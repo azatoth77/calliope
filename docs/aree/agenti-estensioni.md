@@ -482,3 +482,83 @@ tetto del manifesto conta da lì (`Esecuzione.lavoro_s`); l'avvio ha il suo marg
 risposta, il log dice tempi e coda dell'errore. Il motivo vero del 06/10 non si sa (dati
 dell'istanza cancellati): alla prossima prova lo dice il log. `prova_estensioni` con il docker
 finto lento (`DOCKER_FINTO_AVVIO_S`).
+
+## Analisi della richiesta prima di partire (06/10)
+
+Caso vero del 06/10 (DGX): «creami un'estensione che mi fa una ricerca sulle città di una regione
+prendendole da Wikipedia» → `estensione_crea` → «Procedo?» → «sì» → L1 (qwen3.6 su vLLM): 5
+pagine d'esempio scaricate, 6 script `esplora*.py`, 4 minuti di solo ragionamento, 24 passate
+finite, nessun `estensione.py`, titolo «estensione che». La richiesta non era una specifica
+(quali città? «principali» secondo cosa? da quale tabella?). Dario non vuole spinte a metà
+lavoro: la domanda va fatta **prima**, alla proposta.
+
+- **Analizzatore** (`calliope/agenti/richiesta.py` → `Analizzatore`, creato da `load_agenti`
+  con `agenti_analisi`): `estensione_crea` (non per i giochi né per la modifica di un'estensione
+  che c'è) e `delega_lavoro` di tipo codice (non ricerche, documenti, modelli) lo chiamano dopo
+  i controlli dei permessi e del collegamento, prima di creare il lavoro. Modello dell'agente,
+  output strutturato (schema JSON, decodifica guidata di vLLM), thinking spento, temperatura 0,
+  conversazione recente (`ToolContext.storia`) e funzioni di Calliope dal registro dei tool
+  (`ToolContext.strumenti`, le ricerche non fidate o riservate escluse: trovano dati, non fanno
+  il lavoro). Tempo massimo `agenti_analisi_s` (10 s, verifica della fonte compresa); oltre, o
+  con un errore, si procede come prima (esito «nessuna»). Stessa GPU della voce: il client è
+  `ClienteCedevole(dalla_voce=True)`, come lo scrittore dell'ufficio. Frase d'attesa («Un
+  attimo, guardo bene cosa mi chiedi.») solo se l'analisi supera 1,2 s: `ToolContext.attesa`,
+  impostata da Brain quando in quella risposta non si è ancora detto niente.
+- **Lista di controllo chiusa** (`PUNTI`): estensione = input, output, fonte, caso «non
+  trovato», permessi; codice = input, output, dati della persona, linguaggio. Il modello dà uno
+  **stato per punto** (detto, dal_contesto, scelta_ragionevole, manca) e l'esito lo decide il
+  codice: impossibile, poi c'è già, poi vaga (un punto manca e c'è una domanda indispensabile),
+  poi raffinabile (dati presi dalla conversazione, solo se c'è una conversazione), altrimenti
+  chiara. Nello schema l'input di un'estensione (lo dice chi la usa a ogni uso), il caso «non
+  trovato» e il linguaggio non possono mancare. Ogni domanda ha `senza_risposta`: «sbaglia»
+  (si fa) o «sceglie» (un buon programmatore sceglie da solo: non si fa).
+- **Cinque esiti** (etichette di Dario del 06/10): *chiara* → come prima; *raffinabile* → la
+  proposta dice «Ho capito così: …» prima di «Procedo?» (anche dopo un «sì» della politica, che
+  la persona ha detto senza sentirla), il compito all'agente è la specifica e la richiesta come
+  detta va nei vincoli; *vaga* → al più 2 domande a voce (azione in sospeso per lo stesso tool),
+  tutte sul modulo dello schermo personale se c'è (`moduli.offri`; le risposte scritte creano
+  il lavoro e propongono senza il modello); la risposta a voce si analizza di nuovo senza
+  «manca» (una sola tornata di domande); *c'è già* → «Questo lo so già fare: chiedimi pure
+  «…». Vuoi comunque…?» (per le estensioni `_gia_fatto` di sempre), e il «sì, comunque»
+  procede senza un'altra analisi; *impossibile qui* → «Questo qui non posso farlo: …», senza
+  domande né lavoro. Il tool indicato deve esistere nel registro (un nome inventato: si procede).
+  Regole nel registro dei turni: `analisi_<esito>`, `analisi_gia_fatta`.
+- **Fonte web**: per un'estensione chiara o raffinabile con `fonte_url`, una lettura con la rete
+  pubblica di Calliope (`RetePubblica`, registro delle uscite, origine «analisi»); se la voce di
+  Wikipedia indovinata non c'è, una ricerca opensearch di Wikipedia con il titolo; se la fonte non
+  risponde la richiesta diventa vaga («Non ho trovato una fonte pubblica che risponda: da quale
+  sito prendo i dati?»). Un 400/405/422 vale come «c'è» (un'API senza parametri); un certificato
+  che Python non verifica (sul portatile la BCE, catena incompleta; sulla DGX va) vale «non so».
+  La fonte verificata va all'agente nei vincoli.
+- **Titolo** del lavoro di un'estensione: il nome detto o quello dell'analisi («capoluoghi
+  regione», prima «estensione che»).
+- **Tetto in parole** (`servizio.cosa_ha_fatto`): un lavoro di codice o un'estensione fermato da
+  un tetto senza il codice vero dice «ho fermato «…»: ha cercato i dati senza arrivare a scrivere
+  il codice, e ha fatto tutte le 24 passate del lavoro» (solo pagine d'esempio e script
+  d'esplorazione; senza nemmeno quelli «non è arrivato a scrivere il codice»).
+- **Prove**: `prova_analisi_richiesta.py` a secco (livello 2, ~6 s). Banco
+  `prove/banco_richieste.py` (33 richieste: 15 estensioni, 16 di codice, 2 fuori ambito; casi
+  veri E1, E2, E3, C1, C2) e misura manuale `prove/misura_analisi_richiesta.py --url … --modello
+  …`; prova vera `prova_estensioni_agente.py --dalla-voce "…" --risposta "…"`.
+- **Misura sul banco** (DGX, qwen3.6-35b su vLLM, a Calliope inattiva da più di 180 s), quattro
+  giri del prompt: con l'esito scelto dal modello 20/31 (chiare con domande inutili 4/10); con
+  gli stati dei punti e il filtro delle domande **28/31**: vaghe prese **10/10** (obiettivo
+  ≥ 80 %), domande inutili sulle chiare **1/10** (C2, «che tipo di calcolo?», obiettivo ≤ 10 %),
+  raffinabili 5/6, impossibili 2/2, c'è già 1/2 (E8: chiede se la lista va sincronizzata fuori),
+  E11 (CAP) vaga perché la voce di Wikipedia indovinata non c'è. **Tempo** mediana 3,0 s, p90
+  3,4 s, massimo 3,7 s; nessun ripiego. Sbagli che restano: E13 (province) con la voce sbagliata
+  e la ricerca che non la trova → domanda sulla fonte; «calcola» per una conversione nei giri
+  precedenti (ora no).
+- **Prova vera** (DGX, 06/10 ~17:35, Calliope inattiva da 15 minuti; `prova_estensioni_agente.py
+  --dalla-voce`, container vero, dati in una cartella temporanea) con la richiesta di oggi:
+  analisi in **4,0 s** → vaga, due domande giuste («Quali città vuoi che cerchi: tutti i comuni
+  della regione, solo i capoluoghi o quelle con una popolazione superiore a una certa soglia?»,
+  «Che informazioni vuoi per ogni città…?»); risposta «i capoluoghi di provincia, con il numero
+  di abitanti di ognuno, presi da Wikipedia» → raffinabile in 3,5 s, fonte verificata, titolo
+  «capoluoghi regione», «Ho capito così: …» e «Procedo?». La specifica detta suonava come un
+  modulo («input: …. Output: …»): ora il prompt chiede una frase naturale. Il lavoro (qwen3.6):
+  piano alla prima passata e questa volta **estensione.py c'è** (riscritto 4 volte), ma senza
+  test, e il tetto delle 24 passate l'ha fermato dopo 20,9 minuti (86 122 token, 32 105 di
+  ragionamento). L'annuncio ora lo dice: «ha scritto il codice senza arrivare a provarlo». La
+  richiesta adesso è una specifica; che l'agente riscriva lo stesso file senza passare ai test è
+  un problema dell'agente, da guardare a parte (non ripetuta: 20 minuti di GPU).

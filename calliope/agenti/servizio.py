@@ -151,7 +151,11 @@ def cosa_ha_fatto(lav, r: dict) -> str:
                   and not n.startswith(("esplora", "test"))]
         manca = not codice
     if not manca:
+        # Il codice c'è ma nessun test (06/10, prova vera: estensione.py riscritto 4 volte)
+        if not r.get("test") and not any(n.startswith("test") for n in nomi):
+            return "ha scritto il codice senza arrivare a provarlo"
         return ""
+
     return ("ha cercato i dati senza arrivare a scrivere il codice" if esplora
             else "non è arrivato a scrivere il codice")
 

@@ -410,7 +410,12 @@ verifica("con estensione.py niente frase (parlano i test)", cosa_ha_fatto(lav, r
 lav_c = Lavoro("L10", "codice", "x")
 verifica("codice con solo test: «non è arrivato a scrivere il codice»",
          cosa_ha_fatto(lav_c, {"file": ["test_x.py"]}) == "non è arrivato a scrivere il codice")
-verifica("codice con il programma: niente", cosa_ha_fatto(lav_c, {"file": ["rimborso.py"]}) == "")
+verifica("codice con il programma e i test: niente",
+         cosa_ha_fatto(lav_c, {"file": ["rimborso.py", "test_rimborso.py"]}) == "")
+verifica("codice senza test: «ha scritto il codice senza arrivare a provarlo»",
+         cosa_ha_fatto(lav, {"file": ["estensione.py", "manifesto.json"]})
+         == "ha scritto il codice senza arrivare a provarlo")
+
 
 svc.close()
 fake.ferma()
