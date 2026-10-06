@@ -122,6 +122,25 @@ class ToolRegistry:
                                 "per le altre richieste chiama i tool come sempre")
         return json.dumps(out, ensure_ascii=False)
 
+    def mancanti(self, name: str, arguments) -> list[str]:
+        """Gli argomenti obbligatori (`required` dello schema) di una chiamata senza nessun
+        argomento (tutti assenti o vuoti): 06/10, `conversazione_cerca({})` faceva partire
+        «Fammi ricordare.» e la ricerca. Brain non annuncia un tool così; `call` risponde
+        subito con l'errore. Una chiamata con qualche argomento passa com'è: molti tool
+        completano da soli quelli che mancano (la proposta in sospeso di delega_lavoro,
+        l'esercizio in corso di compiti_aiuto)."""
+        spec = self._tools.get(name)
+        if spec is None:
+            vero = self.nome_vicino(name)
+            spec = self._tools.get(vero) if vero else None
+        if spec is None:
+            return []
+        args = arguments if isinstance(arguments, dict) else {}
+        if any(v not in (None, "") and not (isinstance(v, str) and not v.strip())
+               for v in args.values()):
+            return []
+        return list((spec.parameters or {}).get("required") or [])
+
     def announcements(self) -> list[str]:
         """Tutte le frasi di annuncio dei tool, da sintetizzare in anticipo."""
         return [p for t in self._tools.values() for p in t.announce]
@@ -204,6 +223,16 @@ class ToolRegistry:
             no = minori.permesso(ctx, name, arguments or {})
             if no is not None:
                 return json.dumps(no, ensure_ascii=False)
+        # Argomenti obbligatori assenti o vuoti (06/10): niente esecuzione, l'errore subito al
+        # modello, che richiama il tool con gli argomenti o risponde
+        mancano = self.mancanti(name, arguments)
+        if mancano:
+            note_rule(ctx, "tool_argomenti_mancanti")
+            return json.dumps({"ok": False, "fatto": NIENTE,
+                               "errore": "mancano argomenti obbligatori: " + ", ".join(mancano),
+                               "cosa_fare": "richiama il tool con " + ", ".join(mancano)
+                                            + " ricavati dalla frase, oppure rispondi senza"},
+                              ensure_ascii=False)
         # Politica unica (05/10, calliope/politica.py): classe del tool, azione chiesta in
         # questo turno, conversazione con dati non fidati, provenienza degli argomenti. Qui,
         # nell'esecutore: il modello non la scavalca e un canale nuovo non la dimentica

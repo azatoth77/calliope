@@ -670,7 +670,9 @@ def entra(b, canale):
     if canale in ("web", "archivio", "agente_stato", "estensione"):
         nome = {"web": "web_cerca", "archivio": "archivio_cerca", "agente_stato": "lavori_stato",
                 "estensione": "est_meteo"}[canale]
-        return "dimmi cosa dice", [chiama(nome, {"domanda": "meteo"} if canale == "web" else {})]
+        # Argomenti veri: una chiamata senza argomenti obbligatori ora è un errore (06/10)
+        args = {"web": {"domanda": "meteo"}, "archivio": {"cosa": "meteo"}}.get(canale, {})
+        return "dimmi cosa dice", [chiama(nome, args)]
     if canale in ("allegato", "audio"):
         b.allega_non_fidato(canale, INIEZIONE, "nota.txt")
         return "leggi questo file", []
