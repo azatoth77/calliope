@@ -123,6 +123,26 @@ def single_instance_lock():
     return lock
 
 
+# NOTIFY_SOCKET tolto dall'ambiente all'avvio (06/10, `trattieni_notify_socket`): resta qui
+_NOTIFY_SOCKET: str | None = None
+
+
+def trattieni_notify_socket() -> str | None:
+    """Toglie NOTIFY_SOCKET dall'ambiente e lo tiene per `notifica_systemd` (06/10). I
+    processi figli lo ereditavano: `systemctl show` (systemd 255, chiamato da ollama_carico
+    per OLLAMA_MAX_LOADED_MODELS) manda da sé «EXIT_STATUS=0» su quel socket, e il journal
+    della DGX segnava «Got notification message from PID …, but reception only permitted for
+    main PID» (all'avvio, alla compressione, a conversazione_cerca: 10 volte dal 05/10). Con
+    NotifyAccess=main systemd lo scartava già; ora non arriva più, da nessun figlio (systemctl,
+    ssh del tunnel, docker della sandbox)."""
+    global _NOTIFY_SOCKET
+    import os
+    v = os.environ.pop("NOTIFY_SOCKET", None)
+    if v:
+        _NOTIFY_SOCKET = v
+    return _NOTIFY_SOCKET
+
+
 def notifica_systemd(messaggio: str) -> bool:
     """sd_notify senza libsystemd (02/10, DGX Linux): un datagramma sul socket in
     NOTIFY_SOCKET. Con `Type=notify` nell'unità (setup/linux/calliope.service) systemd
@@ -132,7 +152,7 @@ def notifica_systemd(messaggio: str) -> bool:
     Fuori da systemd (Windows, avvio a mano) non fa niente."""
     import os
     import socket
-    addr = os.environ.get("NOTIFY_SOCKET")
+    addr = os.environ.get("NOTIFY_SOCKET") or _NOTIFY_SOCKET
     if not addr or not hasattr(socket, "AF_UNIX"):
         return False
     if addr.startswith("@"):                    # socket astratto di Linux
@@ -977,6 +997,7 @@ class Corsie:
 
 
 def main():
+    trattieni_notify_socket()          # i processi figli non devono parlare a systemd
     avvio = Avvio()
     avvio.prepara()
     avvio.esegui()
