@@ -38,7 +38,7 @@ from .immagini import FOTO_IN_ATTESA, FOTO_NON_VISTA, Immagine
 from .schermi import schede as schede_foto
 from .schermi.moduli import annuncio_lavoro, completa as completa_modulo, oscura, oscura_tutto
 from .speaker_id import estimate_gender
-from .suoni import FINE
+from .suoni import FINE, INIZIO
 from .tools.builtin import biblioteca_contesto
 from .tts import split_sentences, clean_for_speech, strip_false_citation
 from .wakeword import (SPEGNI_SATELLITE_MSG, closing_kind, exit_action, exit_request,
@@ -164,6 +164,17 @@ class Turno:
     protezione: str | None = None        # la frase di protezione detta in questo turno
 
 
+def solo_nome_acustico(text: str, voiced_s: float, cfg) -> bool:
+    """Regola `nome_da_solo_acustico` (06/10, principio 10: riguarda l'audio e le
+    storpiature del nome, che il modello non vede). Con la wake word acustica scattata sicura
+    e il nome assente dal testo, la frase è il nome da solo se il testo è vuoto (Whisper ha
+    restituito un'allucinazione o l'eco del prompt, già tolte in stt.py) o se la voce dura
+    non più di wake_solo_nome_s: in così poco tempo, dopo il nome, non c'è una domanda."""
+    if not re.sub(r"[\W_]+", "", text or ""):
+        return True
+    return voiced_s <= float(getattr(cfg, "wake_solo_nome_s", 0.0) or 0.0)
+
+
 # ─────────────────────────────── CICLO ───────────────────────────────
 class Ciclo:
     """Il ciclo della voce di una corsia: `giro` ascolta una frase e risponde (o annuncia).
@@ -200,6 +211,10 @@ class Ciclo:
         self.ultima_frase_guardia: tuple | None = None
         # Lo stato della voce sugli schermi mentre si aspetta una frase (dorme o ascolta)
         self.attesa_voce = ["dorme", None]
+        # Il nome da solo con i suoni (06/10): frasi prese finora e il timer del suono di fine
+        # ascolto se nessuno parla nella finestra (vedi `_solo_il_nome`)
+        self.frasi_prese = 0
+        self._fine_attesa: threading.Timer | None = None
         self._collega_voce()
 
     # ── stato della voce sugli schermi ──
@@ -863,6 +878,7 @@ class Ciclo:
                                     wakeup=self.sveglia if not t.guided else None)
             if audio is None:        # svegliata dall'agenda o da una pagina: al giro dopo
                 return _FINE
+            self.frasi_prese += 1    # la finestra del nome da solo non suona più la fine
             s.instradamento.inizio_voce()
             t.barged, self.barge_seed = self.barge_seed is not None, None
             # Frase presa (suono di fine ascolto): con la wake word acustica listen restituisce
@@ -1080,10 +1096,19 @@ class Ciclo:
         s.instradamento.persona(self._persona_id(t.speaker_name))
         if s.cfg.debug_audio_dir and t.scritto is None:
             self.rec["audio"] = save_debug_audio(s.cfg, t.audio, t.text)
-        if not t.text:
+        if not t.text and not self._risveglio_acustico(t):
             self.rec["esito"] = "vuoto"
             return _FINE
         return None
+
+    def _risveglio_acustico(self, t) -> bool:
+        """La frase è passata perché la wake word acustica è scattata a Calliope addormentata
+        (non nella finestra d'ascolto, non scritta, non durante una registrazione). Una frase
+        così con il testo vuoto è il nome da solo (vedi `_cerca_il_nome`), non un «vuoto»."""
+        s, cfg = self.s, self.s.cfg
+        return (s.wake is not None and cfg.wake_word_enabled and t.scritto is None
+                and not t.guided and not t.barged
+                and self.listener.started_at > self.awake_until)
 
     def _segna_conversazione(self, t):
         """Una frase detta e rivolta a Calliope: la conversazione per lo scritto sugli
@@ -1280,7 +1305,15 @@ class Ciclo:
                           f" nome non trascritto)")
                     self.rec.update(esito="scartato", testo=None)
                     return _FINE
-                request = text        # nome storpiato ma scatto sicuro: tutta la frase
+                if solo_nome_acustico(text, t.voiced_s, cfg):
+                    # Scatto sicuro su una frase vuota (allucinazione, eco del prompt) o breve
+                    # quanto il nome: è il nome da solo, storpiato da Whisper. Il 06/10 sulla
+                    # DGX «Computer» → «Come più tardi.» (0,76 s) andava al modello come
+                    # domanda e due «Computer» trascritti vuoti non facevano niente
+                    self.rule("nome_da_solo_acustico")
+                    request = ""
+                else:
+                    request = text    # nome storpiato ma scatto sicuro: tutta la frase
         if request is None and listener.started_at > self.awake_until:
             print(f"   (ignorato: «{text}»)")
             self.rec["esito"] = "ignorato"
@@ -1318,17 +1351,51 @@ class Ciclo:
                          f"{speaker_ctx.enroll_prompt}")
 
     def _solo_il_nome(self, t):
-        print(f"Tu: {self.in_console(t.text)}")
+        """Il nome da solo («Calliope.», «Computer» e una pausa): il saluto breve, oppure,
+        con i suoni di ascolto accesi (modalità startrek), di nuovo il suono d'inizio ascolto,
+        come nella serie: nome, bip, comando. In tutti e due i casi la finestra d'ascolto si
+        apre per followup_s; con i suoni, se nessuno parla, si chiude col suono di fine."""
+        s, cfg = self.s, self.s.cfg
+        print(f"Tu: {self.in_console(t.text) or '(il nome)'}")
         self.rec["esito"] = "saluto"
-        if self.s.enroll_pending:
+        suoni = (s.suoni if getattr(cfg, "suoni_ascolto", False)
+                 and getattr(s.suoni, "attivi", True) else None)
+        if s.enroll_pending:
             self._inizia_primo_utente(t)
+        elif suoni is not None and hasattr(self.speaker, "suono"):
+            # Il satellite ha già suonato inizio (allo scatto) e fine (frase presa): il
+            # suono d'inizio di nuovo dice «ora ti ascolto» (06/10: dopo il bip di fine
+            # Dario credeva che l'ascolto fosse chiuso)
+            self.rule("nome_da_solo_suono")
+            self.rec["risposta"] = "(suono d'inizio ascolto)"
+            self.speaker.suono(suoni, INIZIO)
         elif t.speaker_name:
             self.speaker.say(f"Ciao {t.speaker_name}.")
         else:
             self.speaker.say("Sì?")
         self.speaker.wait()
-        self.awake_until = time.monotonic() + self.s.cfg.followup_s
+        self.awake_until = time.monotonic() + cfg.followup_s
+        if suoni is not None and not s.enroll_pending and hasattr(self.speaker, "suono"):
+            self._fine_se_nessuno_parla(suoni, cfg.followup_s)
         return _FINE
+
+    def _fine_se_nessuno_parla(self, suoni, dopo_s: float):
+        """Il suono di fine ascolto alla chiusura della finestra, se nel frattempo non è
+        stata presa nessuna frase (con una frase lo suona chi ha il microfono)."""
+        if self._fine_attesa is not None:
+            self._fine_attesa.cancel()
+        prese = self.frasi_prese
+
+        def chiudi():
+            if self.frasi_prese == prese and time.monotonic() >= self.awake_until - 0.2:
+                print("   (finestra d'ascolto chiusa: nessuno ha parlato)", flush=True)
+                try:
+                    self.speaker.suono(suoni, FINE)
+                except Exception:  # noqa: BLE001 — un suono non ferma il ciclo
+                    pass
+        self._fine_attesa = threading.Timer(max(0.0, dopo_s), chiudi)
+        self._fine_attesa.daemon = True
+        self._fine_attesa.start()
 
     def _primo_avvio(self, t):
         """Se è il primo avvio e l'utente si è presentato (es. "Calliope, sono Mario"),
@@ -1720,7 +1787,9 @@ class Ciclo:
             self.rule("nome_tool_parlato")
             sentence = parlata
         sentence = clean_for_speech(sentence)
-        if not sentence:
+        if not re.search(r"[^\W_]", sentence or ""):
+            # Solo punteggiatura («…», «.»): non si dice (06/10); Brain la tratta come una
+            # risposta vuota (regola risposta_solo_punteggiatura)
             return ""
         # «secondo Wikipedia» solo se in questo turno ha davvero consultato la
         # biblioteca: il 26/09 lo diceva anche rispondendo a memoria (Po, Garda)

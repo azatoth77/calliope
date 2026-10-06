@@ -241,3 +241,36 @@ spezzata in due (pausa dopo «a casa sua»), la seconda parte ha interrotto la r
 (barge-in di livello B con la voce di Sofia) e l'avviso «sicurezza» ai tutori è partito **due
 volte**; negli altri giri il passo è riuscito. «richesta_tutore» (nome del tool storpiato dal
 modello) in un giro B2.
+
+## Il nome da solo dopo lo scatto acustico (06/10, DGX in modalità startrek)
+
+Registro dei turni della DGX: 17:20:20 «Come più tardi.» (voce 0,76 s, `risveglio` 1,0) mandato
+al modello come domanda; 17:22:54 e 17:22:57 due frasi di 0,70 e 0,63 s con testo vuoto, esito
+«vuoto» (il controllo del testo vuoto in `_conversazione_del_turno` veniva prima del nome, e il
+punteggio del risveglio non finiva nemmeno nel registro). Erano tutti «Computer» da solo.
+
+Ora (regola `nome_da_solo_acustico`, `ciclo.solo_nome_acustico`, principio 10: riguarda
+l'audio e le storpiature del nome): a Calliope addormentata, con la wake word acustica scattata
+e il punteggio sopra `wake_confirm_score` (0,9), se il nome non è nel testo e il testo è vuoto
+(allucinazione o eco del prompt, già tolte in `stt.py`) oppure la voce dura al più
+`wake_solo_nome_s` (0,9 s, nuovo campo: «Calliope» da solo dura 0,5–0,65 s sulla DGX) la frase
+è il nome da solo: saluto (o suono d'inizio con i suoni) e finestra aperta. Il risveglio va nel
+registro anche col testo vuoto. Contrari in `prova_nome_da_solo`: scatto debole col testo vuoto
+(scartato in silenzio, come prima), frase vuota nella finestra («vuoto»), frase lunga senza il
+nome e scatto sicuro (tutta al modello, come prima), il nome trascritto con la domanda.
+
+Prompt e hotwords di Whisper dopo il cambio di modalità a voce: già letti da `Config.wake_names`
+a ogni frase dal 05/10 (`stt.prompt_whisper`, `hotwords_whisper`; anche `ServerTranscriber`
+verso whisper.cpp, che non ha hotwords). Misura sul portatile, faster-whisper large-v3-turbo, 6
+voci di Piper (aurora, giorgio e leonardo sono rumorose: le frasi brevi vengono male con
+qualunque prompt):
+
+| | normale («Conversazione con Calliope.») | startrek («… con Computer.», hotwords «Calliope Computer») |
+|---|---|---|
+| «Computer.» con il nome trascritto | 3/6 | 4/6 (una «Calliope Computer.») |
+| «Computer!» | 0/6 | 1/6 |
+| «Computer, che ore sono?» con il nome | 4/6 | 5/6 |
+| «Calliope, che ore sono?» con nome e domanda giusti | 3/6 | 3/6 (giorgio: «Calliope Computer suono.») |
+
+Il resto del nome da solo è testo corto e storpiato («Ok.», «Rovemo, rovemo.», «Grazie.»,
+vuoto): esattamente il caso che la regola sopra prende per durata. Il prompt non va allungato.
