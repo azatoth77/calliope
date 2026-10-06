@@ -7,6 +7,12 @@ pubblica: l'agente la scarica con scarica_esempio) e con `--non-approvare` si fe
 versione da approvare (la sfida resta a chi amministra). Stampa quando arriva il piano (la
 passata) e i token di ragionamento prima del primo strumento.
 
+Dal 06/10 con `--dalla-voce "<richiesta>"` la richiesta passa da estensione_crea come a voce,
+con l'analisi della richiesta (calliope/agenti/richiesta.py) e il modello dell'agente: stampa
+l'esito; se ci sono domande risponde con `--risposta "<testo>"` nel turno dopo, poi dice «sì»
+alla proposta e il lavoro parte con il compito raffinato. Senza `--risposta` si ferma alle
+domande.
+
 Per ogni compito: lavoro «estensione» → codice, test e manifesto dell'agente → consegna
 controllata → versione da approvare (frase dell'annuncio) → approvazione (la sfida qui è
 data per superata: la sfida a voce è in prova_estensioni_ollama) → uso del tool attraverso
@@ -44,7 +50,52 @@ COMPITI = [
 ]
 
 
+def dalla_voce(a, cfg, svc, reg, ctx, est, richiesta):
+    """La richiesta attraverso estensione_crea, come a voce: analisi, domande, risposta, «sì».
+    Il lavoro avviato, o None."""
+    from calliope.agenti.richiesta import Analizzatore
+    from calliope.tools.agenti import agenti_specs
+    from calliope.tools.estensioni import estensioni_specs
+    for s in estensioni_specs() + agenti_specs():
+        if reg.get(s.name) is None:
+            reg.register(s)
+    svc.analizzatore = Analizzatore(cfg, svc, log=lambda m: print(f"   {m}", flush=True))
+    svc.analizzatore.rete = est.rete
+    svc.diagnosi.update(svc.verifica())
+    ctx.cfg, ctx.lavori, ctx.estensioni, ctx.strumenti = cfg, svc, est, reg
+    ctx.speaker_ctx = P.speaker("Dario", "amministra")
+    storia = []
+
+    def turno(n, testo, tool, args):
+        ctx.turno, ctx.user_text, ctx.storia = n, testo, list(storia)
+        t = time.perf_counter()
+        r = json.loads(reg.call(tool, args, ctx, "amministra"))
+        frase = r.get("risposta_finale") or r.get("conferma") or ""
+        print(f"[turno {n}, {time.perf_counter() - t:.1f} s] «{testo}» → {tool}: {frase}",
+              flush=True)
+        storia.extend([("user", testo), ("assistant", frase)])
+        return r
+    r = turno(1, richiesta, "estensione_crea", {"compito": richiesta})
+    n = 2
+    if "Prima di cominciare" in str(r.get("risposta_finale")):
+        if not a.risposta:
+            print("   domande senza --risposta: mi fermo qui", flush=True)
+            return None
+        r = turno(n, a.risposta, "estensione_crea",
+                  {"compito": f"{richiesta}. {a.risposta}"})
+        n += 1
+    off = svc.offerta("u1", n)
+    if off is None:
+        print("   nessuna proposta: mi fermo qui", flush=True)
+        return None
+    print(f"   compito all'agente: {off['lavoro'].compito}\n   titolo: {off['lavoro'].titolo}"
+          f"\n   vincoli: {off['lavoro'].vincoli[-300:]}", flush=True)
+    turno(n, "Sì, procedi.", "delega_lavoro", {"proposta": off["lavoro"].id})
+    return off["lavoro"]
+
+
 def main():
+
     ap = argparse.ArgumentParser()
     ap.add_argument("--casa", action="store_true", help="la casa vera (solo letture)")
     ap.add_argument("--solo", default="", help="solo questo compito (convertitore, temperatura)")
@@ -53,6 +104,9 @@ def main():
                     help="un gioco sullo schermo (05/10: scheda interattiva, test con Node)")
     ap.add_argument("--non-approvare", action="store_true",
                     help="fermati alla versione da approvare")
+    ap.add_argument("--dalla-voce", default="",
+                    help="la richiesta come detta, attraverso estensione_crea e l'analisi")
+    ap.add_argument("--risposta", default="", help="la risposta alle domande dell'analisi")
     a = ap.parse_args()
     from calliope.agenti import Lavori, carica
     from calliope.agenti.sandbox import scegli_isolamento
@@ -62,7 +116,7 @@ def main():
     from calliope.tools.estensioni import estensioni_specs
     tmp = Path(tempfile.mkdtemp(prefix="calliope-est-agente-"))
     cfg = load_config()
-    cfg.agenti_conferma = "mai"
+    cfg.agenti_conferma = "costosi" if a.dalla_voce else "mai"
     cfg.agenti_risultati = str(tmp / "risultati")
     cfg.agenti_sandbox = str(tmp / "sandbox")
     imp = carica(cfg)
@@ -98,17 +152,25 @@ def main():
         return piano_vero(lav, sandbox, args, prima)
     svc.agente._piano = piano_osservato
     compiti = [("libero", a.compito, [])] if a.compito else COMPITI
+    if a.dalla_voce:
+        compiti = [("dalla voce", a.dalla_voce, [])]
     for nome, compito, prove in compiti:
         if a.solo and a.solo != nome:
             continue
         print(f"\n═══ {nome}: {compito}", flush=True)
         t0 = time.perf_counter()
-        lav = svc.nuovo("estensione", compito, "u1", "Dario", "amministra")
-        lav.estensione = None
-        lav.gioco = a.gioco
-        lav.file_iniziali = ({} if a.gioco else
-                             {"calliope_estensione.py": runtime_testo()})
-        svc.avvia(lav)
+        if a.dalla_voce:
+            lav = dalla_voce(a, cfg, svc, reg, ctx, est, compito)
+            if lav is None:
+                continue
+            t0 = time.perf_counter()
+        else:
+            lav = svc.nuovo("estensione", compito, "u1", "Dario", "amministra")
+            lav.estensione = None
+            lav.gioco = a.gioco
+            lav.file_iniziali = ({} if a.gioco else
+                                 {"calliope_estensione.py": runtime_testo()})
+            svc.avvia(lav)
         item = svc.done.get(timeout=cfg.agenti_tempo_max_min * 60 + 60)
         dt = time.perf_counter() - t0
         print(f"[{dt / 60:.1f} min, {lav.passi} passi, {lav.token} token] {item['messaggio']}",

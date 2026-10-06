@@ -2507,11 +2507,25 @@ class Brain:
                         announced = True
                         break
             finals = []
-            for call in calls:
-                content = self._run_tool(call, level)
-                self.history.append({"role": "tool", "tool_call_id": call["id"],
-                                     "name": call["name"], "content": content})
-                finals.append(_final_text(content))
+            # Frase d'attesa chiesta dal tool stesso, quando serve (06/10: l'analisi della
+            # richiesta di un lavoro, che a volte va oltre il secondo). Una volta per risposta
+            attese = []
+
+            def attesa(frase, _on=on_tool_start):
+                if _on and frase and not attese:
+                    attese.append(frase)
+                    _on(frase)
+            self._set_ctx("attesa", attesa if on_tool_start and not (spoke or announced)
+                          else None)
+            try:
+                for call in calls:
+                    content = self._run_tool(call, level)
+                    self.history.append({"role": "tool", "tool_call_id": call["id"],
+                                         "name": call["name"], "content": content})
+                    finals.append(_final_text(content))
+            finally:
+                self._set_ctx("attesa", None)
+            announced = announced or bool(attese)
             # Tool con la frase finale già pronta (documenti): si dice quella e il turno
             # finisce, senza un'altra passata del modello. Ollama può essere ancora occupato
             # a generare il documento in secondo piano: la seconda passata aspetterebbe la
@@ -2934,7 +2948,9 @@ class Brain:
         # turno: frase, fonti non fidate nella conversazione, dati letti in questa risposta o
         # arrivati con la frase, proposta in sospeso
         self._set_ctx("politica", self._turno_politica())
+        self._set_ctx("strumenti", self.tools)
         try:
+
             result = self.tools.call(call["name"], args, self.tool_ctx, level)
         finally:
             self._set_ctx("politica", None)

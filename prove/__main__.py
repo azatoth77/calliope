@@ -112,6 +112,7 @@ A_SECCO = [
     ("prova_estensioni_attacchi.py", [], "banco d'attacco delle estensioni: rete interna, indirizzi travestiti, rebinding, slowloris, dati esca, flussi, contaminazione, scarica_esempio"),
     ("prova_sandbox.py", [], "sandbox in un container con un docker finto: scelta del motore, docker run, kill, capacità"),
     ("prova_agenti_domande.py", [], "agenti: domande a metà lavoro, file della persona all'agente (anche via satellite)"),
+    ("prova_analisi_richiesta.py", [], "agenti: analisi della richiesta prima della proposta (chiara, raffinabile, vaga, c'è già, impossibile qui), ripieghi, fonte web, modulo, motivo del tetto in parole"),
     # ~14 s: Ollama finto (anche l'API OpenAI) e Schermi senza server
     ("prova_avanzamento.py", [], "agenti: avanzamento dei lavori sugli schermi in diretta: ritmo, chiave unica, spostamento, visibilità, pausa"),
     ("prova_esecuzione.py", [], "agenti: il programma finito eseguito in diretta sullo schermo (Python e C# con un docker finto), «eseguilo con…», «fermalo», tetti"),
@@ -206,6 +207,7 @@ LIVELLO_2 = {
     "prova_agenti.py",               # 55–60 s
     "prova_sandbox.py",              # 10 s
     "prova_agenti_domande.py",       # 9 s
+    "prova_analisi_richiesta.py",    # 8 s
     "prova_avanzamento.py",          # 16 s
     "prova_esecuzione.py",           # 17 s
     "prova_agenti_openai.py",        # 9 s
@@ -249,9 +251,11 @@ LEGAMI = [
     ("calliope/config.py", ["prova_linux_import.py"]),
     ("calliope/tools/casa.py", ["prova_casa_ha.py"]),
     ("calliope/tools/agenti.py", ["prova_agenti.py", "prova_agenti_domande.py",
+                                 "prova_analisi_richiesta.py",
                                  "prova_esecuzione.py", "prova_avanzamento.py"]),
     ("calliope/tools/schermi.py", ["prova_schermi.py", "prova_scritto.py"]),
     ("calliope/tools/estensioni.py", ["prova_estensioni.py", "prova_estensioni_attacchi.py",
+                                     "prova_analisi_richiesta.py",
                                      "prova_giochi.py"]),
     ("calliope/tools/pc.py", ["prova_esecutore.py"]),
     ("calliope/tools/stato.py", ["prova_capacita.py", "prova_installa.py"]),
@@ -279,8 +283,9 @@ LEGAMI = [
                           "prova_avanzamento.py", "prova_esecuzione.py",
                           "prova_agenti_openai.py", "prova_arbitro_vllm.py",
                           "prova_arbitro_pausa.py", "prova_contesto_agenti.py",
-                          "prova_estensioni_piano.py"]),
-    ("calliope/estensioni/", ["prova_estensioni.py", "prova_estensioni_piano.py",
+                          "prova_estensioni_piano.py", "prova_analisi_richiesta.py"]),
+    ("calliope/estensioni/",
+ ["prova_estensioni.py", "prova_estensioni_piano.py",
                               "prova_estensioni_attacchi.py", "prova_giochi.py"]),
     ("calliope/guardrail.py", ["prova_estensioni.py", "prova_estensioni_attacchi.py"]),
     ("calliope/web/", ["prova_web.py", "prova_estensioni_attacchi.py"]),

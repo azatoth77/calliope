@@ -1106,6 +1106,13 @@ agenti:
   # Conferma a voce prima di avviare: «costosi» (codice, ricerche, coda già occupata,
   # modello da caricare), «sempre» o «mai»
   agenti_conferma: costosi
+  # Analisi della richiesta prima della proposta (06/10, calliope/agenti/richiesta.py): un
+  # lavoro di codice o un'estensione nuova passa prima dal modello dell'agente, che dice se
+  # la richiesta basta, se la conversazione la completa, quali dati mancano (al più 2
+  # domande a voce), se Calliope lo sa già fare o se qui è impossibile. Oltre tanti secondi
+  # (fonte web verificata compresa) si procede come prima dell'analisi
+  agenti_analisi: true
+  agenti_analisi_s: 10.0
   # Stesso Ollama della voce: l'agente si ferma quando qualcuno parla a Calliope e riparte
   # tanti secondi dopo la fine della risposta
   agenti_precedenza_voce: true

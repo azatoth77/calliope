@@ -70,6 +70,14 @@ class ToolContext:
     # tool con il suo «Procedo?» non lo chiede di nuovo. Lo imposta la politica, solo per la
     # durata della chiamata
     politica_accettata: bool = False
+    # I tool di Calliope (ToolRegistry, lo imposta Brain): l'analisi di una richiesta di lavoro
+    # (calliope/agenti/richiesta.py, 06/10) ci cerca una funzione che la fa già
+    strumenti: Any = None
+    # Frase d'attesa per un tool che a volte è lento (06/10: l'analisi della richiesta): la
+    # imposta Brain durante la chiamata, se in questa risposta non si è ancora detto niente;
+    # il tool la chiama solo quando serve davvero. None = niente frase
+    attesa: Any = None
+
 
 
 def note_rule(ctx, name: str):

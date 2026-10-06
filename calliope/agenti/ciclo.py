@@ -99,6 +99,9 @@ class Lavoro:
     # volta sola, come domanda a chi l'ha chiesta («Vuoi comunque…?»); dopo il «sì», o se la
     # persona l'aveva già detto alla voce, non si chiede più
     doppione_chiesto: bool = False
+    # La specifica in una frase dall'analisi della richiesta (06/10, richiesta.py): detta nella
+    # proposta prima di «Procedo?»; vuota se la richiesta bastava così
+    specifica: str = ""
     # in_coda | in_corso | in_attesa (una domanda a chi l'ha chiesto, 03/10) | fatto |
     # mancano_dati | scaduto (nessuna risposta in tempo) | errore | annullato
     stato: str = "in_coda"

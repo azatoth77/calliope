@@ -79,7 +79,7 @@ per stadio, solo i moduli principali: librerie, classi e dettagli sono nei docum
 | Rispondi dove ti ho chiesto | `rispondi.py` | [schermi-telefono](docs/aree/schermi-telefono.md) |
 | Foto e allegati in ingresso | `immagini.py`, `allegati.py`, `pc/cattura.py` | [immagini-allegati](docs/aree/immagini-allegati.md) |
 | Satelliti (WebSocket, TLS, inoltro, installazione) | `satellite/`, `tls_sicuro.py` | [satelliti](docs/aree/satelliti.md) |
-| Agenti in secondo piano (vLLM sulla DGX, sandbox Docker, arbitro) | `agenti/`, `tools/agenti.py` | [agenti-estensioni](docs/aree/agenti-estensioni.md) |
+| Agenti in secondo piano (vLLM sulla DGX, sandbox Docker, arbitro), analisi della richiesta prima di partire (dal 06/10) | `agenti/` (`richiesta.py`), `tools/agenti.py` | [agenti-estensioni](docs/aree/agenti-estensioni.md) |
 | Estensioni permanenti e guardrail | `estensioni/`, `tools/estensioni.py` | [agenti-estensioni](docs/aree/agenti-estensioni.md) |
 | Giochi sugli schermi | estensioni con scheda, `agenti/fumo_js.mjs` | [giochi](docs/aree/giochi.md) |
 | Installazione e aggiornamento su Linux | `pyproject.toml`, `uv.lock`, `setup/linux/` (`gestore.py`) | [setup-dgx](docs/aree/setup-dgx.md) |

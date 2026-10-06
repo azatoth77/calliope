@@ -296,7 +296,113 @@ def _proponi(ctx, svc, lav, turno) -> dict:
                               "argomenti": {"proposta": lav.id}})
 
 
+def _analisi(ctx, svc, prof, tipo: str, compito: str, crea, tool: str, nota: str = ""):
+    """L'analisi della richiesta prima della proposta (06/10, calliope/agenti/richiesta.py).
+    Restituisce (risultato, esito, gia_fatto_da):
+    - risultato: da dare subito (domande, «c'è già», «impossibile qui»), o None per continuare;
+    - esito: l'Esito (specifica e nome per la proposta), o None;
+    - gia_fatto_da: il tool di un «c'è già» a cui la persona ha detto «sì, comunque».
+    `crea(compito, esito)` crea il lavoro (per le risposte scritte nel modulo dello schermo)."""
+    an = getattr(svc, "analizzatore", None)
+    if an is None or not getattr(ctx.cfg, "agenti_analisi", True) or prof is None:
+        return None, None, ""
+    from ..agenti import richiesta as ar
+    turno = int(getattr(ctx, "turno", 0) or 0)
+    detto = (getattr(ctx, "user_text", "") or "").strip()
+    rec = an.recente(prof.id, tipo, turno)
+    senza = False
+    if rec is not None:
+        if rec["esito"] != "vaga":
+            # Il «sì, comunque» dopo «c'è già» o «impossibile qui»: si procede come oggi
+            note_rule(ctx, "analisi_gia_fatta")
+            return None, None, (rec.get("tool") or "") if rec["esito"] == "gia_fatto" else ""
+        # La risposta alle domande: si analizza di nuovo, senza altre domande
+        senza = True
+        try:
+            from ..schermi.moduli import chiudi_per_voce
+            chiudi_per_voce(ctx, tool)
+        except Exception:  # noqa: BLE001 — lo schermo non deve fermare il tool
+            pass
+        nota = ((nota + " ") if nota else "") + (
+            f"Prima richiesta: «{rec['compito']}». Domande fatte: {' '.join(rec['domande'])} "
+            f"Risposta della persona: «{detto}».")
+    e = an.analizza(tipo, compito, list(getattr(ctx, "storia", None) or []), detto,
+                    getattr(ctx, "strumenti", None), nota, senza,
+                    attesa=getattr(ctx, "attesa", None))
+    note_rule(ctx, f"analisi_{e.esito}")
+    an.log(f"[AGENTI] analisi della richiesta ({tipo}): {e.per_registro()}")
+    if e.esito == "gia_fatto":
+        reg = getattr(ctx, "strumenti", None)
+        esiste = (reg.get(e.tool) is not None) if reg is not None and hasattr(reg, "get") \
+            else e.tool in politica.CLASSI
+        if not esiste or e.tool in ar.NON_FUNZIONI:
+            e.esito = "chiara"          # un nome inventato non vale: si procede
+        else:
+            an.ricorda(prof.id, tipo, turno, compito, e)
+            if tipo == "estensione":
+                from .estensioni import _gia_fatto
+                return _gia_fatto(ctx, compito, "", e.tool, e.come_chiederlo), e, ""
+            esempio = e.come_chiederlo.strip().strip("«»\"' .?")
+            frase = ("Questo lo so già fare" + (f": chiedimi pure «{esempio}»." if esempio
+                                                else ".")
+                     + " Vuoi comunque che lo affidi all'agente?")
+            return {"ok": True, "fatto": f"NIENTE affidato: c'è già un tool che lo fa ({e.tool})",
+                    "conferma": frase, "risposta_finale": frase,
+                    "in_sospeso": {"domanda": frase, "cosa": "affidare comunque il lavoro",
+                                   "tool": "delega_lavoro",
+                                   "argomenti": {"tipo": tipo, "compito": compito}}}, e, ""
+    if e.esito == "impossibile":
+        an.ricorda(prof.id, tipo, turno, compito, e)
+        return _final(ar.frase_impossibile(e.motivo), ok=False,
+                      fatto=f"{NIENTE}: impossibile qui, il lavoro NON è stato affidato"), e, ""
+    if e.esito == "vaga":
+        an.ricorda(prof.id, tipo, turno, compito, e)
+        frase = ar.frase_domande(e.domande)
+        res = {"ok": True, "fatto": "domande: il lavoro NON è ancora cominciato",
+               "conferma": frase, "risposta_finale": frase,
+               "in_sospeso": {"domanda": frase, "cosa": "le risposte per la richiesta di lavoro",
+                              "tool": tool,
+                              "argomenti": ("compito = la richiesta di prima con le risposte "
+                                            "della persona" + (", tipo = codice"
+                                                               if tool == "delega_lavoro" else ""))}}
+        # Tutte le domande anche sul modulo dello schermo personale, se c'è (moduli.offri)
+        from ..schermi.moduli import campo
+        frase_schermo = None
+        if len(e.domande) > ar.MAX_DOMANDE_VOCE:
+            frase_schermo = (ar.frase_domande(e.domande, schermo=True)
+                             + " Puoi rispondere a voce o scrivere sullo schermo.")
+        res["modulo"] = {"chiave": f"richiesta:{tipo}", "titolo": "Prima di cominciare",
+                         "domanda": "Le risposte per il lavoro che hai chiesto",
+                         "campi": [campo(f"d{i}", q, "testo") for i, q in
+                                   enumerate(e.domande)],
+                         **({"frase_schermo": frase_schermo} if frase_schermo else {})}
+        domande = list(e.domande)
+
+        def riprendi(valori, turno, pid=prof.id, domande=domande):
+            # Le risposte scritte sullo schermo, senza il modello (schermi/moduli.py)
+            an.dimentica(pid)
+            dati = "; ".join(f"{q} {str(valori.get(f'd{i}') or '').strip()}"
+                             for i, q in enumerate(domande) if valori.get(f"d{i}"))
+            lav = crea(f"{compito}. Risposte di chi l'ha chiesto: {dati}", None)
+            return _proponi(None, svc, lav, int(turno))
+        from ..schermi.moduli import offri
+
+        return offri(ctx, res, tool, riprendi), e, ""
+    return None, e, ""
+
+
+def _titolo_estensione(nome: str, esito) -> str:
+    """Il nome del lavoro di un'estensione (06/10: «estensione che» per L1): il nome detto,
+    o quello dell'analisi; vuoto per il titolo di sempre."""
+    for t in (nome, getattr(esito, "nome", "") if esito is not None else ""):
+        t = re.sub(r"\s+", " ", str(t or "")).strip(" .«»\"'")
+        if t:
+            return " ".join(t.split()[:6])
+    return ""
+
+
 def _avvia(ctx, svc, lav) -> dict:
+
     _schermo(ctx, lav)
     frase = svc.avvia(lav)
     return _final(frase, fatto="avviato in secondo piano: NON è ancora finito",
@@ -429,18 +535,49 @@ def _delega_lavoro(ctx: ToolContext, tipo: str = "", compito: str = "", formato:
     dati = list(getattr(ctx, "storia", None) or [])
     if detto and detto.strip() != compito:
         dati.append(("user", detto.strip()))
-    lav = svc.nuovo(tipo, compito, prof.id, prof.name, level, fmt, modello,
-                    str(vincoli or ""), dati)
-    if candidati:
-        lav.file_candidati = candidati
-        if len(candidati) == 1:
-            _scegli(lav, "1")
+
+    def crea(compito_agente: str, esito=None):
+        v = str(vincoli or "")
+        if esito is not None and esito.esito == "raffinabile":
+            v = (v + " " if v else "") + f"Richiesta come detta dalla persona: «{compito}»."
+        lv = svc.nuovo(tipo, compito_agente, prof.id, prof.name, level, fmt, modello, v, dati)
+        if compito_agente != compito and not modello:
+            from ..agenti.servizio import senza_estensione, titolo_da
+            lv.titolo = titolo_da(compito)
+            if tipo == "codice":
+                lv.titolo = senza_estensione(lv.titolo)
+        if esito is not None and esito.esito == "raffinabile":
+            lv.specifica = esito.specifica
+        if candidati:
+            lv.file_candidati = candidati
+            if len(candidati) == 1:
+                _scegli(lv, "1")
+        return lv
+
+    # L'analisi della richiesta prima della proposta (06/10): solo i lavori di codice
+    esito = None
+    if tipo == "codice" and not modello:
+        nota = ""
+        if candidati:
+            nota = ("La persona dà all'agente il file " + ", ".join(
+                c["detto"] for c in candidati[:3]) + ": è l'input del programma.")
+        ris, esito, _ = _analisi(ctx, svc, prof, tipo, compito, crea, "delega_lavoro", nota)
+
+        if ris is not None:
+            return ris
+    compito_agente = esito.specifica if esito is not None and esito.esito == "raffinabile" \
+        else compito
+    lav = crea(compito_agente, esito)
+    raffinata = bool(getattr(lav, "specifica", ""))
+
+
     # Una conferma per azione (06/10, caso vero della DGX: conferma della politica per la foto,
     # sfida, poi ancora «Procedo?»): se la persona ha già confermato proprio questa richiesta
     # alla domanda della politica, la proposta vale come accettata. Non con un file della
     # persona: lì la domanda dice anche che il file lascia il PC
     if svc.serve_conferma(lav):
-        if not politica.accettata(ctx) or candidati:
+        # (né con una specifica raffinata dall'analisi: la persona non l'ha ancora sentita)
+        if not politica.accettata(ctx) or candidati or raffinata:
             return _proponi(ctx, svc, lav, turno)
         # (nel registro basta `politica_conferma_unica`, scritta dalla politica)
     return _avvia(ctx, svc, lav)
