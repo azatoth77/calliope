@@ -132,7 +132,31 @@ _PAROLE_ESTENSIONE = re.compile(
     r"alle|nelle|sulle|dalle|queste|quelle)\s+)?(estension[ei])\b", re.I)
 
 
+def cosa_ha_fatto(lav, r: dict) -> str:
+    """Un lavoro di codice o un'estensione fermato da un tetto senza il codice vero (06/10):
+    «ha cercato i dati senza arrivare a scrivere il codice» se ci sono solo pagine d'esempio e
+    script d'esplorazione; vuoto se il codice c'è (allora parlano i test)."""
+    if getattr(lav, "tipo", "") not in ("codice", "estensione") or getattr(lav, "gioco", False):
+        return ""
+    files = [str(f) for f in (r.get("file") or [])]
+    nomi = [f.rsplit("/", 1)[-1] for f in files]
+    esplora = any(f.startswith("esempi/") for f in files) or any(
+        n.startswith("esplora") for n in nomi) or bool(getattr(lav, "esempi", 0))
+    if lav.tipo == "estensione":
+        manca = "estensione.py" not in files
+    else:
+        codice = [n for f, n in zip(files, nomi) if n.endswith((".py", ".cs"))
+                  and not f.startswith(("esempi/", ".calliope/"))
+                  and not n.startswith(("esplora", "test"))]
+        manca = not codice
+    if not manca:
+        return ""
+    return ("ha cercato i dati senza arrivare a scrivere il codice" if esplora
+            else "non è arrivato a scrivere il codice")
+
+
 def senza_estensione(testo: str) -> str:
+
     """«Ho creato un'estensione in Python che…» → «Ho creato un programma in Python che…»."""
     def sost(m):
         art = m[1] or m[2]
@@ -272,6 +296,9 @@ class Lavori:
         self.esecuzioni = Esecuzioni(self, log=log)
         self._offerte: dict[str, dict] = {}
         self.estensioni = None      # Estensioni (calliope/estensioni/): le versioni da approvare
+        # L'analisi della richiesta prima della proposta (06/10, richiesta.Analizzatore): la
+        # crea load_agenti con agenti_analisi; None = si propone come prima (le prove a secco)
+        self.analizzatore = None
         self._n = 0
         self._chiuso = False
         self._worker = threading.Thread(target=self._esegui_coda, daemon=True, name="lavori")
@@ -647,8 +674,13 @@ class Lavori:
         coda = f"; prima devo finire «{att[0].titolo}»" if att else ""
         carico = ("; prima devo caricare il modello, ci vuole un minuto in più"
                   if self.diagnosi.get("caricato") is False else "")
-        return (f"{cosa}: lo affido all'agente {self.imp.su_nome}{coda}{carico}. {stima} e ti "
-                f"avviso quando ha finito. Procedo?")
+        # La specifica raffinata dall'analisi della richiesta (06/10): la persona sente cosa
+        # si farà davvero prima del «sì»
+        spec = str(getattr(lav, "specifica", "") or "").strip().rstrip(".")
+        prima = f"Ho capito così: {spec[:1].lower() + spec[1:]}. " if spec else ""
+        return (f"{prima}{cosa}: lo affido all'agente {self.imp.su_nome}{coda}{carico}. {stima} "
+                f"e ti avviso quando ha finito. Procedo?")
+
 
     def proponi(self, lav: Lavoro, turno: int) -> str:
         frase = self.proposta(lav)
@@ -1088,7 +1120,13 @@ class Lavori:
                     test = f" I test che ha scritto passano, {n} su {n}."
                 elif t:
                     test = f" Dei test che ha scritto ne passano {max(0, n - ko)} su {max(n, ko)}."
-                return (f"ho fermato «{titolo}»: {r.get('motivo', '').split(': ', 1)[-1]}. "
+                limite = r.get('motivo', '').split(': ', 1)[-1]
+                # Cosa ha fatto, in parole (06/10, L1 della DGX: «ha fatto tutte le 24 passate»
+                # non diceva che non c'era nemmeno una riga dell'estensione)
+                fatto = cosa_ha_fatto(lav, r)
+                if fatto:
+                    limite = f"{fatto}, e {limite}"
+                return (f"ho fermato «{titolo}»: {limite}. "
                         f"Quello che ho fatto è {dove}.{test}")
             passo = f" {r['passo']}" if r.get("passo") else ""
             motivo = str(r.get("motivo") or "").rstrip(". ")

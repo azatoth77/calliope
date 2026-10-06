@@ -133,24 +133,56 @@ def _estensione_crea(ctx: ToolContext, compito: str = "", nome: str = "", propos
     # Le funzioni che Calliope ha già, per il piano dell'agente (doppioni, 06/10)
     vincoli = (vincoli + " " + funzioni_di_calliope()).strip()
     gia_detto = politica.accettata(ctx) and politica.gia_fatto({"gia_fatto_da": gia})
-    if gia_detto:
-        vincoli += (f" La persona sa che Calliope lo fa già con {gia} e vuole comunque "
-                    "l'estensione: nel piano gia_fatto_da resta vuoto.")
-    lav = svc.nuovo("estensione", compito, prof.id, prof.name, ta._level(ctx), "", "", vincoli,
-                    list(getattr(ctx, "storia", None) or []))
-    lav.doppione_chiesto = gia_detto
-    lav.estensione = esistente or None
-    lav.gioco = bool(gioco)
-    if gioco:
-        lav.vincoli = ((lav.vincoli + " ") if lav.vincoli else "") + (
-            "È un GIOCO sullo schermo: scheda interattiva (§5 del contratto), gioco puro, "
-            "senza estensione.py.")
-    lav.file_iniziali = {"calliope_estensione.py": runtime_testo(), **file}
+    level = ta._level(ctx)
+    storia = list(getattr(ctx, "storia", None) or [])
+
+    def crea(compito_agente: str, esito=None, gia_detto: bool = False, gia: str = ""):
+        v = vincoli
+        if gia_detto:
+            v += (f" La persona sa che Calliope lo fa già con {gia} e vuole comunque "
+                  "l'estensione: nel piano gia_fatto_da resta vuoto.")
+        if esito is not None and esito.esito == "raffinabile":
+            v += f" Richiesta come detta dalla persona: «{compito}»."
+        lav = svc.nuovo("estensione", compito_agente, prof.id, prof.name, level, "", "", v,
+                        storia)
+        # Il nome del lavoro: quello dell'estensione (06/10: L1 si chiamava «estensione che»)
+        titolo = ta._titolo_estensione(nome, esito)
+        if titolo:
+            lav.titolo = titolo
+        elif compito_agente != compito:
+            from ..agenti.servizio import titolo_da
+            lav.titolo = titolo_da(compito)
+        if esito is not None and esito.esito == "raffinabile":
+            lav.specifica = esito.specifica
+        lav.doppione_chiesto = gia_detto
+        lav.estensione = esistente or None
+        lav.gioco = bool(gioco)
+        if gioco:
+            lav.vincoli = ((lav.vincoli + " ") if lav.vincoli else "") + (
+                "È un GIOCO sullo schermo: scheda interattiva (§5 del contratto), gioco puro, "
+                "senza estensione.py.")
+        lav.file_iniziali = {"calliope_estensione.py": runtime_testo(), **file}
+        return lav
+
+    # L'analisi della richiesta prima della proposta (06/10, calliope/agenti/richiesta.py): non
+    # per un gioco né per la modifica di un'estensione che c'è già
+    esito = None
+    if not esistente and not gioco and not gia_detto:
+        ris, esito, gia_an = ta._analisi(ctx, svc, prof, "estensione", compito, crea,
+                                         "estensione_crea")
+        if ris is not None:
+            return ris
+        if gia_an:                       # «sì, comunque» dopo il «c'è già» dell'analisi
+            gia, gia_detto = gia_an, True
+    raffinata = esito is not None and esito.esito == "raffinabile"
+    lav = crea(esito.specifica if raffinata else compito, esito, gia_detto, gia)
     turno = int(getattr(ctx, "turno", 0) or 0)
-    # Già confermata alla domanda della politica (06/10): niente secondo «Procedo?»
-    if politica.accettata(ctx):          # regola `politica_conferma_unica`, dalla politica
+    # Già confermata alla domanda della politica (06/10): niente secondo «Procedo?» (salvo una
+    # specifica raffinata dall'analisi, che la persona non ha ancora sentito)
+    if politica.accettata(ctx) and not raffinata:   # regola `politica_conferma_unica`
         return ta._avvia(ctx, svc, lav)
     return ta._proponi(ctx, svc, lav, turno)
+
 
 
 def _estensioni_gestisci(ctx: ToolContext, azione: str = "elenca", nome: str = "",

@@ -56,7 +56,12 @@ def load_agenti(cfg, on_done=None, biblioteca=None, formati=("word", "excel", "p
                          "Guarda il terminale di Calliope: python -m calliope.stato.",
                          {"errore": str(e)})
         return None
+    if getattr(cfg, "agenti_analisi", True):
+        # L'analisi della richiesta prima della proposta (06/10, richiesta.py)
+        from .richiesta import Analizzatore
+        svc.analizzatore = Analizzatore(cfg, svc, log=log)
     capacita.REGISTRO.da_dict(capacita.check_agenti(cfg, svc))
+
     capacita.REGISTRO.dinamica("agenti", lambda: capacita.check_agenti(cfg, svc))
     if verifica:
         svc.verifica_in_secondo_piano()

@@ -921,6 +921,13 @@ class Config:
     # Conferma a voce prima di avviare: «costosi» (codice, ricerche, coda già occupata,
     # modello da caricare), «sempre» o «mai»
     agenti_conferma: str = "costosi"
+    # Analisi della richiesta prima della proposta (06/10, calliope/agenti/richiesta.py): un
+    # lavoro di codice o un'estensione nuova passa prima dal modello dell'agente, che dice se
+    # la richiesta basta, se la conversazione la completa, quali dati mancano (al più 2
+    # domande a voce), se Calliope lo sa già fare o se qui è impossibile. Oltre tanti secondi
+    # (fonte web verificata compresa) si procede come prima dell'analisi
+    agenti_analisi: bool = True
+    agenti_analisi_s: float = 10.0
     # Stesso Ollama della voce: l'agente si ferma quando qualcuno parla a Calliope e riparte
     # tanti secondi dopo la fine della risposta
     agenti_precedenza_voce: bool = True
@@ -2059,6 +2066,7 @@ SEZIONI: dict[str, list[str]] = {
                "agenti_dimostrazione_attesa_s", "agenti_esecuzione_attesa_s",
                "agenti_sandbox", "agenti_risultati",
                "agenti_modelli", "agenti_livello", "agenti_livello_codice", "agenti_conferma",
+               "agenti_analisi", "agenti_analisi_s",
                "agenti_precedenza_voce", "agenti_ripresa_s", "agenti_arbitro", "agenti_pausa_vllm",
                "agenti_domande_max",
                "agenti_attesa_risposta_min", "agenti_file_max_mb", "agenti_file_caratteri",
@@ -2242,6 +2250,7 @@ LIMITI: dict[str, tuple[float, float]] = {
     "agenti_num_ctx": (2048, 1_048_576), "agenti_contesti_paralleli": (1, 64),
     "agenti_token_passata": (512, 262_144), "agenti_ragionamento_passata": (0, 262_144),
     "agenti_soglia_file": (0.1, 0.95), "agenti_passi_intatti": (1, 20),
+    "agenti_analisi_s": (1.0, 60.0),
 }
 
 
