@@ -24,6 +24,7 @@ sh ~/calliope-sorgente/setup/linux/installa.sh  # uv (chiede), venv dal lock, ve
 calliope stato            # cosa funziona e cosa manca, con i passi di Linux
 calliope avvia | ferma | riavvia | log
 calliope aggiorna         # versione nuova accanto, verifica, riavvio, ritorno automatico
+                          # (--attendi-lavori / --forza con lavori dell'agente in corso)
 calliope torna            # alla versione precedente (--con-dati: anche memoria e voci di allora)
 calliope versioni | calliope extra casa | calliope sorgente <URL>
 loginctl enable-linger $USER              # una volta: parte all'accensione
@@ -90,6 +91,32 @@ calliope stato --installa whisper_riserva   # faster-whisper su CPU se il server
   alla prima installazione).
 - Da copiare dal portatile (non si scaricano): `wakeword/modelli/calliope.onnx`,
   `speakers.json`, `memoria.db`; voci, CAM++ e biblioteca anche dal catalogo.
+
+## Aggiornare con un lavoro dell'agente in corso (06/10)
+
+Il 06/10 alle 17:07 un `calliope aggiorna` ha ucciso in silenzio il lavoro «gioco memory»
+partito alle 16:56. Ora `aggiorna`, `riavvia` e `torna` (solo libreria standard, in
+`setup/linux/gestore.py`), prima di fermare il servizio, leggono lo stato dei lavori che
+Calliope tiene in `~/calliope/lavori/in_corso.json` (calliope/agenti/ripresa.py; vale solo se il
+processo che l'ha scritto è vivo, e solo con `agenti_sandbox` predefinito). Con lavori in coda o
+in corso li elencano («L2 «gioco memory…» di Mario, in corso da 11 minuti») e:
+
+```bash
+calliope aggiorna                       # da terminale: «Li interrompo e aggiorno lo stesso? [s/N]»
+calliope aggiorna --attendi-lavori      # aspetta che finiscano (al più 30 minuti, controllo ogni 10 s)
+calliope aggiorna --attendi-lavori 60   # al più 60 minuti; oltre, non cambia niente (uscita 75)
+calliope aggiorna --forza               # li interrompe: dopo il riavvio Calliope propone di rifarli
+calliope riavvia --attendi-lavori       # lo stesso per riavvia e torna
+```
+
+Senza terminale (lo script via ssh) e senza opzioni non procede: uscita **75** («riprova più
+tardi») e dice quale opzione usare. Per gli aggiornamenti non interattivi: `--attendi-lavori`
+(con `--forza` se un aggiornamento non può aspettare). Un lavoro che aspetta una risposta non
+blocca: sopravvive al riavvio. Con `aggiorna` il controllo viene dopo la preparazione e la
+verifica della versione nuova (che resta pronta per la volta dopo), prima della copia dei dati.
+Le opzioni ci sono dal primo aggiornamento con questa versione: il gestore si aggiorna solo
+dopo un aggiornamento riuscito, quindi la prima volta `calliope aggiorna` è ancora quello
+vecchio. Prova: `prova_gestore.py`, sezione 11.
 
 ## Prova end-to-end su un'istanza di prova (06/10)
 

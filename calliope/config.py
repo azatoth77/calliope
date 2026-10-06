@@ -94,6 +94,11 @@ class Config:
     # testo nemmeno a tolleranza larga e il punteggio resta sotto questo valore, il
     # risveglio si scarta in silenzio e il testo non si conserva
     wake_confirm_score: float = 0.9
+    # Il nome da solo (06/10): con lo scatto sicuro e il nome assente dal testo, una frase
+    # vuota o con al più questi secondi di voce è il nome storpiato da Whisper («Computer» →
+    # «Come più tardi.», 0,76 s): saluto, o suono d'inizio ascolto, e finestra aperta,
+    # invece della frase al modello. «Calliope» da solo dura 0,5–0,65 s sulla DGX
+    wake_solo_nome_s: float = 0.9
     # Barge-in, livello A: mentre Calliope parla la wake word resta accesa e «Calliope,
     # basta» la interrompe (solo il nome: il resto della voce non viene ascoltato). Senza
     # cuffie si ignora quando è lei a dire il proprio nome. Richiede wake_mode="modello".
@@ -1049,6 +1054,10 @@ class Config:
     # tanti minuti senza risposta si chiude da solo, e Calliope lo dice
     agenti_domande_max: int = 3
     agenti_attesa_risposta_min: float = 120.0
+    # Lavori interrotti da un riavvio di Calliope (06/10, calliope/agenti/ripresa.py): chi li
+    # aveva chiesti lo sente al primo silenzio («… Lo rifaccio?») se il lavoro era vivo meno
+    # di tante ore fa; quelli più vecchi restano solo nell'elenco di lavori_stato, per un giorno
+    agenti_interrotti_annuncio_h: float = 3.0
     # I file della persona dati all'agente (03/10, «correggi lo script backup.py»): solo
     # testo, codice, Word, Excel e PDF, al più tanti MB; del testo di un documento l'agente
     # legge al più tanti caratteri
@@ -1971,7 +1980,8 @@ SEZIONI: dict[str, list[str]] = {
     "identita": ["name", "gender", "persona", "tono", "modalita", "suoni_ascolto",
                  "suono_inizio_ascolto", "suono_fine_ascolto", "suoni_volume"],
     "wake_word": ["wake_word", "wake_anche_nome", "wake_posizione", "wake_word_enabled", "wake_mode", "wake_model", "wake_threshold",
-                  "wake_consecutive", "wake_confirm_score", "followup_s", "wake_match"],
+                  "wake_consecutive", "wake_confirm_score", "wake_solo_nome_s", "followup_s",
+                  "wake_match"],
     "barge_in": ["barge_in_enabled", "barge_in_threshold", "barge_in_seed_s",
                  "barge_in_voice", "barge_in_voice_min_s", "barge_in_echo_max"],
     "llm": ["llm_profilo", "llm_backend", "llm_native_url", "llm_base_url", "llm_model", "llm_temperature",
@@ -2070,7 +2080,7 @@ SEZIONI: dict[str, list[str]] = {
                "agenti_precedenza_voce", "agenti_ripresa_s", "agenti_arbitro", "agenti_pausa_vllm",
                "agenti_domande_max",
                "agenti_attesa_risposta_min", "agenti_file_max_mb", "agenti_file_caratteri",
-               "agenti_esempi_max", "agenti_esempio_kb"],
+               "agenti_esempi_max", "agenti_esempio_kb", "agenti_interrotti_annuncio_h"],
     "estensioni": ["estensioni_enabled", "estensioni_cartella", "estensioni_max_attive",
                    "estensioni_attesa_s", "estensioni_conferma_s", "estensioni_tempo_max_s",
                    "estensioni_memoria_max_mb", "estensioni_secondo_parere",
@@ -2227,7 +2237,7 @@ LIMITI: dict[str, tuple[float, float]] = {
     "llm_num_ctx": (512, 1_048_576), "llm_temperature": (0.0, 2.0),
     "contesto_ripiego": (2048, 1_048_576), "contesto_rilettura_max_s": (0.1, 60.0),
     "contesto_conversazioni": (1, 64), "contesto_margine_gb": (0.0, 512.0),
-    "max_history_turns": (0, 200), "max_tool_turns": (1, 20), "followup_s": (0.0, 600.0),
+    "max_history_turns": (0, 200), "max_tool_turns": (1, 20), "followup_s": (0.0, 600.0), "wake_solo_nome_s": (0.0, 3.0),
     "sample_rate": (8000, 48000), "whisper_beam_size": (1, 20), "stt_timeout_s": (0.5, 600.0),
     "stt_correzione_soglia": (0.0, 1.01), "stt_correzione_timeout_s": (0.2, 30.0),
     "speaker_id_threshold": (0.0, 1.0), "wake_threshold": (0.0, 1.0),

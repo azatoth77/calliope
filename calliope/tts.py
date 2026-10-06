@@ -617,6 +617,16 @@ class Speaker:
         if pcm:
             self.audio_q.put(("", pcm))
 
+    def suono(self, suoni, tipo: str):
+        """Il segnale d'inizio o di fine ascolto deciso dal server (06/10, il nome da solo:
+        calliope/ciclo.py): dalle casse locali o, con un satellite, mandato come una frase
+        senza testo (come `chime`), così lo suona anche un satellite vecchio."""
+        if self.muto or suoni is None:
+            return
+        pcm = suoni.pcm(tipo, self.out.rate if self.out is not None else self._rate)
+        if pcm:
+            self.audio_q.put(("", pcm))
+
     def sintetizza(self, text: str) -> tuple[bytes, int]:
         """Una frase sintetizzata subito con la voce attuale, fuori dalle code: (PCM int16,
         frequenza). Serve al saluto che il satellite dice quando si collega. Da chiamare

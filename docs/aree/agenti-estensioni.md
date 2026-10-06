@@ -421,6 +421,57 @@
     reset dentro `URLError` (Linux). `prova_rinomina_ollama` e `prova_scritto_ollama` nel
     runner con Ollama.
 
+## Lavori interrotti da un riavvio (06/10)
+
+Caso vero della DGX: alle 16:56 Dario fa partire «gioco memory da giocare sullo schermo»
+(codice, qwen3.6 su vLLM, sandbox `~/calliope/lavori/L2-20261006-165635` con gioco.js, logica.js
+e logica.test.js); alle 17:07 un `calliope aggiorna` riavvia il servizio e il lavoro muore.
+Dopo il riavvio Calliope non dice niente e `lavori_stato` risponde «Non ho lavori in corso.»:
+coda e stato stavano solo in memoria (`lavoro.json` si scriveva a lavoro fermo o finito).
+
+Ora (`calliope/agenti/ripresa.py`):
+- **stato su disco**: a ogni cambio (in coda, in corso, cartella e sandbox scelte, in attesa,
+  finito, annullato, scaduto) il servizio scrive `in_corso.json` nella cartella delle sandbox
+  (`agenti_sandbox`, sulla DGX `~/calliope/lavori/`), atomico (`persistenza.scrivi_json`), con
+  il pid del processo. Non durante la chiusura: i lavori fermati da `close()` restano «in
+  corso» e al prossimo avvio diventano interrotti (stesso percorso per SIGTERM e per un
+  crollo). Un file scritto dallo stesso processo non si legge (servizio ricreato, prove);
+- **all'avvio** i lavori in coda o in corso diventano `interrotto` (`lavoro.json` nella
+  cartella lo dice); gli id ripartono dopo il più alto del file;
+- **annuncio** dal thread dei lavori, nella coda degli annunci come gli altri (al primo
+  silenzio, verso la corsia e il satellite di chi l'aveva chiesto): «Mario, il lavoro «…» si
+  è interrotto per un riavvio di Calliope. L'agente aveva già scritto 2 file, e ripartirei da
+  quelli. Lo rifaccio?», con l'azione in sospeso `delega_lavoro(proposta=<id>)`. Un annuncio
+  per persona («i lavori «A» e «B» … Li rifaccio?»: al «sì» ripartono tutti). Una volta sola
+  (`annunciato` resta nel file). Solo se il lavoro era vivo da meno di
+  `agenti_interrotti_annuncio_h` ore (3); più vecchi solo nell'elenco, e dopo un giorno escono;
+- **al «sì»** (`Lavori.offerta` vale anche per gli interrotti annunciati, senza turno: il «sì»
+  lo controlla l'azione in sospeso del Brain, solo la stessa persona) un lavoro nuovo con lo
+  stesso compito, la stessa persona e la stessa cartella dei risultati. **Codice ed estensioni
+  ripartono dalla sandbox di prima** (`sandbox_da`): la scelta più semplice e sicura, perché
+  la sandbox è una cartella, i file sono dell'agente nello stesso isolamento, l'agente li vede
+  nell'elenco dei file e un vincolo gli dice che il lavoro era stato interrotto; i
+  `file_iniziali` che ci sono già non si riscrivono (una modifica a metà di un'estensione
+  resta). La conversazione dell'agente invece riparte da capo: a metà lavoro non è salvata
+  (è lo stato meno sicuro da riprendere), le risposte già date passano nei vincoli. Al «no»
+  non riparte niente e resta nell'elenco;
+- **un lavoro in attesa di una risposta** torna ad aspettarla con la sua conversazione (il
+  `contesto` è JSON: messaggi, spinte, piano, stato del contesto), la domanda si ripete e
+  `lavori_rispondi` lo riprende da dove era, nella stessa sandbox. Se la conversazione non si
+  poteva salvare diventa interrotto;
+- **un lavoro su un file della persona** non si rifà da solo (la copia del file e la consegna
+  al satellite non sopravvivono): «Era su un tuo file: se vuoi, chiedimelo di nuovo.», senza
+  domanda;
+- `lavori_stato` li elenca («… si è interrotto per un riavvio di Calliope: lo rifaccio?», con
+  l'azione in sospeso); `stato()` non dice più «Non ho lavori in corso.» e basta.
+
+Il gestore di Linux legge lo stesso file prima di fermare il servizio: vedi
+[setup-dgx](setup-dgx.md). Non fa ancora: copiare i file della sandbox di un interrotto nella
+cartella dei risultati se la persona dice «no» (restano in `~/calliope/lavori/`); salvare la
+conversazione dell'agente durante il lavoro (si potrebbe a ogni passata, ma riprendere a metà
+di una chiamata di strumento è il punto delicato). A secco: `prova_lavori_riavvio.py`; sulla
+DGX non ancora provato con un riavvio vero.
+
 ## Tetto delle estensioni e avvio del container (06/10, prova e2e)
 
 Alla prima chiamata dopo l'approvazione «Converti gradi» (tetto 5 s) finiva con «si è fermata
