@@ -1,0 +1,27 @@
+{
+  "nome": "preventivo",
+  "titolo": "Preventivo su carta intestata",
+  "descrizione": "Un preventivo con il cliente, le voci con gli importi e il totale.",
+  "formato": "word",
+  "campi": {
+    "cliente": {"descrizione": "il nome del cliente", "tipo": "testo"},
+    "indirizzo_cliente": {"descrizione": "l'indirizzo del cliente", "tipo": "testo"},
+    "data": {"descrizione": "la data del preventivo", "tipo": "data"},
+    "oggetto": {"descrizione": "l'oggetto del lavoro", "tipo": "testo"},
+    "voci": {"descrizione": "le voci del preventivo: descrizione e importo in euro", "tipo": "tabella"},
+    "validita_giorni": {"descrizione": "per quanti giorni vale il preventivo", "tipo": "numero"},
+    "note": {"descrizione": "condizioni o note", "tipo": "testo", "obbligatorio": false}
+  },
+  "documento": {
+    "titolo": "Preventivo {{cliente}} {{data}}",
+    "blocchi": [
+      {"tipo": "paragrafo", "testo": "Esposito Servizi di Casa", "allinea": "destra"},
+      {"tipo": "titolo", "testo": "Preventivo: {{oggetto}}"},
+      {"tipo": "paragrafo", "testo": "Spett.le {{cliente}}, {{indirizzo_cliente}}"},
+      {"tipo": "paragrafo", "testo": "Data: {{data}}"},
+      {"tipo": "tabella", "colonne": ["Voce", "Importo (€)"], "righe": "{{voci}}", "totale": true},
+      {"tipo": "paragrafo", "testo": "Il preventivo vale {{validita_giorni}} giorni dalla data."},
+      {"tipo": "paragrafo", "testo": "{{note}}"}
+    ]
+  }
+}

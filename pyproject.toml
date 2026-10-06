@@ -1,0 +1,105 @@
+# Calliope come progetto Python installabile (02/10/2026, impacchettamento per la DGX Linux).
+#
+# Su Linux (DGX Spark) si installa e si aggiorna con uv: `sh setup/linux/installa.sh`, poi
+# `calliope aggiorna` (vedi setup/linux/gestore.py e
+# docs/ricerche/2026-10-02-impacchettamento-dgx-linux.md). uv.lock è universale: generato
+# su Windows vale anche per linux-aarch64 (documentazione di uv, «universal resolution»).
+# Su Windows il venv di sviluppo con pip resta come prima (CLAUDE.md, «Setup (Windows)»).
+#
+# Le dipendenze di base sono quelle senza cui Calliope non parte (voce, ascolto, modello);
+# il resto sta negli extra, e senza un extra manca solo quella capacità (il registro delle
+# capacità lo dice con il prossimo passo).
+
+[project]
+name = "calliope"
+version = "0.3.0"
+description = "Calliope, assistente vocale locale in italiano"
+readme = "README.md"
+# Licenza (06/10, decisione per la pubblicazione): AGPL v3 o successiva, espressione SPDX
+# (PEP 639); testo in LICENSE, componenti di terzi in TERZE-PARTI.md
+license = "AGPL-3.0-or-later"
+license-files = ["LICENSE", "TERZE-PARTI.md"]
+# numpy 2.5 vuole Python >= 3.12; Ubuntu 24.04 (DGX OS) ha la 3.12, il portatile la 3.14
+requires-python = ">=3.12"
+dependencies = [
+    "numpy",
+    "httpx",
+    "openai",
+    "pyyaml",
+    # Su Linux senza PortAudio: serve la libreria di sistema libportaudio2
+    "sounddevice",
+    "onnxruntime",                 # wake word, CAM++, Piper e (su Linux) Silero VAD
+    # Su Linux aarch64 CTranslate2 è solo per CPU: sulla DGX Whisper va su un server
+    # (stt_motore: server) e questo resta il ripiego su CPU (principio 7)
+    "faster-whisper",
+    "piper-tts",                   # contiene espeak-ng: niente pacchetto di sistema
+    # Serve il file ONNX che contiene; torch e torchaudio solo su Windows (override sotto)
+    "silero-vad",
+    # Biblioteca: i file ZIM con zstd; Python 3.14 ha compression.zstd
+    "zstandard; python_version < '3.14'",
+]
+
+[project.optional-dependencies]
+# pypdf (puro Python, py3-none-any): il testo dei PDF della persona dati all'agente (03/10)
+documenti = ["python-docx", "openpyxl", "fpdf2", "pypdf"]
+# Modelli Word e PowerPoint dell'utente (calliope/ufficio/, 03/10): puro Python (docxtpl con
+# Jinja2, python-pptx con XlsxWriter); le parti native sono lxml, Pillow e MarkupSafe, con
+# wheel win_amd64, win_arm64 e manylinux aarch64
+modelli = ["docxtpl", "python-pptx"]
+casa = ["websockets"]
+# Mai uvicorn[standard]: httptools e uvloop non hanno wheel win_arm64 (CLAUDE.md)
+schermi = ["starlette", "uvicorn"]
+# PC a voce: solo Windows (calliope/pc/windows.py); su Linux l'extra non installa niente
+pc = [
+    "pycaw; sys_platform == 'win32'",
+    "comtypes; sys_platform == 'win32'",
+    "pywin32; sys_platform == 'win32'",
+    "psutil; sys_platform == 'win32'",
+    "screen_brightness_control; sys_platform == 'win32'",
+    "winrt-Windows.Media.Control; sys_platform == 'win32'",
+]
+# Whisper sulla GPU NVIDIA con CTranslate2: le DLL di CUDA 12 da pip, solo Windows x86-64
+gpu = [
+    "nvidia-cublas-cu12; sys_platform == 'win32' and platform_machine == 'AMD64'",
+    "nvidia-cudnn-cu12; sys_platform == 'win32' and platform_machine == 'AMD64'",
+]
+# Archivio dei documenti di casa (calliope/archivio/): PDF con PDFium (wheel per win_amd64,
+# win_arm64 e manylinux aarch64), foto con Pillow, Word con python-docx. L'OCR è il modello
+# visivo già servito sulla DGX: nessuna libreria di OCR
+archivio = ["pypdfium2", "pillow", "python-docx"]
+# Solo per le prove (HA finto con le frasi vere, lettura dei PDF)
+prove = ["hassil", "home-assistant-intents", "pypdf"]
+tutto = ["calliope[documenti,modelli,casa,schermi,pc,gpu,archivio]"]
+
+[project.scripts]
+# Come `python -m calliope`
+calliope = "calliope.__main__:cli"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["calliope"]
+
+[tool.uv]
+# silero-vad dichiara torch e torchaudio obbligatori, ma Calliope usa il suo modello ONNX
+# con onnxruntime (calliope/vad.py, equivalenza misurata il 02/10 su 32 464 finestre).
+# Su Linux aarch64 torch di PyPI è quello con CUDA 13 (2.14.1: 454 MB più cuda-toolkit e
+# cuDNN): con il marcatore torch e torchaudio restano solo su Windows, dove servono ancora
+# al VAD di sempre (vad_motore: auto) e alla stima del genere (speaker_id.py). I limiti
+# di versione sono quelli di silero-vad 6.2.
+override-dependencies = [
+    "torch>=1.12.0; sys_platform == 'win32'",
+    "torchaudio>=0.12.0,<2.10; sys_platform == 'win32'",
+]
+# Il lock si risolve solo per le piattaforme vere di Calliope: Windows (portatile) e Linux
+# (DGX Spark aarch64; x86-64 per completezza)
+environments = [
+    "sys_platform == 'win32'",
+    "sys_platform == 'linux'",
+]
+# Senza un wheel per la DGX il lock fallisce subito, non all'installazione sulla DGX
+required-environments = [
+    "sys_platform == 'linux' and platform_machine == 'aarch64'",
+]

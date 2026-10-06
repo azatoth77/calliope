@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="robots" content="noindex">
+<title>Calliope · schermo</title>
+<link rel="stylesheet" href="/schermo.css">
+<script src="/schermo.js" defer></script>
+</head>
+<body>
+<header id="testa">
+  <span id="luogo">Calliope</span>
+  <span id="orologio-piccolo"></span>
+  <span id="contesto" class="contesto" hidden title="Quanto della memoria della conversazione è usato"><span class="contesto-barra" aria-hidden="true"><span></span></span><span id="contesto-testo"></span></span>
+  <span id="stato" class="stato" title="Collegamento con Calliope"><span class="punto"></span><span id="stato-testo">avvio…</span></span>
+</header>
+<div id="voce" class="voce" role="status" aria-live="polite" hidden>
+  <span class="forma" aria-hidden="true"><i></i><i></i><i></i></span>
+  <span class="voce-testo"></span>
+  <span class="voce-resto"></span>
+  <span class="voce-barra" aria-hidden="true"><span></span></span>
+</div>
+<main id="principale" aria-live="polite"></main>
+<footer id="cronologia" aria-label="Schede recenti"></footer>
+<noscript><p class="avviso">Questa pagina ha bisogno di JavaScript.</p></noscript>
+</body>
+</html>

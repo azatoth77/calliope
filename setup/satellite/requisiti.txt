@@ -1,0 +1,19 @@
+# Il satellite su un PC senza Calliope completa (02/10/2026): solo ascolto, wake word e
+# riproduzione. Versioni uguali a uv.lock. Tutte con wheel per win_amd64, win_arm64 e Linux
+# aarch64 (sounddevice è py3-none-any e contiene la DLL di PortAudio anche per ARM64).
+# Silero VAD si installa a parte, senza dipendenze (installa.ps1): serve solo il suo file
+# ONNX, e le sue dipendenze dichiarate (torch, torchaudio) sono centinaia di MB inutili qui.
+numpy==2.5.3
+sounddevice==0.5.6
+onnxruntime==1.30.0
+websockets==17.1
+pyyaml==6.0.3
+# Esecutore del PC (03/10): volume, musica, luminosità, programmi aperti, ricerca di file per
+# Calliope sul server. Facoltative: senza, il satellite offre solo app, blocco e documenti.
+# Wheel win_arm64 o puro Python (CLAUDE.md, ricerca del 26/09)
+pycaw==20260927
+comtypes==1.4.17
+pywin32==312
+psutil==7.2.2
+screen-brightness-control==0.27.2
+winrt-Windows.Media.Control==3.2.1

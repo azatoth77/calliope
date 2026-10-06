@@ -1,0 +1,31 @@
+# Immagine della sandbox per il C# (04/10/2026): i programmi C# scritti dall'agente si
+# compilano e girano qui dentro, un container usa-e-getta per ogni esecuzione, con le stesse
+# regole di quella di Python (calliope/agenti/sandbox.py: niente rete, disco in sola lettura
+# salvo la cartella del lavoro, utente non root, tetti a tempo, memoria e processi).
+# Si costruisce con setup/linux/motore/sandbox.sh costruisci csharp (o «calliope motore
+# sandbox costruisci csharp»); il nome è calliope-sandbox-dotnet:<prime 12 cifre dello
+# SHA-256 di questo file>.
+#
+# Niente SDK intero (974 MB, e `dotnet build`/`dotnet run` vogliono NuGet, cioè la rete: senza
+# rete falliscono con NU1301): solo il runtime di .NET, il compilatore Roslyn e gli assembly di
+# riferimento, presi dall'SDK con le stesse versioni. Il programma si compila con csc
+# direttamente (calliope/agenti/esegui_cs.sh, montato in sola lettura come _avvio.py): ~0,5 s,
+# senza MSBuild né pacchetti. Solo la libreria di base di .NET.
+FROM mcr.microsoft.com/dotnet/sdk:10.0.401 AS sdk
+
+FROM mcr.microsoft.com/dotnet/runtime:10.0.12
+COPY --from=sdk /usr/share/dotnet/sdk/10.0.401/Roslyn/bincore /opt/csc
+COPY --from=sdk /usr/share/dotnet/packs/Microsoft.NETCore.App.Ref/10.0.12/ref/net10.0 /opt/riferimenti
+# I riferimenti in un file di risposta di csc, e gli «using» impliciti di un progetto console
+RUN set -e; for f in /opt/riferimenti/*.dll; do echo "-r:$f"; done > /opt/csc/riferimenti.rsp; \
+    printf '%s\n' 'global using System;' 'global using System.Collections.Generic;' \
+      'global using System.IO;' 'global using System.Linq;' 'global using System.Net.Http;' \
+      'global using System.Threading;' 'global using System.Threading.Tasks;' \
+      > /opt/csc/usings.cs; \
+    mkdir -p /lavoro /opt/calliope; \
+    dotnet /opt/csc/csc.dll -nologo -help > /dev/null && echo "compilatore ok"
+
+LABEL calliope.sandbox="1"
+USER 65534:65534
+WORKDIR /lavoro
+ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1 DOTNET_gcServer=0 LANG=C.UTF-8

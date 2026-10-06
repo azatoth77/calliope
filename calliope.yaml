@@ -1,0 +1,1298 @@
+# Configurazione di Calliope.
+# Generato da calliope/config.py con: python -m calliope.config --esempio
+# I commenti vengono dal codice. Si cambiano solo i valori: un campo tolto torna
+# al predefinito. Le variabili d'ambiente CALLIOPE_* vincono su questo file.
+
+identita:
+  # Identità: nome (che è anche la wake word, salvo wake_word), genere e personaggio
+  name: Calliope
+  # "f" o "m": come parla di sé (da abbinare alla voce)
+  gender: f
+  persona: Il tuo nome viene dalla musa dell'eloquenza.
+  # Tono delle risposte della casa (04/10, docs/ricerche/2026-10-04-personalita-wake-word.md):
+  # uno dei nomi in TONI (in fondo a questo file): normale, formale, amichevole, ironico,
+  # essenziale, computer_di_bordo. Sta nel prompt di sistema (cambia di rado: la cache del
+  # prefisso si rifà una volta). Ognuno può chiedere il suo («parlami in modo più
+  # formale»: cambia_voce con tono, salvato nel profilo come la voce) e quello va nei dati
+  # del turno, prima della domanda; chi amministra cambia quello della casa a voce
+  # (per_tutti), salvato in personalita.json accanto a calliope.yaml: vince su questo
+  # finché calliope.yaml o calliope.locale.yaml non sono più recenti (vale il più recente)
+  tono: normale
+  # Modalità (preset): "startrek" = wake word «Computer» (solo all'inizio della frase o
+  # dopo una virgola), tono computer_di_bordo e i suoni di inizio e fine ascolto. Vince su
+  # calliope.yaml; ciò che scrivi in calliope.locale.yaml vince sulla modalità. Il nome
+  # dell'assistente resta `name` (si presenta come Calliope, il computer di bordo).
+  # null = nessuna modalità
+  modalita: null
+  # Suoni di inizio ascolto (allo scatto della wake word) e di fine ascolto (frase presa),
+  # suonati da chi ha il microfono: casse locali, satellite o telefono. Senza file sono
+  # sintetici (calliope/suoni.py: bip a più toni, nessun suono originale di Star Trek);
+  # suono_inizio_ascolto / suono_fine_ascolto: un tuo WAV (percorso, in
+  # calliope.locale.yaml: i file non vanno in git), oppure "nessuno" per spegnere solo quel
+  # segnale (il bip d'inizio suona mentre si parla e finisce nella frase per Whisper)
+  suoni_ascolto: false
+  suono_inizio_ascolto: null
+  suono_fine_ascolto: null
+  # 0–1, solo per i suoni sintetici
+  suoni_volume: 0.35
+
+wake_word:
+  # Wake word
+  # La parola che sveglia (04/10). null = il nome (`name`). Per la wake word acustica
+  # serve un modello addestrato su quella parola in wake_model; senza, si torna da soli
+  # alla testuale (Whisper sempre acceso)
+  wake_word: null
+  # Con una wake_word diversa dal nome, anche il nome sveglia (nel testo; l'acustica sente
+  # solo la parola del suo modello)
+  wake_anche_nome: true
+  # "ovunque": la parola vale in qualunque punto della frase (va bene per un nome raro come
+  # Calliope); "inizio": solo in testa (dopo «ehi», «ok»…) o dopo una virgola, come si
+  # chiama qualcuno: per una parola comune come «computer» («il computer è lento» non
+  # sveglia, «Computer, che ore sono?» sì)
+  wake_posizione: ovunque
+  wake_word_enabled: true
+  # "modello": wake word acustica dedicata (wakeword/, docs/ricerche/2026-09-24-wake-word.md):
+  # da addormentata Whisper non trascrive nulla finché non sente il nome. Sulle
+  # registrazioni reali: 48/52 risvegli, 0/69 falsi; ~1 falso/ora su audiolibri.
+  # "testo": Whisper trascrive tutto e si cerca il nome nel testo (ripiego automatico
+  # se il modello o onnxruntime mancano).
+  # (variabile d'ambiente CALLIOPE_WAKE_MODE, che vince su questo file)
+  wake_mode: modello
+  wake_model: wakeword/modelli/calliope.onnx
+  wake_threshold: 0.5
+  # blocchi da 80 ms di fila sopra soglia
+  wake_consecutive: 2
+  # Secondo stadio contro i falsi risvegli (TV, audiolibri): se il nome non compare nel
+  # testo nemmeno a tolleranza larga e il punteggio resta sotto questo valore, il
+  # risveglio si scarta in silenzio e il testo non si conserva
+  wake_confirm_score: 0.9
+  # secondi di ascolto libero dopo una risposta
+  followup_s: 8.0
+  # Tolleranza sulla trascrizione del nome (0–1). Era 0,65: «cavallo» (0,67), «calcio»
+  # (0,71), «calle» e «callo» (0,77) svegliavano Calliope (taratura del 24/09). Le
+  # varianti vere («caliope», «calliop», «allìope», «kaliope») stanno a 0,80 o più.
+  wake_match: 0.78
+
+barge_in:
+  # Barge-in, livello A: mentre Calliope parla la wake word resta accesa e «Calliope,
+  # basta» la interrompe (solo il nome: il resto della voce non viene ascoltato). Senza
+  # cuffie si ignora quando è lei a dire il proprio nome. Richiede wake_mode="modello".
+  barge_in_enabled: true
+  barge_in_threshold: 0.5
+  # audio prima dello scatto passato a Whisper
+  barge_in_seed_s: 2.0
+  # Livello B leggero: mentre parla, anche qualunque frase di una persona registrata
+  # la interrompe (VAD + impronta CAM++). Si attiva da solo solo se durante il saluto
+  # iniziale il VAD non ha sentito la sua voce (microfono con cancellazione dell'eco
+  # di Windows, o cuffie); con l'eco in cassa resta solo il nome.
+  barge_in_voice: true
+  # parlato prima di controllare l'impronta
+  barge_in_voice_min_s: 0.8
+  # quota massima di frame "parlato" sul saluto
+  barge_in_echo_max: 0.05
+
+llm:
+  # LLM — due backend (vedi brain.py):
+  #   "ollama" → API nativa /api/chat: num_ctx, think e keep_alive si impostano
+  #              a ogni richiesta e i tool_calls arrivano interi;
+  #   "openai" → API compatibile OpenAI (/v1): il ripiego per qualunque server
+  #              OpenAI-compatibile (principio 1). Lì num_ctx NON passa: Ollama usa
+  #              4096 token, a meno di OLLAMA_CONTEXT_LENGTH o di un Modelfile.
+  # 127.0.0.1 e non "localhost": su Windows prova prima IPv6 e ogni connessione costa ~2 s
+  # 
+  # Profilo del modello della voce (03/10, docs/ricerche/2026-10-03-modello-davanti.md):
+  # UNA riga che sceglie backend, indirizzo, modello, thinking e le reti sul testo adatte a
+  # quel modello (llm_reti_spente). Vince sulle chiavi llm_* qui sotto che imposta. Nomi in
+  # PROFILI_LLM (in fondo a calliope/config.py): "gemma4-e4b-ollama" (il 4B di sempre, reti
+  # tutte accese), "gemma4-26b-ollama" (gemma4:26b-a4b-it-qat sullo stesso Ollama),
+  # "gemma4-26b-vllm" (Gemma 4 26B-A4B su vLLM, porta 8001, avviato con
+  # setup/linux/motore/vllm.sh voce avvia). null = nessun profilo: valgono le singole
+  # chiavi llm_*. Per tornare indietro si cambia solo questa riga, poi `calliope riavvia`.
+  # (variabile d'ambiente CALLIOPE_LLM_PROFILO, che vince su questo file)
+  llm_profilo: null
+  llm_backend: ollama
+  # backend "ollama"
+  llm_native_url: http://127.0.0.1:11434
+  # backend "openai"
+  llm_base_url: http://127.0.0.1:11434/v1
+  llm_model: gemma4:e4b-it-qat
+  llm_temperature: 0.3
+  # Thinking dei modelli ragionanti, backend "ollama": False lo spegne (latenza),
+  # None = non inviare il parametro. Il 23–24/09 con gemma4 acceso chiamava i tool
+  # meglio ma la prima frase passava da ~0,3 s a 0,6–2,5 s.
+  llm_think: false
+  # Lo stesso per il backend "openai": "none" lo spegne, None = non inviare.
+  llm_reasoning_effort: none
+  # Solo backend "openai": argomenti del modello di chat passati così come sono
+  # (`chat_template_kwargs`). Con vLLM il thinking di Gemma 4 e Qwen3 si spegne con
+  # {enable_thinking: false}; lì llm_reasoning_effort va messo a null (vLLM non garantisce
+  # "none"). Ollama non lo usa. None = non inviare.
+  llm_chat_template_kwargs: null
+  # Finestra di contesto in token. "auto" (05/10, calliope/contesto.py): la calcola
+  # Calliope all'avvio dal setup, il minimo tra il massimo del modello, la memoria libera
+  # (nvidia-smi; sulla DGX la memoria unificata) e il tempo per rileggere la storia
+  # (contesto_rilettura_max_s); `calliope stato` dice quale e perché. Un numero scritto
+  # (in calliope.locale.yaml) vince sempre, anche su un profilo. Con Ollama è il num_ctx di
+  # ogni richiesta (voce, documenti, agenti sullo stesso modello: deve essere uguale,
+  # altrimenti Ollama ricarica il modello); con vLLM il server ha il suo --max-model-len e
+  # questo numero serve solo a tagliare la storia. Misure del 05/10 (nvidia-smi, non
+  # `ollama ps` che sottostima): gemma4 e4b 16384 → 4,35 GiB, 65536 → 5,15, 131072 →
+  # 6,2 (17 KiB a token); prefisso vero ~7,3 k token; la storia si taglia anche in token
+  # (Brain._trim_tokens), non solo dopo max_history_turns.
+  llm_num_ctx: auto
+  # Quanto Ollama tiene il modello in VRAM dopo l'ultima richiesta (backend
+  # "ollama"). Il predefinito è 5 minuti: dopo una pausa la risposta pagherebbe
+  # il ricaricamento. None = predefinito del server. Un numero (secondi; negativo =
+  # sempre) o una durata con l'unità: "30m", "24h", "-1m" (sempre). "-1" scritto come
+  # testo vale -1; senza unità Ollama rispondeva 400 a ogni richiesta (03/10). Un
+  # valore non valido si segnala e resta il predefinito. Con il profilo del 26B, se
+  # qui non è scritto niente, vale -1 (sempre caricato: il ricaricamento costa secondi);
+  # il valore dell'esempio in calliope.yaml («30m») non conta come scritto (04/10). Il
+  # runner delle prove con Ollama manda quello della voce: una prova non lo accorcia mai
+  # (variabile d'ambiente CALLIOPE_LLM_KEEP_ALIVE, che vince su questo file)
+  llm_keep_alive: 30m
+  # Quanti modelli tiene residenti l'Ollama della voce (la sua OLLAMA_MAX_LOADED_MODELS).
+  # 0 = letto dalla variabile o dal servizio systemd di Ollama, altrimenti 3 (06/10,
+  # calliope/ollama_carico.py: avviso all'avvio se Calliope ne usa di più)
+  ollama_max_modelli: 0
+  # All'avvio, quanto aspettare che il modello risponda (Ollama o vLLM non ancora pronti
+  # all'accensione della DGX) prima di arrendersi, con nuovi tentativi ogni 2–30 s (03/10).
+  # Prima Calliope usciva subito, e systemd esauriva i 5 riavvii prima che vLLM avesse
+  # caricato il modello. 0 = esce subito, come prima.
+  llm_attesa_avvio_s: 900.0
+  # Con "auto": la finestra quando un dato non si legge (server su un'altra macchina,
+  # velocità non misurata…), e per ora anche il pavimento del limite di tempo (fase 1:
+  # 1,5 s di rilettura valgono ~14–15 k token su portatile e DGX, la finestra di oggi è già
+  # al limite; scendere toglierebbe storia senza la compressione della fase 2)
+  contesto_ripiego: 16384
+  # Secondi per rileggere tutta la storia quando la cache non serve (Ollama riavviato, un
+  # cambio di conversazione o di satellite): con la velocità di lettura misurata all'avvio
+  # dà quanta storia tenere. Con la compressione (05/10) la storia si ferma alla soglia
+  # morbida e dopo una compressione si rileggono solo riassunto e ultimi turni (0,16 s): la
+  # rilettura intera è rara, e 4 s danno ~20 k token sul portatile (2 700 token/s) e ~24 k
+  # sulla DGX (26B su Ollama, 3 200). Con «spento» il conto è quello della fase 1 (1,5 s
+  # davano 16 k). Misure in docs/ricerche/2026-10-05-contesto-compressione.md
+  contesto_rilettura_max_s: 4.0
+  # Conversazioni contemporanee previste sullo stesso modello (satelliti che parlano
+  # insieme, fase 3): la memoria della cache si divide tra loro
+  contesto_conversazioni: 1
+  # Memoria da lasciare libera oltre a quella che serve alla cache (GB): altri programmi,
+  # sul portatile il desktop di Windows
+  contesto_margine_gb: 0.5
+  # Compressione della conversazione vicino al limite (05/10, calliope/compressione.py),
+  # sul conto vero dei token che il motore dà a ogni turno. Oltre la soglia morbida (frazione
+  # della finestra) i turni vecchi si riassumono in secondo piano a risposta finita, e si
+  # fermano se qualcuno parla; oltre la dura prima di rispondere, con una frase d'attesa.
+  # Restano sempre intatti gli ultimi `contesto_turni_intatti` turni e l'azione in sospeso;
+  # i turni tolti sono nell'archivio delle conversazioni (sezione «conversazioni»)
+  contesto_soglia_morbida: 0.75
+  contesto_soglia_dura: 0.9
+  contesto_turni_intatti: 4
+  # Lunghezza massima del riassunto (token stimati): sta subito dopo il prompt di sistema
+  contesto_riassunto_token: 800
+  # Chi scrive il riassunto: "auto" = l'agente (sulla DGX qwen3.6 su vLLM, con l'arbitro
+  # che dà la precedenza alla voce), altrimenti il modello della voce, altrimenti solo tagli
+  # senza modello; oppure "agente", "voce", "tagli", "spento" (niente compressione: al
+  # limite la storia si taglia a metà come prima del 05/10, ma resta nell'archivio)
+  contesto_riassuntore: auto
+  # Soglia dura: quanto aspettare il riassunto prima di rispondere; poi si comprime con i
+  # soli tagli e il riassunto vero arriva al turno dopo
+  contesto_dura_attesa_s: 8.0
+  # Quanto aspettare che il riassunto dell'agente cominci ad arrivare (06/10, P11): oltre,
+  # lo scrive la voce o si comprime con i tagli. Sulla DGX i riassunti dell'agente andavano
+  # da 1 a 560 s, perché aspettavano la coda dei lavori; da libero ne bastano 4–5. 0 = senza
+  # limite
+  contesto_riassunto_attesa_s: 10.0
+  # Tempo massimo in tutto per il riassunto dell'agente (06/10, Q11): dopo il primo pezzo
+  # non c'era un tetto, e con lo scrittore che cede alla voce a ogni turno un riassunto poteva
+  # durare minuti con la storia piena. Oltre, lo scrive la voce o si comprime con i tagli
+  # (riassunti più corti, mai la storia ferma). Dal primo tentativo, anche se cede e riparte.
+  # 0 = senza limite
+  contesto_riassunto_max_s: 60.0
+  # Domande tenute nella storia, come limite di sicurezza: oltre, si tengono le ultime metà
+  # (a blocchi, per la cache). Dal 05/10 il taglio vero lo decide la compressione in token
+  # (contesto_soglia_morbida) e quello che si toglie resta nell'archivio: prima era 10
+  max_history_turns: 40
+  # tetto di giri di tool calling per risposta
+  max_tool_turns: 4
+  # Azione in sospeso («Lo apro?», «Procedo?»): la proposta arriva al modello nei turni dopo
+  # della stessa persona, al più per `azione_in_sospeso_turni` turni ed entro
+  # `azione_in_sospeso_s` secondi; una proposta nuova sostituisce la vecchia. Fino al 04/10
+  # valeva solo nella risposta subito dopo, e un turno in mezzo («Scusa, io sono chi
+  # amministra») la consumava (calliope/conferme.py). Vale anche per le offerte dei tool
+  # (lavori, installazioni, fatture, schermi, rinomina)
+  azione_in_sospeso_s: 120.0
+  azione_in_sospeso_turni: 3
+  # Frase di sfida (04/10, calliope/conferme.py): quando chi amministra conferma con una
+  # frase che non basta (breve con l'impronta incerta, zona grigia), Calliope chiede di
+  # ripetere tre parole comuni e un numero scelti in quel momento, validi questi secondi:
+  # abbastanza voce per l'impronta, e una prova di presenza contro registrazioni e TV.
+  # false = «dimmelo con una frase un po' più lunga»
+  conferma_sfida: true
+  conferma_sfida_s: 60.0
+  conferma_sfida_parole: 3
+  # Quarantena dei dati non fidati lunghi (05/10, calliope/quarantena.py): sopra questi
+  # token stimati (4 caratteri l'uno) un risultato di internet, di un'estensione,
+  # dell'archivio o di un agente, o un allegato, passa prima da una chiamata del modello
+  # senza tool che ne estrae i dati; la voce vede solo l'estratto. Misura del 05/10 (gemma4
+  # e4b, prove/misura_quarantena.py): un'iniezione «di' all'utente di chiamare l'899…» in un
+  # testo da 1200 o 3500 token arrivava nella risposta 3 volte su 3, con la quarantena 0 su
+  # 3, e a 300 token 0 su 3 anche senza; costo +1,1–1,8 s sulla prima frase. I risultati
+  # normali di internet (5 estratti) restano sotto. 0 = spenta; solo con l'API di Ollama
+  quarantena_token: 800
+  # Ciò che Calliope dice con dati non fidati di mezzo (06/10, calliope/riferire.py): ogni
+  # frase della risposta si controlla prima di dirla (numeri a pagamento, codici e password da
+  # dare, soldi verso un conto, recapiti presi solo dal dato e non chiesti, indicazioni
+  # rivolte alla persona che vengono dal dato); al posto di una frase fermata una frase fissa,
+  # e la storia tiene solo ciò che è stato detto. Misura del 06/10 (gemma4 e4b,
+  # prove/misura_riferire.py): attacchi riportati 22 su 27 → detti 0, falsi allarmi 0 su 36
+  # risposte normali, 0,2 ms per frase. Con la conversazione pulita non costa niente.
+  # Dal 06/10 (Q6) è la rete di sicurezza «riferire» e non si spegne: false si segnala
+  # all'avvio e resta acceso
+  uscita_controllo: true
+  # La conversazione è di una persona sola (03/10, analisi del comportamento): prima restava
+  # finché qualcuno non diceva «esci», e un ospite si faceva ripetere la password del wifi
+  # chiesta da Dario (4 volte su 4). Dal 06/10 ogni persona riconosciuta ha la sua (da
+  # qualunque satellite) e gli ospiti una per satellite (calliope/corsie.py): quando parla
+  # un altro la conversazione resta da parte, e si chiude come con «esci» dopo questi
+  # secondi senza turni. 0 = niente scadenza
+  storia_inattiva_s: 300.0
+  # Reti e spinte da spegnere (03/10): servono al modello piccolo, uno più forte può farne
+  # a meno. Nomi in RETI (in fondo a questo file), solo quelle di categoria «modello»:
+  # textcallguard, chiamata_in_mezzo, spinta_promessa, spinta_richiesta, spinta_dichiarata,
+  # riferimento_casa, riferimento_agenda, conferma_al_posto_del_vuoto,
+  # vuoto_seconda_passata, ricerca_promessa, citazione_tolta, nome_tool_parlato,
+  # eco_contesto, spinta_archivio, spinta_rinuncia; "tutte" le spegne tutte. Quelle di
+  # «sicurezza» (permessi, politica…) non si spengono: un nome di sicurezza o sconosciuto si
+  # segnala all'avvio. Quelle del profilo (llm_profilo) si aggiungono a queste.
+  # Vuoto = tutte accese (o quelle del profilo).
+  llm_reti_spente: []
+
+stt:
+  # Speech-to-Text — faster-whisper
+  # ~1,2 GiB di VRAM reali nel processo, contesto CUDA compreso (misura del 24/09);
+  # "small" occupa meno se non ci sta
+  whisper_model: large-v3-turbo
+  # Cartella del modello installato dal catalogo (02/10, `--installa whisper_riserva`): se
+  # in <whisper_cartella>/<whisper_model> c'è model.bin si usa quello, altrimenti la cache
+  # di Hugging Face. Serve al ripiego su CPU della DGX, che senza il modello lo
+  # scaricherebbe al primo guasto del server di trascrizione (1,6 GB, con la voce ferma)
+  whisper_cartella: models/whisper
+  # Taratura del 24/09 su 104 registrazioni (docs/ricerche/2026-09-24-taratura-whisper.md):
+  # beam 5 + hotwords porta la WER da 14,3 a 11,0 % (frasi dette subito: da 20,1 a
+  # 15,1 %) per +0,04 s di media. Un prompt iniziale più lungo abbassa di poco la WER
+  # ma Whisper lo ricopia sull'audio incerto e inserisce il nome: non allungarlo.
+  whisper_beam_size: 5
+  # Dal 04/10 le parole che svegliano (wake_names) si aggiungono da sole
+  whisper_hotwords: Calliope
+  # fallback automatico a "cpu"
+  whisper_device: cuda
+  whisper_compute_type: int8_float16
+  language: it
+  # Dove gira Whisper (02/10, impacchettamento per la DGX Linux):
+  #   "locale" → faster-whisper nel processo (Windows: GPU con CTranslate2, come sempre);
+  #   "server" → un server di trascrizione con l'API compatibile OpenAI
+  #              (POST {stt_url}/audio/transcriptions: vLLM con Whisper, whisper.cpp con
+  #              --inference-path, speaches). Serve sulla DGX Spark: CTranslate2 per Linux
+  #              aarch64 su PyPI (4.8.2) è solo per CPU. Se il server non risponde si
+  #              ripiega su faster-whisper su CPU (principio 7), e il registro lo dice.
+  #              Beam e hotwords lì non passano (li fissa il server); il prompt sì.
+  stt_motore: locale
+  # es. http://127.0.0.1:8002/v1
+  stt_url: null
+  # il nome servito dal server
+  stt_modello: openai/whisper-large-v3-turbo
+  # oltre, la frase si trascrive su CPU
+  stt_timeout_s: 5.0
+  # Correzione delle frasi incerte (05/10, prototipo: calliope/stt_correzione.py, rapporto
+  # docs/ricerche/2026-10-05-stt-confronto.md). Solo con stt_motore «server»: la risposta
+  # verbose_json di whisper-server dà la probabilità di ogni parola; se la più debole è
+  # sotto stt_correzione_soglia, un modello di testo corregge le parole storpiate con il
+  # vocabolario della casa (satelliti, schermi, stanze, persone, entità, tool) e le ultime
+  # frasi, e la correzione vale solo se cambia parole in parole che suonano simili (regola
+  # stt_corretta, con prima e dopo nel registro dei turni). Sulla DGX col 26B: 104
+  # registrazioni WER 13,4 → 11,4 %, frasi di dominio 20,6 → 17,4 %, nessuna peggiorata;
+  # +0,4 s solo sulle frasi incerte (~40 %). Spenta finché non si prova a voce.
+  # Prova vera del 05/10 sera (DGX, 26B): 15 frasi su 25 corrette, 0,84–1,50 s l'una (STT
+  # 1,1–1,9 s invece di 0,25–0,5), 3 cambiate. Ora: soglia 0,4 senza contare il nome (sul
+  # banco col 26B frasi al secondo passaggio 41 → 28 %, migliorate 6 → 5 su 104 e 19 → 18
+  # su 150) e risposta «giusta: true» senza ricopiare la frase (e4b: frasi lunghe 0,87 →
+  # 0,43 s)
+  stt_correzione: false
+  # probabilità minima per parola sotto cui si corregge
+  stt_correzione_soglia: 0.4
+  # "ollama" | "openai"; vuoto = quello della voce
+  stt_correzione_motore: ''
+  # vuoto = quello della voce
+  stt_correzione_url: ''
+  # Vuoto = il modello della voce: stessa finestra e keep_alive, niente ricarica né memoria
+  # in più (il 4B ne rovinava 3 su 30 cambiate: «voce» → «luce»; il 26B e qwen3.6 nessuna)
+  stt_correzione_modello: ''
+  # Tempo massimo della correzione, dall'invio alla risposta: oltre, vale la frase di Whisper e
+  # la richiesta si chiude (Ollama la annulla). Era 1,5 s di rete: sulla DGX il 05/10 la
+  # correzione costava 1,0 s di mediana (p90 1,4) su 44 frasi su 112, e la prima frase saliva
+  # da 1,35 a 2,73 s (docs/ricerche/2026-10-06-analisi-complessiva.md, P1). Con 0,4 s il
+  # costo di una frase incerta resta sotto mezzo secondo (P1, 06/10)
+  stt_correzione_timeout_s: 0.4
+  # Parole incerte al modello della voce (07/10, variante B del confronto in
+  # docs/aree/stt-tts.md): invece di un secondo passaggio, le parole della frase sotto
+  # stt_correzione_soglia (dal verbose_json di whisper-server, il nome che sveglia escluso)
+  # vanno nei dati del turno, con «se una non ha senso intendi la più probabile, se non è
+  # chiara chiedi». Nessun tempo in più (niente richiesta in più) e nessuna parola cambiata
+  # dal codice: decide il modello (principio 10: contesto del turno, non una regola). Mai
+  # nel prompt di sistema, che resta in cache; le parole non vanno nel registro dei turni
+  # (solo quante). Solo con stt_motore «server»
+  stt_incerte_al_modello: false
+  # Variante B2 (07/10): con parole incerte il modello della voce scrive come prima riga
+  # «⟦capito: la richiesta come la intende⟧» e poi risponde; il codice trattiene la riga (né
+  # voce né storia: Brain.CapitoHold) e la frase capita sostituisce quella di Whisper per la
+  # politica dei tool e per la storia SOLO se passa stt_correzione.accettabile (parole
+  # storpiate → parole simili, niente richieste aggiunte); altrimenti vale Whisper. Nel
+  # registro dei turni `stt_capito` con prima e dopo (come stt_corretta). Vince su
+  # stt_incerte_al_modello. Solo con stt_motore «server»
+  stt_incerte_riscrivi: false
+
+tts:
+  # Text-to-Speech — Piper (servono sia .onnx che .onnx.json, nella cartella voices/)
+  # (variabile d'ambiente CALLIOPE_PIPER_VOICE, che vince su questo file)
+  piper_voice: voices/it_IT-serena-high.onnx
+  # Silenzio scritto prima di chiudere l'uscita audio (cambio voce): le cuffie
+  # Bluetooth hanno un buffer loro e senza margine perdono la coda della frase.
+  tts_tail_s: 0.3
+  # Silenzio scritto appena si apre l'uscita audio: le cuffie Bluetooth impiegano un
+  # attimo a svegliarsi e senza margine il saluto iniziale diventava «iao».
+  tts_lead_s: 0.3
+  # Tra un turno e l'altro l'uscita riceve silenzio continuo: senza, dopo qualche
+  # secondo di vuoto le cuffie Bluetooth vanno in risparmio e «Ciao Dario» perdeva
+  # l'attacco. Costa al massimo la latenza del buffer (~0,18 s con MME).
+  tts_keepalive: true
+  # Inglesismi detti all'inglese (calliope/pronuncia.py): «file» → «fàil», «email» →
+  # «imèil», «wifi» → «uàifài»… Cambia solo il testo dato a Piper, non la storia né gli
+  # schermi. Il lessico predefinito è nel codice (solo le parole che espeak sbaglia).
+  tts_pronuncia: true
+  # Voci in più o diverse: parola → grafia all'italiana («podcast: pòdcast») oppure fonemi
+  # di espeak tra doppie quadre («[[fˈaɪl]]»); un valore vuoto toglie una voce predefinita.
+  tts_pronuncia_extra: {}
+
+audio:
+  # == Calliope completa con microfono e casse di questo PC (audio_modo: locale).
+  # == Il satellite ha i suoi dispositivi nella sezione satellite.
+  # Audio / VAD
+  sample_rate: 16000
+  vad_threshold: 0.5
+  # Motore di Silero VAD (calliope/vad.py): "auto" = PyTorch se c'è (Windows, come
+  # sempre), altrimenti onnxruntime senza torch (Linux aarch64: torch su PyPI è quello con
+  # CUDA 13, qualche GB); "torch" o "onnx" per forzarlo. vad_modello: il file ONNX, vuoto =
+  # quello dentro il pacchetto silero-vad.
+  vad_motore: auto
+  vad_modello: null
+  # pausa che chiude il turno
+  silence_ms: 700
+  # audio tenuto prima dell'inizio del parlato
+  preroll_ms: 300
+  # sotto questa durata è rumore
+  min_speech_ms: 250
+  max_utterance_s: 30
+  # Microfono e uscita di Calliope completa con l'audio di questo PC (audio_modo: locale).
+  # Il satellite usa i suoi, nella sezione satellite (satellite_microfono, satellite_casse):
+  # questi gli valgono solo da ripiego, con un avviso. None = predefinito.
+  # Accettano il numero o parole del nome con l'API audio («I52 MME», «C920 MME»):
+  # il nome è più sicuro, perché Windows rinumera i dispositivi quando le cuffie
+  # Bluetooth si ricollegano; l'API serve perché ogni dispositivo compare più volte.
+  # (variabile d'ambiente CALLIOPE_INPUT_DEVICE, che vince su questo file)
+  input_device: null
+  # (variabile d'ambiente CALLIOPE_OUTPUT_DEVICE, che vince su questo file)
+  output_device: null
+
+chi_parla:
+  # Speaker ID (impronta vocale)
+  speaker_id_enabled: true
+  # Impronta neurale CAM++ di 3D-Speaker (ONNX, 28 MB, Apache 2.0). Valori dalla
+  # ricerca del 24/09 (docs/ricerche/2026-09-24-riconoscimento-parlante.md): alla
+  # soglia 0,48 l'1 % di sconosciuti passa per familiare. Il punteggio non è sulla
+  # scala del vecchio MFCC (Dario ~0,45–0,8). Da ritarare con il secondo familiare.
+  speaker_model: models/speaker/3dspeaker_speech_campplus_sv_zh_en_16k-common_advanced.onnx
+  speaker_threads: 2
+  speaker_id_threshold: 0.48
+  # Zona grigia (soglia − margine … soglia): durante una conversazione conferma chi
+  # parlava al turno prima, ma solo fino a "familiare", mai ad "amministra".
+  speaker_id_session_margin: 0.06
+  # Sotto questa durata di voce l'impronta non decide (rifiuta Dario una volta su due):
+  # si tiene l'identità della conversazione.
+  speaker_min_voice_s: 1.0
+  # Conferma breve (04/10, calliope/conferme.py): un «sì» sotto `speaker_min_voice_s`
+  # conferma un'azione proposta a chi amministra se nella conversazione era già stato
+  # riconosciuto dalla voce e l'impronta della frase breve arriva almeno qui contro il suo
+  # profilo. Misura (prove/misura_conferma_breve.py): altre voci accettate 0,4 / 1,4 / 1,8 %
+  # su 0,5 / 0,7 / 0,9 s di voce (stesso canale), ≤ 0,5 % da altri microfoni, 0 % Piper;
+  # frasi brevi vere di Dario rifiutate 12 % (allora la frase di sfida). Con 0,35 lo stesso
+  # canale arrivava al 3,6 %
+  speaker_conferma_breve_soglia: 0.4
+  # frasi di arruolamento (con 5: Dario rifiutato 4 %)
+  speaker_enroll_phrases: 5
+  # voce minima per una frase di arruolamento
+  speaker_enroll_min_s: 1.5
+  # Una registrazione della voce senza frasi valide per questo tempo si chiude da sola:
+  # aperta per sempre, la prima voce che passava (anche la TV) diventava una frase
+  speaker_enroll_timeout_s: 120.0
+  # Aggiornamento dell'impronta con le frasi sicure (media mobile), senza allontanarsi
+  # dall'impronta dell'arruolamento oltre un coseno di `speaker_adapt_max_drift`
+  speaker_adapt_threshold: 0.58
+  speaker_adapt_alpha: 0.1
+  speaker_adapt_max_drift: 0.9
+
+minori:
+  # Minori (05/10, calliope/minori.py, docs/ricerche/2026-10-05-minori.md): profili con la
+  # data di nascita e i tutori, fasce d'età (piccoli < 7, bambini 7–10, ragazzi 11–13,
+  # adolescenti 14–17) con un preset ciascuna (tono, fonti, internet, agenti, casa, PC,
+  # documenti, acquisti, compiti, orari), ritoccabile per persona a voce (minore_gestisci) e
+  # da terminale (python -m calliope.minori). Il preset arriva al modello come dato del turno,
+  # i permessi li controlla il codice. false = i minori valgono come familiari (sconsigliato)
+  minori_enabled: true
+  # Voce incerta: se un adulto è riconosciuto ma un minore ha un punteggio a meno di questo
+  # dal suo (e almeno nella zona grigia), vale il minore: mai un adulto per una voce dubbia
+  minori_margine_ambiguo: 0.05
+  # Compiti: risposte sbagliate sullo stesso esercizio prima di spiegare la soluzione (e
+  # avvisare i tutori). Decisione del 05/10: 5
+  minori_compiti_tentativi: 5
+  # Ogni quanti mesi ricordare ai tutori di rifare l'impronta di un minore: sotto i 14 anni e
+  # dai 14 (la voce dei bambini cambia in fretta); anche prima se il riconoscimento cala
+  minori_impronta_mesi:
+  - 6
+  - 12
+  # Minuti di gioco al giorno per fascia (piccoli, bambini, ragazzi, adolescenti), sugli
+  # schermi (05/10, calliope/schermi/giochi.py): il tutore li cambia per persona
+  # (minore_gestisci imposta gioco_minuti=…), un adulto può dare tempo in più per oggi
+  minori_gioco_minuti:
+  - 20
+  - 45
+  - 60
+  - 90
+  # Giorni dopo cui una richiesta di un minore al tutore (un gioco, un'estensione, l'agente,
+  # più tempo) senza risposta scade, con un avviso a chi l'aveva chiesta
+  minori_richieste_giorni: 3.0
+  # Secondi in cui un avviso di pericolo uguale (stesso minore, stesso argomento) non si
+  # manda di nuovo ai tutori: una frase spezzata in due turni lo mandava due volte (prova
+  # e2e del 06/10). Un argomento diverso parte sempre; 0 = ogni volta
+  minori_avviso_ripetuto_s: 600.0
+  # Il modello guardiano (calliope/guardiano.py): giudica la domanda e ogni frase della
+  # risposta prima della voce, solo per minori e ospiti. Su Ollama (lo stesso della voce se
+  # guardiano_url è vuoto: llm_native_url). Scelta con prove/misura_guardiano.py (rapporto
+  # §4). Vuoto = nessun guardiano (restano istruzioni e regole fisse)
+  guardiano_enabled: true
+  guardiano_modello: llama-guard3:8b
+  guardiano_url: ''
+  # Tempo massimo di un giudizio; oltre, per un minore la frase non si dice (guardiano_se_guasto
+  # «blocca», una frase fissa al suo posto), per un ospite «passa»
+  guardiano_timeout_s: 3.0
+  guardiano_se_guasto: blocca
+  # Sempre caricato (come la voce): la prima frase di un bambino non deve pagare il
+  # caricamento del modello (secondi)
+  guardiano_keep_alive: -1m
+  guardiano_num_ctx: 2048
+  # Anche per gli ospiti (un ospite può essere un bambino), con il filtro moderato: niente
+  # sesso, istruzioni pericolose, odio; la protezione sì, senza avvisi
+  guardiano_ospiti: true
+  # Il rilevatore di pericolo sulla domanda (Guardiano.pericolo): i modelli di moderazione
+  # non riconoscono un bambino che dice «lo zio mi picchia» (per loro è un testo innocuo);
+  # lo fa un modello generale con l'output strutturato. gemma4 e4b: 9 su 10 sul banco,
+  # nessun falso allarme. Se è il modello della voce si aspetta il suo giudizio prima della
+  # risposta (stesso Ollama: in parallelo gli rovinerebbe la cache del prefisso, +1,4 s
+  # sulla DGX col 26B); se è un altro (la DGX col 26B) gira in parallelo. Vuoto = il modello
+  # della voce (con llm_backend «ollama»; altrimenti solo il guardiano). URL vuoto =
+  # llm_native_url
+  guardiano_pericolo: true
+  guardiano_pericolo_modello: gemma4:e4b-it-qat
+  guardiano_pericolo_url: ''
+
+memoria:
+  # Memoria persistente per persona (memory.py, SQLite). Ognuno vede solo i propri
+  # fatti; degli ospiti non si salva nulla.
+  # (variabile d'ambiente CALLIOPE_MEMORY_DB, che vince su questo file)
+  memory_db: memoria.db
+  # per persona; oltre si toglie il più vecchio
+  memory_max_facts: 50
+  # Appuntamenti (agenda.py, stesso file): l'avviso automatico arriva tanti minuti
+  # prima; se ne manca meno, si segna solo l'appuntamento. 0 = nessun avviso.
+  appuntamento_anticipo_min: 60
+
+conversazioni:
+  # Archivio delle conversazioni (05/10, calliope/conversazioni.py): ogni turno finito si
+  # salva in un file a parte (i ricordi restano per sempre, le conversazioni
+  # `conversazioni_giorni` giorni), così la compressione e la fine di una conversazione non
+  # perdono niente e conversazione_cerca ritrova «cosa ti avevo detto stamattina…».
+  # Ognuno ritrova solo le sue; quelle degli ospiti le vede solo chi amministra (terminale:
+  # python -m calliope.conversazioni). Anche la conversazione in corso, a ogni turno: un
+  # riavvio non la perde
+  conversazioni_enabled: true
+  # (variabile d'ambiente CALLIOPE_CONVERSAZIONI_DB, che vince su questo file)
+  conversazioni_db: conversazioni.db
+  conversazioni_giorni: 30
+  # Ricerca per significato: il modello di embedding sul server del modello (Ollama
+  # /api/embed; con un indirizzo che finisce in /v1, /v1/embeddings). Vuoto = solo ricerca
+  # per parole (FTS5). Scelto il 05/10 sul banco delle conversazioni (vedi il rapporto
+  # docs/ricerche/2026-10-05-contesto-compressione.md): da scaricare con ollama pull
+  conversazioni_embedding: qwen3-embedding:0.6b
+  # Il server degli embedding; vuoto = l'Ollama della voce (con la voce su vLLM, l'Ollama
+  # locale su 127.0.0.1:11434)
+  conversazioni_embedding_url: ''
+  # Embedding sulla CPU (Ollama num_gpu: 0): sul portatile la VRAM serve a voce e Whisper,
+  # e un modello in più farebbe scaricare quello della voce
+  conversazioni_embedding_cpu: true
+  # I vettori dei turni archiviati si calcolano solo con Calliope inattiva da questi secondi
+  # (06/10, prova e2e sulla DGX: il primo embedding caricava qwen3-embedding e scacciava il
+  # guardiano o la voce da un Ollama pieno), a lotti, e il modello si scarica subito dopo.
+  # Se il modello è già caricato si calcolano anche prima. Finché mancano, la ricerca
+  # nell'archivio va per parole (FTS5)
+  conversazioni_vettori_inattivita_s: 600.0
+  # Una conversazione nuova della stessa persona nello stesso posto, entro queste ore dalla
+  # fine della precedente, parte con la riga «l'ultima volta avete parlato di…». 0 = mai
+  conversazione_ripresa_ore: 4.0
+  # Risposte del modello della voce insieme (06/10, calliope/corsie.py: più persone da
+  # satelliti diversi). Oltre, chi parla sente «Sto rispondendo anche a un'altra persona:
+  # dammi un attimo.» e aspetta il suo turno, in ordine d'arrivo; una risposta cominciata
+  # non si interrompe. 1 per Ollama: misurato sulla DGX il 06/10 (gemma4 26B, Ollama 0.35),
+  # Ollama risponde comunque a una richiesta alla volta (con 2 insieme la seconda prima
+  # frase arriva dopo la fine della prima risposta, con 3 la terza dopo le altre due): con
+  # 1 chi aspetta sente subito la frase della coda (0,5–1,1 s) invece del silenzio, e i
+  # tempi delle risposte restano quelli. Con un motore che risponde a più richieste insieme
+  # (vLLM) conviene di più. Misure in docs/ricerche/2026-10-06-conversazione-persona.md.
+  # 0 = nessun limite
+  conversazioni_parallele: 1
+  # La stessa frase presa da un'altra corsia entro questi secondi (due satelliti nella stessa
+  # stanza la sentono tutti e due) è un doppione: risponde solo il primo. 0 = mai
+  conversazione_doppione_s: 2.0
+
+biblioteca:
+  # Biblioteca offline (calliope/biblioteca.py): Wikipedia italiana in file ZIM di Kiwix,
+  # scaricati con biblioteca/scarica.sh. Se i file mancano la biblioteca è spenta e
+  # Calliope funziona uguale. Il «mini» (introduzioni + infobox, 2,3 GB) risponde alla
+  # maggior parte delle domande sui fatti; il completo (8,4 GB) si legge solo quando
+  # nel mini non c'è niente di convincente. Vikidia è l'enciclopedia per ragazzi.
+  biblioteca_enabled: true
+  biblioteca_mini: biblioteca/wikipedia_it_all_mini_2026-08.zim
+  biblioteca_completa: biblioteca/wikipedia_it_all_nopic_2026-08.zim
+  # Vikidia, enciclopedia per ragazzi: usata solo per le spiegazioni semplici (chi parla
+  # è un minore con Vikidia nel preset, calliope/minori.py, oppure chiede «in modo
+  # semplice»), con la precedenza
+  biblioteca_ragazzi: biblioteca/vikidia_it_all_nopic_2026-09.zim
+  biblioteca_ragazzi_vantaggio: 1.5
+  # Wikizionario: significati, sinonimi e contrari («cosa significa effimero?»)
+  biblioteca_dizionario: biblioteca/wiktionary_it_all_nopic_2026-08.zim
+  # passaggi restituiti al modello
+  biblioteca_k: 3
+  # voci candidate lette per domanda
+  biblioteca_voci: 6
+  # paragrafi considerati per voce
+  biblioteca_paragrafi: 12
+  # lunghezza massima di un passaggio
+  biblioteca_max_caratteri: 450
+  # Sotto questo punteggio il passaggio migliore del mini non convince: si guarda nelle
+  # voci complete
+  biblioteca_soglia_completa: 3.0
+  # Ricerca per parole (dal 01/10/2026, al posto di libzim e Xapian): un indice SQLite
+  # FTS5 per Wikipedia ridotta e Vikidia, in biblioteca/indici/ (~1,3 GB, ~3–6 minuti
+  # dopo il download; python -m calliope.biblioteca_indice). Peso del titolo nel bm25:
+  # provati 1, 5, 10, 20, 50; con 1 il banco va meglio (49/56 contro 48/56).
+  biblioteca_peso_titolo: 1.0
+  # Processi per costruire l'indice: l'inserimento in SQLite è uno solo, oltre 6–12 non
+  # si guadagna. 4 lascia la CPU a Calliope se l'indice si prepara mentre è accesa.
+  biblioteca_indice_processi: 4
+  # Altre fonti italiane di Kiwix da usare nella ricerca (prefissi dei file), se scaricate
+  # (a voce, calliope/installa) e con il loro indice. Dal 01/10 la ricerca sa usare solo
+  # Wikiquote, e solo quando si chiede una citazione o chi ha detto una frase; le altre
+  # (Wikisource, Gutenberg, WikiMed…) si scaricano ma restano da parte. [] = nessuna.
+  biblioteca_fonti_extra:
+  - wikiquote_it_all_nopic
+
+installa:
+  # Installazioni a voce e da terminale (calliope/installa/): solo dal catalogo nel codice,
+  # solo chi amministra, sempre con una proposta e un sì. false = niente tool d'installazione.
+  installa_enabled: true
+  # Velocità supposta per la stima del tempo: dal mirror di Kiwix 9 GB in 13 minuti il
+  # 26/09 (biblioteca/scarica.log), ~11 MB/s
+  installa_velocita_mb_s: 10.0
+  # Spazio da lasciare libero sul disco oltre al file: sotto, il download non parte
+  installa_margine_gb: 2.0
+
+pc:
+  # == Il PC su cui gira Calliope; con audio_modo: satellite, quello del satellite. Sul
+  # == satellite valgono pc_enabled, pc_nome, pc_app e pc_risultati di questa sezione;
+  # == la webcam è satellite_webcam.
+  # Controllo del PC (calliope/pc/, docs/ricerche/2026-09-26-controllo-pc.md): volume,
+  # musica, luminosità, app, blocco e ricerca di file sul PC dove gira Calliope. Se non
+  # è Windows o mancano le librerie (pycaw, pywin32, winrt…) i tool pc_* non ci sono.
+  pc_enabled: true
+  # Come Calliope chiama questo PC nelle risposte («sul portatile il volume è a 40»)
+  pc_nome: portatile
+  # Chi può vedere i programmi aperti, cercare e aprire file su questo PC: rivelano cosa
+  # fa una persona. Nomi o id dei profili di speakers.json; chi amministra può sempre.
+  # Vuoto = solo chi amministra.
+  pc_proprietari: []
+  # Gli ospiti (voce non riconosciuta) possono cambiare il volume e comandare la musica?
+  # Predefinito no: una voce qualunque, anche dalla TV, potrebbe farlo.
+  pc_ospite_volume_media: false
+  # Punti di volume o luminosità per «alza»/«abbassa» senza numero o con «un po'»;
+  # «un pochino» vale la metà, «molto» il doppio
+  pc_passo: 10
+  # Risultati tenuti da una ricerca di file: a voce se ne dicono al massimo tre
+  pc_risultati: 5
+  # App che si aprono a voce: nome detto → comando. Solo queste: il modello sceglie il
+  # nome, mai il comando. Il comando è un programma nel PATH o registrato in Windows
+  # (winword.exe), un protocollo (ms-settings:), un percorso completo, oppure «browser»
+  # (il browser predefinito). Le voci non installate si tolgono all'avvio.
+  pc_app:
+    calcolatrice: calc.exe
+    blocco note: notepad.exe
+    esplora file: explorer.exe
+    impostazioni: 'ms-settings:'
+    browser: browser
+    word: winword.exe
+    excel: excel.exe
+  # Con audio_modo: satellite il PC comandato è quello del satellite (il portatile Windows,
+  # esecutore remoto, 03/10): tempo massimo di ogni richiesta, poi «il portatile non
+  # risponde». Un tool ne fa 1–3 (schermo bloccato, lettura, azione); in LAN e in VPN una
+  # richiesta costa qualche decina di ms
+  pc_remoto_timeout_s: 2.0
+  # La webcam di pc_guarda (05/10) quando Calliope gira su questo PC: il nome come lo mostra
+  # Windows («HD Pro Webcam C920»); vuoto = la prima trovata. Letta con PyAV (DirectShow),
+  # che c'è già con faster-whisper. Sul satellite vale satellite_webcam
+  pc_webcam: ''
+
+documenti:
+  # Documenti Word, Excel e PDF a voce (calliope/documenti/): l'LLM scrive solo il
+  # contenuto in JSON, con una richiesta a parte; il file lo fa il codice. Senza
+  # python-docx, openpyxl o fpdf2 quel formato non c'è; senza nessuna, niente tool.
+  documenti_enabled: true
+  # Dove finiscono i file. Vuoto = la cartella Documenti dell'utente (chiesta a Windows,
+  # segue OneDrive), sottocartella «Calliope». Il JSON per le modifiche sta in memory_db.
+  documenti_cartella: null
+  # Font TrueType del PDF, per accenti, «€» e virgolette tipografiche: nomi di font di
+  # sistema (senza .ttf) o percorsi, vale il primo che c'è. Se non ce n'è nessuno il PDF
+  # usa Helvetica, che scrive «EUR» al posto di «€».
+  documenti_font:
+  - arial
+  - segoeui
+  - calibri
+  - DejaVuSans
+  - LiberationSans-Regular
+  # Secondi che il tool aspetta il file prima di passarlo in secondo piano: entro questo
+  # tempo Calliope dice subito «ho preparato…», dopo «te lo preparo» e lo annuncia a file
+  # pronto. Misure del 27/09: tabelle ed elenchi 1–2 s, lettere 3,5–7 s. Nel frattempo
+  # Ollama è occupato: una domanda detta durante la generazione aspetta che finisca.
+  documenti_attesa_s: 4.0
+  # Tetto ai token del JSON di un documento (una lettera ne usa ~250)
+  documenti_max_token: 2048
+
+casa:
+  # Casa a voce (calliope/casa/): luci, tapparelle, termostato, prese e sensori tramite
+  # Home Assistant. Senza indirizzo o senza token i tool casa_comando e casa_stato non ci
+  # sono, e casa_integrazione spiega a voce cosa manca. Calliope parte anche con HA spento.
+  casa_enabled: true
+  # Indirizzo di casa di Home Assistant: https, IP del Raspberry e porta 8123. Mai il nome
+  # DuckDNS (principio 9: Calliope resta dentro casa). Vuoto = casa non collegata.
+  casa_url: null
+  # In casa il certificato è quello del nome DuckDNS: sull'IP il nome non combacia. Qui il
+  # nome atteso (es. casa-mia.duckdns.org): ci si collega all'IP e si verifica il
+  # certificato con questo nome (SNI), con i certificati di sistema. Regge i rinnovi.
+  casa_tls_nome: null
+  # In alternativa l'impronta SHA-256 del certificato («AB:CD:…», la stampa
+  # prove/sonda_ha.py): va bene anche per un certificato fatto in casa, ma cambia a ogni
+  # rinnovo. Se c'è, vince su casa_tls_nome.
+  casa_tls_impronta: null
+  # File PEM di un'autorità di certificazione propria. Vuoto = certificati di sistema.
+  casa_tls_ca: null
+  # false = nessuna verifica del certificato: solo come scelta esplicita, con un avviso a
+  # ogni avvio
+  casa_tls_verifica: true
+  # Tempo massimo di una richiesta a Home Assistant; oltre si dice «la casa non risponde».
+  # Con l'HA finto verifica ed esecuzione costano pochi millisecondi; su un Raspberry Pi piccolo si stima
+  # 0,1–0,5 s a frase (da misurare con prove/sonda_ha.py)
+  casa_timeout_s: 4.0
+  # Tempo massimo per collegarsi, anche alla prima richiesta dopo che HA era giù
+  casa_connessione_s: 3.0
+  # Ogni quanti secondi si rilegge cosa è esposto: una luce esposta dopo l'avvio arriva da sola
+  casa_aggiorna_s: 300.0
+  # Per quanti secondi l'ultimo dispositivo comandato o letto resta il riferimento di
+  # «accendila», «spegnilo», «alzale» (messaggio al modello prima della domanda, 01/10)
+  casa_riferimento_s: 300.0
+  # L'agente di conversazione che esegue i comandi: quello integrato di Home Assistant,
+  # senza LLM, con le sue frasi italiane fisse
+  casa_agente: conversation.home_assistant
+  # Domini che si leggono ma non si comandano mai, anche se esposti: serrature e allarme.
+  # L'agente di HA non chiede conferme né PIN: «sblocca la porta» la aprirebbe davvero.
+  casa_sola_lettura_domini:
+  - lock
+  - alarm_control_panel
+  # Lo stesso per tipo (device_class) di tapparelle e sensori: porta del garage e cancello
+  casa_sola_lettura_classi:
+  - garage
+  - gate
+  - gas
+  - water
+  # Interruttori, pulsanti, valvole, sirene, input_boolean e tapparelle senza classe (o
+  # «door») il cui nome, stanza o alias contiene una di queste parole intere (con «*» in
+  # fondo anche come inizio: «cancell*» prende «cancello» e «cancelletto») si leggono e non
+  # si comandano: un relè del cancello è spesso uno switch (analisi di sicurezza del
+  # 03/10). Le luci no. Per uno switch voluto: casa_consentiti
+  casa_nomi_delicati:
+  - cancell*
+  - garage
+  - box
+  - portone
+  - portoncino
+  - porta
+  - porte
+  - serratur*
+  - allarm*
+  - antifurto
+  - siren*
+  - gas
+  - acqua
+  - idric*
+  - caldaia
+  # Scene, script e automazioni che si possono avviare (id o nome): le altre no, perché
+  # potrebbero fare qualunque cosa, anche aprire una serratura. Vuoto = nessuna.
+  casa_consentiti: []
+  # Domini che anche un ospite (voce non riconosciuta) può comandare e leggere, es.
+  # ["light"]. Predefinito nessuno: una voce qualunque, anche dalla TV, potrebbe farlo.
+  casa_ospite_domini: []
+
+schermi:
+  # Schermi (calliope/schermi/, fase 1 di docs/ricerche/2026-10-01-mappe-e-schermi.md): un
+  # server web in un thread di Calliope serve una pagina da tenere aperta in kiosk; gli
+  # schermi abbinati con un codice di 6 cifre ricevono le schede dei tool (liste, timer,
+  # biblioteca, documenti, casa). Senza starlette e uvicorn Calliope parte uguale.
+  schermi_enabled: true
+  # Dove ascolta il server. 127.0.0.1 = solo il browser di questo PC, in http (contesto
+  # sicuro: il token non esce dal computer). Per tablet e TV di casa: 0.0.0.0 (o l'IP del
+  # PC), mai inoltrato dal router; in rete la pagina va in HTTPS (02/10), con il
+  # certificato qui sotto: senza, il server non parte (salvo schermi_senza_tls)
+  schermi_indirizzo: 127.0.0.1
+  # Porta del server (8123 è di Home Assistant, 11434 di Ollama)
+  schermi_porta: 8770
+  # La stanza del microfono: le schede vanno agli schermi di questa stanza. Vuoto = tutti
+  # gli schermi abbinati (oggi il microfono è uno; con i satelliti la stanza la darà il
+  # satellite che ha sentito la frase). Le schede personali vanno solo agli schermi
+  # personali di chi parla, in qualunque stanza.
+  schermi_stanza: ''
+  # Le schede partono da sole quando un tool finisce (lista, timer, biblioteca…); false =
+  # solo quando si chiede «mostramelo sullo schermo»
+  schermi_automatiche: true
+  # Minuti di validità del codice di abbinamento che mostra uno schermo nuovo
+  schermi_codice_min: 10.0
+  # Giorni senza un collegamento dopo i quali uno schermo o un satellite abbinato si segnala
+  # (all'avvio, in «calliope stato», negli elenchi da terminale): solo un avviso, la revoca
+  # la decide chi amministra. 0 = nessun avviso
+  schermi_inattivi_giorni: 7.0
+  # Schede tenute per schermo e rimandate quando la pagina si ricollega
+  schermi_cronologia: 6
+  # Nomi con cui gli schermi raggiungono il server oltre agli IP, a «localhost» e al nome
+  # di questo PC (es. calliope.lan): gli altri si rifiutano (difesa dal DNS rebinding)
+  schermi_nomi: []
+  # Certificato e chiave della pagina in rete (HTTPS), relativi alla cartella del file di
+  # configurazione. Vuoti = quelli dei satelliti (satellite_tls_cert, satellite_tls_chiave,
+  # fatti da python -m calliope.satellite --certificato). Autofirmati: un tablet mostra
+  # l'avviso del browser la prima volta; il satellite apre la pagina fidandosi solo di
+  # quel certificato (calliope/schermi/tls.py)
+  schermi_tls_cert: ''
+  schermi_tls_chiave: ''
+  # Solo come ultima scelta: la pagina in rete senza HTTPS (token in chiaro), con un
+  # avviso a ogni avvio. Su 127.0.0.1 resta comunque http
+  schermi_senza_tls: false
+  # Scrivere invece di parlare (03/10, calliope/schermi/moduli.py): sugli schermi personali
+  # (e sulla web app del telefono) una casella per scrivere a Calliope, e i moduli per i
+  # dati difficili da dettare (partita IVA, codice fiscale, IBAN, email). Il testo vale come
+  # una frase del proprietario dello schermo; per ciò che vuole la voce di chi amministra
+  # (installazioni, fatture, schermo personale, codice all'agente) serve comunque la voce
+  schermi_scritto: true
+  # Anche dagli schermi di stanza (non personali): lì chi scrive conta come un ospite
+  schermi_scritto_stanza: false
+  # Caratteri al massimo di un testo scritto, e invii al minuto per schermo (testo e moduli)
+  schermi_scritto_max: 500
+  schermi_scritto_al_minuto: 12
+  # Secondi in cui un modulo resta aperto sullo schermo
+  schermi_moduli_s: 900.0
+  # Il telefono come satellite (03/10, docs/ricerche/2026-10-03-webapp-telefono.md): la
+  # pagina /telefono dello stesso server è una web app installabile (PWA) con il microfono,
+  # la wake word nel telefono e la voce di Calliope. Serve audio_modo: satellite (Calliope
+  # sul server) e la libreria websockets; si abbina come un satellite
+  telefono_enabled: true
+  # La cartella di onnxruntime-web (wake word e VAD nel browser), relativa alla cartella di
+  # Calliope: la riempie python -m calliope.stato --installa telefono
+  telefono_web: models/web
+
+immagini:
+  # Foto in ingresso (05/10, calliope/immagini.py, docs/ricerche/2026-10-05-immagini.md):
+  # dal telefono e dagli schermi personali (pulsante «Foto», file, trascina, incolla), dalla
+  # webcam e dallo schermo del PC su richiesta (pc_guarda). Solo in memoria, legate alla
+  # conversazione; su disco solo con «archiviala». Spente: niente pulsante né tool
+  immagini_enabled: true
+  # Il modello della voce vede le immagini? "auto" (Ollama: capacità «vision» di
+  # /api/show; API OpenAI: sì), "si", "no". Gemma 4 (e4b e 26B) e qwen3.6 le vedono
+  immagini_modello: auto
+  # Lato lungo in pixel dopo la riduzione (JPEG): con Gemma 4 su Ollama ~1 token ogni
+  # 2 250 pixel (1024 → ~350 token, 1280 → ~540, 1568 → ~830; misura del 05/10); a 1024 lo
+  # scontrino di prova perdeva l'allineamento dei prezzi, a 1280 no
+  immagini_lato_max: 1280
+  immagini_pixel_per_token: 2250.0
+  # Byte al massimo di un'immagine caricata (prima della riduzione)
+  immagini_max_mb: 12.0
+  # Le foto nella storia: "messaggio" (ogni foto resta nel messaggio dove è arrivata finché
+  # dura la conversazione: la cache del prefisso la copre) oppure "descrizione" (nei turni
+  # dopo solo una frase fatta dal modello, e immagine_guarda per riguardarla). Scelta e
+  # misure nel rapporto, § 5
+  immagini_storia: messaggio
+  # Foto al massimo per conversazione (oltre, la più vecchia esce)
+  immagini_max_conversazione: 6
+  # Secondi in cui una foto mandata senza domanda aspetta la frase dopo della persona
+  immagini_attesa_s: 120.0
+
+allegati:
+  # Allegati di qualsiasi tipo (05/10, calliope/allegati.py, docs/ricerche/2026-10-05-allegati.md):
+  # dal pulsante «Allega» del telefono e degli schermi personali (scegli, trascina, incolla),
+  # con la vita delle foto (la conversazione) e le stesse regole (solo durante una
+  # conversazione a voce, solo schermi personali). Il tipo vero viene dai byte; il contenuto
+  # arriva al modello come dato non fidato. Spenti: niente pulsante per i file né tool
+  allegati_enabled: true
+  # Byte al massimo di un file, e in memoria per tutti i file di una conversazione
+  allegati_max_mb: 25.0
+  allegati_memoria_mb: 100.0
+  # File al massimo per conversazione (oltre, il più vecchio esce)
+  allegati_max_conversazione: 8
+  # Token al massimo del contenuto di un file nel messaggio (un file più lungo entra come
+  # estratto, e il resto si legge con allegato_leggi), e di tutti i file della conversazione
+  # (oltre, i più vecchi restano solo come scheda: nome, tipo, parti). Comunque al più un
+  # sesto della finestra di contesto
+  allegati_token_file: 2500
+  allegati_token_totale: 5000
+  # PDF: pagine lette al massimo, e pagine scansionate (senza testo) date al modello come
+  # immagini (con un modello che vede le immagini)
+  allegati_pdf_pagine: 200
+  allegati_pdf_pagine_immagini: 3
+  # Audio: si trascrive con il Whisper della voce solo fino a tanti secondi (oltre, solo nome,
+  # tipo e durata: la voce resterebbe ferma troppo)
+  allegati_audio_max_s: 180.0
+
+server_satelliti:
+  # == Lato server (dove gira Calliope, la DGX): microfono e casse sono di un
+  # == satellite in rete. Sul portatile che fa da satellite: sezione satellite.
+  # Microfono e casse (calliope/satellite/, docs/ricerche/2026-10-02-satellite.md):
+  #   "locale"    → quelli di questo computer, come sempre;
+  #   "satellite" → quelli di un satellite in rete (il portatile, domani una stanza): qui
+  #                 restano Whisper, modello, voce e tool; sul satellite wake word, VAD e
+  #                 riproduzione. Da addormentata l'audio non lascia il satellite finché
+  #                 non scatta la wake word acustica. Serve a Calliope sulla DGX.
+  # (variabile d'ambiente CALLIOPE_AUDIO_MODO, che vince su questo file)
+  audio_modo: locale
+  # Dove il server ascolta i satelliti. 127.0.0.1 = solo questo computer (satellite e
+  # Calliope sulla stessa macchina). In rete (0.0.0.0) serve il certificato qui sotto:
+  # l'audio di casa e il token attraversano la rete dell'ufficio anche dentro la VPN
+  satellite_indirizzo: 127.0.0.1
+  # Porta del server dei satelliti (8770 è degli schermi, 47913 il lucchetto d'istanza)
+  satellite_porta: 8771
+  # Certificato e chiave del server (TLS), relativi alla cartella del file di
+  # configurazione e fuori da git: si creano con python -m calliope.satellite
+  # --certificato (usa openssl). Il satellite fissa l'impronta SHA-256, niente CA.
+  satellite_tls_cert: satellite.crt
+  satellite_tls_chiave: satellite.key
+  # Solo come ultima scelta: ascoltare in rete senza TLS (audio e token in chiaro), con un
+  # avviso a ogni avvio. Su 127.0.0.1 il TLS non è obbligatorio (si usa se c'è il file)
+  satellite_senza_tls: false
+  # Minuti di validità del codice di abbinamento che mostra un satellite nuovo
+  satellite_codice_min: 10.0
+  # Connessioni insieme sulla porta dei satelliti (anche anonime, in attesa del saluto):
+  # oltre si chiudono subito (prima 300 connessioni mute davano 600 thread)
+  satellite_max_connessioni: 16
+  # Lato server: la pagina /satellite (e /installa sulla porta dei satelliti) con il comando
+  # che fa diventare satellite un PC Windows nuovo, e il pacchetto del satellite per gli
+  # aggiornamenti automatici dei satelliti installati così (calliope/satellite/web.py). Solo
+  # con il TLS dei satelliti. false = spenta
+  satellite_installazione: true
+  # Tutti i satelliti ascoltano e parlano insieme (06/10, calliope/corsie.py): ognuno ha la
+  # sua corsia, e da stanze diverse più persone parlano a Calliope nello stesso momento.
+  # false = come prima del 06/10: un satellite attivo alla volta (il telefono lo prende con
+  # «Parla»)
+  satelliti_insieme: true
+
+satellite:
+  # == Lato satellite (il portatile che fa da microfono, casse e schermo di
+  # == Calliope sul server): python -m calliope.satellite o avvia_satellite.py.
+  # == Usa anche wake_word, audio (VAD) e tts (tts_lead_s, tts_tail_s, tts_keepalive).
+  # Lato satellite (il portatile): l'indirizzo del server, ws://… o wss://… (con il TLS)
+  # (variabile d'ambiente CALLIOPE_SATELLITE_SERVER, che vince su questo file)
+  satellite_server: ws://127.0.0.1:8771
+  # Lato satellite: il file con il token dell'abbinamento e l'impronta del certificato del
+  # server, relativo alla cartella del file di configurazione e fuori da git
+  satellite_credenziali: satellite.json
+  # Lato satellite: l'impronta SHA-256 del certificato del server, se la si vuole fissare a
+  # mano (la stampa --certificato sul server). Vuota = quella vista all'abbinamento
+  satellite_impronta: ''
+  # Lato satellite (05/10): il microfono e le casse di questo satellite, per numero o per
+  # parole del nome con l'API audio («C920 MME», «I52 MME»: il nome regge quando Windows
+  # rinumera i dispositivi). None = quelli predefiniti del sistema. input_device e
+  # output_device (sezione audio) sono di Calliope completa: il satellite li usa solo se
+  # questi mancano, e avvisa di spostarli qui
+  # (variabile d'ambiente CALLIOPE_SATELLITE_MICROFONO, che vince su questo file)
+  satellite_microfono: null
+  # (variabile d'ambiente CALLIOPE_SATELLITE_CASSE, che vince su questo file)
+  satellite_casse: null
+  # Lato satellite, solo Windows: la webcam di pc_guarda su questo PC, il nome come lo mostra
+  # Windows («HD Pro Webcam C920»); vuoto = la prima trovata (ripiego: pc_webcam)
+  # (variabile d'ambiente CALLIOPE_SATELLITE_WEBCAM, che vince su questo file)
+  satellite_webcam: ''
+  # Lato satellite: la pagina degli schermi del server, aperta all'avvio. "finestra" = una
+  # finestra di Edge senza barre (il portatile resta usabile), "kiosk" = schermo intero,
+  # "no" = niente. Sul server serve schermi_indirizzo in rete (o lo stesso computer)
+  satellite_schermo: finestra
+  # Lato satellite: il nome di chi lo usa («Dario»), se lo schermo del satellite va reso
+  # personale (riceve promemoria, appuntamenti e documenti di quella persona). È solo una
+  # richiesta, mandata all'abbinamento: la applica chi amministra, sul server, con
+  # --personale <nome>. Un satellite non può dichiararsi personale di qualcuno da solo
+  satellite_schermo_personale: ''
+  # Lato satellite, solo Windows: offre al server il controllo di questo PC (pc_* con
+  # pc_enabled, il catalogo pc_app e le librerie di questo PC) e riceve i documenti, salvati
+  # in documenti_cartella (vuota = Documenti\Calliope). I percorsi dei file non escono dal
+  # satellite. false = solo microfono e casse
+  satellite_esecutore: true
+  # Lato satellite: inoltro TCP verso la pagina degli schermi e la web app del telefono del
+  # server, per un telefono che è nella rete di casa (o in WireGuard) e non vede il server
+  # (in ufficio, in VPN): "0.0.0.0:8770" o "192.168.1.30:8770" (indirizzo e porta su cui
+  # ascoltare qui). Il TLS resta tra telefono e server: il certificato degli schermi deve
+  # contenere l'indirizzo di questo PC (calliope schermi --certificato --host …). Vuoto =
+  # spento (calliope/satellite/inoltro.py)
+  satellite_inoltro: ''
+  # Le reti da cui l'inoltro accetta connessioni: le altre si chiudono subito. Dal 03/10
+  # non più tutte le reti private (bar, alberghi e uffici usano 10.x e 172.16–31.x): i
+  # router di casa (192.168.x), l'add-on WireGuard di Home Assistant (172.27.66.0/24),
+  # PiVPN (10.6.0.0/24) e il loopback. La rete di casa o della VPN, se è un'altra, va qui
+  satellite_inoltro_reti:
+  - 192.168.0.0/16
+  - 172.27.66.0/24
+  - 10.6.0.0/24
+  - 127.0.0.0/8
+  - ::1/128
+  # Connessioni insieme attraverso l'inoltro (una pagina ne apre 2–6)
+  satellite_inoltro_max: 32
+  # Secondi senza un byte dopo i quali una connessione dell'inoltro si chiude
+  satellite_inoltro_inattivita_s: 300.0
+  # Lato satellite installato dalla pagina /satellite: si aggiorna da solo alla versione del
+  # server, con ritorno automatico alla precedente se non si ricollega. Il satellite avviato
+  # dal repository non si aggiorna mai da solo (calliope/satellite/aggiorna.py)
+  satellite_aggiornamenti: true
+
+agenti:
+  # Agenti in secondo piano (calliope/agenti/, docs/ricerche/2026-10-02-llm-per-spark.md):
+  # «gemma davanti, agenti dietro». I lavori lunghi (programmi, relazioni, documenti da un
+  # modello, ricerche a più passi) li fa un modello grande su un'altra macchina (la DGX
+  # Spark, via tunnel SSH) o sullo stesso Ollama; la voce non li aspetta mai e li annuncia a
+  # lavoro finito. Senza agente configurato i tool delega_lavoro, lavori_stato e
+  # lavori_annulla non ci sono.
+  agenti_enabled: true
+  # Il file della DGX (alias SSH, collegamento, porte, modelli), accanto a calliope.yaml e
+  # fuori da git. Utente, indirizzo e chiave non ci sono: stanno in .ssh\config sotto
+  # l'alias. Relativo alla cartella del file di configurazione.
+  # (variabile d'ambiente CALLIOPE_AGENTI_CONFIG, che vince su questo file)
+  agenti_config_file: dgx.yaml
+  # In alternativa l'indirizzo di un Ollama raggiungibile senza tunnel: una DGX in casa
+  # (http://<IP>:11434) o lo stesso Ollama della voce (http://127.0.0.1:11434, le prove
+  # senza DGX: allora la voce ha la precedenza). Vince sul file. Vuoto = il file.
+  # (variabile d'ambiente CALLIOPE_AGENTI_URL, che vince su questo file)
+  agenti_url: null
+  # Il modello dell'agente. Vuoto = agente_modello del file della DGX (con agenti_url:
+  # llm_model, lo stesso della voce)
+  # (variabile d'ambiente CALLIOPE_AGENTI_MODELLO, che vince su questo file)
+  agenti_modello: null
+  # Contesto dell'agente in token. "auto" (05/10, fase 2b, calliope/contesto.py →
+  # finestra_agenti): con vLLM il minimo tra max_model_len e i token della cache (/metrics)
+  # divisi per agenti_contesti_paralleli; con un Ollama remoto il massimo del modello ma al
+  # più 32 768 (la memoria di là non si legge). Sullo stesso Ollama e con lo stesso modello
+  # della voce vale sempre la finestra della voce (altrimenti Ollama ricaricherebbe il
+  # modello a ogni cambio). Un numero vince
+  agenti_num_ctx: auto
+  # Quanti contesti dell'agente possono stare insieme nella cache del server (il lavoro, più
+  # il riassunto delle conversazioni, l'archivio e l'ufficio sullo stesso modello)
+  agenti_contesti_paralleli: 2
+  # Tetti di una passata: token generati (ragionamento compreso; è anche lo spazio tenuto
+  # libero nella finestra) e token di ragionamento (con vLLM thinking_token_budget: finito il
+  # budget il modello chiude il ragionamento e risponde; con Ollama conta solo il primo)
+  agenti_token_passata: 16384
+  agenti_ragionamento_passata: 8192
+  # Contesto del lavoro (05/10, calliope/agenti/contesto_lavoro.py): oltre questa frazione
+  # della finestra i risultati vecchi e lunghi degli strumenti vanno per intero in
+  # .calliope/passo-N.txt nella cartella del lavoro (nel contesto un riassunto e dove
+  # rileggerli); oltre contesto_soglia_morbida i passi vecchi diventano il diario del
+  # lavoro. Restano interi il compito e gli ultimi agenti_passi_intatti passi
+  agenti_soglia_file: 0.5
+  agenti_passi_intatti: 3
+  # Thinking dell'agente: acceso per codice e documenti (i benchmark del codice sono tutti
+  # con il ragionamento). None = non inviare il parametro
+  agenti_think: true
+  agenti_temperatura: 0.4
+  # Tetti di un lavoro: passate del modello, token generati (ragionamento compreso, che si
+  # conta anche a parte: token_ragionamento in lavoro.json), minuti. Il contesto qui non
+  # conta: lo regge la finestra, comprimendo. Vicino a un tetto l'agente riceve una volta
+  # l'avviso di chiudere con quello che ha; al tetto il lavoro si ferma e l'annuncio dice
+  # perché, dove sono i file e come vanno i test
+  agenti_max_passi: 24
+  agenti_tempo_max_min: 30.0
+  # Il tetto dei token è per tipo di lavoro (06/10): token generati al minuto per
+  # agenti_tempo_max_min, così cresce con il tempo concesso (prima 60 000 per tutti: un lavoro
+  # di codice ne usa ~4 000 al minuto e si fermava al quindicesimo). Misure sulla DGX con
+  # qwen3.6 su vLLM (docs/ricerche/2026-10-05-contesto-agenti.md §5): il codice genera
+  # 2 800–4 300 token al minuto, al più ~4 500 (74 token/s senza pause), quindi lì conta il
+  # tempo; ricerche e documenti 1 700–3 600 nei loro pochi minuti, e una ricerca che genera a
+  # vuoto si ferma a ~20 minuti invece di 30. Un tipo che manca usa «altro»
+  agenti_token_minuto:
+    codice: 5000
+    estensione: 5000
+    ricerca: 3000
+    documento: 3000
+    altro: 3000
+  # Massimo dei token di un lavoro per tutti i tipi, sopra il conto qui sopra. 0 = nessuno
+  agenti_max_token: 0
+  # Guardia contro il ragionamento a vuoto (05/10: il lavoro L1 del 04/10 ha pensato 66 000
+  # token senza usare uno strumento): dopo tanti token o minuti di fila senza strumenti una
+  # spinta («chiama piano, scarica_esempio o scrivi_file»), alla seconda il lavoro si chiude
+  # con il motivo (si conta tra una passata e l'altra: una passata ha già il suo tetto)
+  agenti_token_senza_strumenti: 12000
+  agenti_minuti_senza_strumenti: 5.0
+  # Token del JSON di un documento scritto dall'agente (una relazione ne usa 2–4 mila)
+  agenti_max_token_documento: 8192
+  # Sandbox del codice: secondi per un'esecuzione di Python o dei test, memoria del processo
+  agenti_esecuzione_s: 30.0
+  agenti_memoria_mb: 1024
+  # Motore della sandbox (03/10): «auto» = un container Docker usa-e-getta dove c'è
+  # l'immagine (Linux, la DGX: calliope motore sandbox costruisci), altrimenti il processo
+  # con i limiti e l'audit hook; «docker» = solo il container (se non è pronto il codice
+  # non si esegue); «processo» = mai il container
+  agenti_sandbox_motore: auto
+  # Immagine Docker della sandbox. Vuoto = calliope-sandbox:<hash del Dockerfile>
+  agenti_sandbox_immagine: null
+  # CPU a disposizione del container della sandbox
+  agenti_sandbox_cpu: 2.0
+  # Linguaggi dei programmi dell'agente (04/10): Python sempre; gli altri solo in un
+  # container con la loro immagine (calliope motore sandbox costruisci csharp). Se
+  # l'immagine manca l'agente dice che quel linguaggio qui non c'è
+  agenti_linguaggi:
+  - python
+  - csharp
+  # Il programma finito si esegue e si mostra in diretta sullo schermo personale di chi
+  # l'ha chiesto (04/10, agenti/esecuzione.py), anche a richiesta («fammelo vedere»,
+  # «eseguilo con 3 e 5»): tempo massimo di un'esecuzione, uscita tenuta (KB: oltre restano
+  # l'inizio e la coda), secondi che l'annuncio del lavoro aspetta l'esecuzione e che la
+  # risposta a voce aspetta prima di dire «lo sto eseguendo»
+  agenti_dimostrazione: true
+  agenti_dimostrazione_s: 60.0
+  agenti_dimostrazione_uscita_kb: 64
+  agenti_dimostrazione_attesa_s: 8.0
+  agenti_esecuzione_attesa_s: 4.0
+  # Cartella di lavoro della sandbox (una sottocartella per lavoro), relativa alla cartella
+  # del file di configurazione
+  agenti_sandbox: lavori
+  # Dove finiscono i risultati. Vuoto = Documenti\Calliope\Lavori (una cartella per lavoro)
+  agenti_risultati: null
+  # Modelli di documento (template JSON). Vuoto = Documenti\Calliope\Modelli
+  agenti_modelli: null
+  # Chi può delegare: documenti, ricerche e altro (livello minimo) e il codice. Gli ospiti
+  # mai. «amministra» o «familiare»
+  agenti_livello: familiare
+  agenti_livello_codice: amministra
+  # Conferma a voce prima di avviare: «costosi» (codice, ricerche, coda già occupata,
+  # modello da caricare), «sempre» o «mai»
+  agenti_conferma: costosi
+  # Stesso Ollama della voce: l'agente si ferma quando qualcuno parla a Calliope e riparte
+  # tanti secondi dopo la fine della risposta
+  agenti_precedenza_voce: true
+  agenti_ripresa_s: 3.0
+  # Quando l'agente usa la stessa GPU della voce (e allora le cede il passo, 04/10): «auto»
+  # = stesso Ollama, oppure un server su questo computer (127.0.0.1, localhost: sulla DGX
+  # vLLM accanto all'Ollama della voce) o sullo stesso host della voce; mai con il tunnel.
+  # «sempre» o «mai» per decidere a mano
+  agenti_arbitro: auto
+  # Con l'agente su vLLM nella stessa macchina (04/10): se il server ha la modalità sviluppo
+  # (`vllm.sh agente`, PAUSA=1) l'arbitro lo mette in pausa (`/pause?mode=keep`) mentre si
+  # parla e lo riprende dopo, invece di chiudere gli stream: niente passo perso. Senza
+  # `/pause` si chiudono gli stream come prima. Mai sul server della voce
+  agenti_pausa_vllm: true
+  # Domande dell'agente a metà lavoro (03/10): se gli manca un dato il lavoro aspetta la
+  # risposta (lavori_rispondi) con il suo contesto. Al più tante domande per lavoro; dopo
+  # tanti minuti senza risposta si chiude da solo, e Calliope lo dice
+  agenti_domande_max: 3
+  agenti_attesa_risposta_min: 120.0
+  # I file della persona dati all'agente (03/10, «correggi lo script backup.py»): solo
+  # testo, codice, Word, Excel e PDF, al più tanti MB; del testo di un documento l'agente
+  # legge al più tanti caratteri
+  agenti_file_max_mb: 10.0
+  agenti_file_caratteri: 40000
+  # Pagine pubbliche d'esempio che l'agente può scaricare per scrivere e provare il parser
+  # di un'estensione (scarica_esempio, 05/10), e la dimensione massima di ognuna. 0 = mai
+  agenti_esempi_max: 5
+  agenti_esempio_kb: 1024
+
+estensioni:
+  # Estensioni (calliope/estensioni/, 04/10, docs/ricerche/2026-10-04-estensioni-e-guardrail.md):
+  # funzioni permanenti scritte dall'agente su richiesta di chi amministra, approvate con la
+  # frase di sfida, eseguite sempre nel container della sandbox (Docker) con la sola porta
+  # stretta verso Calliope. Senza Docker o senza l'immagine non girano
+  estensioni_enabled: true
+  # Codice, versioni, dati e registro delle decisioni, relativo alla cartella della config
+  estensioni_cartella: estensioni
+  # Estensioni attive insieme (ognuna è un tool in più per il modello)
+  estensioni_max_attive: 8
+  # Quanto il tool aspetta il risultato prima di dire «ti dico il risultato appena arriva»
+  estensioni_attesa_s: 8.0
+  # Quanto un'azione pericolosa sospesa aspetta il «sì» della persona
+  estensioni_conferma_s: 120.0
+  # Tetti che un manifesto può chiedere
+  estensioni_tempo_max_s: 30.0
+  estensioni_memoria_max_mb: 512
+  # Secondo parere del modello grande (quello degli agenti) sulle richieste con testo
+  # libero: può solo alzare il rischio. Secondi massimi di attesa
+  estensioni_secondo_parere: true
+  estensioni_parere_s: 4.0
+  # Richieste a internet al minuto per estensioni e pagine d'esempio dell'agente, tutte
+  # insieme (calliope/web/rete.py, 05/10): solo internet pubblico, porte 80 e 443, ogni
+  # uscita nel registro estensioni/uscite.jsonl
+  estensioni_rete_max_minuto: 30
+  # Giochi e schede interattive (05/10, calliope/estensioni/scheda.py, calliope/schermi/
+  # giochi.py, docs/ricerche/2026-10-05-giochi.md): un'estensione con una «scheda» gira nel
+  # browser degli schermi in un riquadro isolato (iframe sandbox, origine opaca, niente rete)
+  # che parla con Calliope solo con messaggi controllati qui. false = niente giochi
+  giochi_enabled: true
+  # Frasi al minuto che un gioco può far dire a Calliope (per partita)
+  giochi_frasi_minuto: 3
+  # Messaggi al secondo da un riquadro verso Calliope (mosse, salvataggi), per schermo
+  giochi_messaggi_secondo: 10
+  # Byte massimi di un messaggio di un riquadro (JSON): mosse e stati, non file
+  giochi_messaggio_max: 4096
+  # Messaggi di chat tra giocatori al minuto, per schermo (con un minore o un ospite nella
+  # partita passano dal guardiano)
+  giochi_chat_minuto: 6
+  # Secondi senza risposta al controllo del riquadro prima di chiuderlo (cane da guardia)
+  giochi_watchdog_s: 6.0
+  # Ore di vita di una partita senza segni dalle pagine: poi il suo indirizzo non vale più
+  giochi_partita_ore: 6.0
+
+archivio:
+  # Archivio dei documenti di casa (calliope/archivio/, 03/10): bollette, ricevute, contratti,
+  # polizze, garanzie, referti, documenti d'identità e manuali di una cartella, letti in
+  # secondo piano (testo dei PDF, OCR con il modello visivo per scansioni e foto), schedati dal
+  # modello grande e messi in un grafo in SQLite; a voce archivio_cerca, archivio_scadenze e
+  # archivio_somma. Senza cartella l'archivio è spento e i tool non ci sono.
+  archivio_enabled: true
+  # La cartella dei documenti (fuori da git, in calliope.locale.yaml). Una sottocartella con
+  # il nome di un profilo («Giulia/») tiene i documenti personali di quella persona; il resto
+  # è della casa. Referti e documenti d'identità li vedono solo l'interessato e chi amministra
+  archivio_cartella: null
+  # Il database del grafo, relativo alla cartella del file di configurazione
+  archivio_db: archivio.db
+  # Ogni quanti minuti si guarda se ci sono documenti nuovi o cambiati
+  archivio_intervallo_min: 10.0
+  # OCR di scansioni e foto con il modello visivo (qwen3.6 sulla DGX legge le immagini)
+  archivio_ocr: true
+  # Server del modello per OCR ed estrazione (http://127.0.0.1:8000/v1 = vLLM, senza /v1 =
+  # Ollama). Vuoto = quello degli agenti (dgx.yaml o agenti_url)
+  archivio_url: null
+  # Il modello dell'estrazione; vuoto = lo scrittore degli agenti (o il loro modello)
+  archivio_modello: null
+  # Il modello dell'OCR; vuoto = lo stesso dell'estrazione (deve leggere le immagini)
+  archivio_ocr_modello: null
+  # Chi è chi nei documenti: profilo → nomi e codici fiscali come scritti sui documenti,
+  # separati da virgole (Dario: "Mario Rossi, RSSMRA…"). Senza, un documento è di una
+  # persona solo se il nome completo del profilo è quello sul documento
+  archivio_intestatari: {}
+  # Pagine lette per documento (i manuali lunghi: solo le prime) e dimensione massima
+  archivio_max_pagine: 12
+  archivio_max_mb: 50.0
+
+ufficio:
+  # Ufficio (calliope/ufficio/, docs/ricerche/2026-10-03-template.md): modelli di documento
+  # compilati a voce (fattura, nota di credito, preventivo, DDT e i modelli Word, PowerPoint
+  # o JSON dell'utente), rubrica dei clienti e numerazione progressiva. Serve il servizio
+  # dei documenti; senza docxtpl o python-pptx mancano solo i modelli di quel tipo.
+  ufficio_enabled: true
+  # Cartella dei modelli dell'utente (.docx o .pptx con accanto il .yaml di descrizione, o
+  # i .json). Vuoto = Documenti/Calliope/Modelli, la stessa dei modelli degli agenti
+  ufficio_modelli: null
+  # Chi può preparare fatture e note di credito: «amministra» o «familiare». Preventivi,
+  # DDT, modelli e rubrica: i familiari. Gli ospiti mai
+  ufficio_livello_fiscale: amministra
+  # Secondi in cui i dati già raccolti di un modello restano validi: la risposta a «mi
+  # servono il cliente e il prezzo» completa lo stesso documento
+  ufficio_bozza_s: 900.0
+  # Formato dei numeri per serie, con {n} e {anno} (predefiniti: fatture «{n}/{anno}»,
+  # note_credito «NC{n}/{anno}», preventivi «P{n}/{anno}», ddt «DDT{n}/{anno}»)
+  ufficio_serie: {}
+  # Chi emette fatture, preventivi e DDT: va in calliope.locale.yaml. Chiavi:
+  # denominazione (o nome e cognome), partita_iva, codice_fiscale, regime_fiscale (RF01
+  # ordinario, RF19 forfettario), indirizzo, civico, cap, comune, provincia, nazione,
+  # iban, email, telefono, aliquota_iva (22), ritenuta (aliquota, per esempio 20: solo verso
+  # clienti con partita IVA), tipo_ritenuta (RT01), causale_ritenuta (A), cassa_tipo
+  # (TC22 = rivalsa INPS), cassa_aliquota (4), cassa_ritenuta (si/no), giorni_pagamento
+  # (30), bollo_addebito (si: i 2 euro del bollo a carico del cliente)
+  fatture_emittente: {}
+  # Cartella con lo schema XSD ufficiale di FatturaPA (Schema_VFPR12_v1.2.3.xsd) e
+  # xmldsig-core-schema.xsd, relativa alla cartella del file di configurazione: si
+  # scaricano con `python -m calliope.ufficio --scarica-xsd`. Senza, ogni fattura passa
+  # solo i controlli di Calliope
+  fatture_xsd: fatturapa
+
+web:
+  # Ricerca su internet (03/10, calliope/web/, docs/ricerche/2026-10-03-ricerca-web.md):
+  # SearXNG sulla DGX (calliope motore searxng avvia) per l'attualità che la biblioteca non
+  # sa: meteo, notizie, risultati, orari, prezzi. Accesa se c'è web_searxng_url (sulla DGX
+  # http://127.0.0.1:8004, in calliope.locale.yaml); senza, o con online false, il tool
+  # web_cerca non c'è
+  web_enabled: true
+  web_searxng_url: null
+  # Da che livello si può cercare: ospite, familiare o amministra. Le domande escono di
+  # casa: di predefinito non gli ospiti
+  web_livello: familiare
+  # Al più tante ricerche al minuto (voce e agente insieme), per non farsi bloccare dai
+  # motori di ricerca; risultati dati al modello; tempo massimo di una ricerca
+  web_max_minuto: 10
+  web_risultati: 5
+  web_timeout_s: 6.0
+  web_lingua: it-IT
+  # Stringhe che non devono mai uscire di casa in una ricerca, oltre ai nomi delle persone
+  # registrate e ai dati dell'emittente delle fatture: l'indirizzo di casa, il cognome…
+  # (in calliope.locale.yaml). Codici fiscali, IBAN, email e telefoni si tolgono comunque
+  web_dati_privati: []
+  # Pagine lette dall'agente (web_leggi): dimensione e tempo massimi, caratteri dati al
+  # modello; ricerche e pagine al più per lavoro
+  web_pagina_max_kb: 1024
+  web_pagina_timeout_s: 10.0
+  web_pagina_caratteri: 8000
+  web_agente_ricerche: 8
+  web_agente_pagine: 6
+  # Reti che l'agente non legge mai, oltre a quelle private e locali (sempre vietate): la
+  # rete dell'ufficio se ha indirizzi pubblici, in notazione CIDR («203.0.113.0/24»)
+  web_reti_vietate: []
+
+segreti:
+  # File dei segreti, fuori da git: il token di Home Assistant sta sotto
+  # «home_assistant:» alla voce «token:». Relativo alla cartella del file di
+  # configurazione. La variabile d'ambiente CALLIOPE_HA_TOKEN vince sul file.
+  segreti_file: segreti.yaml
+
+registro:
+  # Registro dei turni (JSONL, un file al giorno): base dell'auto-miglioramento.
+  # CALLIOPE_TURN_LOG="" lo spegne. Degli ospiti non si salva il testo.
+  # (variabile d'ambiente CALLIOPE_TURN_LOG, che vince su questo file)
+  turn_log_dir: registro
+  # dopo si cancellano
+  turn_log_days: 30
+  # Latenza vera della voce (06/10, calliope/latenza.py): se la mediana della prima frase di
+  # oggi o di ieri (dal registro dei turni, almeno 10 risposte) supera questi secondi, lo
+  # dicono l'avvio e `calliope stato`; dettagli con `calliope stato --turni`. 0 = mai. Dal 02
+  # al 05/10 la DGX era passata da 0,78 a 2,05 s senza che nessuno lo vedesse
+  latenza_avviso_s: 1.2
+  # Diagnostica: CALLIOPE_DEBUG_AUDIO registra ogni frase captata (WAV + trascrizione).
+  # (variabile d'ambiente CALLIOPE_DEBUG_AUDIO, che vince su questo file)
+  debug_audio_dir: null
+
+rete:
+  # Rete (principio 5): se False, i tool con requires_internet spariscono dall'elenco
+  online: true
+

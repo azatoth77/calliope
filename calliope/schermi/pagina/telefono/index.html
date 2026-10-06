@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Calliope">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<title>Calliope</title>
+<link rel="manifest" href="/telefono/manifest.webmanifest">
+<link rel="icon" href="/telefono/icona.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/telefono/icona-180.png">
+<link rel="stylesheet" href="/schermo.css">
+<link rel="stylesheet" href="/telefono/telefono.css">
+<script src="/schermo.js" defer></script>
+<script src="/telefono/telefono.js" type="module"></script>
+</head>
+<body class="telefono" data-incorporata="1" data-carosello="1" data-chiave="calliope.telefono.schermo">
+
+<!-- Abbinamento: solo finché il telefono non ha il suo token -->
+<section id="abbina-tel" class="pannello-tel" hidden>
+  <h1>Abbina questo telefono</h1>
+  <p>Il telefono diventa un microfono e una cassa di Calliope, come il portatile. Lo abbina chi amministra, dal server.</p>
+  <p class="piccolo"><span id="tel-stato" class="stato attesa" role="status"><span class="punto"></span><span id="tel-stato-testo">avvio…</span></span></p>
+  <label for="tel-nome">Di chi è questo telefono?</label>
+  <input id="tel-nome" type="text" autocomplete="given-name" placeholder="per esempio Dario" maxlength="40">
+  <button id="tel-chiedi" type="button" class="grande">Chiedi il codice</button>
+  <div id="tel-codice" hidden>
+    <div class="codice" id="tel-codice-cifre"></div>
+    <p>Sul server (chi amministra):</p>
+    <pre id="tel-comando" class="comando"></pre>
+    <p class="piccolo" id="tel-scade"></p>
+    <p id="tel-cambia-app">Puoi cambiare app per dire il codice: quando torni qui l'abbinamento si completa da solo.</p>
+  </div>
+  <p id="abbina-avviso" class="avviso-tel" role="alert" hidden></p>
+</section>
+
+<!-- La pagina: una vista sola, senza scorrere (04/10: sempre come la vista da guida) -->
+<main id="vista" class="vista" hidden aria-label="Calliope">
+  <div class="vista-testa">
+    <div class="riga-stato">
+      <div id="tel-voce" class="voce dorme" role="status" aria-live="polite">
+        <span class="forma" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span class="voce-testo">…</span>
+      </div>
+      <button id="menu-apri" type="button" class="tasto-icona" aria-label="Impostazioni e aiuto" aria-haspopup="dialog" aria-controls="menu">
+        <span class="ingranaggio" aria-hidden="true"><i></i><i></i><i></i></span>
+      </button>
+    </div>
+    <p id="tel-dove" class="vista-dove" hidden></p>
+    <p id="avviso-tel" class="vista-avviso" role="alert" hidden></p>
+    <p id="schermo-avviso" class="vista-avviso" role="alert" hidden></p>
+  </div>
+
+  <section id="carosello" class="carosello" aria-roledescription="carosello" aria-label="Risposta e schede">
+    <div id="binario" class="binario" tabindex="0">
+      <article id="risposta" class="pagina-car risposta-car" data-chiave="__risposta" aria-roledescription="scheda">
+        <div class="etichetta">Risposta</div>
+        <p id="risposta-testo" class="risposta-testo" aria-live="polite"></p>
+        <button type="button" class="espandi" aria-label="Apri la risposta a schermo intero">Espandi</button>
+      </article>
+    </div>
+    <div id="punti" class="punti"><span id="punti-testo" class="solo-lettori"></span></div>
+  </section>
+
+  <button id="parla" type="button" class="parla">
+    <span class="parla-icona" aria-hidden="true"></span><span class="parla-testo">Parla</span>
+  </button>
+
+  <div class="vista-fondo">
+    <button id="microfono" type="button" class="tasto mic" role="switch" aria-checked="false" aria-label="Microfono">
+      <span class="mic-icona" aria-hidden="true"></span><span class="mic-testo"><span>Microfono</span> <b id="mic-stato">spento</b></span>
+    </button>
+    <button id="scrivi-apri" type="button" class="tasto scrivi-apri" aria-haspopup="dialog" aria-controls="strato-scrivi" hidden>
+      <span class="tastiera-icona" aria-hidden="true"><i></i><i></i></span><span>Scrivi</span>
+    </button>
+    <!-- Allega (05/10): fotocamera, libreria o un file del telefono, poi la domanda scritta o detta -->
+    <button id="foto-apri" type="button" class="tasto foto-apri" aria-label="Allega una foto o un file per Calliope" hidden>
+      <span class="foto-icona" aria-hidden="true"></span><span>Allega</span>
+    </button>
+  </div>
+</main>
+
+<!-- Scrivere a Calliope: la casella di schermo.js finisce qui (#scrivi-posto) -->
+<section id="strato-scrivi" class="strato strato-alto" role="dialog" aria-modal="true" aria-labelledby="scrivi-titolo" hidden>
+  <div class="strato-testa">
+    <h2 id="scrivi-titolo">Scrivi a Calliope</h2>
+    <button id="scrivi-chiudi" type="button" class="tasto chiudi">Chiudi</button>
+  </div>
+  <div id="scrivi-posto"></div>
+  <p class="strato-nota">La risposta arriva tra le schede.</p>
+</section>
+
+<!-- Una scheda a schermo intero (06/10): un tocco sulla scheda o «Espandi»; si aggiorna al suo
+     posto, si chiude con «Chiudi», Esc o il gesto indietro -->
+<section id="strato-scheda" class="strato strato-scheda" role="dialog" aria-modal="true" aria-labelledby="intera-titolo" hidden>
+  <div class="strato-testa">
+    <h2 id="intera-titolo">Scheda</h2>
+    <button id="intera-chiudi" type="button" class="tasto chiudi">Chiudi</button>
+  </div>
+  <div id="intera-posto" class="intera-posto" tabindex="0"></div>
+</section>
+
+<!-- Un modulo da compilare: si apre da solo quando arriva -->
+<section id="strato-modulo" class="strato" role="dialog" aria-modal="true" aria-label="Dati da scrivere" hidden>
+  <div class="strato-testa">
+    <h2>Da scrivere</h2>
+    <button id="modulo-chiudi" type="button" class="tasto chiudi">Chiudi</button>
+  </div>
+  <div id="modulo-posto" class="modulo-posto"></div>
+</section>
+
+<!-- Impostazioni e aiuto: tutto quello che non serve guidando -->
+<section id="menu" class="strato menu" role="dialog" aria-modal="true" aria-labelledby="menu-titolo" hidden>
+  <div class="strato-testa">
+    <h2 id="menu-titolo">Impostazioni</h2>
+    <button id="menu-chiudi" type="button" class="tasto chiudi">Chiudi</button>
+  </div>
+  <div class="menu-corpo">
+    <dl class="menu-riga">
+      <dt>Questo telefono</dt><dd id="luogo">Calliope</dd>
+      <dt>Voce</dt><dd><span id="tel-collegamento" class="stato attesa"><span class="punto"></span><span id="tel-collegamento-testo">avvio…</span></span></dd>
+      <dt>Schede</dt><dd><span id="stato" class="stato"><span class="punto"></span><span id="stato-testo">schede</span></span></dd>
+    </dl>
+    <p id="schermo-stato" class="schermo-stato" role="status" hidden><span class="punto" aria-hidden="true"></span><span id="schermo-testo"></span></p>
+    <div class="interruttore">
+      <button id="schermo-tieni" type="button" role="switch" aria-checked="true">
+        <span class="leva" aria-hidden="true"></span>
+        <span>Con il microfono acceso tengo acceso lo schermo</span>
+      </button>
+    </div>
+    <p class="nota-tel">Se lo schermo si spegne, blocchi il telefono o passi a un'altra app il microfono si spegne (lo fanno tutti i browser): con il microfono acceso tengo acceso lo schermo, tu tieni aperta questa pagina.</p>
+    <p class="nota-tel">«Parla»: tocca e parla, smetto di ascoltare quando fai una pausa; tieni premuto per parlare a lungo. Con il microfono acceso rispondo quando sento «Calliope», e «Parla» serve per parlarmi senza dire il nome. Le schede si scorrono di lato.</p>
+    <!-- Il cruscotto di chi amministra (06/10, sola lettura): solo se questo telefono è personale
+         di chi amministra; si apre nel carosello come una scheda -->
+    <button id="cruscotto-tel" type="button" class="grande" hidden>Stato di Calliope (cruscotto)</button>
+    <details id="diag-tel" class="diag-tel">
+      <summary>Calliope non capisce bene? Prova il microfono</summary>
+      <p>Registro due volte 5 secondi (la seconda senza le correzioni del browser): ogni volta di' la frase che compare. Le registrazioni vanno a Calliope, che le tiene qualche giorno per capire cosa succede.</p>
+      <button id="diag-prova" type="button" class="grande">Prova il microfono</button>
+      <pre id="diag-esito" class="diag-esito" aria-live="polite" hidden></pre>
+    </details>
+    <p class="menu-piede"><a href="/telefono/calliope-ca.crt" id="link-ca">Certificato di casa</a>
+      <button type="button" id="dimentica" class="link">Dimentica il telefono</button></p>
+  </div>
+</section>
+
+<noscript><p class="avviso">Questa pagina ha bisogno di JavaScript.</p></noscript>
+</body>
+</html>

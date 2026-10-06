@@ -1,0 +1,14 @@
+#!/bin/sh
+# Prove a secco di Calliope prima di ogni commit (06/10, prove a livelli): livello 1 (le veloci,
+# in parallelo) e livello 2 (quelle legate ai file del commit), sulla copia dell'indice di git
+# (quello che si sta per committare). Di solito 30–90 s. Il livello 3 (browser, Calliope vera,
+# tempo reale) non gira qui: prima dell'unione su main `python -m prove --completo`.
+# Attivato con: git config core.hooksPath .githooks
+# Per saltarle in un caso eccezionale: git commit --no-verify
+PY=.venv/Scripts/python.exe
+[ -x "$PY" ] || PY=.venv/bin/python
+if ! "$PY" -m prove --hook --staged; then
+    echo ""
+    echo "Commit fermato: ci sono prove fallite (sopra il dettaglio)."
+    exit 1
+fi

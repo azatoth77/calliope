@@ -1,0 +1,4 @@
+coda {'t_decisione': 2.827, 't_testo': 2.935} {'pe': 8195, 'pe_ms': 2464.35, 'fine': 2.86}
+arbitro {'t_decisione': 2.233, 't_testo': 2.333} {'fine': 2.22}
+coda {'t_decisione': 2.994, 't_testo': 3.094} {'pe': 8195, 'pe_ms': 2143.08, 'fine': 3.06}
+arbitro {'t_decisione': 2.267, 't_testo': 2.387} {'fine': 2.25}

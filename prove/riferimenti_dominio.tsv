@@ -1,0 +1,51 @@
+id	conversazione	riferimento
+d01	schermi	Calliope, mostrami la lista della spesa sullo schermo dello studio.
+d02	schermi	Mi riferivo allo schermo del mio satellite.
+d03	schermi	Questo satellite è il mio schermo personale.
+d04	schermi	Rendi condiviso lo schermo del telefono.
+d05	schermi	Ripristina lo schermo del satellite dello studio.
+d06	persone	Calliope, dimmi chi sono.
+d07	persone	Chiamami Dario.
+d08	persone	Riconosci la mia voce?
+d09	persone	Registra la voce di Dario.
+d10	casa	Calliope, spegni la luce in taverna.
+d11	casa	Accendi la luce del bagno taverna.
+d12	casa	Che temperatura c'è in cameretta?
+d13	casa	Dimmi lo stato delle luci.
+d14	casa	E che temperatura c'è fuori casa?
+d15	casa	Accendi la lavanderia.
+d16	casa	Spegni la luce della scala.
+d17	casa	Abbassa le tapparelle del soggiorno.
+d18	tempo	Calliope, che ore sono?
+d19	tempo	Metti un timer di dieci minuti.
+d20	tempo	Impostalo di cinque minuti.
+d21	tempo	Ricordami domani alle nove di chiamare il commercialista.
+d22	tempo	Annulla il promemoria.
+d23	tempo	Aggiungi un appuntamento dal dentista giovedì pomeriggio.
+d24	liste	Aggiungi latte, uova e cereali alla lista della spesa.
+d25	liste	Ho preso il latte, toglilo.
+d26	liste	Cosa c'è nella lista delle cose da fare?
+d27	biblioteca	Cerca nella biblioteca chi ha scritto I promessi sposi.
+d28	biblioteca	Dammi una citazione da Wikiquote.
+d29	biblioteca	Spiegamelo in modo semplice con Vikidia.
+d30	biblioteca	Cerca su internet il meteo di domani a Guanzate.
+d31	documenti	Fammi un foglio Excel con le spese di ottobre.
+d32	documenti	Prepara una fattura per Blue Next.
+d33	documenti	Cerca Blue Next nella rubrica.
+d34	documenti	Aprilo sul portatile.
+d35	documenti	Scrivi una lettera di disdetta per la palestra.
+d36	pc	Alza il volume del portatile.
+d37	pc	Apri la calcolatrice.
+d38	pc	Abbassa la luminosità dello schermo.
+d39	pc	Blocca il computer.
+d40	agenti	Affida all'agente uno script Python che rinomina le foto.
+d41	agenti	A che punto è il lavoro?
+d42	agenti	Sì, procedi pure.
+d43	agenti	Annulla il lavoro.
+d44	varie	Fai una foto con la webcam.
+d45	varie	Cosa vedi in questa foto?
+d46	varie	Cosa sai fare?
+d47	varie	Scarica Vikidia nella biblioteca.
+d48	varie	Calliope, esci.
+d49	varie	Calliope, spegniti.
+d50	varie	Calliope, basta.

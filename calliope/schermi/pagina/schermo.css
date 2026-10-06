@@ -1,0 +1,544 @@
+/* Calliope · schermo: tema scuro, leggibile da lontano. Solo font di sistema (offline). */
+:root {
+  --sfondo: #0e1014;
+  --pannello: #171a21;
+  --pannello-2: #1f232c;
+  --bordo: #2a2f3a;
+  --testo: #ece8df;
+  --tenue: #9aa1ad;
+  --accento: #e2b45a;
+  --accento-tenue: rgba(226, 180, 90, 0.14);
+  --ok: #82c99f;
+  --allarme: #f0896a;
+  /* Stato della voce: colore e forma insieme (mai solo il colore) */
+  --v-dorme: #8b93a3;
+  --v-ascolta: #6fd39a;
+  --v-pensa: #e2b45a;
+  --v-parla: #7fb4f5;
+  --raggio: 0.9rem;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+html {
+  /* Cresce con lo schermo: ~19 px su un portatile, ~26 px su una TV 1080p */
+  font-size: clamp(16px, 2.4vmin, 44px);
+  background: var(--sfondo);
+}
+
+body {
+  margin: 0;
+  /* Altezza fissa: una scheda lunga scorre dentro di sé, la cronologia resta in fondo */
+  height: 100vh;
+  height: 100dvh;
+  display: grid;
+  grid-template-rows: auto auto 1fr auto auto;
+  background: var(--sfondo);
+  color: var(--testo);
+  font-family: "Segoe UI", system-ui, -apple-system, "Noto Sans", Roboto, "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.35;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Righe fisse: lo stato della voce nascosto lascia una riga vuota, le altre non si spostano */
+#testa { grid-row: 1; }
+#voce { grid-row: 2; }
+#principale { grid-row: 3; }
+#cronologia { grid-row: 4; }
+#scrivi { grid-row: 5; }
+
+/* ── testa ── */
+#testa {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.7rem 1.4rem;
+  color: var(--tenue);
+  font-size: 0.95rem;
+}
+#luogo { font-weight: 600; letter-spacing: 0.02em; }
+#luogo::first-letter { text-transform: uppercase; }
+#orologio-piccolo { margin-left: auto; font-variant-numeric: tabular-nums; }
+.stato { display: inline-flex; align-items: center; gap: 0.45rem; }
+.punto { width: 0.6rem; height: 0.6rem; border-radius: 50%; background: var(--tenue); }
+.stato.ok .punto { background: var(--ok); }
+.stato.attesa .punto { background: var(--accento); animation: pulsa 1.4s ease-in-out infinite; }
+.stato.giu .punto { background: var(--allarme); }
+/* Uso del contesto della conversazione (05/10, solo schermi personali): discreto, nella testa */
+.contesto { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.8rem;
+  font-variant-numeric: tabular-nums; }
+.contesto-barra { width: 3.2rem; height: 0.3rem; border-radius: 0.2rem; background: var(--bordo);
+  overflow: hidden; }
+.contesto-barra span { display: block; height: 100%; width: 0; background: var(--tenue); }
+.contesto.alto .contesto-barra span { background: var(--accento); }
+
+/* ── area principale ── */
+#principale {
+  min-height: 0;
+  padding: 0.5rem 2.2rem 1rem;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.scheda {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--pannello);
+  border: 1px solid var(--bordo);
+  border-radius: var(--raggio);
+  padding: 1.4rem 1.8rem;
+  animation: entra 0.35s ease-out;
+}
+.scheda > .corpo { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+/* La stessa scheda cambiata per un evento (04/10): un segno leggero sul bordo, non l'entrata.
+   Gli aggiornamenti automatici non hanno né l'uno né l'altra (la pagina li allinea al loro posto) */
+.scheda { position: relative; }
+.scheda.cambiata::after {
+  content: ""; position: absolute; inset: -1px; border: 2px solid var(--accento);
+  border-radius: inherit; pointer-events: none; opacity: 0; animation: segno 1.2s ease-out;
+}
+
+.etichetta {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--accento);
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.badge {
+  color: var(--tenue);
+  border: 1px solid var(--bordo);
+  border-radius: 999px;
+  padding: 0.05rem 0.6rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  font-weight: 500;
+}
+.badge.personale { color: var(--accento); border-color: var(--accento); }
+
+h1.titolo {
+  margin: 0.35rem 0 0.9rem;
+  font-size: 2.4rem;
+  line-height: 1.12;
+  font-weight: 650;
+  text-wrap: balance;
+}
+.sotto { color: var(--tenue); font-size: 1.05rem; margin: -0.4rem 0 1rem; }
+
+/* ── inattiva: orologio ── */
+.inattiva {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.inattiva .ora {
+  font-size: 24vmin;
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.inattiva .data { margin-top: 1.2rem; font-size: 2.2rem; color: var(--tenue); }
+.inattiva .data::first-letter { text-transform: uppercase; }
+
+/* ── abbinamento ── */
+.abbina { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 1.2rem; }
+.abbina h1 { margin: 0; font-size: 2rem; font-weight: 500; color: var(--tenue); }
+.codice {
+  font-size: 16vmin;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  font-variant-numeric: tabular-nums;
+  color: var(--accento);
+  line-height: 1;
+}
+.abbina .istruzioni { font-size: 1.6rem; max-width: 32em; }
+.abbina .istruzioni q { color: var(--testo); font-style: normal; }
+.abbina .piccolo { font-size: 1rem; color: var(--tenue); }
+
+/* ── lista ── */
+ul.voci {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  columns: 2 18rem;
+  column-gap: 2.5rem;
+  font-size: 2rem;
+}
+ul.voci li {
+  break-inside: avoid;
+  padding: 0.35rem 0 0.35rem 1.4rem;
+  position: relative;
+}
+ul.voci li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.78em;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--tenue);
+}
+ul.voci li.nuova { color: var(--accento); font-weight: 600; }
+ul.voci li.nuova::before { background: var(--accento); }
+.vuoto { color: var(--tenue); font-size: 1.6rem; }
+.nota { color: var(--tenue); font-size: 1rem; margin-top: 0.8rem; }
+
+/* ── timer ── */
+.timer { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr)); align-content: start; }
+.timer .riga { background: var(--pannello-2); border-radius: var(--raggio); padding: 1rem 1.4rem; }
+.timer .nome { color: var(--tenue); font-size: 1.3rem; }
+.timer .resto { font-size: 5.2rem; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.05; }
+.timer .riga.finito .resto { color: var(--allarme); animation: pulsa 1s ease-in-out infinite; }
+.timer .riga.solo .resto { font-size: 9rem; }
+
+/* ── agenda ── */
+.agenda { display: grid; gap: 0.6rem; font-size: 1.7rem; }
+.agenda .riga { display: grid; grid-template-columns: 11rem 1fr; gap: 1rem; padding: 0.4rem 0; border-bottom: 1px solid var(--bordo); }
+.agenda .quando { color: var(--accento); font-variant-numeric: tabular-nums; font-size: 1.3rem; padding-top: 0.25rem; }
+
+/* ── biblioteca ── */
+.passaggio {
+  font-size: 1.65rem;
+  line-height: 1.4;
+  border-left: 0.3rem solid var(--accento);
+  background: var(--accento-tenue);
+  padding: 0.8rem 1.2rem;
+  border-radius: 0 var(--raggio) var(--raggio) 0;
+  margin: 0 0 1.2rem;
+}
+.lungo { font-size: 1.2rem; line-height: 1.55; color: #d6d2c9; columns: 2 24rem; column-gap: 2.5rem; }
+.lungo p { margin: 0 0 0.8rem; }
+.altre { color: var(--tenue); font-size: 1rem; margin-top: 0.6rem; }
+
+/* ── ricerca su internet ── */
+.risultato-web { padding: 0.6rem 0; border-bottom: 1px solid var(--bordo); }
+.risultato-web .sito { color: var(--accento); font-size: 1rem; }
+.risultato-web .titolo { font-size: 1.4rem; margin: 0.15rem 0 0.3rem; }
+.risultato-web p { margin: 0; font-size: 1.15rem; line-height: 1.45; color: #d6d2c9; }
+
+/* ── documento ── */
+.documento { font-size: 1.25rem; line-height: 1.5; max-width: 60rem; }
+.documento h2 { font-size: 1.6rem; margin: 1rem 0 0.4rem; }
+.documento p { margin: 0 0 0.8rem; }
+.documento p.destra { text-align: right; }
+.documento ul, .documento ol { margin: 0 0 0.8rem; padding-left: 1.6rem; }
+
+table { border-collapse: collapse; margin: 0.4rem 0 1rem; font-size: 1.2rem; font-variant-numeric: tabular-nums; }
+th, td { padding: 0.35rem 0.9rem; border-bottom: 1px solid var(--bordo); text-align: left; }
+th { color: var(--tenue); font-weight: 600; }
+td.num, th.num { text-align: right; }
+tr.totale td { font-weight: 700; color: var(--accento); border-top: 2px solid var(--bordo); }
+.foglio { color: var(--tenue); font-size: 1rem; margin-top: 0.6rem; }
+
+/* ── casa ── */
+.casa { display: grid; grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr)); gap: 0.8rem; align-content: start; }
+.casa .riga { background: var(--pannello-2); border-radius: var(--raggio); padding: 0.8rem 1.1rem; border-left: 0.3rem solid var(--bordo); }
+.casa .riga.acceso { border-left-color: var(--accento); }
+.casa .nome { font-size: 1.35rem; font-weight: 600; }
+.casa .dove { color: var(--tenue); font-size: 0.95rem; }
+.casa .stato-dispositivo { font-size: 1.2rem; margin-top: 0.2rem; }
+
+/* ── calcolo ── */
+.tipo-calcolo > .corpo { display: flex; flex-direction: column; justify-content: center; }
+.calcolo { display: flex; flex-direction: column; justify-content: center; }
+.calcolo .espressione { font-size: 2.6rem; color: var(--tenue); font-variant-numeric: tabular-nums; word-break: break-all; }
+.calcolo .risultato { font-size: 7rem; font-weight: 650; color: var(--accento); font-variant-numeric: tabular-nums; word-break: break-all; line-height: 1.1; }
+
+/* ── testo ── */
+.testo-lungo { font-size: 1.7rem; line-height: 1.5; max-width: 50rem; white-space: pre-wrap; }
+.domanda-scritta { color: var(--tenue); font-size: 1.1rem; margin-bottom: 0.6rem; }
+
+/* ── lavoro dell'agente ── */
+.riassunto-lavoro { font-size: 1.4rem; line-height: 1.45; max-width: 60rem; margin: 0 0 1rem; }
+.domanda-lavoro { font-size: 1.3rem; color: var(--accento); margin: 0 0 1rem; }
+.file-lavoro { margin: 0 0 1.2rem; }
+.file-lavoro .nome-file { color: var(--tenue); font-size: 1rem; margin-bottom: 0.3rem; }
+.file-lavoro pre.codice {
+  margin: 0; padding: 0.8rem 1rem; background: var(--pannello-2); border-radius: var(--raggio);
+  font: 0.95rem/1.4 ui-monospace, "Cascadia Mono", Consolas, monospace;
+  white-space: pre; overflow: auto; max-height: 28rem;
+}
+
+/* ── avanzamento del lavoro (in diretta) ── */
+.passo-lavoro { font-size: 1.6rem; line-height: 1.35; margin: 0 0 0.8rem; }
+.passo-lavoro.fermo { color: var(--tenue); }
+.badge.pausa { color: var(--accento); border-color: var(--accento); }
+.test-lavoro { font-size: 1.2rem; margin: 0 0 0.8rem; }
+.test-lavoro.ok { color: var(--ok); }
+.test-lavoro.ko { color: var(--allarme); }
+.tetti-lavoro { display: grid; gap: 0.35rem; max-width: 46rem; margin: 0 0 1rem; }
+.tetto { display: grid; grid-template-columns: 6rem minmax(0, 1fr) 15rem; gap: 0.8rem; align-items: center; }
+.tetto-nome, .tetto-valore { color: var(--tenue); font-size: 0.95rem; }
+.tetto-valore { font-variant-numeric: tabular-nums; }
+.tetto-barra { height: 0.45rem; border-radius: 1rem; background: var(--pannello-2); overflow: hidden; }
+.tetto-barra span { display: block; height: 100%; background: var(--tenue); }
+.flusso-lavoro { margin: 0 0 1.2rem; }
+.flusso-lavoro .nome-file, .passi-lavoro .nome-file { color: var(--tenue); font-size: 1rem; margin-bottom: 0.3rem; }
+pre.flusso {
+  margin: 0; padding: 0.8rem 1rem; background: var(--pannello-2); border-radius: var(--raggio);
+  font: 0.95rem/1.4 ui-monospace, "Cascadia Mono", Consolas, monospace;
+  white-space: pre-wrap; overflow: auto; max-height: 12rem;
+}
+pre.flusso.pensiero { font-family: inherit; font-style: italic; color: var(--tenue); }
+pre.flusso.testo { font-family: inherit; }
+.elenco-file { margin: 0 0 0.6rem; padding-left: 1.2rem; font-size: 1.05rem; }
+pre.codice.anteprima { max-height: 14rem; }
+.passi-lavoro ol { list-style: none; margin: 0; padding: 0; }
+.passi-lavoro li { display: flex; gap: 0.8rem; font-size: 1rem; padding: 0.15rem 0; color: var(--tenue); }
+.passi-lavoro li:first-child { color: var(--testo); }
+.ora-passo { font-variant-numeric: tabular-nums; }
+@media (max-width: 600px) {
+  .tetto { grid-template-columns: 4.5rem 1fr; }
+  .tetto-valore { grid-column: 1 / -1; font-size: 0.85rem; }
+  .passo-lavoro { font-size: 1.3rem; }
+}
+
+/* ── programma in esecuzione (04/10): uscita in diretta ── */
+.tempo-esecuzione { font-size: 1.2rem; color: var(--tenue); font-variant-numeric: tabular-nums; margin: 0 0 0.6rem; }
+.tempo-esecuzione.vivo { color: var(--accento); }
+.dati-esecuzione { font-size: 1.1rem; margin: 0 0 0.6rem; }
+pre.uscita-esecuzione {
+  margin: 0 0 0.8rem; padding: 0.8rem 1rem; background: var(--pannello-2); border-radius: var(--raggio);
+  font: 1rem/1.4 ui-monospace, "Cascadia Mono", Consolas, monospace;
+  white-space: pre-wrap; overflow-wrap: anywhere; overflow: auto; max-height: 60vh;
+}
+pre.uscita-esecuzione .err { color: var(--allarme); }
+pre.uscita-esecuzione .omessi, pre.uscita-esecuzione .vuoto { color: var(--tenue); font-style: italic; }
+
+/* ── stato della voce: una fascia sopra la scheda, mai sopra il contenuto ── */
+.voce {
+  --c: var(--v-dorme);
+  margin: 0 2.2rem 0.6rem;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  column-gap: 1.1rem;
+  padding: 0.55rem 1.4rem;
+  border-radius: 999px;
+  border: 2px solid var(--c);
+  background: var(--pannello-2);
+  background: color-mix(in srgb, var(--c) 12%, var(--pannello));
+  color: var(--testo);
+  font-size: 1.7rem;
+  font-weight: 600;
+}
+.voce[hidden] { display: none; }
+.voce-resto { font-variant-numeric: tabular-nums; color: var(--c); }
+.voce-barra { grid-column: 1 / -1; height: 0.3rem; margin-top: 0.4rem; border-radius: 1rem;
+  background: color-mix(in srgb, var(--c) 20%, transparent); overflow: hidden; display: none; }
+.voce-barra span { display: block; height: 100%; width: 100%; background: var(--c); }
+.voce.ascolta.conta .voce-barra { display: block; }
+
+/* Le forme: 3 elementi <i> dentro .forma, disegnati diversamente per ogni stato */
+.forma { position: relative; width: 2.6rem; height: 2.6rem; display: inline-flex;
+  align-items: center; justify-content: center; gap: 0.22rem; }
+.forma i { display: block; background: var(--c); }
+/* dorme: una falce di luna (cerchio con l'ombra) e le altre due nascoste */
+.voce.dorme .forma i:first-child { width: 2.2rem; height: 2.2rem; border-radius: 50%;
+  background: transparent; box-shadow: inset 0.6rem -0.3rem 0 0 var(--c); }
+.voce.dorme .forma i + i { display: none; }
+/* ascolta: un anello pieno che pulsa */
+.voce.ascolta { --c: var(--v-ascolta); }
+.voce.ascolta .forma i:first-child { width: 2.2rem; height: 2.2rem; border-radius: 50%;
+  background: transparent; border: 0.42rem solid var(--c); animation: respira 1.6s ease-in-out infinite; }
+.voce.ascolta .forma i + i { display: none; }
+/* pensa: tre puntini che saltano */
+.voce.pensa { --c: var(--v-pensa); }
+.voce.pensa .forma i { width: 0.6rem; height: 0.6rem; border-radius: 50%;
+  animation: salta 1s ease-in-out infinite; }
+.voce.pensa .forma i:nth-child(2) { animation-delay: 0.15s; }
+.voce.pensa .forma i:nth-child(3) { animation-delay: 0.3s; }
+/* parla: tre barre verticali (un equalizzatore) */
+.voce.parla { --c: var(--v-parla); }
+.voce.parla .forma i { width: 0.5rem; height: 2.2rem; border-radius: 0.3rem;
+  transform-origin: center; animation: onda 0.9s ease-in-out infinite; }
+.voce.parla .forma i:nth-child(2) { animation-delay: 0.2s; }
+.voce.parla .forma i:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes respira { 50% { transform: scale(0.82); } }
+@keyframes salta { 50% { transform: translateY(-0.5rem); } }
+@keyframes onda { 0%, 100% { transform: scaleY(0.35); } 50% { transform: scaleY(1); } }
+
+/* ── cronologia ── */
+#cronologia {
+  display: flex;
+  gap: 0.7rem;
+  padding: 0.4rem 2.2rem 1rem;
+  overflow: hidden;
+  min-height: 3.2rem;
+}
+#cronologia button {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  flex-direction: column;
+  max-width: 16rem;
+  padding: 0.4rem 0.9rem;
+  border-radius: 0.6rem;
+  background: var(--pannello);
+  border: 1px solid var(--bordo);
+  color: var(--tenue);
+  font-size: 0.85rem;
+}
+#cronologia button:focus-visible { outline: 2px solid var(--accento); }
+#cronologia button.attiva { border-color: var(--accento); color: var(--testo); }
+#cronologia .t-titolo { color: var(--testo); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.95rem; }
+
+.avviso { padding: 2rem; font-size: 1.5rem; }
+
+@keyframes entra { from { opacity: 0; transform: translateY(0.6rem); } to { opacity: 1; transform: none; } }
+@keyframes pulsa { 50% { opacity: 0.45; } }
+@keyframes segno { from { opacity: 1; } to { opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .scheda, .scheda.cambiata::after, .stato.attesa .punto, .timer .riga.finito .resto, .forma i { animation: none; }
+  .voce.parla .forma i { transform: scaleY(0.7); }
+}
+
+/* Schermi stretti (telefono, tablet in verticale) */
+@media (max-width: 700px) {
+  #principale { padding: 0.5rem 1rem 1rem; }
+  #cronologia { padding: 0.4rem 1rem 1rem; }
+  .voce { margin: 0 1rem 0.5rem; font-size: 1.3rem; padding: 0.45rem 1rem; }
+  .scheda { padding: 1rem 1.1rem; }
+  h1.titolo { font-size: 1.8rem; }
+  ul.voci { font-size: 1.5rem; columns: 1; }
+  .agenda .riga { grid-template-columns: 1fr; gap: 0; }
+  .lungo { columns: 1; }
+}
+
+/* ── scrivere invece di parlare (03/10): moduli e casella ── */
+.domanda-modulo { font-size: 1.3rem; color: var(--accento); margin: 0 0 1rem; max-width: 50rem; }
+.nota-modulo { font-size: 1.4rem; color: var(--tenue); }
+.modulo { display: grid; gap: 0.9rem; max-width: 46rem; }
+.campo-modulo { display: grid; gap: 0.3rem; }
+.campo-modulo label { color: var(--tenue); font-size: 1rem; }
+.modulo input, .modulo textarea, .modulo select, .scrivi input {
+  font: inherit;
+  font-size: 1.15rem;
+  color: var(--testo);
+  background: var(--pannello-2);
+  border: 1px solid var(--bordo);
+  border-radius: 0.5rem;
+  padding: 0.55rem 0.7rem;
+  min-height: 2.75rem;
+  width: 100%;
+}
+.modulo input:focus-visible, .modulo textarea:focus-visible, .modulo select:focus-visible,
+.scrivi input:focus-visible, .modulo button:focus-visible, .scrivi button:focus-visible {
+  outline: 2px solid var(--accento);
+  outline-offset: 2px;
+}
+.campo-modulo.sbagliato input, .campo-modulo.sbagliato textarea, .campo-modulo.sbagliato select {
+  border-color: var(--allarme);
+}
+.tipo-codice_fiscale input, .tipo-partita_iva input, .tipo-iban input, .tipo-cap input,
+.tipo-codice_destinatario input { font-variant-numeric: tabular-nums; letter-spacing: 0.06em; text-transform: uppercase; }
+.errore-campo { color: var(--allarme); font-size: 0.95rem; min-height: 1.2em; }
+.errore-campo:empty { min-height: 0; }
+.righe-modulo { display: grid; gap: 0.4rem; }
+.riga-modulo { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 1fr) minmax(0, 1.3fr); gap: 0.4rem; }
+.piccolo-bottone, .invia-modulo, .scrivi button {
+  font: inherit;
+  border-radius: 0.5rem;
+  border: 1px solid var(--accento);
+  cursor: pointer;
+  min-height: 2.75rem;
+  padding: 0.4rem 1.1rem;
+}
+.piccolo-bottone { background: transparent; color: var(--accento); justify-self: start; font-size: 0.95rem; }
+.invia-modulo, .scrivi button { background: var(--accento); color: #16130e; font-weight: 600; font-size: 1.1rem; }
+.invia-modulo:disabled, .scrivi button:disabled { opacity: 0.55; cursor: default; }
+.piede-modulo { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.esito-modulo { margin: 0; color: var(--tenue); }
+.modulo.inviato .esito-modulo { color: var(--ok); }
+.scrivi {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 1.4rem 0.8rem;
+}
+.scrivi[hidden] { display: none; }
+.scrivi input { flex: 1 1 14rem; width: auto; }
+.esito-scrivi { color: var(--tenue); font-size: 0.95rem; flex-basis: 100%; }
+/* Senza conversazione a voce (05/10): casella e invio spenti, con la parola da dire */
+.nota-scrittura { color: var(--tenue); font-size: 1rem; flex-basis: 100%; margin: 0.4rem 0 0; }
+.scrivi.spento input, .modulo.spento .invia-modulo { opacity: 0.55; }
+.esito-scrivi:empty { display: none; }
+/* Foto (05/10): pulsante, anteprima prima dell'invio, pagina mentre si trascina un file */
+.scrivi .foto-apri { background: transparent; color: var(--accento); border: 2px solid var(--accento); }
+.scrivi .foto-apri[hidden] { display: none; }
+.scrivi .foto-apri:disabled { opacity: 0.55; cursor: default; }
+.foto-anteprima { display: flex; align-items: center; gap: 0.8rem; flex-basis: 100%; order: -1; }
+.foto-anteprima[hidden] { display: none; }
+.foto-anteprima img { max-height: 7rem; max-width: 60%; border-radius: 0.4rem; }
+body.trascina-foto { outline: 4px dashed var(--accento); outline-offset: -8px; }
+.scheda-foto img { display: block; max-width: 100%; max-height: 55vh; margin: 0 auto; border-radius: 0.5rem; }
+.scheda-foto .didascalia { color: var(--tenue); margin-top: 0.5rem; }
+/* Allegati (05/10): il nome del file nell'anteprima prima dell'invio, e la scheda */
+.foto-anteprima img[hidden], .allegato-info[hidden] { display: none; }
+.allegato-info { font-weight: 600; overflow-wrap: anywhere; flex: 1 1 auto; min-width: 0; }
+.scheda-allegato .nome-allegato { font-weight: 650; overflow-wrap: anywhere; }
+.scheda-allegato .anteprima-allegato { margin-top: 0.6rem; color: var(--tenue); white-space: pre-wrap; }
+@media (max-width: 600px) {
+  .riga-modulo { grid-template-columns: 1fr 1fr; }
+  .riga-modulo input[data-k="descrizione"] { grid-column: 1 / -1; }
+  .scrivi { padding: 0.5rem 1rem 0.8rem; }
+}
+
+/* Giochi (05/10): il riquadro isolato riempie la scheda; niente scorrimento sopra il gioco */
+.scheda-gioco > .corpo { display: flex; flex-direction: column; overflow: hidden; }
+.riquadro-box { flex: 1; min-height: min(60vh, 40rem); display: flex; }
+.riquadro-gioco { flex: 1; width: 100%; min-height: min(60vh, 40rem); border: 0; border-radius: 0.6rem; background: #111; }
+.gioco-chiuso { color: var(--tenue); font-size: 1.2rem; }
+
+/* ── cruscotto di chi amministra (06/10, cruscotto.py): sola lettura, testo piccolo e fitto ── */
+.apri-cruscotto { min-height: 2.2rem; padding: 0.2rem 0.8rem; font-size: 0.85rem; }
+.apri-cruscotto[hidden] { display: none; }
+.tipo-cruscotto h1.titolo { font-size: 1.6rem; margin-bottom: 0.4rem; }
+.tipo-cruscotto .corpo { font-size: 0.95rem; }
+.cr-testa { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.cr-quando { color: var(--tenue); font-variant-numeric: tabular-nums; margin-right: auto; }
+.cr-nota { color: var(--tenue); font-size: 0.85rem; margin: 0.3rem 0 0.2rem; }
+.cr-sezione { border-top: 1px solid var(--bordo); padding-top: 0.5rem; margin-top: 0.7rem; }
+.cr-titolo { font-size: 1.05rem; margin: 0 0 0.35rem; color: var(--accento); letter-spacing: 0.02em; }
+.cr-sotto { font-size: 0.95rem; margin: 0.5rem 0 0.2rem; color: var(--testo); }
+.cr-sezione p { margin: 0.2rem 0; overflow-wrap: anywhere; }
+.cr-sintesi { font-weight: 600; }
+.cr-tenue { color: var(--tenue); }
+.cr-avviso { color: var(--allarme); }
+.cr-comando { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 0.85rem;
+  color: var(--tenue); background: var(--pannello-2); border-radius: 0.4rem; padding: 0.25rem 0.5rem;
+  overflow-wrap: anywhere; }
+.cr-lista { list-style: none; margin: 0.2rem 0; padding: 0; display: grid; gap: 0.35rem; }
+.cr-lista li { overflow-wrap: anywhere; }
+.cr-riga1 { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.cr-nome { font-weight: 600; }
+.cr-motivo, .cr-passo { color: var(--tenue); font-size: 0.9rem; }
+.cr-passo::before { content: "→ "; }
+.cr-voce.guasta .cr-stato, .cr-abbinato.inattivo .cr-stato { color: var(--allarme); border-color: var(--allarme); }
+.cr-voce.mancante .cr-stato, .cr-voce.da_configurare .cr-stato { color: var(--accento); border-color: var(--accento); }
+.cr-abbinato.collegato .punto { background: var(--ok); }
+.cr-abbinato.inattivo .punto { background: var(--allarme); }
+.cr-giorno { padding: 0.25rem 0; font-variant-numeric: tabular-nums; }
+.cr-giorno + .cr-giorno { border-top: 1px dashed var(--bordo); }
+.cr-conti { list-style: none; margin: 0.2rem 0; padding: 0; display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: 0.15rem 1rem; }
+.cr-conti li { display: flex; justify-content: space-between; gap: 0.5rem; min-width: 0; }
+.cr-conti .cr-nome { font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cr-n { font-variant-numeric: tabular-nums; color: var(--accento); }

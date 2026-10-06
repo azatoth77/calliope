@@ -1,0 +1,3060 @@
+{
+ "gemma_json": {
+  "tag": "gemma_json",
+  "n": 93,
+  "accuratezza": 0.7956989247311828,
+  "per_tipo": {
+   "diretto": [
+    62,
+    74
+   ],
+   "passo": [
+    8,
+    8
+   ],
+   "nessuno": [
+    4,
+    11
+   ]
+  },
+  "per_gruppo": {
+   "barra": [
+    10,
+    12
+   ],
+   "esplora": [
+    16,
+    25
+   ],
+   "blocco note": [
+    7,
+    8
+   ],
+   "impostazioni": [
+    27,
+    31
+   ],
+   "vscode": [
+    6,
+    9
+   ],
+   "edge": [
+    8,
+    8
+   ]
+  },
+  "nessuno_detti": 4,
+  "falsi_nessuno": 0,
+  "nessuno_giusti": [
+   4,
+   11
+  ],
+  "non_validi": 0,
+  "trappole": {},
+  "ms_mediana": 373.7,
+  "ms_p95": 638.6,
+  "calibrazione": {
+   "auroc": 0.8613086770981507,
+   "tabella": [
+    {
+     "soglia": 0.0,
+     "automatiche": 1.0,
+     "accuratezza_automatiche": 0.7956989247311828,
+     "errori_automatici": 19,
+     "errori_automatici_azione": 19,
+     "a_conferma": 0
+    },
+    {
+     "soglia": 0.5,
+     "automatiche": 0.9354838709677419,
+     "accuratezza_automatiche": 0.8390804597701149,
+     "errori_automatici": 14,
+     "errori_automatici_azione": 14,
+     "a_conferma": 6
+    },
+    {
+     "soglia": 0.6,
+     "automatiche": 0.8279569892473119,
+     "accuratezza_automatiche": 0.8701298701298701,
+     "errori_automatici": 10,
+     "errori_automatici_azione": 10,
+     "a_conferma": 16
+    },
+    {
+     "soglia": 0.7,
+     "automatiche": 0.7526881720430108,
+     "accuratezza_automatiche": 0.9142857142857143,
+     "errori_automatici": 6,
+     "errori_automatici_azione": 6,
+     "a_conferma": 23
+    },
+    {
+     "soglia": 0.8,
+     "automatiche": 0.7311827956989247,
+     "accuratezza_automatiche": 0.9117647058823529,
+     "errori_automatici": 6,
+     "errori_automatici_azione": 6,
+     "a_conferma": 25
+    },
+    {
+     "soglia": 0.9,
+     "automatiche": 0.6129032258064516,
+     "accuratezza_automatiche": 0.9473684210526315,
+     "errori_automatici": 3,
+     "errori_automatici_azione": 3,
+     "a_conferma": 36
+    },
+    {
+     "soglia": 0.95,
+     "automatiche": 0.44086021505376344,
+     "accuratezza_automatiche": 0.9512195121951219,
+     "errori_automatici": 2,
+     "errori_automatici_azione": 2,
+     "a_conferma": 52
+    }
+   ]
+  }
+ },
+ "gemma_json_banco_nuovo": {
+  "tag": "gemma_json_banco_nuovo",
+  "n": 32,
+  "accuratezza": 0.78125,
+  "per_tipo": {
+   "diretto": [
+    23,
+    26
+   ],
+   "passo": [
+    0,
+    3
+   ],
+   "nessuno": [
+    2,
+    3
+   ]
+  },
+  "per_gruppo": {
+   "barra": [
+    2,
+    4
+   ],
+   "esplora": [
+    6,
+    8
+   ],
+   "blocco note": [
+    3,
+    3
+   ],
+   "impostazioni": [
+    10,
+    11
+   ],
+   "vscode": [
+    2,
+    3
+   ],
+   "edge": [
+    2,
+    3
+   ]
+  },
+  "nessuno_detti": 3,
+  "falsi_nessuno": 1,
+  "nessuno_giusti": [
+   2,
+   3
+  ],
+  "non_validi": 0,
+  "trappole": {},
+  "ms_mediana": 331.5,
+  "ms_p95": 363.9,
+  "calibrazione": {
+   "auroc": 0.7542857142857143,
+   "tabella": [
+    {
+     "soglia": 0.0,
+     "automatiche": 1.0,
+     "accuratezza_automatiche": 0.78125,
+     "errori_automatici": 7,
+     "errori_automatici_azione": 6,
+     "a_conferma": 0
+    },
+    {
+     "soglia": 0.5,
+     "automatiche": 0.96875,
+     "accuratezza_automatiche": 0.7741935483870968,
+     "errori_automatici": 7,
+     "errori_automatici_azione": 6,
+     "a_conferma": 1
+    },
+    {
+     "soglia": 0.6,
+     "automatiche": 0.75,
+     "accuratezza_automatiche": 0.8333333333333334,
+     "errori_automatici": 4,
+     "errori_automatici_azione": 4,
+     "a_conferma": 8
+    },
+    {
+     "soglia": 0.7,
+     "automatiche": 0.75,
+     "accuratezza_automatiche": 0.8333333333333334,
+     "errori_automatici": 4,
+     "errori_automatici_azione": 4,
+     "a_conferma": 8
+    },
+    {
+     "soglia": 0.8,
+     "automatiche": 0.59375,
+     "accuratezza_automatiche": 0.9473684210526315,
+     "errori_automatici": 1,
+     "errori_automatici_azione": 1,
+     "a_conferma": 13
+    },
+    {
+     "soglia": 0.9,
+     "automatiche": 0.5625,
+     "accuratezza_automatiche": 0.9444444444444444,
+     "errori_automatici": 1,
+     "errori_automatici_azione": 1,
+     "a_conferma": 14
+    },
+    {
+     "soglia": 0.95,
+     "automatiche": 0.40625,
+     "accuratezza_automatiche": 0.9230769230769231,
+     "errori_automatici": 1,
+     "errori_automatici_azione": 1,
+     "a_conferma": 19
+    }
+   ]
+  }
+ },
+ "gemma_json_k10": {
+  "tag": "gemma_json_k10",
+  "n": 93,
+  "accuratezza": 0.6989247311827957,
+  "per_tipo": {
+   "diretto": [
+    56,
+    74
+   ],
+   "passo": [
+    6,
+    8
+   ],
+   "nessuno": [
+    3,
+    11
+   ]
+  },
+  "per_gruppo": {
+   "barra": [
+    9,
+    12
+   ],
+   "esplora": [
+    17,
+    25
+   ],
+   "blocco note": [
+    4,
+    8
+   ],
+   "impostazioni": [
+    23,
+    31
+   ],
+   "vscode": [
+    5,
+    9
+   ],
+   "edge": [
+    7,
+    8
+   ]
+  },
+  "nessuno_detti": 11,
+  "falsi_nessuno": 8,
+  "nessuno_giusti": [
+   3,
+   11
+  ],
+  "non_validi": 0,
+  "trappole": {},
+  "ms_mediana": 300.2,
+  "ms_p95": 317.7,
+  "calibrazione": {
+   "auroc": 0.782967032967033,
+   "tabella": [
+    {
+     "soglia": 0.0,
+     "automatiche": 1.0,
+     "accuratezza_automatiche": 0.6989247311827957,
+     "errori_automatici": 28,
+     "errori_automatici_azione": 20,
+     "a_conferma": 0
+    },
+    {
+     "soglia": 0.5,
+     "automatiche": 0.9354838709677419,
+     "accuratezza_automatiche": 0.7126436781609196,
+     "errori_automatici": 25,
+     "errori_automatici_azione": 17,
+     "a_conferma": 6
+    },
+    {
+     "soglia": 0.6,
+     "automatiche": 0.9032258064516129,
+     "accuratezza_automatiche": 0.7142857142857143,
+     "errori_automatici": 24,
+     "errori_automatici_azione": 16,
+     "a_conferma": 9
+    },
+    {
+     "soglia": 0.7,
+     "automatiche": 0.8172043010752689,
+     "accuratezza_automatiche": 0.7368421052631579,
+     "errori_automatici": 20,
+     "errori_automatici_azione": 13,
+     "a_conferma": 17
+    },
+    {
+     "soglia": 0.8,
+     "automatiche": 0.7419354838709677,
+     "accuratezza_automatiche": 0.7536231884057971,
+     "errori_automatici": 17,
+     "errori_automatici_azione": 11,
+     "a_conferma": 24
+    },
+    {
+     "soglia": 0.9,
+     "automatiche": 0.5591397849462365,
+     "accuratezza_automatiche": 0.8461538461538461,
+     "errori_automatici": 8,
+     "errori_automatici_azione": 3,
+     "a_conferma": 41
+    },
+    {
+     "soglia": 0.95,
+     "automatiche": 0.40860215053763443,
+     "accuratezza_automatiche": 0.9736842105263158,
+     "errori_automatici": 1,
+     "errori_automatici_azione": 0,
+     "a_conferma": 55
+    }
+   ]
+  }
+ },
+ "gemma_json_trappole": {
+  "tag": "gemma_json_trappole",
+  "n": 93,
+  "accuratezza": 0.6451612903225806,
+  "per_tipo": {
+   "diretto": [
+    55,
+    74
+   ],
+   "passo": [
+    5,
+    8
+   ],
+   "nessuno": [
+    0,
+    11
+   ]
+  },
+  "per_gruppo": {
+   "barra": [
+    4,
+    12
+   ],
+   "esplora": [
+    14,
+    25
+   ],
+   "blocco note": [
+    7,
+    8
+   ],
+   "impostazioni": [
+    23,
+    31
+   ],
+   "vscode": [
+    6,
+    9
+   ],
+   "edge": [
+    6,
+    8
+   ]
+  },
+  "nessuno_detti": 0,
+  "falsi_nessuno": 0,
+  "nessuno_giusti": [
+   0,
+   11
+  ],
+  "non_validi": 0,
+  "trappole": {
+   "imitazione": 26
+  },
+  "ms_mediana": 360.4,
+  "ms_p95": 410.0,
+  "calibrazione": {
+   "auroc": 0.7080808080808081,
+   "tabella": [
+    {
+     "soglia": 0.0,
+     "automatiche": 1.0,
+     "accuratezza_automatiche": 0.6451612903225806,
+     "errori_automatici": 33,
+     "errori_automatici_azione": 33,
+     "a_conferma": 0
+    },
+    {
+     "soglia": 0.5,
+     "automatiche": 0.9354838709677419,
+     "accuratezza_automatiche": 0.6551724137931034,
+     "errori_automatici": 30,
+     "errori_automatici_azione": 30,
+     "a_conferma": 6
+    },
+    {
+     "soglia": 0.6,
+     "automatiche": 0.8924731182795699,
+     "accuratezza_automatiche": 0.6746987951807228,
+     "errori_automatici": 27,
+     "errori_automatici_azione": 27,
+     "a_conferma": 10
+    },
+    {
+     "soglia": 0.7,
+     "automatiche": 0.7849462365591398,
+     "accuratezza_automatiche": 0.6986301369863014,
+     "errori_automatici": 22,
+     "errori_automatici_azione": 22,
+     "a_conferma": 20
+    },
+    {
+     "soglia": 0.8,
+     "automatiche": 0.6989247311827957,
+     "accuratezza_automatiche": 0.7384615384615385,
+     "errori_automatici": 17,
+     "errori_automatici_azione": 17,
+     "a_conferma": 28
+    },
+    {
+     "soglia": 0.9,
+     "automatiche": 0.5376344086021505,
+     "accuratezza_automatiche": 0.76,
+     "errori_automatici": 12,
+     "errori_automatici_azione": 12,
+     "a_conferma": 43
+    },
+    {
+     "soglia": 0.95,
+     "automatiche": 0.3655913978494624,
+     "accuratezza_automatiche": 0.7941176470588235,
+     "errori_automatici": 7,
+     "errori_automatici_azione": 7,
+     "a_conferma": 59
+    }
+   ]
+  }
+ },
+ "gemma_json_v2": {
+  "tag": "gemma_json_v2",
+  "n": 93,
+  "accuratezza": 0.8494623655913979,
+  "per_tipo": {
+   "diretto": [
+    65,
+    74
+   ],
+   "passo": [
+    7,
+    8
+   ],
+   "nessuno": [
+    7,
+    11
+   ]
+  },
+  "per_gruppo": {
+   "barra": [
+    11,
+    12
+   ],
+   "esplora": [
+    18,
+    25
+   ],
+   "blocco note": [
+    8,
+    8
+   ],
+   "impostazioni": [
+    27,
+    31
+   ],
+   "vscode": [
+    7,
+    9
+   ],
+   "edge": [
+    8,
+    8
+   ]
+  },
+  "nessuno_detti": 8,
+  "falsi_nessuno": 1,
+  "nessuno_giusti": [
+   7,
+   11
+  ],
+  "non_validi": 0,
+  "trappole": {},
+  "ms_mediana": 362.9,
+  "ms_p95": 410.3,
+  "calibrazione": {
+   "auroc": 0.9077757685352622,
+   "tabella": [
+    {
+     "soglia": 0.0,
+     "automatiche": 1.0,
+     "accuratezza_automatiche": 0.8494623655913979,
+     "errori_automatici": 14,
+     "errori_automatici_azione": 13,
+     "a_conferma": 0
+    },
+    {
+     "soglia": 0.5,
+     "automatiche": 0.956989247311828,
+     "accuratezza_automatiche": 0.8651685393258427,
+     "errori_automatici": 12,
+     "errori_automatici_azione": 11,
+     "a_conferma": 4
+    },
+    {
+     "soglia": 0.6,
+     "automatiche": 0.8602150537634409,
+     "accuratezza_automatiche": 0.9125,
+     "errori_automatici": 7,
+     "errori_automatici_azione": 6,
+     "a_conferma": 13
+    },
+    {
+     "soglia": 0.7,
+     "automatiche": 0.8387096774193549,
+     "accuratezza_automatiche": 0.9230769230769231,
+     "errori_automatici": 6,
+     "errori_automatici_azione": 5,
+     "a_conferma": 15
+    },
+    {
+     "soglia": 0.8,
+     "automatiche": 0.7741935483870968,
+     "accuratezza_automatiche": 0.9583333333333334,
+     "errori_automatici": 3,
+     "errori_automatici_azione": 2,
+     "a_conferma": 21
+    },
+    {
+     "soglia": 0.9,
+     "automatiche": 0.6559139784946236,
+     "accuratezza_automatiche": 0.9836065573770492,
+     "errori_automatici": 1,
+     "errori_automatici_azione": 1,
+     "a_conferma": 32
+    },
+    {
+     "soglia": 0.95,
+     "automatiche": 0.5161290322580645,
+     "accuratezza_automatiche": 1.0,
+     "errori_automatici": 0,
+     "errori_automatici_azione": 0,
+     "a_conferma": 45
+    }
+   ]
+  }
+ },
+ "gemma_json_v2_banco_nuovo": {
+  "tag": "gemma_json_v2_banco_nuovo",
+  "n": 32,
+  "accuratezza": 0.8125,
+  "per_tipo": {
+   "diretto": [
+    23,
+    26
+   ],
+   "passo": [
+    1,
+    3
+   ],
+   "nessuno": [
+    2,
+    3
+   ]
+  },
+  "per_gruppo": {
+   "barra": [
+    3,
+    4
+   ],
+   "esplora": [
+    6,
+    8
+   ],
+   "blocco note": [
+    3,
+    3
+   ],
+   "impostazioni": [
+    10,
+    11
+   ],
+   "vscode": [
+    2,
+    3
+   ],
+   "edge": [
+    2,
+    3
+   ]
+  },
+  "nessuno_detti": 3,
+  "falsi_nessuno": 1,
+  "nessuno_giusti": [
+   2,
+   3
+  ],
+  "non_validi": 0,
+  "trappole": {},
+  "ms_mediana": 350.55,
+  "ms_p95": 393.7,
+  "calibrazione": {
+   "auroc": 0.8589743589743589,
+   "tabella": [
+    {
+     "soglia": 0.0,
+     "automatiche": 1.0,
+     "accuratezza_automatiche": 0.8125,
+     "errori_automatici": 6,
+     "errori_automatici_azione": 5,
+     "a_conferma": 0
+    },
+    {
+     "soglia": 0.5,
+     "automatiche": 0.90625,
+     "accuratezza_automatiche": 0.8275862068965517,
+     "errori_automatici": 5,
+     "errori_automatici_azione": 4,
+     "a_conferma": 3
+    },
+    {
+     "soglia": 0.6,
+     "automatiche": 0.875,
+     "accuratezza_automatiche": 0.8214285714285714,
+     "errori_automatici": 5,
+     "errori_automatici_azione": 4,
+     "a_conferma": 4
+    },
+    {
+     "soglia": 0.7,
+     "automatiche": 0.8125,
+     "accuratezza_automatiche": 0.8846153846153846,
+     "errori_automatici": 3,
+     "errori_automatici_azione": 3,
+     "a_conferma": 6
+    },
+    {
+     "soglia": 0.8,
+     "automatiche": 0.65625,
+     "accuratezza_automatiche": 0.9523809523809523,
+     "errori_automatici": 1,
+     "errori_automatici_azione": 1,
+     "a_conferma": 11
+    },
+    {
+     "soglia": 0.9,
+     "automatiche": 0.59375,
+     "accuratezza_automatiche": 1.0,
+     "errori_automatici": 0,
+     "errori_automatici_azione": 0,
+     "a_conferma": 13
+    },
+    {
+     "soglia": 0.95,
+     "automatiche": 0.5,
+     "accuratezza_automatiche": 1.0,
+     "errori_automatici": 0,
+     "errori_automatici_azione": 0,
+     "a_conferma": 16
+    }
+   ]
+  }
+ },
+ "gemma_json_v2_trappole": {
+  "tag": "gemma_json_v2_trappole",
+  "n": 93,
+  "accuratezza": 0.7526881720430108,
+  "per_tipo": {
+   "diretto": [
+    65,
+    74
+   ],
+   "passo": [
+    5,
+    8
+   ],
+   "nessuno": [
+    0,
+    11
+   ]
+  },
+  "per_gruppo": {
+   "barra": [
+    10,
+    12
+   ],
+   "esplora": [
+    18,
+    25
+   ],
+   "blocco note": [
+    7,
+    8
+   ],
+   "impostazioni": [
+    23,
+    31
+   ],
+   "vscode": [
+    6,
+    9
+   ],
+   "edge": [
+    6,
+    8
+   ]
+  },
+  "nessuno_detti": 0,
+  "falsi_nessuno": 0,
+  "nessuno_giusti": [
+   0,
+   11
+  ],
+  "non_validi": 0,
+  "trappole": {
+   "imitazione": 18
+  },
+  "ms_mediana": 386.5,
+  "ms_p95": 418.7,
+  "calibrazione": {
+   "auroc": 0.8260869565217391,
+   "tabella": [
+    {
+     "soglia": 0.0,
+     "automatiche": 1.0,
+     "accuratezza_automatiche": 0.7526881720430108,
+     "errori_automatici": 23,
+     "errori_automatici_azione": 23,
+     "a_conferma": 0
+    },
+    {
+     "soglia": 0.5,
+     "automatiche": 0.956989247311828,
+     "accuratezza_automatiche": 0.7640449438202247,
+     "errori_automatici": 21,
+     "errori_automatici_azione": 21,
+     "a_conferma": 4
+    },
+    {
+     "soglia": 0.6,
+     "automatiche": 0.9139784946236559,
+     "accuratezza_automatiche": 0.7647058823529411,
+     "errori_automatici": 20,
+     "errori_automatici_azione": 20,
+     "a_conferma": 8
+    },
+    {
+     "soglia": 0.7,
+     "automatiche": 0.8387096774193549,
+     "accuratezza_automatiche": 0.7948717948717948,
+     "errori_automatici": 16,
+     "errori_automatici_azione": 16,
+     "a_conferma": 15
+    },
+    {
+     "soglia": 0.8,
+     "automatiche": 0.6881720430107527,
+     "accuratezza_automatiche": 0.859375,
+     "errori_automatici": 9,
+     "errori_automatici_azione": 9,
+     "a_conferma": 29
+    },
+    {
+     "soglia": 0.9,
+     "automatiche": 0.5591397849462365,
+     "accuratezza_automatiche": 0.9615384615384616,
+     "errori_automatici": 2,
+     "errori_automatici_azione": 2,
+     "a_conferma": 41
+    },
+    {
+     "soglia": 0.95,
+     "automatiche": 0.45161290322580644,
+     "accuratezza_automatiche": 0.9761904761904762,
+     "errori_automatici": 1,
+     "errori_automatici_azione": 1,
+     "a_conferma": 51
+    }
+   ]
+  }
+ },
+ "gemma_tool": {
+  "tag": "gemma_tool",
+  "n": 93,
+  "accuratezza": 0.8064516129032258,
+  "per_tipo": {
+   "diretto": [
+    62,
+    74
+   ],
+   "passo": [
+    7,
+    8
+   ],
+   "nessuno": [
+    6,
+    11
+   ]
+  },
+  "per_gruppo": {
+   "barra": [
+    9,
+    12
+   ],
+   "esplora": [
+    20,
+    25
+   ],
+   "blocco note": [
+    8,
+    8
+   ],
+   "impostazioni": [
+    25,
+    31
+   ],
+   "vscode": [
+    5,
+    9
+   ],
+   "edge": [
+    8,
+    8
+   ]
+  },
+  "nessuno_detti": 10,
+  "falsi_nessuno": 4,
+  "nessuno_giusti": [
+   6,
+   11
+  ],
+  "non_validi": 0,
+  "trappole": {},
+  "ms_mediana": 387.6,
+  "ms_p95": 442.8,
+  "calibrazione": null
+ },
+ "gemma_tool_v2": {
+  "tag": "gemma_tool_v2",
+  "n": 93,
+  "accuratezza": 0.8387096774193549,
+  "per_tipo": {
+   "diretto": [
+    67,
+    74
+   ],
+   "passo": [
+    5,
+    8
+   ],
+   "nessuno": [
+    6,
+    11
+   ]
+  },
+  "per_gruppo": {
+   "barra": [
+    11,
+    12
+   ],
+   "esplora": [
+    22,
+    25
+   ],
+   "blocco note": [
+    8,
+    8
+   ],
+   "impostazioni": [
+    25,
+    31
+   ],
+   "vscode": [
+    5,
+    9
+   ],
+   "edge": [
+    7,
+    8
+   ]
+  },
+  "nessuno_detti": 9,
+  "falsi_nessuno": 3,
+  "nessuno_giusti": [
+   6,
+   11
+  ],
+  "non_validi": 0,
+  "trappole": {},
+  "ms_mediana": 342.5,
+  "ms_p95": 459.4,
+  "calibrazione": null
+ },
+ "gemma_tool_v2_banco_nuovo": {
+  "tag": "gemma_tool_v2_banco_nuovo",
+  "n": 32,
+  "accuratezza": 0.78125,
+  "per_tipo": {
+   "diretto": [
+    23,
+    26
+   ],
+   "passo": [
+    0,
+    3
+   ],
+   "nessuno": [
+    2,
+    3
+   ]
+  },
+  "per_gruppo": {
+   "barra": [
+    2,
+    4
+   ],
+   "esplora": [
+    6,
+    8
+   ],
+   "blocco note": [
+    3,
+    3
+   ],
+   "impostazioni": [
+    10,
+    11
+   ],
+   "vscode": [
+    2,
+    3
+   ],
+   "edge": [
+    2,
+    3
+   ]
+  },
+  "nessuno_detti": 4,
+  "falsi_nessuno": 2,
+  "nessuno_giusti": [
+   2,
+   3
+  ],
+  "non_validi": 0,
+  "trappole": {},
+  "ms_mediana": 334.1,
+  "ms_p95": 446.0,
+  "calibrazione": null
+ },
+ "laya_english_etichette": {
+  "tag": "laya_english_etichette",
+  "n": 93,
+  "accuratezza": 0.12903225806451613,
+  "per_tipo": {
+   "diretto": [
+    9,
+    74
+   ],
+   "passo": [
+    0,
+    8
+   ],
+   "nessuno": [
+    3,
+    11
+   ]
+  },
+  "per_gruppo": {
+   "barra": [
+    4,
+    12
+   ],
+   "esplora": [
+    2,
+    25
+   ],
+   "blocco note": [
+    2,
+    8
+   ],
+   "impostazioni": [
+    4,
+    31
+   ],
+   "vscode": [
+    0,
+    9
+   ],
+   "edge": [
+    0,
+    8
+   ]
+  },
+  "nessuno_detti": 20,
+  "falsi_nessuno": 17,
+  "nessuno_giusti": [
+   3,
+   11
+  ],
+  "non_validi": 0,
+  "trappole": {},
+  "ms_mediana": 844.6,
+  "ms_p95": 1055.9,
+  "calibrazione": {
+   "auroc": 0.49794238683127573,
+   "tabella": [
+    {
+     "soglia": 0.0,
+     "automatiche": 1.0,
+     "accuratezza_automatiche": 0.12903225806451613,
+     "errori_automatici": 81,
+     "errori_automatici_azione": 64,
+     "a_conferma": 0
+    },
+    {
+     "soglia": 0.5,
+     "automatiche": 0.11827956989247312,
+     "accuratezza_automatiche": 0.18181818181818182,
+     "errori_automatici": 9,
+     "errori_automatici_azione": 7,
+     "a_conferma": 82
+    },
+    {
+     "soglia": 0.6,
+     "automatiche": 0.06451612903225806,
+     "accuratezza_automatiche": 0.3333333333333333,
+     "errori_automatici": 4,
+     "errori_automatici_azione": 2,
+     "a_conferma": 87
+    },
+    {
+     "soglia": 0.7,
+     "automatiche": 0.03225806451612903,
+     "accuratezza_automatiche": 0.3333333333333333,
+     "errori_automatici": 2,
+     "errori_automatici_azione": 0,
+     "a_conferma": 90
+    },
+    {
+     "soglia": 0.8,
+     "automatiche": 0.010752688172043012,
+     "accuratezza_automatiche": 1.0,
+     "errori_automatici": 0,
+     "errori_automatici_azione": 0,
+     "a_conferma": 92
+    },
+    {
+     "soglia": 0.9,
+     "automatiche": 0.010752688172043012,
+     "accuratezza_automatiche": 1.0,
+     "errori_automatici": 0,
+     "errori_automatici_azione": 0,
+     "a_conferma": 92
+    },
+    {
+     "soglia": 0.95,
+     "automatiche": 0.0,
+     "accuratezza_automatiche": null,
+     "errori_automatici": 0,
+     "errori_automatici_azione": 0,
+     "a_conferma": 93
+    }
+   ]
+  }
+ },
+ "laya_multilingual_codici": {
+  "tag": "laya_multilingual_codici",
+  "n": 93,
+  "accuratezza": 0.25806451612903225,
+  "per_tipo": {
+   "diretto": [
+    23,
+    74
+   ],
+   "passo": [
+    1,
+    8
+   ],
+   "nessuno": [
+    0,
+    11
+   ]
+  },
+  "per_gruppo": {
+   "barra": [
+    5,
+    12
+   ],
+   "esplora": [
+    5,
+    25
+   ],
+   "blocco note": [
+    0,
+    8
+   ],
+   "impostazioni": [
+    12,
+    31
+   ],
+   "vscode": [
+    0,
+    9
+   ],
+   "edge": [
+    2,
+    8
+   ]
+  },
+  "nessuno_detti": 6,
+  "falsi_nessuno": 6,
+  "nessuno_giusti": [
+   0,
+   11
+  ],
+  "non_validi": 0,
+  "trappole": {},
+  "ms_mediana": 295.3,
+  "ms_p95": 376.3,
+  "calibrazione": {
+   "auroc": 0.6370772946859904,
+   "tabella": [
+    {
+     "soglia": 0.0,
+     "automatiche": 1.0,
+     "accuratezza_automatiche": 0.25806451612903225,
+     "errori_automatici": 69,
+     "errori_automatici_azione": 63,
+     "a_conferma": 0
+    },
+    {
+     "soglia": 0.5,
+     "automatiche": 0.11827956989247312,
+     "accuratezza_automatiche": 0.45454545454545453,
+     "errori_automatici": 6,
+     "errori_automatici_azione": 6,
+     "a_conferma": 82
+    },
+    {
+     "soglia": 0.6,
+     "automatiche": 0.08602150537634409,
+     "accuratezza_automatiche": 0.5,
+     "errori_automatici": 4,
+     "errori_automatici_azione": 4,
+     "a_conferma": 85
+    },
+    {
+     "soglia": 0.7,
+     "automatiche": 0.053763440860215055,
+     "accuratezza_automatiche": 0.6,
+     "errori_automatici": 2,
+     "errori_automatici_azione": 2,
+     "a_conferma": 88
+    },
+    {
+     "soglia": 0.8,
+     "automatiche": 0.03225806451612903,
+     "accuratezza_automatiche": 0.6666666666666666,
+     "errori_automatici": 1,
+     "errori_automatici_azione": 1,
+     "a_conferma": 90
+    },
+    {
+     "soglia": 0.9,
+     "automatiche": 0.03225806451612903,
+     "accuratezza_automatiche": 0.6666666666666666,
+     "errori_automatici": 1,
+     "errori_automatici_azione": 1,
+     "a_conferma": 90
+    },
+    {
+     "soglia": 0.95,
+     "automatiche": 0.010752688172043012,
+     "accuratezza_automatiche": 1.0,
+     "errori_automatici": 0,
+     "errori_automatici_azione": 0,
+     "a_conferma": 92
+    }
+   ]
+  }
+ },
+ "laya_multilingual_etichette": {
+  "tag": "laya_multilingual_etichette",
+  "n": 93,
+  "accuratezza": 0.3010752688172043,
+  "per_tipo": {
+   "diretto": [
+    27,
+    74
+   ],
+   "passo": [
+    1,
+    8
+   ],
+   "nessuno": [
+    0,
+    11
+   ]
+  },
+  "per_gruppo": {
+   "barra": [
+    5,
+    12
+   ],
+   "esplora": [
+    6,
+    25
+   ],
+   "blocco note": [
+    2,
+    8
+   ],
+   "impostazioni": [
+    13,
+    31
+   ],
+   "vscode": [
+    2,
+    9
+   ],
+   "edge": [
+    0,
+    8
+   ]
+  },
+  "nessuno_detti": 1,
+  "falsi_nessuno": 1,
+  "nessuno_giusti": [
+   0,
+   11
+  ],
+  "non_validi": 0,
+  "trappole": {},
+  "ms_mediana": 241.4,
+  "ms_p95": 333.1,
+  "calibrazione": {
+   "auroc": 0.7082417582417583,
+   "tabella": [
+    {
+     "soglia": 0.0,
+     "automatiche": 1.0,
+     "accuratezza_automatiche": 0.3010752688172043,
+     "errori_automatici": 65,
+     "errori_automatici_azione": 64,
+     "a_conferma": 0
+    },
+    {
+     "soglia": 0.5,
+     "automatiche": 0.3225806451612903,
+     "accuratezza_automatiche": 0.36666666666666664,
+     "errori_automatici": 19,
+     "errori_automatici_azione": 19,
+     "a_conferma": 63
+    },
+    {
+     "soglia": 0.6,
+     "automatiche": 0.1935483870967742,
+     "accuratezza_automatiche": 0.6111111111111112,
+     "errori_automatici": 7,
+     "errori_automatici_azione": 7,
+     "a_conferma": 75
+    },
+    {
+     "soglia": 0.7,
+     "automatiche": 0.13978494623655913,
+     "accuratezza_automatiche": 0.6153846153846154,
+     "errori_automatici": 5,
+     "errori_automatici_azione": 5,
+     "a_conferma": 80
+    },
+    {
+     "soglia": 0.8,
+     "automatiche": 0.08602150537634409,
+     "accuratezza_automatiche": 0.75,
+     "errori_automatici": 2,
+     "errori_automatici_azione": 2,
+     "a_conferma": 85
+    },
+    {
+     "soglia": 0.9,
+     "automatiche": 0.053763440860215055,
+     "accuratezza_automatiche": 0.8,
+     "errori_automatici": 1,
+     "errori_automatici_azione": 1,
+     "a_conferma": 88
+    },
+    {
+     "soglia": 0.95,
+     "automatiche": 0.010752688172043012,
+     "accuratezza_automatiche": 1.0,
+     "errori_automatici": 0,
+     "errori_automatici_azione": 0,
+     "a_conferma": 92
+    }
+   ]
+  }
+ },
+ "laya_multilingual_etichette_banco_nuovo": {
+  "tag": "laya_multilingual_etichette_banco_nuovo",
+  "n": 32,
+  "accuratezza": 0.46875,
+  "per_tipo": {
+   "diretto": [
+    15,
+    26
+   ],
+   "passo": [
+    0,
+    3
+   ],
+   "nessuno": [
+    0,
+    3
+   ]
+  },
+  "per_gruppo": {
+   "barra": [
+    2,
+    4
+   ],
+   "esplora": [
+    3,
+    8
+   ],
+   "blocco note": [
+    2,
+    3
+   ],
+   "impostazioni": [
+    5,
+    11
+   ],
+   "vscode": [
+    2,
+    3
+   ],
+   "edge": [
+    1,
+    3
+   ]
+  },
+  "nessuno_detti": 2,
+  "falsi_nessuno": 2,
+  "nessuno_giusti": [
+   0,
+   3
+  ],
+  "non_validi": 0,
+  "trappole": {},
+  "ms_mediana": 239.0,
+  "ms_p95": 325.8,
+  "calibrazione": {
+   "auroc": 0.7725490196078432,
+   "tabella": [
+    {
+     "soglia": 0.0,
+     "automatiche": 1.0,
+     "accuratezza_automatiche": 0.46875,
+     "errori_automatici": 17,
+     "errori_automatici_azione": 15,
+     "a_conferma": 0
+    },
+    {
+     "soglia": 0.5,
+     "automatiche": 0.40625,
+     "accuratezza_automatiche": 0.6923076923076923,
+     "errori_automatici": 4,
+     "errori_automatici_azione": 3,
+     "a_conferma": 19
+    },
+    {
+     "soglia": 0.6,
+     "automatiche": 0.34375,
+     "accuratezza_automatiche": 0.6363636363636364,
+     "errori_automatici": 4,
+     "errori_automatici_azione": 3,
+     "a_conferma": 21
+    },
+    {
+     "soglia": 0.7,
+     "automatiche": 0.28125,
+     "accuratezza_automatiche": 0.6666666666666666,
+     "errori_automatici": 3,
+     "errori_automatici_azione": 2,
+     "a_conferma": 23
+    },
+    {
+     "soglia": 0.8,
+     "automatiche": 0.21875,
+     "accuratezza_automatiche": 0.8571428571428571,
+     "errori_automatici": 1,
+     "errori_automatici_azione": 1,
+     "a_conferma": 25
+    },
+    {
+     "soglia": 0.9,
+     "automatiche": 0.125,
+     "accuratezza_automatiche": 0.75,
+     "errori_automatici": 1,
+     "errori_automatici_azione": 1,
+     "a_conferma": 28
+    },
+    {
+     "soglia": 0.95,
+     "automatiche": 0.0625,
+     "accuratezza_automatiche": 0.5,
+     "errori_automatici": 1,
+     "errori_automatici_azione": 1,
+     "a_conferma": 30
+    }
+   ]
+  }
+ },
+ "laya_multilingual_etichette_k8": {
+  "tag": "laya_multilingual_etichette_k8",
+  "n": 93,
+  "accuratezza": 0.3225806451612903,
+  "per_tipo": {
+   "diretto": [
+    25,
+    74
+   ],
+   "passo": [
+    2,
+    8
+   ],
+   "nessuno": [
+    3,
+    11
+   ]
+  },
+  "per_gruppo": {
+   "barra": [
+    5,
+    12
+   ],
+   "esplora": [
+    9,
+    25
+   ],
+   "blocco note": [
+    0,
+    8
+   ],
+   "impostazioni": [
+    12,
+    31
+   ],
+   "vscode": [
+    3,
+    9
+   ],
+   "edge": [
+    1,
+    8
+   ]
+  },
+  "nessuno_detti": 17,
+  "falsi_nessuno": 14,
+  "nessuno_giusti": [
+   3,
+   11
+  ],
+  "non_validi": 0,
+  "trappole": {},
+  "ms_mediana": 152.1,
+  "ms_p95": 196.5,
+  "calibrazione": {
+   "auroc": 0.7060846560846561,
+   "tabella": [
+    {
+     "soglia": 0.0,
+     "automatiche": 1.0,
+     "accuratezza_automatiche": 0.3225806451612903,
+     "errori_automatici": 63,
+     "errori_automatici_azione": 49,
+     "a_conferma": 0
+    },
+    {
+     "soglia": 0.5,
+     "automatiche": 0.5268817204301075,
+     "accuratezza_automatiche": 0.40816326530612246,
+     "errori_automatici": 29,
+     "errori_automatici_azione": 23,
+     "a_conferma": 44
+    },
+    {
+     "soglia": 0.6,
+     "automatiche": 0.3655913978494624,
+     "accuratezza_automatiche": 0.5294117647058824,
+     "errori_automatici": 16,
+     "errori_automatici_azione": 14,
+     "a_conferma": 59
+    },
+    {
+     "soglia": 0.7,
+     "automatiche": 0.26881720430107525,
+     "accuratezza_automatiche": 0.64,
+     "errori_automatici": 9,
+     "errori_automatici_azione": 9,
+     "a_conferma": 68
+    },
+    {
+     "soglia": 0.8,
+     "automatiche": 0.17204301075268819,
+     "accuratezza_automatiche": 0.75,
+     "errori_automatici": 4,
+     "errori_automatici_azione": 4,
+     "a_conferma": 77
+    },
+    {
+     "soglia": 0.9,
+     "automatiche": 0.11827956989247312,
+     "accuratezza_automatiche": 0.7272727272727273,
+     "errori_automatici": 3,
+     "errori_automatici_azione": 3,
+     "a_conferma": 82
+    },
+    {
+     "soglia": 0.95,
+     "automatiche": 0.07526881720430108,
+     "accuratezza_automatiche": 0.7142857142857143,
+     "errori_automatici": 2,
+     "errori_automatici_azione": 2,
+     "a_conferma": 86
+    }
+   ]
+  }
+ },
+ "laya_typed-decisions_etichette": {
+  "tag": "laya_typed-decisions_etichette",
+  "n": 93,
+  "accuratezza": 0.1827956989247312,
+  "per_tipo": {
+   "diretto": [
+    17,
+    74
+   ],
+   "passo": [
+    0,
+    8
+   ],
+   "nessuno": [
+    0,
+    11
+   ]
+  },
+  "per_gruppo": {
+   "barra": [
+    4,
+    12
+   ],
+   "esplora": [
+    0,
+    25
+   ],
+   "blocco note": [
+    1,
+    8
+   ],
+   "impostazioni": [
+    7,
+    31
+   ],
+   "vscode": [
+    3,
+    9
+   ],
+   "edge": [
+    2,
+    8
+   ]
+  },
+  "nessuno_detti": 1,
+  "falsi_nessuno": 1,
+  "nessuno_giusti": [
+   0,
+   11
+  ],
+  "non_validi": 0,
+  "trappole": {},
+  "ms_mediana": 846.2,
+  "ms_p95": 1011.8,
+  "calibrazione": {
+   "auroc": 0.5696594427244582,
+   "tabella": [
+    {
+     "soglia": 0.0,
+     "automatiche": 1.0,
+     "accuratezza_automatiche": 0.1827956989247312,
+     "errori_automatici": 76,
+     "errori_automatici_azione": 75,
+     "a_conferma": 0
+    },
+    {
+     "soglia": 0.5,
+     "automatiche": 0.03225806451612903,
+     "accuratezza_automatiche": 0.3333333333333333,
+     "errori_automatici": 2,
+     "errori_automatici_azione": 2,
+     "a_conferma": 90
+    },
+    {
+     "soglia": 0.6,
+     "automatiche": 0.0,
+     "accuratezza_automatiche": null,
+     "errori_automatici": 0,
+     "errori_automatici_azione": 0,
+     "a_conferma": 93
+    },
+    {
+     "soglia": 0.7,
+     "automatiche": 0.0,
+     "accuratezza_automatiche": null,
+     "errori_automatici": 0,
+     "errori_automatici_azione": 0,
+     "a_conferma": 93
+    },
+    {
+     "soglia": 0.8,
+     "automatiche": 0.0,
+     "accuratezza_automatiche": null,
+     "errori_automatici": 0,
+     "errori_automatici_azione": 0,
+     "a_conferma": 93
+    },
+    {
+     "soglia": 0.9,
+     "automatiche": 0.0,
+     "accuratezza_automatiche": null,
+     "errori_automatici": 0,
+     "errori_automatici_azione": 0,
+     "a_conferma": 93
+    },
+    {
+     "soglia": 0.95,
+     "automatiche": 0.0,
+     "accuratezza_automatiche": null,
+     "errori_automatici": 0,
+     "errori_automatici_azione": 0,
+     "a_conferma": 93
+    }
+   ]
+  }
+ },
+ "lessicale": {
+  "tag": "lessicale",
+  "n": 93,
+  "accuratezza": 0.5376344086021505,
+  "per_tipo": {
+   "diretto": [
+    46,
+    74
+   ],
+   "passo": [
+    4,
+    8
+   ],
+   "nessuno": [
+    0,
+    11
+   ]
+  },
+  "per_gruppo": {
+   "barra": [
+    9,
+    12
+   ],
+   "esplora": [
+    15,
+    25
+   ],
+   "blocco note": [
+    4,
+    8
+   ],
+   "impostazioni": [
+    16,
+    31
+   ],
+   "vscode": [
+    1,
+    9
+   ],
+   "edge": [
+    5,
+    8
+   ]
+  },
+  "nessuno_detti": 0,
+  "falsi_nessuno": 0,
+  "nessuno_giusti": [
+   0,
+   11
+  ],
+  "non_validi": 0,
+  "trappole": {},
+  "ms_mediana": 171.6,
+  "ms_p95": 323.2,
+  "calibrazione": {
+   "auroc": 0.7265116279069768,
+   "tabella": [
+    {
+     "soglia": 0.0,
+     "automatiche": 1.0,
+     "accuratezza_automatiche": 0.5376344086021505,
+     "errori_automatici": 43,
+     "errori_automatici_azione": 43,
+     "a_conferma": 0
+    },
+    {
+     "soglia": 1.0,
+     "automatiche": 0.7204301075268817,
+     "accuratezza_automatiche": 0.6716417910447762,
+     "errori_automatici": 22,
+     "errori_automatici_azione": 22,
+     "a_conferma": 26
+    },
+    {
+     "soglia": 1.1,
+     "automatiche": 0.3548387096774194,
+     "accuratezza_automatiche": 0.696969696969697,
+     "errori_automatici": 10,
+     "errori_automatici_azione": 10,
+     "a_conferma": 60
+    },
+    {
+     "soglia": 1.2,
+     "automatiche": 0.22580645161290322,
+     "accuratezza_automatiche": 0.7142857142857143,
+     "errori_automatici": 6,
+     "errori_automatici_azione": 6,
+     "a_conferma": 72
+    },
+    {
+     "soglia": 1.25,
+     "automatiche": 0.1827956989247312,
+     "accuratezza_automatiche": 0.7647058823529411,
+     "errori_automatici": 4,
+     "errori_automatici_azione": 4,
+     "a_conferma": 76
+    },
+    {
+     "soglia": 1.3,
+     "automatiche": 0.06451612903225806,
+     "accuratezza_automatiche": 1.0,
+     "errori_automatici": 0,
+     "errori_automatici_azione": 0,
+     "a_conferma": 87
+    }
+   ]
+  }
+ },
+ "lessicale_banco_nuovo": {
+  "tag": "lessicale_banco_nuovo",
+  "n": 32,
+  "accuratezza": 0.625,
+  "per_tipo": {
+   "diretto": [
+    20,
+    26
+   ],
+   "passo": [
+    0,
+    3
+   ],
+   "nessuno": [
+    0,
+    3
+   ]
+  },
+  "per_gruppo": {
+   "barra": [
+    2,
+    4
+   ],
+   "esplora": [
+    6,
+    8
+   ],
+   "blocco note": [
+    3,
+    3
+   ],
+   "impostazioni": [
+    7,
+    11
+   ],
+   "vscode": [
+    0,
+    3
+   ],
+   "edge": [
+    2,
+    3
+   ]
+  },
+  "nessuno_detti": 0,
+  "falsi_nessuno": 0,
+  "nessuno_giusti": [
+   0,
+   3
+  ],
+  "non_validi": 0,
+  "trappole": {},
+  "ms_mediana": 75.55,
+  "ms_p95": 124.2,
+  "calibrazione": {
+   "auroc": 0.8166666666666667,
+   "tabella": [
+    {
+     "soglia": 0.0,
+     "automatiche": 1.0,
+     "accuratezza_automatiche": 0.625,
+     "errori_automatici": 12,
+     "errori_automatici_azione": 12,
+     "a_conferma": 0
+    },
+    {
+     "soglia": 1.0,
+     "automatiche": 0.84375,
+     "accuratezza_automatiche": 0.7407407407407407,
+     "errori_automatici": 7,
+     "errori_automatici_azione": 7,
+     "a_conferma": 5
+    },
+    {
+     "soglia": 1.1,
+     "automatiche": 0.375,
+     "accuratezza_automatiche": 0.8333333333333334,
+     "errori_automatici": 2,
+     "errori_automatici_azione": 2,
+     "a_conferma": 20
+    },
+    {
+     "soglia": 1.2,
+     "automatiche": 0.28125,
+     "accuratezza_automatiche": 0.8888888888888888,
+     "errori_automatici": 1,
+     "errori_automatici_azione": 1,
+     "a_conferma": 23
+    },
+    {
+     "soglia": 1.25,
+     "automatiche": 0.21875,
+     "accuratezza_automatiche": 0.8571428571428571,
+     "errori_automatici": 1,
+     "errori_automatici_azione": 1,
+     "a_conferma": 25
+    },
+    {
+     "soglia": 1.3,
+     "automatiche": 0.09375,
+     "accuratezza_automatiche": 0.6666666666666666,
+     "errori_automatici": 1,
+     "errori_automatici_azione": 1,
+     "a_conferma": 29
+    }
+   ]
+  }
+ },
+ "rizzo_1.7b_q8_cpu8": {
+  "tag": "rizzo_1.7b_q8_cpu8",
+  "n": 93,
+  "accuratezza": 0.22580645161290322,
+  "per_tipo": {
+   "diretto": [
+    19,
+    74
+   ],
+   "passo": [
+    0,
+    8
+   ],
+   "nessuno": [
+    2,
+    11
+   ]
+  },
+  "per_gruppo": {
+   "barra": [
+    1,
+    12
+   ],
+   "esplora": [
+    1,
+    25
+   ],
+   "blocco note": [
+    3,
+    8
+   ],
+   "impostazioni": [
+    11,
+    31
+   ],
+   "vscode": [
+    1,
+    9
+   ],
+   "edge": [
+    4,
+    8
+   ]
+  },
+  "nessuno_detti": 16,
+  "falsi_nessuno": 14,
+  "nessuno_giusti": [
+   2,
+   11
+  ],
+  "non_validi": 0,
+  "trappole": {},
+  "ms_mediana": 4222.5,
+  "ms_p95": 4920.7,
+  "calibrazione": {
+   "auroc": 0.6435185185185185,
+   "tabella": [
+    {
+     "soglia": 0.0,
+     "automatiche": 1.0,
+     "accuratezza_automatiche": 0.22580645161290322,
+     "errori_automatici": 72,
+     "errori_automatici_azione": 58,
+     "a_conferma": 0
+    },
+    {
+     "soglia": 0.5,
+     "automatiche": 0.5806451612903226,
+     "accuratezza_automatiche": 0.2962962962962963,
+     "errori_automatici": 38,
+     "errori_automatici_azione": 34,
+     "a_conferma": 39
+    },
+    {
+     "soglia": 0.6,
+     "automatiche": 0.43010752688172044,
+     "accuratezza_automatiche": 0.3,
+     "errori_automatici": 28,
+     "errori_automatici_azione": 25,
+     "a_conferma": 53
+    },
+    {
+     "soglia": 0.7,
+     "automatiche": 0.26881720430107525,
+     "accuratezza_automatiche": 0.28,
+     "errori_automatici": 18,
+     "errori_automatici_azione": 16,
+     "a_conferma": 68
+    },
+    {
+     "soglia": 0.8,
+     "automatiche": 0.12903225806451613,
+     "accuratezza_automatiche": 0.3333333333333333,
+     "errori_automatici": 8,
+     "errori_automatici_azione": 8,
+     "a_conferma": 81
+    },
+    {
+     "soglia": 0.9,
+     "automatiche": 0.06451612903225806,
+     "accuratezza_automatiche": 0.5,
+     "errori_automatici": 3,
+     "errori_automatici_azione": 3,
+     "a_conferma": 87
+    },
+    {
+     "soglia": 0.95,
+     "automatiche": 0.03225806451612903,
+     "accuratezza_automatiche": 0.6666666666666666,
+     "errori_automatici": 1,
+     "errori_automatici_azione": 1,
+     "a_conferma": 90
+    }
+   ]
+  }
+ },
+ "rizzo_1.7b_q8_gpu": {
+  "tag": "rizzo_1.7b_q8_gpu",
+  "n": 93,
+  "accuratezza": 0.21505376344086022,
+  "per_tipo": {
+   "diretto": [
+    18,
+    74
+   ],
+   "passo": [
+    0,
+    8
+   ],
+   "nessuno": [
+    2,
+    11
+   ]
+  },
+  "per_gruppo": {
+   "barra": [
+    1,
+    12
+   ],
+   "esplora": [
+    1,
+    25
+   ],
+   "blocco note": [
+    3,
+    8
+   ],
+   "impostazioni": [
+    11,
+    31
+   ],
+   "vscode": [
+    1,
+    9
+   ],
+   "edge": [
+    3,
+    8
+   ]
+  },
+  "nessuno_detti": 17,
+  "falsi_nessuno": 15,
+  "nessuno_giusti": [
+   2,
+   11
+  ],
+  "non_validi": 0,
+  "trappole": {},
+  "ms_mediana": 74.5,
+  "ms_p95": 83.5,
+  "calibrazione": {
+   "auroc": 0.678082191780822,
+   "tabella": [
+    {
+     "soglia": 0.0,
+     "automatiche": 1.0,
+     "accuratezza_automatiche": 0.21505376344086022,
+     "errori_automatici": 73,
+     "errori_automatici_azione": 58,
+     "a_conferma": 0
+    },
+    {
+     "soglia": 0.5,
+     "automatiche": 0.6344086021505376,
+     "accuratezza_automatiche": 0.288135593220339,
+     "errori_automatici": 42,
+     "errori_automatici_azione": 36,
+     "a_conferma": 34
+    },
+    {
+     "soglia": 0.6,
+     "automatiche": 0.3870967741935484,
+     "accuratezza_automatiche": 0.3055555555555556,
+     "errori_automatici": 25,
+     "errori_automatici_azione": 22,
+     "a_conferma": 57
+    },
+    {
+     "soglia": 0.7,
+     "automatiche": 0.26881720430107525,
+     "accuratezza_automatiche": 0.28,
+     "errori_automatici": 18,
+     "errori_automatici_azione": 16,
+     "a_conferma": 68
+    },
+    {
+     "soglia": 0.8,
+     "automatiche": 0.11827956989247312,
+     "accuratezza_automatiche": 0.36363636363636365,
+     "errori_automatici": 7,
+     "errori_automatici_azione": 7,
+     "a_conferma": 82
+    },
+    {
+     "soglia": 0.9,
+     "automatiche": 0.053763440860215055,
+     "accuratezza_automatiche": 0.6,
+     "errori_automatici": 2,
+     "errori_automatici_azione": 2,
+     "a_conferma": 88
+    },
+    {
+     "soglia": 0.95,
+     "automatiche": 0.03225806451612903,
+     "accuratezza_automatiche": 0.6666666666666666,
+     "errori_automatici": 1,
+     "errori_automatici_azione": 1,
+     "a_conferma": 90
+    }
+   ]
+  }
+ },
+ "rizzo_4b_q4_cpu8": {
+  "tag": "rizzo_4b_q4_cpu8",
+  "n": 93,
+  "accuratezza": 0.46236559139784944,
+  "per_tipo": {
+   "diretto": [
+    34,
+    74
+   ],
+   "passo": [
+    4,
+    8
+   ],
+   "nessuno": [
+    5,
+    11
+   ]
+  },
+  "per_gruppo": {
+   "barra": [
+    3,
+    12
+   ],
+   "esplora": [
+    7,
+    25
+   ],
+   "blocco note": [
+    3,
+    8
+   ],
+   "impostazioni": [
+    19,
+    31
+   ],
+   "vscode": [
+    5,
+    9
+   ],
+   "edge": [
+    6,
+    8
+   ]
+  },
+  "nessuno_detti": 26,
+  "falsi_nessuno": 21,
+  "nessuno_giusti": [
+   5,
+   11
+  ],
+  "non_validi": 0,
+  "trappole": {},
+  "ms_mediana": 7061.8,
+  "ms_p95": 8235.1,
+  "calibrazione": {
+   "auroc": 0.7753488372093024,
+   "tabella": [
+    {
+     "soglia": 0.0,
+     "automatiche": 1.0,
+     "accuratezza_automatiche": 0.46236559139784944,
+     "errori_automatici": 50,
+     "errori_automatici_azione": 29,
+     "a_conferma": 0
+    },
+    {
+     "soglia": 0.5,
+     "automatiche": 0.7096774193548387,
+     "accuratezza_automatiche": 0.5454545454545454,
+     "errori_automatici": 30,
+     "errori_automatici_azione": 13,
+     "a_conferma": 27
+    },
+    {
+     "soglia": 0.6,
+     "automatiche": 0.5053763440860215,
+     "accuratezza_automatiche": 0.6595744680851063,
+     "errori_automatici": 16,
+     "errori_automatici_azione": 6,
+     "a_conferma": 46
+    },
+    {
+     "soglia": 0.7,
+     "automatiche": 0.41935483870967744,
+     "accuratezza_automatiche": 0.717948717948718,
+     "errori_automatici": 11,
+     "errori_automatici_azione": 3,
+     "a_conferma": 54
+    },
+    {
+     "soglia": 0.8,
+     "automatiche": 0.3333333333333333,
+     "accuratezza_automatiche": 0.8064516129032258,
+     "errori_automatici": 6,
+     "errori_automatici_azione": 2,
+     "a_conferma": 62
+    },
+    {
+     "soglia": 0.9,
+     "automatiche": 0.1935483870967742,
+     "accuratezza_automatiche": 0.7777777777777778,
+     "errori_automatici": 4,
+     "errori_automatici_azione": 1,
+     "a_conferma": 75
+    },
+    {
+     "soglia": 0.95,
+     "automatiche": 0.0967741935483871,
+     "accuratezza_automatiche": 0.8888888888888888,
+     "errori_automatici": 1,
+     "errori_automatici_azione": 0,
+     "a_conferma": 84
+    }
+   ]
+  }
+ },
+ "rizzo_4b_q8_gpu": {
+  "tag": "rizzo_4b_q8_gpu",
+  "n": 93,
+  "accuratezza": 0.5483870967741935,
+  "per_tipo": {
+   "diretto": [
+    40,
+    74
+   ],
+   "passo": [
+    4,
+    8
+   ],
+   "nessuno": [
+    7,
+    11
+   ]
+  },
+  "per_gruppo": {
+   "barra": [
+    5,
+    12
+   ],
+   "esplora": [
+    8,
+    25
+   ],
+   "blocco note": [
+    3,
+    8
+   ],
+   "impostazioni": [
+    24,
+    31
+   ],
+   "vscode": [
+    5,
+    9
+   ],
+   "edge": [
+    6,
+    8
+   ]
+  },
+  "nessuno_detti": 20,
+  "falsi_nessuno": 13,
+  "nessuno_giusti": [
+   7,
+   11
+  ],
+  "non_validi": 0,
+  "trappole": {},
+  "ms_mediana": 147.0,
+  "ms_p95": 168.5,
+  "calibrazione": {
+   "auroc": 0.6858076563958917,
+   "tabella": [
+    {
+     "soglia": 0.0,
+     "automatiche": 1.0,
+     "accuratezza_automatiche": 0.5483870967741935,
+     "errori_automatici": 42,
+     "errori_automatici_azione": 29,
+     "a_conferma": 0
+    },
+    {
+     "soglia": 0.5,
+     "automatiche": 0.8064516129032258,
+     "accuratezza_automatiche": 0.5866666666666667,
+     "errori_automatici": 31,
+     "errori_automatici_azione": 19,
+     "a_conferma": 18
+    },
+    {
+     "soglia": 0.6,
+     "automatiche": 0.6451612903225806,
+     "accuratezza_automatiche": 0.6166666666666667,
+     "errori_automatici": 23,
+     "errori_automatici_azione": 12,
+     "a_conferma": 33
+    },
+    {
+     "soglia": 0.7,
+     "automatiche": 0.5268817204301075,
+     "accuratezza_automatiche": 0.6938775510204082,
+     "errori_automatici": 15,
+     "errori_automatici_azione": 5,
+     "a_conferma": 44
+    },
+    {
+     "soglia": 0.8,
+     "automatiche": 0.40860215053763443,
+     "accuratezza_automatiche": 0.7105263157894737,
+     "errori_automatici": 11,
+     "errori_automatici_azione": 2,
+     "a_conferma": 55
+    },
+    {
+     "soglia": 0.9,
+     "automatiche": 0.24731182795698925,
+     "accuratezza_automatiche": 0.782608695652174,
+     "errori_automatici": 5,
+     "errori_automatici_azione": 1,
+     "a_conferma": 70
+    },
+    {
+     "soglia": 0.95,
+     "automatiche": 0.16129032258064516,
+     "accuratezza_automatiche": 0.8666666666666667,
+     "errori_automatici": 2,
+     "errori_automatici_azione": 1,
+     "a_conferma": 78
+    }
+   ]
+  }
+ },
+ "rizzo_4b_q8_gpu_banco_nuovo": {
+  "tag": "rizzo_4b_q8_gpu_banco_nuovo",
+  "n": 32,
+  "accuratezza": 0.4375,
+  "per_tipo": {
+   "diretto": [
+    12,
+    26
+   ],
+   "passo": [
+    0,
+    3
+   ],
+   "nessuno": [
+    2,
+    3
+   ]
+  },
+  "per_gruppo": {
+   "barra": [
+    1,
+    4
+   ],
+   "esplora": [
+    1,
+    8
+   ],
+   "blocco note": [
+    1,
+    3
+   ],
+   "impostazioni": [
+    9,
+    11
+   ],
+   "vscode": [
+    1,
+    3
+   ],
+   "edge": [
+    1,
+    3
+   ]
+  },
+  "nessuno_detti": 9,
+  "falsi_nessuno": 7,
+  "nessuno_giusti": [
+   2,
+   3
+  ],
+  "non_validi": 0,
+  "trappole": {},
+  "ms_mediana": 147.7,
+  "ms_p95": 164.7,
+  "calibrazione": {
+   "auroc": 0.7103174603174603,
+   "tabella": [
+    {
+     "soglia": 0.0,
+     "automatiche": 1.0,
+     "accuratezza_automatiche": 0.4375,
+     "errori_automatici": 18,
+     "errori_automatici_azione": 11,
+     "a_conferma": 0
+    },
+    {
+     "soglia": 0.5,
+     "automatiche": 0.78125,
+     "accuratezza_automatiche": 0.52,
+     "errori_automatici": 12,
+     "errori_automatici_azione": 7,
+     "a_conferma": 7
+    },
+    {
+     "soglia": 0.6,
+     "automatiche": 0.5,
+     "accuratezza_automatiche": 0.5,
+     "errori_automatici": 8,
+     "errori_automatici_azione": 3,
+     "a_conferma": 16
+    },
+    {
+     "soglia": 0.7,
+     "automatiche": 0.375,
+     "accuratezza_automatiche": 0.6666666666666666,
+     "errori_automatici": 4,
+     "errori_automatici_azione": 0,
+     "a_conferma": 20
+    },
+    {
+     "soglia": 0.8,
+     "automatiche": 0.28125,
+     "accuratezza_automatiche": 0.7777777777777778,
+     "errori_automatici": 2,
+     "errori_automatici_azione": 0,
+     "a_conferma": 23
+    },
+    {
+     "soglia": 0.9,
+     "automatiche": 0.15625,
+     "accuratezza_automatiche": 0.8,
+     "errori_automatici": 1,
+     "errori_automatici_azione": 0,
+     "a_conferma": 27
+    },
+    {
+     "soglia": 0.95,
+     "automatiche": 0.0625,
+     "accuratezza_automatiche": 1.0,
+     "errori_automatici": 0,
+     "errori_automatici_azione": 0,
+     "a_conferma": 30
+    }
+   ]
+  }
+ },
+ "rizzo_4b_q8_gpu_en": {
+  "tag": "rizzo_4b_q8_gpu_en",
+  "n": 93,
+  "accuratezza": 0.5376344086021505,
+  "per_tipo": {
+   "diretto": [
+    43,
+    74
+   ],
+   "passo": [
+    3,
+    8
+   ],
+   "nessuno": [
+    4,
+    11
+   ]
+  },
+  "per_gruppo": {
+   "barra": [
+    6,
+    12
+   ],
+   "esplora": [
+    10,
+    25
+   ],
+   "blocco note": [
+    3,
+    8
+   ],
+   "impostazioni": [
+    18,
+    31
+   ],
+   "vscode": [
+    6,
+    9
+   ],
+   "edge": [
+    7,
+    8
+   ]
+  },
+  "nessuno_detti": 12,
+  "falsi_nessuno": 8,
+  "nessuno_giusti": [
+   4,
+   11
+  ],
+  "non_validi": 0,
+  "trappole": {},
+  "ms_mediana": 145.5,
+  "ms_p95": 164.8,
+  "calibrazione": {
+   "auroc": 0.8130232558139535,
+   "tabella": [
+    {
+     "soglia": 0.0,
+     "automatiche": 1.0,
+     "accuratezza_automatiche": 0.5376344086021505,
+     "errori_automatici": 43,
+     "errori_automatici_azione": 35,
+     "a_conferma": 0
+    },
+    {
+     "soglia": 0.5,
+     "automatiche": 0.8064516129032258,
+     "accuratezza_automatiche": 0.6133333333333333,
+     "errori_automatici": 29,
+     "errori_automatici_azione": 21,
+     "a_conferma": 18
+    },
+    {
+     "soglia": 0.6,
+     "automatiche": 0.6666666666666666,
+     "accuratezza_automatiche": 0.6774193548387096,
+     "errori_automatici": 20,
+     "errori_automatici_azione": 12,
+     "a_conferma": 31
+    },
+    {
+     "soglia": 0.7,
+     "automatiche": 0.4838709677419355,
+     "accuratezza_automatiche": 0.8,
+     "errori_automatici": 9,
+     "errori_automatici_azione": 7,
+     "a_conferma": 48
+    },
+    {
+     "soglia": 0.8,
+     "automatiche": 0.3655913978494624,
+     "accuratezza_automatiche": 0.8529411764705882,
+     "errori_automatici": 5,
+     "errori_automatici_azione": 5,
+     "a_conferma": 59
+    },
+    {
+     "soglia": 0.9,
+     "automatiche": 0.20430107526881722,
+     "accuratezza_automatiche": 0.8947368421052632,
+     "errori_automatici": 2,
+     "errori_automatici_azione": 2,
+     "a_conferma": 74
+    },
+    {
+     "soglia": 0.95,
+     "automatiche": 0.12903225806451613,
+     "accuratezza_automatiche": 1.0,
+     "errori_automatici": 0,
+     "errori_automatici_azione": 0,
+     "a_conferma": 81
+    }
+   ]
+  }
+ },
+ "rizzo_4b_q8_gpu_en_banco_nuovo": {
+  "tag": "rizzo_4b_q8_gpu_en_banco_nuovo",
+  "n": 32,
+  "accuratezza": 0.46875,
+  "per_tipo": {
+   "diretto": [
+    14,
+    26
+   ],
+   "passo": [
+    0,
+    3
+   ],
+   "nessuno": [
+    1,
+    3
+   ]
+  },
+  "per_gruppo": {
+   "barra": [
+    3,
+    4
+   ],
+   "esplora": [
+    2,
+    8
+   ],
+   "blocco note": [
+    1,
+    3
+   ],
+   "impostazioni": [
+    6,
+    11
+   ],
+   "vscode": [
+    1,
+    3
+   ],
+   "edge": [
+    2,
+    3
+   ]
+  },
+  "nessuno_detti": 3,
+  "falsi_nessuno": 2,
+  "nessuno_giusti": [
+   1,
+   3
+  ],
+  "non_validi": 0,
+  "trappole": {},
+  "ms_mediana": 141.8,
+  "ms_p95": 163.2,
+  "calibrazione": {
+   "auroc": 0.7843137254901961,
+   "tabella": [
+    {
+     "soglia": 0.0,
+     "automatiche": 1.0,
+     "accuratezza_automatiche": 0.46875,
+     "errori_automatici": 17,
+     "errori_automatici_azione": 15,
+     "a_conferma": 0
+    },
+    {
+     "soglia": 0.5,
+     "automatiche": 0.71875,
+     "accuratezza_automatiche": 0.5652173913043478,
+     "errori_automatici": 10,
+     "errori_automatici_azione": 8,
+     "a_conferma": 9
+    },
+    {
+     "soglia": 0.6,
+     "automatiche": 0.34375,
+     "accuratezza_automatiche": 0.7272727272727273,
+     "errori_automatici": 3,
+     "errori_automatici_azione": 3,
+     "a_conferma": 21
+    },
+    {
+     "soglia": 0.7,
+     "automatiche": 0.25,
+     "accuratezza_automatiche": 0.875,
+     "errori_automatici": 1,
+     "errori_automatici_azione": 1,
+     "a_conferma": 24
+    },
+    {
+     "soglia": 0.8,
+     "automatiche": 0.21875,
+     "accuratezza_automatiche": 0.8571428571428571,
+     "errori_automatici": 1,
+     "errori_automatici_azione": 1,
+     "a_conferma": 25
+    },
+    {
+     "soglia": 0.9,
+     "automatiche": 0.125,
+     "accuratezza_automatiche": 1.0,
+     "errori_automatici": 0,
+     "errori_automatici_azione": 0,
+     "a_conferma": 28
+    },
+    {
+     "soglia": 0.95,
+     "automatiche": 0.09375,
+     "accuratezza_automatiche": 1.0,
+     "errori_automatici": 0,
+     "errori_automatici_azione": 0,
+     "a_conferma": 29
+    }
+   ]
+  }
+ },
+ "rizzo_4b_q8_gpu_en_k8": {
+  "tag": "rizzo_4b_q8_gpu_en_k8",
+  "n": 93,
+  "accuratezza": 0.46236559139784944,
+  "per_tipo": {
+   "diretto": [
+    38,
+    74
+   ],
+   "passo": [
+    2,
+    8
+   ],
+   "nessuno": [
+    3,
+    11
+   ]
+  },
+  "per_gruppo": {
+   "barra": [
+    6,
+    12
+   ],
+   "esplora": [
+    9,
+    25
+   ],
+   "blocco note": [
+    2,
+    8
+   ],
+   "impostazioni": [
+    15,
+    31
+   ],
+   "vscode": [
+    5,
+    9
+   ],
+   "edge": [
+    6,
+    8
+   ]
+  },
+  "nessuno_detti": 16,
+  "falsi_nessuno": 13,
+  "nessuno_giusti": [
+   3,
+   11
+  ],
+  "non_validi": 0,
+  "trappole": {},
+  "ms_mediana": 97.0,
+  "ms_p95": 107.1,
+  "calibrazione": {
+   "auroc": 0.8051162790697675,
+   "tabella": [
+    {
+     "soglia": 0.0,
+     "automatiche": 1.0,
+     "accuratezza_automatiche": 0.46236559139784944,
+     "errori_automatici": 50,
+     "errori_automatici_azione": 37,
+     "a_conferma": 0
+    },
+    {
+     "soglia": 0.5,
+     "automatiche": 0.7956989247311828,
+     "accuratezza_automatiche": 0.5405405405405406,
+     "errori_automatici": 34,
+     "errori_automatici_azione": 24,
+     "a_conferma": 19
+    },
+    {
+     "soglia": 0.6,
+     "automatiche": 0.5913978494623656,
+     "accuratezza_automatiche": 0.6363636363636364,
+     "errori_automatici": 20,
+     "errori_automatici_azione": 14,
+     "a_conferma": 38
+    },
+    {
+     "soglia": 0.7,
+     "automatiche": 0.46236559139784944,
+     "accuratezza_automatiche": 0.7209302325581395,
+     "errori_automatici": 12,
+     "errori_automatici_azione": 11,
+     "a_conferma": 50
+    },
+    {
+     "soglia": 0.8,
+     "automatiche": 0.3010752688172043,
+     "accuratezza_automatiche": 0.8571428571428571,
+     "errori_automatici": 4,
+     "errori_automatici_azione": 4,
+     "a_conferma": 65
+    },
+    {
+     "soglia": 0.9,
+     "automatiche": 0.1935483870967742,
+     "accuratezza_automatiche": 0.9444444444444444,
+     "errori_automatici": 1,
+     "errori_automatici_azione": 1,
+     "a_conferma": 75
+    },
+    {
+     "soglia": 0.95,
+     "automatiche": 0.08602150537634409,
+     "accuratezza_automatiche": 1.0,
+     "errori_automatici": 0,
+     "errori_automatici_azione": 0,
+     "a_conferma": 85
+    }
+   ]
+  }
+ },
+ "rizzo_4b_q8_gpu_k8": {
+  "tag": "rizzo_4b_q8_gpu_k8",
+  "n": 93,
+  "accuratezza": 0.4946236559139785,
+  "per_tipo": {
+   "diretto": [
+    38,
+    74
+   ],
+   "passo": [
+    4,
+    8
+   ],
+   "nessuno": [
+    4,
+    11
+   ]
+  },
+  "per_gruppo": {
+   "barra": [
+    6,
+    12
+   ],
+   "esplora": [
+    10,
+    25
+   ],
+   "blocco note": [
+    2,
+    8
+   ],
+   "impostazioni": [
+    18,
+    31
+   ],
+   "vscode": [
+    5,
+    9
+   ],
+   "edge": [
+    5,
+    8
+   ]
+  },
+  "nessuno_detti": 23,
+  "falsi_nessuno": 19,
+  "nessuno_giusti": [
+   4,
+   11
+  ],
+  "non_validi": 0,
+  "trappole": {},
+  "ms_mediana": 98.0,
+  "ms_p95": 107.3,
+  "calibrazione": {
+   "auroc": 0.6901017576318224,
+   "tabella": [
+    {
+     "soglia": 0.0,
+     "automatiche": 1.0,
+     "accuratezza_automatiche": 0.4946236559139785,
+     "errori_automatici": 47,
+     "errori_automatici_azione": 28,
+     "a_conferma": 0
+    },
+    {
+     "soglia": 0.5,
+     "automatiche": 0.7204301075268817,
+     "accuratezza_automatiche": 0.5522388059701493,
+     "errori_automatici": 30,
+     "errori_automatici_azione": 16,
+     "a_conferma": 26
+    },
+    {
+     "soglia": 0.6,
+     "automatiche": 0.5483870967741935,
+     "accuratezza_automatiche": 0.5686274509803921,
+     "errori_automatici": 22,
+     "errori_automatici_azione": 8,
+     "a_conferma": 42
+    },
+    {
+     "soglia": 0.7,
+     "automatiche": 0.43010752688172044,
+     "accuratezza_automatiche": 0.65,
+     "errori_automatici": 14,
+     "errori_automatici_azione": 5,
+     "a_conferma": 53
+    },
+    {
+     "soglia": 0.8,
+     "automatiche": 0.3225806451612903,
+     "accuratezza_automatiche": 0.7,
+     "errori_automatici": 9,
+     "errori_automatici_azione": 2,
+     "a_conferma": 63
+    },
+    {
+     "soglia": 0.9,
+     "automatiche": 0.13978494623655913,
+     "accuratezza_automatiche": 0.6923076923076923,
+     "errori_automatici": 4,
+     "errori_automatici_azione": 2,
+     "a_conferma": 80
+    },
+    {
+     "soglia": 0.95,
+     "automatiche": 0.07526881720430108,
+     "accuratezza_automatiche": 0.7142857142857143,
+     "errori_automatici": 2,
+     "errori_automatici_azione": 1,
+     "a_conferma": 86
+    }
+   ]
+  }
+ },
+ "rizzo_4b_q8_gpu_trappole": {
+  "tag": "rizzo_4b_q8_gpu_trappole",
+  "n": 93,
+  "accuratezza": 0.5053763440860215,
+  "per_tipo": {
+   "diretto": [
+    38,
+    74
+   ],
+   "passo": [
+    4,
+    8
+   ],
+   "nessuno": [
+    5,
+    11
+   ]
+  },
+  "per_gruppo": {
+   "barra": [
+    4,
+    12
+   ],
+   "esplora": [
+    8,
+    25
+   ],
+   "blocco note": [
+    3,
+    8
+   ],
+   "impostazioni": [
+    22,
+    31
+   ],
+   "vscode": [
+    5,
+    9
+   ],
+   "edge": [
+    5,
+    8
+   ]
+  },
+  "nessuno_detti": 15,
+  "falsi_nessuno": 10,
+  "nessuno_giusti": [
+   5,
+   11
+  ],
+  "non_validi": 0,
+  "trappole": {
+   "imitazione": 18
+  },
+  "ms_mediana": 162.2,
+  "ms_p95": 184.3,
+  "calibrazione": {
+   "auroc": 0.6332099907493062,
+   "tabella": [
+    {
+     "soglia": 0.0,
+     "automatiche": 1.0,
+     "accuratezza_automatiche": 0.5053763440860215,
+     "errori_automatici": 46,
+     "errori_automatici_azione": 36,
+     "a_conferma": 0
+    },
+    {
+     "soglia": 0.5,
+     "automatiche": 0.7419354838709677,
+     "accuratezza_automatiche": 0.5362318840579711,
+     "errori_automatici": 32,
+     "errori_automatici_azione": 24,
+     "a_conferma": 24
+    },
+    {
+     "soglia": 0.6,
+     "automatiche": 0.5483870967741935,
+     "accuratezza_automatiche": 0.6274509803921569,
+     "errori_automatici": 19,
+     "errori_automatici_azione": 14,
+     "a_conferma": 42
+    },
+    {
+     "soglia": 0.7,
+     "automatiche": 0.3978494623655914,
+     "accuratezza_automatiche": 0.6486486486486487,
+     "errori_automatici": 13,
+     "errori_automatici_azione": 9,
+     "a_conferma": 56
+    },
+    {
+     "soglia": 0.8,
+     "automatiche": 0.23655913978494625,
+     "accuratezza_automatiche": 0.6818181818181818,
+     "errori_automatici": 7,
+     "errori_automatici_azione": 5,
+     "a_conferma": 71
+    },
+    {
+     "soglia": 0.9,
+     "automatiche": 0.16129032258064516,
+     "accuratezza_automatiche": 0.7333333333333333,
+     "errori_automatici": 4,
+     "errori_automatici_azione": 2,
+     "a_conferma": 78
+    },
+    {
+     "soglia": 0.95,
+     "automatiche": 0.053763440860215055,
+     "accuratezza_automatiche": 0.8,
+     "errori_automatici": 1,
+     "errori_automatici_azione": 0,
+     "a_conferma": 88
+    }
+   ]
+  }
+ }
+}

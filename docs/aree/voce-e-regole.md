@@ -1,0 +1,338 @@
+# Voce, modello e regole sul testo
+
+*Ciclo principale, modello della voce, tool calling, reti e spinte di Brain, regole deterministiche sul testo, azione in sospeso, robustezza. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
+
+## Moduli
+
+| Stadio | Libreria | Dove |
+|---|---|---|
+| Ciclo principale | — | `calliope/main.py` → `main`, `Avvio` (i passi dell'avvio), `Corsie` (un ciclo per satellite), `single_instance_lock`, `check_audio_devices`, `notifica_systemd` (READY=1 per systemd); il ciclo della voce `calliope/ciclo.py` → `Ciclo` (`giro` in fasi, dal 06/10: P8), `Servizi`, `Turno`, `save_debug_audio`, `domanda_guardia` |
+| Wake word testuale (ripiego, conferma, estrazione della richiesta), uscita, stop, cortesia | difflib sulla trascrizione | `calliope/wakeword.py` → `find_wake_word` (più parole, `start_only`), `exit_intent` / `exit_request`, `is_stop`, `closing_kind`, `said_name`; `calliope/cortesia.py` → `Cortesia` («Prego!», «Bene!» per tono); le parole in `Config.wake_names` (`wake_word`, dal 04/10) |
+| LLM + tool calling | Ollama, API nativa `/api/chat` (httpx) o `/v1` (`openai`) | `calliope/brain.py` → `Brain`, `OllamaBackend`, `OpenAIBackend`; modello della voce in una riga, `llm_profilo` (`calliope/config.py` → `PROFILI_LLM`, con le reti adatte in `llm_reti_spente`); banco `prove/prova_regressione.py` |
+| Tool nativi | — | `calliope/tools/` (`spec.py`, `registry.py`, `builtin.py`) |
+| Pulizia output | regex | `calliope/brain.py` → `ThinkFilter`, `TextCallGuard`; `calliope/tts.py` → `split_sentences`, `clean_for_speech` |
+| Configurazione | dataclass + YAML (PyYAML) | `calliope/config.py` → `Config`, `load_config`, `VOICE_MAP`; file `calliope.yaml` |
+| Registro dei turni | JSONL, un file al giorno in `registro/` | `calliope/turnlog.py` → `TurnLog`; analisi con `revisione.py` |
+| Persistenza comune | SQLite in WAL, file di stato atomici, versioni dello schema | `calliope/persistenza.py` → `apri_db`, `scrivi_atomico` / `scrivi_json` / `leggi_json`, `migra` / `prepara_schema` (tabella `meta_schema`) |
+
+## Note dalla sezione «Stato attuale» di CLAUDE.md (fino al 06/10)
+
+  - **Tool calling nativo**: 20 tool (ora, data, calcola, timer, promemoria, agenda,
+    annulla, chi parla, voci, utenti, cambio voce, rinomina, registrazione, ricorda,
+    dimentica, tre per le liste, due per gli appuntamenti), filtrati per livello di chi
+    parla; 21 con la biblioteca; 8 in più con il PC, 2 con i documenti, 3 con la casa
+    (34 in tutto; senza Home Assistant configurato resta solo `casa_integrazione`); dal
+    01/10 `calliope_stato` e i 3 delle installazioni (38); dal 02/10 `schermo_mostra` e
+    `schermo_gestisci` (40), e con un agente configurato `delega_lavoro`, `lavori_stato`,
+    `lavori_annulla` (43). *[Conteggi storici: il 06/10 i tool sono 65 schemi, con 65 classi in `politica.CLASSI`.]*
+
+  - **Registro dei turni** (`registro/`) per l'auto-miglioramento.
+
+## Note dalla sezione «Problemi noti» di CLAUDE.md (fino al 06/10)
+
+- **Robustezza** (03/10, analisi in `prove/prova_robustezza.py`, una sezione per difetto): i thread della voce non muoiono (frase saltata nel log, uscita guasta riaperta da sola, `Speaker.wait()` con tempo massimo e thread rifatti); il giro del ciclo principale è `giro()` dentro un try (scuse, errore nel registro dei turni, si continua; 5 errori in 120 s → uscita con errore per systemd); `TurnLog.write` non solleva; Whisper passa alla CPU anche durante l'uso, con una frase d'attesa; all'avvio si aspetta il modello (`llm_attesa_avvio_s`, 15 minuti) invece di uscire. `memoria.db` in WAL con `busy_timeout` 30 s per tutti i servizi (`apri_db`); il thread dell'agenda riprova dopo un errore; la numerazione prenota il numero, prepara i file **fuori** dalla transazione e lo conferma (se fallisce: libero se è l'ultimo, altrimenti annullato con la nota). `speakers.json` atomico con la copia `.bak`: un file illeggibile **non** è un primo avvio (tutti ospiti, nessun salvataggio sopra, capacità «chi_parla» guasta). Ogni database ha la sua versione in `meta_schema`: dati di una versione più nuova si aprono in sola lettura. Il gestore ferma il servizio prima di ripristinare, sposta -wal/-shm/-journal con il database e copia anche `archivio.db`. «Tra N minuti» è tempo reale (ora legale). Restano: le attese fisse di `prova_satellite` (negative o di assestamento) e la soglia di 50 ms in `prova_agenti` (fallita una volta sotto carico, 51,7 ms).
+
+- **`localhost` su Windows**: Ollama ascolta solo su IPv4 e ogni nuova connessione a
+  `localhost` perde ~2 s nel tentativo IPv6. Usare sempre `127.0.0.1` in `llm_base_url`.
+
+- **L'LLM si inventa capacità** che non ha (es. "posso cambiare voce"): il prompt di
+  sistema non dice cosa Calliope non sa fare.
+
+- **Modelli "ragionanti"**: misurato su `qwen3:8b`, con il thinking la prima frase passa
+  da 0,57 s a 4,96 s di media (fino a 9,75 s) senza risposte visibilmente migliori.
+  `Config.llm_reasoning_effort = "none"` lo spegne tramite l'API compatibile OpenAI
+  (Ollama lo accetta anche sui modelli senza thinking; altri valori su quei modelli
+  danno errore 400). Se un server non conosce il parametro, impostarlo a `None`.
+  `strip_think` resta come rete di sicurezza per i blocchi `<think>` nel testo.
+
+- **Tool con gemma4 e thinking spento**: a volte il modello scrive la chiamata come testo
+  («chi_parla()», «chi_parla{}», «Chi_parla.» o il formato grezzo `call:cambia_voce{…}`),
+  che finirebbe al TTS e, rimasta nella storia, verrebbe ripetuta nei turni dopo.
+  `TextCallGuard` la intercetta e la esegue come chiamata vera. Con il thinking acceso i
+  tool sono sempre giusti, ma la prima risposta passa da ~0,3 s a 0,6–2,5 s. Un prompt
+  generico faceva dire «ora controllo l'ora» senza chiamare nulla: il prompt nomina i
+  tool uno per uno.
+
+- **Wake word testuale**: soglia 0,78 e niente parole molto più corte del nome. Con 0,65
+  «cavallo», «calcio», «calle» e «callo» svegliavano Calliope. Con il nome in mezzo e
+  solo cortesia dopo («Apri il documento, Calliope, grazie.») vale la frase prima del nome
+  (01/10: arrivava solo «grazie»); «Calliope, grazie» da solo resta «grazie».
+
+- **Regole sul testo ristrette** (01/10, rapporto
+  [`docs/ricerche/2026-10-01-regole-deterministiche.md`](../ricerche/2026-10-01-regole-deterministiche.md)):
+  - **Uscita** (`wakeword.exit_intent`): solo la frase intera, a parte il nome e i
+    riempitivi («allora», «ok», «grazie», «pure»…), con le storpiature misurate di «esci»
+    («è sci», «Eshi», «Eschì», «Addio pesci!», «Cambio per pesci» con il nome in
+    «Cambio»). `EXIT_WORDS` cercava «chiudi» ovunque: «Calliope, speni taverna» (01/10),
+    «chiudi le tapparelle», «chiudi Excel» spegnevano il processo; `is_short_exit` prendeva
+    «spegnilo», «senti», «ci riesci?», «alza audio», «Chiore sono». Sulle registrazioni
+    tutte le 17 frasi d'uscita distinte restano uscite, i 2 falsi spariscono. **«Esci»,
+    «arrivederci», «addio», «vai a dormire» addormentano**: storia e azione in sospeso si
+    azzerano (`Brain.end_conversation`), niente finestra di follow-up, «A presto!». Solo
+    **«spegniti»**, «spegni Calliope», «chiudi il programma» chiudono il processo («Mi
+    spengo»). Addormentarsi è reversibile, quindi basta anche la prima frase («Calliope
+    esci un attimo, facciamo una prova dopo»); spegnersi vuole la frase intera. Vale
+    anche durante la registrazione della voce (annulla e dorme, o annulla e si spegne).
+    **Da un satellite** (`audio_modo: satellite`, 02/10, `wakeword.exit_action`) anche
+    «spegniti» addormenta soltanto e dice «Vado a dormire. Il server resta acceso: per
+    spegnerlo usa calliope ferma.» (regola `uscita_spegni_satellite`): sulla DGX il processo
+    è un servizio systemd che non riparte dopo un'uscita normale, e a voce non si riaccende.
+  - **Stop** (`wakeword.is_stop`): tutte le parole della frase nel lessico di chiusura
+    («grazie», «ok», «va bene così», «basta», «stop», «niente», «silenzio per favore»…), il
+    nome escluso, da sveglia e dopo un'interruzione. «Ok, aprilo», «Ferma la musica»,
+    «Ferma il timer», «Grazie, e domani che tempo fa?» vanno al modello. Con un'azione in
+    sospeso («Lo apro?») anche «Grazie.» va al modello: il 01/10 era stato zittito.
+    **Cortesia** (05/10, «ok, grazie» e «perfetto» restavano senza risposta):
+    `wakeword.closing_kind` divide la chiusura intera in tre forme. Con una parola d'ordine
+    di silenzio («basta», «stop», «zitta», «lascia stare», «niente», «fa lo stesso») resta
+    muta come prima (`stop`, follow-up aperto); il ringraziamento («grazie», «ok, grazie»,
+    «ti ringrazio», «gentilissima») e la conferma («perfetto», «ok», «va bene così»,
+    «d'accordo») ricevono una frase breve senza il modello (`calliope/cortesia.py`: «Prego!»,
+    «Figurati.», «Di niente.», «A disposizione.» / «Bene!», «Ottimo.», «D'accordo.», a
+    rotazione, nel tono della persona o della casa: formale «Prego, è un piacere.»,
+    computer di bordo «Ricevuto.»), sintetizzata all'avvio (`Speaker.prepare` →
+    `say_cached`). Per la conferma una frase e non il suono di fine ascolto: quello c'è solo
+    con `suoni_ascolto`, e «perfetto» resterebbe muto. Dopo, la storia resta (scambio
+    breve, `Brain.record_courtesy`) ma la finestra di follow-up si chiude: fine dello
+    scambio, il parlato della stanza dopo un «grazie» non si trascrive. «Ok», «va bene» dopo
+    una risposta che finisce con «?» vanno al modello (`Brain.ultima_domanda`); azione in
+    sospeso e barge-in invariati. «Sei.» e «Molto.» non sono chiusure. Regola `cortesia`.
+  - **Approfondisci** (`DEEPEN_WORDS`): la frase intera; «controlla il volume», «verifica
+    se la luce è accesa», «dimmi di più sul timer» vanno al modello. `SEARCH_PROMISE` non
+    scatta sulle offerte («posso fare una ricerca») né sulle domande.
+  - Correzioni minori: `agenda.cancel` annulla tutto solo con la richiesta intera
+    («tutto», «tutti i promemoria»: «il promemoria di salutare tutti» li cancellava
+    tutti e 3); il formato detto vale solo con «pdf», «excel», «word», «foglio di
+    calcolo» non negati, e una lettera non è mai Excel («una lettera su un foglio
+    intestato»); `parse_amount` usa «a 30» della frase solo se c'è un numero solo;
+    «Mi chiamo Dario» dopo «Vuoi dirmi il tuo nome?» diventa «Dario» (`said_name`);
+    `mentions_tool` si controlla prima di `clean_for_speech` (prima non scattava mai);
+    tolte da `HALLUCINATIONS` le voci con il punto, mai confrontate.
+
+- **Azione in sospeso** (01/10, `Brain.set_pending`, `PENDING_MSG`): un tool che chiude con
+  una domanda di consenso mette nel risultato `in_sospeso` (tool, argomenti, cosa, domanda):
+  documenti («Lo apro?», anche nell'annuncio in secondo piano), `pc_cerca_file` («Lo
+  apro?», «Quale apro?» con i file numerati), guida della casa. Brain lo toglie dal
+  risultato per il modello e, se la risposta detta finisce con «?», nel turno dopo lo mette
+  come messaggio di sistema **dopo i ricordi**, subito prima della domanda; dal 04/10 vale 3
+  turni della stessa persona (`azione_in_sospeso_turni`) e `azione_in_sospeso_s` (120 s), si
+  toglie quando il tool proposto riesce (vedi «Conferme»). Decide il modello, nessuna regola «sì → apri». Misura con
+  `stream_reply` vero (sessione del 01/10, ricordi davanti, 17 risposte × 3): con l'azione
+  in sospeso 24/24 «sì» aprono e 27/27 «no» no, 0 «ho aperto» falsi; senza 12/24.
+
+- **Rinominare chiede conferma** (02/10, `_rinomina_interlocutore`): Whisper sulla DGX ha
+  trascritto «Calliope, chiamami Davio, ma vorrei sapere chi sono» e il modello ha rinominato
+  subito il profilo di chi amministra. Ora la prima chiamata propone soltanto («Vuoi che ti
+  chiami Davio d'ora in poi?», `risposta_finale` + `in_sospeso`, regola
+  `rinomina_conferma` nel registro); il nome cambia solo se la stessa chiamata (stesso nome,
+  stessa persona) arriva nella risposta **successiva** (`ToolContext.turno`), cioè se il
+  modello giudica il «sì» un consenso. Il nome di un'altra persona registrata si rifiuta
+  (`rename` ne avrebbe sovrascritto il profilo). Con Ollama (`prova_rinomina_ollama.py`,
+  8 giri): la frase della DGX non rinomina mai, «sì» rinomina, «no» no; 1 volta su 3 al
+  primo giro il modello diceva «Ho cambiato il modo in cui ti chiamo» senza richiamare il
+  tool: `ACTION_CLAIM` ora prende anche «ho cambiato» e «ho rinominato», e dopo 40/40.
+  **Cambio voce e registrazione restano senza conferma**: la voce nuova si sente subito e
+  si torna indietro con una frase (effetto evidente e reversibile); la registrazione è già
+  una procedura in più passi in cui la persona nuova deve parlare, e si annulla.
+
+- **Correzioni dalle prove col 26B** (04/10, ramo `correzioni-26b`, log sulla DGX in
+  `~/calliope-misure/modello26b/esiti/`): la rinomina non si confermava perché il 26B chiedeva
+  «Vuoi davvero che ti chiami Davide?» **senza** il tool, e al «sì» la chiamata proponeva di
+  nuovo: ora la domanda detta nella risposta subito prima vale come proposta
+  (`builtin.domanda_rinomina`, regola `rinomina_domanda_detta`). La rete sulle azioni
+  dichiarate vale anche dopo soli tool falliti o letture (`Brain._acted`: «Ho salvato…» dopo
+  quattro `ricorda` falliti); `ricorda` senza memoria non dice più «non so chi sei».
+  `appuntamenti_elenca` dice anche timer e promemoria; `archivio_cerca` con
+  dato=descrizione dice numero e intestatari; l'estrazione dell'ufficio riceve la domanda di
+  prima; `calliope_stato` su una capacità non segnalata dice che non c'è (Wikipedia =
+  biblioteca); OCR, schede dell'archivio e testi dell'ufficio sullo stesso Ollama e modello
+  della voce mandano `num_ctx` e `keep_alive` della voce (`agenti.impostazioni.opzioni_voce`).
+  Con gemma4 e4b in locale: rinomina 3/3 giri, agenda tutto, ufficio 29/30, stato 34/34, banco
+  80/84 (main 77/83), schermi 53/56 come main («Fammelo vedere sullo schermo» e «Mettimi sullo
+  schermo i miei appuntamenti» restano deboli col 4B). Da rifare sul 26B.
+
+- **Rete sulle azioni dichiarate** (01/10, `brain.ACTION_CLAIM`, `ClaimHold`,
+  `CLAIM_NUDGE`): una risposta senza nessun tool nel turno che dice «ho aperto», «ho
+  acceso», «ho spento», «ho creato», «ho impostato», «fatto…», «apro…» riceve **una**
+  spinta. Il primo pezzo che il TTS direbbe (≥ 25 caratteri, come `split_sentences`) si
+  trattiene finché non si sa se è una dichiarazione: se lo è non si dice e non entra nella
+  storia (latenza invariata). Se la dichiarazione arriva più avanti ed è già stata detta,
+  esce dalla storia quando la spinta porta al tool. Se dopo la spinta il modello dichiara
+  di nuovo senza tool, si dice «Non ci sono riuscita: puoi ripetere la richiesta?». La
+  spinta **non** mostra la frase trattenuta: con lei davanti, «Accendi la luce in taverna»
+  ripetuto dopo lo stesso scambio dava 0/5 tool; senza 5/5. Casi del 01/10: «Ho aperto il
+  documento "Disdetta Palestra.docx"» (due volte, finiva nella storia) e «Ho acceso le luci
+  in taverna» a «TAVERNA». Non è una dichiarazione «il file che ho creato…» né «non l'ho
+  aperto». **Né un ricordo** (02/10, `brain.is_claim`): dopo «chiudi taverna» →
+  `casa_comando` vero, «Ho spento Taverna, quindi se intendi riaccenderla, posso…» veniva
+  trattenuta e la risposta diventava «Ho bisogno di sapere il nome della stanza». Ora non
+  scatta se la frase prosegue come ragionamento («quindi», «se intendi», «se vuoi», «visto
+  che») **e** verbo e oggetto sono quelli di un tool riuscito nei turni prima
+  (`Brain._recent_actions`: richiesta, tool, argomenti, conferma), o se la colloca nel
+  passato («prima», «poco fa») e c'è un'azione prima. La dichiarazione nuda uguale
+  all'azione vecchia resta una dichiarazione (il caso «TAVERNA»). Nel registro
+  `dichiarata_ricordo`. Con Ollama la frase esatta non si riproduce (il modello chiede subito
+  il nome); la rete scatta ancora, giusta, su «Ho abbassato la temperatura» detto a
+  «Scendila».
+
+- **Registro delle regole** (01/10): ogni turno ha `regole`, l'elenco delle regole sul testo
+  scattate: `uscita_dormi`, `uscita_spegni`, `uscita_spegni_satellite`, `stop`, `stop_interruzione`, `cortesia`,
+  `cortesia_dopo_nome`, `approfondisci`, `ricerca_promessa`, `annuncio_tool_taciuto` (solo l'annuncio di una chiamata; fino al 06/10 `nome_tool_taciuto`), `nome_tool_parlato` (dal 03/10 il nome di un tool detto a parole, «il mio comando per la casa»: prima la frase si taceva intera e Calliope restava muta),
+  `citazione_tolta`, `nome_detto`, e da Brain e dai tool (`ToolContext.regole`,
+  `note_rule`) `azione_in_sospeso`, `spinta_promessa`, `spinta_richiesta`,
+  `spinta_dichiarata`, `dichiarata_taciuta`, `dichiarata_ricordo`, `riferimento_casa`,
+  `textcallguard`, `conferma_al_posto_del_vuoto`,
+  `agenda_tutto`, `formato_detto`, `lettera_non_excel`, `valore_assoluto_detto`,
+  `casa_riscrittura`, `casa_delicata`, `casa_domanda_letta`; dal 02/10 `persona_io` e, dagli
+  agenti, `lavori_permesso`, `lavori_senza_offerta`, `lavori_proposta_non_id`,
+  `lavori_conferma_implicita`, `lavori_agente_irraggiungibile`; dal 03/10 `schermo_personale_senza_codice`, `schermo_personale_con_codice`, `schermo_proprietario_permesso`. Solo nomi: per gli ospiti il
+  registro non tiene più dati di prima.
+
+- **Ripetizioni come segnale di errore** (`revisione.py`): sulle registrazioni del 21 e
+  24/09 la sola somiglianza del testo trova tutte le 12 coppie vere su 22 candidate. Come
+  giudice gemma4:e4b è debole: con esempi ne conferma 9, di cui 6 giuste. Serve un
+  segnale migliore, acustico (la confidenza di Whisper, oppure ritrascrivere la prima
+  frase guidandola con la seconda) invece che testuale.
+
+- **Un tool che fallisce può avvelenare la conversazione**: dopo un errore di `ricorda`
+  («non so chi sei») il modello smetteva di chiamare tool e inventava ora e voci. Anche un
+  messaggio di sistema che dice «non serve chiamare tool» lo fa. Formulare in positivo
+  («per tutto il resto chiama i tool come sempre») e dare errori chiari. A metà
+  conversazione «che voci hai?» resta debole: 1 su 3 chiama `elenca_voci`, le altre
+  rispondono in modo vago, ma non inventano più nomi.
+
+- **Frase d'attesa sui tool lenti** (26/09): se un tool ha `ToolSpec.announce` (oggi solo
+  `biblioteca_cerca`), appena il modello lo chiama Calliope dice una frase breve
+  («Vediamo.», «Un attimo, cerco.»), già sintetizzata all'avvio da `Speaker.prepare`. Copre
+  la seconda passata dell'LLM: frase d'attesa a 0,4–1,0 s, risposta vera 0,45–0,55 s dopo.
+  La sceglie il codice (`Brain.on_tool_start`), una volta per risposta, solo se Calliope
+  non ha già parlato, e non entra nella storia. Il registro ha `primo_suono_s` e
+  `prima_frase_s`. Non va messa sui tool veloci (ora, calcoli): sarebbe tempo perso.
+
+- **TextCallGuard** (26/09): riconosce anche i qualificatori («calliope.», «default_api.»,
+  «call_») e le funzioni matematiche scritte come testo («sqrt(144)» diventa `calcola`).
+  Una risposta di una sola parola si trattiene per un token (~20 ms). Le frasi che nominano
+  un tool con «_» non si dicono (`Brain.mentions_tool`).
+
+- **Frase superflua prima della spinta** (01/10, `brain.TOOL_REQUEST`): «Calliope, apri il
+  PDF della spesa» diceva «Non ho trovato alcun PDF…, potresti dirmi il nome?» e subito dopo
+  «Ho trovato Lista della spesa, lo apro?». Con una richiesta di file o documento (ora anche
+  lettere e tabelle) e il PC presente, tutto il testo della prima passata aspetta la fine:
+  con un tool si dice, senza scatta la spinta e il testo non si dice né entra nella storia
+  (`richiesta_trattenuta`). Le altre domande non cambiano: la prima frase esce prima che il
+  modello finisca (prova a secco), mediane invariate su Ollama.
+
+- **Modello davanti più forte** (03/10, [`docs/ricerche/2026-10-03-modello-davanti.md`](../ricerche/2026-10-03-modello-davanti.md)):
+  sul banco dalle frasi vere (`prove/prova_regressione.py`, 116 turni) Gemma 4 26B-A4B NVFP4 su
+  vLLM fa 112/116 contro 98–100 del 4B, senza chiamate scritte come testo, ma la prima frase è
+  0,90 s di mediana e ~1,9 s al p90 (il 4B 0,48 / 1,33): genera a 29 token/s (esperti FP4,
+  il resto BF16). **La DGX resta sul 4B.** `gemma4:26b-a4b-it-qat` su Ollama (scaricato il
+  03/10, profilo `gemma4-26b-ollama`, non attivato): 74–79 token/s, banco 110/116, prima
+  frase 0,73 s (0,70 / 1,19 s a livello costante; ~2 s quando cambiava il livello di chi
+  parla, prefisso nuovo: dal 03/10 i tool sono gli stessi per tutti e il salto non c'è più,
+  vedi «Permessi dei tool»). Dal pomeriggio del 03/10 (§11 del rapporto) delega il codice
+  (10/10, prima 1/10), e sulla DGX fa 143/144 con prima frase 0,68 / 1,18 s (4B 139/144,
+  0,47 / 0,88): raccomandato, decide l'utente. Lo stesso giorno: il contesto del turno è
+  «Dati del turno (non ripeterli…): persona: Dario…» perché il 4B lo ripeteva in testa alle
+  risposte («Chi ti parla è Dario.», 17/32; ora 0/32, e `ContextEcho` toglie l'eco rimasta,
+  regola `eco_contesto`); le richieste d'informazioni («parlami di…») vanno a
+  `biblioteca_cerca` senza offerte; `llm_keep_alive` validato («-1» testo → -1; un 400
+  all'avvio è un errore di configurazione). Le reti servono al 4B (senza: 67/116), non al 26B (stesso risultato,
+  +0,04 s). Il modello di chat di Gemma 4 con il thinking spento non mette il canale vuoto
+  dopo il risultato di un tool: il 26B a volte ragionava 10–18 s in silenzio (una volta 971
+  s); corretto da `setup/linux/motore/gemma4_template.py`. Vincolare i tool (`required`) non
+  cambia nulla sul 26B (40/40 anche con `auto`). Qwen3.6 come voce: il suo modello di chat
+  rifiuta i messaggi di sistema a metà conversazione (i ricordi).
+
+- **Comportamento della voce** (03/10, analisi del comportamento, ramo `comportamento`):
+  - **Conversazione di una persona sola**: `Brain._check_conversation` chiude storia, azione
+    in sospeso e riferimenti quando cambia chi parla (id del profilo; riconosciuto ↔ ospite)
+    e dopo `storia_inattiva_s` (300 s); l'ospite che si faceva ripetere la password del wifi
+    chiesta da Dario: 4/4 → 0/4, Dario che se la fa ripetere 4/4. Risultati dei tool
+    riservati → traccia neutra, personali (agenda, promemoria, ricordi, chi parla) → solo la
+    conferma, a fine risposta. L'azione in sospeso vale solo per chi ha sentito la domanda.
+  - **Contesto del turno** (`TURN_CONTEXT_MSG`, primo prima della domanda): chi parla, e
+    l'ora e la data «se ti chiedono l'ora o la data», poi «Per tutto il resto chiama i tool
+    come sempre.». Il testo conta: l'ora detta come un fatto toglieva installa_proponi,
+    calliope_stato e calcola (prova_stato_ollama 46/51 contro 50/51). Il prompt non dice
+    più «sai chi ti parla solo dopo chi_parla». `ora_attuale` e `data_oggi` hanno `da_dire`.
+    Le prove con «Che ore sono?» accettano l'ora giusta senza tool (`prove/ora_giusta.py`).
+  - **Chiamata scritta in mezzo alla frase** («Ora sono ora_attuale.», c4e0f3d la diceva «il
+    mio comando per l'ora»): `ToolNameHold` trattiene dalla frase con il nome di un tool;
+    senza argomenti obbligatori (o con «nome(…)») si esegue (`chiamata_in_mezzo`), se no
+    spinta (`spinta_nome_tool`), poi «Non ci sono riuscita…» (mai muta). Se la domanda è sui
+    comandi («Che comando hai per le luci?») passa e main.py la dice a parole.
+  - `ACTION_CLAIM` con i verbi dei tool e le forme senza «ho» («Timer avviato.», «Ricordato
+    che…»), niente «non l'ho», niente passivi storici: 24/24 dichiarazioni (prima 4).
+    `agenda.cancel` annulla solo con una parola vera in comune, altrimenti chiede quale.
+    Promemoria nel passato rifiutati, durata vaga → «Quanto deve durare il timer?», `cambia`
+    sconosciuto → errore; la ricerca promessa usa `Brain.stream_continuation` (niente «Cerca
+    pure.» finto). Storia tagliata anche in token (`_trim_tokens`) e risultati vecchi ridotti
+    (biblioteca, 12 domande: 15 952 → 11 257 token). `RETI` e `check_reti` in config.py: il
+    profilo governa anche le reti di main.py, i profili del 26B tengono TextCallGuard. Prompt e
+    descrizioni accorciati: prefisso DGX 6 650 → 5 820 token. Banco di regressione 112/130 →
+    127/134 (casi nuovi: «Chi sono?» di Bianca, «Che comando hai per le luci?»).
+  - Da guardare: «Ricorda che a Dario piace la pizza» (il nome di `ricorda` senza «_» scritto
+    come testo) resta.
+  - **Corretti il 04/10** (ramo `difetti-voce`, gemma4 e4b locale, banco di regressione 2 giri
+    con 3 casi nuovi: 160/174 → 166/174, prima frase mediana 0,59 → 0,63 s nel rumore):
+    risposta vuota dopo **sole letture** (`data_oggi`, `ora_attuale`…) → una seconda passata
+    con `EMPTY_NUDGE` (regola e rete `vuoto_seconda_passata`), poi la conferma; dopo
+    un'azione la conferma subito (vuota forzata dopo `data_oggi`: 10/15 risposte intere
+    contro 0/9, +0,45 s di mediana, massimo 0,73). L'ora vecchia: il risultato di
+    `ora_attuale` dei turni prima diventa `ora_di_allora` (`Brain._compact_old_results`);
+    «No, intendevo che ore sono» 0/5 → 5/5 (nominare l'ora vecchia nel contesto del turno
+    peggiorava). `ricorda` non salva un fatto non detto (`memory.unsaid_value`: i numeri
+    detti nella conversazione, e su una domanda nessuna parola nuova; regola
+    `ricordo_non_detto`, frase pronta «Questo non me l'hai mai detto…»): «47» salvato 2/2 → 0/2.
+    «Un paio di minuti» = 2, «un paio d'ore» = 2 ore. «Su che hardware giri?» →
+    `calliope_stato(cosa=macchina)` (`calliope/macchina.py`: modello del computer, sistema,
+    processore, memoria, GPU dal registro o da /proc e /sys, modelli di voce, Whisper e
+    agente, mai indirizzi, utenti o percorsi) 0/2 → 2/2, «che configurazione hai?» 2/2 col tool. `domanda_schermo` con ogni pronome
+    («Me le dici?», «me la ridici?»).
+
+- **Conversazione vera del 05/10 18:10** (DGX, 26B su Ollama, `stt_correzione` accesa; ramo
+  `difetti-1810`, prova `prova_date_ricordi_ollama.py`). La correzione dello STT è sopra, in
+  «Confronto STT…».
+  - **Date**: a «sono nato il 4 luglio del 1977» il modello chiamava
+    `calcola('2026-07-04-1977-07-04')` (zeri iniziali: errore) e poi `2026-1977`. Il 49 detto era
+    giusto (compleanno di luglio già passato), ma per caso. Nuovo tool `data_calcola` (età, giorni
+    mancanti o passati, giorno della settimana, distanza; date come dette, `tempi.parse_date`;
+    `da_dire` con il soggetto, «Chi è nato il … oggi ha 49 anni; ne compie 50 il …»: con «49 anni
+    compiuti» da solo e4b diceva «Ti sono 49 anni»); `calcola` con una data rimanda a lui. Scelto
+    misurando con e4b (8 casi × 3 giri): prima 4/12 date giuste, funzioni di data dentro `calcola`
+    23/24, tool a parte **24/24**; i conti senza date restano a `calcola`. La data di nascita non è
+    stata salvata perché il 26B ha detto «Ho aggiornato il tuo profilo» senza chiamare `ricorda`
+    (c'era solo `calcola`, una lettura) e «aggiornato» non era tra i verbi della rete.
+  - **Stati inventati**: «Ricevuto, ordine sospeso.» e «Ho fermato tutto.» senza ordini né
+    lavori. La rete sulle azioni dichiarate prende anche fermato, sospeso, interrotto, aggiornato,
+    le cose «ordine», «profilo», «scheda», «estensione» e «ricevuto»/«d'accordo» davanti; contrari
+    in `prova_testo` («Il treno si è fermato.», «La partita è stata sospesa…», «Ok, mi fermo.»).
+    Con la frase del 26B come prima passata e gemma4: spinta, poi una risposta vera 4/4. Il ricordo
+    di un fatto salvato non è una dichiarazione (`brain._recalls_fact`: «ho salvato che sei
+    appassionato di…» a «cosa sai di me?», col tono amichevole finiva in «Non ci sono riuscita»
+    2/2): solo se le parole piene e i numeri sono nei ricordi del turno.
+  - **Ricordi fuori tema**: lo smoker in ogni risposta di fisica, la battuta ripetuta di turno in
+    turno. `brain.MEMORY_USE`: i ricordi quando la domanda riguarda chi parla, i suoi gusti o un
+    consiglio; altrimenti nemmeno come esempio o battuta. e4b il difetto lo fa poco: con la storia
+    vera della DGX davanti 23/27 → 17/18, usati quando servono 18/18 come prima, perso «che
+    argomento ti piacerebbe affrontare?» (0/6). Da riprovare col 26B.
+  - Banco di regressione (e4b, giri alternati con main nella stessa cartella): 83 e 82/87 main,
+    81 e 82/87 ramo, prima frase 0,62 contro 0,65 s; `data_calcola` ammesso per «che giorno era
+    ieri?» e «domani». «Calliope, chi sono?» → «Calliope.» sbaglia anche su main dopo le 20:30
+    (dipende dall'ora nel contesto del turno): da guardare a parte.
+- **Giro 5 della prova e2e** (06/10, voce di Piper di Andrea):
+  - «Calliope, spegniti.» trascritto «spenniti» (2 giri su 6; con faster-whisper «speniti» 3 e
+    «spenniti» 1 su 8 sintesi): `speniti` e `spenniti` sono forme di «spegniti» in
+    `wakeword._SHUTDOWN` (solo la frase intera); contrari «Spenti.», «spenniti la luce», «Speni
+    la luce.», «Spendi meno.» in `prova_testo`.
+  - `ACTION_CLAIM`: «Procedo con l'installazione.», «Procedo a scaricare…», «procedo all'…» sono
+    dichiarazioni (un'azione annunciata in corso); non «Procedo?», «non procedo», né i verbi di
+    lettura («procedo a elencare le voci», «con la ricerca»). La forma con «ho» non vale se la
+    frase finisce con «?» senza pause: «Ti ho interrotto?» era spinta come dichiarazione e la
+    risposta a «che ore sono?» diventava «Mi hai interrotta a metà frase»; «Ho acceso la luce,
+    vuoi altro?» resta una dichiarazione.
+  - Frasi del copione cambiate (rumore della voce sintetica, non difetti): «Spegnila, per
+    favore.» (8/8 giusto con faster-whisper, «Spegnila.» 1/8) e «su che hardware stai girando?»
+    (7/8, «su che hardware giri?» 2/8: «Succa arduo argili.»; con la trascrizione giusta il 26B
+    chiamava `calliope_stato` 3 volte su 3).

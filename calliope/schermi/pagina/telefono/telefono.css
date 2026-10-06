@@ -1,0 +1,410 @@
+/* Calliope · telefono: sopra schermo.css (le schede sono le stesse).
+   Dal 04/10 la pagina è sempre quella che era la «vista da guida»: tutto in uno schermo, senza
+   scorrere. In alto lo stato di QUESTO telefono (icona e una parola) e l'icona delle
+   impostazioni; poi un carosello (la risposta e le schede, la più recente per prima); «Parla»
+   (più basso col microfono acceso, quando basta dire «Calliope»); «Microfono» e «Scrivi» in
+   fondo. Fondo nero (OLED spento), colori smorzati ma sopra AA (≥ 4,5:1), niente animazioni,
+   tocchi ≥ 64 px. Impostazioni, modulo da compilare e casella per scrivere sono strati sopra. */
+:root {
+  color-scheme: dark;
+  --sfondo: #000; --pannello: #0d0d0d; --pannello-2: #171717; --bordo: #3a3a3a;
+  --testo: #c9c3b8; --tenue: #a19b91; --accento: #cfa760; --accento-tenue: rgba(207, 167, 96, 0.12);
+  --ok: #62b888; --allarme: #d9876c;
+  --v-dorme: #a3a9b6; --v-ascolta: #62b888; --v-pensa: #cfa760; --v-parla: #84aede; --v-spento: #b3ada3;
+  --g: clamp(0.55rem, 2vmin, 0.9rem);                  /* spazio tra le parti */
+}
+
+html { font-size: 17px; background: #000; }
+
+body.telefono {
+  display: block; height: auto; min-height: 100vh; min-height: 100dvh; overflow: auto;
+  background: #000; color: var(--testo);
+}
+/* In auto non si anima niente: né le schede che entrano, né i puntini, né lo stato */
+.telefono *, .telefono *::before, .telefono *::after { animation: none !important; transition: none !important; }
+
+.solo-lettori {
+  position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+}
+.link { font: inherit; background: none; border: 0; padding: 0; text-decoration: underline; cursor: pointer; color: inherit; }
+
+/* ───────────────────────────── la vista ───────────────────────────── */
+.vista {
+  position: fixed; inset: 0; box-sizing: border-box; height: 100vh; height: 100dvh; overflow: hidden;
+  padding: max(var(--g), env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
+           max(var(--g), env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+  display: grid; gap: var(--g);
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) var(--alto-parla) auto;
+  grid-template-areas: "testa" "carosello" "parla" "fondo";
+  --alto-parla: clamp(4.75rem, 17dvh, 8.5rem);
+  background: #000;
+}
+.vista[hidden] { display: none; }
+/* Microfono acceso: si risponde a «Calliope», «Parla» serve solo per parlare senza il nome */
+.vista.mic-acceso { --alto-parla: 4.25rem; }
+
+/* fascia di stato: niente pillola né cerchio, solo icona e parola; l'icona delle impostazioni */
+.vista-testa { grid-area: testa; min-width: 0; display: flex; flex-direction: column; gap: 0.3rem; }
+.riga-stato { display: flex; align-items: center; gap: 0.4rem; min-width: 0; }
+.vista .voce {
+  flex: 1 1 auto; min-width: 0;
+  margin: 0; padding: 0 0 0.45rem; border: 0; border-bottom: 2px solid var(--c); border-radius: 0;
+  background: transparent; color: var(--c);
+  display: flex; align-items: center; gap: 0.65rem;
+  font-size: clamp(1.2rem, 3.6vmin + 0.45rem, 1.75rem); font-weight: 700; line-height: 1.35;
+}
+.vista .voce .voce-testo { min-width: 0; overflow-wrap: anywhere; }
+.vista .voce .forma { flex: none; width: 1.9rem; height: 1.9rem; }
+.vista .voce.spento { --c: var(--v-spento); }
+/* spento: un cerchio sbarrato */
+.vista .voce.spento .forma i:first-child { width: 1.6rem; height: 1.6rem; border-radius: 50%;
+  background: transparent; border: 0.24rem solid var(--c); box-sizing: border-box; }
+.vista .voce.spento .forma i:nth-child(2) { display: block; position: absolute; width: 0.24rem; height: 2.1rem;
+  border-radius: 0.2rem; transform: rotate(45deg); }
+.vista .voce.spento .forma i:nth-child(3) { display: none; }
+.vista .voce.dorme .forma i:first-child { width: 1.7rem; height: 1.7rem; box-shadow: inset 0.48rem -0.24rem 0 0 var(--c); }
+.vista .voce.ascolta .forma i:first-child { width: 1.7rem; height: 1.7rem; border-width: 0.34rem; box-sizing: border-box; }
+.vista .voce.pensa .forma i { width: 0.5rem; height: 0.5rem; }
+.vista .voce.parla .forma i { height: 1.7rem; transform: scaleY(0.75); }
+.vista .voce.parla .forma i:nth-child(2) { transform: none; }
+
+.tasto-icona {
+  flex: none; width: 4rem; height: 4rem; margin: -0.5rem -0.7rem -0.5rem 0; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; border: 0; border-radius: 1rem; color: var(--tenue); cursor: pointer;
+}
+/* tre cursori: l'icona delle impostazioni, senza immagini */
+.ingranaggio { position: relative; width: 1.6rem; height: 1.35rem; display: flex; flex-direction: column; justify-content: space-between; }
+.ingranaggio i { position: relative; display: block; height: 0.16rem; border-radius: 0.1rem; background: currentColor; }
+.ingranaggio i::after { content: ""; position: absolute; top: -0.17rem; width: 0.5rem; height: 0.5rem; border-radius: 50%;
+  background: #000; border: 0.16rem solid currentColor; box-sizing: border-box; }
+.ingranaggio i:nth-child(1)::after { left: 0.2rem; }
+.ingranaggio i:nth-child(2)::after { left: 0.95rem; }
+.ingranaggio i:nth-child(3)::after { left: 0.5rem; }
+
+.vista-dove { margin: 0; font-size: 1rem; line-height: 1.3; color: var(--tenue); overflow-wrap: anywhere; }
+.vista-avviso {
+  margin: 0; font-size: 1rem; line-height: 1.3; color: var(--testo); overflow-wrap: anywhere; cursor: pointer;
+  border-left: 0.3rem solid var(--allarme); padding-left: 0.6rem;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden;
+}
+.vista-dove[hidden], .vista-avviso[hidden] { display: none; }
+
+/* ── carosello: la risposta e le schede, la più recente per prima, una per volta ── */
+.carosello { grid-area: carosello; min-height: 0; min-width: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.binario {
+  flex: 1 1 auto; min-height: 0; display: flex; gap: 0.75rem;
+  overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; overscroll-behavior-x: contain;
+  scrollbar-width: none; -webkit-overflow-scrolling: touch;
+}
+.binario::-webkit-scrollbar { display: none; }
+.binario:focus-visible { outline: 3px solid var(--v-pensa); outline-offset: 2px; border-radius: var(--raggio); }
+.telefono .pagina-car {
+  flex: 0 0 100%; width: 100%; min-width: 0; height: 100%; box-sizing: border-box;
+  scroll-snap-align: start; scroll-snap-stop: always;
+  display: flex; flex-direction: column; overflow: hidden;
+  background: var(--pannello); border: 1px solid var(--bordo); border-radius: var(--raggio);
+  padding: 0.8rem 1rem;
+}
+.telefono .pagina-car > .corpo { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overflow-wrap: anywhere; scrollbar-width: none; }
+.telefono .pagina-car > .corpo::-webkit-scrollbar, .risposta-testo::-webkit-scrollbar { display: none; }
+/* una scheda più lunga dello spazio scorre dentro di sé, con la dissolvenza in fondo */
+.pagina-car.taglia > .corpo, .risposta-car.taglia .risposta-testo {
+  -webkit-mask-image: linear-gradient(#000 calc(100% - 2.2em), transparent);
+          mask-image: linear-gradient(#000 calc(100% - 2.2em), transparent);
+}
+.risposta-testo {
+  flex: 1; min-height: 0; margin: 0.35rem 0 0; overflow-y: auto; overflow-wrap: anywhere;
+  font-size: clamp(1.15rem, 3.4vmin + 0.45rem, 1.45rem); line-height: 1.38; color: var(--testo); scrollbar-width: none;
+}
+.risposta-testo.vuota { color: var(--tenue); font-size: 1.1rem; }
+.telefono .pagina-car .etichetta { font-size: 0.8rem; flex-wrap: wrap; row-gap: 0.2rem; }
+.telefono .pagina-car .etichetta .quando { margin-left: auto; color: var(--tenue); letter-spacing: 0.02em; font-weight: 500; }
+.telefono .pagina-car h1.titolo { font-size: clamp(1.25rem, 3vmin + 0.6rem, 1.6rem); margin: 0.25rem 0 0.6rem; overflow-wrap: anywhere; }
+
+/* indicatore di posizione: puntini piccoli, quello corrente più lungo (forma e colore) */
+.punti { flex: none; height: 0.6rem; display: flex; justify-content: center; align-items: center; gap: 0.45rem; }
+.punti.nascosti { visibility: hidden; }
+.punti i { display: block; width: 0.45rem; height: 0.45rem; border-radius: 0.3rem; background: #6b665e; }
+.punti i.qui { width: 1.3rem; background: var(--testo); }
+
+/* le schede sul telefono: più piccole che su una TV */
+.telefono .timer { grid-template-columns: 1fr; gap: 0.6rem; }
+.telefono .timer .riga { padding: 0.6rem 0.9rem; }
+.telefono .timer .resto { font-size: 2.6rem; }
+.telefono .timer .riga.solo .resto { font-size: 3.6rem; }
+.telefono .calcolo .espressione { font-size: 1.4rem; }
+.telefono .calcolo .risultato { font-size: clamp(2.8rem, 13vmin, 4.5rem); }
+.telefono ul.voci { font-size: 1.35rem; columns: 1; }
+.telefono .agenda { font-size: 1.15rem; }
+.telefono .agenda .riga { grid-template-columns: 1fr; gap: 0; }
+.telefono .testo-lungo { font-size: 1.2rem; }
+.telefono .lungo { columns: auto; font-size: 1.05rem; color: var(--testo); }
+.telefono .passaggio { font-size: 1.15rem; }
+.telefono .documento { font-size: 1.05rem; }
+.telefono .casa { grid-template-columns: 1fr; }
+.telefono .vuoto { font-size: 1.15rem; }
+.telefono .sotto { font-size: 0.95rem; margin: -0.2rem 0 0.6rem; }
+.telefono pre.uscita-esecuzione, .telefono pre.codice, .telefono pre.flusso { font-size: 0.85rem; max-height: none; }
+.telefono .tetto { grid-template-columns: 4.5rem minmax(0, 1fr); }
+.telefono .tetto-valore { grid-column: 1 / -1; font-size: 0.85rem; }
+.telefono .passo-lavoro { font-size: 1.2rem; }
+.modulo-car .domanda-modulo { font-size: 1.15rem; }
+.modulo-car .apri-modulo { margin-top: 0.6rem; }
+
+/* «Parla»: largo, ma più basso di prima; col microfono acceso ancora di più */
+.parla {
+  grid-area: parla; font: inherit; width: 100%; height: 100%; min-height: 4rem; box-sizing: border-box;
+  font-size: clamp(1.6rem, 6vmin, 2.3rem); font-weight: 700; line-height: 1.15; padding: 0.3rem 1rem;
+  border-radius: 1.3rem; border: 3px solid var(--v-ascolta); background: #08140d; color: #e2ddd3;
+  overflow-wrap: anywhere; overflow: hidden;
+  display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 0.55em;
+  touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; cursor: pointer;
+}
+.mic-acceso .parla { font-size: clamp(1.25rem, 4.5vmin, 1.6rem); border-width: 2px; background: #050d08; }
+.parla-icona {
+  flex: none; width: 1.2em; height: 1.2em; border-radius: 50%; box-sizing: border-box;
+  border: 0.18em solid var(--v-ascolta);
+}
+.parla-testo { min-width: 0; }
+.parla.in-corso { background: #1a4a2f; border-color: var(--v-ascolta); color: #fff; }
+.parla.in-corso .parla-icona { background: currentColor; border-color: currentColor; }
+.parla.parla-calliope { border-color: var(--v-parla); background: #0a1422; }
+.parla.parla-calliope .parla-icona { border-color: var(--v-parla); }
+.parla:disabled { opacity: 0.45; }
+
+.vista-fondo { grid-area: fondo; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(max-content, 1fr); gap: var(--g); }
+.vista-fondo.solo-mic { grid-template-columns: 1fr; }
+/* Con «Foto» (05/10): il microfono su una riga, «Scrivi» e «Foto» sotto, metà ciascuno
+   (in tre colonne «Microfono spento» non ci stava su 375 px) */
+.vista-fondo.con-foto { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.vista-fondo.con-foto .mic { grid-column: 1 / -1; }
+.foto-apri { white-space: nowrap; padding: 0.4rem 0.9rem; }
+/* Icona di «Allega» (05/10): una graffetta, due anelli arrotondati uno dentro l'altro, solo CSS */
+.foto-icona { width: 0.8rem; height: 1.5rem; border: 2px solid currentColor; border-radius: 0.4rem;
+  position: relative; flex: none; transform: rotate(35deg); }
+.foto-icona::after { content: ""; position: absolute; width: 0.3rem; height: 0.95rem; border: 2px solid currentColor;
+  border-bottom: none; border-radius: 0.3rem 0.3rem 0 0; left: 50%; top: 0.15rem; transform: translateX(-50%); }
+.telefono .scrivi .foto-anteprima img { max-height: 30vh; max-width: 100%; }
+.telefono .scrivi .foto-apri { flex: 1 1 100%; min-height: 4rem; font-size: 1.25rem; color: var(--testo); background: #0d0d0d; }
+.telefono .scrivi .foto-anteprima .piccolo-bottone { flex: 0 0 auto; min-height: 3rem; color: var(--testo); background: #0d0d0d; }
+.tasto {
+  font: inherit; min-width: 0; min-height: 4.1rem; padding: 0.4rem 0.7rem; box-sizing: border-box;
+  font-size: 1.15rem; font-weight: 650; line-height: 1.15; border-radius: 1rem;
+  border: 2px solid var(--bordo); background: #0d0d0d; color: var(--testo); cursor: pointer;
+  overflow: hidden;
+  display: flex; align-items: center; justify-content: center; gap: 0.6rem;
+}
+.tasto[hidden] { display: none; }
+.scrivi-apri { white-space: nowrap; padding: 0.4rem 0.9rem; }
+.scrivi-apri.spento, .foto-apri.spento { border-style: dashed; }
+/* Microfono: icona, parola e colore insieme (acceso verde pieno, spento grigio sbarrato) */
+.mic { text-align: left; }
+.mic-testo { display: flex; flex-direction: column; min-width: 0; }
+.mic-testo > span { font-size: 0.9rem; font-weight: 500; color: var(--tenue); }
+.mic-testo b { font-size: 1.3rem; }
+.mic-icona { flex: none; position: relative; width: 1.1rem; height: 1.7rem; border-radius: 0.6rem;
+  border: 0.22rem solid currentColor; box-sizing: border-box; }
+.mic[aria-checked="false"] .mic-icona::after { content: ""; position: absolute; left: 50%; top: -0.35rem;
+  width: 0.22rem; height: 2.2rem; margin-left: -0.11rem; background: currentColor; transform: rotate(45deg); }
+.mic[aria-checked="true"] { border-color: var(--v-ascolta); background: #12301f; color: #8fe0b1; }
+.mic[aria-checked="true"] .mic-testo > span { color: #b5dcc4; }
+.mic[aria-checked="true"] .mic-icona { background: currentColor; }
+/* Scrivi: una tastiera (rettangolo, tasti e barra spaziatrice) */
+.tastiera-icona { flex: none; position: relative; width: 1.75rem; height: 1.2rem; border: 0.16rem solid currentColor;
+  border-radius: 0.25rem; box-sizing: border-box; }
+.tastiera-icona i { position: absolute; display: block; height: 0.14rem; }
+.tastiera-icona i:first-child { left: 0.18rem; right: 0.18rem; top: 0.2rem;
+  background: repeating-linear-gradient(90deg, currentColor 0 0.16rem, transparent 0.16rem 0.3rem); }
+.tastiera-icona i:nth-child(2) { left: 0.4rem; right: 0.4rem; bottom: 0.16rem; background: currentColor; }
+.parla:focus-visible, .tasto:focus-visible, .tasto-icona:focus-visible, .interruttore button:focus-visible,
+button.grande:focus-visible, .link:focus-visible, .strato a:focus-visible {
+  outline: 3px solid var(--v-pensa); outline-offset: 3px;
+}
+
+/* In orizzontale: il carosello a sinistra, alto quanto lo schermo; a destra lo stato in alto e
+   i comandi in basso. Col microfono acceso «Parla» si accorcia e il carosello si allarga */
+@media (orientation: landscape) and (max-height: 560px) {
+  .vista {
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-areas: "carosello testa" "carosello parla" "carosello fondo";
+  }
+  .vista.mic-acceso {
+    grid-template-columns: minmax(0, 1.9fr) minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) 4.25rem auto;
+    grid-template-areas: "carosello testa" "carosello ." "carosello parla" "carosello fondo";
+  }
+  .parla { min-height: 0; }
+  /* In orizzontale (l'auto) niente pulsante «Foto» in basso: non c'è altezza, e la foto si
+     manda comunque da «Scrivi», che ha il suo pulsante */
+  .vista-fondo.con-foto { grid-template-columns: minmax(0, 1.4fr) minmax(max-content, 1fr); }
+  .vista-fondo.con-foto .mic { grid-column: auto; }
+  .vista-fondo.con-foto .foto-apri { display: none; }
+  .vista.mic-acceso .vista-fondo { grid-template-columns: 1fr; }
+}
+
+/* ───────────────────────────── strati sopra la vista ───────────────────────────── */
+.strato {
+  position: fixed; inset: 0; z-index: 10; box-sizing: border-box; overflow-y: auto; overscroll-behavior: contain;
+  padding: max(0.8rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
+           max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+  background: #000; color: var(--testo);
+  display: flex; flex-direction: column; gap: 0.9rem;
+}
+.strato[hidden] { display: none; }
+.strato-testa { display: flex; align-items: center; gap: 0.8rem; }
+.strato-testa h2 { flex: 1; min-width: 0; margin: 0; font-size: 1.4rem; overflow-wrap: anywhere; }
+.strato-testa h2 #luogo { display: inline-block; }
+.strato-testa h2 #luogo::first-letter { text-transform: uppercase; }
+.tasto.chiudi { flex: none; min-width: 6.5rem; }
+.strato-nota { margin: 0; color: var(--tenue); font-size: 0.95rem; }
+.strato p { line-height: 1.45; }
+
+/* la casella per scrivere (di schermo.js) */
+.telefono .scrivi { padding: 0; gap: 0.7rem; }
+.telefono .scrivi input { flex: 1 1 100%; font-size: 1.25rem; min-height: 4rem; padding: 0.7rem 0.9rem; }
+.telefono .scrivi button { flex: 1 1 100%; min-height: 4rem; font-size: 1.25rem; color: #000; }
+.telefono .esito-scrivi { font-size: 1rem; }
+
+/* il modulo da compilare */
+.modulo-posto .scheda { padding: 0.9rem 1rem; }
+.modulo-posto .scheda > .corpo { overflow: visible; }
+.telefono .modulo input, .telefono .modulo textarea, .telefono .modulo select { font-size: 1.15rem; min-height: 3.2rem; }
+.telefono .invia-modulo { min-height: 4rem; min-width: 8rem; font-size: 1.2rem; color: #000; }
+.telefono .piccolo-bottone { min-height: 3.2rem; }
+
+/* impostazioni */
+.menu-corpo { display: flex; flex-direction: column; gap: 0.9rem; }
+.menu-riga { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 0.35rem 0.8rem; color: var(--tenue); font-size: 1rem; }
+.menu-riga dt { color: var(--tenue); }
+.menu-riga dd { margin: 0; color: var(--testo); min-width: 0; overflow-wrap: anywhere; }
+.menu .stato.ok .punto, .pannello-tel .stato.ok .punto { background: var(--ok); }
+.menu .stato.attesa .punto, .pannello-tel .stato.attesa .punto { background: var(--accento); }
+.menu .stato.giu .punto, .pannello-tel .stato.giu .punto { background: var(--allarme); border-radius: 0.1rem; }
+.menu-piede { margin: 0.4rem 0 0; display: flex; flex-wrap: wrap; gap: 0.6rem 1.6rem; align-items: center; }
+.menu-piede a, .menu-piede .link { color: var(--testo); min-height: 4rem; display: inline-flex; align-items: center; }
+.nota-tel { margin: 0; color: var(--tenue); font-size: 0.95rem; }
+
+.interruttore button {
+  font: inherit; font-size: 1.1rem; width: 100%; min-height: 4rem; text-align: left;
+  display: flex; align-items: center; gap: 0.9rem; padding: 0.7rem 1rem; border-radius: var(--raggio);
+  border: 2px solid var(--bordo); background: var(--pannello); color: var(--testo); cursor: pointer;
+}
+.leva {
+  flex: none; width: 3.2rem; height: 1.9rem; border-radius: 1rem; background: var(--bordo); position: relative;
+}
+.leva::after {
+  content: ""; position: absolute; top: 0.2rem; left: 0.2rem; width: 1.5rem; height: 1.5rem;
+  border-radius: 50%; background: var(--testo);
+}
+.interruttore button[aria-checked="true"] { border-color: var(--v-ascolta); }
+.interruttore button[aria-checked="true"] .leva { background: var(--v-ascolta); }
+.interruttore button[aria-checked="true"] .leva::after { left: 1.5rem; background: #000; }
+
+.schermo-stato {
+  margin: 0; display: flex; align-items: flex-start; gap: 0.5rem; color: var(--tenue); font-size: 0.95rem; line-height: 1.4;
+}
+.schermo-stato[hidden] { display: none; }
+.schermo-stato .punto { flex: none; width: 0.6rem; height: 0.6rem; margin-top: 0.45rem; border-radius: 50%; background: var(--tenue); }
+.schermo-stato.ok .punto { background: var(--ok); }
+.schermo-stato.attesa .punto { background: var(--accento); }
+.schermo-stato.avvisa { color: var(--testo); }
+.schermo-stato.avvisa .punto { background: var(--allarme); border-radius: 0.1rem; }   /* forma diversa, non solo il colore */
+
+/* «Prova il microfono» (diagnostica, 03/10) */
+.diag-tel { border: 1px solid var(--bordo); border-radius: var(--raggio); padding: 0.6rem 0.8rem; background: var(--pannello); }
+.diag-tel summary { cursor: pointer; color: var(--testo); min-height: 4rem; display: flex; align-items: center; }
+.diag-tel p { color: var(--tenue); font-size: 0.95rem; }
+.diag-esito {
+  margin: 0.8rem 0 0; padding: 0.8rem; border-radius: 0.6rem; background: var(--pannello-2); color: var(--testo);
+  white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.9rem; max-height: 60vh; overflow: auto;
+}
+
+button.grande {
+  font: inherit; font-size: 1.2rem; font-weight: 650; min-height: 4rem; width: 100%; border: 0;
+  border-radius: var(--raggio); background: var(--accento); color: #000; cursor: pointer;
+}
+
+/* ───────────────────────────── abbinamento ───────────────────────────── */
+.pannello-tel {
+  padding: max(1rem, env(safe-area-inset-top)) 1rem max(1.2rem, env(safe-area-inset-bottom));
+  display: flex; flex-direction: column; gap: 0.9rem;
+}
+.pannello-tel[hidden] { display: none; }
+.pannello-tel h1 { margin: 0.4rem 0 0; font-size: 1.5rem; color: var(--testo); }
+.pannello-tel p { margin: 0; line-height: 1.45; }
+.pannello-tel label { font-weight: 600; }
+.pannello-tel input {
+  font: inherit; font-size: 1.2rem; padding: 0.8rem 1rem; border-radius: var(--raggio); min-height: 3.6rem;
+  border: 2px solid var(--bordo); background: var(--pannello); color: var(--testo);
+}
+.pannello-tel .codice { font-size: 3.2rem; text-align: center; }
+.comando {
+  margin: 0; padding: 0.8rem; border-radius: 0.6rem; background: var(--pannello-2);
+  white-space: pre-wrap; word-break: break-all; font-size: 0.95rem;
+}
+.piccolo { color: var(--tenue); font-size: 0.95rem; }
+.avviso-tel {
+  border-left: 0.35rem solid var(--allarme); background: var(--pannello-2);
+  padding: 0.7rem 0.9rem; border-radius: 0.5rem; font-size: 1rem;
+}
+.avviso-tel[hidden] { display: none; }
+
+/* Giochi (05/10): nel carosello il riquadro prende tutta la pagina */
+.telefono .scheda-gioco > .corpo { overflow: hidden; }
+.telefono .riquadro-box { min-height: 0; }
+
+/* Il cruscotto di chi amministra (06/10): voce del menu, la scheda va nel carosello */
+#cruscotto-tel { margin: 0.2rem 0 0.4rem; background: var(--pannello-2); color: var(--testo);
+  border: 1px solid var(--accento); }
+.telefono .tipo-cruscotto .corpo { font-size: 0.9rem; }
+.telefono .cr-conti { grid-template-columns: minmax(0, 1fr); }
+
+/* ── Una scheda a schermo intero (06/10: sull'iPhone 13 mini il cruscotto e le schede lunghe
+   non si leggevano nel riquadro del carosello) ── */
+/* «Espandi»: in fondo a destra, sulle schede lunghe per tipo o che non ci stanno (classe «lunga»,
+   da segnaTagli) */
+.espandi {
+  display: none; flex: none; font: inherit; font-size: 0.95rem; font-weight: 650; line-height: 1.1;
+  letter-spacing: 0; text-transform: none; min-height: 2.6rem; padding: 0.2rem 0.85rem; margin: 0.35rem 0 0;
+  align-self: flex-end;
+  border-radius: 0.7rem; border: 2px solid var(--accento); background: #0d0d0d; color: var(--accento); cursor: pointer;
+}
+.lunga .espandi { display: inline-flex; align-items: center; }
+.espandi:focus-visible { outline: 3px solid var(--v-pensa); outline-offset: 2px; }
+.telefono .pagina-car.lunga { cursor: pointer; }
+
+/* Lo strato: la testa ferma in alto («Chiudi» sempre a portata), il contenuto scorre in
+   verticale; tabelle e codice scorrono di lato nel loro riquadro, mai la pagina */
+.strato-scheda { overflow: hidden; gap: 0.6rem; }
+.strato-scheda .strato-testa { flex: none; }
+.strato-scheda .tasto.chiudi { min-width: 7.5rem; font-size: 1.25rem; border-color: var(--testo); }
+.intera-posto {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch; border-radius: var(--raggio);
+}
+.intera-posto:focus-visible { outline: 3px solid var(--v-pensa); outline-offset: -3px; }
+.intera-posto > .scheda { flex: none; display: block; padding: 0.8rem 1rem 1.2rem; font-size: 1rem; overflow-wrap: anywhere; }
+.intera-posto > .scheda > .corpo { overflow: visible; flex: none; min-height: 0; }
+.intera-posto h1.titolo { display: none; }                 /* il titolo è nella testa dello strato */
+/* Testo leggibile: niente sotto i 16 px (la pagina ha 17 px di base) */
+.intera-posto .etichetta, .intera-posto .badge, .intera-posto .tipo-cruscotto .corpo,
+.intera-posto .cr-nota, .intera-posto .cr-comando, .intera-posto .cr-motivo, .intera-posto .cr-passo,
+.intera-posto .tetto-valore, .intera-posto pre.codice, .intera-posto pre.flusso,
+.intera-posto pre.uscita-esecuzione, .intera-posto .cr-conti { font-size: 1rem; }
+.intera-posto .etichetta { flex-wrap: wrap; row-gap: 0.2rem; margin-bottom: 0.4rem; }
+.intera-posto .testo-lungo, .intera-posto .riassunto-lavoro { font-size: 1.2rem; }
+.intera-posto .documento { font-size: 1.1rem; }
+.intera-posto table { display: block; max-width: 100%; overflow-x: auto; font-size: 1rem; }
+/* nelle celle le parole non si spezzano (con «anywhere» la tabella si stringeva a una lettera per
+   riga): la tabella si allarga e scorre di lato; numeri e intestazioni su una riga */
+.intera-posto table, .intera-posto table * { overflow-wrap: normal; word-break: normal; }
+.intera-posto th, .intera-posto td.num { white-space: nowrap; }
+.intera-posto pre.codice { white-space: pre; overflow-x: auto; max-height: none; overflow-wrap: normal; }
+.intera-posto pre.flusso, .intera-posto pre.uscita-esecuzione { max-height: 55dvh; }
+.intera-posto .cr-conti { grid-template-columns: minmax(0, 1fr); }
+.intera-posto .piccolo-bottone { min-height: 2.8rem; padding: 0.3rem 0.9rem; }
+/* il «Chiudi» del cruscotto toglierebbe la scheda: nello strato vale quello dello strato */
+.intera-posto [data-cruscotto="chiudi"] { display: none; }

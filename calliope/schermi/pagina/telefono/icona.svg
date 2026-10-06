@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Calliope">
+  <rect width="512" height="512" fill="#0e1014"/>
+  <path d="M 326 170 A 112 112 0 1 0 326 342" fill="none" stroke="#e2b45a" stroke-width="44" stroke-linecap="round"/>
+  <path d="M 352 218 Q 372 256 352 294" fill="none" stroke="#e2b45a" stroke-width="22" stroke-linecap="round"/>
+  <path d="M 390 196 Q 422 256 390 316" fill="none" stroke="#e2b45a" stroke-width="18" stroke-linecap="round" opacity="0.7"/>
+</svg>

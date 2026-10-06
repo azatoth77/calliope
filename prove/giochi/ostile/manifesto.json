@@ -1,0 +1,11 @@
+{
+  "nome": "ostile",
+  "titolo": "Gioco di prova",
+  "cosa_fa": {"verbo": "prova", "oggetto": "i confini del riquadro"},
+  "input": {"type": "object", "properties": {}, "required": []},
+  "permessi": {},
+  "scheda": {"tipo": "gioco", "file": ["gioco.js"], "giocatori": {"min": 1, "max": 1},
+             "salva": true, "voce": true},
+  "livello": "familiare",
+  "limiti": {"tempo_s": 5, "memoria_mb": 128}
+}

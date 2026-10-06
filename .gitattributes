@@ -1,0 +1,5 @@
+# I file del progetto usano la fine riga LF (come sono stati scritti): così Git non li
+# converte in CRLF su Windows e il diff resta pulito tra macchine diverse (anche lo Spark)
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.cmd text eol=crlf

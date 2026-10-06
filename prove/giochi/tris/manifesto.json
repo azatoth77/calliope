@@ -1,0 +1,12 @@
+{
+  "nome": "tris",
+  "titolo": "Tris",
+  "cosa_fa": {"verbo": "propone", "oggetto": "una partita a tris sullo schermo"},
+  "input": {"type": "object", "properties": {}, "required": []},
+  "permessi": {},
+  "scheda": {"tipo": "gioco", "file": ["logica.js", "gioco.js"], "stile": "gioco.css",
+             "giocatori": {"min": 1, "max": 2}, "condivisa": true, "chat": true,
+             "salva": true, "voce": true, "azioni": []},
+  "livello": "familiare",
+  "limiti": {"tempo_s": 5, "memoria_mb": 128}
+}

@@ -1,0 +1,52 @@
+# Unità systemd **utente** di Calliope (02/10/2026). La installa `calliope installa`
+# (setup/linux/gestore.py) in ~/.config/systemd/user/calliope.service, sostituendo
+# @GESTORE@ e @DATI@; non va copiata a mano.
+#
+# Perché un servizio utente e non di sistema: niente sudo, e l'audio di PipeWire è una
+# sessione dell'utente. Perché parta all'accensione anche senza nessuno collegato, una volta:
+#     loginctl enable-linger $USER
+#
+# Type=notify: Calliope manda READY=1 quando ha caricato i modelli e detto il saluto
+# (calliope/main.py, notifica_systemd). `systemctl --user restart calliope` aspetta quel
+# momento: è così che `calliope aggiorna` sa se la versione nuova parte davvero.
+
+[Unit]
+Description=Calliope, assistente vocale locale
+# L'audio dell'utente (PipeWire); se non c'è, l'ordine non conta
+After=pipewire.service pipewire-pulse.service wireplumber.service
+# Il server di trascrizione (whisper.cpp, setup/linux/motore/whisper.sh installa) parte
+# prima: altrimenti all'accensione Calliope lo trova giù e carica Whisper su CPU. Wants= e
+# non Requires=: se il server cade Calliope resta accesa e ripiega sulla CPU (principio 7),
+# e senza l'unità (Whisper su vLLM, o nessun server) non fa niente. Sta qui e non a mano
+# nell'unità installata: `calliope aggiorna` la riscrive da questo file (02/10: le due righe
+# aggiunte a mano sulla DGX erano sparite al primo aggiornamento)
+After=calliope-whisper.service
+Wants=calliope-whisper.service
+# Non più di 5 ripartenze in 10 minuti: un errore fisso non deve girare in tondo
+# Ollama o vLLM non ancora pronti all'accensione non consumano le ripartenze: Calliope li
+# aspetta da sola (llm_attesa_avvio_s, 15 minuti) e allunga il tempo d'avvio con
+# EXTEND_TIMEOUT_USEC (03/10)
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+[Service]
+Type=notify
+NotifyAccess=main
+# Il gestore sceglie la versione in uso e fa exec del suo Python: il processo principale
+# è Calliope stessa
+ExecStart=/usr/bin/python3 @GESTORE@ esegui
+WorkingDirectory=@DATI@
+Environment=PYTHONUNBUFFERED=1 PYTHONUTF8=1 CALLIOPE_GESTITA=1
+# Whisper, le voci e il saluto: sulla DGX qualche decina di secondi al primo avvio
+TimeoutStartSec=300
+TimeoutStopSec=20
+Restart=on-failure
+RestartSec=5
+# Alla fermata muore tutto il gruppo: anche ssh del tunnel e la sandbox degli agenti
+KillMode=control-group
+# Memoria, voci, registro dei turni e segreti leggibili solo dall'utente di Calliope: sulla
+# DGX in ufficio ci sono altri utenti (analisi di sicurezza del 03/10)
+UMask=0077
+
+[Install]
+WantedBy=default.target

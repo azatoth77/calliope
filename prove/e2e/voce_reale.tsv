@@ -1,0 +1,46 @@
+chiave	cartella	stem	testo	uso
+arr1	2026-09-21-webcam	20260921-140848	Qual è la capitale della Francia?	arruola
+arr2	2026-09-21-webcam	20260921-140908	E quella della Spagna?	arruola
+arr3	2026-09-21-webcam	20260921-140919	Oggi è proprio una bella giornata.	arruola
+arr4	2026-09-21-webcam	20260921-140938	Puoi cambiare voce?	arruola
+arr5	2026-09-21-webcam	20260921-141005	Perché il cielo è azzurro?	arruola
+arr6	2026-09-21-webcam	20260921-141033	Chi ha scritto I promessi sposi?	arruola
+arr7	2026-09-21-webcam	20260921-141106	Calliope, ieri sera ho visto un documentario sulla storia dell'Impero romano e mi sono chiesto quanto tempo ci volesse per andare da Roma a Costantinopoli a cavallo.	arruola
+arr8	2026-09-21-webcam	20260921-141124	Ricordati che il mio numero preferito è quarantasette.	arruola
+ore	2026-09-24-v03	20260924-115444	Calliope, che ore sono?	frase
+luna	2026-09-24-v03	20260924-115525	Calliope, quanto dista la Luna dalla Terra?	frase
+toscana	2026-09-24-v03	20260924-115610	Calliope, dimmi tre città della Toscana.	frase
+ombrello	2026-09-24-v03	20260924-115757	Calliope, senti, secondo te conviene prendere l'ombrello se il cielo è nuvoloso?	frase
+sai_chi	2026-09-24-v03	20260924-115821	Calliope, sai chi sono?	frase
+giorno	2026-09-24-v03	20260924-115829	Che giorno è oggi?	frase
+paola	2026-09-24-v03	20260924-115856	Calliope, usa la voce di Paola.	frase
+mare	2026-09-24-v03	20260924-120308	Calliope, raccontami una curiosità sul mare.	frase
+serena	2026-09-24-v03	20260924-120325	Torna alla voce di Serena.	frase
+esci	2026-09-24-v03	20260924-120404	Calliope, esci.	frase
+nome	2026-09-24-v03b	20260924-122208	Calliope.	frase
+numero_ricorda	2026-09-24-v03b	20260924-122122	Ricordati che il mio numero preferito è quarantasette.	frase
+numero_chiedi	2026-09-24-v03b	20260924-122130	Qual è il mio numero preferito?	frase
+promessi	2026-09-21-webcam-mic-sempre-aperto	20260921-141807	Calliope, chi ha scritto I promessi sposi?	frase
+promemoria	2026-09-26-agenda	20260926-121433	Calliope, ricordami, tra due minuti di bere un bicchiere d'acqua.	frase
+agenda	2026-09-26-agenda	20260926-121443	Calliope cosa ho in agenda?	frase
+timer_mezzora	2026-09-26-agenda	20260926-121459	Calliope, metti un timer di mezz'ora.	frase
+annulla_timer	2026-09-26-agenda	20260926-121507	Calliope Annulla il timer.	frase
+quello_mezzora	2026-09-26-agenda	20260926-121517	Quello di mezz'ora.	frase
+moltiplica	2026-09-26-calcola	20260926-120432	Calliope, quanto fa 300 miliardi per 2748?	frase
+radice	2026-09-26-calcola	20260926-120450	Calliope, qual è la radice quadrata di 2?	frase
+seno	2026-09-26-calcola	20260926-120512	Calliope quanto fa il seno di 30 gradi?	frase
+effimero	2026-09-26-dizionario	20260926-143756	Calliope, cosa significa effimero?	frase
+felice	2026-09-26-dizionario	20260926-143811	Dimmi un sinonimo di felice.	frase
+casa_stato	2026-10-01-casa	20261001-205731	Calliope, come va il collegamento con la casa?	frase
+taverna_accendi	2026-10-01-casa	20261001-211144	Calliope Accendi la luce in taverna.	frase
+taverna_spegni	2026-10-01-casa	20261001-220603	Calliope, spegni Taverna.	frase
+pdf_spesa	2026-10-01-casa	20261001-220902	Calliope, fammi un pdf con la lista della spesa pane e latte.	frase
+si	2026-10-01-casa	20261001-220914	Sì.	frase
+spegniti	2026-10-01-casa	20261001-220930	Calliope, spegniti.	frase
+grazie	2026-10-01-casa	20261001-210050	Grazie.	frase
+volume	2026-09-27-pc	20260927-112532	Calliope, a quanto è il volume?	frase
+alzalo	2026-09-27-pc	20260927-112601	Calliope, alzalo un po'.	frase
+calcolatrice	2026-09-27-pc	20260927-112720	Calliope, apri la calcolatrice.	frase
+blocca	2026-09-27-pc	20260927-115748	Calliope Blocca il PC.	frase
+excel	2026-10-01-documenti	20261001-170547	Calliope, fammi un Excel con le spese di settembre. Affitto 800, luce 90, gas 60, con il totale.	frase
+internet	2026-10-01-documenti	20261001-170605	Aggiungi una riga Internet 30.	frase

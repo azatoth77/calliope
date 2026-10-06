@@ -1,0 +1,29 @@
+{
+  "nome": "curriculum",
+  "titolo": "Curriculum vitae",
+  "descrizione": "Un curriculum breve: dati, profilo, esperienze, studi, lingue.",
+  "formato": "word",
+  "campi": {
+    "nome": {"descrizione": "nome e cognome", "tipo": "testo"},
+    "email": {"descrizione": "l'indirizzo email", "tipo": "testo", "obbligatorio": false},
+    "citta": {"descrizione": "la città dove vive", "tipo": "testo"},
+    "profilo": {"descrizione": "due frasi di presentazione", "tipo": "testo"},
+    "esperienze": {"descrizione": "le esperienze di lavoro, con anni e ruolo", "tipo": "elenco"},
+    "studi": {"descrizione": "i titoli di studio, con anni", "tipo": "elenco"},
+    "lingue": {"descrizione": "le lingue e il livello", "tipo": "elenco"}
+  },
+  "documento": {
+    "titolo": "Curriculum {{nome}}",
+    "blocchi": [
+      {"tipo": "titolo", "testo": "{{nome}}"},
+      {"tipo": "paragrafo", "testo": "{{citta}} · {{email}}"},
+      {"tipo": "paragrafo", "testo": "{{profilo}}"},
+      {"tipo": "titolo", "testo": "Esperienze"},
+      {"tipo": "elenco", "voci": "{{esperienze}}"},
+      {"tipo": "titolo", "testo": "Studi"},
+      {"tipo": "elenco", "voci": "{{studi}}"},
+      {"tipo": "titolo", "testo": "Lingue"},
+      {"tipo": "elenco", "voci": "{{lingue}}"}
+    ]
+  }
+}

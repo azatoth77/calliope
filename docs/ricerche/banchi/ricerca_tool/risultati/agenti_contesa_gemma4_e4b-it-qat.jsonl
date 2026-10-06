@@ -1,0 +1,21 @@
+{"scenario": "voce da sola", "t_decisione": 0.135, "t_testo": 0.219}
+{"scenario": "generazione lunga: voce in coda", "t_decisione": 10.967, "t_testo": 11.093, "sfondo_token": 900, "sfondo_fine": 12.3, "sfondo_prompt_ms": 51}
+{"scenario": "generazione lunga: arbitro (chiude lo sfondo)", "t_decisione": 0.179, "t_testo": 0.271, "sfondo_token": 101}
+{"scenario": "generazione lunga: ripresa dopo la voce", "sfondo_primo_token": 0.11, "sfondo_prompt_ms": 39}
+{"scenario": "prompt lungo (18k caratteri): voce in coda", "t_decisione": 3.373, "t_testo": 3.479, "sfondo_token": 185, "sfondo_fine": 3.47, "sfondo_prompt_ms": 797}
+{"scenario": "prompt lungo (18k caratteri): arbitro (chiude lo sfondo)", "t_decisione": 0.221, "t_testo": 0.316, "sfondo_token": 12}
+{"scenario": "prompt lungo (18k caratteri): ripresa dopo la voce", "sfondo_primo_token": 0.16, "sfondo_prompt_ms": 62}
+{"scenario": "voce da sola", "t_decisione": 0.207, "t_testo": 0.303}
+{"scenario": "generazione lunga: voce in coda", "t_decisione": 10.979, "t_testo": 11.071, "sfondo_token": 900, "sfondo_fine": 12.3, "sfondo_prompt_ms": 54}
+{"scenario": "generazione lunga: arbitro (chiude lo sfondo)", "t_decisione": 0.195, "t_testo": 0.28, "sfondo_token": 102}
+{"scenario": "generazione lunga: ripresa dopo la voce", "sfondo_primo_token": 0.13, "sfondo_prompt_ms": 38}
+{"scenario": "prompt lungo (18k caratteri): voce in coda", "t_decisione": 2.292, "t_testo": 2.415, "sfondo_token": 166, "sfondo_fine": 2.39, "sfondo_prompt_ms": 52}
+{"scenario": "prompt lungo (18k caratteri): arbitro (chiude lo sfondo)", "t_decisione": 0.225, "t_testo": 0.325, "sfondo_token": 10}
+{"scenario": "prompt lungo (18k caratteri): ripresa dopo la voce", "sfondo_primo_token": 0.15, "sfondo_prompt_ms": 51}
+{"scenario": "voce da sola", "t_decisione": 0.226, "t_testo": 0.351}
+{"scenario": "generazione lunga: voce in coda", "t_decisione": 10.818, "t_testo": 10.927, "sfondo_token": 900, "sfondo_fine": 12.15, "sfondo_prompt_ms": 55}
+{"scenario": "generazione lunga: arbitro (chiude lo sfondo)", "t_decisione": 0.188, "t_testo": 0.27, "sfondo_token": 105}
+{"scenario": "generazione lunga: ripresa dopo la voce", "sfondo_primo_token": 0.12, "sfondo_prompt_ms": 36}
+{"scenario": "prompt lungo (18k caratteri): voce in coda", "t_decisione": 3.151, "t_testo": 3.263, "sfondo_token": 228, "sfondo_fine": 3.24, "sfondo_prompt_ms": 51}
+{"scenario": "prompt lungo (18k caratteri): arbitro (chiude lo sfondo)", "t_decisione": 0.231, "t_testo": 0.334, "sfondo_token": 9}
+{"scenario": "prompt lungo (18k caratteri): ripresa dopo la voce", "sfondo_primo_token": 0.17, "sfondo_prompt_ms": 61}

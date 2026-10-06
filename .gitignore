@@ -1,0 +1,147 @@
+# Ambiente Python
+.venv/
+__pycache__/
+
+# Modelli: non vanno nel repository (vedi CLAUDE.md)
+*.onnx
+*.onnx.json
+voices/campioni/
+
+# Registrazioni dei test vocali: sono la voce di chi parla
+registrazioni/
+
+# Registro dei turni (turnlog.py): contiene ciò che dicono i familiari
+registro/
+
+# Profili vocali: impronte della voce di chi vive in casa
+speakers.json
+
+# Segreti (token di Home Assistant e simili): mai nel repository
+segreti.yaml
+# DGX Spark in ufficio (alias SSH, porte, modelli): configurazione di questa installazione
+dgx.yaml
+# Satelliti (calliope/satellite/): sul portatile il token dell'abbinamento, sul server
+# certificato e chiave TLS
+satellite.json
+satellite.tmp
+satellite.crt
+satellite.key
+# CA di casa e certificato della pagina per i telefoni (python -m calliope.schermi --certificato)
+calliope-ca.crt
+calliope-ca.key
+schermi.crt
+schermi.key
+# Sandbox dei lavori degli agenti (calliope/agenti/sandbox.py): il codice scritto dall'agente,
+# una cartella per lavoro; i risultati vanno in Documenti\Calliope\Lavori
+/lavori/
+# Estensioni scritte dall'agente (codice, versioni, dati, decisioni): dati di questa casa
+/estensioni/
+
+# Impostazioni di questa installazione (indirizzo di casa, cartelle, dispositivi):
+# vincono su calliope.yaml, che resta uguale al file d'esempio
+calliope.locale.yaml
+# La finestra di contesto scelta all'avvio e la velocità di lettura misurata
+# (calliope/contesto.py): dipendono da questa macchina
+contesto.json
+
+# Riconoscimento del parlante: pesi dei modelli, dati di prova (voci di altre persone),
+# venv degli strumenti e risultati (prove/prova_speaker.py)
+models/speaker/
+# Whisper di riserva installato dal catalogo (--installa whisper_riserva, 1,6 GB)
+models/whisper/
+# onnxruntime-web per la web app del telefono (--installa telefono, ~14 MB)
+models/web/
+
+# Wake word dedicata (wakeword/): dati di addestramento (TTS, MLS, ACAV, feature, ~7 GB),
+# etichette delle registrazioni reali (contengono le trascrizioni) e pesi PyTorch
+wakeword/dati/
+wakeword/modelli/*.pt
+# venv di addestramento della wake word (~1 GB)
+wakeword/.venv/
+
+# Memoria persistente (memory.py): fatti sulle persone di casa
+memoria.db
+memoria.db-journal
+
+# Cancellazione dell'eco (docs/ricerche/banchi/aec/, prove/prova_aec.py): venv separato con i motori AEC,
+# modelli DTLN-aec (TF-Lite, ~64 MB) e dati generati (contengono frasi registrate
+# dall'utente mescolate all'eco simulata e le registrazioni dell'eco reale)
+docs/ricerche/banchi/aec/.venv/
+docs/ricerche/banchi/aec/modelli/
+docs/ricerche/banchi/aec/dati/
+
+# Ricerca sui tool (docs/ricerche/banchi/ricerca_tool/): risultati per richiesta e log, rigenerabili con
+# banco.py (~4 MB); restano in git solo i riassunti piccoli
+docs/ricerche/banchi/ricerca_tool/risultati/*__*.jsonl
+docs/ricerche/banchi/ricerca_tool/risultati/log_*.txt
+
+# Biblioteca offline (calliope/biblioteca.py): file ZIM di Kiwix, ~11 GB, rigenerabili
+# con biblioteca/scarica.sh
+biblioteca/*.zim
+biblioteca/*.zim.sha256
+# Segni di verifica e download a metà delle installazioni a voce (calliope/installa/)
+biblioteca/*.verificato
+biblioteca/*.part
+biblioteca/*.log
+# Indici SQLite FTS5 della ricerca (calliope/biblioteca_indice.py), ~1,3 GB, rigenerabili
+# dai file ZIM con python -m calliope.biblioteca_indice
+biblioteca/indici/
+
+# Ricerca sul controllo dei PC (docs/ricerche/banchi/ricerca_pc/): venv delle sonde di sola lettura
+docs/ricerche/banchi/ricerca_pc/.venv/
+
+# Selettore UI (docs/ricerche/banchi/ricerca_pc/selettore/): venv separato (torch, laya, rizzo-flow), modelli
+# (GGUF di Rizzo Flow, runtime llama.cpp, checkpoint Laya ed e5, ~12 GB), dati (alberi UIA
+# e banco: contengono nomi di file e finestre personali) e log con le richieste
+docs/ricerche/banchi/ricerca_pc/selettore/.venv/
+docs/ricerche/banchi/ricerca_pc/selettore/modelli/
+docs/ricerche/banchi/ricerca_pc/selettore/dati/
+docs/ricerche/banchi/ricerca_pc/selettore/risultati/log_*.txt
+fatturapa/
+
+# Archivio dei documenti di casa (calliope/archivio/): il grafo con le schede, dati personali
+archivio.db
+archivio.db-*
+conversazioni.db
+conversazioni.db-*
+diagnostica/
+
+# Il posto di prima dei banchi delle ricerche del 26/09 (spostati il 06/10 in
+# docs/ricerche/banchi/): venv, modelli e dati rimasti lì vanno spostati a mano, e fino
+# ad allora restano ignorati (ricerca_pc/selettore/modelli pesa ~16 GB)
+/aec/
+/ricerca_pc/
+/ricerca_tool/
+
+# Pubblicazione (06/10): reti di sicurezza in più, oltre ai file nominati sopra.
+# Database, registri e audio non vanno mai nel repository, ovunque stiano
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.wav
+*.flac
+*.mp3
+*.ogg
+*.m4a
+# Chiavi, certificati e segreti di qualunque nome
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+.env
+.env.*
+segreti*.yaml
+calliope.locale*.yaml
+!calliope.locale.esempio.yaml
+dgx*.yaml
+# Il tono della casa detto a voce (calliope/personalita.py): dato di questa installazione
+personalita.json
+# Configurazioni di strumenti personali dell'editor o dell'agente
+opencode.json
+.claude/
+# Documenti privati (06/10, pubblicazione): sessioni e test vocali veri, impianti e rete della
+# casa, termini da non pubblicare (privato/termini.txt, letto da prove/prova_dati_privati.py) e
+# l'archivio della storia di prima del taglio. Restano sul disco, mai in git: privato/LEGGIMI.md
+privato/

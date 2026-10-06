@@ -1,0 +1,81 @@
+# calliope.locale.yaml per la DGX Spark (Linux aarch64), creato da `calliope installa`
+# solo se manca. Stesse sezioni di calliope.yaml, solo le chiavi da cambiare: vincono su
+# calliope.yaml, che il gestore rigenera a ogni aggiornamento. Questo file non si tocca
+# mai da solo: resta nella cartella dei dati (~/calliope) anche dopo aggiornamenti e
+# ritorni indietro. Le righe con «#» davanti sono spente: toglilo per usarle.
+# Niente segreti qui: il token di Home Assistant va in segreti.yaml (stessa cartella).
+
+llm:
+  # Il modello della voce: UNA riga (profili in calliope/config.py, PROFILI_LLM; misure in
+  # docs/ricerche/2026-10-03-modello-davanti.md). Il profilo sceglie backend, indirizzo,
+  # modello, thinking e le reti sul testo adatte al modello. Per cambiare: si cambia questa
+  # riga e poi `calliope riavvia`.
+  #   gemma4-e4b-ollama  gemma4:e4b-it-qat su Ollama della DGX (ollama pull
+  #                      gemma4:e4b-it-qat, a mano e solo con il tuo consenso); tutte le reti
+  #   gemma4-26b-ollama  gemma4:26b-a4b-it-qat sullo stesso Ollama (ollama pull, 15 GB): più
+  #                      bravo con i tool, prima frase ~0,7 s; nessun server in più
+  #   gemma4-26b-vllm    Gemma 4 26B-A4B NVFP4 su vLLM, porta 8001: più bravo con i tool,
+  #                      ma la prima frase è ~0,9 s (il 4B ~0,5). Prima si accende il
+  #                      server, una volta sola (resta acceso anche dopo un riavvio):
+  #                          calliope motore vllm voce avvia
+  #                      e per spegnerlo, dopo essere tornati al 4B:
+  #                          calliope motore vllm voce ferma
+  llm_profilo: gemma4-e4b-ollama
+  # La finestra di contesto si calcola all'avvio (calliope/contesto.py): con la compressione
+  # il tempo è la rilettura della storia alla soglia morbida, al più questi secondi. Sulla DGX
+  # 3 (06/10): finestra 24 576 invece di 28 672, rilettura a freddo ~2,1 s invece di ~3,1 (la
+  # prima frase dopo un riavvio o un cambio di persona); il predefinito di calliope.yaml è 4
+  contesto_rilettura_max_s: 3
+
+stt:
+  # Su Linux aarch64 CTranslate2 di PyPI è solo per CPU: Whisper sulla GPU lo serve
+  # whisper.cpp compilato con CUDA (02/10: WER 12,4 % sulle registrazioni con riferimento,
+  # vLLM con Whisper 21 %), servizio calliope-whisper sulla porta 8003:
+  #     calliope motore whisper compila && calliope motore whisper scarica
+  #     calliope motore whisper installa
+  # Finché il server non c'è, o se cade, si trascrive su CPU con faster-whisper (più lento,
+  # ma funziona): il suo modello lo prepara «calliope stato --installa whisper_riserva».
+  # stt_motore: server
+  # stt_url: http://127.0.0.1:8003/v1
+  # Senza server whisper_device resta "cuda": CTranslate2 senza CUDA lo rifiuta subito e
+  # si ripiega su CPU int8, e il registro delle capacità dice il prossimo passo.
+
+audio:
+  # Microfono e altoparlante per nome (parte del nome come lo dà `python -m sounddevice`
+  # nel venv: calliope stato non lo stampa). Vuoto = quelli predefiniti di PipeWire.
+  input_device: null
+  output_device: null
+
+casa:
+  # Server fuori casa: Home Assistant si raggiunge con il suo indirizzo DuckDNS
+  # pubblico, con la verifica TLS normale (il certificato è proprio per quel nome), senza
+  # casa_tls_nome né impronta. Con il server in casa: l'IP di Home Assistant e
+  # casa_tls_nome, come sul portatile.
+  # casa_url: https://<nome>.duckdns.org:8123
+
+agenti:
+  # L'agente sta sulla stessa macchina: niente tunnel né dgx.yaml, vLLM direttamente
+  # (container calliope-vllm, porta 8000, vedi prove/LEGGIMI.md)
+  # agenti_url: http://127.0.0.1:8000/v1
+  # agenti_modello: qwen3.6-35b
+
+schermi:
+  # La pagina degli schermi per il satellite e i tablet: in rete va in HTTPS con il
+  # certificato dei satelliti (calliope satellite --certificato); senza, non parte
+  # schermi_indirizzo: 0.0.0.0
+
+pc:
+  # Il computer da comandare a voce (volume, musica, file, app) è il portatile Windows
+  # collegato come satellite (audio_modo: satellite): esecutore remoto, 03/10. I documenti
+  # finiscono nella sua cartella Documenti\Calliope. false = niente tool pc_*
+  pc_enabled: true
+
+web:
+  # Ricerca su internet per l'attualità (meteo, notizie, risultati, orari, prezzi): SearXNG in
+  # un container di Calliope, solo su questa macchina e senza log (03/10). Prima, una volta:
+  #     calliope motore searxng avvia
+  # Senza questa riga il tool web_cerca non c'è e Calliope resta tutta offline.
+  # web_searxng_url: http://127.0.0.1:8004
+  # Cose che non devono mai uscire di casa in una ricerca, oltre ai nomi delle persone
+  # registrate (che si tolgono da soli): l'indirizzo di casa, il cognome di famiglia…
+  # web_dati_privati: []

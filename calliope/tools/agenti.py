@@ -1,0 +1,654 @@
+"""
+I tool dei lavori in secondo piano (calliope/agenti/, 02/10/2026): «gemma davanti, agenti
+dietro».
+
+- delega_lavoro(tipo, compito, …): un lavoro lungo il cui risultato è un programma o un
+  file complesso va all'agente (modello grande, in secondo piano). Il criterio è nella
+  descrizione e nel prompt, non in una regola: la ricerca del 02/10 aveva visto delegare
+  «come si scrive un ciclo for?» (2 su 2), e una regola sulle parole sbaglierebbe al
+  contrario. I lavori costosi chiedono conferma («Procedo?», azione in sospeso); la
+  conferma (`conferma` = l'id del lavoro proposto) vale solo nella risposta dopo, della
+  stessa persona, come le installazioni.
+- lavori_stato: a che punto è, con il passo dell'agente.
+- lavori_annulla: ferma il lavoro (subito: lo stream si chiude, la sandbox si ferma).
+- lavori_rispondi(lavoro, risposta) (03/10): la risposta a una domanda dell'agente a metà
+  lavoro; solo chi l'ha chiesto o chi amministra. La domanda annunciata è un'azione in
+  sospeso, ma la persona può rispondere anche più tardi («per il lavoro della relazione: il
+  cliente è Rossi»).
+- lavori_esegui(lavoro, dati) (04/10): esegue di nuovo il programma di un lavoro di codice
+  finito, nella stessa sandbox, e ne mostra l'uscita in diretta sullo schermo personale («fammelo
+  vedere», «eseguilo di nuovo», «eseguilo con 3 e 5»); «fermalo» è lavori_annulla, che ferma
+  prima il programma in esecuzione. Solo chi ha chiesto il lavoro o chi amministra.
+- delega_lavoro(file=…) (03/10): un lavoro su un file della persona che sta sul PC. Il file si
+  cerca come pc_cerca_file, con gli stessi permessi (proprietari del PC o chi amministra, o un
+  documento appena scritto per chi parla), e prima di mandarne la copia la conferma è sempre
+  esplicita: il file lascia il PC.
+
+Permessi nel codice, non nel prompt: delegare solo dai familiari in su (`agenti_livello`), il
+codice solo chi amministra (`agenti_livello_codice`), riconosciuto dalla voce nella frase della
+richiesta; gli ospiti non vedono questi tool. La frase da dire è sempre pronta
+(`risposta_finale`): il modello non la riformula e il turno non aspetta un'altra passata.
+"""
+
+import difflib
+import re
+
+from .. import politica
+
+from ..conferme import admin_confermato, chiedi_conferma, e_admin, serve_conferma
+from .spec import ToolContext, ToolSpec, note_rule, serve_la_voce
+from ..testi import FAMILY, NIENTE, RANK
+
+TIPI = ("codice", "documento", "ricerca", "altro")
+
+
+def _final(text: str, **extra) -> dict:
+    return {"ok": True, **extra, "conferma": text, "risposta_finale": text}
+
+
+def _rifiuto(ctx, frase: str, regola: str) -> dict:
+    note_rule(ctx, regola)
+    return _final(frase, ok=False, fatto=NIENTE)
+
+
+# Un guasto di adesso (contenitore non pronto, agente irraggiungibile) non è un limite di
+# Calliope: detto così, e con questa nota nel risultato che resta nella storia (06/10, DGX: dopo
+# «non posso crearne» il 26B rispondeva «non posso creare estensioni» anche un'ora dopo)
+GUASTO = ("è un guasto di adesso, non una cosa che non sai fare: se la persona lo chiede di "
+          "nuovo, richiama il tool")
+
+
+def _guasto(ctx, frase: str, regola: str = "") -> dict:
+    if regola:
+        note_rule(ctx, regola)
+    return _final(frase, ok=False, fatto=NIENTE, guasto=GUASTO)
+
+
+def _level(ctx) -> str:
+    return getattr(ctx.speaker_ctx, "current_level", "ospite") or "ospite"
+
+
+def _person(ctx):
+    name = getattr(ctx.speaker_ctx, "current_speaker", None)
+    return ctx.speakers.get(name) if name and ctx.speakers else None
+
+
+def _permesso(ctx, tipo: str, rigido: bool, args: dict | None = None):
+    """(profilo, "") se chi parla può delegare questo tipo di lavoro; altrimenti (None, frase)
+    o (None, risultato con la frase di sfida). `rigido`: una richiesta nuova di codice va
+    detta con una frase riconosciuta dalla voce; per la conferma basta anche il «sì» breve di
+    chi amministra in una conversazione sicura (conferme.admin_confermato). A chi amministra
+    con una frase che non basta non si dice mai «chiedi a chi amministra» (04/10): si chiede
+    la frase di sfida."""
+    cfg = ctx.cfg
+    level = "amministra" if admin_confermato(ctx) else _level(ctx)
+    need = (getattr(cfg, "agenti_livello_codice", "amministra")
+            if tipo in ("codice", "estensione") else getattr(cfg, "agenti_livello", "familiare"))
+    # Le estensioni (04/10) come il codice: solo chi amministra, con la voce nella frase
+    tool = "estensione_crea" if tipo == "estensione" else "delega_lavoro"
+    cosa = ("creare una funzione nuova di Calliope" if tipo == "estensione"
+            else "affidare un programma all'agente")
+    if RANK.get(level, 0) < max(1, RANK.get(need, 2)):
+        sfida = serve_conferma(ctx, tool, args, cosa)
+        if sfida is not None:
+            return None, sfida
+        if tipo == "estensione":
+            return None, ("Le funzioni nuove di Calliope le può chiedere solo chi amministra: "
+                          "chiedi a chi amministra.")
+        if tipo == "codice":
+            return None, ("I lavori di programmazione li può affidare solo chi amministra: "
+                          "chiedi a chi amministra.")
+        return None, "Non posso affidare lavori per te: chiedi a qualcuno di casa."
+    prof = _person(ctx)
+    if prof is None:
+        return None, "Non so chi sei: i lavori li affido solo per le persone registrate."
+    if rigido and tipo in ("codice", "estensione") and getattr(
+            ctx.speaker_ctx, "identified_by", "voce") not in ("voce", None) \
+            and not getattr(ctx.speaker_ctx, "sfida_superata", False):
+        # Una richiesta nuova: il «sì» breve non basta mai, nemmeno in una conversazione sicura
+        if e_admin(ctx):
+            return None, chiedi_conferma(ctx, tool, args, cosa)
+        return None, ("In questa frase non ti ho riconosciuto bene dalla voce: ripeti la "
+                      "richiesta con una frase un po' più lunga.")
+    return prof, ""
+
+
+def _no(ctx, why, regola: str) -> dict:
+    """Il rifiuto di _permesso: la frase, oppure il risultato della sfida così com'è."""
+    return why if isinstance(why, dict) else _rifiuto(ctx, why, regola)
+
+
+def _schermo(ctx, lav):
+    """La scheda del lavoro va agli schermi personali di chi l'ha chiesto adesso: in diretta
+    mentre l'agente lavora (03/10) e a lavoro finito."""
+    hub = getattr(ctx, "schermi", None)
+    if hub is None:
+        return
+    sender = hub.mittente(ctx)
+    lav.on_scheda = lambda card: hub.invia(card, sender)
+    # L'avanzamento in diretta (agenti/avanzamento.py) solo con le schede automatiche accese
+    lav.segui_schermi = bool(getattr(hub, "automatiche", True))
+
+
+_FORMATO_DA_EST = {"docx": "word", "xlsx": "excel", "pdf": "pdf"}
+
+
+def _trova_file(ctx, prof, file: str):
+    """(candidati, None) per il file detto (nome o numero di un risultato dell'ultima
+    ricerca), oppure (None, risultato da dire). Stesse regole di pc_cerca_file e pc_apri_file:
+    la ricerca la fa l'esecutore del PC, i percorsi non passano mai dal modello."""
+    from ..agenti.file_utente import ESTENSIONI, detto, estensione
+    from .pc import _ORDINALS, _call, _fuori, _locked, _not_owner, _owner, _pc, _spoken_names
+    name, ex = _pc(ctx, None)
+    if ex is None:
+        return None, _final("Qui non vedo i file del PC: non posso mandarne uno all'agente.",
+                            ok=False, fatto=NIENTE)
+    s = str(file).strip()
+    m = re.fullmatch(r"(?:il |lo |la |l'|numero |n\.? ?)?(\d{1,2})[°º]?|(?:il |lo |la |l')?(\w+)",
+                     s.lower())
+    n = int(m[1]) if m and m[1] else (_ORDINALS.get(m[2]) if m and m[2] else None)
+    if n is not None:
+        fuori = _fuori(name, ex)
+        if fuori:
+            return None, fuori
+        own = getattr(ex, "ultimo_proprio", lambda _: False)(prof.id)
+        if not own and not _owner(ctx):
+            return None, _not_owner(name)
+        r = _call(name, ex.risultato, prof.id, n)
+        if not r.get("ok"):
+            return None, {**r, "fatto": NIENTE,
+                          "cosa_fare": "chiama delega_lavoro con file = il nome del file detto "
+                                       "dalla persona"}
+        items = [r["item"]]
+    else:
+        fuori = _fuori(name, ex, "ricerca")
+        if fuori:
+            return None, fuori
+        if not _owner(ctx):
+            return None, _not_owner(name)
+        ext = estensione(s)
+        ext = ext if re.fullmatch(r"[a-z0-9]{2,5}", ext or "") else ""
+        testo = s[:-(len(ext) + 1)] if ext else s
+        if ext and ext not in ESTENSIONI:
+            return None, _final(f"Non posso mandare all'agente un file .{ext}: solo testo, codice, "
+                                f"Word, Excel e PDF.", ok=False, fatto=NIENTE)
+        r = _call(name, ex.cerca_file, prof.id, testo, "qualsiasi", None, None)
+        if r.get("bloccato"):
+            return None, _locked(name)
+        if not r.get("ok"):
+            return None, r
+        items = []
+        for x in r.get("risultati") or []:
+            rr = ex.risultato(prof.id, x["n"])
+            if rr.get("ok"):
+                items.append(rr["item"])
+        if ext:
+            items = [i for i in items if str(i.get("estensione")).lower() == ext] or items
+        if not items:
+            return None, _final(f"Sul {name} non ho trovato «{s}».", ok=False, fatto=NIENTE)
+    ammessi = [i for i in items if str(i.get("estensione")).lower() in ESTENSIONI]
+    if not ammessi:
+        e0 = str(items[0].get("estensione") or "?").lower()
+        return None, _final(f"Non posso mandare all'agente un file .{e0}: solo testo, codice, "
+                            f"Word, Excel e PDF.", ok=False, fatto=NIENTE)
+    ammessi = ammessi[:5]
+    nomi = _spoken_names(ammessi)
+    return [{"item": i, "detto": detto(nm, str(i.get("estensione") or "")),
+             "detto_di": detto(nm, str(i.get("estensione") or ""), di=True), "pc": name,
+             "ex": ex} for i, nm in zip(ammessi, nomi)], None
+
+
+class _DaAllegato:
+    """Un file allegato alla conversazione (calliope/allegati.py, 05/10) come «esecutore» per
+    _prendi_file di agenti/servizio.py: la copia è già in memoria, niente PC né satellite."""
+
+    def __init__(self, att, nome: str, ext: str):
+        self.att, self.nome, self.ext = att, nome, ext
+
+    def copia_file(self, item, max_byte, estensioni):
+        dati = self.att.dati
+        if dati is None:
+            return {"ok": False, "errore": "del file ho solo il nome"}
+        if len(dati) > max_byte:
+            return {"ok": False, "errore": "il file è troppo grande per l'agente"}
+        if self.ext not in estensioni:
+            return {"ok": False, "errore": f"l'agente non lavora sui file .{self.ext}"}
+        return {"ok": True, "nome": self.nome, "estensione": self.ext, "dati": dati}
+
+
+def _da_allegato(ctx, prof, allegato):
+    """(candidati, None) per un file allegato alla conversazione, oppure (None, risultato).
+    Solo i file mandati da chi parla; il tipo è quello vero (dai byte), e uno script che
+    l'agente non conosce arriva come testo .txt."""
+    from ..agenti.file_utente import ESTENSIONI_TESTO, detto
+    from .allegati import prendi
+    att, err = prendi(ctx, allegato)
+    if err:
+        return None, {**err, "fatto": NIENTE}
+    if att.persona is not None and getattr(prof, "id", None) != att.persona:
+        return None, _final("Posso mandare all'agente solo i file che mi hai mandato tu.",
+                            ok=False, fatto=NIENTE)
+    ext = {"pdf": "pdf", "word": "docx", "excel": "xlsx"}.get(att.categoria)
+    if ext is None and att.categoria in ("testo", "script"):
+        ext = att.estensione if att.estensione in ESTENSIONI_TESTO else "txt"
+    if ext is None or att.dati is None:
+        return None, _final(f"All'agente mando solo testo, codice, Word, Excel e PDF; questo è "
+                            f"{att.detto()}.", ok=False, fatto=NIENTE)
+    from ..agenti.file_utente import nome_sicuro
+    from pathlib import PurePath
+    stem = PurePath(nome_sicuro(att.nome)).stem or "file"
+    nome = f"{stem}.{ext}"
+    return [{"item": {"nome": nome, "estensione": ext}, "detto": detto(stem, ext),
+             "detto_di": detto(stem, ext, di=True), "pc": "conversazione",
+             "ex": _DaAllegato(att, nome, ext)}], None
+
+
+def _scegli(lav, file) -> bool:
+    """Tra più file trovati, quello scelto (numero, ordinale o parte del nome). True se il
+    lavoro ha il suo file."""
+    if lav.file_utente is not None:
+        return True
+    from .pc import _ORDINALS
+    s = str(file or "").strip().lower()
+    if not s:
+        return False
+    m = re.fullmatch(r"(?:il |lo |la |l'|numero |n\.? ?)?(\d{1,2})[°º]?|(?:il |lo |la |l')?(\w+)",
+                     s)
+    n = int(m[1]) if m and m[1] else (_ORDINALS.get(m[2]) if m and m[2] else None)
+    cand = lav.file_candidati
+    if n == -1:
+        n = len(cand)
+    if n is not None and 1 <= n <= len(cand):
+        lav.file_utente = cand[n - 1]
+    else:
+        trovati = [c for c in cand if s in c["detto"].lower() or s in
+                   str(c["item"].get("nome", "")).lower()]
+        if len(trovati) != 1:
+            return False
+        lav.file_utente = trovati[0]
+    ext = str(lav.file_utente["item"].get("estensione") or "").lower()
+    if lav.tipo == "documento" and not lav.formato:
+        lav.formato = _FORMATO_DA_EST.get(ext, "")
+    return True
+
+
+def _offerta_di(ctx, svc, ident: str) -> bool:
+    """C'è un'offerta del tool ancora valida, per chi parla, con questo id."""
+    prof = _person(ctx)
+    off = (svc.offerta(getattr(prof, "id", None), int(getattr(ctx, "turno", 0) or 0))
+           if hasattr(svc, "offerta") else None)
+    return off is not None and off["lavoro"].id == str(ident or "").strip()
+
+
+def _proponi(ctx, svc, lav, turno) -> dict:
+    frase = svc.proponi(lav, turno)
+    if lav.file_utente is None and len(lav.file_candidati) > 1:
+        cosa = "i file trovati: " + ", ".join(f"{i} = {c['detto']}" for i, c in
+                                              enumerate(lav.file_candidati, 1))
+        return _final(frase, fatto="domanda: il lavoro NON è ancora cominciato",
+                      in_sospeso={"domanda": "Quale mando all'agente?", "cosa": cosa,
+                                  "tool": "delega_lavoro",
+                                  "argomenti": f'proposta="{lav.id}", file = il numero del '
+                                               f'file scelto, tipo e compito come prima'})
+    return _final(frase, fatto="proposta: il lavoro NON è ancora cominciato",
+                  in_sospeso={"domanda": "Procedo?", "cosa": f"affidare all'agente "
+                              f"«{lav.titolo}»", "tool": "delega_lavoro",
+                              "argomenti": {"proposta": lav.id}})
+
+
+def _avvia(ctx, svc, lav) -> dict:
+    _schermo(ctx, lav)
+    frase = svc.avvia(lav)
+    return _final(frase, fatto="avviato in secondo piano: NON è ancora finito",
+                  lavoro=lav.id, titolo=lav.titolo)
+
+
+def _delega_lavoro(ctx: ToolContext, tipo: str = "", compito: str = "", formato: str = "",
+                   modello: str = "", vincoli: str = "", proposta: str = "", file: str = "",
+                   allegato=None, **altro) -> dict:
+    svc = getattr(ctx, "lavori", None)
+    if svc is None:
+        return _final("Qui non posso affidare lavori a un agente: non è configurato.", ok=False,
+                      fatto=NIENTE)
+    turno = int(getattr(ctx, "turno", 0) or 0)
+    serve = getattr(ctx.cfg, "agenti_livello_codice", "amministra")
+    if str(tipo or "").strip().lower() == "codice" and RANK.get(_level(ctx), 0) < RANK.get(
+            serve, 2):
+        # Scritto da uno schermo personale: il codice all'agente vuole la voce (03/10)
+        voce = serve_la_voce(ctx, "delega_lavoro", {"tipo": "codice", "compito": compito},
+                             "affidare un programma all'agente", serve)
+        if voce is not None:
+            return voce
+    detto = getattr(ctx, "user_text", "") or ""
+    level = _level(ctx)
+    prof = _person(ctx)
+    # Solo un id di lavoro proposto («L3») avvia una proposta: il 02/10 gemma4 metteva «Sì»
+    # in un parametro che si chiamava «conferma» già alla prima richiesta. Un valore che
+    # non è un id si ignora e la richiesta vale come nuova
+    proposta = str(proposta or "").strip()
+    if proposta and not re.fullmatch(r"L\d+", proposta):
+        note_rule(ctx, "lavori_proposta_non_id")
+        proposta = ""
+    # Confermata alla domanda della politica (06/10): è la richiesta nuova di quella domanda,
+    # anche se il modello ci aggiunge un id che non è di un'offerta del tool
+    if proposta and politica.accettata(ctx) and not _offerta_di(ctx, svc, proposta):
+        proposta = ""
+    if proposta:
+        chi = getattr(prof, "id", None)
+        off = svc.offerta(chi, turno) if hasattr(svc, "offerta") else None
+        if off is None or off["lavoro"].id != proposta:
+            return _rifiuto(ctx, "Prima devo dirti cosa affido all'agente e avere il tuo sì: "
+                                 "chiedimelo di nuovo.", "lavori_senza_offerta")
+        # Il permesso prima di consumare la proposta: un «sì» che non basta non la perde
+        # (04/10: la perdeva, e il «sì» successivo riceveva «chiedimelo di nuovo»)
+        prof, why = _permesso(ctx, off["lavoro"].tipo, rigido=False,
+                              args={"proposta": proposta, **({"file": file} if file else {})})
+        if prof is None and getattr(off["lavoro"], "gioco", False) and not isinstance(why, dict):
+            # Un gioco nuovo (05/10): anche un familiare adulto (tools/estensioni.py)
+            from .estensioni import _permesso_gioco
+            prof, why = _permesso_gioco(ctx, rigido=False)
+        if prof is None:
+            return _no(ctx, why, "lavori_permesso")
+        lav = svc.conferma(chi, proposta, turno)
+        if lav is None:
+            return _rifiuto(ctx, "Prima devo dirti cosa affido all'agente e avere il tuo sì: "
+                                 "chiedimelo di nuovo.", "lavori_senza_offerta")
+        if lav.file_candidati and not _scegli(lav, file):
+            return _proponi(ctx, svc, lav, turno)     # quale file? si richiede
+        return _avvia(ctx, svc, lav)
+    tipo = str(tipo or "").strip().lower()
+    tipo = tipo if tipo in TIPI else "altro"
+    compito = str(compito or "").strip() or detto.strip()
+    if not compito:
+        return {"ok": False, "fatto": NIENTE, "errore": "manca il compito",
+                "cosa_fare": "chiedi in breve cosa deve fare l'agente"}
+    # Un minore (05/10): un tema o un compito diventa una scaletta (lo decide l'agente)
+    from .. import minori
+    compito = compito + minori.nota_documento(ctx)
+    richiesta = {k: v for k, v in {"tipo": tipo, "compito": compito, "formato": formato,
+                                   "modello": modello, "vincoli": vincoli,
+                                   "file": file}.items() if v}
+    # Il modello richiama delega_lavoro (senza conferma) dopo il «sì» alla proposta: è la
+    # stessa scelta in un'altra forma, e vale come conferma (stesso tipo, compito simile)
+    off = svc.offerta(getattr(prof, "id", None), turno) if hasattr(svc, "offerta") else None
+    implicita = (off is not None and off["lavoro"].tipo == tipo and difflib.SequenceMatcher(
+        None, off["lavoro"].compito.lower(), compito.lower()).ratio() >= 0.6)
+    # Prima senza la voce: un «sì» breve dopo la proposta (conferma implicita, qui sotto) vale
+    # come il «sì» con proposta=id, che non la chiede. Fino al 03/10 il controllo rigido
+    # veniva prima e «Sì, vai.» riceveva «non ti ho riconosciuto bene dalla voce»
+    # (prova_agenti_ollama sulla DGX, 4B)
+    prof, why = _permesso(ctx, tipo, rigido=False,
+                          args={"proposta": off["lavoro"].id} if implicita else richiesta)
+    if prof is None:
+        return _no(ctx, why, "lavori_permesso")
+    # Senza un container il codice dell'agente non si esegue (03/10, analisi di sicurezza):
+    # meglio dirlo subito che dopo minuti di lavoro
+    iso = getattr(svc, "isolamento", None)
+    if tipo == "codice" and iso is not None and not getattr(iso, "pronto", True):
+        return _guasto(ctx, "Adesso non posso fare lavori di programmazione: il codice "
+                            "dell'agente lo eseguo solo in un ambiente isolato, e qui adesso "
+                            "non è pronto.", "lavori_codice_senza_sandbox")
+    if implicita:
+        lav = svc.conferma(prof.id, off["lavoro"].id, turno)
+        if lav is not None:
+            note_rule(ctx, "lavori_conferma_implicita")
+            if lav.file_candidati and not _scegli(lav, file):
+                return _proponi(ctx, svc, lav, turno)
+            return _avvia(ctx, svc, lav)
+    # Una richiesta nuova di codice vuole la voce riconosciuta in questa frase
+    prof, why = _permesso(ctx, tipo, rigido=True, args=richiesta)
+    if prof is None:
+        return _no(ctx, why, "lavori_permesso")
+    guasto = svc.collegamento_guasto()
+    if guasto is not None:
+        svc.verifica_in_secondo_piano()
+        return _guasto(ctx, f"Adesso non posso: {guasto['motivo']}. "
+                            f"{guasto['passo']}".strip(), "lavori_agente_irraggiungibile")
+    modello = str(modello or "").strip()
+    if modello and modello not in svc.modelli:
+        modello = ""
+    if modello:
+        tipo = "documento"
+    fmt = str(formato or "").strip().lower()
+    fmt = fmt if fmt in ("word", "excel", "pdf") else ""
+    # Un file della persona (03/10): si cerca ora, con le regole dei file del PC; la copia
+    # parte solo dopo il «sì», in secondo piano
+    candidati = []
+    if allegato not in (None, ""):
+        # Un file allegato alla conversazione (05/10): già in memoria, niente ricerca sul PC
+        candidati, rifiuto = _da_allegato(ctx, prof, allegato)
+        if rifiuto is not None:
+            return rifiuto
+    elif str(file or "").strip():
+        candidati, rifiuto = _trova_file(ctx, prof, str(file))
+        if rifiuto is not None:
+            if "NON" in str(rifiuto.get("fatto", "")) and "proprietario" in str(
+                    rifiuto.get("motivo", "")):
+                note_rule(ctx, "lavori_file_permesso")
+            return rifiuto
+    dati = list(getattr(ctx, "storia", None) or [])
+    if detto and detto.strip() != compito:
+        dati.append(("user", detto.strip()))
+    lav = svc.nuovo(tipo, compito, prof.id, prof.name, level, fmt, modello,
+                    str(vincoli or ""), dati)
+    if candidati:
+        lav.file_candidati = candidati
+        if len(candidati) == 1:
+            _scegli(lav, "1")
+    # Una conferma per azione (06/10, caso vero della DGX: conferma della politica per la foto,
+    # sfida, poi ancora «Procedo?»): se la persona ha già confermato proprio questa richiesta
+    # alla domanda della politica, la proposta vale come accettata. Non con un file della
+    # persona: lì la domanda dice anche che il file lascia il PC
+    if svc.serve_conferma(lav):
+        if not politica.accettata(ctx) or candidati:
+            return _proponi(ctx, svc, lav, turno)
+        # (nel registro basta `politica_conferma_unica`, scritta dalla politica)
+    return _avvia(ctx, svc, lav)
+
+
+def _lavori_stato(ctx: ToolContext) -> dict:
+    svc = getattr(ctx, "lavori", None)
+    if svc is None:
+        return _final("Qui non ci sono lavori affidati a un agente.", ok=False)
+    prof = _person(ctx)
+    admin = _level(ctx) == "amministra"
+    frase = svc.stato(getattr(prof, "id", None), tutti=admin)
+    att = svc.in_attesa(None if admin else getattr(prof, "id", None))
+    if att and frase.endswith("?"):
+        # «A che punto è?» → «aspetta una risposta: …?»: la risposta nel turno dopo vale
+        return _final(frase, in_sospeso=svc.offerta_risposta(att[-1]))
+    return _final(frase)
+
+
+def _lavori_rispondi(ctx: ToolContext, lavoro: str = "", risposta: str = "") -> dict:
+    svc = getattr(ctx, "lavori", None)
+    if svc is None:
+        return _final("Qui non ci sono lavori affidati a un agente.", ok=False, fatto=NIENTE)
+    prof = _person(ctx)
+    if prof is None:
+        return _rifiuto(ctx, "Non so chi sei: alle domande di un lavoro risponde solo chi l'ha "
+                             "chiesto.", "lavori_permesso")
+    testo = str(risposta or "").strip() or (getattr(ctx, "user_text", "") or "").strip()
+    if not testo:
+        return {"ok": False, "fatto": NIENTE, "errore": "manca la risposta",
+                "cosa_fare": "chiedi la risposta alla domanda dell'agente"}
+    lav, frase, altrui = svc.trova_in_attesa(prof.id, str(lavoro or ""),
+                                             admin=_level(ctx) == "amministra")
+    if lav is None:
+        if altrui:
+            return _rifiuto(ctx, frase, "lavori_risposta_altrui")
+        return _final(frase, ok=False, fatto=NIENTE)
+    # Risposta arrivata a voce: il modulo della domanda sullo schermo si chiude (03/10)
+    from ..schermi.moduli import chiudi_per_voce
+    chiudi_per_voce(ctx, "lavori_rispondi", f"lavoro:{lav.id}")
+    frase = svc.rispondi(lav, testo)
+    if frase is None:
+        return _final("Quel lavoro non aspetta più una risposta.", ok=False, fatto=NIENTE)
+    return _final(frase, fatto="risposta passata all'agente: il lavoro riprende, NON è ancora "
+                               "finito", lavoro=lav.id)
+
+
+def _dati(dati) -> list[str]:
+    """I dati per il programma come li passa il modello: un elenco, o una frase («3 e 5»,
+    «3, 5»): si separano a spazi, virgole e punti e virgola (una conversione di forma)."""
+    if isinstance(dati, (int, float)):
+        return [str(dati)]
+    if isinstance(dati, str):
+        # Una frase sola: i valori separati come detti. Un elenco resta com'è (un elemento
+        # può essere una frase con gli spazi)
+        return [x for x in re.split(r"\s*[;,]\s*|\s+e\s+|\s+", dati.strip()) if x][:20]
+    return [str(d).strip() for d in (dati or []) if str(d).strip()][:20]
+
+
+def _lavori_esegui(ctx: ToolContext, lavoro: str = "", dati=None) -> dict:
+    svc = getattr(ctx, "lavori", None)
+    esec = getattr(svc, "esecuzioni", None)
+    if svc is None or esec is None:
+        return _final("Qui non ci sono lavori affidati a un agente.", ok=False, fatto=NIENTE)
+    prof = _person(ctx)
+    if prof is None:
+        return _rifiuto(ctx, "Non so chi sei: un programma lo esegue solo chi l'ha chiesto.",
+                        "lavori_permesso")
+    admin = _level(ctx) == "amministra"
+    lav = esec.ultimo_lavoro(prof.id, admin=admin, quale=str(lavoro or ""))
+    if lav is None:
+        altri = esec.ultimo_lavoro(None, admin=True, quale=str(lavoro or ""))
+        if altri is not None and altri.persona != prof.id:
+            return _rifiuto(ctx, "Quel programma l'ha chiesto un altro: può eseguirlo solo lui o "
+                                 "chi amministra.", "lavori_permesso")
+        return _final("Non ho programmi finiti da eseguire: prima chiedimi di scriverne uno.",
+                      ok=False, fatto=NIENTE)
+    hub = getattr(ctx, "schermi", None)
+    on_scheda = None
+    if hub is not None:
+        sender = hub.mittente(ctx)
+        # Chiesto a voce: la scheda va anche con le schede automatiche spente
+        on_scheda = lambda card: hub.invia(card, sender, forza=True)  # noqa: E731
+    es, frase = esec.avvia(lav, _dati(dati), on_scheda=on_scheda, persona=prof.id,
+                           persona_nome=prof.name)
+    if es is None:
+        return _final(frase, ok=False, fatto=NIENTE)
+    finita = esec.attendi(es, float(getattr(ctx.cfg, "agenti_esecuzione_attesa_s", 4.0)))
+    if finita:
+        return _final(esec.frase(es), fatto="eseguito", lavoro=lav.id, esecuzione=es.id)
+    frase = ("Lo sto eseguendo: guardalo sullo schermo, ti dico come finisce."
+             if es.sullo_schermo else "Lo sto eseguendo: ti dico come finisce.")
+    return _final(frase, fatto="in esecuzione: NON è ancora finito", lavoro=lav.id,
+                  esecuzione=es.id)
+
+
+def _lavori_annulla(ctx: ToolContext, quale: str = "ultimo") -> dict:
+    svc = getattr(ctx, "lavori", None)
+    if svc is None:
+        return _final("Qui non ci sono lavori affidati a un agente.", ok=False, fatto=NIENTE)
+    prof = _person(ctx)
+    if prof is None:
+        return _rifiuto(ctx, "Non so chi sei: un lavoro lo può fermare solo chi l'ha chiesto.",
+                        "lavori_permesso")
+    # «Fermalo» mentre un programma gira sullo schermo (04/10): prima il programma, che è la
+    # cosa che si vede; il lavoro dell'agente con «ferma il lavoro» quando il programma non c'è
+    esec = getattr(svc, "esecuzioni", None)
+    if esec is not None and str(quale or "").lower() != "tutti":
+        fermate = esec.ferma(prof.id, admin=_level(ctx) == "amministra")
+        if fermate:
+            note_rule(ctx, "lavori_ferma_esecuzione")
+            return _final("Ho fermato il programma.", fatto="programma fermato")
+    res = svc.annulla(prof.id, tutti_di_tutti=_level(ctx) == "amministra",
+                      quale="tutti" if str(quale or "").lower() == "tutti" else "ultimo")
+    return _final(res["frase"], ok=res["ok"], **({} if res["ok"] else {"fatto": NIENTE}))
+
+
+def agenti_specs(formati=("word", "excel", "pdf"), modelli=(),
+                 file_pc: bool = False, archivio: bool = False,
+                 allegati: bool = False) -> list[ToolSpec]:
+    """I cinque tool; `modelli`: i nomi dei modelli di documento (template) che ci sono;
+    `file_pc`: c'è un PC con la ricerca dei file (il parametro `file` di delega_lavoro);
+    `archivio`: le ricerche possono interrogare il grafo dei documenti di casa."""
+    props = {"tipo": {"type": "string", "enum": list(TIPI)},
+             "compito": {"type": "string"},
+             "vincoli": {"type": "string"},
+             "proposta": {"type": "string"}}
+    if file_pc:
+        props["file"] = {"type": "string"}
+    if allegati:
+        props["allegato"] = {"type": "integer"}
+    formati = [f for f in ("word", "excel", "pdf") if f in set(formati or ())]
+    if formati:
+        props["formato"] = {"type": "string", "enum": formati}
+    modelli = sorted(modelli or ())
+    if modelli:
+        props["modello"] = {"type": "string", "enum": modelli}
+    mod_txt = (f" Modelli di documento che ci sono: {', '.join(modelli)} (modello)."
+               if modelli else "")
+    # Le domande sui documenti di casa che archivio_cerca e archivio_somma non coprono
+    # (confronti, più documenti insieme) vanno all'agente come ricerca
+    arch_txt = (" Anche le domande complesse sui documenti di casa archiviati, che mettono "
+                "insieme più documenti o confrontano periodi (tipo ricerca)." if archivio else "")
+    return [
+        ToolSpec(
+            name="delega_lavoro",
+            description=(
+                "Affida a un agente in secondo piano un lavoro lungo il cui risultato è un "
+                "programma o un file complesso: script e programmi in Python o C# (tipo "
+                "codice), relazioni, "
+                "presentazioni o documenti di più pagine o da un modello (tipo documento), "
+                "ricerche a più passi (tipo ricerca). NON per domande brevi e spiegazioni "
+                "(«come si scrive un ciclo for?»): rispondi tu. NON per lettere, tabelle ed "
+                "elenchi semplici: documento_crea. NON per le funzioni permanenti di Calliope "
+                "(estensioni: estensione_crea), nemmeno se estensione_crea è stato rifiutato: "
+                "il risultato qui è un programma a sé. compito: tutto quello che serve, con i dati "
+                "come detti. vincoli: facoltativo. Se il risultato finisce con «Procedo?», "
+                "solo dopo il sì richiamalo con proposta = l'id proposto (es. «L3»)."
+                + (" file: solo se il lavoro è su un file della persona che sta sul PC "
+                   "(«correggi lo script backup.py», «riassumimi il PDF del contratto», "
+                   "«aggiungi una colonna al foglio spese.xlsx»): il nome del file come detto, "
+                   "o il numero di un risultato dell'ultima pc_cerca_file. Ne mando una copia "
+                   "all'agente solo dopo il sì." if file_pc else "")
+                + (" allegato: il numero di un file allegato in questa conversazione, se il "
+                   "lavoro è su quel file («dallo all'agente», «correggi questo script»)."
+                   if allegati else "")
+                + mod_txt + arch_txt),
+            parameters={"type": "object", "properties": props,
+                        "required": ["tipo", "compito"]},
+            func=_delega_lavoro, risk="azione", levels=FAMILY),
+        ToolSpec(
+            name="lavori_stato",
+            description=("Dice a che punto sono i lavori affidati all'agente con delega_lavoro "
+                         "(«a che punto è il programma?», «hai finito la relazione?»)."),
+            parameters={"type": "object", "properties": {}, "required": []},
+            func=_lavori_stato, risk="lettura", levels=FAMILY),
+        ToolSpec(
+            name="lavori_annulla",
+            description=("Ferma un lavoro affidato all'agente con delega_lavoro («ferma il "
+                         "lavoro», «annulla il programma»), o il programma che sto eseguendo "
+                         "sullo schermo («fermalo»). quale: ultimo (predefinito) o tutti."),
+            parameters={"type": "object",
+                        "properties": {"quale": {"type": "string", "enum": ["ultimo", "tutti"]}},
+                        "required": []},
+            func=_lavori_annulla, risk="azione", levels=FAMILY),
+        ToolSpec(
+            name="lavori_esegui",
+            description=("Esegue di nuovo il programma scritto dall'agente in un lavoro di "
+                         "codice finito e ne mostra l'uscita sullo schermo («fammelo vedere», "
+                         "«eseguilo di nuovo», «eseguilo con 3 e 5»). dati: i valori detti o "
+                         "scritti, uno per elemento (vuoto = senza dati); lavoro: id (es. «L3») "
+                         "o vuoto per l'ultimo. «Fermalo» è lavori_annulla. È anche il modo di "
+                         "usare di nuovo un programma dell'agente: non ha un comando a voce "
+                         "suo."),
+            parameters={"type": "object",
+                        "properties": {"lavoro": {"type": "string"},
+                                       "dati": {"type": "array", "items": {"type": "string"}}},
+                        "required": []},
+            func=_lavori_esegui, risk="azione", levels=FAMILY),
+        ToolSpec(
+            name="lavori_rispondi",
+            description=("Dà all'agente la risposta a una sua domanda su un lavoro che "
+                         "aspetta («il cliente è Rossi», anche solo «Rossi»). lavoro: id (es. "
+                         "«L3») o vuoto se ce n'è uno solo; risposta: quello che ha detto chi "
+                         "parla, con i dati come detti."),
+            parameters={"type": "object",
+                        "properties": {"lavoro": {"type": "string"},
+                                       "risposta": {"type": "string"}},
+                        "required": ["risposta"]},
+            func=_lavori_rispondi, risk="azione", levels=FAMILY),
+    ]

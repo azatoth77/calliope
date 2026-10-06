@@ -1,0 +1,1265 @@
+"""
+Il servizio dei lavori in secondo piano (02/10/2026): collegamento, coda, proposta e
+conferma, esecuzione, annullo, risultati, annuncio.
+
+Ricalca quello che già funziona per i documenti e le installazioni:
+- **la voce non aspetta mai**: i tool (`delega`, `stato`, `annulla`) leggono e scrivono solo
+  lo stato in memoria; il collegamento (tunnel, Ollama remoto) lo fa il thread dei lavori o
+  un thread di verifica. Nessun lock condiviso con la voce resta preso durante una rete;
+- **un lavoro alla volta** (la GPU dell'agente è una), gli altri in coda;
+- **proposta e conferma** per i lavori costosi (`agenti_conferma`): la proposta finisce con
+  «Procedo?» e diventa un'azione in sospeso; la conferma vale solo nella risposta dopo,
+  della stessa persona (come le installazioni);
+- **a lavoro finito**: i file nella cartella dei risultati (`agenti_risultati`, predefinita
+  Documenti\\Calliope\\Lavori), la scheda sugli schermi personali di chi l'ha chiesto, e un
+  annuncio breve (`done` + `on_done`, che in main.py sveglia l'ascolto come un timer). Il
+  codice non si legge mai ad alta voce;
+- **domande a metà lavoro** (03/10): se all'agente manca un dato (consegna con esito
+  mancano_dati, o un modello di documento con campi obbligatori vuoti) il lavoro resta
+  `in_attesa` con il suo contesto (la conversazione dell'agente, la sandbox, i campi già
+  compilati), la domanda si annuncia come i lavori finiti e diventa un'azione in sospeso
+  (`RISPOSTA_MSG`); la risposta arriva con `rispondi` (tool lavori_rispondi) e il lavoro torna
+  in coda da dove era. Il tempo d'attesa non conta nel tetto dei minuti; al più
+  `agenti_domande_max` domande per lavoro; dopo `agenti_attesa_risposta_min` senza risposta
+  il lavoro si chiude da solo e lo si dice;
+- **i file della persona** (03/10, file_utente.py): la copia si prende in secondo piano al
+  «sì» (`_prendi_file`), entra nella sandbox o nella richiesta, e il risultato torna come
+  file nuovo con `consegna` (RemoteDelivery verso il satellite), mai sopra l'originale.
+"""
+
+import datetime
+import json
+import os
+import queue
+import re
+import sys
+import threading
+import time
+from pathlib import Path
+
+from .arbitro import Arbitro, _interrompi
+from .avanzamento import Avanzamento
+from .esecuzione import Esecuzioni
+from .ciclo import Agente, Annullato, Lavoro, Limite, errore_ollama_frase, per_la_voce
+from .file_utente import (ESTENSIONI as ESTENSIONI_FILE_UTENTE, FileNonLeggibile, nome_risultato,
+                          nome_sicuro, testo_del_file)
+from .impostazioni import Impostazioni, pausa_server, ssh_eseguibile, stessa_gpu, stesso_ollama
+from .remoto import ErroreOllama, crea_cliente
+from .sandbox import ErroreSandbox
+from ..conferme import proposta_valida, secondi_validi
+from ..sicurezza import asks_secret
+from .tunnel import Tunnel
+
+# Dove sta la configurazione di OpenSSH, per i messaggi (DGX Linux dal 02/10)
+_SSH_CONFIG = r".ssh\config" if sys.platform == "win32" else "~/.ssh/config"
+
+# Codici del collegamento → (motivo breve, prossimo passo per la voce e per il terminale)
+MOTIVI = {
+    "vpn": ("la DGX non risponde (VPN spenta?)",
+            "Accendi la VPN dell'ufficio: riprovo da sola alla prossima richiesta."),
+    "timeout": ("la DGX non risponde (VPN spenta?)",
+                "Accendi la VPN dell'ufficio: riprovo da sola alla prossima richiesta."),
+    "nome": ("non trovo l'indirizzo della DGX (VPN spenta o alias mancante?)",
+             "Accendi la VPN; se è già accesa, controlla che l'alias sia in " + _SSH_CONFIG + "."),
+    "chiave": ("la DGX rifiuta la chiave SSH (non caricata in ssh-agent?)",
+               "Carica la chiave con ssh-add e controlla che sia autorizzata sulla DGX: io non "
+               "uso password."),
+    "host_sconosciuto": ("l'impronta della DGX non è tra gli host noti, o è cambiata",
+                         "Collegati una volta a mano con ssh e l'alias da un terminale, e "
+                         "controlla l'impronta."),
+    "porta_locale": ("la porta locale del tunnel è occupata",
+                     "Chiudi il programma che la usa, o cambia porta_locale nel file della DGX."),
+    "rifiutato": ("la DGX rifiuta il collegamento SSH",
+                  "Controlla che sulla DGX il servizio SSH sia acceso."),
+    "config_ssh": ("la configurazione di SSH ha un errore",
+                   "Controlla " + _SSH_CONFIG + " da un terminale con ssh e l'alias."),
+    "ssh_errore": ("il tunnel SSH non si apre",
+                   "Prova da terminale: python -m calliope.agenti --prova."),
+    "ssh_mancante": ("manca il client SSH",
+                     "Installa il Client OpenSSH: Impostazioni, App, Funzionalità facoltative."
+                     if sys.platform == "win32" else
+                     "Installa il client OpenSSH: sudo apt install openssh-client."),
+    "caduto": ("il tunnel verso la DGX è caduto: lo sto riaprendo",
+               "Se non torna, controlla la VPN."),
+    "ollama_giu": ("l'Ollama dell'agente non risponde",
+                   "Sulla macchina dell'agente avvia Ollama (sulla DGX: sudo systemctl start "
+                   "ollama) e controlla la porta."),
+    "ollama_errore": ("l'Ollama dell'agente ha dato un errore",
+                      "Prova da terminale: python -m calliope.agenti --prova."),
+    # motore «openai» (vLLM sulla DGX): script nella home, vedi prove/LEGGIMI.md
+    "motore_giu": ("il server del modello dell'agente non risponde",
+                   "Sulla macchina dell'agente avvia il motore (sulla DGX: "
+                   "~/calliope-motore/avvia.sh) e controlla la porta."),
+    "motore_errore": ("il server del modello dell'agente ha dato un errore",
+                      "Prova da terminale: python -m calliope.agenti --prova."),
+}
+
+_VERBI = re.compile(r"^\s*(?:(?:per favore|puoi|potresti|mi|ti chiedo di|vorrei che)\s+)*"
+                    r"(?:scrivi(?:mi)?|crea(?:mi)?|fa(?:mmi|i)|prepara(?:mi)?|"
+                    r"genera(?:mi)?|correggi(?:mi)?|sistema(?:mi)?|programma(?:mi)?|"
+                    r"compila(?:mi)?|cerca(?:mi)?|ricerca|elabora(?:mi)?|realizza(?:mi)?|"
+                    r"redigi(?:mi)?|metti(?:mi)? insieme|organizza(?:mi)?|riassumi(?:mi)?|"
+                    r"traduci(?:mi)?|aggiungi(?:mi)?|modifica(?:mi)?|leggi(?:mi)?|"
+                    r"controlla(?:mi)?|completa(?:mi)?)\s+", re.I)
+_ARTICOLI = re.compile(r"^(?:(?:uno|una|un|il|lo|la|i|gli|le)\s+|(?:un'|l')\s*)", re.I)
+
+
+def titolo_da(compito: str, parole: int = 7) -> str:
+    """«Scrivi uno script che rinomina le foto per data» → «script che rinomina le foto
+    per data»: il nome del lavoro detto a voce e usato per la cartella."""
+    t = re.sub(r"\s+", " ", str(compito or "")).strip().rstrip(".!?")
+    t = _VERBI.sub("", t, count=1)
+    t = _ARTICOLI.sub("", t, count=1)
+    # Anche a «(»: «carattere_controllo(cf15)» nel titolo finiva letto a voce (04/10)
+    words = re.split(r"[,;:(]", t)[0].split()[:parole]
+    # Niente coda monca («…rinomina le foto di»)
+    while len(words) > 2 and words[-1].lower() in _CODA:
+        words.pop()
+    return " ".join(words) or "lavoro"
+
+
+# Un lavoro di codice non è un'estensione di Calliope (06/10, caso vero della DGX: estensione_crea
+# rifiutato, il modello ha usato delega_lavoro con «Crea un'estensione che…», e l'annuncio
+# diceva «ho creato un'estensione», poi «puoi richiamarla chiedendomi l'estensione
+# sommaparametri», che non esiste). Correzione della forma di una scelta già fatta (tipo
+# codice): nel titolo e nel riassunto detti a voce la parola diventa «programma»
+_ART = {"un": "un", "l": "il", "quest": "questo", "quell": "quel", "dell": "del", "all": "al",
+        "nell": "nel", "sull": "sul", "dall": "dal", "una": "un", "la": "il", "questa": "questo",
+        "quella": "quel", "le": "i", "delle": "dei", "alle": "ai", "nelle": "nei", "sulle": "sui",
+        "dalle": "dai", "queste": "questi", "quelle": "quei"}
+_PAROLE_ESTENSIONE = re.compile(
+    r"\b(?:(un|l|quest|quell|dell|all|nell|sull|dall)['’]\s*|(una|la|questa|quella|le|delle|"
+    r"alle|nelle|sulle|dalle|queste|quelle)\s+)?(estension[ei])\b", re.I)
+
+
+def senza_estensione(testo: str) -> str:
+    """«Ho creato un'estensione in Python che…» → «Ho creato un programma in Python che…»."""
+    def sost(m):
+        art = m[1] or m[2]
+        nome = "programmi" if m[3].lower().endswith("i") else "programma"
+        out = (_ART[art.lower()] + " " + nome) if art else nome
+        primo = m[0][:1]
+        return out[:1].upper() + out[1:] if primo.isupper() else out
+    return _PAROLE_ESTENSIONE.sub(sost, str(testo or ""))
+
+
+_ESTENSIONI_DETTE = re.compile(r"\b([\w-]+)\.(?:py|ps1|html?|js|css|csv|tsv|txt|json|xlsx?|"
+                               r"docx?|pdf|md|sh|bat|cmd|ini|ya?ml|log|xml|sql)\b", re.I)
+
+
+def titolo_detto(titolo: str) -> str:
+    """Il titolo del lavoro da dire a voce (04/10): «modulo codice_fiscale.py con la funzione
+    carattere_controllo» → «modulo codice fiscale con la funzione carattere controllo»;
+    passa da per_la_voce, e se lì non resta niente si tengono solo le parole."""
+    t = re.sub(r"\([^)]*\)?", " ", str(titolo or ""))
+    t = _ESTENSIONI_DETTE.sub(r"\1", t)
+    t = re.sub(r"(?<=\w)_(?=\w)", " ", t)
+    t = re.sub(r"\s+", " ", t).strip()
+    detto = per_la_voce(t).rstrip(".").strip()
+    if not detto:
+        detto = re.sub(r"\s+", " ", re.sub(r"[^\w\s'’-]|_", " ", t)).strip()
+    return detto or "il lavoro"
+
+
+_CODA = frozenset("di a da in con su per tra fra e o il lo la i gli le un uno una del dello "
+                  "della dei degli delle al allo alla ai agli alle dal dalla nel nella sul "
+                  "sulla che".split())
+
+
+def _nome_cartella(s: str) -> str:
+    s = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "", s).strip(" .")
+    return s[:60] or "lavoro"
+
+
+# La domanda dell'agente come azione in sospeso (Brain.set_pending con «messaggio»): la
+# risposta di chi parla non è un «sì», quindi il testo generico di PENDING_MSG («se chi parla
+# acconsente…») non va bene. Decide il modello se ciò che dice è la risposta
+RISPOSTA_MSG = ("Domanda in sospeso: hai appena chiesto, per il lavoro «{titolo}» affidato "
+                "all'agente, «{domanda}». Se chi parla risponde alla domanda (anche solo con il "
+                "dato: un nome, una cifra, una data), chiama subito lavori_rispondi con "
+                "lavoro=\"{id}\" e risposta = quello che ha detto, con i dati come detti. Se "
+                "parla d'altro, fai quello che chiede.")
+
+
+class ErroreInput(Exception):
+    """Il file della persona non è arrivato o non si legge: il lavoro non parte."""
+
+
+def _durata(s: float) -> str:
+    m = int(s // 60)
+    if m < 60:
+        return "un minuto" if m <= 1 else f"{m} minuti"
+    h = round(m / 60)
+    return "un'ora" if h == 1 else f"{h} ore"
+
+
+def cartella_risultati(cfg) -> Path:
+    folder = getattr(cfg, "agenti_risultati", None)
+    if folder:
+        return Path(folder)
+    from ..documenti.consegna import default_folder
+    return default_folder() / "Lavori"
+
+
+def cartella_sandbox(cfg) -> Path:
+    p = Path(getattr(cfg, "agenti_sandbox", None) or "lavori")
+    if not p.is_absolute():
+        base = getattr(cfg, "config_dir", None)
+        p = Path(base) / p if base else p.resolve()
+    return p
+
+
+def cartella_modelli(cfg) -> Path:
+    folder = getattr(cfg, "agenti_modelli", None)
+    if folder:
+        return Path(folder)
+    from ..documenti.consegna import default_folder
+    return default_folder() / "Modelli"
+
+
+class Lavori:
+    def __init__(self, cfg, imp: Impostazioni, on_done=None, biblioteca=None,
+                 formati=("word", "excel", "pdf"), log=print, cliente=None, modelli=None,
+                 consegna=None):
+        self.cfg = cfg
+        # Dove tornano i risultati dei lavori fatti sui file della persona: RemoteDelivery
+        # (il satellite) o None (restano nella cartella del lavoro, su questo computer)
+        self.consegna = consegna
+        self.imp = imp
+        self.on_done = on_done
+        self.log = log
+        self.formati = tuple(formati or ())
+        self.done: queue.Queue = queue.Queue()
+        self.female = getattr(cfg, "gender", "f") == "f"
+        self.tunnel = (Tunnel(imp.ssh_alias, imp.porta_locale, imp.porta_remota, imp.timeout_s,
+                              ssh=ssh_eseguibile(), log=log) if imp.tunnel else None)
+        self.cliente = cliente or crea_cliente(imp)
+        self.stesso = stesso_ollama(cfg, imp)
+        # Stessa GPU della voce (stesso Ollama, o vLLM sulla stessa macchina: 04/10)
+        self.stessa_gpu = stessa_gpu(cfg, imp)
+        condiviso = self.stessa_gpu and getattr(cfg, "agenti_precedenza_voce", True)
+        self.arbitro = Arbitro(condiviso, float(getattr(cfg, "agenti_ripresa_s", 3.0)),
+                               pausa=pausa_server(cfg, imp, log) if condiviso else None,
+                               log=log)
+        if modelli is None:
+            from .modelli import carica_modelli
+            modelli = carica_modelli(cartella_modelli(cfg))
+        self.modelli = modelli
+        self.agente = Agente(cfg, imp, self.cliente, self.arbitro, log=log,
+                             biblioteca=biblioteca, modelli=self.modelli,
+                             stesso_ollama=self.stesso)
+        # La scheda del lavoro in diretta sugli schermi (03/10): solo per i lavori con
+        # on_scheda, costruita e mandata da un thread suo, mai da chi lavora
+        self.avanzamento = Avanzamento(
+            lambda lav=None: (self.agente.max_passi, self.agente.tetto_token(lav),
+                              self.agente.tempo_max_s),
+            self.arbitro, finale=self.scheda, log=log)
+        self.diagnosi = {"codice": "non_provato", "stato": "attiva",
+                         "motivo": "collegamento non ancora provato", "passo": "",
+                         "quando": 0.0}
+        self._lock = threading.Lock()        # solo stato in memoria: mai preso durante la rete
+        self._verifica_lock = threading.Lock()
+        self._coda: queue.Queue = queue.Queue()
+        self.lavori: list[Lavoro] = []
+        self.corrente: Lavoro | None = None
+        self._sandbox = None
+        # Il motore della sandbox (docker o processo): lo sceglie il thread dei lavori, che può
+        # aspettare Docker; il registro delle capacità legge solo questo
+        self.isolamento = None
+        # I linguaggi dei programmi (04/10, linguaggi.py): {nome: Isolamento}, Python compreso
+        self.isolamenti: dict = {}
+        # Il programma di un lavoro eseguito e mostrato in diretta (04/10, esecuzione.py)
+        self.esecuzioni = Esecuzioni(self, log=log)
+        self._offerte: dict[str, dict] = {}
+        self.estensioni = None      # Estensioni (calliope/estensioni/): le versioni da approvare
+        self._n = 0
+        self._chiuso = False
+        self._worker = threading.Thread(target=self._esegui_coda, daemon=True, name="lavori")
+        self._worker.start()
+
+    # ─────────────────────────── collegamento ───────────────────────────
+    def _diag(self, codice: str, stato: str, motivo: str = "", passo: str = "", **extra):
+        self.diagnosi = {"codice": codice, "stato": stato, "motivo": motivo, "passo": passo,
+                         "quando": time.monotonic(), **extra}
+        return self.diagnosi
+
+    def verifica(self) -> dict:
+        """Apre il tunnel se serve, chiede versione e modelli. Blocca (fino al tempo massimo
+        del collegamento): mai dal thread della voce."""
+        with self._verifica_lock:
+            imp = self.imp
+            if self.tunnel is not None:
+                code = self.tunnel.assicura(imp.timeout_s)
+                if code != "ok":
+                    motivo, passo = MOTIVI.get(code, MOTIVI["ssh_errore"])
+                    return self._diag(code, "guasta", motivo, passo)
+            try:
+                ver = self.cliente.versione(timeout=imp.timeout_s)
+                nomi = self.cliente.modelli(timeout=imp.timeout_s)
+            except ErroreOllama as e:
+                motivo, passo = MOTIVI.get(e.codice, MOTIVI["ollama_errore"])
+                return self._diag(e.codice, "guasta", motivo, passo)
+            mancanti = [m for m in dict.fromkeys([imp.modello, imp.modello_scrittore])
+                        if not self.cliente.ha(nomi, m)]
+            if mancanti:
+                m = mancanti[0]
+                dove = imp.su_nome
+                passo = (f"Scaricalo {dove} con ollama pull {m}." if imp.motore == "ollama"
+                         else f"Il motore {dove} serve altri modelli ({', '.join(nomi) or 'nessuno'}): "
+                              f"avvialo con {m} o correggi agente_modello.")
+                return self._diag("modello_mancante", "mancante", f"{dove} manca {m}",
+                                  passo, versione=ver, modelli=len(nomi))
+            caricato = self.cliente.ha(self.cliente.caricati(timeout=imp.timeout_s),
+                                       imp.modello)
+            return self._diag("ok", "attiva", "", "", versione=ver, modelli=len(nomi),
+                              caricato=caricato)
+
+    def verifica_in_secondo_piano(self):
+        if self._verifica_lock.locked():
+            return
+        threading.Thread(target=self.verifica, daemon=True, name="lavori-verifica").start()
+
+    def descrizione(self) -> str:
+        """Dove gira l'agente, per il riassunto dell'avvio (mai host o utente)."""
+        motore = " (API compatibile OpenAI)" if self.imp.motore == "openai" else ""
+        if self.tunnel is not None:
+            return (f"{self.imp.modello} {self.imp.su_nome}{motore} via tunnel SSH "
+                    f"«{self.imp.ssh_alias}» (porta locale {self.imp.porta_locale})")
+        if self.stesso:
+            return f"{self.imp.modello} sullo stesso Ollama della voce (la voce ha la precedenza)"
+        return f"{self.imp.modello} su {self.imp.url}"
+
+    # ─────────────────────────── lavori ───────────────────────────
+    def nuovo(self, tipo, compito, persona=None, persona_nome=None, livello="familiare",
+              formato="", modello="", vincoli="", dati=None) -> Lavoro:
+        with self._lock:
+            self._n += 1
+            n = self._n
+        lav = Lavoro(f"L{n}", tipo, str(compito or "").strip(), persona, persona_nome, livello,
+                     str(formato or ""), str(modello or ""), str(vincoli or ""),
+                     list(dati or []))
+        lav.titolo = (self.modelli[lav.modello].titolo.lower() if lav.modello in self.modelli
+                      else titolo_da(lav.compito))
+        if lav.tipo == "codice":
+            lav.titolo = senza_estensione(lav.titolo)
+            lav.non_estensione = senza_estensione(lav.compito) != lav.compito
+        return lav
+
+    def attivi(self, persona=None, attesa: bool = False) -> list[Lavoro]:
+        """I lavori in coda o in corso (con `attesa` anche quelli che aspettano una risposta:
+        non occupano l'agente)."""
+        stati = ("in_coda", "in_corso") + (("in_attesa",) if attesa else ())
+        with self._lock:
+            return [lv for lv in self.lavori if lv.stato in stati
+                    and (persona is None or lv.persona == persona)]
+
+    # ─────────────────────────── domande a metà lavoro ───────────────────────────
+    def in_attesa(self, persona=None) -> list[Lavoro]:
+        with self._lock:
+            return [lv for lv in self.lavori if lv.stato == "in_attesa"
+                    and (persona is None or lv.persona == persona)]
+
+    def trova_in_attesa(self, persona, quale: str = "", admin: bool = False):
+        """(lavoro, "", False) il lavoro in attesa a cui risponde `persona`; (None, frase,
+        altrui) se non c'è o non è suo (`altrui`: c'è, ma è di un altro). `quale`: l'id («L3») o parole del titolo («la relazione»); vuoto va bene
+        se ce n'è uno solo."""
+        import difflib
+        tutti = self.in_attesa()
+        if not tutti:
+            return None, "Non ho lavori che aspettano una risposta.", False
+        q = str(quale or "").strip()
+        scelto = None
+        if re.fullmatch(r"[Ll]\d+", q):
+            scelto = next((lv for lv in tutti if lv.id.lower() == q.lower()), None)
+        elif q:
+            ql = re.sub(r"\b(il|lo|la|l'|lavoro|della|del|di|per)\b", " ", q.lower()).split()
+            def punti(lv):
+                t = f"{lv.titolo} {lv.compito}".lower()
+                parole = sum(1 for w in ql if len(w) > 2 and w[:-1] in t)
+                return parole + difflib.SequenceMatcher(None, " ".join(ql), lv.titolo.lower()
+                                                        ).ratio()
+            migliori = sorted(tutti, key=punti, reverse=True)
+            if punti(migliori[0]) >= 1.0:
+                scelto = migliori[0]
+        if scelto is None:
+            mine = [lv for lv in tutti if admin or lv.persona == persona]
+            if len(mine) == 1:
+                scelto = mine[0]
+            elif not mine:
+                return None, ("Le domande dei lavori che aspettano sono per chi li ha chiesti: "
+                              "può rispondere solo lui o chi amministra."), True
+            else:
+                nomi = [f"«{lv.titolo}»" for lv in mine]
+                return None, ("Ho più lavori che aspettano una risposta: "
+                              + ", ".join(nomi[:-1]) + " e " + nomi[-1] + ". A quale rispondi?"
+                              ), False
+        if not admin and scelto.persona != persona:
+            return None, (f"La domanda di «{scelto.titolo}» è per chi l'ha chiesto: può "
+                          f"rispondere solo lui o chi amministra."), True
+        return scelto, "", False
+
+    def offerta_risposta(self, lav: Lavoro) -> dict:
+        """L'azione in sospeso della domanda di `lav` (Brain.set_pending)."""
+        return {"domanda": lav.domanda, "tool": "lavori_rispondi",
+                "cosa": f"la domanda del lavoro «{lav.titolo}»",
+                "argomenti": {"lavoro": lav.id},
+                "messaggio": RISPOSTA_MSG.format(titolo=lav.titolo, domanda=lav.domanda,
+                                                 id=lav.id)}
+
+    def rispondi(self, lav: Lavoro, risposta: str) -> str | None:
+        """La risposta alla domanda di `lav`: il lavoro torna in coda e riprende da dove era.
+        Non aspetta nulla (la voce chiama da qui). None se il lavoro non aspetta più."""
+        risposta = re.sub(r"\s+", " ", str(risposta or "")).strip()[:2000]
+        with self._lock:
+            if lav.stato != "in_attesa" or not risposta:
+                return None
+            lav.domande[-1][1] = risposta
+            lav.risposta = risposta
+            lav.attesa_s += time.time() - (lav.attesa_dal or time.time())
+            lav.attesa_dal = None
+            lav.stato, lav.passo = "in_coda", "riprende dopo la risposta"
+            occupato = self.corrente is not None
+        self._coda.put(lav)
+        return (f"Grazie, lo dico all'agente: riprendo «{lav.titolo}»"
+                + (" appena finisce il lavoro in corso" if occupato else " in secondo piano")
+                + ". Ti avviso quando è pronto.")
+
+    def _scadenze(self):
+        """I lavori in attesa da più di agenti_attesa_risposta_min si chiudono da soli."""
+        limite = float(getattr(self.cfg, "agenti_attesa_risposta_min", 120.0)) * 60
+        ora = time.time()
+        with self._lock:
+            scaduti = [lv for lv in self.lavori if lv.stato == "in_attesa"
+                       and ora - (lv.attesa_dal or ora) > limite]
+            for lv in scaduti:
+                lv.stato, lv.fine, lv.passo = "scaduto", ora, "chiuso senza risposta"
+        for lv in scaduti:
+            self.log(f"[AGENTI] {lv.id}: nessuna risposta in {_durata(limite)}: lo chiudo")
+            self._chiudi_attesa(lv, {"esito": "scaduto", "attesa": limite})
+            self._annuncia(lv)
+
+    def _chiudi_attesa(self, lav: Lavoro, ris: dict):
+        """Un lavoro in attesa che finisce senza riprendere (scaduto o annullato): i file fatti
+        fin lì restano nella cartella del lavoro."""
+        dest = Path(lav.cartella) if lav.cartella else self._cartella_lavoro(lav)
+        ris = {**ris, "domanda": lav.domanda, "cartella": str(dest)}
+        sb = lav.sandbox
+        if sb is not None:
+            try:
+                ris["file"] = sb.copia_in(dest)
+            except OSError:
+                pass
+        lav.risultato = ris
+        lav.contesto, lav.sandbox, lav.input = {}, None, None
+        self._metadati(lav, dest)
+
+    def _filtra_segreti(self, lav: Lavoro, ris: dict):
+        """L'agente non chiede mai segreti (password, PIN, codici, token, il wifi): una
+        domanda o un riassunto che li chiede non si dice e il lavoro si chiude. Con un file
+        della persona che glielo ordinava nei commenti, gemma4 chiedeva la password del wifi
+        6 volte su 6 (analisi di sicurezza del 03/10, agenti, difetto 2)."""
+        dom = str(ris.get("domanda") or "")
+        ria = str(ris.get("riassunto") or "")
+        if not (asks_secret(dom) or asks_secret(ria)):
+            return
+        self.log(f"[AGENTI] {lav.id}: l'agente ha chiesto un dato riservato: non lo riferisco")
+        ris.update(esito="impossibile", domanda="", riassunto="",
+                   motivo="l'agente mi ha chiesto un dato riservato, come una password: non "
+                          "lo chiedo, e il lavoro si ferma qui")
+
+    def _puo_chiedere(self, lav: Lavoro, ris: dict) -> bool:
+        self._filtra_segreti(lav, ris)
+        return (ris.get("esito") == "mancano_dati" and bool(str(ris.get("domanda") or "").strip())
+                and len(lav.domande) < int(getattr(self.cfg, "agenti_domande_max", 3))
+                and not lav.annulla.is_set())
+
+    def _sospendi(self, lav: Lavoro, ris: dict, dest: Path):
+        dom = re.sub(r"\s+", " ", str(ris.get("domanda") or "")).strip()[:300]
+        if not dom.endswith("?"):
+            dom = dom.rstrip(".!:;,") + "?"
+        with self._lock:
+            lav.domande.append([dom, None])
+            lav.stato, lav.passo = "in_attesa", "aspetta una risposta"
+            lav.attesa_dal = time.time()
+        lav.risultato = {"esito": "domanda", "domanda": dom, "cartella": str(dest)}
+        self.log(f"[AGENTI] {lav.id}: domanda a {lav.persona_nome or 'chi l’ha chiesto'}")
+        self._metadati(lav, dest)
+        self._annuncia(lav)
+
+    # ─────────────────────────── i file della persona ───────────────────────────
+    def max_byte_file(self) -> int:
+        return int(float(getattr(self.cfg, "agenti_file_max_mb", 10.0)) * 1048576)
+
+    def _prendi_file(self, lav: Lavoro):
+        """La copia del file della persona, in secondo piano subito dopo il «sì»: dal PC
+        locale o dal satellite (a pezzi, con lo SHA-256). Mai dal thread della voce."""
+        fu = lav.file_utente or {}
+        try:
+            r = fu["ex"].copia_file(fu["item"], self.max_byte_file(), ESTENSIONI_FILE_UTENTE)
+        except TimeoutError as e:
+            r = {"ok": False, "errore": str(e) or "il PC non ha risposto in tempo"}
+        except ConnectionError as e:
+            r = {"ok": False, "errore": str(e) or "il PC si è scollegato"}
+        except Exception as e:  # noqa: BLE001 — diventa l'errore del lavoro
+            r = {"ok": False, "errore": f"c'è stato un problema ({type(e).__name__})"}
+        if r.get("ok"):
+            lav.input = {"nome": str(r["nome"]), "estensione": str(r["estensione"]),
+                         "dati": bytes(r["dati"]), "percorso": nome_sicuro(r["nome"])}
+            self.log(f"[AGENTI] {lav.id}: copia del file arrivata "
+                     f"({len(r['dati']) / 1024:.0f} KB)")
+        else:
+            lav.input_errore = str(r.get("errore") or "non è arrivato")
+            self.log(f"[AGENTI] {lav.id}: il file non è arrivato ({lav.input_errore})")
+        lav.input_pronto.set()
+
+    def _prepara_input(self, lav: Lavoro):
+        """Nel thread dei lavori: aspetta la copia (già partita al «sì») e ne estrae il testo
+        per i lavori che non sono codice."""
+        fu = lav.file_utente or {}
+        attesa = 30.0 + self.max_byte_file() / 1048576
+        fine = time.monotonic() + attesa
+        lav.passo = "prende il file"
+        while not lav.input_pronto.wait(0.2):
+            if lav.annulla.is_set():
+                raise Annullato()
+            if time.monotonic() > fine:
+                raise ErroreInput(f"non ho ricevuto {fu.get('detto', 'il file')} in tempo")
+        if lav.input is None:
+            raise ErroreInput(f"non ho potuto prendere {fu.get('detto', 'il file')}: "
+                              f"{lav.input_errore}")
+        if lav.tipo != "codice" and not lav.input_testo:
+            try:
+                lav.input_testo = testo_del_file(
+                    lav.input["nome"], lav.input["dati"],
+                    int(getattr(self.cfg, "agenti_file_caratteri", 40000)))
+            except FileNonLeggibile as e:
+                raise ErroreInput(f"non riesco a leggere {fu.get('detto', 'il file')}: {e}") \
+                    from None
+
+    def _consegna_utente(self, lav: Lavoro, ris: dict, dest: Path):
+        """Il risultato di un lavoro su un file della persona: un file nuovo («backup
+        (corretto).py»), mai l'originale; con il satellite va nella cartella Calliope dei
+        Documenti del portatile (RemoteDelivery), altrimenti resta nella cartella del lavoro."""
+        inp = lav.input
+        uscite: list[Path] = []
+        files = list(ris.get("file") or [])
+        orig = Path(inp["percorso"])
+        if lav.tipo == "codice":
+            p = dest / orig.name
+            if p.is_file() and p.read_bytes() != inp["dati"]:
+                nuovo = dest / nome_risultato(orig.name, "codice")
+                os.replace(p, nuovo)
+                files = [nuovo.name if f == orig.name else f for f in files]
+                uscite.append(nuovo)
+            for f in files:
+                n = Path(f).name
+                if "/" in f or n == orig.name or n in (lav.file_iniziali or {}) or \
+                        n.startswith("test") or n.endswith("_test.py") or \
+                        (uscite and n == uscite[0].name):
+                    continue
+                uscite.append(dest / f)
+        else:
+            for f in files:
+                p = dest / f
+                if p.stem.lower() == orig.stem.lower():
+                    nuovo = dest / nome_risultato(f"{p.stem}{p.suffix}", lav.tipo)
+                    os.replace(p, nuovo)
+                    files = [nuovo.name if x == f else x for x in files]
+                    p = nuovo
+                uscite.append(p)
+        ris["file"] = files
+        ris["consegnati"], ris["dove"] = [], "nella cartella Lavori dei Documenti"
+        if not uscite:
+            return
+        if self.consegna is None:
+            ris["consegnati"] = [p.name for p in uscite]
+            return
+        from ..documenti.formato import safe_filename
+        from ..satellite.protocollo import ESTENSIONI_RICEVUTE
+        dove = set()
+        for p in uscite:
+            ext = p.suffix.lower().lstrip(".")
+            stem = p.stem
+            if ext not in ESTENSIONI_RICEVUTE:      # .js, .bat…: arriva come testo
+                stem, ext = p.name, "txt"
+            try:
+                d = self.consegna.deliver(safe_filename(stem), ext, p.read_bytes())
+            except Exception as e:  # noqa: BLE001 — il file resta comunque qui
+                self.log(f"[AGENTI] {lav.id}: consegna non riuscita: {type(e).__name__}: {e}")
+                continue
+            ris["consegnati"].append(d["nome_file"])
+            dove.add(d.get("dove") or self.consegna.where())
+        if dove:
+            ris["dove"] = sorted(dove)[0]
+
+    def collegamento_guasto(self, recente_s: float = 30.0) -> dict | None:
+        """La diagnosi, se dice che l'agente non è raggiungibile da poco: allora la delega si
+        rifiuta subito (e si riprova in secondo piano). Più vecchia, si lascia provare al
+        lavoro: la VPN può essere stata accesa nel frattempo."""
+        d = self.diagnosi
+        if d.get("stato") in ("guasta", "mancante") and time.monotonic() - d["quando"] < recente_s:
+            return d
+        return None
+
+    def serve_conferma(self, lav: Lavoro) -> bool:
+        # Un file della persona lascia il PC: la conferma c'è sempre (03/10)
+        if lav.file_utente is not None or getattr(lav, "file_candidati", None):
+            return True
+        mode = str(getattr(self.cfg, "agenti_conferma", "costosi") or "costosi").lower()
+        if mode == "sempre":
+            return True
+        if mode == "mai":
+            return False
+        if lav.tipo in ("codice", "ricerca", "estensione"):
+            return True
+        if self.attivi():
+            return True
+        return self.diagnosi.get("caricato") is False
+
+    def proposta(self, lav: Lavoro) -> str:
+        cand = getattr(lav, "file_candidati", None) or []
+        if len(cand) > 1:
+            nomi = [c["detto"] for c in cand]
+            return (f"Ho trovato {len(cand)} file: " + ", ".join(nomi[:-1]) + " e " + nomi[-1]
+                    + ". Quale mando all'agente? Lavora su una copia: l'originale non lo tocco.")
+        if lav.file_utente is not None:
+            stima = {"codice": "Ci vorranno alcuni minuti", "ricerca": "Ci vorrà qualche minuto",
+                     "documento": "Ci vorranno un paio di minuti",
+                     "estensione": "Ci vorranno alcuni minuti",
+                     "altro": "Ci vorrà qualche minuto"}[lav.tipo]
+            return (f"Mando una copia {lav.file_utente['detto_di']} all'agente "
+                    f"{self.imp.su_nome}: lavora sulla copia, e il risultato torna come file "
+                    f"nuovo; l'originale non lo tocco. {stima}. Procedo?")
+        return self._proposta(lav)
+
+    def _proposta(self, lav: Lavoro) -> str:
+        cosa = {"codice": "È un lavoro di programmazione", "ricerca": "È una ricerca a più passi",
+                "documento": "È un documento lungo", "altro": "È un lavoro lungo",
+                "estensione": ("È la modifica di una funzione di Calliope" if getattr(
+                    lav, "estensione", None) else "È una funzione nuova di Calliope")}[lav.tipo]
+        if lav.modello and lav.modello in self.modelli:
+            cosa = f"È {self.modelli[lav.modello].titolo.lower()} da compilare"
+        stima = {"codice": "Ci vorranno alcuni minuti", "ricerca": "Ci vorrà qualche minuto",
+                 "documento": "Ci vorranno un paio di minuti",
+                 "estensione": "Ci vorranno alcuni minuti, poi te la faccio approvare",
+                 "altro": "Ci vorrà qualche minuto"}[lav.tipo]
+        att = self.attivi()
+        coda = f"; prima devo finire «{att[0].titolo}»" if att else ""
+        carico = ("; prima devo caricare il modello, ci vuole un minuto in più"
+                  if self.diagnosi.get("caricato") is False else "")
+        return (f"{cosa}: lo affido all'agente {self.imp.su_nome}{coda}{carico}. {stima} e ti "
+                f"avviso quando ha finito. Procedo?")
+
+    def proponi(self, lav: Lavoro, turno: int) -> str:
+        frase = self.proposta(lav)
+        with self._lock:
+            self._offerte[lav.persona or "?"] = {
+                "lavoro": lav, "turno": turno,
+                "scade": time.monotonic() + secondi_validi(self.cfg)}
+        return frase
+
+    def offerta(self, persona, turno: int) -> dict | None:
+        """L'offerta ancora valida per questa persona (senza consumarla): nei turni dopo la
+        proposta, per `azione_in_sospeso_turni` turni ed entro `azione_in_sospeso_s` (04/10:
+        prima solo nella risposta subito dopo, e un turno in mezzo la consumava)."""
+        with self._lock:
+            off = self._offerte.get(persona or "?")
+            if off is not None and time.monotonic() > off["scade"]:
+                self._offerte.pop(persona or "?", None)
+                return None
+        if off is None or not proposta_valida(self.cfg, off["turno"], turno):
+            return None
+        return off
+
+    def conferma(self, persona, offerta: str, turno: int) -> Lavoro | None:
+        """Il lavoro proposto a questa persona, se `offerta` è il suo id e la proposta vale
+        ancora; la consuma solo allora (un «sì» rifiutato per la voce non la perde)."""
+        off = self.offerta(persona, turno)
+        if off is None or off["lavoro"].id != str(offerta or "").strip():
+            return None
+        with self._lock:
+            self._offerte.pop(persona or "?", None)
+        return off["lavoro"]
+
+    def avvia(self, lav: Lavoro) -> str:
+        att = self.attivi()
+        with self._lock:
+            self.lavori.append(lav)
+            # I lavori in attesa di una risposta non escono dall'elenco
+            vecchi = [lv for lv in self.lavori[:-30] if lv.stato != "in_attesa"]
+            self.lavori = [lv for lv in self.lavori if lv not in vecchi]
+        if lav.on_scheda is not None and getattr(lav, "segui_schermi", True):
+            self.avanzamento.segui(lav)       # la scheda compare subito, «in coda»
+        if lav.file_utente is not None and not lav.input_pronto.is_set():
+            # La copia del file parte subito, al «sì»: non aspetta il suo turno nella coda
+            threading.Thread(target=self._prendi_file, args=(lav,), daemon=True,
+                             name="lavori-file").start()
+        self._coda.put(lav)
+        if att:
+            return (f"D'accordo: lo metto in coda dopo «{att[0].titolo}». Ti avviso quando è "
+                    f"pronto.")
+        return ("Ci lavoro in secondo piano: ti avviso quando è pronto. Intanto puoi chiedermi "
+                "altro.")
+
+    def stato(self, persona=None, tutti: bool = False) -> str:
+        with self._lock:
+            mine = [lv for lv in self.lavori if tutti or lv.persona == persona]
+        corso = [lv for lv in mine if lv.stato == "in_corso"]
+        coda = [lv for lv in mine if lv.stato == "in_coda"]
+        attesa = [lv for lv in mine if lv.stato == "in_attesa"]
+        if attesa:
+            # Prima la domanda: è l'unica cosa che aspetta chi parla
+            lv = attesa[-1]
+            chi = f" di {lv.persona_nome}" if tutti and lv.persona != persona and \
+                lv.persona_nome else ""
+            frase = f"«{lv.titolo}»{chi} aspetta una risposta: {lv.domanda}"
+            altri = len(corso) + len(coda)
+            if altri:
+                frase = (f"{'Ho un altro lavoro' if altri == 1 else f'Ho {altri} lavori'} "
+                         f"in corso. " + frase)
+            return frase
+        if corso:
+            lv = corso[0]
+            minuti = max(0, int((time.time() - (lv.inizio or time.time())) / 60))
+            da = ("da meno di un minuto" if minuti < 1 else "da un minuto" if minuti == 1
+                  else f"da {minuti} minuti")
+            chi = f" per {lv.persona_nome}" if tutti and lv.persona != persona and \
+                lv.persona_nome else ""
+            frase = (f"Sto lavorando a «{lv.titolo}»{chi} {da}: l'agente {lv.passo}, "
+                     f"al passo {lv.passi + 1}.")
+            if coda:
+                frase += (f" Poi c'è «{coda[0].titolo}» in coda." if len(coda) == 1
+                          else f" Poi ce ne sono {len(coda)} in coda.")
+            return frase
+        if coda:
+            return f"«{coda[0].titolo}» è in coda: comincio appena posso."
+        finiti = [lv for lv in mine if lv.stato not in ("in_coda", "in_corso")]
+        if finiti:
+            lv = finiti[-1]
+            come = {"fatto": "è finito", "mancano_dati": "aspetta dei dati da te",
+                    "errore": "non è riuscito", "annullato": "è stato annullato",
+                    "scaduto": "l'ho chiuso perché aspettava una risposta da troppo"}.get(
+                lv.stato, lv.stato)
+            return f"Non ho lavori in corso. L'ultimo, «{lv.titolo}», {come}."
+        return "Non ho lavori in corso."
+
+    def annulla(self, persona=None, tutti_di_tutti: bool = False, quale: str = "ultimo") -> dict:
+        """Ferma il lavoro in corso (o in coda) di `persona`; chi amministra può fermare
+        anche quelli degli altri. Non aspetta: il lavoro si ferma da sé entro un attimo."""
+        with self._lock:
+            mine = [lv for lv in self.lavori if lv.stato in ("in_coda", "in_corso", "in_attesa")
+                    and (tutti_di_tutti or lv.persona == persona)]
+        if not mine:
+            others = self.attivi(attesa=True)
+            if others and not tutti_di_tutti:
+                return {"ok": False, "frase": "Non hai lavori in corso: quelli che vedo sono di "
+                                              "altri, e li può fermare solo chi li ha chiesti o "
+                                              "chi amministra."}
+            return {"ok": False, "frase": "Non ho lavori in corso da fermare."}
+        targets = mine if quale == "tutti" else [next((lv for lv in mine
+                                                       if lv.stato == "in_corso"), mine[-1])]
+        for lv in targets:
+            lv.annulla.set()
+            with self._lock:
+                era = lv.stato
+                if lv.stato in ("in_coda", "in_attesa"):
+                    lv.stato, lv.passo, lv.fine = "annullato", "annullato", time.time()
+            if era == "in_attesa":
+                # La copia dei file fatti fin lì tocca il disco: non nel thread della voce
+                def chiudi(lv=lv):
+                    self._chiudi_attesa(lv, {"esito": "annullato"})
+                    self._scheda_finale(lv)
+                threading.Thread(target=chiudi, daemon=True, name="lavori-annullo").start()
+            elif era == "in_coda":
+                # La scheda «annullato» la costruisce il thread degli schermi
+                self._scheda_finale(lv, sincrona=False)
+        if any(lv is self.corrente for lv in targets):
+            # Solo lo stream del thread dei lavori: lo stesso client può servire l'ufficio
+            _interrompi(self.cliente, self._worker.ident)
+            sb = self._sandbox
+            if sb is not None:
+                sb.termina()
+        nomi = [f"«{lv.titolo}»" for lv in targets]
+        cosa = nomi[0] if len(nomi) == 1 else ", ".join(nomi[:-1]) + " e " + nomi[-1]
+        return {"ok": True, "frase": f"Ho fermato {cosa}. Quello che era già fatto resta nella "
+                                     f"cartella Lavori dei Documenti."
+                if len(targets) == 1 else f"Ho fermato {cosa}."}
+
+    # ─────────────────────────── esecuzione ───────────────────────────
+    def scegli_isolamento(self):
+        """Chiede a Docker se l'immagine della sandbox c'è (fino a 5 s): mai dalla voce."""
+        from .sandbox import scegli_isolamento
+        try:
+            self.isolamento = scegli_isolamento(
+                getattr(self.cfg, "agenti_sandbox_motore", "auto"),
+                getattr(self.cfg, "agenti_sandbox_immagine", None))
+        except Exception as e:  # noqa: BLE001
+            self.log(f"[AGENTI] scelta della sandbox: {type(e).__name__}: {e}")
+        try:
+            from .linguaggi import scegli
+            self.isolamenti = scegli(self.cfg, self.isolamento)
+        except Exception as e:  # noqa: BLE001
+            self.log(f"[AGENTI] linguaggi della sandbox: {type(e).__name__}: {e}")
+        return self.isolamento
+
+    def _esegui_coda(self):
+        self.scegli_isolamento()
+        while not self._chiuso:
+            try:
+                self._scadenze()
+            except Exception as e:  # noqa: BLE001 — una scadenza rotta non ferma la coda
+                self.log(f"[AGENTI] controllo delle attese: {type(e).__name__}: {e}")
+            try:
+                lav = self._coda.get(timeout=0.5)
+            except queue.Empty:
+                continue
+            if lav is None:
+                break
+            if lav.annulla.is_set() or lav.stato == "annullato":
+                lav.stato, lav.fine = "annullato", time.time()
+                continue
+            self.corrente = lav
+            try:
+                self._esegui(lav)
+            except Exception as e:  # noqa: BLE001 — un lavoro rotto non ferma la coda
+                self.log(f"[AGENTI] errore inatteso in {lav.id}: {type(e).__name__}: {e}")
+                lav.stato = "errore"
+                lav.risultato = {"esito": "errore", "motivo": "c'è stato un problema"}
+                self._annuncia(lav)
+            finally:
+                self.corrente = None
+                self._sandbox = None
+
+    def _esegui(self, lav: Lavoro):
+        ripresa = lav.risposta is not None
+        lav.stato, lav.passo = "in_corso", "si collega all'agente"
+        if not ripresa:
+            lav.inizio = time.time()
+        d = self.verifica()
+        if d["codice"] != "ok":
+            lav.stato, lav.fine = "errore", time.time()
+            ris = {"esito": "errore", "motivo": d["motivo"], "passo": d["passo"],
+                   "codice": d["codice"]}
+            if ripresa:          # i file fatti prima della domanda restano nella cartella
+                self._chiudi_attesa(lav, ris)
+            else:
+                lav.risultato = ris
+            self._annuncia(lav)
+            return
+        # Alla ripresa dopo una domanda la cartella è la stessa
+        dest = Path(lav.cartella) if lav.cartella else self._cartella_lavoro(lav)
+        lav.cartella = str(dest)
+        ris: dict = {}
+        try:
+            if lav.file_utente is not None:
+                self._prepara_input(lav)
+            if lav.tipo in ("codice", "estensione"):
+                sb = lav.sandbox
+                if sb is None:
+                    from .sandbox import Sandbox
+                    root = (cartella_sandbox(self.cfg)
+                            / f"{lav.id}-{time.strftime('%Y%m%d-%H%M%S')}")
+                    iso = self.scegli_isolamento()   # di nuovo: l'immagine può essere arrivata ora
+                    sb = Sandbox(root, float(getattr(self.cfg, "agenti_esecuzione_s", 30.0)),
+                                 int(getattr(self.cfg, "agenti_memoria_mb", 1024)),
+                                 max_totale=5_000_000 + (len(lav.input["dati"])
+                                                         if lav.input else 0),
+                                 isolamento=iso,
+                                 cpu=float(getattr(self.cfg, "agenti_sandbox_cpu", 2.0)),
+                                 linguaggi=self.isolamenti)
+                    self.log(f"[AGENTI] {lav.id}: sandbox {sb.isolamento.descrizione}")
+                    lav.sandbox = sb
+                    for nome, testo in (lav.file_iniziali or {}).items():
+                        sb.scrivi(nome, testo)
+                    if lav.input:
+                        sb.metti(lav.input["percorso"], lav.input["dati"])
+                self._sandbox = sb
+                if lav.tipo == "estensione":
+                    from ..estensioni import contratto
+                    from ..estensioni.prompt import controlla_consegna, sistema_estensione
+                    est = getattr(self, "estensioni", None)
+                    presi = est.archivio.nomi() if est is not None else ()
+                    atteso = getattr(lav, "estensione", None)
+                    # Il contratto delle capacità (05/10): nel prompt e nella cartella, in sola
+                    # lettura, con il runtime; il primo passo è il piano
+                    gioco = bool(getattr(lav, "gioco", False))
+                    if contratto.FILE not in sb.sola_lettura:
+                        try:
+                            sb.scrivi(contratto.FILE, contratto.testo(
+                                self.cfg, "gioco" if gioco else "estensione"))
+                        except Exception as e:  # noqa: BLE001 — resta il prompt
+                            self.log(f"[AGENTI] {lav.id}: {contratto.FILE} non scritto: {e}")
+                        sb.sola_lettura |= {contratto.FILE, "calliope_estensione.py"}
+                    ris = self.agente.codice(
+                        lav, sb, sistema=sistema_estensione(self.cfg, gioco=gioco),
+                        controlla=lambda s: controlla_consegna(s, nomi_presi=presi,
+                                                               nome_atteso=atteso),
+                        esempi=True, piano=True)
+                else:
+                    ris = self.agente.codice(lav, sb)
+                lav.risposta = None
+                if self._puo_chiedere(lav, ris):
+                    self._sospendi(lav, ris, dest)
+                    return
+                ris["file"] = sb.copia_in(dest)
+                if lav.tipo == "estensione" and ris.get("esito") == "fatto":
+                    # La versione da approvare (calliope/estensioni/): annuncio con la domanda
+                    est = getattr(self, "estensioni", None)
+                    c = (est.candidata_da_lavoro(lav, sb, ris) if est is not None
+                         else {"errore": "le estensioni non sono attive"})
+                    if "errore" in c:
+                        ris.update(esito="errore", motivo=c["errore"])
+                    else:
+                        ris["estensione"] = c
+            elif lav.tipo == "documento" and lav.modello:
+                ris = self.agente.da_modello(lav)
+            elif lav.tipo == "documento":
+                ris = self.agente.documento(lav, self.formati or ("word",))
+            elif lav.tipo == "ricerca":
+                ris = self.agente.ricerca(lav)
+            else:
+                ris = self.agente.altro(lav)
+            lav.risposta = None
+            if self._puo_chiedere(lav, ris):
+                self._sospendi(lav, ris, dest)
+                return
+            if ris.get("documento") is not None:
+                ris.update(self._scrivi_documento(lav, ris, dest))
+            elif ris.get("testo"):
+                ris.update(self._scrivi_testo(lav, ris, dest))
+            lav.stato = {"fatto": "fatto", "mancano_dati": "mancano_dati"}.get(
+                ris.get("esito"), "errore")
+            if lav.stato == "errore" and not ris.get("motivo"):
+                ris["motivo"] = (per_la_voce(ris.get("riassunto")) or
+                                 "l'agente non è riuscito a farlo")
+            if lav.stato == "fatto" and lav.input:
+                self._consegna_utente(lav, ris, dest)
+        except ErroreInput as e:
+            lav.stato = "errore"
+            ris = {"esito": "errore", "motivo": str(e)}
+        except Annullato:
+            lav.stato = "annullato"
+            ris = {"esito": "annullato"}
+            if self._sandbox is not None:
+                ris["file"] = self._sandbox.copia_in(dest)
+        except Limite as e:
+            lav.stato = "errore"
+            ris = {"esito": "limite", "motivo": f"ho dovuto fermarlo: {e}",
+                   **{k: v for k, v in e.parziale.items() if v}}
+            if self._sandbox is not None:
+                ris.update(self._parziale(lav, self._sandbox, dest))
+        except ErroreSandbox as e:
+            lav.stato = "errore"
+            self.log(f"[AGENTI] {lav.id}: {e}")
+            ris = {"esito": "errore", "motivo": "la sandbox per eseguire il codice non è pronta",
+                   "passo": (self.isolamento.passo if self.isolamento else ""),
+                   "errore": str(e)}
+        except ErroreOllama as e:
+            lav.stato = "errore"
+            self.log(f"[AGENTI] {lav.id}: Ollama dell'agente: {e.codice}: {str(e)[:200]}")
+            code, frase = errore_ollama_frase(e, self.imp)
+            ris = {"esito": "errore", "motivo": frase, "codice": code}
+            self.verifica_in_secondo_piano()
+        except Exception as e:  # noqa: BLE001
+            from ..documenti.formato import DocumentoNonValido
+            lav.stato = "errore"
+            why = ("il documento uscito non era valido" if isinstance(e, DocumentoNonValido)
+                   else "c'è stato un problema")
+            self.log(f"[AGENTI] {lav.id}: {type(e).__name__}: {e}")
+            ris = {"esito": "errore", "motivo": why, "errore": f"{type(e).__name__}: {e}"}
+        lav.fine = time.time()
+        ris["cartella"] = str(dest)
+        lav.risultato = ris
+        # Finito: il contesto per una ripresa non serve più (i file restano su disco)
+        lav.contesto, lav.sandbox = {}, None
+        self._metadati(lav, dest)
+        if lav.stato != "annullato":
+            # Il programma finito si esegue sullo schermo prima dell'annuncio (04/10)
+            es = self.esecuzioni.dimostra(lav)
+            self._annuncia(lav)
+            if es is not None:
+                self.esecuzioni.in_cima(es)       # la scheda del lavoro è appena andata in cima
+        else:
+            self._scheda_finale(lav)
+
+    def _parziale(self, lav: Lavoro, sb, dest: Path) -> dict:
+        """Un lavoro di codice fermato da un tetto (06/10): i file nella cartella e l'esito dei
+        test rifatti dal programma, perché l'annuncio dica cosa funziona già."""
+        out = {"file": sb.copia_in(dest)}
+        try:
+            if self.agente._ha_test(sb):
+                lav.passo = "controlla i test"
+                r = sb.test()
+                out.update(test=r.get("esito"), test_passano=r.get("passano"),
+                           test_uscita=str(r.get("uscita") or "")[-3000:])
+        except Exception as e:  # noqa: BLE001 — i file restano comunque
+            self.log(f"[AGENTI] {lav.id}: test dopo il tetto non eseguiti: {e}")
+        return out
+
+    def _cartella_lavoro(self, lav: Lavoro) -> Path:
+        base = cartella_risultati(self.cfg)
+        stamp = datetime.datetime.now().strftime("%Y-%m-%d %H%M")
+        dest = base / _nome_cartella(f"{stamp} {lav.titolo}")
+        n = 2
+        while dest.exists():
+            dest = base / _nome_cartella(f"{stamp} {lav.titolo} ({n})")
+            n += 1
+        dest.mkdir(parents=True, exist_ok=True)
+        return dest
+
+    def _scrivi_documento(self, lav, ris, dest: Path) -> dict:
+        from ..documenti.consegna import LocalDelivery
+        from ..documenti.formato import ESTENSIONI, safe_filename, summary
+        from ..documenti.render import render
+        doc, formato = ris["documento"], ris["formato"]
+        data = render(formato, doc, getattr(self.cfg, "documenti_font", None))
+        d = LocalDelivery(dest).deliver(safe_filename(doc["titolo"]), ESTENSIONI[formato], data)
+        return {"file": [d["nome_file"]], "rif": d["rif"],
+                "contenuto": summary(formato, doc, False)}
+
+    def _scrivi_testo(self, lav, ris, dest: Path) -> dict:
+        testo = str(ris.get("testo") or "").strip()
+        if "word" in self.formati and lav.tipo == "ricerca":
+            try:
+                from ..documenti.formato import validate
+                paras = [p.strip() for p in re.split(r"\n\s*\n", testo) if p.strip()][:58]
+                doc = validate("word", {"titolo": lav.titolo[:60] or "Ricerca",
+                                        "blocchi": [{"tipo": "titolo", "testo": lav.titolo[:120]}]
+                                        + [{"tipo": "paragrafo", "testo": p[:2900]}
+                                           for p in paras]})
+                return self._scrivi_documento(lav, {"documento": doc, "formato": "word"}, dest)
+            except Exception:  # noqa: BLE001 — si ripiega sul testo semplice
+                pass
+        path = dest / (_nome_cartella(lav.titolo) + ".txt")
+        path.write_text(testo + "\n", encoding="utf-8")
+        return {"file": [path.name]}
+
+    def _metadati(self, lav: Lavoro, dest: Path):
+        r = lav.risultato
+        meta = {"id": lav.id, "tipo": lav.tipo, "titolo": lav.titolo, "compito": lav.compito,
+                "chi": lav.persona_nome, "stato": lav.stato, "esito": r.get("esito"),
+                "riassunto": r.get("riassunto"), "domanda": r.get("domanda"),
+                "domande": [list(x) for x in lav.domande] or None,
+                "attesa_s": round(lav.attesa_s, 1) or None,
+                "file_utente": (lav.input or {}).get("nome") or None,
+                "consegnati": r.get("consegnati"),
+                "test": r.get("test"), "file": r.get("file"), "motivo": r.get("motivo"),
+                "modello": self.imp.modello, "passi": lav.passi, "token": lav.token,
+                "token_letti": lav.prompt_token, "cedimenti": lav.cedimenti,
+                # 05/10: il ragionamento a parte, e il contesto (finestra, picco dei token
+                # letti in una passata, risultati messi nei file .calliope, diari)
+                "token_ragionamento": lav.ragionamento,
+                "contesto": dict(lav.uso_contesto) or None,
+                "secondi": round((lav.fine or time.time()) - (lav.inizio or time.time())
+                                 - lav.attesa_s, 1),
+                "inizio": datetime.datetime.fromtimestamp(lav.inizio or time.time())
+                .isoformat(timespec="seconds")}
+        try:
+            from ..persistenza import scrivi_json      # atomico (03/10)
+            scrivi_json(dest / "lavoro.json", meta, indent=1)
+        except OSError:
+            pass
+
+    # ─────────────────────────── annuncio e scheda ───────────────────────────
+    def frase_finale(self, lav: Lavoro) -> str:
+        r = lav.risultato
+        titolo = titolo_detto(lav.titolo)     # niente nomi di file né parentesi a voce
+        riuscita = "riuscita" if self.female else "riuscito"
+        dove = "nella cartella Lavori dei Documenti"
+        if lav.stato == "in_attesa":
+            dom = lav.domanda
+            if dom.lower().startswith("per "):     # «Per compilare «…» mi servono: …»
+                return dom[:1].lower() + dom[1:]
+            return f"per «{titolo}» ho una domanda: {dom[:1].lower() + dom[1:]}"
+        if lav.stato == "scaduto":
+            return (f"ho chiuso «{titolo}»: aspettavo da {_durata(r.get('attesa') or 0)} "
+                    f"la risposta alla mia domanda. Quello che avevo già fatto è {dove}; se "
+                    f"vuoi, chiedimelo di nuovo con i dati.")
+        if lav.stato == "mancano_dati":
+            return (f"per «{titolo}» mi mancano dei dati. "
+                    + (r.get("domanda") or "Me li dici, così lo rifaccio?"))
+        if lav.stato == "errore":
+            if r.get("esito") == "limite":
+                t = r.get("test") or {}
+                n = t.get("eseguiti") or 0
+                ko = (t.get("falliti") or 0) + (t.get("errori") or 0)
+                test = ""
+                if t and r.get("test_passano"):
+                    test = f" I test che ha scritto passano, {n} su {n}."
+                elif t:
+                    test = f" Dei test che ha scritto ne passano {max(0, n - ko)} su {max(n, ko)}."
+                return (f"ho fermato «{titolo}»: {r.get('motivo', '').split(': ', 1)[-1]}. "
+                        f"Quello che ho fatto è {dove}.{test}")
+            passo = f" {r['passo']}" if r.get("passo") else ""
+            motivo = str(r.get("motivo") or "").rstrip(". ")
+            if r.get("esito") == "impossibile":
+                # Il riassunto dell'agente è una frase sua («Qui posso eseguire solo Python e
+                # C#…»): dopo un punto, non dopo i due punti (04/10)
+                return f"non sono {riuscita} a fare «{titolo}». {motivo}.{passo}"
+            return f"non sono {riuscita} a fare «{titolo}»: {motivo}.{passo}"
+        if r.get("esito") == "impossibile":
+            return f"non sono {riuscita} a fare «{titolo}». {per_la_voce(r.get('riassunto'))}"
+        if lav.tipo == "estensione" and r.get("estensione"):
+            return r["estensione"]["frase"]
+        if lav.tipo in ("codice", "estensione"):
+            sintesi = per_la_voce(r.get("riassunto"))
+            if lav.tipo == "codice":
+                sintesi = senza_estensione(sintesi)
+            t = r.get("test") or {}
+            n = t.get("eseguiti") or 0
+            ko = (t.get("falliti") or 0) + (t.get("errori") or 0)
+            if not t:
+                test = "Non ci sono test."
+            elif r.get("test_passano"):
+                test = f"I test passano, {n} su {n}." if n != 1 else "Il test passa."
+            else:
+                test = (f"Attenzione: {ko} test su {max(n, ko)} "
+                        + ("non passa." if ko == 1 else "non passano."))
+            files = len(r.get("file") or [])
+            sintesi = sintesi[:1].lower() + sintesi[1:] if sintesi else ""
+            if lav.input:
+                return (f"ho finito «{titolo}»" + (f": {sintesi.rstrip('.')}." if sintesi
+                                                        else ".")
+                        + f" {test} {self._frase_consegna(r)}")
+            demo = ""
+            if r.get("dimostrazione"):
+                demo = " " + r["dimostrazione"]
+            elif r.get("dimostrazione_in_corso"):
+                demo = " Lo sto eseguendo: guardalo sullo schermo."
+            # Come rieseguirlo (06/10: «come la richiamo?» faceva inventare un comando a voce)
+            ancora = " Per usarlo di nuovo dimmi «eseguilo», anche con dei valori."
+            if getattr(lav, "non_estensione", False):
+                ancora = (" Non è un'estensione di Calliope: è un programma a sé, e per usarlo "
+                          "di nuovo dimmi «eseguilo», anche con dei valori.")
+            if r.get("dimostrazione_esito") not in (None, "fatto"):
+                # La dimostrazione si è fermata (06/10: «funziona correttamente» del riassunto
+                # e subito dopo «si è fermato con un errore»): niente riassunto dell'agente, che
+                # direbbe il contrario di quello che si è visto
+                senza = ("con i valori d'esempio" if r.get("dimostrazione_con_dati")
+                         else "senza dati")
+                demo = demo.strip()
+                return (f"ho finito «{titolo}». {test} {'Il file è' if files == 1 else 'I file sono'}"
+                        f" {dove}. Eseguito {senza}, però: {demo[:1].lower() + demo[1:]}"
+                        + (" Non è un'estensione di Calliope: è un programma a sé."
+                           if getattr(lav, "non_estensione", False) else "")
+                        + (" Forse vuole dei valori: dimmi «eseguilo con» e i valori." if not
+                           r.get("dimostrazione_con_dati") else ""))
+            return (f"ho finito «{titolo}»" + (f": {sintesi.rstrip('.')}." if sintesi
+                                                    else ".")
+                    + f" {test} {'Il file è' if files == 1 else 'I file sono'} {dove}.{demo}"
+                    + ancora)
+        cosa = r.get("contenuto")
+        sintesi = per_la_voce(r.get("riassunto")) if lav.tipo in ("ricerca", "altro") else ""
+        # «Ho finito», non «è pronto»: il titolo può essere femminile («relazione…»)
+        coda = self._frase_consegna(r) if lav.input else f"Il file è {dove}."
+        return (f"ho finito «{titolo}»" + (f": {cosa}" if cosa else "")
+                + (f". {sintesi.rstrip('.')}" if sintesi else "") + f". {coda}")
+
+    @staticmethod
+    def _frase_consegna(r: dict) -> str:
+        """Dove sono i file nuovi di un lavoro su un file della persona (senza estensione:
+        si legge male)."""
+        nomi = [f"«{Path(n).stem}»" for n in (r.get("consegnati") or [])]
+        if not nomi:
+            return "Non ho cambiato niente: l'originale è com'era."
+        elenco = nomi[0] if len(nomi) == 1 else ", ".join(nomi[:-1]) + " e " + nomi[-1]
+        verbo = "è" if len(nomi) == 1 else "sono"
+        chi = "Il file nuovo" if len(nomi) == 1 else "I file nuovi"
+        return (f"{chi}, {elenco}, {verbo} {r.get('dove') or 'nella cartella Lavori dei Documenti'}"
+                f"; l'originale non l'ho toccato.")
+
+    def scheda(self, lav: Lavoro) -> dict | None:
+        try:
+            from ..schermi import schede
+        except Exception:  # noqa: BLE001
+            return None
+        r = lav.risultato
+        if r.get("estensione"):
+            # La scheda di revisione: cosa fa, permessi, test, analisi del codice
+            return schede.testo(f"Estensione da approvare: {r['estensione']['nome']}",
+                                r["estensione"]["scheda_testo"], "personale")
+        if r.get("documento") is not None and r.get("file"):
+            try:
+                return schede.documento(r["documento"], r.get("formato", "word"), r["file"][0],
+                                        ident=f"lavoro-{lav.id}")
+            except Exception:  # noqa: BLE001
+                return None
+        files = []
+        dest = Path(r.get("cartella") or "")
+        for name in (r.get("file") or [])[:8]:
+            p = dest / name
+            if p.suffix.lower() in (".py", ".txt", ".md", ".json", ".csv", ".html", ".css",
+                                    ".js", ".ps1", ".sql", ".toml", ".yaml", ".yml", ".ini"):
+                try:
+                    files.append({"nome": name, "testo": p.read_text(encoding="utf-8",
+                                                                      errors="replace")})
+                except OSError:
+                    pass
+        return schede.lavoro(lav.titolo, lav.tipo, lav.stato, per_la_voce(r.get("riassunto"), 400)
+                             or r.get("motivo") or "", files, r.get("test"),
+                             Path(r.get("cartella") or "").name, r.get("domanda") or "",
+                             ident=lav.id)
+
+    def _scheda_finale(self, lav: Lavoro, sincrona: bool = True) -> bool:
+        """La scheda finale di un lavoro seguito in diretta: sostituisce quella in corso e
+        va in cima. False se il lavoro non era seguito."""
+        if lav.osservatore is None:
+            return False
+        return self.avanzamento.finale(lav, sincrona=sincrona)
+
+    def _annuncia(self, lav: Lavoro):
+        text = self.frase_finale(lav)
+        on_card = lav.on_scheda
+        if self._scheda_finale(lav):
+            pass
+        elif on_card is not None and lav.stato in ("fatto", "errore", "mancano_dati",
+                                                   "in_attesa", "scaduto"):
+            card = self.scheda(lav)
+            if card:
+                try:
+                    on_card(card)
+                except Exception as e:  # noqa: BLE001 — lo schermo non ferma l'annuncio
+                    self.log(f"[AGENTI] scheda non inviata: {e}")
+        who = f"{lav.persona_nome}, " if lav.persona_nome else ""
+        msg = who + text if who else text[0].upper() + text[1:]
+        item = {"id": lav.id, "tipo": lav.tipo, "titolo": lav.titolo, "stato": lav.stato,
+                "esito": lav.risultato.get("esito"), "messaggio": msg,
+                "chi": lav.persona, "chi_nome": lav.persona_nome, "passi": lav.passi,
+                "token": lav.token, "secondi": round((lav.fine or time.time())
+                                                     - (lav.inizio or time.time()), 1),
+                "cartella": lav.risultato.get("cartella"), "test": lav.risultato.get("test")}
+        if lav.stato == "in_attesa":
+            # La domanda diventa un'azione in sospeso: la risposta nel turno dopo è per lei
+            item["in_sospeso"] = self.offerta_risposta(lav)
+            item["domanda"] = lav.domanda
+            # Anche un modulo sullo schermo personale di chi l'ha chiesto, per scrivere la
+            # risposta invece di dettarla (03/10, calliope/schermi/moduli.py: lo apre main)
+            from ..schermi.moduli import campo
+            item["modulo"] = {"chiave": f"lavoro:{lav.id}", "titolo": f"Domanda: {lav.titolo}",
+                              "domanda": lav.domanda,
+                              "campi": [campo("risposta", "La tua risposta", "testo_lungo")]}
+        if lav.risultato.get("consegnati"):
+            item["consegnati"] = lav.risultato["consegnati"]
+        if (lav.risultato.get("estensione") or {}).get("in_sospeso"):
+            # «Vuoi approvarla?» → estensioni_gestisci approva (con la frase di sfida)
+            item["in_sospeso"] = lav.risultato["estensione"]["in_sospeso"]
+        self.done.put(item)
+        if self.on_done:
+            self.on_done()
+
+    # ─────────────────────────── chiusura ───────────────────────────
+    def close(self):
+        self._chiuso = True
+        # Prima di tutto: vLLM non resta in pausa (blocca ogni richiesta, anche di altri)
+        self.arbitro.chiudi()
+        self.avanzamento.chiudi()
+        for lv in self.attivi():
+            lv.annulla.set()
+        self.cliente.interrompi()
+        if self._sandbox is not None:
+            self._sandbox.termina()
+        self.esecuzioni.ferma(admin=True)
+        self._coda.put(None)
+        if self.tunnel is not None:
+            self.tunnel.chiudi()
+        self.cliente.close()

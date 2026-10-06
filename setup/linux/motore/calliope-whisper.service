@@ -1,0 +1,26 @@
+# Unità systemd **utente** del server di trascrizione (whisper.cpp con CUDA) sulla DGX
+# Spark, 02/10/2026. La installa `setup/linux/motore/whisper.sh installa` in
+# ~/.config/systemd/user/calliope-whisper.service, sostituendo @DIR@, @PORTA@, @MODELLO@,
+# @PROMPT@ e @BEAM@: non va copiata a mano.
+#
+# calliope.service ha Wants= e After= su questa unità: all'accensione (linger) parte prima
+# il server e poi Calliope, che altrimenti al primo avvio lo troverebbe giù e caricherebbe
+# Whisper su CPU. Senza questa unità (per esempio con Whisper su vLLM) Wants= non fa niente.
+#
+# Solo su 127.0.0.1: Calliope è sulla stessa macchina (stt_url: http://127.0.0.1:@PORTA@/v1).
+# Parametri scelti con prove/prova_whisper.py --server (docs/ricerche/2026-10-02-impacchettamento-dgx-linux.md, §1.1):
+# beam 5 e il prompt corto con il nome, come faster-whisper sul portatile.
+
+[Unit]
+Description=Calliope: trascrizione (whisper.cpp con CUDA) su 127.0.0.1:@PORTA@
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+[Service]
+WorkingDirectory=@DIR@
+ExecStart=@DIR@/src/build/bin/whisper-server -m modelli/@MODELLO@ --host 127.0.0.1 --port @PORTA@ -l it -bs @BEAM@ --prompt "@PROMPT@" --inference-path /v1/audio/transcriptions -t 4
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

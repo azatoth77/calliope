@@ -1,0 +1,32 @@
+{
+  "nome": "verbale_condominio",
+  "titolo": "Verbale di assemblea di condominio",
+  "descrizione": "Il verbale di un'assemblea condominiale, con presenti, ordine del giorno e decisioni.",
+  "formato": "word",
+  "campi": {
+    "condominio": {"descrizione": "il nome o l'indirizzo del condominio", "tipo": "testo"},
+    "data": {"descrizione": "la data dell'assemblea", "tipo": "data"},
+    "ora": {"descrizione": "l'ora di inizio", "tipo": "testo"},
+    "presidente": {"descrizione": "chi presiede l'assemblea", "tipo": "testo"},
+    "segretario": {"descrizione": "chi scrive il verbale", "tipo": "testo"},
+    "presenti": {"descrizione": "i condomini presenti", "tipo": "elenco"},
+    "ordine_del_giorno": {"descrizione": "i punti all'ordine del giorno", "tipo": "elenco"},
+    "decisioni": {"descrizione": "le decisioni prese, una per punto", "tipo": "elenco"},
+    "note": {"descrizione": "altre note", "tipo": "testo", "obbligatorio": false}
+  },
+  "documento": {
+    "titolo": "Verbale assemblea {{condominio}} {{data}}",
+    "blocchi": [
+      {"tipo": "titolo", "testo": "Verbale di assemblea del condominio {{condominio}}"},
+      {"tipo": "paragrafo", "testo": "Il giorno {{data}}, alle ore {{ora}}, si è riunita l'assemblea dei condomini. Presiede {{presidente}}, verbalizza {{segretario}}."},
+      {"tipo": "paragrafo", "testo": "Sono presenti:"},
+      {"tipo": "elenco", "voci": "{{presenti}}"},
+      {"tipo": "paragrafo", "testo": "Ordine del giorno:"},
+      {"tipo": "elenco", "voci": "{{ordine_del_giorno}}", "numerato": true},
+      {"tipo": "paragrafo", "testo": "Decisioni:"},
+      {"tipo": "elenco", "voci": "{{decisioni}}", "numerato": true},
+      {"tipo": "paragrafo", "testo": "{{note}}"},
+      {"tipo": "paragrafo", "testo": "Il presidente {{presidente}}   Il segretario {{segretario}}", "allinea": "destra"}
+    ]
+  }
+}

@@ -1,0 +1,23 @@
+49 richieste passate dalla guardia su 101 con tool
+
+### prompt del banco, T 0,3: chiamate native 49/101; nel testo: {'nome(…)': 40, 'nome{…}': 7, 'token speciali gemma': 2, 'nome nudo': 1, "altro: C'è un'area del mare chiamata ": 1, 'altro: Voglio cercare la distanza tra': 1}
+    'calcola(80*0.15)'
+    'timer_imposta(minuti=60, nome="avviso")'
+    'timer_imposta(secondi=30)'
+    'timer_imposta(minuti=90, nome="timer")'
+    'timer_annulla(nome="pasta")'
+    'timer_annulla{}'
+### prompt del banco, T 0: chiamate native 54/101; nel testo: {'nome(…)': 39, 'nome{…}': 5, 'token speciali gemma': 2, 'altro: Per darti una stima precisa, a': 1}
+    'timer_imposta(minuti=60, nome="avviso")'
+    'timer_imposta(secondi=30)'
+    'timer_imposta(minuti=90, nome="timer")'
+    'timer_annulla(nome="pasta")'
+    'timer_annulla()'
+    'promemoria_crea(testo="chiamare il dentista", quando="domani alle otto")'
+### + istruzione sulle chiamate, T 0,3: chiamate native 72/101; nel testo: {'nome(…)': 27, 'nome{…}': 1, 'altro: Certo, ecco una curiosità sul ': 1}
+    'timer_imposta(minuti=60, nome="avviso")'
+    'timer_annulla(nome="pasta")'
+    'timer_annulla{}'
+    'promemoria_crea(testo="chiamare il dentista", quando="domani alle otto")'
+    'promemoria_crea(testo="comprare il latte", quando="tra un\'ora")'
+    'notizie(argomento="Formula 1")'

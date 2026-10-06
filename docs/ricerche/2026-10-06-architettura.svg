@@ -1,0 +1,272 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 1080" width="1500" height="1080" font-family="Segoe UI, DejaVu Sans, Arial, sans-serif" font-size="12">
+  <title>Calliope: architettura al 06/10/2026</title>
+  <desc>Componenti, flussi, dati non fidati e confini di sicurezza di Calliope sulla DGX con satelliti, telefono e schermi.</desc>
+  <defs>
+    <marker id="f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#37474f"/>
+    </marker>
+    <marker id="fr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#c62828"/>
+    </marker>
+    <style>
+      .box{fill:#ffffff;stroke:#546e7a;stroke-width:1.2}
+      .dev{fill:#e3f2fd;stroke:#1565c0;stroke-width:1.2}
+      .core{fill:#ede7f6;stroke:#4527a0;stroke-width:1.4}
+      .gate{fill:#fff3e0;stroke:#e65100;stroke-width:2}
+      .svc{fill:#e8f5e9;stroke:#2e7d32;stroke-width:1.2}
+      .bg{fill:#fbe9e7;stroke:#bf360c;stroke-width:1.2}
+      .store{fill:#eceff1;stroke:#455a64;stroke-width:1.2}
+      .t{fill:#212121}
+      .h{font-weight:700;fill:#212121;font-size:13px}
+      .s{fill:#455a64;font-size:11px}
+      .flow{stroke:#37474f;stroke-width:1.5;fill:none;marker-end:url(#f)}
+      .bad{stroke:#c62828;stroke-width:1.6;fill:none;stroke-dasharray:6 4;marker-end:url(#fr)}
+      .join{stroke:#c62828;stroke-width:1.6;fill:none;stroke-dasharray:6 4}
+      .bound{fill:none;stroke:#e65100;stroke-width:2;stroke-dasharray:10 6}
+      .lbl{fill:#e65100;font-weight:700;font-size:11px}
+      .red{fill:#c62828;font-size:11px;font-weight:700}
+    </style>
+  </defs>
+  <rect x="0" y="0" width="1500" height="1080" fill="#fafafa"/>
+  <text x="20" y="30" class="h" font-size="18">Calliope: architettura (main a 210472a, 06/10/2026)</text>
+  <text x="20" y="50" class="s">Frecce nere: flussi normali. Frecce rosse tratteggiate: dati NON fidati (entrano solo in una busta con provenienza). Riquadri arancioni: confini di sicurezza.</text>
+
+  <!-- Colonna 1: dispositivi -->
+  <rect x="15" y="70" width="230" height="420" rx="8" fill="#f5f9ff" stroke="#90caf9"/>
+  <text x="25" y="90" class="h">Dispositivi in casa</text>
+  <rect x="25" y="100" width="210" height="80" rx="6" class="dev"/>
+  <text x="35" y="118" class="h">Satellite PC (Windows)</text>
+  <text x="35" y="134" class="t">microfono, VAD Silero ONNX,</text>
+  <text x="35" y="148" class="t">wake word ONNX, casse, barge-in</text>
+  <text x="35" y="164" class="s">esecutore pc_* (volume, file, webcam)</text>
+  <rect x="25" y="190" width="210" height="70" rx="6" class="dev"/>
+  <text x="35" y="208" class="h">Telefono (PWA)</text>
+  <text x="35" y="224" class="t">onnxruntime-web: VAD + wake word</text>
+  <text x="35" y="238" class="t">AudioWorklet, carosello schede</text>
+  <text x="35" y="252" class="s">Allega / Scrivi / moduli</text>
+  <rect x="25" y="270" width="210" height="64" rx="6" class="dev"/>
+  <text x="35" y="288" class="h">Schermi (PC, tablet, TV)</text>
+  <text x="35" y="304" class="t">pagina kiosk, SSE, giochi in</text>
+  <text x="35" y="318" class="t">riquadro isolato</text>
+  <rect x="25" y="344" width="210" height="56" rx="6" class="dev"/>
+  <text x="35" y="362" class="h">Audio locale (portatile)</text>
+  <text x="35" y="378" class="s">audio_modo: locale (sviluppo)</text>
+  <text x="35" y="392" class="s">Listener nello stesso processo</text>
+  <rect x="25" y="410" width="210" height="70" rx="6" class="bg"/>
+  <text x="35" y="428" class="h">Home Assistant (Pi)</text>
+  <text x="35" y="444" class="t">WebSocket, agente conversazione</text>
+  <text x="35" y="458" class="s">nomi delle entità = dato esterno</text>
+  <text x="35" y="472" class="s">(ripuliti: casa.base.nome_pulito)</text>
+
+  <!-- Confine di rete -->
+  <rect x="258" y="70" width="24" height="420" class="bound"/>
+  <text x="270" y="510" class="lbl" text-anchor="middle">C1</text>
+  <text transform="translate(275,280) rotate(-90)" class="lbl" text-anchor="middle">TLS con impronta fissata / CA di casa, token abbinati</text>
+
+  <!-- DGX -->
+  <rect x="295" y="70" width="1190" height="995" rx="10" fill="none" stroke="#7e57c2" stroke-width="1.5"/>
+  <text x="305" y="90" class="h" fill="#4527a0">Server: DGX Spark (servizio systemd utente «calliope», processo Python unico)</text>
+
+  <!-- Ingressi -->
+  <rect x="305" y="100" width="200" height="88" rx="6" class="box"/>
+  <text x="315" y="118" class="h">ServerSatelliti :8771</text>
+  <text x="315" y="134" class="t">WSS, PCM 16 kHz, JSON</text>
+  <text x="315" y="148" class="t">valida_evento, AscoltoRemoto</text>
+  <text x="315" y="162" class="t">UscitaRemota, presta/prendi</text>
+  <text x="315" y="178" class="s">satellite/server.py</text>
+  <rect x="305" y="200" width="200" height="110" rx="6" class="box"/>
+  <text x="315" y="218" class="h">ServerSchermi :8770</text>
+  <text x="315" y="234" class="t">Starlette + uvicorn, HTTPS</text>
+  <text x="315" y="248" class="t">SSE schede, ponte WS</text>
+  <text x="315" y="262" class="t">POST scrivi / modulo /</text>
+  <text x="315" y="276" class="t">immagine / allegato</text>
+  <text x="315" y="292" class="s">scrittura_consentita (solo in</text>
+  <text x="315" y="304" class="s">conversazione a voce)</text>
+
+  <!-- Pipeline ingresso -->
+  <rect x="535" y="100" width="215" height="74" rx="6" class="box"/>
+  <text x="545" y="118" class="h">STT</text>
+  <text x="545" y="134" class="t">whisper.cpp CUDA :8003</text>
+  <text x="545" y="148" class="t">ripiego faster-whisper CPU</text>
+  <text x="545" y="164" class="s">stt_correzione (frasi incerte)</text>
+  <rect x="535" y="184" width="215" height="54" rx="6" class="box"/>
+  <text x="545" y="202" class="h">Chi parla (CAM++ ONNX)</text>
+  <text x="545" y="218" class="t">livello: ospite/familiare/amm.</text>
+  <text x="545" y="232" class="s">soglie, zona grigia, sfida</text>
+  <rect x="535" y="248" width="215" height="62" rx="6" class="box"/>
+  <text x="545" y="266" class="h">Regole sul testo</text>
+  <text x="545" y="282" class="t">wake, esci, stop, cortesia,</text>
+  <text x="545" y="296" class="s">nuova_conversazione (wakeword.py)</text>
+  <rect x="535" y="320" width="215" height="70" rx="6" class="core"/>
+  <text x="545" y="338" class="h">Corsie (una per satellite)</text>
+  <text x="545" y="354" class="t">RegistroConversazioni: una</text>
+  <text x="545" y="368" class="t">conversazione per persona</text>
+  <text x="545" y="382" class="s">corsie.py, main.giro</text>
+
+  <!-- Brain -->
+  <rect x="780" y="100" width="300" height="400" rx="8" class="core"/>
+  <text x="792" y="120" class="h" font-size="15">Brain (brain.py, 3 200 righe)</text>
+  <rect x="792" y="130" width="276" height="56" rx="5" class="box"/>
+  <text x="802" y="148" class="h">Contesto del turno</text>
+  <text x="802" y="164" class="t">prompt fisso + tool uguali per tutti,</text>
+  <text x="802" y="178" class="t">poi ricordi, sospeso, riferimenti, tono</text>
+  <rect x="792" y="194" width="276" height="56" rx="5" class="box"/>
+  <text x="802" y="212" class="h">Conversazione + compressione</text>
+  <text x="802" y="228" class="t">finestra auto (16–28k), soglie 75/90 %</text>
+  <text x="802" y="242" class="s">conversazioni.db (FTS5 + vettori)</text>
+  <rect x="792" y="258" width="276" height="50" rx="5" class="box"/>
+  <text x="802" y="276" class="h">LLM della voce (Ollama)</text>
+  <text x="802" y="292" class="t">gemma4 26B-A4B (dal 03/10 sera), streaming</text>
+  <rect x="792" y="316" width="276" height="54" rx="5" class="bg"/>
+  <text x="802" y="334" class="h">Busta dei dati non fidati</text>
+  <text x="802" y="350" class="t">dato_non_fidato / allega_non_fidato,</text>
+  <text x="802" y="364" class="s">provenienza.py, quarantena &gt; 800 token</text>
+  <rect x="792" y="378" width="276" height="112" rx="5" class="box"/>
+  <text x="802" y="396" class="h">Reti sull'uscita del modello</text>
+  <text x="802" y="412" class="t">ThinkFilter, TextCallGuard, ToolNameHold,</text>
+  <text x="802" y="426" class="t">ClaimHold, ContextEcho, spinte</text>
+  <text x="802" y="440" class="t">(promessa, richiesta, dichiarata, vuoto),</text>
+  <text x="802" y="454" class="t">guardie immagini / web / non chiesta</text>
+  <text x="802" y="470" class="s">molte nate per il 4B: col 26B</text>
+  <text x="802" y="484" class="s">TextCallGuard 0 volte su 208 turni</text>
+
+  <!-- Uscita -->
+  <rect x="780" y="515" width="300" height="70" rx="6" class="gate"/>
+  <text x="792" y="533" class="h">C5 Controllo di ciò che dice</text>
+  <text x="792" y="549" class="t">riferire.filtra (con dati non fidati)</text>
+  <text x="792" y="563" class="t">guardiano Llama Guard 3 (minori, ospiti)</text>
+  <text x="792" y="577" class="s">+2,3–3 s alla prima frase quando scatta</text>
+  <rect x="535" y="515" width="215" height="70" rx="6" class="box"/>
+  <text x="545" y="533" class="h">TTS Piper</text>
+  <text x="545" y="549" class="t">frase per frase, 2 thread</text>
+  <text x="545" y="563" class="t">pronuncia degli inglesismi</text>
+  <text x="545" y="577" class="s">audio a pezzi da 0,2 s al satellite</text>
+
+  <!-- Gate dei tool -->
+  <rect x="1110" y="100" width="360" height="150" rx="8" class="gate"/>
+  <text x="1122" y="120" class="h" font-size="14">C2 ToolRegistry.call (tools/registry.py)</text>
+  <text x="1122" y="138" class="t">1. livello di chi parla (ospite / familiare / amministra)</text>
+  <text x="1122" y="154" class="t">2. minori.permesso (fascia, orari, preset)</text>
+  <text x="1122" y="170" class="t">3. politica.controlla: classe del tool (sicuro, azione,</text>
+  <text x="1122" y="184" class="t">   pericoloso, vietato; senza classe = pericoloso)</text>
+  <text x="1122" y="200" class="t">4. conferme: proposta 3 turni, «sì» breve, frase di sfida</text>
+  <text x="1122" y="216" class="t">5. guardrail.valuta_tool, serve_la_voce</text>
+  <text x="1122" y="236" class="s">Rifiuto = frase pronta, nessuna seconda passata</text>
+
+  <!-- Servizi -->
+  <rect x="1110" y="262" width="360" height="238" rx="8" fill="#f1f8e9" stroke="#2e7d32"/>
+  <text x="1122" y="282" class="h">Servizi (67 ToolSpec in tools/)</text>
+  <rect x="1120" y="290" width="168" height="44" rx="5" class="svc"/>
+  <text x="1128" y="307" class="t">memoria, agenda, liste</text>
+  <text x="1128" y="322" class="s">SQLite memoria.db (WAL)</text>
+  <rect x="1294" y="290" width="168" height="44" rx="5" class="svc"/>
+  <text x="1302" y="307" class="t">biblioteca offline</text>
+  <text x="1302" y="322" class="s">ZIM puro Python + FTS5</text>
+  <rect x="1120" y="340" width="168" height="44" rx="5" class="svc"/>
+  <text x="1128" y="357" class="t">casa (HA), pc_* remoto</text>
+  <text x="1128" y="372" class="s">regole: delicati in lettura</text>
+  <rect x="1294" y="340" width="168" height="44" rx="5" class="svc"/>
+  <text x="1302" y="357" class="t">documenti, ufficio</text>
+  <text x="1302" y="372" class="s">output strutturati, FatturaPA</text>
+  <rect x="1120" y="390" width="168" height="44" rx="5" class="bg"/>
+  <text x="1128" y="407" class="t">web_cerca (SearXNG :8004)</text>
+  <text x="1128" y="422" class="s">Ripulitore, SSRF</text>
+  <rect x="1294" y="390" width="168" height="44" rx="5" class="svc"/>
+  <text x="1302" y="407" class="t">schermi, moduli, giochi</text>
+  <text x="1302" y="422" class="s">visibilità per persona</text>
+  <rect x="1120" y="440" width="168" height="50" rx="5" class="svc"/>
+  <text x="1128" y="457" class="t">capacità, installazioni</text>
+  <text x="1128" y="472" class="s">catalogo con SHA-256</text>
+  <rect x="1294" y="440" width="168" height="50" rx="5" class="svc"/>
+  <text x="1302" y="457" class="t">minori, compiti, avvisi</text>
+  <text x="1302" y="472" class="s">ai tutori</text>
+
+  <!-- Secondo piano -->
+  <rect x="305" y="620" width="1165" height="290" rx="8" fill="#fff8f6" stroke="#bf360c" stroke-dasharray="4 3"/>
+  <text x="317" y="640" class="h">Secondo piano (thread propri, avviati dai tool; la voce non li aspetta)</text>
+  <rect x="317" y="650" width="270" height="130" rx="6" class="box"/>
+  <text x="327" y="668" class="h">Agenti (agenti/servizio.py, ciclo.py)</text>
+  <text x="327" y="684" class="t">coda, proposta + «sì», domande</text>
+  <text x="327" y="698" class="t">a metà lavoro, avanzamento in diretta</text>
+  <text x="327" y="712" class="t">contesto lungo su file (passo-N.txt)</text>
+  <text x="327" y="728" class="t">Arbitro: pausa vLLM quando si parla</text>
+  <text x="327" y="746" class="s">modello: qwen3.6-35B su vLLM :8000</text>
+  <text x="327" y="760" class="s">(stessa GPU della voce)</text>
+  <rect x="610" y="650" width="250" height="130" rx="6" class="gate"/>
+  <text x="620" y="668" class="h">C3 Sandbox Docker</text>
+  <text x="620" y="684" class="t">--network none, --read-only,</text>
+  <text x="620" y="698" class="t">cap-drop ALL, uid non root,</text>
+  <text x="620" y="712" class="t">pids/memoria/tempo, audit hook</text>
+  <text x="620" y="728" class="t">come seconda linea; Python e C#</text>
+  <text x="620" y="746" class="s">senza container il codice NON gira</text>
+  <text x="620" y="760" class="s">(rischio: kernel condiviso)</text>
+  <rect x="883" y="650" width="280" height="130" rx="6" class="gate"/>
+  <text x="893" y="668" class="h">C4 Estensioni + porta stretta</text>
+  <text x="893" y="684" class="t">un container per chiamata,</text>
+  <text x="893" y="698" class="t">JSON-RPC calliope/&lt;azione&gt; su stdio</text>
+  <text x="893" y="712" class="t">→ tool veri, al più familiare</text>
+  <text x="893" y="728" class="t">RetePubblica, scope e flussi,</text>
+  <text x="893" y="746" class="s">approvazione con frase di sfida,</text>
+  <text x="893" y="760" class="s">impronta SHA-256 a ogni esecuzione</text>
+  <rect x="1186" y="650" width="272" height="130" rx="6" class="box"/>
+  <text x="1196" y="668" class="h">Archivio documenti di casa</text>
+  <text x="1196" y="684" class="t">cartella osservata, OCR visivo</text>
+  <text x="1196" y="698" class="t">e schede con qwen3.6,</text>
+  <text x="1196" y="712" class="t">grafo SQLite con la fonte</text>
+  <text x="1196" y="728" class="t">sensibili solo all'interessato</text>
+  <text x="1196" y="746" class="s">ClienteCedevole (cede alla voce)</text>
+  <rect x="317" y="795" width="270" height="100" rx="6" class="box"/>
+  <text x="327" y="813" class="h">Compressione e riassunti</text>
+  <text x="327" y="829" class="t">riassunto dall'agente, poi la voce,</text>
+  <text x="327" y="843" class="t">poi tagli; archivio 30 giorni</text>
+  <text x="327" y="859" class="s">misurato sulla DGX: 1–560 s</text>
+  <text x="327" y="873" class="s">(coda dell'agente occupata)</text>
+  <rect x="610" y="795" width="250" height="100" rx="6" class="box"/>
+  <text x="620" y="813" class="h">Agenda: scadenze</text>
+  <text x="620" y="829" class="t">timer, promemoria, avvisi</text>
+  <text x="620" y="843" class="t">annunciati con segnale nella</text>
+  <text x="620" y="857" class="t">corsia del satellite giusto</text>
+  <rect x="883" y="795" width="575" height="100" rx="6" class="store"/>
+  <text x="893" y="813" class="h">Dati in ~/calliope (fuori dal codice, umask 077)</text>
+  <text x="893" y="829" class="t">memoria.db (memoria, agenda, liste, schermi, satelliti, ufficio, minori), conversazioni.db,</text>
+  <text x="893" y="843" class="t">archivio.db, speakers.json (+ .bak), personalita.json, contesto.json, registro/turni-*.jsonl,</text>
+  <text x="893" y="857" class="t">segreti.yaml, dgx.yaml, calliope.yaml + calliope.locale.yaml; codice in versioni/ con uv.lock</text>
+  <text x="893" y="875" class="s">calliope aggiorna: versione accanto, READY=1 dopo il saluto, ritorno automatico</text>
+
+  <!-- Legenda confini -->
+  <rect x="305" y="925" width="1165" height="130" rx="8" fill="#fffdf7" stroke="#e65100"/>
+  <text x="317" y="945" class="h">Confini di sicurezza (arancione)</text>
+  <text x="317" y="963" class="t">C1 rete: satelliti e telefono solo abbinati (codice detto a voce), TLS con impronta o CA di casa, nessun Origin, valida_evento su ogni messaggio.</text>
+  <text x="317" y="980" class="t">C2 azioni: ogni tool passa da ToolRegistry.call (livello, minori, politica con la provenienza della conversazione, conferme a voce, sfida).</text>
+  <text x="317" y="997" class="t">C3 codice dell'agente: container usa-e-getta senza rete. C4 estensioni: container + porta stretta + guardrail; rete solo pubblica e lungo i flussi approvati.</text>
+  <text x="317" y="1014" class="t">C5 uscita: riferire.filtra sulle frasi quando ci sono dati non fidati; guardiano su domanda e frasi di minori e ospiti.</text>
+  <text x="317" y="1033" class="red">Dati non fidati: web, foto e allegati, audio trascritto da file, OCR dell'archivio, risultati di agenti ed estensioni, nomi di HA.</text>
+  <text x="317" y="1049" class="s">Fattore unico per chi amministra: la voce (CAM++). La frase di sfida riduce registrazioni e TV, non una voce clonata in tempo reale.</text>
+
+  <!-- Flussi -->
+  <path class="flow" d="M235,140 L305,140"/>
+  <path class="flow" d="M235,225 L305,240"/>
+  <path class="flow" d="M235,300 L305,280"/>
+  <path class="flow" d="M505,140 L535,140"/>
+  <path class="flow" d="M505,265 C522,265 518,350 535,355"/>
+  <path class="flow" d="M642,174 L642,184"/>
+  <path class="flow" d="M642,238 L642,248"/>
+  <path class="flow" d="M642,310 L642,320"/>
+  <path class="flow" d="M750,355 C765,355 765,230 792,222"/>
+  <path class="flow" d="M930,500 L930,515"/>
+  <path class="flow" d="M780,550 L750,550"/>
+  <path class="flow" d="M535,560 L520,560 L520,176 L507,176"/>
+  <path class="flow" d="M1080,170 L1110,170"/>
+  <path class="flow" d="M1290,250 L1290,262"/>
+  <path class="flow" d="M587,715 L610,715"/>
+  <path class="join" d="M1120,405 L1095,405"/>
+  <path class="bad" d="M1095,405 L1095,352 L1070,352"/>
+  <path class="bad" d="M420,310 L420,400 L770,400 L770,345 L790,345"/>
+  <path class="join" d="M235,470 L250,470 L250,600 L1095,600 L1095,405"/>
+  <path class="join" d="M452,650 L452,612 L1095,612 L1095,600"/>
+  <path class="join" d="M1023,650 L1023,612"/>
+  <path class="join" d="M1322,650 L1322,612 L1095,612"/>
+  <text x="560" y="416" class="red">foto, allegati, audio da file</text>
+  <text x="560" y="596" class="red">nomi e stati di HA</text>
+  <text x="1130" y="608" class="red">risultati di archivio, agenti, estensioni</text>
+</svg>

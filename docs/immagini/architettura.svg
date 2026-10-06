@@ -1,0 +1,200 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='1210' height='1250' viewBox='0 0 1210 1250' font-family='Segoe UI, Helvetica, Arial, sans-serif'>
+<title>Calliope: architettura</title>
+<desc>Componenti, flussi, dati non fidati e confini di sicurezza di Calliope: dispositivi, server con corsie, Brain, politica unica dei tool, servizi, agenti, sandbox ed estensioni.</desc>
+<defs>
+<marker id='pf' viewBox='0 0 10 10' refX='9' refY='5' markerWidth='7' markerHeight='7' orient='auto-start-reverse'><path d='M0,0 L10,5 L0,10 z' fill='#6b778c'/></marker>
+<marker id='pu' viewBox='0 0 10 10' refX='9' refY='5' markerWidth='7' markerHeight='7' orient='auto-start-reverse'><path d='M0,0 L10,5 L0,10 z' fill='#c0392b'/></marker>
+<style>
+.h { font-size: 22px; font-weight: 700; fill: #1b2333; }
+.g { font-size: 14px; font-weight: 600; fill: #3d4a63; }
+.t { font-size: 14px; font-weight: 700; fill: #1b2333; }
+.r { font-size: 12.5px; fill: #2c3547; }
+.e { font-size: 12px; fill: #3d4a63; }
+.f { stroke: #6b778c; stroke-width: 1.6; fill: none; }
+.u { stroke: #c0392b; stroke-width: 1.6; stroke-dasharray: 6 4; fill: none; }
+</style>
+</defs>
+<rect width='100%' height='100%' fill='#ffffff'/>
+<text x='20' y='34' class='h'>Calliope: architettura</text>
+<text x='20' y='56' class='r'>Frecce grigie: flussi normali. Frecce rosse tratteggiate: dati NON fidati (entrano solo in una busta con la provenienza). Riquadri arancioni: confini di sicurezza C1–C5.</text>
+<rect x='14' y='70' width='1172' height='150' rx='12' fill='none' stroke='#9aa5b8' stroke-width='1.2' stroke-dasharray='6 4'/>
+<text x='26' y='90' class='g'>Dispositivi (in rete, abbinati con un codice detto a voce)</text>
+<rect x='26' y='100' width='280' height='110' rx='8' fill='#eef7ee' stroke='#4f8f4f' stroke-width='1.6'/>
+<text x='36' y='121' class='t'>Satellite PC (Windows)</text>
+<text x='36' y='141' class='r'>microfono: VAD Silero + wake word ONNX</text>
+<text x='36' y='158' class='r'>casse, barge-in «Calliope, basta»</text>
+<text x='36' y='175' class='r'>esecutore pc_* (volume, file, app, webcam)</text>
+<text x='36' y='192' class='r'>installato con un comando, si aggiorna</text>
+<rect x='318' y='100' width='280' height='110' rx='8' fill='#eef7ee' stroke='#4f8f4f' stroke-width='1.6'/>
+<text x='328' y='121' class='t'>Telefono (PWA nel browser)</text>
+<text x='328' y='141' class='r'>onnxruntime-web: VAD + wake word</text>
+<text x='328' y='158' class='r'>carosello delle schede, schermo intero</text>
+<text x='328' y='175' class='r'>Parla / Scrivi / Allega, moduli</text>
+<text x='328' y='192' class='r'>schermo acceso per l'auto</text>
+<rect x='610' y='100' width='280' height='110' rx='8' fill='#eef7ee' stroke='#4f8f4f' stroke-width='1.6'/>
+<text x='620' y='121' class='t'>Schermi (PC, tablet, TV)</text>
+<text x='620' y='141' class='r'>pagina kiosk, schede via SSE</text>
+<text x='620' y='158' class='r'>cruscotto di chi amministra (sola lettura)</text>
+<text x='620' y='175' class='r'>giochi in un riquadro isolato</text>
+<text x='620' y='192' class='r'>(iframe sandbox, niente rete)</text>
+<rect x='902' y='100' width='272' height='110' rx='8' fill='#eef7ee' stroke='#4f8f4f' stroke-width='1.6'/>
+<text x='912' y='121' class='t'>Home Assistant</text>
+<text x='912' y='141' class='r'>WebSocket, agente di conversazione</text>
+<text x='912' y='158' class='r'>solo entità esposte ad Assist</text>
+<text x='912' y='175' class='r'>nomi e stati = dato esterno</text>
+<text x='912' y='192' class='r'>delicati (serrature, cancelli) in lettura</text>
+<rect x='14' y='232' width='1172' height='34' rx='8' fill='#fff4e5' stroke='#d9822b' stroke-width='1.6'/>
+<text x='24' y='253' class='t'>C1 rete: abbinamento a codice, TLS con impronta fissata o CA di casa, token, nessun Origin estraneo, valida_evento su ogni messaggio</text>
+<rect x='14' y='280' width='1172' height='860' rx='12' fill='none' stroke='#9aa5b8' stroke-width='1.2' stroke-dasharray='6 4'/>
+<text x='772' y='300' class='g'>Server Calliope · un processo Python, servizio systemd</text>
+<rect x='26' y='310' width='280' height='100' rx='8' fill='#f4f6fa' stroke='#5b6b85' stroke-width='1.6'/>
+<text x='36' y='331' class='t'>ServerSatelliti :8771</text>
+<text x='36' y='351' class='r'>WSS, PCM 16 kHz + JSON</text>
+<text x='36' y='368' class='r'>una corsia per satellite</text>
+<text x='36' y='385' class='r'>AscoltoRemoto / UscitaRemota</text>
+<rect x='902' y='425' width='272' height='112' rx='8' fill='#f4f6fa' stroke='#5b6b85' stroke-width='1.6'/>
+<text x='912' y='446' class='t'>ServerSchermi :8770 (HTTPS)</text>
+<text x='912' y='466' class='r'>scrivi / modulo / immagine / allegato</text>
+<text x='912' y='483' class='r'>solo durante una conversazione a voce</text>
+<text x='912' y='500' class='r'>web app del telefono, cruscotto</text>
+<rect x='318' y='310' width='280' height='100' rx='8' fill='#f4f6fa' stroke='#5b6b85' stroke-width='1.6'/>
+<text x='328' y='331' class='t'>STT: Whisper</text>
+<text x='328' y='351' class='r'>whisper.cpp CUDA :8003 o faster-whisper</text>
+<text x='328' y='368' class='r'>ripiego su CPU se il server cade</text>
+<text x='328' y='385' class='r'>prompt corto con il nome</text>
+<rect x='610' y='310' width='280' height='100' rx='8' fill='#f4f6fa' stroke='#5b6b85' stroke-width='1.6'/>
+<text x='620' y='331' class='t'>Chi parla: CAM++ (ONNX)</text>
+<text x='620' y='351' class='r'>ospite / familiare / amministra</text>
+<text x='620' y='368' class='r'>zona grigia, voce breve = al più familiare</text>
+<text x='620' y='385' class='r'>minori: fascia d'età e tutori</text>
+<rect x='26' y='425' width='280' height='112' rx='8' fill='#f4f6fa' stroke='#5b6b85' stroke-width='1.6'/>
+<text x='36' y='446' class='t'>Ciclo per corsia (ciclo.py)</text>
+<text x='36' y='466' class='r'>Ciclo: ascolta → trascrivi → regole</text>
+<text x='36' y='483' class='r'>→ rispondi → dopo; Servizi condivisi</text>
+<text x='36' y='500' class='r'>main.py: Avvio, Corsie</text>
+<text x='36' y='517' class='r'>annunci nella corsia giusta</text>
+<rect x='610' y='425' width='280' height='112' rx='8' fill='#f4f6fa' stroke='#5b6b85' stroke-width='1.6'/>
+<text x='620' y='446' class='t'>Conversazione per persona (corsie.py)</text>
+<text x='620' y='466' class='r'>la storia segue chi parla tra i satelliti</text>
+<text x='620' y='483' class='r'>ospiti: una per satellite</text>
+<text x='620' y='500' class='r'>risposte in parallelo con la coda</text>
+<text x='620' y='517' class='r'>doppioni tra satelliti: una risposta</text>
+<rect x='902' y='310' width='272' height='100' rx='8' fill='#f4f6fa' stroke='#5b6b85' stroke-width='1.6'/>
+<text x='912' y='331' class='t'>Regole sul testo (solo forme chiuse)</text>
+<text x='912' y='351' class='r'>wake word testuale, esci, spegniti</text>
+<text x='912' y='368' class='r'>stop, cortesia («Prego!»)</text>
+<text x='912' y='385' class='r'>ricominciamo; ogni regola nel registro</text>
+<text x='912' y='402' class='r'>con i suoi casi contrari</text>
+<rect x='318' y='425' width='280' height='112' rx='8' fill='#f4f6fa' stroke='#5b6b85' stroke-width='1.6'/>
+<text x='328' y='446' class='t'>Personalità e modalità</text>
+<text x='328' y='466' class='r'>sei toni, per la casa o per persona</text>
+<text x='328' y='483' class='r'>modalità startrek: «Computer»</text>
+<text x='328' y='500' class='r'>suoni di inizio e fine ascolto</text>
+<text x='328' y='517' class='r'>cambio a voce, senza riavvio</text>
+<rect x='610' y='557' width='280' height='150' rx='8' fill='#f4f6fa' stroke='#5b6b85' stroke-width='1.6'/>
+<text x='620' y='578' class='t'>Brain (contesto del turno)</text>
+<text x='620' y='598' class='r'>prefisso fisso in cache: prompt + tool</text>
+<text x='620' y='615' class='r'>uguali per ogni livello</text>
+<text x='620' y='632' class='r'>poi: chi parla, ricordi, sospeso, riferimenti</text>
+<text x='620' y='649' class='r'>finestra auto (contesto.py)</text>
+<text x='620' y='666' class='r'>compressione a 75/90 % con riassunto</text>
+<text x='620' y='683' class='r'>archivio conversazioni: FTS5 + embedding</text>
+<rect x='318' y='557' width='280' height='150' rx='8' fill='#f4f6fa' stroke='#5b6b85' stroke-width='1.6'/>
+<text x='328' y='578' class='t'>LLM della voce, in streaming</text>
+<text x='328' y='598' class='r'>Gemma 4 e4b o 26B-A4B</text>
+<text x='328' y='615' class='r'>Ollama (API nativa) o vLLM (OpenAI)</text>
+<text x='328' y='632' class='r'>scelto con una riga: llm_profilo</text>
+<text x='328' y='649' class='r'>reti sull'uscita: chiamate scritte come</text>
+<text x='328' y='666' class='r'>testo, azioni dichiarate e non fatte</text>
+<rect x='902' y='557' width='272' height='150' rx='8' fill='#fdeeee' stroke='#c0392b' stroke-width='1.6'/>
+<text x='912' y='578' class='t'>Busta dei dati NON fidati</text>
+<text x='912' y='598' class='r'>Brain.dato_non_fidato / allega_non_fidato</text>
+<text x='912' y='615' class='r'>provenienza.py: fonte marcata</text>
+<text x='912' y='632' class='r'>quarantena oltre 800 token</text>
+<text x='912' y='649' class='r'>web, foto, allegati, audio da file,</text>
+<text x='912' y='666' class='r'>HA, OCR, agenti, estensioni</text>
+<rect x='26' y='557' width='280' height='150' rx='8' fill='#fff4e5' stroke='#d9822b' stroke-width='1.6'/>
+<text x='36' y='578' class='t'>C5 uscita</text>
+<text x='36' y='598' class='r'>riferire.filtra con dati non fidati:</text>
+<text x='36' y='615' class='r'>numeri a pagamento, codici, recapiti</text>
+<text x='36' y='632' class='r'>guardiano Llama Guard 3 + rilevatore</text>
+<text x='36' y='649' class='r'>di pericolo (minori e ospiti)</text>
+<text x='36' y='666' class='r'>→ Piper TTS frase per frase</text>
+<rect x='26' y='727' width='572' height='112' rx='8' fill='#fff4e5' stroke='#d9822b' stroke-width='1.6'/>
+<text x='36' y='748' class='t'>C2 ToolRegistry.call: politica unica dei tool</text>
+<text x='36' y='768' class='r'>1. livello di chi parla   2. minori.permesso (fascia, orari, preset)</text>
+<text x='36' y='785' class='r'>3. politica: classe del tool (sicuro, azione, pericoloso, vietato), provenienza</text>
+<text x='36' y='802' class='r'>   della conversazione, valori presi dal dato, consenso</text>
+<text x='36' y='819' class='r'>4. conferme: proposta valida 3 turni, «sì» breve, frase di sfida</text>
+<rect x='610' y='727' width='564' height='112' rx='8' fill='#f4f6fa' stroke='#5b6b85' stroke-width='1.6'/>
+<text x='620' y='748' class='t'>Servizi (~65 tool)</text>
+<text x='620' y='768' class='r'>memoria, agenda (timer, promemoria, appuntamenti), liste, calcoli</text>
+<text x='620' y='785' class='r'>biblioteca offline (ZIM in puro Python + FTS5), web (SearXNG :8004, Ripulitore)</text>
+<text x='620' y='802' class='r'>casa (HA), PC remoto, documenti, ufficio (FatturaPA), archivio, schermi</text>
+<text x='620' y='819' class='r'>capacità e installazioni dal catalogo, minori (compiti, avvisi, giochi)</text>
+<text x='420' y='866' class='g'>Secondo piano (thread propri: la voce non li aspetta)</text>
+<rect x='26' y='882' width='370' height='128' rx='8' fill='#eef3fb' stroke='#3b6fb6' stroke-width='1.6'/>
+<text x='36' y='903' class='t'>Agenti (agenti/)</text>
+<text x='36' y='923' class='r'>modello grande su vLLM :8000 (Qwen3.6-35B)</text>
+<text x='36' y='940' class='r'>o sullo stesso Ollama della voce</text>
+<text x='36' y='957' class='r'>arbitro: pausa di vLLM quando si parla</text>
+<text x='36' y='974' class='r'>domande a metà lavoro, file della persona</text>
+<text x='36' y='991' class='r'>avanzamento in diretta sugli schermi</text>
+<rect x='408' y='882' width='370' height='128' rx='8' fill='#fff4e5' stroke='#d9822b' stroke-width='1.6'/>
+<text x='418' y='903' class='t'>C3 sandbox Docker</text>
+<text x='418' y='923' class='r'>un container per esecuzione, --network none</text>
+<text x='418' y='940' class='r'>sola lettura, non root, cap-drop ALL</text>
+<text x='418' y='957' class='r'>Python, C# (csc), Node per i test dei giochi</text>
+<text x='418' y='974' class='r'>programmi eseguiti in diretta sulla scheda</text>
+<text x='418' y='991' class='r'>senza Docker il codice non si esegue</text>
+<rect x='790' y='882' width='384' height='128' rx='8' fill='#fff4e5' stroke='#d9822b' stroke-width='1.6'/>
+<text x='800' y='903' class='t'>C4 estensioni</text>
+<text x='800' y='923' class='r'>scritte dall'agente, approvate con la sfida</text>
+<text x='800' y='940' class='r'>un container per chiamata, impronta SHA-256</text>
+<text x='800' y='957' class='r'>porta stretta: JSON-RPC verso i tool veri</text>
+<text x='800' y='974' class='r'>RetePubblica: solo internet pubblico,</text>
+<text x='800' y='991' class='r'>scope e flussi approvati, guardrail</text>
+<rect x='26' y='1025' width='572' height='100' rx='8' fill='#f4f6fa' stroke='#5b6b85' stroke-width='1.6'/>
+<text x='36' y='1046' class='t'>Dati (fuori dal codice)</text>
+<text x='36' y='1066' class='r'>memoria.db, conversazioni.db, archivio.db, speakers.json (+ .bak)</text>
+<text x='36' y='1083' class='r'>calliope.yaml + calliope.locale.yaml, segreti.yaml</text>
+<text x='36' y='1100' class='r'>codice in versioni/ con il suo venv: calliope aggiorna con ritorno automatico</text>
+<rect x='610' y='1025' width='564' height='100' rx='8' fill='#f4f6fa' stroke='#5b6b85' stroke-width='1.6'/>
+<text x='620' y='1046' class='t'>Osservabilità</text>
+<text x='620' y='1066' class='r'>registro dei turni (JSONL al giorno): tempi, tool, regole, contesto</text>
+<text x='620' y='1083' class='r'>calliope stato --turni: prima frase mediana e p90 con le cause</text>
+<text x='620' y='1100' class='r'>registro delle capacità: attiva / da configurare / mancante / guasta</text>
+<line x1='166' y1='210' x2='166' y2='232' class='f' marker-end='url(#pf)'/>
+<line x1='166' y1='266' x2='166' y2='310' class='f' marker-end='url(#pf)'/>
+<line x1='458' y1='210' x2='458' y2='232' class='f' marker-end='url(#pf)'/>
+<line x1='458' y1='266' x2='458' y2='310' class='f' marker-end='url(#pf)'/>
+<line x1='750' y1='210' x2='750' y2='232' class='f' marker-end='url(#pf)'/>
+<line x1='750' y1='266' x2='750' y2='310' class='f' marker-end='url(#pf)'/>
+<line x1='306' y1='357' x2='318' y2='357' class='f' marker-end='url(#pf)'/>
+<line x1='598' y1='357' x2='610' y2='357' class='f' marker-end='url(#pf)'/>
+<line x1='890' y1='357' x2='902' y2='357' class='f' marker-end='url(#pf)'/>
+<line x1='1000' y1='405' x2='760' y2='425' class='f' marker-end='url(#pf)'/>
+<line x1='902' y1='481' x2='890' y2='481' class='f' marker-end='url(#pf)'/>
+<text x='893' y='474' class='e' text-anchor='end'>scritto</text>
+<line x1='750' y1='537' x2='750' y2='557' class='f' marker-end='url(#pf)'/>
+<line x1='610' y1='632' x2='598' y2='632' class='f' marker-end='url(#pf)'/>
+<line x1='318' y1='632' x2='306' y2='632' class='f' marker-end='url(#pf)'/>
+<line x1='902' y1='632' x2='890' y2='632' class='u' marker-end='url(#pu)'/>
+<line x1='1100' y1='537' x2='1100' y2='557' class='u' marker-end='url(#pu)'/>
+<line x1='458' y1='707' x2='458' y2='727' class='f' marker-end='url(#pf)'/>
+<text x='466' y='721' class='e'>chiamate ai tool</text>
+<line x1='598' y1='783' x2='610' y2='783' class='f' marker-end='url(#pf)'/>
+<line x1='1038' y1='727' x2='1038' y2='707' class='u' marker-end='url(#pu)'/>
+<line x1='210' y1='839' x2='210' y2='882' class='f' marker-end='url(#pf)'/>
+<text x='218' y='860' class='e'>delega</text>
+<line x1='396' y1='946' x2='408' y2='946' class='f' marker-end='url(#pf)'/>
+<line x1='980' y1='839' x2='980' y2='882' class='f' marker-end='url(#pf)'/>
+<polyline points='26,690 8,690 8,190 26,190' class='f' marker-end='url(#pf)'/>
+<text x='12' y='440' class='e' transform='rotate(-90 12 440)'>voce di Piper, frase per frase</text>
+<polyline points='1174,180 1192,180 1192,680 1174,680' class='u' marker-end='url(#pu)'/>
+<text x='1196' y='430' class='e' transform='rotate(90 1196 430)'>nomi e stati di HA</text>
+<text x='20' y='1162' class='g'>Confini di sicurezza</text>
+<text x='20' y='1184' class='r'>C1 rete · C2 azioni (politica unica) · C3 codice dell'agente (container senza rete) · C4 estensioni (container + porta stretta + RetePubblica) · C5 uscita (riferire, guardiano)</text>
+<text x='20' y='1204' class='r'>Fattore principale per chi amministra: la voce (CAM++). La frase di sfida ferma registrazioni e TV, non una voce clonata in tempo reale.</text>
+<text x='20' y='1224' class='r'>Fonti: CLAUDE.md, docs/aree/, docs/ricerche/2026-10-06-analisi-complessiva.md</text>
+</svg>
