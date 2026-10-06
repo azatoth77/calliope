@@ -457,6 +457,11 @@ def _lavori_stato(ctx: ToolContext) -> dict:
     if att and frase.endswith("?"):
         # «A che punto è?» → «aspetta una risposta: …?»: la risposta nel turno dopo vale
         return _final(frase, in_sospeso=svc.offerta_risposta(att[-1]))
+    # Un lavoro interrotto da un riavvio (06/10, agenti/ripresa.py): «… lo rifaccio?»
+    rip = (svc.offerta_ripresa(getattr(prof, "id", None)) if hasattr(svc, "offerta_ripresa")
+           else None)
+    if rip is not None and frase.endswith("?"):
+        return _final(frase, in_sospeso=rip)
     return _final(frase)
 
 

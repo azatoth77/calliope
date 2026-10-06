@@ -132,6 +132,8 @@ A_SECCO = [
     ("prova_linux.py", [], "DGX Linux simulata: VAD senza torch, capacità, Whisper su server, voce su vLLM"),
     ("prova_linux_import.py", [], "DGX Linux simulata, solo gli import di tutti i moduli (legata a brain, ciclo, main, config)"),
     ("prova_gestore.py", [], "gestore di Linux: installa, aggiorna, verifica, ritorno automatico e a mano"),
+    # ~10 s: Ollama finto, riavvio simulato (servizio dei lavori chiuso e ricreato)
+    ("prova_lavori_riavvio.py", [], "agenti: lavori che sopravvivono a un riavvio (stato su disco, interrotti annunciati con «Lo rifaccio?», «sì»/«no», sandbox riusata, scadenze, domande in attesa)"),
     ("prova_robustezza.py", [], "robustezza: i guasti dell'analisi del 03/10 non bloccano più Calliope"),
     # ~20 s (Windows PowerShell e curl.exe veri, uv finto); --vera: uv e Python veri (~1 min)
     ("prova_installa_satellite.py", [], "PC nuovo come satellite con un comando: pacchetto, chiave, installa.ps1, aggiornamento e ritorno indietro"),
@@ -217,6 +219,7 @@ LIVELLO_2 = {
     "prova_linux.py",                # 13 s
     "prova_linux_import.py",         # 5 s: solo gli import della DGX simulata (Q7, 06/10)
     "prova_gestore.py",              # 10 s
+    "prova_lavori_riavvio.py",       # 10 s
     "prova_robustezza.py",           # 15 s (88 s prima del 06/10: aspettava il guardiano)
     "prova_biblioteca.py",           # 6 s, con i file della biblioteca
 }
@@ -289,6 +292,9 @@ LEGAMI = [
     ("calliope/stt.py", ["prova_linux.py", "prova_robustezza.py"]),
     ("setup/linux/", ["prova_linux.py", "prova_gestore.py"]),
     ("prove/e2e/", ["prova_e2e_copioni.py"]),
+    # I lavori che sopravvivono a un riavvio (06/10)
+    ("calliope/agenti/", ["prova_lavori_riavvio.py"]),
+    ("calliope/tools/agenti.py", ["prova_lavori_riavvio.py"]),
     ("calliope/main.py", ["prova_robustezza.py"]),
     ("calliope/ciclo.py", ["prova_robustezza.py"]),
     ("calliope/tts.py", ["prova_robustezza.py"]),
