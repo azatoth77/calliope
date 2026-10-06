@@ -188,6 +188,26 @@ carica_tono_casa(r3, log=lambda *a: None)
 verifica("contrario: calliope.yaml più recente vince", (r3.modalita, r3.wake_names), (None, ["Calliope"]))
 os.utime(TMP / "calliope.yaml", (time.time() - 100, time.time() - 100))
 
+# Tornare alla normale SCRITTO (06/10, DGX: in startrek «Computer» non svegliava e lo scritto
+# era rifiutato): ammesso dallo schermo personale di chi amministra, solo il ritorno
+r = _cambia_voce(contesto("Bianca", "familiare", "schermo"), modalita="normale")
+verifica("contrario: «torna alla normale» scritto da una familiare: rifiutato",
+         (r["ok"], cfg.modalita), (False, "startrek"))
+c_scr = contesto("Dario", "familiare", "schermo", "amministra")
+r = _cambia_voce(c_scr, modalita="normale")
+verifica("«torna alla normale» scritto da chi amministra: fatto, col tono di prima",
+         (r["ok"], cfg.modalita, cfg.wake_names, cfg.tono, cfg.suoni_ascolto,
+          "modalita_normale_scritta" in c_scr.regole, "in_sospeso" in r),
+         (True, None, ["Calliope"], "essenziale", False, True, False))
+r = _cambia_voce(contesto("Dario", "familiare", "schermo", "amministra"), modalita="startrek")
+verifica("contrario: attivare startrek scritto chiede ancora la voce",
+         (r["ok"], cfg.modalita, "in_sospeso" in r), (False, None, True))
+os.chdir(TMP)
+r = _cambia_voce(contesto("Dario", "amministra"), modalita="startrek")
+os.chdir(_cwd)
+verifica("di nuovo startrek dalla voce (per il ritorno qui sotto)", (r["ok"], cfg.modalita),
+         (True, "startrek"))
+
 r = _cambia_voce(contesto("Dario", "amministra"), modalita="normale")
 verifica("ritorno alla normale: il tono della casa di prima",
          (r["ok"], cfg.modalita, cfg.wake_names, cfg.tono, cfg.suoni_ascolto, avvisi[-1]),

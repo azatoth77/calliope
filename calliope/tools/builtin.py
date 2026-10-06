@@ -24,8 +24,8 @@ from ..tempi import (parse_day_range, parse_duration, parse_shift, parse_when, s
                      say_when, sposta)
 
 from .registry import ToolRegistry
-from ..conferme import (admin_confermato, chiedi_conferma, proposta_valida, secondi_validi,
-                        serve_conferma)
+from ..conferme import (admin_confermato, chiedi_conferma, e_admin, proposta_valida,
+                        secondi_validi, serve_conferma)
 from .. import minori
 from .spec import ToolSpec, ToolContext, note_rule
 from ..agenda import is_cancel_all
@@ -393,14 +393,25 @@ def _cambia_modalita(ctx: ToolContext, modalita: str) -> dict:
     """La modalità (05/10, calliope/modalita.py): wake word, suoni e tono insieme, subito.
     Vale per tutta la casa: solo chi amministra, riconosciuto dalla voce in questa frase (una
     frase breve o incerta: la frase di sfida; scritto: «me lo chiedi a voce?»)."""
+    from ..config import nome_modalita
     from ..modalita import Modalita, frase
     from .spec import serve_la_voce
     args = {"modalita": modalita}
+    sc = ctx.speaker_ctx
+    mod = getattr(ctx, "modalita", None) or Modalita(ctx.cfg)
+    if (nome_modalita(modalita) == "normale" and mod.attuale != "normale"
+            and getattr(sc, "identified_by", None) == "schermo" and e_admin(ctx)):
+        # Tornare alla modalità normale scritto dallo schermo personale di chi amministra
+        # (06/10): ripristina il predefinito, è reversibile e serve proprio quando la voce
+        # non va (sulla DGX in startrek «Computer» non svegliava, e lo scritto era rifiutato:
+        # «serve la voce»). Solo questo: attivare startrek scritto chiede ancora la voce
+        note_rule(ctx, "modalita_normale_scritta")
+        esito = mod.cambia("normale", getattr(sc, "current_speaker", None))
+        return {**{k: v for k, v in esito.items() if k != "stato"},
+                **(esito.get("stato") or {}), "risposta_finale": frase(esito)}
     scritto = serve_la_voce(ctx, "cambia_voce", args, "cambiare la modalità")
     if scritto is not None:
         return scritto
-    sc = ctx.speaker_ctx
-    from ..conferme import e_admin
     if not e_admin(ctx):
         note_rule(ctx, "modalita_permesso")
         f = ("La modalità la può cambiare solo chi amministra. Se vuoi, cambio solo il tono "
@@ -409,7 +420,6 @@ def _cambia_modalita(ctx: ToolContext, modalita: str) -> dict:
                 "risposta_finale": f}
     if not admin_confermato(ctx):
         return chiedi_conferma(ctx, "cambia_voce", args, "cambiare la modalità")
-    mod = getattr(ctx, "modalita", None) or Modalita(ctx.cfg)
     esito = mod.cambia(modalita, getattr(sc, "current_speaker", None))
     return {**{k: v for k, v in esito.items() if k != "stato"}, **(esito.get("stato") or {}),
             "risposta_finale": frase(esito)}

@@ -336,3 +336,28 @@
     favore.» (8/8 giusto con faster-whisper, «Spegnila.» 1/8) e «su che hardware stai girando?»
     (7/8, «su che hardware giri?» 2/8: «Succa arduo argili.»; con la trascrizione giusta il 26B
     chiamava `calliope_stato` 3 volte su 3).
+
+## Tool senza argomenti, risposta «…», NOTIFY_SOCKET (06/10, DGX)
+
+- **Chiamata senza nessun argomento obbligatorio** (`conversazione_cerca({})` dopo «Come più
+  tardi.»): partivano la frase d'attesa «Fammi ricordare.» (a 5,0 s) e la ricerca. Ora
+  `ToolRegistry.mancanti` dice gli argomenti `required` di una chiamata in cui **tutti** gli
+  argomenti sono assenti o vuoti: Brain non dice la frase d'attesa e `call` risponde subito con
+  l'errore («mancano argomenti obbligatori: domanda», regola `tool_argomenti_mancanti`), il
+  modello richiama o risponde. Una chiamata con qualche argomento passa com'è: molti tool
+  completano da soli (la proposta in sospeso di `delega_lavoro`, l'esercizio in corso di
+  `compiti_aiuto`); il primo tentativo che controllava ogni argomento mancante rompeva
+  `prova_minori` e `prova_conferma_unica`.
+- **Risposta di sola punteggiatura** («…», «.»): la frase non va alla voce (`_frase_da_dire`) e
+  Brain la tratta come vuota (regola `risposta_solo_punteggiatura`): la seconda passata con
+  `EMPTY_NUDGE` anche senza una conferma pronta del tool e, se è di nuovo vuota, «Non ci sono
+  riuscita: puoi ripetere la richiesta?» invece del silenzio. Contrario: una risposta vera dopo
+  lo stesso tool non cambia.
+- **NOTIFY_SOCKET**: nel journal «Got notification message from PID …, but reception only
+  permitted for main PID» (10 volte dal 05/10: all'avvio, alla compressione, a
+  `conversazione_cerca`). Era `systemctl show` (systemd 255, chiamato da `ollama_carico` per
+  `OLLAMA_MAX_LOADED_MODELS`), che con NOTIFY_SOCKET nell'ambiente manda da sé «EXIT_STATUS=0»
+  (misurato sulla DGX con un socket di prova; nvidia-smi no). L'unità ha già
+  `NotifyAccess=main`: ora `main()` toglie la variabile dall'ambiente all'avvio
+  (`trattieni_notify_socket`) e `notifica_systemd` usa il valore tenuto; nessun figlio (systemctl,
+  ssh del tunnel, docker) la eredita. Prova in `prova_linux`.

@@ -77,3 +77,30 @@ l'installazione.» senza installare. Ora `elenca_voci`, con «scarica»/«instal
 solo chi amministra: chiediglielo.» (regola `voce_scarica_elenco`) e a chi amministra dà l'elenco
 con «NON ho scaricato niente» e `installa_proponi` da chiamare; la rete sulle azioni dichiarate
 prende anche «Procedo con…» (vedi voce-e-regole). Prova in `prova_modalita`.
+
+## Star Trek in uso: il nome da solo, il ritorno scritto (06/10, DGX)
+
+Caso vero sul satellite «studio» (profilo gemma4-26b-ollama), appena accesa la modalità a voce:
+«Computer» detto da solo, per aspettare il bip come nella serie, non faceva niente. Una volta
+Whisper dava «Come più tardi.» (0,76 s di voce) e la frase andava al modello come domanda
+(`conversazione_cerca({})`, «Fammi ricordare.», prima frase a 7,4 s, risposta «…»); due volte il
+testo era vuoto (esito «vuoto»: nessun suono, nessun ascolto). Con «Calliope» da solo il suono
+d'inizio c'era, ma il bip di fine della frase presa (lo suona il satellite) faceva credere
+l'ascolto chiuso. Dario ha poi scritto dallo schermo «torna alla modalità normale»: rifiutato
+(«serve la voce»), proprio mentre la voce non andava.
+
+Ora (`calliope/ciclo.py`, dettagli e regole in [stt-tts](stt-tts.md)):
+- il nome da solo, anche storpiato o trascritto vuoto, dopo uno scatto sicuro della wake word
+  acustica, vale come «Calliope.»: «Sì?» / «Ciao Dario.» senza i suoni; **con i suoni**
+  (startrek) di nuovo il suono d'inizio ascolto, al posto delle parole (regola
+  `nome_da_solo_suono`), finestra d'ascolto aperta per `followup_s` e, se nessuno parla, il
+  suono di fine alla chiusura. Sequenza sul satellite: inizio (scatto) → fine (frase presa) →
+  inizio (dal server: «ora ti ascolto») → comando → fine. Il suono dal server parte come una
+  frase senza testo (`Speaker.suono`), quindi lo suona anche un satellite vecchio;
+- **tornare alla modalità normale scritto** dallo schermo personale di chi amministra è ammesso
+  (regola `modalita_normale_scritta`): ripristina il predefinito, è reversibile e serve proprio
+  quando la voce non va. Solo il ritorno: attivare startrek scritto chiede ancora «me lo chiedi
+  a voce?», una familiare resta rifiutata. Il tono della casa torna quello di prima, come a voce.
+
+Prove: `prova_nome_da_solo` (satellite finto), `prova_modalita` (ritorno scritto e contrari).
+Da riprovare sul vero: «Computer» da solo e poi il comando, con il satellite «studio».

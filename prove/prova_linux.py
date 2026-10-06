@@ -491,6 +491,22 @@ def prova_varie(tmp: Path):
         os.environ["NOTIFY_SOCKET"] = p
         ok(notifica_systemd("READY=1") and s.recv(100) == b"READY=1", "sd_notify vero")
         del os.environ["NOTIFY_SOCKET"]
+    # 06/10: NOTIFY_SOCKET tolto all'avvio, i figli non lo ereditano (systemctl 255 mandava
+    # «EXIT_STATUS=0»); notifica_systemd continua a funzionare con il valore tenuto
+    import calliope.main as M
+    vecchio, prima = os.environ.pop("NOTIFY_SOCKET", None), M._NOTIFY_SOCKET
+    try:
+        os.environ["NOTIFY_SOCKET"] = "/percorso/di/prova.sock"
+        ok(M.trattieni_notify_socket() == "/percorso/di/prova.sock"
+           and "NOTIFY_SOCKET" not in os.environ
+           and M._NOTIFY_SOCKET == "/percorso/di/prova.sock",
+           "NOTIFY_SOCKET tolto dall'ambiente dei figli e tenuto per sd_notify")
+        ok(M.trattieni_notify_socket() == "/percorso/di/prova.sock",
+           "trattieni_notify_socket due volte: il valore resta")
+    finally:
+        M._NOTIFY_SOCKET = prima
+        if vecchio is not None:
+            os.environ["NOTIFY_SOCKET"] = vecchio
 
     lock = tomllib.loads((RADICE / "uv.lock").read_text(encoding="utf-8"))
     pacchetti = {p["name"]: p for p in lock["package"]}

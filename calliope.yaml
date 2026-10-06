@@ -66,6 +66,11 @@ wake_word:
   # testo nemmeno a tolleranza larga e il punteggio resta sotto questo valore, il
   # risveglio si scarta in silenzio e il testo non si conserva
   wake_confirm_score: 0.9
+  # Il nome da solo (06/10): con lo scatto sicuro e il nome assente dal testo, una frase
+  # vuota o con al più questi secondi di voce è il nome storpiato da Whisper («Computer» →
+  # «Come più tardi.», 0,76 s): saluto, o suono d'inizio ascolto, e finestra aperta,
+  # invece della frase al modello. «Calliope» da solo dura 0,5–0,65 s sulla DGX
+  wake_solo_nome_s: 0.9
   # secondi di ascolto libero dopo una risposta
   followup_s: 8.0
   # Tolleranza sulla trascrizione del nome (0–1). Era 0,65: «cavallo» (0,67), «calcio»

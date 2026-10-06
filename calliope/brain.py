@@ -139,6 +139,12 @@ TOOL_REQUEST = re.compile(r"\b(apri\w*|trova\w*|cerca\w*)\s+(\w+\s+){0,2}"
 PROMISE_NUDGE = ("Non hai chiamato nessun tool. Chiama adesso il tool giusto con gli "
                  "argomenti presi dalla domanda (bastano le parole dette), senza ripetere la "
                  "frase e senza chiedere altro.")
+def _parlabile(text) -> bool:
+    """La risposta ha almeno una lettera o una cifra (06/10: «…» da solo, dopo
+    conversazione_cerca, finiva alla voce): fatta solo di punteggiatura vale come vuota."""
+    return bool(re.search(r"[^\W_]", text or ""))
+
+
 # Risposta vuota dopo un tool di sola lettura (04/10, vedi _reply): seconda passata
 EMPTY_NUDGE = ("La tua risposta era vuota. Rispondi adesso alla domanda della persona, tutta "
                "intera, con i risultati dei tool qui sopra.")
@@ -2439,7 +2445,10 @@ class Brain:
                         print("   [TOOL] azione " + ("dichiarata" if claimed else "promessa")
                               + " senza tool: la faccio fare", flush=True)
                         continue
-                if not (text or "").strip() and not self._acted() and "spinta_dichiarata" \
+                solo_punteggiatura = bool((text or "").strip()) and not _parlabile(text)
+                if solo_punteggiatura:
+                    self._rule("risposta_solo_punteggiatura")
+                if not _parlabile(text) and not self._acted() and "spinta_dichiarata" \
                         in self.last_rules and claim_at is None:
                     # Dopo la spinta il modello non ha detto niente e non ha fatto niente:
                     # meglio una frase vera del silenzio (la dichiarazione falsa non si dice)
@@ -2448,9 +2457,12 @@ class Brain:
                     return
                 # Risposta vuota dopo un tool riuscito (cambia_voce 1 volta su 5, una ricerca
                 # di file il 27/09): si dice la conferma già pronta del tool, non il silenzio
-                if not (text or "").strip() and self.last_tools                         and self._net("conferma_al_posto_del_vuoto"):
-                    said = self._last_confirmation()
-                    if said and not self._acted() and not retried_empty \
+                if not _parlabile(text) and (self.last_tools or solo_punteggiatura) \
+                        and self._net("conferma_al_posto_del_vuoto"):
+                    said = self._last_confirmation() if self.last_tools else ""
+                    # Solo punteggiatura («…»): la seconda passata anche senza una conferma
+                    # pronta (06/10: dopo conversazione_cerca restava il silenzio)
+                    if (said or solo_punteggiatura) and not self._acted() and not retried_empty \
                             and self._net("vuoto_seconda_passata"):
                         # Dopo sole letture (data_oggi, ora_attuale, calcola…) la conferma
                         # risponde solo a una parte della domanda: «cerca la data di oggi e
@@ -2469,6 +2481,10 @@ class Brain:
                         self._rule("conferma_al_posto_del_vuoto")
                         assistant["content"] = said
                         yield said
+                    elif solo_punteggiatura:
+                        # Di nuovo solo punteggiatura: meglio una frase vera del silenzio
+                        assistant["content"] = "Non ci sono riuscita: puoi ripetere la richiesta?"
+                        yield assistant["content"]
                 return
             if claim_at is not None:
                 # Dopo la spinta il tool c'è: «Ho acceso le luci» detto prima non resta
@@ -2483,7 +2499,10 @@ class Brain:
             if on_tool_start and not (spoke or announced):
                 for call in calls:
                     spec = self.tools.get(call["name"])
-                    if spec is not None and spec.announce:
+                    # Senza gli argomenti obbligatori il tool non parte: niente frase d'attesa
+                    mancanti = getattr(self.tools, "mancanti", None)
+                    if spec is not None and spec.announce and not (
+                            mancanti and mancanti(call["name"], call.get("arguments"))):
                         on_tool_start(random.choice(spec.announce))
                         announced = True
                         break

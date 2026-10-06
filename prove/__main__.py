@@ -52,6 +52,7 @@ A_SECCO = [
     ("prova_ollama_carico.py", [], "modelli residenti in Ollama (06/10, e2e): limite letto o assunto, avviso quando Calliope ne usa di più, embedding delle conversazioni solo senza scacciare nessuno (inattiva, keep_alive 0, ricerca per parole con Ollama pieno)"),
     ("prova_corsie.py", [], "conversazioni per persona e satelliti insieme (06/10): scelta della conversazione, ospiti per satellite, «sì» breve altrove, doppioni, risposte in parallelo con la coda, smistatore, ciclo e stato della voce per corsia, ripresa"),
     ("prova_ciclo.py", [], "il ciclo della voce (06/10, P8) giro per giro con tutto finto: primo avvio e registrazione, nome vero, finestra di ascolto, approfondisci, ricerca promessa, ricominciamo, cortesia, frase ignorata, esci, spegniti"),
+    ("prova_nome_da_solo.py", [], "il nome da solo e la modalità Star Trek in uso (06/10, DGX) con un satellite finto: scatto sicuro con testo vuoto o nome storpiato breve → saluto o suono d'inizio e finestra aperta, suono di fine se nessuno parla; contrari; tool senza argomenti obbligatori senza frase d'attesa; risposta di sola punteggiatura"),
     ("prova_agenda.py", ["--secco"], "timer, promemoria, appuntamenti: scadenza, annullo"),
     ("prova_memoria.py", ["--secco"], "memoria per persona"),
     ("prova_liste.py", [], "liste della casa e memoria della casa"),
