@@ -7,12 +7,12 @@ esista un venv, e non dipende dalla versione di Calliope che sta gestendo.
     calliope installa [--sorgente URL|CARTELLA] [--ramo main] [--segui ramo|tag]
                       [--extra documenti,modelli,casa,schermi] [--python 3.12] [--dati CARTELLA]
                       [--senza-servizio]
-    calliope aggiorna [--rif TAG|COMMIT] [--controlla]
-    calliope torna [VERSIONE] [--con-dati]
+    calliope aggiorna [--rif TAG|COMMIT] [--controlla] [--attendi-lavori [MIN]] [--forza]
+    calliope torna [VERSIONE] [--con-dati] [--attendi-lavori [MIN]] [--forza]
     calliope versioni | calliope stato [--dettagli|--json] | calliope extra NOME…
     calliope satellite --abbina CODICE --stanza STANZA | --elenco | --revoca X | --certificato
     calliope schermi [--abbina CODICE --stanza STANZA | --revoca X | --certificato --host IP]
-    calliope avvia | ferma | riavvia | log | esegui [argomenti]
+    calliope avvia | ferma | riavvia [--attendi-lavori [MIN]] [--forza] | log | esegui [arg…]
     calliope motore whisper|vllm [argomenti]   gli script dei server dei modelli della
                                                versione in uso (setup/linux/motore/)
     calliope sorgente URL
@@ -55,6 +55,20 @@ Aggiornamento (`calliope aggiorna`):
     versione di prima, con i dati copiati al punto 4 (quelli scritti dalla versione
     nuova restano accanto, `memoria.db.dopo-<versione>`).
 Il gestore stesso si aggiorna solo dopo un aggiornamento riuscito.
+
+Lavori dell'agente in corso (06/10, caso vero: un `calliope aggiorna` alle 17:07 ha ucciso in
+silenzio il lavoro «gioco memory» partito alle 16:56). Prima di fermare il servizio,
+`aggiorna`, `riavvia` e `torna` leggono lo stato dei lavori che Calliope tiene su disco
+(`lavori/in_corso.json` nella cartella dei dati, calliope/agenti/ripresa.py; vale solo se
+il processo che l'ha scritto è ancora vivo). Se ci sono lavori in coda o in corso:
+- `--forza`: si procede; dopo il riavvio Calliope li annuncia come interrotti a chi li aveva
+  chiesti e propone di rifarli;
+- `--attendi-lavori [MIN]` (predefinito 30 minuti): si aspetta che finiscano, controllando
+  ogni 10 s; se dopo MIN minuti ce ne sono ancora, non si cambia niente (uscita 75, «riprova
+  più tardi»). È la scelta per gli aggiornamenti non interattivi (script via ssh);
+- altrimenti, da un terminale, si elencano e si chiede conferma; senza terminale non si
+  procede (uscita 75) e si dice quale opzione usare.
+Un lavoro che aspetta una risposta non blocca: sopravvive al riavvio.
 """
 
 import argparse
@@ -82,6 +96,11 @@ DATI_PICCOLI = ("memoria.db", "archivio.db", "conversazioni.db", "speakers.json"
 SQLITE_ACCANTO = ("-wal", "-shm", "-journal")
 VERSIONI_TENUTE = 3
 BACKUP_TENUTI = 5
+# Lo stato dei lavori dell'agente, scritto da Calliope (calliope/agenti/ripresa.py, stesso
+# formato): relativo alla cartella dei dati, come `agenti_sandbox` predefinito
+FILE_LAVORI = Path("lavori") / "in_corso.json"
+ATTESA_LAVORI_MIN = 30.0
+RINVIATO = 75                   # EX_TEMPFAIL: lavori in corso, riprova più tardi
 
 
 class Errore(Exception):
@@ -124,7 +143,8 @@ def _scrivi_atomico(path: Path, testo: str):
 class Gestore:
     def __init__(self, app: Path, dati: Path | None = None, bin_dir: Path | None = None,
                  unit_dir: Path | None = None, uv=None, git=None, systemctl=None,
-                 journalctl=None, out=print, attesa_stabile_s: float = 5.0):
+                 journalctl=None, out=print, attesa_stabile_s: float = 5.0,
+                 chiedi=None, interattivo=None, giro_lavori_s: float = 10.0):
         self.app = Path(app)
         self.repo = self.app / "repo.git"
         self.versioni = self.app / "versioni"
@@ -141,6 +161,11 @@ class Gestore:
         self.journalctl = list(journalctl or ["journalctl", "--user"])
         self.out = out
         self.attesa_stabile_s = attesa_stabile_s
+        # La conferma da terminale prima di interrompere dei lavori (le prove la sostituiscono)
+        self.chiedi = chiedi or input
+        self.interattivo = (interattivo if interattivo is not None
+                            else (lambda: sys.stdin is not None and sys.stdin.isatty()))
+        self.giro_lavori_s = giro_lavori_s
         self.imp = self._leggi_impostazioni()
         self._dati = Path(dati) if dati else None
 
@@ -405,6 +430,90 @@ class Gestore:
             return False
         return (r.stdout or b"").decode().strip() == "active"
 
+    # ── lavori dell'agente in corso ──
+    def lavori_vivi(self) -> list[dict]:
+        """I lavori in coda o in corso secondo Calliope (lavori/in_corso.json), se il processo
+        che ha scritto il file è ancora vivo: un file lasciato da un'istanza caduta non conta."""
+        f = self.dati / FILE_LAVORI
+        dati = None
+        for p in (f, f.with_name(f.name + ".bak")):
+            try:
+                dati = json.loads(p.read_text(encoding="utf-8"))
+                break
+            except (OSError, ValueError):
+                continue
+        if not isinstance(dati, dict):
+            return []
+        pid = dati.get("pid")
+        if os.name == "posix" and isinstance(pid, int) and pid > 0:
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                return []
+            except PermissionError:
+                pass                                  # vivo, di un altro utente
+        return [r for r in dati.get("lavori") or []
+                if isinstance(r, dict) and r.get("stato") in ("in_coda", "in_corso")]
+
+    def _descrivi_lavori(self, vivi: list[dict]):
+        for r in vivi:
+            chi = f" di {r['persona_nome']}" if r.get("persona_nome") else ""
+            quando = ""
+            if r.get("stato") == "in_corso" and r.get("inizio"):
+                minuti = max(0, int((time.time() - float(r["inizio"])) / 60))
+                quando = f", in corso da {minuti} minut{'o' if minuti == 1 else 'i'}"
+            elif r.get("stato") == "in_coda":
+                quando = ", in coda"
+            self.out(f"  - {r.get('id', '?')} «{r.get('titolo', 'lavoro')}»{chi}{quando}")
+
+    def prima_di_fermare(self, cosa: str, forza: bool = False,
+                         attendi_min: float | None = None) -> bool:
+        """True se si può fermare Calliope adesso: nessun lavoro dell'agente in corso, oppure
+        `forza`, oppure finiti entro `attendi_min` minuti, oppure confermato da terminale.
+        `cosa`: «aggiorno», «riavvio», «torno indietro», per i messaggi."""
+        if not self.servizio_attivo():
+            return True
+        vivi = self.lavori_vivi()
+        if not vivi:
+            return True
+        n = len(vivi)
+        self.out(f"Calliope ha {'un lavoro' if n == 1 else f'{n} lavori'} dell'agente in corso:")
+        self._descrivi_lavori(vivi)
+        if forza:
+            self.out("  --forza: li interrompo. Dopo il riavvio Calliope li annuncia come "
+                     "interrotti a chi li aveva chiesti e propone di rifarli.")
+            return True
+        if attendi_min is not None:
+            fine = time.monotonic() + max(0.0, float(attendi_min)) * 60
+            self.out(f"  aspetto che finiscano (al più {attendi_min:g} minuti)…")
+            while vivi and time.monotonic() < fine:
+                time.sleep(min(self.giro_lavori_s, max(0.0, fine - time.monotonic())))
+                vivi = self.lavori_vivi() if self.servizio_attivo() else []
+            if not vivi:
+                self.out("  finiti: procedo.")
+                return True
+            self.out(f"Dopo {attendi_min:g} minuti ci sono ancora lavori in corso: non {cosa}. "
+                     f"Riprova più tardi, o usa --forza per interromperli.")
+            return False
+        if self.interattivo():
+            try:
+                r = self.chiedi(f"Li interrompo e {cosa} lo stesso? [s/N] ")
+            except EOFError:
+                r = ""
+            if str(r).strip().lower() in ("s", "si", "sì", "y", "yes"):
+                self.out("  li interrompo: dopo il riavvio Calliope propone di rifarli.")
+                return True
+            self.out(f"Non {cosa}.")
+            return False
+        self.out(f"Non {cosa}: usa --attendi-lavori [MINUTI] per aspettare che finiscano, o "
+                 f"--forza per interromperli.")
+        return False
+
+    def riavvia(self, forza: bool = False, attendi_min: float | None = None) -> int:
+        if not self.prima_di_fermare("riavvio", forza, attendi_min):
+            return RINVIATO
+        return subprocess.call(self.systemctl + ["restart", SERVIZIO])
+
     def riavvia_e_controlla(self) -> tuple[bool, str]:
         """Riavvio con Type=notify: torna quando Calliope è pronta (o fallisce); poi
         qualche secondo per vedere che non cada subito."""
@@ -521,7 +630,8 @@ class Gestore:
         self.out(f"  stato: {msg}")
         return 0
 
-    def aggiorna(self, rif: str | None = None, solo_controllo=False) -> int:
+    def aggiorna(self, rif: str | None = None, solo_controllo=False, forza: bool = False,
+                 attendi_min: float | None = None) -> int:
         if not self.repo.exists():
             raise Errore("Calliope non è installata qui: prima setup/linux/installa.sh")
         self._git("fetch", "--quiet", "--tags", "--prune", "origin", timeout=600)
@@ -546,6 +656,12 @@ class Gestore:
             self.out(f"La versione nuova non supera la verifica ({msg}): resta in uso "
                      f"{cur}. Niente è cambiato.")
             return 1
+        # I lavori dell'agente in corso prima di fermare il servizio (06/10): la versione
+        # preparata resta pronta per la prossima volta
+        if not self.prima_di_fermare("aggiorno", forza, attendi_min):
+            self._storia(azione="aggiorna", da=cur, a=vid, esito="rinviato",
+                         motivo="lavori dell'agente in corso")
+            return RINVIATO
         attivo = self.servizio_attivo()
         prec = self.precedente()
         copia = self.istantanea(cur)
@@ -586,7 +702,8 @@ class Gestore:
             self.out(f"Attenzione: anche la versione {vid} non riparte ({motivo}). "
                      f"Guarda «calliope log».")
 
-    def torna(self, vid: str | None = None, con_dati=False) -> int:
+    def torna(self, vid: str | None = None, con_dati=False, forza: bool = False,
+              attendi_min: float | None = None) -> int:
         vid = vid or self.precedente()
         cur = self.attuale()
         if not vid or not self.completa(vid):
@@ -600,6 +717,8 @@ class Gestore:
             copia = cand[-1] if cand else None
             if copia is None:
                 raise Errore(f"nessuna copia dei dati presa dalla versione {vid}")
+        if not self.prima_di_fermare("torno indietro", forza, attendi_min):
+            return RINVIATO
         attivo = self.servizio_attivo()
         if copia is None:
             self._config(self.cartella(vid))
@@ -706,12 +825,18 @@ def _parser() -> argparse.ArgumentParser:
     t = sub.add_parser("torna", help="torna alla versione precedente (o a quella data)")
     t.add_argument("versione", nargs="?")
     t.add_argument("--con-dati", action="store_true")
+    r = sub.add_parser("riavvia", help="riavvia il servizio")
+    for x in (a, t, r):
+        # I lavori dell'agente in corso (06/10): aspettare che finiscano, o interromperli
+        x.add_argument("--attendi-lavori", nargs="?", type=float, const=ATTESA_LAVORI_MIN,
+                       default=None, metavar="MINUTI")
+        x.add_argument("--forza", action="store_true")
     sub.add_parser("versioni")
     e = sub.add_parser("extra", help="aggiunge extra (documenti, casa, schermi…)")
     e.add_argument("nomi", nargs="+")
     s = sub.add_parser("sorgente", help="cambia da dove si aggiorna")
     s.add_argument("url")
-    for nome in ("avvia", "ferma", "riavvia", "log"):
+    for nome in ("avvia", "ferma", "log"):
         sub.add_parser(nome)
     return p
 
@@ -757,9 +882,13 @@ def main(argv=None) -> int:
             return g.installa(args.sorgente, args.ramo, args.segui, extra, args.python,
                               servizio=not args.senza_servizio)
         if args.cmd == "aggiorna":
-            return g.aggiorna(args.rif, solo_controllo=args.controlla)
+            return g.aggiorna(args.rif, solo_controllo=args.controlla, forza=args.forza,
+                              attendi_min=args.attendi_lavori)
         if args.cmd == "torna":
-            return g.torna(args.versione, con_dati=args.con_dati)
+            return g.torna(args.versione, con_dati=args.con_dati, forza=args.forza,
+                           attendi_min=args.attendi_lavori)
+        if args.cmd == "riavvia":
+            return g.riavvia(forza=args.forza, attendi_min=args.attendi_lavori)
         if args.cmd == "versioni":
             return g.elenco()
         if args.cmd == "extra":
@@ -772,7 +901,7 @@ def main(argv=None) -> int:
             return 0
         if args.cmd == "log":
             return subprocess.call(g.journalctl + ["-u", SERVIZIO, "-f", "-n", "100"])
-        verbo = {"avvia": "start", "ferma": "stop", "riavvia": "restart"}[args.cmd]
+        verbo = {"avvia": "start", "ferma": "stop"}[args.cmd]
         return subprocess.call(g.systemctl + [verbo, SERVIZIO])
     except Errore as e:
         print(f"Errore: {e}", file=sys.stderr)

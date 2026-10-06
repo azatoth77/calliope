@@ -49,6 +49,7 @@ from .sandbox import ErroreSandbox
 from ..conferme import proposta_valida, secondi_validi
 from ..sicurezza import asks_secret
 from .tunnel import Tunnel
+from . import ripresa
 
 # Dove sta la configurazione di OpenSSH, per i messaggi (DGX Linux dal 02/10)
 _SSH_CONFIG = r".ssh\config" if sys.platform == "win32" else "~/.ssh/config"
@@ -275,6 +276,11 @@ class Lavori:
         self._n = 0
         self._chiuso = False
         self._worker = threading.Thread(target=self._esegui_coda, daemon=True, name="lavori")
+        # I lavori che sopravvivono a un riavvio (06/10, ripresa.py): lo stato su disco, e
+        # all'avvio quelli rimasti in coda o in corso diventano «interrotti»
+        self._stato_file = ripresa.percorso(cartella_sandbox(cfg))
+        self._stato_lock = threading.Lock()
+        self._ripristina()
         self._worker.start()
 
     # ─────────────────────────── collegamento ───────────────────────────
@@ -420,6 +426,7 @@ class Lavori:
             lav.stato, lav.passo = "in_coda", "riprende dopo la risposta"
             occupato = self.corrente is not None
         self._coda.put(lav)
+        self._salva_stato()
         return (f"Grazie, lo dico all'agente: riprendo «{lav.titolo}»"
                 + (" appena finisce il lavoro in corso" if occupato else " in secondo piano")
                 + ". Ti avviso quando è pronto.")
@@ -437,6 +444,8 @@ class Lavori:
             self.log(f"[AGENTI] {lv.id}: nessuna risposta in {_durata(limite)}: lo chiudo")
             self._chiudi_attesa(lv, {"esito": "scaduto", "attesa": limite})
             self._annuncia(lv)
+        if scaduti:
+            self._salva_stato()
 
     def _chiudi_attesa(self, lav: Lavoro, ris: dict):
         """Un lavoro in attesa che finisce senza riprendere (scaduto o annullato): i file fatti
@@ -667,7 +676,13 @@ class Lavori:
             if off is not None and time.monotonic() > off["scade"]:
                 self._offerte.pop(persona or "?", None)
                 return None
-        if off is None or not proposta_valida(self.cfg, off["turno"], turno):
+        if off is None:
+            # Un lavoro interrotto da un riavvio, già annunciato con «Lo rifaccio?» (ripresa.py):
+            # vale senza turno (l'annuncio non è una risposta); il «sì» lo controlla l'azione
+            # in sospeso del Brain (persona, turni, satellite)
+            primo = self._interrotti_da_rifare(persona)
+            return {"lavoro": primo[0], "turno": None, "ripresa": True} if primo else None
+        if not proposta_valida(self.cfg, off["turno"], turno):
             return None
         return off
 
@@ -677,6 +692,8 @@ class Lavori:
         off = self.offerta(persona, turno)
         if off is None or off["lavoro"].id != str(offerta or "").strip():
             return None
+        if off.get("ripresa"):
+            return self._rifai_interrotti(persona)
         with self._lock:
             self._offerte.pop(persona or "?", None)
         return off["lavoro"]
@@ -695,6 +712,11 @@ class Lavori:
             threading.Thread(target=self._prendi_file, args=(lav,), daemon=True,
                              name="lavori-file").start()
         self._coda.put(lav)
+        for altro in getattr(lav, "insieme", None) or ():      # ripresi con lui (ripresa.py)
+            with self._lock:
+                self.lavori.append(altro)
+            self._coda.put(altro)
+        self._salva_stato()
         if att:
             return (f"D'accordo: lo metto in coda dopo «{att[0].titolo}». Ti avviso quando è "
                     f"pronto.")
@@ -707,6 +729,9 @@ class Lavori:
         corso = [lv for lv in mine if lv.stato == "in_corso"]
         coda = [lv for lv in mine if lv.stato == "in_coda"]
         attesa = [lv for lv in mine if lv.stato == "in_attesa"]
+        # Interrotti da un riavvio (06/10, ripresa.py): mai «Non ho lavori in corso.» e basta
+        interrotti = self._frase_interrotti([lv for lv in mine if lv.stato == "interrotto"],
+                                            persona)
         if attesa:
             # Prima la domanda: è l'unica cosa che aspetta chi parla
             lv = attesa[-1]
@@ -717,7 +742,8 @@ class Lavori:
             if altri:
                 frase = (f"{'Ho un altro lavoro' if altri == 1 else f'Ho {altri} lavori'} "
                          f"in corso. " + frase)
-            return frase
+            # La domanda dell'agente resta l'ultima cosa detta: gli interrotti prima
+            return (f"{interrotti.split(':')[0].rstrip('.')}. " if interrotti else "") + frase
         if corso:
             lv = corso[0]
             minuti = max(0, int((time.time() - (lv.inizio or time.time())) / 60))
@@ -730,15 +756,19 @@ class Lavori:
             if coda:
                 frase += (f" Poi c'è «{coda[0].titolo}» in coda." if len(coda) == 1
                           else f" Poi ce ne sono {len(coda)} in coda.")
-            return frase
+            return frase + (f" {interrotti}" if interrotti else "")
         if coda:
-            return f"«{coda[0].titolo}» è in coda: comincio appena posso."
+            return (f"«{coda[0].titolo}» è in coda: comincio appena posso."
+                    + (f" {interrotti}" if interrotti else ""))
+        if interrotti:
+            return f"Non ho lavori in corso. {interrotti}"
         finiti = [lv for lv in mine if lv.stato not in ("in_coda", "in_corso")]
         if finiti:
             lv = finiti[-1]
             come = {"fatto": "è finito", "mancano_dati": "aspetta dei dati da te",
                     "errore": "non è riuscito", "annullato": "è stato annullato",
-                    "scaduto": "l'ho chiuso perché aspettava una risposta da troppo"}.get(
+                    "scaduto": "l'ho chiuso perché aspettava una risposta da troppo",
+                    "ripreso": "si era interrotto per un riavvio, e l'ho rifatto"}.get(
                 lv.stato, lv.stato)
             return f"Non ho lavori in corso. L'ultimo, «{lv.titolo}», {come}."
         return "Non ho lavori in corso."
@@ -779,6 +809,7 @@ class Lavori:
             sb = self._sandbox
             if sb is not None:
                 sb.termina()
+        self._salva_stato()
         nomi = [f"«{lv.titolo}»" for lv in targets]
         cosa = nomi[0] if len(nomi) == 1 else ", ".join(nomi[:-1]) + " e " + nomi[-1]
         return {"ok": True, "frase": f"Ho fermato {cosa}. Quello che era già fatto resta nella "
@@ -804,6 +835,10 @@ class Lavori:
 
     def _esegui_coda(self):
         self.scegli_isolamento()
+        try:
+            self._annuncia_ripresi()
+        except Exception as e:  # noqa: BLE001 — un annuncio rotto non ferma la coda
+            self.log(f"[AGENTI] annuncio dei lavori interrotti: {type(e).__name__}: {e}")
         while not self._chiuso:
             try:
                 self._scadenze()
@@ -829,6 +864,7 @@ class Lavori:
             finally:
                 self.corrente = None
                 self._sandbox = None
+                self._salva_stato()
 
     def _esegui(self, lav: Lavoro):
         ripresa = lav.risposta is not None
@@ -849,6 +885,7 @@ class Lavori:
         # Alla ripresa dopo una domanda la cartella è la stessa
         dest = Path(lav.cartella) if lav.cartella else self._cartella_lavoro(lav)
         lav.cartella = str(dest)
+        self._salva_stato()
         ris: dict = {}
         try:
             if lav.file_utente is not None:
@@ -857,7 +894,9 @@ class Lavori:
                 sb = lav.sandbox
                 if sb is None:
                     from .sandbox import Sandbox
-                    root = (cartella_sandbox(self.cfg)
+                    # Un lavoro ripreso dopo un riavvio (ripresa.py): la sua sandbox di prima
+                    riuso = getattr(lav, "sandbox_da", None)
+                    root = (Path(riuso) if riuso else cartella_sandbox(self.cfg)
                             / f"{lav.id}-{time.strftime('%Y%m%d-%H%M%S')}")
                     iso = self.scegli_isolamento()   # di nuovo: l'immagine può essere arrivata ora
                     sb = Sandbox(root, float(getattr(self.cfg, "agenti_esecuzione_s", 30.0)),
@@ -869,8 +908,10 @@ class Lavori:
                                  linguaggi=self.isolamenti)
                     self.log(f"[AGENTI] {lav.id}: sandbox {sb.isolamento.descrizione}")
                     lav.sandbox = sb
+                    self._salva_stato()
                     for nome, testo in (lav.file_iniziali or {}).items():
-                        sb.scrivi(nome, testo)
+                        if not (riuso and (sb.root / nome).is_file()):
+                            sb.scrivi(nome, testo)
                     if lav.input:
                         sb.metti(lav.input["percorso"], lav.input["dati"])
                 self._sandbox = sb
@@ -1243,6 +1284,151 @@ class Lavori:
         if (lav.risultato.get("estensione") or {}).get("in_sospeso"):
             # «Vuoi approvarla?» → estensioni_gestisci approva (con la frase di sfida)
             item["in_sospeso"] = lav.risultato["estensione"]["in_sospeso"]
+        self.done.put(item)
+        if self.on_done:
+            self.on_done()
+
+    # ─────────────────────────── riavvii (06/10, ripresa.py) ───────────────────────────
+    def _salva_stato(self):
+        """Lo stato dei lavori su disco (in_corso.json), a ogni cambio. Non durante la
+        chiusura: i lavori fermati da close() restano «in corso» nel file, e al prossimo avvio
+        diventano interrotti."""
+        if self._chiuso or not hasattr(self, "_stato_lock"):
+            return
+        with self._lock:
+            lavori = list(self.lavori)
+        try:
+            with self._stato_lock:
+                ripresa.scrivi(self._stato_file, lavori)
+        except OSError as e:
+            self.log(f"[AGENTI] stato dei lavori non salvato: {e}")
+
+    def _ripristina(self):
+        """All'avvio: i lavori rimasti in coda o in corso diventano interrotti, quelli in
+        attesa di una risposta tornano ad aspettarla (se la conversazione dell'agente c'è)."""
+        righe = ripresa.leggi(self._stato_file, salta_pid=os.getpid())
+        if not righe:
+            return
+        ora = time.time()
+        for r in righe:
+            m = re.fullmatch(r"L(\d+)", str(r["id"]))
+            if m:
+                self._n = max(self._n, int(m[1]))     # niente id doppi con quelli di prima
+            if r["stato"] not in ripresa.VIVI + ("interrotto",):
+                continue
+            lav = ripresa.ricostruisci(r, Lavoro)
+            if lav.stato == "interrotto" and ora - lav.vivo >= ripresa.TENUTI_S:
+                continue
+            self.lavori.append(lav)
+            if r["stato"] in ripresa.VIVI:
+                cosa = ("aspetta ancora la risposta" if lav.stato == "in_attesa"
+                        else f"interrotto (era {r['stato'].replace('_', ' ')})")
+                self.log(f"[AGENTI] {lav.id} «{lav.titolo}» di "
+                         f"{lav.persona_nome or 'qualcuno'}: {cosa} dopo il riavvio")
+                if lav.stato == "interrotto" and lav.cartella and Path(lav.cartella).is_dir():
+                    self._metadati(lav, Path(lav.cartella))
+        self._salva_stato()
+
+    def _entro_annuncio(self, lav, ora: float | None = None) -> bool:
+        limite = float(getattr(self.cfg, "agenti_interrotti_annuncio_h", 3.0) or 0) * 3600
+        return ((ora or time.time()) - (getattr(lav, "vivo", None) or 0)) < limite
+
+    def _interrotti_da_rifare(self, persona) -> list:
+        """Gli interrotti di `persona` già annunciati con «Lo rifaccio?», ancora da decidere
+        e recenti (`agenti_interrotti_annuncio_h`); il primo è quello dell'offerta."""
+        with self._lock:
+            out = [lv for lv in getattr(self, "lavori", ()) if lv.stato == "interrotto"
+                   and lv.persona == persona
+                   and persona is not None and getattr(lv, "annunciato", False)
+                   and ripresa.riprendibile(lv) and self._entro_annuncio(lv)]
+        return sorted(out, key=lambda lv: lv.creato)
+
+    def offerta_ripresa(self, persona) -> dict | None:
+        """L'azione in sospeso per rifare gli interrotti di `persona` (lavori_stato)."""
+        primo = self._interrotti_da_rifare(persona)
+        return ripresa.offerta(primo[0]) if primo else None
+
+    def _frase_interrotti(self, interrotti: list, persona) -> str:
+        if not interrotti:
+            return ""
+        nomi = [f"«{lv.titolo}»" for lv in interrotti]
+        if len(nomi) == 1:
+            frase = f"{nomi[0][:1].upper()}{nomi[0][1:]} si è interrotto per un riavvio di Calliope"
+        else:
+            frase = (", ".join(nomi[:-1]) + " e " + nomi[-1]
+                     + " si sono interrotti per un riavvio di Calliope")
+        da_rifare = self._interrotti_da_rifare(persona)
+        if da_rifare:
+            return frase + (": lo rifaccio?" if len(da_rifare) == 1 else ": li rifaccio?")
+        return frase + "."
+
+    def _rifai_interrotti(self, persona):
+        """Il «sì» all'annuncio: un lavoro nuovo per ogni interrotto di `persona` (stesso
+        compito, stessa cartella, la sandbox di prima per il codice). Restituisce il primo, che
+        il tool avvia; gli altri partono con lui (`insieme`)."""
+        vecchi = self._interrotti_da_rifare(persona)
+        nuovi = []
+        for lv in vecchi:
+            n = self.nuovo(lv.tipo, lv.compito, lv.persona, lv.persona_nome, lv.livello,
+                           lv.formato, lv.modello, lv.vincoli, list(lv.dati))
+            nuovi.append(ripresa.nota_ripresa(lv, n))
+            with self._lock:
+                lv.stato, lv.passo = "ripreso", f"rifatto come {n.id}"
+            self.log(f"[AGENTI] {lv.id} interrotto: lo rifaccio come {n.id}")
+        if not nuovi:
+            return None
+        nuovi[0].insieme = nuovi[1:]
+        return nuovi[0]
+
+    def _annuncia_ripresi(self):
+        """Dal thread dei lavori, all'avvio: gli interrotti recenti alla persona che li aveva
+        chiesti (un annuncio per persona, con «Lo rifaccio?»), e le domande di prima del
+        riavvio di nuovo (l'azione in sospeso del Brain non c'è più). Una volta sola."""
+        ora = time.time()
+        with self._lock:
+            interrotti = [lv for lv in self.lavori if lv.stato == "interrotto"
+                          and not getattr(lv, "annunciato", False)]
+            attese = [lv for lv in self.lavori if lv.stato == "in_attesa"
+                      and getattr(lv, "ripristinato", False)]
+        per_persona: dict = {}
+        for lv in interrotti:
+            lv.annunciato = True
+            if not self._entro_annuncio(lv, ora):
+                continue                     # più vecchi: solo nell'elenco di lavori_stato
+            if ripresa.riprendibile(lv) and lv.persona is not None:
+                per_persona.setdefault(lv.persona, []).append(lv)
+            else:
+                self._metti_annuncio(lv, ripresa.frase(lv, titolo_detto(lv.titolo)))
+        for gruppo in per_persona.values():
+            primo = gruppo[0]
+            off = ripresa.offerta(primo)
+            if len(gruppo) == 1:
+                testo = ripresa.frase(primo, titolo_detto(primo.titolo))
+            else:
+                nomi = [f"«{titolo_detto(lv.titolo)}»" for lv in gruppo]
+                testo = (f"i lavori {', '.join(nomi[:-1])} e {nomi[-1]} si sono interrotti per "
+                         f"un riavvio di Calliope. Li rifaccio?")
+                off = {**off, "domanda": "Li rifaccio?",
+                       "cosa": f"rifare i {len(gruppo)} lavori interrotti"}
+            self._metti_annuncio(primo, testo, off)
+        for lv in attese:
+            lv.ripristinato = False
+            if self._entro_annuncio(lv, ora):
+                self._annuncia(lv)
+        if interrotti:
+            self._salva_stato()
+
+    def _metti_annuncio(self, lav, testo: str, in_sospeso: dict | None = None):
+        who = f"{lav.persona_nome}, " if lav.persona_nome else ""
+        msg = who + testo if who else testo[0].upper() + testo[1:]
+        item = {"id": lav.id, "tipo": lav.tipo, "titolo": lav.titolo, "stato": lav.stato,
+                "esito": "interrotto", "messaggio": msg, "chi": lav.persona,
+                "chi_nome": lav.persona_nome, "passi": 0, "token": 0, "secondi": 0,
+                "cartella": lav.cartella, "test": None}
+        if in_sospeso:
+            item["in_sospeso"] = in_sospeso
+        self.log(f"[AGENTI] {lav.id}: annuncio dell'interruzione a "
+                 f"{lav.persona_nome or 'chi l’ha chiesto'}")
         self.done.put(item)
         if self.on_done:
             self.on_done()

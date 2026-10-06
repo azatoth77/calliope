@@ -1042,6 +1042,10 @@ class Config:
     # tanti minuti senza risposta si chiude da solo, e Calliope lo dice
     agenti_domande_max: int = 3
     agenti_attesa_risposta_min: float = 120.0
+    # Lavori interrotti da un riavvio di Calliope (06/10, calliope/agenti/ripresa.py): chi li
+    # aveva chiesti lo sente al primo silenzio («… Lo rifaccio?») se il lavoro era vivo meno
+    # di tante ore fa; quelli più vecchi restano solo nell'elenco di lavori_stato, per un giorno
+    agenti_interrotti_annuncio_h: float = 3.0
     # I file della persona dati all'agente (03/10, «correggi lo script backup.py»): solo
     # testo, codice, Word, Excel e PDF, al più tanti MB; del testo di un documento l'agente
     # legge al più tanti caratteri
@@ -2062,7 +2066,7 @@ SEZIONI: dict[str, list[str]] = {
                "agenti_precedenza_voce", "agenti_ripresa_s", "agenti_arbitro", "agenti_pausa_vllm",
                "agenti_domande_max",
                "agenti_attesa_risposta_min", "agenti_file_max_mb", "agenti_file_caratteri",
-               "agenti_esempi_max", "agenti_esempio_kb"],
+               "agenti_esempi_max", "agenti_esempio_kb", "agenti_interrotti_annuncio_h"],
     "estensioni": ["estensioni_enabled", "estensioni_cartella", "estensioni_max_attive",
                    "estensioni_attesa_s", "estensioni_conferma_s", "estensioni_tempo_max_s",
                    "estensioni_memoria_max_mb", "estensioni_secondo_parere",

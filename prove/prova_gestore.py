@@ -304,6 +304,118 @@ def prova(tmp: Path):
        and sorted([b.name, a.name]) == [a.name, b.name],
        f"due istantanee nello stesso secondo: cartelle diverse e in ordine ({a.name}, {b.name})")
 
+    lavori_in_corso(nuovo, righe, repo, stato, dati, log)
+
+
+def scrivi_lavori(dati: Path, righe: list, pid: int | None = None):
+    """Lo stato dei lavori come lo scrive Calliope (calliope/agenti/ripresa.py)."""
+    f = dati / gestore.FILE_LAVORI
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(json.dumps({"versione": 1, "pid": os.getpid() if pid is None else pid,
+                             "lavori": righe}), encoding="utf-8")
+
+
+def lavori_in_corso(nuovo, righe, repo, stato, dati, log):
+    """11. Lavori dell'agente in corso (06/10, caso vero della DGX: un aggiorna alle 17:07 ha
+    ucciso in silenzio il lavoro «gioco memory» partito alle 16:56)."""
+    import threading
+    import time
+    g = nuovo()
+    g.imp["segui"] = "ramo"            # la 9 l'aveva messo a «tag»
+    g._salva_impostazioni()
+    (stato / "attivo").write_text(g.attuale())
+    gioco = {"id": "L2", "titolo": "gioco memory da giocare sullo schermo", "stato": "in_corso",
+             "persona_nome": "Mario", "inizio": time.time() - 660}
+    scrivi_lavori(dati, [gioco])
+    versione(repo, "7")
+    g = nuovo()
+    g.interattivo = lambda: False
+    prima, restart_prima = g.attuale(), log().count("restart")
+    righe.clear()
+    rc = g.aggiorna()
+    testo = "\n".join(righe)
+    ok(rc == gestore.RINVIATO and g.attuale() == prima and log().count("restart") == restart_prima,
+       f"aggiorna senza terminale con un lavoro in corso: non procede (uscita {rc}), nessun "
+       f"riavvio")
+    ok("«gioco memory da giocare sullo schermo» di Mario, in corso da 11 minuti" in testo
+       and "--attendi-lavori" in testo and "--forza" in testo,
+       "dice quale lavoro e come procedere (--attendi-lavori, --forza)")
+    ok(g.imp["storia"][-1]["esito"] == "rinviato", "nella storia: rinviato")
+
+    g = nuovo()
+    g.interattivo, risposte = (lambda: True), []
+    g.chiedi = lambda domanda: (risposte.append(domanda), "n")[1]
+    ok(g.aggiorna() == gestore.RINVIATO and g.attuale() == prima and risposte
+       and "[s/N]" in risposte[0], "da terminale chiede conferma; «n» → non aggiorna")
+    ok(g.riavvia() == gestore.RINVIATO and log().count("restart") == restart_prima,
+       "riavvia con un lavoro in corso, «n»: niente riavvio")
+    ok(g.torna() == gestore.RINVIATO and g.attuale() == prima,
+       "torna con un lavoro in corso, «n»: resta la versione in uso")
+    g.chiedi = lambda domanda: "sì"
+    ok(g.riavvia() == 0 and log().count("restart") == restart_prima + 1,
+       "da terminale «sì»: riavvia")
+    restart_prima += 1
+
+    # --attendi-lavori: il lavoro finisce dopo un attimo (Calliope riscrive il file)
+    g = nuovo()
+    g.giro_lavori_s = 0.05
+    t0 = []
+
+    def out(riga):
+        righe.append(riga)
+        if "aspetto che finiscano" in riga:
+            t0.append(time.monotonic())
+            threading.Timer(0.3, lambda: scrivi_lavori(dati, [])).start()
+    g.out = out
+    righe.clear()
+    rc = g.aggiorna(attendi_min=1.0)
+    ok(rc == 0 and g.attuale() != prima and log().count("restart") == restart_prima + 1
+       and t0 and time.monotonic() - t0[0] >= 0.3 and any("finiti: procedo" in r for r in righe),
+       "--attendi-lavori: aspetta che il lavoro finisca, poi aggiorna e riavvia")
+    v7 = g.attuale()
+
+    # --attendi-lavori con un lavoro che non finisce: dopo il tempo massimo niente cambia
+    scrivi_lavori(dati, [gioco, {"id": "L3", "titolo": "relazione", "stato": "in_coda"}])
+    versione(repo, "8")
+    g = nuovo()
+    g.giro_lavori_s = 0.05
+    righe.clear()
+    rc = g.aggiorna(attendi_min=0.005)
+    ok(rc == gestore.RINVIATO and g.attuale() == v7 and any("ancora lavori in corso" in r
+                                                            for r in righe),
+       "--attendi-lavori oltre il tempo massimo: non aggiorna (uscita 75)")
+    ok(any("L3 «relazione», in coda" in r for r in righe), "anche i lavori in coda contano")
+
+    # Un lavoro che aspetta una risposta sopravvive al riavvio: non blocca
+    scrivi_lavori(dati, [{"id": "L4", "titolo": "verbale", "stato": "in_attesa"}])
+    ok(nuovo().prima_di_fermare("riavvio") is True,
+       "un lavoro in attesa di una risposta non blocca (sopravvive al riavvio)")
+    # Un file rovinato non blocca
+    (dati / gestore.FILE_LAVORI).write_text("{rotto", encoding="utf-8")
+    ok(nuovo().prima_di_fermare("riavvio") is True, "file dei lavori rovinato: non blocca")
+    if os.name == "posix":
+        # Il file lasciato da un'istanza caduta (pid che non c'è più) non conta
+        scrivi_lavori(dati, [gioco], pid=2 ** 22 + 12345)
+        ok(nuovo().prima_di_fermare("riavvio") is True,
+           "file di un processo che non c'è più: non blocca")
+
+    # --forza: aggiorna lo stesso, e lo dice
+    scrivi_lavori(dati, [gioco])
+    g = nuovo()
+    righe.clear()
+    rc = g.aggiorna(forza=True)
+    ok(rc == 0 and g.attuale() != v7 and any("propone di rifarli" in r for r in righe),
+       "--forza: aggiorna interrompendo il lavoro, e dice che Calliope proporrà di rifarlo")
+    # Servizio spento: nessun controllo
+    (stato / "attivo").unlink()
+    ok(nuovo().prima_di_fermare("riavvio") is True, "servizio spento: nessun lavoro da proteggere")
+    p = gestore._parser().parse_args(["aggiorna", "--attendi-lavori"])
+    ok(p.attendi_lavori == gestore.ATTESA_LAVORI_MIN and not p.forza,
+       f"--attendi-lavori senza numero: {gestore.ATTESA_LAVORI_MIN:g} minuti")
+    p = gestore._parser().parse_args(["riavvia", "--attendi-lavori", "5", "--forza"])
+    ok(p.attendi_lavori == 5.0 and p.forza, "riavvia --attendi-lavori 5 --forza")
+    (dati / gestore.FILE_LAVORI).unlink()
+
 
 def memoria_in(cartella: Path) -> str:
     with sqlite3.connect(cartella / "memoria.db") as c:

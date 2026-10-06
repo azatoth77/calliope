@@ -1129,6 +1129,10 @@ agenti:
   # di un'estensione (scarica_esempio, 05/10), e la dimensione massima di ognuna. 0 = mai
   agenti_esempi_max: 5
   agenti_esempio_kb: 1024
+  # Lavori interrotti da un riavvio di Calliope (06/10, calliope/agenti/ripresa.py): chi li
+  # aveva chiesti lo sente al primo silenzio («… Lo rifaccio?») se il lavoro era vivo meno
+  # di tante ore fa; quelli più vecchi restano solo nell'elenco di lavori_stato, per un giorno
+  agenti_interrotti_annuncio_h: 3.0
 
 estensioni:
   # Estensioni (calliope/estensioni/, 04/10, docs/ricerche/2026-10-04-estensioni-e-guardrail.md):
