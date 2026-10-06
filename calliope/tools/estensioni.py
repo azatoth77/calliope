@@ -143,6 +143,10 @@ def _estensione_crea(ctx: ToolContext, compito: str = "", nome: str = "", propos
                   "l'estensione: nel piano gia_fatto_da resta vuoto.")
         if esito is not None and esito.esito == "raffinabile":
             v += f" Richiesta come detta dalla persona: «{compito}»."
+        if esito is not None and esito.fonte_ok and esito.fonte_url:
+            # La fonte che l'analisi ha già verificato (06/10): l'agente parte da lì
+            v += f" Fonte pubblica verificata (risponde): {esito.fonte_url}"
+
         lav = svc.nuovo("estensione", compito_agente, prof.id, prof.name, level, "", "", v,
                         storia)
         # Il nome del lavoro: quello dell'estensione (06/10: L1 si chiamava «estensione che»)

@@ -74,31 +74,67 @@ class SpeakerCtx:
         self.identified_by = how
 
 
-def risposta(**kw) -> dict:
-    d = {"mancano": [], "esito": "chiara", "specifica": "", "domande": [], "nome": "",
-         "fonte_url": "", "tool": "", "come_chiederlo": "", "motivo": ""}
-    d.update(kw)
+def risposta(esito="chiara", tipo="codice", domande=(), specifica="", nome="", fonte_url="",
+             tool="", come_chiederlo="", motivo="", stati=None) -> dict:
+    """La risposta del modello nel formato dell'analizzatore (stati dei punti), da un esito."""
+    punti = {p: {"stato": "detto", "nota": ""} for p in ar.PUNTI[tipo]}
+    primo = "output"
+    if esito == "vaga":
+        punti[primo]["stato"] = "manca"
+    elif esito == "raffinabile":
+        punti[primo]["stato"] = "dal_contesto"
+    for p, st in (stati or {}).items():
+        punti[p] = {"stato": st, "nota": ""}
+    d = {"impossibile": motivo, "gia_fatto": tool, "come_chiederlo": come_chiederlo,
+         "punti": punti, "domande": list(domande), "specifica": specifica, "nome": nome,
+         "fonte_url": fonte_url}
     return {"content": json.dumps(d, ensure_ascii=False)}
 
 
 # ═══════════════════════════ 1. pezzi ═══════════════════════════
 sezione("interpretazione e frasi")
 verifica("JSON rotto → nessuna (si procede)", ar.interpreta("non json", "codice").esito == "nessuna")
-verifica("esito sconosciuto → nessuna",
-         ar.interpreta(risposta(esito="boh")["content"], "codice").esito == "nessuna")
-verifica("vaga senza domande → chiara",
+verifica("senza i punti → nessuna",
+         ar.interpreta(json.dumps({"esito": "chiara"}), "codice").esito == "nessuna")
+verifica("un punto che manca senza domande → chiara",
          ar.interpreta(risposta(esito="vaga")["content"], "codice").esito == "chiara")
-verifica("raffinabile senza specifica → chiara",
+verifica("dal contesto senza specifica → chiara",
          ar.interpreta(risposta(esito="raffinabile")["content"], "codice").esito == "chiara")
-verifica("impossibile senza motivo → chiara",
-         ar.interpreta(risposta(esito="impossibile")["content"], "codice").esito == "chiara")
+verifica("estensione: l'input non manca mai (lo dice chi la usa), anche se il modello lo dice",
+         ar.interpreta(risposta(tipo="estensione", stati={"input": "manca"}, domande=["Quale?"])[
+             "content"], "estensione").esito == "chiara"
+         and "manca" not in ar.schema("estensione")["properties"]["punti"]["properties"][
+             "input"]["enum"])
+e = ar.interpreta(risposta(esito="raffinabile", specifica="x")["content"], "codice",
+                  conversazione=False)
+verifica("senza conversazione non c'è raffinabile", e.esito == "chiara")
+verifica("stato sconosciuto → scelta ragionevole",
+         ar.interpreta(risposta(stati={"input": "boh"})["content"], "codice").stati["input"]
+         == "scelta_ragionevole")
+verifica("impossibile prima di tutto, poi c'è già",
+         ar.interpreta(risposta(esito="vaga", domande=["a?"], motivo="no", tool="calcola")[
+             "content"], "codice").esito == "impossibile"
+         and ar.interpreta(risposta(esito="vaga", domande=["a?"], tool="calcola")["content"],
+                           "codice").esito == "gia_fatto")
+e = ar.interpreta(risposta(esito="vaga", domande=[
+    {"domanda": "Vuoi anche i simboli?", "senza_risposta": "sceglie"}])["content"], "codice")
+verifica("una domanda che l'agente sceglie da solo non si fa (e non c'è altro: chiara)",
+         e.esito == "chiara" and not e.domande)
+e = ar.interpreta(risposta(esito="vaga", domande=[
+    {"domanda": "Vuoi anche i simboli?", "senza_risposta": "sceglie"},
+    {"domanda": "Che tariffa usa l'azienda?", "senza_risposta": "sbaglia"}])["content"], "codice")
+verifica("restano solo le domande indispensabili", e.esito == "vaga"
+         and e.domande == ["Che tariffa usa l'azienda?"], str(e.domande))
+verifica("le ricerche (web_cerca, archivio) non sono funzioni da proporre",
+         "web_cerca" not in [n for n, _ in ar.funzioni(build_registry(web=Config()))])
 e = ar.interpreta(risposta(esito="vaga", domande=["Quale tariffa usa l'azienda"],
+
                            specifica="x")["content"], "codice", senza_domande=True)
 verifica("dopo le domande una vaga diventa raffinabile", e.esito == "raffinabile")
-e = ar.interpreta(risposta(esito="vaga", domande=["**Quale** linea https://x.it"],
-                           mancano=["input", "inventato"])["content"], "estensione")
-verifica("domande pulite (niente markdown né indirizzi, «?» in fondo), punti solo della lista",
-         e.domande == ["Quale linea?"] and e.mancano == ["input"], str(e.domande))
+e = ar.interpreta(risposta(esito="vaga", tipo="estensione",
+                           domande=["**Quale** linea https://x.it"])["content"], "estensione")
+verifica("domande pulite (niente markdown né indirizzi, «?» in fondo), punti che mancano",
+         e.domande == ["Quale linea?"] and e.mancano == ["output"], str(e.domande))
 f = ar.frase_domande(["Quale linea?", "Quale fermata?", "Di quale azienda?"])
 verifica("a voce al più 2 domande", "Quale linea?" in f and "Quale fermata?" in f
          and "azienda" not in f and f.endswith("?"), f)
@@ -111,9 +147,13 @@ nomi = [n for n, _ in ar.funzioni(reg)]
 verifica("funzioni dal registro dei tool: calcola e data_calcola sì, i lavori no",
          "calcola" in nomi and "data_calcola" in nomi and "delega_lavoro" not in nomi
          and "estensione_crea" not in nomi, f"{len(nomi)} funzioni")
-verifica("schema senza «vaga» dopo le domande",
-         "vaga" not in ar.schema("codice", True)["properties"]["esito"]["enum"]
-         and "vaga" in ar.schema("codice")["properties"]["esito"]["enum"])
+def stati_schema(sc):
+    return sc["properties"]["punti"]["properties"]["input"]["enum"]
+
+
+verifica("schema senza «manca» dopo le domande",
+         "manca" not in stati_schema(ar.schema("codice", True))
+         and "manca" in stati_schema(ar.schema("codice")))
 
 # ═══════════════════════════ 2. delega_lavoro di codice ═══════════════════════════
 fake = FakeOllama(modelli=(MODELLO,), caricati=(MODELLO,)).avvia()
@@ -170,7 +210,7 @@ storia = [("user", "Il mutuo è di 120 000 euro a 20 anni al 3,1 % fisso"),
           ("assistant", "Va bene.")]
 spec = ("Piano di ammortamento alla francese per 120 000 euro, 20 anni, 3,1 % fisso, rata "
         "mensile")
-fake.copione = [risposta(esito="raffinabile", specifica=spec, mancano=["input"])]
+fake.copione = [risposta(esito="raffinabile", specifica=spec)]
 n0 = len(fake.richieste)
 out = delega("Scrivimi un programma che mi fa il piano di ammortamento", 20, storia=storia)
 utente = nuove(n0)[0]["messages"][1]["content"]
@@ -185,7 +225,7 @@ verifica("il compito all'agente è quello raffinato, il titolo quello della rich
 svc._offerte.clear()
 
 sezione("delega_lavoro: vaga, domande e risposta")
-fake.copione = [risposta(esito="vaga", mancano=["dati_persona", "input"],
+fake.copione = [risposta(esito="vaga", stati={"dati_persona": "manca"},
                          domande=["Che tariffa al chilometro usa la tua azienda?",
                                   "Quanti chilometri hai fatto?"])]
 n_lav = len(svc.lavori)
@@ -202,7 +242,7 @@ out = delega("Rimborso chilometrico a 0,42 euro al chilometro per 455,5 km", 31,
              testo="0,42 euro al chilometro, ho fatto 455,5 chilometri")
 corpo = nuove(n0)[0]
 verifica("la risposta si analizza di nuovo senza «vaga», con domande e risposta nel prompt",
-         "vaga" not in corpo["format"]["properties"]["esito"]["enum"]
+         "manca" not in stati_schema(corpo["format"])
          and "Domande fatte" in corpo["messages"][1]["content"]
          and "455,5 chilometri" in corpo["messages"][1]["content"])
 verifica("dopo la risposta: la proposta con la specifica", out["risposta_finale"].startswith(
@@ -334,7 +374,7 @@ verifica("fonte che non risponde: vaga, con la domanda sul sito",
 
          and out["in_sospeso"]["tool"] == "estensione_crea", out["risposta_finale"])
 svc.analizzatore.dimentica("dario-id")
-fake.copione = [risposta(esito="vaga", mancano=["input", "fonte"],
+fake.copione = [risposta(esito="vaga", tipo="estensione", stati={"fonte": "manca"},
                          domande=["Quale linea?", "Quale fermata?", "Di quale azienda?"])]
 hub = HubFinto()
 out = crea("Fammi un'estensione che mi dice quando passa il prossimo autobus", 120,
