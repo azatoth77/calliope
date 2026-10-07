@@ -237,6 +237,48 @@ def prova_sospeso():
     tel.fine_turno()
 
 
+def prova_scaduta_sospeso():
+    """07/10 pomeriggio, caso vero della DGX: «Fai una ricerca…» dopo una pausa lunga (la
+    conversazione si chiude per tempo all'inizio del turno, conversazione_scaduta) →
+    «…Procedo?»; poi «Sì, grazie.» breve: finiva nella conversazione anonima del satellite
+    (la corsia era rimasta sulla conversazione chiusa), senza la proposta, e il modello
+    rispondeva «Prego!»."""
+    reg = corsie.RegistroConversazioni(cfg_prova(conversazione_doppione_s=0.0))
+    sat = corsia_finta("sat:1", 1, reg)
+    parla(sat, "Calliope, il mio gatto si chiama Micio.", "Dario", "voce")
+    vecchia = reg.di_persona("dario-id")
+    vecchia.last_turn_at = time.monotonic() - 1000          # oltre storia_inattiva_s
+    chi = sat.speaker_ctx
+    chi.current_speaker, chi.identified_by, chi.current_level = "Dario", "voce", "amministra"
+    testo = "Calliope, fai una ricerca sui pannelli solari."
+    sat.turno(sat.brain, "Dario", "voce", False, testo, {}, persona_id="dario-id")
+    "".join(sat.brain.stream_reply(testo, "amministra"))
+    sat.brain.set_pending({"tool": "delega_lavoro", "argomenti": {"proposta": "L1"},
+                           "domanda": "Procedo?"})
+    sat.fine_turno()
+    nuova = reg.di_persona("dario-id")
+    verifica("conversazione scaduta all'inizio del turno: al suo posto una nuova",
+             nuova is not vecchia and "conversazione_scaduta" in sat.brain.last_rules,
+             sat.brain.last_rules)
+    verifica("la corsia segue la conversazione nuova (non resta su quella chiusa)",
+             sat.conv is nuova)
+    rec = {}
+    chi.identified_by, chi.current_level = "breve", "familiare"
+    sat.turno(sat.brain, "Dario", "breve", True, "Sì, grazie.", rec, persona_id="dario-id")
+    verifica("«Sì, grazie.» breve subito dopo: continua la sua conversazione, non anonima",
+             rec.get("conversazione", {}).get("come") == "continua", rec.get("conversazione"))
+    verifica("… e la proposta «Procedo?» c'è", bool(sat.brain._take_pending()))
+    sat.fine_turno()
+    # Contrario: un ospite (voce non riconosciuta) nella stessa finestra resta anonimo
+    rec = {}
+    chi.current_speaker, chi.identified_by, chi.current_level = None, None, "ospite"
+    sat.turno(sat.brain, None, None, True, "Sì, grazie.", rec)
+    verifica("contrario: un ospite nella stessa finestra resta nella conversazione anonima",
+             rec.get("conversazione", {}).get("come") == "anonima"
+             and not sat.brain._take_pending(), rec.get("conversazione"))
+    sat.fine_turno()
+
+
 # ───────────────────────── 4. uso e doppioni ─────────────────────────
 def prova_uso_doppioni():
     reg = corsie.RegistroConversazioni(cfg_prova(conversazione_doppione_s=2.0))
@@ -608,7 +650,7 @@ def main():
         sys.stdout.reconfigure(encoding="utf-8")
     except (AttributeError, ValueError):
         pass
-    for f in (prova_scelta, prova_brain, prova_sospeso, prova_uso_doppioni, prova_varco,
+    for f in (prova_scelta, prova_brain, prova_sospeso, prova_scaduta_sospeso, prova_uso_doppioni, prova_varco,
               prova_condivisa, prova_smistatore, prova_ciclo, prova_voce_per_corsia, prova_pulizia_ripresa,
               prova_compressione, prova_server):
         print(f"── {f.__name__} ──")
