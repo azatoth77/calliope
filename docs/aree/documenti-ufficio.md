@@ -150,3 +150,11 @@ lavori un `.txt`.
 - **Conversioni a richiesta** («fammene un PDF», «lo voglio in Word»): `risultato_lavoro` con
   `modo` pdf o word (`agenti/risultato.converti`, area agenti-estensioni) e «Scarica» nella
   scheda (`schermi/scarica.py`, area schermi-telefono).
+
+## Il nome del file offerto dopo una modifica (07/10 sera, ramo `correzioni-giro9`)
+
+`DocumentService._offer` offre al PC il file con il suo nome vero (lo stem di `nome_file`): dopo
+una modifica salvata come «Titolo (2)» perché l'originale era aperto, «Apro Titolo (2).»; il
+`cosa_fare` di `documento_modifica` dice che il risultato 1 è la versione nuova e che il numero
+tra parentesi del nome non è il risultato (caso vero della DGX: il modello chiamava
+`pc_apri_file(2)`). Il resto in [pc](pc.md) e [sicurezza-politica](sicurezza-politica.md).

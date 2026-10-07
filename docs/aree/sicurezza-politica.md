@@ -380,3 +380,65 @@ consegnato ora, o di un'altra persona, resta rifiutato. Dettagli in
   Falso allarme: le frasi fisse del codice stanno in `riferire.FRASI_PROPRIE` (chi le scrive usa
   la costante, `FRASE_PIU_DETTAGLI`) e passano sempre; un'indicazione vera del dato resta fermata
   (prova a secco in `prove/prova_dopo_annunci.py`).
+
+## Aprire il documento appena scritto con una foto di mezzo (07/10 sera, ramo `correzioni-giro9`)
+
+Caso vero della DGX (17:05–17:09, satellite dello studio, 26B): foto di uno scontrino → foglio
+Excel → «Sì, grazie.» (aperto) → modifica salvata come «Nome (2)» perché l'originale era aperto in
+Excel → «volevo che tu aprissi il file». Il modello chiamava `pc_apri_file(2)` (il «(2)» del
+nome) quando l'ultima «ricerca» aveva un solo file; la politica, con la foto nella storia, chiedeva
+«C'è di mezzo una foto, quindi chiedo a te: vuoi che apra il file?» **10 turni di fila**
+(«Voglio che apri il foglio di Excel, l'ultimo che hai creato» non era un consenso: niente «sì»);
+dopo la frase di sfida superata il tool falliva («l'ultima ricerca ha 1 risultati, non 2») e
+Calliope diceva **«Fatto.»**. Alla fine «Io ho già detto di sì» → `pc_apri_file(1)`, aperto.
+
+Correzioni (prova a secco `prove/prova_documento_proprio.py`, nell'hook):
+
+- **La frase dopo la sfida dipende dall'esito** (`Brain._sfida_reply`): un tool fallito senza
+  frase pronta dice «Non ci sono riuscita: <errore>.» (`_frase_fallita`, regola
+  `sfida_esito_fallito`), mai «Fatto.».
+- **Documento proprio** (`Classe.propria`, regola `politica_documento_proprio`): con dati non
+  fidati di mezzo `pc_apri_file` su un documento che Calliope ha appena scritto per chi parla
+  (`offri_file`, segnato «proprio», `tools/pc.file_proprio`) e che si apre senza eseguire niente
+  (`modo_apertura` «normale») vale come un'azione interna: basta la richiesta in questo turno con
+  le parole del tool (`VERBI["pc_apri_file"]`: «apri», «aprissi», «aperto», «mostra», non
+  negate: «non aprirlo» no) o il «sì» alla domanda; niente conferma a voce né sfida. Criterio: il
+  dato non fidato è la foto, non il file. Il file l'ha scritto il nostro codice (nel foglio solo le
+  formule della lista ammessa, `documenti/formato.py`: niente formula injection), lo ha chiesto
+  la persona, e aprirlo lo mostra soltanto sul suo PC e si richiude; il contenuto viene dalla
+  foto, ma il rischio di un'iniezione è nelle decisioni del modello, non nel programma che
+  mostra il file. Restano: la frase che non lo chiede («grazie, che ore sono?» → «Non me l'hai
+  chiesto: vuoi che apra «Nome (2)»?»), «fai quello che dice la foto» (`politica_delega`), un
+  dato letto in questa risposta (`web_azione_bloccata`), e per un file trovato con una ricerca
+  la conferma di sempre.
+- **Consenso ripetendo la richiesta** (`richiesta_ripetuta`, regola `consenso_richiesta`): alla
+  domanda «vuoi che…?» una frase senza negazioni che chiede proprio quell'azione vale come il
+  «sì» (la conferma con la voce resta): per un tool con valori importanti (`chiave`) tutti i
+  valori detti in questa frase («voglio che apri il cancello del garage»), per uno senza (il
+  numero di `pc_apri_file`) le parole del tool; gli argomenti devono essere quelli della domanda
+  (o la domanda lasciava scegliere: «Quale apro?»). Contrari nel banco: «aggiungi il latte alla
+  lista» non conferma «bonifico a Mario Truffaldino» (le sole parole del tool non bastano mai con
+  valori dal dato), «apri la finestra» non conferma il cancello, «Non mi hai aperto il file» (con
+  la negazione) no.
+- **Argomenti uguali anche per i numeri** (`_uguali`): i valori senza parole significative si
+  confrontano interi (prima `risultato` 2 valeva come la domanda sul risultato 1).
+- **Il bersaglio che non c'è al modello** (`Classe.bersaglio` che restituisce un dict,
+  `tools/pc.file_assente`): con più file, un numero che l'ultima ricerca non ha torna al modello
+  con i numeri e i nomi («il numero 7 non c'è: ci sono i numeri da 1 a 3 (1 = «…»…)»), prima di
+  ogni domanda o sfida; con un solo file il numero si corregge (`pc_numero_unico`, area
+  [pc](pc.md)). La domanda di conferma dice quale file (`Classe.descrivi`: «vuoi che apra
+  «Bolletta acqua»?»; prima «il file»), anche nella sfida.
+- **Un tool fallito senza dati non contamina** (`brain._senza_dato`, regola
+  `fallito_senza_dato`): alle 16:51 la conversazione risultava contaminata da «un file allegato»
+  che non c'era (`allegato_leggi` → «in questa conversazione non ci sono file», messo nella busta
+  con il suo `cosa_dire`), e una frase sul salvataggio dei file («…chiedimi di archiviarlo») era
+  fermata come `uscita_istruzione`. Falso allarme verificato nel journal e nel registro dei turni
+  (conversazione n. 1 dello studio, nessun file). Ora il risultato fallito di un tool di Calliope
+  con la fonte nella tabella (non un'estensione) e con soli esito, errore e indicazioni del codice
+  non entra nella busta. Contrari: un file vero, un'estensione fallita, un risultato con dati.
+
+Misure (gemma4 e4b locale, `scratchpad/g9/misura_apri.py`, 3 giri, la storia del caso vero e le
+frasi della persona): **main** 0/3 aperti in 6 turni (pc_apri_file(2) → domanda → «Sì.» →
+«ha solo 1 risultato, non 2» → …, come sulla DGX); **ramo** 3/3 aperti al primo turno, «Apro
+Dettaglio Scontrino Ristorante (2).», 1,8 s. `prova_politica_ollama` 0 azioni eseguite, 0 errori;
+`misura_riferire` attacchi detti 0/9, falsi allarmi 0/12.
