@@ -226,7 +226,8 @@ Bluetooth): da rimisurare dopo l'aggiornamento con un giorno d'uso (`calliope st
 Possibili passi dopo, non fatti: `latency="low"` per l'uscita del satellite (MME 0,09 s invece
 di 0,18, rischio di buchi con il keepalive a 20 ms e le cuffie Bluetooth: da provare a orecchio);
 una voce medium (5 volte più veloce, ma serena-high è una scelta di qualità); Piper sulla GPU
-della DGX (nel venv c'è solo onnxruntime per CPU: ruote CUDA per aarch64 da verificare).
+della DGX (nel venv c'è solo onnxruntime per CPU: ruote CUDA per aarch64 da verificare;
+storico: verificato e fatto il 07/10 sera, «Piper sulla GPU, secondo la macchina» sotto).
 
 ## Il primo pezzo dalla velocità misurata, e la taratura della voce (07/10 pomeriggio)
 
@@ -296,6 +297,98 @@ resto corto, sintesi lentissima: frase intera); la stima (predefiniti → avvio 
 sintesi, anomali e frasi corte scartati, separata per voce e per thread, salvata e riletta, file
 rovinato), `tts_thread` scritto contro «auto», e uno `Speaker` con un Piper finto lento (1 ms a
 carattere, 15 caratteri al secondo) a cui la stima converge.
+
+## Piper sulla GPU, secondo la macchina (07/10 sera)
+
+Il primo pezzo aiuta solo dove ci sono virgole: una prima frase di 130 caratteri senza pause
+costa ~0,47 s sulla CPU della DGX prima del primo audio. Provato Piper con onnxruntime-gpu,
+in un venv temporaneo sulla DGX (cancellato dopo), stessa voce serena-high, frasi delle quattro
+lunghezze e le tredici prime frasi vere del registro.
+
+**Fattibilità** (verificata su PyPI il 07/10): `onnxruntime-gpu` 1.30.0 (MIT, la stessa
+versione di onnxruntime della DGX) ha il wheel `cp312 manylinux_2_34_aarch64` (206 MB) costruito
+per **CUDA 13** (quello della DGX, driver 580); gli extra `cuda` e `cudnn` portano runtime,
+nvrtc, cuFFT, cuRAND, cuBLAS 13 e cuDNN 9 da pip (~2,4 GB, licenza NVIDIA, installati
+dall'utente come l'extra `gpu` di Windows). Serve `onnxruntime.preload_dlls()` prima della
+sessione: senza, la sessione CUDA si apre e la prima convoluzione fallisce («dlopen failed for
+libcudnn.so»). piper-tts 1.8 va bene così com'è (Calliope rifà la sessione). Niente
+jetson-ai-lab, NGC o build da sorgente: non servono. TensorRT non provato (il guadagno di CUDA
+basta, e porterebbe altri GB e la compilazione del motore per forma).
+
+**Misure** (DGX, 07/10 ~12:45, con 26B, guardiano, e4b, vLLM e whisper.cpp caricati; tempo al
+primo audio = sintesi della frase intera, che è un pezzo solo; mediana di 5 dopo una chiamata):
+
+| caratteri | CPU, 8 thread | GPU (CUDA) | prima chiamata GPU per quella lunghezza |
+|---|---|---|---|
+| 26 | 0,102 s | **0,042 s** | 0,33 s (la prima in assoluto: scalda CUDA) |
+| 65 | 0,232 s | **0,046 s** | 0,07 s |
+| 138 | 0,473 s | **0,077 s** | 0,10 s |
+| 263 | 1,011 s | **0,172 s** | 0,20 s |
+| 13 prime frasi vere (47–239) | 3,7 ms a carattere | **0,63 ms** a carattere (0,05–0,14 s) | |
+
+- **Audio equivalente**: a rumore spento (`noise_scale` e `noise_w_scale` 0) CPU e GPU danno la
+  stessa forma d'onda, correlazione 0,99998, SNR della differenza 43 dB, lunghezze entro
+  256 campioni su 6,8 s. Col rumore di Piper le durate variano uguali sui due (6,7–7,2 s
+  contro 6,8–7,0 s per la stessa frase).
+- **Memoria GPU**: 1,34–1,45 GiB nel processo (contesto CUDA e cuDNN ~0,37 GiB, il resto l'arena
+  che cresce con le frasi lunghe); `arena_extend_strategy: kSameAsRequested` non la riduce.
+  Apertura della sessione 1,0–1,4 s.
+- **Contesa** con la voce che genera (26B su Ollama, 300 token): sintesi continua di 138
+  caratteri senza pause (caso peggiore) → sintesi 0,14 s invece di 0,077 e generazione
+  37 token/s invece di 78; con una sintesi ogni ~0,6 s → sintesi 0,14 s, generazione 69 token/s
+  (−11 %). La CPU sotto la stessa contesa: 0,66 s (e la generazione 76). Nell'uso vero si
+  sintetizza una frase mentre se ne riproduce un'altra (0,08 s ogni 5–7 s di voce): la
+  contesa è molto sotto il secondo caso.
+
+**Integrazione** (`tts_dispositivo: auto | cpu | cuda`, predefinito «auto»):
+
+- `pyproject.toml`: su Linux aarch64 `onnxruntime-gpu` al posto di `onnxruntime` (stesso
+  modulo: non possono stare insieme; un override di uv lo toglie anche da piper-tts,
+  faster-whisper e silero-vad, che lo chiedono), extra **`voce-gpu`** con
+  `onnxruntime-gpu[cuda,cudnn]`. Tutte le sessioni di Calliope e delle librerie che usa
+  chiedono già `CPUExecutionProvider` esplicito (VAD, wake word, CAM++, Piper, il VAD di
+  faster-whisper): con la build GPU restano sulla CPU. Senza l'extra onnxruntime-gpu lavora
+  solo sulla CPU, come prima. I satelliti hanno i loro requisiti (`setup/satellite/`): niente
+  cambia per loro.
+- `tts.carica_voce` → `_su_gpu`: se `taratura_voce.dispositivo_in_uso` dice «cuda», sessione
+  CUDA (`taratura_voce.sessione_cuda`) e una frase di prova («Pronta.», scalda anche CUDA);
+  **qualunque errore: la voce resta sulla CPU** con i suoi thread (principio 7).
+- **La scelta dipende dalla macchina** (`taratura_voce.prova_dispositivo`, nella taratura
+  all'avvio dopo la misura sulla CPU; ricerca
+  [2026-10-07-taratura-macchina](../ricerche/2026-10-07-taratura-macchina.md), §4.1: la voce e
+  Whisper vengono prima di Piper sulla GPU):
+  1. **posto**, senza aprire niente sulla GPU (`memoria_gpu` da nvidia-smi; «[N/A]» = memoria
+     unificata, e allora conta MemAvailable): GPU dedicata sotto i 12 GB mai (il portatile da
+     8 GB: la tengono la voce e Whisper, anche se in quel momento c'è VRAM libera perché il
+     modello si carica dopo); dedicata più grande solo con 1,5 GB per Piper più 2 di margine
+     liberi; memoria unificata con 1,5 + 8 liberi (la DGX ne ha ~20);
+  2. **velocità**: la frase fissa sulla GPU contro la CPU appena misurata, GPU solo se almeno
+     **2 volte** più veloce (`GPU_VANTAGGIO`: sotto contesa la GPU rallenta di 1,8 volte e deve
+     restare più veloce anche lì). Sulla DGX: 0,8 contro 3,8 ms a carattere sulla frase fissa
+     (corta, pesa il costo fisso).
+  La scelta e il motivo vanno in `voce_taratura.json` (`dispositivo`: scelta, causa, motivo,
+  le due misure, la memoria vista) e in `calliope stato` («…; sulla GPU; GPU: memoria unificata
+  con 19,6 GB liberi, GPU 0,8 ms a carattere contro 3,8 della CPU.»; in `--json` `voce.dispositivo`
+  e `voce.motivo`). A ogni apertura si ricontrolla: se ora la memoria non basta, o se l'uso
+  (mediana di 30 sintesi vere sulla GPU) non è più veloce della CPU misurata, si apre sulla
+  CPU. Una CPU scelta per mancanza di posto o per un errore (librerie mancanti) si riprova
+  all'avvio dopo; una CPU scelta perché la GPU non era abbastanza veloce resta (si riprova
+  togliendo `dispositivo` dal file). Le misure sulla GPU hanno la chiave «voce@cuda».
+  `tts_dispositivo: cpu` o `cuda` scritti vincono (con «cuda» e onnxruntime senza CUDA: CPU).
+- Provato sulla DGX nel venv temporaneo con il codice del ramo: taratura che sceglie la GPU,
+  voce riaperta sulla GPU (1,45 s), stato con il motivo; senza cuDNN, «cuda» scritto ripiega
+  sulla CPU e «auto» salva l'errore da riprovare.
+
+Prove (`prova_latenza.prova_voce_gpu`, a secco, niente CUDA): portatile finto da 8 GB (CPU senza
+aprire la GPU, anche con VRAM libera), memoria unificata grande con la GPU misurata 4 volte più
+veloce (GPU) e solo 1,3 volte (CPU), librerie mancanti (CPU con il motivo), scelta salvata e
+riletta, memoria che ora non basta, uso più lento della CPU, valori scritti, onnxruntime senza
+CUDA, ripiego in `_su_gpu` alla prima frase che fallisce, validatore della configurazione.
+
+**Da fare sulla DGX** (Dario): rigenerare `uv.lock`, `calliope extra voce-gpu`, aggiornare;
+dopo l'avvio `calliope log` mostra «Voce sulla GPU: …» e `calliope stato` la riga della voce.
+Da rimisurare con un giorno d'uso: `voce_pronta_s` e la riga «dal testo alla voce» di
+`calliope stato --turni`.
 
 ## Ollama pieno: embedding solo a Calliope inattiva (06/10, prova e2e sulla DGX)
 

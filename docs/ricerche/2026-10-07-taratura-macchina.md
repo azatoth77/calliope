@@ -235,7 +235,11 @@ int8, 13 minuti di audio in 1 min 42 s, 1,5 GB): nessun dato dichiarato per turb
 
 Piper: VITS in ONNX sulla CPU; `medium` 63,5 MB, `high` ~110 MB. Misurato (07/10): serena-high
 sulla DGX ~6 ms a carattere con i thread di Piper, 3,5 con 8 (ramo `primo-pezzo`); una medium
-~5 volte più veloce. La tara già il ramo `primo-pezzo`.
+~5 volte più veloce. La tara già il ramo `primo-pezzo`. Aggiunta del 07/10 sera (ramo
+`piper-gpu`): sulla GPU della DGX con onnxruntime-gpu 0,63 ms a carattere, 1,4 GiB; il ruolo
+«Piper» sta in fondo alle priorità della §4.1 (dopo voce e Whisper): sulla GPU solo con posto
+dopo i residenti (dedicata ≥ 12 GB e 3,5 liberi; unificata 9,5 liberi) e se 2 volte più veloce
+della CPU, deciso dalla taratura (`taratura_voce.prova_dispositivo`).
 
 ### 3.4 La cache per token, dalla forma del modello [M]
 
