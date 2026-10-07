@@ -22,8 +22,9 @@ import re
 import time
 
 from .capacita import testo_prompt
-from .conferme import (SFIDA_ALTRA_VOCE, SFIDA_FALLITA, SFIDA_PARZIALE, SFIDA_SCADUTA,
-                       SFIDA_VOCE_FALLITA, SFIDA_VOCE_INCERTA, confronta, nuova_sfida,
+from .conferme import (SFIDA_ALTRA_VOCE, SFIDA_CHI_PARLA, SFIDA_FALLITA, SFIDA_PARZIALE,
+                       SFIDA_SCADUTA, SFIDA_VOCE_FALLITA, SFIDA_VOCE_INCERTA, chiave_di,
+                       confronta, descrivi_azione, incerta_con_admin, nuova_sfida,
                        secondi_validi, turni_validi)
 from .config import Config, frase_tono, keep_alive_valido, nome_tono
 from .contesto import finestra, uso
@@ -1836,10 +1837,16 @@ class Brain:
                 sc.sfida = None
                 return SFIDA_FALLITA, None
             return SFIDA_PARZIALE.format(testo=s.testo), None
-        if self._speaker_key() != s.persona:
+        # Voce incerta tra chi deve rispondere (chi amministra) e un minore (07/10): non è
+        # «un'altra voce», ma nemmeno la sua. Parole nuove, una volta sola, e la frase chiede
+        # chi parla (prima: «solo chi ha fatto la richiesta», e la sfida si chiudeva)
+        incerta = incerta_con_admin(self.tool_ctx)
+        if incerta is not None and chiave_di(self.tool_ctx, incerta[0]) != s.persona:
+            incerta = None
+        if self._speaker_key() != s.persona and incerta is None:
             sc.sfida = None                     # un'altra voce, o un ospite: mai
             return SFIDA_ALTRA_VOCE, None
-        if getattr(sc, "identified_by", None) != "voce":
+        if getattr(sc, "identified_by", None) != "voce" or self._speaker_key() != s.persona:
             # La sua conversazione, ma l'impronta di questa frase non basta: parole nuove,
             # una volta sola
             s.tentativi += 1
@@ -1849,6 +1856,12 @@ class Brain:
             nuova = nuova_sfida(self.cfg, s.persona, s.tool, s.argomenti, s.cosa)
             nuova.tentativi = s.tentativi
             sc.sfida = nuova
+            if incerta is not None:
+                self._rule("voce_incerta_chiede")
+                cosa = (s.cosa or descrivi_azione(s.tool, s.argomenti)).strip().rstrip(".")
+                return SFIDA_CHI_PARLA.format(adulto=incerta[0], minore=incerta[1],
+                                              cosa=cosa or "confermare",
+                                              testo=nuova.testo), None
             return SFIDA_VOCE_INCERTA.format(testo=nuova.testo), None
         sc.sfida = None
         sc.sfida_superata = True

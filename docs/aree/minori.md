@@ -113,3 +113,13 @@ negli istituti di istruzione, non a casa per scelta della famiglia (linee guida 
 14 anni decide il ragazzo. Proposta: prima solo misure oggettive rispetto al proprio solito più
 «come ti sei sentito?»; parte emotiva solo dopo una prova chiusa sulle voci vere, solo arousal per
 sessione, visibile al ragazzo e al tutore come andamento (variante «mista»), mai etichette né voti.
+
+## Voce incerta tra chi amministra e un minore (07/10)
+
+Misure, casi veri e correzioni in [stt-tts](stt-tts.md#voci-di-famiglia-adulto-e-ragazzo-al-telefono-in-auto-0710).
+In breve: al telefono in auto la voce dell'adulto valeva come quella del ragazzo (impronte lontane,
+coseno 0,17, ma il ragazzo registrato dal telefono). `piu_protetto` resta (voce dubbia → il
+minore), con in più il margine tra primo e secondo profilo (`speaker_id_margine`, 0,08), chi
+amministra solo familiare se un minore è a meno di `minori_margine_amministra` (0,12, il verso
+pericoloso) e la domanda «Non sono sicura di chi parla: …?» solo quando serve per un'azione di chi
+amministra. Il minore va registrato di nuovo per canale quando c'è (stt-tts).

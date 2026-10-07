@@ -422,6 +422,13 @@ chi_parla:
   # Zona grigia (soglia − margine … soglia): durante una conversazione conferma chi
   # parlava al turno prima, ma solo fino a "familiare", mai ad "amministra".
   speaker_id_session_margin: 0.06
+  # Margine tra il primo e il secondo profilo (07/10, docs/aree/stt-tts.md «Voci di
+  # famiglia»): sopra soglia ma a meno di questo dal secondo, la voce non decide (vale come
+  # zona grigia: chi parlava nella conversazione al più come familiare, poi il profilo più
+  # protetto, altrimenti ospite). Misura: sul portatile le frasi vere di chi amministra
+  # stanno a 0,19 (p05) dal minore, nel corpus a 22 voci nessuna frase vera sotto 0,10; in
+  # auto al telefono le frasi scambiate erano a meno di 0,05
+  speaker_id_margine: 0.08
   # Sotto questa durata di voce l'impronta non decide (rifiuta Dario una volta su due):
   # si tiene l'identità della conversazione.
   speaker_min_voice_s: 1.0
@@ -457,6 +464,11 @@ minori:
   # Voce incerta: se un adulto è riconosciuto ma un minore ha un punteggio a meno di questo
   # dal suo (e almeno nella zona grigia), vale il minore: mai un adulto per una voce dubbia
   minori_margine_ambiguo: 0.05
+  # Il verso pericoloso (07/10): chi amministra è riconosciuto dalla voce, ma un minore ha un
+  # punteggio a meno di questo dal suo. Resta lui (la sua conversazione), solo come familiare:
+  # per ciò che vuole chi amministra serve una frase più chiara (la frase di sfida), regola
+  # `amministra_minore_vicino`
+  minori_margine_amministra: 0.12
   # Compiti: risposte sbagliate sullo stesso esercizio prima di spiegare la soluzione (e
   # avvisare i tutori). Decisione del 05/10: 5
   minori_compiti_tentativi: 5

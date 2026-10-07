@@ -1096,6 +1096,13 @@ class Config:
     # Zona grigia (soglia − margine … soglia): durante una conversazione conferma chi
     # parlava al turno prima, ma solo fino a "familiare", mai ad "amministra".
     speaker_id_session_margin: float = 0.06
+    # Margine tra il primo e il secondo profilo (07/10, docs/aree/stt-tts.md «Voci di
+    # famiglia»): sopra soglia ma a meno di questo dal secondo, la voce non decide (vale come
+    # zona grigia: chi parlava nella conversazione al più come familiare, poi il profilo più
+    # protetto, altrimenti ospite). Misura: sul portatile le frasi vere di chi amministra
+    # stanno a 0,19 (p05) dal minore, nel corpus a 22 voci nessuna frase vera sotto 0,10; in
+    # auto al telefono le frasi scambiate erano a meno di 0,05
+    speaker_id_margine: float = 0.08
     # Sotto questa durata di voce l'impronta non decide (rifiuta Dario una volta su due):
     # si tiene l'identità della conversazione.
     speaker_min_voice_s: float = 1.0
@@ -1128,6 +1135,11 @@ class Config:
     # Voce incerta: se un adulto è riconosciuto ma un minore ha un punteggio a meno di questo
     # dal suo (e almeno nella zona grigia), vale il minore: mai un adulto per una voce dubbia
     minori_margine_ambiguo: float = 0.05
+    # Il verso pericoloso (07/10): chi amministra è riconosciuto dalla voce, ma un minore ha un
+    # punteggio a meno di questo dal suo. Resta lui (la sua conversazione), solo come familiare:
+    # per ciò che vuole chi amministra serve una frase più chiara (la frase di sfida), regola
+    # `amministra_minore_vicino`
+    minori_margine_amministra: float = 0.12
     # Compiti: risposte sbagliate sullo stesso esercizio prima di spiegare la soluzione (e
     # avvisare i tutori). Decisione del 05/10: 5
     minori_compiti_tentativi: int = 5
@@ -2007,11 +2019,13 @@ SEZIONI: dict[str, list[str]] = {
     "audio": ["sample_rate", "vad_threshold", "vad_motore", "vad_modello", "silence_ms", "preroll_ms", "min_speech_ms",
               "max_utterance_s", "input_device", "output_device"],
     "chi_parla": ["speaker_id_enabled", "speaker_model", "speaker_threads",
-                  "speaker_id_threshold", "speaker_id_session_margin", "speaker_min_voice_s",
+                  "speaker_id_threshold", "speaker_id_session_margin", "speaker_id_margine",
+                  "speaker_min_voice_s",
                   "speaker_conferma_breve_soglia", "speaker_enroll_phrases", "speaker_enroll_min_s", "speaker_enroll_timeout_s",
                   "speaker_adapt_threshold",
                   "speaker_adapt_alpha", "speaker_adapt_max_drift"],
-    "minori": ["minori_enabled", "minori_margine_ambiguo", "minori_compiti_tentativi",
+    "minori": ["minori_enabled", "minori_margine_ambiguo", "minori_margine_amministra",
+               "minori_compiti_tentativi",
                "minori_impronta_mesi", "minori_gioco_minuti", "minori_richieste_giorni",
                "minori_avviso_ripetuto_s",
                "guardiano_enabled", "guardiano_modello", "guardiano_url",
@@ -2241,6 +2255,7 @@ LIMITI: dict[str, tuple[float, float]] = {
     "sample_rate": (8000, 48000), "whisper_beam_size": (1, 20), "stt_timeout_s": (0.5, 600.0),
     "stt_correzione_soglia": (0.0, 1.01), "stt_correzione_timeout_s": (0.2, 30.0),
     "speaker_id_threshold": (0.0, 1.0), "wake_threshold": (0.0, 1.0),
+    "speaker_id_margine": (0.0, 1.0), "minori_margine_amministra": (0.0, 1.0),
     "suoni_volume": (0.0, 1.0),
     "vad_threshold": (0.0, 1.0), "wake_consecutive": (1, 50), "turn_log_days": (1, 3650),
     "latenza_avviso_s": (0.0, 60.0),

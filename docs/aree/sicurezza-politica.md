@@ -253,3 +253,14 @@ congelamento; decisioni D1–D9 aperte.
   vuole un verbo di cancellazione non negato nella frase, o il «sì» con una parola di consenso
   alla domanda «Non me l'hai chiesto: vuoi che dimentichi «…»?». Dettagli, recupero entro 5
   minuti e misure in [`memoria-agenda-liste.md`](memoria-agenda-liste.md).
+
+## Voce incerta tra chi amministra e un minore (07/10)
+
+Dettagli in [stt-tts](stt-tts.md#voci-di-famiglia-adulto-e-ragazzo-al-telefono-in-auto-0710).
+Per la politica: chi amministra riconosciuto con un minore a meno di `minori_margine_amministra`
+vale solo familiare (regola `amministra_minore_vicino`, poi la frase di sfida); con la voce
+incerta tra lui e un minore vale il minore, e un tool di chi amministra chiede la sfida **per
+l'adulto** con la frase «Non sono sicura di chi parla: …?» (`conferme.incerta_con_admin`,
+`chiedi_conferma(incerta=…)`, regola `voce_incerta_chiede`); la risposta alla sfida con la voce
+ancora incerta riceve parole nuove una volta, poi non procede. La conferma breve non vale se un
+altro profilo somiglia alla frase almeno quanto chi amministra.

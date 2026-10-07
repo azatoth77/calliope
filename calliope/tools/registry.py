@@ -12,7 +12,7 @@ Senza rete i tool con requires_internet spariscono dall'elenco (principio 5).
 import json
 
 from .. import politica
-from ..conferme import admin_confermato, chiedi_conferma, e_admin
+from ..conferme import admin_confermato, chiedi_conferma, e_admin, incerta_con_admin
 from .spec import ToolSpec, ToolContext, note_rule, serve_la_voce
 from ..testi import NIENTE
 
@@ -197,6 +197,12 @@ class ToolRegistry:
                     and getattr(sc, "identified_by", None) in ("breve", "conversazione")):
                 return json.dumps(chiedi_conferma(ctx, name, arguments, politica.da_confermare(
                     name, arguments or {}, spec)), ensure_ascii=False)
+            # Voce incerta tra chi amministra e un minore (07/10, vale il minore): la sfida per
+            # chi amministra, con la frase che chiede chi parla, invece del rifiuto secco
+            incerta = incerta_con_admin(ctx) if "amministra" in spec.levels else None
+            if incerta is not None and not e_admin(ctx):
+                return json.dumps(chiedi_conferma(ctx, name, arguments, politica.da_confermare(
+                    name, arguments or {}, spec), incerta=incerta), ensure_ascii=False)
             # Scritto da uno schermo personale di chi, a voce, avrebbe il permesso: si chiede
             # la conferma a voce invece del rifiuto (03/10)
             sc = getattr(ctx, "speaker_ctx", None)

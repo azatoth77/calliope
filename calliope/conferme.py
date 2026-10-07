@@ -57,6 +57,13 @@ SFIDA_ALTRA_VOCE = ("Questa conferma la può dare solo chi ha fatto la richiesta
 SFIDA_VOCE_FALLITA = ("Non ho riconosciuto la tua voce, quindi non procedo: chiedimelo di nuovo "
                       "più tardi.")
 SFIDA_FALLITA = "Non ho sentito le parole giuste, quindi non procedo: chiedimelo di nuovo."
+# Voci di famiglia (07/10): la voce è incerta tra chi amministra e un minore. Solo quando serve
+# per un'azione di chi amministra (una sfida, un tool che la vuole, un «sì» atteso): mai negli
+# altri turni, dove vale in silenzio il profilo più protetto
+CHI_PARLA = ("Non sono sicura di chi parla: {adulto} o {minore}? Se sei {adulto}, dimmelo con "
+             "una frase un po' più lunga, vicino al microfono.")
+SFIDA_CHI_PARLA = ("Non sono sicura di chi parla: {adulto} o {minore}? Se sei {adulto}, per "
+                   "{cosa} ripeti vicino al microfono: {testo}.")
 SFIDA_SCADUTA = "La frase di conferma è scaduta, quindi non procedo: chiedimelo di nuovo."
 
 # Parole della sfida: nomi comuni concreti, 2–4 sillabe, facili da dire e da trascrivere,
@@ -143,6 +150,35 @@ def admin_confermato(ctx) -> bool:
     return False
 
 
+def chiave_di(ctx, nome: str | None):
+    """L'id del profilo `nome` (come `_chiave` per chi parla), o il nome se non c'è."""
+    speakers = getattr(ctx, "speakers", None)
+    try:
+        prof = speakers.get(nome) if nome and speakers is not None else None
+    except Exception:  # noqa: BLE001
+        prof = None
+    return getattr(prof, "id", None) or nome
+
+
+def incerta_con_admin(ctx) -> tuple[str, str] | None:
+    """(adulto, minore) se la voce di questa frase è incerta tra un adulto che amministra e un
+    minore (vale il minore, ciclo._confronta_voce), oppure se chi amministra è riconosciuto ma
+    con un minore troppo vicino; None altrimenti."""
+    sc = getattr(ctx, "speaker_ctx", None)
+    inc = getattr(sc, "incerta", None)
+    if inc:
+        speakers = getattr(ctx, "speakers", None)
+        try:
+            prof = speakers.get(inc[0]) if speakers is not None else None
+        except Exception:  # noqa: BLE001
+            prof = None
+        return tuple(inc) if getattr(prof, "admin", False) else None
+    vicino = getattr(sc, "minore_vicino", None)
+    if vicino and e_admin(ctx):
+        return getattr(sc, "current_speaker", None), vicino
+    return None
+
+
 def admin_da_sentire(ctx) -> bool:
     """Chi parla è chi amministra per la conversazione, ma questa frase non basta: frase breve
     con l'impronta incerta o senza un riconoscimento sicuro prima, oppure zona grigia."""
@@ -224,17 +260,24 @@ def confronta(sfida: Sfida, testo: str) -> str:
     return "parziale" if trovate * 2 >= totale else "no"
 
 
-def chiedi_conferma(ctx, tool: str, argomenti: dict | None, cosa: str) -> dict:
+def chiedi_conferma(ctx, tool: str, argomenti: dict | None, cosa: str,
+                    incerta: tuple[str, str] | None = None) -> dict:
     """Il risultato da dare quando chi amministra non basta in questa frase: la sfida (o,
-    spenta, la frase «mi serve sentirti meglio»). Mai «chiedi a chi amministra»."""
+    spenta, la frase «mi serve sentirti meglio»). Mai «chiedi a chi amministra».
+
+    `incerta` (07/10): (adulto, minore) quando la voce è incerta tra i due: la sfida è per
+    l'adulto e la frase chiede chi parla. Se non è dato, si ricava dalla frase
+    (`incerta_con_admin`)."""
     from .tools.spec import note_rule
+    if incerta is None:
+        incerta = incerta_con_admin(ctx)
     cfg = getattr(ctx, "cfg", None)
     sc = getattr(ctx, "speaker_ctx", None)
     if not getattr(cfg, "conferma_sfida", True) or sc is None:
         note_rule(ctx, "conferma_sentirti_meglio")
         return {"ok": False, "fatto": "NIENTE: l'azione NON è stata eseguita: serve la voce",
                 "conferma": SENTIRTI_MEGLIO, "risposta_finale": SENTIRTI_MEGLIO}
-    chi = _chiave(ctx)
+    chi = chiave_di(ctx, incerta[0]) if incerta else _chiave(ctx)
     s = getattr(sc, "sfida", None)
     if (s is None or s.scaduta() or s.persona != chi or s.tool != tool
             or s.argomenti != dict(argomenti or {})):
@@ -243,6 +286,10 @@ def chiedi_conferma(ctx, tool: str, argomenti: dict | None, cosa: str) -> dict:
     descr = (cosa or s.cosa or descrivi_azione(tool, argomenti)).strip().rstrip(".")
     frase = (SFIDA_COSA_MSG.format(cosa=descr, testo=s.testo) if descr
              else SFIDA_MSG.format(testo=s.testo))
+    if incerta:
+        frase = SFIDA_CHI_PARLA.format(adulto=incerta[0], minore=incerta[1],
+                                       cosa=descr or "confermare", testo=s.testo)
+        note_rule(ctx, "voce_incerta_chiede")
     note_rule(ctx, "sfida_voce")
     return {"ok": False, "fatto": "NIENTE: l'azione NON è stata eseguita: chiedo la frase di "
                                   "conferma", "conferma": frase, "risposta_finale": frase}
@@ -266,4 +313,9 @@ def serve_conferma(ctx, tool: str, argomenti: dict | None, cosa: str) -> dict | 
     incerta, e chiederla anche dopo porterebbe solo turni in più."""
     if admin_da_sentire(ctx):
         return chiedi_conferma(ctx, tool, argomenti, cosa)
+    # Voce incerta tra chi amministra e un minore (07/10): vale il minore, ma se la richiesta
+    # era di chi amministra la frase lo chiede, con la sfida per lui
+    inc = incerta_con_admin(ctx)
+    if inc is not None and not e_admin(ctx):
+        return chiedi_conferma(ctx, tool, argomenti, cosa, incerta=inc)
     return None
