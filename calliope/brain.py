@@ -1237,6 +1237,33 @@ def _result_text(res: dict) -> str:
     return ""
 
 
+# I campi di un risultato fallito di un tool di Calliope che il suo codice scrive: senza
+# altro, non c'è nessun dato non fidato da mettere nella busta (Brain._run_tool)
+_CAMPI_ERRORE = frozenset(provenienza.CONTROLLO) | {"cosa_dire", "serve_ricerca", "risultati"}
+
+
+def _senza_dato(name: str, spec, res: dict) -> bool:
+    """Il risultato fallito di un tool non fidato di Calliope (fonte dalla tabella della
+    politica, non un'estensione) non porta dati: solo esito, errore e indicazioni del codice."""
+    cl = politica.CLASSI.get(name)
+    if getattr(spec, "fonte", None) or cl is None or not cl.fonte:
+        return False
+    return bool(res) and not _result_ok(res) and set(res) <= _CAMPI_ERRORE         and not isinstance(res.get("risultati"), (list, dict, str))
+
+
+def _frase_fallita(res) -> str:
+    """La frase per un tool fallito senza frase pronta, eseguito dal codice (la frase di sfida
+    superata): «Non ci sono riuscita: <errore>.», mai «Fatto.»."""
+    motivo = ""
+    if isinstance(res, dict):
+        for key in ("errore", "motivo"):
+            v = res.get(key)
+            if isinstance(v, str) and v.strip():
+                motivo = v.strip().rstrip(".")
+                break
+    return f"Non ci sono riuscita: {motivo}." if motivo else "Non ci sono riuscita."
+
+
 def _loads_dict(raw: str) -> dict:
     try:
         val = json.loads(raw or "{}")
@@ -2032,9 +2059,16 @@ class Brain:
             self.history.append({"role": "tool", "tool_call_id": call["id"],
                                  "name": call["name"], "content": content})
             try:
-                frase = _final_text(content) or _result_text(json.loads(content))
+                res = json.loads(content)
+                frase = _final_text(content) or _result_text(res)
             except (json.JSONDecodeError, TypeError):
-                frase = ""
+                res, frase = None, ""
+            if not frase and not _result_ok(res):
+                # La frase dipende dall'esito vero (caso vero della DGX del 07/10: sfida
+                # superata, pc_apri_file fallito per un numero che non c'era, e Calliope diceva
+                # «Fatto.»). Senza frase pronta, l'errore del tool
+                self._rule("sfida_esito_fallito")
+                frase = _frase_fallita(res)
             frase = frase or "Fatto."
         self.history.append({"role": "assistant", "content": frase})
         yield frase
@@ -3254,6 +3288,13 @@ class Brain:
         # Il risultato di un tool non fidato (web, estensioni, archivio, agenti) entra nella
         # busta della sua fonte: la conversazione resta contaminata finché c'è (05/10)
         fonte = politica.fonte_di(call["name"], spec)
+        if fonte and not ok and _senza_dato(call["name"], spec, _loads_dict(result)):
+            # Un tool di Calliope fallito senza dati (allegato_leggi «in questa conversazione
+            # non ci sono file»): niente busta e niente contaminazione. Caso vero della DGX del
+            # 07/10, 16:51: la conversazione risultava contaminata da «un file allegato» che non
+            # c'era, e una frase sul salvataggio dei file veniva fermata (uscita_istruzione)
+            self._rule("fallito_senza_dato")
+            fonte = None
         if fonte:
             self._ricorda_esterno(fonte, result)
             result = provenienza.racchiudi_risultato(fonte, self._quarantena_risultato(result))
