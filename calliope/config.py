@@ -409,6 +409,13 @@ class Config:
     # provando 2, 4, 8 e i core fisici (calliope/taratura_voce.py), finché non l'ha fatto 8;
     # un numero scritto qui vince. 0 = la scelta di onnxruntime.
     tts_thread: int | str = "auto"
+    # Dove sintetizza Piper (07/10): "cpu", "cuda" (la GPU NVIDIA, serve onnxruntime-gpu con le
+    # librerie di CUDA e cuDNN: extra voce-gpu su Linux aarch64) o "auto". Con «auto» decide la
+    # taratura all'avvio secondo la macchina: GPU solo se c'è posto dopo la voce e Whisper
+    # (memoria unificata grande sì, GPU dedicata da 8 GB no) e se misurata almeno 2 volte più
+    # veloce; scelta e motivo in voce_taratura.json e in `calliope stato`. Sulla DGX serena-high
+    # costa 0,08 s per 138 caratteri invece di 0,47. Qualunque errore della GPU: CPU.
+    tts_dispositivo: str = "auto"
     # Inglesismi detti all'inglese (calliope/pronuncia.py): «file» → «fàil», «email» →
     # «imèil», «wifi» → «uàifài»… Cambia solo il testo dato a Piper, non la storia né gli
     # schermi. Il lessico predefinito è nel codice (solo le parole che espeak sbaglia).
@@ -2056,7 +2063,7 @@ SEZIONI: dict[str, list[str]] = {
             "stt_correzione_url", "stt_correzione_modello", "stt_correzione_timeout_s",
             "stt_incerte_al_modello", "stt_incerte_riscrivi"],
     "tts": ["piper_voice", "tts_tail_s", "tts_lead_s", "tts_keepalive", "tts_spezza_prima",
-            "tts_primo_pezzo_min", "tts_taratura", "tts_thread",
+            "tts_primo_pezzo_min", "tts_taratura", "tts_thread", "tts_dispositivo",
             "tts_pronuncia",
             "tts_pronuncia_extra"],
     "audio": ["sample_rate", "vad_threshold", "vad_motore", "vad_modello", "silence_ms", "preroll_ms", "min_speech_ms",
@@ -2183,6 +2190,7 @@ ENV_OVERRIDES: dict[str, str] = {
     "wake_mode": "CALLIOPE_WAKE_MODE",
     "piper_voice": "CALLIOPE_PIPER_VOICE",
     "tts_taratura": "CALLIOPE_TTS_TARATURA",
+    "tts_dispositivo": "CALLIOPE_TTS_DISPOSITIVO",
     "input_device": "CALLIOPE_INPUT_DEVICE",
     "output_device": "CALLIOPE_OUTPUT_DEVICE",
     "memory_db": "CALLIOPE_MEMORY_DB",
@@ -2396,8 +2404,16 @@ def _tts_thread_valido(value):
     raise ValueError("serve un numero di thread o «auto»")
 
 
+def _tts_dispositivo_valido(value):
+    """«auto», «cpu» o «cuda»."""
+    s = str(value or "").strip().lower()
+    if s in ("auto", "cpu", "cuda"):
+        return s
+    raise ValueError("serve «auto», «cpu» o «cuda»")
+
+
 VALIDATORI = {"llm_keep_alive": keep_alive_valido, "llm_num_ctx": _num_ctx_valido,
-              "tts_thread": _tts_thread_valido,
+              "tts_thread": _tts_thread_valido, "tts_dispositivo": _tts_dispositivo_valido,
               "agenti_num_ctx": _num_ctx_agenti_valido,
               "contesto_riassuntore": _riassuntore_valido}
 

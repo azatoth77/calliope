@@ -33,7 +33,7 @@ codice. Nessuna ha una licenza incompatibile con l'AGPL-3.0 per questo uso.
 
 | Licenza | Pacchetti | Compatibilità |
 |---|---|---|
-| MIT, MIT-0, MIT-CMU | annotated-types, anyio, cffi, comtypes, ctranslate2, et-xmlfile, faster-whisper, filelock, fonttools, h11, jiter, onnxruntime, openpyxl, pathvalidate, pillow, pycaw, pydantic, pydantic-core, python-docx, python-pptx, pyyaml, screen-brightness-control, setuptools, silero-vad, sniffio, sounddevice, truststore, typing-inspection, unicode-rbnf, winrt-runtime, winrt-windows-media-control, wmi | permissive: compatibili |
+| MIT, MIT-0, MIT-CMU | annotated-types, anyio, cffi, comtypes, ctranslate2, et-xmlfile, faster-whisper, filelock, fonttools, h11, jiter, onnxruntime, onnxruntime-gpu (Linux aarch64, dal 07/10), openpyxl, pathvalidate, pillow, pycaw, pydantic, pydantic-core, python-docx, python-pptx, pyyaml, screen-brightness-control, setuptools, silero-vad, sniffio, sounddevice, truststore, typing-inspection, unicode-rbnf, winrt-runtime, winrt-windows-media-control, wmi | permissive: compatibili |
 | BSD (2 e 3 clausole) | av, click, colorama, fsspec, httpcore, httpcore2, httpx, httpx2, idna, jinja2, lxml, markupsafe, mpmath, networkx, numpy (con parti 0BSD, MIT, Zlib, CC0), protobuf, psutil, pycparser, pypdf, pypdfium2 (BSD-3 / Apache-2.0, con PDFium), starlette, sympy, torch, uvicorn, websockets, xlsxwriter, zstandard | permissive: compatibili |
 | Apache-2.0 | flatbuffers, hassil, hf-xet, home-assistant-intents, huggingface-hub, openai, packaging (o BSD-2), tokenizers | compatibile con la GPLv3 e quindi con l'AGPLv3 (non con la GPLv2) |
 | PSF | defusedxml, pywin32, pypiwin32, typing-extensions | permissiva: compatibile |
@@ -41,7 +41,7 @@ codice. Nessuna ha una licenza incompatibile con l'AGPL-3.0 per questo uso.
 | LGPL-2.1-only | docxtpl (extra `modelli`) | compatibile: libreria usata come dipendenza, non modificata |
 | LGPL-3.0-only | fpdf2 (extra `documenti`) | compatibile |
 | GPL-3.0-or-later | piper-tts | compatibile: la GPLv3 e l'AGPLv3 si possono combinare (sezione 13 di entrambe); è una delle ragioni della scelta di una licenza GNU v3 |
-| Proprietaria NVIDIA | nvidia-cublas-cu12, nvidia-cuda-nvrtc-cu12, nvidia-cudnn-cu12 (extra `gpu`, solo Windows x86-64) | librerie di sistema per la GPU, facoltative, installate dall'utente e mai distribuite con Calliope: non entrano nel lavoro coperto dall'AGPL. Chi ridistribuisse un pacchetto con queste DLL dentro dovrebbe rispettare la licenza NVIDIA. |
+| Proprietaria NVIDIA | nvidia-cublas-cu12, nvidia-cuda-nvrtc-cu12, nvidia-cudnn-cu12 (extra `gpu`, solo Windows x86-64); nvidia-cuda-runtime, nvidia-cuda-nvrtc, nvidia-cublas, nvidia-cufft, nvidia-curand, nvidia-nvjitlink, nvidia-cudnn-cu13 (extra `voce-gpu`, solo Linux aarch64, dal 07/10) | librerie di sistema per la GPU, facoltative, installate dall'utente e mai distribuite con Calliope: non entrano nel lavoro coperto dall'AGPL. Chi ridistribuisse un pacchetto con queste DLL dentro dovrebbe rispettare la licenza NVIDIA. |
 
 Strumenti esterni usati come programmi separati (non librerie): Ollama (MIT), vLLM (Apache-2.0),
 whisper.cpp (MIT), SearXNG (AGPL-3.0, in un container suo), OpenSSH, Docker, openssl, uv
