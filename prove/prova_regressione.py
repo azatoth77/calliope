@@ -133,6 +133,12 @@ class LavoriFinto:
     def collegamento_guasto(self):
         return None
 
+    def _interrotti_da_rifare(self, persona):
+        # `offerta` (presa da Lavori) lo chiama dal 06/10 per i lavori interrotti da un
+        # riavvio: qui non ce ne sono. Senza, ogni delega_lavoro finiva in un errore
+        # (AttributeError) e la catena conf/conf4/conf_tv falliva (07/10)
+        return []
+
     def nuovo(self, tipo, compito, pid, nome, level, fmt, modello, vincoli, dati):
         from types import SimpleNamespace
         self.n += 1
