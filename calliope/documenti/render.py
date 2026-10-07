@@ -135,9 +135,13 @@ def render_docx(doc: dict) -> bytes:
             all_rows = [cols] + rows + ([total] if total else [])
             table = d.add_table(rows=len(all_rows), cols=len(cols))
             table.style = "Table Grid"
+            # Le celle riga per riga: table.cell(r, c) ricostruisce tutta la griglia a ogni
+            # chiamata (tempo quadratico: una tabella di 200 righe di un rapporto dell'agente,
+            # convertito in Word dal 07/10, superava il minuto)
             for r, row in enumerate(all_rows):
+                celle = table.rows[r].cells
                 for c, value in enumerate(row):
-                    cell = table.cell(r, c)
+                    cell = celle[c]
                     cell.text = str(value)
                     para = cell.paragraphs[0]
                     if r == 0 or (total and r == len(all_rows) - 1):
