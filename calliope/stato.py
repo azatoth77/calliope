@@ -208,7 +208,9 @@ def main(argv=None) -> int:
         from . import taratura_voce
         voce_testo = taratura_voce.testo_stato(cfg)
         voce_dati = taratura_voce.per(cfg).stima(
-            cfg.piper_voice, taratura_voce.thread_in_uso(cfg, cfg.piper_voice))
+            cfg.piper_voice, taratura_voce.sessione_in_uso(cfg, cfg.piper_voice))
+        voce_dati["dispositivo"], voce_dati["motivo"] = taratura_voce.dispositivo_in_uso(
+            cfg, cfg.piper_voice, controlla_posto=False)
     except Exception:  # noqa: BLE001
         voce_testo, voce_dati = None, None
     if as_json:

@@ -28,7 +28,14 @@ dependencies = [
     "pyyaml",
     # Su Linux senza PortAudio: serve la libreria di sistema libportaudio2
     "sounddevice",
-    "onnxruntime",                 # wake word, CAM++, Piper e (su Linux) Silero VAD
+    # Wake word, CAM++, Piper e (su Linux) Silero VAD. Su Linux aarch64 (DGX Spark, 07/10) la
+    # build con CUDA, stessa versione e stesso provider CPU: Piper può sintetizzare sulla GPU
+    # (tts_dispositivo). Le librerie di CUDA 13 e cuDNN sono nell'extra voce-gpu; senza,
+    # onnxruntime-gpu lavora solo sulla CPU come onnxruntime. I due pacchetti installano lo
+    # stesso modulo e non possono stare insieme: l'override sotto toglie onnxruntime da Linux
+    # aarch64 anche dove lo chiedono piper-tts, faster-whisper e silero-vad
+    "onnxruntime; sys_platform != 'linux' or platform_machine != 'aarch64'",
+    "onnxruntime-gpu; sys_platform == 'linux' and platform_machine == 'aarch64'",
     # Su Linux aarch64 CTranslate2 è solo per CPU: sulla DGX Whisper va su un server
     # (stt_motore: server) e questo resta il ripiego su CPU (principio 7)
     "faster-whisper",
@@ -63,13 +70,16 @@ gpu = [
     "nvidia-cublas-cu12; sys_platform == 'win32' and platform_machine == 'AMD64'",
     "nvidia-cudnn-cu12; sys_platform == 'win32' and platform_machine == 'AMD64'",
 ]
+# Piper sulla GPU della DGX (07/10, tts_dispositivo): CUDA 13 runtime, nvrtc, cuFFT, cuRAND,
+# cuBLAS e cuDNN 9 da pip (~2,4 GB), caricati da onnxruntime.preload_dlls(). Solo Linux aarch64
+voce-gpu = ["onnxruntime-gpu[cuda,cudnn]; sys_platform == 'linux' and platform_machine == 'aarch64'"]
 # Archivio dei documenti di casa (calliope/archivio/): PDF con PDFium (wheel per win_amd64,
 # win_arm64 e manylinux aarch64), foto con Pillow, Word con python-docx. L'OCR è il modello
 # visivo già servito sulla DGX: nessuna libreria di OCR
 archivio = ["pypdfium2", "pillow", "python-docx"]
 # Solo per le prove (HA finto con le frasi vere, lettura dei PDF)
 prove = ["hassil", "home-assistant-intents", "pypdf"]
-tutto = ["calliope[documenti,modelli,casa,schermi,pc,gpu,archivio]"]
+tutto = ["calliope[documenti,modelli,casa,schermi,pc,gpu,voce-gpu,archivio]"]
 
 [project.scripts]
 # Come `python -m calliope`
@@ -90,6 +100,7 @@ packages = ["calliope"]
 # al VAD di sempre (vad_motore: auto) e alla stima del genere (speaker_id.py). I limiti
 # di versione sono quelli di silero-vad 6.2.
 override-dependencies = [
+    "onnxruntime; sys_platform != 'linux' or platform_machine != 'aarch64'",
     "torch>=1.12.0; sys_platform == 'win32'",
     "torchaudio>=0.12.0,<2.10; sys_platform == 'win32'",
 ]

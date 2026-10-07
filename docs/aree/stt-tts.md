@@ -10,7 +10,7 @@
 | Chi parla | CAM++ (3D-Speaker) in ONNX con onnxruntime | `calliope/speaker_id.py` → `SpeakerEmbedder`, `SpeakerRegistry`, `SpeakerContext`; `arruola.py` |
 | Speech-to-Text | faster-whisper nel processo, oppure un server con l'API OpenAI (sulla DGX whisper.cpp con CUDA, servizio `calliope-whisper`; vLLM scartato) con ripiego su faster-whisper su CPU (modello di riserva dal catalogo, `whisper_riserva`) | `calliope/stt.py` → `Transcriber`, `ServerTranscriber`, `make_transcriber`, `modello_whisper`; server in `setup/linux/motore/whisper.sh`; correzione delle frasi incerte (spenta) `calliope/stt_correzione.py` → `Correttore`, `accettabile`, `min_utile`; a capo di whisper-server tolti `stt.unisci_righe`; parole incerte al modello (B, spenta) `stt_correzione.parole_incerte`, `Brain.STT_INCERTE_MSG`; frase capita trattenuta (B2, spenta) `Brain.CapitoHold`, `Brain._applica_capito`, `STT_RISCRIVI_MSG` (confronto A/B/B2/C in fondo) |
 | Wake word acustica | classificatore addestrato in formato openWakeWord (ONNX) | `calliope/wakeword.py` → `WakeWordDetector`, `load_wake_detector`; usato da `Listener.listen(wake, awake_until)`. Modelli e addestramento in `wakeword/` |
-| Text-to-Speech | Piper (voce `it_IT-serena-high`) | `calliope/tts.py` → `Speaker` (2 thread: sintesi e riproduzione, `_pcm`; la prima frase lunga a pezzi `primo_pezzo`, `tts_spezza_prima`, `tts_primo_pezzo_min`, e i thread di onnxruntime `carica_voce`, `tts_thread`, dal 07/10; velocità e costo della voce misurati all'avvio e con l'uso `calliope/taratura_voce.py` → `Taratura` (file voce_taratura.json), `tts_thread` «auto»: [contesto-conversazione](contesto-conversazione.md)); inglesismi detti all'inglese `calliope/pronuncia.py` → `Pronuncia`, `LESSICO` (`tts_pronuncia`, `tts_pronuncia_extra`) |
+| Text-to-Speech | Piper (voce `it_IT-serena-high`) | `calliope/tts.py` → `Speaker` (2 thread: sintesi e riproduzione, `_pcm`; la prima frase lunga a pezzi `primo_pezzo`, `tts_spezza_prima`, `tts_primo_pezzo_min`, e i thread di onnxruntime `carica_voce`, `tts_thread`, dal 07/10; velocità e costo della voce misurati all'avvio e con l'uso `calliope/taratura_voce.py` → `Taratura` (file voce_taratura.json), `tts_thread` «auto»; dal 07/10 sera Piper anche sulla GPU con onnxruntime-gpu, `tts_dispositivo` auto/cpu/cuda, scelta secondo la macchina e ripiego sulla CPU (`_su_gpu`, `prova_dispositivo`): [contesto-conversazione](contesto-conversazione.md)); inglesismi detti all'inglese `calliope/pronuncia.py` → `Pronuncia`, `LESSICO` (`tts_pronuncia`, `tts_pronuncia_extra`) |
 
 ## Note dalla sezione «Stato attuale» di CLAUDE.md (fino al 06/10)
 
@@ -153,6 +153,17 @@
   classificatore usa feature ACAV100M (CC-BY-NC-SA): va bene per l'uso in casa, non per
   distribuirlo. I dati di addestramento sono in `wakeword/dati/`, ~6,6 GB fuori da git.
   Se il modello manca si torna da soli alla wake word testuale.
+
+## Piper sulla GPU (07/10 sera)
+
+Sulla DGX con onnxruntime-gpu 1.30 (wheel aarch64 per CUDA 13 su PyPI, extra `voce-gpu`)
+serena-high sintetizza 138 caratteri in 0,077 s invece di 0,47 (8 thread di CPU), 263 in 0,17
+invece di 1,01; 0,63 ms a carattere sulle prime frasi vere invece di 3,7. Audio uguale (a
+rumore spento correlazione 0,99998), 1,4 GiB di GPU, la voce che genera insieme rallenta del
+~11 % con sintesi frequenti. Con `tts_dispositivo: auto` decide la taratura secondo la
+macchina (portatile da 8 GB: sempre CPU; memoria unificata grande: GPU se 2 volte più veloce),
+con ripiego sulla CPU a qualunque errore. Misure, regole e prove:
+[contesto-conversazione](contesto-conversazione.md), «Piper sulla GPU, secondo la macchina».
 
 ## Confronto della trascrizione: A / B / B2 / C (07/10)
 

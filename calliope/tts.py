@@ -345,9 +345,14 @@ def carica_voce(cfg, voice_path: str):
     sessione con le opzioni predefinite, cioè un thread per core: sulla DGX (10 core
     Cortex-X925 e 10 A725) i core lenti frenano gli altri, e serena-high con 8 thread
     sintetizza in 0,36 s ciò che con 20 ne costa 0,61 (sul portatile 0,77 contro 1,46). La
-    sessione si rifà con le opzioni giuste; se non riesce resta quella di Piper."""
+    sessione si rifà con le opzioni giuste; se non riesce resta quella di Piper.
+
+    Sulla GPU (07/10) se `tts_dispositivo` o la taratura lo dicono (`_su_gpu`), con ripiego
+    sulla CPU a qualunque errore."""
     from piper import PiperVoice
     voice = PiperVoice.load(voice_path)
+    if getattr(voice, "session", None) is not None and _su_gpu(cfg, voice, voice_path):
+        return voice
     n = numero_thread(cfg, voice_path)
     if n > 0 and getattr(voice, "session", None) is not None:
         try:
@@ -356,13 +361,48 @@ def carica_voce(cfg, voice_path: str):
             o.intra_op_num_threads = n
             o.inter_op_num_threads = 1
             voice.session = onnxruntime.InferenceSession(
-                str(voice_path), sess_options=o,
-                providers=voice.session.get_providers() or ["CPUExecutionProvider"])
+                str(voice_path), sess_options=o, providers=["CPUExecutionProvider"])
             voice.calliope_thread = n          # per la taratura (calliope/taratura_voce.py)
         except Exception as e:  # noqa: BLE001 — la voce resta, solo un po' più lenta
             print(f"   [TTS] Thread della sintesi non impostati ({type(e).__name__}: {e})",
                   flush=True)
     return voice
+
+
+def _su_gpu(cfg, voice, voice_path: str) -> bool:
+    """La voce sulla GPU se `tts_dispositivo` (o la taratura, con «auto») lo dice (07/10). Una
+    frase di prova prima di tenerla: con onnxruntime-gpu senza le librerie di cuDNN la sessione
+    si apre e la prima convoluzione fallisce. Qualunque errore: si resta sulla CPU (ripiego,
+    come per Whisper, principio 7)."""
+    from . import taratura_voce as tv
+    try:
+        dispositivo, motivo = tv.dispositivo_in_uso(cfg, voice_path)
+    except Exception:  # noqa: BLE001
+        return False
+    if dispositivo != "cuda":
+        return False
+    cpu = voice.session
+    try:
+        voice.session = tv.sessione_cuda(voice_path)
+        _prova_sintesi(voice)
+    except Exception as e:  # noqa: BLE001 — librerie di CUDA mancanti, GPU piena…
+        voice.session = cpu
+        breve = (str(e).strip().splitlines() or [""])[-1][-160:]
+        print(f"   [TTS] Voce sulla GPU non riuscita ({type(e).__name__}: {breve}): resta "
+              f"sulla CPU", flush=True)
+        return False
+    voice.calliope_dispositivo = "cuda"
+    print(f"   [TTS] Voce sulla GPU ({motivo})", flush=True)
+    return True
+
+
+def _prova_sintesi(voice):
+    """Una frase corta, che scalda anche la sessione (sulla GPU la prima costa ~0,3 s)."""
+    if not hasattr(voice, "synthesize") or hasattr(voice, "synthesize_stream_raw"):
+        raise RuntimeError("piper-tts troppo vecchio per la GPU")
+    _fonemi_protetti(voice)
+    for _ in voice.synthesize("Pronta."):
+        pass
 
 
 def numero_thread(cfg, voice_path: str) -> int:
@@ -523,7 +563,7 @@ class Speaker:
             try:
                 thread, misure = tv.thread_di(voice), None
                 auto = not isinstance(getattr(self.cfg, "tts_thread", "auto"), int)
-                if auto and self._taratura.thread_scelto(path) is None:
+                if auto and thread != "cuda" and self._taratura.thread_scelto(path) is None:
                     n, sess, misure = tv.prova_thread(voice, path, self._pcm, rate,
                                                       tv.candidati_thread(),
                                                       interrompi=disturbata)
@@ -536,9 +576,25 @@ class Speaker:
                 self._taratura.segna_avvio(path, thread, parlato, costo, misure)
                 prove = (" (provati " + ", ".join(f"{k}: {v * 1000:.1f} ms" for k, v in
                                                    misure.items()) + ")") if misure else ""
+                # CPU o GPU (07/10, `tts_dispositivo: auto`): solo se c'è posto e se è
+                # davvero più veloce; la scelta e il motivo restano in voce_taratura.json.
+                # Interrotta come le altre prove: alla quiete dopo si rifà da capo
+                if thread != "cuda" and tv.da_provare(self.cfg, path):
+                    scelta, sess, info = tv.prova_dispositivo(voice, path, self._pcm, rate,
+                                                              costo, interrompi=disturbata)
+                    if disturbata():
+                        continue
+                    self._taratura.segna_dispositivo(path, info)
+                    print(f"   [TTS] Voce sulla {'GPU' if scelta == 'cuda' else 'CPU'}: "
+                          f"{info.get('motivo')}", flush=True)
+                    if scelta == "cuda":
+                        voice.session, voice.calliope_dispositivo = sess, "cuda"
+                        thread, costo = "cuda", info["cuda_s_car"]
+                        self._taratura.segna_avvio(path, thread, parlato, costo)
+                dove = "GPU" if thread == "cuda" else f"{thread or 'Piper'} thread"
                 print(f"   [TTS] Taratura della voce: sintesi {costo * 1000:.1f} ms a "
-                      f"carattere, {parlato:.0f} caratteri al secondo, "
-                      f"{thread or 'Piper'} thread{prove}", flush=True)
+                      f"carattere, {parlato:.0f} caratteri al secondo, {dove}{prove}",
+                      flush=True)
                 return
             except tv.Interrotta:
                 continue                # una conversazione: si riprova alla prossima quiete

@@ -27,6 +27,7 @@ calliope aggiorna         # versione nuova accanto, verifica, riavvio, ritorno a
                           # (--attendi-lavori / --forza con lavori dell'agente in corso)
 calliope torna            # alla versione precedente (--con-dati: anche memoria e voci di allora)
 calliope versioni | calliope extra casa | calliope sorgente <URL>
+calliope extra voce-gpu   # Piper sulla GPU (07/10): CUDA 13 e cuDNN da pip, ~2,4 GB
 loginctl enable-linger $USER              # una volta: parte all'accensione
 
 # Whisper sulla GPU: whisper.cpp con CUDA, servizio utente calliope-whisper (porta 8003)
@@ -49,9 +50,17 @@ calliope stato --installa whisper_riserva   # faster-whisper su CPU se il server
   segnale che l'aggiornamento è riuscito). Aggiornamenti dall'`origin` del clone: il
   portatile fa `git push` in un repository bare sulla DGX. Solo commit, mai il working tree.
 - **pyproject.toml**: dipendenze di base + extra `documenti`, `casa`, `schermi`, `pc` (solo
-  Windows), `gpu` (DLL CUDA 12, solo Windows), `prove`, `tutto`; `calliope =
+  Windows), `gpu` (DLL CUDA 12, solo Windows), `voce-gpu` (CUDA 13 e cuDNN per Piper sulla
+  GPU, solo Linux aarch64, dal 07/10), `prove`, `tutto`; `calliope =
   calliope.__main__:cli`. `uv.lock` è universale (Windows e Linux): si rigenera con `uv lock`
   quando cambia pyproject.toml. Su Windows il venv con pip resta come prima.
+- **onnxruntime-gpu su Linux aarch64** (07/10 sera): al posto di onnxruntime (stessa versione,
+  stesso provider CPU; i due pacchetti installano lo stesso modulo, e un override di uv toglie
+  onnxruntime anche dove lo chiedono piper-tts, faster-whisper e silero-vad). Senza l'extra
+  `voce-gpu` lavora solo sulla CPU; con l'extra Piper sintetizza sulla GPU se la taratura lo
+  sceglie (`tts_dispositivo`, misure in
+  [contesto-conversazione](contesto-conversazione.md)). Il wheel vuole glibc 2.34 (Ubuntu
+  24.04 ne ha 2.39) e pesa 206 MB invece di 17.
 - **Senza torch su Linux**: torch di PyPI per aarch64 è quello con CUDA 13 (GB). Silero VAD
   usa il suo ONNX con onnxruntime (`calliope/vad.py`, `vad_motore: auto`; uguale a torch su
   32 464 finestre delle registrazioni vere, 0,55 ms contro 1,11); un override di uv tiene

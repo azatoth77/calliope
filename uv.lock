@@ -15,6 +15,7 @@ required-markers = [
 
 [manifest]
 overrides = [
+    { name = "onnxruntime", marker = "platform_machine != 'aarch64' or sys_platform != 'linux'" },
     { name = "torch", marker = "sys_platform == 'win32'", specifier = ">=1.12.0" },
     { name = "torchaudio", marker = "sys_platform == 'win32'", specifier = ">=0.12.0,<2.10" },
 ]
@@ -71,7 +72,8 @@ dependencies = [
     { name = "faster-whisper" },
     { name = "httpx" },
     { name = "numpy" },
-    { name = "onnxruntime" },
+    { name = "onnxruntime", marker = "platform_machine != 'aarch64' or sys_platform == 'win32'" },
+    { name = "onnxruntime-gpu", marker = "platform_machine == 'aarch64' and sys_platform != 'win32'" },
     { name = "openai" },
     { name = "piper-tts" },
     { name = "pyyaml" },
@@ -126,6 +128,7 @@ tutto = [
     { name = "fpdf2" },
     { name = "nvidia-cublas-cu12", marker = "platform_machine == 'AMD64' and sys_platform == 'win32'" },
     { name = "nvidia-cudnn-cu12", marker = "platform_machine == 'AMD64' and sys_platform == 'win32'" },
+    { name = "onnxruntime-gpu", extra = ["cuda", "cudnn"], marker = "platform_machine == 'aarch64' and sys_platform != 'win32'" },
     { name = "openpyxl" },
     { name = "pillow" },
     { name = "psutil", marker = "sys_platform == 'win32'" },
@@ -141,10 +144,13 @@ tutto = [
     { name = "websockets" },
     { name = "winrt-windows-media-control", marker = "sys_platform == 'win32'" },
 ]
+voce-gpu = [
+    { name = "onnxruntime-gpu", extra = ["cuda", "cudnn"], marker = "platform_machine == 'aarch64' and sys_platform != 'win32'" },
+]
 
 [package.metadata]
 requires-dist = [
-    { name = "calliope", extras = ["documenti", "modelli", "casa", "schermi", "pc", "gpu", "archivio"], marker = "extra == 'tutto'" },
+    { name = "calliope", extras = ["documenti", "modelli", "casa", "schermi", "pc", "gpu", "voce-gpu", "archivio"], marker = "extra == 'tutto'" },
     { name = "comtypes", marker = "sys_platform == 'win32' and extra == 'pc'" },
     { name = "docxtpl", marker = "extra == 'modelli'" },
     { name = "faster-whisper" },
@@ -155,7 +161,9 @@ requires-dist = [
     { name = "numpy" },
     { name = "nvidia-cublas-cu12", marker = "platform_machine == 'AMD64' and sys_platform == 'win32' and extra == 'gpu'" },
     { name = "nvidia-cudnn-cu12", marker = "platform_machine == 'AMD64' and sys_platform == 'win32' and extra == 'gpu'" },
-    { name = "onnxruntime" },
+    { name = "onnxruntime", marker = "platform_machine != 'aarch64' or sys_platform != 'linux'" },
+    { name = "onnxruntime-gpu", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
+    { name = "onnxruntime-gpu", extras = ["cuda", "cudnn"], marker = "platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'voce-gpu'" },
     { name = "openai" },
     { name = "openpyxl", marker = "extra == 'documenti'" },
     { name = "pillow", marker = "extra == 'archivio'" },
@@ -179,7 +187,7 @@ requires-dist = [
     { name = "winrt-windows-media-control", marker = "sys_platform == 'win32' and extra == 'pc'" },
     { name = "zstandard", marker = "python_full_version < '3.14'" },
 ]
-provides-extras = ["documenti", "modelli", "casa", "schermi", "pc", "gpu", "archivio", "prove", "tutto"]
+provides-extras = ["documenti", "modelli", "casa", "schermi", "pc", "gpu", "voce-gpu", "archivio", "prove", "tutto"]
 
 [[package]]
 name = "certifi"
@@ -353,7 +361,7 @@ dependencies = [
     { name = "av" },
     { name = "ctranslate2" },
     { name = "huggingface-hub" },
-    { name = "onnxruntime" },
+    { name = "onnxruntime", marker = "platform_machine != 'aarch64' or sys_platform == 'win32'" },
     { name = "tokenizers" },
     { name = "tqdm" },
 ]
@@ -898,6 +906,17 @@ wheels = [
 ]
 
 [[package]]
+name = "nvidia-cublas"
+version = "13.8.1.7"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "nvidia-cuda-nvrtc" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/35/ea/54b9b5f0e0317cc1587353324e6821e16212693c3fde021d88919eaeee2f/nvidia_cublas-13.8.1.7-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:803b9974cd7164a481d0b11c25826498d383d0ef0c372573bc6577a344ddf74e", size = 552728945, upload-time = "2026-09-28T19:53:21.046Z" },
+]
+
+[[package]]
 name = "nvidia-cublas-cu12"
 version = "12.9.2.10"
 source = { registry = "https://pypi.org/simple" }
@@ -909,11 +928,27 @@ wheels = [
 ]
 
 [[package]]
+name = "nvidia-cuda-nvrtc"
+version = "13.4.92"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4f/73/cf76dc0083d68bd1e29309bc51fc95ada28d4b64d341e945eb3f8ec8edec/nvidia_cuda_nvrtc-13.4.92-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:24b9f5eccc6a5a19779038cf468aecb7cecfa8716269beaef5640bd989d21c28", size = 50927348, upload-time = "2026-09-16T20:38:55.548Z" },
+]
+
+[[package]]
 name = "nvidia-cuda-nvrtc-cu12"
 version = "12.9.86"
 source = { registry = "https://pypi.org/simple" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/52/de/823919be3b9d0ccbf1f784035423c5f18f4267fb0123558d58b813c6ec86/nvidia_cuda_nvrtc_cu12-12.9.86-py3-none-win_amd64.whl", hash = "sha256:72972ebdcf504d69462d3bcd67e7b81edd25d0fb85a2c46d3ea3517666636349", size = 76408187, upload-time = "2025-06-05T20:12:27.819Z" },
+]
+
+[[package]]
+name = "nvidia-cuda-runtime"
+version = "13.4.92"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/51/3b/2c6e9d88efa7b3585572760bca5e7da83fa9e06098a9386c7b29c81c46b2/nvidia_cuda_runtime-13.4.92-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:bef071788589550ab02846fcbc732a2b88c2b16f2cd8a0f45d98e68e8c5fb0c8", size = 2509438, upload-time = "2026-09-16T20:37:16.36Z" },
 ]
 
 [[package]]
@@ -925,6 +960,44 @@ dependencies = [
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/aa/38/f856579877f7c1c5066e61182e7de7bc27bf35a78c8d1b0fa592e6985bc4/nvidia_cudnn_cu12-9.27.0.42-py3-none-win_amd64.whl", hash = "sha256:06e9b0026f3bad97d2b58666330fabec04fe1672f776661ecb0ce0029c27f142", size = 743068852, upload-time = "2026-09-29T23:45:50.385Z" },
+]
+
+[[package]]
+name = "nvidia-cudnn-cu13"
+version = "9.27.0.42"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "nvidia-cublas" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ff/c4/ecae6a5da85c256f6b378648bf5b7ef561bb4b56e0d2af868ef6c484c34c/nvidia_cudnn_cu13-9.27.0.42-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:41b3aae756032ed13b1fcac39c79330cfc5434059d0c5251914e0f6ce582c7ea", size = 614353993, upload-time = "2026-09-29T23:41:37.033Z" },
+]
+
+[[package]]
+name = "nvidia-cufft"
+version = "12.4.0.43"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "nvidia-nvjitlink" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/41/f1/bb8cc4e1ffee345a51fe4cf656352bc705274431dcbd6c23ed9f00585ec7/nvidia_cufft-12.4.0.43-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:3938644a5b594e06d396e02d6e52bdd84589b3c1f3a8a127a2704211c2abc441", size = 161750525, upload-time = "2026-09-16T20:41:56.892Z" },
+]
+
+[[package]]
+name = "nvidia-curand"
+version = "10.4.4.72"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e8/9d/42faff77e90e5498eecb9b099894d5deea744b3d6b35e700dafd0381e07a/nvidia_curand-10.4.4.72-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:53bef256d4362eb3d70c9c048a8d31bcf003f9dcade17720c73d3a494a7dcaa3", size = 63771251, upload-time = "2026-09-16T20:42:40.644Z" },
+]
+
+[[package]]
+name = "nvidia-nvjitlink"
+version = "13.4.92"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1f/a8/1cbd4014898af8b419e69b0d7dbc63da2121ee92d92b47d59f4fe9075349/nvidia_nvjitlink-13.4.92-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:25f74fad0d654271c921ac4dca614bd6258bc21791242fc7b2289dad7ae9c099", size = 40420120, upload-time = "2026-09-16T20:45:19.163Z" },
 ]
 
 [[package]]
@@ -954,6 +1027,35 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/2f/db/db8e4c0cf6f70f1311060560630fd21763648e01dfbba5195a2592c052ef/onnxruntime-1.30.0-cp314-cp314-win_arm64.whl", hash = "sha256:83d543843cbd352cfa9996a6c7b92f8a480f114a18f95ff2a1acaf6921e85b6d", size = 14569360, upload-time = "2026-09-10T16:32:09.896Z" },
     { url = "https://files.pythonhosted.org/packages/24/0a/ec0a9d656e39b43887c378a5388b20c3b1e1ee43bded84580b0936466694/onnxruntime-1.30.0-cp314-cp314t-manylinux_2_28_aarch64.whl", hash = "sha256:265de607ba6f9814264e1d5d413fa7069d70f48e3049b5e460b3b04bdfcef294", size = 21348433, upload-time = "2026-09-10T16:32:12.772Z" },
     { url = "https://files.pythonhosted.org/packages/91/f0/40f74b7c00077e1e25627067ed98a70df1fef5c0e21b82849190d312554e/onnxruntime-1.30.0-cp314-cp314t-manylinux_2_28_x86_64.whl", hash = "sha256:67ad7f03433b6462c627d0f555dece80e6a26bc71e8542ced35cebd32142d1b7", size = 23579340, upload-time = "2026-09-10T16:32:15.532Z" },
+]
+
+[[package]]
+name = "onnxruntime-gpu"
+version = "1.30.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "flatbuffers" },
+    { name = "numpy" },
+    { name = "packaging" },
+    { name = "protobuf" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/39/2b/97887b3f49ddad0d22b596a1e32a38a8e029cad81c6342da6d709cdc381c/onnxruntime_gpu-1.30.0-cp312-cp312-manylinux_2_34_aarch64.whl", hash = "sha256:12af352b24145b3480794fcf327d313a240550e772a07fb182390872c1a642fc", size = 205731632, upload-time = "2026-09-10T15:53:07.466Z" },
+    { url = "https://files.pythonhosted.org/packages/07/cd/99171c84362c9a3292ec909c2e8edd922dec21d65e28e83e9d809ad178c6/onnxruntime_gpu-1.30.0-cp313-cp313-manylinux_2_34_aarch64.whl", hash = "sha256:0c68878729527a28202af6c1b7ebc2fc5a687e9f6e02bfb8796e39d1fe775fd7", size = 205732148, upload-time = "2026-09-10T15:53:16.111Z" },
+    { url = "https://files.pythonhosted.org/packages/f5/b0/6187754ea45ce90c116730115e4d856a6107b9e708580093c112def9a567/onnxruntime_gpu-1.30.0-cp313-cp313t-manylinux_2_34_aarch64.whl", hash = "sha256:c6df4b62538f98482dd5cebc91cba668c4b82156e872517c314a383c904a191d", size = 205776779, upload-time = "2026-09-10T15:53:24.926Z" },
+    { url = "https://files.pythonhosted.org/packages/73/93/415e8100a3d7d4754f406fadbe86fa91d03058a9a6d7fa8a692722e9ceb8/onnxruntime_gpu-1.30.0-cp314-cp314-manylinux_2_34_aarch64.whl", hash = "sha256:96cb15cff2f0dffaef3ae636560145d41be47bb73e3230113f2e946ca576014b", size = 205736852, upload-time = "2026-09-10T15:53:34.204Z" },
+    { url = "https://files.pythonhosted.org/packages/74/3d/33878b36bc473415ff7ed92ba751a5b5181d2779c74441c3584c68261dbc/onnxruntime_gpu-1.30.0-cp314-cp314t-manylinux_2_34_aarch64.whl", hash = "sha256:13d4cf97120882739da8572ba26e2a0f39caed4c69749a147d8f1a77f74a4690", size = 205750897, upload-time = "2026-09-10T15:53:43.295Z" },
+]
+
+[package.optional-dependencies]
+cuda = [
+    { name = "nvidia-cuda-nvrtc" },
+    { name = "nvidia-cuda-runtime" },
+    { name = "nvidia-cufft" },
+    { name = "nvidia-curand" },
+]
+cudnn = [
+    { name = "nvidia-cudnn-cu13" },
 ]
 
 [[package]]
@@ -1067,7 +1169,7 @@ name = "piper-tts"
 version = "1.8.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "onnxruntime" },
+    { name = "onnxruntime", marker = "platform_machine != 'aarch64' or sys_platform == 'win32'" },
     { name = "pathvalidate" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/02/cc/95b18b58d9c235d8e0bcece7321b7a7347873c14f9fea2c734b31ef04ff2/piper_tts-1.8.0.tar.gz", hash = "sha256:830588aded347df579c91a32703e0fc2a3685d84f1e3533b14f2de69135d4904", size = 24276117, upload-time = "2026-09-04T16:47:31.908Z" }

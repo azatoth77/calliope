@@ -972,12 +972,182 @@ def prova_voce_a_pezzi():
              and 'tipo: "suona"' in tj and "player.onSuona" in tj)
 
 
+def prova_voce_gpu():
+    """Piper sulla CPU o sulla GPU secondo la macchina (07/10, `tts_dispositivo`): macchine
+    finte (portatile da 8 GB, DGX con memoria unificata), una sintesi finta più o meno veloce,
+    la scelta e il motivo salvati, il ripiego sulla CPU. Niente CUDA vera."""
+    from calliope import taratura_voce as tv
+    from calliope import tts
+    from calliope.config import _tts_dispositivo_valido
+    PORTATILE = {"unificata": False, "totale_gb": 7.96, "libera_gb": 0.5}
+    PORTATILE_VUOTO = {"unificata": False, "totale_gb": 7.96, "libera_gb": 6.0}
+    DGX = {"unificata": True, "totale_gb": 119.7, "libera_gb": 21.0}
+    DGX_PIENA = {"unificata": True, "totale_gb": 119.7, "libera_gb": 6.0}
+    GRANDE = {"unificata": False, "totale_gb": 32.0, "libera_gb": 10.0}
+    verifica("posto: portatile da 8 GB con voce e Whisper caricati, niente GPU",
+             not tv.posto_gpu(PORTATILE)[0], tv.posto_gpu(PORTATILE)[1])
+    verifica("posto: portatile da 8 GB anche con la VRAM libera (la tengono voce e Whisper)",
+             not tv.posto_gpu(PORTATILE_VUOTO)[0]
+             and "voce e Whisper" in tv.posto_gpu(PORTATILE_VUOTO)[1])
+    verifica("posto: memoria unificata grande sì", tv.posto_gpu(DGX)[0], tv.posto_gpu(DGX)[1])
+    verifica("contrario: memoria unificata senza margine, no", not tv.posto_gpu(DGX_PIENA)[0])
+    verifica("posto: GPU dedicata da 32 GB con 10 liberi sì", tv.posto_gpu(GRANDE)[0])
+    verifica("contrario: senza nvidia-smi nessuna GPU", not tv.posto_gpu(None)[0])
+
+    # Sintesi finta: la «sessione» dice quanto costa la frase fissa
+    class Voce:
+        def __init__(self):
+            self.session = "cpu"
+            self.config = SimpleNamespace(sample_rate=16000)
+    costi = {"cpu": 0.02, "cuda": 0.005}
+
+    def sintetizza(voice, testo):
+        time.sleep(costi[voice.session])
+        return b"\0\0" * 16000
+    aperte = []
+
+    def sessione_fn(path):
+        aperte.append(path)
+        return "cuda"
+    cpu = tv.misura(sintetizza, Voce(), 16000)[0]
+    s, sess, info = tv.prova_dispositivo(Voce(), "v.onnx", sintetizza, 16000, cpu,
+                                         mem_fn=lambda: PORTATILE, sessione_fn=sessione_fn)
+    verifica("portatile da 8 GB: CPU, senza nemmeno aprire la GPU",
+             s == "cpu" and sess is None and not aperte and info["causa"] == "memoria", str(info))
+    s, sess, info = tv.prova_dispositivo(Voce(), "v.onnx", sintetizza, 16000, cpu,
+                                         mem_fn=lambda: DGX, sessione_fn=sessione_fn)
+    verifica("memoria unificata grande e GPU misurata 4 volte più veloce: GPU",
+             s == "cuda" and sess == "cuda" and info["causa"] == "misura"
+             and info["cuda_s_car"] < info["cpu_s_car"] and "memoria unificata" in info["motivo"],
+             str(info))
+    costi["cuda"] = 0.015
+    s, sess, info = tv.prova_dispositivo(Voce(), "v.onnx", sintetizza, 16000, cpu,
+                                         mem_fn=lambda: DGX, sessione_fn=sessione_fn)
+    verifica("contrario: GPU solo un po' più veloce (sotto carico non lo sarebbe), CPU",
+             s == "cpu" and sess is None and "non abbastanza" in info["motivo"], str(info))
+
+    def rotta(path):
+        raise OSError("libcudnn.so: cannot open shared object file")
+    s, sess, info = tv.prova_dispositivo(Voce(), "v.onnx", sintetizza, 16000, cpu,
+                                         mem_fn=lambda: DGX, sessione_fn=rotta)
+    verifica("contrario: librerie di CUDA mancanti, CPU con il motivo",
+             s == "cpu" and info["causa"] == "errore" and "libcudnn" in info["motivo"])
+    chiamate = []
+
+    def interrompi():
+        chiamate.append(1)
+        return len(chiamate) > 2          # una conversazione riparte durante la misura GPU
+    try:
+        tv.prova_dispositivo(Voce(), "v.onnx", sintetizza, 16000, cpu, mem_fn=lambda: DGX,
+                             sessione_fn=sessione_fn, interrompi=interrompi)
+        interrotta = False
+    except tv.Interrotta:
+        interrotta = True
+    verifica("una conversazione durante la prova della GPU la interrompe (non è un errore)",
+             interrotta)
+
+    # La scelta salvata, ricontrollata all'apertura, e `calliope stato`
+    vero_cuda = tv.cuda_disponibile
+    try:
+        with tempfile.TemporaryDirectory() as d:
+            cfg = Config()
+            cfg.config_dir = d
+            voce = "voices/it_IT-serena-high.onnx"
+            tv.cuda_disponibile = lambda: False
+            verifica("onnxruntime senza CUDA: CPU (il portatile, Windows)",
+                     tv.dispositivo_in_uso(cfg, voce) == ("cpu", "onnxruntime senza CUDA")
+                     and not tv.da_provare(cfg, voce))
+            tv.cuda_disponibile = lambda: True
+            verifica("auto prima della taratura: CPU, GPU da provare",
+                     tv.dispositivo_in_uso(cfg, voce)[0] == "cpu" and tv.da_provare(cfg, voce))
+            T = tv.per(cfg)
+            T.segna_dispositivo(voce, {"scelta": "cpu", "causa": "memoria",
+                                       "motivo": "memoria unificata con 6,0 GB liberi"})
+            verifica("CPU per mancanza di posto: si riprova al prossimo avvio",
+                     tv.da_provare(cfg, voce))
+            T.segna_dispositivo(voce, {"scelta": "cuda", "causa": "misura",
+                                       "motivo": "memoria unificata con 21,0 GB liberi",
+                                       "cpu_s_car": 0.004, "cuda_s_car": 0.0007})
+            T.segna_avvio(voce, "cuda", 18.0, 0.0007)
+            verifica("GPU scelta dalla taratura: si apre sulla GPU, non si riprova",
+                     tv.dispositivo_in_uso(cfg, voce, mem_fn=lambda: DGX)[0] == "cuda"
+                     and not tv.da_provare(cfg, voce)
+                     and tv.Taratura(Path(d) / tv.FILE).dispositivo_scelto(voce)["scelta"]
+                     == "cuda")
+            ora = tv.dispositivo_in_uso(cfg, voce, mem_fn=lambda: DGX_PIENA)
+            verifica("contrario: GPU scelta ma ora la memoria non basta, CPU",
+                     ora[0] == "cpu" and "ora" in ora[1], str(ora))
+            st = tv.testo_stato(cfg) or ""
+            verifica("stato: sulla GPU con il motivo e la misura della GPU",
+                     "sulla GPU" in st and "GPU: memoria unificata" in st and "0,7 ms" in st, st)
+            verifica("stato: la chiave delle misure è «cuda»",
+                     tv.sessione_in_uso(cfg, voce) == "cuda")
+            for _ in range(tv.MIN_USO):
+                T.osserva(voce, "cuda", 80, 0.005 * 80, 80 / 18.0)
+            ora = tv.dispositivo_in_uso(cfg, voce, mem_fn=lambda: DGX)
+            verifica("dall'uso la GPU è più lenta della CPU misurata: si torna alla CPU",
+                     ora == ("cpu", "dall'uso la GPU non è più veloce della CPU"), str(ora))
+            cfg.tts_dispositivo = "cpu"
+            verifica("tts_dispositivo: cpu scritto vince",
+                     tv.dispositivo_in_uso(cfg, voce, mem_fn=lambda: DGX)
+                     == ("cpu", "scritto in tts_dispositivo") and not tv.da_provare(cfg, voce))
+            cfg.tts_dispositivo = "cuda"
+            verifica("tts_dispositivo: cuda scritto vince (anche senza posto)",
+                     tv.dispositivo_in_uso(cfg, voce, mem_fn=lambda: PORTATILE)[0] == "cuda")
+            tv.cuda_disponibile = lambda: False
+            verifica("contrario: cuda scritto ma onnxruntime senza CUDA, CPU con il motivo",
+                     "non ha CUDA" in tv.dispositivo_in_uso(cfg, voce)[1])
+            tv.cuda_disponibile = lambda: True
+
+            # Ripiego all'apertura: la sessione CUDA si apre, la prima sintesi fallisce
+            class VocePiper:
+                def __init__(self):
+                    self.session = "cpu"
+
+                def phonemize(self, t):
+                    return [t]
+
+                def synthesize(self, testo):
+                    if self.session == "cuda":
+                        raise RuntimeError("cuDNN is unavailable")
+                    yield b""
+            vero_sess = tv.sessione_cuda
+            tv.sessione_cuda = lambda p: "cuda"
+            try:
+                v = VocePiper()
+                buf = io.StringIO()
+                with redirect_stdout(buf):
+                    su = tts._su_gpu(cfg, v, voce)
+                verifica("ripiego: GPU che fallisce alla prima frase, la voce resta sulla CPU",
+                         su is False and v.session == "cpu"
+                         and getattr(v, "calliope_dispositivo", None) is None
+                         and "resta sulla CPU" in buf.getvalue(), buf.getvalue())
+                VocePiper.synthesize = lambda self, testo: iter([b""])
+                v = VocePiper()
+                with redirect_stdout(io.StringIO()):
+                    su = tts._su_gpu(cfg, v, voce)
+                verifica("GPU che funziona: sessione CUDA e chiave «cuda»",
+                         su is True and v.session == "cuda" and tv.thread_di(v) == "cuda")
+            finally:
+                tv.sessione_cuda = vero_sess
+    finally:
+        tv.cuda_disponibile = vero_cuda
+    ok_val = all(_tts_dispositivo_valido(x) == x for x in ("auto", "cpu", "cuda"))
+    try:
+        _tts_dispositivo_valido("gpu")
+        ok_val = False
+    except ValueError:
+        pass
+    verifica("config: tts_dispositivo auto, cpu o cuda", ok_val)
+
+
 prova_guardiano()
 prova_ripresa()
 prova_ripresa_con_tool()
 prova_registro()
 prova_prima_voce()
 prova_voce_a_pezzi()
+prova_voce_gpu()
 prova_compressione()
 print(f"\n{'Tutto ok' if not errori else f'{errori} errori'}")
 sys.exit(1 if errori else 0)
