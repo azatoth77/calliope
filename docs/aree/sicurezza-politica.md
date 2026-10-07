@@ -352,3 +352,13 @@ telefono) e si **scarica**. Le difese (dettagli nelle aree schermi-telefono e do
   resta sul server); tipi solo nostri, `attachment`, nosniff e CSP «sandbox».
 - **Voce**: il riassunto e gli annunci tolgono il Markdown prima di Piper; l'annuncio passa
   ancora da `riferire.controlla_testo`.
+
+## Zona grigia: il documento appena consegnato alla stessa persona (07/10 pomeriggio)
+
+La regola `risultato_schermo_proprio` (dal 07/10 per `risultato_lavoro`) vale anche per
+`schermo_mostra(cosa=documento)`: dalla zona grigia il documento o il risultato della persona
+della conversazione, appena consegnato in questa conversazione (titolo in una risposta recente),
+va solo sui suoi schermi personali e senza «Scarica». Nient'altro cambia: un documento non
+consegnato ora, o di un'altra persona, resta rifiutato. Dettagli in
+[`schermi-telefono.md`](schermi-telefono.md). La data di nascita nel profilo si scrive solo al
+«sì» di chi parla, mai per un minore (`memoria-agenda-liste.md`).

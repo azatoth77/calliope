@@ -428,3 +428,23 @@ si conta dalla prima voce) e `listen` restituisce anche `pause`, `parlato` e `ch
 (taglio probabile) sul telefono non si misura: il microfono si ferma a fine frase. Riassunto per
 persona e canale in `calliope stato --turni --pause` ([stt-tts](stt-tts.md)). Prova
 `prove/prova_pause.py` (il modulo vero eseguito con node, se c'è).
+
+## «Mostramelo.» breve dopo un lavoro consegnato (07/10 pomeriggio, DGX, ramo `correzioni-giro7`)
+
+Caso vero (qui con nomi di fantasia): lavoro finito e annunciato («ho finito «…». Lo apro?»),
+«Sì, aprilo.» breve (aperto), poi «Mostramenob.» (breve, zona grigia) → `schermo_mostra(cosa=
+documento)` rifiutato «Non ho riconosciuto bene la tua voce: le cose personali non le mostro…»,
+subito dopo che la stessa persona l'aveva chiesto e ricevuto. Con il nome, «Mostralo.» funzionava,
+ma mostrava l'ultimo **documento di Calliope** della persona (l'archivio dei documenti), non il
+risultato del lavoro appena annunciato (che non sta in quell'archivio).
+- **Quale documento** (`tools/schermi._documento`): il più recente tra l'ultimo documento della
+  persona e il risultato del suo ultimo lavoro riuscito (`agenti.risultato.recenti`, per `fine`),
+  con la scheda del risultato (`risultato.scheda`, testo intero in Markdown).
+- **Zona grigia** (regola `risultato_schermo_proprio`, la stessa di `risultato_lavoro`): il
+  documento o il risultato della persona della conversazione (proprietario uguale a
+  `mittente.persona`) **appena consegnato** (il suo titolo è in una risposta recente della
+  conversazione, `ToolContext.storia`: l'annuncio, la conferma) va sui suoi schermi personali
+  anche dalla zona grigia; senza «Scarica»; mai sugli schermi d'altri. Contrari in
+  `prova_risultati.py`: un documento non consegnato in questa conversazione (rifiutato come
+  prima), un'altra persona (niente scheda di chi ha chiesto il lavoro); con la voce riconosciuta il
+  risultato più recente, senza la regola.

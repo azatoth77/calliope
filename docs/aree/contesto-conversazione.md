@@ -450,3 +450,12 @@ il primo embedding dell'archivio scacciava il guardiano o la voce (turni di mino
 Embedding fuori da Ollama: non fatto (servirebbe un runtime nuovo; onnxruntime c'è già, ma il
 modello ONNX di qwen3-embedding e il suo tokenizer sono da verificare su ARM). Prova
 `prova_ollama_carico.py`.
+
+## La corsia segue la conversazione sostituita (07/10 pomeriggio, DGX)
+
+Una conversazione chiusa per tempo all'inizio di un turno (`conversazione_scaduta`) veniva
+sostituita nel registro (`RegistroConversazioni.sostituita`) ma non nella corsia che la stava
+usando: la frase breve dopo («Sì, grazie.» a «Procedo?») finiva nella conversazione anonima del
+satellite e la proposta si perdeva. Ora `sostituita` sposta anche `conv` e `_in_uso` della
+corsia. Caso e misure in [`voce-e-regole.md`](voce-e-regole.md); prova `prova_corsie.py`
+(`prova_scaduta_sospeso`).
