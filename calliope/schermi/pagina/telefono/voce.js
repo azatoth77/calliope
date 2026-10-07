@@ -178,6 +178,25 @@ export class WakeWord {
   }
 }
 
+// ───────────────────────────── pause (solo misura) ─────────────────────────────
+// Come calliope/pause.py MisuraPause (07/10): le pause dentro la frase (silenzi tra
+// PAUSA_MIN_MS e silence_ms) e il parlato, dal conteggio dei frame silenziosi dello stesso VAD
+// che chiude il turno. Vanno al server con «frase_finita»; non cambiano nulla dell'ascolto.
+export const PAUSA_MIN_MS = 120;
+export class MisuraPause {
+  constructor(frameMs) { this.fms = frameMs; this.pause = []; this.frames = 0; this.corsa = 0; }
+  frame(silenzioso) {
+    this.frames++;
+    if (silenzioso) { this.corsa++; return; }
+    if (this.corsa) {
+      const ms = this.corsa * this.fms;
+      if (ms >= PAUSA_MIN_MS && this.pause.length < 60) this.pause.push(Math.round(ms));
+      this.corsa = 0;
+    }
+  }
+  parlatoMs(silenzioFinale) { return Math.round(Math.max(0, this.frames - silenzioFinale) * this.fms); }
+}
+
 // ───────────────────────────── ascolto ─────────────────────────────
 // I blocchi del microfono arrivano con push(); listen/registra/veglia li consumano in ordine.
 export class Ascolto {
@@ -226,7 +245,8 @@ export class Ascolto {
   // Come Listener.listen. o: {wake (bool), fino (ms, performance.now), seme (blocchi già
   // della frase), forza() (tocco: la frase comincia ora), sveglia() (smettere se nessuno
   // parla), basta() (fermare tutto), onAudio(blocchi), onInizio(), onFine()}.
-  // Restituisce {audio: [blocchi], inizio, woke, punteggio} oppure null.
+  // Restituisce {audio: [blocchi], inizio, woke, punteggio, pause, parlato, chiusura} oppure
+  // null (pause, parlato e chiusura: solo misura, 07/10).
   async listen(o) {
     const p = this.p;
     const fms = this.frameMs;
@@ -239,9 +259,11 @@ export class Ascolto {
     if (this.vad) this.vad.reset();
     let parlato = [], silenzio = 0, parla = false, sentito = false, forzata = false;
     let segnalata = false, inviati = 0, streak = 0;
+    let misura = new MisuraPause(fms);
     const r = { inizio: 0, woke: false, punteggio: 0 };
     if (o.seme && o.seme.length) {
       parla = true; sentito = true; parlato = o.seme.slice();
+      misura.frames = parlato.length;
       r.inizio = performance.now() - parlato.length * fms;
       r.woke = true; r.punteggio = 1;
     }
@@ -280,13 +302,14 @@ export class Ascolto {
           if (preroll.length > maxPre) preroll.shift();
           if (prob >= p.vad_threshold) {
             parla = true; sentito = true; parlato = preroll.slice(); silenzio = 0;
+            misura = new MisuraPause(fms); misura.frames = 1;   // il frame che l'ha fatta partire
             r.inizio = performance.now() - parlato.length * fms;
             r.woke = false; r.punteggio = 0;
           }
           continue;
         }
         parlato.push(frame);
-        if (prob >= p.vad_threshold) sentito = true;
+        if (prob >= p.vad_threshold && !sentito) { sentito = true; misura = new MisuraPause(fms); }
         if (!segnalata && perMe()) {
           segnalata = true;
           if (o.onInizio) o.onInizio();
@@ -297,20 +320,28 @@ export class Ascolto {
         }
         // Dopo un tocco il silenzio conta solo da quando si è sentita la voce: la persona ha
         // bisogno di un attimo per cominciare
-        if (!forzata || sentito) silenzio = prob < p.vad_threshold - 0.15 ? silenzio + 1 : 0;
+        if (!forzata || sentito) {
+          silenzio = prob < p.vad_threshold - 0.15 ? silenzio + 1 : 0;
+          misura.frame(silenzio > 0);
+        }
         const lunga = parlato.length * fms >= p.max_utterance_s * 1000;
         const muta = forzata && !sentito && parlato.length * fms >= 6000;
-        const fine = (o.fine && o.fine()) || lunga || muta || silenzio * fms >= p.silence_ms;
+        const rilascio = !!(o.fine && o.fine());
+        const fine = rilascio || lunga || muta || silenzio * fms >= p.silence_ms;
         if (fine) {
           const abbastanza = !muta && (parlato.length - silenzio) * fms >= p.min_speech_ms;
           if (abbastanza && perMe()) {
             r.audio = parlato;
+            r.pause = misura.pause.slice();
+            r.parlato = misura.parlatoMs(silenzio);
+            r.chiusura = rilascio ? "rilascio" : silenzio * fms >= p.silence_ms ? "silenzio" : "lunga";
             return r;
           }
           if (segnalata && o.onFine) o.onFine();
           segnalata = false; inviati = 0;
           if (forzata) return null;            // tocco senza voce: finita
           parla = false; parlato = []; silenzio = 0; preroll = [];
+          misura = new MisuraPause(fms);
           if (this.vad) this.vad.reset();
         }
       }

@@ -142,3 +142,18 @@ dà la prima del turno, `Speaker.prima_voce` anche con le casse locali, e il reg
 ha `prima_voce_s` (da `t0`, comprende la frase d'attesa). `calliope/latenza.py` e il cruscotto
 mostrano la prima voce sentita e la stessa dalla fine del parlato. Compatibile nei due sensi.
 Il telefono (pagina web) non lo manda ancora.
+
+## Pause dentro la frase e ripresa (07/10, solo misura)
+
+Il VAD sta sul satellite, quindi anche la misura delle pause (vedi [stt-tts](stt-tts.md), «Pause e
+fine del turno»). `frase_finita` ha tre campi facoltativi: `pause_ms` (le pause interne, ms),
+`parlato_ms`, `chiusura`; il server li controlla in `valida_evento` (`pause.campi_frase`: numeri
+tra 0 e 10 000 ms, al più 60, chiusure note) e `AscoltoRemoto` li tiene per il registro dei
+turni, con `canale` (`Collegamento.canale`: «telefono» per la web app, «satellite» per gli altri)
+e il nome del satellite. Messaggio nuovo `ripresa` (id dell'ascolto, `dopo_s`): qualcuno ha
+ricominciato a parlare entro 2 s dalla fine della frase (il satellite la misura finché non
+arriva la risposta, «frase», e mai mentre le sue casse suonano: `Riproduttore.occupato`); il
+server la tiene in `Collegamento.riprese` (le ultime 20). Compatibile nei due sensi: un server
+vecchio ignora i campi e il tipo, un satellite vecchio non li manda (turno senza pause). Prova
+`prove/prova_pause.py` (server vero con un client WebSocket, satellite in Python con un listener
+finto).

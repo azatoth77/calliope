@@ -104,6 +104,7 @@ class Riproduttore:
         self.interrotta_a = None                  # monotonic dell'ultima interruzione
         self.ultima_scrittura = 0.0               # monotonic della fine dell'ultima scrittura
         self.byte_riprodotti = 0
+        self._pcm_fino = 0.0                      # monotonic: fine dell'ultimo suono locale
         threading.Thread(target=self._lavora, name="riproduttore", daemon=True).start()
 
     # ── dal server ──
@@ -149,6 +150,13 @@ class Riproduttore:
         self.scarta_fino = self.ultimo_turno = 0
         self._frasi.clear()
         self.dette = []
+
+    def occupato(self, margine: float = 0.4) -> bool:
+        """Sta suonando qualcosa (una frase, un segnale), o l'ha appena finito: la misura
+        della ripresa dopo la frase (calliope/pause.py) non deve sentire le casse."""
+        ora = time.monotonic()
+        return (self.in_corso or not self.q.empty() or ora < self._pcm_fino + margine
+                or ora - self.ultima_scrittura < margine)
 
     def saying_name(self) -> bool:
         """Come Speaker.saying_name: la wake word va ignorata mentre dice il suo nome."""
@@ -201,11 +209,13 @@ class Riproduttore:
                 if rate != self.out.rate:
                     self.out.apri(rate)
                 step = int(rate * self.BLOCCO_S) * 2
+                self._pcm_fino = time.monotonic() + len(pcm) / 2 / max(1, rate)
                 for i in range(0, len(pcm), step):
                     if self.out.scrivi(pcm[i:i + step]) is False:
                         break
                 time.sleep(self.out.latency)
             finally:
+                self._pcm_fino = max(self._pcm_fino, time.monotonic())
                 fatto.set()
 
     def _scartata(self, f: _Frase) -> bool:
@@ -769,6 +779,10 @@ class Satellite:
         if t not in ("frase",):
             self.traccia.append((time.monotonic(), t, m.get("id")))
         if t == "frase":
+            # Calliope risponde: finisce la misura della ripresa dopo la frase (pause.py)
+            ferma = getattr(self.listener, "ferma_ripresa", None)
+            if ferma is not None:
+                ferma()
             self.player.frase(int(m["turno"]), int(m["id"]), m.get("testo") or "",
                               int(m["rate"]), int(m["byte"]))
         elif t == "fine_turno":
@@ -853,6 +867,11 @@ class Satellite:
 
         L.on_audio = on_audio
         L.on_speech_end = lambda: self._manda(tipo="scartata", id=lid)
+        # Solo misura (07/10, calliope/pause.py): qualcuno ricomincia a parlare entro 2 s dalla
+        # fine della frase? Le casse di qui (segnale di fine, risposta) non contano. Un server
+        # vecchio ignora il tipo «ripresa»
+        L.ripresa_muto = self.player.occupato
+        L.ripresa_avviso = lambda s, lid=lid: self._manda(tipo="ripresa", id=lid, dopo_s=s)
         try:
             audio = L.listen(self.wake if m.get("wake") else None, awake_until, seed=seed,
                              wakeup=self._wakeup)
@@ -865,9 +884,13 @@ class Satellite:
             return
         self._suona("fine")              # frase presa: il segnale prima della rete
         self.frasi_inviate += 1
+        # Le pause dentro la frase, il parlato e come si è chiusa (07/10, solo misura): campi
+        # facoltativi, un server vecchio li ignora
         self._manda(tipo="frase_finita", id=lid, fa_s=round(time.monotonic() - L.started_at, 3),
                     woke=bool(L.woke), wake_score=round(float(L.wake_score), 3),
-                    campioni=len(audio))
+                    campioni=len(audio), pause_ms=list(getattr(L, "pause_ms", []) or []),
+                    parlato_ms=getattr(L, "parlato_ms", None),
+                    chiusura=getattr(L, "chiusura", None))
 
     def _veglia(self, m: dict):
         wid = m["id"]
