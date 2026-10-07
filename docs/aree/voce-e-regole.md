@@ -454,3 +454,26 @@ Casi veri del satellite dello studio, profilo 26B (qui con nomi di fantasia).
 - Visto e non corretto: nel turno «Dovevi ricordarti…» la risposta è stata detta due volte di
   seguito (il modello, dopo la spinta su una dichiarazione già detta a metà risposta, ha ripetuto
   la stessa risposta). Da guardare se ricapita.
+
+## Banco di regressione col 4B sceso (07/10 sera, ramo `regressione-4b`)
+
+Il banco (`prove/prova_regressione.py`, gemma4 e4b locale, 2 giri) era 166/174 il 04/10, oggi
+152/174 su main (ecf50d4) e 158/174 sul ramo del giro 9. Due cause, nessuna nel codice della voce:
+- **Il finto dei lavori del banco era vecchio** (catena `conf`, `conf4`, `conf_tv`, 10–12 errori
+  su 22): `LavoriFinto` prende `offerta` da `agenti.servizio.Lavori`, che dal 06/10 (ddc9498,
+  lavori che sopravvivono a un riavvio) chiama `_interrotti_da_rifare`; il finto non l'aveva e
+  ogni `delega_lavoro` finiva in `AttributeError`, da cui risposte su un lavoro mai proposto.
+  Con il metodo (nessun interrotto) la catena torna 21/22. Non c'entra l'analisi della richiesta
+  (`agenti/richiesta.py`): il finto non ha `analizzatore`, e il banco la salta come prima.
+- **Ollama aggiornato da solo stamattina** (0.35.0 → 0.35.1, 07/10 08:33, `app-1.log`): il codice
+  del 04/10 (18bb738, dal bundle della storia) oggi fa **162/174**, con gli stessi casi fissi di
+  main: «Calliope, chi sono?» → «Calliope.», «Riesci a mostrarmi il documento sullo schermo?» →
+  «devo sapere quale documento intendi» (nessun documento nella conversazione: la domanda è
+  ragionevole), «Credo che tu abbia sbagliato l'ora.» → «posso controllare l'ora?» invece di
+  `ora_attuale`, e «Scusa, io sono chi amministra.» → «Chi ti parla è Dario.» (eco). Né l'ora né
+  la data del contesto del turno c'entrano (orologio finto alle 11:00 del 04/10: stessi errori),
+  i pacchetti Python sono quelli del 04/10, il modello è lo stesso (digest ee6656371218).
+  Ollama 0.35.0 non si è potuto riprovare (niente rete per scaricarlo): la causa è per esclusione.
+- Dopo la correzione del finto: **165/174** (contro 162 del codice del 04/10 nelle stesse
+  condizioni), prima frase mediana 0,69 s, p90 1,20 s. Restano i quattro casi sopra (il 4B, non
+  la voce della DGX, che è il 26B) e la variabilità di sempre (`info3`, `ora_vecchia`).
