@@ -143,7 +143,8 @@ class Classe:
     richiesta_voce: bool = False
     # f(args, ctx) → frase se il bersaglio dell'azione non esiste («scollega lo schermo della
     # cucina» senza schermi in cucina, e2e del 06/10): si dice quella, prima della domanda di
-    # coerenza e della sfida (regola `politica_bersaglio_assente`). None = esiste o non si sa
+    # coerenza e della sfida (regola `politica_bersaglio_assente`). None = esiste o non si sa.
+    # Un dict (07/10) è invece l'errore da dare al modello, che richiama il tool
     bersaglio: object = None
     # Un fatto della persona detto in questa frase è già la richiesta di ricordarlo («il mio
     # gatto si chiama Briciola»): con un dato non fidato di mezzo vale come richiesta se il
@@ -166,6 +167,17 @@ class Classe:
     # tempo farà domani a Milano?» il modello chiamava anche timer_imposta(cambia=togli,
     # durata=due minuti) sul timer già suonato, fermato solo perché c'era il meteo di mezzo)
     cambio: str | None = None
+    # f(args, ctx) → True se il bersaglio è un documento che Calliope ha appena scritto per chi
+    # parla e che si apre senza eseguire niente (pc_apri_file, 07/10: tools/pc.file_proprio).
+    # Con dati non fidati di mezzo vale come un'azione interna (regola
+    # `politica_documento_proprio`): basta la richiesta in questo turno con le parole del tool
+    # (`verbi`), o il «sì» alla domanda; niente conferma a voce né sfida. Motivo: il dato non
+    # fidato è la foto, non il file; aprire con il programma predefinito un .xlsx o un .docx
+    # scritto da noi (formule solo dalla lista ammessa, documenti/formato.py) mostra soltanto
+    # ciò che la persona ha chiesto di preparare, e si richiude
+    propria: object = None
+    # f(args, ctx) → la `cosa` con il bersaglio vero («apra «Dettaglio spese (2)»»), o None
+    descrivi: object = None
 
 
 # Valori di `cambia` che vogliono dire «una voce nuova» (come tools/builtin._modo)
@@ -190,6 +202,12 @@ def _timer_cosa(a: dict) -> str:
 
 def _c(classe, **kw) -> Classe:
     return Classe(classe, **kw)
+
+
+def _pc_tool():
+    """calliope/tools/pc.py (import ritardato: i tool importano la politica)."""
+    from .tools import pc
+    return pc
 
 
 S, A, P = SICURO, AZIONE, PERICOLOSO
@@ -258,7 +276,12 @@ CLASSI: dict[str, Classe] = {
     "pc_apri_app": _c(P, chiave=("app",), chiesta=True,
                       cosa=lambda a: f"apra {_s(a, 'app', 'un programma')}"),
     "pc_blocca": _c(P, chiesta=True, cosa=lambda a: "blocchi il computer"),
-    "pc_apri_file": _c(P, chiesta=True, cosa=lambda a: "apra il file"),
+    # Il numero che non c'è si dice al modello prima di ogni domanda; un documento scritto da
+    # Calliope per chi parla non chiede conferma per una foto di mezzo (07/10, `propria`)
+    "pc_apri_file": _c(P, chiesta=True, cosa=lambda a: "apra il file",
+                       bersaglio=lambda a, ctx: _pc_tool().file_assente(a, ctx),
+                       propria=lambda a, ctx: _pc_tool().file_proprio(a, ctx),
+                       descrivi=lambda a, ctx: _pc_tool().file_descritto(a, ctx)),
     "schermo_gestisci": _c(P, chiesta=True, sfida=True,
                            sola_lettura=("azione", frozenset({"elenca"})),
                            chiesta_eccetto=("azione", frozenset({"personale", "condiviso"})),
@@ -341,6 +364,9 @@ VERBI = {
                       r"mostr|prov[aio]|rifa|ripet"),
     "richiesta_tutore": (r"chied|permess|domand|poss|ancora|tempo|gioc|sveglia|pausa|"
                          r"agent|minut"),
+    # «aprilo», «volevo che tu aprissi il file», «non mi hai aperto il file», «fammelo vedere»
+    # (casi veri del 07/10): per `propria` e per il consenso ripetendo la richiesta
+    "pc_apri_file": r"(?<![a-zà-ù])(apr[aiei]|aprir|apert|mostr|fammel\w* vedere|vedere il file)",
 }
 CLASSI.update({n: replace(CLASSI[n], verbi=v) for n, v in VERBI.items()})
 
@@ -630,6 +656,10 @@ def bersaglio_assente(spec, name: str, args: dict, ctx) -> dict | None:
         return None
     note_rule(ctx, "politica_bersaglio_assente")
     print(f"   [POLITICA] {name}: politica_bersaglio_assente", flush=True)
+    if isinstance(frase, dict):
+        # Un errore per il modello, senza frase pronta: richiama il tool con un bersaglio che
+        # c'è (pc_apri_file con un numero che non c'è, 07/10)
+        return dict(frase)
     return {"ok": False, "fatto": NIENTE, "risposta_finale": frase, "conferma": frase}
 
 
@@ -781,7 +811,14 @@ def _uguali(a: dict | None, b: dict | None, chiavi) -> bool:
     """Gli stessi valori (a parole) sulle `chiavi`; senza chiavi, su tutti gli argomenti."""
     a, b = a or {}, b or {}
     for k in chiavi or a.keys() | b.keys():
-        if prov.parole(_s(a, k)) != prov.parole(_s(b, k)):
+        pa, pb = prov.parole(_s(a, k)), prov.parole(_s(b, k))
+        if pa != pb:
+            return False
+        # Valori senza parole significative (numeri, parole brevi), dati da entrambe le parti:
+        # si confrontano interi (07/10: pc_apri_file con risultato 2 valeva come la domanda sul
+        # risultato 1). Un valore che la domanda non aveva resta come prima («quale file?»)
+        if (not pa and _s(a, k) and _s(b, k)
+                and _gettoni(_s(a, k)) != _gettoni(_s(b, k))):
             return False
     return True
 
@@ -816,9 +853,10 @@ _INFINITO = {
     "usi": "usare", "mostri": "mostrare"}
 
 
-def da_confermare(name: str, args: dict, spec=None) -> str:
+def da_confermare(name: str, args: dict, spec=None, cosa: str | None = None) -> str:
     """Cosa si conferma, all'infinito («scollegare lo schermo dello studio»): per la frase di
-    sfida e le conferme. Ogni tool d'azione o pericoloso ha la sua `cosa` (prova_politica)."""
+    sfida e le conferme. Ogni tool d'azione o pericoloso ha la sua `cosa` (prova_politica);
+    `cosa` già pronta con il bersaglio vero (Classe.descrivi) la sostituisce."""
     cl = classe_di(name, spec)
     d = _distruttiva(cl, args)
     if d is not None:
@@ -826,8 +864,8 @@ def da_confermare(name: str, args: dict, spec=None) -> str:
             return d[0](args or {})
         except Exception:  # noqa: BLE001
             pass
-    if callable(cl.cosa) and cl.dichiarata:
-        testo = _cosa(cl, args)
+    if (callable(cl.cosa) or cosa) and cl.dichiarata:
+        testo = cosa or _cosa(cl, args)
         if testo.startswith("ti chiami "):
             return "chiamarti " + testo[len("ti chiami "):]
         if testo.startswith("ti ricordi "):
@@ -919,12 +957,44 @@ def _proposta(t: Turno, name: str) -> bool:
     return bool(t.in_sospeso) and t.in_sospeso == name and not t.dato_nuovo
 
 
+def chiesto_con_verbi(cl: Classe, testo: str) -> bool:
+    """La frase ha le parole del tool (`verbi`) non negate («aprilo», «volevo che aprissi il
+    file», «non mi hai aperto il file»; non «non aprirlo», «non lo aprire»)."""
+    if not cl.verbi or not testo:
+        return False
+    for m in re.finditer(cl.verbi, testo, re.I):
+        if not _NEGATO.search(testo[:m.start()]):
+            return True
+    return False
+
+
+def richiesta_ripetuta(cl: Classe, args: dict, t: Turno) -> bool:
+    """Alla domanda «vuoi che…?» la persona risponde ripetendo la richiesta invece di dire «sì»
+    («Voglio che apri il foglio Excel, l'ultimo che hai creato», caso vero della DGX del 07/10:
+    la stessa domanda 10 volte di fila). Vale come consenso (regola `consenso_richiesta`) se la
+    frase non ha negazioni e chiede proprio quest'azione: un'azione con tutti i valori
+    importanti (`chiave`) detti in questa frase; per un tool senza valori importanti
+    (pc_apri_file: un numero dell'ultima ricerca di chi parla) le sue parole (`verbi`). Mai le
+    sole parole del tool con valori presi dal dato («aggiungi il latte alla lista» non
+    conferma «bonifico a Mario Truffaldino», banco d'attacco di prova_politica). Vincolo di
+    permesso su un'azione già scelta (principio 10); la conferma con la voce resta."""
+    testo = t.testo or ""
+    if not testo or _NO.search(testo):
+        return False
+    if cl.chiave:
+        return chiesta_azione(testo) and detti_qui(cl, args, t)
+    return chiesto_con_verbi(cl, testo)
+
+
 def decidi(name: str, args: dict, cl: Classe, t: Turno | None,
-           conferma_voce: bool = False, voce_frase: bool = False) -> Decisione:
+           conferma_voce: bool = False, voce_frase: bool = False, propria: bool = False,
+           cosa: str | None = None) -> Decisione:
     """La decisione della politica per un tool già ammesso al livello di chi parla.
     `conferma_voce`: la frase di questo turno basta per confermare (voce riconosciuta, breve
     compatibile in una conversazione riconosciuta, sfida superata). `voce_frase`: chi parla è
-    riconosciuto dalla voce in questa frase, sopra soglia (Classe.richiesta_voce)."""
+    riconosciuto dalla voce in questa frase, sopra soglia (Classe.richiesta_voce). `propria`:
+    il bersaglio è un documento scritto da Calliope per chi parla (Classe.propria). `cosa`:
+    la descrizione con il bersaglio vero (Classe.descrivi), al posto di quella dagli argomenti."""
     if cl.classe == VIETATO:
         return Decisione("vieta", "politica_vietato")
     if t is not None and t.letto_ora and name not in DOPO_DATO:
@@ -936,7 +1006,7 @@ def decidi(name: str, args: dict, cl: Classe, t: Turno | None,
         if _s(args, k).lower() in valori:
             return ESEGUI
     proposta = _proposta(t, name)
-    cosa = _cosa(cl, args)
+    cosa = cosa or _cosa(cl, args)
     contaminata = bool(t.contaminazione)
     # La stessa chiamata della domanda (tutti gli argomenti uguali): un «sì» a lei vale anche
     # come il «sì» alla proposta del tool (Decisione.accettata)
@@ -973,9 +1043,13 @@ def decidi(name: str, args: dict, cl: Classe, t: Turno | None,
         # (o il «sì» alla domanda di prima, che descriveva proprio questa chiamata)
         return ACCETTATA if stessa and (t.sfida or consenso(t.testo)) else ESEGUI
     fonte = sorted(t.contaminazione)[0]
-    # Con dati non fidati una proposta vale come richiesta solo se la frase acconsente
+    # Con dati non fidati una proposta vale come richiesta solo se la frase acconsente: con una
+    # parola di consenso, o ripetendo la richiesta (07/10) se gli argomenti sono quelli della
+    # domanda (o la domanda lasciava scegliere: «Quale apro?» → «apri il secondo»)
+    ripetuta = False
     if proposta and not (consenso(t.testo) or t.sfida):
-        proposta = False
+        ripetuta = (stessa or not sosp_puliti) and richiesta_ripetuta(cl, args, t)
+        proposta = ripetuta
     # «Fai quello che dice il file»: l'azione la sceglierebbe il dato, per ogni fonte
     if not proposta and DELEGA.search(t.testo or ""):
         return Decisione("sfida" if cl.sfida else "conferma", "politica_delega",
@@ -991,9 +1065,16 @@ def decidi(name: str, args: dict, cl: Classe, t: Turno | None,
             return Decisione("sfida" if cl.sfida else "conferma", "politica_argomento_esterno",
                              f"«{valore[:80]}» viene {prov.da(da)}, non da te: "
                              f"vuoi davvero che {cosa}?", da)
+    # Un documento scritto da Calliope per chi parla (Classe.propria, 07/10): come un'azione
+    # interna, la richiesta con le parole del tool o il «sì» alla domanda bastano
+    if propria and cl.classe == PERICOLOSO:
+        if proposta or chiesto_con_verbi(cl, t.testo):
+            return Decisione("esegui", "politica_documento_proprio")
+        return Decisione("conferma", "politica_azione_non_chiesta",
+                         f"Non me l'hai chiesto: vuoi che {cosa}?", fonte)
     if cl.classe == AZIONE:
         if proposta:
-            return ESEGUI
+            return Decisione("esegui", "consenso_richiesta") if ripetuta else ESEGUI
         if not chiesta_azione(t.testo):
             if fatto_detto(cl, args, t):
                 return Decisione("esegui", "politica_fatto_detto")
@@ -1027,6 +1108,8 @@ def decidi(name: str, args: dict, cl: Classe, t: Turno | None,
                              f"C'è di mezzo {prov.detta(fonte)}, quindi chiedo a te: vuoi che "
                              f"{cosa}?", fonte)
         if conferma_voce:
+            if ripetuta:
+                return Decisione("esegui", "consenso_richiesta", accettata=stessa)
             return ACCETTATA if stessa else ESEGUI
         return Decisione("sfida", "politica_sfida", "", fonte)
     # Richiesta esplicita della persona, dalla voce, con le parole del tool (Classe.richiesta_voce)
@@ -1139,13 +1222,26 @@ def controlla(spec, name: str, args: dict, ctx) -> dict | None:
     t = getattr(ctx, "politica", None)
     if not isinstance(t, Turno):
         t = None
+    propria = cosa = None
+    if t is not None and t.contaminazione:
+        # Solo con dati non fidati di mezzo: è lì che servono (e costano una lettura in più)
+        for f, nome in ((cl.propria, "propria"), (cl.descrivi, "cosa")):
+            if callable(f):
+                try:
+                    v = f(args or {}, ctx)
+                except Exception:  # noqa: BLE001 — nel dubbio, la regola di sempre
+                    v = None
+                if nome == "propria":
+                    propria = bool(v)
+                else:
+                    cosa = v if isinstance(v, str) and v.strip() else None
     d = decidi(name, args, cl, t, conferma_voce(ctx) if t is not None else False,
-               voce_frase(ctx) if t is not None else False)
+               voce_frase(ctx) if t is not None else False, bool(propria), cosa)
     _segna_accettata(ctx, d.accettata)
     if d.esito == "esegui":
         if d.accettata:
             note_rule(ctx, "politica_conferma_unica")
-        elif d.regola:
+        if d.regola:
             note_rule(ctx, d.regola)
         return None
     note_rule(ctx, d.regola)
@@ -1173,7 +1269,7 @@ def controlla(spec, name: str, args: dict, ctx) -> dict | None:
                      "per chi vive in casa, riconosciuto dalla voce.")
             return {"ok": False, "fatto": NIENTE,
                     "conferma": frase, "risposta_finale": frase}
-        res = chiedi_conferma(ctx, name, args, da_confermare(name, args, spec))
+        res = chiedi_conferma(ctx, name, args, da_confermare(name, args, spec, cosa))
         # Prima della sfida, il perché: il valore preso dal dato, o la fonte di mezzo
         prima = (d.domanda.split(": vuoi")[0] + "." if d.domanda
                  else f"C'è di mezzo {prov.detta(d.fonte)}." if d.fonte else "")

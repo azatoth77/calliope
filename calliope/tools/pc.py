@@ -25,6 +25,7 @@ import datetime
 import re
 
 from ..pc import COMANDI_MEDIA, TIPI_FILE
+from ..pc.base import modo_apertura
 from ..tempi import parse_past_range, word_number
 from .spec import ToolSpec, ToolContext, note_rule
 from ..testi import ALL, FAMILY, MESI, NIENTE
@@ -538,6 +539,75 @@ def _pc_cerca_file(ctx: ToolContext, testo: str = "", tipo: str = "qualsiasi",
                          "«apri la bolletta», «sì»), chiama pc_apri_file con il suo numero n."}
 
 
+def _numero(risultato) -> int | None:
+    """Il numero del risultato: «2», «il secondo», «l'ultimo» (= 1, il più recente); None se
+    non è un numero (un percorso o un nome di file dal modello non si apre mai)."""
+    s = str(risultato if risultato is not None else "1").strip().lower()
+    m = re.fullmatch(r"(?:il |lo |la |l'|numero |n\.? ?)?(\d{1,2})[°º]?|"
+                     r"(?:il |lo |la |l')?(\w+)", s)
+    if m and m.group(1):
+        return int(m.group(1))
+    if m and m.group(2):
+        return _ORDINALS.get(m.group(2))
+    return None
+
+
+def _risultato_chiesto(args: dict, ctx) -> dict | None:
+    """Il risultato che pc_apri_file aprirebbe, senza aprirlo: l'esito di
+    `PCExecutor.risultato` per chi parla ({"ok", "item"} o l'errore), o None se non si sa (niente
+    PC, persona non riconosciuta, numero non valido). Per la politica (calliope/politica.py):
+    i risultati restano sul server anche con l'esecutore remoto, nessuna chiamata al satellite."""
+    try:
+        name, ex = _pc(ctx, (args or {}).get("pc"))
+        prof = _profile(ctx)
+        if ex is None or prof is None or not hasattr(ex, "risultato"):
+            return None
+        n = _numero((args or {}).get("risultato", 1))
+        if n is None:
+            return None
+        r = ex.risultato(prof.id, n)
+        return r if isinstance(r, dict) else None
+    except Exception:  # noqa: BLE001 — nel dubbio decide la politica di sempre
+        return None
+
+
+def file_assente(args: dict, ctx) -> dict | None:
+    """pc_apri_file con un numero che l'ultima ricerca di chi parla non ha: l'errore al modello
+    prima della politica, con i numeri e i nomi che ci sono (`Classe.bersaglio`). Caso vero
+    della DGX del 07/10: dopo «ho salvato la nuova versione come “Nome (2)”» il modello chiamava
+    pc_apri_file(2), la politica (una foto di mezzo) chiedeva conferma per un file che non c'era,
+    10 turni di fila. Senza ricerca o con un numero giusto: None (decide il tool)."""
+    r = _risultato_chiesto(args, ctx)
+    if not r or r.get("ok") or "risultati" not in r:
+        return None
+    return {"ok": False, "fatto": NIENTE, "errore": r.get("errore"),
+            "cosa_fare": "richiama subito pc_apri_file con uno dei numeri che ci sono (il 1 è il "
+                         "più recente), senza chiedere niente alla persona: il numero tra "
+                         "parentesi nel nome di un file non è il numero del risultato"}
+
+
+def file_proprio(args: dict, ctx) -> bool:
+    """pc_apri_file apre un documento che Calliope ha appena scritto per chi parla
+    (`PCExecutor.offri_file`, segnato «proprio») e che si apre senza eseguire niente
+    (`modo_apertura` «normale»: foglio, documento, PDF, presentazione). `Classe.propria`."""
+    r = _risultato_chiesto(args, ctx)
+    if not r or not r.get("ok"):
+        return False
+    item = r.get("item") or {}
+    ext = str(item.get("estensione") or "").lower().lstrip(".")
+    return bool(item.get("proprio")) and bool(ext) and modo_apertura(f"x.{ext}") == "normale"
+
+
+def file_descritto(args: dict, ctx) -> str | None:
+    """«apra «Nome del file»» per la domanda di conferma (`Classe.descrivi`): «vuoi che apra il
+    file?» non diceva quale (caso vero del 07/10). None se non si sa."""
+    r = _risultato_chiesto(args, ctx)
+    if not r or not r.get("ok"):
+        return None
+    nome = str((r.get("item") or {}).get("nome") or "").strip()
+    return f"apra «{nome}»" if nome else None
+
+
 def _pc_apri_file(ctx: ToolContext, risultato=1, pc: str | None = None) -> dict:
     name, ex = _pc(ctx, pc)
     fuori = _fuori(name, ex)
@@ -551,14 +621,7 @@ def _pc_apri_file(ctx: ToolContext, risultato=1, pc: str | None = None) -> dict:
         return _not_owner(name)
     # Solo un numero o un ordinale («2», «il secondo», «l'ultimo»): un percorso o un nome
     # di file dal modello non si apre mai
-    s = str(risultato if risultato is not None else "1").strip().lower()
-    m = re.fullmatch(r"(?:il |lo |la |l'|numero |n\.? ?)?(\d{1,2})[°º]?|"
-                     r"(?:il |lo |la |l')?(\w+)", s)
-    n = None
-    if m and m.group(1):
-        n = int(m.group(1))
-    elif m and m.group(2):
-        n = _ORDINALS.get(m.group(2))
+    n = _numero(risultato)
     if n is None:
         return {"ok": False, "fatto": NIENTE, "errore": f"«{risultato}» non è un numero",
                 "cosa_fare": "chiama pc_apri_file con il numero n del risultato"}
@@ -576,6 +639,8 @@ def _pc_apri_file(ctx: ToolContext, risultato=1, pc: str | None = None) -> dict:
             out["cosa_fare"] = ("se la persona ha detto il nome del file, chiama subito "
                                 "pc_cerca_file con quelle parole; se no chiedi quale file")
         return out
+    if r.pop("numero_corretto", False):
+        note_rule(ctx, "pc_numero_unico")
     if r.get("come_testo"):
         # Script e pagine si mostrano, non si eseguono (base.modo_apertura, 03/10)
         return {**r, "conferma": f"Apro {r['nome']} come testo nel Blocco note: gli script "

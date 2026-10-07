@@ -245,9 +245,21 @@ class PCExecutor(ABC):
             return errore("l'ultima ricerca non aveva trovato niente", serve_ricerca=True)
         if int(risultato) == -1:                   # «l'ultimo»
             risultato = len(found)
+        if len(found) == 1 and int(risultato) != 1:
+            # Un solo file: qualunque numero vuol dire quello (07/10, DGX: dopo «salvato come
+            # “Nome (2)”» il modello chiedeva il 2, e con una foto di mezzo la domanda di
+            # conferma per un file che non c'era si ripeteva 10 volte). Correzione della forma
+            # di una scelta già fatta dal modello (principio 10): regola `pc_numero_unico`
+            return {"ok": True, "item": dict(found[0]), "numero_corretto": True}
         if not 1 <= int(risultato) <= len(found):
-            return errore(f"l'ultima ricerca ha {len(found)} risultati, non {risultato}",
-                          risultati=len(found))
+            # I numeri che ci sono, con i nomi (07/10, DGX: dopo «salvato come “Nome (2)”» il
+            # modello chiamava pc_apri_file(2) e l'errore «ha 1 risultati, non 2» non gli
+            # diceva quale numero usare)
+            ci_sono = ("c'è solo il numero 1" if len(found) == 1
+                       else f"ci sono i numeri da 1 a {len(found)}")
+            elenco = "; ".join(f"{i} = «{r.get('nome')}»" for i, r in enumerate(found, 1))
+            return errore(f"il numero {risultato} non c'è: {ci_sono} ({elenco}; il numero 1 è "
+                          f"il più recente)", risultati=len(found))
         return {"ok": True, "item": dict(found[int(risultato) - 1])}
 
     def apri_file(self, richiedente: str, risultato: int) -> dict:
@@ -265,7 +277,8 @@ class PCExecutor(ABC):
                           f"collegamenti, e si avviano solo a mano", tipo_vietato=True)
         self._apri(item["percorso"])
         return {"ok": True, "nome": item["nome"], **({"come_testo": True} if modo == "testo"
-                                                     else {})}
+                                                     else {}),
+                **({"numero_corretto": True} if r.get("numero_corretto") else {})}
 
     def copia_file(self, item: dict, max_byte: int, estensioni) -> dict:
         """Una copia del file `item` (un risultato di `risultato`) per l'agente (03/10,

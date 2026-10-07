@@ -105,3 +105,26 @@ della lista» lo traduce il modello in un numero. Prove: `prove/prova_dopo_annun
 
 Con un lavoro dell'agente appena detto, «un PDF» va a `risultato_lavoro` e non a
 `pc_cerca_file`: vedi [agenti-estensioni](agenti-estensioni.md).
+
+## Il numero 2 con un solo file e il documento proprio (07/10 sera, ramo `correzioni-giro9`)
+
+Caso vero della DGX: dopo «ho salvato la nuova versione come “Dettaglio Scontrino Ristorante
+(2)”» il modello chiamava `pc_apri_file(2)`, ma l'«ultima ricerca» (il documento offerto con
+`offri_file`) aveva un solo file; con la foto dello scontrino di mezzo ne sono venuti 10 turni di
+domande (dettagli e correzioni della politica in
+[sicurezza-politica](sicurezza-politica.md)).
+
+- **Un solo file: qualunque numero vuol dire quello** (`PCExecutor.risultato`, regola
+  `pc_numero_unico` nel registro): correzione della forma di una scelta già fatta dal modello
+  (principio 10).
+- **Con più file, il numero che non c'è** dice i numeri e i nomi che ci sono («il numero 7 non c'è:
+  ci sono i numeri da 1 a 3 (1 = «…»; …; il numero 1 è il più recente)»), e la politica lo dà al
+  modello prima di qualunque domanda (`tools/pc.file_assente`).
+- **Il nome vero del file** nell'offerta (`DocumentService._offer`: lo stem di `nome_file`, non il
+  titolo): «Apro Dettaglio Scontrino Ristorante (2).» dice quale versione si apre; dopo una
+  modifica salvata come copia il `cosa_fare` dice che il risultato 1 è la versione nuova e che il
+  numero tra parentesi del nome non è il risultato. Verificato che dopo la modifica l'offerta
+  punta già alla copia (la maniglia del satellite è quella del file «(2)»): dal codice, la sera del 07/10
+  si è aperta la versione nuova, ma la frase diceva il titolo senza «(2)».
+- **Documento proprio con una foto di mezzo**: si apre alla richiesta («volevo che tu aprissi il
+  file»), senza la conferma a voce (`politica_documento_proprio`).
