@@ -199,7 +199,11 @@ _MEDIA_SYN = {"riproduci": "riproduci", "play": "riproduci", "riprendi": "riprod
               "successiva": "avanti", "successivo": "avanti", "salta": "avanti",
               "indietro": "indietro", "precedente": "indietro"}
 _ORDINALS = {"primo": 1, "prima": 1, "secondo": 2, "seconda": 2, "terzo": 3, "terza": 3,
-             "quarto": 4, "quarta": 4, "quinto": 5, "quinta": 5, "ultimo": -1, "ultima": -1}
+             "quarto": 4, "quarta": 4, "quinto": 5, "quinta": 5,
+             # «Apri l'ultimo (che hai fatto)» vuol dire il più recente (decisione di Dario,
+             # 07/10), e i risultati sono ordinati dal più recente: è il numero 1, non il
+             # fondo dell'elenco. «L'ultimo della lista» lo traduce il modello in un numero
+             "ultimo": 1, "ultima": 1}
 
 
 def _norm(value, synonyms: dict) -> str:

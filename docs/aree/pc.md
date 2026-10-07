@@ -97,9 +97,11 @@ stamattina» li risolve il modello al turno dopo.
 Ordine: Windows Search ordina già per `System.DateModified` (anche la ricerca nel contenuto) e il
 satellite usa lo stesso esecutore; non c'è un punteggio di pertinenza (il nome o il contenuto
 filtrano, la data ordina). Da ora `PCExecutor.cerca_file` riordina comunque dal più recente
-(senza data in fondo) per ogni esecutore. Resta: `pc_apri_file` con «ultimo» converte in -1,
-l'ultimo dell'elenco (il più vecchio): il modello passa un numero, e la proposta dice quale è il
-più recente. Prova: `prove/prova_dopo_annunci.py`.
+(senza data in fondo) per ogni esecutore. ~~`pc_apri_file` con «ultimo» converte in -1, l'ultimo
+dell'elenco (il più vecchio)~~ (storico): dal 07/10 sera «ultimo»/«ultima» valgono 1, il più
+recente (decisione di Dario: «apri l'ultimo che hai fatto» è l'ultima attività svolta); «l'ultimo
+della lista» lo traduce il modello in un numero. Prove: `prove/prova_dopo_annunci.py`,
+`prove/prova_pc.py`.
 
 Con un lavoro dell'agente appena detto, «un PDF» va a `risultato_lavoro` e non a
 `pc_cerca_file`: vedi [agenti-estensioni](agenti-estensioni.md).
