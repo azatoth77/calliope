@@ -145,3 +145,4 @@ opencode.json
 # casa, termini da non pubblicare (privato/termini.txt, letto da prove/prova_dati_privati.py) e
 # l'archivio della storia di prima del taglio. Restano sul disco, mai in git: privato/LEGGIMI.md
 privato/
+voce_taratura.json

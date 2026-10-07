@@ -35,6 +35,14 @@ def _device_from_env(var: str) -> int | str | None:
     return int(raw) if raw.isdigit() else raw
 
 
+def _bool_env(var: str, predefinito: bool) -> bool:
+    """Un sì o no da variabile d'ambiente («0», «false», «no» = no), altrimenti il predefinito."""
+    raw = (os.environ.get(var) or "").strip().lower()
+    if not raw:
+        return predefinito
+    return raw not in ("0", "false", "no")
+
+
 @dataclass
 class Config:
     # Identità: nome (che è anche la wake word, salvo wake_word), genere e personaggio
@@ -381,14 +389,26 @@ class Config:
     # La prima frase della risposta più lunga di così (caratteri) si dice in due pezzi,
     # tagliata dopo la prima virgola, punto e virgola o due punti adatti (07/10): Piper
     # sintetizza una frase intera prima di suonarla, e con serena-high sulla DGX 150
-    # caratteri costano 0,9 s di silenzio in più; il primo pezzo ne costa 0,1–0,3 e il resto
+    # caratteri costano 0,9 s di silenzio in più; il primo pezzo ne costa ~0,1 e il resto
     # si sintetizza mentre suona. 0 = mai.
     tts_spezza_prima: int = 60
+    # Dove tagliarla (07/10, calliope/tts.py → primo_pezzo): alla prima virgola, due punti o
+    # punto e virgola dopo cui il primo pezzo ha almeno tanti caratteri e la sua voce dura più
+    # della sintesi del resto. Velocità della voce e costo della sintesi non si scrivono: li
+    # misura Calliope (calliope/taratura_voce.py, voce_taratura.json accanto a questo file).
+    tts_primo_pezzo_min: int = 15
+    # Taratura della voce all'avvio (07/10): una frase fissa sintetizzata quando la voce è
+    # libera, e con tts_thread «auto» la scelta dei thread. Ogni sintesi vera aggiorna comunque
+    # la stima; false = solo l'uso (prima, i predefiniti prudenti). CALLIOPE_TTS_TARATURA=0
+    # la spegne dall'ambiente (le prove: proverebbe i thread a ogni avvio).
+    tts_taratura: bool = _bool_env("CALLIOPE_TTS_TARATURA", True)
     # Thread di onnxruntime per la sintesi di Piper (07/10). Piper ne usa uno per core, e sui
     # processori con core veloci e lenti (DGX: 10 Cortex-X925 e 10 A725) è più lento: con 8
     # serena-high sintetizza una frase di 100 caratteri in 0,36 s invece di 0,61 sulla DGX,
-    # 0,77 invece di 1,46 sul portatile. 0 = la scelta di onnxruntime.
-    tts_thread: int = 8
+    # 0,77 invece di 1,46 sul portatile. «auto» (07/10): li sceglie la taratura all'avvio
+    # provando 2, 4, 8 e i core fisici (calliope/taratura_voce.py), finché non l'ha fatto 8;
+    # un numero scritto qui vince. 0 = la scelta di onnxruntime.
+    tts_thread: int | str = "auto"
     # Inglesismi detti all'inglese (calliope/pronuncia.py): «file» → «fàil», «email» →
     # «imèil», «wifi» → «uàifài»… Cambia solo il testo dato a Piper, non la storia né gli
     # schermi. Il lessico predefinito è nel codice (solo le parole che espeak sbaglia).
@@ -2035,7 +2055,8 @@ SEZIONI: dict[str, list[str]] = {
             "stt_timeout_s", "stt_correzione", "stt_correzione_soglia", "stt_correzione_motore",
             "stt_correzione_url", "stt_correzione_modello", "stt_correzione_timeout_s",
             "stt_incerte_al_modello", "stt_incerte_riscrivi"],
-    "tts": ["piper_voice", "tts_tail_s", "tts_lead_s", "tts_keepalive", "tts_spezza_prima", "tts_thread",
+    "tts": ["piper_voice", "tts_tail_s", "tts_lead_s", "tts_keepalive", "tts_spezza_prima",
+            "tts_primo_pezzo_min", "tts_taratura", "tts_thread",
             "tts_pronuncia",
             "tts_pronuncia_extra"],
     "audio": ["sample_rate", "vad_threshold", "vad_motore", "vad_modello", "silence_ms", "preroll_ms", "min_speech_ms",
@@ -2161,6 +2182,7 @@ ENV_OVERRIDES: dict[str, str] = {
     "llm_keep_alive": "CALLIOPE_LLM_KEEP_ALIVE",
     "wake_mode": "CALLIOPE_WAKE_MODE",
     "piper_voice": "CALLIOPE_PIPER_VOICE",
+    "tts_taratura": "CALLIOPE_TTS_TARATURA",
     "input_device": "CALLIOPE_INPUT_DEVICE",
     "output_device": "CALLIOPE_OUTPUT_DEVICE",
     "memory_db": "CALLIOPE_MEMORY_DB",
@@ -2286,6 +2308,7 @@ LIMITI: dict[str, tuple[float, float]] = {
     "azione_in_sospeso_turni": (1, 20), "conferma_sfida_s": (5.0, 600.0),
     "conferma_sfida_parole": (2, 4), "speaker_conferma_breve_soglia": (0.0, 1.0),
     "tts_lead_s": (0.0, 5.0), "tts_tail_s": (0.0, 5.0), "tts_spezza_prima": (0, 10_000), "tts_thread": (0, 256),
+    "tts_primo_pezzo_min": (1, 1000),
     "silence_ms": (100, 10_000),
     "preroll_ms": (0, 5000), "memory_max_facts": (1, 10_000), "speaker_threads": (1, 64),
     "appuntamento_anticipo_min": (0, 10_080), "casa_timeout_s": (0.5, 300.0),
@@ -2357,7 +2380,24 @@ def _num_ctx_agenti_valido(value):
     return v
 
 
+def _tts_thread_valido(value):
+    """Un numero di thread (0 = quelli di Piper) o «auto»."""
+    if isinstance(value, bool):
+        raise ValueError("serve un numero di thread o «auto»")
+    if isinstance(value, int):
+        if not (LIMITI["tts_thread"][0] <= value <= LIMITI["tts_thread"][1]):
+            raise ValueError(f"fuori dall'intervallo ammesso {LIMITI['tts_thread']}")
+        return value
+    s = str(value or "").strip().lower()
+    if s == "auto":
+        return s
+    if s.isdigit():
+        return _tts_thread_valido(int(s))
+    raise ValueError("serve un numero di thread o «auto»")
+
+
 VALIDATORI = {"llm_keep_alive": keep_alive_valido, "llm_num_ctx": _num_ctx_valido,
+              "tts_thread": _tts_thread_valido,
               "agenti_num_ctx": _num_ctx_agenti_valido,
               "contesto_riassuntore": _riassuntore_valido}
 

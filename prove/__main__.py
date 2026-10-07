@@ -49,7 +49,7 @@ A_SECCO = [
     ("prova_brain.py", [], "filtro del thinking, guardia, ciclo dei tool, storia"),
     ("prova_tempi.py", [], "durate e orari detti a voce"),
     ("prova_stt_correzione.py", [], "correzione delle frasi incerte (05/10, spenta): confidenza da verbose_json, controllo con i contrari, correttore finto, privacy; parole incerte al modello e frase capita trattenuta (07/10)"),
-    ("prova_latenza.py", [], "latenza vera della voce (06/10, P2–P4, P11): guardiano e rilevatore caldi e ricaricati, domanda giudicata in parallelo, conversazione ripresa in cache, mediana e p90 per giorno con le cause e l'avviso, riassunto dell'agente con un tempo massimo; prima frase a pezzi e dal testo alla voce (07/10)"),
+    ("prova_latenza.py", [], "latenza vera della voce (06/10, P2–P4, P11): guardiano e rilevatore caldi e ricaricati, domanda giudicata in parallelo, conversazione ripresa in cache, mediana e p90 per giorno con le cause e l'avviso, riassunto dell'agente con un tempo massimo; prima frase a pezzi, taratura della voce e dal testo alla voce (07/10)"),
     ("prova_config.py", [], "calliope.yaml, variabili d'ambiente, chiavi sbagliate"),
     ("prova_config_satellite.py", [], "microfono, casse e webcam nella sezione satellite, ripiego con avviso"),
     ("prova_contesto.py", [], "finestra di contesto dal setup (modello, memoria, tempo) e token veri a ogni turno"),
@@ -450,7 +450,10 @@ def lancia(script: str, args: list[str], timeout: float = TIMEOUT_S) -> dict:
     # prova non deve mai aprire un tunnel verso la DGX vera (02/10)
     env = dict(_senza_git(os.environ), PYTHONUTF8="1",
                CALLIOPE_CONFIG_LOCALE=str(RADICE / "prove" / "nessun-file-locale.yaml"),
-               CALLIOPE_AGENTI_CONFIG=str(RADICE / "prove" / "nessun-file-dgx.yaml"))
+               CALLIOPE_AGENTI_CONFIG=str(RADICE / "prove" / "nessun-file-dgx.yaml"),
+               # Niente taratura della voce all'avvio (07/10): con Calliope vera proverebbe i
+               # thread di Piper a ogni prova, CPU tolta alle altre in parallelo
+               CALLIOPE_TTS_TARATURA="false")
     env.pop("CALLIOPE_AGENTI_URL", None)
     env.pop("CALLIOPE_SSH", None)
     env.pop("PROVE_FILE_CAMBIATI", None)

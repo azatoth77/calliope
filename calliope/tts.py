@@ -42,31 +42,41 @@ def split_sentences(chunks, min_chars: int = 25):
 # (misure: 23 caratteri 0,16 s, 100 → 0,65 s, 151 → 0,91 s). Le prime frasi di gemma sono
 # lunghe (150–250 caratteri, con virgole e due punti): la voce partiva ~1 s dopo il testo. La
 # prima frase lunga del turno si dice in due pezzi, tagliata dopo una virgola, un punto e
-# virgola o i due punti seguiti da uno spazio: il primo pezzo si sintetizza in 0,1–0,3 s e,
+# virgola o i due punti seguiti da uno spazio: il primo pezzo si sintetizza in ~0,1 s e,
 # mentre suona, si sintetizza il resto. La punteggiatura resta nel primo pezzo, così espeak
 # gli dà l'intonazione sospesa della virgola e non quella di fine frase.
 _PAUSA = re.compile(r"[,;:](?=\s)")
-PEZZO_MIN = 12              # caratteri: un primo pezzo più corto («Beh,») non basta a coprire
 RESTO_MIN = 20              # sotto, il resto si sintetizza in fretta comunque: non si taglia
-RAPPORTO = 3                # il primo pezzo lungo almeno un terzo del resto (vedi sotto)
+PEZZO_MIN = 15              # predefinito di tts_primo_pezzo_min: «Beh,» non basta mai
+# Il primo pezzo deve durare più della sintesi del resto, con margine per la rete, il buffer
+# del satellite e l'errore della stima (07/10)
+PRUDENZA = 1.5
 
 
-def primo_pezzo(testo: str, oltre: int) -> tuple[str, str] | None:
+def primo_pezzo(testo: str, oltre: int, minimo: int = PEZZO_MIN,
+                parlato_car_s: float = 15.0,
+                sintesi_s_car: float = 0.010) -> tuple[str, str] | None:
     """(primo pezzo, resto) di una frase più lunga di `oltre` caratteri, oppure None (frase
-    corta, nessuna pausa adatta, `oltre` 0 = spento). Il primo pezzo deve durare abbastanza
-    da coprire la sintesi del resto: con Piper l'audio dura ~55 ms a carattere e la sintesi
-    ne costa 4–14 (serena-high: DGX con 8 thread, portatile carico con quelli predefiniti),
-    quindi un pezzo lungo almeno un terzo del resto lo copre con margine per la rete (un
-    quarto, nel banco del 07/10, lasciava un buco di 0,24 s sul portatile carico). Se la
-    prima pausa è troppo presto si prova la successiva."""
+    corta, nessuna pausa adatta, `oltre` 0 = spento). Si taglia solo dopo una virgola, i due
+    punti o il punto e virgola seguiti da uno spazio, alla prima pausa che va bene: il primo
+    pezzo ha almeno `minimo` caratteri e due parole, e la sua voce (caratteri ÷
+    `parlato_car_s`) dura più della sintesi del resto (caratteri × `sintesi_s_car`) per
+    PRUDENZA. I due numeri vengono dalla taratura della voce su questa macchina
+    (calliope/taratura_voce.py). Con serena-high sulla DGX (8 thread: ~19 caratteri al
+    secondo, 3,5 ms a carattere) «Per dormire meglio,» (19 caratteri, ~1,1 s di voce) copre
+    un resto di oltre 200 caratteri; il criterio di prima («almeno un terzo del resto») lo
+    scartava e tagliava a ~65 caratteri (07/10, 0,4–0,5 s di sintesi del primo pezzo)."""
     testo = (testo or "").strip()
     if oltre <= 0 or len(testo) <= oltre:
         return None
+    parlato_car_s = max(float(parlato_car_s), 1e-3)
     for m in _PAUSA.finditer(testo):
         a, b = testo[:m.end()].strip(), testo[m.end():].strip()
         if len(b) < RESTO_MIN:
             return None
-        if len(a) >= max(PEZZO_MIN, len(b) / RAPPORTO) and len(a.split()) >= 2:
+        if len(a) < max(1, minimo) or len(a.split()) < 2:
+            continue
+        if len(a) / parlato_car_s >= PRUDENZA * float(sintesi_s_car) * len(b):
             return a, b
     return None
 
@@ -338,7 +348,7 @@ def carica_voce(cfg, voice_path: str):
     sessione si rifà con le opzioni giuste; se non riesce resta quella di Piper."""
     from piper import PiperVoice
     voice = PiperVoice.load(voice_path)
-    n = int(getattr(cfg, "tts_thread", 0) or 0)
+    n = numero_thread(cfg, voice_path)
     if n > 0 and getattr(voice, "session", None) is not None:
         try:
             import onnxruntime
@@ -348,10 +358,19 @@ def carica_voce(cfg, voice_path: str):
             voice.session = onnxruntime.InferenceSession(
                 str(voice_path), sess_options=o,
                 providers=voice.session.get_providers() or ["CPUExecutionProvider"])
+            voice.calliope_thread = n          # per la taratura (calliope/taratura_voce.py)
         except Exception as e:  # noqa: BLE001 — la voce resta, solo un po' più lenta
             print(f"   [TTS] Thread della sintesi non impostati ({type(e).__name__}: {e})",
                   flush=True)
     return voice
+
+
+def numero_thread(cfg, voice_path: str) -> int:
+    """I thread di onnxruntime per la voce: il numero scritto in `tts_thread` vince; con
+    «auto» quello scelto dalla taratura (voce_taratura.json), altrimenti 8 (il migliore sulla
+    DGX), mai più dei processori logici. 0 = quelli di Piper."""
+    from . import taratura_voce
+    return taratura_voce.thread_in_uso(cfg, voice_path)
 
 
 class Speaker:
@@ -389,6 +408,7 @@ class Speaker:
             self._current_voice_path = cfg.piper_voice
             self._voices = base._voices
             self._voices_lock = base._voices_lock
+            self._taratura = getattr(base, "_taratura", None)
             self._fillers = base._fillers
             if getattr(base, "_filler_phrases", None):
                 self._filler_phrases = base._filler_phrases
@@ -401,6 +421,12 @@ class Speaker:
             self._voices = {cfg.piper_voice: self.voice}    # voci già caricate, per percorso
             self._voices_lock = threading.Lock()
             self._fillers: dict[tuple[str, str], bytes] = {}   # (voce, frase) → audio pronto
+            self._taratura = None
+        # Quanto costa la voce su questa macchina (07/10, calliope/taratura_voce.py): il
+        # taglio della prima frase lo usa, ogni sintesi vera lo aggiorna
+        if self._taratura is None:
+            from . import taratura_voce
+            self._taratura = taratura_voce.per(cfg)
         self.text_q: queue.Queue = queue.Queue()
         self.audio_q: queue.Queue = queue.Queue()
         self.done = threading.Event()
@@ -417,6 +443,59 @@ class Speaker:
             # Dopo l'avvio la usa solo il thread di riproduzione
             self.out = UscitaLocale(cfg, self._rate, on_stato=self._stato_uscita)
         self._avvia_thread()
+        if (base is None and getattr(cfg, "tts_taratura", True)
+                and getattr(self.voice, "session", None) is not None):
+            threading.Thread(target=self._tara, daemon=True, name="tts-taratura").start()
+
+    # ── taratura della voce (07/10) ──
+    _in_sintesi = 0                 # sintesi vere in corso (la taratura aspetta che finiscano)
+    _sintesi_fatte = 0
+    _ultima_sintesi = 0.0
+    TARATURA_QUIETE_S = 2.0         # la voce libera da tanto prima di misurare
+    TARATURA_ATTESA_S = 600.0       # oltre, niente taratura in questo avvio
+
+    def _tara(self):
+        """Taratura all'avvio, in un thread: aspetta che la voce sia libera (il saluto non
+        rallenta), poi misura la frase fissa e, con `tts_thread: auto` e nessuna scelta
+        salvata, prova pochi numeri di thread. Se intanto parte una sintesi vera la misura è
+        sporca e si butta: vale l'uso, o la taratura del prossimo avvio."""
+        from . import taratura_voce as tv
+        fine = time.monotonic() + self.TARATURA_ATTESA_S
+        while True:
+            time.sleep(0.5)
+            if time.monotonic() > fine:
+                return
+            if (self._in_sintesi == 0 and self.text_q.empty()
+                    and time.monotonic() - self._ultima_sintesi > self.TARATURA_QUIETE_S):
+                break
+        voice, path, conta = self.voice, self._current_voice_path, self._sintesi_fatte
+        rate = voice.config.sample_rate
+        try:
+            thread, misure = tv.thread_di(voice), None
+            auto = not isinstance(getattr(self.cfg, "tts_thread", "auto"), int)
+            if auto and self._taratura.thread_scelto(path) is None:
+                n, sess, misure = tv.prova_thread(voice, path, self._pcm, rate,
+                                                  tv.candidati_thread())
+                if self._sintesi_fatte != conta:
+                    return
+                voice.session, voice.calliope_thread, thread = sess, n, n
+            costo, parlato = tv.misura(self._pcm, voice, rate)
+            if self._sintesi_fatte != conta:
+                return
+            self._taratura.segna_avvio(path, thread, parlato, costo, misure)
+            prove = (" (provati " + ", ".join(f"{k}: {v * 1000:.1f} ms" for k, v in
+                                               misure.items()) + ")") if misure else ""
+            print(f"   [TTS] Taratura della voce: sintesi {costo * 1000:.1f} ms a carattere, "
+                  f"{parlato:.0f} caratteri al secondo, {thread or 'Piper'} thread{prove}",
+                  flush=True)
+        except Exception as e:  # noqa: BLE001 — restano i predefiniti o l'uso
+            print(f"   [TTS] Taratura della voce non riuscita ({type(e).__name__}: {e})",
+                  flush=True)
+
+    def stima_voce(self) -> dict:
+        """La stima della voce in uso (taratura_voce.Taratura.stima)."""
+        from . import taratura_voce as tv
+        return self._taratura.stima(self._current_voice_path, tv.thread_di(self.voice))
 
     # ── robustezza (03/10) ──
     # Prima un errore di Piper su una frase, o le cuffie sparite a metà, uccidevano il thread:
@@ -465,8 +544,24 @@ class Speaker:
         return self.out.stream if self.out is not None else None
 
     def _synth(self, text: str) -> bytes:
+        voice = self.voice
+        self._in_sintesi += 1
         t0 = time.monotonic()
-        pcm = self._pcm(self.voice, text)
+        try:
+            pcm = self._pcm(voice, text)
+        finally:
+            self._in_sintesi -= 1
+            self._sintesi_fatte += 1
+            self._ultima_sintesi = time.monotonic()
+        taratura = self.__dict__.get("_taratura")
+        if taratura is not None:
+            try:
+                from . import taratura_voce as tv
+                rate = getattr(getattr(voice, "config", None), "sample_rate", 0) or self._rate
+                taratura.osserva(getattr(self, "_current_voice_path", ""), tv.thread_di(voice),
+                                 len(text), self._ultima_sintesi - t0, len(pcm) / 2 / rate)
+            except Exception:  # noqa: BLE001 — la stima non deve mai fermare la voce
+                pass
         pronta = self.__dict__.setdefault("_pronta", {})
         turno = getattr(self, "turno", 0)
         if turno not in pronta:
@@ -744,7 +839,10 @@ class Speaker:
             # comincia dopo la sintesi del primo, il resto si sintetizza mentre suona. In
             # `played` (e nelle frasi dette dal satellite) entrano i due pezzi
             self._prima_del_turno = False
-            pezzi = primo_pezzo(text, int(getattr(self.cfg, "tts_spezza_prima", 0) or 0))
+            st = self.stima_voce() if self.__dict__.get("_taratura") is not None else {}
+            pezzi = primo_pezzo(text, int(getattr(self.cfg, "tts_spezza_prima", 0) or 0),
+                                int(getattr(self.cfg, "tts_primo_pezzo_min", PEZZO_MIN)),
+                                st.get("parlato_car_s", 15.0), st.get("sintesi_s_car", 0.010))
             if pezzi:
                 for p in pezzi:
                     self.text_q.put(p)

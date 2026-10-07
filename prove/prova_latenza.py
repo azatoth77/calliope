@@ -664,33 +664,147 @@ def prova_voce_a_pezzi():
     from calliope import tts
     from calliope.ciclo import Ciclo
     pp = tts.primo_pezzo
+    # Velocità della voce e costo della sintesi (07/10): serena-high sulla DGX con 8 thread
+    # (~19 caratteri al secondo, 3,5 ms a carattere) e il portatile carico (17, 18,7 ms)
+    DGX = dict(parlato_car_s=19.0, sintesi_s_car=0.0035)
+    LENTO = dict(parlato_car_s=17.0, sintesi_s_car=0.0187)
     f = ("Sono qui, pronta a tutto, anche se non sono sicura di aver capito cosa ti abbiano "
          "detto esattamente.")
-    verifica("frase lunga: dopo la virgola che basta a coprire il resto (la prima è presto)",
-             pp(f, 60) == ("Sono qui, pronta a tutto,", "anche se non sono sicura di aver "
-                           "capito cosa ti abbiano detto esattamente."), str(pp(f, 60)))
+    verifica("frase lunga: «Sono qui,» sotto il minimo, si taglia alla virgola dopo",
+             pp(f, 60, **DGX) == ("Sono qui, pronta a tutto,", "anche se non sono sicura di "
+                                  "aver capito cosa ti abbiano detto esattamente."),
+             str(pp(f, 60, **DGX)))
+    dormire = ("Per dormire meglio, potresti provare a mantenere orari regolari, limitare "
+               "l'uso di schermi prima di coricarti e creare un ambiente fresco e buio.")
+    verifica("caso vero del 07/10: «Per dormire meglio,» ora basta (prima ~65 caratteri)",
+             (pp(dormire, 60, **DGX) or ("",))[0] == "Per dormire meglio,",
+             str(pp(dormire, 60, **DGX)))
+    verifica("caso vero: «Visto che hai lo smoker,» (prima ~95 caratteri)",
+             (pp("Visto che hai lo smoker, potresti tentare una frittata al forno con zucchine "
+                 "e un tocco di formaggio, oppure una torta salata veloce.", 60, **DGX)
+              or ("",))[0] == "Visto che hai lo smoker,")
+    verifica("macchina lenta: lo stesso taglio non copre il resto, si va alla pausa dopo",
+             (pp(dormire, 60, **LENTO) or ("",))[0]
+             == "Per dormire meglio, potresti provare a mantenere orari regolari,",
+             str(pp(dormire, 60, **LENTO)))
     g = ("Allora abbiamo un atleta completo: tra colpi di gomito e maestria orientale, "
          "spero che il tuo corpo sia pronto.")
     verifica("i due punti valgono come la virgola",
-             (pp(g, 60) or ("",))[0] == "Allora abbiamo un atleta completo:", str(pp(g, 60)))
+             (pp(g, 60, **DGX) or ("",))[0] == "Allora abbiamo un atleta completo:",
+             str(pp(g, 60, **DGX)))
     verifica("punto e virgola", (pp("Ho acceso la luce in cucina; quella del salotto era già "
-                                    "accesa da un pezzo, la lascio così.", 60) or ("",))[0]
-             == "Ho acceso la luce in cucina;")
+                                    "accesa da un pezzo, la lascio così.", 60, **DGX)
+                                 or ("",))[0] == "Ho acceso la luce in cucina;")
+    paradosso = ("Hai ragione, è un paradosso degno di un romanzo di fantascienza: cerchiamo di "
+                 "fare progresso e finiamo per girare in tondo come un disco graffiato.")
+    verifica("contrario: primo pezzo sotto il minimo («Hai ragione,», 12 caratteri)",
+             (pp(paradosso, 60, **DGX) or ("",))[0].endswith("fantascienza:"),
+             str(pp(paradosso, 60, **DGX)))
+    verifica("con il minimo più basso (e una voce che lo permette) si taglia lì",
+             (pp(paradosso, 60, 10, 19.0, 0.002) or ("",))[0] == "Hai ragione,",
+             str(pp(paradosso, 60, 10, 19.0, 0.002)))
+    verifica("contrario: «Beh,» da solo mai, anche con la voce più veloce",
+             (pp("Beh, il Calisthenics non è una passeggiata, specialmente quando devi "
+                 "sollevare tutto te stesso.", 60, **DGX) or ("",))[0]
+             == "Beh, il Calisthenics non è una passeggiata,")
     verifica("contrario: frase corta non si tocca", pp("Non ho lavori in corso.", 60) is None)
-    verifica("contrario: spento con 0", pp(f, 0) is None)
+    verifica("contrario: spento con 0", pp(f, 0, **DGX) is None)
+    verifica("contrario: senza virgole resta intera (caso vero del motore elettrico)",
+             pp("Un motore elettrico trasforma l'energia elettrica in energia meccanica "
+                "sfruttando l'interazione tra campi magnetici.", 60, **DGX) is None)
     verifica("contrario: senza pause non si taglia a metà",
              pp("Domani mattina alle nove hai la riunione con il commercialista per il "
-                "bilancio dell'anno scorso.", 60) is None)
+                "bilancio dell'anno scorso.", 60, **DGX) is None)
     verifica("contrario: la virgola dei decimali non è una pausa",
              pp("La temperatura in salotto adesso è di 21,5 gradi e l'umidità è al "
-                "quarantotto per cento circa.", 60) is None)
+                "quarantotto per cento circa.", 60, **DGX) is None)
     verifica("contrario: il resto troppo corto non vale il taglio",
              pp("Ho controllato tutte le luci della casa e i sensori del giardino, va bene.",
-                60) is None)
-    verifica("contrario: «Beh,» da solo non copre il resto: si va alla pausa dopo",
-             (pp("Beh, il Calisthenics non è una passeggiata, specialmente quando devi "
-                 "sollevare tutto te stesso.", 60) or ("",))[0]
-             == "Beh, il Calisthenics non è una passeggiata,")
+                60, **DGX) is None)
+    verifica("contrario: con una sintesi lentissima nessuna pausa basta, frase intera",
+             pp(dormire, 60, parlato_car_s=15.0, sintesi_s_car=0.2) is None)
+
+    # La stima della voce (calliope/taratura_voce.py): predefiniti, avvio, uso
+    from calliope import taratura_voce as tv
+    T = tv.Taratura(None)
+    st0 = T.stima("voices/it_IT-serena-high.onnx", 8)
+    verifica("taratura: senza misure i predefiniti prudenti",
+             st0["fonte"] == "predefiniti" and st0["sintesi_s_car"] == tv.PREDEFINITI[
+                 "sintesi_s_car"], str(st0))
+    T.segna_avvio("voices/it_IT-serena-high.onnx", 8, 18.0, 0.004, {"2": 0.01, "8": 0.004})
+    st1 = T.stima("voices/it_IT-serena-high.onnx", 8)
+    verifica("taratura: dopo l'avvio vale la sua misura",
+             st1["fonte"] == "avvio" and st1["sintesi_s_car"] == 0.004, str(st1))
+    verifica("taratura: i thread scelti, anche per un'altra voce della stessa macchina",
+             T.thread_scelto("voices/it_IT-serena-high.onnx") == 8
+             and T.thread_scelto("voices/it_IT-paola-medium.onnx") == 8)
+    verifica("taratura: con altri thread la misura non vale (si riparte dai predefiniti)",
+             T.stima("voices/it_IT-serena-high.onnx", 4)["fonte"] == "predefiniti")
+
+    def usa(t, voce, costo, parlato, n, car=80, thread=8):
+        for _ in range(n):
+            t.osserva(voce, thread, car, costo * car, car / parlato)
+    usa(T, "voices/it_IT-serena-high.onnx", 0.002, 20.0, tv.MIN_USO - 1)
+    verifica("taratura: con meno di MIN_USO sintesi vale ancora l'avvio",
+             T.stima("voices/it_IT-serena-high.onnx", 8)["fonte"] == "avvio")
+    T.osserva("voices/it_IT-serena-high.onnx", 8, 80, 2.0, 4.0)       # CPU presa da altro
+    T.osserva("voices/it_IT-serena-high.onnx", 8, 5, 0.5, 0.3)        # troppo corta
+    usa(T, "voices/it_IT-serena-high.onnx", 0.002, 20.0, 1)
+    st2 = T.stima("voices/it_IT-serena-high.onnx", 8)
+    verifica("taratura: dall'uso la mediana, anomali e frasi corte scartati",
+             st2["fonte"] == "uso" and st2["n"] == tv.MIN_USO
+             and abs(st2["sintesi_s_car"] - 0.002) < 1e-9
+             and abs(st2["parlato_car_s"] - 20.0) < 1e-6, str(st2))
+    usa(T, "voices/it_IT-paola-medium.onnx", 0.03, 15.0, tv.MIN_USO)
+    lenta = T.stima("voices/it_IT-paola-medium.onnx", 8)
+    verifica("taratura: separata per voce",
+             abs(lenta["sintesi_s_car"] - 0.03) < 1e-9
+             and abs(T.stima("voices/it_IT-serena-high.onnx", 8)["sintesi_s_car"] - 0.002)
+             < 1e-9)
+    veloce = T.stima("voices/it_IT-serena-high.onnx", 8)
+    tv_v = pp(dormire, 60, 15, veloce["parlato_car_s"], veloce["sintesi_s_car"])
+    tv_l = pp(dormire, 60, 15, lenta["parlato_car_s"], lenta["sintesi_s_car"])
+    verifica("taratura: la stima cambia il taglio (voce veloce prima, lenta più avanti)",
+             tv_v and tv_l and len(tv_v[0]) < len(tv_l[0]), f"{tv_v} / {tv_l}")
+    with tempfile.TemporaryDirectory() as d:
+        pf = Path(d) / tv.FILE
+        T2 = tv.Taratura(pf)
+        T2.segna_avvio("voices/it_IT-serena-high.onnx", 4, 18.0, 0.005, {"4": 0.005})
+        usa(T2, "voices/it_IT-serena-high.onnx", 0.003, 19.0, tv.MIN_USO, thread=4)
+        T2.salva()
+        T3 = tv.Taratura(pf)
+        st3 = T3.stima("voices/it_IT-serena-high.onnx", 4)
+        verifica("taratura: salvata e riletta (sopravvive al riavvio)",
+                 st3["fonte"] == "uso" and abs(st3["sintesi_s_car"] - 0.003) < 1e-9
+                 and T3.thread_scelto("voices/it_IT-serena-high.onnx") == 4, str(st3))
+        pf.write_text("{rotto", encoding="utf-8")
+        verifica("contrario: file rovinato, si riparte dai predefiniti senza fermarsi",
+                 tv.Taratura(pf).stima("voices/it_IT-serena-high.onnx", 4)["fonte"]
+                 == "predefiniti")
+        cfg_t = Config()
+        cfg_t.config_dir = d
+        cfg_t.tts_thread = 6
+        verifica("thread: il numero scritto in tts_thread vince",
+                 tv.thread_in_uso(cfg_t, "voices/it_IT-serena-high.onnx") == 6)
+        cfg_t.tts_thread = "auto"
+        tv.per(cfg_t).segna_avvio("voices/it_IT-serena-high.onnx", 4, 18.0, 0.005,
+                                  {"4": 0.005})
+        verifica("thread: «auto» usa la scelta della taratura",
+                 tv.thread_in_uso(cfg_t, "voices/it_IT-serena-high.onnx") == 4)
+        verifica("stato: la stima in una riga",
+                 "4 thread, scelti dalla taratura" in (tv.testo_stato(cfg_t) or ""),
+                 str(tv.testo_stato(cfg_t)))
+    verifica("thread: «auto» senza taratura 8 (mai più dei processori)",
+             tv.thread_in_uso(Config(), "voices/x.onnx") == min(8, os.cpu_count() or 8))
+    from calliope.config import _tts_thread_valido
+    ok_val = (_tts_thread_valido("auto") == "auto" and _tts_thread_valido(4) == 4
+              and _tts_thread_valido("8") == 8)
+    try:
+        _tts_thread_valido("molti")
+        ok_val = False
+    except ValueError:
+        pass
+    verifica("config: tts_thread un numero o «auto»", ok_val)
 
     # Speaker con un'uscita remota finta e una sintesi finta (niente Piper)
     class Remota:
@@ -716,6 +830,7 @@ def prova_voce_a_pezzi():
     rem = Remota()
     sp = tts.Speaker(cfg, uscita=rem, base=base)
     sp._pcm = lambda v, testo: b"\0\0" * 16 * len(testo)
+    sp._taratura = tv.Taratura(None)
     t0 = time.monotonic()
     sp.start_turn()
     sp.say(f)
@@ -736,6 +851,23 @@ def prova_voce_a_pezzi():
     sp.say(f)
     sp.wait()
     verifica("Speaker: al turno dopo si taglia di nuovo", len(rem.frasi) == 2)
+
+    # Un Piper finto lento: la stima dall'uso converge al suo costo e il taglio si sposta
+    sp2 = tts.Speaker(cfg, uscita=Remota(), base=base)
+    sp2._taratura = tv.Taratura(None)
+
+    def pcm_lento(v, testo):
+        time.sleep(0.001 * len(testo))           # 1 ms a carattere
+        return b"\0\0" * int(16000 * len(testo) / 15)   # 15 caratteri al secondo
+    sp2._pcm = pcm_lento
+    sp2.start_turn()
+    for _ in range(tv.MIN_USO + 2):
+        sp2.say("Una frase di prova abbastanza lunga da contare.")
+    sp2.wait()
+    st_l = sp2.stima_voce()
+    verifica("Piper finto lento: la stima converge (1 ms a carattere, 15 al secondo)",
+             st_l["fonte"] == "uso" and 0.0009 <= st_l["sintesi_s_car"] < 0.004
+             and abs(st_l["parlato_car_s"] - 15) < 0.5, str(st_l))
     sp.start_turn()
     verifica("Speaker: un turno nuovo non ha ancora il primo audio", sp.voce_pronta() is None)
     cfg.tts_spezza_prima = 0
@@ -744,8 +876,16 @@ def prova_voce_a_pezzi():
     sp.say(f)
     sp.wait()
     verifica("contrario: tts_spezza_prima 0, la frase intera", [x[1] for x in rem.frasi] == [f])
-    verifica("predefiniti: 60 caratteri, 8 thread",
-             Config().tts_spezza_prima == 60 and Config().tts_thread == 8)
+    verifica("predefiniti: 60 caratteri, primo pezzo da 15, thread «auto»",
+             Config().tts_spezza_prima == 60 and Config().tts_thread == "auto"
+             and Config().tts_primo_pezzo_min == 15)
+    from calliope.config import _bool_env
+    os.environ["PROVA_TARATURA_X"] = "0"
+    verifica("taratura accesa se l'ambiente non dice altro (le prove la spengono: "
+             "CALLIOPE_TTS_TARATURA=0 nel runner)",
+             _bool_env("PROVA_TARATURA_NON_C_E", True) is True
+             and _bool_env("PROVA_TARATURA_X", True) is False)
+    os.environ.pop("PROVA_TARATURA_X", None)
 
     # Il registro: voce_pronta_s e sintesi_s da t0, come prima_voce_s
     rec = {"prima_frase_s": 1.0}
