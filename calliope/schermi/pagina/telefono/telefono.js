@@ -1303,9 +1303,12 @@ async function avviaAscolto(L, seme) {
 function mandaFine(u, r) {
   st.pensa = true;
   suona("fine");                    // frase presa: il segnale prima della rete
+  // pause_ms, parlato_ms, chiusura: solo misura (07/10, calliope/pause.py), un server vecchio
+  // li ignora
   u.fine({ tipo: "frase_finita", fa_s: Math.round(performance.now() - r.inizio) / 1000,
     woke: !!r.woke, wake_score: Math.round(r.punteggio * 1000) / 1000,
-    campioni: r.audio.length * FRAME });
+    campioni: r.audio.length * FRAME, pause_ms: r.pause || [], parlato_ms: r.parlato,
+    chiusura: r.chiusura });
 }
 
 function suAscolta(m) {

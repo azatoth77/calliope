@@ -413,6 +413,38 @@ def numero_thread(cfg, voice_path: str) -> int:
     return taratura_voce.thread_in_uso(cfg, voice_path)
 
 
+class AttivitaVoce:
+    """Sintesi in corso, sintesi fatte e ultimo segno di vita (fine di una sintesi, inizio di
+    un turno) di una voce e dei suoi gemelli (07/10): la taratura parte solo quando sono tutti
+    fermi e si ferma appena uno riparte."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self.in_sintesi = 0
+        self.fatte = 0
+        self.turni = 0
+        self.ultima = time.monotonic()      # l'avvio conta: prima si caricano i modelli
+
+    def inizio(self):
+        with self._lock:
+            self.in_sintesi += 1
+            self.ultima = time.monotonic()
+
+    def fine(self):
+        with self._lock:
+            self.in_sintesi = max(0, self.in_sintesi - 1)
+            self.fatte += 1
+            self.ultima = time.monotonic()
+
+    def turno(self):
+        with self._lock:
+            self.turni += 1
+            self.ultima = time.monotonic()
+
+    def segno(self) -> tuple[int, int]:
+        return self.fatte, self.turni
+
+
 class Speaker:
     """Due thread: uno sintetizza la frase successiva mentre l'altro riproduce.
 
@@ -449,6 +481,7 @@ class Speaker:
             self._voices = base._voices
             self._voices_lock = base._voices_lock
             self._taratura = getattr(base, "_taratura", None)
+            self._attivita = getattr(base, "_attivita", None) or AttivitaVoce()
             self._fillers = base._fillers
             if getattr(base, "_filler_phrases", None):
                 self._filler_phrases = base._filler_phrases
@@ -462,6 +495,9 @@ class Speaker:
             self._voices_lock = threading.Lock()
             self._fillers: dict[tuple[str, str], bytes] = {}   # (voce, frase) → audio pronto
             self._taratura = None
+            # Sintesi e turni di tutte le voci in uscita, gemelli compresi (07/10): la
+            # taratura guarda questa, non solo la voce da cui è partita
+            self._attivita = AttivitaVoce()
         # Quanto costa la voce su questa macchina (07/10, calliope/taratura_voce.py): il
         # taglio della prima frase lo usa, ogni sintesi vera lo aggiorna
         if self._taratura is None:
@@ -488,63 +524,84 @@ class Speaker:
             threading.Thread(target=self._tara, daemon=True, name="tts-taratura").start()
 
     # ── taratura della voce (07/10) ──
-    _in_sintesi = 0                 # sintesi vere in corso (la taratura aspetta che finiscano)
-    _sintesi_fatte = 0
-    _ultima_sintesi = 0.0
-    TARATURA_QUIETE_S = 2.0         # la voce libera da tanto prima di misurare
-    TARATURA_ATTESA_S = 600.0       # oltre, niente taratura in questo avvio
+    # Prima guardava solo la voce da cui era partita: con i satelliti sintetizzano i gemelli
+    # (una voce per corsia), la base restava «libera» e la taratura partiva subito
+    # all'avvio, in mezzo alle conversazioni, rubando la CPU per decine di secondi (prova
+    # delle corsie: «Sono le dieci e un quarto» arrivata oltre 4 s dopo). Ora: l'attività di
+    # tutte le voci (AttivitaVoce, condivisa coi gemelli), una quiete lunga, e la taratura
+    # si ferma fra una sintesi di prova e l'altra appena una conversazione riparte.
+    TARATURA_QUIETE_S = 20.0        # niente sintesi né turni da tanto prima di misurare
+    TARATURA_ATTESA_S = 1800.0      # oltre, niente taratura in questo avvio
+
+    def _voce_libera(self) -> bool:
+        a = self._attivita
+        return (a.in_sintesi == 0 and self.text_q.empty()
+                and time.monotonic() - a.ultima > self.TARATURA_QUIETE_S)
 
     def _tara(self):
-        """Taratura all'avvio, in un thread: aspetta che la voce sia libera (il saluto non
-        rallenta), poi misura la frase fissa e, con `tts_thread: auto` e nessuna scelta
-        salvata, prova pochi numeri di thread. Se intanto parte una sintesi vera la misura è
-        sporca e si butta: vale l'uso, o la taratura del prossimo avvio."""
+        """Taratura all'avvio, in un thread: aspetta che le voci (anche quelle delle corsie)
+        siano ferme da TARATURA_QUIETE_S, poi misura la frase fissa e, con `tts_thread: auto`
+        e nessuna scelta salvata, prova pochi numeri di thread. Se intanto parte una sintesi
+        vera o un turno la taratura si ferma alla prossima sintesi di prova (al più una
+        frase di prova insieme alla voce vera), si butta e si riprova alla quiete
+        successiva."""
         from . import taratura_voce as tv
         fine = time.monotonic() + self.TARATURA_ATTESA_S
         while True:
             time.sleep(0.5)
             if time.monotonic() > fine:
                 return
-            if (self._in_sintesi == 0 and self.text_q.empty()
-                    and time.monotonic() - self._ultima_sintesi > self.TARATURA_QUIETE_S):
-                break
-        voice, path, conta = self.voice, self._current_voice_path, self._sintesi_fatte
-        rate = voice.config.sample_rate
-        try:
-            thread, misure = tv.thread_di(voice), None
-            auto = not isinstance(getattr(self.cfg, "tts_thread", "auto"), int)
-            if auto and thread != "cuda" and self._taratura.thread_scelto(path) is None:
-                n, sess, misure = tv.prova_thread(voice, path, self._pcm, rate,
-                                                  tv.candidati_thread())
-                if self._sintesi_fatte != conta:
-                    return
-                voice.session, voice.calliope_thread, thread = sess, n, n
-            costo, parlato = tv.misura(self._pcm, voice, rate)
-            if self._sintesi_fatte != conta:
+            if not self._voce_libera():
+                continue
+            a = self._attivita
+            voice, path, segno = self.voice, self._current_voice_path, a.segno()
+
+            def disturbata() -> bool:
+                return a.in_sintesi > 0 or a.segno() != segno
+
+            rate = voice.config.sample_rate
+            try:
+                thread, misure = tv.thread_di(voice), None
+                auto = not isinstance(getattr(self.cfg, "tts_thread", "auto"), int)
+                if auto and thread != "cuda" and self._taratura.thread_scelto(path) is None:
+                    n, sess, misure = tv.prova_thread(voice, path, self._pcm, rate,
+                                                      tv.candidati_thread(),
+                                                      interrompi=disturbata)
+                    if disturbata():
+                        continue
+                    voice.session, voice.calliope_thread, thread = sess, n, n
+                costo, parlato = tv.misura(self._pcm, voice, rate, interrompi=disturbata)
+                if disturbata():
+                    continue
+                self._taratura.segna_avvio(path, thread, parlato, costo, misure)
+                prove = (" (provati " + ", ".join(f"{k}: {v * 1000:.1f} ms" for k, v in
+                                                   misure.items()) + ")") if misure else ""
+                # CPU o GPU (07/10, `tts_dispositivo: auto`): solo se c'è posto e se è
+                # davvero più veloce; la scelta e il motivo restano in voce_taratura.json.
+                # Interrotta come le altre prove: alla quiete dopo si rifà da capo
+                if thread != "cuda" and tv.da_provare(self.cfg, path):
+                    scelta, sess, info = tv.prova_dispositivo(voice, path, self._pcm, rate,
+                                                              costo, interrompi=disturbata)
+                    if disturbata():
+                        continue
+                    self._taratura.segna_dispositivo(path, info)
+                    print(f"   [TTS] Voce sulla {'GPU' if scelta == 'cuda' else 'CPU'}: "
+                          f"{info.get('motivo')}", flush=True)
+                    if scelta == "cuda":
+                        voice.session, voice.calliope_dispositivo = sess, "cuda"
+                        thread, costo = "cuda", info["cuda_s_car"]
+                        self._taratura.segna_avvio(path, thread, parlato, costo)
+                dove = "GPU" if thread == "cuda" else f"{thread or 'Piper'} thread"
+                print(f"   [TTS] Taratura della voce: sintesi {costo * 1000:.1f} ms a "
+                      f"carattere, {parlato:.0f} caratteri al secondo, {dove}{prove}",
+                      flush=True)
                 return
-            self._taratura.segna_avvio(path, thread, parlato, costo, misure)
-            prove = (" (provati " + ", ".join(f"{k}: {v * 1000:.1f} ms" for k, v in
-                                               misure.items()) + ")") if misure else ""
-            # CPU o GPU (07/10, `tts_dispositivo: auto`): solo se c'è posto e se è davvero
-            # più veloce; la scelta e il motivo restano in voce_taratura.json
-            if thread != "cuda" and tv.da_provare(self.cfg, path):
-                scelta, sess, info = tv.prova_dispositivo(voice, path, self._pcm, rate, costo)
-                if self._sintesi_fatte != conta:
-                    return
-                self._taratura.segna_dispositivo(path, info)
-                print(f"   [TTS] Voce sulla {'GPU' if scelta == 'cuda' else 'CPU'}: "
-                      f"{info.get('motivo')}", flush=True)
-                if scelta == "cuda":
-                    voice.session, voice.calliope_dispositivo = sess, "cuda"
-                    thread, costo = "cuda", info["cuda_s_car"]
-                    self._taratura.segna_avvio(path, thread, parlato, costo)
-            dove = "GPU" if thread == "cuda" else f"{thread or 'Piper'} thread"
-            print(f"   [TTS] Taratura della voce: sintesi {costo * 1000:.1f} ms a carattere, "
-                  f"{parlato:.0f} caratteri al secondo, {dove}{prove}",
-                  flush=True)
-        except Exception as e:  # noqa: BLE001 — restano i predefiniti o l'uso
-            print(f"   [TTS] Taratura della voce non riuscita ({type(e).__name__}: {e})",
-                  flush=True)
+            except tv.Interrotta:
+                continue                # una conversazione: si riprova alla prossima quiete
+            except Exception as e:  # noqa: BLE001 — restano i predefiniti o l'uso
+                print(f"   [TTS] Taratura della voce non riuscita ({type(e).__name__}: {e})",
+                      flush=True)
+                return
 
     def stima_voce(self) -> dict:
         """La stima della voce in uso (taratura_voce.Taratura.stima)."""
@@ -599,21 +656,23 @@ class Speaker:
 
     def _synth(self, text: str) -> bytes:
         voice = self.voice
-        self._in_sintesi += 1
+        attivita = self.__dict__.get("_attivita")
+        if attivita is not None:
+            attivita.inizio()
         t0 = time.monotonic()
         try:
             pcm = self._pcm(voice, text)
         finally:
-            self._in_sintesi -= 1
-            self._sintesi_fatte += 1
-            self._ultima_sintesi = time.monotonic()
+            t1 = time.monotonic()
+            if attivita is not None:
+                attivita.fine()
         taratura = self.__dict__.get("_taratura")
         if taratura is not None:
             try:
                 from . import taratura_voce as tv
                 rate = getattr(getattr(voice, "config", None), "sample_rate", 0) or self._rate
                 taratura.osserva(getattr(self, "_current_voice_path", ""), tv.thread_di(voice),
-                                 len(text), self._ultima_sintesi - t0, len(pcm) / 2 / rate)
+                                 len(text), t1 - t0, len(pcm) / 2 / rate)
             except Exception:  # noqa: BLE001 — la stima non deve mai fermare la voce
                 pass
         pronta = self.__dict__.setdefault("_pronta", {})
@@ -873,6 +932,9 @@ class Speaker:
         self.turno += 1          # il satellite scarta solo le frasi del turno interrotto
         self._prima_del_turno = True
         self._interrupted.clear()
+        attivita = self.__dict__.get("_attivita")
+        if attivita is not None:
+            attivita.turno()        # una risposta comincia: la taratura si ferma
 
     def interrupt(self):
         """Barge-in: smette di parlare al prossimo blocco e scarta le frasi in coda. Con il

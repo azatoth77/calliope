@@ -887,6 +887,56 @@ def prova_voce_a_pezzi():
              and _bool_env("PROVA_TARATURA_X", True) is False)
     os.environ.pop("PROVA_TARATURA_X", None)
 
+    # La taratura non ruba la CPU a una conversazione (07/10): prima guardava solo la voce
+    # base, e con i satelliti sintetizzano i gemelli → partiva in mezzo ai turni
+    import queue
+    att = tts.AttivitaVoce()
+    base_a = SimpleNamespace(_voices={}, voice=voce, pronuncia=None, _attivita=att,
+                             _voices_lock=threading.Lock(), _fillers={})
+    gem = tts.Speaker(cfg, uscita=Remota(), base=base_a)
+    gem._pcm = lambda v, testo: b"\0\0" * 16 * len(testo)
+    gem.start_turn()
+    gem.say("Una frase detta dalla corsia di un satellite.")
+    gem.wait()
+    verifica("taratura: le sintesi e i turni dei gemelli contano per la voce base",
+             att.fatte == 1 and att.turni == 1 and att.in_sintesi == 0,
+             f"{att.fatte} {att.turni} {att.in_sintesi}")
+    chiamate = []
+    att_t = tts.AttivitaVoce()
+
+    def pcm_taratura(v, testo):
+        chiamate.append(time.monotonic())
+        if len(chiamate) == 2:
+            att_t.turno()                  # una conversazione riparte durante la taratura
+        time.sleep(0.01)
+        return b"\0\0" * 16000
+
+    def finto_tara(att_x, attesa):
+        f_ = SimpleNamespace(
+            _attivita=att_x, text_q=queue.Queue(), _current_voice_path="voci/finta.onnx",
+            voice=SimpleNamespace(config=SimpleNamespace(sample_rate=16000),
+                                  calliope_thread=8),
+            cfg=SimpleNamespace(tts_thread=8), _taratura=tv.Taratura(None), _pcm=pcm_taratura,
+            TARATURA_QUIETE_S=0.3, TARATURA_ATTESA_S=attesa)
+        f_._voce_libera = lambda: tts.Speaker._voce_libera(f_)
+        tts.Speaker._tara(f_)
+        return f_
+    att_t.ultima = time.monotonic() - 1
+    ft = finto_tara(att_t, 10.0)
+    verifica("taratura: una conversazione la ferma alla sintesi di prova dopo, e si riprova "
+             "alla quiete seguente (2 + 3 sintesi)",
+             len(chiamate) == 5 and chiamate[2] - chiamate[1] >= 0.3
+             and ft._taratura.stima("voci/finta.onnx", 8)["fonte"] == "avvio",
+             f"{len(chiamate)} sintesi")
+    chiamate.clear()
+    att_o = tts.AttivitaVoce()
+    att_o.inizio()                         # una sintesi vera in corso per tutto il tempo
+    finto_tara(att_o, 1.2)
+    verifica("contrario: con una sintesi vera in corso la taratura non parte", not chiamate)
+    att_q = tts.AttivitaVoce()             # appena avviata: la quiete non c'è ancora
+    finto_tara(att_q, 0.2)
+    verifica("contrario: subito dopo l'avvio la taratura aspetta la quiete", not chiamate)
+
     # Il registro: voce_pronta_s e sintesi_s da t0, come prima_voce_s
     rec = {"prima_frase_s": 1.0}
     finto = SimpleNamespace(rec=rec, speaker=SimpleNamespace(
@@ -982,6 +1032,19 @@ def prova_voce_gpu():
                                          mem_fn=lambda: DGX, sessione_fn=rotta)
     verifica("contrario: librerie di CUDA mancanti, CPU con il motivo",
              s == "cpu" and info["causa"] == "errore" and "libcudnn" in info["motivo"])
+    chiamate = []
+
+    def interrompi():
+        chiamate.append(1)
+        return len(chiamate) > 2          # una conversazione riparte durante la misura GPU
+    try:
+        tv.prova_dispositivo(Voce(), "v.onnx", sintetizza, 16000, cpu, mem_fn=lambda: DGX,
+                             sessione_fn=sessione_fn, interrompi=interrompi)
+        interrotta = False
+    except tv.Interrotta:
+        interrotta = True
+    verifica("una conversazione durante la prova della GPU la interrompe (non è un errore)",
+             interrotta)
 
     # La scelta salvata, ricontrollata all'apertura, e `calliope stato`
     vero_cuda = tv.cuda_disponibile

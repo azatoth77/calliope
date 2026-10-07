@@ -159,6 +159,16 @@ Dal rapporto [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-
   (riassunto più corto, mai la storia piena per minuti).
 - Prova `prova_latenza.py`.
 
+## La soglia di fine turno nella latenza sentita (07/10, solo misura)
+
+`fine_parlato_s` comprende i 700 ms di `silence_ms` con cui il VAD chiude la frase: è la parte più
+grande della latenza sentita che non dipende dal modello. Dal 07/10 il registro dei turni ha il
+campo `ascolto` (pause dentro la frase, parlato, chiusura, canale, soglia in uso, tagli probabili
+e riprese) e `calliope stato --turni --pause` stima per persona e canale la soglia che si
+sceglierebbe (p95 delle pause + 150 ms, tra 400 e 1300 ms), senza applicarla. Il piano (soglia
+per persona ed età con adattamento asimmetrico, poi partenza anticipata a ~300 ms con annullo,
+~400 ms in meno sulla latenza sentita) è in [stt-tts](stt-tts.md), «Pause e fine del turno».
+
 ## Dal testo alla voce: la prima frase a pezzi (07/10)
 
 Il 07/10 mattina sulla DGX (21 risposte, 20 dal satellite «studio», il portatile in Python con
@@ -254,7 +264,8 @@ calliope.yaml (atomico, `persistenza.scrivi_json`; senza `config_dir` solo in me
 1. **predefiniti prudenti** (15 caratteri al secondo, 10 ms a carattere: una macchina lenta,
    il primo pezzo esce più lungo);
 2. **taratura all'avvio** (`Speaker._tara`, in un thread): aspetta che la voce sia libera da 2 s
-   (il saluto non rallenta), sintetizza tre volte una frase fissa di 59 caratteri e tiene la più
+   (il saluto non rallenta; *storico*: dal 07/10 sera 20 s di quiete di tutte le voci, vedi
+   sotto «La taratura non parte in mezzo alle conversazioni»), sintetizza tre volte una frase fissa di 59 caratteri e tiene la più
    veloce. Con `tts_thread: auto` (il nuovo predefinito) e nessuna scelta salvata prova prima 2,
    4, 8 e i core fisici, una sessione di onnxruntime alla volta su una copia della voce, e tiene
    il più veloce (a parità entro il 5 % il numero più basso); un numero scritto in
@@ -272,6 +283,32 @@ caratteri al secondo (dall'uso, 112 sintesi); 8 thread, scelti dalla taratura.»
 spegne la misura all'avvio, l'uso continua. Il runner delle prove la spegne: con Calliope vera
 proverebbe i thread a ogni prova, togliendo CPU alle altre in parallelo (il primo `--completo`
 con la taratura accesa ha perso `prova_scritto_calliope`, passata da sola).
+
+**La taratura non parte in mezzo alle conversazioni** (07/10 sera, ramo `corsie-fix`). Dopo
+l'unione di `primo-pezzo` (eacf38d) `prova_corsie_satelliti` falliva sempre (3 su 3; prima,
+1f8a8cc, 3 su 3 passata): «la stessa frase da due satelliti: una risposta sola» non vedeva
+«Sono le dieci e un quarto.» entro 4 s. Causa vera, non la prova: `_tara` guardava solo i
+contatori della voce base (`_in_sintesi`, `_ultima_sintesi`), ma con i satelliti sintetizzano
+i **gemelli** delle corsie (`Speaker.gemello`), che scrivevano i loro contatori su sé stessi.
+La base sembrava sempre libera e la taratura partiva subito all'avvio, provando 2, 4, 8 e 24
+thread su serena-high **durante** i turni (decine di secondi, misura sporca e salvata lo
+stesso: «24 thread» scelti sul portatile); la prova la teneva accesa perché toglie le
+`CALLIOPE_*` dall'ambiente, compresa `CALLIOPE_TTS_TARATURA=0` del runner. Nella prova la prima
+frase della cucina con due persone insieme passava da 4,5–5 s a 2,25 s dopo la correzione.
+
+Correzione (`calliope/tts.py`, `calliope/taratura_voce.py`): un `AttivitaVoce` condiviso fra
+la base e i gemelli (sintesi in corso, sintesi fatte, turni, ultimo segno di vita; anche
+`start_turn` conta, così una risposta che comincia ferma la taratura prima della prima
+sintesi); quiete richiesta **20 s** (`TARATURA_QUIETE_S`, prima 2) di tutte le voci, contata
+dall'avvio; `misura` e `prova_thread` controllano `interrompi()` prima di ogni sintesi di
+prova e di ogni sessione e alzano `Interrotta`: la taratura si butta e si riprova alla quiete
+seguente (entro `TARATURA_ATTESA_S`, 30 minuti). Al più una sintesi di prova (≤ 1,4 s con 2
+thread sul portatile) si sovrappone alla voce vera. Prove: `prova_latenza` (i gemelli contano
+per la base; interrotta dopo 2 sintesi di prova e ripresa dopo la quiete; contrari: sintesi
+vera in corso, appena avviata), e `prova_corsie_satelliti`, `prova_satellite`,
+`prova_scritto_calliope`, `misura_corsie` passano `CALLIOPE_TTS_TARATURA=0` a Calliope come il
+runner. Il doppione si aspetta per condizione (risposta arrivata, doppione nel registro, fine
+del turno, 1 s di margine) e non più con 4 s fissi.
 
 Banco sulla DGX (tredici prime frasi vere del 06–07/10, `Speaker` vero con serena-high e 8
 thread, un'uscita remota finta; da `say()` al primo audio pronto, mediana di 3; «buco» = il

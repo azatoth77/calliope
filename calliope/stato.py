@@ -10,6 +10,10 @@ il prossimo passo (registro delle capacità, calliope/capacita.py).
                                               latenza vera della voce per giorno (prima frase,
                                               mediana e p90) con le cause, dal registro dei
                                               turni (calliope/latenza.py)
+    python -m calliope.stato --turni --pause [--giorni N]
+                                              pause dentro la frase per persona e canale,
+                                              tagli probabili e la soglia che si sceglierebbe
+                                              (solo stima, calliope/pause.py)
     python -m calliope.stato --installa <azione>
                                               proposta, conferma da tastiera, scaricamento
                                               con avanzamento (stesso codice della voce)
@@ -172,6 +176,11 @@ def main(argv=None) -> int:
             except (IndexError, ValueError):
                 print("--giorni vuole un numero")
                 return 1
+        if "--pause" in argv:
+            from . import pause
+            r = pause.riassunto(latenza.leggi(cfg.turn_log_dir, giorni))
+            print(json.dumps(r, ensure_ascii=False, indent=2) if as_json else pause.testo(r))
+            return 0
         dati = latenza.per_giorno(latenza.leggi(cfg.turn_log_dir, giorni))
         soglia = float(getattr(cfg, "latenza_avviso_s", 1.2) or 0) or float("inf")
         if as_json:

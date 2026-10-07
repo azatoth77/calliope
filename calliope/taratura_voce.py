@@ -7,9 +7,10 @@ carattere, portatile carico ~8 ms): non si tarano a mano, perché altri installe
 hardware che nessuno ha provato. Tre fonti, dalla più debole alla più forte:
 
 1. **predefiniti prudenti** (PREDEFINITI): una macchina lenta, il primo pezzo esce più lungo;
-2. **taratura all'avvio** (`Taratura.tara`, in un thread dopo il caricamento della voce, quando
-   la voce è libera): una frase fissa sintetizzata tre volte (vale la più veloce); con `tts_thread: auto` e nessuna
-   scelta salvata prova anche pochi numeri di thread (2, 4, 8, i core fisici) e tiene il più
+2. **taratura all'avvio** (`Speaker._tara`, in un thread dopo il caricamento della voce,
+   quando tutte le voci, anche quelle delle corsie, sono ferme da 20 s; si ferma e si riprova
+   se intanto riparte una conversazione): una frase fissa sintetizzata tre volte (vale la più
+   veloce); con `tts_thread: auto` e nessuna scelta salvata prova anche pochi numeri di thread (2, 4, 8, i core fisici) e tiene il più
    veloce;
 3. **l'uso** (`Taratura.osserva`, ogni sintesi vera di almeno MIN_CARATTERI): la mediana delle
    ultime FINESTRA, scartati i valori anomali (oltre ANOMALO volte la mediana: la CPU presa da
@@ -211,11 +212,23 @@ def per(cfg) -> Taratura:
 
 
 # ── la taratura all'avvio ──
-def misura(sintetizza, voice, rate: int, volte: int = 3) -> tuple[float, float]:
+class Interrotta(Exception):
+    """Una conversazione è ripartita durante la taratura: la si butta (07/10)."""
+
+
+def _controlla(interrompi):
+    if interrompi is not None and interrompi():
+        raise Interrotta()
+
+
+def misura(sintetizza, voice, rate: int, volte: int = 3,
+           interrompi=None) -> tuple[float, float]:
     """(secondi di sintesi a carattere, caratteri al secondo di voce) della FRASE: la migliore
-    di `volte` (la prima scalda la sessione). `sintetizza(voice, testo) → PCM int16`."""
+    di `volte` (la prima scalda la sessione). `sintetizza(voice, testo) → PCM int16`.
+    `interrompi()` vero prima di una sintesi di prova → Interrotta (la voce prima di tutto)."""
     migliore, audio_s = float("inf"), 0.0
     for _ in range(max(1, volte)):
+        _controlla(interrompi)
         t0 = time.perf_counter()
         pcm = sintetizza(voice, FRASE)
         migliore = min(migliore, time.perf_counter() - t0)
@@ -225,12 +238,14 @@ def misura(sintetizza, voice, rate: int, volte: int = 3) -> tuple[float, float]:
 
 
 def prova_thread(voice, voice_path: str, sintetizza, rate: int,
-                 candidati: list[int]) -> tuple[int, object, dict]:
+                 candidati: list[int], interrompi=None) -> tuple[int, object, dict]:
     """Prova la voce con pochi numeri di thread (una sessione di onnxruntime per numero, su
-    una copia della voce: quella in uso non si tocca). (migliore, sua sessione, misure)."""
+    una copia della voce: quella in uso non si tocca). (migliore, sua sessione, misure).
+    `interrompi` come in `misura`, controllato anche prima di ogni sessione."""
     import onnxruntime
     misure, tenuta = {}, (None, None)      # una sessione sola tenuta: la migliore finora
     for n in candidati:
+        _controlla(interrompi)
         o = onnxruntime.SessionOptions()
         o.intra_op_num_threads = n
         o.inter_op_num_threads = 1
@@ -238,7 +253,8 @@ def prova_thread(voice, voice_path: str, sintetizza, rate: int,
             str(voice_path), sess_options=o, providers=["CPUExecutionProvider"])
         prova = copy.copy(voice)
         prova.session = sess
-        misure[n] = round(misura(sintetizza, prova, rate, volte=3)[0], 6)
+        misure[n] = round(misura(sintetizza, prova, rate, volte=3,
+                                  interrompi=interrompi)[0], 6)
         # A parità (entro il 5 %) meno thread: lasciano CPU al resto (i candidati crescono)
         if tenuta[0] is None or misure[n] < misure[tenuta[0]] / 1.05:
             tenuta = (n, sess)
@@ -353,21 +369,27 @@ def sessione_cuda(voice_path: str):
 
 
 def prova_dispositivo(voice, voice_path: str, sintetizza, rate: int, cpu_s_car: float,
-                      mem_fn=memoria_gpu, sessione_fn=sessione_cuda) -> tuple[str, object, dict]:
+                      mem_fn=memoria_gpu, sessione_fn=sessione_cuda,
+                      interrompi=None) -> tuple[str, object, dict]:
     """Taratura CPU/GPU: (scelta, sessione CUDA se scelta, info da salvare). Prima il posto
     (senza aprire niente sulla GPU), poi la misura della frase fissa sulla GPU contro quella
-    sulla CPU appena fatta; GPU solo se GPU_VANTAGGIO volte più veloce."""
+    sulla CPU appena fatta; GPU solo se GPU_VANTAGGIO volte più veloce. `interrompi` come in
+    `misura`, controllato anche prima di aprire la sessione: Interrotta passa al chiamante."""
+    _controlla(interrompi)
     mem = mem_fn()
     info = {"memoria": mem, "cpu_s_car": round(cpu_s_car, 6)}
     ok, perche = posto_gpu(mem)
     if not ok:
         return "cpu", None, {**info, "scelta": "cpu", "causa": "memoria", "motivo": perche}
+    _controlla(interrompi)
     try:
         sess = sessione_fn(voice_path)
         prova = copy.copy(voice)
         prova.session = sess
-        gpu_s_car = misura(sintetizza, prova, rate, volte=3)[0]
+        gpu_s_car = misura(sintetizza, prova, rate, volte=3, interrompi=interrompi)[0]
         del prova
+    except Interrotta:
+        raise
     except Exception as e:  # noqa: BLE001 — librerie di CUDA mancanti, GPU occupata…
         return "cpu", None, {**info, "scelta": "cpu", "causa": "errore",
                              "motivo": f"GPU non usabile ({type(e).__name__}: "

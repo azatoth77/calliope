@@ -6,7 +6,7 @@
 
 | Stadio | Libreria | Dove |
 |---|---|---|
-| Cattura + VAD | sounddevice + Silero VAD (PyTorch, oppure il suo ONNX con onnxruntime senza torch: Linux) | `calliope/audio.py` → `Listener` (`listen`, `watch_for_name`, `measure_echo`); `calliope/vad.py` → `carica_vad`, `SileroOnnx`, `SileroTorch` |
+| Cattura + VAD | sounddevice + Silero VAD (PyTorch, oppure il suo ONNX con onnxruntime senza torch: Linux) | `calliope/audio.py` → `Listener` (`listen`, `watch_for_name`, `measure_echo`); `calliope/vad.py` → `carica_vad`, `SileroOnnx`, `SileroTorch`; pause e fine del turno (dal 07/10, solo misura) `calliope/pause.py` → `MisuraPause`, `OsservaRipresa`, `inizio_ripresa`, `riassunto` (sotto) |
 | Chi parla | CAM++ (3D-Speaker) in ONNX con onnxruntime | `calliope/speaker_id.py` → `SpeakerEmbedder`, `SpeakerRegistry`, `SpeakerContext`; `arruola.py` |
 | Speech-to-Text | faster-whisper nel processo, oppure un server con l'API OpenAI (sulla DGX whisper.cpp con CUDA, servizio `calliope-whisper`; vLLM scartato) con ripiego su faster-whisper su CPU (modello di riserva dal catalogo, `whisper_riserva`) | `calliope/stt.py` → `Transcriber`, `ServerTranscriber`, `make_transcriber`, `modello_whisper`; server in `setup/linux/motore/whisper.sh`; correzione delle frasi incerte (spenta) `calliope/stt_correzione.py` → `Correttore`, `accettabile`, `min_utile`; a capo di whisper-server tolti `stt.unisci_righe`; parole incerte al modello (B, spenta) `stt_correzione.parole_incerte`, `Brain.STT_INCERTE_MSG`; frase capita trattenuta (B2, spenta) `Brain.CapitoHold`, `Brain._applica_capito`, `STT_RISCRIVI_MSG` (confronto A/B/B2/C in fondo) |
 | Wake word acustica | classificatore addestrato in formato openWakeWord (ONNX) | `calliope/wakeword.py` → `WakeWordDetector`, `load_wake_detector`; usato da `Listener.listen(wake, awake_until)`. Modelli e addestramento in `wakeword/` |
@@ -353,3 +353,77 @@ peggiora.
 frasi brevi e 10 lunghe a testa per canale, lette alternandosi, per misurare con il registro
 nuovo margine e scambi nei due versi e ritarare `speaker_id_margine` e
 `minori_margine_amministra`.
+
+## Pause e fine del turno: solo misura (07/10)
+
+Decisione di Dario (07/10): oggi il turno si chiude dopo `silence_ms` = 700 ms di silenzio, uguale
+per tutti e su ogni canale (`Listener.listen`; il satellite in Python con gli stessi parametri
+via `protocollo.PARAMETRI`; il telefono in `voce.js`). Chi fa pause lunghe (un bambino che cerca
+la parola, un anziano, chi detta un numero) viene tagliato; chi parla svelto aspetta 700 ms
+per niente. In futuro la soglia si adatterà per persona, età e canale, con una partenza
+anticipata. **Per ora solo misura: nessun comportamento cambiato** (stessa soglia, stessa
+chiusura, nessuna regola sul testo).
+
+Cosa si registra (campo `ascolto` del registro dei turni, nessun dato personale nuovo):
+
+- **Pause dentro la frase** (`pause_ms`): i silenzi tra 120 ms e la soglia, contati sugli stessi
+  frame silenziosi con cui il VAD chiude il turno (probabilità sotto `vad_threshold − 0,15`,
+  frame da 32 ms: valori a passi di 32 ms); il silenzio di chiusura non si conta. **`parlato_ms`**
+  dalla prima voce all'ultima (senza pre-roll né silenzio finale), **`chiusura`** («silenzio»,
+  «lunga» per `max_utterance_s`, «rilascio» del tasto Parla sul telefono). La misura sta dove sta
+  il VAD: in locale e sul satellite in Python `MisuraPause` dentro `Listener.listen`; sul telefono
+  la stessa logica in `voce.js` (`MisuraPause`). Satellite e telefono la mandano con
+  `frase_finita` (`pause_ms`, `parlato_ms`, `chiusura`: facoltativi; il server li controlla in
+  `valida_evento` con `pause.campi_frase`; un server vecchio li ignora, un satellite vecchio non
+  li manda e il turno ha l'`ascolto` senza pause).
+- **Tagli probabili**: dopo la frase, per `RIPRESA_S` (2 s) dalla fine della voce, si guarda se
+  qualcuno ricomincia a parlare (`OsservaRipresa`: tre frame di voce di fila). In half-duplex
+  quella voce cade mentre Calliope pensa e non arriva a Whisper: è il segnale vero del taglio.
+  Usa un VAD suo (Silero in onnxruntime, ~2 MB; quello di `listen` lo usa intanto
+  `watch_for_name`), si sospende mentre le casse suonano (in locale `Speaker._progresso` negli
+  ultimi 0,5 s, sul satellite `Riproduttore.occupato`: segnale di fine ascolto e risposta) e si
+  ferma alla prima voce di Calliope (frase d'attesa o prima frase; sul satellite all'arrivo di
+  «frase»). Nel turno troncato `ripresa_s` e `taglio_probabile`; il satellite lo manda con il
+  messaggio nuovo `ripresa` (id dell'ascolto, `dopo_s`). La finestra utile va da `silence_ms`
+  (0,7 s, già passati quando il VAD chiude) a 2 s. Sul telefono non c'è (il microfono del
+  browser si ferma a fine frase: misurarla vorrebbe dire cambiarne il comportamento).
+  Al turno dopo, se la frase comincia entro 2 s dalla fine di quella di prima sulla stessa
+  corsia (non dal barge-in), `ripresa_dopo_s` e `stessa_persona`. E un segnale a parole:
+  `inizio_ripresa` quando la frase **comincia** (dopo il nome) con «aspetta,»/«aspetta un
+  attimo», «non ho (ancora) finito», «stavo dicendo», «fammi finire» (contrari: «aspetta che
+  arrivi la pizza», «non ho finito i compiti»). Solo una voce del registro, nessun effetto.
+- **Contesto**: `canale` (locale, satellite, telefono: il telefono passa dal ponte degli schermi,
+  `PonteWs`), `satellite` (nome), `soglia_ms` in uso, `seme` se la frase parte da un barge-in,
+  `fascia` d'età se chi parla è un minore; la persona è quella di `voce.nome`.
+
+Riassunto: `calliope stato --turni --pause [--giorni N] [--json]` (`pause.riassunto`, `testo`):
+per persona e canale frasi, pause (n, a frase, p50/p90/p95), parlato mediano, tagli probabili,
+riprese al turno dopo, segnali a parole, chiusure, e **la soglia che si sceglierebbe** =
+p95 + 150 ms tra 400 e 1300 ms, con almeno 20 pause. Le pause misurate sono tutte sotto la
+soglia in uso (le più lunghe chiudono il turno): con più del 5 % di frasi tagliate la stima
+sale ad almeno soglia + 300 ms («tagli frequenti»). È una stima: non si applica.
+
+Limiti noti: la pausa dopo il nome («Calliope, … che ore sono») si conta come le altre (è
+proprio una di quelle che tagliano); il VAD può dare un frame isolato di voce dentro una pausa
+lunga, che la divide in due più corte; la ripresa non sa chi parla (nessuna impronta su quei
+100 ms), la stessa persona si confronta solo al turno dopo; il turno si scrive all'inizio del
+giro dopo, e una ripresa misurata più tardi (turno chiuso in meno di 2 s, per esempio una frase
+ignorata) si perde. Prova a secco `prove/prova_pause.py` (frasi sintetiche con pause note,
+satellite e server veri con un client finto, `voce.js` con node).
+
+**Fasi successive (da decidere con i dati veri, almeno una settimana di turni):**
+
+1. **Soglia per persona, età e canale.** Dal riassunto: partenza per fascia (piccoli e bambini più
+   alta, ~1000 ms; adulti dalla stima) e per canale (il telefono in auto ha più rumore). Adattamento
+   **asimmetrico**: dopo un taglio probabile la soglia di quella persona sale subito (+150 ms), con
+   le frasi intere scende piano (−20 ms ogni 10 frasi, mai sotto il p95 + margine), così un errore
+   costa una frase sola. Nel registro `soglia_ms` per turno e il nome della regola; la soglia va
+   anche al satellite e al telefono (campo nuovo in `ascolta`, facoltativo). Chi parla si sa solo
+   dopo la frase: si usa quello della conversazione in corso (finestra di follow-up) e, da
+   addormentata, la soglia del canale.
+2. **Partenza anticipata.** A ~300 ms di silenzio la frase già presa va a Whisper (e il modello
+   può cominciare) mentre il VAD continua ad ascoltare; se la voce riprende prima della soglia
+   piena si **annulla** (risultato buttato, frase che continua) e nessuno se ne accorge. Guadagno
+   atteso ~400 ms sulla latenza sentita (`fine_parlato_s`), al costo di trascrizioni buttate (da
+   contare nel registro); su whisper.cpp della DGX ~0,15–0,3 s a frase. Prima serve la fase 1:
+   con le pause misurate si sa quante partenze si annullerebbero.
