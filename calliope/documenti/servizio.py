@@ -309,8 +309,11 @@ class Documenti:
         offer = getattr(ex, "offri_file", None)
         if offer is None:
             return False
+        # Il nome vero del file (07/10): dopo una modifica salvata come «Titolo (2)» perché
+        # l'originale era aperto, «Apro Titolo (2).» dice quale versione si apre
+        nome = Path(str(delivered.get("nome_file") or "")).stem or title
         try:
-            offer(owner, {"nome": title, "estensione": ext, "percorso": percorso,
+            offer(owner, {"nome": nome, "estensione": ext, "percorso": percorso,
                           "modificato": time.strftime("%Y-%m-%dT%H:%M")})
             return True
         except Exception:  # noqa: BLE001 — aprire è un di più
@@ -347,6 +350,7 @@ class Documenti:
         self.archive.update(last["id"], new, d["rif"], d["nome_file"], d.get("mtime"))
         can_open = self._offer(job.owner, d, title, ext)
         note = ""
+        copia = d.get("motivo") in ("aperto", "modificato")
         if d.get("motivo") == "aperto":
             note = (f" Il file era aperto, quindi ho salvato la nuova versione come "
                     f"«{Path(d['nome_file']).stem}».")
@@ -362,8 +366,13 @@ class Documenti:
                 "scheda": _scheda(new, formato, d["nome_file"], change, ident=last["id"]),
                 "frase": f"Fatto, ho aggiornato «{title}»: {change}.{note}",
                 "annuncio": f"ho aggiornato «{title}»: {change}.{note}",
+                # Il numero tra parentesi del nome nuovo non è il risultato (07/10, DGX: dopo
+                # «salvato come “Titolo (2)”» il modello chiamava pc_apri_file(2))
                 "cosa_fare": ("Non leggere il documento. Se chiede di aprirlo chiama "
-                              "pc_apri_file con risultato 1." if can_open
+                              "pc_apri_file con risultato 1"
+                              + (f": è la versione nuova, «{Path(d['nome_file']).stem}» (il "
+                                 f"numero tra parentesi nel nome non è il risultato)."
+                                 if copia else ".") if can_open
                               else "Non leggere il documento.")}
 
     def close(self):
