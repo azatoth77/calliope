@@ -663,7 +663,8 @@ def _lavori_rispondi(ctx: ToolContext, lavoro: str = "", risposta: str = "") -> 
                                "finito", lavoro=lav.id)
 
 
-MODI_RISULTATO = ("riassunto", "leggi", "mostra")
+# pdf e word (07/10): «fammene un PDF», il testo in Markdown convertito (agenti/risultato.converti)
+MODI_RISULTATO = ("riassunto", "leggi", "mostra", "pdf", "word")
 
 
 def _risultato_lavoro(ctx: ToolContext, lavoro: str = "", modo: str = "riassunto") -> dict:
@@ -687,6 +688,18 @@ def _risultato_lavoro(ctx: ToolContext, lavoro: str = "", modo: str = "riassunto
         return _final(frase, ok=False, fatto=NIENTE)
     titolo = _titolo_detto(lav.titolo)
     testo = ar.testo_intero(lav)
+    if modo in ("pdf", "word"):
+        # «Fammene un PDF / un Word» (07/10): Markdown → blocchi → render, poi come un documento
+        # di Calliope (al portatile con «Lo apro?», o nella cartella del lavoro)
+        if lav.tipo in ("codice", "estensione"):
+            return _final(f"«{titolo}» è un programma: il codice non lo converto in "
+                          f"{'PDF' if modo == 'pdf' else 'Word'}.", ok=False, fatto=NIENTE)
+        note_rule(ctx, f"risultato_{modo}")
+        out = ar.converti(svc, lav, testo, modo,
+                          attesa_s=float(getattr(ctx.cfg, "documenti_attesa_s", 8.0) or 8.0))
+        extra = {"in_sospeso": out["in_sospeso"]} if out.get("in_sospeso") else {}
+        return _final(out["frase"], ok=bool(out.get("ok")),
+                      fatto=out.get("fatto") or NIENTE, lavoro=lav.id, **extra)
     # Sullo schermo personale di chi chiede, se c'è: sempre il testo intero
     sullo_schermo = False
     hub = getattr(ctx, "schermi", None)
@@ -703,6 +716,8 @@ def _risultato_lavoro(ctx: ToolContext, lavoro: str = "", modo: str = "riassunto
                     and getattr(sender, "certo", True) is False):
                 sender.certo = True
                 note_rule(ctx, "risultato_schermo_proprio")
+                # Ma senza «Scarica» (07/10): dalla zona grigia non si scarica mai
+                card = {k: v for k, v in card.items() if k not in ("scarica", "_scarica")}
             esito = hub.invia(card, sender, forza=True)
             sullo_schermo = bool(esito.get("schermi") or esito.get("destinatari"))
             if sullo_schermo:
@@ -974,7 +989,8 @@ def agenti_specs(formati=("word", "excel", "pdf"), modelli=(),
                          "scritto («e il risultato?», «cosa ha trovato?», «leggimelo», "
                          "«fammi un riassunto della ricerca», «mostramelo sullo schermo»). "
                          "modo: riassunto (predefinito), leggi (più dettagliato, a voce), "
-                         "mostra (il testo intero sullo schermo). lavoro: id (es. «L3») o "
+                         "mostra (il testo intero sullo schermo), pdf o word (ne fa un file: "
+                         "«fammene un PDF», «lo voglio in Word»). lavoro: id (es. «L3») o "
                          "parole del titolo, vuoto per l'ultimo."),
             parameters={"type": "object",
                         "properties": {"lavoro": {"type": "string"},

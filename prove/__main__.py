@@ -39,6 +39,8 @@ A_SECCO = [
     ("prova_politica.py", [], "politica unica dei tool (05/10): provenienza, dati non fidati in busta, classi, banco d'attacco da web, foto, allegati, estensioni, archivio, agenti"),
     ("prova_conferma_unica.py", [], "una conferma per azione (06/10, caso della DGX): «creiamo…» con una foto di mezzo, conferma della politica e «Procedo?» del tool fusi, sfida, doppioni di una funzione che c'è già, annuncio coerente con la dimostrazione"),
     ("prova_risultati.py", [], "risultati dei lavori e consensi (07/10, casi della DGX): risultato_lavoro (quale lavoro, riassunto salvato o dal modello dell'agente, tempo massimo, schermo, codice mai a voce, dopo un riavvio, permessi), dichiarazioni «inizio subito il lavoro», il «sì» di chi non ha la proposta, «Ma sì dai, perché no?» e i contrari; casi del 07/10 mattina: falso allarme di riferire su «installarlo», scheda del risultato nella zona grigia e dopo schermo_mostra, lavori_stato con i lavori finiti dal disco"),
+    # ~8 s: FakeOllama, hub e server degli schermi veri su 127.0.0.1, satellite e PC finti
+    ("prova_markdown.py", [], "Markdown dei testi dell'agente (07/10): blocchi, righe, voce, conversioni in PDF e Word veri e da blocchi, testi ostili (script, javascript:, tabelle enormi, annidamenti, enfasi senza chiusura) in poco tempo; risultato.md, annuncio, scheda del documento con «Scarica», risultato al portatile con «Lo apro?» o sul server; «Scarica» solo per lo schermo personale del proprietario, mai zona grigia né stanza, gettone che scade, Content-Disposition e CSP sandbox; «fammene un PDF»"),
     ("prova_conferme.py", [], "conferme (04/10): «sì» breve di chi amministra, proposta valida 3 turni, frase di sfida"),
     ("prova_voci_famiglia.py", [], "voci di famiglia (07/10): margine tra primo e secondo profilo, chi amministra con un minore vicino, la frase che chiede chi parla, conferma breve con un'altra voce più vicina, i quattro casi veri con impronte sintetiche"),
     ("prova_minori.py", [], "minori (05/10): fasce, preset e permessi nel codice, orari, voce incerta, compiti e avvisi ai tutori, guardiano finto, registrazione con la sfida, privacy"),
@@ -70,6 +72,8 @@ A_SECCO = [
     ("prova_cruscotto.py", [], "cruscotto di chi amministra (06/10): solo lo schermo personale di chi amministra, nessun testo di persone, latenza, regole, errori, abbinamenti, richieste in attesa, cache e registro grande, prefisso del modello invariato"),
     # ~20 s: la pagina degli schermi e del telefono in Edge o Chromium senza finestra
     ("prova_cruscotto_pagina.py", [], "cruscotto nella pagina vera: pulsante solo per chi amministra, scheda con le sezioni, Aggiorna al suo posto, Chiudi, nel carosello del telefono dal menu, nessun errore JS"),
+    # ~25 s: la pagina del telefono e dello schermo in Edge o Chromium senza finestra
+    ("prova_markdown_pagina.py", [], "lettore Markdown nel browser vero (07/10): testo dell'agente ostile (script, HTML con attributi, javascript:, immagini) mai eseguito né come elementi, tabella di 300 righe, annidamenti, sommario, «Scarica» PDF/Word/MD negli scaricamenti, schermo intero del telefono leggibile, nessun errore JS né CSP"),
     ("prova_scheda_intera.py", [], "telefono (06/10): una scheda a schermo intero (cruscotto dal menu, lavoro con il codice, documento con una tabella larga) a 3 dimensioni: testo ≥ 16 px, niente di lato, aggiornamento al suo posto senza perdere lo scorrimento, Chiudi, Esc, indietro, nessun errore JS"),
     # ~15 s: la pagina in Edge o Chromium senza finestra; senza browser si salta
     ("prova_schermi_satellite.py", [], "uno schermo per satellite: riusato ai ricollegamenti e dopo i riavvii, token rinnovato se perso, revoca a cascata, abbinamenti inattivi segnalati"),
@@ -229,13 +233,14 @@ LIVELLO_2 = {
     "prova_lavori_riavvio.py",       # 10 s
     "prova_robustezza.py",           # 15 s (88 s prima del 06/10: aspettava il guardiano)
     "prova_biblioteca.py",           # 6 s, con i file della biblioteca
+    "prova_markdown.py",             # 8 s (07/10)
 }
 LIVELLO_3 = {
     "prova_schermi_pagina.py", "prova_scritto_pagina.py", "prova_immagini_pagina.py",
     "prova_giochi_pagina.py", "prova_scritto_calliope.py", "prova_telefono_pagina.py",
     "prova_telefono_audio.py", "prova_telefono_schermo.py", "prova_satellite.py",
     "prova_corsie_satelliti.py", "prova_installa_satellite.py", "prova_cruscotto_pagina.py",
-    "prova_scheda_intera.py",
+    "prova_scheda_intera.py", "prova_markdown_pagina.py",
 }
 # Mai nel gruppo parallelo, anche quando una prova li sceglie nel livello 2: un browser, un
 # tempo reale o tanti processi, che sotto carico falliscono a caso. Tutto il livello 3 è
@@ -298,7 +303,11 @@ LEGAMI = [
     ("calliope/guardrail.py", ["prova_estensioni.py", "prova_estensioni_attacchi.py"]),
     ("calliope/web/", ["prova_web.py", "prova_estensioni_attacchi.py"]),
     ("calliope/archivio/", ["prova_archivio.py"]),
-    ("calliope/documenti/", ["prova_lavori_criteri.py"]),
+    ("calliope/documenti/", ["prova_lavori_criteri.py", "prova_markdown.py"]),
+    # Il Markdown dell'agente, il lettore e «Scarica» (07/10)
+    ("calliope/schermi/", ["prova_markdown.py"]),
+    ("calliope/agenti/", ["prova_markdown.py"]),
+    ("calliope/tools/agenti.py", ["prova_markdown.py"]),
     ("calliope/satellite/", ["prova_esecutore.py", "prova_inoltro.py",
                              "prova_telefono_abbina.py"]),
     ("calliope/pc/", ["prova_esecutore.py"]),

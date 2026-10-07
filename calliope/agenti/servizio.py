@@ -24,7 +24,14 @@ Ricalca quello che già funziona per i documenti e le installazioni:
   il lavoro si chiude da solo e lo si dice;
 - **i file della persona** (03/10, file_utente.py): la copia si prende in secondo piano al
   «sì» (`_prendi_file`), entra nella sandbox o nella richiesta, e il risultato torna come
-  file nuovo con `consegna` (RemoteDelivery verso il satellite), mai sopra l'originale.
+  file nuovo con `consegna` (RemoteDelivery verso il satellite), mai sopra l'originale;
+- **i testi in Markdown** (07/10, documenti/markdown.py): ricerche, relazioni e riassunti si
+  consegnano come `risultato.md`; la scheda è quella del documento con il lettore Markdown e
+  «Scarica» (MD, PDF, Word); il riassunto detto resta breve e senza Markdown;
+- **il risultato al portatile** (07/10, `_consegna_risultato`): con il satellite che riceve i
+  file (ruolo «pc»), anche il risultato di un lavoro (il testo o il documento) va nella
+  cartella Calliope dei Documenti del portatile, con «Lo apro?»; senza, resta nella cartella
+  del lavoro sul server, e l'annuncio lo dice.
 """
 
 import datetime
@@ -195,6 +202,16 @@ _CODA = frozenset("di a da in con su per tra fra e o il lo la i gli le un uno un
                   "sulla che".split())
 
 
+# Il testo dell'agente nella cartella del lavoro (07/10, documenti/markdown.py)
+NOME_RISULTATO = "risultato.md"
+
+
+def titolo_file(titolo: str) -> str:
+    """Il titolo del lavoro come titolo di un file e di un documento: maiuscola in testa."""
+    t = re.sub(r"\s+", " ", str(titolo or "")).strip() or "Risultato"
+    return t[:1].upper() + t[1:]
+
+
 def _nome_cartella(s: str) -> str:
     s = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "", s).strip(" .")
     return s[:60] or "lavoro"
@@ -254,6 +271,8 @@ class Lavori:
         # Dove tornano i risultati dei lavori fatti sui file della persona: RemoteDelivery
         # (il satellite) o None (restano nella cartella del lavoro, su questo computer)
         self.consegna = consegna
+        # Gli esecutori del PC (main.py): il risultato consegnato si offre a «aprilo» (07/10)
+        self.pcs: dict = {}
         self.imp = imp
         self.on_done = on_done
         self.log = log
@@ -1011,6 +1030,8 @@ class Lavori:
                                  "l'agente non è riuscito a farlo")
             if lav.stato == "fatto" and lav.input:
                 self._consegna_utente(lav, ris, dest)
+            elif lav.stato == "fatto" and lav.tipo not in ("codice", "estensione"):
+                self._consegna_risultato(lav, ris, dest)
         except ErroreInput as e:
             lav.stato = "errore"
             ris = {"esito": "errore", "motivo": str(e)}
@@ -1095,21 +1116,80 @@ class Lavori:
                 "contenuto": summary(formato, doc, False)}
 
     def _scrivi_testo(self, lav, ris, dest: Path) -> dict:
-        testo = str(ris.get("testo") or "").strip()
-        if "word" in self.formati and lav.tipo == "ricerca":
+        """Il testo dell'agente come `risultato.md` (07/10: prima la ricerca diventava un Word
+        di soli paragrafi, e gli altri lavori un .txt). Il titolo in cima se manca; PDF e Word
+        si fanno a richiesta («Scarica», «fammene un PDF»)."""
+        from ..documenti import markdown as md
+        testo = md.con_titolo(str(ris.get("testo") or ""), titolo_file(lav.titolo))
+        path = dest / NOME_RISULTATO
+        path.write_text(testo, encoding="utf-8")
+        return {"file": [path.name], "testo": testo, "markdown": True,
+                "contenuto": md.descrivi(testo)}
+
+    def _consegna_risultato(self, lav: Lavoro, ris: dict, dest: Path):
+        """Il risultato di un lavoro (il testo o il documento) anche nella cartella Calliope dei
+        Documenti del portatile (07/10), come i documenti di Calliope: con il satellite che
+        riceve i file, RemoteDelivery e «Lo apro?»; senza, resta nella cartella del lavoro sul
+        server e la frase lo dice. Con Calliope sul PC stesso (`consegna` None) il file è già
+        nei suoi Documenti: si offre ad «aprilo». Dal thread dei lavori (aspetta la rete)."""
+        files = [f for f in (ris.get("file") or []) if "/" not in str(f)]
+        if not files:
+            return
+        p = dest / files[0]
+        if not p.is_file():
+            return
+        ext = p.suffix.lower().lstrip(".")
+        if self.consegna is None:
+            if self._offri(lav, str(p), ext):
+                ris["apribile"] = True
+            return
+        from ..documenti.formato import safe_filename
+        from ..pc.remoto import per_pc
+        nome_pc = getattr(self.consegna, "nome", "portatile")
+        c = per_pc(getattr(self.consegna, "server", None))
+        if c is None or not (getattr(c, "esecutore", None) or {}).get("file"):
+            ris["dove"] = (f"sul server, nella cartella Lavori, perché il {nome_pc} non è "
+                           f"collegato")
+            return
+        try:
+            d = self.consegna.deliver(safe_filename(titolo_file(lav.titolo)), ext, p.read_bytes())
+        except Exception as e:  # noqa: BLE001 — il file resta comunque nella cartella del lavoro
+            self.log(f"[AGENTI] {lav.id}: consegna al {nome_pc} non riuscita: "
+                     f"{type(e).__name__}: {e}")
+            ris["dove"] = f"sul server, nella cartella Lavori: il {nome_pc} non l'ha ricevuto"
+            return
+        if not d.get("remoto"):
+            # RemoteDelivery l'ha lasciato nella cartella di riserva sul server: qui c'è già
+            # la cartella del lavoro, la copia non serve
             try:
-                from ..documenti.formato import validate
-                paras = [p.strip() for p in re.split(r"\n\s*\n", testo) if p.strip()][:58]
-                doc = validate("word", {"titolo": lav.titolo[:60] or "Ricerca",
-                                        "blocchi": [{"tipo": "titolo", "testo": lav.titolo[:120]}]
-                                        + [{"tipo": "paragrafo", "testo": p[:2900]}
-                                           for p in paras]})
-                return self._scrivi_documento(lav, {"documento": doc, "formato": "word"}, dest)
-            except Exception:  # noqa: BLE001 — si ripiega sul testo semplice
+                Path(str(d.get("rif") or "")).unlink()
+            except OSError:
                 pass
-        path = dest / (_nome_cartella(lav.titolo) + ".txt")
-        path.write_text(testo + "\n", encoding="utf-8")
-        return {"file": [path.name]}
+            perche = str(d.get("dove") or "").split("perché ", 1)[-1] or "non ha risposto"
+            ris["dove"] = f"sul server, nella cartella Lavori, perché {perche}"
+            return
+        ris["consegnati_pc"] = [d["nome_file"]]
+        ris["dove"] = self.consegna.where()
+        self.log(f"[AGENTI] {lav.id}: risultato consegnato al {nome_pc} ({d['nome_file']})")
+        if d.get("apri") and self._offri(lav, d["apri"], ext):
+            ris["apribile"] = True
+
+    def _offri(self, lav: Lavoro, percorso: str, ext: str) -> bool:
+        """Il file appena consegnato diventa l'«ultima ricerca» di chi ha chiesto il lavoro:
+        «aprilo» → pc_apri_file(1), come i documenti (documenti/servizio.Documenti._offer)."""
+        if not self.pcs or lav.persona is None:
+            return False
+        ex = next(iter(self.pcs.values()))
+        offri = getattr(ex, "offri_file", None)
+        if offri is None:
+            return False
+        try:
+            offri(lav.persona, {"nome": titolo_file(lav.titolo), "estensione": ext,
+                                "percorso": percorso,
+                                "modificato": time.strftime("%Y-%m-%dT%H:%M")})
+            return True
+        except Exception:  # noqa: BLE001 — aprire è un di più
+            return False
 
     def _metadati(self, lav: Lavoro, dest: Path):
         r = lav.risultato
@@ -1241,7 +1321,9 @@ class Lavori:
         cosa = r.get("contenuto")
         sintesi = per_la_voce(r.get("riassunto")) if lav.tipo in ("ricerca", "altro") else ""
         # «Ho finito», non «è pronto»: il titolo può essere femminile («relazione…»)
-        coda = self._frase_consegna(r) if lav.input else f"Il file è {dove}."
+        coda = self._frase_consegna(r) if lav.input else f"Il file è {r.get('dove') or dove}."
+        if not lav.input and r.get("apribile"):
+            coda += " Lo apro?"
         return (f"ho finito «{titolo}»" + (f": {cosa}" if cosa else "")
                 + (f". {sintesi.rstrip('.')}" if sintesi else "") + f". {coda}")
 
@@ -1274,6 +1356,14 @@ class Lavori:
                                         ident=f"lavoro-{lav.id}")
             except Exception:  # noqa: BLE001
                 return None
+        if r.get("markdown") and r.get("testo") and lav.stato == "fatto":
+            # Il testo in Markdown (07/10): la scheda del documento con il lettore e «Scarica»,
+            # con la chiave del lavoro (sostituisce quella in diretta)
+            return schede.documento_markdown(
+                titolo_file(lav.titolo), r["testo"], ident=lav.id,
+                riassunto=per_la_voce(r.get("riassunto"), 400),
+                nome_file=(r.get("file") or [NOME_RISULTATO])[0],
+                cartella=Path(r.get("cartella") or "").name, stato=lav.stato)
         files = []
         dest = Path(r.get("cartella") or "")
         for name in (r.get("file") or [])[:8]:
@@ -1330,6 +1420,10 @@ class Lavori:
                               "campi": [campo("risposta", "La tua risposta", "testo_lungo")]}
         if lav.risultato.get("consegnati"):
             item["consegnati"] = lav.risultato["consegnati"]
+        if lav.risultato.get("apribile") and not lav.input and lav.stato == "fatto":
+            # «Lo apro?» (07/10): il risultato è l'«ultima ricerca» di chi l'ha chiesto
+            from ..documenti.servizio import in_sospeso
+            item["in_sospeso"] = in_sospeso("Lo apro?", f"il risultato «{titolo_detto(lav.titolo)}»")
         if (lav.risultato.get("estensione") or {}).get("in_sospeso"):
             # «Vuoi approvarla?» → estensioni_gestisci approva (con la frase di sfida)
             item["in_sospeso"] = lav.risultato["estensione"]["in_sospeso"]

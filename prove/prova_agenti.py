@@ -880,8 +880,10 @@ verifica("conferma implicita (stesso tipo, compito simile, turno dopo)",
          out.get("ok") and "Ci lavoro" in out["risposta_finale"]
          and "lavori_conferma_implicita" in ctx.regole, str(ctx.regole))
 item = fine(svc_t)
-verifica("ricerca senza biblioteca: testo in Word", item and item["stato"] == "fatto"
-         and list(Path(item["cartella"]).glob("*.docx")), str(item and item["messaggio"]))
+# Dal 07/10 il testo dell'agente è Markdown in risultato.md (PDF e Word a richiesta)
+verifica("ricerca senza biblioteca: testo in risultato.md", item and item["stato"] == "fatto"
+         and (Path(item["cartella"]) / "risultato.md").is_file()
+         and not list(Path(item["cartella"]).glob("*.docx")), str(item and item["messaggio"]))
 # Conferma implicita di un programma con il «sì» breve (03/10, prova_agenti_ollama sulla DGX):
 # vale come il «sì» con proposta=id, senza la voce; una richiesta nuova di codice con una
 # frase breve resta rifiutata
