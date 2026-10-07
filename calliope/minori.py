@@ -507,6 +507,19 @@ def dato_turno(prof, cfg=None) -> str:
     return "; ".join(parti)
 
 
+def dato_nascita(prof, oggi: datetime.date | None = None) -> str:
+    """La data di nascita di chi parla come dato del turno, per chiunque l'abbia nel profilo
+    (07/10): «data di nascita 10 settembre 2012 (14 anni)». Il 06/10 sera sulla DGX un
+    ragazzo chiedeva «Quanti anni ho?» e il modello, che vedeva solo «14 anni», passava a
+    data_calcola la data di oggi e diceva «oggi è il tuo compleanno». "" senza la data."""
+    d = leggi_data(getattr(prof, "nascita", None)) if prof is not None else None
+    if d is None:
+        return ""
+    oggi = oggi or datetime.date.today()
+    giorno = "primo" if d.day == 1 else str(d.day)
+    return f"data di nascita {giorno} {MESI[d.month - 1]} {d.year} ({eta(d, oggi)} anni)"
+
+
 # ─────────────────────────── permessi nel codice ───────────────────────────
 
 # Frasi pronte per i rifiuti (risposta_finale: niente altra passata del modello)

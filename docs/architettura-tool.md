@@ -172,7 +172,7 @@ controllo nelle prove a secco), ma tocca tutti i tool e le prove con Ollama che 
 
 | Tool | Livello | Rischio | Cosa |
 |---|---|---|---|
-| `chi_parla` | ospite | lettura | chi parla adesso (nome, livello, certezza) |
+| `chi_parla` | ospite | lettura | chi parla adesso (nome, se riconosciuto; dal 07/10 età e compleanno dal profilo) |
 | `elenca_voci` | ospite | lettura | le voci TTS disponibili |
 | `ora_attuale` | ospite | lettura | ora locale |
 | `data_oggi` | ospite | lettura | data locale |
@@ -184,7 +184,7 @@ controllo nelle prove a secco), ma tocca tutti i tool e le prove con Ollama che 
 | `appuntamenti_elenca` | familiare | lettura | appuntamenti di un giorno o intervallo detto a voce (`tempi.parse_day_range`); vuoto = 7 giorni |
 | `agenda_elenca` | ospite | lettura | timer attivi, promemoria di chi parla e appuntamenti dei prossimi 2 giorni |
 | `agenda_annulla` | ospite | azione | annulla un timer, un promemoria o un appuntamento (con il suo avviso) per descrizione |
-| `elenca_utenti` | familiare | lettura | utenti registrati |
+| `elenca_utenti` | familiare | lettura | persone della casa registrate (non la rubrica): impronta della voce sì/no, minorenne, età e compleanno a sé, ai tutori e a chi amministra (07/10) |
 | `cambia_voce` | familiare | azione | cambia la voce di chi parla |
 | `rinomina_interlocutore` | familiare | azione | rinomina chi parla |
 | `registra_utente` | amministra (dal 05/10, con la frase di sfida) | azione | avvia l'arruolamento di una persona nuova con la data di nascita (o «maggiorenne») e i tutori; un minore ha il preset della sua fascia (`calliope/minori.py`) |

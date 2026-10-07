@@ -1918,8 +1918,10 @@ class Ciclo:
         brain, rec, scritto = self.brain, self.rec, t.scritto
         if getattr(brain, "last_private", False):
             # Documenti di casa (tool riservati): la risposta contiene i loro dati, e nel
-            # registro dei turni restano solo i nomi dei tool
-            rec.update(risposta=None, riservato=True)
+            # registro dei turni restano solo i nomi dei tool. Il numero di parole sì (07/10):
+            # «risposta: null» si leggeva come una risposta muta
+            rec.update(risposta=None, riservato=True,
+                       risposta_parole=len(" ".join(t.said).split()))
         # Il codice di abbinamento di uno schermo non resta nel registro dei turni
         for key in ("testo", "richiesta", "risposta"):
             rec[key] = brain.redact(rec.get(key))

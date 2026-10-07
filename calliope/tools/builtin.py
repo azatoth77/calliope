@@ -70,20 +70,113 @@ def _chi_parla(ctx: ToolContext) -> dict:
     («hai un livello di permesso amministratore», test del 24/09).
     """
     name = ctx.speaker_ctx.current_speaker
-    return {"nome": name, "riconosciuto": name is not None}
+    out = {"nome": name, "riconosciuto": name is not None}
+    # Età e compleanno di chi parla (07/10): i suoi dati, dal profilo
+    prof = _profilo_di(ctx, name) if name else None
+    if prof is not None:
+        out.update(_dati_nascita(prof))
+    return out
 
 
 def _elenca_utenti(ctx: ToolContext) -> dict:
-    """Le persone che Calliope riconosce dalla voce."""
+    """Le persone della casa registrate (speakers.json), non la rubrica dell'ufficio.
+
+    06/10 sera (DGX): il campo «voce» era la voce di Calliope scelta per quella persona, e
+    con «voce: null» il modello diceva che un ragazzo registrato «non ha ancora una sua voce
+    associata», mentre l'impronta c'era. Ora `impronta_voce` (sì/no) dice se Calliope lo
+    riconosce dalla voce; età e compleanno solo a chi può saperli (_vede_nascita)."""
+    chi = _profilo_di(ctx, getattr(ctx.speaker_ctx, "current_speaker", None))
     utenti = []
     for nome in ctx.speakers.known_speakers():
         prof = ctx.speakers.get(nome)
-        utenti.append({
-            "nome": nome,
-            "genere": getattr(prof, "gender", None),
-            "voce": getattr(prof, "preferred_voice", None),
-        })
+        u = {"nome": nome,
+             "impronta_voce": "sì" if getattr(prof, "voiceprint", None) is not None else "no",
+             "amministra": bool(getattr(prof, "admin", False))}
+        if minori.e_minore(prof):
+            u["minorenne"] = True
+        if getattr(prof, "gender", None):
+            u["genere"] = prof.gender
+        if getattr(prof, "preferred_voice", None):
+            u["voce_di_calliope"] = Path(str(prof.preferred_voice)).stem
+        if _vede_nascita(chi, prof):
+            u.update(_dati_nascita(prof))
+        utenti.append(u)
     return {"utenti": utenti, "numero": len(utenti)}
+
+
+# ── Età e compleanni dai profili (07/10) ──
+# 06/10 sera, DGX: un ragazzo registrato con la data di nascita chiede «Quanti anni ho?» → il
+# modello chiama data_calcola(cosa="eta", data=<oggi>) e dice «oggi è il tuo compleanno»; poi
+# il genitore chiede il compleanno e il modello cerca nelle conversazioni e conta i giorni a
+# mente (309 invece di 339). La data di nascita è nel profilo (speakers.json v2, `nascita`):
+# la usa il programma. Chi può saperla: la persona stessa, chi amministra, i suoi tutori; gli
+# ospiti no (non hanno un profilo).
+_IO = {"io", "me", "mio", "mia", "chi parla", "chi sta parlando", "se stesso", "se stessa",
+       "sé stesso", "sé stessa", "me stesso", "me stessa", "il mio", "la mia"}
+
+
+def _profilo_di(ctx, nome):
+    speakers = getattr(ctx, "speakers", None)
+    if not nome or speakers is None:
+        return None
+    try:
+        return speakers.get(nome)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _nascita_di(prof) -> "datetime.date | None":
+    n = getattr(prof, "nascita", None)
+    return minori.leggi_data(n) if n else None
+
+
+def _dati_nascita(prof, oggi: "datetime.date | None" = None) -> dict:
+    """Data di nascita, anni compiuti, prossimo compleanno e giorni che mancano; {} senza."""
+    d = _nascita_di(prof)
+    if d is None:
+        return {}
+    oggi = oggi or datetime.date.today()
+    prossimo = tempi.prossima(tempi.stesso_giorno(d, oggi.year), oggi)
+    return {"nascita": tempi.say_date(d), "anni": tempi.anni_compiuti(d, oggi),
+            "prossimo_compleanno": tempi.say_date(prossimo),
+            "giorni_al_compleanno": (prossimo - oggi).days}
+
+
+def _vede_nascita(chi, altro) -> bool:
+    """`chi` (il profilo di chi parla, None = ospite) può sapere età e compleanno di `altro`?
+    Sé stesso sì; chi amministra e i tutori (minori.e_tutore) sì; gli altri no."""
+    if chi is None or altro is None:
+        return False
+    if chi is altro or getattr(chi, "id", None) == getattr(altro, "id", object()):
+        return True
+    return bool(getattr(chi, "admin", False)) or minori.e_tutore(chi, altro)
+
+
+def _persona_registrata(ctx, persona: str):
+    """(profilo, nome, è chi parla) per `persona` («io» o un nome), o un dict d'errore."""
+    sc = getattr(ctx, "speaker_ctx", None)
+    io = getattr(sc, "current_speaker", None)
+    p = (persona or "").strip().strip(".,!?").casefold()
+    if p in _IO or (io and p == str(io).casefold()):
+        if not io:
+            return {"ok": False, "errore": "non so chi sta parlando (voce non riconosciuta): "
+                                           "chiedi la data di nascita e passala in data"}
+        prof = _profilo_di(ctx, io)
+        return (prof, io, True) if prof is not None else {
+            "ok": False, "errore": "chi parla non ha un profilo: chiedi la data di nascita"}
+    speakers = getattr(ctx, "speakers", None)
+    nome = None
+    if speakers is not None:
+        trova = getattr(speakers, "find", None)
+        if callable(trova):
+            nome = trova(persona)
+        else:
+            nome = next((n for n in speakers.known_speakers()
+                         if n.casefold() == p), None)
+    if not nome:
+        return {"ok": False, "errore": f"«{persona}» non è una persona registrata in casa: "
+                                       f"chiedi la data di nascita e passala in data"}
+    return (speakers.get(nome), nome, nome == io)
 
 
 def _rinomina_interlocutore(ctx: ToolContext, nome: str) -> dict:
@@ -656,13 +749,22 @@ def _calcola(ctx: ToolContext, espressione: str) -> dict:
 _COSE_DATE = ("eta", "giorni_mancanti", "giorni_passati", "giorno_settimana", "differenza")
 
 
-def _data_calcola(ctx: ToolContext, cosa: str, data: str, data2: str = "") -> dict:
+def _data_calcola(ctx: ToolContext, cosa: str, data: str = "", data2: str = "",
+                  persona: str = "") -> dict:
     """Conti con le date: anni compiuti, giorni che mancano o che sono passati, giorno della
-    settimana, differenza tra due date. Risultato con `da_dire`."""
+    settimana, differenza tra due date. Risultato con `da_dire`. Con `persona` («io» o il
+    nome di una persona registrata) età e compleanno vengono dalla data di nascita del
+    profilo (07/10)."""
     oggi = datetime.date.today()
     cosa = (cosa or "").strip().lower().replace("à", "a")
     if cosa not in _COSE_DATE:
         return {"ok": False, "errore": f"cosa sconosciuta: {cosa!r} (una di {', '.join(_COSE_DATE)})"}
+    if (persona or "").strip():
+        return _data_persona(ctx, cosa, persona, oggi)
+    if not (data or "").strip():
+        return {"ok": False, "errore": "manca la data. Per l'età o il compleanno di chi parla "
+                                       "o di una persona di casa passa persona («io» o il "
+                                       "nome); altrimenti la data come detta"}
     p = tempi.parse_date(data, oggi)
     if p is None:
         return {"ok": False, "errore": f"non capisco la data «{data}»: passala come detta, "
@@ -677,6 +779,15 @@ def _data_calcola(ctx: ToolContext, cosa: str, data: str, data2: str = "") -> di
     if cosa == "eta":
         if not con_anno:
             return {"ok": False, "errore": "per gli anni serve l'anno della data: chiedilo"}
+        if d == oggi and not (data2 or "").strip():
+            # 06/10 sera: «Quanti anni ho?» → data = oggi, «compie 0 anni proprio oggi», e il
+            # modello diceva «oggi è il tuo compleanno». La data di oggi non è una nascita
+            note_rule(ctx, "data_eta_oggi")
+            return {"ok": False, "fatto": NIENTE,
+                    "errore": "la data passata è quella di oggi, non una data di nascita",
+                    "cosa_fare": "per l'età di chi parla o di una persona di casa richiama "
+                                 "data_calcola con persona («io» o il nome); altrimenti "
+                                 "chiedi la data di nascita"}
         if d > d2:
             return {"ok": False, "errore": f"il {detta} viene dopo il {tempi.say_date(d2)}"}
         n = tempi.anni_compiuti(d, d2)
@@ -721,6 +832,41 @@ def _data_calcola(ctx: ToolContext, cosa: str, data: str, data2: str = "") -> di
     out["da_dire"] = (f"Tra il {tempi.say_date(a)} e il {tempi.say_date(b)} ci sono {n} giorni"
                       + (f", cioè {out['anni']} anni compiuti" if out["anni"] else "") + ".")
     return out
+
+
+def _data_persona(ctx: ToolContext, cosa: str, persona: str, oggi: datetime.date) -> dict:
+    """Età e compleanno di una persona registrata, dalla data di nascita del profilo."""
+    r = _persona_registrata(ctx, persona)
+    if isinstance(r, dict):
+        return r
+    prof, nome, se_stesso = r
+    chi = _profilo_di(ctx, getattr(getattr(ctx, "speaker_ctx", None), "current_speaker", None))
+    if not se_stesso and not _vede_nascita(chi, prof):
+        note_rule(ctx, "nascita_riservata")
+        return {"ok": False, "fatto": NIENTE,
+                "errore": f"età e compleanno di {nome} li dico solo a {nome}, ai suoi tutori "
+                          f"e a chi amministra",
+                "risposta_finale": f"L'età e il compleanno di {nome} li dico solo a chi è "
+                                   f"della sua famiglia e se ne occupa."}
+    dati = _dati_nascita(prof, oggi)
+    if not dati:
+        return {"ok": False, "fatto": NIENTE,
+                "errore": f"nel profilo di {nome} non c'è la data di nascita",
+                "cosa_fare": "chiedi la data di nascita e passala in data"}
+    if cosa not in ("eta", "giorni_mancanti"):
+        return {"ok": False, "errore": "con persona: cosa è eta o giorni_mancanti (al "
+                                       "compleanno); per il resto passa la data"}
+    n, g = dati["anni"], dati["giorni_al_compleanno"]
+    quando = ("oggi" if g == 0 else "domani" if g == 1
+              else f"il {dati['prossimo_compleanno']}, tra {g} giorni")
+    if se_stesso:
+        frase = (f"Oggi compi {n} anni: buon compleanno!" if g == 0 else
+                 f"Hai {n} anni; ne compi {n + 1} {quando}.")
+    else:
+        frase = (f"Oggi {nome} compie {n} anni." if g == 0 else
+                 f"{nome} ha {n} anni; ne compie {n + 1} {quando}.")
+    return {"ok": True, "oggi": tempi.say_date(oggi), "persona": nome, **dati,
+            "da_dire": frase}
 
 
 # ─────────────────────────────── TIMER E PROMEMORIA ───────────────────────────────
@@ -1513,12 +1659,15 @@ _SPECS = [
         func=_calcola, risk="lettura", levels=ALL),
     ToolSpec(
         name="data_calcola",
-        description=("Conti con le date, esatti: anni compiuti (età, anche di chi parla), "
-                     "giorni che mancano a una data o passati da una data, giorno della "
-                     "settimana di una data, distanza tra due date. Le date come dette "
-                     "(«4 luglio 1977», «25 dicembre», «Natale», «domani»): la data di oggi "
-                     "la sa il programma. Per le date usa questo, non calcola. Nella risposta "
-                     "usa il campo da_dire."),
+        description=("Conti con le date, esatti: anni compiuti (età), giorni che mancano a "
+                     "una data o passati da una data, giorno della settimana di una data, "
+                     "distanza tra due date. Le date come dette («4 luglio 1977», «25 "
+                     "dicembre», «Natale», «domani»): la data di oggi la sa il programma, "
+                     "non passarla. Età e compleanno di chi parla («quanti anni ho?») o di "
+                     "una persona di casa («quanti anni ha Bianca?», «quando è il compleanno "
+                     "di Bianca?»): persona, senza data; la data di nascita la prende il "
+                     "programma dal profilo, non chiederla prima. Per le date usa questo, "
+                     "non calcola. Nella risposta usa il campo da_dire."),
         parameters={"type": "object",
                     "properties": {
                         "cosa": {"type": "string", "enum": list(_COSE_DATE)},
@@ -1526,12 +1675,21 @@ _SPECS = [
                                  "description": "la data come detta, con l'anno se detto"},
                         "data2": {"type": "string",
                                   "description": "solo per una distanza tra due date o per "
-                                                 "l'età a un'altra data; vuoto = oggi"}},
-                    "required": ["cosa", "data"]},
+                                                 "l'età a un'altra data; vuoto = oggi"},
+                        "persona": {"type": "string",
+                                    "description": "«io» per chi parla, o il nome di una "
+                                                   "persona registrata: età (eta) e giorni "
+                                                   "al compleanno (giorni_mancanti)"}},
+                    "required": ["cosa"]},
         func=_data_calcola, risk="lettura", levels=ALL),
     ToolSpec(
         name="elenca_utenti",
-        description="Elenca le persone che Calliope riconosce dalla voce.",
+        description=("Le persone della casa registrate (familiari, non i clienti): per "
+                     "ognuna se ha l'impronta della voce (impronta_voce: se Calliope la "
+                     "riconosce quando parla), se è minorenne e, a chi può saperli, età e "
+                     "compleanno. Per «chi è registrato?», «Bianca è registrata?», «mi "
+                     "riconosci la voce di Bianca?». La rubrica dell'ufficio (clienti, "
+                     "fornitori) è un'altra cosa: anagrafica_cerca."),
         parameters={"type": "object", "properties": {}, "required": []},
         func=_elenca_utenti, risk="lettura", levels=FAMILY),
     ToolSpec(

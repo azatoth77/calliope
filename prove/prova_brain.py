@@ -1076,6 +1076,31 @@ def prova_vuoto_dopo_lettura():
     detto = "".join(b.stream_reply("Che giorno è oggi?", "amministra"))
     verifica("rete vuoto_seconda_passata spenta: la conferma come prima",
              (detto.startswith("Oggi è"), len(b.backend.visti)), (True, 2))
+    # 07/10 (DGX 06/10 sera): vuota dopo un tool fallito o senza frase pronta, o senza
+    # nessun tool: prima il silenzio; ora seconda passata e, di nuovo vuota, il ripiego
+    sbagliata = [("calls", [{"id": "c0", "name": "data_calcola",
+                             "arguments": {"cosa": "boh", "data": "oggi"}}])]
+    b = brain_finto([sbagliata, [("text", "")], [("text", "")]])
+    detto = "".join(b.stream_reply("Quanti anni ho?", "amministra"))
+    verifica("vuoto dopo un tool fallito: seconda passata, poi «Non ci sono riuscita»",
+             (detto.startswith("Non ci sono riuscita"), len(b.backend.visti),
+              "vuoto_seconda_passata" in b.last_rules, "vuoto_ripiego" in b.last_rules),
+             (True, 3, True, True))
+    b = brain_finto([sbagliata, [("text", "")], [("text", "Non so la tua data di nascita.")]])
+    detto = "".join(b.stream_reply("Quanti anni ho?", "amministra"))
+    verifica("vuoto dopo un tool fallito: la seconda passata risponde",
+             (detto, "vuoto_ripiego" in b.last_rules), ("Non so la tua data di nascita.", False))
+    b = brain_finto([[("text", "")], [("text", "")]])
+    detto = "".join(b.stream_reply("Parliamo di Bianca.", "amministra"))
+    verifica("vuoto senza tool: seconda passata, poi il ripiego (mai muta)",
+             (detto.startswith("Non ci sono riuscita"), len(b.backend.visti)), (True, 2))
+    b = brain_finto([[("text", "Certo."), ("calls", [{"id": "c0", "name": "data_calcola",
+                                                       "arguments": {"cosa": "boh",
+                                                                     "data": "oggi"}}])],
+                     [("text", "")], [("text", "")]])
+    detto = "".join(b.stream_reply("Che giorno era?", "amministra"))
+    verifica("contrario: già detto qualcosa, la vuota dopo non diventa «Non ci sono riuscita»",
+             (detto, "vuoto_ripiego" in b.last_rules), ("Certo.", False))
 
 
 

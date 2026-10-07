@@ -111,3 +111,33 @@ chiamare `dimentica` e il ricordo è sparito («Ho dimenticato il tuo numero pre
   modello finto). Con il ricordo appena detto nella stessa conversazione il 4B risponde a
   «Dimentica il mio numero preferito.» «Dimentica il fatto che…» senza tool 4/5 volte, uguale sul
   codice di prima (0/5): difetto del 4B, non di questa correzione.
+
+## Età e compleanni dai profili (07/10, DGX 06/10 sera, ramo `eta-vuoti`)
+
+Casi veri (qui con nomi di fantasia): Bianca, minorenne registrata con la data di nascita
+(10/09/2012), chiede «Quanti anni ho?» → `data_calcola(cosa="eta", data=<oggi>)`, il tool
+risponde «compie 0 anni proprio oggi» e il 26B dice «oggi è il tuo compleanno e compi 14 anni»
+(i 14 anni venivano dai dati del turno del minore). Poi il genitore: «Quando è il compleanno di
+Bianca?» → ricerca nelle conversazioni, e «mancano ancora 309 giorni» contati a mente (erano 339).
+La data di nascita era nel profilo (`speakers.json` v2, `nascita`), il modello non la vedeva.
+- **`data_calcola` con `persona`** («io» o il nome di una persona registrata): la data di nascita
+  la prende il programma dal profilo; `eta` e `giorni_mancanti` danno anni, prossimo compleanno e
+  giorni che mancano (`_dati_nascita`), con `da_dire` («Hai 14 anni; ne compi 15 il 10 settembre
+  2027, tra 338 giorni.»). `data` non è più obbligatoria (resta `cosa`, così `{}` si ferma).
+- **La data di oggi come nascita si rifiuta** (regola `data_eta_oggi`): `eta` con la data di
+  oggi (anche «oggi») e senza `data2` risponde con l'errore e `cosa_fare` (persona, o chiedere la
+  data). Contrari: una data di nascita vera, `giorni_mancanti` a «oggi» («È oggi.»).
+- **Privacy** (`_vede_nascita`): la propria sì; di un altro solo chi amministra e i tutori
+  (`minori.e_tutore`); un familiare non tutore o un minore per un adulto ricevono la frase pronta
+  (regola `nascita_riservata`); gli ospiti non hanno un profilo («non so chi sta parlando»).
+- **Dati del turno**: la data di nascita di chi parla, per tutti quelli che ce l'hanno
+  (`minori.dato_nascita`: «data di nascita 10 settembre 2012 (14 anni)»), dopo il preset del
+  minore; `chi_parla` dà anche età e compleanno; `elenca_utenti` li dà a chi può saperli.
+- Misura con gemma4 e4b locale (script di misura fuori dal repository, 7 domande: «Quanti anni
+  ho?», «Quando è il mio compleanno?», compleanno, giorni e anni di Bianca chiesti dal genitore,
+  «Parliamo di Bianca, che cosa sai di lei?», «Bianca è registrata? Riconosci la sua voce?»):
+  codice di prima **2/14**, dopo **18/21** (3 giri). Restano 2/3 «Quanti anni ha Bianca?» in cui il
+  4B chiede la data invece di chiamare il tool (con la descrizione «non chiederla prima» da 0/2 a
+  1/3), e 1/3 «quanti giorni mancano…». Prima frase mediana 0,88 → 2,4 s, ma prima erano quasi
+  tutte risposte senza tool («ho bisogno della data di nascita»). Da rimisurare col 26B.
+- Prova: `prove/prova_eta_utenti.py` (35 controlli).

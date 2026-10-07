@@ -33,7 +33,8 @@
     fonte su ogni arco, alias per la deduplicazione), rielaborato da solo a versione nuova senza
     rifare l'OCR. A voce `archivio_cerca`, `archivio_scadenze`, `archivio_somma` (frase pronta,
     somme del programma; 25/26 con gemma4, prima frase mediana 0,61 s), riservati: nel registro
-    dei turni solo il nome del tool. Sensibili (referti, identità) solo all'interessato e a chi
+    dei turni solo il nome del tool (dal 07/10 anche i nomi degli argomenti dati, senza i
+    valori). Sensibili (referti, identità) solo all'interessato e a chi
     amministra, mai nella zona grigia né all'agente; cartella con il nome di un profilo =
     personale. L'agente esplora il grafo con sei strumenti chiusi (`grafo_*`) nelle ricerche
     delegate.

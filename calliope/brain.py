@@ -2457,12 +2457,16 @@ class Brain:
                     return
                 # Risposta vuota dopo un tool riuscito (cambia_voce 1 volta su 5, una ricerca
                 # di file il 27/09): si dice la conferma già pronta del tool, non il silenzio
-                if not _parlabile(text) and (self.last_tools or solo_punteggiatura) \
+                # 07/10: anche la risposta vuota del tutto, dopo un tool fallito o senza frase
+                # pronta (una ricerca, un risultato riservato) o senza tool, se non è stato
+                # ancora detto niente: prima restava il silenzio
+                muta = not spoke or solo_punteggiatura
+                if not _parlabile(text) and (self.last_tools or muta) \
                         and self._net("conferma_al_posto_del_vuoto"):
                     said = self._last_confirmation() if self.last_tools else ""
                     # Solo punteggiatura («…»): la seconda passata anche senza una conferma
                     # pronta (06/10: dopo conversazione_cerca restava il silenzio)
-                    if (said or solo_punteggiatura) and not self._acted() and not retried_empty \
+                    if not self._acted() and not retried_empty \
                             and self._net("vuoto_seconda_passata"):
                         # Dopo sole letture (data_oggi, ora_attuale, calcola…) la conferma
                         # risponde solo a una parte della domanda: «cerca la data di oggi e
@@ -2473,7 +2477,7 @@ class Brain:
                         retried_empty = True
                         self.history.pop()          # la risposta vuota non resta
                         self._rule("vuoto_seconda_passata")
-                        print("   [TOOL] risposta vuota dopo una lettura: seconda passata",
+                        print("   [TOOL] risposta vuota: seconda passata",
                               flush=True)
                         tail = [{"role": "system", "content": EMPTY_NUDGE}]
                         continue
@@ -2481,8 +2485,10 @@ class Brain:
                         self._rule("conferma_al_posto_del_vuoto")
                         assistant["content"] = said
                         yield said
-                    elif solo_punteggiatura:
-                        # Di nuovo solo punteggiatura: meglio una frase vera del silenzio
+                    elif solo_punteggiatura or (muta and not self._acted()):
+                        # Di nuovo vuota (o solo punteggiatura): meglio una frase vera del
+                        # silenzio
+                        self._rule("vuoto_ripiego")
                         assistant["content"] = "Non ci sono riuscita: puoi ripetere la richiesta?"
                         yield assistant["content"]
                 return
@@ -2642,7 +2648,8 @@ class Brain:
             data=f"{now.day} {_MESI[now.month - 1]} {now.year}", chi=who)}]
 
     def _minor_note(self, name: str | None) -> str:
-        """Il preset di un minore come dato del turno (minori.dato_turno), "" per un adulto."""
+        """Il preset di un minore come dato del turno (minori.dato_turno), "" per un adulto;
+        con la data di nascita del profilo, per tutti (07/10, minori.dato_nascita)."""
         speakers = getattr(self.tool_ctx, "speakers", None)
         prof = speakers.get(name) if (name and speakers is not None) else None
         if prof is None:
@@ -2651,7 +2658,7 @@ class Brain:
         note = minori.dato_turno(prof, self.cfg)
         if note:
             self._rule("minore_preset")
-        return note
+        return "; ".join(x for x in (note, minori.dato_nascita(prof)) if x)
 
     def _tone_note(self, name: str | None) -> str:
         """Il tono scelto da chi parla (cambia_voce con tono, salvato nel profilo), se è
@@ -2925,8 +2932,10 @@ class Brain:
                  for k, v in args.items()}
         private = bool(getattr(spec, "riservato", False))
         if private:
-            # Documenti di casa: nel registro dei turni e nel terminale solo il nome del tool
-            shown = {}
+            # Documenti di casa: nel registro dei turni e nel terminale il nome del tool e i
+            # nomi degli argomenti dati, senza i valori. Solo il nome (fino al 06/10) faceva
+            # leggere `conversazione_cerca({})` come una chiamata senza argomenti
+            shown = {k: "…" for k, v in args.items() if v not in (None, "")}
             self.last_private = True
         # Gli argomenti di un ospite non vanno nel terminale (sulla DGX: il journal), come nel
         # registro dei turni (03/10, analisi di sicurezza S9)
