@@ -700,3 +700,57 @@ lettore e «Scarica»):
   altri 6 lavori: 6/6 con titolo e 3–4 sezioni, nessun recinto, riassunti senza Markdown. Nelle ricerche
   il modello ha inventato le cifre per regione che i passaggi non avevano: problema del modello
   (qwen3.6 sulla DGX da riprovare), non del formato.
+
+## Il turno dopo il risultato: «fammene un PDF», il lavoro nominato (07/10 sera, ramo `correzioni-giro8`)
+
+Casi veri della DGX (26B, qui con nomi di fantasia):
+- 15:50, satellite dello studio: dopo l'annuncio della ricerca finita («… Il file è nella cartella
+  Calliope dei Documenti del portatile. Lo apro?») e «Per il risultato.» → `risultato_lavoro` col
+  riassunto, «Fammene un PDF» trascritto «Ho metto un pdf.» → `pc_cerca_file(tipo=pdf)`, l'elenco
+  dei PDF del PC; «L'ultimo che hai creato» apriva il PDF più recente del PC, che non era la
+  ricerca.
+- 16:11, telefono: «E il risultato di ricerca sulle pompe di calore?» → `lavori_stato` (l'elenco
+  dei lavori finiti con «Vuoi sentire il risultato?»); solo al turno dopo («Di quello della pompa
+  di calore, sì») `risultato_lavoro`.
+
+Cosa cambia (nessuna regola sul testo della persona, principio 10):
+- **Dati del turno `LAVORO_MSG`** (`Brain._lavoro_turno`, regola `riferimento_lavoro`, rete
+  spegnibile `riferimento_lavoro`): «l'ultimo risultato di cui avete parlato è quello del lavoro
+  «…» (lavoro L2): se ora ne vuole un PDF o un Word senza nominare un altro file, chiama subito
+  risultato_lavoro con modo pdf o word…; può arrivare storpiata («ho metto un pdf»); se nomina un
+  file suo è pc_cerca_file». Solo se un lavoro **finito** (non codice o estensione) di **chi parla**,
+  in memoria, è finito da al più 30 minuti e il suo titolo detto (««…»») è in una risposta degli
+  ultimi 8 messaggi (l'annuncio, il risultato).
+- **Descrizioni**: `pc_cerca_file` («NON per fare un PDF o un Word del risultato di un lavoro
+  dell'agente appena detto»), `documento_crea` («NON per mettere in PDF o in Word il risultato di
+  un lavoro dell'agente»), entrambe solo se gli agenti ci sono; `lavori_stato` («NON quando chiede
+  il risultato o il contenuto di un lavoro finito, anche nominato: risultato_lavoro, con lavoro =
+  le parole del titolo») e `risultato_lavoro` con l'esempio «e il risultato della ricerca sulle
+  pompe di calore?».
+- **Spinta di `documento_crea`** (regola `spinta_documento_lavoro`): con `LAVORO_MSG` in questa
+  risposta, se il documento chiesto dal modello parla del lavoro (almeno 2 parole significative
+  del titolo e almeno il 40% delle sue), la prima chiamata risponde «c'è il risultato del lavoro «…»
+  appena detto: … risultato_lavoro con modo word o pdf …; se vuole davvero un documento nuovo,
+  richiama documento_crea». Una volta per risposta; una lettera qualunque non la riceve.
+
+**Misure** (gemma4 e4b sull'Ollama del portatile, `prove/prova_risultato_pdf_ollama.py`, 3 giri,
+storia vera con annuncio, «Lo apro?» in sospeso e riassunto detto):
+
+| frase | prima | dopo |
+|---|---|---|
+| «Ho metto un pdf.» → `risultato_lavoro` pdf | 0/3 | 1/3, 1/3, 2/3 |
+| «Fammene un PDF.» | 2/3 | 3/3 |
+| «Famme un pdf.» (storpiatura non negli esempi) | — | 3/3 |
+| «Me lo fai in Word?» → word | 0/3 (`documento_crea`) | 1/3, 2/3, 3/3 (con la spinta) |
+| contrari «Cercami il PDF della bolletta…», «Aprimi il PDF del contratto…» → `pc_cerca_file` | 6/6 | 6/6 per giro |
+
+Il 4B a «Ho metto un pdf.» spesso non chiama nessun tool («per creare un PDF ho bisogno di sapere
+cosa deve contenere»); il caso vero era del 26B, che chiamava un tool (quello sbagliato): da
+riprovare sulla DGX. Il caso delle 16:11 **non si misura col 4B**: con l'annuncio e cinque turni
+d'altro davanti non chiama nessun tool, nemmeno `lavori_stato` per «Quali lavori hai finito oggi?»
+(0/3 prima e dopo; nella prova resta come misura, fuori dagli errori). Prova a secco:
+`prove/prova_dopo_annunci.py`.
+
+Nello stesso turno delle 16:11 `riferire` fermava «Se vuoi più dettagli, chiedimi di
+leggertelo.» come `uscita_istruzione` (falso allarme: è la frase del codice in coda a
+`risultato_lavoro`): vedi [sicurezza-politica](sicurezza-politica.md).

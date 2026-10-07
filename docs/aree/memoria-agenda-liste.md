@@ -181,3 +181,31 @@ l'età calcolata dal programma.
   `nascita` → «Sì, grazie.» → profilo → «Quanti anni ho?» dal profilo **3/3**. Da rimisurare col
   26B sulla DGX.
 - Prove: `prove/prova_eta_utenti.py` (sezione 7, (a), (a2), (b), (c) e contrari).
+
+## Il timer già suonato e il cambio non chiesto (07/10 sera, DGX, ramo `correzioni-giro8`)
+
+Caso vero (15:43–15:46): «Mettimi un timer di due minuti», poi lista della spesa, biblioteca;
+alle 15:45 l'annuncio «è scaduto il timer di 2 minuti» (detto, non nella storia); al turno dopo,
+«Che tempo farà domani a Milano?», il modello chiamava `web_cerca` **e**
+`timer_imposta(cambia=togli, durata=due minuti)`, fermato solo da `web_azione_bloccata` perché il
+meteo era appena entrato.
+
+Perché: non l'annuncio (l'annuncio dell'agenda non entra nella storia) ma il **contesto
+dell'agenda** (`AGENDA_MSG`) ancora attivo per 10 minuti: «l'ultima voce messa è il timer «di 2
+minuti»… «toglici due minuti»…» per un timer che non c'era più, con un esempio che ricalca proprio
+la durata del timer. Senza il web di mezzo la politica non lo fermava: `timer_imposta` è
+un'azione interna, e con la conversazione pulita si eseguiva (verificato a secco).
+
+Cosa cambia:
+- il riferimento porta l'id della voce (`_rif(..., item_id)` in timer, promemoria, appuntamenti e
+  spostamenti) e `Brain._take_agenda_reference` lo lascia cadere quando la voce non c'è più
+  nell'agenda (suonata, annullata): regola `riferimento_agenda_finito`;
+- la politica (`Classe.cambio`, regola `politica_cambio_non_chiesto`, vedi
+  [sicurezza-politica](sicurezza-politica.md)): un cambio di una voce già messa (`cambia` di
+  `timer_imposta` e `promemoria_imposta`) chiesto senza le parole del tool («minuti», «aggiungi»,
+  «togli», «impostalo», «spostalo», «ancora»…) diventa «Non me l'hai chiesto: vuoi che tolga due
+  minuti al timer?», anche con la conversazione pulita; il «sì» lo esegue. Un timer nuovo resta
+  come prima. Limite noto: «Mettilo a dieci» (senza «minuti») chiede conferma («metti» è troppo
+  generico per le parole del timer).
+
+Prova a secco col caso: `prove/prova_dopo_annunci.py` (sezione 3).

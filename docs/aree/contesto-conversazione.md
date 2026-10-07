@@ -459,3 +459,25 @@ usando: la frase breve dopo («Sì, grazie.» a «Procedo?») finiva nella conve
 satellite e la proposta si perdeva. Ora `sostituita` sposta anche `conv` e `_in_uso` della
 corsia. Caso e misure in [`voce-e-regole.md`](voce-e-regole.md); prova `prova_corsie.py`
 (`prova_scaduta_sospeso`).
+
+## Prefisso nuovo scaldato dopo un cambio di modalità o del tono della casa (07/10 sera, ramo `correzioni-giro8`)
+
+Caso vero della DGX (16:14): dopo «Calliope, attiva la modalità Star Trek» il turno dopo
+(«Computer, che ore sono?») ha avuto prima frase **7,14 s** con `lettura_s` **5,93**: il tono
+della casa sta nel prompt di sistema, che cambia, e Ollama rileggeva tutto (~15k token tra
+prompt, tool e storia). Ora `Brain.stream_reply` confronta il prompt di sistema prima e dopo la
+risposta: se è cambiato (modalità, tono della casa, qualunque cosa lo cambi), alla fine
+`_scalda_se_cambiato` mette in cache in un thread il prefisso nuovo con la conversazione
+(`scalda_conversazione`, come la ripresa dopo un riavvio; se la storia non entra, almeno prompt e
+tool con `warmup`), mentre Calliope dice la conferma. Non blocca la voce; regola
+`prefisso_scaldato`, nel journal «[LATENZA] prompt di sistema cambiato: prefisso nuovo in cache
+in … s».
+
+**Misura** (`prove/misura_scalda_modalita.py`, gemma4 e4b sul portatile, 3 giri, una
+conversazione di 12 turni mai vista per ogni misura, startrek ↔ normale): turno dopo il cambio
+senza riscaldamento lettura **2,44 s**, prima frase 3,04 s; con il riscaldamento (1,2 s in
+secondo piano) lettura **0,08 s**, prima frase **0,52 s**. Sulla DGX da rimisurare: il
+riscaldamento di ~15k token dura qualche secondo (circa quanto la conferma detta), e con
+`OLLAMA_NUM_PARALLEL=2` un turno che arriva prima della fine può finire nell'altro slot. Prova a
+secco in
+`prove/prova_dopo_annunci.py` (sezione 5).

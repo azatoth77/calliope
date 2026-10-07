@@ -362,3 +362,21 @@ va solo sui suoi schermi personali e senza «Scarica». Nient'altro cambia: un d
 consegnato ora, o di un'altra persona, resta rifiutato. Dettagli in
 [`schermi-telefono.md`](schermi-telefono.md). La data di nascita nel profilo si scrive solo al
 «sì» di chi parla, mai per un minore (`memoria-agenda-liste.md`).
+
+## Cambio non chiesto di una voce dell'agenda e la frase del codice nel risultato (07/10 sera, ramo `correzioni-giro8`)
+
+- **`politica_cambio_non_chiesto`** (`Classe.cambio`, per `timer_imposta` e
+  `promemoria_imposta` con `cambia`): anche con la conversazione pulita, il cambio di una voce
+  già messa si esegue solo se la frase ha le parole del tool (`VERBI`) o è il «sì» alla sua
+  domanda; altrimenti «Non me l'hai chiesto: vuoi che tolga due minuti al timer?» (le frasi
+  `cosa` di timer e promemoria ora dicono il cambio: «tolga…», «aggiunga…», «sposti il
+  promemoria…»). Caso vero: [memoria-agenda-liste](memoria-agenda-liste.md). Come
+  `politica_cancellazione_non_chiesta`: vincolo su un'azione già scelta dal modello, effetto una
+  domanda.
+- **riferire, `FRASI_PROPRIE`**: «Se vuoi più dettagli, chiedimi di leggertelo.», scritta dal
+  codice in coda a `risultato_lavoro` (che ha la fonte «agente»), era fermata come
+  `uscita_istruzione` (DGX, 07/10 16:11: «chiedimi» con parole mai dette dalla persona) e al suo
+  posto si diceva «Il lavoro di un agente contiene anche delle indicazioni che non vengono da te».
+  Falso allarme: le frasi fisse del codice stanno in `riferire.FRASI_PROPRIE` (chi le scrive usa
+  la costante, `FRASE_PIU_DETTAGLI`) e passano sempre; un'indicazione vera del dato resta fermata
+  (prova a secco in `prove/prova_dopo_annunci.py`).
