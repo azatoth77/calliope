@@ -194,9 +194,17 @@ def main(argv=None) -> int:
         ctx_testo, ctx_dati = contesto.testo_stato(cfg), contesto.leggi_salvato(cfg)
     except Exception:  # noqa: BLE001 — lo stato non deve cadere per questo
         ctx_testo, ctx_dati = None, None
+    # Quanto costa la voce su questa macchina (07/10, calliope/taratura_voce.py)
+    try:
+        from . import taratura_voce
+        voce_testo = taratura_voce.testo_stato(cfg)
+        voce_dati = taratura_voce.per(cfg).stima(
+            cfg.piper_voice, taratura_voce.thread_in_uso(cfg, cfg.piper_voice))
+    except Exception:  # noqa: BLE001
+        voce_testo, voce_dati = None, None
     if as_json:
         print(json.dumps({"capacita": reg.as_json(), "riassunto": reg.riassunto(),
-                          "contesto": ctx_dati,
+                          "contesto": ctx_dati, "voce": voce_dati,
                           "macchina": {"sistema": platform.system(),
                                        "architettura": platform.machine(),
                                        "python": platform.python_version()}},
@@ -206,6 +214,8 @@ def main(argv=None) -> int:
         if ctx_testo:
             print()
             print(ctx_testo)
+        if voce_testo:
+            print(voce_testo)
         # La latenza vera di oggi o di ieri, se supera latenza_avviso_s (06/10, P4)
         try:
             from . import latenza

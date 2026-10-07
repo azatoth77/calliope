@@ -679,7 +679,16 @@ def check_voce(cfg) -> dict:
                   "Va scaricata la voce: da terminale python -m calliope.stato --installa "
                   "voce_serena_alta, o un'altra voce del catalogo.",
                   voce=cfg.piper_voice, voci_installate=voci)
-    return _r("voce", "attiva", f"{len(voci)} voci installate" if len(voci) > 1 else "", "",
+    # La stima del costo della voce su questa macchina (07/10, calliope/taratura_voce.py)
+    try:
+        from . import taratura_voce
+        stima = taratura_voce.testo_stato(cfg)
+    except Exception:  # noqa: BLE001
+        stima = None
+    note = [f"{len(voci)} voci installate"] if len(voci) > 1 else []
+    if stima:
+        note.append(stima[0].lower() + stima[1:].rstrip("."))
+    return _r("voce", "attiva", "; ".join(note), "",
               voce=Path(cfg.piper_voice).stem, voci_installate=voci)
 
 

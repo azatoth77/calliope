@@ -188,7 +188,8 @@ Correzioni (prova `prova_latenza.prova_voce_a_pezzi`):
   più lunga di 60 caratteri si manda a Piper in due pezzi, tagliata dopo una virgola, i due
   punti o il punto e virgola seguiti da uno spazio (mai i decimali, mai a metà senza pausa), con
   il primo pezzo lungo almeno un terzo del resto e 12 caratteri: il suo audio (~55 ms a
-  carattere) copre la sintesi del resto. La punteggiatura resta nel primo pezzo: espeak gli dà
+  carattere) copre la sintesi del resto. *(Storico: il criterio del terzo è stato sostituito
+  il 07/10 pomeriggio dalla velocità misurata, sezione sotto.)* La punteggiatura resta nel primo pezzo: espeak gli dà
   l'intonazione sospesa della virgola. Pausa tra i pezzi sulla DGX 0,23–0,38 s, contro 0,23–0,39
   s delle virgole nella frase intera. Le frasi dopo la prima restano intere (si sintetizzano
   mentre suona quella prima). In `played` e nelle frasi dette dal satellite entrano i due
@@ -226,6 +227,73 @@ Possibili passi dopo, non fatti: `latency="low"` per l'uscita del satellite (MME
 di 0,18, rischio di buchi con il keepalive a 20 ms e le cuffie Bluetooth: da provare a orecchio);
 una voce medium (5 volte più veloce, ma serena-high è una scelta di qualità); Piper sulla GPU
 della DGX (nel venv c'è solo onnxruntime per CPU: ruote CUDA per aarch64 da verificare).
+
+## Il primo pezzo dalla velocità misurata, e la taratura della voce (07/10 pomeriggio)
+
+Misura vera dopo l'aggiornamento (DGX, 07/10 11:25, satellite studio, tre risposte senza tool):
+distacco prima frase → voce sentita 0,58 / 0,73 / 0,67 s (la mattina 0,89), ma la sintesi del
+primo pezzo era 0,39 / 0,53 / 0,47 s, non i ~0,19 s del banco. La regola «primo pezzo almeno un
+terzo del resto» spostava il taglio a una virgola lontana: «Per dormire meglio,» (19 caratteri)
+scartato, taglio a 64; «Visto che hai lo smoker,» scartato, taglio a 101; «Un motore elettrico
+trasforma … magnetici.» senza virgole, intera (116).
+
+**Criterio nuovo** (`tts.primo_pezzo`): si taglia alla prima virgola, due punti o punto e
+virgola dopo cui il primo pezzo ha almeno `tts_primo_pezzo_min` caratteri (15) e due parole, e
+la sua voce stimata (caratteri ÷ velocità di parlato) dura almeno 1,5 volte (`PRUDENZA`) la
+sintesi stimata del resto (caratteri × costo a carattere). Le frasi senza pause restano intere.
+Misure di serena-high sulla DGX (73 frasi e pezzi veri, mediana di 3): sintesi 0,026 s +
+3,35 ms a carattere con 8 thread (3,6 ms a carattere sopra i 40 caratteri), voce 0,24 s +
+50 ms a carattere (~19 caratteri al secondo; nei pezzi corti di più, per il silenzio che Piper
+mette in fondo: la stima è prudente).
+
+**I due numeri non si tarano a mano** (Calliope andrà su macchine che nessuno ha provato):
+`calliope/taratura_voce.py`, per voce e numero di thread, in `voce_taratura.json` accanto a
+calliope.yaml (atomico, `persistenza.scrivi_json`; senza `config_dir` solo in memoria):
+
+1. **predefiniti prudenti** (15 caratteri al secondo, 10 ms a carattere: una macchina lenta,
+   il primo pezzo esce più lungo);
+2. **taratura all'avvio** (`Speaker._tara`, in un thread): aspetta che la voce sia libera da 2 s
+   (il saluto non rallenta), sintetizza tre volte una frase fissa di 59 caratteri e tiene la più
+   veloce. Con `tts_thread: auto` (il nuovo predefinito) e nessuna scelta salvata prova prima 2,
+   4, 8 e i core fisici, una sessione di onnxruntime alla volta su una copia della voce, e tiene
+   il più veloce (a parità entro il 5 % il numero più basso); un numero scritto in
+   `tts_thread` vince. Se intanto parte una sintesi vera la misura si butta. Sulla DGX la prima
+   volta 14 s in secondo piano (2 thread 11,7 ms a carattere, 4 → 11,7, 8 → **3,8**, 20 → 5,7:
+   scelti 8), poi solo la frase fissa; sul portatile carico 2 → 25, 4 → 19, 8 → **12**, 24 → 51 ms;
+3. **l'uso** (`Taratura.osserva`, da `Speaker._synth`): ogni sintesi vera di almeno 20
+   caratteri, mediana delle ultime 200, scartati i valori oltre 4 volte (o sotto un quarto) la
+   mediana; vale da 30 sintesi. Sulla DGX dopo 112 sintesi: 3,9 ms a carattere, 18,5 caratteri
+   al secondo.
+
+La stima si vede in `calliope stato` («Voce it_IT-serena-high: sintesi 3,9 ms a carattere, 18
+caratteri al secondo (dall'uso, 112 sintesi); 8 thread, scelti dalla taratura.»), in `--json`
+(`voce`) e nella nota della capacità «voce». `tts_taratura: false` spegne la misura all'avvio
+(l'uso continua).
+
+Banco sulla DGX (tredici prime frasi vere del 06–07/10, `Speaker` vero con serena-high e 8
+thread, un'uscita remota finta; da `say()` al primo audio pronto, mediana di 3; «buco» = il
+resto arriva dopo la fine del primo pezzo, il peggiore di 3):
+
+| prima frase (caratteri) | prima: pezzo, primo audio | dopo: pezzo, primo audio |
+|---|---|---|
+| «Per dormire meglio, …» (145) | 64, 0,26 s | **19, 0,08 s** |
+| «Un motore elettrico …» (116, senza virgole) | 116, 0,43 s | 116, 0,42 s |
+| «Visto che hai lo smoker, …» (133) | 101, 0,34 s | **24, 0,10 s** |
+| altre dieci (136–287) | 38–129, mediana 0,27 s | 38–90, mediana 0,20 s |
+| **mediana delle tredici** | **0,27 s** | **0,20 s** |
+
+Nessun buco tra i pezzi, prima e dopo. Dove resta lento è per le pause: «Hai ragione,», «Se
+vuoi,», «Allora,» sono sotto i 15 caratteri e si va alla pausa dopo (64–90 caratteri);
+«Ho fatto una ricerca,» (21) non copre i 212 del resto con il margine 1,5 per poco. Da
+rimisurare con un giorno d'uso (`calliope stato --turni`, riga «dal testo alla voce»).
+
+Prove (`prova_latenza.prova_voce_a_pezzi`): i casi veri (si taglia a «Per dormire meglio,» e «Visto
+che hai lo smoker,»; con i numeri del portatile carico lo stesso taglio non basta e si va alla
+pausa dopo); i contrari (frase senza virgole, decimali, «Hai ragione,» e «Beh,» sotto il minimo,
+resto corto, sintesi lentissima: frase intera); la stima (predefiniti → avvio → uso con 30
+sintesi, anomali e frasi corte scartati, separata per voce e per thread, salvata e riletta, file
+rovinato), `tts_thread` scritto contro «auto», e uno `Speaker` con un Piper finto lento (1 ms a
+carattere, 15 caratteri al secondo) a cui la stima converge.
 
 ## Ollama pieno: embedding solo a Calliope inattiva (06/10, prova e2e sulla DGX)
 
