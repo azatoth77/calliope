@@ -159,6 +159,74 @@ Dal rapporto [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-
   (riassunto più corto, mai la storia piena per minuti).
 - Prova `prova_latenza.py`.
 
+## Dal testo alla voce: la prima frase a pezzi (07/10)
+
+Il 07/10 mattina sulla DGX (21 risposte, 20 dal satellite «studio», il portatile in Python con
+le cuffie Bluetooth in MME): prima frase pronta mediana 1,24 s, **prima voce sentita 2,20 s**.
+Dal registro dei turni, `prima_voce_s − prima_frase_s` nei turni senza frase d'attesa:
+
+| | studio 06/10 pomeriggio (41) | studio 07/10 mattina (20) |
+|---|---|---|
+| distacco mediano | 0,64 s | 0,89 s |
+| p90 | 1,07 s | 1,45 s |
+| frasi brevi («Non ho lavori in corso.», 23 caratteri) | 0,37–0,44 s | 0,36–0,44 s |
+
+Il distacco cresce con la lunghezza della prima frase (0,4 s con 23 caratteri, 1,3–1,6 s con
+200–450 caratteri di risposta): è la **sintesi di Piper della prima frase intera**. Piper (VITS)
+non dà campioni prima di aver sintetizzato tutta la frase, e `Speaker._pcm` la manda al
+satellite solo dopo. Misure sulla DGX (serena-high, CPU, onnxruntime con le opzioni di Piper):
+23 caratteri 0,16 s, 100 → 0,65 s, 151 → 0,91 s (RTF 0,11–0,13, ~6 ms a carattere; aurora-medium
+5 volte più veloce: 151 caratteri 0,20 s). Il 07/10 gemma ha dato prime frasi più lunghe del
+06/10 (150–250 caratteri, con virgole e due punti): da lì il distacco salito da 0,64 a 0,89 s.
+Il resto, ~0,25 s fisso: rete e pezzi (pochi ms in VPN), il buffer di MME del satellite (0,18 s
+con `latency="high"`, quella che il satellite dichiara in `uscita_s`) e le cuffie Bluetooth
+(non misurabili da qui, non dichiarate). Il **telefono** non mandava `suona`: `prima_voce_s`
+mancava in tutti i suoi turni (05–07/10), il confronto con lo studio non si poteva fare.
+
+Correzioni (prova `prova_latenza.prova_voce_a_pezzi`):
+- **Prima frase a pezzi** (`tts.primo_pezzo`, `tts_spezza_prima` 60): la prima frase del turno
+  più lunga di 60 caratteri si manda a Piper in due pezzi, tagliata dopo una virgola, i due
+  punti o il punto e virgola seguiti da uno spazio (mai i decimali, mai a metà senza pausa), con
+  il primo pezzo lungo almeno un terzo del resto e 12 caratteri: il suo audio (~55 ms a
+  carattere) copre la sintesi del resto. La punteggiatura resta nel primo pezzo: espeak gli dà
+  l'intonazione sospesa della virgola. Pausa tra i pezzi sulla DGX 0,23–0,38 s, contro 0,23–0,39
+  s delle virgole nella frase intera. Le frasi dopo la prima restano intere (si sintetizzano
+  mentre suona quella prima). In `played` e nelle frasi dette dal satellite entrano i due
+  pezzi; la storia e il registro (`t.said`) hanno la frase intera. Con `tts_spezza_prima: 0`
+  si torna a prima. Non è una regola sul testo (principio 10): non cambia cosa si dice, solo come
+  lo si dà a Piper.
+- **Thread di Piper** (`tts.carica_voce`, `tts_thread` 8): Piper apre onnxruntime con un thread
+  per core; sulla DGX (10 Cortex-X925 + 10 A725) è più lento che con 8. Una frase di 100
+  caratteri: 20 thread 0,61 s, 8 → 0,36 s, 10 → 0,35, 12 → 0,69 (mediana di 5); sul portatile
+  (24 core, carico di altri agenti) 1,46 → 0,77 s. Se la sessione non si rifà resta quella di
+  Piper.
+- **Misura**: nel registro `voce_pronta_s` (da `t0`, il primo audio del turno uscito da Piper,
+  anche quello della frase d'attesa sintetizzata al momento: `Speaker.voce_pronta`) e
+  `sintesi_s` (quanto è costato). `calliope stato --turni` aggiunge la riga «dal testo alla
+  voce» con la mediana e il p90 di `prima_voce_s − prima_frase_s` (esclusi i turni con la frase
+  d'attesa, dove la voce arriva prima del testo) e la scomposizione in **sintesi** (coda e
+  Piper) e **rete e uscita** (rete, buffer e uscita del satellite).
+- **Telefono**: `suona` come il satellite (vedi schermi-telefono).
+
+Banco «da `say()` al primo audio mandato al satellite» (le prime frasi vere del 07/10 più una
+breve; `Speaker` con un'uscita remota finta), sulla DGX con serena-high:
+
+| | mediana | frase di 143 caratteri |
+|---|---|---|
+| prima (frase intera, thread di Piper) | 0,66 s | 0,92 s |
+| solo 8 thread | 0,39 s | 0,54 s |
+| solo pezzi | 0,31 s | 0,39 s |
+| pezzi + 8 thread | **0,19 s** | 0,23 s |
+
+Nessun buco tra i pezzi sulla DGX; sul portatile carico, con i thread predefiniti e il primo
+pezzo lungo un quarto del resto, un buco di 0,24 s («Ho salvato tutto:»): da lì un terzo. Ci si
+aspetta un distacco sullo studio di ~0,45 s invece di 0,89 (resta il buffer di MME e il
+Bluetooth): da rimisurare dopo l'aggiornamento con un giorno d'uso (`calliope stato --turni`).
+Possibili passi dopo, non fatti: `latency="low"` per l'uscita del satellite (MME 0,09 s invece
+di 0,18, rischio di buchi con il keepalive a 20 ms e le cuffie Bluetooth: da provare a orecchio);
+una voce medium (5 volte più veloce, ma serena-high è una scelta di qualità); Piper sulla GPU
+della DGX (nel venv c'è solo onnxruntime per CPU: ruote CUDA per aarch64 da verificare).
+
 ## Ollama pieno: embedding solo a Calliope inattiva (06/10, prova e2e sulla DGX)
 
 Nella prova end-to-end sulla DGX voce (26B), guardiano (llama-guard3), rilevatore di pericolo
