@@ -141,3 +141,43 @@ La data di nascita era nel profilo (`speakers.json` v2, `nascita`), il modello n
   1/3), e 1/3 «quanti giorni mancano…». Prima frase mediana 0,88 → 2,4 s, ma prima erano quasi
   tutte risposte senza tool («ho bisogno della data di nascita»). Da rimisurare col 26B.
 - Prova: `prove/prova_eta_utenti.py` (35 controlli).
+
+## La propria data di nascita: dai ricordi e nel profilo (07/10 pomeriggio, DGX, ramo `correzioni-giro7`)
+
+Caso vero (qui con nomi di fantasia): un adulto senza data di nascita nel profilo. «Quanti anni
+ho?» → `data_calcola(cosa=eta, persona=io)` fallito («non ho la tua data di nascita»). «Ricordati
+che il mio compleanno è il 4 luglio del 1977» → `ricorda` salva un ricordo; «quanti anni ho?» →
+di nuovo `data_calcola(persona=io)` fallito due volte, e «Ho appena recuperato il dato…» senza
+l'età calcolata dal programma.
+- **(a) `data_calcola` con `persona` e `data`**: se nel profilo non c'è la nascita e il modello
+  passa anche `data`, si conta con quella (regola `eta_data_dal_modello`; «Hai 49 anni…» detto a
+  chi parla). Il profilo vince quando c'è; la privacy di un altro resta (`nascita_riservata`
+  prima di tutto). L'errore senza data dice di richiamare con la data se la conosce, da questa
+  conversazione o dai ricordi.
+- **(a2) dai ricordi di chi parla** (regola `eta_dal_ricordo`): con gemma4 e4b locale l'errore
+  con la data suggerita (anche col ricordo e la chiamata da fare scritti nel risultato) non
+  bastava: **0 su 8** richiamava con la data, e la rete chiudeva con «Non ci sono riuscita». Ora,
+  solo per chi parla (mai per un altro: i ricordi sono suoi), se tra i **suoi** ricordi ce n'è uno
+  solo con una data completa e una parola della nascita («compleanno», «nato/nata», «nascita»), e
+  la data non lo renderebbe minorenne, quella vale come data di nascita: la risposta dice gli anni
+  e chiede «L'ho preso dai tuoi ricordi: lo salvo come tua data di nascita?» (azione in sospeso:
+  `ricorda` con `nascita`). Due date diverse, una data senza la parola della nascita («si è
+  sposato il…»), nessun ricordo: l'errore di prima. Regola su un dato salvato dalla persona, non
+  sulla frase: il significato della domanda («quanti anni ho» → `persona=io`) lo decide il modello.
+- **(b) nel profilo** (argomento `nascita` di `ricorda`, nessun tool nuovo: restano 66 schemi): il
+  modello passa `nascita` quando il fatto è la data di nascita o il compleanno con l'anno di **chi
+  parla** («mai per altre persone», nella descrizione). Il ricordo si salva come sempre; il codice
+  risponde «Me lo ricordo. Lo salvo anche come tua data di nascita?» con l'azione in sospeso
+  (regola `nascita_proposta`) e la scrive nel profilo solo al «sì», nella risposta dopo, con la
+  stessa data (come `rinomina_interlocutore`; chi amministra con la sua voce o la frase di sfida,
+  `serve_conferma`): regola `nascita_nel_profilo`, «Fatto: il 4 luglio 1977 è la tua data di
+  nascita. Hai 49 anni.». Non si propone: per un minore (la cambia un tutore o chi amministra,
+  `minore_gestisci` azione `nascita`, come prima), con una data che renderebbe minorenne un
+  profilo adulto (`nascita_minore_tutore`), con l'anno mai detto dalla persona (in questa
+  conversazione o in un suo ricordo: `nascita_non_detta`), con `per_tutti`.
+- Misura con gemma4 e4b locale (3 giri, memoria vera, profilo senza data): «Quanti anni ho?» col
+  ricordo «Il compleanno di Luca è il 4 luglio 1977.» **3/3** (prima 0/3: errore, oppure 47 anni
+  contati a mente); «Ok, ricordati che il mio compleanno è il 4 luglio del 1977» → `ricorda` con
+  `nascita` → «Sì, grazie.» → profilo → «Quanti anni ho?» dal profilo **3/3**. Da rimisurare col
+  26B sulla DGX.
+- Prove: `prove/prova_eta_utenti.py` (sezione 7, (a), (a2), (b), (c) e contrari).

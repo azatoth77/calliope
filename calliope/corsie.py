@@ -339,6 +339,16 @@ class RegistroConversazioni:
             u = self._uso.pop(id(vecchia), None)
             if u is not None:
                 self._uso[id(nuova)] = u
+                # Anche la corsia che la stava usando (07/10, caso vero della DGX): chiusa
+                # per tempo all'inizio del turno («Fai una ricerca…», conversazione_scaduta),
+                # la corsia restava sulla vecchia; il «Sì, grazie.» breve dopo «Procedo?» non
+                # la trovava più (scegli: `corsia.conv is c`), finiva nella conversazione
+                # anonima e la proposta si perdeva
+                corsia = u[0]
+                if getattr(corsia, "conv", None) is vecchia:
+                    corsia.conv = nuova
+                if getattr(corsia, "_in_uso", None) is vecchia:
+                    corsia._in_uso = nuova
             self._cond.notify_all()
 
     # ── doppioni ──

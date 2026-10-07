@@ -746,10 +746,135 @@ def prova_casi_mattina():
         agente.ferma()
 
 
+
+# ─────────────────────── 07/10 pomeriggio: «Mostramelo.», «Sì, grazie.», tool falliti ───────────────────────
+def prova_casi_pomeriggio():
+    sezione("07/10 pomeriggio: documento appena consegnato nella zona grigia, «Sì, grazie.», "
+            "dichiarazioni dopo tool falliti")
+    from calliope.tools import schermi as ts
+    from prove.prova_politica import ChiParla, prepara, testo, turno
+    # 1. «Sì, grazie.» alla proposta è un consenso; «No, grazie.» no; «Grazie.» resta cortesia
+    from calliope.wakeword import closing_kind
+    verifica("«Sì, grazie.» è un consenso (e non una chiusura di cortesia)",
+             politica.consenso("Sì, grazie.") and closing_kind("Sì, grazie.") is None)
+    verifica("contrario: «No, grazie.» non è un consenso", not politica.consenso("No, grazie."))
+    verifica("contrario: «Grazie.» da solo resta una chiusura di cortesia",
+             closing_kind("Grazie.") == "grazie" and not politica.consenso("Grazie."))
+
+    # 2. Il risultato del lavoro appena annunciato, «Mostramelo.» breve (zona grigia)
+    agente = FakeOllama(modelli=("qwen3.6:35b",), caricati=("qwen3.6:35b",)).avvia()
+    try:
+        cfg, svc = servizio(agente, "p2")
+        lav = finito(svc)
+        annuncio = (f"Marta, ho finito «{ta._titolo_detto(lav.titolo)}»: tre tecnologie di "
+                    f"batterie. Il file è nella cartella Calliope dei Documenti. Lo apro?")
+
+        class HubCerto(Hub):
+            """Come gli schermi veri: una scheda personale solo con l'identità certa."""
+            def mittente(self, ctx):
+                sc = ctx.speaker_ctx
+                prof = ctx.speakers.get(sc.current_speaker)
+                return SimpleNamespace(persona=getattr(prof, "id", None),
+                                       certo=not sc.from_session)
+
+            def invia(self, card, mitt, forza=False):
+                if not mitt.certo:
+                    return {"schermi": [], "destinatari": [], "motivo": "zona_grigia"}
+                return super().invia(card, mitt, forza)
+
+        storia = [("assistant", annuncio), ("user", "Sì, aprilo."),
+                  ("assistant", "Apro il documento con la tua ricerca.")]
+        hub = HubCerto()
+        ctx, _ = contesto(cfg, svc, livello="familiare", how="breve", hub=hub,
+                          detto="Mostramelo.", storia=storia)
+        ctx.speaker_ctx.from_session = True
+        r = ts._schermo_mostra(ctx, cosa="documento")
+        card = hub.inviate[-1][1] if hub.inviate else {}
+        js = json.dumps(card, ensure_ascii=False)
+        verifica("zona grigia, il documento appena consegnato alla stessa persona: sul suo "
+                 "schermo personale, senza «Scarica»",
+                 r.get("ok") and "Modbus TCP" in js and "scarica" not in card
+                 and "_scarica" not in card and "risultato_schermo_proprio" in ctx.regole,
+                 detta(r))
+        hub = HubCerto()
+        ctx, _ = contesto(cfg, svc, livello="familiare", how="breve", hub=hub,
+                          detto="Mostramelo.", storia=[("user", "Che ore sono?"),
+                                                       ("assistant", "Sono le 15:24.")])
+        ctx.speaker_ctx.from_session = True
+        r = ts._schermo_mostra(ctx, cosa="documento")
+        verifica("contrario: zona grigia e un documento non consegnato in questa conversazione "
+                 "→ niente scheda", not hub.inviate and r.get("ok") is False
+                 and "risultato_schermo_proprio" not in ctx.regole, detta(r))
+        hub = HubCerto(personale=("giorgio",))
+        ctx, _ = contesto(cfg, svc, chi="Giorgio", livello="familiare", how="breve", hub=hub,
+                          detto="Mostramelo.", storia=storia)
+        ctx.speaker_ctx.from_session = True
+        r = ts._schermo_mostra(ctx, cosa="documento")
+        verifica("contrario: zona grigia di un'altra persona (il lavoro è di Marta) → niente "
+                 "scheda di Marta", "Modbus" not in json.dumps(hub.inviate, ensure_ascii=False)
+                 and "risultato_schermo_proprio" not in ctx.regole, detta(r))
+        hub = HubCerto()
+        ctx, _ = contesto(cfg, svc, hub=hub, detto="Calliope, mostralo.", storia=storia)
+        r = ts._schermo_mostra(ctx, cosa="documento")
+        card = hub.inviate[-1][1] if hub.inviate else {}
+        verifica("con la voce: il risultato del lavoro (il più recente), con le sue chiavi, "
+                 "senza la regola della zona grigia",
+                 "Modbus TCP" in json.dumps(card, ensure_ascii=False)
+                 and "risultato_schermo_proprio" not in ctx.regole, detta(r))
+        svc.close()
+    finally:
+        agente.ferma()
+
+    # 3. Brain: «Ho appena recuperato il dato…» dopo soli tool falliti non si dice
+    import dataclasses
+    from calliope.brain import FAILED_NUDGE
+    from prove.prova_politica import Copione
+
+    class Registra(Copione):
+        def __init__(self):
+            super().__init__()
+            self.visti = []
+
+        def stream(self, messages, tools):
+            self.visti.append(json.dumps(messages, ensure_ascii=False, default=str))
+            yield from super().stream(messages, tools)
+
+    b, _, _ = prepara(True)
+    b.backend = Registra()
+    b.tool_ctx.speaker_ctx = ChiParla("Bianca", "familiare")
+    spec = b.tools.get("data_calcola")
+    b.tools.register(dataclasses.replace(spec, func=lambda ctx, **a: {
+        "ok": False, "errore": "nel profilo di Bianca non c'è la data di nascita",
+        "cosa_fare": "se la conosci dai ricordi richiama con data"}))
+    chiamata = [("calls", [{"id": "c1", "name": "data_calcola",
+                            "arguments": {"cosa": "eta", "persona": "io"}}])]
+    detto = turno(b, "La data di nascita te l'ho detta, la recuperi e mi fai il calcolo.",
+                  chiamata,
+                  testo("Ho appena recuperato il dato che mi hai chiesto di ricordare: hai 49 "
+                        "anni."),
+                  testo("Nel tuo profilo la data di nascita non c'è: me la ripeti?"))
+    verifica("Brain: dopo data_calcola fallito «Ho appena recuperato il dato…» non si dice; "
+             "spinta con l'errore, poi la frase vera",
+             "recuperato" not in detto and "me la ripeti" in detto
+             and "dichiarata_tool_fallito" in b.rules_fired()
+             and "sono falliti" in b.backend.visti[-1], detto)
+    b, _, _ = prepara(True)
+    b.tool_ctx.speaker_ctx = ChiParla("Bianca", "familiare")
+    b.tools.register(dataclasses.replace(spec, func=lambda ctx, **a: {
+        "ok": True, "anni": 49, "da_dire": "Hai 49 anni."}))
+    detto = turno(b, "Quanti anni ho?", chiamata,
+                  testo("Ho recuperato la tua data di nascita: hai 49 anni."))
+    verifica("contrario: dopo un tool riuscito «Ho recuperato…» si dice",
+             "Ho recuperato" in detto and "dichiarata_tool_fallito" not in b.rules_fired(),
+             detto)
+    verifica("il messaggio della spinta dice di leggere l'errore", "cosa_fare" in FAILED_NUDGE)
+
+
 prova_consenso()
 prova_dichiarazioni()
 prova_proposta_altrui()
 prova_risultato()
 prova_casi_mattina()
+prova_casi_pomeriggio()
 print(f"\n{errori} errori" if errori else "\nTutto a posto.")
 sys.exit(1 if errori else 0)

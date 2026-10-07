@@ -119,15 +119,8 @@ def _scheda_per(ctx: ToolContext, cosa: str, lista: str, hub, sender):
             return None, "Non so chi sei, quindi non posso mostrarti la tua agenda."
         return schede.promemoria(ctx.agenda, prof.id, prof.name), ""
     if cosa == "documento":
-        svc = getattr(ctx, "documenti", None)
-        if prof is None or svc is None:
-            return None, "Non trovo un tuo documento da mostrare."
-        last = svc.archive.last(prof.id)
-        if last is None:
-            return None, "Non trovo un tuo documento da mostrare: prima dimmi cosa preparare."
-        return schede.documento(last["contenuto"], last["formato"],
-                                Path(str(last.get("nome_file") or "")).name,
-                                ident=last.get("id")), ""
+        card, why, _ = _documento(ctx, prof)
+        return card, why
     if cosa == "casa":
         be = getattr(ctx, "casa", None)
         if be is None:
@@ -147,6 +140,78 @@ def _scheda_per(ctx: ToolContext, cosa: str, lista: str, hub, sender):
             return None, "In casa non vedo dispositivi da mostrare."
         return schede.casa(utili, "Com'è la casa"), ""
     return None, "Non so cosa mostrare: dimmi se la lista, i timer, l'agenda o l'ultima risposta."
+
+
+# ── Il documento appena consegnato (07/10 pomeriggio, caso vero della DGX) ──
+# Lavoro finito e annunciato, «Sì, aprilo.», poi «Mostramelo.» breve (zona grigia): rifiutato
+# con «Non ho riconosciuto bene la tua voce», subito dopo che la stessa persona l'aveva chiesto
+# e ricevuto. Come per risultato_lavoro (regola `risultato_schermo_proprio`): il documento o il
+# risultato della persona della conversazione, appena consegnato (il titolo è in una risposta
+# recente della conversazione), va sui suoi schermi personali anche dalla zona grigia; mai su
+# quelli d'altri, mai senza la persona della conversazione, mai con «Scarica».
+
+def _lavoro_recente(ctx, prof):
+    """L'ultimo lavoro riuscito di `prof` (agenti/risultato.recenti), o None."""
+    svc = getattr(ctx, "lavori", None)
+    if svc is None or prof is None:
+        return None
+    try:
+        from ..agenti import risultato as ar
+        rec = ar.recenti(svc, prof.id, prof.name, 1)
+    except Exception:  # noqa: BLE001 — i lavori non fermano lo schermo
+        return None
+    lav = rec[0] if rec else None
+    return lav if lav is not None and getattr(lav, "stato", "") == "fatto" else None
+
+
+def _documento(ctx, prof):
+    """(scheda, frase d'errore, (persona, titolo detto)) per «mostrami il documento»: il più
+    recente tra l'ultimo documento di Calliope della persona e il risultato del suo ultimo
+    lavoro (07/10: dopo l'annuncio di una ricerca, «mostramelo» mostrava un documento di prima)."""
+    svc = getattr(ctx, "documenti", None)
+    last = svc.archive.last(prof.id) if (prof is not None and svc is not None) else None
+    lav = _lavoro_recente(ctx, prof)
+    if lav is not None and (last is None or float(getattr(lav, "fine", 0) or 0)
+                            >= float(last.get("modificato") or 0)):
+        try:
+            from ..agenti import risultato as ar
+            from ..agenti.servizio import titolo_detto
+            card = ar.scheda(ctx.lavori, lav, ar.testo_intero(lav))
+        except Exception:  # noqa: BLE001
+            card = None
+        if card:
+            return card, "", (lav.persona, titolo_detto(lav.titolo))
+    if prof is None or svc is None:
+        return None, "Non trovo un tuo documento da mostrare.", None
+    if last is None:
+        return None, "Non trovo un tuo documento da mostrare: prima dimmi cosa preparare.", None
+    return (schede.documento(last["contenuto"], last["formato"],
+                             Path(str(last.get("nome_file") or "")).name, ident=last.get("id")),
+            "", (last.get("owner"), str(last.get("titolo") or "")))
+
+
+def _norm_detto(t) -> str:
+    return re.sub(r"[^a-z0-9à-ù]+", "", str(t or "").lower())
+
+
+def appena_consegnato(ctx, titolo: str) -> bool:
+    """Il titolo è in una risposta recente della conversazione (ToolContext.storia)."""
+    n = _norm_detto(titolo)[:60]
+    if len(n) < 6:
+        return False
+    return any(r == "assistant" and n in _norm_detto(c)
+               for r, c in getattr(ctx, "storia", None) or ())
+
+
+def _proprio_grigio(ctx, sender, chi_titolo) -> bool:
+    """Zona grigia, il documento della persona della conversazione appena consegnato: la
+    scheda va ai suoi schermi personali (sender.certo), senza «Scarica»."""
+    if not chi_titolo or getattr(sender, "certo", True) is not False:
+        return False
+    persona, titolo = chi_titolo
+    if persona is None or getattr(sender, "persona", None) != persona:
+        return False
+    return appena_consegnato(ctx, titolo)
 
 
 def _schermo_mostra(ctx: ToolContext, cosa: str = "ultima", lista: str = "") -> dict:
@@ -171,9 +236,17 @@ def _schermo_mostra(ctx: ToolContext, cosa: str = "ultima", lista: str = "") -> 
         if r.get("schermi") or r.get("destinatari"):
             note_rule(ctx, "schermo_mostra_risultato")
             return _final("Il testo intero è sul tuo schermo.", fatto="mostrato")
-    card, why = _scheda_per(ctx, cosa, str(lista or ""), hub, sender)
+    chi_titolo = None
+    if cosa == "documento":
+        card, why, chi_titolo = _documento(ctx, _person(ctx))
+    else:
+        card, why = _scheda_per(ctx, cosa, str(lista or ""), hub, sender)
     if card is None:
         return _final(why, ok=False, fatto=NIENTE)
+    if isinstance(card, dict) and _proprio_grigio(ctx, sender, chi_titolo):
+        sender.certo = True
+        note_rule(ctx, "risultato_schermo_proprio")
+        card = {k: v for k, v in card.items() if k not in ("scarica", "_scarica")}
     # Una scheda o più (i timer: una per timer, ognuna con la sua identità)
     reached, dest, motivo = [], [], None
     for c in (card if isinstance(card, list) else [card]):

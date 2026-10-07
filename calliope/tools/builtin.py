@@ -15,6 +15,7 @@ import operator
 import re
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 from ..config import VOICE_MAP, nome_tono
 from ..liste import say_list, split_items
@@ -760,7 +761,21 @@ def _data_calcola(ctx: ToolContext, cosa: str, data: str = "", data2: str = "",
     if cosa not in _COSE_DATE:
         return {"ok": False, "errore": f"cosa sconosciuta: {cosa!r} (una di {', '.join(_COSE_DATE)})"}
     if (persona or "").strip():
-        return _data_persona(ctx, cosa, persona, oggi)
+        r = _data_persona(ctx, cosa, persona, oggi, bool((data or "").strip()))
+        if r is not None:
+            return r
+        # Nel profilo non c'è la nascita, ma il modello ha passato la data (dai ricordi o dalla
+        # conversazione, 07/10): si conta con quella
+        note_rule(ctx, "eta_data_dal_modello")
+        out = _data_calcola(ctx, cosa, data, data2)
+        chi = _persona_registrata(ctx, persona)
+        se_stesso = isinstance(chi, tuple) and chi[2]
+        if out.get("ok") and cosa == "eta" and se_stesso and not (data2 or "").strip():
+            n = out["anni"]
+            out["da_dire"] = (f"Oggi compi {n} anni: buon compleanno!"
+                              if out.get("prossimo_compleanno") == out.get("oggi") else
+                              f"Hai {n} anni; ne compi {n + 1} il {out['prossimo_compleanno']}.")
+        return out
     if not (data or "").strip():
         return {"ok": False, "errore": "manca la data. Per l'età o il compleanno di chi parla "
                                        "o di una persona di casa passa persona («io» o il "
@@ -834,11 +849,14 @@ def _data_calcola(ctx: ToolContext, cosa: str, data: str = "", data2: str = "",
     return out
 
 
-def _data_persona(ctx: ToolContext, cosa: str, persona: str, oggi: datetime.date) -> dict:
-    """Età e compleanno di una persona registrata, dalla data di nascita del profilo."""
+def _data_persona(ctx: ToolContext, cosa: str, persona: str, oggi: datetime.date,
+                  con_data: bool = False) -> dict | None:
+    """Età e compleanno di una persona registrata, dalla data di nascita del profilo. None se
+    nel profilo non c'è la nascita e il modello ha passato la data (`con_data`): si conta con
+    quella (_data_calcola)."""
     r = _persona_registrata(ctx, persona)
     if isinstance(r, dict):
-        return r
+        return None if con_data else r
     prof, nome, se_stesso = r
     chi = _profilo_di(ctx, getattr(getattr(ctx, "speaker_ctx", None), "current_speaker", None))
     if not se_stesso and not _vede_nascita(chi, prof):
@@ -849,10 +867,26 @@ def _data_persona(ctx: ToolContext, cosa: str, persona: str, oggi: datetime.date
                 "risposta_finale": f"L'età e il compleanno di {nome} li dico solo a chi è "
                                    f"della sua famiglia e se ne occupa."}
     dati = _dati_nascita(prof, oggi)
+    dal_ricordo = None
     if not dati:
-        return {"ok": False, "fatto": NIENTE,
-                "errore": f"nel profilo di {nome} non c'è la data di nascita",
-                "cosa_fare": "chiedi la data di nascita e passala in data"}
+        if con_data:
+            return None
+        # 07/10 pomeriggio, DGX: «ricordati che il mio compleanno è il 4 luglio del 1977» era
+        # nei ricordi, ma il modello richiamava data_calcola(persona=io) senza data, falliva
+        # due volte e diceva «Ho appena recuperato il dato…». Con la data nel risultato
+        # dell'errore gemma4 e4b non richiamava mai (0 su 8, misura del 07/10): per chi parla,
+        # un solo suo ricordo con una data completa e la parola della nascita vale come data
+        # di nascita (regola eta_dal_ricordo), e la risposta propone di salvarla nel profilo
+        dal_ricordo = _nascita_dal_ricordo(ctx, prof) if se_stesso else None
+        if dal_ricordo is None:
+            return {"ok": False, "fatto": NIENTE,
+                    "errore": f"nel profilo di {nome} non c'è la data di nascita",
+                    "cosa_fare": f"se la data di nascita di {nome} la conosci (da questa "
+                                 f"conversazione o dai ricordi), richiama subito data_calcola "
+                                 f"con la stessa persona e data = quella data, come detta; "
+                                 f"altrimenti chiedila"}
+        note_rule(ctx, "eta_dal_ricordo")
+        dati = _dati_nascita(SimpleNamespace(nascita=dal_ricordo[1].isoformat()), oggi)
     if cosa not in ("eta", "giorni_mancanti"):
         return {"ok": False, "errore": "con persona: cosa è eta o giorni_mancanti (al "
                                        "compleanno); per il resto passa la data"}
@@ -865,8 +899,61 @@ def _data_persona(ctx: ToolContext, cosa: str, persona: str, oggi: datetime.date
     else:
         frase = (f"Oggi {nome} compie {n} anni." if g == 0 else
                  f"{nome} ha {n} anni; ne compie {n + 1} {quando}.")
-    return {"ok": True, "oggi": tempi.say_date(oggi), "persona": nome, **dati,
-            "da_dire": frase}
+    out = {"ok": True, "oggi": tempi.say_date(oggi), "persona": nome, **dati, "da_dire": frase}
+    if dal_ricordo is not None:
+        fatto, d = dal_ricordo
+        out["fonte"] = f"il ricordo «{fatto}»"
+        proposta = _proponi_nascita(ctx, prof, fatto, d)
+        if proposta:
+            frase = f"{frase} {_NASCITA_DOMANDA_RICORDO}"
+            out.update(da_dire=frase, conferma=frase, risposta_finale=frase,
+                       in_sospeso=proposta)
+    return out
+
+
+# Un ricordo di chi parla sulla sua nascita: una data completa e una di queste parole
+_NASCITA_RICORDO = re.compile(r"(?<![a-zà-ù])(?:compleann\w*|nat[oa]|nascita)(?![a-zà-ù])",
+                              re.I)
+_NASCITA_DOMANDA_RICORDO = "L'ho preso dai tuoi ricordi: lo salvo come tua data di nascita?"
+
+
+def _nascita_dal_ricordo(ctx, prof):
+    """(fatto, data) se tra i ricordi di `prof` ce n'è uno solo con una data completa e la
+    parola della nascita, e la data non lo renderebbe minorenne; altrimenti None."""
+    mem = getattr(ctx, "memory", None)
+    if mem is None or prof is None or minori.e_minore(prof):
+        return None
+    try:
+        fatti = mem.facts(prof.id)
+    except Exception:  # noqa: BLE001
+        return None
+    trovati = [(f, minori.leggi_data(f)) for f in fatti if _NASCITA_RICORDO.search(f)]
+    trovati = [(f, d) for f, d in trovati if d is not None]
+    if len({d for _, d in trovati}) != 1:
+        return None
+    f, d = trovati[0]
+    return None if minori.fascia_per_eta(minori.eta(d)) is not None else (f, d)
+
+
+def _proponi_nascita(ctx, prof, fatto: str, d) -> dict | None:
+    """L'offerta di salvare `d` nel profilo (ricorda con `nascita`, al «sì»): l'azione in
+    sospeso, o None se la data non si può proporre."""
+    nascita = tempi.say_date(d)
+    d2, regola = _nascita_profilo(ctx, prof, nascita)
+    if d2 is None:
+        if regola:
+            note_rule(ctx, regola)
+        return None
+    offerte = getattr(ctx, "_nascite", None)
+    if offerte is None:
+        offerte = {}
+        ctx._nascite = offerte
+    offerte[prof.id] = {"data": d2.isoformat(), "turno": int(getattr(ctx, "turno", 0) or 0),
+                        "quando": time.monotonic()}
+    note_rule(ctx, "nascita_proposta")
+    return {"domanda": _NASCITA_DOMANDA, "tool": "ricorda",
+            "cosa": "la data di nascita nel tuo profilo",
+            "argomenti": {"fatto": fatto, "nascita": nascita}}
 
 
 # ─────────────────────────────── TIMER E PROMEMORIA ───────────────────────────────
@@ -1359,11 +1446,76 @@ _NO_MEMORY = {"ok": False, "fatto": "NIENTE: la memoria non è disponibile, NON 
                                  "ricordarlo né dimenticarlo."}
 
 
-def _ricorda(ctx: ToolContext, fatto: str, per_tutti=False) -> dict:
-    """Salva un fatto duraturo: su chi parla, o della casa se `per_tutti`."""
+# ── La propria data di nascita nel profilo (07/10 pomeriggio, caso vero della DGX) ──
+# «Ricordati che il mio compleanno è il 4 luglio del 1977» diventava solo un ricordo; poi
+# «quanti anni ho?» → data_calcola(persona=io) falliva (niente nascita nel profilo). Il modello
+# decide che il fatto è la data di nascita di chi parla (argomento `nascita` di ricorda); il
+# codice propone «Lo salvo anche come tua data di nascita?» e la salva nel profilo solo al
+# «sì», nella risposta dopo (come rinomina_interlocutore; chi amministra con la sua voce o la
+# frase di sfida). Solo per sé: mai per un minore (la cambia un tutore, minore_gestisci) né
+# con una data che renderebbe minorenne un profilo adulto, e solo con l'anno detto.
+_NASCITA_DOMANDA = "Lo salvo anche come tua data di nascita?"
+
+
+def _nascita_profilo(ctx: ToolContext, prof, nascita: str):
+    """(data, None) se la data di nascita di chi parla si può proporre per il profilo, oppure
+    (None, regola) se no (None, None: niente da fare)."""
+    d = minori.leggi_data(nascita)
+    if d is None:
+        return None, "nascita_non_capita"
+    if getattr(prof, "nascita", None) == d.isoformat():
+        return None, None
+    if minori.e_minore(prof) or minori.fascia_per_eta(minori.eta(d)) is not None:
+        return None, "nascita_minore_tutore"
+    # Detta dalla persona: in questa conversazione o in un suo ricordo (eta_dal_ricordo)
+    detti = [getattr(ctx, "user_text", "") or ""] + [
+        t for r, t in (getattr(ctx, "storia", None) or ()) if r == "user"]
+    try:
+        detti += list(ctx.memory.facts(prof.id)) if ctx.memory is not None else []
+    except Exception:  # noqa: BLE001
+        pass
+    if not any(str(d.year) in t for t in detti):
+        return None, "nascita_non_detta"
+    return d, None
+
+
+def _salva_nascita(ctx: ToolContext, prof, fatto: str, nascita: str) -> dict | None:
+    """Il «sì» alla proposta: la data nel profilo. None se non c'è una proposta valida."""
+    turno = int(getattr(ctx, "turno", 0) or 0)
+    offerte = getattr(ctx, "_nascite", None) or {}
+    d, _ = _nascita_profilo(ctx, prof, nascita)
+    off = offerte.get(prof.id)
+    if d is None or not off or off["data"] != d.isoformat() or not _proposta_ok(ctx, off, turno):
+        return None
+    if getattr(prof, "admin", False):
+        sfida = serve_conferma(ctx, "ricorda", {"fatto": fatto, "nascita": nascita},
+                               "salvare la tua data di nascita")
+        if sfida is not None:
+            return sfida
+    offerte.pop(prof.id, None)
+    prof.nascita = d.isoformat()
+    try:
+        ctx.speakers.save()
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "fatto": NIENTE, "errore": f"profilo non salvato: {e}"}
+    note_rule(ctx, "nascita_nel_profilo")
+    frase = (f"Fatto: il {tempi.say_date(d)} è la tua data di nascita. Hai "
+             f"{tempi.anni_compiuti(d, datetime.date.today())} anni.")
+    return {"ok": True, "fatto": "data di nascita salvata nel profilo", "conferma": frase,
+            "risposta_finale": frase}
+
+
+def _ricorda(ctx: ToolContext, fatto: str, per_tutti=False, nascita: str = "") -> dict:
+    """Salva un fatto duraturo: su chi parla, o della casa se `per_tutti`. Con `nascita` (la
+    data di nascita di chi parla) propone di salvarla anche nel profilo."""
     prof = _person(ctx)
     if prof is None:
         return {"ok": False, "errore": "non so chi sei, quindi non posso ricordarlo"}
+    nascita = str(nascita or "").strip() if not _yes(per_tutti) else ""
+    if nascita and ctx.memory is not None:
+        fatta = _salva_nascita(ctx, prof, fatto, nascita)
+        if fatta is not None:
+            return fatta
     # Un minore (05/10): niente dati sanitari o sensibili salvati da soli (vincolo di privacy)
     if minori.e_minore(prof) and minori.ricordo_sensibile(fatto):
         note_rule(ctx, "ricordo_minore_sensibile")
@@ -1418,7 +1570,17 @@ def _ricorda(ctx: ToolContext, fatto: str, per_tutti=False) -> dict:
         out["per_tutti"] = True
         out["conferma"] = "Va bene, lo ricorderò per tutta la famiglia."
         return out
-    return ctx.memory.remember(prof.id, fatto)
+    out = ctx.memory.remember(prof.id, fatto)
+    d = minori.leggi_data(nascita) if (nascita and out.get("ok")) else None
+    proposta = _proponi_nascita(ctx, prof, fatto, d) if d is not None else None
+    if nascita and out.get("ok") and d is None:
+        note_rule(ctx, "nascita_non_capita")
+    if proposta:
+        proposta["argomenti"]["nascita"] = nascita       # come detta (il «sì» la ripete)
+        frase = f"Me lo ricordo. {_NASCITA_DOMANDA}"
+        out.update(conferma=frase, risposta_finale=frase, in_sospeso=proposta,
+                   fatto="ricordato; la data di nascita NON è ancora nel profilo")
+    return out
 
 
 def _dimentica(ctx: ToolContext, fatto: str) -> dict:
@@ -1846,10 +2008,13 @@ _SPECS = [
                      "dicono qualcosa di importante e duraturo. Il fatto è una frase breve e "
                      "completa, per esempio «il suo numero preferito è 47». per_tutti: true "
                      "se è un'informazione della casa utile a tutta la famiglia (wifi, "
-                     "caldaia, dove sono le cose); false se riguarda chi parla."),
+                     "caldaia, dove sono le cose); false se riguarda chi parla. nascita: "
+                     "solo se il fatto è la data di nascita o il compleanno con l'anno di chi "
+                     "parla, la data come detta («4 luglio 1977»); mai per altre persone."),
         parameters={"type": "object",
                     "properties": {"fatto": {"type": "string"},
-                                   "per_tutti": {"type": "boolean"}},
+                                   "per_tutti": {"type": "boolean"},
+                                   "nascita": {"type": "string"}},
                     "required": ["fatto"]},
         func=_ricorda, risk="azione", levels=FAMILY),
     ToolSpec(

@@ -416,3 +416,41 @@ Dal registro dei turni e dal journal della DGX del 06/10 (18:48–18:53):
   forma del messaggio («non dire che la fai», senza dire cosa rispondere) dava 3 volte su 6 una
   domanda strana («Procedi con la proposta di Marta?»): ora il messaggio dice la frase da dire e
   «non fare domande».
+
+## «Sì, grazie.» dopo «Procedo?» e «ho recuperato il dato» (07/10 pomeriggio, DGX, ramo `correzioni-giro7`)
+
+Casi veri del satellite dello studio, profilo 26B (qui con nomi di fantasia).
+- **«Sì, grazie.» perso**: «Fai una ricerca sui pannelli solari…» → `delega_lavoro` propone
+  («…Procedo?»); «Sì, grazie.» (frase breve, voce 0,66) → nessun tool, «Prego! Sono qui se hai
+  bisogno di altro.», e la richiesta va ripetuta. Non era il testo: `politica.consenso("Sì,
+  grazie.")` era già vero e `closing_kind` non la prende (la cortesia scatta solo senza azione in
+  sospeso, e «Grazie.» da solo con un'azione in sospeso va al modello, come voluto dal 01/10). Nel
+  registro dei turni il turno era `conversazione: ospite, anonima`, senza `azione_in_sospeso`: il
+  turno della richiesta era arrivato dopo una pausa lunga, la conversazione si era chiusa per tempo
+  (`conversazione_scaduta`) e `end_conversation` l'aveva sostituita nel registro
+  (`RegistroConversazioni.sostituita`), ma la **corsia** restava sulla vecchia; la frase breve
+  continua solo la conversazione della corsia (`scegli`: `corsia.conv is c`) e finiva nella
+  conversazione anonima del satellite, dove la proposta non c'era. Ora `sostituita` sposta anche
+  la corsia che la stava usando (`conv` e `_in_uso`). Prova in `prova_corsie.py`
+  (`prova_scaduta_sospeso`: senza la correzione 3 errori, `{'tipo': 'ospite', 'come': 'anonima'}`
+  come sulla DGX; contrario: un ospite resta anonimo); in `prova_risultati.py` «Sì, grazie.» è un
+  consenso, «No, grazie.» no, «Grazie.» resta cortesia. Misura con gemma4 e4b locale (3 giri,
+  proposta finta di `delega_lavoro` con l'azione in sospeso): «Sì, grazie.» → `delega_lavoro`
+  con `proposta=L1` **3/3**; «No, grazie.» → nessun lavoro 2/3 (il terzo: il modello non aveva
+  proposto al primo turno).
+- **«Ho appena recuperato il dato…» dopo tool falliti**: `data_calcola(persona=io)` fallito due
+  volte, poi «Ho appena recuperato il dato che mi hai appena chiesto di ricordare: hai 49 anni.»
+  (la rete `spinta_dichiarata` era scattata prima, su un'altra frase). Recuperare, calcolare,
+  ricavare non erano dichiarazioni d'azione (sono letture). Ora, **solo quando in questa risposta
+  ci sono tool e sono tutti falliti** (`Brain._solo_falliti`), anche «ho [appena] recuperato /
+  calcolato / ricavato» è una dichiarazione falsa (`brain.FAILED_CLAIM`): la frase si trattiene e
+  il modello riceve `FAILED_NUDGE` («i tool sono falliti… fai quello che dice cosa_fare»), una
+  volta (regola `dichiarata_tool_fallito`); poi vale la regola di sempre. Senza tool è il ricordo
+  della conversazione, dopo un tool riuscito è vera: in entrambi i casi si dice. «Ho trovato»
+  resta fuori: «ho trovato nei tuoi ricordi il 4 luglio 1977» dopo il tool fallito è vero
+  (misura). Prove in `prova_eta_utenti.py` e `prova_risultati.py` (Brain con `data_calcola`
+  fallito e riuscito). La parte sui dati è in
+  [`memoria-agenda-liste.md`](memoria-agenda-liste.md).
+- Visto e non corretto: nel turno «Dovevi ricordarti…» la risposta è stata detta due volte di
+  seguito (il modello, dopo la spinta su una dichiarazione già detta a metà risposta, ha ripetuto
+  la stessa risposta). Da guardare se ricapita.
