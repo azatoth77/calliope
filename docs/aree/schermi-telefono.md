@@ -10,6 +10,7 @@
 | Telefono (satellite nel browser, PWA, dal 03/10) | stessa porta degli schermi: WebSocket di uvicorn con `websockets` sans-I/O e lo stesso protocollo dei satelliti; nel browser onnxruntime-web 1.30 in WebAssembly (Silero VAD e wake word), AudioWorklet, Web Audio, Screen Wake Lock API; CA di casa con `openssl` | `calliope/schermi/telefono.py` → `rotte`, `PonteWs`, `stato`; «Prova il microfono» `telefono_diagnostica.py`; `calliope/schermi/pagina/telefono/` (`telefono.js`, `voce.js`, `microfono.js`, `schermo-acceso.js` (`SchermoAcceso`, `diagnosi`: schermo acceso, dal 04/10), `sw.js`, manifest; una vista sola col carosello delle schede, dal 04/10: `sincronizza`, `disponi`, `vaiA`, strati menu/modulo/scrivi e, dal 06/10, la scheda a schermo intero (`apriIntera`, `disegnaIntera`, `chiudiIntera`); schede da `schermo.js` con `data-carosello` ed eventi `calliope:*`); `ServerSatelliti.prendi` / `lascia` / `per_pc`; `tls.certificato_telefono`; terminale `python -m calliope.schermi --certificato` |
 | Scrivere invece di parlare (moduli e casella sugli schermi personali, dal 03/10) | POST `/api/scrivi` e `/api/modulo` del server degli schermi (sessione in un'intestazione, JSON, solo HTTPS in rete); controlli dei codici in Python e in JS (`schermo.js`, condiviso col telefono); dal 05/10 solo durante una conversazione a voce | `calliope/schermi/moduli.py` → `Moduli`, `Ingresso`, `controlla_campo`, `offri`, `completa`, `oscura`; `Ufficio.completa_modulo` / `rubrica_da_modulo`; `tools/spec.serve_la_voce`; ciclo in `main.py` (`scritto`); `calliope/schermi/conversazione.py` → `scrittura_consentita`, `Conversazioni`; `Schermi.scrittura_consentita` (il punto unico, anche per le foto) |
 | Cruscotto di chi amministra (fase 1, sola lettura, dal 06/10) | — (solo libreria standard: registro dei turni, SQLite in sola lettura, `indice.json` delle estensioni) | `calliope/schermi/cruscotto.py` → `Cruscotto` (`amministra`, `dati`), `LettoreTurni`, `versione_in_uso`, `tipo_errore`; GET `/api/cruscotto` (`server.py`); `Schermi.cruscotto`; scheda locale `cruscotto` in `schermo.js` (`apriCruscotto`, `impostaAmministra`), voce del menu del telefono; `latenza.leggi_file` |
+| Lettore Markdown e «Scarica» nella scheda del documento (07/10) | scritto in proprio in `schermo.js` (createElement e textContent, mai innerHTML); conversione con fpdf2 e python-docx sul server | `schermo.js` → `leggiMarkdown`, `mdBlocchi`, `mdInLinea`, `pulsantiScarica`; `calliope/schermi/scarica.py` → `Scaricamenti` (`registra`, `gettone`, `prendi`), `converti`; POST `/api/scarica` e GET `/scarica/<gettone>` (`server.py`); `Schermi.scaricamenti`, `hub.pubblica`; `schede.documento_markdown`; `schermi_scarica_s` |
 | Rispondi dove ti ho chiesto | — (prestito del satellite attivo, origine del turno) | `calliope/rispondi.py` → `Instradamento`; `ServerSatelliti.presta` / `restituisci` / `per_schermo`; `Schermi.origine_corrente`, `invia_a`, `Mittente.schermo`; `Speaker.muto` |
 
 ## Note dalla sezione «Stato attuale» di CLAUDE.md (fino al 06/10)
@@ -354,3 +355,50 @@ perché non cambia la voce. Prove `prova_cruscotto.py` (a secco) e `prova_crusco
   nel `prova_cruscotto` e `prova_brain.prova_prefisso_uguale`; sha256 del prefisso uguale a
   main).
 - **Fase 2** (non fatta): azioni dal pannello (revoche, approvazioni) con la conferma a voce.
+
+## Lettore Markdown e «Scarica» nella scheda del documento (07/10)
+
+Decisioni di Dario del 07/10: i testi dell'agente arrivano in Markdown (area
+documenti-ufficio); la scheda del documento li legge, sugli schermi e sul telefono (anche nel
+carosello a schermo intero), e ha «Scarica».
+
+- **Il lettore** (`schermo.js`, `leggiMarkdown`): lo stesso sottoinsieme di
+  `documenti/markdown.py`, costruito con `createElement` e `textContent`, **mai innerHTML** (il
+  testo dell'agente non è fidato). I collegamenti restano testo non cliccabile con l'indirizzo
+  tra parentesi (`md-link`, `md-indirizzo`: niente `<a>`, niente navigazione), le immagini un
+  segnaposto (niente rete); un HTML scritto nel testo si legge com'è. CSP invariata. Limiti:
+  120 000 caratteri, 1500 blocchi, tabelle di 200 righe (la nota «… e altre N righe») e 20
+  colonne, 6 livelli di elenco, 4 citazioni annidate, enfasi annidate al più 3 volte e di 400
+  caratteri. Con due titoli o più il **sommario** in alto: un tocco porta al titolo
+  (`data-md-vai` → `scrollIntoView` dentro la stessa scheda). Le tabelle scorrono di lato nel
+  loro riquadro (`tabella-md`); sul telefono a schermo intero valgono le misure del 06/10 (testo
+  ≥ 16 px, niente di lato, contrasto AA), provate a 375×812, 320×568 e 812×375.
+- **La scheda**: `schede.documento_markdown` (tipo `documento`, `formato` «md», `markdown`
+  tagliato a 60 000 caratteri con la nota, `riassunto`, file e cartella); per un lavoro la chiave
+  `lavoro:<id>`, che sostituisce la scheda in diretta. Anche le schede dei documenti a blocchi
+  (lettere, documenti dell'agente, fogli) hanno «Scarica».
+- **«Scarica»** (`schermi/scarica.py`): pulsanti MD, PDF, Word (Excel e MD per un foglio). La
+  sorgente intera sta nella chiave `_scarica` della scheda, che **resta sul server**: `hub.pubblica`
+  toglie le chiavi con «_» prima dell'SSE e della cronologia. Quando la scheda arriva a uno
+  schermo personale del suo proprietario, con l'identità decisa dalla voce (`Mittente.certo`), lo
+  schermo la registra (`Scaricamenti.registra`, le ultime 64); con `invia_a` (la risposta allo
+  schermo da cui si è scritto) vale il proprietario di quello schermo. La pagina chiede un
+  gettone (POST `/api/scarica`, sessione nell'intestazione come lo scritto, JSON, solo HTTPS in
+  rete, 20 al minuto per schermo): solo uno schermo personale a cui la scheda è arrivata, e il
+  cui proprietario è la persona della scheda o amministra; **mai dalla zona grigia** (lì la
+  scheda personale non parte; il risultato del proprio lavoro mostrato nella zona grigia,
+  regola `risultato_schermo_proprio`, arriva senza «Scarica»), mai da uno schermo di stanza.
+  Poi `a.download` su GET `/scarica/<gettone>`: 24 byte a caso, valido `schermi_scarica_s`
+  (180 s) e 3 richieste (un download che riprova, l'anteprima di iOS), legato allo schermo
+  (revocato: 404); niente sessione nell'URL. La conversione la fa il primo GET in un thread
+  (`asyncio.to_thread`), poi resta nel gettone. Tipi solo nostri (md, pdf, docx, xlsx: niente
+  eseguibili), `Content-Disposition: attachment` con il nome in UTF-8 (RFC 6266), nosniff, CSP
+  `default-src 'none'; sandbox` (un file aperto invece che salvato non esegue niente). Sul
+  telefono il file va negli scaricamenti del browser (provato nel browser headless: PDF, Word e
+  MD arrivano).
+- **Prove**: `prova_markdown.py` (a secco: hub e server veri, gettoni, permessi, intestazioni),
+  `prova_markdown_pagina.py` (browser vero: testo ostile con `<script>`, `onerror`,
+  `javascript:`, immagini, 300 righe, 20 annidamenti; nulla eseguito, nessun elemento
+  pericoloso, solo gli attributi del lettore, «Scarica» davvero, schermo intero leggibile).
+- **Da provare sul vero**: lo scaricamento dalla PWA su iPhone (Safari apre l'anteprima del
+  file, «Condividi» → «Salva su File») e su Android.

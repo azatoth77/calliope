@@ -8,7 +8,7 @@
 |---|---|---|
 | Agenti in secondo piano («gemma davanti, agenti dietro») | vLLM con l'API compatibile OpenAI sulla DGX (motore «openai», httpx, via tunnel `ssh -N -L` di OpenSSH), oppure l'API nativa di Ollama (motore «ollama», anche lo stesso Ollama della voce); ciclo scritto in proprio, niente framework; sandbox in un container Docker usa-e-getta sulla DGX (dal 03/10), altrimenti job object di Windows (ctypes) e audit hook | `calliope/agenti/` → `Lavori` (`servizio.py`: coda, proposta, risultati, annuncio, domande a metà lavoro), `Agente` (`ciclo.py`), file della persona (`file_utente.py`), `Tunnel` (`tunnel.py`), `Sandbox` (`sandbox.py` + `_avvio.py`, `scegli_isolamento`; immagine da `setup/linux/sandbox/Dockerfile`), `Arbitro` (`arbitro.py`: anche con vLLM sulla GPU della voce, `ClienteCedevole` per archivio e ufficio; `stessa_gpu` in `impostazioni.py`, `agenti_arbitro`; dal 04/10 `PausaServer`, pausa di vLLM in modalità sviluppo, `pausa_server`, `agenti_pausa_vllm`), `Avanzamento` (`avanzamento.py`: la scheda del lavoro in diretta), `ContestoLavoro` (`contesto_lavoro.py`, dal 05/10: risultati lunghi in `.calliope/passo-N.txt`, diario del lavoro alle soglie; finestra da `contesto.calcola_agenti`), `Modello` (`modelli.py`), `carica` (`impostazioni.py`: dgx.yaml / agenti_url), `ClienteOllama` / `ClienteOpenAI` (`remoto.py`, `remoto_openai.py`, `crea_cliente`), `load_agenti`; tool in `calliope/tools/agenti.py`; terminale `python -m calliope.agenti --prova` |
 | Programmi dell'agente eseguiti in diretta, linguaggi (Python, C#) | stessa sandbox Docker; C# con csc nel container `calliope-sandbox-dotnet` (runtime .NET 10 + Roslyn, niente SDK né NuGet); SSE verso la scheda | `calliope/agenti/esecuzione.py` → `Esecuzioni` (`avvia`, `dimostra`, `ferma`, `frase`); `linguaggi.py`; `esegui_cs.sh`; `setup/linux/sandbox/Dockerfile.dotnet`; tool `lavori_esegui`, scheda `esecuzione` |
-| Il risultato di un lavoro finito a voce o sullo schermo (07/10) | il modello dell'agente per il riassunto per la voce (thinking spento, tempo massimo) | `calliope/agenti/risultato.py` → `trova`, `scegli`, `dal_disco`, `testo_intero`, `riassunto_voce`, `scheda`, `recenti`, `elenco_detto`, `chiave`; tool `risultato_lavoro` (`calliope/tools/agenti.py`), `agenti_risultato_s`; prove `prova_risultati.py`, `prova_risultati_ollama.py` |
+| Il risultato di un lavoro finito a voce o sullo schermo (07/10) | il modello dell'agente per il riassunto per la voce (thinking spento, tempo massimo) | `calliope/agenti/risultato.py` → `trova`, `scegli`, `dal_disco`, `testo_intero`, `riassunto_voce`, `scheda`, `recenti`, `elenco_detto`, `chiave`, `converti` (dal 07/10: «fammene un PDF»); tool `risultato_lavoro` (`calliope/tools/agenti.py`), `agenti_risultato_s`; prove `prova_risultati.py`, `prova_risultati_ollama.py` |
 | Estensioni permanenti e guardrail (04/10) | container della sandbox (Docker) per ogni chiamata, JSON-RPC su stdin/stdout (cornice stdio di MCP, senza SDK), solo libreria standard | `calliope/guardrail.py` → `valuta_porta`, `SecondoParere`, `domanda` (la porta delle estensioni: sicura / pericolosa / vietata; i tool di Calliope li decide `politica.decidi` dal 06/10); `calliope/estensioni/` → `Estensioni` (`servizio.py`), `Porta` (`porta.py`), `Esecuzione` (`esecuzione.py`), `Archivio` (`archivio.py`: versioni, impronta), `valida` (`manifesto.py`), `analizza` (`analisi.py`), runtime `_ospite.py` (nel container: `calliope_estensione`), prompt dell'agente (`prompt.py`: `sistema_estensione`), contratto delle capacità (`contratto.py`: `testo`, `CAPACITA_IDS`, CAPACITA.md); rete solo pubblica `calliope/web/rete.py` → `RetePubblica` (registro `uscite.jsonl`, `riepilogo`), dati riservati nel traffico `calliope/web/riservati.py` → `Riservati`, `da_contesto`; piano e permessi dell'agente in `agenti/ciclo.py` (`PIANO`, `CHIEDI_PERMESSO`, `_piano`, `_fuori_piano`); tool in `calliope/tools/estensioni.py`; progetto in `docs/ricerche/2026-10-04-estensioni-e-guardrail.md` (§11–§14 dal 05/10) |
 
 ## Note dalla sezione «Stato attuale» di CLAUDE.md (fino al 06/10)
@@ -651,3 +651,51 @@ Tre casi del registro dei turni della DGX dopo `risultato_lavoro`:
   [`sicurezza-politica.md`](sicurezza-politica.md).
 
 Prove a secco in `prova_risultati.py` (sezione «07/10 mattina»).
+
+## I testi dell'agente in Markdown e il risultato al portatile (07/10)
+
+Decisioni di Dario del 07/10 (area documenti-ufficio per il modulo, schermi-telefono per il
+lettore e «Scarica»):
+
+- **Markdown**: i prompt della ricerca (`SISTEMA_RICERCA`, `SISTEMA_RICERCA_ARCHIVIO`, lo
+  strumento `consegna`) e dei lavori «altro» (`SISTEMA_ALTRO`) chiedono il testo in Markdown
+  (`TESTO_MARKDOWN`: titolo con #, sezioni con ##, elenchi e tabelle quando servono, niente HTML
+  né immagini) e il riassunto per la voce senza Markdown. `_scrivi_testo` scrive
+  **`risultato.md`** nella cartella del lavoro (con «# Titolo» in cima se manca) al posto del
+  Word di soli paragrafi della ricerca e del `.txt` degli altri; `contenuto` è
+  `markdown.descrivi` («2 sezioni, 2 elenchi e una tabella»). Una ricerca senza `consegna` ha come
+  riassunto l'inizio del testo senza Markdown. `per_la_voce` toglie il Markdown prima di cercare il
+  codice (prima un «#» o una «|» scartava la frase intera). Il documento dell'agente (tipo
+  `documento`, modelli) resta nel formato a blocchi.
+- **La scheda**: per un testo in Markdown `Lavori.scheda` e `risultato.scheda` danno
+  `schede.documento_markdown` (chiave `lavoro:<id>`: sostituisce la scheda in diretta), con il
+  lettore e «Scarica»; i risultati vecchi (`.txt`, Word) restano come prima.
+- **Il risultato al portatile** (`Lavori._consegna_risultato`): prima solo i lavori sui file
+  della persona tornavano al portatile; ora anche il risultato di un lavoro finito (il testo o il
+  documento, mai il codice) va nella cartella Calliope dei Documenti del portatile con
+  `RemoteDelivery`, con il titolo del lavoro come nome («Ricerca sulle api in Italia.md»), e si
+  offre ad «aprilo» (`Lavori.pcs`, da main.py; `offri_file` con la maniglia del satellite):
+  l'annuncio finisce con «Lo apro?» e l'azione in sospeso `pc_apri_file(1)`. Senza il satellite
+  che riceve i file resta nella cartella del lavoro sul server e la frase lo dice («Il file è sul
+  server, nella cartella Lavori, perché il portatile non è collegato.»); la copia di riserva di
+  RemoteDelivery non si fa (il file è già nella cartella del lavoro). Con Calliope sul PC stesso
+  il file è già nei suoi Documenti: «Lo apro?» con il percorso. Il «sì» passa dalla politica
+  come ogni `pc_apri_file` dopo un annuncio dell'agente (conversazione contaminata: basta il «sì»
+  della voce riconosciuta, una frase breve porta alla sfida).
+- **«Fammene un PDF / un Word»**: `risultato_lavoro` con `modo` «pdf» o «word»
+  (`risultato.converti`): Markdown → `markdown.a_blocchi` → `render`, un file nuovo nella
+  cartella del lavoro (mai sopra un altro), poi come il risultato (al portatile con «Lo apro?»).
+  Un thread: oltre `documenti_attesa_s` la voce dice «Preparo il PDF di «…»: ti avviso quando è
+  pronto» e il file si annuncia come un lavoro finito. Il codice non si converte. Regole
+  `risultato_pdf`, `risultato_word`. Nessun tool nuovo (65 schemi): due valori in più
+  dell'enum `modo`.
+- **Misura** (07/10, l'agente vero con qwen3 8b sull'Ollama di questo portatile, biblioteca
+  finta con tre passaggi, 3 giri × una ricerca e un lavoro «altro»; script fuori dal runner):
+  **6/6 in Markdown** (titolo #, 3–4 sezioni ##, elenchi; una tabella in 3 ricerche su 3 quando
+  chiesta), nessun HTML, **riassunto senza Markdown 6/6**, PDF e Word convertiti 6/6, 60–170 s a
+  lavoro (il modello per metà sulla CPU). Un caso su sei aveva **tutto il testo dentro un recinto
+  ```markdown** (la scheda l'avrebbe mostrato come codice): `markdown.senza_recinto` lo toglie
+  (correzione della forma, solo se il recinto copre tutto il testo e dice markdown o md; contrari
+  in `prova_markdown.py`), e il prompt ora dice «non dentro un blocco di codice». Nelle ricerche
+  il modello ha inventato le cifre per regione che i passaggi non avevano: problema del modello
+  (qwen3.6 sulla DGX da riprovare), non del formato.

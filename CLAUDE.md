@@ -74,7 +74,7 @@ per stadio, solo i moduli principali: librerie, classi e dettagli sono nei docum
 | Casa via Home Assistant | `casa/`, `tools/casa.py` | [casa](docs/aree/casa.md) |
 | Registro delle capacità, macchina | `capacita.py`, `stato.py`, `macchina.py`, `tools/stato.py` | [capacita-installazioni](docs/aree/capacita-installazioni.md) |
 | Installazioni dal catalogo | `installa/` | [capacita-installazioni](docs/aree/capacita-installazioni.md) |
-| Schermi (schede, SSE, abbinamento), scrivere invece di parlare, cruscotto di chi amministra (sola lettura, dal 06/10) | `schermi/` (`hub.py`, `server.py`, `moduli.py`, `conversazione.py`, `cruscotto.py`) | [schermi-telefono](docs/aree/schermi-telefono.md) |
+| Schermi (schede, SSE, abbinamento), scrivere invece di parlare, cruscotto di chi amministra (sola lettura, dal 06/10), testi dell'agente in Markdown con «Scarica» (dal 07/10) | `schermi/` (`hub.py`, `server.py`, `moduli.py`, `conversazione.py`, `cruscotto.py`, `scarica.py`), `documenti/markdown.py` | [schermi-telefono](docs/aree/schermi-telefono.md) |
 | Telefono (satellite nel browser, PWA; schede a schermo intero dal 06/10) | `schermi/telefono.py`, `schermi/pagina/telefono/` | [schermi-telefono](docs/aree/schermi-telefono.md) |
 | Rispondi dove ti ho chiesto | `rispondi.py` | [schermi-telefono](docs/aree/schermi-telefono.md) |
 | Foto e allegati in ingresso | `immagini.py`, `allegati.py`, `pc/cattura.py` | [immagini-allegati](docs/aree/immagini-allegati.md) |

@@ -7,6 +7,7 @@
 | Stadio | Libreria | Dove |
 |---|---|---|
 | Documenti Word, Excel, PDF | python-docx, openpyxl, fpdf2 (puro Python); il contenuto è JSON chiesto a Ollama con lo schema degli output strutturati | `calliope/documenti/` → `Documenti` (`servizio.py`), `Writer` (`scrittore.py`), `validate` (`formato.py`), `render` (`render.py`), `LocalDelivery` (`consegna.py`); tool in `calliope/tools/documenti.py` |
+| Markdown dei testi dell'agente (07/10) | scritto in proprio (niente librerie), lo stesso sottoinsieme del lettore della pagina | `calliope/documenti/markdown.py` → `analizza`, `in_linea`, `per_voce`, `descrivi`, `a_blocchi` (verso `render` per PDF e Word), `da_blocchi` (MD di un documento a blocchi), `con_titolo`, `senza_recinto`, `sembra_markdown` |
 | Archivio dei documenti di casa (bollette, contratti, polizze, garanzie, referti…) | cartella osservata; pypdfium2, Pillow, python-docx; OCR ed estrazione con il modello grande (qwen3.6 su vLLM, client degli agenti, output strutturati); grafo in SQLite (nodi e archi tipizzati con la fonte, alias, FTS5) | `calliope/archivio/` → `Archivio` (`servizio.py`: coda, permessi, interrogazioni), `Grafo` (`grafo.py`), `tipi.py` (schede, controllo contro il testo, `nel_grafo`), `testo.py` (`leggi`, `OcrVisivo`), `Estrattore`, `esplora.py` (strumenti dell'agente), `load_archivio`; tool in `calliope/tools/archivio.py`; terminale `python -m calliope.archivio` |
 | Ufficio: modelli di documento, rubrica, numerazione, fatture e DDT | docxtpl (Word) e python-pptx (PowerPoint) per i modelli dell'utente con un `.yaml` di descrizione; SQLite (stesso file della memoria); `Decimal` per i conti; XML FatturaPA FPR12 1.2.3 con la libreria standard, XSD ufficiale con lxml se scaricato; PDF con i documenti | `calliope/ufficio/` → `Ufficio` (`servizio.py`), `modelli.py`, `Rubrica`, `Numeratore`, `conti.py`, `fatturapa.py`, `stampe.py`; tool `modello_compila`, `anagrafica_cerca`, `anagrafica_salva` in `calliope/tools/ufficio.py`; terminale `python -m calliope.ufficio`; vedi [`docs/ricerche/2026-10-03-template.md`](../ricerche/2026-10-03-template.md) |
 
@@ -112,3 +113,40 @@
   sospeso ha tutti gli argomenti obbligatori. `ACTION_CLAIM` ora prende anche «ho
   preparato/emesso» e il passivo («è stata preparata»). Restano: «Prepara una fattura.» senza
   dati → il modello chiede da sé, e la risposta dopo a volte non chiama il tool.
+
+## Markdown per i testi dell'agente (07/10)
+
+Decisione di Dario del 07/10: **ricerche, relazioni e riassunti dell'agente si consegnano in
+Markdown** (`risultato.md`: titoli, sezioni, elenchi, tabelle). Il formato a blocchi di
+`formato.py` resta per lettere, fatture, modelli e per la conversione. Prima la ricerca
+diventava un Word di soli paragrafi (i titoli delle sezioni persi, nessuna tabella) e gli altri
+lavori un `.txt`.
+
+- **`calliope/documenti/markdown.py`**, senza librerie (principio 4): un sottoinsieme uguale a
+  quello del lettore della pagina (`schermo.js`, `leggiMarkdown`): titoli `#`…`######` e
+  sottolineati, paragrafi, elenchi puntati e numerati con i rientri, tabelle con la riga dei
+  trattini (e `\|` nelle celle), codice tra ``` o ~~~, citazioni, righe; nelle righe grassetto,
+  corsivo, barrato, codice, collegamenti (testo, con l'indirizzo tra parentesi nei file e senza a
+  voce), immagini come «[immagine: …]». Niente HTML: un tag resta testo.
+- **Limiti contro i testi ostili** (il testo dell'agente non è fidato): 200 000 caratteri,
+  2000 blocchi, 500 righe e 20 colonne per tabella, 6 livelli di rientro, 4 citazioni
+  annidate; caratteri di controllo e di direzione del testo tolti; grassetto e corsivo al più
+  di 400 caratteri su una riga e indirizzi al più di 600 (con `.+?` senza limiti «*a »
+  ripetuto 60 000 volte costava minuti: tempo quadratico). Misura: 11 testi ostili, ognuno
+  analizzato, detto e convertito in meno di 3 s (`prova_markdown.py`).
+- **Conversione** (`a_blocchi`): titoli → `titolo`, paragrafi, elenchi (i livelli annidati con
+  «– » davanti), tabelle (al più 12 colonne: le altre unite nell'ultima; oltre 200 righe in più
+  tabelle), codice e citazioni come paragrafi; poi `render` com'è (fpdf2, python-docx), senza
+  i limiti di un documento detto a voce (`validate` non serve: un rapporto è più lungo).
+  `da_blocchi` fa il contrario per «Scarica» in MD di una lettera o di un foglio (il testo resta
+  testo: `#`, `*`, `|` con la barra).
+- **`render_docx` era quadratico sulle tabelle**: `table.cell(r, c)` ricostruisce la griglia a
+  ogni chiamata; una tabella di 200 righe × 12 colonne superava il minuto, ora 0,2 s (le celle
+  riga per riga, `table.rows[r].cells`).
+- **Voce**: il Markdown si toglie prima di Piper con le funzioni di pulizia che c'erano:
+  `agenti/ciclo.per_la_voce` e `agenti/risultato.per_voce` passano da `markdown.per_voce` se il
+  testo sembra Markdown (`sembra_markdown`), e il codice tra apici resta riconoscibile per
+  essere scartato come prima.
+- **Conversioni a richiesta** («fammene un PDF», «lo voglio in Word»): `risultato_lavoro` con
+  `modo` pdf o word (`agenti/risultato.converti`, area agenti-estensioni) e «Scarica» nella
+  scheda (`schermi/scarica.py`, area schermi-telefono).
