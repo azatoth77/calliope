@@ -1132,6 +1132,9 @@ class Lavori:
                                  - lav.attesa_s, 1),
                 "inizio": datetime.datetime.fromtimestamp(lav.inizio or time.time())
                 .isoformat(timespec="seconds"),
+                # Quando è finito (07/10): lavori_stato lo dice anche dopo un riavvio
+                "fine": (datetime.datetime.fromtimestamp(lav.fine).isoformat(timespec="seconds")
+                         if lav.fine else None),
                 # Il testo intero di una ricerca (07/10): per risultato_lavoro dopo un riavvio
                 # (agenti/risultato.py), senza rileggere il file Word
                 "testo": (str(r.get("testo"))[:100_000] if r.get("testo") else None)}

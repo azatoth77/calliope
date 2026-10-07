@@ -599,17 +599,38 @@ def _lavori_stato(ctx: ToolContext) -> dict:
            else None)
     if rip is not None and frase.endswith("?"):
         return _final(frase, in_sospeso=rip)
-    # Un lavoro finito (07/10): «Vuoi sentire il risultato?», e il «sì» va a risultato_lavoro
-    # (caso vero della DGX: «E il risultato?» dopo lo stato finiva in lavori_rispondi)
-    if not svc.attivi(None if admin else getattr(prof, "id", None), attesa=True)             and frase.endswith(".") and prof is not None:
-        from ..agenti import risultato as ar
-        lav, _, _ = ar.trova(svc, prof.id, prof.name, "", admin=admin)
-        if lav is not None and lav.stato == "fatto" and not getattr(lav, "dal_disco", False):
-            domanda = "Vuoi sentire il risultato?"
-            return _final(f"{frase} {domanda}", in_sospeso={
-                "domanda": domanda, "tool": "risultato_lavoro",
-                "cosa": f"il risultato di «{lav.titolo}»", "argomenti": {"lavoro": lav.id}})
-    return _final(frase)
+    if prof is None or not frase.endswith("."):
+        return _final(frase)
+    # Gli ultimi lavori finiti di chi parla, anche di prima di un riavvio (07/10, DGX: «e di
+    # quelli che hai già fatto?» → «Non ho lavori in corso.» due volte, e la ricerca del giorno
+    # prima c'era nella cartella dei risultati), e il risultato del più recente: «Vuoi sentire
+    # il risultato?», il «sì» va a risultato_lavoro (prima: «E il risultato?» dopo lo stato
+    # finiva in lavori_rispondi)
+    from ..agenti import risultato as ar
+    try:
+        fin = ar.recenti(svc, prof.id, prof.name, 3)
+    except Exception:  # noqa: BLE001 — lo stato si dice comunque
+        fin = []
+    if not fin:
+        return _final(frase)
+    elenco = ar.elenco_detto(fin)
+    attivi = svc.attivi(None if admin else prof.id, attesa=True)
+    if attivi:
+        return _final(f"{frase} {'Finito di recente' if len(fin) == 1 else 'Finiti di recente'}"
+                      f": {elenco}.")
+    if frase == "Non ho lavori in corso." or frase.startswith("Non ho lavori in corso. L'ultimo"):
+        frase = "Non ho lavori in corso."
+    note_rule(ctx, "lavori_stato_finiti")
+    frase += (f" L'ultimo lavoro: {elenco}." if len(fin) == 1
+              else f" Gli ultimi finiti: {elenco}.")
+    fatto = next((lv for lv in fin if lv.stato == "fatto"), None)
+    if fatto is None:
+        return _final(frase)
+    domanda = ("Vuoi sentire il risultato?" if fatto is fin[0]
+               else f"Vuoi sentire il risultato di «{_titolo_detto(fatto.titolo)}»?")
+    return _final(f"{frase} {domanda}", in_sospeso={
+        "domanda": domanda, "tool": "risultato_lavoro",
+        "cosa": f"il risultato di «{fatto.titolo}»", "argomenti": {"lavoro": ar.chiave(fatto)}})
 
 
 def _lavori_rispondi(ctx: ToolContext, lavoro: str = "", risposta: str = "") -> dict:
@@ -672,8 +693,21 @@ def _risultato_lavoro(ctx: ToolContext, lavoro: str = "", modo: str = "riassunto
     card = ar.scheda(svc, lav, testo) if hub is not None else None
     if card:
         try:
-            esito = hub.invia(card, hub.mittente(ctx), forza=True)
+            sender = hub.mittente(ctx)
+            # Il risultato è di chi l'ha chiesto e va solo sui suoi schermi personali: anche
+            # quando la voce di questa frase è nella zona grigia («Entrambe le cose.», frase
+            # breve che vale per la conversazione, DGX del 07/10: il riassunto si diceva a
+            # voce e la scheda no). Nessuno schermo d'altri, nessuna scheda di un altro
+            if (getattr(sender, "persona", None) is not None
+                    and sender.persona == getattr(lav, "persona", None)
+                    and getattr(sender, "certo", True) is False):
+                sender.certo = True
+                note_rule(ctx, "risultato_schermo_proprio")
+            esito = hub.invia(card, sender, forza=True)
             sullo_schermo = bool(esito.get("schermi") or esito.get("destinatari"))
+            if sullo_schermo:
+                ctx.scheda_risultato = (getattr(ctx, "turno", 0),
+                                        getattr(ctx, "user_text", ""), card, sender)
         except Exception:  # noqa: BLE001 — lo schermo non ferma la voce
             sullo_schermo = False
     dove = ("Il testo intero è sul tuo schermo." if sullo_schermo
@@ -892,8 +926,9 @@ def agenti_specs(formati=("word", "excel", "pdf"), modelli=(),
         ToolSpec(
             name="lavori_stato",
             description=("Dice a che punto sono i lavori affidati all'agente con delega_lavoro "
-                         "(«a che punto è il programma?», «hai finito la relazione?»). Per il "
-                         "contenuto di un lavoro finito: risultato_lavoro."),
+                         "(«a che punto è il programma?», «hai finito la relazione?») e quali "
+                         "sono finiti di recente, anche nei giorni prima («e quelli che hai già "
+                         "fatto?»). Per il contenuto di un lavoro finito: risultato_lavoro."),
             parameters={"type": "object", "properties": {}, "required": []},
             func=_lavori_stato, risk="lettura", levels=FAMILY),
         ToolSpec(

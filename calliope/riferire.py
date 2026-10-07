@@ -171,8 +171,10 @@ _IMPERATIVO_CASA = re.compile(_INIZIO + _CASA_IMP + r")[a-zà-ù']*", re.I)
 # Un infinito o un gerundio dentro un elenco («posso fare conti, comandare luci e scaricare
 # fonti», prova e2e del 06/10) non è un ordine alla persona. In testa alla frase invece sì:
 # «Chiamare subito il numero…» è l'imperativo degli avvisi
+# Anche l'infinito tronco con il pronome attaccato («installarlo», «mandarti», «dirlo»: 07/10)
 _NON_IMPERATIVO = re.compile(r"(are|ere|ire|ando|endo)(l[oiae]|gli\w*|mi|ti|ci|vi|si|ne|"
-                             r"me\w*|te\w*|ce\w*|se\w*)?$", re.I)
+                             r"me\w*|te\w*|ce\w*|se\w*)?$|(ar|er|ir)(l[oiae]|gli\w*|mi|ti|ci|"
+                             r"vi|si|ne|me\w*|te\w*|ce\w*|se\w*)$", re.I)
 # Un invito a mandare qualcosa a Calliope stessa («mandamelo pure», «inviami la foto»): la
 # persona lo dà a lei, non a un recapito preso dal dato
 _A_CALLIOPE = re.compile(r"^(mand|invi|inoltr|dett|comunic|fornisc|condivid)[a-zà-ù]*?"
@@ -332,30 +334,54 @@ def propria(frase: str, ctx: Contesto) -> bool:
     return len(n) >= 12 and any(n in p for p in ctx.propri)
 
 
-def indicazione(frase: str) -> bool:
-    """La frase dà un'indicazione alla persona (imperativo o «devi…») con un verbo del lessico
-    del rischio (contatti, siti, codici, Calliope), o con un verbo della casa e un oggetto
-    delicato («apri il cancello»)?"""
+def indicazioni(frase: str) -> list[str]:
+    """I verbi con cui la frase dà un'indicazione alla persona (imperativo o «devi…») del
+    lessico del rischio (contatti, siti, codici, Calliope), o un verbo della casa con un oggetto
+    delicato («apri il cancello»). Vuota se non ce ne sono."""
     f = frase or ""
 
-    def trova(rx):
+    def trova(rx) -> list[str]:
+        out = []
         # «ti consiglio di non rispondere a quell'email»: un avvertimento, non un'indicazione
         for m in rx.finditer(f):
             if re.search(r"(?<![a-zà-ù])(non|mai)(?![a-zà-ù])", m.group(0), re.I):
                 continue
+            verbo = m.group(0).split()[-1].strip(".,;:!?'") if m.group(0).split() else ""
             if rx is _IMPERATIVO or rx is _IMPERATIVO_CASA:
-                verbo = m.group(0).split()[-1].strip(".,;:!?'") if m.group(0).split() else ""
                 prima = m.group(0)[:len(m.group(0)) - len(verbo)].strip(" .;:!?")
                 if _NON_IMPERATIVO.search(verbo) and prima:
                     continue
                 if _A_CALLIOPE.match(verbo):
                     continue
-            return True
-        return False
+                # Un infinito in testa seguito da «non»: un fatto, non un ordine
+                # («Installarlo non è possibile, è un documento», DGX del 07/10); «Chiamare non
+                # appena…» resta un ordine
+                if (_NON_IMPERATIVO.search(verbo) and not prima and re.match(
+                        r"\s+(non|mai)(?![a-zà-ù])(?!\s+appena)", f[m.end():], re.I)):
+                    continue
+            out.append(verbo)
+        return out
 
-    if trova(_IMPERATIVO) or trova(_MODALE):
-        return True
-    return bool((trova(_IMPERATIVO_CASA) or trova(_MODALE_CASA)) and _DELICATO.search(f))
+    trovati = trova(_IMPERATIVO) + trova(_MODALE)
+    if _DELICATO.search(f):
+        trovati += trova(_IMPERATIVO_CASA) + trova(_MODALE_CASA)
+    return trovati
+
+
+def indicazione(frase: str) -> bool:
+    """La frase dà un'indicazione alla persona (vedi `indicazioni`)?"""
+    return bool(indicazioni(frase))
+
+
+def _verbo_della_domanda(verbo: str, domanda: str) -> bool:
+    """Il verbo dell'indicazione è quello che la persona ha usato in questa frase («riesci a
+    installarlo?» → «Installarlo non si può…»): la frase risponde alla sua richiesta, non
+    ripete un ordine del dato. Si confronta la radice (le prime cinque lettere)."""
+    v = re.sub(r"[^a-zà-ù]", "", (verbo or "").lower())
+    if len(v) < 4:
+        return False
+    radice = v[:5]
+    return any(w.startswith(radice) for w in re.findall(r"[a-zà-ù]+", (domanda or "").lower()))
 
 
 def attribuita(frase: str) -> bool:
@@ -421,9 +447,21 @@ def giudica(frase: str, ctx: Contesto, solo_gravi: bool = False) -> Giudizio:
     if da_dato and not chiesto:
         return Giudizio("uscita_contatto", da_dato[0][1], da_dato[0][0])
     # 5. Indicazioni rivolte alla persona con parole che vengono dal dato
-    if indicazione(t):
+    verbi = indicazioni(t)
+    if verbi:
         fuori, f = _parole_dal_dato(ctx, t)
         delicata = bool(_DELICATO.search(t)) and not _DELICATO.search(persona)
+        if fuori and not _DELICATO.search(t) and not _bersaglio(t, ctx):
+            # Le parole che la persona ha detto prima in questa conversazione non vengono
+            # «solo dal dato» (07/10, DGX: «pattern» detto da lei, ripreso nel riassunto
+            # dell'agente); mai per la casa e Calliope, che restano fermate sempre
+            fuori = [w for w in fuori if w not in prov.parole(ctx.persona_txt)]
+            # Il verbo dell'indicazione è quello della domanda di questo turno («riesci a
+            # installarlo?» → «Installare un documento di ricerca non ha senso…»): Calliope
+            # risponde alla richiesta, non ripete un ordine del dato (falso allarme della DGX
+            # del 07/10). Con un bersaglio non detto (un nome, un numero) resta fermata
+            if all(_verbo_della_domanda(v, ctx.domanda) for v in verbi):
+                fuori = []
         if fuori and not delicata and _solo_foto(ctx, t) and not _bersaglio(t, ctx):
             # Con una foto senza testo da confrontare ogni parola mai detta sembrava presa
             # dalla foto: «mandalo pure, lo leggo appena arriva» diventava «una foto contiene

@@ -8,7 +8,7 @@
 |---|---|---|
 | Agenti in secondo piano («gemma davanti, agenti dietro») | vLLM con l'API compatibile OpenAI sulla DGX (motore «openai», httpx, via tunnel `ssh -N -L` di OpenSSH), oppure l'API nativa di Ollama (motore «ollama», anche lo stesso Ollama della voce); ciclo scritto in proprio, niente framework; sandbox in un container Docker usa-e-getta sulla DGX (dal 03/10), altrimenti job object di Windows (ctypes) e audit hook | `calliope/agenti/` → `Lavori` (`servizio.py`: coda, proposta, risultati, annuncio, domande a metà lavoro), `Agente` (`ciclo.py`), file della persona (`file_utente.py`), `Tunnel` (`tunnel.py`), `Sandbox` (`sandbox.py` + `_avvio.py`, `scegli_isolamento`; immagine da `setup/linux/sandbox/Dockerfile`), `Arbitro` (`arbitro.py`: anche con vLLM sulla GPU della voce, `ClienteCedevole` per archivio e ufficio; `stessa_gpu` in `impostazioni.py`, `agenti_arbitro`; dal 04/10 `PausaServer`, pausa di vLLM in modalità sviluppo, `pausa_server`, `agenti_pausa_vllm`), `Avanzamento` (`avanzamento.py`: la scheda del lavoro in diretta), `ContestoLavoro` (`contesto_lavoro.py`, dal 05/10: risultati lunghi in `.calliope/passo-N.txt`, diario del lavoro alle soglie; finestra da `contesto.calcola_agenti`), `Modello` (`modelli.py`), `carica` (`impostazioni.py`: dgx.yaml / agenti_url), `ClienteOllama` / `ClienteOpenAI` (`remoto.py`, `remoto_openai.py`, `crea_cliente`), `load_agenti`; tool in `calliope/tools/agenti.py`; terminale `python -m calliope.agenti --prova` |
 | Programmi dell'agente eseguiti in diretta, linguaggi (Python, C#) | stessa sandbox Docker; C# con csc nel container `calliope-sandbox-dotnet` (runtime .NET 10 + Roslyn, niente SDK né NuGet); SSE verso la scheda | `calliope/agenti/esecuzione.py` → `Esecuzioni` (`avvia`, `dimostra`, `ferma`, `frase`); `linguaggi.py`; `esegui_cs.sh`; `setup/linux/sandbox/Dockerfile.dotnet`; tool `lavori_esegui`, scheda `esecuzione` |
-| Il risultato di un lavoro finito a voce o sullo schermo (07/10) | il modello dell'agente per il riassunto per la voce (thinking spento, tempo massimo) | `calliope/agenti/risultato.py` → `trova`, `scegli`, `dal_disco`, `testo_intero`, `riassunto_voce`, `scheda`; tool `risultato_lavoro` (`calliope/tools/agenti.py`), `agenti_risultato_s`; prove `prova_risultati.py`, `prova_risultati_ollama.py` |
+| Il risultato di un lavoro finito a voce o sullo schermo (07/10) | il modello dell'agente per il riassunto per la voce (thinking spento, tempo massimo) | `calliope/agenti/risultato.py` → `trova`, `scegli`, `dal_disco`, `testo_intero`, `riassunto_voce`, `scheda`, `recenti`, `elenco_detto`, `chiave`; tool `risultato_lavoro` (`calliope/tools/agenti.py`), `agenti_risultato_s`; prove `prova_risultati.py`, `prova_risultati_ollama.py` |
 | Estensioni permanenti e guardrail (04/10) | container della sandbox (Docker) per ogni chiamata, JSON-RPC su stdin/stdout (cornice stdio di MCP, senza SDK), solo libreria standard | `calliope/guardrail.py` → `valuta_porta`, `SecondoParere`, `domanda` (la porta delle estensioni: sicura / pericolosa / vietata; i tool di Calliope li decide `politica.decidi` dal 06/10); `calliope/estensioni/` → `Estensioni` (`servizio.py`), `Porta` (`porta.py`), `Esecuzione` (`esecuzione.py`), `Archivio` (`archivio.py`: versioni, impronta), `valida` (`manifesto.py`), `analizza` (`analisi.py`), runtime `_ospite.py` (nel container: `calliope_estensione`), prompt dell'agente (`prompt.py`: `sistema_estensione`), contratto delle capacità (`contratto.py`: `testo`, `CAPACITA_IDS`, CAPACITA.md); rete solo pubblica `calliope/web/rete.py` → `RetePubblica` (registro `uscite.jsonl`, `riepilogo`), dati riservati nel traffico `calliope/web/riservati.py` → `Riservati`, `da_contesto`; piano e permessi dell'agente in `agenti/ciclo.py` (`PIANO`, `CHIEDI_PERMESSO`, `_piano`, `_fuori_piano`); tool in `calliope/tools/estensioni.py`; progetto in `docs/ricerche/2026-10-04-estensioni-e-guardrail.md` (§11–§14 dal 05/10) |
 
 ## Note dalla sezione «Stato attuale» di CLAUDE.md (fino al 06/10)
@@ -618,3 +618,36 @@ risultato a voce.
   il tempo di qwen3.6 sul testo, coperto dalla frase d'attesa). A secco `prova_risultati.py`.
 - **Da provare sulla DGX**: il tempo vero del riassunto di qwen3.6 su 20 paragrafi (atteso 2–4 s)
   e la scheda sul telefono.
+
+### Il risultato dopo l'uso vero (07/10 mattina)
+
+Tre casi del registro dei turni della DGX dopo `risultato_lavoro`:
+
+- **La scheda col testo intero non arrivava al telefono**. «Entrambe le cose.» (riassunto e
+  schermo) era una frase breve con la voce sotto soglia (0,447 contro 0,48), che vale per la
+  conversazione: identità dalla zona grigia, e `schermi.destinatari` non manda una scheda
+  personale nella zona grigia (`zona_grigia`). Il tool diceva il riassunto a voce e «Il testo
+  intero è nella cartella Lavori», poi il modello chiamava `schermo_mostra(risposta)`, che
+  mandava sullo schermo dello studio la risposta di prima: sul telefono si vedeva solo quella.
+  Ora il risultato di un lavoro va sugli schermi personali di **chi l'ha chiesto** anche nella
+  zona grigia, se la persona della conversazione è proprio lei (regola
+  `risultato_schermo_proprio`: la scheda va solo sui suoi schermi, mai su quelli d'altri; il
+  lavoro di un altro, anche per chi amministra, resta com'era). Uno `schermo_mostra` «risposta»
+  o «ultima» nella **stessa risposta** rimanda in cima la scheda del risultato invece di coprirla
+  (`ToolContext.scheda_risultato`, regola `schermo_mostra_risultato`); nella risposta dopo fa
+  quello di sempre. Due tool con la stessa frase finale nella stessa risposta: Brain la dice una
+  volta.
+- **«E di quelli che hai già fatto?»** → `lavori_stato` «Non ho lavori in corso.» due volte: dopo
+  il riavvio la ricerca del giorno prima c'era solo nella cartella dei risultati. Ora
+  `lavori_stato` dice anche gli ultimi tre lavori finiti di chi parla, dalla memoria e dal disco
+  (`risultato.recenti`, `elenco_detto`: titolo, «oggi alle…», «ieri alle…», «non riuscito»), e
+  propone il risultato del più recente riuscito («Vuoi sentire il risultato?», azione in sospeso
+  verso `risultato_lavoro`, regola `lavori_stato_finiti`); con un lavoro in corso li aggiunge
+  dopo, senza domanda. `lavoro.json` ha dal 07/10 anche `fine` (prima: inizio + secondi, o l'ora
+  del file). Dopo un riavvio gli id ricominciano da L1: un lavoro del disco si riconosce dalla
+  **cartella** (prima dall'id, e il L1 di ieri spariva dietro il L1 di oggi), e l'azione in
+  sospeso lo richiama con `lavoro = "cartella:<nome>"` (`risultato.chiave`).
+- Il falso allarme di ciò che dice («installarlo», trascrizione di «mostrarlo») è in
+  [`sicurezza-politica.md`](sicurezza-politica.md).
+
+Prove a secco in `prova_risultati.py` (sezione «07/10 mattina»).

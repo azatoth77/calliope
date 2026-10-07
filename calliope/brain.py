@@ -2608,7 +2608,11 @@ class Brain:
             # a generare il documento in secondo piano: la seconda passata aspetterebbe la
             # generazione intera (27/09).
             if finals and all(finals):
-                said = " ".join(finals)
+                # Una frase già detta da un tool prima nella stessa risposta non si ripete
+                # (07/10: risultato_lavoro e schermo_mostra, «Il testo intero è sul tuo
+                # schermo.» due volte)
+                said = " ".join(f for i, f in enumerate(finals)
+                                if f.strip() not in " ".join(finals[:i]))
                 self.history.append({"role": "assistant", "content": said})
                 yield said
                 return
