@@ -378,13 +378,17 @@ class SpeakerRegistry:
         Si può passare l'embedding già calcolato (es. in parallelo a Whisper)."""
         if emb is None:
             emb = self.embed(audio, sample_rate)
-        best_name, best_sim = None, 0.0
-        for name, prof in self.users.items():
-            if prof.voiceprint is not None:
-                sim = float(np.dot(emb, prof.voiceprint))
-                if sim > best_sim:
-                    best_name, best_sim = name, sim
-        return best_name, best_sim
+        classifica = self.classifica(emb)
+        if not classifica or classifica[0][1] <= 0.0:
+            return None, 0.0
+        return classifica[0]
+
+    def classifica(self, emb: np.ndarray) -> list[tuple[str, float]]:
+        """Tutti i profili con un'impronta e il loro punteggio, dal più somigliante (07/10):
+        il secondo serve al margine (`speaker_id_margine`) e al registro dei turni."""
+        out = [(name, float(np.dot(emb, prof.voiceprint)))
+               for name, prof in self.users.items() if prof.voiceprint is not None]
+        return sorted(out, key=lambda x: -x[1])
 
     def identify(self, audio: np.ndarray, sample_rate: int = 16000,
                  threshold: float | None = None) -> tuple[str | None, float]:
@@ -497,11 +501,22 @@ class SpeakerContext:
         self.conferma_breve: bool = False
         self.sfida = None
         self.sfida_superata: bool = False
+        # Voci di famiglia (07/10, ciclo._confronta_voce). `incerta`: (adulto, minore) quando
+        # la voce di questa frase è incerta tra un adulto e un minore e vale il minore (il
+        # profilo più protetto): se serve un'azione di quell'adulto, la frase chiede chi parla
+        # invece di un rifiuto secco. `minore_vicino`: l'adulto che amministra è riconosciuto,
+        # ma un minore ha un punteggio troppo vicino per dargli i permessi di chi amministra
+        self.incerta: tuple[str, str] | None = None
+        self.minore_vicino: str | None = None
 
     def aggiorna_conversazione(self, name: str | None, how: str | None, in_session: bool,
-                               score: float | None):
+                               score: float | None, altro_piu_vicino: bool = False):
         """Dopo il riconoscimento di una frase (main.py): chi è sicuro nella conversazione e
-        se questa frase breve può confermare un'azione proposta a chi amministra."""
+        se questa frase breve può confermare un'azione proposta a chi amministra.
+
+        `altro_piu_vicino`: l'impronta della frase somiglia a un altro profilo almeno quanto
+        a `name` (07/10: «Sì, riproviamoci.» col minore 0,47 e chi amministra 0,435 valeva
+        come conferma breve): allora la frase breve non conferma."""
         if not in_session:
             self.voce_sicura = None          # conversazione nuova (dopo il nome)
         if how == "voce":
@@ -515,7 +530,7 @@ class SpeakerContext:
         self.punteggio = score
         self.conferma_breve = bool(how == "breve" and name and name == self.voce_sicura
                                    and prof is not None and prof.admin and score is not None
-                                   and score >= soglia)
+                                   and score >= soglia and not altro_piu_vicino)
         self.sfida_superata = False
 
     @property

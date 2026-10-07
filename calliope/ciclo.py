@@ -145,6 +145,7 @@ class Turno:
     text: str = ""
     conf_stt: object = None              # stt_correzione.Confidenza della frase, o None
     prev_how: str | None = None          # come era riconosciuto chi parlava prima
+    voce_secondo: tuple = (None, None)   # il secondo profilo e il suo punteggio (07/10)
     speaker_name: str | None = None
     prof_turno: object = None            # profilo di chi parla (minori, orari)
     context: str | None = None           # contesto del turno (biblioteca, foto non viste)
@@ -972,6 +973,7 @@ class Ciclo:
         t.speaker_name = None
         t.prev_how, speaker_ctx.identified_by = speaker_ctx.identified_by, None
         speaker_ctx.conferma_breve = speaker_ctx.sfida_superata = False   # valgono una frase
+        speaker_ctx.incerta = speaker_ctx.minore_vicino = None            # anche queste
         if t.scritto is not None:
             self._chi_scrive(t)
         if t.emb_job is not None:
@@ -995,10 +997,25 @@ class Ciclo:
         speaker_ctx.aggiorna_conversazione(t.speaker_name, speaker_ctx.identified_by,
                                            True, None)
 
+    def _classifica(self, emb) -> list:
+        """[(nome, punteggio)] dal più somigliante; con un registro che sa solo il migliore
+        (prove a secco), solo quello."""
+        reg = self.s.registry
+        if hasattr(reg, "classifica") and emb is not None:
+            return list(reg.classifica(emb))
+        best, sim = reg.best_match(emb=emb)
+        return [(best, sim)] if best is not None else []
+
     def _confronta_voce(self, t, emb):
         """(nome, come, punteggio, migliore) per l'impronta della frase."""
         s, cfg, speaker_ctx = self.s, self.s.cfg, self.speaker_ctx
-        best, sim = s.registry.best_match(emb=emb)
+        classifica = self._classifica(emb)
+        best, sim = classifica[0] if classifica and classifica[0][1] > 0 else (None, 0.0)
+        secondo, sim2 = classifica[1] if len(classifica) > 1 else (None, None)
+        t.voce_secondo = (secondo, sim2)
+        # Voci di famiglia (07/10): sopra soglia ma a meno di `speaker_id_margine` dal secondo
+        # profilo la voce non decide da sola (vale come la zona grigia)
+        netta = sim2 is None or sim - sim2 >= float(getattr(cfg, "speaker_id_margine", 0.0))
         prev = speaker_ctx.current_speaker
         thr = cfg.speaker_id_threshold
         if t.voiced_s < cfg.speaker_min_voice_s and t.in_session and prev:
@@ -1010,7 +1027,7 @@ class Ciclo:
             name, how = prev, ("schermo" if t.prev_how == "schermo" else "breve")
             if how == "breve":
                 speaker_ctx.from_session = True
-        elif sim >= thr:
+        elif sim >= thr and netta:
             name, how = best, "voce"
             speaker_ctx.from_session = False
         elif (t.in_session and best is not None and best == prev
@@ -1025,15 +1042,47 @@ class Ciclo:
         speaker_ctx.identified_by = how
         # Voce incerta tra un minore e un altro profilo (05/10, minori.piu_protetto): vale
         # il profilo più protetto, mai un adulto
+        if not netta and sim >= thr and how != "breve":
+            self.rule("voce_margine")
         protetto = minori.piu_protetto(s.registry, emb, name, how, sim, cfg)
         if protetto is not None and protetto != name:
             print(f"   [VOCE] incerta tra {name or 'ospite'} e {protetto}: vale {protetto} "
                   f"(il profilo più protetto)", flush=True)
             self.rule("minore_piu_protetto")
+            # L'adulto tra cui si è incerti: chi era stato scelto, o il migliore se adulto.
+            # Se serve una sua azione, la frase chiede chi parla (registry, brain._sfida)
+            adulto = name or (best if best != protetto else secondo)
+            if adulto and adulto != protetto and not minori.e_minore(s.registry.get(adulto)):
+                speaker_ctx.incerta = (adulto, protetto)
             name, how = protetto, "conversazione"
             speaker_ctx.from_session = True
             speaker_ctx.identified_by = how
+        elif how == "voce" and name:
+            vicino = self._minore_vicino(name, sim, classifica)
+            if vicino is not None:
+                # Il verso pericoloso: chi amministra con un minore a meno di
+                # `minori_margine_amministra`. Resta lui, ma al più familiare
+                print(f"   [VOCE] {name}, ma {vicino} è vicino: niente permessi di chi "
+                      f"amministra in questa frase", flush=True)
+                self.rule("amministra_minore_vicino")
+                speaker_ctx.minore_vicino = vicino
+                how = "conversazione"
+                speaker_ctx.from_session = True
+                speaker_ctx.identified_by = how
         return name, how, sim, best
+
+    def _minore_vicino(self, name, sim, classifica) -> str | None:
+        """Il minore con un punteggio a meno di `minori_margine_amministra` da chi amministra
+        riconosciuto dalla voce (None se chi parla non amministra o nessun minore è vicino)."""
+        reg, cfg = self.s.registry, self.s.cfg
+        prof = reg.get(name)
+        if not getattr(prof, "admin", False) or not getattr(cfg, "minori_enabled", True):
+            return None
+        margine = float(getattr(cfg, "minori_margine_amministra", 0.0))
+        for n, p in classifica:
+            if n != name and sim - p < margine and minori.e_minore(reg.get(n)):
+                return n
+        return None
 
     def _riconosci_voce(self, t):
         cfg, registry, speaker_ctx = self.s.cfg, self.s.registry, self.speaker_ctx
@@ -1049,7 +1098,10 @@ class Ciclo:
         # chi parlava), per la conferma breve di chi amministra (calliope/conferme.py)
         vp = getattr(registry.get(name), "voiceprint", None) if name else None
         own = float(np.dot(emb, vp)) if vp is not None else None
-        speaker_ctx.aggiorna_conversazione(name, how, t.in_session, own)
+        # Un altro profilo somiglia a questa frase almeno quanto chi vale: la frase breve non
+        # conferma un'azione di chi amministra (07/10)
+        altro = bool(own is not None and best is not None and best != name and sim >= own)
+        speaker_ctx.aggiorna_conversazione(name, how, t.in_session, own, altro)
         adapted = how == "voce" and registry.adapt(name, emb, sim)
         # Punteggio sempre in console: serve a tarare soglia e impronta (docs/test-vocale.md)
         note = {"breve": " frase breve, vale la conversazione",
@@ -1063,8 +1115,17 @@ class Ciclo:
         # Riconosciuto → familiare, non riconosciuto → ospite (principio 9).
         # Azzerare a None evita che resti lo speaker del turno precedente.
         speaker_ctx.current_speaker = name
+        secondo, sim2 = getattr(t, "voce_secondo", (None, None))
         self.rec["voce"] = {"nome": name, "migliore": best, "punteggio": round(sim, 3),
                             "modo": how, "voce_s": round(t.voiced_s, 2), "aggiornata": adapted,
+                            # Il secondo profilo e la distanza dal primo (07/10): per tarare
+                            # `speaker_id_margine` e `minori_margine_amministra` sui turni veri
+                            **({"secondo": secondo, "secondo_punteggio": round(sim2, 3),
+                                "margine": round(sim - sim2, 3)} if secondo is not None else {}),
+                            **({"incerta": list(speaker_ctx.incerta)}
+                               if getattr(speaker_ctx, "incerta", None) else {}),
+                            **({"minore_vicino": speaker_ctx.minore_vicino}
+                               if getattr(speaker_ctx, "minore_vicino", None) else {}),
                             **({"conferma_breve": speaker_ctx.conferma_breve,
                                 "punteggio_conversazione": round(own, 3)}
                                if how == "breve" and own is not None else {})}
@@ -1086,7 +1147,13 @@ class Ciclo:
         continua quella di questo satellite; gli ospiti hanno la loro, qui. Un doppione (la
         stessa frase presa da un altro satellite nella stessa stanza) si scarta."""
         s = self.s
-        if not self.corsia.turno(self.brain, t.speaker_name, self.speaker_ctx.identified_by,
+        if self._chiedi_chi_parla(t):
+            return _FINE
+        # Chi amministra con un minore vicino (07/10): la voce lo ha riconosciuto (sopra il
+        # margine), quindi la sua conversazione; i permessi restano da familiare
+        how = ("voce" if getattr(self.speaker_ctx, "minore_vicino", None)
+               else self.speaker_ctx.identified_by)
+        if not self.corsia.turno(self.brain, t.speaker_name, how,
                                  t.in_session, t.text, self.rec, t.scritto,
                                  persona_id=self._persona_id(t.speaker_name),
                                  impronta=t.emb_job.result() if t.emb_job is not None
@@ -1100,6 +1167,37 @@ class Ciclo:
             self.rec["esito"] = "vuoto"
             return _FINE
         return None
+
+    def _chiedi_chi_parla(self, t) -> bool:
+        """Voce incerta tra chi parlava (chi amministra) e un minore, mentre la conversazione di
+        chi amministra su questo satellite aspetta il suo «sì» a un'azione proposta (07/10: in
+        auto «Sì, procedi.» di chi amministra valeva come il minore, la sua conversazione si
+        perdeva e l'azione restava lì). Vale sempre il profilo più protetto, ma invece di
+        rispondere al minore in una conversazione vuota la frase chiede chi parla; l'azione
+        resta in sospeso per la voce di chi amministra. Regola `voce_incerta_chiede`."""
+        from .conferme import CHI_PARLA
+        sc = self.speaker_ctx
+        inc = getattr(sc, "incerta", None)
+        conv = getattr(self.corsia, "conv", None)
+        if (not inc or not t.in_session or t.scritto is not None or not t.text or conv is None
+                or getattr(sc, "sfida", None) is not None):
+            return False
+        prof = self.s.registry.get(inc[0])
+        pid = getattr(prof, "id", None)
+        p = getattr(conv, "pending", None)
+        if (not getattr(prof, "admin", False) or not pid or not isinstance(p, dict)
+                or getattr(conv, "chiave", None) != corsie.RegistroConversazioni.chiave_persona(pid)
+                or p.get("chi") != pid or time.monotonic() > float(p.get("scade", 0))):
+            return False
+        frase = CHI_PARLA.format(adulto=inc[0], minore=inc[1])
+        print(f"   [VOCE] incerta con un'azione in sospeso: chiedo chi parla", flush=True)
+        self.rule("voce_incerta_chiede")
+        self.speaker.start_turn()
+        self.speaker.say(frase)
+        self.speaker.wait()
+        self.rec.update(esito="chi_parla", risposta=frase)
+        self.awake_until = time.monotonic() + self.s.cfg.followup_s
+        return True
 
     def _risveglio_acustico(self, t) -> bool:
         """La frase è passata perché la wake word acustica è scattata a Calliope addormentata

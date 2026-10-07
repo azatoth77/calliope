@@ -274,3 +274,71 @@ qualunque prompt):
 
 Il resto del nome da solo è testo corto e storpiato («Ok.», «Rovemo, rovemo.», «Grazie.»,
 vuoto): esattamente il caso che la regola sopra prende per durata. Il prompt non va allungato.
+
+## Voci di famiglia: adulto e ragazzo al telefono in auto (07/10)
+
+Sulla DGX, 06–07/10, satellite telefono in auto: più volte la voce di chi amministra è valsa
+come quella di un minore registrato. Quattro casi: tre frasi con chi amministra
+**primo** (0,489, 0,547, 0,534; una era la frase di sfida, rifiutata con «solo chi ha fatto la
+richiesta»; una «Sì, procedi.» di 0,82 s, con l'azione proposta persa) e una con il **minore
+primo sopra soglia** (0,483, 1,46 s, modo «voce»). Misure (dati veri nella scratchpad, qui solo
+numeri aggregati):
+
+- **Impronte lontane**: coseno 0,17 tra le due impronte (0,04 tra quelle dell'arruolamento). Il
+  problema è il canale, non la somiglianza delle voci.
+- **Sul portatile le voci si separano bene**: 345 frasi registrate di chi amministra contro le due
+  impronte: margine sul minore p05 0,19, mediana 0,47; nessuna frase ≥ 1 s a meno di 0,10. Le 9
+  frasi del minore registrate al portatile il 26/09: 0,44–0,70 contro di lui, ≤ 0,20 contro
+  l'adulto. Corpus (22 voci MLS e VoxPopuli, 5 frasi d'impronta, stesso canale): nessuna frase
+  vera sotto 0,10 di margine; 0,37 % delle frasi prese per l'altro nelle 20 coppie più vicine,
+  0 % col margine 0,05.
+- **Al telefono no**: chi amministra in modo «voce» ha mediana 0,641 sul telefono contro 0,746
+  sul satellite dello studio; il minore è stato registrato dal telefono, quindi l'impronta del
+  minore contiene il canale del telefono e le frasi dell'adulto in auto le si avvicinano. Nei
+  tre casi con l'adulto primo, il minore era a meno di 0,05 (è la condizione di
+  `minori.piu_protetto`).
+- **L'impronta dell'adulto non può più adattarsi**: coseno 0,900 con quella dell'arruolamento,
+  esattamente `speaker_adapt_max_drift`. Le frasi sicure del telefono non la spostano più.
+- Il registro dei turni non aveva il secondo profilo: il margine dei turni veri non si poteva
+  misurare. Dal 07/10 c'è (`voce.secondo`, `secondo_punteggio`, `margine`, e `incerta` o
+  `minore_vicino` quando servono).
+
+**Perché i primi tre casi andavano al minore: voluto.** `minori.piu_protetto` (05/10): voce di un
+adulto con un minore almeno in zona grigia e a meno di `minori_margine_ambiguo` (0,05) → vale il
+minore, mai un adulto per una voce dubbia. Con quei punteggi la voce era davvero ambigua.
+Sbagliato era il resto: il modo «voce» per il minore a 0,483 col secondo vicino, la sfida chiusa
+come se fosse un'altra persona, il «sì» perso senza dirlo.
+
+Correzioni (07/10, `ciclo._confronta_voce`, `conferme.py`, `brain._sfida`):
+
+- **Margine** `speaker_id_margine` (0,08): sopra soglia ma a meno del margine dal secondo profilo,
+  la voce non decide (regola `voce_margine`): zona grigia se era chi parlava, poi il profilo più
+  protetto, altrimenti ospite. Costo misurato: 0 % sul portatile e nel corpus.
+- **Chi amministra con un minore vicino** (`minori_margine_amministra`, 0,12; il verso pericoloso:
+  il minore preso per chi amministra): riconosciuto, la sua conversazione, ma al più familiare
+  (regola `amministra_minore_vicino`); per le sue azioni la frase di sfida.
+- **Voce incerta tra un adulto e un minore**: vale il minore (prudente) e si sa tra chi
+  (`SpeakerContext.incerta`). Solo se serve per un'azione, la frase chiede chi parla («Non sono
+  sicura di chi parla: Carlo o Luca? Se sei Carlo…»): un tool di chi amministra (sfida per
+  l'adulto), la risposta alla sfida (parole nuove, una volta), un «sì» mentre un'azione proposta
+  all'adulto è in sospeso su quel satellite (`ciclo._chiedi_chi_parla`, l'azione resta).
+  Regola `voce_incerta_chiede`. Negli altri turni nessuna domanda.
+- **Conferma breve**: un «sì» breve non conferma più se un altro profilo somiglia alla frase
+  almeno quanto chi amministra (il 07/10 «Sì, riproviamoci.» con il minore primo confermava).
+- Prova a secco: `prove/prova_voci_famiglia.py` (impronte sintetiche con lo stesso coseno, nomi di
+  fantasia, i quattro casi e i contrari).
+
+**Più impronte per persona (valutato, non fatto).** La struttura lo consente: `UserProfile` ha
+`voiceprint` e `initial_voiceprint`; un dizionario `impronte_canale` (telefono, satellite,
+portatile) con il punteggio = massimo sui canali, ciascuna adattata solo dalle frasi sicure del
+suo canale e con la deriva misurata dalla propria impronta d'arruolamento, risolve due problemi:
+l'adulto senza un'impronta del telefono e l'impronta bloccata dalla deriva. Il satellite sa già
+il suo tipo (telefono o altro). Da fare insieme alla nuova registrazione del minore, per non
+introdurre un'asimmetria: con un'impronta del telefono solo per l'adulto, il verso pericoloso
+peggiora.
+
+**Da provare con il minore presente**: 5 frasi d'arruolamento (≥ 2 s ciascuna, le frasi-guida)
+**per canale**, telefono in auto, telefono in casa, satellite dello studio, per entrambi; poi 10
+frasi brevi e 10 lunghe a testa per canale, lette alternandosi, per misurare con il registro
+nuovo margine e scambi nei due versi e ritarare `speaker_id_margine` e
+`minori_margine_amministra`.

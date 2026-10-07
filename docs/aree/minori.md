@@ -122,3 +122,13 @@ passata come nascita). Ora la data di nascita è nei dati del turno di chi parla
 età e compleanno di un altro solo a chi amministra e ai tutori (`nascita_riservata`), un minore
 solo la propria. `elenca_utenti` dice `minorenne` e `impronta_voce`. Dettagli e misure in
 [memoria-agenda-liste](memoria-agenda-liste.md); prova `prova_eta_utenti`.
+
+## Voce incerta tra chi amministra e un minore (07/10)
+
+Misure, casi veri e correzioni in [stt-tts](stt-tts.md#voci-di-famiglia-adulto-e-ragazzo-al-telefono-in-auto-0710).
+In breve: al telefono in auto la voce dell'adulto valeva come quella del ragazzo (impronte lontane,
+coseno 0,17, ma il ragazzo registrato dal telefono). `piu_protetto` resta (voce dubbia → il
+minore), con in più il margine tra primo e secondo profilo (`speaker_id_margine`, 0,08), chi
+amministra solo familiare se un minore è a meno di `minori_margine_amministra` (0,12, il verso
+pericoloso) e la domanda «Non sono sicura di chi parla: …?» solo quando serve per un'azione di chi
+amministra. Il minore va registrato di nuovo per canale quando c'è (stt-tts).
