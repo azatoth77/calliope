@@ -113,3 +113,12 @@ negli istituti di istruzione, non a casa per scelta della famiglia (linee guida 
 14 anni decide il ragazzo. Proposta: prima solo misure oggettive rispetto al proprio solito più
 «come ti sei sentito?»; parte emotiva solo dopo una prova chiusa sulle voci vere, solo arousal per
 sessione, visibile al ragazzo e al tutore come andamento (variante «mista»), mai etichette né voti.
+
+## Età e compleanno dal profilo (07/10, DGX 06/10 sera)
+
+Un minore che chiedeva «Quanti anni ho?» si sentiva dire «oggi è il tuo compleanno» (data di oggi
+passata come nascita). Ora la data di nascita è nei dati del turno di chi parla
+(`minori.dato_nascita`), `data_calcola` ha `persona` e rifiuta la data di oggi come nascita;
+età e compleanno di un altro solo a chi amministra e ai tutori (`nascita_riservata`), un minore
+solo la propria. `elenca_utenti` dice `minorenne` e `impronta_voce`. Dettagli e misure in
+[memoria-agenda-liste](memoria-agenda-liste.md); prova `prova_eta_utenti`.

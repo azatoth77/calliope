@@ -361,3 +361,33 @@
   `NotifyAccess=main`: ora `main()` toglie la variabile dall'ambiente all'avvio
   (`trattieni_notify_socket`) e `notifica_systemd` usa il valore tenuto; nessun figlio (systemctl,
   ssh del tunnel, docker) la eredita. Prova in `prova_linux`.
+
+## Risposte «vuote», testo nullo e persone di casa (07/10, DGX 06/10 sera, ramo `eta-vuoti`)
+
+Dal registro dei turni e dal journal della DGX del 06/10 (18:48–18:53):
+- **«testo: null» non era una frase vuota al modello**: erano frasi di un **ospite** (voce sotto
+  soglia, 0,36), che il registro toglie per privacy; il console scrive «(una frase di un
+  ospite)». Le frasi vuote davvero restano fuori (`esito: vuoto`, 18:49:40). Ora il registro
+  tiene `testo_parole` e `risposta_parole` di un ospite (`TurnLog._write`), così null non è
+  ambiguo.
+- **«risposta: null» dopo `conversazione_cerca` e `anagrafica_cerca` non era il silenzio**: i
+  due tool sono riservati e la risposta si toglie dal registro (`riservato: true`; nel journal
+  «[prima frase 3.72s] …»). Ora resta `risposta_parole`.
+- **`conversazione_cerca({})` non era una chiamata senza argomenti**: di un tool riservato il
+  registro e il terminale scrivevano `{}` al posto degli argomenti. `tool_argomenti_mancanti`
+  funzionava (i tool `*_cerca` hanno tutti `required`, ora controllato in `prova_eta_utenti`).
+  Ora di un tool riservato restano i nomi degli argomenti dati, con «…» come valore.
+- **Mai muta dopo una risposta vuota** (regola `vuoto_ripiego`): la risposta vuota del tutto
+  dopo un tool fallito, dopo una lettura senza frase pronta o senza nessun tool, se non si è
+  ancora detto niente, riceve la seconda passata (`EMPTY_NUDGE`, rete `vuoto_seconda_passata`) e,
+  di nuovo vuota, «Non ci sono riuscita: puoi ripetere la richiesta?». Prima la seconda passata
+  c'era solo con una conferma pronta o con la sola punteggiatura, e il resto finiva in silenzio.
+  Contrario: già detto qualcosa nella stessa risposta, niente ripiego (`prova_brain`).
+- **Utenti registrati e rubrica**: «Parliamo di Bianca, che cosa sai di lei?» → `anagrafica_cerca`
+  (rubrica dell'ufficio); «è registrata, ma non ho ancora una sua voce associata» perché
+  `elenca_utenti` dava `voce: null` (era la voce **di Calliope** scelta per lei). Ora
+  `elenca_utenti` dà `impronta_voce` sì/no, `amministra`, `minorenne`, `voce_di_calliope` solo
+  se scelta, età e compleanno a chi può saperli; le descrizioni di `elenca_utenti` (persone della
+  casa) e `anagrafica_cerca` (clienti e fornitori) si rimandano. Misura con gemma4 e4b: «Bianca è
+  registrata? Riconosci la sua voce?» 1/2 → 3/3; «che cosa sai di lei?» `anagrafica_cerca` 1/2 →
+  0/3. Età e compleanni: [memoria-agenda-liste](memoria-agenda-liste.md).

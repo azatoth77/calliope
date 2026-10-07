@@ -1664,9 +1664,10 @@ _SPECS = [
                      "distanza tra due date. Le date come dette («4 luglio 1977», «25 "
                      "dicembre», «Natale», «domani»): la data di oggi la sa il programma, "
                      "non passarla. Età e compleanno di chi parla («quanti anni ho?») o di "
-                     "una persona di casa («quando è il compleanno di Bianca?»): persona, "
-                     "senza data, e la data di nascita la prende dal profilo. Per le date usa "
-                     "questo, non calcola. Nella risposta usa il campo da_dire."),
+                     "una persona di casa («quanti anni ha Bianca?», «quando è il compleanno "
+                     "di Bianca?»): persona, senza data; la data di nascita la prende il "
+                     "programma dal profilo, non chiederla prima. Per le date usa questo, "
+                     "non calcola. Nella risposta usa il campo da_dire."),
         parameters={"type": "object",
                     "properties": {
                         "cosa": {"type": "string", "enum": list(_COSE_DATE)},
