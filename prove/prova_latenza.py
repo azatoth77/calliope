@@ -654,11 +654,140 @@ def prova_prima_voce():
              and "prima voce sentita" in js)
 
 
+# ─────────────────── la prima frase a pezzi (07/10) ───────────────────
+def prova_voce_a_pezzi():
+    """Dal testo alla voce (07/10, DGX: ~0,9 s tra prima frase pronta e voce sentita sullo
+    studio, quasi tutto sintesi di Piper della prima frase intera): la prima frase lunga del
+    turno in due pezzi dopo una virgola, i due punti o il punto e virgola; la misura della
+    sintesi nel registro e nella latenza; il telefono che dice quando suona."""
+    print("── prima frase a pezzi ──")
+    from calliope import tts
+    from calliope.ciclo import Ciclo
+    pp = tts.primo_pezzo
+    f = ("Sono qui, pronta a tutto, anche se non sono sicura di aver capito cosa ti abbiano "
+         "detto esattamente.")
+    verifica("frase lunga: dopo la virgola che basta a coprire il resto (la prima è presto)",
+             pp(f, 60) == ("Sono qui, pronta a tutto,", "anche se non sono sicura di aver "
+                           "capito cosa ti abbiano detto esattamente."), str(pp(f, 60)))
+    g = ("Allora abbiamo un atleta completo: tra colpi di gomito e maestria orientale, "
+         "spero che il tuo corpo sia pronto.")
+    verifica("i due punti valgono come la virgola",
+             (pp(g, 60) or ("",))[0] == "Allora abbiamo un atleta completo:", str(pp(g, 60)))
+    verifica("punto e virgola", (pp("Ho acceso la luce in cucina; quella del salotto era già "
+                                    "accesa da un pezzo, la lascio così.", 60) or ("",))[0]
+             == "Ho acceso la luce in cucina;")
+    verifica("contrario: frase corta non si tocca", pp("Non ho lavori in corso.", 60) is None)
+    verifica("contrario: spento con 0", pp(f, 0) is None)
+    verifica("contrario: senza pause non si taglia a metà",
+             pp("Domani mattina alle nove hai la riunione con il commercialista per il "
+                "bilancio dell'anno scorso.", 60) is None)
+    verifica("contrario: la virgola dei decimali non è una pausa",
+             pp("La temperatura in salotto adesso è di 21,5 gradi e l'umidità è al "
+                "quarantotto per cento circa.", 60) is None)
+    verifica("contrario: il resto troppo corto non vale il taglio",
+             pp("Ho controllato tutte le luci della casa e i sensori del giardino, va bene.",
+                60) is None)
+    verifica("contrario: «Beh,» da solo non copre il resto: si va alla pausa dopo",
+             (pp("Beh, il Calisthenics non è una passeggiata, specialmente quando devi "
+                 "sollevare tutto te stesso.", 60) or ("",))[0]
+             == "Beh, il Calisthenics non è una passeggiata,")
+
+    # Speaker con un'uscita remota finta e una sintesi finta (niente Piper)
+    class Remota:
+        def __init__(self):
+            self.frasi, self._in_coda_s = [], 0.0
+
+        def invia(self, turno, testo, audio, rate):
+            self.frasi.append((turno, testo))
+
+        def fine_turno(self):
+            return [x[1] for x in self.frasi]
+
+        def ferma(self, turno):
+            pass
+
+        def prima_voce(self, turno):
+            return None
+
+    cfg = Config()
+    voce = SimpleNamespace(config=SimpleNamespace(sample_rate=16000))
+    base = SimpleNamespace(_voices={}, voice=voce, pronuncia=None,
+                           _voices_lock=threading.Lock(), _fillers={})
+    rem = Remota()
+    sp = tts.Speaker(cfg, uscita=rem, base=base)
+    sp._pcm = lambda v, testo: b"\0\0" * 16 * len(testo)
+    t0 = time.monotonic()
+    sp.start_turn()
+    sp.say(f)
+    sp.say("E poi una frase lunga anche lei, con una virgola che però non si taglia più.")
+    sp.wait()
+    testi = [x[1] for x in rem.frasi]
+    verifica("Speaker: la prima frase del turno in due pezzi, la seconda intera",
+             testi == ["Sono qui, pronta a tutto,", f[len("Sono qui, pronta a tutto, "):],
+                       "E poi una frase lunga anche lei, con una virgola che però non si "
+                       "taglia più."], str(testi))
+    verifica("Speaker: in played i pezzi, che uniti danno la frase",
+             " ".join(sp.played[:2]) == f, str(sp.played))
+    vp = sp.voce_pronta()
+    verifica("Speaker: il primo audio del turno pronto, con il tempo di sintesi",
+             vp is not None and vp[0] >= t0 and 0 <= vp[1] < 1, str(vp))
+    rem.frasi.clear()
+    sp.start_turn()
+    sp.say(f)
+    sp.wait()
+    verifica("Speaker: al turno dopo si taglia di nuovo", len(rem.frasi) == 2)
+    sp.start_turn()
+    verifica("Speaker: un turno nuovo non ha ancora il primo audio", sp.voce_pronta() is None)
+    cfg.tts_spezza_prima = 0
+    rem.frasi.clear()
+    sp.start_turn()
+    sp.say(f)
+    sp.wait()
+    verifica("contrario: tts_spezza_prima 0, la frase intera", [x[1] for x in rem.frasi] == [f])
+    verifica("predefiniti: 60 caratteri, 8 thread",
+             Config().tts_spezza_prima == 60 and Config().tts_thread == 8)
+
+    # Il registro: voce_pronta_s e sintesi_s da t0, come prima_voce_s
+    rec = {"prima_frase_s": 1.0}
+    finto = SimpleNamespace(rec=rec, speaker=SimpleNamespace(
+        prima_voce=lambda: 100.0 + 1.5, voce_pronta=lambda: (100.0 + 1.3, 0.25)))
+    Ciclo._prima_voce(finto, SimpleNamespace(t0_mono=100.0))
+    verifica("ciclo: voce_pronta_s e sintesi_s nel turno",
+             rec.get("voce_pronta_s") == 1.3 and rec.get("sintesi_s") == 0.25
+             and rec.get("prima_voce_s") == 1.5, str(rec))
+    rec2 = {"prima_frase_s": 1.0}
+    finto.rec = rec2
+    finto.speaker = SimpleNamespace(prima_voce=lambda: None)      # Speaker vecchio o finto
+    Ciclo._prima_voce(finto, SimpleNamespace(t0_mono=100.0))
+    verifica("contrario: senza la misura nessun campo", rec2 == {"prima_frase_s": 1.0}, str(rec2))
+
+    # La latenza: dal testo alla voce, scomposto
+    turni = [turno("2026-10-07", 1.0, prima_voce_s=1.9, voce_pronta_s=1.6) for _ in range(4)]
+    turni += [turno("2026-10-07", 3.0, prima_voce_s=1.2)]       # frase d'attesa: esclusa
+    giorni = latenza.per_giorno(turni)
+    d = giorni["2026-10-07"]["prima_voce"]
+    verifica("latenza: distacco, sintesi e consegna (senza i turni con la frase d'attesa)",
+             abs(d["distacco"] - 0.9) < 1e-9 and abs(d["sintesi"] - 0.6) < 1e-9
+             and abs(d["consegna"] - 0.3) < 1e-9 and d["n_scomposti"] == 4, str(d))
+    t = latenza.testo(giorni)
+    verifica("latenza: la riga nel terminale",
+             "dal testo alla voce 0,90 s" in t and "sintesi 0,60 s, rete e uscita 0,30 s" in t, t)
+
+    # Il telefono dice quando la voce comincia (prima `prima_voce_s` mancava sempre)
+    pag = Path(tts.__file__).parent / "schermi" / "pagina" / "telefono"
+    vj = (pag / "voce.js").read_text(encoding="utf-8")
+    tj = (pag / "telefono.js").read_text(encoding="utf-8")
+    verifica("telefono: «suona» al primo pezzo con il ritardo dell'uscita del browser",
+             "this.onSuona(f.id, uscita)" in vj and "outputLatency" in vj
+             and 'tipo: "suona"' in tj and "player.onSuona" in tj)
+
+
 prova_guardiano()
 prova_ripresa()
 prova_ripresa_con_tool()
 prova_registro()
 prova_prima_voce()
+prova_voce_a_pezzi()
 prova_compressione()
 print(f"\n{'Tutto ok' if not errori else f'{errori} errori'}")
 sys.exit(1 if errori else 0)
