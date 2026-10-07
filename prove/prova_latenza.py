@@ -876,9 +876,16 @@ def prova_voce_a_pezzi():
     sp.say(f)
     sp.wait()
     verifica("contrario: tts_spezza_prima 0, la frase intera", [x[1] for x in rem.frasi] == [f])
-    verifica("predefiniti: 60 caratteri, primo pezzo da 15, thread «auto», taratura accesa",
+    verifica("predefiniti: 60 caratteri, primo pezzo da 15, thread «auto»",
              Config().tts_spezza_prima == 60 and Config().tts_thread == "auto"
-             and Config().tts_primo_pezzo_min == 15 and Config().tts_taratura is True)
+             and Config().tts_primo_pezzo_min == 15)
+    from calliope.config import _bool_env
+    os.environ["PROVA_TARATURA_X"] = "0"
+    verifica("taratura accesa se l'ambiente non dice altro (le prove la spengono: "
+             "CALLIOPE_TTS_TARATURA=0 nel runner)",
+             _bool_env("PROVA_TARATURA_NON_C_E", True) is True
+             and _bool_env("PROVA_TARATURA_X", True) is False)
+    os.environ.pop("PROVA_TARATURA_X", None)
 
     # Il registro: voce_pronta_s e sintesi_s da t0, come prima_voce_s
     rec = {"prima_frase_s": 1.0}

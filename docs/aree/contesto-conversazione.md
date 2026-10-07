@@ -267,8 +267,10 @@ calliope.yaml (atomico, `persistenza.scrivi_json`; senza `config_dir` solo in me
 
 La stima si vede in `calliope stato` («Voce it_IT-serena-high: sintesi 3,9 ms a carattere, 18
 caratteri al secondo (dall'uso, 112 sintesi); 8 thread, scelti dalla taratura.»), in `--json`
-(`voce`) e nella nota della capacità «voce». `tts_taratura: false` spegne la misura all'avvio
-(l'uso continua).
+(`voce`) e nella nota della capacità «voce». `tts_taratura: false` (o `CALLIOPE_TTS_TARATURA=0`)
+spegne la misura all'avvio, l'uso continua. Il runner delle prove la spegne: con Calliope vera
+proverebbe i thread a ogni prova, togliendo CPU alle altre in parallelo (il primo `--completo`
+con la taratura accesa ha perso `prova_scritto_calliope`, passata da sola).
 
 Banco sulla DGX (tredici prime frasi vere del 06–07/10, `Speaker` vero con serena-high e 8
 thread, un'uscita remota finta; da `say()` al primo audio pronto, mediana di 3; «buco» = il

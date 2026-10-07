@@ -384,7 +384,9 @@ tts:
   tts_primo_pezzo_min: 15
   # Taratura della voce all'avvio (07/10): una frase fissa sintetizzata quando la voce è
   # libera, e con tts_thread «auto» la scelta dei thread. Ogni sintesi vera aggiorna comunque
-  # la stima; false = solo l'uso (prima, i predefiniti prudenti).
+  # la stima; false = solo l'uso (prima, i predefiniti prudenti). CALLIOPE_TTS_TARATURA=0
+  # la spegne dall'ambiente (le prove: proverebbe i thread a ogni avvio).
+  # (variabile d'ambiente CALLIOPE_TTS_TARATURA, che vince su questo file)
   tts_taratura: true
   # Thread di onnxruntime per la sintesi di Piper (07/10). Piper ne usa uno per core, e sui
   # processori con core veloci e lenti (DGX: 10 Cortex-X925 e 10 A725) è più lento: con 8

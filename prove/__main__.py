@@ -441,7 +441,10 @@ def lancia(script: str, args: list[str], timeout: float = TIMEOUT_S) -> dict:
     # prova non deve mai aprire un tunnel verso la DGX vera (02/10)
     env = dict(_senza_git(os.environ), PYTHONUTF8="1",
                CALLIOPE_CONFIG_LOCALE=str(RADICE / "prove" / "nessun-file-locale.yaml"),
-               CALLIOPE_AGENTI_CONFIG=str(RADICE / "prove" / "nessun-file-dgx.yaml"))
+               CALLIOPE_AGENTI_CONFIG=str(RADICE / "prove" / "nessun-file-dgx.yaml"),
+               # Niente taratura della voce all'avvio (07/10): con Calliope vera proverebbe i
+               # thread di Piper a ogni prova, CPU tolta alle altre in parallelo
+               CALLIOPE_TTS_TARATURA="false")
     env.pop("CALLIOPE_AGENTI_URL", None)
     env.pop("CALLIOPE_SSH", None)
     env.pop("PROVE_FILE_CAMBIATI", None)

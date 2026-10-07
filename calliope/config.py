@@ -35,6 +35,14 @@ def _device_from_env(var: str) -> int | str | None:
     return int(raw) if raw.isdigit() else raw
 
 
+def _bool_env(var: str, predefinito: bool) -> bool:
+    """Un sì o no da variabile d'ambiente («0», «false», «no» = no), altrimenti il predefinito."""
+    raw = (os.environ.get(var) or "").strip().lower()
+    if not raw:
+        return predefinito
+    return raw not in ("0", "false", "no")
+
+
 @dataclass
 class Config:
     # Identità: nome (che è anche la wake word, salvo wake_word), genere e personaggio
@@ -391,8 +399,9 @@ class Config:
     tts_primo_pezzo_min: int = 15
     # Taratura della voce all'avvio (07/10): una frase fissa sintetizzata quando la voce è
     # libera, e con tts_thread «auto» la scelta dei thread. Ogni sintesi vera aggiorna comunque
-    # la stima; false = solo l'uso (prima, i predefiniti prudenti).
-    tts_taratura: bool = True
+    # la stima; false = solo l'uso (prima, i predefiniti prudenti). CALLIOPE_TTS_TARATURA=0
+    # la spegne dall'ambiente (le prove: proverebbe i thread a ogni avvio).
+    tts_taratura: bool = _bool_env("CALLIOPE_TTS_TARATURA", True)
     # Thread di onnxruntime per la sintesi di Piper (07/10). Piper ne usa uno per core, e sui
     # processori con core veloci e lenti (DGX: 10 Cortex-X925 e 10 A725) è più lento: con 8
     # serena-high sintetizza una frase di 100 caratteri in 0,36 s invece di 0,61 sulla DGX,
@@ -2168,6 +2177,7 @@ ENV_OVERRIDES: dict[str, str] = {
     "llm_keep_alive": "CALLIOPE_LLM_KEEP_ALIVE",
     "wake_mode": "CALLIOPE_WAKE_MODE",
     "piper_voice": "CALLIOPE_PIPER_VOICE",
+    "tts_taratura": "CALLIOPE_TTS_TARATURA",
     "input_device": "CALLIOPE_INPUT_DEVICE",
     "output_device": "CALLIOPE_OUTPUT_DEVICE",
     "memory_db": "CALLIOPE_MEMORY_DB",
