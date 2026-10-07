@@ -471,6 +471,383 @@
     aggiornaLavori();
   }
 
+  // ─── lettore Markdown (07/10, calliope/documenti/markdown.py) ───
+  // I testi dell'agente (ricerche, relazioni) arrivano in Markdown: un sottoinsieme letto qui,
+  // costruito con createElement e textContent, MAI come HTML (il testo dell'agente non è
+  // fidato). Titoli, paragrafi, elenchi (anche annidati), tabelle, codice, citazioni, righe; nelle
+  // righe grassetto, corsivo, barrato, codice. I collegamenti restano testo non cliccabile
+  // (con l'indirizzo tra parentesi), le immagini un segnaposto: niente rete, niente navigazione.
+  // Un HTML scritto nel testo resta testo. Limiti contro i testi ostili: lunghezza, blocchi,
+  // righe e colonne delle tabelle, rientri, citazioni annidate, enfasi annidate e corte.
+  const MD = { caratteri: 120000, blocchi: 1500, righe: 200, colonne: 20, livelli: 6, citazioni: 4, inLinea: 3, enfasi: 400 };
+  const MD_TITOLO = /^ {0,3}(#{1,6})(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*$/;
+  const MD_RIGA = /^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$/;
+  const MD_RECINTO = /^ {0,3}(`{3,}|~{3,})(.*)$/;
+  const MD_VOCE = /^([ \t]*)([-*+]|\d{1,9}[.)])[ \t]+(.*)$/;
+  const MD_SEP = /^[ \t]*\|?[ \t]*:?-+:?[ \t]*(?:\|[ \t]*:?-+:?[ \t]*)*\|?[ \t]*$/;
+  const MD_CIT = /^ {0,3}>[ ]?(.*)$/;
+  const MD_SOTTO1 = /^ {0,3}=+[ \t]*$/;
+  const MD_SOTTO2 = /^ {0,3}-+[ \t]*$/;
+
+  function mdCelle(riga) {
+    let r = riga.trim();
+    if (r.startsWith("|")) r = r.slice(1);
+    if (r.endsWith("|") && !r.endsWith("\\|")) r = r.slice(0, -1);
+    const out = [];
+    let cur = "";
+    for (let i = 0; i < r.length; i++) {
+      if (r[i] === "\\" && r[i + 1] === "|") { cur += "|"; i++; continue; }
+      if (r[i] === "|") { out.push(cur.trim()); cur = ""; } else cur += r[i];
+    }
+    out.push(cur.trim());
+    return out;
+  }
+
+  function mdApre(r, dopo) {
+    return MD_TITOLO.test(r) || MD_RIGA.test(r) || MD_RECINTO.test(r) || MD_VOCE.test(r) || MD_CIT.test(r)
+      || (r.includes("|") && dopo != null && MD_SEP.test(dopo) && dopo.includes("-"));
+  }
+
+  // I blocchi, come markdown.analizza in Python
+  function mdBlocchi(testo, livello) {
+    const righe = String(testo).split("\n");
+    const out = [];
+    let i = 0;
+    const n = righe.length;
+    while (i < n && out.length < MD.blocchi) {
+      const r = righe[i];
+      if (!r.trim()) { i++; continue; }
+      let m = r.match(MD_RECINTO);
+      if (m) {
+        const f = m[1];
+        const chiude = new RegExp("^ {0,3}" + (f[0] === "`" ? "`" : "~") + "{" + f.length + ",}[ \\t]*$");
+        const corpo = [];
+        i++;
+        while (i < n && !chiude.test(righe[i])) corpo.push(righe[i++]);
+        i++;
+        out.push({ tipo: "codice", testo: corpo.join("\n") });
+        continue;
+      }
+      m = r.match(MD_TITOLO);
+      if (m) { out.push({ tipo: "titolo", livello: m[1].length, testo: (m[2] || "").trim() }); i++; continue; }
+      if (MD_RIGA.test(r)) { out.push({ tipo: "riga" }); i++; continue; }
+      const dopo = i + 1 < n ? righe[i + 1] : null;
+      if (r.includes("|") && dopo != null && MD_SEP.test(dopo) && dopo.includes("-")) {
+        const colonne = mdCelle(r).slice(0, MD.colonne);
+        const corpo = [];
+        let altre = 0;
+        i += 2;
+        while (i < n && righe[i].trim() && righe[i].includes("|")) {
+          if (corpo.length < MD.righe) {
+            const c = mdCelle(righe[i]).slice(0, colonne.length);
+            while (c.length < colonne.length) c.push("");
+            corpo.push(c);
+          } else altre++;
+          i++;
+        }
+        out.push({ tipo: "tabella", colonne, righe: corpo, altre });
+        continue;
+      }
+      if (MD_CIT.test(r)) {
+        const dentro = [];
+        while (i < n && righe[i].trim()) {
+          const q = righe[i].match(MD_CIT);
+          if (!q && !dentro.length) break;
+          dentro.push(q ? q[1] : righe[i]);
+          i++;
+        }
+        if (livello + 1 >= MD.citazioni) {
+          out.push({ tipo: "citazione", blocchi: [{ tipo: "paragrafo", testo: dentro.map((x) => x.replace(/^(?:\s*>)+\s?/, "")).join(" ") }] });
+        } else out.push({ tipo: "citazione", blocchi: mdBlocchi(dentro.join("\n"), livello + 1) });
+        continue;
+      }
+      if (MD_VOCE.test(r)) {
+        const voci = [];
+        let base = null;
+        while (i < n) {
+          const riga = righe[i];
+          const v = riga.match(MD_VOCE);
+          if (v) {
+            if (base === null) base = v[1].length;
+            const liv = Math.max(0, Math.min(MD.livelli - 1, Math.floor((v[1].length - base) / 2)));
+            const num = /\d/.test(v[2][0]);
+            if (liv === 0 && voci.length && voci[0].numerato !== num) break;
+            voci.push({ testo: v[3].trim(), livello: liv, numerato: num });
+            i++;
+            continue;
+          }
+          if (riga.trim() && voci.length && /^[ \t]/.test(riga) && !mdApre(riga.trim(), null)) {
+            voci[voci.length - 1].testo += " " + riga.trim();
+            i++;
+            continue;
+          }
+          if (!riga.trim() && i + 1 < n && MD_VOCE.test(righe[i + 1])) { i++; continue; }
+          break;
+        }
+        out.push({ tipo: "elenco", voci });
+        continue;
+      }
+      const par = [r.trim()];
+      i++;
+      while (i < n && righe[i].trim()) {
+        if (MD_SOTTO1.test(righe[i]) || (MD_SOTTO2.test(righe[i]) && par.length === 1)) break;
+        if (mdApre(righe[i], i + 1 < n ? righe[i + 1] : null)) break;
+        par.push(righe[i].trim());
+        i++;
+      }
+      if (i < n && righe[i].trim() && (MD_SOTTO1.test(righe[i]) || MD_SOTTO2.test(righe[i]))) {
+        out.push({ tipo: "titolo", livello: MD_SOTTO1.test(righe[i]) ? 1 : 2, testo: par.join(" ") });
+        i++;
+        continue;
+      }
+      out.push({ tipo: "paragrafo", testo: par.join("\n") });
+    }
+    return out;
+  }
+
+  // Dentro una riga: nodi di testo e pochi elementi (strong, em, s, code, span). `prof`: quante
+  // enfasi annidate (oltre, il resto è testo)
+  const MD_FUGA = "\\`*_{}[]()#+-.!|~>";
+  const mdParola = (c) => !!c && /[\p{L}\p{N}_]/u.test(c);
+  function mdInLinea(dest, s, prof) {
+    let buf = "";
+    const fuori = () => { if (buf) { dest.append(document.createTextNode(buf)); buf = ""; } };
+    let i = 0;
+    while (i < s.length) {
+      const c = s[i];
+      if (c === "\\" && i + 1 < s.length && MD_FUGA.includes(s[i + 1])) { buf += s[i + 1]; i += 2; continue; }
+      if (c === "\n") {
+        // due spazi in fondo: a capo; altrimenti uno spazio
+        if (buf.endsWith("  ")) { buf = buf.replace(/ +$/, ""); fuori(); dest.append(el("br")); } else buf += " ";
+        i++;
+        continue;
+      }
+      if (c === "`") {
+        let k = i;
+        while (s[k] === "`") k++;
+        const apri = s.slice(i, k);
+        const j = s.indexOf(apri, k);
+        if (j > 0 && j - k <= 2000 && s[j + apri.length] !== "`") {
+          fuori();
+          dest.append(el("code", "", s.slice(k, j).trim()));
+          i = j + apri.length;
+          continue;
+        }
+        buf += apri; i = k; continue;
+      }
+      if ((c === "!" && s[i + 1] === "[") || c === "[") {
+        const img = c === "!";
+        const a = img ? i + 2 : i + 1;
+        const fine = s.indexOf("]", a);
+        if (fine > 0 && fine - a <= 500 && s[fine + 1] === "(" && !s.slice(a, fine).includes("\n")) {
+          const chiusa = s.indexOf(")", fine + 2);
+          if (chiusa > 0 && chiusa - fine <= 700) {
+            const testo = s.slice(a, fine);
+            const indirizzo = s.slice(fine + 2, chiusa).trim().split(/\s+/)[0] || "";
+            fuori();
+            if (img) {
+              dest.append(el("span", "md-immagine", testo ? "[immagine: " + testo + "]" : "[immagine]"));
+            } else {
+              // Un collegamento resta testo: niente <a>, niente navigazione
+              const l = el("span", "md-link");
+              if (prof < MD.inLinea) mdInLinea(l, testo, prof + 1); else l.textContent = testo;
+              dest.append(l);
+              if (indirizzo && indirizzo !== testo) dest.append(el("span", "md-indirizzo", " (" + indirizzo + ")"));
+            }
+            i = chiusa + 1;
+            continue;
+          }
+        }
+        buf += img ? "![" : "["; i = a; continue;
+      }
+      const due = s.slice(i, i + 2);
+      if ((due === "**" || due === "__" || due === "~~") && prof < MD.inLinea) {
+        const okInizio = due !== "__" || !mdParola(s[i - 1]);
+        const j = s.indexOf(due, i + 2);
+        if (okInizio && j > i + 2 && j - i <= MD.enfasi && !/\s/.test(s[i + 2]) && !/\s/.test(s[j - 1])
+            && !s.slice(i + 2, j).includes("\n") && (due !== "__" || !mdParola(s[j + 2]))) {
+          fuori();
+          const e = el(due === "~~" ? "s" : "strong");
+          mdInLinea(e, s.slice(i + 2, j), prof + 1);
+          dest.append(e);
+          i = j + 2;
+          continue;
+        }
+        buf += due; i += 2; continue;
+      }
+      if ((c === "*" || c === "_") && prof < MD.inLinea && s[i + 1] && !/\s/.test(s[i + 1]) && s[i + 1] !== c
+          && !mdParola(s[i - 1])) {
+        let j = s.indexOf(c, i + 1);
+        while (j > 0 && j - i <= MD.enfasi && (s[j + 1] === c || /\s/.test(s[j - 1]) || s[j - 1] === "\\")) j = s.indexOf(c, j + 2);
+        if (j > i + 1 && j - i <= MD.enfasi && !mdParola(s[j + 1]) && !s.slice(i + 1, j).includes("\n")) {
+          fuori();
+          const e = el("em");
+          mdInLinea(e, s.slice(i + 1, j), prof + 1);
+          dest.append(e);
+          i = j + 1;
+          continue;
+        }
+      }
+      buf += c;
+      i++;
+    }
+    fuori();
+  }
+
+  function mdTabella(b) {
+    const box = el("div", "tabella-md");
+    const t = el("table");
+    const num = b.colonne.map((_, i) => b.righe.length > 0 && b.righe.every((r) => !r[i] || NUMERO.test(r[i])));
+    const tr = el("tr");
+    b.colonne.forEach((c, i) => { const th = el("th", num[i] ? "num" : ""); mdInLinea(th, c, 0); tr.append(th); });
+    const th = el("thead"); th.append(tr); t.append(th);
+    const tb = el("tbody");
+    b.righe.forEach((r) => {
+      const x = el("tr");
+      b.colonne.forEach((_, i) => { const td = el("td", num[i] ? "num" : ""); mdInLinea(td, r[i] || "", 0); x.append(td); });
+      tb.append(x);
+    });
+    t.append(tb);
+    box.append(t);
+    return box;
+  }
+
+  function mdElenco(voci) {
+    // I livelli diventano elenchi annidati: una pila di <ul>/<ol>
+    const radice = el(voci[0].numerato ? "ol" : "ul");
+    const pila = [radice];
+    let ultimo = null;
+    voci.forEach((v) => {
+      while (pila.length - 1 > v.livello) pila.pop();
+      while (pila.length - 1 < v.livello && ultimo) {
+        const sotto = el(v.numerato ? "ol" : "ul");
+        ultimo.append(sotto);
+        pila.push(sotto);
+      }
+      const li = el("li");
+      mdInLinea(li, v.testo, 0);
+      pila[pila.length - 1].append(li);
+      ultimo = li;
+    });
+    return radice;
+  }
+
+  function mdDisegna(dest, blocchi, titoli) {
+    blocchi.forEach((b) => {
+      if (b.tipo === "titolo") {
+        const h = el("h" + Math.min(6, b.livello + 1), "md-titolo");
+        mdInLinea(h, b.testo, 0);
+        h.dataset.mdAncora = String(titoli.length);
+        titoli.push({ livello: b.livello, testo: h.textContent });
+        dest.append(h);
+      } else if (b.tipo === "paragrafo") {
+        const p = el("p");
+        mdInLinea(p, b.testo, 0);
+        dest.append(p);
+      } else if (b.tipo === "elenco") {
+        if (b.voci.length) dest.append(mdElenco(b.voci));
+      } else if (b.tipo === "tabella") {
+        dest.append(mdTabella(b));
+        if (b.altre) dest.append(el("p", "nota", "… e altre " + b.altre + " righe"));
+      } else if (b.tipo === "codice") {
+        dest.append(el("pre", "codice md-codice", b.testo));
+      } else if (b.tipo === "citazione") {
+        const q = el("blockquote", "md-citazione");
+        mdDisegna(q, b.blocchi, titoli);
+        dest.append(q);
+      } else if (b.tipo === "riga") {
+        dest.append(el("hr"));
+      }
+    });
+  }
+
+  // {nodo, sommario}: il testo disegnato e, con due titoli o più, il sommario da toccare
+  function leggiMarkdown(testo) {
+    const t = String(testo || "").replace(/\r\n?/g, "\n").replace(/\t/g, "    ")
+      .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f​-‏‪-‮⁦-⁩]/g, "")
+      .slice(0, MD.caratteri);
+    const nodo = el("div", "documento markdown");
+    const titoli = [];
+    mdDisegna(nodo, mdBlocchi(t, 0), titoli);
+    let sommario = null;
+    const voci = titoli.filter((x) => x.livello <= 3);
+    if (voci.length >= 2) {
+      sommario = el("nav", "sommario-md");
+      sommario.setAttribute("aria-label", "Sommario");
+      sommario.append(el("div", "sommario-titolo", "Sommario"));
+      const min = Math.min(...voci.map((x) => x.livello));
+      titoli.forEach((x, k) => {
+        if (x.livello > 3) return;
+        const b = el("button", "voce-sommario livello-" + (x.livello - min), x.testo);
+        b.type = "button";
+        b.dataset.mdVai = String(k);
+        sommario.append(b);
+      });
+    }
+    return { nodo, sommario };
+  }
+
+  // Il sommario porta al titolo, dentro la stessa scheda (anche nello strato del telefono)
+  document.addEventListener("click", (ev) => {
+    const b = ev.target.closest && ev.target.closest("button[data-md-vai]");
+    if (!b) return;
+    const s = b.closest("article.scheda");
+    const h = s && s.querySelector('.markdown [data-md-ancora="' + CSS.escape(b.dataset.mdVai) + '"]');
+    if (h) h.scrollIntoView({ block: "start", behavior: "instant" });
+  });
+
+  // ─── «Scarica» nella scheda del documento (07/10, calliope/schermi/scarica.py) ───
+  // Il server dà un indirizzo di pochi minuti, solo a uno schermo personale a cui la scheda è
+  // arrivata; il browser salva il file (sul telefono negli scaricamenti)
+  const NOMI_SCARICA = { md: "Markdown", pdf: "PDF", word: "Word", excel: "Excel" };
+  function pulsantiScarica(c) {
+    const box = el("div", "scarica");
+    (c.scarica || []).forEach((f) => {
+      if (!NOMI_SCARICA[f]) return;
+      const b = el("button", "piccolo-bottone tasto-scarica", "Scarica " + NOMI_SCARICA[f]);
+      b.type = "button";
+      b.dataset.scarica = f;
+      b.dataset.chiaveScheda = chiaveDi(c);
+      box.append(b);
+    });
+    box.append(el("span", "esito-scarica", ""));
+    return box;
+  }
+  document.addEventListener("click", async (ev) => {
+    const b = ev.target.closest && ev.target.closest("button[data-scarica]");
+    if (!b || b.disabled) return;
+    const esito = b.parentElement && b.parentElement.querySelector(".esito-scarica");
+    const dire = (t) => { if (esito) esito.textContent = t; };
+    if (!S.sessione) { dire("Non collegato: riprova tra poco."); return; }
+    b.disabled = true;
+    dire("Preparo il file…");
+    try {
+      const r = await fetch("/api/scarica", {
+        method: "POST", cache: "no-store",
+        headers: { "Content-Type": "application/json", "X-Calliope-Sessione": S.sessione },
+        body: JSON.stringify({ chiave: b.dataset.chiaveScheda, formato: b.dataset.scarica }),
+      });
+      let d = {};
+      try { d = await r.json(); } catch (e) { /* niente */ }
+      if (r.status !== 200 || typeof d.url !== "string" || !/^\/scarica\/[\w-]+$/.test(d.url)) {
+        dire(d.errore || ("Non riesco a scaricarlo (" + r.status + ")."));
+        return;
+      }
+      const a = el("a");
+      a.href = d.url;
+      a.download = d.nome || "";
+      a.hidden = true;
+      document.body.append(a);
+      a.click();
+      a.remove();
+      dire("Scaricato: " + (d.nome || "file") + ".");
+    } catch (e) {
+      dire("Calliope non risponde: riprova.");
+    } finally {
+      b.disabled = false;
+    }
+  });
+
   const DISEGNA = {
     lista(c, corpo) {
       if (!c.voci || !c.voci.length) { corpo.append(el("p", "vuoto", "La lista è vuota.")); }
@@ -524,9 +901,19 @@
       if (c.altre && c.altre.length) corpo.append(el("p", "altre", "Anche: " + c.altre.join(", ")));
     },
     documento(c, corpo) {
-      const meta = el("p", "sotto", c.file || "");
+      const meta = el("p", "sotto", [c.file, c.cartella].filter(Boolean).join(" · "));
       if (c.modifica) meta.textContent += " · cambiato: " + c.modifica;
       corpo.append(meta);
+      if (Array.isArray(c.scarica) && c.scarica.length) corpo.append(pulsantiScarica(c));
+      if (c.riassunto) corpo.append(el("p", "riassunto-lavoro", c.riassunto));
+      if (typeof c.markdown === "string") {
+        // Il testo in Markdown dell'agente (07/10): il lettore di questa pagina, mai HTML
+        const md = leggiMarkdown(c.markdown);
+        if (md.sommario) corpo.append(md.sommario);
+        corpo.append(md.nodo);
+        if (c.tagliato) corpo.append(el("p", "nota", "Il testo continua nel file: «Scarica» lo dà intero."));
+        return;
+      }
       const d = el("div", "documento");
       (c.blocchi || []).forEach((b) => {
         if (b.tipo === "titolo") d.append(el("h2", "", b.testo));

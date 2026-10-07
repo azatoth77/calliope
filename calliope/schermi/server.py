@@ -31,6 +31,11 @@ Indirizzi:
   GET  /api/cruscotto            «X-Calliope-Sessione»: il cruscotto di chi amministra (06/10,
                                  cruscotto.py), solo da uno schermo personale il cui
                                  proprietario amministra; ?aggiorna=1 ricalcola. Sola lettura
+  POST /api/scarica              «X-Calliope-Sessione», {chiave, formato}: l'indirizzo per
+                                 scaricare il documento di una scheda (07/10, scarica.py), solo
+                                 da uno schermo personale a cui la scheda è arrivata
+  GET  /scarica/<gettone>        il file (MD, PDF, Word, Excel), convertito qui al primo
+                                 accesso; il gettone vale pochi minuti e poche richieste
   GET  /satellite                il comando per un PC nuovo come satellite (satellite/web.py)
   /telefono/…                    la web app del telefono (telefono.py): pagina, modelli e il
                                  WebSocket del protocollo dei satelliti
@@ -519,6 +524,56 @@ def crea_app(hub: Schermi) -> Starlette:
             return _json({"errore": f"cruscotto non calcolato ({type(e).__name__})"}, 500)
         return _json(dati)
 
+    # ── «Scarica» nella scheda del documento (07/10, scarica.py) ──
+    async def scarica_gettone(request: Request):
+        """L'indirizzo per scaricare il documento di una scheda: sessione in un'intestazione
+        (come lo scritto), JSON, solo in HTTPS fuori da questo computer. Non serve una
+        conversazione a voce: il documento è già sullo schermo del proprietario."""
+        from .scarica import Rifiuto
+        client = request.client.host if request.client else ""
+        if request.url.scheme != "https" and client not in ("127.0.0.1", "::1"):
+            return _json({"errore": "solo in HTTPS"}, 403)
+        sess = request.headers.get("x-calliope-sessione", "")
+        with lock:
+            sid = sessioni.get(sess) if sess else None
+        schermo = next((s for s in hub.abbinati() if s["id"] == sid), None) if sid else None
+        if schermo is None:
+            return _json({"errore": "sessione non valida"}, 401)
+        dati, errore = await corpo_json(request, 2048)
+        if errore is not None:
+            return errore
+        if not isinstance(dati, dict):
+            return _json({"errore": "dati non validi"}, 400)
+        cr = getattr(hub, "cruscotto", None)
+        try:
+            amministra = bool(cr is not None and cr.amministra(schermo))
+        except Exception:  # noqa: BLE001
+            amministra = False
+        try:
+            out = hub.scaricamenti.gettone(schermo, str(dati.get("chiave") or ""),
+                                           str(dati.get("formato") or ""), amministra)
+        except Rifiuto as e:
+            return _json({"errore": e.frase}, e.stato)
+        return _json(out)
+
+    async def scarica_file(request: Request):
+        from starlette.responses import Response
+        from .scarica import INTESTAZIONI, Rifiuto, disposizione
+        client = request.client.host if request.client else ""
+        if request.url.scheme != "https" and client not in ("127.0.0.1", "::1"):
+            return PlainTextResponse("solo in HTTPS", status_code=403, headers=INTESTAZIONI)
+        try:
+            nome, tipo, dati = await asyncio.to_thread(
+                hub.scaricamenti.prendi, request.path_params.get("gettone", ""), hub.valido)
+        except Rifiuto as e:
+            return PlainTextResponse(e.frase, status_code=e.stato, headers=INTESTAZIONI)
+        except Exception as e:  # noqa: BLE001 — la conversione non riuscita è una risposta
+            hub.log(f"[SCHERMI] scaricamento non riuscito: {type(e).__name__}: {e}")
+            return PlainTextResponse("conversione non riuscita", status_code=500,
+                                     headers=INTESTAZIONI)
+        return Response(dati, media_type=tipo,
+                        headers={**INTESTAZIONI, "Content-Disposition": disposizione(nome)})
+
     # ── giochi (05/10, giochi.py) ──
     async def gioco_documento(request: Request):
         """Il documento del riquadro di una partita: origine opaca (CSP sandbox), niente rete,
@@ -573,6 +628,8 @@ def crea_app(hub: Schermi) -> Starlette:
         Route("/api/immagine", immagine, methods=["POST"]),
         Route("/api/allegato", allegato, methods=["POST"]),
         Route("/api/cruscotto", cruscotto),
+        Route("/api/scarica", scarica_gettone, methods=["POST"]),
+        Route("/scarica/{gettone}", scarica_file),
         Route("/gioco/{gettone}", gioco_documento),
         Route("/api/gioco", gioco_api, methods=["POST"]),
         *telefono.rotte(hub),

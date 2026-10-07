@@ -670,6 +670,10 @@ class Config:
     schermi_scritto_al_minuto: int = 12
     # Secondi in cui un modulo resta aperto sullo schermo
     schermi_moduli_s: float = 900.0
+    # «Scarica» nella scheda del documento (07/10, schermi/scarica.py): l'indirizzo del file
+    # (MD, PDF o Word, convertito al clic) vale tanti secondi, solo per lo schermo personale a
+    # cui è arrivata la scheda; poi va richiesto di nuovo dalla scheda
+    schermi_scarica_s: float = 180.0
     # Foto in ingresso (05/10, calliope/immagini.py, docs/ricerche/2026-10-05-immagini.md):
     # dal telefono e dagli schermi personali (pulsante «Foto», file, trascina, incolla), dalla
     # webcam e dallo schermo del PC su richiesta (pc_guarda). Solo in memoria, legate alla
@@ -2065,6 +2069,7 @@ SEZIONI: dict[str, list[str]] = {
                 "schermi_nomi", "schermi_tls_cert", "schermi_tls_chiave",
                 "schermi_senza_tls", "schermi_scritto", "schermi_scritto_stanza",
                 "schermi_scritto_max", "schermi_scritto_al_minuto", "schermi_moduli_s",
+                "schermi_scarica_s",
                 "telefono_enabled", "telefono_web"],
     "immagini": ["immagini_enabled", "immagini_modello", "immagini_lato_max",
                  "immagini_pixel_per_token", "immagini_max_mb", "immagini_storia",
@@ -2283,6 +2288,7 @@ LIMITI: dict[str, tuple[float, float]] = {
     "agenti_soglia_file": (0.1, 0.95), "agenti_passi_intatti": (1, 20),
     "agenti_analisi_s": (1.0, 60.0),
     "agenti_risultato_s": (1.0, 120.0),
+    "schermi_scarica_s": (10.0, 3600.0),
 }
 
 

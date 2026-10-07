@@ -830,6 +830,10 @@ schermi:
   schermi_scritto_al_minuto: 12
   # Secondi in cui un modulo resta aperto sullo schermo
   schermi_moduli_s: 900.0
+  # «Scarica» nella scheda del documento (07/10, schermi/scarica.py): l'indirizzo del file
+  # (MD, PDF o Word, convertito al clic) vale tanti secondi, solo per lo schermo personale a
+  # cui è arrivata la scheda; poi va richiesto di nuovo dalla scheda
+  schermi_scarica_s: 180.0
   # Il telefono come satellite (03/10, docs/ricerche/2026-10-03-webapp-telefono.md): la
   # pagina /telefono dello stesso server è una web app installabile (PWA) con il microfono,
   # la wake word nel telefono e la voce di Calliope. Serve audio_modo: satellite (Calliope
