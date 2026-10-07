@@ -696,6 +696,7 @@ lettore e «Scarica»):
   lavoro (il modello per metà sulla CPU). Un caso su sei aveva **tutto il testo dentro un recinto
   ```markdown** (la scheda l'avrebbe mostrato come codice): `markdown.senza_recinto` lo toglie
   (correzione della forma, solo se il recinto copre tutto il testo e dice markdown o md; contrari
-  in `prova_markdown.py`), e il prompt ora dice «non dentro un blocco di codice». Nelle ricerche
+  in `prova_markdown.py`), e il prompt ora dice «non dentro un blocco di codice». Con la frase nuova
+  altri 6 lavori: 6/6 con titolo e 3–4 sezioni, nessun recinto, riassunti senza Markdown. Nelle ricerche
   il modello ha inventato le cifre per regione che i passaggi non avevano: problema del modello
   (qwen3.6 sulla DGX da riprovare), non del formato.
