@@ -9,7 +9,9 @@ pagina (pagina/schermo.js) la disegna con `textContent`, mai come HTML. Tipi:
               nella pagina                                                        pubblica
   promemoria  promemoria e appuntamenti di una persona                            personale
   biblioteca  voce, fonte, passaggio usato e un testo più lungo da leggere        pubblica
-  documento   anteprima del documento appena creato o cambiato (dal suo JSON)     personale
+  documento   anteprima del documento appena creato o cambiato (dal suo JSON), o il
+              testo in Markdown di un lavoro dell'agente (07/10: `markdown`, letto dalla
+              pagina con il suo lettore, mai come HTML); con «Scarica» (`scarica`)    personale
   casa        dispositivi letti da casa_stato, con lo stato                       casa
   calcolo     espressione e risultato                                             pubblica
   web         risultati di una ricerca su internet: titolo, sito, testo (03/10)   pubblica
@@ -32,6 +34,10 @@ schermo della stanza, anche per gli ospiti; `casa` solo se chi parla è riconosc
 decide chi costruisce la scheda, qui: il modello non la sceglie.
 
 Le schede sono piccole (testi tagliati): passano su SSE a ogni schermo della stanza.
+
+Le chiavi che cominciano con «_» restano sul server (hub.py le toglie prima di mandare la
+scheda e di metterla nella cronologia): `_scarica` è la sorgente intera del documento per il
+pulsante «Scarica» (schermi/scarica.py), il Markdown o il JSON a blocchi.
 
 Identità (02/10, `chiave`): una scheda legata a un oggetto ha una chiave stabile
 (`timer:<id dell'agenda>-<creazione>`, `agenda:<persona>`, `documento:<id del documento>`,
@@ -204,7 +210,38 @@ def documento(doc: dict, formato: str, nome_file: str, modifica: str = "",
         f"file:{nome_file}" if nome_file else None)
     return nuova("documento", doc.get("titolo") or "Documento", PERSONALE, chiave=chiave,
                  formato=formato, file=_taglia(nome_file, 120),
-                 modifica=_taglia(modifica, 200), blocchi=blocchi)
+                 modifica=_taglia(modifica, 200), blocchi=blocchi,
+                 # «Scarica» (07/10): il file nel suo formato e negli altri, convertito al clic
+                 scarica=list(SCARICA_FOGLIO if formato == "excel" else SCARICA_TESTO),
+                 _scarica={"documento": doc, "formato": formato,
+                           "titolo": doc.get("titolo") or "Documento"})
+
+
+# I formati del pulsante «Scarica» (schermi/scarica.py)
+SCARICA_TESTO = ("md", "pdf", "word")
+SCARICA_FOGLIO = ("excel", "md")
+# Il Markdown sulla scheda: oltre, la scheda dice che il testo intero è nel file (e «Scarica»
+# lo dà intero: la sorgente resta sul server)
+MAX_MARKDOWN = 60_000
+
+
+def documento_markdown(titolo: str, testo: str, ident=None, riassunto: str = "",
+                       nome_file: str = "", cartella: str = "", chiave: str | None = None,
+                       stato: str = "") -> dict:
+    """Un testo in Markdown dell'agente (07/10: ricerche, relazioni, riassunti in
+    `risultato.md`): la pagina lo legge con il suo lettore (sottoinsieme, createElement e
+    textContent, mai innerHTML: il testo dell'agente non è fidato), con il sommario dei titoli
+    in alto e «Scarica» in MD, PDF e Word. Chiave `lavoro:<id>` per un lavoro (sostituisce
+    la scheda in diretta), personale come il lavoro."""
+    t = str(testo or "")
+    if chiave is None and ident is not None:
+        chiave = f"lavoro:{ident}"
+    return nuova("documento", titolo or "Documento", PERSONALE, durata_s=1800.0, chiave=chiave,
+                 formato="md", file=_taglia(nome_file, 120), modifica="", blocchi=[],
+                 markdown=t[:MAX_MARKDOWN], tagliato=len(t) > MAX_MARKDOWN,
+                 riassunto=_taglia(riassunto, 600), cartella=_taglia(cartella, 160),
+                 stato=stato, scarica=list(SCARICA_TESTO),
+                 _scarica={"markdown": t, "titolo": titolo or "Documento"})
 
 
 # ─────────────────────────── casa ───────────────────────────

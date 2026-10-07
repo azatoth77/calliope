@@ -406,19 +406,27 @@ SISTEMA_CODICE = (
     "sempre gli strumenti con chiamate di funzione vere, mai scritte nel testo."
     + ANTI_INIEZIONE)
 
+# I testi dell'agente si consegnano in Markdown (07/10, calliope/documenti/markdown.py): la
+# scheda del documento li legge con titoli, elenchi e tabelle, e «Scarica» li converte in PDF e
+# Word. Il riassunto da dire resta testo semplice
+TESTO_MARKDOWN = ("in Markdown (un titolo con #, le sezioni con ##, paragrafi pieni; elenchi "
+                  "e tabelle quando servono; niente HTML né immagini; il testo così com'è, "
+                  "non dentro un blocco di codice)")
+
 SISTEMA_RICERCA = (
     "Sei l'agente di ricerca di Calliope. Fai una ricerca a più passi: cerca nella "
     "biblioteca offline (biblioteca_cerca) tutte le voci che servono, una domanda alla "
-    "volta, poi chiama consegna con il testo completo della relazione in italiano (titolo, "
-    "paragrafi, nessun markdown) e un riassunto di una o due frasi da dire a voce. Usa solo "
+    "volta, poi chiama consegna con il testo completo della relazione in italiano, "
+    + TESTO_MARKDOWN + ", e un riassunto di una o due frasi da dire a voce, senza Markdown. "
+    "Usa solo "
     "quello che trovi, citando la fonte; quello che non trovi dillo, non inventarlo."
     + ANTI_INIEZIONE)
 
 STRUMENTI_RICERCA = [
     _fn("biblioteca_cerca", "Cerca nella biblioteca offline (Wikipedia italiana) e restituisce "
         "i passaggi più utili.", {"domanda": {"type": "string"}}, ["domanda"]),
-    _fn("consegna", "Chiude la ricerca. testo: la relazione intera. riassunto: una o due "
-        "frasi da dire a voce.", {"testo": {"type": "string"}, "riassunto": {"type": "string"}},
+    _fn("consegna", "Chiude la ricerca. testo: la relazione intera, in Markdown. riassunto: "
+        "una o due frasi da dire a voce, senza Markdown.", {"testo": {"type": "string"}, "riassunto": {"type": "string"}},
         ["testo", "riassunto"]),
 ]
 
@@ -454,8 +462,8 @@ SISTEMA_WEB = (
 
 SISTEMA_RICERCA_ARCHIVIO = (
     "Sei l'agente di ricerca di Calliope. Rispondi a una domanda sui documenti di casa con "
-    "più passi, poi chiama consegna con il testo completo della risposta in italiano "
-    "(titolo, paragrafi, nessun markdown) e un riassunto di una o due frasi da dire a voce."
+    "più passi, poi chiama consegna con il testo completo della risposta in italiano, "
+    + TESTO_MARKDOWN + ", e un riassunto di una o due frasi da dire a voce, senza Markdown."
     + ANTI_INIEZIONE)
 
 SISTEMA_GRAFO = (
@@ -468,8 +476,8 @@ SISTEMA_GRAFO = (
 
 SISTEMA_ALTRO = (
     "Sei l'agente di Calliope per i lavori lunghi. Fai il lavoro richiesto per intero e "
-    "rispondi con il risultato in italiano, in testo semplice senza markdown. In fondo, su "
-    "una riga che comincia con «RIASSUNTO:», una o due frasi da dire a voce."
+    "rispondi con il risultato in italiano, " + TESTO_MARKDOWN + ". In fondo, su una riga "
+    "che comincia con «RIASSUNTO:», una o due frasi da dire a voce, senza Markdown."
     + ANTI_INIEZIONE)
 
 
@@ -500,6 +508,12 @@ def per_la_voce(testo: str, max_caratteri: int = 260) -> str:
     """Il riassunto del modello, ridotto a frasi che si possono dire: niente codice, simboli
     o nomi di file; al massimo due frasi. Vuoto se non resta niente di dicibile."""
     t = re.sub(r"```.*?```", " ", str(testo or ""), flags=re.S)
+    # Un riassunto in Markdown (07/10: i testi dell'agente lo sono): via titoli, elenchi,
+    # grassetti e tabelle prima di cercare il codice, che altrimenti scarterebbe ogni frase con
+    # «#» o «|»; il codice tra apici inversi resta, e si scarta come prima
+    from ..documenti.markdown import per_voce as md_per_voce, sembra_markdown
+    if sembra_markdown(t):
+        t = md_per_voce(t, tieni_codice=True)
     t = re.sub(r"\s+", " ", t).strip()
     frasi = [f.strip() for f in re.split(r"(?<=[.!?])\s+", t) if f.strip()]
     buone = [f for f in frasi if not _CODICE.search(f)]
@@ -1559,8 +1573,11 @@ class Agente:
                 msg["tool_calls"] = [{"function": c} for c in calls]
             messages.append(msg)
             if not calls:
+                # Senza consegna il testo è la relazione: il riassunto ne è l'inizio, senza
+                # Markdown (07/10: «# Titolo» finiva tra le frasi dette)
+                from ..documenti.markdown import per_voce as md_per_voce
                 return {"esito": "fatto", "testo": out["content"],
-                        "riassunto": out["content"][:300]}
+                        "riassunto": md_per_voce(out["content"])[:300]}
             for c in calls:
                 args = c.get("arguments") or {}
                 if c["name"] == "consegna":

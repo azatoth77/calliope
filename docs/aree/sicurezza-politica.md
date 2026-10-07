@@ -335,3 +335,20 @@ attacchi riportati dal modello 15/18, **detti 0/18**; risposte normali con una f
 «installarlo» e con «mostrarlo») non si riproduce: e4b risponde d'altro, nessuna frase fermata
 né con le regole di prima né con le nuove; va riprovato col 26B sulla DGX.
 
+## Il testo dell'agente in Markdown e «Scarica» (07/10)
+
+Il Markdown dell'agente è un dato non fidato che ora si **disegna** (schede degli schermi e del
+telefono) e si **scarica**. Le difese (dettagli nelle aree schermi-telefono e documenti-ufficio):
+
+- **Lettore senza HTML**: `schermo.js` costruisce i nodi con `createElement` e `textContent`, mai
+  innerHTML; nessun `<a>` (i collegamenti sono testo con l'indirizzo, anche `javascript:`),
+  nessuna immagine (niente richieste verso fuori), nessun attributo dal testo; CSP della pagina
+  invariata. Limiti di lunghezza, righe, colonne, annidamenti ed enfasi contro i testi ostili, in
+  Python e in JS. Provato nel browser vero con `<script>`, `onerror`, `onclick`, `javascript:`,
+  immagini da fuori, 300 righe e 20 annidamenti (`prova_markdown_pagina.py`): nulla eseguito.
+- **«Scarica»**: solo lo schermo personale a cui la scheda è arrivata, del proprietario della
+  scheda o di chi amministra, mai dalla zona grigia né da uno schermo di stanza; gettone a caso
+  di 180 s e 3 richieste, legato allo schermo; la sorgente non va mai alle pagine (`_scarica`
+  resta sul server); tipi solo nostri, `attachment`, nosniff e CSP «sandbox».
+- **Voce**: il riassunto e gli annunci tolgono il Markdown prima di Piper; l'annuncio passa
+  ancora da `riferire.controlla_testo`.

@@ -292,6 +292,12 @@ def testo_intero(lav, max_caratteri: int = TESTO_MAX) -> str:
         p = cartella / str(nome)
         if p.suffix.lower() not in (".txt", ".md", ".docx", ".pdf"):
             continue
+        if p.suffix.lower() == ".md":
+            # Il Markdown così com'è (07/10): la scheda lo legge, il riassunto lo toglie
+            try:
+                return p.read_text(encoding="utf-8", errors="replace")[:max_caratteri]
+            except OSError:
+                continue
         try:
             return testo_del_file(p.name, p.read_bytes(), max_caratteri)
         except (OSError, FileNonLeggibile):
@@ -301,7 +307,10 @@ def testo_intero(lav, max_caratteri: int = TESTO_MAX) -> str:
 
 def per_voce(testo: str, max_frasi: int = 6, max_caratteri: int = 900) -> str:
     """Il riassunto del modello ridotto a frasi da dire: niente markdown, elenchi, indirizzi."""
+    from ..documenti.markdown import per_voce as md_per_voce, sembra_markdown
     t = re.sub(r"```.*?```", " ", str(testo or ""), flags=re.S)
+    if sembra_markdown(t):
+        t = md_per_voce(t)
     t = re.sub(r"https?://\S+|www\.\S+", " ", t)
     t = re.sub(r"(?m)^\s*(?:[-*•#>]+|\d+[.)])\s*", "", t)
     t = re.sub(r"[*_#`|]+", "", t)
@@ -396,6 +405,106 @@ def scheda(svc, lav, testo: str) -> dict | None:
     if not testo:
         return svc.scheda(lav) if not getattr(lav, "dal_disco", False) else None
     nome = (r.get("file") or [f"{lav.titolo}.txt"])[0]
+    if str(nome).lower().endswith(".md") or r.get("markdown"):
+        # Il testo in Markdown (07/10): la scheda del documento con il lettore e «Scarica»
+        from .servizio import titolo_file
+        return schede.documento_markdown(titolo_file(lav.titolo), testo, ident=lav.id,
+                                         riassunto=riassunto_salvato(lav), nome_file=str(nome),
+                                         cartella=Path(r.get("cartella") or "").name,
+                                         stato=str(lav.stato or ""))
     return schede.lavoro(lav.titolo, lav.tipo, lav.stato, riassunto_salvato(lav),
                          [{"nome": str(nome), "testo": testo}], None,
                          Path(r.get("cartella") or "").name, "", ident=lav.id)
+
+
+# ─────────────────────────── «fammene un PDF» ───────────────────────────
+
+_NOMI_FORMATO = {"pdf": ("il PDF", "PDF"), "word": ("il documento Word", "Word")}
+
+
+def converti(svc, lav, testo: str, formato: str, attesa_s: float = 8.0) -> dict:
+    """«Fammene un PDF / un Word» (07/10): il testo in Markdown (o il documento a blocchi del
+    lavoro) → formato a blocchi → render (fpdf2, python-docx), un file nuovo nella cartella del
+    lavoro, poi come il risultato (servizio._consegna_risultato: al portatile con «Lo apro?»).
+    Il lavoro in un thread: oltre `attesa_s` la voce risponde subito e il file si annuncia
+    quando è pronto (svc.done). {"ok", "frase", "fatto", "in_sospeso"?}. Mai un'eccezione."""
+    from ..documenti import markdown as md
+    from ..documenti.consegna import LocalDelivery
+    from ..documenti.formato import ESTENSIONI, safe_filename
+    from ..documenti.render import available_formats, render
+    from ..documenti.servizio import in_sospeso
+    from .servizio import titolo_detto, titolo_file
+    nome, corto = _NOMI_FORMATO[formato]
+    riuscita = "riuscita" if getattr(svc, "female", True) else "riuscito"
+    titolo = titolo_detto(lav.titolo)
+    if formato not in available_formats()[0]:
+        return {"ok": False, "frase": f"Qui non posso fare {nome}: manca la libreria."}
+    r = lav.risultato or {}
+    if isinstance(r.get("documento"), dict) and r.get("formato") != "excel":
+        doc = r["documento"]
+    elif str(testo or "").strip():
+        doc = md.a_blocchi(testo, titolo_file(lav.titolo))
+    else:
+        return {"ok": False, "frase": f"«{titolo}» non ha un testo da mettere in {corto}."}
+    cartella = Path(r.get("cartella") or "")
+    if not str(r.get("cartella") or "") or not cartella.is_dir():
+        return {"ok": False, "frase": f"Non trovo più la cartella di «{titolo}»: non posso "
+                                      f"farne {nome}."}
+    esito: dict = {}
+    lock = threading.Lock()
+
+    def frase_di(ris: dict) -> tuple[str, dict | None]:
+        dove = ris.get("dove") or "nella cartella Lavori dei Documenti"
+        f = f"Ho fatto {nome} di «{titolo}», {dove}."
+        if ris.get("apribile"):
+            return f + " Lo apro?", in_sospeso("Lo apro?", f"{nome} di «{titolo}»")
+        return f, None
+
+    def lavora():
+        try:
+            data = render(formato, doc, getattr(svc.cfg, "documenti_font", None))
+            d = LocalDelivery(cartella).deliver(safe_filename(titolo_file(lav.titolo)),
+                                                ESTENSIONI[formato], data)
+            ris = {"file": [d["nome_file"]]}
+            svc._consegna_risultato(lav, ris, cartella)
+            out = {"ok": True, "ris": ris}
+        except Exception as e:  # noqa: BLE001 — diventa una frase
+            getattr(svc, "log", print)(f"[AGENTI] {nome} di {lav.id} non riuscito: "
+                                       f"{type(e).__name__}: {e}")
+            out = {"ok": False}
+        with lock:
+            esito.update(out)
+            tardi = esito.get("tardi")
+        if tardi:
+            # La voce ha già risposto «ti avviso»: l'annuncio, come un lavoro finito
+            if out["ok"]:
+                f, sosp = frase_di(out["ris"])
+            else:
+                f, sosp = f"Non sono {riuscita} a fare {nome} di «{titolo}».", None
+            chi = getattr(lav, "persona_nome", None)
+            item = {"id": lav.id, "tipo": lav.tipo, "titolo": lav.titolo, "stato": "fatto",
+                    "esito": "conversione", "messaggio": (f"{chi}, {f[0].lower()}{f[1:]}"
+                                                          if chi else f),
+                    "chi": getattr(lav, "persona", None), "chi_nome": chi, "passi": 0,
+                    "token": 0, "secondi": 0, "cartella": str(cartella), "test": None}
+            if sosp:
+                item["in_sospeso"] = sosp
+            svc.done.put(item)
+            if getattr(svc, "on_done", None):
+                svc.on_done()
+
+    th = threading.Thread(target=lavora, daemon=True, name="risultato-converti")
+    th.start()
+    th.join(max(0.0, float(attesa_s)))
+    with lock:
+        if "ok" not in esito:
+            esito["tardi"] = True
+            return {"ok": True, "frase": f"Preparo {nome} di «{titolo}»: ti avviso quando è "
+                                         f"pronto.", "fatto": "conversione in corso"}
+    if not esito["ok"]:
+        return {"ok": False, "frase": f"Non sono {riuscita} a fare {nome} di «{titolo}»."}
+    f, sosp = frase_di(esito["ris"])
+    out = {"ok": True, "frase": f, "fatto": f"fatto {nome}"}
+    if sosp:
+        out["in_sospeso"] = sosp
+    return out
