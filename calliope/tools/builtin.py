@@ -1026,9 +1026,10 @@ def _spostamento(ctx, testo: str, modo: str) -> tuple[str, int | None]:
     return modo, None
 
 
-def _rif(kind: str, label: str, tool: str) -> dict:
-    """L'ultima voce messa, per «impostalo…», «spostalo…» nei turni dopo (Brain.AGENDA_MSG)."""
-    return {"cosa": f"{kind} «{label}»", "tool": tool}
+def _rif(kind: str, label: str, tool: str, item_id: int | None = None) -> dict:
+    """L'ultima voce messa, per «impostalo…», «spostalo…» nei turni dopo (Brain.AGENDA_MSG).
+    `item_id`: la voce nell'agenda (07/10): suonata o annullata, il riferimento non vale più."""
+    return {"cosa": f"{kind} «{label}»", "tool": tool, "id": item_id}
 
 
 def _timer_auto_label(label: str) -> bool:
@@ -1078,7 +1079,8 @@ def _timer_cambia(ctx, durata: str, nome: str, modo: str, prof) -> dict | None:
         conferma = (f"Fatto, ho {verb} {say_duration(secs)} a{what[1:]}: ora scade tra "
                     f"{say_duration(heard)}.")
     out = {"ok": True, "timer": label, "cambiato": True, "mancano": say_duration(heard),
-           "conferma": conferma, "riferimento_agenda": _rif("il timer", label, "timer_imposta")}
+           "conferma": conferma,
+           "riferimento_agenda": _rif("il timer", label, "timer_imposta", item["id"])}
     # Stessa scheda (stessa identità, timer:<id>-<creazione>), aggiornata e portata in cima
     return _con_scheda(out, ctx, lambda: schede.timer(new))
 
@@ -1129,7 +1131,7 @@ def _sposta(ctx, kind: str, query: str, quando: str, modo: str, prof, tool: str)
         conferma = f"Va bene, ho spostato il promemoria: {say_when(when)} ti ricordo di {label}."
     return _con_scheda({"ok": True, kind: label, "quando": say_when(when), "cambiato": True,
                         "conferma": conferma,
-                        "riferimento_agenda": _rif(f"{the}{kind}", label, tool)},
+                        "riferimento_agenda": _rif(f"{the}{kind}", label, tool, item["id"])},
                        ctx, lambda: _scheda_agenda(ctx, prof))
 
 
@@ -1180,7 +1182,8 @@ def _timer_imposta(ctx: ToolContext, durata: str, nome: str = "", cambia: str = 
         conferma = f"Non c'era più un timer da cambiare, quindi ne ho avviato uno {label}."
     out = {"ok": True, "timer": label, "durata": say_duration(secs),
            "scade": say_when(sposta(datetime.datetime.now(), secs)),
-           "conferma": conferma, "riferimento_agenda": _rif("il timer", label, "timer_imposta")}
+           "conferma": conferma,
+           "riferimento_agenda": _rif("il timer", label, "timer_imposta", tid)}
     # La scheda di questo timer (identità timer:<id>-<creazione>): un altro timer è un'altra
     return _con_scheda(out, ctx, lambda: schede.timer(ctx.agenda.get(tid)
                                                       or {"id": tid, "label": label, "due": due}))
@@ -1213,10 +1216,12 @@ def _promemoria_imposta(ctx: ToolContext, testo: str, quando: str, cambia: str =
         return {"ok": False, "errore": f"{say_when(when)} è già passato: non l'ho segnato",
                 "cosa_fare": "chiedi il giorno giusto"}
     what = re.sub(r"^(di|che)\s+", "", (testo or "").strip().rstrip("."), flags=re.I)
-    ctx.agenda.add("promemoria", what, when.timestamp(), owner=prof.id, owner_name=prof.name)
+    pid = ctx.agenda.add("promemoria", what, when.timestamp(), owner=prof.id,
+                         owner_name=prof.name)
     return _con_scheda({"ok": True, "promemoria": what, "quando": say_when(when),
                         "conferma": f"Va bene, {say_when(when)} ti ricordo di {what}.",
-                        "riferimento_agenda": _rif("il promemoria", what, "promemoria_imposta")},
+                        "riferimento_agenda": _rif("il promemoria", what, "promemoria_imposta",
+                                                   pid)},
                        ctx, lambda: _scheda_agenda(ctx, prof))
 
 
@@ -1726,7 +1731,7 @@ def _appuntamento_aggiungi(ctx: ToolContext, cosa: str, quando: str, cambia: str
     return _con_scheda({"ok": True, "appuntamento": what, "quando": say_when(when),
                         "conferma": f"Segnato: {what}, {say_when(when)}.{avviso}",
                         "riferimento_agenda": _rif("l'appuntamento", what,
-                                                   "appuntamento_aggiungi")},
+                                                   "appuntamento_aggiungi", aid)},
                        ctx, lambda: _scheda_agenda(ctx, prof))
 
 
@@ -2087,11 +2092,11 @@ def build_registry(biblioteca: bool = False, pc: dict | None = None,
         reg.register(web_spec(None if web is True else web))
     if pc:
         from .pc import pc_specs
-        for spec in pc_specs(pc, pc_ospite, documenti=bool(documenti)):
+        for spec in pc_specs(pc, pc_ospite, documenti=bool(documenti), agenti=bool(agenti)):
             reg.register(spec)
     if documenti:
         from .documenti import documenti_specs
-        for spec in documenti_specs(documenti):
+        for spec in documenti_specs(documenti, agenti=bool(agenti)):
             reg.register(spec)
     if casa is not None:
         from .casa import casa_specs

@@ -206,6 +206,11 @@ class PCExecutor(ABC):
         if tipo not in TIPI_FILE:
             tipo = "qualsiasi"
         found = self._cerca(testo or "", tipo, dal, al, self.max_risultati)
+        # Dal più recente (07/10): Windows Search lo fa già (ORDER BY System.DateModified,
+        # anche sul satellite, che usa lo stesso esecutore); qui vale per ogni esecutore. Non
+        # c'è un punteggio di pertinenza: il nome o il contenuto filtrano, la data ordina, e il
+        # numero 1 della domanda «Quale apro?» è sempre il più recente (tools/pc.py)
+        found = sorted(found, key=lambda r: str(r.get("modificato") or ""), reverse=True)
         with self._mutex:
             self._ricerche[richiedente] = (time.time(), found)
         return {"ok": True, "risultati": [

@@ -764,7 +764,8 @@ def _risultato_lavoro(ctx: ToolContext, lavoro: str = "", modo: str = "riassunto
         frase += "."
     frase += " " + dove
     if come == "salvato" and testo and modo == "riassunto":
-        frase += " Se vuoi più dettagli, chiedimi di leggertelo."
+        from ..riferire import FRASE_PIU_DETTAGLI
+        frase += " " + FRASE_PIU_DETTAGLI
     # Il testo è dell'agente (dato non fidato): numeri a pagamento, codici, soldi e indicazioni
     # sulla casa non si ripetono (come l'annuncio, calliope/riferire.py)
     try:
@@ -943,7 +944,10 @@ def agenti_specs(formati=("word", "excel", "pdf"), modelli=(),
             description=("Dice a che punto sono i lavori affidati all'agente con delega_lavoro "
                          "(«a che punto è il programma?», «hai finito la relazione?») e quali "
                          "sono finiti di recente, anche nei giorni prima («e quelli che hai già "
-                         "fatto?»). Per il contenuto di un lavoro finito: risultato_lavoro."),
+                         "fatto?», «quali lavori hai finito?»). NON quando chiede il risultato "
+                         "o il contenuto di un lavoro finito, anche nominato («e il risultato "
+                         "della ricerca sulle pompe di calore?», «cosa ha trovato?»): quello è "
+                         "risultato_lavoro, con lavoro = le parole del titolo."),
             parameters={"type": "object", "properties": {}, "required": []},
             func=_lavori_stato, risk="lettura", levels=FAMILY),
         ToolSpec(
@@ -986,7 +990,8 @@ def agenti_specs(formati=("word", "excel", "pdf"), modelli=(),
         ToolSpec(
             name="risultato_lavoro",
             description=("Il risultato di un lavoro dell'agente già finito: cosa ha trovato o "
-                         "scritto («e il risultato?», «cosa ha trovato?», «leggimelo», "
+                         "scritto («e il risultato?», «cosa ha trovato?», «e il risultato "
+                         "della ricerca sulle pompe di calore?», «leggimelo», "
                          "«fammi un riassunto della ricerca», «mostramelo sullo schermo»). "
                          "modo: riassunto (predefinito), leggi (più dettagliato, a voce), "
                          "mostra (il testo intero sullo schermo), pdf o word (ne fa un file: "

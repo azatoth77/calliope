@@ -158,6 +158,34 @@ class Classe:
     # verbi che la chiedono: senza uno di loro nella frase (e senza il «sì» alla domanda),
     # «Non me l'hai chiesto: vuoi che…?» (regola `politica_cancellazione_non_chiesta`)
     verbo_sempre: object = None
+    # L'argomento che, con un valore, cambia una voce già messa invece di crearne una
+    # (timer_imposta, promemoria_imposta: `cambia`). Anche con la conversazione pulita il
+    # cambio si esegue solo se la frase ha le parole del tool (`verbi`: «aggiungi», «togli»,
+    # «minuti», «spostalo»…) o è il «sì» alla sua domanda; altrimenti «Non me l'hai chiesto:
+    # vuoi che…?» (regola `politica_cambio_non_chiesto`; caso vero della DGX del 07/10: a «Che
+    # tempo farà domani a Milano?» il modello chiamava anche timer_imposta(cambia=togli,
+    # durata=due minuti) sul timer già suonato, fermato solo perché c'era il meteo di mezzo)
+    cambio: str | None = None
+
+
+# Valori di `cambia` che vogliono dire «una voce nuova» (come tools/builtin._modo)
+_NUOVA = frozenset({"", "no", "nuovo", "nuova", "false", "none", "null", "nessuno", "niente"})
+
+
+def _cambio(a: dict, k: str | None) -> bool:
+    """La chiamata cambia una voce già messa (Classe.cambio)."""
+    return bool(k) and _s(a, k).lower() not in _NUOVA
+
+
+def _timer_cosa(a: dict) -> str:
+    modo = _s(a, "cambia").lower()
+    if modo == "togli":
+        return f"tolga {_s(a, 'durata', 'del tempo')} al timer"
+    if modo == "aggiungi":
+        return f"aggiunga {_s(a, 'durata', 'del tempo')} al timer"
+    if _cambio(a, "cambia"):
+        return f"cambi il timer a {_s(a, 'durata', 'un altro tempo')}"
+    return f"imposti un timer di {_s(a, 'durata', 'qualche minuto')}"
 
 
 def _c(classe, **kw) -> Classe:
@@ -194,10 +222,10 @@ CLASSI: dict[str, Classe] = {
     "allegato_leggi": _c(S, fonte="allegato"),
     # ── azioni di Calliope, della persona, reversibili ──
     "cambia_voce": _c(A, cosa=lambda a: "cambi la voce"),
-    "timer_imposta": _c(A, chiave=("nome",), cosa=lambda a: f"imposti un timer di "
-                                                          f"{_s(a, 'durata', 'qualche minuto')}"),
-    "promemoria_imposta": _c(A, chiave=("testo",), cosa=lambda a: f"ti ricordi "
-                                                                f"«{_s(a, 'testo')}»"),
+    "timer_imposta": _c(A, chiave=("nome",), cambio="cambia", cosa=lambda a: _timer_cosa(a)),
+    "promemoria_imposta": _c(A, chiave=("testo",), cambio="cambia",
+                             cosa=lambda a: f"sposti il promemoria «{_s(a, 'testo')}»"
+                             if _cambio(a, "cambia") else f"ti ricordi «{_s(a, 'testo')}»"),
     "agenda_annulla": _c(A, cosa=lambda a: f"annulli «{_s(a, 'cosa', 'una voce')}»"),
     "appuntamento_aggiungi": _c(A, chiave=("cosa",),
                                 cosa=lambda a: f"segni l'appuntamento «{_s(a, 'cosa')}»"),
@@ -935,6 +963,11 @@ def decidi(name: str, args: dict, cl: Classe, t: Turno | None,
         if (callable(cl.verbo_sempre) and t.testo and not cl.verbo_sempre(t.testo)
                 and not (proposta and (consenso(t.testo) or t.sfida))):
             return Decisione("conferma", "politica_cancellazione_non_chiesta",
+                             f"Non me l'hai chiesto: vuoi che {cosa}?")
+        if (_cambio(args, cl.cambio) and t.testo and cl.verbi
+                and not re.search(cl.verbi, t.testo, re.I)
+                and not (proposta and (consenso(t.testo) or t.sfida))):
+            return Decisione("conferma", "politica_cambio_non_chiesto",
                              f"Non me l'hai chiesto: vuoi che {cosa}?")
         # Frase di sfida superata per proprio questa chiamata: era la conferma
         # (o il «sì» alla domanda di prima, che descriveva proprio questa chiamata)

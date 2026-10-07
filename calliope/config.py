@@ -1911,6 +1911,9 @@ RETI: dict[str, Rete] = {
     "riferimento_agenda": Rete(
         "«impostalo di un minuto»: l'ultima voce dell'agenda", MODELLO,
         "contesto del turno: «impostalo» avviava un secondo timer (03/10)"),
+    "riferimento_lavoro": Rete(
+        "«fammene un PDF»: il lavoro dell'agente appena detto (LAVORO_MSG)", MODELLO,
+        "dati del turno: «Ho metto un pdf.» dopo il risultato cercava i PDF del PC (07/10)"),
     "conferma_al_posto_del_vuoto": Rete(
         "risposta vuota dopo un tool: la sua conferma", MODELLO,
         "risposte vuote del 4B dopo un'azione riuscita"),

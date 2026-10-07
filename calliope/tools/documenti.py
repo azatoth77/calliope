@@ -95,8 +95,34 @@ def _spoken(res: dict, ctx: ToolContext | None = None) -> dict:
     return out
 
 
+def _parla_del_lavoro(testo: str, parole_titolo) -> bool:
+    """Il documento chiesto ha almeno 2 parole significative del titolo del lavoro, e sono
+    almeno il 40% delle sue (forma della scelta del modello, non della frase della persona)."""
+    from ..provenienza import parole
+    mie = parole(testo)
+    comuni = mie & set(parole_titolo)
+    return len(comuni) >= 2 and len(comuni) >= 0.4 * len(mie)
+
+
 def _documento_crea(ctx: ToolContext, formato: str = "", richiesta: str = "",
                     titolo: str = "") -> dict:
+    # Il risultato di un lavoro dell'agente appena detto (07/10: «Me lo fai in Word?» dopo il
+    # riassunto di una ricerca → documento_crea con la ricerca riassunta in una riga, 3 volte su
+    # 3 col 4B, anche con la descrizione e i dati del turno). Una spinta, una volta per
+    # risposta, e solo se il documento chiesto dal modello parla del lavoro (le sue parole
+    # sono in buona parte quelle del titolo): una lettera qualunque si fa subito, e se il
+    # modello richiama documento_crea il documento nuovo si fa
+    rif = getattr(ctx, "lavoro_turno", None)
+    if isinstance(rif, dict) and not rif.get("avvisato") and _parla_del_lavoro(
+            f"{richiesta} {titolo}", rif.get("parole") or ()):
+        rif["avvisato"] = True
+        note_rule(ctx, "spinta_documento_lavoro")
+        return {"ok": False, "fatto": NIENTE,
+                "errore": f"c'è il risultato del lavoro «{rif.get('titolo')}» appena detto",
+                "cosa_fare": f"se chi parla vuole quel risultato in Word o in PDF, chiama "
+                             f"risultato_lavoro con modo word o pdf e lavoro "
+                             f"{rif.get('lavoro')}; se vuole davvero un documento nuovo con "
+                             f"altro contenuto, richiama documento_crea"}
     svc = getattr(ctx, "documenti", None)
     if svc is None:
         return {"ok": False, "errore": "documenti non disponibili"}
@@ -170,8 +196,11 @@ _LABELS = {"word": "word (lettere, testi, documenti)", "excel": "excel (tabelle 
            "spese, totali)", "pdf": "pdf"}
 
 
-def documenti_specs(formati) -> list[ToolSpec]:
-    """I due tool, con l'enum dei formati che ci sono davvero (librerie installate)."""
+def documenti_specs(formati, agenti: bool = False) -> list[ToolSpec]:
+    """I due tool, con l'enum dei formati che ci sono davvero (librerie installate). Con
+    `agenti` (c'è risultato_lavoro) documento_crea dice che il risultato di un lavoro
+    dell'agente in PDF o in Word non è un documento nuovo (07/10: «Me lo fai in Word?» dopo il
+    risultato di una ricerca → documento_crea con la richiesta riassunta, 3 su 3 col 4B)."""
     formati = [f for f in ("word", "excel", "pdf") if f in set(formati or ())]
     if not formati:
         return []
@@ -184,7 +213,10 @@ def documenti_specs(formati) -> list[ToolSpec]:
                          f"cifre, date), come detti a voce: «lettera di disdetta della "
                          f"palestra», «spese di settembre: affitto 800, luce 90, gas 60, con "
                          f"il totale». Il testo lo scrive il programma: tu non scriverlo e non "
-                         f"leggerlo. titolo facoltativo."),
+                         f"leggerlo. titolo facoltativo."
+                         + (" NON per mettere in PDF o in Word il risultato di un lavoro "
+                            "dell'agente (una ricerca, una relazione): risultato_lavoro."
+                            if agenti else "")),
             parameters={"type": "object",
                         "properties": {"formato": {"type": "string", "enum": formati},
                                        "richiesta": {"type": "string"},

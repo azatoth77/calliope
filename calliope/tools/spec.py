@@ -81,6 +81,10 @@ class ToolContext:
     # (turno, frase, scheda, mittente). Uno schermo_mostra «risposta» nella stessa risposta
     # rimanda questa invece di coprirla con la risposta detta
     scheda_risultato: Any = None
+    # Il lavoro dell'agente appena detto (07/10, Brain.LAVORO_MSG): {"lavoro", "titolo",
+    # "avvisato", "parole"} in questa risposta, o None. documento_crea lo ricorda una volta al
+    # modello
+    lavoro_turno: Any = None
 
 
 
