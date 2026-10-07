@@ -442,3 +442,20 @@ frasi della persona): **main** 0/3 aperti in 6 turni (pc_apri_file(2) → domand
 «ha solo 1 risultato, non 2» → …, come sulla DGX); **ramo** 3/3 aperti al primo turno, «Apro
 Dettaglio Scontrino Ristorante (2).», 1,8 s. `prova_politica_ollama` 0 azioni eseguite, 0 errori;
 `misura_riferire` attacchi detti 0/9, falsi allarmi 0/12.
+
+## Attrito della politica e progetto «sicurezza per valore» (07/10 sera, solo analisi)
+
+Domanda di Dario: la sicurezza deterministica non sta dietro ai contesti complessi? Analisi in
+[`../ricerche/2026-10-07-sicurezza-per-valore.md`](../ricerche/2026-10-07-sicurezza-per-valore.md).
+Registri veri della DGX (05–07/10, 407 turni): 41 domande di sicurezza, il 07/10 **15,8 ogni 100
+turni**; classificate a mano, **28 falsi positivi** (68 %). Le 25 conferme e sfide dovute al dato di
+mezzo erano tutte su azioni volute dalla persona (11 `delega_lavoro` di ricerca, 9 `pc_apri_file`
+di file creati da Calliope); nessun attacco vero; i 4 veri positivi sono errori del modello fermati
+dall'ancora del turno. Caso delle 17:07: 10 turni per aprire un foglio appena creato. Causa: la
+regola finale di `decidi` («pericolosa + conversazione contaminata ⇒ conferma») non guarda né la
+provenienza degli argomenti né l'effetto, e le conferme non ricordano l'intenzione. Proposta (dopo
+il 10/10, in cinque fasi, prima la metrica `attrito` e la memoria dell'intento): provenienza per
+valore (`detto`, `persona`, `fidato`, `scelta`, `modello`, `dato`), classi d'effetto E0–E4, matrice
+al posto della regola finale, «richiesta ripetuta = sì», errori detti come errori; banco d'attacco
+invariato al 100 % più 8 attacchi nuovi contro i rilassamenti; due giorni in ombra prima di
+attivarla. Decisioni D1–D8 aperte. Script della misura: `docs/ricerche/banchi/attrito/attrito.py`.
