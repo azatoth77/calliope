@@ -354,3 +354,18 @@ perché non cambia la voce. Prove `prova_cruscotto.py` (a secco) e `prova_crusco
   nel `prova_cruscotto` e `prova_brain.prova_prefisso_uguale`; sha256 del prefisso uguale a
   main).
 - **Fase 2** (non fatta): azioni dal pannello (revoche, approvazioni) con la conferma a voce.
+
+## La voce che si sente sul telefono (07/10)
+
+- La pagina non mandava `suona` (06/10, protocollo dei satelliti): sul telefono `prima_voce_s`
+  mancava in tutti i turni del 05–07/10. Ora `Riproduttore.onSuona` (`voce.js`) scatta al
+  primo pezzo di ogni frase messo in coda su Web Audio, con `uscita_s` = quanto manca
+  all'inizio programmato più `outputLatency` (o `baseLatency`) del contesto; `telefono.js` lo
+  manda come il satellite in Python e il server scrive `prima_voce_s`. Nel browser non c'è
+  silenzio iniziale (`tts_lead_s` è solo di `UscitaLocale`) e la riproduzione comincia 30 ms
+  dopo il primo pezzo arrivato.
+- La prima frase lunga arriva in due pezzi (`tts_spezza_prima`, vedi
+  [contesto-conversazione](contesto-conversazione.md)): la scheda della risposta li unisce con
+  uno spazio come le frasi (`ricordaFrase`).
+- Prova a secco in `prova_latenza.prova_voce_a_pezzi` (il codice della pagina); nel browser
+  vero da rimisurare col registro dopo l'aggiornamento (`calliope stato --turni`, per satellite).
