@@ -180,7 +180,8 @@ def main() -> int:
                    CALLIOPE_CONFIG=str(tmp / "calliope.yaml"),
                    CALLIOPE_CONFIG_LOCALE=str(tmp / "nessun-file-locale.yaml"),
                    CALLIOPE_AGENTI_CONFIG=str(tmp / "nessun-file-dgx.yaml"),
-                   CALLIOPE_PORTA_ISTANZA=str(porta_libera()))
+                   CALLIOPE_PORTA_ISTANZA=str(porta_libera()),
+                   CALLIOPE_TTS_TARATURA="0")   # come il runner: niente taratura
         cal = Calliope(tmp, env)
         cal.avvia()
         scena, casse = Scena(), Casse()

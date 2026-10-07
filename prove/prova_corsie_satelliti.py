@@ -278,7 +278,10 @@ def main():
                        CALLIOPE_CONFIG=str(tmp / "calliope.yaml"),
                        CALLIOPE_CONFIG_LOCALE=str(tmp / "nessun-file-locale.yaml"),
                        CALLIOPE_AGENTI_CONFIG=str(tmp / "nessun-file-dgx.yaml"),
-                       CALLIOPE_PORTA_ISTANZA=str(porta_libera()))
+                       CALLIOPE_PORTA_ISTANZA=str(porta_libera()),
+                       # Come il runner (07/10): niente taratura della voce, che proverebbe i
+                       # thread di Piper a ogni avvio (le CALLIOPE_* sopra sono tolte)
+                       CALLIOPE_TTS_TARATURA="0")
             cal = Calliope(tmp, env)
             cal.avvia()
             return cal
@@ -363,12 +366,23 @@ def main():
                 t_.start()
             for t_ in th:
                 t_.join(20)
-            time.sleep(4.0)
-            risposte = [s for _, s in studio.frasi[n_studio:] + cucina.frasi[n_cucina:]
+
+            def dieci():
+                return [s for _, s in studio.frasi[n_studio:] + cucina.frasi[n_cucina:]
                         if "dieci" in s]
+            # Si aspettano le condizioni, non un tempo fisso (07/10: con la CPU presa da altro
+            # 4 s non bastavano): la risposta arrivata e il doppione scartato dall'altro
+            # satellite; poi la fine del turno di chi ha risposto e un margine, perché una
+            # seconda risposta avrebbe avuto il tempo di arrivare
+            _aspetta(lambda: dieci() and any(r.get("esito") == "doppione"
+                                             for r in registro(tmp)), 20)
+            for s in (studio, cucina):
+                if any("dieci" in x for _, x in s.frasi[n_studio if s is studio else n_cucina:]):
+                    s.aspetta_fine_turno(s.frasi[-1][0] - 0.001, 10)
+            time.sleep(1.0)
+            risposte = dieci()
             ok("la stessa frase da due satelliti nella stessa stanza: una risposta sola",
                len(risposte) == 1, str(risposte))
-            _aspetta(lambda: any(r.get("esito") == "doppione" for r in registro(tmp)), 8)
             righe = registro(tmp)
             ok("registro dei turni: il doppione con la sua regola",
                any(r.get("esito") == "doppione"

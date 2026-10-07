@@ -184,7 +184,8 @@ def main():
                CALLIOPE_CONFIG=str(tmp / "calliope.yaml"),
                CALLIOPE_CONFIG_LOCALE=str(tmp / "nessun-file-locale.yaml"),
                CALLIOPE_AGENTI_CONFIG=str(tmp / "nessun-file-dgx.yaml"),
-               CALLIOPE_PORTA_ISTANZA=str(porta_libera()))
+               CALLIOPE_PORTA_ISTANZA=str(porta_libera()),
+               CALLIOPE_TTS_TARATURA="0")   # come il runner: niente taratura
     log = open(tmp / "calliope.log", "w", encoding="utf-8")
     proc = subprocess.Popen([sys.executable, "-u", "-m", "calliope"], cwd=tmp, env=env,
                             stdout=log, stderr=subprocess.STDOUT)
