@@ -198,6 +198,8 @@ class PonteWs:
     gira in un suo thread come per una connessione del satellite vero. Le uscite passano al
     ciclo asyncio con call_soon_threadsafe e non aspettano mai."""
 
+    telefono = True        # il canale nel registro dei turni (07/10, pause: calliope/pause.py)
+
     def __init__(self, loop: asyncio.AbstractEventLoop, path: str):
         self.loop = loop
         self.request = SimpleNamespace(path=path, headers={})

@@ -159,6 +159,16 @@ Dal rapporto [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-
   (riassunto più corto, mai la storia piena per minuti).
 - Prova `prova_latenza.py`.
 
+## La soglia di fine turno nella latenza sentita (07/10, solo misura)
+
+`fine_parlato_s` comprende i 700 ms di `silence_ms` con cui il VAD chiude la frase: è la parte più
+grande della latenza sentita che non dipende dal modello. Dal 07/10 il registro dei turni ha il
+campo `ascolto` (pause dentro la frase, parlato, chiusura, canale, soglia in uso, tagli probabili
+e riprese) e `calliope stato --turni --pause` stima per persona e canale la soglia che si
+sceglierebbe (p95 delle pause + 150 ms, tra 400 e 1300 ms), senza applicarla. Il piano (soglia
+per persona ed età con adattamento asimmetrico, poi partenza anticipata a ~300 ms con annullo,
+~400 ms in meno sulla latenza sentita) è in [stt-tts](stt-tts.md), «Pause e fine del turno».
+
 ## Dal testo alla voce: la prima frase a pezzi (07/10)
 
 Il 07/10 mattina sulla DGX (21 risposte, 20 dal satellite «studio», il portatile in Python con

@@ -46,6 +46,22 @@ class Listener:
         # Suono d'inizio ascolto (04/10, calliope/suoni.py): chiamata senza argomenti quando
         # la wake word acustica scatta a Calliope addormentata. Non deve bloccare
         self.on_wake = None
+        # Pause e fine del turno (07/10, calliope/pause.py: solo misura). Dopo ogni frase:
+        # le pause interne (ms), il parlato (ms) e come si è chiusa ("silenzio" o "lunga")
+        self.pause_ms: list[int] = []
+        self.parlato_ms: int | None = None
+        self.chiusura: str | None = None
+        # Dopo la frase, per pause.RIPRESA_S dalla fine della voce, si guarda se qualcuno
+        # ricomincia a parlare (taglio probabile). Con un VAD suo (`vad_ripresa`, caricato la
+        # prima volta: il modello di `listen` lo usano anche watch_for_name e measure_echo,
+        # che girano intanto). `ripresa_muto()` vero sospende la misura (un suono o la voce di
+        # Calliope sulle casse); `ripresa_avviso(s)` riceve la ripresa appena c'è (satellite)
+        self.misura_ripresa = True
+        self.vad_ripresa = None
+        self.ripresa_muto = None
+        self.ripresa_avviso = None
+        self._ripresa = None                 # pause.OsservaRipresa in corso
+        self._ripresa_ultima = None          # l'ultima, per leggerne l'esito
         # Ultimi frame captati mentre non si ascolta: diventano il pre-roll iniziale.
         # Senza, chi parlava appena Calliope finiva perdeva l'attacco (test del 24/09:
         # voce a 100–160 ms dall'inizio invece di 240–290, «Equale rospaniac»).
@@ -84,6 +100,46 @@ class Listener:
                 self.frames.put(frame)
             # Sempre: all'inizio di listen() gli ultimi ~300 ms fanno da pre-roll
             self._recent.append(frame)
+        r = self._ripresa
+        if r is not None:                # dopo la frase: qualcuno ricomincia? (pause.py)
+            r.frame(frame)
+
+    # ── ripresa dopo la frase (07/10, solo misura) ──
+    def _vad_per_ripresa(self):
+        """Il VAD dell'osservazione della ripresa: Silero in onnxruntime (leggero, niente
+        torch), altrimenti lo stesso motore di `listen`. None se non si carica."""
+        if self.vad_ripresa is None:
+            from .vad import SileroOnnx, carica_vad, modello_onnx
+            try:
+                p = modello_onnx(self.cfg.vad_modello)
+                self.vad_ripresa = (SileroOnnx(p) if p is not None
+                                    else carica_vad(self.cfg.vad_motore, self.cfg.vad_modello))
+            except Exception as e:  # noqa: BLE001 — senza, niente misura della ripresa
+                print(f"   [MIC] misura della ripresa spenta ({type(e).__name__}: {e})",
+                      flush=True)
+                self.misura_ripresa = False
+                return None
+        return self.vad_ripresa
+
+    def _osserva_ripresa(self, frame_ms: float):
+        from .pause import OsservaRipresa
+        self.ferma_ripresa()
+        if not self.misura_ripresa:
+            return
+        self._ripresa = self._ripresa_ultima = OsservaRipresa(
+            self._vad_per_ripresa, self.cfg.vad_threshold, frame_ms, self.ended_at,
+            muto=self.ripresa_muto, avvisa=self.ripresa_avviso)
+
+    def ferma_ripresa(self):
+        """Fine dell'osservazione della ripresa (Calliope parla, o si ascolta di nuovo)."""
+        r, self._ripresa = self._ripresa, None
+        if r is not None:
+            r.ferma()
+
+    def ripresa_s(self) -> float | None:
+        """Secondi dalla fine della voce dell'ultima frase alla ripresa, o None."""
+        r = self._ripresa_ultima
+        return r.ripresa_s if r is not None else None
 
     def watch_for_name(self, wake, stop: threading.Event, muted,
                        voice_ok=None) -> list | None:
@@ -203,9 +259,13 @@ class Listener:
         Con `wakeup` impostato (un timer o un promemoria scaduto) restituisce None appena
         nessuno sta parlando, così Calliope può annunciarlo senza aspettare una frase.
         """
+        from .pause import MisuraPause
         cfg = self.cfg
         frame_ms = self.FRAME / cfg.sample_rate * 1000
         preroll = collections.deque(maxlen=max(1, int(cfg.preroll_ms / frame_ms)))
+        self.ferma_ripresa()
+        self._ripresa_ultima = None
+        misura = MisuraPause(frame_ms)
         # Arbitro degli agenti (calliope/agenti/arbitro.py): `on_speech_start` appena qualcuno
         # comincia a parlare a Calliope (sveglia, o nome sentito dal rilevatore), così un agente
         # sullo stesso Ollama si ferma mentre la frase finisce e Whisper trascrive;
@@ -232,6 +292,7 @@ class Listener:
             self.active = True
         if seed:
             talking, speech = True, list(seed)
+            misura.frame_voce = len(seed)
             self.started_at = time.monotonic() - len(seed) * frame_ms / 1000
             self.woke, self.wake_score = True, 1.0
         try:
@@ -250,6 +311,7 @@ class Listener:
                         on_end()                 # la frase a metà si butta
                     signaled, sent = False, 0
                     talking, speech, silent = False, [], 0
+                    misura = MisuraPause(frame_ms)
                     preroll.clear()
                     self.model.reset_states()
                     continue
@@ -276,6 +338,8 @@ class Listener:
                     preroll.append(frame)
                     if prob >= cfg.vad_threshold:
                         talking, speech, silent = True, list(preroll), 0
+                        misura = MisuraPause(frame_ms)
+                        misura.frame_voce = 1        # il frame che ha fatto partire la frase
                         self.started_at = time.monotonic() - len(preroll) * frame_ms / 1000
                         self.woke, self.wake_score = False, 0.0
                     continue
@@ -290,12 +354,19 @@ class Listener:
                     on_audio(speech[sent:])          # satellite: la frase parte già ora
                     sent = len(speech)
                 silent = silent + 1 if prob < cfg.vad_threshold - 0.15 else 0
+                misura.frame(silent > 0)
                 too_long = len(speech) * frame_ms >= cfg.max_utterance_s * 1000
                 if silent * frame_ms >= cfg.silence_ms or too_long:
                     long_enough = (len(speech) - silent) * frame_ms >= cfg.min_speech_ms
                     for_me = wake is None or self.started_at <= awake_until or self.woke
                     if long_enough and for_me:
                         self.ended_at = time.monotonic() - silent * frame_ms / 1000
+                        # Solo misura (07/10): pause interne, parlato, come si è chiusa
+                        self.pause_ms = list(misura.pause)
+                        self.parlato_ms = misura.parlato_ms(silent)
+                        self.chiusura = ("silenzio" if silent * frame_ms >= cfg.silence_ms
+                                         else "lunga")
+                        self._osserva_ripresa(frame_ms)
                         return np.concatenate(speech)
                     if signaled and on_end is not None:
                         on_end()
@@ -305,6 +376,7 @@ class Listener:
                         print(f"   (quasi risveglio: {self.wake_score:.2f})", flush=True)
                     # Rumore, oppure parlato non rivolto a Calliope: si butta
                     talking, speech, silent = False, [], 0
+                    misura = MisuraPause(frame_ms)
                     preroll.clear()
                     self.model.reset_states()
         finally:

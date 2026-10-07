@@ -55,6 +55,10 @@ import numpy as np
 # frase, uscita_s: il ritardo della sua uscita audio) quando comincia a riprodurre una frase; il
 # server la segna (`prima_voce_s` nel registro dei turni). Un server vecchio ignora il tipo, un
 # satellite vecchio non lo manda: niente misura, nient'altro cambia.
+# Sempre nella versione 2 (07/10, pause e fine del turno: solo misura, calliope/pause.py):
+# `frase_finita` può avere `pause_ms` (le pause dentro la frase), `parlato_ms` e `chiusura`
+# («silenzio», «lunga», «rilascio»); il satellite manda `ripresa` (id dell'ascolto, dopo_s) se
+# qualcuno ricomincia a parlare entro 2 s dalla fine della frase. Facoltativi nei due sensi.
 VERSIONE = 2
 VERSIONI = (1, 2)                      # quelle che il server accetta
 PERCORSO_AUDIO = "/satellite"          # connessione con il token

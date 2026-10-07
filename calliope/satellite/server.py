@@ -121,6 +121,10 @@ def valida_evento(t: str, m: dict) -> dict | None:
     if t == "frase_finita":
         out.update(fa_s=_numero(m.get("fa_s"), 0.0, 120.0), woke=m.get("woke") is True,
                    wake_score=_numero(m.get("wake_score"), 0.0, 1.0))
+        # Pause dentro la frase, parlato, chiusura (07/10, solo misura: calliope/pause.py):
+        # facoltativi, un satellite vecchio non li manda
+        from ..pause import campi_frase
+        out.update(campi_frase(m.get("pause_ms"), m.get("parlato_ms"), m.get("chiusura")))
     elif t == "interruzione":
         out["motivo"] = str(m.get("motivo") or "")[:80]
     return out
@@ -177,6 +181,19 @@ class Collegamento:
         self._rpc_cond = threading.Condition()
         # File in arrivo dal satellite per un lavoro dell'agente: id → stato del trasferimento
         self._in_arrivo: dict[int, dict] = {}
+        # Riprese dopo la frase misurate dal satellite (07/10, calliope/pause.py): id
+        # dell'ascolto → secondi dalla fine della voce. Solo le ultime
+        self.riprese: dict[int, float] = {}
+
+    @property
+    def canale(self) -> str:
+        """«telefono» (la web app, attraverso il server degli schermi) o «satellite»."""
+        return "telefono" if getattr(self.ws, "telefono", False) else "satellite"
+
+    def ripresa(self, ident: int, dopo_s: float):
+        self.riprese[ident] = dopo_s
+        while len(self.riprese) > 20:
+            self.riprese.pop(min(self.riprese))
 
     @property
     def stanza(self) -> str:
@@ -1106,6 +1123,12 @@ class ServerSatelliti:
             coll.turno_finito(_intero(m.get("id")) or 0,
                               [str(x)[:500] for x in dette][:50]
                               if isinstance(dette, list) else [])
+        elif t == "ripresa":
+            # Qualcuno ha ricominciato a parlare subito dopo la frase (07/10, solo misura)
+            ident = _intero(m.get("id"))
+            dopo = _numero(m.get("dopo_s"), 0.0, 10.0, None)
+            if ident is not None and dopo is not None:
+                coll.ripresa(ident, round(dopo, 2))
         elif t == "suona":
             ident = _intero(m.get("id"))
             if ident is not None:
@@ -1335,6 +1358,14 @@ class AscoltoRemoto:
         self.on_speech_end = None
         self._ids = itertools.count(1)
         self._in_attesa = False
+        # Come Listener (07/10, calliope/pause.py): le misure dell'ultima frase, dal satellite
+        # (None se è un satellite vecchio), e il canale da cui è arrivata
+        self.pause_ms: list[int] | None = None
+        self.parlato_ms: int | None = None
+        self.chiusura: str | None = None
+        self.canale: str | None = None
+        self.satellite_nome: str | None = None
+        self._ultima: tuple | None = None       # (collegamento, id) dell'ultima frase
 
     def attendi(self):
         """Blocca finché non c'è un satellite pronto. Il ciclo principale la chiama prima
@@ -1418,7 +1449,23 @@ class AscoltoRemoto:
                                      - coll.ritardo())
                     self.woke = bool(d.get("woke"))
                     self.wake_score = float(d.get("wake_score") or 0.0)
+                    self.pause_ms = d.get("pause_ms")
+                    self.parlato_ms = d.get("parlato_ms")
+                    self.chiusura = d.get("chiusura")
+                    self.canale = coll.canale
+                    self.satellite_nome = coll.satellite.get("nome")
+                    self._ultima = (coll, lid)
                     return audio
+
+    def ripresa_s(self) -> float | None:
+        """La ripresa dopo l'ultima frase, se il satellite l'ha misurata (pause.py)."""
+        if self._ultima is None:
+            return None
+        coll, lid = self._ultima
+        return coll.riprese.get(lid)
+
+    def ferma_ripresa(self):
+        """La misura la ferma il satellite da sé, quando arriva la risposta."""
 
     def watch_for_name(self, wake, stop: threading.Event, muted, voice_ok=None):
         """Barge-in: la wake word (e il livello B) girano sul satellite, che ferma da solo

@@ -50,7 +50,7 @@ per stadio, solo i moduli principali: librerie, classi e dettagli sono nei docum
 | Stadio | Dove | Area |
 |---|---|---|
 | Ciclo principale, robustezza | `main.py` (`Avvio`, `Corsie`), `ciclo.py` (`Ciclo`, `Servizi`: dal 06/10, P8), `persistenza.py`, `turnlog.py` | [voce-e-regole](docs/aree/voce-e-regole.md) |
-| Cattura, VAD, wake word acustica, barge-in | `audio.py` (`Listener`), `vad.py`, `wakeword.py` (`WakeWordDetector`) | [stt-tts](docs/aree/stt-tts.md) |
+| Cattura, VAD, wake word acustica, barge-in; pause e fine del turno (solo misura, dal 07/10) | `audio.py` (`Listener`), `vad.py`, `wakeword.py` (`WakeWordDetector`), `pause.py` | [stt-tts](docs/aree/stt-tts.md) |
 | Chi parla (CAM++ in ONNX) | `speaker_id.py`, `arruola.py` | [stt-tts](docs/aree/stt-tts.md) |
 | Speech-to-Text (faster-whisper o whisper.cpp sulla DGX, ripiego su CPU) | `stt.py`, `stt_correzione.py` | [stt-tts](docs/aree/stt-tts.md) |
 | Text-to-Speech (Piper), pronuncia degli inglesismi | `tts.py` (`Speaker`), `pronuncia.py` | [stt-tts](docs/aree/stt-tts.md) |

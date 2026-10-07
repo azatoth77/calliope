@@ -417,3 +417,14 @@ carosello a schermo intero), e ha «Scarica».
   uno spazio come le frasi (`ricordaFrase`).
 - Prova a secco in `prova_latenza.prova_voce_a_pezzi` (il codice della pagina); nel browser
   vero da rimisurare col registro dopo l'aggiornamento (`calliope stato --turni`, per satellite).
+
+## Pause dentro la frase dal telefono (07/10, solo misura)
+
+`voce.js` misura le pause dentro la frase come `calliope/pause.py` (`MisuraPause`: silenzi tra
+120 ms e `silence_ms` sugli stessi frame del VAD che chiude il turno; dopo un tocco su «Parla»
+si conta dalla prima voce) e `listen` restituisce anche `pause`, `parlato` e `chiusura`
+(«silenzio», «lunga», «rilascio» del tasto); `telefono.js` li manda in `frase_finita`
+(`pause_ms`, `parlato_ms`, `chiusura`). Nessun comportamento cambiato. La ripresa dopo la frase
+(taglio probabile) sul telefono non si misura: il microfono si ferma a fine frase. Riassunto per
+persona e canale in `calliope stato --turni --pause` ([stt-tts](stt-tts.md)). Prova
+`prove/prova_pause.py` (il modulo vero eseguito con node, se c'è).

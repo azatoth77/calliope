@@ -50,6 +50,8 @@ A_SECCO = [
     ("prova_tempi.py", [], "durate e orari detti a voce"),
     ("prova_stt_correzione.py", [], "correzione delle frasi incerte (05/10, spenta): confidenza da verbose_json, controllo con i contrari, correttore finto, privacy; parole incerte al modello e frase capita trattenuta (07/10)"),
     ("prova_latenza.py", [], "latenza vera della voce (06/10, P2–P4, P11): guardiano e rilevatore caldi e ricaricati, domanda giudicata in parallelo, conversazione ripresa in cache, mediana e p90 per giorno con le cause e l'avviso, riassunto dell'agente con un tempo massimo; prima frase a pezzi, taratura della voce e dal testo alla voce (07/10)"),
+    # ~9 s: microfono e VAD finti in tempo quasi reale, server dei satelliti vero, node se c'è
+    ("prova_pause.py", [], "pause e fine del turno (07/10, solo misura): pause interne e parlato da Listener, satellite e telefono (voce.js con node), ripresa dopo la frase con i contrari (casse, risposta, oltre 2 s), «aspetta»/«non ho finito» con i contrari, campo «ascolto» del registro, frase_finita e «ripresa» nel protocollo (satellite vecchio), riassunto e soglia stimata in `calliope stato --turni --pause`"),
     ("prova_config.py", [], "calliope.yaml, variabili d'ambiente, chiavi sbagliate"),
     ("prova_config_satellite.py", [], "microfono, casse e webcam nella sezione satellite, ripiego con avviso"),
     ("prova_contesto.py", [], "finestra di contesto dal setup (modello, memoria, tempo) e token veri a ogni turno"),
@@ -234,6 +236,7 @@ LIVELLO_2 = {
     "prova_robustezza.py",           # 15 s (88 s prima del 06/10: aspettava il guardiano)
     "prova_biblioteca.py",           # 6 s, con i file della biblioteca
     "prova_markdown.py",             # 8 s (07/10)
+    "prova_pause.py",                # 9 s (07/10)
 }
 LIVELLO_3 = {
     "prova_schermi_pagina.py", "prova_scritto_pagina.py", "prova_immagini_pagina.py",
@@ -326,6 +329,14 @@ LEGAMI = [
     ("calliope/turnlog.py", ["prova_robustezza.py"]),
     ("calliope/zim.py", ["prova_zim.py", "prova_biblioteca.py"]),
     ("calliope/biblioteca", ["prova_biblioteca_indice.py", "prova_biblioteca.py"]),
+    # Pause e fine del turno (07/10, solo misura): dove sta il VAD e il registro
+    ("calliope/pause.py", ["prova_pause.py"]),
+    ("calliope/audio.py", ["prova_pause.py"]),
+    ("calliope/ciclo.py", ["prova_pause.py"]),
+    ("calliope/stato.py", ["prova_pause.py"]),
+    ("calliope/satellite/", ["prova_pause.py"]),
+    ("calliope/schermi/telefono.py", ["prova_pause.py"]),
+    ("calliope/schermi/pagina/telefono/", ["prova_pause.py"]),
     ("pyproject.toml", ["prova_linux.py", "prova_gestore.py"]),
     ("uv.lock", ["prova_linux.py"]),
 ]

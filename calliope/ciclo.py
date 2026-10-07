@@ -28,6 +28,7 @@ from pathlib import Path
 import numpy as np
 
 from . import contesto, corsie, minori
+from . import pause as pause_mod
 from . import guardiano as guardia
 from . import provenienza, riferire
 from . import allegati as allegati_mod
@@ -216,7 +217,14 @@ class Ciclo:
         # ascolto se nessuno parla nella finestra (vedi `_solo_il_nome`)
         self.frasi_prese = 0
         self._fine_attesa: threading.Timer | None = None
+        # Pause e fine del turno (07/10, solo misura: calliope/pause.py): la fine della voce
+        # della frase di prima (monotonic) e chi la diceva, per la ripresa al turno dopo
+        self._fine_voce_prec: float | None = None
+        self._voce_prec: str | None = None
         self._collega_voce()
+        if self.listener is not None and not getattr(self.listener, "remoto", False)                 and hasattr(self.listener, "ripresa_muto"):
+            # In locale le casse sono qui: la voce di Calliope e i suoni non sono una ripresa
+            self.listener.ripresa_muto = self._casse_occupate
 
     # ── stato della voce sugli schermi ──
     def stanza_voce(self) -> str | None:
@@ -269,6 +277,70 @@ class Ciclo:
         self.listener.on_speech_start, self.listener.on_speech_end = inizio_frase, fine_frase
 
     # ── aiuti ──
+
+    def _casse_occupate(self) -> bool:
+        """Le casse locali hanno suonato da poco (voce o segnale): la misura della ripresa
+        dopo la frase si sospende (calliope/pause.py)."""
+        ultimo = float(getattr(self.speaker, "_progresso", 0.0) or 0.0)
+        return time.monotonic() - ultimo < 0.5
+
+    def _fine_ripresa(self):
+        """Calliope comincia a rispondere: la ripresa dopo la frase non si misura più."""
+        ferma = getattr(self.listener, "ferma_ripresa", None)
+        if ferma is not None:
+            try:
+                ferma()
+            except Exception:  # noqa: BLE001 — una misura non ferma la voce
+                pass
+
+    def _misure_ascolto(self, t) -> dict:
+        """Le misure dell'ascolto di questa frase (07/10, solo misura): canale, soglia in uso,
+        pause interne, parlato, chiusura e, se la stessa voce ricomincia entro
+        pause.RIPRESA_S dalla frase di prima, `ripresa_dopo_s`."""
+        cfg, L = self.s.cfg, self.listener
+        remoto = bool(getattr(L, "remoto", False))
+        a = {"canale": (getattr(L, "canale", None) or "satellite") if remoto else "locale",
+             "soglia_ms": int(cfg.silence_ms)}
+        if remoto and getattr(L, "satellite_nome", None):
+            a["satellite"] = L.satellite_nome
+        for k in ("chiusura", "parlato_ms", "pause_ms"):
+            v = getattr(L, k, None)
+            if v is not None:
+                a[k] = list(v) if k == "pause_ms" else v
+        if t.barged:
+            a["seme"] = True                 # comincia con l'audio del barge-in
+        inizio, fine = getattr(L, "started_at", 0.0), getattr(L, "ended_at", 0.0)
+        prec = self._fine_voce_prec
+        if prec and inizio and not t.barged and 0 <= inizio - prec <= pause_mod.RIPRESA_S:
+            a["ripresa_dopo_s"] = round(inizio - prec, 2)
+        self._fine_voce_prec = fine or None
+        return a
+
+    def _chiudi_ascolto(self, rec: dict):
+        """Prima di scrivere il turno: la ripresa misurata dopo la frase (taglio probabile),
+        la fascia d'età se è un minore, la stessa persona della ripresa al turno dopo."""
+        a = rec.get("ascolto")
+        if not isinstance(a, dict):
+            return
+        try:
+            r = self.listener.ripresa_s() if hasattr(self.listener, "ripresa_s") else None
+        except Exception:  # noqa: BLE001
+            r = None
+        if r is not None:
+            a["ripresa_s"] = r
+            a["taglio_probabile"] = True
+        voce = rec.get("voce") if isinstance(rec.get("voce"), dict) else {}
+        nome = voce.get("nome")
+        if nome:
+            try:
+                f = minori.fascia(self.s.registry.get(nome))
+            except Exception:  # noqa: BLE001
+                f = None
+            if f:
+                a["fascia"] = f
+        if a.get("ripresa_dopo_s") is not None and nome and self._voce_prec:
+            a["stessa_persona"] = nome == self._voce_prec
+        self._voce_prec = nome
 
     def known_voice(self, audio) -> bool:
         """Il parlato durante una risposta è di una persona registrata?
@@ -546,6 +618,7 @@ class Ciclo:
         primo utente) si ascolta senza bisogno del nome."""
         s, cfg, speaker_ctx = self.s, self.s.cfg, self.speaker_ctx
         if self.rec:
+            self._chiudi_ascolto(self.rec)
             s.turns.write(self.rec)
             self.rec = None
         # Il turno di prima è finito: voce di nuovo accesa, il satellite in prestito resta
@@ -902,6 +975,8 @@ class Ciclo:
                     "durata_s": round(len(audio) / cfg.sample_rate, 2), "sveglia": t.in_session,
                     "livello": self.speaker_ctx.current_level, "voce": None, "testo": None,
                     "esito": None, **({"canale": "scritto"} if t.scritto else {})}
+        if t.scritto is None:
+            self.rec["ascolto"] = self._misure_ascolto(t)
         return None
 
     # ── fase 3: trascrizione ──
@@ -918,6 +993,13 @@ class Ciclo:
         t.emb_job = (s.embed_pool.submit(s.registry.embed, t.audio, cfg.sample_rate)
                      if identify else None)
         t.text = s.stt.transcribe(t.audio) if t.scritto is None else t.scritto["testo"]
+        if t.scritto is None and isinstance(self.rec.get("ascolto"), dict):
+            # «aspetta», «non ho finito»… in testa alla frase: solo un segnale nel registro
+            # (07/10, pause.py), nessun effetto sul turno
+            segnale = pause_mod.inizio_ripresa(
+                t.text, (cfg.name, getattr(cfg, "wake_word", None)))
+            if segnale:
+                self.rec["ascolto"]["inizio_ripresa"] = segnale
         conf_stt = getattr(s.stt, "ultima_confidenza", None) if t.scritto is None else None
         t.conf_stt = conf_stt
         if conf_stt is not None and t.text:
@@ -1721,6 +1803,7 @@ class Ciclo:
         def announce(phrase):
             # Tool lento: la frase d'attesa parte subito e copre la seconda passata
             rec["primo_suono_s"] = round(time.perf_counter() - t0, 2)
+            self._fine_ripresa()
             print(f"[attesa {rec['primo_suono_s']:.2f}s] {phrase} ", end="", flush=True)
             speaker.say_cached(phrase)
         brain.on_tool_start = announce
@@ -1903,6 +1986,7 @@ class Ciclo:
     def _di_frase(self, t, sentence: str):
         rec = self.rec
         if t.first:
+            self._fine_ripresa()            # Calliope risponde: la ripresa non si misura più
             rec["prima_frase_s"] = round(time.perf_counter() - t.t0, 2)
             # Primo suono = frase d'attesa se c'è stata, altrimenti la prima frase
             rec.setdefault("primo_suono_s", rec["prima_frase_s"])
