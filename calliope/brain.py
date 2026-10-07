@@ -299,12 +299,32 @@ _FIRST_SENTENCE = re.compile(r"[.!?…]+[\"»)\]]?\s+|\n+")
 _WORD = re.compile(r"[a-zàèéìòù0-9]+", re.I)
 
 
-def is_claim(text: str, actions: list[str] | tuple = ()) -> bool:
+# Dopo soli tool falliti (07/10 pomeriggio, caso vero della DGX): data_calcola(persona=io)
+# fallito due volte e poi «Ho appena recuperato il dato che mi hai chiesto di ricordare: hai 49
+# anni.». Recuperare, calcolare, ricavare un dato sono letture: con un tool riuscito sono vere
+# («Ho calcolato: 49»), senza nessun tool sono il ricordo della conversazione; dopo che i
+# tool di questa risposta sono tutti falliti sono false (FAILED_NUDGE)
+FAILED_CLAIM = re.compile(
+    r"(?<![\w'’])(?<!che )(?<!non )(?:ho|l'ho|l’ho|li ho|le ho)\s+"
+    r"(?:appena\s+|già\s+|anche\s+|finalmente\s+|ora\s+)?"
+    r"(?:recuperat|calcolat|ricavat)[oaie]\b"
+    r"(?![^.!?,;:]*\?)", re.I)
+FAILED_NUDGE = ("I tool che hai chiamato in questa risposta sono falliti: non hai recuperato, "
+                "calcolato né trovato niente. Leggi il loro errore e fai quello che dice "
+                "cosa_fare (per esempio richiamali con il dato che conosci); se non puoi, di' "
+                "in breve cosa manca. Non dire di averlo fatto.")
+
+
+def is_claim(text: str, actions: list[str] | tuple = (), fallito: bool = False) -> bool:
     """La risposta dichiara un'azione fatta in questo turno? `actions`: le azioni fatte
     davvero da un tool nei turni precedenti, come testo minuscolo (richiesta, tool,
     argomenti, conferma). Una dichiarazione che le ricorda per ragionarci sopra («Ho spento
-    Taverna, quindi se intendi riaccenderla…») non lo è; vedi _CLAIM_REASONING."""
+    Taverna, quindi se intendi riaccenderla…») non lo è; vedi _CLAIM_REASONING. `fallito`:
+    i tool di questa risposta sono tutti falliti, e anche «ho recuperato il dato» lo è
+    (FAILED_CLAIM)."""
     text = text or ""
+    if fallito and FAILED_CLAIM.search(text):
+        return True
     for m in ACTION_CLAIM.finditer(text):
         # La frase della dichiarazione, dall'inizio della dichiarazione al punto
         end = re.search(r"[.!?…]", text[m.end():])
@@ -451,8 +471,10 @@ class ClaimHold:
     `non_so` (05/10): trattiene allo stesso modo un «non ho informazioni…» dopo una
     compressione (NON_SO); `kind` dice quale dei due ("claim" o "non_so")."""
 
-    def __init__(self, active: bool, actions=(), non_so: bool = False, rinuncia=None):
+    def __init__(self, active: bool, actions=(), non_so: bool = False, rinuncia=None,
+                 fallito: bool = False):
         self.claims = active
+        self.fallito = fallito          # i tool di questa risposta sono tutti falliti
         self.non_so = non_so
         # «Non posso creare un'estensione» con il tool disponibile (06/10, politica.rinuncia):
         # trattenuto allo stesso modo, kind "rinuncia"
@@ -466,6 +488,9 @@ class ClaimHold:
     def _match(self, text: str) -> bool:
         if self.claims and is_claim(text, self.actions):
             self.kind = "claim"
+            return True
+        if self.claims and self.fallito and FAILED_CLAIM.search(text):
+            self.kind = "fallito"
             return True
         if self.non_so and NON_SO.search(text):
             self.kind = "non_so"
@@ -1566,7 +1591,7 @@ class Brain:
 
     def _turn(self, messages, schemas, hold_claims: bool = False, hold_request: bool = False,
               actions=(), hold_names: bool = False, hold_non_so: bool = False,
-              hold_rinuncia=None):
+              hold_rinuncia=None, hold_fallito: bool = False):
         """Una passata: rilascia il testo pulito e restituisce (testo, chiamate, trattenuto,
         richiesta_trattenuta, nome_trattenuto).
 
@@ -1590,7 +1615,7 @@ class Brain:
         echo = ContextEcho(getattr(self, "_who_name", None), self._net("eco_contesto"))
         guard = TextCallGuard(self.tools.all_schemas() if self._net("textcallguard") else [])
         hold = ClaimHold(hold_claims and self._net("spinta_dichiarata"), actions,
-                         non_so=hold_non_so, rinuncia=hold_rinuncia)
+                         non_so=hold_non_so, rinuncia=hold_rinuncia, fallito=hold_fallito)
         self._held_kind = None
         self.mentions_tool("")                       # prepara _tool_re
         names = ToolNameHold(self._tool_re, hold_names and self._net("chiamata_in_mezzo"))
@@ -2350,7 +2375,7 @@ class Brain:
         # Azioni vere dei turni prima: una dichiarazione che le ricorda non fa scattare la rete
         actions = self._recent_actions(start) + [FACT_PREFIX + f.lower()
                                                  for f in self._remembered_facts()]
-        spoke = announced = nudged = retried_empty = False
+        spoke = announced = nudged = retried_empty = nudged_fallito = False
         claim_at = None          # risposta già detta che dichiarava un'azione senza tool
         # La domanda chiede un file o un documento e c'è il PC per cercarlo: se il modello
         # risponde con testo senza tool scatta la spinta, quindi quel testo non va detto prima
@@ -2382,7 +2407,8 @@ class Brain:
                 hold_names=bool(schemas) and not self.last_tools and not explaining,
                 hold_non_so=archive_hold and not self.last_tools,
                 hold_rinuncia=rinuncia_di if disp and not nudged and not self.last_tools
-                else None)
+                else None,
+                hold_fallito=self._solo_falliti())
             tail = []
             if held and self._held_kind == "rinuncia":
                 # Non detta né nella storia: la spinta, una volta (poi si va avanti normali)
@@ -2446,6 +2472,15 @@ class Brain:
                 tail = [{"role": "system", "content": PROMISE_NUDGE}]
                 continue
             spoke = spoke or bool(text)
+            if held and self._held_kind == "fallito" and not nudged_fallito:
+                # «Ho recuperato il dato» dopo soli tool falliti: non si dice, il modello
+                # rilegge gli errori (una volta; poi vale la regola di sempre, qui sotto)
+                nudged = nudged_fallito = True
+                self._rule("dichiarata_tool_fallito")
+                print(f"   [TOOL] dato dichiarato dopo tool falliti, non lo dico: "
+                      f"«{held[:80]}»", flush=True)
+                tail = [{"role": "system", "content": FAILED_NUDGE}]
+                continue
             if held and nudged:
                 # Di nuovo «ho aperto…» senza tool, anche dopo la spinta (misura del 01/10:
                 # «Sì.» senza azione in sospeso, 2 volte su 3): la frase falsa non si dice
@@ -2475,7 +2510,9 @@ class Brain:
                 if not nudged and schemas and not self._acted():
                     # Azione dichiarata più avanti nella risposta, già detta: spinta, e se
                     # poi il tool arriva la frase falsa esce dalla storia
-                    claimed = self._net("spinta_dichiarata") and is_claim(text or "", actions)
+                    fallito = self._solo_falliti()
+                    claimed = self._net("spinta_dichiarata") and is_claim(text or "", actions,
+                                                                          fallito)
                     if not claimed and self._net("spinta_dichiarata")                             and ACTION_CLAIM.search(text or ""):
                         # La forma c'era, ma è il ricordo di un'azione vera: niente spinta
                         self._rule("dichiarata_ricordo")
@@ -2512,7 +2549,8 @@ class Brain:
                         self._rule("spinta_dichiarata" if claimed else "spinta_promessa"
                                    if promised else "spinta_richiesta")
                         tail = [{"role": "system",
-                                 "content": CLAIM_NUDGE if claimed else PROMISE_NUDGE}]
+                                 "content": (FAILED_NUDGE if claimed and fallito
+                                             else CLAIM_NUDGE if claimed else PROMISE_NUDGE)}]
                         print("   [TOOL] azione " + ("dichiarata" if claimed else "promessa")
                               + " senza tool: la faccio fare", flush=True)
                         continue
@@ -2884,6 +2922,11 @@ class Brain:
         26B: quattro «ricorda» falliti e poi «Ho salvato…»): la rete sulle azioni dichiarate
         vale anche lì, non solo quando non c'è nessun tool."""
         return any(t.get("ok") and t.get("azione", True) for t in self.last_tools or ())
+
+    def _solo_falliti(self) -> bool:
+        """In questa risposta ci sono tool, e sono tutti falliti (FAILED_CLAIM)."""
+        tools = self.last_tools or ()
+        return bool(tools) and not any(t.get("ok") for t in tools)
 
     def _last_confirmation(self) -> str:
         """La frase pronta (conferma, risposta_finale o da_dire: _result_text) dell'ultimo
