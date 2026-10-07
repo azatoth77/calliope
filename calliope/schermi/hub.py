@@ -40,6 +40,7 @@ from . import conversazione as conv_mod
 from .archivio import ArchivioSchermi, norm_stanza
 from .conversazione import Conversazioni
 from .moduli import Ingresso, Moduli
+from .scarica import Scaricamenti
 from .schede import CASA, PERSONALE, PUBBLICA
 
 # Coda per connessione: oltre, le schede vecchie di uno schermo lento si scartano
@@ -119,6 +120,14 @@ def _destinatari(visibilita: str, mittente: Mittente, schermi: list[dict],
     stanza = norm_stanza(stanza) if stanza else ""
     qui = [s for s in schermi if not stanza or s.get("stanza") == stanza]
     return (qui, "") if qui else ([], "stanza")
+
+
+def pubblica(scheda: dict) -> dict:
+    """La scheda come va alle pagine e nella cronologia: senza le chiavi che cominciano con
+    «_» (07/10: `_scarica`, la sorgente intera del documento, resta sul server)."""
+    if not any(str(k).startswith("_") for k in scheda):
+        return scheda
+    return {k: v for k, v in scheda.items() if not str(k).startswith("_")}
 
 
 class _Connessione:
@@ -213,6 +222,9 @@ class Schermi:
         # Il cruscotto di chi amministra (06/10, cruscotto.py: sola lettura), da main.py;
         # None = niente pulsante e /api/cruscotto risponde 404
         self.cruscotto = None
+        # «Scarica» nella scheda del documento (07/10, scarica.py): le schede scaricabili
+        # arrivate a ogni schermo personale e i gettoni degli indirizzi
+        self.scaricamenti = Scaricamenti(cfg)
 
     # ── configurazione ──
     @property
@@ -311,11 +323,18 @@ class Schermi:
         tutti = self.abbinati()
         stanza = mittente.stanza or self.stanza_predefinita or None
         dest, motivo = destinatari(scheda.get("visibilita", PERSONALE), mittente, tutti, stanza)
-        msg = json.dumps(scheda, ensure_ascii=False, default=str)
+        pub = pubblica(scheda)
+        msg = json.dumps(pub, ensure_ascii=False, default=str)
         raggiunti = []
+        # «Scarica» (07/10): solo gli schermi personali di chi parla, con l'identità decisa
+        # dalla voce (mai la zona grigia: lì una scheda personale non parte comunque)
+        scaricabile = ("_scarica" in scheda and scheda.get("visibilita") == PERSONALE
+                       and mittente.certo and mittente.persona)
         with self._lock:
             for s in dest:
-                self._in_storia(s["id"], scheda)
+                self._in_storia(s["id"], pub)
+                if scaricabile and s.get("proprietario") == mittente.persona:
+                    self.scaricamenti.registra(s["id"], scheda, mittente.persona)
                 for c in self._conn.get(s["id"], []):
                     if c.consegna(("scheda", msg)):
                         raggiunti.append(s["nome"])
@@ -330,10 +349,16 @@ class Schermi:
         collegata (altrimenti resta nella sua cronologia)."""
         if not self.valido(sid):
             return False
-        msg = json.dumps(scheda, ensure_ascii=False, default=str)
+        pub = pubblica(scheda)
+        msg = json.dumps(pub, ensure_ascii=False, default=str)
         ok = False
+        if "_scarica" in scheda:
+            # Lo schermo da cui è stata scritta la richiesta: il suo proprietario (se è personale)
+            s = self.schermo(sid) or {}
+            if s.get("proprietario"):
+                self.scaricamenti.registra(sid, scheda, s["proprietario"])
         with self._lock:
-            self._in_storia(sid, scheda)
+            self._in_storia(sid, pub)
             for c in self._conn.get(sid, []):
                 ok = c.consegna(("scheda", msg)) or ok
         return ok
