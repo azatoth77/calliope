@@ -210,6 +210,19 @@ ACTION_CLAIM = re.compile(
     r"(?:(?:con|ad|al|allo|alla|ai|alle|a)\b|all['’])\s*(?:l['’]\s*|(?:la|il|lo|i|gli|le)\s+)?+"
     r"(?!elenc|legg|lettur|cerc|ricerc|controll|verific|dirt|dirl|mostr|spieg|rispond|chied|"
     r"domand)[a-zà-ù]+(?![^.!?,;:]*\?)"
+    # Un lavoro annunciato come cominciato (07/10, caso vero della DGX: a «Sì, procedi.» di
+    # un'altra voce «Perfetto, allora inizio subito il lavoro. Ti faccio sapere…» senza nessun
+    # tool, e due minuti dopo «Non ho lavori in corso»): presente e futuro immediato dei verbi
+    # dei lavori. Non «inizio a capire», «ti avviso quando inizio il lavoro», «inizio io?»
+    r"|(?<![\w'’])(?<!quando )(?<!appena )(?<!se )(?<!non )(?<!che )"
+    r"(?:(?:inizio|comincio|avvio)\s+(?:(?:subito|ora|adesso|immediatamente)\s+)?"
+    r"(?:il|la|lo|l['’])\s*(?:lavoro|ricerca|programma|script|relazione|documento|compito|"
+    r"analisi)\b"
+    r"|(?:inizio|comincio|parto|mi metto)\s+(?:subito|ora|adesso|immediatamente)"
+    r"(?=\s*(?:[.!,;]|$|a lavorar|al lavoro|con (?:il|la|lo|l['’])\s*(?:lavoro|ricerca)))"
+    r"|(?:lo|la|li|le|l['’])\s*(?:affido|delego)\b(?!\s+a\s+te)"
+    r"|(?:lo|la|li|le|l['’])\s*(?:mando|passo|giro)\s+(?:subito\s+)?all['’]agente)"
+    r"(?![^.!?]*\?)"
     # cambiat, rinominat: 02/10, «Ho cambiato il modo in cui ti chiamo, Davide.» dopo «Sì»
     # alla domanda di rinomina_interlocutore, senza richiamarlo (1 volta su 3)
     # «Ti ricorderò alle 9 di chiamare la mamma» senza promemoria_imposta
@@ -563,6 +576,32 @@ PENDING_LATER_MSG = ("Azione in sospeso: poco fa hai chiesto «{domanda}» per {
                      "ancora stata fatta. Se chi parla ora acconsente (sì, ok, procedi, va "
                      "bene…), chiama {tool} con {argomenti}: è il tool a controllare chi può "
                      "confermare. Se rifiuta o chiede altro, non farlo e fai quello che chiede.")
+# Il «sì» di una persona a una proposta fatta a un'altra (07/10, caso vero della DGX: dopo
+# «Procedo?» a una persona il suo «Sì, procedi.» è stato attribuito alla voce di un ragazzo;
+# nessun tool, e la risposta «Perfetto, allora inizio subito il lavoro.» era falsa). Dati del
+# turno, non una regola sul significato: la proposta non vale per chi parla (_take_pending la
+# scarta, `sospeso_altra_persona`), e il modello lo sa. Solo se la frase è un consenso
+# (politica.consenso). Regola nel registro: `sospeso_altrui_consenso`
+SOSPESO_ALTRUI_MSG = ("Dati del turno: c'è una proposta di {nome} in sospeso («{domanda}» per "
+                      "{cosa}): solo {nome} può confermarla, e chi parla adesso non è stato "
+                      "riconosciuto come {nome}. Rispondi con una frase che la proposta è di "
+                      "{nome} e la può confermare solo {nome}: se è {nome} a parlare, lo ripeta "
+                      "con una frase un po' più lunga. Non dire che la fai o che l'hai fatta, e "
+                      "non fare domande.")
+
+
+def proposta_altrui(pending: dict | None, chi) -> dict | None:
+    """I campi di SOSPESO_ALTRUI_MSG per un'azione in sospeso ancora valida di una persona
+    diversa da `chi` (la chiave di chi parla), o None."""
+    if not isinstance(pending, dict) or time.monotonic() > pending.get("scade", 0):
+        return None
+    if pending.get("chi", _UNSET) is _UNSET or pending.get("chi") == chi:
+        return None
+    if pending.get("chi") is None:
+        return None                      # la proposta era a un ospite: niente nomi da dire
+    return {"nome": pending.get("chi_nome") or "un'altra persona",
+            "domanda": pending.get("domanda") or "?",
+            "cosa": pending.get("cosa") or "l'azione proposta"}
 
 
 # Riferimento dei pronomi (01/10, prova a voce): dopo «chiudi taverna» → «Ho spento
@@ -1765,6 +1804,14 @@ class Brain:
         self.last_lettura_s = None  # lettura del prompt della prima passata (_note_usage)
         self.last_compressione = None
         self.turn_pending_tool = None
+        # Una proposta di un'altra persona ancora valida (07/10, SOSPESO_ALTRUI_MSG): dalla
+        # corsia (la conversazione di prima sul satellite) o da questa conversazione, prima che
+        # si chiuda perché cambia chi parla
+        altrui = self.__dict__.pop("sospeso_altrui", None) or proposta_altrui(
+            getattr(self, "pending", None), self._speaker_key())
+        self._altrui_msg = None
+        if altrui and user_text and politica.consenso(user_text):
+            self._altrui_msg = SOSPESO_ALTRUI_MSG.format(**altrui)
         # La conversazione è di chi parla: cambiata la persona, o passato troppo tempo, si
         # chiude come con «esci» (prima di leggere l'azione in sospeso e i riferimenti)
         self._check_conversation()
@@ -1785,6 +1832,9 @@ class Brain:
             rules.clear()
         if pending:
             self._rule("azione_in_sospeso")
+            # Un consenso che vale solo per le forme chiuse («Ma sì dai, perché no?», 07/10)
+            if politica.solo_forma_chiusa(user_text or ""):
+                self._rule("consenso_forma_chiusa")
         self._letto_ora = ""      # un tool non fidato ha già risposto in questa risposta
         self._politica_risposta = {}  # stato della politica per questa risposta (Turno.risposta)
         self.last_turn_at = time.monotonic()
@@ -2004,6 +2054,10 @@ class Brain:
             "messaggio_dopo": str(offer.get("messaggio") or "") or PENDING_LATER_MSG.format(
                 **fields),
             "chi": self._speaker_key(),             # vale solo per chi ha sentito la domanda
+            # Il nome, per dire a un'altra persona di chi è la proposta (07/10, SOSPESO_ALTRUI)
+            "chi_nome": getattr(getattr(self.tool_ctx, "speaker_ctx", None),
+                                "current_speaker", None),
+            "domanda": fields["domanda"], "cosa": fields["cosa"],
             # Dove l'ha sentita (06/10): un «sì» breve vale solo su quel satellite
             "satellite": getattr(self, "satellite", None),
             "turno": getattr(self, "turn_number", 0),
@@ -2278,6 +2332,10 @@ class Brain:
         # dei ricordi (o senza), il «sì» dopo «La apro?» veniva preso per un ringraziamento
         if pending:
             memory = memory + [{"role": "system", "content": pending}]
+        # Il «sì» di chi non ha la proposta (07/10, SOSPESO_ALTRUI_MSG)
+        if getattr(self, "_altrui_msg", None):
+            memory = memory + [{"role": "system", "content": self._altrui_msg}]
+            self._rule("sospeso_altrui_consenso")
 
         tail: list[dict] = []    # spinta del solo giro successivo, in fondo (vedi sotto)
 

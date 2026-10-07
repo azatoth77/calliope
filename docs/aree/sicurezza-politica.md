@@ -264,3 +264,34 @@ l'adulto** con la frase «Non sono sicura di chi parla: …?» (`conferme.incert
 `chiedi_conferma(incerta=…)`, regola `voce_incerta_chiede`); la risposta alla sfida con la voce
 ancora incerta riceve parole nuove una volta, poi non procede. La conferma breve non vale se un
 altro profilo somiglia alla frase almeno quanto chi amministra.
+
+## Consenso in forma chiusa e il «sì» di chi non ha la proposta (07/10)
+
+- **«Ma sì dai, perché no?»** (caso vero della DGX del 07/10: con il risultato di un'estensione,
+  il meteo, nella conversazione `delega_lavoro` chiedeva «C'è di mezzo il risultato di
+  un'estensione, quindi chiedo a te: vuoi che affidi all'agente…?»; la risposta non era un
+  consenso per il «no» di «perché no», e la stessa domanda si è ripetuta finché «Sì, sì,
+  eseguila.» è passato). `politica.consenso` accetta ora anche una frase fatta **per intero** di
+  forme chiuse di consenso (`FORME_SI`: «perché no», «ma sì dai», «sì dai», «vai», «fallo»,
+  «certo», «certamente», «va bene», «procedi»…; `consenso_chiuso`): ogni pezzo tra virgole e
+  punti, tolti riempitivi («ma», «dai», «pure», «allora», «beh») e il nome, è una forma. La regola
+  di sempre (una parola di consenso e nessuna negazione) resta. Principio 10: vincolo di
+  permesso su un'azione già scelta, forma chiusa e breve per intero, mai una parola dentro la
+  frase. Contrari in `prova_risultati.py`: «Perché no? Non ora.», «No, perché no?», «No dai.»,
+  «Ma no dai.», «Perché no il gas?», «Perché non lo fai tu?», «Dai.», «Sì, ma non adesso.».
+  Che «perché no?» sia una domanda dopo un rifiuto il codice non lo distingue: `consenso` vale
+  solo come risposta a una proposta in sospeso.
+- **Una conferma per azione** (verificato, invariato): la contaminazione da estensione chiede
+  sempre la conferma a voce, una volta; il primo consenso valido con la voce vale anche come il
+  «Procedo?» del tool (`politica_conferma_unica`): nella sequenza vera, ora, una domanda sola.
+- **Il «sì» di un'altra voce a una proposta** (caso vero del 07/10: dopo «Procedo?» a chi
+  amministra il suo «Sì, procedi.», 0,8 s di voce, è stato attribuito a un ragazzo; nessun tool,
+  e la risposta «Perfetto, allora inizio subito il lavoro.» era falsa): la proposta resta di chi
+  l'ha sentita (`_take_pending`, `sospeso_altra_persona`), e ora il turno ha nei dati «c'è una
+  proposta di <nome> in sospeso: solo <nome> può confermarla…; se è <nome> a parlare lo ripeta con
+  una frase un po' più lunga» (`brain.SOSPESO_ALTRUI_MSG`, `proposta_altrui`), solo se la frase è
+  un consenso, regola `sospeso_altrui_consenso`. Funziona anche con le corsie: `Corsia.turno`
+  passa a Brain la proposta valida della conversazione di prima sul satellite
+  (`brain.sospeso_altrui`). Il nome e la domanda sono nell'azione in sospeso (`chi_nome`,
+  `domanda`, `cosa`). Dettagli e la rete sulle dichiarazioni in
+  [`voce-e-regole.md`](voce-e-regole.md).

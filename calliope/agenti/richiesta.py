@@ -63,7 +63,7 @@ PUNTI_DETTI = {
 # installazioni, la gestione delle persone e di Calliope
 NON_FUNZIONI = frozenset({
     "delega_lavoro", "estensione_crea", "estensioni_gestisci", "lavori_stato",
-    "lavori_annulla", "lavori_rispondi", "lavori_esegui", "installa_proponi", "installa_avvia",
+    "lavori_annulla", "lavori_rispondi", "lavori_esegui", "risultato_lavoro", "installa_proponi", "installa_avvia",
     "installa_gestisci", "registra_utente", "rinomina_interlocutore", "elenca_utenti",
     "elenca_voci", "chi_parla", "minore_gestisci", "richiesta_tutore", "dimentica",
     "conversazioni_dimentica", "calliope_stato", "schermo_gestisci", "cambia_voce",

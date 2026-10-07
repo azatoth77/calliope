@@ -132,6 +132,16 @@ class Corsia:
                   f"satellite: la lascio a lui", flush=True)
             return False
         conv, come = reg.scegli(self, persona_id, how, in_session)
+        # Una proposta ancora valida di chi parlava prima su questo satellite (07/10): se ora
+        # risponde un'altra voce, il turno lo sa (brain.SOSPESO_ALTRUI_MSG)
+        vecchia = self.conv
+        try:
+            from .brain import proposta_altrui
+            brain.sospeso_altrui = (proposta_altrui(getattr(vecchia, "pending", None),
+                                                    persona_id)
+                                    if vecchia is not None and vecchia is not conv else None)
+        except Exception:  # noqa: BLE001 — un dato del turno non ferma la voce
+            pass
         self.fine_turno()                    # una conversazione per volta
         conv = reg.occupa(conv, self)
         self._in_uso = conv

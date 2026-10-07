@@ -1114,7 +1114,8 @@ class Lavori:
     def _metadati(self, lav: Lavoro, dest: Path):
         r = lav.risultato
         meta = {"id": lav.id, "tipo": lav.tipo, "titolo": lav.titolo, "compito": lav.compito,
-                "chi": lav.persona_nome, "stato": lav.stato, "esito": r.get("esito"),
+                "chi": lav.persona_nome, "persona": lav.persona, "stato": lav.stato,
+                "esito": r.get("esito"),
                 "riassunto": r.get("riassunto"), "domanda": r.get("domanda"),
                 "domande": [list(x) for x in lav.domande] or None,
                 "attesa_s": round(lav.attesa_s, 1) or None,
@@ -1130,7 +1131,10 @@ class Lavori:
                 "secondi": round((lav.fine or time.time()) - (lav.inizio or time.time())
                                  - lav.attesa_s, 1),
                 "inizio": datetime.datetime.fromtimestamp(lav.inizio or time.time())
-                .isoformat(timespec="seconds")}
+                .isoformat(timespec="seconds"),
+                # Il testo intero di una ricerca (07/10): per risultato_lavoro dopo un riavvio
+                # (agenti/risultato.py), senza rileggere il file Word
+                "testo": (str(r.get("testo"))[:100_000] if r.get("testo") else None)}
         try:
             from ..persistenza import scrivi_json      # atomico (03/10)
             scrivi_json(dest / "lavoro.json", meta, indent=1)

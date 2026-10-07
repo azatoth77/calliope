@@ -187,6 +187,8 @@ CLASSI: dict[str, Classe] = {
     "archivio_cerca": _c(S, fonte="archivio"), "archivio_scadenze": _c(S, fonte="archivio"),
     "archivio_somma": _c(S, fonte="archivio"),
     "lavori_stato": _c(S, fonte="agente"),
+    # il risultato di un lavoro finito (07/10): il testo è dell'agente
+    "risultato_lavoro": _c(S, fonte="agente"),
     "immagine_guarda": _c(S),             # la foto entra dall'album: provenienza «foto»
     # le parti di un file allegato (calliope/allegati.py): dato non fidato, fonte «allegato»
     "allegato_leggi": _c(S, fonte="allegato"),
@@ -475,10 +477,56 @@ _NO = re.compile(r"(?<![a-zà-ù])(no|non|aspetta|annulla|lascia stare|lascia pe
                  r"fermo|stop|niente|nulla|mai)(?![a-zà-ù])", re.I)
 
 
+# Forme chiuse di consenso (07/10, caso vero della DGX: a «vuoi che affidi all'agente il
+# lavoro…?» con il risultato di un'estensione di mezzo, «Ma sì dai, perché no?» non era un
+# consenso per il «no» di «perché no», e la stessa domanda si ripeteva). Principio 10: vincolo
+# di permesso su un'azione già scelta, forma chiusa e breve **per intero**: ogni pezzo della
+# frase (tra virgole e punti), tolti i riempitivi e il nome, è una di queste forme. Mai una
+# parola dentro una frase: «perché no il gas?» o «perché no? non ora» restano alla regola di
+# sempre (con la negazione: non è un consenso). Che «perché no?» sia una domanda dopo un rifiuto
+# non si distingue qui: consenso() vale solo come risposta a una proposta in sospeso.
+FORME_SI = frozenset({
+    "perché no", "perche no", "ma sì dai", "sì dai", "dai sì", "vai", "vai pure", "fallo",
+    "fallo pure", "falla", "falli", "certo", "certamente", "certo che sì", "ma certo", "sì",
+    "sì sì", "ok", "okay", "va bene", "procedi", "procedi pure", "d'accordo", "volentieri",
+    "perfetto", "esatto", "assolutamente"})
+_RIEMPITIVI_SI = frozenset({"ma", "dai", "pure", "allora", "beh", "be'", "be", "eh", "mah",
+                            "calliope", "ok", "okay"})
+
+
+def _forma_si(pezzo: str) -> bool:
+    p = re.sub(r"(?<![a-zà-ù])si(?![a-zà-ù])", "sì", pezzo.lower().replace("’", "'"))
+    p = re.sub(r"\s+", " ", re.sub(r"[^a-zà-ù' ]", " ", p)).strip()
+    if p in FORME_SI:
+        return True
+    parole = p.split()
+    while parole and parole[0] in _RIEMPITIVI_SI:
+        parole.pop(0)
+    while parole and parole[-1] in _RIEMPITIVI_SI and parole[-1] != "dai":
+        parole.pop()
+    return " ".join(parole) in FORME_SI
+
+
+def consenso_chiuso(testo: str) -> bool:
+    """Tutta la frase è fatta di forme chiuse di consenso («Ma sì dai, perché no?», «Vai,
+    fallo.», «Calliope, certo.»)."""
+    pezzi = [x for x in re.split(r"[,.;:!?…]+", testo or "")
+             if x.strip() and x.strip().lower() != "calliope"]      # il nome da solo, a parte
+    return bool(pezzi) and all(_forma_si(x) for x in pezzi)
+
+
 def consenso(testo: str) -> bool:
-    """La frase acconsente a una proposta: una parola di consenso, nessuna negazione."""
+    """La frase acconsente a una proposta: una parola di consenso, nessuna negazione; oppure
+    tutta fatta di forme chiuse di consenso (FORME_SI, anche «perché no»)."""
     t = testo or ""
-    return bool(_SI.search(t)) and not _NO.search(t)
+    return consenso_chiuso(t) or (bool(_SI.search(t)) and not _NO.search(t))
+
+
+def solo_forma_chiusa(testo: str) -> bool:
+    """Un consenso che la regola di sempre non avrebbe accettato («perché no»): Brain scrive
+    `consenso_forma_chiusa` nel registro dei turni (principio 10)."""
+    t = testo or ""
+    return consenso_chiuso(t) and not (bool(_SI.search(t)) and not _NO.search(t))
 
 
 # Coerenza tra il verbo detto e un'azione distruttiva (caso vero della DGX, 05/10 sera: «volevo

@@ -8,6 +8,7 @@
 |---|---|---|
 | Agenti in secondo piano («gemma davanti, agenti dietro») | vLLM con l'API compatibile OpenAI sulla DGX (motore «openai», httpx, via tunnel `ssh -N -L` di OpenSSH), oppure l'API nativa di Ollama (motore «ollama», anche lo stesso Ollama della voce); ciclo scritto in proprio, niente framework; sandbox in un container Docker usa-e-getta sulla DGX (dal 03/10), altrimenti job object di Windows (ctypes) e audit hook | `calliope/agenti/` → `Lavori` (`servizio.py`: coda, proposta, risultati, annuncio, domande a metà lavoro), `Agente` (`ciclo.py`), file della persona (`file_utente.py`), `Tunnel` (`tunnel.py`), `Sandbox` (`sandbox.py` + `_avvio.py`, `scegli_isolamento`; immagine da `setup/linux/sandbox/Dockerfile`), `Arbitro` (`arbitro.py`: anche con vLLM sulla GPU della voce, `ClienteCedevole` per archivio e ufficio; `stessa_gpu` in `impostazioni.py`, `agenti_arbitro`; dal 04/10 `PausaServer`, pausa di vLLM in modalità sviluppo, `pausa_server`, `agenti_pausa_vllm`), `Avanzamento` (`avanzamento.py`: la scheda del lavoro in diretta), `ContestoLavoro` (`contesto_lavoro.py`, dal 05/10: risultati lunghi in `.calliope/passo-N.txt`, diario del lavoro alle soglie; finestra da `contesto.calcola_agenti`), `Modello` (`modelli.py`), `carica` (`impostazioni.py`: dgx.yaml / agenti_url), `ClienteOllama` / `ClienteOpenAI` (`remoto.py`, `remoto_openai.py`, `crea_cliente`), `load_agenti`; tool in `calliope/tools/agenti.py`; terminale `python -m calliope.agenti --prova` |
 | Programmi dell'agente eseguiti in diretta, linguaggi (Python, C#) | stessa sandbox Docker; C# con csc nel container `calliope-sandbox-dotnet` (runtime .NET 10 + Roslyn, niente SDK né NuGet); SSE verso la scheda | `calliope/agenti/esecuzione.py` → `Esecuzioni` (`avvia`, `dimostra`, `ferma`, `frase`); `linguaggi.py`; `esegui_cs.sh`; `setup/linux/sandbox/Dockerfile.dotnet`; tool `lavori_esegui`, scheda `esecuzione` |
+| Il risultato di un lavoro finito a voce o sullo schermo (07/10) | il modello dell'agente per il riassunto per la voce (thinking spento, tempo massimo) | `calliope/agenti/risultato.py` → `trova`, `scegli`, `dal_disco`, `testo_intero`, `riassunto_voce`, `scheda`; tool `risultato_lavoro` (`calliope/tools/agenti.py`), `agenti_risultato_s`; prove `prova_risultati.py`, `prova_risultati_ollama.py` |
 | Estensioni permanenti e guardrail (04/10) | container della sandbox (Docker) per ogni chiamata, JSON-RPC su stdin/stdout (cornice stdio di MCP, senza SDK), solo libreria standard | `calliope/guardrail.py` → `valuta_porta`, `SecondoParere`, `domanda` (la porta delle estensioni: sicura / pericolosa / vietata; i tool di Calliope li decide `politica.decidi` dal 06/10); `calliope/estensioni/` → `Estensioni` (`servizio.py`), `Porta` (`porta.py`), `Esecuzione` (`esecuzione.py`), `Archivio` (`archivio.py`: versioni, impronta), `valida` (`manifesto.py`), `analizza` (`analisi.py`), runtime `_ospite.py` (nel container: `calliope_estensione`), prompt dell'agente (`prompt.py`: `sistema_estensione`), contratto delle capacità (`contratto.py`: `testo`, `CAPACITA_IDS`, CAPACITA.md); rete solo pubblica `calliope/web/rete.py` → `RetePubblica` (registro `uscite.jsonl`, `riepilogo`), dati riservati nel traffico `calliope/web/riservati.py` → `Riservati`, `da_contesto`; piano e permessi dell'agente in `agenti/ciclo.py` (`PIANO`, `CHIEDI_PERMESSO`, `_piano`, `_fuori_piano`); tool in `calliope/tools/estensioni.py`; progetto in `docs/ricerche/2026-10-04-estensioni-e-guardrail.md` (§11–§14 dal 05/10) |
 
 ## Note dalla sezione «Stato attuale» di CLAUDE.md (fino al 06/10)
@@ -562,3 +563,58 @@ lavoro: la domanda va fatta **prima**, alla proposta.
   ragionamento). L'annuncio ora lo dice: «ha scritto il codice senza arrivare a provarlo». La
   richiesta adesso è una specifica; che l'agente riscriva lo stesso file senza passare ai test è
   un problema dell'agente, da guardare a parte (non ripetuta: 20 minuti di GPU).
+
+## Il risultato di un lavoro finito (07/10)
+
+Caso vero del 07/10 (DGX, registro dei turni): una ricerca finita e annunciata («ho finito
+«Esegui una ricerca approfondita…»: 20 paragrafi. … Il file è nella cartella Lavori dei
+Documenti.»), poi «E il risultato?» → `lavori_rispondi(risposta="Il lavoro è stato
+completato.")` e «l'agente non ha generato un rapporto da leggermi»; «leggili o delegali e
+dammi un bel riassunto» → `lavori_esegui` («Non ho programmi finiti da eseguire»), due volte;
+poi un `delega_lavoro` nuovo per riassumere il «documento generato dalla ricerca precedente»,
+che il lavoro nuovo non vedeva; poi `pc_cerca_file` dal telefono. Non c'era un modo di avere il
+risultato a voce.
+
+- **Tool `risultato_lavoro(lavoro?, modo: riassunto|leggi|mostra)`** (`calliope/tools/agenti.py`,
+  `calliope/agenti/risultato.py`): il lavoro più recente finito di chi parla (chi amministra:
+  anche degli altri), o quello detto per id o con parole del titolo (`risultato.scegli`, come
+  `lavori_rispondi`); se il più recente è ancora in corso lo dice. Un altro familiare riceve un
+  rifiuto (regola `risultato_lavoro_altrui`). Dopo un riavvio i lavori finiti non sono più in
+  memoria: si leggono dalla cartella dei risultati (`dal_disco`, le 40 cartelle più recenti;
+  `lavoro.json` ha dal 07/10 `persona` e il testo intero di una ricerca, quelli di prima si
+  trovano per nome e il testo si legge dal file).
+- **Cosa dice**: il riassunto dell'agente già salvato (`risultato_salvato`); con «leggi», con un
+  riassunto salvato troppo corto (< 80 caratteri) o **già detto** (l'annuncio del lavoro finito
+  lo contiene quasi sempre: `risultato_gia_detto`), un riassunto per la voce chiesto al modello
+  dell'agente sul testo intero (`riassunto_voce`: thinking spento, 2–3 frasi o 4–6 con «leggi», il
+  testo come dato e la domanda della persona, `ClienteCedevole` sulla stessa GPU, frase d'attesa
+  dopo 1,2 s, tempo massimo `agenti_risultato_s` = 15 s; oltre, o con un errore, il riassunto
+  salvato e la regola `risultato_ripiego`). L'uscita del modello passa da `per_voce` (niente
+  elenchi, markdown, indirizzi). Il codice non si legge mai a voce.
+- **Schermo**: se chi chiede ha uno schermo personale, il testo intero ci va sempre (la scheda del
+  lavoro con il testo, stessa chiave della scheda finale); «mostra» senza schermo lo dice e
+  riassume a voce.
+- **Sicurezza**: classe `sicuro` con fonte «agente» in `politica.CLASSI` (il risultato entra in
+  busta, la conversazione resta contaminata come dopo l'annuncio); la frase passa da
+  `riferire.controlla_testo` come gli annunci (un numero a pagamento nel riassunto dell'agente
+  diventa la frase fissa) e poi dal controllo di ciò che dice nel ciclo.
+- **Gli altri tool lo propongono**: `lavori_esegui` su una ricerca o un documento (««…» è una
+  ricerca, non un programma: vuoi il risultato?», regola `lavori_offri_risultato`),
+  `lavori_rispondi` senza domande in attesa, `lavori_stato` con l'ultimo lavoro finito («Vuoi
+  sentire il risultato?»): azione in sospeso verso `risultato_lavoro`. Descrizioni ritoccate:
+  `lavori_esegui` «Solo per i programmi», `lavori_rispondi` «Solo quando l'agente ha fatto una
+  domanda», `lavori_stato` e `delega_lavoro` rimandano a `risultato_lavoro`; una riga nel prompt.
+- **Il nome**: prima `lavori_risultato`, come gli altri tool dei lavori. Con gemma4 e4b la
+  chiamata finiva a volte scritta come testo con il nome fuso («lavoris_risultato(…)»,
+  «lavorisultato(…)», «lavor_risultato(…)»: «lavori» e «risultato» si saldano su «ri»), a distanza
+  3 dal nome vero, che `TextCallGuard` e `nome_vicino` non riconoscono: 5 prime risposte su 15
+  nella prova e 6 su 50 nella sonda con i due nomi alternati minuto per minuto;
+  `risultato_lavoro` 0 su 50.
+- **Misura** (`prova_risultati_ollama.py`, gemma4 e4b su questo portatile, agente finto, 5 giri ×
+  3 frasi, ognuna subito dopo l'annuncio come nel caso vero): main **2/15** (`lavori_rispondi`
+  7 volte, `delega_lavoro` 2, risposte senza il contenuto), con `risultato_lavoro` **15/15**
+  (il tool 15 volte, nessun tool sbagliato, il dettaglio del testo intero nelle frasi 2 e 3);
+  prima frase mediana 1,60 → 0,60 s (il riassunto dell'agente finto è immediato: sulla DGX conta
+  il tempo di qwen3.6 sul testo, coperto dalla frase d'attesa). A secco `prova_risultati.py`.
+- **Da provare sulla DGX**: il tempo vero del riassunto di qwen3.6 su 20 paragrafi (atteso 2–4 s)
+  e la scheda sul telefono.
