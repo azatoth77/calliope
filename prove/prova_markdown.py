@@ -128,6 +128,15 @@ verifica("descrivi: «2 sezioni, 2 elenchi e una tabella»",
 verifica("sembra_markdown: sì per titoli/elenchi/tabelle, no per una frase semplice",
          md.sembra_markdown(RELAZIONE) and md.sembra_markdown("- a\n- b")
          and not md.sembra_markdown("Ho trovato tre fonti. Il resto è nel file."))
+recinto = "```markdown\n# Titolo\n\n- voce\n```"
+verifica("senza_recinto: il testo tutto in ```markdown è il Markdown (misura del 07/10)",
+         md.senza_recinto(recinto) == ("# Titolo\n\n- voce", True)
+         and md.senza_recinto("  ~~~md\nciao\n~~~\n") == ("ciao", True))
+verifica("senza_recinto, contrari: un recinto in mezzo, di un altro linguaggio, non chiuso",
+         not md.senza_recinto("Testo\n" + recinto)[1]
+         and not md.senza_recinto(recinto + "\nDopo")[1]
+         and not md.senza_recinto("```python\nprint(1)\n```")[1]
+         and not md.senza_recinto("```markdown\n# Titolo")[1])
 verifica("con_titolo: aggiunge «# Titolo» solo se manca",
          md.con_titolo("testo", "Relazione").startswith("# Relazione\n")
          and md.con_titolo(RELAZIONE, "Altro").startswith("# Le api in Italia"))

@@ -1120,7 +1120,10 @@ class Lavori:
         di soli paragrafi, e gli altri lavori un .txt). Il titolo in cima se manca; PDF e Word
         si fanno a richiesta («Scarica», «fammene un PDF»)."""
         from ..documenti import markdown as md
-        testo = md.con_titolo(str(ris.get("testo") or ""), titolo_file(lav.titolo))
+        testo, tolto = md.senza_recinto(str(ris.get("testo") or ""))
+        if tolto:
+            self.log(f"[AGENTI] {lav.id}: il testo era tutto in un recinto ```markdown: tolto")
+        testo = md.con_titolo(testo, titolo_file(lav.titolo))
         path = dest / NOME_RISULTATO
         path.write_text(testo, encoding="utf-8")
         return {"file": [path.name], "testo": testo, "markdown": True,

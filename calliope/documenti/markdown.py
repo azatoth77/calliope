@@ -321,6 +321,21 @@ def titolo_di(md: str) -> str:
     return in_linea(primo["testo"], indirizzi=False).strip() if primo else ""
 
 
+_RECINTO_MD = re.compile(r"\A\s*(`{3,}|~{3,})[ \t]*(?:markdown|md)[ \t]*\n(.*?)\n[ \t]*\1\s*\Z",
+                         re.S | re.I)
+
+
+def senza_recinto(md: str) -> tuple[str, bool]:
+    """(testo, tolto): un testo **tutto** dentro un recinto ```markdown (o ```md) è il Markdown
+    stesso, non codice da mostrare (misura del 07/10: qwen3 8b una volta su tre). Correzione
+    della forma di una scelta già fatta dal modello; un recinto in mezzo al testo, o di un altro
+    linguaggio, resta."""
+    m = _RECINTO_MD.match(str(md or ""))
+    if not m:
+        return str(md or ""), False
+    return m.group(2), True
+
+
 def con_titolo(md: str, titolo: str) -> str:
     """Il testo con un titolo di primo livello in cima, se non ce l'ha già."""
     t = normalizza(md).strip()

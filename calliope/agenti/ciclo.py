@@ -410,7 +410,8 @@ SISTEMA_CODICE = (
 # scheda del documento li legge con titoli, elenchi e tabelle, e «Scarica» li converte in PDF e
 # Word. Il riassunto da dire resta testo semplice
 TESTO_MARKDOWN = ("in Markdown (un titolo con #, le sezioni con ##, paragrafi pieni; elenchi "
-                  "e tabelle quando servono; niente HTML né immagini)")
+                  "e tabelle quando servono; niente HTML né immagini; il testo così com'è, "
+                  "non dentro un blocco di codice)")
 
 SISTEMA_RICERCA = (
     "Sei l'agente di ricerca di Calliope. Fai una ricerca a più passi: cerca nella "
