@@ -77,6 +77,10 @@ class ToolContext:
     # imposta Brain durante la chiamata, se in questa risposta non si è ancora detto niente;
     # il tool la chiama solo quando serve davvero. None = niente frase
     attesa: Any = None
+    # La scheda del risultato di un lavoro mandata in questa risposta (07/10, risultato_lavoro):
+    # (turno, frase, scheda, mittente). Uno schermo_mostra «risposta» nella stessa risposta
+    # rimanda questa invece di coprirla con la risposta detta
+    scheda_risultato: Any = None
 
 
 

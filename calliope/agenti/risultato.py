@@ -124,14 +124,113 @@ def dal_disco(cartella: Path, persona, persona_nome, limite: int = DISCO_MAX) ->
             id=str(meta.get("id") or "?"), tipo=str(meta.get("tipo") or "altro"),
             titolo=str(meta.get("titolo") or "il lavoro"), compito=str(meta.get("compito") or ""),
             stato=meta.get("stato"), persona=chi, persona_nome=meta.get("chi"), risultato=ris,
-            dal_disco=True))
+            fine=_fine_da(meta, d), dal_disco=True))
     return out
+
+
+def _fine_da(meta: dict, d: Path) -> float:
+    """Quando è finito un lavoro salvato: `fine` (dal 07/10), o inizio + secondi, o l'ora del
+    file."""
+    import datetime
+    for k in ("fine", "inizio"):
+        try:
+            t = datetime.datetime.fromisoformat(str(meta.get(k))).timestamp()
+        except (TypeError, ValueError):
+            continue
+        return t + (float(meta.get("secondi") or 0) + float(meta.get("attesa_s") or 0)
+                    if k == "inizio" else 0.0)
+    try:
+        return (d / "lavoro.json").stat().st_mtime
+    except OSError:
+        return 0.0
+
+
+def _cartella(lv) -> str:
+    """La cartella dei risultati di un lavoro, normalizzata ("" se non c'è): dopo un riavvio
+    gli id ricominciano da L1, quindi un lavoro su disco si riconosce dalla cartella."""
+    import os
+    c = (getattr(lv, "risultato", None) or {}).get("cartella") or getattr(lv, "cartella", "")
+    return os.path.normcase(os.path.abspath(str(c))) if c else ""
+
+
+PER_CARTELLA = "cartella:"
+
+
+def chiave(lv) -> str:
+    """Come richiamare il lavoro (argomento `lavoro` di risultato_lavoro in un'azione in
+    sospeso): l'id se è in memoria, la cartella se viene dal disco."""
+    if getattr(lv, "dal_disco", False) and _cartella(lv):
+        return PER_CARTELLA + Path(_cartella(lv)).name
+    return str(lv.id)
+
+
+def _tutti(svc, persona, persona_nome) -> tuple[list, list]:
+    """(in memoria, dal disco senza quelli già in memoria)."""
+    with svc._lock:
+        tutti = list(svc.lavori)
+    from .servizio import cartella_risultati
+    noti = {_cartella(lv) for lv in tutti} - {""}
+    disco = [lv for lv in dal_disco(cartella_risultati(svc.cfg), persona, persona_nome)
+             if _cartella(lv) not in noti]
+    return tutti, disco
+
+
+def recenti(svc, persona, persona_nome=None, n: int = 3) -> list:
+    """Gli ultimi `n` lavori finiti di `persona` (in memoria e, dopo un riavvio, dalla cartella
+    dei risultati), dal più recente, ognuno con `fine` (07/10: «e quelli che hai già fatto?»
+    → lavori_stato rispondeva «Non ho lavori in corso.» e basta)."""
+    tutti, disco = _tutti(svc, persona, persona_nome)
+    # «ripreso»: interrotto da un riavvio e rifatto, c'è già il lavoro nuovo
+    fin = [lv for lv in tutti + disco if lv.stato in FINITI and lv.stato != "ripreso"
+           and lv.persona == persona]
+    fin.sort(key=_quando, reverse=True)
+    return fin[:max(0, n)]
+
+
+def _quando(lv) -> float:
+    return float(getattr(lv, "fine", None) or getattr(lv, "creato", None) or 0.0)
+
+
+_ESITI = {"fatto": "", "errore": "non riuscito", "mancano_dati": "mancavano dei dati",
+          "scaduto": "chiuso senza la tua risposta", "ripreso": "rifatto dopo un riavvio"}
+
+
+def elenco_detto(lavori: list, adesso: float | None = None) -> str:
+    """«“A”, oggi alle 10:29; “B”, ieri alle 16:05, non riuscito» (per la voce). Uno solo:
+    «“A” è finito oggi alle 10:29»."""
+    from ..tools.conversazioni import quando_detto
+    from .servizio import titolo_detto
+    parti = []
+    for lv in lavori:
+        p = f"«{titolo_detto(lv.titolo)}»"
+        if _quando(lv):
+            p += f", {quando_detto(_quando(lv), adesso)}"
+        esito = _ESITI.get(lv.stato, "")
+        if lv.stato == "fatto" and (lv.risultato or {}).get("esito") == "impossibile":
+            esito = "non riuscito"
+        if esito:
+            p += f", {esito}"
+        elif len(lavori) == 1:
+            p = p.replace("», ", "» è finito ", 1) if _quando(lv) else p + " è finito"
+        parti.append(p)
+    return "; ".join(parti)
 
 
 def trova(svc, persona, persona_nome=None, quale: str = "", admin: bool = False):
     """(lavoro, frase, altrui) come `scegli`, prima in memoria e poi (dopo un riavvio) dalla
     cartella dei risultati. Se il lavoro più recente di chi parla non è ancora finito (e non ne
     ha detto un altro), lo si dice."""
+    q = str(quale or "").strip()
+    if q.startswith(PER_CARTELLA):
+        # Dall'azione in sospeso di lavori_stato: un lavoro preciso, anche di prima di un
+        # riavvio (gli id ricominciano da L1)
+        nome = q[len(PER_CARTELLA):].strip().lower()
+        tutti, disco = _tutti(svc, persona, persona_nome)
+        lv = next((x for x in tutti + disco if x.stato in FINITI and _cartella(x)
+                   and Path(_cartella(x)).name.lower() == nome), None)
+        if lv is not None:
+            return scegli([lv], persona, "", admin)
+        quale = ""
     with svc._lock:
         tutti = list(svc.lavori)
     suoi = [lv for lv in tutti if admin or lv.persona == persona]
@@ -146,10 +245,9 @@ def trova(svc, persona, persona_nome=None, quale: str = "", admin: bool = False)
                                 admin)
     if lav is not None:
         return lav, "", False
-    from .servizio import cartella_risultati
-    noti = {lv.id for lv in tutti}
-    disco = [lv for lv in dal_disco(cartella_risultati(svc.cfg), persona, persona_nome)
-             if lv.id not in noti]
+    # Dal disco quelli che la memoria non ha (per cartella: dopo un riavvio gli id ricominciano,
+    # e il L1 di ieri non è il L1 di oggi)
+    _, disco = _tutti(svc, persona, persona_nome)
     if disco:
         lav2, frase2, altrui2 = scegli(disco, persona, quale, admin)
         if lav2 is not None or not altrui:

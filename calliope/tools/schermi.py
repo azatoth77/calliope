@@ -160,6 +160,17 @@ def _schermo_mostra(ctx: ToolContext, cosa: str = "ultima", lista: str = "") -> 
     if cosa not in COSE:
         cosa = "ultima"
     sender = hub.mittente(ctx)
+    # Nella stessa risposta il risultato di un lavoro è già andato sullo schermo personale
+    # (risultato_lavoro, 07/10): «risposta» o «ultima» lo rimandano in cima invece di coprirlo
+    # con la risposta detta (DGX del 07/10: sul telefono restava solo il riassunto)
+    gia = getattr(ctx, "scheda_risultato", None)
+    if (cosa in ("ultima", "risposta") and isinstance(gia, tuple) and len(gia) == 4
+            and gia[0] == getattr(ctx, "turno", 0)
+            and gia[1] == getattr(ctx, "user_text", "")):
+        r = hub.invia(gia[2], gia[3], forza=True)
+        if r.get("schermi") or r.get("destinatari"):
+            note_rule(ctx, "schermo_mostra_risultato")
+            return _final("Il testo intero è sul tuo schermo.", fatto="mostrato")
     card, why = _scheda_per(ctx, cosa, str(lista or ""), hub, sender)
     if card is None:
         return _final(why, ok=False, fatto=NIENTE)
