@@ -72,6 +72,11 @@ class TurnLog:
         for k, v in self.modello.items():
             rec.setdefault(k, v)
         if rec.get("livello") == "ospite":
+            for key in ("testo", "risposta"):
+                # Quante parole c'erano (07/10): «testo: null» di un ospite si confondeva con
+                # una frase vuota arrivata al modello, «risposta: null» con il silenzio
+                if isinstance(rec.get(key), str):
+                    rec.setdefault(f"{key}_parole", len(rec[key].split()))
             for key in ("testo", "richiesta", "risposta"):
                 if rec.get(key) is not None:
                     rec[key] = None

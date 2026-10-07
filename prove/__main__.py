@@ -40,6 +40,7 @@ A_SECCO = [
     ("prova_conferma_unica.py", [], "una conferma per azione (06/10, caso della DGX): «creiamo…» con una foto di mezzo, conferma della politica e «Procedo?» del tool fusi, sfida, doppioni di una funzione che c'è già, annuncio coerente con la dimostrazione"),
     ("prova_conferme.py", [], "conferme (04/10): «sì» breve di chi amministra, proposta valida 3 turni, frase di sfida"),
     ("prova_minori.py", [], "minori (05/10): fasce, preset e permessi nel codice, orari, voce incerta, compiti e avvisi ai tutori, guardiano finto, registrazione con la sfida, privacy"),
+    ("prova_eta_utenti.py", [], "età e compleanni dai profili (07/10, DGX): data di oggi come nascita rifiutata, persona=io o un nome, giorni contati dal programma, privacy (chi amministra e i tutori), impronta della voce in elenca_utenti, rubrica distinta, tool *_cerca con argomenti obbligatori, parole di un ospite nel registro"),
     ("prova_minori_pericolo.py", [], "minore in pericolo con la frase spezzata (06/10, e2e): pezzi uniti per il guardiano, protezione senza barge-in con la sola voce e ripetuta se il nome la interrompe, avviso non ripetuto per lo stesso episodio, con i contrari"),
     ("prova_brain.py", [], "filtro del thinking, guardia, ciclo dei tool, storia"),
     ("prova_tempi.py", [], "durate e orari detti a voce"),

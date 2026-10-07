@@ -185,8 +185,11 @@ def ufficio_specs(modelli) -> list[ToolSpec]:
             riservato=True),
         ToolSpec(
             name="anagrafica_cerca",
-            description=("Cerca un cliente, fornitore o contatto nella rubrica («che dati ho "
-                         "di Rossi?», «la partita IVA di Bianchi»)."),
+            description=("Cerca un cliente, fornitore o contatto di lavoro nella rubrica "
+                         "dell'ufficio («che dati ho di Rossi?», «la partita IVA di "
+                         "Bianchi»). testo: il nome o le parole da cercare. Non per le "
+                         "persone della casa registrate (familiari, chi parla con Calliope): "
+                         "quelle sono in elenca_utenti."),
             parameters={"type": "object", "properties": {"testo": {"type": "string"}},
                         "required": ["testo"]},
             func=_anagrafica_cerca, risk="lettura", levels=FAMILY, riservato=True),

@@ -273,7 +273,8 @@ buf = io.StringIO()
 with contextlib.redirect_stdout(buf):
     out = b._run_tool({"name": "archivio_cerca", "id": "c1",
                        "arguments": {"cosa": "bolletta luce", "dato": "importo"}}, "familiare")
-verifica("registro dei turni: solo il nome del tool", b.last_tools[0]["argomenti"] == {}
+verifica("registro dei turni: il nome del tool e i nomi degli argomenti, senza valori",
+         b.last_tools[0]["argomenti"] == {"cosa": "…", "dato": "…"}
          and b.last_private and "84,50" in out and "84,50" not in buf.getvalue()
          and "bolletta" not in buf.getvalue(), buf.getvalue())
 
