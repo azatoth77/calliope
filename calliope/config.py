@@ -933,6 +933,11 @@ class Config:
     # (fonte web verificata compresa) si procede come prima dell'analisi
     agenti_analisi: bool = True
     agenti_analisi_s: float = 10.0
+    # Il risultato di un lavoro finito, chiesto a voce (07/10, tool risultato_lavoro: «e il
+    # risultato?», «leggimelo»): il riassunto dell'agente già salvato; per più dettaglio un
+    # riassunto per la voce chiesto al modello dell'agente sul testo intero, entro tanti
+    # secondi (oltre, il riassunto salvato). Il testo intero va sullo schermo personale
+    agenti_risultato_s: float = 15.0
     # Stesso Ollama della voce: l'agente si ferma quando qualcuno parla a Calliope e riparte
     # tanti secondi dopo la fine della risposta
     agenti_precedenza_voce: bool = True
@@ -1422,7 +1427,8 @@ class Config:
                 "sapere a che punto è lavori_stato, per fermarlo lavori_annulla, per "
                 "rispondere a una domanda dell'agente lavori_rispondi, per eseguire di nuovo il "
                 "programma finito e vederlo sullo schermo («fammelo vedere», «eseguilo con 3 e "
-                "5») lavori_esegui; le "
+                "5») lavori_esegui, per il risultato di un lavoro finito («e il risultato?», "
+                "«leggimelo», «fammi un riassunto della ricerca») risultato_lavoro; le "
                 "domande di programmazione e le spiegazioni brevi («come si scrive…», «cos'è…», "
                 "«a cosa serve…») le rispondi tu, a voce, senza delegare; "
                 # «Scrivimi uno script Python…» col 26B veniva scritto a voce (~10 s di codice
@@ -2076,7 +2082,7 @@ SEZIONI: dict[str, list[str]] = {
                "agenti_dimostrazione_attesa_s", "agenti_esecuzione_attesa_s",
                "agenti_sandbox", "agenti_risultati",
                "agenti_modelli", "agenti_livello", "agenti_livello_codice", "agenti_conferma",
-               "agenti_analisi", "agenti_analisi_s",
+               "agenti_analisi", "agenti_analisi_s", "agenti_risultato_s",
                "agenti_precedenza_voce", "agenti_ripresa_s", "agenti_arbitro", "agenti_pausa_vllm",
                "agenti_domande_max",
                "agenti_attesa_risposta_min", "agenti_file_max_mb", "agenti_file_caratteri",
@@ -2261,6 +2267,7 @@ LIMITI: dict[str, tuple[float, float]] = {
     "agenti_token_passata": (512, 262_144), "agenti_ragionamento_passata": (0, 262_144),
     "agenti_soglia_file": (0.1, 0.95), "agenti_passi_intatti": (1, 20),
     "agenti_analisi_s": (1.0, 60.0),
+    "agenti_risultato_s": (1.0, 120.0),
 }
 
 

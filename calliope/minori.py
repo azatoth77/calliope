@@ -528,7 +528,7 @@ FRASI = {
 # Tool → chiave del preset
 _TOOL_CHIAVE = {
     "web_cerca": "internet",
-    "delega_lavoro": "agenti", "lavori_rispondi": "agenti",
+    "delega_lavoro": "agenti", "lavori_rispondi": "agenti", "risultato_lavoro": "agenti",
     "documento_crea": "documenti", "documento_modifica": "documenti",
 }
 _UFFICIO = {"modello_compila", "anagrafica_cerca", "anagrafica_salva", "archivio_cerca",

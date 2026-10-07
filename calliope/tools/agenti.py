@@ -599,6 +599,16 @@ def _lavori_stato(ctx: ToolContext) -> dict:
            else None)
     if rip is not None and frase.endswith("?"):
         return _final(frase, in_sospeso=rip)
+    # Un lavoro finito (07/10): «Vuoi sentire il risultato?», e il «sì» va a risultato_lavoro
+    # (caso vero della DGX: «E il risultato?» dopo lo stato finiva in lavori_rispondi)
+    if not svc.attivi(None if admin else getattr(prof, "id", None), attesa=True)             and frase.endswith(".") and prof is not None:
+        from ..agenti import risultato as ar
+        lav, _, _ = ar.trova(svc, prof.id, prof.name, "", admin=admin)
+        if lav is not None and lav.stato == "fatto" and not getattr(lav, "dal_disco", False):
+            domanda = "Vuoi sentire il risultato?"
+            return _final(f"{frase} {domanda}", in_sospeso={
+                "domanda": domanda, "tool": "risultato_lavoro",
+                "cosa": f"il risultato di «{lav.titolo}»", "argomenti": {"lavoro": lav.id}})
     return _final(frase)
 
 
@@ -619,6 +629,8 @@ def _lavori_rispondi(ctx: ToolContext, lavoro: str = "", risposta: str = "") -> 
     if lav is None:
         if altrui:
             return _rifiuto(ctx, frase, "lavori_risposta_altrui")
+        if not svc.in_attesa():
+            return _offri_risultato(ctx, svc, prof, frase)
         return _final(frase, ok=False, fatto=NIENTE)
     # Risposta arrivata a voce: il modulo della domanda sullo schermo si chiude (03/10)
     from ..schermi.moduli import chiudi_per_voce
@@ -628,6 +640,128 @@ def _lavori_rispondi(ctx: ToolContext, lavoro: str = "", risposta: str = "") -> 
         return _final("Quel lavoro non aspetta più una risposta.", ok=False, fatto=NIENTE)
     return _final(frase, fatto="risposta passata all'agente: il lavoro riprende, NON è ancora "
                                "finito", lavoro=lav.id)
+
+
+MODI_RISULTATO = ("riassunto", "leggi", "mostra")
+
+
+def _risultato_lavoro(ctx: ToolContext, lavoro: str = "", modo: str = "riassunto") -> dict:
+    """Il risultato di un lavoro finito (07/10, agenti/risultato.py): riassunto a voce, più
+    dettaglio col modello dell'agente, il testo intero sullo schermo personale."""
+    from ..agenti import risultato as ar
+    svc = getattr(ctx, "lavori", None)
+    if svc is None:
+        return _final("Qui non ci sono lavori affidati a un agente.", ok=False, fatto=NIENTE)
+    prof = _person(ctx)
+    if prof is None:
+        return _rifiuto(ctx, "Non so chi sei: il risultato di un lavoro lo sente solo chi l'ha "
+                             "chiesto.", "lavori_permesso")
+    modo = str(modo or "riassunto").strip().lower()
+    modo = modo if modo in MODI_RISULTATO else "riassunto"
+    admin = _level(ctx) == "amministra"
+    lav, frase, altrui = ar.trova(svc, prof.id, prof.name, str(lavoro or ""), admin=admin)
+    if lav is None:
+        if altrui:
+            return _rifiuto(ctx, frase, "risultato_lavoro_altrui")
+        return _final(frase, ok=False, fatto=NIENTE)
+    titolo = _titolo_detto(lav.titolo)
+    testo = ar.testo_intero(lav)
+    # Sullo schermo personale di chi chiede, se c'è: sempre il testo intero
+    sullo_schermo = False
+    hub = getattr(ctx, "schermi", None)
+    card = ar.scheda(svc, lav, testo) if hub is not None else None
+    if card:
+        try:
+            esito = hub.invia(card, hub.mittente(ctx), forza=True)
+            sullo_schermo = bool(esito.get("schermi") or esito.get("destinatari"))
+        except Exception:  # noqa: BLE001 — lo schermo non ferma la voce
+            sullo_schermo = False
+    dove = ("Il testo intero è sul tuo schermo." if sullo_schermo
+            else "Il testo intero è nella cartella Lavori dei Documenti.")
+    if modo == "mostra" and sullo_schermo:
+        note_rule(ctx, "risultato_mostra")
+        return _final(f"Te l'ho mandato sullo schermo: «{titolo}».", fatto="mostrato sullo "
+                      "schermo", lavoro=lav.id)
+    salvato = ar.riassunto_salvato(lav)
+    if lav.tipo in ("codice", "estensione"):
+        # Il codice non si legge mai a voce
+        frase = (f"«{titolo}»: {salvato.rstrip('.')}." if salvato else f"«{titolo}» è finito.")
+        frase += (" Il codice è sul tuo schermo." if sullo_schermo else
+                  " Il codice non lo leggo a voce: è nella cartella Lavori dei Documenti.")
+        return _final(frase, fatto="letto il riassunto", lavoro=lav.id)
+    sintesi, come = salvato, "salvato"
+    # Il riassunto salvato già sentito (l'annuncio del lavoro finito lo dice, e così una
+    # risposta di prima): ripeterlo non è una risposta a «dammi un bel riassunto» (07/10)
+    gia = _gia_detto(ctx, salvato)
+    if gia:
+        note_rule(ctx, "risultato_gia_detto")
+    if testo and (modo != "riassunto" or len(salvato) < 80 or gia):
+        detta, esito = ar.riassunto_voce(
+            svc, lav, testo, getattr(ctx, "user_text", "") or "",
+            frasi="da quattro a sei" if modo == "leggi" else "due o tre",
+            tempo_s=float(getattr(ctx.cfg, "agenti_risultato_s", 15.0) or 15.0),
+            attesa=getattr(ctx, "attesa", None))
+        if detta:
+            sintesi, come = detta, "modello"
+        else:
+            note_rule(ctx, "risultato_ripiego")
+            getattr(svc, "log", print)(f"[AGENTI] riassunto di {lav.id} per la voce: {esito}")
+    if not sintesi:
+        return _final(f"«{titolo}» è finito, ma l'agente non ha lasciato un riassunto. {dove}",
+                      fatto="niente riassunto", lavoro=lav.id)
+    pre = "Non vedo un tuo schermo, quindi te lo dico: " if modo == "mostra" else ""
+    frase = f"{pre}«{titolo}»: {sintesi.rstrip()}"
+    if not frase.endswith((".", "!", "?")):
+        frase += "."
+    frase += " " + dove
+    if come == "salvato" and testo and modo == "riassunto":
+        frase += " Se vuoi più dettagli, chiedimi di leggertelo."
+    # Il testo è dell'agente (dato non fidato): numeri a pagamento, codici, soldi e indicazioni
+    # sulla casa non si ripetono (come l'annuncio, calliope/riferire.py)
+    try:
+        from .. import riferire
+        frase, regole = riferire.controlla_testo(frase, "agente", getattr(ctx, "user_text", "")
+                                                 or "", str(lav.titolo))
+        for r in regole:
+            note_rule(ctx, r)
+    except Exception:  # noqa: BLE001 — il controllo dell'uscita resta anche nel ciclo
+        pass
+    note_rule(ctx, f"risultato_{come}")
+    return _final(frase, fatto="detto il risultato", lavoro=lav.id)
+
+
+def _gia_detto(ctx, frase: str) -> bool:
+    """La frase (il riassunto salvato) è già in una risposta della conversazione recente."""
+    def norm(t):
+        return re.sub(r"[^a-z0-9à-ù]+", "", str(t or "").lower())
+    n = norm(frase)[:80]
+    if len(n) < 30:
+        return False
+    return any(r == "assistant" and n in norm(c) for r, c in getattr(ctx, "storia", None) or ())
+
+
+def _titolo_detto(titolo: str) -> str:
+    from ..agenti.servizio import titolo_detto
+    return titolo_detto(titolo)
+
+
+def _offri_risultato(ctx, svc, prof, frase: str) -> dict:
+    """La frase di un rifiuto di lavori_esegui o lavori_rispondi quando il lavoro finito è una
+    ricerca o un documento (07/10, caso vero della DGX: «leggili e dammi un riassunto» →
+    lavori_esegui «Non ho programmi finiti da eseguire», due volte): si dice cos'è e si
+    propone il risultato, con l'azione in sospeso per il «sì»."""
+    from ..agenti import risultato as ar
+    lav, _, _ = ar.trova(svc, getattr(prof, "id", None), getattr(prof, "name", None), "",
+                         admin=_level(ctx) == "amministra")
+    if lav is None or lav.tipo in ("codice", "estensione"):
+        return _final(frase, ok=False, fatto=NIENTE)
+    note_rule(ctx, "lavori_offri_risultato")
+    tipo = {"ricerca": "una ricerca", "documento": "un documento"}.get(lav.tipo, "un lavoro")
+    domanda = f"«{_titolo_detto(lav.titolo)}» è {tipo}, non un programma: vuoi il risultato?"
+    return _final(domanda, ok=False, fatto=NIENTE,
+                  in_sospeso={"domanda": domanda, "tool": "risultato_lavoro",
+                              "cosa": f"il risultato di «{lav.titolo}»",
+                              "argomenti": {"lavoro": lav.id}})
 
 
 def _dati(dati) -> list[str]:
@@ -658,8 +792,8 @@ def _lavori_esegui(ctx: ToolContext, lavoro: str = "", dati=None) -> dict:
         if altri is not None and altri.persona != prof.id:
             return _rifiuto(ctx, "Quel programma l'ha chiesto un altro: può eseguirlo solo lui o "
                                  "chi amministra.", "lavori_permesso")
-        return _final("Non ho programmi finiti da eseguire: prima chiedimi di scriverne uno.",
-                      ok=False, fatto=NIENTE)
+        return _offri_risultato(ctx, svc, prof, "Non ho programmi finiti da eseguire: prima "
+                                                "chiedimi di scriverne uno.")
     hub = getattr(ctx, "schermi", None)
     on_scheda = None
     if hub is not None:
@@ -703,7 +837,7 @@ def _lavori_annulla(ctx: ToolContext, quale: str = "ultimo") -> dict:
 def agenti_specs(formati=("word", "excel", "pdf"), modelli=(),
                  file_pc: bool = False, archivio: bool = False,
                  allegati: bool = False) -> list[ToolSpec]:
-    """I cinque tool; `modelli`: i nomi dei modelli di documento (template) che ci sono;
+    """I sei tool; `modelli`: i nomi dei modelli di documento (template) che ci sono;
     `file_pc`: c'è un PC con la ricerca dei file (il parametro `file` di delega_lavoro);
     `archivio`: le ricerche possono interrogare il grafo dei documenti di casa."""
     props = {"tipo": {"type": "string", "enum": list(TIPI)},
@@ -749,6 +883,8 @@ def agenti_specs(formati=("word", "excel", "pdf"), modelli=(),
                 + (" allegato: il numero di un file allegato in questa conversazione, se il "
                    "lavoro è su quel file («dallo all'agente», «correggi questo script»)."
                    if allegati else "")
+                + " NON per leggere o riassumere il risultato di un lavoro già finito: "
+                  "risultato_lavoro."
                 + mod_txt + arch_txt),
             parameters={"type": "object", "properties": props,
                         "required": ["tipo", "compito"]},
@@ -756,7 +892,8 @@ def agenti_specs(formati=("word", "excel", "pdf"), modelli=(),
         ToolSpec(
             name="lavori_stato",
             description=("Dice a che punto sono i lavori affidati all'agente con delega_lavoro "
-                         "(«a che punto è il programma?», «hai finito la relazione?»)."),
+                         "(«a che punto è il programma?», «hai finito la relazione?»). Per il "
+                         "contenuto di un lavoro finito: risultato_lavoro."),
             parameters={"type": "object", "properties": {}, "required": []},
             func=_lavori_stato, risk="lettura", levels=FAMILY),
         ToolSpec(
@@ -770,13 +907,15 @@ def agenti_specs(formati=("word", "excel", "pdf"), modelli=(),
             func=_lavori_annulla, risk="azione", levels=FAMILY),
         ToolSpec(
             name="lavori_esegui",
-            description=("Esegue di nuovo il programma scritto dall'agente in un lavoro di "
-                         "codice finito e ne mostra l'uscita sullo schermo («fammelo vedere», "
+            description=("Solo per i programmi: esegue di nuovo il programma scritto "
+                         "dall'agente in un lavoro di codice finito e ne mostra l'uscita sullo "
+                         "schermo («fammelo vedere», "
                          "«eseguilo di nuovo», «eseguilo con 3 e 5»). dati: i valori detti o "
                          "scritti, uno per elemento (vuoto = senza dati); lavoro: id (es. «L3») "
                          "o vuoto per l'ultimo. «Fermalo» è lavori_annulla. È anche il modo di "
                          "usare di nuovo un programma dell'agente: non ha un comando a voce "
-                         "suo."),
+                         "suo. NON per ricerche e documenti: il loro risultato è "
+                         "risultato_lavoro."),
             parameters={"type": "object",
                         "properties": {"lavoro": {"type": "string"},
                                        "dati": {"type": "array", "items": {"type": "string"}}},
@@ -784,13 +923,27 @@ def agenti_specs(formati=("word", "excel", "pdf"), modelli=(),
             func=_lavori_esegui, risk="azione", levels=FAMILY),
         ToolSpec(
             name="lavori_rispondi",
-            description=("Dà all'agente la risposta a una sua domanda su un lavoro che "
-                         "aspetta («il cliente è Rossi», anche solo «Rossi»). lavoro: id (es. "
-                         "«L3») o vuoto se ce n'è uno solo; risposta: quello che ha detto chi "
-                         "parla, con i dati come detti."),
+            description=("Solo quando l'agente ha fatto una domanda e il lavoro la aspetta: "
+                         "gli dà la risposta («il cliente è Rossi», anche solo «Rossi»). lavoro: "
+                         "id (es. «L3») o vuoto se ce n'è uno solo; risposta: quello che ha "
+                         "detto chi parla, con i dati come detti. NON per avere il risultato di "
+                         "un lavoro finito: risultato_lavoro."),
             parameters={"type": "object",
                         "properties": {"lavoro": {"type": "string"},
                                        "risposta": {"type": "string"}},
                         "required": ["risposta"]},
             func=_lavori_rispondi, risk="azione", levels=FAMILY),
+        ToolSpec(
+            name="risultato_lavoro",
+            description=("Il risultato di un lavoro dell'agente già finito: cosa ha trovato o "
+                         "scritto («e il risultato?», «cosa ha trovato?», «leggimelo», "
+                         "«fammi un riassunto della ricerca», «mostramelo sullo schermo»). "
+                         "modo: riassunto (predefinito), leggi (più dettagliato, a voce), "
+                         "mostra (il testo intero sullo schermo). lavoro: id (es. «L3») o "
+                         "parole del titolo, vuoto per l'ultimo."),
+            parameters={"type": "object",
+                        "properties": {"lavoro": {"type": "string"},
+                                       "modo": {"type": "string", "enum": list(MODI_RISULTATO)}},
+                        "required": []},
+            func=_risultato_lavoro, risk="lettura", levels=FAMILY),
     ]

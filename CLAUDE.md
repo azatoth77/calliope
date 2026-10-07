@@ -154,7 +154,7 @@ Calliope gira sulla **DGX Spark** dal 02/10 come servizio (voce gemma4 su Ollama
 satelliti. Cronologia e primi test in [`docs/aree/cronologia.md`](docs/aree/cronologia.md).
 
 - **Voce**: wake word acustica, barge-in col nome, chi parla con CAM++, half-duplex, risposte in streaming ([stt-tts](docs/aree/stt-tts.md), [voce-e-regole](docs/aree/voce-e-regole.md)).
-- **Tool**: 65 schemi uguali per ogni livello, permessi decisi in `ToolRegistry.call` ([voce-e-regole](docs/aree/voce-e-regole.md)).
+- **Tool**: 66 schemi uguali per ogni livello (dal 07/10 anche `risultato_lavoro`), permessi decisi in `ToolRegistry.call` ([voce-e-regole](docs/aree/voce-e-regole.md)).
 - **Capacità**: 18 nel registro (`capacita.DEFINIZIONI`), installazioni a voce dal catalogo ([capacita-installazioni](docs/aree/capacita-installazioni.md)).
 - **Politica unica dei tool** con dati non fidati in busta, conferme e frase di sfida ([sicurezza-politica](docs/aree/sicurezza-politica.md)).
 - **Contesto**: finestra dal setup, compressione, archivio delle conversazioni, una conversazione per persona ([contesto-conversazione](docs/aree/contesto-conversazione.md)).

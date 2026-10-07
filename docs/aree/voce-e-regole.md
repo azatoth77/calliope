@@ -361,3 +361,28 @@
   `NotifyAccess=main`: ora `main()` toglie la variabile dall'ambiente all'avvio
   (`trattieni_notify_socket`) e `notifica_systemd` usa il valore tenuto; nessun figlio (systemctl,
   ssh del tunnel, docker) la eredita. Prova in `prova_linux`.
+
+## Dichiarazioni «inizio subito il lavoro» e proposte di altri (07/10, DGX)
+
+- **Rete sulle dichiarazioni** (`brain.ACTION_CLAIM`, spinta `spinta_dichiarata`): dopo un «Sì,
+  procedi.» attribuito a un'altra voce, nessun tool e la risposta «Perfetto, allora inizio subito
+  il lavoro. Ti faccio sapere non appena ho finito.»; due minuti dopo `lavori_stato` → «Non ho
+  lavori in corso». La rete non conosceva le azioni annunciate al presente: ora anche
+  «inizio/comincio/avvio [subito] il lavoro (la ricerca, il programma…)», «parto/inizio/mi metto
+  subito» a fine frase o con «a lavorarci», «lo affido/lo delego», «lo mando/passo all'agente».
+  Contrari (in `prova_risultati.py`): «Inizio a capire…», «Ti avviso quando inizio il lavoro»,
+  «Appena inizio il lavoro…», «Non inizio il lavoro senza il tuo sì», «Inizio io?», «Inizio
+  subito il lavoro?», «Lo affido all'agente?», «Il lavoro lo affido a te», «L'inizio del
+  lavoro…». Come le altre forme, solo nelle risposte senza tool.
+- **Causa a monte**: il «sì» di chi non ha la proposta ha nei dati del turno la proposta
+  dell'altra persona (`SOSPESO_ALTRUI_MSG`, regola `sospeso_altrui_consenso`): dettagli in
+  [`sicurezza-politica.md`](sicurezza-politica.md). Così la risposta vera è «la proposta è di
+  <nome>», e la spinta della rete non porta a un lavoro a nome di chi non l'ha chiesto (il tool
+  rifiuterebbe comunque: l'offerta è della persona). Sonda con gemma4 e4b su questo portatile
+  (proposta di Marta per una ricerca, poi «Sì, procedi.» di Luca con la voce incerta, 6–8 giri,
+  agente finto): main «Cosa devo fare?» 6/6 (la conversazione di Marta si chiude e il modello non
+  sa di cosa si parla; sulla DGX lo stesso vuoto è diventato «inizio subito il lavoro»), ramo
+  «La proposta … è di Marta e solo lei può confermarla.» 8/8, nessun lavoro avviato. La prima
+  forma del messaggio («non dire che la fai», senza dire cosa rispondere) dava 3 volte su 6 una
+  domanda strana («Procedi con la proposta di Marta?»): ora il messaggio dice la frase da dire e
+  «non fare domande».

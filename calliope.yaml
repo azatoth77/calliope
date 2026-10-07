@@ -1113,6 +1113,11 @@ agenti:
   # (fonte web verificata compresa) si procede come prima dell'analisi
   agenti_analisi: true
   agenti_analisi_s: 10.0
+  # Il risultato di un lavoro finito, chiesto a voce (07/10, tool risultato_lavoro: «e il
+  # risultato?», «leggimelo»): il riassunto dell'agente già salvato; per più dettaglio un
+  # riassunto per la voce chiesto al modello dell'agente sul testo intero, entro tanti
+  # secondi (oltre, il riassunto salvato). Il testo intero va sullo schermo personale
+  agenti_risultato_s: 15.0
   # Stesso Ollama della voce: l'agente si ferma quando qualcuno parla a Calliope e riparte
   # tanti secondi dopo la fine della risposta
   agenti_precedenza_voce: true
