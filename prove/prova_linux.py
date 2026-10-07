@@ -514,7 +514,7 @@ def prova_varie(tmp: Path):
                  if d["name"] in ("torch", "torchaudio")]
     ok(torch_dip and all("win32" in d.get("marker", "") for d in torch_dip),
        "uv.lock: torch solo su Windows (Linux senza CUDA da PyPI)")
-    for nome in ("ctranslate2", "onnxruntime", "numpy", "piper-tts", "lxml", "pillow"):
+    for nome in ("ctranslate2", "onnxruntime", "onnxruntime-gpu", "nvidia-cudnn-cu13", "numpy", "piper-tts", "lxml", "pillow"):
         wheels = [w["url"].rsplit("/", 1)[-1] for w in pacchetti[nome].get("wheels", [])]
         ok(any("aarch64" in w and "manylinux" in w for w in wheels) or
            any("none-any" in w for w in wheels),
