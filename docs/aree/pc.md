@@ -82,3 +82,24 @@
   - Config: `pc_proprietari` e `pc_app` sono i primi campi lista e mappa;
     `_literal_default` legge `field(default_factory=…)`, `_type_ok` controlla gli
     elementi e il file d'esempio li scrive su più righe.
+
+## «Quale apro?» con le date (07/10 sera, ramo `correzioni-giro8`)
+
+Caso vero della DGX (15:50): dopo `pc_cerca_file(tipo=pdf)` «Ho trovato 5 PDF: … Quale apro?»,
+«L'ultimo che hai creato.» → `pc_apri_file(1)`, giusto per caso: l'azione in sospeso dava al
+modello solo «1 = nome, 2 = nome…». Ora la proposta dice, per ogni file trovato (anche quelli
+non detti), la data e l'ora di modifica («1 = visura (modificato oggi alle 15:23); 2 = diagnosi
+(modificato ieri alle 18:02); 3 = contratto (modificato il 6 agosto alle 9:05)», l'anno se non è
+questo) e che il numero 1 è il più recente (`tools/pc._elenco_sospeso`). Le date non si dicono a
+voce: la frase resta «Ho trovato 5 PDF: …». Così «l'ultimo», «quello di ieri», «quello di
+stamattina» li risolve il modello al turno dopo.
+
+Ordine: Windows Search ordina già per `System.DateModified` (anche la ricerca nel contenuto) e il
+satellite usa lo stesso esecutore; non c'è un punteggio di pertinenza (il nome o il contenuto
+filtrano, la data ordina). Da ora `PCExecutor.cerca_file` riordina comunque dal più recente
+(senza data in fondo) per ogni esecutore. Resta: `pc_apri_file` con «ultimo» converte in -1,
+l'ultimo dell'elenco (il più vecchio): il modello passa un numero, e la proposta dice quale è il
+più recente. Prova: `prove/prova_dopo_annunci.py`.
+
+Con un lavoro dell'agente appena detto, «un PDF» va a `risultato_lavoro` e non a
+`pc_cerca_file`: vedi [agenti-estensioni](agenti-estensioni.md).

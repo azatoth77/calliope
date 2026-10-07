@@ -21,6 +21,7 @@ satellite, 03/10) i tool ci sono sempre, con tutte le capacità: se il satellite
 collegato, è vecchio o non ha quella capacità, il tool lo dice (`_fuori`) invece di sparire.
 """
 
+import datetime
 import re
 
 from ..pc import COMANDI_MEDIA, TIPI_FILE
@@ -448,6 +449,37 @@ def _spoken_names(found: list[dict]) -> list[str]:
     return names
 
 
+def _quando_modificato(f: dict, adesso: datetime.datetime | None = None) -> str:
+    """«oggi alle 10:31», «ieri alle 18:02», «il 6 agosto alle 9:15» (con l'anno se non è
+    questo): la data di modifica di un risultato, per il modello e non per la voce."""
+    m = re.match(r"(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d)", str(f.get("modificato") or ""))
+    if not m:
+        return ""
+    quando = datetime.date(int(m[1]), int(m[2]), int(m[3]))
+    oggi = (adesso or datetime.datetime.now()).date()
+    ora = f"alle {int(m[4])}:{m[5]}"
+    if quando == oggi:
+        return f"oggi {ora}"
+    if quando == oggi - datetime.timedelta(days=1):
+        return f"ieri {ora}"
+    anno = f" {quando.year}" if quando.year != oggi.year else ""
+    return f"il {quando.day} {MESI[quando.month - 1]}{anno} {ora}"
+
+
+def _elenco_sospeso(found: list[dict], adesso: datetime.datetime | None = None) -> str:
+    """I file trovati per l'azione in sospeso («Quale apro?»): numero, nome e data di modifica
+    di ognuno (07/10, DGX: dopo «Quale apro?» «l'ultimo che hai creato» → il numero 1 per
+    caso; il modello aveva solo «1 = nome»). Così «l'ultimo», «quello di ieri», «quello di
+    stamattina» si risolvono al turno dopo. Le date non si dicono a voce."""
+    names = _spoken_names(found)
+    parti = []
+    for i, (n, f) in enumerate(zip(names, found), 1):
+        q = _quando_modificato(f, adesso)
+        parti.append(f"{i} = {n}" + (f" (modificato {q})" if q else ""))
+    return ("i file trovati, dal più recente (il numero 1 è quello modificato più di "
+            "recente): " + "; ".join(parti))
+
+
 def _pc_cerca_file(ctx: ToolContext, testo: str = "", tipo: str = "qualsiasi",
                    periodo: str = "", pc: str | None = None) -> dict:
     name, ex = _pc(ctx, pc)
@@ -494,9 +526,7 @@ def _pc_cerca_file(ctx: ToolContext, testo: str = "", tipo: str = "qualsiasi",
     else:
         conferma = (f"Ho trovato {len(found)} {many}: {_items(names)}"
                     + (f" e altri {more}" if more else "") + ". Quale apro?")
-        pending = {"domanda": "Quale apro?",
-                   "cosa": "i file trovati: " + ", ".join(
-                       f"{i} = {n}" for i, n in enumerate(names, 1)),
+        pending = {"domanda": "Quale apro?", "cosa": _elenco_sospeso(found),
                    "tool": "pc_apri_file",
                    "argomenti": "risultato = il numero del file scelto"}
     return {**r, "periodo": label or "sempre", "conferma": conferma, "in_sospeso": pending,
@@ -559,14 +589,16 @@ def _stato_enum(caps) -> list[str]:
 
 
 def pc_specs(executors: dict, ospite_volume_media: bool = False,
-             documenti: bool = False) -> list[ToolSpec]:
+             documenti: bool = False, agenti: bool = False) -> list[ToolSpec]:
     """Gli schemi dei tool pc_* per i PC collegati. Un tool c'è solo se almeno un PC ha
     la capacità; gli enum (cosa leggere, app) vengono da ciò che i PC dichiarano, così un
     PC senza batteria non offre «batteria» e l'elenco delle app è quello installato.
 
     Il parametro `pc` c'è solo con più di un PC: oggi c'è solo il portatile, e un
     parametro in più è un'occasione di errore per il modello. Con `documenti` la
-    descrizione di pc_apri_file dice che «aprilo» dopo documento_crea è il risultato 1.
+    descrizione di pc_apri_file dice che «aprilo» dopo documento_crea è il risultato 1. Con
+    `agenti` (c'è risultato_lavoro) quella di pc_cerca_file dice che il PDF del risultato di un
+    lavoro non si cerca sul PC (07/10, DGX: «Ho metto un pdf.» → l'elenco dei PDF del PC).
     """
     if not executors:
         return []
@@ -646,7 +678,10 @@ def pc_specs(executors: dict, ospite_volume_media: bool = False,
                          f"come detto a voce («la settimana scorsa», «ad agosto»; vuoto = "
                          f"sempre). Basta una parola: «apri il file chiavi» è testo «chiavi», "
                          f"senza chiedere il nome completo. Per aprirne uno poi usa "
-                         f"pc_apri_file."),
+                         f"pc_apri_file."
+                         + (" NON per fare un PDF o un Word del risultato di un lavoro "
+                            "dell'agente appena detto («fammene un PDF», «un PDF»): quello è "
+                            "risultato_lavoro." if agenti else "")),
             parameters=params({"testo": {"type": "string"},
                                "tipo": {"type": "string", "enum": list(TIPI_FILE)},
                                "periodo": {"type": "string"}}, []),

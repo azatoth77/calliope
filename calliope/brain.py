@@ -19,6 +19,7 @@ import datetime
 import json
 import random
 import re
+import threading
 import time
 
 from .capacita import testo_prompt
@@ -661,6 +662,22 @@ AGENDA_MSG = ("Contesto dell'agenda: l'ultima voce messa o cambiata è {cosa}. S
               "dice di aggiungere o togliere. Non crearne una nuova. Se chiede "
               "«un altro» o «un'altra», creane una nuova senza cambia.")
 AGENDA_REF_S = 600.0
+
+# Il lavoro dell'agente di cui si è appena parlato (07/10, caso vero della DGX: dopo l'annuncio
+# della ricerca finita e il suo riassunto, «Fammene un PDF» trascritto «Ho metto un pdf.» →
+# pc_cerca_file(tipo=pdf), l'elenco dei PDF del PC). Dati del turno, non una regola sul testo
+# (principio 10): ci sono solo se un lavoro finito di chi parla è recente e il suo titolo è
+# in una risposta degli ultimi messaggi; decide il modello. Misura con gemma4 e4b in
+# prove/prova_risultato_pdf_ollama.py e docs/aree/agenti-estensioni.md
+LAVORO_MSG = ("Contesto del lavoro: l'ultimo risultato di cui avete parlato è quello del lavoro "
+              "dell'agente «{titolo}» (lavoro {lavoro}). Se ora chi parla ne vuole un PDF o un "
+              "Word («un PDF», «fammene un PDF», «me lo fai in Word?») senza nominare un altro "
+              "file, chiama subito risultato_lavoro con modo pdf o word e lavoro {lavoro}, senza "
+              "chiedere: non è un file da cercare sul PC né un documento nuovo. La frase può "
+              "arrivare storpiata dalla trascrizione («ho metto un pdf» per «fammene un PDF»). "
+              "Se nomina un file suo («il PDF della bolletta»), è pc_cerca_file.")
+LAVORO_RECENTE_S = 1800.0      # finito da al più mezz'ora
+LAVORO_STORIA = 8              # il titolo detto negli ultimi messaggi
 
 # Tool i cui risultati non restano nella storia oltre la risposta (03/10): i riservati
 # (ToolSpec.riservato, i documenti di casa) diventano una traccia neutra, questi personali
@@ -1867,6 +1884,9 @@ class Brain:
         # Frase di sfida in corso (04/10, conferme.py): se la frase la ripete, decide il codice
         sfida = self._sfida(user_text)
         self.last_sfida = sfida is not None      # la frase era la risposta a una sfida
+        # Il prompt di sistema prima della risposta: se una modalità o il tono della casa lo
+        # cambiano, alla fine il prefisso nuovo si scalda in secondo piano (_scalda_se_cambiato)
+        firma = self._firma_sistema()
         try:
             if sfida is not None:
                 yield from self._sfida_reply(user_text, level, *sfida)
@@ -1885,6 +1905,44 @@ class Brain:
         said = (last.get("content") or "").strip() if last.get("role") == "assistant" else ""
         if self._offer and said.endswith("?") and self._net("azione_in_sospeso"):
             self.set_pending(self._offer)
+        self._scalda_se_cambiato(firma)
+
+    def _firma_sistema(self) -> str | None:
+        """Il prompt di sistema di adesso (per accorgersi che è cambiato), o None."""
+        try:
+            return self._system_messages()[0]["content"]
+        except Exception:  # noqa: BLE001 — senza firma niente riscaldamento
+            return None
+
+    def _scalda_se_cambiato(self, firma: str | None):
+        """Dopo una risposta che ha cambiato il prompt di sistema (modalità Star Trek, tono
+        della casa), il prefisso nuovo con la conversazione si mette in cache del motore in un
+        thread, mentre Calliope dice la conferma: senza, il turno dopo lo rileggeva tutto (07/10,
+        DGX: «Computer, che ore sono?» dopo «attiva la modalità Star Trek», prima frase 7,14 s
+        con lettura 5,93 s, ~15k token). Non blocca la voce; regola `prefisso_scaldato`."""
+        if firma is None:
+            return
+        nuova = self._firma_sistema()
+        if nuova is None or nuova == firma:
+            return
+        self._rule("prefisso_scaldato")
+        conv = self.conv
+
+        def scalda():
+            try:
+                t0 = time.perf_counter()
+                res = self.scalda_conversazione(conv)
+                if res is None:
+                    self.warmup()          # almeno prompt di sistema e tool
+                print(f"   [LATENZA] prompt di sistema cambiato: prefisso nuovo in cache in "
+                      f"{time.perf_counter() - t0:.1f} s", flush=True)
+            except Exception as e:  # noqa: BLE001 — il riscaldamento non ferma niente
+                print(f"   [LATENZA] prefisso nuovo non scaldato: {type(e).__name__}: {e}",
+                      flush=True)
+
+        self.scalda_thread = threading.Thread(target=scalda, daemon=True,
+                                              name="scalda-prefisso")
+        self.scalda_thread.start()
 
     def _sfida(self, user_text: str | None):
         """La frase di sfida chiesta per confermare un'azione di chi amministra
@@ -2109,6 +2167,8 @@ class Brain:
             return
         self.agenda_reference = {
             "messaggio": AGENDA_MSG.format(cosa=ref["cosa"], tool=ref["tool"]),
+            # La voce dell'agenda (07/10): suonata o tolta, il riferimento non vale più
+            "id": ref.get("id"),
             "turno": getattr(self, "turn_number", 0),
             "scade": time.monotonic() + AGENDA_REF_S}
 
@@ -2122,7 +2182,53 @@ class Brain:
             return None
         if r["turno"] == getattr(self, "turn_number", 0):
             return None
+        # La voce non c'è più (07/10, caso vero della DGX: il timer di 2 minuti era già
+        # suonato e al turno dopo, «Che tempo farà domani a Milano?», il modello chiamava anche
+        # timer_imposta(cambia=togli, durata=due minuti), come nell'esempio «toglici due
+        # minuti» del contesto): un timer suonato o una voce annullata non si cambiano più
+        agenda = getattr(self.tool_ctx, "agenda", None)
+        if r.get("id") is not None and agenda is not None:
+            try:
+                gone = agenda.get(r["id"]) is None
+            except Exception:  # noqa: BLE001 — nel dubbio il riferimento resta
+                gone = False
+            if gone:
+                self.agenda_reference = None
+                self._rule("riferimento_agenda_finito")
+                return None
         return r["messaggio"]
+
+    def _lavoro_turno(self) -> tuple[str, dict] | None:
+        """(LAVORO_MSG, {"lavoro", "titolo", "avvisato", "parole"}) per il lavoro finito di chi
+        parla di cui si è appena parlato, o None."""
+        if not self._net("riferimento_lavoro"):
+            return None
+        svc = getattr(self.tool_ctx, "lavori", None)
+        if svc is None or self.tools.get("risultato_lavoro") is None:
+            return None
+        chi = self._speaker_key()
+        if chi is None:
+            return None
+        adesso = time.time()
+        try:
+            fatti = [lv for lv in list(getattr(svc, "lavori", None) or ())
+                     if getattr(lv, "persona", None) == chi and lv.stato == "fatto"
+                     and lv.tipo not in ("codice", "estensione")
+                     and adesso - float(getattr(lv, "fine", None) or 0) <= LAVORO_RECENTE_S]
+            if not fatti:
+                return None
+            from .agenti.servizio import titolo_detto
+            lav = max(fatti, key=lambda lv: float(lv.fine or 0))
+            titolo = titolo_detto(lav.titolo)
+        except Exception:  # noqa: BLE001 — sono solo dati del turno
+            return None
+        detto = f"«{titolo}»"
+        if not any(m.get("role") == "assistant" and detto in str(m.get("content") or "")
+                   for m in self.history[-LAVORO_STORIA:]):
+            return None
+        return (LAVORO_MSG.format(titolo=titolo, lavoro=lav.id),
+                {"lavoro": lav.id, "titolo": titolo, "avvisato": False,
+                 "parole": sorted(provenienza.parole(lav.titolo))})
 
     def _take_reference(self) -> str | None:
         """Il riferimento dei turni prima, se è ancora valido (non si consuma: vale finché
@@ -2353,6 +2459,16 @@ class Brain:
         if agenda_ref:
             memory = memory + [{"role": "system", "content": agenda_ref}]
             self._rule("riferimento_agenda")
+        # Il lavoro dell'agente appena detto, per «fammene un PDF» (LAVORO_MSG)
+        lavoro_ref = self._lavoro_turno() if user_text else None
+        if self.tool_ctx is not None:
+            try:
+                self.tool_ctx.lavoro_turno = lavoro_ref[1] if lavoro_ref else None
+            except AttributeError:
+                pass
+        if lavoro_ref:
+            memory = memory + [{"role": "system", "content": lavoro_ref[0]}]
+            self._rule("riferimento_lavoro")
         # Azione in sospeso: dopo i ricordi, l'ultima cosa prima della domanda. Messa prima
         # dei ricordi (o senza), il «sì» dopo «La apro?» veniva preso per un ringraziamento
         if pending:

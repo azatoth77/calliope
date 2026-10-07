@@ -239,6 +239,13 @@ FRASI = {
 }
 REGOLE = tuple(FRASI)
 
+# Frasi fisse scritte dal codice di Calliope dentro un risultato con un dato non fidato (07/10,
+# DGX: «Se vuoi più dettagli, chiedimi di leggertelo.» in coda a risultato_lavoro, che ha la
+# fonte «agente», era fermata come `uscita_istruzione`: «chiedimi» con parole mai dette dalla
+# persona). Non vengono dal dato: passano sempre. Chi le scrive usa queste costanti
+FRASE_PIU_DETTAGLI = "Se vuoi più dettagli, chiedimi di leggertelo."
+FRASI_PROPRIE = (FRASE_PIU_DETTAGLI,)
+
 
 @dataclass
 class Giudizio:
@@ -327,6 +334,9 @@ def _norm(s: str) -> str:
     return re.sub(r"[^a-z0-9à-ù]", "", (s or "").lower())
 
 
+_PROPRIE_NORM = frozenset(_norm(f) for f in FRASI_PROPRIE)
+
+
 def propria(frase: str, ctx: Contesto) -> bool:
     """La frase è una frase pronta di Calliope (risposta_finale o conferma di un tool fidato
     di questa conversazione, già scritta dal codice): non viene da un dato."""
@@ -394,6 +404,8 @@ def giudica(frase: str, ctx: Contesto, solo_gravi: bool = False) -> Giudizio:
     Calliope (gli annunci dei lavori: la persona ha chiesto il lavoro, e un recapito o un
     consiglio nel risultato possono essere proprio ciò che voleva)."""
     if not ctx.contaminata or not (frase or "").strip():
+        return Giudizio(OK, frase=frase)
+    if _norm(frase) in _PROPRIE_NORM:
         return Giudizio(OK, frase=frase)
     t = frase
     persona = ctx.domanda
