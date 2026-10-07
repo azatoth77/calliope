@@ -25,7 +25,8 @@ dei lavori finiti) invece di risultato_lavoro:
   7. quella frase, 8. «Cosa ha trovato la ricerca sulle pompe di calore?» → risultato_lavoro;
   9. contrario: «Quali lavori hai finito oggi?» → lavori_stato.
 Le 7–9 sono solo misura: il 4B qui non chiama nessun tool (risponde dalla storia), nemmeno
-per la 9; contano nel riepilogo, non negli errori.
+per la 9; contano nel riepilogo, non negli errori. Anche la 1 e la 4 sono misura (col 4B da 0/3 a
+1–3/3 per giro): la prova fallisce sulle frasi pulite e sui contrari.
 
     python prove\\prova_risultato_pdf_ollama.py        # 3 giri
     python prove\\prova_risultato_pdf_ollama.py 1      # 1 giro
@@ -94,10 +95,10 @@ RISPOSTA = (f"«{DETTO}»: Le pompe di calore offrono un'alta efficienza energet
 # (frase, tool atteso, modo atteso o None = qualunque, storia: "dopo" il riassunto detto o
 # "lontano": l'annuncio e poi altri turni, senza il riassunto)
 FRASI = [
-    ("Ho metto un pdf.", "risultato_lavoro", "pdf", "dopo"),
+    ("Ho metto un pdf.", "risultato_lavoro", "pdf", "misura"),
     ("Fammene un PDF.", "risultato_lavoro", "pdf", "dopo"),
     ("Famme un pdf.", "risultato_lavoro", "pdf", "dopo"),
-    ("Me lo fai in Word?", "risultato_lavoro", "word", "dopo"),
+    ("Me lo fai in Word?", "risultato_lavoro", "word", "misura"),
     ("Cercami il PDF della bolletta della luce.", "pc_cerca_file", None, "dopo"),
     ("Aprimi il PDF del contratto d'affitto.", "pc_cerca_file", None, "dopo"),
     # Caso vero del 07/10, 16:11 (telefono): il risultato di un lavoro nominato, chiesto un
@@ -166,7 +167,7 @@ for giro in range(1, GIRI + 1):
     svc.lavori.append(lav)
     pcs = {"portatile": FakePC(volume=40, luminosita=80)}
     for i, (frase, atteso, modo, storia) in enumerate(FRASI, 1):
-        b = sessione(cfg, svc, pcs, storia)
+        b = sessione(cfg, svc, pcs, "lontano" if storia == "lontano" else "dopo")
         t0 = time.perf_counter()
         primo, parti = None, []
         for pezzo in b.stream_reply(frase, "amministra"):
@@ -185,10 +186,11 @@ for giro in range(1, GIRI + 1):
         argomenti = "; ".join(f"{n}({', '.join(f'{k}={v!r}' for k, v in a.items())})"
                               for n, a in chiamate) or "—"
         dettaglio = f"{primo or 0:.2f}s  {risposta[:160]!r}  regole={b.last_rules}"
-        if storia == "lontano":
+        if storia in ("lontano", "misura"):
             # Solo misura: col 4B nessun tool, nemmeno lavori_stato per «Quali lavori hai
             # finito oggi?» (risponde dalla storia, 0/3 prima e dopo il 07/10); il 26B della
-            # DGX chiamava lavori_stato. Non conta negli errori
+            # DGX chiamava lavori_stato. «Ho metto un pdf.» e «Me lo fai in Word?» col 4B da 0/3
+            # a 1–3/3 (docs/aree/agenti-estensioni.md): misura, non errori
             print(f"{'ok ' if ok else '-- '} [{giro}.{i}] (misura) «{frase}» → {argomenti}  "
                   f"{dettaglio}", flush=True)
         else:
