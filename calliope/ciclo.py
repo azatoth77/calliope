@@ -2077,6 +2077,17 @@ class Ciclo:
             tv = None
         if self.rec is not None and tv is not None and t.t0_mono and tv >= t.t0_mono:
             self.rec["prima_voce_s"] = round(tv - t.t0_mono, 2)
+        # La scomposizione (07/10): quando il primo audio è uscito da Piper (`voce_pronta_s`,
+        # da `t0`) e quanto è costata la sua sintesi (`sintesi_s`). Tra `prima_frase_s` e
+        # `voce_pronta_s` la coda e la sintesi; tra `voce_pronta_s` e `prima_voce_s` la rete,
+        # il buffer e l'uscita audio del satellite
+        try:
+            vp = self.speaker.voce_pronta()
+        except Exception:  # noqa: BLE001
+            vp = None
+        if self.rec is not None and vp is not None and t.t0_mono and vp[0] >= t.t0_mono:
+            self.rec["voce_pronta_s"] = round(vp[0] - t.t0_mono, 2)
+            self.rec["sintesi_s"] = round(vp[1], 2)
 
     def _dopo_la_risposta(self, t):
         """Finita la voce: interruzione, ricerca promessa, avvisi ai tutori, registrazione

@@ -14,6 +14,9 @@ dal registro dei turni (calliope/turnlog.py), per ogni giorno:
   cominciano davvero a suonare la prima frase, anche quella d'attesa; da `t0` come la prima
   frase), e la stessa dalla fine del parlato: la latenza che si sente, con sintesi, rete e
   riproduzione;
+- il **distacco** tra il testo pronto e la voce sentita (07/10: `prima_voce_s − prima_frase_s`
+  nei turni senza frase d'attesa), scomposto con `voce_pronta_s` (il primo audio uscito da
+  Piper) in **sintesi** (coda e Piper) e **consegna** (rete, buffer e uscita del satellite);
 - le **cause**: STT, correzione della trascrizione (`stt_correzione_ms`, scadute), guardiano
   (minori e ospiti), tool nel turno, rilettura del prompt (`lettura_s`, dal 06/10: oltre 1 s
   la cache del prefisso non è servita), contesto (token), coda delle risposte;
@@ -72,6 +75,18 @@ def giorno(turni: list[dict]) -> dict:
     pf = [_num(t, "prima_frase_s") for t in r]
     fp = [_num(t, "fine_parlato_s") for t in r if _num(t, "fine_parlato_s") is not None]
     pv = [_num(t, "prima_voce_s") for t in r if _num(t, "prima_voce_s") is not None]
+    # Dal testo alla voce (07/10): solo i turni in cui la prima voce è la prima frase (con la
+    # frase d'attesa la voce arriva prima del testo e il distacco non ha senso)
+    dist, sint, cons = [], [], []
+    for t in r:
+        f, v, p = (_num(t, "prima_frase_s"), _num(t, "prima_voce_s"),
+                   _num(t, "voce_pronta_s"))
+        if v is None or v < f:
+            continue
+        dist.append(v - f)
+        if p is not None and f <= p <= v:
+            sint.append(p - f)
+            cons.append(v - p)
     # Dalla fine del parlato: prima voce + il silenzio finale (fine_parlato_s − prima_frase_s)
     sentita = [_num(t, "prima_voce_s") + _num(t, "fine_parlato_s") - _num(t, "prima_frase_s")
                for t in r if _num(t, "prima_voce_s") is not None
@@ -96,7 +111,9 @@ def giorno(turni: list[dict]) -> dict:
         "prima_frase": {"mediana": _med(pf), "p75": _q(pf, .75), "p90": _q(pf, .9)},
         "fine_parlato": {"n": len(fp), "mediana": _med(fp), "p90": _q(fp, .9)},
         "prima_voce": {"n": len(pv), "mediana": _med(pv), "p90": _q(pv, .9),
-                       "sentita": _med(sentita), "sentita_p90": _q(sentita, .9)},
+                       "sentita": _med(sentita), "sentita_p90": _q(sentita, .9),
+                       "distacco": _med(dist), "distacco_p90": _q(dist, .9),
+                       "sintesi": _med(sint), "consegna": _med(cons), "n_scomposti": len(sint)},
         "stt": {"mediana": _med(stt), "p90": _q(stt, .9)},
         "correzione": {"n": len(corr),
                        "ms_mediana": _med([_num(t, "stt_correzione_ms") for t in corr]),
@@ -192,6 +209,11 @@ def testo(giorni: dict[str, dict], soglia: float = 1.2) -> str:
                          + (f", dalla fine del parlato {_s(pv['sentita'])} (p90 "
                             f"{_s(pv['sentita_p90'])})" if pv.get("sentita") is not None
                             else ""))
+            if pv.get("distacco") is not None:
+                righe.append(f"    dal testo alla voce {_s(pv['distacco'])} (p90 "
+                             f"{_s(pv['distacco_p90'])})"
+                             + (f": sintesi {_s(pv['sintesi'])}, rete e uscita "
+                                f"{_s(pv['consegna'])}" if pv.get("n_scomposti") else ""))
         c, g, t, le = d["correzione"], d["guardiano"], d["tool"], d["lettura"]
         righe.append(f"    STT {_s(d['stt']['mediana'])} (p90 {_s(d['stt']['p90'])})"
                      f"  base senza tool, guardiano e correzione {_s(d['base']['mediana'])} "

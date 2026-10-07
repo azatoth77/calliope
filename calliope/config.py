@@ -378,6 +378,17 @@ class Config:
     # secondo di vuoto le cuffie Bluetooth vanno in risparmio e «Ciao Dario» perdeva
     # l'attacco. Costa al massimo la latenza del buffer (~0,18 s con MME).
     tts_keepalive: bool = True
+    # La prima frase della risposta più lunga di così (caratteri) si dice in due pezzi,
+    # tagliata dopo la prima virgola, punto e virgola o due punti adatti (07/10): Piper
+    # sintetizza una frase intera prima di suonarla, e con serena-high sulla DGX 150
+    # caratteri costano 0,9 s di silenzio in più; il primo pezzo ne costa 0,1–0,3 e il resto
+    # si sintetizza mentre suona. 0 = mai.
+    tts_spezza_prima: int = 60
+    # Thread di onnxruntime per la sintesi di Piper (07/10). Piper ne usa uno per core, e sui
+    # processori con core veloci e lenti (DGX: 10 Cortex-X925 e 10 A725) è più lento: con 8
+    # serena-high sintetizza una frase di 100 caratteri in 0,36 s invece di 0,61 sulla DGX,
+    # 0,77 invece di 1,46 sul portatile. 0 = la scelta di onnxruntime.
+    tts_thread: int = 8
     # Inglesismi detti all'inglese (calliope/pronuncia.py): «file» → «fàil», «email» →
     # «imèil», «wifi» → «uàifài»… Cambia solo il testo dato a Piper, non la storia né gli
     # schermi. Il lessico predefinito è nel codice (solo le parole che espeak sbaglia).
@@ -2020,7 +2031,8 @@ SEZIONI: dict[str, list[str]] = {
             "stt_timeout_s", "stt_correzione", "stt_correzione_soglia", "stt_correzione_motore",
             "stt_correzione_url", "stt_correzione_modello", "stt_correzione_timeout_s",
             "stt_incerte_al_modello", "stt_incerte_riscrivi"],
-    "tts": ["piper_voice", "tts_tail_s", "tts_lead_s", "tts_keepalive", "tts_pronuncia",
+    "tts": ["piper_voice", "tts_tail_s", "tts_lead_s", "tts_keepalive", "tts_spezza_prima", "tts_thread",
+            "tts_pronuncia",
             "tts_pronuncia_extra"],
     "audio": ["sample_rate", "vad_threshold", "vad_motore", "vad_modello", "silence_ms", "preroll_ms", "min_speech_ms",
               "max_utterance_s", "input_device", "output_device"],
@@ -2268,7 +2280,8 @@ LIMITI: dict[str, tuple[float, float]] = {
     "llm_attesa_avvio_s": (0.0, 86_400.0), "azione_in_sospeso_s": (0.0, 3600.0),
     "azione_in_sospeso_turni": (1, 20), "conferma_sfida_s": (5.0, 600.0),
     "conferma_sfida_parole": (2, 4), "speaker_conferma_breve_soglia": (0.0, 1.0),
-    "tts_lead_s": (0.0, 5.0), "tts_tail_s": (0.0, 5.0), "silence_ms": (100, 10_000),
+    "tts_lead_s": (0.0, 5.0), "tts_tail_s": (0.0, 5.0), "tts_spezza_prima": (0, 10_000), "tts_thread": (0, 256),
+    "silence_ms": (100, 10_000),
     "preroll_ms": (0, 5000), "memory_max_facts": (1, 10_000), "speaker_threads": (1, 64),
     "appuntamento_anticipo_min": (0, 10_080), "casa_timeout_s": (0.5, 300.0),
     "documenti_attesa_s": (0.0, 300.0),

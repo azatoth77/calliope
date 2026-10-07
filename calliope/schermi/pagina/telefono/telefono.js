@@ -50,6 +50,8 @@ const st = {
 const param = Object.assign({}, PARAMETRI);
 const ascolto = new Ascolto(param);
 const player = new Riproduttore("Calliope");
+// La voce comincia a sentirsi (07/10): come `suona` del satellite in Python, per `prima_voce_s`
+player.onSuona = (id, uscita) => manda({ tipo: "suona", id, uscita_s: Math.round(uscita * 1000) / 1000 });
 let suoni = {};          // {inizio, fine}: {pcm (Uint8Array, int16), rate} dal benvenuto
 function suona(tipo) {
   const s = suoni[tipo];

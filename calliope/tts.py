@@ -37,6 +37,40 @@ def split_sentences(chunks, min_chars: int = 25):
         yield buf.strip()
 
 
+# La prima frase a pezzi (07/10, la voce che si sente): Piper sintetizza una frase intera prima
+# di dare il primo campione, e con serena-high sulla CPU della DGX costa ~6 ms a carattere
+# (misure: 23 caratteri 0,16 s, 100 → 0,65 s, 151 → 0,91 s). Le prime frasi di gemma sono
+# lunghe (150–250 caratteri, con virgole e due punti): la voce partiva ~1 s dopo il testo. La
+# prima frase lunga del turno si dice in due pezzi, tagliata dopo una virgola, un punto e
+# virgola o i due punti seguiti da uno spazio: il primo pezzo si sintetizza in 0,1–0,3 s e,
+# mentre suona, si sintetizza il resto. La punteggiatura resta nel primo pezzo, così espeak
+# gli dà l'intonazione sospesa della virgola e non quella di fine frase.
+_PAUSA = re.compile(r"[,;:](?=\s)")
+PEZZO_MIN = 12              # caratteri: un primo pezzo più corto («Beh,») non basta a coprire
+RESTO_MIN = 20              # sotto, il resto si sintetizza in fretta comunque: non si taglia
+RAPPORTO = 3                # il primo pezzo lungo almeno un terzo del resto (vedi sotto)
+
+
+def primo_pezzo(testo: str, oltre: int) -> tuple[str, str] | None:
+    """(primo pezzo, resto) di una frase più lunga di `oltre` caratteri, oppure None (frase
+    corta, nessuna pausa adatta, `oltre` 0 = spento). Il primo pezzo deve durare abbastanza
+    da coprire la sintesi del resto: con Piper l'audio dura ~55 ms a carattere e la sintesi
+    ne costa 4–14 (serena-high: DGX con 8 thread, portatile carico con quelli predefiniti),
+    quindi un pezzo lungo almeno un terzo del resto lo copre con margine per la rete (un
+    quarto, nel banco del 07/10, lasciava un buco di 0,24 s sul portatile carico). Se la
+    prima pausa è troppo presto si prova la successiva."""
+    testo = (testo or "").strip()
+    if oltre <= 0 or len(testo) <= oltre:
+        return None
+    for m in _PAUSA.finditer(testo):
+        a, b = testo[:m.end()].strip(), testo[m.end():].strip()
+        if len(b) < RESTO_MIN:
+            return None
+        if len(a) >= max(PEZZO_MIN, len(b) / RAPPORTO) and len(a.split()) >= 2:
+            return a, b
+    return None
+
+
 _CITATION = re.compile(r"[,;]?\s*\b(secondo|stando a|come (dice|riporta|scrive)|come si legge (su|in))"
                        r"\s+(la\s+|l')?(wikipedia|enciclopedia)\b[,;]?", re.I)
 
@@ -296,6 +330,30 @@ def _fonemi_protetti(voice):
         pass
 
 
+def carica_voce(cfg, voice_path: str):
+    """Una voce di Piper, con i thread di onnxruntime di `tts_thread` (07/10). Piper apre la
+    sessione con le opzioni predefinite, cioè un thread per core: sulla DGX (10 core
+    Cortex-X925 e 10 A725) i core lenti frenano gli altri, e serena-high con 8 thread
+    sintetizza in 0,36 s ciò che con 20 ne costa 0,61 (sul portatile 0,77 contro 1,46). La
+    sessione si rifà con le opzioni giuste; se non riesce resta quella di Piper."""
+    from piper import PiperVoice
+    voice = PiperVoice.load(voice_path)
+    n = int(getattr(cfg, "tts_thread", 0) or 0)
+    if n > 0 and getattr(voice, "session", None) is not None:
+        try:
+            import onnxruntime
+            o = onnxruntime.SessionOptions()
+            o.intra_op_num_threads = n
+            o.inter_op_num_threads = 1
+            voice.session = onnxruntime.InferenceSession(
+                str(voice_path), sess_options=o,
+                providers=voice.session.get_providers() or ["CPUExecutionProvider"])
+        except Exception as e:  # noqa: BLE001 — la voce resta, solo un po' più lenta
+            print(f"   [TTS] Thread della sintesi non impostati ({type(e).__name__}: {e})",
+                  flush=True)
+    return voice
+
+
 class Speaker:
     """Due thread: uno sintetizza la frase successiva mentre l'altro riproduce.
 
@@ -318,6 +376,10 @@ class Speaker:
         self.remota = uscita
         self.turno = 0                       # cresce a ogni start_turn (uscita remota)
         self._prima_voce: dict[int, float] = {}   # turno → quando si è sentita (locale)
+        # Turno → (monotonic, secondi di sintesi) del primo audio pronto (07/10): la
+        # scomposizione della voce che si sente nel registro dei turni (`voce_pronta_s`)
+        self._pronta: dict[int, tuple[float, float]] = {}
+        self._prima_del_turno = True         # la prima frase del turno si può spezzare
         # Muta per un turno (04/10, calliope/rispondi.py): una frase scritta da uno schermo
         # senza audio in un'altra stanza ha la risposta solo scritta, mai detta qui
         self.muto = False
@@ -331,8 +393,7 @@ class Speaker:
             if getattr(base, "_filler_phrases", None):
                 self._filler_phrases = base._filler_phrases
         else:
-            from piper import PiperVoice
-            self.voice = PiperVoice.load(cfg.piper_voice)   # usata solo dal thread di sintesi
+            self.voice = carica_voce(cfg, cfg.piper_voice)  # usata solo dal thread di sintesi
             # Inglesismi detti all'inglese («file» → «fàil»), solo nel testo per Piper
             self.pronuncia = Pronuncia(getattr(cfg, "tts_pronuncia_extra", None),
                                        attiva=getattr(cfg, "tts_pronuncia", True))
@@ -404,7 +465,16 @@ class Speaker:
         return self.out.stream if self.out is not None else None
 
     def _synth(self, text: str) -> bytes:
-        return self._pcm(self.voice, text)
+        t0 = time.monotonic()
+        pcm = self._pcm(self.voice, text)
+        pronta = self.__dict__.setdefault("_pronta", {})
+        turno = getattr(self, "turno", 0)
+        if turno not in pronta:
+            if len(pronta) > 50:
+                pronta.pop(min(pronta), None)
+            ora = time.monotonic()
+            pronta[turno] = (ora, ora - t0)
+        return pcm
 
     def _pcm(self, voice, text: str) -> bytes:
         """PCM int16 di una frase. La pronuncia degli inglesismi (calliope/pronuncia.py)
@@ -521,6 +591,12 @@ class Speaker:
                     self.remota.invia(self.turno, text, audio, self._rate)
             except Exception as e:  # noqa: BLE001
                 self._salta(item[0] if isinstance(item, tuple) else item, e)
+
+    def voce_pronta(self) -> tuple[float, float] | None:
+        """(monotonic, secondi di sintesi) del primo audio di questo turno uscito da Piper
+        (anche la frase d'attesa sintetizzata al momento), oppure None (frase d'attesa già
+        pronta, niente detto)."""
+        return self.__dict__.get("_pronta", {}).get(getattr(self, "turno", 0))
 
     def prima_voce(self) -> float | None:
         """Il monotonic in cui la prima frase di questo turno ha cominciato a sentirsi (casse
@@ -646,6 +722,7 @@ class Speaker:
         """Inizio di una risposta: azzera le frasi pronunciate e l'interruzione."""
         self.played = []
         self.turno += 1          # il satellite scarta solo le frasi del turno interrotto
+        self._prima_del_turno = True
         self._interrupted.clear()
 
     def interrupt(self):
@@ -662,6 +739,16 @@ class Speaker:
     def say(self, text: str):
         if self.muto:
             return
+        if self.__dict__.get("_prima_del_turno", False):
+            # La prima frase del turno, se lunga, in due pezzi (primo_pezzo, 07/10): la voce
+            # comincia dopo la sintesi del primo, il resto si sintetizza mentre suona. In
+            # `played` (e nelle frasi dette dal satellite) entrano i due pezzi
+            self._prima_del_turno = False
+            pezzi = primo_pezzo(text, int(getattr(self.cfg, "tts_spezza_prima", 0) or 0))
+            if pezzi:
+                for p in pezzi:
+                    self.text_q.put(p)
+                return
         self.text_q.put(text)
 
     def wait(self, stallo_s: float | None = None) -> bool:
@@ -726,11 +813,10 @@ class Speaker:
         Caricarla costa ~1,5 s: nel test del 24/09 ogni cambio di voce ritardava di
         altrettanto la risposta (prima frase a 2,05–2,37 s invece di ~0,6).
         """
-        from piper import PiperVoice
         with self._voices_lock:
             voice = self._voices.get(voice_path)
         if voice is None:
-            voice = PiperVoice.load(voice_path)
+            voice = carica_voce(self.cfg, voice_path)
             with self._voices_lock:
                 voice = self._voices.setdefault(voice_path, voice)
         return voice

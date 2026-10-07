@@ -361,6 +361,9 @@ export class Riproduttore {
     this.scartaFino = 0;
     this.ultimoTurno = 0;
     this.byte = 0;
+    // (id della frase, secondi a quando si sentirà) al primo pezzo messo in coda (07/10):
+    // la pagina manda «suona» come il satellite, e il server scrive `prima_voce_s`
+    this.onSuona = null;
   }
 
   contesto() {
@@ -426,7 +429,14 @@ export class Riproduttore {
     const t = Math.max(this.prossimo, c.currentTime + 0.03);
     src.start(t);
     this.prossimo = t + n / f.rate;
-    if (f.inizio === null) f.inizio = t;
+    if (f.inizio === null) {
+      f.inizio = t;
+      if (this.onSuona) {
+        // Quanto manca all'inizio programmato, più il ritardo dell'uscita del browser
+        const uscita = Math.max(0, t - c.currentTime) + (c.outputLatency || c.baseLatency || 0);
+        try { this.onSuona(f.id, uscita); } catch (e) { /* la misura non ferma la voce */ }
+      }
+    }
     f.fine = this.prossimo;
     const voce = { src, turno: f.turno, fine: this.prossimo };
     this.sorgenti.push(voce);
