@@ -127,3 +127,16 @@ tra parentesi («spento nella configurazione») e legge a parole le altre («cas
 `calliope_stato` la usa per motivo e passo. Terminale e dettagli invariati. Dal 06/10 la
 capacità «llm» dice anche quando Calliope usa più modelli di quanti Ollama ne tiene
 (`calliope/ollama_carico.py`, vedi contesto-conversazione).
+
+## Taratura sulla macchina: ricerca (07/10)
+
+Richiesta di Dario: che Calliope suggerisca modelli, contesto e numero di modelli secondo la
+macchina su cui gira (una GPU da 32 GB non è una DGX). Ricerca, niente codice:
+[`../ricerche/2026-10-07-taratura-macchina.md`](../ricerche/2026-10-07-taratura-macchina.md).
+Inventario di ciò che c'è (`macchina.py`, `contesto.py`, `ollama_carico.py`, catalogo, latenza),
+classi di macchine con le bande dichiarate, catalogo dei modelli con dati dichiarati e misurati,
+cache per token dai `/api/show` (tre sovrastime di `contesto.kv_ollama`: qwen3.6, gpt-oss,
+Gemma 3), regole del piano con le priorità (voce, Whisper, guardiano mai spento in silenzio…),
+tre piani completi (portatile, RTX 5090, DGX), verifica con `size_vram` di `/api/ps`, stato in
+`taratura.json`, `calliope stato --piano`, fasi (~12–15 giorni; prima la velocità di generazione
+nel registro dei turni, che oggi manca).
