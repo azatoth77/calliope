@@ -159,6 +159,11 @@ class ToolSpec:
     classe: str | None = None
     fonte: str | None = None
     chiave: tuple[str, ...] = ()
+    # La forma degli argomenti scelti dal modello, ricondotta a quella del tool prima dei
+    # permessi e della politica (08/10: estensioni_gestisci «attiva» → «approva»): (ctx,
+    # argomenti) → argomenti. Solo conversioni di forma (principio 10), con una regola nel
+    # registro dei turni; None = niente
+    prepara: Callable | None = None
 
     def schema(self) -> dict:
         """Schema del tool nel formato OpenAI (Ollama lo accetta sia su /api/chat sia su /v1)."""

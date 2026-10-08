@@ -477,3 +477,28 @@ Il banco (`prove/prova_regressione.py`, gemma4 e4b locale, 2 giri) era 166/174 i
 - Dopo la correzione del finto: **165/174** (contro 162 del codice del 04/10 nelle stesse
   condizioni), prima frase mediana 0,69 s, p90 1,20 s. Restano i quattro casi sopra (il 4B, non
   la voce della DGX, che è il 26B) e la variabilità di sempre (`info3`, `ora_vecchia`).
+
+## La forma degli argomenti, l'estensione nominata, la risposta interrotta nel registro (08/10, ramo `correzioni-giro10`)
+
+Dal caso vero della DGX del 07/10 sera (meteo per città, vedi
+[agenti-estensioni](agenti-estensioni.md)):
+- **`ToolSpec.prepara`** (nuovo, `tools/spec.py`, applicato da `ToolRegistry.call` prima dei
+  permessi e della politica): la forma degli argomenti scelti dal modello ricondotta a quella del
+  tool, `(ctx, argomenti) → argomenti`. Solo conversioni di forma (principio 10), con la loro
+  regola nel registro. Il primo è `estensioni_gestisci` («attiva» → `approva` o `riattiva`,
+  `estensioni_azione_sinonimo`): prima la politica chiedeva «vuoi che faccia «attiva»…?» e al «sì»
+  il tool diceva «azione sconosciuta».
+- **Dati del turno `EST_NOMINATA_MSG`** (rete `estensione_nominata`, categoria modello, regola
+  `estensione_nominata`): la frase nomina un'estensione attiva → il suo tool, cosa fa e l'input,
+  subito prima della domanda come `LAVORO_MSG`; mai nel prompt di sistema (prefisso in cache).
+  Riconoscere il nome è una regola sul testo: è ammessa perché il suo effetto è solo un contesto
+  del turno, e ha i contrari in `prove/prova_estensioni_versioni.py`.
+- **Registro dei turni di una risposta interrotta**: alle 18:48:50 «Com'è andata l'estensione?» →
+  `lavori_stato` aveva risposto (nel journal la frase c'è), ma «risposta» nel registro era vuota.
+  Non era un errore del tool: dopo un barge-in «risposta» tiene solo le frasi **sentite per
+  intero** (`speaker.played`), e la risposta di `lavori_stato` è una frase sola, lunga, interrotta
+  dal nome a metà (lo stesso alle 18:48:38 e alle 18:54:36). Ora resta così, e c'è anche
+  **`risposta_inviata`**: quello che era già andato alla voce, ripulito come la risposta (codice
+  dello schermo, testo scritto oscurato, parole della frase di sfida); per un ospite nullo come
+  la risposta. Prima la «risposta» dopo un'interruzione non passava nemmeno dalla pulizia
+  (`Ciclo._ripulisci_per_registro`).

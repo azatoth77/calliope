@@ -167,6 +167,12 @@ class ToolRegistry:
                 return self.sconosciuto(name)
             note_rule(ctx, "tool_nome_corretto")
             name, spec = vero, self._tools[vero]
+        if getattr(spec, "prepara", None) is not None:
+            # La forma degli argomenti (ToolSpec.prepara), prima di permessi e politica
+            try:
+                arguments = spec.prepara(ctx, dict(arguments or {})) or arguments
+            except Exception:  # noqa: BLE001 — nel dubbio, gli argomenti come sono
+                pass
         sc = getattr(ctx, "speaker_ctx", None)
         # Dopo un dato non fidato letto in questa risposta, solo letture (politica.DOPO_DATO)
         fermo = politica.bloccata(name, ctx)

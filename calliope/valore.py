@@ -103,7 +103,9 @@ ARGOMENTI: dict[str, dict[str, str]] = {
     "installa_avvia": {"azione": B},
     "installa_gestisci": {"azione": Z},
     "estensione_crea": {"compito": L, "nome": C, "gia_fatto_da": S, "come_chiederlo": L,
-                        "proposta": X, "gioco": S},
+                        "proposta": X, "gioco": S,
+                        # 08/10 (giro 10): l'estensione esistente di cui fare una versione nuova
+                        "modifica": B},
     "estensioni_gestisci": {"azione": Z, "nome": B, "esecuzione": B, "sempre": S},
 }
 

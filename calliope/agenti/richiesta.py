@@ -23,7 +23,11 @@ Lista di controllo chiusa per tipo (`PUNTI`): estensione = input, output, fonte 
 - **gia_fatto** («c'è già»): una funzione di Calliope lo fa già (dal registro dei tool, mai da un
   elenco scritto a mano): lo dice e come chiederlo, senza costruire un doppione;
 - **impossibile** («impossibile qui»): serve qualcosa che la sandbox o la porta delle estensioni
-  non hanno (rete di casa, file del PC…): lo dice subito, senza domande.
+  non hanno (rete di casa, file del PC…): lo dice subito, senza domande;
+- **estensione** (08/10, solo per un lavoro di codice): la richiesta è creare o cambiare
+  un'estensione di Calliope, che non è impossibile ma è un'altra richiesta (estensione_crea, con
+  modifica per una che c'è). Il modello lo scrive come `impossibile` = «ESTENSIONE» (lo schema
+  resta quello); il 07/10 sulla DGX diceva «non posso modificare le estensioni esistenti».
 
 Per un'estensione che legge internet l'analizzatore indica la fonte (`fonte_url`), e una
 lettura rapida con la rete pubblica di Calliope (`web.rete.RetePubblica`, gli stessi controlli
@@ -43,7 +47,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 
-ESITI = ("chiara", "raffinabile", "vaga", "gia_fatto", "impossibile")
+ESITI = ("chiara", "raffinabile", "vaga", "gia_fatto", "impossibile", "estensione")
 PUNTI = {
     "estensione": ("input", "output", "fonte", "non_trovato", "permessi"),
     "codice": ("input", "output", "dati_persona", "linguaggio"),
@@ -148,14 +152,17 @@ def capacita(cfg, tipo: str, linguaggi=("python",)) -> str:
             "all'agente), niente programmi con finestre, niente orari fissi.\nImpossibile qui: "
             "collegarsi a dispositivi di casa (inverter, router, NAS, stampanti), leggere o "
             "salvare i file e le cartelle del PC (backup, rinomina di cartelle), mandare email o "
-            "messaggi, restare acceso in secondo piano.")
+            "messaggi, restare acceso in secondo piano.\nLe estensioni di Calliope (funzioni "
+            "permanenti che si usano a voce) NON sono lavori di codice ma si possono fare, con "
+            "un'altra richiesta: se la richiesta è creare, cambiare o correggere un'estensione, "
+            "in impossibile scrivi solo la parola ESTENSIONE.")
 
 
 SISTEMA = """Sei l'analista delle richieste di lavoro di Calliope, un'assistente vocale di casa. Prima che un agente programmatore cominci, controlli se la richiesta basta per lavorare. Non scrivi codice e non rispondi alla persona: compili il JSON, campo per campo, nell'ordine.
 
 Lavoro: {tipo_detto}
 
-1. impossibile: se serve qualcosa che qui non si può fare (vedi «Cosa si può fare qui»), il perché in una frase breve da dire alla persona; altrimenti vuoto.
+1. impossibile: se serve qualcosa che qui non si può fare (vedi «Cosa si può fare qui»), il perché in una frase breve da dire alla persona; altrimenti vuoto.{nota_impossibile}
 2. punti: per ogni punto della lista di controllo uno stato:
    - detto: la richiesta lo dice;
    - dal_contesto: non lo dice la richiesta ma lo dice la conversazione recente (una città, un file mandato, dei numeri, dei nomi, l'estensione usata poco prima);
@@ -186,6 +193,13 @@ NOTA_TIPO = {
     "codice": ("Un programma si può rieseguire a voce con dei valori: i valori che cambiano "
                "a ogni esecuzione (i chilometri di un viaggio, l'IBAN da controllare, il numero "
                "da convertire) non mancano; un file della persona da leggere invece va indicato."),
+}
+# Il lavoro di codice che crea o cambia un'estensione (08/10): non è impossibile, è un'altra
+# richiesta; la parola chiave la legge `interpreta` (esito «estensione»)
+NOTA_IMPOSSIBILE = {
+    "codice": (" ECCEZIONE: se la richiesta è creare, cambiare, correggere o rifare "
+               "un'estensione di Calliope (una sua funzione permanente, anche nominata per "
+               "titolo), NON è impossibile: scrivi solo la parola ESTENSIONE."),
 }
 STATI = ("detto", "dal_contesto", "scelta_ragionevole", "manca")
 # Punti che non mancano mai: li sceglie l'agente (il linguaggio, cosa dire se un dato non c'è)
@@ -239,7 +253,7 @@ def messaggi(cfg, tipo: str, compito: str, storia=(), detto: str = "", strumenti
                     if tipo == "estensione" else "un programma da scrivere ed eseguire una "
                     "volta. ") + "Lista di controllo: " + "; ".join(
                         f"{p} = {PUNTI_DETTI[p]}" for p in PUNTI[tipo]) + ".",
-        nota_tipo=NOTA_TIPO.get(tipo, ""),
+        nota_tipo=NOTA_TIPO.get(tipo, ""), nota_impossibile=NOTA_IMPOSSIBILE.get(tipo, ""),
         capacita=capacita(cfg, tipo, linguaggi),
         funzioni="\n".join(f"- {n}: {d}" if d else f"- {n}" for n, d in fz) or "(nessuna)",
         nome_regola=("un nome breve in italiano, 2-4 parole minuscole (es. «città della "
@@ -307,7 +321,9 @@ def interpreta(testo: str, tipo: str, senza_domande: bool = False,
               tool=str(d.get("gia_fatto") or "").strip(),
               come_chiederlo=_pulisci(d.get("come_chiederlo"), 160),
               motivo=_pulisci(d.get("impossibile"), 300), stati=stati)
-    if e.motivo:
+    if tipo == "codice" and re.match(r"\W*estension[ei]\W*$", e.motivo, re.I):
+        e.esito, e.motivo = "estensione", ""
+    elif e.motivo:
         e.esito = "impossibile"
     elif e.tool:
         e.esito = "gia_fatto"

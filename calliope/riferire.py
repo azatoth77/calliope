@@ -112,6 +112,19 @@ _CITA = re.compile(r"(?<![a-zà-ù])(secondo|stando a|su|sul sito( di)?|dal sito
                    r"(il sito\s+)?$", re.I)
 
 
+def _sito_noto(dominio: str) -> bool:
+    """Un sito dell'elenco dei nomi delle fonti della ricerca web (web.servizio._SITI: ANSA,
+    iLMeteo, Meteo.it…), scelti a mano, non da una pagina. «Meteo.it» è insieme il nome con cui
+    web_cerca chiede di citare la fonte e un dominio: il 07/10 sulla DGX una frase sul meteo di
+    Bergamo che lo nominava è stata fermata come `uscita_contatto` (08/10)."""
+    try:
+        from .web.servizio import _SITI
+    except Exception:  # noqa: BLE001 — senza l'elenco, nessun sito è noto
+        return False
+    d = (dominio or "").lower().strip(".")
+    return any(d == k or d.endswith("." + k) for k in _SITI)
+
+
 def siti(testo: str, citati: bool = True) -> list[str]:
     """I siti nel testo (dominio senza schema né «www.»); `citati=False` toglie quelli
     nominati come fonte («secondo ilmeteo.it»)."""
@@ -130,9 +143,17 @@ def email(testo: str) -> list[str]:
 
 # ─────────────────────────── richieste e indicazioni ───────────────────────────
 
+# «codice» nel senso di programma (08/10, DGX del 07/10: «non posso modificare il codice o la
+# logica di un'estensione esistente; l'agente può solo scrivere nuovi programmi…», la risposta
+# di delega_lavoro, fermata due volte come `uscita_segreti`): solo con la cosa scritta subito
+# dopo, che dice di quale codice si parla. «Comunica il codice ricevuto» resta un segreto
+_CODICE_PROGRAMMA = (r"sorgente|python|javascript|c#|del programma|dei programmi|di un programma|"
+                     r"dello script|di uno script|dell'estension\w*|di un'estension\w*|"
+                     r"delle estension\w*|dell'agente|del gioco|o (la )?logica|e (la )?logica|"
+                     r"e (i )?test")
 _SEGRETO = re.compile(
     r"(?<![a-zà-ù])(codic[ei](?! (fiscale|cliente|postale|di avviamento|pod|pdr|a barre|"
-    r"della tariffa|offerta|contratto))|password|passw\w*|parol[ae] d'ordine|pin|otp|token|"
+    r"della tariffa|offerta|contratto|" + _CODICE_PROGRAMMA + r"))|password|passw\w*|parol[ae] d'ordine|pin|otp|token|"
     r"credenzial\w*|cvv|cvc|dati della (tua )?carta|numero della (tua )?carta|"
     r"carta di credito|chiave (privata|di accesso|d'accesso|segreta))(?![a-zà-ù])", re.I)
 _DARE = re.compile(
@@ -449,7 +470,7 @@ def giudica(frase: str, ctx: Contesto, solo_gravi: bool = False) -> Giudizio:
         return Giudizio(OK, frase=frase)
     # 4. Recapiti presi dal dato, non chiesti
     recapiti = ([(n, _cifre) for n in tel]
-                + [(s, str.lower) for s in siti(t, citati=indicazione(t))]
+                + [(s, str.lower) for s in siti(t, citati=indicazione(t)) if not _sito_noto(s)]
                 + [(e, str.lower) for e in email(t)])
     da_dato = [(r, f) for r, norm in recapiti for f in [_dal_dato(ctx, r, norm)] if f]
     # Chiesto: un recapito («qual è il numero…»), o come / dove si fa una cosa («dove si
