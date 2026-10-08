@@ -42,7 +42,7 @@ calliope/                 # package: python -m calliope
 │   ├── pc.py             # i tool pc_* (PC a voce)
 │   ├── documenti.py      # documento_crea, documento_modifica
 │   ├── casa.py           # casa_comando, casa_stato, casa_integrazione
-│   ├── schermi.py        # schermo_mostra, schermo_gestisci
+│   ├── schermi.py        # schermo_mostra, schermo_gestisci, schede_pulisci
 │   ├── agenti.py         # lavoro_affida, lavoro_stato, lavoro_annulla, lavoro_rispondi, lavoro_risultato, programma_esegui
 │   ├── sviluppo.py       # sviluppo_apri, sviluppo_passo, sviluppo_collauda, sviluppo_chiedi, sviluppo_correggi (modalità sviluppo, 08/10)
 │   └── stato.py          # calliope_stato, installa_proponi, installa_avvia, installa_gestisci
@@ -216,6 +216,7 @@ controllo nelle prove a secco), ma tocca tutti i tool e le prove con Ollama che 
 | `installa_gestisci` | familiare (annullare solo chi amministra) | azione | «a che punto è?», «annulla il download» |
 | `schermo_mostra` | ospite (il codice decide cosa può vedere) | lettura | «mostramelo sullo schermo», «metti la lista sullo schermo», «fammelo leggere», «togli dallo schermo»: `cosa` in enum (ultima, risposta, lista, timer, promemoria, documento, casa, niente); la scheda la costruisce il codice, la frase dice cosa è successo davvero (`risposta_finale`) |
 | `schermo_gestisci` | amministra | azione | abbina (codice di 6 cifre, stanza, personale), scollega, elenca gli schermi; il codice è un argomento segreto (`ToolSpec.segreti`) |
+| `schede_pulisci` | familiare (il codice vuole la voce riconosciuta: mai la zona grigia) | azione | «pulisci le mie schede» (08/10): la cronologia delle schede di chi parla, su disco e sui suoi schermi personali; solo le sue, senza conferma (documenti, lavori e file restano); lo sviluppo aperto resta. Anche il tasto «Pulisci» della pagina (`POST /api/schede`) |
 | `lavoro_affida` | familiare | azione | affida a un agente in secondo piano un lavoro lungo il cui risultato è un file complesso: `tipo` documento (anche da un `modello`), ricerca, altro; `compito` con i dati detti. Dal 08/10 senza il codice: un tipo codice passa da sé a `sviluppo_apri` (regola `lavoro_codice_sviluppo`). I lavori costosi chiudono con «Procedo?» e partono solo con `proposta` = l'id, nella risposta dopo, della stessa persona; `risposta_finale` (fino al 08/10 `delega_lavoro`) |
 | `lavoro_stato` | familiare | lettura | a che punto sono i lavori (passo dell'agente, coda, una tappa, ultimo finito) (era `lavori_stato`) |
 | `lavoro_annulla` | familiare (gli altrui solo chi amministra) | azione | ferma il lavoro in corso, in coda o fermo a una tappa, subito (stream chiuso, sandbox fermata) (era `lavori_annulla`) |

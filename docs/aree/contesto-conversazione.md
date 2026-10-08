@@ -500,3 +500,28 @@ Ramo `taratura-fasi-0-2` ([ricerca del 07/10](../ricerche/2026-10-07-taratura-ma
   architetture verificate: `gemma3` 6, `gptoss` 2); un'architettura non elencata resta
   prudente. Forma letta il 08/10 da `/api/show` della DGX (qwen3.6, gpt-oss) e del portatile
   (gemma3, qwen3.5). Per la voce di oggi (Gemma 4) non cambia niente.
+
+## L'archivio a turno finito e la scheda «Conversazione» (08/10 sera, ramo `cronologia-persona`)
+
+La scheda «Conversazione» degli schermi personali ([schermi-telefono](schermi-telefono.md)) è
+una vista dell'archivio delle conversazioni, non un registro in più. Per farla:
+
+- **A turno finito**: il ciclo archivia il turno appena chiuso (`Ciclo._archivia_turno`, in cima
+  al giro dopo, con la storia già finale: interruzioni e correzioni dei controlli fatte), con
+  `Brain.archivia_turni`. Prima l'archivio lo prendeva solo all'inizio della risposta dopo (o alla
+  chiusura), quindi l'ultimo turno di una conversazione arrivava tardi e con l'ora sbagliata
+  (quella dell'archiviazione).
+- **Dove e come**: il messaggio dell'utente prende `_turno` (ora d'inizio del turno, satellite o
+  schermo, «voce» o «scritto», se era la frase di sfida o se la risposta la chiedeva);
+  `conversazione.turni` ne fa `quando` e `meta`, che l'archivio salva nella colonna nuova
+  `turni.meta` (migrazione alla **versione 2** dello schema: un `calliope torna` senza dati
+  aprirebbe l'archivio in sola lettura, come previsto da `prepara_schema`).
+- **Pulizie in più nell'archivio** (valgono anche per `conversazione_cerca`): la frase di sfida
+  ripetuta diventa «(frase di conferma)», nella risposta che la chiede le parole spariscono
+  («ripeti: …», `senza_sfida`), come già nel registro dei turni; i segreti detti nel turno (il
+  codice di abbinamento di uno schermo, `Brain.redact`) non restano più (prima nell'archivio sì:
+  `oscura_archivio` toglie solo le cifre da 10 in su).
+- **In diretta**: `ArchivioConversazioni.su_turni` (dopo il commit, dal thread dell'archivio, mai
+  per gli ospiti) e `su_dimentica`; `chat(persona, n)` e `chat_markdown` per la scheda e
+  «Scarica»; `voce_chat` mostra la frase detta da un tool se la risposta è vuota.
+- Prova: `prova_cronologia_schede` (migrazione, meta, sfida, codici, ospiti, dimentica, tenuta).

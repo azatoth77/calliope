@@ -12,6 +12,7 @@
 | Cruscotto di chi amministra (fase 1, sola lettura, dal 06/10) | — (solo libreria standard: registro dei turni, SQLite in sola lettura, `indice.json` delle estensioni) | `calliope/schermi/cruscotto.py` → `Cruscotto` (`amministra`, `dati`), `LettoreTurni`, `versione_in_uso`, `tipo_errore`; GET `/api/cruscotto` (`server.py`); `Schermi.cruscotto`; scheda locale `cruscotto` in `schermo.js` (`apriCruscotto`, `impostaAmministra`), voce del menu del telefono; `latenza.leggi_file` |
 | Lettore Markdown e «Scarica» nella scheda del documento (07/10) | scritto in proprio in `schermo.js` (createElement e textContent, mai innerHTML); conversione con fpdf2 e python-docx sul server | `schermo.js` → `leggiMarkdown`, `mdBlocchi`, `mdInLinea`, `pulsantiScarica`; `calliope/schermi/scarica.py` → `Scaricamenti` (`registra`, `gettone`, `prendi`), `converti`; POST `/api/scarica` e GET `/scarica/<gettone>` (`server.py`); `Schermi.scaricamenti`, `hub.pubblica`; `schede.documento_markdown`; `schermi_scarica_s` |
 | Vista dello sviluppo, lavoro in diretta a schermo intero, flusso dell'agente (08/10) | scritto in proprio in `schermo.js` (createElement e textContent); niente librerie | `schermo.js` → `assorbiFlusso`, `chatFlusso`, `colonnaFlusso`, `disegnaAvanzamento`, `misuraSegui`, `ripristinaSegui`, `vistaSviluppo`, `disegnaVista`, `comandiSviluppo`, `apriInteroPC`, `disegnaInteroPC`; `telefono.js` → `sincronizza` (apre e chiude la vista); `hub.per_storia`, `hub.registra_scaricabili`; `scarica.converti` (`markdown_file`); `calliope/agenti/avanzamento.py` → `Avanzamento`, `_Argomenti`, `esito_breve`, `chiamata_breve`; `calliope/sviluppo.py` → `Sviluppi.dati_vista`, `agli_schermi`, `riepilogo_lavoro`, `totali` |
+| Cronologia delle schede per persona e scheda «Conversazione» (08/10) | solo libreria standard: un file JSON per persona (scrittura atomica da un thread), l'archivio delle conversazioni in SQLite | `calliope/schermi/cronologia.py` → `CronologiaSchede` (`aggiungi`, `ultime`, `pulisci`), `rivedi`, `lavoro_finale`; `hub.py` → `Schermi.ripresa`, `collega(ripresa=…)`, `pulisci_schede`, `chat_per`, `chat_nuovi`, `chat_dimenticata`, `registra_chat`, `ricostruttori`; `carica_cronologia`, `cartella_cronologia` (`schermi/__init__.py`); POST `/api/schede` (`server.py`); `conversazioni.py` → `ArchivioConversazioni.chat`, `chat_markdown`, `su_turni`, `su_dimentica`, `voce_chat`; `conversazione.turni` (`_turno`, `senza_sfida`); `Ciclo._archivia_turno`, `_luogo_turno`; `Brain.archivia_turni`; tool `schede_pulisci`; `schermo.js` → `DISEGNA.chat`, `impostaChat`, `chatDalServer`, `apriChat`, `pulisciSchede`, `pulisciLocale`; telefono: «La nostra conversazione» e «Pulisci le mie schede» nel menu |
 | Rispondi dove ti ho chiesto | — (prestito del satellite attivo, origine del turno) | `calliope/rispondi.py` → `Instradamento`; `ServerSatelliti.presta` / `restituisci` / `per_schermo`; `Schermi.origine_corrente`, `invia_a`, `Mittente.schermo`; `Speaker.muto` |
 
 ## Note dalla sezione «Stato attuale» di CLAUDE.md (fino al 06/10)
@@ -581,3 +582,68 @@ un pezzo dello stream per chi lavora resta nei microsecondi (`prova_avanzamento`
 1–2 schede con un pezzo per sezione). Rete: un invio porta solo il testo nuovo (prima la coda
 intera di 600 caratteri a ogni invio); la finestra (≤ 40 000 caratteri) va solo a una pagina che
 si ricollega.
+
+## Cronologia delle schede per persona e scheda «Conversazione» (08/10 sera, ramo `cronologia-persona`)
+
+Richiesta di Dario: la cronologia stava solo in memoria per schermo (`_storia`, ultime
+`schermi_cronologia`), si perdeva a ogni riavvio e uno schermo personale nuovo partiva vuoto.
+
+- **Su disco, per persona** (`calliope/schermi/cronologia.py`): ogni scheda **personale** mandata
+  da `invia` con l'identità certa (`Mittente.certo`, familiare o chi amministra: mai ospiti né
+  zona grigia) o da `invia_a` a uno schermo personale va nella cronologia del proprietario,
+  anche se in quel momento non ha uno schermo collegato. Mai le schede pubbliche o della casa
+  (di stanza), mai «vuota», le partite e le schede solo della pagina (cruscotto, conversazione).
+  Un file JSON per persona in `schermi_cronologia_cartella` (vuota = `schede/` accanto a
+  `conversazioni.db`), 700/600 fuori da Windows come il cassetto, scritto in modo atomico da un
+  thread suo un attimo dopo (la voce e i tool non aspettano il disco). Tenuta
+  `schermi_cronologia_giorni` (7), tetto `schermi_cronologia_max` (40) e `schermi_cronologia_mb`
+  (4 MB) per persona; una scheda oltre 512 kB si salva senza la sorgente di «Scarica», poi niente.
+  Chiavi uniche come la cronologia degli schermi (al loro posto con `sposta: false`); le chiavi
+  legate a un oggetto in memoria (`foto:`, `allegato:`, `risposta:`, fatte con `id()`) valgono
+  solo nello stesso avvio.
+- **Ripresa** (`Schermi.ripresa`, in un thread del server prima di `collega`): uno schermo
+  personale che si collega (nuovo, ricollegato, dopo un riavvio) riceve le ultime
+  `schermi_cronologia` (6) schede del **suo proprietario**, in ordine, prima di quelle che ha già;
+  mai di un'altra persona (un tutore non vede quelle del ragazzo, e viceversa), mai uno schermo
+  di stanza. Ogni scheda passa da `rivedi`: modulo chiuso e timer finito si saltano;
+  l'avanzamento di un lavoro che non lavora più (interrotto dal riavvio, o finito) diventa la
+  scheda finale («interrotto», «Finito: chiedimi il risultato»), senza flusso né anteprima; in
+  attesa di una risposta resta; gli esercizi chiusi diventano il riepilogo senza la domanda
+  (aperti: la scheda vera della sessione); un programma che girava prima di un riavvio è
+  «fermato»; il cassetto tiene solo i file che ci sono ancora; lo sviluppo si ricostruisce da
+  `Sviluppi` (`ricostruttori`, da `main.py`: quello aperto va in fondo anche se non era tra le
+  ultime, così lo schermo rientra subito nella vista dello sviluppo). Il flusso di un lavoro
+  arriva con l'ultima finestra (`per_storia`). «Scarica»: la sorgente resta sul server e si
+  registra di nuovo per lo schermo nuovo; il gettone lo chiede la pagina al tocco (sempre nuovo),
+  quello di prima del riavvio non vale più.
+- **Pulire**: «Calliope, pulisci le mie schede» (tool `schede_pulisci`, familiari e chi
+  amministra, solo con la voce riconosciuta, senza conferma) o il tasto «Pulisci» in fondo alla
+  cronologia degli schermi personali (due tocchi) e «Pulisci le mie schede» nel menu del
+  telefono (`POST /api/schede`, solo da uno schermo personale e solo per le sue schede, 10 al
+  minuto). Via dal disco e dai suoi schermi personali (evento SSE «pulisci»); gli schermi d'altri
+  e di stanza non cambiano; lo sviluppo aperto resta (è uno stato: la scheda torna subito); la
+  conversazione no (per quella c'è «dimentica le nostre conversazioni»).
+- **Scheda «Conversazione»** (solo schermi personali, `schermi_chat_turni` = 80, 0 = spenta): le
+  frasi della persona come trascritte o scritte e le risposte di Calliope, con l'ora, il
+  satellite o lo schermo e «scritto». Riusa l'archivio delle conversazioni (niente doppioni: ne
+  è una vista; [contesto-conversazione](contesto-conversazione.md)): nel benvenuto gli ultimi
+  turni della persona (`chat_per`), poi l'evento «chat» con i soli turni nuovi a ogni turno
+  archiviato (`chat_nuovi`, da `ArchivioConversazioni.su_turni`), in fondo, senza riscrivere
+  quelli di prima (la pagina scarta i doppioni per id). Mai i turni degli ospiti né di altre
+  persone, mai la frase di sfida né i codici (le pulizie dell'archivio); le risposte riservate
+  restano «(risposta con dati riservati: non archiviata)»; «dimentica le nostre conversazioni» la
+  svuota anche qui (`chat_dimenticata`); tenuta come l'archivio. Sul computer il pulsante
+  «Conversazione» nella testa (e «Schermo intero»), sul telefono «La nostra conversazione» nel
+  menu, a schermo intero e nel carosello, in una colonna. «Scarica Markdown» della trascrizione
+  intera, fatta al tocco dall'archivio (`scarica.converti` con `markdown_fn`), solo dagli schermi
+  personali. Tutto con createElement e textContent; CSP invariata. Riusa il riquadro del flusso
+  dell'agente (`flusso-chat`: «In fondo», segue la coda solo se si era in fondo).
+- Prove: `prova_cronologia_schede` (a secco, ~2 s) e `prova_cronologia_pagina` (Edge headless,
+  ~35 s: riavvio del server vero, schermo nuovo, telefono). Screenshot controllati (1280×800 e
+  390×844): bolle «Tu» a destra e «Calliope» a sinistra, una barra di scorrimento sola nella
+  scheda normale (la prima versione ne aveva due e non arrivava in fondo); sul telefono la
+  scheda a schermo intero ora va in fondo all'apertura (anche il flusso dell'agente: prima lo
+  scorrimento si chiedeva con lo strato ancora nascosto).
+- Cache del service worker `calliope-telefono-pagina-v8` (era v7).
+- Da fare o da provare sul vero: molti lavori in diretta insieme (una scrittura su disco al più
+  ogni 0,8 s per persona); «mostramelo» dopo un riavvio (oggi `Schermi.ultima` è solo in memoria).
