@@ -185,7 +185,7 @@ Calliope vera, satelliti e voci finte; **dal vero** = usata a voce.
 | Conversazioni | una per persona tra i satelliti; compressione con riassunto; archivio di 30 giorni con ricerca ibrida; scheda «Conversazione» con la trascrizione sugli schermi personali, in diretta e scaricabile (08/10) | a secco, dal vero | [contesto-conversazione](docs/aree/contesto-conversazione.md) |
 | Biblioteca | Wikipedia italiana, Vikidia, Wikizionario, Wikiquote (Kiwix ZIM in puro Python + FTS5), fonte citata | dal vero | [biblioteca](docs/aree/biblioteca.md) |
 | Ricerca web | SearXNG locale facoltativo; dati personali tolti dalle domande; testo dei siti non fidato | dal vero | [biblioteca](docs/aree/biblioteca.md) |
-| Casa | Home Assistant: comandi tramite l'agente di HA con verifica a secco; serrature, allarmi, cancelli, valvole, riavvii solo in lettura | dal vero | [casa](docs/aree/casa.md) |
+| Casa | Home Assistant: comandi tramite l'agente di HA con verifica a secco; serrature, allarmi, cancelli, valvole, riavvii solo in lettura; se HA non trova il dispositivo, Calliope lo cerca tra le entità esposte per nome, alias e area e riprova col nome esatto (08/10) | dal vero | [casa](docs/aree/casa.md) |
 | PC | volume, musica, luminosità, app da catalogo, file (gli script non si eseguono), webcam e schermo su richiesta; anche tramite il satellite | dal vero | [pc](docs/aree/pc.md) |
 | Documenti | Word, Excel, PDF a voce; contenuto JSON con schema, totali e formule dal programma | dal vero | [documenti-ufficio](docs/aree/documenti-ufficio.md) |
 | Ufficio | modelli Word/PowerPoint, rubrica, numerazione, preventivi, DDT, FatturaPA (XML FPR12 + PDF, invio allo SdI a mano) | a secco, dal vero | [documenti-ufficio](docs/aree/documenti-ufficio.md) |
