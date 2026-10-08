@@ -253,6 +253,7 @@ class Avanzamento:
         self._lock = threading.Lock()
         self._cv = threading.Condition(self._lock)
         self._invio = threading.Lock()         # una scheda alla volta, nell'ordine giusto
+        self._scrittura = threading.Lock()     # il registro su disco: uno scrittore alla volta
         self._segue: dict[str, _Segue] = {}
         self._thread = None
         self._chiuso = False
@@ -389,7 +390,9 @@ class Avanzamento:
                     seguiti = [sg for sg in self._segue.values()
                                if not sg.chiuso and sg.lav.stato == "in_corso"]
                     if seguiti:
-                        attesa = self.intervallo
+                        # La fine della pausa si vede presto (08/10: con l'intervallo intero
+                        # un lavoro che ripartiva e finiva in mezzo secondo non la mostrava)
+                        attesa = min(self.intervallo, 0.2)
                 for sg in list(self._segue.values()):
                     if sg.finale_pendente:
                         sg.finale_pendente = False
@@ -459,8 +462,13 @@ class Avanzamento:
 
     def _registro(self, sg: _Segue):
         """Scrive nel registro su disco i pezzi in coda (fuori dal lock, dal thread degli
-        schermi). Il registro è in Markdown: separatori di passata, ragionamento e testo
-        come paragrafi, codice in blocchi, chiamate ed esiti in una riga."""
+        schermi o, per la finale, da quello dei lavori: uno alla volta, nell'ordine). Il
+        registro è in Markdown: separatori di passata, ragionamento e testo come paragrafi,
+        codice in blocchi, chiamate ed esiti in una riga."""
+        with self._scrittura:
+            self._scrivi_registro(sg)
+
+    def _scrivi_registro(self, sg: _Segue):
         lav = sg.lav
         with self._lock:
             if sg.reg_path is None:
@@ -578,7 +586,6 @@ class Avanzamento:
                 vivo, storia = self._flussi(sg, self._numera(sg))
                 prima = sg.inviate == 0
                 sg.pausa = av["pausa"]
-            self._registro(sg)
             av["flusso"] = vivo
             if svil:
                 av["sviluppo"] = svil
@@ -589,6 +596,7 @@ class Avanzamento:
             with self._lock:
                 sg.ultimo = time.monotonic()
                 sg.inviate += 1
+        self._registro(sg)               # il file dopo la scheda: lo schermo non aspetta il disco
 
     def _manda_finale(self, sg: _Segue):
         lav = sg.lav

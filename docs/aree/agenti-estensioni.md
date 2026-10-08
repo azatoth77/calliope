@@ -6,7 +6,7 @@
 
 | Stadio | Libreria | Dove |
 |---|---|---|
-| Agenti in secondo piano («gemma davanti, agenti dietro») | vLLM con l'API compatibile OpenAI sulla DGX (motore «openai», httpx, via tunnel `ssh -N -L` di OpenSSH), oppure l'API nativa di Ollama (motore «ollama», anche lo stesso Ollama della voce); ciclo scritto in proprio, niente framework; sandbox in un container Docker usa-e-getta sulla DGX (dal 03/10), altrimenti job object di Windows (ctypes) e audit hook | `calliope/agenti/` → `Lavori` (`servizio.py`: coda, proposta, risultati, annuncio, domande a metà lavoro), `Agente` (`ciclo.py`), file della persona (`file_utente.py`), `Tunnel` (`tunnel.py`), `Sandbox` (`sandbox.py` + `_avvio.py`, `scegli_isolamento`; immagine da `setup/linux/sandbox/Dockerfile`), `Arbitro` (`arbitro.py`: anche con vLLM sulla GPU della voce, `ClienteCedevole` per archivio e ufficio; `stessa_gpu` in `impostazioni.py`, `agenti_arbitro`; dal 04/10 `PausaServer`, pausa di vLLM in modalità sviluppo, `pausa_server`, `agenti_pausa_vllm`), `Avanzamento` (`avanzamento.py`: la scheda del lavoro in diretta), `ContestoLavoro` (`contesto_lavoro.py`, dal 05/10: risultati lunghi in `.calliope/passo-N.txt`, diario del lavoro alle soglie; finestra da `contesto.calcola_agenti`), `Modello` (`modelli.py`), `carica` (`impostazioni.py`: dgx.yaml / agenti_url), `ClienteOllama` / `ClienteOpenAI` (`remoto.py`, `remoto_openai.py`, `crea_cliente`), `load_agenti`; tool in `calliope/tools/agenti.py`; terminale `python -m calliope.agenti --prova` |
+| Agenti in secondo piano («gemma davanti, agenti dietro») | vLLM con l'API compatibile OpenAI sulla DGX (motore «openai», httpx, via tunnel `ssh -N -L` di OpenSSH), oppure l'API nativa di Ollama (motore «ollama», anche lo stesso Ollama della voce); ciclo scritto in proprio, niente framework; sandbox in un container Docker usa-e-getta sulla DGX (dal 03/10), altrimenti job object di Windows (ctypes) e audit hook | `calliope/agenti/` → `Lavori` (`servizio.py`: coda, proposta, risultati, annuncio, domande a metà lavoro), `Agente` (`ciclo.py`), file della persona (`file_utente.py`), `Tunnel` (`tunnel.py`), `Sandbox` (`sandbox.py` + `_avvio.py`, `scegli_isolamento`; immagine da `setup/linux/sandbox/Dockerfile`), `Arbitro` (`arbitro.py`: anche con vLLM sulla GPU della voce, `ClienteCedevole` per archivio e ufficio; `stessa_gpu` in `impostazioni.py`, `agenti_arbitro`; dal 04/10 `PausaServer`, pausa di vLLM in modalità sviluppo, `pausa_server`, `agenti_pausa_vllm`), `Avanzamento` (`avanzamento.py`: la scheda del lavoro in diretta; dal 08/10 il flusso a sequenza, il registro del flusso e i tetti per giro), `ContestoLavoro` (`contesto_lavoro.py`, dal 05/10: risultati lunghi in `.calliope/passo-N.txt`, diario del lavoro alle soglie; finestra da `contesto.calcola_agenti`), `Modello` (`modelli.py`), `carica` (`impostazioni.py`: dgx.yaml / agenti_url), `ClienteOllama` / `ClienteOpenAI` (`remoto.py`, `remoto_openai.py`, `crea_cliente`), `load_agenti`; tool in `calliope/tools/agenti.py`; terminale `python -m calliope.agenti --prova` |
 | Programmi dell'agente eseguiti in diretta, linguaggi (Python, C#) | stessa sandbox Docker; C# con csc nel container `calliope-sandbox-dotnet` (runtime .NET 10 + Roslyn, niente SDK né NuGet); SSE verso la scheda | `calliope/agenti/esecuzione.py` → `Esecuzioni` (`avvia`, `dimostra`, `ferma`, `frase`); `linguaggi.py`; `esegui_cs.sh`; `setup/linux/sandbox/Dockerfile.dotnet`; tool `lavori_esegui`, scheda `esecuzione` |
 | Il risultato di un lavoro finito a voce o sullo schermo (07/10) | il modello dell'agente per il riassunto per la voce (thinking spento, tempo massimo) | `calliope/agenti/risultato.py` → `trova`, `scegli`, `dal_disco`, `testo_intero`, `riassunto_voce`, `scheda`, `recenti`, `elenco_detto`, `chiave`, `converti` (dal 07/10: «fammene un PDF»); tool `risultato_lavoro` (`calliope/tools/agenti.py`), `agenti_risultato_s`; prove `prova_risultati.py`, `prova_risultati_ollama.py` |
 | Modalità sviluppo (08/10): un'estensione o un programma come iter a fasi | solo libreria standard; lo stato su disco accanto ai lavori (`sviluppi.json`) | `calliope/sviluppo.py` → `Sviluppi` (`corrente`, `apri`, `passa`, `proposto`, `avviato`, `lavoro_finito`, `estensione_approvata`, `dati_turno`, `promemoria_giorno`, `scheda`), `passo_interno`, `estraneo`; tool `sviluppo` e `sviluppo_prova` in `calliope/tools/sviluppo.py` (`controlla_nuovo`, `apri_se_serve`); `Estensioni.prova_candidata`, `Estensioni.revisione`, `differenze` (`calliope/estensioni/servizio.py`); progetto [`docs/ricerche/2026-10-08-modalita-sviluppo.md`](../ricerche/2026-10-08-modalita-sviluppo.md); prove `prova_sviluppo.py`, `prova_sviluppo_ollama.py` |
@@ -1011,3 +1011,58 @@ decidere**: `lavoro_affida` perde un po' su relazioni e ricerche col 4B (vedi ta
 DGX col 26B si vede lo stesso, proposta: tornare al verbo «delega» nella famiglia
 (`lavoro_delega`) o riprendere nella descrizione la frase di prima («un lavoro lungo il cui
 risultato è un file complesso»). Da misurare sulla DGX con il 26B e l'agente vero, anche le tappe.
+
+## La scheda del lavoro in diretta e i conti dello sviluppo (08/10, ramo `scheda-sviluppo`)
+
+Richieste di Dario dopo il giro vero della DGX delle 14:36–15:30 (la pagina e la vista dello
+sviluppo in [schermi-telefono](schermi-telefono.md#la-scheda-dello-sviluppo-e-del-lavoro-in-diretta-la-vista-dello-sviluppo-0810-ramo-scheda-sviluppo)).
+Prove `prova_scheda_sviluppo.py`, `prova_avanzamento.py` (aggiornata),
+`prova_vista_sviluppo_pagina.py`.
+
+**Il giro vero, letto dalla DGX in sola lettura** (`lavori/sviluppi.json`, `lavoro.json` dei
+risultati, giornale del servizio): S1 «Meteo città» aperto alle 14:36, attivato alle 15:30. L1
+(il primo lavoro) 10 570 token generati, 13 passate, 3 min; L2 (correzione) 6 191, 8 passate;
+L3 (correzione) 92 957 token, 33 passate in due giri (tappa alle 15:02 a 24 passate, «continua»
+alle 15:03), 25 min di lavoro; poi due ritorni all'analisi con un lavoro nuovo ciascuno: L4
+24 310, L6 21 680. In tutto **155 708 token**, 80 passate, 5 lavori. `sviluppi.json` diceva solo
+il lavoro di adesso e `correzioni: 2`: nessun totale. Cosa mostrava la scheda: per ogni lavoro i
+suoi token generati (`lav.token`, ragionamento compreso: coerente) contro il tetto **di un giro**
+(5 000 al minuto × 30 = 150 000), le passate cumulative contro 24 (al giro 2 di L3 «33 di 24», barra
+piena), il tempo di lavoro cumulativo contro «30 min» fissi; una correzione ripartiva da zero
+senza dire niente dello sviluppo.
+
+Decisioni (08/10):
+
+- **Tetti per giro, cumulativi** (`Avanzamento._istantanea`): al giro N il massimo mostrato è N
+  volte quello di un giro (passate 24 → 48 → 72, minuti 30 → 60 → 90, token 150 000 → 300 000),
+  come i conti, che sono del lavoro intero; il motore dà a ogni giro di nuovo tutto
+  (`ciclo._tetti`), quindi il massimo mostrato è un limite superiore onesto (un giro finito prima
+  dei suoi 30 minuti lascia la barra del tempo sotto). Il tempo continua a contare (`dal`), senza
+  l'attesa di una risposta. La scheda dice «giro 2» e «i massimi sono quelli di 2 giri». Per i
+  token Dario aveva detto che restare al massimo andava bene: con i tetti cumulativi il token
+  resta la stessa barra (generati su massimo), solo il massimo cresce col giro come gli altri.
+- **I numeri del lavoro in corso + quelli dello sviluppo intero**: `Sviluppo.lavori` registra
+  ogni lavoro dello sviluppo (id e istante di creazione: dopo un riavvio gli id ripartono da L1)
+  con token, ragionamento, passate, secondi e giri, aggiornati a ogni lavoro finito;
+  `Sviluppi.totali` li somma (il lavoro in corso con i numeri di adesso), `riepilogo_lavoro` li
+  dà alla scheda del lavoro con la fase e il numero della correzione: «Correzione N, riparte dalla
+  versione provata» (una correzione è un lavoro nuovo, `svc.nuovo`, sui file della versione
+  provata con un ragionamento nuovo). Anche la scheda in Markdown dello sviluppo ha «Lavori
+  dell'agente» con i totali. Le domande di `sviluppo_chiedi` non sono lavori e non contano.
+- **Il flusso a sequenza** (`avanzamento.py`): `_evento` accumula i pezzi per sezione
+  (`pensiero`, `testo`, `codice` dagli argomenti di scrivi_file, `strumento`, `esito`,
+  `passata`), il thread degli schermi li numera a ogni invio (un pezzo per sezione e per invio),
+  li manda nuovi e tiene la finestra per la cronologia (`_storia`). Il ciclo manda ora
+  `strumento` (nome e argomenti) ed `esito` (il risultato) di ogni chiamata
+  (`Lavoro.nota`, `ciclo.py`): la scheda ne mostra una riga (`chiamata_breve`, `esito_breve`),
+  mai il contenuto dei file. Gli argomenti di vLLM si sciolgono **in modo incrementale**
+  (`_Argomenti`: prima si rileggeva tutto il buffer a ogni pezzo, quadratico su un file lungo;
+  un escape spezzato aspetta il pezzo dopo, `\uXXXX` compreso): il codice ricostruito è identico.
+- **Il registro completo** del flusso, in Markdown, nella cartella dei risultati del lavoro
+  (`.registro-agente.md`, nascosto: `file_di_codice` e le correzioni non lo prendono; al più
+  16 MB), scritto dal thread degli schermi; la scheda ha `registro` (chiave `registro:<id>`) e
+  hub.py lo registra per «Scarica» solo sugli schermi personali di chi l'ha chiesto, mai dalla
+  zona grigia; il file si legge al clic (`scarica.converti`, `markdown_file`).
+
+**Da fare io sulla DGX**: niente di particolare; `calliope aggiorna` porta tutto. I lavori finiti
+prima dell'aggiornamento non hanno né registro né numeri nello sviluppo (`lavori` vuoto).

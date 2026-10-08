@@ -2,8 +2,9 @@
 dopo il giro vero della DGX delle 14:36–15:30: calliope/agenti/avanzamento.py,
 calliope/sviluppo.py, calliope/schermi/hub.py e scarica.py). Nomi di fantasia, numeri veri.
 
-1. I conti dei token: il caso vero («Meteo città», S1: il primo lavoro, due correzioni, una
-   tappa al giro 1 del terzo lavoro, poi altri due lavori; L1 10 570, L2 6 191, L3 92 957 in
+1. I conti dei token: il caso vero («Meteo città», S1: il primo lavoro, due correzioni (L2, L3,
+   con una tappa alla fine del giro 1 di L3), poi due ritorni all'analisi con un lavoro nuovo
+   ciascuno (L4, L6); L1 10 570, L2 6 191, L3 92 957 in
    due giri, L4 24 310, L6 21 680 token generati): ogni lavoro conta i suoi, lo sviluppo la
    somma (155 708); la correzione N si riconosce («riparte dalla versione provata»); il lavoro
    in corso con i numeri di adesso; un id che si ripete dopo un riavvio è un altro lavoro.
@@ -95,7 +96,7 @@ def main() -> int:
              and not any(c.get("tipo") == "sviluppo" for c in hub.storia(camera["id"])))
     numeri = [("L1", 10570, 13, 179.9, False, 1), ("L2", 6191, 8, 100.9, True, 1),
               ("L3", 92957, 33, 1521.6, True, 2), ("L4", 24310, 14, 368.0, False, 1),
-              ("L6", 21680, 12, 317.5, True, 1)]
+              ("L6", 21680, 12, 317.5, False, 1)]
     for i, (ident, tok, passi, sec, corr, giro) in enumerate(numeri):
         lav = lavoro(ident, tok, passi, sec, t0 + i * 600, correzione=corr, giro=giro,
                      stato="in_corso")
@@ -118,7 +119,7 @@ def main() -> int:
     tot = svs.totali(sv)
     verifica("lo sviluppo intero: la somma dei lavori (155 708 token, 80 passate, 5 lavori)",
              tot["token"] == 155708 and tot["passate"] == 80 and tot["lavori"] == 5
-             and tot["correzioni"] == 3, json.dumps(tot))
+             and tot["correzioni"] == 2, json.dumps(tot))
     verifica("…e sulla scheda in Markdown",
              "155 708 token generati in tutto" in svs.testo_scheda(sv),
              svs.testo_scheda(sv)[-300:])
@@ -130,8 +131,8 @@ def main() -> int:
     svs.avviato(vivo)
     vivo.token, vivo.passi = 4000, 5
     r = svs.riepilogo_lavoro(vivo)
-    verifica("il lavoro in corso: correzione 4, e il totale con i suoi numeri di adesso",
-             r["correzione"] == 4 and r["totali"]["token"] == 155708 + 4000
+    verifica("il lavoro in corso: correzione 3, e il totale con i suoi numeri di adesso",
+             r["correzione"] == 3 and r["totali"]["token"] == 155708 + 4000
              and r["totali"]["lavori"] == 6, json.dumps(r))
     # Dopo un riavvio gli id ripartono: un altro «L1» è un altro lavoro
     nuovo_l1 = lavoro("L1", 500, 1, 20, time.time() + 5, stato="in_corso")
@@ -192,7 +193,7 @@ def main() -> int:
              and v["fasi"][2]["nome"] == "collaudo", str(v["fasi"]))
     verifica("nome, versione, giro, tappa, correzioni, lavoro",
              v["nome"] == "meteo_citta" and v["versione"] == 3 and v["giro"] == 2
-             and v["tappa"] is True and v["correzioni"] == 4 and v["lavoro"] == "lavoro:L9",
+             and v["tappa"] is True and v["correzioni"] == 3 and v["lavoro"] == "lavoro:L9",
              json.dumps({k: v[k] for k in ("nome", "versione", "giro", "tappa", "correzioni",
                                            "lavoro")}))
     verifica("collaudi (dati, esito, versione) e domande a chi l'ha scritto",

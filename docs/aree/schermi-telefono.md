@@ -11,6 +11,7 @@
 | Scrivere invece di parlare (moduli e casella sugli schermi personali, dal 03/10) | POST `/api/scrivi` e `/api/modulo` del server degli schermi (sessione in un'intestazione, JSON, solo HTTPS in rete); controlli dei codici in Python e in JS (`schermo.js`, condiviso col telefono); dal 05/10 solo durante una conversazione a voce | `calliope/schermi/moduli.py` → `Moduli`, `Ingresso`, `controlla_campo`, `offri`, `completa`, `oscura`; `Ufficio.completa_modulo` / `rubrica_da_modulo`; `tools/spec.serve_la_voce`; ciclo in `main.py` (`scritto`); `calliope/schermi/conversazione.py` → `scrittura_consentita`, `Conversazioni`; `Schermi.scrittura_consentita` (il punto unico, anche per le foto) |
 | Cruscotto di chi amministra (fase 1, sola lettura, dal 06/10) | — (solo libreria standard: registro dei turni, SQLite in sola lettura, `indice.json` delle estensioni) | `calliope/schermi/cruscotto.py` → `Cruscotto` (`amministra`, `dati`), `LettoreTurni`, `versione_in_uso`, `tipo_errore`; GET `/api/cruscotto` (`server.py`); `Schermi.cruscotto`; scheda locale `cruscotto` in `schermo.js` (`apriCruscotto`, `impostaAmministra`), voce del menu del telefono; `latenza.leggi_file` |
 | Lettore Markdown e «Scarica» nella scheda del documento (07/10) | scritto in proprio in `schermo.js` (createElement e textContent, mai innerHTML); conversione con fpdf2 e python-docx sul server | `schermo.js` → `leggiMarkdown`, `mdBlocchi`, `mdInLinea`, `pulsantiScarica`; `calliope/schermi/scarica.py` → `Scaricamenti` (`registra`, `gettone`, `prendi`), `converti`; POST `/api/scarica` e GET `/scarica/<gettone>` (`server.py`); `Schermi.scaricamenti`, `hub.pubblica`; `schede.documento_markdown`; `schermi_scarica_s` |
+| Vista dello sviluppo, lavoro in diretta a schermo intero, flusso dell'agente (08/10) | scritto in proprio in `schermo.js` (createElement e textContent); niente librerie | `schermo.js` → `assorbiFlusso`, `chatFlusso`, `colonnaFlusso`, `disegnaAvanzamento`, `misuraSegui`, `ripristinaSegui`, `vistaSviluppo`, `disegnaVista`, `comandiSviluppo`, `apriInteroPC`, `disegnaInteroPC`; `telefono.js` → `sincronizza` (apre e chiude la vista); `hub.per_storia`, `hub.registra_scaricabili`; `scarica.converti` (`markdown_file`); `calliope/agenti/avanzamento.py` → `Avanzamento`, `_Argomenti`, `esito_breve`, `chiamata_breve`; `calliope/sviluppo.py` → `Sviluppi.dati_vista`, `agli_schermi`, `riepilogo_lavoro`, `totali` |
 | Rispondi dove ti ho chiesto | — (prestito del satellite attivo, origine del turno) | `calliope/rispondi.py` → `Instradamento`; `ServerSatelliti.presta` / `restituisci` / `per_schermo`; `Schermi.origine_corrente`, `invia_a`, `Mittente.schermo`; `Speaker.muto` |
 
 ## Note dalla sezione «Stato attuale» di CLAUDE.md (fino al 06/10)
@@ -307,7 +308,8 @@ server né al modello. Prova `prova_scheda_intera.py` (livello 3, Edge headless)
   l'apertura di un altro strato. Col microfono acceso «Parla» resta sotto lo strato: un tocco su
   «Chiudi» e c'è (vincolo della vista da guida). Niente animazioni (come tutta la pagina),
   contrasto AA, strato alto quanto lo schermo, a 375×812, 320×568 e 812×375.
-- **Pagina degli schermi** (tablet, portatile, TV): valutato e non cambiato. Lì la scheda
+- **Pagina degli schermi** (tablet, portatile, TV) — *storico, superato l'08/10: anche lì c'è lo
+  schermo intero, vedi «La scheda dello sviluppo e del lavoro in diretta»*: valutato e non cambiato. Lì la scheda
   prende già tutta l'area tra la testa e la cronologia, il corpo scorre in verticale e le
   tabelle e il codice scorrono di lato dentro di lui; uno strato in più toglierebbe solo la
   fascia della voce e la cronologia.
@@ -509,3 +511,73 @@ La scheda `sviluppo:<id>` mostra anche le domande fatte a chi ha scritto il codi
 che non vanno («non riuscito», con l'esito per intero), e tra le frasi d'esempio «perché…?»,
 «correggilo» e «chiudi lo sviluppo». Si manda anche a ogni domanda all'agente e a ogni
 correzione; a una tappa del lavoro resta la scheda del lavoro in diretta.
+
+## La scheda dello sviluppo e del lavoro in diretta, la vista dello sviluppo (08/10, ramo `scheda-sviluppo`)
+
+Richieste di Dario dopo il giro vero della DGX delle 14:36–15:30 («Meteo città», S1: cinque
+lavori, due correzioni, una tappa), più l'aggiunta della vista dello sviluppo. Server in
+[agenti-estensioni](agenti-estensioni.md#la-scheda-del-lavoro-in-diretta-e-i-conti-dello-sviluppo-0810-ramo-scheda-sviluppo).
+Prove `prova_scheda_sviluppo.py` (a secco, ~1 s) e `prova_vista_sviluppo_pagina.py` (Edge senza
+finestra, computer e telefono, ~40 s).
+
+- **Schermo intero sulla pagina degli schermi** (satellite PC, tablet, TV): «Schermo intero»
+  nell'etichetta del lavoro, del documento e dell'uscita di un programma apre uno strato alto
+  quanto la finestra (`#strato-intero`, «Chiudi» ed Esc), che si aggiorna al suo posto con la
+  stessa chiave. Sul telefono c'era dal 06/10: stessa costruzione (`costruisci(c, {intera: true})`),
+  carosello invariato.
+- **Due colonne a schermo intero** (≥ 900 px; sotto, una colonna): a destra sempre «il codice
+  che gira» (il flusso dell'agente, con «Scarica il registro»), a sinistra in alto il riepilogo
+  (stato e giro, passo, test, tetti, sviluppo: fase, «Correzione N, riparte dalla versione
+  provata», numeri dello sviluppo intero), sotto i file scritti e gli ultimi passi. **Nella scheda
+  normale il flusso non c'è** (e nemmeno l'anteprima del codice).
+- **Il flusso come una chat in sola lettura** (`assorbiFlusso`): prima ogni aggiornamento
+  mandava gli ultimi 600 caratteri e la pagina li riscriveva da zero. Ora i pezzi nuovi arrivano
+  numerati (`n`) con la sezione (`s`); la pagina li accumula per chiave del lavoro, scarta quelli
+  già visti e, se manca un pezzo (un invio perso), chiede la finestra ricollegandosi (al più due
+  volte di fila, poi segna il taglio). La cronologia del server tiene la scheda con l'ultima
+  finestra intera (`_storia`, `hub.per_storia`): chi si ricollega riprende senza buchi né
+  doppioni (provato con pezzi arrivati a pagina giù). Sezioni: «Ragiona» (corsivo, tenue),
+  «Scrive», «Scrive il codice · file» (in un riquadro che scorre di lato), → chiamata in breve
+  (mai il contenuto del file), ← esito in breve («2 test su 3 passano», «scritto»), separatore
+  «passata N» (o «giro 2 · passata 25»). Tetto nella pagina 40 000 caratteri, come la finestra:
+  oltre, «L'inizio non è qui: è nel registro completo». Testo dell'agente sempre con textContent,
+  CSP invariata.
+- **Scorrimento**: segue la coda; chi torna indietro a leggere resta lì e compare «In fondo»
+  (≥ 44 px), che riprende la coda. Girando il telefono o cambiando la finestra chi seguiva resta
+  in fondo. Le aree che seguono la coda ora sono `[data-segui]` (`misuraSegui`/`ripristinaSegui`,
+  anche per il telefono).
+- **CSP**: `allinea` copiava l'attributo `style` delle barre dei tetti con `setAttribute`, che
+  con `style-src 'self'` è una violazione (la prova nuova l'ha trovata: le barre in diretta
+  non erano mai state allineate in una prova nel browser); ora `style.cssText` (CSSOM).
+- **La vista dello sviluppo** (aggiunta di Dario): con uno sviluppo aperto gli schermi
+  personali di chi sviluppa (computer e telefono) passano a una vista fatta apposta; gli altri
+  schermi di casa non cambiano. La scheda `sviluppo:<id>` ha ora `tipo: "sviluppo"` con i dati
+  strutturati (`Sviluppi.dati_vista`; il Markdown di prima resta per il lettore e «Scarica») e la
+  manda `Sviluppi.agli_schermi` a ogni cambio di fase o di stato (apertura, collaudo, domanda,
+  sospensione, ripresa, chiusura). Nella vista: la barra delle fasi (fatta, adesso, manca), il
+  titolo con nome dell'estensione, versione, giro e correzioni; al centro le due colonne
+  (riepilogo del lavoro e flusso); le sezioni del collaudo (prove con dati, esito, versione e il
+  giudizio della persona), delle domande a chi l'ha scritto (con i dettagli), della revisione
+  (permessi e analisi, col lettore Markdown) e dell'analisi (richiesta e specifica), quella della
+  fase di adesso per prima; in fondo i comandi a tocco. Sul computer la vista prende l'area
+  delle schede (la cronologia si nasconde; «Vista normale» torna alle schede e «Torna allo
+  sviluppo» nella testa riporta qui); un modulo, un gioco o un esercizio la interrompono (vogliono
+  una risposta). Sul telefono si apre da sola a schermo intero (se non c'è un altro strato
+  aperto), in una colonna: riepilogo, flusso, sezioni, comandi; «Chiudi» torna al carosello, un
+  tocco sulla scheda la riapre. Sviluppo chiuso o sospeso: si esce dalla vista.
+- **Comandi a tocco** solo innocui, come frasi scritte (`/api/scrivi`, quindi solo durante una
+  conversazione cominciata a voce, e con la politica di sempre): «A che punto siamo?», «Prova
+  con…» e «Chiedi all'agente…» (la frase da finire nella casella dello scritto), «Riprendi lo
+  sviluppo» (sospeso), «Vista normale». Testi fissi della pagina, mai testo della scheda.
+  Approvare e attivare restano a voce con la frase di sfida: nessun pulsante, e la vista lo dice.
+- **Chiaro e scuro**: la pagina degli schermi e il telefono hanno un tema solo (scuro, `color-scheme:
+  dark`); la vista usa gli stessi colori (variabili di `schermo.css`), e con lo schema chiaro del
+  sistema resta scura e leggibile (screenshot). Un tema chiaro vero sarebbe un lavoro a sé.
+- Cache del service worker `calliope-telefono-pagina-v7` (era v6).
+
+Costo: un aggiornamento del flusso costa alla pagina
+un'allineata del sotto-albero della colonna (qualche centinaio di nodi al tetto); al server,
+un pezzo dello stream per chi lavora resta nei microsecondi (`prova_avanzamento`, 20 000 pezzi →
+1–2 schede con un pezzo per sezione). Rete: un invio porta solo il testo nuovo (prima la coda
+intera di 600 caratteri a ogni invio); la finestra (≤ 40 000 caratteri) va solo a una pagina che
+si ricollega.
