@@ -768,3 +768,25 @@ Cosa resta su disco e chi lo vede ([schermi-telefono](schermi-telefono.md)):
 - la scheda «Conversazione» mostra l'archivio della persona già pulito: frase di sfida oscurata
   (ora anche nell'archivio), codici e segreti del turno tolti, risposte riservate non archiviate,
   mai ospiti né altre persone.
+
+## Il secondo collaudo nella stessa frase, con `argomenti` (08/10 sera, ramo `sviluppo-giro5`)
+
+Caso vero della DGX (18:21:24): «Prova con Pratofiorito Maggiore e poi con Borgo Alto». Il
+giro 3 (`dopo_dato_valore_detto`, `DOPO_DATO_SE_DETTO`) guardava solo `dati`, ma dal giro 4 il
+modello passa `argomenti` (oggetto): il secondo `sviluppo_collauda({'argomenti': {'citta':
+…}})` è stato fermato da `web_azione_bloccata`, e la voce ha detto «non ha risposto».
+
+- `DOPO_DATO_SE_DETTO = {"sviluppo_collauda": ("dati", "argomenti")}`: si guardano **tutti** i
+  valori presenti, anche dentro l'oggetto (stringhe e numeri, le chiavi no; anche un oggetto
+  passato come testo JSON) e ognuno deve essere detto in questa frase, con la tolleranza alle
+  storpiature di `provenienza.vicina`. Un numero intero piccolo detto a parole («per due
+  giorni» → 2) vale come detto (conversione di forma, `_numero_detto`, fino a venti). Contrari
+  nella prova: un valore preso dal risultato del primo collaudo, un numero non detto, un oggetto
+  vuoto, `argomenti` detti con `dati` dal risultato → fermato.
+- Il rifiuto del collaudo ha la sua frase (`BLOCCO_COLLAUDO_DOPO_DATO`, `blocco_dopo_dato`):
+  «questo collaudo NON è partito…», `partito: false`, e `cosa_fare` dice di riferire il primo
+  risultato e che il secondo non è partito, mai «l'estensione non ha risposto». Le altre azioni
+  hanno il rifiuto di sempre; Brain riconosce entrambi (`MOTIVI_DOPO_DATO`, `bloccato: web` nel
+  registro dei turni).
+- La doppia codifica nella traccia è un avviso, mai un rifiuto della porta:
+  [agenti-estensioni](agenti-estensioni.md), stessa data.

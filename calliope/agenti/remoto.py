@@ -97,8 +97,9 @@ class ClienteOllama:
         pensare riceve di nuovo la richiesta senza `think`."""
         model = body.get("model", "")
         # Il tetto del ragionamento della passata è di vLLM (thinking_token_budget): Ollama non
-        # lo conosce, lì vale solo num_predict
-        body = {k: v for k, v in body.items() if k != "thinking_budget"}
+        # lo conosce, lì vale solo num_predict. Il presence_penalty dell'agente (08/10 sera) è
+        # per vLLM: con Ollama non si manda (stesso modello della voce, niente ricarichi)
+        body = {k: v for k, v in body.items() if k not in ("thinking_budget", "presence_penalty")}
         if model in self.senza_think:
             body = {k: v for k, v in body.items() if k != "think"}
         try:

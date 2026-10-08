@@ -3528,7 +3528,7 @@ class Brain:
             # Rifiutato perché un dato non fidato è già stato letto in questa risposta
             # (politica.DOPO_DATO): nel registro come prima del 06/10
             bloccato = ("web" if isinstance(parsed, dict) and parsed.get("motivo")
-                        == politica.BLOCCO_DOPO_DATO["motivo"] else None)
+                        in politica.MOTIVI_DOPO_DATO else None)
         except (json.JSONDecodeError, TypeError, AttributeError):
             ok, bloccato = False, None
         # Il tool proposto è riuscito: la proposta è fatta e non vale più (04/10: resta valida

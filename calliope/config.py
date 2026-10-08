@@ -974,6 +974,19 @@ class Config:
     # con il motivo (si conta tra una passata e l'altra: una passata ha già il suo tetto)
     agenti_token_senza_strumenti: int = 12000
     agenti_minuti_senza_strumenti: float = 5.0
+    # Giro a vuoto nel ragionamento (08/10 sera, calliope/agenti/ripetizioni.py: qwen3.6 ha
+    # ripetuto la stessa riga 58 volte in una passata, 160 kB di registro in 12 passate): una
+    # frase di prosa di almeno 6 parole ripetuta tante volte nella stessa passata la ferma, con
+    # la spinta «decidi e chiama uno strumento»; alla terza di fila il lavoro si chiude.
+    # Codice, tabelle e frasi corte non contano. 0 = spento
+    agenti_ripetizioni_max: int = 8
+    # presence_penalty per tipo di lavoro, solo con il motore compatibile OpenAI (vLLM; con
+    # Ollama non si manda). La scheda di Qwen3.6 consiglia 0 nel ragionamento sul codice
+    # («precise coding tasks»: un codice ripete per forza gli stessi token) e 1,5 nel
+    # ragionamento generale, contro le ripetizioni senza fine dei modelli quantizzati; oltre
+    # 1,5 a volte mescola le lingue. Non ancora misurato sulla DGX. 0 = non si manda
+    agenti_presence_penalty: dict[str, float] = field(default_factory=lambda: {
+        "codice": 0.0, "estensione": 0.0, "ricerca": 1.5, "documento": 1.5, "altro": 1.5})
     # Token del JSON di un documento scritto dall'agente (una relazione ne usa 2–4 mila)
     agenti_max_token_documento: int = 8192
     # Sandbox del codice: secondi per un'esecuzione di Python o dei test, memoria del processo
@@ -2246,7 +2259,8 @@ SEZIONI: dict[str, list[str]] = {
                "agenti_think", "agenti_temperatura", "agenti_max_passi",
                "agenti_tempo_max_min", "agenti_token_minuto", "agenti_max_token",
                "agenti_token_senza_strumenti",
-               "agenti_minuti_senza_strumenti", "agenti_max_token_documento",
+               "agenti_minuti_senza_strumenti", "agenti_ripetizioni_max",
+               "agenti_presence_penalty", "agenti_max_token_documento",
                "agenti_esecuzione_s", "agenti_memoria_mb", "agenti_sandbox_motore",
                "agenti_sandbox_immagine", "agenti_sandbox_cpu", "agenti_linguaggi",
                "agenti_dimostrazione", "agenti_dimostrazione_s", "agenti_dimostrazione_uscita_kb",

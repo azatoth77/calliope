@@ -397,6 +397,34 @@ def _riprendi(ctx, svs, persona, quale: str) -> dict:
     return _final(frase, fatto="sviluppo ripreso", sviluppo=sv.id, **extra)
 
 
+def _collaudi_per_agente(svs, sv) -> str:
+    """I collaudi della versione provata per il lavoro che riparte dall'analisi (08/10 sera,
+    giro 5: la persona ha dato la diagnosi durante il collaudo, «i nomi devi codificarli», e il
+    lavoro L2 è ripartito con la sola specifica, senza i collaudi né la traccia di rete; la
+    versione nuova aveva la stessa doppia codifica). Come per sviluppo_correggi: dati, argomenti
+    passati, esito, il giudizio della persona, la diagnosi di chi l'ha scritto e la traccia.
+    "" senza collaudi."""
+    if not sv.collaudi:
+        return ""
+    from ..sviluppo import argomenti_detti
+    casi = "; ".join(f"«{c.get('dati') or 'senza dati'}»"
+                     + (f" (argomenti passati: {argomenti_detti(c)})" if c.get("argomenti")
+                        else "")
+                     + f" → {'riuscito' if c.get('ok') else 'NON riuscito'}: "
+                     + f"{c.get('esito') or 'errore'}"
+                     + (f" (la persona: {c['giudizio']})" if c.get("giudizio") else "")
+                     for c in sv.collaudi[-5:])
+    diagnosi = next((q for q in reversed(sv.chiesti) if q.get("dettagli") or q.get("voce")),
+                    None)
+    rete = svs.testo_traccia(sv)
+    return (f" Collaudi della versione che la persona ha provato (dati → esito): {casi}."
+            + (f" Diagnosi di chi l'ha scritto, alla domanda «{diagnosi['domanda']}»: "
+               f"{diagnosi.get('dettagli') or diagnosi.get('voce')}" if diagnosi else "")
+            + (f" {rete}" if rete else "")
+            + " Controlla che la versione nuova non abbia gli stessi problemi: aggiungi un test "
+              "con ogni caso che non andava.")
+
+
 def _nuovo_lavoro(ctx, svs, sv, prof, compito: str, cambia: str = "",
                   avvia: bool = False) -> dict:
     """Il lavoro dello sviluppo con la specifica nuova, proposto con «Ho capito così: …
@@ -422,7 +450,8 @@ def _nuovo_lavoro(ctx, svs, sv, prof, compito: str, cambia: str = "",
                    "la persona ha provato) sono già nella cartella; tieni lo stesso nome nel "
                    "manifesto. " + titolo_vincolo(est, sv.estensione)
                    + (f" Cambiamento chiesto dalla persona: «{cambia}»." if cambia
-                      else "") + " " + funzioni_di_calliope())
+                      else "") + _collaudi_per_agente(svs, sv) + " "
+                   + funzioni_di_calliope())
         lav = svc.nuovo("estensione", compito, prof.id, prof.name, "amministra", "", "",
                         vincoli, storia)
         lav.titolo = sv.titolo
@@ -433,7 +462,8 @@ def _nuovo_lavoro(ctx, svs, sv, prof, compito: str, cambia: str = "",
     else:
         from ..sviluppo import file_di_codice
         vincoli = ("Riparti dal programma di prima: i suoi file sono già nella cartella."
-                   + (f" Cambiamento chiesto dalla persona: «{cambia}»." if cambia else ""))
+                   + (f" Cambiamento chiesto dalla persona: «{cambia}»." if cambia else "")
+                   + _collaudi_per_agente(svs, sv))
         lav = svc.nuovo("codice", compito, prof.id, prof.name, "amministra", "", "", vincoli,
                         storia)
         lav.titolo = sv.titolo
