@@ -12,7 +12,9 @@ Indirizzi:
   POST /api/abbinamento/stato    «Authorization: Bearer <richiesta>» → attesa | abbinato | scaduto
   POST /api/accedi               «Authorization: Bearer <token>» → {sessione, nome, stanza…}
   GET  /eventi?sessione=…        SSE: benvenuto (con la cronologia e lo stato della voce),
-                                 scheda, voce, revocato, ping
+                                 scheda, voce, revocato, ping; dall'08/10 sugli schermi
+                                 personali la cronologia della persona (anche dopo un
+                                 riavvio), «chat» (turni della conversazione) e «pulisci»
   GET  /api/salute               il server c'è (per python -m calliope.stato)
   POST /api/scrivi               «X-Calliope-Sessione: <sessione>», {testo}: una frase scritta
                                  (03/10, moduli.py), come se fosse detta dal proprietario
@@ -44,7 +46,10 @@ Indirizzi:
                                  calliope/cassetto.py), solo da uno schermo personale e solo
                                  sui file del suo proprietario, o di un figlio sotto i 14
                                  anni per un tutore verificato dalla voce
-  GET  /satellite                il comando per un PC nuovo come satellite (satellite/web.py)
+  POST /api/schede               «X-Calliope-Sessione», {azione: pulisci}: «Pulisci le mie
+                                 schede» (08/10, cronologia.py), solo da uno schermo personale
+                                 e solo per le schede del suo proprietario
+  GET  /satellite               il comando per un PC nuovo come satellite (satellite/web.py)
   /telefono/…                    la web app del telefono (telefono.py): pagina, modelli e il
                                  WebSocket del protocollo dei satelliti
 
@@ -230,14 +235,32 @@ def crea_app(hub: Schermi) -> Starlette:
             return PlainTextResponse("sessione non valida", status_code=401,
                                      headers={"Cache-Control": "no-store", **_SICUREZZA})
         client = request.client.host if request.client else ""
+        personale = bool(schermo.get("proprietario"))
+        # Uno schermo personale ritrova la cronologia del suo proprietario (08/10, anche dopo un
+        # riavvio o appena abbinato), rivista contro lo stato vero: fuori dal ciclo del server
+        ripresa = []
+        if personale:
+            try:
+                ripresa = await asyncio.to_thread(hub.ripresa, schermo)
+            except Exception as e:  # noqa: BLE001 — senza ripresa resta quella in memoria
+                hub.log(f"[SCHERMI] ripresa della cronologia non riuscita: {type(e).__name__}")
         conn, storia = hub.collega(schermo, asyncio.get_running_loop(),
-                                   locale=client in ("127.0.0.1", "::1"))
+                                   locale=client in ("127.0.0.1", "::1"), ripresa=ripresa)
+        # La scheda «Conversazione» (08/10): dopo collega, così un turno archiviato nel frattempo
+        # arriva comunque (la pagina scarta i doppioni per id)
+        chat = await asyncio.to_thread(hub.chat_per, schermo) if personale else None
+        if chat is not None:
+            hub.registra_chat(schermo["id"], schermo.get("proprietario"))
 
         async def flusso():
             try:
                 benvenuto = {"nome": schermo["nome"], "stanza": schermo["stanza"],
-                             "personale": bool(schermo.get("proprietario")),
+                             "personale": personale,
                              "ora_server": time.time(), "cronologia": storia,
+                             # Quante schede tiene la pagina (schermi_cronologia, 08/10)
+                             "cronologia_max": hub._n_storia(),
+                             # La conversazione della persona (solo schermi personali)
+                             "chat": chat,
                              # Stato della voce (o None: questa pagina non lo mostra)
                              "voce": hub.voce_per(conn),
                              # Si può scrivere adesso? (05/10: solo in conversazione)
@@ -679,6 +702,40 @@ def crea_app(hub: Schermi) -> Starlette:
             return _json({"errore": "non ci sono riuscita"}, 500)
         return _json(out, int(out.pop("_stato", 200 if out.get("ok") else 409)))
 
+    # ── «Pulisci le mie schede» (08/10, cronologia.py) ──
+    async def schede_api(request: Request):
+        """Il tasto della pagina: la cronologia delle schede del proprietario dello schermo, su
+        disco e sui suoi schermi personali. Sessione in un'intestazione e corpo JSON (come lo
+        scritto), solo in HTTPS fuori da questo computer, solo da uno schermo personale e solo
+        per le sue schede. Non serve una conversazione a voce: le schede sono già sue."""
+        client = request.client.host if request.client else ""
+        if request.url.scheme != "https" and client not in ("127.0.0.1", "::1"):
+            return _json({"errore": "solo in HTTPS"}, 403)
+        sess = request.headers.get("x-calliope-sessione", "")
+        with lock:
+            sid = sessioni.get(sess) if sess else None
+        schermo = next((s for s in hub.abbinati() if s["id"] == sid), None) if sid else None
+        if schermo is None:
+            return _json({"errore": "sessione non valida"}, 401)
+        persona = schermo.get("proprietario")
+        if not persona:
+            return _json({"errore": "si pulisce solo da uno schermo personale"}, 403)
+        ora = time.monotonic()
+        with lock:
+            fatti = [t for t in pulsanti.get(-schermo["id"], []) if ora - t < 60.0]
+            if len(fatti) >= 10:
+                pulsanti[-schermo["id"]] = fatti
+                return _json({"errore": "troppi tocchi: aspetta un momento"}, 429)
+            pulsanti[-schermo["id"]] = fatti + [ora]
+        dati, errore = await corpo_json(request, 1024)
+        if errore is not None:
+            return errore
+        if not isinstance(dati, dict) or dati.get("azione") != "pulisci":
+            return _json({"errore": "azione sconosciuta"}, 400)
+        n = await asyncio.to_thread(hub.pulisci_schede, persona)
+        return _json({"ok": True, "tolte": n,
+                      "frase": "Schede tolte." if n else "Non c'erano schede da togliere."})
+
     # ── giochi (05/10, giochi.py) ──
     async def gioco_documento(request: Request):
         """Il documento del riquadro di una partita: origine opaca (CSP sandbox), niente rete,
@@ -771,6 +828,7 @@ def crea_app(hub: Schermi) -> Starlette:
         Route("/api/scarica", scarica_gettone, methods=["POST"]),
         Route("/scarica/{gettone}", scarica_file),
         Route("/api/cassetto", cassetto, methods=["POST"]),
+        Route("/api/schede", schede_api, methods=["POST"]),
         Route("/gioco/{gettone}", gioco_documento),
         Route("/api/gioco", gioco_api, methods=["POST"]),
         Route("/api/esercizio", esercizio, methods=["POST"]),

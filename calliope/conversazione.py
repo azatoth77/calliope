@@ -176,22 +176,48 @@ def oscura_archivio(testo: str) -> str:
     return testo
 
 
+# La frase di sfida (conferme.py) non resta nell'archivio (08/10, come nel registro dei turni):
+# al posto della frase ripetuta questo segno, e nella risposta che la chiede le parole tolte
+SFIDA_DETTA = "(frase di conferma)"
+_RIPETI = re.compile(r"(\b[Rr]ipeti\b[^:.!?\n]{0,40}:)[^.!?\n]*")
+
+
+def senza_sfida(testo: str) -> str:
+    """«Per conferma ripeti: girasole, treno.» → «Per conferma ripeti: ….»"""
+    return _RIPETI.sub(r"\1 …", testo or "")
+
+
 def turni(messaggi: list[dict], riservati=frozenset(), segreti: dict | None = None,
-          quando: float | None = None) -> list[dict]:
+          quando: float | None = None, redact=None) -> list[dict]:
     """I messaggi della storia divisi in turni da archiviare: {domanda, risposta, azioni,
     riservato, quando}. Un turno comincia con un messaggio dell'utente (un annuncio senza
     domanda è un turno con la domanda vuota). Gli argomenti dei tool non si salvano mai
     (codici degli schermi, dati scritti): solo il nome, l'esito e la frase già detta. Un turno
     con un tool `riservati` (documenti di casa, rubrica) non tiene la risposta. I testi
-    passano da `oscura` (codici fiscali, IBAN, email), come il registro dei turni."""
+    passano da `oscura` (codici fiscali, IBAN, email), come il registro dei turni.
+
+    Dall'08/10 il messaggio dell'utente può portare `_turno` (ciclo.py, a turno finito):
+    l'istante del turno, il satellite o lo schermo e il canale (`meta` del turno, per la scheda
+    «Conversazione»), e se era la frase di sfida (`sfida`: al suo posto SFIDA_DETTA) o se la
+    risposta la chiedeva (`sfida_chiesta`: le parole tolte). `redact` (Brain.redact): i
+    segreti detti nel turno (il codice di abbinamento di uno schermo)."""
     oscura = oscura_archivio
     out: list[dict] = []
     cur = None
     for m in messaggi:
         ruolo = m.get("role")
         if ruolo == "user" or cur is None:
+            meta = m.get("_turno") if ruolo == "user" and isinstance(m.get("_turno"),
+                                                                     dict) else {}
+            t0 = meta.get("t")
             cur = {"domanda": "", "risposta": [], "azioni": [], "riservato": False,
-                   "quando": quando or time.time()}
+                   "quando": float(t0) if isinstance(t0, (int, float)) else (quando
+                                                                             or time.time()),
+                   "_sfida": bool(meta.get("sfida")),
+                   "_sfida_chiesta": bool(meta.get("sfida_chiesta"))}
+            info = {k: str(meta[k])[:60] for k in ("luogo", "canale") if meta.get(k)}
+            if info:
+                cur["meta"] = info
             out.append(cur)
             if ruolo == "user":
                 # Senza le buste dei dati non fidati (allegati: calliope/provenienza.py)
@@ -224,10 +250,29 @@ def turni(messaggi: list[dict], riservati=frozenset(), segreti: dict | None = No
             cur["azioni"].append({"tool": nome, "ok": ok,
                                   **({"detto": oscura(detto)[:300]} if detto
                                      and nome not in riservati else {})})
+    def pulito(x: str) -> str:
+        x = oscura(x)
+        if redact is not None:
+            try:
+                x = redact(x)
+            except Exception:  # noqa: BLE001 — l'archivio non si ferma per un segreto
+                pass
+        return x
+
     for t in out:
-        t["domanda"] = oscura(t["domanda"])
+        sfida, chiesta = t.pop("_sfida", False), t.pop("_sfida_chiesta", False)
+        t["domanda"] = SFIDA_DETTA if sfida and t["domanda"] else pulito(t["domanda"])
         t["risposta"] = (RISERVATA if t["riservato"] and t["risposta"]
-                         else oscura(" ".join(t["risposta"])))
+                         else pulito(" ".join(t["risposta"])))
+        if chiesta:
+            t["risposta"] = senza_sfida(t["risposta"])
+            for a in t["azioni"]:
+                if a.get("detto"):
+                    a["detto"] = senza_sfida(a["detto"])
+        if redact is not None:
+            for a in t["azioni"]:
+                if a.get("detto"):
+                    a["detto"] = pulito(a["detto"])
     return [t for t in out if t["domanda"] or t["risposta"] or t["azioni"]]
 
 

@@ -25,7 +25,7 @@
     lavoro: "Lavoro", modulo: "Da scrivere", web: "Internet", esecuzione: "Programma",
     risposta: "Risposta", foto: "Foto", allegato: "File", gioco: "Gioco",
     cruscotto: "Cruscotto", cassetto: "Cassetto", esercizio: "Esercizi",
-    esercizi_riepilogo: "Esercizi", sviluppo: "Sviluppo",
+    esercizi_riepilogo: "Esercizi", sviluppo: "Sviluppo", chat: "Conversazione",
   };
   // Il programma di un lavoro mentre gira (04/10, calliope/agenti/esecuzione.py)
   const STATI_ESECUZIONE = {
@@ -60,6 +60,13 @@
     svil: null, svilLasciata: null,
     // Una scheda a schermo intero sulla pagina degli schermi (08/10): la sua chiave
     intera: null,
+    // Quante schede tiene la cronologia della pagina (schermi_cronologia, dal benvenuto)
+    max: 6,
+    // La scheda «Conversazione» (08/10, solo schermi personali): i turni della persona
+    // dall'archivio (benvenuto ed evento «chat»), per id; chatOk: il server la dà
+    chat: [], chatOk: false, chatMax: 80, chatGiorni: 0,
+    // «Pulisci»: il primo tocco arma il secondo per qualche secondo
+    pulisciArmato: 0,
   };
   // Attese tra un tentativo e l'altro quando Calliope non risponde: crescono fino a 15 s e
   // poi restano lì, per sempre (mai un arresto definitivo: dopo un riavvio del server, o
@@ -220,6 +227,10 @@
     // Il cruscotto di chi amministra (06/10): il menu del telefono lo apre nel carosello
     cruscotto() { return apriCruscotto(); },
     amministra() { return S.amministra; },
+    // La scheda «Conversazione» e «Pulisci le mie schede» (08/10): il menu del telefono
+    chat() { return apriChat(); },
+    haChat() { return S.chatOk; },
+    pulisci() { return pulisciSchede(); },
     NOMI_TIPO,
   };
 
@@ -289,6 +300,8 @@
       const d = JSON.parse(ev.data);
       S.scarto = d.ora_server * 1000 - Date.now();
       if (d.parola) { TESTI_VOCE.dorme = "Dormo · di' «" + d.parola + "»"; S.parola = d.parola; }
+      if (Number.isInteger(d.cronologia_max) && d.cronologia_max > 0) S.max = d.cronologia_max;
+      impostaChat(d.chat || null);
       stato("ok", "collegato");
       // Le schede della cronologia del server, nell'ordine del server: una scheda già qui
       // con la stessa identità (o lo stesso id) si sostituisce, mai un doppione
@@ -345,6 +358,8 @@
     es.addEventListener("scrittura", (ev) => { vivo(); applicaScrittura(JSON.parse(ev.data)); });
     es.addEventListener("contesto", (ev) => { vivo(); mostraContesto(JSON.parse(ev.data)); });
     es.addEventListener("gioco", (ev) => { vivo(); daServerGioco(JSON.parse(ev.data)); });
+    es.addEventListener("chat", (ev) => { vivo(); chatDalServer(JSON.parse(ev.data)); });
+    es.addEventListener("pulisci", () => { vivo(); pulisciLocale(); });
     es.addEventListener("revocato", () => {
       mostraVoce(null);
       mostraContesto(null);
@@ -352,6 +367,7 @@
       casellaScrivi(false);
       salvaToken(null);
       S.cronologia = [];
+      impostaChat(null);
       emetti("schede", {});
       disegnaCronologia();
       if (INCORPORATA) { S.sessione = null; stato("attesa", "schede in attesa"); return; }
@@ -462,7 +478,7 @@
     } else {
       if (i >= 0) S.cronologia.splice(i, 1);
       S.cronologia.push(c);              // in cima, come l'ultima arrivata
-      if (S.cronologia.length > 6) S.cronologia.shift();
+      while (S.cronologia.length > Math.max(S.max, 2)) S.cronologia.shift();
     }
     emetti("schede", { scheda: c, spostata: !(i >= 0 && c.sposta === false && !ordine) });
     disegnaCronologia();
@@ -481,6 +497,14 @@
       b.addEventListener("click", () => mostra(Object.assign({}, c, { scade: (ora() + 300000) / 1000 })));
       f.append(b);
     });
+    // «Pulisci» (08/10): solo sugli schermi personali, le schede del proprietario
+    if (S.personale && !CAROSELLO && S.cronologia.some((c) => !SOLO_PAGINA.has(c.tipo))) {
+      const p = el("button", "pulisci-schede", Date.now() < S.pulisciArmato ? "Tocca di nuovo per pulire" : "Pulisci");
+      p.type = "button";
+      p.dataset.pulisci = "1";
+      p.title = "Toglie le tue schede da questo schermo e dagli altri tuoi schermi";
+      f.append(p);
+    }
   }
 
   // La stessa scheda aggiornata (l'avanzamento di un lavoro, l'uscita di un programma: anche
@@ -518,7 +542,7 @@
   // `opz.intera` (08/10): la scheda a schermo intero (sulla pagina degli schermi nel suo
   // strato, sul telefono nel suo): per un lavoro due colonne, a destra il flusso dell'agente;
   // per uno sviluppo la vista dello sviluppo. Nella scheda normale il flusso non c'è
-  const TIPI_INTERA_PC = new Set(["lavoro", "documento", "esecuzione"]);
+  const TIPI_INTERA_PC = new Set(["lavoro", "documento", "esecuzione", "chat"]);
   function costruisci(c, opz) {
     opz = opz || {};
     const s = el("article", "scheda tipo-" + c.tipo + (opz.intera ? " intera" : ""));
@@ -1355,6 +1379,194 @@
     if (!b) return;
     if (b.dataset.cruscotto === "aggiorna") apriCruscotto(false, true);
     else if (b.dataset.cruscotto === "chiudi") togliCruscotto();
+  });
+
+  // ─── la scheda «Conversazione» (08/10, calliope/conversazioni.py) ───
+  // Le frasi della persona (come trascritte o scritte) e le risposte di Calliope, con l'ora e il
+  // satellite, dall'archivio delle conversazioni: solo sugli schermi personali del proprietario
+  // (il server la manda solo lì). Una scheda di questa pagina, come il cruscotto: i turni
+  // nuovi arrivano con l'evento «chat» e si aggiungono in fondo (allinea tocca solo i nodi
+  // nuovi). Tutto come testo (textContent): le frasi e le risposte non sono HTML
+  const CHAT = "chat";
+  // Le schede che vivono solo nella pagina: «Pulisci» non le tocca
+  const SOLO_PAGINA = new Set([CRUSCOTTO, CHAT]);
+  const fmtGiorno = new Intl.DateTimeFormat("it-IT", { weekday: "long", day: "numeric", month: "long" });
+
+  function turnoValido(t) {
+    return t && Number.isInteger(t.id) && typeof t.quando === "number"
+      && (typeof t.domanda === "string" || typeof t.risposta === "string");
+  }
+  function potaChat() {
+    if (S.chatGiorni > 0) {
+      const limite = ora() / 1000 - S.chatGiorni * 86400;
+      S.chat = S.chat.filter((t) => t.quando >= limite);
+    }
+    if (S.chat.length > S.chatMax) S.chat = S.chat.slice(S.chat.length - S.chatMax);
+  }
+
+  function impostaChat(d) {
+    if (!d) {
+      S.chatOk = false;
+      S.chat = [];
+      togliScheda(CHAT);
+    } else {
+      S.chatOk = true;
+      if (Number.isInteger(d.max) && d.max > 0) S.chatMax = d.max;
+      if (typeof d.giorni === "number") S.chatGiorni = d.giorni;
+      // L'archivio è la fonte: la lista del server sostituisce quella di prima
+      S.chat = (Array.isArray(d.turni) ? d.turni : []).filter(turnoValido).sort((a, b) => a.id - b.id);
+      potaChat();
+      aggiornaChat();
+    }
+    emetti("chat", { attiva: S.chatOk });
+    segnaChat();
+  }
+
+  function chatDalServer(d) {
+    if (!S.chatOk || !d) return;
+    if (d.reset) S.chat = [];
+    const visti = new Set(S.chat.map((t) => t.id));
+    for (const t of (Array.isArray(d.turni) ? d.turni : [])) {
+      if (!turnoValido(t) || visti.has(t.id)) continue;   // un doppione per id non entra
+      S.chat.push(t);
+      visti.add(t.id);
+    }
+    S.chat.sort((a, b) => a.id - b.id);
+    potaChat();
+    aggiornaChat();
+  }
+
+  function schedaChat() {
+    return { tipo: CHAT, id: CHAT, chiave: CHAT, titolo: "La nostra conversazione",
+      visibilita: "personale", creata: ora() / 1000, turni: S.chat.slice(), scarica: ["md"] };
+  }
+  function chatAperta() { return S.cronologia.some((c) => chiaveDi(c) === CHAT); }
+
+  // La scheda già aperta (nella cronologia, mostrata o nel carosello) prende i turni nuovi
+  function aggiornaChat() {
+    if (!chatAperta()) return;
+    const c = Object.assign(schedaChat(), { sposta: false });
+    aggiungiCronologia(c);
+    if (S.corrente && chiaveDi(S.corrente) === CHAT) ridisegna(c);
+    if (S.intera === CHAT && !CAROSELLO) setTimeout(disegnaInteroPC, 0);
+  }
+
+  function apriChat() {
+    if (!S.chatOk || !S.sessione) return false;
+    const c = schedaChat();
+    aggiungiCronologia(c);
+    mostra(c);
+    return true;
+  }
+
+  function togliScheda(k) {
+    const i = S.cronologia.findIndex((c) => chiaveDi(c) === k);
+    if (i < 0) return;
+    S.cronologia.splice(i, 1);
+    emetti("schede", {});
+    disegnaCronologia();
+    if (S.corrente && chiaveDi(S.corrente) === k) {
+      S.corrente = null;
+      const ultima = S.cronologia[S.cronologia.length - 1];
+      if (ultima && valida(ultima) && !CAROSELLO) mostra(ultima); else mostraInattiva();
+    }
+  }
+
+  // Il pulsante «Conversazione» nella testa (non nel telefono: lì è nel menu)
+  function segnaChat() {
+    if (CAROSELLO || INCORPORATA) return;
+    let b = $("chat-apri");
+    if (!b && S.chatOk) {
+      b = el("button", "piccolo-bottone apri-chat", "Conversazione");
+      b.id = "chat-apri";
+      b.type = "button";
+      b.title = "Quello che ci siamo detti, con l'ora e il satellite";
+      b.addEventListener("click", () => apriChat());
+      const testa = $("testa");
+      if (testa) testa.insertBefore(b, $("cruscotto-apri") || $("stato"));
+    }
+    if (b) b.hidden = !S.chatOk;
+  }
+
+  DISEGNA.chat = function (c, corpo, s, opz) {
+    s.classList.add("scheda-chat");
+    corpo.append(pulsantiScarica(c));
+    const turni = Array.isArray(c.turni) ? c.turni : [];
+    const box = el("div", "flusso-chat conv-chat");
+    box.dataset.segui = "1";
+    box.setAttribute("role", "log");
+    box.setAttribute("aria-label", "La nostra conversazione");
+    box.tabIndex = 0;
+    const lista = el("div", "conv-turni");
+    if (!turni.length) lista.append(el("p", "fl-vuoto", "Ancora niente: quello che ci diciamo compare qui."));
+    let giorno = "";
+    turni.forEach((t) => {
+      const d = new Date(t.quando * 1000);
+      const g = fmtGiorno.format(d);
+      if (g !== giorno) { giorno = g; lista.append(el("div", "conv-giorno", g)); }
+      const r = el("div", "conv-turno");
+      r.dataset.turno = String(t.id);
+      r.append(el("div", "conv-meta", [fmtOra.format(d), t.luogo, t.canale === "scritto" ? "scritto" : ""]
+        .filter(Boolean).join(" · ")));
+      if (t.domanda) {
+        const tu = el("div", "conv-tu");
+        tu.append(el("div", "conv-chi", "Tu"), el("div", "conv-x", t.domanda));
+        r.append(tu);
+      }
+      if (t.risposta) {
+        const ca = el("div", "conv-calliope");
+        ca.append(el("div", "conv-chi", "Calliope"), el("div", "conv-x", t.risposta));
+        r.append(ca);
+      }
+      lista.append(r);
+    });
+    box.append(lista);
+    const giu = el("button", "fl-fondo", "In fondo");
+    giu.type = "button";
+    giu.dataset.flussoFondo = "1";
+    box.append(giu);
+    corpo.append(box);
+    if (opz && opz.intera) s.classList.add("chat-intera");
+  };
+
+  // ─── «Pulisci le mie schede» (08/10, POST /api/schede) ───
+  // Il server toglie le schede del proprietario da disco e dai suoi schermi (evento «pulisci»);
+  // la pagina tiene solo le sue (cruscotto e conversazione)
+  function pulisciLocale() {
+    S.cronologia = S.cronologia.filter((c) => SOLO_PAGINA.has(c.tipo));
+    S.svil = null;
+    S.svilLasciata = null;
+    Object.keys(FLUSSI).forEach((k) => { delete FLUSSI[k]; });
+    emetti("schede", {});
+    if (S.corrente && !SOLO_PAGINA.has(S.corrente.tipo)) { S.corrente = null; mostraInattiva(); }
+    else disegnaCronologia();
+    segnaTorna();
+    if (S.intera && !CAROSELLO && !SOLO_PAGINA.has(S.intera)) chiudiInteroPC();
+  }
+
+  async function pulisciSchede() {
+    if (!S.sessione || !S.personale) return { ok: false };
+    let r;
+    try { r = await postSessione("/api/schede", { azione: "pulisci" }); }
+    catch (e) { r = { status: 0, dati: { errore: "Calliope non risponde: riprova." } }; }
+    if (r.status === 200) pulisciLocale();
+    return Object.assign({ ok: r.status === 200 }, r.dati || {});
+  }
+
+  document.addEventListener("click", async (ev) => {
+    const b = ev.target.closest && ev.target.closest("button[data-pulisci]");
+    if (!b || b.disabled) return;
+    if (Date.now() >= S.pulisciArmato) {
+      // Il primo tocco chiede il secondo: le schede non tornano
+      S.pulisciArmato = Date.now() + 4000;
+      b.textContent = "Tocca di nuovo per pulire";
+      setTimeout(() => { if (Date.now() >= S.pulisciArmato) disegnaCronologia(); }, 4100);
+      return;
+    }
+    S.pulisciArmato = 0;
+    b.disabled = true;
+    const r = await pulisciSchede();
+    if (!r.ok) { b.disabled = false; b.textContent = r.errore || "Non ci sono riuscita"; }
   });
 
   const fmtS = (x) => (x === null || x === undefined) ? "—" : x.toFixed(2).replace(".", ",") + " s";

@@ -198,7 +198,11 @@ class Ciclo:
         self.sveglia = sveglia               # threading.Event: un annuncio o uno scritto
         # Stato della corsia
         self.rec = None                      # il turno in corso (registro dei turni)
-        self.awake_until = 0.0               # fino a quando accetta domande senza il nome
+        # Dove e come è arrivato il turno risposto, per l'archivio delle conversazioni e la
+        # scheda «Conversazione» degli schermi (08/10): lo scrive _registra_risposta, lo usa
+        # _archivia_turno in cima al giro dopo
+        self._meta_turno = None
+        self.awake_until = 0.0              # fino a quando accetta domande senza il nome
         self.barge_seed = None               # audio dell'interruzione, da cui riparte l'ascolto
         self.last_question = None            # ultima domanda con risposta («approfondisci»)
         self.pending_real_name = None        # attende il nome vero del primo utente
@@ -623,6 +627,8 @@ class Ciclo:
         primo utente) si ascolta senza bisogno del nome."""
         s, cfg, speaker_ctx = self.s, self.s.cfg, self.speaker_ctx
         if self.rec:
+            # Il turno finito nell'archivio delle conversazioni (08/10: la scheda «Conversazione»)
+            self._archivia_turno()
             self._chiudi_ascolto(self.rec)
             s.turns.write(self.rec)
             self.rec = None
@@ -2119,6 +2125,12 @@ class Ciclo:
         # morbida), e si ferma se qualcuno ricomincia a parlare
         self._compressione_dopo(t)
         self._oscura_registro(t)
+        regole = set(brain.rules_fired())
+        self._meta_turno = {"t": round(time.time() - (time.perf_counter() - t.t0), 3),
+                            "luogo": self._luogo_turno(t),
+                            "canale": "scritto" if t.scritto is not None else "voce",
+                            "sfida": bool(getattr(brain, "last_sfida", False)),
+                            "sfida_chiesta": bool({"sfida_voce", "sfida_risposta"} & regole)}
         for name in brain.rules_fired():
             self.rule(name)
         print()
@@ -2128,6 +2140,40 @@ class Ciclo:
             # può ascoltare (04/10). Prima di aspettare la voce: si legge subito
             rec["risposta_scritta"] = self.s.instradamento.risposta_scritta(
                 t.scritto, t.text, " ".join(t.said))
+
+    def _luogo_turno(self, t) -> str:
+        """Il satellite o lo schermo del turno, per la scheda «Conversazione» (08/10)."""
+        if t.scritto is not None:
+            return str(t.scritto.get("schermo") or "schermo")
+        if getattr(self.corsia, "satellite_id", None) is not None:
+            return str(getattr(self.corsia, "nome", "") or "satellite")
+        sat = self.s.satelliti
+        att = getattr(sat, "attivo", None) if sat is not None else None
+        if att is not None:
+            info = getattr(att, "satellite", None) or {}
+            return str(info.get("nome") or getattr(att, "stanza", "") or "satellite")
+        return "questo computer"
+
+    def _archivia_turno(self):
+        """In cima al giro dopo (08/10): il turno appena finito nell'archivio delle
+        conversazioni, con dove e come è arrivato, così la scheda «Conversazione» degli schermi
+        personali lo mostra subito. Prima l'archivio lo prendeva solo all'inizio della risposta
+        dopo. La storia è già quella finale (interruzioni e correzioni dei controlli fatte)."""
+        meta, self._meta_turno = self._meta_turno, None
+        brain = self.brain
+        hist = getattr(brain, "history", None)
+        if meta and isinstance(hist, list):
+            for m in reversed(hist):
+                if isinstance(m, dict) and m.get("role") == "user":
+                    m.setdefault("_turno", meta)
+                    break
+        archivia = getattr(brain, "archivia_turni", None)
+        if callable(archivia):
+            try:
+                archivia()
+            except Exception as e:  # noqa: BLE001 — l'archivio non ferma la voce
+                print(f"   [CONVERSAZIONI] turno non archiviato: {type(e).__name__}: {e}",
+                      flush=True)
 
     def _registra_controlli(self, t):
         """Ciò che i controlli dell'uscita (riferire.py) e il guardiano hanno fermato."""

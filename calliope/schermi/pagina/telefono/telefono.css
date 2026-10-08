@@ -420,3 +420,6 @@ button.grande {
 .intera-posto .svil-sezioni { grid-template-columns: minmax(0, 1fr); }
 /* I comandi in fondo alla vista, non fermi: sul telefono prenderebbero mezzo schermo */
 .intera-posto .piede-svil { position: static; }
+
+/* «Pulisci le mie schede» (08/10): un tasto secondario, non come quelli che aprono qualcosa */
+button.grande.secondario { background: transparent; color: var(--accento); border: 2px solid var(--accento); }

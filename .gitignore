@@ -104,6 +104,10 @@ archivio.db
 archivio.db-*
 conversazioni.db
 conversazioni.db-*
+# Le schede di ogni persona (08/10, calliope/schermi/cronologia.py) e il cassetto dei file
+# (calliope/cassetto.py) accanto ai database: dati personali
+/schede/
+/cassetto/
 diagnostica/
 
 # Il posto di prima dei banchi delle ricerche del 26/09 (spostati il 06/10 in

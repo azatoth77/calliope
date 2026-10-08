@@ -865,8 +865,26 @@ schermi:
   # (all'avvio, in «calliope stato», negli elenchi da terminale): solo un avviso, la revoca
   # la decide chi amministra. 0 = nessun avviso
   schermi_inattivi_giorni: 7.0
-  # Schede tenute per schermo e rimandate quando la pagina si ricollega
+  # Schede tenute per schermo e rimandate quando la pagina si ricollega; anche quante schede
+  # della cronologia di una persona riceve un suo schermo personale che si collega
   schermi_cronologia: 6
+  # La cronologia delle schede per persona, su disco (08/10, schermi/cronologia.py): le
+  # schede personali di chi è riconosciuto restano anche dopo un riavvio, e uno schermo
+  # personale nuovo (un satellite o un telefono appena abbinati) le ritrova. Mai schede di
+  # stanza, della zona grigia o di un'altra persona. false = solo in memoria, come prima
+  schermi_cronologia_persona: true
+  # La cartella dei file (uno per persona, permessi 600 fuori da Windows): vuota = «schede»
+  # accanto a conversazioni.db
+  schermi_cronologia_cartella: ''
+  # Giorni di tenuta, e tetto per persona in numero di schede e in MB (oltre, escono le più
+  # vecchie): come il cassetto dei file, una settimana
+  schermi_cronologia_giorni: 7.0
+  schermi_cronologia_max: 40
+  schermi_cronologia_mb: 4.0
+  # La scheda «Conversazione» degli schermi personali (08/10): quanti turni della persona
+  # (dall'archivio delle conversazioni, con la sua scadenza) si ricaricano su uno schermo
+  # che si collega. 0 = niente scheda
+  schermi_chat_turni: 80
   # Nomi con cui gli schermi raggiungono il server oltre agli IP, a «localhost» e al nome
   # di questo PC (es. calliope.lan): gli altri si rifiutano (difesa dal DNS rebinding)
   schermi_nomi: []

@@ -74,7 +74,7 @@ per stadio, solo i moduli principali: librerie, classi e dettagli sono nei docum
 | Casa via Home Assistant | `casa/`, `tools/casa.py` | [casa](docs/aree/casa.md) |
 | Registro delle capacità, macchina; piano dei modelli in sola lettura (`calliope stato --piano`, dal 08/10) | `capacita.py`, `stato.py`, `macchina.py`, `modelli.py`, `piano.py`, `tools/stato.py` | [capacita-installazioni](docs/aree/capacita-installazioni.md) |
 | Installazioni dal catalogo | `installa/` | [capacita-installazioni](docs/aree/capacita-installazioni.md) |
-| Schermi (schede, SSE, abbinamento), scrivere invece di parlare, cruscotto di chi amministra (sola lettura, dal 06/10), testi dell'agente in Markdown con «Scarica» (dal 07/10) | `schermi/` (`hub.py`, `server.py`, `moduli.py`, `conversazione.py`, `cruscotto.py`, `scarica.py`), `documenti/markdown.py` | [schermi-telefono](docs/aree/schermi-telefono.md) |
+| Schermi (schede, SSE, abbinamento), scrivere invece di parlare, cruscotto di chi amministra (sola lettura, dal 06/10), testi dell'agente in Markdown con «Scarica» (dal 07/10), cronologia delle schede per persona su disco e scheda «Conversazione» (dal 08/10) | `schermi/` (`hub.py`, `server.py`, `moduli.py`, `conversazione.py`, `cruscotto.py`, `scarica.py`, `cronologia.py`), `documenti/markdown.py` | [schermi-telefono](docs/aree/schermi-telefono.md) |
 | Telefono (satellite nel browser, PWA; schede a schermo intero dal 06/10) | `schermi/telefono.py`, `schermi/pagina/telefono/` | [schermi-telefono](docs/aree/schermi-telefono.md) |
 | Rispondi dove ti ho chiesto | `rispondi.py` | [schermi-telefono](docs/aree/schermi-telefono.md) |
 | Foto e allegati in ingresso; cassetto dei file per persona (7 giorni, dal 08/10) | `immagini.py`, `allegati.py`, `cassetto.py`, `pc/cattura.py` | [immagini-allegati](docs/aree/immagini-allegati.md) |
@@ -154,7 +154,7 @@ Calliope gira sulla **DGX Spark** dal 02/10 come servizio (voce gemma4 su Ollama
 satelliti. Cronologia e primi test in [`docs/aree/cronologia.md`](docs/aree/cronologia.md).
 
 - **Voce**: wake word acustica, barge-in col nome, chi parla con CAM++, half-duplex, risposte in streaming ([stt-tts](docs/aree/stt-tts.md), [voce-e-regole](docs/aree/voce-e-regole.md)).
-- **Tool**: 71 schemi uguali per ogni livello sulla DGX (66 del 07/10, poi `cassetto_gestisci` e i quattro della modalità sviluppo; dal 08/10 nomi nuovi `lavoro_*`, `sviluppo_*`, `programma_esegui`, `estensione_gestisci`, i vecchi validi nel registro; `esercizi` solo con un minore in casa), permessi decisi in `ToolRegistry.call` ([voce-e-regole](docs/aree/voce-e-regole.md)).
+- **Tool**: 72 schemi uguali per ogni livello (66 del 07/10, poi `cassetto_gestisci`, i quattro della modalità sviluppo e `schede_pulisci`; dal 08/10 nomi nuovi `lavoro_*`, `sviluppo_*`, `programma_esegui`, `estensione_gestisci`, i vecchi validi nel registro; `esercizi` solo con un minore in casa), permessi decisi in `ToolRegistry.call` ([voce-e-regole](docs/aree/voce-e-regole.md)).
 - **Capacità**: 18 nel registro (`capacita.DEFINIZIONI`), installazioni a voce dal catalogo ([capacita-installazioni](docs/aree/capacita-installazioni.md)).
 - **Politica unica dei tool** con dati non fidati in busta, conferme e frase di sfida ([sicurezza-politica](docs/aree/sicurezza-politica.md)).
 - **Contesto**: finestra dal setup, compressione, archivio delle conversazioni, una conversazione per persona ([contesto-conversazione](docs/aree/contesto-conversazione.md)).

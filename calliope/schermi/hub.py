@@ -26,6 +26,12 @@ ascolta: con un satellite quelli della sua stanza, con l'audio locale quelli di
 `schermi_stanza` o, se è vuota, quelli aperti su questo computer (127.0.0.1). È pubblico:
 nessun nome, nessun dato di chi parla.
 
+Dall'08/10 le schede personali di chi è riconosciuto restano anche nella cronologia su disco
+della persona (cronologia.py): uno schermo personale che si collega (nuovo, ricollegato, dopo
+un riavvio) ritrova le ultime, riviste contro lo stato vero (`ripresa`); «pulisci le mie
+schede» le toglie (`pulisci_schede`). E la scheda «Conversazione» degli schermi personali: i
+turni della persona dall'archivio delle conversazioni (`chat_per`), in diretta (`chat_nuovi`).
+
 Questo modulo non importa Starlette: lo usano anche le prove e i tool senza server.
 """
 
@@ -250,6 +256,19 @@ class Schermi:
         # Il cassetto dei file per persona (08/10, calliope/cassetto.py), da main.py: None =
         # /api/cassetto risponde 404
         self.cassetto = None
+        # La cronologia delle schede per persona, su disco (08/10, cronologia.py): la imposta
+        # load_schermi. None = solo la cronologia in memoria per schermo, come prima
+        self.cronologia = None
+        # Le schede da ricostruire dallo stato vero per una persona, quando un suo schermo si
+        # collega o pulisce le schede (08/10): funzioni(persona) → [schede]. main.py ci mette
+        # lo sviluppo aperto (Sviluppi.scheda), così la vista dello sviluppo torna subito
+        self.ricostruttori: list = []
+        # I lavori dell'agente (agenti/servizio.Lavori), da main.py: la ripresa di un
+        # avanzamento che non lavora più, e gli sviluppi
+        self.lavori = None
+        # La scheda «Conversazione» degli schermi personali (08/10): l'archivio delle
+        # conversazioni (conversazioni.ArchivioConversazioni), da main.py. None = niente scheda
+        self.chat_fonte = None
 
     # ── configurazione ──
     @property
@@ -302,15 +321,164 @@ class Schermi:
         return any(s["id"] == sid for s in self.abbinati())
 
     # ── connessioni (dal server) ──
-    def collega(self, schermo: dict, loop, locale: bool = False
+    def collega(self, schermo: dict, loop, locale: bool = False, ripresa=None
                 ) -> tuple[_Connessione, list[dict]]:
         """Nuova connessione SSE: la sua coda e la cronologia da mostrare subito. `locale`:
-        la pagina è aperta su questo computer (per lo stato della voce con l'audio locale)."""
+        la pagina è aperta su questo computer (per lo stato della voce con l'audio locale).
+        `ripresa` (08/10, `ripresa`): le schede della cronologia del proprietario di uno
+        schermo personale, già riviste; quelle che lo schermo non ha ancora entrano prima delle
+        sue (sono più vecchie), con «Scarica» registrato per lui."""
         conn = _Connessione(schermo, loop, locale)
         with self._lock:
             self._conn.setdefault(schermo["id"], []).append(conn)
+            if ripresa:
+                self._unisci_storia(schermo["id"], ripresa, schermo.get("proprietario"))
             storia = list(self._storia.get(schermo["id"], ()))
+        if not schermo.get("proprietario"):
+            # Uno schermo che non è (più) personale («rendilo condiviso») non rimanda le schede
+            # personali che aveva in memoria (08/10)
+            storia = [c for c in storia if c.get("visibilita") != PERSONALE]
         return conn, storia
+
+    # ── cronologia per persona (08/10, cronologia.py) ──
+    def _n_storia(self) -> int:
+        return max(1, int(getattr(self.cfg, "schermi_cronologia", 6) or 6))
+
+    def _unisci_storia(self, sid: int, ripresa: list[dict], persona):
+        """Con il lock: le schede di `ripresa` che la cronologia dello schermo non ha (stessa
+        chiave o stesso id) prima delle sue, fino a `schermi_cronologia`."""
+        h = list(self._storia.get(sid, ()))
+        presenti = {x.get("chiave") or x.get("id") for x in h}
+        nuove = []
+        for c in ripresa:
+            if (c.get("chiave") or c.get("id")) in presenti:
+                continue
+            nuove.append(pubblica(c))
+            if persona and ("_scarica" in c or "_registro" in c):
+                registra_scaricabili(self.scaricamenti, sid, c, persona)
+        if nuove:
+            self._storia[sid] = deque(nuove + h, maxlen=self._n_storia())
+
+    def _salva_persona(self, persona, scheda: dict, storia: dict):
+        """Una scheda personale nella cronologia su disco di `persona` (non blocca: la scrive
+        il thread della cronologia)."""
+        cron = self.cronologia
+        if cron is None or not persona or scheda.get("visibilita") != PERSONALE:
+            return
+        try:
+            cron.aggiungi(persona, scheda, storia)
+        except Exception as e:  # noqa: BLE001 — la cronologia non ferma la scheda
+            self.log(f"[SCHERMI] cronologia della persona non aggiornata: {type(e).__name__}")
+
+    def ripresa(self, schermo: dict | None) -> list[dict]:
+        """Le schede da rimandare a uno schermo personale che si collega: la cronologia del
+        suo proprietario (mai di altri, mai di stanza) rivista contro lo stato vero
+        (cronologia.rivedi), più quelle da ricostruire (lo sviluppo aperto) in fondo; le
+        ultime `schermi_cronologia`. Fuori dal ciclo del server (legge lavori, cassetto…)."""
+        from .cronologia import rivedi
+        persona = (schermo or {}).get("proprietario")
+        cron = self.cronologia
+        out: list[dict] = []
+        if persona and cron is not None:
+            for v in cron.ultime(persona):
+                try:
+                    c = rivedi(self, v, persona)
+                except Exception as e:  # noqa: BLE001 — una scheda guasta si salta
+                    self.log(f"[SCHERMI] scheda della cronologia saltata: {type(e).__name__}")
+                    c = None
+                if c:
+                    out.append(c)
+        if persona:
+            for c in self._ricostruite(persona):
+                k = c.get("chiave")
+                out = [x for x in out if not (k and x.get("chiave") == k)] + [c]
+        return out[-self._n_storia():]
+
+    def _ricostruite(self, persona) -> list[dict]:
+        out = []
+        for f in list(self.ricostruttori):
+            try:
+                out += [c for c in (f(persona) or ()) if isinstance(c, dict)]
+            except Exception as e:  # noqa: BLE001
+                self.log(f"[SCHERMI] scheda non ricostruita: {type(e).__name__}: {e}")
+        return out
+
+    def pulisci_schede(self, persona) -> int:
+        """«Pulisci le mie schede» (08/10): la cronologia della persona, su disco e sui suoi
+        schermi personali (le pagine ricevono «pulisci» e tornano all'orologio). Solo le sue:
+        gli schermi di stanza e quelli d'altri non cambiano. Uno sviluppo aperto resta (è uno
+        stato, non una scheda passata): la sua scheda torna subito. Restituisce quante schede
+        sono state tolte."""
+        if not persona:
+            return 0
+        n = self.cronologia.pulisci(persona) if self.cronologia is not None else 0
+        sids = [s["id"] for s in self.abbinati() if s.get("proprietario") == persona]
+        with self._lock:
+            self._ultime.pop(persona, None)
+            for sid in sids:
+                n = max(n, len(self._storia.pop(sid, ()) or ()))
+                for c in self._conn.get(sid, []):
+                    c.consegna(("pulisci", "{}"))
+        for c in self._ricostruite(persona):
+            for sid in sids:
+                self.invia_a(sid, c)
+        return n
+
+    # ── la scheda «Conversazione» (08/10): i turni della persona dall'archivio ──
+    def _n_chat(self) -> int:
+        return max(0, int(getattr(self.cfg, "schermi_chat_turni", 80) or 0))
+
+    def chat_per(self, schermo: dict | None) -> dict | None:
+        """Per il benvenuto di uno schermo personale: gli ultimi turni del proprietario
+        dall'archivio delle conversazioni (mai gli ospiti, mai altre persone), la tenuta e il
+        tetto. None per gli schermi di stanza o senza archivio."""
+        persona = (schermo or {}).get("proprietario")
+        fonte, n = self.chat_fonte, self._n_chat()
+        if not persona or fonte is None or n <= 0:
+            return None
+        try:
+            turni = fonte.chat(persona, n)
+        except Exception as e:  # noqa: BLE001 — la scheda resta vuota
+            self.log(f"[SCHERMI] conversazione non letta: {type(e).__name__}: {e}")
+            turni = []
+        return {"turni": turni, "max": n, "giorni": float(getattr(fonte, "giorni", 0) or 0)}
+
+    def registra_chat(self, sid: int, persona):
+        """«Scarica» della trascrizione in Markdown, per uno schermo personale del proprietario:
+        il testo si fa al tocco, dall'archivio di quel momento."""
+        fonte = self.chat_fonte
+        if fonte is None or not persona or self._n_chat() <= 0:
+            return
+        self.scaricamenti.registra(sid, {
+            "chiave": "chat", "scarica": ["md"],
+            "_scarica": {"markdown_fn": lambda p=persona: fonte.chat_markdown(p),
+                         "titolo": "Conversazione con Calliope"}}, persona)
+
+    def chat_nuovi(self, persona, turni: list[dict]) -> int:
+        """Turni appena archiviati di `persona` (dal thread dell'archivio): in diretta ai suoi
+        schermi personali, in fondo alla scheda. Quante pagine."""
+        if not persona or not turni or self._n_chat() <= 0:
+            return 0
+        msg = json.dumps({"turni": turni}, ensure_ascii=False, default=str)
+        # «Scarica» resta valido anche se nel frattempo tanti documenti l'hanno spinto fuori
+        for sid in [x["id"] for x in self.abbinati() if x.get("proprietario") == persona]:
+            self.registra_chat(sid, persona)
+        return self._a_personali(persona, "chat", msg)
+
+    def chat_dimenticata(self, persona) -> int:
+        """«Dimentica le nostre conversazioni»: la scheda si svuota anche sugli schermi."""
+        if not persona:
+            return 0
+        return self._a_personali(persona, "chat", json.dumps({"reset": True, "turni": []}))
+
+    def _a_personali(self, persona, tipo: str, msg: str) -> int:
+        sids = [s["id"] for s in self.abbinati() if s.get("proprietario") == persona]
+        n = 0
+        with self._lock:
+            for sid in sids:
+                for c in self._conn.get(sid, []):
+                    n += c.consegna((tipo, msg))
+        return n
 
     def scollega(self, conn: _Connessione):
         with self._lock:
@@ -365,6 +533,13 @@ class Schermi:
                 for c in self._conn.get(s["id"], []):
                     if c.consegna(("scheda", msg)):
                         raggiunti.append(s["nome"])
+        # La cronologia su disco della persona (08/10): solo le schede personali di chi è
+        # riconosciuto con certezza (mai ospiti né zona grigia), anche se in questo momento non
+        # ha uno schermo personale collegato (uno nuovo le ritroverà)
+        if (mittente.certo and mittente.persona
+                and mittente.livello in ("familiare", "amministra")
+                and motivo not in ("ospite", "zona_grigia")):
+            self._salva_persona(mittente.persona, scheda, storia)
         self.inviate += bool(raggiunti)
         return {"schermi": list(dict.fromkeys(raggiunti)),
                 "destinatari": [s["nome"] for s in dest], "motivo": motivo,
@@ -379,15 +554,20 @@ class Schermi:
         pub = pubblica(scheda)
         msg = json.dumps(pub, ensure_ascii=False, default=str)
         ok = False
+        s = self.schermo(sid) or {}
         if "_scarica" in scheda or "_registro" in scheda:
             # Lo schermo da cui è stata scritta la richiesta: il suo proprietario (se è personale)
-            s = self.schermo(sid) or {}
             if s.get("proprietario"):
                 registra_scaricabili(self.scaricamenti, sid, scheda, s["proprietario"])
+        storia = per_storia(scheda, pub)
         with self._lock:
-            self._in_storia(sid, per_storia(scheda, pub))
+            self._in_storia(sid, storia)
             for c in self._conn.get(sid, []):
                 ok = c.consegna(("scheda", msg)) or ok
+        # Una scheda personale a uno schermo personale (la risposta scritta da lì, lo sviluppo,
+        # il cassetto): nella cronologia su disco del suo proprietario (08/10)
+        if s.get("proprietario"):
+            self._salva_persona(s["proprietario"], scheda, storia)
         return ok
 
     def evento_a(self, sid: int, tipo: str, dati: dict) -> int:

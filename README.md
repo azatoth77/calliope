@@ -182,7 +182,7 @@ Calliope vera, satelliti e voci finte; **dal vero** = usata a voce.
 | Minori | fasce d'età con preset, tutori, guardiano, rilevatore di pericolo con avviso, compiti guidati, orari, tempo di gioco, richieste ai tutori; esercizi generati al momento (matematica e italiano) e corretti dal programma (08/10) | a secco, e2e | [minori](docs/aree/minori.md) |
 | Memoria | per persona e della casa; i «fatti» che sono ordini si rifiutano | dal vero | [memoria-agenda-liste](docs/aree/memoria-agenda-liste.md) |
 | Agenda e liste | timer, promemoria, appuntamenti (durate e orari convertiti dal programma), liste senza doppioni | dal vero | [memoria-agenda-liste](docs/aree/memoria-agenda-liste.md) |
-| Conversazioni | una per persona tra i satelliti; compressione con riassunto; archivio di 30 giorni con ricerca ibrida | a secco, dal vero | [contesto-conversazione](docs/aree/contesto-conversazione.md) |
+| Conversazioni | una per persona tra i satelliti; compressione con riassunto; archivio di 30 giorni con ricerca ibrida; scheda «Conversazione» con la trascrizione sugli schermi personali, in diretta e scaricabile (08/10) | a secco, dal vero | [contesto-conversazione](docs/aree/contesto-conversazione.md) |
 | Biblioteca | Wikipedia italiana, Vikidia, Wikizionario, Wikiquote (Kiwix ZIM in puro Python + FTS5), fonte citata | dal vero | [biblioteca](docs/aree/biblioteca.md) |
 | Ricerca web | SearXNG locale facoltativo; dati personali tolti dalle domande; testo dei siti non fidato | dal vero | [biblioteca](docs/aree/biblioteca.md) |
 | Casa | Home Assistant: comandi tramite l'agente di HA con verifica a secco; serrature, allarmi, cancelli, valvole, riavvii solo in lettura | dal vero | [casa](docs/aree/casa.md) |
@@ -196,7 +196,7 @@ Calliope vera, satelliti e voci finte; **dal vero** = usata a voce.
 | Giochi | schede interattive in un iframe isolato; partite tra schermi; gioco puro approvabile da un adulto | a secco | [giochi](docs/aree/giochi.md) |
 | Satelliti | installazione con un comando, aggiornamento con ritorno indietro, più satelliti insieme, esecutore del PC | dal vero (PC pulito non provato) | [satelliti](docs/aree/satelliti.md) |
 | Telefono | PWA: VAD e wake word nel browser, carosello, schede a schermo intero, schermo acceso | dal vero in parte (auto no) | [schermi-telefono](docs/aree/schermi-telefono.md) |
-| Schermi | kiosk abbinati a voce, schede dei tool, visibilità per persona, moduli, cruscotto di chi amministra; testi dell'agente in Markdown con «Scarica»; vista dello sviluppo (fasi, due colonne, collaudi, comandi innocui a tocco) e schermo intero (08/10) | dal vero | [schermi-telefono](docs/aree/schermi-telefono.md) |
+| Schermi | kiosk abbinati a voce, schede dei tool, visibilità per persona, moduli, cruscotto di chi amministra; testi dell'agente in Markdown con «Scarica»; vista dello sviluppo (fasi, due colonne, collaudi, comandi innocui a tocco) e schermo intero (08/10); le schede personali salvate per persona (7 giorni) e ritrovate da uno schermo nuovo o dopo un riavvio, «pulisci le mie schede» | dal vero | [schermi-telefono](docs/aree/schermi-telefono.md) |
 | Voce | Piper sulla GPU se la macchina ce l'ha, prima frase a pezzi, taratura all'avvio e con l'uso | dal vero | [stt-tts](docs/aree/stt-tts.md) |
 | Personalità | sei toni, modalità Star Trek («Computer», suoni), cortesia senza modello | a secco, toni dal vero | [personalita](docs/aree/personalita.md) |
 | Capacità | registro con stato e prossimo passo; installazioni a voce solo da catalogo; inventario della macchina e piano dei modelli in sola lettura (`calliope stato --piano`) | dal vero | [capacita-installazioni](docs/aree/capacita-installazioni.md) |
@@ -365,8 +365,8 @@ Prossimi passi decisi, senza date:
 2. **Immagini generate in locale** (FLUX.2 [klein] 4B), con filtri e regole per i minori.
 3. **Secondo fattore** per chi amministra: conferma dal telefono, chiave vocale.
 4. **Pannello di amministrazione** con le azioni.
-5. **Cronologia delle schede e della chat per persona**, che uno schermo personale nuovo
-   ritrova; ricerca cronologica nelle conversazioni; frasi pronte dei tool meno monotone.
+5. **Ricerca cronologica nelle conversazioni** («di cosa stavamo parlando?»); frasi pronte dei
+   tool meno monotone.
 6. Sicurezza per valore: decidere se accenderla dopo i giorni in ombra.
 7. Poi: interfono tra satelliti, conversazione di stanza, mappe e luoghi, satellite su
    Raspberry, altre fonti italiane nella biblioteca.
@@ -477,11 +477,11 @@ network trace for the agent, review, activation; versions, rename) and a live de
 on screens; generated exercises for students (maths, Italian); a per-person file drawer (7
 days); Piper on the GPU when available; a read-only model plan from a hardware inventory; sandboxed games on screens; satellites with
 one-command install and self-update with rollback; phone PWA; kiosk screens and an admin
-dashboard; personalities and a Star Trek mode; capability registry and catalogue installs;
+dashboard; per-person card history and a live conversation transcript on personal screens; personalities and a Star Trek mode; capability registry and catalogue installs;
 turn log with latency statistics; tiered tests and an end-to-end test.
 
 **Roadmap.** The feature freeze (for latency) was lifted on 08/10. Next: the rest of the study
-module (more subjects, oral exam simulation), per-person card and chat history on screens, local image generation (FLUX.2 [klein] 4B), a second factor for admins, an
+module (more subjects, oral exam simulation), chronological conversation search, local image generation (FLUX.2 [klein] 4B), a second factor for admins, an
 admin panel with actions; then intercom, room conversations, maps, Raspberry satellites. A
 speech-to-text correction study (07/10) kept Whisper output uncorrected. Contributions: open an
 issue first ([`CONTRIBUTING.md`](CONTRIBUTING.md)).

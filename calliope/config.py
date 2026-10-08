@@ -694,8 +694,26 @@ class Config:
     # (all'avvio, in «calliope stato», negli elenchi da terminale): solo un avviso, la revoca
     # la decide chi amministra. 0 = nessun avviso
     schermi_inattivi_giorni: float = 7.0
-    # Schede tenute per schermo e rimandate quando la pagina si ricollega
+    # Schede tenute per schermo e rimandate quando la pagina si ricollega; anche quante schede
+    # della cronologia di una persona riceve un suo schermo personale che si collega
     schermi_cronologia: int = 6
+    # La cronologia delle schede per persona, su disco (08/10, schermi/cronologia.py): le
+    # schede personali di chi è riconosciuto restano anche dopo un riavvio, e uno schermo
+    # personale nuovo (un satellite o un telefono appena abbinati) le ritrova. Mai schede di
+    # stanza, della zona grigia o di un'altra persona. false = solo in memoria, come prima
+    schermi_cronologia_persona: bool = True
+    # La cartella dei file (uno per persona, permessi 600 fuori da Windows): vuota = «schede»
+    # accanto a conversazioni.db
+    schermi_cronologia_cartella: str = ""
+    # Giorni di tenuta, e tetto per persona in numero di schede e in MB (oltre, escono le più
+    # vecchie): come il cassetto dei file, una settimana
+    schermi_cronologia_giorni: float = 7.0
+    schermi_cronologia_max: int = 40
+    schermi_cronologia_mb: float = 4.0
+    # La scheda «Conversazione» degli schermi personali (08/10): quanti turni della persona
+    # (dall'archivio delle conversazioni, con la sua scadenza) si ricaricano su uno schermo
+    # che si collega. 0 = niente scheda
+    schermi_chat_turni: int = 80
     # Nomi con cui gli schermi raggiungono il server oltre agli IP, a «localhost» e al nome
     # di questo PC (es. calliope.lan): gli altri si rifiutano (difesa dal DNS rebinding)
     schermi_nomi: list[str] = field(default_factory=list)
@@ -2195,7 +2213,9 @@ SEZIONI: dict[str, list[str]] = {
              "casa_nomi_delicati", "casa_consentiti", "casa_ospite_domini"],
     "schermi": ["schermi_enabled", "schermi_indirizzo", "schermi_porta", "schermi_stanza",
                 "schermi_automatiche", "schermi_codice_min", "schermi_inattivi_giorni",
-                "schermi_cronologia",
+                "schermi_cronologia", "schermi_cronologia_persona",
+                "schermi_cronologia_cartella", "schermi_cronologia_giorni",
+                "schermi_cronologia_max", "schermi_cronologia_mb", "schermi_chat_turni",
                 "schermi_nomi", "schermi_tls_cert", "schermi_tls_chiave",
                 "schermi_senza_tls", "schermi_scritto", "schermi_scritto_stanza",
                 "schermi_scritto_max", "schermi_scritto_al_minuto", "schermi_moduli_s",
@@ -2433,6 +2453,9 @@ LIMITI: dict[str, tuple[float, float]] = {
     "agenti_analisi_s": (1.0, 60.0),
     "agenti_risultato_s": (1.0, 120.0),
     "schermi_scarica_s": (10.0, 3600.0),
+    "schermi_cronologia": (1, 200), "schermi_cronologia_giorni": (0.01, 365.0),
+    "schermi_cronologia_max": (1, 1000), "schermi_cronologia_mb": (0.1, 1000.0),
+    "schermi_chat_turni": (0, 2000),
 }
 
 

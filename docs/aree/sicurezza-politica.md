@@ -752,3 +752,19 @@ Dal giro vero della DGX dell'08/10 pomeriggio (dettagli e misure in
   aprire è l'analisi e la proposta, l'approvazione vuole sempre la sfida. Un programma nuovo e la
   zona grigia restano con la sfida; la sfida porta la chiamata intera. Dettagli in
   [agenti-estensioni](agenti-estensioni.md), stessa data.
+
+## Cronologia delle schede e conversazione sugli schermi personali (08/10 sera, ramo `cronologia-persona`)
+
+Cosa resta su disco e chi lo vede ([schermi-telefono](schermi-telefono.md)):
+- la cronologia delle schede per persona salva solo le schede **personali** con l'identità
+  **certa** (mai zona grigia, ospiti, schede di stanza); la ripresa le manda solo agli schermi
+  personali del loro proprietario (mai a un tutore quelle del ragazzo, mai il contrario); file
+  700/600 fuori da Windows; tenuta 7 giorni; «Scarica» si registra di nuovo per lo schermo che
+  le riceve, sempre del proprietario;
+- `schede_pulisci` (classe azione dichiarata nel tool, effetto E2 in `valore.EFFETTI`, nessun
+  argomento): solo le schede di chi parla, rifiutato dalla zona grigia e agli ospiti; dalla
+  pagina `POST /api/schede` (sessione in un'intestazione, JSON, HTTPS, schermo personale, 10 al
+  minuto). Non è nei tool proposti come funzioni (`agenti/richiesta.NON_FUNZIONI`);
+- la scheda «Conversazione» mostra l'archivio della persona già pulito: frase di sfida oscurata
+  (ora anche nell'archivio), codici e segreti del turno tolti, risposte riservate non archiviate,
+  mai ospiti né altre persone.

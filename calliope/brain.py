@@ -1468,11 +1468,17 @@ class Brain:
                 out.add(spec.name)
         return frozenset(out)
 
+    def archivia_turni(self):
+        """Il turno appena finito nell'archivio (08/10, ciclo.py a turno finito: la scheda
+        «Conversazione» degli schermi lo mostra subito)."""
+        self._archivia_turni()
+
     def _archivia_turni(self):
         """I turni finiti e non ancora archiviati vanno in conversazioni.db (dal thread
         dell'archivio: la voce non aspetta il disco). Si chiama all'inizio di ogni risposta,
         prima di ogni taglio della storia e alla fine della conversazione: così quello che
-        si toglie è già salvato. I messaggi sono già sigillati (_seal_private, WEB_TOLTO)."""
+        si toglie è già salvato. I messaggi sono già sigillati (_seal_private, WEB_TOLTO).
+        Dall'08/10 anche a turno finito (`archivia_turni`, dal ciclo)."""
         arch = getattr(self, "archivio_conv", None)
         conv = self._c()
         if arch is None:
@@ -1484,8 +1490,10 @@ class Brain:
         from .conversazione import turni
         try:
             owner = None if conv.owner is UNSET else conv.owner
-            arch.archivia(conv, turni(nuovi, self._riservati()), owner, conv.nome,
-                          ospite=owner is None)
+            # Con i segreti detti nel turno tolti (08/10: dal ciclo i turni si archiviano a
+            # turno finito, quando `last_secrets` è ancora quello del turno)
+            arch.archivia(conv, turni(nuovi, self._riservati(), redact=self.redact), owner,
+                          conv.nome, ospite=owner is None)
         except Exception as e:  # noqa: BLE001 — l'archivio non ferma la voce
             print(f"   [CONVERSAZIONI] turni non archiviati: {type(e).__name__}: {e}",
                   flush=True)

@@ -784,3 +784,33 @@ body.in-vista-sviluppo #cronologia { display: none; }     /* «Vista normale» r
   .scheda.vista-svil .flusso-chat { flex: 1; height: auto; min-height: 0; }
   .scheda.vista-svil .piede-svil { position: static; }
 }
+
+/* ── «Pulisci» le schede (08/10): in fondo alla cronologia, solo sugli schermi personali ── */
+#cronologia button.pulisci-schede {
+  margin-left: auto; flex: none; justify-content: center; min-height: 2.75rem; min-width: 6rem;
+  color: var(--accento); border-color: var(--accento); text-align: center; font-size: 0.95rem;
+}
+
+/* ── la scheda «Conversazione» (08/10): i turni della persona, come una chat ── */
+.conv-turni { display: flex; flex-direction: column; gap: 0.6rem; }
+.conv-giorno {
+  display: flex; align-items: center; gap: 0.6rem; color: var(--tenue); font-size: 0.9rem;
+  margin: 0.6rem 0 0.1rem; text-transform: capitalize;
+}
+.conv-giorno::before, .conv-giorno::after { content: ""; flex: 1; border-top: 1px solid var(--bordo); }
+.conv-turno { display: flex; flex-direction: column; gap: 0.3rem; }
+.conv-meta { color: var(--tenue); font-size: 0.85rem; }
+.conv-tu, .conv-calliope {
+  max-width: min(46rem, 88%); padding: 0.5rem 0.8rem; border-radius: var(--raggio);
+  overflow-wrap: anywhere; line-height: 1.45;
+}
+.conv-tu { align-self: flex-end; background: var(--accento-tenue); border: 1px solid var(--accento); }
+.conv-calliope { align-self: flex-start; background: var(--pannello); border: 1px solid var(--bordo); }
+.conv-chi { color: var(--tenue); font-size: 0.8rem; margin-bottom: 0.1rem; }
+.conv-x { white-space: pre-wrap; }
+.scheda-chat .scarica { margin: 0 0 0.6rem; }
+.apri-chat { margin-right: 0.4rem; }
+/* Nella scheda normale la conversazione prende lo spazio della scheda e scorre da sola (una
+   barra sola); a schermo intero ha l'altezza del flusso dell'agente */
+.scheda-chat:not(.intera) > .corpo { display: flex; flex-direction: column; overflow: hidden; }
+.scheda-chat:not(.intera) .conv-chat { flex: 1; height: auto; min-height: 8rem; }
