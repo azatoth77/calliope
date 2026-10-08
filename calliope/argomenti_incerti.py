@@ -294,9 +294,11 @@ class Vocabolario:
                     break
             self._riusciti.append((tipo, v))
 
-    def carica_dal_registro(self, cartella, giorni: int = 14):
+    def carica_dal_registro(self, cartella, giorni: int = 14, attendi: bool = True):
         """I valori con esito pieno degli ultimi `giorni` file del registro (una volta per
-        cartella). Mai dei turni di ospiti (nel registro non hanno il valore)."""
+        cartella). Mai dei turni di ospiti (nel registro non hanno il valore). Con
+        `attendi=False` in un thread a parte: la prima chiamata di un tool non aspetta la
+        lettura del registro."""
         if not cartella:
             return
         chiave = str(cartella)
@@ -304,6 +306,13 @@ class Vocabolario:
             if chiave in self._caricato:
                 return
             self._caricato.add(chiave)
+        if not attendi:
+            threading.Thread(target=self._carica, args=(cartella, giorni), daemon=True,
+                             name="vocabolario-registro").start()
+            return
+        self._carica(cartella, giorni)
+
+    def _carica(self, cartella, giorni: int):
         try:
             from .latenza import leggi
             turni = leggi(cartella, giorni)

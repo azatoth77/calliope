@@ -579,6 +579,12 @@ def prova_brain():
                       testo("Niente."), parole=[("cerca", 0.9), ("Rossi", 0.9)])
     verifica("tool riservato: nel registro mai il valore",
              reg and "valore" not in reg[0] and "noto" not in reg[0], str(reg))
+    b5.tools.register(dataclasses.replace(b5.tools.get("est_riservata"), func=lambda ctx, **a: {
+        "ok": True, "risultati": [{"nome": "Rossi"}]}))
+    parla(b5, "Calliope, cerca Rossi", chiama("est_riservata", {"testo": "Rossi"}),
+          testo("Trovato."), parole=[("cerca", 0.9), ("Rossi", 0.9)])
+    verifica("tool riservato: il vocabolario non impara i suoi valori",
+             "Rossi" not in ai.VOCABOLARIO.riusciti("contatto"))
     b5.cfg.llm_reti_spente = ["argomento_forse"]
     parla(b5, "Calliope, prova con Patello Giugnasco",
           chiama("est_meteo_citta", {"citta": "Patello Giugnasco"}), testo("Non la trovo."),

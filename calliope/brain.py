@@ -3616,7 +3616,7 @@ class Brain:
             return []
         try:
             argomenti_incerti.VOCABOLARIO.carica_dal_registro(
-                getattr(self.cfg, "turn_log_dir", None))
+                getattr(self.cfg, "turn_log_dir", None), attendi=False)
         except Exception:  # noqa: BLE001
             pass
         sc = getattr(self.tool_ctx, "speaker_ctx", None)
@@ -3677,8 +3677,9 @@ class Brain:
                 m.noto, m.somiglianza = None, 0.0
             conv.argomenti_recenti.append({"turno": turno, "tool": name, "campo": m.campo,
                                            "valore": m.valore, "esito": es})
-            # Nel vocabolario solo i nomi detti dalla persona (non presi da un risultato)
-            if (es == "pieno" and not m.anonima
+            # Nel vocabolario solo i nomi detti dalla persona (non presi da un risultato), mai
+            # quelli di un tool riservato (la rubrica è di chi la tiene)
+            if (es == "pieno" and not m.anonima and not m.riservata
                     and ai.nella_frase(m.valore, getattr(self, "_turn_text", "") or "")):
                 ai.VOCABOLARIO.ricorda(m.tipo, m.valore)
         del conv.argomenti_recenti[:-12]
