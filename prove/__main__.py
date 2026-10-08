@@ -92,6 +92,10 @@ A_SECCO = [
     ("prova_immagini.py", [], "foto (05/10): controllo e riduzione dei byte, album della conversazione, foto nei messaggi, guardia sulle azioni, /api/immagine, pc_guarda e permessi, cattura dal satellite"),
     # ~8 s: file generati in memoria (anche ostili), Brain finto, server degli schermi vero
     ("prova_allegati.py", [], "allegati (05/10): tipo dai byte, lettura per tipo, file ostili (bomba zip, XXE, macro, PDF rotto, eseguibili), audio, contenuto marcato e guardia, allegato_leggi/archivia, delega, /api/allegato"),
+    # ~6 s: cassetto in una cartella temporanea, Brain finto, server degli schermi vero
+    ("prova_cassetto.py", [], "cassetto dei file per persona (08/10): entrata (foto, file, audio; mai programmi né ospiti), scadenza e «ho eliminato», revisione una volta al giorno, tieni/elimina/tieni ancora, tetto, minore e tutore, zona grigia, ritrovamento dopo un riavvio, contenuto in busta, /api/cassetto, ciclo finto"),
+    # ~15 s: la scheda del cassetto in Edge o Chromium senza finestra; senza browser si salta
+    ("prova_cassetto_pagina.py", [], "scheda del cassetto nella pagina vera: carosello (miniatura, sigle), Tieni solo dove si può, Tieni ancora, Tieni, Elimina tutti con due tocchi, schermo di un'altra persona vuoto, nessun errore JS né CSP"),
     # ~15 s: la pagina in Edge o Chromium senza finestra; senza browser si salta
     ("prova_immagini_pagina.py", [], "foto nella pagina vera: pulsante, file scelto, incolla, trascina, SVG rifiutato, scheda con la miniatura"),
     # ~40 s: Calliope vera con un satellite finto; senza voci di Piper o modelli si salta
@@ -246,7 +250,7 @@ LIVELLO_3 = {
     "prova_giochi_pagina.py", "prova_scritto_calliope.py", "prova_telefono_pagina.py",
     "prova_telefono_audio.py", "prova_telefono_schermo.py", "prova_satellite.py",
     "prova_corsie_satelliti.py", "prova_installa_satellite.py", "prova_cruscotto_pagina.py",
-    "prova_scheda_intera.py", "prova_markdown_pagina.py",
+    "prova_scheda_intera.py", "prova_markdown_pagina.py", "prova_cassetto_pagina.py",
 }
 # Mai nel gruppo parallelo, anche quando una prova li sceglie nel livello 2: un browser, un
 # tempo reale o tanti processi, che sotto carico falliscono a caso. Tutto il livello 3 è
@@ -279,7 +283,8 @@ LEGAMI = [
     ("calliope/tools/web.py", ["prova_web.py", "prova_estensioni_attacchi.py"]),
     ("calliope/tools/archivio.py", ["prova_archivio.py"]),
     ("calliope/tools/immagini.py", ["prova_immagini.py"]),
-    ("calliope/tools/allegati.py", ["prova_allegati.py"]),
+    ("calliope/tools/allegati.py", ["prova_allegati.py", "prova_cassetto.py"]),
+    ("calliope/cassetto.py", ["prova_cassetto.py"]),
     ("calliope/tools/minori.py", ["prova_minori.py", "prova_giochi.py"]),
     ("calliope/speaker_id.py", ["prova_voci_famiglia.py", "prova_conferme.py"]),
     ("calliope/conferme.py", ["prova_voci_famiglia.py", "prova_conferme.py"]),
@@ -294,10 +299,10 @@ LEGAMI = [
     ("calliope/latenza.py", ["prova_cruscotto.py"]),
     ("calliope/schermi/", ["prova_schermi.py", "prova_cruscotto.py", "prova_scritto.py", "prova_giochi.py",
                            "prova_telefono_abbina.py", "prova_inoltro.py",
-                           "prova_immagini.py", "prova_allegati.py"]),
+                           "prova_immagini.py", "prova_allegati.py", "prova_cassetto.py"]),
     ("calliope/ufficio/", ["prova_scritto.py"]),
     ("calliope/immagini.py", ["prova_immagini.py"]),
-    ("calliope/allegati.py", ["prova_allegati.py"]),
+    ("calliope/allegati.py", ["prova_allegati.py", "prova_cassetto.py"]),
     ("calliope/agenti/", ["prova_agenti.py", "prova_sandbox.py", "prova_agenti_domande.py",
                           "prova_avanzamento.py", "prova_esecuzione.py",
                           "prova_agenti_openai.py", "prova_arbitro_vllm.py",

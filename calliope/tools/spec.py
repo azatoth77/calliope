@@ -62,6 +62,8 @@ class ToolContext:
     immagini_viste: list = field(default_factory=list)
     # I file allegati della conversazione (05/10, calliope/allegati.py: Allegati di Brain)
     allegati: Any = None
+    # Il cassetto dei file per persona (08/10, calliope/cassetto.py: Cassetto), o None
+    cassetto: Any = None
     # Quello che la politica dei tool sa del turno (calliope/politica.Turno: la frase, le fonti
     # non fidate nella conversazione, la proposta in sospeso). Lo imposta Brain prima di ogni
     # tool; senza (chiamate del codice) la politica ferma solo i tool vietati

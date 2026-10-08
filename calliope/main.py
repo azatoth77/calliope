@@ -503,6 +503,17 @@ class Avvio:
         conv_arch = self.conv_arch = load_conversazioni(cfg)
         if conv_arch is not None:
             atexit.register(conv_arch.close)
+        # Il cassetto dei file per persona (08/10, calliope/cassetto.py): foto, file e audio
+        # restano 7 giorni; con gli allegati dagli schermi
+        cassetto = None
+        if schermi is not None and getattr(cfg, "allegati_enabled", True):
+            from .cassetto import load_cassetto
+            cassetto = load_cassetto(cfg)
+        s.cassetto = cassetto
+        if cassetto is not None:
+            atexit.register(cassetto.close)
+            cassetto.archivio, cassetto.registry = self.archivio, s.registry
+            schermi.cassetto = cassetto
         s.tools = build_registry(biblioteca=s.biblioteca is not None, pc=self.pcs,
                                  pc_ospite=cfg.pc_ospite_volume_media,
                                  documenti=s.documenti.formati if s.documenti else None,
@@ -524,7 +535,8 @@ class Avvio:
                                  immagini=opzioni_foto(cfg, self.pcs, self.archivio),
                                  # File allegati dagli schermi (05/10, calliope/allegati.py)
                                  allegati=bool(getattr(cfg, "allegati_enabled", True)
-                                               and schermi is not None))
+                                               and schermi is not None),
+                                 cassetto=cassetto is not None)
         # Foto (e file allegati) mandati senza domanda: aspettano la frase dopo della stessa
         # persona
         s.foto_attesa = InAttesa(getattr(cfg, "immagini_attesa_s", 120.0))
@@ -538,7 +550,8 @@ class Avvio:
                                     casa=s.casa, capacita=capacita.REGISTRO,
                                     installazioni=s.installazioni, schermi=schermi,
                                     lavori=lavori, ufficio=ufficio, archivio=self.archivio,
-                                    web=web, conversazioni=conv_arch, modalita=self.modalita)
+                                    web=web, conversazioni=conv_arch, modalita=self.modalita,
+                                    cassetto=cassetto)
 
     def attiva_minori(self) -> bool:
         """I tool compiti_aiuto e minore_gestisci solo con un minore in casa: True se li ha
@@ -755,6 +768,11 @@ class Avvio:
         if s.schermi is not None:
             # I rifiuti dello scritto senza conversazione (thread del server, 05/10)
             s.schermi.registro_turni = s.turns.write
+        if s.cassetto is not None:
+            # Il cassetto (08/10): nel registro solo nome, tipo e dimensione; la pulizia dei
+            # file scaduti subito e poi ogni cassetto_pulizia_s
+            s.cassetto.registro = s.turns.write
+            s.cassetto.avvia(float(getattr(cfg, "cassetto_pulizia_s", 3600.0)))
 
     def _saluto_ed_eco(self):
         """Il saluto, e intanto si misura se il microfono sente la sua voce (eco)."""

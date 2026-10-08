@@ -760,6 +760,22 @@ class Config:
     # Audio: si trascrive con il Whisper della voce solo fino a tanti secondi (oltre, solo nome,
     # tipo e durata: la voce resterebbe ferma troppo)
     allegati_audio_max_s: float = 180.0
+    # Il cassetto dei file per persona (08/10, calliope/cassetto.py, decisione del 07/10): ogni
+    # foto, file o audio mandato da chi è riconosciuto resta `cassetto_giorni` giorni sulla
+    # macchina di Calliope, poi si elimina (e Calliope lo dice la volta dopo). Si ritrova a
+    # voce («il file che ti ho mandato ieri»); alla prima conversazione del giorno, se qualcosa
+    # scade entro `cassetto_avviso_giorni`, una frase e la scheda col carosello sullo schermo
+    # personale (Tieni nei documenti di casa, Elimina, Tieni ancora). Mai per gli ospiti. Oltre
+    # `cassetto_mb_persona` il file resta solo nella conversazione e Calliope lo dice. Spento:
+    # i file vivono solo nella conversazione, come prima
+    cassetto_enabled: bool = True
+    # Cartella dei file (vuoto = «cassetto» accanto a memory_db); l'indice sta in memory_db
+    cassetto_cartella: str = ""
+    cassetto_giorni: float = 7.0
+    cassetto_mb_persona: float = 500.0
+    cassetto_avviso_giorni: float = 2.0
+    # Ogni quanti secondi si eliminano i file scaduti (anche all'avvio)
+    cassetto_pulizia_s: float = 3600.0
     # Il telefono come satellite (03/10, docs/ricerche/2026-10-03-webapp-telefono.md): la
     # pagina /telefono dello stesso server è una web app installabile (PWA) con il microfono,
     # la wake word nel telefono e la voce di Calliope. Serve audio_modo: satellite (Calliope
@@ -2119,7 +2135,9 @@ SEZIONI: dict[str, list[str]] = {
                  "immagini_max_conversazione", "immagini_attesa_s"],
     "allegati": ["allegati_enabled", "allegati_max_mb", "allegati_memoria_mb",
                  "allegati_max_conversazione", "allegati_token_file", "allegati_token_totale",
-                 "allegati_pdf_pagine", "allegati_pdf_pagine_immagini", "allegati_audio_max_s"],
+                 "allegati_pdf_pagine", "allegati_pdf_pagine_immagini", "allegati_audio_max_s",
+                 "cassetto_enabled", "cassetto_cartella", "cassetto_giorni",
+                 "cassetto_mb_persona", "cassetto_avviso_giorni", "cassetto_pulizia_s"],
     # Due sezioni dal 05/10: il server che accoglie i satelliti (la DGX) e il satellite stesso
     # (il portatile). Si possono scrivere anche nella sezione dell'altro: contano le chiavi
     "server_satelliti": ["audio_modo", "satellite_indirizzo", "satellite_porta",
