@@ -393,5 +393,5 @@ def estensioni_specs(crea: bool = True) -> list[ToolSpec]:
             "titolo": {"type": "string"}},
             "required": ["azione"]},
         func=_estensioni_gestisci, risk="azione", levels=FAMILY,
-        prepara=_prepara_gestisci))
+        prepara=_prepara_gestisci, nomi={"nome": "estensione"}))
     return out

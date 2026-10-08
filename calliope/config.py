@@ -386,6 +386,24 @@ class Config:
     # registro dei turni `stt_capito` con prima e dopo (come stt_corretta). Vince su
     # stt_incerte_al_modello. Solo con stt_motore «server»
     stt_incerte_riscrivi: bool = False
+    # Argomenti che nominano qualcosa (08/10, calliope/argomenti_incerti.py, fasi F0 e F1 di
+    # docs/ricerche/2026-10-08-parole-incerte.md). Quando il modello chiama un tool con un
+    # argomento marcato (ToolSpec.nomi: la città di un collaudo, l'estensione, il file…), le
+    # probabilità per parola della frase si chiedono in parallelo al tool (whisper.cpp:
+    # verbose_json, +0,15 s di GPU misurati sulla DGX, solo in quei turni; faster-whisper:
+    # word_timestamps) e si cerca il nome noto più vicino; nel registro dei turni
+    # `stt_argomento`, riassunto in `calliope stato --turni`. Nessun effetto sulla risposta
+    stt_argomenti_misura: bool = True
+    # Dopo un esito vuoto (F1, rete «argomento_forse»): «forse intendeva X» da questa
+    # somiglianza con un nome noto (lettere senza spazi, doppie ridotte; sul solo argomento a
+    # 0,7 44 proposte giuste su 66 e nessuna sbagliata) …
+    stt_argomenti_soglia_noto: float = 0.7
+    # … altrimenti «ripetilo o scrivilo» se una parola del valore è sotto questa probabilità
+    # (whisper.cpp a 0,5: 49 nomi sbagliati su 69 segnalati, 7 giusti su 39)
+    stt_argomenti_soglia_p: float = 0.5
+    # Quanto si aspettano le probabilità dopo un esito vuoto (di solito sono già arrivate:
+    # il tool dura più della richiesta)
+    stt_argomenti_attesa_s: float = 0.4
 
     # Text-to-Speech — Piper (servono sia .onnx che .onnx.json, nella cartella voices/)
     piper_voice: str = (os.environ.get("CALLIOPE_PIPER_VOICE") or
@@ -2104,6 +2122,11 @@ RETI: dict[str, Rete] = {
         "esercizio in sospeso e risposta senza il tool esercizi: trattenuta, spinta", MODELLO,
         "il 4B copiava dalla storia «Perfetto! Prossima: …» correggendo da sé (08/10, 7 turni "
         "d'italiano su 18): la correzione è del programma"),
+    "argomento_forse": Rete(
+        "esito vuoto con un nome forse capito male: «forse intendeva X» o «ripetilo» nel "
+        "risultato del tool (calliope/argomenti_incerti.py)", MODELLO,
+        "dati del turno: «Patello Giugnasco» non trovato, e la persona doveva ripetere da sola "
+        "(08/10, DGX)"),
     # ── sicurezza: sempre accese, per ogni modello ──
     "permessi": Rete(
         "livello di chi parla e preset dei minori, a ogni esecuzione (ToolRegistry.call)",
@@ -2231,7 +2254,8 @@ SEZIONI: dict[str, list[str]] = {
             "whisper_compute_type", "language", "stt_motore", "stt_url", "stt_modello",
             "stt_timeout_s", "stt_correzione", "stt_correzione_soglia", "stt_correzione_motore",
             "stt_correzione_url", "stt_correzione_modello", "stt_correzione_timeout_s",
-            "stt_incerte_al_modello", "stt_incerte_riscrivi"],
+            "stt_incerte_al_modello", "stt_incerte_riscrivi", "stt_argomenti_misura",
+            "stt_argomenti_soglia_noto", "stt_argomenti_soglia_p", "stt_argomenti_attesa_s"],
     "tts": ["piper_voice", "tts_tail_s", "tts_lead_s", "tts_keepalive", "tts_spezza_prima",
             "tts_primo_pezzo_min", "tts_taratura", "tts_thread", "tts_dispositivo",
             "tts_pronuncia",
@@ -2491,6 +2515,8 @@ LIMITI: dict[str, tuple[float, float]] = {
     "max_history_turns": (0, 200), "max_tool_turns": (1, 20), "followup_s": (0.0, 600.0), "wake_solo_nome_s": (0.0, 3.0),
     "sample_rate": (8000, 48000), "whisper_beam_size": (1, 20), "stt_timeout_s": (0.5, 600.0),
     "stt_correzione_soglia": (0.0, 1.01), "stt_correzione_timeout_s": (0.2, 30.0),
+    "stt_argomenti_soglia_noto": (0.0, 1.0), "stt_argomenti_soglia_p": (0.0, 1.01),
+    "stt_argomenti_attesa_s": (0.0, 10.0),
     "speaker_id_threshold": (0.0, 1.0), "wake_threshold": (0.0, 1.0),
     "speaker_id_margine": (0.0, 1.0), "minori_margine_amministra": (0.0, 1.0),
     "speaker_continuita_s": (0.0, 86400.0), "speaker_continuita_soglia": (0.0, 1.0),

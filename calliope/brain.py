@@ -33,7 +33,7 @@ from .allegati import Allegati, Allegato
 from .conversazione import UNSET, Conversazione
 from .immagini import Album
 from .memory import HOUSE
-from . import politica, provenienza, valore
+from . import argomenti_incerti, politica, provenienza, valore
 from .sicurezza import instruction_fact
 from .testi import MESI as _MESI, SENTENCE_END as _SENTENCE_END
 from .tools.registry import ToolRegistry
@@ -1903,7 +1903,7 @@ class Brain:
         rules.append(name)
 
     def stream_reply(self, user_text: str, level: str = "ospite", context: str | None = None,
-                     immagini=None, allegati=None, incerte=None):
+                     immagini=None, allegati=None, incerte=None, ascolto=None):
         """Risponde e gestisce i tool. `level` è il livello di chi parla: il modello vede
         gli stessi tool a ogni livello (prefisso in cache anche quando cambia chi parla,
         03/10), e il registro rifiuta a ogni esecuzione quelli non ammessi.
@@ -1922,6 +1922,13 @@ class Brain:
         # `incerte`: le parole incerte di Whisper (stt_incerte_al_modello), nei dati del turno;
         # con stt_incerte_riscrivi (B2) il modello scrive prima «⟦capito: …⟧» (CapitoHold)
         self._incerte_turno = list(incerte or [])
+        # `ascolto`: l'audio della frase e il trascrittore (argomenti_incerti.Ascolto, 08/10):
+        # le probabilità per parola si chiedono solo se il modello chiama un tool con un
+        # argomento che nomina qualcosa (last_argomenti, campo stt_argomento del registro)
+        # (dal ciclo come attributo `ascolto_turno`, che vale una risposta sola)
+        turno_asc = self.__dict__.pop("ascolto_turno", None)
+        self._ascolto = ascolto if ascolto is not None else turno_asc
+        self.last_argomenti = []
         self._riscrivi_turno = bool(self._incerte_turno) and bool(
             getattr(self.cfg, "stt_incerte_riscrivi", False))
         self._capito_applicato = False
@@ -3484,6 +3491,9 @@ class Brain:
         # La politica dei tool (calliope/politica.py) decide nell'esecutore con lo stato del
         # turno: frase, fonti non fidate nella conversazione, dati letti in questa risposta o
         # arrivati con la frase, proposta in sospeso
+        # Gli argomenti che nominano qualcosa (08/10): le probabilità di Whisper partono adesso,
+        # in parallelo al tool
+        misure = self._argomenti_inizio(call["name"], spec, args, level)
         self._set_ctx("politica", self._turno_politica())
         self._set_ctx("strumenti", self.tools)
         self._set_ctx("politica_esito", None)
@@ -3537,6 +3547,10 @@ class Brain:
                         in politica.MOTIVI_DOPO_DATO else None)
         except (json.JSONDecodeError, TypeError, AttributeError):
             ok, bloccato = False, None
+        # Esito vuoto con un nome forse capito male (08/10, F1): il suggerimento per il modello
+        # (si aggiunge in fondo, fuori dalla busta dei dati non fidati)
+        nome_incerto = self._argomenti_fine(misure, call["name"], args, result, ok,
+                                            offerta) if misure else None
         # Il tool proposto è riuscito: la proposta è fatta e non vale più (04/10: resta valida
         # per qualche turno, conferme.py). Un'altra domanda dello stesso tool la sostituisce
         p = getattr(self, "pending", None)
@@ -3580,7 +3594,151 @@ class Brain:
             # risultato di un'azione ripete gli argomenti scelti dal modello, che possono venire
             # da un dato
             self._ricorda_fidato(result)
+        if nome_incerto:
+            try:
+                res = json.loads(result)
+                if isinstance(res, dict):
+                    res["nome_incerto"] = nome_incerto
+                    result = json.dumps(res, ensure_ascii=False)
+            except (json.JSONDecodeError, TypeError):
+                pass
         return result
+
+    # ── argomenti che nominano qualcosa (08/10, calliope/argomenti_incerti.py) ──
+    def _argomenti_inizio(self, name: str, spec, args: dict, level: str) -> list:
+        """Le misure degli argomenti marcati di questa chiamata (F0): fa partire la richiesta
+        delle probabilità per parola, segna il valore suggerito al turno prima che torna
+        (`argomento_forse_usato`) e la correzione spontanea (`correzione_argomento`)."""
+        if spec is None or not getattr(self.cfg, "stt_argomenti_misura", True):
+            return []
+        marcati = argomenti_incerti.argomenti_marcati(spec, args)
+        if not marcati:
+            return []
+        try:
+            argomenti_incerti.VOCABOLARIO.carica_dal_registro(
+                getattr(self.cfg, "turn_log_dir", None), attendi=False)
+        except Exception:  # noqa: BLE001
+            pass
+        sc = getattr(self.tool_ctx, "speaker_ctx", None)
+        anonima = level == "ospite" or provenienza.persona(sc) in (
+            provenienza.PERSONA_OSPITE, provenienza.PERSONA_ZONA_GRIGIA)
+        asc = getattr(self, "_ascolto", None)
+        if asc is not None:
+            try:
+                asc.avvia()
+            except Exception:  # noqa: BLE001 — la misura non ferma il tool
+                pass
+        conv, turno = self._c(), getattr(self, "turn_number", 0)
+        recenti = getattr(conv, "argomenti_recenti", None) or []
+        sugg = getattr(conv, "argomento_suggerito", None) or {}
+        misure = []
+        for campo, val, tipo in marcati:
+            m = argomenti_incerti.Misura(name, campo, val, tipo,
+                                         bool(getattr(spec, "riservato", False)), anonima)
+            if (sugg.get("tool") == name and 0 < turno - sugg.get("turno", -9) <= 2
+                    and argomenti_incerti.uguali(sugg.get("valore"), val)):
+                m.da_suggerimento = True
+                self._rule("argomento_forse_usato")
+            for r in reversed(recenti):
+                d = turno - r["turno"]
+                if (r["tool"] == name and r["campo"] == campo
+                        and 1 <= d <= argomenti_incerti.CORREZIONE_TURNI
+                        and argomenti_incerti.correzione(r["valore"], val)):
+                    m.correzione = {"turni": d, "esito_prima": r["esito"]}
+                    self._rule("correzione_argomento")
+                    break
+            misure.append(m)
+        return misure
+
+    def _argomenti_fine(self, misure: list, name: str, args: dict, result: str, ok: bool,
+                        offerta: bool) -> dict | None:
+        """L'esito del tool e il nome noto più vicino per ogni argomento marcato; dopo un esito
+        vuoto (F1) il suggerimento per il modello, o None. Mai a un ospite o nella zona grigia,
+        mai nella risposta a una sfida né quando il valore era già il nome suggerito (un «sì» che
+        non trova di nuovo non riceve un altro «forse»), mai con un'altra domanda già fatta in
+        questa risposta, mai se il tool ha già i suoi nomi vicini (la casa) o una frase pronta che il
+        modello non rilegge."""
+        ai = argomenti_incerti
+        try:
+            res = json.loads(result)
+        except (json.JSONDecodeError, TypeError):
+            res = None
+        es = ai.esito(res) if isinstance(res, dict) else ("pieno" if ok else "errore")
+        if offerta and not ok:
+            es = "fermato"            # una domanda (della politica o del tool) al posto del tool
+        conv, turno = self._c(), getattr(self, "turn_number", 0)
+        if not isinstance(getattr(conv, "argomenti_recenti", None), list):
+            conv.argomenti_recenti = []
+        for m in misure:
+            m.esito = es
+            try:
+                m.noto, m.somiglianza = ai.VOCABOLARIO.vicino(m.valore, m.tipo, self.tool_ctx)
+            except Exception:  # noqa: BLE001
+                m.noto, m.somiglianza = None, 0.0
+            conv.argomenti_recenti.append({"turno": turno, "tool": name, "campo": m.campo,
+                                           "valore": m.valore, "esito": es})
+            # Nel vocabolario solo i nomi detti dalla persona (non presi da un risultato), mai
+            # quelli di un tool riservato (la rubrica è di chi la tiene)
+            if (es == "pieno" and not m.anonima and not m.riservata
+                    and ai.nella_frase(m.valore, getattr(self, "_turn_text", "") or "")):
+                ai.VOCABOLARIO.ricorda(m.tipo, m.valore)
+        del conv.argomenti_recenti[:-12]
+        if not isinstance(getattr(self, "last_argomenti", None), list):
+            self.last_argomenti = []
+        self.last_argomenti.extend(misure)
+        if (es != "vuoto" or not self._net("argomento_forse") or any(m.anonima for m in misure)
+                or offerta or getattr(self, "_offer", None)
+                or getattr(self, "_sfida_args", None) is not None
+                or getattr(self, "last_sfida", False)
+                or any(m.da_suggerimento for m in misure)
+                or not isinstance(res, dict) or res.get("nomi_vicini") is not None
+                or res.get("risposta_finale")):
+            return None
+        sc = getattr(self.tool_ctx, "speaker_ctx", None)
+        scritto = getattr(sc, "identified_by", None) == "schermo"
+        attesa = float(getattr(self.cfg, "stt_argomenti_attesa_s", 0.4) or 0)
+        asc = getattr(self, "_ascolto", None)
+        for m in misure:
+            if not scritto:
+                m.completa(asc, attesa)
+        # L'argomento più incerto: quello con il nome noto più vicino, poi la probabilità più
+        # bassa
+        m = sorted(misure, key=lambda x: (-(x.somiglianza if x.noto else 0),
+                                          x.p_min if x.p_min is not None else 1.0))[0]
+        s = ai.suggerimento(m, float(getattr(self.cfg, "stt_argomenti_soglia_noto",
+                                             ai.SOGLIA_NOTO)),
+                            float(getattr(self.cfg, "stt_argomenti_soglia_p", ai.SOGLIA_P)),
+                            scritto)
+        if s is None:
+            return None
+        self._rule("argomento_forse")
+        if s["forma"] == "forse":
+            # Il «sì» richiama il tool con il nome suggerito: l'azione in sospeso di sempre
+            # (la politica vede la proposta con gli stessi argomenti)
+            self._offer = {"domanda": f"Intendevi {s['forse']}?",
+                           "cosa": f"riprovare con «{s['forse']}»", "tool": name,
+                           "argomenti": ai.sostituisci(args, m.campo, s["forse"])}
+            conv.argomento_suggerito = {"tool": name, "valore": s["forse"], "turno": turno}
+            return {"detto": m.valore, "forse": s["forse"],
+                    "cosa_fare": ai.FORSE_MSG.format(detto=m.valore, forse=s["forse"],
+                                                     tool=name)}
+        schermo = (" sullo schermo" if getattr(self.tool_ctx, "schermi", None) is not None
+                   else "")
+        return {"detto": m.valore,
+                "cosa_fare": ai.RIPETI_MSG.format(detto=m.valore, schermo=schermo)}
+
+    def argomenti_per_registro(self, attesa_s: float = 1.0) -> list[dict]:
+        """Le misure di questa risposta per il registro dei turni (`stt_argomento`), con le
+        probabilità arrivate entro `attesa_s` (la voce ha già finito di parlare: di solito ci
+        sono da un pezzo)."""
+        misure = getattr(self, "last_argomenti", None) or []
+        asc = getattr(self, "_ascolto", None)
+        t0 = time.monotonic()
+        out = []
+        for m in misure:
+            m.completa(asc, max(0.0, attesa_s - (time.monotonic() - t0)))
+            out.append(m.per_registro(getattr(asc, "ms", None)))
+        return out
 
     def _ricorda_fidato(self, risultato: str):
         """Il risultato riuscito di un tool interno fidato, in memoria per la conversazione

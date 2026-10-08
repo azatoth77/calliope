@@ -52,7 +52,7 @@ per stadio, solo i moduli principali: librerie, classi e dettagli sono nei docum
 | Ciclo principale, robustezza | `main.py` (`Avvio`, `Corsie`), `ciclo.py` (`Ciclo`, `Servizi`: dal 06/10, P8), `persistenza.py`, `turnlog.py` | [voce-e-regole](docs/aree/voce-e-regole.md) |
 | Cattura, VAD, wake word acustica, barge-in; pause e fine del turno (solo misura, dal 07/10) | `audio.py` (`Listener`), `vad.py`, `wakeword.py` (`WakeWordDetector`), `pause.py` | [stt-tts](docs/aree/stt-tts.md) |
 | Chi parla (CAM++ in ONNX) | `speaker_id.py`, `arruola.py` | [stt-tts](docs/aree/stt-tts.md) |
-| Speech-to-Text (faster-whisper o whisper.cpp sulla DGX, ripiego su CPU) | `stt.py`, `stt_correzione.py` | [stt-tts](docs/aree/stt-tts.md) |
+| Speech-to-Text (faster-whisper o whisper.cpp sulla DGX, ripiego su CPU); nomi incerti negli argomenti dei tool, misura e «forse intendeva» dopo un esito vuoto (dal 08/10) | `stt.py`, `stt_correzione.py`, `argomenti_incerti.py` | [stt-tts](docs/aree/stt-tts.md) |
 | Text-to-Speech (Piper), pronuncia degli inglesismi | `tts.py` (`Speaker`), `pronuncia.py` | [stt-tts](docs/aree/stt-tts.md) |
 | Regole sul testo: wake word testuale, uscita, stop, cortesia | `wakeword.py`, `cortesia.py` | [voce-e-regole](docs/aree/voce-e-regole.md) |
 | LLM e tool calling (Ollama nativo o API OpenAI), reti e spinte | `brain.py` (`Brain`), `tools/` (`spec`, `registry`, `builtin`) | [voce-e-regole](docs/aree/voce-e-regole.md) |

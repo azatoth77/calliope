@@ -111,6 +111,9 @@ class Confidenza:
     # Le parole sotto 0,5 con la loro probabilità (05/10 sera): servono a `incerta` per
     # non contare il nome di Calliope (vedi lì)
     deboli: list = field(default_factory=list)
+    # Tutte le parole con la probabilità (08/10, calliope/argomenti_incerti.py): con il
+    # verbose_json già chiesto per la frase, la misura sugli argomenti non lo richiede
+    parole: list = field(default_factory=list)
 
 
 def confidenza(verbose: dict, soglia_parola: float = 0.5) -> Confidenza:
@@ -121,7 +124,8 @@ def confidenza(verbose: dict, soglia_parola: float = 0.5) -> Confidenza:
         logprob=min((float(s.get("avg_logprob", 0.0)) for s in segs), default=0.0),
         no_speech=max((float(s.get("no_speech_prob", 0.0)) for s in segs), default=0.0),
         incerte=[w for w, p in parole if p < soglia_parola],
-        deboli=[(w, round(p, 3)) for w, p in parole if p < soglia_parola])
+        deboli=[(w, round(p, 3)) for w, p in parole if p < soglia_parola],
+        parole=[(w, round(p, 3)) for w, p in parole])
 
 
 def min_utile(conf: Confidenza, cfg=None) -> float:

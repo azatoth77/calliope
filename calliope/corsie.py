@@ -654,6 +654,12 @@ class STTCondiviso:
             self._qui.conf = getattr(self._stt, "ultima_confidenza", None)
         return testo
 
+    def parole(self, audio):
+        """Le parole con la probabilità (calliope/argomenti_incerti.py), una richiesta alla
+        volta come le trascrizioni."""
+        with self._lock:
+            return self._stt.parole(audio)
+
     @property
     def ultima_confidenza(self):
         return getattr(self._qui, "conf", None)

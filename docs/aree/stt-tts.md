@@ -8,7 +8,7 @@
 |---|---|---|
 | Cattura + VAD | sounddevice + Silero VAD (PyTorch, oppure il suo ONNX con onnxruntime senza torch: Linux) | `calliope/audio.py` → `Listener` (`listen`, `watch_for_name`, `measure_echo`); `calliope/vad.py` → `carica_vad`, `SileroOnnx`, `SileroTorch`; pause e fine del turno (dal 07/10, solo misura) `calliope/pause.py` → `MisuraPause`, `OsservaRipresa`, `inizio_ripresa`, `riassunto` (sotto) |
 | Chi parla | CAM++ (3D-Speaker) in ONNX con onnxruntime | `calliope/speaker_id.py` → `SpeakerEmbedder`, `SpeakerRegistry`, `SpeakerContext`; `arruola.py` |
-| Speech-to-Text | faster-whisper nel processo, oppure un server con l'API OpenAI (sulla DGX whisper.cpp con CUDA, servizio `calliope-whisper`; vLLM scartato) con ripiego su faster-whisper su CPU (modello di riserva dal catalogo, `whisper_riserva`) | `calliope/stt.py` → `Transcriber`, `ServerTranscriber`, `make_transcriber`, `modello_whisper`; server in `setup/linux/motore/whisper.sh`; correzione delle frasi incerte (spenta) `calliope/stt_correzione.py` → `Correttore`, `accettabile`, `min_utile`; a capo di whisper-server tolti `stt.unisci_righe`; parole incerte al modello (B, spenta) `stt_correzione.parole_incerte`, `Brain.STT_INCERTE_MSG`; frase capita trattenuta (B2, spenta) `Brain.CapitoHold`, `Brain._applica_capito`, `STT_RISCRIVI_MSG` (confronto A/B/B2/C in fondo) |
+| Speech-to-Text | faster-whisper nel processo, oppure un server con l'API OpenAI (sulla DGX whisper.cpp con CUDA, servizio `calliope-whisper`; vLLM scartato) con ripiego su faster-whisper su CPU (modello di riserva dal catalogo, `whisper_riserva`) | `calliope/stt.py` → `Transcriber`, `ServerTranscriber`, `make_transcriber`, `modello_whisper`; server in `setup/linux/motore/whisper.sh`; correzione delle frasi incerte (spenta) `calliope/stt_correzione.py` → `Correttore`, `accettabile`, `min_utile`; a capo di whisper-server tolti `stt.unisci_righe`; parole incerte al modello (B, spenta) `stt_correzione.parole_incerte`, `Brain.STT_INCERTE_MSG`; frase capita trattenuta (B2, spenta) `Brain.CapitoHold`, `Brain._applica_capito`, `STT_RISCRIVI_MSG` (confronto A/B/B2/C in fondo); parole incerte negli argomenti dei tool (dal 08/10, F0 e F1, sotto) `calliope/argomenti_incerti.py` → `Ascolto`, `Misura`, `Vocabolario`, `allinea`, `esito`, `suggerimento`, `riassunto`, con le probabilità per parola `Transcriber.parole` e `ServerTranscriber.parole` |
 | Wake word acustica | classificatore addestrato in formato openWakeWord (ONNX) | `calliope/wakeword.py` → `WakeWordDetector`, `load_wake_detector`; usato da `Listener.listen(wake, awake_until)`. Modelli e addestramento in `wakeword/` |
 | Text-to-Speech | Piper (voce `it_IT-serena-high`) | `calliope/tts.py` → `Speaker` (2 thread: sintesi e riproduzione, `_pcm`; la prima frase lunga a pezzi `primo_pezzo`, `tts_spezza_prima`, `tts_primo_pezzo_min`, e i thread di onnxruntime `carica_voce`, `tts_thread`, dal 07/10; velocità e costo della voce misurati all'avvio e con l'uso `calliope/taratura_voce.py` → `Taratura` (file voce_taratura.json), `tts_thread` «auto»; dal 07/10 sera Piper anche sulla GPU con onnxruntime-gpu, `tts_dispositivo` auto/cpu/cuda, scelta secondo la macchina e ripiego sulla CPU (`_su_gpu`, `prova_dispositivo`): [contesto-conversazione](contesto-conversazione.md)); inglesismi detti all'inglese `calliope/pronuncia.py` → `Pronuncia`, `LESSICO` (`tts_pronuncia`, `tts_pronuncia_extra`) |
 
@@ -492,3 +492,66 @@ fantasia, tre voci di Piper). Nessuna modifica al codice.
   chiesta solo per i turni con un tool che nomina), F1 «forse intendevi / ripetimelo» solo dopo un
   esito vuoto, F2 scheda di correzione sullo schermo personale senza fermare il tool, F3 dizionario
   per persona solo da correzioni confermate, come suggerimento e mai sostituzione nel testo.
+
+## Parole incerte negli argomenti: misura (F0) e «forse intendeva» (F1) (08/10, ramo `parole-incerte-f01`)
+
+Le fasi F0 e F1 del rapporto [`../ricerche/2026-10-08-parole-incerte.md`](../ricerche/2026-10-08-parole-incerte.md),
+decise da Dario. Codice in `calliope/argomenti_incerti.py`; la parte di Brain (tool, registro,
+regole) è in [voce-e-regole](voce-e-regole.md). Prova a secco `prove/prova_argomenti_incerti.py`
+(nel livello 1), misura col modello `prove/misura_argomenti_forse.py` (manuale).
+
+- **Argomenti che nominano qualcosa**: `ToolSpec.nomi` ({argomento: tipo}). Marcati: `dati` e
+  `argomenti` di `sviluppo_collauda` (ogni valore di testo dell'oggetto, con il tipo dal nome
+  dell'input: «citta» → luogo), `modifica` di `sviluppo_apri`, gli input di testo liberi di ogni
+  `est_*` (`nomi_estensione`), `comando` e `cosa` della casa, `nome` di `estensione_gestisci`,
+  `testo` di `anagrafica_cerca` (riservato: mai il valore nel registro) e di `pc_cerca_file`.
+  **Non** `web_cerca` e `biblioteca_cerca`: il loro argomento è una domanda libera, il nome non
+  si separa dal resto e l'esito non è mai «vuoto» (il rapporto sconsiglia la confidenza sulla
+  frase intera).
+- **Probabilità solo in questi turni, in parallelo al tool**: il ciclo passa a Brain l'audio della
+  frase (`Ascolto`, attributo `ascolto_turno`); alla prima chiamata con un argomento marcato parte
+  in secondo piano `stt.parole(audio)`: whisper-server con `verbose_json` e
+  `token_timestamps=false`, faster-whisper con `word_timestamps`. Se la frase aveva già il
+  `verbose_json` (correzione o varianti B/B2 accese) si usano quelle parole (`Confidenza.parole`).
+  Il tool non aspetta: nella prova 0,25 s di tool e 0,2 s di Whisper finiscono in meno di 0,4 s.
+- **Allineamento** (`allinea`): la finestra di parole della trascrizione (lunga quanto il valore,
+  una in più o in meno) più simile lettera per lettera, almeno 0,5, il nome che sveglia escluso;
+  dà minima e media della probabilità e se il valore è uguale alla trascrizione o il modello l'ha
+  già corretto. Valore non nella frase (un «sì», un nome preso dalla storia) → «non allineato».
+- **Vocabolario dei nomi noti** (`Vocabolario`): titoli e nomi delle estensioni, entità esposte,
+  alias e stanze (per la casa sui pezzi di una, due, tre parole del comando), persone registrate,
+  e i valori dei tool con **esito pieno** detti da chi vive in casa (solo se vengono dalle parole
+  della frase, `nella_frase`: mai un nome preso da un risultato), ricaricati all'avvio dal
+  registro dei turni. Somiglianza come nella misura del rapporto (lettere senza spazi, doppie
+  ridotte); «forse» da 0,7 (`stt_argomenti_soglia_noto`).
+- **Esito del tool** (`esito`): vuoto (campo d'errore o testo «non trovato», «nessun risultato»,
+  risultati vuoti, `trovato: false`), errore, pieno, fermato (una domanda della politica o del tool
+  al posto del tool).
+- **F1**: dopo un esito vuoto, con un nome noto vicino il risultato del tool porta
+  `nome_incerto` («chiudi con la domanda «Intendevi X?»»; fuori dalla busta dei dati non fidati) e
+  una proposta in sospeso con il nome suggerito: il «sì» richiama il tool con quello, senza altre
+  domande della politica (prova: anche il collaudo, classe pericolosa, dopo la domanda «C'è di
+  mezzo il risultato di un'estensione»). Senza nome vicino e con una parola sotto 0,5
+  (`stt_argomenti_soglia_p`): «chiedi di ripeterlo o di scriverlo». Mai il valore cambiato dal
+  codice né il tool rilanciato da solo.
+- **Costo**: sulla DGX una richiesta in più a whisper.cpp (0,37 s di mediana misurati, `verbose_json`)
+  solo nei turni con un argomento marcato (17 % dei turni del 02–08/10), in secondo piano; la voce
+  aspetta al più `stt_argomenti_attesa_s` (0,4 s) e solo dopo un esito vuoto, se la probabilità non
+  è ancora arrivata. Sul portatile, faster-whisper vero (RTX 5070, 30 frasi di nomi): trascrizione
+  0,332 s di mediana, `parole` 0,346 s; 27 nomi su 30 allineati (gli altri: frase vuota, un «sì»,
+  una frase di conferma storpiata).
+
+**Misura col modello** (`prove/misura_argomenti_forse.py 5`, gemma4 e4b su questo portatile,
+estensione «Meteo città» finta): suggerimento acceso, «Patello Giugnasco» → «Non ho trovato
+informazioni per Patello Giugnasco, forse intendevi Pradello Dugnasco?» **5/5**, proposta in
+sospeso 5/5, «Sì.» → estensione richiamata con il nome giusto **5/5**; «Rocca Barba» (nessun nome
+vicino, Whisper incerto) → chiede di ripeterlo o scriverlo 5/5, nessun nome inventato; esito pieno
+→ nessun «intendevi» 5/5. Spento: 0/5 in tutti e tre (risponde solo «non ho trovato»). Con la prima
+formulazione del messaggio («chiedi se intendeva…») la domanda finiva col punto 3 volte su 5 e la
+proposta non restava: ora il messaggio chiede la domanda finale con il punto di domanda. Prima
+frase 1,6–1,8 s col suggerimento contro 1,5–1,6 senza (qualche parola in più).
+
+Limite: il collaudo che si ferma con un campo d'errore nel risultato (`_fallito` in
+`tools/sviluppo.py`) risponde con la sua frase pronta «Lo faccio correggere?»: lì F1 non arriva al
+modello (la misura resta). Da rimisurare sulla DGX con la voce vera: soglie, quanti esiti vuoti
+hanno un nome noto vicino, quante correzioni spontanee (`calliope stato --turni`).

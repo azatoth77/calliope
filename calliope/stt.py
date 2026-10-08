@@ -125,6 +125,20 @@ class Transcriber:
                                             condition_on_previous_text=False)
         return " ".join(s.text.strip() for s in segments).strip()
 
+    def parole(self, audio) -> list[tuple[str, float]]:
+        """Le parole della frase con la loro probabilità (08/10, calliope/argomenti_incerti.py),
+        con le stesse opzioni della trascrizione più `word_timestamps`: solo quando il modello
+        chiama un tool con un argomento che nomina qualcosa, in secondo piano (portatile:
+        0,315 → 0,355 s di mediana per frase)."""
+        segments, _ = self.model.transcribe(audio, language=self.cfg.language,
+                                            beam_size=self.cfg.whisper_beam_size,
+                                            hotwords=hotwords_whisper(self.cfg),
+                                            initial_prompt=self.prompt,
+                                            condition_on_previous_text=False,
+                                            word_timestamps=True)
+        return [(w.word.strip(), round(float(w.probability), 3))
+                for s in segments for w in (s.words or ()) if any(c.isalnum() for c in w.word)]
+
     # Chiamata (senza argomenti) prima di caricare Whisper su CPU durante l'uso: main.py ci
     # fa dire una frase d'attesa, perché la prima frase sulla CPU costa secondi (03/10)
     on_ripiego = None
@@ -269,6 +283,23 @@ class ServerTranscriber(Transcriber):
             from .stt_correzione import confidenza
             self.ultima_confidenza = confidenza(v)
         return unisci_righe(str(v.get("text") or "")).strip()
+
+    def parole(self, audio) -> list[tuple[str, float]]:
+        """Le parole della frase con la probabilità (08/10, calliope/argomenti_incerti.py): la
+        stessa frase rimandata con `verbose_json`, senza i tempi per token (la probabilità c'è
+        lo stesso; misurato sulla DGX: 0,37 s di mediana contro 0,22 del json). Solo quando il
+        modello chiama un tool con un argomento che nomina qualcosa, in parallelo al tool. Con il
+        server giù nessuna parola (il ripiego su CPU serve alla voce, non alla misura)."""
+        if self.ultimo != "server" or time.monotonic() - self._giu_da < self.RIPROVA_S:
+            return []
+        from .stt_correzione import parole_whisper
+        files = {"file": ("frase.wav", wav_bytes(audio, self.cfg.sample_rate), "audio/wav")}
+        data = {"model": self.cfg.stt_modello, "language": self.cfg.language,
+                "prompt": self.prompt, "temperature": "0", "response_format": "verbose_json",
+                "token_timestamps": "false"}
+        r = self.http.post(self.url, files=files, data=data)
+        r.raise_for_status()
+        return [(w, round(p, 3)) for w, p in parole_whisper(r.json())]
 
     def _segnala_ok(self):
         from . import capacita

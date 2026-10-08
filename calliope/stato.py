@@ -10,7 +10,10 @@ il prossimo passo (registro delle capacità, calliope/capacita.py).
                                               latenza vera della voce per giorno (prima frase,
                                               mediana e p90) con le cause, dal registro dei
                                               turni (calliope/latenza.py); attrito della
-                                              sicurezza per giorno (calliope/attrito.py)
+                                              sicurezza per giorno (calliope/attrito.py);
+                                              argomenti che nominano qualcosa: probabilità di
+                                              Whisper, nomi noti vicini, esiti vuoti
+                                              (calliope/argomenti_incerti.py)
     python -m calliope.stato --turni --pause [--giorni N]
                                               pause dentro la frase per persona e canale,
                                               tagli probabili e la soglia che si sceglierebbe
@@ -220,14 +223,20 @@ def main(argv=None) -> int:
         # turni, ripetute, poi eseguite, e la politica per valore in ombra
         sicurezza = attrito.per_giorno(turni)
         soglia_a = float(getattr(cfg, "attrito_avviso", 3.0) or 0)
+        # Gli argomenti che nominano qualcosa (08/10, F0: calliope/argomenti_incerti.py)
+        from . import argomenti_incerti
+        argomenti = argomenti_incerti.riassunto(turni)
         if as_json:
             print(json.dumps({"giorni": dati, "soglia_s": getattr(cfg, "latenza_avviso_s", None),
-                              "attrito": sicurezza, "attrito_soglia": soglia_a},
+                              "attrito": sicurezza, "attrito_soglia": soglia_a,
+                              "argomenti": argomenti},
                              ensure_ascii=False, indent=2))
         else:
             print(latenza.testo(dati, soglia))
             print()
             print(attrito.testo(sicurezza, soglia_a))
+            print()
+            print(argomenti_incerti.testo(argomenti))
         return 0
     if "--piano" in argv:
         return piano_main(cfg, argv, as_json)

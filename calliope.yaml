@@ -370,6 +370,24 @@ stt:
   # registro dei turni `stt_capito` con prima e dopo (come stt_corretta). Vince su
   # stt_incerte_al_modello. Solo con stt_motore «server»
   stt_incerte_riscrivi: false
+  # Argomenti che nominano qualcosa (08/10, calliope/argomenti_incerti.py, fasi F0 e F1 di
+  # docs/ricerche/2026-10-08-parole-incerte.md). Quando il modello chiama un tool con un
+  # argomento marcato (ToolSpec.nomi: la città di un collaudo, l'estensione, il file…), le
+  # probabilità per parola della frase si chiedono in parallelo al tool (whisper.cpp:
+  # verbose_json, +0,15 s di GPU misurati sulla DGX, solo in quei turni; faster-whisper:
+  # word_timestamps) e si cerca il nome noto più vicino; nel registro dei turni
+  # `stt_argomento`, riassunto in `calliope stato --turni`. Nessun effetto sulla risposta
+  stt_argomenti_misura: true
+  # Dopo un esito vuoto (F1, rete «argomento_forse»): «forse intendeva X» da questa
+  # somiglianza con un nome noto (lettere senza spazi, doppie ridotte; sul solo argomento a
+  # 0,7 44 proposte giuste su 66 e nessuna sbagliata) …
+  stt_argomenti_soglia_noto: 0.7
+  # … altrimenti «ripetilo o scrivilo» se una parola del valore è sotto questa probabilità
+  # (whisper.cpp a 0,5: 49 nomi sbagliati su 69 segnalati, 7 giusti su 39)
+  stt_argomenti_soglia_p: 0.5
+  # Quanto si aspettano le probabilità dopo un esito vuoto (di solito sono già arrivate:
+  # il tool dura più della richiesta)
+  stt_argomenti_attesa_s: 0.4
 
 tts:
   # Text-to-Speech — Piper (servono sia .onnx che .onnx.json, nella cartella voices/)

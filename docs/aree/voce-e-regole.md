@@ -9,7 +9,7 @@
 | Ciclo principale | — | `calliope/main.py` → `main`, `Avvio` (i passi dell'avvio), `Corsie` (un ciclo per satellite), `single_instance_lock`, `check_audio_devices`, `notifica_systemd` (READY=1 per systemd); il ciclo della voce `calliope/ciclo.py` → `Ciclo` (`giro` in fasi, dal 06/10: P8), `Servizi`, `Turno`, `save_debug_audio`, `domanda_guardia` |
 | Wake word testuale (ripiego, conferma, estrazione della richiesta), uscita, stop, cortesia | difflib sulla trascrizione | `calliope/wakeword.py` → `find_wake_word` (più parole, `start_only`), `exit_intent` / `exit_request`, `is_stop`, `closing_kind`, `said_name`; `calliope/cortesia.py` → `Cortesia` («Prego!», «Bene!» per tono); le parole in `Config.wake_names` (`wake_word`, dal 04/10) |
 | LLM + tool calling | Ollama, API nativa `/api/chat` (httpx) o `/v1` (`openai`) | `calliope/brain.py` → `Brain`, `OllamaBackend`, `OpenAIBackend`; modello della voce in una riga, `llm_profilo` (`calliope/config.py` → `PROFILI_LLM`, con le reti adatte in `llm_reti_spente`); banco `prove/prova_regressione.py` |
-| Tool nativi | — | `calliope/tools/` (`spec.py`, `registry.py`, `builtin.py`) |
+| Tool nativi | — | `calliope/tools/` (`spec.py`, `registry.py`, `builtin.py`); argomenti che nominano qualcosa `ToolSpec.nomi` e la loro misura in Brain (`_argomenti_inizio`, `_argomenti_fine`, `argomenti_per_registro`, dal 08/10: [stt-tts](stt-tts.md)) |
 | Pulizia output | regex | `calliope/brain.py` → `ThinkFilter`, `TextCallGuard`; `calliope/tts.py` → `split_sentences`, `clean_for_speech` |
 | Configurazione | dataclass + YAML (PyYAML) | `calliope/config.py` → `Config`, `load_config`, `VOICE_MAP`; file `calliope.yaml` |
 | Registro dei turni | JSONL, un file al giorno in `registro/` | `calliope/turnlog.py` → `TurnLog`; analisi con `revisione.py` |
@@ -587,3 +587,33 @@ cronologica e il caso vero):
   immediato»), nessuna giustificazione inventata, nessun `calliope_stato`; resta qualche frase
   generica («non ho un accesso diretto e immediato a tutti i nostri scambi»). «Perché il cielo è
   blu?» 3/3 con la spiegazione vera; `prova_brain_ollama` uguale. Da rifare col 26B sulla DGX.
+
+## Argomenti incerti nel registro e «forse intendeva» (08/10, ramo `parole-incerte-f01`)
+
+F0 e F1 di [`../ricerche/2026-10-08-parole-incerte.md`](../ricerche/2026-10-08-parole-incerte.md);
+probabilità, vocabolario e misure in [stt-tts](stt-tts.md).
+
+- **Registro dei turni**: campo `stt_argomento`, una voce per argomento marcato di ogni chiamata:
+  tool, argomento, tipo, esito (`pieno`, `vuoto`, `errore`, `fermato`), valore (già nel registro
+  come argomento del tool), nome noto più vicino e somiglianza (`e_noto` se è proprio quello),
+  `p_min`/`p_media`/`parole` e `uguale_alla_frase` (o `allineato: false`, `p_tardi`), `stt_ms`,
+  `correzione`, `forse`, `da_suggerimento`. Per ospiti e zona grigia solo numeri (né valore né nome
+  noto) e mai F1; per un tool riservato mai il valore; scritto da uno schermo: oscurato come i tool.
+  Riassunto in `calliope stato --turni` (chiamate, esiti, probabilità sotto 0,3/0,4/0,5 anche
+  sugli esiti vuoti, nomi vicini, correzioni spontanee e quelle riuscite dopo un vuoto,
+  suggerimenti e quanti usati).
+- **Regole** (principio 10): `correzione_argomento` è solo misura (lo stesso tool entro tre turni
+  con un valore quasi uguale, ≥ 0,75 con le doppie, numeri uguali); `argomento_forse` è un dato del
+  turno nel risultato del tool, mai un cambio del valore (rete `argomento_forse`, categoria
+  «modello», spegnibile con `llm_reti_spente`); `argomento_forse_usato` quando la chiamata dopo
+  usa il nome suggerito. Il riconoscimento dell'esito vuoto guarda il risultato del tool, non la
+  frase della persona.
+- **Quando no**: esito pieno, errore o fermato; ospite o zona grigia; risposta a una sfida; il
+  valore era già il nome suggerito (il «sì» che non trova di nuovo non riceve un altro «forse»);
+  un'altra domanda già fatta in questa risposta (un tool con la sua proposta); il tool ha già i suoi
+  nomi vicini (la casa, `nomi_vicini`) o una frase pronta (`risposta_finale`); frase scritta senza
+  nome vicino (niente Whisper da cui dubitare).
+- **Politica**: il «sì» passa dalla proposta in sospeso (`set_pending`, solo se la risposta finisce
+  con «?»), con gli stessi argomenti: nessuna domanda in più (`politica_conferma_unica` nella prova
+  del collaudo). Se il modello richiama con gli argomenti in un'altra forma (`argomenti` invece di
+  `dati`) la politica chiede come sempre: non si allenta la provenienza per F1.

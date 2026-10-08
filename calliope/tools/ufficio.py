@@ -192,7 +192,8 @@ def ufficio_specs(modelli) -> list[ToolSpec]:
                          "quelle sono in elenca_utenti."),
             parameters={"type": "object", "properties": {"testo": {"type": "string"}},
                         "required": ["testo"]},
-            func=_anagrafica_cerca, risk="lettura", levels=FAMILY, riservato=True),
+            func=_anagrafica_cerca, risk="lettura", levels=FAMILY, riservato=True,
+            nomi={"testo": "contatto"}),
         ToolSpec(
             name="anagrafica_salva",
             description=("Aggiunge, modifica o toglie un cliente, fornitore o contatto della "
