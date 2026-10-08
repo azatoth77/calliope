@@ -294,7 +294,7 @@ def _da_tool(tools) -> dict[str, bool]:
             "documenti": "documento_crea" in names,
             "casa": "casa_comando" in names,
             "schermi": "schermo_mostra" in names,
-            "agenti": "delega_lavoro" in names,
+            "agenti": "lavoro_affida" in names,
             "archivio": "archivio_cerca" in names}, **extra}
 
 
@@ -316,7 +316,7 @@ def testo_prompt(registro: Registro | None = None, tools=()) -> str:
             presenti["schermi"] = True
         # Gli agenti pure: con la VPN spenta i tool restano (la delega spiega cosa manca), e il
         # prompt non cambia quando la DGX va e viene
-        if "agenti" in presenti and "delega_lavoro" in names:
+        if "agenti" in presenti and "lavoro_affida" in names:
             presenti["agenti"] = True
         # L'archivio pure: con il modello grande giù le domande sui documenti già letti vanno
         if "archivio" in presenti and "archivio_cerca" in names:

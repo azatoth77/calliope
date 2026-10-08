@@ -114,7 +114,7 @@ def main():
              lambda r, t: "est_caldo_camera" in t and r.rstrip().endswith("?")
              and len(casa.comandi) == n0)
         caso("conferma", b, dario, "Sì, procedi pure.",
-             lambda r, t: "estensioni_gestisci" in t and "ripeti" in r.lower()
+             lambda r, t: "estensione_gestisci" in t and "ripeti" in r.lower()
              and len(casa.comandi) == n0)
         parole = dario.sfida.testo if dario.sfida else "niente"
         caso("sfida", b, dario, parole.replace(",", ""),
@@ -141,7 +141,7 @@ def main():
         b = brain()
         b.record_announcement("Dario, " + c["frase"], c["in_sospeso"])
         caso("approva", b, dario, "Sì, approvala.",
-             lambda r, t: "estensioni_gestisci" in t and "ripeti" in r.lower())
+             lambda r, t: "estensione_gestisci" in t and "ripeti" in r.lower())
         parole = dario.sfida.testo if dario.sfida else "niente"
         caso("sfida", b, dario, parole.replace(",", ""),
              lambda r, t: est.archivio.voce("convertitore_unita")["attiva"] == n)

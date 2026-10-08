@@ -107,7 +107,9 @@ def strip_think(tokens):
 # Qualificatore che il modello a volte mette davanti al nome del tool, e una parola sola.
 # «calliope_cambia_voce(tono="computer_di_bordo", per_tutti=true)» detto ad alta voce (04/10,
 # prova_personalita_ollama, 1 volta su 2): il nome dell'assistente attaccato con «_»
-_QUALIFIER = re.compile(r"(?:call_|calliope_|[a-z_][a-z0-9_]*\.)")
+# «chiamata_» (08/10, gemma4 con i nomi nuovi dei lavori: «chiamata_lavoro_affida(…)» detto a
+# voce in una sessione su due del banco degli agenti): un prefisso come «call_»
+_QUALIFIER = re.compile(r"(?:call_|calliope_|chiamata_|[a-z_][a-z0-9_]*\.)")
 _MATH_FUNCS = ("sqrt", "radice", "log", "log10", "ln", "sin", "cos", "tan", "exp",
                "fattoriale", "factorial", "abs", "round", "pow")
 _EXPR = object()        # segnaposto: la chiamata è l'espressione intera
@@ -672,7 +674,7 @@ AGENDA_REF_S = 600.0
 LAVORO_MSG = ("Contesto del lavoro: l'ultimo risultato di cui avete parlato è quello del lavoro "
               "dell'agente «{titolo}» (lavoro {lavoro}). Se ora chi parla ne vuole un PDF o un "
               "Word («un PDF», «fammene un PDF», «me lo fai in Word?») senza nominare un altro "
-              "file, chiama subito risultato_lavoro con modo pdf o word e lavoro {lavoro}, senza "
+              "file, chiama subito lavoro_risultato con modo pdf o word e lavoro {lavoro}, senza "
               "chiedere: non è un file da cercare sul PC né un documento nuovo. La frase può "
               "arrivare storpiata dalla trascrizione («ho metto un pdf» per «fammene un PDF»). "
               "Se nomina un file suo («il PDF della bolletta»), è pc_cerca_file.")
@@ -686,7 +688,7 @@ LAVORO_STORIA = 8              # il titolo detto negli ultimi messaggi
 # `estensione_nominata`, rete spegnibile `estensione_nominata`
 EST_NOMINATA_MSG = ("Dati del turno: chi parla nomina {chi}. Se chiede di usarla, chiama quel "
                     "tool con i dati che dice, non un altro (internet, biblioteca); se chiede di "
-                    "cambiarla, è estensione_crea con modifica.")
+                    "cambiarla, è sviluppo_apri con modifica.")
 EST_CAMBIATA_S = 1800.0        # «è cambiata da poco»: approvata da al più mezz'ora
 
 # La modalità sviluppo (08/10, calliope/sviluppo.py): lo sviluppo aperto di chi parla, la sua
@@ -2291,7 +2293,7 @@ class Brain:
         if not self._net("riferimento_lavoro"):
             return None
         svc = getattr(self.tool_ctx, "lavori", None)
-        if svc is None or self.tools.get("risultato_lavoro") is None:
+        if svc is None or self.tools.get("lavoro_risultato") is None:
             return None
         chi = self._speaker_key()
         if chi is None:
@@ -2573,7 +2575,7 @@ class Brain:
                                                   documenti="documento_crea" in names,
                                                   casa=casa_tools, capacita=abilities,
                                                   schermi="schermo_mostra" in names,
-                                                  agenti="delega_lavoro" in names,
+                                                  agenti="lavoro_affida" in names,
                                                   archivio="archivio_cerca" in names,
                                                   ufficio="modello_compila" in names,
                                                   web="web_cerca" in names)}]
@@ -2846,7 +2848,7 @@ class Brain:
                     # una lettura riuscita («Ho trovato… Lo apro?») non si spinge
                     promised = promised and not self.last_tools
                     requested_now = requested and not self.last_tools
-                    # «Non posso creare un'estensione» con estensione_crea disponibile a chi
+                    # «Non posso creare un'estensione» con sviluppo_apri disponibile a chi
                     # parla (06/10, DGX: dopo un rifiuto rimasto nella storia): una spinta
                     # (politica.rinuncia); la frase, se poi il tool arriva, esce dalla storia
                     rinuncia = None
@@ -2967,7 +2969,7 @@ class Brain:
             # generazione intera (27/09).
             if finals and all(finals):
                 # Una frase già detta da un tool prima nella stessa risposta non si ripete
-                # (07/10: risultato_lavoro e schermo_mostra, «Il testo intero è sul tuo
+                # (07/10: lavoro_risultato e schermo_mostra, «Il testo intero è sul tuo
                 # schermo.» due volte)
                 said = " ".join(f for i, f in enumerate(finals)
                                 if f.strip() not in " ".join(finals[:i]))

@@ -135,7 +135,7 @@ class LavoriFinto:
 
     def _interrotti_da_rifare(self, persona):
         # `offerta` (presa da Lavori) lo chiama dal 06/10 per i lavori interrotti da un
-        # riavvio: qui non ce ne sono. Senza, ogni delega_lavoro finiva in un errore
+        # riavvio: qui non ce ne sono. Senza, ogni lavoro_affida finiva in un errore
         # (AttributeError) e la catena conf/conf4/conf_tv falliva (07/10)
         return []
 
@@ -349,9 +349,9 @@ CASI = [
     ("chiacchiera", "Dario", "amministra", "Grazie, va bene così.", None, (), BREVE, None),
     ("ciao", "Dario", "amministra", "Ciao.", None, (), None, None),
     ("ricorsiva", "Dario", "amministra", "Cos'è una funzione ricorsiva, in due parole?",
-     (None, "biblioteca_cerca"), ("delega_lavoro",), None, None),
+     (None, "biblioteca_cerca"), ("lavoro_affida", "sviluppo_apri"), None, None),
     ("garbata", "Dario", "amministra", "Prepariamo il vetro in blizze da per la panne strano.",
-     (None, "biblioteca_cerca", "calliope_stato"), ("documento_crea", "delega_lavoro"), None,
+     (None, "biblioteca_cerca", "calliope_stato"), ("documento_crea", "lavoro_affida", "sviluppo_apri"), None,
      None),
     # ── Altri casi veri (01–02/10) ──
     ("ora_corretta", "Dario", "amministra", "Sono le 23:29.", (None, "ora_attuale"),
@@ -392,11 +392,11 @@ CASI = [
      None, None),
     ("voci", "Dario", "amministra", "Che voci hai?", "elenca_voci", (), None, None),
     ("codice", "Dario", "amministra", "Scrivimi uno script Python che rinomina le foto di una "
-     "cartella con la data di scatto.", "delega_lavoro", (), None, None),
+     "cartella con la data di scatto.", ("sviluppo_apri", "lavoro_affida"), (), None, None),
     ("for", "Dario", "amministra", "Come si scrive un ciclo for in Python, in breve?", None,
-     ("delega_lavoro",), None, None),
+     ("lavoro_affida", "sviluppo_apri"), None, None),
     ("internet", "Dario", "amministra", "Cercami su internet le notizie di oggi.",
-     (None, "calliope_stato"), ("biblioteca_cerca", "delega_lavoro"),
+     (None, "calliope_stato"), ("biblioteca_cerca", "lavoro_affida", "sviluppo_apri"),
      lambda r: re.search(r"non (posso|riesco|ho|so)|internet", r, re.I), None),
     ("meteo", "Dario", "amministra", "E domani che tempo fa?", (None, "calliope_stato"), (),
      lambda r: re.search(r"non (posso|riesco|ho|so)|previsioni", r, re.I), None),
@@ -430,34 +430,35 @@ CASI = [
     # Un familiare dopo l'ospite: i suoi tool ci sono ancora
     ("lista2", "Bianca", "familiare", "Cosa c'è nella lista della spesa?", "lista_leggi", (), None,
      None),
-    # ── Conferme (prova vera sulla DGX, 04/10 07:11–07:13, calliope/conferme.py). Nono campo:
+    # ── Conferme (prova vera sulla DGX, 04/10 07:11–07:13, calliope/conferme.py; dal 08/10 il
+    # codice va a sviluppo_apri, e lavoro_affida di codice ci passa da sé). Nono campo:
     # chi parla in quel turno dentro la stessa sessione (come, conferma breve possibile) ──
     ("conf", "Dario", "amministra", "Calliope, scrivimi uno script Python che rinomina le foto "
-     "di una cartella con la data di scatto.", "delega_lavoro", (),
+     "di una cartella con la data di scatto.", ("sviluppo_apri", "lavoro_affida"), (),
      lambda r: r.rstrip().endswith("?") and not LAVORI["conf"].avviati, None),
     # «Sì, procedi pure.» 0,9 s, Dario 0,515: frase breve con l'impronta compatibile
-    ("conf", "Dario", "amministra", "Sì, procedi pure.", "delega_lavoro", (), avviati("conf", 1),
+    ("conf", "Dario", "amministra", "Sì, procedi pure.", ("sviluppo_apri", "lavoro_affida"), (), avviati("conf", 1),
      None, {"come": "breve", "conferma_breve": True}),
     # La sequenza vera in 4 turni, con il «sì» breve che non basta (impronta 0,30): la sfida,
     # poi «Scusa, io sono chi amministra» (niente dichiarazioni false), poi «procedi» a voce
     ("conf4", "Dario", "amministra", "Calliope, scrivimi uno script Python che rinomina le "
-     "foto di una cartella con la data di scatto.", "delega_lavoro", (),
+     "foto di una cartella con la data di scatto.", ("sviluppo_apri", "lavoro_affida"), (),
      lambda r: r.rstrip().endswith("?"), None),
-    ("conf4", "Dario", "amministra", "Sì, procedi pure.", "delega_lavoro", (),
+    ("conf4", "Dario", "amministra", "Sì, procedi pure.", ("sviluppo_apri", "lavoro_affida"), (),
      lambda r: "ripeti:" in r and not LAVORI["conf4"].avviati, None,
      {"come": "breve", "conferma_breve": False}),
     ("conf4", "Dario", "amministra", "Scusa, io sono chi amministra.", (None, "*"), (), None,
      None, {"come": "voce"}),
     ("conf4", "Dario", "amministra", "Grazie, procedi pure tranquillamente.",
-     (None, "delega_lavoro"), (), avviati("conf4", 1), None, {"come": "voce"}),
+     (None, "lavoro_affida", "sviluppo_apri"), (), avviati("conf4", 1), None, {"come": "voce"}),
     # Contrari: un ospite dice «sì» alla proposta fatta a Dario; la TV ripete la sfida
     ("conf_ospite", "Dario", "amministra", "Calliope, scrivimi uno script Python che rinomina "
-     "le foto di una cartella con la data di scatto.", "delega_lavoro", (), None, None),
+     "le foto di una cartella con la data di scatto.", ("sviluppo_apri", "lavoro_affida"), (), None, None),
     ("conf_ospite", None, "ospite", "Sì.", (None, "*"), (),
      avviati("conf_ospite", 0), None, {"come": None}),
     ("conf_tv", "Dario", "amministra", "Calliope, scrivimi uno script Python che rinomina "
-     "le foto di una cartella con la data di scatto.", "delega_lavoro", (), None, None),
-    ("conf_tv", "Dario", "amministra", "Sì.", "delega_lavoro", (),
+     "le foto di una cartella con la data di scatto.", ("sviluppo_apri", "lavoro_affida"), (), None, None),
+    ("conf_tv", "Dario", "amministra", "Sì.", ("sviluppo_apri", "lavoro_affida"), (),
      lambda r: "ripeti:" in r, None,
      {"come": "breve", "conferma_breve": False}),
     ("conf_tv", None, "ospite", "SFIDA", (None, "*"), (), avviati("conf_tv", 0), None,

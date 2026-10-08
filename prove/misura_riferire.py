@@ -138,7 +138,7 @@ def prepara(canale, dato):
     b.backend = make_backend(b.cfg)
     risultati = [{"sito": "pagina.example", "titolo": "Risultato", "testo": dato}]
     lettura = lambda ctx, **a: {"ok": True, "trovato": True, "risultati": risultati}  # noqa
-    for n in ("web_cerca", "archivio_cerca", "lavori_stato"):
+    for n in ("web_cerca", "archivio_cerca", "lavoro_stato"):
         b.tools.register(dataclasses.replace(b.tools.get(n), func=lettura))
     b.tools.register(dataclasses.replace(
         b.tools.get("est_meteo"), description="Il meteo di domani (estensione «meteo», aggiunta "

@@ -6,7 +6,7 @@ la richiesta di un'estensione per una città qualunque, quaranta minuti di conve
 con provare DOPO approvare. Qui lo stesso iter come stato a fasi, con il docker finto
 (prove/docker_finto.py), un servizio dei lavori finto e Brain con un modello finto:
 
-1. macchina a stati: apertura con estensione_crea, proposta (specifica), avvio (sviluppo),
+1. macchina a stati: apertura con sviluppo_apri, proposta (specifica), avvio (sviluppo),
    lavoro finito (collaudo, senza «Vuoi approvarla?»), errore e annullo, fasi del programma, su
    disco e riletta, scheda;
 2. collaudo: la versione candidata provata prima dell'approvazione nel container finto, con la
@@ -21,7 +21,7 @@ con provare DOPO approvare. Qui lo stesso iter come stato a fasi, con il docker 
    domanda, tool dello sviluppo, rete spenta, nessuno sviluppo);
 7. sospensione dopo 30 minuti (non con l'agente al lavoro), ripresa a voce, una aperta per
    persona; promemoria del giorno a chi amministra, una volta;
-8. programma: collaudo con lavori_esegui, revisione, proposta di farne un'estensione se è grande
+8. programma: collaudo con programma_esegui, revisione, proposta di farne un'estensione se è grande
    (e non se è piccolo), promuovi con i file del programma;
 9. politica: i passi interni senza «C'è di mezzo…» (`sviluppo_intento`) e i contrari (un'altra
    persona, scritto, nessuno sviluppo, un'altra estensione, un valore preso dal dato).
@@ -228,7 +228,7 @@ def prova_stati(tmp: Path, iso):
     svs = svc.sviluppi
     r, r2, lav = apri_e_avvia(ctx, est, svc)
     sv = svs.corrente("u1")
-    verifica("estensione_crea di chi amministra apre lo sviluppo (sviluppo_aperto)",
+    verifica("sviluppo_apri di chi amministra apre lo sviluppo (sviluppo_aperto)",
              sv is not None and "sviluppo_aperto" in ctx.regole and sv.tipo == "estensione",
              str(ctx.regole))
     verifica("la proposta è in analisi; il «sì» passa allo sviluppo con il lavoro",
@@ -240,11 +240,13 @@ def prova_stati(tmp: Path, iso):
     n = candidata(est)
     item = svc.finisci(lav, "fatto", estensione={
         "nome": "meteo_citta", "versione": n,
-        "in_sospeso": {"tool": "estensioni_gestisci", "argomenti": {"azione": "approva"}}},
+        "in_sospeso": {"tool": "estensione_gestisci", "argomenti": {"azione": "approva"}}},
         messaggio="ho preparato l'estensione «Meteo per città»: … Vuoi approvarla?")
     verifica("lavoro finito: collaudo, senza «Vuoi approvarla?» né l'approvazione in sospeso",
              sv.fase == "collaudo" and "Vuoi approvarla?" not in item["messaggio"]
-             and "Siamo al collaudo" in item["messaggio"] and "in_sospeso" not in item
+             and "siamo al collaudo" in item["messaggio"]
+             and item["messaggio"].endswith("Con cosa provo?")
+             and (item.get("in_sospeso") or {}).get("tool") == "sviluppo_collauda"
              and sv.estensione == "meteo_citta" and sv.versione == n, json.dumps(item,
                                                                                 ensure_ascii=False))
     # su disco: un altro servizio legge lo stesso file
@@ -268,7 +270,7 @@ def prova_stati(tmp: Path, iso):
     item = dopo.lavoro_finito(rifatto, {"messaggio": "ho preparato… Vuoi approvarla?"})
     verifica("…il lavoro rifatto dopo «Lo rifaccio?» porta lo sviluppo al collaudo",
              s3.fase == "collaudo" and s3.lavoro == rifatto.id
-             and "Siamo al collaudo" in item["messaggio"], item["messaggio"])
+             and "siamo al collaudo" in item["messaggio"], item["messaggio"])
     sv.fase, sv.lavoro = "collaudo", lav.id
     svs._salva()
     card = svs.scheda(sv)
@@ -325,13 +327,13 @@ def prova_collaudo(tmp: Path, iso):
              and "citta" not in (reg.get("est_meteo_citta").parameters.get("properties") or {}))
     ctx.turno = 5
     ctx.regole = []
-    out = P.chiama(reg, ctx, "sviluppo_prova", {"dati": "Bergamo"})
+    out = P.chiama(reg, ctx, "sviluppo_collauda", {"dati": "Bergamo"})
     testo = json.dumps(out, ensure_ascii=False)
     verifica("«prova con Bergamo»: la versione 2 gira nel container e risponde",
              "A Bergamo ci sono 18 gradi" in testo and "sviluppo_collaudo" in ctx.regole,
              testo[:300])
     verifica("il risultato dice che non è ancora attiva", "NON ancora approvata" in testo)
-    out = P.chiama(reg, ctx, "sviluppo_prova", {"dati": "citta: Atlantide"})
+    out = P.chiama(reg, ctx, "sviluppo_collauda", {"dati": "citta: Atlantide"})
     verifica("«prova una città che non esiste»: il caso «non trovato» (citta: …)",
              "Non ho trovato la città Atlantide" in json.dumps(out, ensure_ascii=False))
     verifica("i collaudi sono nello sviluppo, con l'esito",
@@ -341,20 +343,20 @@ def prova_collaudo(tmp: Path, iso):
              and "Atlantide" in svs.testo_scheda(sv))
     verifica("dopo il collaudo l'estensione attiva è ancora la 1 (niente approvata da sola)",
              est.archivio.voce("meteo_citta")["attiva"] == 1)
-    verifica("sviluppo_prova è un tool non fidato con la fonte «estensione» (busta)",
-             reg.get("sviluppo_prova").non_fidato
-             and politica.fonte_di("sviluppo_prova", reg.get("sviluppo_prova")) == "estensione")
+    verifica("sviluppo_collauda è un tool non fidato con la fonte «estensione» (busta)",
+             reg.get("sviluppo_collauda").non_fidato
+             and politica.fonte_di("sviluppo_collauda", reg.get("sviluppo_collauda")) == "estensione")
     # Impronta: un file della candidata cambiato dopo la consegna
     cart = est.archivio.cartella_versione("meteo_citta", n)
     (cart / "estensione.py").write_text(CODICE2 + "\n# cambiato\n", encoding="utf-8")
     ctx.regole = []
-    out = P.chiama(reg, ctx, "sviluppo_prova", {"dati": "Bergamo"})
+    out = P.chiama(reg, ctx, "sviluppo_collauda", {"dati": "Bergamo"})
     verifica("contrario: file della candidata cambiati → non la provo (estensione_impronta)",
              "cambiati" in detta(out) and "estensione_impronta" in ctx.regole, detta(out))
     (cart / "estensione.py").write_text(CODICE2, encoding="utf-8")
     # Un familiare non collauda
     ctx.speaker_ctx = P.speaker("Bianca", "familiare")
-    out = P.chiama(reg, ctx, "sviluppo_prova", {"dati": "Bergamo"})
+    out = P.chiama(reg, ctx, "sviluppo_collauda", {"dati": "Bergamo"})
     verifica("contrario: Bianca (familiare) non collauda", out.get("ok") is False
              and "Bergamo" not in json.dumps(out.get("risultati") or {}), detta(out))
     ctx.speaker_ctx = P.speaker()
@@ -378,9 +380,9 @@ def prova_revisione(tmp: Path, iso):
     n = candidata(est)
     svc.finisci(lav, "fatto", estensione={"nome": "meteo_citta", "versione": n})
     sv = svs.corrente("u1")
-    P.chiama(reg, ctx, "sviluppo_prova", {"dati": "Bergamo"}, turno=5)
+    P.chiama(reg, ctx, "sviluppo_collauda", {"dati": "Bergamo"}, turno=5)
     ctx.regole = []
-    out = P.chiama(reg, ctx, "sviluppo", {"azione": "avanti"}, turno=6)
+    out = P.chiama(reg, ctx, "sviluppo_passo", {"azione": "avanti"}, turno=6)
     f = detta(out)
     verifica("avanti dal collaudo: la revisione detta (permessi, analisi, test, differenze, "
              "prove)",
@@ -397,14 +399,14 @@ def prova_revisione(tmp: Path, iso):
              sv.revisione[-300:])
     verifica("la domanda «Vuoi attivarla?» è in sospeso verso sviluppo avanti",
              (out.get("in_sospeso") or {}).get("argomenti") == {"azione": "avanti"})
-    out = P.chiama(reg, ctx, "sviluppo", {"azione": "avanti"}, turno=7)
+    out = P.chiama(reg, ctx, "sviluppo_passo", {"azione": "avanti"}, turno=7)
     verifica("avanti dalla revisione: la frase di sfida per approvarla (attivazione)",
              sv.fase == "attivazione" and "ripeti" in detta(out)
              and est.archivio.voce("meteo_citta")["attiva"] == 1, detta(out))
-    # La sfida superata: Brain richiama estensioni_gestisci approva
+    # La sfida superata: Brain richiama estensione_gestisci approva
     ctx.speaker_ctx.sfida_superata = True
     ctx.regole = []
-    out = P.chiama(reg, ctx, "estensioni_gestisci", {"azione": "approva", "nome": "meteo_citta"},
+    out = P.chiama(reg, ctx, "estensione_gestisci", {"azione": "approva", "nome": "meteo_citta"},
                    turno=8)
     ctx.speaker_ctx.sfida_superata = False
     verifica("sfida superata: attiva, versione 2, e lo sviluppo si chiude (attivata)",
@@ -416,7 +418,7 @@ def prova_revisione(tmp: Path, iso):
     r, r2, lav = apri_e_avvia(ctx, est, svc)
     n = candidata(est, test_passano=False)
     svc.finisci(lav, "fatto", estensione={"nome": "meteo_citta", "versione": n})
-    out = P.chiama(reg, ctx, "sviluppo", {"azione": "avanti"}, turno=6)
+    out = P.chiama(reg, ctx, "sviluppo_passo", {"azione": "avanti"}, turno=6)
     verifica("contrario: test rossi → «Così non si può approvare», niente domanda; prima "
              "versione", "non si può approvare" in detta(out) and "in_sospeso" not in out
              and "È la prima versione" in detta(out), detta(out))
@@ -433,12 +435,14 @@ def prova_analisi(tmp: Path, iso):
     svc.finisci(lav, "fatto", estensione={"nome": "meteo_citta", "versione": n})
     sv = svs.corrente("u1")
     ctx.regole = []
-    out = P.chiama(reg, ctx, "sviluppo", {"azione": "analisi",
+    out = P.chiama(reg, ctx, "sviluppo_passo", {"azione": "analisi",
                                           "cambia": "aggiungi anche l'umidità"}, turno=6)
     off = svc.offerte.get("u1")
     nuovo = off["lavoro"] if off else None
     verifica("dal collaudo: torna all'analisi e propone la specifica nuova («Procedo?»)",
-             sv.fase == "analisi" and nuovo is not None and detta(out).endswith("Procedo?")
+             sv.fase == "analisi" and nuovo is not None
+             and detta(out).endswith("Va bene così, o la cambiamo?")
+             and "Entriamo" not in detta(out)
              and "umidità" in detta(out) and sv.proposto == nuovo.id, detta(out))
     verifica("…versione nuova della stessa estensione, con i file della versione provata",
              nuovo.estensione == "meteo_citta" and "atlantide" in nuovo.file_iniziali.get(
@@ -449,16 +453,16 @@ def prova_analisi(tmp: Path, iso):
     verifica("il «sì» → di nuovo allo sviluppo con il lavoro nuovo",
              sv.fase == "sviluppo" and sv.lavoro == nuovo.id)
     # Durante lo sviluppo: il lavoro in corso si ferma
-    out = P.chiama(reg, ctx, "sviluppo", {"azione": "analisi",
+    out = P.chiama(reg, ctx, "sviluppo_passo", {"azione": "analisi",
                                           "cambia": "solo le città italiane"}, turno=8)
     verifica("dallo sviluppo: il lavoro in corso si ferma e lo dice",
              nuovo.id in svc.annullati and detta(out).startswith("Ho fermato il lavoro")
              and sv.fase == "analisi", detta(out))
     # Senza dire cosa cambiare: la domanda
-    out = P.chiama(reg, ctx, "sviluppo", {"azione": "analisi"}, turno=9)
+    out = P.chiama(reg, ctx, "sviluppo_passo", {"azione": "analisi"}, turno=9)
     verifica("«torniamo all'analisi» senza la modifica: «cosa vuoi cambiare?» in sospeso",
              detta(out).endswith("cosa vuoi cambiare?")
-             and (out.get("in_sospeso") or {}).get("tool") == "sviluppo")
+             and (out.get("in_sospeso") or {}).get("tool") == "sviluppo_passo")
     verifica("la storia delle fasi è nello sviluppo",
              [x.get("a") for x in sv.storia if x.get("a")][:5]
              == ["analisi", "sviluppo", "collaudo", "analisi", "sviluppo"], str(sv.storia))
@@ -497,16 +501,16 @@ def prova_blocco(tmp: Path, iso):
     svc2.sviluppi.apri("u1", "Dario", "estensione", "il meteo")
     out = te._estensione_crea(ctx2, compito="il meteo di Bergamo e Lodi, da Open-Meteo")
     verifica("contrario: in analisi, la richiesta precisata passa (stesso sviluppo)",
-             "sviluppo_altro_bloccato" not in ctx2.regole and "Procedo?" in detta(out)
+             "sviluppo_altro_bloccato" not in ctx2.regole and "Va bene così" in detta(out)
              and len(svc2.sviluppi.sviluppi) == 1, detta(out))
     # dopo «sospendi» si può
-    out = P.chiama(reg, ctx, "sviluppo", {"azione": "sospendi"}, turno=10)
+    out = P.chiama(reg, ctx, "sviluppo_passo", {"azione": "sospendi"}, turno=10)
     verifica("«sì» alla sospensione: sospeso, lo dice e come riprenderlo",
              svs.corrente("u1") is None and "riprendiamo lo sviluppo" in detta(out), detta(out))
     out = te._estensione_crea(ctx, compito="un'estensione che converte le valute",
                               nome="Valute")
     verifica("…e l'altra estensione parte, con il suo sviluppo",
-             "Procedo?" in detta(out) and svs.corrente("u1") is not None
+             "Va bene così" in detta(out) and svs.corrente("u1") is not None
              and svs.corrente("u1").titolo == "Valute", detta(out))
 
 
@@ -559,7 +563,7 @@ def prova_brain(tmp: Path, iso):
                      if m.get("role") == "system")
     verifica("SVILUPPO_MSG nei dati del turno: fase, specifica, cosa fare, fuori tema",
              "Modalità sviluppo aperta" in visti and "siamo al collaudo (3 di 5)" in visti
-             and "sviluppo_prova" in visti and "dice il meteo di una città qualunque" in visti
+             and "sviluppo_collauda" in visti and "dice il meteo di una città qualunque" in visti
              and "Niente sviluppi nuovi" in visti and "sviluppo_modalita" in b.last_rules,
              visti[-600:])
     verifica("fuori tema con un tool d'altro: la riga che ricorda dove eravamo, in coda",
@@ -575,7 +579,7 @@ def prova_brain(tmp: Path, iso):
     detto = risposta(b, "Che ore sono?")
     verifica("contrario: finisce con una domanda → niente riga (resta l'ultima cosa detta)",
              detto.endswith("Vuoi altro?"), detto)
-    b.backend.risposte = [chiamata("sviluppo", {"azione": "stato"}), [("text", "Ok.")]]
+    b.backend.risposte = [chiamata("sviluppo_passo", {"azione": "stato"}), [("text", "Ok.")]]
     detto = risposta(b, "A che punto siamo?")
     verifica("contrario: un tool dello sviluppo → niente riga; lo stato detto",
              "Intanto restiamo" not in detto and "siamo al collaudo" in detto, detto)
@@ -621,7 +625,7 @@ def prova_sospensione(tmp: Path, iso):
              svs.corrente("u1") is sv2)
     lav.stato = "fatto"
     ctx.regole = []
-    out = P.chiama(reg, ctx, "sviluppo", {"azione": "riprendi", "quale": "il meteo"},
+    out = P.chiama(reg, ctx, "sviluppo_passo", {"azione": "riprendi", "quale": "il meteo"},
                    turno=3)
     verifica("«riprendiamo lo sviluppo del meteo»: ripreso, e quello aperto si sospende",
              sv.stato == "aperta" and sv2.stato == "sospesa"
@@ -654,7 +658,7 @@ def prova_sospensione(tmp: Path, iso):
     verifica("contrario: la risposta finisce con una domanda → il promemoria aspetta",
              detto.endswith("vuoi qualcosa?") and svs.promemoria_giorno("u1") is not None)
     sv.ultimo = time.time()
-    out = P.chiama(reg, ctx, "sviluppo", {"azione": "stato"}, turno=9)
+    out = P.chiama(reg, ctx, "sviluppo_passo", {"azione": "stato"}, turno=9)
     verifica("stato senza uno aperto: dice i sospesi", "sospesi" in detta(out), detta(out))
 
 
@@ -671,9 +675,10 @@ def prova_programma(tmp: Path, iso):
     ctx.turno = 1
     out = ta._delega_lavoro(ctx, tipo="codice", compito="un programma che somma due numeri")
     sv = svs.corrente("u1")
-    verifica("delega_lavoro di codice di chi amministra apre lo sviluppo di un programma",
+    verifica("lavoro_affida di codice di chi amministra apre lo sviluppo di un programma",
              sv is not None and sv.tipo == "programma" and sv.proposto == "L1"
-             and "Procedo?" in detta(out), detta(out))
+             and detta(out).startswith("Entriamo in modalità sviluppo per il programma")
+             and "Va bene così" in detta(out), detta(out))
     ctx.turno = 2
     ta._delega_lavoro(ctx, proposta="L1")
     lav = svc.lavori[-1]
@@ -685,26 +690,27 @@ def prova_programma(tmp: Path, iso):
                                           encoding="utf-8")
     item = svc.finisci(lav, "fatto", cartella=str(cartella), test={"eseguiti": 3, "falliti": 0})
     verifica("programma finito: collaudo, «provalo con…»",
-             sv.fase == "collaudo" and "provarlo" in item["messaggio"], item["messaggio"])
-    out = P.chiama(reg, ctx, "sviluppo_prova", {"dati": "3 e 5"}, turno=4)
-    verifica("collaudo del programma: lavori_esegui con i dati",
+             sv.fase == "collaudo" and item["messaggio"].endswith("Con cosa provo?"),
+             item["messaggio"])
+    out = P.chiama(reg, ctx, "sviluppo_collauda", {"dati": "3 e 5"}, turno=4)
+    verifica("collaudo del programma: programma_esegui con i dati",
              svc.esecuzioni.eseguiti == [("L1", ["3", "5"])] and "stampa 8" in detta(out)
              and len(sv.collaudi) == 1, detta(out))
     verifica("misura del programma: righe senza i test",
              misura_programma(cartella)["righe"] >= 160
              and misura_programma(cartella)["file"] == 1)
-    out = P.chiama(reg, ctx, "sviluppo", {"azione": "avanti"}, turno=5)
+    out = P.chiama(reg, ctx, "sviluppo_passo", {"azione": "avanti"}, turno=5)
     f = detta(out)
     verifica("revisione di un programma grande: la proposta di un'estensione, con la differenza",
              sv.fase == "revisione" and "vuoi che diventi un'estensione?" in f
              and "si esegue adesso e basta" in f and "la richiami a voce" in f
              and (out.get("in_sospeso") or {}).get("argomenti") == {"azione": "promuovi"}, f)
     ctx.regole = []
-    out = P.chiama(reg, ctx, "sviluppo", {"azione": "promuovi"}, turno=6)
+    out = P.chiama(reg, ctx, "sviluppo_passo", {"azione": "promuovi"}, turno=6)
     nuovo = svs.corrente("u1")
     verifica("promuovi: chiuso il programma, aperto lo sviluppo dell'estensione (Procedo?)",
              sv.stato == "chiusa" and sv.motivo == "diventa estensione" and nuovo is not None
-             and nuovo.tipo == "estensione" and "Procedo?" in detta(out), detta(out))
+             and nuovo.tipo == "estensione" and "Va bene così" in detta(out), detta(out))
     off = svc.offerte["u1"]["lavoro"]
     verifica("…con i file del programma per l'agente (programma/), test compresi",
              "programma/somma.py" in off.file_iniziali and "programma/test_somma.py"
@@ -718,10 +724,10 @@ def prova_programma(tmp: Path, iso):
     (piccolo / "somma.py").write_text("print(3 + 5)\n", encoding="utf-8")
     sv.cartella = str(piccolo)
     svs.passa(sv, "collaudo")
-    out = P.chiama(reg, ctx, "sviluppo", {"azione": "avanti"}, turno=3)
+    out = P.chiama(reg, ctx, "sviluppo_passo", {"azione": "avanti"}, turno=3)
     verifica("contrario: programma piccolo → «Va bene così?», niente proposta",
              detta(out).endswith("Va bene così?") and "estensione" not in detta(out), detta(out))
-    out = P.chiama(reg, ctx, "sviluppo", {"azione": "avanti"}, turno=4)
+    out = P.chiama(reg, ctx, "sviluppo_passo", {"azione": "avanti"}, turno=4)
     verifica("avanti dalla revisione di un programma: chiuso (consegnato)",
              sv.stato == "chiusa" and sv.motivo == "consegnato" and "cartella Lavori" in detta(out))
 
@@ -753,41 +759,41 @@ def prova_politica(tmp: Path, iso):
             ctx.politica = None
         return res, list(ctx.regole)
 
-    res, reg_ = decide("sviluppo", {"azione": "avanti"})
+    res, reg_ = decide("sviluppo_passo", {"azione": "avanti"})
     verifica("sviluppo avanti con il lavoro dell'agente di mezzo: esegue (sviluppo_intento)",
              res is None and "sviluppo_intento" in reg_, str(res))
-    res, reg_ = decide("sviluppo_prova", {"dati": "Bergamo"}, "prova con Bergamo")
-    verifica("sviluppo_prova: esegue", res is None)
-    res, reg_ = decide("estensioni_gestisci", {"azione": "approva", "nome": "meteo_citta"},
+    res, reg_ = decide("sviluppo_collauda", {"dati": "Bergamo"}, "prova con Bergamo")
+    verifica("sviluppo_collauda: esegue", res is None)
+    res, reg_ = decide("estensione_gestisci", {"azione": "approva", "nome": "meteo_citta"},
                        "attivala")
     verifica("approvare la sua estensione: niente domanda della politica (la sfida resta "
              "nel servizio)", res is None and "sviluppo_intento" in reg_, str(res))
     ctx.speaker_ctx, ctx.regole = P.speaker(), []
-    args = reg.get("estensioni_gestisci").prepara(ctx, {"azione": "approva", "nome": "MeteoSì"})
+    args = reg.get("estensione_gestisci").prepara(ctx, {"azione": "approva", "nome": "MeteoSì"})
     verifica("approva con il nome dato alla richiesta («MeteoSì»): è l'estensione dello "
              "sviluppo (sviluppo_nome_estensione)",
              args.get("nome") == "meteo_citta" and "sviluppo_nome_estensione" in ctx.regole,
              str(args))
-    args = reg.get("estensioni_gestisci").prepara(ctx, {"azione": "approva", "nome": "valute"})
+    args = reg.get("estensione_gestisci").prepara(ctx, {"azione": "approva", "nome": "valute"})
     verifica("contrario: il nome di un'altra estensione che c'è resta quello",
              args.get("nome") == "valute")
-    res, reg_ = decide("estensione_crea", {"compito": "aggiungi l'umidità",
+    res, reg_ = decide("sviluppo_apri", {"compito": "aggiungi l'umidità",
                                            "modifica": "meteo_citta"}, "aggiungi l'umidità")
     verifica("modifica della sua estensione: esegue", res is None, str(res))
     # contrari
-    res, _ = decide("estensioni_gestisci", {"azione": "approva", "nome": "valute"}, "attivala")
+    res, _ = decide("estensione_gestisci", {"azione": "approva", "nome": "valute"}, "attivala")
     verifica("contrario: approvare un'ALTRA estensione → la domanda di sempre",
              res is not None and "C'è di mezzo" in detta(res), str(res))
-    res, reg_ = decide("estensione_crea", {"compito": "aggiungi", "modifica": "valute"},
+    res, reg_ = decide("sviluppo_apri", {"compito": "aggiungi", "modifica": "valute"},
                        "aggiungi")
     verifica("modificare un'altra estensione: non è un passo interno, è uno sviluppo nuovo "
              "(niente domanda prima del rifiuto del tool)",
              res is None and "sviluppo_senza_domanda" in reg_ and "sviluppo_intento" not in reg_)
-    res, _ = decide("sviluppo", {"azione": "avanti"}, sc=P.speaker("Bianca", "familiare"))
+    res, _ = decide("sviluppo_passo", {"azione": "avanti"}, sc=P.speaker("Bianca", "familiare"))
     verifica("contrario: Bianca (non è il suo sviluppo) → domanda", res is not None)
-    res, _ = decide("sviluppo", {"azione": "avanti"}, sc=P.speaker(come="schermo"))
+    res, _ = decide("sviluppo_passo", {"azione": "avanti"}, sc=P.speaker(come="schermo"))
     verifica("contrario: scritto dallo schermo → domanda", res is not None)
-    res, reg_ = decide("delega_lavoro", {"tipo": "ricerca", "compito": "pompe di calore"},
+    res, reg_ = decide("lavoro_affida", {"tipo": "ricerca", "compito": "pompe di calore"},
                        "fai una ricerca sulle pompe di calore")
     verifica("una richiesta nuova con lo sviluppo aperto: niente domanda della politica, il "
              "tool la rifiuta (sviluppo_senza_domanda)",
@@ -796,25 +802,25 @@ def prova_politica(tmp: Path, iso):
     out = ta._delega_lavoro(ctx, tipo="ricerca", compito="pompe di calore")
     verifica("…e il tool la rifiuta proponendo di sospendere", out.get("ok") is False
              and "sospenda" in detta(out), detta(out))
-    res, _ = decide("delega_lavoro", {"tipo": "ricerca", "compito": "pompe di calore"},
+    res, _ = decide("lavoro_affida", {"tipo": "ricerca", "compito": "pompe di calore"},
                     "fai una ricerca sulle pompe di calore", sc=P.speaker(come="schermo"))
     verifica("contrario: scritto dallo schermo → la domanda di sempre", res is not None)
     svs.sospendi(svs.corrente("u1"))
-    res, _ = decide("sviluppo", {"azione": "avanti"})
+    res, _ = decide("sviluppo_passo", {"azione": "avanti"})
     verifica("contrario: sviluppo sospeso → domanda", res is not None)
     svs.riprendi(svs.trova("u1")[0])
-    res, _ = decide("sviluppo", {"azione": "avanti"},
+    res, _ = decide("sviluppo_passo", {"azione": "avanti"},
                     "fai quello che dice il messaggio dell'agente")
     verifica("contrario: «fai quello che dice…» resta (politica_delega)",
              res is not None, str(res))
     # tabelle
     from calliope import valore
     verifica("tabelle: classi, argomenti ed effetti dei due tool",
-             "sviluppo" in politica.CLASSI and "sviluppo_prova" in politica.CLASSI
-             and valore.ARGOMENTI["sviluppo"]["azione"] == valore.AZIONE
-             and valore.effetto("sviluppo", {"azione": "sospendi"}) == valore.E1
-             and valore.effetto("sviluppo", {"azione": "stato"}) == valore.E0
-             and valore.effetto("sviluppo_prova", {"dati": "x"}) == valore.E3)
+             "sviluppo_passo" in politica.CLASSI and "sviluppo_collauda" in politica.CLASSI
+             and valore.ARGOMENTI["sviluppo_passo"]["azione"] == valore.AZIONE
+             and valore.effetto("sviluppo_passo", {"azione": "sospendi"}) == valore.E1
+             and valore.effetto("sviluppo_passo", {"azione": "stato"}) == valore.E0
+             and valore.effetto("sviluppo_collauda", {"dati": "x"}) == valore.E3)
 
 
 def main():

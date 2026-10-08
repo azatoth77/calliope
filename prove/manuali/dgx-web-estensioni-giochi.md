@@ -59,7 +59,7 @@ cd ~/est-prova && CALLIOPE_CONFIG=~/calliope/calliope.yaml $PY prove/prova_esten
 ```
 
 Prova a voce (dopo l'aggiornamento, con uno schermo abbinato): «Calliope, fammi un gioco del
-memory per i bambini» (estensione_crea gioco=true; anche un familiare adulto) → «Procedo?» →
+memory per i bambini» (sviluppo_apri gioco=true; anche un familiare adulto) → «Procedo?» →
 «sì» → annuncio con «lo può approvare un adulto di casa» → «sì» (voce riconosciuta: niente
 sfida) → «Calliope, giochiamo a memory»: la scheda compare sullo schermo da cui si parla. Per
 Bianca: «abilita il memory per Bianca» (tutore), oppure Bianca lo chiede e la richiesta arriva al

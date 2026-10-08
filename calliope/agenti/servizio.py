@@ -18,7 +18,7 @@ Ricalca quello che già funziona per i documenti e le installazioni:
   mancano_dati, o un modello di documento con campi obbligatori vuoti) il lavoro resta
   `in_attesa` con il suo contesto (la conversazione dell'agente, la sandbox, i campi già
   compilati), la domanda si annuncia come i lavori finiti e diventa un'azione in sospeso
-  (`RISPOSTA_MSG`); la risposta arriva con `rispondi` (tool lavori_rispondi) e il lavoro torna
+  (`RISPOSTA_MSG`); la risposta arriva con `rispondi` (tool lavoro_rispondi) e il lavoro torna
   in coda da dove era. Il tempo d'attesa non conta nel tetto dei minuti; al più
   `agenti_domande_max` domande per lavoro; dopo `agenti_attesa_risposta_min` senza risposta
   il lavoro si chiude da solo e lo si dice;
@@ -126,8 +126,8 @@ def titolo_da(compito: str, parole: int = 7) -> str:
     return " ".join(words) or "lavoro"
 
 
-# Un lavoro di codice non è un'estensione di Calliope (06/10, caso vero della DGX: estensione_crea
-# rifiutato, il modello ha usato delega_lavoro con «Crea un'estensione che…», e l'annuncio
+# Un lavoro di codice non è un'estensione di Calliope (06/10, caso vero della DGX: sviluppo_apri
+# rifiutato, il modello ha usato lavoro_affida con «Crea un'estensione che…», e l'annuncio
 # diceva «ho creato un'estensione», poi «puoi richiamarla chiedendomi l'estensione
 # sommaparametri», che non esiste). Correzione della forma di una scelta già fatta (tipo
 # codice): nel titolo e nel riassunto detti a voce la parola diventa «programma»
@@ -206,6 +206,34 @@ _CODA = frozenset("di a da in con su per tra fra e o il lo la i gli le un uno un
 NOME_RISULTATO = "risultato.md"
 
 
+def frase_tappa(lav, titolo: str) -> str:
+    """Il rapporto di una tappa (08/10, versione 2 della modalità sviluppo), senza il nome di
+    chi l'ha chiesto: cosa è fatto, cosa blocca, i segnali di giro a vuoto, la scelta."""
+    r = lav.risultato or {}
+    perche = {"passate": "ha finito le passate del giro", "tempo": "è finito il tempo del giro",
+              "token": "ha finito i token del giro: ho compresso il suo diario"}.get(
+        r.get("tipo_limite"), "è arrivato al limite del giro")
+    parti = [f"«{titolo}» si è fermato a una tappa: {perche}."]
+    fatto = per_la_voce(str(r.get("riassunto") or ""), 220).rstrip(".")
+    if fatto:
+        parti.append(f"Finora {fatto[:1].lower() + fatto[1:]}.")
+    t = r.get("test") or {}
+    if isinstance(t, dict) and t.get("eseguiti"):
+        n = int(t.get("eseguiti") or 0)
+        ko = int(t.get("falliti") or 0) + int(t.get("errori") or 0)
+        parti.append(f"I test passano, {n} su {n}." if r.get("test_passano") or not ko
+                     else f"Dei test ne passano {max(0, n - ko)} su {max(n, ko)}.")
+    manca = [per_la_voce(str(x), 120).rstrip(".") for x in (r.get("manca") or [])[:2]]
+    manca = [m for m in manca if m]
+    if manca:
+        parti.append("Manca: " + "; ".join(manca) + ".")
+    seg = (r.get("segnali") or {}).get("frasi") or []
+    if seg:
+        parti.append("Attenzione, sembra girare a vuoto: " + ", ".join(seg) + ".")
+    parti.append("Continuo con un altro giro, vuoi cambiare qualcosa prima, o lo fermo?")
+    return " ".join(parti)
+
+
 def titolo_file(titolo: str) -> str:
     """Il titolo del lavoro come titolo di un file e di un documento: maiuscola in testa."""
     t = re.sub(r"\s+", " ", str(titolo or "")).strip() or "Risultato"
@@ -222,7 +250,7 @@ def _nome_cartella(s: str) -> str:
 # acconsente…») non va bene. Decide il modello se ciò che dice è la risposta
 RISPOSTA_MSG = ("Domanda in sospeso: hai appena chiesto, per il lavoro «{titolo}» affidato "
                 "all'agente, «{domanda}». Se chi parla risponde alla domanda (anche solo con il "
-                "dato: un nome, una cifra, una data), chiama subito lavori_rispondi con "
+                "dato: un nome, una cifra, una data), chiama subito lavoro_rispondi con "
                 "lavoro=\"{id}\" e risposta = quello che ha detto, con i dati come detti. Se "
                 "parla d'altro, fai quello che chiede.")
 
@@ -458,16 +486,59 @@ class Lavori:
 
     def offerta_risposta(self, lav: Lavoro) -> dict:
         """L'azione in sospeso della domanda di `lav` (Brain.set_pending)."""
-        return {"domanda": lav.domanda, "tool": "lavori_rispondi",
+        return {"domanda": lav.domanda, "tool": "lavoro_rispondi",
                 "cosa": f"la domanda del lavoro «{lav.titolo}»",
                 "argomenti": {"lavoro": lav.id},
                 "messaggio": RISPOSTA_MSG.format(titolo=lav.titolo, domanda=lav.domanda,
                                                  id=lav.id)}
 
+    @staticmethod
+    def in_tappa(lav) -> bool:
+        """Il lavoro aspetta alla fine di un giro (08/10, tappe della modalità sviluppo)."""
+        return (getattr(lav, "stato", "") == "in_attesa"
+                and (getattr(lav, "risultato", None) or {}).get("esito") == "tappa")
+
+    def continua(self, lav: Lavoro, nota: str = "") -> str | None:
+        """Un giro nuovo per un lavoro fermo a una tappa (08/10, versione 2 della modalità
+        sviluppo): di nuovo tutte le passate, il tempo e i token, con il contesto di prima e la
+        nota della persona («cambia e continua»). None se il lavoro non è fermo a una tappa."""
+        nota = re.sub(r"\s+", " ", str(nota or "")).strip()[:1000]
+        with self._lock:
+            if not self.in_tappa(lav):
+                return None
+            ora = time.time()
+            lav.attesa_s += ora - (lav.attesa_dal or ora)
+            lav.attesa_dal = None
+            lav.giro = int(getattr(lav, "giro", 1) or 1) + 1
+            lav.passi0, lav.token0 = lav.passi, lav.token
+            lav.attesa0, lav.giro_inizio = lav.attesa_s, ora
+            lav.avvisato = False
+            if isinstance(lav.segnali, dict):
+                lav.segnali["senza_novita"] = 0
+            lav.nota_giro = nota
+            lav.risposta = nota or "continua"
+            lav.stato, lav.passo = "in_coda", f"riprende: giro {lav.giro}"
+            occupato = self.corrente is not None
+        self.log(f"[AGENTI] {lav.id}: giro {lav.giro}" + (f", con la nota «{nota[:80]}»"
+                                                          if nota else ""))
+        self._coda.put(lav)
+        self._salva_stato()
+        return (f"Continuo «{titolo_detto(lav.titolo)}»: un altro giro di "
+                f"{_durata(self.agente.tempo_max_s)}"
+                + (" con la tua indicazione" if nota else "")
+                + (", appena finisce il lavoro in corso" if occupato else "")
+                + ". Ti avviso quando è pronto.")
+
     def rispondi(self, lav: Lavoro, risposta: str) -> str | None:
         """La risposta alla domanda di `lav`: il lavoro torna in coda e riprende da dove era.
         Non aspetta nulla (la voce chiama da qui). None se il lavoro non aspetta più."""
         risposta = re.sub(r"\s+", " ", str(risposta or "")).strip()[:2000]
+        if self.in_tappa(lav):
+            # La risposta al rapporto di una tappa: un giro nuovo, con la frase come nota
+            # se dice più di «continua»
+            nuda = re.fullmatch(r"(?i)\W*(sì|si|ok|va bene|continua|vai|avanti|prosegui)\W*",
+                                risposta or "")
+            return self.continua(lav, "" if nuda else risposta)
         with self._lock:
             if lav.stato != "in_attesa" or not risposta:
                 return None
@@ -796,7 +867,9 @@ class Lavori:
             lv = attesa[-1]
             chi = f" di {lv.persona_nome}" if tutti and lv.persona != persona and \
                 lv.persona_nome else ""
-            frase = f"«{lv.titolo}»{chi} aspetta una risposta: {lv.domanda}"
+            frase = (f"«{lv.titolo}»{chi} è fermo a una tappa: aspetta che tu dica se "
+                     f"continuare con un altro giro." if self.in_tappa(lv)
+                     else f"«{lv.titolo}»{chi} aspetta una risposta: {lv.domanda}")
             altri = len(corso) + len(coda)
             if altri:
                 frase = (f"{'Ho un altro lavoro' if altri == 1 else f'Ho {altri} lavori'} "
@@ -1005,6 +1078,9 @@ class Lavori:
                 else:
                     ris = self.agente.codice(lav, sb)
                 lav.risposta = None
+                if ris.get("esito") == "tappa":
+                    self._tappa(lav, ris, dest, sb)
+                    return
                 if self._puo_chiedere(lav, ris):
                     self._sospendi(lav, ris, dest)
                     return
@@ -1079,6 +1155,9 @@ class Lavori:
         lav.fine = time.time()
         ris["cartella"] = str(dest)
         lav.risultato = ris
+        # Il contesto di un lavoro di uno sviluppo resta finché lo sviluppo è aperto o sospeso
+        # (08/10, versione 2: sviluppo_chiedi e sviluppo_correggi ripartono da lì)
+        self._conserva(lav)
         # Finito: il contesto per una ripresa non serve più (i file restano su disco)
         lav.contesto, lav.sandbox = {}, None
         self._metadati(lav, dest)
@@ -1090,6 +1169,32 @@ class Lavori:
                 self.esecuzioni.in_cima(es)       # la scheda del lavoro è appena andata in cima
         else:
             self._scheda_finale(lav)
+
+    def _conserva(self, lav: Lavoro):
+        svs = getattr(self, "sviluppi", None)
+        if svs is None:
+            return
+        try:
+            svs.conserva(lav)
+        except Exception as e:  # noqa: BLE001 — il lavoro finisce comunque
+            self.log(f"[AGENTI] {lav.id}: contesto dello sviluppo non conservato: {e}")
+
+    def _tappa(self, lav: Lavoro, ris: dict, dest: Path, sb):
+        """Un tetto del giro in un lavoro di uno sviluppo (08/10): il lavoro aspetta con il
+        contesto e la sandbox, i file fatti fin qui nella cartella, e il rapporto si annuncia
+        (calliope/sviluppo.py lo dice e chiede se continuare)."""
+        ris = {**ris, "cartella": str(dest)}
+        try:
+            ris["file"] = sb.copia_in(dest)
+        except OSError:
+            pass
+        with self._lock:
+            lav.stato, lav.passo = "in_attesa", "aspetta: fine del giro"
+            lav.attesa_dal = time.time()
+        lav.risultato = ris
+        self._metadati(lav, dest)
+        self._conserva(lav)
+        self._annuncia(lav)
 
     def _parziale(self, lav: Lavoro, sb, dest: Path) -> dict:
         """Un lavoro di codice fermato da un tetto (06/10): i file nella cartella e l'esito dei
@@ -1226,10 +1331,10 @@ class Lavori:
                                  - lav.attesa_s, 1),
                 "inizio": datetime.datetime.fromtimestamp(lav.inizio or time.time())
                 .isoformat(timespec="seconds"),
-                # Quando è finito (07/10): lavori_stato lo dice anche dopo un riavvio
+                # Quando è finito (07/10): lavoro_stato lo dice anche dopo un riavvio
                 "fine": (datetime.datetime.fromtimestamp(lav.fine).isoformat(timespec="seconds")
                          if lav.fine else None),
-                # Il testo intero di una ricerca (07/10): per risultato_lavoro dopo un riavvio
+                # Il testo intero di una ricerca (07/10): per lavoro_risultato dopo un riavvio
                 # (agenti/risultato.py), senza rileggere il file Word
                 "testo": (str(r.get("testo"))[:100_000] if r.get("testo") else None)}
         try:
@@ -1244,6 +1349,8 @@ class Lavori:
         titolo = titolo_detto(lav.titolo)     # niente nomi di file né parentesi a voce
         riuscita = "riuscita" if self.female else "riuscito"
         dove = "nella cartella Lavori dei Documenti"
+        if self.in_tappa(lav):
+            return frase_tappa(lav, titolo)
         if lav.stato == "in_attesa":
             dom = lav.domanda
             if dom.lower().startswith("per "):     # «Per compilare «…» mi servono: …»
@@ -1422,7 +1529,13 @@ class Lavori:
                 "token": lav.token, "secondi": round((lav.fine or time.time())
                                                      - (lav.inizio or time.time()), 1),
                 "cartella": lav.risultato.get("cartella"), "test": lav.risultato.get("test")}
-        if lav.stato == "in_attesa":
+        if self.in_tappa(lav):
+            # Una tappa (08/10): «continuo?»; la modalità sviluppo la riscrive con la fase
+            item["in_sospeso"] = {"domanda": "Continuo?", "tool": "lavoro_rispondi",
+                                  "cosa": f"un altro giro di lavoro per «{lav.titolo}»",
+                                  "argomenti": {"lavoro": lav.id, "risposta": "continua"}}
+            item["tappa"] = True
+        elif lav.stato == "in_attesa":
             # La domanda diventa un'azione in sospeso: la risposta nel turno dopo è per lei
             item["in_sospeso"] = self.offerta_risposta(lav)
             item["domanda"] = lav.domanda
@@ -1439,7 +1552,7 @@ class Lavori:
             from ..documenti.servizio import in_sospeso
             item["in_sospeso"] = in_sospeso("Lo apro?", f"il risultato «{titolo_detto(lav.titolo)}»")
         if (lav.risultato.get("estensione") or {}).get("in_sospeso"):
-            # «Vuoi approvarla?» → estensioni_gestisci approva (con la frase di sfida)
+            # «Vuoi approvarla?» → estensione_gestisci approva (con la frase di sfida)
             item["in_sospeso"] = lav.risultato["estensione"]["in_sospeso"]
         if self.sviluppi is not None:
             # Un lavoro della modalità sviluppo (08/10): la fase cambia e l'annuncio dice dove
@@ -1508,7 +1621,7 @@ class Lavori:
         return sorted(out, key=lambda lv: lv.creato)
 
     def offerta_ripresa(self, persona) -> dict | None:
-        """L'azione in sospeso per rifare gli interrotti di `persona` (lavori_stato)."""
+        """L'azione in sospeso per rifare gli interrotti di `persona` (lavoro_stato)."""
         primo = self._interrotti_da_rifare(persona)
         return ripresa.offerta(primo[0]) if primo else None
 
@@ -1558,7 +1671,7 @@ class Lavori:
         for lv in interrotti:
             lv.annunciato = True
             if not self._entro_annuncio(lv, ora):
-                continue                     # più vecchi: solo nell'elenco di lavori_stato
+                continue                     # più vecchi: solo nell'elenco di lavoro_stato
             if ripresa.riprendibile(lv) and lv.persona is not None:
                 per_persona.setdefault(lv.persona, []).append(lv)
             else:

@@ -7,14 +7,14 @@ calliope/agenti/richiesta.py), con l'agente su un Ollama FINTO (prove/ollama_fin
 - interpretazione del JSON (rotto, esito sconosciuto, vaga senza domande, raffinabile senza
   specifica, impossibile senza motivo), frasi delle domande (al più 2 a voce), funzioni dal
   registro dei tool (senza i tool dei lavori), schema senza «vaga» dopo le domande;
-- delega_lavoro di tipo codice: chiara (proposta di sempre), raffinabile («Ho capito così: …»
+- lavoro_affida di tipo codice: chiara (proposta di sempre), raffinabile («Ho capito così: …»
   e il compito all'agente raffinato), vaga (domande in sospeso, niente lavoro; la risposta si
   analizza di nuovo senza domande e porta alla proposta), «c'è già» con un tool vero (e il «sì,
   comunque» che propone senza un'altra analisi) e con un tool inventato (si procede),
   «impossibile qui» (niente lavoro); tempo scaduto, errore del motore e analisi spenta: si
   procede come prima; frase d'attesa solo oltre la soglia; thinking spento e schema JSON nella
   richiesta;
-- estensione_crea: titolo dal nome dell'estensione, fonte web che non risponde → vaga con la
+- sviluppo_apri: titolo dal nome dell'estensione, fonte web che non risponde → vaga con la
   domanda sulla fonte, fonte che risponde → chiara; modulo dello schermo con tutte le domande e
   ripresa dai valori scritti;
 - motivo in parole di un lavoro fermato da un tetto senza il codice («ha cercato i dati senza
@@ -145,8 +145,8 @@ for s in estensioni_specs():
     reg.register(s)
 nomi = [n for n, _ in ar.funzioni(reg)]
 verifica("funzioni dal registro dei tool: calcola e data_calcola sì, i lavori no",
-         "calcola" in nomi and "data_calcola" in nomi and "delega_lavoro" not in nomi
-         and "estensione_crea" not in nomi, f"{len(nomi)} funzioni")
+         "calcola" in nomi and "data_calcola" in nomi and "lavoro_affida" not in nomi
+         and "sviluppo_apri" not in nomi, f"{len(nomi)} funzioni")
 def stati_schema(sc):
     return sc["properties"]["punti"]["properties"]["input"]["enum"]
 
@@ -155,7 +155,7 @@ verifica("schema senza «manca» dopo le domande",
          "manca" not in stati_schema(ar.schema("codice", True))
          and "manca" in stati_schema(ar.schema("codice")))
 
-# ═══════════════════════════ 2. delega_lavoro di codice ═══════════════════════════
+# ═══════════════════════════ 2. lavoro_affida di codice ═══════════════════════════
 fake = FakeOllama(modelli=(MODELLO,), caricati=(MODELLO,)).avvia()
 cfg = Config()
 cfg.agenti_url = fake.url
@@ -182,7 +182,7 @@ def ctx(turno, testo="", storia=None, schermi=None):
 
 
 def delega(compito, turno, testo=None, storia=None, **altro):
-    return json.loads(reg.call("delega_lavoro", {"tipo": "codice", "compito": compito, **altro},
+    return json.loads(reg.call("lavoro_affida", {"tipo": "codice", "compito": compito, **altro},
                                ctx(turno, compito if testo is None else testo, storia),
                                "amministra"))
 
@@ -191,7 +191,7 @@ def nuove(n0):
     return fake.richieste[n0:]
 
 
-sezione("delega_lavoro: chiara")
+sezione("lavoro_affida: chiara")
 n0 = len(fake.richieste)
 fake.copione = [risposta(esito="chiara", specifica="Primi fino a mille in Python")]
 out = delega("Scrivi un programma in Python che trova i numeri primi fino a mille", 10)
@@ -205,7 +205,7 @@ sistema = corpo["messages"][0]["content"]
 verifica("il prompt ha la lista di controllo del codice e le funzioni di Calliope",
          "dati_persona" in sistema and "data_calcola" in sistema and "niente rete" in sistema)
 
-sezione("delega_lavoro: raffinabile")
+sezione("lavoro_affida: raffinabile")
 storia = [("user", "Il mutuo è di 120 000 euro a 20 anni al 3,1 % fisso"),
           ("assistant", "Va bene.")]
 spec = ("Piano di ammortamento alla francese per 120 000 euro, 20 anni, 3,1 % fisso, rata "
@@ -224,16 +224,16 @@ verifica("il compito all'agente è quello raffinato, il titolo quello della rich
          and "Richiesta come detta" in off["lavoro"].vincoli, off and off["lavoro"].titolo)
 svc._offerte.clear()
 
-sezione("delega_lavoro: vaga, domande e risposta")
+sezione("lavoro_affida: vaga, domande e risposta")
 fake.copione = [risposta(esito="vaga", stati={"dati_persona": "manca"},
                          domande=["Che tariffa al chilometro usa la tua azienda?",
                                   "Quanti chilometri hai fatto?"])]
 n_lav = len(svc.lavori)
 out = delega("Calcolami il rimborso con la tariffa al chilometro che usa la mia azienda", 30)
 sosp = out.get("in_sospeso") or {}
-verifica("vaga: due domande a voce, azione in sospeso per delega_lavoro, niente lavoro",
+verifica("vaga: due domande a voce, azione in sospeso per lavoro_affida, niente lavoro",
          "tariffa" in out["risposta_finale"] and "chilometri" in out["risposta_finale"]
-         and sosp.get("tool") == "delega_lavoro" and svc.offerta("dario-id", 31) is None
+         and sosp.get("tool") == "sviluppo_apri" and svc.offerta("dario-id", 31) is None
          and len(svc.lavori) == n_lav and "NON" in out.get("fatto", ""), out["risposta_finale"])
 fake.copione = [risposta(esito="raffinabile",
                          specifica="Rimborso di 455,5 km a 0,42 euro al chilometro")]
@@ -250,13 +250,13 @@ verifica("dopo la risposta: la proposta con la specifica", out["risposta_finale"
     out["risposta_finale"])
 svc._offerte.clear()
 
-sezione("delega_lavoro: c'è già e impossibile qui")
+sezione("lavoro_affida: c'è già e impossibile qui")
 fake.copione = [risposta(esito="gia_fatto", tool="data_calcola",
                          come_chiederlo="quanti giorni mancano al 25 dicembre?")]
 out = delega("Scrivi un programma che dice quanti giorni mancano a una data", 40)
 verifica("c'è già: lo dice, come chiederlo, «vuoi comunque…?» in sospeso, niente lavoro",
          out["risposta_finale"].startswith("Questo lo so già fare: chiedimi pure «quanti giorni")
-         and out["in_sospeso"]["tool"] == "delega_lavoro"
+         and out["in_sospeso"]["tool"] == "sviluppo_apri"
          and svc.offerta("dario-id", 41) is None, out["risposta_finale"])
 n0 = len(fake.richieste)
 out = delega("Scrivi un programma che dice quanti giorni mancano a una data", 41, testo="sì")
@@ -304,8 +304,8 @@ verifica("analisi spenta (agenti_analisi): nessuna richiesta, proposta di sempre
 cfg.agenti_analisi = True
 svc._offerte.clear()
 
-# ═══════════════════════════ 3. estensione_crea ═══════════════════════════
-sezione("estensione_crea")
+# ═══════════════════════════ 3. sviluppo_apri ═══════════════════════════
+sezione("sviluppo_apri")
 
 
 class ArchivioFinto:
@@ -352,7 +352,7 @@ class HubFinto:
 def crea(compito, turno, schermi=None, **altro):
     c = ctx(turno, compito, schermi=schermi)
     c.estensioni = EstFinte()
-    return json.loads(reg.call("estensione_crea", {"compito": compito, **altro}, c, "amministra"))
+    return json.loads(reg.call("sviluppo_apri", {"compito": compito, **altro}, c, "amministra"))
 
 
 fake.copione = [risposta(esito="chiara", nome="regioni d'italia",
@@ -372,7 +372,7 @@ out = crea("Un'estensione che dato il CAP mi dice il comune", 110, nome="cap e c
 verifica("fonte che non risponde: vaga, con la domanda sul sito",
          "da quale sito" in out["risposta_finale"]
 
-         and out["in_sospeso"]["tool"] == "estensione_crea", out["risposta_finale"])
+         and out["in_sospeso"]["tool"] == "sviluppo_apri", out["risposta_finale"])
 svc.analizzatore.dimentica("dario-id")
 fake.copione = [risposta(esito="vaga", tipo="estensione", stati={"fonte": "manca"},
                          domande=["Quale linea?", "Quale fermata?", "Di quale azienda?"])]
@@ -381,7 +381,7 @@ out = crea("Fammi un'estensione che mi dice quando passa il prossimo autobus", 1
            schermi=hub)
 spec_m, riprendi, tool = hub.moduli.aperti[-1] if hub.moduli.aperti else ({}, None, "")
 verifica("tre domande: due a voce, tutte e tre sul modulo dello schermo",
-         len(spec_m.get("campi") or []) == 3 and tool == "estensione_crea"
+         len(spec_m.get("campi") or []) == 3 and tool == "sviluppo_apri"
          and "sullo schermo" in out["risposta_finale"] and "azienda" not in
          out["risposta_finale"], out["risposta_finale"])
 r = riprendi({"d0": "linea 7", "d1": "piazza Fantasia", "d2": "Trasporti Fantasia"}, 121)

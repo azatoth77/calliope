@@ -7,27 +7,27 @@ approssimato del nome la trasforma nella versione 2 di quella che c'era, con il 
 «Meteo per città». Poi: «attiva l'estensione Meteocittà» → azione inesistente «attiva»,
 «riattiva» → «Fatto: è di nuovo attiva» (la vecchia), quattro turni per approvare la nuova;
 approvata, «invoca l'estensione meteo per città su Bergamo» tre volte → sempre web_cerca;
-«modificala» → delega_lavoro di codice → «impossibile: non posso modificare le estensioni»,
+«modificala» → lavoro_affida di codice → «impossibile: non posso modificare le estensioni»,
 detto come «Il lavoro di un agente chiede anche dei codici o delle password» (riferire);
 «Com'è andata l'estensione?» → «Vuoi sentire il risultato?».
 
 A secco, con il docker finto (prove/docker_finto.py) e un servizio dei lavori finto:
-1. estensione_crea: un nome simile a quello di un'estensione che c'è è un'estensione NUOVA
+1. sviluppo_apri: un nome simile a quello di un'estensione che c'è è un'estensione NUOVA
    (detto nella risposta, regola `estensione_nuova_accanto`); `modifica` fa la versione nuova
    (con i file e il nome); `modifica` che non c'è → l'elenco al modello;
 2. l'annuncio e l'elenco di una versione nuova con il titolo di prima e quello nuovo, cosa fa e
    come approvarla; niente «di l'»;
-3. estensioni_gestisci: «attiva» → approva con una versione da approvare (prima della politica,
+3. estensione_gestisci: «attiva» → approva con una versione da approvare (prima della politica,
    `estensioni_azione_sinonimo`), → riattiva senza; «riattiva» di una già attiva non dice
    «Fatto» e propone la versione nuova (`estensione_gia_attiva`); i contrari;
 4. approvata: la frase dice cosa fa adesso, il risultato dà al modello il tool e l'input;
 5. dati del turno EST_NOMINATA_MSG (`estensione_nominata`): la frase che nomina l'estensione,
    anche storpiata, con «è cambiata da poco»; contrari (frase senza nome, rete spenta, nome di
    una parola dentro un'altra parola);
-6. delega_lavoro di codice che cambia un'estensione → estensione_crea con modifica
+6. lavoro_affida di codice che cambia un'estensione → sviluppo_apri con modifica
    (`delega_estensione`); contrari: «estensione» dei file, il titolo senza la parola;
    l'analisi della richiesta con l'esito «estensione»;
-7. lavori_stato con un lavoro d'estensione finito: la versione da approvare e la domanda;
+7. lavoro_stato con un lavoro d'estensione finito: la versione da approvare e la domanda;
 8. il registro dei turni di una risposta interrotta dal nome a metà della sua unica frase:
    «risposta» (sentita) vuota e «risposta_inviata» con la frase, ripulita come la risposta (la
    frase di sfida), e per un ospite niente; contrario: non interrotta, nessun campo in più.
@@ -129,7 +129,7 @@ def candidata_v2(est):
 
 
 def prova_crea(tmp: Path, iso):
-    print("— 1. estensione_crea: nuova o versione nuova")
+    print("— 1. sviluppo_apri: nuova o versione nuova")
     cfg, reg, ctx, est = ambiente(tmp, iso)
     P.installa(est, M1, CODICE)
     svc = LavoriFinti()
@@ -175,7 +175,7 @@ def prova_crea(tmp: Path, iso):
     verifica("senza la conferma della politica: la proposta («Procedo?») con l'avviso davanti",
              detta(r).startswith("Sarà un'estensione nuova") and detta(r).endswith("?"),
              detta(r))
-    spec = reg.get("estensione_crea")
+    spec = reg.get("sviluppo_apri")
     verifica("descrizione: CAMBIA con modifica, nome per una nuova",
              "modifica = il suo nome" in spec.description and "nome: un nome breve per "
              "un'estensione nuova" in spec.description
@@ -207,14 +207,14 @@ def prova_annuncio_elenco(tmp: Path, iso):
     verifica("contrario: stesso titolo, niente «che ora si chiama»",
              "che ora si chiama" not in c2["frase"] and "la versione 2 di «Meteo Borgoverde"
              in c2["frase"], c2["frase"][:100])
-    r = P.chiama(reg, ctx, "estensioni_gestisci", {"azione": "elenca"}, turno=2)
+    r = P.chiama(reg, ctx, "estensione_gestisci", {"azione": "elenca"}, turno=2)
     verifica("elenco: la versione 2 con il suo titolo, cosa fa e come usarla",
              "«Meteo Borgoverde e Valfiorita» (attiva, versione 1; c'è una versione nuova da "
              "approvare, la 2, «Meteo per città»: dice il meteo attuale in una città)" in detta(r)
              and detta(r).endswith("Per usare una versione nuova, dimmi di approvarla."),
              detta(r))
     est.archivio.rifiuta("meteo_citta", n)
-    r = P.chiama(reg, ctx, "estensioni_gestisci", {"azione": "elenca"}, turno=3)
+    r = P.chiama(reg, ctx, "estensione_gestisci", {"azione": "elenca"}, turno=3)
     verifica("contrario: senza versioni nuove l'elenco di sempre",
              detta(r) == "Ho un'estensione: «Meteo Borgoverde e Valfiorita» (attiva).", detta(r))
 
@@ -235,7 +235,7 @@ def prova_gestisci(tmp: Path, iso):
         verifica(f"azione «{detto}» su «{nome}» → «{atteso}»",
                  azione_vera(detto, _nome(nome, a), a) == atteso)
     ctx.regole.clear()
-    r = P.chiama(reg, ctx, "estensioni_gestisci", {"azione": "attiva", "nome": "Meteo Città"},
+    r = P.chiama(reg, ctx, "estensione_gestisci", {"azione": "attiva", "nome": "Meteo Città"},
                  turno=2)
     s = ctx.speaker_ctx.sfida
     verifica("«attiva l'estensione Meteocittà» con la versione 2 da approvare: la frase di "
@@ -247,7 +247,7 @@ def prova_gestisci(tmp: Path, iso):
              and "estensioni_azione_sinonimo" in ctx.regole, detta(r))
     ctx.speaker_ctx.sfida = None
     ctx.regole.clear()
-    r = P.chiama(reg, ctx, "estensioni_gestisci", {"azione": "riattiva", "nome": "Meteo Città"},
+    r = P.chiama(reg, ctx, "estensione_gestisci", {"azione": "riattiva", "nome": "Meteo Città"},
                  turno=3)
     sosp = r.get("in_sospeso") or {}
     verifica("«riattiva» di una già attiva: niente «Fatto», com'è e la versione nuova",
@@ -259,23 +259,23 @@ def prova_gestisci(tmp: Path, iso):
              and "estensione_gia_attiva" in ctx.regole and a.voce("meteo_citta")["attiva"] == 1,
              detta(r))
     a.rifiuta("meteo_citta", n)
-    r = P.chiama(reg, ctx, "estensioni_gestisci", {"azione": "riattiva", "nome": "meteo_citta"},
+    r = P.chiama(reg, ctx, "estensione_gestisci", {"azione": "riattiva", "nome": "meteo_citta"},
                  turno=4)
     verifica("contrario: già attiva e niente da approvare: «è già attiva», senza domande",
              detta(r) == "«Meteo Borgoverde e Valfiorita» è già attiva, versione 1."
              and not r.get("in_sospeso"), detta(r))
-    P.chiama(reg, ctx, "estensioni_gestisci", {"azione": "disattiva", "nome": "meteo_citta"},
+    P.chiama(reg, ctx, "estensione_gestisci", {"azione": "disattiva", "nome": "meteo_citta"},
              turno=5)
-    r = P.chiama(reg, ctx, "estensioni_gestisci", {"azione": "attiva", "nome": "meteo_citta"},
+    r = P.chiama(reg, ctx, "estensione_gestisci", {"azione": "attiva", "nome": "meteo_citta"},
                  turno=6)
     verifica("contrario: «attiva» di una disattivata senza versioni nuove = riattiva",
              detta(r) == "Fatto: «Meteo Borgoverde e Valfiorita» è di nuovo attiva."
              and reg.get("est_meteo_citta") is not None, detta(r))
-    r = P.chiama(reg, ctx, "estensioni_gestisci", {"azione": "indovina", "nome": "meteo_citta"},
+    r = P.chiama(reg, ctx, "estensione_gestisci", {"azione": "indovina", "nome": "meteo_citta"},
                  turno=7)
     verifica("contrario: un'azione che non c'è resta un errore",
              "azione sconosciuta" in str(r.get("errore")), str(r))
-    spec = reg.get("estensioni_gestisci")
+    spec = reg.get("estensione_gestisci")
     verifica("descrizione: «attiva la versione nuova» è approva; per usarla il tool est_",
              "«attiva la versione nuova»" in spec.description and "est_" in spec.description
              and spec.prepara is not None)
@@ -287,7 +287,7 @@ def prova_approvata(tmp: Path, iso):
     P.installa(est, M1, CODICE)
     candidata_v2(est)
     ctx.speaker_ctx.sfida_superata = True
-    r = P.chiama(reg, ctx, "estensioni_gestisci", {"azione": "approva", "nome": "meteo_citta"},
+    r = P.chiama(reg, ctx, "estensione_gestisci", {"azione": "approva", "nome": "meteo_citta"},
                  turno=2)
     ctx.speaker_ctx.sfida_superata = False
     verifica("la frase dice cosa fa adesso",
@@ -359,7 +359,7 @@ def prova_nominata(tmp: Path, iso):
     b.cfg.llm_reti_spente = ["estensione_nominata"]
     verifica("rete spenta: niente dati del turno", b._estensioni_nominate(FRASI_SI[0]) is None)
     b.cfg.llm_reti_spente = []
-    P.chiama(reg, ctx, "estensioni_gestisci", {"azione": "disattiva", "nome": "meteo_citta"},
+    P.chiama(reg, ctx, "estensione_gestisci", {"azione": "disattiva", "nome": "meteo_citta"},
              turno=9)
     verifica("contrario: disattivata (niente tool): niente dati del turno",
              b._estensioni_nominate(FRASI_SI[0]) is None)
@@ -368,7 +368,7 @@ def prova_nominata(tmp: Path, iso):
 
 
 def prova_delega(tmp: Path, iso):
-    print("— 6. delega_lavoro che cambia un'estensione, analisi della richiesta")
+    print("— 6. lavoro_affida che cambia un'estensione, analisi della richiesta")
     cfg, reg, ctx, est = ambiente(tmp, iso)
     P.installa(est, M1, CODICE)
     mv, n = candidata_v2(est)
@@ -382,7 +382,7 @@ def prova_delega(tmp: Path, iso):
             "qualsiasi città indicata dall'utente.")
     r = ta._delega_lavoro(ctx, tipo="codice", compito=vero)
     lav = svc.avviati[-1] if svc.avviati else None
-    verifica("il compito vero della DGX: estensione_crea con modifica = meteo_citta, già "
+    verifica("il compito vero della DGX: sviluppo_apri con modifica = meteo_citta, già "
              "confermato", lav is not None and lav.tipo == "estensione"
              and lav.estensione == "meteo_citta" and "delega_estensione" in ctx.regole
              and detta(r).startswith("Sarà una versione nuova di «Meteo per città»"), detta(r))
@@ -426,13 +426,13 @@ def prova_delega(tmp: Path, iso):
     r = ta._delega_lavoro(ctx, tipo="codice", compito="Correggi l'estensione del meteo che "
                                                       "sbaglia le città.")
     verifica("analisi con esito estensione: niente lavoro, nessuna frase detta, il modello "
-             "richiama estensione_crea (con l'elenco)", len(svc.avviati) == k
-             and not detta(r) and "estensione_crea" in r.get("cosa_fare", "")
+             "richiama sviluppo_apri (con l'elenco)", len(svc.avviati) == k
+             and not detta(r) and "sviluppo_apri" in r.get("cosa_fare", "")
              and "(meteo_citta)" in r.get("cosa_fare", ""), json.dumps(r, ensure_ascii=False))
 
 
 def prova_lavori_stato(tmp: Path, iso):
-    print("— 7. lavori_stato con un lavoro d'estensione finito")
+    print("— 7. lavoro_stato con un lavoro d'estensione finito")
     cfg, reg, ctx, est = ambiente(tmp, iso)
     P.installa(est, M1, CODICE)
     mv, n = candidata_v2(est)
@@ -452,7 +452,7 @@ def prova_lavori_stato(tmp: Path, iso):
         verifica("«Com'è andata l'estensione?»: la versione da approvare e «Vuoi approvarla?»",
                  "Ha preparato la versione 2 di «Meteo Borgoverde e Valfiorita», che ora si "
                  "chiama «Meteo per città»: è da approvare. Vuoi approvarla?" in detta(r)
-                 and sosp.get("tool") == "estensioni_gestisci"
+                 and sosp.get("tool") == "estensione_gestisci"
                  and sosp.get("argomenti") == {"azione": "approva", "nome": "meteo_citta"},
                  detta(r))
         est.archivio.approva("meteo_citta", n, "Dario")

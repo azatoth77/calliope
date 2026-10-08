@@ -464,7 +464,7 @@ class Sandbox:
 
     def termina(self):
         """Ferma l'esecuzione in corso (annullo del lavoro). Non aspetta: si chiama anche dal
-        thread della voce («fermalo», lavori_annulla)."""
+        thread della voce («fermalo», lavoro_annulla)."""
         with self._lock:
             job, proc, nome = self._job, self._proc, self._nome
         if nome is not None:

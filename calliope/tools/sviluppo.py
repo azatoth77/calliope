@@ -7,11 +7,24 @@ docs/ricerche/2026-10-08-modalita-sviluppo.md).
   chiusura per un programma; all'analisi conferma la specifica); analisi (si torna all'analisi
   da qualunque fase, con la modifica detta: il lavoro in corso si ferma, la specifica nuova si
   propone); sospendi, riprendi, esci; promuovi (un programma diventa un'estensione).
-- sviluppo_prova(dati): il collaudo, la versione candidata provata PRIMA dell'approvazione
+- sviluppo_collauda(dati): il collaudo, la versione candidata provata PRIMA dell'approvazione
   (calliope/estensioni/servizio.Estensioni.prova_candidata) o il programma eseguito di nuovo
-  (lavori_esegui). Il risultato è un dato non fidato (fonte «estensione», come gli est_).
+  (programma_esegui). Il risultato è un dato non fidato (fonte «estensione», come gli est_).
 
-E gli agganci per estensione_crea e delega_lavoro (tools/estensioni.py, tools/agenti.py): una
+Versione 2 (08/10, docs/ricerche/2026-10-08-modalita-sviluppo.md § 9), con i nomi nuovi (nome
+singolare + verbo, prefisso per famiglia; il codice passa sempre dallo sviluppo):
+- sviluppo_apri(tipo=estensione|programma, compito, …): apre uno sviluppo (prima estensione_crea
+  e delega_lavoro di codice); con `proposta` conferma la specifica proposta;
+- sviluppo_passo (era `sviluppo`): «chiudi» chiede conferma e, con l'agente al lavoro, sospende;
+  «avanti» a una tappa fa un giro nuovo;
+- sviluppo_collauda (era `sviluppo_prova`): un collaudo che non va diventa un caso per l'agente
+  e la proposta «Lo faccio correggere?»;
+- sviluppo_chiedi(domanda): la domanda a chi l'ha scritto, in sola lettura, con il contesto
+  dello sviluppo conservato; la risposta è un dato non fidato;
+- sviluppo_correggi(problema): la correzione come passo a sé (la specifica resta), dai file,
+  dai collaudi falliti e dalla risposta di sviluppo_chiedi; poi di nuovo collaudo.
+
+E gli agganci per sviluppo_apri e lavoro_affida (tools/estensioni.py, tools/agenti.py): una
 richiesta nuova di chi amministra apre lo sviluppo (`apri_se_serve`); mentre uno è aperto, uno
 sviluppo diverso non parte (`controlla_nuovo`, regola `sviluppo_altro_bloccato`); proposta e
 avvio di un lavoro cambiano la fase (`su_proposta`, `su_avvio`).
@@ -25,7 +38,8 @@ import re
 from .spec import ToolContext, ToolSpec, note_rule
 from ..testi import FAMILY, NIENTE
 
-AZIONI = ["stato", "avanti", "analisi", "sospendi", "riprendi", "esci", "promuovi"]
+AZIONI = ["stato", "avanti", "analisi", "sospendi", "riprendi", "chiudi", "promuovi"]
+TIPI_APRI = ["estensione", "programma"]
 
 
 def _final(text: str, **extra) -> dict:
@@ -84,7 +98,7 @@ def controlla_nuovo(ctx, tool: str, args: dict) -> dict | None:
             "conferma": frase, "risposta_finale": frase,
             "in_sospeso": {"domanda": "Vuoi che sospenda questo sviluppo?",
                            "cosa": f"sospendere lo sviluppo di «{sv.titolo}»",
-                           "tool": "sviluppo", "argomenti": {"azione": "sospendi"}}}
+                           "tool": "sviluppo_passo", "argomenti": {"azione": "sospendi"}}}
 
 
 def apri_se_serve(ctx, tipo: str, compito: str, titolo: str = "", gioco: bool = False,
@@ -125,12 +139,54 @@ def chiudi_se_vuoto(ctx, motivo: str):
 
 
 def su_proposta(svc, lav):
+    """La proposta di un lavoro: lo sviluppo in analisi che la riceve, o None."""
     svs = getattr(svc, "sviluppi", None)
     if svs is not None:
         try:
-            svs.proposto(lav)
+            return svs.proposto(lav)
         except Exception as e:  # noqa: BLE001 — la proposta parte comunque
             getattr(svc, "log", print)(f"[SVILUPPO] proposta: {type(e).__name__}: {e}")
+    return None
+
+
+# ─────────────────────────── sviluppo_apri ───────────────────────────
+
+def _tipo(tipo) -> str:
+    t = str(tipo or "").strip().lower()
+    if t in ("programma", "codice", "script", "programmi"):
+        return "programma"
+    if t in ("estensione", "estensioni", "funzione", "gioco"):
+        return "estensione"
+    return ""
+
+
+def _sviluppo_apri(ctx: ToolContext, tipo: str = "", compito: str = "", nome: str = "",
+                   modifica: str = "", proposta: str = "", gioco=False, gia_fatto_da: str = "",
+                   come_chiederlo: str = "", vincoli: str = "", file: str = "", allegato=None,
+                   **_altro) -> dict:
+    """Uno sviluppo nuovo (08/10, versione 2): un'estensione (tools/estensioni._estensione_crea)
+    o un programma (tools/agenti._delega_lavoro di tipo codice), con la stessa analisi, la
+    stessa proposta e gli stessi permessi di prima. `proposta` = l'id del lavoro proposto: il
+    «sì» alla specifica."""
+    from . import agenti as ta
+    from . import estensioni as te
+    t = _tipo(tipo)
+    if gioco in (True, "true", "sì", "si", 1) or str(modifica or "").strip():
+        t = "estensione"
+    prop = str(proposta or "").strip()
+    if not t and prop:
+        svc = getattr(ctx, "lavori", None)
+        prof = ta._person(ctx)
+        off = (svc.offerta(getattr(prof, "id", None), int(getattr(ctx, "turno", 0) or 0))
+               if svc is not None and hasattr(svc, "offerta") else None)
+        if off is not None and getattr(off["lavoro"], "tipo", "") == "codice":
+            t = "programma"
+    if t == "programma":
+        return ta._delega_lavoro(ctx, tipo="codice", compito=compito, vincoli=vincoli,
+                                 proposta=proposta, file=file, allegato=allegato)
+    return te._estensione_crea(ctx, compito=compito, nome=nome, proposta=proposta,
+                               gia_fatto_da=gia_fatto_da, come_chiederlo=come_chiederlo,
+                               gioco=gioco, modifica=modifica)
 
 
 def su_avvio(ctx, svc, lav):
@@ -159,7 +215,7 @@ def _sviluppo(ctx: ToolContext, azione: str = "stato", quale: str = "", cambia: 
         return _no(ctx, "La modalità sviluppo è di chi amministra.", "sviluppo_permesso")
     azione = str(azione or "stato").strip().lower()
     azione = {"continua": "avanti", "prosegui": "avanti", "procedi": "avanti",
-              "cambia": "analisi", "modifica": "analisi", "chiudi": "esci", "basta": "esci",
+              "cambia": "analisi", "modifica": "analisi", "esci": "chiudi", "basta": "chiudi",
               "pausa": "sospendi", "riapri": "riprendi"}.get(azione, azione)
     persona = chi(ctx)
     if azione == "riprendi":
@@ -174,7 +230,7 @@ def _sviluppo(ctx: ToolContext, azione: str = "stato", quale: str = "", cambia: 
             frase = f"Lo sviluppo di «{s.titolo}» è sospeso: vuoi riprenderlo?"
             return _final(frase, ok=False, fatto=NIENTE,
                           in_sospeso={"domanda": frase, "cosa": f"riprendere «{s.titolo}»",
-                                      "tool": "sviluppo",
+                                      "tool": "sviluppo_passo",
                                       "argomenti": {"azione": "riprendi", "quale": s.id}})
         return _no(ctx, "Non c'è nessuno sviluppo aperto.")
     svs.tocca(sv)
@@ -187,18 +243,8 @@ def _sviluppo(ctx: ToolContext, azione: str = "stato", quale: str = "", cambia: 
         return _final(f"D'accordo: sospendo lo sviluppo di «{sv.titolo}», eravamo "
                       f"{_alla(sv)}. Quando vuoi, dimmi «riprendiamo lo sviluppo».{extra}",
                       fatto="sviluppo sospeso")
-    if azione == "esci":
-        svs.chiudi(sv, "uscita")
-        note_rule(ctx, "sviluppo_chiuso")
-        extra = ""
-        if sv.tipo == "estensione" and sv.estensione and sv.fase in ("collaudo", "revisione",
-                                                                      "attivazione"):
-            extra = " La versione nuova resta da approvare: puoi approvarla più tardi."
-        elif svs.lavoro_attivo(sv):
-            extra = " Il lavoro dell'agente va avanti: te lo dico quando è finito."
-        _schermo(ctx, sv)
-        return _final(f"D'accordo: chiudo lo sviluppo di «{sv.titolo}» e torniamo alla "
-                      f"conversazione normale.{extra}", fatto="sviluppo chiuso")
+    if azione == "chiudi":
+        return _chiudi(ctx, svs, sv)
     if azione == "analisi":
         return _analisi(ctx, svs, sv, prof, str(cambia or "").strip())
     if azione == "promuovi":
@@ -207,6 +253,56 @@ def _sviluppo(ctx: ToolContext, azione: str = "stato", quale: str = "", cambia: 
         return _avanti(ctx, svs, sv, prof)
     return {"ok": False, "fatto": NIENTE, "errore": f"azione sconosciuta: {azione}",
             "cosa_fare": "azione: " + ", ".join(AZIONI)}
+
+
+def _in_tappa(svs, sv) -> object:
+    """Il lavoro dello sviluppo fermo a una tappa (fine del giro), o None."""
+    lav = svs._lavoro(sv.lavoro)
+    if lav is not None and getattr(lav, "stato", "") == "in_attesa" and (
+            getattr(lav, "risultato", None) or {}).get("esito") == "tappa":
+        return lav
+    return None
+
+
+def _chiudi(ctx, svs, sv) -> dict:
+    """«Chiudi» (08/10, versione 2; DGX, 11:30: «Ok, chiuso a long», storpiato, chiudeva lo
+    sviluppo con l'agente al lavoro, senza domande). Con un lavoro in corso diventa «sospendi»;
+    altrimenti chiede conferma, e chiude solo al «sì» a quella domanda (il turno dopo, con
+    l'azione in sospeso di sviluppo_passo): una frase breve o storpiata non chiude mai da sola."""
+    if svs.lavoro_attivo(sv) or _in_tappa(svs, sv) is not None:
+        svs.sospendi(sv, "chiesto di chiudere con l'agente al lavoro")
+        note_rule(ctx, "sviluppo_chiudi_sospende")
+        _schermo(ctx, sv)
+        return _final(f"L'agente sta ancora lavorando a «{sv.titolo}»: invece di chiudere, "
+                      "sospendo lo sviluppo. Quando il lavoro è pronto lo riapro al collaudo.",
+                      fatto="sviluppo SOSPESO, non chiuso: c'è un lavoro dell'agente in corso")
+    from ..sviluppo import CHIUSURA_TURNI
+    turno = int(getattr(ctx, "turno", 0) or 0)
+    chiesta = sv.chiusura_chiesta
+    if (chiesta is not None and 1 <= turno - int(chiesta) <= CHIUSURA_TURNI
+            and getattr(ctx, "tool_in_sospeso", None) == "sviluppo_passo"):
+        svs.chiudi(sv, "uscita")
+        note_rule(ctx, "sviluppo_chiuso")
+        extra = ""
+        if sv.tipo == "estensione" and sv.estensione and sv.fase in ("collaudo", "revisione",
+                                                                      "attivazione"):
+            extra = " La versione nuova resta da approvare: puoi approvarla più tardi."
+        _schermo(ctx, sv)
+        return _final(f"D'accordo: chiudo lo sviluppo di «{sv.titolo}» e torniamo alla "
+                      f"conversazione normale.{extra}", fatto="sviluppo chiuso")
+    sv.chiusura_chiesta = turno
+    svs.tocca(sv)
+    note_rule(ctx, "sviluppo_chiudi_conferma")
+    extra = ""
+    if sv.tipo == "estensione" and sv.estensione and sv.fase in ("collaudo", "revisione",
+                                                                  "attivazione"):
+        extra = " La versione nuova non è ancora approvata."
+    domanda = f"Chiudo lo sviluppo di «{sv.titolo}»?"
+    frase = (f"{domanda}{extra} Se vuoi solo una pausa, dimmi «sospendi» e lo riprendiamo "
+             "quando vuoi.")
+    return _final(frase, ok=False, fatto="NIENTE chiuso: aspetta la conferma",
+                  in_sospeso={"domanda": domanda, "cosa": f"chiudere lo sviluppo di «{sv.titolo}»",
+                              "tool": "sviluppo_passo", "argomenti": {"azione": "chiudi"}})
 
 
 def _alla(sv) -> str:
@@ -226,6 +322,13 @@ def _stato(ctx, svs, sv, persona) -> dict:
                       + ". Dimmi quale riprendere.", fatto="nessuno sviluppo aperto")
     frase = f"Stiamo sviluppando «{sv.titolo}»: {svs.dove(sv)}."
     lav = svs._lavoro(sv.lavoro)
+    if sv.fase == "sviluppo" and _in_tappa(svs, sv) is not None:
+        frase += " Il lavoro dell'agente è fermo a una tappa: continuo con un altro giro?"
+        _schermo(ctx, sv)
+        return _final(frase, fatto="stato dello sviluppo", sviluppo=sv.id,
+                      in_sospeso={"domanda": "Continuo con un altro giro?",
+                                  "cosa": "un altro giro di lavoro", "tool": "sviluppo_passo",
+                                  "argomenti": {"azione": "avanti"}})
     if sv.fase == "sviluppo" and lav is not None and lav.stato in ("in_coda", "in_corso"):
         frase += f" L'agente {getattr(lav, 'passo', 'lavora')}, al passo {lav.passi + 1}."
     elif sv.fase == "sviluppo" and sv.nota:
@@ -259,12 +362,12 @@ def _riprendi(ctx, svs, persona, quale: str) -> dict:
     elif sv.fase == "revisione":
         frase += " Vuoi andare avanti?"
         extra["in_sospeso"] = {"domanda": "Vuoi andare avanti?", "cosa": "andare avanti",
-                               "tool": "sviluppo", "argomenti": {"azione": "avanti"}}
+                               "tool": "sviluppo_passo", "argomenti": {"azione": "avanti"}}
     elif sv.fase == "analisi" and sv.specifica:
         frase += " Vuoi che affidi all'agente la specifica di prima?"
         extra["in_sospeso"] = {"domanda": "Vuoi che la affidi all'agente?",
                                "cosa": "affidare la specifica all'agente",
-                               "tool": "sviluppo", "argomenti": {"azione": "avanti"}}
+                               "tool": "sviluppo_passo", "argomenti": {"azione": "avanti"}}
     _schermo(ctx, sv)
     return _final(frase, fatto="sviluppo ripreso", sviluppo=sv.id, **extra)
 
@@ -330,7 +433,7 @@ def _analisi(ctx, svs, sv, prof, cambia: str) -> dict:
         _schermo(ctx, sv)
         return _final(frase, fatto="sviluppo all'analisi: manca la modifica",
                       in_sospeso={"domanda": frase, "cosa": "la modifica allo sviluppo",
-                                  "tool": "sviluppo",
+                                  "tool": "sviluppo_passo",
                                   "argomenti": "azione = analisi, cambia = la modifica come "
                                                "detta dalla persona"})
     base = (sv.specifica or sv.richiesta or "").strip().rstrip(".")
@@ -354,13 +457,22 @@ def _avanti(ctx, svs, sv, prof) -> dict:
             return _nuovo_lavoro(ctx, svs, sv, prof, sv.specifica)
         return _no(ctx, "Siamo ancora all'analisi: prima dimmi cosa deve fare.")
     if sv.fase == "sviluppo":
+        tappa = _in_tappa(svs, sv)
+        if tappa is not None:
+            # Una tappa (08/10, versione 2): «continua» → un giro nuovo con il contesto
+            frase = svc.continua(tappa) if hasattr(svc, "continua") else None
+            if frase:
+                note_rule(ctx, "sviluppo_tappa_continua")
+                svs.tocca(sv)
+                return _final(frase, fatto="un altro giro avviato: NON è ancora finito",
+                              lavoro=tappa.id)
         if svs.lavoro_attivo(sv):
             return _stato(ctx, svs, sv, sv.persona)
         frase = ("Il lavoro dell'agente non è andato: vuoi cambiare qualcosa, o lo rifaccio "
                  "così?")
         return _final(frase, ok=False, fatto=NIENTE,
                       in_sospeso={"domanda": frase, "cosa": "rifare il lavoro",
-                                  "tool": "sviluppo",
+                                  "tool": "sviluppo_passo",
                                   "argomenti": "azione = analisi, cambia = la modifica detta "
                                                "(vuota per rifarlo così)"})
     if sv.fase == "collaudo":
@@ -410,7 +522,7 @@ def _revisione(ctx, svs, sv) -> dict:
         frase = f"{rev['frase']} {detto_coll} Vuoi attivarla? Ti chiederò la frase di conferma."
         return _final(frase, fatto="revisione detta: NON è ancora attiva",
                       in_sospeso={"domanda": "Vuoi attivarla?",
-                                  "cosa": f"attivare «{sv.titolo}»", "tool": "sviluppo",
+                                  "cosa": f"attivare «{sv.titolo}»", "tool": "sviluppo_passo",
                                   "argomenti": {"azione": "avanti"}})
     # Un programma: file, righe, test, prove; e se è grande, la proposta di un'estensione
     misura = misura_programma(sv.cartella)
@@ -441,11 +553,11 @@ def _revisione(ctx, svs, sv) -> dict:
                    "ha i permessi approvati da te e le sue versioni.")
         return _final(f"{frase} {domanda}", fatto="revisione detta",
                       in_sospeso={"domanda": domanda, "cosa": "farne un'estensione",
-                                  "tool": "sviluppo", "argomenti": {"azione": "promuovi"}})
+                                  "tool": "sviluppo_passo", "argomenti": {"azione": "promuovi"}})
     frase += " Va bene così?"
     return _final(frase, fatto="revisione detta",
                   in_sospeso={"domanda": "Va bene così?", "cosa": "chiudere lo sviluppo",
-                              "tool": "sviluppo", "argomenti": {"azione": "avanti"}})
+                              "tool": "sviluppo_passo", "argomenti": {"azione": "avanti"}})
 
 
 def _test_su_disco(cartella):
@@ -476,7 +588,7 @@ def _promuovi(ctx, svs, sv, prof) -> dict:
     return _estensione_crea(ctx, compito=compito, nome=sv.titolo)
 
 
-# ─────────────────────────── sviluppo_prova ───────────────────────────
+# ─────────────────────────── sviluppo_collauda ───────────────────────────
 
 def _argomenti(m: dict, dati) -> dict:
     """I dati della prova come li passa il modello («Bergamo», «citta: Bergamo», un oggetto)
@@ -500,6 +612,20 @@ def _argomenti(m: dict, dati) -> dict:
         return {k: v for k, v in coppie.items() if k in props}
     primo = req[0] if req else props[0]
     return {primo: s}
+
+
+def _fallito(out, ris) -> bool:
+    """Il collaudo non è andato, per il codice (08/10, versione 2): l'esecuzione si è fermata
+    con un errore, o il risultato dell'estensione ha un campo d'errore. Un risultato che dice
+    «non trovato» a parole lo giudica la persona (e il modello)."""
+    if not isinstance(out, dict):
+        return True
+    if out.get("errore") or (out.get("ok") is False and "risultati" not in out):
+        return True
+    if isinstance(ris, dict):
+        if ris.get("errore") or ris.get("error") or ris.get("ok") is False:
+            return True
+    return False
 
 
 def _sviluppo_prova(ctx: ToolContext, dati: str = "", **_altro) -> dict:
@@ -537,30 +663,251 @@ def _sviluppo_prova(ctx: ToolContext, dati: str = "", **_altro) -> dict:
         out = ta._lavori_esegui(ctx, lavoro=lav_id, dati=dati)
         ok = bool((out or {}).get("ok"))
         esito = str((out or {}).get("conferma") or "")
-    svs.collaudo(sv, detti, ok, esito)
-    note_rule(ctx, "sviluppo_prova")
+    if sv.tipo == "estensione":
+        fallito = _fallito(out, (out or {}).get("risultati") if isinstance(out, dict) else None)
+        # Un rifiuto prima dell'esecuzione (file cambiati, contenitore spento, un gioco) non è
+        # un collaudo: si dice e basta
+        prima = isinstance(out, dict) and out.get("risultati") is None and not out.get("errore")
+        if prima:
+            return out
+    else:
+        fallito = not ok
+    svs.collaudo(sv, detti, not fallito, esito)
+    note_rule(ctx, "sviluppo_collauda")
+    _schermo(ctx, sv)
+    if fallito:
+        # Un collaudo che non va diventa un caso per l'agente (versione 2): la frase la dice il
+        # codice (niente testo dell'estensione), e il «sì» va a sviluppo_correggi
+        note_rule(ctx, "sviluppo_collaudo_fallito")
+        cosa = f"con «{detti}»" if detti else "senza dati"
+        domanda = "Lo faccio correggere?"
+        frase = (f"La prova {cosa} non è andata: si è fermata con un errore. I dettagli sono "
+                 f"sulla scheda dello sviluppo. {domanda}")
+        return _final(frase, ok=False, fatto="collaudo NON riuscito",
+                      in_sospeso={"domanda": domanda, "tool": "sviluppo_correggi",
+                                  "cosa": f"far correggere «{sv.titolo}» all'agente",
+                                  "argomenti": {"problema": f"il collaudo {cosa} si ferma con "
+                                                            "un errore"}})
+    return out
+
+
+# ─────────────────────────── sviluppo_chiedi ───────────────────────────
+
+def _sviluppo_chiedi(ctx: ToolContext, domanda: str = "", **_altro) -> dict:
+    """La domanda a chi ha scritto il codice (08/10, versione 2; DGX, 11:13: «Perché?» dopo
+    «Impossibile cercare la città», e la voce improvvisava). L'agente risponde in sola lettura,
+    con il contesto dello sviluppo conservato; la risposta è un dato non fidato (fonte agente)."""
+    from ..sviluppo import chi, chiedi_agente
+    svs = _svs(ctx)
+    if svs is None:
+        return _no(ctx, "Qui la modalità sviluppo non c'è.")
+    prof = _prof(ctx)
+    if prof is None or not _admin(ctx):
+        return _no(ctx, "Le domande a chi scrive il codice sono di chi amministra.",
+                   "sviluppo_permesso")
+    sv = svs.corrente(chi(ctx))
+    if sv is None:
+        return _no(ctx, "Non c'è nessuno sviluppo aperto: di quale codice parli?")
+    if sv.fase == "analisi" and not (sv.estensione or sv.cartella or sv.lavoro):
+        return _no(ctx, "Non c'è ancora codice da spiegare: siamo all'analisi.")
+    domanda = str(domanda or "").strip() or str(getattr(ctx, "user_text", "") or "").strip()
+    if not domanda:
+        return {"ok": False, "fatto": NIENTE, "errore": "manca la domanda",
+                "cosa_fare": "richiama con domanda = la domanda della persona come detta"}
+    svc = getattr(ctx, "lavori", None)
+    svs.tocca(sv)
+    tempo = float(getattr(ctx.cfg, "sviluppo_chiedi_s", 60.0) or 60.0)
+    r, esito = chiedi_agente(svc, domanda, svs.testo_per_agente(sv), tempo)
+    if r is None:
+        note_rule(ctx, "sviluppo_chiedi_guasto")
+        getattr(svc, "log", print)(f"[SVILUPPO] {sv.id}: domanda all'agente: {esito}")
+        return _final("Adesso chi l'ha scritta non mi risponde"
+                      + (" in tempo" if esito == "tempo" else "")
+                      + ". Riprova tra poco, oppure lo faccio correggere?", ok=False,
+                      fatto=NIENTE, guasto="un guasto di adesso, non una cosa che non sai fare",
+                      in_sospeso={"domanda": "Lo faccio correggere?", "tool": "sviluppo_correggi",
+                                  "cosa": f"far correggere «{sv.titolo}»",
+                                  "argomenti": {"problema": domanda}})
+    svs.chiesto(sv, domanda, r)
+    note_rule(ctx, "sviluppo_chiedi")
+    _schermo(ctx, sv)
+    out = {"ok": True, "chi_risponde": "l'agente che ha scritto il codice",
+           "risposta": r.get("voce") or "", "serve_correzione": bool(r.get("serve_correzione")),
+           "dettagli": "sullo schermo, nella scheda dello sviluppo",
+           "cosa_fare": ("di' in breve la risposta, come risposta di chi l'ha scritta"
+                         + (", e chiedi «Lo faccio correggere?»" if r.get("serve_correzione")
+                            else ""))}
+    if r.get("serve_correzione"):
+        out["in_sospeso"] = {"domanda": "Lo faccio correggere?", "tool": "sviluppo_correggi",
+                             "cosa": f"far correggere «{sv.titolo}»",
+                             "argomenti": {"problema": str(r.get("cosa_correggere") or domanda)
+                                           [:300]}}
+    return out
+
+
+# ─────────────────────────── sviluppo_correggi ───────────────────────────
+
+def _sviluppo_correggi(ctx: ToolContext, problema: str = "", **_altro) -> dict:
+    """La correzione come passo a sé (08/10, versione 2; DGX, 11:15: «fai revisionare il codice
+    all'agente» tornava all'analisi e rileggeva la specifica). La specifica resta: l'agente
+    riparte dai suoi file, dai collaudi che non vanno e dalla risposta di sviluppo_chiedi; poi
+    di nuovo collaudo. A una tappa è «cambia e continua»: il giro nuovo con la nota."""
+    from ..sviluppo import chi
+    svs = _svs(ctx)
+    sv = svs.corrente(chi(ctx)) if svs is not None else None
+    if sv is None:
+        # Nessuno sviluppo aperto: «correggi lo script di backup…» è una richiesta nuova di
+        # codice (misura del 08/10 con gemma4: 2 volte su 2 qui invece di sviluppo_apri). Una
+        # conversione della forma della scelta del modello: lo sviluppo di un programma, con
+        # la frase della persona (regola `sviluppo_correggi_nuovo`)
+        note_rule(ctx, "sviluppo_correggi_nuovo")
+        compito = (str(getattr(ctx, "user_text", "") or "").strip()
+                   or str(problema or "").strip())
+        return _sviluppo_apri(ctx, tipo="programma", compito=compito)
+    prof = _prof(ctx)
+    if prof is None or not _admin(ctx):
+        return _no(ctx, "Le correzioni sono di chi amministra.", "sviluppo_permesso")
+    svc = getattr(ctx, "lavori", None)
+    problema = str(problema or "").strip()
+    tappa = _in_tappa(svs, sv)
+    if tappa is not None:
+        frase = svc.continua(tappa, problema) if hasattr(svc, "continua") else None
+        if frase:
+            note_rule(ctx, "sviluppo_tappa_cambia")
+            svs.tocca(sv)
+            return _final(frase, fatto="un altro giro avviato con la nota: NON è ancora finito",
+                          lavoro=tappa.id)
+    if svs.lavoro_attivo(sv):
+        return _final("L'agente ci sta già lavorando: te lo dico quando è pronto, e poi lo "
+                      "proviamo.", ok=False, fatto=NIENTE)
+    if sv.fase == "analisi" and not (sv.estensione or sv.cartella):
+        return _no(ctx, "Non c'è ancora codice da correggere: prima finiamo l'analisi.")
+    # Un collaudo riuscito per il codice ma sbagliato per la persona: è lui il caso
+    if problema and sv.collaudi and sv.collaudi[-1].get("ok") and \
+            not sv.collaudi[-1].get("giudizio"):
+        sv.collaudi[-1]["giudizio"] = problema[:200]
+    falliti = [c for c in sv.collaudi if not c.get("ok") or c.get("giudizio")][-5:]
+    casi = "; ".join(f"«{c.get('dati') or 'senza dati'}» → {c.get('esito') or 'errore'}"
+                     + (f" (la persona: {c['giudizio']})" if c.get("giudizio") else "")
+                     for c in falliti)
+    diagnosi = next((q for q in reversed(sv.chiesti) if q.get("dettagli") or q.get("voce")),
+                    None)
+    vincoli = (f"È una CORREZIONE dello sviluppo «{sv.titolo}»: la specifica NON cambia "
+               f"(«{(sv.specifica or sv.richiesta)[:500]}»). I file della versione che la "
+               "persona ha provato sono già nella cartella: riparti da quelli, non riscrivere da "
+               "zero."
+               + (f" Collaudi che non vanno (dati → esito): {casi}." if casi else "")
+               + (f" Diagnosi di chi l'ha scritto, alla domanda «{diagnosi['domanda']}»: "
+                  f"{diagnosi.get('dettagli') or diagnosi.get('voce')}"
+                  + (f" Da correggere: {diagnosi['cosa_correggere']}."
+                     if diagnosi.get("cosa_correggere") else "") if diagnosi else "")
+               + (f" Problema detto dalla persona: «{problema}»." if problema else "")
+               + " Trova la causa, correggi il codice, aggiungi un test con ogni caso che non "
+                 "andava, rifai i test, poi consegna.")
+    lav = _lavoro_dello_sviluppo(ctx, svc, sv, prof, sv.specifica or sv.richiesta, vincoli)
+    if isinstance(lav, dict):
+        return lav
+    lav.correzione = True
+    with svs._lock:
+        sv.correzioni += 1
+    svs.passa(sv, "sviluppo", "correzione" + (f": {problema[:80]}" if problema else ""))
+    note_rule(ctx, "sviluppo_correzione")
+    from . import agenti as ta
+    out = ta._avvia(ctx, svc, lav)
+    caso = falliti[-1].get("dati") if falliti else ""
+    frase = ("D'accordo: lo faccio correggere a chi l'ha scritto. Ci lavora in secondo piano; "
+             "quando è pronto rifacciamo la prova" + (f" con «{caso}»" if caso else "") + ".")
+    out["conferma"] = out["risposta_finale"] = frase
     _schermo(ctx, sv)
     return out
 
 
-def sviluppo_specs() -> list[ToolSpec]:
+def _lavoro_dello_sviluppo(ctx, svc, sv, prof, compito: str, vincoli: str):
+    """Il lavoro dell'agente sui file dello sviluppo (correzione): per un'estensione la
+    versione provata, con lo stesso nome; per un programma la sua cartella."""
+    storia = list(getattr(ctx, "storia", None) or [])
+    if sv.tipo == "estensione":
+        est = getattr(ctx, "estensioni", None)
+        if est is None or not sv.estensione:
+            return _no(ctx, "Qui le estensioni non ci sono.")
+        from ..estensioni.servizio import runtime_testo
+        from .estensioni import funzioni_di_calliope
+        v = (f"È lo sviluppo dell'estensione «{sv.estensione}»: tieni lo stesso nome nel "
+             f"manifesto. {vincoli} {funzioni_di_calliope()}")
+        lav = svc.nuovo("estensione", compito, prof.id, prof.name, "amministra", "", "", v,
+                        storia)
+        lav.estensione = sv.estensione
+        lav.gioco = bool(sv.gioco)
+        lav.file_iniziali = {"calliope_estensione.py": runtime_testo(),
+                             **est.file_per_modifica(sv.estensione, candidata=True)}
+    else:
+        from ..sviluppo import file_di_codice
+        lav = svc.nuovo("codice", compito, prof.id, prof.name, "amministra", "", "", vincoli,
+                        storia)
+        lav.file_iniziali = file_di_codice(sv.cartella) if sv.cartella else {}
+    lav.titolo = sv.titolo
+    lav.specifica = compito
+    return lav
+
+
+def sviluppo_apri_spec(file_pc: bool = False, allegati: bool = False) -> ToolSpec:
+    """sviluppo_apri (08/10, versione 2): estensioni e programmi, con `file` e `allegato` come
+    per i lavori quando ci sono il PC e gli allegati."""
+    props = {"tipo": {"type": "string", "enum": TIPI_APRI},
+             "compito": {"type": "string"}, "nome": {"type": "string"},
+             "modifica": {"type": "string"},
+             "gia_fatto_da": {"type": "string"}, "come_chiederlo": {"type": "string"},
+             "proposta": {"type": "string"}, "gioco": {"type": "boolean"}}
+    if file_pc:
+        props["file"] = {"type": "string"}
+    if allegati:
+        props["allegato"] = {"type": "integer"}
+    return ToolSpec(
+        name="sviluppo_apri",
+        description=(
+            "Crea un'estensione nuova di Calliope o un programma: apre lo sviluppo di qualcosa "
+            "che l'agente scrive in codice («voglio un'estensione che…», «fammi uno script…»). "
+            "tipo estensione: una funzione permanente di Calliope, che resta e si usa a voce "
+            "(«fammi una funzione che "
+            "converte le unità di misura»), o una versione nuova di un'estensione che c'è («falla "
+            "funzionare per ogni città», «correggila»: modifica = il suo nome); gioco=true per un "
+            "gioco sullo schermo. tipo programma: uno script o un programma da usare adesso, in "
+            "Python o C# («scrivimi uno script che rinomina le foto»)"
+            + (", anche su un file della persona sul PC (file = il nome detto)" if file_pc
+               else "")
+            + (" o allegato (allegato = il numero)" if allegati else "")
+            + ". NON per domande brevi e spiegazioni di programmazione («come si scrive un "
+            "ciclo for?», «cos'è una funzione ricorsiva?»): rispondi tu, a voce. compito: cosa deve fare, "
+            "con i dati come detti. nome: un nome breve per un'estensione nuova. gia_fatto_da: se uno "
+            "dei tuoi tool fa "
+            "già la stessa cosa (sommare = calcola), il suo nome, e come_chiederlo: la frase per "
+            "chiederlo a voce. Se il risultato finisce con una domanda («Va bene così, o la "
+            "cambiamo?»), dopo il sì richiamalo con proposta = l'id proposto (es. «L3»)."),
+        parameters={"type": "object", "properties": props, "required": ["compito"]},
+        func=_sviluppo_apri, risk="azione", levels=FAMILY)
+
+
+def sviluppo_specs(file_pc: bool = False, allegati: bool = False) -> list[ToolSpec]:
     return [
+        sviluppo_apri_spec(file_pc, allegati),
         ToolSpec(
-            name="sviluppo",
-            description=("La modalità sviluppo di un'estensione o di un programma (analisi, "
-                         "sviluppo e test, collaudo, revisione, attivazione): stato (a che punto "
-                         "è); avanti (la fase dopo: «va bene, andiamo avanti», «attivala»); "
-                         "analisi (si torna all'analisi per cambiare cosa deve fare: cambia = "
-                         "la modifica come detta); sospendi; riprendi («riprendiamo lo sviluppo "
-                         "del meteo»: quale = le parole del titolo); esci; promuovi (un programma "
-                         "diventa un'estensione). Cosa fare in ogni fase è nei dati del turno."),
+            name="sviluppo_passo",
+            description=("Un passo della modalità sviluppo di un'estensione o di un programma "
+                         "(analisi, sviluppo e test, collaudo, revisione, attivazione): stato (a "
+                         "che punto è); avanti (la fase dopo: «va bene, andiamo avanti», "
+                         "«attivala»; a una tappa del lavoro, «continua»); analisi (si torna "
+                         "all'analisi per cambiare cosa deve fare: cambia = la modifica come "
+                         "detta); sospendi; riprendi («riprendiamo lo sviluppo del meteo»: quale "
+                         "= le parole del titolo); chiudi (chiede conferma); promuovi (un "
+                         "programma diventa un'estensione). Cosa fare in ogni fase è nei dati "
+                         "del turno."),
             parameters={"type": "object", "properties": {
                 "azione": {"type": "string", "enum": AZIONI},
                 "quale": {"type": "string"}, "cambia": {"type": "string"}},
                 "required": ["azione"]},
             func=_sviluppo, risk="azione", levels=FAMILY),
         ToolSpec(
-            name="sviluppo_prova",
+            name="sviluppo_collauda",
             description=("Il collaudo nella modalità sviluppo: prova la versione nuova "
                          "dell'estensione (non ancora attiva) o il programma, con i dati detti "
                          "(«prova con Bergamo», «provalo con 3 e 5»). dati: i dati come detti."),
@@ -568,4 +915,26 @@ def sviluppo_specs() -> list[ToolSpec]:
                         "required": []},
             func=_sviluppo_prova, risk="azione", levels=FAMILY, non_fidato=True,
             fonte="estensione", announce=("Un attimo.",)),
+        ToolSpec(
+            name="sviluppo_chiedi",
+            description=("Nella modalità sviluppo, una domanda a chi ha scritto il codice: "
+                         "perché un collaudo dà quel risultato, come funziona, cosa fa in un "
+                         "caso («perché non trova Cerro Maggiore?», «come mai?», «che fonte "
+                         "usa?»). Risponde senza cambiare niente. domanda: come detta."),
+            parameters={"type": "object", "properties": {"domanda": {"type": "string"}},
+                        "required": ["domanda"]},
+            func=_sviluppo_chiedi, risk="lettura", levels=FAMILY, non_fidato=True,
+            fonte="agente", announce=("Lo chiedo a chi l'ha scritta.",)),
+        ToolSpec(
+            name="sviluppo_correggi",
+            description=("Solo con uno sviluppo aperto (nei dati del turno): fa correggere il "
+                         "codice dello sviluppo da chi l'ha scritto, senza cambiare cosa deve "
+                         "fare («correggilo», «fallo sistemare», «sì» a «Lo faccio "
+                         "correggere?»; a una tappa, «cambia e continua»). problema: cosa non "
+                         "va, come detto. Per cambiare cosa deve fare, sviluppo_passo con azione "
+                         "analisi; per correggere uno script o un file fuori da uno sviluppo, "
+                         "sviluppo_apri tipo programma."),
+            parameters={"type": "object", "properties": {"problema": {"type": "string"}},
+                        "required": []},
+            func=_sviluppo_correggi, risk="azione", levels=FAMILY),
     ]

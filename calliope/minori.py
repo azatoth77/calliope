@@ -553,14 +553,14 @@ FRASI = {
 # Tool → chiave del preset
 _TOOL_CHIAVE = {
     "web_cerca": "internet",
-    "delega_lavoro": "agenti", "lavori_rispondi": "agenti", "risultato_lavoro": "agenti",
+    "lavoro_affida": "agenti", "lavoro_rispondi": "agenti", "lavoro_risultato": "agenti",
     "documento_crea": "documenti", "documento_modifica": "documenti",
 }
 _UFFICIO = {"modello_compila", "anagrafica_cerca", "anagrafica_salva", "archivio_cerca",
             "archivio_scadenze", "archivio_somma",
             # «archivialo» porta un file o una foto nei documenti di casa (05/10, allegati)
             "allegato_archivia", "immagine_archivia"}
-_SOLO_ADULTI = {"estensione_crea", "estensioni_gestisci", "installa_proponi", "installa_avvia",
+_SOLO_ADULTI = {"sviluppo_apri", "estensione_gestisci", "installa_proponi", "installa_avvia",
                 "registra_utente", "schermo_gestisci"}
 
 

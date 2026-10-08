@@ -217,3 +217,96 @@ attivazione con la sfida 6/6), il fuori tema resta in modalità e lo ricorda 3/3
 turno); prima frase mediana 1,32 s contro 1,00–1,18 s senza (~250 token in più, solo con uno
 sviluppo aperto). Lo stato nel codice fa quasi tutto da solo: con la rete spenta il collaudo e
 «avanti» vanno lo stesso. Da misurare sulla DGX con il 26B e l'agente vero.
+
+## 9. Versione 2 (08/10 pomeriggio, ramo `modalita-sviluppo-2`)
+
+### 9.1 Il giro di prova vero (DGX, 08/10 11:06–11:32, satellite dello studio, 26B)
+
+Dal journal e dal registro dei turni (in sola lettura; qui con una città di fantasia,
+«Pratofiorito Maggiore», al posto di quella vera di due parole). Sviluppo S1 «Meteo di una città»:
+
+- apertura con la frase di sempre («Ho capito così: … Procedo?»): **nessun segno della modalità**;
+  analisi chiara, lavoro, collaudo: quattro città vanno, quella di due parole due volte
+  «Impossibile cercare la città»;
+- «Perché?» → **la voce improvvisa** («crisi esistenziale», «sono qui con te a …»): non c'era
+  una strada verso chi aveva scritto il codice;
+- «Fai revisionare il codice all'agente e capire come mai» → `sviluppo(analisi, cambia=…)`: la
+  specifica riletta e tre turni di confusione («siamo in analisi / il codice c'è già»), poi un
+  lavoro nuovo (L2);
+- «Ok, chiuso a long» (storpiato da Whisper) → `sviluppo(esci)` **senza conferma**, con l'agente
+  al lavoro;
+- L2 finito alle 11:30 con **l'annuncio vecchio stile**; «vorrei fare il collaudo prima» → niente;
+  «prova con …» → «C'è di mezzo il lavoro di un agente, vuoi…?» → «sì» → «Non c'è nessuno
+  sviluppo aperto da provare». **Vicolo cieco.**
+
+### 9.2 Decisioni di Dario e cosa è stato fatto
+
+1. **Nomi dei tool** (nome singolare + verbo, prefisso per famiglia; il codice passa sempre dallo
+   sviluppo): `lavoro_affida` (era `delega_lavoro`, senza il codice), `lavoro_stato`,
+   `lavoro_risultato` (era `risultato_lavoro`), `lavoro_rispondi`, `lavoro_annulla`;
+   `sviluppo_apri(tipo=estensione|programma, …)` (sostituisce `estensione_crea` e
+   `delega_lavoro` di codice), `sviluppo_passo` (era `sviluppo`), `sviluppo_collauda` (era
+   `sviluppo_prova`), i nuovi `sviluppo_chiedi` e `sviluppo_correggi`; `estensione_gestisci`
+   (era `estensioni_gestisci`), `programma_esegui` (era `lavori_esegui`). I nomi vecchi valgono
+   ancora nel registro (`ToolRegistry.NOMI_VECCHI`, regola `tool_nome_vecchio`: conversazioni e
+   azioni in sospeso di prima); `lavoro_affida` con tipo codice passa da sé a `sviluppo_apri`
+   come programma (`lavoro_codice_sviluppo`, una conversione di forma). Politica (`CLASSI`,
+   `VERBI`, `RINUNCE`), `valore.py` (`ARGOMENTI`, `EFFETTI`: `sviluppo_apri` E3 per un programma
+   ed E2 per un'estensione, `sviluppo_correggi` E2), prompt, reti, analizzatore, prove e documenti
+   con i nomi nuovi; due schemi in più (~880 caratteri, ~250 token di prefisso).
+2. **Apertura esplicita** (`Sviluppi.frase_proposta`, regola `sviluppo_apertura`): «Entriamo in
+   modalità sviluppo per «…». Ho capito così: … Va bene così, o la cambiamo?», con la specifica
+   letta sempre (chiude l'analisi), e il «sì» a `sviluppo_apri` con `proposta`. Le proposte dopo,
+   nello stesso sviluppo, senza «Entriamo». Titolo leggibile (`leggibile`: «meteo_città» →
+   «Meteo città», «MeteoSemplice» → «Meteo semplice»).
+3. **`sviluppo_chiedi(domanda)`**: una passata del modello dell'agente, senza strumenti né
+   ragionamento, in JSON (`voce`, `dettagli`, `serve_correzione`, `cosa_correggere`), in **sola
+   lettura** (non scrive né esegue niente), con il contesto dello sviluppo
+   (`Sviluppi.testo_per_agente`): specifica, collaudi con gli esiti e i giudizi della persona,
+   domande già fatte, diario (estrattivo) e ultimi passi dell'agente, uscita dei test, i file
+   della versione provata, le fonti del manifesto. Il contesto dei lavori **si conserva**
+   (`Sviluppi.conserva`, `lavori/sviluppi/S<n>.json`, gli ultimi tre lavori) a lavoro finito e a
+   ogni tappa, finché lo sviluppo è aperto o sospeso; si toglie alla chiusura. La risposta è un
+   dato non fidato (fonte «agente»: busta, `riferire`); i dettagli sulla scheda; la frase
+   d'attesa «Lo chiedo a chi l'ha scritta.»; tempo massimo `sviluppo_chiedi_s` (60 s), oltre il
+   quale lo si dice e si propone la correzione.
+4. **Collaudo fallito → caso di prova**: un'esecuzione che si ferma con un errore, o un risultato
+   con un campo d'errore, è un collaudo NON riuscito; la frase la dice il codice («La prova con
+   «…» non è andata: si è fermata con un errore. … Lo faccio correggere?», mai il testo
+   dell'estensione) e il «sì» va a `sviluppo_correggi`. Un risultato che dice «non trovata» a
+   parole lo giudica la persona: «non va, doveva…» → `sviluppo_correggi(problema)` segna il
+   collaudo come sbagliato (`giudizio`).
+5. **`sviluppo_correggi(problema)`**: un lavoro sui file della versione provata (per un programma
+   la sua cartella), con i collaudi che non vanno, la diagnosi di `sviluppo_chiedi` e il
+   problema detto nei vincoli («aggiungi un test con ogni caso che non andava»); la specifica
+   resta, nessun ritorno all'analisi; parte subito (la persona l'ha chiesto); poi di nuovo
+   collaudo, con la prova che non andava proposta per prima.
+6. **Uscita**: `sviluppo_passo(chiudi)` (anche `esci`) chiede «Chiudo lo sviluppo di «…»?» e
+   chiude solo se nel turno dopo c'è il «sì» a quella domanda (azione in sospeso di
+   `sviluppo_passo`, entro tre turni): una frase sola, breve o storpiata, non chiude mai; con un
+   lavoro dell'agente in corso o fermo a una tappa diventa «sospendi» e lo dice.
+7. **Lavoro finito a sviluppo sospeso o chiuso** (`Sviluppi.lavoro_finito`, `frase_pronto`): lo
+   sviluppo si riapre al collaudo (quello aperto, se c'è, si sospende) con «Il lavoro di «…» è
+   pronto: siamo al collaudo. Con cosa provo?», mai l'annuncio vecchio stile; «Con cosa provo?»
+   in sospeso verso `sviluppo_collauda`. Riaperto, è di nuovo lo sviluppo aperto di chi parla, e i
+   suoi passi valgono come intento (niente «C'è di mezzo il lavoro di un agente»).
+8. **Limiti come tappe** (`Lavoro.tappe`, acceso per i lavori di uno sviluppo): ai tetti di
+   passate, tempo o token del giro (`Limite.tipo`) il ciclo dell'agente non si chiude
+   (`Agente._tappa`): il contesto resta compattato (al tetto dei token prima il diario, senza
+   modello), i test si rifanno, e il servizio mette il lavoro in attesa (`Lavori._tappa`) con il
+   **rapporto** (`frase_tappa`): cosa è fatto, i test, cosa manca (dal diario), e i **segnali di
+   giro a vuoto misurati dal codice** (`segnali_giro`: lo stesso file riscritto tre volte o più,
+   i test che falliscono con lo stesso errore di fila, `firma_errore`, le passate senza file né
+   test nuovi). Poi la persona sceglie: «continua» (`sviluppo_passo(avanti)` o
+   `lavoro_rispondi`: un giro nuovo di 30 minuti e 24 passate, `Lavori.continua`, i tetti contano
+   per giro), «cambia e continua» (`sviluppo_correggi(problema)`: il giro con la nota),
+   «fermalo» (`lavoro_annulla`). Le tappe sopravvivono a un riavvio (`ripresa.py`). Fuori da uno
+   sviluppo il tetto chiude il lavoro come prima.
+
+### 9.3 Prove e misure
+
+A secco `prove/prova_sviluppo_v2.py` (il giro vero riscritto: nomi, apertura, collaudo fallito,
+chiedi, correggi, chiusura, riapertura, tappe con il servizio dei lavori vero e l'Ollama finto).
+Con gemma4 e4b sul portatile: `prove/prova_sviluppo_v2_ollama.py` (il giro vero come sequenza di
+undici passi) e i banchi di prima e dopo i nomi nuovi, nel documento d'area
+[agenti-estensioni](../aree/agenti-estensioni.md#modalità-sviluppo-versione-2-0810-ramo-modalita-sviluppo-2).

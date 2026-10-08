@@ -86,7 +86,7 @@ CASI = [
     ("C16", C, "Scrivi un programma che genera password di sedici caratteri", [], "chiara", ""),
 ]
 
-# Fuori ambito: l'analizzatore non è chiamato (delega_lavoro di tipo ricerca o documento)
+# Fuori ambito: l'analizzatore non è chiamato (lavoro_affida di tipo ricerca o documento)
 FUORI = [
     ("F1", "ricerca", "Cercami le differenze tra pompa di calore e caldaia a condensazione"),
     ("F2", "documento", "Scrivimi una lettera all'amministratore del condominio per il rumore "

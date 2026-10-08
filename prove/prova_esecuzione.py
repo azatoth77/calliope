@@ -19,8 +19,8 @@ per il C# esegue il Python scritto in un commento /* FINTO_PY … */) e l'Ollama
   scaduto, «fermalo», errore con il codice e l'ultima riga dello stderr, C# che non si
   compila; la frase per la voce dice solo com'è finita e le ultime righe; i risultati del
   lavoro non si toccano; annuncio solo se la risposta non l'ha aspettata;
-- tool: lavori_esegui (permessi, dati detti «3 e 5», risposta subito o «lo sto eseguendo»),
-  lavori_annulla che ferma prima il programma;
+- tool: programma_esegui (permessi, dati detti «3 e 5», risposta subito o «lo sto eseguendo»),
+  lavoro_annulla che ferma prima il programma;
 - lavoro di codice con l'Ollama finto: a lavoro finito il programma si esegue sullo schermo,
   l'annuncio dice com'è andata e la scheda dell'esecuzione torna in cima; senza schermi no;
   l'agente vede esegui_csharp e i linguaggi solo se il C# c'è.
@@ -379,7 +379,7 @@ def a_secco():
     verifica("un modulo di sole funzioni non si esegue, e lo dice", es10 is None
              and "solo funzioni" in frase, frase)
 
-    sezione("tool lavori_esegui e lavori_annulla")
+    sezione("tool programma_esegui e lavoro_annulla")
     tool_e_annulla(iso, isos)
 
     sezione("lavoro di codice: dimostrazione a lavoro finito")
@@ -466,18 +466,18 @@ def tool_e_annulla(iso, isos):
         out = json.loads(reg.call(name, args, ctx, livello))
         return out, time.perf_counter() - t0
 
-    out, _ = tool("lavori_esegui", {}, "Dario", "amministra")
+    out, _ = tool("programma_esegui", {}, "Dario", "amministra")
     verifica("nessun programma: lo dice", out.get("ok") is False and "Non ho programmi" in
              out["risposta_finale"], out.get("risposta_finale"))
     lav = LavoroFinto("L20", {"conti.py": "import sys\nn = [int(x) for x in sys.argv[1:]] or [2, 2]\n"
                               "print('somma', sum(n))\n"})
     svc.lavori.append(lav)
-    out, _ = tool("lavori_esegui", {}, None, "ospite")
+    out, _ = tool("programma_esegui", {}, None, "ospite")
     verifica("ospite: il registro rifiuta", out.get("ok") is False)
-    out, _ = tool("lavori_esegui", {}, "Bianca", "familiare")
+    out, _ = tool("programma_esegui", {}, "Bianca", "familiare")
     verifica("il programma di un altro: rifiutato", out.get("ok") is False
              and "un altro" in out["risposta_finale"], out.get("risposta_finale"))
-    out, dt = tool("lavori_esegui", {"dati": "3 e 5"}, "Dario", "amministra")
+    out, dt = tool("programma_esegui", {"dati": "3 e 5"}, "Dario", "amministra")
     verifica("«eseguilo con 3 e 5»: i dati separati, la risposta con l'esito",
              out.get("ok") and "«somma 8»" in out["risposta_finale"]
              and "sullo schermo" in out["risposta_finale"], f"{out.get('risposta_finale')} "
@@ -486,7 +486,7 @@ def tool_e_annulla(iso, isos):
     verifica("la scheda va allo schermo di chi l'ha chiesto, con la chiave della seconda "
              "esecuzione", card["chiave"] == "esecuzione:L20-1" and card["dati"] == ["3", "5"],
              card.get("chiave"))
-    out, _ = tool("lavori_esegui", {"dati": ["10", "20", "30"], "lavoro": "L20"}, "Bianca",
+    out, _ = tool("programma_esegui", {"dati": ["10", "20", "30"], "lavoro": "L20"}, "Bianca",
                   "amministra")
     verifica("chi amministra esegue anche il programma di un altro, dati come elenco",
              out.get("ok") and "«somma 60»" in out["risposta_finale"], out.get("risposta_finale"))
@@ -494,11 +494,11 @@ def tool_e_annulla(iso, isos):
                                "time.sleep(30)\n"})
     svc.lavori.append(lav2)
     cfg.agenti_esecuzione_attesa_s = 0.3
-    out, dt = tool("lavori_esegui", {}, "Dario", "amministra")
+    out, dt = tool("programma_esegui", {}, "Dario", "amministra")
     verifica("programma lungo: «lo sto eseguendo», subito", out.get("ok")
              and out["risposta_finale"].startswith("Lo sto eseguendo") and dt < 1.0,
              f"{out.get('risposta_finale')} {dt:.2f} s")
-    out, dt = tool("lavori_annulla", {}, "Dario", "amministra")
+    out, dt = tool("lavoro_annulla", {}, "Dario", "amministra")
     # `Sandbox.termina` lancia `docker kill` e lo aspetta: con il docker finto è un processo
     # Python, 0,1 s a vuoto e oltre 0,4 s con due runner insieme (06/10). Il tetto guarda che
     # non si aspetti la fine del programma (30 s), non l'avvio di un processo
@@ -511,11 +511,11 @@ def tool_e_annulla(iso, isos):
         item = None
     verifica("fermato: l'annuncio lo dice", item and "ho fermato il programma" in
              item["messaggio"].lower(), str(item and item["messaggio"]))
-    out, _ = tool("lavori_annulla", {}, "Dario", "amministra")
+    out, _ = tool("lavoro_annulla", {}, "Dario", "amministra")
     verifica("«fermalo» senza programmi in corso: passa ai lavori", "Non ho lavori" in
              out["risposta_finale"], out.get("risposta_finale"))
-    verifica("lavori_esegui per i familiari, non per gli ospiti",
-             reg.allowed("lavori_esegui", "familiare") and not reg.allowed("lavori_esegui",
+    verifica("programma_esegui per i familiari, non per gli ospiti",
+             reg.allowed("programma_esegui", "familiare") and not reg.allowed("programma_esegui",
                                                                           "ospite"))
 
 

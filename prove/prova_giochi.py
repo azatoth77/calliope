@@ -277,13 +277,13 @@ def prova_approvazione(tmp: Path):
     sezione("approvazione dei giochi")
     a = Ambiente(tmp)
     mv, _ = a.installa("tris", approva=False)
-    out = a.chiama("estensioni_gestisci", {"azione": "approva", "nome": "tris"}, "Elena", "breve")
+    out = a.chiama("estensione_gestisci", {"azione": "approva", "nome": "tris"}, "Elena", "breve")
     verifica("familiare con una frase breve: no", out.get("ok") is False and
              a.est.archivio.voce("tris")["stato"] != "attiva", out.get("risposta_finale"))
-    out = a.chiama("estensioni_gestisci", {"azione": "approva", "nome": "tris"}, "Bianca")
+    out = a.chiama("estensione_gestisci", {"azione": "approva", "nome": "tris"}, "Bianca")
     verifica("un minore: no", a.est.archivio.voce("tris")["stato"] != "attiva",
              out.get("risposta_finale"))
-    out = a.chiama("estensioni_gestisci", {"azione": "approva", "nome": "tris"}, "Elena")
+    out = a.chiama("estensione_gestisci", {"azione": "approva", "nome": "tris"}, "Elena")
     verifica("familiare adulto con la voce: approvato senza sfida",
              a.est.archivio.voce("tris")["stato"] == "attiva"
              and "gioco_approvato_familiare" in a.ctx.regole, out.get("risposta_finale"))
@@ -293,12 +293,12 @@ def prova_approvazione(tmp: Path):
              and "partita" in a.tools.get("est_tris").parameters["properties"])
     # Con parti a rischio: solo chi amministra, con la sfida
     a.installa("ostile", approva=False)
-    out = a.chiama("estensioni_gestisci", {"azione": "approva", "nome": "ostile"}, "Elena")
+    out = a.chiama("estensione_gestisci", {"azione": "approva", "nome": "ostile"}, "Elena")
     verifica("gioco puro con parti a rischio: non da un familiare",
              a.est.archivio.voce("ostile")["stato"] != "attiva"
              and "solo chi amministra" in out.get("risposta_finale", ""),
              out.get("risposta_finale"))
-    out = a.chiama("estensioni_gestisci", {"azione": "approva", "nome": "ostile"}, "Dario")
+    out = a.chiama("estensione_gestisci", {"azione": "approva", "nome": "ostile"}, "Dario")
     verifica("chi amministra: la frase di sfida", "ripeti" in out.get("risposta_finale", "")
              and a.est.archivio.voce("ostile")["stato"] != "attiva", out.get("risposta_finale"))
     # Non puro: familiare no
@@ -309,11 +309,11 @@ def prova_approvazione(tmp: Path):
     mv = valida(m)
     a.est.archivio.nuova_candidata(mv, file, "Elena", {"eseguiti": 1}, {"sintassi": [],
                                                                        "rischi": []}, "L2", True)
-    out = a.chiama("estensioni_gestisci", {"azione": "approva", "nome": "quiz_casa"}, "Elena")
+    out = a.chiama("estensione_gestisci", {"azione": "approva", "nome": "quiz_casa"}, "Elena")
     verifica("gioco non puro: non da un familiare",
              a.est.archivio.voce("quiz_casa")["stato"] != "attiva", out.get("risposta_finale"))
     # Familiare per altre azioni di gestione: come prima
-    out = a.chiama("estensioni_gestisci", {"azione": "disattiva", "nome": "tris"}, "Elena")
+    out = a.chiama("estensione_gestisci", {"azione": "disattiva", "nome": "tris"}, "Elena")
     verifica("disattivare resta di chi amministra", out.get("ok") is False and
              a.est.archivio.voce("tris")["stato"] == "attiva")
     return a
@@ -477,17 +477,17 @@ def prova_azioni(tmp: Path):
              str(r))
     item = a.est.done.get(timeout=2)
     verifica("la domanda va agli annunci con l'azione in sospeso",
-             item["in_sospeso"]["tool"] == "estensioni_gestisci" and "?" in item["messaggio"],
+             item["in_sospeso"]["tool"] == "estensione_gestisci" and "?" in item["messaggio"],
              item["messaggio"])
     ident = item["in_sospeso"]["argomenti"]["esecuzione"]
     a.eventi.clear()
-    out = a.chiama("estensioni_gestisci", {"azione": "consenti", "esecuzione": ident}, "Dario",
+    out = a.chiama("estensione_gestisci", {"azione": "consenti", "esecuzione": ident}, "Dario",
                    turno=5)
     time.sleep(0.3)
     if "ripeti" in str(out.get("risposta_finale")):
         # La sfida (comando della casa): superata a voce
         a.ctx.speaker_ctx.sfida_superata = True
-        out = json.loads(a.tools.call("estensioni_gestisci", {"azione": "consenti",
+        out = json.loads(a.tools.call("estensione_gestisci", {"azione": "consenti",
                                                              "esecuzione": ident},
                                       a.ctx, "amministra"))
         time.sleep(0.3)

@@ -7,7 +7,7 @@ pubblica: l'agente la scarica con scarica_esempio) e con `--non-approvare` si fe
 versione da approvare (la sfida resta a chi amministra). Stampa quando arriva il piano (la
 passata) e i token di ragionamento prima del primo strumento.
 
-Dal 06/10 con `--dalla-voce "<richiesta>"` la richiesta passa da estensione_crea come a voce,
+Dal 06/10 con `--dalla-voce "<richiesta>"` la richiesta passa da sviluppo_apri come a voce,
 con l'analisi della richiesta (calliope/agenti/richiesta.py) e il modello dell'agente: stampa
 l'esito; se ci sono domande risponde con `--risposta "<testo>"` nel turno dopo, poi dice «sì»
 alla proposta e il lavoro parte con il compito raffinato. Senza `--risposta` si ferma alle
@@ -51,7 +51,7 @@ COMPITI = [
 
 
 def dalla_voce(a, cfg, svc, reg, ctx, est, richiesta):
-    """La richiesta attraverso estensione_crea, come a voce: analisi, domande, risposta, «sì».
+    """La richiesta attraverso sviluppo_apri, come a voce: analisi, domande, risposta, «sì».
     Il lavoro avviato, o None."""
     from calliope.agenti.richiesta import Analizzatore
     from calliope.tools.agenti import agenti_specs
@@ -75,13 +75,13 @@ def dalla_voce(a, cfg, svc, reg, ctx, est, richiesta):
               flush=True)
         storia.extend([("user", testo), ("assistant", frase)])
         return r
-    r = turno(1, richiesta, "estensione_crea", {"compito": richiesta})
+    r = turno(1, richiesta, "sviluppo_apri", {"compito": richiesta})
     n = 2
     if "Prima di cominciare" in str(r.get("risposta_finale")):
         if not a.risposta:
             print("   domande senza --risposta: mi fermo qui", flush=True)
             return None
-        r = turno(n, a.risposta, "estensione_crea",
+        r = turno(n, a.risposta, "sviluppo_apri",
                   {"compito": f"{richiesta}. {a.risposta}"})
         n += 1
     off = svc.offerta("u1", n)
@@ -90,7 +90,7 @@ def dalla_voce(a, cfg, svc, reg, ctx, est, richiesta):
         return None
     print(f"   compito all'agente: {off['lavoro'].compito}\n   titolo: {off['lavoro'].titolo}"
           f"\n   vincoli: {off['lavoro'].vincoli[-300:]}", flush=True)
-    turno(n, "Sì, procedi.", "delega_lavoro", {"proposta": off["lavoro"].id})
+    turno(n, "Sì, procedi.", "lavoro_affida", {"proposta": off["lavoro"].id})
     return off["lavoro"]
 
 
@@ -105,7 +105,7 @@ def main():
     ap.add_argument("--non-approvare", action="store_true",
                     help="fermati alla versione da approvare")
     ap.add_argument("--dalla-voce", default="",
-                    help="la richiesta come detta, attraverso estensione_crea e l'analisi")
+                    help="la richiesta come detta, attraverso sviluppo_apri e l'analisi")
     ap.add_argument("--risposta", default="", help="la risposta alle domande dell'analisi")
     a = ap.parse_args()
     from calliope.agenti import Lavori, carica
@@ -203,7 +203,7 @@ def main():
         ctx.speaker_ctx = P.speaker("Dario", "amministra")
         ctx.speaker_ctx.sfida_superata = True            # la sfida: prova_estensioni_ollama
         ctx.turno = 1
-        r = json.loads(reg.call("estensioni_gestisci", {"azione": "approva", "nome": c["nome"]},
+        r = json.loads(reg.call("estensione_gestisci", {"azione": "approva", "nome": c["nome"]},
                                 ctx, "amministra"))
         print("   approvazione:", r.get("risposta_finale"), flush=True)
         ctx.speaker_ctx.sfida_superata = False

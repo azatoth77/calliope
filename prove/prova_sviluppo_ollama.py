@@ -3,14 +3,14 @@ FINTO e un servizio dei lavori finto (08/10/2026; la sessione del meteo per citt
 07/10 sera, riscritta come iter, nomi di fantasia).
 
 C'è «Meteo Borgoverde e Valfiorita» (città fisse). Dario, con la voce:
- 1. «Voglio un'estensione che mi dica il meteo di una città qualunque…» → estensione_crea
+ 1. «Voglio un'estensione che mi dica il meteo di una città qualunque…» → sviluppo_apri
     (apre lo sviluppo) e «Procedo?»;
  2. «Sì, procedi.» → il lavoro parte (sviluppo);
  3. «Che ore sono?» → risponde e resta in modalità (la riga che ricorda dove eravamo, del
     modello o del codice);
     … il lavoro finisce (finto): l'annuncio, collaudo;
- 4. «Prova con Bergamo.» → sviluppo_prova, mai est_ né internet;
- 5. «Prova una città che non esiste, tipo Atlantide.» → sviluppo_prova;
+ 4. «Prova con Bergamo.» → sviluppo_collauda, mai est_ né internet;
+ 5. «Prova una città che non esiste, tipo Atlantide.» → sviluppo_collauda;
  6. «Aggiungi il latte alla lista della spesa.» → lista_aggiungi, e lo sviluppo resta al collaudo;
  7. «Fammi anche un'estensione che converte le valute.» → nessun lavoro nuovo (o rifiutato dal
     codice, o il modello propone di sospendere);
@@ -166,7 +166,7 @@ def sessione(giro, tmp, iso, spenta: bool, conteggi: dict, tempi: list):
 
     passo(1, "Voglio un'estensione che mi dica il meteo di una città qualunque, non solo di "
              "Borgoverde e Valfiorita.",
-          lambda r, t, sv: "estensione_crea" in t and sv is not None and sv.fase == "analisi",
+          lambda r, t, sv: "sviluppo_apri" in t and sv is not None and sv.fase == "analisi",
           "richiesta → sviluppo aperto")
     passo(2, "Sì, procedi.",
           lambda r, t, sv: sv is not None and sv.fase == "sviluppo", "sì → sviluppo")
@@ -178,7 +178,7 @@ def sessione(giro, tmp, iso, spenta: bool, conteggi: dict, tempi: list):
               "sì → sviluppo (proposta arrivata tardi)")
         sv = svs.corrente("u1")
     if sv is not None and sv.tipo != "estensione":
-        # Il 4B a volte chiede l'estensione con delega_lavoro di codice («Crea un'estensione
+        # Il 4B a volte chiede l'estensione con lavoro_affida di codice («Crea un'estensione
         # che…»): è uno sviluppo di un programma, e il resto dell'iter non vale per questa prova
         print(f"   [{giro}/{etichetta}] aperto lo sviluppo di un PROGRAMMA: il giro finisce",
               flush=True)
@@ -195,10 +195,10 @@ def sessione(giro, tmp, iso, spenta: bool, conteggi: dict, tempi: list):
         print(f"   [{giro}/{etichetta}] nessun lavoro dello sviluppo: il giro finisce", flush=True)
         return
     passo(4, "Prova con Bergamo.",
-          lambda r, t, sv: "sviluppo_prova" in t and "web_cerca" not in t
+          lambda r, t, sv: "sviluppo_collauda" in t and "web_cerca" not in t
           and not any(x.startswith("est_") for x in t) and "Bergamo" in r, "collaudo Bergamo")
     passo(5, "Prova una città che non esiste, tipo Atlantide.",
-          lambda r, t, sv: "sviluppo_prova" in t and "web_cerca" not in t,
+          lambda r, t, sv: "sviluppo_collauda" in t and "web_cerca" not in t,
           "collaudo città inesistente")
     passo(6, "Aggiungi il latte alla lista della spesa.",
           lambda r, t, sv: "lista_aggiungi" in t and sv is not None and sv.fase == "collaudo",
@@ -250,7 +250,7 @@ def main():
                   f"({len(t)} turni)")
     k, n = conteggi.get(("dati del turno", "04 collaudo Bergamo"), [0, 1])
     k2, n2 = conteggi.get(("dati del turno", "12 sfida → attiva, chiuso"), [0, 1])
-    verifica("con i dati del turno: il collaudo con sviluppo_prova (almeno 2 volte su 3)",
+    verifica("con i dati del turno: il collaudo con sviluppo_collauda (almeno 2 volte su 3)",
              k * 3 >= n * 2, f"{k}/{n}")
     verifica("con i dati del turno: l'iter arriva all'attivazione almeno una volta", k2 >= 1,
              f"{k2}/{n2}")

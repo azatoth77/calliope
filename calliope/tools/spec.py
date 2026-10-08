@@ -79,7 +79,7 @@ class ToolContext:
     # imposta Brain durante la chiamata, se in questa risposta non si è ancora detto niente;
     # il tool la chiama solo quando serve davvero. None = niente frase
     attesa: Any = None
-    # La scheda del risultato di un lavoro mandata in questa risposta (07/10, risultato_lavoro):
+    # La scheda del risultato di un lavoro mandata in questa risposta (07/10, lavoro_risultato):
     # (turno, frase, scheda, mittente). Uno schermo_mostra «risposta» nella stessa risposta
     # rimanda questa invece di coprirla con la risposta detta
     scheda_risultato: Any = None
@@ -162,7 +162,7 @@ class ToolSpec:
     fonte: str | None = None
     chiave: tuple[str, ...] = ()
     # La forma degli argomenti scelti dal modello, ricondotta a quella del tool prima dei
-    # permessi e della politica (08/10: estensioni_gestisci «attiva» → «approva»): (ctx,
+    # permessi e della politica (08/10: estensione_gestisci «attiva» → «approva»): (ctx,
     # argomenti) → argomenti. Solo conversioni di forma (principio 10), con una regola nel
     # registro dei turni; None = niente
     prepara: Callable | None = None

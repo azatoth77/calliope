@@ -67,7 +67,7 @@ def prova_conti():
              # sfida della politica: «c'è di mezzo»
              turno(1000, "approva", regole=["sfida_voce", "politica_conferma_unica"],
                    risposta="C'è di mezzo il lavoro di un agente. Per approvare, ripeti: …",
-                   tool=[{"nome": "estensioni_gestisci", "ok": False}]),
+                   tool=[{"nome": "estensione_gestisci", "ok": False}]),
              turno(1100, "", esito="vuoto"), turno(1110, "grazie", esito="cortesia")]
     turni += [turno(1200 + i) for i in range(10)]
     d = attrito.giorno(turni)
@@ -81,7 +81,7 @@ def prova_conti():
     verifica("conti: poi eseguite entro 3 turni della stessa persona", d["accettate"] == 2
              and d["fermate"] == 5, str(d))
     verifica("conti: «te l'ho già detto»", d["gia_detto"] == 1, str(d))
-    verifica("conti: per tool", d["per_tool"] == {"pc_apri_file": 4, "estensioni_gestisci": 1},
+    verifica("conti: per tool", d["per_tool"] == {"pc_apri_file": 4, "estensione_gestisci": 1},
              str(d["per_tool"]))
 
 

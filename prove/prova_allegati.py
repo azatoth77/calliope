@@ -19,7 +19,7 @@ Prova a secco degli allegati (05/10/2026, calliope/allegati.py, docs/ricerche/20
   (azioni pericolose con conferma, non chieste con domanda, chieste passano, letture passano);
   fine della conversazione = file persi;
 - tool allegato_leggi (parti, ricerca, file di un altro) e allegato_archivia (cartella
-  personale, estensione vera, niente eseguibili); delega_lavoro(allegato=…): candidato e copia;
+  personale, estensione vera, niente eseguibili); lavoro_affida(allegato=…): candidato e copia;
 - server degli schermi vero: POST /api/allegato (senza conversazione 403, schermo di stanza
   403, JSON 415, troppo grande 413, immagine → strada delle foto, file → coda).
 """
@@ -486,10 +486,10 @@ def prova_tool():
              and len(list(ctx.archivio.cartella.rglob("*.*"))) == 1, r)
     r = call("allegato_archivia", {"allegato": altrui.n})
     verifica("archivialo: il file di un'altra persona no", not r.get("ok"), r)
-    # delega_lavoro(allegato=…): il candidato e la copia, senza PC né satellite
+    # lavoro_affida(allegato=…): il candidato e la copia, senza PC né satellite
     from calliope.tools.agenti import _da_allegato
-    spec = reg.get("delega_lavoro")
-    verifica("delega_lavoro ha il parametro «allegato»",
+    spec = reg.get("lavoro_affida")
+    verifica("lavoro_affida ha il parametro «allegato»",
              "allegato" in spec.parameters["properties"])
     cand, rif = _da_allegato(ctx, Speakers().get("Dario"), pdf.n)
     copia = cand and cand[0]["ex"].copia_file(cand[0]["item"], 10_000_000, ("pdf", "txt"))
@@ -588,7 +588,7 @@ def prova_server():
 
 def prova_minori():
     """Minori (merge con il ramo minori, 05/10): allegato_archivia e immagine_archivia come
-    l'ufficio, delega_lavoro(allegato) come gli agenti; il guardiano giudica anche il testo
+    l'ufficio, lavoro_affida(allegato) come gli agenti; il guardiano giudica anche il testo
     estratto dei file."""
     import datetime
     from calliope.main import domanda_guardia
@@ -620,9 +620,9 @@ def prova_minori():
     verifica("minore: «archivialo» rifiutato come l'ufficio, niente su disco",
              not r.get("ok") and "documenti di casa" in r.get("conferma", "")
              and not list(ctx.archivio.cartella.rglob("*.*")), r)
-    r = json.loads(reg.call("delega_lavoro", {"tipo": "documento", "compito": "riassumi",
+    r = json.loads(reg.call("lavoro_affida", {"tipo": "documento", "compito": "riassumi",
                                               "allegato": 1}, ctx, "familiare"))
-    verifica("minore: delega_lavoro con l'allegato rifiutato (preset degli agenti)",
+    verifica("minore: lavoro_affida con l'allegato rifiutato (preset degli agenti)",
              not r.get("ok") and "adulto" in r.get("conferma", ""), r)
     g = domanda_guardia("Cosa dice?", [file(A.ISTRUZIONE, "nota.txt")])
     verifica("guardiano: la domanda con il testo estratto del file, tagliato",

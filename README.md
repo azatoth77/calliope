@@ -223,7 +223,7 @@ Andrea: Calliope, Sofia mi ha chiesto qualcosa?        [minore_gestisci]
 Andrea: (foto di uno scontrino) Quanto ho speso in tutto?          [«14,10»: la foto è un dato]
 Andrea: (scritto) E quanto costava il latte?          [«1,29», dalla stessa foto]
 Andrea: (allegato con istruzioni nascoste)             [nessuna azione «perché lo dice il file»]
-Andrea: Calliope, scrivi un programma in Python che legge due numeri…  [delega_lavoro, «Procedo?»]
+Andrea: Calliope, scrivi un programma in Python che legge due numeri…  [lavoro_affida, «Procedo?»]
 Andrea: Sì, procedi.  …  Calliope, eseguilo con 3 e 5. [programma eseguito nella sandbox, in diretta]
 ```
 

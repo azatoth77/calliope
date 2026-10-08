@@ -501,3 +501,11 @@ mancavano anche i modelli della wake word e le voci. Ora:
 Misure dal worktree senza file locali (08/10): 27 controlli superati, preparazione dei modelli
 1,3 s, pagina 283 kB, modelli e onnxruntime 8,0 MB trasferiti (gzip), CPU dell'inferenza nel
 browser 7,6 %.
+
+## La scheda dello sviluppo, versione 2 (08/10, ramo `modalita-sviluppo-2`)
+
+La scheda `sviluppo:<id>` mostra anche le domande fatte a chi ha scritto il codice
+(`sviluppo_chiedi`) con i dettagli della risposta (la voce ne dice una o due frasi), i collaudi
+che non vanno («non riuscito», con l'esito per intero), e tra le frasi d'esempio «perché…?»,
+«correggilo» e «chiudi lo sviluppo». Si manda anche a ogni domanda all'agente e a ogni
+correzione; a una tappa del lavoro resta la scheda del lavoro in diretta.

@@ -488,7 +488,7 @@ def prova_lavoro():
         lavori = LavoriFinti()
         item = {"id": "L3", "messaggio": "Dario, per «la relazione» ho una domanda: chi è il "
                                          "cliente?", "chi": "dario-id", "chi_nome": "Dario",
-                "in_sospeso": {"tool": "lavori_rispondi", "domanda": "Chi è il cliente?",
+                "in_sospeso": {"tool": "lavoro_rispondi", "domanda": "Chi è il cliente?",
                                "argomenti": {"lavoro": "L3"}, "messaggio": "Domanda in sospeso"},
                 "modulo": {"chiave": "lavoro:L3", "titolo": "Domanda: la relazione",
                            "domanda": "Chi è il cliente?",

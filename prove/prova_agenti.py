@@ -18,7 +18,7 @@ Niente DGX, niente ssh vero, niente Ollama vero:
   annullo durante lo stream;
 - arbitro con l'agente sullo stesso Ollama della voce: la voce chiude lo stream subito, non
   aspetta, l'agente riparte dopo;
-- tool delega_lavoro, lavori_stato, lavori_annulla: livelli, proposta e conferma (solo nel
+- tool lavoro_affida, lavoro_stato, lavoro_annulla: livelli, proposta e conferma (solo nel
   turno dopo, solo la stessa persona), conferma implicita, agente irraggiungibile; la voce
   non aspetta mai (anche con il tunnel bloccato);
 - Brain con una voce finta: delega → «Procedo?» → azione in sospeso → «sì» → lavoro;
@@ -654,7 +654,7 @@ lav = svc2.nuovo("documento", "Compila il verbale del condominio Le Querce", "da
                  modello="verbale")
 svc2.avvia(lav)
 item = fine(svc2)
-# Dal 03/10 il lavoro aspetta la risposta (stato in_attesa, lavori_rispondi): vedi
+# Dal 03/10 il lavoro aspetta la risposta (stato in_attesa, lavoro_rispondi): vedi
 # prove/prova_agenti_domande.py
 verifica("modello con dati mancanti: chiede invece di inventare",
          item and item["stato"] == "in_attesa" and item.get("in_sospeso")
@@ -794,7 +794,7 @@ svc_t.modelli = {}
 reg = build_registry(documenti=FORMATI, agenti=True)
 names_ospite = [s["function"]["name"] for s in reg.schemas_for("ospite")]
 verifica("gli ospiti non possono usare i tool dei lavori (permessi; il modello li vede)",
-         not {"delega_lavoro", "lavori_stato", "lavori_annulla"} & set(names_ospite))
+         not {"lavoro_affida", "lavoro_stato", "lavoro_annulla"} & set(names_ospite))
 hub = Hub()
 
 
@@ -809,14 +809,14 @@ def tool(name, args, chi, livello, turno, how="voce", testo=""):
     return out, time.perf_counter() - t0
 
 
-out, _ = tool("delega_lavoro", {"tipo": "codice", "compito": "script"}, None, "ospite", 1)
+out, _ = tool("lavoro_affida", {"tipo": "codice", "compito": "script"}, None, "ospite", 1)
 verifica("ospite: rifiutato dal registro", out.get("ok") is False and "NON" in out.get("fatto", ""))
-out, _ = tool("delega_lavoro", {"tipo": "codice", "compito": "Scrivi uno script di backup"},
+out, _ = tool("lavoro_affida", {"tipo": "codice", "compito": "Scrivi uno script di backup"},
               "Bianca", "familiare", 2)
 verifica("familiare e codice: solo chi amministra", out.get("ok") is False
          and "amministra" in out["risposta_finale"] and not svc_t.lavori)
 fake.copione = [{"content": "Testo.\nRIASSUNTO: Ho scritto il testo."}]
-out, dt = tool("delega_lavoro", {"tipo": "altro", "compito": "Scrivi un racconto per bambini"},
+out, dt = tool("lavoro_affida", {"tipo": "altro", "compito": "Scrivi un racconto per bambini"},
                "Bianca", "familiare", 3)
 verifica("familiare e lavoro non costoso: parte subito, senza conferma",
          out.get("ok") and "Ci lavoro" in out["risposta_finale"] and "in_sospeso" not in out,
@@ -825,56 +825,56 @@ verifica("la delega risponde subito", dt < SUBITO_S, f"{dt * 1000:.1f} ms")
 item = fine(svc_t)
 verifica("annuncio a Bianca", item and item["messaggio"].startswith("Bianca, ho finito"),
          str(item and item["messaggio"]))
-out, _ = tool("delega_lavoro", {"tipo": "codice", "compito": "Scrivi uno script che rinomina le "
+out, _ = tool("lavoro_affida", {"tipo": "codice", "compito": "Scrivi uno script che rinomina le "
                                 "foto per data"}, "Dario", "amministra", 10)
 off = out.get("in_sospeso") or {}
-verifica("codice: proposta con «Procedo?» e azione in sospeso con l'id del lavoro",
-         out["risposta_finale"].endswith("Procedo?") and off.get("tool") == "delega_lavoro"
+verifica("codice: proposta con «Procedo?» e azione in sospeso con l'id del lavoro (dal 08/10 verso sviluppo_apri)",
+         out["risposta_finale"].endswith("Procedo?") and off.get("tool") == "sviluppo_apri"
          and str(off.get("argomenti", {}).get("proposta", "")).startswith("L")
          and not svc_t.attivi(), out["risposta_finale"])
 lid = off.get("argomenti", {}).get("proposta")
-out, _ = tool("delega_lavoro", {"tipo": "codice", "compito": "x", "proposta": lid}, "Dario",
+out, _ = tool("lavoro_affida", {"tipo": "codice", "compito": "x", "proposta": lid}, "Dario",
               "amministra", 10)
 verifica("conferma nello stesso turno: rifiutata", out.get("ok") is False and not svc_t.attivi())
 ctx = ctx_per("Dario", "amministra", 15)
-out = json.loads(reg.call("delega_lavoro", {"tipo": "codice", "compito": "Scrivi uno script "
+out = json.loads(reg.call("lavoro_affida", {"tipo": "codice", "compito": "Scrivi uno script "
                           "che rinomina le foto per data", "proposta": "Sì"}, ctx, "amministra"))
 verifica("«proposta» che non è un id (gemma4 ci metteva «Sì»): vale come richiesta nuova",
          out["risposta_finale"].endswith("Procedo?") and "lavori_proposta_non_id" in ctx.regole
          and not svc_t.attivi(), out["risposta_finale"])
-out, _ = tool("delega_lavoro", {"tipo": "codice", "compito": "Scrivi uno script che rinomina le "
+out, _ = tool("lavoro_affida", {"tipo": "codice", "compito": "Scrivi uno script che rinomina le "
                                 "foto per data"}, "Dario", "amministra", 20)
 lid = (out.get("in_sospeso") or {}).get("argomenti", {}).get("proposta")
-out, _ = tool("delega_lavoro", {"tipo": "codice", "compito": "x", "proposta": lid}, "Bianca",
+out, _ = tool("lavoro_affida", {"tipo": "codice", "compito": "x", "proposta": lid}, "Bianca",
               "familiare", 21)
 verifica("conferma di un'altra persona: rifiutata", out.get("ok") is False and not svc_t.attivi())
-out, _ = tool("delega_lavoro", {"tipo": "codice", "compito": "Scrivi uno script che rinomina le "
+out, _ = tool("lavoro_affida", {"tipo": "codice", "compito": "Scrivi uno script che rinomina le "
                                 "foto per data"}, "Dario", "amministra", 30)
 lid = (out.get("in_sospeso") or {}).get("argomenti", {}).get("proposta")
 fake.ritardo_pezzo, fake.pezzi = 0.2, 10
 fake.copione = [{"content": "w" * 100}] + [dict(x) for x in CODICE]
-out, _ = tool("delega_lavoro", {"tipo": "codice", "compito": "Sì", "proposta": lid}, "Dario",
+out, _ = tool("lavoro_affida", {"tipo": "codice", "compito": "Sì", "proposta": lid}, "Dario",
               "amministra", 31, how="breve")
 verifica("«sì» nel turno dopo (frase breve): lavoro avviato", out.get("ok") and
          "Ci lavoro" in out["risposta_finale"] and svc_t.attivi(), out["risposta_finale"])
 aspetta(lambda: svc_t.corrente is not None, 3)
-out, dt = tool("lavori_stato", {}, "Dario", "amministra", 32)
-verifica("lavori_stato: a che punto è, senza aspettare", "Sto lavorando a «script che rinomina"
+out, dt = tool("lavoro_stato", {}, "Dario", "amministra", 32)
+verifica("lavoro_stato: a che punto è, senza aspettare", "Sto lavorando a «script che rinomina"
          in out["risposta_finale"] and dt < SUBITO_S, f"{dt * 1000:.1f} ms {out['risposta_finale']}")
-out, _ = tool("lavori_annulla", {}, "Bianca", "familiare", 33)
+out, _ = tool("lavoro_annulla", {}, "Bianca", "familiare", 33)
 verifica("un familiare non ferma il lavoro di un altro", out.get("ok") is False
          and "altri" in out["risposta_finale"] and svc_t.attivi())
-out, _ = tool("lavori_annulla", {}, "Dario", "amministra", 34)
+out, _ = tool("lavoro_annulla", {}, "Dario", "amministra", 34)
 verifica("chi l'ha chiesto lo ferma", out.get("ok") and "Ho fermato" in out["risposta_finale"]
          and aspetta(lambda: not svc_t.attivi(), 3))
 fake.ritardo_pezzo, fake.pezzi = 0.0, 4
 aspetta(lambda: svc_t.corrente is None, 3)
-# Conferma implicita: dopo il «sì» il modello richiama delega_lavoro senza conferma
-out, _ = tool("delega_lavoro", {"tipo": "ricerca", "compito": "Fai una ricerca sulla storia di "
+# Conferma implicita: dopo il «sì» il modello richiama lavoro_affida senza conferma
+out, _ = tool("lavoro_affida", {"tipo": "ricerca", "compito": "Fai una ricerca sulla storia di "
                                 "Venezia e scrivi una relazione"}, "Dario", "amministra", 40)
 fake.copione = [{"content": "Venezia.\nRIASSUNTO: Relazione su Venezia pronta."}]
 ctx = ctx_per("Dario", "amministra", 41, "breve", "Sì, procedi.")
-out = json.loads(reg.call("delega_lavoro", {"tipo": "ricerca", "compito": "Ricerca sulla storia "
+out = json.loads(reg.call("lavoro_affida", {"tipo": "ricerca", "compito": "Ricerca sulla storia "
                           "di Venezia e relazione"}, ctx, "amministra"))
 verifica("conferma implicita (stesso tipo, compito simile, turno dopo)",
          out.get("ok") and "Ci lavoro" in out["risposta_finale"]
@@ -887,17 +887,17 @@ verifica("ricerca senza biblioteca: testo in risultato.md", item and item["stato
 # Conferma implicita di un programma con il «sì» breve (03/10, prova_agenti_ollama sulla DGX):
 # vale come il «sì» con proposta=id, senza la voce; una richiesta nuova di codice con una
 # frase breve resta rifiutata
-out, _ = tool("delega_lavoro", {"tipo": "codice", "compito": "Scrivi uno script che rinomina le "
+out, _ = tool("lavoro_affida", {"tipo": "codice", "compito": "Scrivi uno script che rinomina le "
                                 "foto per data"}, "Dario", "amministra", 50)
 fake.copione = [dict(x) for x in CODICE]
 ctx = ctx_per("Dario", "amministra", 51, "breve", "Sì, vai.")
-out = json.loads(reg.call("delega_lavoro", {"tipo": "codice", "compito": "Scrivi uno script "
+out = json.loads(reg.call("lavoro_affida", {"tipo": "codice", "compito": "Scrivi uno script "
                           "Python che rinomina le foto per data"}, ctx, "amministra"))
 verifica("conferma implicita di un programma con il «sì» breve", out.get("ok")
          and "Ci lavoro" in out["risposta_finale"] and "lavori_conferma_implicita" in ctx.regole,
          out.get("risposta_finale", ""))
 fine(svc_t)
-out, _ = tool("delega_lavoro", {"tipo": "codice", "compito": "Scrivi un programma per i backup"},
+out, _ = tool("lavoro_affida", {"tipo": "codice", "compito": "Scrivi un programma per i backup"},
               "Dario", "amministra", 60, how="breve")
 # Dal 04/10 chi amministra con una frase che non basta riceve la frase di sfida
 verifica("codice nuovo con una frase breve: rifiutato, frase di sfida", out.get("ok") is False
@@ -927,7 +927,7 @@ verifica("capacità guasta: «VPN spenta?» e il passo", cap["stato"] == "guasta
          and "VPN" in cap["motivo"] and "VPN" in cap["prossimo_passo"], str(cap))
 ctx = ToolContext(cfg=cfg_d, speakers=Speakers(), speaker_ctx=SpeakerCtx("Dario", "amministra"),
                   speaker=None, lavori=svc_d, turno=50)
-out = json.loads(reg_d.call("delega_lavoro", {"tipo": "altro", "compito": "Un riassunto"}, ctx,
+out = json.loads(reg_d.call("lavoro_affida", {"tipo": "altro", "compito": "Un riassunto"}, ctx,
                             "amministra"))
 verifica("delega con l'agente irraggiungibile da poco: rifiuto subito con il motivo",
          out.get("ok") is False and out["risposta_finale"].startswith("Adesso non posso")
@@ -939,8 +939,8 @@ svc_d.avvia(svc_d.nuovo("altro", "Fai un riassunto", "dario-id", "Dario"))
 aspetta(lambda: svc_d.corrente is not None, 2)
 ctx.turno = 60
 t0 = time.perf_counter()
-reg_d.call("lavori_stato", {}, ctx, "amministra")
-out = json.loads(reg_d.call("delega_lavoro", {"tipo": "altro", "compito": "Un altro riassunto"},
+reg_d.call("lavoro_stato", {}, ctx, "amministra")
+out = json.loads(reg_d.call("lavoro_affida", {"tipo": "altro", "compito": "Un altro riassunto"},
                             ctx, "amministra"))
 dt = time.perf_counter() - t0
 verifica("tunnel bloccato nel thread dei lavori: i tool rispondono subito", dt < SUBITO_S,
@@ -976,13 +976,13 @@ reg_b = build_registry(documenti=FORMATI, agenti=True)
 ctx_b = ToolContext(cfg=cfg_b, speakers=Speakers(), speaker_ctx=SpeakerCtx("Dario", "amministra"),
                     speaker=None, lavori=svc_b, schermi=hub)
 brain = Brain(cfg_b, reg_b, ctx_b)
-voce.copione = [{"tool_calls": [call("delega_lavoro", {
+voce.copione = [{"tool_calls": [call("lavoro_affida", {
     "tipo": "codice", "compito": "Scrivi una funzione che somma due numeri, con un test"})]}]
 risposta = "".join(brain.stream_reply("Scrivimi un programma che somma due numeri, con i test",
                                       "amministra"))
 sistema = voce.richieste[0]["messages"][0]["content"]
-verifica("il prompt della voce nomina delega_lavoro e il criterio",
-         "delega_lavoro" in sistema and "le rispondi tu" in sistema)
+verifica("il prompt della voce nomina lavoro_affida e il criterio",
+         "lavoro_affida" in sistema and "le rispondi tu" in sistema)
 verifica("proposta detta così com'è, azione in sospeso", risposta.endswith("Procedo?")
          and brain.has_pending() and len(voce.richieste) == 1, risposta)
 
@@ -992,7 +992,7 @@ def conferma_dal_sospeso(body):
             and m["content"].startswith("Azione in sospeso")]
     import re as _re
     lid = _re.search(r"proposta=\"(L\d+)\"", pend[-1]).group(1) if pend else "?"
-    return {"tool_calls": [call("delega_lavoro", {"tipo": "codice", "compito": "Sì",
+    return {"tool_calls": [call("lavoro_affida", {"tipo": "codice", "compito": "Sì",
                                                   "proposta": lid})]}
 
 

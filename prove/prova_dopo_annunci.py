@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
    un lavoro finito di chi parla, recente, nominato negli ultimi messaggi; mai per un altro, un
    programma, un lavoro vecchio o con la rete spenta. documento_crea con il lavoro di mezzo:
    una spinta, una volta, solo se il documento parla del lavoro (`spinta_documento_lavoro`).
-   Le descrizioni di pc_cerca_file, documento_crea e lavori_stato rimandano a risultato_lavoro.
+   Le descrizioni di pc_cerca_file, documento_crea e lavoro_stato rimandano a lavoro_risultato.
 2. **«Quale apro?» con le date** (pc_cerca_file): l'azione in sospeso dice la data e l'ora di
    modifica di ogni file (oggi, ieri, il giorno) e che il numero 1 è il più recente; i
    risultati sono ordinati dal più recente per ogni esecutore.
@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
    parole del tool chiede «Non me l'hai chiesto…» anche con la conversazione pulita
    (`politica_cambio_non_chiesto`); i contrari («toglici due minuti», il «sì» alla domanda).
 4. **riferire**: «Se vuoi più dettagli, chiedimi di leggertelo.» (frase del codice in coda a
-   risultato_lavoro) non è un'indicazione del dato; un'indicazione vera del dato resta fermata.
+   lavoro_risultato) non è un'indicazione del dato; un'indicazione vera del dato resta fermata.
 5. **Prefisso scaldato dopo un cambio del prompt di sistema** (modalità Star Trek, tono della
    casa: il turno dopo rileggeva ~15k token, 5,9 s): il riscaldamento parte in un thread solo
    se il prompt è cambiato (`prefisso_scaldato`).
@@ -75,7 +75,7 @@ class Registra(Copione):
 
 TITOLO = ("Esegui una ricerca approfondita sui vantaggi e gli svantaggi delle pompe di calore "
           "per una casa, con i costi, gli incentivi e i consumi")
-DETTO = titolo_detto(TITOLO)            # come lo dicono l'annuncio e risultato_lavoro
+DETTO = titolo_detto(TITOLO)            # come lo dicono l'annuncio e lavoro_risultato
 
 
 def lavoro(persona="dario", tipo="ricerca", fine_s=60, stato="fatto", lid="L2"):
@@ -146,8 +146,8 @@ def prova_lavoro():
     ctx = SimpleNamespace(lavoro_turno=rif, regole=[], documenti=None)
     r = td._documento_crea(ctx, "word", "Ricerca sui vantaggi e svantaggi delle pompe di calore",
                            "Ricerca pompe di calore")
-    verifica("documento_crea sul lavoro appena detto: la spinta verso risultato_lavoro",
-             not r.get("ok") and "risultato_lavoro" in r.get("cosa_fare", "")
+    verifica("documento_crea sul lavoro appena detto: la spinta verso lavoro_risultato",
+             not r.get("ok") and "lavoro_risultato" in r.get("cosa_fare", "")
              and "L2" in r.get("cosa_fare", "") and "spinta_documento_lavoro" in ctx.regole, r)
     r = td._documento_crea(ctx, "word", "Ricerca sui vantaggi e svantaggi delle pompe di calore")
     verifica("richiamato nella stessa risposta: si va avanti (qui: documenti non disponibili)",
@@ -158,16 +158,16 @@ def prova_lavoro():
              r.get("errore") == "documenti non disponibili" and not ctx.regole, r)
     # Le descrizioni
     reg = build_registry(agenti=True, documenti=FORMATI, pc={"portatile": FakePC()})
-    d = {n: reg.get(n).description for n in ("pc_cerca_file", "documento_crea", "lavori_stato",
-                                             "risultato_lavoro")}
-    verifica("descrizioni: pc_cerca_file e documento_crea rimandano a risultato_lavoro",
-             "risultato_lavoro" in d["pc_cerca_file"] and "risultato_lavoro" in d["documento_crea"])
-    verifica("descrizioni: lavori_stato non per il risultato di un lavoro nominato",
-             "pompe di calore" in d["lavori_stato"] and "pompe di calore" in d["risultato_lavoro"])
+    d = {n: reg.get(n).description for n in ("pc_cerca_file", "documento_crea", "lavoro_stato",
+                                             "lavoro_risultato")}
+    verifica("descrizioni: pc_cerca_file e documento_crea rimandano a lavoro_risultato",
+             "lavoro_risultato" in d["pc_cerca_file"] and "lavoro_risultato" in d["documento_crea"])
+    verifica("descrizioni: lavoro_stato non per il risultato di un lavoro nominato",
+             "pompe di calore" in d["lavoro_stato"] and "pompe di calore" in d["lavoro_risultato"])
     reg = build_registry(documenti=FORMATI, pc={"portatile": FakePC()})
     verifica("contrario: senza agenti nessun rimando a un tool che non c'è",
-             "risultato_lavoro" not in reg.get("pc_cerca_file").description
-             and "risultato_lavoro" not in reg.get("documento_crea").description)
+             "lavoro_risultato" not in reg.get("pc_cerca_file").description
+             and "lavoro_risultato" not in reg.get("documento_crea").description)
 
 
 def prova_date():

@@ -427,13 +427,13 @@ class Estensioni:
         sempre = (" Se dice «sì, sempre», aggiungi sempre=true." if v.ricorrente else "")
         msg = (f"Azione in sospeso: alla fine della tua ultima risposta hai chiesto «{r['domanda']}» "
                f"per l'estensione «{es.manifesto.get('titolo')}». Se chi parla acconsente (sì, "
-               f"ok, va bene, procedi), chiama estensioni_gestisci con azione=\"consenti\" ed "
-               f"esecuzione=\"{es.id}\".{sempre} Se rifiuta, chiama estensioni_gestisci con "
+               f"ok, va bene, procedi), chiama estensione_gestisci con azione=\"consenti\" ed "
+               f"esecuzione=\"{es.id}\".{sempre} Se rifiuta, chiama estensione_gestisci con "
                f"azione=\"nega\" ed esecuzione=\"{es.id}\". Se chiede altro, fai quello che chiede.")
         return _final(r["domanda"], fatto="sospesa: l'estensione aspetta il sì, NON è stato "
                                           "fatto niente", esecuzione=es.id,
                       in_sospeso={"domanda": r["domanda"], "cosa": v.cosa,
-                                  "tool": "estensioni_gestisci", "argomenti": args,
+                                  "tool": "estensione_gestisci", "argomenti": args,
                                   "messaggio": msg})
 
     def _segui(self, es: Esecuzione):
@@ -574,7 +574,7 @@ class Estensioni:
                      f"tornare indietro. Procedo?")
             return _final(frase, fatto="proposta: NON è ancora stato tolto niente",
                           in_sospeso={"domanda": "Procedo?", "cosa": f"togliere «{titolo}»",
-                                      "tool": "estensioni_gestisci",
+                                      "tool": "estensione_gestisci",
                                       "argomenti": {"azione": "rimuovi", "nome": nome}})
         return {"ok": False, "fatto": NIENTE, "errore": f"azione sconosciuta: {azione}"}
 
@@ -596,7 +596,7 @@ class Estensioni:
                                    "l'approvazione",
                       in_sospeso={"domanda": "Vuoi approvarla?",
                                   "cosa": f"approvare {chi_e(mc, cand, vecchio)}",
-                                  "tool": "estensioni_gestisci",
+                                  "tool": "estensione_gestisci",
                                   "argomenti": {"azione": "approva", "nome": nome}})
 
     def _sfida(self, ctx, argomenti: dict, cosa: str) -> dict | None:
@@ -605,7 +605,7 @@ class Estensioni:
         if getattr(sc, "sfida_superata", False):
             return None
         from ..conferme import chiedi_conferma
-        return chiedi_conferma(ctx, "estensioni_gestisci", argomenti, cosa)
+        return chiedi_conferma(ctx, "estensione_gestisci", argomenti, cosa)
 
     def _approva(self, ctx, nome: str, voce: dict) -> dict:
         n = self.archivio.candidata(nome)
@@ -875,7 +875,7 @@ class Estensioni:
         if approvabile:
             out["in_sospeso"] = {"domanda": "Vuoi approvarla?",
                                  "cosa": f"approvare {chi_e(m, n, vecchio)}",
-                                 "tool": "estensioni_gestisci",
+                                 "tool": "estensione_gestisci",
                                  "argomenti": {"azione": "approva", "nome": m["nome"]}}
         return out
 
@@ -964,7 +964,7 @@ def _ordine_al_modello(testo: str, registry) -> bool:
     return any(w in nomi for w in re.findall(r"\b[a-z]+_[a-z_]+\b", testo.lower()))
 
 
-# Le azioni dette con un altro verbo (08/10, DGX del 07/10: estensioni_gestisci(attiva) →
+# Le azioni dette con un altro verbo (08/10, DGX del 07/10: estensione_gestisci(attiva) →
 # la politica chiedeva «vuoi che faccia «attiva»…?», poi «azione sconosciuta: attiva»). È la
 # forma di una scelta già fatta dal modello (principio 10): «attiva» con una versione nuova da
 # approvare è «approva» (che vuole comunque la frase di sfida), senza è «riattiva»
@@ -978,7 +978,7 @@ _SINONIMI = {"disabilita": "disattiva", "spegni": "disattiva", "sospendi": "disa
 
 
 def azione_vera(azione, nome: str, archivio) -> str:
-    """L'azione di estensioni_gestisci con un sinonimo ricondotto a quelle del tool (AZIONI);
+    """L'azione di estensione_gestisci con un sinonimo ricondotto a quelle del tool (AZIONI);
     un'azione che non conosce resta com'è (e il tool lo dice)."""
     a = str(azione or "elenca").strip().lower()
     if a in _SINONIMI:
@@ -992,7 +992,7 @@ def azione_vera(azione, nome: str, archivio) -> str:
 
 
 def prepara_gestisci(ctx, argomenti: dict) -> dict:
-    """ToolSpec.prepara di estensioni_gestisci: l'azione vera prima dei permessi e della
+    """ToolSpec.prepara di estensione_gestisci: l'azione vera prima dei permessi e della
     politica, che così chiede (e ricorda) proprio quella."""
     est = getattr(ctx, "estensioni", None)
     if est is None or not isinstance(argomenti, dict) or "azione" not in argomenti:

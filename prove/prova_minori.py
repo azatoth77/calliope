@@ -247,20 +247,20 @@ verifica("safesearch: 2 per Luca, 1 per Sara e Dario",
 from calliope.tools.agenti import agenti_specs  # noqa: E402
 for s in agenti_specs((), ()):
     TOOLS.register(s)
-out, ctx = chiama("delega_lavoro", {"tipo": "documento", "compito": "relazione sui vulcani"},
+out, ctx = chiama("lavoro_affida", {"tipo": "documento", "compito": "relazione sui vulcani"},
                   "Bianca")
 verifica("Bianca: niente agenti", "minore_agenti" in ctx.regole and "Dario" in out["risposta_finale"])
-out, ctx = chiama("delega_lavoro", {"tipo": "documento", "compito": "relazione"}, "Luca")
+out, ctx = chiama("lavoro_affida", {"tipo": "documento", "compito": "relazione"}, "Luca")
 verifica("Luca: agenti solo con l'autorizzazione", "minore_autorizzazione" in ctx.regole
          and "Elena" in out["risposta_finale"], out.get("risposta_finale"))
 regole.autorizza(LUCA.id, "agenti", 30, "elena-id")
-out, ctx = chiama("delega_lavoro", {"tipo": "documento", "compito": "relazione"}, "Luca")
+out, ctx = chiama("lavoro_affida", {"tipo": "documento", "compito": "relazione"}, "Luca")
 verifica("Luca autorizzato da Elena: passa il controllo dei minori",
          "minore_autorizzazione" not in ctx.regole)
 dati = regole.leggi(LUCA.id)
 dati["autorizzazioni"]["agenti"]["fino"] = time.time() - 1
 regole.scrivi(LUCA.id, dati)
-out, ctx = chiama("delega_lavoro", {"tipo": "documento", "compito": "relazione"}, "Luca")
+out, ctx = chiama("lavoro_affida", {"tipo": "documento", "compito": "relazione"}, "Luca")
 verifica("autorizzazione scaduta: di nuovo no", "minore_autorizzazione" in ctx.regole)
 
 from prove.pc_finto import FakePC  # noqa: E402

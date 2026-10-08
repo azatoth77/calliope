@@ -151,7 +151,7 @@ def sessione(giro, tmp, iso, spenta: bool, conteggi: dict):
         parole = dario.sfida.testo.replace(",", "")
         r2, _, _ = parla(b, dario, parole)
     else:
-        # Il modello non ha chiamato estensioni_gestisci: approvata dal codice (si dice)
+        # Il modello non ha chiamato estensione_gestisci: approvata dal codice (si dice)
         print(f"   [{giro}/{etichetta}] il modello non ha chiesto l'approvazione: {tools} "
               f"{r[:100]!r}", flush=True)
         est.archivio.approva("meteo_citta", 2, "Dario")

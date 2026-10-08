@@ -11,7 +11,7 @@ nel container usa-e-getta, ma chi l'aveva chiesto non vedeva mai il programma gi
   ciò che il programma scrive non tocca i risultati. Tempo massimo `agenti_dimostrazione_s`.
 - **Quando**: a lavoro di codice finito, se chi l'ha chiesto ha uno schermo personale
   (`agenti_dimostrazione`), e su richiesta («fammelo vedere», «eseguilo di nuovo», «eseguilo
-  con 3 e 5»: tool lavori_esegui). «Fermalo»: lavori_annulla ferma prima l'esecuzione.
+  con 3 e 5»: tool programma_esegui). «Fermalo»: lavoro_annulla ferma prima l'esecuzione.
 - **Input**: i dati detti o scritti nella casella dello schermo arrivano come argomenti della
   riga di comando **e** come righe dello stdin (uno per riga), poi lo stdin si chiude: il
   programma prende quello che si aspetta, e niente input interattivo oltre a questo.

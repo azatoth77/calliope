@@ -614,7 +614,7 @@ def _pulisci(testo, massimo: int) -> str:
 class AzioneGioco:
     """Una richiesta del riquadro alla porta stretta (estensioni/porta.py), con la stessa
     interfaccia di un'esecuzione (estensioni/esecuzione.py) per la porta e per il «sì» della
-    persona (estensioni_gestisci consenti/nega). La contaminazione è della partita: un gioco
+    persona (estensione_gestisci consenti/nega). La contaminazione è della partita: un gioco
     che ha letto l'agenda non manda più messaggi agli altri schermi."""
 
     def __init__(self, giochi: Giochi, p: Partita, posto: Posto, azione: str, params: dict,
@@ -700,7 +700,7 @@ class AzioneGioco:
         ris = out.get("risultato")
         return {"ok": True, "valore": ris}
 
-    # ── come Esecuzione, per estensioni_gestisci consenti/nega ──
+    # ── come Esecuzione, per estensione_gestisci consenti/nega ──
     def attendi(self, timeout: float) -> str:
         fine = time.monotonic() + timeout
         with self._cambio:

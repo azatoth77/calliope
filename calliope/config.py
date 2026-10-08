@@ -891,8 +891,8 @@ class Config:
     # «gemma davanti, agenti dietro». I lavori lunghi (programmi, relazioni, documenti da un
     # modello, ricerche a più passi) li fa un modello grande su un'altra macchina (la DGX
     # Spark, via tunnel SSH) o sullo stesso Ollama; la voce non li aspetta mai e li annuncia a
-    # lavoro finito. Senza agente configurato i tool delega_lavoro, lavori_stato e
-    # lavori_annulla non ci sono.
+    # lavoro finito. Senza agente configurato i tool lavoro_affida, lavoro_stato e
+    # lavoro_annulla non ci sono.
     agenti_enabled: bool = True
     # Il file della DGX (alias SSH, collegamento, porte, modelli), accanto a calliope.yaml e
     # fuori da git. Utente, indirizzo e chiave non ci sono: stanno in .ssh\config sotto
@@ -1005,7 +1005,7 @@ class Config:
     # (fonte web verificata compresa) si procede come prima dell'analisi
     agenti_analisi: bool = True
     agenti_analisi_s: float = 10.0
-    # Il risultato di un lavoro finito, chiesto a voce (07/10, tool risultato_lavoro: «e il
+    # Il risultato di un lavoro finito, chiesto a voce (07/10, tool lavoro_risultato: «e il
     # risultato?», «leggimelo»): il riassunto dell'agente già salvato; per più dettaglio un
     # riassunto per la voce chiesto al modello dell'agente sul testo intero, entro tanti
     # secondi (oltre, il riassunto salvato). Il testo intero va sullo schermo personale
@@ -1127,13 +1127,13 @@ class Config:
     # solo i controlli di Calliope
     fatture_xsd: str = "fatturapa"
     # Domande dell'agente a metà lavoro (03/10): se gli manca un dato il lavoro aspetta la
-    # risposta (lavori_rispondi) con il suo contesto. Al più tante domande per lavoro; dopo
+    # risposta (lavoro_rispondi) con il suo contesto. Al più tante domande per lavoro; dopo
     # tanti minuti senza risposta si chiude da solo, e Calliope lo dice
     agenti_domande_max: int = 3
     agenti_attesa_risposta_min: float = 120.0
     # Lavori interrotti da un riavvio di Calliope (06/10, calliope/agenti/ripresa.py): chi li
     # aveva chiesti lo sente al primo silenzio («… Lo rifaccio?») se il lavoro era vivo meno
-    # di tante ore fa; quelli più vecchi restano solo nell'elenco di lavori_stato, per un giorno
+    # di tante ore fa; quelli più vecchi restano solo nell'elenco di lavoro_stato, per un giorno
     agenti_interrotti_annuncio_h: float = 3.0
     # Modalità sviluppo (08/10, calliope/sviluppo.py): per chi amministra un'estensione o un
     # programma è un iter a fasi (analisi, sviluppo e test, collaudo, revisione, attivazione),
@@ -1146,6 +1146,10 @@ class Config:
     sviluppo_sospendi_min: float = 30.0
     sviluppo_promemoria: bool = True
     sviluppo_programma_righe: int = 150
+    # Versione 2 (08/10): «perché?» durante il collaudo va a chi ha scritto il codice
+    # (sviluppo_chiedi): una passata del modello dell'agente in sola lettura, con il contesto
+    # dello sviluppo; dopo tanti secondi senza risposta lo si dice e si propone la correzione
+    sviluppo_chiedi_s: float = 60.0
     # I file della persona dati all'agente (03/10, «correggi lo script backup.py»): solo
     # testo, codice, Word, Excel e PDF, al più tanti MB; del testo di un documento l'agente
     # legge al più tanti caratteri
@@ -1446,13 +1450,13 @@ class Config:
         Le schede partono da sole dai tool: il modello serve solo per le richieste esplicite
         («mostramelo sullo schermo») e per abbinare o scollegare uno schermo.
 
-        `agenti`: se ci sono delega_lavoro, lavori_stato e lavori_annulla (calliope/agenti/,
+        `agenti`: se ci sono lavoro_affida, lavoro_stato e lavoro_annulla (calliope/agenti/,
         02/10). La ricerca del 02/10 aveva visto delegare «come si scrive un ciclo for?» (2 su
         2): il criterio è il risultato (un programma o un file complesso), non l'argomento, e
         le domande brevi di programmazione restano alla voce. Con i tool degli agenti «Fai un
-        PDF con l'elenco dei compiti di Matteo…» andava a delega_lavoro (2 su 2 in
+        PDF con l'elenco dei compiti di Matteo…» andava a lavoro_affida (2 su 2 in
         prova_documenti_ollama, 0 su 4 giusti in una sonda). Misure del 02/10, 4 ripetizioni
-        per frase: la stessa avvertenza nella descrizione di delega_lavoro non cambia niente
+        per frase: la stessa avvertenza nella descrizione di lavoro_affida non cambia niente
         (0/4), rinominare il parametro «compito» nemmeno (2/4); una frase nel blocco degli
         agenti con «elenco» la risolve (4/4) ma faceva chiamare appuntamenti_elenca a «mettimi
         sullo schermo i miei appuntamenti» (prova_schermi_ollama 36/38); senza la parola
@@ -1517,7 +1521,7 @@ class Config:
         # Il testo del documento lo scrive una richiesta a parte: se lo dicesse la voce,
         # Calliope leggerebbe una lettera intera ad alta voce
         # Con gli agenti, «Fai un PDF con l'elenco dei compiti di Matteo…» andava a
-        # delega_lavoro (3 volte su 4, 02/10): i documenti brevi si nominano qui
+        # lavoro_affida (3 volte su 4, 02/10): i documenti brevi si nominano qui
         kinds = ("lettere, tabelle, elenchi, anche di compiti o di cose da fare" if agenti
                  else "lettere, tabelle, elenchi")
         documents = (f"per creare un documento Word, Excel o PDF ({kinds}) "
@@ -1537,23 +1541,25 @@ class Config:
                   "anagrafica_cerca e anagrafica_salva; per le lettere e gli altri documenti "
                   "senza modello resta documento_crea, chiamato subito anche se mancano dei "
                   "dettagli (li lascia da completare il programma); " if ufficio else "")
-        jobs = ("per un lavoro lungo il cui risultato è un programma o un file complesso "
-                "(scrivere o correggere script, programmi e pagine web, relazioni o "
-                "presentazioni di più pagine, "
+        # 08/10 (versione 2 della modalità sviluppo): il codice passa sempre dallo sviluppo
+        jobs = ("per scrivere o correggere script, programmi e pagine web, o una funzione "
+                "permanente di Calliope, sviluppo_apri (tipo programma o estensione); per un "
+                "lavoro lungo il cui risultato è un file complesso (relazioni o presentazioni "
+                "di più pagine, "
                 + ("" if ufficio else "documenti da un modello, ") + "ricerche a più passi) "
-                "delega_lavoro, per "
-                "sapere a che punto è lavori_stato, per fermarlo lavori_annulla, per "
-                "rispondere a una domanda dell'agente lavori_rispondi, per eseguire di nuovo il "
+                "lavoro_affida, per "
+                "sapere a che punto è lavoro_stato, per fermarlo lavoro_annulla, per "
+                "rispondere a una domanda dell'agente lavoro_rispondi, per eseguire di nuovo il "
                 "programma finito e vederlo sullo schermo («fammelo vedere», «eseguilo con 3 e "
-                "5») lavori_esegui, per il risultato di un lavoro finito («e il risultato?», "
-                "«leggimelo», «fammi un riassunto della ricerca») risultato_lavoro; le "
+                "5») programma_esegui, per il risultato di un lavoro finito («e il risultato?», "
+                "«leggimelo», «fammi un riassunto della ricerca») lavoro_risultato; le "
                 "domande di programmazione e le spiegazioni brevi («come si scrive…», «cos'è…», "
                 "«a cosa serve…») le rispondi tu, a voce, senza delegare; "
                 # «Scrivimi uno script Python…» col 26B veniva scritto a voce (~10 s di codice
                 # letto, 1 delega su 10 nella sonda del 03/10); con questa frase 10/10, e il 4B
                 # da 8/10 a 30/30, senza delegare le domande brevi (10/10 e 29/30)
                 "uno script, un programma o una pagina web da scrivere non li detti a voce: "
-                "chiami delega_lavoro; " if agenti else "")
+                "chiami sviluppo_apri; " if agenti else "")
         archive = ("per i documenti di casa archiviati (bollette, ricevute, contratti, polizze, "
                    "garanzie, referti, documenti d'identità: cosa dicono, importi, numeri, "
                    "scadenze, «fino a quando è in garanzia…») archivio_cerca, per cosa scade "
@@ -2233,7 +2239,7 @@ SEZIONI: dict[str, list[str]] = {
                "agenti_attesa_risposta_min", "agenti_file_max_mb", "agenti_file_caratteri",
                "agenti_esempi_max", "agenti_esempio_kb", "agenti_interrotti_annuncio_h",
                "sviluppo_enabled", "sviluppo_sospendi_min", "sviluppo_promemoria",
-               "sviluppo_programma_righe"],
+               "sviluppo_programma_righe", "sviluppo_chiedi_s"],
     "estensioni": ["estensioni_enabled", "estensioni_cartella", "estensioni_max_attive",
                    "estensioni_attesa_s", "estensioni_conferma_s", "estensioni_tempo_max_s",
                    "estensioni_memoria_max_mb", "estensioni_secondo_parere",
@@ -2421,6 +2427,7 @@ LIMITI: dict[str, tuple[float, float]] = {
     "conversazione_doppione_s": (0.0, 30.0),
     "agenti_num_ctx": (2048, 1_048_576), "agenti_contesti_paralleli": (1, 64),
     "sviluppo_sospendi_min": (0.0, 1440.0), "sviluppo_programma_righe": (10, 100_000),
+    "sviluppo_chiedi_s": (5.0, 600.0),
     "agenti_token_passata": (512, 262_144), "agenti_ragionamento_passata": (0, 262_144),
     "agenti_soglia_file": (0.1, 0.95), "agenti_passi_intatti": (1, 20),
     "agenti_analisi_s": (1.0, 60.0),

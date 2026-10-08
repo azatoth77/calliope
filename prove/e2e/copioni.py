@@ -175,9 +175,9 @@ COPIONI: list[Copione] = [
     ]),
     Copione("fermati-ordine", "conversazione", "«fermati con l'ordine» senza ordini in corso", [
         P("Andrea", "Calliope, per il momento fermati con l'ordine.",
-          # lavori_annulla che risponde «Non ho lavori in corso da fermare» va bene (giro 4 del
+          # lavoro_annulla che risponde «Non ho lavori in corso da fermare» va bene (giro 4 del
           # 06/10): guarda e non ferma niente; restano vietati annulli dell'agenda e deleghe
-          attese={"no_tool": ["agenda_annulla", "delega_lavoro"],
+          attese={"no_tool": ["agenda_annulla", "lavoro_affida"],
                   "non_testo": [r"\bho fermato\b|sospes[oa]\b|\bannullat|\bfermato tutto"],
                   "giudizio": "deve dire che non c'è nessun ordine in corso"}),
     ]),
@@ -328,22 +328,22 @@ COPIONI: list[Copione] = [
     Copione("programma", "agenti", "programma dell'agente e «eseguilo con 3 e 5» senza conferma", [
         P("Andrea", "Calliope, scrivi un programma in Python che legge due numeri "
           "dall'input e stampa la loro somma.",
-          attese={"tool": ["delega_lavoro"], "testo": [r"\?"]}, max_s=60),
-        P("Andrea", "Sì, procedi.", attese={"tool": ["delega_lavoro"],
+          attese={"tool": ["lavoro_affida"], "testo": [r"\?"]}, max_s=60),
+        P("Andrea", "Sì, procedi.", attese={"tool": ["lavoro_affida"],
                                            "annuncio": (r"finito|pront|creato", 900)},
           max_s=60),
         P("Andrea", "Calliope, eseguilo con 3 e 5.",
-          attese={"tool": ["lavori_esegui"], "no_regole": ["politica_conferma"],
+          attese={"tool": ["programma_esegui"], "no_regole": ["politica_conferma"],
                   "testo": [r"\b8\b|otto"]}, max_s=90),
     ], richiede=("agente",), lento=True),
     Copione("estensione", "estensioni", "estensione creata dall'agente, approvata con la sfida", [
         P("Andrea", "Calliope, crea un'estensione che converte i gradi Celsius in Fahrenheit.",
-          attese={"tool": ["estensione_crea"], "testo": [r"\?"]}, max_s=60),
-        P("Andrea", "Sì, procedi.", attese={"tool": ["delega_lavoro", "estensione_crea"],
+          attese={"tool": ["sviluppo_apri"], "testo": [r"\?"]}, max_s=60),
+        P("Andrea", "Sì, procedi.", attese={"tool": ["lavoro_affida", "sviluppo_apri"],
                                            "annuncio": (r"preparat|estensione|approv", 1500)},
           max_s=60),
         P("Andrea", "Calliope, approva l'estensione.",
-          attese={"tool": ["estensioni_gestisci"], "testo": [r"\?|ripeti"]}, max_s=60),
+          attese={"tool": ["estensione_gestisci"], "testo": [r"\?|ripeti"]}, max_s=60),
         # Dopo la conferma della politica («vuoi che approvi…?») il «sì», poi la sfida;
         # se la sfida è già arrivata il «sì» si salta (passo «se_non_sfida»)
         P("Andrea", "Sì, approvala.", dati={"se_non_sfida": True}, max_s=60),

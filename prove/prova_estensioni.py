@@ -558,19 +558,19 @@ def prova_esecuzioni(tmp: Path, isolamento, vero: bool = False):
     es_id = r.get("esecuzione")
     verifica("si ferma: domanda pronta con l'azione in sospeso",
              r["risposta_finale"].startswith("L'estensione «Caldo in camera» vuole che esegua")
-             and r["in_sospeso"]["tool"] == "estensioni_gestisci" and not casa.comandi,
+             and r["in_sospeso"]["tool"] == "estensione_gestisci" and not casa.comandi,
              r["risposta_finale"])
-    r2 = chiama(reg, ctx, "estensioni_gestisci", {"azione": "consenti", "esecuzione": es_id},
+    r2 = chiama(reg, ctx, "estensione_gestisci", {"azione": "consenti", "esecuzione": es_id},
                 turno=10)
     verifica("nella stessa risposta il modello non può confermare", r2.get("ok") is False
              and not casa.comandi)
     ctx.speaker_ctx = speaker("Bianca", "familiare")
-    r2 = chiama(reg, ctx, "estensioni_gestisci", {"azione": "consenti", "esecuzione": es_id},
+    r2 = chiama(reg, ctx, "estensione_gestisci", {"azione": "consenti", "esecuzione": es_id},
                 turno=11)
     verifica("un'altra persona non conferma", r2.get("ok") is False and not casa.comandi,
              r2.get("risposta_finale"))
     ctx.speaker_ctx = speaker("Dario", "amministra")
-    r2 = chiama(reg, ctx, "estensioni_gestisci", {"azione": "consenti", "esecuzione": es_id},
+    r2 = chiama(reg, ctx, "estensione_gestisci", {"azione": "consenti", "esecuzione": es_id},
                 turno=11)
     verifica("comando della casa: il «sì» chiede la frase di sfida",
              "ripeti" in r2.get("risposta_finale", "").lower() and not casa.comandi
@@ -586,7 +586,7 @@ def prova_esecuzioni(tmp: Path, isolamento, vero: bool = False):
              and casa.comandi == [("accendi il riscaldamento in camera", "familiare")],
              str(casa.comandi))
     r = chiama(reg, ctx, "est_caldo_camera", {}, turno=20)
-    r2 = chiama(reg, ctx, "estensioni_gestisci", {"azione": "nega", "esecuzione":
+    r2 = chiama(reg, ctx, "estensione_gestisci", {"azione": "nega", "esecuzione":
                                                   r["esecuzione"]}, turno=21)
     verifica("«no»: niente comando, l'estensione lo sa", r2.get("ok") and len(casa.comandi) == 1
              and r2["risultati"]["acceso"] is False, r2["risultati"]["da_dire"][:60])
@@ -606,7 +606,7 @@ def prova_esecuzioni(tmp: Path, isolamento, vero: bool = False):
     r = chiama(reg, ctx, "est_pulisci_spesa", {"cosa": "latte"}, turno=40)
     verifica("togliere dalla lista: si ferma", r.get("in_sospeso") is not None
              and "latte" in liste.read("spesa")[1])
-    r2 = chiama(reg, ctx, "estensioni_gestisci", {"azione": "consenti", "esecuzione":
+    r2 = chiama(reg, ctx, "estensione_gestisci", {"azione": "consenti", "esecuzione":
                                                   r["esecuzione"], "sempre": True}, turno=41)
     verifica("«sì, sempre»: tolto, senza sfida", r2.get("ok") and "latte" not in
              liste.read("spesa")[1], r2.get("risultati"))
@@ -616,14 +616,14 @@ def prova_esecuzioni(tmp: Path, isolamento, vero: bool = False):
     ctx.speaker_ctx = speaker("Bianca", "familiare")
     r = chiama(reg, ctx, "est_pulisci_spesa", {"cosa": "uova"}, turno=43)
     verifica("un'altra persona: chiede di nuovo", r.get("in_sospeso") is not None)
-    chiama(reg, ctx, "estensioni_gestisci", {"azione": "nega", "esecuzione": r["esecuzione"]},
+    chiama(reg, ctx, "estensione_gestisci", {"azione": "nega", "esecuzione": r["esecuzione"]},
            turno=44)
     ctx.speaker_ctx = speaker("Dario", "amministra")
-    r = chiama(reg, ctx, "estensioni_gestisci", {"azione": "revoca", "nome": "pulisci_spesa"},
+    r = chiama(reg, ctx, "estensione_gestisci", {"azione": "revoca", "nome": "pulisci_spesa"},
                turno=45)
     r = chiama(reg, ctx, "est_pulisci_spesa", {"cosa": "uova"}, turno=46)
     verifica("revocato: chiede di nuovo", r.get("in_sospeso") is not None)
-    chiama(reg, ctx, "estensioni_gestisci", {"azione": "nega", "esecuzione": r["esecuzione"]},
+    chiama(reg, ctx, "estensione_gestisci", {"azione": "nega", "esecuzione": r["esecuzione"]},
            turno=47)
 
     sezione("rete, tempo, impronta, injection")
@@ -730,12 +730,12 @@ def prova_ciclo_di_vita(tmp: Path, isolamento):
         "convertitore_unita", 1) / "calliope_estensione.py").exists())
     verifica("da approvare: nessun tool ancora", reg.get("est_convertitore_unita") is None)
     ctx.speaker_ctx = speaker("Bianca", "familiare")
-    r = chiama(reg, ctx, "estensioni_gestisci", {"azione": "approva", "nome": "convertitore"},
+    r = chiama(reg, ctx, "estensione_gestisci", {"azione": "approva", "nome": "convertitore"},
                turno=1)
     verifica("un familiare non approva", r.get("ok") is False and reg.get(
         "est_convertitore_unita") is None, r.get("risposta_finale"))
     ctx.speaker_ctx = speaker("Dario", "amministra")
-    r = chiama(reg, ctx, "estensioni_gestisci", {"azione": "approva", "nome": "convertitore"},
+    r = chiama(reg, ctx, "estensione_gestisci", {"azione": "approva", "nome": "convertitore"},
                turno=2)
     verifica("chi amministra, riconosciuto dalla voce: la sfida c'è sempre",
              "ripeti" in r.get("risposta_finale", "").lower()
@@ -760,17 +760,17 @@ def prova_ciclo_di_vita(tmp: Path, isolamento):
                                                              "a": "miglia"},
                         turno=5)["risultati"]["valore"] == 6.21)
     ctx.speaker_ctx.sfida_superata = True
-    chiama(reg, ctx, "estensioni_gestisci", {"azione": "approva", "nome": "convertitore_unita"},
+    chiama(reg, ctx, "estensione_gestisci", {"azione": "approva", "nome": "convertitore_unita"},
            turno=6)
     ctx.speaker_ctx.sfida_superata = False
     r = chiama(reg, ctx, "est_convertitore_unita", {"valore": 10, "da": "km", "a": "miglia"},
                turno=7)
     verifica("versione 2 approvata e in uso", r["risultati"]["valore"] == 6.2)
-    r = chiama(reg, ctx, "estensioni_gestisci", {"azione": "indietro", "nome": "convertitore_unita"},
+    r = chiama(reg, ctx, "estensione_gestisci", {"azione": "indietro", "nome": "convertitore_unita"},
                turno=8)
     verifica("indietro: chiede la sfida", "ripeti" in r.get("risposta_finale", "").lower())
     ctx.speaker_ctx.sfida, ctx.speaker_ctx.sfida_superata = None, True
-    r = chiama(reg, ctx, "estensioni_gestisci", {"azione": "indietro",
+    r = chiama(reg, ctx, "estensione_gestisci", {"azione": "indietro",
                                                  "nome": "convertitore_unita"}, turno=9)
     ctx.speaker_ctx.sfida_superata = False
     r2 = chiama(reg, ctx, "est_convertitore_unita", {"valore": 10, "da": "km", "a": "miglia"},
@@ -795,27 +795,27 @@ def prova_ciclo_di_vita(tmp: Path, isolamento):
     verifica("test che non passano: non approvabile, analisi detta",
              "in_sospeso" not in c and "non si può approvare" in c["frase"]
              and "import socket" in c["frase"], c["frase"][-120:])
-    r = chiama(reg, ctx, "estensioni_gestisci", {"azione": "approva", "nome": "convertitore_unita"},
+    r = chiama(reg, ctx, "estensione_gestisci", {"azione": "approva", "nome": "convertitore_unita"},
                turno=11)
     verifica("e approvarla a voce non va", r.get("ok") is False and "test" in r["risposta_finale"])
-    r = chiama(reg, ctx, "estensioni_gestisci", {"azione": "elenca"}, turno=12)
+    r = chiama(reg, ctx, "estensione_gestisci", {"azione": "elenca"}, turno=12)
     verifica("elenco a voce", "Convertitore di unità" in r["risposta_finale"]
              and "versione nuova da approvare" in r["risposta_finale"], r["risposta_finale"])
-    r = chiama(reg, ctx, "estensioni_gestisci", {"azione": "disattiva",
+    r = chiama(reg, ctx, "estensione_gestisci", {"azione": "disattiva",
                                                  "nome": "convertitore_unita"}, turno=13)
     verifica("disattiva subito, senza conferma", r.get("ok") and reg.get(
         "est_convertitore_unita") is None)
-    r = chiama(reg, ctx, "estensioni_gestisci", {"azione": "riattiva",
+    r = chiama(reg, ctx, "estensione_gestisci", {"azione": "riattiva",
                                                  "nome": "convertitore_unita"}, turno=14)
     verifica("riattiva", reg.get("est_convertitore_unita") is not None, r["risposta_finale"])
-    r = chiama(reg, ctx, "estensioni_gestisci", {"azione": "rimuovi",
+    r = chiama(reg, ctx, "estensione_gestisci", {"azione": "rimuovi",
                                                  "nome": "convertitore_unita"}, turno=15)
     verifica("rimuovi: prima la domanda", r["risposta_finale"].endswith("Procedo?")
              and est.archivio.voce("convertitore_unita") is not None)
-    r2 = chiama(reg, ctx, "estensioni_gestisci", {"azione": "rimuovi",
+    r2 = chiama(reg, ctx, "estensione_gestisci", {"azione": "rimuovi",
                                                   "nome": "convertitore_unita"}, turno=15)
     verifica("…mai nella stessa risposta", est.archivio.voce("convertitore_unita") is not None)
-    r2 = chiama(reg, ctx, "estensioni_gestisci", {"azione": "rimuovi",
+    r2 = chiama(reg, ctx, "estensione_gestisci", {"azione": "rimuovi",
                                                   "nome": "convertitore_unita"}, turno=16)
     verifica("…poi il sì la toglie", est.archivio.voce("convertitore_unita") is None
              and reg.get("est_convertitore_unita") is None, str(r2)[-200:])

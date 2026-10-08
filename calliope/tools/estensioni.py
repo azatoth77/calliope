@@ -1,11 +1,12 @@
 """
 I tool delle estensioni (04/10/2026, calliope/estensioni/).
 
-- estensione_crea(compito, nome, modifica): chi amministra chiede una funzione permanente nuova
-  (`nome`) o la modifica di una che c'è (`modifica`, dal 08/10: una versione nuova). È un lavoro di codice per l'agente, con proposta e «sì»
-  (come delega_lavoro: la proposta si conferma con delega_lavoro proposta=id). A lavoro finito
-  la versione è «da approvare» e si annuncia.
-- estensioni_gestisci(azione, nome, esecuzione, sempre): elenca; approva, indietro (sempre
+- _estensione_crea (il tool sviluppo_apri tipo estensione, tools/sviluppo.py; fino al 08/10 il
+  tool estensione_crea): chi amministra chiede una funzione permanente nuova (`nome`) o la
+  modifica di una che c'è (`modifica`, dal 08/10: una versione nuova). È un lavoro di codice
+  per l'agente, con proposta e «sì» (sviluppo_apri proposta=id). A lavoro finito la versione
+  è «da approvare» e si annuncia.
+- estensione_gestisci (fino al 08/10 estensioni_gestisci)(azione, nome, esecuzione, sempre): elenca; approva, indietro (sempre
   con la frase di sfida); rifiuta, disattiva, riattiva, revoca, rimuovi (con «Procedo?»);
   consenti e nega per un'azione pericolosa sospesa di un'estensione.
 - est_<nome>: un tool per estensione attiva (calliope/estensioni/servizio.py, `specs`).
@@ -50,7 +51,7 @@ def _gia_fatto(ctx, compito: str, nome: str, gia_fatto_da: str, come_chiederlo: 
     # dice la fonte e cosa si crea, e il «sì» con la voce vale per tutte e due
     t = getattr(ctx, "politica", None)
     fonti = sorted(getattr(t, "contaminazione", None) or ())
-    cosa = politica.da_confermare("estensione_crea", {"compito": compito})
+    cosa = politica.da_confermare("sviluppo_apri", {"compito": compito})
     cosa = cosa[len("creare "):] if cosa.startswith("creare ") else cosa
     frase = "Questo lo so già fare" + (f": chiedimi pure «{esempio}»." if esempio else ".")
     if fonti:
@@ -63,7 +64,7 @@ def _gia_fatto(ctx, compito: str, nome: str, gia_fatto_da: str, come_chiederlo: 
                                  f"{str(gia_fatto_da).strip()})",
             "conferma": frase, "risposta_finale": frase,
             "in_sospeso": {"domanda": frase, "cosa": "creare comunque l'estensione",
-                           "tool": "estensione_crea", "argomenti": args}}
+                           "tool": "sviluppo_apri", "argomenti": {"tipo": "estensione", **args}}}
 
 
 def funzioni_di_calliope() -> str:
@@ -125,7 +126,7 @@ def _estensione_crea(ctx: ToolContext, compito: str = "", nome: str = "", propos
     # diversa non parte finché non è chiuso o sospeso; le risposte all'analisi e la modifica
     # della sua estensione sì
     from .sviluppo import apri_se_serve, controlla_nuovo
-    blocco = controlla_nuovo(ctx, "estensione_crea", {"modifica": modifica, "gioco": gioco})
+    blocco = controlla_nuovo(ctx, "sviluppo_apri", {"modifica": modifica, "gioco": gioco})
     if blocco is not None:
         return blocco
     # Una versione nuova solo se il modello lo dice (`modifica`, 08/10). Prima `nome` valeva per
@@ -199,7 +200,7 @@ def _estensione_crea(ctx: ToolContext, compito: str = "", nome: str = "", propos
     esito = None
     if not esistente and not gioco and not gia_detto:
         ris, esito, gia_an = ta._analisi(ctx, svc, prof, "estensione", compito, crea,
-                                         "estensione_crea")
+                                         "sviluppo_apri")
         if ris is not None:
             if esito is not None and esito.esito in ("impossibile", "gia_fatto"):
                 from .sviluppo import chiudi_se_vuoto
@@ -283,34 +284,12 @@ AZIONI = ["elenca", "approva", "rifiuta", "disattiva", "riattiva", "indietro", "
 def estensioni_specs(crea: bool = True) -> list[ToolSpec]:
     out = []
     if crea:
-        out.append(ToolSpec(
-            name="estensione_crea",
-            description=("Crea una funzione permanente nuova di Calliope (un'estensione: un "
-                         "piccolo programma che resta e si usa a voce, per esempio «fammi una "
-                         "funzione che converte le unità di misura»), oppure CAMBIA "
-                         "un'estensione che c'è («falla funzionare per ogni città», "
-                         "«correggila», «aggiungi…»): modifica = il suo nome, e ne preparo una "
-                         "versione nuova da approvare. Quelle che ci sono sono i tuoi tool est_: "
-                         "un programma fatto da delega_lavoro non è un'estensione e si riusa con "
-                         "lavori_esegui. NON per un programma da usare una volta "
-                         "sola: quello è delega_lavoro tipo codice. compito: cosa deve fare, con "
-                         "i dati come detti. nome: un nome breve per un'estensione nuova. "
-                         "gia_fatto_da: se uno dei tuoi tool fa già la stessa "
-                         "cosa (sommare due numeri o fare conti = calcola), il suo nome, e "
-                         "come_chiederlo: la frase con cui chiederlo a voce (es. «quanto fa 3 "
-                         "più 5»); vuoto se nessuno: chiedo io se la vuole comunque, e al sì "
-                         "richiamalo uguale. gioco=true per un gioco nuovo da fare sullo "
-                         "schermo (tris, memory, quiz…). Se finisce con «Procedo?», dopo il sì "
-                         "richiama delega_lavoro con proposta = l'id proposto."),
-            parameters={"type": "object", "properties": {
-                "compito": {"type": "string"}, "nome": {"type": "string"},
-                "modifica": {"type": "string"},
-                "gia_fatto_da": {"type": "string"}, "come_chiederlo": {"type": "string"},
-                "proposta": {"type": "string"}, "gioco": {"type": "boolean"}},
-                "required": ["compito"]},
-            func=_estensione_crea, risk="azione", levels=FAMILY))
+        # Dal 08/10 (versione 2) un'estensione nuova o cambiata si apre con sviluppo_apri
+        # (tools/sviluppo.py), lo stesso tool dei programmi
+        from .sviluppo import sviluppo_apri_spec
+        out.append(sviluppo_apri_spec())
     out.append(ToolSpec(
-        name="estensioni_gestisci",
+        name="estensione_gestisci",
         description=("Le estensioni di Calliope (funzioni aggiunte dalla famiglia): elenca "
                      "(quali ci sono davvero, con le versioni nuove da approvare: prima di dire "
                      "come usarne una); approva una versione nuova («attiva la versione nuova», "

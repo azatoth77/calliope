@@ -253,7 +253,7 @@ def prova_scaduta_sospeso():
     testo = "Calliope, fai una ricerca sui pannelli solari."
     sat.turno(sat.brain, "Dario", "voce", False, testo, {}, persona_id="dario-id")
     "".join(sat.brain.stream_reply(testo, "amministra"))
-    sat.brain.set_pending({"tool": "delega_lavoro", "argomenti": {"proposta": "L1"},
+    sat.brain.set_pending({"tool": "lavoro_affida", "argomenti": {"proposta": "L1"},
                            "domanda": "Procedo?"})
     sat.fine_turno()
     nuova = reg.di_persona("dario-id")
