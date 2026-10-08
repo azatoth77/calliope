@@ -181,7 +181,7 @@ Dal registro dei turni della DGX (02–08/10, 992 turni con testo, conteggi):
 - **10 turni (1 ogni 100)** richiamano lo stesso tool entro tre turni con un argomento quasi
   uguale (somiglianza ≥ 0,75 su una parola): è la **correzione spontanea**, e prende i due casi
   dell'08/10 (Duniasco → Dugnasco, Luca → Lucca). Lo stesso confronto sulle parole delle frasi,
-  senza il tool, scatta in 251 turni su 971 (estensione/estensioni, centro/cerro): inutile.
+  senza il tool, scatta in 251 turni su 971 (estensione/estensioni, certo/centro): inutile.
 
 Domande in più ogni 100 turni, secondo quando si chiede (stime da queste misure):
 
