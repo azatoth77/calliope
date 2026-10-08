@@ -496,7 +496,8 @@ di un altro ramo, da fare dopo.
   parole di un'altra azione non confermano («voglio che la rimuovi» non conferma «approva»;
   «disattiva» non è «attiva»).
 - **Intenzione** (`valore.Intenzione`, nella conversazione, solo in memoria): un'azione confermata
-  con la voce (il «sì», la richiesta ripetuta, la sfida superata) che poi **fallisce** resta aperta
+  con la voce (il «sì», la richiesta ripetuta, la sfida superata), o chiesta con la voce
+  riconosciuta sopra soglia in questa frase ed eseguita, che poi **fallisce** resta aperta
   per lo stesso tool, lo stesso bersaglio (argomenti `bersaglio`, `azione`, indice o il file vero
   di `Classe.descrivi`, testo libero; non il contenuto) e la stessa persona; la chiamata corretta
   si esegue senza un'altra domanda (regola `intento_confermato`, accettata anche per il «Procedo?»
@@ -527,9 +528,11 @@ per ogni chiamata con un dato di mezzo, `politica_ombra`: `vera`, `vera_regola`,
 `valore_e4_sfida`), `effetto`, le etichette per argomento («comando: bersaglio/detto») e `attiva`;
 **nessun valore**. Scelte rispetto al documento, tutte più strette:
 
-- il dato vince sul fidato (una parola del dato ripetuta da un tool interno, come il nome di un
-  timer messo da una pagina, non diventa fidata: altrimenti un timer E1 «lavava» il valore per una
-  lista E2);
+- il dato vince sul fidato, e tra i fidati vanno solo i risultati delle letture (E0): una parola
+  del dato ripetuta da un tool interno, come il nome di un timer messo da una pagina, non diventa
+  fidata (altrimenti un timer E1 «lavava» il valore per una lista E2). Costo misurato: il nome di
+  un'estensione detto nell'annuncio dell'agente vale `dato` anche se è nell'elenco delle
+  estensioni, e l'approvazione (E3) chiede una volta, come il documento prevede per E3;
 - le parole «distintive» di un testo libero sono nomi propri, sigle, numeri, email e indirizzi web,
   non le parole comuni da 6 lettere (il modello espande «fai una ricerca sulle batterie» con
   «approfondita», «analizzando», che stanno anche nei risultati degli agenti);
@@ -550,6 +553,18 @@ attacchi nuovi** del § 6.2 fermati con l'interruttore spento e acceso; **il ban
 `prova_politica` invariata 99/99. **Rigioco a secco** dei casi veri del 07/10 (volume dopo il meteo,
 tre ricerche chieste a voce dopo un lavoro dell'agente): 4 domande con l'interruttore spento, 0
 acceso, tutto eseguito.
+
+Misura con gemma4 e4b locale (`scratchpad/sv-script/misura_valore.py`, 2 giri, la storia dei casi
+veri con nomi di fantasia; nel registro le stesse regole):
+
+| Caso | main | ramo, spenta | ramo, accesa |
+|---|---|---|---|
+| 18:52, «Voglio che approvi la nuova versione» ×3 dopo la domanda | 4 domande, mai eseguita | 1 domanda, eseguita al 2º–3º turno | 1 domanda, eseguita al 2º–4º turno |
+| luce chiesta, «sì», il tool fallisce, «Riprova.» ×2 | 3 domande | 1 domanda, poi `intento_confermato` | 0 domande |
+| volume dopo il meteo; ricerca dopo un lavoro dell'agente | 1 + 1 domande | 1 + 1 (ombra: `esegui`) | 0 + 0 |
+
+`prova_politica_ollama 1` sul ramo: 6 casi, 1 tentativo d'azione del modello, **0 azioni
+eseguite**, 5 frasi fermate da riferire.
 
 **Come leggere l'ombra dopo due giorni** (sulla DGX, `calliope stato --turni --giorni 2`): la riga
 «in ombra» di ogni giorno dice le chiamate con un dato di mezzo, quante decisioni sono diverse, le
