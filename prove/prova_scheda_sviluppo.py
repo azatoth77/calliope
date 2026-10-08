@@ -158,11 +158,13 @@ def main() -> int:
                      log=lambda m: None)
     l3 = lavoro("L3", 70000, 26, 0, time.time() - 2400, giro=2, stato="in_corso", attesa=300)
     l3.fine = None
+    l3.token0 = 50000          # i token del primo giro
     ist = av._istantanea(_Segue(l3), False)
-    verifica("giro 2: passate 48, minuti 60, token 300 000 (cumulativi)",
+    verifica("giro 2: passate 48 e minuti 60 (cumulativi), token del giro su 150 000 (fisso)",
              ist["giro"] == 2 and ist["max_passate"] == 48 and ist["max_s"] == 3600
-             and ist["max_token"] == 300000, json.dumps({k: ist[k] for k in (
-                 "giro", "max_passate", "max_s", "max_token")}))
+             and ist["max_token"] == 150000 and ist["token_giro"] == 20000
+             and ist["token"] == 70000, json.dumps({k: ist[k] for k in (
+                 "giro", "max_passate", "max_s", "max_token", "token_giro", "token")}))
     verifica("il tempo continua a contare oltre i 30 minuti (l'attesa non conta)",
              1990 < ist["trascorso_s"] < 2110 and ist["dal"], ist["trascorso_s"])
     l1 = lavoro("L8", 10, 1, 0, time.time() - 60, stato="in_corso")

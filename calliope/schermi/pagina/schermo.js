@@ -2277,11 +2277,15 @@
     barra("Tempo", tr, av.max_s, durata(tr) + " di " + Math.round(av.max_s / 60) + " min al massimo",
       vivo && av.dal ? av.dal : null);
     barra("Passate", av.passate || 0, av.max_passate, (av.passate || 0) + " di " + av.max_passate + " al massimo");
-    barra("Token", av.token || 0, av.max_token,
-      (av.token || 0).toLocaleString("it-IT") + " di " + (av.max_token || 0).toLocaleString("it-IT") + " al massimo");
-    // Dal 08/10: i tetti sono per giro e cumulativi (al giro 2 di uno sviluppo il doppio), i
-    // token sono quelli generati, ragionamento compreso
-    if ((av.giro || 1) > 1) g.append(el("p", "tetti-nota", "Giro " + av.giro + ": i massimi sono quelli di " + av.giro + " giri."));
+    // I token (08/10, decisione di Dario): la barra è quella del giro sul tetto di un giro, che
+    // non cresce; il totale del lavoro a parte. Sono quelli generati, ragionamento compreso
+    const giro2 = (av.giro || 1) > 1;
+    const tg = giro2 && av.token_giro != null ? av.token_giro : (av.token || 0);
+    barra(giro2 ? "Token del giro" : "Token", tg, av.max_token,
+      tg.toLocaleString("it-IT") + " di " + (av.max_token || 0).toLocaleString("it-IT") + " al massimo");
+    // Passate e minuti sono cumulativi (al giro 2 di uno sviluppo il doppio)
+    if (giro2) g.append(el("p", "tetti-nota", "Giro " + av.giro + ": passate e minuti sono quelli di "
+      + av.giro + " giri; " + (av.token || 0).toLocaleString("it-IT") + " token in tutto il lavoro."));
     return g;
   }
 

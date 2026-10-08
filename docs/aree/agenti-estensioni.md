@@ -1116,14 +1116,15 @@ senza dire niente dello sviluppo.
 
 Decisioni (08/10):
 
-- **Tetti per giro, cumulativi** (`Avanzamento._istantanea`): al giro N il massimo mostrato è N
-  volte quello di un giro (passate 24 → 48 → 72, minuti 30 → 60 → 90, token 150 000 → 300 000),
-  come i conti, che sono del lavoro intero; il motore dà a ogni giro di nuovo tutto
-  (`ciclo._tetti`), quindi il massimo mostrato è un limite superiore onesto (un giro finito prima
-  dei suoi 30 minuti lascia la barra del tempo sotto). Il tempo continua a contare (`dal`), senza
-  l'attesa di una risposta. La scheda dice «giro 2» e «i massimi sono quelli di 2 giri». Per i
-  token Dario aveva detto che restare al massimo andava bene: con i tetti cumulativi il token
-  resta la stessa barra (generati su massimo), solo il massimo cresce col giro come gli altri.
+- **Tetti per giro, cumulativi per passate e minuti** (`Avanzamento._istantanea`): al giro N il
+  massimo mostrato è N volte quello di un giro (passate 24 → 48 → 72, minuti 30 → 60 → 90), come
+  i conti, che sono del lavoro intero; il motore dà a ogni giro di nuovo tutto (`ciclo._tetti`).
+  Il tempo continua a contare (`dal`), senza l'attesa di una risposta. La scheda dice «giro 2».
+  *Storico (08/10, ramo):* anche il massimo dei token cresceva col giro (150 000 → 300 000).
+  **Decisione di Dario (08/10 sera):** il tetto dei token è un budget di spesa (token generati,
+  ragionamento compreso), non la finestra di contesto, e un massimo raddoppiato sembrava più
+  spazio all'agente: la barra mostra i token **del giro** (`token_giro`, da `token0`) sul tetto
+  di un giro, che resta 150 000, e la nota sotto dà il totale del lavoro.
 - **I numeri del lavoro in corso + quelli dello sviluppo intero**: `Sviluppo.lavori` registra
   ogni lavoro dello sviluppo (id e istante di creazione: dopo un riavvio gli id ripartono da L1)
   con token, ragionamento, passate, secondi e giri, aggiornati a ogni lavoro finito;

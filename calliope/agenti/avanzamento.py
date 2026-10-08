@@ -10,8 +10,8 @@ personale, come la scheda finale: hub.py decide i destinatari, mai nella zona gr
 - i file scritti finora (i nomi; per il codice un'anteprima breve dell'ultimo);
 - l'ultimo esito dei test;
 - passate, token e minuti rispetto ai tetti del lavoro: sono gli unici numeri onesti, una
-  percentuale di «quanto manca» non esiste. Dal 08/10 i tetti sono **per giro e cumulativi**:
-  al giro 2 di uno sviluppo (dopo una tappa) 48 passate, 60 minuti e due volte i token, e il
+  percentuale di «quanto manca» non esiste. Dal 08/10 i tetti sono **per giro**: al giro 2 di
+  uno sviluppo (dopo una tappa) 48 passate e 60 minuti, i token del giro su 150 000, e il
   tempo continua a contare (prima restava «di 30 min» con la barra piena);
 - il **flusso** dell'agente (08/10): il ragionamento, il testo, il codice negli argomenti di
   scrivi_file (vLLM), le chiamate agli strumenti con il loro esito in breve e un separatore a
@@ -547,8 +547,10 @@ class Avanzamento:
         except TypeError:
             passate, token, secondi = self.tetti()
         # Per giro (08/10): un lavoro di uno sviluppo continuato dopo una tappa ha di nuovo
-        # tutte le passate, il tempo e i token (ciclo._tetti): i tetti mostrati sono cumulativi,
-        # come i conti (passate, token e minuti del lavoro intero)
+        # tutte le passate, il tempo e i token (ciclo._tetti). Passate e minuti si mostrano
+        # cumulativi, come i conti del lavoro intero; i token no (decisione di Dario, 08/10):
+        # la barra è quella del giro sul tetto di un giro, che non cresce, e il totale del
+        # lavoro sta a parte, perché un «massimo» raddoppiato sembrava più spazio all'agente
         giro = max(1, int(getattr(lav, "giro", 1) or 1))
         ora = time.time()
         corre = lav.stato == "in_corso"
@@ -564,7 +566,8 @@ class Avanzamento:
               "test": dict(sg.test) if sg.test else None,
               "giro": giro,
               "passate": lav.passi, "max_passate": int(passate) * giro,
-              "token": lav.token, "max_token": int(token) * giro,
+              "token": lav.token, "max_token": int(token),
+              "token_giro": max(0, lav.token - int(getattr(lav, "token0", 0) or 0)),
               "ragionamento": int(getattr(lav, "ragionamento", 0) or 0),
               "trascorso_s": round(trascorso, 1), "max_s": round(float(secondi)) * giro,
               # da quando contare (epoch) se il lavoro corre: la pagina conta da sola
