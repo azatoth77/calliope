@@ -156,6 +156,43 @@ _SEGRETO = re.compile(
     r"della tariffa|offerta|contratto|" + _CODICE_PROGRAMMA + r"))|password|passw\w*|parol[ae] d'ordine|pin|otp|token|"
     r"credenzial\w*|cvv|cvc|dati della (tua )?carta|numero della (tua )?carta|"
     r"carta di credito|chiave (privata|di accesso|d'accesso|segreta))(?![a-zà-ù])", re.I)
+# «Codice» come lavoro di programmazione (08/10, DGX delle 17:09: «…l'agente avrà finito di
+# scrivere il codice» con lo sviluppo aperto, fermata come `uscita_segreti`): l'oggetto di un
+# verbo di chi programma (scrivere, correggere, sistemare, lavorare sul…), non di chi dà o
+# inserisce. Non vale con un segreto subito dopo («scrivere il codice ricevuto via SMS»), con
+# un'indicazione rivolta alla persona («devi scrivere il codice…») o con un imperativo
+# («scrivi il codice»): restano fermate (prova_politica, prova_riferire)
+_CODICE_LAVORO = re.compile(
+    r"(?<![a-zà-ù])(scriver\w*|scrivend\w*|scritt\w*|scrive|riscriver\w*|correg\w*|"
+    r"corrett\w*|sistem\w*|modific\w*|lavor\w*|rived\w*|rilegg\w*|ricontroll\w*|test\w*|"
+    r"aggiorn\w*|svilupp\w*)\s+(?:(?:ancora|tutto|bene|meglio|subito)\s+)?"
+    r"(?:il|al|sul|nel|del|dal|lo|questo|quel)\s+(?:(?:nuovo|suo|tuo|vostro|loro)\s+)?"
+    r"codic[ei](?![a-zà-ù])", re.I)
+_CODICE_SEGRETO_DOPO = re.compile(
+    r"^\s*(che (hai|ti è|ti hanno|ti arriva|ricevi|riceverai)|ricevut\w*|arrivat\w*|via |per sms|"
+    r"di (verifica|conferma|accesso|sicurezza|sblocco|attivazione)|otp|pin|segret\w*|"
+    r"della (tua )?carta|bancari\w*|temporane\w*)", re.I)
+_IMPERATIVO_CODICE = re.compile(r"(?<![a-zà-ù])(scrivi|correggi|sistema|modifica|riscrivi|"
+                                r"rileggi|aggiorna)\s+(il|lo|quel|questo)\s+codic", re.I)
+
+
+# «comunicalo», «dettaglielo», «inseriscilo»: il codice dato a qualcuno
+_DARLO = re.compile(r"(?<![a-zà-ù])(comunic|dett|mand|invi|inser|inseris|digit|scriv|fornisc|"
+                    r"condivid|rivel|ripet|incoll|copi|riferisc|da)[a-zà-ù]*?(l[oi]|gliel[oi])"
+                    r"(?![a-zà-ù])", re.I)
+
+
+def _codice_di_programma(t: str, m) -> bool:
+    """Il «codice» trovato da _SEGRETO è quello che un agente scrive (vedi _CODICE_LAVORO)."""
+    if not m.group(0).lower().startswith("codic"):
+        return False
+    if _DIRETTA.search(t) or _IMPERATIVO_CODICE.search(t) or _DARLO.search(t):
+        return False
+    if _CODICE_SEGRETO_DOPO.search(t[m.end():]):
+        return False
+    return any(lv.end() == m.end() for lv in _CODICE_LAVORO.finditer(t))
+
+
 _DARE = re.compile(
     r"(?<![a-zà-ù])(comunic|fornisc|fornir|forniscil|dett|dai |dar(e|gli|le|lo)|di'|dì|dic(i|endo|"
     r"ano)|dirgli|dirl|inser|digit|invi|mand|confer|scriv|legg|condivid|rivel|dimm|riferisc|"
@@ -438,7 +475,7 @@ def giudica(frase: str, ctx: Contesto, solo_gravi: bool = False) -> Giudizio:
             return Giudizio("uscita_numero_pagamento",
                             _dal_dato(ctx, n, _cifre) or ctx.fonte(), n)
     # 2. Codici, password, PIN da dare: se la persona non ne ha parlato
-    m = _SEGRETO.search(t)
+    m = next((x for x in _SEGRETO.finditer(t) if not _codice_di_programma(t, x)), None)
     if m and (_DARE.search(t) or _DIRETTA.search(t)) and not _SEGRETO.search(persona):
         return Giudizio("uscita_segreti", ctx.fonte(), m.group(0))
     # 3. Soldi: IBAN, carte regalo, criptovalute; un pagamento verso un conto detto come ordine
