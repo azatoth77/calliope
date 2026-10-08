@@ -1181,6 +1181,26 @@ class Config:
     # (sviluppo_chiedi): una passata del modello dell'agente in sola lettura, con il contesto
     # dello sviluppo; dopo tanti secondi senza risposta lo si dice e si propone la correzione
     sviluppo_chiedi_s: float = 60.0
+    # Ricollaudo alla consegna (08/10, docs/ricerche/2026-10-08-sonde-agente.md § 9.3): quando
+    # l'agente consegna una correzione (o un lavoro ripartito dall'analisi dopo i collaudi),
+    # prima di dire «è pronto» Calliope esegue la versione nuova con i collaudi della persona
+    # che non andavano (gli ultimi, uno per dato distinto, al più sviluppo_ricollaudo_max), una
+    # volta per lavoro, con il manifesto ristretto alla sola lettura di rete verso gli host già
+    # noti e senza conferme; se un caso non va ancora, la consegna torna all'agente con la
+    # traccia. false = come prima
+    sviluppo_ricollaudo: bool = True
+    sviluppo_ricollaudo_max: int = 3
+    # Sonde dell'agente nelle correzioni (§ 9.4, sonda_rete al posto di scarica_esempio): GET
+    # vere fatte da Calliope solo verso gli host noti dello sviluppo (manifesto approvato, host
+    # che hanno risposto in un collaudo, concessi con chiedi_permesso) e con i soli valori del
+    # caso (specifica, collaudi, traccia; numeri e date). Sonde per lavoro (0 = spente: resta
+    # scarica_esempio), per passata del modello, per sviluppo in un giorno; byte e secondi
+    # massimi di una risposta
+    sviluppo_sonde_max: int = 4
+    sviluppo_sonde_passata: int = 2
+    sviluppo_sonde_giorno: int = 12
+    sviluppo_sonda_kb: int = 256
+    sviluppo_sonda_s: float = 8.0
     # I file della persona dati all'agente (03/10, «correggi lo script backup.py»): solo
     # testo, codice, Word, Excel e PDF, al più tanti MB; del testo di un documento l'agente
     # legge al più tanti caratteri
@@ -1377,6 +1397,15 @@ class Config:
     # Reti che l'agente non legge mai, oltre a quelle private e locali (sempre vietate): la
     # rete dell'ufficio se ha indirizzi pubblici, in notazione CIDR («203.0.113.0/24»)
     web_reti_vietate: list[str] = field(default_factory=list)
+    # Nomi e indirizzi pubblici di casa (08/10, sonde dell'agente § 2.4): il nome DuckDNS e
+    # l'IP pubblico del router risolvono a un indirizzo «pubblico», e con un inoltro di porta
+    # una richiesta di un'estensione o dell'agente tornerebbe dentro casa. Qui i nomi e gli IP
+    # da trattare come rete di casa (es. «casa-mia.duckdns.org»: il valore vero va in
+    # calliope.locale.yaml). In più valgono da soli i nomi già nella configurazione
+    # (casa_tls_nome, l'host di casa_url, di satellite_server, degli altri *_url e
+    # schermi_nomi). Ogni nome si risolve al momento della richiesta (al più ogni minuto) e
+    # una richiesta verso uno di quegli indirizzi si ferma (regola rete_casa_pubblica)
+    web_nomi_casa: list[str] = field(default_factory=list)
 
     # Rete (principio 5): se False, i tool con requires_internet spariscono dall'elenco
     online: bool = True
@@ -2297,7 +2326,9 @@ SEZIONI: dict[str, list[str]] = {
                "agenti_attesa_risposta_min", "agenti_file_max_mb", "agenti_file_caratteri",
                "agenti_esempi_max", "agenti_esempio_kb", "agenti_interrotti_annuncio_h",
                "sviluppo_enabled", "sviluppo_sospendi_min", "sviluppo_promemoria",
-               "sviluppo_programma_righe", "sviluppo_chiedi_s"],
+               "sviluppo_programma_righe", "sviluppo_chiedi_s", "sviluppo_ricollaudo",
+               "sviluppo_ricollaudo_max", "sviluppo_sonde_max", "sviluppo_sonde_passata",
+               "sviluppo_sonde_giorno", "sviluppo_sonda_kb", "sviluppo_sonda_s"],
     "estensioni": ["estensioni_enabled", "estensioni_cartella", "estensioni_max_attive",
                    "estensioni_attesa_s", "estensioni_conferma_s", "estensioni_tempo_max_s",
                    "estensioni_memoria_max_mb", "estensioni_secondo_parere",
@@ -2313,7 +2344,7 @@ SEZIONI: dict[str, list[str]] = {
     "web": ["web_enabled", "web_searxng_url", "web_livello", "web_max_minuto", "web_risultati",
             "web_timeout_s", "web_lingua", "web_dati_privati", "web_pagina_max_kb",
             "web_pagina_timeout_s", "web_pagina_caratteri", "web_agente_ricerche",
-            "web_agente_pagine", "web_reti_vietate"],
+            "web_agente_pagine", "web_reti_vietate", "web_nomi_casa"],
     "segreti": ["segreti_file"],
     "registro": ["turn_log_dir", "turn_log_days", "latenza_avviso_s", "attrito_avviso",
                  "debug_audio_dir"],
@@ -2488,6 +2519,9 @@ LIMITI: dict[str, tuple[float, float]] = {
     "agenti_num_ctx": (2048, 1_048_576), "agenti_contesti_paralleli": (1, 64),
     "sviluppo_sospendi_min": (0.0, 1440.0), "sviluppo_programma_righe": (10, 100_000),
     "sviluppo_chiedi_s": (5.0, 600.0),
+    "sviluppo_ricollaudo_max": (1, 10), "sviluppo_sonde_max": (0, 20),
+    "sviluppo_sonde_passata": (1, 10), "sviluppo_sonde_giorno": (0, 200),
+    "sviluppo_sonda_kb": (1, 4096), "sviluppo_sonda_s": (1.0, 60.0),
     "agenti_token_passata": (512, 262_144), "agenti_ragionamento_passata": (0, 262_144),
     "agenti_soglia_file": (0.1, 0.95), "agenti_passi_intatti": (1, 20),
     "agenti_analisi_s": (1.0, 60.0),

@@ -339,6 +339,59 @@ class Estensioni:
             out[CHIAVE_TRACCIA] = list(es.traccia)
         return out
 
+    def prova_bozza(self, cartella, manifesto: dict, argomenti: dict, origine: dict,
+                    attesa_s: float | None = None) -> dict:
+        """Il ricollaudo alla consegna (08/10 notte, docs/ricerche/2026-10-08-sonde-agente.md
+        § 9.3, calliope/sonde.py): la versione appena consegnata dall'agente (i file in
+        `cartella`, una copia fatta da chi chiama) gira nel container vero, con la porta e il
+        guardrail di un'estensione attiva ma con `manifesto` già ristretto
+        (`manifesto.restringi_per_sonda`) e in modo «ricollaudo» (niente conferme). `origine`:
+        {"lavoro", "sviluppo", "persona", "persona_nome"}. {"ok", "stato", "risultato" o
+        "errore", "traccia"}; {"saltato": perché} se non può partire."""
+        if not self.pronto():
+            return {"saltato": "il contenitore delle estensioni non è pronto"}
+        with self._lock:
+            attive = [e for e in self.esecuzioni.values() if e.stato in ("in_corso",
+                                                                         "in_attesa")]
+            if len(attive) >= MAX_ESECUZIONI:
+                return {"saltato": "troppe esecuzioni in corso"}
+            self._n += 1
+            ident = f"E{self._n}"
+        argomenti = _ripulisci(argomenti, manifesto)
+        es = Esecuzione(ident, manifesto.get("nome", "bozza"), 0, manifesto, Path(cartella),
+                        argomenti, persona=origine.get("persona"),
+                        persona_nome=origine.get("persona_nome"), livello="familiare",
+                        isolamento=self.isolamento, porta=self.porta,
+                        conferma_s=self.conferma_s, log=self.log)
+        es.modo = "ricollaudo"
+        es.lavoro, es.sviluppo = origine.get("lavoro"), origine.get("sviluppo")
+        if self._riservati_in(argomenti):
+            # Come per un'esecuzione vera: niente rete con un dato riservato negli argomenti
+            es.storia.contamina("conversazione")
+        with self._lock:
+            self.esecuzioni[ident] = es
+        es.avvia()
+        stato = es.attendi(attesa_s if attesa_s is not None
+                           else es.tempo_s + es.avvio_s + 5)
+        if stato in ("in_corso", "in_attesa"):
+            es.annulla()
+            stato = "errore"
+            es.errore = es.errore if es.errore and es.errore != "annullata" else "tempo scaduto"
+        # Il processo del container finisce prima che la cartella si tolga (Windows la tiene
+        # aperta finché il processo vive)
+        proc = getattr(es, "_proc", None)
+        if proc is not None:
+            try:
+                proc.wait(timeout=10)
+            except Exception:  # noqa: BLE001 — la cartella resta, il risultato no
+                pass
+        out = {"stato": stato, "traccia": list(es.traccia), "decisioni": len(es.decisioni)}
+        if stato == "finita":
+            out.update(ok=True, risultato=self._ripulisci_testi(es.risultato or {}))
+        else:
+            out.update(ok=False, errore=str(es.errore or stato)[:300])
+        return out
+
     def _esecuzione(self, ctx, nome: str, n: int, m: dict, argomenti: dict):
         """Avvia l'esecuzione della versione `n` con il manifesto `m`: l'Esecuzione, o il
         rifiuto da dire (troppe esecuzioni insieme)."""

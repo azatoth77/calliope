@@ -163,6 +163,11 @@ def chiamata_breve(nome: str, args) -> str:
     """La chiamata a uno strumento detta in breve: il nome e gli argomenti che dicono cosa
     (percorso, domanda, indirizzo), mai il contenuto di un file."""
     a = args if isinstance(args, dict) else {}
+    if nome == "sonda_rete":
+        # Una sonda (08/10 notte, calliope/sonde.py): l'URL ripulito come nella traccia, mai
+        # quello grezzo
+        from ..estensioni.porta import url_per_traccia
+        return _breve("sonda · " + url_per_traccia(a.get("url")), 160)
     cosa = ""
     for k in ("percorso", "cartella", "domanda", "url", "query", "esito", "capacita_necessarie"):
         if a.get(k):
@@ -181,6 +186,14 @@ def esito_breve(nome: str, r) -> str:
         if isinstance(r, list):
             return f"{len(r)} risultati"
         return _breve(r)
+    if nome == "sonda_rete":
+        if r.get("errore"):
+            return _breve("rifiutata: " + str(r["errore"]).replace("sonda non fatta: ", ""))
+        letto = r.get("come_l_ha_letto_il_server") or {}
+        primo = next(iter(letto.items()), None)
+        return _breve((f"stato {r.get('stato')}, {r.get('byte', 0)} byte" if r.get("stato") == 200
+                       else f"errore del sito: {r.get('errore_del_sito') or ''}")
+                      + (f" · il server ha letto {primo[0]} = «{primo[1]}»" if primo else ""))
     if r.get("errore"):
         return _breve(f"errore: {r['errore']}")
     if nome == "scrivi_file":

@@ -144,6 +144,11 @@ class Lavoro:
     input: dict | None = None         # {"nome", "estensione", "dati", "percorso"}: la copia
     input_testo: str = ""             # il suo testo, per i lavori che non sono codice
     esempi: int = 0                   # pagine d'esempio scaricate (scarica_esempio, 05/10)
+    # ── sonde e ricollaudo (08/10 notte, calliope/sonde.py) ──
+    sonde: int = 0                    # sonde fatte (sonda_rete) in questo lavoro
+    host_concessi: list = field(default_factory=list)   # host concessi con chiedi_permesso
+    ricollaudo_fatto: bool = False    # il ricollaudo alla consegna è già stato fatto
+    ricollaudo: dict = field(default_factory=dict)      # il suo esito (frase «è pronto»)
     input_pronto: threading.Event = field(default_factory=threading.Event)
     input_errore: str = ""
     # ── avanzamento sugli schermi (03/10, avanzamento.py) ──
@@ -270,6 +275,8 @@ ESEGUI_CSHARP = _fn(
 # «il modello non usa gli strumenti»). La pagina la scarica Calliope (calliope/web/rete.py:
 # solo internet pubblico, con il registro delle uscite) e la salva nella cartella come dato di
 # prova; i test del parser la leggono da lì, offline. Mai con dati personali nel lavoro.
+from ..sonde import SONDA_RETE  # noqa: E402 — lo strumento delle sonde (08/10 notte)
+
 SCARICA_ESEMPIO = _fn(
     "scarica_esempio", "Scarica una pagina pubblica di internet (HTML, JSON, CSV, XML, testo) "
     "e la salva nella cartella come esempio, per scrivere e provare un parser: i test la "
@@ -595,6 +602,9 @@ class Agente:
         # La condivide il servizio delle estensioni (stesso tetto, stesso registro); senza, se
         # ne fa una al primo uso
         self.rete = None
+        # Gli sviluppi (calliope/sviluppo.py, 08/10 notte): le sonde di una correzione vanno
+        # solo verso gli host noti dello sviluppo del lavoro. Lo imposta load_agenti
+        self.sviluppi = None
         self.modelli = modelli or {}
         self.stesso = stesso_ollama
         self.max_passi = int(getattr(cfg, "agenti_max_passi", 24))
@@ -958,6 +968,13 @@ class Agente:
                 # La risposta a chiedi_permesso: la decisione vera resta di chi approva
                 # l'estensione (la scheda di revisione la mostra con la risposta)
                 chiesti[-1]["risposta"] = str(lav.risposta)[:300]
+                # Un «sì» a un host di rete: diventa noto per le sonde (08/10 notte)
+                try:
+                    from ..sonde import concedi
+                    svs, sv, _ = self._sviluppo_di(lav)
+                    concedi(svs, sv, lav, chiesti[-1].get("scope"), lav.risposta, self.log)
+                except Exception as e:  # noqa: BLE001 — le sonde non fermano il lavoro
+                    self.log(f"[AGENTI] {lav.id}: host concessi non registrati: {e}")
                 extra = ("\nSe ha detto di sì, quel permesso entra nel piano: mettilo nel "
                          "manifesto. Se ha detto di no, fai senza, oppure chiama piano con "
                          "fattibile=false e un'alternativa.")
@@ -969,6 +986,11 @@ class Agente:
             user = f"Compito: {lav.compito.strip()}"
             if lav.vincoli:
                 user += f"\nVincoli: {lav.vincoli.strip()}"
+            if esempi and self._sonde_ok(lav) is None:
+                # I siti noti e le sonde (08/10 notte, sonde.py § 9.5)
+                from ..sonde import riga_vincoli
+                svs, sv, arch = self._sviluppo_di(lav)
+                user += " " + riga_vincoli(self.cfg, sv, arch, lav)
             if lav.dati:
                 user += f"\nDalla conversazione con chi lo chiede:\n{lav.dati_testo()}"
             files = sandbox.elenca()
@@ -1009,8 +1031,13 @@ class Agente:
             strumenti = strumenti_codice(self._linguaggi(sandbox))
             if piano:
                 strumenti = [PIANO, CHIEDI_PERMESSO] + strumenti
-            if esempi and self._esempi_ok(lav) is None:
-                strumenti = strumenti + [SCARICA_ESEMPIO]
+            if esempi:
+                # Nelle correzioni di uno sviluppo (08/10 notte) sonda_rete al posto di
+                # scarica_esempio: GET solo verso gli host noti, con i valori del caso
+                if self._sonde_ok(lav) is None:
+                    strumenti = strumenti + [SONDA_RETE]
+                elif self._esempi_ok(lav) is None:
+                    strumenti = strumenti + [SCARICA_ESEMPIO]
             gc.imposta_finestra(self.num_ctx())
             self._avviso_fine(lav, messages, "codice")
             gc.prima_della_passata(messages, strumenti, elenco_file=sandbox.elenca,
@@ -1430,7 +1457,13 @@ class Agente:
                                               args.get("argomenti") or [],
                                               None if inp in (None, "") else str(inp)))
             if name == "scarica_esempio":
+                if self._sonde_ok(lav) is None:
+                    # In una correzione si sonda, non si scarica (08/10 notte)
+                    return {"errore": "in una correzione scarica_esempio non c'è: usa "
+                                      "sonda_rete verso i siti già usati"}
                 return self._scarica_esempio(lav, sandbox, args)
+            if name == "sonda_rete":
+                return self._sonda_rete(lav, args)
             if name == "esegui_test":
                 lav.passo = "prova il codice con i test"
                 r = sandbox.test(args.get("percorso") or None)
@@ -1444,6 +1477,43 @@ class Agente:
             return {"errore": str(e)}
         except Exception as e:  # noqa: BLE001 — l'errore torna all'agente, non ferma il lavoro
             return {"errore": f"{type(e).__name__}: {e}"}
+
+    # ── sonde (08/10 notte, calliope/sonde.py) ──
+    def _sviluppo_di(self, lav: Lavoro):
+        """(Sviluppi, lo sviluppo del lavoro o None, l'archivio delle estensioni o None)."""
+        svs = getattr(self, "sviluppi", None)
+        if svs is None:
+            return None, None, None
+        try:
+            sv = svs.di_lavoro(lav.id, lav.persona, chiusi=True)
+        except Exception:  # noqa: BLE001
+            sv = None
+        est = getattr(getattr(svs, "lavori", None), "estensioni", None)
+        return svs, sv, getattr(est, "archivio", None)
+
+    def _sonde_ok(self, lav: Lavoro) -> str | None:
+        """None se il lavoro ha sonda_rete (al posto di scarica_esempio), o il perché no."""
+        from ..sonde import sonde_ok
+        svs, sv, arch = self._sviluppo_di(lav)
+        if svs is None:
+            return "niente sviluppi"
+        try:
+            return sonde_ok(self.cfg, lav, sv, arch)
+        except Exception as e:  # noqa: BLE001 — nel dubbio niente sonde
+            return f"controllo non riuscito: {e}"
+
+    def _sonda_rete(self, lav: Lavoro, args: dict) -> dict:
+        from ..sonde import sonda
+        perche = self._sonde_ok(lav)
+        if perche:
+            return {"errore": f"sonde non disponibili: {perche}"}
+        if self.rete is None:
+            from ..estensioni import cartella
+            from ..web.rete import RetePubblica
+            self.rete = RetePubblica(self.cfg, cartella(self.cfg) / "uscite.jsonl", log=self.log)
+        svs, sv, arch = self._sviluppo_di(lav)
+        lav.passo = "verifica un'ipotesi con una richiesta vera"
+        return sonda(self.cfg, self.rete, svs, sv, lav, args, arch, log=self.log)
 
     # ── pagine d'esempio (05/10) ──
     def _esempi_ok(self, lav: Lavoro) -> str | None:
@@ -1534,12 +1604,16 @@ class Agente:
                                "rete_leggi; l'estensione vera la chiederà con "
                                "calliope.rete_leggi(url). Per esplorarla usa esegui_python "
                                "(BeautifulSoup c'è), non leggi_file: è lunga.")}
+        # Il testo del sito in busta, come ogni dato non fidato (08/10 notte, sonde § 9.6)
+        from ..provenienza import racchiudi
+        from ..web.rete import _host
         if ext == ".html":
             titolo, estratto = pagina.estrai_testo(testo, tipo, max_caratteri=1500)
-            out.update(titolo=titolo, tabelle=testo.lower().count("<table"),
-                       moduli=testo.lower().count("<form"), anteprima=estratto)
+            out.update(tabelle=testo.lower().count("<table"),
+                       moduli=testo.lower().count("<form"),
+                       anteprima=racchiudi("web", estratto, titolo=titolo or _host(url)))
         else:
-            out["anteprima"] = testo[:1500]
+            out["anteprima"] = racchiudi("web", testo[:1500], titolo=_host(url))
         return out
 
     # ── contesto del lavoro (05/10) ──

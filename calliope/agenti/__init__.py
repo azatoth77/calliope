@@ -67,6 +67,9 @@ def load_agenti(cfg, on_done=None, biblioteca=None, formati=("word", "excel", "p
             from ..sviluppo import Sviluppi
             from .servizio import cartella_sandbox
             svc.sviluppi = Sviluppi(cfg, cartella_sandbox(cfg), svc, log=log)
+            # Le sonde delle correzioni (08/10 notte, calliope/sonde.py): l'agente trova lo
+            # sviluppo del lavoro e i suoi host noti
+            svc.agente.sviluppi = svc.sviluppi
         except Exception as e:  # noqa: BLE001 — senza, i lavori vanno come prima
             log(f"[SVILUPPO] non disponibile: {type(e).__name__}: {e}")
     capacita.REGISTRO.da_dict(capacita.check_agenti(cfg, svc))

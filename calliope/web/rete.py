@@ -15,6 +15,11 @@ con dei tetti, e che resti scritta.
   suo Ollama su 0.0.0.0 sarebbe «pubblico») e `web_reti_vietate`.
 - Un tetto al minuto per tutto il processo (`estensioni_rete_max_minuto`): un'estensione o un
   agente impazzito non diventa un generatore di traffico dall'IP dell'ufficio.
+- I **nomi pubblici di casa** (08/10, docs/ricerche/2026-10-08-sonde-agente.md § 2.4 e 9.6): il
+  nome DuckDNS di casa e l'IP pubblico del router sono «internet pubblico», e con un inoltro di
+  porta una richiesta tornerebbe dentro casa. Sono vietati i nomi di `web_nomi_casa` e quelli
+  già nella configurazione (`nomi_casa`), e ogni nome che risolve a uno dei loro indirizzi,
+  risolti al momento della richiesta (al più ogni `CASA_TTL_S`): regola `rete_casa_pubblica`.
 - Il **registro delle uscite** (`uscite.jsonl` nella cartella delle estensioni): una riga per
   richiesta, fatta o bloccata, con chi (estensione e versione, o lavoro dell'agente), persona,
   host, metodo, byte, esito e motivo. Mai il percorso né la query (potrebbero contenere dati):
@@ -31,6 +36,13 @@ import time
 from pathlib import Path
 
 from . import pagina
+
+# Ogni quanto si risolvono di nuovo i nomi pubblici di casa (DuckDNS cambia indirizzo)
+CASA_TTL_S = 60.0
+# I campi della configurazione con un indirizzo di un servizio di casa o di Calliope, oltre a
+# quelli che finiscono in «_url»
+CAMPI_CASA = ("casa_tls_nome", "satellite_server", "schermi_nomi", "web_nomi_casa")
+REGOLA_CASA = "rete_casa_pubblica"
 
 TIPI_DATI = ("text/html", "application/xhtml+xml", "text/plain", "application/json",
              "text/csv", "application/xml", "text/xml", "application/rss+xml",
@@ -49,6 +61,55 @@ def indirizzi_propri() -> list[str]:
         except OSError:
             continue
     return out
+
+
+def _nome_di(valore) -> str:
+    """L'host di un valore della configurazione: un URL («wss://casa.esempio.org:8771»), un
+    nome, un IP (anche «[::1]»); "" se non c'è."""
+    from urllib.parse import urlsplit
+    v = str(valore or "").strip()
+    if not v:
+        return ""
+    try:
+        h = urlsplit(v if "://" in v else "//" + v).hostname or ""
+    except ValueError:
+        return ""
+    return h.rstrip(".").lower()
+
+
+def nomi_casa(cfg, eccezioni=frozenset()) -> tuple[list[str], list[str]]:
+    """(nomi, ip) pubblici di casa e di Calliope dalla configurazione: `web_nomi_casa` e i
+    campi che hanno un indirizzo di un servizio di casa (`CAMPI_CASA` e ogni «*_url»). Restano
+    fuori i nomi locali e gli IP privati, già vietati sempre (`eccezioni`: solo per le prove)."""
+    import ipaddress
+    valori = []
+    if cfg is not None:
+        try:
+            from dataclasses import fields
+            campi = [f.name for f in fields(cfg)]
+        except TypeError:
+            campi = [k for k in vars(cfg)]
+        for nome in campi:
+            if nome.endswith("_url") or nome in CAMPI_CASA:
+                v = getattr(cfg, nome, None)
+                valori += list(v) if isinstance(v, (list, tuple)) else [v]
+    nomi, ips = [], []
+    for v in valori:
+        h = _nome_di(v)
+        if not h:
+            continue
+        try:
+            ipaddress.ip_address(h)
+            if not pagina.indirizzo_vietato(h, eccezioni=eccezioni) and h not in ips:
+                ips.append(h)
+            continue
+        except ValueError:
+            pass
+        if h == "localhost" or "." not in h or h.endswith(pagina._NOMI_LOCALI):
+            continue
+        if h not in nomi:
+            nomi.append(h)
+    return nomi, ips
 
 
 class RetePubblica:
@@ -70,6 +131,10 @@ class RetePubblica:
         vietate += [ip for ip in indirizzi_propri()
                     if not pagina.indirizzo_vietato(ip)]           # solo quelli pubblici
         self.vietate = pagina.reti(vietate)
+        # I nomi pubblici di casa (08/10): i nomi, gli IP scritti e quelli risolti dai nomi
+        self.casa_nomi, self.casa_ip = nomi_casa(cfg, self.eccezioni)
+        self._casa_risolti: set[str] = set()
+        self._casa_t = float("-inf")
         self._lock = threading.Lock()
         self._ultime: collections.deque = collections.deque()
         # I dati riservati di casa (web/riservati.py, 05/10): nessuna richiesta li porta fuori,
@@ -104,6 +169,13 @@ class RetePubblica:
             self.registra(origine, host, metodo, "bloccata", "url_non_codificato",
                           inviati=inviati)
             raise pagina.PaginaVietata(rotto)
+        casa = self._di_casa(host)
+        if casa:
+            self.registra(origine, host, metodo, "bloccata", f"{REGOLA_CASA}: {casa}",
+                          inviati=inviati)
+            self.log(f"[RETE] richiesta verso un indirizzo pubblico di casa fermata "
+                     f"({REGOLA_CASA}, {(origine or {}).get('origine') or '?'})")
+            raise pagina.PaginaVietata("indirizzo pubblico di casa: da qui non si raggiunge")
         trovati = self._riservati(url, corpo, origine)
         if trovati:
             self.registra(origine, host, metodo, "bloccata",
@@ -120,9 +192,11 @@ class RetePubblica:
         avv = {"avviso": doppia.partition(":")[0]} if doppia else {}
         t0 = time.monotonic()
         try:
-            r = self._scarica(url, max_byte=max_byte, timeout_s=timeout_s, vietate=self.vietate,
+            r = self._scarica(url, max_byte=max_byte, timeout_s=timeout_s,
+                              vietate=self.vietate + pagina.reti(self._ip_casa()),
                               eccezioni=self.eccezioni, porte=self.porte,
-                              risolutore=self.risolutore, tipi=tipi, metodo=metodo, corpo=corpo,
+                              risolutore=self._risolutore_casa, tipi=tipi, metodo=metodo,
+                              corpo=corpo,
                               host_ammesso=host_ammesso, max_rimandi=max_rimandi,
                               contesto_tls=self.contesto_tls)
         except pagina.PaginaVietata as e:
@@ -138,6 +212,55 @@ class RetePubblica:
                       ms=int((time.monotonic() - t0) * 1000), **avv,
                       **({"host_finale": finale} if finale != host else {}))
         return r
+
+    # ── nomi pubblici di casa (08/10) ──
+    def _ip_casa(self) -> set[str]:
+        """Gli indirizzi pubblici di casa: quelli scritti e quelli dei nomi, risolti di nuovo
+        se sono più vecchi di CASA_TTL_S (un nome che non si risolve tiene gli ultimi)."""
+        if not self.casa_nomi:
+            return set(self.casa_ip)
+        ora = time.monotonic()
+        with self._lock:
+            fresco = ora - self._casa_t < CASA_TTL_S
+        if not fresco:
+            nuovi = set()
+            for nome in self.casa_nomi:
+                try:
+                    info = (self.risolutore or socket.getaddrinfo)(nome, 443,
+                                                                   type=socket.SOCK_STREAM)
+                    nuovi |= {str(i[4][0]).split("%", 1)[0] for i in info}
+                except (OSError, UnicodeError, ValueError):
+                    continue
+            with self._lock:
+                if nuovi:
+                    self._casa_risolti = nuovi
+                self._casa_t = ora
+        with self._lock:
+            return set(self.casa_ip) | set(self._casa_risolti)
+
+    def _di_casa(self, host: str) -> str:
+        """"" o il perché: `host` è un nome pubblico di casa (o un suo sottodominio) o uno
+        dei suoi indirizzi scritto per esteso."""
+        h = str(host or "").strip("[]").rstrip(".").lower()
+        if not h:
+            return ""
+        if any(h == n or h.endswith("." + n) for n in self.casa_nomi):
+            return "nome di casa"
+        if (self.casa_ip or self.casa_nomi) and h in self._ip_casa():
+            return "indirizzo di casa"
+        return ""
+
+    def _risolutore_casa(self, host, porta, type=0):
+        """Il risolutore di `pagina.scarica` (anche dopo ogni reindirizzamento): un nome di casa,
+        o un nome qualunque che porta a un indirizzo di casa (il dominio di chi attacca puntato
+        all'IP del router), si ferma con la regola nel motivo."""
+        if self._di_casa(host):
+            raise pagina.PaginaVietata(f"{REGOLA_CASA}: nome pubblico di casa")
+        info = (self.risolutore or socket.getaddrinfo)(host, porta, type=type)
+        casa = self._ip_casa() if (self.casa_ip or self.casa_nomi) else set()
+        if casa and any(str(i[4][0]).split("%", 1)[0] in casa for i in info):
+            raise pagina.PaginaVietata(f"{REGOLA_CASA}: il nome porta a un indirizzo di casa")
+        return info
 
     def _riservati(self, url: str, corpo, origine: dict) -> list[str]:
         """I tipi di dato riservato nella richiesta, anche sommando i valori delle richieste
@@ -212,10 +335,11 @@ class RetePubblica:
 
 
 def riepilogo(registro, ore: float = 24) -> dict:
-    """{"richieste", "fatte", "bloccate", "byte_inviati", "byte_ricevuti", "host"} delle ultime
-    `ore` ore, letto dalla coda del registro (al più gli ultimi 2 MB)."""
+    """{"richieste", "fatte", "bloccate", "byte_inviati", "byte_ricevuti", "host", "sonde",
+    "ricollaudi"} delle ultime `ore` ore, letto dalla coda del registro (al più gli ultimi 2 MB).
+    Sonde e ricollaudi della modalità sviluppo (08/10 notte) contati anche a parte."""
     out = {"richieste": 0, "fatte": 0, "bloccate": 0, "byte_inviati": 0, "byte_ricevuti": 0,
-           "host": 0}
+           "host": 0, "sonde": 0, "ricollaudi": 0}
     p = Path(registro) if registro else None
     if p is None or not p.is_file():
         return out
@@ -236,6 +360,10 @@ def riepilogo(registro, ore: float = 24) -> dict:
         if not isinstance(d, dict) or str(d.get("quando") or "") < limite:
             continue
         out["richieste"] += 1
+        if d.get("origine") == "sonda":
+            out["sonde"] += 1
+        elif d.get("origine") == "ricollaudo":
+            out["ricollaudi"] += 1
         if d.get("esito") == "fatta":
             out["fatte"] += 1
         elif d.get("esito") == "bloccata":
