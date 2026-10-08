@@ -547,7 +547,7 @@ prima (`attiva: true`). Restano sempre: il dato letto in questa risposta, «fai 
 «sì» alla domanda, l'intenzione, la coerenza delle distruttive, il bersaglio che non c'è, la sfida,
 riferire, la quarantena, il livello, i minori.
 
-Prove (`prove/prova_valore.py`, ~2 s, livello 1; `prove/prova_attrito.py`): 104 controlli; **gli 8
+Prove (`prove/prova_valore.py`, ~2 s, livello 1; `prove/prova_attrito.py`): 108 controlli; **gli 8
 attacchi nuovi** del § 6.2 fermati con l'interruttore spento e acceso; **il banco di
 `prova_politica` con l'interruttore acceso** 99/99 (più valori riformulati e sfida dopo il dato);
 `prova_politica` invariata 99/99. **Rigioco a secco** dei casi veri del 07/10 (volume dopo il meteo,
