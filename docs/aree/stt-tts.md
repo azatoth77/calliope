@@ -427,3 +427,28 @@ satellite e server veri con un client finto, `voce.js` con node).
    atteso ~400 ms sulla latenza sentita (`fine_parlato_s`), al costo di trascrizioni buttate (da
    contare nel registro); su whisper.cpp della DGX ~0,15–0,3 s a frase. Prima serve la fase 1:
    con le pause misurate si sa quante partenze si annullerebbero.
+
+## Parole incerte: chiedere e imparare le correzioni (08/10, analisi)
+
+Rapporto: [`../ricerche/2026-10-08-parole-incerte.md`](../ricerche/2026-10-08-parole-incerte.md),
+misure con `prove/misura_parole_incerte.py` e `prove/riferimenti_nomi.tsv` (40 frasi con nomi di
+fantasia, tre voci di Piper). Nessuna modifica al codice.
+
+- **whisper.cpp**: la probabilità per parola è un buon segnale **sui nomi negli argomenti** (a 0,5
+  segnala 49 nomi sbagliati su 69 e 7 giusti su 39), non sulla frase intera (sulle 104 vere metà
+  delle parole segnalate è giusta). faster-whisper molto meno (21/65). Un errore su tre o quattro
+  ha p alta: le parole vere al posto di parole vere, «alla gente» per «all'agente» a 0,95–1,00,
+  «Luca» per Lucca a 0,84.
+- **Costo** del `verbose_json` sulla DGX: 0,222 → 0,372 s di mediana a ogni turno; con
+  `token_timestamps=false` uguale (0,365), probabilità identiche. faster-whisper con
+  `word_timestamps`: +0,04 s.
+- **Vocabolario dei nomi noti** sull'argomento (lettere, somiglianza ≥ 0,7): ritrova 44 nomi
+  sbagliati su 66 senza proposte sbagliate, qualunque sia la probabilità; sulle frasi intere darebbe
+  16 «forse intendevi» spurii su 104.
+- **Registro della DGX** (02–08/10): il 17,3 % dei turni ha un tool con un argomento che nomina
+  qualcosa, 3,9 ogni 100 con quel tool fallito, 1 ogni 100 con lo stesso tool richiamato entro tre
+  turni con il valore corretto.
+- **Raccomandazione**: F0 misura in ombra (`stt_argomento`, `correzione_argomento`, confidenza
+  chiesta solo per i turni con un tool che nomina), F1 «forse intendevi / ripetimelo» solo dopo un
+  esito vuoto, F2 scheda di correzione sullo schermo personale senza fermare il tool, F3 dizionario
+  per persona solo da correzioni confermate, come suggerimento e mai sostituzione nel testo.
