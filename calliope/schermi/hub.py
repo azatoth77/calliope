@@ -225,6 +225,9 @@ class Schermi:
         # «Scarica» nella scheda del documento (07/10, scarica.py): le schede scaricabili
         # arrivate a ogni schermo personale e i gettoni degli indirizzi
         self.scaricamenti = Scaricamenti(cfg)
+        # Il cassetto dei file per persona (08/10, calliope/cassetto.py), da main.py: None =
+        # /api/cassetto risponde 404
+        self.cassetto = None
 
     # ── configurazione ──
     @property

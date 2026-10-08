@@ -36,6 +36,10 @@ Indirizzi:
                                  da uno schermo personale a cui la scheda è arrivata
   GET  /scarica/<gettone>        il file (MD, PDF, Word, Excel), convertito qui al primo
                                  accesso; il gettone vale pochi minuti e poche richieste
+  POST /api/cassetto             «X-Calliope-Sessione», {azione: tieni|elimina|ancora, id: [..]}:
+                                 i pulsanti della scheda del cassetto dei file (08/10,
+                                 calliope/cassetto.py), solo da uno schermo personale e solo
+                                 sui file del suo proprietario
   GET  /satellite                il comando per un PC nuovo come satellite (satellite/web.py)
   /telefono/…                    la web app del telefono (telefono.py): pagina, modelli e il
                                  WebSocket del protocollo dei satelliti
@@ -574,6 +578,71 @@ def crea_app(hub: Schermi) -> Starlette:
         return Response(dati, media_type=tipo,
                         headers={**INTESTAZIONI, "Content-Disposition": disposizione(nome)})
 
+    # ── il cassetto dei file (08/10, calliope/cassetto.py) ──
+    pulsanti: dict[int, list[float]] = {}
+
+    async def cassetto(request: Request):
+        """I pulsanti della scheda del cassetto (Tieni, Elimina, Tieni ancora; Elimina tutti,
+        Tieni tutti): sessione in un'intestazione e corpo JSON (come lo scritto: nessuna pagina
+        di un altro sito li manda), solo in HTTPS fuori da questo computer, solo da uno schermo
+        personale e solo sui file del suo proprietario. Non serve una conversazione a voce: la
+        scheda è già sullo schermo del proprietario; e non c'è voce, quindi nemmeno la zona
+        grigia. Dopo, la scheda aggiornata a tutti i suoi schermi personali."""
+        cas = getattr(hub, "cassetto", None)
+        if cas is None:
+            return _json({"errore": "cassetto spento"}, 404)
+        client = request.client.host if request.client else ""
+        if request.url.scheme != "https" and client not in ("127.0.0.1", "::1"):
+            return _json({"errore": "solo in HTTPS"}, 403)
+        sess = request.headers.get("x-calliope-sessione", "")
+        with lock:
+            sid = sessioni.get(sess) if sess else None
+        schermo = next((s for s in hub.abbinati() if s["id"] == sid), None) if sid else None
+        if schermo is None:
+            return _json({"errore": "sessione non valida"}, 401)
+        persona = schermo.get("proprietario")
+        if not persona:
+            return _json({"errore": "solo dagli schermi personali"}, 403)
+        ora = time.monotonic()
+        with lock:
+            fatti = [t for t in pulsanti.get(schermo["id"], []) if ora - t < 60.0]
+            if len(fatti) >= 30:
+                pulsanti[schermo["id"]] = fatti
+                return _json({"errore": "troppi tocchi: aspetta un momento"}, 429)
+            pulsanti[schermo["id"]] = fatti + [ora]
+        dati, errore = await corpo_json(request, 4096)
+        if errore is not None:
+            return errore
+        if not isinstance(dati, dict):
+            return _json({"errore": "dati non validi"}, 400)
+        ids = dati.get("id")
+        ids = ids if isinstance(ids, list) else [ids]
+        ids = [i for i in ids if isinstance(i, int) and not isinstance(i, bool)]
+
+        def fai():
+            from .. import minori
+            prof = cas.registry.by_id(persona) if cas.registry is not None else None
+            out = cas.da_pagina(persona, str(dati.get("azione") or ""), ids,
+                                minore=bool(prof is not None and minori.e_minore(prof)))
+            if out.get("ok"):
+                # La scheda di prima, con i file che restano (o la frase se non ne resta)
+                aperti = cas.schede_aperte.get(persona)
+                if aperti is not None:
+                    resto = [r for r in (cas.prendi(persona, i) for i in sorted(aperti))
+                             if r is not None]
+                else:
+                    resto = cas.elenco(persona, cas.avviso_giorni * 86400.0)
+                cas.manda_scheda(hub, persona, cas.scheda(
+                    persona, resto, tieni=not (prof is not None and minori.e_minore(prof)),
+                    nota="" if resto else out.get("frase", "")))
+            return out
+        try:
+            out = await asyncio.to_thread(fai)
+        except Exception as e:  # noqa: BLE001
+            hub.log(f"[CASSETTO] pulsante non riuscito: {type(e).__name__}: {e}")
+            return _json({"errore": "non ci sono riuscita"}, 500)
+        return _json(out, 200 if out.get("ok") else 409)
+
     # ── giochi (05/10, giochi.py) ──
     async def gioco_documento(request: Request):
         """Il documento del riquadro di una partita: origine opaca (CSP sandbox), niente rete,
@@ -630,6 +699,7 @@ def crea_app(hub: Schermi) -> Starlette:
         Route("/api/cruscotto", cruscotto),
         Route("/api/scarica", scarica_gettone, methods=["POST"]),
         Route("/scarica/{gettone}", scarica_file),
+        Route("/api/cassetto", cassetto, methods=["POST"]),
         Route("/gioco/{gettone}", gioco_documento),
         Route("/api/gioco", gioco_api, methods=["POST"]),
         *telefono.rotte(hub),

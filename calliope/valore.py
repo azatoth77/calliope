@@ -98,6 +98,8 @@ ARGOMENTI: dict[str, dict[str, str]] = {
     "pc_guarda": {"cosa": Z},
     "immagine_archivia": {"foto": "indice:foto"},
     "allegato_archivia": {"allegato": "indice:allegato"},
+    # 08/10, cassetto dei file: «quale» sceglie i file della persona, «di» un ragazzo (tutore)
+    "cassetto_gestisci": {"azione": Z, "quale": B, "di": B},
     "richiesta_tutore": {"cosa": Z, "nome": B, "minuti": S},
     "minore_gestisci": {"nome": B, "azione": Z, "valore": C},
     "installa_avvia": {"azione": B},
@@ -165,7 +167,7 @@ EFFETTI: dict[str, object] = {
     "pc_volume": E1, "pc_luminosita": E1, "pc_media": E1, "pc_apri_file": E1,
     "timer_imposta": E1, "promemoria_imposta": E1, "cambia_voce": E1, "documento_crea": E1,
     "documento_modifica": E1, "pc_blocca": E1, "immagine_archivia": E1,
-    "allegato_archivia": E1,
+    "allegato_archivia": E1, "cassetto_gestisci": E2,
     # E2: resta, altri lo vedono o cambia le risposte future
     "lista_aggiungi": E2, "lista_togli": E2, "ricorda": _ricorda, "dimentica": E2,
     "appuntamento_aggiungi": E2, "agenda_annulla": E2, "anagrafica_salva": E2,

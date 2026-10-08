@@ -940,6 +940,22 @@ allegati:
   # Audio: si trascrive con il Whisper della voce solo fino a tanti secondi (oltre, solo nome,
   # tipo e durata: la voce resterebbe ferma troppo)
   allegati_audio_max_s: 180.0
+  # Il cassetto dei file per persona (08/10, calliope/cassetto.py, decisione del 07/10): ogni
+  # foto, file o audio mandato da chi è riconosciuto resta `cassetto_giorni` giorni sulla
+  # macchina di Calliope, poi si elimina (e Calliope lo dice la volta dopo). Si ritrova a
+  # voce («il file che ti ho mandato ieri»); alla prima conversazione del giorno, se qualcosa
+  # scade entro `cassetto_avviso_giorni`, una frase e la scheda col carosello sullo schermo
+  # personale (Tieni nei documenti di casa, Elimina, Tieni ancora). Mai per gli ospiti. Oltre
+  # `cassetto_mb_persona` il file resta solo nella conversazione e Calliope lo dice. Spento:
+  # i file vivono solo nella conversazione, come prima
+  cassetto_enabled: true
+  # Cartella dei file (vuoto = «cassetto» accanto a memory_db); l'indice sta in memory_db
+  cassetto_cartella: ''
+  cassetto_giorni: 7.0
+  cassetto_mb_persona: 500.0
+  cassetto_avviso_giorni: 2.0
+  # Ogni quanti secondi si eliminano i file scaduti (anche all'avvio)
+  cassetto_pulizia_s: 3600.0
 
 server_satelliti:
   # == Lato server (dove gira Calliope, la DGX): microfono e casse sono di un

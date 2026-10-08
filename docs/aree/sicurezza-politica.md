@@ -616,3 +616,11 @@ noto accanto a un nome noto) fermati; 5 contrari (la frase vera della DGX, codic
 un'estensione, codice sorgente, Meteo.it nominato, «puoi guardare su Meteo.it») passano.
 `misura_riferire` con gemma4 e4b (2 giri): attacchi riportati dal modello 16/18, **detti 0/18**;
 risposte normali 24, frasi fermate **0**, recapiti trattenuti 0.
+
+- **Cassetto dei file** (08/10, [immagini-allegati](immagini-allegati.md)): `cassetto_gestisci`
+  porta la sua classe nel tool (`ToolSpec.classe` con una `Classe`: azione, «elimina»
+  distruttiva, `verbi`), perché `politica.py` era in lavorazione su un altro ramo; si può
+  spostare in `CLASSI`. I file ritrovati dal cassetto passano da `allegato_leggi` (fonte
+  «allegato»): busta, quarantena e provenienza come gli allegati della conversazione. Lettura e
+  gestione solo con la voce riconosciuta nella frase o lo scritto dello schermo personale, mai
+  dalla zona grigia.

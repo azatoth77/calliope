@@ -24,7 +24,7 @@
     documento: "Documento", casa: "Casa", calcolo: "Calcolo", testo: "Da leggere",
     lavoro: "Lavoro", modulo: "Da scrivere", web: "Internet", esecuzione: "Programma",
     risposta: "Risposta", foto: "Foto", allegato: "File", gioco: "Gioco",
-    cruscotto: "Cruscotto",
+    cruscotto: "Cruscotto", cassetto: "Cassetto",
   };
   // Il programma di un lavoro mentre gira (04/10, calliope/agenti/esecuzione.py)
   const STATI_ESECUZIONE = {
@@ -1009,6 +1009,98 @@
       }
     },
   };
+
+  // ─── Il cassetto dei file (08/10, calliope/cassetto.py) ───
+  // Un carosello: anteprima (solo un data URL JPEG per le foto, altrimenti la sigla), nome,
+  // quando e da dove, scadenza; Tieni, Elimina, Tieni ancora; in alto Elimina tutti e Tieni
+  // tutti. Tutto come testo. I pulsanti vanno a /api/cassetto; la scheda aggiornata arriva dal
+  // server (stessa chiave). «Elimina tutti» vuole un secondo tocco
+  function bottoneCassetto(testo, azione, ids, cls) {
+    const b = el("button", "piccolo-bottone tasto-cassetto" + (cls ? " " + cls : ""), testo);
+    b.type = "button";
+    b.dataset.cassetto = azione;
+    b.dataset.ids = ids.join(",");
+    return b;
+  }
+  DISEGNA.cassetto = function (c, corpo, s) {
+    s.classList.add("scheda-cassetto");
+    const voci = Array.isArray(c.voci) ? c.voci : [];
+    if (c.nota) corpo.append(el("p", "sotto", c.nota));
+    if (!voci.length) {
+      if (!c.nota) corpo.append(el("p", "vuoto", c.vuoto || "Nessun file."));
+      return;
+    }
+    const ids = voci.map((v) => v.id).filter((i) => Number.isInteger(i));
+    const giorni = Number.isInteger(c.giorni) ? c.giorni : 7;
+    const tutti = el("div", "cassetto-tutti");
+    tutti.append(bottoneCassetto("Elimina tutti", "elimina", ids, "conferma"));
+    if (voci.some((v) => v.tieni)) {
+      tutti.append(bottoneCassetto("Tieni tutti", "tieni", ids.filter((i, k) => voci[k].tieni)));
+    }
+    tutti.append(el("span", "esito-cassetto", ""));
+    corpo.append(tutti);
+    const car = el("div", "cassetto-carosello");
+    voci.forEach((v) => {
+      if (!Number.isInteger(v.id)) return;
+      const f = el("section", "cassetto-voce");
+      const ant = el("div", "cassetto-anteprima");
+      if (typeof v.src === "string" && v.src.startsWith("data:image/jpeg;base64,")) {
+        const img = el("img");
+        img.alt = v.tipo || "foto";
+        img.src = v.src;
+        ant.append(img);
+      } else {
+        ant.append(el("span", "cassetto-sigla", v.sigla || "FILE"));
+      }
+      f.append(ant);
+      f.append(el("p", "cassetto-nome", v.nome || "file"));
+      f.append(el("p", "sotto", [v.tipo, v.dimensione].filter(Boolean).join(" · ")));
+      f.append(el("p", "sotto", "Arrivato " + [v.arrivato, v.da].filter(Boolean).join(" ")));
+      if (v.scade) f.append(el("p", "cassetto-scade", "Scade " + v.scade));
+      const p = el("div", "cassetto-pulsanti");
+      if (v.tieni) p.append(bottoneCassetto("Tieni", "tieni", [v.id]));
+      p.append(bottoneCassetto("Elimina", "elimina", [v.id]));
+      p.append(bottoneCassetto("Tieni ancora " + giorni + " giorni", "ancora", [v.id]));
+      f.append(p);
+      car.append(f);
+    });
+    corpo.append(car);
+    if (c.altri) corpo.append(el("p", "nota", "e altri " + c.altri));
+  };
+  document.addEventListener("click", async (ev) => {
+    const b = ev.target.closest && ev.target.closest("button[data-cassetto]");
+    if (!b || b.disabled) return;
+    const s = b.closest("article.scheda");
+    const esito = s && s.querySelector(".esito-cassetto");
+    const dire = (t) => { if (esito) esito.textContent = t; };
+    if (!S.sessione) { dire("Non collegato: riprova tra poco."); return; }
+    if (b.classList.contains("conferma") && !b.dataset.armato) {
+      // Un secondo tocco entro 4 s: «Elimina tutti» non si disfa
+      b.dataset.armato = "1";
+      const prima = b.textContent;
+      b.textContent = "Tocca di nuovo per eliminarli tutti";
+      setTimeout(() => { delete b.dataset.armato; b.textContent = prima; }, 4000);
+      return;
+    }
+    const ids = (b.dataset.ids || "").split(",").map((x) => parseInt(x, 10)).filter(Number.isInteger);
+    if (!ids.length) return;
+    b.disabled = true;
+    dire("…");
+    try {
+      const r = await fetch("/api/cassetto", {
+        method: "POST", cache: "no-store",
+        headers: { "Content-Type": "application/json", "X-Calliope-Sessione": S.sessione },
+        body: JSON.stringify({ azione: b.dataset.cassetto, id: ids }),
+      });
+      let d = {};
+      try { d = await r.json(); } catch (e) { /* niente */ }
+      dire(r.status === 200 ? (d.frase || "Fatto.") : (d.errore || ("Non ci sono riuscita (" + r.status + ").")));
+    } catch (e) {
+      dire("Calliope non risponde: riprova.");
+    } finally {
+      b.disabled = false;
+    }
+  });
 
   // L'uscita di un programma: stdout e stderr (in rosso) mentre arrivano, sempre come testo
   DISEGNA.esecuzione = function (c, corpo) {

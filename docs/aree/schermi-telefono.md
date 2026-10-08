@@ -448,3 +448,12 @@ risultato del lavoro appena annunciato (che non sta in quell'archivio).
   `prova_risultati.py`: un documento non consegnato in questa conversazione (rifiutato come
   prima), un'altra persona (niente scheda di chi ha chiesto il lavoro); con la voce riconosciuta il
   risultato più recente, senza la regola.
+
+- **Scheda del cassetto dei file** (08/10, [immagini-allegati](immagini-allegati.md)): tipo
+  `cassetto`, personale, chiave `cassetto:<persona>`, costruita da `Cassetto.scheda` e mandata
+  con `invia_a` a ogni schermo personale della persona; un carosello orizzontale dentro la scheda
+  (miniatura in data URL o sigla, nome come testo, quando e da dove, scadenza) con «Tieni»,
+  «Elimina», «Tieni ancora 7 giorni» e in alto «Elimina tutti» (secondo tocco entro 4 s) e
+  «Tieni tutti». I pulsanti vanno a POST `/api/cassetto` (sessione in un'intestazione, JSON,
+  HTTPS, solo schermo personale e solo i file del proprietario, 30 al minuto); la scheda
+  aggiornata torna dal server con la stessa chiave. Prova `prova_cassetto_pagina.py`.

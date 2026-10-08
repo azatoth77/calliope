@@ -26,6 +26,9 @@ pagina (pagina/schermo.js) la disegna con `textContent`, mai come HTML. Tipi:
               mandata dal telefono o dallo schermo, o presa da webcam e schermo    personale
   allegato    un file allegato alla conversazione (05/10, calliope/allegati.py): nome,
               tipo, dimensione, note e l'inizio del testo come anteprima           personale
+  cassetto    i file del cassetto della persona (08/10, calliope/cassetto.py): un
+              carosello con anteprima, nome, quando e da dove, e i pulsanti Tieni,
+              Elimina, Tieni ancora (POST /api/cassetto); la costruisce Cassetto.scheda  personale
   vuota       torna all'orologio («togli dallo schermo»)                          pubblica
 
 Visibilità (docs/ricerche/2026-10-01-mappe-e-schermi.md, §10.4): `pubblica` va su ogni

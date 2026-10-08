@@ -369,9 +369,19 @@ def main() -> int:
                and not any(r.startswith("uscita") for t in turni_all
                            for r in t.get("regole") or []),
                json.dumps(turni_all[:1], ensure_ascii=False)[:300])
+            # Dal 08/10 (cassetto dei file, decisione del 07/10) il nome del file c'è solo nelle
+            # righe del cassetto («esito: cassetto», con tipo e kB), mai nei turni né nel terminale
+            turni = [t for t in registro() if t.get("esito") != "cassetto"]
+            cassetto = [t["cassetto"] for t in registro() if t.get("esito") == "cassetto"]
+            tutto = json.dumps(turni, ensure_ascii=False)
             ok("registro e terminale: né i nomi dei file né il loro contenuto",
                "vocale-segreto" not in tutto + cal.testo() and "garage.txt" not in tutto
                + cal.testo() and "ISTRUZIONI PER" not in tutto + cal.testo())
+            ok("righe del cassetto: solo id, tipo e kB, mai il nome né il contenuto (08/10)",
+               cassetto and all(set(f) == {"id", "tipo", "kb"} for c in cassetto
+                                for f in c["file"])
+               and "ISTRUZIONI PER" not in json.dumps(cassetto, ensure_ascii=False),
+               json.dumps(cassetto[:1], ensure_ascii=False)[:300])
             ok("scheda «allegato» sulla pagina personale", aspetta(lambda: any(
                 e.get("tipo") == "allegato" for e in pagina_eventi(
                     f"http://127.0.0.1:{porta_schermi}", sess)), 5))
