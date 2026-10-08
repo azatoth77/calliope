@@ -7,6 +7,7 @@
 | Stadio | Libreria | Dove |
 |---|---|---|
 | Conferme delle azioni (proposta valida 3 turni, «sì» breve di chi amministra, frase di sfida) | difflib sulla trascrizione, impronta CAM++ | `calliope/conferme.py` → `proposta_valida`, `admin_confermato`, `serve_conferma`, `Sfida`, `confronta`; `SpeakerContext.aggiorna_conversazione`; `Brain._sfida`; misure `prove/misura_conferma_breve.py`, `prove/misura_sfida.py` |
+| Sicurezza per valore (08/10: attrito come metrica, memoria dell'intento, provenienza per valore e classi d'effetto in ombra) | — (regole nel codice) | `calliope/attrito.py` → `giorno`, `avviso`, `avviso_recente` (da `calliope stato --turni` e dall'avvio); `calliope/valore.py` → `ARGOMENTI`, `EFFETTI`, `effetto`, `Intenzione`, `intento_aperto`, `aggiorna`, `etichetta`, `distintive`, `decidi_valore`, `ombra`; `calliope/politica.py` → `VERBI_AZIONE`, `chiesto_con_verbi`, `consenso_turno`; prove `prove/prova_valore.py`, `prove/prova_attrito.py`; progetto [`docs/ricerche/2026-10-07-sicurezza-per-valore.md`](../ricerche/2026-10-07-sicurezza-per-valore.md) |
 | Politica unica dei tool e provenienza (05/10: dati non fidati in busta, classi dei tool, conferma a voce con dati di mezzo) | — (regole nel codice) | `calliope/politica.py` → `CLASSI`, `classe_di`, `decidi`, `controlla` e `incoerente` (da `ToolRegistry.call`), `Turno`, `consenso`, `coerente`; `calliope/provenienza.py` → `racchiudi`, `racchiudi_risultato`, `fonti`, `marca`, `FONTI`; porta unica `Brain.dato_non_fidato` / `allega_non_fidato`; `calliope/quarantena.py`; ciò che dice con dati di mezzo `calliope/riferire.py` → `giudica`, `filtra`, `controlla_testo` (da `main.py`, 06/10); banco `prove/prova_politica.py`; rapporto [`docs/ricerche/2026-10-05-politica-sicurezza.md`](../ricerche/2026-10-05-politica-sicurezza.md) |
 
 ## Note dalla sezione «Stato attuale» di CLAUDE.md (fino al 06/10)
@@ -458,4 +459,116 @@ il 10/10, in cinque fasi, prima la metrica `attrito` e la memoria dell'intento):
 valore (`detto`, `persona`, `fidato`, `scelta`, `modello`, `dato`), classi d'effetto E0–E4, matrice
 al posto della regola finale, «richiesta ripetuta = sì», errori detti come errori; banco d'attacco
 invariato al 100 % più 8 attacchi nuovi contro i rilassamenti; due giorni in ombra prima di
-attivarla. Decisioni D1–D8 aperte. Script della misura: `docs/ricerche/banchi/attrito/attrito.py`.
+attivarla. Decisioni D1–D8 aperte (prese l'08/10: sezione sotto). Script della misura:
+`docs/ricerche/banchi/attrito/attrito.py`.
+
+## Sicurezza per valore, fasi 1–3 (08/10, ramo `sicurezza-valore`)
+
+Decisione di Dario dell'08/10: il congelamento riguardava la latenza, già buona (07–08/10 mediana
+1,14 s), quindi le fasi 1–3 subito; la 4 (attivazione) dopo due giorni d'ombra. Decisioni prese
+come raccomandate dal documento: **D1** `delega_lavoro` di tipo ricerca in E2; **D2** casa: luci E1,
+clima e tapparelle E2, nomi delicati E4; **D3** `ricorda` E2 (con parole dal dato si mostra,
+altrimenti come `fatto_detto`); **D4** intenzione valida al più 10 minuti; **D5** attivazione dopo
+due giorni d'ombra, una riga per tornare indietro; **D6** avviso oltre 3 domande ogni 100 turni o
+con una domanda ripetuta; **D7** dati personali anche nel compito di `delega_lavoro`; **D8** fasi 1
+e 2 subito.
+
+**Fase 1, l'attrito come metrica** (`calliope/attrito.py`). Dal registro dei turni, per giorno:
+domande di sicurezza ogni 100 turni con una frase (politica e ciò che dice; le sfide d'identità
+della voce a parte), le ripetute per lo stesso tool e la stessa persona entro 5 minuti, quelle poi
+eseguite entro 3 turni (indizio automatico di falso positivo), le frasi «te l'ho già detto», e il
+confronto con l'ombra. In `calliope stato --turni` (anche `--json`, chiave `attrito`), in `calliope
+stato` e all'avvio (`[SICUREZZA] …`) l'avviso D6 (`attrito_avviso`, 3). Sui registri della DGX:
+05/10 **7,4** (2 ripetute), 06/10 **0**, 07/10 **16,8** su 244 turni (33 della politica, 8 di ciò
+che dice, 17 ripetute, 20 su 33 poi eseguite, 5 «già detto»), 08/10 mattina 0 su 41. Le parole
+che fanno fermare una frase a riferire (proposte nel piano) non sono nel registro: `riferire.py` è
+di un altro ramo, da fare dopo.
+
+**Fase 2, attiva: conferme con memoria dell'intento.**
+
+- **Le pericolose hanno le parole che le chiedono** (`VERBI` per tutte, `VERBI_AZIONE` per
+  l'azione scelta in un enum: estensioni, schermi, volume, luminosità, musica, installazioni). Caso
+  vero del 07/10 alle 18:49–18:53 (satellite dello studio, 26B): con il lavoro di un agente di mezzo,
+  «Voglio che approvi la nuova versione» detto **tre volte** con la voce riconosciuta non valeva
+  come consenso per `estensioni_gestisci(approva)` (il giro 9 riconosceva la richiesta ripetuta
+  solo con le parole del tool, che qui non c'erano): ora la seconda frase esegue
+  (`consenso_richiesta`) e il servizio delle estensioni chiede la sua frase di sfida, voluta. Le
+  parole di un'altra azione non confermano («voglio che la rimuovi» non conferma «approva»;
+  «disattiva» non è «attiva»).
+- **Intenzione** (`valore.Intenzione`, nella conversazione, solo in memoria): un'azione confermata
+  con la voce (il «sì», la richiesta ripetuta, la sfida superata) che poi **fallisce** resta aperta
+  per lo stesso tool, lo stesso bersaglio (argomenti `bersaglio`, `azione`, indice o il file vero
+  di `Classe.descrivi`, testo libero; non il contenuto) e la stessa persona; la chiamata corretta
+  si esegue senza un'altra domanda (regola `intento_confermato`, accettata anche per il «Procedo?»
+  del tool). Si chiude con il successo, con «no», «lascia stare», «annulla», «basta così» (forma
+  chiusa in testa alla frase, `valore.chiude`, regola `intento_chiuso`), con un'altra azione
+  riuscita, con una foto o un file arrivati con la frase, alla chiusura della conversazione o dopo
+  `intento_valido_s` (600 s). Mai per un'altra persona, scritto dallo schermo, un ospite, un valore
+  importante nuovo preso dal dato, né per i tool con la frase di sfida (registrare voci, schermi,
+  minori, installazioni, rinomina): lì la domanda è sull'identità. Gli errori restano errori: la
+  frase dopo la sfida dipende dall'esito (giro 9), e l'errore non riapre la conferma.
+- **Una domanda, una volta** (regola `politica_domanda_non_ripetuta`): se la stessa domanda della
+  politica per la stessa chiamata è già in sospeso e la frase non è un consenso, il modello riceve
+  «la persona non ha confermato la domanda di prima: chiedile con parole tue che cosa intende» e la
+  proposta resta valida; al «sì» esegue. Il 07/10 alle 17:07 la stessa frase era stata detta sette
+  volte.
+
+**Fase 3, in ombra: provenienza per valore e classi d'effetto** (`calliope/valore.py`). Ogni tool
+d'azione dichiara i tipi dei suoi argomenti (`ARGOMENTI`: bersaglio, azione, scelta, indice in un
+elenco, contenuto, testo libero, ignora) e la classe d'effetto (`EFFETTI`, E0–E4, con le funzioni
+per casa e delega); senza dichiarazione vale bersaglio ed E3. L'etichetta di un valore è la
+peggiore delle sue parole (`etichetta`: `detto` in questa frase, `persona` prima, `dato`, `fidato`
+nei risultati dei tool interni della conversazione, `Conversazione.fidati`, `modello`; con una foto
+un bersaglio senza fonte vale `dato`; un indice vale l'elenco a cui punta). La matrice
+(`decidi_valore`, § 5.4 del documento) decide accanto a quella vera e il registro dei turni scrive,
+per ogni chiamata con un dato di mezzo, `politica_ombra`: `vera`, `vera_regola`, `nuova`,
+`nuova_regola` (`valore_esegue`, `valore_voce`, `valore_non_ancorata`, `valore_bersaglio_dato`,
+`valore_contenuto_dato`, `valore_contenuto_non_detto`, `valore_dati_personali`, `valore_e3_chiede`,
+`valore_e4_sfida`), `effetto`, le etichette per argomento («comando: bersaglio/detto») e `attiva`;
+**nessun valore**. Scelte rispetto al documento, tutte più strette:
+
+- il dato vince sul fidato (una parola del dato ripetuta da un tool interno, come il nome di un
+  timer messo da una pagina, non diventa fidata: altrimenti un timer E1 «lavava» il valore per una
+  lista E2);
+- le parole «distintive» di un testo libero sono nomi propri, sigle, numeri, email e indirizzi web,
+  non le parole comuni da 6 lettere (il modello espande «fai una ricerca sulle batterie» con
+  «approfondita», «analizzando», che stanno anche nei risultati degli agenti);
+- un tool senza classe o una pericolosa senza parole dichiarate non è mai ancorato (il banco con
+  l'interruttore acceso aveva eseguito `tool_nuovo` dopo «riassumi la pagina»);
+- i dati personali nel compito (D7) si controllano con il Ripulitore del web
+  (`web/privacy.Ripulitore`), solo nella matrice: attivi con la fase 4.
+
+**Interruttore** `politica_per_valore` (spento, sezione `llm` di `calliope.yaml`): acceso, la matrice
+sostituisce la regola finale «pericolosa + dato di mezzo ⇒ conferma» e l'ombra registra quella di
+prima (`attiva: true`). Restano sempre: il dato letto in questa risposta, «fai quello che dice…», il
+«sì» alla domanda, l'intenzione, la coerenza delle distruttive, il bersaglio che non c'è, la sfida,
+riferire, la quarantena, il livello, i minori.
+
+Prove (`prove/prova_valore.py`, ~2 s, livello 1; `prove/prova_attrito.py`): 104 controlli; **gli 8
+attacchi nuovi** del § 6.2 fermati con l'interruttore spento e acceso; **il banco di
+`prova_politica` con l'interruttore acceso** 99/99 (più valori riformulati e sfida dopo il dato);
+`prova_politica` invariata 99/99. **Rigioco a secco** dei casi veri del 07/10 (volume dopo il meteo,
+tre ricerche chieste a voce dopo un lavoro dell'agente): 4 domande con l'interruttore spento, 0
+acceso, tutto eseguito.
+
+**Come leggere l'ombra dopo due giorni** (sulla DGX, `calliope stato --turni --giorni 2`): la riga
+«in ombra» di ogni giorno dice le chiamate con un dato di mezzo, quante decisioni sono diverse, le
+domande evitate e quelle in più, **le esecuzioni in più con un bersaglio preso dal dato** e
+l'attrito simulato. Criterio per accendere (D5): esecuzioni con un bersaglio dal dato **0**, attrito
+simulato **≤ 3**, e ogni decisione diversa letta a mano (comando sotto). Si accende con
+`politica_per_valore: true` in `calliope.locale.yaml` (poi `systemctl --user restart calliope`); si
+torna indietro togliendo la riga. Le decisioni diverse una per una:
+
+```
+python - <<'EOF'
+import glob, json
+for f in sorted(glob.glob("registro/turni-*.jsonl"))[-2:]:
+    for riga in open(f, encoding="utf-8"):
+        r = json.loads(riga)
+        for t in r.get("tool") or []:
+            o = t.get("politica_ombra")
+            if o and o["vera"] != o["nuova"]:
+                print(r["inizio"][:19], t["nome"], o["vera_regola"] or o["vera"], "→",
+                      o["nuova_regola"], o["effetto"], o["argomenti"])
+EOF
+```

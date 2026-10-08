@@ -62,7 +62,7 @@ per stadio, solo i moduli principali: librerie, classi e dettagli sono nei docum
 | Memoria, agenda, liste, tempi | `memory.py`, `agenda.py`, `tempi.py`, `liste.py` | [memoria-agenda-liste](docs/aree/memoria-agenda-liste.md) |
 | Finestra di contesto, conversazione, compressione, archivio | `contesto.py`, `conversazione.py`, `compressione.py`, `conversazioni.py` | [contesto-conversazione](docs/aree/contesto-conversazione.md) |
 | Una conversazione per persona, satelliti insieme | `corsie.py` | [contesto-conversazione](docs/aree/contesto-conversazione.md) |
-| Politica dei tool, provenienza, quarantena, ciò che dice | `politica.py`, `provenienza.py`, `quarantena.py`, `riferire.py` | [sicurezza-politica](docs/aree/sicurezza-politica.md) |
+| Politica dei tool, provenienza, quarantena, ciò che dice; sicurezza per valore (attrito, memoria dell'intento, matrice in ombra: dall'08/10) | `politica.py`, `provenienza.py`, `valore.py`, `attrito.py`, `quarantena.py`, `riferire.py` | [sicurezza-politica](docs/aree/sicurezza-politica.md) |
 | Conferme e frase di sfida, sicurezza | `conferme.py`, `sicurezza.py`, `guardrail.py` | [sicurezza-politica](docs/aree/sicurezza-politica.md) |
 | Minori e guardiano | `minori.py`, `guardiano.py` | [minori](docs/aree/minori.md) |
 | Biblioteca offline (ZIM in puro Python, FTS5) | `biblioteca.py`, `zim.py`, `biblioteca_indice.py` | [biblioteca](docs/aree/biblioteca.md) |
