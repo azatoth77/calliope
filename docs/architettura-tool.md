@@ -189,6 +189,7 @@ controllo nelle prove a secco), ma tocca tutti i tool e le prove con Ollama che 
 | `rinomina_interlocutore` | familiare | azione | rinomina chi parla |
 | `registra_utente` | amministra (dal 05/10, con la frase di sfida) | azione | avvia l'arruolamento di una persona nuova con la data di nascita (o «maggiorenne») e i tutori; un minore ha il preset della sua fascia (`calliope/minori.py`) |
 | `compiti_aiuto` | familiare (solo con un minore in casa; agisce per i minori con i compiti guidati) | lettura | registra l'esercizio, controlla la risposta con il valutatore di `calcola`, mai la soluzione prima di 5 errori, poi l'avviso ai tutori |
+| `esercizi` | familiare (solo con un minore in casa; il codice: i minori per sé, i loro tutori e chi amministra, mai gli ospiti) | lettura | esercizi generati da Calliope (08/10, `calliope/esercizi/`): inizia, rispondi (corregge il codice), aiuto, salta, ripeti, segnala, soluzione, fine, argomenti, riepilogo |
 | `minore_gestisci` | familiare (il codice: un tutore o chi amministra, dalla voce) | azione | preset di un minore: stato, imposta, orari, estensioni, autorizzazione a tempo, nascita, tutori, riepilogo dei compiti |
 | `ricorda` | familiare | azione | salva un fatto su chi parla (memoria persistente, `memory.py`); con `per_tutti` è un fatto della casa (persona `casa`), visto da tutti i familiari |
 | `dimentica` | familiare | azione | toglie un fatto (o «tutto»): prima tra quelli di chi parla, poi tra quelli della casa |

@@ -219,6 +219,9 @@ class Schermi:
         self._contesto: dict[str, dict] = {}
         # I giochi delle estensioni (05/10, giochi.py): lo imposta main.py con le estensioni
         self.giochi = None
+        # Gli esercizi (08/10, calliope/esercizi/sessione.py): la scheda risponde da
+        # /api/esercizio; lo imposta main.py
+        self.esercizi = None
         # Il cruscotto di chi amministra (06/10, cruscotto.py: sola lettura), da main.py;
         # None = niente pulsante e /api/cruscotto risponde 404
         self.cruscotto = None

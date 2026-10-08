@@ -50,6 +50,10 @@ A_SECCO = [
     ("prova_voci_famiglia.py", [], "voci di famiglia (07/10): margine tra primo e secondo profilo, chi amministra con un minore vicino, la frase che chiede chi parla, conferma breve con un'altra voce più vicina, i quattro casi veri con impronte sintetiche"),
     ("prova_minori.py", [], "minori (05/10): fasce, preset e permessi nel codice, orari, voce incerta, compiti e avvisi ai tutori, guardiano finto, registrazione con la sfida, privacy"),
     ("prova_eta_utenti.py", [], "età e compleanni dai profili (07/10, DGX): data di oggi come nascita rifiutata, persona=io o un nome, giorni contati dal programma, privacy (chi amministra e i tutori), impronta della voce in elenca_utenti, rubrica distinta, tool *_cerca con argomenti obbligatori, parole di un ospite nel registro; la propria data di nascita nel profilo con ricorda e la data dai ricordi in data_calcola (07/10 pomeriggio)"),
+    # ~8 s: generatori su migliaia di semi, secondo parere finto, server degli schermi vero
+    ("prova_esercizi.py", [], "esercizi generati da Calliope (08/10): numeri detti, generatori di matematica (ricalcolo indipendente) e d'italiano (forme chiuse, lessico sul Wikizionario), secondo parere finto (buono, scartato, guasto, banco), flusso a voce (indizi, 5 errori con avviso ai tutori una volta, salta, soluzione, segnala, livelli, fine), permessi (ospite, adulto che non segue ragazzi, tutore, riepilogo), dato del turno, /api/esercizio sul server vero (schermo personale, fuori orario, limite, mai la risposta attesa)"),
+    # ~25 s: la pagina degli schermi e del telefono in Edge o Chromium senza finestra
+    ("prova_esercizi_pagina.py", [], "scheda degli esercizi nella pagina vera (08/10): domanda grande, risposta scritta sbagliata e giusta, indizio, segnalazione, fine, scelte d'italiano come pulsanti, risposta attesa mai nel DOM, telefono con la scheda nel carosello, nessun errore JS né CSP"),
     ("prova_minori_pericolo.py", [], "minore in pericolo con la frase spezzata (06/10, e2e): pezzi uniti per il guardiano, protezione senza barge-in con la sola voce e ripetuta se il nome la interrompe, avviso non ripetuto per lo stesso episodio, con i contrari"),
     ("prova_brain.py", [], "filtro del thinking, guardia, ciclo dei tool, storia"),
     ("prova_tempi.py", [], "durate e orari detti a voce"),
@@ -175,6 +179,7 @@ CON_OLLAMA = [
     ("prova_stato_ollama.py", ["1"], "stato e installazioni a voce con il modello (server finto)"),
     ("prova_personalita_ollama.py", ["1"], "tono di voce chiesto a voce (cambia_voce con tono, per_tutti) e tool dopo il cambio"),
     ("prova_modalita_ollama.py", ["1"], "modalità Star Trek chiesta a voce (cambia_voce con modalita), «non sento i suoni», tool dopo il cambio, i toni restano toni"),
+    ("prova_esercizi_ollama.py", ["--giri", "1"], "esercizi a voce con il modello (08/10): un giro di 10 esercizi per materia con risposte giuste, sbagliate, indizi e segnalazioni simulate; correzioni giuste, tool chiamato, tempi, secondo parere vero sugli esercizi d'italiano"),
     ("prova_minori_ollama.py", ["--giri", "1"], "minori (05/10): richieste esplicite, aggiramenti, pericolo, compiti con 5 tentativi, tool, contrari per gli adulti, con il guardiano"),
     ("prova_schermi_ollama.py", ["1"], "schermi a voce con il modello e il server vero; latenza"),
     ("prova_agenti_ollama.py", ["1"], "delega, stato e annullo a voce con il modello (agente finto)"),
@@ -249,6 +254,7 @@ LIVELLO_2 = {
     "prova_biblioteca.py",           # 6 s, con i file della biblioteca
     "prova_markdown.py",             # 8 s (07/10)
     "prova_pause.py",                # 9 s (07/10)
+    "prova_esercizi.py",             # 8 s (08/10)
 }
 LIVELLO_3 = {
     "prova_schermi_pagina.py", "prova_scritto_pagina.py", "prova_immagini_pagina.py",
@@ -256,6 +262,7 @@ LIVELLO_3 = {
     "prova_telefono_audio.py", "prova_telefono_schermo.py", "prova_satellite.py",
     "prova_corsie_satelliti.py", "prova_installa_satellite.py", "prova_cruscotto_pagina.py",
     "prova_scheda_intera.py", "prova_markdown_pagina.py", "prova_cassetto_pagina.py",
+    "prova_esercizi_pagina.py",
 }
 # Mai nel gruppo parallelo, anche quando una prova li sceglie nel livello 2: un browser, un
 # tempo reale o tanti processi, che sotto carico falliscono a caso. Tutto il livello 3 è
@@ -290,7 +297,12 @@ LEGAMI = [
     ("calliope/tools/immagini.py", ["prova_immagini.py"]),
     ("calliope/tools/allegati.py", ["prova_allegati.py", "prova_cassetto.py"]),
     ("calliope/cassetto.py", ["prova_cassetto.py"]),
-    ("calliope/tools/minori.py", ["prova_minori.py", "prova_giochi.py"]),
+    ("calliope/tools/minori.py", ["prova_minori.py", "prova_giochi.py", "prova_esercizi.py"]),
+    # Esercizi (08/10): il pacchetto, il tool, la scheda e il dato del turno dei minori
+    ("calliope/esercizi/", ["prova_esercizi.py"]),
+    ("calliope/tools/esercizi.py", ["prova_esercizi.py"]),
+    ("calliope/minori.py", ["prova_esercizi.py"]),
+    ("calliope/schermi/", ["prova_esercizi.py"]),
     ("calliope/speaker_id.py", ["prova_voci_famiglia.py", "prova_conferme.py"]),
     ("calliope/conferme.py", ["prova_voci_famiglia.py", "prova_conferme.py"]),
     ("calliope/minori.py", ["prova_voci_famiglia.py", "prova_minori.py"]),

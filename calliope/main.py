@@ -570,6 +570,16 @@ class Avvio:
         # Minori (05/10, calliope/minori.py): regole per persona, compiti, avvisi ai tutori
         # (stesso file della memoria)
         minori.prepara(cfg, schermi=s.schermi, registry=s.registry)
+        # Esercizi generati da Calliope (08/10, calliope/esercizi/): stesso file della memoria;
+        # la scheda risponde da /api/esercizio (schermi/server.py)
+        try:
+            from .esercizi import sessione as esercizi
+            srv = esercizi.prepara(cfg, schermi=s.schermi, biblioteca=s.biblioteca,
+                                    registry=s.registry)
+            if s.schermi is not None:
+                s.schermi.esercizi = srv
+        except Exception as e:  # noqa: BLE001 — senza esercizi Calliope parte lo stesso
+            print(f"[ESERCIZI] non disponibili: {type(e).__name__}: {e}", flush=True)
         s.attiva_minori = self.attiva_minori
         self.attiva_minori()
         # Il guardiano (calliope/guardiano.py): domanda e frasi della risposta per minori e

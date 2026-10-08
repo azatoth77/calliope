@@ -504,6 +504,18 @@ def dato_turno(prof, cfg=None) -> str:
             parti.append(f"esercizio aperto: «{aperto['testo']}», risposte sbagliate "
                          f"{aperto['tentativi']} su {compiti().massimo} (ogni risposta che "
                          f"dice va controllata con compiti_aiuto)")
+    # Gli esercizi di Calliope in corso (08/10, calliope/esercizi/): come l'esercizio aperto dei
+    # compiti, ogni risposta va al tool (la corregge il programma)
+    try:
+        from .esercizi import sessione as _es
+        srv = _es.servizio()
+        st = srv.stato(getattr(prof, "id", "")) if srv is not None else None
+    except Exception:  # noqa: BLE001 — il dato del turno non deve rompersi
+        st = None
+    if st is not None:
+        parti.append(f"esercizi in corso ({st['materia']}, {st['argomento']}): domanda "
+                     f"«{st['domanda']}» (ogni risposta che dice va passata a esercizi con "
+                     f"azione=rispondi; aiuto, salta, segnala, fine)")
     return "; ".join(parti)
 
 

@@ -396,8 +396,20 @@ def _minore_gestisci(ctx: ToolContext, nome: str = "", azione: str = "stato",
             return _final("Il riepilogo dei compiti lo può sentire solo un tutore.", ok=False,
                           fatto=NIENTE)
         av = M.avvisi()
-        return _final(av.riepilogo(minore) if av is not None else
-                      "Il riepilogo dei compiti qui non c'è.")
+        frase = (av.riepilogo(minore) if av is not None else
+                 "Il riepilogo dei compiti qui non c'è.")
+        # Con gli esercizi del giorno (08/10, calliope/esercizi/): solo la frase, il dettaglio
+        # con esercizi azione=riepilogo
+        from ..esercizi import sessione as _S
+        srv = _S.servizio()
+        if srv is not None:
+            try:
+                r = srv.registro.riepilogo(minore.id, minore.name)
+                if r["righe"]:
+                    frase += " " + r["frase"]
+            except Exception:  # noqa: BLE001 — il riepilogo dei compiti resta
+                pass
+        return _final(frase)
     # Cambiare: solo un tutore o chi amministra, riconosciuto dalla voce in questa frase
     if not tutore:
         note_rule(ctx, "minore_gestisci_permesso")
@@ -558,4 +570,11 @@ def minori_specs() -> list[ToolSpec]:
                 "azione": {"type": "string", "enum": AZIONI},
                 "valore": {"type": "string"}}, "required": ["azione"]},
             func=_minore_gestisci, risk="azione", levels=FAMILY),
+        # Esercizi generati da Calliope (08/10, calliope/esercizi/, tools/esercizi.py)
+        _esercizi_spec(),
     ]
+
+
+def _esercizi_spec() -> ToolSpec:
+    from .esercizi import esercizi_spec
+    return esercizi_spec()

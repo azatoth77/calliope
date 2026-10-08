@@ -7,6 +7,7 @@
 | Stadio | Libreria | Dove |
 |---|---|---|
 | Minori (fasce d'età, preset per fascia, permessi nel codice, orari, compiti, avvisi ai tutori; dal 05/10) | SQLite (stesso file della memoria: `minori_regole`, `avvisi_tutori`, `compiti_giorno`); guardiano Llama Guard 3 8B su Ollama + rilevatore di pericolo (gemma4 e4b, output strutturato) | `calliope/minori.py` → `fascia`, `preset`, `permesso` (da `ToolRegistry.call`), `dato_turno`, `fuori_orario`, `piu_protetto`, `Compiti`, `Avvisi`, `estensione_consentita`, `conversazioni_visibili_ai_tutori`; `calliope/guardiano.py` → `Guardiano`, `filtra` (in `main.py`), `correggi_storia`; tool `compiti_aiuto`, `minore_gestisci` (`calliope/tools/minori.py`); terminale `python -m calliope.minori`; banchi `prove/prova_minori_ollama.py`, `prove/misura_guardiano.py`; [`docs/ricerche/2026-10-05-minori.md`](../ricerche/2026-10-05-minori.md) |
+| Esercizi generati da Calliope (dal 08/10): matematica e italiano, a voce e sulla scheda, correzione nel codice, registro dei tentativi per i tutori | libreria standard; SQLite (stesso file della memoria: `esercizi_tentativi`, `esercizi_segnalazioni`, `esercizi_banco`); Wikizionario della biblioteca; secondo modello su Ollama | `calliope/esercizi/` → `matematica.genera`, `italiano.genera`, `numeri.leggi_valore`, `verifica.Wikizionario`, `verifica.SecondoParere`, `registro.Registro`, `sessione.Servizio`; tool `esercizi` (`calliope/tools/esercizi.py`); scheda `DISEGNA.esercizio` e `POST /api/esercizio`; rete `spinta_esercizi`; prove `prove/prova_esercizi.py`, `prove/prova_esercizi_pagina.py`, `prove/prova_esercizi_ollama.py`; [`docs/ricerche/2026-10-08-esercizi.md`](../ricerche/2026-10-08-esercizi.md) |
 
 ## Note dalla sezione «Stato attuale» di CLAUDE.md (fino al 06/10)
 
@@ -140,3 +141,39 @@ amministra. Il minore va registrato di nuovo per canale quando c'è (stt-tts).
 - **Cassetto, tutore dai pulsanti** (08/10): il tutore opera sui file del figlio sotto i 14 anni
   anche dai pulsanti della scheda sul proprio schermo, solo in una conversazione verificata dalla
   voce; «Tieni» li mette nella cartella del tutore ([immagini-allegati](immagini-allegati.md)).
+
+## Esercizi generati da Calliope (08/10, pilota)
+
+Progetto, misure e cosa resta: [`../ricerche/2026-10-08-esercizi.md`](../ricerche/2026-10-08-esercizi.md).
+Decisioni di Dario del 07/10: esercizi nativi generati al momento, senza revisione obbligatoria
+(la «revisione di un adulto» della ricerca su Kolibri è superata); studio fuori dal tempo di
+schermo; i tutori vedono il dettaglio dei tentativi anche dai 14 anni.
+
+- **Pilota**: matematica (addizioni, sottrazioni, tabelline, divisioni, frazioni, problemi,
+  potenze, equazioni di primo grado; dalla prima elementare alla quinta superiore, 3 livelli) e
+  italiano (analisi grammaticale, analisi logica di base). Classe dall'età o detta; livello che
+  si adatta.
+- **Correzione nel codice**: il modello passa la risposta come l'ha sentita; numeri e frazioni
+  detti si leggono in `numeri.py`. Matematica: generatore dalla soluzione e ricalcolo
+  indipendente a frazioni esatte. Italiano: frasi costruite da un lessico annotato, ogni forma
+  controllata sul Wikizionario, secondo modello che risolve da solo (scarto se non concorda;
+  banco per firma in `esercizi_banco`).
+- **Regola dei compiti guidati** anche qui: indizi graduati, dopo `minori_compiti_tentativi` (5)
+  la spiegazione e l'avviso ai tutori (una volta per sessione); la soluzione su richiesta solo
+  con i compiti «liberi» o a un adulto che prova.
+- **Al posto della revisione**: «secondo me è sbagliato» (ricontrollo, esercizio tolto se non
+  torna, segnalazione e avviso), riepilogo per il tutore con il dettaglio, le segnalazioni e 3
+  esercizi a campione (`esercizi azione=riepilogo`, anche in `minore_gestisci
+  riepilogo_compiti`).
+- **Scheda** personale (schermo e telefono): domanda grande, campo o scelte, esito; risponde da
+  `/api/esercizio` senza il modello, la risposta attesa resta sul server.
+- **Permessi**: ospiti no, adulti che non seguono ragazzi no, tutori sì (prova e riepilogo); un
+  ragazzo solo il proprio riepilogo. Orari di pausa validi anche per la scheda.
+- **Misure** (portatile, gemma4 e4b): banco a voce simulata 71/72 turni giusti in due giri
+  (matematica 36/36, italiano 35/36) dopo la rete `spinta_esercizi` (prima l'italiano era
+  11/18: il 4B copiava «Perfetto! Prossima: …» dalla storia senza il tool); prima frase mediana
+  0,77 s (matematica) e 1,29 s (italiano, con il secondo parere sullo stesso modello); secondo
+  parere 60/60 d'accordo, 30/30 errori del generatore presi, 299 ms di mediana.
+- **Resta**: logica, fisica, chimica (calcolabili), grammatica oltre il pilota, storia e scienze
+  (fattuali, blocchi dall'agente con le fonti della biblioteca); prova d'uso con un ragazzo;
+  misura col 26B e qwen3.6 sulla DGX.

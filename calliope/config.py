@@ -305,7 +305,7 @@ class Config:
     # textcallguard, chiamata_in_mezzo, spinta_promessa, spinta_richiesta, spinta_dichiarata,
     # riferimento_casa, riferimento_agenda, conferma_al_posto_del_vuoto,
     # vuoto_seconda_passata, ricerca_promessa, citazione_tolta, nome_tool_parlato,
-    # eco_contesto, spinta_archivio, spinta_rinuncia; "tutte" le spegne tutte. Quelle di
+    # eco_contesto, spinta_archivio, spinta_rinuncia, spinta_esercizi; "tutte" le spegne tutte. Quelle di
     # «sicurezza» (permessi, politica…) non si spengono: un nome di sicurezza o sconosciuto si
     # segnala all'avvio. Quelle del profilo (llm_profilo) si aggiungono a queste.
     # Vuoto = tutte accese (o quelle del profilo).
@@ -1240,6 +1240,23 @@ class Config:
     # manda di nuovo ai tutori: una frase spezzata in due turni lo mandava due volte (prova
     # e2e del 06/10). Un argomento diverso parte sempre; 0 = ogni volta
     minori_avviso_ripetuto_s: float = 600.0
+    # Esercizi generati da Calliope (08/10, calliope/esercizi/, docs/ricerche/
+    # 2026-10-08-esercizi.md): matematica e italiano per i ragazzi di casa, a voce e sulla
+    # scheda, con la correzione nel codice e il registro dei tentativi per i tutori
+    esercizi_enabled: bool = True
+    # Il secondo modello che risolve da solo gli esercizi d'italiano (se non concorda,
+    # l'esercizio si scarta). Vuoto = il modello della voce sullo stesso Ollama; sulla DGX si
+    # può scegliere un modello più forte. Su Ollama (API nativa, output strutturato)
+    esercizi_verifica_modello: str = ""
+    esercizi_verifica_url: str = ""
+    esercizi_verifica_timeout_s: float = 20.0
+    # Esercizi d'italiano senza il secondo parere quando il modello non risponde (solo lessico e
+    # Wikizionario). false = in quel caso niente esercizi d'italiano
+    esercizi_senza_secondo_parere: bool = False
+    # Esercizi d'italiano controllati in anticipo per livello, in secondo piano
+    esercizi_pronti: int = 3
+    # Esercizi a campione nel riepilogo per i tutori (da controllare al posto della revisione)
+    esercizi_campione: int = 3
     # Il modello guardiano (calliope/guardiano.py): giudica la domanda e ogni frase della
     # risposta prima della voce, solo per minori e ospiti. Su Ollama (lo stesso della voce se
     # guardiano_url è vuoto: llm_native_url). Scelta con prove/misura_guardiano.py (rapporto
@@ -1978,6 +1995,10 @@ RETI: dict[str, Rete] = {
     "spinta_rinuncia": Rete(
         "«non posso creare un'estensione» con il tool disponibile: spinta", MODELLO,
         "il 26B dopo un rifiuto rimasto nella storia (06/10, DGX)"),
+    "spinta_esercizi": Rete(
+        "esercizio in sospeso e risposta senza il tool esercizi: trattenuta, spinta", MODELLO,
+        "il 4B copiava dalla storia «Perfetto! Prossima: …» correggendo da sé (08/10, 7 turni "
+        "d'italiano su 18): la correzione è del programma"),
     # ── sicurezza: sempre accese, per ogni modello ──
     "permessi": Rete(
         "livello di chi parla e preset dei minori, a ogni esecuzione (ToolRegistry.call)",
@@ -2122,6 +2143,9 @@ SEZIONI: dict[str, list[str]] = {
                "minori_compiti_tentativi",
                "minori_impronta_mesi", "minori_gioco_minuti", "minori_richieste_giorni",
                "minori_avviso_ripetuto_s",
+               "esercizi_enabled", "esercizi_verifica_modello", "esercizi_verifica_url",
+               "esercizi_verifica_timeout_s", "esercizi_senza_secondo_parere",
+               "esercizi_pronti", "esercizi_campione",
                "guardiano_enabled", "guardiano_modello", "guardiano_url",
                "guardiano_timeout_s", "guardiano_se_guasto", "guardiano_keep_alive",
                "guardiano_num_ctx", "guardiano_ospiti", "guardiano_pericolo",
@@ -2356,6 +2380,8 @@ LIMITI: dict[str, tuple[float, float]] = {
     "stt_correzione_soglia": (0.0, 1.01), "stt_correzione_timeout_s": (0.2, 30.0),
     "speaker_id_threshold": (0.0, 1.0), "wake_threshold": (0.0, 1.0),
     "speaker_id_margine": (0.0, 1.0), "minori_margine_amministra": (0.0, 1.0),
+    "esercizi_verifica_timeout_s": (0.5, 300.0), "esercizi_pronti": (0, 50),
+    "esercizi_campione": (0, 50),
     "suoni_volume": (0.0, 1.0),
     "vad_threshold": (0.0, 1.0), "wake_consecutive": (1, 50), "turn_log_days": (1, 3650),
     "latenza_avviso_s": (0.0, 60.0), "attrito_avviso": (0.0, 100.0),
