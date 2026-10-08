@@ -8,6 +8,7 @@
 |---|---|---|
 | Casa (luci, tapparelle, termostato, sensori) | Home Assistant via WebSocket (`websockets`): agente di conversazione integrato per i comandi, stati delle entità esposte per le letture | `calliope/casa/` → `HomeBackend` (`base.py`), `HomeAssistantBackend` (`homeassistant.py`), `Regole` (`regole.py`), `descrivi` (`parole.py`), `diagnose`, `load_casa`; tool in `calliope/tools/casa.py` |
 | Errori di HA in italiano normale | i modelli veri delle risposte d'errore di HA (home-assistant-intents) | `calliope/casa/errori.py` → `riformula_errore`, usato da `HomeAssistantBackend._esito` |
+| Comando capito ma senza dispositivi (08/10) | nessuna: le entità esposte già in memoria | `calliope/casa/nomi.py` → `candidate`, `frase_fatto`, `frase_quale`, consigli a chi amministra; usato da `tools/casa.py` (`_per_nome`) |
 
 ## Note dalla sezione «Stato attuale» di CLAUDE.md (fino al 06/10)
 
@@ -129,3 +130,62 @@
     corrisponde resta com'è, salvo parole tecniche (dominio, classe, entità): allora una
     frase per codice (`no_valid_targets`, `no_intent_match`, `failed_to_handle`). L'HA finto
     ora risponde con i testi veri (`errore_ha`, `errori_forzati`).
+
+## Nome dell'entità e area diversa (08/10)
+
+- **Caso vero** (DGX, 08/10 18:52–18:54, righe `[CASA]` del giornale): «accendi il
+  soggiorno» → `HassTurnOn ['light.ingresso_1']`, fatto (HA la prende per nome: la luce si
+  chiama «Soggiorno» ma è nell'area Ingresso). «Spegni la luce in soggiorno» →
+  `HassTurnOff []`, `no_valid_targets`, e Calliope: «In soggiorno non posso comandare nessuna
+  luce: non è esposta ad Assist». «Spegni la luce in cucina» tre volte → `no_valid_targets`,
+  ma Calliope diceva «Home Assistant non ha capito il comando», un momento dopo che
+  `casa_stato` aveva detto «è accesa la luce in cucina». Assist con «la luce in X» cerca le
+  luci **dell'area X**: il nome dell'entità non conta.
+- **Perché «non ha capito»** con `no_valid_targets`: verificato sul sorgente di HA
+  (`conversation/default_agent.py`, ramo dev, 08/10): `_get_match_error_response` risponde con
+  la chiave `no_intent` («Mi dispiace, non ho capito») anche quando la frase è stata capita ma
+  i bersagli no, se non riconosce quale vincolo è fallito (o per uno stato senza stati), con il
+  codice `no_valid_targets`. `errori.py` riconosceva il modello `no_intent` e diceva «non ha
+  capito il comando» senza guardare il codice. Ora con un codice diverso da
+  `no_intent_match` vale la frase del codice («In Home Assistant non trovo un dispositivo
+  esposto ad Assist che corrisponda alla richiesta.»). Il motivo esatto della cucina in HA non
+  si vede dal giornale (HA non dice il vincolo); probabile che la luce «Cucina» non sia
+  nell'area Cucina, come il soggiorno.
+- **La candidata tra le esposte** (`casa/nomi.py`, `tools/casa.py: _per_nome`): dopo
+  `no_valid_targets` o `no_intent_match` su un comando semplice (accendi, spegni, apri, chiudi,
+  alza, abbassa, attiva, disattiva; niente percentuali né gradi) si toglie dalla frase il verbo,
+  gli articoli e le parole del tipo («luce», «lampada», «presa», «tapparella»…): resta la
+  stanza detta («soggiorno»). Candidate: le entità esposte **visibili a chi parla**, del tipo
+  detto (luce = `light`, o uno `switch` con una parola di luce nel nome o negli alias: il relè
+  di una lampada; «presa» = switch; tapparella = cover senza classe delicata) e adatte al verbo,
+  che le regole lasciano comandare (mai delicate, pulsanti di riavvio, scene, script), il cui
+  nome o alias senza le parole del tipo è la stanza detta («Luce soggiorno» → «soggiorno»),
+  oppure la cui area (nome o alias) è la stanza detta. Gli omonimi irraggiungibili contano come
+  uno solo.
+  - **Una candidata**: si riprova **una** volta con il nome esatto («spegni Soggiorno»,
+    «chiudi» di una luce → «spegni»). La verifica a secco della riprova deve toccare solo lei
+    (o i suoi omonimi): un bersaglio in più → non si esegue e si dice l'errore di prima. Le
+    regole (ospite, minore, delicata) valgono come sempre. Frase: «Ho spento «Soggiorno», che
+    in Home Assistant è nell'area Ingresso.»; senza area «…: in Home Assistant non è in
+    nessuna stanza.»; area giusta «Ho spento «Cucina».».
+  - **Più candidate**: «Ho trovato più dispositivi: «Taverna», nell'area Cantina o «Faretti
+    taverna», nell'area Taverna. Quale intendi?», niente eseguito.
+  - **Nessuna**: la frase d'errore di HA riscritta (con il codice vero).
+  - È la correzione della forma di una scelta già fatta dal modello (principio 10): il modello
+    ha scelto `casa_comando` e il dispositivo, qui cambia solo come lo si nomina a HA; effetto
+    reversibile. Nel registro dei turni `casa_nome_entita` (anche per la domanda).
+- **Consiglio a chi amministra** (una volta per entità e stanza, in memoria fino al
+  riavvio, al più 20): «La luce «Soggiorno» è nell'area Ingresso: se la chiami «luce in
+  soggiorno», in Home Assistant spostala nell'area Soggiorno.» (o «crea l'area … e spostala
+  lì» se l'area detta non c'è). Se il comando l'ha dato chi amministra lo sente subito dopo la
+  frase; altrimenti lo dice `casa_integrazione` a chi amministra («Un consiglio: …», anche
+  nella guida scritta). Niente URL. Nel giornale `[CASA] consiglio per chi amministra`.
+- **Prove**: `prova_casa_nomi` (a secco, casa finta in memoria, nomi e stanze di fantasia):
+  il caso vero, switch come luce, nome uguale all'area, due candidate, nessuna, omonima
+  irraggiungibile, riprova che allargherebbe, delicati, scene, percentuali e verbi esclusi,
+  ospite, il consiglio una volta sola, «non ho capito» con `no_valid_targets`. In
+  `prova_casa_ha` l'errore forzato «la luce della cucina» ora trova due luci esposte in cucina
+  e chiede quale; la frase riformulata si prova su «le luci al piano di sopra».
+- **Da fare a mano** sulla casa vera: spostare la luce «Soggiorno» nell'area Soggiorno (o
+  darle l'alias) e controllare l'area della luce «Cucina»; rimisurare a voce «spegni la luce
+  in soggiorno» e «in cucina».

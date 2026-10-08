@@ -83,6 +83,7 @@ A_SECCO = [
     ("prova_documenti.py", [], "documenti Word, Excel e PDF: file, formule, modifiche, permessi"),
     ("prova_ufficio.py", [], "ufficio: conti, XML FatturaPA (XSD se c'è), numerazione concorrente, rubrica, modelli Word e PowerPoint, flusso a voce"),
     ("prova_casa_ha.py", [], "casa via Home Assistant con un HA finto: regole, permessi, TLS, diagnosi"),
+    ("prova_casa_nomi.py", [], "casa: comando capito da HA ma senza dispositivi (08/10), la candidata tra le esposte per nome o area, domanda, mai allargare, consiglio a chi amministra"),
     ("prova_capacita.py", [], "registro delle capacità: stati, riassunto, prompt, calliope_stato, macchina nuova"),
     ("prova_piano.py", [], "taratura della macchina, fasi 1–2 (08/10): inventario con sonde finte (portatile, DGX unificata, senza GPU, registro, GPU fuori catalogo, modello in parte sulla CPU), catalogo con fonti, piano su macchine finte (solo CPU, 8, 16, 24, 32 GB, DGX di oggi ritrovata, Windows su ARM) con i contrari, calliope stato --piano in sola lettura"),
     ("prova_installa.py", [], "installazioni con un server HTTP finto: catalogo, permessi, offerta, ripresa"),

@@ -12,7 +12,9 @@ home-assistant-intents 2026.9.30, verificato con `get_intents("it")`). prove/pro
 li confronta con il pacchetto installato, così un cambio di testo in HA si vede subito.
 Codici di errore di HA (`data.code`): no_intent_match, no_valid_targets, failed_to_handle,
 unknown. Una frase che non corrisponde a nessun modello resta com'è, salvo le parole
-tecniche (dominio, classe, entità): allora vale una frase per codice.
+tecniche (dominio, classe, entità): allora vale una frase per codice. Anche il modello
+generico «non ho capito» con un codice diverso da no_intent_match (08/10: HA lo usa come
+ripiego quando non trova i dispositivi) diventa la frase del codice.
 """
 
 import re
@@ -191,6 +193,14 @@ def riformula_errore(speech: str, codice: str | None = None) -> tuple[str, str |
     for key, rx in _PATTERNS:
         m = rx.match(text)
         if m:
+            # «Mi dispiace, non ho capito» è anche il ripiego di HA quando la frase è stata
+            # capita ma non trova i dispositivi (default_agent._get_match_error_response:
+            # nessun vincolo fallito riconosciuto, o uno stato senza stati): con il codice
+            # no_valid_targets dire «non ha capito il comando» è falso (08/10, «spegni la
+            # luce in cucina» tre volte). Vale il codice vero
+            if key == "no_intent" and codice and codice != "no_intent_match" \
+                    and codice in _PER_CODICE:
+                return _PER_CODICE[codice], key
             out = _riscrivi(key, m.groupdict())
             if out:
                 return out, key
