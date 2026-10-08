@@ -1320,6 +1320,10 @@ def uscite_settimana(cfg) -> dict | None:
     r["frase"] = (f"internet di estensioni e agente nell'ultima settimana: {r['richieste']} "
                   f"richieste verso {r['host']} siti, {r['fatte']} fatte ({kb:.0f} kB "
                   f"ricevuti, {r['byte_inviati']} byte inviati) e {r['bloccate']} bloccate")
+    parti = [f"{r[k]} {n}" for k, n in (("sonde", "sonde"), ("ricollaudi", "ricollaudi"))
+             if r.get(k)]
+    if parti:
+        r["frase"] += "; di cui " + " e ".join(parti) + " della modalità sviluppo"
     return r
 
 
