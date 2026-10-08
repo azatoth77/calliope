@@ -998,6 +998,20 @@ def prepara_gestisci(ctx, argomenti: dict) -> dict:
     if est is None or not isinstance(argomenti, dict) or "azione" not in argomenti:
         return argomenti
     nome = _nome(argomenti.get("nome"), est.archivio)
+    if est.archivio.voce(nome) is None:
+        # Nella modalità sviluppo (08/10) un nome che non è di nessuna estensione è quella che
+        # si sta sviluppando: il 4B la chiamava con il nome dato alla richiesta («MeteoSì») e
+        # non con il titolo del manifesto («Meteo per città»). Forma di una scelta già fatta
+        try:
+            from ..sviluppo import chi, servizio
+            svs = servizio(ctx)
+            sv = svs.corrente(chi(ctx)) if svs is not None else None
+        except Exception:  # noqa: BLE001
+            sv = None
+        if sv is not None and sv.estensione and est.archivio.voce(sv.estensione) is not None:
+            note_rule(ctx, "sviluppo_nome_estensione")
+            nome = sv.estensione
+            argomenti = dict(argomenti, nome=nome)
     vera = azione_vera(argomenti.get("azione"), nome, est.archivio)
     if vera != str(argomenti.get("azione") or "").strip().lower():
         note_rule(ctx, "estensioni_azione_sinonimo")

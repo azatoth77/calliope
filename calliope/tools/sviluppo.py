@@ -72,22 +72,9 @@ def controlla_nuovo(ctx, tool: str, args: dict) -> dict | None:
     """Uno sviluppo nuovo (un'estensione, un programma, un lavoro dell'agente) mentre uno è
     aperto: non parte, Calliope lo dice e propone di sospendere quello aperto (decisione di
     Dario dell'08/10). None se la richiesta è dello sviluppo aperto, o non ce n'è uno."""
-    from ..sviluppo import ALLA, _nome_estensione, chi
-    svs = _svs(ctx)
-    if svs is None:
-        return None
-    sv = svs.corrente(chi(ctx))
+    from ..sviluppo import ALLA, estraneo
+    sv = estraneo(tool, args, ctx)
     if sv is None:
-        return None
-    a = args if isinstance(args, dict) else {}
-    if tool == "estensione_crea" and sv.tipo == "estensione":
-        mod = str(a.get("modifica") or "").strip()
-        if mod and sv.estensione and _nome_estensione(ctx, mod) == sv.estensione:
-            return None
-        if not mod and sv.fase == "analisi" and sv.lavoro is None:
-            return None                     # le risposte alle domande dell'analisi
-    if tool == "delega_lavoro" and sv.tipo == "programma" and sv.fase == "analisi" \
-            and sv.lavoro is None and str(a.get("tipo") or "").lower() == "codice":
         return None
     note_rule(ctx, "sviluppo_altro_bloccato")
     frase = (f"Adesso stiamo sviluppando «{sv.titolo}» e siamo {ALLA.get(sv.fase, sv.fase)}: "

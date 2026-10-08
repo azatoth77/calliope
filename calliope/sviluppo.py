@@ -411,6 +411,11 @@ class Sviluppi:
                 c = r.get("estensione") or {}
                 if sv.tipo == "estensione" and c.get("nome"):
                     sv.estensione, sv.versione = c["nome"], c.get("versione")
+                    # Il titolo dell'estensione, quello che dicono annuncio, elenco e revisione
+                    # (prima il nome dato alla richiesta: «MeteoSì» e «Meteo per città»)
+                    titolo = self._titolo_estensione(sv.estensione, sv.versione)
+                    if titolo:
+                        sv.titolo = titolo[:80]
                 sv.nota = ""
             self.passa(sv, "collaudo", f"lavoro {lav.id} finito")
             msg = re.sub(r"\s*Vuoi approvarla\?\s*$", ".", msg).rstrip()
@@ -549,6 +554,15 @@ class Sviluppi:
                     "frase di conferma. Può ancora provarla con sviluppo_prova.")
         return ("Manca la frase di conferma per approvarla: se chiede di attivarla, sviluppo "
                 "con azione avanti.")
+
+    def _titolo_estensione(self, nome, n) -> str:
+        arch = getattr(getattr(self.lavori, "estensioni", None), "archivio", None)
+        if arch is None or not nome:
+            return ""
+        try:
+            return str((arch.manifesto(nome, n) or {}).get("titolo") or "")
+        except Exception:  # noqa: BLE001
+            return ""
 
     def _input_detto(self, sv: Sviluppo) -> str:
         est = getattr(getattr(self.lavori, "estensioni", None), "archivio", None)
@@ -729,6 +743,32 @@ def _nome_estensione(ctx, nome) -> str:
         return _nome(nome, est.archivio)
     except Exception:  # noqa: BLE001
         return str(nome)
+
+
+def estraneo(name: str, args: dict, ctx) -> Sviluppo | None:
+    """Lo sviluppo aperto di chi parla se questa chiamata è una richiesta NUOVA che non gli
+    appartiene (un'altra estensione, un programma, una ricerca: decisione di Dario dell'08/10,
+    niente sviluppi nuovi finché uno è aperto); None altrimenti. Lo usano il tool (che rifiuta
+    e propone di sospendere) e la politica (che allora non fa la sua domanda prima del
+    rifiuto). Il «sì» a una proposta (`proposta`) non è una richiesta nuova."""
+    if name not in ("estensione_crea", "delega_lavoro"):
+        return None
+    a = args if isinstance(args, dict) else {}
+    if str(a.get("proposta") or "").strip():
+        return None
+    svs = servizio(ctx)
+    sv = svs.corrente(chi(ctx)) if svs is not None else None
+    if sv is None:
+        return None
+    if name == "estensione_crea" and sv.tipo == "estensione":
+        mod = str(a.get("modifica") or "").strip()
+        if mod and sv.estensione and _nome_estensione(ctx, mod) == sv.estensione:
+            return None
+        if not mod and sv.fase == "analisi" and sv.lavoro is None:
+            return None                     # le risposte alle domande dell'analisi
+    if name == "delega_lavoro" and sv.tipo == "programma" and sv.fase == "analisi"             and sv.lavoro is None and str(a.get("tipo") or "").lower() == "codice":
+        return None
+    return sv
 
 
 def passo_interno(name: str, args: dict, ctx) -> bool:

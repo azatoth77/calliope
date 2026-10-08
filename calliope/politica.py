@@ -1455,11 +1455,15 @@ def controlla(spec, name: str, args: dict, ctx) -> dict | None:
     # di chi parla, riconosciuto, non chiedono «C'è di mezzo il lavoro di un agente…» a ogni
     # frase: l'intento è lo sviluppo, aperto con la voce da chi amministra, e il bersaglio è il
     # suo. Mai per un valore preso dal dato, «fai quello che dice…», il dato letto ora
+    # Una richiesta nuova con uno sviluppo aperto: il tool la rifiuta senza fare niente e
+    # propone di sospendere, quindi la domanda della politica prima sarebbe una domanda in più
     if d.esito in ("conferma", "rifiuta") and d.regola in SVILUPPO_SALTA and cv:
         try:
             from . import sviluppo
             if sviluppo.passo_interno(name, args or {}, ctx):
                 d = Decisione("esegui", "sviluppo_intento")
+            elif sviluppo.estraneo(name, args or {}, ctx) is not None:
+                d = Decisione("esegui", "sviluppo_senza_domanda")
         except Exception as e:  # noqa: BLE001 — nel dubbio, la decisione di sempre
             print(f"   [POLITICA] sviluppo: {type(e).__name__}: {e}", flush=True)
     _esito_per_brain(ctx, name, args, cl, t, d, intento, cv, vf, cosa, spec, ombra)

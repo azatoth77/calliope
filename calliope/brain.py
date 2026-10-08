@@ -2380,8 +2380,9 @@ class Brain:
             if sv is None or not nomi or dello_sviluppo:
                 return None
             basso = said.lower()
-            if sv.titolo.lower() in basso or "svilupp" in basso:
-                return None
+            if sv.titolo.lower() in basso or re.search(
+                    r"svilupp|collaud|revision|analisi|estension|programm|agente", basso):
+                return None                  # il modello l'ha già ricordato con parole sue
             self._rule("sviluppo_riga_fuori_tema")
             return svs.riga_fuori_tema(sv)
         except Exception as e:  # noqa: BLE001 — la riga in più non ferma la risposta

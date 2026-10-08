@@ -763,6 +763,15 @@ def prova_politica(tmp: Path, iso):
                        "attivala")
     verifica("approvare la sua estensione: niente domanda della politica (la sfida resta "
              "nel servizio)", res is None and "sviluppo_intento" in reg_, str(res))
+    ctx.speaker_ctx, ctx.regole = P.speaker(), []
+    args = reg.get("estensioni_gestisci").prepara(ctx, {"azione": "approva", "nome": "MeteoSì"})
+    verifica("approva con il nome dato alla richiesta («MeteoSì»): è l'estensione dello "
+             "sviluppo (sviluppo_nome_estensione)",
+             args.get("nome") == "meteo_citta" and "sviluppo_nome_estensione" in ctx.regole,
+             str(args))
+    args = reg.get("estensioni_gestisci").prepara(ctx, {"azione": "approva", "nome": "valute"})
+    verifica("contrario: il nome di un'altra estensione che c'è resta quello",
+             args.get("nome") == "valute")
     res, reg_ = decide("estensione_crea", {"compito": "aggiungi l'umidità",
                                            "modifica": "meteo_citta"}, "aggiungi l'umidità")
     verifica("modifica della sua estensione: esegue", res is None, str(res))
@@ -770,16 +779,27 @@ def prova_politica(tmp: Path, iso):
     res, _ = decide("estensioni_gestisci", {"azione": "approva", "nome": "valute"}, "attivala")
     verifica("contrario: approvare un'ALTRA estensione → la domanda di sempre",
              res is not None and "C'è di mezzo" in detta(res), str(res))
-    res, _ = decide("estensione_crea", {"compito": "aggiungi", "modifica": "valute"}, "aggiungi")
-    verifica("contrario: modificare un'altra estensione → domanda", res is not None)
+    res, reg_ = decide("estensione_crea", {"compito": "aggiungi", "modifica": "valute"},
+                       "aggiungi")
+    verifica("modificare un'altra estensione: non è un passo interno, è uno sviluppo nuovo "
+             "(niente domanda prima del rifiuto del tool)",
+             res is None and "sviluppo_senza_domanda" in reg_ and "sviluppo_intento" not in reg_)
     res, _ = decide("sviluppo", {"azione": "avanti"}, sc=P.speaker("Bianca", "familiare"))
     verifica("contrario: Bianca (non è il suo sviluppo) → domanda", res is not None)
     res, _ = decide("sviluppo", {"azione": "avanti"}, sc=P.speaker(come="schermo"))
     verifica("contrario: scritto dallo schermo → domanda", res is not None)
+    res, reg_ = decide("delega_lavoro", {"tipo": "ricerca", "compito": "pompe di calore"},
+                       "fai una ricerca sulle pompe di calore")
+    verifica("una richiesta nuova con lo sviluppo aperto: niente domanda della politica, il "
+             "tool la rifiuta (sviluppo_senza_domanda)",
+             res is None and "sviluppo_senza_domanda" in reg_, str(res))
+    ctx.speaker_ctx = P.speaker()
+    out = ta._delega_lavoro(ctx, tipo="ricerca", compito="pompe di calore")
+    verifica("…e il tool la rifiuta proponendo di sospendere", out.get("ok") is False
+             and "sospenda" in detta(out), detta(out))
     res, _ = decide("delega_lavoro", {"tipo": "ricerca", "compito": "pompe di calore"},
-                    "fai una ricerca sulle pompe di calore")
-    verifica("contrario: una delega che non è dello sviluppo → la politica di sempre",
-             res is not None and "C'è di mezzo" in detta(res), str(res))
+                    "fai una ricerca sulle pompe di calore", sc=P.speaker(come="schermo"))
+    verifica("contrario: scritto dallo schermo → la domanda di sempre", res is not None)
     svs.sospendi(svs.corrente("u1"))
     res, _ = decide("sviluppo", {"azione": "avanti"})
     verifica("contrario: sviluppo sospeso → domanda", res is not None)
