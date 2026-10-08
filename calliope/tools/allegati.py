@@ -119,7 +119,10 @@ def _scheda_cassetto(ctx, cas, chi, righe, titolo: str) -> dict | None:
         return None
     from .. import minori
     try:
-        return cas.scheda(chi.id, righe, titolo=titolo, tieni=not minori.e_minore(chi))
+        # «Tieni» c'è per chi non è minore, e per il tutore sui file del figlio (va nella
+        # cartella del tutore: 08/10, cassetto-tutore)
+        tieni = not minori.e_minore(chi) or not minori.e_minore(_persona(ctx))
+        return cas.scheda(chi.id, righe, titolo=titolo, tieni=tieni)
     except Exception:  # noqa: BLE001 — la scheda non ferma la risposta
         return None
 
@@ -228,7 +231,12 @@ def _gestisci(ctx: ToolContext, azione: str = "", quale: str = "", di: str | Non
                 "cosa_fare": ("chiedi quale (allegato_leggi con cassetto mostra l'elenco), "
                               "oppure richiama con quale=\"tutti\" se la persona li vuole tutti")}
     from .. import minori
-    out = cas.esegui(chi.id, az, righe, minore=minori.e_minore(chi), nome_persona=chi.name)
+    # Un tutore sui file del figlio (08/10, cassetto-tutore): «Tieni» li mette nella SUA
+    # cartella dell'archivio (il figlio i documenti di casa non li vede; li tiene chi ne
+    # risponde), come dai pulsanti della scheda
+    tutore = chi is not prof
+    out = cas.esegui(chi.id, az, righe, minore=minori.e_minore(chi) and not tutore,
+                     nome_persona=prof.name if tutore else chi.name)
     if not out.get("ok"):
         return _final(out.get("errore") or "Non ci sono riuscita.", ok=False)
     frase = out["frase"]
@@ -238,7 +246,7 @@ def _gestisci(ctx: ToolContext, azione: str = "", quale: str = "", di: str | Non
         resto = [r for r in (cas.prendi(chi.id, i) for i in sorted(ids)) if r is not None]
         try:
             cas.manda_scheda(ctx.schermi, chi.id, cas.scheda(
-                chi.id, resto, tieni=not minori.e_minore(chi),
+                chi.id, resto, tieni=not minori.e_minore(chi) or tutore,
                 nota="" if resto else frase))
         except Exception:  # noqa: BLE001
             pass
