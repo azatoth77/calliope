@@ -15,6 +15,13 @@ il prossimo passo (registro delle capacità, calliope/capacita.py).
                                               pause dentro la frase per persona e canale,
                                               tagli probabili e la soglia che si sceglierebbe
                                               (solo stima, calliope/pause.py)
+    python -m calliope.stato --piano [--json] [--inventario FILE]
+                                              il piano dei modelli per questa macchina, in
+                                              sola lettura (calliope/piano.py): voce, Whisper,
+                                              guardiano, rilevatore, embedding, contesto,
+                                              agente, Piper, con stime e motivi; non applica
+                                              niente. --inventario: una macchina salvata (JSON
+                                              di --piano --json) invece di questa
     python -m calliope.stato --installa <azione>
                                               proposta, conferma da tastiera, scaricamento
                                               con avanzamento (stesso codice della voce)
@@ -151,6 +158,29 @@ def _log(cfg, azione: str, res: dict, t0: float):
         pass
 
 
+def piano_main(cfg, argv: list[str], as_json: bool) -> int:
+    """`--piano`: inventario della macchina, piano proposto, nessuna applicazione (08/10)."""
+    from . import macchina, piano
+    if "--inventario" in argv:
+        i = argv.index("--inventario")
+        try:
+            with open(argv[i + 1], encoding="utf-8") as fh:
+                inv = json.load(fh)
+            inv = inv.get("inventario", inv)
+        except (IndexError, OSError, ValueError) as e:
+            print(f"--inventario vuole un file JSON leggibile ({e})")
+            return 1
+    else:
+        inv = macchina.inventario(cfg)
+    p = piano.piano(inv, piano.da_config(cfg, inv))
+    if as_json:
+        print(json.dumps({"inventario": inv, "piano": p.as_json()}, ensure_ascii=False,
+                         indent=2, default=str))
+    else:
+        print(piano.testo(p))
+    return 0
+
+
 def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     try:
@@ -199,6 +229,8 @@ def main(argv=None) -> int:
             print()
             print(attrito.testo(sicurezza, soglia_a))
         return 0
+    if "--piano" in argv:
+        return piano_main(cfg, argv, as_json)
     if "--installa" in argv:
         i = argv.index("--installa")
         if i + 1 >= len(argv):

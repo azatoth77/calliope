@@ -481,3 +481,22 @@ riscaldamento di ~15k token dura qualche secondo (circa quanto la conferma detta
 `OLLAMA_NUM_PARALLEL=2` un turno che arriva prima della fine può finire nell'altro slot. Prova a
 secco in
 `prove/prova_dopo_annunci.py` (sezione 5).
+
+## Generazione nel registro dei turni e cache per token corretta (08/10, taratura fase 0)
+
+Ramo `taratura-fasi-0-2` ([ricerca del 07/10](../ricerche/2026-10-07-taratura-macchina.md), fase 0).
+
+- **Generazione**: `OllamaBackend.stream` passa anche `eval_count` ed `eval_duration`;
+  `OpenAIBackend.stream` (vLLM) misura dal primo all'ultimo pezzo, senza il primo token (che
+  paga la lettura). `Brain._note_usage` somma tutte le passate del turno in
+  `last_generazione`; il ciclo scrive `generati` e `generazione_tps` nel registro dei turni;
+  `latenza.giorno` dà mediana e p10 («i più lenti»: contesa con l'agente, modello in parte
+  sulla CPU) e `calliope stato --turni` la riga «generazione N token/s». Serve al rapporto tra
+  prima frase vera e pulita (§4.2 della ricerca) e all'adattamento delle fasi successive.
+- **`kv_ollama`** sovrastimava tre famiglie dove Ollama non espone lo schema: qwen3.6
+  (`qwen35moe`, `full_attention_interval` 4 con le teste KV come numero solo) 82 KiB a token
+  invece di 20; gpt-oss 48 invece di 24; Gemma 3 136 invece di 20 (+~120 MiB fissi). Ora gli
+  strati lineari si saltano e lo schema alternato viene da `SCHEMA_SLIDING` (solo le
+  architetture verificate: `gemma3` 6, `gptoss` 2); un'architettura non elencata resta
+  prudente. Forma letta il 08/10 da `/api/show` della DGX (qwen3.6, gpt-oss) e del portatile
+  (gemma3, qwen3.5). Per la voce di oggi (Gemma 4) non cambia niente.

@@ -73,6 +73,49 @@ kv = contesto.kv_ollama(LLAMA)
 verifica("llama senza finestra: tutti globali, dimensione della testa dall'embedding",
          kv and round(kv[0]) == round(32 * 8 * 256 * 2 * 1.1) and kv[1] == 0, kv)
 verifica("model_info vuoto → None", contesto.kv_ollama({}) is None)
+# Famiglie che il calcolo sovrastimava (08/10, taratura della macchina §3.4): forma vera da
+# /api/show (qwen3.6 e gpt-oss della DGX, gemma3 e qwen3.5 del portatile)
+QWEN36 = {"general.architecture": "qwen35moe", "qwen35moe.block_count": 41,
+          "qwen35moe.attention.head_count": 16, "qwen35moe.attention.head_count_kv": 2,
+          "qwen35moe.attention.key_length": 256, "qwen35moe.attention.value_length": 256,
+          "qwen35moe.full_attention_interval": 4, "qwen35moe.nextn_predict_layers": 1,
+          "qwen35moe.embedding_length": 2048, "qwen35moe.context_length": 262144}
+GPTOSS = {"general.architecture": "gptoss", "gptoss.block_count": 24,
+          "gptoss.attention.head_count": 64, "gptoss.attention.head_count_kv": 8,
+          "gptoss.attention.key_length": 64, "gptoss.attention.value_length": 64,
+          "gptoss.attention.sliding_window": 128, "gptoss.embedding_length": 2880}
+GEMMA3 = {"general.architecture": "gemma3", "gemma3.block_count": 34,
+          "gemma3.attention.head_count": 8, "gemma3.attention.head_count_kv": 4,
+          "gemma3.attention.key_length": 256, "gemma3.attention.value_length": 256,
+          "gemma3.attention.sliding_window": 1024, "gemma3.embedding_length": 2560}
+QWEN35 = {"general.architecture": "qwen35", "qwen35.block_count": 32,
+          "qwen35.attention.head_count": 16,
+          "qwen35.attention.head_count_kv": [0, 0, 0, 4] * 8,
+          "qwen35.attention.key_length": 256, "qwen35.attention.value_length": 256,
+          "qwen35.full_attention_interval": 4, "qwen35.embedding_length": 2560}
+kv = contesto.kv_ollama(QWEN36)
+verifica("qwen3.6: uno strato su 4 con attenzione (10 su 41) → 20 KiB, non 82",
+         kv and round(kv[0]) == round(10 * 2 * 512 * 2 * 1.1) and kv[1] == 0, kv)
+kv = contesto.kv_ollama(GPTOSS)
+verifica("gpt-oss: metà strati sliding da 128 → 24 KiB a token e 3 MiB fissi, non 48",
+         kv and round(kv[0]) == round(12 * 8 * 128 * 2 * 1.1)
+         and round(kv[1]) == round(12 * 8 * 128 * 2 * 128 * 1.1), kv)
+kv = contesto.kv_ollama(GEMMA3)
+verifica("gemma3: 5 sliding e 1 globale → 5 strati globali, 20 KiB e ~110 MiB fissi, non 136",
+         kv and round(kv[0]) == round(5 * 4 * 512 * 2 * 1.1)
+         and 100 * 2**20 < kv[1] < 130 * 2**20, kv)
+kv = contesto.kv_ollama(QWEN35)
+verifica("contrario: qwen3.5 con le teste per strato resta 32 KiB (l'intervallo non conta "
+         "due volte)", kv and round(kv[0]) == round(8 * 4 * 512 * 2 * 1.1), kv)
+senza = {k: v for k, v in GEMMA3.items() if "sliding" not in k}
+kv = contesto.kv_ollama(senza)
+verifica("contrario: gemma3 senza sliding_window → tutti globali, prudente",
+         kv and round(kv[0]) == round(34 * 4 * 512 * 2 * 1.1), kv)
+altro = {k.replace("gptoss", "ignoto"): v for k, v in GPTOSS.items()}
+altro["general.architecture"] = "ignoto"
+kv = contesto.kv_ollama(altro)
+verifica("contrario: architettura non elencata con la finestra ma senza schema → prudente",
+         kv and round(kv[0]) == round(24 * 8 * 128 * 2 * 1.1), kv)
 verifica("contesto massimo del modello", (contesto.contesto_ollama(E4B),
          contesto.contesto_ollama(B26), contesto.contesto_ollama({})) == (131072, 262144, None))
 METRICHE = ('# HELP vllm:cache_config_info x\nvllm:cache_config_info{block_size="16",'
@@ -291,7 +334,8 @@ class Gestore(BaseHTTPRequestHandler):
             righe = [{"message": {"content": "Ciao, "}, "done": False},
                      {"message": {"content": "tutto bene."}, "done": False},
                      {"message": {"content": ""}, "done": True,
-                      "prompt_eval_count": 9000, "eval_count": 12}]
+                      "prompt_eval_count": 9000, "eval_count": 12,
+                      "eval_duration": 150_000_000}]
             raw = "".join(json.dumps(r) + "\n" for r in righe).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/x-ndjson")
@@ -388,6 +432,8 @@ detto = "".join(brain.stream_reply("Ciao, come stai?", "amministra"))
 verifica("Ollama: token del turno = prompt_eval_count + eval_count, sulla finestra",
          brain.last_context == {"token": 9012, "finestra": 32768, "percento": 28},
          (detto, brain.last_context))
+verifica("Ollama: generazione del turno da eval_count ed eval_duration (fase 0, 08/10)",
+         brain.last_generazione == {"token": 12, "ns": 150_000_000}, brain.last_generazione)
 verifica("riga per la console", contesto.riga(brain.last_context)
          == "[CONTESTO] 9.012 token su 32.768 (28 %)")
 # API OpenAI (vLLM): stream_options.include_usage e l'ultimo pezzo con usage
