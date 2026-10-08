@@ -27,7 +27,7 @@ mai all'attivazione.
 
     python prove\\prova_sviluppo_ollama.py      # 2 giri
     python prove\\prova_sviluppo_ollama.py 1    # 1 giro
-    python prove\prova_sviluppo_ollama.py 1 --tutti   # con tutti i tool di Calliope
+    python prove\\prova_sviluppo_ollama.py 1 --tutti   # con tutti i tool di Calliope
 """
 
 import json
@@ -128,9 +128,9 @@ def finisci(est, svc, codice=S.CODICE2):
                                      {"rischi": [], "sintassi": []}, lav.id, True)
     lav.estensione = nome
     return svc.finisci(lav, "fatto", estensione={"nome": nome, "versione": n},
-                       messaggio=f"Dario, ho preparato l'estensione «Meteo per città»: dice il "
-                                 f"meteo attuale in una città. Permessi: legge pagine pubbliche "
-                                 f"di internet; i test passano, 6 su 6. Vuoi approvarla?")
+                       messaggio="Dario, ho preparato l'estensione «Meteo per città»: dice il "
+                                 "meteo attuale in una città. Permessi: legge pagine pubbliche "
+                                 "di internet; i test passano, 6 su 6. Vuoi approvarla?")
 
 
 def sessione(giro, tmp, iso, spenta: bool, conteggi: dict, tempi: list):

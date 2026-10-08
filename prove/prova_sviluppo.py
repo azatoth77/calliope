@@ -29,7 +29,6 @@ con provare DOPO approvare. Qui lo stesso iter come stato a fasi, con il docker 
     python prove\\prova_sviluppo.py
 """
 
-import dataclasses
 import json
 import os
 import sys
