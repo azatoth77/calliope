@@ -92,9 +92,8 @@ class Wikizionario:
 
     @staticmethod
     def da_config(cfg, biblioteca=None) -> "Wikizionario | None":
-        diz = getattr(biblioteca, "dizionario", None)
-        if diz is not None:
-            return Wikizionario(diz.archive)
+        """Un lettore suo del file del Wikizionario (non quello della biblioteca, che si
+        chiude quando la biblioteca si ricarica dopo un aggiornamento)."""
         try:
             from pathlib import Path
             from ..installa.catalogo import risolvi_zim
@@ -123,8 +122,9 @@ class Wikizionario:
                     e, hops = e.get_redirect_entry(), hops + 1
                 out = parti_da_html(bytes(e.get_item().content).decode("utf-8", "replace"))
                 break
-            except Exception:  # noqa: BLE001 — una voce illeggibile vale «assente»
-                continue
+            except Exception as e:  # noqa: BLE001
+                # File illeggibile: non è un esercizio sbagliato, è il controllo che manca
+                raise RuntimeError(f"Wikizionario illeggibile: {type(e).__name__}") from e
         with self._lock:
             self._cache[forma] = out
         return out
@@ -242,9 +242,12 @@ def verifica_italiano(es: Esercizio, diz: Wikizionario | None,
     out: dict = {"tipo": "linguistico"}
     problemi: list[str] = []
     if diz is not None and diz.pronto:
-        ok, prob = diz.controlla_frase([tuple(p) for p in es.dati.get("parole", [])])
-        out["wikizionario"] = "ok" if ok else "no"
-        problemi += prob
+        try:
+            ok, prob = diz.controlla_frase([tuple(p) for p in es.dati.get("parole", [])])
+            out["wikizionario"] = "ok" if ok else "no"
+            problemi += prob
+        except RuntimeError as e:
+            out["wikizionario"] = f"guasto: {e}"
     else:
         out["wikizionario"] = "assente"
     if problemi:

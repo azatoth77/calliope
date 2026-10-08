@@ -259,6 +259,17 @@ p = ParereFinto()
 verifica("Wikizionario contrario → scartato senza chiedere al modello",
          verifica_italiano(es, DizFinto([parola]), p)["esito"] == "scartato" and p.chiamate == 0)
 
+class DizRotto:
+    pronto = True
+
+    def controlla_frase(self, parole):
+        raise RuntimeError("Wikizionario illeggibile: ZimError")
+
+
+v = verifica_italiano(es, DizRotto(), ParereFinto())
+verifica("Wikizionario illeggibile: non scarta, decide il secondo parere",
+         v["esito"] == "buono" and v["wikizionario"].startswith("guasto"), v)
+
 TMP = Path(tempfile.mkdtemp(prefix="calliope-esercizi-"))
 cfg = Config()
 cfg.memory_db = str(TMP / "memoria.db")
