@@ -55,6 +55,7 @@ TOOL_SVILUPPO = frozenset({"sviluppo_passo", "sviluppo_collauda", "sviluppo_apri
                            "sviluppo_chiedi", "sviluppo_correggi"})
 CONTESTI = "sviluppi"           # la cartella dei contesti conservati, accanto a sviluppi.json
 MAX_CHIESTI = 10
+MAX_LAVORI = 40
 CHIUSURA_TURNI = 3              # la conferma della chiusura vale per tanti turni
 
 
@@ -71,6 +72,24 @@ def leggibile(titolo: str) -> str:
     if t and t == t.lower() and "_" in grezzo:
         t = t[:1].upper() + t[1:]
     return t
+
+
+def _migliaia(n) -> str:
+    return f"{int(n or 0):,}".replace(",", "\u202f")
+
+
+def _numeri(lav) -> dict:
+    """Token (generati, ragionamento compreso), passate, secondi di lavoro (l'attesa di una
+    risposta non conta) e giri di un lavoro."""
+    inizio, fine = getattr(lav, "inizio", None), getattr(lav, "fine", None)
+    secondi = 0.0
+    if inizio:
+        secondi = max(0.0, (fine or time.time()) - inizio
+                      - float(getattr(lav, "attesa_s", 0) or 0))
+    return {"token": int(getattr(lav, "token", 0) or 0),
+            "ragionamento": int(getattr(lav, "ragionamento", 0) or 0),
+            "passate": int(getattr(lav, "passi", 0) or 0), "secondi": round(secondi, 1),
+            "giri": int(getattr(lav, "giro", 1) or 1)}
 
 
 def _oggi() -> str:
@@ -120,6 +139,10 @@ class Sviluppo:
     chiusura_chiesta: int | None = None   # il turno in cui si è chiesto «Chiudo lo sviluppo…?»
     chiesti: list = field(default_factory=list)   # domande all'agente: domanda, voce, …
     correzioni: int = 0               # le correzioni chieste (sviluppo_correggi)
+    # I lavori dell'agente dello sviluppo (08/10, la scheda: i numeri dello sviluppo intero):
+    # [{id, creato, correzione (0 = il primo, N = la correzione N), token, ragionamento,
+    #   passate, secondi, giri}], aggiornati a ogni lavoro finito
+    lavori: list = field(default_factory=list)
 
     def fasi(self) -> tuple[str, ...]:
         return FASI_PROGRAMMA if self.tipo == "programma" else FASI_ESTENSIONE
@@ -163,6 +186,10 @@ class Sviluppi:
         # dopo (tools/sviluppo.py: promuovi → sviluppo_apri)
         self.da_programma: dict = {}
         self.sospendi_s = max(0.0, float(getattr(cfg, "sviluppo_sospendi_min", 30.0) or 0)) * 60
+        # Gli schermi (calliope/schermi/hub.Schermi, da main.py): a ogni cambio di fase o di
+        # stato la scheda `sviluppo:<id>` va agli schermi personali di chi sviluppa, che
+        # entrano nella vista dello sviluppo o ne escono (08/10). None = niente schermi
+        self.schermi = None
         self._carica()
 
     # ─────────────────────────── disco ───────────────────────────
@@ -238,6 +265,7 @@ class Sviluppi:
                 self.log(f"[SVILUPPO] {sv.id} «{sv.titolo}» sospeso: "
                          f"{int(self.sospendi_s // 60)} minuti senza parlarne")
                 self._salva()
+                self.agli_schermi(sv)
                 return None
             return sv
 
@@ -302,6 +330,7 @@ class Sviluppi:
             self.sviluppi.append(sv)
         self.log(f"[SVILUPPO] {sv.id} aperto: {tipo} «{sv.titolo}» per {persona_nome or persona}")
         self._salva()
+        self.agli_schermi(sv)
         return sv
 
     def tocca(self, sv: Sviluppo):
@@ -320,6 +349,7 @@ class Sviluppi:
             sv.fase = fase
             sv.ultimo = time.time()
         self._salva()
+        self.agli_schermi(sv)
 
     def _cambia_stato(self, sv: Sviluppo, stato: str, motivo: str):
         sv.storia.append({"quando": time.time(), "stato": stato, "perche": motivo})
@@ -333,6 +363,7 @@ class Sviluppi:
             self._cambia_stato(sv, "sospesa", motivo)
         self.log(f"[SVILUPPO] {sv.id} «{sv.titolo}» sospeso ({motivo})")
         self._salva()
+        self.agli_schermi(sv)
 
     def riprendi(self, sv: Sviluppo) -> Sviluppo | None:
         """Riapre `sv`; restituisce quello che era aperto (ora sospeso) o None."""
@@ -345,6 +376,9 @@ class Sviluppi:
             sv.ultimo = time.time()
         self.log(f"[SVILUPPO] {sv.id} «{sv.titolo}» ripreso")
         self._salva()
+        if prima is not None:
+            self.agli_schermi(prima)
+        self.agli_schermi(sv)
         return prima
 
     def chiudi(self, sv: Sviluppo, motivo: str):
@@ -353,6 +387,7 @@ class Sviluppi:
             sv.chiusura_chiesta = None
         self.log(f"[SVILUPPO] {sv.id} «{sv.titolo}» chiuso ({motivo})")
         self._salva()
+        self.agli_schermi(sv)
         # Il contesto dei lavori serve finché lo sviluppo è aperto o sospeso (versione 2)
         self._togli_contesto(sv)
 
@@ -387,6 +422,7 @@ class Sviluppi:
             return None
         with self._lock:
             sv.lavoro, sv.proposto, sv.nota = lav.id, None, ""
+            self._registra_lavoro(sv, lav)
             # Ai tetti del giro il lavoro si ferma a una tappa, non si chiude (08/10)
             lav.tappe = True
             if not sv.specifica:
@@ -401,6 +437,69 @@ class Sviluppi:
                 self._file_del_programma(sv, lav)
         self.passa(sv, "sviluppo", f"lavoro {lav.id}")
         return sv
+
+    # ─────────────────────────── i numeri dei lavori (08/10) ───────────────────────────
+    @staticmethod
+    def _registra_lavoro(sv: Sviluppo, lav):
+        """Il lavoro nell'elenco dei lavori dello sviluppo, o i suoi numeri aggiornati (con il
+        lock). Un lavoro si riconosce da id e istante di creazione: dopo un riavvio gli id
+        ripartono da L1."""
+        ident, creato = str(getattr(lav, "id", "") or ""), float(getattr(lav, "creato", 0) or 0)
+        if not ident:
+            return
+        voce = next((x for x in sv.lavori if x.get("id") == ident
+                     and abs(float(x.get("creato") or 0) - creato) < 1.0), None)
+        if voce is None:
+            voce = {"id": ident, "creato": round(creato, 3),
+                    "correzione": sv.correzioni if getattr(lav, "correzione", False) else 0}
+            sv.lavori.append(voce)
+            sv.lavori = sv.lavori[-MAX_LAVORI:]
+        voce.update(_numeri(lav))
+
+    def _vivo(self, voce: dict):
+        """Il lavoro in memoria di una voce dell'elenco (i numeri di adesso), o None."""
+        lav = self._lavoro(voce.get("id"))
+        if lav is not None and abs(float(getattr(lav, "creato", 0) or 0)
+                                   - float(voce.get("creato") or 0)) < 1.0:
+            return lav
+        return None
+
+    def totali(self, sv: Sviluppo) -> dict:
+        """I numeri dello sviluppo intero: lavori, correzioni, token generati (ragionamento
+        compreso), passate e minuti di lavoro, sommando i lavori (quello in corso coi suoi
+        numeri di adesso)."""
+        with self._lock:
+            voci = [dict(v) for v in sv.lavori]
+        for v in voci:
+            lav = self._vivo(v)
+            if lav is not None:
+                v.update(_numeri(lav))
+        return {"lavori": len(voci),
+                "correzioni": sum(1 for v in voci if v.get("correzione")),
+                "token": sum(int(v.get("token") or 0) for v in voci),
+                "ragionamento": sum(int(v.get("ragionamento") or 0) for v in voci),
+                "passate": sum(int(v.get("passate") or 0) for v in voci),
+                "secondi": round(sum(float(v.get("secondi") or 0) for v in voci), 1)}
+
+    def riepilogo_lavoro(self, lav) -> dict | None:
+        """Per la scheda del lavoro in diretta (agenti/avanzamento.py): di quale sviluppo è,
+        la fase, se è una correzione (e quale) e i numeri dello sviluppo intero. None se il
+        lavoro non è di uno sviluppo."""
+        sv = self.di_lavoro(getattr(lav, "id", None), getattr(lav, "persona", None),
+                            chiusi=True)
+        if sv is None:
+            return None
+        with self._lock:
+            voce = next((x for x in sv.lavori if x.get("id") == lav.id
+                         and abs(float(x.get("creato") or 0)
+                                 - float(getattr(lav, "creato", 0) or 0)) < 1.0), None)
+        correzione = int((voce or {}).get("correzione") or 0)
+        if voce is None and getattr(lav, "correzione", False):
+            correzione = sv.correzioni
+        return {"id": sv.id, "titolo": sv.titolo, "fase": sv.fase,
+                "fase_nome": NOMI.get(sv.fase, sv.fase), "n_fase": sv.numero_fase(),
+                "fasi": len(sv.fasi()), "correzione": correzione,
+                "totali": self.totali(sv)}
 
     @staticmethod
     def _stesso_tipo(sv: Sviluppo, lav) -> bool:
@@ -432,6 +531,8 @@ class Sviluppi:
             sv = self._rifatto(lav)
         if sv is None:
             return item
+        with self._lock:
+            self._registra_lavoro(sv, lav)          # i numeri finali del lavoro
         stato = getattr(lav, "stato", "")
         r = getattr(lav, "risultato", None) or {}
         msg = str(item.get("messaggio") or "")
@@ -521,6 +622,7 @@ class Sviluppi:
             sv.nota = ""
             sv.ultimo = time.time()
         self._salva()
+        self.agli_schermi(sv)
         if sv.stato == "aperta":
             item["in_sospeso"] = {"domanda": "Continuo?", "tool": "sviluppo_passo",
                                   "cosa": f"un altro giro di lavoro per «{sv.titolo}»",
@@ -706,6 +808,7 @@ class Sviluppi:
             sv.chiesti = sv.chiesti[-MAX_CHIESTI:]
             sv.ultimo = time.time()
         self._salva()
+        self.agli_schermi(sv)
 
     def _rifatto(self, lav) -> Sviluppo | None:
         """Lo sviluppo, rimasto allo sviluppo senza lavoro (un riavvio), di un lavoro rifatto
@@ -719,6 +822,7 @@ class Sviluppi:
                 stessa = (sv.estensione and getattr(lav, "estensione", None) == sv.estensione)
                 if stessa or str(getattr(lav, "titolo", "")).strip() == sv.titolo:
                     sv.lavoro = lav.id
+                    self._registra_lavoro(sv, lav)
                     return sv
         return None
 
@@ -890,6 +994,13 @@ class Sviluppi:
             righe += ["", "## Domande a chi l'ha scritta", ""]
             for q in sv.chiesti[-5:]:
                 righe.append(f"- «{q.get('domanda')}»: {q.get('dettagli') or q.get('voce')}")
+        tot = self.totali(sv) if sv.lavori else None
+        if tot:
+            righe += ["", "## Lavori dell'agente", "",
+                      f"{tot['lavori']} lavori (di cui {tot['correzioni']} correzioni), "
+                      f"{_migliaia(tot['token'])} token generati in tutto (ragionamento "
+                      f"compreso), {tot['passate']} passate, "
+                      f"{round(tot['secondi'] / 60)} minuti di lavoro."]
         if sv.revisione:
             righe += ["", "## Revisione", "", sv.revisione]
         if sv.nota and sv.fase == "sviluppo":
@@ -917,10 +1028,62 @@ class Sviluppi:
         return out
 
     def scheda(self, sv: Sviluppo) -> dict:
+        """La scheda `sviluppo:<id>` (08/10: la vista dello sviluppo sugli schermi di chi
+        sviluppa): i dati strutturati in `sviluppo` (fasi, versione, giro, collaudi, domande,
+        revisione, numeri) per la vista, e il testo in Markdown di prima per il lettore e
+        «Scarica»."""
         from .schermi import schede
-        return schede.documento_markdown(f"Sviluppo: {sv.titolo}", self.testo_scheda(sv),
+        card = schede.documento_markdown(f"Sviluppo: {sv.titolo}", self.testo_scheda(sv),
                                          chiave=f"sviluppo:{sv.id}",
                                          stato=sv.fase if sv.stato == "aperta" else sv.stato)
+        card["tipo"] = "sviluppo"
+        card["sviluppo"] = self.dati_vista(sv)
+        return card
+
+    def dati_vista(self, sv: Sviluppo) -> dict:
+        """I dati della vista dello sviluppo (schermo.js, DISEGNA.sviluppo): solo testo e
+        numeri; la pagina li mostra con textContent."""
+        lav = self._lavoro(sv.lavoro)
+        k = sv.numero_fase()
+        chiusa_ok = sv.stato == "chiusa" and sv.motivo == "attivata"
+        fasi = [{"chiave": f, "nome": NOMI[f],
+                 "stato": "fatta" if chiusa_ok or i < k else "adesso" if i == k else "manca"}
+                for i, f in enumerate(sv.fasi(), 1)]
+        tappa = bool(lav is not None and getattr(lav, "stato", "") == "in_attesa"
+                     and (getattr(lav, "risultato", None) or {}).get("esito") == "tappa")
+        with self._lock:
+            collaudi = [{"ora": float(c.get("quando") or 0), "dati": str(c.get("dati") or ""),
+                         "ok": bool(c.get("ok")), "esito": str(c.get("esito") or ""),
+                         "versione": c.get("versione"), "giudizio": str(c.get("giudizio") or "")}
+                        for c in sv.collaudi[-MAX_COLLAUDI:]]
+            chiesti = [{"ora": float(q.get("quando") or 0), "domanda": str(q.get("domanda") or ""),
+                        "voce": str(q.get("voce") or ""), "dettagli": str(q.get("dettagli") or "")}
+                       for q in sv.chiesti[-MAX_CHIESTI:]]
+        return {"id": sv.id, "titolo": sv.titolo, "cosa": sv.cosa(), "tipo": sv.tipo,
+                "nome": sv.estensione or "", "versione": sv.versione, "stato": sv.stato,
+                "motivo": sv.motivo, "fase": sv.fase, "fase_nome": NOMI.get(sv.fase, sv.fase),
+                "fasi": fasi, "lavoro": f"lavoro:{sv.lavoro}" if sv.lavoro else "",
+                "lavoro_stato": str(getattr(lav, "stato", "") or "") if lav is not None else "",
+                "giro": int(getattr(lav, "giro", 1) or 1) if lav is not None else 0,
+                "tappa": tappa, "correzioni": sv.correzioni,
+                "richiesta": sv.richiesta, "specifica": sv.specifica,
+                "collaudi": collaudi, "chiesti": chiesti, "revisione": sv.revisione,
+                "nota": sv.nota, "totali": self.totali(sv)}
+
+    def agli_schermi(self, sv: Sviluppo):
+        """La scheda dello sviluppo agli schermi personali di chi sviluppa (08/10): ci entrano
+        nella vista dello sviluppo o, chiuso o sospeso, ne escono. Gli altri schermi di casa
+        non cambiano. Non blocca (hub.invia_a mette in coda)."""
+        hub = self.schermi
+        if hub is None or not sv.persona:
+            return
+        try:
+            card = self.scheda(sv)
+            for s in hub.abbinati():
+                if s.get("proprietario") == sv.persona:
+                    hub.invia_a(s["id"], card)
+        except Exception as e:  # noqa: BLE001 — lo schermo non ferma niente
+            self.log(f"[SVILUPPO] scheda non inviata agli schermi: {type(e).__name__}: {e}")
 
     def _manda_scheda(self, sv: Sviluppo, on_scheda):
         if on_scheda is None:
@@ -938,6 +1101,7 @@ class Sviluppi:
             sv.collaudi = sv.collaudi[-MAX_COLLAUDI:]
             sv.ultimo = time.time()
         self._salva()
+        self.agli_schermi(sv)
 
 
 # Dati del turno (Brain): la modalità e la fase, prima della domanda. Un contesto: decide il

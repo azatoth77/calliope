@@ -130,6 +130,25 @@ def pubblica(scheda: dict) -> dict:
     return {k: v for k, v in scheda.items() if not str(k).startswith("_")}
 
 
+def per_storia(scheda: dict, pub: dict) -> dict:
+    """La scheda come resta nella cronologia dello schermo (rimandata a una pagina che si
+    ricollega): `pub` con i campi di `_storia` sopra (08/10: il flusso di un lavoro va alle
+    pagine collegate a pezzi nuovi, e nella cronologia con l'ultima finestra intera)."""
+    altro = scheda.get("_storia")
+    return {**pub, **altro} if isinstance(altro, dict) and altro else pub
+
+
+def registra_scaricabili(scaricamenti, sid: int, scheda: dict, persona: str):
+    """«Scarica» della scheda (`_scarica`) e del registro di un lavoro (`_registro`, 08/10:
+    sotto la chiave `registro:<id>`, la stessa che la pagina chiede)."""
+    if "_scarica" in scheda:
+        scaricamenti.registra(sid, scheda, persona)
+    reg = scheda.get("registro")
+    if isinstance(scheda.get("_registro"), dict) and isinstance(reg, dict) and reg.get("chiave"):
+        scaricamenti.registra(sid, {"chiave": reg["chiave"], "_scarica": scheda["_registro"],
+                                    "scarica": list(reg.get("formati") or ["md"])}, persona)
+
+
 class _Connessione:
     def __init__(self, schermo: dict, loop: asyncio.AbstractEventLoop, locale: bool = False):
         self.schermo = schermo
@@ -330,17 +349,19 @@ class Schermi:
         stanza = mittente.stanza or self.stanza_predefinita or None
         dest, motivo = destinatari(scheda.get("visibilita", PERSONALE), mittente, tutti, stanza)
         pub = pubblica(scheda)
+        storia = per_storia(scheda, pub)
         msg = json.dumps(pub, ensure_ascii=False, default=str)
         raggiunti = []
         # «Scarica» (07/10): solo gli schermi personali di chi parla, con l'identità decisa
         # dalla voce (mai la zona grigia: lì una scheda personale non parte comunque)
-        scaricabile = ("_scarica" in scheda and scheda.get("visibilita") == PERSONALE
+        scaricabile = (("_scarica" in scheda or "_registro" in scheda)
+                       and scheda.get("visibilita") == PERSONALE
                        and mittente.certo and mittente.persona)
         with self._lock:
             for s in dest:
-                self._in_storia(s["id"], pub)
+                self._in_storia(s["id"], storia)
                 if scaricabile and s.get("proprietario") == mittente.persona:
-                    self.scaricamenti.registra(s["id"], scheda, mittente.persona)
+                    registra_scaricabili(self.scaricamenti, s["id"], scheda, mittente.persona)
                 for c in self._conn.get(s["id"], []):
                     if c.consegna(("scheda", msg)):
                         raggiunti.append(s["nome"])
@@ -358,13 +379,13 @@ class Schermi:
         pub = pubblica(scheda)
         msg = json.dumps(pub, ensure_ascii=False, default=str)
         ok = False
-        if "_scarica" in scheda:
+        if "_scarica" in scheda or "_registro" in scheda:
             # Lo schermo da cui è stata scritta la richiesta: il suo proprietario (se è personale)
             s = self.schermo(sid) or {}
             if s.get("proprietario"):
-                self.scaricamenti.registra(sid, scheda, s["proprietario"])
+                registra_scaricabili(self.scaricamenti, sid, scheda, s["proprietario"])
         with self._lock:
-            self._in_storia(sid, pub)
+            self._in_storia(sid, per_storia(scheda, pub))
             for c in self._conn.get(sid, []):
                 ok = c.consegna(("scheda", msg)) or ok
         return ok

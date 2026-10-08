@@ -459,6 +459,10 @@ class Avvio:
             atexit.register(lavori.close)        # chiude il tunnel anche su un'uscita brusca
             # Il risultato consegnato al portatile si offre ad «aprilo» (07/10)
             lavori.pcs = self.pcs
+            # La vista dello sviluppo (08/10): a ogni fase la scheda va agli schermi personali
+            # di chi sviluppa
+            if s.schermi is not None and getattr(lavori, "sviluppi", None) is not None:
+                lavori.sviluppi.schermi = s.schermi
             if self.insieme:
                 # Più corsie: la voce è libera solo quando nessuna la tiene (06/10)
                 lavori.arbitro.voce_occupata, lavori.arbitro.voce_libera = corsie.condivisa(

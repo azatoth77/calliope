@@ -25,7 +25,7 @@
     lavoro: "Lavoro", modulo: "Da scrivere", web: "Internet", esecuzione: "Programma",
     risposta: "Risposta", foto: "Foto", allegato: "File", gioco: "Gioco",
     cruscotto: "Cruscotto", cassetto: "Cassetto", esercizio: "Esercizi",
-    esercizi_riepilogo: "Esercizi",
+    esercizi_riepilogo: "Esercizi", sviluppo: "Sviluppo",
   };
   // Il programma di un lavoro mentre gira (04/10, calliope/agenti/esecuzione.py)
   const STATI_ESECUZIONE = {
@@ -37,7 +37,6 @@
     fatto: "finito", errore: "non riuscito", mancano_dati: "mancano dati",
     annullato: "annullato", scaduto: "chiuso senza risposta",
   };
-  const FLUSSO_LAVORO = { testo: "Sta scrivendo", pensiero: "Sta ragionando", codice: "Sta scrivendo il codice" };
   const fmtOraSec = new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
   const S = {
     token: null, sessione: null, es: null, scarto: 0, corrente: null,
@@ -55,6 +54,12 @@
     // Ricollegamento (02/10): un solo ciclo alla volta, e l'ora dell'ultimo segno di vita
     // del flusso (anche i «ping» del server, ogni 15 s)
     ricollego: false, ultimoSegno: 0, tentativi: 0,
+    // La vista dello sviluppo (08/10): la scheda `sviluppo:<id>` aperta su questo schermo
+    // personale, e la chiave di quella lasciata con «Vista normale» (si torna con «Torna allo
+    // sviluppo»). Sulla pagina degli schermi; il telefono la apre a schermo intero
+    svil: null, svilLasciata: null,
+    // Una scheda a schermo intero sulla pagina degli schermi (08/10): la sua chiave
+    intera: null,
   };
   // Attese tra un tentativo e l'altro quando Calliope non risponde: crescono fino a 15 s e
   // poi restano lì, per sempre (mai un arresto definitivo: dopo un riavvio del server, o
@@ -80,6 +85,70 @@
     return e;
   }
   const ora = () => Date.now() + S.scarto;           // orologio del server
+
+  // ─── il flusso dell'agente come una chat (08/10, calliope/agenti/avanzamento.py) ───
+  // Il server manda solo i pezzi nuovi, numerati (n) e con la loro sezione (s); la cronologia
+  // rimandata a una pagina che si ricollega ne ha l'ultima finestra (finestra: true). Qui si
+  // accumulano per chiave del lavoro: un pezzo già visto non si aggiunge di nuovo, un buco
+  // (un invio perso) fa chiedere la finestra con un ricollegamento (al più due volte di fila;
+  // poi si va avanti segnando il taglio). Tetto: FLUSSO_PAGINA caratteri, come la finestra del
+  // server; il resto è nel registro completo («Scarica il registro»). Solo testo: textContent
+  const FLUSSO_PAGINA = 40000;
+  const FLUSSI = {};
+  const BUCHI = {};
+  let chiestaFinestra = 0;
+  function nuovoFlusso(id) { return { id: String(id || ""), fino: 0, sezioni: [], car: 0, taglio: false }; }
+  function chiediFinestra() {
+    if (Date.now() - chiestaFinestra < 4000) return;
+    chiestaFinestra = Date.now();
+    ricollega();
+  }
+  function assorbiFlusso(c) {
+    const av = c && c.avanzamento;
+    const f = av && av.flusso;
+    if (!f || !Array.isArray(f.pezzi)) return;
+    const k = chiaveDi(c);
+    let st = FLUSSI[k];
+    if (st && st.id !== String(f.id || "")) st = null;  // un altro lavoro con lo stesso id
+    const pezzi = f.pezzi.filter((p) => p && Number.isInteger(p.n) && typeof p.x === "string")
+      .sort((a, b) => a.n - b.n);
+    const fino = st ? st.fino : 0;
+    const primo = pezzi.length ? pezzi[0].n : (Number(f.fino) || 0) + 1;
+    if (primo > fino + 1) {
+      if (f.finestra) {
+        st = nuovoFlusso(f.id);
+        st.taglio = !!f.taglio || primo > 1;
+      } else if ((BUCHI[k] || 0) < 2) {
+        BUCHI[k] = (BUCHI[k] || 0) + 1;
+        chiediFinestra();
+        return;
+      } else {
+        if (!st) st = nuovoFlusso(f.id);
+        st.taglio = true;
+      }
+    }
+    if (!st) st = nuovoFlusso(f.id);
+    for (const p of pezzi) {
+      if (p.n <= st.fino) continue;                     // già qui: niente doppioni
+      const u = st.sezioni[st.sezioni.length - 1];
+      if (u && u.s === p.s && u.t === p.t) u.x += p.x;
+      else st.sezioni.push({ s: p.s, t: String(p.t || "testo"), f: typeof p.f === "string" ? p.f : "", x: p.x });
+      st.car += p.x.length;
+      st.fino = p.n;
+    }
+    while (st.car > FLUSSO_PAGINA && st.sezioni.length > 1) { st.car -= st.sezioni.shift().x.length; st.taglio = true; }
+    if (st.car > FLUSSO_PAGINA && st.sezioni.length) {
+      const u = st.sezioni[0];
+      u.x = u.x.slice(u.x.length - FLUSSO_PAGINA);
+      st.car = u.x.length;
+      st.taglio = true;
+    }
+    BUCHI[k] = 0;
+    delete FLUSSI[k];
+    FLUSSI[k] = st;                                     // in fondo: i più vecchi escono per primi
+    const chiavi = Object.keys(FLUSSI);
+    if (chiavi.length > 8) delete FLUSSI[chiavi[0]];
+  }
   const fmtOra = new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit" });
   const fmtData = new Intl.DateTimeFormat("it-IT", { weekday: "long", day: "numeric", month: "long" });
 
@@ -138,8 +207,12 @@
     foto() { const x = $("scrivi-foto-file"); if (x && S.fotoAmmessa && S.scrittura.attiva) { x.click(); return true; } return false; },
     dimentica() { chiudiEventi(); salvaToken(null); S.sessione = null; },
     // Per il carosello del telefono: le schede costruite e allineate come qui
-    costruisci(c) { return costruisci(c); },
+    costruisci(c, opz) { return costruisci(c, opz); },
     allinea(a, b) { allinea(a, b); },
+    // Le aree che seguono la coda (flusso dell'agente, uscita di un programma): prima e dopo
+    // un allineamento, per restare in fondo solo se chi guarda era in fondo (08/10)
+    misuraSegui(r) { return misuraSegui(r); },
+    ripristinaSegui(r, m) { ripristinaSegui(r, m); },
     chiaveDi(c) { return chiaveDi(c); },
     cronologia() { return S.cronologia.slice(); },
     corrente() { return S.corrente; },
@@ -219,17 +292,31 @@
       stato("ok", "collegato");
       // Le schede della cronologia del server, nell'ordine del server: una scheda già qui
       // con la stessa identità (o lo stesso id) si sostituisce, mai un doppione
-      (d.cronologia || []).forEach((c) => aggiungiCronologia(c, true));
+      (d.cronologia || []).forEach((c) => { assorbiFlusso(c); aggiungiCronologia(c, true); });
       mostraVoce(d.voce || null);       // null: questa pagina non mostra lo stato
       if (d.scrittura) applicaScrittura(d.scrittura);
       mostraContesto(d.contesto || null);
+      // Uno sviluppo aperto nella cronologia (08/10): lo schermo torna nella sua vista
+      const svil = (d.cronologia || []).filter((c) => c.tipo === "sviluppo").pop();
+      if (!CAROSELLO && svil) {
+        if (svilAperto(svil)) {
+          if (!S.svil || chiaveDi(S.svil) !== chiaveDi(svil)) S.svilLasciata = null;
+          S.svil = svil;
+        } else if (S.svil && chiaveDi(S.svil) === chiaveDi(svil)) S.svil = null;
+      }
       const ultima = d.cronologia && d.cronologia[d.cronologia.length - 1];
-      if (ultima && valida(ultima)) mostra(ultima);
+      if (vistaAttiva()) disegnaVista();
+      else if (ultima && valida(ultima)) mostra(ultima);
       else if (!S.corrente) mostraInattiva();
+      segnaTorna();
+      if (S.intera) disegnaInteroPC();
     });
     es.addEventListener("scheda", (ev) => {
       vivo();
       const c = JSON.parse(ev.data);
+      assorbiFlusso(c);
+      if (!CAROSELLO && vistaSviluppo(c)) { if (S.intera) disegnaInteroPC(); return; }
+      if (S.intera && chiaveDi(c) === S.intera) setTimeout(disegnaInteroPC, 0);
       if (c.tipo === "vuota") {
         if (moduloInCorso()) return;       // non si cancella un modulo mentre si scrive
         S.corrente = null; mostraInattiva(); return;
@@ -407,7 +494,11 @@
     if (a.nodeType === 3) { if (a.data !== b.data) a.data = b.data; return; }
     if (a.tagName !== b.tagName) { a.replaceWith(b); return; }
     for (const at of [...b.attributes]) {
-      if (a.getAttribute(at.name) !== at.value) a.setAttribute(at.name, at.value);
+      if (a.getAttribute(at.name) === at.value) continue;
+      // Lo stile (le barre dei tetti) per il CSSOM: setAttribute("style") viola la CSP
+      // (style-src 'self'), cssText no (08/10, la barra del tempo in diretta)
+      if (at.name === "style") a.style.cssText = b.style.cssText;
+      else a.setAttribute(at.name, at.value);
     }
     for (const at of [...a.attributes]) if (!b.hasAttribute(at.name)) a.removeAttribute(at.name);
     const nuovi = [...b.childNodes];
@@ -424,24 +515,57 @@
   // in fondo solo se chi guarda era in fondo
   function inFondo(e) { return e.scrollHeight - e.scrollTop - e.clientHeight < 24; }
 
-  function costruisci(c) {
-    const s = el("article", "scheda tipo-" + c.tipo);
+  // `opz.intera` (08/10): la scheda a schermo intero (sulla pagina degli schermi nel suo
+  // strato, sul telefono nel suo): per un lavoro due colonne, a destra il flusso dell'agente;
+  // per uno sviluppo la vista dello sviluppo. Nella scheda normale il flusso non c'è
+  const TIPI_INTERA_PC = new Set(["lavoro", "documento", "esecuzione"]);
+  function costruisci(c, opz) {
+    opz = opz || {};
+    const s = el("article", "scheda tipo-" + c.tipo + (opz.intera ? " intera" : ""));
     s.dataset.chiave = chiaveDi(c);
     const et = el("div", "etichetta", NOMI_TIPO[c.tipo] || c.tipo);
     if (c.visibilita === "personale") et.append(el("span", "badge personale", "personale"));
     if (c.fonte) et.append(el("span", "badge", c.fonte));
-    if (c.formato) et.append(el("span", "badge", c.formato.toUpperCase()));
+    if (c.formato && c.tipo !== "sviluppo") et.append(el("span", "badge", c.formato.toUpperCase()));
+    if (!CAROSELLO && !opz.intera && TIPI_INTERA_PC.has(c.tipo)) {
+      const b = el("button", "piccolo-bottone tasto-intero", "Schermo intero");
+      b.type = "button";
+      b.dataset.intero = chiaveDi(c);
+      b.setAttribute("aria-label", "Apri a schermo intero: " + (c.titolo || NOMI_TIPO[c.tipo] || "scheda"));
+      et.append(b);
+    }
     s.append(et);
     if (c.tipo !== "calcolo") s.append(el("h1", "titolo", c.titolo));
     const corpo = el("div", "corpo");
-    (DISEGNA[c.tipo] || DISEGNA.testo)(c, corpo, s);
+    (DISEGNA[c.tipo] || DISEGNA.testo)(c, corpo, s, opz);
     s.append(corpo);
     return s;
+  }
+
+  // Le aree che seguono la coda del testo ([data-segui]: il flusso dell'agente, l'uscita di un
+  // programma): prima di allineare si guarda chi era in fondo, dopo lo si riporta in fondo; chi
+  // è tornato indietro a leggere resta dov'è (e il flusso mostra «In fondo»)
+  function misuraSegui(r) { return r ? [...r.querySelectorAll("[data-segui]")].map(inFondo) : []; }
+  function ripristinaSegui(r, m) {
+    if (!r) return;
+    r.querySelectorAll("[data-segui]").forEach((p, i) => {
+      const segue = !m || m[i] !== false;
+      if (segue) p.scrollTop = p.scrollHeight;
+      p.classList.toggle("staccato", !segue);
+    });
   }
 
   // `segnale`: la stessa scheda cambiata per un evento (sposta: true, un cambio di stato):
   // un segno leggero sul bordo, non l'animazione di entrata
   function mostra(c, segnale = true) {
+    if (!CAROSELLO && c.tipo === "sviluppo" && svilAperto(c)) {
+      // La scheda dello sviluppo aperto (dalla cronologia o da Calliope): la sua vista
+      S.svil = c;
+      S.svilLasciata = null;
+      disegnaVista();
+      return;
+    }
+    if (!CAROSELLO && S.svil && S.svilLasciata !== chiaveDi(S.svil)) S.svilLasciata = chiaveDi(S.svil);
     const prima = S.corrente;
     S.corrente = c;
     S.vista = "scheda";
@@ -451,13 +575,11 @@
     const nuova = costruisci(c);
     if (vecchia && prima && chiaveDi(prima) === chiaveDi(c) && vecchia.dataset.chiave === chiaveDi(c)
         && c.tipo !== "modulo" && c.tipo !== "esercizio" && prima.tipo === c.tipo) {
-      const seguite = [...vecchia.querySelectorAll("pre[data-segui]")].map(inFondo);
+      const seguite = misuraSegui(vecchia);
       // Il segno di prima resta com'è (togliere e rimettere la classe lo farebbe ripartire)
       if (vecchia.classList.contains("cambiata")) nuova.classList.add("cambiata");
       allinea(vecchia, nuova);
-      vecchia.querySelectorAll("pre[data-segui]").forEach((p, i) => {
-        if (seguite[i] !== false) p.scrollTop = p.scrollHeight;
-      });
+      ripristinaSegui(vecchia, seguite);
       if (segnale) {
         vecchia.classList.remove("cambiata");
         void vecchia.offsetWidth;          // il segno riparte anche se c'era già
@@ -465,11 +587,13 @@
       }
     } else {
       m.replaceChildren(nuova);
-      nuova.querySelectorAll("pre[data-segui]").forEach((p) => { p.scrollTop = p.scrollHeight; });
+      ripristinaSegui(nuova, null);
     }
+    document.body.classList.remove("in-vista-sviluppo");
     disegnaCronologia();
     aggiornaTimer();
     aggiornaLavori();
+    segnaTorna();
   }
 
   // ─── lettore Markdown (07/10, calliope/documenti/markdown.py) ───
@@ -984,9 +1108,23 @@
       for (const n of (Array.isArray(c.note) ? c.note : [])) corpo.append(el("p", "sotto", n));
       if (c.anteprima) corpo.append(el("div", "testo-lungo anteprima-allegato", c.anteprima));
     },
-    lavoro(c, corpo) {
+    lavoro(c, corpo, s, opz) {
       const av = c.avanzamento;
-      if (av && ["in_coda", "in_corso"].includes(c.stato)) { disegnaAvanzamento(c, av, corpo); return; }
+      const intera = !!(opz && opz.intera);
+      if (av && ["in_coda", "in_corso"].includes(c.stato)) {
+        if (!intera) { disegnaAvanzamento(c, av, corpo, false); return; }
+        const sx = el("div", "col-riepilogo");
+        disegnaAvanzamento(c, av, sx, true);
+        corpo.append(dueColonne(sx, colonnaFlusso(c)));
+        return;
+      }
+      if (intera && (FLUSSI[chiaveDi(c)] || c.registro)) {
+        // A lavoro finito, a schermo intero: il risultato a sinistra, il flusso a destra
+        const sx = el("div", "col-riepilogo");
+        DISEGNA.lavoro(c, sx, s, null);
+        corpo.append(dueColonne(sx, colonnaFlusso(c)));
+        return;
+      }
       const meta = el("p", "sotto", STATI_LAVORO[c.stato] || c.stato || "");
       if (c.test) {
         const t = c.test, ko = (t.falliti || 0) + (t.errori || 0);
@@ -1006,6 +1144,7 @@
       if (av) {
         // A lavoro finito: quanto ha consumato e gli ultimi passi, sotto il risultato
         corpo.append(tettiLavoro(av, false));
+        if (av.sviluppo) corpo.append(righeSviluppo(av.sviluppo));
         if (av.passi && av.passi.length) corpo.append(passiLavoro(av.passi));
       }
     },
@@ -1873,6 +2012,8 @@
   function applicaScrittura(st) {
     S.scrittura = { attiva: !!(st && st.attiva), testo: (st && st.testo) || "" };
     document.querySelectorAll("form.modulo").forEach(statoModulo);
+    document.querySelectorAll(".comandi-svil [data-svil-invia], .comandi-svil [data-svil-scrivi]")
+      .forEach((b) => { b.disabled = !S.scrittura.attiva; });
     const f = $("scrivi");
     if (f) {
       const i = $("scrivi-testo");
@@ -2138,7 +2279,91 @@
     barra("Passate", av.passate || 0, av.max_passate, (av.passate || 0) + " di " + av.max_passate + " al massimo");
     barra("Token", av.token || 0, av.max_token,
       (av.token || 0).toLocaleString("it-IT") + " di " + (av.max_token || 0).toLocaleString("it-IT") + " al massimo");
+    // Dal 08/10: i tetti sono per giro e cumulativi (al giro 2 di uno sviluppo il doppio), i
+    // token sono quelli generati, ragionamento compreso
+    if ((av.giro || 1) > 1) g.append(el("p", "tetti-nota", "Giro " + av.giro + ": i massimi sono quelli di " + av.giro + " giri."));
     return g;
+  }
+
+  const mig = (n) => (Number(n) || 0).toLocaleString("it-IT");
+  // Il lavoro di uno sviluppo (08/10): fase, correzione, e i numeri dello sviluppo intero
+  // (somma dei lavori e delle correzioni)
+  function righeSviluppo(v) {
+    const b = el("section", "svil-lavoro");
+    if (v.id) {
+      b.append(el("p", "svil-fase", "Sviluppo " + v.id + " · " + (v.fase_nome || v.fase || "")
+        + (v.n_fase ? " (" + v.n_fase + " di " + v.fasi + ")" : "")));
+    }
+    if (v.correzione) b.append(el("p", "svil-correzione", "Correzione " + v.correzione + ", riparte dalla versione provata"));
+    const t = v.totali || {};
+    if (t.lavori) {
+      b.append(el("p", "svil-totali", "Sviluppo intero: " + t.lavori + (t.lavori === 1 ? " lavoro" : " lavori")
+        + (t.correzioni ? " (" + t.correzioni + (t.correzioni === 1 ? " correzione" : " correzioni") + ")" : "")
+        + ", " + mig(t.token) + " token, " + mig(t.passate) + " passate, "
+        + Math.round((t.secondi || 0) / 60) + " min di lavoro"));
+    }
+    return b;
+  }
+
+  function dueColonne(sx, dx) {
+    const g = el("div", "due-colonne");
+    g.append(sx, dx);
+    return g;
+  }
+
+  // La colonna del «codice che gira»: il flusso accumulato del lavoro `k`, con «Scarica il
+  // registro» quando c'è
+  function colonnaFlusso(c, k) {
+    k = k || chiaveDi(c);
+    const col = el("section", "col-flusso");
+    const testa = el("div", "testa-flusso");
+    testa.append(el("div", "nome-file", "Il codice che gira"));
+    if (c && c.registro && c.registro.chiave) {
+      const box = el("div", "scarica");
+      const b = el("button", "piccolo-bottone tasto-scarica", "Scarica il registro");
+      b.type = "button";
+      b.dataset.scarica = "md";
+      b.dataset.chiaveScheda = String(c.registro.chiave);
+      box.append(b, el("span", "esito-scarica", ""));
+      testa.append(box);
+    }
+    col.append(testa, chatFlusso(k, c && c.stato === "in_corso"));
+    return col;
+  }
+
+  function chatFlusso(k, corre) {
+    const st = FLUSSI[k];
+    const box = el("div", "flusso-chat");
+    box.dataset.segui = "1";
+    box.setAttribute("role", "log");
+    box.setAttribute("aria-label", "Il lavoro dell'agente, in diretta");
+    box.tabIndex = 0;
+    if (!st || !st.sezioni.length) {
+      box.append(el("p", "fl-vuoto", corre ? "Aspetto che l'agente scriva…" : "Qui compare il lavoro dell'agente mentre lavora."));
+      return box;
+    }
+    if (st.taglio) box.append(el("p", "fl-taglio", "L'inizio non è qui: è nel registro completo («Scarica il registro»)."));
+    st.sezioni.forEach((z) => box.append(sezioneFlusso(z)));
+    const giu = el("button", "fl-fondo", "In fondo");
+    giu.type = "button";
+    giu.dataset.flussoFondo = "1";
+    box.append(giu);
+    return box;
+  }
+
+  function sezioneFlusso(z) {
+    if (z.t === "passata") return el("div", "fl-passata", z.x);
+    if (z.t === "strumento" || z.t === "esito") {
+      const d = el("div", "fl-" + z.t);
+      d.append(el("span", "fl-freccia", z.t === "strumento" ? "→" : "←"), el("span", "", z.x));
+      return d;
+    }
+    const codice = z.t === "codice";
+    const d = el("div", "fl-sez fl-" + (codice ? "codice" : z.t === "pensiero" ? "pensiero" : "testo"));
+    d.append(el("div", "fl-chi", codice ? "Scrive il codice" + (z.f ? " · " + z.f : "")
+      : z.t === "pensiero" ? "Ragiona" : "Scrive"));
+    d.append(el(codice ? "pre" : "div", codice ? "fl-x codice-flusso" : "fl-x", z.x));
+    return d;
   }
 
   function passiLavoro(passi) {
@@ -2155,8 +2380,12 @@
     return box;
   }
 
-  function disegnaAvanzamento(c, av, corpo) {
-    const meta = el("p", "sotto", STATI_LAVORO[c.stato] || c.stato || "");
+  // Il riepilogo del lavoro in corso: stato (e giro), passo, test, tetti, sviluppo, file
+  // scritti, ultimi passi. Il flusso dell'agente (il «codice che gira») solo a schermo intero,
+  // nella colonna di destra (08/10); l'anteprima del codice solo lì
+  function disegnaAvanzamento(c, av, corpo, intera) {
+    const meta = el("p", "sotto", (STATI_LAVORO[c.stato] || c.stato || "")
+      + ((av.giro || 1) > 1 ? " · giro " + av.giro : ""));
     if (av.pausa) meta.append(el("span", "badge pausa", "in pausa: sto rispondendo a voce"));
     corpo.append(meta);
     if (av.passo) corpo.append(el("p", "passo-lavoro" + (av.pausa ? " fermo" : ""), "Adesso: " + av.passo));
@@ -2165,22 +2394,15 @@
       corpo.append(el("p", "test-lavoro" + (ko ? " ko" : " ok"),
         "Test: " + (n ? (n - ko) + " su " + n + " passano" : "nessuno trovato")));
     }
-    if (c.stato === "in_corso") corpo.append(tettiLavoro(av, !av.pausa));
-    if (av.flusso && av.flusso.testo) {
-      const b = el("section", "flusso-lavoro");
-      b.append(el("div", "nome-file", FLUSSO_LAVORO[av.flusso.tipo] || "Sta scrivendo"));
-      const pre = el("pre", "flusso " + av.flusso.tipo, av.flusso.testo);
-      b.append(pre);
-      corpo.append(b);
-      pre.dataset.segui = "1";
-    }
+    if (c.stato === "in_corso" || (c.stato !== "in_coda" && av.trascorso_s)) corpo.append(tettiLavoro(av, c.stato === "in_corso" && !av.pausa));
+    if (av.sviluppo) corpo.append(righeSviluppo(av.sviluppo));
     if (av.file && av.file.length) {
       const b = el("section", "file-lavoro");
       b.append(el("div", "nome-file", "File scritti finora"));
       const ul = el("ul", "elenco-file");
       av.file.forEach((f) => ul.append(el("li", "", f.nome + (f.righe ? " · " + f.righe + (f.righe === 1 ? " riga" : " righe") : ""))));
       b.append(ul);
-      if (av.anteprima) {
+      if (av.anteprima && intera) {
         b.append(el("div", "nome-file", "Inizio di " + av.anteprima.nome));
         b.append(el("pre", "codice anteprima", av.anteprima.testo));
       }
@@ -2188,6 +2410,385 @@
     }
     if (av.passi && av.passi.length) corpo.append(passiLavoro(av.passi));
   }
+
+  // ─── la vista dello sviluppo (08/10, calliope/sviluppo.py: Sviluppi.dati_vista) ───
+  // Sugli schermi personali di chi sviluppa, finché lo sviluppo è aperto: la barra delle fasi
+  // con nome, versione e giro; al centro il riepilogo del lavoro (a sinistra) e il flusso
+  // dell'agente (a destra); sotto l'analisi, il collaudo, le domande a chi l'ha scritto, la
+  // revisione; in fondo i comandi a tocco, solo innocui, che mandano una frase come se fosse
+  // scritta. Approvare e attivare restano a voce, con la frase di conferma: nessun pulsante.
+  // Sulla pagina degli schermi prende l'area delle schede; il telefono la apre a schermo intero
+  function svilAperto(c) { return !!(c && c.tipo === "sviluppo" && c.sviluppo && c.sviluppo.stato === "aperta"); }
+  function vistaAttiva() { return !CAROSELLO && !!S.svil && S.svilLasciata !== chiaveDi(S.svil); }
+  function schedaDi(k) {
+    if (!k) return null;
+    for (let i = S.cronologia.length - 1; i >= 0; i--) if (chiaveDi(S.cronologia[i]) === k) return S.cronologia[i];
+    return null;
+  }
+  const fmtGiornoOra = new Intl.DateTimeFormat("it-IT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+
+  function barraFasi(v) {
+    const ol = el("ol", "fasi-svil");
+    ol.setAttribute("aria-label", "Fasi dello sviluppo");
+    (v.fasi || []).forEach((f, i) => {
+      const li = el("li", "fase " + (f.stato === "adesso" ? "adesso" : f.stato === "fatta" ? "fatta" : "manca"));
+      li.append(el("span", "fase-n", String(i + 1)), el("span", "fase-nome", f.nome));
+      if (f.stato === "adesso") li.setAttribute("aria-current", "step");
+      li.append(el("span", "fase-stato", f.stato === "adesso" ? "adesso" : f.stato === "fatta" ? "fatta" : ""));
+      ol.append(li);
+    });
+    return ol;
+  }
+
+  function righeTitoloSvil(v) {
+    const parti = [(v.titolo ? v.titolo + " — " : "") + (v.cosa || "sviluppo")];
+    if (v.nome) parti.push(v.nome);
+    if (v.versione) parti.push("versione " + v.versione);
+    if (v.giro > 1) parti.push("giro " + v.giro);
+    if (v.correzioni) parti.push(v.correzioni + (v.correzioni === 1 ? " correzione" : " correzioni"));
+    parti.push(v.id || "");
+    return parti.filter(Boolean).join(" · ");
+  }
+
+  DISEGNA.sviluppo = function (c, corpo, s, opz) {
+    const v = c.sviluppo || {};
+    s.classList.add("scheda-sviluppo");
+    const intera = !!(opz && opz.intera);
+    corpo.append(barraFasi(v));
+    corpo.append(el("p", "svil-titolo", righeTitoloSvil(v)));
+    if (v.stato !== "aperta") {
+      corpo.append(el("p", "svil-chiuso", (v.stato === "sospesa" ? "Sviluppo sospeso" : "Sviluppo chiuso")
+        + (v.motivo ? ": " + v.motivo : "") + "."));
+    }
+    const lav = schedaDi(v.lavoro);
+    const av = lav && lav.avanzamento;
+    if (!intera) {
+      if (av && ["in_coda", "in_corso"].includes(lav.stato)) corpo.append(el("p", "passo-lavoro", "Adesso: " + (av.passo || STATI_LAVORO[lav.stato])));
+      else if (v.tappa) corpo.append(el("p", "passo-lavoro", "Fermo a una tappa: aspetta che tu dica se continuare."));
+      const ult = (v.collaudi || []).slice(-1)[0];
+      if (ult) corpo.append(el("p", "sotto", "Ultima prova: «" + ult.dati + "», " + (ult.ok ? "riuscita" : "non riuscita")));
+      if (!CAROSELLO && v.stato === "aperta") {
+        const b = el("button", "piccolo-bottone tasto-svil", "Apri la vista dello sviluppo");
+        b.type = "button";
+        b.dataset.svilVista = "1";
+        corpo.append(b);
+      }
+      return;
+    }
+    // Al centro: il riepilogo del lavoro e il flusso dell'agente
+    const sx = el("div", "col-riepilogo");
+    if (av) {
+      // Il riepilogo del lavoro, con la fase e i numeri dello sviluppo di adesso (quelli nella
+      // scheda del lavoro sono dell'ultimo invio)
+      sx.append(el("div", "nome-file", "Il lavoro dell'agente"));
+      disegnaAvanzamento(lav, Object.assign({}, av, { sviluppo: null }), sx, false);
+    } else {
+      sx.append(el("p", "sotto", v.tappa ? "Il lavoro è fermo a una tappa: aspetta che tu dica se continuare."
+        : v.lavoro_stato === "in_corso" || v.lavoro_stato === "in_coda" ? "L'agente sta lavorando."
+          : "L'agente non sta lavorando adesso."));
+      if (v.nota && v.fase === "sviluppo") sx.append(el("p", "test-lavoro ko", "L'ultimo lavoro non è andato: " + v.nota + "."));
+    }
+    // I numeri dello sviluppo: con il lavoro in corso quelli del suo ultimo invio (il lavoro si
+    // aggiorna due volte al secondo, la scheda dello sviluppo solo a ogni fase)
+    const vivo = av && av.sviluppo && av.sviluppo.totali && ["in_coda", "in_corso"].includes(lav.stato);
+    const t = (vivo ? av.sviluppo.totali : v.totali) || {};
+    if (t.lavori || (av && av.sviluppo && av.sviluppo.correzione)) {
+      sx.append(righeSviluppo({ correzione: av && av.sviluppo ? av.sviluppo.correzione : 0, totali: t }));
+    }
+    // Le sezioni: quella della fase di adesso per prima
+    const sez = {
+      analisi: () => {
+        const b = el("section", "svil-sez");
+        b.append(el("h2", "", "Analisi: cosa si è capito"));
+        if (v.richiesta) b.append(el("p", "svil-richiesta", "Richiesta: «" + v.richiesta + "»"));
+        b.append(el("p", "", v.specifica || "La specifica non è ancora decisa."));
+        return b;
+      },
+      collaudo: () => {
+        const b = el("section", "svil-sez");
+        b.append(el("h2", "", "Collaudo: le prove"));
+        const prove = (v.collaudi || []).slice().reverse();
+        if (!prove.length) { b.append(el("p", "sotto", "Nessuna prova ancora.")); return b; }
+        const ol = el("ol", "prove-svil");
+        prove.forEach((p) => {
+          const li = el("li", "prova " + (p.ok ? "ok" : "ko"));
+          const r = el("div", "prova-testa");
+          r.append(el("span", "badge " + (p.ok ? "ok" : "ko"), p.ok ? "riuscita" : "non riuscita"),
+            el("span", "prova-dati", "«" + (p.dati || "senza dati") + "»"),
+            el("span", "prova-quando", (p.versione ? "versione " + p.versione + " · " : "") + (p.ora ? fmtGiornoOra.format(new Date(p.ora * 1000)) : "")));
+          li.append(r);
+          if (p.esito) li.append(el("p", "prova-esito", p.esito));
+          if (p.giudizio) li.append(el("p", "prova-giudizio", "Secondo te: " + p.giudizio));
+          ol.append(li);
+        });
+        b.append(ol);
+        return b;
+      },
+      domande: () => {
+        const q = (v.chiesti || []).slice().reverse();
+        if (!q.length) return null;
+        const b = el("section", "svil-sez");
+        b.append(el("h2", "", "Domande a chi l'ha scritto"));
+        q.forEach((x) => {
+          const d = el("div", "domanda-svil");
+          d.append(el("p", "domanda-testo", "«" + x.domanda + "»"));
+          if (x.voce) d.append(el("p", "", x.voce));
+          if (x.dettagli && x.dettagli !== x.voce) {
+            const det = el("details");
+            det.append(el("summary", "", "I dettagli"), el("p", "domanda-dettagli", x.dettagli));
+            d.append(det);
+          }
+          b.append(d);
+        });
+        return b;
+      },
+      revisione: () => {
+        if (!v.revisione) return null;
+        const b = el("section", "svil-sez");
+        b.append(el("h2", "", "Revisione: permessi e analisi del codice"));
+        b.append(leggiMarkdown(v.revisione).nodo);
+        return b;
+      },
+    };
+    const prima = { analisi: "analisi", sviluppo: "analisi", collaudo: "collaudo", revisione: "revisione", attivazione: "revisione" }[v.fase] || "analisi";
+    const ordine = [prima].concat(["collaudo", "domande", "revisione", "analisi"].filter((x) => x !== prima));
+    const g = el("div", "svil-sezioni");
+    ordine.forEach((k) => { const n = sez[k](); if (n) g.append(n); });
+    // Al centro: a sinistra il riepilogo e sotto le sezioni (sul computer scorrono insieme), a
+    // destra il flusso. In una colonna sola (telefono, finestre strette) il flusso viene dopo
+    // il riepilogo e prima delle sezioni (col-sinistra con display: contents)
+    const sinistra = el("div", "col-sinistra");
+    sinistra.append(sx, g);
+    const centro = el("div", "due-colonne vista-centro");
+    centro.append(sinistra, colonnaFlusso(lav || { stato: v.lavoro_stato }, v.lavoro || ("svil:" + v.id)));
+    corpo.append(centro);
+    corpo.append(comandiSviluppo(v));
+  };
+
+  // I comandi a tocco: solo azioni innocue, come frasi scritte (passano dal modello e dalla
+  // politica come lo scritto: niente che lo scritto non possa già fare). Testi fissi della
+  // pagina, mai testo della scheda
+  function comandiSviluppo(v) {
+    const bar = el("div", "comandi-svil");
+    bar.setAttribute("role", "group");
+    bar.setAttribute("aria-label", "Comandi dello sviluppo");
+    const attivo = !!S.scrittura.attiva;
+    const tasto = (testo, k, val) => {
+      const b = el("button", "tasto-svil", testo);
+      b.type = "button";
+      b.dataset[k] = val;
+      if (k !== "svilEsci" && !attivo) b.disabled = true;
+      bar.append(b);
+    };
+    if (v.stato === "aperta") {
+      tasto("A che punto siamo?", "svilInvia", "A che punto è lo sviluppo?");
+      if (v.fase === "collaudo" || v.fase === "revisione") tasto("Prova con…", "svilScrivi", "Prova con ");
+      if (v.fase !== "analisi") tasto("Chiedi all'agente…", "svilScrivi", "Perché ");
+    } else if (v.stato === "sospesa" && /^S\d+$/.test(v.id || "")) {
+      tasto("Riprendi lo sviluppo", "svilInvia", "Riprendiamo lo sviluppo " + v.id);
+    }
+    if (!CAROSELLO) tasto("Vista normale", "svilEsci", "1");
+    const nota = el("p", "nota-svil", (attivo ? "" : "I comandi si accendono in una conversazione: di' «" + S.parola + "». ")
+      + "Approvare e attivare si fa a voce.");
+    nota.setAttribute("role", "status");
+    const box = el("div", "piede-svil");
+    box.append(bar, nota);
+    return box;
+  }
+
+  // La vista sulla pagina degli schermi: nell'area delle schede, al posto della scheda
+  function disegnaVista() {
+    if (!S.svil) return;
+    const m = $("principale");
+    if (!m) return;
+    S.corrente = S.svil;
+    S.vista = "sviluppo";
+    const nuova = costruisci(S.svil, { intera: true });
+    nuova.classList.add("vista-svil");
+    const vecchia = m.querySelector(":scope > article.scheda");
+    if (vecchia && vecchia.dataset.chiave === nuova.dataset.chiave && vecchia.classList.contains("vista-svil")) {
+      const seg = misuraSegui(vecchia);
+      const sc = vecchia.querySelector(":scope > .corpo");
+      const top = sc ? sc.scrollTop : 0;
+      allinea(vecchia, nuova);
+      ripristinaSegui(vecchia, seg);
+      if (sc) sc.scrollTop = top;
+    } else {
+      m.replaceChildren(nuova);
+      ripristinaSegui(nuova, null);
+    }
+    document.body.classList.add("in-vista-sviluppo");
+    disegnaCronologia();
+    aggiornaLavori();
+    segnaTorna();
+  }
+
+  // Una scheda arrivata mentre c'è uno sviluppo (pagina degli schermi): true se l'ha gestita
+  // la vista. Lo sviluppo che si apre fa entrare nella vista, quello chiuso o sospeso fa
+  // uscire; con la vista attiva le altre schede vanno nella cronologia (un modulo, un gioco,
+  // un esercizio si mostrano: vogliono una risposta, e «Torna allo sviluppo» riporta qui)
+  function vistaSviluppo(c) {
+    if (c.tipo === "sviluppo") {
+      if (svilAperto(c)) {
+        if (!S.svil || chiaveDi(S.svil) !== chiaveDi(c)) S.svilLasciata = null;
+        S.svil = c;
+        aggiungiCronologia(c);
+        if (vistaAttiva()) disegnaVista(); else segnaTorna();
+        return true;
+      }
+      if (S.svil && chiaveDi(S.svil) === chiaveDi(c)) {
+        S.svil = null;
+        S.svilLasciata = null;
+        aggiungiCronologia(c);
+        mostra(c);
+        return true;
+      }
+      return false;
+    }
+    if (!vistaAttiva()) return false;
+    if (c.tipo === "vuota") return true;
+    if (["modulo", "gioco", "esercizio"].includes(c.tipo) && c.sposta !== false) return false;
+    aggiungiCronologia(c);
+    if (chiaveDi(c) === (S.svil.sviluppo || {}).lavoro) disegnaVista();
+    return true;
+  }
+
+  // «Torna allo sviluppo» nella testa, quando lo sviluppo è aperto e si guarda altro
+  function segnaTorna() {
+    if (CAROSELLO || INCORPORATA) return;
+    const testa = $("testa");
+    if (!testa) return;
+    let b = $("torna-svil");
+    if (!b) {
+      b = el("button", "piccolo-bottone torna-svil", "Torna allo sviluppo");
+      b.type = "button";
+      b.id = "torna-svil";
+      b.dataset.svilVista = "1";
+      testa.insertBefore(b, $("orologio-piccolo"));
+    }
+    b.hidden = !(S.svil && !vistaAttiva());
+  }
+
+  // ─── una scheda a schermo intero sulla pagina degli schermi (08/10) ───
+  // Il lavoro (due colonne, con il flusso dell'agente), il documento, l'uscita di un
+  // programma: uno strato sopra la pagina, alto quanto lo schermo, che si aggiorna al suo
+  // posto con la stessa chiave. Si chiude con «Chiudi» o Esc
+  function stratoInteroPC() {
+    let st = $("strato-intero");
+    if (st) return st;
+    st = el("section", "strato-intero");
+    st.id = "strato-intero";
+    st.setAttribute("role", "dialog");
+    st.setAttribute("aria-modal", "true");
+    st.setAttribute("aria-labelledby", "intero-titolo");
+    st.hidden = true;
+    const testa = el("div", "intero-testa");
+    const h = el("h2", "intero-titolo", "");
+    h.id = "intero-titolo";
+    const ch = el("button", "tasto-chiudi-intero", "Chiudi");
+    ch.type = "button";
+    ch.id = "intero-chiudi";
+    ch.addEventListener("click", chiudiInteroPC);
+    testa.append(h, ch);
+    const posto = el("div", "intero-posto");
+    posto.id = "intero-posto";
+    st.append(testa, posto);
+    document.body.append(st);
+    return st;
+  }
+  function disegnaInteroPC() {
+    if (!S.intera) return;
+    const c = schedaDi(S.intera) || (S.corrente && chiaveDi(S.corrente) === S.intera ? S.corrente : null);
+    if (!c) return;                       // uscita dalla cronologia: resta l'ultimo contenuto
+    const st = stratoInteroPC();
+    $("intero-titolo").textContent = c.titolo || NOMI_TIPO[c.tipo] || "Scheda";
+    const posto = $("intero-posto");
+    const nuova = costruisci(c, { intera: true });
+    const vecchia = posto.firstElementChild;
+    if (vecchia && vecchia.dataset.chiave === nuova.dataset.chiave && vecchia.className === nuova.className) {
+      const seg = misuraSegui(vecchia);
+      allinea(vecchia, nuova);
+      ripristinaSegui(vecchia, seg);
+    } else {
+      posto.replaceChildren(nuova);
+      ripristinaSegui(nuova, null);
+    }
+    st.hidden = false;
+    aggiornaLavori();
+  }
+  function apriInteroPC(k) {
+    const prima = S.intera;
+    S.intera = k;
+    disegnaInteroPC();
+    if (!prima) { const ch = $("intero-chiudi"); if (ch) ch.focus({ preventScroll: true }); }
+  }
+  function chiudiInteroPC() {
+    S.intera = null;
+    const st = $("strato-intero");
+    if (st) { st.hidden = true; $("intero-posto").replaceChildren(); }
+  }
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape" && S.intera && !CAROSELLO) chiudiInteroPC();
+  });
+
+  // Il flusso: chi torna indietro a leggere ferma lo scorrimento; «In fondo» lo riprende
+  // Un cambio di dimensione (il telefono girato, la finestra) sposta lo scorrimento senza che
+  // nessuno l'abbia chiesto: chi seguiva la coda resta in fondo
+  let ridimensionato = 0;
+  window.addEventListener("resize", () => {
+    ridimensionato = Date.now();
+    const seguono = [...document.querySelectorAll(".flusso-chat:not(.staccato)")];
+    requestAnimationFrame(() => seguono.forEach((c) => { c.scrollTop = c.scrollHeight; }));
+  });
+  document.addEventListener("scroll", (ev) => {
+    const t = ev.target;
+    if (!t || !t.classList || !t.classList.contains("flusso-chat")) return;
+    if (Date.now() - ridimensionato < 400 && !t.classList.contains("staccato")) return;
+    t.classList.toggle("staccato", !inFondo(t));
+  }, true);
+
+  document.addEventListener("click", async (ev) => {
+    const b = ev.target.closest && ev.target.closest("[data-intero], [data-flusso-fondo], [data-svil-vista], [data-svil-esci], [data-svil-invia], [data-svil-scrivi]");
+    if (!b || b.disabled) return;
+    if (b.dataset.intero) { apriInteroPC(b.dataset.intero); return; }
+    if (b.dataset.flussoFondo) {
+      const box = b.closest(".flusso-chat");
+      if (box) { box.scrollTop = box.scrollHeight; box.classList.remove("staccato"); }
+      return;
+    }
+    if (b.dataset.svilVista) { if (S.svil) { S.svilLasciata = null; chiudiInteroPC(); disegnaVista(); } return; }
+    if (b.dataset.svilEsci) {
+      S.svilLasciata = S.svil ? chiaveDi(S.svil) : null;
+      document.body.classList.remove("in-vista-sviluppo");
+      const altra = S.cronologia.slice().reverse().find((x) => x.tipo !== "sviluppo" && valida(x));
+      if (altra) mostra(altra); else { S.corrente = null; mostraInattiva(); }
+      segnaTorna();
+      return;
+    }
+    const piede = b.closest(".piede-svil");
+    const esito = piede && piede.querySelector(".nota-svil");
+    const dire = (t) => { if (esito) esito.textContent = t; };
+    if (!S.scrittura.attiva) { dire(S.scrittura.testo || "Di' «" + S.parola + "» per usare i comandi."); return; }
+    if (b.dataset.svilScrivi) {
+      // «Prova con…», «Chiedi all'agente…»: la frase da finire nella casella dello scritto
+      const testo = b.dataset.svilScrivi;
+      if (CAROSELLO) { emetti("prefill", { testo }); return; }
+      const i = $("scrivi-testo");
+      if (!i || i.disabled) { dire("Qui non si può scrivere."); return; }
+      i.value = testo;
+      i.focus();
+      try { i.setSelectionRange(testo.length, testo.length); } catch (e) { /* niente */ }
+      dire("Finisci la frase qui sotto e premi Invia.");
+      return;
+    }
+    b.disabled = true;
+    let r = null;
+    try { r = await postSessione("/api/scrivi", { testo: b.dataset.svilInvia }); } catch (e) { r = null; }
+    b.disabled = !S.scrittura.attiva;
+    if (r && r.dati && r.dati.codice === "senza_conversazione") { applicaScrittura({ attiva: false, testo: r.dati.errore }); dire(r.dati.errore || ""); return; }
+    dire(r && r.status === 200 ? "Inviato: ti rispondo qui." : r ? (r.dati.errore || MESSAGGI[r.status] || "Non è andato.") : "Calliope non risponde.");
+    if (r && r.status === 200) emetti("scritto", {});
+  });
 
   const NUMERO = /^\s*-?(€\s*)?[\d.]+(,\d+)?\s*(€|%)?\s*$/;
   function tabella(b) {
@@ -2539,7 +3140,7 @@
     aggiornaTimer();
     aggiornaLavori();
     disegnaVoce();
-    if (S.vista === "scheda" && S.corrente && !valida(S.corrente)) {
+    if (S.vista === "scheda" && S.corrente && !valida(S.corrente) && !vistaAttiva()) {
       S.corrente = null;
       mostraInattiva();
     }

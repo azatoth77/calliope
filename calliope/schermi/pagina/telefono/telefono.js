@@ -222,11 +222,12 @@ const car = {
   modulo: null,             // chiave del modulo aperto nello strato
   moduloFirma: "",
   intera: null,             // chiave della scheda aperta a schermo intero (06/10)
+  svil: null,               // lo sviluppo aperto già mostrato nella sua vista (08/10)
 };
 // Le schede che hanno sempre «Espandi» (le altre solo se non ci stanno): sul telefono il
 // cruscotto, il codice di un lavoro, un documento o l'uscita di un programma non si leggono
 // nel riquadro del carosello (06/10, iPhone 13 mini)
-const TIPI_LUNGHI = new Set(["cruscotto", "lavoro", "documento", "esecuzione", "biblioteca", "web", "allegato"]);
+const TIPI_LUNGHI = new Set(["cruscotto", "lavoro", "documento", "esecuzione", "biblioteca", "web", "allegato", "sviluppo"]);
 // Queste non si aprono a schermo intero: il modulo ha il suo strato, il gioco il suo riquadro
 const TIPI_SENZA_INTERA = new Set(["modulo", "gioco"]);
 const opzioniCarosello = { manoMs: 10000, schedaMs: 12000 };
@@ -361,18 +362,35 @@ function sincronizza(det) {
     if (el && vecchia === c) continue;
     const nuova = costruisciPagina(c);
     if (el && vecchia && vecchia.tipo === c.tipo && c.tipo !== "esercizio") {
-      const seguite = [...el.querySelectorAll("pre[data-segui]")].map((p) => p.scrollHeight - p.scrollTop - p.clientHeight < 24);
+      const seguite = sch().misuraSegui(el);
       sch().allinea(el, nuova);
-      el.querySelectorAll("pre[data-segui]").forEach((p, i) => { if (seguite[i] !== false) p.scrollTop = p.scrollHeight; });
+      sch().ripristinaSegui(el, seguite);
     } else if (el) {
       el.replaceWith(nuova);
     } else {
       bin.append(nuova);
-      nuova.querySelectorAll("pre[data-segui]").forEach((p) => { p.scrollTop = p.scrollHeight; });
+      sch().ripristinaSegui(nuova, null);
     }
     if (car.modulo === k) aggiornaModulo(c);
     if (car.intera === k) disegnaIntera();
   }
+  // La vista dello sviluppo (08/10): a schermo intero quando uno sviluppo si apre (se non c'è
+  // un altro strato aperto: il menu, lo scritto, un modulo), chiusa quando si chiude o si
+  // sospende; aperta, si ridisegna anche quando cambia il suo lavoro (il flusso, i tetti)
+  const d = det && det.scheda;
+  if (d && d.tipo === "sviluppo") {
+    const k = chiaveDi(d);
+    const aperto = !!(d.sviluppo && d.sviluppo.stato === "aperta");
+    if (aperto && car.svil !== k) {
+      car.svil = k;
+      const altri = STRATI.some((x) => x !== "strato-scheda" && !$(x).hidden);
+      if (!altri) apriIntera(k);
+    } else if (!aperto && car.svil === k) {
+      car.svil = null;
+      if (car.intera === k) chiudiIntera();
+    }
+  }
+  if (car.intera && car.schede[car.intera] && car.schede[car.intera].tipo === "sviluppo") disegnaIntera();
   for (const k of Object.keys(car.schede)) {
     if (viste.has(k)) continue;
     delete car.schede[k];
@@ -488,7 +506,7 @@ function costruisciIntera(k) {
   } else {
     const c = car.schede[k];
     if (!c) return null;
-    s = sch().costruisci(c);
+    s = sch().costruisci(c, { intera: true });
   }
   s.dataset.tipo = k === RISPOSTA ? "risposta" : car.schede[k].tipo;
   return s;
@@ -510,13 +528,13 @@ function disegnaIntera() {
   metti($("intera-titolo"), titoloIntera(k));
   const vecchia = posto.firstElementChild;
   if (vecchia && vecchia.dataset.chiave === nuova.dataset.chiave && vecchia.dataset.tipo === nuova.dataset.tipo) {
-    const seguite = [...vecchia.querySelectorAll("pre[data-segui]")].map((p) => p.scrollHeight - p.scrollTop - p.clientHeight < 24);
+    const seguite = sch().misuraSegui(vecchia);
     sch().allinea(vecchia, nuova);
-    vecchia.querySelectorAll("pre[data-segui]").forEach((p, i) => { if (seguite[i] !== false) p.scrollTop = p.scrollHeight; });
+    sch().ripristinaSegui(vecchia, seguite);
   } else {
     posto.replaceChildren(nuova);
     posto.scrollTop = 0;
-    nuova.querySelectorAll("pre[data-segui]").forEach((p) => { p.scrollTop = p.scrollHeight; });
+    sch().ripristinaSegui(nuova, null);
   }
   if (sch()) sch().aggiorna();
 }
@@ -1718,6 +1736,17 @@ async function avvio() {
   document.addEventListener("calliope:mostra", (ev) => { if (ev.detail.scheda) suMostra(ev.detail.scheda); });
   document.addEventListener("calliope:scrivi", (ev) => suScrivi(ev.detail));
   document.addEventListener("calliope:scritto", () => setTimeout(() => chiudiStrato("strato-scrivi"), 1200));
+  // «Prova con…», «Chiedi all'agente…» della vista dello sviluppo (08/10): la frase da finire
+  // nella casella dello scritto (lo strato dello sviluppo si chiude, e si riapre dalla scheda)
+  document.addEventListener("calliope:prefill", (ev) => {
+    const testo = String((ev.detail && ev.detail.testo) || "");
+    apriScrivi();
+    const i = $("scrivi-testo");
+    if (i && !i.disabled) {
+      i.value = testo;
+      try { i.setSelectionRange(testo.length, testo.length); } catch (e) { /* niente */ }
+    }
+  });
   // Il cruscotto di chi amministra (06/10): la voce del menu solo se il proprietario di questo
   // telefono amministra (lo ricontrolla il server); la scheda va nel carosello
   document.addEventListener("calliope:amministra", (ev) => { $("cruscotto-tel").hidden = !ev.detail.attiva; });

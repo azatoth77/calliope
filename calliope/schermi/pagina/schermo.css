@@ -628,3 +628,159 @@ body.trascina-foto { outline: 4px dashed var(--accento); outline-offset: -8px; }
   .esito-esercizio { font-size: 1.05rem; margin: 0.35rem 0; }
   .scelta-esercizio { font-size: 1.05rem; padding: 0.3rem 0.7rem; min-height: 2.75rem; }
 }
+
+/* ── a schermo intero sulla pagina degli schermi (08/10): lavoro, documento, programma ── */
+.tasto-intero { margin-left: auto; text-transform: none; letter-spacing: normal; font-weight: 600;
+  min-height: 2.4rem; }
+.strato-intero {
+  position: fixed; inset: 0; z-index: 50; display: grid; grid-template-rows: auto 1fr;
+  background: var(--sfondo); color: var(--testo); padding: 0.8rem 1.6rem 1rem; gap: 0.6rem;
+}
+.strato-intero[hidden] { display: none; }
+.intero-testa { display: flex; align-items: center; gap: 1rem; }
+.intero-titolo { flex: 1; min-width: 0; margin: 0; font-size: 1.5rem; overflow-wrap: anywhere; }
+.tasto-chiudi-intero {
+  min-height: 3rem; min-width: 7rem; font: inherit; font-size: 1.2rem; font-weight: 600;
+  color: var(--testo); background: var(--pannello-2); border: 1px solid var(--testo);
+  border-radius: var(--raggio); cursor: pointer;
+}
+.tasto-chiudi-intero:focus-visible, .tasto-intero:focus-visible, .tasto-svil:focus-visible,
+.fl-fondo:focus-visible, .flusso-chat:focus-visible { outline: 3px solid var(--v-pensa); outline-offset: 2px; }
+.intero-posto { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.intero-posto > .scheda { animation: none; min-height: 100%; }
+.intero-posto > .scheda > .corpo { overflow: visible; }
+.intero-posto h1.titolo { display: none; }
+
+/* ── due colonne: a sinistra il riepilogo, a destra il codice che gira ── */
+.due-colonne { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.2rem; align-items: start; }
+.col-riepilogo, .col-flusso { min-width: 0; }
+.testa-flusso { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 1rem; margin-bottom: 0.4rem; }
+.testa-flusso .nome-file { color: var(--tenue); font-size: 1rem; }
+.testa-flusso .scarica { margin: 0; }
+@media (min-width: 900px) {
+  .due-colonne { grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.25fr); }
+  .col-flusso { position: sticky; top: 0; }
+}
+
+/* ── il flusso dell'agente: una chat in sola lettura ── */
+.flusso-chat {
+  position: relative; background: var(--pannello-2); border: 1px solid var(--bordo);
+  border-radius: var(--raggio); padding: 0.7rem 0.9rem 0.4rem; overflow-y: auto; overflow-x: hidden;
+  height: min(70vh, 46rem); scrollbar-width: thin; overscroll-behavior: contain; font-size: 1rem;
+}
+.intera .flusso-chat { height: calc(100dvh - 12rem); min-height: 16rem; }
+.fl-vuoto, .fl-taglio { color: var(--tenue); font-style: italic; margin: 0.2rem 0 0.6rem; }
+.fl-passata {
+  display: flex; align-items: center; gap: 0.6rem; color: var(--accento); font-weight: 600;
+  margin: 0.8rem 0 0.4rem; font-size: 0.95rem;
+}
+.fl-passata::before, .fl-passata::after { content: ""; flex: 1; border-top: 1px solid var(--bordo); }
+.fl-sez { margin: 0.35rem 0 0.6rem; }
+.fl-chi { color: var(--tenue); font-size: 0.85rem; margin-bottom: 0.15rem; }
+.fl-x { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.45; }
+.fl-pensiero .fl-x { color: var(--tenue); font-style: italic; }
+pre.codice-flusso {
+  margin: 0; padding: 0.6rem 0.8rem; background: var(--sfondo); border-radius: 0.5rem;
+  font: 0.92rem/1.4 ui-monospace, "Cascadia Mono", Consolas, monospace;
+  white-space: pre; overflow-x: auto; overflow-wrap: normal;
+}
+.fl-strumento, .fl-esito { display: flex; gap: 0.5rem; margin: 0.25rem 0; overflow-wrap: anywhere;
+  font: 0.92rem/1.4 ui-monospace, "Cascadia Mono", Consolas, monospace; }
+.fl-strumento { color: var(--v-parla); }
+.fl-esito { color: var(--tenue); margin-bottom: 0.6rem; }
+.fl-freccia { flex: none; }
+.fl-fondo {
+  position: sticky; bottom: 0.4rem; float: right; display: none; margin: 0.4rem 0 0;
+  min-height: 2.75rem; padding: 0 1rem; font: inherit; font-weight: 600; cursor: pointer;
+  color: var(--sfondo); background: var(--accento); border: 0; border-radius: 999px;
+}
+.flusso-chat.staccato .fl-fondo { display: inline-flex; align-items: center; }
+.tetti-nota { color: var(--tenue); font-size: 0.9rem; margin: 0.2rem 0 0; }
+/* Nella colonna del riepilogo la barra non si schiaccia: il valore prende quanto gli serve */
+@media (min-width: 601px) {
+  .col-riepilogo .tetto { grid-template-columns: 5.5rem minmax(3rem, 1fr) auto; }
+}
+
+/* ── il lavoro di uno sviluppo ── */
+.svil-lavoro { margin: 0 0 1rem; }
+.svil-lavoro p { margin: 0 0 0.25rem; }
+.svil-fase { color: var(--accento); font-weight: 600; }
+.svil-correzione { font-weight: 600; }
+.svil-totali { color: var(--tenue); }
+
+/* ── la vista dello sviluppo ── */
+.fasi-svil { list-style: none; margin: 0 0 0.6rem; padding: 0; display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.fase {
+  display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.3rem 0.8rem 0.3rem 0.35rem;
+  border: 1px solid var(--bordo); border-radius: 999px; color: var(--tenue); font-size: 1rem;
+}
+.fase-n {
+  display: inline-grid; place-items: center; width: 1.6rem; height: 1.6rem; border-radius: 50%;
+  background: var(--pannello-2); font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.fase-stato { font-size: 0.85rem; }
+.fase-stato:empty { display: none; }
+.fase.fatta { color: var(--ok); border-color: var(--ok); }
+.fase.adesso { color: var(--sfondo); background: var(--accento); border-color: var(--accento); font-weight: 600; }
+.fase.adesso .fase-n { background: var(--sfondo); color: var(--accento); }
+.svil-titolo { font-size: 1.15rem; margin: 0 0 0.8rem; color: var(--testo); }
+.svil-chiuso { color: var(--accento); font-size: 1.15rem; margin: 0 0 0.8rem; }
+.scheda-sviluppo .tasto-svil { margin-top: 0.6rem; }
+.svil-sezioni { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
+  gap: 1rem; margin: 1.2rem 0; }
+.svil-sez { background: var(--pannello-2); border: 1px solid var(--bordo); border-radius: var(--raggio);
+  padding: 0.8rem 1rem; min-width: 0; }
+.svil-sez h2 { font-size: 1.1rem; margin: 0 0 0.6rem; color: var(--accento); }
+.svil-sez p { margin: 0 0 0.5rem; line-height: 1.45; }
+.svil-richiesta { color: var(--tenue); }
+.prove-svil { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
+.prova { border-left: 3px solid var(--ok); padding: 0.2rem 0 0.2rem 0.7rem; }
+.prova.ko { border-left-color: var(--allarme); }
+.prova-testa { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.6rem; }
+.prova-dati { font-weight: 600; overflow-wrap: anywhere; }
+.prova-quando { color: var(--tenue); font-size: 0.9rem; }
+.prova-esito { margin: 0.25rem 0 0; overflow-wrap: anywhere; }
+.prova-giudizio { color: var(--accento); margin: 0.2rem 0 0; }
+.badge.ok { color: var(--ok); border-color: var(--ok); }
+.badge.ko { color: var(--allarme); border-color: var(--allarme); }
+.domanda-svil { margin: 0 0 0.8rem; overflow-wrap: anywhere; }
+.domanda-testo { font-weight: 600; }
+.domanda-svil summary { cursor: pointer; color: var(--accento); min-height: 2rem; }
+.domanda-dettagli { color: var(--tenue); white-space: pre-wrap; }
+.piede-svil {
+  position: sticky; bottom: 0; z-index: 1; background: var(--pannello); border-top: 1px solid var(--bordo);
+  padding: 0.7rem 0 0.2rem; margin-top: 0.4rem;
+}
+.comandi-svil { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+.tasto-svil {
+  min-height: 2.75rem; padding: 0 1.1rem; font: inherit; font-size: 1.05rem; font-weight: 600; cursor: pointer;
+  color: var(--testo); background: var(--pannello-2); border: 1px solid var(--accento); border-radius: 999px;
+}
+.tasto-svil[data-svil-esci] { border-color: var(--bordo); color: var(--tenue); }
+.tasto-svil:disabled { opacity: 0.55; cursor: default; }
+.nota-svil { color: var(--tenue); margin: 0.5rem 0 0; font-size: 0.95rem; }
+.torna-svil { font-weight: 600; min-height: 2.2rem; }
+.torna-svil[hidden] { display: none; }
+body.in-vista-sviluppo #principale { padding-top: 0.2rem; }
+body.in-vista-sviluppo #cronologia { display: none; }     /* «Vista normale» riporta alle schede */
+.scheda.vista-svil { animation: none; }
+/* In una colonna: il riepilogo, il flusso, poi le sezioni */
+.vista-centro .col-sinistra { display: contents; }
+.vista-centro .col-riepilogo { order: 1; }
+.vista-centro .col-flusso { order: 2; }
+.vista-centro .svil-sezioni { order: 3; margin: 0; }
+/* Sul computer: la vista prende l'area delle schede, senza scorrere tutta; scorrono la colonna
+   di sinistra (riepilogo e sezioni) e il flusso, i comandi restano in fondo */
+@media (min-width: 900px) {
+  .scheda.vista-svil { padding: 0.8rem 1.2rem 0.6rem; }
+  .scheda.vista-svil > .etichetta, .scheda.vista-svil > h1.titolo { display: none; }
+  .scheda.vista-svil > .corpo { display: flex; flex-direction: column; overflow: hidden; }
+  .scheda.vista-svil .vista-centro { flex: 1; min-height: 0; grid-template-rows: minmax(0, 1fr);
+    align-items: stretch; }
+  .scheda.vista-svil .col-sinistra { display: block; min-width: 0; min-height: 0; overflow-y: auto;
+    scrollbar-width: thin; padding-right: 0.4rem; }
+  .scheda.vista-svil .svil-sezioni { grid-template-columns: minmax(0, 1fr); margin-top: 1rem; }
+  .scheda.vista-svil .col-flusso { position: static; display: flex; flex-direction: column; min-height: 0; }
+  .scheda.vista-svil .flusso-chat { flex: 1; height: auto; min-height: 0; }
+  .scheda.vista-svil .piede-svil { position: static; }
+}
