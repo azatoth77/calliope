@@ -463,6 +463,13 @@ class Avvio:
             # di chi sviluppa
             if s.schermi is not None and getattr(lavori, "sviluppi", None) is not None:
                 lavori.sviluppi.schermi = s.schermi
+                # Uno schermo personale che si collega (anche dopo un riavvio) rientra nella
+                # vista dello sviluppo aperto: la scheda si ricostruisce dallo stato vero (08/10)
+                s.schermi.ricostruttori.append(lambda persona, svs=lavori.sviluppi: [
+                    svs.scheda(sv) for sv in [svs.corrente(persona)] if sv is not None])
+            if s.schermi is not None:
+                # La ripresa della cronologia per persona guarda se un lavoro lavora ancora
+                s.schermi.lavori = lavori
             if self.insieme:
                 # Più corsie: la voce è libera solo quando nessuna la tiene (06/10)
                 lavori.arbitro.voce_occupata, lavori.arbitro.voce_libera = corsie.condivisa(
@@ -507,6 +514,12 @@ class Avvio:
         conv_arch = self.conv_arch = load_conversazioni(cfg)
         if conv_arch is not None:
             atexit.register(conv_arch.close)
+            if schermi is not None:
+                # La scheda «Conversazione» degli schermi personali (08/10): i turni della
+                # persona dall'archivio, in diretta a ogni turno archiviato; «dimentica» la svuota
+                schermi.chat_fonte = conv_arch
+                conv_arch.su_turni.append(schermi.chat_nuovi)
+                conv_arch.su_dimentica.append(schermi.chat_dimenticata)
         # Il cassetto dei file per persona (08/10, calliope/cassetto.py): foto, file e audio
         # restano 7 giorni; con gli allegati dagli schermi
         cassetto = None

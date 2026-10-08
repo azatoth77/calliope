@@ -58,6 +58,11 @@ def converti(sorgente: dict, formato: str, font=None) -> bytes:
     from ..documenti.render import available_formats, render
     if formato not in FORMATI:
         raise Rifiuto(400, "formato non ammesso")
+    if callable(sorgente.get("markdown_fn")):
+        # La trascrizione della conversazione (08/10, hub.registra_chat): fatta adesso
+        # dall'archivio, così il file ha anche i turni arrivati dopo la scheda
+        sorgente = {"markdown": str(sorgente["markdown_fn"]() or ""),
+                    "titolo": sorgente.get("titolo")}
     if "markdown_file" in sorgente:
         # Il registro di un lavoro (08/10, agenti/avanzamento.py): un file del server, letto
         # al clic (il percorso viene solo dalla scheda costruita qui, mai dalla pagina)

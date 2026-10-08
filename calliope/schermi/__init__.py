@@ -10,6 +10,7 @@ in cui il tool finisce. La voce non aspetta mai lo schermo.
   archivio.py   schermi abbinati e codici in attesa (SQLite, solo libreria standard)
   hub.py        chi riceve cosa: stanza, livello, visibilità; consegna senza bloccare
   schede.py     le schede, costruite dal codice
+  cronologia.py le schede personali di ogni persona su disco (08/10), riviste alla ripresa
   server.py     Starlette + uvicorn (unica parte con dipendenze), SSE verso la pagina
   pagina/       la pagina kiosk: HTML, CSS e JS locali, niente CDN né font esterni
   __main__.py   python -m calliope.schermi: elenco, abbinamento, revoca, kiosk
@@ -65,6 +66,38 @@ def solo_locale(cfg) -> bool:
     return tls.solo_locale(cfg)
 
 
+def cartella_cronologia(cfg):
+    """La cartella della cronologia delle schede per persona: `schermi_cronologia_cartella`
+    (relativa alla cartella della configurazione), vuota = «schede» accanto a conversazioni.db."""
+    import os
+    from pathlib import Path
+    p = str(getattr(cfg, "schermi_cronologia_cartella", "") or "").strip()
+    if not p:
+        from ..conversazioni import percorso_db
+        return percorso_db(cfg).resolve().parent / "schede"
+    p = Path(os.path.expanduser(p))
+    return p if p.is_absolute() else Path(getattr(cfg, "config_dir", None) or ".") / p
+
+
+def carica_cronologia(cfg, log=print):
+    """La cronologia delle schede per persona (cronologia.py), o None: spenta, o la cartella
+    non si crea (allora resta quella in memoria e lo dice il log)."""
+    if not getattr(cfg, "schermi_cronologia_persona", True):
+        return None
+    from .cronologia import CronologiaSchede
+    try:
+        cron = CronologiaSchede(cartella_cronologia(cfg),
+                                giorni=float(getattr(cfg, "schermi_cronologia_giorni", 7.0)),
+                                massimo=int(getattr(cfg, "schermi_cronologia_max", 40)),
+                                mb=float(getattr(cfg, "schermi_cronologia_mb", 4.0)), log=log)
+    except OSError as e:
+        log(f"   [SCHERMI] cronologia delle schede solo in memoria: {e}")
+        return None
+    import atexit
+    atexit.register(cron.close)
+    return cron
+
+
 def load_schermi(cfg, db_path: str, log=print) -> Schermi | None:
     """Il registro degli schermi con il server già acceso, oppure None (spento, librerie
     mancanti, porta occupata): Calliope parte uguale, e lo dice il registro delle capacità."""
@@ -105,6 +138,7 @@ def load_schermi(cfg, db_path: str, log=print) -> Schermi | None:
     archivio = ArchivioSchermi(db_path, getattr(cfg, "schermi_codice_min", 10.0))
     hub = Schermi(cfg, archivio, log=log)
     hub.tls = certificato
+    hub.cronologia = carica_cronologia(cfg, log)
     try:
         srv = ServerSchermi(hub, host, port, tls=certificato).avvia()
     except OSError as e:

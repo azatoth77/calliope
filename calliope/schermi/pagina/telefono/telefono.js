@@ -227,7 +227,7 @@ const car = {
 // Le schede che hanno sempre «Espandi» (le altre solo se non ci stanno): sul telefono il
 // cruscotto, il codice di un lavoro, un documento o l'uscita di un programma non si leggono
 // nel riquadro del carosello (06/10, iPhone 13 mini)
-const TIPI_LUNGHI = new Set(["cruscotto", "lavoro", "documento", "esecuzione", "biblioteca", "web", "allegato", "sviluppo"]);
+const TIPI_LUNGHI = new Set(["cruscotto", "lavoro", "documento", "esecuzione", "biblioteca", "web", "allegato", "sviluppo", "chat"]);
 // Queste non si aprono a schermo intero: il modulo ha il suo strato, il gioco il suo riquadro
 const TIPI_SENZA_INTERA = new Set(["modulo", "gioco"]);
 const opzioniCarosello = { manoMs: 10000, schedaMs: 12000 };
@@ -399,7 +399,7 @@ function sincronizza(det) {
     // Tolta da chi la guarda (il «Chiudi» del cruscotto) o da Calliope (revoca, non amministra
     // più): lo strato si chiude. Uscita dalla cronologia perché ne sono arrivate altre: resta
     // aperta con l'ultimo contenuto (una scheda nuova non chiude quella che si sta leggendo)
-    if (car.intera === k && (k === "cruscotto" || !lista.length)) chiudiStrato("strato-scheda");
+    if (car.intera === k && (k === "cruscotto" || k === "chat" || !lista.length)) chiudiStrato("strato-scheda");
   }
   if (sch()) sch().aggiorna();          // timer e tempi dei lavori subito, non al giro dopo
   disponi();
@@ -547,6 +547,9 @@ function apriIntera(k) {
   car.intera = k;
   disegnaIntera();
   apriStrato("strato-scheda");
+  // Le aree che seguono la coda (la conversazione, il flusso dell'agente) vanno in fondo quando
+  // lo strato è visibile: nascosto, lo scorrimento non vale (08/10)
+  if (!gia) requestAnimationFrame(() => { if (car.intera === k && sch()) sch().ripristinaSegui($("intera-posto"), null); });
   // Il gesto indietro (Android, Edge) chiude lo strato invece di lasciare la pagina
   if (!gia) { try { history.pushState({ calliopeStrato: "scheda" }, ""); } catch (e) { /* niente */ } }
   return true;
@@ -1754,6 +1757,31 @@ async function avvio() {
   $("cruscotto-tel").addEventListener("click", async () => {
     chiudiStrato("menu");
     if (sch() && await sch().cruscotto()) apriIntera("cruscotto");
+  });
+  // La conversazione (08/10): dal menu a schermo intero, e resta nel carosello; «Pulisci le mie
+  // schede» con due tocchi (le schede non tornano). Solo su un telefono personale
+  document.addEventListener("calliope:chat", (ev) => { $("chat-tel").hidden = !ev.detail.attiva; });
+  document.addEventListener("calliope:scrivi", (ev) => { $("pulisci-tel").hidden = !(ev.detail && ev.detail.personale); });
+  $("chat-tel").addEventListener("click", () => {
+    chiudiStrato("menu");
+    if (sch() && sch().chat()) apriIntera("chat");
+  });
+  let pulisciArmato = 0;
+  $("pulisci-tel").addEventListener("click", async () => {
+    const b = $("pulisci-tel"), esito = $("pulisci-esito");
+    if (Date.now() >= pulisciArmato) {
+      pulisciArmato = Date.now() + 4000;
+      b.textContent = "Tocca di nuovo per pulire";
+      setTimeout(() => { if (Date.now() >= pulisciArmato) b.textContent = "Pulisci le mie schede"; }, 4100);
+      return;
+    }
+    pulisciArmato = 0;
+    b.disabled = true;
+    const r = sch() ? await sch().pulisci() : { ok: false };
+    b.disabled = false;
+    b.textContent = "Pulisci le mie schede";
+    esito.hidden = false;
+    esito.textContent = r.ok ? (r.frase || "Schede tolte.") : (r.errore || "Non ci sono riuscita: riprova.");
   });
   const bin = $("binario");
   bin.addEventListener("scroll", suScorri, { passive: true });

@@ -22,6 +22,10 @@ stamattina sul preventivo?».
   solo se riconosciuto dalla voce (tool con `ospiti=true`).
 - **Cancellazione**: per persona («dimentica le nostre conversazioni»), e dopo
   `conversazioni_giorni` giorni (all'avvio e una volta al giorno).
+- **Scheda «Conversazione»** (08/10): ogni turno porta in `meta` il satellite o lo schermo e il
+  canale (colonna della versione 2); dal ciclo si archivia a turno finito, e `su_turni` lo
+  manda in diretta agli schermi personali della persona (mai per gli ospiti); `chat` e
+  `chat_markdown` per la scheda e «Scarica»; `su_dimentica` la svuota.
 - I lavori lenti (inserimenti, vettori, pulizia) li fa un thread suo, in ordine: la voce non
   aspetta mai il disco né il server degli embedding. La ricerca è sincrona (la chiama il tool).
 - **Mai un modello in più durante una conversazione** (06/10, prova e2e sulla DGX: Ollama ne
@@ -108,7 +112,14 @@ def _v1(db):
     """)
 
 
-MIGRAZIONI = [_v1]
+def _v2(db):
+    """08/10: `meta` dei turni (JSON: il satellite o lo schermo del turno, «voce» o «scritto»)
+    per la scheda «Conversazione» degli schermi personali. NULL nei turni di prima."""
+    from .persistenza import aggiungi_colonna
+    aggiungi_colonna(db, "turni", "meta", "TEXT")
+
+
+MIGRAZIONI = [_v1, _v2]
 
 
 # ─────────────────────────── embedding ───────────────────────────
@@ -192,6 +203,12 @@ class ArchivioConversazioni:
         self._fermo = threading.Event()
         self._thread = None
         self._ultima_pulizia = 0.0
+        # Chi vuole sapere dei turni appena archiviati di una persona (08/10: la scheda
+        # «Conversazione» degli schermi personali, hub.Schermi.chat_nuovi): funzioni
+        # (persona, [voci di `voce_chat`]), dal thread dell'archivio, mai per gli ospiti. E di
+        # una persona che ha cancellato le sue conversazioni (funzioni(persona))
+        self.su_turni: list = []
+        self.su_dimentica: list = []
         if avvia:
             self.avvia()
 
@@ -284,6 +301,7 @@ class ArchivioConversazioni:
         self.segna_attivita()
 
         def f():
+            nuovi = []
             with self.lock:
                 if conv.id_archivio is None:
                     cur = self.db.execute(
@@ -293,15 +311,55 @@ class ArchivioConversazioni:
                     conv.id_archivio = cur.lastrowid
                 from .conversazione import testo_turno
                 for t in turni:
+                    meta = t.get("meta") if isinstance(t.get("meta"), dict) else None
                     cur = self.db.execute(
-                        "INSERT INTO turni (conv, quando, domanda, risposta, azioni, riservato) "
-                        "VALUES (?, ?, ?, ?, ?, ?)",
+                        "INSERT INTO turni (conv, quando, domanda, risposta, azioni, riservato, "
+                        "meta) VALUES (?, ?, ?, ?, ?, ?, ?)",
                         (conv.id_archivio, t["quando"], t["domanda"], t["risposta"],
-                         json.dumps(t["azioni"], ensure_ascii=False), int(t["riservato"])))
+                         json.dumps(t["azioni"], ensure_ascii=False), int(t["riservato"]),
+                         json.dumps(meta, ensure_ascii=False) if meta else None))
                     self.db.execute("INSERT INTO turni_fts (rowid, testo) VALUES (?, ?)",
                                     (cur.lastrowid, testo_turno(t)))
+                    nuovi.append(voce_chat(cur.lastrowid, t["quando"], t["domanda"],
+                                           t["risposta"], meta, conv.luogo, t["azioni"]))
                 self.db.commit()
+            # In diretta agli schermi personali della persona (mai gli ospiti), dopo il commit
+            if persona and not ospite and self.su_turni:
+                for g in list(self.su_turni):
+                    try:
+                        g(str(persona), [v for v in nuovi if v is not None])
+                    except Exception as e:  # noqa: BLE001 — lo schermo non ferma l'archivio
+                        self.log(f"[CONVERSAZIONI] schermi non avvisati: {type(e).__name__}")
         self._in_coda(f)
+
+    # ── la scheda «Conversazione» (08/10) ──
+    def chat(self, persona: str | None, n: int = 80) -> list[dict]:
+        """Gli ultimi `n` turni di `persona` (mai degli ospiti), dal più vecchio, entro la
+        tenuta dell'archivio: per la scheda «Conversazione» di un suo schermo personale."""
+        if not persona or n <= 0:
+            return []
+        dal = time.time() - self.giorni * 86400 if self.giorni > 0 else 0.0
+        with self.lock:
+            righe = self.db.execute(
+                "SELECT t.id, t.quando, t.domanda, t.risposta, t.meta, c.luogo, t.azioni "
+                "FROM turni t JOIN conversazioni c ON c.id = t.conv WHERE c.persona = ? AND "
+                "c.ospite = 0 AND t.quando >= ? ORDER BY t.id DESC LIMIT ?",
+                (str(persona), dal, int(n))).fetchall()
+        out = []
+        for r in reversed(righe):
+            try:
+                meta = json.loads(r[4]) if r[4] else None
+                azioni = json.loads(r[6] or "[]")
+            except ValueError:
+                meta, azioni = None, []
+            v = voce_chat(r[0], r[1], r[2], r[3], meta, r[5], azioni)
+            if v is not None:
+                out.append(v)
+        return out
+
+    def chat_markdown(self, persona: str | None, n: int = 2000) -> str:
+        """La trascrizione in Markdown («Scarica» della scheda), giorno per giorno."""
+        return chat_markdown(self.chat(persona, n))
 
     def chiudi(self, conv, motivo: str, riassunto: dict | None = None):
         """La conversazione è finita: fine, motivo e (se c'è) il riassunto di chiusura."""
@@ -523,6 +581,12 @@ class ArchivioConversazioni:
                 (str(persona),))]
             self._togli(ids)
             self.db.commit()
+        # Anche dalla scheda «Conversazione» dei suoi schermi personali (08/10)
+        for g in list(self.su_dimentica):
+            try:
+                g(str(persona))
+            except Exception as e:  # noqa: BLE001
+                self.log(f"[CONVERSAZIONI] schermi non avvisati: {type(e).__name__}")
         return len(ids)
 
     def _togli(self, ids: list[int]):
@@ -584,6 +648,55 @@ class ArchivioConversazioni:
             n_turni, n_vet = self.db.execute(
                 "SELECT COUNT(*), COUNT(vettore) FROM turni").fetchone()
         return {"conversazioni": n_conv, "turni": n_turni, "vettori": n_vet}
+
+
+# ─────────────────────────── la scheda «Conversazione» (08/10) ───────────────────────────
+def voce_chat(ident, quando, domanda, risposta, meta, luogo_conv, azioni=()) -> dict | None:
+    """Un turno per la scheda «Conversazione»: id (dell'archivio: la pagina scarta i doppioni),
+    quando, la frase come trascritta (o scritta) e la risposta, il satellite o lo schermo del
+    turno e il canale. I testi sono quelli dell'archivio: già senza codici, frase di sfida e
+    risposte riservate (conversazione.turni). Una risposta vuota con un'azione detta dal tool
+    mostra la frase detta. None se non c'è niente da mostrare."""
+    meta = meta if isinstance(meta, dict) else {}
+    risposta = str(risposta or "")
+    if not risposta.strip():
+        fatti = [str(a.get("detto")) for a in azioni or () if isinstance(a, dict)
+                 and a.get("detto")]
+        risposta = " ".join(fatti)
+    domanda = str(domanda or "")
+    if not domanda.strip() and not risposta.strip():
+        return None
+    luogo = str(meta.get("luogo") or luogo_conv or "")
+    if luogo == "locale":
+        luogo = "questo computer"
+    return {"id": int(ident), "quando": round(float(quando or 0), 3), "domanda": domanda,
+            "risposta": risposta, "luogo": luogo[:60],
+            "canale": "scritto" if meta.get("canale") == "scritto" else "voce"}
+
+
+def chat_markdown(turni: list[dict], titolo: str = "Conversazione con Calliope") -> str:
+    """La trascrizione in Markdown, giorno per giorno: ora, luogo, «Tu» e «Calliope»."""
+    from .testi import MESI
+    giorni = ("lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato", "domenica")
+    righe = [f"# {titolo}", ""]
+    if not turni:
+        righe.append("Nessun turno nell'archivio.")
+    giorno = None
+    for t in turni:
+        d = datetime.datetime.fromtimestamp(float(t.get("quando") or 0))
+        if d.date() != giorno:
+            giorno = d.date()
+            righe += [f"## {giorni[d.weekday()]} {d.day} {MESI[d.month - 1]} {d.year}", ""]
+        dove = " · ".join(x for x in (d.strftime("%H:%M"), t.get("luogo") or "",
+                                      "scritto" if t.get("canale") == "scritto" else "")
+                          if x)
+        righe.append(f"**{dove}**")
+        righe.append("")
+        if t.get("domanda"):
+            righe += [f"**Tu:** {t['domanda']}", ""]
+        if t.get("risposta"):
+            righe += [f"**Calliope:** {t['risposta']}", ""]
+    return "\n".join(righe).rstrip() + "\n"
 
 
 # ─────────────────────────── avvio ───────────────────────────

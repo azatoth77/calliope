@@ -100,6 +100,8 @@ ARGOMENTI: dict[str, dict[str, str]] = {
     "allegato_archivia": {"allegato": "indice:allegato"},
     # 08/10, cassetto dei file: «quale» sceglie i file della persona, «di» un ragazzo (tutore)
     "cassetto_gestisci": {"azione": Z, "quale": B, "di": B},
+    # 08/10, cronologia delle schede per persona: senza argomenti, solo quelle di chi parla
+    "schede_pulisci": {},
     "richiesta_tutore": {"cosa": Z, "nome": B, "minuti": S},
     "minore_gestisci": {"nome": B, "azione": Z, "valore": C},
     "installa_avvia": {"azione": B},
@@ -202,7 +204,7 @@ EFFETTI: dict[str, object] = {
     "lista_aggiungi": E2, "lista_togli": E2, "ricorda": _ricorda, "dimentica": E2,
     "appuntamento_aggiungi": E2, "agenda_annulla": E2, "anagrafica_salva": E2,
     "modello_compila": E2, "richiesta_tutore": E2, "lavoro_rispondi": E2,
-    "lavoro_annulla": E2, "pc_guarda": E2,
+    "lavoro_annulla": E2, "pc_guarda": E2, "schede_pulisci": E2,
     # E3: esce di casa, esegue codice o non si disfa
     "programma_esegui": E3, "installa_avvia": E3, "installa_gestisci": E3, "pc_apri_app": E3,
     "estensione_gestisci": E3, "conversazioni_dimentica": E3,

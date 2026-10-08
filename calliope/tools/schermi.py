@@ -16,6 +16,10 @@ qui ci sono solo le richieste esplicite e la gestione.
   si parla, o quello nominato; chi amministra riconosciuto dalla voce in quella frase; si fa
   solo dopo il «sì» (domanda con azione in sospeso, proposta valida nella risposta dopo).
 
+- schede_pulisci(): «pulisci le mie schede» (08/10, schermi/cronologia.py): la cronologia
+  delle schede di chi parla, su disco e sui suoi schermi personali; solo le sue, solo con la
+  voce riconosciuta. Anche il tasto «Pulisci» della pagina (POST /api/schede).
+
 Regole (principio 10): il codice detto si prende dalla frase solo se l'argomento del modello
 non ha 6 cifre («codice_dalla_frase», correzione della forma di una scelta già fatta), la
 stanza si normalizza («al soggiorno» → «soggiorno»). Le visibilità sono permessi, nel codice.
@@ -28,7 +32,7 @@ from pathlib import Path
 from ..schermi import cifre, norm_stanza, schede
 from ..conferme import proposta_valida, secondi_validi
 from .spec import ToolContext, ToolSpec, note_rule
-from ..testi import ADMIN, ALL, NIENTE
+from ..testi import ADMIN, ALL, FAMILY, NIENTE
 
 # La persona detta come «io» («il mio schermo»): vale chi parla
 _IO = frozenset({"me", "io", "mio", "mia", "il mio", "la mia", "me stesso", "me stessa",
@@ -562,6 +566,39 @@ def _esito_abbina(res: dict, owner_name) -> dict:
                   "cifre sullo schermo e ripetile.", ok=False, fatto=NIENTE)
 
 
+# ─────────────────────────── schede_pulisci ───────────────────────────
+
+def _schede_pulisci(ctx: ToolContext) -> dict:
+    """«Pulisci le mie schede» (08/10, schermi/cronologia.py): la cronologia delle schede di chi
+    parla, su disco e sui suoi schermi personali. Solo le sue, e solo con la voce riconosciuta
+    (mai la zona grigia: un'altra voce non pulisce le schede di qualcuno). Senza conferma: le
+    schede sono copie (documenti, lavori e file restano dove sono)."""
+    hub = getattr(ctx, "schermi", None)
+    if hub is None:
+        return _final("Gli schermi non sono attivi in questa installazione.", ok=False,
+                      fatto=NIENTE)
+    sender = hub.mittente(ctx)
+    if not sender.persona or sender.livello not in ("familiare", "amministra"):
+        return _final("Le schede le pulisco solo alle persone di casa che riconosco dalla voce.",
+                      ok=False, fatto=NIENTE)
+    if not sender.certo:
+        return _final("Non ho riconosciuto bene la tua voce: le schede non le tocco. Ripetilo "
+                      "dopo avermi chiamata per nome.", ok=False, fatto=NIENTE)
+    n = hub.pulisci_schede(sender.persona)
+    if not n:
+        return _final("Non c'erano schede da togliere.", fatto="nessuna scheda")
+    return _final("Fatto, ho tolto le tue schede dagli schermi. Documenti, lavori e file "
+                  "restano dove sono.", fatto=f"tolte {n} schede")
+
+
+def _classe_pulisci():
+    """La classe per la politica dei tool (calliope/politica.py): un'azione della persona sulle
+    sue schede; con dati non fidati di mezzo servono le parole del tool nella frase."""
+    from ..politica import AZIONE, Classe
+    return Classe(AZIONE, cosa=lambda a: "tolga le tue schede dagli schermi",
+                  verbi=r"pulisc|pulir|togl|cancell|elimin|svuot|sched")
+
+
 def schermi_specs() -> list[ToolSpec]:
     return [
         ToolSpec(
@@ -604,4 +641,13 @@ def schermi_specs() -> list[ToolSpec]:
                                        "persona": {"type": "string"}},
                         "required": ["azione"]},
             func=_schermo_gestisci, risk="azione", levels=ADMIN, segreti=("codice",)),
+        ToolSpec(
+            name="schede_pulisci",
+            description=("Toglie le schede passate di chi parla dai suoi schermi personali e "
+                         "dalla loro cronologia («pulisci le mie schede», «cancella le mie "
+                         "schede dal telefono»). Solo le sue; documenti, lavori e file restano. "
+                         "Non per togliere la scheda di adesso (schermo_mostra con niente) né "
+                         "per le conversazioni."),
+            parameters={"type": "object", "properties": {}, "required": []},
+            func=_schede_pulisci, risk="azione", levels=FAMILY, classe=_classe_pulisci()),
     ]

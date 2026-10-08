@@ -108,6 +108,8 @@ A_SECCO = [
     # ~6 s: cassetto in una cartella temporanea, Brain finto, server degli schermi vero
     ("prova_cassetto.py", [], "cassetto dei file per persona (08/10): entrata (foto, file, audio; mai programmi né ospiti), scadenza e «ho eliminato», revisione una volta al giorno, tieni/elimina/tieni ancora, tetto, minore e tutore, zona grigia, ritrovamento dopo un riavvio, contenuto in busta, /api/cassetto, ciclo finto"),
     # ~15 s: la scheda del cassetto in Edge o Chromium senza finestra; senza browser si salta
+    ("prova_cronologia_schede.py", [], "cronologia delle schede per persona e scheda «Conversazione» (08/10): salvataggio solo personale e certo, chiavi, tenuta e tetti, ripresa dopo un riavvio con le schede finali (lavoro interrotto, esercizi, sviluppo ricostruito, modulo e timer saltati), «Scarica» con un gettone nuovo, pulizia (tool, /api/schede, evento), conversazione dall'archivio (meta, sfida e codici tolti, in diretta solo ai propri schermi, dimentica, tenuta, Markdown), server vero"),
+    ("prova_cronologia_pagina.py", [], "cronologia delle schede e conversazione nella pagina vera: riavvio del server, schermo nuovo che ritrova schede e chat, turno nuovo in fondo senza riscrivere, Scarica, stanza vuota, Pulisci con due tocchi, vista dello sviluppo dopo un riavvio, telefono dal menu, nessun errore JS né CSP"),
     ("prova_cassetto_pagina.py", [], "scheda del cassetto nella pagina vera: carosello (miniatura, sigle), Tieni solo dove si può, Tieni ancora, Tieni, Elimina tutti con due tocchi, schermo di un'altra persona vuoto, nessun errore JS né CSP"),
     # ~15 s: la pagina in Edge o Chromium senza finestra; senza browser si salta
     ("prova_immagini_pagina.py", [], "foto nella pagina vera: pulsante, file scelto, incolla, trascina, SVG rifiutato, scheda con la miniatura"),
@@ -270,7 +272,7 @@ LIVELLO_3 = {
     "prova_telefono_audio.py", "prova_telefono_schermo.py", "prova_satellite.py",
     "prova_corsie_satelliti.py", "prova_installa_satellite.py", "prova_cruscotto_pagina.py",
     "prova_scheda_intera.py", "prova_markdown_pagina.py", "prova_cassetto_pagina.py",
-    "prova_esercizi_pagina.py", "prova_vista_sviluppo_pagina.py",
+    "prova_esercizi_pagina.py", "prova_vista_sviluppo_pagina.py", "prova_cronologia_pagina.py",
 }
 # Mai nel gruppo parallelo, anche quando una prova li sceglie nel livello 2: un browser, un
 # tempo reale o tanti processi, che sotto carico falliscono a caso. Tutto il livello 3 è
@@ -324,6 +326,11 @@ LEGAMI = [
     ("calliope/piano.py", ["prova_piano.py"]),
     ("calliope/installa/", ["prova_installa.py", "prova_capacita.py"]),
     ("calliope/latenza.py", ["prova_cruscotto.py"]),
+    # La cronologia delle schede per persona e la scheda «Conversazione» (08/10)
+    ("calliope/schermi/", ["prova_cronologia_schede.py"]),
+    ("calliope/conversazioni.py", ["prova_cronologia_schede.py", "prova_conversazioni.py"]),
+    ("calliope/conversazione.py", ["prova_cronologia_schede.py", "prova_conversazioni.py"]),
+    ("calliope/tools/schermi.py", ["prova_cronologia_schede.py"]),
     ("calliope/schermi/", ["prova_schermi.py", "prova_cruscotto.py", "prova_scritto.py", "prova_giochi.py",
                            "prova_telefono_abbina.py", "prova_inoltro.py",
                            "prova_immagini.py", "prova_allegati.py", "prova_cassetto.py"]),
