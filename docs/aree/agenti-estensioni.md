@@ -1312,3 +1312,76 @@ registro dei turni, `uscite.jsonl` e registri dei lavori letti in sola lettura).
 **Prove**: a secco `prove/prova_sviluppo_giro5.py` (~2 s, livello 1: doppia codifica e
 contrari, collaudi con `argomenti`, «la gente», analisi con i collaudi, il rilevatore con uno
 stream finto e i contrari, `presence_penalty`); con gemma4 `prove/prova_sviluppo_giro5_ollama.py`.
+
+## Diagnosi dei collaudi: confronto tra riusciti e falliti, risposte vere per i test (08/10 notte, ramo `diagnosi-collaudi`)
+
+Il caso del giro 5, visto da lontano: l'agente **aveva** la traccia giusta (`name=…%2BMaggiore`
+→ 32 byte), l'ha letta male, e i suoi test passavano «24 su 24» con un geocoder finto scritto da
+lui che trovava la città. Dario: «e se domani il problema fosse un altro?». L'avviso della
+doppia codifica e il rifiuto degli spazi (giri 3 e 5) restano, come avvisi in più; sopra ci sono
+due meccanismi **generali**, che non sanno niente del problema.
+
+- **Confronto tra collaudi riusciti e falliti** (`sviluppo.confronto`). Per ogni collaudo
+  fallito della versione provata (al più 3) le sue richieste vanno accanto a quelle di un
+  collaudo riuscito verso lo **stesso host e percorso** (prima della stessa versione, se no di
+  una versione di prima: anche con i soli falliti c'è il confronto). Della richiesta: parametri
+  com'erano scritti e decodificati una volta, metodo, corpo (POST); della risposta: stato,
+  dimensione, chiavi JSON di primo livello e chiavi vuote (la porta ora le scrive nella traccia,
+  `forma`/`chiavi`/`vuote`, `porta.forma_json`). Poi le differenze in fila: parametri solo da
+  una parte, valori diversi con i segni che il riuscito non ha («%2B», «+», spazio, lettere
+  accentate), risposta senza una chiave o con una chiave vuota, molto più piccola, stato
+  diverso; e se l'**input** del collaudo e il valore che il servizio legge sono lo stesso testo
+  a meno di segni («citta» = «Pratofiorito Maggiore», `name` letto «Pratofiorito+Maggiore»),
+  mentre nel riuscito coincidono. Un «non ho trovato» è un risultato per il codice (il collaudo è
+  «riuscito», `_fallito`): se nessun collaudo è segnato fallito vale come fallito quello che
+  dallo stesso indirizzo ha avuto una risposta più povera, ed è detto così. Esempio vero (con
+  le città di fantasia): «Riuscito: «citta: Valfiorita» → GET geocoding-api…/v1/search
+  name=Valfiorita → stato 200, 2.369 byte, chiavi results, generationtime_ms. Fallito: «citta:
+  Pratofiorito Maggiore» (per il codice riuscito: «Non ho trovato…»; la risposta ha meno dati) →
+  … name=Pratofiorito%2BMaggiore (decodificato: «Pratofiorito+Maggiore») → stato 200, 29 byte,
+  chiavi generationtime_ms. Differenze: solo il parametro name (nel valore del fallito «%2B»,
+  «+» che nel riuscito non c'è); la risposta del fallito non ha results; … molto più piccola;
+  l'input citta del fallito era «Pratofiorito Maggiore», ma il servizio legge name =
+  «Pratofiorito+Maggiore» (nel riuscito input e valore letto coincidono)». Sta **in testa** alla
+  traccia (`testo_traccia`, quindi nei vincoli di `sviluppo_correggi` e del lavoro che riparte
+  dall'analisi, sopra l'«ATTENZIONE» della doppia codifica) e prima dei collaudi nel contesto di
+  `sviluppo_chiedi`. Usa la traccia già ripulita dalla porta (un valore «[tolto]» resta tolto),
+  al più 2.500 caratteri. Le intestazioni non ci sono: l'estensione non ne manda (la porta ha
+  solo `url` e, per la POST, `dati`).
+- **Risposte vere come esempi per i test** (`Porta._esempio`, `sviluppo.esempi_veri`). La porta
+  tiene la risposta intera (al più 8.000 caratteri, poi «troncata») solo per una **GET verso un
+  host scritto nel manifesto**, mai dopo una lettura di dati di casa, mai con un dato riservato
+  nella risposta o un valore tolto dall'URL; un dato personale riconosciuto si toglie e
+  l'esempio è «ripulito»; al più 2 indirizzi per esecuzione, e solo negli ultimi 6 collaudi
+  (`sviluppi.json` resta piccolo). Quando parte una correzione o un lavoro dall'analisi, nella
+  cartella dell'agente vanno `esempi_veri/<host>_<n>.json` (richiesta con l'URL com'era e
+  risposta vera, l'esito del collaudo) e `esempi_veri/indice.json`, prima i falliti, al più 6
+  (sostituiscono quelli della versione di prima); nei vincoli `ESEMPI_VINCOLO`: un test per ogni
+  collaudo che non andava con la stessa richiesta e la risposta vera, mai risposte del servizio
+  che contraddicono quelle vere; il prompt dell'agente lo ricorda in una riga. I file restano
+  nella versione (JSON ammessi dall'archivio), così i test della revisione girano uguali.
+- **CalliopeFinta con le risposte vere** (`_ospite.CalliopeFinta`, `esempi_veri=True`): se nella
+  cartella di lavoro c'è `esempi_veri/indice.json`, per lo stesso indirizzo (anche con i
+  parametri in un altro ordine) `rete_leggi` risponde con la risposta vera, non con quella
+  preparata dal test, e lo scrive su stderr (`vere` tiene gli indirizzi). Il test del giro vero
+  («un geocoder finto che trova qualunque città») con il codice della doppia codifica **fallisce**
+  (prova con unittest in un processo); con la codifica giusta l'indirizzo è un altro e il test
+  passa. Non sostituisce una risposta troncata o ripulita; `esempi_veri=False` per simulare un
+  guasto; una rete negata resta negata.
+- **Misura breve** con il modello locale (qwen3:8b, think spento, il prompt e lo schema di
+  `sviluppo_chiedi`; l'avviso specifico della doppia codifica **tolto** dal contesto in entrambi
+  i casi, per misurare solo il meccanismo generale; «Perché con Pratofiorito Maggiore dice che
+  non la trova, mentre con Valfiorita va?», 4 giri ciascuno): con la sola traccia 0/4 («non è
+  nel database» 3 volte, «spazi o nomi complessi» una); con il confronto senza la riga
+  dell'input 0/4 («il geocodificatore non lo riconosce»); con il confronto completo **4/4**
+  danno la colpa alla codifica del parametro `name`, 2/4 con il dettaglio giusto («%2B» al posto
+  dello spazio), 2/4 nel verso sbagliato («gli spazi vanno codificati come +»). ~23 s a risposta
+  sul portatile. L'agente vero è qwen3.6 su vLLM sulla DGX (non toccato): da misurare lì con un
+  giro vero, e da vedere se i test con gli esempi veri fermano un «24 su 24» falso.
+
+**Prove**: a secco `prove/prova_diagnosi_collaudi.py` (~2 s, livello 1: il confronto e i contrari
+— nessun riuscito, host diversi, un collaudo solo, due riusciti uguali, input che cambia anche
+nel riuscito —, il tetto, le tracce di prima; la porta con gli esempi e i contrari — host fuori
+dal manifesto, dati di casa letti, POST, dato riservato, URL ripulito, troncata, al più due —;
+`esempi_veri` e l'indice; CalliopeFinta con il test dell'agente in un processo; il confronto e
+gli esempi in `sviluppo_chiedi`, `sviluppo_correggi` e nell'analisi).
