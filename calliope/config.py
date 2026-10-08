@@ -269,6 +269,20 @@ class Config:
     # 3, e a 300 token 0 su 3 anche senza; costo +1,1–1,8 s sulla prima frase. I risultati
     # normali di internet (5 estratti) restano sotto. 0 = spenta; solo con l'API di Ollama
     quarantena_token: int = 800
+    # Memoria dell'intento (08/10, calliope/valore.py, fase 2 della sicurezza per valore;
+    # decisione D4): un'azione confermata dalla persona riconosciuta e poi fallita resta aperta
+    # al più questi secondi, per lo stesso tool, lo stesso bersaglio e la stessa persona: la
+    # chiamata corretta («riprova», l'indice giusto) non chiede di nuovo. Il 07/10 alle 17:07
+    # servivano 10 turni per aprire un foglio appena creato. 0 = fino alla chiusura della
+    # conversazione
+    intento_valido_s: float = 600.0
+    # Politica per valore (08/10, calliope/valore.py, fase 4; decisione D5): con un dato non
+    # fidato di mezzo decide la matrice provenienza × effetto al posto della regola «pericolosa
+    # ⇒ conferma». Spenta, la decisione nuova si calcola lo stesso e va nel registro dei turni
+    # (`politica_ombra` di ogni chiamata; confronto in `calliope stato --turni`). Si accende
+    # dopo due giorni d'ombra senza esecuzioni in più con un bersaglio preso dal dato; per
+    # tornare indietro basta rimetterla a false
+    politica_per_valore: bool = False
     # Ciò che Calliope dice con dati non fidati di mezzo (06/10, calliope/riferire.py): ogni
     # frase della risposta si controlla prima di dirla (numeri a pagamento, codici e password da
     # dare, soldi verso un conto, recapiti presi solo dal dato e non chiesti, indicazioni
@@ -760,6 +774,22 @@ class Config:
     # Audio: si trascrive con il Whisper della voce solo fino a tanti secondi (oltre, solo nome,
     # tipo e durata: la voce resterebbe ferma troppo)
     allegati_audio_max_s: float = 180.0
+    # Il cassetto dei file per persona (08/10, calliope/cassetto.py, decisione del 07/10): ogni
+    # foto, file o audio mandato da chi è riconosciuto resta `cassetto_giorni` giorni sulla
+    # macchina di Calliope, poi si elimina (e Calliope lo dice la volta dopo). Si ritrova a
+    # voce («il file che ti ho mandato ieri»); alla prima conversazione del giorno, se qualcosa
+    # scade entro `cassetto_avviso_giorni`, una frase e la scheda col carosello sullo schermo
+    # personale (Tieni nei documenti di casa, Elimina, Tieni ancora). Mai per gli ospiti. Oltre
+    # `cassetto_mb_persona` il file resta solo nella conversazione e Calliope lo dice. Spento:
+    # i file vivono solo nella conversazione, come prima
+    cassetto_enabled: bool = True
+    # Cartella dei file (vuoto = «cassetto» accanto a memory_db); l'indice sta in memory_db
+    cassetto_cartella: str = ""
+    cassetto_giorni: float = 7.0
+    cassetto_mb_persona: float = 500.0
+    cassetto_avviso_giorni: float = 2.0
+    # Ogni quanti secondi si eliminano i file scaduti (anche all'avvio)
+    cassetto_pulizia_s: float = 3600.0
     # Il telefono come satellite (03/10, docs/ricerche/2026-10-03-webapp-telefono.md): la
     # pagina /telefono dello stesso server è una web app installabile (PWA) con il microfono,
     # la wake word nel telefono e la voce di Calliope. Serve audio_modo: satellite (Calliope
@@ -965,8 +995,8 @@ class Config:
     # mai. «amministra» o «familiare»
     agenti_livello: str = "familiare"
     agenti_livello_codice: str = "amministra"
-    # Conferma a voce prima di avviare: «costosi» (codice, ricerche, coda già occupata,
-    # modello da caricare), «sempre» o «mai»
+    # Conferma a voce prima di avviare: «costosi» (codice ed estensioni, coda già occupata,
+    # modello da caricare; le ricerche no dal 08/10), «sempre» o «mai»
     agenti_conferma: str = "costosi"
     # Analisi della richiesta prima della proposta (06/10, calliope/agenti/richiesta.py): un
     # lavoro di codice o un'estensione nuova passa prima dal modello dell'agente, che dice se
@@ -1127,6 +1157,12 @@ class Config:
     # dicono l'avvio e `calliope stato`; dettagli con `calliope stato --turni`. 0 = mai. Dal 02
     # al 05/10 la DGX era passata da 0,78 a 2,05 s senza che nessuno lo vedesse
     latenza_avviso_s: float = 1.2
+    # Attrito della sicurezza (08/10, calliope/attrito.py, decisione D6): oltre queste domande di
+    # sicurezza ogni 100 turni con una frase (giorni con almeno 50 turni), o con una domanda
+    # ripetuta per la stessa azione entro 5 minuti, lo dicono l'avvio e `calliope stato`;
+    # dettagli con `calliope stato --turni`. Il 07/10 erano 15,8, 28 su 41 falsi positivi
+    # (docs/ricerche/2026-10-07-sicurezza-per-valore.md). Obiettivo ≤ 2; 0 = solo le ripetute
+    attrito_avviso: float = 3.0
     # Diagnostica: CALLIOPE_DEBUG_AUDIO registra ogni frase captata (WAV + trascrizione).
     debug_audio_dir: str | None = os.environ.get("CALLIOPE_DEBUG_AUDIO") or None
 
@@ -1931,6 +1967,10 @@ RETI: dict[str, Rete] = {
     "riferimento_lavoro": Rete(
         "«fammene un PDF»: il lavoro dell'agente appena detto (LAVORO_MSG)", MODELLO,
         "dati del turno: «Ho metto un pdf.» dopo il risultato cercava i PDF del PC (07/10)"),
+    "estensione_nominata": Rete(
+        "un'estensione nominata nella frase: il suo tool e cosa fa (EST_NOMINATA_MSG)", MODELLO,
+        "dati del turno: «invoca l'estensione meteo per città su Bergamo» tre volte, e sempre "
+        "web_cerca (26B, 07/10)"),
     "conferma_al_posto_del_vuoto": Rete(
         "risposta vuota dopo un tool: la sua conferma", MODELLO,
         "risposte vuote del 4B dopo un'azione riuscita"),
@@ -2078,6 +2118,7 @@ SEZIONI: dict[str, list[str]] = {
             "contesto_riassunto_max_s",
             "max_history_turns", "max_tool_turns", "azione_in_sospeso_s", "azione_in_sospeso_turni",
             "conferma_sfida", "conferma_sfida_s", "conferma_sfida_parole", "quarantena_token",
+            "intento_valido_s", "politica_per_valore",
             "uscita_controllo",
             "storia_inattiva_s",
             "llm_reti_spente"],
@@ -2143,7 +2184,9 @@ SEZIONI: dict[str, list[str]] = {
                  "immagini_max_conversazione", "immagini_attesa_s"],
     "allegati": ["allegati_enabled", "allegati_max_mb", "allegati_memoria_mb",
                  "allegati_max_conversazione", "allegati_token_file", "allegati_token_totale",
-                 "allegati_pdf_pagine", "allegati_pdf_pagine_immagini", "allegati_audio_max_s"],
+                 "allegati_pdf_pagine", "allegati_pdf_pagine_immagini", "allegati_audio_max_s",
+                 "cassetto_enabled", "cassetto_cartella", "cassetto_giorni",
+                 "cassetto_mb_persona", "cassetto_avviso_giorni", "cassetto_pulizia_s"],
     # Due sezioni dal 05/10: il server che accoglie i satelliti (la DGX) e il satellite stesso
     # (il portatile). Si possono scrivere anche nella sezione dell'altro: contano le chiavi
     "server_satelliti": ["audio_modo", "satellite_indirizzo", "satellite_porta",
@@ -2190,7 +2233,8 @@ SEZIONI: dict[str, list[str]] = {
             "web_pagina_timeout_s", "web_pagina_caratteri", "web_agente_ricerche",
             "web_agente_pagine", "web_reti_vietate"],
     "segreti": ["segreti_file"],
-    "registro": ["turn_log_dir", "turn_log_days", "latenza_avviso_s", "debug_audio_dir"],
+    "registro": ["turn_log_dir", "turn_log_days", "latenza_avviso_s", "attrito_avviso",
+                 "debug_audio_dir"],
     "rete": ["online"],
 }
 
@@ -2340,8 +2384,9 @@ LIMITI: dict[str, tuple[float, float]] = {
     "esercizi_campione": (0, 50),
     "suoni_volume": (0.0, 1.0),
     "vad_threshold": (0.0, 1.0), "wake_consecutive": (1, 50), "turn_log_days": (1, 3650),
-    "latenza_avviso_s": (0.0, 60.0),
+    "latenza_avviso_s": (0.0, 60.0), "attrito_avviso": (0.0, 100.0),
     "llm_attesa_avvio_s": (0.0, 86_400.0), "azione_in_sospeso_s": (0.0, 3600.0),
+    "intento_valido_s": (0.0, 3600.0),
     "azione_in_sospeso_turni": (1, 20), "conferma_sfida_s": (5.0, 600.0),
     "conferma_sfida_parole": (2, 4), "speaker_conferma_breve_soglia": (0.0, 1.0),
     "tts_lead_s": (0.0, 5.0), "tts_tail_s": (0.0, 5.0), "tts_spezza_prima": (0, 10_000), "tts_thread": (0, 256),

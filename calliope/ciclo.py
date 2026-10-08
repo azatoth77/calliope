@@ -32,6 +32,7 @@ from . import pause as pause_mod
 from . import guardiano as guardia
 from . import provenienza, riferire
 from . import allegati as allegati_mod
+from .cassetto import CassettoPieno
 from .agenda import announcement
 from .compressione import FRASE_DURA
 from .config import Config, DEEPEN_WORDS, SEARCH_PROMISE
@@ -110,6 +111,7 @@ class Servizi:
     giochi: object = None
     guardiano: object = None
     foto_attesa: object = None           # immagini.InAttesa (foto e file senza domanda)
+    cassetto: object = None              # cassetto.Cassetto: i file per persona (08/10)
     cortesia: object = None
     turns: object = None                 # TurnLog
     attiva_minori: object = None         # () → True se ha registrato i tool dei minori
@@ -217,6 +219,9 @@ class Ciclo:
         # ascolto se nessuno parla nella finestra (vedi `_solo_il_nome`)
         self.frasi_prese = 0
         self._fine_attesa: threading.Timer | None = None
+        # Il cassetto dei file (08/10): la persona il cui ultimo file non c'è entrato (tetto),
+        # da dire dopo la risposta
+        self.cassetto_pieno: str | None = None
         # Pause e fine del turno (07/10, solo misura: calliope/pause.py): la fine della voce
         # della frase di prima (monotonic) e chi la diceva, per la ripresa al turno dopo
         self._fine_voce_prec: float | None = None
@@ -874,11 +879,14 @@ class Ciclo:
         non si dice né si registra (è un dato di chi l'ha mandato)."""
         scritto, schermi = t.scritto, self.s.schermi
         att = scritto.pop("allegato")
+        pieno = self._nel_cassetto(scritto, att)
         if (scritto.get("testo") or "").strip():
             scritto.update(tipo="scritto", allegati=[att])
             return None
         self.s.foto_attesa.metti(att)
         frase = allegati_mod.FILE_IN_ATTESA.format(cosa=att.detto())
+        if pieno:
+            frase = self._frase_pieno(frase)
         self.rec = {"inizio": datetime.datetime.now().isoformat(timespec="milliseconds"),
                     "esito": "allegato_in_attesa", "canale": "scritto",
                     "allegati": [att.per_registro()]}
@@ -896,6 +904,7 @@ class Ciclo:
         frase scritta con la foto; da sola aspetta la domanda, scritta o detta."""
         scritto, schermi = t.scritto, self.s.schermi
         img = scritto.pop("immagine")
+        pieno = self._nel_cassetto(scritto, img)
         if (scritto.get("testo") or "").strip():
             scritto.update(tipo="scritto", immagini=[img])
             return None
@@ -910,7 +919,93 @@ class Ciclo:
                 schermi.invia_a(scritto["schermo_id"], schede_foto.foto(img))
             except Exception as e:  # noqa: BLE001 — lo schermo non ferma la voce
                 print(f"   [SCHERMI] foto non mostrata: {e}", flush=True)
-        return self._senza_domanda(t, FOTO_IN_ATTESA)
+        return self._senza_domanda(t, self._frase_pieno(FOTO_IN_ATTESA) if pieno
+                                   else FOTO_IN_ATTESA)
+
+    # ── il cassetto dei file (08/10, calliope/cassetto.py) ──
+    CASSETTO_PIENO = ("Il tuo cassetto dei file è pieno, quindi questo lo tengo solo per questa "
+                      "conversazione. Se vuoi fare spazio, dimmi quali file eliminare.")
+
+    def _nel_cassetto(self, scritto: dict, x) -> bool:
+        """Ogni foto, file o audio di una persona riconosciuta entra nel suo cassetto per
+        `cassetto_giorni` (decisione del 07/10). Mai per gli ospiti: arriva solo da uno schermo
+        personale, e senza profilo non c'è cassetto. True se non c'è entrato per il tetto
+        (la persona va avvisata)."""
+        cas = self.s.cassetto
+        if cas is None:
+            return False
+        prof = self.s.registry.by_id(scritto.get("persona")) if scritto.get("persona") else None
+        if prof is None:
+            return False
+        try:
+            if isinstance(x, Immagine):
+                cas.metti_foto(x, prof.id)
+            else:
+                x.cassetto = cas.metti_allegato(x, prof.id)
+        except CassettoPieno:
+            print("   [CASSETTO] pieno: il file resta solo nella conversazione", flush=True)
+            self.cassetto_pieno = prof.id
+            return True
+        except Exception as e:  # noqa: BLE001 — il cassetto non ferma la voce
+            print(f"   [CASSETTO] file non salvato: {type(e).__name__}: {e}", flush=True)
+        return False
+
+    def _frase_pieno(self, frase: str) -> str:
+        """La frase senza domanda con l'avviso del cassetto pieno (detto una volta)."""
+        self.cassetto_pieno = None
+        self.rule("cassetto_pieno")
+        return f"{self.CASSETTO_PIENO} {frase}"
+
+    def _cassetto_dopo(self, t):
+        """Dopo la risposta, alla prima conversazione del giorno della persona: i file eliminati
+        alla scadenza («Ho eliminato 2 file che non avevi tenuto») e, solo se qualcosa scade
+        entro cassetto_avviso_giorni, una frase sola e la scheda col carosello sullo schermo
+        personale; senza schermo personale aperto, a voce. Solo a chi è riconosciuto con
+        certezza (voce in questa frase o schermo personale: mai la zona grigia)."""
+        cas = self.s.cassetto
+        if cas is None or t.watch.get("seed"):
+            return
+        prof = self.s.registry.get(t.speaker_name) if t.speaker_name else None
+        if (prof is None or self.speaker_ctx.current_level == "ospite"
+                or self.speaker_ctx.identified_by not in ("voce", "schermo")):
+            return
+        frasi = []
+        if self.cassetto_pieno == prof.id:
+            self.cassetto_pieno = None
+            self.rule("cassetto_pieno")
+            frasi.append(self.CASSETTO_PIENO)
+        # Una domanda in sospeso aspetta la sua risposta: la revisione al turno dopo
+        info = None
+        if not self.brain.has_pending():
+            try:
+                info = cas.da_dire(prof.id)
+            except Exception as e:  # noqa: BLE001
+                print(f"   [CASSETTO] revisione non letta: {type(e).__name__}: {e}", flush=True)
+        if info is not None and (info["eliminati"] or info["in_scadenza"]):
+            schermi = self.s.schermi
+            aperto = bool(info["in_scadenza"]) and cas.schermo_aperto(schermi, prof.id)
+            if aperto:
+                righe = info["in_scadenza"]
+                cas.manda_scheda(schermi, prof.id, cas.scheda(
+                    prof.id, righe, tieni=not minori.e_minore(prof)))
+                cas.schede_aperte[prof.id] = {r["id"] for r in righe}
+            frasi.append(cas.frase(info, aperto))
+            self.rule("cassetto_revisione" if info["in_scadenza"] else "cassetto_eliminati")
+            if self.rec is not None:
+                self.rec["cassetto"] = {"eliminati": info["eliminati"],
+                                        "in_scadenza": len(info["in_scadenza"]),
+                                        "scheda": aperto}
+        if info is not None:
+            cas.segna_detto(prof.id, revisione=info["revisione"])
+        if not frasi:
+            return
+        frase = " ".join(frasi)
+        print(f"   [CASSETTO] {frase}", flush=True)
+        self.speaker.start_turn()
+        self.speaker.say(frase)
+        self.speaker.wait()
+        # Nella storia: a «tienili tutti» il modello sa di quali file si parla
+        self.brain.record_announcement(frase, fonte=None)
 
     def _modulo_dallo_schermo(self, t):
         """Un modulo inviato: dritto al tool che l'aveva chiesto (schermi/moduli.py)."""
@@ -1753,6 +1848,9 @@ class Ciclo:
                 t_a = time.perf_counter()
                 allegati_mod.trascrivi(att, s.stt, float(getattr(cfg, "allegati_audio_max_s",
                                                                  180.0)))
+                if att.cassetto is not None and s.cassetto is not None and att.parti:
+                    # La trascrizione resta con l'audio nel cassetto: ritrovato, non si rifà
+                    s.cassetto.aggiorna_testo(att.cassetto, att.testo)
                 print(f"   [ALLEGATI] audio trascritto in {time.perf_counter() - t_a:.2f} s",
                       flush=True)
             # Le pagine scansionate di un PDF vanno al modello come foto (se le vede)
@@ -2096,6 +2194,18 @@ class Ciclo:
                 print(f"   [CONTESTO] compressione non avviata: {type(e).__name__}: {e}",
                       flush=True)
 
+    def _ripulisci_per_registro(self, t, testo):
+        """Una risposta (o un suo pezzo) come la scrive `_oscura_registro`: senza il codice di
+        abbinamento, oscurata se scritta, senza le parole della frase di sfida."""
+        brain = self.brain
+        testo = brain.redact(testo)
+        if t.scritto is not None:
+            testo = oscura(testo)
+        if isinstance(testo, str) and {"sfida_voce", "sfida_risposta"} & set(
+                brain.rules_fired()):
+            testo = re.sub(r"([Rr]ipeti:).*", r"\1 …", testo)
+        return testo
+
     def _oscura_registro(self, t):
         brain, rec, scritto = self.brain, self.rec, t.scritto
         if getattr(brain, "last_private", False):
@@ -2139,6 +2249,11 @@ class Ciclo:
         # prefisso non è servita (riavvio, altra conversazione)
         if getattr(brain, "last_lettura_s", None) is not None:
             self.rec["lettura_s"] = brain.last_lettura_s
+        # Velocità di generazione del turno (08/10, fase 0 della taratura): tutte le passate
+        gen = getattr(brain, "last_generazione", None)
+        if isinstance(gen, dict) and gen.get("token") and gen.get("ns"):
+            self.rec["generati"] = int(gen["token"])
+            self.rec["generazione_tps"] = round(gen["token"] / (gen["ns"] / 1e9), 1)
         if not uso_ctx:
             return
         self.rec["contesto"] = dict(uso_ctx)
@@ -2187,9 +2302,15 @@ class Ciclo:
             # Interrotta: nella storia solo le frasi pronunciate per intero; si ascolta
             # subito, partendo dall'audio che contiene il nome
             self.brain.record_interruption(speaker.played)
-            self.rec.update(interrotta=True,
-                            risposta=None if getattr(self.brain, "last_private", False)
-                            else " ".join(speaker.played))
+            # «risposta»: solo le frasi sentite per intero; «risposta_inviata»: quello che era
+            # già andato alla voce, ripulito come la risposta (08/10, DGX del 07/10: lavori_stato
+            # interrotto dal nome a metà della sua unica frase, e nel registro risposta vuota)
+            inviata = self.rec.get("risposta")
+            sentita = None if getattr(self.brain, "last_private", False) \
+                else self._ripulisci_per_registro(t, " ".join(speaker.played))
+            self.rec.update(interrotta=True, risposta=sentita)
+            if inviata and inviata != sentita:
+                self.rec["risposta_inviata"] = inviata
             self.barge_seed = t.watch["seed"]
         self._protezione_dopo(t)
         self._ricerca_promessa(t)
@@ -2197,6 +2318,7 @@ class Ciclo:
             self.last_question = t.text
         if not t.watch.get("seed"):
             self.avvisi_ai_tutori(t.speaker_name)
+            self._cassetto_dopo(t)
         speaker.start_turn()     # azzera un'interruzione arrivata a risposta finita
         if speaker_ctx.is_enrolling and not t.was_enrolling:
             self.enroll_reminded.discard(speaker_ctx.enrolling_name)

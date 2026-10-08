@@ -9,11 +9,19 @@ il prossimo passo (registro delle capacità, calliope/capacita.py).
     python -m calliope.stato --turni [--giorni N]
                                               latenza vera della voce per giorno (prima frase,
                                               mediana e p90) con le cause, dal registro dei
-                                              turni (calliope/latenza.py)
+                                              turni (calliope/latenza.py); attrito della
+                                              sicurezza per giorno (calliope/attrito.py)
     python -m calliope.stato --turni --pause [--giorni N]
                                               pause dentro la frase per persona e canale,
                                               tagli probabili e la soglia che si sceglierebbe
                                               (solo stima, calliope/pause.py)
+    python -m calliope.stato --piano [--json] [--inventario FILE]
+                                              il piano dei modelli per questa macchina, in
+                                              sola lettura (calliope/piano.py): voce, Whisper,
+                                              guardiano, rilevatore, embedding, contesto,
+                                              agente, Piper, con stime e motivi; non applica
+                                              niente. --inventario: una macchina salvata (JSON
+                                              di --piano --json) invece di questa
     python -m calliope.stato --installa <azione>
                                               proposta, conferma da tastiera, scaricamento
                                               con avanzamento (stesso codice della voce)
@@ -150,6 +158,29 @@ def _log(cfg, azione: str, res: dict, t0: float):
         pass
 
 
+def piano_main(cfg, argv: list[str], as_json: bool) -> int:
+    """`--piano`: inventario della macchina, piano proposto, nessuna applicazione (08/10)."""
+    from . import macchina, piano
+    if "--inventario" in argv:
+        i = argv.index("--inventario")
+        try:
+            with open(argv[i + 1], encoding="utf-8") as fh:
+                inv = json.load(fh)
+            inv = inv.get("inventario", inv)
+        except (IndexError, OSError, ValueError) as e:
+            print(f"--inventario vuole un file JSON leggibile ({e})")
+            return 1
+    else:
+        inv = macchina.inventario(cfg)
+    p = piano.piano(inv, piano.da_config(cfg, inv))
+    if as_json:
+        print(json.dumps({"inventario": inv, "piano": p.as_json()}, ensure_ascii=False,
+                         indent=2, default=str))
+    else:
+        print(piano.testo(p))
+    return 0
+
+
 def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     try:
@@ -181,14 +212,25 @@ def main(argv=None) -> int:
             r = pause.riassunto(latenza.leggi(cfg.turn_log_dir, giorni))
             print(json.dumps(r, ensure_ascii=False, indent=2) if as_json else pause.testo(r))
             return 0
-        dati = latenza.per_giorno(latenza.leggi(cfg.turn_log_dir, giorni))
+        from . import attrito
+        turni = latenza.leggi(cfg.turn_log_dir, giorni)
+        dati = latenza.per_giorno(turni)
         soglia = float(getattr(cfg, "latenza_avviso_s", 1.2) or 0) or float("inf")
+        # L'attrito della sicurezza (08/10, calliope/attrito.py): domande di sicurezza ogni 100
+        # turni, ripetute, poi eseguite, e la politica per valore in ombra
+        sicurezza = attrito.per_giorno(turni)
+        soglia_a = float(getattr(cfg, "attrito_avviso", 3.0) or 0)
         if as_json:
-            print(json.dumps({"giorni": dati, "soglia_s": getattr(cfg, "latenza_avviso_s", None)},
+            print(json.dumps({"giorni": dati, "soglia_s": getattr(cfg, "latenza_avviso_s", None),
+                              "attrito": sicurezza, "attrito_soglia": soglia_a},
                              ensure_ascii=False, indent=2))
         else:
             print(latenza.testo(dati, soglia))
+            print()
+            print(attrito.testo(sicurezza, soglia_a))
         return 0
+    if "--piano" in argv:
+        return piano_main(cfg, argv, as_json)
     if "--installa" in argv:
         i = argv.index("--installa")
         if i + 1 >= len(argv):
@@ -236,6 +278,15 @@ def main(argv=None) -> int:
         if avviso:
             print()
             print(f"Latenza: {avviso} Dettagli: --turni")
+        # Troppe domande di sicurezza oggi o ieri, o una ripetuta (08/10, calliope/attrito.py)
+        try:
+            from . import attrito
+            avviso = attrito.avviso_recente(cfg)
+        except Exception:  # noqa: BLE001
+            avviso = None
+        if avviso:
+            print()
+            print(f"{avviso} Dettagli: --turni")
     return 0
 
 

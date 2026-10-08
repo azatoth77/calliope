@@ -21,6 +21,9 @@ dal registro dei turni (calliope/turnlog.py), per ogni giorno:
   (minori e ospiti), tool nel turno, rilettura del prompt (`lettura_s`, dal 06/10: oltre 1 s
   la cache del prefisso non è servita), contesto (token), coda delle risposte;
 - la **base**: la prima frase dei turni senza tool, guardiano né correzione;
+- la **generazione** (`generazione_tps`, dal 08/10, fase 0 della taratura): token al secondo
+  del modello nel turno (Ollama `eval_count / eval_duration`; vLLM dal primo all'ultimo
+  pezzo), mediana e p10 (i turni più lenti: contesa con l'agente, modello in parte sulla CPU);
 - un **avviso** se la mediana del giorno supera `latenza_avviso_s` (1,2 s) con almeno
   `MIN_RISPOSTE` risposte: all'avvio di Calliope e in `calliope stato`.
 
@@ -97,6 +100,7 @@ def giorno(turni: list[dict]) -> dict:
     con_tool = [t for t in r if _tool(t)]
     senza_tool = [t for t in r if not _tool(t)]
     letture = [x for x in (_lettura(t) for t in r) if x is not None]
+    gen = [_num(t, "generazione_tps") for t in r if _num(t, "generazione_tps")]
     token = [t["contesto"].get("token") for t in r if isinstance(t.get("contesto"), dict)]
     coda = [_num(t, "coda_s") for t in r if _num(t, "coda_s")]
     base = [_num(t, "prima_frase_s") for t in r
@@ -132,6 +136,7 @@ def giorno(turni: list[dict]) -> dict:
                  "senza": _med([_num(t, "prima_frase_s") for t in senza_tool])},
         "lettura": {"n": len(letture), "mediana": _med(letture),
                     "lente": sum(1 for x in letture if x > LETTURA_LENTA_S)},
+        "generazione": {"n": len(gen), "mediana": _med(gen), "p10": _q(gen, .1)},
         "contesto": {"token_mediana": _med(token)},
         "coda": {"n": len(coda), "mediana": _med(coda)},
         "base": {"n": len(base), "mediana": _med(base)},
@@ -191,6 +196,10 @@ def _s(x) -> str:
     return "—" if x is None else f"{x:.2f} s".replace(".", ",")
 
 
+def _tps(x) -> str:
+    return "—" if x is None else str(round(x))
+
+
 def testo(giorni: dict[str, dict], soglia: float = 1.2) -> str:
     """La tabella per il terminale (`calliope stato --turni`)."""
     if not giorni:
@@ -232,6 +241,10 @@ def testo(giorni: dict[str, dict], soglia: float = 1.2) -> str:
         if le["n"]:
             cause.append(f"rilettura {_s(le['mediana'])}, {le['lente']} oltre "
                          f"{_s(LETTURA_LENTA_S)}")
+        ge = d.get("generazione") or {}
+        if ge.get("n"):
+            cause.append(f"generazione {_tps(ge['mediana'])} token/s (i più lenti "
+                         f"{_tps(ge['p10'])})")
         if d["contesto"]["token_mediana"]:
             cause.append(f"contesto {int(d['contesto']['token_mediana'])} token")
         if d["coda"]["n"]:

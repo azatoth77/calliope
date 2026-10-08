@@ -34,7 +34,9 @@ FIRME = (
     (b"BM", "bmp"),
 )
 FONTI = {"telefono": "dal telefono", "schermo": "dallo schermo", "webcam": "dalla webcam",
-         "screenshot": "lo schermo del computer", "file": "da un file"}
+         "screenshot": "lo schermo del computer", "file": "da un file",
+         # riletta dal cassetto dei file della persona (08/10, calliope/cassetto.py)
+         "cassetto": "dal cassetto"}
 # Frasi del ciclo principale (main.py)
 FOTO_IN_ATTESA = "Ho la foto. Cosa vuoi sapere?"
 FOTO_NON_VISTA = ("La persona ti ha mandato una foto, ma il modello di adesso non vede le "

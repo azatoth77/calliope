@@ -2042,7 +2042,8 @@ def build_registry(biblioteca: bool = False, pc: dict | None = None,
                    agenti_modelli=(), ufficio=(), archivio: bool = False,
                    web=None, conversazioni: bool = False,
                    immagini: dict | None = None,
-                   minori_tool: bool = False, allegati: bool = False) -> ToolRegistry:
+                   minori_tool: bool = False, allegati: bool = False,
+                   cassetto: bool = False) -> ToolRegistry:
     """Costruisce il registro dei tool nativi di Calliope.
 
     `biblioteca_cerca` si registra solo se la biblioteca c'è: un tool che risponde
@@ -2079,6 +2080,8 @@ def build_registry(biblioteca: bool = False, pc: dict | None = None,
     archivio}; None = le foto sono spente o il modello non le vede.
     `allegati`: i tool dei file allegati (calliope/tools/allegati.py, 05/10): allegato_leggi,
     allegato_archivia con l'archivio, e il parametro `allegato` di delega_lavoro.
+    `cassetto` (08/10, calliope/cassetto.py): con gli allegati, il cassetto dei file per persona
+    (allegato_leggi con `cassetto` e `di`, cassetto_gestisci).
     `minori_tool`: compiti_aiuto e minore_gestisci (calliope/tools/minori.py, 05/10), con
     almeno un profilo minorenne in casa (il prefisso degli altri non cambia finché non c'è).
     """
@@ -2133,7 +2136,7 @@ def build_registry(biblioteca: bool = False, pc: dict | None = None,
             reg.register(spec)
     if allegati:
         from .allegati import allegati_specs
-        for spec in allegati_specs(archivio=archivio):
+        for spec in allegati_specs(archivio=archivio, cassetto=cassetto):
             reg.register(spec)
     if minori_tool:
         from .minori import minori_specs

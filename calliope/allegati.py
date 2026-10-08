@@ -235,6 +235,8 @@ class Allegato:
     # per la domanda di allora ({"dati": [...], "istruzioni": bool}); il modello della voce
     # vede solo questi, e il resto con allegato_leggi (anche lui in quarantena)
     estratto: dict | None = field(default=None, repr=False)
+    # L'id nel cassetto dei file della persona (08/10, calliope/cassetto.py), se c'è entrato
+    cassetto: int | None = None
 
     @property
     def estensione(self) -> str:

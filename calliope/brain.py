@@ -33,7 +33,7 @@ from .allegati import Allegati, Allegato
 from .conversazione import UNSET, Conversazione
 from .immagini import Album
 from .memory import HOUSE
-from . import politica, provenienza
+from . import politica, provenienza, valore
 from .sicurezza import instruction_fact
 from .testi import MESI as _MESI, SENTENCE_END as _SENTENCE_END
 from .tools.registry import ToolRegistry
@@ -679,6 +679,16 @@ LAVORO_MSG = ("Contesto del lavoro: l'ultimo risultato di cui avete parlato è q
 LAVORO_RECENTE_S = 1800.0      # finito da al più mezz'ora
 LAVORO_STORIA = 8              # il titolo detto negli ultimi messaggi
 
+# Un'estensione nominata nella frase (08/10, caso della DGX del 07/10: «invoca l'estensione meteo
+# per città su Bergamo», detto tre volte, e sempre web_cerca; dopo l'approvazione della versione
+# 2 il modello ripeteva quello che aveva detto della 1). Dati del turno, non un ordine: decide
+# il modello se la persona vuole usarla, cambiarla o solo parlarne (principio 10). Regola
+# `estensione_nominata`, rete spegnibile `estensione_nominata`
+EST_NOMINATA_MSG = ("Dati del turno: chi parla nomina {chi}. Se chiede di usarla, chiama quel "
+                    "tool con i dati che dice, non un altro (internet, biblioteca); se chiede di "
+                    "cambiarla, è estensione_crea con modifica.")
+EST_CAMBIATA_S = 1800.0        # «è cambiata da poco»: approvata da al più mezz'ora
+
 # Tool i cui risultati non restano nella storia oltre la risposta (03/10): i riservati
 # (ToolSpec.riservato, i documenti di casa) diventano una traccia neutra, questi personali
 # solo la frase già detta (conferma). La conversazione è già di una persona sola
@@ -1087,9 +1097,12 @@ class OllamaBackend:
                     # Token veri della passata (05/10, calliope/contesto.py): il prompt
                     # intero (anche la parte già in cache) e la risposta
                     # Con il tempo di lettura del prompt (06/10): solo la parte non in cache
+                    # Con la generazione (08/10, fase 0 della taratura): token/s del turno
                     yield "usage", {"prompt": obj.get("prompt_eval_count"),
                                     "output": obj.get("eval_count"),
-                                    "lettura_ns": obj.get("prompt_eval_duration")}
+                                    "lettura_ns": obj.get("prompt_eval_duration"),
+                                    "generati": obj.get("eval_count"),
+                                    "generazione_ns": obj.get("eval_duration")}
                     break
 
 
@@ -1170,12 +1183,16 @@ class OpenAIBackend:
             kwargs["tools"] = tools
         acc: dict = {}
         usage = None
+        primo = ultimo = None        # tempi del primo e dell'ultimo pezzo (generazione)
         for chunk in self.client.chat.completions.create(**kwargs):
             if getattr(chunk, "usage", None) is not None:
                 usage = chunk.usage
             if not chunk.choices or chunk.choices[0].delta is None:
                 continue
             delta = chunk.choices[0].delta
+            if delta.content or delta.tool_calls:
+                ultimo = time.perf_counter()
+                primo = primo or ultimo
             merge_tool_deltas(acc, delta.tool_calls or [])
             if delta.content:
                 yield "text", delta.content
@@ -1184,8 +1201,13 @@ class OpenAIBackend:
                              "arguments": _loads_dict(acc[i]["arguments"])}
                             for i in sorted(acc)]
         if usage is not None:
-            yield "usage", {"prompt": getattr(usage, "prompt_tokens", None),
-                            "output": getattr(usage, "completion_tokens", None)}
+            out = getattr(usage, "completion_tokens", None)
+            u = {"prompt": getattr(usage, "prompt_tokens", None), "output": out}
+            # vLLM non dice i tempi (08/10): la generazione è dal primo all'ultimo pezzo,
+            # senza il primo token (che paga la lettura del prompt)
+            if isinstance(out, int) and out > 1 and primo and ultimo and ultimo > primo:
+                u["generati"], u["generazione_ns"] = out - 1, int((ultimo - primo) * 1e9)
+            yield "usage", u
 
 
 def merge_tool_deltas(acc: dict, deltas):
@@ -1833,6 +1855,11 @@ class Brain:
         last = getattr(self, "last_context", None)
         if u and (last is None or u["token"] >= last["token"]):
             self.last_context = u
+        # La generazione di tutte le passate del turno (08/10, fase 0 della taratura)
+        n, ns = payload.get("generati"), payload.get("generazione_ns")
+        if isinstance(n, int) and n > 0 and isinstance(ns, (int, float)) and ns > 0:
+            g = getattr(self, "last_generazione", None) or {"token": 0, "ns": 0}
+            self.last_generazione = {"token": g["token"] + n, "ns": g["ns"] + int(ns)}
 
     def _rule(self, name: str):
         """Una regola sul testo è scattata in questa risposta (per il registro dei turni)."""
@@ -1871,6 +1898,7 @@ class Brain:
         self.last_rules = []      # regole sul testo scattate (per il registro dei turni)
         self.last_context = None  # uso del contesto di questa risposta (_note_usage)
         self.last_lettura_s = None  # lettura del prompt della prima passata (_note_usage)
+        self.last_generazione = None  # token generati e tempo, tutte le passate (_note_usage)
         self.last_compressione = None
         self.turn_pending_tool = None
         # Una proposta di un'altra persona ancora valida (07/10, SOSPESO_ALTRUI_MSG): dalla
@@ -1887,6 +1915,7 @@ class Brain:
         # Turni finiti nell'archivio, compressione pronta, ripresa (05/10)
         self._inizio_conversazione()
         pending = self._take_pending() if self._net("azione_in_sospeso") else None
+        self._chiudi_intenzioni(user_text)
         # Numero della risposta: un'installazione proposta in questa risposta si può avviare
         # solo nella prossima (calliope/installa/servizio.py)
         self.turn_number = getattr(self, "turn_number", 0) + 1
@@ -1933,6 +1962,19 @@ class Brain:
         if self._offer and said.endswith("?") and self._net("azione_in_sospeso"):
             self.set_pending(self._offer)
         self._scalda_se_cambiato(firma)
+
+    def _chiudi_intenzioni(self, user_text: str | None):
+        """Le intenzioni confermate e non ancora riuscite (calliope/valore.py, fase 2) si
+        chiudono con un «no», «lascia stare», «annulla», o con una foto o un file arrivati con
+        questa frase (regola `intento_chiuso`)."""
+        ints = getattr(self._c(), "intenzioni", None)
+        if not ints:
+            return
+        nuovi = (getattr(self, "_nuove_immagini", None) or getattr(self, "_nuovi_allegati", None)
+                 or getattr(self, "_nuovi_dati", None))
+        if valore.chiude(user_text or "") or nuovi:
+            ints.clear()
+            self._rule("intento_chiuso")
 
     def _firma_sistema(self) -> str | None:
         """Il prompt di sistema di adesso (per accorgersi che è cambiato), o None."""
@@ -2264,6 +2306,35 @@ class Brain:
                 {"lavoro": lav.id, "titolo": titolo, "avvisato": False,
                  "parole": sorted(provenienza.parole(lav.titolo))})
 
+    def _estensioni_nominate(self, testo: str) -> str | None:
+        """EST_NOMINATA_MSG per le estensioni attive che la frase nomina, o None."""
+        if not self._net("estensione_nominata"):
+            return None
+        est = getattr(self.tool_ctx, "estensioni", None)
+        if est is None or not hasattr(est, "nominate"):
+            return None
+        try:
+            trovate = est.nominate(testo)[:2]
+        except Exception:  # noqa: BLE001 — sono solo dati del turno
+            return None
+        if not trovate:
+            return None
+        parti = []
+        for e in trovate:
+            p = (f"la tua estensione «{e['titolo']}» (versione {e['versione']}): è il tool "
+                 f"{e['tool']}" + (f", «{e['descrizione']}»" if e.get("descrizione") else "")
+                 + (f", input: {', '.join(e['input'])}" if e.get("input") else ""))
+            try:
+                quando = datetime.datetime.fromisoformat(str(e.get("approvata") or ""))
+                fresca = (datetime.datetime.now() - quando).total_seconds() <= EST_CAMBIATA_S
+            except ValueError:
+                fresca = False
+            if fresca and int(e.get("versione") or 1) > 1:
+                p += (". È cambiata da poco: quello che è stato detto di lei prima nella "
+                      "conversazione valeva per la versione di prima")
+            parti.append(p)
+        return EST_NOMINATA_MSG.format(chi="; ".join(parti))
+
     def _take_reference(self) -> str | None:
         """Il riferimento dei turni prima, se è ancora valido (non si consuma: vale finché
         non ne arriva un altro o scade)."""
@@ -2503,6 +2574,11 @@ class Brain:
         if lavoro_ref:
             memory = memory + [{"role": "system", "content": lavoro_ref[0]}]
             self._rule("riferimento_lavoro")
+        # Un'estensione nominata nella frase (EST_NOMINATA_MSG)
+        est_msg = self._estensioni_nominate(user_text) if user_text else None
+        if est_msg:
+            memory = memory + [{"role": "system", "content": est_msg}]
+            self._rule("estensione_nominata")
         # Azione in sospeso: dopo i ricordi, l'ultima cosa prima della domanda. Messa prima
         # dei ricordi (o senza), il «sì» dopo «La apro?» veniva preso per un ringraziamento
         if pending:
@@ -3235,11 +3311,15 @@ class Brain:
         # arrivati con la frase, proposta in sospeso
         self._set_ctx("politica", self._turno_politica())
         self._set_ctx("strumenti", self.tools)
+        self._set_ctx("politica_esito", None)
         try:
 
             result = self.tools.call(call["name"], args, self.tool_ctx, level)
         finally:
             self._set_ctx("politica", None)
+        # La decisione della politica per questa chiamata: intenzione e ombra (08/10)
+        esito_pol = getattr(self.tool_ctx, "politica_esito", None)
+        self._set_ctx("politica_esito", None)
         if getattr(spec, "non_fidato", False) and '"risultati"' in result:
             # Dato non fidato in questa risposta: solo letture fino alla fine (DOPO_DATO)
             self._letto_ora = politica.fonte_di(call["name"], spec) or "web"
@@ -3256,6 +3336,7 @@ class Brain:
         except (json.JSONDecodeError, TypeError, AttributeError):
             pass
         sent = self._send_cards(cards, call["name"]) if cards else []
+        offerta = False
         print(f"   [TOOL] → {'(riservato)' if quiet else oscura(result) if scritta else result}",
               flush=True)
         try:
@@ -3263,6 +3344,7 @@ class Brain:
             # L'azione proposta con una domanda («Lo apro?») è per Brain, non per il modello
             if isinstance(parsed, dict) and "in_sospeso" in parsed:
                 self._offer = parsed.pop("in_sospeso")
+                offerta = True
                 result = json.dumps(parsed, ensure_ascii=False)
             # L'ultimo dispositivo della casa, per i pronomi dei turni dopo (REFERENCE_MSG)
             if isinstance(parsed, dict) and "riferimento" in parsed:
@@ -3286,6 +3368,14 @@ class Brain:
         if ok and p and call["name"] == p.get("tool") and call["name"] == getattr(
                 self, "turn_pending_tool", None) and not self._offer:
             self.pending = None
+        # Le intenzioni (calliope/valore.py, fase 2): riuscita si chiude, fallita resta aperta
+        # (gli errori sono errori: la chiamata corretta non chiede di nuovo)
+        try:
+            valore.aggiorna(self._c().intenzioni, esito_pol, ok, offerta,
+                            float(getattr(self.cfg, "intento_valido_s", 600) or 0))
+        except Exception:  # noqa: BLE001 — le intenzioni non fermano la risposta
+            pass
+        ombra = esito_pol.get("ombra") if isinstance(esito_pol, dict) else None
         self.last_tools.append({"nome": call["name"], "argomenti": shown, "ok": ok,
                                 # Un'azione vera (non una lettura): conta per la rete sulle
                                 # azioni dichiarate (Brain._acted)
@@ -3293,7 +3383,10 @@ class Brain:
                                 # True = scritta come testo e salvata da TextCallGuard
                                 "da_testo": call["id"] == "call_testo",
                                 **({"bloccato": bloccato} if bloccato else {}),
-                                **({"schede": sent} if sent else {})})
+                                **({"schede": sent} if sent else {}),
+                                # La decisione della politica per valore accanto a quella vera
+                                # (08/10, fase 3, in ombra): nomi ed etichette, nessun valore
+                                **({"politica_ombra": ombra} if ombra else {})})
         # Il risultato di un tool non fidato (web, estensioni, archivio, agenti) entra nella
         # busta della sua fonte: la conversazione resta contaminata finché c'è (05/10)
         fonte = politica.fonte_di(call["name"], spec)
@@ -3307,7 +3400,22 @@ class Brain:
         if fonte:
             self._ricorda_esterno(fonte, result)
             result = provenienza.racchiudi_risultato(fonte, self._quarantena_risultato(result))
+        elif ok and not private and valore.effetto(call["name"], args, spec) == valore.E0:
+            # Solo le letture (elenchi di file, liste, estensioni, stato della casa): il
+            # risultato di un'azione ripete gli argomenti scelti dal modello, che possono venire
+            # da un dato
+            self._ricorda_fidato(result)
         return result
+
+    def _ricorda_fidato(self, risultato: str):
+        """Il risultato riuscito di un tool interno fidato, in memoria per la conversazione
+        (08/10, calliope/valore.py): i nomi dei file trovati, i titoli dei documenti, le voci
+        delle liste valgono «fidato» come provenienza di un argomento. Non su disco."""
+        conv = self._c()
+        if not isinstance(getattr(conv, "fidati", None), list):
+            conv.fidati = []
+        conv.fidati.append(str(risultato)[:4000])
+        del conv.fidati[:-30]
 
     def _quarantena(self):
         q = getattr(self, "_quar", None)
@@ -3453,7 +3561,18 @@ class Brain:
             sfida=sfida_args is not None,
             dato_nuovo=bool(getattr(self, "_dato_nuovo", False)),
             letto_ora=str(getattr(self, "_letto_ora", "") or ""),
-            risposta=self._politica_risposta)
+            risposta=self._politica_risposta,
+            # Sicurezza per valore (08/10): chi parla, le intenzioni aperte (la lista viva della
+            # conversazione), i risultati dei tool fidati
+            persona=self._speaker_key(),
+            intenzioni=self._intenzioni(),
+            fidati=list(getattr(self._c(), "fidati", None) or ()))
+
+    def _intenzioni(self) -> list:
+        conv = self._c()
+        if not isinstance(getattr(conv, "intenzioni", None), list):
+            conv.intenzioni = []
+        return conv.intenzioni
 
     def _accogli_immagini(self):
         """Le foto arrivate con questa frase entrano nell'album e nel messaggio della persona

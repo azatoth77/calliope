@@ -522,6 +522,31 @@ body.trascina-foto { outline: 4px dashed var(--accento); outline-offset: -8px; }
 .allegato-info { font-weight: 600; overflow-wrap: anywhere; flex: 1 1 auto; min-width: 0; }
 .scheda-allegato .nome-allegato { font-weight: 650; overflow-wrap: anywhere; }
 .scheda-allegato .anteprima-allegato { margin-top: 0.6rem; color: var(--tenue); white-space: pre-wrap; }
+/* Il cassetto dei file (08/10): un carosello orizzontale, una voce per file */
+.cassetto-tutti { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 0 0 0.8rem; }
+.esito-cassetto { color: var(--tenue); font-size: 1rem; }
+.cassetto-carosello {
+  display: flex; gap: 0.8rem; overflow-x: auto; scroll-snap-type: x mandatory;
+  padding-bottom: 0.5rem; overscroll-behavior-x: contain;
+}
+.cassetto-voce {
+  flex: 0 0 min(24rem, 88%); scroll-snap-align: start; min-width: 0;
+  border: 1px solid var(--bordo); border-radius: var(--raggio); padding: 0.8rem;
+  background: var(--pannello); display: grid; grid-template-columns: 5.5rem minmax(0, 1fr);
+  column-gap: 0.8rem; row-gap: 0.15rem; align-content: start;
+}
+.cassetto-anteprima {
+  grid-row: 1 / span 4; height: 5.5rem; display: flex; align-items: center;
+  justify-content: center; border-radius: 0.5rem; background: var(--accento-tenue);
+  overflow: hidden;
+}
+.cassetto-anteprima img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.cassetto-sigla { color: var(--accento); font-weight: 700; font-size: 1.1rem; letter-spacing: 0.06em; }
+.cassetto-nome { font-weight: 650; overflow-wrap: anywhere; margin: 0; }
+.cassetto-voce .sotto { margin: 0; font-size: 0.95rem; }
+.cassetto-scade { color: var(--accento); margin: 0; font-size: 0.95rem; }
+.cassetto-pulsanti { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
+.tasto-cassetto.conferma[data-armato] { background: var(--allarme); color: #16130e; border-color: var(--allarme); }
 @media (max-width: 600px) {
   .riga-modulo { grid-template-columns: 1fr 1fr; }
   .riga-modulo input[data-k="descrizione"] { grid-column: 1 / -1; }

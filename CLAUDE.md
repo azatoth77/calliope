@@ -62,7 +62,7 @@ per stadio, solo i moduli principali: librerie, classi e dettagli sono nei docum
 | Memoria, agenda, liste, tempi | `memory.py`, `agenda.py`, `tempi.py`, `liste.py` | [memoria-agenda-liste](docs/aree/memoria-agenda-liste.md) |
 | Finestra di contesto, conversazione, compressione, archivio | `contesto.py`, `conversazione.py`, `compressione.py`, `conversazioni.py` | [contesto-conversazione](docs/aree/contesto-conversazione.md) |
 | Una conversazione per persona, satelliti insieme | `corsie.py` | [contesto-conversazione](docs/aree/contesto-conversazione.md) |
-| Politica dei tool, provenienza, quarantena, ciò che dice | `politica.py`, `provenienza.py`, `quarantena.py`, `riferire.py` | [sicurezza-politica](docs/aree/sicurezza-politica.md) |
+| Politica dei tool, provenienza, quarantena, ciò che dice; sicurezza per valore (attrito, memoria dell'intento, matrice in ombra: dall'08/10) | `politica.py`, `provenienza.py`, `valore.py`, `attrito.py`, `quarantena.py`, `riferire.py` | [sicurezza-politica](docs/aree/sicurezza-politica.md) |
 | Conferme e frase di sfida, sicurezza | `conferme.py`, `sicurezza.py`, `guardrail.py` | [sicurezza-politica](docs/aree/sicurezza-politica.md) |
 | Minori e guardiano; esercizi generati da Calliope (matematica e italiano, dal 08/10) | `minori.py`, `guardiano.py`, `esercizi/`, `tools/esercizi.py` | [minori](docs/aree/minori.md) |
 | Biblioteca offline (ZIM in puro Python, FTS5) | `biblioteca.py`, `zim.py`, `biblioteca_indice.py` | [biblioteca](docs/aree/biblioteca.md) |
@@ -72,12 +72,12 @@ per stadio, solo i moduli principali: librerie, classi e dettagli sono nei docum
 | Ufficio: modelli, rubrica, fatture, DDT | `ufficio/`, `tools/ufficio.py` | [documenti-ufficio](docs/aree/documenti-ufficio.md) |
 | Archivio dei documenti di casa (grafo) | `archivio/`, `tools/archivio.py` | [documenti-ufficio](docs/aree/documenti-ufficio.md) |
 | Casa via Home Assistant | `casa/`, `tools/casa.py` | [casa](docs/aree/casa.md) |
-| Registro delle capacità, macchina | `capacita.py`, `stato.py`, `macchina.py`, `tools/stato.py` | [capacita-installazioni](docs/aree/capacita-installazioni.md) |
+| Registro delle capacità, macchina; piano dei modelli in sola lettura (`calliope stato --piano`, dal 08/10) | `capacita.py`, `stato.py`, `macchina.py`, `modelli.py`, `piano.py`, `tools/stato.py` | [capacita-installazioni](docs/aree/capacita-installazioni.md) |
 | Installazioni dal catalogo | `installa/` | [capacita-installazioni](docs/aree/capacita-installazioni.md) |
 | Schermi (schede, SSE, abbinamento), scrivere invece di parlare, cruscotto di chi amministra (sola lettura, dal 06/10), testi dell'agente in Markdown con «Scarica» (dal 07/10) | `schermi/` (`hub.py`, `server.py`, `moduli.py`, `conversazione.py`, `cruscotto.py`, `scarica.py`), `documenti/markdown.py` | [schermi-telefono](docs/aree/schermi-telefono.md) |
 | Telefono (satellite nel browser, PWA; schede a schermo intero dal 06/10) | `schermi/telefono.py`, `schermi/pagina/telefono/` | [schermi-telefono](docs/aree/schermi-telefono.md) |
 | Rispondi dove ti ho chiesto | `rispondi.py` | [schermi-telefono](docs/aree/schermi-telefono.md) |
-| Foto e allegati in ingresso | `immagini.py`, `allegati.py`, `pc/cattura.py` | [immagini-allegati](docs/aree/immagini-allegati.md) |
+| Foto e allegati in ingresso; cassetto dei file per persona (7 giorni, dal 08/10) | `immagini.py`, `allegati.py`, `cassetto.py`, `pc/cattura.py` | [immagini-allegati](docs/aree/immagini-allegati.md) |
 | Satelliti (WebSocket, TLS, inoltro, installazione) | `satellite/`, `tls_sicuro.py` | [satelliti](docs/aree/satelliti.md) |
 | Agenti in secondo piano (vLLM sulla DGX, sandbox Docker, arbitro), analisi della richiesta prima di partire (dal 06/10) | `agenti/` (`richiesta.py`), `tools/agenti.py` | [agenti-estensioni](docs/aree/agenti-estensioni.md) |
 | Estensioni permanenti e guardrail | `estensioni/`, `tools/estensioni.py` | [agenti-estensioni](docs/aree/agenti-estensioni.md) |

@@ -7,6 +7,7 @@
 | Stadio | Libreria | Dove |
 |---|---|---|
 | Registro delle capacità | — (controlli rapidi in sola lettura) | `calliope/capacita.py` → `Registro`, `REGISTRO`, `segnala`, `controlla`, `testo_prompt`; terminale `calliope/stato.py` (`python -m calliope.stato`); tool `calliope_stato` in `calliope/tools/stato.py` (con `cosa=macchina` la macchina e i modelli: `calliope/macchina.py`) |
+| Piano dei modelli per la macchina, in sola lettura (dal 08/10) | — (nvidia-smi, /proc/meminfo, registro di Windows, Ollama `/api/version` `/api/tags` `/api/ps`, vLLM `/v1/models` `/version` `/metrics`, `systemctl show` in sola lettura) | `calliope/macchina.py` → `inventario`, `Sonde`; catalogo `calliope/modelli.py` → `MODELLI`, `GPU`, `WHISPER`, `VERSIONE`; regole `calliope/piano.py` → `piano`, `da_config`, `testo`, `Funzioni`; terminale `python -m calliope.stato --piano [--json] [--inventario FILE]`; prova `prove/prova_piano.py` |
 | Installazioni dal catalogo | httpx (Range, checksum), API `/api/pull` di Ollama | `calliope/installa/` → `catalogo` (`catalogo.py`), `scarica_file` (`scarica.py`), `Installazioni` (`servizio.py`); tool `installa_proponi`, `installa_avvia`, `installa_gestisci` in `calliope/tools/stato.py` |
 
 ## Note dalla sezione «Stato attuale» di CLAUDE.md (fino al 06/10)
@@ -140,3 +141,74 @@ Gemma 3), regole del piano con le priorità (voce, Whisper, guardiano mai spento
 tre piani completi (portatile, RTX 5090, DGX), verifica con `size_vram` di `/api/ps`, stato in
 `taratura.json`, `calliope stato --piano`, fasi (~12–15 giorni; prima la velocità di generazione
 nel registro dei turni, che oggi manca).
+
+## Taratura sulla macchina, fasi 0–2: inventario, catalogo e piano in sola lettura (08/10)
+
+Ramo `taratura-fasi-0-2`, fasi 0–2 della [ricerca del 07/10](../ricerche/2026-10-07-taratura-macchina.md).
+Niente si applica: il piano si legge e basta, e le sei decisioni aperte del documento sono
+scritte nel piano come opzioni.
+
+- **Fase 0** (vedi contesto-conversazione): la velocità di generazione di ogni turno nel
+  registro (`generati`, `generazione_tps`) e in `calliope stato --turni`; `kv_ollama` corretto
+  per qwen3.6, gpt-oss e Gemma 3.
+- **Inventario** (`macchina.inventario`, solo libreria standard, solo 127.0.0.1): GPU da
+  nvidia-smi (MiB → GB; «[N/A]» = memoria unificata, il pool è la RAM di /proc/meminfo; senza
+  nvidia-smi la VRAM dal registro di Windows), banda dalla tabella del catalogo, memoria libera
+  adesso, Ollama (versione, installati, caricati con `size_vram`: un modello **in parte sulla
+  CPU** è un avviso), variabili di Ollama da `systemctl show` (sola lettura), vLLM sulle porte
+  8000/8001 con `gpu_memory_utilization` e i token della cache da /metrics, server di Whisper,
+  CUDA per onnxruntime (Piper) e CTranslate2 (faster-whisper). Le sonde sono una classe
+  (`Sonde`): le prove ne passano una finta.
+- **Catalogo** (`calliope/modelli.py`, `VERSIONE = "2026-10-08"`): solo dati, con fonte e data
+  accanto a ogni numero (legenda [M]/[V]/[A]/[Agg]/[D] della ricerca). Modelli della §3 con i
+  pesi in memoria (misurati con `/api/ps` dove li abbiamo caricati, tolte cache e buffer: 26B
+  14,6 GB, e4b 2,67, guardiano 8B 4,4), byte letti a token, cache per token, licenza, posto
+  nella scala del banco e misure nostre per GPU (26B 76 token/s e lettura 3 164 sulla DGX, e4b
+  76 sul portatile, Qwen3.6 76 su vLLM). Nella scala della voce solo e2b, e4b e 26B;
+  `gemma4:12b` e `qwen3.5:9b` sono candidati «da provare» (decisione 2), mai scelti. Tabella
+  delle GPU per nome (banda, memoria, unificata, lettura relativa [D]), Whisper (faster-whisper
+  sulla GPU 1,27 GB, whisper.cpp 2,1 GB, small sulla CPU ~1 s [D]), Piper 1,5 GB, immagini
+  13 GB.
+- **Piano** (`piano.piano`, funzione pura): le priorità della §4.1 con la memoria sommata
+  (pesi + buffer 0,35 GB + cache × posti di `OLLAMA_NUM_PARALLEL` + contesto CUDA per processo
+  sulla GPU dedicata, 0,9 GB su Windows e 0,5 su Linux [D]; vLLM = `gpu_memory_utilization` ×
+  memoria). La voce entra con la finestra minima (16 384) e la finestra cresce **dopo**
+  guardiano, rilevatore ed embedding (punto 7 della §4.1), fin dove tempo e memoria lo
+  permettono; la misura di `contesto.json` vince sulla stima. Velocità: misurata da noi su
+  quella GPU, altrimenti η × banda / byte letti (η 0,55, o quello delle misure della macchina),
+  al più 250 token/s; lettura misurata, o scalata dai parametri attivi e dalla GPU [D]. La
+  memoria «di adesso» si guarda a parte: se altri programmi tengono più della riserva il piano
+  lo dice, e le funzioni a richiesta (immagini, Piper sulla GPU) diventano «non adesso».
+- `calliope stato --piano` (tabella con «come oggi» o «oggi X» accanto a ogni ruolo, variabili
+  di Ollama proposte come comando, candidati, avvisi, decisioni aperte), `--json` (inventario
+  e piano), `--inventario FILE` (una macchina salvata).
+
+**Sulla DGX vera (08/10, sola lettura).** Eseguire codice sulla DGX non è stato permesso: le
+letture permesse (nvidia-smi, /proc/meminfo, Ollama `/api/version` `/api/tags` `/api/ps`,
+`systemctl show ollama`, vLLM `/v1/models` `/version` `/metrics`, il server di Whisper che
+risponde, `contesto.json`; onnxruntime con CUDA e CTranslate2 senza GPU nel Python del servizio)
+sono state ripassate a `macchina.inventario` con sonde che le rileggono, e il piano è stato
+calcolato sul portatile con la configurazione della DGX (`llm_profilo: gemma4-26b-ollama`,
+`contesto_rilettura_max_s: 3`, `stt_motore: server`). Ritrova **tutte** le scelte fatte a mano:
+26B su Ollama (76 token/s, prima frase pulita ~0,73 s), whisper.cpp sulla GPU, guardiano 8B,
+rilevatore e4b separato, embedding sulla CPU, Qwen3.6 su vLLM (0,4 × 128 GB), 28 672 token, 4
+residenti e 2 posti già impostati; in più Piper sulla GPU (c'è posto) e immagini «a richiesta,
+non adesso»: MemAvailable era 10,5 GB, cioè ~40 GB tenuti da altri programmi oltre ai modelli
+di Calliope (la riserva del piano è 14). Senza `contesto.json` la finestra stimata è 24–28k.
+
+**Macchine finte** (`prove/prova_piano.py`): solo CPU → voce e2b sulla CPU fuori soglia
+(~4,4 s), decisione 5; 8 GB (il portatile) → e4b, Whisper sulla GPU, guardiano 1B sulla CPU
+con la decisione 3, rilevatore = voce; 16 GB → e4b con il guardiano 8B sulla GPU; 24 GB → 26B,
+guardiano 8B, rilevatore = voce, agente = il 26B sul secondo posto (decisione 4,
+`OLLAMA_NUM_PARALLEL=2` proposto); 32 GB → 26B, guardiano 8B, rilevatore e4b separato, agente
+sul secondo posto (~32 GB su 34); Windows su ARM 128 GB → 80 % alla GPU, whisper.cpp, Qwen3.6
+separato su Ollama. Diverso dall'esempio della ricerca: sui 24 GB il guardiano **8B ci sta**
+(la ricerca metteva la voce a 28k con due posti prima del guardiano; qui la finestra cresce
+dopo, come vuole la §4.1). Contrari: guardiano «nessun modello» con avviso, mai sparito; la
+voce non scende per far posto a un ruolo più in basso; un candidato «da provare» mai scelto;
+nessun file scritto.
+
+Resta (fasi 3–6 della ricerca): la prova breve con `size_vram` e la generazione misurata,
+`taratura.json`, i campi «auto», il catalogo per ruolo, `calliope_stato(cosa=piano)`, gli
+installatori. Da misurare prima (§7.2): η su più modelli, il rapporto vero/pulita dai nuovi
+`generazione_tps`, Whisper e guardiano 1B sulla CPU.

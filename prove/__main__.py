@@ -40,9 +40,12 @@ A_SECCO = [
     ("prova_conferma_unica.py", [], "una conferma per azione (06/10, caso della DGX): «creiamo…» con una foto di mezzo, conferma della politica e «Procedo?» del tool fusi, sfida, doppioni di una funzione che c'è già, annuncio coerente con la dimostrazione"),
     ("prova_dopo_annunci.py", [], "il turno dopo un annuncio o un risultato (07/10 sera, casi della DGX): «Fammene un PDF» dopo il risultato di un lavoro (dati del turno LAVORO_MSG e contrari, spinta di documento_crea, descrizioni), «Quale apro?» con le date di modifica e i risultati dal più recente, il timer già suonato (riferimento dell'agenda che cade, cambio non chiesto con la conversazione pulita e contrari), la frase del codice in coda a risultato_lavoro che riferire non ferma, il prefisso scaldato dopo un cambio del prompt di sistema"),
     ("prova_risultati.py", [], "risultati dei lavori e consensi (07/10, casi della DGX): risultato_lavoro (quale lavoro, riassunto salvato o dal modello dell'agente, tempo massimo, schermo, codice mai a voce, dopo un riavvio, permessi), dichiarazioni «inizio subito il lavoro», il «sì» di chi non ha la proposta, «Ma sì dai, perché no?» e i contrari; casi del 07/10 mattina: falso allarme di riferire su «installarlo», scheda del risultato nella zona grigia e dopo schermo_mostra, lavori_stato con i lavori finiti dal disco; del pomeriggio: «Sì, grazie.», «Mostramelo.» nella zona grigia, «ho recuperato il dato» dopo tool falliti"),
+    ("prova_estensioni_versioni.py", [], "versioni di un'estensione a voce (08/10, giro 10, caso della DGX): estensione_crea con un nome simile è un'estensione nuova e con modifica una versione nuova, annuncio ed elenco con il titolo di prima e quello nuovo, «attiva» → approva e «riattiva» di una già attiva, cosa fa dopo l'approvazione, dati del turno dell'estensione nominata (EST_NOMINATA_MSG) con i contrari, delega_lavoro che cambia un'estensione → estensione_crea, analisi «ESTENSIONE», lavori_stato con la versione da approvare, registro dei turni di una risposta interrotta (risposta_inviata)"),
     # ~8 s: FakeOllama, hub e server degli schermi veri su 127.0.0.1, satellite e PC finti
     ("prova_markdown.py", [], "Markdown dei testi dell'agente (07/10): blocchi, righe, voce, conversioni in PDF e Word veri e da blocchi, testi ostili (script, javascript:, tabelle enormi, annidamenti, enfasi senza chiusura) in poco tempo; risultato.md, annuncio, scheda del documento con «Scarica», risultato al portatile con «Lo apro?» o sul server; «Scarica» solo per lo schermo personale del proprietario, mai zona grigia né stanza, gettone che scade, Content-Disposition e CSP sandbox; «fammene un PDF»"),
     ("prova_conferme.py", [], "conferme (04/10): «sì» breve di chi amministra, proposta valida 3 turni, frase di sfida"),
+    ("prova_valore.py", [], "sicurezza per valore (08/10, fasi 2 e 3): richiesta ripetuta = sì per le pericolose (caso del 07/10 18:52), memoria dell'intento e i contrari, una domanda una volta, politica per valore in ombra nel registro, tabelle di argomenti ed effetti, etichette e matrice, gli 8 attacchi nuovi e il banco di prova_politica con l'interruttore acceso, rigioco dei casi veri del 07/10"),
+    ("prova_attrito.py", [], "attrito della sicurezza (08/10, fase 1 della sicurezza per valore): domande ogni 100 turni per tipo, ripetute, poi eseguite, «già detto», avviso D6, politica per valore in ombra, calliope stato --turni"),
     ("prova_documento_proprio.py", [], "aprire il documento appena scritto con una foto di mezzo (07/10, giro 9, caso della DGX): documento proprio senza conferma a voce e i contrari, consenso ripetendo la richiesta e i contrari, un solo file e il numero 2, numero che non c'è detto al modello, sfida superata con il tool fallito, allegato_leggi fallito che non contamina"),
     ("prova_voci_famiglia.py", [], "voci di famiglia (07/10): margine tra primo e secondo profilo, chi amministra con un minore vicino, la frase che chiede chi parla, conferma breve con un'altra voce più vicina, i quattro casi veri con impronte sintetiche"),
     ("prova_minori.py", [], "minori (05/10): fasce, preset e permessi nel codice, orari, voce incerta, compiti e avvisi ai tutori, guardiano finto, registrazione con la sfida, privacy"),
@@ -74,6 +77,7 @@ A_SECCO = [
     ("prova_ufficio.py", [], "ufficio: conti, XML FatturaPA (XSD se c'è), numerazione concorrente, rubrica, modelli Word e PowerPoint, flusso a voce"),
     ("prova_casa_ha.py", [], "casa via Home Assistant con un HA finto: regole, permessi, TLS, diagnosi"),
     ("prova_capacita.py", [], "registro delle capacità: stati, riassunto, prompt, calliope_stato, macchina nuova"),
+    ("prova_piano.py", [], "taratura della macchina, fasi 1–2 (08/10): inventario con sonde finte (portatile, DGX unificata, senza GPU, registro, GPU fuori catalogo, modello in parte sulla CPU), catalogo con fonti, piano su macchine finte (solo CPU, 8, 16, 24, 32 GB, DGX di oggi ritrovata, Windows su ARM) con i contrari, calliope stato --piano in sola lettura"),
     ("prova_installa.py", [], "installazioni con un server HTTP finto: catalogo, permessi, offerta, ripresa"),
     ("prova_schermi.py", [], "schermi: server e SSE veri, abbinamento, visibilità, schede dei tool, log"),
     # ~3 s: server degli schermi vero, registro dei turni finto (anche grande: 28 000 turni)
@@ -96,6 +100,10 @@ A_SECCO = [
     ("prova_immagini.py", [], "foto (05/10): controllo e riduzione dei byte, album della conversazione, foto nei messaggi, guardia sulle azioni, /api/immagine, pc_guarda e permessi, cattura dal satellite"),
     # ~8 s: file generati in memoria (anche ostili), Brain finto, server degli schermi vero
     ("prova_allegati.py", [], "allegati (05/10): tipo dai byte, lettura per tipo, file ostili (bomba zip, XXE, macro, PDF rotto, eseguibili), audio, contenuto marcato e guardia, allegato_leggi/archivia, delega, /api/allegato"),
+    # ~6 s: cassetto in una cartella temporanea, Brain finto, server degli schermi vero
+    ("prova_cassetto.py", [], "cassetto dei file per persona (08/10): entrata (foto, file, audio; mai programmi né ospiti), scadenza e «ho eliminato», revisione una volta al giorno, tieni/elimina/tieni ancora, tetto, minore e tutore, zona grigia, ritrovamento dopo un riavvio, contenuto in busta, /api/cassetto, ciclo finto"),
+    # ~15 s: la scheda del cassetto in Edge o Chromium senza finestra; senza browser si salta
+    ("prova_cassetto_pagina.py", [], "scheda del cassetto nella pagina vera: carosello (miniatura, sigle), Tieni solo dove si può, Tieni ancora, Tieni, Elimina tutti con due tocchi, schermo di un'altra persona vuoto, nessun errore JS né CSP"),
     # ~15 s: la pagina in Edge o Chromium senza finestra; senza browser si salta
     ("prova_immagini_pagina.py", [], "foto nella pagina vera: pulsante, file scelto, incolla, trascina, SVG rifiutato, scheda con la miniatura"),
     # ~40 s: Calliope vera con un satellite finto; senza voci di Piper o modelli si salta
@@ -182,6 +190,7 @@ CON_OLLAMA = [
     ("prova_allegati_ollama.py", ["1"], "allegati con gemma4: bolletta, Excel, PDF lungo, Word, archivia, spesa, vocale; banco di sicurezza (istruzioni nei file e negli audio, esci, sì procedi, sfida): zero azioni"),
     ("prova_risultato_pdf_ollama.py", ["1"], "«Fammene un PDF» dopo il risultato di un lavoro con gemma4 (07/10 sera, caso della DGX «Ho metto un pdf.» → pc_cerca_file): risultato_lavoro pdf o word, i contrari col PDF di un file del PC, e (solo misura) il risultato di un lavoro nominato un po' dopo l'annuncio"),
     ("prova_risultati_ollama.py", ["1"], "il risultato di un lavoro finito con gemma4 (07/10, caso della DGX): «E il risultato?», «leggili e dammi un bel riassunto» subito dopo l'annuncio, senza lavori_esegui né lavori_rispondi"),
+    ("prova_estensione_nominata_ollama.py", ["1"], "l'estensione nominata a voce con gemma4 (08/10, caso della DGX): «invoca l'estensione meteo per città su Bergamo» dopo l'approvazione della versione 2 e nella conversazione pulita → est_, mai web_cerca; «che tempo fa?» contato; con e senza i dati del turno"),
     ("prova_conferma_unica_ollama.py", ["1"], "una conferma per azione con gemma4: la sequenza della DGX (foto, «creiamo un'estensione…»), doppione, «come la richiamo?»"),
     ("prova_politica_ollama.py", ["1"], "politica dei tool con gemma4: iniezioni da web, allegati, estensioni, archivio, agenti; zero azioni"),
     ("prova_immagini_ollama.py", ["1"], "foto con gemma4: scontrino e turno dopo, spesa dallo scontrino, istruzione nella foto senza azioni, archivia, schermo e webcam"),
@@ -252,7 +261,8 @@ LIVELLO_3 = {
     "prova_giochi_pagina.py", "prova_scritto_calliope.py", "prova_telefono_pagina.py",
     "prova_telefono_audio.py", "prova_telefono_schermo.py", "prova_satellite.py",
     "prova_corsie_satelliti.py", "prova_installa_satellite.py", "prova_cruscotto_pagina.py",
-    "prova_scheda_intera.py", "prova_markdown_pagina.py", "prova_esercizi_pagina.py",
+    "prova_scheda_intera.py", "prova_markdown_pagina.py", "prova_cassetto_pagina.py",
+    "prova_esercizi_pagina.py",
 }
 # Mai nel gruppo parallelo, anche quando una prova li sceglie nel livello 2: un browser, un
 # tempo reale o tanti processi, che sotto carico falliscono a caso. Tutto il livello 3 è
@@ -285,7 +295,8 @@ LEGAMI = [
     ("calliope/tools/web.py", ["prova_web.py", "prova_estensioni_attacchi.py"]),
     ("calliope/tools/archivio.py", ["prova_archivio.py"]),
     ("calliope/tools/immagini.py", ["prova_immagini.py"]),
-    ("calliope/tools/allegati.py", ["prova_allegati.py"]),
+    ("calliope/tools/allegati.py", ["prova_allegati.py", "prova_cassetto.py"]),
+    ("calliope/cassetto.py", ["prova_cassetto.py"]),
     ("calliope/tools/minori.py", ["prova_minori.py", "prova_giochi.py", "prova_esercizi.py"]),
     # Esercizi (08/10): il pacchetto, il tool, la scheda e il dato del turno dei minori
     ("calliope/esercizi/", ["prova_esercizi.py"]),
@@ -299,16 +310,18 @@ LEGAMI = [
     ("calliope/tools/conversazioni.py", ["prova_conversazioni.py"]),
     ("calliope/casa/", ["prova_casa_ha.py"]),
     ("calliope/capacita.py", ["prova_capacita.py"]),
-    ("calliope/stato.py", ["prova_capacita.py"]),
-    ("calliope/macchina.py", ["prova_capacita.py"]),
+    ("calliope/stato.py", ["prova_capacita.py", "prova_piano.py"]),
+    ("calliope/macchina.py", ["prova_capacita.py", "prova_piano.py"]),
+    ("calliope/modelli.py", ["prova_piano.py"]),
+    ("calliope/piano.py", ["prova_piano.py"]),
     ("calliope/installa/", ["prova_installa.py", "prova_capacita.py"]),
     ("calliope/latenza.py", ["prova_cruscotto.py"]),
     ("calliope/schermi/", ["prova_schermi.py", "prova_cruscotto.py", "prova_scritto.py", "prova_giochi.py",
                            "prova_telefono_abbina.py", "prova_inoltro.py",
-                           "prova_immagini.py", "prova_allegati.py"]),
+                           "prova_immagini.py", "prova_allegati.py", "prova_cassetto.py"]),
     ("calliope/ufficio/", ["prova_scritto.py"]),
     ("calliope/immagini.py", ["prova_immagini.py"]),
-    ("calliope/allegati.py", ["prova_allegati.py"]),
+    ("calliope/allegati.py", ["prova_allegati.py", "prova_cassetto.py"]),
     ("calliope/agenti/", ["prova_agenti.py", "prova_sandbox.py", "prova_agenti_domande.py",
                           "prova_avanzamento.py", "prova_esecuzione.py",
                           "prova_agenti_openai.py", "prova_arbitro_vllm.py",

@@ -427,6 +427,69 @@ def prova_registro():
     b.last_lettura_s = None
     b._note_usage({"prompt": 100, "output": 5})
     verifica("contrario: senza durata (vLLM) niente lettura_s", b.last_lettura_s is None)
+    prova_generazione()
+
+
+def prova_generazione():
+    """La velocità di generazione del turno (08/10, fase 0 della taratura della macchina)."""
+    print("── generazione nel registro (fase 0 della taratura) ──")
+    b = brain_finto()
+    b.last_generazione = None
+    b._note_usage({"prompt": 9000, "output": 30, "generati": 30, "generazione_ns": 400_000_000})
+    b._note_usage({"prompt": 9100, "output": 50, "generati": 50, "generazione_ns": 600_000_000})
+    verifica("Ollama: token e tempo sommati su tutte le passate del turno",
+             b.last_generazione == {"token": 80, "ns": 1_000_000_000}, str(b.last_generazione))
+    b.last_generazione = None
+    b._note_usage({"prompt": 100, "output": 5})
+    b._note_usage({"prompt": 100, "output": 5, "generati": 0, "generazione_ns": 10})
+    b._note_usage({"prompt": 100, "output": 5, "generati": 5, "generazione_ns": 0})
+    verifica("contrario: senza tempi, o con zero token o zero tempo, niente generazione",
+             b.last_generazione is None, str(b.last_generazione))
+    # vLLM (API OpenAI): dal primo all'ultimo pezzo, senza il primo token
+    from calliope.brain import OpenAIBackend
+
+    def pezzo(testo=None, usage=None):
+        delta = SimpleNamespace(content=testo, tool_calls=None)
+        return SimpleNamespace(choices=[SimpleNamespace(delta=delta)] if testo else [],
+                               usage=usage)
+
+    def crea(**kw):
+        yield pezzo("Ciao, ")
+        time.sleep(0.05)
+        yield pezzo("tutto ")
+        time.sleep(0.05)
+        yield pezzo("bene.")
+        yield pezzo(usage=SimpleNamespace(prompt_tokens=8000, completion_tokens=11))
+    be = OpenAIBackend.__new__(OpenAIBackend)
+    be.cfg, be.extra = Config(), {}
+    be.client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=crea)))
+    usage = [p for k, p in be.stream([{"role": "user", "content": "x"}], None) if k == "usage"]
+    u = usage[0] if usage else {}
+    tps = u.get("generati", 0) / (u.get("generazione_ns", 1) / 1e9)
+    verifica("vLLM: 10 token (11 meno il primo) in ~0,1 s → ~100 token/s",
+             u.get("generati") == 10 and 0.09e9 <= u.get("generazione_ns", 0) <= 0.5e9
+             and 20 <= tps <= 111, str(u))
+
+    def crea_uno(**kw):
+        yield pezzo("Sì.")
+        yield pezzo(usage=SimpleNamespace(prompt_tokens=8000, completion_tokens=1))
+    be.client.chat.completions.create = crea_uno
+    u = [p for k, p in be.stream([{"role": "user", "content": "x"}], None) if k == "usage"][0]
+    verifica("contrario: un token solo, nessuna velocità", "generati" not in u, str(u))
+    # Nel registro e in calliope stato --turni
+    turni = ([turno("2026-10-08", 0.9, generazione_tps=76.0 + i) for i in range(9)]
+             + [turno("2026-10-08", 1.5, generazione_tps=14.0)]
+             + [turno("2026-10-08", 0.8)])
+    d = latenza.per_giorno(turni)["2026-10-08"]
+    verifica("mediana e p10 della generazione (il turno senza il campo non conta)",
+             d["generazione"] == {"n": 10, "mediana": 79.5, "p10": 76.0}, str(d["generazione"]))
+    t = latenza.testo({"2026-10-08": d})
+    verifica("testo: «generazione 80 token/s (i più lenti 76)»",
+             "generazione 80 token/s (i più lenti 76)" in t, t)
+    vuoto = latenza.per_giorno([turno("2026-10-08", 0.9)])["2026-10-08"]
+    verifica("contrario: registro di prima, nessuna riga di generazione",
+             vuoto["generazione"]["n"] == 0
+             and "generazione" not in latenza.testo({"2026-10-08": vuoto}))
 
 
 # ─────────────────────────── P11: riassunto dell'agente in tempo ───────────────────────────

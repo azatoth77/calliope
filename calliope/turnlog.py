@@ -77,7 +77,8 @@ class TurnLog:
                 # una frase vuota arrivata al modello, «risposta: null» con il silenzio
                 if isinstance(rec.get(key), str):
                     rec.setdefault(f"{key}_parole", len(rec[key].split()))
-            for key in ("testo", "richiesta", "risposta"):
+            # (anche quella mandata alla voce prima di un'interruzione, 08/10)
+            for key in ("testo", "richiesta", "risposta", "risposta_inviata"):
                 if rec.get(key) is not None:
                     rec[key] = None
             if rec.get("stt_corretta"):          # prima e dopo: le parole dell'ospite

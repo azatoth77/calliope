@@ -187,13 +187,26 @@ def finestra(cfg) -> int:
 
 
 # ─────────────────────────── i tre limiti ───────────────────────────
+# Schema alternato che Ollama non espone in /api/show (08/10, §3.4 della ricerca sulla taratura
+# della macchina): uno strato su `n` con attenzione globale, gli altri «sliding» (in llama.cpp
+# `set_swa_pattern(n)`). Senza, la cache di Gemma 3 veniva 6 volte troppo grande, quella di
+# gpt-oss 2 volte. Solo le architetture verificate: un modello non elencato resta prudente.
+SCHEMA_SLIDING = {"gemma3": 6, "gptoss": 2}
+
+
 def kv_ollama(info: dict) -> tuple[float, float] | None:
     """(byte per token degli strati globali, byte fissi degli strati «sliding») dalla forma
     del modello (`model_info` di /api/show), con FATTORE_KV. None se mancano i dati.
 
     Gemma 4 (05/10): e4b 42 strati, gli ultimi 18 condividono la cache dei precedenti; dei 24
     con cache 4 sono globali (2 teste KV × 512 + 512) → 16 KiB a token; 26B-A4B 30 strati, 5
-    globali → 20 KiB. Gli strati «sliding» tengono solo `sliding_window` token."""
+    globali → 20 KiB. Gli strati «sliding» tengono solo `sliding_window` token.
+
+    Modelli ibridi (08/10): con `full_attention_interval` n e le teste KV come numero solo
+    (qwen3.6 35B-A3B, `qwen35moe`) solo uno strato su n ha la cache, gli altri sono lineari
+    (DeltaNet, stato fisso piccolo) → 10 strati su 41, 20 KiB invece di 82. Con le teste come
+    elenco per strato (qwen3.5, Nemotron) gli strati lineari hanno già 0 teste. Gemma 3 e
+    gpt-oss: SCHEMA_SLIDING."""
     arch = info.get("general.architecture")
     if not arch:
         return None
@@ -215,9 +228,15 @@ def kv_ollama(info: dict) -> tuple[float, float] | None:
     vls = g("attention.value_length_swa") or vl
     win = g("attention.sliding_window") or 0
     pat = g("attention.sliding_window_pattern")
+    if pat is None and win:
+        pat = SCHEMA_SLIDING.get(arch)
+    intervallo = g("full_attention_interval")
+    intervallo = int(intervallo) if isinstance(intervallo, int) and intervallo > 1         and not isinstance(kv, list) else 0
     propri = max(1, int(strati) - int(g("attention.shared_kv_layers") or 0))
     globale = fissi = 0.0
     for i in range(propri):
+        if intervallo and (i + 1) % intervallo:
+            continue                          # strato lineare: nessuna cache per token
         h = kv[i] if isinstance(kv, list) and i < len(kv) else (
             kv[-1] if isinstance(kv, list) else kv)
         if isinstance(pat, list):

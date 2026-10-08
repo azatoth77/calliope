@@ -754,3 +754,119 @@ d'altro davanti non chiama nessun tool, nemmeno `lavori_stato` per «Quali lavor
 Nello stesso turno delle 16:11 `riferire` fermava «Se vuoi più dettagli, chiedimi di
 leggertelo.» come `uscita_istruzione` (falso allarme: è la frase del codice in coda a
 `risultato_lavoro`): vedi [sicurezza-politica](sicurezza-politica.md).
+
+## Versioni di un'estensione a voce (08/10, giro 10, ramo `correzioni-giro10`)
+
+Caso vero della DGX (07/10 18:14–18:57, telefono, 26B; qui con nomi di fantasia). C'era
+«Meteo Borgoverde e Valfiorita» (`meteo_citta`, città fisse). La persona chiede un'estensione che
+dica il meteo di **una città qualunque**; il modello chiama `estensione_crea(nome="Meteo Città")`
+e il confronto approssimato di `_nome` («meteo città» ≈ `meteo_citta`) ne fa la **versione 2** di
+quella che c'era, con il titolo nuovo «Meteo per città». Poi:
+1. annuncio «ho preparato una versione nuova di l'estensione «Meteo per città»», elenco ««Meteo
+   Borgoverde e Valfiorita» (attiva, con una versione nuova da approvare)»: la persona cercava un
+   nome e ne sentiva un altro. «Attiva l'estensione Meteocittà» → `estensioni_gestisci(attiva)`:
+   la politica chiede «vuoi che faccia «attiva»…?», al «sì» «azione sconosciuta»; «riattiva» →
+   «Fatto: «Meteo Borgoverde…» è di nuovo attiva» (era già attiva); per approvare la versione 2
+   quattro turni e la sfida («Voglio che approvi la nuova versione», ripetuto, non vale come
+   consenso alla domanda della politica: è il tema delle conferme con memoria dell'intento,
+   [`docs/ricerche/2026-10-07-sicurezza-per-valore.md`](../ricerche/2026-10-07-sicurezza-per-valore.md),
+   qui non toccato);
+2. approvata la versione 2, «invoca l'estensione meteo per città su Bergamo» tre volte → sempre
+   `web_cerca`, e una volta «l'estensione è progettata per dati preimpostati delle località
+   configurate» (quello che aveva detto della versione 1). Il tool era registrato bene: schema con
+   `citta` e descrizione della versione 2 (verificato sull'indice della DGX), nomi riletti a caldo
+   (`Estensioni.aggiorna_tool`, `Brain.rileggi_tool`). Il modello seguiva le sue risposte di prima
+   e la descrizione di `web_cerca` («meteo e previsioni»);
+3. «modificala per qualunque città» → `delega_lavoro` di codice → analisi «impossibile: non posso
+   modificare le estensioni esistenti» (e `riferire` la fermava, vedi
+   [sicurezza-politica](sicurezza-politica.md));
+4. «Com'è andata l'estensione?» → «Vuoi sentire il risultato?», e nel registro dei turni la
+   risposta vuota (vedi [voce-e-regole](voce-e-regole.md)).
+
+**Decisione: estensione nuova o versione nuova?** Lo dice il modello con le parole della persona,
+mai un confronto approssimato: `estensione_crea` ha `modifica` (il nome di un'estensione che c'è:
+versione nuova, con i suoi file e lo stesso nome; titolo e descrizione cambiano se cambia quello
+che fa) e `nome` (un nome per una nuova). Un nome simile a quello di un'estensione che c'è, senza
+`modifica`, è un'estensione **nuova** accanto all'altra, e la frase lo dice («Sarà un'estensione
+nuova: «Meteo Borgoverde e Valfiorita», che c'è già, resta com'è.», regola
+`estensione_nuova_accanto`); con `modifica` «Sarà una versione nuova di «…»: quella di adesso resta
+in uso finché non approvi la nuova.». Cambiare lo scopo (città fisse → qualunque) va bene in tutti
+e due i modi: se poi la persona ne vuole una sola, rimuove l'altra. `modifica` che non c'è →
+niente lavoro, l'elenco delle estensioni al modello. Con la semantica di prima (`nome` = quella da
+cambiare) nasce un'estensione nuova accanto: da guardare nell'uso vero col 26B.
+
+Cosa cambia ancora (nessuna regola sul testo della persona oltre ai dati del turno, principio 10):
+- **Annuncio, elenco e domande** (`servizio.chi_e`): «ho preparato la versione 2 di «Meteo
+  Borgoverde e Valfiorita», che ora si chiama «Meteo per città»: …»; elenco «(attiva, versione 1;
+  c'è una versione nuova da approvare, la 2, «Meteo per città»: dice il meteo attuale in una
+  città). Per usare una versione nuova, dimmi di approvarla.»; la sfida «Per approvare la versione
+  2 di «…», che ora si chiama «…», ripeti: …».
+- **Sinonimi d'azione** (`servizio.azione_vera`; `ToolSpec.prepara`, nuovo: la forma degli
+  argomenti prima dei permessi e della politica; regola `estensioni_azione_sinonimo`): attiva,
+  abilita, usa, accendi, conferma, accetta → `approva` se c'è una versione da approvare, se no
+  `riattiva`; disabilita/spegni → disattiva; elimina/cancella/togli → rimuovi. La politica chiede
+  così proprio l'azione vera. Un'azione che non conosce resta un errore.
+- **«riattiva» di una già attiva** (`_gia_attiva`, regola `estensione_gia_attiva`): niente
+  «Fatto»; ««…» è già attiva, versione 1. C'è la versione nuova 2 …: … Vuoi approvarla?» con la
+  domanda in sospeso (il «sì» la approva, con la sua sfida). Senza versioni nuove «è già attiva».
+- **Approvata**: «Fatto: «Meteo per città» è attiva, versione 2: dice il meteo attuale in una
+  città. Da adesso puoi chiedermela.»; nel risultato per il modello `tool`, `input` e, dalla
+  versione 2, `nota` («quello che è stato detto prima di questa estensione valeva per la versione
+  di prima»).
+- **Dati del turno `EST_NOMINATA_MSG`** (`Estensioni.nominate`, `Brain._estensioni_nominate`,
+  regola `estensione_nominata`, rete spegnibile `estensione_nominata`): se la frase nomina
+  un'estensione attiva per titolo o nome (a parole intere; per un titolo di almeno due parole e
+  dieci lettere anche simile, ≥ 0,85, «Medio per città», o attaccato, «Meteocittà»), subito prima
+  della domanda: «chi parla nomina la tua estensione «Meteo per città» (versione 2): è il tool
+  est_meteo_citta, «Dice il meteo attuale in una città», input: citta[. È cambiata da poco: quello
+  che è stato detto di lei prima nella conversazione valeva per la versione di prima]. Se chiede di
+  usarla, chiama quel tool con i dati che dice, non un altro (internet, biblioteca); se chiede di
+  cambiarla, è estensione_crea con modifica.» («cambiata da poco»: versione > 1 approvata da al
+  più 30 minuti). È un contesto: decide il modello. «Che tempo fa a Bergamo?» non lo riceve.
+- **`delega_lavoro` di codice che cambia un'estensione** (regola `delega_estensione`): se il
+  compito ha la parola «estensione» e il titolo o il nome di una (una sola) estensione che c'è, il
+  lavoro passa a `estensione_crea` con `modifica`, con la stessa conferma della politica (è la
+  stessa richiesta: una versione da approvare, che vuole comunque la sfida). «Cambia l'estensione
+  dei file .txt» e «un programma che legge il meteo per città» restano lavori di codice.
+- **Analisi della richiesta**: esito nuovo `estensione` (`richiesta.NOTA_IMPOSSIBILE`, solo per il
+  codice: «se la richiesta è creare, cambiare, correggere o rifare un'estensione … NON è
+  impossibile: scrivi solo la parola ESTENSIONE»; `interpreta` → esito «estensione»): niente frase
+  detta, il risultato dice al modello di richiamare `estensione_crea` (con l'elenco per
+  `modifica`). Misura con qwen3:8b sul portatile (2 giri, 3 richieste d'estensione): 0/6 prima e
+  dopo (l'8B ignora la parola chiave: «raffinabile», «vaga», «gia_fatto»); da rimisurare con
+  qwen3.6 sulla DGX. Il compito vero lo copre già la regola di sopra, prima dell'analisi.
+- **`lavori_stato` di un lavoro d'estensione finito**: «L'ultimo lavoro: «Meteo Città» è finito …
+  Ha preparato la versione 2 di «…», che ora si chiama «…»: è da approvare. Vuoi approvarla?» con
+  la domanda per `estensioni_gestisci(approva)`; approvata: ««…» è attiva, versione 2.» (prima:
+  «Vuoi sentire il risultato?»).
+- Descrizioni: `estensione_crea` («oppure CAMBIA un'estensione che c'è (…): modifica = il suo
+  nome…; nome: un nome breve per un'estensione nuova»), `estensioni_gestisci` («approva una
+  versione nuova («attiva la versione nuova», «usa la nuova»)…; riattiva (una disattivata)…; per
+  USARE un'estensione chiama il suo tool est_, non questo»).
+
+**Misure** (gemma4 e4b sul portatile, `prove/prova_estensione_nominata_ollama.py`): la storia della
+DGX (Calliope che dice tre volte «è solo per Borgoverde e Valfiorita», «per Bergamo devo usare il
+web»), l'approvazione della versione 2 col modello e la sfida, poi «invoca l'estensione meteo per
+città su Bergamo»; tre frasi che la nominano in una conversazione pulita; «Che tempo fa a
+Bergamo?». `--tutti`: con gli altri ~50 tool di Calliope.
+
+| | ramo, dati del turno | ramo, rete spenta | main |
+|---|---|---|---|
+| storia della DGX → `est_meteo_citta` (3 giri; 2 giri con `--tutti`) | 3/3; 2/2 | 3/3; 2/2 | 3/3; 2/2 |
+| conversazione pulita, nominata → `est_` | 9/9; 6/6 | 9/9; 6/6 | 9/9; 6/6 |
+| «Che tempo fa a Bergamo?» | estensione 3/3; con `--tutti` internet 2/2 | uguale | uguale (`--tutti`: internet 3/4) |
+
+Il 4B **non riproduce** l'errore del 26B (nemmeno con il codice di main, ~50 tool e la storia della
+DGX): i cambi sono costruiti sul caso vero, non peggiorano il 4B, e vanno rimisurati sulla DGX con
+l'uso vero. «Che tempo fa a Bergamo?» con l'estensione o con internet vanno bene tutti e due
+(l'estensione dice i dati di Open-Meteo, internet i siti di meteo con la fonte detta): con pochi
+tool il 4B sceglie l'estensione, con tutti internet. Prova a secco:
+`prove/prova_estensioni_versioni.py`.
+
+## Ricerche senza «Procedo?» (08/10)
+
+Decisione di Dario: una ricerca affidata all'agente parte appena chiesta, senza la proposta
+«È una ricerca a più passi… Procedo?» (`Lavori.serve_conferma`: restano codice ed estensioni,
+la coda occupata, il modello da caricare, i file della persona). Coerente con la classe d'effetto
+E2 delle ricerche nella politica per valore (`docs/ricerche/2026-10-07-sicurezza-per-valore.md`,
+D1). La conferma della politica per un dato non fidato di mezzo resta quella della politica.
