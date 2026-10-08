@@ -269,6 +269,20 @@ class Config:
     # 3, e a 300 token 0 su 3 anche senza; costo +1,1–1,8 s sulla prima frase. I risultati
     # normali di internet (5 estratti) restano sotto. 0 = spenta; solo con l'API di Ollama
     quarantena_token: int = 800
+    # Memoria dell'intento (08/10, calliope/valore.py, fase 2 della sicurezza per valore;
+    # decisione D4): un'azione confermata dalla persona riconosciuta e poi fallita resta aperta
+    # al più questi secondi, per lo stesso tool, lo stesso bersaglio e la stessa persona: la
+    # chiamata corretta («riprova», l'indice giusto) non chiede di nuovo. Il 07/10 alle 17:07
+    # servivano 10 turni per aprire un foglio appena creato. 0 = fino alla chiusura della
+    # conversazione
+    intento_valido_s: float = 600.0
+    # Politica per valore (08/10, calliope/valore.py, fase 4; decisione D5): con un dato non
+    # fidato di mezzo decide la matrice provenienza × effetto al posto della regola «pericolosa
+    # ⇒ conferma». Spenta, la decisione nuova si calcola lo stesso e va nel registro dei turni
+    # (`politica_ombra` di ogni chiamata; confronto in `calliope stato --turni`). Si accende
+    # dopo due giorni d'ombra senza esecuzioni in più con un bersaglio preso dal dato; per
+    # tornare indietro basta rimetterla a false
+    politica_per_valore: bool = False
     # Ciò che Calliope dice con dati non fidati di mezzo (06/10, calliope/riferire.py): ogni
     # frase della risposta si controlla prima di dirla (numeri a pagamento, codici e password da
     # dare, soldi verso un conto, recapiti presi solo dal dato e non chiesti, indicazioni
@@ -2063,6 +2077,7 @@ SEZIONI: dict[str, list[str]] = {
             "contesto_riassunto_max_s",
             "max_history_turns", "max_tool_turns", "azione_in_sospeso_s", "azione_in_sospeso_turni",
             "conferma_sfida", "conferma_sfida_s", "conferma_sfida_parole", "quarantena_token",
+            "intento_valido_s", "politica_per_valore",
             "uscita_controllo",
             "storia_inattiva_s",
             "llm_reti_spente"],
@@ -2323,6 +2338,7 @@ LIMITI: dict[str, tuple[float, float]] = {
     "vad_threshold": (0.0, 1.0), "wake_consecutive": (1, 50), "turn_log_days": (1, 3650),
     "latenza_avviso_s": (0.0, 60.0), "attrito_avviso": (0.0, 100.0),
     "llm_attesa_avvio_s": (0.0, 86_400.0), "azione_in_sospeso_s": (0.0, 3600.0),
+    "intento_valido_s": (0.0, 3600.0),
     "azione_in_sospeso_turni": (1, 20), "conferma_sfida_s": (5.0, 600.0),
     "conferma_sfida_parole": (2, 4), "speaker_conferma_breve_soglia": (0.0, 1.0),
     "tts_lead_s": (0.0, 5.0), "tts_tail_s": (0.0, 5.0), "tts_spezza_prima": (0, 10_000), "tts_thread": (0, 256),

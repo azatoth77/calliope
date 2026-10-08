@@ -64,6 +64,12 @@ class Conversazione:
         # calliope/provenienza.py), solo in memoria: la provenienza degli argomenti li usa anche
         # dopo che la busta è uscita dalla storia. Non si salvano su disco
         self.esterni: list = []
+        # Sicurezza per valore (08/10, calliope/valore.py), solo in memoria: le intenzioni
+        # confermate dalla persona e non ancora riuscite (fase 2: la chiamata corretta dopo un
+        # errore non chiede di nuovo), e i testi dei risultati dei tool interni fidati (fase 3:
+        # provenienza «fidato» di un valore, per esempio il nome di un file trovato)
+        self.intenzioni: list = []
+        self.fidati: list = []
         # Le foto della conversazione (calliope/immagini.py, Album): solo in memoria, mai su
         # disco (esporta non le salva); si svuotano con la conversazione. Lo crea Brain
         self.album = None
