@@ -83,6 +83,7 @@ class Reg(SpeakerRegistry):
                                 tutori=["carlo-id"], id="luca-id"),
             "Bianca": UserProfile(name="Bianca", voiceprint=ALTRO, id="bianca-id"),
         }
+        self._salvato, self._da_salvare = time.monotonic(), False   # adapt (impronta)
 
     def save(self):
         pass
@@ -217,6 +218,116 @@ def prova_conferma_breve():
         verifica(f"ciclo: «sì» breve Carlo {sca} Luca {slu} → conferma {atteso}",
                  sc.conferma_breve is atteso and v["modo"] == "breve"
                  and "secondo" in v and "margine" in v, json.dumps(v))
+
+
+# ─────────────────────────── continuità (08/10) ───────────────────────────
+# Caso vero della DGX (08/10 17:26, nomi di fantasia): 13 minuti dopo l'ultima frase di chi
+# amministra, «Calliope.» (0,5 s di voce, 0,44, il secondo a 0,11) e la frase dopo (0,6 s, 0,40)
+# sotto la soglia 0,48 → ospite, e la ricerca nelle sue conversazioni negata.
+
+class Job:
+    def __init__(self, e):
+        self.e = e
+
+    def result(self):
+        return self.e
+
+
+class VoceFinta:
+    _current_voice_path = None
+
+
+def frase_bianca(s_bianca: float, s_carlo: float) -> np.ndarray:
+    """Un'impronta con i punteggi voluti contro Bianca e Carlo (e ~0 contro Luca: Bianca e
+    Carlo sono ortogonali a Luca solo in parte, qui basta che Luca resti lontano)."""
+    v = s_bianca * ALTRO + s_carlo * CARLO
+    resto = 1 - float(v @ v)
+    w = v + np.sqrt(resto) * _ortho(CARLO, LUCA, ALTRO)
+    return w.astype(np.float32)
+
+
+def riconosci(ciclo, sc, emb, voiced_s, in_session=False, prev=None):
+    sc.current_speaker = prev
+    t = Turno(voiced_s=voiced_s, in_session=in_session, emb_job=Job(emb), prev_how=None)
+    ciclo.rec = {}
+    ciclo._riconosci_voce(t)
+    return sc.current_speaker, sc.identified_by, sc.current_level, ciclo.rec["voce"], t
+
+
+def prova_continuita():
+    reg, sc, ciclo, regole = ciclo_finto()
+    ciclo.speaker = VoceFinta()
+    cfg = reg.cfg
+    verifica("predefiniti: 900 s, 0,36, margine 0,20", (cfg.speaker_continuita_s,
+             cfg.speaker_continuita_soglia, cfg.speaker_continuita_margine) == (900.0, 0.36, 0.20))
+    # Carlo riconosciuto dalla voce su questo satellite
+    n, how, lv, v, _ = riconosci(ciclo, sc, frase_con(0.72, 0.20), 2.1)
+    verifica("Carlo dalla voce: ricordato per la continuità", n == "Carlo"
+             and ciclo._voce_recente[0] == "Carlo")
+    # Il caso vero: fuori dalla finestra d'ascolto, 0,5 s, 0,44 con Luca lontano
+    regole.clear()
+    n, how, lv, v, t = riconosci(ciclo, sc, frase_con(0.44, 0.11), 0.5)
+    verifica("caso vero: «Calliope.» 0,5 s a 0,44 → Carlo per continuità, solo familiare",
+             (n, how, lv) == ("Carlo", "conversazione", "familiare") and t.continuita
+             and v["modo"] == "continuita" and "voce_continuita" in regole, json.dumps(v))
+    verifica("per continuità: niente conferma breve né voce sicura",
+             not sc.conferma_breve and sc.voce_sicura is None)
+    n, how, lv, v, t = riconosci(ciclo, sc, frase_con(0.40, 0.08), 0.63, in_session=True,
+                                 prev=None)
+    verifica("caso vero: la frase dopo, 0,6 s a 0,40 dopo un ospite → Carlo per continuità",
+             n == "Carlo" and t.continuita, json.dumps(v))
+    # Contrari
+    regole.clear()
+    n, how, lv, v, t = riconosci(ciclo, sc, frase_con(0.34, 0.05), 0.5)
+    verifica("contrario: sotto 0,36 → ospite", n is None and not t.continuita
+             and "voce_continuita" not in regole)
+    n, how, lv, v, t = riconosci(ciclo, sc, frase_con(0.44, 0.30), 0.5)
+    verifica("contrario: il minore a 0,14 dal migliore (margine sotto 0,20) → non per "
+             "continuità", not t.continuita and n != "Carlo", f"{n} {how}")
+    n, how, lv, v, t = riconosci(ciclo, sc, frase_con(0.44, 0.11), 1.4)
+    verifica("contrario: frase lunga sotto soglia → ospite come prima (solo sotto 1 s)",
+             n is None and not t.continuita)
+    # Un'altra persona vicina: il migliore è Bianca, non chi è stato riconosciuto qui
+    n, how, lv, v, t = riconosci(ciclo, sc, frase_bianca(0.44, 0.10), 0.5)
+    verifica("contrario: il migliore è un'altra persona → ospite", n is None
+             and not t.continuita, f"{n} {json.dumps(v)}")
+    # Finestra scaduta
+    ciclo._voce_recente = ("Carlo", time.monotonic() - 901)
+    n, how, lv, v, t = riconosci(ciclo, sc, frase_con(0.44, 0.11), 0.5)
+    verifica("contrario: finestra scaduta (15 minuti) → ospite", n is None and not t.continuita)
+    # Satellite diverso: un'altra corsia non ha visto Carlo
+    reg2, sc2, ciclo2, regole2 = ciclo_finto()
+    ciclo2.speaker = VoceFinta()
+    n, how, lv, v, t = riconosci(ciclo2, sc2, frase_con(0.44, 0.11), 0.5)
+    verifica("contrario: satellite diverso (nessuno riconosciuto qui) → ospite",
+             n is None and not t.continuita)
+    # Spenta
+    ciclo._voce_recente = ("Carlo", time.monotonic())
+    cfg.speaker_continuita_s = 0
+    n, how, lv, v, t = riconosci(ciclo, sc, frase_con(0.44, 0.11), 0.5)
+    verifica("contrario: speaker_continuita_s 0 → spenta", n is None)
+    cfg.speaker_continuita_s = 900.0
+    # Un ospite che parla a lungo qui toglie la continuità
+    riconosci(ciclo, sc, frase_bianca(0.10, 0.10), 2.0)
+    n, how, lv, v, t = riconosci(ciclo, sc, frase_con(0.44, 0.11), 0.5)
+    verifica("contrario: dopo una frase lunga di un'altra voce → ospite",
+             ciclo._voce_recente is None and n is None)
+    # Il minore: riconosciuto dalla voce, poi una frase cortissima sua → vale lui
+    riconosci(ciclo, sc, frase_con(0.20, 0.70), 2.0)
+    n, how, lv, v, t = riconosci(ciclo, sc, frase_con(0.08, 0.42), 0.5)
+    verifica("minore riconosciuto qui, frase cortissima sua → il minore per continuità",
+             n == "Luca" and t.continuita and lv == "familiare", f"{n} {how}")
+    # Carlo ricordato, ma la frase è più vicina al minore (verso pericoloso) → mai Carlo
+    riconosci(ciclo, sc, frase_con(0.72, 0.20), 2.0)
+    n, how, lv, v, t = riconosci(ciclo, sc, frase_con(0.40, 0.43), 0.5)
+    verifica("minore più vicino di Carlo → mai Carlo per continuità", n != "Carlo"
+             and not t.continuita, f"{n} {how}")
+    # Chi amministra con il minore vicino non resta ricordato (la sua frase non bastava)
+    ciclo._voce_recente = None
+    riconosci(ciclo, sc, frase_con(0.62, 0.52), 2.0)
+    verifica("Carlo con il minore vicino: non ricordato per la continuità",
+             sc.minore_vicino == "Luca" and ciclo._voce_recente is None,
+             str(ciclo._voce_recente))
 
 
 # ─────────────────────────── la frase che chiede chi parla ───────────────────────────
@@ -355,6 +466,8 @@ if __name__ == "__main__":
     prova_verso_pericoloso()
     print("── conferma breve ──")
     prova_conferma_breve()
+    print("── continuità ──")
+    prova_continuita()
     print("── la frase che chiede chi parla ──")
     prova_frasi()
     prova_azione_in_sospeso()

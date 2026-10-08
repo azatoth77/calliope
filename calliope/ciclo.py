@@ -149,6 +149,7 @@ class Turno:
     conf_stt: object = None              # stt_correzione.Confidenza della frase, o None
     prev_how: str | None = None          # come era riconosciuto chi parlava prima
     voce_secondo: tuple = (None, None)   # il secondo profilo e il suo punteggio (07/10)
+    continuita: bool = False             # chi parla vale per continuità (08/10, _per_continuita)
     speaker_name: str | None = None
     prof_turno: object = None            # profilo di chi parla (minori, orari)
     context: str | None = None           # contesto del turno (biblioteca, foto non viste)
@@ -230,6 +231,9 @@ class Ciclo:
         # della frase di prima (monotonic) e chi la diceva, per la ripresa al turno dopo
         self._fine_voce_prec: float | None = None
         self._voce_prec: str | None = None
+        # L'ultima persona riconosciuta dalla voce (sopra soglia) su questo satellite e quando
+        # (monotonic): per le frasi cortissime fuori dalla conversazione (08/10, continuità)
+        self._voce_recente: tuple[str, float] | None = None
         self._collega_voce()
         if self.listener is not None and not getattr(self.listener, "remoto", False)                 and hasattr(self.listener, "ripresa_muto"):
             # In locale le casse sono qui: la voce di Calliope e i suoni non sono una ripresa
@@ -1219,6 +1223,15 @@ class Ciclo:
             # prima, ma il livello si ferma a "familiare" (vedi current_level)
             name, how = best, "conversazione"
             speaker_ctx.from_session = True
+        elif t.voiced_s < cfg.speaker_min_voice_s and self._per_continuita(best, sim, sim2):
+            # Frase cortissima fuori dalla conversazione (08/10): il punteggio sotto ~1 s non
+            # è affidabile, ma su questo satellite la stessa persona è stata riconosciuta dalla
+            # voce da poco e il migliore è lei, con un margine netto. Vale lei «per
+            # continuità», come la zona grigia: al più familiare, niente conferma breve, le
+            # azioni che vogliono la voce chiedono la frase di sfida
+            name, how = best, "conversazione"
+            speaker_ctx.from_session = True
+            t.continuita = True
         else:
             name, how = None, None
             speaker_ctx.from_session = False
@@ -1240,6 +1253,7 @@ class Ciclo:
             name, how = protetto, "conversazione"
             speaker_ctx.from_session = True
             speaker_ctx.identified_by = how
+            t.continuita = False
         elif how == "voce" and name:
             vicino = self._minore_vicino(name, sim, classifica)
             if vicino is not None:
@@ -1253,6 +1267,33 @@ class Ciclo:
                 speaker_ctx.from_session = True
                 speaker_ctx.identified_by = how
         return name, how, sim, best
+
+    def _per_continuita(self, best, sim: float, sim2) -> bool:
+        """Regola `voce_continuita` (08/10, riguarda l'audio: principio 10). Una frase più corta
+        di `speaker_min_voice_s` vale `best` se su questo satellite `best` è stato riconosciuto
+        dalla voce negli ultimi `speaker_continuita_s` secondi, con almeno
+        `speaker_continuita_soglia` e `speaker_continuita_margine` sul secondo profilo. Mai
+        senza la persona appena riconosciuta qui: un ospite resta un ospite."""
+        cfg = self.s.cfg
+        finestra = float(getattr(cfg, "speaker_continuita_s", 0.0) or 0.0)
+        recente = self._voce_recente
+        if finestra <= 0 or best is None or recente is None or recente[0] != best:
+            return False
+        if time.monotonic() - recente[1] > finestra:
+            return False
+        if sim < float(getattr(cfg, "speaker_continuita_soglia", 0.36)):
+            return False
+        return sim2 is None or sim - sim2 >= float(getattr(cfg, "speaker_continuita_margine",
+                                                           0.20))
+
+    def _ricorda_voce(self, t, name, how):
+        """Chi è stato riconosciuto dalla voce su questo satellite (per la continuità). Una
+        frase lunga di nessun profilo, o di un'altra persona, la toglie: c'è un'altra voce."""
+        if how == "voce" and name and not getattr(self.speaker_ctx, "minore_vicino", None):
+            self._voce_recente = (name, time.monotonic())
+        elif (t.voiced_s >= self.s.cfg.speaker_min_voice_s and self._voce_recente is not None
+              and name != self._voce_recente[0]):
+            self._voce_recente = None
 
     def _minore_vicino(self, name, sim, classifica) -> str | None:
         """Il minore con un punteggio a meno di `minori_margine_amministra` da chi amministra
@@ -1285,10 +1326,15 @@ class Ciclo:
         # conferma un'azione di chi amministra (07/10)
         altro = bool(own is not None and best is not None and best != name and sim >= own)
         speaker_ctx.aggiorna_conversazione(name, how, t.in_session, own, altro)
+        self._ricorda_voce(t, name, how)
+        if t.continuita:
+            self.rule("voce_continuita")
         adapted = how == "voce" and registry.adapt(name, emb, sim)
         # Punteggio sempre in console: serve a tarare soglia e impronta (docs/test-vocale.md)
         note = {"breve": " frase breve, vale la conversazione",
                 "conversazione": " confermata dalla conversazione"}.get(how, "")
+        if t.continuita:
+            note = " frase breve, vale per continuità (riconosciuta qui da poco)"
         if how == "breve" and own is not None:
             note += (f" ({own:.2f}: può confermare)" if speaker_ctx.conferma_breve
                      else f" ({own:.2f})")
@@ -1300,7 +1346,7 @@ class Ciclo:
         speaker_ctx.current_speaker = name
         secondo, sim2 = getattr(t, "voce_secondo", (None, None))
         self.rec["voce"] = {"nome": name, "migliore": best, "punteggio": round(sim, 3),
-                            "modo": how, "voce_s": round(t.voiced_s, 2), "aggiornata": adapted,
+                            "modo": "continuita" if t.continuita else how, "voce_s": round(t.voiced_s, 2), "aggiornata": adapted,
                             # Il secondo profilo e la distanza dal primo (07/10): per tarare
                             # `speaker_id_margine` e `minori_margine_amministra` sui turni veri
                             **({"secondo": secondo, "secondo_punteggio": round(sim2, 3),
@@ -1335,7 +1381,7 @@ class Ciclo:
         # Chi amministra con un minore vicino (07/10): la voce lo ha riconosciuto (sopra il
         # margine), quindi la sua conversazione; i permessi restano da familiare
         how = ("voce" if getattr(self.speaker_ctx, "minore_vicino", None)
-               else self.speaker_ctx.identified_by)
+               else "continuita" if t.continuita else self.speaker_ctx.identified_by)
         if not self.corsia.turno(self.brain, t.speaker_name, how,
                                  t.in_session, t.text, self.rec, t.scritto,
                                  persona_id=self._persona_id(t.speaker_name),
