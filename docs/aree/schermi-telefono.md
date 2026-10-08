@@ -448,3 +448,15 @@ risultato del lavoro appena annunciato (che non sta in quell'archivio).
   `prova_risultati.py`: un documento non consegnato in questa conversazione (rifiutato come
   prima), un'altra persona (niente scheda di chi ha chiesto il lavoro); con la voce riconosciuta il
   risultato più recente, senza la regola.
+
+## La scheda dello sviluppo (08/10, ramo `modalita-sviluppo`)
+
+La modalità sviluppo ([agenti-estensioni](agenti-estensioni.md#modalità-sviluppo-0810-ramo-modalita-sviluppo))
+ha una scheda per sviluppo sugli schermi personali di chi amministra, chiave `sviluppo:<id>` (si
+aggiorna al suo posto): nessun JavaScript nuovo nella pagina, è `schede.documento_markdown` con il
+lettore Markdown e «Scarica» che ci sono già (`Sviluppi.scheda`, `testo_scheda`). Dentro: le fasi
+(fatta, **adesso**, manca), la specifica, i collaudi con dati, esito e ora, la revisione (permessi,
+analisi, test, prove, e il diff in un blocco `diff`), cosa si può dire. Si manda a ogni passo dei
+tool `sviluppo` e `sviluppo_prova` (`hub.mittente`) e a lavoro finito (`lav.on_scheda`); durante lo
+sviluppo resta anche la scheda del lavoro in diretta. Il testo dei collaudi viene dall'estensione:
+il lettore usa `textContent`, mai `innerHTML`.

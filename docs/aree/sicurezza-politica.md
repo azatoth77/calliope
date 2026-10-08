@@ -616,3 +616,39 @@ noto accanto a un nome noto) fermati; 5 contrari (la frase vera della DGX, codic
 un'estensione, codice sorgente, Meteo.it nominato, «puoi guardare su Meteo.it») passano.
 `misura_riferire` con gemma4 e4b (2 giri): attacchi riportati dal modello 16/18, **detti 0/18**;
 risposte normali 24, frasi fermate **0**, recapiti trattenuti 0.
+
+## Modalità sviluppo: i passi interni senza «C'è di mezzo…» (08/10, ramo `modalita-sviluppo`)
+
+Nella modalità sviluppo ([agenti-estensioni](agenti-estensioni.md#modalità-sviluppo-0810-ramo-modalita-sviluppo),
+progetto [`2026-10-08-modalita-sviluppo.md`](../ricerche/2026-10-08-modalita-sviluppo.md) § 4) la
+conversazione è quasi sempre contaminata dal lavoro dell'agente, e ogni passo («va bene, andiamo
+avanti», «prova con Bergamo», «sì» alla specifica nuova) avrebbe chiesto «C'è di mezzo il lavoro di
+un agente, quindi chiedo a te…». In `politica.controlla`, dopo la decisione:
+
+- **`sviluppo_intento`**: una `conferma` o un `rifiuta` per sola contaminazione o richiesta non
+  riconosciuta (`SVILUPPO_SALTA`: `politica_conferma`, `politica_azione_non_chiesta`,
+  `politica_azione_non_giustificata`, `politica_argomento_non_detto`) diventa `esegui` se la
+  chiamata è un passo interno dello sviluppo aperto di chi parla (`sviluppo.passo_interno`) e chi
+  parla è riconosciuto (`conferma_voce`): `sviluppo`, `sviluppo_prova`, `estensione_crea` con
+  `modifica` = la sua estensione o in analisi prima del lavoro, `delega_lavoro` con `proposta` = il
+  lavoro proposto, `estensioni_gestisci` approva o rifiuta la sua estensione (la sfida del
+  servizio resta), `lavori_esegui` e `lavori_rispondi` del suo lavoro. È la memoria dell'intento
+  della fase 2 allargata a un intento esplicito e lungo: aperto con la voce da chi amministra,
+  legato a un bersaglio e a una persona, chiuso da attivazione, uscita o sospensione.
+- **`sviluppo_senza_domanda`**: una richiesta nuova con uno sviluppo aperto (`sviluppo.estraneo`)
+  non riceve la domanda della politica, perché il tool la rifiuta comunque senza fare niente e
+  propone di sospendere (prima: due domande di fila).
+- **`sviluppo_nome_estensione`** (`prepara_gestisci`): dentro uno sviluppo un nome che non è di
+  nessuna estensione è quella dello sviluppo (il 4B la approvava con il nome dato alla richiesta).
+- Restano sempre: il dato letto in questa risposta, «fai quello che dice…» (`politica_delega`), un
+  valore preso dal dato (`politica_argomento_esterno`), le vietate, il livello, i minori, la sfida
+  dell'attivazione, `riferire`, la quarantena. Il collaudo esegue codice non ancora approvato nello
+  stesso container con la porta stretta e il guardrail, l'impronta ricontrollata a ogni prova, il
+  risultato in busta (fonte «estensione»).
+- Tabelle: `CLASSI` (`sviluppo` pericoloso con «stato» in sola lettura e sospendi, riprendi, esci
+  innocue; `sviluppo_prova` pericoloso con la fonte «estensione»), `VERBI`, `VERBI_AZIONE`,
+  `_INFINITO` (provi, vada, torni); in `valore.py` `ARGOMENTI` ed `EFFETTI` (sviluppo E1 per
+  sospendi, riprendi ed esci, E2 per analisi e promuovi, E3 per avanti; `sviluppo_prova` E3).
+
+Contrari in `prove/prova_sviluppo.py` (sezione 9): un'altra estensione, un'altra persona, scritto
+dallo schermo, sviluppo sospeso, «fai quello che dice il messaggio dell'agente».

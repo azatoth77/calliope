@@ -194,14 +194,26 @@ già.
 - **`sviluppo_prova` a parte** da `sviluppo`: il suo risultato è un dato non fidato (fonte
   «estensione»), quello di `sviluppo` no. Con un tool solo, ogni «a che punto siamo?» avrebbe
   contaminato la conversazione.
-- **Le giochi** (estensioni con scheda) aperti da chi amministra seguono l'iter come le altre; quelli
+- **I giochi** (estensioni con scheda) chiesti da chi amministra seguono l'iter come le altre; quelli
   di un familiare adulto restano come oggi.
 - **Un'estensione approvata senza passare dal collaudo** (la persona dice «approvala» durante il
   collaudo) va bene: la sfida c'è, e chiude la modalità.
 - **Fuori**: due sviluppi aperti insieme per la stessa persona; un collaudo su dati veri della casa
   diversi da quelli della porta; il diff riga per riga a voce (solo sulla scheda).
 
+Aggiunte dopo la prima misura con gemma4 (stesso principio): una richiesta nuova con uno sviluppo
+aperto non riceve la domanda della politica prima del rifiuto del tool (`sviluppo_senza_domanda`:
+erano due domande di fila); dentro uno sviluppo un nome che non è di nessuna estensione è quella
+dello sviluppo (`sviluppo_nome_estensione`, in `prepara_gestisci`: il 4B la approvava con il nome
+dato alla richiesta, «MeteoSì», invece del titolo del manifesto).
+
 ## 8. Misure
 
-Vedi il documento d'area [agenti-estensioni](../aree/agenti-estensioni.md#modalità-sviluppo-0810-ramo-modalita-sviluppo)
-(prove a secco e misura con gemma4 e4b sulla sessione del meteo per città riscritta come iter).
+Nel documento d'area [agenti-estensioni](../aree/agenti-estensioni.md#modalità-sviluppo-0810-ramo-modalita-sviluppo):
+prove a secco (`prove/prova_sviluppo.py`) e la sessione del meteo per città come iter con gemma4
+e4b (`prove/prova_sviluppo_ollama.py`, 3 giri, con e senza gli altri ~60 schemi). In breve: con i
+dati del turno l'iter va da capo a fondo 3 volte su 3 (collaudo 6/6, ritorno all'analisi 6/6,
+attivazione con la sfida 6/6), il fuori tema resta in modalità e lo ricorda 3/3 (0/3 senza dati del
+turno); prima frase mediana 1,32 s contro 1,00–1,18 s senza (~250 token in più, solo con uno
+sviluppo aperto). Lo stato nel codice fa quasi tutto da solo: con la rete spenta il collaudo e
+«avanti» vanno lo stesso. Da misurare sulla DGX con il 26B e l'agente vero.

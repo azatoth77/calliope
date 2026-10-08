@@ -44,6 +44,7 @@ calliope/                 # package: python -m calliope
 │   ├── casa.py           # casa_comando, casa_stato, casa_integrazione
 │   ├── schermi.py        # schermo_mostra, schermo_gestisci
 │   ├── agenti.py         # delega_lavoro, lavori_stato, lavori_annulla
+│   ├── sviluppo.py       # sviluppo, sviluppo_prova (modalità sviluppo, 08/10)
 │   └── stato.py          # calliope_stato, installa_proponi, installa_avvia, installa_gestisci
 ├── pc/                   # capacità dei PC: PCExecutor (base.py), LocalWindowsExecutor (windows.py)
 ├── documenti/            # Word, Excel, PDF: formato.py (JSON e validazione), scrittore.py
@@ -217,6 +218,8 @@ controllo nelle prove a secco), ma tocca tutti i tool e le prove con Ollama che 
 | `delega_lavoro` | familiare (il codice: solo chi amministra, `agenti_livello_codice`, riconosciuto dalla voce nella frase) | azione | affida a un agente in secondo piano un lavoro lungo il cui risultato è un programma o un file complesso: `tipo` codice, documento (anche da un `modello`), ricerca, altro; `compito` con i dati detti. I lavori costosi chiudono con «Procedo?» (azione in sospeso) e partono solo con `proposta` = l'id del lavoro, nella risposta dopo, della stessa persona; `risposta_finale` |
 | `lavori_stato` | familiare | lettura | a che punto sono i lavori (passo dell'agente, coda, ultimo finito) |
 | `lavori_annulla` | familiare (gli altrui solo chi amministra) | azione | ferma il lavoro in corso o in coda, subito (stream chiuso, sandbox fermata) |
+| `sviluppo` | familiare (il codice: solo chi amministra) | azione | la modalità sviluppo (08/10, `calliope/sviluppo.py`): stato, avanti, analisi (con `cambia`), sospendi, riprendi (`quale`), esci, promuovi; le fasi le cambia il codice |
+| `sviluppo_prova` | familiare (il codice: solo chi amministra) | azione, risultato non fidato | il collaudo: la versione candidata dell'estensione provata prima dell'approvazione nel suo container, o il programma eseguito di nuovo |
 
 I tool `pc_*` ci sono solo se il PC c'è (`calliope.pc.load_pc`: Windows e librerie
 presenti), e ciascuno solo se il PC ha quella capacità. «Proprietario» è un controllo nel
