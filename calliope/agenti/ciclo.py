@@ -1481,7 +1481,7 @@ class Agente:
     # ── sonde (08/10 notte, calliope/sonde.py) ──
     def _sviluppo_di(self, lav: Lavoro):
         """(Sviluppi, lo sviluppo del lavoro o None, l'archivio delle estensioni o None)."""
-        svs = self.sviluppi
+        svs = getattr(self, "sviluppi", None)
         if svs is None:
             return None, None, None
         try:

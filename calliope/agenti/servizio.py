@@ -1193,7 +1193,7 @@ class Lavori:
             errore = controlla_consegna(sandbox, nomi_presi=presi, nome_atteso=atteso)
             if errore:
                 return errore
-            svs = self.sviluppi
+            svs = getattr(self, "sviluppi", None)
             if svs is None or getattr(lav, "ricollaudo_fatto", False):
                 return None
             try:
