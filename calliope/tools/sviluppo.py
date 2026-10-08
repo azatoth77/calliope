@@ -38,7 +38,8 @@ import re
 from .spec import ToolContext, ToolSpec, note_rule
 from ..testi import FAMILY, NIENTE
 
-AZIONI = ["stato", "avanti", "analisi", "sospendi", "riprendi", "chiudi", "promuovi"]
+AZIONI = ["stato", "avanti", "analisi", "rifai", "ferma", "sospendi", "riprendi", "chiudi",
+          "promuovi"]
 TIPI_APRI = ["estensione", "programma"]
 
 
@@ -241,13 +242,22 @@ def _sviluppo(ctx: ToolContext, azione: str = "stato", quale: str = "", cambia: 
     azione = str(azione or "stato").strip().lower()
     azione = {"continua": "avanti", "prosegui": "avanti", "procedi": "avanti",
               "cambia": "analisi", "modifica": "analisi", "esci": "chiudi", "basta": "chiudi",
-              "pausa": "sospendi", "riapri": "riprendi"}.get(azione, azione)
+              "pausa": "sospendi", "riapri": "riprendi", "stop": "ferma", "blocca": "ferma",
+              "interrompi": "ferma", "fermalo": "ferma", "rifallo": "rifai",
+              "rifare": "rifai", "riprova": "rifai", "ricomincia": "rifai"}.get(azione, azione)
     persona = chi(ctx)
     if azione == "riprendi":
         return _riprendi(ctx, svs, persona, quale)
     sv = svs.corrente(persona)
     if azione == "stato":
         return _stato(ctx, svs, sv, persona)
+    if azione == "ferma" and sv is None:
+        # «Sospendi» e poi «no, fermalo» (DGX, 08/10 19:07): lo sviluppo è già sospeso, il
+        # lavoro dell'agente va ancora
+        al_lavoro = [s for s in svs.trova(persona, quale)
+                     if svs.lavoro_attivo(s) or _in_tappa(svs, s) is not None]
+        if al_lavoro:
+            return _ferma(ctx, svs, al_lavoro[0], prof)
     if sv is None:
         sospesi = svs.trova(persona, quale)
         if sospesi:
@@ -262,12 +272,25 @@ def _sviluppo(ctx: ToolContext, azione: str = "stato", quale: str = "", cambia: 
     if azione == "sospendi":
         svs.sospendi(sv)
         note_rule(ctx, "sviluppo_sospeso")
-        extra = (" L'agente intanto finisce il suo lavoro: te lo dico quando è pronto."
-                 if svs.lavoro_attivo(sv) else "")
         _schermo(ctx, sv)
-        return _final(f"D'accordo: sospendo lo sviluppo di «{sv.titolo}», eravamo "
-                      f"{_alla(sv)}. Quando vuoi, dimmi «riprendiamo lo sviluppo».{extra}",
-                      fatto="sviluppo sospeso")
+        frase = (f"D'accordo: sospendo lo sviluppo di «{sv.titolo}», eravamo {_alla(sv)}. "
+                 "Quando vuoi, dimmi «riprendiamo lo sviluppo».")
+        if svs.lavoro_attivo(sv):
+            # Con l'agente al lavoro una pausa lascia finire il lavoro: lo si dice, e il «sì»
+            # alla domanda lo ferma (DGX, 08/10 19:06: «Fermo lo sviluppo» → sospeso, e «Ti ho
+            # detto di stopparlo, non deve più continuare»)
+            domanda = "Vuoi che fermi anche il lavoro dell'agente?"
+            return _final(f"{frase} L'agente intanto finisce il suo lavoro e te lo dico quando "
+                          f"è pronto. {domanda}",
+                          fatto="sviluppo sospeso; il lavoro dell'agente CONTINUA",
+                          in_sospeso={"domanda": domanda,
+                                      "cosa": f"fermare il lavoro dell'agente su «{sv.titolo}»",
+                                      "tool": "sviluppo_passo", "argomenti": {"azione": "ferma"}})
+        return _final(frase, fatto="sviluppo sospeso")
+    if azione == "ferma":
+        return _ferma(ctx, svs, sv, prof)
+    if azione == "rifai":
+        return _rifai(ctx, svs, sv, prof)
     if azione == "chiudi":
         return _chiudi(ctx, svs, sv)
     if azione == "analisi":
@@ -298,9 +321,14 @@ def _chiudi(ctx, svs, sv) -> dict:
         svs.sospendi(sv, "chiesto di chiudere con l'agente al lavoro")
         note_rule(ctx, "sviluppo_chiudi_sospende")
         _schermo(ctx, sv)
+        domanda = "Vuoi che fermi anche il lavoro dell'agente?"
         return _final(f"L'agente sta ancora lavorando a «{sv.titolo}»: invece di chiudere, "
-                      "sospendo lo sviluppo. Quando il lavoro è pronto lo riapro al collaudo.",
-                      fatto="sviluppo SOSPESO, non chiuso: c'è un lavoro dell'agente in corso")
+                      "sospendo lo sviluppo. Quando il lavoro è pronto lo riapro al collaudo. "
+                      + domanda,
+                      fatto="sviluppo SOSPESO, non chiuso: c'è un lavoro dell'agente in corso",
+                      in_sospeso={"domanda": domanda,
+                                  "cosa": f"fermare il lavoro dell'agente su «{sv.titolo}»",
+                                  "tool": "sviluppo_passo", "argomenti": {"azione": "ferma"}})
     from ..sviluppo import CHIUSURA_TURNI
     turno = int(getattr(ctx, "turno", 0) or 0)
     chiesta = sv.chiusura_chiesta
@@ -330,6 +358,107 @@ def _chiudi(ctx, svs, sv) -> dict:
                               "tool": "sviluppo_passo", "argomenti": {"azione": "chiudi"}})
 
 
+def _rifaccio(sv) -> str:
+    """La domanda dopo un lavoro fermato o non andato (nessun lavoro in corso)."""
+    if sv.nota in ("annullato", "fermato"):
+        return ("Il lavoro dell'agente l'hai fermato tu: lo rifaccio così com'è, o vuoi cambiare "
+                "qualcosa?")
+    return "Il lavoro dell'agente non è andato: lo rifaccio così com'è, o vuoi cambiare qualcosa?"
+
+
+def _rifaccio_sospeso(sv) -> dict:
+    """L'azione in sospeso di quella domanda (08/10 sera, DGX delle 20:05: «Sì, rifallo» →
+    `analisi` senza modifica → «cosa vuoi cambiare?», poi la specifica riletta e un altro «va
+    bene così»; l'azione in sospeso diceva «azione = analisi, cambia vuota per rifarlo così», che
+    l'analisi non sapeva fare). Il «sì» va a `rifai`, che riparte subito con la stessa
+    specifica; una modifica detta va all'analisi."""
+    return {"domanda": "Lo rifaccio così com'è?",
+            "cosa": f"rifare il lavoro di «{sv.titolo}» con la stessa specifica",
+            "tool": "sviluppo_passo",
+            "argomenti": "azione = rifai (sì, rifallo così com'è: riparte subito con la stessa "
+                         "specifica); se dice cosa cambiare, azione = analisi e cambia = la "
+                         "modifica come detta"}
+
+
+def _ferma(ctx, svs, sv, prof) -> dict:
+    """«Ferma lo sviluppo», «stoppalo», «bloccalo» con l'agente al lavoro (08/10 sera, DGX delle
+    19:06: «Fermo lo sviluppo» → sospendi, «l'agente intanto finisce il suo lavoro», e Dario «Ti
+    ho detto di stopparlo, di fermarlo, non deve più continuare»): il lavoro dell'agente si
+    ferma, lo sviluppo resta (aperto o sospeso com'era) senza lavoro, pronto per «rifallo» o
+    per tornare all'analisi. Senza un lavoro in corso è una pausa: lo sviluppo si sospende.
+    Quale azione sia («ferma» o «sospendi») lo sceglie il modello (principio 10)."""
+    svc = getattr(ctx, "lavori", None)
+    lav = svs._lavoro(sv.lavoro)
+    al_lavoro = lav is not None and getattr(lav, "stato", "") in ("in_coda", "in_corso",
+                                                                    "in_attesa")
+    if not al_lavoro or svc is None:
+        if sv.stato == "aperta":
+            svs.sospendi(sv, "fermato senza lavoro in corso")
+        note_rule(ctx, "sviluppo_sospeso")
+        _schermo(ctx, sv)
+        return _final(f"L'agente non sta lavorando a «{sv.titolo}»: ho sospeso lo sviluppo, "
+                      f"eravamo {_alla(sv)}. Quando vuoi, dimmi «riprendiamo lo sviluppo».",
+                      fatto="nessun lavoro da fermare: sviluppo sospeso")
+    res = svc.annulla(prof.id, tutti_di_tutti=True, quale=sv.lavoro)
+    if not res.get("ok"):
+        return _final(str(res.get("frase") or "Non sono riuscita a fermare il lavoro."),
+                      ok=False, fatto=NIENTE)
+    with svs._lock:
+        sv.lavoro, sv.nota = None, "annullato"
+    svs.tocca(sv)
+    note_rule(ctx, "sviluppo_fermato")
+    _schermo(ctx, sv)
+    dove = ("Lo sviluppo resta sospeso" if sv.stato == "sospesa"
+            else f"Lo sviluppo resta aperto, {_alla(sv)}")
+    return _final(f"Ho fermato il lavoro dell'agente su «{sv.titolo}»: non continua. {dove}: "
+                  "quando vuoi lo rifaccio così com'è, o cambiamo qualcosa.",
+                  fatto="lavoro dell'agente FERMATO", lavoro=getattr(lav, "id", None))
+
+
+def _rifai(ctx, svs, sv, prof) -> dict:
+    """«Sì, rifallo» dopo un lavoro fermato o non andato: un lavoro nuovo uguale all'ultimo
+    dello sviluppo (stessa specifica, stessi vincoli e file di partenza), avviato subito: la
+    specifica la persona l'aveva già accettata. Senza l'ultimo lavoro in memoria (un riavvio),
+    il lavoro nuovo dalla specifica dello sviluppo."""
+    from . import agenti as ta
+    svc = getattr(ctx, "lavori", None)
+    if svc is None:
+        return _no(ctx, "Qui non ci sono agenti.")
+    if svs.lavoro_attivo(sv) or _in_tappa(svs, sv) is not None:
+        return _stato(ctx, svs, sv, sv.persona)
+    if sv.fase == "analisi":
+        return _avanti(ctx, svs, sv, prof)
+    if sv.fase != "sviluppo":
+        return _no(ctx, f"Non c'è un lavoro da rifare: siamo {_alla(sv)}. Se qualcosa non va, "
+                        "lo faccio correggere.")
+    note_rule(ctx, "sviluppo_rifai")
+    ultimo = None
+    for voce in reversed(sv.lavori or []):
+        lv = svs._lavoro(voce.get("id"))
+        if lv is not None and svs._stesso_tipo(sv, lv):
+            ultimo = lv
+            break
+    if ultimo is None:
+        out = _nuovo_lavoro(ctx, svs, sv, prof, sv.specifica or sv.richiesta, avvia=True)
+        _schermo(ctx, sv)
+        return out
+    lav = svc.nuovo(ultimo.tipo, ultimo.compito, prof.id, prof.name, "amministra",
+                    getattr(ultimo, "formato", "") or "", getattr(ultimo, "modello", "") or "",
+                    getattr(ultimo, "vincoli", "") or "",
+                    list(getattr(ultimo, "dati", None) or []))
+    for k in ("titolo", "estensione", "gioco", "specifica", "correzione"):
+        if getattr(ultimo, k, None) is not None:
+            setattr(lav, k, getattr(ultimo, k))
+    lav.file_iniziali = dict(getattr(ultimo, "file_iniziali", None) or {})
+    out = ta._avvia(ctx, svc, lav)
+    if isinstance(out, dict):
+        frase = (f"D'accordo: rifaccio il lavoro di «{sv.titolo}» con la stessa specifica. Ci "
+                 "lavora in secondo piano: te lo dico quando è pronto.")
+        out["conferma"] = out["risposta_finale"] = frase
+    _schermo(ctx, sv)
+    return out
+
+
 def _alla(sv) -> str:
     from ..sviluppo import ALLA
     return ALLA.get(sv.fase, sv.fase)
@@ -357,7 +486,10 @@ def _stato(ctx, svs, sv, persona) -> dict:
     if sv.fase == "sviluppo" and lav is not None and lav.stato in ("in_coda", "in_corso"):
         frase += f" L'agente {getattr(lav, 'passo', 'lavora')}, al passo {lav.passi + 1}."
     elif sv.fase == "sviluppo" and sv.nota:
-        frase += " Il lavoro dell'agente non è andato: vuoi cambiare qualcosa o lo rifaccio?"
+        frase += " " + _rifaccio(sv)
+        _schermo(ctx, sv)
+        return _final(frase, fatto="stato dello sviluppo: nessun lavoro in corso",
+                      sviluppo=sv.id, in_sospeso=_rifaccio_sospeso(sv))
     elif sv.fase == "collaudo":
         n = len(sv.collaudi)
         frase += (f" Hai fatto {'una prova' if n == 1 else f'{n} prove'}." if n else
@@ -388,6 +520,10 @@ def _riprendi(ctx, svs, persona, quale: str) -> dict:
         frase += " Vuoi andare avanti?"
         extra["in_sospeso"] = {"domanda": "Vuoi andare avanti?", "cosa": "andare avanti",
                                "tool": "sviluppo_passo", "argomenti": {"azione": "avanti"}}
+    elif sv.fase == "sviluppo" and sv.nota and not svs.lavoro_attivo(sv):
+        # DGX, 08/10 20:04: ripreso dopo il lavoro fermato, «siamo allo sviluppo» e basta
+        frase += " " + _rifaccio(sv)
+        extra["in_sospeso"] = _rifaccio_sospeso(sv)
     elif sv.fase == "analisi" and sv.specifica:
         frase += " Vuoi che affidi all'agente la specifica di prima?"
         extra["in_sospeso"] = {"domanda": "Vuoi che la affidi all'agente?",
@@ -576,13 +712,7 @@ def _avanti(ctx, svs, sv, prof) -> dict:
                               lavoro=tappa.id)
         if svs.lavoro_attivo(sv):
             return _stato(ctx, svs, sv, sv.persona)
-        frase = ("Il lavoro dell'agente non è andato: vuoi cambiare qualcosa, o lo rifaccio "
-                 "così?")
-        return _final(frase, ok=False, fatto=NIENTE,
-                      in_sospeso={"domanda": frase, "cosa": "rifare il lavoro",
-                                  "tool": "sviluppo_passo",
-                                  "argomenti": "azione = analisi, cambia = la modifica detta "
-                                               "(vuota per rifarlo così)"})
+        return _final(_rifaccio(sv), ok=False, fatto=NIENTE, in_sospeso=_rifaccio_sospeso(sv))
     if sv.fase == "collaudo":
         return _revisione(ctx, svs, sv)
     if sv.fase in ("revisione", "attivazione"):
@@ -795,6 +925,136 @@ def _fallito(out, ris) -> bool:
     return False
 
 
+def _collauda_estensione(ctx, svs, sv, est, passati: dict, detti: str):
+    """Un collaudo della versione candidata con questi argomenti: (risultato per il modello,
+    fallito, rifiutato prima di partire). Un collaudo partito resta nello sviluppo con la sua
+    traccia di rete (08/10: per l'agente, mai alla voce)."""
+    from ..estensioni.servizio import CHIAVE_TRACCIA
+    out = est.prova_candidata(ctx, sv.estensione, passati)
+    traccia = out.pop(CHIAVE_TRACCIA, None) if isinstance(out, dict) else None
+    ris = (out or {}).get("risultati") if isinstance(out, dict) else None
+    if isinstance(out, dict) and ris is None and not out.get("errore"):
+        return out, False, True
+    esito = (ris.get("da_dire") if isinstance(ris, dict) and ris.get("da_dire")
+             else json.dumps(ris, ensure_ascii=False) if ris is not None
+             else str((out or {}).get("errore") or (out or {}).get("conferma") or ""))
+    fallito = _fallito(out, ris)
+    svs.collaudo(sv, detti, not fallito, esito, rete=traccia, argomenti=passati)
+    return out, fallito, False
+
+
+# Più valori da provare detti insieme (08/10 sera, DGX delle 20:10, con nomi di fantasia: «prova
+# con Borgoverde Maggiore e Pratofiorito» → UNA chiamata con argomenti = {"citta": "Borgoverde
+# Maggiore"} e dati = «Borgoverde Maggiore e Pratofiorito», e la voce: «per Pratofiorito non ho
+# ancora ricevuto i dati»). Il
+# separatore: virgola, punto e virgola, «e», «ed», «e poi», «poi», «oppure»; davanti a un valore
+# si tolgono «con», «a», «anche», «poi»
+_SEP_VALORI = re.compile(r"\s*(?:[,;]|\s(?:e\s+poi|poi|ed|e|oppure)\s)\s*", re.I)
+_DAVANTI = re.compile(r"^(?:(?:e|ed|poi|anche|invece|pure)\s+)*(?:(?:con|a|ad|per)\s+(?=\D))?",
+                      re.I)
+
+
+def valori_elenco(dati) -> list[str]:
+    """I valori di un elenco detto («A e B», «A, B e C», «con A e poi con B»); [] se non è un
+    elenco: meno di due valori, più di quattro, un valore che comincia con un numero
+    («Pratofiorito, 3 giorni», «3 e 5») o lungo più di sei parole."""
+    s = re.sub(r"\s+", " ", str(dati or "")).strip().strip(".")
+    s = _DAVANTI.sub("", s)
+    voci = [_DAVANTI.sub("", v.strip()).strip(" .") for v in _SEP_VALORI.split(" " + s + " ")]
+    voci = [v for v in voci if v]
+    if not 2 <= len(voci) <= 4:
+        return []
+    if any(v[0].isdigit() or not re.search(r"[^\W\d_]{2,}", v) or len(v.split()) > 6
+           for v in voci):
+        return []
+    return voci
+
+
+def piu_valori(m: dict, argomenti, dati, passati: dict) -> list[tuple[str, dict]] | None:
+    """Un collaudo per valore, quando il modello ha già separato i valori: `dati` è un elenco
+    («A e B») e `argomenti` ha per il primo input UNO solo di quei valori. Correzione della forma
+    di una scelta del modello (principio 10, regola `collaudo_piu_valori`): solo così, perché
+    «A e B» da solo può essere un nome solo (un comune «Bosco e Prato»): se il modello passa
+    l'elenco intero, o solo `dati`, resta un collaudo con quello che ha scelto. Gli altri input
+    (i giorni) valgono per tutti, salvo un valore che li dice da sé («B per 3 giorni»).
+    [(valore detto, argomenti), …] o None."""
+    if not isinstance(argomenti, dict) or not isinstance(dati, str) or not passati:
+        return None
+    schema = ((m or {}).get("input") or {})
+    props = list(schema.get("properties") or {})
+    req = list(schema.get("required") or [])
+    if not props:
+        return None
+    primo = req[0] if req else props[0]
+    val = passati.get(primo)
+    if not isinstance(val, str) or not val.strip():
+        return None
+    voci = valori_elenco(dati)
+    if not voci:
+        return None
+    from ..estensioni.servizio import _norm_testo
+    n_val = _norm_testo(val)
+    if n_val == _norm_testo(dati):
+        return None
+    lette = [(v, _argomenti(m, v)) for v in voci]
+    uguali = [i for i, (v, a) in enumerate(lette)
+              if n_val in (_norm_testo(v), _norm_testo(str(a.get(primo) or "")))]
+    if len(uguali) != 1:
+        return None
+    out = []
+    for i, (v, a) in enumerate(lette):
+        if i == uguali[0]:
+            out.append((v, dict(passati)))
+        else:
+            out.append((v, {**passati, **{k: x for k, x in a.items() if x not in ("", None)}}))
+    return out
+
+
+def _piu_collaudi(ctx, svs, sv, est, valori: list[tuple[str, dict]]) -> dict:
+    """I collaudi di più valori detti insieme, uno dopo l'altro: ognuno resta nello sviluppo
+    come un collaudo a sé (con la sua traccia), il modello riceve i risultati in fila."""
+    note_rule(ctx, "collaudo_piu_valori")
+    fatti, falliti = [], []
+    primo_out = None
+    for detto, args in valori:
+        out, fallito, prima = _collauda_estensione(ctx, svs, sv, est, args, detto)
+        if prima:
+            if not fatti:
+                return out                   # il primo non è partito: nessuno parte
+            fatti.append({"provato": detto, "partito": False,
+                          "nota": str((out or {}).get("conferma") or (out or {}).get("fatto")
+                                      or "non partito")})
+            continue
+        primo_out = primo_out or out
+        voce = {"provato": detto, "argomenti_passati": args, "riuscito": not fallito}
+        if isinstance(out, dict) and out.get("risultati") is not None:
+            voce["risultati"] = out["risultati"]
+        else:
+            voce["errore"] = "si è fermata con un errore: i dettagli sono sulla scheda"
+        if fallito:
+            falliti.append(detto)
+            note_rule(ctx, "sviluppo_collaudo_fallito")
+        fatti.append(voce)
+    note_rule(ctx, "sviluppo_collauda")
+    _schermo(ctx, sv)
+    n = est.archivio.candidata(sv.estensione)
+    res = {"ok": True, "estensione": (primo_out or {}).get("estensione") or sv.titolo,
+           "collaudi": fatti,
+           "collaudo": (f"{len(fatti)} prove della versione {n}, NON ancora approvata né attiva, "
+                        "una per valore detto: di' in breve il risultato di OGNUNA")}
+    if isinstance(primo_out, dict) and primo_out.get("avviso"):
+        res["avviso"] = primo_out["avviso"]
+    if falliti:
+        cosa = ", ".join(f"«{x}»" for x in falliti)
+        res["cosa_fare"] = (f"per {cosa} di' che la prova si è fermata con un errore (i dettagli "
+                            "sono sulla scheda) e chiedi «Lo faccio correggere?»")
+        res["in_sospeso"] = {"domanda": "Lo faccio correggere?", "tool": "sviluppo_correggi",
+                             "cosa": f"far correggere «{sv.titolo}» all'agente",
+                             "argomenti": {"problema": f"il collaudo con {cosa} si ferma con "
+                                                       "un errore"}}
+    return res
+
+
 def _sviluppo_prova(ctx: ToolContext, dati: str = "", argomenti=None, **_altro) -> dict:
     from ..sviluppo import chi
     svs = _svs(ctx)
@@ -832,32 +1092,21 @@ def _sviluppo_prova(ctx: ToolContext, dati: str = "", argomenti=None, **_altro) 
         passati = _argomenti(m, argomenti if argomenti is not None else dati)
         if argomenti is None and len(passati) > 1:
             note_rule(ctx, "collaudo_input_dal_testo")
-        out = est.prova_candidata(ctx, sv.estensione, passati)
-        # La traccia di rete (08/10): per l'agente (collaudi dello sviluppo), mai alla voce
-        from ..estensioni.servizio import CHIAVE_TRACCIA
-        traccia = out.pop(CHIAVE_TRACCIA, None) if isinstance(out, dict) else None
-        ok = isinstance(out, dict) and out.get("risultati") is not None
-        ris = (out or {}).get("risultati") if ok else None
-        esito = (ris.get("da_dire") if isinstance(ris, dict) and ris.get("da_dire")
-                 else json.dumps(ris, ensure_ascii=False) if ris is not None
-                 else str((out or {}).get("errore") or (out or {}).get("conferma") or ""))
+        valori = piu_valori(m, argomenti, dati, passati)
+        if valori:
+            return _piu_collaudi(ctx, svs, sv, est, valori)
+        out, fallito, prima = _collauda_estensione(ctx, svs, sv, est, passati, detti)
+        if prima:
+            # Un rifiuto prima dell'esecuzione (file cambiati, contenitore spento, un gioco)
+            # non è un collaudo: si dice e basta
+            return out
     else:
-        traccia = None
         from . import agenti as ta
         lav_id = sv.lavoro if svs._lavoro(sv.lavoro) is not None else ""
         out = ta._lavori_esegui(ctx, lavoro=lav_id, dati=dati)
-        ok = bool((out or {}).get("ok"))
-        esito = str((out or {}).get("conferma") or "")
-    if sv.tipo == "estensione":
-        fallito = _fallito(out, (out or {}).get("risultati") if isinstance(out, dict) else None)
-        # Un rifiuto prima dell'esecuzione (file cambiati, contenitore spento, un gioco) non è
-        # un collaudo: si dice e basta
-        prima = isinstance(out, dict) and out.get("risultati") is None and not out.get("errore")
-        if prima:
-            return out
-    else:
-        fallito = not ok
-    svs.collaudo(sv, detti, not fallito, esito, rete=traccia, argomenti=passati)
+        fallito = not bool((out or {}).get("ok"))
+        svs.collaudo(sv, detti, not fallito, str((out or {}).get("conferma") or ""),
+                     argomenti=passati)
     note_rule(ctx, "sviluppo_collauda")
     _schermo(ctx, sv)
     if fallito:
@@ -1099,7 +1348,11 @@ def sviluppo_specs(file_pc: bool = False, allegati: bool = False) -> list[ToolSp
                          "che punto è); avanti (la fase dopo: «va bene, andiamo avanti», "
                          "«attivala»; a una tappa del lavoro, «continua»); analisi (si torna "
                          "all'analisi per cambiare cosa deve fare: cambia = la modifica come "
-                         "detta); sospendi; riprendi («riprendiamo lo sviluppo del meteo»: quale "
+                         "detta); rifai (dopo un lavoro fermato o non andato, «sì, rifallo», "
+                         "«riprova così com'è»: riparte subito con la stessa specifica); ferma "
+                         "(«ferma/stoppa/blocca lo sviluppo», «fermalo»: il lavoro dell'agente "
+                         "si ferma subito); sospendi (una pausa, «mettiamo in pausa»: un lavoro "
+                         "dell'agente in corso finisce); riprendi («riprendiamo lo sviluppo del meteo»: quale "
                          "= le parole del titolo); chiudi (chiede conferma); promuovi (un "
                          "programma diventa un'estensione). Cosa fare in ogni fase è nei dati "
                          "del turno."),
@@ -1112,7 +1365,9 @@ def sviluppo_specs(file_pc: bool = False, allegati: bool = False) -> list[ToolSp
             name="sviluppo_collauda",
             description=("Il collaudo nella modalità sviluppo: prova la versione nuova "
                          "dell'estensione (non ancora attiva) o il programma, con i dati detti "
-                         "(«prova con Bergamo», «provalo con 3 e 5»). dati: i dati come detti. "
+                         "(«prova con Bergamo», «provalo con 3 e 5»). Per un'estensione, più "
+                         "valori detti insieme («prova con Bergamo e Roma») sono un collaudo "
+                         "ciascuno: una chiamata per valore. dati: i dati come detti. "
                          "argomenti: per un'estensione con più input (sono nei dati del "
                          "turno), un oggetto con un valore per input («Bergamo per 3 giorni» → "
                          "{\"citta\": \"Bergamo\", \"giorni\": 3})."),
