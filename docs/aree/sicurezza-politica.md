@@ -790,3 +790,17 @@ modello passa `argomenti` (oggetto): il secondo `sviluppo_collauda({'argomenti':
   registro dei turni).
 - La doppia codifica nella traccia è un avviso, mai un rifiuto della porta:
   [agenti-estensioni](agenti-estensioni.md), stessa data.
+
+## Sonde dell'agente: analisi e specifica (08/10 sera, ramo `analisi-sonde`)
+
+Analisi della proposta di Dario (richieste vere di prova chieste dall'agente durante una
+correzione), senza codice: [`2026-10-08-sonde-agente.md`](../ricerche/2026-10-08-sonde-agente.md).
+La sonda c'è già ed è più larga: `scarica_esempio`, in ogni lavoro «estensione» comprese le
+correzioni, GET verso qualunque host pubblico con la conversazione recente nel prompt. «Solo gli
+host del manifesto in sviluppo» non è un confine: quel manifesto lo scrive l'agente, e il
+collaudo lo usa già. Raccomandati il ricollaudo automatico alla consegna (i casi falliti della
+persona, manifesto ristretto alla sola `rete_leggi` verso host noti, niente conferme) e
+`sonda_rete` nelle correzioni (host noti, valori solo dal caso, risposta in busta), con il banco
+`prova_sonde_attacchi`. Da correggere comunque: il nome pubblico di casa (DuckDNS) per
+`RetePubblica` è «pubblico» (da verificare quali nomi ha la DGX), e la traccia nei vincoli
+dell'agente non è in busta. Realizzazione dopo l'unione di `diagnosi-collaudi`.

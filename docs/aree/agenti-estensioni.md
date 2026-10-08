@@ -1312,3 +1312,16 @@ registro dei turni, `uscite.jsonl` e registri dei lavori letti in sola lettura).
 **Prove**: a secco `prove/prova_sviluppo_giro5.py` (~2 s, livello 1: doppia codifica e
 contrari, collaudi con `argomenti`, «la gente», analisi con i collaudi, il rilevatore con uno
 stream finto e i contrari, `presence_penalty`); con gemma4 `prove/prova_sviluppo_giro5_ollama.py`.
+
+## Sonde dell'agente: analisi e specifica (08/10 sera, ramo `analisi-sonde`)
+
+[`2026-10-08-sonde-agente.md`](../ricerche/2026-10-08-sonde-agente.md), niente codice. Letto
+dalla DGX in sola lettura: l'08/10 l'agente ha usato `scarica_esempio` 15 volte (origine
+«agente» in `uscite.jsonl`). Nelle correzioni del giro 3 ha scaricato la città di due parole con
+l'URL scritto bene da lui (risposta piena), mentre il codice dell'estensione la costruiva rotta.
+Una sonda prova l'URL dell'agente, non quello del codice. Nella correzione delle 18:51 (giro 5)
+non ne ha usata nessuna. Proposta a due pezzi: **ricollaudo alla consegna** di una correzione
+(`Estensioni.prova_bozza`, nel `controlla` della consegna, una volta per lavoro, i casi falliti
+della persona) e **`sonda_rete`** al posto di `scarica_esempio` nelle correzioni (host noti
+dello sviluppo, vocabolario del caso, 4 per lavoro, «come l'ha letto il server»). Specifica con
+configurazione, schede, registri, regole e prove nel § 9 del documento.
