@@ -530,6 +530,56 @@ mg = json.loads(TOOLS.call("minore_gestisci", {"nome": "Bianca", "azione": "riep
 verifica("riepilogo dei compiti del tutore: con gli esercizi",
          "esercizi" in mg.get("risposta_finale", ""), mg)
 
+# ─────────────────────────── spinta in Brain ───────────────────────────
+print("── Brain: risposta senza il tool con l'esercizio in sospeso ──")
+from calliope.brain import Brain  # noqa: E402
+
+
+class BackendFinto:
+    def __init__(self, copione):
+        self.copione, self.visti = list(copione), []
+
+    def stream(self, messages, tools):
+        self.visti.append([dict(m) for m in messages])
+        yield from self.copione.pop(0)
+
+
+def brain_finto(copione, chi):
+    b = Brain.__new__(Brain)
+    b.cfg, b.tools, b.history = cfg, TOOLS, []
+    b.tool_ctx = ctx_di(chi)
+    b.backend = BackendFinto(copione)
+    return b
+
+
+out, _ = chiama({"azione": "inizia", "argomento": "addizioni", "classe": "seconda elementare"},
+                "Bianca")
+s = SRV.sessione(BIANCA.id)
+giusta = frazione_scritta(s.es.risposta)
+prima = s.es.firma
+falso = "Perfetto! Prossima: quanto fa 2 più 2?"
+b = brain_finto([[("text", falso)],
+                 [("calls", [{"id": "c1", "name": "esercizi",
+                              "arguments": {"azione": "rispondi", "risposta": giusta}}])]],
+                "Bianca")
+b.turn_number = 0
+b.set_pending(out["in_sospeso"])
+detto = "".join(b.stream_reply(giusta, "familiare"))
+verifica("spinta: la correzione inventata dal modello non si dice", falso not in detto
+         and "Prossima" in detto, detto)
+verifica("spinta: regola spinta_esercizi e tool chiamato dopo",
+         "spinta_esercizi" in b.rules_fired() and SRV.sessione(BIANCA.id).es.firma != prima,
+         b.rules_fired())
+verifica("spinta: il messaggio della spinta nel secondo giro",
+         any("non hai chiamato esercizi" in (m.get("content") or "")
+             for m in b.backend.visti[-1]))
+chiama({"azione": "fine"}, "Bianca")
+b = brain_finto([[("text", "Sono le dieci.")]], "Bianca")
+b.turn_number = 0
+detto = "".join(b.stream_reply("Che ore sono?", "familiare"))
+verifica("contrario: senza esercizi in sospeso nessuna spinta", detto == "Sono le dieci."
+         and "spinta_esercizi" not in b.rules_fired() and len(b.backend.visti) == 1, detto)
+
 # ─────────────────────────── scheda: /api/esercizio ───────────────────────────
 print("── scheda: /api/esercizio sul server vero ──")
 from calliope.schermi import ArchivioSchermi, Schermi  # noqa: E402

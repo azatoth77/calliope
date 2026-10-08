@@ -49,6 +49,8 @@ A_SECCO = [
     ("prova_eta_utenti.py", [], "età e compleanni dai profili (07/10, DGX): data di oggi come nascita rifiutata, persona=io o un nome, giorni contati dal programma, privacy (chi amministra e i tutori), impronta della voce in elenca_utenti, rubrica distinta, tool *_cerca con argomenti obbligatori, parole di un ospite nel registro; la propria data di nascita nel profilo con ricorda e la data dai ricordi in data_calcola (07/10 pomeriggio)"),
     # ~8 s: generatori su migliaia di semi, secondo parere finto, server degli schermi vero
     ("prova_esercizi.py", [], "esercizi generati da Calliope (08/10): numeri detti, generatori di matematica (ricalcolo indipendente) e d'italiano (forme chiuse, lessico sul Wikizionario), secondo parere finto (buono, scartato, guasto, banco), flusso a voce (indizi, 5 errori con avviso ai tutori una volta, salta, soluzione, segnala, livelli, fine), permessi (ospite, adulto che non segue ragazzi, tutore, riepilogo), dato del turno, /api/esercizio sul server vero (schermo personale, fuori orario, limite, mai la risposta attesa)"),
+    # ~25 s: la pagina degli schermi e del telefono in Edge o Chromium senza finestra
+    ("prova_esercizi_pagina.py", [], "scheda degli esercizi nella pagina vera (08/10): domanda grande, risposta scritta sbagliata e giusta, indizio, segnalazione, fine, scelte d'italiano come pulsanti, risposta attesa mai nel DOM, telefono con la scheda nel carosello, nessun errore JS né CSP"),
     ("prova_minori_pericolo.py", [], "minore in pericolo con la frase spezzata (06/10, e2e): pezzi uniti per il guardiano, protezione senza barge-in con la sola voce e ripetuta se il nome la interrompe, avviso non ripetuto per lo stesso episodio, con i contrari"),
     ("prova_brain.py", [], "filtro del thinking, guardia, ciclo dei tool, storia"),
     ("prova_tempi.py", [], "durate e orari detti a voce"),
@@ -250,7 +252,7 @@ LIVELLO_3 = {
     "prova_giochi_pagina.py", "prova_scritto_calliope.py", "prova_telefono_pagina.py",
     "prova_telefono_audio.py", "prova_telefono_schermo.py", "prova_satellite.py",
     "prova_corsie_satelliti.py", "prova_installa_satellite.py", "prova_cruscotto_pagina.py",
-    "prova_scheda_intera.py", "prova_markdown_pagina.py",
+    "prova_scheda_intera.py", "prova_markdown_pagina.py", "prova_esercizi_pagina.py",
 }
 # Mai nel gruppo parallelo, anche quando una prova li sceglie nel livello 2: un browser, un
 # tempo reale o tanti processi, che sotto carico falliscono a caso. Tutto il livello 3 è

@@ -68,6 +68,13 @@ BRAVO = {"f": ("Giusto!", "Esatto!", "Brava!", "Perfetto!"),
          "m": ("Giusto!", "Esatto!", "Bravo!", "Perfetto!")}
 
 
+def conto_detto(fatti: int, giuste: int) -> str:
+    """«1 esercizio, 1 giusto», «10 esercizi, 8 giusti», «3 esercizi, nessuno giusto»."""
+    es = "1 esercizio" if fatti == 1 else f"{fatti} esercizi"
+    g = "nessuno giusto" if giuste == 0 else "1 giusto" if giuste == 1 else f"{giuste} giusti"
+    return f"{es}, {g}"
+
+
 def _o(prof) -> str:
     return "a" if getattr(prof, "gender", None) == "f" else "o"
 
@@ -367,7 +374,7 @@ class Servizio:
         s.esito = {"testo": frase, "giusta": True}
         cambio = self._adatta(s)
         if s.fatti % 10 == 0:
-            frase += f" Siamo a {s.fatti} esercizi, {s.giuste} giusti."
+            frase += f" Siamo a {conto_detto(s.fatti, s.giuste)}."
         if cambio > 0:
             frase += " Proviamo un po' più difficile."
         elif cambio < 0:
@@ -499,7 +506,7 @@ class Servizio:
             if self.sessioni.get(s.persona) is s:
                 self.sessioni.pop(s.persona, None)
         if s.fatti:
-            conto = (f"Abbiamo finito: {s.fatti} esercizi, {s.giuste} giusti."
+            conto = (f"Abbiamo finito: {conto_detto(s.fatti, s.giuste)}."
                      + (" Ottimo lavoro!" if s.giuste >= 0.8 * s.fatti else
                         " Bel lavoro, la prossima volta andrà ancora meglio."))
         else:

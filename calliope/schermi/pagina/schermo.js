@@ -1152,12 +1152,15 @@
   // ricostruisce intera a ogni aggiornamento (niente allinea: i gestori leggerebbero
   // l'esercizio di prima); se si stava scrivendo, il campo nuovo riprende il fuoco
   DISEGNA.esercizio = function (c, corpo) {
-    const dati = [c.materia, c.argomento, c.classe].filter(Boolean).join(" · ");
+    // L'argomento è già nel titolo: qui la classe e il numero dell'esercizio
+    const dati = [c.classe].filter(Boolean).join(" · ");
     corpo.append(el("p", "sotto", dati + (c.stato === "aperta" && c.domanda ? " · esercizio " + c.numero : "")));
     const es = c.esito || {};
     if (c.stato !== "aperta" || !c.domanda) {
       corpo.append(el("p", "esito-esercizio", es.testo || "Esercizi finiti."));
-      corpo.append(el("p", "nota", (c.fatti || 0) + " esercizi, " + (c.giuste || 0) + " giusti."));
+      const f = c.fatti || 0, g = c.giuste || 0;
+      corpo.append(el("p", "nota", (f === 1 ? "1 esercizio" : f + " esercizi") + ", "
+        + (g === 0 ? "nessuno giusto" : g === 1 ? "1 giusto" : g + " giusti") + "."));
       return;
     }
     corpo.append(el("p", "domanda-esercizio", c.domanda));
