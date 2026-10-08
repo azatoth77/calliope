@@ -2371,7 +2371,14 @@ class Brain:
         # Una frase che parla di estensioni: quali ci sono davvero (08/10, caso vero della DGX:
         # «adesso abbiamo due estensioni, giusto?» → «ne abbiamo solo una», «la vecchia è stata
         # ritirata», ed erano attive tutte e due). Un contesto, decide il modello
-        elenco = self._elenco_estensioni(est) if PARLA_ESTENSIONI.search(testo or "") else ""
+        # Anche al turno subito dopo («Quindi la vecchia non c'è più?»: la conversazione parla
+        # ancora di estensioni, senza la parola)
+        turno = int(getattr(self, "turn_number", 0) or 0)
+        parla = PARLA_ESTENSIONI.search(testo or "") or (
+            turno and getattr(self, "_elenco_est_turno", -9) == turno - 1)
+        elenco = self._elenco_estensioni(est) if parla else ""
+        if elenco:
+            self._elenco_est_turno = turno
         if not trovate:
             return EST_ELENCO_MSG.format(elenco=elenco) if elenco else None
         parti = []

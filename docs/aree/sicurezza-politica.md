@@ -691,3 +691,41 @@ prima `delega_lavoro` di codice), `delega_lavoro` → `lavoro_affida`, `estensio
 - **Riapertura**: uno sviluppo sospeso o chiuso si riapre quando il suo lavoro finisce, ed è di
   nuovo lo sviluppo aperto di chi l'ha aperto: i suoi passi valgono come intento come prima della
   sospensione (il «C'è di mezzo il lavoro di un agente» delle 11:31 era su uno sviluppo chiuso).
+
+## Modalità sviluppo, giro 3: storpiature, due collaudi, sfida, «ok» in coda, rinomina (08/10, ramo `sviluppo-giro3`)
+
+Dal giro vero della DGX dell'08/10 pomeriggio (dettagli e misure in
+[agenti-estensioni](agenti-estensioni.md), stessa data):
+
+- **Provenienza con le storpiature** (14:43 e 15:10: «Bergamo, Cerno Maggiore e Legnano» detto,
+  «Cerro Maggiore» nel valore e nel lavoro dell'agente → «viene dal lavoro di un agente, non da
+  te», poi la sfida, due volte): `provenienza.vicina` — una parola del valore che non è fra
+  quelle dette ma ne è una storpiatura vale come detta, in `esterne` (quindi
+  `politica_argomento_esterno`) e nella matrice per valore in ombra (`etichetta`,
+  `distintive`). Solo parole di lettere (mai cifre: un telefono o un IBAN con una cifra diversa è
+  un altro numero), di almeno 5 lettere, con la stessa iniziale; una lettera di differenza, due
+  da 9 lettere in su. Chi controlla il dato ottiene al più una parola quasi uguale a una detta
+  dalla persona. Banco d'attacco di `prova_politica` e `prova_valore` invariato e verde; i
+  contrari in `prova_sviluppo_giro3`.
+- **Due collaudi nella stessa frase** (14:40, «prova con Bergamo e poi con Cerro Maggiore»: il
+  secondo fermato da `web_azione_bloccata` per il risultato del primo): `DOPO_DATO_SE_DETTO`
+  (`sviluppo_collauda`: `dati`) — dopo un dato letto in questa risposta parte, se il valore è
+  fatto solo di parole dette in questa frase (`provenienza.tutto_detto`, anche corte e cifre,
+  tolti «e», «con», «poi»…; regola `dopo_dato_valore_detto`). I suoi effetti li governa il
+  guardrail della porta; ogni altra azione resta fermata.
+- **L'esito dopo la sfida** (15:10: sfida superata, `sviluppo_collauda` eseguito e «Fatto.»; a
+  «che risultato ho avuto?» il modello lo richiamava e ripartiva la domanda): un risultato
+  riuscito senza frase pronta ma con altro da dire (risultati, dato in busta) lo riferisce il
+  modello, con i dati del turno `SFIDA_ESITO_MSG` («è GIÀ stato eseguito… non richiamarlo»;
+  regola `sfida_esito_modello`); con la frase pronta del tool resta quella, senza modello.
+- **«ok» in coda** (15:13, «Babine Kuzik, questa è la stessa ok.» ha fatto partire un lavoro:
+  il modello ha chiamato `sviluppo_apri` con la proposta e `politica.consenso` ha accettato per
+  l'«ok» in fondo, con il lavoro dell'agente di mezzo): la parola di consenso vale solo fra le
+  prime 4 parole di un pezzo della frase (tra virgole e punti), o con la frase tutta di forme
+  chiuse. «Sì, direi che…», «Direi che va bene», «Beh sì» valgono; un «ok» in coda a un pezzo
+  lungo no (regola `consenso_in_coda` nel registro dei turni: si richiede, una domanda in più).
+  Anche «per me è tutto ok» ora chiede: accettato.
+- **Rinomina con il titolo detto** (`DETTO_BASTA`: `estensione_gestisci` `rinomina`, `titolo`):
+  reversibile; con il verbo dell'azione e il titolo fatto di parole dette in questa frase non
+  chiede conferma nemmeno con un dato di mezzo (`politica_valore_detto`); un titolo non detto
+  con un dato di mezzo → la conferma di sempre.

@@ -460,7 +460,14 @@ def prova_estensioni(tmp):
              "«Meteo Borgoverde e Valfiorita» (attiva, versione 1" in msg
              and "«Meteo città codificata» (attiva, versione 1)" in msg
              and "mai a memoria" in msg, msg)
-    verifica("contrario: «che tempo fa a Bergamo?» non lo riceve",
+    b.turn_number = 5
+    b._estensioni_nominate("Quante estensioni abbiamo?")
+    b.turn_number = 6
+    msg = b._estensioni_nominate("Quindi la vecchia non c'è più?") or ""
+    verifica("…anche al turno subito dopo, senza la parola («la vecchia non c'è più?»)",
+             "«Meteo città codificata» (attiva" in msg, msg)
+    b.turn_number = 8
+    verifica("contrario: «che tempo fa a Bergamo?» due turni dopo non lo riceve",
              b._estensioni_nominate("Che tempo fa a Bergamo?") is None)
     g = reg.get("estensione_gestisci")
     verifica("estensione_gestisci elenca: «chiamalo prima di rispondere a una domanda sulle "

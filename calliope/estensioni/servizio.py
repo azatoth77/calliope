@@ -513,6 +513,17 @@ class Estensioni:
         if not (forte or e_admin(ctx)):
             return _rifiuto(ctx, "Le estensioni le gestisce solo chi amministra.",
                             "estensione_permesso")
+        if not nome and azione == "rinomina":
+            # «Rinominiamo quella nuova, Meteo città codificata: chiamala…» senza nome (misura
+            # col 4B, 08/10): l'estensione nominata nella frase, se è una sola. Forma di una
+            # scelta già fatta dal modello (regola `estensione_nome_dalla_frase`)
+            try:
+                trovate = self.nominate(str(getattr(ctx, "user_text", "") or ""), tutte=True)
+            except Exception:  # noqa: BLE001
+                trovate = []
+            if len(trovate) == 1:
+                nome = trovate[0]["nome"]
+                note_rule(ctx, "estensione_nome_dalla_frase")
         if not nome:
             return {"ok": False, "fatto": NIENTE, "errore": "manca il nome dell'estensione",
                     "cosa_fare": "chiedi quale estensione"}
