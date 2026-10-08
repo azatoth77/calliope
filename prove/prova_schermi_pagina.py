@@ -186,14 +186,21 @@ def lavoro(pagina: Pagina, hub):
                                     ident="L7", sposta=True))
     aspetta(lambda: pagina.titolo_scheda() == "script delle foto", 5)
     manda(schede.lavoro_avanzamento("script delle foto", "codice", "in_corso", av(
-        "sta pensando al codice", {"tipo": "pensiero", "testo": "Guardo i file e poi"}),
+        "sta pensando al codice", {"id": "x", "fino": 1, "pezzi": [
+            {"n": 1, "s": 1, "t": "pensiero", "x": "Guardo i file e poi"}]}),
         ident="L7"))
     passo = lambda: pagina.valuta(  # noqa: E731
         "(document.querySelector('.passo-lavoro')||{}).textContent||''") or ""
     verifica("pagina: lavoro in corso, aggiornato al suo posto con il passo",
              aspetta(lambda: passo() == "Adesso: sta pensando al codice", 5) is not None, passo())
-    verifica("pagina: il testo in arrivo (ragionamento)", "Guardo i file" in (pagina.valuta(
-        "(document.querySelector('pre.flusso.pensiero')||{}).textContent||''") or ""))
+    # Dal 08/10 il flusso dell'agente si vede solo a schermo intero (due colonne)
+    verifica("pagina: il flusso dell'agente non è nella scheda normale",
+             pagina.valuta("!document.querySelector('#principale .flusso-chat')") is True)
+    pagina.valuta("document.querySelector('#principale [data-intero]').click(); 1")
+    verifica("pagina: a schermo intero il testo in arrivo (ragionamento)", aspetta(lambda: "Guardo i file" in (
+        pagina.valuta("(document.querySelector('#intero-posto .fl-pensiero')||{}).textContent||''")
+        or ""), 5) is not None)
+    pagina.valuta("document.getElementById('intero-chiudi').click(); 1")
     tempo = lambda: pagina.valuta(  # noqa: E731
         "(document.querySelector('.tetto-valore[data-dal]')||{}).textContent||''") or ""
     t1 = tempo()
@@ -213,11 +220,10 @@ def lavoro(pagina: Pagina, hub):
     pagina.valuta("[...document.querySelectorAll('#cronologia button')].find(b => "
                   "b.textContent.includes('script delle foto')).click()")
     aspetta(lambda: passo() == "Adesso: scrive rinomina.py", 5)
-    verifica("pagina: i file scritti finora e l'anteprima del codice",
+    verifica("pagina: i file scritti finora (l'anteprima del codice solo a schermo intero)",
              "rinomina.py" in (pagina.valuta(
                  "(document.querySelector('.elenco-file')||{}).textContent||''") or "")
-             and "return a + b" in (pagina.valuta(
-                 "(document.querySelector('pre.codice.anteprima')||{}).textContent||''") or ""))
+             and pagina.valuta("!document.querySelector('#principale pre.codice.anteprima')") is True)
     manda(schede.lavoro_avanzamento("script delle foto", "codice", "in_corso", av(
         "scrive rinomina.py", pausa=True), ident="L7"))
     verifica("pagina: «in pausa: sto rispondendo a voce»", aspetta(lambda: "in pausa" in (

@@ -12,6 +12,10 @@ compatibile:
   cima; dopo la finale niente più aggiornamenti;
 - ritmo: al più un aggiornamento ogni 0,5 s per lavoro anche con lo stream veloce, i pezzi
   accorpati; il costo per chi lavora (`Lavoro.nota`) in microsecondi;
+- il flusso a sequenza (08/10): pezzi numerati senza buchi né doppioni da un invio all'altro,
+  sezioni per tipo (ragionamento, testo, chiamata, esito, separatore di passata), la finestra
+  per la cronologia (`_storia`), il registro completo nella cartella del lavoro e «Scarica il
+  registro»; il codice degli argomenti di vLLM ricostruito identico, a pezzi;
 - documento: «scrive la bozza» con il testo in arrivo, «impagina il documento» senza il JSON,
   scheda finale «documento» con la stessa chiave;
 - domanda a metà lavoro: scheda «aspetta la tua risposta» in cima, ripresa al suo posto;
@@ -209,11 +213,43 @@ verifica("niente codice intero negli aggiornamenti (solo l'anteprima)",
 test_visti = [c.get("test") for c in agg if c.get("test")]
 verifica("l'esito dei test sulla scheda in corso", any(
     t["eseguiti"] == 3 and t["falliti"] == 2 for t in test_visti), str(test_visti[:2]))
-flussi = [c["avanzamento"]["flusso"] for c in agg if c["avanzamento"].get("flusso")]
-verifica("il testo che l'agente sta scrivendo, accorpato e tagliato",
-         any(f["tipo"] == "testo" and ("Comincio dalla funzione" in f["testo"]
-                                       or "correggo il segno" in f["testo"]) for f in flussi)
-         and all(len(f["testo"]) <= 800 for f in flussi), str(flussi[:1])[:200])
+pezzi = [p for _, c in tutte for p in ((c.get("avanzamento") or {}).get("flusso") or {})
+         .get("pezzi", [])]
+numeri = [p["n"] for p in pezzi]
+verifica("flusso a sequenza: numerati da 1, senza buchi né doppioni da un invio all'altro",
+         numeri and numeri == list(range(1, len(numeri) + 1)), str(numeri[:20]))
+testo = "".join(p["x"] for p in pezzi if p["t"] == "testo")
+verifica("il testo dell'agente si accumula intero (non tagliato alla coda)",
+         testo.count("Comincio dalla funzione") == 3 and testo.count("correggo il segno") == 4,
+         testo[:120])
+tipi = {p["t"] for p in pezzi}
+verifica("sezioni per tipo: ragionamento, testo, chiamata, esito, separatore di passata",
+         {"pensiero", "testo", "strumento", "esito", "passata"} <= tipi, str(sorted(tipi)))
+verifica("la chiamata in breve e il suo esito (mai il contenuto del file)",
+         any(p["t"] == "strumento" and p["x"] == "scrivi_file · somma.py" for p in pezzi)
+         and any(p["t"] == "esito" and "1 test su 3 passano" in p["x"] for p in pezzi)
+         and not any("return a - b" in p["x"] for p in pezzi if p["t"] in ("strumento", "esito")),
+         str([p["x"] for p in pezzi if p["t"] in ("strumento", "esito")][:6]))
+passate_viste = [p["x"] for p in pezzi if p["t"] == "passata"]
+verifica("un separatore a ogni passata", passate_viste[:2] == ["passata 1", "passata 2"]
+         and len(passate_viste) >= lav.passi, str(passate_viste))
+storie = [c.get("_storia", {}).get("avanzamento", {}).get("flusso") for _, c in tutte]
+ultima_storia = [x for x in storie if x][-1]
+verifica("per la cronologia: la finestra intera dei pezzi (chi si ricollega riprende da lì)",
+         ultima_storia.get("finestra") is True and ultima_storia["pezzi"][0]["n"] == 1
+         and ultima_storia["pezzi"][-1]["n"] == numeri[-1] and not ultima_storia.get("taglio"),
+         json.dumps({k: v for k, v in ultima_storia.items() if k != "pezzi"}))
+reg_file = Path(lav.cartella) / ".registro-agente.md"
+reg_testo = reg_file.read_text(encoding="utf-8") if reg_file.exists() else ""
+verifica("il registro completo nella cartella del lavoro, in Markdown",
+         "## passata 1" in reg_testo and "→ scrivi_file · somma.py" in reg_testo
+         and reg_testo.count("Comincio dalla funzione") == 3, reg_testo[:200])
+verifica("«Scarica il registro»: la chiave per la pagina e il file solo sul server",
+         finale.get("registro") == {"chiave": f"registro:{lav.id}", "formati": ["md"]}
+         and finale.get("_registro", {}).get("markdown_file") == str(reg_file))
+verifica("tetti per giro: al primo giro quelli di un giro",
+         all(c["avanzamento"].get("giro") == 1 and c["avanzamento"]["max_passate"] ==
+             svc.agente.max_passi for c in agg))
 verifica("tetti onesti: passate e minuti con il loro massimo, nessuna percentuale",
          all({"passate", "max_passate", "token", "max_token", "trascorso_s", "max_s"}
              <= set(c["avanzamento"]) and "percentuale" not in c["avanzamento"] for c in agg)
@@ -246,6 +282,11 @@ verifica("costo di un pezzo dello stream per chi lavora: pochi microsecondi", us
 time.sleep(0.6)
 verifica("20 000 pezzi in un attimo: al più 1–2 schede", len(lv.on_scheda.tutte()) <= 3,
          f"{len(lv.on_scheda.tutte())} schede")
+acc = "".join(p["x"] for _, c in lv.on_scheda.tutte()
+              for p in c["avanzamento"]["flusso"]["pezzi"])
+verifica("…e accorpati: un pezzo per sezione e per invio, il testo intero",
+         acc == "parola " * N and sum(len(c["avanzamento"]["flusso"]["pezzi"])
+                                     for _, c in lv.on_scheda.tutte()) <= 3, f"{len(acc)} caratteri")
 lv.annulla.set()
 lv.stato = "annullato"
 svc.avanzamento.finale(lv)
@@ -272,11 +313,10 @@ controlla_ritmo("documento", reg)
 passi = [p["testo"] for _, c in tutte for p in (c.get("avanzamento") or {}).get("passi", [])]
 verifica("passi: scrive la bozza, impagina il documento",
          "scrive la bozza" in passi and "impagina il documento" in passi, str(set(passi)))
-flussi = [c["avanzamento"].get("flusso") for _, c in tutte
-          if c["tipo"] == "lavoro" and (c.get("avanzamento") or {}).get("flusso")]
+bozza = "".join(p["x"] for _, c in tutte
+                for p in ((c.get("avanzamento") or {}).get("flusso") or {}).get("pezzi", []))
 verifica("la bozza in arrivo sulla scheda, il JSON no",
-         any("rose vanno potate" in f["testo"] for f in flussi)
-         and not any("\"blocchi\"" in f["testo"] for f in flussi), str(flussi[-1:])[:200])
+         "rose vanno potate" in bozza and "\"blocchi\"" not in bozza, bozza[-200:])
 verifica("finale: scheda «documento» con la stessa chiave, in cima",
          tutte[-1][1]["tipo"] == "documento" and tutte[-1][1].get("sposta") is not False
          and tutte[-1][1]["chiave"] == f"lavoro:{lav.id}")
@@ -377,6 +417,15 @@ verifica("argomenti a metà decodificati",
          _decodifica_argomenti('{"percorso": "a.py", "contenuto": "def f():\\n    ret')
          == "def f():\n    ret"
          and _decodifica_argomenti('{"percorso": "a.py"') == "")
+# A pezzi di un carattere: un escape spezzato a metà aspetta il pezzo dopo (il testo cresce
+# solo in fondo), \u00e8 compreso
+from calliope.agenti.avanzamento import _Argomenti
+GREZZO = json.dumps({"percorso": "è.py", "contenuto": 'x = "è"\n\tprint(x)\\fine'},
+                    ensure_ascii=True)
+dec = _Argomenti()
+uscito = "".join(dec.aggiungi(ch) for ch in GREZZO)
+verifica("argomenti a pezzi di un carattere: identici, con gli escape spezzati",
+         uscito == 'x = "è"\n    print(x)\\fine' and dec.percorso, repr(uscito))
 cfg_o = cfg_base(fake.url + "/v1")
 svc_o = servizio(cfg_o)
 LUNGO = "".join(f"def f{i}(x):\n    return x + {i}\n\n\n" for i in range(40))
@@ -390,12 +439,16 @@ lav = svc_o.nuovo("codice", "Scrivi tante funzioni", "dario-id", "Dario")
 lav.on_scheda = reg
 svc_o.avvia(lav)
 item = fine(svc_o)
-flussi = [c["avanzamento"].get("flusso") for _, c in reg.tutte()
-          if c["tipo"] == "lavoro" and (c.get("avanzamento") or {}).get("flusso")]
-codice = [f for f in flussi if f["tipo"] == "codice"]
-verifica("il codice che l'agente sta scrivendo compare mentre arriva",
-         item and item["stato"] == "fatto" and codice and "def f" in codice[0]["testo"],
-         f"{len(codice)} aggiornamenti col codice, {fake.richieste[-1].get('stream')}")
+pezzi_c = [p for _, c in reg.tutte()
+           for p in ((c.get("avanzamento") or {}).get("flusso") or {}).get("pezzi", [])
+           if p["t"] == "codice"]
+in_corso_c = [c for _, c in reg.tutte() if c["stato"] == "in_corso"
+              and any(p["t"] == "codice" for p in c["avanzamento"]["flusso"]["pezzi"])]
+verifica("il codice che l'agente sta scrivendo compare mentre arriva, ricostruito identico",
+         item and item["stato"] == "fatto" and in_corso_c
+         and "".join(p["x"] for p in pezzi_c) == LUNGO
+         and all(p.get("f") == "molte.py" for p in pezzi_c),
+         f"{len(in_corso_c)} aggiornamenti col codice, {len(pezzi_c)} pezzi")
 svc_o.close()
 fake.pezzi_argomenti = 2
 

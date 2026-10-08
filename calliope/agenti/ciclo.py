@@ -994,6 +994,9 @@ class Agente:
                 name, args = c["name"], c.get("arguments") or {}
                 if consegna is not None:
                     break                       # chiuso dal piano o da chiedi_permesso
+                # Il registro in diretta sugli schermi (08/10, avanzamento.py): la chiamata e,
+                # sotto, il suo esito in breve (mai il contenuto dei file)
+                lav.nota("strumento", nome=name, argomenti=args)
                 if name in _SOLA_LETTURA:
                     # La stessa lettura due volte nella stessa passata (06/10: nove leggi_file
                     # di due file in una passata, ~25 000 token di risultati oltre la finestra)
@@ -1012,6 +1015,7 @@ class Agente:
                         consegna = chiusura
                     messages.append({"role": "tool", "tool_name": name,
                                      "content": gc.risultato(name, result)})
+                    lav.nota("esito", nome=name, esito=result)
                     continue
                 if piano and name == "chiedi_permesso":
                     result, chiusura = self._chiedi_permesso(lav, args, stato_piano)
@@ -1019,6 +1023,7 @@ class Agente:
                         consegna = chiusura
                     messages.append({"role": "tool", "tool_name": name,
                                      "content": gc.risultato(name, result)})
+                    lav.nota("esito", nome=name, esito=result)
                     continue
                 if piano and stato_piano is None and (
                         name in _DOPO_PIANO or (name == "consegna" and str(
@@ -1074,6 +1079,7 @@ class Agente:
                             novita = True
                 messages.append({"role": "tool", "tool_name": name,
                                  "content": gc.risultato(name, result)})
+                lav.nota("esito", nome=name, esito=result)
             if not novita and consegna is None:
                 seg["senza_novita"] = int(seg.get("senza_novita", 0)) + 1
         # Il contesto resta per una ripresa (domanda a metà lavoro): il servizio lo butta se
@@ -1700,6 +1706,7 @@ class Agente:
                     return {"esito": "fatto", "testo": str(args.get("testo") or ""),
                             "riassunto": str(args.get("riassunto") or "")}
                 cosa = re.sub(r"\s+", " ", str(args.get("domanda") or "")).strip()[:60]
+                lav.nota("strumento", nome=c["name"], argomenti=args)
                 if c["name"] == "biblioteca_cerca":
                     lav.passo = (f"cerca nella biblioteca «{cosa}»" if cosa
                                  else "cerca nella biblioteca")
@@ -1730,6 +1737,7 @@ class Agente:
                         res = {"errore": f"{type(e).__name__}"}
                 messages.append({"role": "tool", "tool_name": c["name"],
                                  "content": gc.risultato(c["name"], res)})
+                lav.nota("esito", nome=c["name"], esito=res)
 
     def _web(self, lav: Lavoro, web, nome: str, args: dict, rete: dict) -> dict:
         """web_cerca e web_leggi dell'agente, con i tetti del lavoro. Il testo torna marcato

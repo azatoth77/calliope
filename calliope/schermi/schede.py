@@ -325,7 +325,18 @@ def lavoro_avanzamento(titolo: str, tipo: str, stato: str, av: dict, ident=None,
     if a.get("anteprima"):
         a["anteprima"] = {"nome": _taglia(a["anteprima"].get("nome"), 120),
                           "testo": str(a["anteprima"].get("testo") or "")[:1600]}
-    if a.get("flusso"):
+    if isinstance(a.get("flusso"), dict) and "pezzi" in a["flusso"]:
+        # Il flusso a sequenza (08/10, avanzamento.py): i pezzi nuovi, numerati; la pagina li
+        # accumula. Qui solo la forma (il testo resta dell'agente: la pagina usa textContent)
+        f = a["flusso"]
+        a["flusso"] = {"id": str(f.get("id") or ""), "fino": int(f.get("fino") or 0),
+                       "pezzi": [{"n": int(p["n"]), "s": int(p.get("s") or 0),
+                                  "t": str(p.get("t") or "testo"), "x": str(p.get("x") or ""),
+                                  **({"f": _taglia(p["f"], 160)} if p.get("f") else {})}
+                                 for p in (f.get("pezzi") or [])],
+                       **({"finestra": True, "taglio": bool(f.get("taglio"))}
+                          if f.get("finestra") else {})}
+    elif a.get("flusso"):
         t = str(a["flusso"].get("testo") or "")
         a["flusso"] = {"tipo": str(a["flusso"].get("tipo") or "testo"), "testo": t[-800:]}
     return nuova("lavoro", titolo or "Lavoro", PERSONALE, durata_s=1800.0,

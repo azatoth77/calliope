@@ -58,6 +58,16 @@ def converti(sorgente: dict, formato: str, font=None) -> bytes:
     from ..documenti.render import available_formats, render
     if formato not in FORMATI:
         raise Rifiuto(400, "formato non ammesso")
+    if "markdown_file" in sorgente:
+        # Il registro di un lavoro (08/10, agenti/avanzamento.py): un file del server, letto
+        # al clic (il percorso viene solo dalla scheda costruita qui, mai dalla pagina)
+        from pathlib import Path
+        try:
+            testo = Path(str(sorgente["markdown_file"])).read_text(encoding="utf-8",
+                                                                  errors="replace")
+        except OSError:
+            raise Rifiuto(404, "il registro non c'è più") from None
+        sorgente = {"markdown": testo, "titolo": sorgente.get("titolo")}
     if "markdown" in sorgente:
         testo = str(sorgente.get("markdown") or "")
         if formato == "md":

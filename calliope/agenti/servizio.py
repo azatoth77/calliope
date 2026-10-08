@@ -329,7 +329,10 @@ class Lavori:
         self.avanzamento = Avanzamento(
             lambda lav=None: (self.agente.max_passi, self.agente.tetto_token(lav),
                               self.agente.tempo_max_s),
-            self.arbitro, finale=self.scheda, log=log)
+            self.arbitro, finale=self.scheda, log=log,
+            # Il lavoro di uno sviluppo (08/10): fase, correzione e i numeri dello sviluppo
+            sviluppo=lambda lav: (self.sviluppi.riepilogo_lavoro(lav)
+                                  if self.sviluppi is not None else None))
         self.diagnosi = {"codice": "non_provato", "stato": "attiva",
                          "motivo": "collegamento non ancora provato", "passo": "",
                          "quando": 0.0}

@@ -408,3 +408,15 @@ button.grande {
 .intera-posto .piccolo-bottone { min-height: 2.8rem; padding: 0.3rem 0.9rem; }
 /* il «Chiudi» del cruscotto toglierebbe la scheda: nello strato vale quello dello strato */
 .intera-posto [data-cruscotto="chiudi"] { display: none; }
+
+/* La vista dello sviluppo e il lavoro a schermo intero (08/10): una colonna sola che scorre;
+   il flusso dell'agente nel suo riquadro, che scorre da sé. Niente sotto i 16 px */
+.intera-posto .flusso-chat { height: 60dvh; min-height: 14rem; }
+.intera-posto .fl-chi, .intera-posto .fl-passata, .intera-posto pre.codice-flusso,
+.intera-posto .fl-strumento, .intera-posto .fl-esito, .intera-posto .fase, .intera-posto .fase-stato,
+.intera-posto .prova-quando, .intera-posto .nota-svil, .intera-posto .tetti-nota,
+.intera-posto .svil-sez h2, .intera-posto .testa-flusso .nome-file { font-size: 1rem; }
+.intera-posto pre.codice-flusso { overflow-wrap: normal; word-break: normal; }
+.intera-posto .svil-sezioni { grid-template-columns: minmax(0, 1fr); }
+/* I comandi in fondo alla vista, non fermi: sul telefono prenderebbero mezzo schermo */
+.intera-posto .piede-svil { position: static; }
