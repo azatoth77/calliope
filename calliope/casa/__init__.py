@@ -5,6 +5,8 @@ La casa comandata e letta a voce (direzione «Calliope → Home Assistant»).
 - homeassistant.py: l'adattatore Home Assistant (WebSocket, TLS, verifica a secco);
 - regole.py: cosa Calliope non comanda mai (domini delicati, ospiti, non esposte);
 - parole.py: stati e risposte in italiano, ricerca locale per casa_stato;
+- nomi.py: il dispositivo detto, cercato tra le esposte quando HA capisce il comando ma non
+  trova i dispositivi (nome dell'entità in un'area diversa dalla stanza detta, 08/10);
 - guida.py: come si collega, a voce e per iscritto.
 
 I tool vocali sono in calliope/tools/casa.py. La direzione opposta (Home Assistant che usa

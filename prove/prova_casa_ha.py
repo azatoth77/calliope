@@ -719,13 +719,26 @@ for testo, codice, atteso in [
         ("", "no_intent_match", "Home Assistant non ha capito il comando.")]:
     verifica(f"riformula «{testo[:45]}…»", riformula_errore(testo, codice)[0] == atteso,
              riformula_errore(testo, codice)[0])
-# Dall'HA finto, con la risposta vera di HA: casa_comando dice la frase riformulata
+# Dall'HA finto, con la risposta vera di HA: casa_comando dice la frase riformulata. Un
+# piano: le esposte che corrispondono per nome o stanza (casa/nomi.py, 08/10) non ci sono,
+# quindi resta la frase di HA (fino al 08/10 qui c'era «la luce della cucina», che ora trova
+# due luci esposte in cucina e chiede quale)
+ha.errori_forzati["accendi le luci al piano di sopra"] = (
+    "no_valid_targets", "no_domain_in_floor_exposed", {"floor": "Primo piano",
+                                                       "domain": "light"})
+r = chiama(reg, ctx, "casa_comando", {"comando": "accendi le luci al piano di sopra"},
+           "familiare")
+verifica("HA finto: errore vero riformulato nella risposta finale",
+         r.get("ok") is False and r.get("risposta_finale") == "Al primo piano non posso "
+         "comandare nessuna luce: non è esposta ad Assist in Home Assistant.",
+         str(r.get("risposta_finale")))
+# La stessa luce in cucina, con l'errore forzato: due esposte in cucina → la domanda
 ha.errori_forzati["accendi la luce della cucina"] = (
     "no_valid_targets", "no_domain_in_area_exposed", {"area": "Cucina", "domain": "light"})
 r = chiama(reg, ctx, "casa_comando", {"comando": "accendi la luce della cucina"}, "familiare")
-verifica("HA finto: errore vero riformulato nella risposta finale",
-         r.get("ok") is False and r.get("risposta_finale") == "In cucina non posso comandare "
-         "nessuna luce: non è esposta ad Assist in Home Assistant.", str(r.get("risposta_finale")))
+verifica("HA finto: due luci esposte nella stanza detta → chiede quale, non esegue",
+         r.get("ok") is False and "Quale intendi?" in str(r.get("risposta_finale")),
+         str(r.get("risposta_finale")))
 ha.errori_forzati.clear()
 
 be.close()

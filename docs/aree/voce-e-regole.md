@@ -183,7 +183,7 @@
   `spinta_dichiarata`, `dichiarata_taciuta`, `dichiarata_ricordo`, `riferimento_casa`,
   `textcallguard`, `conferma_al_posto_del_vuoto`,
   `agenda_tutto`, `formato_detto`, `lettera_non_excel`, `valore_assoluto_detto`,
-  `casa_riscrittura`, `casa_delicata`, `casa_domanda_letta`; dal 02/10 `persona_io` e, dagli
+  `casa_riscrittura`, `casa_delicata`, `casa_domanda_letta` (dall'08/10 anche `casa_nome_entita`, [casa](casa.md)); dal 02/10 `persona_io` e, dagli
   agenti, `lavori_permesso`, `lavori_senza_offerta`, `lavori_proposta_non_id`,
   `lavori_conferma_implicita`, `lavori_agente_irraggiungibile`; dal 03/10 `schermo_personale_senza_codice`, `schermo_personale_con_codice`, `schermo_proprietario_permesso`. Solo nomi: per gli ospiti il
   registro non tiene più dati di prima.

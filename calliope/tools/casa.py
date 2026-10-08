@@ -7,6 +7,8 @@ I tool casa_*: la casa comandata e letta a voce (calliope/casa/).
   decidono, poi si esegue. La risposta di HA è la `risposta_finale`: si dice così com'è,
   senza un'altra passata del modello (~0,3–0,5 s in meno). Se HA non capisce, il modello
   riceve i nomi e le stanze più vicini e riprova una volta.
+  Se HA capisce ma non trova i dispositivi (08/10, la luce «Soggiorno» nell'area Ingresso),
+  Calliope cerca tra le esposte quella detta e riprova con il suo nome (casa/nomi.py).
 - casa_stato(cosa): letture locali dagli stati già in memoria (nessuna richiesta a HA),
   con una frase pronta. Gli intent di lettura di HA non bastano: la temperatura di una
   stanza la leggono solo dai termostati, e «cosa c'è acceso?» non lo capiscono.
@@ -22,7 +24,8 @@ import re
 
 from ..casa import CasaNonRisponde, diagnose
 from ..casa.guida import frase_familiare, guida_scritta
-from ..casa.parole import categorie, descrivi, riscrivi, suggerimenti, trova_per_nome
+from ..casa import nomi
+from ..casa.parole import categorie, descrivi, norm, riscrivi, suggerimenti, trova_per_nome
 from ..casa.regole import FRASI, Regole
 from .spec import ToolContext, ToolSpec, note_rule
 from ..testi import ALL, FAMILY, NIENTE
@@ -119,6 +122,62 @@ def _aree(be) -> dict:
         return {}
 
 
+_ARTICOLO = re.compile(r"^(il|lo|la|i|gli|le|l['’])\s*", re.I)
+
+
+def _per_nome(ctx, be, rules, level, testo, entita, esito, autorizza):
+    """HA ha capito il comando ma non trova i dispositivi: si cerca tra le esposte che chi
+    parla vede quella detta (casa/nomi.py). (risultato finale | None, esito nuovo | None,
+    comando riprovato). Un esito nuovo è solo un rifiuto delle regole sulla riprova (ospite,
+    minore, delicata): lo dice il flusso normale."""
+    interp = esito.interpretazione
+    if interp is not None and interp.capito and interp.azione != "comando":
+        return None, None, None
+    visible = [e for e in entita if rules.visibile(e, level)]
+    aree = _aree(be)
+    c = nomi.candidate(testo, visible, aree,
+                       lambda e: not rules.delicata(e) and not rules.da_elenco(e))
+    if c is None or not c["trovate"]:
+        return None, None, None          # la frase d'errore di HA, già giusta
+    note_rule(ctx, "casa_nome_entita")
+    trovate = c["trovate"]
+    if len(trovate) > 1:
+        print(f"   [CASA] «{testo}»: {esito.codice}, più candidate "
+              f"{[e.id for e in trovate]}: chiedo quale", flush=True)
+        return _final(nomi.frase_quale(trovate), ok=False, fatto=NIENTE, errore=esito.codice,
+                      candidate=[e.nome for e in trovate]), None, None
+    e = trovate[0]
+    ids = set(c["stesso_nome"].get(norm(e.nome)) or [e.id])
+    alt = nomi.comando_esatto(c["verbo"], e)
+
+    def solo_lei(i):
+        # Mai allargare: la riprova deve toccare solo la candidata (o i suoi omonimi)
+        if i.azione == "comando" and (not i.bersagli or not set(i.bersagli) <= ids):
+            return "fuori_candidata"
+        return autorizza(i)
+
+    again = be.comando(alt, solo_lei)
+    interp2 = again.interpretazione
+    print(f"   [CASA] «{testo}»: {esito.codice}, riprovo con «{alt}» → "
+          f"{interp2.intento if interp2 else '?'} {interp2.bersagli if interp2 else []}: "
+          f"{again.tipo} {again.codice}", flush=True)
+    if again.tipo == "fatto" and again.ok:
+        frase = nomi.frase_fatto(c["verbo"], e, c["stanza"], aree)
+        detto = _ARTICOLO.sub("", re.sub(r"^\W*\w+\s+", "", testo).strip())
+        consiglio = nomi.segna_consiglio(e, detto, c["stanza"], aree)
+        if consiglio:
+            print(f"   [CASA] consiglio per chi amministra: {consiglio}", flush=True)
+            if level == "amministra":
+                frase += " " + consiglio
+                nomi.segna_detto(consiglio)
+        ref = _riferimento(again.bersagli or [e.id], entita, alt)
+        return _final(frase, ok=True, fatto="eseguito", **({"riferimento": ref} if ref
+                                                            else {})), None, None
+    if again.tipo == "rifiuto" and again.codice != "fuori_candidata":
+        return None, again, alt
+    return None, None, None
+
+
 # ─────────────────────────── casa_comando ───────────────────────────
 
 def _casa_comando(ctx: ToolContext, comando: str = "") -> dict:
@@ -160,6 +219,15 @@ def _casa_comando(ctx: ToolContext, comando: str = "") -> dict:
                 again = be.comando(alt, autorizza)
                 if again.codice != "non_capito":
                     esito, testo = again, alt
+        # Capito ma senza dispositivi (08/10, «spegni la luce in soggiorno» con la luce
+        # «Soggiorno» nell'area Ingresso): si cerca tra le esposte quella detta
+        if esito.tipo == "errore" and esito.codice in ("no_valid_targets", "no_intent_match"):
+            fixed, again, alt = _per_nome(ctx, be, rules, level, testo, entita, esito,
+                                          autorizza)
+            if fixed is not None:
+                return fixed
+            if again is not None:
+                esito, testo = again, alt
     except CasaNonRisponde as e:
         return _giu(e)
     interp = esito.interpretazione
@@ -295,6 +363,11 @@ def _casa_integrazione(ctx: ToolContext, per_iscritto=False, formato: str = "") 
         diag = diagnose(ctx.cfg, be, esempio=_esempio(be))
     if level != "amministra":
         return _final(frase_familiare(diag["codice"]), ok=True, stato=diag["stato"])
+    # I consigli sui nomi e sulle aree raccolti dai comandi (08/10, casa/nomi.py): una volta
+    consigli = nomi.consigli_da_dire()
+    if consigli:
+        diag["prossimo_passo"] = (diag["prossimo_passo"] + " Un consiglio: "
+                                  + " ".join(consigli))
     text = diag["prossimo_passo"]
     extra = {}
     if str(per_iscritto).strip().lower() in ("true", "1", "sì", "si", "yes"):
