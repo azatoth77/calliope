@@ -354,6 +354,46 @@ frasi brevi e 10 lunghe a testa per canale, lette alternandosi, per misurare con
 nuovo margine e scambi nei due versi e ritarare `speaker_id_margine` e
 `minori_margine_amministra`.
 
+## Frasi cortissime prese per un ospite: la continuità (08/10 sera, ramo `conversazioni-cronologiche`)
+
+**Caso vero della DGX** (08/10 17:26, studio, registro dei turni): 13 minuti dopo l'ultima frase
+di Dario, «Calliope.» con 0,5 s di voce (0,44, secondo profilo a 0,11) e la frase dopo con 0,6 s
+(0,40, secondo a 0,08), sotto la soglia 0,48 → ospite; la seconda chiedeva le conversazioni
+passate, rifiutata (`permesso_livello`). Dieci secondi dopo, con 1,4 s di voce, 0,71. La frase
+breve «breve» (vale chi parlava) non c'entrava: la prima era fuori dalla finestra d'ascolto, la
+seconda aveva un ospite prima. Sotto ~1 s il punteggio non è affidabile: sulla DGX (02–08/10)
+le frasi «breve» di chi parlava stanno a 0,49 di mediana (p05 0,18), e 57 frasi corte su 266
+non sono state riconosciute (quasi tutte col migliore che era chi parlava da poco).
+
+**Fatto** (`ciclo._per_continuita`, regola `voce_continuita`, principio 10: riguarda l'audio):
+una frase più corta di `speaker_min_voice_s`, quando non vale già la frase breve, vale il
+migliore se **su questo satellite** è stato riconosciuto dalla voce (sopra soglia, senza un
+minore vicino) negli ultimi `speaker_continuita_s` (900 s), con almeno
+`speaker_continuita_soglia` (0,36) e `speaker_continuita_margine` (0,20) sul secondo profilo.
+- Vale **come la zona grigia** (`identified_by = "conversazione"`, `from_session`): al più
+  familiare, niente conferma breve né voce sicura, e per ciò che vuole la voce di chi amministra
+  la frase di sfida (registro dei tool, `conferme.admin_da_sentire`): politica e sicurezza per
+  valore la trattano come prima trattavano la zona grigia, senza toccarle. Nel registro dei
+  turni `voce.modo = "continuita"`, nella console «vale per continuità».
+- La memoria è per corsia (`Ciclo._voce_recente`): un altro satellite non ne sa niente. Una
+  frase lunga di nessun profilo o di un'altra persona la toglie (c'è un'altra voce).
+- La corsia (`RegistroConversazioni.scegli`, come «continuita») continua la conversazione della
+  persona se è l'ultima di questo satellite, o ne apre una nuova se non c'è (con la ripresa);
+  se intanto l'ha usata un altro satellite, anonima.
+- Minori: `minori.piu_protetto` resta dopo (un minore nella zona grigia vale lui); con il minore a
+  meno di 0,20 il margine non basta e la continuità non scatta; un minore riconosciuto qui resta
+  lui. Chi amministra con il minore vicino (`amministra_minore_vicino`) non viene ricordato.
+  Sul telefono in auto i margini veri sono 0,07–0,16: lì la continuità non scatta (il problema
+  dei canali resta quello delle «Voci di famiglia»).
+- Misura di rischio (`prove/misura_conferma_breve.py`, stesso canale, senza la condizione del
+  margine): a 0,35–0,38 passano l'1,4–0,7 % (0,5 s), 3,1–1,8 % (0,7 s), 3,6–2,4 % (0,9 s) delle
+  frasi brevi di altre voci, e solo se la persona è stata riconosciuta lì da poco; le frasi
+  brevi vere di Dario sotto 0,36 sono ~9 %.
+- Prove: `prova_voci_famiglia` (il caso vero e i contrari: sotto 0,36, minore a meno di 0,20,
+  frase lunga, un'altra persona migliore, finestra scaduta, satellite diverso, spenta, un'altra
+  voce nel mezzo, il minore, chi amministra col minore vicino), `prova_corsie` (la scelta della
+  conversazione). I casi di `prova_voci_famiglia` di prima passano tutti uguali.
+
 ## Pause e fine del turno: solo misura (07/10)
 
 Decisione di Dario (07/10): oggi il turno si chiude dopo `silence_ms` = 700 ms di silenzio, uguale
