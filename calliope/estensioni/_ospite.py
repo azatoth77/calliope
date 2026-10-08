@@ -24,7 +24,9 @@ dell'estensione vanno su stderr: stdout è del protocollo.
 
 Per i test dell'estensione c'è `CalliopeFinta`: risposte preparate e l'elenco delle richieste.
 Come la porta vera, rifiuta un indirizzo con spazi o caratteri non codificati (08/10): i
-parametri si scrivono con urllib.parse.urlencode o quote, mai a mano.
+parametri si scrivono con urllib.parse.urlencode o quote, mai a mano. Una possibile doppia
+codifica («Borgo%2BAlto»: quote_plus e poi urlencode) non la rifiuta: la scrive in
+`avvisi` e su stderr.
 """
 
 import json
@@ -76,6 +78,35 @@ def url_non_codificato(url):
     return (f"URL non valido: c'è {cosa} {dove}. Codifica i valori con urllib.parse.urlencode "
             "(o urllib.parse.quote per un pezzo del percorso), mai a mano nell'indirizzo: es. "
             "\"https://sito/cerca?\" + urlencode({\"nome\": valore})")
+
+
+def doppia_codifica(url):
+    """"" o l'avviso «possibile doppia codifica» (08/10 sera): la stessa regola di
+    calliope/web/pagina.doppia_codifica, copiata. Un valore che decodificato una volta
+    contiene ancora «%XX», o un «+» tra due lettere (era «%2B», un più letterale)."""
+    import re
+    from urllib.parse import unquote_plus, urlsplit
+    try:
+        u = urlsplit(str(url or "").strip())
+    except ValueError:
+        return ""
+    for pezzo in (u.query.split("&") if u.query else ()):
+        nome, _, valore = pezzo.partition("=")
+        if not valore:
+            continue
+        uno = unquote_plus(valore)
+        if re.search(r"%[0-9A-Fa-f]{2}", uno):
+            cosa = "«%25» è un «%» letterale"
+        elif re.search(r"[^\W\d_]\+[^\W\d_]", uno):
+            cosa = "«%2B» è un «+» letterale, mentre lo spazio è «+» o «%20»"
+        else:
+            continue
+        dove = (f"nel parametro «{nome[:40]}»"
+                if nome and all(c in _URL_AMMESSI for c in nome) else "nei parametri")
+        return (f"possibile doppia codifica {dove}: {cosa}. Il valore è stato codificato due "
+                "volte (per esempio quote_plus e poi urlencode): codifica una volta sola, con "
+                "urlencode passa il testo com'è")
+    return ""
 
 
 class Calliope:
@@ -152,6 +183,7 @@ class CalliopeFinta(Calliope):
         self.risposte = dict(risposte or {})
         self.negate = set(negate)
         self.richieste = []
+        self.avvisi = []
         self.dati = {}
         super().__init__(self._finta)
 
@@ -164,6 +196,12 @@ class CalliopeFinta(Calliope):
             rotto = url_non_codificato(argomenti.get("url"))
             if rotto:
                 raise ErroreCalliope(f"rete: {rotto}")
+            # Una doppia codifica non si rifiuta (può essere voluta): l'avviso resta in
+            # `avvisi` e su stderr, dove pytest lo mostra se il test fallisce
+            doppia = doppia_codifica(argomenti.get("url"))
+            if doppia:
+                self.avvisi.append(doppia)
+                print(f"AVVISO di CalliopeFinta: {doppia}", file=sys.stderr)
         if azione == "dati_scrivi":
             self.dati[argomenti["nome"]] = argomenti["testo"]
             return {"ok": True}

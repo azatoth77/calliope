@@ -114,6 +114,10 @@ class RetePubblica:
                           f"più di {self.max_minuto} richieste al minuto", inviati=inviati)
             raise pagina.PaginaVietata(f"troppe richieste a internet (al più {self.max_minuto} "
                                        "al minuto)")
+        # Una possibile doppia codifica (08/10 sera, «name=Borgo%2BAlto»): la richiesta
+        # parte (un %2B può essere voluto), il registro lo segna con il nome del parametro
+        doppia = pagina.doppia_codifica(url)
+        avv = {"avviso": doppia.partition(":")[0]} if doppia else {}
         t0 = time.monotonic()
         try:
             r = self._scarica(url, max_byte=max_byte, timeout_s=timeout_s, vietate=self.vietate,
@@ -126,12 +130,12 @@ class RetePubblica:
             raise
         except pagina.PaginaNonLetta as e:
             self.registra(origine, host, metodo, "fallita", str(e), inviati=inviati,
-                          ms=int((time.monotonic() - t0) * 1000))
+                          ms=int((time.monotonic() - t0) * 1000), **avv)
             raise
         finale = _host(r.get("url") or url)
         self.registra(origine, host, metodo, "fatta", "", inviati=inviati,
                       ricevuti=int(r.get("byte") or len(r.get("testo_grezzo") or "")),
-                      ms=int((time.monotonic() - t0) * 1000),
+                      ms=int((time.monotonic() - t0) * 1000), **avv,
                       **({"host_finale": finale} if finale != host else {}))
         return r
 

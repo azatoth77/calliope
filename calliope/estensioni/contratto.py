@@ -248,7 +248,10 @@ def testo(cfg=None, tipo: str = "estensione", linguaggi=("python",)) -> str:
                   "- indirizzi: i valori dei parametri (una città, un nome, una ricerca) si "
                   "codificano con urllib.parse.urlencode o quote, mai a mano: un URL con "
                   "spazi, accenti o apostrofi non codificati la porta lo rifiuta («URL non "
-                  "valido…»), e anche CalliopeFinta nei test",
+                  "valido…»), e anche CalliopeFinta nei test. Codifica una volta sola: con "
+                  "urlencode passa il testo com'è, mai quote_plus prima («name=Borgo%2BAlto» "
+                  "cerca un + letterale e non trova niente; la traccia lo segna come possibile "
+                  "doppia codifica)",
                   f"- dati propri: {_porta.MAX_DATO_BYTE // 1000} kB per testo, "
                   f"{_porta.MAX_DATI_BYTE // 1000} kB in tutto",
                   "- input: al più 6 proprietà (string, number, integer, boolean), testi fino "

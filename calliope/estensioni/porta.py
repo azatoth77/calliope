@@ -297,6 +297,13 @@ class Porta:
                             byte=len(testo.encode("utf-8")),
                             inizio=_pulisci_testo(" ".join(testo[:TRACCIA_RISPOSTA * 2].split()),
                                                   rete)[:TRACCIA_RISPOSTA])
+            # La doppia codifica (08/10 sera): la richiesta parte, ma la traccia lo dice in
+            # chiaro (l'agente, con «name=Borgo%2BAlto» davanti, l'aveva preso per giusto)
+            from ..web.pagina import doppia_codifica
+            doppia = doppia_codifica(url)
+            if doppia:
+                riga["avviso"] = doppia
+                self.svc.nota_regola("estensione_doppia_codifica")
             tr.append(riga)
         except Exception:  # noqa: BLE001 — la traccia non cambia la richiesta
             pass

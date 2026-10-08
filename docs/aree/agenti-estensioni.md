@@ -6,7 +6,7 @@
 
 | Stadio | Libreria | Dove |
 |---|---|---|
-| Agenti in secondo piano («gemma davanti, agenti dietro») | vLLM con l'API compatibile OpenAI sulla DGX (motore «openai», httpx, via tunnel `ssh -N -L` di OpenSSH), oppure l'API nativa di Ollama (motore «ollama», anche lo stesso Ollama della voce); ciclo scritto in proprio, niente framework; sandbox in un container Docker usa-e-getta sulla DGX (dal 03/10), altrimenti job object di Windows (ctypes) e audit hook | `calliope/agenti/` → `Lavori` (`servizio.py`: coda, proposta, risultati, annuncio, domande a metà lavoro), `Agente` (`ciclo.py`), file della persona (`file_utente.py`), `Tunnel` (`tunnel.py`), `Sandbox` (`sandbox.py` + `_avvio.py`, `scegli_isolamento`; immagine da `setup/linux/sandbox/Dockerfile`), `Arbitro` (`arbitro.py`: anche con vLLM sulla GPU della voce, `ClienteCedevole` per archivio e ufficio; `stessa_gpu` in `impostazioni.py`, `agenti_arbitro`; dal 04/10 `PausaServer`, pausa di vLLM in modalità sviluppo, `pausa_server`, `agenti_pausa_vllm`), `Avanzamento` (`avanzamento.py`: la scheda del lavoro in diretta; dal 08/10 il flusso a sequenza, il registro del flusso e i tetti per giro), `ContestoLavoro` (`contesto_lavoro.py`, dal 05/10: risultati lunghi in `.calliope/passo-N.txt`, diario del lavoro alle soglie; finestra da `contesto.calcola_agenti`), `Modello` (`modelli.py`), `carica` (`impostazioni.py`: dgx.yaml / agenti_url), `ClienteOllama` / `ClienteOpenAI` (`remoto.py`, `remoto_openai.py`, `crea_cliente`), `load_agenti`; tool in `calliope/tools/agenti.py`; terminale `python -m calliope.agenti --prova` |
+| Agenti in secondo piano («gemma davanti, agenti dietro») | vLLM con l'API compatibile OpenAI sulla DGX (motore «openai», httpx, via tunnel `ssh -N -L` di OpenSSH), oppure l'API nativa di Ollama (motore «ollama», anche lo stesso Ollama della voce); ciclo scritto in proprio, niente framework; sandbox in un container Docker usa-e-getta sulla DGX (dal 03/10), altrimenti job object di Windows (ctypes) e audit hook | `calliope/agenti/` → `Lavori` (`servizio.py`: coda, proposta, risultati, annuncio, domande a metà lavoro), `Agente` (`ciclo.py`), file della persona (`file_utente.py`), `Tunnel` (`tunnel.py`), `Sandbox` (`sandbox.py` + `_avvio.py`, `scegli_isolamento`; immagine da `setup/linux/sandbox/Dockerfile`), `Arbitro` (`arbitro.py`: anche con vLLM sulla GPU della voce, `ClienteCedevole` per archivio e ufficio; `stessa_gpu` in `impostazioni.py`, `agenti_arbitro`; dal 04/10 `PausaServer`, pausa di vLLM in modalità sviluppo, `pausa_server`, `agenti_pausa_vllm`), `Avanzamento` (`avanzamento.py`: la scheda del lavoro in diretta; dal 08/10 il flusso a sequenza, il registro del flusso e i tetti per giro), `ContestoLavoro` (`contesto_lavoro.py`, dal 05/10: risultati lunghi in `.calliope/passo-N.txt`, diario del lavoro alle soglie; finestra da `contesto.calcola_agenti`), `Ripetizioni` (`ripetizioni.py`, dal 08/10 sera: il giro a vuoto nel ragionamento ferma la passata), `Modello` (`modelli.py`), `carica` (`impostazioni.py`: dgx.yaml / agenti_url), `ClienteOllama` / `ClienteOpenAI` (`remoto.py`, `remoto_openai.py`, `crea_cliente`), `load_agenti`; tool in `calliope/tools/agenti.py`; terminale `python -m calliope.agenti --prova` |
 | Programmi dell'agente eseguiti in diretta, linguaggi (Python, C#) | stessa sandbox Docker; C# con csc nel container `calliope-sandbox-dotnet` (runtime .NET 10 + Roslyn, niente SDK né NuGet); SSE verso la scheda | `calliope/agenti/esecuzione.py` → `Esecuzioni` (`avvia`, `dimostra`, `ferma`, `frase`); `linguaggi.py`; `esegui_cs.sh`; `setup/linux/sandbox/Dockerfile.dotnet`; tool `lavori_esegui`, scheda `esecuzione` |
 | Il risultato di un lavoro finito a voce o sullo schermo (07/10) | il modello dell'agente per il riassunto per la voce (thinking spento, tempo massimo) | `calliope/agenti/risultato.py` → `trova`, `scegli`, `dal_disco`, `testo_intero`, `riassunto_voce`, `scheda`, `recenti`, `elenco_detto`, `chiave`, `converti` (dal 07/10: «fammene un PDF»); tool `risultato_lavoro` (`calliope/tools/agenti.py`), `agenti_risultato_s`; prove `prova_risultati.py`, `prova_risultati_ollama.py` |
 | Modalità sviluppo (08/10): un'estensione o un programma come iter a fasi | solo libreria standard; lo stato su disco accanto ai lavori (`sviluppi.json`) | `calliope/sviluppo.py` → `Sviluppi` (`corrente`, `apri`, `passa`, `proposto`, `avviato`, `lavoro_finito`, `estensione_approvata`, `dati_turno`, `promemoria_giorno`, `scheda`), `passo_interno`, `estraneo`; tool `sviluppo` e `sviluppo_prova` in `calliope/tools/sviluppo.py` (`controlla_nuovo`, `apri_se_serve`); `Estensioni.prova_candidata`, `Estensioni.revisione`, `differenze` (`calliope/estensioni/servizio.py`); progetto [`docs/ricerche/2026-10-08-modalita-sviluppo.md`](../ricerche/2026-10-08-modalita-sviluppo.md); prove `prova_sviluppo.py`, `prova_sviluppo_ollama.py` |
@@ -1226,3 +1226,89 @@ nuova di Meteocittà 3/3 (il 4B mette già il nome in `modifica` con la descrizi
 `argomenti`; «l'analisi è corretta» a offerta scaduta → il lavoro parte 3/3 (0/1 prima di
 `sviluppo_proposta_scaduta`); prima frase mediana 1,83 s. Da rimisurare sulla DGX col 26B, che
 il 08/10 metteva la descrizione in `modifica` e i giorni nei dati.
+
+## Modalità sviluppo, giro 5: doppia codifica, giro a vuoto nel ragionamento (08/10 sera, ramo `sviluppo-giro5`)
+
+Giro vero della DGX dell'08/10 sera (18:14–19:05, 26B e qwen3.6; qui con nomi di fantasia;
+registro dei turni, `uscite.jsonl` e registri dei lavori letti in sola lettura). La modifica
+«preferisci le città italiane e fammi indicare il paese» è arrivata al collaudo (v5, 19 test su
+19), «Parigi in Francia» e un nome corto sono andate; le città di due parole no, e nemmeno nella v6.
+
+- **Doppia codifica** (v5 e v6): l'estensione faceva `quote_plus(nome)` e poi
+  `urlencode(params)` → `name=Pratofiorito%2BMaggiore`, il geocoder cercava un «+» letterale e
+  rispondeva vuoto (31–32 byte); per la porta del giro 3 l'URL era codificato bene. Il lavoro
+  della correzione delle 18:51 **aveva** la traccia con quell'URL e i 32 byte, e ha scritto
+  «the trace shows %2B which is correct for space», poi ha costruito un ripiego «se non trova,
+  cerca con la prima parola». Ora `web/pagina.doppia_codifica` (la stessa regola copiata in
+  `_ospite`, tenute uguali dalla prova): un valore di un parametro che, decodificato una volta,
+  contiene ancora «%XX» (era «%25XX») o un «+» tra due lettere (era «%2B») → l'avviso «possibile
+  doppia codifica nel parametro «name»: «%2B» è un «+» letterale, mentre lo spazio è «+» o
+  «%20». Il valore è stato codificato due volte (per esempio quote_plus e poi urlencode):
+  codifica una volta sola, con urlencode passa il testo com'è». **Mai un rifiuto** (un `%2B`
+  può essere voluto: «C++», «1+1» non lo fanno scattare): la richiesta parte e l'avviso va
+  nella traccia del collaudo (`avviso`, regola `estensione_doppia_codifica`), nelle righe della
+  traccia per `sviluppo_chiedi` («— ATTENZIONE: …»), **in testa** alla traccia nei vincoli di
+  `sviluppo_correggi` e dell'analisi («ATTENZIONE, dalla porta di Calliope: …»; i collaudi con
+  un avviso si scelgono come quelli con un errore), nel registro delle uscite (`avviso` col nome
+  del parametro, mai il valore) e in `CalliopeFinta.avvisi` (e su stderr, che pytest mostra se
+  il test fallisce). Il contratto (CAPACITA.md) e il prompt dell'agente dicono «codifica una
+  volta sola: con urlencode passa il testo com'è, mai quote_plus prima».
+- **Il lavoro ripartito dall'analisi** (18:21:52: Dario dà la diagnosi «i nomi devi
+  codificarli», il modello la passa a `sviluppo_passo azione=analisi cambia=…` → L2): il lavoro
+  nuovo aveva i file della versione provata ma **né i collaudi né la traccia** (in `lavoro.json`
+  solo la specifica; le due città li sapeva dalla conversazione). Ora `_nuovo_lavoro` aggiunge
+  ai vincoli, come `sviluppo_correggi`, i collaudi della versione provata (dati, argomenti
+  passati, esito, il giudizio della persona), la diagnosi di chi l'ha scritto e la traccia con
+  l'avviso (`_collaudi_per_agente`), anche per un programma; alla prima analisi niente.
+- **Il secondo collaudo nella stessa frase** (18:21:24, «Prova con Pratofiorito Maggiore e poi con
+  Borgo Alto»): il primo passato con `dati` e `argomenti`, il secondo solo con
+  `argomenti` → fermato (`web_azione_bloccata`), e Calliope ha detto «per Borgo Alto non ha
+  risposto». Il controllo e la frase del rifiuto: [sicurezza-politica](sicurezza-politica.md).
+- **«Chiedi all'agente» trascritto «chiedi alla gente»** (18:23): il 26B ha chiamato
+  `richiesta_tutore` (fermato) e poi, a «volevo che lo chiedessi alla gente che sta sviluppando
+  Meteocittà…», ha detto «ho già registrato la tua domanda nel mio processo di sviluppo» senza
+  chiamare niente (`spinta_dichiarata`). Contesto, non regola (principio 10): i dati del turno
+  dello sviluppo (`SVILUPPO_MSG`) dicono che «chiedi alla gente…» con uno sviluppo aperto è una
+  domanda a chi scrive il codice → `sviluppo_chiedi` (non `calliope_stato` né
+  `richiesta_tutore`), lo stesso per «come sceglie…» e «perché…», e di non dire di aver passato
+  una domanda senza il tool. Misura con gemma4 e4b sul portatile
+  (`prova_sviluppo_giro5_ollama.py`): «puoi chiedere alla gente come sceglie la città…?» 0/2
+  prima (`sviluppo_apri`, `calliope_stato`, «Chiedo alla gente…» detto senza tool), 0/2 con una
+  prima versione più vaga della riga, **3/3** con quella finale; «lo chiedessi alla gente che sta
+  sviluppando…» 2/2 già prima, 3/3; contrari 3/3 («la gente dice che domani pioverà» → meteo;
+  senza sviluppo aperto niente `sviluppo_chiedi`). Prima frase mediana 1,50 s. Da rimisurare col
+  26B sulla DGX.
+- **Giro a vuoto nel ragionamento** (correzione delle 18:51, e già L2): qwen3.6 ha ripetuto
+  per centinaia di righe gli stessi paragrafi («La soluzione più semplice è: 1. Aggiungere il
+  parametro paese…», la stessa riga 58 volte in una passata); 170 kB di registro in 12
+  passate, e sullo schermo sembrava un difetto del pannello (il pannello va bene). La guardia del
+  05/10 (token senza strumenti) guarda solo tra una passata e l'altra. Ora
+  `agenti/ripetizioni.py` (`Ripetizioni`) legge il flusso della passata (ragionamento e testo,
+  mai gli argomenti delle chiamate) e conta le frasi di prosa di almeno 6 parole: una ripetuta
+  `agenti_ripetizioni_max` volte (8) nella stessa passata ferma lo stream (`controlla` alza
+  `GiroAVuoto`, il client chiude la connessione) e la passata torna come «giro a vuoto»
+  (token stimati dai caratteri). Il ciclo aggiunge la spinta «Ti ho fermato: stai ripetendo lo
+  stesso ragionamento («…»). Non ripensarci: decidi adesso e chiama uno strumento…» (in coda al
+  messaggio della persona, mai due «user» di fila), scrive nel log la regola
+  `agente_ragionamento_ripetuto`, conta `segnali.ripetizioni` (la tappa dice «sembra girare a
+  vuoto: ha ripetuto lo stesso ragionamento») e mette sulla scheda il passo «l'agente girava a
+  vuoto (ripeteva lo stesso ragionamento): l'ho fermato». Alla terza passata fermata di fila il
+  lavoro si chiude (`RIPETIZIONI_MAX`). Solo nelle passate con gli strumenti (codice ed
+  estensioni, ricerche); non contano i blocchi di codice, le righe delle tabelle, le righe che
+  sembrano codice, le frasi corte. Sui due registri veri della DGX scatta nelle 6 passate che
+  giravano a vuoto (dopo 6–16 kB invece di 32–65 kB) e in nessuna delle altre.
+- **`presence_penalty`**: le richieste a vLLM non lo mandavano. Ora
+  `agenti_presence_penalty` per tipo di lavoro (solo motore OpenAI: `traduci_corpo`; il client
+  di Ollama lo toglie). Valori dalla scheda di Qwen3.6: **0 per codice ed estensioni** (il
+  ragionamento sul codice: «precise coding tasks», un codice ripete per forza gli stessi token)
+  e 1,5 per ricerche, documenti e altro (ragionamento generale; oltre 1,5 a volte mescola le
+  lingue). Quindi per il caso vero (un'estensione) la difesa è il rilevatore, non la penalità.
+  **Da misurare** sulla DGX (non toccata): un banco delle ricerche con 0 e 1,5, e un'estensione
+  con 0 e 0,5 per vedere se cala il giro a vuoto senza peggiorare il codice.
+- Sulla DGX (letto il 08/10 alle 19:05): la v6 ha ancora `quote_plus` + `urlencode` e la
+  correzione delle 18:51 era in corso con il ripiego «prima parola»; dopo l'aggiornamento
+  conviene chiudere quello sviluppo o farlo correggere di nuovo, così il lavoro riceve l'avviso.
+
+**Prove**: a secco `prove/prova_sviluppo_giro5.py` (~2 s, livello 1: doppia codifica e
+contrari, collaudi con `argomenti`, «la gente», analisi con i collaudi, il rilevatore con uno
+stream finto e i contrari, `presence_penalty`); con gemma4 `prove/prova_sviluppo_giro5_ollama.py`.

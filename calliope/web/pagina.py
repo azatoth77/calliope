@@ -187,6 +187,43 @@ def url_non_codificato(url: str) -> str:
             "\"https://sito/cerca?\" + urlencode({\"nome\": valore})")
 
 
+# La doppia codifica (08/10 sera, giro 5 della DGX): l'estensione faceva quote_plus(nome) e poi
+# urlencode(params) → «name=Borgo%2BAlto», il geocoder cercava «Borgo+Alto» e
+# rispondeva vuoto (31 byte); l'agente, con la traccia davanti, ha scritto «%2B is correct for
+# space». Solo un avviso (un %2B può essere legittimo: «C++», «1+1»), mai un rifiuto
+_PERC_XX = re.compile(r"%[0-9A-Fa-f]{2}")
+_PIU_TRA_LETTERE = re.compile(r"[^\W\d_]\+[^\W\d_]")
+
+
+def doppia_codifica(url: str) -> str:
+    """"" o l'avviso «possibile doppia codifica» per un parametro dell'URL il cui valore,
+    decodificato una volta, contiene ancora una sequenza «%XX» (era «%25XX») o un «+» tra due
+    lettere (era «%2B»: un più letterale, mentre lo spazio è «+» o «%20»). Nel messaggio il nome
+    del parametro, mai il suo valore. La stessa regola è in calliope/estensioni/_ospite.py."""
+    from urllib.parse import unquote_plus
+    try:
+        u = urlsplit(str(url or "").strip())
+    except ValueError:
+        return ""
+    for pezzo in (u.query.split("&") if u.query else ()):
+        nome, _, valore = pezzo.partition("=")
+        if not valore:
+            continue
+        uno = unquote_plus(valore)
+        if _PERC_XX.search(uno):
+            cosa = "«%25» è un «%» letterale"
+        elif _PIU_TRA_LETTERE.search(uno):
+            cosa = "«%2B» è un «+» letterale, mentre lo spazio è «+» o «%20»"
+        else:
+            continue
+        dove = (f"nel parametro «{nome[:40]}»"
+                if nome and all(c in _URL_AMMESSI for c in nome) else "nei parametri")
+        return (f"possibile doppia codifica {dove}: {cosa}. Il valore è stato codificato due "
+                "volte (per esempio quote_plus e poi urlencode): codifica una volta sola, con "
+                "urlencode passa il testo com'è")
+    return ""
+
+
 def risolvi_pubblico(host: str, porta: int, vietate=(), eccezioni=frozenset(),
                      risolutore=None) -> str:
     """Un indirizzo del nome, solo se **tutti** i suoi indirizzi sono pubblici."""
