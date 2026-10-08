@@ -23,6 +23,8 @@ sono richieste JSON-RPC nell'altro senso, con metodi «calliope/<azione>». Le `
 dell'estensione vanno su stderr: stdout è del protocollo.
 
 Per i test dell'estensione c'è `CalliopeFinta`: risposte preparate e l'elenco delle richieste.
+Come la porta vera, rifiuta un indirizzo con spazi o caratteri non codificati (08/10): i
+parametri si scrivono con urllib.parse.urlencode o quote, mai a mano.
 """
 
 import json
@@ -32,6 +34,48 @@ import sys
 
 class ErroreCalliope(Exception):
     """Calliope non ha fatto quello che l'estensione chiedeva: il messaggio dice perché."""
+
+
+# La stessa regola di calliope/web/pagina.url_non_codificato (questo file non importa
+# Calliope: è copiata, e prova_estensioni_rete controlla che le due dicano lo stesso)
+_URL_AMMESSI = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+                         "-._~:/?#[]@!$&'()*+,;=%")
+
+
+def url_non_codificato(url):
+    """"" se percorso e parametri dell'URL sono codificati; se no il messaggio d'errore."""
+    import re
+    from urllib.parse import urlsplit
+    percento = re.compile(r"%(?![0-9A-Fa-f]{2})")
+    testo = str(url or "").strip()
+    try:
+        u = urlsplit(testo)
+    except ValueError:
+        return "URL non valido: non si riesce a leggere"
+    i = testo.find(u.netloc) if u.netloc else -1
+    resto = testo[i + len(u.netloc):] if i >= 0 else testo
+    cattivo = next((c for c in resto if c not in _URL_AMMESSI), None)
+    if cattivo is None and not percento.search(resto):
+        return ""
+    if cattivo is None:
+        cosa = "un «%» non seguito da due cifre esadecimali"
+    elif cattivo == " ":
+        cosa = "uno spazio"
+    elif ord(cattivo) < 32 or ord(cattivo) == 127:
+        cosa = "un carattere di controllo"
+    else:
+        cosa = f"il carattere «{cattivo}» non codificato"
+    dove = "nel percorso"
+    for pezzo in (u.query.split("&") if u.query else ()):
+        if (cattivo is not None and cattivo in pezzo) or (
+                cattivo is None and percento.search(pezzo)):
+            nome = pezzo.partition("=")[0]
+            dove = (f"nel parametro «{nome[:40]}»"
+                    if nome and all(c in _URL_AMMESSI for c in nome) else "nei parametri")
+            break
+    return (f"URL non valido: c'è {cosa} {dove}. Codifica i valori con urllib.parse.urlencode "
+            "(o urllib.parse.quote per un pezzo del percorso), mai a mano nell'indirizzo: es. "
+            "\"https://sito/cerca?\" + urlencode({\"nome\": valore})")
 
 
 class Calliope:
@@ -115,6 +159,11 @@ class CalliopeFinta(Calliope):
         self.richieste.append((azione, argomenti))
         if azione in self.negate:
             raise ErroreCalliope(f"{azione}: negato (finto)")
+        if azione in ("rete_leggi", "rete_invia"):
+            # Come la porta vera: un URL scritto a mano con spazi o accenti non parte
+            rotto = url_non_codificato(argomenti.get("url"))
+            if rotto:
+                raise ErroreCalliope(f"rete: {rotto}")
         if azione == "dati_scrivi":
             self.dati[argomenti["nome"]] = argomenti["testo"]
             return {"ok": True}

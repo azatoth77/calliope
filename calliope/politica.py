@@ -444,6 +444,7 @@ VERBI_AZIONE = {
         "indietro": _W + r"(indietro|precedent|torn|ripristin|vecchi)",
         "revoca": _W + r"(revoc|togli\w* .*permess)",
         "rimuovi": _W + r"(rimuov|cancell|elimin|togli|disinstall)",
+        "rinomina": _W + r"(rinomin|chiam|nom[ei])",
         "consenti": _W + r"(consent|permett|autorizz|lascia)",
         "nega": _W + r"(neg|non consent|blocc|vieta)"}),
     "schermo_gestisci": ("azione", {
@@ -533,6 +534,7 @@ _ESTENSIONE = {"approva": ("approvare", "approvi", "l'"), "rifiuta": ("rifiutare
                             "precedente", "l'"),
                "revoca": ("revocare i permessi «sempre»", "revochi i permessi «sempre»", "dell'"),
                "rimuovi": ("rimuovere", "rimuova", "l'"),
+               "rinomina": ("rinominare", "rinomini", "l'"),
                "consenti": ("consentire l'azione chiesta", "consenta l'azione chiesta", "dall'"),
                "nega": ("negare l'azione chiesta", "neghi l'azione chiesta", "dall'")}
 
@@ -688,18 +690,43 @@ def consenso_chiuso(testo: str) -> bool:
     return bool(pezzi) and all(_forma_si(x) for x in pezzi)
 
 
+# Dove conta la parola di consenso (08/10, caso vero della DGX: «Babine Kuzik, questa è la
+# stessa ok.», una frase storpiata, ha fatto partire un lavoro per l'«ok» in coda): fra le
+# prime TESTA_SI parole di un pezzo della frase (tra virgole e punti). «Sì, direi che…», «Direi
+# che va bene», «Beh sì» valgono; un «ok» in fondo a un pezzo lungo no (si richiede: una
+# domanda in più, reversibile). Regola `consenso_in_coda` quando è solo per questo.
+TESTA_SI = 4
+
+
+def _si_in_testa(t: str) -> bool:
+    for pezzo in re.split(r"[,.;:!?…]+", t or ""):
+        for m in _SI.finditer(pezzo):
+            if len(re.findall(r"[\wà-ù']+", pezzo[:m.start()])) < TESTA_SI:
+                return True
+    return False
+
+
 def consenso(testo: str) -> bool:
-    """La frase acconsente a una proposta: una parola di consenso, nessuna negazione; oppure
-    tutta fatta di forme chiuse di consenso (FORME_SI, anche «perché no»)."""
+    """La frase acconsente a una proposta: una parola di consenso in testa a un suo pezzo,
+    nessuna negazione; oppure tutta fatta di forme chiuse di consenso (FORME_SI, anche «perché
+    no»)."""
     t = testo or ""
-    return consenso_chiuso(t) or (bool(_SI.search(t)) and not _NO.search(t))
+    return consenso_chiuso(t) or (_si_in_testa(t) and not _NO.search(t))
+
+
+def consenso_in_coda(testo: str) -> bool:
+    """La parola di consenso c'è, ma solo in coda a un pezzo lungo: non vale (regola
+    `consenso_in_coda` nel registro dei turni)."""
+    t = testo or ""
+    return (bool(_SI.search(t)) and not _NO.search(t) and not _si_in_testa(t)
+            and not consenso_chiuso(t))
 
 
 def solo_forma_chiusa(testo: str) -> bool:
     """Un consenso che la regola di sempre non avrebbe accettato («perché no»): Brain scrive
     `consenso_forma_chiusa` nel registro dei turni (principio 10)."""
     t = testo or ""
-    return consenso_chiuso(t) and not (bool(_SI.search(t)) and not _NO.search(t))
+    return consenso_chiuso(t) and not (_si_in_testa(t) and not _NO.search(t))
 
 
 # Coerenza tra il verbo detto e un'azione distruttiva (caso vero della DGX, 05/10 sera: «volevo
@@ -729,13 +756,28 @@ def _distruttiva(cl: Classe, args: dict):
     return cl.distruttiva.get(_s(args, "azione").lower()) or cl.distruttiva.get("*")
 
 
-def bloccata(name: str, ctx) -> dict | None:
+def detto_dopo_dato(name: str, args: dict | None, t: "Turno") -> bool:
+    """Un tool di DOPO_DATO_SE_DETTO con il valore fatto solo di parole dette in questa frase:
+    lo sceglie la persona, non il dato letto prima nella stessa risposta (08/10, caso vero
+    della DGX: «prova con Bergamo e poi con Cerro Maggiore», il secondo collaudo fermato dal
+    risultato del primo). Vincolo di sicurezza allentato su un valore già scelto dalla persona
+    (principio 10); regola `dopo_dato_valore_detto`."""
+    chiave = DOPO_DATO_SE_DETTO.get(name)
+    if not chiave or not isinstance(args, dict) or t is None:
+        return False
+    return prov.tutto_detto(args.get(chiave), t.testo or "")
+
+
+def bloccata(name: str, ctx, args: dict | None = None) -> dict | None:
     """Il rifiuto `web_azione_bloccata` (DOPO_DATO), o None: lo chiama ToolRegistry.call per
     primo, prima del livello e della coerenza (una domanda su un'azione dettata dal dato non
     deve nemmeno partire). La stessa regola è anche in `decidi`."""
     from .tools.spec import note_rule
     t = getattr(ctx, "politica", None)
     if not isinstance(t, Turno) or not t.letto_ora or name in DOPO_DATO:
+        return None
+    if detto_dopo_dato(name, args, t):
+        note_rule(ctx, "dopo_dato_valore_detto")
         return None
     note_rule(ctx, "web_azione_bloccata")
     print(f"   [POLITICA] {name}: web_azione_bloccata (dati da {t.letto_ora})", flush=True)
@@ -904,6 +946,14 @@ def rinuncia(testo: str, richiesta: str, disponibili) -> str | None:
 # prima brain.DOPO_WEB). Le altre, anche chieste, si rifiutano con BLOCCO_DOPO_DATO
 DOPO_DATO = frozenset({"web_cerca", "biblioteca_cerca", "ora_attuale", "data_oggi", "calcola",
                        "data_calcola", "schermo_mostra", "calliope_stato"})
+# Dopo un dato letto in questa risposta partono anche questi, se il valore dell'argomento
+# indicato è fatto solo di parole dette dalla persona in questa frase (08/10: due collaudi
+# nella stessa frase). Il collaudo esegue la versione da approvare con la porta stretta: i suoi
+# effetti li governa il guardrail delle estensioni, non il testo letto
+DOPO_DATO_SE_DETTO = {"sviluppo_collauda": "dati"}
+# Azioni reversibili che con il valore detto tutto nella frase (e il verbo dell'azione) non
+# chiedono conferma nemmeno con un dato di mezzo: {tool: (azione, argomento)}
+DETTO_BASTA = {"estensione_gestisci": ("rinomina", "titolo")}
 BLOCCO_DOPO_DATO = {
     "ok": False, "fatto": NIENTE,
     "motivo": "dopo una ricerca su internet, nella stessa risposta non eseguo azioni: il testo "
@@ -1153,7 +1203,8 @@ def decidi(name: str, args: dict, cl: Classe, t: Turno | None,
     (calliope/valore.py, fase 2 della sicurezza per valore: regola `intento_confermato`)."""
     if cl.classe == VIETATO:
         return Decisione("vieta", "politica_vietato")
-    if t is not None and t.letto_ora and name not in DOPO_DATO:
+    if (t is not None and t.letto_ora and name not in DOPO_DATO
+            and not detto_dopo_dato(name, args, t)):
         return Decisione("blocca", "web_azione_bloccata", fonte=t.letto_ora)
     if t is None or cl.classe == SICURO:
         return ESEGUI
@@ -1161,6 +1212,14 @@ def decidi(name: str, args: dict, cl: Classe, t: Turno | None,
         k, valori = cl.sola_lettura
         if _s(args, k).lower() in valori:
             return ESEGUI
+    # Un'azione reversibile con il valore detto tutto in questa frase, con il verbo giusto
+    # (08/10, caso vero della DGX: «rinominiamo questa, chiamala solo Meteo città» → «c'è di
+    # mezzo il lavoro di un agente…»). Con un dato di mezzo il valore non può venire dal dato
+    detto = DETTO_BASTA.get(name)
+    if (detto is not None and _s(args, "azione").lower() == detto[0]
+            and prov.tutto_detto(_s(args, detto[1]), t.testo or "")
+            and chiesto_con_verbi(cl, t.testo, args)):
+        return Decisione("esegui", "politica_valore_detto")
     proposta = _proposta(t, name)
     cosa = cosa or _cosa(cl, args)
     contaminata = bool(t.contaminazione)

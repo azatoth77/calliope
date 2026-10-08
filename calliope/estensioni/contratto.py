@@ -245,6 +245,10 @@ def testo(cfg=None, tipo: str = "estensione", linguaggi=("python",)) -> str:
                   f"({', '.join(_rete.TIPI_DATI[:5])}…), "
                   f"{int(getattr(cfg, 'estensioni_rete_max_minuto', 30) or 30)} richieste al "
                   "minuto per tutto Calliope; mai dati riservati di casa nell'indirizzo",
+                  "- indirizzi: i valori dei parametri (una città, un nome, una ricerca) si "
+                  "codificano con urllib.parse.urlencode o quote, mai a mano: un URL con "
+                  "spazi, accenti o apostrofi non codificati la porta lo rifiuta («URL non "
+                  "valido…»), e anche CalliopeFinta nei test",
                   f"- dati propri: {_porta.MAX_DATO_BYTE // 1000} kB per testo, "
                   f"{_porta.MAX_DATI_BYTE // 1000} kB in tutto",
                   "- input: al più 6 proprietà (string, number, integer, boolean), testi fino "

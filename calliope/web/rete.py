@@ -97,6 +97,13 @@ class RetePubblica:
         (riuscita o no) finisce nel registro delle uscite."""
         host = _host(url)
         inviati = len(corpo.encode("utf-8")) if corpo else 0
+        # Un indirizzo con spazi o caratteri non codificati non parte (08/10): prima partiva
+        # rotto e tornava «collegamento non riuscito», senza la causa per chi scrive il codice
+        rotto = pagina.url_non_codificato(url)
+        if rotto:
+            self.registra(origine, host, metodo, "bloccata", "url_non_codificato",
+                          inviati=inviati)
+            raise pagina.PaginaVietata(rotto)
         trovati = self._riservati(url, corpo, origine)
         if trovati:
             self.registra(origine, host, metodo, "bloccata",

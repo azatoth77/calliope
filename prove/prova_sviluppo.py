@@ -211,6 +211,11 @@ def apri_e_avvia(ctx, est, svc, compito="Un'estensione che dica il meteo di una 
     """La richiesta di Dario (voce), la proposta e il «sì»: sviluppo aperto, lavoro avviato."""
     ctx.turno = 1
     r = te._estensione_crea(ctx, compito=compito, nome="Meteo per città")
+    if "estensione_simile_scelta" in ctx.regole:
+        # Dal 08/10 (giro 3) un nome simile senza modifica torna al modello: cambiare quella
+        # che c'è o farne una nuova accanto. Qui il modello sceglie di cambiarla
+        r = te._estensione_crea(ctx, compito=compito, nome="Meteo per città",
+                                modifica="meteo_citta")
     lav = svc.offerte["u1"]["lavoro"]
     lav.specifica = ("dice il meteo attuale di una città qualunque; se la città non esiste lo "
                      "dice")

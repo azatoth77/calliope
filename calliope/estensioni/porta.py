@@ -20,6 +20,13 @@ pubblico, anche dopo i reindirizzamenti), e ogni uscita, fatta o bloccata, va ne
 delle uscite (`uscite.jsonl`).
 
 Nessun segreto passa da qui: l'estensione vede risultati, mai token o percorsi.
+
+Dal 08/10 (giro vero della DGX, il meteo per città: cinque versioni corrette alla cieca) ogni
+richiesta di rete lascia nell'esecuzione una **traccia per lo sviluppo** (`Esecuzione.traccia`:
+metodo, URL ripulito, esito, l'inizio della risposta o l'errore, durata), che il collaudo passa
+all'agente (calliope/sviluppo.py); e un URL con spazi o caratteri non codificati si rifiuta
+con un errore che dice come scriverlo (`pagina.url_non_codificato`), anche con la funzione finta
+delle prove.
 """
 
 from __future__ import annotations
@@ -27,6 +34,7 @@ from __future__ import annotations
 import copy
 import json
 import re
+import time
 from types import SimpleNamespace
 
 from .. import guardrail as gr
@@ -40,6 +48,10 @@ _NOME_DATO = re.compile(r"^[a-zA-Z0-9][\w\-. ]{0,60}$")
 # Risposta di rete data all'estensione: troncata
 MAX_RETE_BYTE = 1_000_000
 MAX_RETE_TESTO = 200_000
+# Traccia di rete per lo sviluppo: richieste tenute, caratteri dell'URL e della risposta
+MAX_TRACCIA = 12
+TRACCIA_URL = 300
+TRACCIA_RISPOSTA = 300
 
 
 class Porta:
@@ -59,6 +71,8 @@ class Porta:
             self.svc.rete.registra(self._origine(es), gr.host_di(params.get("url")),
                                    "POST" if azione == "rete_invia" else "GET", "bloccata",
                                    f"{v.regola}: {v.motivo}")
+            self._traccia(es, azione, params.get("url"),
+                          {"errore": f"non concesso: {v.motivo}"}, 0)
         if v.classe == gr.SICURA and self.parere is not None and azione in gr.CON_TESTO:
             v = self.parere.applica(v, es.manifesto.get("titolo", ""),
                                     es.manifesto.get("descrizione", ""), azione, params)
@@ -224,6 +238,17 @@ class Porta:
         host del manifesto), con dati letti solo gli host dei loro flussi."""
         from ..web import pagina
         url = str(p.get("url") or "")
+        t0 = time.monotonic()
+        # Un URL scritto a mano con spazi o accenti non parte (anche con la funzione finta
+        # delle prove): l'errore dice a chi scrive il codice come codificarlo
+        rotto = pagina.url_non_codificato(url)
+        if rotto:
+            if self._scarica is None:
+                self.svc.rete.registra(self._origine(es), gr.host_di(url),
+                                       "POST" if azione == "rete_invia" else "GET", "bloccata",
+                                       "url_non_codificato")
+            self.svc.nota_regola("estensione_url_non_codificato")
+            return self._traccia(es, azione, url, {"errore": f"rete: {rotto}"}, t0)
         scope = gr._scope((es.manifesto or {}).get("permessi") or {})
         kw = {"max_byte": MAX_RETE_BYTE,
               "timeout_s": float(getattr(self.svc, "rete_timeout_s", 8.0))}
@@ -239,11 +264,90 @@ class Porta:
             else:
                 r = self.svc.rete.richiesta(url, self._origine(es), **kw)
         except (pagina.PaginaVietata, pagina.PaginaNonLetta) as e:
-            return {"errore": f"rete: {e}"}
+            return self._traccia(es, azione, url, {"errore": f"rete: {e}"}, t0)
         if not kw["host_ammesso"](gr.host_di(r.get("url") or url)):
-            return {"errore": "rete: reindirizzato verso un host non ammesso"}
-        return {"risultato": {"stato": 200, "tipo": r.get("tipo"),
-                              "testo": str(r.get("testo_grezzo") or "")[:MAX_RETE_TESTO]}}
+            return self._traccia(es, azione, url,
+                                 {"errore": "rete: reindirizzato verso un host non ammesso"}, t0)
+        return self._traccia(es, azione, url, {"risultato": {
+            "stato": 200, "tipo": r.get("tipo"),
+            "testo": str(r.get("testo_grezzo") or "")[:MAX_RETE_TESTO]}}, t0)
+
+    # ── traccia per lo sviluppo (08/10) ──
+    def _traccia(self, es, azione: str, url, out: dict, t0: float) -> dict:
+        """Aggiunge la richiesta alla traccia dell'esecuzione e restituisce `out`. L'URL senza
+        dati riservati (e, dopo una lettura di dati di casa, senza i valori dei parametri);
+        della risposta solo l'inizio. Mai un'eccezione."""
+        try:
+            tr = getattr(es, "traccia", None)
+            if not isinstance(tr, list) or len(tr) >= MAX_TRACCIA:
+                return out
+            rete = getattr(self.svc, "rete", None)
+            contaminata = bool(getattr(getattr(es, "storia", None), "contaminazione", None))
+            riga = {"metodo": "POST" if azione == "rete_invia" else "GET",
+                    "url": url_per_traccia(url, rete, contaminata),
+                    "ms": int((time.monotonic() - t0) * 1000) if t0 else 0}
+            if "errore" in out:
+                riga["esito"] = "errore"
+                riga["errore"] = _pulisci_testo(str(out["errore"]), rete)[:400]
+            else:
+                ris = out.get("risultato") or {}
+                testo = str(ris.get("testo") or "")
+                riga.update(esito=f"stato {ris.get('stato')}",
+                            tipo=str(ris.get("tipo") or "")[:60],
+                            byte=len(testo.encode("utf-8")),
+                            inizio=_pulisci_testo(" ".join(testo[:TRACCIA_RISPOSTA * 2].split()),
+                                                  rete)[:TRACCIA_RISPOSTA])
+            tr.append(riga)
+        except Exception:  # noqa: BLE001 — la traccia non cambia la richiesta
+            pass
+        return out
+
+
+def _pulisci_testo(testo: str, rete=None) -> str:
+    """Un testo per la traccia senza dati riservati di casa né dati personali riconosciuti."""
+    r = getattr(rete, "riservati", None)
+    if r is None or not testo:
+        return testo
+    try:
+        if r.trova(testo, forme_personali=False):
+            return "[tolto: contiene un dato riservato]"
+        if r.ripulitore is not None:
+            return r.ripulitore.pulisci(testo)[0]
+    except Exception:  # noqa: BLE001
+        return "[tolto]"
+    return testo
+
+
+def url_per_traccia(url, rete=None, contaminata: bool = False) -> str:
+    """L'URL per la traccia di sviluppo: com'era scritto (gli spazi non codificati restano:
+    sono spesso la causa), con l'host del registro, e i valori dei parametri tolti se portano
+    un dato riservato o, dopo una lettura di dati di casa, sempre."""
+    from urllib.parse import urlsplit
+    testo = str(url or "")[:2000].strip()
+    try:
+        u = urlsplit(testo)
+    except ValueError:
+        return "[URL illeggibile]"
+    host = u.hostname or ""
+    if host and rete is not None and hasattr(rete, "host_per_registro"):
+        if rete.host_per_registro(host) != host:
+            return f"{u.scheme}://[tolto: dato riservato]/[tolto]"
+    pezzi = []
+    for pezzo in (u.query.split("&") if u.query else ()):
+        nome, uguale, valore = pezzo.partition("=")
+        if uguale and valore:
+            if contaminata:
+                valore = "[tolto: dati di casa letti]"
+            elif _pulisci_testo(valore, rete) != valore:
+                valore = "[tolto]"
+        pezzi.append(nome + uguale + valore)
+    percorso = u.path
+    if contaminata and percorso.count("/") > 1:
+        percorso = percorso.rsplit("/", 1)[0] + "/[tolto]"
+    elif _pulisci_testo(percorso, rete) != percorso:
+        percorso = "/[tolto]"
+    out = f"{u.scheme}://{u.netloc}{percorso}" + ("?" + "&".join(pezzi) if u.query else "")
+    return out[:TRACCIA_URL] + ("…" if len(out) > TRACCIA_URL else "")
 
 
 def _motivo(motivo: str, params: dict, rete=None) -> str:

@@ -57,6 +57,9 @@ class Esecuzione:
         self.errore: str = ""
         self.richiesta: dict | None = None     # la richiesta che aspetta la conferma
         self.decisioni: list[dict] = []        # ogni richiesta alla porta, con l'esito
+        # La traccia di rete per lo sviluppo (08/10, porta.Porta._traccia): il collaudo la
+        # passa all'agente
+        self.traccia: list[dict] = []
         self.stderr = ""
         self.inizio = time.monotonic()
         self.avvio_s = float(AVVIO_S if avvio_s is None else avvio_s)

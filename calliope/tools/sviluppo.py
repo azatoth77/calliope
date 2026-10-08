@@ -386,7 +386,8 @@ def _nuovo_lavoro(ctx, svs, sv, prof, compito: str, cambia: str = "") -> dict:
         if not sv.estensione:
             # Nessuna versione ancora: la richiesta rifatta passa dall'analisi come la prima
             from .estensioni import _estensione_crea
-            return _estensione_crea(ctx, compito=compito, nome=sv.titolo, gioco=sv.gioco)
+            return _estensione_crea(ctx, compito=compito, nome=sv.titolo, gioco=sv.gioco,
+                                    accanto=True)
         from ..estensioni.servizio import runtime_testo
         from .estensioni import funzioni_di_calliope
         vincoli = (f"È lo sviluppo dell'estensione «{sv.estensione}»: i suoi file (la versione che "
@@ -652,12 +653,16 @@ def _sviluppo_prova(ctx: ToolContext, dati: str = "", **_altro) -> dict:
         if m is None:
             return _no(ctx, "Non c'è una versione nuova da provare.")
         out = est.prova_candidata(ctx, sv.estensione, _argomenti(m, dati))
+        # La traccia di rete (08/10): per l'agente (collaudi dello sviluppo), mai alla voce
+        from ..estensioni.servizio import CHIAVE_TRACCIA
+        traccia = out.pop(CHIAVE_TRACCIA, None) if isinstance(out, dict) else None
         ok = isinstance(out, dict) and out.get("risultati") is not None
         ris = (out or {}).get("risultati") if ok else None
         esito = (ris.get("da_dire") if isinstance(ris, dict) and ris.get("da_dire")
                  else json.dumps(ris, ensure_ascii=False) if ris is not None
                  else str((out or {}).get("errore") or (out or {}).get("conferma") or ""))
     else:
+        traccia = None
         from . import agenti as ta
         lav_id = sv.lavoro if svs._lavoro(sv.lavoro) is not None else ""
         out = ta._lavori_esegui(ctx, lavoro=lav_id, dati=dati)
@@ -672,7 +677,7 @@ def _sviluppo_prova(ctx: ToolContext, dati: str = "", **_altro) -> dict:
             return out
     else:
         fallito = not ok
-    svs.collaudo(sv, detti, not fallito, esito)
+    svs.collaudo(sv, detti, not fallito, esito, rete=traccia)
     note_rule(ctx, "sviluppo_collauda")
     _schermo(ctx, sv)
     if fallito:
@@ -792,6 +797,9 @@ def _sviluppo_correggi(ctx: ToolContext, problema: str = "", **_altro) -> dict:
                      for c in falliti)
     diagnosi = next((q for q in reversed(sv.chiesti) if q.get("dettagli") or q.get("voce")),
                     None)
+    # La traccia di rete dei collaudi (08/10): le richieste vere con l'esito, la causa che nel
+    # giro della DGX l'agente non vedeva (nella sandbox non ha rete)
+    rete = svs.testo_traccia(sv)
     vincoli = (f"È una CORREZIONE dello sviluppo «{sv.titolo}»: la specifica NON cambia "
                f"(«{(sv.specifica or sv.richiesta)[:500]}»). I file della versione che la "
                "persona ha provato sono già nella cartella: riparti da quelli, non riscrivere da "
@@ -802,6 +810,7 @@ def _sviluppo_correggi(ctx: ToolContext, problema: str = "", **_altro) -> dict:
                   + (f" Da correggere: {diagnosi['cosa_correggere']}."
                      if diagnosi.get("cosa_correggere") else "") if diagnosi else "")
                + (f" Problema detto dalla persona: «{problema}»." if problema else "")
+               + (f" {rete}" if rete else "")
                + " Trova la causa, correggi il codice, aggiungi un test con ogni caso che non "
                  "andava, rifai i test, poi consegna.")
     lav = _lavoro_dello_sviluppo(ctx, svc, sv, prof, sv.specifica or sv.richiesta, vincoli)
@@ -855,7 +864,9 @@ def sviluppo_apri_spec(file_pc: bool = False, allegati: bool = False) -> ToolSpe
     per i lavori quando ci sono il PC e gli allegati."""
     props = {"tipo": {"type": "string", "enum": TIPI_APRI},
              "compito": {"type": "string"}, "nome": {"type": "string"},
-             "modifica": {"type": "string"},
+             "modifica": {"type": "string", "description": (
+                 "per CAMBIARE un'estensione che c'è il suo nome (es. «modifica l'estensione "
+                 "Meteo città: …» → modifica = \"meteo_citta\"); vuoto per una nuova")},
              "gia_fatto_da": {"type": "string"}, "come_chiederlo": {"type": "string"},
              "proposta": {"type": "string"}, "gioco": {"type": "boolean"}}
     if file_pc:

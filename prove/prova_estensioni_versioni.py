@@ -138,8 +138,18 @@ def prova_crea(tmp: Path, iso):
     compito = ("Crea un'estensione che permetta di chiedere il meteo di una città "
                "specifica e restituisca le condizioni attuali.")
     r = te._estensione_crea(ctx, compito=compito, nome="Meteo Città")
+    # Dal 08/10 (giro 3, DGX 15:36: «Modifica l'estensione Meteocittà…» senza modifica → una
+    # nuova accanto, riscritta da zero): la prima volta la scelta torna al modello
+    verifica("«Meteo Città» senza modifica, simile a meteo_citta: niente lavoro, la scelta al "
+             "modello (estensione_simile_scelta)",
+             r.get("ok") is False and not svc.avviati
+             and "modifica = \"meteo_citta\"" in r.get("cosa_fare", "")
+             and "NUOVA accanto" in r.get("cosa_fare", "")
+             and "estensione_simile_scelta" in ctx.regole, json.dumps(r, ensure_ascii=False))
+    # Il modello richiama uguale nella stessa risposta: vuole davvero una nuova accanto
+    r = te._estensione_crea(ctx, compito=compito, nome="Meteo Città")
     lav = svc.avviati[-1] if svc.avviati else None
-    verifica("«Meteo Città» senza modifica: un'estensione nuova, non la versione 2 di "
+    verifica("…richiamata uguale: un'estensione nuova, non la versione 2 di "
              "meteo_citta", lav is not None and lav.estensione is None
              and "calliope_estensione.py" in lav.file_iniziali
              and "estensione.py" not in lav.file_iniziali, str(getattr(lav, "estensione", "")))
@@ -361,8 +371,11 @@ def prova_nominata(tmp: Path, iso):
     b.cfg.llm_reti_spente = []
     P.chiama(reg, ctx, "estensione_gestisci", {"azione": "disattiva", "nome": "meteo_citta"},
              turno=9)
-    verifica("contrario: disattivata (niente tool): niente dati del turno",
-             b._estensioni_nominate(FRASI_SI[0]) is None)
+    msg = b._estensioni_nominate(FRASI_SI[0]) or ""
+    # (dal 08/10 la frase che dice «estensione» riceve l'elenco vero, con lo stato)
+    verifica("contrario: disattivata (niente tool): non è «nominata», nell'elenco disattivata",
+             "nomina la tua estensione" not in msg
+             and "«Meteo per città» (disattivata" in msg, msg)
     verifica("…ma per cambiarla la si trova ancora (tutte=True)",
              [e["nome"] for e in est.nominate(FRASI_SI[0], tutte=True)] == ["meteo_citta"])
 

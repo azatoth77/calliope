@@ -140,6 +140,53 @@ def controlla_url(url: str, porte=(80, 443)) -> tuple[str, str, int, str]:
     return u.scheme, host, porta, path
 
 
+# I caratteri ammessi così come sono nel percorso, nella query e nel frammento (RFC 3986:
+# non riservati, riservati e «%» delle codifiche). Uno spazio, un accento o un carattere di
+# controllo devono arrivare codificati
+_URL_AMMESSI = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+                         "-._~:/?#[]@!$&'()*+,;=%")
+_PERCENTO = re.compile(r"%(?![0-9A-Fa-f]{2})")
+
+
+def url_non_codificato(url: str) -> str:
+    """"" se percorso e parametri dell'URL sono codificati; se no il messaggio per chi scrive
+    il codice (08/10, caso vero della DGX: l'estensione del meteo scriveva
+    «…/search?name={citta}» a mano, «Bergamo» andava e una città di due parole no; la richiesta
+    partiva rotta e tornava solo «collegamento non riuscito», e in cinque versioni l'agente
+    non ha mai visto la causa). Nel messaggio il nome del parametro, mai il suo valore.
+    La stessa regola è in calliope/estensioni/_ospite.py (CalliopeFinta, per i test
+    dell'agente): le tiene uguali prova_estensioni_rete."""
+    testo = str(url or "").strip()
+    try:
+        u = urlsplit(testo)
+    except ValueError:
+        return "URL non valido: non si riesce a leggere"
+    i = testo.find(u.netloc) if u.netloc else -1
+    resto = testo[i + len(u.netloc):] if i >= 0 else testo
+    cattivo = next((c for c in resto if c not in _URL_AMMESSI), None)
+    if cattivo is None and not _PERCENTO.search(resto):
+        return ""
+    if cattivo is None:
+        cosa = "un «%» non seguito da due cifre esadecimali"
+    elif cattivo == " ":
+        cosa = "uno spazio"
+    elif ord(cattivo) < 32 or ord(cattivo) == 127:
+        cosa = "un carattere di controllo"
+    else:
+        cosa = f"il carattere «{cattivo}» non codificato"
+    dove = "nel percorso"
+    for pezzo in (u.query.split("&") if u.query else ()):
+        if (cattivo is not None and cattivo in pezzo) or (
+                cattivo is None and _PERCENTO.search(pezzo)):
+            nome = pezzo.partition("=")[0]
+            dove = (f"nel parametro «{nome[:40]}»"
+                    if nome and all(c in _URL_AMMESSI for c in nome) else "nei parametri")
+            break
+    return (f"URL non valido: c'è {cosa} {dove}. Codifica i valori con urllib.parse.urlencode "
+            "(o urllib.parse.quote per un pezzo del percorso), mai a mano nell'indirizzo: es. "
+            "\"https://sito/cerca?\" + urlencode({\"nome\": valore})")
+
+
 def risolvi_pubblico(host: str, porta: int, vietate=(), eccezioni=frozenset(),
                      risolutore=None) -> str:
     """Un indirizzo del nome, solo se **tutti** i suoi indirizzi sono pubblici."""

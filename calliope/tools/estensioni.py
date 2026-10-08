@@ -78,7 +78,7 @@ def funzioni_di_calliope() -> str:
 
 def _estensione_crea(ctx: ToolContext, compito: str = "", nome: str = "", proposta: str = "",
                      gia_fatto_da: str = "", come_chiederlo: str = "", gioco=False,
-                     modifica: str = "", **altro) -> dict:
+                     modifica: str = "", accanto: bool = False, **altro) -> dict:
     from . import agenti as ta
     from .. import politica
     est = getattr(ctx, "estensioni", None)
@@ -141,6 +141,23 @@ def _estensione_crea(ctx: ToolContext, compito: str = "", nome: str = "", propos
                 "cosa_fare": ("richiama con modifica = una di queste: " + ci_sono if ci_sono
                               else "non ci sono estensioni: per farne una nuova togli modifica")}
     simile = "" if esistente else _simile(nome, est)
+    if simile and not accanto and not _scelta_gia_detta(ctx, est, simile):
+        # Un nome simile a un'estensione che c'è, senza `modifica` (08/10, caso vero della DGX
+        # delle 15:36: «Modifica l'estensione Meteocittà: fai codificare il nome…» → il 26B
+        # senza modifica, ed è nata un'estensione NUOVA accanto, riscritta da zero, anche dopo
+        # «vorrei che tu modificassi l'estensione»). Niente lavoro né sviluppo: la scelta torna
+        # al modello (correzione della forma della sua chiamata, principio 10; regola
+        # `estensione_simile_scelta`). Se la richiama uguale nella stessa risposta, è nuova
+        ta.note_rule(ctx, "estensione_simile_scelta")
+        est._simile_detto = (int(getattr(ctx, "turno", 0) or 0), simile)
+        tit = _titolo(est, simile)
+        return {"ok": False, "fatto": NIENTE,
+                "errore": f"c'è già l'estensione «{tit}» ({simile}): niente creato",
+                "cosa_fare": (f"se la persona vuole CAMBIARE «{tit}» (modificala, correggila, "
+                              f"aggiungi…), richiama sviluppo_apri con modifica = \"{simile}\" e "
+                              "compito = cosa cambiare; per un'estensione NUOVA accanto, "
+                              "richiama con un nome diverso; se non si capisce, chiedi: «Vuoi "
+                              f"cambiare «{tit}» o farne una nuova accanto?»")}
     # Una richiesta nuova di chi amministra apre lo sviluppo, in analisi (08/10)
     apri_se_serve(ctx, "estensione", compito,
                   titolo=str(nome or "").strip() or (_titolo(est, esistente) if esistente
@@ -220,6 +237,12 @@ def _estensione_crea(ctx: ToolContext, compito: str = "", nome: str = "", propos
     return _con_avviso(out, esistente, simile, est)
 
 
+def _scelta_gia_detta(ctx, est, simile: str) -> bool:
+    """La scelta «cambiare o nuova accanto» è già tornata al modello in questo turno per la
+    stessa estensione: se richiama ancora senza `modifica`, vuole una nuova."""
+    return getattr(est, "_simile_detto", None) == (int(getattr(ctx, "turno", 0) or 0), simile)
+
+
 def _titolo(est, nome: str) -> str:
     m = est.archivio.manifesto(nome) or est.archivio.manifesto(
         nome, est.archivio.candidata(nome)) or {}
@@ -265,11 +288,11 @@ def _con_avviso(out: dict, esistente: str, simile: str, est) -> dict:
 
 
 def _estensioni_gestisci(ctx: ToolContext, azione: str = "elenca", nome: str = "",
-                         esecuzione: str = "", sempre=False) -> dict:
+                         esecuzione: str = "", sempre=False, titolo: str = "") -> dict:
     est = getattr(ctx, "estensioni", None)
     if est is None:
         return _final("Qui le estensioni non ci sono.", ok=False, fatto=NIENTE)
-    return est.gestisci(ctx, azione, nome, esecuzione, sempre)
+    return est.gestisci(ctx, azione, nome, esecuzione, sempre, titolo)
 
 
 def _prepara_gestisci(ctx, argomenti: dict) -> dict:
@@ -278,7 +301,7 @@ def _prepara_gestisci(ctx, argomenti: dict) -> dict:
 
 
 AZIONI = ["elenca", "approva", "rifiuta", "disattiva", "riattiva", "indietro", "revoca",
-          "rimuovi", "consenti", "nega"]
+          "rimuovi", "rinomina", "consenti", "nega"]
 
 
 def estensioni_specs(crea: bool = True) -> list[ToolSpec]:
@@ -291,16 +314,20 @@ def estensioni_specs(crea: bool = True) -> list[ToolSpec]:
     out.append(ToolSpec(
         name="estensione_gestisci",
         description=("Le estensioni di Calliope (funzioni aggiunte dalla famiglia): elenca "
-                     "(quali ci sono davvero, con le versioni nuove da approvare: prima di dire "
-                     "come usarne una); approva una versione nuova («attiva la versione nuova», "
+                     "(quali e quante ci sono davvero, attive o no, con le versioni nuove da "
+                     "approvare: chiamalo prima di rispondere a una domanda sulle estensioni o "
+                     "di dire come usarne una); approva una versione nuova («attiva la versione nuova», "
                      "«usa la nuova»), rifiuta, disattiva, riattiva (una disattivata), indietro "
-                     "(torna alla versione precedente), revoca (i permessi «sempre»), rimuovi; "
+                     "(torna alla versione precedente), revoca (i permessi «sempre»), rimuovi, "
+                     "rinomina (titolo = il nome nuovo detto: cambia solo come si chiama, "
+                     "senza agente); "
                      "consenti o nega un'azione che un'estensione ha chiesto (esecuzione = l'id, "
                      "es. «E3»; sempre=true se la persona dice «sì, sempre»). Per USARE "
                      "un'estensione chiama il suo tool est_, non questo."),
         parameters={"type": "object", "properties": {
             "azione": {"type": "string", "enum": AZIONI}, "nome": {"type": "string"},
-            "esecuzione": {"type": "string"}, "sempre": {"type": "boolean"}},
+            "esecuzione": {"type": "string"}, "sempre": {"type": "boolean"},
+            "titolo": {"type": "string"}},
             "required": ["azione"]},
         func=_estensioni_gestisci, risk="azione", levels=FAMILY,
         prepara=_prepara_gestisci))
