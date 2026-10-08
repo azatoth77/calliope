@@ -24,7 +24,7 @@
     documento: "Documento", casa: "Casa", calcolo: "Calcolo", testo: "Da leggere",
     lavoro: "Lavoro", modulo: "Da scrivere", web: "Internet", esecuzione: "Programma",
     risposta: "Risposta", foto: "Foto", allegato: "File", gioco: "Gioco",
-    cruscotto: "Cruscotto",
+    cruscotto: "Cruscotto", esercizio: "Esercizi", esercizi_riepilogo: "Esercizi",
   };
   // Il programma di un lavoro mentre gira (04/10, calliope/agenti/esecuzione.py)
   const STATI_ESECUZIONE = {
@@ -449,7 +449,7 @@
     const vecchia = m.querySelector(":scope > article.scheda");
     const nuova = costruisci(c);
     if (vecchia && prima && chiaveDi(prima) === chiaveDi(c) && vecchia.dataset.chiave === chiaveDi(c)
-        && c.tipo !== "modulo" && prima.tipo === c.tipo) {
+        && c.tipo !== "modulo" && c.tipo !== "esercizio" && prima.tipo === c.tipo) {
       const seguite = [...vecchia.querySelectorAll("pre[data-segui]")].map(inFondo);
       // Il segno di prima resta com'è (togliere e rimettere la classe lo farebbe ripartire)
       if (vecchia.classList.contains("cambiata")) nuova.classList.add("cambiata");
@@ -1145,6 +1145,124 @@
     if (parte && parte.errore) { box.append(el("p", "cr-avviso", parte.errore)); return true; }
     return !parte;
   }
+
+  // ─── esercizi (08/10, calliope/esercizi/) ───
+  // La domanda grande, il campo per scrivere (o i pulsanti delle scelte) e l'esito. La
+  // risposta giusta non arriva mai qui: la controlla il server (/api/esercizio). La scheda si
+  // ricostruisce intera a ogni aggiornamento (niente allinea: i gestori leggerebbero
+  // l'esercizio di prima); se si stava scrivendo, il campo nuovo riprende il fuoco
+  DISEGNA.esercizio = function (c, corpo) {
+    const dati = [c.materia, c.argomento, c.classe].filter(Boolean).join(" · ");
+    corpo.append(el("p", "sotto", dati + (c.stato === "aperta" && c.domanda ? " · esercizio " + c.numero : "")));
+    const es = c.esito || {};
+    if (c.stato !== "aperta" || !c.domanda) {
+      corpo.append(el("p", "esito-esercizio", es.testo || "Esercizi finiti."));
+      corpo.append(el("p", "nota", (c.fatti || 0) + " esercizi, " + (c.giuste || 0) + " giusti."));
+      return;
+    }
+    corpo.append(el("p", "domanda-esercizio", c.domanda));
+    const esito = el("p", "esito-esercizio" + (es.giusta === true ? " giusta" : es.giusta === false ? " sbagliata" : ""), es.testo || "");
+    esito.setAttribute("role", "status");
+    esito.setAttribute("aria-live", "polite");
+    const bottoni = [];
+    const attivo = document.activeElement;
+    const fuoco = !!(attivo && attivo.closest && attivo.closest(".risposta-esercizio"));
+    const invia = async (azione, risposta) => {
+      bottoni.forEach((b) => { b.disabled = true; });
+      esito.className = "esito-esercizio";
+      esito.textContent = "…";
+      let r;
+      try { r = await postSessione("/api/esercizio", { azione, esercizio: c.esercizio, risposta: risposta || "" }); }
+      catch (e) { r = null; }
+      bottoni.forEach((b) => { b.disabled = false; });
+      if (r && r.dati && r.dati.scheda) {
+        aggiungiCronologia(r.dati.scheda);
+        mostra(r.dati.scheda);
+        if (r.status === 200) return;
+      }
+      esito.textContent = r ? (r.dati.errore || MESSAGGI[r.status] || "Non è andato: riprova.")
+        : "Calliope non risponde: riprova.";
+    };
+    if (Array.isArray(c.scelte) && c.scelte.length) {
+      const g = el("div", "scelte-esercizio");
+      c.scelte.forEach((x) => {
+        const b = el("button", "scelta-esercizio", x);
+        b.type = "button";
+        b.addEventListener("click", () => invia("rispondi", x));
+        bottoni.push(b);
+        g.append(b);
+      });
+      corpo.append(g);
+    } else {
+      const f = el("form", "risposta-esercizio");
+      f.noValidate = true;
+      const id = "es-" + String(c.esercizio || "x");
+      const lab = el("label", "", "La tua risposta");
+      lab.htmlFor = id;
+      const i = el("input");
+      i.id = id;
+      i.type = "text";
+      i.autocomplete = "off";
+      i.maxLength = 80;
+      i.setAttribute("autocapitalize", "off");
+      if (c.campo === "numero") i.placeholder = "per esempio 12, 3/4 o -2";
+      const b = el("button", "invia-modulo", "Rispondi");
+      b.type = "submit";
+      bottoni.push(b);
+      f.append(lab, i, b);
+      f.addEventListener("submit", (ev) => {
+        ev.preventDefault();
+        const v = i.value.trim();
+        if (!v) { esito.textContent = "Scrivi la risposta."; i.focus(); return; }
+        invia("rispondi", v);
+      });
+      corpo.append(f);
+      if (fuoco) requestAnimationFrame(() => { if (i.isConnected) i.focus(); });
+    }
+    corpo.append(esito);
+    const piede = el("div", "piede-esercizio");
+    [["aiuto", "Un indizio"], ["salta", "Salta"], ["segnala", "Secondo me è sbagliato"],
+      ["fine", "Basta così"]].forEach(([a, t]) => {
+      const b = el("button", "piccolo-bottone", t);
+      b.type = "button";
+      b.dataset.azione = a;
+      b.addEventListener("click", () => invia(a, ""));
+      bottoni.push(b);
+      piede.append(b);
+    });
+    corpo.append(piede);
+    if (c.tentativi) corpo.append(el("p", "nota", "Risposte sbagliate: " + c.tentativi + " su " + c.massimo));
+  };
+
+  // Il riepilogo per i tutori: la frase, gli esercizi a campione da guardare, le segnalazioni
+  // e il dettaglio dei tentativi (decisione del 07/10: anche per gli adolescenti)
+  DISEGNA.esercizi_riepilogo = function (c, corpo) {
+    if (c.frase) corpo.append(el("p", "riassunto-lavoro", c.frase));
+    const tabella = (titolo, intest, righe) => {
+      if (!righe || !righe.length) return;
+      corpo.append(el("h2", "", titolo));
+      const box = el("div", "tabella-md");
+      const t = el("table");
+      const h = el("tr");
+      intest.forEach((x) => h.append(el("th", "", x)));
+      t.append(h);
+      righe.forEach((r) => {
+        const tr = el("tr");
+        r.forEach((x) => tr.append(el("td", "", x == null ? "" : x)));
+        t.append(tr);
+      });
+      box.append(t);
+      corpo.append(box);
+    };
+    const ESITI = { giusta: "giusta", sbagliata: "sbagliata", aiuto: "indizio", saltato: "saltato",
+      spiegato: "spiegato", scartato: "tolto" };
+    tabella("Segnalati come sbagliati", ["Domanda", "Risposta del programma", "Sua", "Ricontrollo"],
+      (c.segnalazioni || []).map((x) => [x.domanda, x.attesa, x.data, x.esito === "scartato" ? "tolto" : "torna"]));
+    tabella("Da controllare (a campione)", ["Domanda", "Risposta del programma"],
+      (c.campione || []).map((x) => [x.domanda, x.attesa]));
+    tabella("Tentativi", ["Ora", "Argomento", "Domanda", "Risposta", "Esito"],
+      (c.righe || []).map((x) => [x.quando, x.argomento, x.domanda, x.data, ESITI[x.esito] || x.esito]));
+  };
 
   DISEGNA.cruscotto = function (c, corpo) {
     const d = c.dati || {};

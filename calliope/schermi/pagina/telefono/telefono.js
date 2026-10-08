@@ -360,7 +360,7 @@ function sincronizza(det) {
     const el = bin.querySelector(':scope > [data-chiave="' + CSS.escape(k) + '"]');
     if (el && vecchia === c) continue;
     const nuova = costruisciPagina(c);
-    if (el && vecchia && vecchia.tipo === c.tipo) {
+    if (el && vecchia && vecchia.tipo === c.tipo && c.tipo !== "esercizio") {
       const seguite = [...el.querySelectorAll("pre[data-segui]")].map((p) => p.scrollHeight - p.scrollTop - p.clientHeight < 24);
       sch().allinea(el, nuova);
       el.querySelectorAll("pre[data-segui]").forEach((p, i) => { if (seguite[i] !== false) p.scrollTop = p.scrollHeight; });
