@@ -1165,8 +1165,8 @@ agenti:
   # mai. «amministra» o «familiare»
   agenti_livello: familiare
   agenti_livello_codice: amministra
-  # Conferma a voce prima di avviare: «costosi» (codice, ricerche, coda già occupata,
-  # modello da caricare), «sempre» o «mai»
+  # Conferma a voce prima di avviare: «costosi» (codice ed estensioni, coda già occupata,
+  # modello da caricare; le ricerche no dal 08/10), «sempre» o «mai»
   agenti_conferma: costosi
   # Analisi della richiesta prima della proposta (06/10, calliope/agenti/richiesta.py): un
   # lavoro di codice o un'estensione nuova passa prima dal modello dell'agente, che dice se

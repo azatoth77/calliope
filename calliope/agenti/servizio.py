@@ -669,7 +669,9 @@ class Lavori:
             return True
         if mode == "mai":
             return False
-        if lav.tipo in ("codice", "ricerca", "estensione"):
+        # Le ricerche partono senza «Procedo?» (decisione di Dario, 08/10): le chiede la persona
+        # in modo esplicito e costano poco; il codice e le estensioni lo chiedono ancora
+        if lav.tipo in ("codice", "estensione"):
             return True
         if self.attivi():
             return True

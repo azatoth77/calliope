@@ -862,3 +862,11 @@ l'uso vero. «Che tempo fa a Bergamo?» con l'estensione o con internet vanno be
 (l'estensione dice i dati di Open-Meteo, internet i siti di meteo con la fonte detta): con pochi
 tool il 4B sceglie l'estensione, con tutti internet. Prova a secco:
 `prove/prova_estensioni_versioni.py`.
+
+## Ricerche senza «Procedo?» (08/10)
+
+Decisione di Dario: una ricerca affidata all'agente parte appena chiesta, senza la proposta
+«È una ricerca a più passi… Procedo?» (`Lavori.serve_conferma`: restano codice ed estensioni,
+la coda occupata, il modello da caricare, i file della persona). Coerente con la classe d'effetto
+E2 delle ricerche nella politica per valore (`docs/ricerche/2026-10-07-sicurezza-per-valore.md`,
+D1). La conferma della politica per un dato non fidato di mezzo resta quella della politica.
