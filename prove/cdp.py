@@ -19,9 +19,14 @@ import time
 import urllib.request
 from pathlib import Path
 
+# --mute-audio (08/10): senza, la voce che la pagina del telefono riproduce con Web Audio
+# (frasi di Piper mandate da UscitaRemota in prova_telefono_pagina, prova_telefono_audio…)
+# usciva dalle casse o dalle cuffie vere del portatile durante le prove. Web Audio gira lo
+# stesso (AudioContext «running», tempi e «dette per intero» uguali): si spegne solo l'uscita.
 OPZIONI_BASE = ("--headless=new", "--remote-debugging-port=0", "--no-first-run",
                 "--no-default-browser-check", "--disable-sync", "--disable-gpu",
-                "--remote-allow-origins=*", "--disable-crash-reporter", "--disable-breakpad")
+                "--remote-allow-origins=*", "--disable-crash-reporter", "--disable-breakpad",
+                "--mute-audio")
 
 
 class Browser:

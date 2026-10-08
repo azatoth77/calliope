@@ -87,7 +87,10 @@ dura da 0,2 s in su, e sotto carico il solo avvio di un thread superava i 50 ms.
 Le prove con il **browser** (Edge o Chromium senza finestra) usano `prove/cdp.py` (06/10): la
 porta di DevTools la sceglie il browser (`--remote-debugging-port=0`, letta da
 `DevToolsActivePort`) e la chiusura passa da `Browser.close`, poi dall'albero dei processi
-(prima restavano vivi crashpad e le utility di Edge).
+(prima restavano vivi crashpad e le utility di Edge). Dal 08/10 il browser parte sempre con `--mute-audio`: la voce
+che la pagina del telefono riproduce con Web Audio non esce più dalle casse o dalle cuffie
+vere del portatile (Web Audio gira lo stesso). Le prove con un satellite in Python usano casse
+finte (`apri_uscita`, `apri_flusso`).
 
 
 ## Le prove per area
