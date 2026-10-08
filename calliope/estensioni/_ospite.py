@@ -109,6 +109,18 @@ def doppia_codifica(url):
     return ""
 
 
+def _chiave_url(url):
+    """L'indirizzo per il confronto con le risposte vere: schema, host (minuscolo), percorso e
+    i parametri com'erano scritti, in ordine alfabetico."""
+    from urllib.parse import urlsplit
+    try:
+        u = urlsplit(str(url or "").strip())
+    except ValueError:
+        return str(url or "")
+    q = sorted(u.query.split("&")) if u.query else []
+    return (u.scheme.lower(), (u.netloc or "").lower(), u.path or "/", tuple(q))
+
+
 class Calliope:
     """La porta stretta vista dall'estensione: ogni metodo è una richiesta a Calliope, che
     decide (permessi del manifesto, guardrail, conferma della persona)."""
@@ -179,13 +191,52 @@ class CalliopeFinta(Calliope):
     """Per i test: `risposte` = {azione: risultato o funzione(argomenti)}; `negate` = azioni
     che alzano ErroreCalliope. `richieste` registra ogni (azione, argomenti)."""
 
-    def __init__(self, risposte=None, negate=()):
+    def __init__(self, risposte=None, negate=(), esempi_veri=True):
         self.risposte = dict(risposte or {})
         self.negate = set(negate)
         self.richieste = []
         self.avvisi = []
         self.dati = {}
+        # Le risposte vere dei collaudi (08/10 notte): per un indirizzo registrato in
+        # esempi_veri/indice.json risponde quella, non la risposta preparata dal test (un test
+        # che «trova» ciò che il servizio vero non trova fallisce). `vere`: gli indirizzi così
+        self.esempi_veri = bool(esempi_veri)
+        self.vere = []
+        self._indice = None
         super().__init__(self._finta)
+
+    def _risposta_vera(self, url):
+        """{stato, tipo, testo} della risposta vera registrata per questo indirizzo, o None.
+        Solo quelle intere e non ripulite; l'indirizzo uguale a meno dell'ordine dei
+        parametri. Cerca esempi_veri/indice.json nella cartella di lavoro (dove girano i
+        test)."""
+        if not self.esempi_veri:
+            return None
+        if self._indice is None:
+            self._indice = {}
+            base = os.getcwd()
+            try:
+                with open(os.path.join(base, "esempi_veri", "indice.json"),
+                          encoding="utf-8") as f:
+                    voci = json.load(f)
+            except (OSError, ValueError):
+                voci = []
+            for v in voci if isinstance(voci, list) else ():
+                if isinstance(v, dict) and v.get("url") and v.get("file") \
+                        and not v.get("troncata") and not v.get("ripulita") \
+                        and str(v["file"]).startswith("esempi_veri/") and ".." not in v["file"]:
+                    self._indice[_chiave_url(v["url"])] = os.path.join(
+                        base, *str(v["file"]).split("/"))
+        percorso = self._indice.get(_chiave_url(url))
+        if not percorso:
+            return None
+        try:
+            with open(percorso, encoding="utf-8") as f:
+                r = json.load(f).get("risposta") or {}
+        except (OSError, ValueError, AttributeError):
+            return None
+        return {"stato": r.get("stato"), "tipo": r.get("tipo") or "",
+                "testo": str(r.get("testo") or "")}
 
     def _finta(self, azione, argomenti):
         self.richieste.append((azione, argomenti))
@@ -202,6 +253,14 @@ class CalliopeFinta(Calliope):
             if doppia:
                 self.avvisi.append(doppia)
                 print(f"AVVISO di CalliopeFinta: {doppia}", file=sys.stderr)
+            if azione == "rete_leggi":
+                vera = self._risposta_vera(argomenti.get("url"))
+                if vera is not None:
+                    self.vere.append(argomenti.get("url"))
+                    print("CalliopeFinta: per questo indirizzo c'è la risposta vera di un "
+                          "collaudo (esempi_veri/): uso quella, non quella del test",
+                          file=sys.stderr)
+                    return vera
         if azione == "dati_scrivi":
             self.dati[argomenti["nome"]] = argomenti["testo"]
             return {"ok": True}

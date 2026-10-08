@@ -469,9 +469,30 @@ def _nuovo_lavoro(ctx, svs, sv, prof, compito: str, cambia: str = "",
         lav.titolo = sv.titolo
         lav.file_iniziali = file_di_codice(sv.cartella) if sv.cartella else {}
     lav.specifica = compito
+    _con_esempi(svs, sv, lav)
     if avvia:
         return ta._avvia(ctx, svc, lav)
     return ta._proponi(ctx, svc, lav, turno)
+
+
+def _con_esempi(svs, sv, lav) -> int:
+    """Le risposte vere dei collaudi nella cartella dell'agente (`esempi_veri/`, 08/10 notte) e
+    nei vincoli come usarle nei test. Il numero di file messi (0 senza)."""
+    from ..sviluppo import ESEMPI_VINCOLO, ESEMPI_VERI
+    try:
+        esempi = svs.esempi(sv)
+    except Exception as e:  # noqa: BLE001 — gli esempi aiutano, non fermano il lavoro
+        getattr(svs, "log", print)(f"[SVILUPPO] esempi veri non preparati: "
+                                   f"{type(e).__name__}: {e}")
+        return 0
+    if not esempi:
+        return 0
+    # Quelli della versione di prima (tra i file della candidata) li sostituiscono i nuovi
+    lav.file_iniziali = {k: v for k, v in (lav.file_iniziali or {}).items()
+                         if not k.startswith(ESEMPI_VERI + "/")}
+    lav.file_iniziali.update(esempi)
+    lav.vincoli = ((lav.vincoli or "").rstrip() + " " + ESEMPI_VINCOLO).strip()
+    return len(esempi) - 1
 
 
 def _analisi(ctx, svs, sv, prof, cambia: str) -> dict:
@@ -982,6 +1003,7 @@ def _sviluppo_correggi(ctx: ToolContext, problema: str = "", **_altro) -> dict:
     lav = _lavoro_dello_sviluppo(ctx, svc, sv, prof, sv.specifica or sv.richiesta, vincoli)
     if isinstance(lav, dict):
         return lav
+    _con_esempi(svs, sv, lav)
     lav.correzione = True
     with svs._lock:
         sv.correzioni += 1

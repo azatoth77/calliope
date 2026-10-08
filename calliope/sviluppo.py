@@ -47,6 +47,15 @@ ALLA = {"analisi": "all'analisi", "sviluppo": "allo sviluppo", "collaudo": "al c
         "revisione": "alla revisione", "attivazione": "all'attivazione"}
 MAX_COLLAUDI = 20
 MAX_TRACCIA = 12          # richieste di rete tenute per collaudo (estensioni/porta.py)
+# Il confronto tra collaudi riusciti e falliti (08/10 notte): collaudi falliti messi in fila,
+# richieste per collaudo, caratteri in tutto
+CONFRONTO_FALLITI = 3
+CONFRONTO_RICHIESTE = 3
+MAX_CONFRONTO = 2500
+# Le risposte vere come esempi per i test (esempi_veri/): collaudi che le tengono, file
+COLLAUDI_CON_ESEMPI = 6
+MAX_ESEMPI = 6
+ESEMPI_VERI = "esempi_veri"
 MAX_STORIA = 60
 TENUTA_CHIUSE_S = 30 * 86400
 # I tool che fanno parte di uno sviluppo: una risposta che ne usa uno è «parlarne»
@@ -748,6 +757,9 @@ class Sviluppi:
         inp = self.input_in_prova(sv)
         if inp:
             righe.append("Input della versione in prova: " + "; ".join(inp))
+        diff = confronto(sv.collaudi)
+        if diff:
+            righe.append(diff)
         if sv.collaudi:
             righe.append("Collaudi fatti dalla persona (dati → esito):")
             ultimi = sv.collaudi[-8:]
@@ -1139,6 +1151,11 @@ class Sviluppi:
         with self._lock:
             sv.collaudi.append(c)
             sv.collaudi = sv.collaudi[-MAX_COLLAUDI:]
+            # Le risposte vere intere (esempi_veri) solo negli ultimi collaudi: sviluppi.json
+            # resta piccolo
+            for vecchio in sv.collaudi[:-COLLAUDI_CON_ESEMPI]:
+                for r in vecchio.get("rete") or ():
+                    r.pop("esempio", None)
             sv.ultimo = time.time()
         self._salva()
         self.agli_schermi(sv)
@@ -1162,6 +1179,9 @@ class Sviluppi:
         con = [c for c in sv.collaudi if c.get("rete")]
         if not con:
             return ""
+        # In testa il confronto tra riusciti e falliti (08/10 notte): le differenze messe in
+        # fila, così la causa non dipende da come l'agente legge la traccia
+        diff = confronto(sv.collaudi)
         # Prima gli errori e le richieste con un avviso (la doppia codifica, 08/10 sera: la
         # richiesta riesce con «stato 200, 31 byte» e la causa è solo nell'URL)
         errori = [c for c in con if any(r.get("esito") == "errore" or r.get("avviso")
@@ -1177,7 +1197,15 @@ class Sviluppi:
             righe.append(f"collaudo «{c.get('dati') or 'senza dati'}» (versione "
                          f"{c.get('versione')}):")
             righe += ["  " + r for r in self.righe_traccia(c)]
+        if diff:
+            righe.insert(0, diff)
         return "\n".join(righe)
+
+    def esempi(self, sv: Sviluppo) -> dict[str, str]:
+        """I file esempi_veri/ per la cartella dell'agente (08/10 notte), {} senza."""
+        with self._lock:
+            collaudi = [dict(c) for c in sv.collaudi]
+        return esempi_veri(collaudi)
 
 
 # Dati del turno (Brain): la modalità e la fase, prima della domanda. Un contesto: decide il
@@ -1251,6 +1279,355 @@ def argomenti_detti(c: dict) -> str:
     """citta="Guanzate, 5 giorni", giorni=3: gli argomenti veri di un collaudo."""
     return ", ".join(f"{k}={json.dumps(v, ensure_ascii=False)}"
                      for k, v in (c.get("argomenti") or {}).items())
+
+# ─────────────────── diagnosi dei collaudi (08/10 notte) ───────────────────
+# Il 08/10 sulla DGX l'agente aveva la traccia giusta («name=…%2BMaggiore» → 32 byte), l'ha letta
+# male, e i suoi test passavano con un geocoder finto scritto da lui che trovava la città. Due
+# meccanismi generali, senza conoscere il problema: il confronto tra le richieste dei collaudi
+# riusciti e falliti verso lo stesso indirizzo, e le risposte vere come esempi per i test.
+
+def _richieste(c: dict) -> list[dict]:
+    return [r for r in (c.get("rete") or ()) if isinstance(r, dict) and r.get("url")]
+
+
+def _punto(r: dict) -> tuple[str, str]:
+    """(host, percorso) di una richiesta della traccia: «lo stesso indirizzo»."""
+    from urllib.parse import urlsplit
+    try:
+        u = urlsplit(str(r.get("url") or ""))
+    except ValueError:
+        return "", str(r.get("url") or "")
+    return (u.hostname or "").lower(), u.path or "/"
+
+
+def _parametri(r: dict) -> list[tuple[str, str]]:
+    """I parametri della query com'erano scritti, in ordine."""
+    from urllib.parse import urlsplit
+    try:
+        q = urlsplit(str(r.get("url") or "").rstrip("…")).query
+    except ValueError:
+        return []
+    out = []
+    for pezzo in (q.split("&") if q else ()):
+        nome, _, valore = pezzo.partition("=")
+        out.append((nome, valore))
+    return out
+
+
+def _decodificato(valore: str) -> str:
+    from urllib.parse import unquote_plus
+    if "[tolto" in valore:
+        return valore
+    try:
+        return unquote_plus(valore)
+    except Exception:  # noqa: BLE001
+        return valore
+
+
+def _male(c: dict) -> bool:
+    """Un collaudo fallito: per il codice, o per la persona (il giudizio)."""
+    return not c.get("ok") or bool(c.get("giudizio"))
+
+
+def _chiavi(r: dict) -> list[str]:
+    if r.get("chiavi"):
+        return list(r["chiavi"])
+    # Le tracce di prima del 08/10 notte: le chiavi dall'inizio della risposta, se è intera
+    if r.get("inizio") and int(r.get("byte") or 0) <= len(str(r["inizio"])):
+        try:
+            dati = json.loads(r["inizio"])
+            return [str(k) for k in dati] if isinstance(dati, dict) else []
+        except ValueError:
+            return []
+    return []
+
+
+def _povera(a: dict, b: dict) -> bool:
+    """La risposta `a` ha meno della risposta `b` dallo stesso indirizzo: un errore contro una
+    risposta, uno stato diverso da 200, chiavi che mancano o che sono vuote."""
+    ea, eb = str(a.get("esito") or ""), str(b.get("esito") or "")
+    if ea == "errore" and eb != "errore":
+        return True
+    if ea != eb and eb == "stato 200":
+        return True
+    ka, kb = set(_chiavi(a)), set(_chiavi(b))
+    if kb - ka and not ka - kb:
+        return True
+    va, vb = set(a.get("vuote") or ()), set(b.get("vuote") or ())
+    return bool((va - vb) & kb)
+
+
+def _risposta(r: dict) -> str:
+    if r.get("esito") == "errore":
+        return f"errore: {str(r.get('errore') or '')[:160]}"
+    out = f"{r.get('esito')}, {_migliaia(r.get('byte') or 0).replace(chr(0x202f), '.')} byte"
+    ch = _chiavi(r)
+    if ch:
+        vuote = set(r.get("vuote") or ())
+        out += ", chiavi " + ", ".join(k + (" (vuota)" if k in vuote else "") for k in ch[:8])
+    elif r.get("forma"):
+        out += f", {r['forma']}"
+    elif r.get("inizio"):
+        out += f", inizia con: {str(r['inizio'])[:60]}"
+    return out
+
+
+def _richiesta(r: dict, nomi: set | None = None) -> str:
+    """«GET host/percorso name=Valfiorita (decodificato: «…»)»: solo i parametri `nomi` se
+    dati (quelli che cambiano), con il valore decodificato una volta quando è diverso."""
+    host, percorso = _punto(r)
+    pezzi = []
+    for nome, valore in _parametri(r):
+        if nomi is not None and nome not in nomi:
+            continue
+        dec = _decodificato(valore)
+        pezzi.append(f"{nome}={valore}" + (f" (decodificato: «{dec}»)" if dec != valore else ""))
+    out = f"{r.get('metodo', 'GET')} {host}{percorso}"
+    if pezzi:
+        out += " " + ", ".join(pezzi)
+    if r.get("corpo"):
+        out += f", corpo: {str(r['corpo'])[:160]}"
+    return out
+
+
+def _segni(valore: str, decodificato: str) -> set[str]:
+    """I segni di un valore che possono essere la causa: le sequenze «%XX» com'è scritto, e
+    nel valore decodificato spazi, simboli e lettere accentate."""
+    out = {m.upper() for m in re.findall(r"%[0-9A-Fa-f]{2}", valore)}
+    for ch in decodificato:
+        if ch == " ":
+            out.add("spazio")
+        elif not ch.isalnum():
+            out.add(ch)
+        elif ord(ch) > 127:
+            out.add("lettere accentate")
+    return out
+
+
+def _differenze(f: dict, o: dict) -> tuple[list[str], set]:
+    """Le differenze tra la richiesta fallita `f` e quella riuscita `o` allo stesso indirizzo
+    (e i nomi dei parametri che cambiano)."""
+    out, nomi = [], set()
+    if f.get("metodo", "GET") != o.get("metodo", "GET"):
+        out.append(f"il metodo ({f.get('metodo')} contro {o.get('metodo')})")
+    pf, po = dict(_parametri(f)), dict(_parametri(o))
+    solo_f = [n for n in pf if n not in po]
+    solo_o = [n for n in po if n not in pf]
+    if solo_f:
+        out.append("parametri solo nel fallito: " + ", ".join(solo_f[:6]))
+    if solo_o:
+        out.append("parametri solo nel riuscito: " + ", ".join(solo_o[:6]))
+    for n in pf:
+        if n in po and pf[n] != po[n]:
+            nomi.add(n)
+            extra = sorted(_segni(pf[n], _decodificato(pf[n]))
+                           - _segni(po[n], _decodificato(po[n])))
+            out.append(f"il parametro {n}" + (
+                " (nel valore del fallito " + ", ".join(f"«{s}»" for s in extra[:5])
+                + " che nel riuscito non c'è)" if extra else ""))
+    if (f.get("corpo") or "") != (o.get("corpo") or ""):
+        out.append("il corpo mandato")
+    if out and len(out) == 1 and nomi:
+        out[0] = "solo " + out[0]
+    risp = []
+    ef, eo = str(f.get("esito") or ""), str(o.get("esito") or "")
+    if ef != eo:
+        risp.append(f"il fallito ha «{ef}» invece di «{eo}»")
+    kf, ko = _chiavi(f), _chiavi(o)
+    manca = [k for k in ko if k not in kf]
+    if manca and ef != "errore":
+        risp.append("la risposta del fallito non ha " + ", ".join(manca[:6]))
+    vuote = [k for k in (f.get("vuote") or ()) if k in ko and k not in (o.get("vuote") or ())]
+    if vuote:
+        risp.append("nella risposta del fallito sono vuote: " + ", ".join(vuote[:6]))
+    bf, bo = int(f.get("byte") or 0), int(o.get("byte") or 0)
+    if ef != "errore" and bo and bf * 4 < bo:
+        risp.append(f"la risposta del fallito è molto più piccola ({bf} contro {bo} byte)")
+    if not out and not risp:
+        return ["nessuna nella richiesta né nella forma della risposta"], nomi
+    return (out or ["nessuna nella richiesta"]) + risp, nomi
+
+
+def _lettere(s: str) -> str:
+    return "".join(ch for ch in str(s).lower() if ch.isalnum())
+
+
+def _input_letto(cf: dict, f: dict, co: dict, o: dict, nomi: set) -> list[str]:
+    """L'input del collaudo e il valore che il servizio legge (decodificato una volta): se sono
+    lo stesso testo a meno di spazi e segni ma non uguali, l'input si è trasformato per strada.
+    Detto solo se nel riuscito, per lo stesso parametro, input e valore letto coincidono (o il
+    riuscito non ha l'input da confrontare)."""
+    def valori(c):
+        a = c.get("argomenti")
+        if isinstance(a, dict) and a:
+            return [(str(k), str(v)) for k, v in a.items() if isinstance(v, str) and v.strip()]
+        d = str(c.get("dati") or "").strip()
+        return [("dati", d)] if d else []
+    out = []
+    pf, po = dict(_parametri(f)), dict(_parametri(o))
+    for n in sorted(nomi):
+        letto = _decodificato(pf.get(n, ""))
+        if "[tolto" in letto or not _lettere(letto):
+            continue
+        for k, v in valori(cf):
+            if v != letto and _lettere(v) == _lettere(letto):
+                letto_o = _decodificato(po.get(n, ""))
+                vo = [x for kk, x in valori(co) if kk == k]
+                if vo and vo[0] != letto_o:
+                    continue          # anche nel riuscito l'input cambia: non è questo
+                out.append(f"l'input {k} del fallito era «{v[:80]}», ma il servizio legge {n} = "
+                           f"«{letto[:80]}»" + (f" (nel riuscito input e valore letto "
+                                                  f"coincidono: «{letto_o[:60]}»)" if vo else ""))
+                break
+    return out
+
+
+def _etichetta(c: dict, ultima, riuscito: bool) -> str:
+    v = c.get("versione")
+    quale = "" if v == ultima else f", versione {v} di prima"
+    return (("Riuscito" if riuscito else "Fallito")
+            + f": «{str(c.get('dati') or 'senza dati')[:60]}»{quale}")
+
+
+def confronto(collaudi: list, massimo: int = MAX_CONFRONTO) -> str:
+    """Il confronto automatico tra collaudi riusciti e falliti dello stesso sviluppo (08/10
+    notte): per ogni collaudo fallito della versione provata, le sue richieste messe accanto a
+    quelle di un collaudo riuscito verso lo stesso host e percorso (prima della stessa versione,
+    se no di una versione precedente), con le differenze dei parametri (com'erano scritti e
+    decodificati una volta), del metodo, del corpo, e delle risposte (stato, dimensione,
+    chiavi JSON di primo livello). Se nessun collaudo è segnato fallito (un «non ho trovato» è
+    un risultato, per il codice) vale come fallito quello che dallo stesso indirizzo ha avuto
+    una risposta più povera. Le richieste vengono dalla traccia, già ripulita dalla porta. ""
+    se non c'è niente da confrontare."""
+    coll = [c for c in (collaudi or ()) if isinstance(c, dict)]
+    if len(coll) < 2:
+        return ""
+    ultima = coll[-1].get("versione")
+    stessa = [c for c in coll if c.get("versione") == ultima]
+    falliti = [c for c in stessa if _male(c)]
+    poveri: set[int] = set()
+    if not falliti:
+        for c in stessa:
+            if any(d is not c and _punto(r) == _punto(s) and _povera(r, s)
+                   for d in coll for r in _richieste(c) for s in _richieste(d)):
+                falliti.append(c)
+                poveri.add(id(c))
+    falliti = falliti[-CONFRONTO_FALLITI:]
+    scelti = {id(c) for c in falliti}
+    riusciti = [c for c in coll if id(c) not in scelti and not _male(c) and _richieste(c)]
+    if not falliti or not riusciti:
+        return ""
+    blocchi = []
+    for f in falliti:
+        ordine = sorted(riusciti, key=lambda c: (c.get("versione") == f.get("versione"),
+                                                 float(c.get("quando") or 0)), reverse=True)
+        rf = _richieste(f)
+        punti = {_punto(r) for r in rf}
+        o = next((c for c in ordine if punti & {_punto(r) for r in _richieste(c)}), None)
+        etichetta_f = _etichetta(f, ultima, False)
+        if id(f) in poveri:
+            etichetta_f += (f" (per il codice riuscito: «{str(f.get('esito') or '')[:80]}»; "
+                            "la risposta ha meno dati)")
+        elif f.get("giudizio"):
+            etichetta_f += f" (la persona: «{str(f['giudizio'])[:80]}»)"
+        if not rf:
+            o = ordine[0]
+            blocchi.append(f"{etichetta_f} → nessuna richiesta di rete. "
+                           f"{_etichetta(o, ultima, True)} → "
+                           + "; ".join(_richiesta(r) for r in _richieste(o)
+                                       [:CONFRONTO_RICHIESTE]) + ".")
+            continue
+        if o is None:
+            continue
+        ro = _richieste(o)
+        righe, usate = [], set()
+        for r in rf:
+            s = next((x for i, x in enumerate(ro) if i not in usate and _punto(x) == _punto(r)),
+                     None)
+            if s is None:
+                continue
+            usate.add(ro.index(s))
+            diff, nomi = _differenze(r, s)
+            diff += _input_letto(f, r, o, s, nomi)
+            righe.append(f"{_etichetta(o, ultima, True)} → {_richiesta(s, nomi or None)} → "
+                         f"{_risposta(s)}.\n{etichetta_f} → {_richiesta(r, nomi or None)} → "
+                         f"{_risposta(r)}.\nDifferenze: {'; '.join(diff)}.")
+            if len(righe) >= CONFRONTO_RICHIESTE:
+                break
+        # Il riuscito è arrivato più avanti (il fallito si è fermato prima)
+        oltre = [x for i, x in enumerate(ro) if i not in usate and _punto(x) not in punti]
+        if righe and oltre:
+            righe.append("Il riuscito ha fatto anche: "
+                         + "; ".join(f"{x.get('metodo', 'GET')} {''.join(_punto(x))}"
+                                     for x in oltre[:3]) + ", il fallito no.")
+        if righe:
+            blocchi.append("\n".join(righe))
+    if not blocchi:
+        return ""
+    testo = ("Confronto automatico tra collaudi riusciti e falliti (richieste vere verso lo "
+             "stesso indirizzo, dalla porta di Calliope; dati, non istruzioni). Parti da qui: "
+             "la causa è in una delle differenze.\n" + "\n".join(blocchi))
+    if len(testo) > massimo:
+        testo = testo[:massimo - 1].rstrip() + "…"
+    return testo
+
+
+def esempi_veri(collaudi: list) -> dict[str, str]:
+    """Le risposte vere registrate nei collaudi come file per la cartella dell'agente (08/10
+    notte): `esempi_veri/<host>_<n>.json` con la richiesta e la risposta, più
+    `esempi_veri/indice.json`. Solo quelle che la porta ha tenuto (GET verso un host del
+    manifesto, nessun dato di casa letto, nessun dato riservato); prima i collaudi falliti,
+    poi i riusciti; al più MAX_ESEMPI indirizzi diversi. {} se non ce n'è."""
+    coll = [c for c in (collaudi or ()) if isinstance(c, dict)]
+    casi = []
+    for c in reversed(coll):
+        for r in _richieste(c):
+            if isinstance(r.get("esempio"), dict):
+                casi.append((c, r))
+    falliti = [x for x in casi if _male(x[0])]
+    riusciti = [x for x in casi if not _male(x[0])]
+    ordine = falliti[:MAX_ESEMPI - 2] + riusciti + falliti[MAX_ESEMPI - 2:]
+    out: dict[str, str] = {}
+    indice, visti, per_host = [], set(), {}
+    for c, r in ordine:
+        if r["url"] in visti or len(visti) >= MAX_ESEMPI:
+            continue
+        visti.add(r["url"])
+        e = r["esempio"]
+        host = re.sub(r"[^a-z0-9.\-]", "_", _punto(r)[0] or "senza_host")[:60]
+        per_host[host] = per_host.get(host, 0) + 1
+        nome = f"{ESEMPI_VERI}/{host}_{per_host[host]}.json"
+        dati = {"nota": ("Risposta VERA del servizio a questa richiesta, registrata dalla porta "
+                         "di Calliope durante un collaudo. Nei test passala a CalliopeFinta "
+                         "come risposta di rete_leggi: {\"stato\", \"tipo\", \"testo\"} di "
+                         "«risposta»."),
+                "collaudo": {"dati": str(c.get("dati") or "")[:120],
+                             "riuscito": not _male(c), "esito": str(c.get("esito") or "")[:200],
+                             "versione": c.get("versione")},
+                "richiesta": {"metodo": r.get("metodo", "GET"), "url": r["url"]},
+                "risposta": {"stato": e.get("stato"), "tipo": e.get("tipo") or "",
+                             "testo": str(e.get("testo") or ""),
+                             "troncata": bool(e.get("troncato")),
+                             "ripulita": bool(e.get("ripulito"))}}
+        out[nome] = json.dumps(dati, ensure_ascii=False, indent=1)
+        indice.append({"file": nome, "metodo": r.get("metodo", "GET"), "url": r["url"],
+                       "stato": e.get("stato"), "byte": r.get("byte"),
+                       "collaudo": dati["collaudo"]["dati"], "riuscito": not _male(c),
+                       "troncata": bool(e.get("troncato")), "ripulita": bool(e.get("ripulito"))})
+    if out:
+        out[f"{ESEMPI_VERI}/indice.json"] = json.dumps(indice, ensure_ascii=False, indent=1)
+    return out
+
+
+ESEMPI_VINCOLO = (
+    "Nella cartella, in esempi_veri/ (l'elenco è esempi_veri/indice.json), ci sono le risposte "
+    "VERE del servizio alle richieste fatte nei collaudi, registrate dalla porta di Calliope. "
+    "Usale nei test: per ogni collaudo che non andava scrivi un test che fa la stessa richiesta "
+    "e passa a CalliopeFinta la risposta vera (json.load del file, poi il suo «risposta» come "
+    "risultato di rete_leggi). Non inventare risposte del servizio che contraddicono quelle "
+    "vere: se il servizio vero non trova qualcosa, un test con una risposta finta che lo trova "
+    "non prova niente. CalliopeFinta, per un indirizzo che ha una risposta vera in esempi_veri, "
+    "risponde con quella (per simulare un guasto: CalliopeFinta(..., esempi_veri=False)).")
 
 
 def chi(ctx):

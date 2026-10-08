@@ -52,6 +52,13 @@ MAX_RETE_TESTO = 200_000
 MAX_TRACCIA = 12
 TRACCIA_URL = 300
 TRACCIA_RISPOSTA = 300
+# Chiavi JSON di primo livello tenute per richiesta (il confronto tra collaudi, 08/10 notte)
+TRACCIA_CHIAVI = 20
+# La risposta vera intera come esempio per i test dell'agente (08/10 notte, esempi_veri/):
+# solo GET verso un host del manifesto, senza dati di casa letti né dati riservati; al più
+# ESEMPI_PER_ESECUZIONE indirizzi diversi per esecuzione, ESEMPIO_MAX caratteri ciascuno
+ESEMPIO_MAX = 8000
+ESEMPI_PER_ESECUZIONE = 2
 
 
 class Porta:
@@ -270,10 +277,11 @@ class Porta:
                                  {"errore": "rete: reindirizzato verso un host non ammesso"}, t0)
         return self._traccia(es, azione, url, {"risultato": {
             "stato": 200, "tipo": r.get("tipo"),
-            "testo": str(r.get("testo_grezzo") or "")[:MAX_RETE_TESTO]}}, t0)
+            "testo": str(r.get("testo_grezzo") or "")[:MAX_RETE_TESTO]}}, t0,
+            corpo=p.get("dati") if azione == "rete_invia" else None)
 
     # ── traccia per lo sviluppo (08/10) ──
-    def _traccia(self, es, azione: str, url, out: dict, t0: float) -> dict:
+    def _traccia(self, es, azione: str, url, out: dict, t0: float, corpo=None) -> dict:
         """Aggiunge la richiesta alla traccia dell'esecuzione e restituisce `out`. L'URL senza
         dati riservati (e, dopo una lettura di dati di casa, senza i valori dei parametri);
         della risposta solo l'inizio. Mai un'eccezione."""
@@ -297,6 +305,25 @@ class Porta:
                             byte=len(testo.encode("utf-8")),
                             inizio=_pulisci_testo(" ".join(testo[:TRACCIA_RISPOSTA * 2].split()),
                                                   rete)[:TRACCIA_RISPOSTA])
+                # La forma della risposta (08/10 notte): le chiavi JSON di primo livello, per il
+                # confronto tra collaudi riusciti e falliti (sviluppo.confronto)
+                forma, chiavi, vuote = forma_json(testo)
+                if forma:
+                    riga["forma"] = forma
+                if chiavi:
+                    riga["chiavi"] = [_pulisci_testo(k, rete)[:40] for k in chiavi]
+                if vuote:
+                    riga["vuote"] = [_pulisci_testo(k, rete)[:40] for k in vuote]
+                if azione == "rete_leggi" and not contaminata and riga["url"] == str(url):
+                    esempio = self._esempio(es, url, ris, testo, rete)
+                    if esempio is not None:
+                        riga["esempio"] = esempio
+            if azione == "rete_invia" and corpo is not None:
+                # Il corpo mandato, ripulito, per il confronto; dopo una lettura di dati di
+                # casa solo la sua dimensione
+                c = json.dumps(corpo, ensure_ascii=False, default=str)
+                riga["corpo"] = (f"({len(c)} caratteri, tolto: dati di casa letti)"
+                                 if contaminata else _pulisci_testo(c, rete)[:TRACCIA_RISPOSTA])
             # La doppia codifica (08/10 sera): la richiesta parte, ma la traccia lo dice in
             # chiaro (l'agente, con «name=Borgo%2BAlto» davanti, l'aveva preso per giusto)
             from ..web.pagina import doppia_codifica
@@ -308,6 +335,55 @@ class Porta:
         except Exception:  # noqa: BLE001 — la traccia non cambia la richiesta
             pass
         return out
+
+    def _esempio(self, es, url: str, ris: dict, testo: str, rete) -> dict | None:
+        """La risposta vera come esempio per i test dell'agente (08/10 notte; sviluppo.py,
+        `esempi_veri/`), o None. Solo verso un host scritto nel manifesto (un servizio scelto,
+        non una pagina qualunque), al più ESEMPI_PER_ESECUZIONE indirizzi per esecuzione, mai
+        con un dato riservato di casa; un dato personale riconosciuto si toglie (e l'esempio
+        si segna «ripulito»: CalliopeFinta allora non lo usa al posto della risposta del
+        test)."""
+        scope = gr._scope((es.manifesto or {}).get("permessi") or {})
+        if gr.host_di(url) not in set((scope.get("rete") or {}).get("host") or ()):
+            return None
+        tr = getattr(es, "traccia", None) or []
+        if len({r.get("url") for r in tr if r.get("esempio")} - {url}) >= ESEMPI_PER_ESECUZIONE:
+            return None
+        if any(r.get("esempio") and r.get("url") == url for r in tr):
+            return None                  # lo stesso indirizzo due volte: basta il primo
+        corpo = testo[:ESEMPIO_MAX]
+        ripulito = corpo
+        r = getattr(rete, "riservati", None)
+        if r is not None:
+            try:
+                if r.trova(corpo, forme_personali=False):
+                    return None
+                if r.ripulitore is not None:
+                    ripulito = r.ripulitore.pulisci(corpo)[0]
+            except Exception:  # noqa: BLE001 — nel dubbio niente esempio
+                return None
+        return {"stato": ris.get("stato"), "tipo": str(ris.get("tipo") or "")[:60],
+                "testo": ripulito, "troncato": len(testo) > ESEMPIO_MAX,
+                "ripulito": ripulito != corpo}
+
+
+def forma_json(testo: str) -> tuple[str, list[str], list[str]]:
+    """(«oggetto JSON» | «lista JSON di N» | «», le chiavi di primo livello, quelle con un
+    valore vuoto: [], {}, "", null): la forma della risposta per il confronto tra collaudi
+    («results» che manca o che è vuoto). Un testo che non è JSON → («», [], [])."""
+    t = str(testo or "").strip()
+    if not t or t[0] not in "[{":
+        return "", [], []
+    try:
+        dati = json.loads(t)
+    except ValueError:
+        return "", [], []
+    if isinstance(dati, dict):
+        chiavi = [str(k) for k in list(dati)[:TRACCIA_CHIAVI]]
+        return "oggetto JSON", chiavi, [k for k in chiavi if dati.get(k) in ([], {}, "", None)]
+    if isinstance(dati, list):
+        return f"lista JSON di {len(dati)}", [], []
+    return "", [], []
 
 
 def _pulisci_testo(testo: str, rete=None) -> str:
