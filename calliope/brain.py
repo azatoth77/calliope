@@ -2532,6 +2532,12 @@ class Brain:
         requested = (self._net("spinta_richiesta") and bool(TOOL_REQUEST.search(user_text))
                      and any(self.tools.allowed(n, level)
                              for n in ("pc_cerca_file", "pc_apri_file")))
+        # Esercizi in corso (08/10, calliope/esercizi/): la frase del ragazzo la corregge il
+        # programma. Il testo senza il tool non si dice: spinta, una volta (il 4B copiava dalla
+        # storia «Perfetto! Prossima: …» senza chiamare esercizi, 7 turni su 18)
+        esercizi = (self._net("spinta_esercizi")
+                    and getattr(self, "turn_pending_tool", None) == "esercizi")
+        requested = requested or esercizi
         # Una domanda sui comandi stessi («che comando hai per le luci?»): il nome di un tool
         # nella risposta è una spiegazione, non una chiamata mancata (ToolNameHold)
         explaining = bool(ASKS_ABOUT_TOOLS.search(user_text or ""))
@@ -2616,10 +2622,13 @@ class Brain:
                 # Frase detta al posto del tool («Non ho trovato alcun PDF…», 01/10): non si
                 # dice e non entra nella storia; il modello riceve la spinta e riprova
                 nudged = True
-                self._rule("richiesta_trattenuta")
-                print(f"   [TOOL] richiesta di un file senza tool, non dico: «{held_req[:80]}»",
-                      flush=True)
-                tail = [{"role": "system", "content": PROMISE_NUDGE}]
+                self._rule("spinta_esercizi" if esercizi else "richiesta_trattenuta")
+                print(f"   [TOOL] {'esercizio' if esercizi else 'richiesta di un file'} senza "
+                      f"tool, non dico: «{held_req[:80]}»", flush=True)
+                if esercizi:
+                    from .esercizi.sessione import ESERCIZI_NUDGE
+                tail = [{"role": "system", "content": ESERCIZI_NUDGE if esercizi
+                         else PROMISE_NUDGE}]
                 continue
             spoke = spoke or bool(text)
             if held and self._held_kind == "fallito" and not nudged_fallito:

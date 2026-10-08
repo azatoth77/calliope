@@ -49,8 +49,17 @@ ESERCIZI_MSG = ("Esercizi in corso, messaggio di sistema: hai appena chiesto «{
                 "questa frase dà una risposta, chiama subito esercizi con azione=rispondi e "
                 "risposta come l'ha detta, senza dire tu se è giusta. Se chiede un indizio: "
                 "azione=aiuto; se vuole saltare: salta; se dice che l'esercizio è sbagliato: "
-                "segnala; se vuole ripetere la domanda: ripeti; se vuole smettere: fine. Se "
-                "parla d'altro, rispondi normalmente.")
+                "segnala; se vuole ripetere la domanda: ripeti; se vuole smettere: fine. Anche "
+                "una parola o un numero da soli («Sei.», «Tre quarti.», «Verbo.») sono una "
+                "risposta. Se parla d'altro, rispondi normalmente.")
+# La spinta di Brain quando, con l'esercizio in sospeso, il modello risponde senza il tool
+# (rete `spinta_esercizi`): la risposta trattenuta non si dice
+ESERCIZI_NUDGE = ("Esercizi in corso: non hai chiamato esercizi. Se la frase del ragazzo è una "
+                  "risposta all'esercizio, chiama adesso esercizi con azione=rispondi e la "
+                  "risposta come l'ha detta: la corregge il programma, non tu. Per un indizio "
+                  "azione=aiuto, per saltare salta, se dice che è sbagliato segnala, per smettere "
+                  "fine. Solo se parla d'altro rispondi normalmente, senza dire se l'esercizio è "
+                  "giusto.")
 ARGOMENTO_MSG = ("Esercizi, messaggio di sistema: hai chiesto quale argomento di {materia}. Se "
                  "risponde con un argomento, chiama esercizi con azione=inizia, "
                  "materia={materia} e argomento come l'ha detto{classe}.")
@@ -538,10 +547,8 @@ class Servizio:
                 return self._chiudi(s, frase)
             return self._risultato(s, f"{frase} Prossima: {self._domanda(s)}",
                                    regola="esercizi_segnalato_tolto")
-        frase = (f"L'ho ricontrollato e mi torna, ma l'ho segnato e lo dico {a_chi}, che lo "
-                 f"guarderà." if es.materia == "italiano" else
-                 f"L'ho ricontrollato con un altro conto e torna. L'ho comunque segnato per "
-                 f"{a_chi.removeprefix('a ').removeprefix('ad ')}.")
+        frase = (f"L'ho ricontrollato{' con un altro conto' if es.materia == 'matematica' else ''}"
+                 f" e mi torna, ma l'ho segnato e lo dico {a_chi}.")
         s.esito = {"testo": "Segnalato: lo guarderà un adulto.", "giusta": None}
         return self._risultato(s, f"{frase} {self._riprova(s)}",
                                regola="esercizi_segnalato_confermato")

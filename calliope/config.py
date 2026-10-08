@@ -291,7 +291,7 @@ class Config:
     # textcallguard, chiamata_in_mezzo, spinta_promessa, spinta_richiesta, spinta_dichiarata,
     # riferimento_casa, riferimento_agenda, conferma_al_posto_del_vuoto,
     # vuoto_seconda_passata, ricerca_promessa, citazione_tolta, nome_tool_parlato,
-    # eco_contesto, spinta_archivio, spinta_rinuncia; "tutte" le spegne tutte. Quelle di
+    # eco_contesto, spinta_archivio, spinta_rinuncia, spinta_esercizi; "tutte" le spegne tutte. Quelle di
     # «sicurezza» (permessi, politica…) non si spengono: un nome di sicurezza o sconosciuto si
     # segnala all'avvio. Quelle del profilo (llm_profilo) si aggiungono a queste.
     # Vuoto = tutte accese (o quelle del profilo).
@@ -1955,6 +1955,10 @@ RETI: dict[str, Rete] = {
     "spinta_rinuncia": Rete(
         "«non posso creare un'estensione» con il tool disponibile: spinta", MODELLO,
         "il 26B dopo un rifiuto rimasto nella storia (06/10, DGX)"),
+    "spinta_esercizi": Rete(
+        "esercizio in sospeso e risposta senza il tool esercizi: trattenuta, spinta", MODELLO,
+        "il 4B copiava dalla storia «Perfetto! Prossima: …» correggendo da sé (08/10, 7 turni "
+        "d'italiano su 18): la correzione è del programma"),
     # ── sicurezza: sempre accese, per ogni modello ──
     "permessi": Rete(
         "livello di chi parla e preset dei minori, a ogni esecuzione (ToolRegistry.call)",
