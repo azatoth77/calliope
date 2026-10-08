@@ -174,7 +174,7 @@ def prova_crea(tmp: Path, iso):
     r = te._estensione_crea(ctx, compito="Fai dire il meteo.", modifica="oroscopo del giorno")
     verifica("modifica di un'estensione che non c'è: niente lavoro, l'elenco al modello",
              r.get("ok") is False and len(svc.avviati) == n
-             and "«Meteo Borgoverde e Valfiorita» (meteo_citta)" in r.get("cosa_fare", ""),
+             and "«Meteo Borgoverde e Valfiorita» (meteo_citta, attiva)" in r.get("cosa_fare", ""),
              json.dumps(r, ensure_ascii=False)[:200])
     r = te._estensione_crea(ctx, compito="Una funzione che converte le unità di misura.",
                             nome="Convertitore")
@@ -441,7 +441,7 @@ def prova_delega(tmp: Path, iso):
     verifica("analisi con esito estensione: niente lavoro, nessuna frase detta, il modello "
              "richiama sviluppo_apri (con l'elenco)", len(svc.avviati) == k
              and not detta(r) and "sviluppo_apri" in r.get("cosa_fare", "")
-             and "(meteo_citta)" in r.get("cosa_fare", ""), json.dumps(r, ensure_ascii=False))
+             and "(meteo_citta, attiva)" in r.get("cosa_fare", ""), json.dumps(r, ensure_ascii=False))
 
 
 def prova_lavori_stato(tmp: Path, iso):

@@ -102,44 +102,11 @@ def _estensione_crea(ctx: ToolContext, compito: str = "", nome: str = "", propos
         ta.note_rule(ctx, "estensione_doppione")
         return _gia_fatto(ctx, str(compito or ""), str(nome or ""), gia, come_chiederlo)
     gioco = gioco in (True, "true", "sì", "si", 1)
-    prof, why = ta._permesso(ctx, "estensione", rigido=True,
-                             args={"compito": compito, "nome": nome})
-    if prof is None and gioco and not isinstance(why, dict):
-        prof, why = _permesso_gioco(ctx)
-    if prof is None:
-        return ta._no(ctx, why, "lavori_permesso")
-    if not est.pronto():
-        return ta._guasto(ctx, "Adesso non posso crearla: le estensioni girano solo in un "
-                               "contenitore isolato, e qui adesso non è pronto.",
-                          "estensione_senza_container")
-    guasto = svc.collegamento_guasto()
-    if guasto is not None:
-        svc.verifica_in_secondo_piano()
-        return ta._guasto(ctx, f"Adesso non posso: {guasto['motivo']}. "
-                               f"{guasto['passo']}".strip())
-    compito = str(compito or "").strip() or (getattr(ctx, "user_text", "") or "").strip()
-    if not compito:
-        return {"ok": False, "fatto": NIENTE, "errore": "manca il compito",
-                "cosa_fare": "chiedi in breve cosa deve fare la funzione"}
-    from ..estensioni.servizio import _nome, runtime_testo
-    # Uno sviluppo aperto (08/10, modalità sviluppo, calliope/sviluppo.py): un'estensione
-    # diversa non parte finché non è chiuso o sospeso; le risposte all'analisi e la modifica
-    # della sua estensione sì
-    from .sviluppo import apri_se_serve, controlla_nuovo
-    blocco = controlla_nuovo(ctx, "sviluppo_apri", {"modifica": modifica, "gioco": gioco})
-    if blocco is not None:
-        return blocco
-    # Una versione nuova solo se il modello lo dice (`modifica`, 08/10). Prima `nome` valeva per
-    # tutte e due e si cercava con un confronto approssimato: il 07/10 sulla DGX «Meteo Città»,
-    # il nome di un'estensione NUOVA (una città qualunque), è diventato la versione 2 di
-    # «meteo_citta» (Borgoverde e Valfiorita), e la persona non capiva più quale fosse
-    esistente = _nome(modifica, est.archivio) if str(modifica or "").strip() else ""
-    if esistente and not est.archivio.voce(esistente):
-        ci_sono = elenco_breve(est)
-        return {"ok": False, "fatto": NIENTE,
-                "errore": f"non ho un'estensione «{str(modifica).strip()}» da cambiare",
-                "cosa_fare": ("richiama con modifica = una di queste: " + ci_sono if ci_sono
-                              else "non ci sono estensioni: per farne una nuova togli modifica")}
+    # Quale estensione si cambia, PRIMA dei permessi e della frase di sfida (08/10, DGX delle
+    # 16:45: sfida chiesta e superata per una chiamata che poi rifiutava «c'è già l'estensione»)
+    esistente, rifiuto = _da_cambiare(ctx, est, modifica, nome, compito)
+    if rifiuto is not None:
+        return rifiuto
     simile = "" if esistente else _simile(nome, est)
     if simile and not accanto and not _scelta_gia_detta(ctx, est, simile):
         # Un nome simile a un'estensione che c'è, senza `modifica` (08/10, caso vero della DGX
@@ -158,10 +125,41 @@ def _estensione_crea(ctx: ToolContext, compito: str = "", nome: str = "", propos
                               "compito = cosa cambiare; per un'estensione NUOVA accanto, "
                               "richiama con un nome diverso; se non si capisce, chiedi: «Vuoi "
                               f"cambiare «{tit}» o farne una nuova accanto?»")}
-    # Una richiesta nuova di chi amministra apre lo sviluppo, in analisi (08/10)
+    # La chiamata intera nella frase di sfida, se serve: rifatta dopo la sfida è la stessa
+    # (16:45 sulla DGX: senza `modifica` e `tipo` la chiamata rifatta era un'estensione nuova)
+    tutti = {k: v for k, v in {"tipo": "estensione", "compito": compito, "nome": nome,
+                               "modifica": esistente or modifica,
+                               "gioco": True if gioco else None}.items() if v}
+    prof, why = ta._permesso(ctx, "estensione", rigido=True, args=tutti)
+    if prof is None and gioco and not isinstance(why, dict):
+        prof, why = _permesso_gioco(ctx)
+    if prof is None:
+        return ta._no(ctx, why, "lavori_permesso")
+    if not est.pronto():
+        return ta._guasto(ctx, "Adesso non posso crearla: le estensioni girano solo in un "
+                               "contenitore isolato, e qui adesso non è pronto.",
+                          "estensione_senza_container")
+    guasto = svc.collegamento_guasto()
+    if guasto is not None:
+        svc.verifica_in_secondo_piano()
+        return ta._guasto(ctx, f"Adesso non posso: {guasto['motivo']}. "
+                               f"{guasto['passo']}".strip())
+    compito = str(compito or "").strip() or (getattr(ctx, "user_text", "") or "").strip()
+    if not compito:
+        return {"ok": False, "fatto": NIENTE, "errore": "manca il compito",
+                "cosa_fare": "chiedi in breve cosa deve fare la funzione"}
+    from ..estensioni.servizio import runtime_testo
+    # Uno sviluppo aperto (08/10, modalità sviluppo, calliope/sviluppo.py): un'estensione
+    # diversa non parte finché non è chiuso o sospeso; le risposte all'analisi e la modifica
+    # della sua estensione sì
+    from .sviluppo import apri_se_serve, controlla_nuovo
+    blocco = controlla_nuovo(ctx, "sviluppo_apri", {"modifica": modifica, "gioco": gioco})
+    if blocco is not None:
+        return blocco
+    # Una richiesta nuova di chi amministra apre lo sviluppo, in analisi (08/10). Per una
+    # modifica il titolo è quello dell'estensione (dato dalla persona, se l'ha rinominata)
     apri_se_serve(ctx, "estensione", compito,
-                  titolo=str(nome or "").strip() or (_titolo(est, esistente) if esistente
-                                                     else ""),
+                  titolo=(_titolo(est, esistente) if esistente else str(nome or "").strip()),
                   gioco=bool(gioco in (True, "true", "sì", "si", 1)),
                   estensione=esistente or None)
     if simile:
@@ -171,8 +169,8 @@ def _estensione_crea(ctx: ToolContext, compito: str = "", nome: str = "", propos
     if esistente:
         file = est.file_per_modifica(esistente)
         vincoli = (f"È la modifica dell'estensione esistente «{esistente}»: i suoi file sono "
-                   f"già nella cartella; tieni lo stesso nome nel manifesto (il titolo e la "
-                   f"descrizione cambiano se cambia quello che fa).")
+                   f"già nella cartella; tieni lo stesso nome nel manifesto (la descrizione "
+                   f"cambia se cambia quello che fa). " + titolo_vincolo(est, esistente)).strip()
     # Le funzioni che Calliope ha già, per il piano dell'agente (doppioni, 06/10)
     vincoli = (vincoli + " " + funzioni_di_calliope()).strip()
     gia_detto = politica.accettata(ctx) and politica.gia_fatto({"gia_fatto_da": gia})
@@ -193,8 +191,7 @@ def _estensione_crea(ctx: ToolContext, compito: str = "", nome: str = "", propos
         lav = svc.nuovo("estensione", compito_agente, prof.id, prof.name, level, "", "", v,
                         storia)
         # Il nome del lavoro: quello dell'estensione (06/10: L1 si chiamava «estensione che»)
-        titolo = ta._titolo_estensione(nome or (_titolo(est, esistente) if esistente else ""),
-                                       esito)
+        titolo = ta._titolo_estensione(_titolo(est, esistente) if esistente else nome, esito)
         if titolo:
             lav.titolo = titolo
         elif compito_agente != compito:
@@ -237,6 +234,68 @@ def _estensione_crea(ctx: ToolContext, compito: str = "", nome: str = "", propos
     return _con_avviso(out, esistente, simile, est)
 
 
+def _da_cambiare(ctx, est, modifica, nome, compito) -> tuple[str, dict | None]:
+    """(nome interno dell'estensione da cambiare, None), ("", None) per una nuova, o ("", il
+    rifiuto da dare al modello). Una versione nuova solo se il modello lo dice (`modifica`,
+    08/10). Prima `nome` valeva per tutte e due e si cercava con un confronto approssimato: il
+    07/10 sulla DGX «Meteo Città», il nome di un'estensione NUOVA (una città qualunque), è
+    diventato la versione 2 di «meteo_citta» (Borgoverde e Valfiorita).
+
+    `modifica` che non è un'estensione (08/10, DGX delle 16:43: «modifica: "aggiungi la
+    possibilità di scegliere quanti giorni…"», la cosa da cambiare al posto del nome): se il
+    modello l'ha nominata in `nome`, o se la frase o il compito ne nominano una sola, è quella.
+    Correzione della forma di una scelta già fatta dal modello (cambiare un'estensione,
+    principio 10; regola `estensione_modifica_dal_nome`); con due nominate o nessuna, la
+    scelta torna al modello con l'elenco e gli stati."""
+    from ..estensioni.servizio import _nome
+    detto = str(modifica or "").strip()
+    if not detto:
+        return "", None
+    esistente = _nome(detto, est.archivio)
+    if est.archivio.voce(esistente):
+        return esistente, None
+    trovata = _nominata(ctx, est, nome, compito)
+    if trovata:
+        from .spec import note_rule
+        note_rule(ctx, "estensione_modifica_dal_nome")
+        return trovata, None
+    ci_sono = elenco_breve(est)
+    return "", {"ok": False, "fatto": NIENTE,
+                "errore": f"non ho un'estensione «{detto[:80]}» da cambiare",
+                "cosa_fare": ("modifica = il NOME di un'estensione (cosa cambiare va in "
+                              "compito): richiama con modifica = una di queste: " + ci_sono
+                              if ci_sono else "non ci sono estensioni: per farne una nuova "
+                                              "togli modifica")}
+
+
+def _nominata(ctx, est, nome, compito) -> str:
+    """L'unica estensione nominata: in `nome` dal modello, oppure nella frase della persona o
+    nel compito (una disattivata conta solo se non c'è un'attiva). "" se nessuna o più d'una."""
+    from ..estensioni.servizio import _nome
+    if str(nome or "").strip():
+        n = _nome(nome, est.archivio)
+        if est.archivio.voce(n):
+            return n
+    testo = " ".join(str(x or "") for x in (getattr(ctx, "user_text", ""), compito))
+    try:
+        trovate = est.nominate(testo, tutte=True)
+    except Exception:  # noqa: BLE001 — nel dubbio, la scelta torna al modello
+        return ""
+    nomi = sorted({t["nome"] for t in trovate})
+    if len(nomi) > 1:
+        nomi = [n for n in nomi if (est.archivio.voce(n) or {}).get("stato") == "attiva"]
+    return nomi[0] if len(nomi) == 1 else ""
+
+
+def titolo_vincolo(est, nome: str) -> str:
+    """Per l'agente che scrive una versione nuova: il titolo dato dalla persona resta (08/10)."""
+    titolo = str((est.archivio.voce(nome) or {}).get("titolo") or "").strip()
+    if not titolo:
+        return ""
+    return (f"Il titolo «{titolo}» l'ha scelto la persona: nel manifesto usa proprio questo "
+            "titolo.")
+
+
 def _scelta_gia_detta(ctx, est, simile: str) -> bool:
     """La scelta «cambiare o nuova accanto» è già tornata al modello in questo turno per la
     stessa estensione: se richiama ancora senza `modifica`, vuole una nuova."""
@@ -250,9 +309,13 @@ def _titolo(est, nome: str) -> str:
 
 
 def elenco_breve(est) -> str:
-    """«Meteo per città» (meteo_citta), «Tris» (tris): le estensioni che ci sono, per il
-    modello."""
-    return ", ".join(f"«{_titolo(est, n)}» ({n})" for n in est.archivio.nomi())
+    """«Meteo per città» (meteo_citta, attiva), «Tris» (tris, disattivata): le estensioni che ci
+    sono, per il modello, con lo stato (08/10: due titoli quasi uguali, uno disattivato, e il
+    modello chiedeva «Meteo città o Meteocittà?»)."""
+    def stato(n):
+        st = (est.archivio.voce(n) or {}).get("stato") or "?"
+        return {"da_approvare": "da approvare"}.get(st, st)
+    return ", ".join(f"«{_titolo(est, n)}» ({n}, {stato(n)})" for n in est.archivio.nomi())
 
 
 def _simile(nome: str, est) -> str:

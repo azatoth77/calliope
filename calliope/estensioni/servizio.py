@@ -495,7 +495,7 @@ class Estensioni:
     # ─────────────────────────── gestione ───────────────────────────
     def gestisci(self, ctx, azione: str = "elenca", nome: str = "", esecuzione: str = "",
                  sempre=False, titolo: str = "") -> dict:
-        nome = _nome(nome, self.archivio)
+        nome = _nome(nome, self.archivio, preferenza(azione))
         vera = azione_vera(azione, nome, self.archivio)
         if vera != str(azione or "elenca").strip().lower():
             note_rule(ctx, "estensioni_azione_sinonimo")
@@ -673,7 +673,8 @@ class Estensioni:
         if n is None:
             return _final("Non c'è nessuna versione da approvare.", ok=False, fatto=NIENTE)
         ver = self.archivio.versione(nome, n)
-        m = ver["manifesto"]
+        # Con il titolo dato dalla persona, se l'ha rinominata (vedi `revisione`)
+        m = self.archivio.manifesto(nome, n) or ver["manifesto"]
         test = ver.get("test") or {}
         an = ver.get("analisi") or {}
         if an.get("sintassi"):
@@ -879,6 +880,8 @@ class Estensioni:
         file.pop("manifesto.json", None)
         vecchio = self.archivio.manifesto(m["nome"])        # la versione approvata, se c'è
         n = self.archivio.nuova_candidata(m, file, lav.persona_nome, test, an, lav.id, passano)
+        # Il titolo dato dalla persona resta anche nell'annuncio (vedi `revisione`)
+        m = self.archivio.manifesto(m["nome"], n) or m
         return self._presenta(m, n, test, passano, an, vecchio, ris.get("piano"))
 
     def _presenta(self, m: dict, n: int, test, passano: bool, an: dict,
@@ -966,7 +969,12 @@ class Estensioni:
         if n is None:
             return None
         ver = self.archivio.versione(nome, n) or {}
-        m = ver.get("manifesto") or {}
+        # Il titolo dato dalla persona (rinomina) vale anche per la versione nuova (08/10, DGX:
+        # «Meteocittà» rinominata, la v4 col manifesto «Meteo città» diceva «che ora si chiama
+        # «Meteo città»», poi «Fatto: «Meteo città» è attiva»): resta finché la persona non lo
+        # cambia; il titolo proposto dall'agente va solo sulla scheda
+        m = self.archivio.manifesto(nome, n) or ver.get("manifesto") or {}
+        proposto = str((ver.get("manifesto") or {}).get("titolo") or "")
         voce = self.archivio.voce(nome) or {}
         prima_n = voce.get("attiva")
         vecchio = self.archivio.manifesto(nome) if prima_n else None
@@ -998,7 +1006,11 @@ class Estensioni:
                  + (f" {diff_detto}" if diff_detto else " È la prima versione."))
         testo = "\n".join(
             [f"Versione {n}" + (f", al posto della {prima_n}" if prima_n else ", la prima"),
-             "", f"- Cosa fa: {m.get('descrizione', '')}", f"- Permessi: {perm}",
+             "", f"- Cosa fa: {m.get('descrizione', '')}"]
+            + ([f"- Titolo: «{m.get('titolo')}», scelto da te (l'agente proponeva "
+                f"«{proposto}»: per cambiarlo, chiedimi di rinominarla)"]
+               if proposto and proposto != m.get("titolo") else [])
+            + [f"- Permessi: {perm}",
              f"- Chi la usa: {chi_la_usa(m)}",
              f"- Input: {', '.join((m.get('input') or {}).get('properties') or {}) or 'nessuno'}",
              f"- Analisi del codice: {in_parole(an, 10)}", f"- Test: {esito_test}"]
@@ -1058,7 +1070,7 @@ def prepara_gestisci(ctx, argomenti: dict) -> dict:
     est = getattr(ctx, "estensioni", None)
     if est is None or not isinstance(argomenti, dict) or "azione" not in argomenti:
         return argomenti
-    nome = _nome(argomenti.get("nome"), est.archivio)
+    nome = _nome(argomenti.get("nome"), est.archivio, preferenza(argomenti.get("azione")))
     if est.archivio.voce(nome) is None:
         # Nella modalità sviluppo (08/10) un nome che non è di nessuna estensione è quella che
         # si sta sviluppando: il 4B la chiamava con il nome dato alla richiesta («MeteoSì») e
@@ -1080,8 +1092,29 @@ def prepara_gestisci(ctx, argomenti: dict) -> dict:
     return argomenti
 
 
-def _nome(nome, archivio) -> str:
-    """Il nome detto («convertitore di unità», «est_convertitore_unita») → il nome vero."""
+def preferenza(azione) -> tuple:
+    """Lo stato da preferire tra due estensioni con lo stesso titolo detto (`_nome`): per
+    riattivarla la disattivata, per tutto il resto l'attiva."""
+    a = str(azione or "").strip().lower()
+    if a in ("riattiva", "riattivala", "riaccendi") or a in _SINONIMI_ATTIVA:
+        return ("da_approvare", "disattivata", "attiva") if a in _SINONIMI_ATTIVA else (
+            "disattivata", "attiva")
+    return ("attiva", "da_approvare")
+
+
+def _compatto(s) -> str:
+    """Il titolo senza accenti, punteggiatura né spazi: «Meteo città» e «Meteocittà» sono lo
+    stesso nome detto a voce (la trascrizione li attacca o li stacca a caso)."""
+    return _norm_testo(s).replace(" ", "")
+
+
+def _nome(nome, archivio, preferisci: tuple = ("attiva",)) -> str:
+    """Il nome detto («convertitore di unità», «est_convertitore_unita») → il nome vero.
+
+    Due estensioni con lo stesso titolo detto (08/10, DGX: «Meteo città», disattivata, e
+    «Meteocittà», attiva, dopo una rinomina): vince quella nello stato in `preferisci` (per
+    usarla o cambiarla l'attiva; per riattivarla la disattivata). Una disattivata non rende
+    ambiguo il nome di un'attiva."""
     s = str(nome or "").strip().lower()
     if s.startswith(PREFISSO):
         s = s[len(PREFISSO):]
@@ -1095,10 +1128,19 @@ def _nome(nome, archivio) -> str:
         return chiave
     import difflib
     titoli = {}
+    uguali = []
     for n in nomi:
         v = archivio.voce(n) or {}
         m = archivio.manifesto(n, v.get("attiva") or v.get("candidata")) or {}
         titoli[str(m.get("titolo", n)).lower()] = n
+        if _compatto(s) in (_compatto(m.get("titolo", n)), _compatto(n.replace("_", " "))):
+            uguali.append(n)
+    if uguali:
+        for stato in preferisci or ():
+            scelti = [n for n in uguali if (archivio.voce(n) or {}).get("stato") == stato]
+            if scelti:
+                return scelti[0]
+        return uguali[0]
     vicini = difflib.get_close_matches(s, list(titoli) + nomi, n=1, cutoff=0.6)
     if vicini:
         return titoli.get(vicini[0], vicini[0])

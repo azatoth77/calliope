@@ -745,13 +745,18 @@ class Sviluppi:
         file (troncati), le fonti del manifesto."""
         righe = [f"Sviluppo: {sv.cosa()} «{sv.titolo}» ({sv.id}), fase: {NOMI.get(sv.fase)}.",
                  f"Specifica: {sv.specifica or sv.richiesta}"]
+        inp = self.input_in_prova(sv)
+        if inp:
+            righe.append("Input della versione in prova: " + "; ".join(inp))
         if sv.collaudi:
             righe.append("Collaudi fatti dalla persona (dati → esito):")
             ultimi = sv.collaudi[-8:]
             for i, c in enumerate(ultimi):
                 giudizio = (" [la persona dice che è sbagliato: " + c["giudizio"] + "]"
                             if c.get("giudizio") else "")
-                righe.append(f"- «{c.get('dati') or 'senza dati'}» → "
+                righe.append(f"- «{c.get('dati') or 'senza dati'}»"
+                             + (f" (argomenti passati all'estensione: {argomenti_detti(c)})"
+                                if c.get("argomenti") else "") + " → "
                              f"{'riuscito' if c.get('ok') else 'NON riuscito'}: "
                              f"{c.get('esito') or ''}{giudizio}")
                 # Le richieste di rete vere del collaudo (08/10): la causa che, nel giro della
@@ -948,17 +953,30 @@ class Sviluppi:
         except Exception:  # noqa: BLE001
             return ""
 
-    def _input_detto(self, sv: Sviluppo) -> str:
+    def input_in_prova(self, sv: Sviluppo) -> list[str]:
+        """Gli input della versione in prova, con tipo e descrizione breve (08/10)."""
         est = getattr(getattr(self.lavori, "estensioni", None), "archivio", None)
         if est is None or not sv.estensione:
-            return ""
+            return []
         try:
+            from .tools.sviluppo import input_della_prova
             n = est.candidata(sv.estensione) or (est.voce(sv.estensione) or {}).get("attiva")
-            m = est.manifesto(sv.estensione, n) or {}
-            nomi = sorted((m.get("input") or {}).get("properties") or {})
+            return input_della_prova(est.manifesto(sv.estensione, n) or {})
         except Exception:  # noqa: BLE001 — sono solo dati del turno
+            return []
+
+    def _input_detto(self, sv: Sviluppo) -> str:
+        """Gli input della versione in prova nei dati del turno (08/10, DGX: con `citta` e
+        `giorni` il modello metteva «Guanzate, 5 giorni» tutto nei dati, cioè in `citta`)."""
+        inp = self.input_in_prova(sv)
+        if not inp:
             return ""
-        return f" (input: {', '.join(nomi)})" if nomi else ""
+        if len(inp) == 1:
+            return f" (input: {inp[0]})"
+        return (f". La versione in prova ha {len(inp)} input: " + "; ".join(inp)
+                + ". Con più input passa argomenti = un oggetto con un valore per input "
+                "(«Bergamo per 3 giorni» → argomenti = {\"citta\": \"Bergamo\", \"giorni\": 3}), "
+                "non tutto in dati")
 
     def dati_turno(self, sv: Sviluppo) -> str:
         spec = re.sub(r"\s+", " ", sv.specifica or sv.richiesta or "da definire").strip()
@@ -995,7 +1013,8 @@ class Sviluppi:
             righe += ["", "## Collaudi", ""]
             for c in sv.collaudi[-10:]:
                 dati = c.get("dati") or "senza dati"
-                righe.append(f"- {_ora(float(c.get('quando') or 0))}, «{dati}»: "
+                righe.append(f"- {_ora(float(c.get('quando') or 0))}, «{dati}»"
+                             + (f" ({argomenti_detti(c)})" if c.get("argomenti") else "") + ": "
                              f"{'riuscito' if c.get('ok') else 'non riuscito'}"
                              + (f" — {c['esito']}" if c.get("esito") else ""))
         if sv.chiesti:
@@ -1101,13 +1120,20 @@ class Sviluppi:
         except Exception as e:  # noqa: BLE001 — lo schermo non ferma niente
             self.log(f"[SVILUPPO] scheda non inviata: {type(e).__name__}: {e}")
 
-    def collaudo(self, sv: Sviluppo, dati: str, ok: bool, esito: str, rete=None):
+    def collaudo(self, sv: Sviluppo, dati: str, ok: bool, esito: str, rete=None,
+                 argomenti: dict | None = None):
         """Un collaudo fatto. `rete`: la traccia di rete dell'esecuzione (08/10,
         estensioni/porta.py: metodo, URL ripulito, esito, inizio della risposta o errore,
-        durata), per l'agente in sviluppo_chiedi e sviluppo_correggi."""
+        durata), per l'agente in sviluppo_chiedi e sviluppo_correggi. `argomenti`: gli input
+        veri passati all'estensione (08/10: «Guanzate, 5 giorni» tutto in `citta`, e l'agente
+        cercava la causa nel codice)."""
         c = {"quando": time.time(), "dati": str(dati or "")[:120], "ok": bool(ok),
              "esito": re.sub(r"\s+", " ", str(esito or "")).strip()[:200],
              "versione": sv.versione}
+        if isinstance(argomenti, dict) and argomenti:
+            c["argomenti"] = {str(k)[:40]: (v if isinstance(v, (int, float, bool))
+                                            else str(v)[:120]) for k, v in
+                              list(argomenti.items())[:8]}
         if isinstance(rete, list) and rete:
             c["rete"] = [dict(r) for r in rete[:MAX_TRACCIA] if isinstance(r, dict)]
         with self._lock:
@@ -1205,6 +1231,12 @@ def misura_programma(cartella) -> dict:
 def servizio(ctx) -> Sviluppi | None:
     """Gli sviluppi, attaccati al servizio dei lavori (agenti/__init__.load_agenti)."""
     return getattr(getattr(ctx, "lavori", None), "sviluppi", None)
+
+
+def argomenti_detti(c: dict) -> str:
+    """citta="Guanzate, 5 giorni", giorni=3: gli argomenti veri di un collaudo."""
+    return ", ".join(f"{k}={json.dumps(v, ensure_ascii=False)}"
+                     for k, v in (c.get("argomenti") or {}).items())
 
 
 def chi(ctx):
