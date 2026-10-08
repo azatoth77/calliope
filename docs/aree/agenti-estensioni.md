@@ -959,3 +959,55 @@ un'estensione…» riceveva la domanda della politica prima del rifiuto (ora
 («Crea un'estensione che…»): si apre lo sviluppo di un programma (il limite noto dell'analisi
 «ESTENSIONE» col modello piccolo, vedi il giro 10). Da misurare sulla DGX con il 26B e l'agente
 vero.
+
+## Modalità sviluppo, versione 2 (08/10, ramo `modalita-sviluppo-2`)
+
+Dal giro di prova vero della DGX dell'08/10 (11:06–11:32, satellite dello studio, 26B): apertura
+senza segni della modalità, «Perché?» improvvisato dalla voce, «fai revisionare il codice» che
+tornava all'analisi, «Ok, chiuso a long» (storpiato) che chiudeva lo sviluppo con l'agente al
+lavoro, il lavoro finito annunciato vecchio stile e poi «Non c'è nessuno sviluppo aperto da
+provare». Decisioni di Dario e cosa è stato fatto: § 9 di
+[`2026-10-08-modalita-sviluppo.md`](../ricerche/2026-10-08-modalita-sviluppo.md). In breve:
+
+- **Nomi nuovi** (le voci qui sopra hanno quelli di prima): `lavoro_affida` (era
+  `delega_lavoro`, senza il codice), `lavoro_stato`, `lavoro_risultato`, `lavoro_rispondi`,
+  `lavoro_annulla`, `programma_esegui` (era `lavori_esegui`), `sviluppo_apri(tipo=estensione|
+  programma)` (era `estensione_crea` e `delega_lavoro` di codice), `sviluppo_passo` (era
+  `sviluppo`), `sviluppo_collauda` (era `sviluppo_prova`), i nuovi `sviluppo_chiedi` e
+  `sviluppo_correggi`, `estensione_gestisci` (era `estensioni_gestisci`). I vecchi valgono nel
+  registro (`tool_nome_vecchio`); `lavoro_affida` di codice e `sviluppo_correggi` senza uno
+  sviluppo aperto passano a `sviluppo_apri` come programma (`lavoro_codice_sviluppo`,
+  `sviluppo_correggi_nuovo`). Due schemi in più (63 → 65 nel registro di prova, ~880
+  caratteri); 71 sulla DGX.
+- **Apertura detta** e specifica letta; **`sviluppo_chiedi`** con il contesto dei lavori
+  conservato (`lavori/sviluppi/S<n>.json`); **collaudo fallito → «Lo faccio correggere?»**;
+  **`sviluppo_correggi`** sui file della versione provata; **chiusura** con conferma, sospensione
+  con l'agente al lavoro; **riapertura al collaudo** a lavoro finito; **tappe** ai tetti del giro
+  con il rapporto e i segnali di giro a vuoto (`agenti/ciclo.py`, `Lavori.continua`).
+- `TextCallGuard`: anche «chiamata_» davanti al nome è un prefisso come «call_» (gemma4 ha detto
+  a voce «chiamata_lavoro_affida(…)» una volta).
+
+**Prove**: a secco `prove/prova_sviluppo_v2.py` (~10 s, il giro vero riscritto con la città di
+fantasia «Pratofiorito Maggiore»; tappe con il servizio dei lavori vero e l'Ollama finto). Con
+gemma4 e4b sul portatile, `prove/prova_sviluppo_v2_ollama.py` (il giro vero in 11 passi) e i banchi
+di prima e dopo i nomi nuovi, stessa versione di Ollama, 2 giri (dopo: con il codice finale):
+
+| banco | prima (main) | dopo |
+|---|---|---|
+| `prova_sviluppo_v2_ollama` (11 passi) | — | 44/44 su 4 giri; nei giri prima delle due correzioni qui sotto «Attivala.» 1/3 e la richiesta → `calliope_stato` 2 volte su 9 |
+| `prova_sviluppo_ollama` (12 passi, dati del turno / rete spenta) | tutto bene; mediana 1,29 / 1,18 s | tutto bene; mediana 1,24 / 1,17 s |
+| `prova_agenti_ollama` | 32/40 (gli 8 errori: la sandbox non è pronta sul portatile, il codice non parte) | 30–32/40 su quattro esecuzioni; oltre agli 8 della sandbox, relazione e ricerca 6 errori su 30 (prima 0 su 12): «Chiedo quale formato…» invece di `lavoro_affida`, una volta «chiamata_lavoro_affida(…)» detto a voce |
+| `prova_estensioni_ollama` | tutto bene | tutto bene |
+| `prova_risultati_ollama` | 6/6 | 6/6 |
+| `prova_regressione` (174 casi) | 162/174; 57 chiamate scritte come testo | 161–163/174; 62–69 chiamate scritte come testo; gli errori sono quelli di sempre (chi sono, l'ora, lo schermo, i delfini), nessuno sui nomi |
+| nomi fusi o sconosciuti («lavoris_stato») | 0 | 0 in tutti i banchi |
+| prima frase mediana (regressione) | 0,70 s | 0,74–0,76 s |
+
+Correzioni dopo la prima misura: la riga della revisione («chiama subito sviluppo_passo avanti:
+la frase di conferma la chiede il tool, non tu»: «Attivala.» da 1/3 a 6/6) e la descrizione di
+`sviluppo_apri` che comincia con «Crea un'estensione nuova di Calliope o un programma…» (la
+richiesta d'estensione da 7/9 a 4/4: col nome nuovo il 4B a volte non la riconosceva). **Da
+decidere**: `lavoro_affida` perde un po' su relazioni e ricerche col 4B (vedi tabella); se sulla
+DGX col 26B si vede lo stesso, proposta: tornare al verbo «delega» nella famiglia
+(`lavoro_delega`) o riprendere nella descrizione la frase di prima («un lavoro lungo il cui
+risultato è un file complesso»). Da misurare sulla DGX con il 26B e l'agente vero, anche le tappe.

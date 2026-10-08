@@ -107,7 +107,9 @@ def strip_think(tokens):
 # Qualificatore che il modello a volte mette davanti al nome del tool, e una parola sola.
 # «calliope_cambia_voce(tono="computer_di_bordo", per_tutti=true)» detto ad alta voce (04/10,
 # prova_personalita_ollama, 1 volta su 2): il nome dell'assistente attaccato con «_»
-_QUALIFIER = re.compile(r"(?:call_|calliope_|[a-z_][a-z0-9_]*\.)")
+# «chiamata_» (08/10, gemma4 con i nomi nuovi dei lavori: «chiamata_lavoro_affida(…)» detto a
+# voce in una sessione su due del banco degli agenti): un prefisso come «call_»
+_QUALIFIER = re.compile(r"(?:call_|calliope_|chiamata_|[a-z_][a-z0-9_]*\.)")
 _MATH_FUNCS = ("sqrt", "radice", "log", "log10", "ln", "sin", "cos", "tan", "exp",
                "fattoriale", "factorial", "abs", "round", "pow")
 _EXPR = object()        # segnaposto: la chiamata è l'espressione intera

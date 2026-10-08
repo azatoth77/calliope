@@ -72,6 +72,10 @@ def prova_guardia():
     detto, call, _ = guardia(["call", "_cambia_voce(voce='serena')"])
     verifica("prefisso «call_»", (call and call["name"], call and call["arguments"]),
              ("cambia_voce", {"voce": "serena"}))
+    # 08/10: «chiamata_lavoro_affida(…)» detto a voce da gemma4
+    detto, call, _ = guardia(["chiamata", "_cambia_voce(voce=\"serena\")"])
+    verifica("prefisso «chiamata_»", (detto, call and call["name"], call and call["arguments"]),
+             ("", "cambia_voce", {"voce": "serena"}))
     detto, call, pezzi = guardia(["Certo", ". Ecco una storia."])
     verifica("«Certo. Ecco…» passa", (detto, call), ("Certo. Ecco una storia.", None))
     detto, call, pezzi = guardia(["Venezia", " è una città."])

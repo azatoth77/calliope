@@ -821,10 +821,11 @@ class Sviluppi:
                         "con azione avanti (chiude lo sviluppo); se vuole farne un'estensione, "
                         "sviluppo_passo con azione promuovi.")
             return ("Hai detto la revisione (permessi, rete, analisi del codice, differenze). "
-                    "Se dice di attivarla o che va bene, sviluppo_passo con azione avanti: chiederà la "
-                    "frase di conferma. Può ancora provarla con sviluppo_collauda." + dopo)
-        return ("Manca la frase di conferma per approvarla: se chiede di attivarla, sviluppo_passo "
-                "con azione avanti.")
+                    "Se dice di attivarla o che va bene, chiama subito sviluppo_passo con azione "
+                    "avanti: la frase di conferma la chiede il tool, non tu. Può ancora provarla "
+                    "con sviluppo_collauda." + dopo)
+        return ("Manca la frase di conferma per approvarla: se chiede di attivarla, chiama "
+                "subito sviluppo_passo con azione avanti (la frase la chiede il tool).")
 
     def _titolo_estensione(self, nome, n) -> str:
         arch = getattr(getattr(self.lavori, "estensioni", None), "archivio", None)

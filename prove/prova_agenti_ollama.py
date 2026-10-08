@@ -95,6 +95,7 @@ DELEGA = "lavoro_affida"
 # Dal 08/10 (modalità sviluppo, versione 2) il codice è di sviluppo_apri; lavoro_affida di codice
 # ci passa da sé (regola `lavoro_codice_sviluppo`), quindi valgono tutti e due
 CODICE_T = ("sviluppo_apri", DELEGA)
+# (sviluppo_correggi senza uno sviluppo aperto passa a sviluppo_apri: `sviluppo_correggi_nuovo`)
 NIENTE = ("niente_delega",)       # né lavoro_affida né sviluppo_apri (qualunque altra cosa va bene)
 
 # (sessione, chi, livello, come, frase, atteso, controllo(risposta, svc, docs))
@@ -124,7 +125,7 @@ CASI = [
      lambda r, s, d: not any(lv.tipo == "ricerca" for lv in s.lavori)),
     # Altri lavori di codice
     ("cod2", "Dario", "amministra", "voce",
-     "Correggi lo script di backup: non copia i file nascosti. Aggiungi anche i test.", CODICE_T,
+     "Correggi lo script di backup: non copia i file nascosti. Aggiungi anche i test.", CODICE_T + ("sviluppo_correggi",),
      lambda r, s, d: True),
     ("web", "Dario", "amministra", "voce",
      "Scrivimi una pagina web per la lista della spesa, con il pulsante per aggiungere le "

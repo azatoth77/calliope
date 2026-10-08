@@ -381,6 +381,16 @@ def prova_correggi(tmp, iso):
              and "nome intero" in nuovo.vincoli and nuovo.estensione == "meteo_citta"
              and nuovo.tipo == "estensione", nuovo.vincoli[:300])
     verifica("…con le tappe accese (lavoro di uno sviluppo)", getattr(nuovo, "tappe", False))
+    # Senza uno sviluppo aperto (misura con gemma4: «Correggi lo script di backup…» → qui)
+    cfg3, reg3, ctx3, est3, svc3 = ambiente(tmp / "senza", iso)
+    ctx3.regole, ctx3.user_text = [], "Correggi lo script di backup: non copia i file nascosti."
+    out = P.chiama(reg3, ctx3, "sviluppo_correggi", {"problema": "non copia i file nascosti"},
+                   turno=1)
+    sv3 = svc3.sviluppi.corrente("u1")
+    verifica("senza sviluppo aperto: è una richiesta nuova di codice (sviluppo_correggi_nuovo)",
+             "sviluppo_correggi_nuovo" in ctx3.regole and sv3 is not None
+             and sv3.tipo == "programma" and "backup" in sv3.richiesta
+             and "Va bene così" in detta(out), detta(out))
     out = P.chiama(reg, ctx, "sviluppo_correggi", {}, turno=8)
     verifica("contrario: con l'agente già al lavoro non ne parte un altro",
              out.get("ok") is False and svc.lavori[-1] is nuovo, detta(out))

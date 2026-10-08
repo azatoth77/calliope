@@ -549,4 +549,6 @@ del turno (`SVILUPPO_MSG`) al collaudo e alla revisione: «perché?» → `svilu
 «chiudi (chiede conferma)». Regole nuove nel registro: `tool_nome_vecchio`,
 `lavoro_codice_sviluppo`, `sviluppo_apertura`, `sviluppo_collaudo_fallito`, `sviluppo_chiedi`,
 `sviluppo_chiedi_guasto`, `sviluppo_correzione`, `sviluppo_chiudi_conferma`,
-`sviluppo_chiudi_sospende`, `sviluppo_tappa_continua`, `sviluppo_tappa_cambia`.
+`sviluppo_chiudi_sospende`, `sviluppo_tappa_continua`, `sviluppo_tappa_cambia`,
+`sviluppo_correggi_nuovo`; «chiamata_» davanti al nome di un tool è un prefisso per `TextCallGuard`
+come «call_».

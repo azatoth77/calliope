@@ -754,14 +754,19 @@ def _sviluppo_correggi(ctx: ToolContext, problema: str = "", **_altro) -> dict:
     di nuovo collaudo. A una tappa è «cambia e continua»: il giro nuovo con la nota."""
     from ..sviluppo import chi
     svs = _svs(ctx)
-    if svs is None:
-        return _no(ctx, "Qui la modalità sviluppo non c'è.")
+    sv = svs.corrente(chi(ctx)) if svs is not None else None
+    if sv is None:
+        # Nessuno sviluppo aperto: «correggi lo script di backup…» è una richiesta nuova di
+        # codice (misura del 08/10 con gemma4: 2 volte su 2 qui invece di sviluppo_apri). Una
+        # conversione della forma della scelta del modello: lo sviluppo di un programma, con
+        # la frase della persona (regola `sviluppo_correggi_nuovo`)
+        note_rule(ctx, "sviluppo_correggi_nuovo")
+        compito = (str(getattr(ctx, "user_text", "") or "").strip()
+                   or str(problema or "").strip())
+        return _sviluppo_apri(ctx, tipo="programma", compito=compito)
     prof = _prof(ctx)
     if prof is None or not _admin(ctx):
         return _no(ctx, "Le correzioni sono di chi amministra.", "sviluppo_permesso")
-    sv = svs.corrente(chi(ctx))
-    if sv is None:
-        return _no(ctx, "Non c'è nessuno sviluppo aperto da correggere.")
     svc = getattr(ctx, "lavori", None)
     problema = str(problema or "").strip()
     tappa = _in_tappa(svs, sv)
@@ -860,8 +865,10 @@ def sviluppo_apri_spec(file_pc: bool = False, allegati: bool = False) -> ToolSpe
     return ToolSpec(
         name="sviluppo_apri",
         description=(
-            "Apre lo sviluppo di qualcosa che l'agente scrive in codice. tipo estensione: una "
-            "funzione permanente di Calliope, che resta e si usa a voce («fammi una funzione che "
+            "Crea un'estensione nuova di Calliope o un programma: apre lo sviluppo di qualcosa "
+            "che l'agente scrive in codice («voglio un'estensione che…», «fammi uno script…»). "
+            "tipo estensione: una funzione permanente di Calliope, che resta e si usa a voce "
+            "(«fammi una funzione che "
             "converte le unità di misura»), o una versione nuova di un'estensione che c'è («falla "
             "funzionare per ogni città», «correggila»: modifica = il suo nome); gioco=true per un "
             "gioco sullo schermo. tipo programma: uno script o un programma da usare adesso, in "
@@ -869,7 +876,8 @@ def sviluppo_apri_spec(file_pc: bool = False, allegati: bool = False) -> ToolSpe
             + (", anche su un file della persona sul PC (file = il nome detto)" if file_pc
                else "")
             + (" o allegato (allegato = il numero)" if allegati else "")
-            + ". NON per domande brevi di programmazione: rispondi tu. compito: cosa deve fare, "
+            + ". NON per domande brevi e spiegazioni di programmazione («come si scrive un "
+            "ciclo for?», «cos'è una funzione ricorsiva?»): rispondi tu, a voce. compito: cosa deve fare, "
             "con i dati come detti. nome: un nome breve per un'estensione nuova. gia_fatto_da: se uno "
             "dei tuoi tool fa "
             "già la stessa cosa (sommare = calcola), il suo nome, e come_chiederlo: la frase per "
@@ -919,11 +927,13 @@ def sviluppo_specs(file_pc: bool = False, allegati: bool = False) -> list[ToolSp
             fonte="agente", announce=("Lo chiedo a chi l'ha scritta.",)),
         ToolSpec(
             name="sviluppo_correggi",
-            description=("Nella modalità sviluppo, fa correggere il codice da chi l'ha scritto, "
-                         "senza cambiare cosa deve fare («correggilo», «fallo sistemare», «sì» a "
-                         "«Lo faccio correggere?»; a una tappa, «cambia e continua»). problema: "
-                         "cosa non va, come detto. Per cambiare cosa deve fare, invece, "
-                         "sviluppo_passo con azione analisi."),
+            description=("Solo con uno sviluppo aperto (nei dati del turno): fa correggere il "
+                         "codice dello sviluppo da chi l'ha scritto, senza cambiare cosa deve "
+                         "fare («correggilo», «fallo sistemare», «sì» a «Lo faccio "
+                         "correggere?»; a una tappa, «cambia e continua»). problema: cosa non "
+                         "va, come detto. Per cambiare cosa deve fare, sviluppo_passo con azione "
+                         "analisi; per correggere uno script o un file fuori da uno sviluppo, "
+                         "sviluppo_apri tipo programma."),
             parameters={"type": "object", "properties": {"problema": {"type": "string"}},
                         "required": []},
             func=_sviluppo_correggi, risk="azione", levels=FAMILY),
