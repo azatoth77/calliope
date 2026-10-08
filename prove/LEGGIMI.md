@@ -43,7 +43,12 @@ I **livelli** (in `prove/__main__.py`):
   **Obbligatorio prima dell'unione di un ramo su main.** Va lanciato dove ci sono i file
   fuori da git (`voices/`, `models/speaker/`, `wakeword/modelli/`, `biblioteca/`): in un
   worktree come hard link (non junction); senza, quelle prove si saltano e il riepilogo le
-  elenca.
+  elenca. Eccezione (08/10): `prova_telefono_pagina` trova da sé onnxruntime-web
+  (`models/web/`), i modelli della wake word e le voci nel **repository principale** (`git
+  rev-parse --git-common-dir`, anche dalla copia dell'hook via `PROVE_ORIGINE`), o nella
+  cartella di onnxruntime-web indicata da `CALLIOPE_TELEFONO_MODELLI`: si installano una volta
+  sola nel principale con `python -m calliope.stato --installa telefono` (14 MB, ignorati da
+  git) e in un worktree non serve nessun link.
 
 L'**hook** (`.githooks/pre-commit`, attivato con `git config core.hooksPath .githooks`)
 lancia `python -m prove --hook --staged`: livelli 1 e 2 con i file del commit, sulla **copia
@@ -82,7 +87,10 @@ dura da 0,2 s in su, e sotto carico il solo avvio di un thread superava i 50 ms.
 Le prove con il **browser** (Edge o Chromium senza finestra) usano `prove/cdp.py` (06/10): la
 porta di DevTools la sceglie il browser (`--remote-debugging-port=0`, letta da
 `DevToolsActivePort`) e la chiusura passa da `Browser.close`, poi dall'albero dei processi
-(prima restavano vivi crashpad e le utility di Edge).
+(prima restavano vivi crashpad e le utility di Edge). Dal 08/10 il browser parte sempre con `--mute-audio`: la voce
+che la pagina del telefono riproduce con Web Audio non esce più dalle casse o dalle cuffie
+vere del portatile (Web Audio gira lo stesso). Le prove con un satellite in Python usano casse
+finte (`apri_uscita`, `apri_flusso`).
 
 
 ## Le prove per area

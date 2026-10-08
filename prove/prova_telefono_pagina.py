@@ -24,8 +24,13 @@ sicuro, come il telefono in HTTPS):
 
 Servono onnxruntime-web (python -m calliope.stato --installa telefono, in models/web), i
 modelli della wake word (wakeword/modelli/) e una voce di Piper per le frasi: se mancano, o
-senza Edge né Chromium, la prova si salta (esce con 0 e lo dice). Tutto in una cartella
+senza Edge né Chromium, la prova si salta (esce con 77 e lo dice). Tutto in una cartella
 temporanea; ~60 s.
+
+Dove li cerca (08/10, `risorsa`): CALLIOPE_TELEFONO_MODELLI (la cartella di onnxruntime-web),
+poi questa radice, la cartella da cui viene la copia dell'indice (PROVE_ORIGINE, l'hook) e il
+repository principale (git --git-common-dir): così un worktree o la copia dell'hook usano i
+file installati una volta sola nel principale, senza hard link né junction.
 """
 
 import json
@@ -51,6 +56,55 @@ def verifica(nome, ok, dettaglio=""):
     print(("ok  " if ok else "NO  ") + nome + (f"  ({dettaglio})" if dettaglio else ""), flush=True)
     if not ok:
         ERRORI.append(nome)
+
+
+def _radici() -> list[Path]:
+    """Dove cercare i file fuori da git: questa radice, l'origine della copia dell'indice
+    (PROVE_ORIGINE) e il repository principale di ciascuna (il worktree ne è un ramo)."""
+    basi = [RADICE] + ([Path(os.environ["PROVE_ORIGINE"])] if os.environ.get("PROVE_ORIGINE")
+                       else [])
+    out = list(basi)
+    for b in basi:
+        try:
+            r = subprocess.run(["git", "-C", str(b), "rev-parse", "--git-common-dir"],
+                               capture_output=True, text=True, timeout=30)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if r.returncode == 0 and r.stdout.strip():
+            comune = Path(r.stdout.strip())
+            if not comune.is_absolute():
+                comune = b / comune
+            out.append(comune.resolve().parent)
+    visti = []
+    for r in out:
+        if r.resolve() not in visti:
+            visti.append(r.resolve())
+    return visti
+
+
+def risorsa(rel: str, nomi: tuple[str, ...], env: str | None = None) -> Path:
+    """La prima cartella `rel` (es. "models/web") che contiene tutti i `nomi`; la variabile
+    d'ambiente `env`, se c'è, vince. Se non c'è da nessuna parte, quella di questa radice
+    (la prova poi si salta e lo dice)."""
+    if env and os.environ.get(env):
+        return Path(os.environ[env])
+    for r in _radici():
+        if all((r / rel / n).is_file() for n in nomi):
+            return r / rel
+    return RADICE / rel
+
+
+ORT_FILE = ("ort.wasm.min.mjs", "ort-wasm-simd-threaded.mjs", "ort-wasm-simd-threaded.wasm")
+WAKE_FILE = ("calliope.onnx", "melspectrogram.onnx", "embedding_model.onnx")
+VOCI = ("it_IT-paola-medium.onnx", "it_IT-riccardo-x_low.onnx")
+
+
+def cartella_web() -> Path:
+    return risorsa("models/web", ORT_FILE, "CALLIOPE_TELEFONO_MODELLI")
+
+
+def cartella_wake() -> Path:
+    return risorsa("wakeword/modelli", WAKE_FILE)
 
 
 def browser() -> str | None:
@@ -166,8 +220,8 @@ class Pagina:
 
 def sintetizza(testi: list[str]) -> dict[str, np.ndarray] | None:
     """Le frasi di «chi parla» con una voce di Piper, a 16 kHz (come prova_satellite)."""
-    for nome in ("it_IT-paola-medium.onnx", "it_IT-riccardo-x_low.onnx"):
-        path = RADICE / "voices" / nome
+    for nome in VOCI:
+        path = risorsa("voices", (nome, nome + ".json")) / nome
         if path.is_file():
             break
     else:
@@ -215,8 +269,8 @@ class Ambiente:
         cfg.memory_db = str(TMP / "memoria.db")
         cfg.satellite_porta = 0
         cfg.audio_modo = "satellite"
-        cfg.telefono_web = str(RADICE / "models" / "web")
-        cfg.wake_model = str(RADICE / "wakeword" / "modelli" / "calliope.onnx")
+        cfg.telefono_web = str(cartella_web())
+        cfg.wake_model = str(cartella_wake() / "calliope.onnx")
         self.cfg = cfg
         self.log = []
         self.srv = ServerSatelliti(cfg, ArchivioSatelliti(cfg.memory_db), log=self.log.append)
@@ -266,12 +320,14 @@ def main() -> int:
     from calliope.schermi import telefono
     from calliope.config import Config
     c = Config()
-    c.telefono_web = str(RADICE / "models" / "web")
-    c.wake_model = str(RADICE / "wakeword" / "modelli" / "calliope.onnx")
+    c.telefono_web = str(cartella_web())
+    c.wake_model = str(cartella_wake() / "calliope.onnx")
     st = telefono.stato(c)
     if not all(st["ort"].values()) or not all(st["modelli"].values()):
-        print("Mancano onnxruntime-web (python -m calliope.stato --installa telefono) o i "
-              "modelli della wake word (wakeword/modelli/): prova saltata.")
+        print("Mancano onnxruntime-web (python -m calliope.stato --installa telefono nel "
+              "repository principale, o CALLIOPE_TELEFONO_MODELLI) o i modelli della wake word "
+              f"(wakeword/modelli/): prova saltata. Cercati in {c.telefono_web} e "
+              f"{Path(c.wake_model).parent}.")
         return SALTATA
     frasi = sintetizza(["Calliope, che ore sono?", "Che tempo fa domani a Milano?",
                         "Calliope, basta."])

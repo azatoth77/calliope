@@ -483,3 +483,21 @@ analisi, test, prove, e il diff in un blocco `diff`), cosa si può dire. Si mand
 tool `sviluppo` e `sviluppo_prova` (`hub.mittente`) e a lavoro finito (`lav.on_scheda`); durante lo
 sviluppo resta anche la scheda del lavoro in diretta. Il testo dei collaudi viene dall'estensione:
 il lettore usa `textContent`, mai `innerHTML`.
+
+## La prova del telefono nel browser gira sempre (08/10, ramo `prova-telefono-pagina`)
+
+Fino al 07/10 `prova_telefono_pagina.py` si saltava in ogni `--completo` (anche nel repository
+principale): onnxruntime-web non era installato da nessuna parte sul portatile, e nei worktree
+mancavano anche i modelli della wake word e le voci. Ora:
+
+- onnxruntime-web 1.30.0 è installato una volta nel principale con l'installatore del catalogo
+  (`python -m calliope.stato --installa telefono`, 14 MB da jsDelivr, SHA-256 verificati) in
+  `models/web/`, ignorata da git; i due modelli generici della wake word c'erano già;
+- la prova cerca ogni cartella (`risorsa`) in quest'ordine: `CALLIOPE_TELEFONO_MODELLI` (solo
+  onnxruntime-web), la sua radice, `PROVE_ORIGINE` (la copia dell'indice dell'hook) e il
+  repository principale (`git rev-parse --git-common-dir`). Si sceglie la prima che ha tutti i
+  file; niente link né copie. Il messaggio del salto dice dove ha cercato.
+
+Misure dal worktree senza file locali (08/10): 27 controlli superati, preparazione dei modelli
+1,3 s, pagina 283 kB, modelli e onnxruntime 8,0 MB trasferiti (gzip), CPU dell'inferenza nel
+browser 7,6 %.
