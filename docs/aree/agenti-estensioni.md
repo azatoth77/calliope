@@ -1150,3 +1150,79 @@ Decisioni (08/10):
 
 **Da fare io sulla DGX**: niente di particolare; `calliope aggiorna` porta tutto. I lavori finiti
 prima dell'aggiornamento non hanno né registro né numeri nello sviluppo (`lavori` vuoto).
+
+## Modalità sviluppo, giro 4: quale estensione, più input, titolo della persona (08/10, ramo `sviluppo-giro4`)
+
+Giro vero della DGX dell'08/10 sera (16:42–17:13, 26B e qwen3.6; qui con nomi di fantasia).
+Sono andati bene: elenco, disattiva, rinomina, modifica con collaudo, correzione, revisione e
+attivazione della v4 con i giorni di previsione. I problemi, corretti sul ramo:
+
+- **`modifica` con la cosa da cambiare** (16:43: «modifica: "aggiungi la possibilità di
+  scegliere quanti giorni…"», `nome` = «Meteocittà»): «non ho un'estensione…», poi la domanda
+  «Meteo città o Meteocittà?» insieme al «Procedo…» del modello. Ora la descrizione di
+  `modifica` dice «solo il suo NOME… MAI cosa cambiare, che va in compito»; se `modifica` non è
+  un'estensione ma il modello l'ha nominata in `nome`, o la frase e il compito ne nominano una
+  sola (una disattivata conta solo se non c'è un'attiva), è quella (`_da_cambiare`,
+  `_nominata`; correzione della forma della scelta del modello, regola
+  `estensione_modifica_dal_nome`). Nessuna o due attive nominate: la scelta torna al modello con
+  l'elenco **e gli stati** («Meteocittà» (meteo_codifica_citta, attiva), «Meteo città»
+  (meteo_citta, disattivata)). Il controllo viene **prima** dei permessi e della frase di sfida:
+  una chiamata che rifiuterebbe non chiede la sfida.
+- **Una disattivata non rende ambiguo il nome** (`servizio._nome`): due titoli uguali detti a
+  voce («Meteo città» e «Meteocittà», confrontati senza spazi né accenti) → vince l'attiva; per
+  `riattiva` (e «attiva» senza una versione da approvare) la disattivata (`preferenza`).
+- **La sfida sprecata** (16:45: «Sì, te lo confermo», breve compatibile di chi amministra →
+  «Per creare una funzione nuova di Calliope, ripeti: …»; superata, la chiamata rifatta era
+  senza `modifica` né `tipo`, quindi `estensione_simile_scelta` e niente). La sfida veniva dal
+  controllo rigido di `tools/agenti._permesso` (richiesta nuova di codice con una frase breve),
+  non dalla politica (che aveva già dato `intento_confermato`). Decisione: **aprire lo sviluppo
+  di un'estensione è l'analisi e la proposta**, e niente diventa attivo senza l'approvazione,
+  che vuole sempre la sfida: basta il «sì» breve compatibile di chi amministra in una
+  conversazione sicura (`admin_confermato`, regola `sviluppo_apri_breve`). Un programma nuovo
+  resta com'era (sfida). Quando la sfida serve, porta la chiamata intera (`tipo`, `compito`,
+  `nome`, `modifica` col nome vero), così rifatta è la stessa.
+- **Collaudo con più input** (v2–v4 con `citta` e `giorni`; «Guanzate, 5 giorni» tutto in
+  `citta` per tre collaudi «non trovato»; `sviluppo_chiedi` ha risposto «prova a dire solo il
+  nome della città» e la correzione ha fatto leggere all'estensione «Città, N giorni»: un
+  rattoppo). Ora i dati del turno in collaudo elencano gli input della versione in prova con
+  tipo e descrizione («citta (testo, obbligatorio): …; giorni (numero intero): …») e, con più
+  input, «passa argomenti = un oggetto… non tutto in dati»; `sviluppo_collauda` accetta
+  `argomenti` (oggetto, anche come testo JSON; `dati` resta per un input solo); un numero
+  seguito dal **nome esatto** di un input numerico nei dati («Pratofiorito, 5 giorni», «… per i
+  prossimi 2 giorni») diventa quell'input (conversione di forma, `collaudo_input_dal_testo`;
+  contrari: «Via Roma 5», «Valfiorita, 5», due numeri, un input solo). Ogni collaudo conserva gli
+  **argomenti veri** passati (`collaudi[].argomenti`): li vedono il contesto di
+  `sviluppo_chiedi` (con gli input della versione), la scheda e i vincoli di
+  `sviluppo_correggi` («argomenti passati: citta="Guanzate, 5 giorni"»), così l'agente vede che
+  il problema è nel passaggio e non nel codice; il risultato per il modello ha
+  `argomenti_passati`.
+- **Analisi** (17:01: «Ho capito così: X. Con questa modifica: X.»): una modifica uguale alla
+  specifica, o che ci sta dentro, non si aggiunge (`_con_modifica`, somiglianza ≥ 0,8). A
+  «l'analisi è corretta e voglio implementarla così» (17:02) `sviluppo_passo avanti` ripeteva la
+  domanda perché l'offerta era scaduta (tre turni in mezzo): in analisi «avanti» **accetta** la
+  specifica già proposta e letta, e il lavoro parte (`sviluppo_avanti_accetta`), con la frase
+  che basta per chi amministra; se no si ripropone. Lo stesso se il modello richiama
+  `sviluppo_apri` con la proposta scaduta dello sviluppo (`sviluppo_proposta_scaduta`; nella
+  misura con gemma4 era «chiedimelo di nuovo»).
+- **Il titolo della persona** (regola decisa qui): il titolo dato con `rinomina` resta finché la
+  persona non lo cambia. La revisione, l'annuncio della versione nuova e l'approvazione usano il
+  titolo effettivo (`archivio.manifesto`, con il titolo dell'indice) e non dicono più «che ora
+  si chiama «Meteo città»» (17:12) né «Fatto: «Meteo città» è attiva» (17:13); il titolo proposto
+  dall'agente va solo sulla scheda della revisione («scelto da te; l'agente proponeva «…»: per
+  cambiarlo, chiedimi di rinominarla»). I vincoli dell'agente per una versione nuova dicono «Il
+  titolo «…» l'ha scelto la persona: nel manifesto usa proprio questo titolo» (`titolo_vincolo`),
+  e lo sviluppo e il lavoro di una modifica prendono il titolo dell'estensione, non il `nome`
+  del modello. Sulla DGX (letto in sola lettura) l'indice ha ancora il titolo «Meteocittà» per
+  meteo_codifica_citta: l'elenco già lo diceva, solo le frasi di revisione e approvazione no.
+- **«Luca» → Šipanska Luka** (17:11): il geocoder dell'estensione prende il primo risultato del
+  mondo. È un tema dell'estensione (potrebbe preferire l'Italia, o chiedere quando il nome è
+  ambiguo), non di Calliope: da chiedere all'agente con una modifica, se Dario vuole.
+- Il falso positivo di `uscita_segreti` (17:10): [sicurezza-politica](sicurezza-politica.md).
+
+**Prove**: a secco `prove/prova_sviluppo_giro4.py` (~3 s, livello 1). Con gemma4 e4b sul
+portatile `prove/prova_sviluppo_giro4_ollama.py` (3 giri): la modifica con i giorni → versione
+nuova di Meteocittà 3/3 (il 4B mette già il nome in `modifica` con la descrizione nuova);
+«Pratofiorito per 3 giorni» e «Borgoverde per cinque giorni» → `citta` e `giorni` 6/6, sempre con
+`argomenti`; «l'analisi è corretta» a offerta scaduta → il lavoro parte 3/3 (0/1 prima di
+`sviluppo_proposta_scaduta`); prima frase mediana 1,83 s. Da rimisurare sulla DGX col 26B, che
+il 08/10 metteva la descrizione in `modifica` e i giorni nei dati.

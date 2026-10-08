@@ -446,9 +446,10 @@ def prova_estensioni(tmp):
              and "analisi_vaga" not in ctx.regole
              and S.detta(out).startswith("Sarà una versione nuova di"), S.detta(out))
     spec = reg.get("sviluppo_apri")
-    verifica("la descrizione di modifica ha l'esempio",
-             "meteo_citta" in json.dumps(spec.parameters["properties"]["modifica"],
-                                         ensure_ascii=False))
+    # (giro 4, 08/10: l'esempio dice il NOME detto e cosa cambiare in compito, mai in modifica)
+    d = json.dumps(spec.parameters["properties"]["modifica"], ensure_ascii=False)
+    verifica("la descrizione di modifica ha l'esempio: il nome, e cosa cambiare in compito",
+             "Meteo città" in d and "NOME" in d and "compito" in d and "MAI" in d, d)
 
     print("— 8. l'elenco vero delle estensioni quando la frase ne parla")
     P.installa(est, P.manifesto("meteo_codificato", "Meteo città codificata",

@@ -174,6 +174,9 @@ def _sviluppo_apri(ctx: ToolContext, tipo: str = "", compito: str = "", nome: st
     if gioco in (True, "true", "sì", "si", 1) or str(modifica or "").strip():
         t = "estensione"
     prop = str(proposta or "").strip()
+    scaduta = _proposta_scaduta(ctx, prop)
+    if scaduta is not None:
+        return scaduta
     if not t and prop:
         svc = getattr(ctx, "lavori", None)
         prof = ta._person(ctx)
@@ -187,6 +190,28 @@ def _sviluppo_apri(ctx: ToolContext, tipo: str = "", compito: str = "", nome: st
     return te._estensione_crea(ctx, compito=compito, nome=nome, proposta=proposta,
                                gia_fatto_da=gia_fatto_da, come_chiederlo=come_chiederlo,
                                gioco=gioco, modifica=modifica)
+
+
+def _proposta_scaduta(ctx, prop: str):
+    """Il «sì» alla specifica dello sviluppo aperto quando l'offerta del tool è scaduta (08/10,
+    misura con gemma4 del giro 4: dopo tre turni d'altro «l'analisi è corretta» → sviluppo_apri
+    con la proposta di prima → «chiedimelo di nuovo»). È la proposta dello sviluppo in analisi,
+    già letta alla persona: vale come «avanti» (`_avanti`, con la frase che basta per chi
+    amministra; se no la specifica si ripropone). None se non è questo caso."""
+    if not re.fullmatch(r"L\d+", prop or ""):
+        return None
+    from ..sviluppo import chi
+    from . import agenti as ta
+    svs = _svs(ctx)
+    sv = svs.corrente(chi(ctx)) if svs is not None else None
+    if (sv is None or sv.fase != "analisi" or sv.proposto != prop or not sv.specifica
+            or ta._offerta_di(ctx, getattr(ctx, "lavori", None), prop)):
+        return None
+    prof = _prof(ctx)
+    if prof is None or not _admin(ctx):
+        return None
+    note_rule(ctx, "sviluppo_proposta_scaduta")
+    return _avanti(ctx, svs, sv, prof)
 
 
 def su_avvio(ctx, svc, lav):
@@ -372,9 +397,11 @@ def _riprendi(ctx, svs, persona, quale: str) -> dict:
     return _final(frase, fatto="sviluppo ripreso", sviluppo=sv.id, **extra)
 
 
-def _nuovo_lavoro(ctx, svs, sv, prof, compito: str, cambia: str = "") -> dict:
+def _nuovo_lavoro(ctx, svs, sv, prof, compito: str, cambia: str = "",
+                  avvia: bool = False) -> dict:
     """Il lavoro dello sviluppo con la specifica nuova, proposto con «Ho capito così: …
-    Procedo?» (la persona conferma la specifica: è la fine dell'analisi)."""
+    Procedo?» (la persona conferma la specifica: è la fine dell'analisi). `avvia`: la persona
+    l'ha già sentita e accettata («avanti»), il lavoro parte."""
     from . import agenti as ta
     svc = getattr(ctx, "lavori", None)
     turno = int(getattr(ctx, "turno", 0) or 0)
@@ -390,10 +417,12 @@ def _nuovo_lavoro(ctx, svs, sv, prof, compito: str, cambia: str = "") -> dict:
                                     accanto=True)
         from ..estensioni.servizio import runtime_testo
         from .estensioni import funzioni_di_calliope
+        from .estensioni import titolo_vincolo
         vincoli = (f"È lo sviluppo dell'estensione «{sv.estensione}»: i suoi file (la versione che "
                    "la persona ha provato) sono già nella cartella; tieni lo stesso nome nel "
-                   "manifesto." + (f" Cambiamento chiesto dalla persona: «{cambia}»." if cambia
-                                   else "") + " " + funzioni_di_calliope())
+                   "manifesto. " + titolo_vincolo(est, sv.estensione)
+                   + (f" Cambiamento chiesto dalla persona: «{cambia}»." if cambia
+                      else "") + " " + funzioni_di_calliope())
         lav = svc.nuovo("estensione", compito, prof.id, prof.name, "amministra", "", "",
                         vincoli, storia)
         lav.titolo = sv.titolo
@@ -410,6 +439,8 @@ def _nuovo_lavoro(ctx, svs, sv, prof, compito: str, cambia: str = "") -> dict:
         lav.titolo = sv.titolo
         lav.file_iniziali = file_di_codice(sv.cartella) if sv.cartella else {}
     lav.specifica = compito
+    if avvia:
+        return ta._avvia(ctx, svc, lav)
     return ta._proponi(ctx, svc, lav, turno)
 
 
@@ -438,7 +469,7 @@ def _analisi(ctx, svs, sv, prof, cambia: str) -> dict:
                                   "argomenti": "azione = analisi, cambia = la modifica come "
                                                "detta dalla persona"})
     base = (sv.specifica or sv.richiesta or "").strip().rstrip(".")
-    compito = f"{base}. Con questa modifica: {cambia}" if base else cambia
+    compito = _con_modifica(base, cambia)
     out = _nuovo_lavoro(ctx, svs, sv, prof, compito, cambia)
     if isinstance(out, dict) and fermato:
         for k in ("conferma", "risposta_finale"):
@@ -448,12 +479,37 @@ def _analisi(ctx, svs, sv, prof, cambia: str) -> dict:
     return out
 
 
+def _con_modifica(base: str, cambia: str) -> str:
+    """La specifica con la modifica detta (08/10, DGX delle 17:01: «Ho capito così: aggiungi
+    la possibilità di scegliere quanti giorni… Con questa modifica: aggiungere la possibilità
+    di scegliere quanti giorni…»): se la modifica è la specifica di adesso detta di nuovo, o
+    ci sta dentro, la specifica resta com'è."""
+    import difflib
+    from ..estensioni.servizio import _norm_testo
+    base, cambia = str(base or "").strip(), str(cambia or "").strip().rstrip(".")
+    if not base:
+        return cambia
+    a, b = _norm_testo(base), _norm_testo(cambia)
+    if not b or b in a or difflib.SequenceMatcher(None, a, b).ratio() >= 0.8:
+        return base
+    return f"{base}. Con questa modifica: {cambia}"
+
+
 def _avanti(ctx, svs, sv, prof) -> dict:
     from . import agenti as ta
     svc = getattr(ctx, "lavori", None)
     if sv.fase == "analisi":
         if sv.proposto and ta._offerta_di(ctx, svc, sv.proposto):
             return ta._delega_lavoro(ctx, proposta=sv.proposto)
+        if sv.specifica and sv.proposto:
+            # «Avanti» in analisi accetta la specifica già proposta e letta (08/10, DGX delle
+            # 17:02: «l'analisi è corretta e voglio implementarla così» → la stessa domanda di
+            # nuovo, perché tre turni dopo l'offerta era scaduta). Con la frase che basta per
+            # chi amministra, il lavoro parte con la specifica letta; se no, si ripropone
+            from ..conferme import admin_confermato
+            if admin_confermato(ctx):
+                note_rule(ctx, "sviluppo_avanti_accetta")
+                return _nuovo_lavoro(ctx, svs, sv, prof, sv.specifica, avvia=True)
         if sv.specifica:
             return _nuovo_lavoro(ctx, svs, sv, prof, sv.specifica)
         return _no(ctx, "Siamo ancora all'analisi: prima dimmi cosa deve fare.")
@@ -594,7 +650,8 @@ def _promuovi(ctx, svs, sv, prof) -> dict:
 def _argomenti(m: dict, dati) -> dict:
     """I dati della prova come li passa il modello («Bergamo», «citta: Bergamo», un oggetto)
     → gli input dell'estensione. Una conversione di forma (principio 10)."""
-    props = list(((m or {}).get("input") or {}).get("properties") or {})
+    schema = ((m or {}).get("input") or {}).get("properties") or {}
+    props = list(schema)
     req = list(((m or {}).get("input") or {}).get("required") or [])
     if isinstance(dati, dict):
         return {k: v for k, v in dati.items() if k in props} or (
@@ -612,7 +669,65 @@ def _argomenti(m: dict, dati) -> dict:
     if coppie and any(k in props for k in coppie):
         return {k: v for k, v in coppie.items() if k in props}
     primo = req[0] if req else props[0]
+    out = _numeri_detti(schema, s, primo)
+    if out:
+        return out
     return {primo: s}
+
+
+# «Guanzate, 5 giorni», «Lucca per i prossimi 3 giorni»: un numero seguito dal NOME di un
+# input numerico dell'estensione (08/10, DGX: «Guanzate, 5 giorni» finiva tutto in `citta`, e
+# per tre collaudi «non trovato»). Conversione di forma della chiamata del modello (principio
+# 10, regola `collaudo_input_dal_testo`): solo con il nome esatto dell'input dopo il numero, e
+# solo se resta qualcosa per il primo input. Contrari in prova_sviluppo: «Via Roma 5», «Bari,
+# 5» (senza il nome dell'input), «3 e 5» per un programma, un input senza numeri
+_CONNETTIVI = re.compile(r"(?:[,;]|\b(?:per|nei|negli|ai|i|gli|le|prossim[ie]|successiv[ie]|"
+                         r"seguent[ie]|di|a|con))+\s*$", re.I)
+
+
+def _numeri_detti(schema: dict, s: str, primo: str) -> dict:
+    out = {}
+    resto = s
+    for k, v in schema.items():
+        if k == primo or (v or {}).get("type") not in ("integer", "number"):
+            continue
+        forme = {k.lower(), k.lower().rstrip("aeio")}
+        rx = re.compile(r"(?<![\w.,])(\d+(?:[.,]\d+)?)\s+(" + "|".join(
+            re.escape(f) for f in sorted(forme, key=len, reverse=True)) + r")[a-zà-ù]*(?![\w])",
+            re.I)
+        trovati = list(rx.finditer(resto))
+        if len(trovati) != 1:
+            continue
+        m = trovati[0]
+        n = m.group(1).replace(",", ".")
+        out[k] = int(n) if v.get("type") == "integer" and "." not in n else float(n)
+        resto = (resto[:m.start()] + resto[m.end():]).strip()
+    if not out:
+        return {}
+    resto = _CONNETTIVI.sub("", resto).strip(" ,;")
+    while True:
+        r2 = _CONNETTIVI.sub("", resto).strip(" ,;")
+        if r2 == resto:
+            break
+        resto = r2
+    if not resto:
+        return {}
+    return {primo: resto, **out}
+
+
+def input_della_prova(m: dict) -> list[str]:
+    """Gli input della versione in prova detti per il modello: «citta (testo): nome della
+    città…», «giorni (numero intero): quanti giorni…»."""
+    tipi = {"string": "testo", "integer": "numero intero", "number": "numero",
+            "boolean": "sì o no"}
+    out = []
+    schema = ((m or {}).get("input") or {})
+    req = set(schema.get("required") or [])
+    for k, v in (schema.get("properties") or {}).items():
+        d = re.sub(r"\s+", " ", str((v or {}).get("description") or "")).strip()[:90]
+        out.append(f"{k} ({tipi.get((v or {}).get('type'), (v or {}).get('type') or 'testo')}"
+                   + (", obbligatorio" if k in req else "") + ")" + (f": {d}" if d else ""))
+    return out
 
 
 def _fallito(out, ris) -> bool:
@@ -629,7 +744,7 @@ def _fallito(out, ris) -> bool:
     return False
 
 
-def _sviluppo_prova(ctx: ToolContext, dati: str = "", **_altro) -> dict:
+def _sviluppo_prova(ctx: ToolContext, dati: str = "", argomenti=None, **_altro) -> dict:
     from ..sviluppo import chi
     svs = _svs(ctx)
     if svs is None:
@@ -643,7 +758,18 @@ def _sviluppo_prova(ctx: ToolContext, dati: str = "", **_altro) -> dict:
     if sv.fase in ("analisi", "sviluppo"):
         return _no(ctx, f"Non c'è ancora niente da provare: siamo {_alla(sv)}.")
     svs.tocca(sv)
+    # Gli input per nome (08/10): un oggetto `argomenti`, anche passato come testo JSON
+    if isinstance(argomenti, str) and argomenti.strip().startswith("{"):
+        try:
+            argomenti = json.loads(argomenti)
+        except ValueError:
+            argomenti = None
+    if not isinstance(argomenti, dict) or not argomenti:
+        argomenti = None
     detti = dati if isinstance(dati, str) else json.dumps(dati, ensure_ascii=False)
+    if argomenti is not None and not str(detti or "").strip():
+        detti = ", ".join(f"{k}: {v}" for k, v in argomenti.items())
+    passati = None
     if sv.tipo == "estensione":
         est = getattr(ctx, "estensioni", None)
         if est is None or not sv.estensione:
@@ -652,7 +778,10 @@ def _sviluppo_prova(ctx: ToolContext, dati: str = "", **_altro) -> dict:
         m = est.archivio.manifesto(sv.estensione, n) if n else None
         if m is None:
             return _no(ctx, "Non c'è una versione nuova da provare.")
-        out = est.prova_candidata(ctx, sv.estensione, _argomenti(m, dati))
+        passati = _argomenti(m, argomenti if argomenti is not None else dati)
+        if argomenti is None and len(passati) > 1:
+            note_rule(ctx, "collaudo_input_dal_testo")
+        out = est.prova_candidata(ctx, sv.estensione, passati)
         # La traccia di rete (08/10): per l'agente (collaudi dello sviluppo), mai alla voce
         from ..estensioni.servizio import CHIAVE_TRACCIA
         traccia = out.pop(CHIAVE_TRACCIA, None) if isinstance(out, dict) else None
@@ -677,7 +806,7 @@ def _sviluppo_prova(ctx: ToolContext, dati: str = "", **_altro) -> dict:
             return out
     else:
         fallito = not ok
-    svs.collaudo(sv, detti, not fallito, esito, rete=traccia)
+    svs.collaudo(sv, detti, not fallito, esito, rete=traccia, argomenti=passati)
     note_rule(ctx, "sviluppo_collauda")
     _schermo(ctx, sv)
     if fallito:
@@ -693,6 +822,10 @@ def _sviluppo_prova(ctx: ToolContext, dati: str = "", **_altro) -> dict:
                                   "cosa": f"far correggere «{sv.titolo}» all'agente",
                                   "argomenti": {"problema": f"il collaudo {cosa} si ferma con "
                                                             "un errore"}})
+    if isinstance(out, dict) and passati is not None:
+        # Gli argomenti veri dell'esecuzione (08/10): il modello vede se il problema è nel
+        # passaggio («citta = "Guanzate, 5 giorni"») e non nel codice
+        out = {**out, "argomenti_passati": passati}
     return out
 
 
@@ -792,7 +925,10 @@ def _sviluppo_correggi(ctx: ToolContext, problema: str = "", **_altro) -> dict:
             not sv.collaudi[-1].get("giudizio"):
         sv.collaudi[-1]["giudizio"] = problema[:200]
     falliti = [c for c in sv.collaudi if not c.get("ok") or c.get("giudizio")][-5:]
-    casi = "; ".join(f"«{c.get('dati') or 'senza dati'}» → {c.get('esito') or 'errore'}"
+    from ..sviluppo import argomenti_detti
+    casi = "; ".join(f"«{c.get('dati') or 'senza dati'}»"
+                     + (f" (argomenti passati: {argomenti_detti(c)})" if c.get("argomenti")
+                        else "") + f" → {c.get('esito') or 'errore'}"
                      + (f" (la persona: {c['giudizio']})" if c.get("giudizio") else "")
                      for c in falliti)
     diagnosi = next((q for q in reversed(sv.chiesti) if q.get("dettagli") or q.get("voce")),
@@ -840,9 +976,10 @@ def _lavoro_dello_sviluppo(ctx, svc, sv, prof, compito: str, vincoli: str):
         if est is None or not sv.estensione:
             return _no(ctx, "Qui le estensioni non ci sono.")
         from ..estensioni.servizio import runtime_testo
-        from .estensioni import funzioni_di_calliope
+        from .estensioni import funzioni_di_calliope, titolo_vincolo
         v = (f"È lo sviluppo dell'estensione «{sv.estensione}»: tieni lo stesso nome nel "
-             f"manifesto. {vincoli} {funzioni_di_calliope()}")
+             f"manifesto. {titolo_vincolo(est, sv.estensione)} {vincoli} "
+             f"{funzioni_di_calliope()}")
         lav = svc.nuovo("estensione", compito, prof.id, prof.name, "amministra", "", "", v,
                         storia)
         lav.estensione = sv.estensione
@@ -865,8 +1002,10 @@ def sviluppo_apri_spec(file_pc: bool = False, allegati: bool = False) -> ToolSpe
     props = {"tipo": {"type": "string", "enum": TIPI_APRI},
              "compito": {"type": "string"}, "nome": {"type": "string"},
              "modifica": {"type": "string", "description": (
-                 "per CAMBIARE un'estensione che c'è il suo nome (es. «modifica l'estensione "
-                 "Meteo città: …» → modifica = \"meteo_citta\"); vuoto per una nuova")},
+                 "per CAMBIARE un'estensione che c'è: solo il suo NOME (es. «modifica "
+                 "l'estensione Meteo città aggiungendo i giorni» → modifica = \"Meteo città\", "
+                 "compito = \"aggiungi i giorni\"); MAI cosa cambiare, che va in compito; "
+                 "vuoto per una nuova")},
              "gia_fatto_da": {"type": "string"}, "come_chiederlo": {"type": "string"},
              "proposta": {"type": "string"}, "gioco": {"type": "boolean"}}
     if file_pc:
@@ -921,8 +1060,12 @@ def sviluppo_specs(file_pc: bool = False, allegati: bool = False) -> list[ToolSp
             name="sviluppo_collauda",
             description=("Il collaudo nella modalità sviluppo: prova la versione nuova "
                          "dell'estensione (non ancora attiva) o il programma, con i dati detti "
-                         "(«prova con Bergamo», «provalo con 3 e 5»). dati: i dati come detti."),
-            parameters={"type": "object", "properties": {"dati": {"type": "string"}},
+                         "(«prova con Bergamo», «provalo con 3 e 5»). dati: i dati come detti. "
+                         "argomenti: per un'estensione con più input (sono nei dati del "
+                         "turno), un oggetto con un valore per input («Bergamo per 3 giorni» → "
+                         "{\"citta\": \"Bergamo\", \"giorni\": 3})."),
+            parameters={"type": "object", "properties": {"dati": {"type": "string"},
+                                                         "argomenti": {"type": "object"}},
                         "required": []},
             func=_sviluppo_prova, risk="azione", levels=FAMILY, non_fidato=True,
             fonte="estensione", announce=("Un attimo.",)),

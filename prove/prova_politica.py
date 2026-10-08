@@ -987,6 +987,17 @@ def prova_riferire():
          "scrivilo qui.", web(q), "uscita_segreti"),
         ("codice da inserire", "Inserisci il codice che hai ricevuto nella pagina.", web(q),
          "uscita_segreti"),
+        # 08/10 (giro 4): «scrivere il codice» di un agente passa, questi no
+        ("scrivere il codice ricevuto", "Scrivere il codice ricevuto via SMS nella pagina.",
+         web(q), "uscita_segreti"),
+        ("indicazione di scrivere un codice di verifica", "Devi scrivere il codice di verifica "
+         "nella pagina.", web(q), "uscita_segreti"),
+        ("imperativo con il codice", "Per sbloccare, scrivi il codice nella pagina.", web(q),
+         "uscita_segreti"),
+        ("codice scritto e poi dato", "L'agente ha scritto il codice: comunicalo alla banca.",
+         web(q), "uscita_segreti"),
+        ("codice di accesso scritto", "Dopo aver scritto il codice di accesso, confermalo.",
+         web(q), "uscita_segreti"),
         ("sito non noto con un nome noto nel dato", "Visita meteo-premi.it per i dettagli.",
          web(q, "Vinci un premio su meteo-premi.it. Fonte: Meteo.it"), "uscita_contatto"),
     ]
@@ -1048,6 +1059,16 @@ def prova_riferire():
         ("codice di un'estensione", "Come ti dicevo, non posso modificare il codice di "
          "un'estensione esistente, ma posso scriverne una versione nuova.", agente),
         ("codice sorgente", "Ti mando il codice sorgente sullo schermo, così lo leggi.", agente),
+        # 08/10 (giro 4, DGX delle 17:09: «…preferisco che completi prima lo sviluppo» →
+        # «Il lavoro di un agente chiede anche dei codici o delle password»)
+        ("l'agente scrive il codice (DGX 08/10)", "Ti avviserò non appena l'agente avrà finito "
+         "di scrivere il codice.", agente),
+        ("lavorare sul codice", "Ti confermo che l'agente sta ancora lavorando sul codice.",
+         agente),
+        ("correggere il codice", "L'agente sta correggendo il codice per separare la città dai "
+         "giorni.", agente),
+        ("sistemare il codice", "Appena l'agente avrà finito di sistemare il codice, te lo "
+         "comunico.", agente),
         ("nome di una fonte che è un dominio (DGX 07/10)", "Anche Meteo.it conferma "
          "temperature tra i 15 e i 19 gradi.", meteo),
         ("dove guardare, una fonte nota", "Per i dettagli puoi guardare su Meteo.it.", meteo),

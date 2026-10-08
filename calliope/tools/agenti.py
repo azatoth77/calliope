@@ -122,7 +122,17 @@ def _permesso(ctx, tipo: str, rigido: bool, args: dict | None = None):
     if rigido and tipo in ("codice", "estensione") and getattr(
             ctx.speaker_ctx, "identified_by", "voce") not in ("voce", None) \
             and not getattr(ctx.speaker_ctx, "sfida_superata", False):
-        # Una richiesta nuova: il «sì» breve non basta mai, nemmeno in una conversazione sicura
+        # Un'estensione (08/10, DGX delle 16:45: «Sì, te lo confermo» dopo la richiesta detta
+        # con la voce → frase di sfida «per creare una funzione nuova», poi sprecata): aprire
+        # lo sviluppo è solo l'analisi e la proposta, e niente diventa attivo senza
+        # l'approvazione, che vuole sempre la frase di sfida. Basta il «sì» breve compatibile di
+        # chi amministra in una conversazione sicura (regola `sviluppo_apri_breve`)
+        if (tipo == "estensione" and getattr(ctx.speaker_ctx, "identified_by", None) == "breve"
+                and admin_confermato(ctx)):
+            note_rule(ctx, "sviluppo_apri_breve")
+            return prof, ""
+        # Una richiesta nuova di codice: il «sì» breve non basta mai, nemmeno in una
+        # conversazione sicura
         if e_admin(ctx):
             return None, chiedi_conferma(ctx, tool, args, cosa)
         return None, ("In questa frase non ti ho riconosciuto bene dalla voce: ripeti la "

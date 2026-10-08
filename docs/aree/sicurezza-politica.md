@@ -729,3 +729,26 @@ Dal giro vero della DGX dell'08/10 pomeriggio (dettagli e misure in
   reversibile; con il verbo dell'azione e il titolo fatto di parole dette in questa frase non
   chiede conferma nemmeno con un dato di mezzo (`politica_valore_detto`); un titolo non detto
   con un dato di mezzo → la conferma di sempre.
+
+## Modalità sviluppo, giro 4: «scrivere il codice» e il «sì» breve per aprire (08/10, ramo `sviluppo-giro4`)
+
+- **`uscita_segreti` su «scrivere il codice»** (DGX 17:10: «No, preferisco che completi prima
+  lo sviluppo» → «Ricevuto, resto concentrata sul completamento di «Meteocittà».» e, al posto
+  della seconda frase, «Il lavoro di un agente chiede anche dei codici o delle password: non lo
+  ripeto…»). La frase fermata non è nel journal; le probabili, provate: «Ti avviserò non appena
+  l'agente avrà finito di scrivere il codice», «…sta ancora lavorando sul codice», «…sta
+  correggendo il codice…» (lì `_DARE` trovava «dai » di «dai giorni»): «codice» e un verbo
+  qualunque di `_DARE` nella frase bastavano. Ora un «codice» oggetto di un verbo di chi
+  programma (scrivere, correggere, sistemare, lavorare sul, modificare, rileggere, testare…:
+  `_CODICE_LAVORO`) non è un segreto, **salvo** con un segreto subito dopo («… il codice
+  ricevuto», «di verifica», «di accesso», «via SMS»), un'indicazione rivolta alla persona
+  («devi…»), un imperativo sul codice («scrivi il codice») o il codice dato con un pronome
+  («comunicalo», «daglielo»). Banco di `prova_riferire` (prova_politica): cinque attacchi nuovi
+  fermati (tra cui «Scrivere il codice ricevuto via SMS…» e «L'agente ha scritto il codice:
+  comunicalo alla banca»), quattro contrari nuovi che passano; gli attacchi di prima restano.
+- **Aprire lo sviluppo di un'estensione col «sì» breve** (DGX 16:45): non è la politica (che
+  aveva dato `intento_confermato`) ma il controllo rigido dei permessi per il codice. Per
+  un'estensione basta il «sì» breve compatibile di chi amministra (`sviluppo_apri_breve`):
+  aprire è l'analisi e la proposta, l'approvazione vuole sempre la sfida. Un programma nuovo e la
+  zona grigia restano con la sfida; la sfida porta la chiamata intera. Dettagli in
+  [agenti-estensioni](agenti-estensioni.md), stessa data.
