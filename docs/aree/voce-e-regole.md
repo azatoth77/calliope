@@ -477,3 +477,15 @@ Il banco (`prove/prova_regressione.py`, gemma4 e4b locale, 2 giri) era 166/174 i
 - Dopo la correzione del finto: **165/174** (contro 162 del codice del 04/10 nelle stesse
   condizioni), prima frase mediana 0,69 s, p90 1,20 s. Restano i quattro casi sopra (il 4B, non
   la voce della DGX, che è il 26B) e la variabilità di sempre (`info3`, `ora_vecchia`).
+
+## Rete `spinta_esercizi` (08/10, ramo `esercizi-pilota`)
+
+Con un esercizio in sospeso (tool `esercizi`, calliope/esercizi/) una risposta del modello senza
+il tool si trattiene e il modello riceve una spinta (`ESERCIZI_NUDGE`), una volta; poi la sua
+risposta si dice. Caso: col 4B, a «Verbo.» la risposta era «Perfetto! Prossima: …» copiata
+dalla storia, cioè la correzione decisa dal modello (italiano 11/18 nel banco); con la rete
+35/36 e matematica 36/36 (`prova_esercizi_ollama`, 2 giri). Categoria «modello» in `RETI`
+(`Brain`: `turn_pending_tool == "esercizi"` attiva lo stesso trattenimento di
+`spinta_richiesta`). Prova con backend finto e contrario in `prova_esercizi`. Dettagli in
+[minori](minori.md) e [`../ricerche/2026-10-08-esercizi.md`](../ricerche/2026-10-08-esercizi.md).
+

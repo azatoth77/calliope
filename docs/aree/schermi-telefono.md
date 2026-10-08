@@ -448,3 +448,18 @@ risultato del lavoro appena annunciato (che non sta in quell'archivio).
   `prova_risultati.py`: un documento non consegnato in questa conversazione (rifiutato come
   prima), un'altra persona (niente scheda di chi ha chiesto il lavoro); con la voce riconosciuta il
   risultato più recente, senza la regola.
+
+## Scheda degli esercizi (08/10, ramo `esercizi-pilota`)
+
+Tipo `esercizio` (personale, chiave `esercizi:<persona>`) e `esercizi_riepilogo` (per i tutori),
+disegnati in `schermo.js` (`DISEGNA.esercizio`, `DISEGNA.esercizi_riepilogo`): domanda grande,
+campo per scrivere o pulsanti delle scelte, esito, «Un indizio», «Salta», «Secondo me è
+sbagliato», «Basta così». `POST /api/esercizio` (sessione in un'intestazione, JSON, HTTPS fuori
+da questo computer, 30 al minuto per schermo) risponde senza passare dal modello: solo da uno
+schermo personale il cui proprietario ha una sessione aperta (cominciata a voce), fuori dagli
+orari di pausa. La scheda si ricostruisce intera a ogni aggiornamento (niente `allinea`: i
+gestori leggerebbero l'esercizio di prima; anche nel carosello del telefono) e il campo riprende
+il fuoco. La risposta attesa non arriva mai alla pagina. Prove `prova_esercizi` (server vero) e
+`prova_esercizi_pagina` (Edge senza finestra, schermo e telefono). Area e misure in
+[minori](minori.md).
+
