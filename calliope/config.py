@@ -1119,6 +1119,17 @@ class Config:
     # aveva chiesti lo sente al primo silenzio («… Lo rifaccio?») se il lavoro era vivo meno
     # di tante ore fa; quelli più vecchi restano solo nell'elenco di lavori_stato, per un giorno
     agenti_interrotti_annuncio_h: float = 3.0
+    # Modalità sviluppo (08/10, calliope/sviluppo.py): per chi amministra un'estensione o un
+    # programma è un iter a fasi (analisi, sviluppo e test, collaudo, revisione, attivazione),
+    # su disco accanto ai lavori. Dopo tanti minuti senza parlarne (non mentre l'agente
+    # lavora) si sospende e si riprende a voce; 0 = mai. Una volta al giorno, alla prima
+    # risposta a chi amministra, Calliope ricorda gli sviluppi sospesi (sviluppo_promemoria).
+    # Un programma con almeno tante righe di codice (o 3 file, o 3 prove) alla revisione
+    # riceve la proposta di diventare un'estensione
+    sviluppo_enabled: bool = True
+    sviluppo_sospendi_min: float = 30.0
+    sviluppo_promemoria: bool = True
+    sviluppo_programma_righe: int = 150
     # I file della persona dati all'agente (03/10, «correggi lo script backup.py»): solo
     # testo, codice, Word, Excel e PDF, al più tanti MB; del testo di un documento l'agente
     # legge al più tanti caratteri
@@ -1938,6 +1949,11 @@ RETI: dict[str, Rete] = {
         "un'estensione nominata nella frase: il suo tool e cosa fa (EST_NOMINATA_MSG)", MODELLO,
         "dati del turno: «invoca l'estensione meteo per città su Bergamo» tre volte, e sempre "
         "web_cerca (26B, 07/10)"),
+    "modalita_sviluppo": Rete(
+        "lo sviluppo aperto di chi parla: fase e cosa fare (SVILUPPO_MSG), la riga del fuori "
+        "tema in coda, il promemoria degli sviluppi sospesi", MODELLO,
+        "dati del turno: senza, il modello non sa a che punto è l'iter di un'estensione (07/10 "
+        "sera, DGX: provarla veniva dopo approvarla, ogni passo una richiesta nuova)"),
     "conferma_al_posto_del_vuoto": Rete(
         "risposta vuota dopo un tool: la sua conferma", MODELLO,
         "risposte vuote del 4B dopo un'azione riuscita"),
@@ -2173,7 +2189,9 @@ SEZIONI: dict[str, list[str]] = {
                "agenti_precedenza_voce", "agenti_ripresa_s", "agenti_arbitro", "agenti_pausa_vllm",
                "agenti_domande_max",
                "agenti_attesa_risposta_min", "agenti_file_max_mb", "agenti_file_caratteri",
-               "agenti_esempi_max", "agenti_esempio_kb", "agenti_interrotti_annuncio_h"],
+               "agenti_esempi_max", "agenti_esempio_kb", "agenti_interrotti_annuncio_h",
+               "sviluppo_enabled", "sviluppo_sospendi_min", "sviluppo_promemoria",
+               "sviluppo_programma_righe"],
     "estensioni": ["estensioni_enabled", "estensioni_cartella", "estensioni_max_attive",
                    "estensioni_attesa_s", "estensioni_conferma_s", "estensioni_tempo_max_s",
                    "estensioni_memoria_max_mb", "estensioni_secondo_parere",
@@ -2358,6 +2376,7 @@ LIMITI: dict[str, tuple[float, float]] = {
     "conversazione_ripresa_ore": (0.0, 720.0), "conversazioni_parallele": (0, 16),
     "conversazione_doppione_s": (0.0, 30.0),
     "agenti_num_ctx": (2048, 1_048_576), "agenti_contesti_paralleli": (1, 64),
+    "sviluppo_sospendi_min": (0.0, 1440.0), "sviluppo_programma_righe": (10, 100_000),
     "agenti_token_passata": (512, 262_144), "agenti_ragionamento_passata": (0, 262_144),
     "agenti_soglia_file": (0.1, 0.95), "agenti_passi_intatti": (1, 20),
     "agenti_analisi_s": (1.0, 60.0),

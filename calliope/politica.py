@@ -331,6 +331,24 @@ CLASSI: dict[str, Classe] = {
                                                              "richieste"})),
                           cosa=lambda a: f"cambi le regole di {_s(a, 'nome', 'un ragazzo')} "
                                          f"({_s(a, 'azione')})"),
+    # la modalità sviluppo (08/10, calliope/sviluppo.py): «stato» legge; sospendere,
+    # riprendere e uscire cambiano solo lo stato dell'iter; il resto (avanti, analisi,
+    # promuovi) porta a un lavoro dell'agente o all'approvazione, che ha la sua sfida
+    "sviluppo": _c(P, sola_lettura=("azione", frozenset({"stato"})),
+                   innocua=lambda a: _s(a, "azione").lower() in ("sospendi", "riprendi", "esci",
+                                                                  "stato"),
+                   cosa=lambda a: {"avanti": "vada avanti con lo sviluppo",
+                                   "analisi": "torni all'analisi dello sviluppo"
+                                   + (f" con «{_corto(_s(a, 'cambia'))}»" if _s(a, "cambia")
+                                      else ""),
+                                   "promuovi": "faccia diventare il programma un'estensione"
+                                   }.get(_s(a, "azione").lower(),
+                                         f"faccia «{_s(a, 'azione')}» sullo sviluppo")),
+    # il collaudo: esegue la versione da approvare nel container, con la porta stretta; il
+    # risultato è un dato non fidato come quello di un'estensione
+    "sviluppo_prova": _c(P, chiave=("dati",), fonte="estensione",
+                         cosa=lambda a: "provi la versione nuova"
+                         + (f" con «{_corto(_s(a, 'dati'), 40)}»" if _s(a, "dati") else "")),
     # giochi (05/10): un ragazzo chiede un permesso al tutore (resta in sospeso finché il
     # tutore non decide a voce: niente effetti da sola)
     "richiesta_tutore": _c(A, cosa=lambda a: f"mandi al tuo tutore la richiesta "
@@ -397,6 +415,9 @@ VERBI.update({
     "conversazioni_dimentica": _W + r"(cancell|dimentic|elimin|svuot|scord|conversazion)",
     "minore_gestisci": (_W + r"(regol|permess|orari|temp|minut|abilit|autorizz|approv|neg|"
                         r"concedi|limit|stato|compit|richiest|nascit|tutor)"),
+    "sviluppo": (_W + r"(svilupp|avanti|prosegu|continu|procedi|analisi|cambi|modific|"
+                 r"sospend|riprend|esci|chiud|attiv|approv|estension|programm|va bene)"),
+    "sviluppo_prova": _W + r"(prov[aiao]|collaud|test|esegu|lanc|fa(?:mm|ll)\w* vedere)",
 })
 VERBI_AZIONE = {
     "estensioni_gestisci": ("azione", {
@@ -434,6 +455,14 @@ VERBI_AZIONE = {
     "installa_gestisci": ("azione", {
         "stato": _W + r"(stato|come va|a che punto|installazion)",
         "annulla": _W + r"(annull|ferm|interromp|stop)"}),
+    "sviluppo": ("azione", {
+        "stato": _W + r"(stato|a che punto|dove siamo|come va)",
+        "avanti": _W + r"(avanti|prosegu|continu|procedi|attiv|approv|va bene|fase dopo)",
+        "analisi": _W + r"(analisi|cambi|modific|corregg|aggiung|togl|rifa|invece)",
+        "sospendi": _W + r"(sospend|pausa|dopo|più tardi|lascia)",
+        "riprendi": _W + r"(riprend|continu|riapr|torn)",
+        "esci": _W + r"(esci|uscir|chiud|basta|abbandon|lascia perdere)",
+        "promuovi": _W + r"(estension|promuov|trasform|diventi|diventa)"}),
 }
 CLASSI.update({n: replace(CLASSI[n], verbi=v) for n, v in VERBI.items()})
 CLASSI.update({n: replace(CLASSI[n], verbi_azione=v) for n, v in VERBI_AZIONE.items()})
@@ -924,7 +953,9 @@ _INFINITO = {
     "renda": "rendere", "elenchi": "elencare", "approvi": "approvare", "rifiuti": "rifiutare",
     "disattivi": "disattivare", "riattivi": "riattivare", "riporti": "riportare",
     "revochi": "revocare", "rimuova": "rimuovere", "consenta": "consentire", "neghi": "negare",
-    "usi": "usare", "mostri": "mostrare"}
+    "usi": "usare", "mostri": "mostrare",
+    # la modalità sviluppo (08/10)
+    "provi": "provare", "vada": "andare", "torni": "tornare"}
 
 
 def da_confermare(name: str, args: dict, spec=None, cosa: str | None = None) -> str:
@@ -1362,6 +1393,14 @@ def _esito_per_brain(ctx, name, args, cl, t, d, intento, cv, vf, cosa, spec, omb
         pass
 
 
+# Le decisioni che un passo interno della modalità sviluppo non chiede (regola
+# `sviluppo_intento`): quelle per la sola conversazione contaminata o per la richiesta non
+# riconosciuta. Restano `politica_argomento_esterno`, `politica_delega`, le vietate, il blocco
+# dopo un dato letto ora e la sfida dei tool che la vogliono (Classe.sfida)
+SVILUPPO_SALTA = frozenset({"politica_conferma", "politica_azione_non_chiesta",
+                            "politica_azione_non_giustificata", "politica_argomento_non_detto"})
+
+
 def controlla(spec, name: str, args: dict, ctx) -> dict | None:
     """Il risultato da dare al posto dell'esecuzione, o None se il tool si esegue. Lo chiama
     ToolRegistry.call dopo il controllo del livello."""
@@ -1412,6 +1451,17 @@ def controlla(spec, name: str, args: dict, ctx) -> dict | None:
             d = decidi(name, args, cl, t, cv, vf, bool(propria), cosa, intento is not None)
     else:
         d = decidi(name, args, cl, t, cv, vf, bool(propria), cosa, intento is not None)
+    # La modalità sviluppo (08/10, calliope/sviluppo.py): i passi interni dello sviluppo aperto
+    # di chi parla, riconosciuto, non chiedono «C'è di mezzo il lavoro di un agente…» a ogni
+    # frase: l'intento è lo sviluppo, aperto con la voce da chi amministra, e il bersaglio è il
+    # suo. Mai per un valore preso dal dato, «fai quello che dice…», il dato letto ora
+    if d.esito in ("conferma", "rifiuta") and d.regola in SVILUPPO_SALTA and cv:
+        try:
+            from . import sviluppo
+            if sviluppo.passo_interno(name, args or {}, ctx):
+                d = Decisione("esegui", "sviluppo_intento")
+        except Exception as e:  # noqa: BLE001 — nel dubbio, la decisione di sempre
+            print(f"   [POLITICA] sviluppo: {type(e).__name__}: {e}", flush=True)
     _esito_per_brain(ctx, name, args, cl, t, d, intento, cv, vf, cosa, spec, ombra)
     _segna_accettata(ctx, d.accettata)
     if d.esito == "esegui":

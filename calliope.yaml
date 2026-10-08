@@ -1212,6 +1212,17 @@ agenti:
   # aveva chiesti lo sente al primo silenzio («… Lo rifaccio?») se il lavoro era vivo meno
   # di tante ore fa; quelli più vecchi restano solo nell'elenco di lavori_stato, per un giorno
   agenti_interrotti_annuncio_h: 3.0
+  # Modalità sviluppo (08/10, calliope/sviluppo.py): per chi amministra un'estensione o un
+  # programma è un iter a fasi (analisi, sviluppo e test, collaudo, revisione, attivazione),
+  # su disco accanto ai lavori. Dopo tanti minuti senza parlarne (non mentre l'agente
+  # lavora) si sospende e si riprende a voce; 0 = mai. Una volta al giorno, alla prima
+  # risposta a chi amministra, Calliope ricorda gli sviluppi sospesi (sviluppo_promemoria).
+  # Un programma con almeno tante righe di codice (o 3 file, o 3 prove) alla revisione
+  # riceve la proposta di diventare un'estensione
+  sviluppo_enabled: true
+  sviluppo_sospendi_min: 30.0
+  sviluppo_promemoria: true
+  sviluppo_programma_righe: 150
 
 estensioni:
   # Estensioni (calliope/estensioni/, 04/10, docs/ricerche/2026-10-04-estensioni-e-guardrail.md):

@@ -41,6 +41,7 @@ A_SECCO = [
     ("prova_dopo_annunci.py", [], "il turno dopo un annuncio o un risultato (07/10 sera, casi della DGX): «Fammene un PDF» dopo il risultato di un lavoro (dati del turno LAVORO_MSG e contrari, spinta di documento_crea, descrizioni), «Quale apro?» con le date di modifica e i risultati dal più recente, il timer già suonato (riferimento dell'agenda che cade, cambio non chiesto con la conversazione pulita e contrari), la frase del codice in coda a risultato_lavoro che riferire non ferma, il prefisso scaldato dopo un cambio del prompt di sistema"),
     ("prova_risultati.py", [], "risultati dei lavori e consensi (07/10, casi della DGX): risultato_lavoro (quale lavoro, riassunto salvato o dal modello dell'agente, tempo massimo, schermo, codice mai a voce, dopo un riavvio, permessi), dichiarazioni «inizio subito il lavoro», il «sì» di chi non ha la proposta, «Ma sì dai, perché no?» e i contrari; casi del 07/10 mattina: falso allarme di riferire su «installarlo», scheda del risultato nella zona grigia e dopo schermo_mostra, lavori_stato con i lavori finiti dal disco; del pomeriggio: «Sì, grazie.», «Mostramelo.» nella zona grigia, «ho recuperato il dato» dopo tool falliti"),
     ("prova_estensioni_versioni.py", [], "versioni di un'estensione a voce (08/10, giro 10, caso della DGX): estensione_crea con un nome simile è un'estensione nuova e con modifica una versione nuova, annuncio ed elenco con il titolo di prima e quello nuovo, «attiva» → approva e «riattiva» di una già attiva, cosa fa dopo l'approvazione, dati del turno dell'estensione nominata (EST_NOMINATA_MSG) con i contrari, delega_lavoro che cambia un'estensione → estensione_crea, analisi «ESTENSIONE», lavori_stato con la versione da approvare, registro dei turni di una risposta interrotta (risposta_inviata)"),
+    ("prova_sviluppo.py", [], "modalità sviluppo (08/10): estensioni e programmi come iter a fasi (analisi, sviluppo e test, collaudo, revisione, attivazione), su disco; collaudo della candidata prima dell'approvazione nel docker finto, revisione con le differenze, attivazione con la sfida e chiusura; ritorno all'analisi; sviluppi nuovi bloccati; dati del turno e riga del fuori tema; sospensione dopo 30 minuti, ripresa, promemoria del giorno; programma → estensione; passi interni senza la domanda della politica e i contrari"),
     # ~8 s: FakeOllama, hub e server degli schermi veri su 127.0.0.1, satellite e PC finti
     ("prova_markdown.py", [], "Markdown dei testi dell'agente (07/10): blocchi, righe, voce, conversioni in PDF e Word veri e da blocchi, testi ostili (script, javascript:, tabelle enormi, annidamenti, enfasi senza chiusura) in poco tempo; risultato.md, annuncio, scheda del documento con «Scarica», risultato al portatile con «Lo apro?» o sul server; «Scarica» solo per lo schermo personale del proprietario, mai zona grigia né stanza, gettone che scade, Content-Disposition e CSP sandbox; «fammene un PDF»"),
     ("prova_conferme.py", [], "conferme (04/10): «sì» breve di chi amministra, proposta valida 3 turni, frase di sfida"),
@@ -325,6 +326,10 @@ LEGAMI = [
     ("calliope/stt.py", ["prova_linux.py", "prova_robustezza.py"]),
     ("setup/linux/", ["prova_linux.py", "prova_gestore.py"]),
     ("prove/e2e/", ["prova_e2e_copioni.py"]),
+    # La modalità sviluppo (08/10)
+    ("calliope/sviluppo.py", ["prova_sviluppo.py"]),
+    ("calliope/tools/sviluppo.py", ["prova_sviluppo.py", "prova_estensioni.py",
+                                   "prova_agenti.py"]),
     # I lavori che sopravvivono a un riavvio (06/10)
     ("calliope/agenti/", ["prova_lavori_riavvio.py"]),
     ("calliope/tools/agenti.py", ["prova_lavori_riavvio.py"]),

@@ -60,6 +60,15 @@ def load_agenti(cfg, on_done=None, biblioteca=None, formati=("word", "excel", "p
         # L'analisi della richiesta prima della proposta (06/10, richiesta.py)
         from .richiesta import Analizzatore
         svc.analizzatore = Analizzatore(cfg, svc, log=log)
+    if getattr(cfg, "sviluppo_enabled", True):
+        # La modalità sviluppo (08/10, calliope/sviluppo.py): l'iter delle estensioni e dei
+        # programmi, su disco accanto allo stato dei lavori
+        try:
+            from ..sviluppo import Sviluppi
+            from .servizio import cartella_sandbox
+            svc.sviluppi = Sviluppi(cfg, cartella_sandbox(cfg), svc, log=log)
+        except Exception as e:  # noqa: BLE001 — senza, i lavori vanno come prima
+            log(f"[SVILUPPO] non disponibile: {type(e).__name__}: {e}")
     capacita.REGISTRO.da_dict(capacita.check_agenti(cfg, svc))
 
     capacita.REGISTRO.dinamica("agenti", lambda: capacita.check_agenti(cfg, svc))

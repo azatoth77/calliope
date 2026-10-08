@@ -290,6 +290,52 @@ class Estensioni:
         if not self.pronto():
             return _rifiuto(ctx, "Le estensioni girano solo nel loro contenitore isolato, e "
                                  "qui adesso non è pronto.", "estensione_senza_container")
+        es = self._esecuzione(ctx, nome, voce["attiva"], self.archivio.manifesto(nome),
+                              argomenti)
+        if isinstance(es, dict):
+            return es
+        return self._esito(ctx, es, es.attendi(self.attesa_s))
+
+    def prova_candidata(self, ctx, nome: str, argomenti: dict) -> dict:
+        """Il collaudo (08/10, modalità sviluppo, calliope/sviluppo.py): la versione da
+        approvare si prova PRIMA dell'approvazione, nello stesso container, con la stessa porta
+        e lo stesso guardrail di un'estensione attiva. L'impronta dei file si ricontrolla: la
+        candidata provata è quella che si approverà."""
+        from .archivio import impronta
+        n = self.archivio.candidata(nome)
+        if n is None:
+            return _final("Non c'è una versione nuova da provare.", ok=False, fatto=NIENTE)
+        ver = self.archivio.versione(nome, n) or {}
+        try:
+            intatta = impronta(self.archivio.cartella_versione(nome, n)) == ver.get("impronta")
+        except OSError:
+            intatta = False
+        if not intatta:
+            return _rifiuto(ctx, "Non la provo: i suoi file sono cambiati dopo che l'agente l'ha "
+                                 "consegnata.", "estensione_impronta")
+        if (ver.get("analisi") or {}).get("sintassi"):
+            return _final("Non si può provare: il codice ha errori. Dimmi cosa correggere.",
+                          ok=False, fatto=NIENTE)
+        m = ver.get("manifesto") or {}
+        if m.get("scheda"):
+            return _final("Un gioco si prova sullo schermo dopo l'approvazione: qui non lo "
+                          "eseguo.", ok=False, fatto=NIENTE)
+        if not self.pronto():
+            return _rifiuto(ctx, "Le estensioni girano solo nel loro contenitore isolato, e "
+                                 "qui adesso non è pronto.", "estensione_senza_container")
+        es = self._esecuzione(ctx, nome, n, m, argomenti)
+        if isinstance(es, dict):
+            return es
+        note_rule(ctx, "sviluppo_collaudo")
+        out = self._esito(ctx, es, es.attendi(self.attesa_s))
+        if isinstance(out, dict) and out.get("risultati") is not None:
+            out["collaudo"] = (f"prova della versione {n}, NON ancora approvata né attiva: di' "
+                               "il risultato in breve")
+        return out
+
+    def _esecuzione(self, ctx, nome: str, n: int, m: dict, argomenti: dict):
+        """Avvia l'esecuzione della versione `n` con il manifesto `m`: l'Esecuzione, o il
+        rifiuto da dire (troppe esecuzioni insieme)."""
         with self._lock:
             attive = [e for e in self.esecuzioni.values() if e.stato in ("in_corso",
                                                                          "in_attesa")]
@@ -298,8 +344,6 @@ class Estensioni:
                               ok=False, fatto=NIENTE)
             self._n += 1
             ident = f"E{self._n}"
-        m = self.archivio.manifesto(nome)
-        n = voce["attiva"]
         prof = _profilo(ctx)
         # Il livello di chi la usa, al più familiare: la porta non offre azioni di chi
         # amministra
@@ -328,7 +372,7 @@ class Estensioni:
                       if e.stato in ("finita", "errore", "negata")][:-20]:
                 self.esecuzioni.pop(k, None)
         es.avvia()
-        return self._esito(ctx, es, es.attendi(self.attesa_s))
+        return es
 
     def _esito(self, ctx, es: Esecuzione, stato: str) -> dict:
         titolo = es.manifesto.get("titolo", es.nome)
@@ -622,9 +666,19 @@ class Estensioni:
         if n > 1:
             extra["nota"] = (f"è la versione {n}: quello che è stato detto prima di questa "
                              f"estensione nella conversazione valeva per la versione di prima")
+        # La modalità sviluppo (08/10, calliope/sviluppo.py): attivata, l'iter è finito
+        fine = ""
+        svs = getattr(self, "sviluppi", None)
+        if svs is not None:
+            try:
+                if svs.estensione_approvata(nome, n) is not None:
+                    note_rule(ctx, "sviluppo_chiuso")
+                    fine = " Lo sviluppo è finito: torniamo alla conversazione normale."
+            except Exception as e:  # noqa: BLE001 — l'approvazione è fatta comunque
+                self.log(f"[ESTENSIONI] sviluppo non chiuso: {type(e).__name__}: {e}")
         return _final(f"Fatto: «{m['titolo']}» è attiva, versione {n}"
                       + (f": {cosa[:1].lower() + cosa[1:]}" if cosa else "")
-                      + ". Da adesso puoi chiedermela.", **extra)
+                      + ". Da adesso puoi chiedermela." + fine, **extra)
 
     @staticmethod
     def _voce_sicura(ctx) -> bool:
@@ -825,18 +879,72 @@ class Estensioni:
                                  "argomenti": {"azione": "approva", "nome": m["nome"]}}
         return out
 
-    def file_per_modifica(self, nome: str) -> dict[str, str]:
-        """I file della versione attiva, da dare all'agente per una modifica."""
+    def file_per_modifica(self, nome: str, candidata: bool = False) -> dict[str, str]:
+        """I file della versione attiva, da dare all'agente per una modifica. Con `candidata`
+        (08/10, modalità sviluppo: si torna all'analisi dopo il collaudo) quelli della versione
+        da approvare, se c'è: la persona ha provato quella."""
         voce = self.archivio.voce(nome)
-        if not voce or not voce.get("attiva"):
+        n = (self.archivio.candidata(nome) if candidata and voce else None) or (
+            (voce or {}).get("attiva"))
+        if not voce or not n:
             return {}
-        cart = self.archivio.cartella_versione(nome, voce["attiva"])
+        cart = self.archivio.cartella_versione(nome, n)
         out = {}
         for p in sorted(cart.rglob("*")):
             if p.is_file() and "__pycache__" not in p.parts:
                 out[p.relative_to(cart).as_posix()] = p.read_text(encoding="utf-8",
                                                                   errors="replace")
         return out
+
+    def revisione(self, nome: str) -> dict | None:
+        """La revisione della versione da approvare (08/10, modalità sviluppo): {"frase" detta,
+        "testo" in Markdown per la scheda, "approvabile"}, o None senza una candidata.
+        Permessi in parole (con quelli nuovi rispetto alla versione approvata), chi la usa,
+        analisi del codice, test, differenze con la versione approvata."""
+        n = self.archivio.candidata(nome)
+        if n is None:
+            return None
+        ver = self.archivio.versione(nome, n) or {}
+        m = ver.get("manifesto") or {}
+        voce = self.archivio.voce(nome) or {}
+        prima_n = voce.get("attiva")
+        vecchio = self.archivio.manifesto(nome) if prima_n else None
+        perm = permessi_in_parole(m)
+        if vecchio:
+            nuovi = permessi_nuovi(vecchio, m)
+            perm += ("; in più rispetto alla versione approvata: " + ", ".join(nuovi) if nuovi
+                     else "; nessun permesso nuovo rispetto alla versione approvata")
+        an = ver.get("analisi") or {}
+        t = ver.get("test") or {}
+        if an.get("sintassi"):
+            esito_test = "il codice ha errori"
+        elif not t:
+            esito_test = "non ci sono test"
+        elif ver.get("test_passano"):
+            k = t.get("eseguiti") or 0
+            esito_test = "passano, " + (f"{k} su {k}" if k != 1 else "uno su uno")
+        else:
+            esito_test = "non passano"
+        diff_detto, diff_testo = "", ""
+        if prima_n:
+            diff_detto, diff_testo = differenze(self.file_versione(nome, prima_n),
+                                                self.file_versione(nome, n))
+            diff_detto = f"Rispetto alla versione {prima_n}: {diff_detto}."
+        approvabile = bool(ver.get("test_passano")) and not an.get("sintassi")
+        di = re.sub(r"^l'", "dell'", re.sub(r"^la ", "della ", chi_e(m, n, vecchio)))
+        frase = (f"Revisione {di}. Permessi: {perm}. La può usare "
+                 f"{chi_la_usa(m)}. Analisi del codice: {in_parole(an)}. Test: {esito_test}."
+                 + (f" {diff_detto}" if diff_detto else " È la prima versione."))
+        testo = "\n".join(
+            [f"Versione {n}" + (f", al posto della {prima_n}" if prima_n else ", la prima"),
+             "", f"- Cosa fa: {m.get('descrizione', '')}", f"- Permessi: {perm}",
+             f"- Chi la usa: {chi_la_usa(m)}",
+             f"- Input: {', '.join((m.get('input') or {}).get('properties') or {}) or 'nessuno'}",
+             f"- Analisi del codice: {in_parole(an, 10)}", f"- Test: {esito_test}"]
+            + [f"- {r['file']}:{r['riga']} {r['cosa']} ({r['perche']})"
+               for r in (an.get("rischi") or [])[:10]]
+            + ([f"- {diff_detto}", "", "```diff", diff_testo, "```"] if diff_testo else []))
+        return {"frase": frase, "testo": testo, "approvabile": approvabile, "versione": n}
 
     def close(self):
         for es in list(self.esecuzioni.values()):
@@ -993,6 +1101,46 @@ def chi_e(m: dict, n: int, vecchio: dict | None = None) -> str:
     if titolo != prima:
         out += f", che ora si chiama «{titolo}»"
     return out
+
+
+def differenze(prima: dict, dopo: dict, max_righe: int = 400) -> tuple[str, str]:
+    """(detto, diff) tra i file di due versioni ({percorso: bytes}): a voce quanti file e
+    quante righe cambiano (mai i nomi dei file né il codice), per la scheda il diff unificato
+    (al più `max_righe`). 08/10, revisione della modalità sviluppo."""
+    import difflib
+
+    def righe(b):
+        return (b or b"").decode("utf-8", "replace").splitlines()
+    cambiati = nuovi = tolti = piu = meno = 0
+    out: list[str] = []
+    for nome in sorted(set(prima) | set(dopo)):
+        a, b = righe(prima.get(nome)), righe(dopo.get(nome))
+        if nome not in prima:
+            nuovi += 1
+        elif nome not in dopo:
+            tolti += 1
+        elif a == b:
+            continue
+        else:
+            cambiati += 1
+        for r in difflib.unified_diff(a, b, f"prima/{nome}", f"dopo/{nome}", lineterm="", n=2):
+            if r.startswith("+") and not r.startswith("+++"):
+                piu += 1
+            elif r.startswith("-") and not r.startswith("---"):
+                meno += 1
+            out.append(r)
+    if not (cambiati or nuovi or tolti):
+        return "nessun file cambiato", ""
+    parti = []
+    for k, uno, molti in ((cambiati, "un file cambiato", "file cambiati"),
+                          (nuovi, "un file nuovo", "file nuovi"),
+                          (tolti, "un file tolto", "file tolti")):
+        if k:
+            parti.append(uno if k == 1 else f"{k} {molti}")
+    detto = ", ".join(parti) + (f", {piu} righe in più e {meno} in meno" if piu or meno else "")
+    if len(out) > max_righe:
+        out = out[:max_righe] + [f"… altre {len(out) - max_righe} righe"]
+    return detto, "\n".join(out)
 
 
 def approvabile_da_familiare(ver: dict) -> bool:

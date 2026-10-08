@@ -282,6 +282,9 @@ def _offerta_di(ctx, svc, ident: str) -> bool:
 
 def _proponi(ctx, svc, lav, turno) -> dict:
     frase = svc.proponi(lav, turno)
+    # La modalità sviluppo (08/10, calliope/sviluppo.py): la specifica proposta
+    from .sviluppo import su_proposta
+    su_proposta(svc, lav)
     if lav.file_utente is None and len(lav.file_candidati) > 1:
         cosa = "i file trovati: " + ", ".join(f"{i} = {c['detto']}" for i, c in
                                               enumerate(lav.file_candidati, 1))
@@ -435,6 +438,9 @@ def _avvia(ctx, svc, lav) -> dict:
 
     _schermo(ctx, lav)
     frase = svc.avvia(lav)
+    # La modalità sviluppo (08/10): il «sì» alla specifica, si passa allo sviluppo
+    from .sviluppo import su_avvio
+    su_avvio(ctx, svc, lav)
     return _final(frase, fatto="avviato in secondo piano: NON è ancora finito",
                   lavoro=lav.id, titolo=lav.titolo)
 
@@ -531,6 +537,12 @@ def _delega_lavoro(ctx: ToolContext, tipo: str = "", compito: str = "", formato:
             if lav.file_candidati and not _scegli(lav, file):
                 return _proponi(ctx, svc, lav, turno)
             return _avvia(ctx, svc, lav)
+    # Uno sviluppo aperto (08/10, modalità sviluppo): niente lavori nuovi dell'agente finché
+    # non è chiuso o sospeso (decisione di Dario), salvo il programma di quello sviluppo
+    from .sviluppo import apri_se_serve, controlla_nuovo
+    blocco = controlla_nuovo(ctx, "delega_lavoro", {"tipo": tipo})
+    if blocco is not None:
+        return blocco
     # Una richiesta nuova di codice vuole la voce riconosciuta in questa frase
     prof, why = _permesso(ctx, tipo, rigido=True, args=richiesta)
     if prof is None:
@@ -593,6 +605,10 @@ def _delega_lavoro(ctx: ToolContext, tipo: str = "", compito: str = "", formato:
         da_estensione = _a_estensione(ctx, compito)
         if da_estensione is not None:
             return da_estensione
+    if tipo == "codice" and not modello:
+        # Un programma di chi amministra è uno sviluppo (08/10): si apre qui, in analisi
+        from ..agenti.servizio import senza_estensione, titolo_da
+        apri_se_serve(ctx, "codice", compito, titolo=senza_estensione(titolo_da(compito)))
     # L'analisi della richiesta prima della proposta (06/10): solo i lavori di codice
     esito = None
     if tipo == "codice" and not modello:
@@ -603,6 +619,9 @@ def _delega_lavoro(ctx: ToolContext, tipo: str = "", compito: str = "", formato:
         ris, esito, _ = _analisi(ctx, svc, prof, tipo, compito, crea, "delega_lavoro", nota)
 
         if ris is not None:
+            if esito is not None and esito.esito in ("impossibile", "gia_fatto", "estensione"):
+                from .sviluppo import chiudi_se_vuoto
+                chiudi_se_vuoto(ctx, esito.esito)
             return ris
     compito_agente = esito.specifica if esito is not None and esito.esito == "raffinabile" \
         else compito

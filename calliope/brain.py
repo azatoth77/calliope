@@ -689,6 +689,11 @@ EST_NOMINATA_MSG = ("Dati del turno: chi parla nomina {chi}. Se chiede di usarla
                     "cambiarla, è estensione_crea con modifica.")
 EST_CAMBIATA_S = 1800.0        # «è cambiata da poco»: approvata da al più mezz'ora
 
+# La modalità sviluppo (08/10, calliope/sviluppo.py): lo sviluppo aperto di chi parla, la sua
+# fase e cosa si fa adesso (Sviluppi.dati_turno, SVILUPPO_MSG); senza uno aperto, gli sviluppi
+# sospesi solo se la frase parla di riprendere o di sviluppo. Rete `modalita_sviluppo`
+SVILUPPO_RIPRENDI = re.compile(r"(?<![a-zà-ù])(riprend|svilupp|continu)", re.I)
+
 # Tool i cui risultati non restano nella storia oltre la risposta (03/10): i riservati
 # (ToolSpec.riservato, i documenti di casa) diventano una traccia neutra, questi personali
 # solo la frase già detta (conferma). La conversazione è già di una persona sola
@@ -1930,6 +1935,12 @@ class Brain:
                 yield from self._sfida_reply(user_text, level, *sfida)
             else:
                 yield from self._reply(user_text, level, context, pending)
+                # La modalità sviluppo (08/10): la riga che ricorda dove eravamo dopo una
+                # domanda fuori tema, o il promemoria del giorno degli sviluppi sospesi
+                coda = self._sviluppo_coda(user_text, level)
+                if coda:
+                    self._aggiungi_detto(coda)
+                    yield " " + coda
         finally:
             # Anche se la risposta è interrotta: il testo dei siti non resta nella storia, e
             # nemmeno i risultati riservati e personali di questa risposta
@@ -2317,6 +2328,74 @@ class Brain:
             parti.append(p)
         return EST_NOMINATA_MSG.format(chi="; ".join(parti))
 
+    def _sviluppi(self):
+        return getattr(getattr(self.tool_ctx, "lavori", None), "sviluppi", None)
+
+    def _sviluppo_turno(self, testo: str) -> str | None:
+        """I dati del turno della modalità sviluppo per chi parla, o None."""
+        if not self._net("modalita_sviluppo"):
+            return None
+        svs = self._sviluppi()
+        chi = self._speaker_key()
+        if svs is None or chi is None:
+            return None
+        try:
+            sv = svs.corrente(chi)
+            if sv is not None:
+                return svs.dati_turno(sv)
+            if SVILUPPO_RIPRENDI.search(testo or ""):
+                return svs.dati_sospesi(chi)
+        except Exception as e:  # noqa: BLE001 — sono solo dati del turno
+            print(f"   [SVILUPPO] dati del turno: {type(e).__name__}: {e}", flush=True)
+        return None
+
+    def _sviluppo_coda(self, user_text: str | None, level: str) -> str | None:
+        """La frase da aggiungere in coda alla risposta, o None (08/10, modalità sviluppo):
+        - una volta al giorno, a chi amministra, gli sviluppi sospesi;
+        - con uno sviluppo aperto, dopo una risposta che ha usato soltanto tool d'altro (l'ora,
+          il meteo, la casa) e non lo nomina: «Intanto restiamo sullo sviluppo di …».
+        Mai dopo una domanda: deve restare l'ultima cosa detta (l'azione in sospeso)."""
+        if not user_text or not self._net("modalita_sviluppo"):
+            return None
+        svs = self._sviluppi()
+        chi = self._speaker_key()
+        if svs is None or chi is None:
+            return None
+        last = self.history[-1] if self.history else {}
+        said = (last.get("content") or "").strip() if last.get("role") == "assistant" else ""
+        if not said or said.endswith("?"):
+            return None
+        from .sviluppo import TOOL_SVILUPPO
+        nomi = [t.get("nome") for t in getattr(self, "last_tools", None) or ()]
+        dello_sviluppo = any(n in TOOL_SVILUPPO for n in nomi)
+        try:
+            if level == "amministra":
+                promemoria = svs.promemoria_giorno(chi)
+                if promemoria:
+                    svs.ricordato(chi)
+                    if not dello_sviluppo:
+                        self._rule("sviluppo_promemoria_giorno")
+                        return promemoria
+            sv = svs.corrente(chi)
+            if sv is None or not nomi or dello_sviluppo:
+                return None
+            basso = said.lower()
+            if sv.titolo.lower() in basso or "svilupp" in basso:
+                return None
+            self._rule("sviluppo_riga_fuori_tema")
+            return svs.riga_fuori_tema(sv)
+        except Exception as e:  # noqa: BLE001 — la riga in più non ferma la risposta
+            print(f"   [SVILUPPO] riga in coda: {type(e).__name__}: {e}", flush=True)
+            return None
+
+    def _aggiungi_detto(self, frase: str):
+        """Una frase detta dal codice in coda alla risposta: nella storia come parte di lei."""
+        last = self.history[-1] if self.history else None
+        if last is not None and last.get("role") == "assistant" and not last.get("tool_calls"):
+            last["content"] = ((last.get("content") or "").rstrip() + " " + frase).strip()
+        else:
+            self.history.append({"role": "assistant", "content": frase})
+
     def _take_reference(self) -> str | None:
         """Il riferimento dei turni prima, se è ancora valido (non si consuma: vale finché
         non ne arriva un altro o scade)."""
@@ -2561,6 +2640,11 @@ class Brain:
         if est_msg:
             memory = memory + [{"role": "system", "content": est_msg}]
             self._rule("estensione_nominata")
+        # Lo sviluppo aperto di chi parla, e la sua fase (SVILUPPO_MSG)
+        sv_msg = self._sviluppo_turno(user_text) if user_text else None
+        if sv_msg:
+            memory = memory + [{"role": "system", "content": sv_msg}]
+            self._rule("sviluppo_modalita")
         # Azione in sospeso: dopo i ricordi, l'ultima cosa prima della domanda. Messa prima
         # dei ricordi (o senza), il «sì» dopo «La apro?» veniva preso per un ringraziamento
         if pending:

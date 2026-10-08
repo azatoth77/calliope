@@ -121,6 +121,13 @@ def _estensione_crea(ctx: ToolContext, compito: str = "", nome: str = "", propos
         return {"ok": False, "fatto": NIENTE, "errore": "manca il compito",
                 "cosa_fare": "chiedi in breve cosa deve fare la funzione"}
     from ..estensioni.servizio import _nome, runtime_testo
+    # Uno sviluppo aperto (08/10, modalità sviluppo, calliope/sviluppo.py): un'estensione
+    # diversa non parte finché non è chiuso o sospeso; le risposte all'analisi e la modifica
+    # della sua estensione sì
+    from .sviluppo import apri_se_serve, controlla_nuovo
+    blocco = controlla_nuovo(ctx, "estensione_crea", {"modifica": modifica, "gioco": gioco})
+    if blocco is not None:
+        return blocco
     # Una versione nuova solo se il modello lo dice (`modifica`, 08/10). Prima `nome` valeva per
     # tutte e due e si cercava con un confronto approssimato: il 07/10 sulla DGX «Meteo Città»,
     # il nome di un'estensione NUOVA (una città qualunque), è diventato la versione 2 di
@@ -133,6 +140,12 @@ def _estensione_crea(ctx: ToolContext, compito: str = "", nome: str = "", propos
                 "cosa_fare": ("richiama con modifica = una di queste: " + ci_sono if ci_sono
                               else "non ci sono estensioni: per farne una nuova togli modifica")}
     simile = "" if esistente else _simile(nome, est)
+    # Una richiesta nuova di chi amministra apre lo sviluppo, in analisi (08/10)
+    apri_se_serve(ctx, "estensione", compito,
+                  titolo=str(nome or "").strip() or (_titolo(est, esistente) if esistente
+                                                     else ""),
+                  gioco=bool(gioco in (True, "true", "sì", "si", 1)),
+                  estensione=esistente or None)
     if simile:
         ta.note_rule(ctx, "estensione_nuova_accanto")
     file = {}
@@ -188,6 +201,9 @@ def _estensione_crea(ctx: ToolContext, compito: str = "", nome: str = "", propos
         ris, esito, gia_an = ta._analisi(ctx, svc, prof, "estensione", compito, crea,
                                          "estensione_crea")
         if ris is not None:
+            if esito is not None and esito.esito in ("impossibile", "gia_fatto"):
+                from .sviluppo import chiudi_se_vuoto
+                chiudi_se_vuoto(ctx, esito.esito)
             return ris
         if gia_an:                       # «sì, comunque» dopo il «c'è già» dell'analisi
             gia, gia_detto = gia_an, True
