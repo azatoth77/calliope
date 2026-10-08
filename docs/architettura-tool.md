@@ -43,8 +43,8 @@ calliope/                 # package: python -m calliope
 │   ├── documenti.py      # documento_crea, documento_modifica
 │   ├── casa.py           # casa_comando, casa_stato, casa_integrazione
 │   ├── schermi.py        # schermo_mostra, schermo_gestisci
-│   ├── agenti.py         # delega_lavoro, lavori_stato, lavori_annulla
-│   ├── sviluppo.py       # sviluppo, sviluppo_prova (modalità sviluppo, 08/10)
+│   ├── agenti.py         # lavoro_affida, lavoro_stato, lavoro_annulla, lavoro_rispondi, lavoro_risultato, programma_esegui
+│   ├── sviluppo.py       # sviluppo_apri, sviluppo_passo, sviluppo_collauda, sviluppo_chiedi, sviluppo_correggi (modalità sviluppo, 08/10)
 │   └── stato.py          # calliope_stato, installa_proponi, installa_avvia, installa_gestisci
 ├── pc/                   # capacità dei PC: PCExecutor (base.py), LocalWindowsExecutor (windows.py)
 ├── documenti/            # Word, Excel, PDF: formato.py (JSON e validazione), scrittore.py
@@ -216,11 +216,17 @@ controllo nelle prove a secco), ma tocca tutti i tool e le prove con Ollama che 
 | `installa_gestisci` | familiare (annullare solo chi amministra) | azione | «a che punto è?», «annulla il download» |
 | `schermo_mostra` | ospite (il codice decide cosa può vedere) | lettura | «mostramelo sullo schermo», «metti la lista sullo schermo», «fammelo leggere», «togli dallo schermo»: `cosa` in enum (ultima, risposta, lista, timer, promemoria, documento, casa, niente); la scheda la costruisce il codice, la frase dice cosa è successo davvero (`risposta_finale`) |
 | `schermo_gestisci` | amministra | azione | abbina (codice di 6 cifre, stanza, personale), scollega, elenca gli schermi; il codice è un argomento segreto (`ToolSpec.segreti`) |
-| `delega_lavoro` | familiare (il codice: solo chi amministra, `agenti_livello_codice`, riconosciuto dalla voce nella frase) | azione | affida a un agente in secondo piano un lavoro lungo il cui risultato è un programma o un file complesso: `tipo` codice, documento (anche da un `modello`), ricerca, altro; `compito` con i dati detti. I lavori costosi chiudono con «Procedo?» (azione in sospeso) e partono solo con `proposta` = l'id del lavoro, nella risposta dopo, della stessa persona; `risposta_finale` |
-| `lavori_stato` | familiare | lettura | a che punto sono i lavori (passo dell'agente, coda, ultimo finito) |
-| `lavori_annulla` | familiare (gli altrui solo chi amministra) | azione | ferma il lavoro in corso o in coda, subito (stream chiuso, sandbox fermata) |
-| `sviluppo` | familiare (il codice: solo chi amministra) | azione | la modalità sviluppo (08/10, `calliope/sviluppo.py`): stato, avanti, analisi (con `cambia`), sospendi, riprendi (`quale`), esci, promuovi; le fasi le cambia il codice |
-| `sviluppo_prova` | familiare (il codice: solo chi amministra) | azione, risultato non fidato | il collaudo: la versione candidata dell'estensione provata prima dell'approvazione nel suo container, o il programma eseguito di nuovo |
+| `lavoro_affida` | familiare | azione | affida a un agente in secondo piano un lavoro lungo il cui risultato è un file complesso: `tipo` documento (anche da un `modello`), ricerca, altro; `compito` con i dati detti. Dal 08/10 senza il codice: un tipo codice passa da sé a `sviluppo_apri` (regola `lavoro_codice_sviluppo`). I lavori costosi chiudono con «Procedo?» e partono solo con `proposta` = l'id, nella risposta dopo, della stessa persona; `risposta_finale` (fino al 08/10 `delega_lavoro`) |
+| `lavoro_stato` | familiare | lettura | a che punto sono i lavori (passo dell'agente, coda, una tappa, ultimo finito) (era `lavori_stato`) |
+| `lavoro_annulla` | familiare (gli altrui solo chi amministra) | azione | ferma il lavoro in corso, in coda o fermo a una tappa, subito (stream chiuso, sandbox fermata) (era `lavori_annulla`) |
+| `lavoro_rispondi` | familiare | azione | la risposta a una domanda dell'agente a metà lavoro; a una tappa vale «continua» (era `lavori_rispondi`) |
+| `lavoro_risultato` | familiare | lettura, risultato non fidato | il risultato di un lavoro finito: riassunto, più dettaglio, sullo schermo, PDF o Word (era `risultato_lavoro`) |
+| `programma_esegui` | familiare (chi l'ha chiesto o chi amministra) | azione | esegue di nuovo il programma di un lavoro di codice finito (era `lavori_esegui`) |
+| `sviluppo_apri` | familiare (il codice e le estensioni: solo chi amministra, dalla voce; un gioco anche un familiare adulto) | azione | apre uno sviluppo (08/10, versione 2): `tipo` estensione (anche `modifica` di una che c'è, `gioco`) o programma (anche su un `file` del PC o un `allegato`); proposta «Entriamo in modalità sviluppo per «…». Ho capito così: … Va bene così, o la cambiamo?»; il «sì» con `proposta` = l'id (fino al 08/10 `estensione_crea` e `delega_lavoro` di codice) |
+| `sviluppo_passo` | familiare (il codice: solo chi amministra) | azione | la modalità sviluppo (`calliope/sviluppo.py`): stato, avanti (anche «continua» a una tappa), analisi (con `cambia`), sospendi, riprendi (`quale`), chiudi (con la conferma; con l'agente al lavoro sospende), promuovi; le fasi le cambia il codice (era `sviluppo`) |
+| `sviluppo_collauda` | familiare (il codice: solo chi amministra) | azione, risultato non fidato | il collaudo: la versione candidata dell'estensione provata prima dell'approvazione nel suo container, o il programma eseguito di nuovo; un collaudo che non va → «Lo faccio correggere?» (era `sviluppo_prova`) |
+| `sviluppo_chiedi` | familiare (il codice: solo chi amministra) | lettura, risultato non fidato | la domanda a chi ha scritto il codice (08/10): una passata del modello dell'agente in sola lettura con il contesto dello sviluppo conservato (specifica, collaudi, diario, file, fonti), entro `sviluppo_chiedi_s` |
+| `sviluppo_correggi` | familiare (il codice: solo chi amministra) | azione | la correzione come passo a sé (08/10): un lavoro sui file della versione provata, con i collaudi che non vanno e la diagnosi di `sviluppo_chiedi`, la specifica resta; a una tappa «cambia e continua» |
 
 I tool `pc_*` ci sono solo se il PC c'è (`calliope.pc.load_pc`: Windows e librerie
 presenti), e ciascuno solo se il PC ha quella capacità. «Proprietario» è un controllo nel
@@ -354,4 +360,4 @@ il blocco `cryptography`. Allowlist per server e per livello.
 2. **Da discutere**: memoria (SQLite contro altre strade).
 3. **Dopo**: ponte MCP. Agenti in secondo piano e arbitro: fatti il 02/10 (`calliope/agenti/`);
    restano llama-server per l'agente, le domande dell'agente a metà lavoro
-   (`lavori_rispondi`), i modelli `.docx` con docxtpl e le presentazioni in `.pptx`.
+   (`lavoro_rispondi`), i modelli `.docx` con docxtpl e le presentazioni in `.pptx`.

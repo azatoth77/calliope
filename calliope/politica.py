@@ -38,7 +38,7 @@ tool senza classe dichiarata e fallisce).
      (calliope/conferme.py); per le più delicate (`sfida`) la sfida subito (`politica_sfida`);
    - **una conferma per azione** (06/10, `politica_conferma_unica`): il «sì» con la voce (o la
      sfida superata) alla domanda della politica, per la stessa chiamata, vale anche come il
-     «Procedo?» del tool (delega_lavoro, estensione_crea: `accettata`), che parte subito; lo
+     «Procedo?» del tool (lavoro_affida, sviluppo_apri: `accettata`), che parte subito; lo
      stesso per la sfida superata con la conversazione pulita;
    - **provenienza degli argomenti** (`politica_argomento_esterno`): se un valore importante
      (`chiave`: il comando della casa, l'app, il file, le voci di una lista, il testo di un
@@ -109,12 +109,12 @@ class Classe:
     # (argomento, valori) che rendono l'azione di sola lettura (schermo_gestisci «elenca»)
     sola_lettura: tuple[str, frozenset] | None = None
     # Come sola_lettura, con una funzione degli argomenti: la chiamata risponde soltanto
-    # (estensione_crea con `gia_fatto_da`: «Questo lo so già fare…», 06/10)
+    # (sviluppo_apri con `gia_fatto_da`: «Questo lo so già fare…», 06/10)
     innocua: object = None
     # Argomenti che non cambiano l'azione, per riconoscere «la stessa chiamata» della domanda
     # (Decisione.accettata): l'id della proposta che il modello aggiunge o inventa al «sì»
     ignora: tuple[str, ...] = ("proposta",)
-    # Oppure, al contrario, solo questi (estensione_crea: compito e nome; al «sì» gemma4
+    # Oppure, al contrario, solo questi (sviluppo_apri: compito e nome; al «sì» gemma4
     # aggiungeva campi a caso, anche scritti male, 06/10)
     confronta: tuple[str, ...] | None = None
     # (argomento, valori) per cui, con la conversazione pulita, non serve la richiesta nel
@@ -137,7 +137,7 @@ class Classe:
     # Pericolosa che, con dati non fidati di mezzo, non chiede conferma se la richiesta viene
     # in questo turno dalla voce riconosciuta sopra soglia (non breve, non zona grigia, non
     # scritta), con le parole del tool (`verbi`) e i valori di `chiave` detti in questa frase
-    # (lavori_esegui, 06/10: il risultato dell'agente nella storia faceva chiedere
+    # (programma_esegui, 06/10: il risultato dell'agente nella storia faceva chiedere
     # «C'è di mezzo il lavoro di un agente…» a ogni «eseguilo con 3 e 5»). Regola
     # `politica_richiesta_voce`; senza le condizioni, la conferma di sempre
     richiesta_voce: bool = False
@@ -236,9 +236,9 @@ CLASSI: dict[str, Classe] = {
     "web_cerca": _c(S, fonte="web"),
     "archivio_cerca": _c(S, fonte="archivio"), "archivio_scadenze": _c(S, fonte="archivio"),
     "archivio_somma": _c(S, fonte="archivio"),
-    "lavori_stato": _c(S, fonte="agente"),
+    "lavoro_stato": _c(S, fonte="agente"),
     # il risultato di un lavoro finito (07/10): il testo è dell'agente
-    "risultato_lavoro": _c(S, fonte="agente"),
+    "lavoro_risultato": _c(S, fonte="agente"),
     "immagine_guarda": _c(S),             # la foto entra dall'album: provenienza «foto»
     # le parti di un file allegato (calliope/allegati.py): dato non fidato, fonte «allegato»
     "allegato_leggi": _c(S, fonte="allegato"),
@@ -262,8 +262,8 @@ CLASSI: dict[str, Classe] = {
                     verbo_sempre=lambda testo: chiesto_di_dimenticare(testo)),
     "documento_crea": _c(A, cosa=lambda a: "prepari il documento"),
     "documento_modifica": _c(A, cosa=lambda a: "modifichi il documento"),
-    "lavori_annulla": _c(A, cosa=lambda a: "fermi il lavoro"),
-    "lavori_rispondi": _c(A, cosa=lambda a: "mandi la risposta all'agente"),
+    "lavoro_annulla": _c(A, cosa=lambda a: "fermi il lavoro"),
+    "lavoro_rispondi": _c(A, cosa=lambda a: "mandi la risposta all'agente"),
     "immagine_archivia": _c(A, cosa=lambda a: "archivi la foto"),
     "allegato_archivia": _c(A, cosa=lambda a: "archivi il file"),
     "modello_compila": _c(A, cosa=lambda a: f"prepari «{_s(a, 'modello', 'il documento')}»"),
@@ -303,19 +303,24 @@ CLASSI: dict[str, Classe] = {
                                  cosa=lambda a: f"ti chiami {_s(a, 'nome')}"),
     "installa_gestisci": _c(P, cosa=lambda a: f"faccia «{_s(a, 'azione')}» sulle "
                                               "installazioni"),
-    "delega_lavoro": _c(P, chiave=("file", "allegato"),
+    "lavoro_affida": _c(P, chiave=("file", "allegato"),
                         cosa=lambda a: f"affidi all'agente il lavoro «{_corto(_s(a, 'compito'))}»"),
     # chi può eseguirlo (chi ha chiesto il lavoro o chi amministra) lo decide il tool
-    "lavori_esegui": _c(P, chiave=("dati",), richiesta_voce=True,
+    "programma_esegui": _c(P, chiave=("dati",), richiesta_voce=True,
                         cosa=lambda a: "esegua di nuovo il programma dell'agente"
                         + (f" con {_corto(_s(a, 'dati'), 40)}" if _s(a, "dati") else "")),
     # Senza la frase di sfida (06/10): crearla prepara solo una versione «da approvare», e
     # l'approvazione vuole sempre la sfida; il «sì» con la voce basta, e la domanda dice il compito
-    "estensione_crea": _c(P, innocua=lambda a: gia_fatto(a),
-                          confronta=("compito", "nome"),
-                          cosa=lambda a: "crei una funzione nuova di Calliope"
-                          + (f", «{_corto(_s(a, 'compito'))}»" if _s(a, "compito") else "")),
-    "estensioni_gestisci": _c(P, sola_lettura=("azione", frozenset({"elenca"})),
+    # 08/10 (versione 2): anche i programmi (prima delega_lavoro di codice): il file della
+    # persona come per i lavori
+    "sviluppo_apri": _c(P, innocua=lambda a: gia_fatto(a), chiave=("file", "allegato"),
+                        confronta=("compito", "nome"),
+                        cosa=lambda a: (f"affidi all'agente il programma «{_corto(_s(a, 'compito'))}»"
+                                        if _s(a, "tipo").lower() in ("programma", "codice")
+                                        else "crei una funzione nuova di Calliope"
+                                        + (f", «{_corto(_s(a, 'compito'))}»"
+                                           if _s(a, "compito") else ""))),
+    "estensione_gestisci": _c(P, sola_lettura=("azione", frozenset({"elenca"})),
                               cosa=lambda a: _estensione(a, "congiuntivo"),
                               distruttiva={k: (lambda a: _estensione(a, "infinito"), c) for k, c in (
                                   ("rimuovi", "Così sparisce, con i suoi dati."),
@@ -334,9 +339,9 @@ CLASSI: dict[str, Classe] = {
     # la modalità sviluppo (08/10, calliope/sviluppo.py): «stato» legge; sospendere,
     # riprendere e uscire cambiano solo lo stato dell'iter; il resto (avanti, analisi,
     # promuovi) porta a un lavoro dell'agente o all'approvazione, che ha la sua sfida
-    "sviluppo": _c(P, sola_lettura=("azione", frozenset({"stato"})),
+    "sviluppo_passo": _c(P, sola_lettura=("azione", frozenset({"stato"})),
                    innocua=lambda a: _s(a, "azione").lower() in ("sospendi", "riprendi", "esci",
-                                                                  "stato"),
+                                                                  "chiudi", "stato"),
                    cosa=lambda a: {"avanti": "vada avanti con lo sviluppo",
                                    "analisi": "torni all'analisi dello sviluppo"
                                    + (f" con «{_corto(_s(a, 'cambia'))}»" if _s(a, "cambia")
@@ -346,9 +351,16 @@ CLASSI: dict[str, Classe] = {
                                          f"faccia «{_s(a, 'azione')}» sullo sviluppo")),
     # il collaudo: esegue la versione da approvare nel container, con la porta stretta; il
     # risultato è un dato non fidato come quello di un'estensione
-    "sviluppo_prova": _c(P, chiave=("dati",), fonte="estensione",
+    "sviluppo_collauda": _c(P, chiave=("dati",), fonte="estensione",
                          cosa=lambda a: "provi la versione nuova"
                          + (f" con «{_corto(_s(a, 'dati'), 40)}»" if _s(a, "dati") else "")),
+    # 08/10 (versione 2): la domanda a chi l'ha scritta è una lettura (l'agente risponde in
+    # sola lettura, niente codice né esecuzioni); la risposta è un dato non fidato
+    "sviluppo_chiedi": _c(S, fonte="agente"),
+    # la correzione: un lavoro dell'agente sui file dello sviluppo (come tornare all'analisi)
+    "sviluppo_correggi": _c(P, cosa=lambda a: "faccia correggere lo sviluppo all'agente"
+                            + (f": «{_corto(_s(a, 'problema'))}»" if _s(a, "problema")
+                               else "")),
     # giochi (05/10): un ragazzo chiede un permesso al tutore (resta in sospeso finché il
     # tutore non decide a voce: niente effetti da sola)
     "richiesta_tutore": _c(A, cosa=lambda a: f"mandi al tuo tutore la richiesta "
@@ -374,7 +386,7 @@ VERBI = {
                        r"fammi|elenc|relazion|lista"),
     "documento_modifica": (r"modific|cambi|aggiung|togl|corregg|sistem|aggiorn|mett|"
                            r"riscriv|lev"),
-    "lavori_annulla": r"annull|ferm|stop|bast|lascia|interromp",
+    "lavoro_annulla": r"annull|ferm|stop|bast|lascia|interromp",
     "immagine_archivia": r"archivi|salv|conserv|tien",
     "modello_compila": (r"fattur|preventiv|ddt|modell|compil|prepar|nota di credito|document|"
                         r"bolla|emett|fai|fammi"),
@@ -382,7 +394,7 @@ VERBI = {
                          r"fornitor|cambi|aggiorn|corregg"),
     "pc_guarda": r"guard|scherm|ved|legg|controll|webcam|screenshot|fotograf|inquadr",
     # «eseguilo con 3 e 5», «fammelo vedere», «rilancialo», «provalo con 4»
-    "lavori_esegui": (r"esegu|lanc|avvi|gir[aio]|fa(?:mm|ll)\w* (?:vedere|girare|partire)|"
+    "programma_esegui": (r"esegu|lanc|avvi|gir[aio]|fa(?:mm|ll)\w* (?:vedere|girare|partire)|"
                       r"mostr|prov[aio]|rifa|ripet"),
     "richiesta_tutore": (r"chied|permess|domand|poss|ancora|tempo|gioc|sveglia|pausa|"
                          r"agent|minut"),
@@ -392,9 +404,9 @@ VERBI = {
 }
 # Le pericolose (08/10, sicurezza per valore, fasi 2 e 3): le parole che le chiedono, per
 # «ripetere la richiesta vale come sì» (richiesta_ripetuta) e per l'ancora della politica per
-# valore (valore.ancorata). Prima c'erano solo per lavori_esegui e pc_apri_file: alle 18:52 del
+# valore (valore.ancorata). Prima c'erano solo per programma_esegui e pc_apri_file: alle 18:52 del
 # 07/10 «Voglio che approvi la nuova versione», detto tre volte con la voce, non valeva come
-# consenso per estensioni_gestisci(approva). Un'azione scelta in un enum ha le sue parole in
+# consenso per estensione_gestisci(approva). Un'azione scelta in un enum ha le sue parole in
 # VERBI_AZIONE: le parole di un'altra azione dello stesso tool non la confermano
 _W = r"(?<![a-zà-ù])"
 VERBI.update({
@@ -406,21 +418,24 @@ VERBI.update({
     "installa_avvia": _W + r"(install|scaric|avvi|procedi|aggiung)",
     "registra_utente": _W + r"(registr|impar\w* (?:la )?(?:sua |mia )?voce|aggiung\w* .*voce)",
     "rinomina_interlocutore": _W + r"(chiam|rinomin|nome)",
-    "delega_lavoro": (_W + r"(ricerc|cerc|indag|approfond|informa|scriv|programm|codic|"
+    "lavoro_affida": (_W + r"(ricerc|cerc|indag|approfond|informa|scriv|programm|codic|"
                       r"script|svilupp|prepar|cre[aioò]|fa[ilt]?(?![a-zà-ù])|fammi|fate|facc|"
                       r"realizz|costru|deleg|agent|document|relazion|analizz|studi|lavor|"
                       r"modific|corregg|sistem)"),
-    "estensione_crea": (_W + r"(estension|funzion|cre[aioò]|aggiung|insegn|impar|nuov|"
-                        r"programm|abilit)"),
+    "sviluppo_apri": (_W + r"(estension|funzion|cre[aioò]|aggiung|insegn|impar|nuov|"
+                      r"programm|abilit|script|codic|svilupp|scriv|fa[ilt]?(?![a-zà-ù])|fammi|"
+                      r"corregg|sistem|modific)"),
     "conversazioni_dimentica": _W + r"(cancell|dimentic|elimin|svuot|scord|conversazion)",
     "minore_gestisci": (_W + r"(regol|permess|orari|temp|minut|abilit|autorizz|approv|neg|"
                         r"concedi|limit|stato|compit|richiest|nascit|tutor)"),
-    "sviluppo": (_W + r"(svilupp|avanti|prosegu|continu|procedi|analisi|cambi|modific|"
+    "sviluppo_passo": (_W + r"(svilupp|avanti|prosegu|continu|procedi|analisi|cambi|modific|"
                  r"sospend|riprend|esci|chiud|attiv|approv|estension|programm|va bene)"),
-    "sviluppo_prova": _W + r"(prov[aiao]|collaud|test|esegu|lanc|fa(?:mm|ll)\w* vedere)",
+    "sviluppo_collauda": _W + r"(prov[aiao]|collaud|test|esegu|lanc|fa(?:mm|ll)\w* vedere)",
+    "sviluppo_correggi": (_W + r"(corregg|corrett|sistem|ripar|aggiust|risolv|sbagli|non va|"
+                          r"non funzion|fix)"),
 })
 VERBI_AZIONE = {
-    "estensioni_gestisci": ("azione", {
+    "estensione_gestisci": ("azione", {
         "elenca": _W + r"(elenc|quali|lista|stato)",
         "approva": _W + r"(approv|attiv|accett|conferm|install)",
         "rifiuta": _W + r"(rifiut|scart|bocci)",
@@ -455,12 +470,13 @@ VERBI_AZIONE = {
     "installa_gestisci": ("azione", {
         "stato": _W + r"(stato|come va|a che punto|installazion)",
         "annulla": _W + r"(annull|ferm|interromp|stop)"}),
-    "sviluppo": ("azione", {
+    "sviluppo_passo": ("azione", {
         "stato": _W + r"(stato|a che punto|dove siamo|come va)",
         "avanti": _W + r"(avanti|prosegu|continu|procedi|attiv|approv|va bene|fase dopo)",
         "analisi": _W + r"(analisi|cambi|modific|corregg|aggiung|togl|rifa|invece)",
         "sospendi": _W + r"(sospend|pausa|dopo|più tardi|lascia)",
         "riprendi": _W + r"(riprend|continu|riapr|torn)",
+        "chiudi": _W + r"(esci|uscir|chiud|basta|abbandon|lascia perdere)",
         "esci": _W + r"(esci|uscir|chiud|basta|abbandon|lascia perdere)",
         "promuovi": _W + r"(estension|promuov|trasform|diventi|diventa)"}),
 }
@@ -469,12 +485,12 @@ CLASSI.update({n: replace(CLASSI[n], verbi_azione=v) for n, v in VERBI_AZIONE.it
 
 
 def gia_fatto(a: dict) -> bool:
-    """estensione_crea che risponde soltanto «Questo lo so già fare…» (tools/estensioni.py): il
+    """sviluppo_apri che risponde soltanto «Questo lo so già fare…» (tools/estensioni.py): il
     modello ha indicato un tool di Calliope che fa già il compito. Lo stesso controllo nel
     tool: un nome inventato non vale (e allora decide la politica come sempre). Il «sì» alla
     domanda la crea comunque: decidi lo riconosce prima (Decisione.accettata)."""
     gia = _s(a, "gia_fatto_da")
-    return gia in CLASSI and gia not in ("estensione_crea", "estensioni_gestisci")
+    return gia in CLASSI and gia not in ("sviluppo_apri", "estensione_gestisci")
 
 
 _SCHERMO = {"abbina": ("abbinare", "abbini"), "scollega": ("scollegare", "scolleghi"),
@@ -603,7 +619,7 @@ class Turno:
 # Solo con la conversazione contaminata (regola `politica_azione_non_chiesta`)
 # Le coniugazioni contano (caso vero della DGX, 06/10: «Creiamo un'estensione che prende due
 # parametri e li somma» con una foto di due minuti prima non era una richiesta, perché «crea»
-# non prende «creiamo», e estensione_crea veniva rifiutato): imperativo, infinito, 1ª plurale
+# non prende «creiamo», e sviluppo_apri veniva rifiutato): imperativo, infinito, 1ª plurale
 # («crea», «creare», «creiamo», «facciamo», «fammi», «prepariamo», «aggiungiamo»…)
 _INTERNE = re.compile(
     r"(?<![a-zà-ù])(aggiung|segn|ricord|memorizz|salv|archivi|annot|cre[aioò]|cree|prepar|"
@@ -838,14 +854,15 @@ def chiesta_azione(testo: str) -> bool:
 
 # ─────────────────────────── rinunce ───────────────────────────
 
-# «Non posso creare un'estensione» con estensione_crea registrato e chi parla che amministra
+# «Non posso creare un'estensione» con sviluppo_apri registrato e chi parla che amministra
 # (06/10, DGX, 18:20: dopo un rifiuto sbagliato rimasto nella storia il 26B non chiamava più il
 # tool e insisteva «la mia architettura non mi permette…»). Rete (spinta, principio 10): non
 # decide niente, il modello riceve una spinta e sceglie; se la persona non ha chiesto
 # un'azione, niente spinta. Tool → parole dell'oggetto della rinuncia
 RINUNCE = {
-    "estensione_crea": r"estension|funzion\w* (nuov|permanent)|nuov\w* funzion",
-    "delega_lavoro": r"programm|script|codice",
+    # 08/10 (versione 2): il codice passa sempre dallo sviluppo
+    "sviluppo_apri": r"estension|funzion\w* (nuov|permanent)|nuov\w* funzion|programm|script|codice",
+    "lavoro_affida": r"ricerc|relazion",
     "documento_crea": r"document|letter[ae]|pdf|word|excel|tabell",
     "timer_imposta": r"timer|sveglia",
     "promemoria_imposta": r"promemori",
@@ -902,7 +919,7 @@ class Decisione:
     fonte: str = ""
     # Una conferma per azione (06/10): la persona ha già detto «sì» (con la voce) o superato la
     # sfida per proprio questa chiamata, a una domanda del codice che la descriveva; il tool che
-    # chiederebbe il suo «Procedo?» (delega_lavoro, estensione_crea) parte senza chiederlo
+    # chiederebbe il suo «Procedo?» (lavoro_affida, sviluppo_apri) parte senza chiederlo
     accettata: bool = False
 
 

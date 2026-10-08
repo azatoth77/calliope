@@ -56,7 +56,7 @@ def prepara(seconda_linea):
     import dataclasses
     lettura = lambda ctx, **a: {"ok": True, "trovato": True, "risultati": [  # noqa: E731
         {"sito": "meteo.example", "titolo": "Meteo Milano", "testo": INIEZIONE}]}
-    for n in ("web_cerca", "archivio_cerca", "lavori_stato"):
+    for n in ("web_cerca", "archivio_cerca", "lavoro_stato"):
         b.tools.register(dataclasses.replace(b.tools.get(n), func=lettura))
     b.tools.register(dataclasses.replace(
         b.tools.get("est_meteo"), description="Il meteo di domani (estensione «meteo», aggiunta "

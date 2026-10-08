@@ -145,7 +145,7 @@ def _scheda_per(ctx: ToolContext, cosa: str, lista: str, hub, sender):
 # ── Il documento appena consegnato (07/10 pomeriggio, caso vero della DGX) ──
 # Lavoro finito e annunciato, «Sì, aprilo.», poi «Mostramelo.» breve (zona grigia): rifiutato
 # con «Non ho riconosciuto bene la tua voce», subito dopo che la stessa persona l'aveva chiesto
-# e ricevuto. Come per risultato_lavoro (regola `risultato_schermo_proprio`): il documento o il
+# e ricevuto. Come per lavoro_risultato (regola `risultato_schermo_proprio`): il documento o il
 # risultato della persona della conversazione, appena consegnato (il titolo è in una risposta
 # recente della conversazione), va sui suoi schermi personali anche dalla zona grigia; mai su
 # quelli d'altri, mai senza la persona della conversazione, mai con «Scarica».
@@ -226,7 +226,7 @@ def _schermo_mostra(ctx: ToolContext, cosa: str = "ultima", lista: str = "") -> 
         cosa = "ultima"
     sender = hub.mittente(ctx)
     # Nella stessa risposta il risultato di un lavoro è già andato sullo schermo personale
-    # (risultato_lavoro, 07/10): «risposta» o «ultima» lo rimandano in cima invece di coprirlo
+    # (lavoro_risultato, 07/10): «risposta» o «ultima» lo rimandano in cima invece di coprirlo
     # con la risposta detta (DGX del 07/10: sul telefono restava solo il riassunto)
     gia = getattr(ctx, "scheda_risultato", None)
     if (cosa in ("ultima", "risposta") and isinstance(gia, tuple) and len(gia) == 4

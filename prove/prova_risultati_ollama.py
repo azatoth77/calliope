@@ -7,19 +7,19 @@ il riassunto per la voce è a copione).
 
 Caso vero della DGX del 07/10 (registro dei turni, qui con nomi di fantasia): una ricerca
 finita e annunciata («ho finito «Esegui una ricerca approfondita…»: 20 paragrafi…»), poi
-«E il risultato?» → lavori_rispondi fallito («l'agente non ha generato un rapporto da
-leggermi»); «leggili o delegali e dammi un bel riassunto» → lavori_esegui («Non ho programmi
-finiti da eseguire»), due volte; poi delega_lavoro di un «documento generato dalla ricerca
-precedente». Manca un modo per avere il risultato: dal 07/10 c'è risultato_lavoro.
+«E il risultato?» → lavoro_rispondi fallito («l'agente non ha generato un rapporto da
+leggermi»); «leggili o delegali e dammi un bel riassunto» → programma_esegui («Non ho programmi
+finiti da eseguire»), due volte; poi lavoro_affida di un «documento generato dalla ricerca
+precedente». Manca un modo per avere il risultato: dal 07/10 c'è lavoro_risultato.
 
 Per ogni frase un Brain nuovo, con la storia come quella vera (richiesta, «Ci lavoro…»,
 annuncio dell'agente come dato non fidato), e la frase subito dopo l'annuncio:
   1. «E il risultato?» (breve, quindi familiare);
   2. «Perfetto, ti chiederei di leggerli o comunque di delegarli e di darmi un bel riassunto.»;
   3. «…voglio un bel riassunto verbale.».
-Riuscita: nessun tool sbagliato (lavori_esegui, lavori_rispondi, delega_lavoro,
+Riuscita: nessun tool sbagliato (programma_esegui, lavoro_rispondi, lavoro_affida,
 pc_cerca_file), nessuna chiamata scritta come testo e, per la 2 e la 3, un dettaglio che sta
-solo nel testo intero (non nell'annuncio). Senza risultato_lavoro (main prima del 07/10) la prova misura lo stesso.
+solo nel testo intero (non nell'annuncio). Senza lavoro_risultato (main prima del 07/10) la prova misura lo stesso.
 
     python prove\\prova_risultati_ollama.py        # 5 giri
     python prove\\prova_risultati_ollama.py 2      # 2 giri
@@ -100,7 +100,7 @@ RIASSUNTO_AGENTE = ("Un'integrazione ufficiale con Home Assistant non c'è, ma c
                     "dell'installatore. Non serve hardware in più se il gateway è già in rete: "
                     "al massimo un cavo di rete al posto del Wi-Fi.")
 DETTAGLI = re.compile(r"hacs|modbus|comunit|cavo di rete", re.I)
-SBAGLIATI = {"lavori_esegui", "lavori_rispondi", "delega_lavoro", "pc_cerca_file"}
+SBAGLIATI = {"programma_esegui", "lavoro_rispondi", "lavoro_affida", "pc_cerca_file"}
 
 # (come, livello, frase, serve il dettaglio)
 FRASI = [
@@ -173,14 +173,14 @@ for giro in range(1, GIRI + 1):
                               for t in b.last_tools) or "—"
         verifica(f"[{giro}.{i}] «{frase[:40]}…» → {argomenti}", ok,
                  f"{primo or 0:.2f}s  {risposta[:220]!r}")
-        righe.append((giro, i, ok, primo or 0, "risultato_lavoro" in tools))
+        righe.append((giro, i, ok, primo or 0, "lavoro_risultato" in tools))
     svc.close()
     agente.ferma()
 
 prime = sorted(r[3] for r in righe)
 for i in range(1, len(FRASI) + 1):
     rr = [r for r in righe if r[1] == i]
-    print(f"frase {i}: riuscite {sum(r[2] for r in rr)}/{len(rr)}, risultato_lavoro "
+    print(f"frase {i}: riuscite {sum(r[2] for r in rr)}/{len(rr)}, lavoro_risultato "
           f"{sum(r[4] for r in rr)}/{len(rr)}")
 print(f"\nprima frase mediana {prime[len(prime) // 2]:.2f}s, massimo {prime[-1]:.2f}s; "
       f"riuscite {sum(r[2] for r in righe)}/{len(righe)}")

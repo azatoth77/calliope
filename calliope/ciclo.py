@@ -751,7 +751,7 @@ class Ciclo:
             msg = annuncio_lavoro(s.schermi, item, s.lavori, brain)
             item.pop("modulo", None)
             if s.cfg.rete("riferire") and not (item.get("in_sospeso") or {}).get(
-                    "tool") == "estensioni_gestisci":
+                    "tool") == "estensione_gestisci":
                 # Il riassunto è dell'agente (06/10, calliope/riferire.py): numeri a
                 # pagamento, codici, soldi e indicazioni sulla casa non si ripetono
                 msg, regole_u = riferire.controlla_testo(
@@ -770,7 +770,7 @@ class Ciclo:
             speaker.chime()
             speaker.say(msg)
             # Una domanda dell'agente («… ho una domanda: …?») diventa un'azione in
-            # sospeso: la risposta nel turno dopo va a lavori_rispondi. Il riassunto è
+            # sospeso: la risposta nel turno dopo va a lavoro_rispondi. Il riassunto è
             # dell'agente: dato non fidato (calliope/provenienza.py)
             brain.record_announcement(msg, item.get("in_sospeso"), fonte="agente")
 
@@ -2303,7 +2303,7 @@ class Ciclo:
             # subito, partendo dall'audio che contiene il nome
             self.brain.record_interruption(speaker.played)
             # «risposta»: solo le frasi sentite per intero; «risposta_inviata»: quello che era
-            # già andato alla voce, ripulito come la risposta (08/10, DGX del 07/10: lavori_stato
+            # già andato alla voce, ripulito come la risposta (08/10, DGX del 07/10: lavoro_stato
             # interrotto dal nome a metà della sua unica frase, e nel registro risposta vuota)
             inviata = self.rec.get("risposta")
             sentita = None if getattr(self.brain, "last_private", False) \

@@ -4,7 +4,7 @@ I lavori dell'agente che sopravvivono a un riavvio di Calliope (06/10/2026).
 Caso vero della DGX: alle 16:56 Dario fa partire «gioco memory da giocare sullo schermo» (tipo
 codice, qwen3.6 su vLLM); l'agente scrive gioco.js, logica.js e logica.test.js nella sandbox.
 Alle 17:07 un `calliope aggiorna` riavvia il servizio: il lavoro muore, dopo il riavvio
-Calliope non dice niente e lavori_stato risponde «Non ho lavori in corso.». Dario pensa che si
+Calliope non dice niente e lavoro_stato risponde «Non ho lavori in corso.». Dario pensa che si
 sia piantata. Prima di qui coda e stato dei lavori stavano solo in memoria (lavoro.json si
 scriveva nella cartella dei risultati, a lavoro fermo o finito).
 
@@ -19,10 +19,10 @@ Cosa fa:
   era salvabile (JSON), altrimenti è interrotto anche lui;
 - **l'annuncio**: alla persona che li aveva chiesti, al primo silenzio e verso la sua corsia e
   il suo satellite come gli altri annunci dei lavori: «il lavoro «…» si è interrotto per un
-  riavvio di Calliope. Lo rifaccio?», con l'azione in sospeso delega_lavoro(proposta=id).
+  riavvio di Calliope. Lo rifaccio?», con l'azione in sospeso lavoro_affida(proposta=id).
   Solo se il lavoro era vivo da meno di `agenti_interrotti_annuncio_h` ore e una volta sola
   (`annunciato` resta nel file: un secondo riavvio non lo ripete). Più vecchi: solo
-  nell'elenco di lavori_stato, per un giorno;
+  nell'elenco di lavoro_stato, per un giorno;
 - **al «sì»** un lavoro nuovo (id nuovo) con lo stesso compito, la stessa persona e la stessa
   cartella dei risultati. Un lavoro di codice o un'estensione **riparte dalla sua sandbox**,
   con i file già scritti: l'agente li vede nell'elenco dei file e un vincolo gli dice che il
@@ -86,7 +86,16 @@ def voce(lav, ora: float) -> dict:
          "doppione_chiesto": bool(getattr(lav, "doppione_chiesto", False)),
          "file_iniziali": iniziali,
          "annunciato": bool(getattr(lav, "annunciato", False)),
-         "vivo": ora if lav.stato in VIVI else (getattr(lav, "vivo", None) or ora)}
+         "vivo": ora if lav.stato in VIVI else (getattr(lav, "vivo", None) or ora),
+         # le tappe (08/10, versione 2 della modalità sviluppo): il giro e i suoi conti
+         "tappe": bool(getattr(lav, "tappe", False)), "giro": int(getattr(lav, "giro", 1) or 1),
+         "passi": int(getattr(lav, "passi", 0) or 0), "token": int(getattr(lav, "token", 0) or 0),
+         "passi0": int(getattr(lav, "passi0", 0) or 0),
+         "token0": int(getattr(lav, "token0", 0) or 0),
+         "attesa0": float(getattr(lav, "attesa0", 0) or 0),
+         "segnali": _json(getattr(lav, "segnali", None) or {})}
+    if (getattr(lav, "risultato", None) or {}).get("esito") == "tappa":
+        d["tappa"] = _json(lav.risultato)
     if lav.stato == "in_attesa":
         d["contesto"] = _json(lav.contesto or {})
     return d
@@ -149,6 +158,12 @@ def ricostruisci(riga: dict, Lavoro):
     lav.file_persona = bool(riga.get("file_persona"))
     lav.annunciato = bool(riga.get("annunciato"))
     lav.vivo = float(riga.get("vivo") or time.time())
+    lav.tappe = bool(riga.get("tappe"))
+    lav.giro = int(riga.get("giro") or 1)
+    lav.passi, lav.token = int(riga.get("passi") or 0), int(riga.get("token") or 0)
+    lav.passi0, lav.token0 = int(riga.get("passi0") or 0), int(riga.get("token0") or 0)
+    lav.attesa0 = float(riga.get("attesa0") or 0.0)
+    lav.segnali = dict(riga.get("segnali") or {})
     root = riga.get("sandbox")
     lav.sandbox_da = root if root and Path(root).is_dir() else None
     stato = str(riga["stato"])
@@ -159,6 +174,10 @@ def ricostruisci(riga: dict, Lavoro):
         lav.stato, lav.passo = "in_attesa", "aspetta una risposta"
         lav.risultato = {"esito": "domanda", "domanda": lav.domanda,
                          "cartella": lav.cartella or ""}
+        if isinstance(riga.get("tappa"), dict):
+            # una tappa di uno sviluppo (08/10): aspetta ancora «continua» o «ferma»
+            lav.risultato = dict(riga["tappa"])
+            lav.passo = "aspetta: fine del giro"
         lav.ripristinato = True
     else:
         lav.stato, lav.passo = "interrotto", "interrotto da un riavvio"
@@ -194,8 +213,8 @@ def frase(lav, titolo: str) -> str:
 
 
 def offerta(lav) -> dict:
-    """L'azione in sospeso dell'annuncio: il «sì» richiama delega_lavoro con l'id."""
-    return {"domanda": "Lo rifaccio?", "tool": "delega_lavoro",
+    """L'azione in sospeso dell'annuncio: il «sì» richiama lavoro_affida con l'id."""
+    return {"domanda": "Lo rifaccio?", "tool": "lavoro_affida",
             "cosa": f"rifare il lavoro interrotto «{lav.titolo}»",
             "argomenti": {"proposta": lav.id}}
 

@@ -123,8 +123,8 @@ def main():
         passo["reale-biblioteca", 1].attese, {"tool": [{"nome": "biblioteca_cerca"}]}, luna))
     ok("luna: una distanza sbagliata no", V.controlla(
         passo["reale-biblioteca", 1].attese, {}, "La Luna dista 150 milioni di km."))
-    ferma = {"tool": [{"nome": "lavori_annulla"}], "esito": "risposta"}
-    ok("fermati-ordine: lavori_annulla che non ferma niente va bene", not V.controlla(
+    ferma = {"tool": [{"nome": "lavoro_annulla"}], "esito": "risposta"}
+    ok("fermati-ordine: lavoro_annulla che non ferma niente va bene", not V.controlla(
         passo["fermati-ordine", 0].attese, ferma, "Non ho lavori in corso da fermare."))
     ok("fermati-ordine: «ho fermato» no", V.controlla(
         passo["fermati-ordine", 0].attese, ferma, "Ho fermato l'ordine."))

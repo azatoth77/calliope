@@ -6,7 +6,7 @@ estensione, perché la richiesta non era una specifica: quali città? «principa
 da quale tabella?). Niente spinte a metà lavoro: la domanda si fa **prima**, al momento della
 proposta.
 
-`estensione_crea` e `delega_lavoro` di tipo codice chiamano `Analizzatore.analizza` prima di
+`sviluppo_apri` e `lavoro_affida` di tipo codice chiamano `Analizzatore.analizza` prima di
 creare il lavoro. Il modello è quello dell'agente (qwen3.6 su vLLM sulla DGX), con l'output
 strutturato (schema JSON, decodifica guidata), senza ragionamento, con un tempo massimo
 (`agenti_analisi_s`, 10 s compresa la verifica della fonte); oltre, o con un errore, si procede
@@ -25,7 +25,7 @@ Lista di controllo chiusa per tipo (`PUNTI`): estensione = input, output, fonte 
 - **impossibile** («impossibile qui»): serve qualcosa che la sandbox o la porta delle estensioni
   non hanno (rete di casa, file del PC…): lo dice subito, senza domande;
 - **estensione** (08/10, solo per un lavoro di codice): la richiesta è creare o cambiare
-  un'estensione di Calliope, che non è impossibile ma è un'altra richiesta (estensione_crea, con
+  un'estensione di Calliope, che non è impossibile ma è un'altra richiesta (sviluppo_apri, con
   modifica per una che c'è). Il modello lo scrive come `impossibile` = «ESTENSIONE» (lo schema
   resta quello); il 07/10 sulla DGX diceva «non posso modificare le estensioni esistenti».
 
@@ -66,8 +66,8 @@ PUNTI_DETTI = {
 # Tool che non sono «funzioni» da proporre al posto di un lavoro: i lavori stessi, le
 # installazioni, la gestione delle persone e di Calliope
 NON_FUNZIONI = frozenset({
-    "delega_lavoro", "estensione_crea", "estensioni_gestisci", "lavori_stato",
-    "lavori_annulla", "lavori_rispondi", "lavori_esegui", "risultato_lavoro", "installa_proponi", "installa_avvia",
+    "lavoro_affida", "sviluppo_apri", "estensione_gestisci", "lavoro_stato",
+    "lavoro_annulla", "lavoro_rispondi", "programma_esegui", "lavoro_risultato", "installa_proponi", "installa_avvia",
     "installa_gestisci", "registra_utente", "rinomina_interlocutore", "elenca_utenti",
     "elenca_voci", "chi_parla", "minore_gestisci", "richiesta_tutore", "dimentica",
     "conversazioni_dimentica", "calliope_stato", "schermo_gestisci", "cambia_voce",

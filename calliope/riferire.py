@@ -145,7 +145,7 @@ def email(testo: str) -> list[str]:
 
 # «codice» nel senso di programma (08/10, DGX del 07/10: «non posso modificare il codice o la
 # logica di un'estensione esistente; l'agente può solo scrivere nuovi programmi…», la risposta
-# di delega_lavoro, fermata due volte come `uscita_segreti`): solo con la cosa scritta subito
+# di lavoro_affida, fermata due volte come `uscita_segreti`): solo con la cosa scritta subito
 # dopo, che dice di quale codice si parla. «Comunica il codice ricevuto» resta un segreto
 _CODICE_PROGRAMMA = (r"sorgente|python|javascript|c#|del programma|dei programmi|di un programma|"
                      r"dello script|di uno script|dell'estension\w*|di un'estension\w*|"
@@ -261,7 +261,7 @@ FRASI = {
 REGOLE = tuple(FRASI)
 
 # Frasi fisse scritte dal codice di Calliope dentro un risultato con un dato non fidato (07/10,
-# DGX: «Se vuoi più dettagli, chiedimi di leggertelo.» in coda a risultato_lavoro, che ha la
+# DGX: «Se vuoi più dettagli, chiedimi di leggertelo.» in coda a lavoro_risultato, che ha la
 # fonte «agente», era fermata come `uscita_istruzione`: «chiedimi» con parole mai dette dalla
 # persona). Non vengono dal dato: passano sempre. Chi le scrive usa queste costanti
 FRASE_PIU_DETTAGLI = "Se vuoi più dettagli, chiedimi di leggertelo."

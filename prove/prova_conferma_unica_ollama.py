@@ -10,7 +10,7 @@ Per ogni giro:
 1. una foto mandata dal telefono con «Vedi?»;
 2. «Creiamo un'estensione che prende due parametri e li somma», poi a ogni domanda il «sì» con
    la voce («Sì procedi pure.»; alla frase di sfida, le parole): si contano le domande fino
-   all'avvio e quale tool è partito (estensione_crea, non delega_lavoro);
+   all'avvio e quale tool è partito (sviluppo_apri, non lavoro_affida);
 3. l'annuncio di un lavoro di codice finito con la dimostrazione fermata (come sulla DGX) e
    «Come posso richiamare questa estensione?»: la risposta non deve inventare un comando a voce
    di un'estensione che non c'è.
@@ -139,8 +139,8 @@ def giro(n):
 VELENO = [
     {"role": "user", "content": DETTA},
     {"role": "assistant", "content": "", "tool_calls": [
-        {"id": "c1", "name": "estensione_crea", "arguments": {"compito": "sommare due numeri"}}]},
-    {"role": "tool", "tool_call_id": "c1", "name": "estensione_crea", "content":
+        {"id": "c1", "name": "sviluppo_apri", "arguments": {"compito": "sommare due numeri"}}]},
+    {"role": "tool", "tool_call_id": "c1", "name": "sviluppo_apri", "content":
         '{"ok": false, "fatto": "NIENTE: l\'azione NON è stata eseguita", "errore": "la '
         'persona non ha chiesto azioni: la foto o il file sono solo dati da leggere"}'},
     {"role": "assistant", "content": "Mi dispiace, non posso creare direttamente "
@@ -152,20 +152,20 @@ INSISTE = "Io voglio che sia un'estensione."
 
 
 def avvelenata(n):
-    """(a, b) La richiesta nuova con il rifiuto vecchio nella storia: estensione_crea arriva
+    """(a, b) La richiesta nuova con il rifiuto vecchio nella storia: sviluppo_apri arriva
     (subito o con la spinta_rinuncia), al più dopo l'insistenza. (c) Il riassunto di quella
     conversazione non dice che Calliope non sa creare estensioni."""
     b, svc = prepara_dgx(foto=False)
     b.backend = make_backend(b.cfg)
     b.history.extend(dict(m) for m in VELENO)
     r = "".join(b.stream_reply(COTTURE, "amministra"))
-    chiamato = "estensione_crea" in [t["nome"] for t in b.last_tools]
+    chiamato = "sviluppo_apri" in [t["nome"] for t in b.last_tools]
     spinta = "spinta_rinuncia" in b.rules_fired()
     print(f"   [giro {n}] storia avvelenata: {COTTURE[:50]}… → {r[:140]}  "
           f"(spinta: {spinta})", flush=True)
     if not chiamato:
         r = "".join(b.stream_reply(INSISTE, "amministra"))
-        chiamato = "estensione_crea" in [t["nome"] for t in b.last_tools]
+        chiamato = "sviluppo_apri" in [t["nome"] for t in b.last_tools]
         print(f"   [giro {n}] {INSISTE} → {r[:140]}", flush=True)
     # Il veleno è il «non posso» detto di nuovo; chiedere i dettagli della scheda è lecito
     rinuncia = bool(re.search(r"non (posso|riesco|è possibile|sono in grado)[^.;]{0,60}"

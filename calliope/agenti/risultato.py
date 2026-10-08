@@ -1,15 +1,15 @@
 """
 Il risultato di un lavoro dell'agente già finito, chiesto a voce (07/10/2026, tool
-risultato_lavoro).
+lavoro_risultato).
 
 Caso vero della DGX del 07/10: una ricerca finita e annunciata («ho finito «Esegui una
-ricerca approfondita…»: 20 paragrafi…»), poi «E il risultato?» → lavori_rispondi fallito («non
-ha generato un rapporto da leggermi»), «leggili e dammi un bel riassunto» → lavori_esegui
+ricerca approfondita…»: 20 paragrafi…»), poi «E il risultato?» → lavoro_rispondi fallito («non
+ha generato un rapporto da leggermi»), «leggili e dammi un bel riassunto» → programma_esegui
 («Non ho programmi finiti da eseguire») due volte, poi un lavoro nuovo per riassumere il
 documento, che il nuovo lavoro non vedeva. Non c'era un modo di avere il risultato.
 
 - **Quale lavoro**: il più recente finito di chi parla (chi amministra: anche degli altri), o
-  quello detto per id («L3») o con parole del titolo, come lavori_rispondi. Dopo un riavvio i
+  quello detto per id («L3») o con parole del titolo, come lavoro_rispondi. Dopo un riavvio i
   lavori finiti non sono più in memoria: si leggono dalla cartella dei risultati
   (`lavoro.json`, con il testo intero dal 07/10, o il file del lavoro).
 - **Cosa si dice**: `riassunto` (predefinito) il riassunto dell'agente già salvato; `leggi`
@@ -157,7 +157,7 @@ PER_CARTELLA = "cartella:"
 
 
 def chiave(lv) -> str:
-    """Come richiamare il lavoro (argomento `lavoro` di risultato_lavoro in un'azione in
+    """Come richiamare il lavoro (argomento `lavoro` di lavoro_risultato in un'azione in
     sospeso): l'id se è in memoria, la cartella se viene dal disco."""
     if getattr(lv, "dal_disco", False) and _cartella(lv):
         return PER_CARTELLA + Path(_cartella(lv)).name
@@ -178,7 +178,7 @@ def _tutti(svc, persona, persona_nome) -> tuple[list, list]:
 def recenti(svc, persona, persona_nome=None, n: int = 3) -> list:
     """Gli ultimi `n` lavori finiti di `persona` (in memoria e, dopo un riavvio, dalla cartella
     dei risultati), dal più recente, ognuno con `fine` (07/10: «e quelli che hai già fatto?»
-    → lavori_stato rispondeva «Non ho lavori in corso.» e basta)."""
+    → lavoro_stato rispondeva «Non ho lavori in corso.» e basta)."""
     tutti, disco = _tutti(svc, persona, persona_nome)
     # «ripreso»: interrotto da un riavvio e rifatto, c'è già il lavoro nuovo
     fin = [lv for lv in tutti + disco if lv.stato in FINITI and lv.stato != "ripreso"
@@ -222,7 +222,7 @@ def trova(svc, persona, persona_nome=None, quale: str = "", admin: bool = False)
     ha detto un altro), lo si dice."""
     q = str(quale or "").strip()
     if q.startswith(PER_CARTELLA):
-        # Dall'azione in sospeso di lavori_stato: un lavoro preciso, anche di prima di un
+        # Dall'azione in sospeso di lavoro_stato: un lavoro preciso, anche di prima di un
         # riavvio (gli id ricominciano da L1)
         nome = q[len(PER_CARTELLA):].strip().lower()
         tutti, disco = _tutti(svc, persona, persona_nome)

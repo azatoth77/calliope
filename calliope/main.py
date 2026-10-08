@@ -618,7 +618,9 @@ class Avvio:
         estensioni = self.estensioni = load_estensioni(cfg, s.tools, self.tool_ctx, s.lavori)
         if estensioni is not None:
             try:
-                for spec in estensioni_specs(crea=s.lavori is not None):
+                # sviluppo_apri (08/10, versione 2) c'è già con gli agenti: non si rifà
+                for spec in estensioni_specs(crea=s.lavori is not None
+                                             and s.tools.get("sviluppo_apri") is None):
                     s.tools.register(spec)
                 estensioni.aggiorna_tool()
                 self.tool_ctx.estensioni = estensioni

@@ -120,7 +120,7 @@ def _documento_crea(ctx: ToolContext, formato: str = "", richiesta: str = "",
         return {"ok": False, "fatto": NIENTE,
                 "errore": f"c'è il risultato del lavoro «{rif.get('titolo')}» appena detto",
                 "cosa_fare": f"se chi parla vuole quel risultato in Word o in PDF, chiama "
-                             f"risultato_lavoro con modo word o pdf e lavoro "
+                             f"lavoro_risultato con modo word o pdf e lavoro "
                              f"{rif.get('lavoro')}; se vuole davvero un documento nuovo con "
                              f"altro contenuto, richiama documento_crea"}
     svc = getattr(ctx, "documenti", None)
@@ -198,7 +198,7 @@ _LABELS = {"word": "word (lettere, testi, documenti)", "excel": "excel (tabelle 
 
 def documenti_specs(formati, agenti: bool = False) -> list[ToolSpec]:
     """I due tool, con l'enum dei formati che ci sono davvero (librerie installate). Con
-    `agenti` (c'è risultato_lavoro) documento_crea dice che il risultato di un lavoro
+    `agenti` (c'è lavoro_risultato) documento_crea dice che il risultato di un lavoro
     dell'agente in PDF o in Word non è un documento nuovo (07/10: «Me lo fai in Word?» dopo il
     risultato di una ricerca → documento_crea con la richiesta riassunta, 3 su 3 col 4B)."""
     formati = [f for f in ("word", "excel", "pdf") if f in set(formati or ())]
@@ -215,7 +215,7 @@ def documenti_specs(formati, agenti: bool = False) -> list[ToolSpec]:
                          f"il totale». Il testo lo scrive il programma: tu non scriverlo e non "
                          f"leggerlo. titolo facoltativo."
                          + (" NON per mettere in PDF o in Word il risultato di un lavoro "
-                            "dell'agente (una ricerca, una relazione): risultato_lavoro."
+                            "dell'agente (una ricerca, una relazione): lavoro_risultato."
                             if agenti else "")),
             parameters={"type": "object",
                         "properties": {"formato": {"type": "string", "enum": formati},

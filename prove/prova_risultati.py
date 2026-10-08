@@ -4,15 +4,15 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 """Risultati dei lavori, dichiarazioni e consensi, a secco (07/10/2026, tre casi veri della DGX
 del 07/10, qui con nomi di fantasia).
 
-1. **Il risultato di un lavoro finito** (tool risultato_lavoro, calliope/agenti/risultato.py):
-   dopo una ricerca annunciata, «E il risultato?» finiva in lavori_rispondi, «leggili e dammi
-   un bel riassunto» in lavori_esegui («Non ho programmi finiti da eseguire»). Qui: quale
+1. **Il risultato di un lavoro finito** (tool lavoro_risultato, calliope/agenti/risultato.py):
+   dopo una ricerca annunciata, «E il risultato?» finiva in lavoro_rispondi, «leggili e dammi
+   un bel riassunto» in programma_esegui («Non ho programmi finiti da eseguire»). Qui: quale
    lavoro (il più recente, per id, per parole del titolo, di un altro, in corso, dopo un
    riavvio dalla cartella dei risultati), riassunto salvato, riassunto col modello dell'agente
    (finto) quando quello salvato è già stato detto o si chiede «leggi», tempo massimo con la
    frase d'attesa e il ripiego, scheda sullo schermo personale («mostra»), codice mai a voce,
-   numeri a pagamento del testo dell'agente fermati, classe nella politica; lavori_esegui,
-   lavori_rispondi e lavori_stato che propongono il risultato.
+   numeri a pagamento del testo dell'agente fermati, classe nella politica; programma_esegui,
+   lavoro_rispondi e lavoro_stato che propongono il risultato.
 2. **Dichiarazioni d'azione** (brain.ACTION_CLAIM): «Perfetto, allora inizio subito il
    lavoro.» senza nessun tool; i contrari («inizio a capire», «ti avviso quando inizio»,
    «inizio io?»). E la causa a monte: il «sì» di una voce diversa da chi ha la proposta ha nei
@@ -163,7 +163,7 @@ def detta(r):
 
 # ─────────────────────────── 1. il risultato di un lavoro ───────────────────────────
 def prova_risultato():
-    sezione("risultato_lavoro")
+    sezione("lavoro_risultato")
     agente = FakeOllama(modelli=("qwen3.6:35b",), caricati=("qwen3.6:35b",)).avvia()
     agente.predefinita = {"content": "- " + DAL_MODELLO + " Vedi https://esempio.example."}
     try:
@@ -318,37 +318,37 @@ def prova_risultato():
         ctx, _ = contesto(cfg, svc, detto="Leggili e dammi un bel riassunto.")
         r = ta._lavori_esegui(ctx, lavoro="L1")
         sosp = r.get("in_sospeso") or {}
-        verifica("lavori_esegui su una ricerca: «è una ricerca, non un programma: vuoi il "
+        verifica("programma_esegui su una ricerca: «è una ricerca, non un programma: vuoi il "
                  "risultato?» con l'azione in sospeso",
                  "non un programma" in detta(r) and detta(r).endswith("?")
-                 and sosp.get("tool") == "risultato_lavoro"
+                 and sosp.get("tool") == "lavoro_risultato"
                  and "lavori_offri_risultato" in ctx.regole, detta(r))
         ctx, _ = contesto(cfg, svc, detto="E il risultato?")
         r = ta._lavori_rispondi(ctx, risposta="Il lavoro è stato completato.")
-        verifica("lavori_rispondi senza domande in attesa: propone il risultato",
-                 (r.get("in_sospeso") or {}).get("tool") == "risultato_lavoro", detta(r))
+        verifica("lavoro_rispondi senza domande in attesa: propone il risultato",
+                 (r.get("in_sospeso") or {}).get("tool") == "lavoro_risultato", detta(r))
         ctx, _ = contesto(cfg, svc, detto="A che punto è il lavoro?")
         r = ta._lavori_stato(ctx)
-        verifica("lavori_stato con un lavoro finito: «Vuoi sentire il risultato?»",
+        verifica("lavoro_stato con un lavoro finito: «Vuoi sentire il risultato?»",
                  detta(r).endswith("Vuoi sentire il risultato?")
-                 and (r.get("in_sospeso") or {}).get("tool") == "risultato_lavoro", detta(r))
+                 and (r.get("in_sospeso") or {}).get("tool") == "lavoro_risultato", detta(r))
         svc.close(), svc2.close(), svc3.close(), svc4.close()
     finally:
         agente.ferma()
     # n. registro e politica
     reg = build_registry(agenti=True)
-    spec = reg.get("risultato_lavoro")
-    verifica("registro: risultato_lavoro con gli agenti, per i familiari",
+    spec = reg.get("lavoro_risultato")
+    verifica("registro: lavoro_risultato con gli agenti, per i familiari",
              spec is not None and "ospite" not in spec.levels)
-    cl = politica.classe_di("risultato_lavoro")
+    cl = politica.classe_di("lavoro_risultato")
     verifica("politica: classe sicura, fonte agente (dato non fidato)",
              cl.classe == politica.SICURO and cl.fonte == "agente" and cl.dichiarata)
-    desc = {n: reg.get(n).description for n in ("lavori_esegui", "lavori_rispondi",
-                                                "lavori_stato", "delega_lavoro")}
-    verifica("descrizioni: gli altri tool dei lavori rimandano a risultato_lavoro",
-             all("risultato_lavoro" in d for d in desc.values())
-             and desc["lavori_esegui"].startswith("Solo per i programmi")
-             and desc["lavori_rispondi"].startswith("Solo quando l'agente ha fatto una domanda"))
+    desc = {n: reg.get(n).description for n in ("programma_esegui", "lavoro_rispondi",
+                                                "lavoro_stato", "lavoro_affida")}
+    verifica("descrizioni: gli altri tool dei lavori rimandano a lavoro_risultato",
+             all("lavoro_risultato" in d for d in desc.values())
+             and desc["programma_esegui"].startswith("Solo per i programmi")
+             and desc["lavoro_rispondi"].startswith("Solo quando l'agente ha fatto una domanda"))
 
 
 # ─────────────────────────── 2. dichiarazioni e proposte altrui ───────────────────────────
@@ -399,7 +399,7 @@ def prova_proposta_altrui():
             id="luca", name="Luca", admin=False, gender="m", preferred_voice=None,
             giovane=True, young=True, tono=None)
         reg = b.tools
-        reg.register(dataclasses.replace(reg.get("delega_lavoro"), func=ta._delega_lavoro))
+        reg.register(dataclasses.replace(reg.get("lavoro_affida"), func=ta._delega_lavoro))
         svc = LavoriFinti()
         b.tool_ctx.lavori = svc
         visti = []
@@ -414,7 +414,7 @@ def prova_proposta_altrui():
     RIC = {"tipo": "codice", "compito": "Scrivi uno script che somma due numeri"}
     b, svc, visti = brain()
     marta = ChiParla("Marta", "amministra")
-    r1 = turno(b, "Scrivimi uno script che somma due numeri", chiama("delega_lavoro", RIC),
+    r1 = turno(b, "Scrivimi uno script che somma due numeri", chiama("lavoro_affida", RIC),
                testo("Va bene."), chi=marta)
     verifica("Marta: la proposta («Procedo?»)", r1.rstrip().endswith("?"), r1)
     visti.clear()
@@ -431,17 +431,17 @@ def prova_proposta_altrui():
              not svc.avviati and "inizio subito" not in r2, r2)
     # Contrari: la stessa persona (il lavoro parte), un'altra domanda (niente dati)
     b, svc, visti = brain()
-    turno(b, "Scrivimi uno script che somma due numeri", chiama("delega_lavoro", RIC),
+    turno(b, "Scrivimi uno script che somma due numeri", chiama("lavoro_affida", RIC),
           testo("Va bene."), chi=ChiParla("Marta", "amministra"))
     visti.clear()
-    turno(b, "Sì, procedi pure con il lavoro.", chiama("delega_lavoro", {"proposta": "L1"}),
+    turno(b, "Sì, procedi pure con il lavoro.", chiama("lavoro_affida", {"proposta": "L1"}),
           testo("Fatto."), chi=ChiParla("Marta", "amministra"))
     dati = " ".join(x for giro in visti for x in giro if x)
     verifica("contrario: il «sì» di Marta → parte, niente dati sulla proposta altrui",
              len(svc.avviati) == 1 and "proposta di Marta" not in dati
              and "sospeso_altrui_consenso" not in b.rules_fired(), str(b.rules_fired()))
     b, svc, visti = brain()
-    turno(b, "Scrivimi uno script che somma due numeri", chiama("delega_lavoro", RIC),
+    turno(b, "Scrivimi uno script che somma due numeri", chiama("lavoro_affida", RIC),
           testo("Va bene."), chi=ChiParla("Marta", "amministra"))
     visti.clear()
     turno(b, "Che ore sono?", testo("Sono le dieci."), chi=ChiParla("Luca", "familiare"))
@@ -456,7 +456,7 @@ def prova_proposta_altrui():
     c = Corsia("sat:1", 1, "telefono", registro=reg)
     b.tool_ctx.speaker_ctx = ChiParla("Marta", "amministra")
     c.turno(b, "Marta", "voce", True, persona_id="marta")
-    turno(b, "Scrivimi uno script che somma due numeri", chiama("delega_lavoro", RIC),
+    turno(b, "Scrivimi uno script che somma due numeri", chiama("lavoro_affida", RIC),
           testo("Va bene."))
     b.tool_ctx.speaker_ctx = ChiParla("Luca", "familiare", "conversazione")
     c.turno(b, "Luca", "conversazione", True, persona_id="luca")
@@ -497,7 +497,7 @@ def prova_consenso():
     def brain():
         b, _, _ = prepara(True)
         reg = b.tools
-        reg.register(dataclasses.replace(reg.get("delega_lavoro"), func=ta._delega_lavoro))
+        reg.register(dataclasses.replace(reg.get("lavoro_affida"), func=ta._delega_lavoro))
         svc = LavoriFinti()
         b.tool_ctx.lavori = svc
         b.tool_ctx.speakers.p["Marta"] = SimpleNamespace(
@@ -509,10 +509,10 @@ def prova_consenso():
 
     b, svc = brain()
     r1 = turno(b, "Puoi fare una ricerca su internet sul robot Lefa e Home Assistant?",
-               chiama("delega_lavoro", RIC), testo("Va bene."))
+               chiama("lavoro_affida", RIC), testo("Va bene."))
     verifica("estensione di mezzo: la domanda della politica",
              "estensione" in r1 and r1.rstrip().endswith("?") and not svc.avviati, r1)
-    r2 = turno(b, "Ma sì dai, perché no?", chiama("delega_lavoro", RIC), testo("Fatto."))
+    r2 = turno(b, "Ma sì dai, perché no?", chiama("lavoro_affida", RIC), testo("Fatto."))
     verifica("«Ma sì dai, perché no?» → il lavoro parte, una domanda sola",
              len(svc.avviati) == 1 and domande(r1, r2) == 1, f"{r1!r} / {r2!r}")
     verifica("…regole politica_conferma_unica e consenso_forma_chiusa",
@@ -524,8 +524,8 @@ def prova_consenso():
     for frase in ("Perché no? Non ora.", "No, lascia stare."):
         b, svc = brain()
         turno(b, "Puoi fare una ricerca su internet sul robot Lefa e Home Assistant?",
-              chiama("delega_lavoro", RIC), testo("Va bene."))
-        r = turno(b, frase, chiama("delega_lavoro", RIC), testo("Fatto."))
+              chiama("lavoro_affida", RIC), testo("Va bene."))
+        r = turno(b, frase, chiama("lavoro_affida", RIC), testo("Fatto."))
         verifica(f"contrario: «{frase}» → niente avviato", not svc.avviati, r)
 
 
@@ -665,7 +665,7 @@ def prova_casi_mattina():
     b.tool_ctx.speaker_ctx = ChiParla("Dario", "amministra")
     from calliope.tools.schermi import schermi_specs
     b.tools.register(next(s for s in schermi_specs() if s.name == "schermo_mostra"))
-    for nome, frase in (("risultato_lavoro", "«Pannelli»: tre modelli. Il testo intero è sul "
+    for nome, frase in (("lavoro_risultato", "«Pannelli»: tre modelli. Il testo intero è sul "
                                              "tuo schermo."),
                         ("schermo_mostra", "Il testo intero è sul tuo schermo.")):
         spec = b.tools.get(nome)
@@ -673,13 +673,13 @@ def prova_casi_mattina():
             spec, func=lambda ctx, _f=frase, **a: {"ok": True, "conferma": _f,
                                                    "risposta_finale": _f}))
     b.backend.risposte = [[("calls", [
-        {"id": "c0", "name": "risultato_lavoro", "arguments": {}},
+        {"id": "c0", "name": "lavoro_risultato", "arguments": {}},
         {"id": "c1", "name": "schermo_mostra", "arguments": {"cosa": "risposta"}}])]]
     detto = "".join(b.stream_reply("Entrambe le cose.", "amministra"))
     verifica("Brain: la stessa frase di due tool detta una volta",
              detto.count("sul tuo schermo") == 1, detto)
 
-    # 3. lavori_stato con i lavori finiti, anche di prima di un riavvio
+    # 3. lavoro_stato con i lavori finiti, anche di prima di un riavvio
     agente = FakeOllama(modelli=("qwen3.6:35b",), caricati=("qwen3.6:35b",)).avvia()
     try:
         cfg, svc = servizio(agente, "m3")
@@ -703,11 +703,11 @@ def prova_casi_mattina():
                  detta(r).startswith("Non ho lavori in corso. L'ultimo lavoro: «robot "
                                      "aspirapolvere Lefa» è finito ieri alle")
                  and detta(r).endswith("Vuoi sentire il risultato?")
-                 and sosp.get("tool") == "risultato_lavoro"
+                 and sosp.get("tool") == "lavoro_risultato"
                  and "lavori_stato_finiti" in ctx.regole, detta(r))
         ctx, _ = contesto(cfg, svc, detto="Sì.")
         r = ta._risultato_lavoro(ctx, **sosp.get("argomenti", {}))
-        verifica("il «sì»: risultato_lavoro con la cartella trova quello di ieri",
+        verifica("il «sì»: lavoro_risultato con la cartella trova quello di ieri",
                  r.get("ok") and "Lefa" in detta(r), detta(r))
         # Oggi un altro L1 (gli id ricominciano dopo un riavvio) e uno non riuscito
         oggi = finito(svc, compito="Ricerca i pattern di design per ricerche in parallelo")

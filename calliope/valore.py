@@ -87,11 +87,11 @@ ARGOMENTI: dict[str, dict[str, str]] = {
     "documento_modifica": {"modifica": L},
     "casa_comando": {"comando": B},
     "schermo_gestisci": {"azione": Z, "codice": B, "stanza": B, "personale": S, "persona": B},
-    "delega_lavoro": {"tipo": Z, "compito": L, "vincoli": L, "proposta": X, "file": B,
+    "lavoro_affida": {"tipo": Z, "compito": L, "vincoli": L, "proposta": X, "file": B,
                       "allegato": "indice:allegato", "formato": S, "modello": S},
-    "lavori_annulla": {"quale": Z},
-    "lavori_esegui": {"lavoro": B, "dati": C},
-    "lavori_rispondi": {"lavoro": B, "risposta": C},
+    "lavoro_annulla": {"quale": Z},
+    "programma_esegui": {"lavoro": B, "dati": C},
+    "lavoro_rispondi": {"lavoro": B, "risposta": C},
     "modello_compila": {"modello": Z, "dati": C, "proposta": X},
     "anagrafica_salva": {"azione": Z, "nome": B, "dati": C, "proposta": X},
     "conversazioni_dimentica": {},
@@ -104,15 +104,21 @@ ARGOMENTI: dict[str, dict[str, str]] = {
     "minore_gestisci": {"nome": B, "azione": Z, "valore": C},
     "installa_avvia": {"azione": B},
     "installa_gestisci": {"azione": Z},
-    "estensione_crea": {"compito": L, "nome": C, "gia_fatto_da": S, "come_chiederlo": L,
-                        "proposta": X, "gioco": S,
-                        # 08/10 (giro 10): l'estensione esistente di cui fare una versione nuova
-                        "modifica": B},
-    "estensioni_gestisci": {"azione": Z, "nome": B, "esecuzione": B, "sempre": S},
+    # 08/10 (versione 2): estensioni e programmi si aprono qui (prima estensione_crea e
+    # delega_lavoro di codice); tipo sceglie quale, file e allegato come per i lavori
+    "sviluppo_apri": {"tipo": Z, "compito": L, "nome": C, "gia_fatto_da": S,
+                      "come_chiederlo": L, "proposta": X, "gioco": S, "vincoli": L,
+                      "file": B, "allegato": "indice:allegato",
+                      # 08/10 (giro 10): l'estensione esistente di cui fare una versione nuova
+                      "modifica": B},
+    "estensione_gestisci": {"azione": Z, "nome": B, "esecuzione": B, "sempre": S},
     # 08/10, modalità sviluppo (calliope/sviluppo.py): lo sviluppo è quello aperto di chi parla
     # (il bersaglio non è un argomento); quale sceglie tra i suoi sospesi
-    "sviluppo": {"azione": Z, "quale": B, "cambia": L},
-    "sviluppo_prova": {"dati": C},
+    "sviluppo_passo": {"azione": Z, "quale": B, "cambia": L},
+    "sviluppo_collauda": {"dati": C},
+    # 08/10 (versione 2): la domanda all'agente che l'ha scritto (sola lettura) e la correzione
+    "sviluppo_chiedi": {"domanda": C},
+    "sviluppo_correggi": {"problema": L},
 }
 
 # Gli elenchi a cui punta un indice: fidato se lo fa un tool interno (o è un file della
@@ -160,12 +166,19 @@ def _delega(a: dict) -> int:
     return E2 if pol._s(a, "tipo").lower() == "ricerca" else E3
 
 
+def _apri(a: dict) -> int:
+    # 08/10 (versione 2): un programma esegue codice dell'agente (E3, come il codice di
+    # delega_lavoro); un'estensione prepara solo una versione da approvare (E2)
+    t = pol._s(a, "tipo").lower()
+    return E3 if t in ("programma", "codice") else E2
+
+
 def _sviluppo(a: dict) -> int:
     # 08/10: sospendere, riprendere, uscire cambiano solo lo stato dell'iter (E1); tornare
     # all'analisi o promuovere preparano un lavoro dell'agente da confermare (E2); avanti può
     # arrivare all'approvazione, che ha la sua sfida (E3)
     az = pol._s(a, "azione").lower()
-    if az in ("sospendi", "riprendi", "esci"):
+    if az in ("sospendi", "riprendi", "chiudi", "esci"):
         return E1
     if az in ("analisi", "promuovi"):
         return E2
@@ -187,18 +200,22 @@ EFFETTI: dict[str, object] = {
     # E2: resta, altri lo vedono o cambia le risposte future
     "lista_aggiungi": E2, "lista_togli": E2, "ricorda": _ricorda, "dimentica": E2,
     "appuntamento_aggiungi": E2, "agenda_annulla": E2, "anagrafica_salva": E2,
-    "modello_compila": E2, "richiesta_tutore": E2, "lavori_rispondi": E2,
-    "lavori_annulla": E2, "estensione_crea": E2, "pc_guarda": E2,
+    "modello_compila": E2, "richiesta_tutore": E2, "lavoro_rispondi": E2,
+    "lavoro_annulla": E2, "pc_guarda": E2,
     # E3: esce di casa, esegue codice o non si disfa
-    "lavori_esegui": E3, "installa_avvia": E3, "installa_gestisci": E3, "pc_apri_app": E3,
-    "estensioni_gestisci": E3, "conversazioni_dimentica": E3,
+    "programma_esegui": E3, "installa_avvia": E3, "installa_gestisci": E3, "pc_apri_app": E3,
+    "estensione_gestisci": E3, "conversazioni_dimentica": E3,
     # E4: fiducia e sicurezza fisica
     "registra_utente": E4, "rinomina_interlocutore": E4, "schermo_gestisci": E4,
     "minore_gestisci": E4,
     # dipendono da un argomento
-    "casa_comando": _casa, "delega_lavoro": _delega, "sviluppo": _sviluppo,
+    "casa_comando": _casa, "lavoro_affida": _delega, "sviluppo_passo": _sviluppo,
+    "sviluppo_apri": _apri,
     # il collaudo esegue codice (nel container, con la porta stretta)
-    "sviluppo_prova": E3,
+    "sviluppo_collauda": E3,
+    # la domanda all'agente non cambia niente (sola lettura); la correzione rifà il codice
+    # dello sviluppo con l'agente (come tornare all'analisi: un lavoro, E2)
+    "sviluppo_chiedi": E1, "sviluppo_correggi": E2,
 }
 
 
@@ -443,7 +460,7 @@ def distintive(valore, f: Fonti) -> list[str]:
 
 def personali(valore, t, ctx) -> list[str]:
     """I tipi di dato personale nel valore che la persona non ha detto in questa frase (D7:
-    il compito di delega_lavoro, ciò che esce di casa): nomi delle persone di casa, stringhe
+    il compito di lavoro_affida, ciò che esce di casa): nomi delle persone di casa, stringhe
     private, codici fiscali, IBAN, email, telefoni. Solo i tipi, mai i dati."""
     testo = _testo(valore) or ""
     if not testo:
@@ -560,7 +577,7 @@ def decidi_valore(name: str, args: dict, cl, t, base, conferma_voce: bool = Fals
                              f"C'è di mezzo {prov.detta(fonte)}, quindi chiedo a te: vuoi che "
                              f"{cosa}?", fonte), det
     # Dati personali in ciò che esce (D7): il compito di un lavoro, l'esecuzione di codice
-    if E >= E3 or name == "delega_lavoro":
+    if E >= E3 or name in ("lavoro_affida", "sviluppo_apri"):
         for k, v in args.items():
             tipo = (tipi or {}).get(k, BERSAGLIO)
             if tipo in (LIBERO, CONTENUTO) and personali(v, t, ctx):

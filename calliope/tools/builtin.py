@@ -2066,7 +2066,7 @@ def build_registry(biblioteca: bool = False, pc: dict | None = None,
     `schermi`: schermo_mostra e schermo_gestisci (calliope/schermi/, 02/10), con il server
     delle schede acceso. Le schede automatiche dei tool non dipendono da questi due tool.
 
-    `agenti`: delega_lavoro, lavori_stato e lavori_annulla (calliope/agenti/, 02/10), con un
+    `agenti`: lavoro_affida, lavoro_stato e lavoro_annulla (calliope/agenti/, 02/10), con un
     agente configurato (dgx.yaml o agenti_url); `agenti_modelli` sono i nomi dei modelli di
     documento (template) che l'agente sa compilare.
 
@@ -2079,7 +2079,7 @@ def build_registry(biblioteca: bool = False, pc: dict | None = None,
     `immagini`: i tool delle foto (calliope/tools/immagini.py, 05/10), {storia, pc,
     archivio}; None = le foto sono spente o il modello non le vede.
     `allegati`: i tool dei file allegati (calliope/tools/allegati.py, 05/10): allegato_leggi,
-    allegato_archivia con l'archivio, e il parametro `allegato` di delega_lavoro.
+    allegato_archivia con l'archivio, e il parametro `allegato` di lavoro_affida.
     `cassetto` (08/10, calliope/cassetto.py): con gli allegati, il cassetto dei file per persona
     (allegato_leggi con `cassetto` e `di`, cassetto_gestisci).
     `minori_tool`: compiti_aiuto e minore_gestisci (calliope/tools/minori.py, 05/10), con
@@ -2123,7 +2123,7 @@ def build_registry(biblioteca: bool = False, pc: dict | None = None,
             reg.register(spec)
         # La modalità sviluppo (08/10, calliope/sviluppo.py): l'iter di estensioni e programmi
         from .sviluppo import sviluppo_specs
-        for spec in sviluppo_specs():
+        for spec in sviluppo_specs(file_pc=file_pc, allegati=bool(allegati)):
             reg.register(spec)
     if ufficio:
         from .ufficio import ufficio_specs

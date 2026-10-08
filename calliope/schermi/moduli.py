@@ -562,7 +562,7 @@ def annuncio_lavoro(hub, item: dict, lavori, brain) -> str:
         return {"ok": frase is not None,
                 "frase": frase or "Quel lavoro non aspetta più una risposta."}
     try:
-        r = hub.moduli.apri(item["modulo"], riprendi, mitt, "lavori_rispondi", "familiare")
+        r = hub.moduli.apri(item["modulo"], riprendi, mitt, "lavoro_rispondi", "familiare")
     except Exception:  # noqa: BLE001
         return msg
     if r.get("mostrato"):

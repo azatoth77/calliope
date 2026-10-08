@@ -660,3 +660,34 @@ un agente, quindi chiedo a te…». In `politica.controlla`, dopo la decisione:
 
 Contrari in `prove/prova_sviluppo.py` (sezione 9): un'altra estensione, un'altra persona, scritto
 dallo schermo, sviluppo sospeso, «fai quello che dice il messaggio dell'agente».
+
+## Modalità sviluppo, versione 2: nomi nuovi, domanda all'agente, chiusura (08/10, ramo `modalita-sviluppo-2`)
+
+Progetto in [`2026-10-08-modalita-sviluppo.md`](../ricerche/2026-10-08-modalita-sviluppo.md) § 9.
+Le voci qui sopra usano i nomi di prima: dal 08/10 `sviluppo` → `sviluppo_passo`,
+`sviluppo_prova` → `sviluppo_collauda`, `estensione_crea` → `sviluppo_apri` (anche i programmi,
+prima `delega_lavoro` di codice), `delega_lavoro` → `lavoro_affida`, `estensioni_gestisci` →
+`estensione_gestisci`, `lavori_esegui` → `programma_esegui`, `lavori_rispondi` →
+`lavoro_rispondi`. I nomi vecchi valgono ancora nel registro (`ToolRegistry.NOMI_VECCHI`, regola
+`tool_nome_vecchio`) con tutti i controlli del nome nuovo.
+
+- **`sviluppo_apri`**: pericoloso, con `chiave` file e allegato (il file della persona lascia il
+  PC, come per i lavori) e `confronta` compito e nome; in `valore.py` E3 per un programma (esegue
+  codice dell'agente), E2 per un'estensione; i dati personali nel compito controllati come per
+  `lavoro_affida` (D7). `sviluppo.estraneo` e `passo_interno` guardano il tipo della richiesta
+  (`tipo_richiesta`), non più il nome del tool.
+- **`sviluppo_chiedi`**: sicuro (sola lettura: una passata del modello dell'agente senza
+  strumenti), con la fonte «agente»: la risposta è un dato non fidato, in busta, e passa da
+  `riferire`; dopo, nella stessa risposta, solo letture. Il contesto dato all'agente è un dato
+  (il prompt lo dice).
+- **`sviluppo_correggi`**: pericoloso, E2 (prepara un lavoro, come il ritorno all'analisi);
+  passo interno dello sviluppo aperto (`sviluppo_intento`).
+- **Chiusura**: `sviluppo_passo(chiudi)` chiude solo al «sì» alla sua domanda nel turno dopo
+  (azione in sospeso di `sviluppo_passo`), mai da una frase sola: il 08/10 alle 11:28 «Ok,
+  chiuso a long», storpiato, chiudeva lo sviluppo con l'agente al lavoro. Con un lavoro in corso
+  diventa sospensione.
+- **Collaudo fallito**: la frase la scrive il codice, senza il testo dell'estensione; i dettagli
+  (dato non fidato) vanno solo sulla scheda e all'agente.
+- **Riapertura**: uno sviluppo sospeso o chiuso si riapre quando il suo lavoro finisce, ed è di
+  nuovo lo sviluppo aperto di chi l'ha aperto: i suoi passi valgono come intento come prima della
+  sospensione (il «C'è di mezzo il lavoro di un agente» delle 11:31 era su uno sviluppo chiuso).

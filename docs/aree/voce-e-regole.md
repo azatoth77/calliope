@@ -535,3 +535,18 @@ l'ultima cosa detta):
 - **`sviluppo_promemoria_giorno`**: una volta al giorno, alla prima risposta a chi amministra, gli
   sviluppi sospesi («A proposito: lo sviluppo di «…» è sospeso, eravamo al collaudo. Quando vuoi,
   dimmi «riprendiamo lo sviluppo di …».»).
+
+## Modalità sviluppo, versione 2: nomi dei tool e righe di fase (08/10, ramo `modalita-sviluppo-2`)
+
+Nomi nuovi dei tool dei lavori e dello sviluppo (nome singolare + verbo, prefisso per famiglia:
+`lavoro_affida`, `lavoro_stato`, `lavoro_risultato`, `lavoro_rispondi`, `lavoro_annulla`,
+`programma_esegui`, `sviluppo_apri`, `sviluppo_passo`, `sviluppo_collauda`, `sviluppo_chiedi`,
+`sviluppo_correggi`, `estensione_gestisci`; le voci qui sopra hanno i nomi di prima), con le
+misure prima e dopo in [agenti-estensioni](agenti-estensioni.md#modalità-sviluppo-versione-2-0810-ramo-modalita-sviluppo-2).
+Il prompt dei lavori dice che il codice e le funzioni permanenti sono `sviluppo_apri`. Nei dati
+del turno (`SVILUPPO_MSG`) al collaudo e alla revisione: «perché?» → `sviluppo_chiedi`,
+«correggilo» → `sviluppo_correggi`; allo sviluppo fermo a una tappa le tre scelte; per fermarsi
+«chiudi (chiede conferma)». Regole nuove nel registro: `tool_nome_vecchio`,
+`lavoro_codice_sviluppo`, `sviluppo_apertura`, `sviluppo_collaudo_fallito`, `sviluppo_chiedi`,
+`sviluppo_chiedi_guasto`, `sviluppo_correzione`, `sviluppo_chiudi_conferma`,
+`sviluppo_chiudi_sospende`, `sviluppo_tappa_continua`, `sviluppo_tappa_cambia`.

@@ -31,6 +31,16 @@ REFUSAL = {
 # per «richiesta_tutore», la richiesta del minore non partiva e il modello diceva lo stesso
 # «glielo chiedo»). Entro questa distanza, con un solo tool così vicino, vale quel tool
 # (regola `tool_nome_corretto`); oltre, l'errore dice i nomi più vicini
+# I nomi di prima del 08/10 (modalità sviluppo, versione 2: nome singolare + verbo, prefisso per
+# famiglia): una conversazione o un'azione in sospeso di prima, o il modello che li ripesca dalla
+# storia, valgono come il tool nuovo, con tutti i controlli (regola `tool_nome_vecchio`)
+NOMI_VECCHI = {
+    "delega_lavoro": "lavoro_affida", "lavori_stato": "lavoro_stato",
+    "lavori_annulla": "lavoro_annulla", "lavori_rispondi": "lavoro_rispondi",
+    "risultato_lavoro": "lavoro_risultato", "lavori_esegui": "programma_esegui",
+    "estensione_crea": "sviluppo_apri", "estensioni_gestisci": "estensione_gestisci",
+    "sviluppo": "sviluppo_passo", "sviluppo_prova": "sviluppo_collauda",
+}
 NOME_DISTANZA_MAX = 2
 NOME_LUNGHEZZA_MIN = 6
 NOME_SUGGERIMENTI_MAX = 4
@@ -127,11 +137,11 @@ class ToolRegistry:
         argomento (tutti assenti o vuoti): 06/10, `conversazione_cerca({})` faceva partire
         «Fammi ricordare.» e la ricerca. Brain non annuncia un tool così; `call` risponde
         subito con l'errore. Una chiamata con qualche argomento passa com'è: molti tool
-        completano da soli quelli che mancano (la proposta in sospeso di delega_lavoro,
+        completano da soli quelli che mancano (la proposta in sospeso di lavoro_affida,
         l'esercizio in corso di compiti_aiuto)."""
         spec = self._tools.get(name)
         if spec is None:
-            vero = self.nome_vicino(name)
+            vero = NOMI_VECCHI.get(name) or self.nome_vicino(name)
             spec = self._tools.get(vero) if vero else None
         if spec is None:
             return []
@@ -159,6 +169,10 @@ class ToolRegistry:
         storia o scriverlo come testo). Il rifiuto ha una frase pronta e chiude il turno.
         """
         spec = self._tools.get(name)
+        if spec is None and self._tools.get(NOMI_VECCHI.get(name, "")) is not None:
+            note_rule(ctx, "tool_nome_vecchio")
+            name = NOMI_VECCHI[name]
+            spec = self._tools[name]
         if spec is None:
             # Nome storpiato ma senza dubbi: vale il tool giusto, con tutti i controlli qui
             # sotto (politica, livello, minori) come se il modello l'avesse scritto bene

@@ -1086,8 +1086,8 @@ agenti:
   # «gemma davanti, agenti dietro». I lavori lunghi (programmi, relazioni, documenti da un
   # modello, ricerche a più passi) li fa un modello grande su un'altra macchina (la DGX
   # Spark, via tunnel SSH) o sullo stesso Ollama; la voce non li aspetta mai e li annuncia a
-  # lavoro finito. Senza agente configurato i tool delega_lavoro, lavori_stato e
-  # lavori_annulla non ci sono.
+  # lavoro finito. Senza agente configurato i tool lavoro_affida, lavoro_stato e
+  # lavoro_annulla non ci sono.
   agenti_enabled: true
   # Il file della DGX (alias SSH, collegamento, porte, modelli), accanto a calliope.yaml e
   # fuori da git. Utente, indirizzo e chiave non ci sono: stanno in .ssh\config sotto
@@ -1208,7 +1208,7 @@ agenti:
   # (fonte web verificata compresa) si procede come prima dell'analisi
   agenti_analisi: true
   agenti_analisi_s: 10.0
-  # Il risultato di un lavoro finito, chiesto a voce (07/10, tool risultato_lavoro: «e il
+  # Il risultato di un lavoro finito, chiesto a voce (07/10, tool lavoro_risultato: «e il
   # risultato?», «leggimelo»): il riassunto dell'agente già salvato; per più dettaglio un
   # riassunto per la voce chiesto al modello dell'agente sul testo intero, entro tanti
   # secondi (oltre, il riassunto salvato). Il testo intero va sullo schermo personale
@@ -1228,7 +1228,7 @@ agenti:
   # `/pause` si chiudono gli stream come prima. Mai sul server della voce
   agenti_pausa_vllm: true
   # Domande dell'agente a metà lavoro (03/10): se gli manca un dato il lavoro aspetta la
-  # risposta (lavori_rispondi) con il suo contesto. Al più tante domande per lavoro; dopo
+  # risposta (lavoro_rispondi) con il suo contesto. Al più tante domande per lavoro; dopo
   # tanti minuti senza risposta si chiude da solo, e Calliope lo dice
   agenti_domande_max: 3
   agenti_attesa_risposta_min: 120.0
@@ -1243,7 +1243,7 @@ agenti:
   agenti_esempio_kb: 1024
   # Lavori interrotti da un riavvio di Calliope (06/10, calliope/agenti/ripresa.py): chi li
   # aveva chiesti lo sente al primo silenzio («… Lo rifaccio?») se il lavoro era vivo meno
-  # di tante ore fa; quelli più vecchi restano solo nell'elenco di lavori_stato, per un giorno
+  # di tante ore fa; quelli più vecchi restano solo nell'elenco di lavoro_stato, per un giorno
   agenti_interrotti_annuncio_h: 3.0
   # Modalità sviluppo (08/10, calliope/sviluppo.py): per chi amministra un'estensione o un
   # programma è un iter a fasi (analisi, sviluppo e test, collaudo, revisione, attivazione),
@@ -1256,6 +1256,10 @@ agenti:
   sviluppo_sospendi_min: 30.0
   sviluppo_promemoria: true
   sviluppo_programma_righe: 150
+  # Versione 2 (08/10): «perché?» durante il collaudo va a chi ha scritto il codice
+  # (sviluppo_chiedi): una passata del modello dell'agente in sola lettura, con il contesto
+  # dello sviluppo; dopo tanti secondi senza risposta lo si dice e si propone la correzione
+  sviluppo_chiedi_s: 60.0
 
 estensioni:
   # Estensioni (calliope/estensioni/, 04/10, docs/ricerche/2026-10-04-estensioni-e-guardrail.md):

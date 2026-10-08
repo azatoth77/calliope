@@ -3,7 +3,7 @@ Agenti in secondo piano: «gemma davanti, agenti dietro» (02/10/2026,
 docs/ricerche/2026-10-02-llm-per-spark.md).
 
 La voce (gemma4, sempre residente) riconosce un lavoro lungo e lo delega con il tool
-`delega_lavoro`; un modello grande lo fa in secondo piano, su un'altra macchina (la DGX
+`lavoro_affida`; un modello grande lo fa in secondo piano, su un'altra macchina (la DGX
 Spark, via tunnel SSH) o sullo stesso Ollama (prove, macchina senza DGX), e Calliope lo
 annuncia a lavoro finito.
 

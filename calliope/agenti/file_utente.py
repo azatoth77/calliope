@@ -3,7 +3,7 @@ I file della persona dati all'agente (03/10/2026): «correggi lo script backup.p
 «riassumimi il PDF del contratto», «aggiungi una colonna al foglio spese.xlsx».
 
 Il flusso (calliope/tools/agenti.py e servizio.py):
-1. `delega_lavoro(file=…)` cerca il file sul PC con l'esecutore (lo stesso di pc_cerca_file,
+1. `lavoro_affida(file=…)` cerca il file sul PC con l'esecutore (lo stesso di pc_cerca_file,
    con gli stessi permessi: proprietari del PC o chi amministra, oppure un documento appena
    scritto per chi parla) e propone «Mando una copia di … all'agente … Procedo?»: il file
    lascia il portatile, quindi la conferma è sempre esplicita (azione in sospeso);

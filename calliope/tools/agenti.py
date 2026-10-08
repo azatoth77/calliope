@@ -2,24 +2,32 @@
 I tool dei lavori in secondo piano (calliope/agenti/, 02/10/2026): «gemma davanti, agenti
 dietro».
 
-- delega_lavoro(tipo, compito, …): un lavoro lungo il cui risultato è un programma o un
-  file complesso va all'agente (modello grande, in secondo piano). Il criterio è nella
+Nomi dal 08/10 (modalità sviluppo, versione 2: nome singolare + verbo, prefisso per famiglia):
+delega_lavoro → lavoro_affida (senza il codice: i programmi passano da sviluppo_apri, in
+tools/sviluppo.py), lavori_stato → lavoro_stato, lavori_annulla → lavoro_annulla,
+lavori_rispondi → lavoro_rispondi, risultato_lavoro → lavoro_risultato, lavori_esegui →
+programma_esegui. I nomi vecchi valgono ancora nel registro (ToolRegistry.NOMI_VECCHI).
+
+- lavoro_affida(tipo, compito, …): un lavoro lungo il cui risultato è un file complesso (una
+  relazione, una ricerca a più passi) va all'agente (modello grande, in secondo piano). Il
+  codice no: un programma è uno sviluppo (sviluppo_apri tipo programma; qui un tipo codice ci
+  passa da sé, regola `lavoro_codice_sviluppo`). Il criterio è nella
   descrizione e nel prompt, non in una regola: la ricerca del 02/10 aveva visto delegare
   «come si scrive un ciclo for?» (2 su 2), e una regola sulle parole sbaglierebbe al
   contrario. I lavori costosi chiedono conferma («Procedo?», azione in sospeso); la
   conferma (`conferma` = l'id del lavoro proposto) vale solo nella risposta dopo, della
   stessa persona, come le installazioni.
-- lavori_stato: a che punto è, con il passo dell'agente.
-- lavori_annulla: ferma il lavoro (subito: lo stream si chiude, la sandbox si ferma).
-- lavori_rispondi(lavoro, risposta) (03/10): la risposta a una domanda dell'agente a metà
+- lavoro_stato: a che punto è, con il passo dell'agente.
+- lavoro_annulla: ferma il lavoro (subito: lo stream si chiude, la sandbox si ferma).
+- lavoro_rispondi(lavoro, risposta) (03/10): la risposta a una domanda dell'agente a metà
   lavoro; solo chi l'ha chiesto o chi amministra. La domanda annunciata è un'azione in
   sospeso, ma la persona può rispondere anche più tardi («per il lavoro della relazione: il
   cliente è Rossi»).
-- lavori_esegui(lavoro, dati) (04/10): esegue di nuovo il programma di un lavoro di codice
+- programma_esegui(lavoro, dati) (04/10): esegue di nuovo il programma di un lavoro di codice
   finito, nella stessa sandbox, e ne mostra l'uscita in diretta sullo schermo personale («fammelo
-  vedere», «eseguilo di nuovo», «eseguilo con 3 e 5»); «fermalo» è lavori_annulla, che ferma
+  vedere», «eseguilo di nuovo», «eseguilo con 3 e 5»); «fermalo» è lavoro_annulla, che ferma
   prima il programma in esecuzione. Solo chi ha chiesto il lavoro o chi amministra.
-- delega_lavoro(file=…) (03/10): un lavoro su un file della persona che sta sul PC. Il file si
+- lavoro_affida(file=…) (03/10): un lavoro su un file della persona che sta sul PC. Il file si
   cerca come pc_cerca_file, con gli stessi permessi (proprietari del PC o chi amministra, o un
   documento appena scritto per chi parla), e prima di mandarne la copia la conferma è sempre
   esplicita: il file lascia il PC.
@@ -40,6 +48,15 @@ from .spec import ToolContext, ToolSpec, note_rule, serve_la_voce
 from ..testi import FAMILY, NIENTE, RANK
 
 TIPI = ("codice", "documento", "ricerca", "altro")
+# I tipi che il modello vede in lavoro_affida (08/10, versione 2): il codice è di sviluppo_apri
+TIPI_AFFIDA = ("documento", "ricerca", "altro")
+
+
+def tool_di(lav) -> str:
+    """Il tool che conferma o richiama un lavoro proposto: i programmi e le estensioni sono
+    sviluppi (sviluppo_apri), il resto lavoro_affida."""
+    return "sviluppo_apri" if getattr(lav, "tipo", "") in ("codice", "estensione") \
+        else "lavoro_affida"
 
 
 def _final(text: str, **extra) -> dict:
@@ -85,7 +102,7 @@ def _permesso(ctx, tipo: str, rigido: bool, args: dict | None = None):
     need = (getattr(cfg, "agenti_livello_codice", "amministra")
             if tipo in ("codice", "estensione") else getattr(cfg, "agenti_livello", "familiare"))
     # Le estensioni (04/10) come il codice: solo chi amministra, con la voce nella frase
-    tool = "estensione_crea" if tipo == "estensione" else "delega_lavoro"
+    tool = "sviluppo_apri" if tipo in ("estensione", "codice") else "lavoro_affida"
     cosa = ("creare una funzione nuova di Calliope" if tipo == "estensione"
             else "affidare un programma all'agente")
     if RANK.get(level, 0) < max(1, RANK.get(need, 2)):
@@ -157,7 +174,7 @@ def _trova_file(ctx, prof, file: str):
         r = _call(name, ex.risultato, prof.id, n)
         if not r.get("ok"):
             return None, {**r, "fatto": NIENTE,
-                          "cosa_fare": "chiama delega_lavoro con file = il nome del file detto "
+                          "cosa_fare": "richiama il tool con file = il nome del file detto "
                                        "dalla persona"}
         items = [r["item"]]
     else:
@@ -284,18 +301,28 @@ def _proponi(ctx, svc, lav, turno) -> dict:
     frase = svc.proponi(lav, turno)
     # La modalità sviluppo (08/10, calliope/sviluppo.py): la specifica proposta
     from .sviluppo import su_proposta
-    su_proposta(svc, lav)
+    sv = su_proposta(svc, lav)
+    tool = tool_di(lav)
     if lav.file_utente is None and len(lav.file_candidati) > 1:
         cosa = "i file trovati: " + ", ".join(f"{i} = {c['detto']}" for i, c in
                                               enumerate(lav.file_candidati, 1))
         return _final(frase, fatto="domanda: il lavoro NON è ancora cominciato",
                       in_sospeso={"domanda": "Quale mando all'agente?", "cosa": cosa,
-                                  "tool": "delega_lavoro",
+                                  "tool": tool,
                                   "argomenti": f'proposta="{lav.id}", file = il numero del '
                                                f'file scelto, tipo e compito come prima'})
+    domanda = "Procedo?"
+    if sv is not None and sv.fase == "analisi" and lav.file_utente is None:
+        # Versione 2 (08/10): l'apertura esplicita e la specifica letta sempre, che chiude
+        # l'analisi («Entriamo in modalità sviluppo per «…». Ho capito così: … Va bene così, o
+        # la cambiamo?»). Prima la modalità non si vedeva (DGX, 08/10 11:06)
+        frase = svc.sviluppi.frase_proposta(sv, lav)
+        domanda = "Va bene così, o la cambiamo?"
+        if ctx is not None:
+            note_rule(ctx, "sviluppo_apertura")
     return _final(frase, fatto="proposta: il lavoro NON è ancora cominciato",
-                  in_sospeso={"domanda": "Procedo?", "cosa": f"affidare all'agente "
-                              f"«{lav.titolo}»", "tool": "delega_lavoro",
+                  in_sospeso={"domanda": domanda, "cosa": f"affidare all'agente "
+                              f"«{lav.titolo}»", "tool": tool,
                               "argomenti": {"proposta": lav.id}})
 
 
@@ -352,17 +379,18 @@ def _analisi(ctx, svc, prof, tipo: str, compito: str, crea, tool: str, nota: str
             return {"ok": True, "fatto": f"NIENTE affidato: c'è già un tool che lo fa ({e.tool})",
                     "conferma": frase, "risposta_finale": frase,
                     "in_sospeso": {"domanda": frase, "cosa": "affidare comunque il lavoro",
-                                   "tool": "delega_lavoro",
-                                   "argomenti": {"tipo": tipo, "compito": compito}}}, e, ""
+                                   "tool": tool,
+                                   "argomenti": {"tipo": "programma" if tipo == "codice"
+                                                 else tipo, "compito": compito}}}, e, ""
     if e.esito == "estensione":
         # Cambiare o creare un'estensione non è un lavoro di codice (08/10): il modello richiama
-        # estensione_crea (con modifica per una che c'è). Niente frase detta: continua lui
+        # sviluppo_apri (con modifica per una che c'è). Niente frase detta: continua lui
         from .estensioni import elenco_breve
         est = getattr(ctx, "estensioni", None)
         ci_sono = elenco_breve(est) if est is not None else ""
         return {"ok": False, "fatto": f"{NIENTE}: il lavoro NON è stato affidato",
-                "errore": "è un'estensione: si crea o si cambia con estensione_crea",
-                "cosa_fare": ("richiama estensione_crea con lo stesso compito"
+                "errore": "è un'estensione: si crea o si cambia con sviluppo_apri",
+                "cosa_fare": ("richiama sviluppo_apri con lo stesso compito"
                               + (f"; per cambiarne una che c'è, modifica = il suo nome tra "
                                  f"questi: {ci_sono}" if ci_sono else ""))}, e, ""
     if e.esito == "impossibile":
@@ -377,8 +405,9 @@ def _analisi(ctx, svc, prof, tipo: str, compito: str, crea, tool: str, nota: str
                "in_sospeso": {"domanda": frase, "cosa": "le risposte per la richiesta di lavoro",
                               "tool": tool,
                               "argomenti": ("compito = la richiesta di prima con le risposte "
-                                            "della persona" + (", tipo = codice"
-                                                               if tool == "delega_lavoro" else ""))}}
+                                            "della persona" + {"codice": ", tipo = programma",
+                                                               "estensione": ", tipo = estensione"}
+                                            .get(tipo, ""))}}
         # Tutte le domande anche sul modulo dello schermo personale, se c'è (moduli.offri)
         from ..schermi.moduli import campo
         frase_schermo = None
@@ -406,7 +435,7 @@ def _analisi(ctx, svc, prof, tipo: str, compito: str, crea, tool: str, nota: str
 
 
 def _a_estensione(ctx, compito: str):
-    """Il risultato di estensione_crea con modifica = l'estensione che il compito di un lavoro
+    """Il risultato di sviluppo_apri con modifica = l'estensione che il compito di un lavoro
     di codice nomina («…dell'estensione 'Meteo per città'…»), o None. Solo con la parola
     «estensione» e il titolo (o il nome) di un'estensione che c'è: «un programma che legge il
     meteo per città» resta un programma."""
@@ -457,7 +486,7 @@ def _delega_lavoro(ctx: ToolContext, tipo: str = "", compito: str = "", formato:
     if str(tipo or "").strip().lower() == "codice" and RANK.get(_level(ctx), 0) < RANK.get(
             serve, 2):
         # Scritto da uno schermo personale: il codice all'agente vuole la voce (03/10)
-        voce = serve_la_voce(ctx, "delega_lavoro", {"tipo": "codice", "compito": compito},
+        voce = serve_la_voce(ctx, "sviluppo_apri", {"tipo": "programma", "compito": compito},
                              "affidare un programma all'agente", serve)
         if voce is not None:
             return voce
@@ -510,7 +539,7 @@ def _delega_lavoro(ctx: ToolContext, tipo: str = "", compito: str = "", formato:
     richiesta = {k: v for k, v in {"tipo": tipo, "compito": compito, "formato": formato,
                                    "modello": modello, "vincoli": vincoli,
                                    "file": file}.items() if v}
-    # Il modello richiama delega_lavoro (senza conferma) dopo il «sì» alla proposta: è la
+    # Il modello richiama lavoro_affida (senza conferma) dopo il «sì» alla proposta: è la
     # stessa scelta in un'altra forma, e vale come conferma (stesso tipo, compito simile)
     off = svc.offerta(getattr(prof, "id", None), turno) if hasattr(svc, "offerta") else None
     implicita = (off is not None and off["lavoro"].tipo == tipo and difflib.SequenceMatcher(
@@ -540,7 +569,7 @@ def _delega_lavoro(ctx: ToolContext, tipo: str = "", compito: str = "", formato:
     # Uno sviluppo aperto (08/10, modalità sviluppo): niente lavori nuovi dell'agente finché
     # non è chiuso o sospeso (decisione di Dario), salvo il programma di quello sviluppo
     from .sviluppo import apri_se_serve, controlla_nuovo
-    blocco = controlla_nuovo(ctx, "delega_lavoro", {"tipo": tipo})
+    blocco = controlla_nuovo(ctx, "lavoro_affida", {"tipo": tipo})
     if blocco is not None:
         return blocco
     # Una richiesta nuova di codice vuole la voce riconosciuta in questa frase
@@ -597,9 +626,9 @@ def _delega_lavoro(ctx: ToolContext, tipo: str = "", compito: str = "", formato:
         return lv
 
     # Un lavoro di codice che cambia un'estensione che c'è (08/10, DGX del 07/10: «Modifica la
-    # logica dell'estensione 'Meteo per città'…» con delega_lavoro → l'analisi diceva
+    # logica dell'estensione 'Meteo per città'…» con lavoro_affida → l'analisi diceva
     # «impossibile: non posso modificare le estensioni»). Le estensioni si cambiano con
-    # estensione_crea (una versione nuova da approvare): la stessa richiesta, già confermata
+    # sviluppo_apri (una versione nuova da approvare): la stessa richiesta, già confermata
     # alla domanda della politica, passa a lei. Regola `delega_estensione`
     if tipo == "codice" and not modello and not candidati:
         da_estensione = _a_estensione(ctx, compito)
@@ -616,7 +645,7 @@ def _delega_lavoro(ctx: ToolContext, tipo: str = "", compito: str = "", formato:
         if candidati:
             nota = ("La persona dà all'agente il file " + ", ".join(
                 c["detto"] for c in candidati[:3]) + ": è l'input del programma.")
-        ris, esito, _ = _analisi(ctx, svc, prof, tipo, compito, crea, "delega_lavoro", nota)
+        ris, esito, _ = _analisi(ctx, svc, prof, tipo, compito, crea, "sviluppo_apri", nota)
 
         if ris is not None:
             if esito is not None and esito.esito in ("impossibile", "gia_fatto", "estensione"):
@@ -641,6 +670,21 @@ def _delega_lavoro(ctx: ToolContext, tipo: str = "", compito: str = "", formato:
     return _avvia(ctx, svc, lav)
 
 
+def _lavoro_affida(ctx: ToolContext, tipo: str = "", **altro) -> dict:
+    """lavoro_affida (08/10, versione 2): i lavori che non sono codice. Un tipo codice (il
+    modello che sbaglia tool, una conversazione di prima del 08/10) va a sviluppo_apri come
+    programma: una conversione della forma di una scelta già fatta (principio 10), regola
+    `lavoro_codice_sviluppo`. Una proposta («sì» a «Procedo?») vale com'è."""
+    t = str(tipo or "").strip().lower()
+    if t in ("codice", "programma", "script") and not str(altro.get("proposta") or "").strip() \
+            and not str(altro.get("modello") or "").strip():
+        note_rule(ctx, "lavoro_codice_sviluppo")
+        from .sviluppo import _sviluppo_apri
+        return _sviluppo_apri(ctx, tipo="programma", **{k: v for k, v in altro.items()
+                                                       if k not in ("formato", "modello")})
+    return _delega_lavoro(ctx, tipo=tipo, **altro)
+
+
 def _lavori_stato(ctx: ToolContext) -> dict:
     svc = getattr(ctx, "lavori", None)
     if svc is None:
@@ -662,8 +706,8 @@ def _lavori_stato(ctx: ToolContext) -> dict:
     # Gli ultimi lavori finiti di chi parla, anche di prima di un riavvio (07/10, DGX: «e di
     # quelli che hai già fatto?» → «Non ho lavori in corso.» due volte, e la ricerca del giorno
     # prima c'era nella cartella dei risultati), e il risultato del più recente: «Vuoi sentire
-    # il risultato?», il «sì» va a risultato_lavoro (prima: «E il risultato?» dopo lo stato
-    # finiva in lavori_rispondi)
+    # il risultato?», il «sì» va a lavoro_risultato (prima: «E il risultato?» dopo lo stato
+    # finiva in lavoro_rispondi)
     from ..agenti import risultato as ar
     try:
         fin = ar.recenti(svc, prof.id, prof.name, 3)
@@ -693,7 +737,7 @@ def _lavori_stato(ctx: ToolContext) -> dict:
     domanda = ("Vuoi sentire il risultato?" if fatto is fin[0]
                else f"Vuoi sentire il risultato di «{_titolo_detto(fatto.titolo)}»?")
     return _final(f"{frase} {domanda}", in_sospeso={
-        "domanda": domanda, "tool": "risultato_lavoro",
+        "domanda": domanda, "tool": "lavoro_risultato",
         "cosa": f"il risultato di «{fatto.titolo}»", "argomenti": {"lavoro": ar.chiave(fatto)}})
 
 
@@ -712,7 +756,7 @@ def _estensione_del_lavoro(ctx, lav):
         cosa = chi_e(m, n, prima)
         return (f"Ha preparato {cosa}: è da approvare. Vuoi approvarla?",
                 {"domanda": "Vuoi approvarla?", "cosa": f"approvare {cosa}",
-                 "tool": "estensioni_gestisci",
+                 "tool": "estensione_gestisci",
                  "argomenti": {"azione": "approva", "nome": nome}})
     if voce.get("attiva") == n and voce.get("stato") == "attiva":
         return (f"«{m.get('titolo', nome)}» è attiva, versione {n}.", None)
@@ -741,7 +785,7 @@ def _lavori_rispondi(ctx: ToolContext, lavoro: str = "", risposta: str = "") -> 
         return _final(frase, ok=False, fatto=NIENTE)
     # Risposta arrivata a voce: il modulo della domanda sullo schermo si chiude (03/10)
     from ..schermi.moduli import chiudi_per_voce
-    chiudi_per_voce(ctx, "lavori_rispondi", f"lavoro:{lav.id}")
+    chiudi_per_voce(ctx, "lavoro_rispondi", f"lavoro:{lav.id}")
     frase = svc.rispondi(lav, testo)
     if frase is None:
         return _final("Quel lavoro non aspetta più una risposta.", ok=False, fatto=NIENTE)
@@ -882,9 +926,9 @@ def _titolo_detto(titolo: str) -> str:
 
 
 def _offri_risultato(ctx, svc, prof, frase: str) -> dict:
-    """La frase di un rifiuto di lavori_esegui o lavori_rispondi quando il lavoro finito è una
+    """La frase di un rifiuto di programma_esegui o lavoro_rispondi quando il lavoro finito è una
     ricerca o un documento (07/10, caso vero della DGX: «leggili e dammi un riassunto» →
-    lavori_esegui «Non ho programmi finiti da eseguire», due volte): si dice cos'è e si
+    programma_esegui «Non ho programmi finiti da eseguire», due volte): si dice cos'è e si
     propone il risultato, con l'azione in sospeso per il «sì»."""
     from ..agenti import risultato as ar
     lav, _, _ = ar.trova(svc, getattr(prof, "id", None), getattr(prof, "name", None), "",
@@ -895,7 +939,7 @@ def _offri_risultato(ctx, svc, prof, frase: str) -> dict:
     tipo = {"ricerca": "una ricerca", "documento": "un documento"}.get(lav.tipo, "un lavoro")
     domanda = f"«{_titolo_detto(lav.titolo)}» è {tipo}, non un programma: vuoi il risultato?"
     return _final(domanda, ok=False, fatto=NIENTE,
-                  in_sospeso={"domanda": domanda, "tool": "risultato_lavoro",
+                  in_sospeso={"domanda": domanda, "tool": "lavoro_risultato",
                               "cosa": f"il risultato di «{lav.titolo}»",
                               "argomenti": {"lavoro": lav.id}})
 
@@ -974,9 +1018,9 @@ def agenti_specs(formati=("word", "excel", "pdf"), modelli=(),
                  file_pc: bool = False, archivio: bool = False,
                  allegati: bool = False) -> list[ToolSpec]:
     """I sei tool; `modelli`: i nomi dei modelli di documento (template) che ci sono;
-    `file_pc`: c'è un PC con la ricerca dei file (il parametro `file` di delega_lavoro);
+    `file_pc`: c'è un PC con la ricerca dei file (il parametro `file` di lavoro_affida);
     `archivio`: le ricerche possono interrogare il grafo dei documenti di casa."""
-    props = {"tipo": {"type": "string", "enum": list(TIPI)},
+    props = {"tipo": {"type": "string", "enum": list(TIPI_AFFIDA)},
              "compito": {"type": "string"},
              "vincoli": {"type": "string"},
              "proposta": {"type": "string"}}
@@ -998,47 +1042,46 @@ def agenti_specs(formati=("word", "excel", "pdf"), modelli=(),
                 "insieme più documenti o confrontano periodi (tipo ricerca)." if archivio else "")
     return [
         ToolSpec(
-            name="delega_lavoro",
+            name="lavoro_affida",
             description=(
                 "Affida a un agente in secondo piano un lavoro lungo il cui risultato è un "
-                "programma o un file complesso: script e programmi in Python o C# (tipo "
-                "codice), relazioni, "
-                "presentazioni o documenti di più pagine o da un modello (tipo documento), "
-                "ricerche a più passi (tipo ricerca). NON per domande brevi e spiegazioni "
+                "file complesso: relazioni, presentazioni o documenti di più pagine o da un "
+                "modello (tipo documento), ricerche a più passi (tipo ricerca). NON per il "
+                "codice (script, programmi) né per le funzioni permanenti di Calliope "
+                "(estensioni): quelli sono sviluppo_apri, anche se è stato rifiutato. NON per "
+                "domande brevi e spiegazioni "
                 "(«come si scrive un ciclo for?»): rispondi tu. NON per lettere, tabelle ed "
-                "elenchi semplici: documento_crea. NON per le funzioni permanenti di Calliope "
-                "(estensioni: estensione_crea), nemmeno se estensione_crea è stato rifiutato: "
-                "il risultato qui è un programma a sé. compito: tutto quello che serve, con i dati "
+                "elenchi semplici: documento_crea. compito: tutto quello che serve, con i dati "
                 "come detti. vincoli: facoltativo. Se il risultato finisce con «Procedo?», "
                 "solo dopo il sì richiamalo con proposta = l'id proposto (es. «L3»)."
                 + (" file: solo se il lavoro è su un file della persona che sta sul PC "
-                   "(«correggi lo script backup.py», «riassumimi il PDF del contratto», "
+                   "(«riassumimi il PDF del contratto», "
                    "«aggiungi una colonna al foglio spese.xlsx»): il nome del file come detto, "
                    "o il numero di un risultato dell'ultima pc_cerca_file. Ne mando una copia "
                    "all'agente solo dopo il sì." if file_pc else "")
                 + (" allegato: il numero di un file allegato in questa conversazione, se il "
-                   "lavoro è su quel file («dallo all'agente», «correggi questo script»)."
+                   "lavoro è su quel file («dallo all'agente», «riassumilo»)."
                    if allegati else "")
                 + " NON per leggere o riassumere il risultato di un lavoro già finito: "
-                  "risultato_lavoro."
+                  "lavoro_risultato."
                 + mod_txt + arch_txt),
             parameters={"type": "object", "properties": props,
                         "required": ["tipo", "compito"]},
-            func=_delega_lavoro, risk="azione", levels=FAMILY),
+            func=_lavoro_affida, risk="azione", levels=FAMILY),
         ToolSpec(
-            name="lavori_stato",
-            description=("Dice a che punto sono i lavori affidati all'agente con delega_lavoro "
+            name="lavoro_stato",
+            description=("Dice a che punto sono i lavori affidati all'agente "
                          "(«a che punto è il programma?», «hai finito la relazione?») e quali "
                          "sono finiti di recente, anche nei giorni prima («e quelli che hai già "
                          "fatto?», «quali lavori hai finito?»). NON quando chiede il risultato "
                          "o il contenuto di un lavoro finito, anche nominato («e il risultato "
                          "della ricerca sulle pompe di calore?», «cosa ha trovato?»): quello è "
-                         "risultato_lavoro, con lavoro = le parole del titolo."),
+                         "lavoro_risultato, con lavoro = le parole del titolo."),
             parameters={"type": "object", "properties": {}, "required": []},
             func=_lavori_stato, risk="lettura", levels=FAMILY),
         ToolSpec(
-            name="lavori_annulla",
-            description=("Ferma un lavoro affidato all'agente con delega_lavoro («ferma il "
+            name="lavoro_annulla",
+            description=("Ferma un lavoro affidato all'agente («ferma il "
                          "lavoro», «annulla il programma»), o il programma che sto eseguendo "
                          "sullo schermo («fermalo»). quale: ultimo (predefinito) o tutti."),
             parameters={"type": "object",
@@ -1046,35 +1089,35 @@ def agenti_specs(formati=("word", "excel", "pdf"), modelli=(),
                         "required": []},
             func=_lavori_annulla, risk="azione", levels=FAMILY),
         ToolSpec(
-            name="lavori_esegui",
+            name="programma_esegui",
             description=("Solo per i programmi: esegue di nuovo il programma scritto "
                          "dall'agente in un lavoro di codice finito e ne mostra l'uscita sullo "
                          "schermo («fammelo vedere», "
                          "«eseguilo di nuovo», «eseguilo con 3 e 5»). dati: i valori detti o "
                          "scritti, uno per elemento (vuoto = senza dati); lavoro: id (es. «L3») "
-                         "o vuoto per l'ultimo. «Fermalo» è lavori_annulla. È anche il modo di "
+                         "o vuoto per l'ultimo. «Fermalo» è lavoro_annulla. È anche il modo di "
                          "usare di nuovo un programma dell'agente: non ha un comando a voce "
                          "suo. NON per ricerche e documenti: il loro risultato è "
-                         "risultato_lavoro."),
+                         "lavoro_risultato."),
             parameters={"type": "object",
                         "properties": {"lavoro": {"type": "string"},
                                        "dati": {"type": "array", "items": {"type": "string"}}},
                         "required": []},
             func=_lavori_esegui, risk="azione", levels=FAMILY),
         ToolSpec(
-            name="lavori_rispondi",
+            name="lavoro_rispondi",
             description=("Solo quando l'agente ha fatto una domanda e il lavoro la aspetta: "
                          "gli dà la risposta («il cliente è Rossi», anche solo «Rossi»). lavoro: "
                          "id (es. «L3») o vuoto se ce n'è uno solo; risposta: quello che ha "
                          "detto chi parla, con i dati come detti. NON per avere il risultato di "
-                         "un lavoro finito: risultato_lavoro."),
+                         "un lavoro finito: lavoro_risultato."),
             parameters={"type": "object",
                         "properties": {"lavoro": {"type": "string"},
                                        "risposta": {"type": "string"}},
                         "required": ["risposta"]},
             func=_lavori_rispondi, risk="azione", levels=FAMILY),
         ToolSpec(
-            name="risultato_lavoro",
+            name="lavoro_risultato",
             description=("Il risultato di un lavoro dell'agente già finito: cosa ha trovato o "
                          "scritto («e il risultato?», «cosa ha trovato?», «e il risultato "
                          "della ricerca sulle pompe di calore?», «leggimelo», "

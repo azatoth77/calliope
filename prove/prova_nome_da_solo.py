@@ -309,7 +309,7 @@ def prova_argomenti_mancanti():
     verifica("mancanti: argomento vuoto", reg.mancanti("conversazione_cerca", {"domanda": " "})
              == ["domanda"])
     verifica("contrario: con un argomento qualsiasi passa (completano i tool)",
-             reg.mancanti("delega_lavoro", {"proposta": "L1"}) == [])
+             reg.mancanti("lavoro_affida", {"proposta": "L1"}) == [])
     attese = []
     b.on_tool_start = attese.append
     r = turno(b, "di cosa abbiamo parlato ieri?", chiama("conversazione_cerca", {}),

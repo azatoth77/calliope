@@ -12,7 +12,7 @@ ricreato nello stesso processo, con il pid del file cambiato (come un processo n
 
 - lo stato su disco (in_corso.json) a ogni cambio, con la sandbox e la cartella;
 - all'avvio il lavoro in corso diventa interrotto: annuncio alla persona con «Lo rifaccio?» e
-  azione in sospeso; lavori_stato lo elenca; gli id nuovi non ripetono quelli di prima;
+  azione in sospeso; lavoro_stato lo elenca; gli id nuovi non ripetono quelli di prima;
 - «sì» detto alla voce (Brain con una voce finta, annuncio con la fonte «agente» come nel
   ciclo): lavoro nuovo con lo stesso compito, la stessa cartella e la sandbox con i file già
   scritti (l'agente li vede, con il vincolo della ripresa); finisce e lo dice;
@@ -201,26 +201,26 @@ verifica("annuncio a Mario: si è interrotto, ripartirei dai file, «Lo rifaccio
          and "aveva già scritto 2 file" in msg and msg.endswith("Lo rifaccio?")
          and item.get("chi") == "mario-id", msg)
 off = (item or {}).get("in_sospeso") or {}
-verifica("azione in sospeso: delega_lavoro con l'id del lavoro interrotto",
-         off.get("tool") == "delega_lavoro" and off.get("argomenti") == {"proposta": lav.id},
+verifica("azione in sospeso: lavoro_affida con l'id del lavoro interrotto",
+         off.get("tool") == "lavoro_affida" and off.get("argomenti") == {"proposta": lav.id},
          str(off))
 meta = json.loads((Path(riga["cartella"]) / "lavoro.json").read_text(encoding="utf-8"))
 verifica("lavoro.json nella cartella dice «interrotto»", meta["stato"] == "interrotto")
 banco = Banco(cfg, svc2)
-out = banco.tool("lavori_stato", {}, "Mario", 1)
-verifica("lavori_stato: lo elenca come interrotto e chiede se rifarlo, con l'azione in sospeso",
+out = banco.tool("lavoro_stato", {}, "Mario", 1)
+verifica("lavoro_stato: lo elenca come interrotto e chiede se rifarlo, con l'azione in sospeso",
          "si è interrotto per un riavvio di Calliope: lo rifaccio?" in out["risposta_finale"]
          and (out.get("in_sospeso") or {}).get("argomenti") == {"proposta": lav.id},
          out["risposta_finale"])
 nuovo_id = svc2.nuovo("altro", "prova", "mario-id", "Mario").id
 verifica("gli id nuovi non ripetono quelli di prima", nuovo_id != lav.id
          and int(nuovo_id[1:]) > int(lav.id[1:]), nuovo_id)
-out = banco.tool("delega_lavoro", {"tipo": "codice", "compito": "x", "proposta": lav.id},
+out = banco.tool("lavoro_affida", {"tipo": "codice", "compito": "x", "proposta": lav.id},
                  "Bianca", 2)
 verifica("un'altra persona non può dire «sì» al posto di Mario", out.get("ok") is False
          and interr.stato == "interrotto" and not svc2.attivi(), out.get("risposta_finale"))
 
-# «Sì» detto alla voce: il modello vede l'azione in sospeso e richiama delega_lavoro
+# «Sì» detto alla voce: il modello vede l'azione in sospeso e richiama lavoro_affida
 visto = {}
 
 
@@ -244,7 +244,7 @@ def dice_si(body):
     sis = " ".join(m["content"] for m in body["messages"] if m["role"] == "system")
     m = re.search(r'proposta="(L\d+)"', sis)
     visto["sospeso"] = bool(m)
-    return {"tool_calls": [call("delega_lavoro", {"tipo": "codice", "compito": "gioco memory",
+    return {"tool_calls": [call("lavoro_affida", {"tipo": "codice", "compito": "gioco memory",
                                                   "proposta": m.group(1) if m else ""})]}
 
 
@@ -268,8 +268,8 @@ verifica("i file di prima nella cartella dei risultati", Path(riga["cartella"], 
          .is_file() and Path(riga["cartella"], "logica.js").is_file())
 verifica("il vecchio è «ripreso», non più interrotto né da rifare",
          interr.stato == "ripreso" and svc2.offerta_ripresa("mario-id") is None)
-out = banco.tool("lavori_stato", {}, "Mario", 5)
-verifica("lavori_stato dopo: l'ultimo è finito", "è finito" in out["risposta_finale"],
+out = banco.tool("lavoro_stato", {}, "Mario", 5)
+verifica("lavoro_stato dopo: l'ultimo è finito", "è finito" in out["risposta_finale"],
          out["risposta_finale"])
 voce.ferma()
 svc2.close()
@@ -294,7 +294,7 @@ verifica("ricerca interrotta: annuncio con «Lo rifaccio?» (niente file da ripr
 time.sleep(0.3)
 verifica("«no»: nessun lavoro riparte", not svc2.attivi())
 banco = Banco(cfg, svc2)
-out = banco.tool("lavori_stato", {}, "Mario", 1)
+out = banco.tool("lavoro_stato", {}, "Mario", 1)
 verifica("resta nell'elenco come interrotto", "si è interrotto" in out["risposta_finale"],
          out["risposta_finale"])
 svc3 = riavvia(cfg, svc2)
@@ -315,11 +315,11 @@ svc2 = riavvia(cfg, svc, vivo=lambda r: time.time() - 5 * 3600)
 libera.set()
 verifica("vecchio di 5 ore: nessun annuncio", fine(svc2, 1.0) is None)
 banco = Banco(cfg, svc2)
-out = banco.tool("lavori_stato", {}, "Mario", 1)
-verifica("ma lavori_stato lo elenca, senza domanda", out["risposta_finale"].endswith(
+out = banco.tool("lavoro_stato", {}, "Mario", 1)
+verifica("ma lavoro_stato lo elenca, senza domanda", out["risposta_finale"].endswith(
     "si è interrotto per un riavvio di Calliope.") and not out.get("in_sospeso"),
          out["risposta_finale"])
-out = banco.tool("delega_lavoro", {"tipo": "altro", "compito": "x", "proposta": lav.id},
+out = banco.tool("lavoro_affida", {"tipo": "altro", "compito": "x", "proposta": lav.id},
                  "Mario", 2)
 verifica("e non si rifà con l'id: va chiesto di nuovo", out.get("ok") is False
          and not svc2.attivi(), out.get("risposta_finale"))
@@ -355,7 +355,7 @@ fake.copione = [{"tool_calls": [call("consegna", {"riassunto": "Fatto.", "esito"
                 {"content": json.dumps({"titolo": "Spese di casa", "blocchi": [
                     {"tipo": "paragrafo", "testo": "Le spese."}]})}]
 banco = Banco(cfg, svc2)
-out = banco.tool("delega_lavoro", {"tipo": "codice", "compito": "x",
+out = banco.tool("lavoro_affida", {"tipo": "codice", "compito": "x",
                                    "proposta": item["in_sospeso"]["argomenti"]["proposta"]},
                  "Mario", 1)
 finiti = [fine(svc2, 15), fine(svc2, 15)]
@@ -420,12 +420,12 @@ verifica("nel file in attesa, con la conversazione dell'agente", riga["stato"] =
          and (riga.get("contesto") or {}).get("tipo") == "codice")
 svc2 = riavvia(cfg, svc)
 item = fine(svc2, 5)
-verifica("dopo il riavvio la domanda si ripete, con l'azione in sospeso per lavori_rispondi",
+verifica("dopo il riavvio la domanda si ripete, con l'azione in sospeso per lavoro_rispondi",
          item and item["stato"] == "in_attesa" and item["messaggio"].endswith(
              "che separatore usa il file CSV?") and (item.get("in_sospeso") or {}).get("tool")
-         == "lavori_rispondi", str(item and item["messaggio"]))
+         == "lavoro_rispondi", str(item and item["messaggio"]))
 banco = Banco(cfg, svc2)
-out = banco.tool("lavori_rispondi", {"risposta": "punto e virgola"}, "Mario", 1)
+out = banco.tool("lavoro_rispondi", {"risposta": "punto e virgola"}, "Mario", 1)
 item = fine(svc2, 15)
 msgs = ripresa_msgs.get("m") or []
 verifica("la risposta lo fa ripartire e finisce", out.get("ok") and item

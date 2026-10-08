@@ -54,11 +54,14 @@ _SOLA_LETTURA = {"leggi_file", "elenca_file"}
 
 class Limite(Exception):
     """Finiti i passi, i token o il tempo del lavoro. `parziale`: quello che il ciclo sa del
-    lavoro fatto (il servizio lo aggiunge al risultato)."""
+    lavoro fatto (il servizio lo aggiunge al risultato). `tipo` (08/10, versione 2 della
+    modalità sviluppo): «passate», «token» o «tempo» per i tetti di un giro, che in uno
+    sviluppo diventano tappe; vuoto per gli altri (ragionamento a vuoto, strumenti non usati)."""
 
-    def __init__(self, motivo: str = "", parziale: dict | None = None):
+    def __init__(self, motivo: str = "", parziale: dict | None = None, tipo: str = ""):
         super().__init__(motivo)
         self.parziale = dict(parziale or {})
+        self.tipo = tipo
 
 
 def _migliaia(n: int) -> str:
@@ -146,6 +149,19 @@ class Lavoro:
     # ── contesto del lavoro (05/10, contesto_lavoro.py) ──
     gestore: object = field(default=None, repr=False, compare=False)   # ContestoLavoro
     uso_contesto: dict = field(default_factory=dict)   # finestra, picco, file, diari
+    # ── tappe (08/10, versione 2 della modalità sviluppo) ──
+    # Un lavoro di uno sviluppo: ai tetti di passate, tempo o token non si chiude, va in attesa
+    # con il contesto e un rapporto (calliope/sviluppo.py), e la persona sceglie se continuare
+    tappe: bool = False
+    giro: int = 1                     # il giro di lavoro (1 il primo; +1 a ogni «continua»)
+    passi0: int = 0                   # passate, token e attesa all'inizio del giro
+    token0: int = 0
+    attesa0: float = 0.0
+    giro_inizio: float | None = None
+    # Segnali di giro a vuoto misurati dal codice: scritture per file, firme degli errori dei
+    # test che falliscono, passate senza file né test nuovi (nel giro)
+    segnali: dict = field(default_factory=dict)
+    nota_giro: str = ""               # la nota della persona per il giro dopo («cambia e continua»)
 
     def __setattr__(self, nome, valore):
         if nome in _OSSERVATI:
@@ -642,9 +658,9 @@ class Agente:
             raise Annullato()
         while True:
             if servizio:
-                if lav.token >= self.tetto_token(lav):
+                if self.token_giro(lav) >= self.tetto_token(lav):
                     raise Limite(f"ha usato tutti i {_migliaia(self.tetto_token(lav))} token "
-                                 "del lavoro")
+                                 "del lavoro", tipo="token")
             else:
                 self._tetti(lav)
             waited = self.arbitro.attendi(lav.annulla)
@@ -712,6 +728,22 @@ class Agente:
             lav.nota("passata_fine")
             return out
 
+    @staticmethod
+    def passi_giro(lav: Lavoro) -> int:
+        return lav.passi - int(getattr(lav, "passi0", 0) or 0)
+
+    @staticmethod
+    def token_giro(lav: Lavoro) -> int:
+        return lav.token - int(getattr(lav, "token0", 0) or 0)
+
+    @staticmethod
+    def trascorso(lav: Lavoro) -> float:
+        """I secondi di lavoro del giro (l'attesa di una risposta non conta)."""
+        inizio = getattr(lav, "giro_inizio", None) or lav.inizio
+        if not inizio:
+            return 0.0
+        return time.time() - inizio - (lav.attesa_s - float(getattr(lav, "attesa0", 0) or 0))
+
     def tetto_token(self, lav: Lavoro | None = None) -> int:
         """I token che un lavoro di quel tipo può generare: agenti_token_minuto del tipo (o di
         «altro») per agenti_tempo_max_min, al più agenti_max_token se è un numero > 0."""
@@ -723,13 +755,17 @@ class Agente:
         return t if t > 0 else 60000
 
     def _tetti(self, lav: Lavoro):
-        if lav.passi >= self.max_passi:
-            raise Limite(f"ha fatto tutte le {self.max_passi} passate del lavoro")
+        # Per giro (08/10): un lavoro di uno sviluppo continuato dopo una tappa ha di nuovo
+        # tutte le passate, i token e il tempo; per gli altri il giro è uno solo
+        if self.passi_giro(lav) >= self.max_passi:
+            raise Limite(f"ha fatto tutte le {self.max_passi} passate del lavoro",
+                         tipo="passate")
         tetto = self.tetto_token(lav)
-        if lav.token >= tetto:
-            raise Limite(f"ha usato tutti i {_migliaia(tetto)} token del lavoro")
-        if lav.inizio and time.time() - lav.inizio - lav.attesa_s > self.tempo_max_s:
-            raise Limite(f"sono passati i {self.tempo_max_s / 60:.0f} minuti del lavoro")
+        if self.token_giro(lav) >= tetto:
+            raise Limite(f"ha usato tutti i {_migliaia(tetto)} token del lavoro", tipo="token")
+        if lav.inizio and self.trascorso(lav) > self.tempo_max_s:
+            raise Limite(f"sono passati i {self.tempo_max_s / 60:.0f} minuti del lavoro",
+                         tipo="tempo")
 
     def _avviso_fine(self, lav: Lavoro, messages: list, tipo: str = "codice"):
         """Una volta per lavoro, vicino a un tetto (le ultime 2 passate, l'85 % dei token o del
@@ -737,11 +773,11 @@ class Agente:
         if lav.avvisato:
             return
         tetto = self.tetto_token(lav)
-        trascorso = (time.time() - lav.inizio - lav.attesa_s) if lav.inizio else 0.0
-        if lav.passi + 2 >= self.max_passi:
+        trascorso = self.trascorso(lav)
+        if self.passi_giro(lav) + 2 >= self.max_passi:
             cosa = "le sue passate (ne restano 2)"
-        elif lav.token >= 0.85 * tetto:
-            cosa = f"i suoi token ({_migliaia(lav.token)} su {_migliaia(tetto)})"
+        elif self.token_giro(lav) >= 0.85 * tetto:
+            cosa = f"i suoi token ({_migliaia(self.token_giro(lav))} su {_migliaia(tetto)})"
         elif trascorso >= 0.85 * self.tempo_max_s:
             cosa = (f"il suo tempo (restano {max(1, round((self.tempo_max_s - trascorso) / 60))}"
                     " minuti)")
@@ -809,7 +845,22 @@ class Agente:
         capacità; c'è anche chiedi_permesso. Nel risultato `piano` (per la scheda di revisione)."""
         ctx = lav.contesto if lav.contesto.get("tipo") == "codice" else {}
         stato_piano = ctx.get("piano") if ctx else None
-        if ctx and lav.risposta is not None:
+        if ctx and ctx.get("tappa") and lav.risposta is not None:
+            # Un giro nuovo dopo una tappa (08/10, versione 2 della modalità sviluppo): la
+            # conversazione di prima, compattata, e la nota della persona se c'è
+            messages = ctx["messages"]
+            spinte, scritti = ctx["spinte"], ctx["scritti"]
+            rimandi = ctx.get("rimandi", 0)
+            nota = str(lav.nota_giro or "").strip()
+            messages.append({"role": "user", "content":
+                             f"Hai un altro giro di lavoro ({self.max_passi} passate, "
+                             f"{self.tempo_max_s / 60:.0f} minuti). Riprendi da dove eri, senza "
+                             "rifare quello che c'è già: guarda il diario e i file."
+                             + (f" La persona ha chiesto anche: «{nota}»." if nota else "")
+                             + " Se un test fallisce sempre con lo stesso errore, cambia "
+                               "strada. Alla fine chiama consegna."})
+            lav.nota_giro = ""
+        elif ctx and lav.risposta is not None:
             # Ripresa dopo una domanda (03/10): la conversazione dell'agente è quella di prima
             messages = ctx["messages"]
             spinte, scritti = ctx["spinte"], ctx["scritti"]
@@ -861,6 +912,11 @@ class Agente:
         soglia = int(getattr(self.cfg, "agenti_token_senza_strumenti", 12000) or 0)
         soglia_s = float(getattr(self.cfg, "agenti_minuti_senza_strumenti", 5.0) or 0) * 60
         vuoto_tok, vuoto_t0, vuote = 0, time.monotonic(), 0
+        seg = lav.segnali if isinstance(lav.segnali, dict) else {}
+        lav.segnali = seg
+        seg.setdefault("scritture", {})
+        seg.setdefault("errori_test", [])
+        seg.setdefault("senza_novita", 0)
         while consegna is None:
             lav.passo = "sta pensando al codice" if not scritti else "sta lavorando al codice"
             strumenti = strumenti_codice(self._linguaggi(sandbox))
@@ -875,8 +931,16 @@ class Agente:
             try:
                 out = self.passata(lav, messages, tools=strumenti, contesto=gc)
             except Limite as e:
+                if getattr(lav, "tappe", False) and e.tipo in ("passate", "tempo", "token"):
+                    # Un lavoro di uno sviluppo (08/10, versione 2): il tetto è una tappa.
+                    # Il contesto resta (compattato; con il tetto dei token anche il diario
+                    # senza modello) e il rapporto va alla persona, che sceglie
+                    return self._tappa(lav, sandbox, gc, messages, e, spinte, scritti,
+                                       rimandi, stato_piano, piano)
                 # Fermato dal tetto: cosa è stato fatto (il diario o l'ultima cosa detta)
-                raise Limite(str(e), {"riassunto": _fatto_finora(gc, messages)}) from None
+                raise Limite(str(e), {"riassunto": _fatto_finora(gc, messages)},
+                             tipo=e.tipo) from None
+            novita = False
             calls = out["tool_calls"]
             if not calls:
                 c = self.chiamata_da_testo(out["content"], strumenti)
@@ -998,8 +1062,20 @@ class Agente:
                     result = self._strumento(lav, sandbox, name, args)
                     if name == "scrivi_file" and result.get("ok"):
                         scritti += 1
+                        p = str(result.get("percorso") or args.get("percorso") or "?")
+                        novita = novita or p not in seg["scritture"]
+                        seg["scritture"][p] = int(seg["scritture"].get(p, 0)) + 1
+                    elif name == "esegui_test":
+                        firma = firma_errore(result)
+                        if firma:
+                            novita = novita or firma not in seg["errori_test"]
+                            seg["errori_test"] = (seg["errori_test"] + [firma])[-12:]
+                        elif result.get("passano"):
+                            novita = True
                 messages.append({"role": "tool", "tool_name": name,
                                  "content": gc.risultato(name, result)})
+            if not novita and consegna is None:
+                seg["senza_novita"] = int(seg.get("senza_novita", 0)) + 1
         # Il contesto resta per una ripresa (domanda a metà lavoro): il servizio lo butta se
         # il lavoro finisce qui. Con una domanda resta compattato: i risultati lunghi nei
         # file, salvo l'ultimo passo
@@ -1031,6 +1107,45 @@ class Agente:
                 if isinstance(consegna.get("argomenti_esempio"), list) else [],
                 "test": (test or {}).get("esito"), "test_passano": (test or {}).get("passano"),
                 "test_uscita": (test or {}).get("uscita", "")[-3000:],
+                **({"piano": stato_piano} if piano else {})}
+
+    # ── tappe (08/10, versione 2 della modalità sviluppo) ──
+    def _tappa(self, lav: Lavoro, sandbox, gc, messages: list, e: Limite, spinte: int,
+               scritti: int, rimandi: int, stato_piano, piano: bool) -> dict:
+        """Un tetto del giro in un lavoro di uno sviluppo: il contesto resta per il giro dopo
+        (compattato; al tetto dei token anche il diario, senza modello: i token sono finiti) e
+        il risultato è il rapporto: cosa è fatto, cosa manca, i test, i segnali di giro a
+        vuoto. Il servizio mette il lavoro in attesa e la persona sceglie."""
+        if e.tipo == "token":
+            try:
+                gc.diario_ora(messages, elenco_file=sandbox.elenca, diario_modello=None)
+            except Exception as ex:  # noqa: BLE001 — il contesto resta comunque
+                self.log(f"[AGENTI] {lav.id}: diario alla tappa non fatto: {ex}")
+        gc.per_attesa(messages)
+        lav.uso_contesto = dict(gc.uso)
+        lav.contesto = {"tipo": "codice", "messages": messages, "spinte": spinte,
+                        "scritti": scritti, "rimandi": rimandi, "piano": stato_piano,
+                        "gestore": gc.esporta(), "tappa": True}
+        manca = []
+        try:
+            from .contesto_lavoro import estrattivo
+            d = estrattivo(messages[2:], gc.diario)
+            manca = list(d.get("manca") or [])[:3]
+        except Exception:  # noqa: BLE001
+            pass
+        test = None
+        try:
+            if self._ha_test(sandbox):
+                lav.passo = "controlla i test"
+                test = sandbox.test()
+        except Exception as ex:  # noqa: BLE001
+            self.log(f"[AGENTI] {lav.id}: test alla tappa non eseguiti: {ex}")
+        self.log(f"[AGENTI] {lav.id}: tappa del giro {lav.giro} ({e.tipo}): {e}")
+        return {"esito": "tappa", "tipo_limite": e.tipo, "motivo": str(e),
+                "riassunto": _fatto_finora(gc, messages), "manca": manca,
+                "segnali": segnali_giro(lav, self.max_passi), "giro": lav.giro,
+                "test": (test or {}).get("esito"), "test_passano": (test or {}).get("passano"),
+                "test_uscita": str((test or {}).get("uscita") or "")[-1500:],
                 **({"piano": stato_piano} if piano else {})}
 
     # ── piano di fattibilità e permessi (05/10) ──
@@ -1123,7 +1238,7 @@ class Agente:
 
     def _chiedi_permesso(self, lav: Lavoro, args: dict, stato_piano: dict | None):
         """Un permesso fuori dal contratto: il lavoro si sospende con la domanda alla persona
-        (domande a metà lavoro, lavori_rispondi). L'agente non lo prende da solo."""
+        (domande a metà lavoro, lavoro_rispondi). L'agente non lo prende da solo."""
         from ..estensioni.manifesto import ManifestoNonValido, normalizza_permessi
         if stato_piano is None:
             return {"ok": False, "errore": "prima chiama piano"}, None
@@ -1154,9 +1269,10 @@ class Agente:
 
     def _resta_tempo(self, lav: Lavoro) -> bool:
         """Restano almeno due passate (correggere e richiamare consegna) e un po' di tempo?"""
-        if lav.passi + 2 > self.max_passi or lav.token >= self.tetto_token(lav) * 0.9:
+        if (self.passi_giro(lav) + 2 > self.max_passi
+                or self.token_giro(lav) >= self.tetto_token(lav) * 0.9):
             return False
-        if lav.inizio and time.time() - lav.inizio - lav.attesa_s > self.tempo_max_s * 0.9:
+        if lav.inizio and self.trascorso(lav) > self.tempo_max_s * 0.9:
             return False
         return True
 
@@ -1666,6 +1782,48 @@ class Agente:
         if m:
             riassunto, text = m.group(1).strip(), text[:m.start()].strip()
         return {"esito": "fatto", "testo": text, "riassunto": riassunto}
+
+
+def firma_errore(res) -> str:
+    """La firma dell'errore di un esegui_test che non passa (08/10, segnali di giro a vuoto):
+    l'ultima riga d'errore dell'uscita, senza numeri di riga né indirizzi, o "" se passano."""
+    if not isinstance(res, dict) or res.get("passano") or res.get("ok") is False and \
+            not res.get("uscita"):
+        return ""
+    righe = [r.strip() for r in str(res.get("uscita") or "").splitlines() if r.strip()]
+    cand = [r for r in righe if re.search(r"(Error|Exception|assert|FAILED|errore)", r)]
+    riga = (cand or righe or [""])[-1]
+    riga = re.sub(r"0x[0-9a-f]+|\d+", "#", riga)
+    return riga[:160]
+
+
+def segnali_giro(lav, max_passi: int) -> dict:
+    """I segnali di giro a vuoto misurati dal codice (08/10): file riscritti più volte, test che
+    falliscono con lo stesso errore, passate senza file né test nuovi; con le frasi da dire."""
+    seg = getattr(lav, "segnali", None) or {}
+    riscritti = sorted(((p, n) for p, n in (seg.get("scritture") or {}).items() if n >= 3),
+                       key=lambda x: -x[1])
+    errori = list(seg.get("errori_test") or [])
+    stesso, n_stesso = "", 0
+    if errori:
+        ultimo = errori[-1]
+        for x in reversed(errori):
+            if x != ultimo:
+                break
+            n_stesso += 1
+        stesso = ultimo if n_stesso >= 2 else ""
+    vuote = int(seg.get("senza_novita") or 0)
+    frasi = []
+    if riscritti:
+        p, n = riscritti[0]
+        frasi.append(f"ha riscritto {p.rsplit('/', 1)[-1]} {n} volte")
+    if stesso:
+        frasi.append(f"i test falliscono {n_stesso} volte di fila con lo stesso errore")
+    if vuote >= max(3, max_passi // 4):
+        frasi.append(f"{vuote} passate senza file né test nuovi")
+    return {"riscritti": [list(x) for x in riscritti[:5]], "errore_ripetuto": stesso,
+            "volte_errore": n_stesso, "senza_novita": vuote, "frasi": frasi,
+            "a_vuoto": bool(frasi)}
 
 
 def _fatto_finora(gc, messages: list) -> str:

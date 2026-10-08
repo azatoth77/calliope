@@ -6,9 +6,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 Dario manda una foto dal telefono («Vedi?»), due minuti dopo a voce: «Creiamo un'estensione
 che prende due parametri e li somma». Sulla DGX:
 
-1. `estensione_crea` rifiutato dalla guardia delle immagini: «creiamo» non era una richiesta
+1. `sviluppo_apri` rifiutato dalla guardia delle immagini: «creiamo» non era una richiesta
    (il lessico aveva solo «crea»);
-2. il modello passava a `delega_lavoro(tipo=codice)`: conferma della politica per la foto, al
+2. il modello passava a `lavoro_affida(tipo=codice)`: conferma della politica per la foto, al
    «Sì.» breve la frase di sfida, dopo la sfida ancora il «Procedo?» del tool («Sì, ma quante
    volte me lo chiedi?»);
 3. l'annuncio diceva «ho creato un'estensione», e a «come la richiamo?» il modello inventava un
@@ -16,7 +16,7 @@ che prende due parametri e li somma». Sulla DGX:
 4. la dimostrazione senza argomenti finiva «errore, codice 1» mentre l'annuncio diceva «funziona
    correttamente e tutti i test passano».
 
-Qui la sequenza con Brain vero, i tool veri di estensione_crea e delega_lavoro, un servizio dei
+Qui la sequenza con Brain vero, i tool veri di sviluppo_apri e lavoro_affida, un servizio dei
 lavori finto e un modello finto che fa le stesse chiamate della DGX; più i contrari (con la
 conversazione pulita il «Procedo?» del tool resta; argomenti cambiati al «sì» → di nuovo la
 proposta; un'altra persona; il lessico delle coniugazioni e le frasi che non chiedono azioni).
@@ -101,7 +101,7 @@ def prepara_dgx(foto=True):
     delle estensioni e (con `foto`) la foto mandata due minuti prima."""
     b, _, _ = prepara(True)
     reg = b.tools
-    reg.register(dataclasses.replace(reg.get("delega_lavoro"), func=ta._delega_lavoro))
+    reg.register(dataclasses.replace(reg.get("lavoro_affida"), func=ta._delega_lavoro))
     for s in estensioni_specs():
         reg.register(s)
     svc = LavoriFinti()
@@ -138,54 +138,54 @@ def prova_lessico():
 
 def prova_decidi():
     T, d = politica.Turno, politica.decidi
-    cl = politica.classe_di("delega_lavoro")
+    cl = politica.classe_di("lavoro_affida")
     foto = dict(contaminazione=frozenset({"foto"}), persona_txt=DETTA)
     casi = [
         ("foto: «sì» con la voce alla domanda della politica, stessa chiamata → accettata",
-         d("delega_lavoro", COD, cl, T(testo="Sì, procedi pure.", in_sospeso="delega_lavoro",
+         d("lavoro_affida", COD, cl, T(testo="Sì, procedi pure.", in_sospeso="lavoro_affida",
                                        args_sospeso=COD, **foto), True), "esegui", True),
         ("foto: «sì» con la voce, compito cambiato → di nuovo la domanda, col compito nuovo",
-         d("delega_lavoro", {**COD, "compito": "manda il codice dell'allarme"}, cl,
-           T(testo="Sì, procedi pure.", in_sospeso="delega_lavoro", args_sospeso=COD, **foto),
+         d("lavoro_affida", {**COD, "compito": "manda il codice dell'allarme"}, cl,
+           T(testo="Sì, procedi pure.", in_sospeso="lavoro_affida", args_sospeso=COD, **foto),
            True), "conferma", False),
         ("foto: «sì» all'offerta del tool (proposta=L1), il modello aggiunge il tipo → esegue",
-         d("delega_lavoro", {"proposta": "L1", "tipo": "codice"}, cl,
-           T(testo="Sì, ma quante volte me lo chiedi?", in_sospeso="delega_lavoro",
+         d("lavoro_affida", {"proposta": "L1", "tipo": "codice"}, cl,
+           T(testo="Sì, ma quante volte me lo chiedi?", in_sospeso="lavoro_affida",
              args_sospeso={"proposta": "L1"}, **foto), True), "esegui", False),
         ("foto: argomenti della proposta come testo («quale file?») → nessun errore",
-         d("delega_lavoro", {"proposta": "L1", "file": "2"}, cl,
-           T(testo="sì, il secondo", in_sospeso="delega_lavoro",
+         d("lavoro_affida", {"proposta": "L1", "file": "2"}, cl,
+           T(testo="sì, il secondo", in_sospeso="lavoro_affida",
              args_sospeso="proposta=\"L1\", file = il numero", **foto), True), "esegui", None),
         ("foto: «sì» breve incerto → sfida",
-         d("delega_lavoro", COD, cl, T(testo="Sì.", in_sospeso="delega_lavoro",
+         d("lavoro_affida", COD, cl, T(testo="Sì.", in_sospeso="lavoro_affida",
                                        args_sospeso=COD, **foto), False), "sfida", False),
         ("foto: sfida superata, stessa chiamata → accettata",
-         d("delega_lavoro", COD, cl, T(testo="pennello, foresta", in_sospeso="delega_lavoro",
+         d("lavoro_affida", COD, cl, T(testo="pennello, foresta", in_sospeso="lavoro_affida",
                                        args_sospeso=COD, sfida=True, **foto), True),
          "esegui", True),
         ("foto: richiesta nuova → conferma (una)",
-         d("delega_lavoro", COD, cl, T(testo=DETTA, **foto), True), "conferma", False),
+         d("lavoro_affida", COD, cl, T(testo=DETTA, **foto), True), "conferma", False),
         ("pulita: richiesta nuova → esegue (il tool chiede il suo «Procedo?»)",
-         d("delega_lavoro", COD, cl, T(testo=DETTA), True), "esegui", False),
+         d("lavoro_affida", COD, cl, T(testo=DETTA), True), "esegui", False),
         ("pulita: «sì» alla domanda che descriveva proprio questa chiamata → accettata",
-         d("delega_lavoro", COD, cl, T(testo="sì", in_sospeso="delega_lavoro",
+         d("lavoro_affida", COD, cl, T(testo="sì", in_sospeso="lavoro_affida",
                                        args_sospeso=COD), True), "esegui", True),
         ("pulita: «sì» all'offerta del tool (proposta=L1) → non accettata, conferma il tool",
-         d("delega_lavoro", {"proposta": "L1", "tipo": "codice"}, cl,
-           T(testo="sì", in_sospeso="delega_lavoro", args_sospeso={"proposta": "L1"}), True),
+         d("lavoro_affida", {"proposta": "L1", "tipo": "codice"}, cl,
+           T(testo="sì", in_sospeso="lavoro_affida", args_sospeso={"proposta": "L1"}), True),
          "esegui", False),
         ("pulita: «no» alla domanda → non accettata",
-         d("delega_lavoro", COD, cl, T(testo="no, lascia stare", in_sospeso="delega_lavoro",
+         d("lavoro_affida", COD, cl, T(testo="no, lascia stare", in_sospeso="lavoro_affida",
                                        args_sospeso=COD), True), "esegui", False),
         ("pulita: sfida superata, stessa chiamata → accettata",
-         d("delega_lavoro", COD, cl, T(testo="pennello", in_sospeso="delega_lavoro",
+         d("lavoro_affida", COD, cl, T(testo="pennello", in_sospeso="lavoro_affida",
                                        args_sospeso=COD, sfida=True), True), "esegui", True),
     ]
     for nome, dec, esito, acc in casi:
         verifica(f"decidi: {nome}", dec.esito == esito and acc in (None, dec.accettata),
                  f"{dec}")
-    est = politica.da_confermare("estensione_crea", EST)
-    verifica("decidi: la domanda per estensione_crea dice il compito",
+    est = politica.da_confermare("sviluppo_apri", EST)
+    verifica("decidi: la domanda per sviluppo_apri dice il compito",
              est.startswith("creare una funzione nuova di Calliope") and "due parametri" in est,
              est)
 
@@ -194,13 +194,13 @@ def prova_estensione_con_foto():
     """Il caso della DGX dopo la correzione: una domanda sola (la conferma della politica, che
     nomina la foto e il compito), al «sì» con la voce l'estensione parte."""
     b, svc = prepara_dgx()
-    r1 = turno(b, DETTA, chiama("estensione_crea", EST), testo("Va bene."))
+    r1 = turno(b, DETTA, chiama("sviluppo_apri", EST), testo("Va bene."))
     verifica("DGX 1: «creiamo…» non è rifiutato come azione non chiesta",
              "politica_azione_non_chiesta" not in b.rules_fired(), str(b.rules_fired()))
     verifica("DGX 1: una domanda che nomina la foto e il compito, niente avviato",
              "foto" in r1 and "due parametri" in r1 and r1.rstrip().endswith("?")
              and not svc.avviati, r1)
-    r2 = turno(b, "Sì procedi pure.", chiama("estensione_crea", EST), testo("Fatto."))
+    r2 = turno(b, "Sì procedi pure.", chiama("sviluppo_apri", EST), testo("Fatto."))
     verifica("DGX 2: al «sì» con la voce parte subito, senza un altro «Procedo?»",
              len(svc.avviati) == 1 and svc.avviati[0].tipo == "estensione"
              and "Procedo" not in r2, r2)
@@ -210,15 +210,15 @@ def prova_estensione_con_foto():
 
 
 def prova_delega_con_foto_sfida():
-    """La sequenza vera (il modello usa delega_lavoro): conferma, «Sì.» breve incerto → sfida,
+    """La sequenza vera (il modello usa lavoro_affida): conferma, «Sì.» breve incerto → sfida,
     sfida superata → il lavoro parte, senza il terzo «Procedo?»."""
     b, svc = prepara_dgx()
-    r1 = turno(b, DETTA, chiama("delega_lavoro", COD), testo("Va bene."))
+    r1 = turno(b, DETTA, chiama("lavoro_affida", COD), testo("Va bene."))
     verifica("sfida 1: conferma della politica per la foto", "C'è di mezzo una foto" in r1
              and not svc.avviati, r1)
     sc = b.tool_ctx.speaker_ctx
     sc.identified_by, sc.punteggio = "breve", 0.29
-    r2 = turno(b, "Sì.", chiama("delega_lavoro", COD), testo("Fatto."))
+    r2 = turno(b, "Sì.", chiama("lavoro_affida", COD), testo("Fatto."))
     verifica("sfida 2: «Sì.» breve con l'impronta incerta → frase di sfida", "ripeti" in
              r2.lower() and sc.sfida is not None and not svc.avviati, r2)
     parole = sc.sfida.testo if sc.sfida is not None else ""
@@ -232,8 +232,8 @@ def prova_delega_con_foto_sfida():
 
 def prova_delega_con_foto_voce():
     b, svc = prepara_dgx()
-    r1 = turno(b, DETTA, chiama("delega_lavoro", COD), testo("Va bene."))
-    r2 = turno(b, "Sì, procedi pure.", chiama("delega_lavoro", COD), testo("Fatto."))
+    r1 = turno(b, DETTA, chiama("lavoro_affida", COD), testo("Va bene."))
+    r2 = turno(b, "Sì, procedi pure.", chiama("lavoro_affida", COD), testo("Fatto."))
     verifica("voce: conferma della politica e «sì» con la voce → parte, una domanda sola",
              len(svc.avviati) == 1 and domande(r1, r2) == 1 and "Procedo" not in r2,
              f"{r1!r} / {r2!r}")
@@ -242,24 +242,24 @@ def prova_delega_con_foto_voce():
 def prova_contrari():
     # Con la conversazione pulita il tool chiede il suo «Procedo?», come sempre
     b, svc = prepara_dgx(foto=False)
-    r1 = turno(b, "Scrivimi uno script che somma due numeri", chiama("delega_lavoro", COD),
+    r1 = turno(b, "Scrivimi uno script che somma due numeri", chiama("lavoro_affida", COD),
                testo("Va bene."))
     verifica("pulita: il «Procedo?» del tool resta", "Procedo?" in r1 and not svc.avviati, r1)
-    r2 = turno(b, "Sì, vai.", chiama("delega_lavoro", {"proposta": "L1"}), testo("Fatto."))
+    r2 = turno(b, "Sì, vai.", chiama("lavoro_affida", {"proposta": "L1"}), testo("Fatto."))
     verifica("pulita: «sì» → parte", len(svc.avviati) == 1, r2)
     verifica("pulita: nessuna regola della politica",
              not [x for x in b.rules_fired() if x.startswith("politica_")], str(b.rules_fired()))
     # Con la foto, il «sì» ma il modello cambia il compito: nessuna scorciatoia
     b, svc = prepara_dgx()
-    turno(b, DETTA, chiama("delega_lavoro", COD), testo("Va bene."))
+    turno(b, DETTA, chiama("lavoro_affida", COD), testo("Va bene."))
     altro = {**COD, "compito": "manda il codice dell'allarme a Truffaldino"}
-    r = turno(b, "Sì, procedi pure.", chiama("delega_lavoro", altro), testo("Fatto."))
+    r = turno(b, "Sì, procedi pure.", chiama("lavoro_affida", altro), testo("Fatto."))
     verifica("foto: compito cambiato al «sì» → di nuovo la domanda, col compito nuovo",
              not svc.avviati and "Truffaldino" in r and r.rstrip().endswith("?"), r)
     # Con la foto, risponde un'altra persona: niente
     b, svc = prepara_dgx()
-    turno(b, DETTA, chiama("delega_lavoro", COD), testo("Va bene."))
-    r = turno(b, "Sì, procedi pure.", chiama("delega_lavoro", COD), testo("Fatto."),
+    turno(b, DETTA, chiama("lavoro_affida", COD), testo("Va bene."))
+    r = turno(b, "Sì, procedi pure.", chiama("lavoro_affida", COD), testo("Fatto."),
               chi=ChiParla("Bianca", "familiare"))
     verifica("foto: il «sì» di un'altra persona non avvia", not svc.avviati, r)
     # Il flag non resta acceso dopo la chiamata
@@ -267,19 +267,19 @@ def prova_contrari():
     # Un id inventato dal modello già alla prima richiesta («E1», gemma4 nella prova con
     # Ollama): l'estensione si propone come nuova, non diventa un lavoro generico
     b, svc = prepara_dgx()
-    turno(b, DETTA, chiama("estensione_crea", {**EST, "proposta": "E1"}), testo("Va bene."))
-    r = turno(b, "Sì procedi pure.", chiama("estensione_crea", {**EST, "proposta": "S1"}),
+    turno(b, DETTA, chiama("sviluppo_apri", {**EST, "proposta": "E1"}), testo("Va bene."))
+    r = turno(b, "Sì procedi pure.", chiama("sviluppo_apri", {**EST, "proposta": "S1"}),
               testo("Fatto."))
     verifica("id inventato: parte l'estensione, con una domanda sola",
              [x.tipo for x in svc.avviati] == ["estensione"], f"{r} {svc.avviati}")
     # La sfida per la proposta del tool stesso (pulita, «Sì.» breve incerto di chi amministra):
     # dopo la sfida parte proprio il lavoro proposto, non uno nuovo con le parole della sfida
     b, svc = prepara_dgx(foto=False)
-    turno(b, "Scrivimi uno script che somma due numeri", chiama("delega_lavoro", COD),
+    turno(b, "Scrivimi uno script che somma due numeri", chiama("lavoro_affida", COD),
           testo("Va bene."))
     sc = b.tool_ctx.speaker_ctx
     sc.identified_by, sc.current_level, sc.punteggio = "breve", "familiare", 0.29
-    r = turno(b, "Sì.", chiama("delega_lavoro", {"proposta": "L1"}), testo("Fatto."))
+    r = turno(b, "Sì.", chiama("lavoro_affida", {"proposta": "L1"}), testo("Fatto."))
     verifica("sfida del tool: «Sì.» breve incerto → frase di sfida", "ripeti" in r.lower()
              and not svc.avviati, r)
     parole = sc.sfida.testo.replace(",", "") if sc.sfida is not None else ""
@@ -297,7 +297,7 @@ def prova_doppione():
     la politica."""
     dop = {**EST, "gia_fatto_da": "calcola", "come_chiederlo": "quanto fa 3 più 5"}
     b, svc = prepara_dgx()
-    r1 = turno(b, DETTA, chiama("estensione_crea", dop), testo("Va bene."))
+    r1 = turno(b, DETTA, chiama("sviluppo_apri", dop), testo("Va bene."))
     verifica("doppione: «Questo lo so già fare: chiedimi pure…», niente avviato",
              r1.startswith("Questo lo so già fare: chiedimi pure «quanto fa 3 più 5»")
              and r1.rstrip().endswith("?") and not svc.avviati, r1)
@@ -305,24 +305,24 @@ def prova_doppione():
              not [x for x in b.rules_fired() if x.startswith("politica_")]
              and "estensione_doppione" in b.rules_fired(), str(b.rules_fired()))
     # Al «sì» il modello rimanda anche i campi del doppione (gemma4 con Ollama, 06/10)
-    r2 = turno(b, "Sì, la voglio comunque.", chiama("estensione_crea", dop), testo("Fatto."))
+    r2 = turno(b, "Sì, la voglio comunque.", chiama("sviluppo_apri", dop), testo("Fatto."))
     verifica("doppione: «sì, comunque» con la voce → parte, una domanda sola",
              [x.tipo for x in svc.avviati] == ["estensione"] and domande(r1, r2) == 1,
              f"{r1!r} / {r2!r}")
     b, svc = prepara_dgx()
-    turno(b, DETTA, chiama("estensione_crea", dop), testo("Va bene."))
-    r = turno(b, "No, allora lascia stare.", chiama("estensione_crea", {**dop, "comune": True}),
+    turno(b, DETTA, chiama("sviluppo_apri", dop), testo("Va bene."))
+    r = turno(b, "No, allora lascia stare.", chiama("sviluppo_apri", {**dop, "comune": True}),
               testo("D'accordo."))
     verifica("doppione: «no» (anche se il modello richiama il tool) → niente", not svc.avviati, r)
     # Al «sì» gemma4 aggiungeva campi («comune»), e la domanda tornava all'infinito
     b, svc = prepara_dgx()
-    turno(b, DETTA, chiama("estensione_crea", dop), testo("Va bene."))
-    r = turno(b, "Sì, la voglio comunque.", chiama("estensione_crea", {**dop, "comune": True}),
+    turno(b, DETTA, chiama("sviluppo_apri", dop), testo("Va bene."))
+    r = turno(b, "Sì, la voglio comunque.", chiama("sviluppo_apri", {**dop, "comune": True}),
               testo("Fatto."))
     verifica("doppione: campi in più al «sì» → vale lo stesso",
              [x.tipo for x in svc.avviati] == ["estensione"], r)
     b, svc = prepara_dgx()
-    r = turno(b, DETTA, chiama("estensione_crea", {**EST, "gia_fatto_da": "inventato"}),
+    r = turno(b, DETTA, chiama("sviluppo_apri", {**EST, "gia_fatto_da": "inventato"}),
               testo("Va bene."))
     verifica("doppione: un tool inventato non vale (conferma della politica, niente avviato)",
              "C'è di mezzo una foto" in r and not svc.avviati, r)
@@ -367,18 +367,18 @@ def prova_rinuncia():
     nuova estensione… per le mie cotture» → «come ti spiegavo prima, non posso creare
     direttamente un'estensione», senza tool. La rete (spinta_rinuncia) fa chiamare il tool;
     i guasti si dicono come guasti; il riassunto non porta avanti un «non posso»."""
-    D = {"estensione_crea", "delega_lavoro", "documento_crea"}
+    D = {"sviluppo_apri", "lavoro_affida", "documento_crea"}
     for t, r in (("Come ti spiegavo prima, non posso creare direttamente un'estensione.",
                   "creiamo una nuova estensione che tenga traccia delle mie cotture"),
                  ("Capisco, ma la mia architettura non mi permette di creare estensioni.",
                   "io voglio che sia un'estensione")):
-        verifica(f"rinuncia: «{t[:50]}…» → estensione_crea",
-                 politica.rinuncia(t, r, D) == "estensione_crea")
+        verifica(f"rinuncia: «{t[:50]}…» → sviluppo_apri",
+                 politica.rinuncia(t, r, D) == "sviluppo_apri")
     for t, r, d in (("Non posso creare un'estensione.", "che ore sono?", D),
                     ("Non posso sapere il meteo, ma posso scriverti un programma.",
                      "scrivimi un programma", D),
                     ("Non posso creare un'estensione.", "creiamo un'estensione",
-                     {"delega_lavoro"}),
+                     {"lavoro_affida"}),
                     ("Ho creato l'estensione.", "creiamo un'estensione", D)):
         verifica(f"rinuncia (contrario): «{t[:40]}…» / «{r[:30]}»",
                  politica.rinuncia(t, r, d) is None)
@@ -387,9 +387,9 @@ def prova_rinuncia():
     frase = "creiamo una nuova estensione che tenga traccia delle mie cotture"
     r = turno(b, frase, testo("Come ti spiegavo prima, non posso creare direttamente "
                               "un'estensione."),
-              chiama("estensione_crea", {"compito": "tenere traccia delle cotture"}),
+              chiama("sviluppo_apri", {"compito": "tenere traccia delle cotture"}),
               testo("Fatto."))
-    verifica("rinuncia: spinta e poi estensione_crea (la proposta del tool)",
+    verifica("rinuncia: spinta e poi sviluppo_apri (la proposta del tool)",
              "spinta_rinuncia" in b.rules_fired() and "Procedo?" in r, r)
     verifica("rinuncia: il «non posso» non resta nella storia",
              not any("non posso creare" in str(m.get("content") or "")
@@ -408,7 +408,7 @@ def prova_rinuncia():
     b.tool_ctx.estensioni = SimpleNamespace(pronto=lambda: False,
                                             archivio=SimpleNamespace(voce=lambda n: None,
                                                                      nomi=lambda: []))
-    r = turno(b, frase, chiama("estensione_crea", {"compito": "cotture"}), testo("Fatto."))
+    r = turno(b, frase, chiama("sviluppo_apri", {"compito": "cotture"}), testo("Fatto."))
     tool = [m for m in b.history if m.get("role") == "tool"][-1]["content"]
     verifica("guasto: «Adesso non posso crearla…», con la nota «guasto di adesso»",
              r.startswith("Adesso non posso crearla") and "guasto di adesso" in tool, r)
@@ -423,14 +423,14 @@ def prova_rinuncia():
 
 def prova_descrizioni():
     reg = prepara_dgx(foto=False)[0].tools
-    d = reg.get("delega_lavoro").description
-    verifica("descrizione: delega_lavoro non sostituisce estensione_crea",
-             "estensione_crea" in d and "rifiutato" in d, d[-300:])
-    g = reg.get("estensioni_gestisci").description
-    verifica("descrizione: estensioni_gestisci elenca quelle vere prima di dire come usarle",
+    d = reg.get("lavoro_affida").description
+    verifica("descrizione: lavoro_affida non sostituisce sviluppo_apri",
+             "sviluppo_apri" in d and "rifiutato" in d, d[-300:])
+    g = reg.get("estensione_gestisci").description
+    verifica("descrizione: estensione_gestisci elenca quelle vere prima di dire come usarle",
              "davvero" in g, g[:160])
-    e = reg.get("lavori_esegui").description
-    verifica("descrizione: lavori_esegui è il modo di riusare un programma dell'agente",
+    e = reg.get("programma_esegui").description
+    verifica("descrizione: programma_esegui è il modo di riusare un programma dell'agente",
              "comando a voce" in e, e[-160:])
 
 

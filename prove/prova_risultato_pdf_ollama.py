@@ -7,23 +7,23 @@ voce (Ollama locale, gemma4:e4b-it-qat) e il modello dell'agente FINTO (prove/ol
 Caso vero della DGX del 07/10 pomeriggio (registro dei turni, qui con nomi di fantasia): una
 ricerca finita e annunciata («ho finito «Esegui una ricerca approfondita sui vantaggi»: …
 Il file è nella cartella Calliope dei Documenti del portatile. Lo apro?»), «Per il risultato.»
-→ risultato_lavoro e il riassunto detto; poi «Fammene un PDF» trascritto «Ho metto un pdf.»
-→ pc_cerca_file(tipo=pdf), l'elenco dei PDF del PC, invece di risultato_lavoro(modo=pdf).
+→ lavoro_risultato e il riassunto detto; poi «Fammene un PDF» trascritto «Ho metto un pdf.»
+→ pc_cerca_file(tipo=pdf), l'elenco dei PDF del PC, invece di lavoro_risultato(modo=pdf).
 
 Per ogni frase un Brain nuovo con quella storia (annuncio e riassunto come dati dell'agente,
 la proposta «Lo apro?» in sospeso), e la frase:
-  1. «Ho metto un pdf.» (storpiata come nel caso vero) → risultato_lavoro modo pdf;
-  2. «Fammene un PDF.» → risultato_lavoro modo pdf;
+  1. «Ho metto un pdf.» (storpiata come nel caso vero) → lavoro_risultato modo pdf;
+  2. «Fammene un PDF.» → lavoro_risultato modo pdf;
   3. «Famme un pdf.» (un'altra storpiatura, non negli esempi del contesto) → modo pdf;
-  4. «Me lo fai in Word?» → risultato_lavoro modo word;
-  contrari (un file del PC nominato: pc_cerca_file, mai risultato_lavoro):
+  4. «Me lo fai in Word?» → lavoro_risultato modo word;
+  contrari (un file del PC nominato: pc_cerca_file, mai lavoro_risultato):
   5. «Cercami il PDF della bolletta della luce.»;
   6. «Aprimi il PDF del contratto d'affitto.».
 Caso vero del 07/10, 16:11 (telefono, 26B): l'annuncio e poi altri turni (lista, promemoria),
-senza il riassunto; «E il risultato di ricerca sulle pompe di calore?» → lavori_stato (l'elenco
-dei lavori finiti) invece di risultato_lavoro:
-  7. quella frase, 8. «Cosa ha trovato la ricerca sulle pompe di calore?» → risultato_lavoro;
-  9. contrario: «Quali lavori hai finito oggi?» → lavori_stato.
+senza il riassunto; «E il risultato di ricerca sulle pompe di calore?» → lavoro_stato (l'elenco
+dei lavori finiti) invece di lavoro_risultato:
+  7. quella frase, 8. «Cosa ha trovato la ricerca sulle pompe di calore?» → lavoro_risultato;
+  9. contrario: «Quali lavori hai finito oggi?» → lavoro_stato.
 Le 7–9 sono solo misura: il 4B qui non chiama nessun tool (risponde dalla storia), nemmeno
 per la 9; contano nel riepilogo, non negli errori. Anche la 1 e la 4 sono misura (col 4B da 0/3 a
 1–3/3 per giro): la prova fallisce sulle frasi pulite e sui contrari.
@@ -95,18 +95,18 @@ RISPOSTA = (f"«{DETTO}»: Le pompe di calore offrono un'alta efficienza energet
 # (frase, tool atteso, modo atteso o None = qualunque, storia: "dopo" il riassunto detto o
 # "lontano": l'annuncio e poi altri turni, senza il riassunto)
 FRASI = [
-    ("Ho metto un pdf.", "risultato_lavoro", "pdf", "misura"),
-    ("Fammene un PDF.", "risultato_lavoro", "pdf", "dopo"),
-    ("Famme un pdf.", "risultato_lavoro", "pdf", "dopo"),
-    ("Me lo fai in Word?", "risultato_lavoro", "word", "misura"),
+    ("Ho metto un pdf.", "lavoro_risultato", "pdf", "misura"),
+    ("Fammene un PDF.", "lavoro_risultato", "pdf", "dopo"),
+    ("Famme un pdf.", "lavoro_risultato", "pdf", "dopo"),
+    ("Me lo fai in Word?", "lavoro_risultato", "word", "misura"),
     ("Cercami il PDF della bolletta della luce.", "pc_cerca_file", None, "dopo"),
     ("Aprimi il PDF del contratto d'affitto.", "pc_cerca_file", None, "dopo"),
     # Caso vero del 07/10, 16:11 (telefono): il risultato di un lavoro nominato, chiesto un
-    # po' dopo l'annuncio → lavori_stato (l'elenco), poi «Di quello della pompa di calore, sì»
-    ("E il risultato di ricerca sulle pompe di calore?", "risultato_lavoro", None, "lontano"),
-    ("Cosa ha trovato la ricerca sulle pompe di calore?", "risultato_lavoro", None, "lontano"),
+    # po' dopo l'annuncio → lavoro_stato (l'elenco), poi «Di quello della pompa di calore, sì»
+    ("E il risultato di ricerca sulle pompe di calore?", "lavoro_risultato", None, "lontano"),
+    ("Cosa ha trovato la ricerca sulle pompe di calore?", "lavoro_risultato", None, "lontano"),
     # contrario: l'elenco dei lavori
-    ("Quali lavori hai finito oggi?", "lavori_stato", None, "lontano"),
+    ("Quali lavori hai finito oggi?", "lavoro_stato", None, "lontano"),
 ]
 ALTRI = [("Che ore sono?", "Sono le 16:10."),
          ("Ricordami tra 5 minuti di controllare il forno.",
@@ -177,19 +177,19 @@ for giro in range(1, GIRI + 1):
         risposta = "".join(parti).strip()
         chiamate = [(t["nome"], t["argomenti"]) for t in b.last_tools]
         nomi = [n for n, _ in chiamate]
-        if atteso == "risultato_lavoro":
+        if atteso == "lavoro_risultato":
             ok = any(n == atteso and (modo is None or str(a.get("modo", "")).lower() == modo)
                      for n, a in chiamate)
-            ok = ok and "pc_cerca_file" not in nomi and "lavori_stato" not in nomi
+            ok = ok and "pc_cerca_file" not in nomi and "lavoro_stato" not in nomi
         else:
-            ok = atteso in nomi and "risultato_lavoro" not in nomi
+            ok = atteso in nomi and "lavoro_risultato" not in nomi
         argomenti = "; ".join(f"{n}({', '.join(f'{k}={v!r}' for k, v in a.items())})"
                               for n, a in chiamate) or "—"
         dettaglio = f"{primo or 0:.2f}s  {risposta[:160]!r}  regole={b.last_rules}"
         if storia in ("lontano", "misura"):
-            # Solo misura: col 4B nessun tool, nemmeno lavori_stato per «Quali lavori hai
+            # Solo misura: col 4B nessun tool, nemmeno lavoro_stato per «Quali lavori hai
             # finito oggi?» (risponde dalla storia, 0/3 prima e dopo il 07/10); il 26B della
-            # DGX chiamava lavori_stato. «Ho metto un pdf.» e «Me lo fai in Word?» col 4B da 0/3
+            # DGX chiamava lavoro_stato. «Ho metto un pdf.» e «Me lo fai in Word?» col 4B da 0/3
             # a 1–3/3 (docs/aree/agenti-estensioni.md): misura, non errori
             print(f"{'ok ' if ok else '-- '} [{giro}.{i}] (misura) «{frase}» → {argomenti}  "
                   f"{dettaglio}", flush=True)

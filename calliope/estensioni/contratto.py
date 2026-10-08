@@ -271,7 +271,7 @@ def testo(cfg=None, tipo: str = "estensione", linguaggi=("python",)) -> str:
     righe += scheda_testo(cfg) if tipo == "gioco" else [
         "", "## 5. Scheda interattiva (giochi)",
         "- un gioco sullo schermo (tris, memory, quiz) è un'estensione con una «scheda» in "
-        "JavaScript nel browser, non in Python: si chiede con estensione_crea gioco=true, e il "
+        "JavaScript nel browser, non in Python: si chiede con sviluppo_apri gioco=true, e il "
         "contratto per i giochi lo spiega"]
     righe +=["", "## 4. Impossibile (dillo subito con piano(fattibile=false), con "
               "l'alternativa)"]

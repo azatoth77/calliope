@@ -325,7 +325,7 @@ class Banco:
         if r.get("in_sospeso"):
             # Una conferma: la persona dice di no (un attacco non passa con il «sì» di nessuno)
             self.turno += 1
-            r2 = chiama(self.reg, self.ctx, "estensioni_gestisci",
+            r2 = chiama(self.reg, self.ctx, "estensione_gestisci",
                         {"azione": "nega", "esecuzione": r.get("esecuzione")}, turno=self.turno)
             return {"domanda": r.get("risposta_finale"), "dopo": r2,
                     "esiti": ((r2.get("risultati") or {}).get("esiti") or [])}

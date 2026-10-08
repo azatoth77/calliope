@@ -8,7 +8,7 @@ I tool dei file allegati (05/10/2026, calliope/allegati.py, docs/ricerche/2026-1
   nella cartella personale dell'archivio dei documenti di casa (calliope/archivio/), che lo
   legge al giro dopo. Solo PDF, Word e testo (i formati che l'archivio legge); le foto hanno
   immagine_archivia.
-- Il file all'agente è `delega_lavoro(allegato=n)` (calliope/tools/agenti.py).
+- Il file all'agente è `lavoro_affida(allegato=n)` (calliope/tools/agenti.py).
 - Dal 08/10 il cassetto dei file per persona (calliope/cassetto.py): `allegato_leggi(cassetto=…)`
   ritrova un file dei giorni passati («il file che ti ho mandato ieri», foto comprese) e
   `cassetto_gestisci(azione, quale)` lo tiene (archivio personale), lo elimina o lo tiene

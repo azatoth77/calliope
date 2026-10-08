@@ -8,7 +8,7 @@ Chi può scaricare:
 - e solo se il suo proprietario è la persona per cui era la scheda, o amministra;
 - mai dalla zona grigia: la scheda personale ci arriva solo con l'identità decisa dalla voce
   (`Mittente.certo`, hub.destinatari) o perché scritta da quello schermo; una scheda mostrata
-  nella zona grigia (risultato_lavoro del proprio lavoro) arriva senza «Scarica».
+  nella zona grigia (lavoro_risultato del proprio lavoro) arriva senza «Scarica».
 
 Come: la pagina chiede un gettone (`POST /api/scarica`, sessione nell'intestazione, come lo
 scritto) e apre `GET /scarica/<gettone>`: un indirizzo a caso valido `schermi_scarica_s`

@@ -91,8 +91,11 @@ def delegato(svc, tipo=None):
     return [lv for lv in svc.lavori if tipo is None or lv.tipo == tipo]
 
 
-DELEGA = "delega_lavoro"
-NIENTE = ("niente_delega",)       # nessun delega_lavoro (qualunque altra cosa va bene)
+DELEGA = "lavoro_affida"
+# Dal 08/10 (modalità sviluppo, versione 2) il codice è di sviluppo_apri; lavoro_affida di codice
+# ci passa da sé (regola `lavoro_codice_sviluppo`), quindi valgono tutti e due
+CODICE_T = ("sviluppo_apri", DELEGA)
+NIENTE = ("niente_delega",)       # né lavoro_affida né sviluppo_apri (qualunque altra cosa va bene)
 
 # (sessione, chi, livello, come, frase, atteso, controllo(risposta, svc, docs))
 #   atteso: nome del tool, NIENTE, oppure una tupla di tool ammessi
@@ -100,13 +103,13 @@ CASI = [
     # Codice: proposta, «sì», stato, annullo
     ("cod", "Dario", "amministra", "voce",
      "Scrivimi uno script Python che rinomina le foto di una cartella mettendo la data nel "
-     "nome, con i test.", DELEGA,
+     "nome, con i test.", CODICE_T,
      lambda r, s, d: r.rstrip().endswith("?") and not s.attivi()),
-    ("cod", "Dario", "amministra", "breve", "Sì, vai.", DELEGA,
+    ("cod", "Dario", "amministra", "breve", "Sì, vai.", CODICE_T,
      lambda r, s, d: any(lv.tipo == "codice" for lv in s.attivi())),
-    ("cod", "Dario", "amministra", "voce", "A che punto è il programma?", "lavori_stato",
+    ("cod", "Dario", "amministra", "voce", "A che punto è il programma?", "lavoro_stato",
      lambda r, s, d: "Sto lavorando" in r or "in coda" in r),
-    ("cod", "Dario", "amministra", "voce", "Fermalo, non mi serve più.", "lavori_annulla",
+    ("cod", "Dario", "amministra", "voce", "Fermalo, non mi serve più.", "lavoro_annulla",
      lambda r, s, d: "Ho fermato" in r and not any(lv.tipo == "codice" for lv in s.attivi())),
     # Documento lungo: parte subito (non costoso), non è documento_crea
     ("rel", "Dario", "amministra", "voce",
@@ -121,11 +124,11 @@ CASI = [
      lambda r, s, d: not any(lv.tipo == "ricerca" for lv in s.lavori)),
     # Altri lavori di codice
     ("cod2", "Dario", "amministra", "voce",
-     "Correggi lo script di backup: non copia i file nascosti. Aggiungi anche i test.", DELEGA,
+     "Correggi lo script di backup: non copia i file nascosti. Aggiungi anche i test.", CODICE_T,
      lambda r, s, d: True),
     ("web", "Dario", "amministra", "voce",
      "Scrivimi una pagina web per la lista della spesa, con il pulsante per aggiungere le "
-     "voci.", DELEGA, lambda r, s, d: True),
+     "voci.", CODICE_T, lambda r, s, d: True),
     # Da NON delegare
     ("for", "Dario", "amministra", "voce", "Come si scrive un ciclo for in Python, in breve?",
      NIENTE, lambda r, s, d: len(r) > 10),
@@ -137,7 +140,7 @@ CASI = [
      lambda r, s, d: re.search(r"\d", r)),
     ("let", "Dario", "amministra", "voce", "Scrivimi una lettera di disdetta della palestra in "
      "PDF.", "documento_crea", lambda r, s, d: True),
-    # «compiti» come il parametro di delega_lavoro: senza la frase sui documenti brevi nel
+    # «compiti» come il parametro di lavoro_affida: senza la frase sui documenti brevi nel
     # prompt andava all'agente 3 volte su 4 (02/10)
     ("elenco", "Dario", "amministra", "voce", "Fai un PDF con l'elenco dei compiti di Matteo per "
      "domani: matematica pagina 40, leggere un capitolo del libro, ripassare storia.",
@@ -148,12 +151,12 @@ CASI = [
      lambda r, s, d: True),
     # Permessi
     ("fam", "Bianca", "familiare", "voce", "Scrivimi uno script che fa il backup dei miei "
-     "documenti ogni sera.", (DELEGA, None),
+     "documenti ogni sera.", (DELEGA, "sviluppo_apri", None),
      lambda r, s, d: not any(lv.persona == "bianca-id" and lv.tipo == "codice" for lv in s.lavori)),
     ("osp", None, "ospite", "voce", "Scrivimi un programma che calcola le tasse.",
-     (DELEGA, None), lambda r, s, d: not any(lv.persona is None for lv in s.lavori)),
+     (DELEGA, "sviluppo_apri", None), lambda r, s, d: not any(lv.persona is None for lv in s.lavori)),
     # Stato senza lavori di chi chiede
-    ("st", "Bianca", "familiare", "voce", "A che punto sono i miei lavori?", "lavori_stato",
+    ("st", "Bianca", "familiare", "voce", "A che punto sono i miei lavori?", "lavoro_stato",
      lambda r, s, d: True),
 ]
 
@@ -196,7 +199,7 @@ for giro in range(1, GIRI + 1):
             time.sleep(1.0)                              # il lavoro si ferma da sé
         tools = [t["nome"] for t in b.last_tools]
         if atteso == NIENTE:
-            ok_tool = DELEGA not in tools
+            ok_tool = DELEGA not in tools and "sviluppo_apri" not in tools
         elif isinstance(atteso, tuple):
             ok_tool = any(t in atteso for t in tools) or (None in atteso and not tools)
         else:

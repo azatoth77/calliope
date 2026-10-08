@@ -19,7 +19,7 @@ a richiesta, il risultato al portatile).
    schermo personale a cui la scheda è arrivata, del suo proprietario (o di chi amministra),
    mai dalla zona grigia né da uno schermo di stanza; formato non ammesso; scadenza e usi; il
    GET con Content-Disposition, CSP «sandbox» e nosniff; PDF, Word e MD veri.
-4. **«Fammene un PDF»** (risultato_lavoro con modo pdf/word): il file nella cartella del
+4. **«Fammene un PDF»** (lavoro_risultato con modo pdf/word): il file nella cartella del
    lavoro e al portatile, «Lo apro?»; il codice no; nella zona grigia la scheda senza
    «Scarica».
 
@@ -326,7 +326,7 @@ verifica("scheda: quella del documento con il Markdown, chiave del lavoro, «Sca
          and card["riassunto"].startswith("Ho trovato tre fonti"), {k: card[k] for k in
                                                                    ("tipo", "chiave", "scarica")})
 meta = json.loads((cart / "lavoro.json").read_text(encoding="utf-8"))
-verifica("lavoro.json: il testo e il file risultato.md (per risultato_lavoro dopo un riavvio)",
+verifica("lavoro.json: il testo e il file risultato.md (per lavoro_risultato dopo un riavvio)",
          meta["file"] == ["risultato.md"] and meta["testo"].startswith("# Le api"))
 
 sat2 = Satellite(TMP / "spento", collegato=False)
@@ -538,7 +538,7 @@ def contesto(hubf=None):
 hubf = HubFinto()
 ctx = contesto(hubf)
 res = ta._risultato_lavoro(ctx, "", "word")
-verifica("risultato_lavoro modo word: il file Word e la frase", res.get("ok")
+verifica("lavoro_risultato modo word: il file Word e la frase", res.get("ok")
          and "documento Word" in res["risposta_finale"] and list(cart.glob("*.docx")), res)
 res = ta._risultato_lavoro(ctx, "", "mostra")
 verifica("zona grigia (risultato proprio): la scheda c'è, senza «Scarica»",

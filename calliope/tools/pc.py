@@ -666,7 +666,7 @@ def pc_specs(executors: dict, ospite_volume_media: bool = False,
     Il parametro `pc` c'è solo con più di un PC: oggi c'è solo il portatile, e un
     parametro in più è un'occasione di errore per il modello. Con `documenti` la
     descrizione di pc_apri_file dice che «aprilo» dopo documento_crea è il risultato 1. Con
-    `agenti` (c'è risultato_lavoro) quella di pc_cerca_file dice che il PDF del risultato di un
+    `agenti` (c'è lavoro_risultato) quella di pc_cerca_file dice che il PDF del risultato di un
     lavoro non si cerca sul PC (07/10, DGX: «Ho metto un pdf.» → l'elenco dei PDF del PC).
     """
     if not executors:
@@ -750,7 +750,7 @@ def pc_specs(executors: dict, ospite_volume_media: bool = False,
                          f"pc_apri_file."
                          + (" NON per fare un PDF o un Word del risultato di un lavoro "
                             "dell'agente appena detto («fammene un PDF», «un PDF»): quello è "
-                            "risultato_lavoro." if agenti else "")),
+                            "lavoro_risultato." if agenti else "")),
             parameters=params({"testo": {"type": "string"},
                                "tipo": {"type": "string", "enum": list(TIPI_FILE)},
                                "periodo": {"type": "string"}}, []),

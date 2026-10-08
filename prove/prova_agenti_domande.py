@@ -12,7 +12,7 @@ il PC è un PC finto (prove/pc_finto.py) con file veri in una cartella temporane
 Domande:
 - codice: l'agente scrive un file e chiede un dato → lavoro in_attesa, sandbox e conversazione
   conservate, annuncio con la domanda e azione in sospeso (RISPOSTA_MSG); risposta nel turno
-  dopo (Brain con una voce finta: il modello vede la domanda e chiama lavori_rispondi), il
+  dopo (Brain con una voce finta: il modello vede la domanda e chiama lavoro_rispondi), il
   lavoro riprende dal punto in cui era; il tempo d'attesa non conta nel tetto dei minuti;
 - modello di documento: risposta più tardi, per titolo («il verbale»), i campi già compilati
   restano;
@@ -167,12 +167,12 @@ cfg = cfg_base(fake.url, agenti_tempo_max_min=0.03)       # 1,8 s di lavoro al m
 svc = servizio(cfg)
 banco = Banco(cfg, svc)
 nomi = [s["function"]["name"] for s in banco.reg.all_schemas()]
-verifica("lavori_rispondi registrato (familiari e chi amministra)", "lavori_rispondi" in nomi
-         and "lavori_rispondi" not in [s["function"]["name"]
+verifica("lavoro_rispondi registrato (familiari e chi amministra)", "lavoro_rispondi" in nomi
+         and "lavoro_rispondi" not in [s["function"]["name"]
                                        for s in banco.reg.schemas_for("ospite")])
-verifica("senza PC delega_lavoro non ha il parametro file",
+verifica("senza PC lavoro_affida non ha il parametro file",
          "file" not in next(s for s in banco.reg.all_schemas()
-                            if s["function"]["name"] == "delega_lavoro")["function"][
+                            if s["function"]["name"] == "lavoro_affida")["function"][
              "parameters"]["properties"])
 ripresa = {}
 
@@ -199,16 +199,16 @@ verifica("annuncio con la domanda, che finisce con «?»", item and item["messag
     "Dario, per «") and item["messaggio"].endswith("che separatore usa il file CSV?"),
          str(item and item["messaggio"]))
 off = (item or {}).get("in_sospeso") or {}
-verifica("azione in sospeso per lavori_rispondi con il testo della domanda",
-         off.get("tool") == "lavori_rispondi" and "Domanda in sospeso" in off.get("messaggio", "")
+verifica("azione in sospeso per lavoro_rispondi con il testo della domanda",
+         off.get("tool") == "lavoro_rispondi" and "Domanda in sospeso" in off.get("messaggio", "")
          and f'lavoro="{lav.id}"' in off.get("messaggio", ""), str(off)[:200])
 verifica("sandbox e conversazione conservate durante l'attesa",
          lav.sandbox is not None and (lav.sandbox.root / "leggi_csv.py").is_file()
          and lav.contesto.get("tipo") == "codice")
 verifica("lavoro.json scritto con la domanda", lav.cartella and json.loads(
     (Path(lav.cartella) / "lavoro.json").read_text(encoding="utf-8"))["stato"] == "in_attesa")
-out, dt = banco.tool("lavori_stato", {}, "Dario", 2)
-verifica("lavori_stato: aspetta una risposta, con la domanda e l'azione in sospeso",
+out, dt = banco.tool("lavoro_stato", {}, "Dario", 2)
+verifica("lavoro_stato: aspetta una risposta, con la domanda e l'azione in sospeso",
          "aspetta una risposta" in out["risposta_finale"] and out.get("in_sospeso"),
          out["risposta_finale"])
 
@@ -227,7 +227,7 @@ def risponde_alla_domanda(body):
     sis = [m["content"] for m in body["messages"] if m["role"] == "system"]
     visto["sospeso"] = [x for x in sis if x.startswith("Domanda in sospeso")]
     m = re.search(r'lavoro="(L\d+)"', visto["sospeso"][-1] if visto["sospeso"] else "")
-    return {"tool_calls": [call("lavori_rispondi", {"lavoro": m.group(1) if m else "",
+    return {"tool_calls": [call("lavoro_rispondi", {"lavoro": m.group(1) if m else "",
                                                     "risposta": "punto e virgola"})]}
 
 
@@ -288,13 +288,13 @@ item = fine(svc)
 verifica("dati mancanti: in attesa, la domanda dice cosa manca", item
          and item["stato"] == "in_attesa" and "data dell'assemblea" in item["messaggio"]
          and item["messaggio"].endswith("?"), str(item and item["messaggio"]))
-out, _ = banco.tool("lavori_rispondi", {"lavoro": "verbale", "risposta": "il 3 ottobre"},
+out, _ = banco.tool("lavoro_rispondi", {"lavoro": "verbale", "risposta": "il 3 ottobre"},
                     "Marco", 5)
 verifica("un altro familiare non risponde: rifiutato, NON eseguito, regola nel registro",
          out.get("ok") is False and "NON" in out.get("fatto", "")
          and "lavori_risposta_altrui" in banco.regole and lav.stato == "in_attesa",
          out.get("risposta_finale"))
-out, _ = banco.tool("lavori_rispondi", {"risposta": "il 3 ottobre"}, "Dario", 6)
+out, _ = banco.tool("lavoro_rispondi", {"risposta": "il 3 ottobre"}, "Dario", 6)
 verifica("senza nominare il lavoro, chi non l'ha chiesto ma amministra: va",
          out.get("ok") and lav.stato in ("in_coda", "in_corso", "fatto"), out["risposta_finale"])
 item = fine(svc)
@@ -314,22 +314,22 @@ fine(svc)
 l_c = svc.nuovo("codice", "Scrivi uno script di backup delle foto", "bianca-id", "Bianca")
 svc.avvia(l_c)
 fine(svc)
-out, _ = banco.tool("lavori_rispondi", {"risposta": "Le Querce"}, "Bianca", 7)
+out, _ = banco.tool("lavoro_rispondi", {"risposta": "Le Querce"}, "Bianca", 7)
 verifica("due lavori in attesa e nessun nome: «A quale rispondi?»", out.get("ok") is False
          and out["risposta_finale"].endswith("A quale rispondi?")
          and l_v.stato == l_c.stato == "in_attesa", out["risposta_finale"])
 fake.copione = [{"tool_calls": [call("consegna", {"riassunto": "Fatto.", "esito": "fatto"})]}]
-out, dt = banco.tool("lavori_rispondi", {"lavoro": "lo script del backup",
+out, dt = banco.tool("lavoro_rispondi", {"lavoro": "lo script del backup",
                                          "risposta": "la cartella Immagini"}, "Bianca", 8)
 verifica("«per lo script del backup: …» trova il lavoro giusto, subito", out.get("ok")
          and l_c.stato != "in_attesa" and l_v.stato == "in_attesa" and dt < SUBITO_S,
          f"{out['risposta_finale']} ({dt * 1000:.1f} ms)")
 item = fine(svc)
 verifica("e il lavoro finisce", item and item["id"] == l_c.id and item["stato"] == "fatto")
-out, _ = banco.tool("lavori_annulla", {}, "Bianca", 9)
+out, _ = banco.tool("lavoro_annulla", {}, "Bianca", 9)
 verifica("annullo di un lavoro in attesa: fermato, nessun annuncio",
          out.get("ok") and l_v.stato == "annullato" and svc.done.empty(), out["risposta_finale"])
-out, _ = banco.tool("lavori_rispondi", {"risposta": "x"}, "Bianca", 10)
+out, _ = banco.tool("lavoro_rispondi", {"risposta": "x"}, "Bianca", 10)
 verifica("nessun lavoro in attesa: lo dice, NON eseguito", out.get("ok") is False
          and "Non ho lavori" in out["risposta_finale"])
 svc.close()
@@ -352,7 +352,7 @@ verifica("nessuna risposta in tempo: si chiude da solo e lo dice", item
          and "chiedimelo di nuovo" in item["messaggio"], str(item and item["messaggio"]))
 verifica("i file fatti fin lì restano nella cartella", Path(lav.cartella, "b.py").is_file()
          and lav.sandbox is None)
-out, _ = banco.tool("lavori_rispondi", {"risposta": "per Bianca"}, "Dario", 3)
+out, _ = banco.tool("lavoro_rispondi", {"risposta": "per Bianca"}, "Dario", 3)
 verifica("risposta dopo la scadenza: niente da riprendere", out.get("ok") is False)
 svc.close()
 
@@ -367,7 +367,7 @@ fake.copione = [{"tool_calls": [call("consegna", {"riassunto": "Manca.", "esito"
 lav = svc.nuovo("codice", "Scrivi un programma", "dario-id", "Dario")
 svc.avvia(lav)
 fine(svc)
-banco.tool("lavori_rispondi", {"risposta": "sì"}, "Dario", 2)
+banco.tool("lavoro_rispondi", {"risposta": "sì"}, "Dario", 2)
 item = fine(svc)
 verifica("oltre agenti_domande_max: il lavoro si chiude con la domanda (come prima)",
          item and item["stato"] == "mancano_dati" and "Seconda domanda" in item["messaggio"],
@@ -380,7 +380,7 @@ lento = svc.nuovo("altro", "Un lavoro lento", "dario-id", "Dario")
 svc.avvia(lento)
 aspetta(lambda: lento.stato == "in_corso", 3)
 tempi = []
-for nome, args in (("lavori_stato", {}), ("lavori_rispondi", {"risposta": "x"})):
+for nome, args in (("lavoro_stato", {}), ("lavoro_rispondi", {"risposta": "x"})):
     _, dt = banco.tool(nome, args, "Dario", 4)
     tempi.append(dt)
 verifica("con l'agente occupato i tool rispondono in pochi millisecondi", max(tempi) < SUBITO_S,
@@ -431,20 +431,20 @@ verifica("nome del risultato: «backup (corretto).py», «spese (modificato).xls
 cfg = cfg_base(fake.url, agenti_file_max_mb=0.02)          # 20 KB
 svc = servizio(cfg)
 banco = Banco(cfg, svc, pcs)
-schema = next(s for s in banco.reg.all_schemas() if s["function"]["name"] == "delega_lavoro")
-verifica("con il PC delega_lavoro ha il parametro file", "file" in schema["function"][
+schema = next(s for s in banco.reg.all_schemas() if s["function"]["name"] == "lavoro_affida")
+verifica("con il PC lavoro_affida ha il parametro file", "file" in schema["function"][
     "parameters"]["properties"])
 
-out, _ = banco.tool("delega_lavoro", {"tipo": "codice", "compito": "Correggi lo script",
+out, _ = banco.tool("lavoro_affida", {"tipo": "codice", "compito": "Correggi lo script",
                                       "file": "backup.py"}, "Bianca", 1)
 verifica("familiare non proprietario: niente file (prima il codice: solo chi amministra)",
          out.get("ok") is False and not svc.lavori, out.get("risposta_finale") or out.get("motivo"))
-out, _ = banco.tool("delega_lavoro", {"tipo": "documento", "compito": "Riassumimi il contratto",
+out, _ = banco.tool("lavoro_affida", {"tipo": "documento", "compito": "Riassumimi il contratto",
                                       "file": "contratto"}, "Bianca", 1)
 verifica("familiare non proprietario del PC: il file non lascia il PC, regola nel registro",
          out.get("ok") is False and "proprietario" in out.get("motivo", "")
          and "lavori_file_permesso" in banco.regole and not svc.lavori, str(out)[:160])
-out, _ = banco.tool("delega_lavoro", {"tipo": "codice", "compito": "Guarda la foto",
+out, _ = banco.tool("lavoro_affida", {"tipo": "codice", "compito": "Guarda la foto",
                                       "file": "foto mare.jpg"}, "Dario", 1)
 verifica("estensione vietata: rifiutata prima di cercare", out.get("ok") is False
          and ".jpg" in out["risposta_finale"] and pc.ultima_ricerca is None,
@@ -465,15 +465,15 @@ fake.copione = [legge,
                 {"tool_calls": [call("consegna", {"riassunto": "Ho corretto il valore restituito.",
                                                   "esito": "fatto"})]}]
 fake.richieste.clear()
-out, _ = banco.tool("delega_lavoro", {"tipo": "codice", "compito": "Correggi lo script backup",
+out, _ = banco.tool("lavoro_affida", {"tipo": "codice", "compito": "Correggi lo script backup",
                                       "file": "backup.py"}, "Dario", 2)
 off = out.get("in_sospeso") or {}
 verifica("conferma esplicita: «Mando una copia dello script Python «backup»… Procedo?»",
          out["risposta_finale"].startswith("Mando una copia dello script Python «backup»")
          and "l'originale non lo tocco" in out["risposta_finale"]
-         and out["risposta_finale"].endswith("Procedo?") and off.get("tool") == "delega_lavoro"
+         and out["risposta_finale"].endswith("Procedo?") and off.get("tool") == "sviluppo_apri"
          and not svc.lavori and not fake.richieste, out["risposta_finale"])
-out, dt = banco.tool("delega_lavoro", {"tipo": "codice", "compito": "Correggi lo script backup",
+out, dt = banco.tool("lavoro_affida", {"tipo": "codice", "compito": "Correggi lo script backup",
                                        "proposta": off["argomenti"]["proposta"]}, "Dario", 3)
 verifica("al «sì» parte, e la voce non aspetta la copia", out.get("ok") and dt < SUBITO_S,
          f"{dt * 1000:.1f} ms")
@@ -497,11 +497,11 @@ DOC = {"titolo": "Riassunto contratto", "blocchi": [
     {"tipo": "paragrafo", "testo": "Il canone è di 800 euro al mese per 4 anni."}]}
 fake.copione = [{"content": "Bozza del riassunto."}, {"content": json.dumps(DOC)}]
 fake.richieste.clear()
-out, _ = banco.tool("delega_lavoro", {"tipo": "documento", "compito": "Riassumimi il contratto",
+out, _ = banco.tool("lavoro_affida", {"tipo": "documento", "compito": "Riassumimi il contratto",
                                       "file": "contratto"}, "Marco", 4)
 verifica("proprietario del PC (familiare): proposta con «del PDF»", "del PDF «contratto affitto»"
          in out.get("risposta_finale", ""), out.get("risposta_finale"))
-banco.tool("delega_lavoro", {"tipo": "documento", "compito": "Riassumimi il contratto",
+banco.tool("lavoro_affida", {"tipo": "documento", "compito": "Riassumimi il contratto",
                              "proposta": out["in_sospeso"]["argomenti"]["proposta"]}, "Marco", 5)
 item = fine(svc)
 verifica("il testo del PDF arriva all'agente", fake.richieste
@@ -515,17 +515,17 @@ DOC2 = {"titolo": "Spese 2026", "fogli": [{"nome": "Spese", "colonne": ["Voce", 
                                           "righe": [["Luce", 340, "bolletta"]]}]}
 fake.copione = [{"content": json.dumps(DOC2)}]
 fake.richieste.clear()
-out, _ = banco.tool("delega_lavoro", {"tipo": "documento", "compito": "Aggiungi una colonna Note",
+out, _ = banco.tool("lavoro_affida", {"tipo": "documento", "compito": "Aggiungi una colonna Note",
                                       "file": "spese"}, "Dario", 6)
 off = out.get("in_sospeso") or {}
 verifica("due file trovati: «Quale mando all'agente?» con i numeri", "Quale mando all'agente?"
          in out.get("risposta_finale", "") and off.get("domanda") == "Quale mando all'agente?"
          and "1 = " in off.get("cosa", ""), out.get("risposta_finale"))
 lid = re.search(r'proposta="(L\d+)"', off.get("argomenti", "")).group(1)
-out, _ = banco.tool("delega_lavoro", {"tipo": "documento", "compito": "Aggiungi una colonna Note",
+out, _ = banco.tool("lavoro_affida", {"tipo": "documento", "compito": "Aggiungi una colonna Note",
                                       "proposta": lid}, "Dario", 7)
 verifica("senza dire quale: lo richiede", "Quale mando" in out.get("risposta_finale", ""))
-out, _ = banco.tool("delega_lavoro", {"tipo": "documento", "compito": "Aggiungi una colonna Note",
+out, _ = banco.tool("lavoro_affida", {"tipo": "documento", "compito": "Aggiungi una colonna Note",
                                       "proposta": lid, "file": "il primo"}, "Dario", 8)
 item = fine(svc)
 # Il più recente prima: «spese 2026» è il primo risultato
@@ -536,15 +536,15 @@ verifica("scelto il primo: Excel con lo stesso nome → «Spese 2026 (modificato
          str(item and item["messaggio"]))
 
 # Troppo grande
-out, _ = banco.tool("delega_lavoro", {"tipo": "altro", "compito": "Leggi il file grande",
+out, _ = banco.tool("lavoro_affida", {"tipo": "altro", "compito": "Leggi il file grande",
                                       "file": "grande.txt"}, "Dario", 9)
-banco.tool("delega_lavoro", {"tipo": "altro", "compito": "Leggi il file grande",
+banco.tool("lavoro_affida", {"tipo": "altro", "compito": "Leggi il file grande",
                              "proposta": out["in_sospeso"]["argomenti"]["proposta"]}, "Dario", 10)
 item = fine(svc)
 verifica("file troppo grande: il lavoro non parte e lo dice", item and item["stato"] == "errore"
          and "troppo grande" in item["messaggio"], str(item and item["messaggio"]))
 pc.locked = True
-out, _ = banco.tool("delega_lavoro", {"tipo": "codice", "compito": "Correggi",
+out, _ = banco.tool("lavoro_affida", {"tipo": "codice", "compito": "Correggi",
                                       "file": "backup.py"}, "Dario", 11)
 verifica("schermo bloccato: niente ricerca, niente file", out.get("ok") is False
          and "bloccato" in json.dumps(out, ensure_ascii=False))
@@ -603,11 +603,11 @@ fake.copione = [{"tool_calls": [call("scrivi_file", {"percorso": "backup.py",
                 {"tool_calls": [call("consegna", {"riassunto": "Ho corretto lo script.",
                                                   "esito": "fatto"})]}]
 pc_sat.ritardo = 0.8
-out, _ = banco.tool("delega_lavoro", {"tipo": "codice", "compito": "Correggi lo script backup",
+out, _ = banco.tool("lavoro_affida", {"tipo": "codice", "compito": "Correggi lo script backup",
                                       "file": "backup.py"}, "Dario", 1)
 verifica("ricerca sul satellite e proposta", out["risposta_finale"].endswith("Procedo?"),
          out["risposta_finale"])
-out, dt = banco.tool("delega_lavoro", {"tipo": "codice", "compito": "Correggi lo script backup",
+out, dt = banco.tool("lavoro_affida", {"tipo": "codice", "compito": "Correggi lo script backup",
                                        "proposta": out["in_sospeso"]["argomenti"]["proposta"]},
                      "Dario", 2)
 verifica("al «sì» la voce non aspetta il portatile lento (0,8 s)", out.get("ok") and dt < SUBITO_S,
@@ -664,12 +664,12 @@ except PCNonCollegato as e:
 verifica("satellite senza invio: «va aggiornato»", "aggiornato" in msg, msg)
 c.esecutore["invio"] = True
 fake.copione = [{"content": "Ok.\nRIASSUNTO: Fatto."}]
-out, _ = banco.tool("delega_lavoro", {"tipo": "altro", "compito": "Riassumi",
+out, _ = banco.tool("lavoro_affida", {"tipo": "altro", "compito": "Riassumi",
                                       "file": "contratto"}, "Dario", 20)
 lid = out["in_sospeso"]["argomenti"]["proposta"]
 sat.ferma()
 aspetta(lambda: srv.attivo_pronto() is None, 5)
-banco.tool("delega_lavoro", {"tipo": "altro", "compito": "Riassumi", "proposta": lid},
+banco.tool("lavoro_affida", {"tipo": "altro", "compito": "Riassumi", "proposta": lid},
            "Dario", 21)
 item = fine(svc, 20)
 verifica("satellite scollegato al momento della copia: il lavoro non parte e lo dice",
