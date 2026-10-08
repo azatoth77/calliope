@@ -179,6 +179,9 @@ def prova_scadenza():
     info = cas.da_dire("dario")
     verifica("il giorno dopo: un file che scade entro 2 giorni (solo quello)",
              info["revisione"] and [r["id"] for r in info["in_scadenza"]] == [a], info)
+    trovati, _ = cas.cerca("dario", "quelli in scadenza")
+    verifica("«quelli in scadenza» trova solo quello che scade",
+             [r["id"] for r in trovati] == [a], [r["id"] for r in trovati])
     f = cas.frase(info, schermo=True)
     verifica("frase con lo schermo personale: una sola, «lo trovi sullo schermo»",
              f == "Hai un file che scade domani: lo trovi sullo schermo.", f)

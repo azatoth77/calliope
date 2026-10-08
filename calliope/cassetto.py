@@ -85,6 +85,7 @@ vocali pdf word excel video zip testo presentazione foglio fogli giorno giorni f
 scorsa ultimo ultima ultimi ultime primo prima stamattina stasera stamani mattina sera
 pomeriggio oggi ieri altroieri settimana lunedi martedi mercoledi giovedi venerdi sabato
 domenica tutti tutte tutto elenco lista quali dammi leggi leggimi apri mostra mostrami
+scadenza scadenze scade scadono scadere presto ancora tieni tienili elimina eliminali
 """.split())
 _TIPI_PAROLE = (
     (r"\bfoto|immagin|scatt|screenshot|schermat", {"immagine"}),
