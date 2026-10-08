@@ -505,10 +505,10 @@ class Misura:
 
 
 # ─────────────────────────────── F1: il suggerimento ───────────────────────────────
-FORSE_MSG = ("Con «{detto}» non è stato trovato niente, e forse ho capito male il nome. Chiedi "
-             "in breve a chi parla se intendeva «{forse}», con una domanda (es. «Intendevi "
-             "{forse}?»). Se dice sì, richiama {tool} con «{forse}» al posto di «{detto}». Non "
-             "dire che è stato trovato e non cambiare il nome da solo.")
+FORSE_MSG = ("Con «{detto}» non è stato trovato niente, e forse ho capito male il nome. Dillo "
+             "in breve e chiudi la risposta con la domanda «Intendevi {forse}?», con il punto "
+             "di domanda. Se poi dice sì, richiama {tool} con «{forse}» al posto di «{detto}». "
+             "Non dire che è stato trovato e non cambiare il nome da solo.")
 RIPETI_MSG = ("Con «{detto}» non è stato trovato niente, e forse ho capito male il nome. Dillo "
               "in breve e chiedi a chi parla di ripeterlo, o di scriverlo{schermo}. Non "
               "inventare un nome.")
