@@ -114,7 +114,7 @@ nuova va in `elenco.md` (nella sua area) e in `prove/__main__.py`.
 - **Agenti ed estensioni** ([elenco](elenco.md#agenti-ed-estensioni), [area](../docs/aree/agenti-estensioni.md)): `prova_estensioni.py`, `prova_estensioni_attacchi.py`, `prova_contesto_agenti.py`, `prova_estensioni_piano.py`, `prova_estensioni_ollama.py`, `prova_estensioni_agente.py`, `prova_agenti.py`, `prova_sandbox.py`, `prova_agenti_domande.py`, `prova_avanzamento.py`, `prova_esecuzione.py`, `prova_agenti_openai.py`, `prova_arbitro_vllm.py`, `prova_arbitro_pausa.py`, `prova_agenti_ollama.py`, `prova_lavori_criteri.py`, `prova_lavori.py`, `misura_contesto_agenti.py`, `misura_arbitro_vllm.py`
 - **Giochi** ([elenco](elenco.md#giochi), [area](../docs/aree/giochi.md)): `prova_giochi.py`, `prova_giochi_pagina.py`
 - **Capacità e installazioni** ([elenco](elenco.md#capacità-e-installazioni), [area](../docs/aree/capacita-installazioni.md)): `prova_capacita.py`, `prova_installa.py`, `prova_stato_ollama.py`
-- **Personalità** ([elenco](elenco.md#personalità), [area](../docs/aree/personalita.md)): `prova_personalita.py`, `prova_personalita_ollama.py`, `misura_tono.py`
+- **Personalità** ([elenco](elenco.md#personalità), [area](../docs/aree/personalita.md)): `prova_personalita.py`, `prova_personalita_ollama.py`, `misura_tono.py`, `misura_frasi_pronte.py`
 - **Linux e DGX** ([elenco](elenco.md#linux-e-dgx), [area](../docs/aree/setup-dgx.md)): `prova_linux.py`, `prova_gestore.py`
 
 ## Passi manuali

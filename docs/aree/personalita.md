@@ -104,3 +104,16 @@ Ora (`calliope/ciclo.py`, dettagli e regole in [stt-tts](stt-tts.md)):
 
 Prove: `prova_nome_da_solo` (satellite finto), `prova_modalita` (ritorno scritto e contrari).
 Da riprovare sul vero: «Computer» da solo e poi il comando, con il satellite «studio».
+
+## Frasi pronte monotone: analisi (08/10, ramo `analisi-frasi`)
+
+Le frasi scritte nel codice (`risposta_finale`, politica, lavori, annunci, cortesia) sono il
+28,5 % delle risposte della DGX (02–08/10) e si ripetono 20,5 volte ogni 100 (il modello 2,2);
+non seguono il tono, e quasi tutte danno del tu anche nel formale. Sul banco con e4b la
+riformulazione del modello resta identica 62 volte su 90 e sbaglia il senso quando cambia; la
+coda del modello è gratis in latenza ma generica. Proposta: campo `pronte` nel registro e
+ripetizioni ogni 100 risposte in `calliope stato --turni`; poi un catalogo delle frasi più dette
+con varianti per tono e registro, rotazione per persona e forma breve la seconda volta;
+sicurezza, sfida, permessi, numeri e domande in sospeso parola per parola. Dettagli e misure:
+[`../ricerche/2026-10-08-frasi-pronte.md`](../ricerche/2026-10-08-frasi-pronte.md); banco
+`prove/misura_frasi_pronte.py`.
