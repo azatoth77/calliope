@@ -1398,3 +1398,83 @@ nel riuscito —, il tetto, le tracce di prima; la porta con gli esempi e i cont
 dal manifesto, dati di casa letti, POST, dato riservato, URL ripulito, troncata, al più due —;
 `esempi_veri` e l'indice; CalliopeFinta con il test dell'agente in un processo; il confronto e
 gli esempi in `sviluppo_chiedi`, `sviluppo_correggi` e nell'analisi).
+
+## Modalità sviluppo, giro 6: ferma o sospendi, «rifallo», un collaudo per valore (08/10 sera, ramo `sviluppo-giro6`)
+
+Giro vero della DGX dell'08/10 sera (19:06–20:13, 26B e qwen3.6; registro dei turni letto in
+sola lettura, qui con nomi di fantasia). La v7 di «Meteocittà» è arrivata all'attivazione, ma
+tre passi sono andati storti:
+
+- **«Fermo lo sviluppo»** con l'agente al lavoro (19:06) → `sviluppo_passo azione=sospendi` e
+  «l'agente intanto finisce il suo lavoro»; Dario: «Ti ho detto di stopparlo, di fermarlo, non
+  deve più continuare» → `lavoro_annulla`. La riga finale dei dati del turno diceva «Per
+  fermarsi: sviluppo_passo con azione sospendi… o chiudi». **Decisione**: un'azione `ferma`
+  distinta da `sospendi`. `ferma` («ferma/stoppa/blocca lo sviluppo», «fermalo», «non deve
+  continuare») annulla il lavoro dello sviluppo (`Lavori.annulla` con l'id) e lascia lo sviluppo
+  com'era (aperto allo sviluppo, o sospeso) senza lavoro, nota «annullato» (regola
+  `sviluppo_fermato`); senza un lavoro in corso è una pausa (sospende). `sospendi` («mettiamo in
+  pausa», «ne riparliamo dopo») lascia finire l'agente, come prima, ma ora lo dice e chiede
+  «Vuoi che fermi anche il lavoro dell'agente?» (in sospeso `ferma`); così anche `chiudi` con
+  l'agente al lavoro. Lo sceglie il modello (principio 10): descrizione di `sviluppo_passo`, riga
+  della fase («nel dubbio chiedi «fermo anche il lavoro dell'agente?»»), riga finale di
+  `SVILUPPO_MSG`, e i dati degli sviluppi sospesi con l'agente ancora al lavoro («fermalo» →
+  `ferma`, anche a sviluppo sospeso). A una tappa «fermalo» ora è `ferma` (prima
+  `lavoro_annulla`). Politica e valore: [sicurezza-politica](sicurezza-politica.md).
+- **«Sì, rifallo»** (20:05): Calliope aveva chiesto «Il lavoro dell'agente non è andato: vuoi
+  cambiare qualcosa o lo rifaccio?» (per un lavoro fermato da Dario), il modello ha chiamato
+  `analisi` senza modifica → «cosa vuoi cambiare?», poi «partiamo così com'è» → `avanti` ha
+  riletto la specifica e voluto un altro «va bene così». L'azione in sospeso di quella domanda
+  diceva «azione = analisi, cambia vuota per rifarlo così», che l'analisi non sapeva fare. Ora
+  l'azione **`rifai`**: un lavoro nuovo uguale all'ultimo dello sviluppo (compito, specifica,
+  vincoli, file di partenza, estensione) avviato subito, perché la specifica era già accettata
+  (regola `sviluppo_rifai`; dopo un riavvio, senza il lavoro in memoria, dalla specifica dello
+  sviluppo). La domanda è «Lo rifaccio così com'è, o vuoi cambiare qualcosa?» (o «l'hai fermato
+  tu…») con l'azione in sospeso `rifai` (una modifica detta → `analisi` con `cambia`), nello
+  stato, alla ripresa (prima: «siamo allo sviluppo» e basta, 20:04), dopo `avanti` e
+  nell'annuncio di un lavoro non andato. L'annuncio del lavoro fermato, che arriva dal thread dei
+  lavori dopo, non tocca più un lavoro già rifatto (`lavoro_finito`).
+- **Più collaudi in una frase** (20:10): «prova con Borgoverde Maggiore e Pratofiorito» → una
+  chiamata `sviluppo_collauda({'argomenti': {'citta': 'Borgoverde Maggiore'}, 'dati':
+  'Borgoverde Maggiore e Pratofiorito'})` e la voce «per Pratofiorito non ho ancora ricevuto i
+  dati, restiamo in attesa» (falso: quel collaudo non c'era); poi «E invece Pratofiorito?» →
+  nessun tool (`vuoto_seconda_passata`) e una risposta inventata. Due correzioni:
+  1. **un collaudo per valore** quando il modello ha già separato i valori: `dati` è un elenco
+     («A e B», «A, B e C», «con A e poi con B», «A oppure B»; da 2 a 4 valori, nessuno che
+     comincia con un numero, al più sei parole) e gli `argomenti` hanno per il primo input
+     **uno solo** di quei valori (`piu_valori`, conversione della forma della scelta del
+     modello, regola `collaudo_piu_valori`). Gli altri input valgono per tutti, salvo un valore
+     che li dice da sé («Borgo Alto per 3 giorni»). Ogni collaudo resta a sé nello sviluppo
+     (traccia, argomenti, esito), il modello riceve i risultati in fila («di' il risultato di
+     OGNUNA»); uno che non va porta «Lo faccio correggere?». **Contrari**: il nome intero negli
+     argomenti o solo `dati` («Bosco e Prato», che può essere un comune: decide il modello), un
+     valore fuori dall'elenco, «Pratofiorito, 3 giorni», «3 e 5» di un programma (il programma
+     non si divide mai);
+  2. **la spinta** nei dati del turno al collaudo (`PIU_COLLAUDI`): più valori → un collaudo
+     ciascuno nella stessa risposta, gli altri input solo se detti, mai dire di aspettare i dati
+     di un collaudo non fatto, «se dice che è un nome solo è un valore solo», e «e invece X?» è
+     un collaudo. La descrizione di `sviluppo_collauda` lo ripete in una riga.
+
+**Prove**: a secco `prove/prova_sviluppo_giro6.py` (~1 s, livello 1). Con gemma4 e4b sul
+portatile `prove/prova_sviluppo_giro6_ollama.py` (servizio dei lavori finto, docker finto):
+
+| caso | main (2 giri) | ramo (3 giri, codice finale) |
+|---|---|---|
+| «Fermo lo sviluppo.» con l'agente al lavoro → fermato | 0/2 (sospendi) | 3/3 |
+| «Stoppa lo sviluppo, non deve più continuare.» → fermato | 0/2 (sospendi) | 3/3 |
+| contrario «Mettiamo in pausa lo sviluppo…» → continua | 2/2 | 3/3 |
+| «Sospendi…» e poi «Fermalo, non deve più continuare» → fermato | 2/2 (`lavoro_annulla`) | 3/3 (`ferma`) |
+| dopo il lavoro fermato, «Sì, rifallo.» → riparte subito | 0/2 (non confrontabile: su main il lavoro non si ferma) | 3/3 |
+| «Niente, partiamo… così com'è.» → riparte subito | 0/2 (idem) | 3/3 |
+| contrario «No, prima cambiamo: aggiungi il vento» → nessun lavoro | 2/2 | 3/3 |
+| «provare con Valfiorita e Borgo Alto» → due collaudi | 0/2 | 3/3 |
+| «E invece Pratofiorito Maggiore?» → un collaudo | 1/2 | 3/3 |
+| contrario «Bosco e Prato: è un paese solo» → uno col nome intero | 1/2 | 3/3 |
+| prima frase mediana | 0,75 s | 0,89 s |
+
+Il 4B fa sempre due chiamate (mai l'elenco in una sola, che faceva il 26B: la divisione è
+coperta a secco). Prima della correzione della politica il secondo collaudo era fermato (2/3 e
+2/3 sui due casi del collaudo): il 4B aggiunge da sé `giorni = 3`, copiato dall'esempio
+«Bergamo per 3 giorni» dei dati del turno; ora i valori della chiamata di prima del dato valgono
+([sicurezza-politica](sicurezza-politica.md)). Un turno dopo, «per 3 giorni» inventato chiede
+ancora conferma (giusto). La prima frase cresce di ~0,1 s per le righe in più dei dati del turno
+(solo con uno sviluppo aperto). Da rimisurare sulla DGX col 26B.
