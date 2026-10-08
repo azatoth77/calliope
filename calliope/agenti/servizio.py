@@ -1059,7 +1059,7 @@ class Lavori:
                 self._sandbox = sb
                 if lav.tipo == "estensione":
                     from ..estensioni import contratto
-                    from ..estensioni.prompt import controlla_consegna, sistema_estensione
+                    from ..estensioni.prompt import sistema_estensione
                     est = getattr(self, "estensioni", None)
                     presi = est.archivio.nomi() if est is not None else ()
                     atteso = getattr(lav, "estensione", None)
@@ -1075,8 +1075,7 @@ class Lavori:
                         sb.sola_lettura |= {contratto.FILE, "calliope_estensione.py"}
                     ris = self.agente.codice(
                         lav, sb, sistema=sistema_estensione(self.cfg, gioco=gioco),
-                        controlla=lambda s: controlla_consegna(s, nomi_presi=presi,
-                                                               nome_atteso=atteso),
+                        controlla=self._controlla_estensione(lav, presi, atteso),
                         esempi=True, piano=True)
                 else:
                     ris = self.agente.codice(lav, sb)
@@ -1181,6 +1180,34 @@ class Lavori:
             svs.conserva(lav)
         except Exception as e:  # noqa: BLE001 — il lavoro finisce comunque
             self.log(f"[AGENTI] {lav.id}: contesto dello sviluppo non conservato: {e}")
+
+    def _controlla_estensione(self, lav, presi, atteso):
+        """Il controllo della consegna di un lavoro «estensione»: quello di sempre
+        (`controlla_consegna`: manifesto, nome, test) e, se passa, il ricollaudo alla consegna
+        (08/10 notte, calliope/sonde.py): in un lavoro di uno sviluppo con dei collaudi che non
+        andavano, la versione nuova si prova con quei casi prima di dire «è pronto», una volta
+        per lavoro."""
+        from ..estensioni.prompt import controlla_consegna
+
+        def controlla(sandbox):
+            errore = controlla_consegna(sandbox, nomi_presi=presi, nome_atteso=atteso)
+            if errore:
+                return errore
+            svs = self.sviluppi
+            if svs is None or getattr(lav, "ricollaudo_fatto", False):
+                return None
+            try:
+                sv = svs.di_lavoro(lav.id, lav.persona, chiusi=True)
+                if sv is None or not sv.collaudi:
+                    return None
+                from ..sonde import ricollaudo
+                return ricollaudo(self.cfg, getattr(self, "estensioni", None), svs, sv, lav,
+                                  sandbox, log=self.log,
+                                  resta_tempo=lambda: self.agente._resta_tempo(lav))
+            except Exception as e:  # noqa: BLE001 — il ricollaudo non ferma la consegna
+                self.log(f"[AGENTI] {lav.id}: ricollaudo non riuscito: {type(e).__name__}: {e}")
+                return None
+        return controlla
 
     def _tappa(self, lav: Lavoro, ris: dict, dest: Path, sb):
         """Un tetto del giro in un lavoro di uno sviluppo (08/10): il lavoro aspetta con il

@@ -330,6 +330,27 @@ def _permessi(p) -> dict:
     return normalizza_permessi(p)
 
 
+def restringi_per_sonda(m: dict, host_noti) -> dict:
+    """Il manifesto del ricollaudo alla consegna (08/10 notte, docs/ricerche/2026-10-08-sonde-
+    agente.md § 9.3): una copia di `m` che legge solo la rete, solo verso gli host della
+    versione che sono anche noti allo sviluppo (con `rete.pubblica` tutti i noti: pubblica non
+    allarga), al più 5; niente letture né scritture di casa, liste, agenda, dati propri, schermi,
+    niente invii né flussi. Il resto lo nega il guardrail come sempre
+    (`estensione_permesso_negato`)."""
+    import copy
+    out = copy.deepcopy(m or {})
+    try:
+        p = normalizza_permessi((m or {}).get("permessi") or {})
+    except ManifestoNonValido:
+        p = normalizza_permessi({})
+    noti = {str(h).strip().lower().rstrip(".") for h in (host_noti or ()) if h}
+    propri = set(p["rete"]["host"]) | {f["host"] for f in p["invia"]}
+    hosts = sorted(noti if p["rete"]["pubblica"] else propri & noti)[:5]
+    out["permessi"] = {"legge": {}, "scrive": {},
+                       "rete": {"pubblica": False, "host": hosts, "post": False}, "invia": []}
+    return out
+
+
 # ─────────────────────────── in parole ───────────────────────────
 
 def _e(cose: list[str]) -> str:

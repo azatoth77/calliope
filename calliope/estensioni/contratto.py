@@ -252,6 +252,15 @@ def testo(cfg=None, tipo: str = "estensione", linguaggi=("python",)) -> str:
                   "urlencode passa il testo com'è, mai quote_plus prima («name=Borgo%2BAlto» "
                   "cerca un + letterale e non trova niente; la traccia lo segna come possibile "
                   "doppia codifica)",
+                  # Le sonde e il ricollaudo (08/10 notte, calliope/sonde.py, § 9.5)
+                  "- sonde (solo nelle correzioni): sonda_rete fa una GET vera al posto di "
+                  "scarica_esempio, solo verso i siti già usati nei collaudi o approvati, solo "
+                  "con i valori dei collaudi e della specifica (numeri, date, codici di lingua "
+                  f"e paese), al più {int(getattr(cfg, 'sviluppo_sonde_max', 4) or 0)} per "
+                  f"lavoro e {int(getattr(cfg, 'sviluppo_sonde_passata', 2) or 0)} per "
+                  "passata; un sito nuovo solo con chiedi_permesso. Alla consegna di una "
+                  "correzione Calliope riprova la tua versione con i casi della persona: se non "
+                  "va, te la rimanda con la traccia",
                   f"- dati propri: {_porta.MAX_DATO_BYTE // 1000} kB per testo, "
                   f"{_porta.MAX_DATI_BYTE // 1000} kB in tutto",
                   "- input: al più 6 proprietà (string, number, integer, boolean), testi fino "

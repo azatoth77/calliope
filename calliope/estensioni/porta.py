@@ -27,6 +27,12 @@ metodo, URL ripulito, esito, l'inizio della risposta o l'errore, durata), che il
 all'agente (calliope/sviluppo.py); e un URL con spazi o caratteri non codificati si rifiuta
 con un errore che dice come scriverlo (`pagina.url_non_codificato`), anche con la funzione finta
 delle prove.
+
+Dal 08/10 notte (sonde dell'agente, docs/ricerche/2026-10-08-sonde-agente.md § 9.6): una riga
+della traccia dice se la richiesta l'ha rifiutata la porta (`rifiutata`: non conta per gli host
+«noti» dello sviluppo), e un'esecuzione di **ricollaudo** (`es.modo == "ricollaudo"`, la
+versione appena consegnata provata da Calliope con i casi della persona) non chiede mai
+conferme: una classe pericolosa diventa vietata (regola `ricollaudo_senza_conferme`).
 """
 
 from __future__ import annotations
@@ -79,10 +85,22 @@ class Porta:
                                    "POST" if azione == "rete_invia" else "GET", "bloccata",
                                    f"{v.regola}: {v.motivo}")
             self._traccia(es, azione, params.get("url"),
-                          {"errore": f"non concesso: {v.motivo}"}, 0)
+                          {"errore": f"non concesso: {v.motivo}"}, 0, rifiutata=True)
         if v.classe == gr.SICURA and self.parere is not None and azione in gr.CON_TESTO:
             v = self.parere.applica(v, es.manifesto.get("titolo", ""),
                                     es.manifesto.get("descrizione", ""), azione, params)
+        if v.classe == gr.PERICOLOSA and getattr(es, "modo", "") == "ricollaudo":
+            # Il ricollaudo gira senza la persona (08/10 notte): niente domande, mai
+            self.svc.nota_regola("ricollaudo_senza_conferme")
+            if azione.startswith("rete_"):
+                self.svc.rete.registra(self._origine(es), gr.host_di(params.get("url")),
+                                       "POST" if azione == "rete_invia" else "GET", "bloccata",
+                                       "ricollaudo_senza_conferme")
+                self._traccia(es, azione, params.get("url"),
+                              {"errore": "non concesso: nel ricollaudo niente conferme"}, 0,
+                              rifiutata=True)
+            v = gr.Valutazione(gr.VIETATA, "nel ricollaudo di Calliope non si chiede niente "
+                               f"alla persona ({v.motivo})", "ricollaudo_senza_conferme")
         es.storia.conta(azione)
         if v.classe == gr.VIETATA:
             return self._registra(es, azione, params, v, "rifiutata",
@@ -158,6 +176,13 @@ class Porta:
 
     @staticmethod
     def _origine(es) -> dict:
+        if getattr(es, "modo", "") == "ricollaudo":
+            # Il ricollaudo alla consegna (08/10 notte): il lavoro e lo sviluppo, per il
+            # registro delle uscite; «esecuzione» tiene la somma dei dati riservati a pezzi
+            return {"origine": "ricollaudo", "estensione": es.nome, "esecuzione": es.id,
+                    "lavoro": getattr(es, "lavoro", None), "sviluppo": getattr(es, "sviluppo",
+                                                                               None),
+                    "persona": es.persona_nome}
         return {"origine": "estensione", "estensione": es.nome, "versione": es.versione,
                 "esecuzione": es.id, "persona": es.persona_nome}
 
@@ -255,7 +280,8 @@ class Porta:
                                        "POST" if azione == "rete_invia" else "GET", "bloccata",
                                        "url_non_codificato")
             self.svc.nota_regola("estensione_url_non_codificato")
-            return self._traccia(es, azione, url, {"errore": f"rete: {rotto}"}, t0)
+            return self._traccia(es, azione, url, {"errore": f"rete: {rotto}"}, t0,
+                                 rifiutata=True)
         scope = gr._scope((es.manifesto or {}).get("permessi") or {})
         kw = {"max_byte": MAX_RETE_BYTE,
               "timeout_s": float(getattr(self.svc, "rete_timeout_s", 8.0))}
@@ -270,21 +296,26 @@ class Porta:
                 r = self._scarica(url, **kw)
             else:
                 r = self.svc.rete.richiesta(url, self._origine(es), **kw)
-        except (pagina.PaginaVietata, pagina.PaginaNonLetta) as e:
+        except pagina.PaginaVietata as e:
+            return self._traccia(es, azione, url, {"errore": f"rete: {e}"}, t0, rifiutata=True)
+        except pagina.PaginaNonLetta as e:
             return self._traccia(es, azione, url, {"errore": f"rete: {e}"}, t0)
         if not kw["host_ammesso"](gr.host_di(r.get("url") or url)):
             return self._traccia(es, azione, url,
-                                 {"errore": "rete: reindirizzato verso un host non ammesso"}, t0)
+                                 {"errore": "rete: reindirizzato verso un host non ammesso"}, t0,
+                                 rifiutata=True)
         return self._traccia(es, azione, url, {"risultato": {
             "stato": 200, "tipo": r.get("tipo"),
             "testo": str(r.get("testo_grezzo") or "")[:MAX_RETE_TESTO]}}, t0,
             corpo=p.get("dati") if azione == "rete_invia" else None)
 
     # ── traccia per lo sviluppo (08/10) ──
-    def _traccia(self, es, azione: str, url, out: dict, t0: float, corpo=None) -> dict:
+    def _traccia(self, es, azione: str, url, out: dict, t0: float, corpo=None,
+                 rifiutata: bool = False) -> dict:
         """Aggiunge la richiesta alla traccia dell'esecuzione e restituisce `out`. L'URL senza
         dati riservati (e, dopo una lettura di dati di casa, senza i valori dei parametri);
-        della risposta solo l'inizio. Mai un'eccezione."""
+        della risposta solo l'inizio. `rifiutata`: l'ha fermata la porta (o RetePubblica) prima
+        che il sito rispondesse. Mai un'eccezione."""
         try:
             tr = getattr(es, "traccia", None)
             if not isinstance(tr, list) or len(tr) >= MAX_TRACCIA:
@@ -297,6 +328,8 @@ class Porta:
             if "errore" in out:
                 riga["esito"] = "errore"
                 riga["errore"] = _pulisci_testo(str(out["errore"]), rete)[:400]
+                if rifiutata:
+                    riga["rifiutata"] = True
             else:
                 ris = out.get("risultato") or {}
                 testo = str(ris.get("testo") or "")
@@ -314,7 +347,8 @@ class Porta:
                     riga["chiavi"] = [_pulisci_testo(k, rete)[:40] for k in chiavi]
                 if vuote:
                     riga["vuote"] = [_pulisci_testo(k, rete)[:40] for k in vuote]
-                if azione == "rete_leggi" and not contaminata and riga["url"] == str(url):
+                if (azione == "rete_leggi" and not contaminata and riga["url"] == str(url)
+                        and getattr(es, "modo", "") != "ricollaudo"):
                     esempio = self._esempio(es, url, ris, testo, rete)
                     if esempio is not None:
                         riga["esempio"] = esempio

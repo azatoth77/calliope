@@ -46,6 +46,7 @@ A_SECCO = [
     ("prova_sviluppo_giro4.py", [], "il giro vero della DGX dell'08/10 sera (giro 4 della modalità sviluppo): modifica con una descrizione al posto del nome → l'unica estensione nominata, una disattivata non rende ambiguo il titolo di un'attiva, il «sì» breve apre lo sviluppo di un'estensione senza sfida e la sfida tiene la chiamata intera, collaudo con più input (argomenti, «N giorni» nei dati, gli input nei dati del turno, gli argomenti veri per l'agente), analisi senza testo ripetuto e «avanti» che accetta, il titolo della persona nella revisione e nell'approvazione"),
     ("prova_sviluppo_giro5.py", [], "il giro vero della DGX dell'08/10 sera (giro 5 della modalità sviluppo): doppia codifica (quote_plus e poi urlencode) segnalata nella traccia del collaudo, nei vincoli della correzione e dell'analisi, nel registro delle uscite e in CalliopeFinta, mai rifiutata; il secondo collaudo nella stessa frase con `argomenti` detti (anche i numeri a parole) e i contrari, il rifiuto «NON è partito»; «la gente» per «l'agente» nei dati del turno; il lavoro che riparte dall'analisi con i collaudi e la traccia; il giro a vuoto nel ragionamento dell'agente fermato (spinta, segnale, passo sulla scheda) e i contrari (codice, tabelle, frasi corte); presence_penalty per tipo di lavoro solo per vLLM"),
     ("prova_diagnosi_collaudi.py", [], "diagnosi dei collaudi della modalità sviluppo (08/10 notte): confronto automatico tra collaudi riusciti e falliti verso lo stesso host e percorso (parametri com'erano e decodificati, metodo, corpo, stato, dimensione, chiavi JSON; anche un «non ho trovato» con la risposta più povera; versioni di prima) con i contrari e il tetto; risposte vere dei collaudi come esempi_veri/ per i test dell'agente (solo GET verso host del manifesto, senza dati di casa né riservati, troncate, al più due per esecuzione) nei vincoli di sviluppo_correggi e dell'analisi; CalliopeFinta che risponde con la risposta vera per lo stesso indirizzo (il test che «trova» la città fallisce) e i contrari"),
+    ("prova_sonde.py", [], "sonde dell'agente e ricollaudo alla consegna (08/10 notte, § 9 di docs/ricerche/2026-10-08-sonde-agente.md): host noti (approvato, collaudi con risposta, chiedi_permesso; mai rifiuti della porta, candidata, rete.pubblica, reindirizzamenti), vocabolario del caso e contrari del giro 5, come l'ha letto il server, quote per lavoro, passata e giorno, risposta in busta; ricollaudo con il docker finto (la versione del giro 3 rimandata all'agente con la traccia in busta, una volta per lavoro, la giusta che va, frase «ora vanno», manifesto ristretto, nessuna conferma, quando non parte); il giro dell'agente con sonda_rete al posto di scarica_esempio; busta per traccia, confronto, esempi veri e scarica_esempio; nomi pubblici di casa in RetePubblica"),
     ("prova_scheda_sviluppo.py", [], "scheda dello sviluppo e del lavoro in diretta (08/10, il giro vero della DGX): conti dei token per lavoro e dello sviluppo intero (155 708), correzione N, id ripetuti dopo un riavvio, tetti per giro cumulativi e tempo che continua, dati della vista, scheda agli schermi personali di chi sviluppa e mai agli altri, uscita dalla vista a sviluppo chiuso o sospeso, finestra del flusso nella cronologia e «Scarica il registro»"),
     ("prova_sviluppo.py", [], "modalità sviluppo (08/10): estensioni e programmi come iter a fasi (analisi, sviluppo e test, collaudo, revisione, attivazione), su disco; collaudo della candidata prima dell'approvazione nel docker finto, revisione con le differenze, attivazione con la sfida e chiusura; ritorno all'analisi; sviluppi nuovi bloccati; dati del turno e riga del fuori tema; sospensione dopo 30 minuti, ripresa, promemoria del giorno; programma → estensione; passi interni senza la domanda della politica e i contrari"),
     # ~8 s: FakeOllama, hub e server degli schermi veri su 127.0.0.1, satellite e PC finti
@@ -144,6 +145,7 @@ A_SECCO = [
     ("prova_contesto_agenti.py", [], "contesto degli agenti (05/10): finestra dal setup, tetti della passata e del ragionamento, risultati lunghi in .calliope, diario del lavoro alle soglie, domanda a metà lavoro"),
     ("prova_estensioni_piano.py", [], "contratto delle capacità, piano di fattibilità, chiedi_permesso, guardia contro il ragionamento a vuoto (agente finto)"),
     ("prova_estensioni_attacchi.py", [], "banco d'attacco delle estensioni: rete interna, indirizzi travestiti, rebinding, slowloris, dati esca, flussi, contaminazione, scarica_esempio"),
+    ("prova_sonde_attacchi.py", [], "banco d'attacco delle sonde e del ricollaudo (08/10 notte): un agente finto che ci casca sempre e un'estensione ostile nel ricollaudo; esfiltrazione nell'URL, nei nomi, nel percorso, a pezzi, host non noti, rebinding, reindirizzamenti verso casa e la rete interna, nomi pubblici di casa, quote, injection dalle risposte, letture e azioni negate nel ricollaudo, registro delle uscite senza esche; obiettivo zero passaggi"),
     ("prova_sandbox.py", [], "sandbox in un container con un docker finto: scelta del motore, docker run, kill, capacità"),
     ("prova_agenti_domande.py", [], "agenti: domande a metà lavoro, file della persona all'agente (anche via satellite)"),
     ("prova_analisi_richiesta.py", [], "agenti: analisi della richiesta prima della proposta (chiara, raffinabile, vaga, c'è già, impossibile qui), ripieghi, fonte web, modulo, motivo del tetto in parole"),
@@ -258,6 +260,7 @@ LIVELLO_2 = {
     "prova_arbitro_pausa.py",        # 21 s
     "prova_estensioni.py",           # 16 s
     "prova_estensioni_attacchi.py",  # 30 s
+    "prova_sonde_attacchi.py",       # ~3 s (08/10 notte)
     "prova_giochi.py",               # 7 s
     "prova_esecutore.py",            # 12 s
     "prova_inoltro.py",              # 18 s, con il browser (seriale)
@@ -386,6 +389,15 @@ LEGAMI = [
     ("calliope/sviluppo.py", ["prova_diagnosi_collaudi.py"]),
     ("calliope/tools/sviluppo.py", ["prova_diagnosi_collaudi.py"]),
     ("calliope/estensioni/", ["prova_diagnosi_collaudi.py"]),
+    # Le sonde dell'agente e il ricollaudo (08/10 notte): il banco d'attacco
+    ("calliope/sonde.py", ["prova_sonde_attacchi.py"]),
+    ("calliope/sviluppo.py", ["prova_sonde_attacchi.py"]),
+    ("calliope/estensioni/", ["prova_sonde_attacchi.py"]),
+    ("calliope/web/", ["prova_sonde_attacchi.py"]),
+    ("calliope/agenti/ciclo.py", ["prova_sonde_attacchi.py"]),
+    ("calliope/agenti/servizio.py", ["prova_sonde_attacchi.py"]),
+    ("calliope/guardrail.py", ["prova_sonde_attacchi.py"]),
+    ("calliope/provenienza.py", ["prova_sonde_attacchi.py"]),
     ("calliope/tools/sviluppo.py", ["prova_sviluppo_giro5.py"]),
     ("calliope/estensioni/", ["prova_sviluppo_giro5.py"]),
     ("calliope/web/pagina.py", ["prova_sviluppo_giro5.py"]),
