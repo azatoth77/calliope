@@ -456,6 +456,9 @@ class Schermi:
         if not persona or not turni or self._n_chat() <= 0:
             return 0
         msg = json.dumps({"turni": turni}, ensure_ascii=False, default=str)
+        # «Scarica» resta valido anche se nel frattempo tanti documenti l'hanno spinto fuori
+        for sid in [x["id"] for x in self.abbinati() if x.get("proprietario") == persona]:
+            self.registra_chat(sid, persona)
         return self._a_personali(persona, "chat", msg)
 
     def chat_dimenticata(self, persona) -> int:

@@ -165,6 +165,29 @@ def prova_salvataggio():
     n = len(c2.ultime("dario"))
     verifica("tetto in byte: restano le più nuove", 0 < n < 6
              and c2.ultime("dario")[-1]["scheda"]["titolo"] == "T5", n)
+    # Con il thread di scrittura (come in Calliope): il file arriva un attimo dopo, la chiusura
+    # scrive quello che manca
+    c3 = CronologiaSchede(TMP / "schede-thread", log=lambda m: None)
+    t0 = time.perf_counter()
+    for i in range(50):
+        c3.aggiungi("dario", schede.lavoro_avanzamento("L", "codice", "in_corso", {"passo": str(i)},
+                                                       ident="L1"))
+    ms = (time.perf_counter() - t0) * 1000 / 50
+    f3 = TMP / "schede-thread" / nome_file("dario")
+    verifica("aggiornamenti in diretta: niente disco nel thread di chi chiama (< 5 ms l'uno)",
+             ms < 5 and not f3.exists(), f"{ms:.2f} ms")
+    ok = False
+    for _ in range(60):
+        if f3.exists():
+            ok = True
+            break
+        time.sleep(0.1)
+    verifica("il thread scrive il file un attimo dopo, una scheda sola (stessa chiave)",
+             ok and len(json.loads(f3.read_text(encoding="utf-8"))["schede"]) == 1)
+    c3.aggiungi("dario", schede.testo("Ultima", "x", schede.PERSONALE))
+    c3.close()
+    verifica("alla chiusura scrive quello che manca",
+             len(json.loads(f3.read_text(encoding="utf-8"))["schede"]) == 2)
     verifica("mai salvate: vuota, partite", not c.aggiungi("dario", schede.vuota())
              and not c.aggiungi("dario", schede.nuova("gioco", "G", schede.PERSONALE)))
     hub.archivio.close()

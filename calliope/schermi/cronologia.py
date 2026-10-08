@@ -52,8 +52,8 @@ EFFIMERE = ("foto:", "allegato:", "risposta:")
 # Le chiavi private che restano (sul server, mai alle pagine)
 PRIVATE = ("_scarica", "_registro")
 # Debounce della scrittura: le schede in diretta (avanzamento) arrivano anche più volte al
-# secondo, il disco una volta ogni tanto
-ATTESA_S = 0.8
+# secondo, il disco una volta ogni tanto (un riavvio brusco perde al più questi secondi)
+ATTESA_S = 2.0
 
 
 def nome_file(persona: str) -> str:
@@ -74,6 +74,15 @@ def _privata(p: Path, cartella: bool):
 
 def _misura(voce: dict) -> int:
     return len(json.dumps(voce, ensure_ascii=False, default=str).encode("utf-8"))
+
+
+def _peso(voce: dict) -> int:
+    """I byte di una voce, calcolati una volta (`b`): la potatura gira a ogni aggiornamento
+    in diretta, e ridurre in JSON tutta la cronologia ogni volta costerebbe."""
+    b = voce.get("b")
+    if not isinstance(b, int):
+        b = voce["b"] = _misura(voce)
+    return b
 
 
 def da_salvare(scheda: dict, storia: dict) -> dict:
@@ -104,6 +113,8 @@ class CronologiaSchede:
         self.scritture = 0
         self._lock = threading.RLock()
         self._cond = threading.Condition(self._lock)
+        # La scrittura dei file ha un lock suo: chi aggiunge una scheda non aspetta mai il disco
+        self._io = threading.Lock()
         self._dati: dict[str, list[dict]] = {}
         self._sporche: set[str] = set()
         self._fermo = False
@@ -139,7 +150,7 @@ class CronologiaSchede:
     def _pota(self, voci: list[dict]) -> list[dict]:
         limite = self.ora() - self.giorni * 86400.0
         voci = [v for v in voci if float(v.get("t") or 0) >= limite][-self.massimo:]
-        misure = [_misura(v) for v in voci]
+        misure = [_peso(v) for v in voci]
         tot = sum(misure)
         while voci and tot > self.tetto:
             voci.pop(0)
@@ -163,6 +174,7 @@ class CronologiaSchede:
             voce["scheda"] = {k: v for k, v in voce["scheda"].items() if k not in PRIVATE}
             if _misura(voce) > MAX_SCHEDA:
                 return False
+        _peso(voce)
         k = voce["scheda"].get("chiave")
         with self._lock:
             lst = list(self._lista(persona))
@@ -175,6 +187,8 @@ class CronologiaSchede:
                 lst.append(voce)
             self._dati[persona] = self._pota(lst)
             self._sporca(persona)
+        if self._subito:
+            self.scrivi_ora()
         return True
 
     def ultime(self, persona: str | None) -> list[dict]:
@@ -194,12 +208,15 @@ class CronologiaSchede:
             n = len(self._lista(persona))
             self._dati[persona] = []
             self._sporca(persona)
+        if self._subito:
+            self.scrivi_ora()
         return n
 
     def _sporca(self, persona: str):
+        """Con il lock: il file di `persona` va riscritto (dal thread; con `scrivi_subito` lo
+        scrive chi ha chiamato, appena lasciato il lock)."""
         self._sporche.add(persona)
         if self._subito:
-            self.scrivi_ora()
             return
         if self._thread is None:
             self._thread = threading.Thread(target=self._ciclo, name="schermi-cronologia",
@@ -208,40 +225,43 @@ class CronologiaSchede:
         self._cond.notify_all()
 
     def _ciclo(self):
-        with self._lock:
-            while not self._fermo:
-                if not self._sporche:
+        while True:
+            with self._lock:
+                while not self._fermo and not self._sporche:
                     self._cond.wait()
-                    continue
-                self._cond.wait(ATTESA_S)
-                self._scrivi_sporche()
-
-    def _scrivi_sporche(self):
-        """Con il lock: i file delle persone cambiate."""
-        from ..persistenza import scrivi_json
-        for persona in list(self._sporche):
-            self._sporche.discard(persona)
-            p = self._percorso(persona)
-            voci = self._dati.get(persona) or []
-            try:
-                if not voci:
-                    for x in (p, p.with_name(p.name + ".bak")):
-                        x.unlink(missing_ok=True)
-                else:
-                    scrivi_json(p, {"formato": FORMATO, "persona": persona, "schede": voci},
-                                indent=None)
-                    _privata(p, False)
-                self.scritture += 1
-            except OSError as e:
-                self.log(f"[SCHERMI] cronologia delle schede non salvata: {e}")
+                if self._fermo:
+                    return
+                self._cond.wait(ATTESA_S)     # gli aggiornamenti vicini insieme
+            self.scrivi_ora()
 
     def scrivi_ora(self):
-        with self._lock:
-            self._scrivi_sporche()
+        """I file delle persone cambiate. La copia si prende con il lock delle schede, la
+        scrittura (fsync) solo con quello dei file: in ordine, e senza far aspettare chi aggiunge."""
+        from ..persistenza import scrivi_json
+        with self._io:
+            with self._lock:
+                lavoro = [(p, list(self._dati.get(p) or [])) for p in self._sporche]
+                self._sporche.clear()
+            for persona, voci in lavoro:
+                self._scrivi(scrivi_json, persona, voci)
+
+    def _scrivi(self, scrivi_json, persona: str, voci: list[dict]):
+        p = self._percorso(persona)
+        try:
+            if not voci:
+                for x in (p, p.with_name(p.name + ".bak")):
+                    x.unlink(missing_ok=True)
+            else:
+                scrivi_json(p, {"formato": FORMATO, "persona": persona, "schede": voci},
+                            indent=None)
+                _privata(p, False)
+            self.scritture += 1
+        except OSError as e:
+            self.log(f"[SCHERMI] cronologia delle schede non salvata: {e}")
 
     def close(self):
+        self.scrivi_ora()
         with self._lock:
-            self._scrivi_sporche()
             self._fermo = True
             self._cond.notify_all()
 
