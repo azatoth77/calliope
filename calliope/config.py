@@ -1666,6 +1666,15 @@ class Config:
             f"conversazioni, con per_tutti=true se è un'informazione della casa per tutta "
             f"la famiglia (wifi, caldaia, dove sono le cose); se ti chiedono di "
             f"dimenticarlo, chiama dimentica. "
+            # Spiegazioni inventate su sé stessa (08/10, DGX: «come mai non sei riuscita a
+            # recuperarle? forse c'è un buco?» → «ho dovuto fare un lavoro di ricerca per essere
+            # precisa», falso): docs/aree/voce-e-regole.md. Senza «Per tutto il resto chiama i
+            # tool come sempre» «non avevamo parlato anche del tokamak?» non cercava più (1/8
+            # contro 7/8 senza la frase e 7/8 con)
+            f"Se ti chiedono perché hai risposto così o perché qualcosa non è andato, non "
+            f"inventare spiegazioni sul tuo funzionamento: racconta con parole semplici cosa "
+            f"hai fatto davvero in questa conversazione, oppure di' che non lo sai. Per "
+            f"tutto il resto chiama i tool come sempre. "
             f"{news}{direct} al punto e non offrire altro aiuto."
             + (f" {capacita}" if capacita else "")
             + self._frase_modalita()
