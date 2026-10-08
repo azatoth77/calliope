@@ -1127,6 +1127,12 @@ class Config:
     # dicono l'avvio e `calliope stato`; dettagli con `calliope stato --turni`. 0 = mai. Dal 02
     # al 05/10 la DGX era passata da 0,78 a 2,05 s senza che nessuno lo vedesse
     latenza_avviso_s: float = 1.2
+    # Attrito della sicurezza (08/10, calliope/attrito.py, decisione D6): oltre queste domande di
+    # sicurezza ogni 100 turni con una frase (giorni con almeno 50 turni), o con una domanda
+    # ripetuta per la stessa azione entro 5 minuti, lo dicono l'avvio e `calliope stato`;
+    # dettagli con `calliope stato --turni`. Il 07/10 erano 15,8, 28 su 41 falsi positivi
+    # (docs/ricerche/2026-10-07-sicurezza-per-valore.md). Obiettivo ≤ 2; 0 = solo le ripetute
+    attrito_avviso: float = 3.0
     # Diagnostica: CALLIOPE_DEBUG_AUDIO registra ogni frase captata (WAV + trascrizione).
     debug_audio_dir: str | None = os.environ.get("CALLIOPE_DEBUG_AUDIO") or None
 
@@ -2166,7 +2172,8 @@ SEZIONI: dict[str, list[str]] = {
             "web_pagina_timeout_s", "web_pagina_caratteri", "web_agente_ricerche",
             "web_agente_pagine", "web_reti_vietate"],
     "segreti": ["segreti_file"],
-    "registro": ["turn_log_dir", "turn_log_days", "latenza_avviso_s", "debug_audio_dir"],
+    "registro": ["turn_log_dir", "turn_log_days", "latenza_avviso_s", "attrito_avviso",
+                 "debug_audio_dir"],
     "rete": ["online"],
 }
 
@@ -2314,7 +2321,7 @@ LIMITI: dict[str, tuple[float, float]] = {
     "speaker_id_margine": (0.0, 1.0), "minori_margine_amministra": (0.0, 1.0),
     "suoni_volume": (0.0, 1.0),
     "vad_threshold": (0.0, 1.0), "wake_consecutive": (1, 50), "turn_log_days": (1, 3650),
-    "latenza_avviso_s": (0.0, 60.0),
+    "latenza_avviso_s": (0.0, 60.0), "attrito_avviso": (0.0, 100.0),
     "llm_attesa_avvio_s": (0.0, 86_400.0), "azione_in_sospeso_s": (0.0, 3600.0),
     "azione_in_sospeso_turni": (1, 20), "conferma_sfida_s": (5.0, 600.0),
     "conferma_sfida_parole": (2, 4), "speaker_conferma_breve_soglia": (0.0, 1.0),

@@ -30,7 +30,7 @@ from pathlib import Path
 
 import sounddevice as sd
 
-from . import capacita, contesto, corsie, latenza, minori
+from . import attrito, capacita, contesto, corsie, latenza, minori
 from . import guardiano as guardia
 from .agenda import Agenda
 from .agenti import load_agenti
@@ -736,6 +736,10 @@ class Avvio:
         avviso_latenza = latenza.avviso_recente(cfg)
         if avviso_latenza:
             print(f"[LATENZA] {avviso_latenza} Dettagli: calliope stato --turni", flush=True)
+        # Troppe domande di sicurezza oggi o ieri (08/10, calliope/attrito.py, D6)
+        avviso_attrito = attrito.avviso_recente(cfg)
+        if avviso_attrito:
+            print(f"[SICUREZZA] {avviso_attrito} Dettagli: calliope stato --turni", flush=True)
         # Una riga di riassunto al posto delle stampe di ogni caricamento; la tabella completa
         # con i passi: python -m calliope.stato. La casa si collega in secondo piano: di solito
         # ha già finito (Whisper e le voci si caricano in qualche secondo), al più si aspettano
