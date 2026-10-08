@@ -16,6 +16,7 @@ import threading
 import time
 from pathlib import Path
 
+from ..argomenti_incerti import nomi_estensione
 from ..tools.spec import ToolSpec, note_rule
 from .analisi import analizza, in_parole
 from .archivio import ESTENSIONI_FILE, RUNTIME, Archivio
@@ -176,7 +177,9 @@ class Estensioni:
                 classe="azione" if _agisce(m) else "sicuro", fonte="estensione",
                 chiave=tuple(k for k, v in ((m["input"] or {}).get("properties") or {}).items()
                              if isinstance(v, dict) and v.get("type") in ("string", "array")),
-                announce=("Un attimo.",)))
+                announce=("Un attimo.",),
+                # Gli input di testo nominano qualcosa (08/10, calliope/argomenti_incerti.py)
+                nomi=nomi_estensione(m["input"])))
         return out
 
     def _spec_gioco(self, m: dict) -> ToolSpec:

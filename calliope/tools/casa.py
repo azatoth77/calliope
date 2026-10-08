@@ -434,7 +434,10 @@ def casa_specs(collegata: bool, ospite: bool = False, pc_nome: str | None = None
                 parameters={"type": "object",
                             "properties": {"comando": {"type": "string"}},
                             "required": ["comando"]},
-                func=_casa_comando, risk="azione", levels=levels),
+                func=_casa_comando, risk="azione", levels=levels,
+                # Il comando contiene il nome del dispositivo (calliope/argomenti_incerti.py:
+                # solo misura, il «non trovato» ha già nomi_vicini)
+                nomi={"comando": "casa"}),
             ToolSpec(
                 name="casa_stato",
                 description=("Dice com'è la casa adesso, dagli stati di Home Assistant. "
@@ -444,7 +447,7 @@ def casa_specs(collegata: bool, ospite: bool = False, pc_nome: str | None = None
                              "un riassunto."),
                 parameters={"type": "object",
                             "properties": {"cosa": {"type": "string"}}, "required": []},
-                func=_casa_stato, risk="lettura", levels=levels),
+                func=_casa_stato, risk="lettura", levels=levels, nomi={"cosa": "casa"}),
         ]
     if integrazione:
         specs.append(ToolSpec(

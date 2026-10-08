@@ -1131,6 +1131,17 @@ class Ciclo:
             self.rec["stt_confidenza"]["al_modello"] = len(parole)
         return parole
 
+    def _ascolto_turno(self, t):
+        """L'audio della frase e il trascrittore, per le probabilità per parola degli argomenti
+        che nominano qualcosa (08/10, calliope/argomenti_incerti.py): si chiedono solo se il
+        modello chiama un tool così. None per una frase scritta o con la misura spenta."""
+        cfg = self.s.cfg
+        if t.scritto is not None or not getattr(cfg, "stt_argomenti_misura", True):
+            return None
+        from . import argomenti_incerti
+        nomi = getattr(cfg, "wake_names", None) or [cfg.name]
+        return argomenti_incerti.Ascolto(t.audio, self.s.stt, t.conf_stt, nomi)
+
     def _correggi_frase(self, t, conf_stt):
         s, cfg, rec = self.s, self.s.cfg, self.rec
         from . import stt_correzione
@@ -2070,6 +2081,9 @@ class Ciclo:
             brain.trattieni_schede = [] if trattieni else None
             brain.schede_attesa_ms = None
             incerte = self._parole_incerte(t)
+            # L'audio della frase per gli argomenti che nominano qualcosa (08/10): un attributo
+            # e non un argomento, così i Brain finti delle prove restano com'erano
+            brain.ascolto_turno = self._ascolto_turno(t)
             frasi = split_sentences(brain.stream_reply(
                 t.text, t.level, context=t.context, **({"immagini": t.foto} if t.foto else {}),
                 **({"incerte": incerte} if incerte else {})))
@@ -2168,6 +2182,14 @@ class Ciclo:
         # e se è valsa per la politica e la storia (stt_correzione.accettabile)
         if getattr(brain, "last_capito", None):
             rec["stt_capito"] = dict(brain.last_capito)
+        # Gli argomenti che nominano qualcosa (08/10, F0): probabilità di Whisper, nome noto
+        # più vicino, esito del tool (calliope/argomenti_incerti.py)
+        if getattr(brain, "last_argomenti", None):
+            try:
+                misure = brain.argomenti_per_registro()
+            except Exception as e:  # noqa: BLE001 — la misura non ferma il registro
+                misure = [{"errore": type(e).__name__}]
+            rec["stt_argomento"] = oscura_tutto(misure) if t.scritto is not None else misure
         # Il modello ha finito: una compressione in secondo piano può partire (soglia
         # morbida), e si ferma se qualcuno ricomincia a parlare
         self._compressione_dopo(t)

@@ -754,7 +754,7 @@ def pc_specs(executors: dict, ospite_volume_media: bool = False,
             parameters=params({"testo": {"type": "string"},
                                "tipo": {"type": "string", "enum": list(TIPI_FILE)},
                                "periodo": {"type": "string"}}, []),
-            func=_pc_cerca_file, risk="lettura", levels=FAMILY))
+            func=_pc_cerca_file, risk="lettura", levels=FAMILY, nomi={"testo": "file"}))
         specs.append(ToolSpec(
             name="pc_apri_file",
             description=(f"Apre uno dei file trovati dall'ultima pc_cerca_file: risultato è "

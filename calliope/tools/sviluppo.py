@@ -1086,7 +1086,9 @@ def sviluppo_apri_spec(file_pc: bool = False, allegati: bool = False) -> ToolSpe
             "chiederlo a voce. Se il risultato finisce con una domanda («Va bene così, o la "
             "cambiamo?»), dopo il sì richiamalo con proposta = l'id proposto (es. «L3»)."),
         parameters={"type": "object", "properties": props, "required": ["compito"]},
-        func=_sviluppo_apri, risk="azione", levels=FAMILY)
+        func=_sviluppo_apri, risk="azione", levels=FAMILY,
+        # Il nome di un'estensione da cambiare (calliope/argomenti_incerti.py)
+        nomi={"modifica": "estensione"})
 
 
 def sviluppo_specs(file_pc: bool = False, allegati: bool = False) -> list[ToolSpec]:
@@ -1120,7 +1122,10 @@ def sviluppo_specs(file_pc: bool = False, allegati: bool = False) -> list[ToolSp
                                                          "argomenti": {"type": "object"}},
                         "required": []},
             func=_sviluppo_prova, risk="azione", levels=FAMILY, non_fidato=True,
-            fonte="estensione", announce=("Un attimo.",)),
+            fonte="estensione", announce=("Un attimo.",),
+            # I dati del collaudo nominano qualcosa (calliope/argomenti_incerti.py): `argomenti`
+            # per ogni valore di testo, con il tipo dal nome dell'input («citta» → luogo)
+            nomi={"dati": "valore", "argomenti": "valore"}),
         ToolSpec(
             name="sviluppo_chiedi",
             description=("Nella modalità sviluppo, una domanda a chi ha scritto il codice: "

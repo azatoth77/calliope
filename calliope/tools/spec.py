@@ -169,6 +169,12 @@ class ToolSpec:
     # argomenti) → argomenti. Solo conversioni di forma (principio 10), con una regola nel
     # registro dei turni; None = niente
     prepara: Callable | None = None
+    # Gli argomenti che nominano qualcosa (08/10, calliope/argomenti_incerti.py): {argomento:
+    # tipo} con tipo «luogo», «casa», «estensione», «contatto», «persona», «file» o «valore».
+    # Su questi si misura quanto Whisper era sicuro delle parole e si cerca il nome noto più
+    # vicino; dopo un esito vuoto il modello riceve «forse intendeva…». Un argomento oggetto
+    # vale per ogni suo valore di testo, con il tipo dal nome del campo. Vuoto = nessuno
+    nomi: dict = field(default_factory=dict)
 
     def schema(self) -> dict:
         """Schema del tool nel formato OpenAI (Ollama lo accetta sia su /api/chat sia su /v1)."""
