@@ -17,6 +17,7 @@ Traduzione del corpo:
   il `tool_call_id` corrispondente, in ordine (Ollama non usa id); gli argomenti diventano
   una stringa JSON;
 - `options.temperature` → `temperature`, `options.num_predict` → `max_tokens`;
+  `presence_penalty` (08/10 sera, Config.agenti_presence_penalty) passa com'è;
   `num_ctx` e `keep_alive` non servono (il contesto lo fissa il server all'avvio);
 - `think` vero/falso → `chat_template_kwargs.enable_thinking` (Qwen3, vLLM e llama.cpp);
   una stringa («low», «medium», «high», gpt-oss) → `reasoning_effort`;
@@ -93,6 +94,9 @@ def traduci_corpo(body: dict) -> dict:
            "stream": True, "stream_options": {"include_usage": True}}
     if "temperature" in opts:
         req["temperature"] = opts["temperature"]
+    # Contro le ripetizioni senza fine di Qwen3 (08/10 sera): Config.agenti_presence_penalty
+    if body.get("presence_penalty"):
+        req["presence_penalty"] = float(body["presence_penalty"])
     if opts.get("num_predict"):
         req["max_tokens"] = int(opts["num_predict"])
     elif opts.get("num_ctx"):

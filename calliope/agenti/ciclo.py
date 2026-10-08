@@ -47,6 +47,11 @@ class Annullato(Exception):
     pass
 
 
+class GiroAVuoto(Exception):
+    """Il ragionamento della passata ripete la stessa frase (calliope/agenti/ripetizioni.py):
+    lo stream si chiude e la passata torna come «giro a vuoto» (08/10 sera)."""
+
+
 # Gli strumenti che non cambiano niente: la stessa chiamata ripetuta nella stessa passata non si
 # rifà
 _SOLA_LETTURA = {"leggi_file", "elenca_file"}
@@ -337,6 +342,21 @@ def _fuori_piano(sandbox, stato_piano: dict) -> str | None:
             + ". Se servono davvero chiama chiedi_permesso (con lo scope), altrimenti toglili")
 
 
+# Passate fermate di fila per giro a vuoto (ripetizioni.py) prima di chiudere il lavoro
+RIPETIZIONI_MAX = 3
+
+
+def _spinta_ripetizioni(messages: list, frase) -> None:
+    """La spinta dopo una passata fermata per giro a vuoto: in coda all'ultimo messaggio della
+    persona o come messaggio nuovo (mai due messaggi «user» di fila)."""
+    from .ripetizioni import spinta
+    testo = spinta(frase if isinstance(frase, str) else "")
+    if messages and messages[-1].get("role") == "user":
+        messages[-1] = dict(messages[-1], content=f"{messages[-1]['content']}\n\n{testo}")
+    else:
+        messages.append({"role": "user", "content": testo})
+
+
 def _vuoto_spinta(token: int) -> str:
     return (f"Stai ragionando da {token} token senza usare gli strumenti. Smetti di pensare "
             "e agisci adesso con una chiamata di funzione: piano (se non l'hai ancora "
@@ -589,9 +609,11 @@ class Agente:
         # Il cliente sa mandare anche il ragionamento e gli argomenti a pezzi (su_flusso)?
         # I clienti finti di altre prove no: allora solo il testo
         try:
-            self._flusso = "su_flusso" in inspect.signature(cliente.chat).parameters
+            parametri = inspect.signature(cliente.chat).parameters
+            self._flusso = "su_flusso" in parametri
+            self._pezzo = "su_pezzo" in parametri
         except (TypeError, ValueError, AttributeError):
-            self._flusso = False
+            self._flusso = self._pezzo = False
         # La finestra dell'agente (05/10, fase 2b): calcolata dal setup al primo bisogno, dal
         # thread dei lavori, e rifatta ogni FINESTRA_S (il server può essere ripartito)
         self._finestra = None             # Budget
@@ -636,6 +658,17 @@ class Agente:
         # altrimenti Ollama ricarica il modello a ogni cambio (secondi persi dalla voce)
         return {"num_ctx": num_ctx or self.num_ctx(),
                 "temperature": float(getattr(self.cfg, "agenti_temperatura", 0.4))}
+
+    def _presence_penalty(self, lav: Lavoro) -> float:
+        """agenti_presence_penalty del tipo del lavoro (o di «altro»); 0 = non si manda."""
+        per = getattr(self.cfg, "agenti_presence_penalty", None) or {}
+        if not isinstance(per, dict):
+            return 0.0
+        tipo = getattr(lav, "tipo", None) or "altro"
+        try:
+            return float(per.get(tipo, per.get("altro", 0.0)) or 0.0)
+        except (TypeError, ValueError):
+            return 0.0
 
     def _generazione(self, ctx: int, messages: list, tools, contesto) -> int:
         """Il tetto di token della passata: agenti_token_passata (al più metà della
@@ -688,26 +721,52 @@ class Agente:
                 body["tools"] = tools
             if formato is not None:
                 body["format"] = formato
+            # Contro le ripetizioni senza fine (08/10 sera): il presence_penalty del tipo di
+            # lavoro, solo per il motore compatibile OpenAI (vLLM); il client di Ollama lo toglie
+            pp = self._presence_penalty(lav)
+            if pp:
+                body["presence_penalty"] = pp
 
             url = getattr(self.cliente, "url", None)
+            # Il giro a vuoto nel ragionamento (08/10 sera, ripetizioni.py): solo nelle passate
+            # con gli strumenti, dove il ciclo può continuare con una spinta
+            soglia_rip = int(getattr(self.cfg, "agenti_ripetizioni_max", 8) or 0)
+            rip = None
+            if tools and formato is None and soglia_rip > 0:
+                from .ripetizioni import Ripetizioni
+                rip = Ripetizioni(soglia_rip)
 
             def controlla():
                 # Con la pausa del server (vLLM in modalità sviluppo) lo stream resta aperto,
                 # congelato: deve_cedere è falso e non si perde il passo
                 if lav.annulla.is_set() or self.arbitro.deve_cedere(url):
                     raise Interrotto()
+                if rip is not None and rip.scattato:
+                    raise GiroAVuoto()
             kw = {}
             # Il testo in arrivo, per gli schermi che seguono il lavoro; non il JSON degli
             # output strutturati (illeggibile: lì basta il passo «impagina il documento»)
-            if lav.osservatore is not None and formato is None:
+            segue = lav.osservatore is not None and formato is None
+            if segue:
                 lav.nota("passata")
-                if self._flusso:
-                    kw["su_flusso"] = lambda tipo, t: lav.nota("flusso", tipo=tipo, testo=t)
-                else:
-                    kw["su_pezzo"] = lambda t: lav.nota("flusso", tipo="testo", testo=t)
+            if (segue or rip is not None) and self._flusso:
+                def su_flusso(tipo, t):
+                    if rip is not None and tipo in ("pensiero", "testo"):
+                        rip.aggiungi(t)
+                    if segue:
+                        lav.nota("flusso", tipo=tipo, testo=t)
+                kw["su_flusso"] = su_flusso
+            elif segue or (rip is not None and self._pezzo):
+                def su_pezzo(t):
+                    if rip is not None:
+                        rip.aggiungi(t)
+                    if segue:
+                        lav.nota("flusso", tipo="testo", testo=t)
+                kw["su_pezzo"] = su_pezzo
             tid = threading.get_ident()
             chiave = self.arbitro.registra_stream(
                 lambda: _interrompi(self.cliente, tid), url)
+            t_passata = time.monotonic()
             try:
                 out = self.cliente.chat(body, controlla=controlla, **kw)
             except Interrotto:
@@ -715,8 +774,12 @@ class Agente:
                     raise Annullato() from None
                 lav.cedimenti += 1
                 continue                 # la voce aveva la precedenza: si rifà il passo
+            except GiroAVuoto:
+                out = self._giro_a_vuoto(lav, rip, t_passata, servizio)
             finally:
                 self.arbitro.togli_stream(chiave)
+            if out.get("giro_a_vuoto"):
+                return out
             if not servizio:
                 lav.passi += 1
             lav.token += out["eval"]
@@ -727,6 +790,29 @@ class Agente:
                 lav.uso_contesto = dict(contesto.uso)
             lav.nota("passata_fine")
             return out
+
+    def _giro_a_vuoto(self, lav: Lavoro, rip, t0: float, servizio: bool) -> dict:
+        """La passata fermata dal rilevatore delle ripetizioni: i token stimati dai caratteri
+        (lo stream chiuso non porta l'usage), il segnale per la tappa, la regola nel log e il
+        passo sulla scheda. Chi chiama aggiunge la spinta (ripetizioni.spinta)."""
+        stima = int((rip.caratteri if rip is not None else 0) / 3.5)
+        if not servizio:
+            lav.passi += 1
+        lav.token += stima
+        lav.ragionamento += stima
+        seg = lav.segnali if isinstance(lav.segnali, dict) else {}
+        lav.segnali = seg
+        seg["ripetizioni"] = int(seg.get("ripetizioni", 0) or 0) + 1
+        frase = rip.scattato if rip is not None else ""
+        self.log(f"[AGENTI] {lav.id}: giro a vuoto nel ragionamento, passata fermata "
+                 f"(regola agente_ragionamento_ripetuto, {seg['ripetizioni']}ª volta): "
+                 f"«{frase[:80]}»")
+        lav.nota("flusso", tipo="esito", testo="l'agente girava a vuoto (ripeteva lo stesso "
+                                               "ragionamento): l'ho fermato")
+        lav.nota("spinta", motivo="ragionamento ripetuto", regola="agente_ragionamento_ripetuto")
+        lav.nota("passata_fine")
+        return {"content": "", "thinking": "", "tool_calls": [], "eval": stima, "prompt": 0,
+                "s": round(time.monotonic() - t0, 2), "giro_a_vuoto": frase or True}
 
     @staticmethod
     def passi_giro(lav: Lavoro) -> int:
@@ -917,6 +1003,7 @@ class Agente:
         seg.setdefault("scritture", {})
         seg.setdefault("errori_test", [])
         seg.setdefault("senza_novita", 0)
+        giri_vuoti = 0
         while consegna is None:
             lav.passo = "sta pensando al codice" if not scritti else "sta lavorando al codice"
             strumenti = strumenti_codice(self._linguaggi(sandbox))
@@ -940,6 +1027,17 @@ class Agente:
                 # Fermato dal tetto: cosa è stato fatto (il diario o l'ultima cosa detta)
                 raise Limite(str(e), {"riassunto": _fatto_finora(gc, messages)},
                              tipo=e.tipo) from None
+            if out.get("giro_a_vuoto"):
+                # Il ragionamento ripeteva la stessa frase (08/10 sera): la spinta, e alla
+                # terza passata fermata di fila il lavoro si chiude con il motivo
+                giri_vuoti += 1
+                if giri_vuoti >= RIPETIZIONI_MAX:
+                    raise Limite("ha ripetuto lo stesso ragionamento in "
+                                 f"{giri_vuoti} passate di fila senza decidere",
+                                 {"riassunto": _fatto_finora(gc, messages)})
+                _spinta_ripetizioni(messages, out["giro_a_vuoto"])
+                continue
+            giri_vuoti = 0
             novita = False
             calls = out["tool_calls"]
             if not calls:
@@ -1688,6 +1786,12 @@ class Agente:
                 out = self.passata(lav, messages, tools=tools, contesto=gc)
             except Limite as e:
                 raise Limite(str(e), {"riassunto": _fatto_finora(gc, messages)}) from None
+            if out.get("giro_a_vuoto"):
+                if int((lav.segnali or {}).get("ripetizioni", 0)) >= RIPETIZIONI_MAX:
+                    raise Limite("ha ripetuto lo stesso ragionamento senza decidere",
+                                 {"riassunto": _fatto_finora(gc, messages)})
+                _spinta_ripetizioni(messages, out["giro_a_vuoto"])
+                continue
             calls = out["tool_calls"] or ([c] if (c := self.chiamata_da_testo(
                 out["content"], tools)) else [])
             msg = {"role": "assistant", "content": out["content"]}
@@ -1829,8 +1933,14 @@ def segnali_giro(lav, max_passi: int) -> dict:
         frasi.append(f"i test falliscono {n_stesso} volte di fila con lo stesso errore")
     if vuote >= max(3, max_passi // 4):
         frasi.append(f"{vuote} passate senza file né test nuovi")
+    ripetute = int(seg.get("ripetizioni") or 0)
+    if ripetute:
+        frasi.append("ha ripetuto lo stesso ragionamento ("
+                     + ("una passata fermata" if ripetute == 1
+                        else f"{ripetute} passate fermate") + ")")
     return {"riscritti": [list(x) for x in riscritti[:5]], "errore_ripetuto": stesso,
-            "volte_errore": n_stesso, "senza_novita": vuote, "frasi": frasi,
+            "volte_errore": n_stesso, "senza_novita": vuote, "ripetizioni": ripetute,
+            "frasi": frasi,
             "a_vuoto": bool(frasi)}
 
 
