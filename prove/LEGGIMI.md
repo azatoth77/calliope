@@ -43,7 +43,12 @@ I **livelli** (in `prove/__main__.py`):
   **Obbligatorio prima dell'unione di un ramo su main.** Va lanciato dove ci sono i file
   fuori da git (`voices/`, `models/speaker/`, `wakeword/modelli/`, `biblioteca/`): in un
   worktree come hard link (non junction); senza, quelle prove si saltano e il riepilogo le
-  elenca.
+  elenca. Eccezione (08/10): `prova_telefono_pagina` trova da sé onnxruntime-web
+  (`models/web/`), i modelli della wake word e le voci nel **repository principale** (`git
+  rev-parse --git-common-dir`, anche dalla copia dell'hook via `PROVE_ORIGINE`), o nella
+  cartella di onnxruntime-web indicata da `CALLIOPE_TELEFONO_MODELLI`: si installano una volta
+  sola nel principale con `python -m calliope.stato --installa telefono` (14 MB, ignorati da
+  git) e in un worktree non serve nessun link.
 
 L'**hook** (`.githooks/pre-commit`, attivato con `git config core.hooksPath .githooks`)
 lancia `python -m prove --hook --staged`: livelli 1 e 2 con i file del commit, sulla **copia
