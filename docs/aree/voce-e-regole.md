@@ -513,3 +513,25 @@ Dal caso vero della DGX del 07/10 sera (meteo per città, vedi
   dello schermo, testo scritto oscurato, parole della frase di sfida); per un ospite nullo come
   la risposta. Prima la «risposta» dopo un'interruzione non passava nemmeno dalla pulizia
   (`Ciclo._ripulisci_per_registro`).
+
+## Modalità sviluppo nei dati del turno (08/10, ramo `modalita-sviluppo`)
+
+La modalità sviluppo ([agenti-estensioni](agenti-estensioni.md#modalità-sviluppo-0810-ramo-modalita-sviluppo))
+arriva al modello come **dati del turno**, mai nel prompt di sistema (il prefisso non cambia):
+`Sviluppi.dati_turno` → `SVILUPPO_MSG` in `calliope/sviluppo.py`, messo da `Brain._sviluppo_turno`
+dopo l'estensione nominata (regola `sviluppo_modalita`, rete spegnibile `modalita_sviluppo`): cosa
+si sviluppa, la fase («siamo al collaudo (3 di 5): fatte analisi e sviluppo e test; mancano
+revisione e attivazione»), la specifica, la riga della fase (`riga_fase`: cosa si fa adesso e con
+quale tool), il ritorno all'analisi, il fuori tema e «niente sviluppi nuovi». Senza uno sviluppo
+aperto, gli sviluppi sospesi solo se la frase parla di riprendere o di sviluppo (`SOSPESI_MSG`).
+Un contesto, non un ordine (principio 10).
+
+In coda alla risposta, dal codice (`Brain._sviluppo_coda`, mai dopo una domanda, che deve restare
+l'ultima cosa detta):
+- **`sviluppo_riga_fuori_tema`**: con uno sviluppo aperto, dopo una risposta che ha usato solo tool
+  d'altro e non ne parla («svilupp», «collaud», «estension»… o il titolo), «Intanto restiamo sullo
+  sviluppo di «…»: siamo al collaudo.». Nella misura con gemma4 la riga l'ha sempre scritta il
+  modello da sé («Ricorda che stiamo collaudando l'estensione…»): è una rete.
+- **`sviluppo_promemoria_giorno`**: una volta al giorno, alla prima risposta a chi amministra, gli
+  sviluppi sospesi («A proposito: lo sviluppo di «…» è sospeso, eravamo al collaudo. Quando vuoi,
+  dimmi «riprendiamo lo sviluppo di …».»).

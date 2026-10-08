@@ -320,6 +320,8 @@ class Lavori:
         self.esecuzioni = Esecuzioni(self, log=log)
         self._offerte: dict[str, dict] = {}
         self.estensioni = None      # Estensioni (calliope/estensioni/): le versioni da approvare
+        # La modalità sviluppo (08/10, calliope/sviluppo.py): la crea load_agenti; None = niente
+        self.sviluppi = None
         # L'analisi della richiesta prima della proposta (06/10, richiesta.Analizzatore): la
         # crea load_agenti con agenti_analisi; None = si propone come prima (le prove a secco)
         self.analizzatore = None
@@ -843,8 +845,15 @@ class Lavori:
                                               "altri, e li può fermare solo chi li ha chiesti o "
                                               "chi amministra."}
             return {"ok": False, "frase": "Non ho lavori in corso da fermare."}
-        targets = mine if quale == "tutti" else [next((lv for lv in mine
-                                                       if lv.stato == "in_corso"), mine[-1])]
+        if re.fullmatch(r"L\d+", str(quale or "")):
+            # Un lavoro preciso (08/10, modalità sviluppo: si torna all'analisi e il lavoro di
+            # quello sviluppo si ferma, non un altro)
+            targets = [lv for lv in mine if lv.id == quale]
+            if not targets:
+                return {"ok": False, "frase": "Quel lavoro non è più in corso."}
+        else:
+            targets = mine if quale == "tutti" else [next((lv for lv in mine
+                                                           if lv.stato == "in_corso"), mine[-1])]
         for lv in targets:
             lv.annulla.set()
             with self._lock:
@@ -1432,6 +1441,13 @@ class Lavori:
         if (lav.risultato.get("estensione") or {}).get("in_sospeso"):
             # «Vuoi approvarla?» → estensioni_gestisci approva (con la frase di sfida)
             item["in_sospeso"] = lav.risultato["estensione"]["in_sospeso"]
+        if self.sviluppi is not None:
+            # Un lavoro della modalità sviluppo (08/10): la fase cambia e l'annuncio dice dove
+            # siamo (un'estensione si prova prima di approvarla: niente «Vuoi approvarla?»)
+            try:
+                item = self.sviluppi.lavoro_finito(lav, item) or item
+            except Exception as e:  # noqa: BLE001 — l'annuncio parte comunque
+                self.log(f"[AGENTI] sviluppo di {lav.id}: {type(e).__name__}: {e}")
         self.done.put(item)
         if self.on_done:
             self.on_done()

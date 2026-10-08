@@ -79,7 +79,7 @@ per stadio, solo i moduli principali: librerie, classi e dettagli sono nei docum
 | Rispondi dove ti ho chiesto | `rispondi.py` | [schermi-telefono](docs/aree/schermi-telefono.md) |
 | Foto e allegati in ingresso; cassetto dei file per persona (7 giorni, dal 08/10) | `immagini.py`, `allegati.py`, `cassetto.py`, `pc/cattura.py` | [immagini-allegati](docs/aree/immagini-allegati.md) |
 | Satelliti (WebSocket, TLS, inoltro, installazione) | `satellite/`, `tls_sicuro.py` | [satelliti](docs/aree/satelliti.md) |
-| Agenti in secondo piano (vLLM sulla DGX, sandbox Docker, arbitro), analisi della richiesta prima di partire (dal 06/10) | `agenti/` (`richiesta.py`), `tools/agenti.py` | [agenti-estensioni](docs/aree/agenti-estensioni.md) |
+| Agenti in secondo piano (vLLM sulla DGX, sandbox Docker, arbitro), analisi della richiesta prima di partire (dal 06/10), modalità sviluppo a fasi con il collaudo prima dell'approvazione (dal 08/10) | `agenti/` (`richiesta.py`), `tools/agenti.py`, `sviluppo.py`, `tools/sviluppo.py` | [agenti-estensioni](docs/aree/agenti-estensioni.md) |
 | Estensioni permanenti e guardrail | `estensioni/`, `tools/estensioni.py` | [agenti-estensioni](docs/aree/agenti-estensioni.md) |
 | Giochi sugli schermi | estensioni con scheda, `agenti/fumo_js.mjs` | [giochi](docs/aree/giochi.md) |
 | Installazione e aggiornamento su Linux | `pyproject.toml`, `uv.lock`, `setup/linux/` (`gestore.py`) | [setup-dgx](docs/aree/setup-dgx.md) |
@@ -154,7 +154,7 @@ Calliope gira sulla **DGX Spark** dal 02/10 come servizio (voce gemma4 su Ollama
 satelliti. Cronologia e primi test in [`docs/aree/cronologia.md`](docs/aree/cronologia.md).
 
 - **Voce**: wake word acustica, barge-in col nome, chi parla con CAM++, half-duplex, risposte in streaming ([stt-tts](docs/aree/stt-tts.md), [voce-e-regole](docs/aree/voce-e-regole.md)).
-- **Tool**: 66 schemi uguali per ogni livello (dal 07/10 anche `risultato_lavoro`), permessi decisi in `ToolRegistry.call` ([voce-e-regole](docs/aree/voce-e-regole.md)).
+- **Tool**: schemi uguali per ogni livello (66 di base dal 07/10; dal 08/10 più `cassetto_gestisci` e i due della modalità sviluppo, `esercizi` solo con un minore in casa), permessi decisi in `ToolRegistry.call` ([voce-e-regole](docs/aree/voce-e-regole.md)).
 - **Capacità**: 18 nel registro (`capacita.DEFINIZIONI`), installazioni a voce dal catalogo ([capacita-installazioni](docs/aree/capacita-installazioni.md)).
 - **Politica unica dei tool** con dati non fidati in busta, conferme e frase di sfida ([sicurezza-politica](docs/aree/sicurezza-politica.md)).
 - **Contesto**: finestra dal setup, compressione, archivio delle conversazioni, una conversazione per persona ([contesto-conversazione](docs/aree/contesto-conversazione.md)).

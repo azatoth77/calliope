@@ -9,6 +9,7 @@
 | Agenti in secondo piano («gemma davanti, agenti dietro») | vLLM con l'API compatibile OpenAI sulla DGX (motore «openai», httpx, via tunnel `ssh -N -L` di OpenSSH), oppure l'API nativa di Ollama (motore «ollama», anche lo stesso Ollama della voce); ciclo scritto in proprio, niente framework; sandbox in un container Docker usa-e-getta sulla DGX (dal 03/10), altrimenti job object di Windows (ctypes) e audit hook | `calliope/agenti/` → `Lavori` (`servizio.py`: coda, proposta, risultati, annuncio, domande a metà lavoro), `Agente` (`ciclo.py`), file della persona (`file_utente.py`), `Tunnel` (`tunnel.py`), `Sandbox` (`sandbox.py` + `_avvio.py`, `scegli_isolamento`; immagine da `setup/linux/sandbox/Dockerfile`), `Arbitro` (`arbitro.py`: anche con vLLM sulla GPU della voce, `ClienteCedevole` per archivio e ufficio; `stessa_gpu` in `impostazioni.py`, `agenti_arbitro`; dal 04/10 `PausaServer`, pausa di vLLM in modalità sviluppo, `pausa_server`, `agenti_pausa_vllm`), `Avanzamento` (`avanzamento.py`: la scheda del lavoro in diretta), `ContestoLavoro` (`contesto_lavoro.py`, dal 05/10: risultati lunghi in `.calliope/passo-N.txt`, diario del lavoro alle soglie; finestra da `contesto.calcola_agenti`), `Modello` (`modelli.py`), `carica` (`impostazioni.py`: dgx.yaml / agenti_url), `ClienteOllama` / `ClienteOpenAI` (`remoto.py`, `remoto_openai.py`, `crea_cliente`), `load_agenti`; tool in `calliope/tools/agenti.py`; terminale `python -m calliope.agenti --prova` |
 | Programmi dell'agente eseguiti in diretta, linguaggi (Python, C#) | stessa sandbox Docker; C# con csc nel container `calliope-sandbox-dotnet` (runtime .NET 10 + Roslyn, niente SDK né NuGet); SSE verso la scheda | `calliope/agenti/esecuzione.py` → `Esecuzioni` (`avvia`, `dimostra`, `ferma`, `frase`); `linguaggi.py`; `esegui_cs.sh`; `setup/linux/sandbox/Dockerfile.dotnet`; tool `lavori_esegui`, scheda `esecuzione` |
 | Il risultato di un lavoro finito a voce o sullo schermo (07/10) | il modello dell'agente per il riassunto per la voce (thinking spento, tempo massimo) | `calliope/agenti/risultato.py` → `trova`, `scegli`, `dal_disco`, `testo_intero`, `riassunto_voce`, `scheda`, `recenti`, `elenco_detto`, `chiave`, `converti` (dal 07/10: «fammene un PDF»); tool `risultato_lavoro` (`calliope/tools/agenti.py`), `agenti_risultato_s`; prove `prova_risultati.py`, `prova_risultati_ollama.py` |
+| Modalità sviluppo (08/10): un'estensione o un programma come iter a fasi | solo libreria standard; lo stato su disco accanto ai lavori (`sviluppi.json`) | `calliope/sviluppo.py` → `Sviluppi` (`corrente`, `apri`, `passa`, `proposto`, `avviato`, `lavoro_finito`, `estensione_approvata`, `dati_turno`, `promemoria_giorno`, `scheda`), `passo_interno`, `estraneo`; tool `sviluppo` e `sviluppo_prova` in `calliope/tools/sviluppo.py` (`controlla_nuovo`, `apri_se_serve`); `Estensioni.prova_candidata`, `Estensioni.revisione`, `differenze` (`calliope/estensioni/servizio.py`); progetto [`docs/ricerche/2026-10-08-modalita-sviluppo.md`](../ricerche/2026-10-08-modalita-sviluppo.md); prove `prova_sviluppo.py`, `prova_sviluppo_ollama.py` |
 | Estensioni permanenti e guardrail (04/10) | container della sandbox (Docker) per ogni chiamata, JSON-RPC su stdin/stdout (cornice stdio di MCP, senza SDK), solo libreria standard | `calliope/guardrail.py` → `valuta_porta`, `SecondoParere`, `domanda` (la porta delle estensioni: sicura / pericolosa / vietata; i tool di Calliope li decide `politica.decidi` dal 06/10); `calliope/estensioni/` → `Estensioni` (`servizio.py`), `Porta` (`porta.py`), `Esecuzione` (`esecuzione.py`), `Archivio` (`archivio.py`: versioni, impronta), `valida` (`manifesto.py`), `analizza` (`analisi.py`), runtime `_ospite.py` (nel container: `calliope_estensione`), prompt dell'agente (`prompt.py`: `sistema_estensione`), contratto delle capacità (`contratto.py`: `testo`, `CAPACITA_IDS`, CAPACITA.md); rete solo pubblica `calliope/web/rete.py` → `RetePubblica` (registro `uscite.jsonl`, `riepilogo`), dati riservati nel traffico `calliope/web/riservati.py` → `Riservati`, `da_contesto`; piano e permessi dell'agente in `agenti/ciclo.py` (`PIANO`, `CHIEDI_PERMESSO`, `_piano`, `_fuori_piano`); tool in `calliope/tools/estensioni.py`; progetto in `docs/ricerche/2026-10-04-estensioni-e-guardrail.md` (§11–§14 dal 05/10) |
 
 ## Note dalla sezione «Stato attuale» di CLAUDE.md (fino al 06/10)
@@ -870,3 +871,91 @@ Decisione di Dario: una ricerca affidata all'agente parte appena chiesta, senza 
 la coda occupata, il modello da caricare, i file della persona). Coerente con la classe d'effetto
 E2 delle ricerche nella politica per valore (`docs/ricerche/2026-10-07-sicurezza-per-valore.md`,
 D1). La conferma della politica per un dato non fidato di mezzo resta quella della politica.
+
+## Modalità sviluppo (08/10, ramo `modalita-sviluppo`)
+
+Idea di Dario dell'08/10: per chi amministra lo sviluppo di un'estensione (o di un programma)
+diventa uno **stato** con fasi, invece di frasi sparse nella conversazione normale. Progetto,
+stati e transizioni in [`docs/ricerche/2026-10-08-modalita-sviluppo.md`](../ricerche/2026-10-08-modalita-sviluppo.md);
+il caso vero è la sessione del meteo per città del 07/10 sera (sezione del giro 10 qui sopra),
+dove provare l'estensione veniva **dopo** approvarla e ogni passo era una richiesta nuova.
+
+- **Fasi**: analisi → sviluppo e test → collaudo → revisione → attivazione (un programma non ha
+  l'attivazione). Le transizioni le fa il codice quando un tool riesce: `estensione_crea` o
+  `delega_lavoro` di codice di chi amministra con la voce **aprono** lo sviluppo
+  (`apri_se_serve`, regola `sviluppo_aperto`); la proposta «Ho capito così: … Procedo?» è la
+  specifica; il «sì» avvia il lavoro (sviluppo); `Lavori._annuncia` porta al collaudo
+  (`Sviluppi.lavoro_finito`: l'annuncio non chiede più «Vuoi approvarla?», dice «Siamo al
+  collaudo: … prima di approvarla la puoi provare»); `sviluppo(avanti)` alla revisione e poi
+  all'attivazione; `Estensioni._approva` chiude lo sviluppo (`sviluppo_chiuso`). Un lavoro
+  fallito lascia lo sviluppo allo sviluppo, senza lavoro («torniamo all'analisi o lo rifaccio?»).
+  L'analisi «impossibile» o «c'è già» chiude lo sviluppo appena aperto (non blocca gli altri).
+- **Due tool nuovi** (68 schemi con gli agenti; uguali per ogni livello): `sviluppo(azione:
+  stato, avanti, analisi, sospendi, riprendi, esci, promuovi; quale; cambia)` e
+  `sviluppo_prova(dati)`. Il secondo è a parte perché il suo risultato è un dato non fidato
+  (fonte «estensione», come gli `est_`): con un tool solo ogni «a che punto siamo?» avrebbe
+  contaminato la conversazione.
+- **Collaudo** (`Estensioni.prova_candidata`): la versione candidata gira nello stesso container
+  di un'estensione attiva (`_esecuzione`, la stessa di `usa`: porta stretta, guardrail, quote,
+  tetti del manifesto, livello al più familiare), con l'impronta dei file ricontrollata prima di
+  ogni prova; i dati detti diventano gli input (`_argomenti`: «Bergamo», «citta=Roma», JSON). Il
+  programma si prova con `lavori_esegui`. I collaudi restano nello sviluppo e sulla scheda.
+- **Revisione** (`Estensioni.revisione`): permessi in parole con quelli nuovi rispetto alla
+  versione approvata, chi la usa, analisi del codice, test, prove fatte, e quanti file e righe
+  cambiano (`differenze`; a voce mai nomi di file né codice, il diff unificato sulla scheda). Un
+  programma: file e righe di codice, test, prove; se è grande (`sviluppo_programma_righe` 150, o 3
+  file, o 3 prove) la proposta di farne un'estensione, con la differenza spiegata («un programma
+  si esegue adesso e basta; un'estensione resta, la richiami a voce, ha i permessi approvati da
+  te e le sue versioni»); `promuovi` chiude il programma e apre lo sviluppo dell'estensione con i
+  file del programma sotto `programma/` nella cartella dell'agente.
+- **Ritorno all'analisi** da qualunque fase (`sviluppo(analisi, cambia)`): il lavoro in corso si
+  ferma (`Lavori.annulla` con l'id), la specifica con la modifica si propone; per un'estensione
+  con una candidata il lavoro parte dai file della versione provata (`file_per_modifica(…,
+  candidata=True)`), per un programma dai file del risultato.
+- **Niente sviluppi nuovi** con uno aperto (`controlla_nuovo`, regola `sviluppo_altro_bloccato`):
+  un'altra estensione, un programma, una ricerca → «Adesso stiamo sviluppando «…» e siamo al
+  collaudo: un'altra cosa per l'agente la comincio dopo. Vuoi che sospenda questo sviluppo?»
+  (in sospeso `sviluppo(sospendi)`). Le risposte alle domande dell'analisi e la modifica della
+  sua estensione passano.
+- **Sospensione** dopo `sviluppo_sospendi_min` (30) minuti senza parlarne, pigra
+  (`Sviluppi.corrente`), mai con l'agente al lavoro; «riprendiamo lo sviluppo del meteo» →
+  `sviluppo(riprendi, quale)`, e quello aperto si sospende (uno aperto per persona). Una volta al
+  giorno, alla prima risposta a chi amministra (riconosciuto: non nella zona grigia), la frase
+  degli sviluppi sospesi in coda (`promemoria_giorno`, `ricordati` su disco).
+- **Su disco** (`sviluppi.json` nella cartella delle sandbox): un riavvio a metà sviluppo lascia
+  lo sviluppo senza lavoro («interrotto da un riavvio»), e il lavoro rifatto dopo «Lo rifaccio?»
+  si riconosce da persona, tipo ed estensione o titolo (`_rifatto`).
+- Dati del turno, riga del fuori tema e promemoria: [voce-e-regole](voce-e-regole.md);
+  sicurezza dei passi interni: [sicurezza-politica](sicurezza-politica.md); la scheda:
+  [schermi-telefono](schermi-telefono.md).
+
+**Prove**: a secco `prove/prova_sviluppo.py` (~2 s, livello 1: macchina a stati, collaudo nel
+docker finto, revisione e sfida, analisi, blocco, Brain, sospensione e promemoria, programma,
+politica). **Misura con gemma4 e4b** sul portatile (`prove/prova_sviluppo_ollama.py`: la sessione
+del meteo per città come iter, 12 passi, servizio dei lavori finto, il lavoro finisce per finta; con
+i dati del turno e con la rete `modalita_sviluppo` spenta; `--tutti` con gli altri ~60 schemi):
+
+| passo | 3 giri, dati del turno | 3 giri, rete spenta | 3 giri `--tutti`, dati del turno | `--tutti`, rete spenta |
+|---|---|---|---|---|
+| richiesta → sviluppo aperto | 3/3 | 3/3 | 2/3 (una volta «c'è già: chiedimi che tempo fa») | 3/3 |
+| «Sì, procedi.» → sviluppo | 3/3 | 3/3 | 3/3 | 2/3 (+1 al turno dopo) |
+| «Che ore sono?»: risponde e ricorda dove eravamo | **3/3** | 0/3 | **3/3** | 0/3 |
+| «Prova con Bergamo.», «…Atlantide» → `sviluppo_prova` | 6/6 | 6/6 | 6/6 | 6/6 |
+| «Aggiungi il latte…» → la lista, resta al collaudo | 3/3 | 3/3 | 3/3 | 3/3 |
+| «Fammi anche un'estensione…» → non parte, senza domanda della politica | 3/3 | 3/3 | 3/3 | 3/3 |
+| «Anzi, torniamo all'analisi…», «Sì.» | 6/6 | 6/6 | 6/6 | 6/6 |
+| «Va bene, andiamo avanti.» → revisione | 3/3 | 3/3 | 3/3 | 3/3 |
+| «Attivala.» → sfida → attiva, sviluppo chiuso | 6/6 | 6/6 | 6/6 | 5/6 |
+| prima frase mediana | 1,32 s | 1,00 s | 1,32 s | 1,18 s |
+
+Lo stato nel codice fa quasi tutto: con la rete spenta il modello trova i tool giusti dalle loro
+risposte (il collaudo, «avanti»). I dati del turno servono al fuori tema (il 4B scrive da sé
+«Ricorda che stiamo collaudando l'estensione…»: la riga del codice non è mai servita) e costano
+~0,15–0,3 s di prima frase (~250 token, solo con uno sviluppo aperto). Nei primi giri, prima delle
+correzioni: «Attivala.» → `estensioni_gestisci(approva, nome="MeteoSì")` (il nome dato alla
+richiesta) e la domanda della politica (ora `sviluppo_nome_estensione`); «Fammi anche
+un'estensione…» riceveva la domanda della politica prima del rifiuto (ora
+`sviluppo_senza_domanda`); il 4B una volta ha chiesto l'estensione con `delega_lavoro` di codice
+(«Crea un'estensione che…»): si apre lo sviluppo di un programma (il limite noto dell'analisi
+«ESTENSIONE» col modello piccolo, vedi il giro 10). Da misurare sulla DGX con il 26B e l'agente
+vero.

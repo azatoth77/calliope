@@ -109,6 +109,10 @@ ARGOMENTI: dict[str, dict[str, str]] = {
                         # 08/10 (giro 10): l'estensione esistente di cui fare una versione nuova
                         "modifica": B},
     "estensioni_gestisci": {"azione": Z, "nome": B, "esecuzione": B, "sempre": S},
+    # 08/10, modalità sviluppo (calliope/sviluppo.py): lo sviluppo è quello aperto di chi parla
+    # (il bersaglio non è un argomento); quale sceglie tra i suoi sospesi
+    "sviluppo": {"azione": Z, "quale": B, "cambia": L},
+    "sviluppo_prova": {"dati": C},
 }
 
 # Gli elenchi a cui punta un indice: fidato se lo fa un tool interno (o è un file della
@@ -156,6 +160,18 @@ def _delega(a: dict) -> int:
     return E2 if pol._s(a, "tipo").lower() == "ricerca" else E3
 
 
+def _sviluppo(a: dict) -> int:
+    # 08/10: sospendere, riprendere, uscire cambiano solo lo stato dell'iter (E1); tornare
+    # all'analisi o promuovere preparano un lavoro dell'agente da confermare (E2); avanti può
+    # arrivare all'approvazione, che ha la sua sfida (E3)
+    az = pol._s(a, "azione").lower()
+    if az in ("sospendi", "riprendi", "esci"):
+        return E1
+    if az in ("analisi", "promuovi"):
+        return E2
+    return E3
+
+
 def _ricorda(a: dict) -> int:
     # D3: per tutti E2; personale E2 anche lui, ma senza parole dal dato si esegue come oggi
     # (fatto_detto o ancorata): la differenza la fanno le etichette
@@ -180,7 +196,9 @@ EFFETTI: dict[str, object] = {
     "registra_utente": E4, "rinomina_interlocutore": E4, "schermo_gestisci": E4,
     "minore_gestisci": E4,
     # dipendono da un argomento
-    "casa_comando": _casa, "delega_lavoro": _delega,
+    "casa_comando": _casa, "delega_lavoro": _delega, "sviluppo": _sviluppo,
+    # il collaudo esegue codice (nel container, con la porta stretta)
+    "sviluppo_prova": E3,
 }
 
 

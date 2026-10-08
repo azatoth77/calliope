@@ -50,6 +50,8 @@ def load_estensioni(cfg, registry=None, tool_ctx=None, lavori=None, log=print):
         svc.scegli_in_secondo_piano()
     if lavori is not None:
         lavori.estensioni = svc
+        # La modalità sviluppo (08/10, calliope/sviluppo.py): l'approvazione chiude l'iter
+        svc.sviluppi = getattr(lavori, "sviluppi", None)
         # Una sola porta verso internet (e un solo tetto al minuto) per estensioni e agente
         agente = getattr(lavori, "agente", None)
         if agente is not None:

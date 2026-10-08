@@ -2121,6 +2121,10 @@ def build_registry(biblioteca: bool = False, pc: dict | None = None,
         for spec in agenti_specs(documenti or (), agenti_modelli, file_pc=file_pc,
                                  archivio=archivio, allegati=allegati):
             reg.register(spec)
+        # La modalità sviluppo (08/10, calliope/sviluppo.py): l'iter di estensioni e programmi
+        from .sviluppo import sviluppo_specs
+        for spec in sviluppo_specs():
+            reg.register(spec)
     if ufficio:
         from .ufficio import ufficio_specs
         for spec in ufficio_specs(ufficio):
