@@ -334,6 +334,10 @@ class Schermi:
             if ripresa:
                 self._unisci_storia(schermo["id"], ripresa, schermo.get("proprietario"))
             storia = list(self._storia.get(schermo["id"], ()))
+        if not schermo.get("proprietario"):
+            # Uno schermo che non è (più) personale («rendilo condiviso») non rimanda le schede
+            # personali che aveva in memoria (08/10)
+            storia = [c for c in storia if c.get("visibilita") != PERSONALE]
         return conn, storia
 
     # ── cronologia per persona (08/10, cronologia.py) ──

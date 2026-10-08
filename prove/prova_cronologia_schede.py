@@ -311,6 +311,13 @@ def prova_ripresa():
     hub2.cfg.schermi_cronologia = 3
     verifica("riceve al più `schermi_cronologia` schede (le ultime)",
              len(hub2.ripresa(s_tel)) == 3 and hub2.ripresa(s_tel)[-1]["tipo"] == "sviluppo")
+    # Uno schermo personale reso condiviso non rimanda le schede personali che aveva in memoria
+    with hub2._lock:
+        hub2._in_storia(s_cucina["id"], schede.testo("Vecchia personale", "x", schede.PERSONALE))
+        hub2._in_storia(s_cucina["id"], schede.calcolo("1+1", "2"))
+    st_c = Conn(hub2, s_cucina).storia
+    verifica("schermo di stanza (reso condiviso): mai le schede personali rimaste in memoria",
+             [c["tipo"] for c in st_c] == ["calcolo"], [c["tipo"] for c in st_c])
     # Ricollegata: le schede che lo schermo ha già non si ripetono
     pagina2 = Conn(hub2, s_tel, ripresa=hub2.ripresa(s_tel))
     k = chiavi(pagina2.storia)
