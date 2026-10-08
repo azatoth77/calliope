@@ -1914,6 +1914,10 @@ RETI: dict[str, Rete] = {
     "riferimento_lavoro": Rete(
         "«fammene un PDF»: il lavoro dell'agente appena detto (LAVORO_MSG)", MODELLO,
         "dati del turno: «Ho metto un pdf.» dopo il risultato cercava i PDF del PC (07/10)"),
+    "estensione_nominata": Rete(
+        "un'estensione nominata nella frase: il suo tool e cosa fa (EST_NOMINATA_MSG)", MODELLO,
+        "dati del turno: «invoca l'estensione meteo per città su Bergamo» tre volte, e sempre "
+        "web_cerca (26B, 07/10)"),
     "conferma_al_posto_del_vuoto": Rete(
         "risposta vuota dopo un tool: la sua conferma", MODELLO,
         "risposte vuote del 4B dopo un'azione riuscita"),

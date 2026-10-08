@@ -2096,6 +2096,18 @@ class Ciclo:
                 print(f"   [CONTESTO] compressione non avviata: {type(e).__name__}: {e}",
                       flush=True)
 
+    def _ripulisci_per_registro(self, t, testo):
+        """Una risposta (o un suo pezzo) come la scrive `_oscura_registro`: senza il codice di
+        abbinamento, oscurata se scritta, senza le parole della frase di sfida."""
+        brain = self.brain
+        testo = brain.redact(testo)
+        if t.scritto is not None:
+            testo = oscura(testo)
+        if isinstance(testo, str) and {"sfida_voce", "sfida_risposta"} & set(
+                brain.rules_fired()):
+            testo = re.sub(r"([Rr]ipeti:).*", r"\1 …", testo)
+        return testo
+
     def _oscura_registro(self, t):
         brain, rec, scritto = self.brain, self.rec, t.scritto
         if getattr(brain, "last_private", False):
@@ -2187,9 +2199,15 @@ class Ciclo:
             # Interrotta: nella storia solo le frasi pronunciate per intero; si ascolta
             # subito, partendo dall'audio che contiene il nome
             self.brain.record_interruption(speaker.played)
-            self.rec.update(interrotta=True,
-                            risposta=None if getattr(self.brain, "last_private", False)
-                            else " ".join(speaker.played))
+            # «risposta»: solo le frasi sentite per intero; «risposta_inviata»: quello che era
+            # già andato alla voce, ripulito come la risposta (08/10, DGX del 07/10: lavori_stato
+            # interrotto dal nome a metà della sua unica frase, e nel registro risposta vuota)
+            inviata = self.rec.get("risposta")
+            sentita = None if getattr(self.brain, "last_private", False) \
+                else self._ripulisci_per_registro(t, " ".join(speaker.played))
+            self.rec.update(interrotta=True, risposta=sentita)
+            if inviata and inviata != sentita:
+                self.rec["risposta_inviata"] = inviata
             self.barge_seed = t.watch["seed"]
         self._protezione_dopo(t)
         self._ricerca_promessa(t)

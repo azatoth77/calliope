@@ -679,6 +679,16 @@ LAVORO_MSG = ("Contesto del lavoro: l'ultimo risultato di cui avete parlato è q
 LAVORO_RECENTE_S = 1800.0      # finito da al più mezz'ora
 LAVORO_STORIA = 8              # il titolo detto negli ultimi messaggi
 
+# Un'estensione nominata nella frase (08/10, caso della DGX del 07/10: «invoca l'estensione meteo
+# per città su Bergamo», detto tre volte, e sempre web_cerca; dopo l'approvazione della versione
+# 2 il modello ripeteva quello che aveva detto della 1). Dati del turno, non un ordine: decide
+# il modello se la persona vuole usarla, cambiarla o solo parlarne (principio 10). Regola
+# `estensione_nominata`, rete spegnibile `estensione_nominata`
+EST_NOMINATA_MSG = ("Dati del turno: chi parla nomina {chi}. Se chiede di usarla, chiama quel "
+                    "tool con i dati che dice, non un altro (internet, biblioteca); se chiede di "
+                    "cambiarla, è estensione_crea con modifica.")
+EST_CAMBIATA_S = 1800.0        # «è cambiata da poco»: approvata da al più mezz'ora
+
 # Tool i cui risultati non restano nella storia oltre la risposta (03/10): i riservati
 # (ToolSpec.riservato, i documenti di casa) diventano una traccia neutra, questi personali
 # solo la frase già detta (conferma). La conversazione è già di una persona sola
@@ -2264,6 +2274,35 @@ class Brain:
                 {"lavoro": lav.id, "titolo": titolo, "avvisato": False,
                  "parole": sorted(provenienza.parole(lav.titolo))})
 
+    def _estensioni_nominate(self, testo: str) -> str | None:
+        """EST_NOMINATA_MSG per le estensioni attive che la frase nomina, o None."""
+        if not self._net("estensione_nominata"):
+            return None
+        est = getattr(self.tool_ctx, "estensioni", None)
+        if est is None or not hasattr(est, "nominate"):
+            return None
+        try:
+            trovate = est.nominate(testo)[:2]
+        except Exception:  # noqa: BLE001 — sono solo dati del turno
+            return None
+        if not trovate:
+            return None
+        parti = []
+        for e in trovate:
+            p = (f"la tua estensione «{e['titolo']}» (versione {e['versione']}): è il tool "
+                 f"{e['tool']}" + (f", «{e['descrizione']}»" if e.get("descrizione") else "")
+                 + (f", input: {', '.join(e['input'])}" if e.get("input") else ""))
+            try:
+                quando = datetime.datetime.fromisoformat(str(e.get("approvata") or ""))
+                fresca = (datetime.datetime.now() - quando).total_seconds() <= EST_CAMBIATA_S
+            except ValueError:
+                fresca = False
+            if fresca and int(e.get("versione") or 1) > 1:
+                p += (". È cambiata da poco: quello che è stato detto di lei prima nella "
+                      "conversazione valeva per la versione di prima")
+            parti.append(p)
+        return EST_NOMINATA_MSG.format(chi="; ".join(parti))
+
     def _take_reference(self) -> str | None:
         """Il riferimento dei turni prima, se è ancora valido (non si consuma: vale finché
         non ne arriva un altro o scade)."""
@@ -2503,6 +2542,11 @@ class Brain:
         if lavoro_ref:
             memory = memory + [{"role": "system", "content": lavoro_ref[0]}]
             self._rule("riferimento_lavoro")
+        # Un'estensione nominata nella frase (EST_NOMINATA_MSG)
+        est_msg = self._estensioni_nominate(user_text) if user_text else None
+        if est_msg:
+            memory = memory + [{"role": "system", "content": est_msg}]
+            self._rule("estensione_nominata")
         # Azione in sospeso: dopo i ricordi, l'ultima cosa prima della domanda. Messa prima
         # dei ricordi (o senza), il «sì» dopo «La apro?» veniva preso per un ringraziamento
         if pending:

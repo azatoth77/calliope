@@ -1,8 +1,8 @@
 """
 I tool delle estensioni (04/10/2026, calliope/estensioni/).
 
-- estensione_crea(compito, nome): chi amministra chiede una funzione permanente nuova (o la
-  modifica di una esistente, `nome`). È un lavoro di codice per l'agente, con proposta e «sì»
+- estensione_crea(compito, nome, modifica): chi amministra chiede una funzione permanente nuova
+  (`nome`) o la modifica di una che c'è (`modifica`, dal 08/10: una versione nuova). È un lavoro di codice per l'agente, con proposta e «sì»
   (come delega_lavoro: la proposta si conferma con delega_lavoro proposta=id). A lavoro finito
   la versione è «da approvare» e si annuncia.
 - estensioni_gestisci(azione, nome, esecuzione, sempre): elenca; approva, indietro (sempre
@@ -77,7 +77,7 @@ def funzioni_di_calliope() -> str:
 
 def _estensione_crea(ctx: ToolContext, compito: str = "", nome: str = "", proposta: str = "",
                      gia_fatto_da: str = "", come_chiederlo: str = "", gioco=False,
-                     **altro) -> dict:
+                     modifica: str = "", **altro) -> dict:
     from . import agenti as ta
     from .. import politica
     est = getattr(ctx, "estensioni", None)
@@ -121,15 +121,27 @@ def _estensione_crea(ctx: ToolContext, compito: str = "", nome: str = "", propos
         return {"ok": False, "fatto": NIENTE, "errore": "manca il compito",
                 "cosa_fare": "chiedi in breve cosa deve fare la funzione"}
     from ..estensioni.servizio import _nome, runtime_testo
-    esistente = _nome(nome, est.archivio) if str(nome or "").strip() else ""
+    # Una versione nuova solo se il modello lo dice (`modifica`, 08/10). Prima `nome` valeva per
+    # tutte e due e si cercava con un confronto approssimato: il 07/10 sulla DGX «Meteo Città»,
+    # il nome di un'estensione NUOVA (una città qualunque), è diventato la versione 2 di
+    # «meteo_citta» (Borgoverde e Valfiorita), e la persona non capiva più quale fosse
+    esistente = _nome(modifica, est.archivio) if str(modifica or "").strip() else ""
+    if esistente and not est.archivio.voce(esistente):
+        ci_sono = elenco_breve(est)
+        return {"ok": False, "fatto": NIENTE,
+                "errore": f"non ho un'estensione «{str(modifica).strip()}» da cambiare",
+                "cosa_fare": ("richiama con modifica = una di queste: " + ci_sono if ci_sono
+                              else "non ci sono estensioni: per farne una nuova togli modifica")}
+    simile = "" if esistente else _simile(nome, est)
+    if simile:
+        ta.note_rule(ctx, "estensione_nuova_accanto")
     file = {}
     vincoli = ""
-    if esistente and est.archivio.voce(esistente):
+    if esistente:
         file = est.file_per_modifica(esistente)
         vincoli = (f"È la modifica dell'estensione esistente «{esistente}»: i suoi file sono "
-                   f"già nella cartella; tieni lo stesso nome nel manifesto.")
-    else:
-        esistente = ""
+                   f"già nella cartella; tieni lo stesso nome nel manifesto (il titolo e la "
+                   f"descrizione cambiano se cambia quello che fa).")
     # Le funzioni che Calliope ha già, per il piano dell'agente (doppioni, 06/10)
     vincoli = (vincoli + " " + funzioni_di_calliope()).strip()
     gia_detto = politica.accettata(ctx) and politica.gia_fatto({"gia_fatto_da": gia})
@@ -150,7 +162,8 @@ def _estensione_crea(ctx: ToolContext, compito: str = "", nome: str = "", propos
         lav = svc.nuovo("estensione", compito_agente, prof.id, prof.name, level, "", "", v,
                         storia)
         # Il nome del lavoro: quello dell'estensione (06/10: L1 si chiamava «estensione che»)
-        titolo = ta._titolo_estensione(nome, esito)
+        titolo = ta._titolo_estensione(nome or (_titolo(est, esistente) if esistente else ""),
+                                       esito)
         if titolo:
             lav.titolo = titolo
         elif compito_agente != compito:
@@ -184,8 +197,53 @@ def _estensione_crea(ctx: ToolContext, compito: str = "", nome: str = "", propos
     # Già confermata alla domanda della politica (06/10): niente secondo «Procedo?» (salvo una
     # specifica raffinata dall'analisi, che la persona non ha ancora sentito)
     if politica.accettata(ctx) and not raffinata:   # regola `politica_conferma_unica`
-        return ta._avvia(ctx, svc, lav)
-    return ta._proponi(ctx, svc, lav, turno)
+        out = ta._avvia(ctx, svc, lav)
+    else:
+        out = ta._proponi(ctx, svc, lav, turno)
+    return _con_avviso(out, esistente, simile, est)
+
+
+def _titolo(est, nome: str) -> str:
+    m = est.archivio.manifesto(nome) or est.archivio.manifesto(
+        nome, est.archivio.candidata(nome)) or {}
+    return str(m.get("titolo") or nome)
+
+
+def elenco_breve(est) -> str:
+    """«Meteo per città» (meteo_citta), «Tris» (tris): le estensioni che ci sono, per il
+    modello."""
+    return ", ".join(f"«{_titolo(est, n)}» ({n})" for n in est.archivio.nomi())
+
+
+def _simile(nome: str, est) -> str:
+    """Il nome interno di un'estensione che c'è con un nome simile a quello dato a una nuova
+    («Meteo Città» e meteo_citta), o ""."""
+    from ..estensioni.servizio import _nome
+    if not str(nome or "").strip():
+        return ""
+    vero = _nome(nome, est.archivio)
+    return vero if est.archivio.voce(vero) else ""
+
+
+def _con_avviso(out: dict, esistente: str, simile: str, est) -> dict:
+    """La frase della proposta o dell'avvio dice se è una versione nuova di un'estensione che
+    c'è o un'estensione nuova accanto a una simile (08/10, caso della DGX del 07/10)."""
+    if not isinstance(out, dict) or not out.get("ok") or not (esistente or simile):
+        return out
+    if esistente:
+        avviso = (f"Sarà una versione nuova di «{_titolo(est, esistente)}»: quella di adesso "
+                  f"resta in uso finché non approvi la nuova.")
+    else:
+        avviso = (f"Sarà un'estensione nuova: «{_titolo(est, simile)}», che c'è già, resta "
+                  f"com'è.")
+    for k in ("conferma", "risposta_finale"):
+        if isinstance(out.get(k), str) and out[k].strip():
+            out[k] = f"{avviso} {out[k]}"
+    sosp = out.get("in_sospeso")
+    if isinstance(sosp, dict) and isinstance(sosp.get("domanda"), str) \
+            and not sosp["domanda"].startswith(avviso) and len(sosp["domanda"]) > 20:
+        sosp["domanda"] = f"{avviso} {sosp['domanda']}"
+    return out
 
 
 
@@ -195,6 +253,11 @@ def _estensioni_gestisci(ctx: ToolContext, azione: str = "elenca", nome: str = "
     if est is None:
         return _final("Qui le estensioni non ci sono.", ok=False, fatto=NIENTE)
     return est.gestisci(ctx, azione, nome, esecuzione, sempre)
+
+
+def _prepara_gestisci(ctx, argomenti: dict) -> dict:
+    from ..estensioni.servizio import prepara_gestisci
+    return prepara_gestisci(ctx, argomenti)
 
 
 AZIONI = ["elenca", "approva", "rifiuta", "disattiva", "riattiva", "indietro", "revoca",
@@ -208,12 +271,15 @@ def estensioni_specs(crea: bool = True) -> list[ToolSpec]:
             name="estensione_crea",
             description=("Crea una funzione permanente nuova di Calliope (un'estensione: un "
                          "piccolo programma che resta e si usa a voce, per esempio «fammi una "
-                         "funzione che converte le unità di misura»), oppure modifica una "
-                         "estensione esistente (nome). Quelle che ci sono sono i tuoi tool est_: "
+                         "funzione che converte le unità di misura»), oppure CAMBIA "
+                         "un'estensione che c'è («falla funzionare per ogni città», "
+                         "«correggila», «aggiungi…»): modifica = il suo nome, e ne preparo una "
+                         "versione nuova da approvare. Quelle che ci sono sono i tuoi tool est_: "
                          "un programma fatto da delega_lavoro non è un'estensione e si riusa con "
                          "lavori_esegui. NON per un programma da usare una volta "
                          "sola: quello è delega_lavoro tipo codice. compito: cosa deve fare, con "
-                         "i dati come detti. gia_fatto_da: se uno dei tuoi tool fa già la stessa "
+                         "i dati come detti. nome: un nome breve per un'estensione nuova. "
+                         "gia_fatto_da: se uno dei tuoi tool fa già la stessa "
                          "cosa (sommare due numeri o fare conti = calcola), il suo nome, e "
                          "come_chiederlo: la frase con cui chiederlo a voce (es. «quanto fa 3 "
                          "più 5»); vuoto se nessuno: chiedo io se la vuole comunque, e al sì "
@@ -222,6 +288,7 @@ def estensioni_specs(crea: bool = True) -> list[ToolSpec]:
                          "richiama delega_lavoro con proposta = l'id proposto."),
             parameters={"type": "object", "properties": {
                 "compito": {"type": "string"}, "nome": {"type": "string"},
+                "modifica": {"type": "string"},
                 "gia_fatto_da": {"type": "string"}, "come_chiederlo": {"type": "string"},
                 "proposta": {"type": "string"}, "gioco": {"type": "boolean"}},
                 "required": ["compito"]},
@@ -229,14 +296,17 @@ def estensioni_specs(crea: bool = True) -> list[ToolSpec]:
     out.append(ToolSpec(
         name="estensioni_gestisci",
         description=("Le estensioni di Calliope (funzioni aggiunte dalla famiglia): elenca "
-                     "(quali ci sono davvero e come si chiedono: prima di dire come usarne una); "
-                     "approva una versione nuova, rifiuta, disattiva, riattiva, indietro (torna "
-                     "alla versione precedente), revoca (i permessi «sempre»), rimuovi; "
+                     "(quali ci sono davvero, con le versioni nuove da approvare: prima di dire "
+                     "come usarne una); approva una versione nuova («attiva la versione nuova», "
+                     "«usa la nuova»), rifiuta, disattiva, riattiva (una disattivata), indietro "
+                     "(torna alla versione precedente), revoca (i permessi «sempre»), rimuovi; "
                      "consenti o nega un'azione che un'estensione ha chiesto (esecuzione = l'id, "
-                     "es. «E3»; sempre=true se la persona dice «sì, sempre»)."),
+                     "es. «E3»; sempre=true se la persona dice «sì, sempre»). Per USARE "
+                     "un'estensione chiama il suo tool est_, non questo."),
         parameters={"type": "object", "properties": {
             "azione": {"type": "string", "enum": AZIONI}, "nome": {"type": "string"},
             "esecuzione": {"type": "string"}, "sempre": {"type": "boolean"}},
             "required": ["azione"]},
-        func=_estensioni_gestisci, risk="azione", levels=FAMILY))
+        func=_estensioni_gestisci, risk="azione", levels=FAMILY,
+        prepara=_prepara_gestisci))
     return out

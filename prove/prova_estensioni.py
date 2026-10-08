@@ -754,7 +754,7 @@ def prova_ciclo_di_vita(tmp: Path, isolamento):
     lav = SimpleNamespace(id="L2", persona_nome="Dario", estensione="convertitore_unita")
     c = est.candidata_da_lavoro(lav, sb, {"test": test["esito"], "test_passano": True})
     verifica("modifica: versione 2 da approvare, la 1 resta in uso",
-             "una versione nuova" in c["frase"] and est.archivio.candidata(
+             "la versione 2 di «Convertitore" in c["frase"] and est.archivio.candidata(
                  "convertitore_unita") == 2
              and chiama(reg, ctx, "est_convertitore_unita", {"valore": 10, "da": "km",
                                                              "a": "miglia"},

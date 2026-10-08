@@ -244,6 +244,36 @@ class Estensioni:
             except Exception:  # noqa: BLE001
                 pass
 
+    def nominate(self, testo: str, tutte: bool = False) -> list[dict]:
+        """Le estensioni attive (con il loro tool registrato) che la frase nomina, per titolo o
+        per nome: «invoca l'estensione meteo per città su Bergamo», anche storpiato dalla
+        trascrizione («Medio per città», «Meteocittà»). Servono ai dati del turno di Brain
+        (EST_NOMINATA_MSG, 08/10): è un contesto, decide il modello. `tutte`: anche quelle
+        disattivate o ancora da approvare (per cambiarle)."""
+        frase = _norm_testo(testo)
+        if not frase:
+            return []
+        reg = self.registry
+        out = []
+        voci = ([dict(self.archivio.voce(n) or {}, nome=n) for n in self.archivio.nomi()]
+                if tutte else self.archivio.attive())
+        for v in voci:
+            nome = v["nome"]
+            if not tutte and reg is not None and reg.get(PREFISSO + nome) is None:
+                continue
+            titoli = [(self.archivio.manifesto(nome, k) or {}).get("titolo")
+                      for k in {v.get("attiva"), v.get("candidata")} if k]
+            m = self.archivio.manifesto(nome, v.get("attiva") or v.get("candidata")) or {}
+            if not any(_nomina(frase, _norm_testo(x)) for x in
+                       titoli + [nome.replace("_", " ")] if x):
+                continue
+            ver = self.archivio.versione(nome) or {}
+            out.append({"nome": nome, "tool": PREFISSO + nome, "titolo": m.get("titolo", nome),
+                        "descrizione": str(m.get("descrizione") or "").rstrip("."),
+                        "input": sorted((m.get("input") or {}).get("properties") or {}),
+                        "versione": v.get("attiva"), "approvata": ver.get("approvata")})
+        return out
+
     # ─────────────────────────── uso ───────────────────────────
     def usa(self, ctx, nome: str, argomenti: dict) -> dict:
         voce = self.archivio.voce(nome)
@@ -415,8 +445,11 @@ class Estensioni:
     # ─────────────────────────── gestione ───────────────────────────
     def gestisci(self, ctx, azione: str = "elenca", nome: str = "", esecuzione: str = "",
                  sempre=False) -> dict:
-        azione = str(azione or "elenca").strip().lower()
         nome = _nome(nome, self.archivio)
+        vera = azione_vera(azione, nome, self.archivio)
+        if vera != str(azione or "elenca").strip().lower():
+            note_rule(ctx, "estensioni_azione_sinonimo")
+        azione = vera
         if azione in ("consenti", "nega"):
             return self._decidi(ctx, azione == "consenti", str(esecuzione or "").strip(),
                                 sempre in (True, "true", "sì", "si", 1))
@@ -440,6 +473,11 @@ class Estensioni:
                   or {}).get("titolo", nome)
         if azione == "approva":
             return self._approva(ctx, nome, voce)
+        if azione == "riattiva" and voce.get("stato") == "attiva":
+            # Già attiva (08/10, DGX del 07/10: «voglio che mi attivi l'estensione» → riattiva
+            # → «Fatto: «Meteo Borgoverde…» è di nuovo attiva», e la persona voleva la versione
+            # nuova): niente «Fatto», si dice com'è e, se c'è, si propone la versione nuova
+            return self._gia_attiva(ctx, nome, voce, titolo)
         if not forte and azione in ("rifiuta", "riattiva", "rimuovi", "revoca"):
             sf = self._sfida(ctx, {"azione": azione, "nome": nome}, f"«{azione}» su «{titolo}»")
             if sf is not None:
@@ -496,6 +534,27 @@ class Estensioni:
                                       "argomenti": {"azione": "rimuovi", "nome": nome}})
         return {"ok": False, "fatto": NIENTE, "errore": f"azione sconosciuta: {azione}"}
 
+    def _gia_attiva(self, ctx, nome: str, voce: dict, titolo: str) -> dict:
+        """«riattiva» su un'estensione già attiva: com'è, e la versione nuova da approvare se
+        c'è (con la domanda: il «sì» la approva, con la sua frase di sfida)."""
+        note_rule(ctx, "estensione_gia_attiva")
+        cand = self.archivio.candidata(nome)
+        frase = f"«{titolo}» è già attiva, versione {voce.get('attiva')}."
+        if cand is None:
+            return _final(frase, fatto="NIENTE da fare: era già attiva")
+        mc = self.archivio.manifesto(nome, cand) or {}
+        vecchio = self.archivio.manifesto(nome) or {}
+        cosa = str(mc.get("descrizione") or "").rstrip(".")
+        frase += (f" C'è {chi_e(mc, cand, vecchio).replace('la versione', 'la versione nuova', 1)}"
+                  + (f": {cosa[:1].lower() + cosa[1:]}" if cosa else "")
+                  + ". Vuoi approvarla?")
+        return _final(frase, fatto="NIENTE fatto: era già attiva; la versione nuova aspetta "
+                                   "l'approvazione",
+                      in_sospeso={"domanda": "Vuoi approvarla?",
+                                  "cosa": f"approvare {chi_e(mc, cand, vecchio)}",
+                                  "tool": "estensioni_gestisci",
+                                  "argomenti": {"azione": "approva", "nome": nome}})
+
     def _sfida(self, ctx, argomenti: dict, cosa: str) -> dict | None:
         """La frase di sfida, se non è appena stata superata (calliope/conferme.py)."""
         sc = getattr(ctx, "speaker_ctx", None)
@@ -538,8 +597,9 @@ class Estensioni:
             return _final(f"Ho già {len(attive)} estensioni attive, il massimo: disattivane "
                           f"una prima.", ok=False, fatto=NIENTE)
         if not da_familiare or not self._voce_sicura(ctx):
+            prima = self.archivio.manifesto(nome) if voce.get("attiva") else None
             sfida = self._sfida(ctx, {"azione": "approva", "nome": nome},
-                                f"approvare l'estensione «{m['titolo']}»")
+                                f"approvare {chi_e(m, n, prima)}")
             if sfida is not None:
                 return sfida
         elif not admin:
@@ -553,8 +613,18 @@ class Estensioni:
         self.archivio.registra({"estensione": nome, "versione": n, "esito": "approvata",
                                 "persona": getattr(_profilo(ctx), "name", None),
                                 "impronta": ver.get("impronta")})
-        return _final(f"Fatto: «{m['titolo']}» è attiva, versione {n}. Da adesso puoi "
-                      f"chiedermela.")
+        # Cosa fa adesso, detto, e per il modello il tool e il suo input (08/10, DGX del 07/10:
+        # dopo l'approvazione della versione 2 il modello ripeteva quello che aveva detto della
+        # versione 1, «è configurata solo per Borgoverde e Valfiorita», e usava web_cerca)
+        cosa = str(m.get("descrizione") or "").rstrip(".")
+        extra = {"tool": PREFISSO + nome,
+                 "input": sorted((m.get("input") or {}).get("properties") or {})}
+        if n > 1:
+            extra["nota"] = (f"è la versione {n}: quello che è stato detto prima di questa "
+                             f"estensione nella conversazione valeva per la versione di prima")
+        return _final(f"Fatto: «{m['titolo']}» è attiva, versione {n}"
+                      + (f": {cosa[:1].lower() + cosa[1:]}" if cosa else "")
+                      + ". Da adesso puoi chiedermela.", **extra)
 
     @staticmethod
     def _voce_sicura(ctx) -> bool:
@@ -581,20 +651,34 @@ class Estensioni:
         return ""
 
     def _elenca(self, ctx) -> dict:
-        voci = []
+        voci, nuove = [], False
         for nome in self.archivio.nomi():
             v = self.archivio.voce(nome)
             m = self.archivio.manifesto(nome, v.get("attiva") or v.get("candidata")) or {}
             stato = {"attiva": "attiva", "disattivata": "disattivata",
                      "da_approvare": "da approvare", "rifiutata": "rifiutata"}.get(
                 v.get("stato"), v.get("stato"))
-            if v.get("stato") == "attiva" and self.archivio.candidata(nome):
-                stato = "attiva, con una versione nuova da approvare"
+            cand = self.archivio.candidata(nome)
+            if v.get("attiva") and cand:
+                # La versione nuova con il suo titolo e cosa fa (08/10, DGX del 07/10: «Meteo
+                # Borgoverde e Valfiorita (attiva, con una versione nuova da approvare)» e la
+                # persona cercava «Meteo per città», il titolo dell'annuncio)
+                mc = self.archivio.manifesto(nome, cand) or {}
+                altro = (f", «{mc['titolo']}»" if mc.get("titolo")
+                         and mc.get("titolo") != m.get("titolo") else "")
+                cosa = str(mc.get("descrizione") or "").rstrip(".")
+                stato = (f"{stato}, versione {v['attiva']}; c'è una versione nuova da approvare, "
+                         f"la {cand}{altro}" + (f": {cosa[:1].lower() + cosa[1:]}" if cosa
+                                                 else ""))
+                nuove = True
             voci.append(f"«{m.get('titolo', nome)}» ({stato})")
         if not voci:
             return _final("Non ci sono estensioni.")
-        return _final(("Ho un'estensione: " if len(voci) == 1 else
-                       f"Ho {len(voci)} estensioni: ") + ", ".join(voci) + ".")
+        testo = (("Ho un'estensione: " if len(voci) == 1 else f"Ho {len(voci)} estensioni: ")
+                 + "; ".join(voci) + ".")
+        if nuove:
+            testo += " Per usare una versione nuova, dimmi di approvarla."
+        return _final(testo)
 
     def _decidi(self, ctx, si: bool, ident: str, sempre: bool) -> dict:
         es = self.esecuzioni.get(ident)
@@ -694,7 +778,6 @@ class Estensioni:
             esito_test = "i test passano, " + (f"{k} su {k}" if k != 1 else "uno su uno")
         else:
             esito_test = "attenzione: i test non passano"
-        nuova = "una versione nuova di " if n > 1 else ""
         perm = permessi_in_parole(m)
         # Il confronto con la versione approvata (05/10): i permessi nuovi detti per primi
         nuovi = permessi_nuovi(vecchio, m) if vecchio else []
@@ -715,7 +798,7 @@ class Estensioni:
                            and not an.get("rischi") else "lo approva chi amministra, con la "
                                                           "frase di conferma")
             perm += f"; {chi_approva}"
-        frase = (f"ho preparato {nuova}l'estensione «{m['titolo']}»: {m['descrizione'].rstrip('.')}"
+        frase = (f"ho preparato {chi_e(m, n, vecchio)}: {m['descrizione'].rstrip('.')}"
                  f". Permessi: {perm}; la può usare {chi_la_usa(m)}; {esito_test}"
                  + (f"; analisi del codice: {rischi}" if an.get("rischi") else "") + ". "
                  + ("Vuoi approvarla?" if approvabile else
@@ -737,7 +820,7 @@ class Estensioni:
                       for r in an.get("rischi", [])[:10]])}
         if approvabile:
             out["in_sospeso"] = {"domanda": "Vuoi approvarla?",
-                                 "cosa": f"approvare l'estensione «{m['titolo']}»",
+                                 "cosa": f"approvare {chi_e(m, n, vecchio)}",
                                  "tool": "estensioni_gestisci",
                                  "argomenti": {"azione": "approva", "nome": m["nome"]}}
         return out
@@ -771,6 +854,47 @@ def _ordine_al_modello(testo: str, registry) -> bool:
         return True
     nomi = set(getattr(registry, "_tools", {}) or ())
     return any(w in nomi for w in re.findall(r"\b[a-z]+_[a-z_]+\b", testo.lower()))
+
+
+# Le azioni dette con un altro verbo (08/10, DGX del 07/10: estensioni_gestisci(attiva) →
+# la politica chiedeva «vuoi che faccia «attiva»…?», poi «azione sconosciuta: attiva»). È la
+# forma di una scelta già fatta dal modello (principio 10): «attiva» con una versione nuova da
+# approvare è «approva» (che vuole comunque la frase di sfida), senza è «riattiva»
+_SINONIMI_ATTIVA = frozenset({"attiva", "attivala", "abilita", "abilitala", "accendi",
+                              "accendila", "usa", "installa", "conferma", "accetta",
+                              "approvala", "aggiorna", "attivare", "approvare"})
+_SINONIMI = {"disabilita": "disattiva", "spegni": "disattiva", "sospendi": "disattiva",
+             "disattivala": "disattiva", "elimina": "rimuovi", "cancella": "rimuovi",
+             "togli": "rimuovi", "lista": "elenca", "elenco": "elenca", "mostra": "elenca",
+             "torna indietro": "indietro", "versione precedente": "indietro"}
+
+
+def azione_vera(azione, nome: str, archivio) -> str:
+    """L'azione di estensioni_gestisci con un sinonimo ricondotto a quelle del tool (AZIONI);
+    un'azione che non conosce resta com'è (e il tool lo dice)."""
+    a = str(azione or "elenca").strip().lower()
+    if a in _SINONIMI:
+        return _SINONIMI[a]
+    if a in _SINONIMI_ATTIVA:
+        cand = archivio.candidata(nome) if nome and archivio.voce(nome) else None
+        if cand is not None:
+            return "approva"
+        return "riattiva" if a not in ("aggiorna", "approvala", "approvare") else "approva"
+    return a
+
+
+def prepara_gestisci(ctx, argomenti: dict) -> dict:
+    """ToolSpec.prepara di estensioni_gestisci: l'azione vera prima dei permessi e della
+    politica, che così chiede (e ricorda) proprio quella."""
+    est = getattr(ctx, "estensioni", None)
+    if est is None or not isinstance(argomenti, dict) or "azione" not in argomenti:
+        return argomenti
+    nome = _nome(argomenti.get("nome"), est.archivio)
+    vera = azione_vera(argomenti.get("azione"), nome, est.archivio)
+    if vera != str(argomenti.get("azione") or "").strip().lower():
+        note_rule(ctx, "estensioni_azione_sinonimo")
+        return dict(argomenti, azione=vera)
+    return argomenti
 
 
 def _nome(nome, archivio) -> str:
@@ -823,6 +947,52 @@ def _solo_usati(file: dict) -> dict:
                     tieni.add(rel)
                     coda.append(rel)
     return {k: v for k, v in file.items() if not k.endswith(".py") or k in tieni}
+
+
+def _norm_testo(s) -> str:
+    """Minuscolo, senza accenti né punteggiatura, spazi singoli."""
+    import unicodedata
+    t = unicodedata.normalize("NFD", str(s or "").lower())
+    t = "".join(c for c in t if not unicodedata.combining(c))
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", t).split())
+
+
+def _nomina(frase: str, nome: str) -> bool:
+    """La frase (normalizzata) contiene il nome (normalizzato): uguale, a parole intere; per un
+    nome di almeno due parole e dieci lettere anche simile (ratio ≥ 0,85, la trascrizione:
+    «medio per citta») o attaccato («meteocitta»)."""
+    import difflib
+    if not nome:
+        return False
+    if re.search(r"(?<![a-z0-9])" + re.escape(nome) + r"(?![a-z0-9])", frase):
+        return True
+    parole, n = frase.split(), len(nome.split())
+    if n < 2 or len(nome) < 10:
+        return False
+    compatto = nome.replace(" ", "")
+    for k in {n, n - 1, n + 1} - {0}:
+        for i in range(0, max(0, len(parole) - k + 1)):
+            pezzo = parole[i:i + k]
+            if difflib.SequenceMatcher(None, " ".join(pezzo), nome).ratio() >= 0.85 or \
+                    difflib.SequenceMatcher(None, "".join(pezzo), compatto).ratio() >= 0.9:
+                return True
+    return False
+
+
+def chi_e(m: dict, n: int, vecchio: dict | None = None) -> str:
+    """Come si chiama a voce la versione `n` del manifesto `m`: «l'estensione «X»», oppure,
+    per una versione nuova di un'estensione che ha già una versione approvata (`vecchio`, il suo
+    manifesto), «la versione 2 di «Vecchio», che ora si chiama «Nuovo»» (08/10, caso della
+    DGX del 07/10: l'annuncio diceva solo il titolo nuovo, l'elenco solo quello vecchio, e la
+    persona non capiva che erano la stessa estensione)."""
+    titolo = m.get("titolo") or m.get("nome")
+    if n <= 1 or not vecchio:
+        return f"l'estensione «{titolo}»"
+    prima = vecchio.get("titolo") or vecchio.get("nome")
+    out = f"la versione {n} di «{prima}»"
+    if titolo != prima:
+        out += f", che ora si chiama «{titolo}»"
+    return out
 
 
 def approvabile_da_familiare(ver: dict) -> bool:

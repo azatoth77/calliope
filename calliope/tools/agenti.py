@@ -351,6 +351,17 @@ def _analisi(ctx, svc, prof, tipo: str, compito: str, crea, tool: str, nota: str
                     "in_sospeso": {"domanda": frase, "cosa": "affidare comunque il lavoro",
                                    "tool": "delega_lavoro",
                                    "argomenti": {"tipo": tipo, "compito": compito}}}, e, ""
+    if e.esito == "estensione":
+        # Cambiare o creare un'estensione non è un lavoro di codice (08/10): il modello richiama
+        # estensione_crea (con modifica per una che c'è). Niente frase detta: continua lui
+        from .estensioni import elenco_breve
+        est = getattr(ctx, "estensioni", None)
+        ci_sono = elenco_breve(est) if est is not None else ""
+        return {"ok": False, "fatto": f"{NIENTE}: il lavoro NON è stato affidato",
+                "errore": "è un'estensione: si crea o si cambia con estensione_crea",
+                "cosa_fare": ("richiama estensione_crea con lo stesso compito"
+                              + (f"; per cambiarne una che c'è, modifica = il suo nome tra "
+                                 f"questi: {ci_sono}" if ci_sono else ""))}, e, ""
     if e.esito == "impossibile":
         an.ricorda(prof.id, tipo, turno, compito, e)
         return _final(ar.frase_impossibile(e.motivo), ok=False,
@@ -389,6 +400,25 @@ def _analisi(ctx, svc, prof, tipo: str, compito: str, crea, tool: str, nota: str
 
         return offri(ctx, res, tool, riprendi), e, ""
     return None, e, ""
+
+
+def _a_estensione(ctx, compito: str):
+    """Il risultato di estensione_crea con modifica = l'estensione che il compito di un lavoro
+    di codice nomina («…dell'estensione 'Meteo per città'…»), o None. Solo con la parola
+    «estensione» e il titolo (o il nome) di un'estensione che c'è: «un programma che legge il
+    meteo per città» resta un programma."""
+    est = getattr(ctx, "estensioni", None)
+    if est is None or not re.search(r"(?<![a-zà-ù])estension[ei]", compito or "", re.I):
+        return None
+    try:
+        nomi = est.nominate(compito, tutte=True)
+    except Exception:  # noqa: BLE001 — nel dubbio, il lavoro di codice come prima
+        return None
+    if len(nomi) != 1:
+        return None
+    note_rule(ctx, "delega_estensione")
+    from .estensioni import _estensione_crea
+    return _estensione_crea(ctx, compito=compito, modifica=nomi[0]["nome"])
 
 
 def _titolo_estensione(nome: str, esito) -> str:
@@ -554,6 +584,15 @@ def _delega_lavoro(ctx: ToolContext, tipo: str = "", compito: str = "", formato:
                 _scegli(lv, "1")
         return lv
 
+    # Un lavoro di codice che cambia un'estensione che c'è (08/10, DGX del 07/10: «Modifica la
+    # logica dell'estensione 'Meteo per città'…» con delega_lavoro → l'analisi diceva
+    # «impossibile: non posso modificare le estensioni»). Le estensioni si cambiano con
+    # estensione_crea (una versione nuova da approvare): la stessa richiesta, già confermata
+    # alla domanda della politica, passa a lei. Regola `delega_estensione`
+    if tipo == "codice" and not modello and not candidati:
+        da_estensione = _a_estensione(ctx, compito)
+        if da_estensione is not None:
+            return da_estensione
     # L'analisi della richiesta prima della proposta (06/10): solo i lavori di codice
     esito = None
     if tipo == "codice" and not modello:
@@ -626,11 +665,39 @@ def _lavori_stato(ctx: ToolContext) -> dict:
     fatto = next((lv for lv in fin if lv.stato == "fatto"), None)
     if fatto is None:
         return _final(frase)
+    if fatto is fin[0] and getattr(fatto, "tipo", "") == "estensione":
+        # «Com'è andata l'estensione?» (08/10, DGX del 07/10: «Vuoi sentire il risultato?»):
+        # il risultato di un lavoro d'estensione è la versione da approvare
+        est = _estensione_del_lavoro(ctx, fatto)
+        if est is not None:
+            return _final(f"{frase} {est[0]}", **({"in_sospeso": est[1]} if est[1] else {}))
     domanda = ("Vuoi sentire il risultato?" if fatto is fin[0]
                else f"Vuoi sentire il risultato di «{_titolo_detto(fatto.titolo)}»?")
     return _final(f"{frase} {domanda}", in_sospeso={
         "domanda": domanda, "tool": "risultato_lavoro",
         "cosa": f"il risultato di «{fatto.titolo}»", "argomenti": {"lavoro": ar.chiave(fatto)}})
+
+
+def _estensione_del_lavoro(ctx, lav):
+    """(frase, in_sospeso o None) per l'estensione preparata da un lavoro finito, o None."""
+    r = (getattr(lav, "risultato", None) or {}).get("estensione") or {}
+    est = getattr(ctx, "estensioni", None)
+    nome, n = r.get("nome"), r.get("versione")
+    if est is None or not nome or not n or est.archivio.voce(nome) is None:
+        return None
+    from ..estensioni.servizio import chi_e
+    m = est.archivio.manifesto(nome, n) or {}
+    voce = est.archivio.voce(nome) or {}
+    if est.archivio.candidata(nome) == n:
+        prima = est.archivio.manifesto(nome) if voce.get("attiva") else None
+        cosa = chi_e(m, n, prima)
+        return (f"Ha preparato {cosa}: è da approvare. Vuoi approvarla?",
+                {"domanda": "Vuoi approvarla?", "cosa": f"approvare {cosa}",
+                 "tool": "estensioni_gestisci",
+                 "argomenti": {"azione": "approva", "nome": nome}})
+    if voce.get("attiva") == n and voce.get("stato") == "attiva":
+        return (f"«{m.get('titolo', nome)}» è attiva, versione {n}.", None)
+    return None
 
 
 def _lavori_rispondi(ctx: ToolContext, lavoro: str = "", risposta: str = "") -> dict:
