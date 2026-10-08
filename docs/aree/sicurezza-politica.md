@@ -804,3 +804,48 @@ persona, manifesto ristretto alla sola `rete_leggi` verso host noti, niente conf
 `prova_sonde_attacchi`. Da correggere comunque: il nome pubblico di casa (DuckDNS) per
 `RetePubblica` è «pubblico» (da verificare quali nomi ha la DGX), e la traccia nei vincoli
 dell'agente non è in busta. Realizzazione dopo l'unione di `diagnosi-collaudi`.
+
+## Sonde, ricollaudo e nomi pubblici di casa (08/10 notte, ramo `sonde-ricollaudo`)
+
+Realizzata la specifica del § 9 di [`2026-10-08-sonde-agente.md`](../ricerche/2026-10-08-sonde-agente.md)
+(dettagli nel documento [agenti-estensioni](agenti-estensioni.md)). Rispetto a prima il canale
+«agente → internet» si **restringe**: nelle correzioni `scarica_esempio` (qualunque host
+pubblico, valori liberi) lascia il posto a `sonda_rete`, e il codice dell'agente si prova prima
+della persona ma con meno permessi di un collaudo.
+
+- **Nomi pubblici di casa vietati** (`web/rete.py`, `nomi_casa`, `RetePubblica._di_casa`,
+  `_risolutore_casa`; vale per estensioni, `scarica_esempio`, sonde e ricollaudi). Il nome
+  DuckDNS e l'IP pubblico del router sono «internet pubblico»: con un inoltro di porta una GET
+  tornava dentro casa (§ 2.4.1 della ricerca). Ora sono rete di casa i nomi e gli IP di
+  `web_nomi_casa` (campo nuovo: il valore vero va in `calliope.locale.yaml` sulla DGX) e quelli
+  già nella configurazione: `casa_tls_nome`, l'host di `casa_url`, di `satellite_server`, degli
+  altri `*_url` e `schermi_nomi` (fuori i nomi locali e gli IP privati, già vietati). Si ferma il
+  nome, ogni sottodominio, l'IP scritto per esteso e ogni nome che risolve a uno di quegli
+  indirizzi (il dominio dell'attaccante puntato all'IP del router), anche dopo un
+  reindirizzamento: il risolutore di `pagina.scarica` è avvolto, e gli indirizzi di casa vanno
+  anche tra le reti vietate della richiesta. I nomi si risolvono al momento della richiesta, al
+  più una volta al minuto (`CASA_TTL_S`; DuckDNS cambia IP; un nome che non si risolve tiene gli
+  ultimi indirizzi); con la configurazione predefinita nessun nome e nessun DNS in più. Registro
+  delle uscite: «bloccata», motivo `rete_casa_pubblica`.
+- **Sonde** (`sonde.sonda`): host solo noti (manifesto approvato, risposta in un collaudo,
+  `chiedi_permesso` con il sì), valori solo dal caso (`Vocabolario`), 4 per lavoro, 2 per
+  passata, 12 al giorno; la conversazione recente del lavoro non entra mai nel vocabolario, così
+  il testo libero («giovedì visita dal cardiologo») non esce nemmeno verso un host noto. Residuo
+  documentato (§ 6): banda bassa scegliendo tra valori ammessi e numeri, verso un host noto che
+  collabori. I codici di tre lettere liberi sono stati tolti dalle forme neutre durante il banco
+  (un canale a pezzi): restano due lettere e un elenco chiuso.
+- **Ricollaudo** (`sonde.ricollaudo`): stesso container e stessa porta del collaudo, argomenti
+  scelti dai collaudi della persona e non dall'agente, manifesto ristretto alla sola lettura di
+  rete verso gli host noti, nessuna conferma a nessuno (`ricollaudo_senza_conferme`). Nel
+  ricollaudo il filtro dei valori non vale (§ 6: il codice ha valori suoi), valgono host noti,
+  dati riservati e tetti.
+- **Busta** per il testo dei siti che arriva all'agente: traccia, confronto e contesto di
+  `sviluppo_chiedi` (prima erano cornici di testo), anteprima di `scarica_esempio` (prima
+  `AVVISO_WEB`), risposta delle sonde. È una spinta: i confini veri restano host e valori.
+- **Banco d'attacco** `prove/prova_sonde_attacchi.py`: un agente finto che ci casca sempre e
+  un'estensione ostile nel ricollaudo; 13 famiglie (host non noti, conversazione in ogni forma e
+  a pezzi, segreto dei ricordi anche detto in un collaudo, metodi diversi da GET,
+  reindirizzamenti verso il cattivo, la rete interna, i metadati e casa, rebinding di un host
+  noto, nomi pubblici di casa anche «concessi», quote fino al minuto, injection dalle risposte,
+  risposte enormi, lente e bombe, ricollaudo che legge, scrive, invia, mostra e chiama host della
+  sola candidata) e i contrari: **0 passaggi su 59**, ~3 s. Da rifare sulla DGX con `--docker`.

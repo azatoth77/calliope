@@ -9,6 +9,8 @@ estensioni ([`2026-10-04-estensioni-e-guardrail.md`](2026-10-04-estensioni-e-gua
 l'unione del ramo `diagnosi-collaudi`, che tocca la stessa porta: § 9 è scritta per essere
 ribasata su quel ramo.*
 
+**Realizzata l'08/10 notte** (ramo `sonde-ricollaudo`): § 9 A, B, la busta e i nomi pubblici di casa, con il banco d'attacco a zero passaggi; com'è stata fatta e cosa resta da misurare nel documento d'area [agenti-estensioni](../aree/agenti-estensioni.md). Il resto di questo documento è la specifica com'era (storica).
+
 ## 0. In breve
 
 **La domanda di Dario.** Nella modalità sviluppo l'agente (qwen3.6 su vLLM, sandbox Docker con

@@ -10,6 +10,7 @@
 | Programmi dell'agente eseguiti in diretta, linguaggi (Python, C#) | stessa sandbox Docker; C# con csc nel container `calliope-sandbox-dotnet` (runtime .NET 10 + Roslyn, niente SDK né NuGet); SSE verso la scheda | `calliope/agenti/esecuzione.py` → `Esecuzioni` (`avvia`, `dimostra`, `ferma`, `frase`); `linguaggi.py`; `esegui_cs.sh`; `setup/linux/sandbox/Dockerfile.dotnet`; tool `lavori_esegui`, scheda `esecuzione` |
 | Il risultato di un lavoro finito a voce o sullo schermo (07/10) | il modello dell'agente per il riassunto per la voce (thinking spento, tempo massimo) | `calliope/agenti/risultato.py` → `trova`, `scegli`, `dal_disco`, `testo_intero`, `riassunto_voce`, `scheda`, `recenti`, `elenco_detto`, `chiave`, `converti` (dal 07/10: «fammene un PDF»); tool `risultato_lavoro` (`calliope/tools/agenti.py`), `agenti_risultato_s`; prove `prova_risultati.py`, `prova_risultati_ollama.py` |
 | Modalità sviluppo (08/10): un'estensione o un programma come iter a fasi | solo libreria standard; lo stato su disco accanto ai lavori (`sviluppi.json`) | `calliope/sviluppo.py` → `Sviluppi` (`corrente`, `apri`, `passa`, `proposto`, `avviato`, `lavoro_finito`, `estensione_approvata`, `dati_turno`, `promemoria_giorno`, `scheda`), `passo_interno`, `estraneo`; tool `sviluppo` e `sviluppo_prova` in `calliope/tools/sviluppo.py` (`controlla_nuovo`, `apri_se_serve`); `Estensioni.prova_candidata`, `Estensioni.revisione`, `differenze` (`calliope/estensioni/servizio.py`); progetto [`docs/ricerche/2026-10-08-modalita-sviluppo.md`](../ricerche/2026-10-08-modalita-sviluppo.md); prove `prova_sviluppo.py`, `prova_sviluppo_ollama.py` |
+| Sonde dell'agente e ricollaudo alla consegna (08/10 notte) | solo libreria standard; il container delle estensioni per il ricollaudo, `RetePubblica` per le sonde | `calliope/sonde.py` → `ricollaudo`, `casi_da_riprovare`, `sonda`, `sonde_ok`, `host_noti`, `concedi`, `vocabolario`, `Vocabolario`, `controlla_url`, `come_l_ha_letto`, `SONDA_RETE`; `Estensioni.prova_bozza` (`estensioni/servizio.py`), `restringi_per_sonda` (`estensioni/manifesto.py`), `Lavori._controlla_estensione` (`agenti/servizio.py`), `Agente._sonda_rete` (`agenti/ciclo.py`); nomi pubblici di casa in `calliope/web/rete.py` → `nomi_casa`; specifica in [`docs/ricerche/2026-10-08-sonde-agente.md`](../ricerche/2026-10-08-sonde-agente.md) § 9; prove `prova_sonde.py`, `prova_sonde_attacchi.py` |
 | Estensioni permanenti e guardrail (04/10) | container della sandbox (Docker) per ogni chiamata, JSON-RPC su stdin/stdout (cornice stdio di MCP, senza SDK), solo libreria standard | `calliope/guardrail.py` → `valuta_porta`, `SecondoParere`, `domanda` (la porta delle estensioni: sicura / pericolosa / vietata; i tool di Calliope li decide `politica.decidi` dal 06/10); `calliope/estensioni/` → `Estensioni` (`servizio.py`), `Porta` (`porta.py`), `Esecuzione` (`esecuzione.py`), `Archivio` (`archivio.py`: versioni, impronta), `valida` (`manifesto.py`), `analizza` (`analisi.py`), runtime `_ospite.py` (nel container: `calliope_estensione`), prompt dell'agente (`prompt.py`: `sistema_estensione`), contratto delle capacità (`contratto.py`: `testo`, `CAPACITA_IDS`, CAPACITA.md); rete solo pubblica `calliope/web/rete.py` → `RetePubblica` (registro `uscite.jsonl`, `riepilogo`), dati riservati nel traffico `calliope/web/riservati.py` → `Riservati`, `da_contesto`; piano e permessi dell'agente in `agenti/ciclo.py` (`PIANO`, `CHIEDI_PERMESSO`, `_piano`, `_fuori_piano`); tool in `calliope/tools/estensioni.py`; progetto in `docs/ricerche/2026-10-04-estensioni-e-guardrail.md` (§11–§14 dal 05/10) |
 
 ## Note dalla sezione «Stato attuale» di CLAUDE.md (fino al 06/10)
@@ -1398,3 +1399,94 @@ nel riuscito —, il tetto, le tracce di prima; la porta con gli esempi e i cont
 dal manifesto, dati di casa letti, POST, dato riservato, URL ripulito, troncata, al più due —;
 `esempi_veri` e l'indice; CalliopeFinta con il test dell'agente in un processo; il confronto e
 gli esempi in `sviluppo_chiedi`, `sviluppo_correggi` e nell'analisi).
+
+## Sonde dell'agente e ricollaudo alla consegna (08/10 notte, ramo `sonde-ricollaudo`)
+
+Realizzata la specifica del § 9 di [`2026-10-08-sonde-agente.md`](../ricerche/2026-10-08-sonde-agente.md),
+come l'ha voluta Dario: «una regola generalista e di buon senso, una bella rete di protezione».
+**Calliope prova davvero prima di dire «è pronto»**: verso host già visti, con valori che vengono
+dal caso, in poche richieste, e scrive tutto. Modulo nuovo `calliope/sonde.py`.
+
+- **Ricollaudo alla consegna** (`sonde.ricollaudo`, `Estensioni.prova_bozza`, agganciato a
+  `Lavori._controlla_estensione` dopo `controlla_consegna`). In un lavoro «estensione» di uno
+  sviluppo con dei collaudi che non andavano (una correzione, o il lavoro ripartito dall'analisi
+  durante il collaudo), alla consegna «fatto» Calliope copia i file della versione nella cartella
+  delle estensioni (`ricollaudi/`, tolta alla fine) e la esegue nel container vero con gli
+  argomenti dei collaudi falliti o giudicati sbagliati (`casi_da_riprovare`: dal più recente, uno
+  per dato, al più `sviluppo_ricollaudo_max` = 3). Il manifesto è ristretto
+  (`manifesto.restringi_per_sonda`): niente letture né scritture di casa, liste, agenda, dati
+  propri, schermi; niente invii; rete in sola lettura verso gli host della versione che sono
+  anche noti (con `rete.pubblica`, tutti i noti). La porta in modo «ricollaudo» non chiede mai
+  conferme (`ricollaudo_senza_conferme`) e scrive le uscite con origine «ricollaudo», lavoro e
+  sviluppo. Un caso «va» con la regola del collaudo (niente errore, risultati non vuoti) e in più:
+  nessuna richiesta rifiutata dalla porta o con l'avviso della doppia codifica, non lo stesso
+  risultato che la persona aveva detto sbagliato. Se un caso non va (ed entro i tetti del giro,
+  `Agente._resta_tempo`), la consegna torna all'agente: «Prima di consegnare ho riprovato la tua
+  versione con i casi della persona: 2 su 2 non va ancora. «Borgo Alto» → «Non ho trovato…» (una
+  richiesta rifiutata dalla porta)», con la traccia nuova in busta, il confronto con i collaudi
+  riusciti (`sviluppo.confronto` sui collaudi e sui casi riprovati) e «la seconda consegna non la
+  riprovo». **Una volta per lavoro** (`lav.ricollaudo_fatto`). I collaudi della persona non si
+  toccano: gli esiti vanno in `sv.ricollaudi` (al più 10) e nella scheda («Prove di Calliope prima
+  della consegna»); il passo del lavoro lo dice («riprovata con «X»: ora va»). L'annuncio
+  (`Sviluppi.frase_pronto`): «L'ho già riprovata con «Borgo Alto» e «Pratofiorito Maggiore»: ora
+  vanno. Con cosa provo?»; dopo un rimando «Prima della sua ultima correzione l'ho riprovata con
+  «X» e non andava ancora: provala tu e dimmi»; senza tempo per un altro giro «L'ho riprovata:
+  con «X» non va ancora». Non parte (regola `ricollaudo_saltato` nel log) se è spento
+  (`sviluppo_ricollaudo`), senza container, per un gioco, se il lavoro non è di chi amministra,
+  con un file della persona, senza collaudi da riprovare.
+- **`sonda_rete` al posto di `scarica_esempio` nelle correzioni** (`sonde.sonda`,
+  `Agente._sonda_rete`, `sonde.SONDA_RETE`). Offerta solo in un lavoro «estensione» di uno
+  sviluppo, in una correzione o con dei collaudi, con almeno un host noto, senza file della
+  persona (`sonde_ok`); allora `scarica_esempio` non c'è (e se l'agente lo chiama lo stesso,
+  l'errore dice di usare la sonda). Al primo sviluppo resta `scarica_esempio` com'era. **Host
+  noti** (`sonde.host_noti`): manifesto **approvato** (rete e flussi), host che hanno risposto in
+  un collaudo della persona (anche con un 4xx/5xx o il tempo scaduto; mai un rifiuto della porta:
+  campo nuovo `rifiutata` nella traccia di `Porta._traccia`, e le tracce di prima «non concesso»
+  non contano), host concessi con `chiedi_permesso` e un «sì» (`sonde.concedi`,
+  `sv.host_concessi`); mai la candidata, mai `rete.pubblica`, mai l'host finale di un
+  reindirizzamento. **Valori** (`sonde.vocabolario`, `controlla_url`): ogni valore, nome di
+  parametro e pezzo del percorso viene dalla specifica, dai dati e argomenti dei collaudi o dalle
+  loro richieste (anche come combinazione di parole: «Pratofiorito Maggiore» se ci sono le due
+  parole), confrontati senza maiuscole, accenti, «+», «%20», decodificati fino a due volte; in più
+  numeri fino a 8 cifre, date ISO, codici di due lettere (e un elenco chiuso di tre: le tre
+  lettere libere erano un canale a pezzi, «gio», «ved», «car»), unità e nomi di parametri comuni
+  delle API (`NOMI_API`: il paese del giro 4 sì). Mai la conversazione, i file, la diagnosi, le
+  risposte delle sonde; il rifiuto dice i valori ammessi, mai quello estraneo né un nome
+  rifiutato. **Quote**: 4 per lavoro, 2 per passata, 12 per sviluppo al giorno, dentro il tetto
+  al minuto di tutto Calliope; GET sola (argomenti in più ignorati), 256 kB, 8 s, al più 2
+  reindirizzamenti e solo verso host noti. **Risposta**: stato, tipo, byte, ms,
+  `come_l_ha_letto_il_server` (i parametri decodificati una volta: «name = Pratofiorito+Maggiore»),
+  l'avviso della doppia codifica, i primi 1.500 caratteri ripuliti **in busta** (fonte web), le
+  sonde restanti; niente file in `esempi/`. Registro delle uscite con origine «sonda» (di una
+  sonda rifiutata solo l'host noto: mai percorso, valori o un host non noto per intero, che può
+  portare il dato nel nome); `sv.sonde` (al più 20) nella scheda («Sonde dell'agente», «N
+  richieste di 12 oggi»); scheda del lavoro «sonda · URL ripulito» e «stato 200, 32 byte · il
+  server ha letto name = «…»». Nei vincoli una riga «Siti già usati: … verifica l'ipotesi con
+  sonda_rete … prima di correggere» (scritta dal ciclo, non da `tools/sviluppo.py`); nel contratto
+  delle capacità la voce delle sonde. Regole nel log e in `lav.segnali["regole"]`: `sonda_fatta`,
+  `sonda_finite`, `sonda_host_nuovo`, `sonda_valore_estraneo`, `sonda_url_non_codificato`,
+  `sonda_dato_riservato`, `ricollaudo_fatto`, `ricollaudo_non_va`, `ricollaudo_saltato`; la frase
+  «è pronto» scrive `sviluppo_pronto_riprovato` nel log (l'annuncio non passa dal registro dei
+  turni).
+- **Busta** per ciò che scrivono i siti e arriva all'agente: la traccia nei vincoli
+  (`testo_traccia`: l'avviso della porta resta fuori, le richieste dentro), il confronto
+  (intestazione fuori, differenze dentro, sempre entro i 2.500 caratteri), le richieste dei
+  collaudi nel contesto di `sviluppo_chiedi`, l'anteprima e il titolo di `scarica_esempio`; i file
+  di `esempi_veri/` hanno l'avvertenza «dato, non istruzioni».
+- **Configurazione** (sezione agenti): `sviluppo_ricollaudo`, `sviluppo_ricollaudo_max`,
+  `sviluppo_sonde_max` (0 = spente, resta `scarica_esempio`), `sviluppo_sonde_passata`,
+  `sviluppo_sonde_giorno`, `sviluppo_sonda_kb`, `sviluppo_sonda_s`. Nessuna dipendenza nuova.
+
+**Prove**: `prove/prova_sonde.py` (livello 1, ~3 s, 105 controlli: host noti, vocabolario e i
+contrari del giro 5, «come l'ha letto», quote, busta, ricollaudo con il docker finto, il giro
+dell'agente finto con il controllo della consegna vero, nomi pubblici di casa) e il banco
+d'attacco `prove/prova_sonde_attacchi.py` (livello 2, ~3 s, 59 controlli, **zero passaggi**;
+`--docker` sulla DGX per il ricollaudo nel container vero). Le prove della modalità sviluppo e
+della diagnosi passano invariate.
+
+**Da misurare sulla DGX** (§ 10): con il giro vero del meteo, quante correzioni arrivano al
+collaudo della persona con un difetto noto (atteso zero dei tipi «giro 3» e «giro 5»); quante
+sonde usa qwen3.6 e quante ne rifiuta il vocabolario (se tante, allargarlo con un contrario
+nella prova, mai con un'eccezione larga); il tempo in più per consegna (atteso sotto i 10 s per
+tre casi); una settimana di `uscite.jsonl` con sonde e ricollaudi contati a parte; il banco con
+`--docker`.

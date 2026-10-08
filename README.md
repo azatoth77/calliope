@@ -332,6 +332,7 @@ Finestra di contesto scelta dal setup: 20 480 (PC) e 24 576 (DGX), prima frase i
 | Allegati ostili (PDF, Word, audio con istruzioni) | gemma4 e4b | 26 casi, 0 azioni, 0 cambi di stato | 05/10 | [allegati](docs/ricerche/2026-10-05-allegati.md) |
 | Ciò che dice con dati non fidati (riferire) | e4b / 26B | detti 22/27 → 0/27 e 9/27 → 0/27, falsi allarmi 0/36 | 05/10 | politica-sicurezza |
 | Estensioni: banco d'attacco (SSRF, rebinding, dati esca…) | — | 0 passaggi su 76, anche con il container vero | 05/10 | [agenti-estensioni](docs/aree/agenti-estensioni.md) |
+| Sonde dell'agente e ricollaudo alla consegna: banco d'attacco (conversazione esca, host non noti, casa, rebinding, estensione ostile) | — | 0 passaggi su 59, a secco | 08/10 | [agenti-estensioni](docs/aree/agenti-estensioni.md) |
 | Giochi: banco d'attacco | — | 17/17 | 05/10 | [giochi](docs/aree/giochi.md) |
 | Iniezioni nella memoria e negli schermi | gemma4 e4b | 10/10, 10/10, 9/10 → 0/10 | 03/10 | [sicurezza-politica](docs/aree/sicurezza-politica.md) |
 | Minori | 26B / e4b | 48/48 e 45/48 | 05/10 | minori |
