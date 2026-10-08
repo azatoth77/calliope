@@ -804,3 +804,22 @@ persona, manifesto ristretto alla sola `rete_leggi` verso host noti, niente conf
 `prova_sonde_attacchi`. Da correggere comunque: il nome pubblico di casa (DuckDNS) per
 `RetePubblica` è «pubblico» (da verificare quali nomi ha la DGX), e la traccia nei vincoli
 dell'agente non è in busta. Realizzazione dopo l'unione di `diagnosi-collaudi`.
+
+## I valori della chiamata di prima, dopo il risultato del collaudo (08/10 sera, ramo `sviluppo-giro6`)
+
+Misura con gemma4 del giro 6 ([agenti-estensioni](agenti-estensioni.md), stessa data): «io
+direi di provare con Valfiorita e Borgo Alto» → due `sviluppo_collauda`, il primo con
+`giorni = 3` (non detto: il 4B lo copia dall'esempio dei dati del turno) e `dati` «Valfiorita
+per 3 giorni»; il secondo, uguale per «Borgo Alto», fermato da `web_azione_bloccata` (il 3 non
+detto) e poi da `politica_argomento_esterno` («per 3 giorni» tornava nel risultato del primo e
+sembrava preso da lì). Un valore che il modello aveva già passato **allo stesso tool in questa
+risposta, prima di leggere un dato**, non viene dal dato: `bloccata` ricorda i valori delle
+chiamate di `DOPO_DATO_SE_DETTO` fatte prima del dato (`Turno.risposta["valori_prima"]`, che
+Brain azzera a ogni risposta), e `detto_dopo_dato` e `valori_esterni` (con il nome del tool,
+anche da `valore.py`) li contano come detti, anche a pezzi («Borgo Alto» detto, «per 3 giorni»
+della prima). Regola `dopo_dato_valore_di_prima` quando serve. Contrari in
+`prova_sviluppo_giro6`: un numero nuovo, una città dal risultato, nessuna chiamata prima del dato
+(un turno dopo: «E invece Pratofiorito Maggiore?» con «per 3 giorni» inventato chiede ancora
+conferma, giusto). `sviluppo_passo` ha due azioni nuove: `ferma` (verbi «ferm|stop|blocc|
+interromp|annull|basta|non deve continuare», valore E2 come `lavoro_annulla`, non innocua) e
+`rifai` (verbi «rifa|riprov|ricominc|riparti|di nuovo|così com'è», E3 come `avanti`).

@@ -294,7 +294,9 @@ def prova_stati(tmp: Path, iso):
                        messaggio="non sono riuscita a finire «x»: tetto delle passate.")
     verifica("lavoro fallito: lo sviluppo resta aperto, allo sviluppo, senza lavoro",
              sv.fase == "sviluppo" and sv.lavoro is None and sv.stato == "aperta"
-             and "torniamo all'analisi" in item["messaggio"], item["messaggio"])
+             and "lo rifaccio così com'è" in item["messaggio"]
+             and (item.get("in_sospeso") or {}).get("tool") == "sviluppo_passo",
+             item["messaggio"])
     verifica("riga per il modello: il lavoro non è andato → analisi",
              "non è andato" in svs.riga_fase(sv))
     # programma: quattro fasi
