@@ -346,6 +346,10 @@ def prova_tool():
     verifica("cassetto_gestisci tieni: un minore no", not r.get("ok"), r)
     r = call(ctx, "cassetto_gestisci", {"azione": "ancora", "quale": "storia", "di": "Bianca"})
     verifica("cassetto_gestisci: il tutore tiene ancora il file della figlia", r.get("ok"), r)
+    r = call(ctx, "cassetto_gestisci", {"azione": "tieni", "quale": "storia", "di": "Bianca"})
+    tenuti = list(cas.archivio.cartella.rglob("storia*"))
+    verifica("cassetto_gestisci: «Tieni» del tutore sul file della figlia va nella SUA cartella",
+             r.get("ok") and [p.parent.name for p in tenuti] == ["Dario"], (r, tenuti))
     r = call(ctx_per(cas, come="conversazione"), "cassetto_gestisci",
              {"azione": "elimina", "quale": "tutti"})
     verifica("cassetto_gestisci dalla zona grigia: no", not r.get("ok")
@@ -549,8 +553,8 @@ def prova_server():
                  post(stanza, {"azione": "elimina", "id": [a]}).status_code == 403
                  and cas.prendi("dario", a) is not None)
         r = post(teodora, {"azione": "elimina", "id": [a, b]})
-        verifica("/api/cassetto: i file di un altro non si toccano (409)",
-                 r.status_code == 409 and cas.prendi("dario", a) is not None, r.text)
+        verifica("/api/cassetto: i file di un altro adulto non si toccano (403)",
+                 r.status_code == 403 and cas.prendi("dario", a) is not None, r.text)
         r = httpx.post(base + "/api/cassetto", content=b"azione=elimina", timeout=10,
                        headers={"X-Calliope-Sessione": mio,
                                 "Content-Type": "application/x-www-form-urlencoded"})
@@ -576,6 +580,92 @@ def prova_server():
         cas.close()
 
 
+# ─────────────────────────── tutore dai pulsanti (08/10, cassetto-tutore) ───────────────────────────
+def prova_tutore_pagina():
+    """Decisione di Dario dopo l'unione: un tutore, in una conversazione verificata dalla voce,
+    opera anche sui file del figlio dai pulsanti della scheda sul proprio schermo personale."""
+    import httpx
+    from calliope.schermi import ArchivioSchermi, Schermi
+    from calliope.schermi.server import ServerSchermi
+    from prova_schermi_pagina import porta_libera
+    cas, tmp = nuovo()
+    cfg = Config()
+    cfg.memory_db = str(tmp / "s.db")
+    cfg.config_dir = str(tmp)
+    hub = Schermi(cfg, ArchivioSchermi(cfg.memory_db))
+    hub.cassetto = cas
+    port = porta_libera()
+    srv = ServerSchermi(hub, "127.0.0.1", port).avvia()
+    try:
+        base = f"http://127.0.0.1:{port}"
+
+        def schermo(stanza, persona, nome):
+            r = hub.archivio.nuova_richiesta()
+            hub.archivio.abbina(r["codice"], stanza, persona, nome)
+            return httpx.post(base + "/api/accedi",
+                              headers={"Authorization": "Bearer " + r["richiesta"]}
+                              ).json()["sessione"]
+
+        dario = schermo("studio", "dario", "Dario")
+        teodora = schermo("cucina", "teodora", "Teodora")
+        sid_dario = next(s["id"] for s in hub.abbinati() if s.get("proprietario") == "dario")
+
+        def post(sess, dati):
+            return httpx.post(base + "/api/cassetto", json=dati, timeout=10,
+                              headers={"X-Calliope-Sessione": sess})
+        b1 = cas.metti("bianca", b"compito 1", "compito1.txt", "testo")
+        b2 = cas.metti("bianca", b"compito 2", "compito2.txt", "testo")
+        c1 = cas.metti("carlo", b"diario", "diario.txt", "testo")
+        d1 = cas.metti("dario", b"mio", "mio.txt", "testo")
+        r = post(dario, {"azione": "elimina", "id": [b1]})
+        verifica("tutore senza conversazione a voce: 403 (senza_conversazione), file intatto",
+                 r.status_code == 403 and r.json().get("codice") == "senza_conversazione"
+                 and cas.prendi("bianca", b1) is not None, r.text)
+        hub.conversazioni.voce("dario", "conversazione")
+        r = post(dario, {"azione": "elimina", "id": [b1]})
+        verifica("tutore dalla zona grigia: 403, file intatto",
+                 r.status_code == 403 and cas.prendi("bianca", b1) is not None, r.text)
+        hub.conversazioni.voce("dario", "breve")
+        r = post(dario, {"azione": "elimina", "id": [b1]})
+        verifica("tutore con una frase breve: 403", r.status_code == 403, r.text)
+        hub.conversazioni.voce("dario", "voce")
+        r = post(dario, {"azione": "ancora", "id": [b2]})
+        verifica("tutore verificato dalla voce: «Tieni ancora» sul file della figlia (10 anni)",
+                 r.status_code == 200 and r.json().get("frase", "").startswith("Lo tengo"), r.text)
+        st = hub.storia(sid_dario)
+        verifica("…la scheda aggiornata va al suo schermo, con i file della figlia",
+                 st and st[-1]["tipo"] == "cassetto" and st[-1]["titolo"] == "I file di Bianca"
+                 and {v["id"] for v in st[-1]["voci"]} == {b1, b2}
+                 and all(v["tieni"] for v in st[-1]["voci"]), st[-1:])
+        r = post(dario, {"azione": "tieni", "id": [b1]})
+        tenuti = list(cas.archivio.cartella.rglob("compito1*"))
+        verifica("«Tieni» del tutore: nella cartella del tutore (la figlia l'archivio non lo vede)",
+                 r.status_code == 200 and [p.parent.name for p in tenuti] == ["Dario"]
+                 and cas.prendi("bianca", b1) is None, (r.text, tenuti))
+        r = post(dario, {"azione": "elimina", "id": [c1]})
+        verifica("tutore verificato, ragazzo di 15 anni: 403, file intatto",
+                 r.status_code == 403 and cas.prendi("carlo", c1) is not None, r.text)
+        r = post(dario, {"azione": "elimina", "id": [d1, b2]})
+        verifica("file di persone diverse insieme: 409, niente toccato",
+                 r.status_code == 409 and cas.prendi("dario", d1) is not None
+                 and cas.prendi("bianca", b2) is not None, r.text)
+        hub.conversazioni.voce("teodora", "voce")
+        r = post(teodora, {"azione": "elimina", "id": [b2]})
+        verifica("un altro adulto verificato dalla voce, non tutore: 403",
+                 r.status_code == 403 and cas.prendi("bianca", b2) is not None, r.text)
+        hub.conversazioni.voce("dario", "voce")
+        r = post(dario, {"azione": "elimina", "id": [d1]})
+        verifica("i suoi file: come prima", r.status_code == 200
+                 and cas.prendi("dario", d1) is None, r.text)
+        hub.conversazioni.chiudi()
+        r = post(dario, {"azione": "elimina", "id": [b2]})
+        verifica("conversazione chiusa («esci»): di nuovo 403 per i file della figlia",
+                 r.status_code == 403 and cas.prendi("bianca", b2) is not None, r.text)
+    finally:
+        srv.ferma()
+        cas.close()
+
+
 if __name__ == "__main__":
     prova_entrata()
     prova_scadenza()
@@ -584,6 +674,7 @@ if __name__ == "__main__":
     prova_politica_e_busta()
     prova_ciclo()
     prova_server()
+    prova_tutore_pagina()
     print()
     if ERRORI:
         print(f"{len(ERRORI)} prove fallite: " + "; ".join(ERRORI))

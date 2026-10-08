@@ -674,7 +674,8 @@ class Cassetto:
             vuoto="Nessun file da rivedere.", giorni=round(self.giorni))
 
     def manda_scheda(self, hub, persona: str, scheda: dict) -> int:
-        """La scheda a ogni schermo personale della persona. Quanti con una pagina aperta."""
+        """La scheda a ogni schermo personale della persona (per un tutore che opera sui file
+        del figlio: i suoi schermi, con la scheda del figlio). Quanti con una pagina aperta."""
         if hub is None:
             return 0
         n = 0
@@ -697,10 +698,23 @@ class Cassetto:
             return False
 
     # ─────────────────────────── dai pulsanti della pagina ───────────────────────────
-    def da_pagina(self, persona: str, azione: str, ids, minore: bool = False) -> dict:
-        """Un pulsante della scheda (POST /api/cassetto, schermi/server.py): solo il
-        proprietario dello schermo personale, solo i suoi file. {ok, frase} o {ok: False,
-        errore}."""
+    def proprietario(self, fid) -> str | None:
+        """Di chi è il file `fid` (attivo), o None. Per il server: un tutore che tocca un
+        pulsante sulla scheda dei file del figlio (08/10, cassetto-tutore)."""
+        try:
+            fid = int(str(fid).strip().lstrip("Cc"))
+        except (TypeError, ValueError):
+            return None
+        with self._lock:
+            r = self._riga(fid)
+        return r["persona"] if r is not None and r["stato"] == "attivo" else None
+
+    def da_pagina(self, persona: str, azione: str, ids, minore: bool = False,
+                  nome_persona: str | None = None) -> dict:
+        """Un pulsante della scheda (POST /api/cassetto, schermi/server.py): il proprietario
+        dello schermo personale sui suoi file, o un suo tutore verificato dalla voce sui file
+        del figlio (il server lo controlla; qui `persona` è il proprietario dei file e
+        `nome_persona` la cartella per «Tieni»). {ok, frase} o {ok: False, errore}."""
         azione = str(azione or "").strip().lower()
         if azione not in ("tieni", "elimina", "ancora"):
             return {"ok": False, "errore": "azione sconosciuta"}
@@ -713,7 +727,7 @@ class Cassetto:
                 righe.append(r)
         if not righe:
             return {"ok": False, "errore": "Questi file non ci sono più."}
-        return self.esegui(persona, azione, righe, minore=minore)
+        return self.esegui(persona, azione, righe, minore=minore, nome_persona=nome_persona)
 
     def esegui(self, persona: str, azione: str, righe: list[dict], minore: bool = False,
                nome_persona: str | None = None) -> dict:

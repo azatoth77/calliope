@@ -39,7 +39,8 @@ Indirizzi:
   POST /api/cassetto             «X-Calliope-Sessione», {azione: tieni|elimina|ancora, id: [..]}:
                                  i pulsanti della scheda del cassetto dei file (08/10,
                                  calliope/cassetto.py), solo da uno schermo personale e solo
-                                 sui file del suo proprietario
+                                 sui file del suo proprietario, o di un figlio sotto i 14
+                                 anni per un tutore verificato dalla voce
   GET  /satellite                il comando per un PC nuovo come satellite (satellite/web.py)
   /telefono/…                    la web app del telefono (telefono.py): pagina, modelli e il
                                  WebSocket del protocollo dei satelliti
@@ -621,19 +622,51 @@ def crea_app(hub: Schermi) -> Starlette:
 
         def fai():
             from .. import minori
-            prof = cas.registry.by_id(persona) if cas.registry is not None else None
-            out = cas.da_pagina(persona, str(dati.get("azione") or ""), ids,
-                                minore=bool(prof is not None and minori.e_minore(prof)))
+            reg = cas.registry
+            prof = reg.by_id(persona) if reg is not None else None
+            # Di chi sono i file: del proprietario dello schermo, oppure (08/10, decisione di
+            # Dario) di un figlio di cui è tutore, solo in una conversazione verificata dalla
+            # voce (Schermi.scrittura_consentita: riconosciuto dalla voce sopra soglia, non zona
+            # grigia né frase breve né scritto) e con la regola d'età della visibilità
+            # (conversazioni_visibili_ai_tutori: sotto i 14 anni)
+            padroni = {cas.proprietario(i) for i in ids} - {None}
+            if len(padroni) > 1:
+                return {"ok": False, "errore": "file di persone diverse", "_stato": 409}
+            padrone = next(iter(padroni), persona)
+            tutore = padrone != persona
+            if tutore:
+                figlio = reg.by_id(padrone) if reg is not None else None
+                if (figlio is None or prof is None or not minori.e_minore(figlio)
+                        or not minori.e_tutore(prof, figlio)
+                        or not minori.conversazioni_visibili_ai_tutori(figlio)):
+                    return {"ok": False, "errore": "Questi file non sono tuoi.", "_stato": 403}
+                ok, _ = hub.scrittura_consentita(schermo)
+                if not ok:
+                    return {"ok": False, "_stato": 403, "codice": "senza_conversazione",
+                            "errore": "Per i file di un ragazzo parlami prima a voce: "
+                                      "di' «Calliope» e poi tocca di nuovo."}
+            # «Tieni» di un tutore va nella SUA cartella dell'archivio (il ragazzo i documenti
+            # di casa non li vede): come cassetto_gestisci a voce
+            out = cas.da_pagina(padrone, str(dati.get("azione") or ""), ids,
+                                minore=bool(not tutore and prof is not None
+                                            and minori.e_minore(prof)),
+                                nome_persona=getattr(prof, "name", None) if tutore else None)
             if out.get("ok"):
-                # La scheda di prima, con i file che restano (o la frase se non ne resta)
-                aperti = cas.schede_aperte.get(persona)
+                # La scheda di prima, con i file che restano (o la frase se non ne resta), sugli
+                # schermi personali di chi ha toccato
+                aperti = None if tutore else cas.schede_aperte.get(persona)
                 if aperti is not None:
                     resto = [r for r in (cas.prendi(persona, i) for i in sorted(aperti))
                              if r is not None]
+                elif tutore:
+                    resto = cas.elenco(padrone)
                 else:
                     resto = cas.elenco(persona, cas.avviso_giorni * 86400.0)
+                titolo = (f"I file di {getattr(reg.by_id(padrone), 'name', '')}".strip()
+                          if tutore else "")
                 cas.manda_scheda(hub, persona, cas.scheda(
-                    persona, resto, tieni=not (prof is not None and minori.e_minore(prof)),
+                    padrone, resto, titolo=titolo,
+                    tieni=tutore or not (prof is not None and minori.e_minore(prof)),
                     nota="" if resto else out.get("frase", "")))
             return out
         try:
@@ -641,7 +674,7 @@ def crea_app(hub: Schermi) -> Starlette:
         except Exception as e:  # noqa: BLE001
             hub.log(f"[CASSETTO] pulsante non riuscito: {type(e).__name__}: {e}")
             return _json({"errore": "non ci sono riuscita"}, 500)
-        return _json(out, 200 if out.get("ok") else 409)
+        return _json(out, int(out.pop("_stato", 200 if out.get("ok") else 409)))
 
     # ── giochi (05/10, giochi.py) ──
     async def gioco_documento(request: Request):

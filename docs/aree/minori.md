@@ -137,3 +137,6 @@ amministra. Il minore va registrato di nuovo per canale quando c'è (stt-tts).
   minore restano 7 giorni nel suo cassetto come quelli degli adulti; un tutore li vede e li
   gestisce (`allegato_leggi`/`cassetto_gestisci` con `di`) con la regola delle conversazioni
   archiviate (sotto i 14 anni). Il minore non può «Tieni» (archivio dei documenti di casa).
+- **Cassetto, tutore dai pulsanti** (08/10): il tutore opera sui file del figlio sotto i 14 anni
+  anche dai pulsanti della scheda sul proprio schermo, solo in una conversazione verificata dalla
+  voce; «Tieni» li mette nella cartella del tutore ([immagini-allegati](immagini-allegati.md)).
