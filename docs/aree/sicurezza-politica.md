@@ -459,3 +459,11 @@ valore (`detto`, `persona`, `fidato`, `scelta`, `modello`, `dato`), classi d'eff
 al posto della regola finale, «richiesta ripetuta = sì», errori detti come errori; banco d'attacco
 invariato al 100 % più 8 attacchi nuovi contro i rilassamenti; due giorni in ombra prima di
 attivarla. Decisioni D1–D8 aperte. Script della misura: `docs/ricerche/banchi/attrito/attrito.py`.
+
+- **Cassetto dei file** (08/10, [immagini-allegati](immagini-allegati.md)): `cassetto_gestisci`
+  porta la sua classe nel tool (`ToolSpec.classe` con una `Classe`: azione, «elimina»
+  distruttiva, `verbi`), perché `politica.py` era in lavorazione su un altro ramo; si può
+  spostare in `CLASSI`. I file ritrovati dal cassetto passano da `allegato_leggi` (fonte
+  «allegato»): busta, quarantena e provenienza come gli allegati della conversazione. Lettura e
+  gestione solo con la voce riconosciuta nella frase o lo scritto dello schermo personale, mai
+  dalla zona grigia.

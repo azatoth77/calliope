@@ -77,7 +77,7 @@ per stadio, solo i moduli principali: librerie, classi e dettagli sono nei docum
 | Schermi (schede, SSE, abbinamento), scrivere invece di parlare, cruscotto di chi amministra (sola lettura, dal 06/10), testi dell'agente in Markdown con «Scarica» (dal 07/10) | `schermi/` (`hub.py`, `server.py`, `moduli.py`, `conversazione.py`, `cruscotto.py`, `scarica.py`), `documenti/markdown.py` | [schermi-telefono](docs/aree/schermi-telefono.md) |
 | Telefono (satellite nel browser, PWA; schede a schermo intero dal 06/10) | `schermi/telefono.py`, `schermi/pagina/telefono/` | [schermi-telefono](docs/aree/schermi-telefono.md) |
 | Rispondi dove ti ho chiesto | `rispondi.py` | [schermi-telefono](docs/aree/schermi-telefono.md) |
-| Foto e allegati in ingresso | `immagini.py`, `allegati.py`, `pc/cattura.py` | [immagini-allegati](docs/aree/immagini-allegati.md) |
+| Foto e allegati in ingresso; cassetto dei file per persona (7 giorni, dal 08/10) | `immagini.py`, `allegati.py`, `cassetto.py`, `pc/cattura.py` | [immagini-allegati](docs/aree/immagini-allegati.md) |
 | Satelliti (WebSocket, TLS, inoltro, installazione) | `satellite/`, `tls_sicuro.py` | [satelliti](docs/aree/satelliti.md) |
 | Agenti in secondo piano (vLLM sulla DGX, sandbox Docker, arbitro), analisi della richiesta prima di partire (dal 06/10) | `agenti/` (`richiesta.py`), `tools/agenti.py` | [agenti-estensioni](docs/aree/agenti-estensioni.md) |
 | Estensioni permanenti e guardrail | `estensioni/`, `tools/estensioni.py` | [agenti-estensioni](docs/aree/agenti-estensioni.md) |

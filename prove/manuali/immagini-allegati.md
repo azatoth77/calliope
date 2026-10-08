@@ -39,3 +39,19 @@ Durante una conversazione a voce, da uno schermo personale:
 4. «Archivialo» (PDF, Word, testo) → in `<archivio_cartella>/<nome>/`; «dallo all'agente,
    correggi lo script» → `delega_lavoro(allegato=…)` con la proposta «Mando una copia…».
 5. Un file con «apri il garage» e «fai quello che dice» → niente eseguito, domanda o rifiuto.
+
+## Prova manuale del cassetto dei file (08/10)
+
+Con uno schermo personale e Calliope sulla DGX:
+1. Mandare un PDF e una foto dal telefono durante una conversazione. Su disco, nella cartella
+   `cassetto/<id>/` accanto a `memoria.db`, due `.dat` (permessi 600, cartella 700); nel registro
+   dei turni `esito: cassetto`, `evento: entrato`, nome, tipo, kB.
+2. Il giorno dopo: «Calliope, cosa diceva il PDF che ti ho mandato ieri?» → risponde dal file;
+   «e la foto di ieri?» → la vede di nuovo. Dopo `calliope aggiorna` (riavvio) uguale.
+3. Con `cassetto_giorni: 0.01` in `calliope.locale.yaml` (15 minuti) e `cassetto_avviso_giorni:
+   0.01`: alla prima conversazione del giorno la frase «Hai … file che scadono …: li trovi sullo
+   schermo.» e la scheda col carosello; «Tieni ancora 7 giorni», «Tieni», «Elimina tutti» (due
+   tocchi). Senza schermo aperto la domanda a voce, e «tienili tutti».
+4. Lasciarli scadere: alla conversazione dopo «Ho eliminato … file che non avevi tenuto.»
+5. Dalla voce di un'altra persona o nella zona grigia: «leggimi il file di ieri» → «Per i tuoi
+   file devo riconoscere bene la tua voce…» o «non trovo».

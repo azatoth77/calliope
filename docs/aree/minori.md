@@ -132,3 +132,8 @@ minore), con in più il margine tra primo e secondo profilo (`speaker_id_margine
 amministra solo familiare se un minore è a meno di `minori_margine_amministra` (0,12, il verso
 pericoloso) e la domanda «Non sono sicura di chi parla: …?» solo quando serve per un'azione di chi
 amministra. Il minore va registrato di nuovo per canale quando c'è (stt-tts).
+
+- **Cassetto dei file** (08/10, [immagini-allegati](immagini-allegati.md)): i file mandati da un
+  minore restano 7 giorni nel suo cassetto come quelli degli adulti; un tutore li vede e li
+  gestisce (`allegato_leggi`/`cassetto_gestisci` con `di`) con la regola delle conversazioni
+  archiviate (sotto i 14 anni). Il minore non può «Tieni» (archivio dei documenti di casa).
