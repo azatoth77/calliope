@@ -1255,6 +1255,20 @@ class Config:
     # Sotto questa durata di voce l'impronta non decide (rifiuta Dario una volta su due):
     # si tiene l'identità della conversazione.
     speaker_min_voice_s: float = 1.0
+    # Continuità (08/10, docs/aree/stt-tts.md «Frasi cortissime prese per un ospite»): una frase
+    # più corta di `speaker_min_voice_s`, fuori dalla conversazione o senza nessuno prima, vale
+    # la persona riconosciuta dalla voce su **questo** satellite negli ultimi
+    # `speaker_continuita_s` secondi, se il migliore è lei, con almeno
+    # `speaker_continuita_soglia` e `speaker_continuita_margine` sul secondo profilo; al più
+    # familiare (come la zona grigia: le azioni che vogliono la voce chiedono la frase di
+    # sfida), regola `voce_continuita`. Caso vero: «Calliope.» (0,5 s, 0,44, secondo a 0,11) e
+    # la frase dopo (0,6 s, 0,40) 13 minuti dopo l'ultima frase di Dario → ospite, ricerca
+    # negata. Misure: sulla DGX (02–08/10) le frasi brevi «breve» stanno a 0,49 di mediana;
+    # con prove/misura_conferma_breve.py a 0,35–0,38 le frasi brevi di altre voci sullo stesso
+    # canale passano nell'1–3 % (0,5–0,9 s), quelle di Dario sono rifiutate nel 9–11 %. 0 = spenta
+    speaker_continuita_s: float = 900.0
+    speaker_continuita_soglia: float = 0.36
+    speaker_continuita_margine: float = 0.20
     # Conferma breve (04/10, calliope/conferme.py): un «sì» sotto `speaker_min_voice_s`
     # conferma un'azione proposta a chi amministra se nella conversazione era già stato
     # riconosciuto dalla voce e l'impronta della frase breve arriva almeno qui contro il suo
@@ -1681,6 +1695,15 @@ class Config:
             f"conversazioni, con per_tutti=true se è un'informazione della casa per tutta "
             f"la famiglia (wifi, caldaia, dove sono le cose); se ti chiedono di "
             f"dimenticarlo, chiama dimentica. "
+            # Spiegazioni inventate su sé stessa (08/10, DGX: «come mai non sei riuscita a
+            # recuperarle? forse c'è un buco?» → «ho dovuto fare un lavoro di ricerca per essere
+            # precisa», falso): docs/aree/voce-e-regole.md. Senza «Per tutto il resto chiama i
+            # tool come sempre» «non avevamo parlato anche del tokamak?» non cercava più (1/8
+            # contro 7/8 senza la frase e 7/8 con)
+            f"Se ti chiedono perché hai risposto così o perché qualcosa non è andato, non "
+            f"inventare spiegazioni sul tuo funzionamento: racconta con parole semplici cosa "
+            f"hai fatto davvero in questa conversazione, oppure di' che non lo sai. Per "
+            f"tutto il resto chiama i tool come sempre. "
             f"{news}{direct} al punto e non offrire altro aiuto."
             + (f" {capacita}" if capacita else "")
             + self._frase_modalita()
@@ -2217,7 +2240,8 @@ SEZIONI: dict[str, list[str]] = {
               "max_utterance_s", "input_device", "output_device"],
     "chi_parla": ["speaker_id_enabled", "speaker_model", "speaker_threads",
                   "speaker_id_threshold", "speaker_id_session_margin", "speaker_id_margine",
-                  "speaker_min_voice_s",
+                  "speaker_min_voice_s", "speaker_continuita_s", "speaker_continuita_soglia",
+                  "speaker_continuita_margine",
                   "speaker_conferma_breve_soglia", "speaker_enroll_phrases", "speaker_enroll_min_s", "speaker_enroll_timeout_s",
                   "speaker_adapt_threshold",
                   "speaker_adapt_alpha", "speaker_adapt_max_drift"],
@@ -2469,6 +2493,8 @@ LIMITI: dict[str, tuple[float, float]] = {
     "stt_correzione_soglia": (0.0, 1.01), "stt_correzione_timeout_s": (0.2, 30.0),
     "speaker_id_threshold": (0.0, 1.0), "wake_threshold": (0.0, 1.0),
     "speaker_id_margine": (0.0, 1.0), "minori_margine_amministra": (0.0, 1.0),
+    "speaker_continuita_s": (0.0, 86400.0), "speaker_continuita_soglia": (0.0, 1.0),
+    "speaker_continuita_margine": (0.0, 1.0),
     "esercizi_verifica_timeout_s": (0.5, 300.0), "esercizi_pronti": (0, 50),
     "esercizi_campione": (0, 50),
     "suoni_volume": (0.0, 1.0),

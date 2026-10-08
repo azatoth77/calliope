@@ -1,0 +1,41 @@
+id	tipo	riferimento	nomi
+n01	citta	Prova con Pratofiorito Maggiore.	Pratofiorito Maggiore
+n02	citta	Collauda l'estensione con Roccalba Superiore e Borgoverde.	Roccalba Superiore Borgoverde
+n03	citta	Che tempo fa domani a Castel Morano?	Castel Morano
+n04	citta	Prova con Fontalba di Sotto per tre giorni.	Fontalba Sotto
+n05	citta	Dimmi il meteo di Valdorsa Marina.	Valdorsa Marina
+n06	citta	Prova con Lucca.	Lucca
+n07	citta	E adesso prova con Mantova.	Mantova
+n08	citta	Prova con Pavia e Rovigo.	Pavia Rovigo
+n09	citta	Che tempo fa a Bergamo?	Bergamo
+n10	citta	Prova con San Doriano al Piano.	San Doriano Piano
+n11	contatto	Aggiungi in rubrica Ilaria Venturelli.	Ilaria Venturelli
+n12	contatto	Qual è il numero di Gualtiero Bonsignori?	Gualtiero Bonsignori
+n13	contatto	Scrivi una lettera a Ottavia Ranieri.	Ottavia Ranieri
+n14	contatto	Fai una fattura a Ferramenta Lodovici.	Ferramenta Lodovici
+n15	casa	Accendi la luce della taverna.	taverna
+n16	casa	Spegni l'abat-jour dello studio.	abat jour studio
+n17	casa	Alza la tapparella della cameretta.	tapparella cameretta
+n18	casa	Accendi la lampada del soppalco.	lampada soppalco
+n19	estensione	Attiva l'estensione Meteocittà.	Meteocittà
+n20	estensione	Disattiva Orario Treni.	Orario Treni
+n21	estensione	Rinomina l'estensione in Previsioni di Casa.	Previsioni Casa
+n22	conferma	Sì, voglio attivarla.	sì voglio attivarla
+n23	conferma	Sì, procedi pure.	sì procedi
+n24	conferma	No, lascia stare.	no lascia stare
+n25	agente	Chiedi all'agente come sceglie la città.	agente
+n26	agente	Chiedi all'agente se ha finito.	agente
+n27	file	Apri il file preventivo Bonsignori.	preventivo Bonsignori
+n28	file	Cercami il documento contratto affitto.	contratto affitto
+n29	ricerca	Cerca su internet la sagra di Roccalba.	sagra Roccalba
+n30	ricerca	Cerca nella biblioteca chi era Cesare Beccaria.	Cesare Beccaria
+n31	libera	Raccontami una barzelletta.	
+n32	libera	Com'è andata la giornata?	
+n33	libera	Perché il cielo è azzurro?	
+n34	libera	Grazie, sei stata gentilissima.	
+n35	persona	Ricorda che a Tobia piace la pizza.	Tobia
+n36	persona	Imposta un promemoria per Ludovica alle cinque.	Ludovica
+n37	citta	Prova con Pieve Castellina.	Pieve Castellina
+n38	citta	Prova con Torre del Grifo.	Torre Grifo
+n39	citta	Aggiungi anche Montecalvo Serrano.	Montecalvo Serrano
+n40	citta	Prova con Borgo Tessano.	Borgo Tessano

@@ -563,7 +563,10 @@ class Sviluppi:
             if sv.fase == "analisi":
                 return item                  # fermato per tornare all'analisi: già detto
             with self._lock:
-                sv.lavoro, sv.nota = None, "annullato"
+                # Fermato e subito rifatto (08/10 sera, `rifai`): l'annuncio del lavoro fermato
+                # arriva dopo, e non tocca il lavoro nuovo
+                if sv.lavoro in (None, getattr(lav, "id", None)):
+                    sv.lavoro, sv.nota = None, "annullato"
             self._salva()
             return item
         if stato == "fatto":
@@ -599,8 +602,14 @@ class Sviluppi:
             sv.nota = str(r.get("motivo") or stato or "non riuscito")[:200]
             sv.lavoro = None
         self._salva()
-        item["messaggio"] = (msg.rstrip() + f" Lo sviluppo {sv.di()} resta aperto: se vuoi, "
-                             "torniamo all'analisi e cambiamo qualcosa, oppure lo rifaccio.")
+        item["messaggio"] = (msg.rstrip() + f" Lo sviluppo {sv.di()} resta aperto: lo rifaccio "
+                             "così com'è, o vuoi cambiare qualcosa?")
+        # Il «sì» rifà il lavoro con la stessa specifica (08/10 sera, tools/sviluppo._rifai)
+        item["in_sospeso"] = {"domanda": "Lo rifaccio così com'è?", "tool": "sviluppo_passo",
+                              "cosa": f"rifare il lavoro di «{sv.titolo}» con la stessa specifica",
+                              "argomenti": "azione = rifai (sì, rifallo così com'è); se dice "
+                                           "cosa cambiare, azione = analisi e cambia = la "
+                                           "modifica come detta"}
         item["sviluppo"] = sv.id
         return item
 
@@ -956,14 +965,23 @@ class Sviluppi:
                 return (f"Il lavoro {sv.lavoro} è fermo a una tappa (fine del giro): «continua» → "
                         "sviluppo_passo con azione avanti; «cambia e continua», con un'indicazione "
                         "→ sviluppo_correggi con problema = l'indicazione; «fermalo» → "
-                        "lavoro_annulla.")
+                        "sviluppo_passo con azione ferma.")
             if self.lavoro_attivo(sv):
                 return (f"L'agente sta lavorando (lavoro {sv.lavoro}): se chiede a che punto è, "
                         "sviluppo_passo con azione stato; una domanda sul codice o sul perché di "
-                        "qualcosa → sviluppo_chiedi.")
-            return (f"Il lavoro dell'agente non è andato ({sv.nota or 'si è fermato'}): se vuole "
-                    "riprovare o cambiare cosa deve fare, sviluppo_passo con azione analisi; se "
-                    "va corretto, sviluppo_correggi.")
+                        "qualcosa → sviluppo_chiedi. «Ferma/stoppa/blocca lo sviluppo», "
+                        "«fermalo», «non deve continuare» → sviluppo_passo con azione ferma (il "
+                        "lavoro dell'agente si ferma); «sospendi», «mettiamo in pausa», «ne "
+                        "riparliamo dopo» → azione sospendi (l'agente finisce il suo lavoro). Se "
+                        "non è chiaro quale delle due, chiedi «fermo anche il lavoro "
+                        "dell'agente?».")
+            fermato = sv.nota in ("annullato", "fermato")
+            return (("Il lavoro dell'agente l'ha fermato chi parla" if fermato else
+                     f"Il lavoro dell'agente non è andato ({sv.nota or 'si è fermato'})")
+                    + ": nessun lavoro in corso. Se vuole rifarlo così com'è («sì», «rifallo», "
+                    "«riprova», «partiamo così com'è»), sviluppo_passo con azione rifai: riparte "
+                    "subito con la stessa specifica, senza rileggerla. Se dice cosa cambiare, "
+                    "azione analisi con cambia = la modifica; se va corretto, sviluppo_correggi.")
         dopo = (" Se un risultato è sbagliato o la persona chiede perché («perché?», «come mai "
                 "non trova…?»), sviluppo_chiedi con domanda = la domanda come detta: risponde "
                 "chi l'ha scritto; se va corretto («correggilo», «fallo sistemare»), "
@@ -978,8 +996,9 @@ class Sviluppi:
                     "prova prima di approvarla. Se chiede di provarla («prova con Bergamo», "
                     "«prova una città che non esiste», anche solo il nome di una città), chiama "
                     "sviluppo_collauda con dati = i dati come detti" + self._input_detto(sv)
-                    + "; NON il suo tool est_ né internet. Se dice che va bene o di andare "
-                    "avanti, sviluppo_passo con azione avanti (la revisione)." + dopo)
+                    + "; NON il suo tool est_ né internet. " + PIU_COLLAUDI + " Se dice che va "
+                    "bene o di andare avanti, sviluppo_passo con azione avanti (la revisione)."
+                    + dopo)
         if sv.fase == "revisione":
             if sv.tipo == "programma":
                 return ("Hai detto la revisione del programma. Se dice che va bene, sviluppo_passo "
@@ -1037,7 +1056,15 @@ class Sviluppi:
         if not sospesi:
             return None
         voci = [f"«{s.titolo}» ({s.id}, {ALLA.get(s.fase, s.fase)})" for s in sospesi[:4]]
-        return SOSPESI_MSG.format(voci=_e(voci))
+        msg = SOSPESI_MSG.format(voci=_e(voci))
+        al_lavoro = [s for s in sospesi[:4] if self.lavoro_attivo(s)]
+        if al_lavoro:
+            # Sospeso con l'agente al lavoro (08/10 sera, DGX delle 19:07: «Ti ho detto di
+            # stopparlo, non deve più continuare»)
+            msg += (f" Per «{al_lavoro[0].titolo}» l'agente lavora ancora: se chiede di fermarlo "
+                    "(«fermalo», «stoppalo», «non deve continuare»), sviluppo_passo con azione "
+                    "ferma.")
+        return msg
 
     # ─────────────────────────── scheda ───────────────────────────
     def testo_scheda(self, sv: Sviluppo) -> str:
@@ -1296,9 +1323,22 @@ SVILUPPO_MSG = ("Modalità sviluppo aperta con chi parla (dati del turno, non ri
                 "o registrato una domanda senza averla fatta con il tool. Se chiede altro (l'ora, il meteo, la casa, le "
                 "liste…), rispondi come sempre con i tuoi tool e chiudi con una frase breve che "
                 "ricorda che siete {alla} di «{titolo}». Niente sviluppi nuovi (estensioni, "
-                "programmi, lavori dell'agente) finché questo è aperto. Per fermarsi: "
-                "sviluppo_passo con azione sospendi (si riprende quando vuole) o chiudi (chiede "
+                "programmi, lavori dell'agente) finché questo è aperto. Per una pausa: "
+                "sviluppo_passo con azione sospendi (si riprende quando vuole; un lavoro "
+                "dell'agente in corso continua); per fermare il lavoro dell'agente («ferma», "
+                "«stoppa», «blocca»): azione ferma; per finire lo sviluppo: chiudi (chiede "
                 "conferma).")
+# Più valori da provare in una frase (08/10 sera, DGX delle 20:10: «prova con Borgoverde Maggiore e
+# Pratofiorito» (nomi di fantasia) → un collaudo solo e «per Pratofiorito non ho ancora ricevuto i
+# dati»; poi «E invece Pratofiorito?» → nessun tool e una risposta inventata). Contesto, non regola
+PIU_COLLAUDI = ("Più valori da provare nella stessa frase («prova con Valfiorita e Borgo Alto», "
+                "«con A, B e C»): un collaudo per valore, cioè sviluppo_collauda una volta per "
+                "ciascuno, nella stessa risposta, con un valore solo per input (gli altri input "
+                "solo se detti); di' il risultato di ognuno e mai che aspetti i dati di un "
+                "collaudo che non hai fatto. Se chi parla dice che è un nome solo («Bosco e "
+                "Prato è un paese»), è un valore solo. Una domanda "
+                "su un valore non ancora provato («e invece X?», «e con Y?», «e a Z?») è un "
+                "collaudo: sviluppo_collauda con X, mai una risposta senza il tool.")
 SOSPESI_MSG = ("Dati del turno: chi parla ha degli sviluppi sospesi: {voci}. Se chiede di "
                "riprenderne uno, sviluppo_passo con azione riprendi e quale = le parole del titolo.")
 

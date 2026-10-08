@@ -347,7 +347,10 @@ CLASSI: dict[str, Classe] = {
                                    "analisi": "torni all'analisi dello sviluppo"
                                    + (f" con «{_corto(_s(a, 'cambia'))}»" if _s(a, "cambia")
                                       else ""),
-                                   "promuovi": "faccia diventare il programma un'estensione"
+                                   "promuovi": "faccia diventare il programma un'estensione",
+                                   "ferma": "fermi il lavoro dell'agente sullo sviluppo",
+                                   "rifai": "rifaccia il lavoro dello sviluppo con la stessa "
+                                            "specifica"
                                    }.get(_s(a, "azione").lower(),
                                          f"faccia «{_s(a, 'azione')}» sullo sviluppo")),
     # il collaudo: esegue la versione da approvare nel container, con la porta stretta; il
@@ -430,7 +433,8 @@ VERBI.update({
     "minore_gestisci": (_W + r"(regol|permess|orari|temp|minut|abilit|autorizz|approv|neg|"
                         r"concedi|limit|stato|compit|richiest|nascit|tutor)"),
     "sviluppo_passo": (_W + r"(svilupp|avanti|prosegu|continu|procedi|analisi|cambi|modific|"
-                 r"sospend|riprend|esci|chiud|attiv|approv|estension|programm|va bene)"),
+                 r"sospend|riprend|esci|chiud|attiv|approv|estension|programm|va bene|ferm|"
+                 r"stop|blocc|interromp|rifa|riprov|ricominc|di nuovo)"),
     "sviluppo_collauda": _W + r"(prov[aiao]|collaud|test|esegu|lanc|fa(?:mm|ll)\w* vedere)",
     "sviluppo_correggi": (_W + r"(corregg|corrett|sistem|ripar|aggiust|risolv|sbagli|non va|"
                           r"non funzion|fix)"),
@@ -477,6 +481,8 @@ VERBI_AZIONE = {
         "avanti": _W + r"(avanti|prosegu|continu|procedi|attiv|approv|va bene|fase dopo)",
         "analisi": _W + r"(analisi|cambi|modific|corregg|aggiung|togl|rifa|invece)",
         "sospendi": _W + r"(sospend|pausa|dopo|più tardi|lascia)",
+        "ferma": _W + r"(ferm|stop|blocc|interromp|annull|bast|non deve (?:più )?continu)",
+        "rifai": _W + r"(rifa|riprov|ricominc|riparti|di nuovo|ancora|così com|cos[iì] com)",
         "riprendi": _W + r"(riprend|continu|riapr|torn)",
         "chiudi": _W + r"(esci|uscir|chiud|basta|abbandon|lascia perdere)",
         "esci": _W + r"(esci|uscir|chiud|basta|abbandon|lascia perdere)",
@@ -769,12 +775,35 @@ def detto_dopo_dato(name: str, args: dict | None, t: "Turno") -> bool:
     chiavi = DOPO_DATO_SE_DETTO.get(name)
     if not chiavi or not isinstance(args, dict) or t is None:
         return False
-    valori = []
-    for k in chiavi:
-        valori += _valori_foglia(args.get(k))
+    valori = _valori_chiave(name, args)
     testo = t.testo or ""
+    # Un valore che il modello aveva già passato allo stesso tool in questa risposta PRIMA di
+    # leggere un dato (08/10 sera, giro 6: «prova con Valfiorita e Borgo Alto» → il primo
+    # collaudo con giorni = 3, il secondo uguale fermato perché il 3 non era detto) non viene dal
+    # dato: vale come il primo. Regola `dopo_dato_valore_di_prima`
+    # (anche a pezzi: «Borgo Alto per 3 giorni» con «Borgo Alto» detto e «per 3 giorni» nella
+    # chiamata di prima)
+    prima = set((t.risposta or {}).get("valori_prima", {}).get(name, ()))
+    con_prima = testo + " " + " ".join(sorted(prima)) if prima else testo
     return bool(valori) and all(prov.tutto_detto(v, testo) or _numero_detto(v, testo)
+                                or v in prima or (prima and prov.tutto_detto(v, con_prima))
                                 for v in valori)
+
+
+def _valori_chiave(name: str, args) -> list[str]:
+    valori = []
+    for k in DOPO_DATO_SE_DETTO.get(name) or ():
+        valori += _valori_foglia((args or {}).get(k) if isinstance(args, dict) else None)
+    return valori
+
+
+def _ricorda_prima(name: str, args, t: "Turno"):
+    """I valori di una chiamata di DOPO_DATO_SE_DETTO fatta prima di ogni dato letto in questa
+    risposta (Turno.risposta, che Brain azzera a ogni risposta)."""
+    if name not in DOPO_DATO_SE_DETTO or not isinstance(t.risposta, dict):
+        return
+    t.risposta.setdefault("valori_prima", {}).setdefault(name, set()).update(
+        _valori_chiave(name, args))
 
 
 # I numeri piccoli detti a parole («per due giorni» → giorni = 2): una conversione di forma
@@ -819,10 +848,20 @@ def bloccata(name: str, ctx, args: dict | None = None) -> dict | None:
     deve nemmeno partire). La stessa regola è anche in `decidi`."""
     from .tools.spec import note_rule
     t = getattr(ctx, "politica", None)
-    if not isinstance(t, Turno) or not t.letto_ora or name in DOPO_DATO:
+    if not isinstance(t, Turno):
+        return None
+    if not t.letto_ora:
+        _ricorda_prima(name, args, t)
+        return None
+    if name in DOPO_DATO:
         return None
     if detto_dopo_dato(name, args, t):
         note_rule(ctx, "dopo_dato_valore_detto")
+        prima = (t.risposta or {}).get("valori_prima", {}).get(name, ())
+        testo = t.testo or ""
+        if any(v in prima and not (prov.tutto_detto(v, testo) or _numero_detto(v, testo))
+               for v in _valori_chiave(name, args)):
+            note_rule(ctx, "dopo_dato_valore_di_prima")
         return None
     note_rule(ctx, "web_azione_bloccata")
     print(f"   [POLITICA] {name}: web_azione_bloccata (dati da {t.letto_ora})", flush=True)
@@ -1110,9 +1149,13 @@ def da_confermare(name: str, args: dict, spec=None, cosa: str | None = None) -> 
     return descrivi_azione(name, args)
 
 
-def valori_esterni(cl: Classe, args: dict, t: Turno) -> tuple[str, list[str], str]:
+def valori_esterni(cl: Classe, args: dict, t: Turno,
+                   name: str = "") -> tuple[str, list[str], str]:
     """(argomento, parole, fonte) del primo valore importante che viene solo da un dato non
-    fidato; ("", [], "") se nessuno."""
+    fidato; ("", [], "") se nessuno. Per un tool di DOPO_DATO_SE_DETTO (`name`) valgono come
+    dette anche le parole che il modello gli aveva già passato in questa risposta prima di
+    leggere un dato (08/10 sera, giro 6: «Borgo Alto per 3 giorni» dopo «Valfiorita per 3
+    giorni»: «per 3 giorni» tornava nel risultato e sembrava preso da lì)."""
     if not cl.chiave or not t.contaminazione:
         return "", [], ""
     # Le foto non hanno un testo da confrontare: con una foto di mezzo un valore che la persona
@@ -1130,7 +1173,10 @@ def valori_esterni(cl: Classe, args: dict, t: Turno) -> tuple[str, list[str], st
         # Le parole di questo turno (06/10, limite 2 del rapporto): una parola che sta in un
         # dato non fidato e che la persona ha detto solo in un turno di prima può essere stata
         # scelta dal dato («latte» detto prima, «aggiungi anche il latte» nella pagina)
-        fuori, fonte = prov.esterne(args[k], t.testo, t.esterni)
+        prima = ((t.risposta or {}).get("valori_prima", {}).get(name, ())
+                 if name in DOPO_DATO_SE_DETTO else ())
+        detto = (t.testo or "") + (" " + " ".join(sorted(prima)) if prima else "")
+        fuori, fonte = prov.esterne(args[k], detto, t.esterni)
         if fuori:
             return k, fuori, fonte
         if senza_testo:
@@ -1339,7 +1385,7 @@ def decidi(name: str, args: dict, cl: Classe, t: Turno | None,
     # li ha già sentiti
     # (senza chiavi si confrontano tutti gli argomenti, tranne quelli che non cambiano l'azione)
     if not (proposta and _uguali(puliti, sosp_puliti, cl.chiave)):
-        k, fuori, da = valori_esterni(cl, args, t)
+        k, fuori, da = valori_esterni(cl, args, t, name)
         if fuori:
             valore = _s(args, k)
             return Decisione("sfida" if cl.sfida else "conferma", "politica_argomento_esterno",

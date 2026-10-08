@@ -183,9 +183,9 @@ def _sviluppo(a: dict) -> int:
     az = pol._s(a, "azione").lower()
     if az in ("sospendi", "riprendi", "chiudi", "esci"):
         return E1
-    if az in ("analisi", "promuovi"):
-        return E2
-    return E3
+    if az in ("analisi", "promuovi", "ferma"):
+        return E2                            # ferma: come lavoro_annulla (08/10 sera)
+    return E3                                # avanti, rifai (riparte un lavoro dell'agente)
 
 
 def _ricorda(a: dict) -> int:
@@ -314,7 +314,7 @@ def intento_aperto(name: str, args: dict, t, ctx, cosa: str | None = None, spec=
         if (i.tool != name or i.persona != t.persona or (valido and ora - i.aperta > valido)
                 or not _stesso(chiave, i.bersaglio)):
             continue
-        k, fuori, _ = pol.valori_esterni(cl, args or {}, t)
+        k, fuori, _ = pol.valori_esterni(cl, args or {}, t, name)
         if fuori and not pol._uguali({k: (args or {}).get(k)}, {k: i.argomenti.get(k)}, [k]):
             return None
         return i
