@@ -42,6 +42,7 @@ A_SECCO = [
     ("prova_risultati.py", [], "risultati dei lavori e consensi (07/10, casi della DGX): lavoro_risultato (quale lavoro, riassunto salvato o dal modello dell'agente, tempo massimo, schermo, codice mai a voce, dopo un riavvio, permessi), dichiarazioni «inizio subito il lavoro», il «sì» di chi non ha la proposta, «Ma sì dai, perché no?» e i contrari; casi del 07/10 mattina: falso allarme di riferire su «installarlo», scheda del risultato nella zona grigia e dopo schermo_mostra, lavoro_stato con i lavori finiti dal disco; del pomeriggio: «Sì, grazie.», «Mostramelo.» nella zona grigia, «ho recuperato il dato» dopo tool falliti"),
     ("prova_estensioni_versioni.py", [], "versioni di un'estensione a voce (08/10, giro 10, caso della DGX): sviluppo_apri con un nome simile è un'estensione nuova e con modifica una versione nuova, annuncio ed elenco con il titolo di prima e quello nuovo, «attiva» → approva e «riattiva» di una già attiva, cosa fa dopo l'approvazione, dati del turno dell'estensione nominata (EST_NOMINATA_MSG) con i contrari, lavoro_affida che cambia un'estensione → sviluppo_apri, analisi «ESTENSIONE», lavoro_stato con la versione da approvare, registro dei turni di una risposta interrotta (risposta_inviata)"),
     ("prova_sviluppo_v2.py", [], "modalità sviluppo, versione 2 (08/10, il giro vero della DGX): nomi nuovi dei tool e i vecchi che valgono ancora, lavoro_affida di codice allo sviluppo, apertura esplicita con la specifica letta e il titolo leggibile, collaudo fallito → «Lo faccio correggere?», sviluppo_chiedi con il contesto conservato (sola lettura, non fidato, tempo massimo), sviluppo_correggi sui file della versione provata, chiusura con la conferma e sospensione con l'agente al lavoro, lavoro finito che riapre lo sviluppo al collaudo, tappe ai limiti del giro con i segnali di giro a vuoto e «continua» (servizio dei lavori vero, Ollama finto)"),
+    ("prova_sviluppo_giro3.py", [], "il giro vero della DGX dell'08/10 pomeriggio (giro 3 della modalità sviluppo): URL non codificato rifiutato dalla porta, da RetePubblica e da CalliopeFinta, traccia di rete del collaudo per sviluppo_chiedi e sviluppo_correggi (ripulita), storpiature della trascrizione nella provenienza, due collaudi nella stessa frase, l'esito dopo la sfida, «ok» in coda non è consenso, nome simile senza modifica → la scelta al modello, l'elenco vero delle estensioni, rinomina"),
     ("prova_sviluppo.py", [], "modalità sviluppo (08/10): estensioni e programmi come iter a fasi (analisi, sviluppo e test, collaudo, revisione, attivazione), su disco; collaudo della candidata prima dell'approvazione nel docker finto, revisione con le differenze, attivazione con la sfida e chiusura; ritorno all'analisi; sviluppi nuovi bloccati; dati del turno e riga del fuori tema; sospensione dopo 30 minuti, ripresa, promemoria del giorno; programma → estensione; passi interni senza la domanda della politica e i contrari"),
     # ~8 s: FakeOllama, hub e server degli schermi veri su 127.0.0.1, satellite e PC finti
     ("prova_markdown.py", [], "Markdown dei testi dell'agente (07/10): blocchi, righe, voce, conversioni in PDF e Word veri e da blocchi, testi ostili (script, javascript:, tabelle enormi, annidamenti, enfasi senza chiusura) in poco tempo; risultato.md, annuncio, scheda del documento con «Scarica», risultato al portatile con «Lo apro?» o sul server; «Scarica» solo per lo schermo personale del proprietario, mai zona grigia né stanza, gettone che scade, Content-Disposition e CSP sandbox; «fammene un PDF»"),
@@ -195,6 +196,7 @@ CON_OLLAMA = [
     ("prova_estensione_nominata_ollama.py", ["1"], "l'estensione nominata a voce con gemma4 (08/10, caso della DGX): «invoca l'estensione meteo per città su Bergamo» dopo l'approvazione della versione 2 e nella conversazione pulita → est_, mai web_cerca; «che tempo fa?» contato; con e senza i dati del turno"),
     ("prova_sviluppo_ollama.py", ["1"], "la modalità sviluppo con gemma4 (08/10): la sessione del meteo per città della DGX come iter (richiesta, sì, fuori tema, collaudo con sviluppo_collauda, sviluppo nuovo che non parte, ritorno all'analisi, revisione, attivazione con la sfida), con i dati del turno e con la rete spenta"),
     ("prova_sviluppo_v2_ollama.py", ["1"], "la modalità sviluppo, versione 2, con gemma4 (08/10, il giro vero della DGX): apertura detta, collaudo che non va e «Lo faccio correggere?», «Perché?» → sviluppo_chiedi, la correzione, «Ok, chiuso a long» che non chiude, la correzione finita che riapre al collaudo, attivazione; chiamate come testo e nomi di tool detti"),
+    ("prova_sviluppo_giro3_ollama.py", ["1"], "il giro 3 con gemma4 (08/10, DGX del pomeriggio): la modifica di un'estensione che c'è (mai una nuova accanto), «abbiamo due estensioni?» con l'elenco vero, rinomina senza agente, l'esito del collaudo dopo la sfida, «Cerno Maggiore» detto senza «viene dal lavoro di un agente»"),
     ("prova_conferma_unica_ollama.py", ["1"], "una conferma per azione con gemma4: la sequenza della DGX (foto, «creiamo un'estensione…»), doppione, «come la richiamo?»"),
     ("prova_politica_ollama.py", ["1"], "politica dei tool con gemma4: iniezioni da web, allegati, estensioni, archivio, agenti; zero azioni"),
     ("prova_immagini_ollama.py", ["1"], "foto con gemma4: scontrino e turno dopo, spesa dallo scontrino, istruzione nella foto senza azioni, archivia, schermo e webcam"),
@@ -351,6 +353,17 @@ LEGAMI = [
     ("prove/e2e/", ["prova_e2e_copioni.py"]),
     # La modalità sviluppo (08/10), e la sua versione 2 (tappe nel ciclo dell'agente, nomi)
     ("calliope/sviluppo.py", ["prova_sviluppo.py", "prova_sviluppo_v2.py"]),
+    # Il giro 3 (08/10): porta, traccia di rete, provenienza, consenso, rinomina
+    ("calliope/sviluppo.py", ["prova_sviluppo_giro3.py"]),
+    ("calliope/tools/sviluppo.py", ["prova_sviluppo_giro3.py"]),
+    ("calliope/tools/estensioni.py", ["prova_sviluppo_giro3.py", "prova_estensioni_versioni.py"]),
+    ("calliope/estensioni/", ["prova_sviluppo_giro3.py"]),
+    ("calliope/web/pagina.py", ["prova_sviluppo_giro3.py"]),
+    ("calliope/web/rete.py", ["prova_sviluppo_giro3.py"]),
+    ("calliope/politica.py", ["prova_sviluppo_giro3.py"]),
+    ("calliope/provenienza.py", ["prova_sviluppo_giro3.py"]),
+    ("calliope/valore.py", ["prova_sviluppo_giro3.py"]),
+    ("calliope/brain.py", ["prova_sviluppo_giro3.py"]),
     ("calliope/tools/sviluppo.py", ["prova_sviluppo.py", "prova_sviluppo_v2.py",
                                    "prova_estensioni.py", "prova_agenti.py"]),
     ("calliope/agenti/", ["prova_sviluppo_v2.py"]),

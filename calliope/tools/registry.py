@@ -189,7 +189,7 @@ class ToolRegistry:
                 pass
         sc = getattr(ctx, "speaker_ctx", None)
         # Dopo un dato non fidato letto in questa risposta, solo letture (politica.DOPO_DATO)
-        fermo = politica.bloccata(name, ctx)
+        fermo = politica.bloccata(name, ctx, arguments)
         if fermo is not None:
             return json.dumps(fermo, ensure_ascii=False)
         # Un'azione su un bersaglio che non c'è («scollega lo schermo della cucina» senza

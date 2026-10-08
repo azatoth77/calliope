@@ -690,6 +690,12 @@ EST_NOMINATA_MSG = ("Dati del turno: chi parla nomina {chi}. Se chiede di usarla
                     "tool con i dati che dice, non un altro (internet, biblioteca); se chiede di "
                     "cambiarla, è sviluppo_apri con modifica.")
 EST_CAMBIATA_S = 1800.0        # «è cambiata da poco»: approvata da al più mezz'ora
+# Una frase che parla di estensioni (08/10): l'elenco vero nei dati del turno (regola
+# `estensioni_elenco_turno`, nella rete `estensione_nominata`)
+PARLA_ESTENSIONI = re.compile(r"(?<![a-zà-ù])estension[ei]", re.I)
+EST_ELENCO_MSG = ("Dati del turno: le estensioni che ci sono adesso, tutte: {elenco}. Per "
+                  "domande su quali o quante ce ne sono rispondi da qui, mai a memoria; per "
+                  "cambiarle, estensione_gestisci.")
 
 # La modalità sviluppo (08/10, calliope/sviluppo.py): lo sviluppo aperto di chi parla, la sua
 # fase e cosa si fa adesso (Sviluppi.dati_turno, SVILUPPO_MSG); senza uno aperto, gli sviluppi
@@ -1278,6 +1284,19 @@ def _senza_dato(name: str, spec, res: dict) -> bool:
     if getattr(spec, "fonte", None) or cl is None or not cl.fonte:
         return False
     return bool(res) and not _result_ok(res) and set(res) <= _CAMPI_ERRORE         and not isinstance(res.get("risultati"), (list, dict, str))
+
+
+def _ha_esito(res) -> bool:
+    """Il risultato riuscito porta qualcosa da dire oltre a «ok» (un risultato, un dato non
+    fidato in busta): dopo la sfida lo riferisce il modello, non «Fatto.» (08/10)."""
+    return isinstance(res, dict) and bool(set(res) - {"ok", "fatto", "in_sospeso", "regola"})
+
+
+# Dopo la frase di sfida superata, il tool è già stato eseguito dal codice: il modello ne dice
+# l'esito (08/10, Brain._sfida_reply)
+SFIDA_ESITO_MSG = ("Dati del turno: la frase di conferma è giusta e {tool} è GIÀ stato eseguito "
+                   "(il risultato è qui sopra). Di' in breve il suo esito a chi parla, come "
+                   "risposta; non richiamare {tool} e non chiedere di nuovo conferma.")
 
 
 def _frase_fallita(res) -> str:
@@ -1940,6 +1959,9 @@ class Brain:
             # Un consenso che vale solo per le forme chiuse («Ma sì dai, perché no?», 07/10)
             if politica.solo_forma_chiusa(user_text or ""):
                 self._rule("consenso_forma_chiusa")
+            # Un «ok» solo in coda a un pezzo lungo non vale come consenso (08/10)
+            if politica.consenso_in_coda(user_text or ""):
+                self._rule("consenso_in_coda")
         self._letto_ora = ""      # un tool non fidato ha già risposto in questa risposta
         self._politica_risposta = {}  # stato della politica per questa risposta (Turno.risposta)
         self.last_turn_at = time.monotonic()
@@ -2124,6 +2146,22 @@ class Brain:
                 # «Fatto.»). Senza frase pronta, l'errore del tool
                 self._rule("sfida_esito_fallito")
                 frase = _frase_fallita(res)
+            if not frase and _result_ok(res) and _ha_esito(res):
+                # Riuscito, senza frase pronta ma con un esito da dire (08/10, caso vero della
+                # DGX: sviluppo_collauda dopo la sfida → «Fatto.», e a «che risultato ho
+                # avuto?» il collaudo richiesto di nuovo, con la stessa domanda): lo dice il
+                # modello dal risultato, senza rifare la chiamata
+                self._rule("sfida_esito_modello")
+                fatti = list(self.last_tools or [])
+                detto = []
+                for pezzo in self._reply(None, level, SFIDA_ESITO_MSG.format(tool=sfida.tool),
+                                         None):
+                    detto.append(pezzo)
+                    yield pezzo
+                self.last_tools = fatti + list(self.last_tools or [])
+                if "".join(detto).strip():
+                    return
+                frase = "Fatto."
             frase = frase or "Fatto."
         self.history.append({"role": "assistant", "content": frase})
         yield frase
@@ -2330,8 +2368,19 @@ class Brain:
             trovate = est.nominate(testo)[:2]
         except Exception:  # noqa: BLE001 — sono solo dati del turno
             return None
+        # Una frase che parla di estensioni: quali ci sono davvero (08/10, caso vero della DGX:
+        # «adesso abbiamo due estensioni, giusto?» → «ne abbiamo solo una», «la vecchia è stata
+        # ritirata», ed erano attive tutte e due). Un contesto, decide il modello
+        # Anche al turno subito dopo («Quindi la vecchia non c'è più?»: la conversazione parla
+        # ancora di estensioni, senza la parola)
+        turno = int(getattr(self, "turn_number", 0) or 0)
+        parla = PARLA_ESTENSIONI.search(testo or "") or (
+            turno and getattr(self, "_elenco_est_turno", -9) == turno - 1)
+        elenco = self._elenco_estensioni(est) if parla else ""
+        if elenco:
+            self._elenco_est_turno = turno
         if not trovate:
-            return None
+            return EST_ELENCO_MSG.format(elenco=elenco) if elenco else None
         parti = []
         for e in trovate:
             p = (f"la tua estensione «{e['titolo']}» (versione {e['versione']}): è il tool "
@@ -2346,7 +2395,29 @@ class Brain:
                 p += (". È cambiata da poco: quello che è stato detto di lei prima nella "
                       "conversazione valeva per la versione di prima")
             parti.append(p)
-        return EST_NOMINATA_MSG.format(chi="; ".join(parti))
+        out = EST_NOMINATA_MSG.format(chi="; ".join(parti))
+        return out + " " + EST_ELENCO_MSG.format(elenco=elenco) if elenco else out
+
+    @staticmethod
+    def _elenco_estensioni(est) -> str:
+        """«Meteo città» (attiva, versione 5); «Tris» (disattivata): tutte le estensioni."""
+        try:
+            arch = est.archivio
+            voci = []
+            for n in arch.nomi()[:12]:
+                v = arch.voce(n) or {}
+                m = arch.manifesto(n, v.get("attiva") or v.get("candidata")) or {}
+                stato = {"attiva": "attiva", "disattivata": "disattivata",
+                         "da_approvare": "da approvare", "rifiutata": "rifiutata"}.get(
+                    v.get("stato"), str(v.get("stato") or ""))
+                if v.get("attiva"):
+                    stato += f", versione {v['attiva']}"
+                if arch.candidata(n):
+                    stato += f", una versione nuova da approvare (la {arch.candidata(n)})"
+                voci.append(f"«{m.get('titolo') or n}» ({stato})")
+            return "; ".join(voci) if voci else "nessuna"
+        except Exception:  # noqa: BLE001 — sono solo dati del turno
+            return ""
 
     def _sviluppi(self):
         return getattr(getattr(self.tool_ctx, "lavori", None), "sviluppi", None)
@@ -2660,7 +2731,10 @@ class Brain:
         est_msg = self._estensioni_nominate(user_text) if user_text else None
         if est_msg:
             memory = memory + [{"role": "system", "content": est_msg}]
-            self._rule("estensione_nominata")
+            if "nomina" in est_msg:
+                self._rule("estensione_nominata")
+            if "le estensioni che ci sono adesso" in est_msg:
+                self._rule("estensioni_elenco_turno")
         # Lo sviluppo aperto di chi parla, e la sua fase (SVILUPPO_MSG)
         sv_msg = self._sviluppo_turno(user_text) if user_text else None
         if sv_msg:

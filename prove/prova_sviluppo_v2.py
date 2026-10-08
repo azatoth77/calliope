@@ -144,6 +144,11 @@ def apri_e_finisci(ctx, est, svc):
     r = S.P.chiama(ctx.registro, ctx, "sviluppo_apri", {
         "tipo": "estensione", "compito": "un'estensione che dica il meteo di una città "
                                           "qualunque", "nome": "meteo_città"})
+    if "estensione_simile_scelta" in ctx.regole:
+        # Dal 08/10 (giro 3): nome simile senza modifica → la scelta al modello, che la cambia
+        r = S.P.chiama(ctx.registro, ctx, "sviluppo_apri", {
+            "tipo": "estensione", "compito": "un'estensione che dica il meteo di una città "
+                                              "qualunque", "modifica": "meteo_citta"})
     lav = svc.offerte["u1"]["lavoro"]
     r2 = S.P.chiama(ctx.registro, ctx, "sviluppo_apri", {"proposta": lav.id}, turno=2)
     n = candidata(est, lav.id)
@@ -216,8 +221,10 @@ def prova_apertura(tmp, iso):
     f = detta(r)
     verifica("«Entriamo in modalità sviluppo per «…». Ho capito così: … Va bene così, o la "
              "cambiamo?»",
-             # (con un nome simile a un'estensione che c'è, prima l'avviso del giro 10)
-             "Entriamo in modalità sviluppo per «Meteo città». Ho capito così: " in f
+             # (con un nome simile a un'estensione che c'è, prima l'avviso del giro 10; dal
+             # giro 3 dell'08/10 il modello sceglie modifica: il titolo è quello che c'è)
+             "Entriamo in modalità sviluppo per «Meteo Borgoverde e Valfiorita». Ho capito "
+             "così: " in f
              and f.endswith("Va bene così, o la cambiamo?") and "meteo di una città" in f
              and "sviluppo_apertura" in ctx.regole, f)
     sosp = r.get("in_sospeso") or {}

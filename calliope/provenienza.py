@@ -274,12 +274,65 @@ def parole(testo: str) -> set[str]:
     return {w for w in re.findall(r"[a-z0-9]{4,}", t) if w not in _STOP}
 
 
+def _distanza(a: str, b: str, limite: int) -> int:
+    """Distanza di edit (Levenshtein) fra due parole, fermandosi oltre `limite`."""
+    if abs(len(a) - len(b)) > limite:
+        return limite + 1
+    prima = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        ora = [i]
+        for j, cb in enumerate(b, 1):
+            ora.append(min(prima[j] + 1, ora[j - 1] + 1, prima[j - 1] + (ca != cb)))
+        if min(ora) > limite:
+            return limite + 1
+        prima = ora
+    return prima[-1]
+
+
+def vicina(w: str, insieme) -> bool:
+    """La parola è una storpiatura di una parola dell'insieme (08/10, caso vero della DGX:
+    «Cerno Maggiore» trascritto, «Cerro Maggiore» nel valore del modello e nel lavoro
+    dell'agente → «viene dal lavoro di un agente, non da te», due volte e la sfida). Solo
+    parole di lettere (mai cifre: un numero di telefono o un IBAN con una cifra diversa è un
+    altro numero), di almeno 5 lettere, con la stessa iniziale: una lettera di differenza, due
+    da 9 lettere in su. Chi controlla il dato può ottenere al più una parola quasi uguale a
+    quella detta dalla persona."""
+    if len(w) < 5 or not w.isalpha():
+        return False
+    limite = 2 if len(w) >= 9 else 1
+    for p in insieme:
+        if (p != w and p[:1] == w[:1] and p.isalpha() and len(p) >= 5
+                and _distanza(w, p, limite) <= limite):
+            return True
+    return False
+
+
+_LEGAMI = frozenset("e ed con di a da in per poi anche".split())
+
+
+def _gettoni(testo) -> list[str]:
+    t = unicodedata.normalize("NFKD", str(testo or ""))
+    t = "".join(c for c in t if not unicodedata.combining(c)).lower()
+    return re.findall(r"[a-z0-9]+", t)
+
+
+def tutto_detto(valore, testo: str) -> bool:
+    """Ogni parola del valore (anche corta, anche cifre; tolte «e», «con», «poi»…) è nella
+    frase, o ne è una storpiatura (`vicina`). Un valore vuoto non è detto."""
+    if isinstance(valore, (list, tuple)):
+        valore = " ".join(str(v) for v in valore)
+    mie = set(_gettoni(testo))
+    gettoni = [g for g in _gettoni(valore) if g not in _LEGAMI]
+    return bool(gettoni) and all(g in mie or vicina(g, mie) for g in gettoni)
+
+
 def esterne(valore, persona_txt: str, esterni: list[tuple[str, str]]) -> tuple[list[str], str]:
     """Le parole del valore che compaiono in un dato non fidato e mai nelle parole della
     persona, con la fonte del primo dato che le contiene."""
     if isinstance(valore, (list, tuple)):
         valore = " ".join(str(v) for v in valore)
-    candidate = parole(valore) - parole(persona_txt)
+    mie = parole(persona_txt)
+    candidate = {w for w in parole(valore) - mie if not vicina(w, mie)}
     if not candidate:
         return [], ""
     fuori, fonte = [], ""

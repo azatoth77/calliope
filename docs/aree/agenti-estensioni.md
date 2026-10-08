@@ -1011,3 +1011,86 @@ decidere**: `lavoro_affida` perde un po' su relazioni e ricerche col 4B (vedi ta
 DGX col 26B si vede lo stesso, proposta: tornare al verbo «delega» nella famiglia
 (`lavoro_delega`) o riprendere nella descrizione la frase di prima («un lavoro lungo il cui
 risultato è un file complesso»). Da misurare sulla DGX con il 26B e l'agente vero, anche le tappe.
+
+## Modalità sviluppo, giro 3: la causa che l'agente non vedeva (08/10, ramo `sviluppo-giro3`)
+
+Giro vero della DGX dell'08/10 pomeriggio (14:36–15:47, 26B e qwen3.6; qui con nomi di
+fantasia): sviluppo del meteo per città, cinque versioni, attivata la quinta con la sfida.
+L'estensione costruiva l'URL del geocoder a mano (`…/search?name={citta}&count=1…`): una città
+di una parola andava, una di due no. La richiesta partiva rotta e tornava «collegamento non
+riuscito» in ~15 ms (`uscite.jsonl`); l'estensione la trasformava in «non ho trovato il meteo»,
+il collaudo passava all'agente solo quella frase, nella sandbox l'agente non ha rete e i suoi
+test con `CalliopeFinta` rispondevano a qualunque URL: cinque correzioni alla cieca, e
+`sviluppo_chiedi` ha dato con sicurezza due diagnosi sbagliate («il servizio non la conosce»,
+«il problema non sono i nomi di due parole»).
+
+- **URL non codificato rifiutato** (`web/pagina.url_non_codificato`): spazi, accenti, caratteri
+  di controllo o un «%» sbagliato nel percorso o nei parametri → «URL non valido: c'è uno spazio
+  nel parametro «name». Codifica i valori con urllib.parse.urlencode…» (il nome del parametro,
+  mai il valore). Lo controllano la porta delle estensioni (anche con la funzione finta delle
+  prove; regola `estensione_url_non_codificato`), `RetePubblica` (anche per l'agente; nel
+  registro delle uscite «bloccata: url_non_codificato») e `CalliopeFinta` (la stessa regola,
+  copiata in `_ospite.py` perché il runtime non importa Calliope; la prova le confronta): un test
+  dell'agente con una città di due parole fallisce come nel vero. Lo dicono il contratto
+  (`CAPACITA.md`, «indirizzi») e il prompt dell'agente delle estensioni («nei test prova anche un
+  valore di due parole con un accento»).
+- **Traccia di rete del collaudo** (`Porta._traccia`, `Esecuzione.traccia`, al più 12
+  richieste): metodo, URL com'era scritto (lo spazio resta: è spesso la causa), esito («stato
+  200» o «errore» con il messaggio), byte e i primi 300 caratteri della risposta, durata. URL
+  ripuliti: host riservato → tolto, un valore con un dato riservato o personale → «[tolto]»,
+  dopo una lettura di dati di casa tutti i valori e l'ultimo pezzo del percorso. Il collaudo la
+  conserva nello sviluppo (`collaudi[].rete`, su disco in `sviluppi.json`), mai nel risultato
+  per il modello della voce; la ricevono `sviluppo_chiedi` (righe «richieste di rete» negli
+  ultimi 4 collaudi; il prompt: «se una non va, la causa parte da lì; non indovinare una causa
+  che la traccia smentisce») e i vincoli del lavoro di `sviluppo_correggi` («Traccia di rete dei
+  collaudi», prima quelli con un errore).
+- **Modifica di un'estensione che c'è** (DGX 15:36: «Modifica l'estensione Meteocittà: fai
+  codificare il nome…» → `sviluppo_apri` senza `modifica`, ed è nata «Meteo città codificata»,
+  riscritta da zero, senza le previsioni della v5, accanto alla vecchia): con un nome simile a
+  un'estensione che c'è e senza `modifica`, niente lavoro né sviluppo: il risultato restituisce
+  la scelta al modello («se la persona vuole CAMBIARE «X», richiama con modifica = "x"; per una
+  NUOVA accanto, un nome diverso; se non si capisce, chiedi»; regola `estensione_simile_scelta`).
+  Richiamato uguale nella stessa risposta vale come nuova accanto; il ritorno all'analisi di uno
+  sviluppo già aperto per una nuova non chiede di nuovo. `modifica` ha la descrizione con
+  l'esempio. Con `modifica` l'analisi della richiesta («quale API vuoi usare?») non c'è già da
+  prima: l'agente parte dai file della versione che c'è.
+- **Quali estensioni ci sono** (DGX 15:45: «ne abbiamo solo una», «la vecchia è stata
+  ritirata», ed erano attive tutte e due; il modello vedeva solo i tool `est_` e non ha chiamato
+  `elenca`): una frase che dice «estensione/i», e quella subito dopo, riceve nei dati del turno
+  l'elenco vero (titolo, stato, versione, versione da approvare; regola
+  `estensioni_elenco_turno`, rete `estensione_nominata`); la descrizione di
+  `estensione_gestisci elenca` dice di chiamarlo prima di rispondere a una domanda sulle
+  estensioni.
+- **Rinomina** (DGX 15:46: «chiamala solo Meteo città» → `sviluppo_apri`, la conferma «c'è di
+  mezzo il lavoro di un agente» e poi «non posso rinominare»): `estensione_gestisci` azione
+  `rinomina`, `titolo` = il nome nuovo, di chi amministra, senza agente. Cambia solo il titolo
+  (nell'indice: i file e l'impronta delle versioni restano, il tool `est_` e il nome interno
+  pure; vale per tutte le versioni). Un titolo già di un'altra estensione attiva → «C'è già
+  un'estensione che si chiama «…», ed è attiva… Vuoi che disattivi quella, prima?» (in sospeso
+  `disattiva`; `estensione_rinomina_doppia`). Senza `nome`, l'estensione nominata nella frase se
+  è una sola (`estensione_nome_dalla_frase`). Disattivare e rimuovere c'erano già. Sulla DGX le
+  due estensioni restano com'erano: decide Dario.
+- Politica (storpiature, due collaudi nella stessa frase, l'esito dopo la sfida, «ok» in coda,
+  rinomina con il titolo detto): [sicurezza-politica](sicurezza-politica.md), stessa data.
+
+**Prove**: a secco `prove/prova_sviluppo_giro3.py` (~1 s, livello 1; geocoder finto,
+«Pratofiorito Maggiore» al posto delle città vere). Con gemma4 e4b sul portatile
+`prove/prova_sviluppo_giro3_ollama.py`:
+
+| passo | main (2 giri) | ramo (3 giri) |
+|---|---|---|
+| «Modifica l'estensione Meteocittà…» → versione nuova di quella che c'è | 0/2 | 3/3 |
+| …senza «quale API vuoi usare?» | 2/2 | 3/3 |
+| «abbiamo due estensioni?» → due | 0/2 | 3/3 |
+| «la vecchia non c'è più?» → niente di falso | 2/2 | 3/3 |
+| …e dice che c'è ancora | 0/2 | 0/3 (il 4B chiede quale, o propone l'elenco) |
+| «chiamala Meteo Valfiorita» → rinominata | 0/2 | 3/3 (2/3 prima del nome dalla frase) |
+| sfida superata al collaudo → l'esito detto, una sola esecuzione | 0/2 («Fatto.») | 3/3 |
+| «Cerno Maggiore» detto → collaudo senza «viene dal lavoro di un agente» | 0/2 | 1/3 |
+| prima frase mediana | 0,67 s | 0,87 s |
+
+L'ultimo passo col 4B è sporcato da un limite noto: scrive la chiamata come testo
+(`chiamata_in_mezzo`, senza argomenti) e la risposta resta vuota, su main come sul ramo; il
+confronto della provenienza è coperto a secco. Da rimisurare sulla DGX con il 26B e l'agente
+vero: la traccia di rete in `sviluppo_chiedi` e nella correzione (qwen3.6), e se l'agente scrive
+da sé `urlencode` con il prompt nuovo.

@@ -111,7 +111,8 @@ ARGOMENTI: dict[str, dict[str, str]] = {
                       "file": B, "allegato": "indice:allegato",
                       # 08/10 (giro 10): l'estensione esistente di cui fare una versione nuova
                       "modifica": B},
-    "estensione_gestisci": {"azione": Z, "nome": B, "esecuzione": B, "sempre": S},
+    "estensione_gestisci": {"azione": Z, "nome": B, "esecuzione": B, "sempre": S,
+                            "titolo": C},
     # 08/10, modalità sviluppo (calliope/sviluppo.py): lo sviluppo è quello aperto di chi parla
     # (il bersaglio non è un argomento); quale sceglie tra i suoi sospesi
     "sviluppo_passo": {"azione": Z, "quale": B, "cambia": L},
@@ -413,7 +414,9 @@ def etichetta(valore, tipo: str, f: Fonti) -> str:
         return DATO
     peggiore = None
     for w in prov.parole(testo):
-        if w in f.frase:
+        # Una storpiatura della trascrizione vale come detta (08/10, provenienza.vicina:
+        # «Cerno Maggiore» detto, «Cerro Maggiore» nel valore)
+        if w in f.frase or prov.vicina(w, f.frase):
             e = DETTO
         elif w in f.persona:
             # Detto solo prima e anche nel dato: per un bersaglio può averlo scelto il dato
@@ -452,6 +455,8 @@ def distintive(valore, f: Fonti) -> list[str]:
     for m in _DISTINTIVA.finditer(" " + testo):
         for w in prov.parole(m.group(0)) | _gettoni_numeri(m.group(0)):
             if w in f.persona or w in f.frase or w in f.numeri_frase or w in f.numeri_persona:
+                continue
+            if prov.vicina(w, f.frase):       # storpiatura della trascrizione (08/10)
                 continue
             if w in f.dato or w in f.numeri_dato:
                 out.append(w)

@@ -107,8 +107,22 @@ class Archivio:
         return self.cartella / nome / "dati"
 
     def manifesto(self, nome: str, n: int | None = None) -> dict | None:
+        """Il manifesto della versione (quella attiva se `n` è None), con il titolo dato dalla
+        persona se l'ha rinominata (`rinomina`, 08/10): vale per tutte le versioni."""
         ver = self.versione(nome, n)
-        return (ver or {}).get("manifesto")
+        m = (ver or {}).get("manifesto")
+        with self._lock:
+            titolo = (self.indice.get(nome) or {}).get("titolo")
+        if m is not None and titolo:
+            m = dict(m, titolo=titolo)
+        return m
+
+    def rinomina(self, nome: str, titolo: str):
+        """Il titolo detto a voce, scelto dalla persona (08/10): solo nell'indice, i file delle
+        versioni (e la loro impronta) non cambiano; il nome interno e il tool restano."""
+        with self._lock:
+            self.indice[nome]["titolo"] = str(titolo).strip()
+            self._salva()
 
     # ── candidate ──
     def nuova_candidata(self, manifesto: dict, file: dict[str, bytes], chi: str | None,
