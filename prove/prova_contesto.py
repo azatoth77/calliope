@@ -291,7 +291,8 @@ class Gestore(BaseHTTPRequestHandler):
             righe = [{"message": {"content": "Ciao, "}, "done": False},
                      {"message": {"content": "tutto bene."}, "done": False},
                      {"message": {"content": ""}, "done": True,
-                      "prompt_eval_count": 9000, "eval_count": 12}]
+                      "prompt_eval_count": 9000, "eval_count": 12,
+                      "eval_duration": 150_000_000}]
             raw = "".join(json.dumps(r) + "\n" for r in righe).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/x-ndjson")
@@ -388,6 +389,8 @@ detto = "".join(brain.stream_reply("Ciao, come stai?", "amministra"))
 verifica("Ollama: token del turno = prompt_eval_count + eval_count, sulla finestra",
          brain.last_context == {"token": 9012, "finestra": 32768, "percento": 28},
          (detto, brain.last_context))
+verifica("Ollama: generazione del turno da eval_count ed eval_duration (fase 0, 08/10)",
+         brain.last_generazione == {"token": 12, "ns": 150_000_000}, brain.last_generazione)
 verifica("riga per la console", contesto.riga(brain.last_context)
          == "[CONTESTO] 9.012 token su 32.768 (28 %)")
 # API OpenAI (vLLM): stream_options.include_usage e l'ultimo pezzo con usage

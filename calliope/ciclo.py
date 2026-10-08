@@ -2139,6 +2139,11 @@ class Ciclo:
         # prefisso non è servita (riavvio, altra conversazione)
         if getattr(brain, "last_lettura_s", None) is not None:
             self.rec["lettura_s"] = brain.last_lettura_s
+        # Velocità di generazione del turno (08/10, fase 0 della taratura): tutte le passate
+        gen = getattr(brain, "last_generazione", None)
+        if isinstance(gen, dict) and gen.get("token") and gen.get("ns"):
+            self.rec["generati"] = int(gen["token"])
+            self.rec["generazione_tps"] = round(gen["token"] / (gen["ns"] / 1e9), 1)
         if not uso_ctx:
             return
         self.rec["contesto"] = dict(uso_ctx)

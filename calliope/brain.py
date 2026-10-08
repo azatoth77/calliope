@@ -1087,9 +1087,12 @@ class OllamaBackend:
                     # Token veri della passata (05/10, calliope/contesto.py): il prompt
                     # intero (anche la parte già in cache) e la risposta
                     # Con il tempo di lettura del prompt (06/10): solo la parte non in cache
+                    # Con la generazione (08/10, fase 0 della taratura): token/s del turno
                     yield "usage", {"prompt": obj.get("prompt_eval_count"),
                                     "output": obj.get("eval_count"),
-                                    "lettura_ns": obj.get("prompt_eval_duration")}
+                                    "lettura_ns": obj.get("prompt_eval_duration"),
+                                    "generati": obj.get("eval_count"),
+                                    "generazione_ns": obj.get("eval_duration")}
                     break
 
 
@@ -1170,12 +1173,16 @@ class OpenAIBackend:
             kwargs["tools"] = tools
         acc: dict = {}
         usage = None
+        primo = ultimo = None        # tempi del primo e dell'ultimo pezzo (generazione)
         for chunk in self.client.chat.completions.create(**kwargs):
             if getattr(chunk, "usage", None) is not None:
                 usage = chunk.usage
             if not chunk.choices or chunk.choices[0].delta is None:
                 continue
             delta = chunk.choices[0].delta
+            if delta.content or delta.tool_calls:
+                ultimo = time.perf_counter()
+                primo = primo or ultimo
             merge_tool_deltas(acc, delta.tool_calls or [])
             if delta.content:
                 yield "text", delta.content
@@ -1184,8 +1191,13 @@ class OpenAIBackend:
                              "arguments": _loads_dict(acc[i]["arguments"])}
                             for i in sorted(acc)]
         if usage is not None:
-            yield "usage", {"prompt": getattr(usage, "prompt_tokens", None),
-                            "output": getattr(usage, "completion_tokens", None)}
+            out = getattr(usage, "completion_tokens", None)
+            u = {"prompt": getattr(usage, "prompt_tokens", None), "output": out}
+            # vLLM non dice i tempi (08/10): la generazione è dal primo all'ultimo pezzo,
+            # senza il primo token (che paga la lettura del prompt)
+            if isinstance(out, int) and out > 1 and primo and ultimo and ultimo > primo:
+                u["generati"], u["generazione_ns"] = out - 1, int((ultimo - primo) * 1e9)
+            yield "usage", u
 
 
 def merge_tool_deltas(acc: dict, deltas):
@@ -1833,6 +1845,11 @@ class Brain:
         last = getattr(self, "last_context", None)
         if u and (last is None or u["token"] >= last["token"]):
             self.last_context = u
+        # La generazione di tutte le passate del turno (08/10, fase 0 della taratura)
+        n, ns = payload.get("generati"), payload.get("generazione_ns")
+        if isinstance(n, int) and n > 0 and isinstance(ns, (int, float)) and ns > 0:
+            g = getattr(self, "last_generazione", None) or {"token": 0, "ns": 0}
+            self.last_generazione = {"token": g["token"] + n, "ns": g["ns"] + int(ns)}
 
     def _rule(self, name: str):
         """Una regola sul testo è scattata in questa risposta (per il registro dei turni)."""
@@ -1871,6 +1888,7 @@ class Brain:
         self.last_rules = []      # regole sul testo scattate (per il registro dei turni)
         self.last_context = None  # uso del contesto di questa risposta (_note_usage)
         self.last_lettura_s = None  # lettura del prompt della prima passata (_note_usage)
+        self.last_generazione = None  # token generati e tempo, tutte le passate (_note_usage)
         self.last_compressione = None
         self.turn_pending_tool = None
         # Una proposta di un'altra persona ancora valida (07/10, SOSPESO_ALTRUI_MSG): dalla
