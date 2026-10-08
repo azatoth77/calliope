@@ -178,8 +178,8 @@ Calliope vera, satelliti e voci finte; **dal vero** = usata a voce.
 |---|---|---|---|
 | Primo avvio | chi parla per primo diventa «Primo/Prima» e amministra; nome e voce registrati con frasi guidate | dal vero | [stt-tts](docs/aree/stt-tts.md) |
 | Persone e livelli | ospite, familiare, amministra; tool uguali per tutti, permessi in `ToolRegistry.call`; registrazione a voce di familiari e minori | dal vero, e2e | [sicurezza-politica](docs/aree/sicurezza-politica.md) |
-| Conferme e sfida | «Procedo?» per le azioni pericolose; frase di sfida (parole scelte sul momento) quando la voce non basta | a secco, e2e | [sicurezza-politica](docs/aree/sicurezza-politica.md) |
-| Minori | fasce d'età con preset, tutori, guardiano, rilevatore di pericolo con avviso, compiti guidati, orari, tempo di gioco, richieste ai tutori | a secco, e2e | [minori](docs/aree/minori.md) |
+| Conferme e sfida | «Procedo?» per le azioni pericolose; frase di sfida (parole scelte sul momento) quando la voce non basta; memoria dell'intento (la richiesta ripetuta vale come sì); attrito misurato e sicurezza per valore in ombra (08/10) | a secco, e2e, dal vero | [sicurezza-politica](docs/aree/sicurezza-politica.md) |
+| Minori | fasce d'età con preset, tutori, guardiano, rilevatore di pericolo con avviso, compiti guidati, orari, tempo di gioco, richieste ai tutori; esercizi generati al momento (matematica e italiano) e corretti dal programma (08/10) | a secco, e2e | [minori](docs/aree/minori.md) |
 | Memoria | per persona e della casa; i «fatti» che sono ordini si rifiutano | dal vero | [memoria-agenda-liste](docs/aree/memoria-agenda-liste.md) |
 | Agenda e liste | timer, promemoria, appuntamenti (durate e orari convertiti dal programma), liste senza doppioni | dal vero | [memoria-agenda-liste](docs/aree/memoria-agenda-liste.md) |
 | Conversazioni | una per persona tra i satelliti; compressione con riassunto; archivio di 30 giorni con ricerca ibrida | a secco, dal vero | [contesto-conversazione](docs/aree/contesto-conversazione.md) |
@@ -190,16 +190,17 @@ Calliope vera, satelliti e voci finte; **dal vero** = usata a voce.
 | Documenti | Word, Excel, PDF a voce; contenuto JSON con schema, totali e formule dal programma | dal vero | [documenti-ufficio](docs/aree/documenti-ufficio.md) |
 | Ufficio | modelli Word/PowerPoint, rubrica, numerazione, preventivi, DDT, FatturaPA (XML FPR12 + PDF, invio allo SdI a mano) | a secco, dal vero | [documenti-ufficio](docs/aree/documenti-ufficio.md) |
 | Archivio | documenti di casa da una cartella: OCR con il modello visivo, schede per tipo, grafo SQLite | a secco, modello vero | [documenti-ufficio](docs/aree/documenti-ufficio.md) |
-| Foto e allegati | foto, PDF, Office, testo, audio, zip; tipo dai byte; sempre dato non fidato | a secco, dal vero | [immagini-allegati](docs/aree/immagini-allegati.md) |
-| Agenti | lavori lunghi a un modello grande; codice Python e C# in sandbox Docker con test; programmi in diretta sulla scheda; domande a metà lavoro; file della persona | dal vero | [agenti-estensioni](docs/aree/agenti-estensioni.md) |
-| Estensioni | scritte dall'agente, approvate con la sfida; container per chiamata, porta stretta verso i tool, scope e flussi di rete | dal vero | [agenti-estensioni](docs/aree/agenti-estensioni.md) |
+| Foto e allegati | foto, PDF, Office, testo, audio, zip; tipo dai byte; sempre dato non fidato; cassetto dei file per persona (7 giorni, revisione dal carosello, il tutore sui file del figlio) | a secco, dal vero | [immagini-allegati](docs/aree/immagini-allegati.md) |
+| Agenti | lavori lunghi a un modello grande; codice Python e C# in sandbox Docker con test; programmi in diretta sulla scheda; domande a metà lavoro; file della persona; lavori che sopravvivono ai riavvii; testo dell'agente in diretta come una chat in sola lettura | dal vero | [agenti-estensioni](docs/aree/agenti-estensioni.md) |
+| Estensioni | scritte dall'agente, approvate con la sfida; container per chiamata, porta stretta verso i tool, scope e flussi di rete. **Modalità sviluppo** (08/10): analisi, sviluppo e test, collaudo della versione candidata con dati detti (traccia di rete per l'agente, URL non codificati rifiutati), domande a chi l'ha scritta, correzioni dalla versione provata, revisione, attivazione con la sfida; tappe ai limiti di ogni giro; versioni, rinomina, disattivazione a voce | dal vero | [agenti-estensioni](docs/aree/agenti-estensioni.md) |
 | Giochi | schede interattive in un iframe isolato; partite tra schermi; gioco puro approvabile da un adulto | a secco | [giochi](docs/aree/giochi.md) |
 | Satelliti | installazione con un comando, aggiornamento con ritorno indietro, più satelliti insieme, esecutore del PC | dal vero (PC pulito non provato) | [satelliti](docs/aree/satelliti.md) |
 | Telefono | PWA: VAD e wake word nel browser, carosello, schede a schermo intero, schermo acceso | dal vero in parte (auto no) | [schermi-telefono](docs/aree/schermi-telefono.md) |
-| Schermi | kiosk abbinati a voce, schede dei tool, visibilità per persona, moduli, cruscotto di chi amministra | dal vero | [schermi-telefono](docs/aree/schermi-telefono.md) |
+| Schermi | kiosk abbinati a voce, schede dei tool, visibilità per persona, moduli, cruscotto di chi amministra; testi dell'agente in Markdown con «Scarica»; vista dello sviluppo (fasi, due colonne, collaudi, comandi innocui a tocco) e schermo intero (08/10) | dal vero | [schermi-telefono](docs/aree/schermi-telefono.md) |
+| Voce | Piper sulla GPU se la macchina ce l'ha, prima frase a pezzi, taratura all'avvio e con l'uso | dal vero | [stt-tts](docs/aree/stt-tts.md) |
 | Personalità | sei toni, modalità Star Trek («Computer», suoni), cortesia senza modello | a secco, toni dal vero | [personalita](docs/aree/personalita.md) |
-| Capacità | registro con stato e prossimo passo; installazioni a voce solo da catalogo | dal vero | [capacita-installazioni](docs/aree/capacita-installazioni.md) |
-| Osservabilità | registro dei turni JSONL; `calliope stato --turni` (mediana e p90 della prima frase, cause) | dal vero | [voce-e-regole](docs/aree/voce-e-regole.md) |
+| Capacità | registro con stato e prossimo passo; installazioni a voce solo da catalogo; inventario della macchina e piano dei modelli in sola lettura (`calliope stato --piano`) | dal vero | [capacita-installazioni](docs/aree/capacita-installazioni.md) |
+| Osservabilità | registro dei turni JSONL; `calliope stato --turni` (mediana e p90 della prima frase, cause, attrito delle conferme, pause) | dal vero | [voce-e-regole](docs/aree/voce-e-regole.md) |
 
 ## Esempi
 
@@ -261,6 +262,7 @@ ordini di grandezza.
 | Prova e2e, giri 1–2 (prima delle correzioni) | 26B | DGX | voce sentita 2,28 e 2,40 s (p90 5,30 e 5,25), guardiano ~7 s | 06/10 | idem |
 | Turni veri, aggregati per giorno (02–05/10) | e4b, poi 26B | DGX | mediana 0,68–2,05 s | 02–05/10 | [analisi-complessiva](docs/ricerche/2026-10-06-analisi-complessiva.md) |
 | Turni veri dopo le correzioni (06/10, 20 risposte, aggregato) | 26B | DGX | prima frase 1,31 s (p90 3,33), base 0,91, guardiano 1,47 (rilevatore 0,47), STT 0,19 | 06/10 | [e2e-dgx](prove/manuali/e2e-dgx.md) |
+| Turni veri di una giornata di prove della modalità sviluppo (185 risposte, molte con tool) | 26B | DGX | prima frase mediana 1,51 s, p90 3,91 | 08/10 | registro dei turni (`calliope stato --turni`) |
 | Satellite a secco: fine frase → prima voce | finto | PC | 0,67–0,80 s (+30–93 ms con 50 ms di rete) | 02/10 | [satellite](docs/ricerche/2026-10-02-satellite.md) |
 | Arbitro con un agente vLLM sulla stessa GPU | 26B + vLLM | DGX | senza 2,02 s (p90 4,21), con 0,73 (p90 1,83), con pausa 0,75 (p90 1,48) | 04/10 | [agenti-estensioni](docs/aree/agenti-estensioni.md) |
 
@@ -354,16 +356,19 @@ Finestra di contesto scelta dal setup: 20 480 (PC) e 24 576 (DGX), prima frase i
 
 ## Roadmap
 
-Le funzionalità nuove sono **congelate** finché la latenza vera della prima frase non sta
-stabilmente sotto 1,2 s di mediana. Prossimi passi decisi, senza date:
+Il congelamento delle funzionalità nuove (dal 06/10, per la latenza) è stato tolto l'08/10.
+Prossimi passi decisi, senza date:
 
-1. **Modulo studio per i ragazzi**: esercizi generati al momento con verifica automatica, in
-   tutte le materie dalle elementari alle superiori; simulazione d'interrogazione con domande a
-   tempo, registrazione delle risposte e valutazione di contenuti ed esposizione.
+1. **Modulo studio per i ragazzi**: gli esercizi generati e corretti dal programma ci sono per
+   matematica e italiano (08/10); restano le altre materie e la simulazione d'interrogazione con
+   domande a tempo, registrazione delle risposte e valutazione di contenuti ed esposizione.
 2. **Immagini generate in locale** (FLUX.2 [klein] 4B), con filtri e regole per i minori.
 3. **Secondo fattore** per chi amministra: conferma dal telefono, chiave vocale.
 4. **Pannello di amministrazione** con le azioni.
-5. Poi: interfono tra satelliti, conversazione di stanza, mappe e luoghi, satellite su
+5. **Cronologia delle schede e della chat per persona**, che uno schermo personale nuovo
+   ritrova; ricerca cronologica nelle conversazioni; frasi pronte dei tool meno monotone.
+6. Sicurezza per valore: decidere se accenderla dopo i giorni in ombra.
+7. Poi: interfono tra satelliti, conversazione di stanza, mappe e luoghi, satellite su
    Raspberry, altre fonti italiane nella biblioteca.
 
 In valutazione: riscontro emotivo dalla voce nello studio. Scartato: Kolibri (catalogo italiano
@@ -435,7 +440,7 @@ Whisper (faster-whisper in process, or whisper.cpp CUDA server; CPU fallback) �
 recognition (guest / family / admin, minors with guardians) → one loop per satellite and one
 conversation per person → context builder with a cache-stable prefix, automatic context
 window, compression and a searchable conversation archive (FTS5 + embeddings) → local LLM
-(Gemma 4 e4b or 26B-A4B on Ollama or vLLM, chosen by `llm_profilo`) with ~65 tools → a single
+(Gemma 4 e4b or 26B-A4B on Ollama or vLLM, chosen by `llm_profilo`) with ~70 tools → a single
 policy in `ToolRegistry.call` (level, age, data provenance, spoken confirmation, challenge
 phrase) → output checks (`riferire`, Llama Guard 3 for minors and guests) → Piper TTS, sentence
 by sentence. Five security boundaries: network, actions, agent code sandbox (Docker, no
@@ -465,15 +470,18 @@ lists; offline library (Kiwix ZIM, pure Python, FTS5); optional private web sear
 Home Assistant with read-only sensitive devices; PC control (also via a satellite); Word,
 Excel, PDF; office templates, address book, FatturaPA e-invoices, delivery notes; household
 document archive with OCR and a graph; photos and attachments as untrusted data; background
-agents (Python and C# in a sandbox, live programs, mid-task questions); extensions written by
-the agent and approved with the challenge phrase; sandboxed games on screens; satellites with
+agents (Python and C# in a sandbox, live programs, mid-task questions, jobs that survive
+restarts); extensions written by the agent and approved with the challenge phrase, with a
+staged development mode (analysis, build and test, acceptance test of the candidate with a
+network trace for the agent, review, activation; versions, rename) and a live development view
+on screens; generated exercises for students (maths, Italian); a per-person file drawer (7
+days); Piper on the GPU when available; a read-only model plan from a hardware inventory; sandboxed games on screens; satellites with
 one-command install and self-update with rollback; phone PWA; kiosk screens and an admin
 dashboard; personalities and a Star Trek mode; capability registry and catalogue installs;
 turn log with latency statistics; tiered tests and an end-to-end test.
 
-**Roadmap.** New features are frozen until real first-sentence latency is reliably below 1.2 s
-median. Next: a study module for students (generated exercises with automatic checking, oral
-exam simulation), local image generation (FLUX.2 [klein] 4B), a second factor for admins, an
+**Roadmap.** The feature freeze (for latency) was lifted on 08/10. Next: the rest of the study
+module (more subjects, oral exam simulation), per-person card and chat history on screens, local image generation (FLUX.2 [klein] 4B), a second factor for admins, an
 admin panel with actions; then intercom, room conversations, maps, Raspberry satellites. A
 speech-to-text correction study (07/10) kept Whisper output uncorrected. Contributions: open an
 issue first ([`CONTRIBUTING.md`](CONTRIBUTING.md)).
