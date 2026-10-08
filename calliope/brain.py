@@ -3329,7 +3329,10 @@ class Brain:
         if fonte:
             self._ricorda_esterno(fonte, result)
             result = provenienza.racchiudi_risultato(fonte, self._quarantena_risultato(result))
-        elif ok and not private:
+        elif ok and not private and valore.effetto(call["name"], args, spec) == valore.E0:
+            # Solo le letture (elenchi di file, liste, estensioni, stato della casa): il
+            # risultato di un'azione ripete gli argomenti scelti dal modello, che possono venire
+            # da un dato
             self._ricorda_fidato(result)
         return result
 

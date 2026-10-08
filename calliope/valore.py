@@ -17,8 +17,8 @@ deterministiche:
    condiviso, esce o esegue codice, fiducia e sicurezza fisica.
 
 **Fase 2, attiva: memoria dell'intento** (`Intenzione`). Un'azione confermata dalla persona
-riconosciuta (il «sì» con la voce, la sfida superata, la richiesta ripetuta) che poi fallisce
-resta un'intenzione aperta per quel tool, quel bersaglio e quella persona: la chiamata corretta
+riconosciuta (il «sì» con la voce, la sfida superata, la richiesta ripetuta), o chiesta da lei
+con la voce in questa frase ed eseguita, che poi fallisce resta un'intenzione aperta per quel tool, quel bersaglio e quella persona: la chiamata corretta
 («riprova», l'indice giusto, «ti ho detto di sì») si esegue senza un'altra domanda (regola
 `intento_confermato`). Si chiude con il successo, con un «no» o «lascia stare», con un'azione
 riuscita di un altro tool, con un dato nuovo, alla chiusura della conversazione o dopo

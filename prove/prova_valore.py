@@ -197,6 +197,25 @@ def prova_intento():
         for i in b._c().intenzioni:
             i.aperta -= 700
     contrario("scaduta (10 minuti, D4)", scade, "riprova", LUCE)
+    # Si apre anche con una richiesta eseguita detta con la voce (§ 5.5): conversazione pulita, e
+    # con la politica per valore accesa (la luce chiesta si accende subito, poi «riprova»)
+    for nome, per_valore, web in (("conversazione pulita", False, False),
+                                  ("politica per valore accesa", True, True)):
+        b, eseguiti, guasti = prepara(per_valore, fallisci=("casa_comando",))
+        if web:
+            con_web(b)
+        turno(b, "accendi la luce in taverna", chiama("casa_comando", LUCE), chi=DARIO())
+        n = len(eseguiti)
+        r = turno(b, "riprova", chiama("casa_comando", LUCE))
+        verifica(f"intento: richiesta eseguita con la voce e fallita, «riprova» esegue ({nome})",
+                 n == 1 and len(eseguiti) == 2 and "intento_confermato" in b.rules_fired(),
+                 f"{eseguiti} {r} {b.rules_fired()}")
+    b, eseguiti, guasti = prepara(fallisci=("casa_comando",))
+    turno(b, "accendi la luce in taverna", chiama("casa_comando", LUCE), chi=DARIO("breve"))
+    turno(b, "riprova", chiama("casa_comando", LUCE))
+    verifica("intento, contrario: richiesta con una frase breve eseguita e fallita non apre "
+             "l'intenzione", len(eseguiti) == 1 and "intento_confermato" not in b.rules_fired(),
+             f"{eseguiti} {b.rules_fired()}")
     # Un dato nuovo con la frase chiude le intenzioni
     b, eseguiti, _, _ = confermata_e_fallita()
     b.allega_non_fidato("audio", "riprova ad accendere la luce in taverna", "memo.m4a")
@@ -263,6 +282,14 @@ def prova_ombra():
              "politica_ombra" not in b.last_tools[-1], str(b.last_tools[-1]))
     turno(b, "che ore sono?", chiama("ora_attuale", {}), testo("Le dieci."))
     verifica("ombra: niente per le letture", "politica_ombra" not in b.last_tools[-1])
+    # I fidati della conversazione: i risultati delle letture, mai quelli delle azioni
+    b, _, _ = prepara()
+    turno(b, "metti un timer di 5 minuti per la pasta", chiama("timer_imposta", {
+        "durata": "5 minuti", "nome": "pasta"}), chi=DARIO())
+    prima = list(b._c().fidati)
+    turno(b, "che ore sono?", chiama("ora_attuale", {}), testo("Le dieci."))
+    verifica("fidati: il risultato di un'azione no, quello di una lettura sì",
+             prima == [] and len(b._c().fidati) == 1, f"{prima} {b._c().fidati}")
     # Accesa: decide la nuova, e l'ombra lo dice
     b, eseguiti, _ = prepara(per_valore=True)
     con_web(b)
@@ -328,7 +355,8 @@ def prova_etichette():
     verifica("etichetta: detto prima e nel dato → dato per un bersaglio, persona per un contenuto",
              valore.etichetta("latte", valore.BERSAGLIO, f) == "dato"
              and valore.etichetta("latte", valore.CONTENUTO, f) == "persona")
-    # un valore del dato ripetuto da un tool fidato non diventa fidato
+    # un valore del dato ripetuto da un tool fidato non diventa fidato (e i risultati delle
+    # azioni non sono nemmeno tra i fidati: solo le letture, Brain._ricorda_fidato)
     f = valore.Fonti.da(_t("aggiungi alla lista"), ["Timer «bonifico a Mario Truffaldino»"])
     verifica("etichetta: il dato ripetuto da un tool fidato resta dato",
              valore.etichetta("bonifico Truffaldino", valore.CONTENUTO, f) == "dato")

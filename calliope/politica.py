@@ -1337,7 +1337,7 @@ def _domanda_ripetuta(name: str, args: dict, cl: Classe, t: Turno | None) -> boo
     return not consenso_turno(name, args, cl, t)[0]
 
 
-def _esito_per_brain(ctx, name, args, cl, t, d, intento, cv, cosa, spec, ombra):
+def _esito_per_brain(ctx, name, args, cl, t, d, intento, cv, vf, cosa, spec, ombra):
     """Quello che Brain deve sapere dopo l'esecuzione (`ToolContext.politica_esito`): la
     decisione, l'intenzione aperta o da aprire (calliope/valore.py) e la decisione in ombra
     per il registro dei turni."""
@@ -1349,7 +1349,10 @@ def _esito_per_brain(ctx, name, args, cl, t, d, intento, cv, cosa, spec, ombra):
         if d.esito == "esegui" and t is not None and cl.classe != SICURO:
             if intento is not None:
                 esito["intento"], esito["usata"] = intento, True
-            elif (cv or t.sfida) and consenso_turno(name, args, cl, t)[0]:
+            # Si apre con il «sì» (o la sfida) alla domanda, e con una richiesta eseguita
+            # detta con la voce riconosciuta sopra soglia in questa frase (§ 5.5): resta solo se
+            # il tool fallisce
+            elif vf or ((cv or t.sfida) and consenso_turno(name, args, cl, t)[0]):
                 esito["intento"] = valore.nuova_intenzione(name, args, t, cosa, spec)
     except Exception:  # noqa: BLE001
         pass
@@ -1409,7 +1412,7 @@ def controlla(spec, name: str, args: dict, ctx) -> dict | None:
             d = decidi(name, args, cl, t, cv, vf, bool(propria), cosa, intento is not None)
     else:
         d = decidi(name, args, cl, t, cv, vf, bool(propria), cosa, intento is not None)
-    _esito_per_brain(ctx, name, args, cl, t, d, intento, cv, cosa, spec, ombra)
+    _esito_per_brain(ctx, name, args, cl, t, d, intento, cv, vf, cosa, spec, ombra)
     _segna_accettata(ctx, d.accettata)
     if d.esito == "esegui":
         if d.accettata:
