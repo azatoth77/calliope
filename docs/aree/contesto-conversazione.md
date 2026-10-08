@@ -525,3 +525,58 @@ una vista dell'archivio delle conversazioni, non un registro in più. Per farla:
   per gli ospiti) e `su_dimentica`; `chat(persona, n)` e `chat_markdown` per la scheda e
   «Scarica»; `voce_chat` mostra la frase detta da un tool se la risposta è vuota.
 - Prova: `prova_cronologia_schede` (migrazione, meta, sfida, codici, ospiti, dimentica, tenuta).
+
+## Le domande cronologiche sulle conversazioni passate (08/10 sera, ramo `conversazioni-cronologiche`)
+
+**Caso vero della DGX** (08/10, 17:26–17:43, registro dei turni e journal): «Meno male, quindi di
+cosa stavamo parlando?», «Prima di questo di cosa parlavamo?», «No, più indietro ancora.» →
+tre volte `conversazione_cerca` per somiglianza (FTS5 + vettori): una domanda sull'**ordine**
+non ha un argomento, la ricerca trova turni a caso e «più indietro» non vuol dire niente per il
+tool. «Non avevamo parlato anche di fusione nucleare?» invece è una domanda per argomento, e va
+bene com'è.
+
+**Fatto**: un parametro, non un tool nuovo (lo schema cresce di poco e il nome resta quello che
+il modello conosce): `conversazione_cerca(domanda, quando, cronologico=true)`.
+- `ArchivioConversazioni.recenti(persona, salta, n, dal, al, escludi_conv)`: le conversazioni
+  della persona ordinate per l'ultimo turno, mai degli ospiti, con inizio, fine, luogo, il
+  riassunto di chiusura senza la testa per la voce (`_riassunto_nudo`) e, senza riassunto (non
+  ancora chiusa, o riassunto non fatto), le prime quattro frasi della persona.
+- Il tool dà **una** conversazione per chiamata (con un periodo, «ieri», fino a tre, come
+  elenco) con «quando» detto a voce («oggi dalle 16:42 alle 17:13»), «da dove» («dal satellite
+  studio», «da questo computer») e «di cosa»; `quale` dice la posizione («la 2ª più recente (quelle
+  più recenti le hai già dette)») e `altre_più_indietro` quante ne restano. Con tre per chiamata
+  anche senza periodo, a «No, più indietro ancora.» gemma4 e4b raccontava l'**ultima**
+  dell'elenco (0/3): «più indietro» letto come «la più vecchia che hai».
+- **«Più indietro» continua**: lo stato è per persona e per corsia (`arch.cronologia`, chiave
+  persona e `id(ctx)`): una chiamata cronologica entro `CRONO_RISPOSTE` (3) risposte e
+  `CRONO_S` (15 minuti) dalla precedente, con lo stesso periodo, salta una conversazione in più
+  (regola `conversazione_piu_indietro`); altrimenti si riparte dalla più recente. Finite le
+  conversazioni, la frase pronta «Più indietro di così non ho altre nostre conversazioni (le
+  tengo 30 giorni).»
+- **La conversazione in corso** non è nell'elenco (`ToolContext.conv_archivio`, impostato da
+  Brain): è già nella storia, e il risultato lo dice (`conversazione_di_adesso`) se ha turni.
+  La descrizione del tool: «se la risposta è già nella conversazione di adesso, rispondi da lì».
+- Permessi e riservatezza come la ricerca: tool `riservato`, solo le proprie conversazioni,
+  ospiti mai (anche con `ospiti=true` il modo cronologico non c'è: resta la ricerca).
+
+**Misure** (gemma4 e4b sull'Ollama del portatile, `prove/prova_conversazioni_ollama.py`, archivio
+finto con cinque conversazioni, la sequenza vera in una conversazione ripresa, 3 giri):
+
+| | sequenza (4 frasi) | per argomento e contrari (3) | «perché il cielo è blu?» |
+|---|---|---|---|
+| cronologico, tre per chiamata, senza spinta | 10/12 e 12/12 | 8/9 e 8/9 | 3/3 |
+| cronologico, tre per chiamata, prima spinta (con «i tool chiamati») | 12/12 | 6/9 | 3/3 |
+| cronologico, tre per chiamata, seconda spinta (senza «chiama i tool come sempre») | 9/12 | 6/9 | 3/3 |
+| **cronologico, una per chiamata, spinta finale** | **11/12** | **8/9** | **3/3** |
+
+La sequenza conta riuscita se la chiamata è cronologica (o la prima frase risponde dalla
+ripresa senza tool) e la risposta nomina l'argomento giusto; i contrari («cosa ti avevo detto
+sul preventivo del bagno?», «che libro mi avevi consigliato?», «non avevamo parlato anche del
+tokamak?») se cercano per argomento, mai cronologico, e trovano la risposta. Prima frase
+mediana 1,25 s. Da rifare col 26B sulla DGX (la sequenza vera). La spinta sulle spiegazioni di
+sé è in [voce-e-regole](voce-e-regole.md).
+
+**Limite noto**: se il modello risponde alla prima domanda dalla riga di ripresa senza chiamare
+il tool, la prima chiamata cronologica dopo ridà la stessa conversazione (lo stato parte dalla
+chiamata, non da ciò che è stato detto). Nel banco non è successo: la prima frase ha sempre
+chiamato il tool.

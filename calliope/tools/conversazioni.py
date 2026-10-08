@@ -1,9 +1,10 @@
 """
 Tool dell'archivio delle conversazioni (05/10/2026, calliope/conversazioni.py).
 
-- conversazione_cerca(domanda, quando, ospiti): ritrova nelle conversazioni passate di chi
-  parla («cosa ti avevo detto stamattina sul preventivo?»), con la ricerca ibrida (parole e
-  significato). I risultati arrivano al modello come trascrizioni tra virgolette, dati e non
+- conversazione_cerca(domanda, quando, ospiti, cronologico): ritrova nelle conversazioni
+  passate di chi parla («cosa ti avevo detto stamattina sul preventivo?»), con la ricerca
+  ibrida (parole e significato); con `cronologico` (08/10) le ultime conversazioni dalla più
+  recente, con quando, dove e il riassunto, e «più indietro» continua da dove era arrivata. I risultati arrivano al modello come trascrizioni tra virgolette, dati e non
   istruzioni; il tool è `riservato`: a risposta finita nella storia resta solo la frase
   detta, e niente va nel registro dei turni né nel terminale.
 - conversazioni_dimentica(): «dimentica le nostre conversazioni» cancella dall'archivio tutte
@@ -51,8 +52,95 @@ def quando_detto(t: float, adesso: float | None = None) -> str:
     return f"il {d.day} {MESI[d.month - 1]} alle {ora}"
 
 
+def _periodo(inizio: float, fine: float, adesso: float | None = None) -> str:
+    """«oggi dalle 16:42 alle 17:13», «ieri alle 18:40» (un turno solo), «il 3 ottobre dalle…»."""
+    a = quando_detto(inizio, adesso)
+    d0, d1 = datetime.datetime.fromtimestamp(inizio), datetime.datetime.fromtimestamp(fine)
+    if d1 - d0 < datetime.timedelta(minutes=1):
+        return a
+    if d0.date() == d1.date():
+        return a.replace(" alle ", " dalle ", 1) + f" alle {d1.hour}:{d1.minute:02d}"
+    return f"{a.replace(' alle ', ' dalle ', 1)} a {quando_detto(fine, adesso)}"
+
+
+def _luogo(luogo) -> str:
+    luogo = str(luogo or "").strip()
+    return "da questo computer" if luogo == "locale" else (f"dal satellite {luogo}"
+                                                             if luogo else "")
+
+
+# Il modo cronologico (08/10): «più indietro» continua da dove si era arrivati se l'ultima
+# chiamata cronologica di chi parla, su questo satellite, è di una delle ultime
+# CRONO_RISPOSTE risposte e di meno di CRONO_S secondi fa; altrimenti si riparte dalla più
+# recente
+CRONO_RISPOSTE = 3
+CRONO_S = 900.0
+
+
+def _cronologico(ctx, arch, persona, quando: str, dal, al, detto_periodo: str) -> dict:
+    """Le ultime conversazioni di chi parla dalla più recente (la conversazione in corso
+    esclusa: è nella storia), una alla volta (con un periodo, «ieri», fino a tre: un elenco);
+    ogni chiamata successiva va una più indietro. Con tre alla volta anche senza periodo il
+    modello, a «più indietro ancora», raccontava l'ultima dell'elenco (0/3, 08/10)."""
+    stato = getattr(arch, "cronologia", None)
+    if stato is None:
+        stato = arch.cronologia = {}
+    chiave = (persona, id(ctx))
+    turno = int(getattr(ctx, "turno", 0) or 0)
+    ora = time.monotonic()
+    periodo = (quando or "").strip().lower()
+    prima = stato.get(chiave)
+    continua = bool(prima and prima["quando"] == periodo
+                    and 0 < turno - prima["turno"] <= CRONO_RISPOSTE
+                    and ora - prima["t"] <= CRONO_S)
+    salta = prima["salta"] + 1 if continua else 0
+    r = arch.recenti(persona, salta=salta, n=3 if periodo else 1, dal=dal, al=al,
+                     escludi_conv=getattr(ctx, "conv_archivio", None))
+    if continua:
+        from .spec import note_rule
+        note_rule(ctx, "conversazione_piu_indietro")
+    dove = f" {detto_periodo}" if detto_periodo else ""
+    if not r["conversazioni"]:
+        stato.pop(chiave, None)
+        if salta:
+            giorni = int(getattr(arch, "giorni", 0) or 0)
+            tengo = f" (le tengo {giorni} giorni)" if giorni > 0 else ""
+            return _final(f"Più indietro di così non ho altre nostre conversazioni{dove}"
+                          f"{tengo}.", ok=False)
+        return _final(f"Non trovo nostre conversazioni passate{dove}.", ok=False)
+    stato[chiave] = {"salta": salta, "turno": turno, "t": ora, "quando": periodo}
+    adesso = time.time()
+    elenco = []
+    for c in r["conversazioni"]:
+        voce = {"quando": _periodo(c["inizio"], c["fine"], adesso), "dove": _luogo(c["luogo"]),
+                "di_cosa": c["riassunto"][:700],
+                "tue_prime_frasi": "; ".join(f"«{d[:160]}»" for d in c["domande"])
+                if not c["riassunto"] else ""}
+        elenco.append({k: v for k, v in voce.items() if v})
+    storia = getattr(ctx, "storia", None) or []
+    in_corso = sum(1 for ruolo, _ in storia if ruolo == "user")
+    extra = {}
+    if not salta and in_corso:
+        extra["conversazione_di_adesso"] = ("non è nell'elenco: è quella qui sopra nella "
+                                            "storia")
+    posizione = ("la più recente" if not salta else f"la {salta + 1}ª più recente (quelle "
+                 f"più recenti le hai già dette)")
+    if len(elenco) == 1:
+        risultato = {"conversazione": elenco[0], "quale": posizione}
+        fare = ("racconta in una o due frasi questa conversazione: quando, da dove e di cosa "
+                "avete parlato")
+    else:
+        risultato = {"conversazioni": elenco, "ordine": "dalla più recente alla più vecchia"}
+        fare = ("racconta in breve queste conversazioni, dalla più recente: quando e di cosa "
+                "avete parlato")
+    return {"ok": True, "nota": NOTA, **risultato, **extra,
+            "altre_più_indietro": r["altre"],
+            "cosa_fare": fare + ". Se la persona chiede di andare ancora più indietro, "
+                                "richiama conversazione_cerca con cronologico=true"}
+
+
 def _conversazione_cerca(ctx: ToolContext, domanda: str = "", quando: str = "",
-                         ospiti: bool = False) -> dict:
+                         ospiti: bool = False, cronologico: bool = False) -> dict:
     arch = getattr(ctx, "conversazioni", None)
     if arch is None:
         return _final("Qui non tengo l'archivio delle conversazioni.", ok=False)
@@ -76,6 +164,8 @@ def _conversazione_cerca(ctx: ToolContext, domanda: str = "", quando: str = "",
         d0, d1, detto_periodo = parse_past_range(quando)
         dal = d0.timestamp() if d0 else None
         al = d1.timestamp() if d1 else None
+    if cronologico in (True, "true", "sì", "si") and not ospiti:
+        return _cronologico(ctx, arch, persona, quando, dal, al, detto_periodo)
     testo = (domanda or "").strip() or (getattr(ctx, "user_text", "") or "")
     r = arch.cerca(testo, persona, ospiti=ospiti, dal=dal, al=al, k=8)
     fuori_periodo = False
@@ -166,11 +256,16 @@ def conversazioni_specs() -> list[ToolSpec]:
                 "abbiamo parlato ieri?», «che libro mi avevi consigliato?», «come si chiamava "
                 "quel ristorante di cui ti ho parlato?». Chiamalo subito, senza chiedere "
                 "prima di cosa si parlava. domanda: le parole utili; quando: il "
-                "periodo come detto («stamattina», «ieri», «la settimana scorsa»), se c'è. Non "
+                "periodo come detto («stamattina», «ieri», «la settimana scorsa»), se c'è. Per "
+                "le domande sull'ordine e non su un argomento («di cosa stavamo parlando?», «e "
+                "prima di questo?», «più indietro ancora») cronologico=true: le ultime "
+                "conversazioni dalla più recente, e ogni nuova chiamata va più indietro; se "
+                "la risposta è già nella conversazione di adesso, rispondi da lì. Non "
                 "per i ricordi salvati (quelli li hai già) né per i fatti della biblioteca."),
             parameters={"type": "object",
                         "properties": {"domanda": {"type": "string"},
                                        "quando": {"type": "string"},
+                                       "cronologico": {"type": "boolean"},
                                        "ospiti": {"type": "boolean"}},
                         "required": ["domanda"]},
             func=_conversazione_cerca, risk="lettura", levels=FAMILY, riservato=True,

@@ -260,6 +260,10 @@ class RegistroConversazioni:
             **questo** satellite nella sua finestra di ascolto; altrimenti anonima;
           - scritto da uno schermo personale («schermo»): la conversazione della persona se
             c'è, altrimenti anonima;
+          - frase cortissima per continuità («continuita», 08/10, ciclo._per_continuita: la
+            persona riconosciuta dalla voce da poco su **questo** satellite): la sua
+            conversazione se è l'ultima di questo satellite o se non ce n'è una (nuova, con la
+            ripresa); se nel frattempo l'ha usata un altro satellite, anonima;
           - ospite o voce incerta: la conversazione anonima di questo satellite."""
         with self._cond:
             if persona_id and how == "voce":
@@ -275,6 +279,11 @@ class RegistroConversazioni:
                 if in_session and c is not None and c.chiave == chiave \
                         and self._conv.get(chiave) is c:
                     return c, "continua"
+            elif persona_id and how == "continuita":
+                chiave = self.chiave_persona(persona_id)
+                c = self._conv.get(chiave)
+                if c is None or corsia.conv is c:
+                    return self._di(chiave), "continuita"
             elif persona_id and how == "schermo":
                 c = self._conv.get(self.chiave_persona(persona_id))
                 if c is not None:

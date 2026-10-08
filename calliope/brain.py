@@ -1958,6 +1958,12 @@ class Brain:
                 self.tool_ctx.turno = self.turn_number
             except AttributeError:
                 pass
+            # La conversazione in corso nell'archivio (08/10): il modo cronologico di
+            # conversazione_cerca la salta, perché è già qui nella storia
+            try:
+                self.tool_ctx.conv_archivio = getattr(self._c(), "id_archivio", None)
+            except AttributeError:
+                pass
         self._offer = None        # azione proposta da un tool in questa risposta
         rules = getattr(self.tool_ctx, "regole", None)
         if isinstance(rules, list):

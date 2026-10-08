@@ -45,6 +45,9 @@ class ToolContext:
     # Numero della risposta in corso (lo imposta Brain): un'installazione proposta in una
     # risposta si può avviare solo nella successiva
     turno: int = 0
+    # L'id nell'archivio della conversazione in corso (lo imposta Brain, 08/10), o None: il modo
+    # cronologico di conversazione_cerca la salta (è già nella storia)
+    conv_archivio: Any = None
     # Il tool dell'azione in sospeso di questo turno (lo imposta Brain): solo per lui un «sì»
     # breve di chi amministra vale come conferma (calliope/conferme.py, 04/10)
     tool_in_sospeso: str | None = None

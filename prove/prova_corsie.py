@@ -162,6 +162,17 @@ def prova_scelta():
              o1.chiave == "ospite:sat:1" and o2.chiave == "ospite:sat:2" and o1 is not o2)
     o3, _ = reg.scegli(a, None, None, True)
     verifica("ospite di nuovo sullo stesso satellite: la stessa", o3 is o1)
+    # Continuità (08/10, ciclo._per_continuita): frase cortissima fuori dalla finestra
+    a.conv = c1
+    c10, come = reg.scegli(a, "dario-id", "continuita", False)
+    verifica("continuità sul satellite dove ha parlato: la sua conversazione",
+             c10 is c1 and come == "continuita", come)
+    c11, come = reg.scegli(b, "dario-id", "continuita", False)
+    verifica("continuità, ma l'ultima del satellite è un'altra: anonima",
+             c11.chiave == "ospite:sat:2" and come == "anonima", come)
+    c12, come = reg.scegli(a, "carla-id", "continuita", False)
+    verifica("continuità senza una conversazione sua: una nuova per la persona (la ripresa)",
+             c12.chiave == "persona:carla-id" and come == "continuita", come)
 
 
 # ───────────────────────── 2. Brain con il registro ─────────────────────────

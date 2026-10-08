@@ -62,7 +62,7 @@ flowchart LR
 | Ingresso | `calliope/satellite/` (`ServerSatelliti`, client), `calliope/schermi/` (Starlette, SSE, PWA del telefono) | WSS, PCM 16 kHz; da addormentata nessun audio lascia il dispositivo |
 | VAD e wake word | `vad.py` (Silero ONNX), `wakeword.py` (classificatore formato openWakeWord) | ripiego testuale se manca il modello acustico |
 | STT | `stt.py` | faster-whisper nel processo o whisper.cpp come server (API OpenAI), ripiego su CPU |
-| Chi parla | `speaker_id.py` (CAM++ ONNX, fbank in numpy) | soglia 0,48; sotto ~1 s di voce vale la conversazione, al più familiare |
+| Chi parla | `speaker_id.py` (CAM++ ONNX, fbank in numpy) | soglia 0,48; sotto ~1 s di voce vale la conversazione, o la persona riconosciuta da poco sullo stesso satellite (08/10), al più familiare |
 | Ciclo | `ciclo.py` (`Ciclo`, `Servizi`), `main.py` (`Avvio`, `Corsie`), `corsie.py` | un ciclo per satellite, una conversazione per persona |
 | Contesto | `brain.py`, `contesto.py`, `conversazione.py`, `compressione.py`, `conversazioni.py` | prefisso fisso in cache; `llm_num_ctx: auto`; compressione a 75/90 %; archivio FTS5 + embedding (RRF) |
 | LLM | `brain.py` (`OllamaBackend`, `OpenAIBackend`), `config.PROFILI_LLM` | `llm_profilo` sceglie backend, URL, modello, thinking e reti in una riga |
@@ -182,7 +182,7 @@ Calliope vera, satelliti e voci finte; **dal vero** = usata a voce.
 | Minori | fasce d'età con preset, tutori, guardiano, rilevatore di pericolo con avviso, compiti guidati, orari, tempo di gioco, richieste ai tutori; esercizi generati al momento (matematica e italiano) e corretti dal programma (08/10) | a secco, e2e | [minori](docs/aree/minori.md) |
 | Memoria | per persona e della casa; i «fatti» che sono ordini si rifiutano | dal vero | [memoria-agenda-liste](docs/aree/memoria-agenda-liste.md) |
 | Agenda e liste | timer, promemoria, appuntamenti (durate e orari convertiti dal programma), liste senza doppioni | dal vero | [memoria-agenda-liste](docs/aree/memoria-agenda-liste.md) |
-| Conversazioni | una per persona tra i satelliti; compressione con riassunto; archivio di 30 giorni con ricerca ibrida; scheda «Conversazione» con la trascrizione sugli schermi personali, in diretta e scaricabile (08/10) | a secco, dal vero | [contesto-conversazione](docs/aree/contesto-conversazione.md) |
+| Conversazioni | una per persona tra i satelliti; compressione con riassunto; archivio di 30 giorni con ricerca ibrida e cronologica («di cosa stavamo parlando?», «più indietro», 08/10); scheda «Conversazione» con la trascrizione sugli schermi personali, in diretta e scaricabile (08/10) | a secco, dal vero | [contesto-conversazione](docs/aree/contesto-conversazione.md) |
 | Biblioteca | Wikipedia italiana, Vikidia, Wikizionario, Wikiquote (Kiwix ZIM in puro Python + FTS5), fonte citata | dal vero | [biblioteca](docs/aree/biblioteca.md) |
 | Ricerca web | SearXNG locale facoltativo; dati personali tolti dalle domande; testo dei siti non fidato | dal vero | [biblioteca](docs/aree/biblioteca.md) |
 | Casa | Home Assistant: comandi tramite l'agente di HA con verifica a secco; serrature, allarmi, cancelli, valvole, riavvii solo in lettura; se HA non trova il dispositivo, Calliope lo cerca tra le entità esposte per nome, alias e area e riprova col nome esatto (08/10) | dal vero | [casa](docs/aree/casa.md) |
@@ -365,8 +365,8 @@ Prossimi passi decisi, senza date:
 2. **Immagini generate in locale** (FLUX.2 [klein] 4B), con filtri e regole per i minori.
 3. **Secondo fattore** per chi amministra: conferma dal telefono, chiave vocale.
 4. **Pannello di amministrazione** con le azioni.
-5. **Ricerca cronologica nelle conversazioni** («di cosa stavamo parlando?»); frasi pronte dei
-   tool meno monotone.
+5. Frasi pronte dei tool meno monotone (la ricerca cronologica nelle conversazioni, «di cosa
+   stavamo parlando?», «più indietro», c'è dall'08/10).
 6. Sicurezza per valore: decidere se accenderla dopo i giorni in ombra.
 7. Poi: interfono tra satelliti, conversazione di stanza, mappe e luoghi, satellite su
    Raspberry, altre fonti italiane nella biblioteca.

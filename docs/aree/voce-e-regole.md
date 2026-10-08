@@ -552,3 +552,38 @@ del turno (`SVILUPPO_MSG`) al collaudo e alla revisione: «perché?» → `svilu
 `sviluppo_chiudi_sospende`, `sviluppo_tappa_continua`, `sviluppo_tappa_cambia`,
 `sviluppo_correggi_nuovo`; «chiamata_» davanti al nome di un tool è un prefisso per `TextCallGuard`
 come «call_».
+
+## Spiegazioni inventate su sé stessa (08/10 sera, ramo `conversazioni-cronologiche`)
+
+**Caso vero della DGX** (08/10 17:43, 26B): dopo tre ricerche nelle conversazioni passate,
+«Come mai secondo te non sei riuscita a recuperare queste informazioni…? Forse c'è un buco?» →
+«non è che non le abbia recuperate, è che ho dovuto fare un piccolo lavoro di ricerca nei
+nostri vecchi scambi per essere sicura di non inventarmi nulla»: falso, la ricerca per
+somiglianza aveva trovato a caso (il modo cronologico è in
+[contesto-conversazione](contesto-conversazione.md)).
+
+**Fatto**: una spinta nel prompt di sistema, dopo la frase sulla memoria: «Se ti chiedono perché
+hai risposto così o perché qualcosa non è andato, non inventare spiegazioni sul tuo
+funzionamento: racconta con parole semplici cosa hai fatto davvero in questa conversazione,
+oppure di' che non lo sai. Per tutto il resto chiama i tool come sempre.» Nel prompt di sistema
+e non nei dati del turno: la domanda non si riconosce dal testo (principio 10), e la storia ha
+già le chiamate dei tool (i risultati riservati come traccia neutra).
+
+**Misure** (gemma4 e4b, `prove/prova_conversazioni_ollama.py`, 3 giri, due storie: la sequenza
+cronologica e il caso vero):
+- **Senza la spinta** (12 risposte in due misure): 11 con una giustificazione inventata («è un
+  modo per assicurarmi di darti la risposta più accurata», «non ho dimenticato nulla di ciò che
+  mi hai detto»), 9 con `calliope_stato` chiamato e la sua frase attaccata in fondo.
+- **Prima versione** («…di' cosa hai fatto davvero in questa conversazione (i tool chiamati e
+  cosa hanno risposto) o che non lo sai»): il modello nominava il tool («usando il tool
+  conversazion…»), la rete `nome_tool_parlato` lo fermava e restava «Non ci sono riuscita: puoi
+  ripetere la richiesta?» (3/6).
+- **Senza «Per tutto il resto chiama i tool come sempre»**: «Ma noi non avevamo parlato anche
+  del tokamak?» in una conversazione nuova non cercava più (1/8 contro 7/8 senza la spinta, e
+  7/8 con la frase finale): come per la modalità e i dati del turno, un «non fare» nel prompt
+  spegne i tool se non si ridice di chiamarli.
+- **Versione finale**: 6/6 raccontano cosa hanno fatto («Ho cercato di recuperare le
+  conversazioni passate usando lo strumento apposito, ma non ho trovato un riepilogo
+  immediato»), nessuna giustificazione inventata, nessun `calliope_stato`; resta qualche frase
+  generica («non ho un accesso diretto e immediato a tutti i nostri scambi»). «Perché il cielo è
+  blu?» 3/3 con la spiegazione vera; `prova_brain_ollama` uguale. Da rifare col 26B sulla DGX.
