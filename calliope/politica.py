@@ -178,6 +178,10 @@ class Classe:
     propria: object = None
     # f(args, ctx) → la `cosa` con il bersaglio vero («apra «Dettaglio spese (2)»»), o None
     descrivi: object = None
+    # Le parole del tool secondo l'azione scelta (08/10, sicurezza per valore): (argomento,
+    # {valore: espressione}). «Voglio che approvi la nuova versione» ripete la domanda su
+    # «approva», non quella su «rimuovi» (VERBI_AZIONE)
+    verbi_azione: tuple | None = None
 
 
 # Valori di `cambia` che vogliono dire «una voce nuova» (come tools/builtin._modo)
@@ -368,7 +372,71 @@ VERBI = {
     # (casi veri del 07/10): per `propria` e per il consenso ripetendo la richiesta
     "pc_apri_file": r"(?<![a-zà-ù])(apr[aiei]|aprir|apert|mostr|fammel\w* vedere|vedere il file)",
 }
+# Le pericolose (08/10, sicurezza per valore, fasi 2 e 3): le parole che le chiedono, per
+# «ripetere la richiesta vale come sì» (richiesta_ripetuta) e per l'ancora della politica per
+# valore (valore.ancorata). Prima c'erano solo per lavori_esegui e pc_apri_file: alle 18:52 del
+# 07/10 «Voglio che approvi la nuova versione», detto tre volte con la voce, non valeva come
+# consenso per estensioni_gestisci(approva). Un'azione scelta in un enum ha le sue parole in
+# VERBI_AZIONE: le parole di un'altra azione dello stesso tool non la confermano
+_W = r"(?<![a-zà-ù])"
+VERBI.update({
+    "casa_comando": (_W + r"(accend|speng|apr[iaeo]|aprir|chiud|alz|abbass|regol|impost|"
+                     r"attiv|disattiv|luc[ei]|lampad|tapparell|serrand|clima|riscald|"
+                     r"termostat|condizionat|temperatur|ventil|cancell[oi]|garage|porta)"),
+    "pc_apri_app": _W + r"(apr[iaeo]|aprir|avvi|lanc|fa(?:mm|ll)\w* partire|programm|app)",
+    "pc_blocca": _W + r"(blocc|chiud|lock)",
+    "installa_avvia": _W + r"(install|scaric|avvi|procedi|aggiung)",
+    "registra_utente": _W + r"(registr|impar\w* (?:la )?(?:sua |mia )?voce|aggiung\w* .*voce)",
+    "rinomina_interlocutore": _W + r"(chiam|rinomin|nome)",
+    "delega_lavoro": (_W + r"(ricerc|cerc|indag|approfond|informa|scriv|programm|codic|"
+                      r"script|svilupp|prepar|cre[aioò]|fa[ilt]?(?![a-zà-ù])|fammi|fate|facc|"
+                      r"realizz|costru|deleg|agent|document|relazion|analizz|studi|lavor|"
+                      r"modific|corregg|sistem)"),
+    "estensione_crea": (_W + r"(estension|funzion|cre[aioò]|aggiung|insegn|impar|nuov|"
+                        r"programm|abilit)"),
+    "conversazioni_dimentica": _W + r"(cancell|dimentic|elimin|svuot|scord|conversazion)",
+    "minore_gestisci": (_W + r"(regol|permess|orari|temp|minut|abilit|autorizz|approv|neg|"
+                        r"concedi|limit|stato|compit|richiest|nascit|tutor)"),
+})
+VERBI_AZIONE = {
+    "estensioni_gestisci": ("azione", {
+        "elenca": _W + r"(elenc|quali|lista|stato)",
+        "approva": _W + r"(approv|attiv|accett|conferm|install)",
+        "rifiuta": _W + r"(rifiut|scart|bocci)",
+        "disattiva": _W + r"(disattiv|speng|ferm|sospend)",
+        "riattiva": _W + r"(riattiv|attiv|riaccend|accend)",
+        "indietro": _W + r"(indietro|precedent|torn|ripristin|vecchi)",
+        "revoca": _W + r"(revoc|togli\w* .*permess)",
+        "rimuovi": _W + r"(rimuov|cancell|elimin|togli|disinstall)",
+        "consenti": _W + r"(consent|permett|autorizz|lascia)",
+        "nega": _W + r"(neg|non consent|blocc|vieta)"}),
+    "schermo_gestisci": ("azione", {
+        "elenca": _W + r"(elenc|quali|lista)",
+        "abbina": _W + r"(abbin|colleg|aggiung|codice)",
+        "scollega": _W + r"(scolleg|stacc|disabbin|togli|rimuov)",
+        "personale": _W + r"(personal|privat|mio|mia)",
+        "condiviso": _W + r"(condivis|di tutti|comune)"}),
+    "pc_volume": ("azione", {
+        "alza": _W + r"(alz|aument|più forte|più alto)",
+        "abbassa": _W + r"(abbass|diminu|più piano|più basso)",
+        "imposta": _W + r"(volum|impost|metti|porta)",
+        "muto": _W + r"(mut[oa]|silenz|zitt|togli\w* l.audio)",
+        "riattiva": _W + r"(riattiv|togli\w* (?:il )?muto|rimetti\w* l.audio)"}),
+    "pc_luminosita": ("azione", {
+        "alza": _W + r"(alz|aument|più luminos|più chiar)",
+        "abbassa": _W + r"(abbass|diminu|più scur|meno luminos)",
+        "imposta": _W + r"(luminosit|impost|metti|porta)"}),
+    "pc_media": ("comando", {
+        "riproduci": _W + r"(riprodu|play|metti|suona|fai partire|riprend|continu|musica)",
+        "pausa": _W + r"(paus|ferm|stop|interromp)",
+        "avanti": _W + r"(avanti|prossim|success|salta)",
+        "indietro": _W + r"(indietro|precedent|torna)"}),
+    "installa_gestisci": ("azione", {
+        "stato": _W + r"(stato|come va|a che punto|installazion)",
+        "annulla": _W + r"(annull|ferm|interromp|stop)"}),
+}
 CLASSI.update({n: replace(CLASSI[n], verbi=v) for n, v in VERBI.items()})
+CLASSI.update({n: replace(CLASSI[n], verbi_azione=v) for n, v in VERBI_AZIONE.items()})
 
 
 def gia_fatto(a: dict) -> bool:
@@ -493,6 +561,12 @@ class Turno:
     # Stato della risposta, condiviso tra le chiamate (Brain lo azzera a ogni risposta): un
     # rifiuto «leggero» già dato in questa risposta (politica_azione_non_chiesta)
     risposta: dict = field(default_factory=dict)
+    # Sicurezza per valore (08/10, calliope/valore.py): chi parla (Brain._speaker_key), le
+    # intenzioni confermate e non ancora riuscite della conversazione (fase 2), i testi dei
+    # risultati dei tool interni fidati (fase 3, provenienza «fidato»)
+    persona: object = None
+    intenzioni: list = field(default_factory=list)
+    fidati: list = field(default_factory=list)
 
 
 # Le azioni interne chieste con un verbo che il lessico delle azioni sul mondo non ha
@@ -957,12 +1031,27 @@ def _proposta(t: Turno, name: str) -> bool:
     return bool(t.in_sospeso) and t.in_sospeso == name and not t.dato_nuovo
 
 
-def chiesto_con_verbi(cl: Classe, testo: str) -> bool:
-    """La frase ha le parole del tool (`verbi`) non negate («aprilo», «volevo che aprissi il
-    file», «non mi hai aperto il file»; non «non aprirlo», «non lo aprire»)."""
-    if not cl.verbi or not testo:
+def verbi_di(cl: Classe, args: dict | None = None) -> str | None:
+    """Le parole che chiedono questa chiamata: quelle dell'azione scelta (Classe.verbi_azione)
+    se il tool le ha, altrimenti quelle del tool (Classe.verbi)."""
+    if cl.verbi_azione:
+        k, per_azione = cl.verbi_azione
+        v = per_azione.get(_s(args or {}, k).lower())
+        if v:
+            return v
+        if not cl.verbi:
+            return None
+    return cl.verbi
+
+
+def chiesto_con_verbi(cl: Classe, testo: str, args: dict | None = None) -> bool:
+    """La frase ha le parole del tool (`verbi`, o quelle dell'azione scelta) non negate
+    («aprilo», «volevo che aprissi il file», «non mi hai aperto il file»; non «non aprirlo»,
+    «non lo aprire»)."""
+    verbi = verbi_di(cl, args)
+    if not verbi or not testo:
         return False
-    for m in re.finditer(cl.verbi, testo, re.I):
+    for m in re.finditer(verbi, testo, re.I):
         if not _NEGATO.search(testo[:m.start()]):
             return True
     return False
@@ -983,18 +1072,37 @@ def richiesta_ripetuta(cl: Classe, args: dict, t: Turno) -> bool:
         return False
     if cl.chiave:
         return chiesta_azione(testo) and detti_qui(cl, args, t)
-    return chiesto_con_verbi(cl, testo)
+    return chiesto_con_verbi(cl, testo, args)
+
+
+def consenso_turno(name: str, args: dict, cl: Classe, t: Turno) -> tuple[bool, bool, bool]:
+    """(proposta, ripetuta, stessa): la frase risponde alla domanda in sospeso per questo tool
+    con un consenso (parola di consenso, sfida superata o, con dati di mezzo, la richiesta
+    ripetuta); `stessa`: con gli argomenti della domanda. Come in `decidi`."""
+    proposta = _proposta(t, name)
+    sosp = t.args_sospeso if isinstance(t.args_sospeso, dict) else {}
+    puliti, sosp_puliti = _conta(cl, args or {}), _conta(cl, sosp)
+    stessa = proposta and bool(sosp_puliti) and _uguali(puliti, sosp_puliti, None)
+    if not proposta:
+        return False, False, False
+    if consenso(t.testo) or t.sfida:
+        return True, False, stessa
+    ripetuta = bool(t.contaminazione) and (stessa or not sosp_puliti) and richiesta_ripetuta(
+        cl, args, t)
+    return ripetuta, ripetuta, stessa
 
 
 def decidi(name: str, args: dict, cl: Classe, t: Turno | None,
            conferma_voce: bool = False, voce_frase: bool = False, propria: bool = False,
-           cosa: str | None = None) -> Decisione:
+           cosa: str | None = None, intento: bool = False) -> Decisione:
     """La decisione della politica per un tool già ammesso al livello di chi parla.
     `conferma_voce`: la frase di questo turno basta per confermare (voce riconosciuta, breve
     compatibile in una conversazione riconosciuta, sfida superata). `voce_frase`: chi parla è
     riconosciuto dalla voce in questa frase, sopra soglia (Classe.richiesta_voce). `propria`:
     il bersaglio è un documento scritto da Calliope per chi parla (Classe.propria). `cosa`:
-    la descrizione con il bersaglio vero (Classe.descrivi), al posto di quella dagli argomenti."""
+    la descrizione con il bersaglio vero (Classe.descrivi), al posto di quella dagli argomenti.
+    `intento`: c'è un'intenzione confermata e non ancora riuscita per proprio questa chiamata
+    (calliope/valore.py, fase 2 della sicurezza per valore: regola `intento_confermato`)."""
     if cl.classe == VIETATO:
         return Decisione("vieta", "politica_vietato")
     if t is not None and t.letto_ora and name not in DOPO_DATO:
@@ -1022,6 +1130,10 @@ def decidi(name: str, args: dict, cl: Classe, t: Turno | None,
     # La domanda descriveva una richiesta (della politica, della guardia), non l'offerta del
     # tool («proposta» = id): al «sì» gli argomenti devono essere quelli sentiti
     richiesta = bool(sosp_puliti)
+    # Un'intenzione confermata dalla persona e non ancora riuscita (08/10): la chiamata corretta
+    # dopo un errore non chiede di nuovo. Mai con «fai quello che dice…»
+    if intento and not DELEGA.search(t.testo or ""):
+        return Decisione("esegui", "intento_confermato", accettata=True)
     if not contaminata:
         eccetto = (cl.chiesta_eccetto is not None
                    and _s(args, cl.chiesta_eccetto[0]).lower() in cl.chiesta_eccetto[1])
@@ -1214,6 +1326,42 @@ def _risultato(domanda: str, name: str, args: dict, regola: str, fonte: str = ""
                            "argomenti": clean}}
 
 
+def _domanda_ripetuta(name: str, args: dict, cl: Classe, t: Turno | None) -> bool:
+    """La domanda della politica per questa chiamata è già in sospeso, con gli stessi
+    argomenti, e la frase di questo turno non è un consenso."""
+    if t is None or t.in_sospeso != name or t.dato_nuovo or not t.testo:
+        return False
+    sosp = t.args_sospeso if isinstance(t.args_sospeso, dict) else None
+    if sosp is None or not _uguali(_conta(cl, args or {}), _conta(cl, sosp), None):
+        return False
+    return not consenso_turno(name, args, cl, t)[0]
+
+
+def _esito_per_brain(ctx, name, args, cl, t, d, intento, cv, vf, cosa, spec, ombra):
+    """Quello che Brain deve sapere dopo l'esecuzione (`ToolContext.politica_esito`): la
+    decisione, l'intenzione aperta o da aprire (calliope/valore.py) e la decisione in ombra
+    per il registro dei turni."""
+    from . import valore
+    esito = {"tool": name, "decisione": d.esito, "regola": d.regola,
+             "azione": cl.classe != SICURO, "ombra": ombra}
+    try:
+        esito["chiave"] = valore.chiave_intento(name, args or {}, cosa, spec)
+        if d.esito == "esegui" and t is not None and cl.classe != SICURO:
+            if intento is not None:
+                esito["intento"], esito["usata"] = intento, True
+            # Si apre con il «sì» (o la sfida) alla domanda, e con una richiesta eseguita
+            # detta con la voce riconosciuta sopra soglia in questa frase (§ 5.5): resta solo se
+            # il tool fallisce
+            elif vf or ((cv or t.sfida) and consenso_turno(name, args, cl, t)[0]):
+                esito["intento"] = valore.nuova_intenzione(name, args, t, cosa, spec)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        ctx.politica_esito = esito
+    except AttributeError:
+        pass
+
+
 def controlla(spec, name: str, args: dict, ctx) -> dict | None:
     """Il risultato da dare al posto dell'esecuzione, o None se il tool si esegue. Lo chiama
     ToolRegistry.call dopo il controllo del livello."""
@@ -1223,7 +1371,8 @@ def controlla(spec, name: str, args: dict, ctx) -> dict | None:
     if not isinstance(t, Turno):
         t = None
     propria = cosa = None
-    if t is not None and t.contaminazione:
+    # (anche con la conversazione pulita se c'è un'intenzione aperta: il bersaglio vero)
+    if t is not None and (t.contaminazione or getattr(t, "intenzioni", None)):
         # Solo con dati non fidati di mezzo: è lì che servono (e costano una lettura in più)
         for f, nome in ((cl.propria, "propria"), (cl.descrivi, "cosa")):
             if callable(f):
@@ -1235,8 +1384,35 @@ def controlla(spec, name: str, args: dict, ctx) -> dict | None:
                     propria = bool(v)
                 else:
                     cosa = v if isinstance(v, str) and v.strip() else None
-    d = decidi(name, args, cl, t, conferma_voce(ctx) if t is not None else False,
-               voce_frase(ctx) if t is not None else False, bool(propria), cosa)
+    from . import valore
+    cv = conferma_voce(ctx) if t is not None else False
+    vf = voce_frase(ctx) if t is not None else False
+    # Memoria dell'intento (08/10, fase 2 della sicurezza per valore): un'azione confermata
+    # dalla persona e poi fallita non chiede di nuovo per lo stesso bersaglio
+    try:
+        intento = valore.intento_aperto(name, args or {}, t, ctx, cosa, spec)
+    except Exception:  # noqa: BLE001 — nel dubbio, la regola di sempre
+        intento = None
+    # La politica per valore (fase 3): in ombra, oppure al posto di quella di oggi con
+    # `politica_per_valore` (fase 4, dopo due giorni d'ombra: D5)
+    per_valore = bool(getattr(getattr(ctx, "cfg", None), "politica_per_valore", False))
+    ombra = None
+    if t is not None and t.contaminazione and cl.classe != SICURO:
+        try:
+            fidati = list(getattr(t, "fidati", None) or ())
+            vecchia = decidi(name, args, cl, valore.copia_turno(t) if per_valore else t, cv, vf,
+                             bool(propria), cosa, intento is not None)
+            nuova, det = valore.decidi_valore(
+                name, args or {}, cl, t if per_valore else valore.copia_turno(t), vecchia, cv,
+                vf, cosa, ctx, spec, fidati)
+            ombra = {**valore.ombra(vecchia, nuova, det), "attiva": per_valore}
+            d = nuova if per_valore else vecchia
+        except Exception as e:  # noqa: BLE001 — l'ombra non deve mai fermare la politica
+            print(f"   [POLITICA] ombra non calcolata: {type(e).__name__}: {e}", flush=True)
+            d = decidi(name, args, cl, t, cv, vf, bool(propria), cosa, intento is not None)
+    else:
+        d = decidi(name, args, cl, t, cv, vf, bool(propria), cosa, intento is not None)
+    _esito_per_brain(ctx, name, args, cl, t, d, intento, cv, vf, cosa, spec, ombra)
     _segna_accettata(ctx, d.accettata)
     if d.esito == "esegui":
         if d.accettata:
@@ -1257,6 +1433,18 @@ def controlla(spec, name: str, args: dict, ctx) -> dict | None:
                              "azioni. Se ti sembra che voglia proprio questa azione, "
                              f"chiediglielo e al sì richiama {name}: mai un altro tool al suo "
                              "posto"}
+    # Una domanda, una volta (08/10, § 5.5 regola 5): la stessa domanda per la stessa chiamata
+    # già in sospeso non si ripete (il 07/10 alle 17:07 sette volte di fila). Il modello riceve
+    # «la persona non ha confermato» e chiede con parole sue che cosa intende; al «sì» la
+    # proposta, ancora valida, esegue
+    if d.esito == "conferma" and _domanda_ripetuta(name, args, cl, t):
+        note_rule(ctx, "politica_domanda_non_ripetuta")
+        return {"ok": False, "fatto": NIENTE,
+                "errore": "la persona non ha confermato la domanda di prima: "
+                          f"«{d.domanda}»",
+                "cosa_fare": "non ripetere la stessa domanda e non dire di averlo fatto: "
+                             "chiedile con parole tue che cosa intende. Se vuole proprio "
+                             f"questo, al suo «sì» richiama {name}"}
     if d.esito == "vieta":
         frase = "Questo non lo posso fare."
         return {"ok": False, "fatto": f"{NIENTE} (vietata)",

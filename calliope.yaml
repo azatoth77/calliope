@@ -245,6 +245,20 @@ llm:
   # 3, e a 300 token 0 su 3 anche senza; costo +1,1–1,8 s sulla prima frase. I risultati
   # normali di internet (5 estratti) restano sotto. 0 = spenta; solo con l'API di Ollama
   quarantena_token: 800
+  # Memoria dell'intento (08/10, calliope/valore.py, fase 2 della sicurezza per valore;
+  # decisione D4): un'azione confermata dalla persona riconosciuta e poi fallita resta aperta
+  # al più questi secondi, per lo stesso tool, lo stesso bersaglio e la stessa persona: la
+  # chiamata corretta («riprova», l'indice giusto) non chiede di nuovo. Il 07/10 alle 17:07
+  # servivano 10 turni per aprire un foglio appena creato. 0 = fino alla chiusura della
+  # conversazione
+  intento_valido_s: 600.0
+  # Politica per valore (08/10, calliope/valore.py, fase 4; decisione D5): con un dato non
+  # fidato di mezzo decide la matrice provenienza × effetto al posto della regola «pericolosa
+  # ⇒ conferma». Spenta, la decisione nuova si calcola lo stesso e va nel registro dei turni
+  # (`politica_ombra` di ogni chiamata; confronto in `calliope stato --turni`). Si accende
+  # dopo due giorni d'ombra senza esecuzioni in più con un bersaglio preso dal dato; per
+  # tornare indietro basta rimetterla a false
+  politica_per_valore: false
   # Ciò che Calliope dice con dati non fidati di mezzo (06/10, calliope/riferire.py): ogni
   # frase della risposta si controlla prima di dirla (numeri a pagamento, codici e password da
   # dare, soldi verso un conto, recapiti presi solo dal dato e non chiesti, indicazioni
@@ -1357,6 +1371,12 @@ registro:
   # dicono l'avvio e `calliope stato`; dettagli con `calliope stato --turni`. 0 = mai. Dal 02
   # al 05/10 la DGX era passata da 0,78 a 2,05 s senza che nessuno lo vedesse
   latenza_avviso_s: 1.2
+  # Attrito della sicurezza (08/10, calliope/attrito.py, decisione D6): oltre queste domande di
+  # sicurezza ogni 100 turni con una frase (giorni con almeno 50 turni), o con una domanda
+  # ripetuta per la stessa azione entro 5 minuti, lo dicono l'avvio e `calliope stato`;
+  # dettagli con `calliope stato --turni`. Il 07/10 erano 15,8, 28 su 41 falsi positivi
+  # (docs/ricerche/2026-10-07-sicurezza-per-valore.md). Obiettivo ≤ 2; 0 = solo le ripetute
+  attrito_avviso: 3.0
   # Diagnostica: CALLIOPE_DEBUG_AUDIO registra ogni frase captata (WAV + trascrizione).
   # (variabile d'ambiente CALLIOPE_DEBUG_AUDIO, che vince su questo file)
   debug_audio_dir: null

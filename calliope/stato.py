@@ -9,7 +9,8 @@ il prossimo passo (registro delle capacità, calliope/capacita.py).
     python -m calliope.stato --turni [--giorni N]
                                               latenza vera della voce per giorno (prima frase,
                                               mediana e p90) con le cause, dal registro dei
-                                              turni (calliope/latenza.py)
+                                              turni (calliope/latenza.py); attrito della
+                                              sicurezza per giorno (calliope/attrito.py)
     python -m calliope.stato --turni --pause [--giorni N]
                                               pause dentro la frase per persona e canale,
                                               tagli probabili e la soglia che si sceglierebbe
@@ -181,13 +182,22 @@ def main(argv=None) -> int:
             r = pause.riassunto(latenza.leggi(cfg.turn_log_dir, giorni))
             print(json.dumps(r, ensure_ascii=False, indent=2) if as_json else pause.testo(r))
             return 0
-        dati = latenza.per_giorno(latenza.leggi(cfg.turn_log_dir, giorni))
+        from . import attrito
+        turni = latenza.leggi(cfg.turn_log_dir, giorni)
+        dati = latenza.per_giorno(turni)
         soglia = float(getattr(cfg, "latenza_avviso_s", 1.2) or 0) or float("inf")
+        # L'attrito della sicurezza (08/10, calliope/attrito.py): domande di sicurezza ogni 100
+        # turni, ripetute, poi eseguite, e la politica per valore in ombra
+        sicurezza = attrito.per_giorno(turni)
+        soglia_a = float(getattr(cfg, "attrito_avviso", 3.0) or 0)
         if as_json:
-            print(json.dumps({"giorni": dati, "soglia_s": getattr(cfg, "latenza_avviso_s", None)},
+            print(json.dumps({"giorni": dati, "soglia_s": getattr(cfg, "latenza_avviso_s", None),
+                              "attrito": sicurezza, "attrito_soglia": soglia_a},
                              ensure_ascii=False, indent=2))
         else:
             print(latenza.testo(dati, soglia))
+            print()
+            print(attrito.testo(sicurezza, soglia_a))
         return 0
     if "--installa" in argv:
         i = argv.index("--installa")
@@ -236,6 +246,15 @@ def main(argv=None) -> int:
         if avviso:
             print()
             print(f"Latenza: {avviso} Dettagli: --turni")
+        # Troppe domande di sicurezza oggi o ieri, o una ripetuta (08/10, calliope/attrito.py)
+        try:
+            from . import attrito
+            avviso = attrito.avviso_recente(cfg)
+        except Exception:  # noqa: BLE001
+            avviso = None
+        if avviso:
+            print()
+            print(f"{avviso} Dettagli: --turni")
     return 0
 
 

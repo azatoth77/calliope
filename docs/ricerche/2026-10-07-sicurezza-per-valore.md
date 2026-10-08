@@ -7,6 +7,16 @@ granularità, non nel principio. In parallelo il ramo `correzioni-giro9` ripara 
 stesso caso del 07/10: la conferma che si ripete con una foto di mezzo, e il «Fatto.» detto dopo la
 sfida con il tool fallito. Questo documento ne cerca la causa e non tocca quel ramo.*
 
+**Stato all'08/10** (ramo `sicurezza-valore`). Dario ha deciso D1–D8 come raccomandato (§ 9) e di
+non aspettare venerdì: fasi 1–3 fatte, la 4 dopo due giorni d'ombra. Fase 1: `calliope/attrito.py`
+(`calliope stato --turni`, avviso D6). Fase 2, attiva: parole per tutte le pericolose (anche per
+l'azione scelta: il caso del 07/10 alle 18:52), memoria dell'intento, una domanda una volta. Fase 3,
+in ombra: `calliope/valore.py`, campo `politica_ombra` nel registro, interruttore
+`politica_per_valore` spento. Le differenze dal progetto (tutte più strette: il dato vince sul
+fidato, parole distintive solo nomi propri, sigle e numeri, tool senza classe mai ancorati) e come
+leggere l'ombra sono nel documento d'area
+[sicurezza-politica](../aree/sicurezza-politica.md#sicurezza-per-valore-fasi-13-0810-ramo-sicurezza-valore).
+
 ## 0. In breve
 
 **La domanda di Dario (07/10).** «Ho dei dubbi sul modello di security: più il contesto è
