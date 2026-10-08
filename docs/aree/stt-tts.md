@@ -363,7 +363,7 @@ passate, rifiutata (`permesso_livello`). Dieci secondi dopo, con 1,4 s di voce, 
 breve «breve» (vale chi parlava) non c'entrava: la prima era fuori dalla finestra d'ascolto, la
 seconda aveva un ospite prima. Sotto ~1 s il punteggio non è affidabile: sulla DGX (02–08/10)
 le frasi «breve» di chi parlava stanno a 0,49 di mediana (p05 0,18), e 57 frasi corte su 266
-non sono state riconosciute (quasi tutte col migliore che era chi parlava da poco).
+non sono state riconosciute (ospite).
 
 **Fatto** (`ciclo._per_continuita`, regola `voce_continuita`, principio 10: riguarda l'audio):
 una frase più corta di `speaker_min_voice_s`, quando non vale già la frase breve, vale il
