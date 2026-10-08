@@ -1346,7 +1346,8 @@ class Ciclo:
         speaker_ctx.current_speaker = name
         secondo, sim2 = getattr(t, "voce_secondo", (None, None))
         self.rec["voce"] = {"nome": name, "migliore": best, "punteggio": round(sim, 3),
-                            "modo": "continuita" if t.continuita else how, "voce_s": round(t.voiced_s, 2), "aggiornata": adapted,
+                            "modo": "continuita" if t.continuita else how,
+                            "voce_s": round(t.voiced_s, 2), "aggiornata": adapted,
                             # Il secondo profilo e la distanza dal primo (07/10): per tarare
                             # `speaker_id_margine` e `minori_margine_amministra` sui turni veri
                             **({"secondo": secondo, "secondo_punteggio": round(sim2, 3),
