@@ -148,3 +148,15 @@ prova: [`prove/manuali/e2e-dgx.md`](../../prove/manuali/e2e-dgx.md).
     ritorno automatico, torna), dati in `~/calliope` fuori dal codice, VAD senza torch,
     Whisper su un server con ripiego su CPU, voce su Ollama o vLLM. Provato a secco su
     Windows (`prova_linux.py`, `prova_gestore.py`): **la DGX vera non è stata toccata**. *[Storico (02/10): dalla sera del 02/10 Calliope gira sulla DGX come servizio; vedi «Setup (DGX Linux)» qui sopra.]*
+
+## SearXNG tenuto aggiornato (09/10, ramo `searxng-aggiornamento`)
+
+`calliope motore searxng controlla | aggiorna | novita | storia` gira in Python
+(`calliope.web.motore`, dal gestore come `esegui`, nella cartella dei dati: stesso stato
+`motore/searxng.json` e stesso blocco di Calliope); le altre azioni restano dello script
+(`avvia`, `stato`, `prova`, `diagnosi` e le nuove `immagine`, `candidata`, `togli-candidata`,
+`usa`, `dimentica`, `pulisci-immagini`). Calliope chiama lo script con bash e docker (l'utente
+è nel gruppo `docker`): la copia di prova `calliope-searxng-candidata` su 127.0.0.1:10004, il
+container vero rifatto con `usa`. L'immagine scelta sta in `~/calliope-motore/searxng/immagine`
+e vince su quella fissata nello script finché non è più vecchia. Niente sudo, nessun altro
+container toccato. Procedura della prima prova vera e dettagli in [biblioteca](biblioteca.md).

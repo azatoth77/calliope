@@ -149,7 +149,7 @@ Linux x86-64: il lock lo include e l'installatore è lo stesso, ma il percorso *
 | whisper.cpp | `calliope motore whisper …` | 8003 | `ggml-large-v3-turbo.bin` 1,6 GB |
 | vLLM agente (facoltativo) | `calliope motore vllm agente avvia` | 8000 | `nvidia/Qwen3.6-35B-A3B-NVFP4` (pesi scaricati a mano, comando stampato) |
 | vLLM voce (facoltativo) | `calliope motore vllm voce avvia` | 8001 | `nvidia/Gemma-4-26B-A4B-NVFP4` |
-| SearXNG (facoltativo) | `calliope motore searxng avvia` | 8004 | immagine ufficiale con digest fissato |
+| SearXNG (facoltativo) | `calliope motore searxng avvia` | 8004 | immagine ufficiale con digest fissato; dal 09/10 controllo quotidiano e aggiornamento provato accanto (`calliope motore searxng controlla\|aggiorna`, «Aggiorna» nel cruscotto) |
 | Sandbox | `calliope motore sandbox costruisci [python\|csharp\|javascript]` | — | ~290 MB (Python), ~300 MB (C#) |
 | Calliope | `calliope avvia` | 8770 schermi, 8771 satelliti | CAM++, voci Piper, biblioteca (~12 GB, facoltativa) |
 

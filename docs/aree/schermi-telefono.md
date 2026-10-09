@@ -342,7 +342,7 @@ perché non cambia la voce. Prove `prova_cruscotto.py` (a secco) e `prova_crusco
   può contenere ciò che è stato detto); richieste in attesa: avvisi ai tutori non ancora detti
   (solo quanti), estensioni da approvare (nome e versione), lavori in attesa di risposta e in
   corso (solo quanti, mai i titoli).
-- **Niente azioni**: solo «Aggiorna» (rilegge) e «Chiudi» (toglie la scheda); revoche e
+- **Niente azioni** (storico: dal 09/10 la ricerca web ha «Controlla» e «Aggiorna», sezione sotto): solo «Aggiorna» (rilegge) e «Chiudi» (toglie la scheda); revoche e
   approvazioni restano a voce o da terminale, qui il comando come testo. Niente dati personali
   di altri: niente testi delle conversazioni, ricordi, documenti, titoli; gli ospiti nel
   registro non hanno testi comunque.
@@ -657,3 +657,38 @@ satelliti nella stessa stanza vale se lo è una sorgente). La pagina degli scher
 stato la riga piccola «In compagnia: chiamami per nome» (`.voce-compagnia`), anche quando si
 riaddormenta; il telefono la aggiunge alla riga sotto lo stato (evento `calliope:compagnia` dalla
 pagina incorporata). Sparisce con una voce sola. Prova `prove/prova_compagnia_pagina.py` (livello 3).
+
+## Le prime azioni del cruscotto: «Controlla» e «Aggiorna» di SearXNG (09/10, ramo `searxng-aggiornamento`)
+
+Decisione di Dario del 09/10 (meccanismo in [biblioteca](biblioteca.md), `calliope/web/motore.py`).
+Con il motore della ricerca web il cruscotto ha una sezione **«Ricerca web (SearXNG)»**:
+immagine in uso, giudizio dell'ultimo controllo (va bene, degradata, non risponde) con il
+motivo, le prove (categoria, domanda fissa, risultati, motori che non rispondono e perché),
+il tag più recente nel registro, il modo (automatico o manuale, o «non disponibile qui:
+…»), la fase di un controllo o aggiornamento in corso, l'ultimo esito e le ultime decisioni
+(chi e cosa). Due pulsanti, **«Controlla»** e **«Aggiorna»** (questo solo dove il container
+c'è).
+
+- **Chi**: le stesse regole di `/api/cruscotto` (sessione in un'intestazione, HTTPS fuori da
+  127.0.0.1, schermo personale il cui proprietario amministra, ricontrollato a ogni richiesta):
+  mai uno schermo di stanza, mai un familiare; nessuna voce di mezzo, quindi nemmeno la zona
+  grigia. `POST /api/motore` con corpo JSON.
+- **Due tocchi con un gettone**: il primo tocco chiede un gettone (`{azione}`), legato allo
+  schermo e all'azione, che vale **una volta** e scade in 60 s (`GETTONE_S`); il pulsante
+  diventa «Tocca ancora: controlla». Il secondo manda `{azione, gettone}` e l'azione parte in un
+  thread del motore. Un gettone di un'altra azione, di un altro schermo, già usato o scaduto:
+  «conferma scaduta: tocca di nuovo». Al più 6 richieste al minuto per schermo
+  (`AZIONI_MINUTO`, 429). Ogni azione nel log (`[CRUSCOTTO] … da «schermo» (id)`) e nella
+  storia del motore (`cruscotto:<id>`).
+- **Esito**: mentre l'azione gira la pagina rilegge il cruscotto ogni 2 s (al più 20 minuti) e
+  mostra la fase; la sezione del motore non passa dalla cache di 25 s del cruscotto (è un
+  file piccolo). Il resto del cruscotto resta in sola lettura e la nota lo dice.
+- **CSP invariata**: pulsanti fatti con il DOM, delega dei clic come gli altri, niente HTML
+  dal server.
+- **Avvisi**: l'esito di un aggiornamento automatico e il passaggio a «degradata» come scheda
+  «Da leggere» personale (`Cruscotto.avvisa` → `invia_a`) solo sugli schermi personali di chi
+  amministra.
+- Prove: `prova_searxng_aggiorna` (endpoint, gettoni, limite, avviso) e
+  `prova_cruscotto_pagina` (Edge headless: sezione e pulsanti, primo tocco che chiede la
+  conferma senza far partire niente, secondo che fa il controllo, esito sulla scheda, un
+  familiare senza pulsanti, nessun errore JS né CSP).
