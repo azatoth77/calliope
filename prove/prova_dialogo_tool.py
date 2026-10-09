@@ -118,6 +118,26 @@ def prova_caso_vero():
     verifica("web_cerca({'tipo': 'notizie'}): parte, le notizie generali",
              r.get("ok") is True and ctx.web.cercate == [("notizie", "notizie")]
              and "notizie_generali" in ctx.regole, f"{r} {ctx.web.cercate}")
+    # Il tema nella frase di chi parla (09/10 sera, caso vero della DGX alle 21:04: «Le
+    # notizie di sport» → web_cerca({'tipo': 'notizie'}) → notizie generali): si cerca quello
+    for frase, attesa, regola in [("Le notizie di sport.", "sport", "notizie_tema_frase"),
+                                  ("Calliope. Le ultime notizie.", "notizie",
+                                   "notizie_generali"),
+                                  ("Le notizie di oggi?", "notizie", "notizie_generali")]:
+        ctx = ctx_vuoto()
+        ctx.web = _WebFinto()
+        ctx.user_text = frase
+        reg.call("web_cerca", {"tipo": "notizie"}, ctx)
+        verifica(f"web_cerca({{'tipo': 'notizie'}}) dopo «{frase}» → «{attesa}»",
+                 ctx.web.cercate == [(attesa, "notizie")] and regola in ctx.regole,
+                 f"{ctx.web.cercate} {ctx.regole}")
+    # Contrario: con la domanda del modello la frase non conta
+    ctx = ctx_vuoto()
+    ctx.web = _WebFinto()
+    ctx.user_text = "Le notizie di sport."
+    reg.call("web_cerca", {"tipo": "notizie", "domanda": "calcio"}, ctx)
+    verifica("…con la domanda del modello, quella", ctx.web.cercate == [("calcio", "notizie")]
+             and "notizie_tema_frase" not in ctx.regole, str(ctx.web.cercate))
     verifica("…nello schema «domanda» non è più obbligatoria, e la descrizione lo dice",
              "domanda" not in (reg.get("web_cerca").parameters.get("required") or ())
              and "facoltativa" in reg.get("web_cerca").description)

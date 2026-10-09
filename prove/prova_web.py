@@ -357,6 +357,25 @@ for q, atteso in [("notizie di sport", "sport"), ("Notizie sport", "sport"),
                   ("Newsweek", "Newsweek"), ("economia e finanza", "economia e finanza")]:
     verifica(f"tema delle notizie: «{q}» → «{atteso}»", tema_notizie(q) == atteso,
              tema_notizie(q))
+# Il tema dalla frase di chi parla, quando il modello non mette la domanda (09/10 sera, caso
+# vero della DGX alle 21:04: «Le notizie di sport» → web_cerca({'tipo': 'notizie'}))
+from calliope.web.servizio import tema_dalla_frase  # noqa: E402
+for f, atteso in [("Le notizie di sport.", "sport"), ("Sentimi le notizie di sport", "sport"),
+                  ("Che notizie ci sono da Torino?", "Torino"),
+                  ("Ci sono novità sul Trapanese?", "Trapanese"),
+                  ("Dimmi le notizie sportive di oggi", "sportive"),
+                  ("Mi dici le ultime notizie di economia per favore", "economia"),
+                  ("Le notizie di oggi sul Milan", "Milan"), ("Notizie su La Spezia", "La Spezia"),
+                  ("Le notizie di sport e poi spegni la luce", "sport"),
+                  # contrari: nessun tema → notizie generali
+                  ("Calliope. Le ultime notizie.", ""), ("notizie di oggi", ""),
+                  ("Le notizie di oggi?", ""), ("le notizie del giorno", ""),
+                  ("le notizie più recenti", ""), ("Leggimi le notizie, per favore", ""),
+                  ("Che si dice nello sport?", ""), ("", ""),
+                  ("Le notizie che mi interessano sono quelle che parlano di cose belle e "
+                   "lontane", "")]:
+    verifica(f"tema dalla frase: «{f}» → «{atteso}»", tema_dalla_frase(f) == atteso,
+             tema_dalla_frase(f))
 web.cerca("la quarta")
 r = web.cerca("ancora")
 verifica("tetto al minuto (4)", r.get("codice") == "troppe", str(r))
