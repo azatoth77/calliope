@@ -167,6 +167,10 @@ servirà un secondo fattore (vedi visione).
 4. Accumula i `tool_calls`, esegue, reimmetti i risultati, ripete (tetto `max_tool_turns`).
 5. `tool_choice` non è supportato da Ollama: **il modello decide da solo** se chiamare un
    tool. Per questo i tool nativi vanno tenuti semplici, con campi vincolati.
+6. Dal 09/10 gli argomenti si controllano contro lo schema prima della chiamata e un errore
+   torna al modello in parole, con esempio e `cosa_fare` (`calliope/tools/dialogo.py`); dopo
+   un errore correggibile il modello richiama invece di dire «riprovo» (giro di correzione,
+   [`ricerche/2026-10-09-dialogo-tool.md`](ricerche/2026-10-09-dialogo-tool.md)).
 
 ### 6.1 Contratto dei risultati (proposta del 03/10, da fare)
 

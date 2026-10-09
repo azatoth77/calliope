@@ -1572,3 +1572,21 @@ sonde usa qwen3.6 e quante ne rifiuta il vocabolario (se tante, allargarlo con u
 nella prova, mai con un'eccezione larga); il tempo in più per consegna (atteso sotto i 10 s per
 tre casi); una settimana di `uscite.jsonl` con sonde e ricollaudi contati a parte; il banco con
 `--docker`.
+
+## Errori chiari tra voce, agente e strumenti (09/10, ramo `dialogo-tool`)
+
+Parte del protocollo di [`../ricerche/2026-10-09-dialogo-tool.md`](../ricerche/2026-10-09-dialogo-tool.md)
+(il resto in [voce-e-regole](voce-e-regole.md)):
+- **Strumenti dell'agente** (`agenti/ciclo.py`, ciclo del codice e della ricerca): gli argomenti
+  si controllano contro lo schema dello strumento (`dialogo.controlla_strumento`: obbligatorio
+  **assente**, forme di enum e numeri; un `contenuto` vuoto resta valido, gli argomenti in più
+  si lasciano) e l'errore torna all'agente con l'esempio e `cosa_fare`, senza arrivare allo
+  strumento. Le eccezioni degli strumenti sono `{ok: false, errore: "<strumento> non è riuscito:
+  Tipo: messaggio", cosa_fare}` in una riga (`dialogo.errore_strumento`); nella ricerca prima
+  c'era solo il tipo («KeyError»). Strumento sconosciuto con l'elenco di quelli veri.
+- **Estensioni**: lo schema del manifesto è il contratto (`fonte: estensione`): un obbligatorio
+  mancante ha l'errore strutturato prima del container, invece di «non è riuscita: KeyError:
+  'citta'» dall'estensione.
+- **Esiti dei lavori verso la voce**: già frasi (`motivo`, `riassunto`); il tipo dell'eccezione
+  resta nei dati del lavoro e nel log. Inventario completo nel § 7 del documento di progetto.
+
