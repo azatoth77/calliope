@@ -35,8 +35,10 @@ def _final(frase: str, ok: bool = True, **extra) -> dict:
 
 
 def _in_corso(ctx) -> bool:
-    """La conversazione di adesso ha già dei turni (nella storia del modello)?"""
-    return any(ruolo == "user" for ruolo, _ in (getattr(ctx, "storia", None) or []))
+    """La conversazione di adesso ha già dei turni (nella storia del modello), o gli ultimi
+    scambi di quella chiusa poco fa per una pausa (09/10, `conv_coda`, compressione.testo_coda)?"""
+    return (any(ruolo == "user" for ruolo, _ in (getattr(ctx, "storia", None) or []))
+            or bool(getattr(ctx, "conv_coda", False)))
 
 
 def _niente(ctx, frase: str) -> dict:
@@ -47,8 +49,9 @@ def _niente(ctx, frase: str) -> dict:
     if not _in_corso(ctx):
         return _final(frase, ok=False)
     return {"ok": False, "fatto": NIENTE, "trovato": False,
-            "conversazione_di_adesso": "i turni di questa conversazione sono nella storia qui "
-                                       "sopra, e l'archivio non li ripete",
+            "conversazione_di_adesso": "i turni di questa conversazione (e gli ultimi scambi di "
+                                       "quella di poco fa, se ci sono nei dati qui sopra) sono "
+                                       "già davanti a te, e l'archivio non li ripete",
             "cosa_fare": f"Nelle conversazioni passate non c'è («{frase}»). Se quello di cui "
                          "parla la persona è nella storia di questa conversazione, rispondi da "
                          "lì (e per saperne di più cerca di nuovo con lo strumento usato "
@@ -436,10 +439,30 @@ def _conversazioni_dimentica(ctx: ToolContext) -> dict:
 NUOVA_FRASE = "Va bene, ricominciamo da capo."
 
 
-def _conversazione_nuova(ctx: ToolContext) -> dict:
+# «cosa» (che cosa ricominciare, con le parole di chi parla) è la conversazione stessa: vuoto,
+# «da capo», «la conversazione», «tutto»… Un'altra cosa nominata («il collaudo», «la lista») non
+# si ricomincia con questo tool (misura del 09/10 col modello locale: «Ricominciamo il collaudo
+# dall'inizio.» lo chiamava 3 volte su 3). Controllo della forma di un argomento scelto dal
+# modello (principio 10)
+_COSA_CONVERSAZIONE = re.compile(
+    r"^\W*(?:(?:la|una|questa|nostra|il|tutto|tutta|nuova|di|da|a|ad|dall|dalla|all|"
+    r"dell|nostro|discorso|conversazione|chiacchierata|dialogo|capo|zero|inizio|principio|"
+    r"daccapo|tutto|quanto|ricominciamo|ricominciare|ripartiamo|ripartire|noi|con|te|me|"
+    r"quello|quel|che|ci|siamo|abbiamo|detto|detti|adesso|ora|finora|fin|qui|parlato)\W*)*$",
+    re.I)
+
+
+def _conversazione_nuova(ctx: ToolContext, cosa: str = "") -> dict:
     """Segna che la conversazione va chiusa a risposta finita (ciclo._dopo_la_risposta): chiusa
     adesso, la risposta stessa finirebbe nella conversazione nuova."""
     from .spec import note_rule
+    if not _COSA_CONVERSAZIONE.match(str(cosa or "")):
+        note_rule(ctx, "conversazione_nuova_altro")
+        return {"ok": False, "fatto": NIENTE,
+                "motivo": f"«{str(cosa)[:60]}» non è la conversazione: questo strumento "
+                          "ricomincia solo la conversazione con te",
+                "cosa_fare": "se per quella cosa c'è uno strumento, usa quello; altrimenti "
+                             "rispondi a chi parla senza ricominciare la conversazione"}
     try:
         ctx.conversazione_nuova = True
     except AttributeError:
@@ -453,15 +476,23 @@ def conversazioni_specs() -> list[ToolSpec]:
         ToolSpec(
             name="conversazione_nuova",
             description=(
-                "Chiude la conversazione di adesso e ne comincia una nuova, da capo: quando chi "
-                "parla chiede con parole sue di ricominciare da capo, di azzerare o di cambiare "
-                "conversazione («voglio che ricominciamo da capo», «facciamo finta di niente e "
-                "ripartiamo da zero», «dimentica quello che ci siamo detti adesso e "
-                "ricominciamo»). Quello che vi siete detti resta nell'archivio. Non per "
-                "ricominciare una cosa (un collaudo, un gioco, un esercizio, un timer, una "
-                "lista) né per riprendere da dove eravate. Se lo chiedono, chiamalo: non dire "
-                "che ricominciate senza chiamarlo."),
-            parameters={"type": "object", "properties": {}, "required": []},
+                "Butta via la conversazione di adesso e ne comincia una nuova, vuota: solo quando "
+                "chi parla vuole ripartire da zero con te («voglio che ricominciamo da capo», "
+                "«facciamo finta di niente e ripartiamo da zero», «dimentica quello che ci siamo "
+                "detti adesso e ricominciamo»). Quello che vi siete detti resta nell'archivio. "
+                "NON chiamarlo quando vuole ricominciare una cosa precisa (il collaudo, un "
+                "gioco, un esercizio, un timer, una lista: per quelle c'è il loro strumento) né "
+                "quando vuole riprendere o continuare («ricominciamo da dove eravamo», "
+                "«riprendiamo il discorso»): è il contrario, la conversazione serve. Se invece "
+                "chiede di ripartire da zero, chiamalo: non dire che ricominciate senza "
+                "chiamarlo."),
+            parameters={"type": "object",
+                        "properties": {"cosa": {
+                            "type": "string",
+                            "description": "che cosa vuole ricominciare, con le sue parole: «da "
+                                           "capo», «la conversazione», oppure la cosa nominata "
+                                           "(«il collaudo», «la lista»…)"}},
+                        "required": ["cosa"]},
             func=_conversazione_nuova, risk="azione", levels=ALL, classe="sicuro"),
         ToolSpec(
             name="conversazione_cerca",

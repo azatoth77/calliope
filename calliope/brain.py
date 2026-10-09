@@ -2095,6 +2095,10 @@ class Brain:
             # conversazione_cerca la salta, perché è già qui nella storia
             try:
                 self.tool_ctx.conv_archivio = getattr(self._c(), "id_archivio", None)
+                # Gli ultimi scambi della conversazione chiusa per una pausa sono nei dati
+                # (09/10): conversazione_cerca non risponde «non trovo niente» per lei
+                r0 = self._c().riassunto
+                self.tool_ctx.conv_coda = isinstance(r0, dict) and r0.get("tipo") == "coda"
             except AttributeError:
                 pass
         self._offer = None        # azione proposta da un tool in questa risposta

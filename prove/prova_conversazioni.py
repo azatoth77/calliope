@@ -1091,12 +1091,20 @@ def prova_conversazione_nuova():
                                       for lv in ("ospite", "familiare", "amministra"))
              and classe_di("conversazione_nuova", spec).classe == "sicuro")
     verifica("descrizione: i contrari (un collaudo, riprendere da dove eravate)",
-             "collaudo" in spec.description and "da dove eravate" in spec.description)
+             "collaudo" in spec.description and "da dove eravamo" in spec.description)
     ctx = Ctx()
-    r = _conversazione_nuova(ctx)
+    r = _conversazione_nuova(ctx, "da capo")
     verifica("il tool segna la richiesta e dà la frase pronta", r["ok"]
              and r["risposta_finale"] == NUOVA_FRASE and ctx.conversazione_nuova is True
              and "conversazione_nuova_tool" in ctx.regole, str(r))
+    for cosa in ("il collaudo", "la lista della spesa", "da dove eravamo"):
+        c2 = Ctx()
+        r2 = _conversazione_nuova(c2, cosa)
+        verifica(f"contrario: cosa=«{cosa}» non è la conversazione → niente",
+                 r2["ok"] is False and not getattr(c2, "conversazione_nuova", False)
+                 and "conversazione_nuova_altro" in c2.regole, str(r2))
+    for cosa in ("", "la conversazione", "tutto da capo", "dall'inizio"):
+        verifica(f"cosa=«{cosa}» è la conversazione", _conversazione_nuova(Ctx(), cosa)["ok"])
     b = brain_finto()
     parla(b, "Parliamo della pizza")
     ciclo = Ciclo.__new__(Ciclo)
