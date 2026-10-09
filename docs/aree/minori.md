@@ -177,3 +177,78 @@ schermo; i tutori vedono il dettaglio dei tentativi anche dai 14 anni.
 - **Resta**: logica, fisica, chimica (calcolabili), grammatica oltre il pilota, storia e scienze
   (fattuali, blocchi dall'agente con le fonti della biblioteca); prova d'uso con un ragazzo;
   misura col 26B e qwen3.6 sulla DGX.
+
+## Pericolo poco chiaro: il giro a due cancelli (09/10, ramo `minori-due-cancelli`)
+
+**Caso vero** (DGX, 08/10 22:23–22:25, telefono in un locale rumoroso; solo campi non testuali
+del registro): un amico adulto ospite, voce non registrata, prende 0,433 e 0,470 sul profilo del
+ragazzo (secondo profilo chi amministra a 0,425 e 0,29: «incerta», vale il ragazzo, il profilo più
+protetto); una sua frase di 0,57 s («frase breve, vale la conversazione») diventa `pericolo` per il
+**rilevatore** (categoria `pericolo`: Llama Guard 3 non l'aveva fermata), con protezione (19696,
+112) e avviso «sicurezza» urgente al tutore, detto a voce 21 s dopo sullo stesso telefono. Il
+ragazzo non c'era. Il rilevatore locale (gemma4 e4b) dice PERICOLO anche su «Addio.», «Morire.»,
+«Sparisco.», «Che palle, mi sparo.» (10 su 12 frasi poco chiare di fantasia).
+
+**Decisione di Dario**: «un minore venga prima rassicurato, poi si cerca di capire se il problema è
+reale; solo superato il secondo cancello si manda la notifica», con prudenza (un falso negativo su
+un minore in pericolo è peggio di un falso positivo). Realizzato in `calliope/cancelli.py`,
+`Guardiano.gravita` e `Guardiano.verifica` (stesso modello del rilevatore, output strutturato),
+`guardiano.filtra(al_pericolo=…)`, `Ciclo._decidi_pericolo`, `_secondo_cancello`:
+
+- **Gravità** (solo per un minore, dopo un `pericolo` sulla domanda): ACUTO = esplicito anche se
+  breve («voglio morire», «lo zio mi picchia», «aiutami, mi segue un uomo»), DUBBIO = una parola
+  senza verbo, un saluto, un modo di dire, un gioco. **Acuto → come prima**: protezione e avviso
+  urgente subito, nessun cancello. Un giudizio di gravità guasto o assente vale acuto (regola
+  `pericolo_gravita_guasta`).
+- **Cancello 1** (DUBBIO): al posto della protezione una frase che rassicura e chiede, per fascia
+  (`cancelli.RASSICURA`: «Sono qui con te. Se c'è qualcosa che ti preoccupa o ti fa stare male, puoi
+  dirmelo. Va tutto bene?»; per ragazzi e adolescenti più asciutta), senza nominare l'allarme né i
+  numeri. Il segnale resta aperto su quel minore e su quel satellite per
+  `minori_pericolo_attesa_s` (300 s). Nel registro: testo del minore tolto come per un pericolo,
+  `pericolo.livello: da_verificare`, regole `guardiano_pericolo`, `pericolo_da_verificare`.
+- **Cancello 2**: la frase dopo (dello stesso minore; se la voce non era sicura, di chiunque parli
+  su quel satellite) va al rilevatore con il primo segnale, prima delle altre fasi della risposta.
+  **Conferma** (anche una reticenza che preoccupa, «non posso dirlo», «lascia stare») o giudizio
+  guasto → protezione e avviso urgente, senza il modello (regola `pericolo_confermato`); **smentita**
+  (va tutto bene, era un saluto o un gioco, parla tranquillo d'altro) → si risponde come sempre,
+  nessun avviso (`pericolo_smentito`). Con la voce sicura del minore la frase di un adulto non
+  chiude il cancello.
+- **Due segnali poco chiari** dello stesso minore entro `minori_pericolo_finestra_s` (1800 s,
+  anche dopo una smentita o un silenzio) → il secondo vale confermato: protezione e avviso
+  (`pericolo_secondo_segnale`, l'avviso dice anche l'argomento del primo).
+- **Silenzio** (scelta prudente da confermare): nessuna risposta entro l'attesa → avviso **non
+  urgente** «Da verificare, segnale debole: … gli ho chiesto con delicatezza se andava tutto bene e
+  non ha risposto. Quando puoi, chiedigli con calma come sta.» e una riga nel registro
+  (`esito: pericolo_silenzio`). Compromesso: nel caso vero il tutore avrebbe ricevuto comunque
+  questo avviso (l'ospite se n'era andato), ma non urgente, non a voce davanti a nessuno e con
+  «la voce non era sicura»; con `minori_pericolo_silenzio: niente` solo il registro.
+- **Voce incerta** (zona grigia, frase breve, continuità, profilo più protetto): un segnale acuto
+  resta acuto (protezione e avviso urgente: i numeri non fanno male a un adulto), uno poco chiaro
+  va ai cancelli; l'avviso aggiunge «Attenzione: la voce non era sicura, potrebbe non essere stato
+  lui» (`pericolo_voce_incerta`). Non si chiede «chi parla?»: un nome detto non è una prova, e un
+  ragazzo in difficoltà potrebbe usarlo per evitare l'avviso; il punteggio della risposta resta nel
+  registro.
+- **Avvisi al tutore**: livello in testa («Segnale confermato: …», «Da verificare, segnale debole:
+  …»), solo l'argomento, mai le parole del minore (il primo segnale resta solo in memoria per il
+  secondo giudizio). **Mai a voce vicino al minore**: un avviso «sicurezza» non si dice a voce sul
+  satellite dove il minore ha parlato da meno di `minori_avviso_privato_s` (600 s); al suo posto,
+  una volta, «Ho un avviso importante per te: lo trovi sul tuo schermo personale.», e a voce più
+  tardi (regola `avviso_sicurezza_rinviato`; `Avvisi.segna`). Gli altri avvisi come prima.
+- Invariati: adulti, ospiti veri (protezione per gli ospiti, senza avvisi), fuori orario (protezione
+  come prima, motivo `fuori_orario`), `minori_pericolo_verifica: false` = tutto come prima.
+
+**Prove**: `prove/prova_minori_cancelli.py` (a secco, 32 controlli: acuto, caso vero riscritto,
+conferma, smentita, silenzio col timer vero, due segnali, voce incerta, giudizi guasti, ospiti,
+avviso non a voce, con i contrari); `prova_minori_pericolo.py` invariata e verde.
+
+**Misura** (`prove/misura_cancelli.py`, portatile, gemma4 e4b + Llama Guard 3 8B, frasi di
+fantasia): esplicite giudicate ACUTO **13/13** (la prima versione del prompt ne perdeva una:
+«non mangio da tre giorni…»); poco chiare giudicate DUBBIO **11/12** («Aiuto.» resta ACUTO: va
+bene così); verifiche **11/11** (5 smentite, 6 conferme con reticenze); gravità e verifica
+~0,45 s di mediana (sul portatile; con i due modelli insieme in 8 GB alcune richieste 11 s per lo
+scambio di memoria). Costo: solo nei turni con un pericolo (gravità) e nel turno dopo un segnale
+aperto (verifica); la voce degli altri turni non cambia. Da rimisurare sulla DGX.
+
+**Da confermare con Dario**: avviso non urgente sul silenzio (o niente); attesa 300 s e finestra
+1800 s; acuto con la voce incerta come acuto (protezione e avviso «la voce non era sicura»);
+«Aiuto.» da solo acuto; avviso «sicurezza» rinviato a voce per 600 s sul satellite del minore.

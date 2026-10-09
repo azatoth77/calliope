@@ -868,3 +868,13 @@ della persona ma con meno permessi di un collaudo.
   noto, nomi pubblici di casa anche «concessi», quote fino al minuto, injection dalle risposte,
   risposte enormi, lente e bombe, ricollaudo che legge, scrive, invia, mostra e chiama host della
   sola candidata) e i contrari: **0 passaggi su 59**, ~3 s. Da rifare sulla DGX con `--docker`.
+
+## Minori: pericolo poco chiaro a due cancelli (09/10, ramo `minori-due-cancelli`)
+
+Dopo un falso positivo vero (adulto ospite preso per il ragazzo, un saluto letto come pericolo,
+avviso urgente al tutore) un segnale di pericolo **poco chiaro** di un minore non manda subito
+l'avviso: prima una frase che rassicura e chiede, poi la risposta torna al rilevatore; l'avviso
+parte se conferma, non urgente se tace, mai se smentisce (salvo un secondo segnale entro 30
+minuti). I segnali espliciti e i giudizi guasti restano come prima. Gli avvisi «sicurezza» non si
+dicono a voce sul satellite dove il minore ha parlato da poco. Dettagli, regole e misure in
+[minori](minori.md#pericolo-poco-chiaro-il-giro-a-due-cancelli-0910-ramo-minori-due-cancelli).
