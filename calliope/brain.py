@@ -3591,7 +3591,8 @@ class Brain:
         un'offerta («Se vuoi cerco su internet.», dal 09/10: OFFERTA)? Allora «grazie» e «ok»
         possono essere un sì, e li decide il modello (ciclo.Ciclo._chiusure)."""
         for m in reversed(self.history):
-            if m.get("role") == "assistant" and isinstance(m.get("content"), str)                     and (m["content"].strip() or not m.get("tool_calls")):
+            if (m.get("role") == "assistant" and isinstance(m.get("content"), str)
+                    and (m["content"].strip() or not m.get("tool_calls"))):
                 return chiede_risposta(m["content"]) is not None
             if m.get("role") == "user":
                 return False

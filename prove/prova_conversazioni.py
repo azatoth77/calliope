@@ -935,6 +935,19 @@ def prova_fonte():
     pari = {"punti": 0.031, "quando": 3.0}
     verifica("a pari pertinenza (≥ 85 % del migliore) il più recente prima",
              per_recenti([vecchio, pari, nuovo]) == [pari, vecchio, nuovo])
+    # Ordine e argomento insieme: «prima mi parlavi di un festival» con cronologico → anche i
+    # turni sull'argomento, dal più recente, con la fonte; senza argomento come prima
+    ctx.turno = 5
+    r = _conversazione_cerca(ctx, "Prima mi parlavi di un festival", cronologico=True)
+    sull = r.get("sull_argomento") or []
+    verifica("cronologico con un argomento: sull_argomento dal più recente, con la fonte",
+             len(sull) == 2 and sull[0]["quando"].startswith("oggi")
+             and "web_cerca" in sull[0].get("fonte", "") and "sull_argomento" in r["cosa_fare"],
+             json.dumps(r, ensure_ascii=False)[:400])
+    ctx.turno = 20
+    r = _conversazione_cerca(ctx, "di cosa stavamo parlando prima?", cronologico=True)
+    verifica("contrario: cronologico senza argomento, niente sull_argomento",
+             r["ok"] and "sull_argomento" not in r, json.dumps(r, ensure_ascii=False)[:300])
     # La conversazione in corso: segnata, e il risultato ricorda che è nella storia
     ctx.conv_archivio = c2.id_archivio
     ctx.storia = [("user", "Le ultime notizie"), ("assistant", "Tra le notizie di oggi: …")]
@@ -944,6 +957,32 @@ def prova_fonte():
              "ancora aperta" in oggi.get("conversazione", "") and "conversazione_di_adesso" in r
              and not any("conversazione" in x for x in r["risultati"] if x is not oggi),
              json.dumps(r, ensure_ascii=False)[:400])
+    # C2 (09/10): «quella cosa delle proteste che mi dicevi all'inizio» con le proteste nella
+    # storia → le frasi di questa conversazione nel risultato, anche se l'archivio non ha niente
+    ctx.conv_archivio = None
+    ctx.storia = [("user", "Le ultime notizie"),
+                  ("assistant", "Ci sono proteste a Porto Azzurro contro la diga. A Valfiorita "
+                                "apre un festival."),
+                  ("user", "Che ore sono?"), ("assistant", "Sono le undici.")]
+    r = _conversazione_cerca(ctx, "proteste che mi dicevi all'inizio")
+    verifica("questa conversazione: le frasi giuste della storia, e «rispondi da lì»",
+             r["ok"] and r.get("in_questa_conversazione")
+             == ["«Ci sono proteste a Porto Azzurro contro la diga.»"]
+             and "rispondi da lì" in r["cosa_fare"] and "risposta_finale" not in r,
+             json.dumps(r, ensure_ascii=False)[:400])
+    r = _conversazione_cerca(ctx, "proteste", cronologico=True)
+    verifica("…anche in modo cronologico", r.get("in_questa_conversazione")
+             == ["«Ci sono proteste a Porto Azzurro contro la diga.»"],
+             json.dumps(r, ensure_ascii=False)[:300])
+    r = _conversazione_cerca(ctx, "astronave marziana")
+    verifica("contrario: niente nella storia né nell'archivio → nessuna frase pronta, decide "
+             "il modello con la storia davanti",
+             r["ok"] is False and r.get("trovato") is False and "risposta_finale" not in r
+             and "in_questa_conversazione" not in r, json.dumps(r, ensure_ascii=False)[:300])
+    ctx.storia = []
+    r = _conversazione_cerca(ctx, "astronave marziana")
+    verifica("contrario: senza conversazione in corso la frase pronta di prima",
+             r.get("risposta_finale", "").startswith("Non trovo niente"), str(r))
     desc = build_registry(conversazioni=True).get("conversazione_cerca").description
     verifica("descrizione: le conversazioni chiuse; questa conversazione dalla storia",
              "già chiuse" in desc and "rispondi da lì senza chiamarlo" in desc)
