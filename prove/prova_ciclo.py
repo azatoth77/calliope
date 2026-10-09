@@ -174,6 +174,46 @@ class Cervello:
         return False
 
 
+def prova_traccia_riservata():
+    """Risposta di un turno con un tool riservato (09/10, D della prova vera della DGX): nel
+    registro dei turni nessun testo, ma una traccia per la diagnosi (caratteri, frasi,
+    «non so / non trovo», domanda o offerta finale), e i tool con l'esito."""
+    import json
+    import tempfile
+    from pathlib import Path
+    from calliope.turnlog import TurnLog
+    detta = ["Ne avevamo parlato ieri: il festival della fotografia a Roma.",
+             "Se vuoi cerco su internet."]
+    brain = types.SimpleNamespace(last_private=True, redact=lambda s: s,
+                                  rules_fired=lambda: [], last_sfida=False)
+    tool = [{"nome": "conversazione_cerca", "ok": True}, {"nome": "biblioteca_cerca", "ok": True}]
+    finto = types.SimpleNamespace(brain=brain, rec={
+        "inizio": "2026-10-09T11:23:56", "livello": "amministra",
+        "testo": "Prima mi parlavi di un festival, dimmi di più",
+        "risposta": " ".join(detta), "tool": tool})
+    Ciclo._oscura_registro(finto, types.SimpleNamespace(said=detta, scritto=None))
+    with tempfile.TemporaryDirectory() as tmp:
+        TurnLog(tmp).write(finto.rec)
+        scritto = "".join(f.read_text(encoding="utf-8") for f in Path(tmp).glob("*.jsonl"))
+    riga = json.loads(scritto.splitlines()[0])
+    verifica("risposta riservata: nel registro nessun testo della risposta",
+             riga.get("risposta") is None and riga.get("riservato") is True
+             and not any(p in scritto for p in ("festival della fotografia", "Roma",
+                                                "cerco su internet")), scritto[:300])
+    verifica("…la traccia: caratteri, frasi, non_so, offerta finale, e i tool con l'esito",
+             riga.get("risposta_traccia") == {"caratteri": len(" ".join(detta)), "frasi": 2,
+                                              "non_so": False, "finisce_con": "offerta"}
+             and [x.get("nome") for x in riga.get("tool") or ()]
+             == ["conversazione_cerca", "biblioteca_cerca"], str(riga.get("risposta_traccia")))
+    # Contrario: una risposta non riservata resta com'era, senza traccia
+    brain.last_private = False
+    finto.rec = {"testo": "Che ore sono?", "risposta": "Sono le dieci."}
+    Ciclo._oscura_registro(finto, types.SimpleNamespace(said=["Sono le dieci."], scritto=None))
+    verifica("contrario: risposta non riservata intera, senza traccia",
+             finto.rec.get("risposta") == "Sono le dieci."
+             and "risposta_traccia" not in finto.rec, str(finto.rec))
+
+
 def main():
     cfg = Config()
     cfg.speaker_id_enabled = False
@@ -258,6 +298,19 @@ def main():
     verifica("cortesia: una frase breve senza il modello, finestra chiusa",
              len(detto) == 1 and c.rec["esito"] == "cortesia" and c.awake_until == 0.0,
              str(detto))
+    # Caso vero della DGX (09/10 11:24): dopo «… se vuoi cerco su internet.» il «Sì, grazie.»
+    # trascritto «Grazie.» riceveva la cortesia. Dopo una domanda o un'offerta va al modello
+    cervello.ultima_domanda = lambda: True
+    _, detto = giro("Calliope, grazie.")
+    verifica("«grazie» dopo una domanda o un'offerta di Calliope: al modello",
+             len(detto) == 1 and detto[0].startswith("Risposta a")
+             and c.rec["esito"] != "cortesia"
+             and "cortesia_dopo_domanda" in c.rec.get("regole", []), str(detto))
+    del cervello.ultima_domanda
+    _, detto = giro("Grazie.")
+    verifica("contrario: «grazie» dopo una risposta normale resta cortesia",
+             len(detto) == 1 and c.rec["esito"] == "cortesia"
+             and "cortesia_dopo_domanda" not in c.rec.get("regole", []), str(detto))
     _, detto = giro("Che tempo fa domani?")
     verifica("addormentata: una frase senza il nome si ignora e non resta nel registro",
              detto == [] and c.rec["esito"] == "ignorato" and c.rec["testo"] is None,
@@ -302,6 +355,7 @@ def main():
     k, giri, finito, _ = esegui_con(corsie.Corsia("locale"), ["esci", None, None])
     verifica("contrario: nella corsia locale «esci» chiude il ciclo (come prima)",
              finito and len(giri) == 1, f"{len(giri)} giri")
+    prova_traccia_riservata()
     print(f"\n{'Tutto bene' if not errori else f'{errori} errori'}")
     return 1 if errori else 0
 

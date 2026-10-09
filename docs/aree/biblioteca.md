@@ -264,3 +264,28 @@ senza città → ricerca generica, «non so dove ti trovi… se mi dici la tua c
   della privacy → «notizie»).
 - **Il meteo della casa**: il campo nuovo `casa_citta` e le estensioni prima di internet, in
   [voce-e-regole](voce-e-regole.md) (stessa data). Con gemma4 e4b: `prova_citta_casa_ollama`.
+
+## Le notizie senza tema (09/10, ramo `ricerche-distanza`)
+
+Giro di prova vero della DGX (09/10, 11:03): «Le ultime notizie» → tre
+`web_cerca({'tipo': 'notizie'})` fermati per «domanda» mancante (`tool_argomenti_mancanti`) e la
+quarta giusta, prima frase 5,1 s. Il contratto chiedeva il tema nella domanda anche quando non
+c'è.
+
+- **Contratto**: nello schema di `web_cerca` (`calliope/tools/web.py`, `PARAMETRI`) `domanda`
+  non è più obbligatoria; la descrizione dice che per le notizie è facoltativa («senza, le ultime
+  notizie generali») e obbligatoria per tipo «web». Con tipo «notizie» e senza domanda si cerca
+  «notizie» (che `tema_notizie` lascia com'è, dell'ultima settimana), regola `notizie_generali`.
+  Con tipo «web» (o senza tipo) e senza domanda la funzione risponde con lo stesso errore dello
+  schema (`dialogo.errore_argomenti`, correggibile, fuori dalla busta dei dati non fidati),
+  regola `tool_argomenti_mancanti`. Unico costo: per `web_cerca({})` la frase d'attesa «Cerco su
+  internet» si dice prima dell'errore (il registro non vede più l'obbligo nello schema).
+- **Il tetto dei giri di correzione** che non aveva fermato i tre giri:
+  [voce-e-regole](voce-e-regole.md) (stessa data).
+- **Misura** con gemma4 e4b locale (`prova_ricerche_distanza_ollama`, SearXNG finto): il 4B
+  mette sempre una domanda («ultime notizie»), quindi il caso vero non si riproduce qui; 3/3
+  senza chiamate fermate, prima frase mediana 1,9 s. Il caso senza domanda è a secco in
+  `prova_dialogo_tool`.
+- **Fonte nell'archivio**: le conversazioni ritrovate dicono se l'informazione veniva dalle
+  notizie su internet o dalla biblioteca, così «dimmi di più» può cercare di nuovo nello stesso
+  posto: [contesto-conversazione](contesto-conversazione.md) (stessa data).

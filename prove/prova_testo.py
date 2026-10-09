@@ -143,6 +143,52 @@ verifica("cortesia: niente dichiarazioni d'azione né maschili",
          [f for t in RISPOSTE.values() for v in t.values() for f in v
           if re.search(r"\b(fatto|eseguito|contento|pronto)\b", f, re.I)], [])
 
+# ── cortesia dopo una domanda o un'offerta di Calliope (09/10, caso vero della DGX alle
+# 11:24: «Sì, grazie.» trascritto «Grazie.» dopo «… se vuoi cerco su internet.») ──
+from calliope.brain import Brain, chiede_risposta, traccia_risposta  # noqa: E402
+
+for frase, atteso in [
+        ("Il festival è a Lodi. Se vuoi cerco su internet.", "offerta"),
+        ("Ho trovato tre ricette, se ti va te le leggo.", "offerta"),
+        ("Dimmi se vuoi i dettagli.", "offerta"), ("Fammi sapere se ti serve altro.", "offerta"),
+        ("Vuoi che lo cerchi su internet?", "domanda"), ("Lo apro?", "domanda"),
+        ("Se preferisce, glielo mando sullo schermo.", "offerta"),
+        # contrari: risposte normali, anche con «se» o «vuoi» in una frase non finale
+        ("Il festival è a Lodi.", None), ("Se vuoi saperlo, piove. Domani sole.", None),
+        ("Vediamo se domani piove: no, sole.", None), ("Ti ho messo un timer.", None),
+        ("Fatto quello che vuoi.", None), ("", None)]:
+    verifica(f"fine della risposta «{frase}»", chiede_risposta(frase), atteso)
+_b = Brain.__new__(Brain)
+for ultima, atteso in [("Se vuoi cerco su internet.", True), ("Vuoi che lo cerchi?", True),
+                       ("Il festival è a Lodi.", False)]:
+    _b.history = [{"role": "user", "content": "prima mi parlavi di un festival"},
+                  {"role": "assistant", "content": ultima}]
+    verifica(f"ultima_domanda dopo «{ultima}»", _b.ultima_domanda(), atteso)
+_b.history = [{"role": "assistant", "content": "Vuoi altro?"}, {"role": "user", "content": "x"}]
+verifica("ultima_domanda: dopo la frase della persona no", _b.ultima_domanda(), False)
+# La forma della frase della persona: «Sì, grazie.» e «No, grazie.» non sono chiusure
+# (vanno al modello: consenso o rifiuto); «Grazie.» sì (poi decide ultima_domanda, Ciclo)
+for testo, atteso in [("Sì, grazie.", None), ("Si grazie", None), ("No, grazie.", None),
+                      ("Sì grazie mille.", None), ("Grazie.", "grazie")]:
+    verifica(f"chiusura «{testo}» (09/10)", closing_kind(testo), atteso)
+
+# ── traccia senza testo di una risposta riservata (09/10, registro dei turni) ──
+_t = traccia_risposta("Ne avevamo parlato ieri: il festival della fotografia a Roma. "
+                      "Se vuoi cerco su internet.")
+verifica("traccia: caratteri, frasi, offerta", (_t["frasi"], _t["finisce_con"], _t["non_so"]),
+         (2, "offerta", False))
+verifica("traccia: nessun testo dentro", sorted(_t) == ["caratteri", "finisce_con", "frasi",
+                                                         "non_so"]
+         and not any(isinstance(v, str) and v not in ("domanda", "offerta")
+                     for v in _t.values()), True)
+verifica("traccia: «non trovo» e domanda finale",
+         {k: traccia_risposta("Non trovo niente su questo. Vuoi che cerchi su internet?")[k]
+          for k in ("non_so", "finisce_con")}, {"non_so": True, "finisce_con": "domanda"})
+verifica("traccia: «non ho informazioni»",
+         traccia_risposta("Non ho informazioni su quel festival.")["non_so"], True)
+verifica("traccia: contrario, risposta normale",
+         traccia_risposta("Il festival è a Lodi, fino a domenica.")["non_so"], False)
+
 # ── nome detto dopo «Vuoi dirmi il tuo nome?» ──
 for testo, atteso in [("Mi chiamo Dario.", "Dario"), ("Dario.", "Dario"),
                       ("Sono Dario, grazie.", "Dario"), ("Il mio nome è Maria Rosa.", "Maria Rosa"),

@@ -542,7 +542,7 @@ class ArchivioConversazioni:
             with self.lock:
                 righe = {r[0]: r for r in self.db.execute(
                     f"SELECT t.id, t.quando, t.domanda, t.risposta, t.azioni, c.riassunto, "
-                    f"c.nome FROM turni t JOIN conversazioni c ON c.id = t.conv "
+                    f"c.nome, t.conv FROM turni t JOIN conversazioni c ON c.id = t.conv "
                     f"WHERE t.id IN ({','.join('?' * len(scelti))})", scelti)}
             for i in scelti:
                 r = righe.get(i)
@@ -550,7 +550,7 @@ class ArchivioConversazioni:
                     continue
                 out.append({"id": i, "quando": r[1], "domanda": r[2] or "",
                             "risposta": r[3] or "", "azioni": json.loads(r[4] or "[]"),
-                            "nome": r[6], "punti": round(punti[i], 4),
+                            "nome": r[6], "conv": r[7], "punti": round(punti[i], 4),
                             "parole": i in rank_fts, "significato": i in rank_vet})
         return {"risultati": out, "modo": modo}
 

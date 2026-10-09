@@ -878,8 +878,120 @@ def prova_cronologico():
     a.close()
 
 
+def scambio_con_ricerca(domanda, tool, argomenti, risposta, cid):
+    """Un turno con una ricerca (gli argomenti come li scrive il modello) e il risultato già
+    tolto dalla storia, come resta dopo la risposta."""
+    return [{"role": "user", "content": domanda},
+            {"role": "assistant", "content": "", "tool_calls": [
+                {"id": cid, "name": tool, "arguments": argomenti}]},
+            {"role": "tool", "tool_call_id": cid, "name": tool,
+             "content": "[risultati tolti dalla storia]"},
+            {"role": "assistant", "content": risposta}]
+
+
+def prova_fonte():
+    """09/10, caso vero della DGX (11:23, nomi e luoghi di fantasia): «prima mi parlavi di un
+    festival, dimmi di più» → il festival di ieri (biblioteca) invece di quello di oggi (notizie
+    da internet). Il turno ritrovato dice la fonte e quando; a pari pertinenza il più recente."""
+    ora = time.time()
+    t_ieri = turni(scambio_con_ricerca(
+        "Parlami del festival della fotografia di Borgo Lieto", "biblioteca_cerca",
+        {"domanda": "festival fotografia Borgo Lieto"},
+        "Il festival della fotografia di Borgo Lieto si tiene ogni estate.", "b1"),
+        quando=ora - 86400)
+    t_oggi = turni(scambio_con_ricerca(
+        "Le ultime notizie", "web_cerca", {"tipo": "notizie"},
+        "Tra le notizie di oggi: si apre il festival della fotografia di Valfiorita.", "w1"),
+        quando=ora - 1200)
+    verifica("turni: dalla chiamata resta solo il tipo («notizie»), mai la domanda",
+             t_oggi[0]["azioni"] == [{"tool": "web_cerca", "ok": True, "tipo": "notizie"}]
+             and t_ieri[0]["azioni"] == [{"tool": "biblioteca_cerca", "ok": True}],
+             f"{t_oggi[0]['azioni']} {t_ieri[0]['azioni']}")
+    t_lungo = turni(scambio_con_ricerca("x", "pc_cerca_file", {"tipo": "pdf e anche altro"},
+                                        "ok", "p1"))
+    verifica("contrario: un tipo che non è una parola sola non si tiene",
+             "tipo" not in t_lungo[0]["azioni"][0], str(t_lungo))
+    a = archivio("fonte.db")
+    c1, c2 = Conversazione(), Conversazione()
+    a.archivia(c1, t_ieri, "p-dario", "Dario", False)
+    a.archivia(c2, t_oggi, "p-dario", "Dario", False)
+    a.attendi()
+    ctx = Ctx(a)
+    r = _conversazione_cerca(ctx, "festival")
+    ris = r.get("risultati") or []
+    verifica("fonte del turno ritrovato: le notizie su internet con lo strumento, e quando",
+             len(ris) == 2 and "web_cerca" in ris[0].get("fonte", "")
+             and "notizie" in ris[0]["fonte"] and ris[0]["quando"].startswith("oggi"),
+             json.dumps(ris, ensure_ascii=False)[:400])
+    verifica("…l'altro dalla biblioteca, di ieri, dopo (a pari pertinenza vince il più recente)",
+             len(ris) == 2 and "biblioteca_cerca" in ris[1].get("fonte", "")
+             and ris[1]["quando"].startswith("ieri") and "più recente" in r["cosa_fare"]
+             and "stesso strumento" in r["cosa_fare"], json.dumps(r, ensure_ascii=False)[:400])
+    from calliope.tools.conversazioni import per_recenti
+    vecchio = {"punti": 0.033, "quando": 1.0}
+    nuovo = {"punti": 0.016, "quando": 2.0}
+    verifica("contrario: molto più pertinente vince anche se più vecchio",
+             per_recenti([vecchio, nuovo]) == [vecchio, nuovo])
+    pari = {"punti": 0.031, "quando": 3.0}
+    verifica("a pari pertinenza (≥ 85 % del migliore) il più recente prima",
+             per_recenti([vecchio, pari, nuovo]) == [pari, vecchio, nuovo])
+    # Ordine e argomento insieme: «prima mi parlavi di un festival» con cronologico → anche i
+    # turni sull'argomento, dal più recente, con la fonte; senza argomento come prima
+    ctx.turno = 5
+    r = _conversazione_cerca(ctx, "Prima mi parlavi di un festival", cronologico=True)
+    sull = r.get("sull_argomento") or []
+    verifica("cronologico con un argomento: sull_argomento dal più recente, con la fonte",
+             len(sull) == 2 and sull[0]["quando"].startswith("oggi")
+             and "web_cerca" in sull[0].get("fonte", "") and "sull_argomento" in r["cosa_fare"],
+             json.dumps(r, ensure_ascii=False)[:400])
+    ctx.turno = 20
+    r = _conversazione_cerca(ctx, "di cosa stavamo parlando prima?", cronologico=True)
+    verifica("contrario: cronologico senza argomento, niente sull_argomento",
+             r["ok"] and "sull_argomento" not in r, json.dumps(r, ensure_ascii=False)[:300])
+    # La conversazione in corso: segnata, e il risultato ricorda che è nella storia
+    ctx.conv_archivio = c2.id_archivio
+    ctx.storia = [("user", "Le ultime notizie"), ("assistant", "Tra le notizie di oggi: …")]
+    r = _conversazione_cerca(ctx, "festival")
+    oggi = next(x for x in r["risultati"] if x["quando"].startswith("oggi"))
+    verifica("turno della conversazione in corso segnato, e «conversazione_di_adesso»",
+             "ancora aperta" in oggi.get("conversazione", "") and "conversazione_di_adesso" in r
+             and not any("conversazione" in x for x in r["risultati"] if x is not oggi),
+             json.dumps(r, ensure_ascii=False)[:400])
+    # C2 (09/10): «quella cosa delle proteste che mi dicevi all'inizio» con le proteste nella
+    # storia → le frasi di questa conversazione nel risultato, anche se l'archivio non ha niente
+    ctx.conv_archivio = None
+    ctx.storia = [("user", "Le ultime notizie"),
+                  ("assistant", "Ci sono proteste a Porto Azzurro contro la diga. A Valfiorita "
+                                "apre un festival."),
+                  ("user", "Che ore sono?"), ("assistant", "Sono le undici.")]
+    r = _conversazione_cerca(ctx, "proteste che mi dicevi all'inizio")
+    verifica("questa conversazione: le frasi giuste della storia, e «rispondi da lì»",
+             r["ok"] and r.get("in_questa_conversazione")
+             == ["«Ci sono proteste a Porto Azzurro contro la diga.»"]
+             and "rispondi da lì" in r["cosa_fare"] and "risposta_finale" not in r,
+             json.dumps(r, ensure_ascii=False)[:400])
+    r = _conversazione_cerca(ctx, "proteste", cronologico=True)
+    verifica("…anche in modo cronologico", r.get("in_questa_conversazione")
+             == ["«Ci sono proteste a Porto Azzurro contro la diga.»"],
+             json.dumps(r, ensure_ascii=False)[:300])
+    r = _conversazione_cerca(ctx, "astronave marziana")
+    verifica("contrario: niente nella storia né nell'archivio → nessuna frase pronta, decide "
+             "il modello con la storia davanti",
+             r["ok"] is False and r.get("trovato") is False and "risposta_finale" not in r
+             and "in_questa_conversazione" not in r, json.dumps(r, ensure_ascii=False)[:300])
+    ctx.storia = []
+    r = _conversazione_cerca(ctx, "astronave marziana")
+    verifica("contrario: senza conversazione in corso la frase pronta di prima",
+             r.get("risposta_finale", "").startswith("Non trovo niente"), str(r))
+    desc = build_registry(conversazioni=True).get("conversazione_cerca").description
+    verifica("descrizione: le conversazioni chiuse; questa conversazione dalla storia",
+             "già chiuse" in desc and "rispondi da lì senza chiamarlo" in desc)
+    a.close()
+
+
 prova_oggetto()
 prova_luogo_funzione()
+prova_fonte()
 prova_turni()
 prova_archivio()
 prova_brain_archivio()

@@ -99,29 +99,55 @@ def prova_tutti_i_tool():
              "valori_ammessi" in r["argomenti"]["azione"], str(r.get("argomenti")))
 
 
+class _WebFinto:
+    def __init__(self):
+        self.cercate = []
+
+    def cerca(self, domanda, tipo="web", **_):
+        self.cercate.append((domanda, tipo))
+        return {"ok": True, "risultati": []}
+
+
 def prova_caso_vero():
     reg = registro_completo()
+    # Dal 09/10 (caso vero delle 11:03, tre giri fermati) con tipo «notizie» la domanda è
+    # facoltativa: senza tema, le ultime notizie generali
     ctx = ctx_vuoto()
+    ctx.web = _WebFinto()
     r = json.loads(reg.call("web_cerca", {"tipo": "notizie"}, ctx))
-    verifica("web_cerca({'tipo': 'notizie'}): manca «domanda», detto in parole",
+    verifica("web_cerca({'tipo': 'notizie'}): parte, le notizie generali",
+             r.get("ok") is True and ctx.web.cercate == [("notizie", "notizie")]
+             and "notizie_generali" in ctx.regole, f"{r} {ctx.web.cercate}")
+    verifica("…nello schema «domanda» non è più obbligatoria, e la descrizione lo dice",
+             "domanda" not in (reg.get("web_cerca").parameters.get("required") or ())
+             and "facoltativa" in reg.get("web_cerca").description)
+    verifica("…nessun errore per il registro né per la frase d'attesa",
+             reg.mancanti("web_cerca", {"tipo": "notizie"}) == [])
+    # Con tipo «web» (o senza tipo) la domanda serve: lo stesso errore dello schema
+    ctx = ctx_vuoto()
+    ctx.web = _WebFinto()
+    r = json.loads(reg.call("web_cerca", {"tipo": "web"}, ctx))
+    verifica("web_cerca({'tipo': 'web'}): manca «domanda», detto in parole",
              strutturato(r) and r["campo"] == "domanda" and "«domanda»" in r["errore"]
-             and r["correggibile"] is True, r.get("errore"))
+             and "per le notizie è facoltativa" in r["errore"] and r["correggibile"] is True
+             and not ctx.web.cercate and "tool_argomenti_mancanti" in ctx.regole
+             and ctx.errore_registro is True, r.get("errore"))
     verifica("…con la descrizione dell'argomento presa dalla descrizione del tool",
              "motore di ricerca" in r["argomenti"]["domanda"].get("cosa", ""),
              str(r["argomenti"]))
     verifica("…l'esempio tiene «tipo» e mette «domanda» al suo posto",
-             r["esempio"]["argomenti"] == {"tipo": "notizie", "domanda": "<domanda>"},
+             r["esempio"]["argomenti"] == {"tipo": "web", "domanda": "<domanda>"},
              str(r["esempio"]))
     verifica("…cosa_fare: richiamare con le parole della persona, chiedere solo se mancano",
              "Richiama subito web_cerca" in r["cosa_fare"] and "Chiedi alla persona solo se"
              in r["cosa_fare"], r["cosa_fare"])
     c = ctx_vuoto()
-    c.user_text = "Raccontami le ultime novità della giornata"
-    r = json.loads(reg.call("web_cerca", {"tipo": "notizie"}, c))
-    verifica("…con la frase della persona, se c'è",
-             "(«Raccontami le ultime novità della giornata»)" in r["cosa_fare"], r["cosa_fare"])
-    verifica("Brain non dice la frase d'attesa di una chiamata che non parte",
-             reg.mancanti("web_cerca", {"tipo": "notizie"}) == ["domanda"])
+    c.web = _WebFinto()
+    c.user_text = "Cercami una cosa"
+    r = json.loads(reg.call("web_cerca", {}, c))
+    verifica("web_cerca({}): tipo «web», stesso errore, con la frase della persona",
+             r.get("correggibile") is True and "(«Cercami una cosa»)" in r["cosa_fare"]
+             and not c.web.cercate, r.get("cosa_fare"))
     verifica("contrario: con la domanda niente da dire",
              reg.mancanti("web_cerca", {"domanda": "notizie di oggi"}) == [])
     r = json.loads(reg.call("web_cerca", {"query": "notizie"}, ctx_vuoto()))
@@ -225,7 +251,11 @@ def _brain_con_web(risultato_web=None):
         cercate.append((domanda, tipo))
         return risultato_web or {"ok": True, "trovato": True, "risultati": [
             {"sito": "Notiziario", "titolo": "Notizia", "testo": "Oggi piove."}]}
-    b.tools.register(dataclasses.replace(b.tools.get("web_cerca"), func=web))
+    # Uno schema con «domanda» obbligatoria (com'era web_cerca fino al 09/10): il giro di
+    # correzione è uguale per ogni tool
+    spec = b.tools.get("web_cerca")
+    b.tools.register(dataclasses.replace(spec, func=web, parameters=dict(
+        spec.parameters, required=["domanda"])))
     copione = b.backend
     copione.messaggi = []
     stream = copione.stream
@@ -287,6 +317,44 @@ def prova_giro_di_correzione():
               testo("Altro."))
     verifica("tetto dei giri (2): poi la frase si dice, niente giro infinito",
              r == "Non ci riesco." and b.rules_fired().count("correzione_tool") == 2, r)
+
+    # Caso vero delle 11:03 (09/10): il modello richiama subito, sbagliato di nuovo, senza
+    # frasi in mezzo. Ogni passata dopo l'errore è un giro: dopo i 2 giri l'ultima passata è
+    # senza tool, con l'errore davanti (prima si andava avanti fino a max_tool_turns)
+    b, cercate = _brain_con_web()
+    sbagliata = chiama("web_cerca", {"tipo": "notizie"})
+    r = turno(b, "le ultime notizie", sbagliata, sbagliata, sbagliata,
+              testo("Di quale argomento vuoi le notizie?"),
+              chiama("web_cerca", {"tipo": "notizie", "domanda": "notizie"}))
+    regole = b.rules_fired()
+    ultima = b.backend.messaggi[-1]
+    verifica("richiamate subito sbagliate: dopo 2 giri di correzione niente quarta chiamata",
+             r == "Di quale argomento vuoi le notizie?" and not cercate
+             and regole.count("tool_argomenti_mancanti") == 3
+             and "correzioni_esaurite" in regole and len(b.backend.messaggi) == 4,
+             f"{r!r} {cercate} {regole} {len(b.backend.messaggi)}")
+    verifica("…l'ultima passata ha l'errore e «non richiamarlo»",
+             any("non è partito neanche questa volta" in str(m.get("content"))
+                 and "«domanda»" in str(m.get("content")) for m in ultima
+                 if m.get("role") == "system"), str([m for m in ultima
+                                                     if m.get("role") == "system"][-1:])[:300])
+    # Contrario: corretta al secondo giro → nessun tetto
+    b, cercate = _brain_con_web()
+    r = turno(b, "le ultime notizie", sbagliata, sbagliata,
+              chiama("web_cerca", {"tipo": "notizie", "domanda": "notizie"}),
+              testo("Secondo Notiziario oggi piove."))
+    verifica("contrario: corretta entro i giri → la ricerca parte, niente correzioni_esaurite",
+             r == "Secondo Notiziario oggi piove." and cercate == [("notizie", "notizie")]
+             and "correzioni_esaurite" not in b.rules_fired(), f"{r!r} {b.rules_fired()}")
+    # Contrario: con tool_correzioni_max = 3 il terzo giro c'è
+    b, cercate = _brain_con_web()
+    b.cfg.tool_correzioni_max = 3
+    r = turno(b, "le ultime notizie", sbagliata, sbagliata, sbagliata,
+              chiama("web_cerca", {"tipo": "notizie", "domanda": "notizie"}),
+              testo("Secondo Notiziario oggi piove."))
+    verifica("contrario: tool_correzioni_max = 3 → la quarta chiamata parte",
+             r == "Secondo Notiziario oggi piove." and len(cercate) == 1
+             and "correzioni_esaurite" not in b.rules_fired(), f"{r!r} {b.rules_fired()}")
 
     # Errore non correggibile: lo si dice subito, nessun giro
     def rotta(ctx, domanda, tipo="web"):

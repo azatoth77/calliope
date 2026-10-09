@@ -331,6 +331,54 @@ CORREZIONE_NUDGE = ("Il tool {tool} non è partito: «{errore}» Non l'hai ancor
                     "con le sue stesse parole. Chiedi alla persona solo se lì non c'è niente "
                     "che serva, con una domanda breve. Non dire che riprovi e non scusarti: "
                     "richiamalo.")
+# Giri di correzione finiti (09/10, caso vero della DGX alle 11:03: «le ultime notizie» →
+# tre `web_cerca({'tipo': 'notizie'})` fermati e la quarta giusta, prima frase 5,1 s). Il tetto
+# `tool_correzioni_max` contava solo i giri con la spinta: un modello che richiama subito, di
+# nuovo sbagliato, non li consumava e andava avanti fino a max_tool_turns. Ora ogni passata dopo
+# un errore correggibile è un giro; finiti i giri, un'ultima passata senza tool con l'errore
+# davanti: il modello chiede il dato alla persona o dice che non ci è riuscita
+CORREZIONE_ESAURITA = ("Il tool {tool} non è partito neanche questa volta: «{errore}» Non "
+                       "richiamarlo. Rispondi ora alla persona in una frase breve: chiedile il "
+                       "dato che manca, oppure di' che adesso non ci sei riuscita, senza "
+                       "inventare il risultato.")
+
+# L'ultima frase di Calliope è un'offerta («Se vuoi cerco su internet.», «Vuoi che lo
+# cerchi?»): la risposta dopo («Grazie.», «Ok.») può essere un sì, e la decide il modello, non
+# la cortesia (09/10, caso vero della DGX alle 11:24: «Sì, grazie.» trascritto «Grazie.» →
+# «Prego, lo metto in conto» e nessuna ricerca). Una forma chiusa sulla frase di Calliope, che
+# toglie una scorciatoia e non decide niente (principio 10)
+OFFERTA = re.compile(r"\bse (?:vuoi|ti va|preferisci|ti interessa|desideri|vuole|le va|"
+                     r"preferisce|le interessa|desidera)\b|^\W*(?:fammi|mi faccia) sapere\b|"
+                     r"^\W*(?:dimmi|mi dica) (?:pure )?se\b|^\W*(?:vuoi|vuole) che\b", re.I)
+# Una dichiarazione di non sapere o non trovare, per la traccia di una risposta riservata
+NON_TROVO = re.compile(r"\bnon (?:so|trovo|ho trovato|riesco a trovare|risulta|c'è niente|"
+                       r"c'è nulla)\b", re.I)
+
+
+def ultima_frase(text: str) -> str:
+    """L'ultima frase di un testo (per la domanda o l'offerta finale)."""
+    frasi = [f for f in re.split(r"(?<=[.!?…])\s+", (text or "").strip()) if f.strip()]
+    return frasi[-1].strip() if frasi else ""
+
+
+def chiede_risposta(text: str) -> str | None:
+    """«domanda» se il testo finisce con una domanda, «offerta» se l'ultima frase è
+    un'offerta (OFFERTA), altrimenti None."""
+    t = (text or "").rstrip()
+    if t.endswith("?"):
+        return "domanda"
+    return "offerta" if OFFERTA.search(ultima_frase(t)) else None
+
+
+def traccia_risposta(text: str) -> dict:
+    """Una traccia senza testo della risposta (09/10, per il registro dei turni quando la
+    risposta è riservata): lunghezza, frasi, se dichiara di non sapere o non trovare e se
+    finisce con una domanda o un'offerta. Mai il contenuto."""
+    t = (text or "").strip()
+    frasi = [f for f in re.split(r"(?<=[.!?…])\s+", t) if re.search(r"\w", f)]
+    return {"caratteri": len(t), "frasi": len(frasi),
+            "non_so": bool(NON_SO.search(t) or NON_TROVO.search(t)),
+            "finisce_con": chiede_risposta(t)}
 
 
 def is_claim(text: str, actions: list[str] | tuple = (), fallito: bool = False) -> bool:
@@ -2996,8 +3044,18 @@ class Brain:
 
         # Giri di correzione dopo un errore correggibile di un tool (09/10, CORREZIONE_NUDGE)
         correzioni, t_inizio = 0, time.perf_counter()
+        esaurita = None          # giri di correzione finiti con il tool ancora fermo
         for _ in range(self.cfg.max_tool_turns + 1):
             corr = self._correzione_aperta(correzioni)
+            if corr is None:
+                esaurita = self._correzione_esaurita(correzioni)
+                if esaurita is not None:
+                    # Giri finiti (anche richiamando subito, senza la spinta): ultima passata
+                    # senza tool, qui sotto
+                    self._rule("correzioni_esaurite")
+                    print(f"   [TOOL] {esaurita['nome']} non è partito dopo {correzioni} giri "
+                          f"di correzione: rispondo senza tool", flush=True)
+                    break
             if corr is not None:
                 correzioni += 1
                 # Le AI si stanno parlando da un po' e la persona non ha sentito niente: una
@@ -3296,8 +3354,11 @@ class Brain:
                 return
 
         # Tetto dei giri raggiunto: un'ultima passata senza tool, così risponde comunque.
-        messages = with_memory(system + [{"role": "system",
-                                          "content": "Rispondi ora, senza chiamare altri tool."}])
+        # Dopo i giri di correzione finiti, con l'errore davanti (CORREZIONE_ESAURITA)
+        fine = (CORREZIONE_ESAURITA.format(tool=esaurita["nome"],
+                                           errore=esaurita.get("errore") or "")
+                if esaurita is not None else "Rispondi ora, senza chiamare altri tool.")
+        messages = with_memory(system + [{"role": "system", "content": fine}])
         text, _, _, _, _ = yield from self._turn(messages, [])
         self.history.append({"role": "assistant", "content": text})
 
@@ -3526,10 +3587,13 @@ class Brain:
         self.salva_conversazione()
 
     def ultima_domanda(self) -> bool:
-        """L'ultima risposta di Calliope nella storia finisce con una domanda?"""
+        """L'ultima risposta di Calliope nella storia finisce con una domanda o con
+        un'offerta («Se vuoi cerco su internet.», dal 09/10: OFFERTA)? Allora «grazie» e «ok»
+        possono essere un sì, e li decide il modello (ciclo.Ciclo._chiusure)."""
         for m in reversed(self.history):
-            if m.get("role") == "assistant" and isinstance(m.get("content"), str):
-                return m["content"].rstrip().endswith("?")
+            if (m.get("role") == "assistant" and isinstance(m.get("content"), str)
+                    and (m["content"].strip() or not m.get("tool_calls"))):
+                return chiede_risposta(m["content"]) is not None
             if m.get("role") == "user":
                 return False
         return False
@@ -3582,6 +3646,18 @@ class Brain:
         if not tools or not self._net("correzione_tool"):
             return None
         if fatte >= int(getattr(self.cfg, "tool_correzioni_max", 2) or 0):
+            return None
+        last = tools[-1]
+        return last if not last.get("ok") and last.get("correggibile") else None
+
+    def _correzione_esaurita(self, fatte: int) -> dict | None:
+        """L'ultimo tool di questa risposta è fallito con un errore correggibile e i giri di
+        correzione sono finiti (`fatte` ≥ tool_correzioni_max): la sua voce in `last_tools`,
+        altrimenti None (09/10: prima il tetto contava solo i giri con la spinta)."""
+        tools = self.last_tools or ()
+        if not tools or not self._net("correzione_tool"):
+            return None
+        if fatte < int(getattr(self.cfg, "tool_correzioni_max", 2) or 0):
             return None
         last = tools[-1]
         return last if not last.get("ok") and last.get("correggibile") else None
