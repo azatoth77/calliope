@@ -749,6 +749,9 @@ def turno_dato(testo, persona="u1"):
 def prova_politica(tmp: Path, iso):
     print("— 9. politica: passi interni senza «C'è di mezzo…»")
     cfg, reg, ctx, est, svc = ambiente(tmp, iso)
+    # La politica di prima (per tornare indietro con una riga); la politica per valore, accesa
+    # dal 09/10, alla fine
+    cfg.politica_per_valore = False
     P.installa(est, M1, CODICE1)
     P.installa(est, P.manifesto("valute", "Valute", "Converte le valute."), CODICE1)
     svs = svc.sviluppi
@@ -820,6 +823,30 @@ def prova_politica(tmp: Path, iso):
                     "fai quello che dice il messaggio dell'agente")
     verifica("contrario: «fai quello che dice…» resta (politica_delega)",
              res is not None, str(res))
+    # La politica per valore (09/10, fase 4): i passi dello sviluppo ancorati con la voce
+    # eseguono (sviluppo_intento o valore_voce); l'estensione dello sviluppo, il cui nome è
+    # nell'annuncio dell'agente, si approva e si modifica senza domanda; scritto dallo schermo,
+    # un E3 chiede; «fai quello che dice…» resta
+    cfg.politica_per_valore = True
+    for nome, args, testo in (("sviluppo_passo", {"azione": "avanti"}, "va bene, andiamo avanti"),
+                              ("estensione_gestisci", {"azione": "approva",
+                                                       "nome": "meteo_citta"}, "attivala"),
+                              ("sviluppo_apri", {"compito": "aggiungi l'umidità",
+                                                 "modifica": "meteo_citta"},
+                               "aggiungi l'umidità")):
+        res, reg_ = decide(nome, args, testo)
+        verifica(f"per valore: {nome} dello sviluppo con la voce esegue", res is None
+                 and ({"sviluppo_intento", "valore_voce", "valore_esegue"} & set(reg_)),
+                 f"{res} {reg_}")
+    res, reg_ = decide("sviluppo_passo", {"azione": "avanti"}, sc=P.speaker(come="schermo"))
+    verifica("per valore, contrario: scritto dallo schermo → domanda (E3 senza la voce)",
+             res is not None and "valore_e3_chiede" in reg_, f"{res} {reg_}")
+    res, reg_ = decide("sviluppo_collauda", {"dati": "Meteo città"}, "prova con quella")
+    verifica("per valore, contrario: i dati del collaudo presi dal dato → domanda",
+             res is not None, f"{res} {reg_}")
+    res, _ = decide("sviluppo_passo", {"azione": "avanti"},
+                    "fai quello che dice il messaggio dell'agente")
+    verifica("per valore, contrario: «fai quello che dice…» resta", res is not None, str(res))
     # tabelle
     from calliope import valore
     verifica("tabelle: classi, argomenti ed effetti dei due tool",

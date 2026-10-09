@@ -183,6 +183,13 @@ class Classe:
     # {valore: espressione}). «Voglio che approvi la nuova versione» ripete la domanda su
     # «approva», non quella su «rimuovi» (VERBI_AZIONE)
     verbi_azione: tuple | None = None
+    # Una lettura che manda fuori i suoi argomenti (09/10, estensioni che leggono soltanto:
+    # rete in GET, niente scritture, flussi o dati di casa; estensioni/servizio._agisce). Vale
+    # come `web_cerca`: niente richiesta d'azione né conferma per il dato di mezzo, ma con un
+    # dato non fidato nella conversazione un argomento `chiave` preso dal dato si mostra e si
+    # chiede (regola `politica_argomento_esterno`): un valore di un sito non esce verso gli
+    # host dell'estensione senza che la persona lo senta
+    esce: bool = False
 
 
 # Valori di `cambia` che vogliono dire «una voce nuova» (come tools/builtin._modo)
@@ -1441,6 +1448,22 @@ def consenso_turno(name: str, args: dict, cl: Classe, t: Turno) -> tuple[bool, b
     return ripetuta, ripetuta, stessa
 
 
+def _lettura_che_esce(name: str, args: dict, cl: Classe, t: Turno) -> Decisione:
+    """Una lettura che manda fuori i suoi argomenti (Classe.esce) con un dato non fidato di
+    mezzo: esegue, salvo un valore importante preso dal dato, che si mostra e si chiede. Al
+    «sì» (o alla sfida) con gli stessi valori esegue."""
+    sosp = t.args_sospeso if isinstance(t.args_sospeso, dict) else {}
+    if (_proposta(t, name) and (consenso(t.testo) or t.sfida)
+            and _uguali(_conta(cl, args or {}), _conta(cl, sosp), cl.chiave)):
+        return ACCETTATA
+    k, fuori, da = valori_esterni(cl, args or {}, t, name)
+    if fuori:
+        return Decisione("conferma", "politica_argomento_esterno",
+                         f"«{_s(args, k)[:80]}» viene {prov.da(da)}, non da te: vuoi davvero "
+                         f"che {_cosa(cl, args)}?", da)
+    return ESEGUI
+
+
 def decidi(name: str, args: dict, cl: Classe, t: Turno | None,
            conferma_voce: bool = False, voce_frase: bool = False, propria: bool = False,
            cosa: str | None = None, intento: bool = False) -> Decisione:
@@ -1458,6 +1481,8 @@ def decidi(name: str, args: dict, cl: Classe, t: Turno | None,
             and not detto_dopo_dato(name, args, t)):
         return Decisione("blocca", "web_azione_bloccata", fonte=t.letto_ora)
     if t is None or cl.classe == SICURO:
+        if cl.esce and t is not None and t.contaminazione:
+            return _lettura_che_esce(name, args, cl, t)
         return ESEGUI
     if cl.sola_lettura is not None:
         k, valori = cl.sola_lettura
@@ -1732,7 +1757,16 @@ def _esito_per_brain(ctx, name, args, cl, t, d, intento, cv, vf, cosa, spec, omb
 # riconosciuta. Restano `politica_argomento_esterno`, `politica_delega`, le vietate, il blocco
 # dopo un dato letto ora e la sfida dei tool che la vogliono (Classe.sfida)
 SVILUPPO_SALTA = frozenset({"politica_conferma", "politica_azione_non_chiesta",
-                            "politica_azione_non_giustificata", "politica_argomento_non_detto"})
+                            "politica_azione_non_giustificata", "politica_argomento_non_detto",
+                            # le stesse con la politica per valore (09/10, fase 4)
+                            "valore_non_ancorata", "valore_e3_chiede",
+                            "valore_contenuto_non_detto"})
+# Con la politica per valore il nome dell'estensione dello sviluppo detto nell'annuncio
+# dell'agente vale «dal dato» (valore_bersaglio_dato); per approvarla o modificarla dallo
+# sviluppo aperto `sviluppo.passo_interno` controlla già che il bersaglio sia proprio quello
+# dello sviluppo (lo stato, non il testo del dato): solo questi argomenti
+SVILUPPO_BERSAGLIO = {"estensione_gestisci": frozenset({"nome"}),
+                      "sviluppo_apri": frozenset({"modifica"})}
 
 
 def _gia_rifiutata(name: str, args: dict, cl: Classe, t: Turno | None, ctx, spec) -> dict | None:
@@ -1829,7 +1863,12 @@ def controlla(spec, name: str, args: dict, ctx) -> dict | None:
     # suo. Mai per un valore preso dal dato, «fai quello che dice…», il dato letto ora
     # Una richiesta nuova con uno sviluppo aperto: il tool la rifiuta senza fare niente e
     # propone di sospendere, quindi la domanda della politica prima sarebbe una domanda in più
-    if d.esito in ("conferma", "rifiuta") and d.regola in SVILUPPO_SALTA and cv:
+    salta = d.regola in SVILUPPO_SALTA
+    if d.regola == "valore_bersaglio_dato" and name in SVILUPPO_BERSAGLIO and ombra:
+        dal_dato = {k for k, e in (ombra.get("argomenti") or {}).items()
+                    if e in ("bersaglio/dato", "indice/dato")}
+        salta = bool(dal_dato) and dal_dato <= SVILUPPO_BERSAGLIO[name]
+    if d.esito in ("conferma", "rifiuta") and salta and cv:
         try:
             from . import sviluppo
             if sviluppo.passo_interno(name, args or {}, ctx):

@@ -285,13 +285,17 @@ class Config:
     # servivano 10 turni per aprire un foglio appena creato. 0 = fino alla chiusura della
     # conversazione
     intento_valido_s: float = 600.0
-    # Politica per valore (08/10, calliope/valore.py, fase 4; decisione D5): con un dato non
-    # fidato di mezzo decide la matrice provenienza × effetto al posto della regola «pericolosa
-    # ⇒ conferma». Spenta, la decisione nuova si calcola lo stesso e va nel registro dei turni
-    # (`politica_ombra` di ogni chiamata; confronto in `calliope stato --turni`). Si accende
-    # dopo due giorni d'ombra senza esecuzioni in più con un bersaglio preso dal dato; per
-    # tornare indietro basta rimetterla a false
-    politica_per_valore: bool = False
+    # Politica per valore (08/10, calliope/valore.py; fase 4 accesa il 09/10, decisione D5):
+    # con un dato non fidato di mezzo decide la matrice provenienza × effetto al posto della
+    # regola «pericolosa ⇒ conferma». Accesa dopo due giorni d'ombra sulla DGX: 08/10, 251
+    # turni, 96 chiamate con un dato di mezzo, 31 domande evitate, 0 in più, 0 esecuzioni con
+    # un bersaglio preso dal dato, attrito simulato 0,0 (vero 6,4) ogni 100 turni; 09/10, 126
+    # turni, 2 evitate, 0 in più, 0 dal dato, 1,6 (vero 3,2). Restano sempre il dato letto in
+    # questa risposta, «fai quello che dice…», le vietate, la sfida delle più delicate, minori,
+    # livello e ospiti. L'ombra resta al contrario: il registro dei turni scrive che cosa
+    # avrebbe deciso la politica di prima (`calliope stato --turni`). Per tornare indietro:
+    # `politica_per_valore: false` in calliope.locale.yaml
+    politica_per_valore: bool = True
     # Ciò che Calliope dice con dati non fidati di mezzo (06/10, calliope/riferire.py): ogni
     # frase della risposta si controlla prima di dirla (numeri a pagamento, codici e password da
     # dare, soldi verso un conto, recapiti presi solo dal dato e non chiesti, indicazioni

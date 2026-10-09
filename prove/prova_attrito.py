@@ -118,6 +118,32 @@ def prova_ombra():
     verifica("ombra: attrito simulato (2 − 2 + 1 su 4)", o["attrito_simulato"] == 25.0, str(o))
     verifica("ombra: senza il campo, attrito simulato assente",
              attrito.giorno([turno(0)])["ombra"]["attrito_simulato"] is None)
+    verifica("ombra spenta: niente attrito della politica di prima",
+             o["attrito_prima"] is None and o["attive"] == 0, str(o))
+    # Fase 4 (09/10): la politica per valore decide («nuova» = vera esecuzione), l'ombra dice
+    # la politica di prima. Due domande evitate (una con un bersaglio dal dato), una in più
+    # (vera), su 4 turni: attrito vero 1, con la politica di prima 1 + 2 − 1 = 2
+    def attiva(vera, nuova, bersagli=()):
+        return {"nome": "pc_apri_file", "ok": nuova == "esegui",
+                "politica_ombra": {"vera": vera, "nuova": nuova, "bersagli": list(bersagli),
+                                   "attiva": True}}
+    turni = [turno(0, tool=[attiva("conferma", "esegui")]),
+             turno(10, tool=[attiva("esegui", "esegui")]),
+             turno(20, tool=[attiva("esegui", "conferma")], regole=["politica_conferma"]),
+             turno(30, tool=[attiva("conferma", "esegui", ["dato"])])]
+    d = attrito.giorno(turni)
+    o = d["ombra"]
+    verifica("attiva: attrito vero 25 (una domanda della politica per valore)",
+             d["attrito"] == 25.0, str(d))
+    verifica("attiva: evitate 2, in più 1, eseguite con un bersaglio dal dato 1",
+             (o["attive"], o["evitate"], o["in_piu"], o["dato_eseguite"]) == (4, 2, 1, 1), str(o))
+    verifica("attiva: attrito con la politica di prima (1 + 2 − 1 su 4)",
+             o["attrito_prima"] == 50.0, str(o))
+    verifica("attiva: l'attrito «simulato» è quello vero", o["attrito_simulato"] == 25.0, str(o))
+    t = attrito.testo({"2026-10-10": d})
+    verifica("attiva: la riga dice la politica di prima e le esecuzioni dal dato",
+             "politica per valore attiva" in t and "con la politica di prima 50,0" in t
+             and "ESEGUITE con un bersaglio dal dato 1" in t, t)
 
 
 def prova_stato():

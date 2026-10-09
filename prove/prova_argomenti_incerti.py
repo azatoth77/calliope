@@ -453,19 +453,23 @@ def prova_brain():
 
     # Il collaudo vero (classe pericolosa, dati da un'estensione nella conversazione): «prova
     # con Pradello Dugnasco» trovato, poi «Patello Giugnasco» (la domanda della politica, il sì,
-    # non trovato, «intendevi…?»), poi «sì» → eseguito senza un'altra domanda
+    # non trovato, «intendevi…?»), poi «sì» → eseguito senza un'altra domanda. Con la politica
+    # di prima (per tornare indietro con una riga): con la politica per valore, accesa dal
+    # 09/10, il collaudo chiesto con la voce e la città detta non chiede (sotto)
     b, eseguiti = prepara_brain()
+    b.tool_ctx.cfg.politica_per_valore = False
 
     def collauda(ctx, dati="", argomenti=None, **_):
         citta = dati or (argomenti or {}).get("citta", "")
         eseguiti.append(("sviluppo_collauda", citta))
         return meteo(ctx, citta=citta)
-    b.tools.register(ToolSpec(
+    spec_collauda = ToolSpec(
         name="sviluppo_collauda", description="", parameters={
             "type": "object", "properties": {"dati": {"type": "string"},
                                              "argomenti": {"type": "object"}}},
         func=collauda, risk="azione", levels=frozenset({"familiare", "amministra"}),
-        non_fidato=True, fonte="estensione", nomi={"dati": "valore", "argomenti": "valore"}))
+        non_fidato=True, fonte="estensione", nomi={"dati": "valore", "argomenti": "valore"})
+    b.tools.register(spec_collauda)
     dario = ChiParla(name="Dario", level="amministra")
     parla(b, "Calliope, prova con Pradello Dugnasco",
           chiama("sviluppo_collauda", {"dati": "Pradello Dugnasco"}), testo("17 gradi."),
@@ -492,6 +496,35 @@ def prova_brain():
              eseguiti[n:] == [("sviluppo_collauda", "Pradello Dugnasco")]
              and "argomento_forse_usato" in b.rules_fired()
              and "politica_argomento_esterno" not in b.rules_fired(),
+             f"{eseguiti[n:]} {detto!r} {b.rules_fired()}")
+
+    # Lo stesso con la politica per valore (09/10, fase 4): «prova con Patello Giugnasco» detto
+    # con la voce esegue subito (E3, valore_voce), il non trovato dà «intendevi…?», il «sì»
+    # esegue con il nome suggerito senza altre domande
+    b, eseguiti = prepara_brain()
+    b.tool_ctx.cfg.politica_per_valore = True
+    b.tools.register(dataclasses.replace(spec_collauda, func=collauda))
+    parla(b, "Calliope, prova con Pradello Dugnasco",
+          chiama("sviluppo_collauda", {"dati": "Pradello Dugnasco"}), testo("17 gradi."),
+          parole=[("prova", 0.98), ("con", 0.99), ("Pradello", 0.9), ("Dugnasco", 0.9)],
+          chi=dario)
+    n = len(eseguiti)
+    parla(b, "Calliope, prova con Patello Giugnasco",
+          chiama("sviluppo_collauda", {"dati": "Patello Giugnasco"}),
+          testo("Non trovo Patello Giugnasco: intendevi Pradello Dugnasco?"), parole=P_PATELLO)
+    verifica("per valore: il collaudo con la città detta esegue senza domanda, poi «forse»",
+             eseguiti[n:] == [("sviluppo_collauda", "Patello Giugnasco")]
+             and "valore_voce" in b.rules_fired() and "argomento_forse" in b.rules_fired()
+             and (b.pending or {}).get("args") == {"dati": "Pradello Dugnasco"},
+             f"{eseguiti[n:]} {b.rules_fired()} {b.pending}")
+    n = len(eseguiti)
+    detto, _, _ = parla(b, "Sì.", chiama("sviluppo_collauda", {"dati": "Pradello Dugnasco"}),
+                        testo("A Pradello Dugnasco 17 gradi."), parole=[("Sì", 0.9)])
+    verifica("per valore: il «sì» esegue con il nome suggerito, senza domande",
+             eseguiti[n:] == [("sviluppo_collauda", "Pradello Dugnasco")]
+             and "argomento_forse_usato" in b.rules_fired()
+             and not {"politica_argomento_esterno", "valore_non_ancorata",
+                      "valore_contenuto_dato"} & set(b.rules_fired()),
              f"{eseguiti[n:]} {detto!r} {b.rules_fired()}")
 
     # Il «sì» che non trova di nuovo: niente secondo «forse»

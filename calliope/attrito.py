@@ -26,7 +26,11 @@ Per ogni giorno:
 - **`ombra`** (fase 3): per le chiamate con il campo `politica_ombra` (la decisione che avrebbe
   preso la politica per valore, calliope/valore.py), le domande che non avrebbe fatto, quelle in
   più e le esecuzioni in più con un bersaglio preso da un dato (devono essere 0 per attivarla),
-  e l'attrito simulato.
+  e l'attrito simulato. Dal 09/10 (fase 4) la politica per valore è accesa e l'ombra è **al
+  contrario** (`attiva` nel campo): `vera` è ciò che avrebbe deciso la politica di prima e
+  `nuova` ciò che è successo davvero. Le domande evitate restano quelle che la politica di
+  prima avrebbe fatto, le esecuzioni con un bersaglio dal dato sono **vere** (da guardare una
+  per una), e `attrito_prima` è l'attrito che avrebbe avuto la politica di prima.
 
 **Avviso** (decisione D6 di Dario, 08/10): `attrito` oltre `attrito_avviso` (3) ogni 100 turni
 in un giorno con almeno `MIN_TURNI` (50) turni, oppure una domanda ripetuta. Obiettivo ≤ 2.
@@ -51,7 +55,12 @@ DOMANDE = frozenset({
     "politica_cambio_non_chiesto", "politica_azione_incoerente",
     # le guardie di prima del 06/10 (registri vecchi)
     "azione_non_chiesta", "immagine_azione_non_chiesta",
-    "web_azione_bloccata"})
+    "web_azione_bloccata",
+    # la politica per valore, accesa dal 09/10 (calliope/valore.py): le regole che chiedono,
+    # rifiutano o sfidano (valore_esegue, valore_voce e valore_lettura eseguono)
+    "valore_non_ancorata", "valore_bersaglio_dato", "valore_contenuto_dato",
+    "valore_contenuto_non_detto", "valore_dati_personali", "valore_e3_chiede",
+    "valore_e4_sfida"})
 RIFERIRE = frozenset({"uscita_istruzione", "uscita_contatto", "uscita_segreti", "uscita_soldi",
                       "uscita_numero_pagamento"})
 # «Te l'ho già detto», «quante volte», «ti ho detto di sì», «me lo chiedi ancora?»
@@ -130,7 +139,10 @@ def giorno(turni: list[dict]) -> dict:
     n = len(con_frase)
     domande = tipi["politica"] + tipi["riferire"]
     ombra = _ombra(turni)
-    simulate = max(0, domande - ombra["evitate"] + ombra["in_piu"])
+    # Con la politica per valore per tutto il giorno (le chiamate in ombra spenta cambiano) e
+    # con quella di prima per tutto il giorno (cambiano quelle con la politica per valore attiva)
+    simulate = max(0, domande - ombra["evitate_ombra"] + ombra["in_piu_ombra"])
+    prima = max(0, domande + ombra["evitate_attiva"] - ombra["in_piu_attiva"])
     return {
         "turni": n, "domande": domande, **tipi,
         "attrito": round(100 * domande / n, 1) if n else None,
@@ -138,22 +150,31 @@ def giorno(turni: list[dict]) -> dict:
         "accettate_quota": round(accettate / fermate, 2) if fermate else None,
         "gia_detto": gia_detto, "per_tool": dict(sorted(per_tool.items(), key=lambda x: -x[1])),
         "ombra": {**ombra, "attrito_simulato": (round(100 * simulate / n, 1)
-                                                if n and ombra["chiamate"] else None)},
+                                                if n and ombra["chiamate"] else None),
+                  "attrito_prima": (round(100 * prima / n, 1)
+                                    if n and ombra["attive"] else None)},
     }
 
 
 def _ombra(turni: list[dict]) -> dict:
     """Il confronto tra la decisione vera e quella della politica per valore (campo
     `politica_ombra` di ogni chiamata, calliope/valore.py). Per turno: una domanda evitata se
-    la vera chiedeva e la nuova esegue; una in più se la vera eseguiva e la nuova chiedeva."""
-    out = {"chiamate": 0, "diverse": 0, "evitate": 0, "in_piu": 0, "dato_eseguite": 0}
+    la vera chiedeva e la nuova esegue; una in più se la vera eseguiva e la nuova chiedeva.
+    Con `attiva` (dal 09/10) la «vera» è la politica di prima e la «nuova» quella che ha
+    deciso: i conti restano gli stessi, divisi per sapere quale attrito simulare."""
+    out = {"chiamate": 0, "attive": 0, "diverse": 0, "evitate": 0, "in_piu": 0,
+           "dato_eseguite": 0, "evitate_ombra": 0, "in_piu_ombra": 0, "evitate_attiva": 0,
+           "in_piu_attiva": 0}
     for t in turni:
-        evitata = in_piu = False
+        evitata = in_piu = attiva = False
         for e in _tool(t):
             o = e.get("politica_ombra")
             if not isinstance(o, dict):
                 continue
             out["chiamate"] += 1
+            if o.get("attiva"):
+                out["attive"] += 1
+                attiva = True
             vera, nuova = o.get("vera"), o.get("nuova")
             if vera != nuova:
                 out["diverse"] += 1
@@ -166,6 +187,9 @@ def _ombra(turni: list[dict]) -> dict:
                 out["dato_eseguite"] += 1
         out["evitate"] += evitata
         out["in_piu"] += in_piu
+        modo = "attiva" if attiva else "ombra"
+        out["evitate_" + modo] += evitata
+        out["in_piu_" + modo] += in_piu
     return out
 
 
@@ -222,7 +246,14 @@ def testo(giorni: dict[str, dict], soglia: float = 3.0) -> str:
             righe.append("    per tool: " + ", ".join(f"{k} {v}" for k, v in
                                                      list(d["per_tool"].items())[:6]))
         o = d["ombra"]
-        if o["chiamate"]:
+        if o["attive"]:
+            # Fase 4 (09/10): la politica per valore decide, l'ombra dice la politica di prima
+            righe.append(f"    politica per valore attiva: {o['chiamate']} chiamate con un dato "
+                         f"di mezzo, {o['diverse']} diverse dalla politica di prima, domande "
+                         f"evitate {o['evitate']}, in più {o['in_piu']}, ESEGUITE con un "
+                         f"bersaglio dal dato {o['dato_eseguite']}, attrito con la politica di "
+                         f"prima {_n(o['attrito_prima'])}")
+        elif o["chiamate"]:
             righe.append(f"    in ombra (politica per valore): {o['chiamate']} chiamate, "
                          f"{o['diverse']} diverse, domande evitate {o['evitate']}, in più "
                          f"{o['in_piu']}, eseguite con un bersaglio dal dato "

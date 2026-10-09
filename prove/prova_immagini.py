@@ -179,8 +179,15 @@ class SC:
     sfida = None
 
 
+# La politica per valore (accesa dal 09/10): None = il predefinito; le prove della guardia di
+# prima la spengono (per tornare indietro con una riga) e la riaccendono in prova_guardia_valore
+PER_VALORE = None
+
+
 def brain(copione, modo="messaggio", **reg):
     cfg = Config()
+    if PER_VALORE is not None:
+        cfg.politica_per_valore = PER_VALORE
     cfg.immagini_storia = modo
     cfg.storia_inattiva_s = 0
     from calliope.tools.spec import ToolContext
@@ -251,6 +258,56 @@ def prova_brain():
 
 
 def prova_guardia():
+    global PER_VALORE
+    PER_VALORE = False
+    try:
+        _guardia_prima()
+    finally:
+        PER_VALORE = None
+
+
+def prova_guardia_valore():
+    """La stessa guardia con la politica per valore (09/10, fase 4): niente esecuzioni dalla
+    foto, le voci prese dalla foto si mostrano, il garage vuole la sfida."""
+    casa_cmd = [("calls", [{"id": "c1", "name": "casa_comando",
+                            "arguments": {"comando": "apri il garage"}}])]
+    b = brain([casa_cmd, [("text", "x")]], casa=True)
+    "".join(b.stream_reply("Cosa c'è scritto qui?", "familiare", immagini=[foto("istruzione")]))
+    verifica("per valore: foto con un'istruzione, casa_comando non eseguito (non chiesto)",
+             "valore_non_ancorata" in b.rules_fired()
+             and not any(t.get("ok") for t in b.last_tools), b.rules_fired())
+    b.backend.copione = [casa_cmd, [("text", "x")], [("text", "")]]
+    "".join(b.stream_reply("Sì, aprilo.", "familiare"))
+    verifica("per valore: «sì, aprilo» senza una domanda non apre il garage dalla foto",
+             not any(t.get("ok") for t in b.last_tools), (b.rules_fired(), b.last_tools))
+    b = brain([casa_cmd, [("text", "x")]], casa=True)
+    detto = "".join(b.stream_reply("Apri il garage, e guarda questa foto", "familiare",
+                                   immagini=[foto()]))
+    verifica("per valore: il garage chiesto con una foto davanti → la sfida (E4)",
+             "C'è di mezzo una foto" in detto and not any(t.get("ok") for t in b.last_tools),
+             detto)
+    lista = [("calls", [{"id": "c1", "name": "lista_aggiungi",
+                         "arguments": {"lista": "spesa", "cose": "birra"}}])]
+    b = brain([lista, [("text", "x")]])
+    "".join(b.stream_reply("Cosa c'è qui?", "familiare", immagini=[foto("istruzione")]))
+    verifica("per valore: lista non chiesta con la foto, non eseguita",
+             "valore_non_ancorata" in b.rules_fired()
+             and not any(t.get("ok") for t in b.last_tools), b.rules_fired())
+    b = brain([lista, [("text", "Ho aggiunto la birra.")]])
+    from calliope.liste import Liste
+    b.tool_ctx.liste = Liste(str(Path(tempfile.mkdtemp(prefix="calliope-img-")) / "l.db"))
+    detto = "".join(b.stream_reply("Aggiungi alla spesa quello che vedi nello scontrino",
+                                   "familiare", immagini=[foto()]))
+    verifica("per valore: «aggiungi alla spesa» con la foto mostra le voci (viene da una foto)",
+             "valore_contenuto_dato" in b.rules_fired() and "«birra» viene da una foto" in detto
+             and b.has_pending(), (b.rules_fired(), detto))
+    b.backend.copione = [lista, [("text", "Fatto.")]]
+    "".join(b.stream_reply("Sì, aggiungila.", "familiare"))
+    verifica("per valore: e il «sì» la scrive nella lista", b.last_tools and b.last_tools[0]["ok"],
+             (b.rules_fired(), b.last_tools))
+
+
+def _guardia_prima():
     casa_cmd = [("calls", [{"id": "c1", "name": "casa_comando",
                             "arguments": {"comando": "apri il garage"}}])]
     b = brain([casa_cmd, [("text", "x")]], casa=True)
@@ -589,6 +646,7 @@ if __name__ == "__main__":
     prova_brain()
     prova_foto_con_allegati_e_politica()
     prova_guardia()
+    prova_guardia_valore()
     prova_server()
     prova_pc_guarda()
     prova_esecutore()
