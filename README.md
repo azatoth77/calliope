@@ -200,7 +200,7 @@ Calliope vera, satelliti e voci finte; **dal vero** = usata a voce.
 | Nomi capiti male | per gli argomenti che nominano qualcosa (città di un collaudo, estensione, file, dispositivo) la probabilità di Whisper e il nome noto più vicino nel registro dei turni; se il tool non trova niente, «forse intendevi…?» o «me lo ripeti o scrivi?» (08/10) | a secco, modello locale | [stt-tts](docs/aree/stt-tts.md) |
 | Voce | Piper sulla GPU se la macchina ce l'ha, prima frase a pezzi, taratura all'avvio e con l'uso | dal vero | [stt-tts](docs/aree/stt-tts.md) |
 | Personalità | sei toni, modalità Star Trek («Computer», suoni), cortesia senza modello | a secco, toni dal vero | [personalita](docs/aree/personalita.md) |
-| Capacità | registro con stato e prossimo passo; installazioni a voce solo da catalogo; inventario della macchina e piano dei modelli in sola lettura (`calliope stato --piano`) | dal vero | [capacita-installazioni](docs/aree/capacita-installazioni.md) |
+| Capacità | registro con stato e prossimo passo; installazioni a voce solo da catalogo; inventario della macchina e piano dei modelli in sola lettura (`calliope stato --piano`); «cosa sai fare?» per grandi aree con il dettaglio a richiesta, «cosa c'è di nuovo?» dal CHANGELOG della versione installata, «chi sei?» con fatti veri (09/10) | dal vero | [capacita-installazioni](docs/aree/capacita-installazioni.md) |
 | Osservabilità | registro dei turni JSONL; `calliope stato --turni` (mediana e p90 della prima frase, cause, attrito delle conferme, pause) | dal vero | [voce-e-regole](docs/aree/voce-e-regole.md) |
 
 ## Esempi

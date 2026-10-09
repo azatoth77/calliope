@@ -194,22 +194,162 @@ def _una(ctx, reg, nome: str, level: str) -> str:
     return frase
 
 
+# ─────────────────────────── aree, novità, chi sei (09/10) ───────────────────────────
+
+def _tool_names(ctx, level: str):
+    """I tool che chi parla può usare (None se il registro non c'è: prove a mano)."""
+    reg = getattr(ctx, "strumenti", None)
+    if reg is None or not hasattr(reg, "schemas_for"):
+        return None
+    try:
+        return [s["function"]["name"] for s in reg.schemas_for(level)]
+    except Exception:  # noqa: BLE001 — l'elenco serve solo a scegliere le aree
+        return None
+
+
+def _sullo_schermo(ctx) -> bool:
+    """C'è uno schermo personale di chi parla, collegato adesso? Solo allora si dice «è
+    sullo schermo» (la scheda è personale: altrove non arriva)."""
+    hub = getattr(ctx, "schermi", None)
+    if hub is None:
+        return False
+    try:
+        from ..schermi.hub import destinatari
+        from ..schermi.schede import PERSONALE
+        m = hub.mittente(ctx)
+        dest, _ = destinatari(PERSONALE, m, hub.collegati(), m.stanza)
+        return bool(dest)
+    except Exception:  # noqa: BLE001 — la scheda non deve rompere il tool
+        return False
+
+
+def _con_scheda(ctx, out: dict, titolo: str, testo: str, chiave: str) -> dict:
+    """La scheda personale in Markdown, con «Scarica» (schede.documento_markdown)."""
+    if getattr(ctx, "schermi", None) is None or not testo:
+        return out
+    try:
+        from ..schermi import schede
+        out["scheda"] = schede.documento_markdown(titolo, testo, chiave=chiave)
+    except Exception as e:  # noqa: BLE001
+        print(f"   [SCHERMI] scheda non costruita: {type(e).__name__}: {e}", flush=True)
+    return out
+
+
+def _azione(cosa: str) -> str:
+    """«timer, promemoria…» e «volume, musica…» non sono verbi: «gestire timer…»."""
+    return f"gestire {cosa}" if cosa.startswith(("timer", "volume")) else cosa
+
+
+def _md_aree(aree: list[dict], level: str) -> str:
+    righe = ["# Cosa so fare", ""]
+    for a in aree:
+        if not a["attiva"] and not (level == "amministra" and a["mancano"]):
+            continue
+        righe += [f"## {a['titolo']}", ""]
+        righe += [f"- {_cap1(_azione(x))}" for x in a["sa_fare"]]
+        if a["mancano"]:
+            nomi = _join([_cap.DEFINIZIONI[n].breve for n in a["mancano"]])
+            righe.append(f"- Non funziona ancora: {nomi}")
+        righe.append("")
+    righe.append("Chiedimi di un'area per il dettaglio, per esempio «cosa sai fare con la "
+                 "casa?».")
+    return "\n".join(righe)
+
+
+def _sa_fare_aree(ctx, reg, level: str) -> dict:
+    """«Cosa sai fare?»: solo le grandi aree (09/10, caso vero: l'elenco intero era così
+    lungo che la persona l'ha interrotta); il dettaglio sulla scheda e con `area`."""
+    aree = _cap.aree(reg, _tool_names(ctx, level))
+    attive = [a for a in aree if a["attiva"]]
+    frase = f"Posso aiutarti con {_join([a['nome'] for a in attive])}."
+    if level == "amministra":
+        bad = [c for c in reg.tutte(fresche=True) if not c.attiva]
+        if bad:
+            nomi = [c.definizione.breve for c in bad[:3]]
+            if len(bad) > 3:
+                nomi.append(f"altre {len(bad) - 3}")
+            verb = "funziona" if len(nomi) == 1 else "funzionano"
+            frase += f" Non {verb} ancora: {_join(nomi)}; il perché con «cosa manca?»."
+    else:
+        missing = [c.definizione.breve for c in reg.tutte(fresche=True)
+                   if not c.attiva and c.definizione.utente]
+        if missing:
+            frase += (f" Qui non ci sono ancora: {_join(missing)}; per queste chiedi a chi "
+                      f"amministra.")
+    esempio = next((a["nome"] for a in attive if a["chiave"] in ("casa", "documenti", "pc")),
+                   attive[0]["nome"] if attive else "")
+    if esempio:
+        frase += (f" Chiedimi di un'area per il dettaglio, per esempio «cosa sai fare con "
+                  f"{esempio}?».")
+    if _sullo_schermo(ctx):
+        frase += " L'elenco completo è sullo schermo."
+    return _con_scheda(ctx, _final(frase, aree=[a["chiave"] for a in attive]),
+                       "Cosa so fare", _md_aree(aree, level), "calliope:sa_fare")
+
+
+def _una_area(ctx, reg, chiave: str, level: str) -> dict:
+    """«Cosa sai fare con la casa?»: le capacità di quell'area."""
+    a = {x["chiave"]: x for x in _cap.aree(reg, _tool_names(ctx, level))}[chiave]
+    pezzi = []
+    if a["sa_fare"]:
+        pezzi.append(f"{a['con']} posso {_join([_azione(x) for x in a['sa_fare']])}.")
+    for nome in a["mancano"]:
+        d = _cap.DEFINIZIONI[nome]
+        if level == "amministra":
+            pezzi.append(_una(ctx, reg, nome, level))
+        elif d.utente:
+            verb = "funzionano" if _plurale(d.titolo) else "funziona"
+            pezzi.append(f"{_cap1(d.titolo)} qui non {verb} ancora: chiedi a chi amministra.")
+    if not pezzi:
+        pezzi.append(f"Con {a['nome']} in questa installazione non posso aiutarti.")
+    return _final(" ".join(pezzi), area=chiave)
+
+
+def _novita(ctx, periodo: str) -> dict:
+    from .. import novita
+    r = novita.novita(periodo)
+    frase = r["frase"]
+    if r["fuori"] and _sullo_schermo(ctx):
+        frase += " Il resto è sullo schermo."
+    return _con_scheda(ctx, _final(frase), "Novità di Calliope", r["markdown"],
+                       "calliope:novita")
+
+
 def _calliope_stato(ctx: ToolContext, capacita: str = "", domanda: str = "",
-                    cosa: str = "") -> dict:
+                    cosa: str = "", area: str = "", periodo: str = "") -> dict:
     level = _level(ctx)
-    if str(cosa or "").strip().lower() == "macchina":
+    cosa = str(cosa or "").strip().lower()
+    if cosa == "macchina":
         # «Su che hardware giri?» (04/10): la macchina e i modelli, non le capacità. Niente
         # dati sensibili (calliope/macchina.py), quindi per tutti i livelli
         from ..macchina import descrivi
         return _final(descrivi(ctx.cfg, getattr(ctx, "lavori", None)))
+    if not cosa and str(periodo or "").strip():
+        # Solo il periodo («cosa è cambiato da ieri?» → periodo=da_ieri, 09/10 col modello
+        # locale): il periodo c'è solo per le novità, la forma della scelta si completa qui
+        note_rule(ctx, "stato_periodo_novita")
+        cosa = "novita"
+    if cosa == "novita":
+        # «Cosa c'è di nuovo?», «che versione sei?» (09/10): CHANGELOG.md della versione
+        # installata (calliope/novita.py). Il registro è pubblico: per tutti i livelli
+        return _novita(ctx, str(periodo or "").strip().lower())
     reg = _registro(ctx)
+    if cosa == "chi_sei":
+        # «Chi sei?», «dove giri?», «chi ti ha fatta?» (09/10): fatti veri, niente host
+        from ..novita import chi_sei
+        return _final(chi_sei(ctx.cfg, getattr(ctx, "lavori", None), reg))
     nome = str(capacita or "").strip().lower()
+    area = str(area or "").strip().lower()
     if level == "ospite":
         frase = _ospite(ctx, reg)
+    elif area in _cap.AREE and cosa != "manca":
+        return _una_area(ctx, reg, area, level)
     elif nome in _cap.DEFINIZIONI:
         frase = _una(ctx, reg, nome, level)
+    elif cosa != "manca":
+        return _sa_fare_aree(ctx, reg, level)
     else:
-        frase = _panoramica(ctx, reg, level, str(cosa or "").strip().lower())
+        frase = _panoramica(ctx, reg, level, cosa)
     return _final(frase)
 
 
@@ -325,19 +465,26 @@ SPECS = [
     ToolSpec(
         name="calliope_stato",
         # Accorciata il 03/10 (analisi del comportamento: prefisso −14 % con le altre): la
-        # capacità è nell'enum, qui non si ripete
-        description=("Dice cosa sai fare in questa installazione, cosa manca e perché qualcosa "
-                     "non funziona, con il prossimo passo. Per «cosa sai fare?», «cosa "
-                     "manca?», «funziona tutto?», «perché non riesci a…?». capacita: tutte, o "
-                     "quella chiesta (Wikipedia = biblioteca, offline; web = internet). cosa: manca per «cosa manca?» o «cosa si può "
-                     "aggiungere?»; macchina per «su che hardware giri?», «che "
-                     "configurazione hai?», «che modello usi?»; altrimenti sa_fare. Nella "
-                     "risposta usa la frase del risultato."),
+        # capacità è nell'enum, qui non si ripete. 09/10: aree, novità e chi sei
+        description=("Dice cosa sai fare, cosa manca, perché qualcosa non funziona, e chi sei. "
+                     "cosa: sa_fare per «cosa sai fare?»; con area per «cosa sai fare con la "
+                     "casa?», «cosa puoi fare per i promemoria?» (sempre, mai a memoria); manca per «cosa manca?», «funziona tutto?», «cosa si può "
+                     "aggiungere?»; macchina per «su che hardware giri?», «che modello usi?»; "
+                     "novita per «cosa c'è di nuovo?», «che versione sei?», «quando ti hanno "
+                     "aggiornata?» (periodo per «da ieri», «questa settimana»); chi_sei per "
+                     "«chi sei?», «dove gira il tuo codice?», «chi ti ha fatta?». capacita: "
+                     "quella chiesta, per «perché non riesci a…?» (Wikipedia = biblioteca, "
+                     "offline; web = internet). Nella risposta usa la frase del risultato."),
         parameters={"type": "object",
                     "properties": {"capacita": {"type": "string",
                                                 "enum": ["tutte"] + list(_cap.DEFINIZIONI)},
                                    "cosa": {"type": "string",
-                                            "enum": ["sa_fare", "manca", "macchina"]}},
+                                            "enum": ["sa_fare", "manca", "macchina", "novita",
+                                                     "chi_sei"]},
+                                   "area": {"type": "string", "enum": list(_cap.AREE)},
+                                   "periodo": {"type": "string",
+                                               "enum": ["ultimo_aggiornamento", "oggi",
+                                                        "da_ieri", "settimana", "mese"]}},
                     "required": []},
         func=_calliope_stato, risk="lettura", levels=ALL),
     ToolSpec(
