@@ -526,6 +526,11 @@ class Config:
     # Una conversazione nuova della stessa persona nello stesso posto, entro queste ore dalla
     # fine della precedente, parte con la riga «l'ultima volta avete parlato di…». 0 = mai
     conversazione_ripresa_ore: float = 4.0
+    # Una conversazione chiusa per una pausa (storia_inattiva_s) lascia alla nuova della stessa
+    # persona i suoi ultimi scambi, solo le frasi dette, per `conversazione_ripresa_ore` (09/10,
+    # caso vero della DGX: dopo 10 minuti «cos'è che ti ho chiesto?» non aveva niente, e il
+    # riassunto di chiusura arriva in secondo piano dopo). 0 = solo il riassunto, come prima
+    conversazione_coda_scambi: int = 3
     # Risposte del modello della voce insieme (06/10, calliope/corsie.py: più persone da
     # satelliti diversi). Oltre, chi parla sente «Sto rispondendo anche a un'altra persona:
     # dammi un attimo.» e aspetta il suo turno, in ordine d'arrivo; una risposta cominciata
@@ -2496,7 +2501,7 @@ SEZIONI: dict[str, list[str]] = {
     "conversazioni": ["conversazioni_enabled", "conversazioni_db", "conversazioni_giorni",
                       "conversazioni_embedding", "conversazioni_embedding_url",
                       "conversazioni_embedding_cpu", "conversazioni_vettori_inattivita_s",
-                      "conversazione_ripresa_ore",
+                      "conversazione_ripresa_ore", "conversazione_coda_scambi",
                       "conversazioni_parallele", "conversazione_doppione_s"],
     "biblioteca": ["biblioteca_enabled", "biblioteca_mini", "biblioteca_completa",
                    "biblioteca_ragazzi", "biblioteca_ragazzi_vantaggio",
@@ -2762,7 +2767,7 @@ LIMITI: dict[str, tuple[float, float]] = {
     "contesto_turni_intatti": (1, 50), "contesto_riassunto_token": (100, 4000),
     "contesto_dura_attesa_s": (0.0, 120.0), "contesto_riassunto_attesa_s": (0.0, 600.0),
     "contesto_riassunto_max_s": (0.0, 3600.0), "conversazioni_giorni": (0, 3650),
-    "conversazione_ripresa_ore": (0.0, 720.0), "conversazioni_parallele": (0, 16),
+    "conversazione_ripresa_ore": (0.0, 720.0), "conversazione_coda_scambi": (0, 10), "conversazioni_parallele": (0, 16),
     "conversazione_doppione_s": (0.0, 30.0),
     "agenti_num_ctx": (2048, 1_048_576), "agenti_contesti_paralleli": (1, 64),
     "sviluppo_sospendi_min": (0.0, 1440.0), "sviluppo_programma_righe": (10, 100_000),

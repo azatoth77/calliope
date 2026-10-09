@@ -1649,6 +1649,16 @@ class Brain:
                 print(f"   [CONTESTO] compressione non applicata: {type(e).__name__}: {e}",
                       flush=True)
         arch = getattr(self, "archivio_conv", None)
+        r0 = conv.riassunto if isinstance(conv.riassunto, dict) else {}
+        if not conv.history and r0.get("tipo") == "coda":
+            # Gli ultimi scambi della conversazione chiusa per una pausa (09/10): valgono per
+            # le ore della ripresa, poi la ripresa di sempre
+            ore = float(getattr(self.cfg, "conversazione_ripresa_ore", 4) or 0)
+            if time.time() - float(r0.get("quando") or 0) <= ore * 3600:
+                conv.ripresa_provata = True
+                self._rule("conversazione_coda")
+            else:
+                conv.riassunto = None
         if (arch is not None and not conv.history and conv.riassunto is None
                 and not getattr(conv, "ripresa_provata", False)):
             conv.ripresa_provata = True
@@ -2813,7 +2823,11 @@ class Brain:
         il riassunto di chiusura si fa in secondo piano (calliope/compressione.py: la voce
         non aspetta). La conversazione nuova è un oggetto nuovo nello stesso posto."""
         old = self._c()
-        if old.history or old.riassunto:
+        # Una conversazione con la sola riga di ripresa (o la coda di quella chiusa) non ha
+        # niente da archiviare né da riassumere (09/10)
+        solo_ripresa = (not old.history and isinstance(old.riassunto, dict)
+                        and old.riassunto.get("tipo") in ("ripresa", "coda"))
+        if (old.history or old.riassunto) and not solo_ripresa:
             self._archivia_turni()
             comp = getattr(self, "compressore", None)
             arch = getattr(self, "archivio_conv", None)
@@ -2834,6 +2848,8 @@ class Brain:
             alleg.svuota()               # e anche i file allegati (mai su disco)
         self.conv = Conversazione(old.chiave)
         self.conv.luogo = old.luogo
+        if motivo == "conversazione_scaduta":
+            self._coda_della_chiusa(old)      # gli ultimi scambi restano nella ripresa (09/10)
         # Il numero delle risposte continua (prima era di Brain e non si azzerava): una
         # proposta della conversazione chiusa non diventa mai «la risposta precedente»
         self.conv.turn_number = getattr(old, "turn_number", 0)
@@ -2846,6 +2862,22 @@ class Brain:
         sc = getattr(self.tool_ctx, "speaker_ctx", None)
         if sc is not None and getattr(sc, "sfida", None) is not None:
             sc.sfida = None              # la frase di conferma era di questa conversazione
+
+    def _coda_della_chiusa(self, old):
+        """Chiusa per una pausa (09/10): gli ultimi scambi nella ripresa della nuova, per
+        `conversazione_ripresa_ore` (compressione.coda_scambi). Solo la stessa persona: la
+        nuova ha la stessa chiave, e mai per un ospite (due ospiti dello stesso satellite sono
+        due persone diverse)."""
+        from .compressione import coda_scambi, testo_coda
+        owner = getattr(old, "owner", None)
+        if owner is None or owner is UNSET:
+            return
+        n = int(getattr(self.cfg, "conversazione_coda_scambi", 0) or 0)
+        scambi = coda_scambi(old.history, n) if n > 0 else []
+        if scambi:
+            ora = time.time()
+            self.conv.riassunto = {"tipo": "coda", "testo": testo_coda(scambi, ora),
+                                   "quando": ora}
 
     def chiudi_conversazione(self, conv, motivo: str):
         """Chiude una conversazione che non è quella del turno (06/10: il registro delle

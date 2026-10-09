@@ -122,7 +122,13 @@ def _voce_turno(x: dict, ospiti: bool, adesso: float, in_corso=None) -> dict:
 _CORNICE = frozenset(
     "stavamo parlando parlavamo parlavi parlavo dicevi dicevamo raccontavi raccontato "
     "ancora indietro poi dopo prima questo quello cosa cose altro altra dimmi parlami meno "
-    "male quindi allora dunque insomma davvero".split())
+    "male quindi allora dunque insomma davvero "
+    # Le domande su cosa si è chiesto (09/10, caso vero della DGX alle 19:06: «scusami, ma cos'è
+    # che ti ho chiesto esattamente?» → argomento «scusami chiesto esattamente», trovato in 5
+    # turni di una conversazione delle 12:41, e il modello raccontava quella invece dell'ultima)
+    "chiesto chiesta chiesti chieste chiedevo chiedere chiedo domandato domanda domande "
+    "richiesta richieste esattamente precisamente scusa scusami attimo momento poco appena "
+    "ultima ultimo ultime ultimi fatto fatta".split())
 
 
 def _argomento(domanda: str) -> str:
@@ -203,6 +209,13 @@ def _cronologico(ctx, arch, persona, quando: str, dal, al, detto_periodo: str,
             extra["sull_argomento"] = [_voce_turno(x, False, adesso,
                                                    getattr(ctx, "conv_archivio", None))
                                        for x in trovati]
+            # Un turno di una conversazione più vecchia di quella raccontata lo dice (09/10):
+            # il modello non lo prende per l'ultima cosa detta
+            primo = r["conversazioni"][0]
+            for v, x in zip(extra["sull_argomento"], trovati):
+                if x.get("conv") != primo["id"] and float(x.get("quando") or 0) < float(
+                        primo["inizio"] or 0):
+                    v["conversazione"] = "un'altra, più vecchia di quella qui sopra"
             fare += ("; se la persona chiede di un argomento preciso, rispondi con "
                      "sull_argomento (il primo è il più recente), e per saperne di più cerca di "
                      "nuovo con lo strumento della sua «fonte»")

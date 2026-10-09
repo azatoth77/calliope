@@ -741,6 +741,11 @@ conversazioni:
   # Una conversazione nuova della stessa persona nello stesso posto, entro queste ore dalla
   # fine della precedente, parte con la riga «l'ultima volta avete parlato di…». 0 = mai
   conversazione_ripresa_ore: 4.0
+  # Una conversazione chiusa per una pausa (storia_inattiva_s) lascia alla nuova della stessa
+  # persona i suoi ultimi scambi, solo le frasi dette, per `conversazione_ripresa_ore` (09/10,
+  # caso vero della DGX: dopo 10 minuti «cos'è che ti ho chiesto?» non aveva niente, e il
+  # riassunto di chiusura arriva in secondo piano dopo). 0 = solo il riassunto, come prima
+  conversazione_coda_scambi: 3
   # Risposte del modello della voce insieme (06/10, calliope/corsie.py: più persone da
   # satelliti diversi). Oltre, chi parla sente «Sto rispondendo anche a un'altra persona:
   # dammi un attimo.» e aspetta il suo turno, in ordine d'arrivo; una risposta cominciata

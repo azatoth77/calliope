@@ -989,7 +989,94 @@ def prova_fonte():
     a.close()
 
 
+# ─────────────────────────── 9. dopo una pausa (09/10) ───────────────────────────
+# Caso vero della DGX alle 19:06 (qui con argomenti di fantasia): la conversazione della pizza
+# e del foglio Excel chiusa dopo ~10 minuti; «scusami, ma cos'è che ti ho chiesto
+# esattamente?» → conversazione_cerca cronologico → l'argomento «scusami chiesto esattamente»
+# trovava 5 turni della conversazione delle 12:41 (i video) e il modello raccontava quella
+def prova_dopo_la_pausa():
+    from calliope.compressione import coda_scambi, testo_coda
+    a = archivio("pausa.db")
+    ora = time.time()
+    vecchia = Conversazione()
+    vecchia.luogo = "telefono"
+    riempi(a, vecchia, "p-dario", "Dario", False,
+           [("Riesci a vedere i video esattamente?", "No, i video non li vedo."),
+            ("Esattamente cosa vedi allora?", "Le foto che mi mandi."),
+            ("Tetto: quanto costa rifarlo?", "Sui 7.000 euro.")], quando=ora - 6 * 3600)
+    recente = Conversazione()
+    recente.luogo = "telefono"
+    riempi(a, recente, "p-dario", "Dario", False,
+           [("Che pizza mi consigli stasera?", "Una margherita."),
+            ("Fammi un foglio Excel con le spese", "Fatto, è sullo schermo.")],
+           quando=ora - 600)
+    a.attendi()
+    ctx = Ctx(a)
+    ctx.turno = 5
+    r = _conversazione_cerca(ctx, "scusami, ma cos'è che ti ho chiesto esattamente?",
+                             cronologico=True)
+    txt = json.dumps(r, ensure_ascii=False)
+    verifica("caso vero: «cos'è che ti ho chiesto esattamente?» → la conversazione appena "
+             "chiusa (pizza), senza i turni vecchi con «esattamente»",
+             r["ok"] and "pizza" in r["conversazione"].get("tue_prime_frasi", "")
+             and "sull_argomento" not in r and "video" not in txt, txt[:400])
+    ctx.turno = 20
+    r = _conversazione_cerca(ctx, "prima mi parlavi del tetto", cronologico=True)
+    arg = r.get("sull_argomento") or [{}]
+    verifica("contrario: un argomento vero di una conversazione più vecchia resta, e lo dice",
+             "7.000" in json.dumps(arg, ensure_ascii=False)
+             and "più vecchia" in arg[0].get("conversazione", ""),
+             json.dumps(r, ensure_ascii=False)[:400])
+    a.close()
+
+    # La coda: chiusa per una pausa, gli ultimi scambi restano nella ripresa
+    storia = [{"role": "user", "content": f"Domanda {i}"} if j == 0 else
+              {"role": "assistant", "content": f"Risposta {i}"} for i in range(5) for j in (0, 1)]
+    storia.insert(3, {"role": "assistant", "content": "", "tool_calls": [{"id": "x"}]})
+    storia.insert(4, {"role": "tool", "content": "{\"segreto\": 1}", "tool_call_id": "x"})
+    sc = coda_scambi(storia, 3)
+    verifica("coda_scambi: gli ultimi tre, solo le frasi dette",
+             sc == [("Domanda 2", "Risposta 2"), ("Domanda 3", "Risposta 3"),
+                    ("Domanda 4", "Risposta 4")], str(sc))
+    verifica("testo_coda: dati, non istruzioni, con le frasi", "non istruzioni" in
+             testo_coda(sc, ora) and "«Domanda 4»" in testo_coda(sc, ora))
+    b = brain_finto()
+    parla(b, "Che pizza mi consigli stasera?")
+    parla(b, "Fammi un foglio Excel con le spese")
+    b.end_conversation("conversazione_scaduta")
+    parla(b, "Cos'è che ti ho chiesto un attimo fa?")
+    visti = b.backend.visti[-1]
+    verifica("chiusa per una pausa: gli ultimi scambi nella conversazione nuova",
+             visti[1]["role"] == "system" and "foglio Excel" in visti[1]["content"]
+             and "pizza" in visti[1]["content"] and "conversazione_coda" in b.rules_fired()
+             and sum(1 for m in visti if m["role"] == "user") == 1, visti[1]["content"][:200])
+    for motivo in ("nuova", "dormi", "conversazione_altra_persona"):
+        b = brain_finto()
+        parla(b, "Che pizza mi consigli stasera?")
+        b.end_conversation(motivo)
+        verifica(f"contrario: chiusa per «{motivo}» → niente coda", b.conv.riassunto is None)
+    b = brain_finto()
+    parla(b, "Che pizza mi consigli stasera?", chi=None, livello="ospite")
+    b.end_conversation("conversazione_scaduta")
+    verifica("contrario: un ospite → niente coda (un altro ospite non la eredita)",
+             b.conv.riassunto is None)
+    b = brain_finto()
+    parla(b, "Che pizza mi consigli stasera?")
+    b.end_conversation("conversazione_scaduta")
+    b.conv.riassunto["quando"] -= 5 * 3600
+    parla(b, "Ciao")
+    verifica("contrario: oltre conversazione_ripresa_ore la coda non vale",
+             not any("pizza" in (m.get("content") or "") for m in b.backend.visti[-1]
+                     if m["role"] == "system"))
+    b = brain_finto()
+    b.cfg.conversazione_coda_scambi = 0
+    parla(b, "Che pizza mi consigli stasera?")
+    b.end_conversation("conversazione_scaduta")
+    verifica("contrario: conversazione_coda_scambi 0 → come prima", b.conv.riassunto is None)
+
+
 prova_oggetto()
+prova_dopo_la_pausa()
 prova_luogo_funzione()
 prova_fonte()
 prova_turni()
