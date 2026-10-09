@@ -32,6 +32,10 @@ from ..testi import NIENTE
 
 _FIELDS = ("id", "owner", "owner_name", "formato", "titolo", "rif", "nome_file", "contenuto",
            "versione", "mtime", "richiesta", "creato", "modificato")
+# Parole che dicono il tipo di file, non quale documento («il foglio Excel della pizza»)
+_GENERICHE = frozenset({"foglio", "fogli", "excel", "documento", "documenti", "file", "word",
+                        "xlsx", "docx", "calcolo", "quel", "quello", "ultimo", "creato",
+                        "fatto", "preparato"})
 
 
 class Archive:
@@ -93,6 +97,41 @@ class Archive:
 
     def get(self, doc_id: int) -> dict | None:
         return self._one("id = ?", (doc_id,))
+
+    def recenti(self, owner, n: int = 10) -> list[dict]:
+        """Gli ultimi `n` documenti di `owner`, dal più recente (senza il contenuto)."""
+        campi = [f for f in _FIELDS if f != "contenuto"]
+        with self._lock:
+            rows = self.db.execute(
+                f"SELECT {', '.join(campi)} FROM documenti WHERE owner = ? "
+                "ORDER BY modificato DESC, id DESC LIMIT ?", (owner, max(1, int(n)))).fetchall()
+        return [dict(zip(campi, r)) for r in rows]
+
+    def trova(self, owner, quale: str = "") -> dict | None:
+        """Il documento di `owner` detto con parole del titolo («la tabella dell'idratazione»),
+        o l'ultimo se `quale` è vuoto; None se le parole non corrispondono a nessuno dei suoi
+        ultimi documenti (mai un altro documento al suo posto)."""
+        q = str(quale or "").strip()
+        if not q or q.lower() in ("ultimo", "l'ultimo", "quello", "questo", "il documento",
+                                  "il file", "documento", "file"):
+            return self.last(owner)
+        if q.isdigit():
+            d = self.get(int(q))
+            return d if d is not None and d.get("owner") == owner else None
+        from ..provenienza import parole
+        mie = parole(q) - _GENERICHE
+        if not mie:
+            return self.last(owner)
+        migliore, punti = None, 0.0
+        for d in self.recenti(owner, 20):
+            sue = parole(d.get("titolo") or "") | parole(Path(str(d.get("nome_file") or "")).stem)
+            comuni = len(mie & sue)
+            p = comuni / len(mie)
+            if comuni and p > punti:
+                migliore, punti = d, p
+        if migliore is None or punti < 0.5:
+            return None
+        return self.get(migliore["id"])
 
     def update(self, doc_id: int, contenuto: dict, rif, nome_file, mtime):
         """Nuova versione: quella di prima resta in documenti_versioni."""
@@ -209,7 +248,12 @@ class Documenti:
         on_card = getattr(job, "on_scheda", None)
         if background and on_card and result.get("scheda"):
             try:
-                on_card(result["scheda"])
+                esito = on_card(result["scheda"])
+                # Arrivata a uno schermo personale di chi l'ha chiesto (con «Scarica»): il
+                # documento rimasto sul server si prende da lì (09/10)
+                if result.get("annuncio_scheda") and isinstance(esito, dict) \
+                        and esito.get("schermi"):
+                    result["annuncio"] = result["annuncio_scheda"]
             except Exception as e:  # noqa: BLE001 — lo schermo non ferma l'annuncio
                 print(f"   [DOCUMENTI] scheda non inviata: {e}", flush=True)
         if background:
@@ -268,16 +312,32 @@ class Documenti:
         self.stats.append({"lavoro": "crea", "formato": formato, "generazione_s": round(gen_s, 2),
                            "totale_s": round(total_s, 2), **getattr(self.writer, "last_stats", {})})
         pronto = "pronta" if fem else "pronto"
+        # Rimasto sul server perché il satellite non riceve documenti (un telefono): con uno
+        # schermo personale di chi l'ha chiesto la scheda ha «Scarica», e la frase dice quella
+        # (09/10, caso vero della DGX delle 18:56: «sul server, perché il satellite collegato non
+        # riceve documenti», e il file sembrava perso). La sceglie il tool (o l'annuncio) se la
+        # scheda arriva davvero
+        sulla_scheda = {}
+        if d.get("remoto") is False:
+            lo = "averla" if fem else "averlo"
+            sulla_scheda = {
+                "frase_scheda": (f"Ho preparato {name} «{doc['titolo']}»: {what}. È sulla "
+                                 f"scheda del tuo schermo: per {lo} tocca «Scarica»."),
+                "annuncio_scheda": (f"È {pronto} {name} «{doc['titolo']}»: {what}. È sulla "
+                                    f"scheda del tuo schermo: per {lo} tocca «Scarica».")}
+        leggi = (" Per dire cosa contiene, riassumerlo o mostrarlo di nuovo: documento_leggi.")
         return {"ok": True, "documento": doc_id, "formato": formato, "titolo": doc["titolo"],
                 "nome_file": d["nome_file"], "contenuto": what, "secondi": round(total_s, 1),
                 # Anteprima per gli schermi personali (Brain la toglie prima del modello)
                 "scheda": _scheda(doc, formato, d["nome_file"], ident=doc_id),
                 "frase": f"Ho preparato {name} «{doc['titolo']}»: {what}, {where}.{ask}",
                 "annuncio": f"È {pronto} {name} «{doc['titolo']}»: {what}, {where}.{ask}",
+                **sulla_scheda,
                 "cosa_fare": ("Non leggere il documento. Se chiede di aprirlo chiama "
                               "pc_apri_file con risultato 1; per cambiarlo documento_modifica."
+                              + leggi
                               if can_open else "Non leggere il documento. Per cambiarlo "
-                                               "documento_modifica."),
+                                               "documento_modifica." + leggi),
                 # La domanda «Lo apro?» diventa un'azione in sospeso per il turno dopo
                 # (Brain): decide il modello se la risposta è un sì
                 **({"in_sospeso": in_sospeso(ask.strip(), f"{name} «{doc['titolo']}»")}

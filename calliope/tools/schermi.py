@@ -50,6 +50,7 @@ COSE = ("ultima", "risposta", "lista", "timer", "promemoria", "documento", "casa
 # I tool che toccano cose personali: la loro risposta, riletta sullo schermo, è personale
 _PERSONALI = {"promemoria_imposta", "appuntamento_aggiungi", "appuntamenti_elenca",
               "agenda_elenca", "ricorda", "dimentica", "documento_crea", "documento_modifica",
+              "documento_leggi",
               "pc_cerca_file", "pc_apri_file", "pc_programmi", "chi_parla"}
 
 

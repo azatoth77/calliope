@@ -607,6 +607,17 @@ class Schermi:
         with self._lock:
             return any(locale is None or c.locale == locale for c in self._conn.get(sid, []))
 
+    def personale_collegato(self, mittente: Mittente) -> bool:
+        """Una scheda personale di `mittente` arriverebbe adesso, con «Scarica», a un suo
+        schermo personale con la pagina aperta (09/10: il documento rimasto sul server si dice
+        «sulla scheda»). Come `invia`: identità decisa dalla voce, schede automatiche accese."""
+        if not self.automatiche or not mittente.certo or not mittente.persona:
+            return False
+        stanza = mittente.stanza or self.stanza_predefinita or None
+        dest, _ = destinatari(PERSONALE, mittente, self.abbinati(), stanza)
+        return any(s.get("proprietario") == mittente.persona and self.collegato(s["id"])
+                   for s in dest)
+
     def _in_storia(self, sid: int, scheda: dict):
         """La scheda nella cronologia dello schermo (con il lock). Con una `chiave` già
         presente la sostituisce: in cima (di norma: è cambiata per un'azione o un evento) o

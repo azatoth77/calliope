@@ -110,7 +110,11 @@ ARGOMENTI: dict[str, dict[str, str]] = {
     "installa_gestisci": {"azione": Z},
     # 08/10 (versione 2): estensioni e programmi si aprono qui (prima estensione_crea e
     # delega_lavoro di codice); tipo sceglie quale, file e allegato come per i lavori
-    "sviluppo_apri": {"tipo": Z, "compito": L, "nome": C, "gia_fatto_da": S,
+    # «nome»: il nome che il modello dà alla funzione nuova («Meteocittà suggerimenti») è un
+    # testo libero come il compito (09/10, caso vero della DGX delle 20:39: come contenuto, la
+    # parola «suggerimenti» non detta faceva chiedere «C'è di mezzo una pagina internet…»); si
+    # giudica sulle parole distintive prese da un dato
+    "sviluppo_apri": {"tipo": Z, "compito": L, "nome": L, "gia_fatto_da": S,
                       "come_chiederlo": L, "proposta": X, "gioco": S, "vincoli": L,
                       "file": B, "allegato": "indice:allegato",
                       # 08/10 (giro 10): l'estensione esistente di cui fare una versione nuova
@@ -390,8 +394,14 @@ class Fonti:
     def da(cls, t, fidati=()) -> "Fonti":
         esterni = " ".join(x for _, x in (t.esterni or ()))
         fid = " ".join(str(x) for x in (fidati or ()))
-        return cls(prov.parole(t.testo), prov.parole(t.persona_txt), prov.parole(fid),
-                   prov.parole(esterni), _gettoni_numeri(t.testo), _gettoni_numeri(t.persona_txt),
+        # La risposta a una domanda di Calliope fatta con nomi fidati (09/10: «Taverna o Bagno
+        # della Taverna?» dai nomi di Home Assistant): quei nomi li ha scelti la persona
+        # e la città della casa dalla configurazione (`da_config`, 09/10: fidata come le parole
+        # della persona, come per la politica di prima; analisi delle regole § 3.8)
+        persona = (f"{t.persona_txt} {getattr(t, 'domanda_fidata', '') or ''} "
+                   f"{getattr(t, 'da_config', '') or ''}")
+        return cls(prov.parole(t.testo), prov.parole(persona), prov.parole(fid),
+                   prov.parole(esterni), _gettoni_numeri(t.testo), _gettoni_numeri(persona),
                    _gettoni_numeri(esterni), "foto" in (t.contaminazione or ()))
 
 
@@ -423,10 +433,15 @@ def etichetta(valore, tipo: str, f: Fonti) -> str:
         # «Cerno Maggiore» detto, «Cerro Maggiore» nel valore)
         if w in f.frase or prov.vicina(w, f.frase):
             e = DETTO
-        elif w in f.persona:
-            # Detto solo prima e anche nel dato: per un bersaglio può averlo scelto il dato
-            # (il «latte» del 06/10)
-            e = DATO if tipo == BERSAGLIO and w in f.dato else PERSONA
+        elif w in f.persona or prov.vicina(w, f.persona):
+            # Detto dalla persona in questa conversazione (un turno di prima, o la risposta a
+            # una domanda di Calliope fatta con nomi fidati: Turno.domanda_fidata) vale suo,
+            # anche se un dato lo ripete (09/10, casi veri della DGX: «Meteocittà» nominata da
+            # Dario più volte e ripetuta negli annunci dell'agente → «viene dal lavoro di un
+            # agente, non da te»). Storico (08/10–09/10): per un bersaglio valeva «dato» (il
+            # «latte» del 06/10, detto prima e scelto dal dato); resta «dato» solo una parola
+            # che sta SOLO nel dato
+            e = PERSONA
         elif w in f.dato:
             # Il dato prima del fidato: un valore del dato che un tool interno ha ripetuto
             # (il nome di un timer messo da una pagina) non diventa fidato
@@ -509,7 +524,31 @@ def personali(valore, t, ctx) -> list[str]:
 VALORE_REGOLE = (
     "valore_lettura", "valore_non_ancorata", "valore_bersaglio_dato", "valore_contenuto_dato",
     "valore_contenuto_non_detto", "valore_dati_personali", "valore_esegue",
-    "valore_voce", "valore_e3_chiede", "valore_e4_sfida")
+    "valore_voce", "valore_e3_chiede", "valore_e4_sfida", "valore_consenso_breve",
+    "valore_consenso_voce", "valore_consenso_sfida", "valore_sfida_classe")
+
+
+def fonte_del_valore(valore, t) -> str:
+    """La fonte del dato non fidato da cui vengono le parole del valore (09/10, analisi delle
+    regole § 3.3: prima si diceva la prima fonte in ordine alfabetico, «viene da una foto» per
+    un numero della pagina). "" se nessuna (o una foto, che non ha testo)."""
+    testo = _testo(valore) or ""
+    ps = prov.parole(testo) | _gettoni_numeri(testo)
+    if not ps:
+        return ""
+    for f, txt in reversed(list(getattr(t, "esterni", None) or ())):
+        if ps & (prov.parole(txt) | _gettoni_numeri(txt)):
+            return f
+    return "foto" if "foto" in (getattr(t, "contaminazione", None) or ()) else ""
+
+
+def consenso_della_persona(ctx) -> bool:
+    """Il «sì» viene dalla persona della conversazione: riconosciuta dalla voce in questa
+    frase o, per una frase breve, dalla conversazione (ciclo.py: in compagnia una frase breve
+    non vale nessuno). Non la zona grigia, non un ospite, non scritto da uno schermo."""
+    sc = getattr(ctx, "speaker_ctx", None)
+    return (sc is not None and getattr(sc, "current_speaker", None) is not None
+            and getattr(sc, "identified_by", None) in ("voce", "breve"))
 
 
 def ancorata(cl, name: str, args: dict, t) -> bool:
@@ -530,6 +569,23 @@ def _mostra(valore) -> str:
 def decidi_valore(name: str, args: dict, cl, t, base, conferma_voce: bool = False,
                   voce_frase: bool = False, cosa: str | None = None, ctx=None, spec=None,
                   fidati=()) -> tuple:
+    """La decisione della politica per valore (`_matrice`), con la frase di sfida dichiarata
+    nella classe come pavimento (09/10, analisi delle regole § 3.8: `installa_avvia` ha
+    `sfida=True` ma è E3, e con la voce riconosciuta in questa frase la matrice lo eseguiva
+    senza sfida). Una decisione della matrice che esegue o chiede soltanto, per un tool con
+    `Classe.sfida`, diventa la sfida (regola `valore_sfida_classe`), salvo la sfida già superata
+    in questo turno. Quando vale `base` (la politica di prima) decide lei, come sempre."""
+    d, det = _matrice(name, args, cl, t, base, conferma_voce, voce_frase, cosa, ctx, spec,
+                      fidati)
+    if (d is not base and cl.sfida and d.esito in ("esegui", "conferma")
+            and not getattr(t, "sfida", False)):
+        d = pol.Decisione("sfida", "valore_sfida_classe", d.domanda, d.fonte)
+    return d, det
+
+
+def _matrice(name: str, args: dict, cl, t, base, conferma_voce: bool = False,
+             voce_frase: bool = False, cosa: str | None = None, ctx=None, spec=None,
+             fidati=()) -> tuple:
     """La decisione della politica per valore, accanto a quella di oggi (`base`, da
     politica.decidi): (Decisione, dettagli). Con la conversazione pulita, per le letture, i
     tool vietati, il dato letto in questa risposta, la delega al dato, il «sì» alla domanda e
@@ -541,7 +597,9 @@ def decidi_valore(name: str, args: dict, cl, t, base, conferma_voce: bool = Fals
     if (t is None or not t.contaminazione or cl.classe in (pol.SICURO, pol.VIETATO)
             or base.esito in ("blocca", "vieta") or base.regola in (
                 "politica_delega", "intento_confermato", "consenso_richiesta",
-                "politica_fatto_detto")):
+                # la rinomina detta per intero con il verbo (08/10): resta senza domanda
+                # anche con la politica nuova (analisi delle regole § 3.8)
+                "politica_fatto_detto", "politica_valore_detto")):
         return base, det
     if cl.sola_lettura is not None and pol._s(args, cl.sola_lettura[0]).lower() in cl.sola_lettura[1]:
         return base, det
@@ -551,11 +609,33 @@ def decidi_valore(name: str, args: dict, cl, t, base, conferma_voce: bool = Fals
                 return base, det
         except Exception:  # noqa: BLE001
             pass
-    proposta, _ripetuta, _stessa = pol.consenso_turno(name, args, cl, t)
-    if proposta:
-        return base, det
-    fonte = sorted(t.contaminazione)[0]
+    proposta, _ripetuta, stessa = pol.consenso_turno(name, args, cl, t)
+    fonte = pol.fonte_principale(t)
     cosa = cosa or pol._cosa(cl, args)
+    if proposta:
+        # Il «sì» breve della persona della conversazione a una domanda su un'azione E1–E2
+        # (09/10, caso vero della DGX delle 20:39: «Sì.» a «vuoi che spenga la luce della
+        # taverna?» → «C'è di mezzo una pagina internet… ripeti: …»). La frase di sfida della
+        # politica di prima serve all'identità per le azioni che contano; qui la domanda era
+        # sull'intento, e la stessa azione chiesta con le sue parole si sarebbe eseguita
+        # senza domande. Mai per i tool con la sfida, per E3–E4, per un ospite o uno scritto
+        if (base.esito == "sfida" and base.regola == "politica_sfida" and not cl.sfida
+                and E <= E2 and consenso_della_persona(ctx)):
+            return pol.Decisione("esegui", "valore_consenso_breve", accettata=stessa), det
+        # Il «sì» a una domanda della politica (la stessa chiamata): lo giudica la politica
+        # nuova anche per E3–E4 (09/10, analisi delle regole § 3.2). E3: la voce riconosciuta in
+        # questa frase (o la sfida superata) basta; altrimenti la frase di sfida, dicendo la
+        # causa vera (la voce, non la pagina). E4: sempre la sfida. I tool con la sfida nella
+        # classe: il pavimento di decidi_valore
+        if getattr(t, "sospeso_politica", False) and stessa and not cl.sfida:
+            if E == E3:
+                if voce_frase or t.sfida:
+                    return pol.Decisione("esegui", "valore_consenso_voce", accettata=True), det
+                return pol.Decisione("sfida", "valore_consenso_sfida",
+                                     f"{pol.VOCE_INCERTA}: vuoi che {cosa}?", fonte), det
+            if E >= E4 and not t.sfida:
+                return pol.Decisione("sfida", "valore_e4_sfida", "", fonte), det
+        return base, det
     if E == E0:
         return pol.Decisione("esegui", "valore_lettura"), det
     # 1. l'ancora: chi l'ha chiesta
@@ -596,16 +676,18 @@ def decidi_valore(name: str, args: dict, cl, t, base, conferma_voce: bool = Fals
                               if etichette[k].startswith((BERSAGLIO + "/", INDICE + "/"))})
     if bers_dato:
         k = bers_dato[0]
-        domanda = (f"«{_mostra(args[k])}» viene {prov.da(fonte)}, non da te: vuoi davvero che "
+        da = fonte_del_valore(args[k], t) or fonte
+        domanda = (f"«{_mostra(args[k])}» viene {prov.da(da)}, non da te: vuoi davvero che "
                    f"{cosa}?")
         return pol.Decisione("sfida" if E == E4 else "conferma", "valore_bersaglio_dato",
-                             domanda, fonte), det
+                             domanda, da), det
     if cont_dato and E >= E2:
         k = cont_dato[0]
-        domanda = (f"«{_mostra(args[k])}» viene {prov.da(fonte)}, non da te: vuoi davvero che "
+        da = fonte_del_valore(args[k], t) or fonte
+        domanda = (f"«{_mostra(args[k])}» viene {prov.da(da)}, non da te: vuoi davvero che "
                    f"{cosa}?")
         return pol.Decisione("sfida" if E == E4 else "conferma", "valore_contenuto_dato",
-                             domanda, fonte), det
+                             domanda, da), det
     if cont_modello and E >= E2:
         return pol.Decisione("sfida" if E == E4 else "conferma", "valore_contenuto_non_detto",
                              f"C'è di mezzo {prov.detta(fonte)}, quindi chiedo a te: vuoi che "

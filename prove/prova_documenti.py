@@ -456,6 +456,133 @@ def prova_secondo_piano():
     svc.close()
 
 
+class SulServer(LocalDelivery):
+    """Consegna di Calliope sulla DGX con un telefono collegato: il satellite non riceve
+    documenti e il file resta sul server (come consegna.RemoteDelivery._sul_server)."""
+
+    def deliver(self, *a, **k):
+        d = super().deliver(*a, **k)
+        d["dove"] = "sul server, perché il satellite collegato non riceve documenti"
+        d["remoto"] = False
+        return d
+
+
+class Schermi:
+    """Schermi finti: `personale` = chi ha uno schermo personale aperto adesso."""
+
+    def __init__(self, personale=("dario-id",)):
+        self.personale = set(personale)
+        self.inviate = []
+
+    def mittente(self, ctx):
+        from types import SimpleNamespace
+        prof = ctx.speakers.get(ctx.speaker_ctx.current_speaker)
+        return SimpleNamespace(persona=getattr(prof, "id", None))
+
+    def personale_collegato(self, m):
+        return m.persona in self.personale
+
+    def invia(self, card, m, forza=False):
+        if m.persona in self.personale:
+            self.inviate.append((m.persona, card, forza))
+            return {"schermi": ["telefono"], "destinatari": ["telefono"], "motivo": ""}
+        return {"schermi": [], "destinatari": [], "motivo": "personale"}
+
+
+def chiama_s(reg, svc, cfg, nome, args, chi, frase="", schermi=None):
+    ctx = ToolContext(cfg=cfg, speakers=Speakers(), speaker_ctx=SpeakerCtx(chi, "amministra"),
+                      speaker=None, documenti=svc, user_text=frase)
+    ctx.schermi = schermi
+    ctx.regole = []
+    return json.loads(reg.call(nome, args, ctx, "amministra")), ctx
+
+
+def prova_rilettura():
+    """Casi veri della DGX del 09/10 (18:56–19:13), con nomi di fantasia: un foglio Excel creato
+    dal telefono restava «sul server, perché il satellite non riceve documenti» e non si poteva
+    più rileggere (lavoro_risultato ripiegava su un lavoro dell'agente)."""
+    cfg = Config()
+    cfg.documenti_attesa_s = 2.0
+    svc = Documenti(cfg, str(TMP / "server.db"), writer=FakeWriter(),
+                    delivery=SulServer(TMP / "server"))
+    reg = build_registry(documenti=svc.formati, agenti=True)
+    tel = Schermi()
+    r, ctx = chiama_s(reg, svc, cfg, "documento_crea", {"formato": "excel", "richiesta": "spese"},
+                      "Dario", "fammi una tabella delle spese", tel)
+    f = r.get("risposta_finale") or ""
+    verifica("sul server con il telefono aperto: la frase dice la scheda con «Scarica»",
+             "sulla scheda del tuo schermo" in f and "«Scarica»" in f and "sul server" not in f
+             and "documento_sulla_scheda" in ctx.regole, f)
+    verifica("…e le frasi alternative non arrivano al modello",
+             not {"frase_scheda", "annuncio_scheda", "frase", "annuncio"} & set(r), str(set(r)))
+    verifica("cosa_fare nomina documento_leggi", "documento_leggi" in (r.get("cosa_fare") or ""))
+    r, _ = chiama_s(reg, svc, cfg, "documento_crea", {"formato": "excel", "richiesta": "spese"},
+                    "Dario", "fammi una tabella delle spese", Schermi(personale=()))
+    verifica("contrario: senza uno schermo personale aperto, la frase di sempre (sul server)",
+             "sul server, perché il satellite" in (r.get("risposta_finale") or ""),
+             r.get("risposta_finale"))
+    cfg_l, svc_l = servizio("portatile")
+    reg_l = build_registry(documenti=svc_l.formati)
+    r, _ = chiama_s(reg_l, svc_l, cfg_l, "documento_crea", {"formato": "excel",
+                                                            "richiesta": "spese"},
+                    "Dario", "fammi una tabella delle spese", tel)
+    verifica("contrario: consegnato davvero (sul portatile) → la frase di sempre",
+             "sulla scheda" not in (r.get("risposta_finale") or ""), r.get("risposta_finale"))
+    # documento_leggi: «cosa c'è in quel file?», per titolo, l'ultimo, un altro
+    names = {s["function"]["name"] for s in reg.schemas_for("familiare")}
+    verifica("documento_leggi registrato per i familiari, non per gli ospiti",
+             "documento_leggi" in names and "documento_leggi" not in
+             {s["function"]["name"] for s in reg.schemas_for("ospite")})
+    r, ctx = chiama_s(reg, svc, cfg, "documento_leggi", {}, "Dario",
+                      "raccontami cosa c'è in quel file")
+    verifica("documento_leggi: l'ultimo documento, con il contenuto per il modello",
+             r.get("ok") and "Affitto" in (r.get("contenuto") or "")
+             and "frasi" in (r.get("cosa_fare") or "") and "documento_letto" in ctx.regole,
+             str(r)[:300])
+    r, _ = chiama_s(reg, svc, cfg, "documento_leggi", {"documento": "il foglio Excel delle "
+                                                                     "spese di settembre"},
+                    "Dario", "riassumimi le spese")
+    verifica("documento_leggi: per parole del titolo", r.get("ok") and r.get("titolo") ==
+             "Spese di settembre", str(r)[:200])
+    r, ctx = chiama_s(reg, svc, cfg, "documento_leggi", {"documento": "idratazione della pizza"},
+                      "Dario", "e la pizza?")
+    verifica("documento_leggi: un titolo che non c'è → errore con i documenti veri, mai un "
+             "altro documento", r.get("ok") is False and r.get("correggibile") is True
+             and "Spese di settembre" in (r.get("documenti") or []) and "contenuto" not in r
+             and "documento_non_trovato" in ctx.regole, str(r))
+    r, _ = chiama_s(reg, svc, cfg, "documento_leggi", {}, "Bianca", "cosa c'è nel file?")
+    verifica("documento_leggi: i documenti di un'altra persona no", r.get("ok") is False
+             and "contenuto" not in r, str(r))
+    tel = Schermi()
+    r, ctx = chiama_s(reg, svc, cfg, "documento_leggi", {"modo": "mostra"}, "Dario", "aprilo",
+                      tel)
+    verifica("documento_leggi mostra («aprilo»): sulla scheda del telefono, con «Scarica»",
+             r.get("ok") and "sullo schermo" in (r.get("risposta_finale") or "")
+             and tel.inviate and tel.inviate[-1][1].get("scarica"), str(r))
+    r, _ = chiama_s(reg, svc, cfg, "documento_leggi", {"modo": "mostra"}, "Dario", "aprilo",
+                    Schermi(personale=()))
+    verifica("documento_leggi mostra senza schermo: il contenuto, da dire a voce",
+             r.get("ok") and "contenuto" in r and "Non vedo un tuo schermo"
+             in (r.get("cosa_fare") or ""), str(r)[:200])
+    # In secondo piano: l'annuncio dice la scheda se la scheda è arrivata
+    cfg2 = Config()
+    cfg2.documenti_attesa_s = 0.05
+    svc2 = Documenti(cfg2, str(TMP / "server2.db"), writer=FakeWriter(delay=0.3),
+                     delivery=SulServer(TMP / "server2"))
+    reg2 = build_registry(documenti=svc2.formati)
+    r, _ = chiama_s(reg2, svc2, cfg2, "documento_crea", {"formato": "excel",
+                                                         "richiesta": "spese"},
+                    "Dario", "fammi una tabella", Schermi())
+    t0 = time.perf_counter()
+    while svc2.done.empty() and time.perf_counter() - t0 < 3:
+        time.sleep(0.02)
+    msg = svc2.done.get_nowait()["messaggio"] if not svc2.done.empty() else ""
+    verifica("in secondo piano: l'annuncio dice la scheda con «Scarica»",
+             r.get("in_preparazione") and "sulla scheda del tuo schermo" in msg, msg)
+    for s in (svc, svc_l, svc2):
+        s.close()
+
+
 def prova_scrittore():
     """Un solo nuovo tentativo, con gli errori; poi errore chiaro."""
     w = Writer(Config())
@@ -583,6 +710,7 @@ prova_validazione()
 prova_nomi()
 prova_servizio()
 prova_secondo_piano()
+prova_rilettura()
 prova_scrittore()
 prova_frasi()
 prova_brain()

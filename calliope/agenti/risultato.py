@@ -40,6 +40,8 @@ from types import SimpleNamespace
 from .ciclo import per_la_voce
 
 FINITI = ("fatto", "errore", "mancano_dati", "scaduto", "ripreso")
+# Il lavoro indicato non c'è tra quelli finiti (scegli): mai un altro al suo posto
+NON_TROVATO = "Non ho un lavoro dell'agente finito che corrisponda a «{quale}»."
 ATTESA = "Un attimo, lo rileggo per fartene un riassunto."
 ATTESA_DOPO_S = 1.2
 TESTO_MAX = 40_000          # caratteri del testo intero dati al modello dell'agente
@@ -70,15 +72,23 @@ def scegli(lavori: list, persona, quale: str = "", admin: bool = False):
     if q.lower() in ("ultimo", "l'ultimo", "ultima", "l'ultima", "quello", "questo"):
         q = ""
     scelto = None
+    detto = False                    # la persona (o il modello) ha indicato un lavoro preciso
     if re.fullmatch(r"[Ll]\d+", q):
+        detto = True
         scelto = next((lv for lv in reversed(lavori) if lv.id.lower() == q.lower()), None)
     elif q:
         ql = re.sub(r"\b(il|lo|la|l'|lavoro|della|del|di|per|sul|sulla|risultato|ricerca)\b",
                     " ", q.lower()).split()
         if ql:
+            detto = True
             migliori = sorted(reversed(lavori), key=lambda lv: _punti(ql, lv), reverse=True)
             if migliori and _punti(ql, migliori[0]) >= 1.0:
                 scelto = migliori[0]
+    if scelto is None and detto:
+        # Un riferimento che non è un lavoro non ripiega mai su un altro (09/10, caso vero
+        # della DGX delle 18:56: lavoro_risultato «Tabella Comparativa Idratazione Pizza», un
+        # documento appena creato, dava la Nebulosa di Orione del mattino, tre volte)
+        return None, NON_TROVATO.format(quale=q), False
     if scelto is None:
         mine = [lv for lv in lavori if lv.persona == persona]
         if mine:
@@ -251,7 +261,19 @@ def trova(svc, persona, persona_nome=None, quale: str = "", admin: bool = False)
     if disco:
         lav2, frase2, altrui2 = scegli(disco, persona, quale, admin)
         if lav2 is not None or not altrui:
-            return lav2, frase2, altrui2
+            lav, frase, altrui = lav2, frase2, altrui2
+            if lav is not None:
+                return lav, frase, altrui
+    if str(quale or "").strip() and not altrui:
+        # Il lavoro detto c'è ma non è ancora finito
+        ql = str(quale).lower().split()
+        aperto = next((lv for lv in reversed(suoi) if lv.stato in ("in_coda", "in_corso",
+                                                                   "in_attesa")
+                       and (lv.id.lower() == str(quale).strip().lower()
+                            or _punti(ql, lv) >= 1.0)), None)
+        if aperto is not None:
+            return None, f"«{aperto.titolo}» non è ancora finito: ti avviso quando è pronto.", \
+                False
     return None, frase, altrui
 
 
