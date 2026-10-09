@@ -3019,6 +3019,7 @@ class Ciclo:
             self.avvisi_ai_tutori(t.speaker_name)
             self._cassetto_dopo(t)
         speaker.start_turn()     # azzera un'interruzione arrivata a risposta finita
+        self._conversazione_nuova_chiesta()
         if speaker_ctx.is_enrolling and not t.was_enrolling:
             self.enroll_reminded.discard(speaker_ctx.enrolling_name)
             speaker.say(f"{speaker_ctx.enrolling_name}, adesso parla tu, e comincia ogni "
@@ -3026,6 +3027,20 @@ class Ciclo:
                         f"frasi, una alla volta. {speaker_ctx.enroll_prompt}")
             speaker.wait()
         self.awake_until = time.monotonic() + cfg.followup_s
+
+    def _conversazione_nuova_chiesta(self) -> bool:
+        """Il modello ha chiamato conversazione_nuova (09/10, «voglio che ricominciamo da capo»
+        detto con parole sue): la conversazione si chiude come con la regola breve, a risposta
+        finita (la risposta resta in quella chiusa, nell'archivio)."""
+        if not getattr(self.tool_ctx, "conversazione_nuova", False):
+            return False
+        self.tool_ctx.conversazione_nuova = False
+        print("   [STORIA] conversazione nuova, chiesta con parole sue", flush=True)
+        if self.rec is not None:
+            self.rec["conversazione_nuova"] = True
+        self.brain.end_conversation("nuova")
+        self.last_question = None
+        return True
 
     def _ricerca_promessa(self, t):
         """Ricerca promessa e non fatta («devo fare una ricerca», 26/09): la si fa subito.

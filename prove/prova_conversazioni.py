@@ -1075,7 +1075,48 @@ def prova_dopo_la_pausa():
     verifica("contrario: conversazione_coda_scambi 0 → come prima", b.conv.riassunto is None)
 
 
+# ─────────────────────────── 10. «ricominciamo» con parole sue (09/10) ───────────────────────
+# Caso vero della DGX alle 21:04: «No, voglio che ricominciamo da capo, quindi Calliope
+# ricominciamo.» → la regola breve non scatta (non è la frase intera) e il modello rispondeva
+# «Certamente, ricominciamo pure» senza farlo. Ora c'è il tool conversazione_nuova
+def prova_conversazione_nuova():
+    from calliope.ciclo import Ciclo, Servizi
+    from calliope.politica import classe_di
+    from calliope.tools.conversazioni import NUOVA_FRASE, _conversazione_nuova
+    from calliope.wakeword import nuova_conversazione
+    reg = build_registry(conversazioni=True)
+    spec = reg.get("conversazione_nuova")
+    verifica("tool conversazione_nuova: per tutti i livelli, classe sicura (si disfa: archivio)",
+             spec is not None and all(reg.allowed("conversazione_nuova", lv)
+                                      for lv in ("ospite", "familiare", "amministra"))
+             and classe_di("conversazione_nuova", spec).classe == "sicuro")
+    verifica("descrizione: i contrari (un collaudo, riprendere da dove eravate)",
+             "collaudo" in spec.description and "da dove eravate" in spec.description)
+    ctx = Ctx()
+    r = _conversazione_nuova(ctx)
+    verifica("il tool segna la richiesta e dà la frase pronta", r["ok"]
+             and r["risposta_finale"] == NUOVA_FRASE and ctx.conversazione_nuova is True
+             and "conversazione_nuova_tool" in ctx.regole, str(r))
+    b = brain_finto()
+    parla(b, "Parliamo della pizza")
+    ciclo = Ciclo.__new__(Ciclo)
+    ciclo.tool_ctx, ciclo.brain, ciclo.rec, ciclo.last_question = ctx, b, {}, "pizza"
+    vecchia = b.conv
+    verifica("a risposta finita il ciclo chiude la conversazione (come la regola breve)",
+             ciclo._conversazione_nuova_chiesta() and b.conv is not vecchia
+             and not b.conv.history and ciclo.rec.get("conversazione_nuova")
+             and ctx.conversazione_nuova is False and ciclo.last_question is None)
+    verifica("…una volta sola", not ciclo._conversazione_nuova_chiesta())
+    verifica("la regola breve resta: «ricominciamo» per intero",
+             nuova_conversazione("Calliope, ricominciamo.", "Calliope"))
+    for frase in ("No, voglio che ricominciamo da capo, quindi Calliope ricominciamo.",
+                  "Ricominciamo il collaudo.", "Ricominciamo da dove eravamo."):
+        verifica(f"la regola breve non scatta su «{frase}» (decide il modello)",
+                 not nuova_conversazione(frase, "Calliope"))
+
+
 prova_oggetto()
+prova_conversazione_nuova()
 prova_dopo_la_pausa()
 prova_luogo_funzione()
 prova_fonte()
