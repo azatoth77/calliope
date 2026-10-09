@@ -13,6 +13,7 @@ import json
 
 from .. import politica
 from ..conferme import admin_confermato, chiedi_conferma, e_admin, incerta_con_admin
+from . import dialogo
 from .spec import ToolSpec, ToolContext, note_rule, serve_la_voce
 from ..testi import NIENTE
 
@@ -65,6 +66,21 @@ def distanza(a: str, b: str, limite: int = 99) -> int:
         if min(riga) > limite:
             return limite + 1
     return riga[-1]
+
+
+def _segna_registro(ctx):
+    """L'errore viene dal codice di Calliope (validazione o eccezione), non dal tool: Brain non
+    lo mette nella busta dei dati non fidati (ToolContext.errore_registro, 09/10)."""
+    try:
+        ctx.errore_registro = True
+    except AttributeError:
+        pass
+
+
+def _contratto(spec) -> bool:
+    """Lo schema è il contratto del tool (le estensioni: il manifesto), anche se la funzione
+    prende soli **kw: gli obbligatori mancano davvero se assenti (09/10)."""
+    return getattr(spec, "fonte", None) == "estensione"
 
 
 class ToolRegistry:
@@ -136,27 +152,40 @@ class ToolRegistry:
         return json.dumps(out, ensure_ascii=False)
 
     def mancanti(self, name: str, arguments) -> list[str]:
-        """Gli argomenti obbligatori (`required` dello schema) di una chiamata senza nessun
-        argomento (tutti assenti o vuoti): 06/10, `conversazione_cerca({})` faceva partire
-        «Fammi ricordare.» e la ricerca. Brain non annuncia un tool così; `call` risponde
-        subito con l'errore. Una chiamata con qualche argomento passa com'è: molti tool
-        completano da soli quelli che mancano (la proposta in sospeso di lavoro_affida,
-        l'esercizio in corso di compiti_aiuto)."""
+        """Gli argomenti che impediscono la chiamata (Brain non dice la frase d'attesa di un
+        tool che non parte; `call` risponde subito con l'errore). Dal 06/10: una chiamata
+        senza nessun argomento (`conversazione_cerca({})`) ha tutti i `required` mancanti.
+        Dal 09/10 (tools/dialogo.py) anche un obbligatorio assente o vuoto che la funzione non
+        sa completare da sola (`web_cerca({'tipo': 'notizie'})`), un valore fuori dai valori
+        ammessi o del tipo sbagliato, un argomento che la funzione non conosce. Gli
+        obbligatori con un valore predefinito nella funzione restano ai tool, che li
+        completano (la proposta in sospeso di lavoro_affida, l'esercizio di compiti_aiuto)."""
         spec = self._tools.get(name)
         if spec is None:
             vero = NOMI_VECCHI.get(name) or self.nome_vicino(name)
             spec = self._tools.get(vero) if vero else None
         if spec is None:
             return []
-        args = arguments if isinstance(arguments, dict) else {}
-        if any(v not in (None, "") and not (isinstance(v, str) and not v.strip())
-               for v in args.values()):
+        _, _, err = dialogo.controlla(spec.name, spec.parameters, arguments, spec.func,
+                                      spec.description, _contratto(spec))
+        if err is None:
             return []
-        return list((spec.parameters or {}).get("required") or [])
+        return list(err.get("argomenti") or ()) or ["argomenti"]
+
+    def controlla(self, spec: ToolSpec, arguments, ctx=None):
+        """(argomenti in forma, errore o None) di una chiamata a `spec` (tools/dialogo.py):
+        le conversioni di forma restano nel registro dei turni (`tool_argomento_forma`)."""
+        args, convertiti, err = dialogo.controlla(spec.name, spec.parameters, arguments,
+                                                  spec.func, spec.description, _contratto(spec))
+        if convertiti and ctx is not None:
+            note_rule(ctx, "tool_argomento_forma")
+        return args, err
 
     def announcements(self) -> list[str]:
-        """Tutte le frasi di annuncio dei tool, da sintetizzare in anticipo."""
-        return [p for t in self._tools.values() for p in t.announce]
+        """Tutte le frasi di annuncio dei tool, da sintetizzare in anticipo, con quelle dei
+        giri di correzione (dialogo.FRASI_CORREZIONE, 09/10)."""
+        return ([p for t in self._tools.values() for p in t.announce]
+                + list(dialogo.FRASI_CORREZIONE))
 
     def all_schemas(self) -> list[dict]:
         """Gli schemi di tutti i tool, senza filtro: servono a riconoscerne i nomi."""
@@ -270,16 +299,17 @@ class ToolRegistry:
             no = minori.permesso(ctx, name, arguments or {})
             if no is not None:
                 return json.dumps(no, ensure_ascii=False)
-        # Argomenti obbligatori assenti o vuoti (06/10): niente esecuzione, l'errore subito al
-        # modello, che richiama il tool con gli argomenti o risponde
-        mancano = self.mancanti(name, arguments)
-        if mancano:
-            note_rule(ctx, "tool_argomenti_mancanti")
-            return json.dumps({"ok": False, "fatto": NIENTE,
-                               "errore": "mancano argomenti obbligatori: " + ", ".join(mancano),
-                               "cosa_fare": "richiama il tool con " + ", ".join(mancano)
-                                            + " ricavati dalla frase, oppure rispondi senza"},
-                              ensure_ascii=False)
+        # Argomenti contro lo schema (06/10 i mancanti, 09/10 tutto: tools/dialogo.py): niente
+        # esecuzione, l'errore strutturato subito al modello, che richiama il tool corretto o
+        # chiede il dato alla persona (giro di correzione in Brain, `correggibile`)
+        arguments, err = self.controlla(spec, arguments, ctx)
+        if err is not None:
+            solo_mancanti = (err["errore"].startswith(f"{spec.name} non è partito: manca")
+                             and ";" not in err["errore"])
+            note_rule(ctx, "tool_argomenti_mancanti" if solo_mancanti
+                      else "tool_argomenti_non_validi")
+            _segna_registro(ctx)
+            return dialogo.come_json(err)
         # Politica unica (05/10, calliope/politica.py): classe del tool, azione chiesta in
         # questo turno, conversazione con dati non fidati, provenienza degli argomenti. Qui,
         # nell'esecutore: il modello non la scavalca e un canale nuovo non la dimentica
@@ -293,11 +323,14 @@ class ToolRegistry:
             result = spec.func(ctx, **(arguments or {}))
             if result is None:
                 result = {"ok": True}
-            return json.dumps(result, ensure_ascii=False, default=str)
-        except TypeError as e:
-            return json.dumps({"errore": f"argomenti non validi: {e}"}, ensure_ascii=False)
-        except Exception as e:
-            return json.dumps({"errore": str(e)}, ensure_ascii=False)
+            return json.dumps(dialogo.uniforma(result), ensure_ascii=False, default=str)
+        except Exception as e:  # noqa: BLE001 — l'errore torna al modello, mai la traccia
+            # Gli argomenti sono già stati controllati: un'eccezione qui è del tool (09/10:
+            # prima un TypeError interno diventava «argomenti non validi» con la traccia)
+            print(f"   [TOOL] {name} si è fermato: {type(e).__name__}: {e}", flush=True)
+            note_rule(ctx, "tool_errore_interno")
+            _segna_registro(ctx)
+            return dialogo.come_json(dialogo.errore_interno(name, e))
         finally:
             if breve:
                 sc.identified_by, sc.from_session = prima

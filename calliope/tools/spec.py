@@ -90,6 +90,10 @@ class ToolContext:
     # "avvisato", "parole"} in questa risposta, o None. documento_crea lo ricorda una volta al
     # modello
     lavoro_turno: Any = None
+    # L'ultimo errore l'ha scritto il registro (09/10, tools/dialogo.py: argomenti contro lo
+    # schema o eccezione del tool), non il tool: niente dati, quindi niente busta dei dati non
+    # fidati. Brain lo azzera prima di ogni chiamata e lo legge dopo
+    errore_registro: bool = False
 
 
 

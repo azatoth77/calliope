@@ -35,6 +35,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 
+from ..tools import dialogo
 from .arbitro import _interrompi
 from .remoto import ErroreOllama, Interrotto
 
@@ -1122,6 +1123,15 @@ class Agente:
                 # Il registro in diretta sugli schermi (08/10, avanzamento.py): la chiamata e,
                 # sotto, il suo esito in breve (mai il contenuto dei file)
                 lav.nota("strumento", nome=name, argomenti=args)
+                # Argomenti contro lo schema dello strumento (09/10, tools/dialogo.py): un
+                # obbligatorio assente o un valore fuori dai valori ammessi tornano all'agente
+                # come errore chiaro, con un esempio, invece di un'eccezione dello strumento
+                args, errore_args = dialogo.controlla_strumento(name, strumenti, args)
+                if errore_args is not None:
+                    messages.append({"role": "tool", "tool_name": name,
+                                     "content": gc.risultato(name, errore_args)})
+                    lav.nota("esito", nome=name, esito=errore_args)
+                    continue
                 if name in _SOLA_LETTURA:
                     # La stessa lettura due volte nella stessa passata (06/10: nove leggi_file
                     # di due file in una passata, ~25 000 token di risultati oltre la finestra)
@@ -1474,9 +1484,10 @@ class Agente:
                         **({"errore": r["errore"]} if r.get("errore") else {})}
             return {"errore": f"strumento sconosciuto: {name}"}
         except ErroreSandbox as e:
-            return {"errore": str(e)}
+            return {"ok": False, "errore": str(e)}
         except Exception as e:  # noqa: BLE001 — l'errore torna all'agente, non ferma il lavoro
-            return {"errore": f"{type(e).__name__}: {e}"}
+            # Forma comune degli errori (09/10, tools/dialogo.py): tipo e messaggio in una riga
+            return dialogo.errore_strumento(name, e)
 
     # ── sonde (08/10 notte, calliope/sonde.py) ──
     def _sviluppo_di(self, lav: Lavoro):
@@ -1895,8 +1906,13 @@ class Agente:
                     lav.passo = "cerca su internet"
                 elif c["name"] == "web_leggi":
                     lav.passo = "legge una pagina su internet"
+                args, errore_args = dialogo.controlla_strumento(c["name"], tools, args)
                 if c["name"] not in nomi:
-                    res = {"errore": f"strumento sconosciuto: {c['name']}"}
+                    res = {"ok": False, "errore": f"strumento sconosciuto: {c['name']}",
+                           "cosa_fare": "usa solo gli strumenti dell'elenco: "
+                                        + ", ".join(sorted(nomi))}
+                elif errore_args is not None:
+                    res = errore_args
                 elif c["name"] == "leggi_file":
                     res = self._leggi(lav, None, args)
                 elif c["name"] in ("web_cerca", "web_leggi"):
@@ -1905,14 +1921,14 @@ class Agente:
                     try:
                         res = esp.esegui(c["name"], args)
                     except Exception as e:  # noqa: BLE001 — l'errore torna all'agente
-                        res = {"errore": f"{type(e).__name__}"}
+                        res = dialogo.errore_strumento(c["name"], e)
                 else:
                     try:
                         passaggi = self.biblioteca.cerca(str(args.get("domanda") or lav.compito))
                         res = [{"titolo": p.titolo, "fonte": p.fonte, "testo": p.testo[:1500]}
                                for p in passaggi[:4]]
                     except Exception as e:  # noqa: BLE001
-                        res = {"errore": f"{type(e).__name__}"}
+                        res = dialogo.errore_strumento(c["name"], e)
                 messages.append({"role": "tool", "tool_name": c["name"],
                                  "content": gc.risultato(c["name"], res)})
                 lav.nota("esito", nome=c["name"], esito=res)

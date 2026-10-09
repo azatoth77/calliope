@@ -36,6 +36,7 @@ from .memory import HOUSE
 from . import argomenti_incerti, politica, provenienza, valore
 from .sicurezza import instruction_fact
 from .testi import MESI as _MESI, SENTENCE_END as _SENTENCE_END
+from .tools import dialogo
 from .tools.registry import ToolRegistry
 from .tools.spec import ToolContext
 
@@ -316,6 +317,19 @@ FAILED_NUDGE = ("I tool che hai chiamato in questa risposta sono falliti: non ha
                 "calcolato né trovato niente. Leggi il loro errore e fai quello che dice "
                 "cosa_fare (per esempio richiamali con il dato che conosci); se non puoi, di' "
                 "in breve cosa manca. Non dire di averlo fatto.")
+
+
+# Giro di correzione (09/10, docs/ricerche/2026-10-09-dialogo-tool.md): l'ultimo tool non è
+# partito per un errore correggibile (argomenti contro lo schema, tools/dialogo.py) e il modello
+# ha risposto senza richiamarlo e senza chiedere niente alla persona («ho avuto un piccolo
+# intoppo, riprovo subito», DGX 09/10 08:19, quattro volte). La frase non si dice; il modello
+# rilegge l'errore e richiama, o chiede il dato. Uguale per ogni tool, nessun caso scritto qui
+CORREZIONE_NUDGE = ("Il tool {tool} non è partito: «{errore}» Non l'hai ancora richiamato. "
+                    "Rileggi il suo risultato qui sopra (argomenti, esempio, cosa_fare) e "
+                    "richiamalo adesso con gli argomenti giusti, ricavati dalla frase della "
+                    "persona e dalla conversazione. Solo se il dato non si ricava in nessun "
+                    "modo, chiedilo alla persona con una domanda breve. Non dire che riprovi e "
+                    "non scusarti: richiamalo.")
 
 
 def is_claim(text: str, actions: list[str] | tuple = (), fallito: bool = False) -> bool:
@@ -2899,11 +2913,26 @@ class Brain:
         def rinuncia_di(t: str):
             return politica.rinuncia(t, user_text, disp)
 
+        # Giri di correzione dopo un errore correggibile di un tool (09/10, CORREZIONE_NUDGE)
+        correzioni, t_inizio = 0, time.perf_counter()
         for _ in range(self.cfg.max_tool_turns + 1):
+            corr = self._correzione_aperta(correzioni)
+            if corr is not None:
+                correzioni += 1
+                # Le AI si stanno parlando da un po' e la persona non ha sentito niente: una
+                # frase breve, una volta per risposta, fuori dalla storia
+                on_tool_start = getattr(self, "on_tool_start", None)
+                if on_tool_start and not (spoke or announced) and (
+                        time.perf_counter() - t_inizio
+                        > float(getattr(self.cfg, "tool_correzione_avviso_s", 2.0) or 0)):
+                    on_tool_start(random.choice(dialogo.FRASI_CORREZIONE))
+                    announced = True
+                    self._rule("correzione_avviso")
             text, calls, held, held_req, named = yield from self._turn(
                 with_memory(system), schemas,
                 hold_claims=bool(schemas) and not self._acted(),
-                hold_request=requested and not nudged and not self.last_tools,
+                hold_request=(requested and not nudged and not self.last_tools)
+                or corr is not None,
                 actions=actions,
                 hold_names=bool(schemas) and not self.last_tools and not explaining,
                 hold_non_so=archive_hold and not self.last_tools,
@@ -2911,6 +2940,20 @@ class Brain:
                 else None,
                 hold_fallito=self._solo_falliti())
             tail = []
+            if corr is not None and held_req and not held and not calls:
+                if held_req.rstrip().endswith("?"):
+                    # Chiede il dato alla persona: è la risposta giusta, si dice
+                    yield held_req
+                    held_req = ""
+                else:
+                    # «Riprovo subito» senza richiamare: non si dice, il modello rilegge
+                    # l'errore e richiama (o chiede), entro tool_correzioni_max
+                    self._rule("correzione_tool")
+                    print(f"   [TOOL] {corr['nome']} non è partito e il modello non l'ha "
+                          f"richiamato, non dico: «{held_req[:80]}»", flush=True)
+                    tail = [{"role": "system", "content": CORREZIONE_NUDGE.format(
+                        tool=corr["nome"], errore=corr.get("errore") or "")}]
+                    continue
             if held and self._held_kind == "rinuncia":
                 # Non detta né nella storia: la spinta, una volta (poi si va avanti normali)
                 nudged = True
@@ -3438,6 +3481,18 @@ class Brain:
         vale anche lì, non solo quando non c'è nessun tool."""
         return any(t.get("ok") and t.get("azione", True) for t in self.last_tools or ())
 
+    def _correzione_aperta(self, fatte: int = 0) -> dict | None:
+        """L'ultimo tool di questa risposta è fallito con un errore correggibile (argomenti
+        contro lo schema, tools/dialogo.py) e restano giri di correzione: la sua voce in
+        `last_tools`, altrimenti None (09/10)."""
+        tools = self.last_tools or ()
+        if not tools or not self._net("correzione_tool"):
+            return None
+        if fatte >= int(getattr(self.cfg, "tool_correzioni_max", 2) or 0):
+            return None
+        last = tools[-1]
+        return last if not last.get("ok") and last.get("correggibile") else None
+
     def _solo_falliti(self) -> bool:
         """In questa risposta ci sono tool, e sono tutti falliti (FAILED_CLAIM)."""
         tools = self.last_tools or ()
@@ -3600,6 +3655,7 @@ class Brain:
         self._set_ctx("politica", self._turno_politica())
         self._set_ctx("strumenti", self.tools)
         self._set_ctx("politica_esito", None)
+        self._set_ctx("errore_registro", False)
         try:
 
             result = self.tools.call(call["name"], args, self.tool_ctx, level)
@@ -3650,6 +3706,13 @@ class Brain:
                         in politica.MOTIVI_DOPO_DATO else None)
         except (json.JSONDecodeError, TypeError, AttributeError):
             ok, bloccato = False, None
+        # L'errore l'ha scritto il registro (09/10, tools/dialogo.py): argomenti contro lo schema
+        # o eccezione del tool. Nessun dato; se correggibile, il giro di correzione
+        da_registro = bool(getattr(self.tool_ctx, "errore_registro", False))
+        self._set_ctx("errore_registro", False)
+        corr, esito = {}, (_loads_dict(result) if not ok else {})
+        if esito.get("correggibile") is True:
+            corr = {"correggibile": True, "errore": str(esito.get("errore") or "")[:240]}
         # Esito vuoto con un nome forse capito male (08/10, F1): il suggerimento per il modello
         # (si aggiunge in fondo, fuori dalla busta dei dati non fidati)
         nome_incerto = self._argomenti_fine(misure, call["name"], args, result, ok,
@@ -3678,11 +3741,13 @@ class Brain:
                                 **({"schede": sent} if sent else {}),
                                 # La decisione della politica per valore accanto a quella vera
                                 # (08/10, fase 3, in ombra): nomi ed etichette, nessun valore
-                                **({"politica_ombra": ombra} if ombra else {})})
+                                **({"politica_ombra": ombra} if ombra else {}),
+                                **corr})
         # Il risultato di un tool non fidato (web, estensioni, archivio, agenti) entra nella
         # busta della sua fonte: la conversazione resta contaminata finché c'è (05/10)
         fonte = politica.fonte_di(call["name"], spec)
-        if fonte and not ok and _senza_dato(call["name"], spec, _loads_dict(result)):
+        if fonte and not ok and (da_registro
+                                 or _senza_dato(call["name"], spec, _loads_dict(result))):
             # Un tool di Calliope fallito senza dati (allegato_leggi «in questa conversazione
             # non ci sono file»): niente busta e niente contaminazione. Caso vero della DGX del
             # 07/10, 16:51: la conversazione risultava contaminata da «un file allegato» che non
