@@ -3413,8 +3413,18 @@ class Brain:
         fine = (CORREZIONE_ESAURITA.format(tool=esaurita["nome"],
                                            errore=esaurita.get("errore") or "")
                 if esaurita is not None else "Rispondi ora, senza chiamare altri tool.")
+        # La spinta dell'ultimo giro non resta (09/10, analisi delle regole § 3.7: con
+        # CORREZIONE_NUDGE «richiamalo» in fondo e CORREZIONE_ESAURITA «non richiamarlo»
+        # davanti, la passata finale riceveva due ordini opposti)
+        tail = []
         messages = with_memory(system + [{"role": "system", "content": fine}])
         text, _, _, _, _ = yield from self._turn(messages, [])
+        if not (text or "").strip():
+            # Una chiamata scritta come testo (trattenuta) o niente: meglio una frase vera del
+            # silenzio
+            self._rule("vuoto_ripiego")
+            text = "Non ci sono riuscita: puoi ripetere la richiesta?"
+            yield text
         self.history.append({"role": "assistant", "content": text})
 
     def strip_tool_mentions(self, sentence: str) -> str:

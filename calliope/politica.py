@@ -1393,6 +1393,20 @@ def detti_qui(cl: Classe, args: dict, t: Turno) -> bool:
     return True
 
 
+# Il perché della frase di sfida quando la causa è la voce (Decisione.domanda, prima di «: vuoi»)
+VOCE_INCERTA = "Dalla voce non sono sicura che sia tu"
+
+
+def fonte_principale(t: Turno) -> str:
+    """La fonte detta in «C'è di mezzo…» quando non c'è un valore preciso: quella del dato non
+    fidato più recente (09/10; prima la prima in ordine alfabetico)."""
+    fonti = set(t.contaminazione or ())
+    for f, _ in reversed(list(t.esterni or ())):
+        if f in fonti:
+            return f
+    return sorted(fonti)[0] if fonti else ""
+
+
 def _proposta(t: Turno, name: str) -> bool:
     """Questo tool è la risposta alla proposta in sospeso? Non con foto o file arrivati con
     la frase (Turno.dato_nuovo)."""
@@ -1556,7 +1570,7 @@ def decidi(name: str, args: dict, cl: Classe, t: Turno | None,
         # Frase di sfida superata per proprio questa chiamata: era la conferma
         # (o il «sì» alla domanda di prima, che descriveva proprio questa chiamata)
         return ACCETTATA if stessa and (t.sfida or consenso(t.testo)) else ESEGUI
-    fonte = sorted(t.contaminazione)[0]
+    fonte = fonte_principale(t)
     # Con dati non fidati una proposta vale come richiesta solo se la frase acconsente: con una
     # parola di consenso, o ripetendo la richiesta (07/10) se gli argomenti sono quelli della
     # domanda (o la domanda lasciava scegliere: «Quale apro?» → «apri il secondo»)
@@ -1625,7 +1639,9 @@ def decidi(name: str, args: dict, cl: Classe, t: Turno | None,
             if ripetuta:
                 return Decisione("esegui", "consenso_richiesta", accettata=stessa)
             return ACCETTATA if stessa else ESEGUI
-        return Decisione("sfida", "politica_sfida", "", fonte)
+        # La sfida qui è per la voce, non per il dato: lo si dice (09/10, analisi delle regole
+        # § 3.3: «C'è di mezzo una pagina internet» per spegnere una luce)
+        return Decisione("sfida", "politica_sfida", f"{VOCE_INCERTA}: vuoi che {cosa}?", fonte)
     # Richiesta esplicita della persona, dalla voce, con le parole del tool (Classe.richiesta_voce)
     if (cl.richiesta_voce and not proposta and voce_frase and cl.verbi
             and re.search(cl.verbi, t.testo or "", re.I)):
@@ -1818,6 +1834,11 @@ def _gia_rifiutata(name: str, args: dict, cl: Classe, t: Turno | None, ctx, spec
                          "di nuovo lei, con parole sue"}
 
 
+def _finale(ombra: dict | None, esito: str, regola: str):
+    if isinstance(ombra, dict):
+        ombra["finale"], ombra["finale_regola"] = esito, regola or ""
+
+
 def controlla(spec, name: str, args: dict, ctx) -> dict | None:
     """Il risultato da dare al posto dell'esecuzione, o None se il tool si esegue. Lo chiama
     ToolRegistry.call dopo il controllo del livello."""
@@ -1893,6 +1914,10 @@ def controlla(spec, name: str, args: dict, ctx) -> dict | None:
                 d = Decisione("esegui", "sviluppo_senza_domanda")
         except Exception as e:  # noqa: BLE001 — nel dubbio, la decisione di sempre
             print(f"   [POLITICA] sviluppo: {type(e).__name__}: {e}", flush=True)
+    # L'ombra segue la decisione finale (09/10, analisi delle regole § 3.4): `nuova` è la
+    # matrice, `finale` ciò che è successo dopo le correzioni (sviluppo, domanda non ripetuta,
+    # persona non riconosciuta); attrito.py conta su `finale`
+    _finale(ombra, d.esito, d.regola)
     _esito_per_brain(ctx, name, args, cl, t, d, intento, cv, vf, cosa, spec, ombra)
     _segna_accettata(ctx, d.accettata)
     if d.esito == "esegui":
@@ -1920,6 +1945,7 @@ def controlla(spec, name: str, args: dict, ctx) -> dict | None:
     # proposta, ancora valida, esegue
     if d.esito == "conferma" and _domanda_ripetuta(name, args, cl, t):
         note_rule(ctx, "politica_domanda_non_ripetuta")
+        _finale(ombra, "rifiuta", "politica_domanda_non_ripetuta")
         return {"ok": False, "fatto": NIENTE,
                 "errore": "la persona non ha confermato la domanda di prima: "
                           f"«{d.domanda}»",
@@ -1934,6 +1960,7 @@ def controlla(spec, name: str, args: dict, ctx) -> dict | None:
         from .conferme import chiedi_conferma
         sc = getattr(ctx, "speaker_ctx", None)
         if getattr(sc, "current_speaker", None) is None:
+            _finale(ombra, "vieta", "sfida_senza_voce")
             frase = ("Con " + prov.detta(d.fonte or "web") + " di mezzo questo lo faccio solo "
                      "per chi vive in casa, riconosciuto dalla voce.")
             return {"ok": False, "fatto": NIENTE,
