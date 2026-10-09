@@ -85,11 +85,13 @@ immagine_scelta() {
 }
 
 # Motori per l'italiano: generali senza chiave d'accesso (DuckDuckGo, Brave, Startpage,
-# Qwant, Mojeek, Bing), le notizie (ANSA, Bing News, DuckDuckGo News, Google News), Wikipedia e
+# Qwant, Mojeek), le notizie (ANSA, Bing News, DuckDuckGo News, Google News), Wikipedia e
 # Wikidata e i cambi di valuta. Google web resta spento: chiede spesso il captcha a un indirizzo
 # che fa molte ricerche. wttr.in (meteo) no: alla prova del 03/10 dava «parsing error», e le
 # previsioni arrivano comunque dai siti di meteo (ilMeteo, 3B Meteo) nei risultati generali.
-ENGINES=(duckduckgo brave startpage qwant mojeek bing wikipedia wikidata "bing news"
+# Bing web tolto il 09/10 (decisione di Dario): ignora la lingua italiana e dava pagine cinesi,
+# francesi e tedesche fuori tema; Bing News resta per le notizie.
+ENGINES=(duckduckgo brave startpage qwant mojeek wikipedia wikidata "bing news"
          "duckduckgo news" "google news" ansa currency)
 
 impostazioni() {
@@ -129,8 +131,6 @@ outgoing:
   request_timeout: 3.0
   max_request_timeout: 6.0
 engines:
-  - name: bing
-    disabled: false
   - name: ansa
     disabled: false
 EOF

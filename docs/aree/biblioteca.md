@@ -314,6 +314,8 @@ many requests»).
 - **Configurazione**: `web_preferisci_lingua` (predefinito true; false = l'ordine di SearXNG).
   Registro dei turni: `web_lingua_preferita` (qualcosa è finito in fondo), `web_altra_lingua`.
 - **Prove** a secco in `prova_web` (SearXNG finto suo, così i conteggi delle richieste di sopra
-  non cambiano). Da valutare con Dario: togliere Bing dai motori di SearXNG (`settings.yml`),
-  visto che con `it-IT` dà risultati fuori lingua e fuori tema.
+  non cambiano). *Storico (09/10 pomeriggio):* «da valutare con Dario: togliere Bing».
+  **Deciso da Dario il 09/10: Bing web tolto** dai motori (`setup/linux/motore/searxng.sh`,
+  `ENGINES`; Bing News resta per le notizie). Si applica al prossimo avvio del container
+  (`calliope motore searxng avvia` o un aggiornamento dell'immagine, che riscrive le impostazioni).
 
