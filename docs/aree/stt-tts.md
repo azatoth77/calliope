@@ -555,3 +555,29 @@ Limite: il collaudo che si ferma con un campo d'errore nel risultato (`_fallito`
 `tools/sviluppo.py`) risponde con la sua frase pronta «Lo faccio correggere?»: lì F1 non arriva al
 modello (la misura resta). Da rimisurare sulla DGX con la voce vera: soglie, quanti esiti vuoti
 hanno un nome noto vicino, quante correzioni spontanee (`calliope stato --turni`).
+
+## Più persone che parlano: la «modalità compagnia» (09/10, analisi, ramo `analisi-compagnia`)
+
+Rapporto: [`../ricerche/2026-10-09-piu-persone.md`](../ricerche/2026-10-09-piu-persone.md).
+Nessuna modifica al codice. Caso vero della DGX (08/10 sera e notte del 09/10, telefono in un
+locale con un amico): l'amico preso per il minore (0,43–0,47 sul suo profilo) con un falso allarme
+del guardiano, e Calliope che risponde a frasi non rivolte a lei. Misure:
+
+- **La causa principale è la finestra d'ascolto**: in compagnia ogni risposta riapre gli 8 s di
+  `followup_s` e la frase di chiunque arriva senza il nome. Nei due episodi 66 frasi su 75 sono
+  arrivate nella finestra, 20 delle 23 frasi di ospiti lì dentro hanno avuto una risposta.
+- **Frase contro il profilo di chi è stato riconosciuto da poco** (segnale migliore, costo zero:
+  l'impronta c'è già): sotto 0,20 con almeno 1 s di voce, Dario 0 % (sei giorni, tre microfoni),
+  altre voci dello stesso canale prese 2 volte su 3. Sul registro vero (02–09/10, solo numeri)
+  14 % delle frasi sarebbe stato in compagnia; entrambi gli episodi presi prima del danno.
+- **Gruppi tra frasi** (anche senza profilo): falsa compagnia ≤ 2,6 % delle sessioni di una voce,
+  due voci prese nel 46–82 % (un amico che dice tre frasi). Utile tra ospiti.
+- **Due voci dentro una frase** (finestre di 1,5 s): 6–8 frasi miste su 10, 0,7–3 % di falsi su voce
+  pulita, 37–52 ms di CPU per finestra: non ora.
+- **«È rivolta a me?»** col modello piccolo, giudizio separato: 26/27 rivolte e 27/29 no su frasi di
+  fantasia, ~0,28 s in parallelo alla risposta; dentro la risposta stessa sbaglia di più.
+
+Raccomandazione a fasi: F0 in ombra (registro `voce.compagnia`, regola `voci_compagnia`, giudizio
+in ombra), poi niente frase breve né continuità in compagnia e la compagnia come «voce non sicura»
+per i due cancelli dei minori, poi il giudizio sulla finestra d'ascolto (regola `non_rivolta`).
+Impronte delle frasi solo in memoria per corsia, 5 minuti, mai su disco.
