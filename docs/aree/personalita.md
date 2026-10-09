@@ -2,6 +2,12 @@
 
 *Toni di voce, modalità startrek, suoni d'ascolto, wake word diversa dal nome. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
+**Stato al 09/10.** Sei toni (della casa e per persona), modalità startrek accesa e spenta a
+voce da chi amministra senza riavvio (il ritorno alla normale anche scritto), suoni d'ascolto
+sintetici; il modello acustico di «computer» c'è sul portatile e sulla DGX, non nel repository.
+Le frasi pronte del codice non seguono ancora il tono: l'analisi dell'08/10 (in fondo) propone
+come farlo, niente è ancora nel codice.
+
 ## Moduli
 
 | Stadio | Libreria | Dove |
@@ -31,7 +37,7 @@
   pubblico della comunità (inglese) sulle voci italiane di Piper scatta 18 volte su 40.
   Addestramento pronto sul portatile (`WW_PAROLA=computer`, ~30 min, niente download), da
   lanciare su decisione dell'utente (comandi nel rapporto).
-  Calliope. Il modello acustico di «computer» (`wakeword/modelli/computer.onnx`) c'è sul
+  Il modello acustico di «computer» (`wakeword/modelli/computer.onnx`) c'è sul
   portatile e sulla DGX, non nel repository; senza si usa la testuale.
   **A voce, intera e subito** (05/10, `calliope/modalita.py`, prove `prova_modalita.py`,
   `prova_modalita_ollama.py`): sulla DGX «la proviamo la modalità Star Trek» cambiava solo il

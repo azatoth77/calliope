@@ -2,11 +2,20 @@
 
 *Comandi e letture della casa via Home Assistant, regole, errori di HA in italiano. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
+**Stato al 09/10.** Collegata all'HA vero (un Raspberry Pi) dal 01/10; ogni comando passa dalla
+verifica a secco di HA, dalle regole di Calliope e poi dall'esecuzione; le letture vengono dagli
+stati delle entità esposte. Dall'08/10, quando HA non trova il dispositivo nella stanza detta,
+Calliope lo cerca tra le esposte per nome (`casa/nomi.py`, sezione in fondo). Gli argomenti di
+`casa_comando` e `casa_stato` sono misurati dalle parole incerte (solo misura, niente «forse
+intendevi»: la casa ha i suoi nomi vicini; [voce-e-regole](voce-e-regole.md)); il nome pubblico
+di casa è vietato alle sonde dell'agente (`web/rete.py`, [agenti-estensioni](agenti-estensioni.md)).
+Da fare a mano: le aree delle luci «Soggiorno» e «Cucina» (fondo del documento).
+
 ## Moduli
 
 | Stadio | Libreria | Dove |
 |---|---|---|
-| Casa (luci, tapparelle, termostato, sensori) | Home Assistant via WebSocket (`websockets`): agente di conversazione integrato per i comandi, stati delle entità esposte per le letture | `calliope/casa/` → `HomeBackend` (`base.py`), `HomeAssistantBackend` (`homeassistant.py`), `Regole` (`regole.py`), `descrivi` (`parole.py`), `diagnose`, `load_casa`; tool in `calliope/tools/casa.py` |
+| Casa (luci, tapparelle, termostato, sensori) | Home Assistant via WebSocket (`websockets`): agente di conversazione integrato per i comandi, stati delle entità esposte per le letture | `calliope/casa/` → `HomeBackend` (`base.py`), `HomeAssistantBackend` (`homeassistant.py`), `Regole` (`regole.py`), `descrivi` (`parole.py`), `diagnose`, `load_casa`, guida scritta in `guida.py`; tool in `calliope/tools/casa.py` |
 | Errori di HA in italiano normale | i modelli veri delle risposte d'errore di HA (home-assistant-intents) | `calliope/casa/errori.py` → `riformula_errore`, usato da `HomeAssistantBackend._esito` |
 | Comando capito ma senza dispositivi (08/10) | nessuna: le entità esposte già in memoria | `calliope/casa/nomi.py` → `candidate`, `frase_fatto`, `frase_quale`, consigli a chi amministra; usato da `tools/casa.py` (`_per_nome`) |
 

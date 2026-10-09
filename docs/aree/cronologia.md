@@ -2,6 +2,8 @@
 
 *Il riassunto della v0.3, il primo test reale del 21/09, i modelli scelti, le prove automatiche. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
+*Questo file copre i primi giorni (fino al 06/10). Dal 06/10 in poi le tappe, una riga per giorno fino al 09/10, sono nella tabella «Tappe dello sviluppo» di [`../../CHANGELOG.md`](../../CHANGELOG.md); i dettagli nei documenti d'area.*
+
 ## Note dalla sezione «Stato attuale» di CLAUDE.md (fino al 06/10)
 
 - **v0.3 (22–26/09/2026)**: il codice è il package `calliope/` (26/09), con la
@@ -27,7 +29,7 @@
   satelliti, famiglia, ospiti, musica, biblioteca offline e agenti. Leggere
   [`docs/visione.md`](../visione.md) (bozza) e le ricerche in `docs/ricerche/` prima
   di toccare l'architettura. Roadmap e principi qui sotto verranno riallineati quando
-  la visione sarà confermata.
+  la visione sarà confermata. *[storico: la visione è la direzione del progetto, principi e stato sono in CLAUDE.md e la roadmap in [`../roadmap.md`](../roadmap.md)]*
 
 - **Prove automatiche** (26/09): `python -m prove` lancia le prove a secco (~4 s) e gira
   anche prima di ogni commit (`.githooks/pre-commit`); `python -m prove --ollama` aggiunge
