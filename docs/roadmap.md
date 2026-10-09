@@ -25,7 +25,8 @@ area e, in fondo, la roadmap com'era, con le voci fatte segnate. Nessuna data pr
 Dettagli in [`../CHANGELOG.md`](../CHANGELOG.md) e nei documenti d'area.
 
 - **Sicurezza per valore**, fasi 1–3 (attrito misurato, memoria dell'intento attiva, matrice per
-  valore ed effetto in ombra); un «no» chiude la proposta (09/10)
+  valore ed effetto in ombra); un «no» chiude la proposta (09/10); fase 4 accesa e estensioni
+  che leggono soltanto come letture (09/10 sera)
   ([sicurezza-politica](aree/sicurezza-politica.md)).
 - **Modalità sviluppo** per estensioni e programmi, versione 2 e giri 3–6 dai casi veri,
   confronto dei collaudi, ricollaudo alla consegna, sonde verso i soli host noti; vista dello
@@ -48,9 +49,10 @@ Dettagli in [`../CHANGELOG.md`](../CHANGELOG.md) e nei documenti d'area.
 
 **In coda (decisi o in attesa di una lettura dei dati)**
 
-1. **Sicurezza per valore, fase 4** (10/10): leggere i giorni d'ombra (`politica_ombra` nel
-   registro dei turni) e decidere se accendere `politica_per_valore`
-   ([`ricerche/2026-10-07-sicurezza-per-valore.md`](ricerche/2026-10-07-sicurezza-per-valore.md)).
+1. **Sicurezza per valore, fase 4**: *[accesa il 09/10 sera, ramo `valore-fase4`]*; resta da
+   guardare per qualche giorno l'ombra al contrario sulla DGX (esecuzioni con un bersaglio dal
+   dato a 0, attrito con la politica di prima), poi la fase 5 facoltativa (giudice sui compiti
+   E3) ([`ricerche/2026-10-07-sicurezza-per-valore.md`](ricerche/2026-10-07-sicurezza-per-valore.md)).
 2. **Frasi pronte meno monotone**, fasi 0–1 (campo `pronte` nel registro, catalogo con varianti
    per tono e forma breve), in attesa del via
    ([`ricerche/2026-10-08-frasi-pronte.md`](ricerche/2026-10-08-frasi-pronte.md)).

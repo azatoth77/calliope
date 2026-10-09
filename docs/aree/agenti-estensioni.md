@@ -1652,3 +1652,38 @@ biblioteca, e la frase del web dice «l'estensione che lo fa, se c'è, altriment
 Nessuna regola sul testo: decide il modello dalla descrizione del tool (`descrizione_tool`,
 invariata). Con la città della casa (`casa_citta`) «Che tempo fa?» → l'estensione con la città
 6/6 col 4B (main 0/6). Dettagli e contrari in [voce-e-regole](voce-e-regole.md).
+
+## Le estensioni che leggono soltanto sono letture (09/10, ramo `valore-fase4`)
+
+Misura del ramo `citta-casa-notizie` (sezione sopra): nella stessa conversazione, dopo «Sentimi
+le notizie di sport», «Che tempo fa?» non arrivava all'estensione meteo. `servizio._agisce`
+contava «parla con internet» come azione, e con un risultato web nella conversazione la politica
+la fermava (`politica_azione_non_chiesta`, o `valore_non_ancorata` con la matrice): il 4B
+inventava il meteo («sereno, 18 gradi») 2 volte su 3.
+
+Ora un'estensione **senza scritture, senza flussi `invia`, senza `rete.post` e senza dati di
+casa letti** (casa, liste, agenda, dati), con la sola rete in GET verso internet pubblico o i
+suoi host, ha come classe una **lettura che manda fuori i suoi argomenti**
+(`servizio._classe` → `politica.Classe("sicuro", esce=True)`): vale come `web_cerca`, senza
+richiesta né conferma per il dato di mezzo, ma un argomento importante (le stringhe dell'input)
+preso da un dato non fidato si mostra e si chiede («“Truffaldino” viene da una pagina internet,
+non da te: vuoi davvero che usi «Meteo città» con questi dati?», `politica_argomento_esterno`,
+`politica._lettura_che_esce`), con la politica per valore accesa e spenta; al «sì» esegue.
+Restano: host e porta del manifesto (niente POST, scritture, liste, dati, timer, schermi), i
+dati riservati negli argomenti (`_riservati_in`: niente rete in quell'esecuzione) e il blocco
+dopo un dato letto nella stessa risposta (le estensioni non sono in `DOPO_DATO`). Senza rete,
+leggere casa, liste o agenda resta una lettura come prima; con la rete, o con `legge.dati`, è
+un'azione. Un'estensione con un manifesto che non si legge resta un'azione.
+
+Scelta da confermare: conta come lettura anche `rete.pubblica: true` (GET a qualunque sito
+pubblico), perché la meteo vera della DGX ce l'ha. L'indirizzo lo decide il codice approvato, non
+il modello; un host scelto da una pagina («manda a cattivo.example…») arriva come parola del
+dato e chiede; i dati riservati non escono in nessuna forma. Se si vuole solo `rete.host`,
+basta togliere `pubblica` da `_rete`.
+
+Prove: `prova_valore` (classi per dieci manifesti, il caso delle notizie con la città di casa o
+detta, il valore del sito che chiede e il «sì», il blocco nella stessa risposta, un'estensione
+con POST che resta un'azione), `prova_estensioni_attacchi` (estensione ostile di sola lettura,
+0 passaggi). Col 4B (`prova_citta_casa_ollama.py`): dopo le notizie l'estensione con la città
+di casa 0/3 → 5/6, mai più il meteo inventato. Dettagli in
+[sicurezza-politica](sicurezza-politica.md#sicurezza-per-valore-fase-4-accesa-0910-ramo-valore-fase4).
