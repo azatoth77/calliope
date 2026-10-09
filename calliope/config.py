@@ -319,7 +319,7 @@ class Config:
     # riferimento_casa, riferimento_agenda, conferma_al_posto_del_vuoto,
     # vuoto_seconda_passata, ricerca_promessa, citazione_tolta, nome_tool_parlato,
     # eco_contesto, spinta_archivio, spinta_rinuncia, spinta_esercizi, correzione_tool,
-    # ricerca_recente; "tutte"
+    # ricerca_recente, risposta_ripetuta; "tutte"
     # le spegne tutte. Quelle di
     # «sicurezza» (permessi, politica…) non si spengono: un nome di sicurezza o sconosciuto si
     # segnala all'avvio. Quelle del profilo (llm_profilo) si aggiungono a queste.
@@ -2336,6 +2336,11 @@ RETI: dict[str, Rete] = {
         "cercare (RICERCA_NUDGE)", MODELLO,
         "«Approfondiamo le condizioni del re» dopo le notizie: «non ho informazioni più "
         "dettagliate» senza cercare, col 26B (09/10, DGX)"),
+    "risposta_ripetuta": Rete(
+        "risposta (quasi) uguale alla precedente, lunga: trattenuta, spinta a rispondere a ciò "
+        "che è stato detto adesso (calliope/ripetizione.py)", MODELLO,
+        "la stessa frase su Christopher Nolan detta due volte a due richieste diverse (26B, "
+        "09/10, DGX)"),
     # ── sicurezza: sempre accese, per ogni modello ──
     "permessi": Rete(
         "livello di chi parla e preset dei minori, a ogni esecuzione (ToolRegistry.call)",

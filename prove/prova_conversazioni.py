@@ -1115,7 +1115,69 @@ def prova_conversazione_nuova():
                  not nuova_conversazione(frase, "Calliope"))
 
 
+# ─────────────────────────── 11. la risposta uguale alla precedente (09/10) ───────────────────
+# Caso vero della DGX alle 19:06:49 e 19:07:04: la stessa frase lunga detta due volte a due
+# richieste diverse. Rete risposta_ripetuta (calliope/ripetizione.py)
+NOLAN = "Mi hai chiesto esattamente cos'è che mi avevi chiesto un attimo fa. Un loop degno di un film di Christopher Nolan, ma con meno effetti speciali."
+
+
+def prova_ripetuta():
+    from calliope.ripetizione import inizia_come, ripete, risposta_precedente
+    verifica("ripete: la stessa frase lunga", ripete(NOLAN, NOLAN))
+    verifica("ripete: quasi uguale (una parola diversa)",
+             ripete(NOLAN.replace("meno", "pochi"), NOLAN))
+    verifica("contrario: brevi uguali sono legittime («Fatto.», «Va bene.»)",
+             not ripete("Fatto.", "Fatto.") and not ripete("Sono le dieci e venti.",
+                                                          "Sono le dieci e venti."))
+    verifica("contrario: stessa apertura, risposta diversa",
+             not ripete("Mi hai chiesto esattamente della pizza margherita e del foglio Excel "
+                        "con le spese.", NOLAN))
+    verifica("inizia_come: la prima frase uguale", inizia_come(NOLAN.split(". ")[0], NOLAN)
+             and not inizia_come("Certo, ecco cosa mi avevi chiesto prima.", NOLAN))
+    verifica("risposta_precedente: l'ultima detta, non le chiamate",
+             risposta_precedente([{"role": "user", "content": "a"},
+                                  {"role": "assistant", "content": "Prima."},
+                                  {"role": "user", "content": "b"},
+                                  {"role": "assistant", "content": "", "tool_calls": [{}]},
+                                  {"role": "tool", "content": "{}"},
+                                  {"role": "assistant", "content": "Dopo il tool."}])
+             == "Dopo il tool.")
+    # Il giro: la risposta uguale non si dice, la spinta, la risposta nuova
+    b = brain_finto(risposte=[NOLAN, NOLAN, "Prima mi avevi chiesto della pizza e del foglio."])
+    parla(b, "Cos'è che ti ho chiesto?")
+    detto = parla(b, "No, mi riferivo alla richiesta di un attimo fa.")
+    visti = b.backend.visti[-1]
+    verifica("caso vero: la risposta uguale non si dice, il modello riceve la spinta",
+             detto == "Prima mi avevi chiesto della pizza e del foglio."
+             and "spinta_ripetuta" in b.rules_fired()
+             and any("uguale alla tua risposta precedente" in (m.get("content") or "")
+                     for m in visti if m["role"] == "system"), detto)
+    verifica("…e non entra nella storia",
+             sum(1 for m in b.history if m.get("content") == NOLAN) == 1)
+    b = brain_finto(risposte=[NOLAN, NOLAN, NOLAN])
+    parla(b, "Cos'è che ti ho chiesto?")
+    detto = parla(b, "Puoi ripetere?")
+    verifica("dopo la spinta la sua risposta si dice, anche uguale (una volta sola)",
+             detto == NOLAN and len(b.backend.visti) == 3, detto)
+    b = brain_finto(risposte=["Va bene, nessun problema.", "Va bene, nessun problema."])
+    parla(b, "Ci sentiamo dopo")
+    detto = parla(b, "Ti richiamo più tardi")
+    verifica("contrario: una risposta breve uguale si dice («Va bene…»)", detto == "Va bene, nessun problema."
+             and "spinta_ripetuta" not in b.rules_fired() and len(b.backend.visti) == 2)
+    b = brain_finto(risposte=[NOLAN, "Un'altra risposta del tutto diversa da quella di prima, "
+                                     "lunga abbastanza."])
+    parla(b, "Cos'è che ti ho chiesto?")
+    detto = parla(b, "E dopo?")
+    verifica("contrario: una risposta diversa passa subito", detto.startswith("Un'altra")
+             and len(b.backend.visti) == 2)
+    b = brain_finto(risposte=[NOLAN, NOLAN])
+    b.cfg.llm_reti_spente = ["risposta_ripetuta"]
+    parla(b, "Cos'è che ti ho chiesto?")
+    verifica("contrario: rete spenta → come prima", parla(b, "E quindi?") == NOLAN)
+
+
 prova_oggetto()
+prova_ripetuta()
 prova_conversazione_nuova()
 prova_dopo_la_pausa()
 prova_luogo_funzione()
