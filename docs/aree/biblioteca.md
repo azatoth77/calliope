@@ -2,6 +2,8 @@
 
 *Wikipedia italiana e le altre fonti Kiwix in puro Python con FTS5; ricerca su internet con SearXNG. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
+*Stato al 09/10: biblioteca e ricerca web invariate dalla pubblicazione (06/10). Dall'08/10 notte il testo dei siti letto dall'agente (`web_leggi`) arriva in busta come ogni dato non fidato, e i nomi pubblici di casa sono vietati nella rete delle estensioni e dell'agente ([agenti-estensioni](agenti-estensioni.md)). Restano aperti le tabelle delle voci non lette e i «perché…?» che trovano titoli omonimi.*
+
 ## Moduli
 
 | Stadio | Libreria | Dove |

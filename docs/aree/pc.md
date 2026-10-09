@@ -2,18 +2,20 @@
 
 *Volume, musica, luminosità, app, file sul portatile; esecutore locale e remoto. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
+**Stato al 09/10.** Otto tool `pc_*` in `calliope/tools/pc.py` (volume, media, luminosità, stato, app, blocco, ricerca e apertura di file); `pc_guarda` (webcam e schermo) è nell'area [immagini-allegati](immagini-allegati.md). Con Calliope sulla DGX comandano il portatile collegato come satellite (esecutore remoto, usato davvero dal 07/10: casi del registro qui sotto); con più satelliti vale quello della corsia che chiede, se ha l'esecutore ([satelliti](satelliti.md)). Dal 07/10 l'elenco dei file in sospeso ha le date e «l'ultimo» è il più recente.
+
 ## Moduli
 
 | Stadio | Libreria | Dove |
 |---|---|---|
-| PC a voce (il portatile stesso, o quello del satellite) | pycaw, WinRT (GSMTC), screen_brightness_control, pywin32 (Windows Search via ADODB), psutil | `calliope/pc/` → `PCExecutor` (`base.py`), `LocalWindowsExecutor` (`windows.py`), `RemotePCExecutor` (`remoto.py`, dal 03/10), `load_pc`; sul satellite `EsecutoreSatellite` (`calliope/satellite/esecutore.py`); tool in `calliope/tools/pc.py`; documenti al satellite con `RemoteDelivery` (`calliope/documenti/consegna.py`) |
+| PC a voce (il portatile stesso, o quello del satellite) | pycaw, WinRT (GSMTC), screen_brightness_control, pywin32 (Windows Search via ADODB), psutil | `calliope/pc/` → `PCExecutor` (`base.py`: `cerca_file` dal più recente, `risultato` con un solo file, dal 07/10), `LocalWindowsExecutor` (`windows.py`), `RemotePCExecutor` (`remoto.py`, dal 03/10), `load_pc`; sul satellite `EsecutoreSatellite` (`calliope/satellite/esecutore.py`); tool in `calliope/tools/pc.py` (`_elenco_sospeso` con le date, `file_assente`, dal 07/10); documenti al satellite con `RemoteDelivery` (`calliope/documenti/consegna.py`) |
 
 ## Note dalla sezione «Stato attuale» di CLAUDE.md (fino al 06/10)
 
   - **Esecutore remoto del PC** (03/10, protocollo 2 dei satelliti): con Calliope sulla DGX i
     tool `pc_*` comandano il portatile Windows collegato come satellite, e i documenti si
     salvano nella sua cartella Documenti\Calliope. Provato a secco (`prova_esecutore.py`):
-    la prova vera con la DGX e il portatile no.
+    la prova vera con la DGX e il portatile no. *[superato il 07/10: usato sulla DGX dal satellite dello studio, casi veri nelle sezioni del 07/10 qui sotto]*
 
   - **PC a voce** (26/09, `calliope/pc/`): volume, musica, luminosità, batteria, programmi
     aperti, app del catalogo, blocco dello schermo, ricerca e apertura di file sul portatile
@@ -103,7 +105,7 @@ recente (decisione di Dario: «apri l'ultimo che hai fatto» è l'ultima attivit
 della lista» lo traduce il modello in un numero. Prove: `prove/prova_dopo_annunci.py`,
 `prove/prova_pc.py`.
 
-Con un lavoro dell'agente appena detto, «un PDF» va a `risultato_lavoro` e non a
+Con un lavoro dell'agente appena detto, «un PDF» va a `risultato_lavoro` (dal 08/10 `lavoro_risultato`) e non a
 `pc_cerca_file`: vedi [agenti-estensioni](agenti-estensioni.md).
 
 ## Il numero 2 con un solo file e il documento proprio (07/10 sera, ramo `correzioni-giro9`)

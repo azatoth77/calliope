@@ -2,13 +2,15 @@
 
 *Foto in ingresso, webcam e schermata del PC, allegati di qualsiasi tipo. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
+*Stato al 09/10: foto e allegati come dal 05/10, con la guardia nella politica dal 06/10; dall'08/10 ogni file di una persona riconosciuta resta 7 giorni nel suo cassetto (sezione sotto), anche per il tutore dai pulsanti della scheda. Resta aperto «cosa vedi sul mio schermo?» con una foto nella conversazione («Non me l'hai chiesto»); il modello vero sul cassetto non è ancora misurato.*
+
 ## Moduli
 
 | Stadio | Libreria | Dove |
 |---|---|---|
 | Foto in ingresso (telefono, pagina degli schermi, webcam e schermo del PC su richiesta, dal 05/10) | Pillow (firma dei byte, riduzione a 1280, JPEG senza EXIF); `images` di Ollama / `image_url` dell'API OpenAI; webcam con PyAV (DirectShow, già con faster-whisper), schermata con `ImageGrab`, avviso con tkinter | `calliope/immagini.py` → `prepara`, `Immagine`, `Album` (in `Brain.album`, per conversazione), `InAttesa`, `opzioni_tool`; `Brain._con_immagini`, `_image_tokens`; dato nuovo nel turno `politica.Turno.dato_nuovo` (la guardia delle foto è nella politica dal 06/10); POST `/api/immagine` (`schermi/server.py`); `calliope/pc/cattura.py`, `PCExecutor.cattura` (metodo «cattura» dei satelliti); tool `pc_guarda`, `immagine_archivia`, `immagine_guarda` in `calliope/tools/immagini.py`; scheda `foto`; vedi [`docs/ricerche/2026-10-05-immagini.md`](../ricerche/2026-10-05-immagini.md) |
 | Cassetto dei file per persona (08/10): ogni foto, file o audio di chi è riconosciuto resta 7 giorni, poi si elimina | SQLite (tabelle `cassetto_*` in `memory_db`), file sul disco; niente librerie nuove | `calliope/cassetto.py` → `Cassetto` (`metti_allegato`, `metti_foto`, `cerca`, `esegui`, `pulisci`, `da_dire`, `frase`, `scheda`, `da_pagina`), `load_cassetto`; nel ciclo `Ciclo._nel_cassetto`, `_cassetto_dopo`; `allegato_leggi(cassetto=…, di=…)` e `cassetto_gestisci` in `calliope/tools/allegati.py`; POST `/api/cassetto` (`schermi/server.py`); scheda `cassetto` (carosello) in `schermo.js` |
-| Allegati di qualsiasi tipo (telefono e pagina degli schermi, «Allega», trascina, incolla, dal 05/10) | tipo dai byte; pypdf e pypdfium2 (pagine scansionate → immagini), python-docx, openpyxl, python-pptx (o ElementTree), zipfile (solo elenco), PyAV + il Whisper della voce per l'audio; niente librerie nuove | `calliope/allegati.py` → `riconosci`, `prepara`, `Allegato` (`blocco`, `parte`), `Allegati` (in `Brain.allegati`, per conversazione), `trascrivi`; `Brain.allega_non_fidato` (porta unica), `_accogli_allegati`, `_quarantena_allegati`, `_con_allegati`, `_blocchi_allegati`, `_allegati_tokens`, nella politica `Turno.dato_nuovo` e la delega al dato (regola «politica_delega»); POST `/api/allegato`; tool `allegato_leggi`, `allegato_archivia` in `calliope/tools/allegati.py`, `delega_lavoro(allegato=…)`; scheda `allegato`; vedi [`docs/ricerche/2026-10-05-allegati.md`](../ricerche/2026-10-05-allegati.md) |
+| Allegati di qualsiasi tipo (telefono e pagina degli schermi, «Allega», trascina, incolla, dal 05/10) | tipo dai byte; pypdf e pypdfium2 (pagine scansionate → immagini), python-docx, openpyxl, python-pptx (o ElementTree), zipfile (solo elenco), PyAV + il Whisper della voce per l'audio; niente librerie nuove | `calliope/allegati.py` → `riconosci`, `prepara`, `Allegato` (`blocco`, `parte`), `Allegati` (in `Brain.allegati`, per conversazione), `trascrivi`; `Brain.allega_non_fidato` (porta unica), `_accogli_allegati`, `_quarantena_allegati`, `_con_allegati`, `_blocchi_allegati`, `_allegati_tokens`, nella politica `Turno.dato_nuovo` e la delega al dato (regola «politica_delega»); POST `/api/allegato`; tool `allegato_leggi`, `allegato_archivia` in `calliope/tools/allegati.py`, `lavoro_affida(allegato=…)` (fino all'08/10 `delega_lavoro`); scheda `allegato`; vedi [`docs/ricerche/2026-10-05-allegati.md`](../ricerche/2026-10-05-allegati.md) |
 
 ## Note dalla sezione «Stato attuale» di CLAUDE.md (fino al 06/10)
 
@@ -110,7 +112,7 @@ tenuto»). La vita nella conversazione non cambia: il cassetto serve a ritrovarl
   tipo vero; l'archivio legge PDF, Word, testo e immagini, Excel e PowerPoint e gli audio restano
   conservati senza essere letti; zip e binari no). «Ancora» = 7 giorni da adesso. Più file per le
   stesse parole senza «tutti» → chiede quale. Classe per la politica dichiarata nel tool
-  (`ToolSpec.classe`, non in `politica.CLASSI`: quel file era di un altro ramo): azione, «elimina»
+  (`ToolSpec.classe`, non in `politica.CLASSI`: quel file era di un altro ramo; dall'unione dell'08/10 è anche nelle tabelle di `valore.py`, nota sotto): azione, «elimina»
   distruttiva (serve il verbo nella frase), `verbi` per i dati non fidati di mezzo.
 - **Revisione**: dopo la prima risposta del giorno alla persona (voce o schermo personale; mai con
   una domanda in sospeso: aspetta il turno dopo), **solo se** qualcosa scade entro

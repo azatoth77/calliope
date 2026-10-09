@@ -2,13 +2,16 @@
 
 *Finestra di contesto, compressione e archivio delle conversazioni, una conversazione per persona (corsie). Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
+*Stato al 09/10: una conversazione per persona con i satelliti insieme (06/10), finestra dal setup, compressione e archivio; dal 07/10 prima frase a pezzi, taratura della voce e Piper sulla GPU secondo la macchina; dall'08/10 la generazione nel registro, l'archivio a turno finito con la scheda «Conversazione» e le domande cronologiche («più indietro»); dal 09/10 la finestra d'ascolto si chiude in compagnia con una voce sconosciuta. La latenza vera sulla DGX è da rimisurare con un giorno d'uso (`calliope stato --turni`).*
+
 ## Moduli
 
 | Stadio | Libreria | Dove |
 |---|---|---|
 | Conversazione per persona, satelliti insieme (dal 06/10) | thread per satellite («corsie»), solo libreria standard | `calliope/corsie.py` → `Corsia`, `RegistroConversazioni` (`scegli`, `occupa`, `doppione`, `pulisci`, `riprendi`), `Varco` (`conversazioni_parallele`), `Smistatore`; il ciclo di ogni corsia `calliope/ciclo.py` → `Ciclo` (dal 06/10, P8), `Servizi`, `Turno`; `main.Corsie` (una corsia per satellite), `main.Avvio`; `ServerSatelliti.insieme`; rapporto [`docs/ricerche/2026-10-06-conversazione-persona.md`](../ricerche/2026-10-06-conversazione-persona.md) |
 | Finestra di contesto (dal 05/10) | — (Ollama `/api/show` e `/api/ps`, vLLM `/v1/models` e `/metrics`, nvidia-smi, /proc/meminfo) | `calliope/contesto.py` → `prepara`, `calcola`, `finestra` (il num_ctx di tutti), `testo_stato`; `llm_num_ctx: auto`, scelta in `contesto.json`; token veri in `Brain.last_context`; barra `Schermi.contesto`; misure `prove/misura_contesto.py` |
-| Conversazione, compressione e archivio delle conversazioni (dal 05/10) | SQLite in WAL con FTS5 (`conversazioni.db`), vettori da Ollama `/api/embed` sulla CPU (`qwen3-embedding:0.6b`) o `/v1/embeddings`, coseno in numpy, RRF | `calliope/conversazione.py` → `Conversazione` (Brain la espone con `history`, `pending`…, `brain.conv`), `turni`; `calliope/compressione.py` → `Compressore` (soglie 75/90 %, `avvia`, `comprimi_ora`, `applica`, `chiudi`), `RiassuntoreLLM` (agente o voce), `RiassuntoreTagli`, `crea_riassuntori`; `calliope/conversazioni.py` → `ArchivioConversazioni` (`archivia`, `cerca`, `ultima`, `dimentica`, conversazione corrente), `Embedder`, `load_conversazioni`; tool `conversazione_cerca`, `conversazioni_dimentica` in `calliope/tools/conversazioni.py`; «ricominciamo» `wakeword.nuova_conversazione`; terminale `python -m calliope.conversazioni`; misure `prove/misura_conversazioni.py` |
+| Conversazione, compressione e archivio delle conversazioni (dal 05/10) | SQLite in WAL con FTS5 (`conversazioni.db`), vettori da Ollama `/api/embed` sulla CPU (`qwen3-embedding:0.6b`) o `/v1/embeddings`, coseno in numpy, RRF | `calliope/conversazione.py` → `Conversazione` (Brain la espone con `history`, `pending`…, `brain.conv`), `turni`; `calliope/compressione.py` → `Compressore` (soglie 75/90 %, `avvia`, `comprimi_ora`, `applica`, `chiudi`), `RiassuntoreLLM` (agente o voce), `RiassuntoreTagli`, `crea_riassuntori`; `calliope/conversazioni.py` → `ArchivioConversazioni` (`archivia`, `cerca`, `ultima`, `dimentica`, conversazione corrente; dall'08/10 `recenti` per le domande cronologiche, `su_turni` e `chat` per la scheda «Conversazione»), `Embedder`, `load_conversazioni`; tool `conversazione_cerca`, `conversazioni_dimentica` in `calliope/tools/conversazioni.py`; «ricominciamo» `wakeword.nuova_conversazione`; terminale `python -m calliope.conversazioni`; misure `prove/misura_conversazioni.py` |
+| Latenza come metrica, cache scaldata, modelli di Ollama (dal 06/10) | solo libreria standard (registro dei turni, Ollama `/api/ps`) | `calliope/latenza.py` → `giorno`, `per_giorno`, `testo`, `avviso`, `avviso_recente`, `scalda_ripresa`, `leggi_file` (`calliope stato --turni`); `Brain.scalda_conversazione`, `Brain._scalda_se_cambiato` (prefisso nuovo dopo un cambio di modalità, 07/10); `calliope/ollama_carico.py` → `residenti`, `limite`, `usati`, `avviso`, `puo_caricare`; la prima frase a pezzi e la taratura della voce (sezioni del 07/10 sotto) hanno il codice in `tts.py` e `taratura_voce.py`, area [stt-tts](stt-tts.md) |
 
 ## Note dalla sezione «Stato attuale» di CLAUDE.md (fino al 06/10)
 
@@ -84,7 +87,7 @@
 - **Compressione e archivio delle conversazioni** (05/10, fase 2 del contesto,
   [`docs/ricerche/2026-10-05-contesto-compressione.md`](../ricerche/2026-10-05-contesto-compressione.md),
   prova `prova_conversazioni.py`): la conversazione è un oggetto (`Conversazione`, una per
-  satellite nella fase 3). Ogni turno finito va in `conversazioni.db` (30 giorni, regole di
+  satellite nella fase 3 *[superato il 06/10: una per persona, con le corsie, sopra]*). Ogni turno finito va in `conversazioni.db` (30 giorni, regole di
   sempre su riservati e personali, mai gli argomenti dei tool), così ogni taglio della storia
   toglie solo turni archiviati. Oltre il 75 % della finestra (token veri) la compressione parte
   a risposta finita e cede alla voce; oltre il 90 % prima di rispondere («Un attimo, riordino
@@ -133,7 +136,7 @@ Dal rapporto [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-
 - **Correzione della trascrizione**: `stt_correzione_timeout_s` 0,4 s, tempo massimo vero
   (oltre vale Whisper, regola `stt_correzione_scaduta`). Il 05/10 sulla DGX: 44 frasi su 112,
   1,00 s di mediana, 10 cambiate; prima frase 2,73 s con la correzione contro 1,35 s senza.
-  Col 26B a 0,4 s non arriva quasi mai: proposta di spegnerla sulla DGX.
+  Col 26B a 0,4 s non arriva quasi mai: proposta di spegnerla sulla DGX. *[Oggi è spenta (`stt_correzione: false`, anche sulla DGX); il confronto delle varianti del 07/10 ha confermato di restare senza: [stt-tts](stt-tts.md).]*
 - **Guardiano**: i ~3 s dei minori venivano dal rilevatore di pericolo (`gemma4:e4b-it-qat`)
   mai caricato sulla DGX: ogni richiesta chiusa a 3 s (499 nel log di Ollama) faceva
   ripartire il caricamento. Ora `prepara` carica guardiano e rilevatore all'avvio
@@ -145,7 +148,7 @@ Dal rapporto [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-
 - **Cache dopo un riavvio**: `Brain.scalda_conversazione` legge in anticipo la conversazione
   ripresa (stesso prefisso del primo turno), lanciata da `latenza.scalda_ripresa` all'avvio:
   11 000 token riletti in 2,85 s senza, 0,07 s con. Resta freddo il cambio di persona:
-  proposti `OLLAMA_NUM_PARALLEL=2` sulla DGX (~0,65 GB per slot a 28 672) oppure
+  proposti `OLLAMA_NUM_PARALLEL=2` sulla DGX (~0,65 GB per slot a 28 672; *[fatto: verificato sulla DGX il 07/10]*) oppure
   `contesto_rilettura_max_s: 3` (finestra 24 576, rilettura a freddo ~2,1 s invece di ~3,1).
   Dal 06/10 (Q5 della seconda analisi) si scalda la storia **già compattata** come la vedrà il
   primo turno (`brain._compatta_storia`, la stessa di `_compact_old_results`, su copie): con un
@@ -422,7 +425,7 @@ veloce (GPU) e solo 1,3 volte (CPU), librerie mancanti (CPU con il motivo), scel
 riletta, memoria che ora non basta, uso più lento della CPU, valori scritti, onnxruntime senza
 CUDA, ripiego in `_su_gpu` alla prima frase che fallisce, validatore della configurazione.
 
-**Da fare sulla DGX** (Dario): rigenerare `uv.lock`, `calliope extra voce-gpu`, aggiornare;
+**Da fare sulla DGX** (Dario): rigenerare `uv.lock` *[fatto il 07/10, ea05def]*, `calliope extra voce-gpu`, aggiornare;
 dopo l'avvio `calliope log` mostra «Voce sulla GPU: …» e `calliope stato` la riga della voce.
 Da rimisurare con un giorno d'uso: `voce_pronta_s` e la riga «dal testo alla voce» di
 `calliope stato --turni`.

@@ -2,6 +2,15 @@
 
 *Politica unica dei tool e provenienza, permessi, conferme e frase di sfida, analisi di sicurezza del 03/10. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
+**Stato al 09/10.** Politica unica dei tool in `ToolRegistry.call` (classi, provenienza, dati non
+fidati in busta, conferme e frase di sfida, controllo di ciò che dice). Sicurezza per valore:
+fase 2 (memoria dell'intento) attiva dall'08/10, fase 3 (provenienza per valore e classi
+d'effetto) in ombra con `politica_per_valore` spento; la decisione se accenderla (fase 4) è del
+10/10, dopo due giorni d'ombra (criteri in «Sicurezza per valore, fasi 1–3»). Dall'08/10 nomi
+nuovi dei tool dei lavori e dello sviluppo (le sezioni di prima usano i vecchi: tabella in
+«Modalità sviluppo, versione 2»), nomi pubblici di casa vietati all'agente; dal 09/10 il «no»
+chiude la proposta. Il secondo fattore per chi amministra è ancora un progetto.
+
 ## Moduli
 
 | Stadio | Libreria | Dove |
@@ -9,6 +18,9 @@
 | Conferme delle azioni (proposta valida 3 turni, «sì» breve di chi amministra, frase di sfida) | difflib sulla trascrizione, impronta CAM++ | `calliope/conferme.py` → `proposta_valida`, `admin_confermato`, `serve_conferma`, `Sfida`, `confronta`; `SpeakerContext.aggiorna_conversazione`; `Brain._sfida`; misure `prove/misura_conferma_breve.py`, `prove/misura_sfida.py` |
 | Sicurezza per valore (08/10: attrito come metrica, memoria dell'intento, provenienza per valore e classi d'effetto in ombra) | — (regole nel codice) | `calliope/attrito.py` → `giorno`, `avviso`, `avviso_recente` (da `calliope stato --turni` e dall'avvio); `calliope/valore.py` → `ARGOMENTI`, `EFFETTI`, `effetto`, `Intenzione`, `intento_aperto`, `aggiorna`, `etichetta`, `distintive`, `decidi_valore`, `ombra`; `calliope/politica.py` → `VERBI_AZIONE`, `chiesto_con_verbi`, `consenso_turno`; prove `prove/prova_valore.py`, `prove/prova_attrito.py`; progetto [`docs/ricerche/2026-10-07-sicurezza-per-valore.md`](../ricerche/2026-10-07-sicurezza-per-valore.md) |
 | Politica unica dei tool e provenienza (05/10: dati non fidati in busta, classi dei tool, conferma a voce con dati di mezzo) | — (regole nel codice) | `calliope/politica.py` → `CLASSI`, `classe_di`, `decidi`, `controlla` e `incoerente` (da `ToolRegistry.call`), `Turno`, `consenso`, `coerente`; `calliope/provenienza.py` → `racchiudi`, `racchiudi_risultato`, `fonti`, `marca`, `FONTI`; porta unica `Brain.dato_non_fidato` / `allega_non_fidato`; `calliope/quarantena.py`; ciò che dice con dati di mezzo `calliope/riferire.py` → `giudica`, `filtra`, `controlla_testo` (da `main.py`, 06/10); banco `prove/prova_politica.py`; rapporto [`docs/ricerche/2026-10-05-politica-sicurezza.md`](../ricerche/2026-10-05-politica-sicurezza.md) |
+| Consenso e rifiuto nelle risposte alle proposte (07–09/10: forme chiuse, richiesta ripetuta, «no» in testa, «sì, però…»); storpiature nella provenienza (08/10) | — (regole nel codice) | `calliope/politica.py` → `consenso_chiuso`, `richiesta_ripetuta`, `accettata`, `bersaglio_assente`, `rinuncia`, `rifiuto`, `domanda_si_no`, `consenso_avversativo`; `Brain._rifiuto_proposta`; `calliope/valore.py` → `chiude`, `chiave_intento`; `calliope/provenienza.py` → `vicina`, `tutto_detto`; `calliope/riferire.py` → `indicazioni`, `FRASI_PROPRIE`; prove `prove/prova_testo.py`, `prove/prova_intento_no.py` |
+| Fatti-istruzione, azioni non chieste, segreti, permessi dei file (03/10) | — (regole nel codice) | `calliope/sicurezza.py` → `instruction_fact`, `asked_for_action`, `asks_secret`, `proteggi_dati`; prova `prove/prova_sicurezza.py` |
+| Nomi pubblici di casa vietati all'agente, sonde e ricollaudo (08/10 notte) | solo libreria standard | `calliope/web/rete.py` → `nomi_casa`; `calliope/sonde.py` → `sonda`, `ricollaudo`; dettagli in [agenti-estensioni](agenti-estensioni.md); banco `prove/prova_sonde_attacchi.py` |
 
 ## Note dalla sezione «Stato attuale» di CLAUDE.md (fino al 06/10)
 
@@ -47,7 +59,7 @@
   (regressione alternata con main: 81 e 83/87 contro 82 e 83/87, prima frase 0,64 e 0,61 s
   contro 0,65 e 0,64; nessuna regola nuova scattata in 174 turni).
   **«Eseguilo con 3 e 5» senza conferma** (06/10, `Classe.richiesta_voce`, regola
-  `politica_richiesta_voce`): `lavori_esegui` con il lavoro dell'agente nella storia si esegue
+  `politica_richiesta_voce`): `lavori_esegui` (dall'08/10 `programma_esegui`) con il lavoro dell'agente nella storia si esegue
   subito se la frase è della voce riconosciuta sopra soglia (`politica.voce_frase`), ha le
   parole del tool e i `dati` detti in questa frase (`detti_qui`, anche «tre e cinque»); breve,
   zona grigia, scritto, proposta del modello o dati non detti (`politica_argomento_non_detto`)
@@ -136,14 +148,16 @@
     (`ricordo_istruzione_escluso`). Un'azione su casa, PC, schermi (abbina, scollega) o di
     installazione e registrazione chiamata in un turno senza nessuna richiesta d'azione
     (`asked_for_action`: verbi, «volume a 30», «più forte»; «che ore sono?» no) non si esegue
-    e diventa «Non me l'hai chiesto: vuoi che…?» (`Brain._unasked`, `azione_non_chiesta`); il
+    e diventa «Non me l'hai chiesto: vuoi che…?» (`Brain._unasked`, `azione_non_chiesta`;
+    *[dal 06/10 `_unasked` è tolto: lo fa la politica, `politica_azione_non_chiesta`]*); il
     «sì» la esegue (tool dell'azione in sospeso). Attacco dell'analisi (`inj_memoria`,
     `inj_schermo`, gemma4 e4b): 10/10, 10/10 e 9/10 → **0/10, 0/10, 0/10**; ciascuno strato da
     solo: senza filtro, cornice e conferma 0/10 eseguiti (10/10 chiamate fermate); con la sola
     cornice «ordine» 10/10, «abitudine» 0/10, schermo 0/10.
   - **Codice dell'agente senza isolamento vero** (agenti, difetti 1–2): con
     `agenti_sandbox_motore: auto` e senza container (Windows, Docker assente, immagine non
-    costruita) il codice **non si esegue**: `delega_lavoro` di tipo codice risponde subito
+    costruita) il codice **non si esegue**: `delega_lavoro` di tipo codice (dall'08/10 i
+    programmi passano da `sviluppo_apri`) risponde subito
     «…lo eseguo solo in un ambiente isolato» (`lavori_codice_senza_sandbox`) e il registro
     delle capacità lo dice. Il motore «processo» solo scritto a mano, con l'avviso «NON
     isola»: lxml legge file e apre connessioni in C senza passare dall'audit hook. Sulla DGX
@@ -211,7 +225,8 @@ davvero nel codice), `prova_brain`.
 obbligatorio per chi amministra (conferma con un tocco, `ruolo = 'telefono'` del satellite), chiave
 vocale di 5 parole (se ne chiedono 2, hash per parola con scrypt e pepper in `segreti.yaml`),
 gradini F1/F2/F3 in `politica.Classe.fattore`, capacità «amministrazione». Da fare dopo il
-congelamento; decisioni D1–D9 aperte.
+congelamento; decisioni D1–D9 aperte. *[Il congelamento è finito l'08/10; al 09/10 il progetto
+non è ancora realizzato e le decisioni restano aperte.]*
 
 ## Correzioni dalla prova e2e del 06/10
 
@@ -587,8 +602,6 @@ for f in sorted(glob.glob("registro/turni-*.jsonl"))[-2:]:
                       o["nuova_regola"], o["effetto"], o["argomenti"])
 EOF
 ```
-
-attivarla. Decisioni D1–D8 aperte. Script della misura: `docs/ricerche/banchi/attrito/attrito.py`.
 
 ## «Codice» di un programma e i siti delle fonti in ciò che dice (08/10, ramo `correzioni-giro10`)
 
