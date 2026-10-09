@@ -973,3 +973,14 @@ dicono a voce sul satellite dove il minore ha parlato da poco. Dettagli, regole 
   Nessuna voce di mezzo: niente frase di sfida (lo schermo personale è già il secondo fattore
   di chi lo tiene in mano); l'effetto peggiore è un SearXNG cambiato con il ritorno indietro
   automatico.
+
+## La città della casa nella provenienza (09/10)
+
+Caso vero della DGX (09/10 12:16): «che tempo fa?» → l'estensione meteo con la città della casa
+(`casa_citta`, dalla configurazione, nel prompt dal ramo `citta-casa-notizie`); al seguito («…e
+domani piove?») la stessa città, ora presente anche nel risultato dell'estensione, veniva presa
+per un valore «dal dato» (`politica_argomento_esterno`: «viene dal risultato di un'estensione,
+non da te»). I valori che Calliope dà al modello dalla configurazione della casa valgono come
+parole della persona nel controllo della provenienza (`Turno.da_config`, oggi la sola
+`casa_citta`); le altre parole del valore restano controllate. Prova in `prova_politica`
+(«valore della configurazione della casa» e il contrario).

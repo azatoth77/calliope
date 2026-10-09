@@ -627,6 +627,9 @@ class Turno:
     # I «no» della persona alle proposte di questa conversazione (09/10, la lista viva di
     # Conversazione.rifiutate: {"tool", "chiave", "cosa"}): regola `politica_proposta_rifiutata`
     rifiuti: list = field(default_factory=list)
+    # Valori della configurazione della casa che Calliope dà al modello (09/10, `casa_citta`):
+    # fidati come le parole della persona nel controllo della provenienza
+    da_config: str = ""
 
 
 # Le azioni interne chieste con un verbo che il lessico delle azioni sul mondo non ha
@@ -1306,6 +1309,8 @@ def valori_esterni(cl: Classe, args: dict, t: Turno,
         prima = ((t.risposta or {}).get("valori_prima", {}).get(name, ())
                  if name in DOPO_DATO_SE_DETTO else ())
         detto = (t.testo or "") + (" " + " ".join(sorted(prima)) if prima else "")
+        if t.da_config:
+            detto += " " + t.da_config
         fuori, fonte = prov.esterne(args[k], detto, t.esterni)
         if fuori:
             return k, fuori, fonte

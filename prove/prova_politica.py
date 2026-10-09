@@ -283,6 +283,21 @@ def prova_decidi():
     verifica("decidi: la domanda mostra il valore preso dal dato",
              "apri il cancello del garage" in dec.domanda and "pagina internet" in dec.domanda
              and dec.regola == "politica_argomento_esterno", dec.domanda)
+    # La città della casa (09/10, DGX 12:16): viene dalla configurazione, non dal risultato
+    # dell'estensione che la ripete; il contrario senza `da_config` resta fermato
+    est = lambda **k: T(testo="e domani piove?", contaminazione=frozenset({"estensione"}),  # noqa: E731
+                        esterni=[("estensione", "A Borgoverde è nuvoloso con 19 gradi")],
+                        persona_txt="che tempo fa? e domani piove?", **k)
+    argomento = {"comando": "accendi la luce a Borgoverde"}
+    senza = d("casa_comando", argomento, casa, est())
+    con = d("casa_comando", argomento, casa, est(da_config="Borgoverde"))
+    verifica("decidi: valore della configurazione della casa non è «dal dato»",
+             senza.regola == "politica_argomento_esterno"
+             and con.regola != "politica_argomento_esterno", f"{senza.regola} / {con.regola}")
+    con2 = d("casa_comando", {"comando": "apri il cancello a Borgoverde"}, casa,
+             est(da_config="Borgoverde"))
+    verifica("decidi: contrario, la città fidata non copre le altre parole dal dato",
+             con2.esito != "esegui", f"{con2}")
     verifica("chiesta_azione: azioni interne", all(politica.chiesta_azione(t) for t in (
         "aggiungi il latte", "ricordami di chiamare", "scrivi una lettera", "un timer")))
     verifica("chiesta_azione: contrari", not any(politica.chiesta_azione(t) for t in (

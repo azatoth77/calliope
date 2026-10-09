@@ -4240,7 +4240,9 @@ class Brain:
             # La proposta è una domanda della politica (09/10): vale solo con un consenso
             sospeso_politica=bool(p.get("politica")) and p.get("tool") == tool,
             # I «no» della conversazione (09/10): la lista viva, la politica la aggiorna
-            rifiuti=self._rifiuti())
+            rifiuti=self._rifiuti(),
+            # La città della casa (09/10) viene dalla configurazione, non da un dato esterno
+            da_config=" ".join(str(getattr(self.cfg, "casa_citta", "") or "").split()))
 
     def _intenzioni(self) -> list:
         conv = self._c()
