@@ -53,15 +53,20 @@ def ripete(testo: str, precedente: str) -> bool:
     return difflib.SequenceMatcher(None, a, b, autojunk=False).ratio() >= SOGLIA
 
 
-def risposta_precedente(storia: list[dict]) -> str | None:
+def risposta_precedente(storia: list[dict], domanda: str | None = None) -> str | None:
     """L'ultima risposta detta nella storia (prima della domanda di adesso): il testo
-    dell'ultimo messaggio di Calliope senza chiamate di tool."""
+    dell'ultimo messaggio di Calliope senza chiamate di tool. None se la domanda di adesso è
+    (quasi) uguale a quella che l'aveva avuta: alla stessa domanda la stessa risposta va bene
+    (prova_corsie_satelliti, «Che tempo fa domani?» chiesto di nuovo dopo un riavvio)."""
+    risposta = None
     for m in reversed(storia or ()):
-        if m.get("role") == "user":
-            continue
-        if (m.get("role") == "assistant" and not m.get("tool_calls")
+        ruolo = m.get("role")
+        if (risposta is None and ruolo == "assistant" and not m.get("tool_calls")
                 and (m.get("content") or "").strip()):
-            return str(m["content"])
-        if m.get("role") == "assistant":
-            continue
-    return None
+            risposta = str(m["content"])
+        elif risposta is not None and ruolo == "user":
+            a, b = parole(domanda or ""), parole(str(m.get("content") or ""))
+            if a and b and difflib.SequenceMatcher(None, a, b, autojunk=False).ratio() >= SOGLIA:
+                return None
+            return risposta
+    return risposta

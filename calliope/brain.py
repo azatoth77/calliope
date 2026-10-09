@@ -3069,7 +3069,7 @@ class Brain:
         spoke = announced = nudged = retried_empty = nudged_fallito = False
         # La risposta di prima (09/10, rete risposta_ripetuta): una uguale si trattiene, una volta
         from .ripetizione import RIPETUTA_NUDGE, risposta_precedente
-        precedente = (risposta_precedente(self.history[:start])
+        precedente = (risposta_precedente(self.history[:start], user_text)
                       if user_text and self._net("risposta_ripetuta") else None)
         claim_at = None          # risposta già detta che dichiarava un'azione senza tool
         # La domanda chiede un file o un documento e c'è il PC per cercarlo: se il modello

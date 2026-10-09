@@ -878,7 +878,7 @@ aspetta comunque la fine della prima frase) e, se comincia così, il resto; a ri
 nella storia e il modello riceve `RIPETUTA_NUDGE` (rispondi a quello che ha detto adesso; se non
 capisci chiedi; se ti ha chiesto di ripetere, ripeti), una volta: la seconda risposta si dice
 anche se uguale. Regola `spinta_ripetuta`. Le risposte brevi uguali («Fatto.», «Va bene, nessun
-problema.») non si guardano. Si spegne con `llm_reti_spente`. Col modello locale il caso non si
+problema.») non si guardano. Alla stessa domanda (quasi uguale alla precedente) la stessa risposta va bene: la rete non guarda (trovato con `prova_corsie_satelliti`, «Che tempo fa domani?» chiesto di nuovo). Si spegne con `llm_reti_spente`. Col modello locale il caso non si
 riproduce (0/3: la e4b risponde in un altro modo), le prove sono a secco
 (`prova_conversazioni`: caso vero, ripetere chiesto, breve uguale, risposta diversa, rete spenta).
 

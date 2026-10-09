@@ -1162,6 +1162,12 @@ def prova_ripetuta():
                      for m in visti if m["role"] == "system"), detto)
     verifica("…e non entra nella storia",
              sum(1 for m in b.history if m.get("content") == NOLAN) == 1)
+    b = brain_finto(risposte=[NOLAN, NOLAN])
+    parla(b, "Cos'è che ti ho chiesto?")
+    detto = parla(b, "Cos'è che ti ho chiesto?")
+    verifica("contrario: la stessa domanda di nuovo → la stessa risposta va bene",
+             detto == NOLAN and len(b.backend.visti) == 2
+             and "spinta_ripetuta" not in b.rules_fired(), detto)
     b = brain_finto(risposte=[NOLAN, NOLAN, NOLAN])
     parla(b, "Cos'è che ti ho chiesto?")
     detto = parla(b, "Puoi ripetere?")
