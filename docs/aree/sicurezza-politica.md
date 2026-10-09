@@ -952,3 +952,24 @@ parte se conferma, non urgente se tace, mai se smentisce (salvo un secondo segna
 minuti). I segnali espliciti e i giudizi guasti restano come prima. Gli avvisi «sicurezza» non si
 dicono a voce sul satellite dove il minore ha parlato da poco. Dettagli, regole e misure in
 [minori](minori.md#pericolo-poco-chiaro-il-giro-a-due-cancelli-0910-ramo-minori-due-cancelli).
+
+## Aggiornamento di SearXNG e le prime azioni del cruscotto (09/10, ramo `searxng-aggiornamento`)
+
+- **Cosa si scarica**: solo `searxng/searxng` con un tag di data e il digest dell'indice letti
+  dal registro delle immagini, mai `latest` né un tag mobile; la forma si controlla sia in
+  Python (`motore.FORMA_IMMAGINE`) sia nello script (`valida`) prima di qualunque comando
+  docker; la copia di prova e il container vero hanno le stesse regole di prima (solo
+  127.0.0.1, utente non root, file system in sola lettura, nessuna capability, niente log).
+  Una nuova immagine si tiene solo se va almeno come la vecchia, altrimenti si torna indietro.
+  La pulizia tocca solo le immagini scaricate da qui e senza `-f`. Rischio residuo: un tag
+  pubblicato dal progetto SearXNG compromesso passerebbe (come un `docker pull` a mano);
+  l'attesa di `web_searxng_giorni` in automatico lascia qualche giorno perché un problema si
+  sappia.
+- **Le ricerche di prova** escono di casa come quelle vere, ma sono frasi fisse della
+  configurazione: nessun dato di persone.
+- **Azioni dal cruscotto**: solo dallo schermo personale di chi amministra (ricontrollato a
+  ogni richiesta), con due tocchi e un gettone legato allo schermo e all'azione che vale una
+  volta e scade in 60 s, al più 6 richieste al minuto, ogni azione nel log e nella storia.
+  Nessuna voce di mezzo: niente frase di sfida (lo schermo personale è già il secondo fattore
+  di chi lo tiene in mano); l'effetto peggiore è un SearXNG cambiato con il ritorno indietro
+  automatico.

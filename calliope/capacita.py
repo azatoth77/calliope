@@ -9,6 +9,8 @@ memoria, biblioteca, PC, documenti, casa, schermi, agenti) dichiara da cosa dipe
   da_configurare  c'è tutto il necessario, manca un'impostazione o un passo di chi amministra
   mancante        manca una libreria, un file o un modello
   guasta          dovrebbe funzionare ma non va (Ollama giù, Home Assistant irraggiungibile…)
+  degradata       funziona, ma peggio del solito (09/10: la ricerca web quando il controllo
+                  quotidiano di SearXNG trova pochi risultati o pochi motori, web/motore.py)
 
 con un motivo breve (per i log), un prossimo passo concreto adatto alla voce e i dettagli
 per chi amministra. Una sola fonte, tre viste:
@@ -38,7 +40,7 @@ import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 
-STATI = ("attiva", "da_configurare", "mancante", "guasta")
+STATI = ("attiva", "da_configurare", "mancante", "guasta", "degradata")
 
 
 @dataclass(frozen=True)
@@ -208,7 +210,7 @@ def aree(registro: "Registro | None", tool_names=None) -> list[dict]:
             d = DEFINIZIONI.get(nome)
             if c is None or d is None:
                 continue
-            if c.attiva:
+            if c.funziona:
                 if d.sa_fare:
                     fa.append(d.sa_fare)
             else:
@@ -242,6 +244,11 @@ class Capacita:
     @property
     def attiva(self) -> bool:
         return self.stato == "attiva"
+
+    @property
+    def funziona(self) -> bool:
+        """Si può usare (anche se «degradata»): per «cosa sai fare?» e per chi non amministra."""
+        return self.stato in ("attiva", "degradata")
 
     def as_dict(self) -> dict:
         d = self.definizione
@@ -311,8 +318,8 @@ class Registro:
         caps = self.tutte(fresche=fresche)
         attive = sum(c.attiva for c in caps)
         parti = [f"Capacità: {attive} attive su {len(caps)}"]
-        for stato, etichetta in (("guasta", "non funziona"), ("mancante", "manca"),
-                                 ("da_configurare", "da configurare")):
+        for stato, etichetta in (("guasta", "non funziona"), ("degradata", "va peggio"),
+                                 ("mancante", "manca"), ("da_configurare", "da configurare")):
             these = [c for c in caps if c.stato == stato]
             if these:
                 parti.append(f"{etichetta}: " + ", ".join(
@@ -1569,6 +1576,19 @@ def check_web(cfg, servizio=None) -> dict:
                   "torna da sola alla prossima ricerca.", **det)
     if d.get("codice") == "errore":
         return _r("web", "attiva", "l'ultima ricerca non è riuscita", passo_giu, **det)
+    # Il controllo quotidiano di SearXNG (09/10, web/motore.py): pochi risultati o pochi motori
+    motore = getattr(servizio, "motore", None)
+    if motore is not None:
+        g = motore.giudizio()
+        det["controllo"] = g.get("stato")
+        if g.get("stato") == "degradata":
+            passo = ("Dal cruscotto: «Aggiorna» nella sezione della ricerca web; da terminale: "
+                     "calliope motore searxng aggiorna.")
+            if motore.modo == "automatico" and motore.aggiornabile:
+                passo = ("Provo da sola un'immagine più recente di SearXNG quando sono ferma; "
+                         "subito: «Aggiorna» nel cruscotto.")
+            return _r("web", "degradata", g.get("motivo") or "pochi risultati",
+                      passo, **det)
     return _r("web", "attiva", "SearXNG risponde", "", **det)
 
 

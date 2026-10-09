@@ -1498,6 +1498,37 @@ class Config:
     # schermi_nomi). Ogni nome si risolve al momento della richiesta (al più ogni minuto) e
     # una richiesta verso uno di quegli indirizzi si ferma (regola rete_casa_pubblica)
     web_nomi_casa: list[str] = field(default_factory=list)
+    # SearXNG tenuto aggiornato (09/10, calliope/web/motore.py): i motori a cui si appoggia
+    # cambiano spesso e un'immagine vecchia smette di trovare. Una volta al giorno, con
+    # Calliope ferma da web_searxng_inattivita_min e nessun lavoro dell'agente in corso, poche
+    # ricerche di prova (web_searxng_prove, «categoria:domanda», fisse e senza dati di
+    # nessuno) contro il SearXNG locale: risultati, motori che rispondono, errori, tempi. Se
+    # una prova dà meno di web_searxng_min_risultati risultati, o risultati e motori scendono
+    # sotto web_searxng_soglia dell'ultimo controllo buono, la ricerca web è «degradata» nel
+    # registro delle capacità. web_searxng_aggiorna:
+    #   automatico  se è degradata, o se c'è un tag più recente pubblicato da almeno
+    #               web_searxng_giorni giorni, scarica quel tag (mai «latest»: tag e digest dal
+    #               registro delle immagini), lo prova accanto a quello in uso e lo tiene solo
+    #               se va almeno come il vecchio, altrimenti torna indietro; un avviso sugli
+    #               schermi personali di chi amministra
+    #   manuale     solo il controllo; si aggiorna dal cruscotto di chi amministra
+    #               («Aggiorna») o da terminale (calliope motore searxng aggiorna)
+    # Solo sulla macchina del container (Linux con docker): altrove il controllo resta se
+    # SearXNG è raggiungibile, l'aggiornamento no. Non si cambia a voce: si scrive in
+    # calliope.locale.yaml (sezione web) e si riavvia
+    web_searxng_aggiorna: str = "automatico"
+    web_searxng_giorni: float = 3.0
+    web_searxng_controllo_ore: float = 24.0
+    web_searxng_inattivita_min: float = 30.0
+    web_searxng_prove: list[str] = field(default_factory=lambda: [
+        "general:meteo Roma domani", "news:notizie Italia oggi", "news:Serie A risultati"])
+    web_searxng_min_risultati: int = 3
+    web_searxng_soglia: float = 0.6
+    # Lo stato del controllo e la storia delle decisioni (nella cartella dei dati), e il
+    # registro delle immagini da cui si leggono tag e digest
+    web_searxng_stato: str = "motore/searxng.json"
+    web_searxng_registro: str = ("https://hub.docker.com/v2/repositories/searxng/searxng/"
+                                 "tags?page_size=50&ordering=last_updated")
 
     # Rete (principio 5): se False, i tool con requires_internet spariscono dall'elenco
     online: bool = True
@@ -2493,7 +2524,10 @@ SEZIONI: dict[str, list[str]] = {
     "web": ["web_enabled", "web_searxng_url", "web_livello", "web_max_minuto", "web_risultati",
             "web_timeout_s", "web_lingua", "web_dati_privati", "web_pagina_max_kb",
             "web_pagina_timeout_s", "web_pagina_caratteri", "web_agente_ricerche",
-            "web_agente_pagine", "web_reti_vietate", "web_nomi_casa"],
+            "web_agente_pagine", "web_reti_vietate", "web_nomi_casa", "web_searxng_aggiorna",
+            "web_searxng_giorni", "web_searxng_controllo_ore", "web_searxng_inattivita_min",
+            "web_searxng_prove", "web_searxng_min_risultati", "web_searxng_soglia",
+            "web_searxng_stato", "web_searxng_registro"],
     "segreti": ["segreti_file"],
     "registro": ["turn_log_dir", "turn_log_days", "latenza_avviso_s", "attrito_avviso",
                  "debug_audio_dir"],
@@ -2685,6 +2719,9 @@ LIMITI: dict[str, tuple[float, float]] = {
     "agenti_analisi_s": (1.0, 60.0),
     "agenti_risultato_s": (1.0, 120.0),
     "schermi_scarica_s": (10.0, 3600.0),
+    "web_searxng_giorni": (0.0, 365.0), "web_searxng_controllo_ore": (1.0, 720.0),
+    "web_searxng_inattivita_min": (0.0, 1440.0), "web_searxng_min_risultati": (1, 50),
+    "web_searxng_soglia": (0.0, 1.0),
     "schermi_cronologia": (1, 200), "schermi_cronologia_giorni": (0.01, 365.0),
     "schermi_cronologia_max": (1, 1000), "schermi_cronologia_mb": (0.1, 1000.0),
     "schermi_chat_turni": (0, 2000),

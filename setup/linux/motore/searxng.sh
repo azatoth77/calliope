@@ -13,6 +13,20 @@
 #   setup/linux/motore/searxng.sh diagnosi   una copia per 20 secondi con i messaggi sullo
 #                                            schermo (il container vero non ha log)
 #
+# Aggiornamento (09/10/2026, calliope/web/motore.py: i motori a cui SearXNG si appoggia
+# cambiano spesso, e un'immagine vecchia smette di trovare). Queste le usa Calliope, con il
+# controllo quotidiano e i pulsanti del cruscotto; da terminale le stesse cose con
+# «calliope motore searxng controlla|aggiorna|novita|storia» (in Python, gestore.py):
+#   … immagine              l'immagine in uso (quella scelta da Calliope o quella fissata qui)
+#   … candidata IMMAGINE    scarica IMMAGINE (tag@digest) e ne avvia una copia di prova
+#                           accanto a quella vera, su 127.0.0.1:PORTA+2000
+#   … togli-candidata       ferma e cancella la copia di prova
+#   … usa IMMAGINE          la sceglie (in DIR/immagine) e rifà il container vero con lei;
+#                           «usa» con l'immagine di prima è il ritorno indietro
+#   … dimentica             torna all'immagine fissata qui (toglie DIR/immagine)
+#   … pulisci-immagini I…   cancella le immagini scaricate da qui (DIR/scaricate) tranne I… e
+#                           quella in uso: mai quelle di altri progetti, mai con -f
+#
 # Calliope lo usa con, in ~/calliope/calliope.locale.yaml:
 #     web:
 #       web_searxng_url: http://127.0.0.1:8004
@@ -40,12 +54,35 @@
 set -euo pipefail
 
 NOME=calliope-searxng
-# Tag e digest dell'indice multi-architettura letti dal Docker Hub il 03/10/2026
-IMMAGINE="${IMMAGINE:-searxng/searxng:2026.10.2-19ffbcd30@sha256:c642712fcedcdaa78fac44f71eada86aff510745826ba1bd1a368211fea2ce7f}"
+# Tag e digest dell'indice multi-architettura letti dal Docker Hub il 03/10/2026. Dal 09/10 è
+# il punto di partenza: l'aggiornamento di Calliope ne sceglie uno più recente (DIR/immagine)
+FISSATA="searxng/searxng:2026.10.2-19ffbcd30@sha256:c642712fcedcdaa78fac44f71eada86aff510745826ba1bd1a368211fea2ce7f"
 PORTA="${PORTA:-8004}"
 DIR="${DIR:-$HOME/calliope-motore/searxng}"
 URL="http://127.0.0.1:$PORTA"
+PORTA_PROVA=$((PORTA + 2000))
+URL_PROVA="http://127.0.0.1:$PORTA_PROVA"
 AZIONE="${1:-stato}"
+
+# Solo immagini ufficiali con un tag di data e il digest: mai «latest», mai un nome qualunque
+FORMA='^searxng/searxng:[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}-[0-9a-f]{6,40}@sha256:[0-9a-f]{64}$'
+valida() { [[ "${1:-}" =~ $FORMA ]]; }
+data_di() { local t="${1%@*}"; t="${t##*:}"; echo "${t%%-*}"; }
+
+# L'immagine da usare: IMMAGINE dall'ambiente; altrimenti quella scelta da Calliope
+# (DIR/immagine) se non è più vecchia di quella fissata qui (un aggiornamento di Calliope che
+# fissa un tag più nuovo vince); altrimenti quella fissata
+immagine_scelta() {
+  if [ -n "${IMMAGINE:-}" ]; then echo "$IMMAGINE"; return; fi
+  local scelta=""
+  [ -s "$DIR/immagine" ] && scelta="$(head -n 1 "$DIR/immagine" | tr -d '[:space:]')"
+  if valida "$scelta"; then
+    local piu
+    piu="$(printf '%s\n%s\n' "$(data_di "$FISSATA")" "$(data_di "$scelta")" | sort -V | tail -n 1)"
+    if [ "$piu" = "$(data_di "$scelta")" ]; then echo "$scelta"; return; fi
+  fi
+  echo "$FISSATA"
+}
 
 # Motori per l'italiano: generali senza chiave d'accesso (DuckDuckGo, Brave, Startpage,
 # Qwant, Mojeek, Bing), le notizie (ANSA, Bing News, DuckDuckGo News, Google News), Wikipedia e
@@ -102,33 +139,44 @@ EOF
 }
 
 pronto() {
-  curl -fsS -m 3 -o /dev/null "$URL/healthz" 2>/dev/null
+  curl -fsS -m 3 -o /dev/null "${1:-$URL}/healthz" 2>/dev/null
+}
+
+# Un container di SearXNG con le regole di sopra: nome, porta, immagine, opzioni in più
+contenitore() {
+  local nome="$1" porta="$2" img="$3"
+  shift 3
+  docker run -d --name "$nome" "$@" \
+    -p "127.0.0.1:$porta:8080" \
+    --user 977:977 --read-only --cap-drop ALL --security-opt no-new-privileges \
+    --tmpfs /var/cache/searxng:rw,size=64m,uid=977,gid=977 --tmpfs /tmp:rw,size=16m \
+    -v "$DIR/settings.yml:/etc/searxng/settings.yml:ro" \
+    -e GRANIAN_LOG_ACCESS_ENABLED=false -e FORCE_OWNERSHIP=false \
+    --memory 1g --pids-limit 256 \
+    --log-driver none \
+    "$img" >/dev/null
+}
+
+avvia() {
+  command -v docker >/dev/null 2>&1 || { echo "Manca docker."; exit 1; }
+  impostazioni
+  local img
+  img="$(immagine_scelta)"
+  # Sempre da capo (~2 s): così immagine, opzioni e impostazioni sono quelle di questo
+  # script anche dopo un aggiornamento di Calliope. Nel container non c'è niente da tenere
+  docker rm -f "$NOME" >/dev/null 2>&1 || true
+  contenitore "$NOME" "$PORTA" "$img" --restart unless-stopped
+  for _ in $(seq 1 30); do
+    pronto && { echo "$NOME risponde su $URL (solo questa macchina): ${img%@*}"; exit 0; }
+    sleep 1
+  done
+  echo "$NOME non risponde ancora: $0 diagnosi"
+  exit 1
 }
 
 case "$AZIONE" in
-  avvia)
-    command -v docker >/dev/null 2>&1 || { echo "Manca docker."; exit 1; }
-    impostazioni
-    # Sempre da capo (~2 s): così immagine, opzioni e impostazioni sono quelle di questo
-    # script anche dopo un aggiornamento di Calliope. Nel container non c'è niente da tenere
-    docker rm -f "$NOME" >/dev/null 2>&1 || true
-    docker run -d --name "$NOME" --restart unless-stopped \
-      -p "127.0.0.1:$PORTA:8080" \
-      --user 977:977 --read-only --cap-drop ALL --security-opt no-new-privileges \
-      --tmpfs /var/cache/searxng:rw,size=64m,uid=977,gid=977 --tmpfs /tmp:rw,size=16m \
-      -v "$DIR/settings.yml:/etc/searxng/settings.yml:ro" \
-      -e GRANIAN_LOG_ACCESS_ENABLED=false -e FORCE_OWNERSHIP=false \
-      --memory 1g --pids-limit 256 \
-      --log-driver none \
-      "$IMMAGINE" >/dev/null
-    for _ in $(seq 1 30); do
-      pronto && { echo "$NOME risponde su $URL (solo questa macchina)."; exit 0; }
-      sleep 1
-    done
-    echo "$NOME non risponde ancora: $0 diagnosi"
-    exit 1
-    ;;
-  ferma)   docker stop "$NOME" >/dev/null && echo "$NOME fermato." ;;
+  avvia) avvia ;;
+  ferma)  docker stop "$NOME" >/dev/null && echo "$NOME fermato." ;;
   rimuovi) docker rm -f "$NOME" >/dev/null 2>&1 || true; echo "$NOME rimosso (impostazioni in $DIR)." ;;
   log)     echo "Il container non ha log (conterrebbero le domande): $0 diagnosi" ;;
   diagnosi)
@@ -141,7 +189,7 @@ case "$AZIONE" in
       --user 977:977 --read-only --cap-drop ALL --security-opt no-new-privileges \
       --tmpfs /var/cache/searxng:rw,size=64m,uid=977,gid=977 --tmpfs /tmp:rw,size=16m \
       -v "$DIR/settings.yml:/etc/searxng/settings.yml:ro" \
-      -e GRANIAN_LOG_ACCESS_ENABLED=false -e FORCE_OWNERSHIP=false "$IMMAGINE" &
+      -e GRANIAN_LOG_ACCESS_ENABLED=false -e FORCE_OWNERSHIP=false "$(immagine_scelta)" &
     sleep 8
     curl -fsS -m 10 -o /dev/null -X POST --data-urlencode "q=prova" -d format=json \
       "http://127.0.0.1:$P2/search" && echo "(ricerca di prova fatta)" || echo "(ricerca di prova non riuscita)"
@@ -151,7 +199,7 @@ case "$AZIONE" in
     ;;
   stato)
     if docker container inspect "$NOME" >/dev/null 2>&1; then
-      docker container inspect -f 'container: {{.State.Status}} (riavvio: {{.HostConfig.RestartPolicy.Name}})' "$NOME"
+      docker container inspect -f 'container: {{.State.Status}} (riavvio: {{.HostConfig.RestartPolicy.Name}}), immagine {{.Config.Image}}' "$NOME"
     else
       echo "container: non c'è ($0 avvia)"
     fi
@@ -180,8 +228,53 @@ for x in r[:5]:
     print(" -", x.get("engine"), "|", (x.get("title") or "")[:70])
 '
     ;;
+  immagine) immagine_scelta ;;
+  candidata)
+    IMG="${2:-}"
+    valida "$IMG" || { echo "Immagine non valida (serve searxng/searxng:TAG@sha256:…)" >&2; exit 2; }
+    command -v docker >/dev/null 2>&1 || { echo "Manca docker."; exit 1; }
+    impostazioni
+    docker pull -q "$IMG" >/dev/null || { echo "Scaricamento non riuscito: ${IMG%@*}"; exit 1; }
+    # Le immagini scaricate da qui: solo queste «pulisci-immagini» può cancellare
+    touch "$DIR/scaricate"
+    grep -qxF -- "$IMG" "$DIR/scaricate" || echo "$IMG" >> "$DIR/scaricate"
+    docker rm -f "$NOME-candidata" >/dev/null 2>&1 || true
+    contenitore "$NOME-candidata" "$PORTA_PROVA" "$IMG"
+    for _ in $(seq 1 60); do
+      pronto "$URL_PROVA" && { echo "$URL_PROVA"; exit 0; }
+      sleep 1
+    done
+    echo "La copia di prova non risponde."
+    docker rm -f "$NOME-candidata" >/dev/null 2>&1 || true
+    exit 1
+    ;;
+  togli-candidata) docker rm -f "$NOME-candidata" >/dev/null 2>&1 || true; echo "Copia di prova tolta." ;;
+  usa)
+    IMG="${2:-}"
+    valida "$IMG" || { echo "Immagine non valida (serve searxng/searxng:TAG@sha256:…)" >&2; exit 2; }
+    mkdir -p "$DIR"
+    printf '%s\n' "$IMG" > "$DIR/immagine.tmp"
+    mv -f -- "$DIR/immagine.tmp" "$DIR/immagine"
+    IMMAGINE="$IMG" avvia
+    ;;
+  dimentica) rm -f -- "$DIR/immagine"; echo "Si torna all'immagine fissata nello script: $0 avvia" ;;
+  pulisci-immagini)
+    shift
+    [ -s "$DIR/scaricate" ] || { echo "Nessuna immagine scaricata da qui."; exit 0; }
+    tenute="$(printf '%s\n' "$@" "$(immagine_scelta)")"
+    : > "$DIR/scaricate.tmp"
+    while IFS= read -r img; do
+      img="${img%$'\r'}"
+      [ -n "$img" ] || continue
+      if grep -qxF -- "$img" <<< "$tenute"; then echo "$img" >> "$DIR/scaricate.tmp"; continue; fi
+      # Senza -f: un'immagine usata da un container (anche fermo) resta
+      if valida "$img" && docker image rm "$img" >/dev/null 2>&1; then echo "tolta ${img%@*}"
+      else echo "$img" >> "$DIR/scaricate.tmp"; fi
+    done < "$DIR/scaricate"
+    mv -f -- "$DIR/scaricate.tmp" "$DIR/scaricate"
+    ;;
   *)
-    echo "Uso: $0 avvia|ferma|rimuovi|stato|prova [domanda]|diagnosi" >&2
+    echo "Uso: $0 avvia|ferma|rimuovi|stato|prova [domanda]|diagnosi|immagine|candidata IMMAGINE|togli-candidata|usa IMMAGINE|dimentica|pulisci-immagini [IMMAGINE…]" >&2
     exit 2
     ;;
 esac

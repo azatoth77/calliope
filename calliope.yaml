@@ -1570,6 +1570,38 @@ web:
   # schermi_nomi). Ogni nome si risolve al momento della richiesta (al più ogni minuto) e
   # una richiesta verso uno di quegli indirizzi si ferma (regola rete_casa_pubblica)
   web_nomi_casa: []
+  # SearXNG tenuto aggiornato (09/10, calliope/web/motore.py): i motori a cui si appoggia
+  # cambiano spesso e un'immagine vecchia smette di trovare. Una volta al giorno, con
+  # Calliope ferma da web_searxng_inattivita_min e nessun lavoro dell'agente in corso, poche
+  # ricerche di prova (web_searxng_prove, «categoria:domanda», fisse e senza dati di
+  # nessuno) contro il SearXNG locale: risultati, motori che rispondono, errori, tempi. Se
+  # una prova dà meno di web_searxng_min_risultati risultati, o risultati e motori scendono
+  # sotto web_searxng_soglia dell'ultimo controllo buono, la ricerca web è «degradata» nel
+  # registro delle capacità. web_searxng_aggiorna:
+  #   automatico  se è degradata, o se c'è un tag più recente pubblicato da almeno
+  #               web_searxng_giorni giorni, scarica quel tag (mai «latest»: tag e digest dal
+  #               registro delle immagini), lo prova accanto a quello in uso e lo tiene solo
+  #               se va almeno come il vecchio, altrimenti torna indietro; un avviso sugli
+  #               schermi personali di chi amministra
+  #   manuale     solo il controllo; si aggiorna dal cruscotto di chi amministra
+  #               («Aggiorna») o da terminale (calliope motore searxng aggiorna)
+  # Solo sulla macchina del container (Linux con docker): altrove il controllo resta se
+  # SearXNG è raggiungibile, l'aggiornamento no. Non si cambia a voce: si scrive in
+  # calliope.locale.yaml (sezione web) e si riavvia
+  web_searxng_aggiorna: automatico
+  web_searxng_giorni: 3.0
+  web_searxng_controllo_ore: 24.0
+  web_searxng_inattivita_min: 30.0
+  web_searxng_prove:
+  - general:meteo Roma domani
+  - news:notizie Italia oggi
+  - news:Serie A risultati
+  web_searxng_min_risultati: 3
+  web_searxng_soglia: 0.6
+  # Lo stato del controllo e la storia delle decisioni (nella cartella dei dati), e il
+  # registro delle immagini da cui si leggono tag e digest
+  web_searxng_stato: motore/searxng.json
+  web_searxng_registro: https://hub.docker.com/v2/repositories/searxng/searxng/tags?page_size=50&ordering=last_updated
 
 segreti:
   # File dei segreti, fuori da git: il token di Home Assistant sta sotto

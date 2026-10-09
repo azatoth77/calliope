@@ -127,7 +127,7 @@ def _panoramica(ctx, reg, level: str, cosa: str = "") -> str:
     caps = reg.tutte(fresche=True)
     manca = cosa == "manca"
     can = ["dirti l'ora e la data", "fare conti"]
-    can += [c.definizione.sa_fare for c in caps if c.attiva and c.definizione.utente
+    can += [c.definizione.sa_fare for c in caps if c.funziona and c.definizione.utente
             and c.definizione.sa_fare]
     # «Cosa manca?»: prima cosa non va e cosa si può aggiungere, senza l'elenco intero
     frase = "" if manca else f"Posso {_join(can)}."
@@ -143,7 +143,7 @@ def _panoramica(ctx, reg, level: str, cosa: str = "") -> str:
         else:
             frase += " Funziona tutto quello che è installato."
     else:
-        missing = [c.definizione.breve for c in caps if not c.attiva and c.definizione.utente]
+        missing = [c.definizione.breve for c in caps if not c.funziona and c.definizione.utente]
         if missing:
             frase += (f" Qui non ci sono ancora: {_join(missing)}; per queste chiedi a chi "
                       f"amministra.")
@@ -169,7 +169,14 @@ def _una(ctx, reg, nome: str, level: str) -> str:
                 ctx, reg, "biblioteca", level)
         return frase
     verb = "funzionano" if _plurale(d.titolo) else "funziona"
-    if c.attiva:
+    if c.stato == "degradata" and level == "amministra":
+        # Funziona, ma peggio del solito (09/10: il controllo quotidiano di SearXNG)
+        frase = f"{_cap1(d.titolo)} {verb}, ma peggio del solito"
+        frase += f": {_cap.a_voce(c.motivo)}." if c.motivo else "."
+        if c.prossimo_passo:
+            frase += f" {_cap.a_voce(c.prossimo_passo)}"
+        return frase
+    if c.funziona:
         frase = f"{_cap1(d.titolo)} {verb}."
         if level == "amministra" and c.motivo:
             frase += f" Nota: {_cap.a_voce(c.motivo)}."

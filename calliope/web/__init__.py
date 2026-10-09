@@ -6,6 +6,7 @@ web_cerca e web_leggi per l'agente (calliope/agenti/ciclo.py).
     servizio.py   Web: ricerca, pagine, tetto al minuto, diagnosi
     privacy.py    Ripulitore: niente nomi e dati personali nelle domande che escono di casa
     pagina.py     lettura di una pagina senza SSRF, testo estratto senza eseguire niente
+    motore.py     MotoreRicerca: controllo quotidiano e aggiornamento di SearXNG (09/10)
 """
 
 import threading
@@ -29,6 +30,9 @@ def load_web(cfg, speakers=None, riprova: bool = True, log=print) -> Web | None:
         capacita.REGISTRO.da_dict(d)
         return None
     svc = Web(cfg, Ripulitore(nomi_da(cfg, speakers), lambda: privati_da_config(cfg)), log=log)
+    # Il controllo e l'aggiornamento di SearXNG (09/10): main.py lo collega e lo avvia
+    from .motore import MotoreRicerca
+    svc.motore = MotoreRicerca(cfg, web=svc, log=log)
     svc.prova()
     capacita.REGISTRO.da_dict(capacita.check_web(cfg, svc))
     capacita.REGISTRO.dinamica("web", lambda: capacita.check_web(cfg, svc))

@@ -15,6 +15,8 @@ esista un venv, e non dipende dalla versione di Calliope che sta gestendo.
     calliope avvia | ferma | riavvia [--attendi-lavori [MIN]] [--forza] | log | esegui [arg…]
     calliope motore whisper|vllm [argomenti]   gli script dei server dei modelli della
                                                versione in uso (setup/linux/motore/)
+    calliope motore searxng controlla|aggiorna|novita|storia   SearXNG tenuto aggiornato
+                                               (calliope/web/motore.py, 09/10)
     calliope sorgente URL
 
 Come è fatta un'installazione (nessun percorso personale nel codice: tutto parte dalla home):
@@ -101,6 +103,8 @@ BACKUP_TENUTI = 5
 FILE_LAVORI = Path("lavori") / "in_corso.json"
 ATTESA_LAVORI_MIN = 30.0
 RINVIATO = 75                   # EX_TEMPFAIL: lavori in corso, riprova più tardi
+# `calliope motore searxng <azione>` in Python (calliope/web/motore.py), il resto è lo script
+SEARXNG_PYTHON = ("controlla", "aggiorna", "novita", "storia")
 
 
 class Errore(Exception):
@@ -783,6 +787,10 @@ class Gestore:
         nomi = sorted(p.stem for p in cartella.glob("*.sh"))
         if not args or args[0] not in nomi:
             raise Errore(f"uso: calliope motore {'|'.join(nomi) or '…'} [argomenti]")
+        if args[0] == "searxng" and args[1:2] and args[1] in SEARXNG_PYTHON:
+            # Controllo e aggiornamento di SearXNG (09/10, calliope/web/motore.py): in Python,
+            # nella cartella dei dati come Calliope (stato e storia condivisi con lei)
+            return self.esegui(args[1:], modulo="calliope.web.motore") or 0
         return subprocess.call(["bash", str(cartella / f"{args[0]}.sh"), *args[1:]])
 
     def prova_e2e(self, args: list[str]) -> int:
