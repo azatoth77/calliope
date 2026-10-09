@@ -55,7 +55,7 @@ per stadio, solo i moduli principali: librerie, classi e dettagli sono nei docum
 | Speech-to-Text (faster-whisper o whisper.cpp sulla DGX, ripiego su CPU); nomi incerti negli argomenti dei tool, misura e «forse intendeva» dopo un esito vuoto (dal 08/10) | `stt.py`, `stt_correzione.py`, `argomenti_incerti.py` | [stt-tts](docs/aree/stt-tts.md) |
 | Text-to-Speech (Piper), pronuncia degli inglesismi | `tts.py` (`Speaker`), `pronuncia.py` | [stt-tts](docs/aree/stt-tts.md) |
 | Regole sul testo: wake word testuale, uscita, stop, cortesia | `wakeword.py`, `cortesia.py` | [voce-e-regole](docs/aree/voce-e-regole.md) |
-| LLM e tool calling (Ollama nativo o API OpenAI), reti e spinte | `brain.py` (`Brain`), `tools/` (`spec`, `registry`, `builtin`) | [voce-e-regole](docs/aree/voce-e-regole.md) |
+| LLM e tool calling (Ollama nativo o API OpenAI), reti e spinte; errori dei tool in parole e giri di correzione (dal 09/10) | `brain.py` (`Brain`), `tools/` (`spec`, `registry`, `builtin`, `dialogo`) | [voce-e-regole](docs/aree/voce-e-regole.md) |
 | Configurazione (dataclass + YAML), profili del modello | `config.py` (`Config`, `PROFILI_LLM`, `TONI`) | [voce-e-regole](docs/aree/voce-e-regole.md) |
 | Latenza come metrica | `latenza.py` (`calliope stato --turni`, avviso oltre 1,2 s, `scalda_ripresa`) | [contesto-conversazione](docs/aree/contesto-conversazione.md) |
 | Personalità: toni, modalità startrek, suoni | `config.py`, `personalita.py`, `modalita.py` (a voce, senza riavvio), `suoni.py` | [personalita](docs/aree/personalita.md) |

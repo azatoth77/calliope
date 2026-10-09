@@ -64,9 +64,15 @@ modello che **dice** che riprova invece di riprovare.
 
 - `last_tools` segna `correggibile` (dal risultato). Finché l'ultimo tool fallito è
   correggibile e non c'è stato un successo dopo, il testo della passata successiva **aspetta la
-  fine** (come `hold_request`): se arriva una chiamata si dice; se è una **domanda** alla
-  persona («Di quale argomento vuoi le notizie?») si dice; altrimenti non si dice e il modello
-  riceve `CORREZIONE_NUDGE` (rilegge l'errore, richiama o chiede), regola `correzione_tool`.
+  fine** (come `hold_request`): se arriva una chiamata si dice; altrimenti non si dice e il
+  modello riceve `CORREZIONE_NUDGE` (rilegge l'errore, richiama o chiede), regola
+  `correzione_tool`. Una **domanda** alla persona («Di quale argomento vuoi le notizie?») si
+  dice dal secondo giro: al primo aspetta anche lei, perché il 4B chiedeva il dato appena detto
+  («Potresti dirmi la durata?» dopo «un timer di cinque minuti», § 7).
+- L'errore e la spinta riportano la frase della persona («ricavando domanda da quello che ha
+  detto la persona («Raccontami le ultime novità della giornata»)… va bene anche una forma
+  generale, con le sue stesse parole»): è il dato che il modello ha già, e senza il 4B
+  chiedeva l'argomento invece di cercare (§ 7).
 - Tetto: `tool_correzioni_max` (2) passate dopo un errore correggibile per risposta; poi il
   testo si dice com'è (anche «non ci sono riuscita»). Un errore **non** correggibile non
   trattiene niente: lo si dice onestamente, niente giri.
@@ -105,4 +111,55 @@ Dove passano i messaggi fra il modello della voce e l'agente (§ 7 per l'inventa
 
 ## 7. Misure e inventario
 
-(Compilato a lavoro finito.)
+**Banco** (`scratchpad`, non nel repository: la prima passata è forzata con la chiamata
+sbagliata, come quella vista sulla DGX, poi il modello vero; gemma4 e4b locale su questo
+portatile, SearXNG finto delle prove, 3 giri per caso). «Prima» = main (traccia del
+`TypeError`, nessun giro di correzione); «dopo» = questo ramo.
+
+| Caso (frase → chiamata sbagliata) | Prima | Dopo | Dopo, secondi totali |
+|---|---|---|---|
+| «Raccontami le ultime novità della giornata» → `web_cerca({tipo: notizie})` | 0/3 | **3/3** | 2,3–2,4 |
+| «Vai sul sito dell'Ansa e prendi la prima notizia» → idem | 0/3 | **3/3** | 2,2–2,4 |
+| «Che tempo fa domani a Milano?» → `web_cerca({query: …})` (argomento sconosciuto) | 0/3 | **3/3** | 2,6 |
+| «Metti un timer di cinque minuti» → `timer_imposta({cambia: imposta})` | 0/3 | **3/3** | 1,4–1,6 |
+| «Ricordami alle diciotto di chiamare la mamma» → `promemoria_imposta({testo})` | 0/3 | **3/3** | 1,6–1,8 |
+| «Aggiungi il latte alla lista della spesa» → `lista_aggiungi({lista: spesa})` | 0/3 | 0/3 | 1,0–2,3 |
+| «Quanto fa dodici per sette?» → `calcola({expr: …})` | 2/3 | **3/3** | 1,1–1,5 |
+| *Contrario*: «Aggiungi una cosa alla lista della spesa» (dato non deducibile) | chiede 3/3 | chiede 3/3 | 0,7–0,9 |
+| *Contrario*: `web_cerca` con un errore interno (non correggibile) | detto 3/3 | detto 3/3, nessun giro | 0,4–0,5 |
+
+- Corrette **18/21** contro 2/21. Prima il modello chiedeva l'argomento («ho bisogno di sapere
+  su quale argomento vuoi…») o diceva «Aggiungo latte alla lista» senza farlo. La lista resta
+  0/3 col 4B: il modello chiede «Cosa vuoi aggiungere?», una volta scrive la chiamata come
+  testo («Chiami lista_aggiungi con cose="latte"…?»), una volta arriva al tetto e alla frase
+  di ripiego; da riprovare col 26B della DGX.
+- Le prime versioni: con il solo errore strutturato (senza la frase della persona e con la
+  domanda detta subito) notizie 1/1 ma timer, lista, ansa e meteo con una domanda alla persona;
+  con la frase della persona e la domanda trattenuta al primo giro i numeri sopra.
+- **Latenza aggiunta** (4B locale): ogni passata di correzione 0,4–0,7 s; il caso riuscito
+  costa la passata della chiamata giusta più quella della risposta (prima finiva subito, ma con
+  una risposta sbagliata). Il contrario con il dato non deducibile paga una passata in più
+  (0,67–0,91 s contro 0,30–0,47 s di prima) perché la domanda al primo giro aspetta; l'errore
+  non correggibile niente. La frase d'attesa dei giri non è scattata (passate sotto i 2 s).
+  Sulla DGX col 26B ogni passata vale ~1 s: con la frase della persona il caso vero dovrebbe
+  risolversi in un giro (da misurare sul registro dei turni: regole `correzione_tool`,
+  `correzione_avviso`).
+- **A secco**: `prove/prova_dialogo_tool.py`, tra l'altro la chiamata vuota a ognuno dei 42
+  tool con argomenti obbligatori del registro completo (errore strutturato, mai eseguito).
+
+**Inventario voce ↔ agente** (§ 5):
+
+| Dove | Prima | Ora |
+|---|---|---|
+| Strumenti dell'agente di codice e della ricerca: argomenti | nessun controllo; un obbligatorio assente arrivava allo strumento | `dialogo.controlla_strumento` contro lo schema dello strumento (obbligatori assenti, forme di enum e numeri), errore con esempio e `cosa_fare` |
+| `_strumento` (eccezioni) | `{"errore": "TypeError: …"}` | `dialogo.errore_strumento`: `{ok: false, errore: "<strumento> non è riuscito: Tipo: messaggio"}` in una riga, con `cosa_fare` |
+| Ricerca e grafo (eccezioni) | `{"errore": "KeyError"}` (solo il tipo) | come sopra, con il messaggio |
+| Strumento sconosciuto (ricerca) | `{"errore": "strumento sconosciuto: x"}` | con `ok: false` e l'elenco degli strumenti in `cosa_fare` |
+| Estensioni (`est_*`) verso la voce | argomenti mancanti → eccezione nell'estensione, «non è riuscita: KeyError: 'citta'» | lo schema del manifesto è il contratto: errore strutturato prima del container |
+| Esiti dei lavori verso la voce (`lavoro_stato`, `lavoro_risultato`, annunci) | `motivo` già in parole; `errore` con il tipo dell'eccezione nei dati del lavoro | invariato: la voce legge `motivo`/`riassunto`; il tipo resta nel log e nei dati |
+| Domande dell'agente a metà lavoro (`lavoro_rispondi`) | testo dell'agente in busta | invariato |
+
+Restano (non semplici, da un lavoro a parte): il contratto unico dei risultati riusciti
+(`docs/architettura-tool.md` § 6.1); un `cosa_fare` uniforme per gli errori scritti dai tool
+stessi (oggi molti hanno solo `errore`); gli errori dell'estensione nel container
+(`es.errore`, «TypeError: …» dalla sandbox) verso la voce, che restano la riga dell'eccezione.

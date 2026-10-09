@@ -16,7 +16,8 @@ intoppo, riprovo subito» senza riprovare, quattro volte. A secco, senza modello
 - eccezioni del tool: mai la traccia, errore di programmazione non correggibile, ValueError
   correggibile con la sua riga; la forma vecchia {errore} diventa {ok: false, errore};
 - Brain: giro di correzione (la frase «riprovo subito» non si dice, il modello rilegge e
-  richiama), la domanda alla persona si dice, errore non correggibile detto senza giri, tetto
+  richiama), la domanda alla persona si dice dopo il primo giro, errore non correggibile
+  detto senza giri, tetto
   dei giri, frase d'attesa una volta, errore del registro fuori dalla busta dei dati non fidati;
 - strumenti dell'agente: obbligatorio assente, contenuto vuoto ammesso, eccezione in una riga.
 """
@@ -111,8 +112,14 @@ def prova_caso_vero():
     verifica("…l'esempio tiene «tipo» e mette «domanda» al suo posto",
              r["esempio"]["argomenti"] == {"tipo": "notizie", "domanda": "<domanda>"},
              str(r["esempio"]))
-    verifica("…cosa_fare: richiamare, chiedere solo se non si ricava",
-             "Richiama subito web_cerca" in r["cosa_fare"] and "chiedilo" in r["cosa_fare"])
+    verifica("…cosa_fare: richiamare con le parole della persona, chiedere solo se mancano",
+             "Richiama subito web_cerca" in r["cosa_fare"] and "Chiedi alla persona solo se"
+             in r["cosa_fare"], r["cosa_fare"])
+    c = ctx_vuoto()
+    c.user_text = "Raccontami le ultime novità della giornata"
+    r = json.loads(reg.call("web_cerca", {"tipo": "notizie"}, c))
+    verifica("…con la frase della persona, se c'è",
+             "(«Raccontami le ultime novità della giornata»)" in r["cosa_fare"], r["cosa_fare"])
     verifica("Brain non dice la frase d'attesa di una chiamata che non parte",
              reg.mancanti("web_cerca", {"tipo": "notizie"}) == ["domanda"])
     verifica("contrario: con la domanda niente da dire",
@@ -263,13 +270,15 @@ def prova_giro_di_correzione():
              ultimi[0].get("correggibile") is True and not ultimi[0]["ok"] and ultimi[1]["ok"],
              str(ultimi))
 
-    # La domanda alla persona si dice
+    # La domanda alla persona: al primo giro aspetta (il 4B chiedeva il dato appena detto),
+    # dopo la spinta si dice
     b, cercate = _brain_con_web()
     r = turno(b, "raccontami le novità", chiama("web_cerca", {"tipo": "notizie"}),
-              testo("Di quale argomento vuoi le notizie?"))
-    verifica("domanda alla persona dopo l'errore: si dice, nessun giro",
+              testo("Quanti minuti?"), testo("Di quale argomento vuoi le notizie?"))
+    verifica("domanda alla persona dopo l'errore: al primo giro aspetta, dopo la spinta si dice",
              r == "Di quale argomento vuoi le notizie?"
-             and "correzione_tool" not in b.rules_fired() and not cercate, r)
+             and b.rules_fired().count("correzione_tool") == 1 and not cercate,
+             f"{r} {b.rules_fired()}")
 
     # Tetto: il modello continua a promettere
     b, cercate = _brain_con_web()

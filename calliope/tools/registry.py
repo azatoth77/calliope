@@ -175,8 +175,9 @@ class ToolRegistry:
     def controlla(self, spec: ToolSpec, arguments, ctx=None):
         """(argomenti in forma, errore o None) di una chiamata a `spec` (tools/dialogo.py):
         le conversioni di forma restano nel registro dei turni (`tool_argomento_forma`)."""
-        args, convertiti, err = dialogo.controlla(spec.name, spec.parameters, arguments,
-                                                  spec.func, spec.description, _contratto(spec))
+        args, convertiti, err = dialogo.controlla(
+            spec.name, spec.parameters, arguments, spec.func, spec.description,
+            _contratto(spec), frase=str(getattr(ctx, "user_text", "") or ""))
         if convertiti and ctx is not None:
             note_rule(ctx, "tool_argomento_forma")
         return args, err

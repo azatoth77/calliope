@@ -75,6 +75,13 @@ def descrizione_argomento(nome: str, prop: dict, descrizione_tool: str = "") -> 
     m = re.search(r"(?<![\w])" + re.escape(nome) + r"\s*:\s*(.+)", descrizione_tool or "",
                   re.S)
     if not m:
+        # Senza «nome:», la frase della descrizione che nomina l'argomento («Cose separate da
+        # virgola o «e»…» per `cose`)
+        for frase in re.split(r"(?<=[.;])\s+", descrizione_tool or ""):
+            if re.search(r"(?<![\w])" + re.escape(nome) + r"(?![\w])", frase, re.I):
+                frase = re.sub(r"\s+", " ", frase).strip()
+                return (frase[:DESCRIZIONE_MAX].rsplit(" ", 1)[0] + "…"
+                        if len(frase) > DESCRIZIONE_MAX else frase)
         return ""
     testo = m.group(1)
     # Fino al prossimo «altro_argomento:» o alla fine della frase
@@ -181,7 +188,7 @@ def mancanti(params: dict, argomenti, func=None, contratto: bool = False) -> lis
 
 
 def controlla(nome: str, params: dict, argomenti, func=None, descrizione: str = "",
-              contratto: bool = False):
+              contratto: bool = False, frase: str = ""):
     """Gli argomenti di una chiamata contro lo schema (e la firma della funzione, se c'è).
     Restituisce (argomenti in forma, conversioni fatte, errore o None). L'errore è già il
     risultato da dare al modello (`errore_argomenti`)."""
@@ -209,11 +216,12 @@ def controlla(nome: str, params: dict, argomenti, func=None, descrizione: str = 
     if not (sconosciuti or manca or sbagliati):
         return args, convertiti, None
     return args, convertiti, errore_argomenti(nome, params, args, descrizione, manca=manca,
-                                              sbagliati=sbagliati, sconosciuti=sconosciuti)
+                                              sbagliati=sbagliati, sconosciuti=sconosciuti,
+                                              frase=frase)
 
 
 def errore_argomenti(nome: str, params: dict, args: dict, descrizione: str = "",
-                     manca=(), sbagliati=(), sconosciuti=()) -> dict:
+                     manca=(), sbagliati=(), sconosciuti=(), frase: str = "") -> dict:
     """L'errore strutturato di una chiamata con argomenti mancanti, sbagliati o sconosciuti:
     che cosa non va, lo schema degli argomenti coinvolti, un esempio e che cosa fare."""
     props = (params or {}).get("properties") or {}
@@ -251,11 +259,13 @@ def errore_argomenti(nome: str, params: dict, args: dict, descrizione: str = "",
         esempio[k] = _segnaposto(k, props.get(k) or {})
     out["esempio"] = {"tool": nome, "argomenti": esempio}
     da_dedurre = ", ".join(list(manca) + list(sbagliati)) or ", ".join(props)
-    out["cosa_fare"] = (f"Richiama subito {nome} con gli argomenti giusti, come nell'esempio: "
-                        f"ricava {da_dedurre} dalla frase della persona e dalla conversazione "
-                        f"(anche in forma generale). Solo se proprio non si può ricavare, "
-                        f"chiedilo alla persona con una domanda breve. Non dire che riprovi: "
-                        f"richiamalo.")
+    frase = re.sub(r"\s+", " ", str(frase or "")).strip()[:200]
+    detto = f" («{frase}»)" if frase else ""
+    out["cosa_fare"] = (f"Richiama subito {nome} con gli argomenti giusti, come nell'esempio, "
+                        f"ricavando {da_dedurre} da quello che ha detto la persona{detto} e "
+                        f"dalla conversazione: va bene anche una forma generale, con le sue "
+                        f"stesse parole. Chiedi alla persona solo se lì non c'è niente che "
+                        f"serva. Non dire che riprovi: richiamalo.")
     return out
 
 

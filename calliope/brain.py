@@ -326,10 +326,11 @@ FAILED_NUDGE = ("I tool che hai chiamato in questa risposta sono falliti: non ha
 # rilegge l'errore e richiama, o chiede il dato. Uguale per ogni tool, nessun caso scritto qui
 CORREZIONE_NUDGE = ("Il tool {tool} non è partito: «{errore}» Non l'hai ancora richiamato. "
                     "Rileggi il suo risultato qui sopra (argomenti, esempio, cosa_fare) e "
-                    "richiamalo adesso con gli argomenti giusti, ricavati dalla frase della "
-                    "persona e dalla conversazione. Solo se il dato non si ricava in nessun "
-                    "modo, chiedilo alla persona con una domanda breve. Non dire che riprovi e "
-                    "non scusarti: richiamalo.")
+                    "richiamalo adesso con gli argomenti giusti, ricavati da quello che ha "
+                    "detto la persona e dalla conversazione: va bene anche una forma generale, "
+                    "con le sue stesse parole. Chiedi alla persona solo se lì non c'è niente "
+                    "che serva, con una domanda breve. Non dire che riprovi e non scusarti: "
+                    "richiamalo.")
 
 
 def is_claim(text: str, actions: list[str] | tuple = (), fallito: bool = False) -> bool:
@@ -2941,8 +2942,10 @@ class Brain:
                 hold_fallito=self._solo_falliti())
             tail = []
             if corr is not None and held_req and not held and not calls:
-                if held_req.rstrip().endswith("?"):
-                    # Chiede il dato alla persona: è la risposta giusta, si dice
+                if held_req.rstrip().endswith("?") and correzioni > 1:
+                    # Chiede il dato alla persona dopo aver riletto l'errore con la spinta: è la
+                    # sua decisione, si dice. Al primo giro anche la domanda aspetta (misura del
+                    # 09/10: il 4B chiedeva la durata appena detta, «cinque minuti»)
                     yield held_req
                     held_req = ""
                 else:
