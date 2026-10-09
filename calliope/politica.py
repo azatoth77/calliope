@@ -278,6 +278,9 @@ CLASSI: dict[str, Classe] = {
                     verbo_sempre=lambda testo: chiesto_di_dimenticare(testo)),
     "documento_crea": _c(A, cosa=lambda a: "prepari il documento"),
     "documento_modifica": _c(A, cosa=lambda a: "modifichi il documento"),
+    # 09/10: rilegge un documento preparato da Calliope per chi parla (il testo l'ha scritto
+    # lo scrittore dei documenti, non un dato esterno)
+    "documento_leggi": _c(S),
     "lavoro_annulla": _c(A, cosa=lambda a: "fermi il lavoro"),
     "lavoro_rispondi": _c(A, cosa=lambda a: "mandi la risposta all'agente"),
     "immagine_archivia": _c(A, cosa=lambda a: "archivi la foto"),
@@ -430,7 +433,12 @@ VERBI = {
 # VERBI_AZIONE: le parole di un'altra azione dello stesso tool non la confermano
 _W = r"(?<![a-zà-ù])"
 VERBI.update({
-    "casa_comando": (_W + r"(accend|speng|apr[iaeo]|aprir|chiud|alz|abbass|regol|impost|"
+    # «spegni», «spegnere», «spegnessi» hanno «spegn», non «speng» (09/10, caso vero della DGX
+    # delle 20:39: «No, io volevo che la spegnessi.» non era una richiesta di casa_comando e la
+    # politica per valore rispondeva «Non me l'hai chiesto…»); con le storpiature di Whisper
+    # che sicurezza.ACTION_REQUEST già conosce («Spenni la luce», «Sprengi la»)
+    "casa_comando": (_W + r"(accend|acces[oaie]|speng|spegn|spent[oaie]|spre(?:i?gn|ngh?|n)i|"
+                     r"spenn?i|apr[iaeo]|aprir|chiud|alz|abbass|regol|impost|"
                      r"attiv|disattiv|luc[ei]|lampad|tapparell|serrand|clima|riscald|"
                      r"termostat|condizionat|temperatur|ventil|cancell[oi]|garage|porta)"),
     "pc_apri_app": _W + r"(apr[iaeo]|aprir|avvi|lanc|fa(?:mm|ll)\w* partire|programm|app)",
@@ -460,7 +468,7 @@ VERBI_AZIONE = {
         "elenca": _W + r"(elenc|quali|lista|stato)",
         "approva": _W + r"(approv|attiv|accett|conferm|install)",
         "rifiuta": _W + r"(rifiut|scart|bocci)",
-        "disattiva": _W + r"(disattiv|speng|ferm|sospend)",
+        "disattiva": _W + r"(disattiv|speng|spegn|ferm|sospend)",
         "riattiva": _W + r"(riattiv|attiv|riaccend|accend)",
         "indietro": _W + r"(indietro|precedent|torn|ripristin|vecchi)",
         "revoca": _W + r"(revoc|togli\w* .*permess)",
@@ -646,6 +654,10 @@ class Turno:
     # Valori della configurazione della casa che Calliope dà al modello (09/10, `casa_citta`):
     # fidati come le parole della persona nel controllo della provenienza
     da_config: str = ""
+    # I nomi fidati della domanda di Calliope a cui questa frase risponde (09/10: i nomi delle
+    # entità di Home Assistant in «Taverna o Bagno della Taverna?», il titolo di uno sviluppo
+    # dall'indice): valgono come parole della persona per la politica per valore
+    domanda_fidata: str = ""
 
 
 # Le azioni interne chieste con un verbo che il lessico delle azioni sul mondo non ha
@@ -1766,7 +1778,11 @@ SVILUPPO_SALTA = frozenset({"politica_conferma", "politica_azione_non_chiesta",
 # sviluppo aperto `sviluppo.passo_interno` controlla già che il bersaglio sia proprio quello
 # dello sviluppo (lo stato, non il testo del dato): solo questi argomenti
 SVILUPPO_BERSAGLIO = {"estensione_gestisci": frozenset({"nome"}),
-                      "sviluppo_apri": frozenset({"modifica"})}
+                      "sviluppo_apri": frozenset({"modifica"}),
+                      # 09/10 (caso vero della DGX delle 21:00: «Sì, attivarla.» → «“Meteocittà”
+                      # viene dal lavoro di un agente»): `quale` sceglie tra gli sviluppi di chi
+                      # parla, e il passo interno è quello del suo sviluppo aperto
+                      "sviluppo_passo": frozenset({"quale"})}
 
 
 def _gia_rifiutata(name: str, args: dict, cl: Classe, t: Turno | None, ctx, spec) -> dict | None:

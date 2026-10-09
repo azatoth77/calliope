@@ -110,7 +110,11 @@ ARGOMENTI: dict[str, dict[str, str]] = {
     "installa_gestisci": {"azione": Z},
     # 08/10 (versione 2): estensioni e programmi si aprono qui (prima estensione_crea e
     # delega_lavoro di codice); tipo sceglie quale, file e allegato come per i lavori
-    "sviluppo_apri": {"tipo": Z, "compito": L, "nome": C, "gia_fatto_da": S,
+    # «nome»: il nome che il modello dà alla funzione nuova («Meteocittà suggerimenti») è un
+    # testo libero come il compito (09/10, caso vero della DGX delle 20:39: come contenuto, la
+    # parola «suggerimenti» non detta faceva chiedere «C'è di mezzo una pagina internet…»); si
+    # giudica sulle parole distintive prese da un dato
+    "sviluppo_apri": {"tipo": Z, "compito": L, "nome": L, "gia_fatto_da": S,
                       "come_chiederlo": L, "proposta": X, "gioco": S, "vincoli": L,
                       "file": B, "allegato": "indice:allegato",
                       # 08/10 (giro 10): l'estensione esistente di cui fare una versione nuova
@@ -390,8 +394,11 @@ class Fonti:
     def da(cls, t, fidati=()) -> "Fonti":
         esterni = " ".join(x for _, x in (t.esterni or ()))
         fid = " ".join(str(x) for x in (fidati or ()))
-        return cls(prov.parole(t.testo), prov.parole(t.persona_txt), prov.parole(fid),
-                   prov.parole(esterni), _gettoni_numeri(t.testo), _gettoni_numeri(t.persona_txt),
+        # La risposta a una domanda di Calliope fatta con nomi fidati (09/10: «Taverna o Bagno
+        # della Taverna?» dai nomi di Home Assistant): quei nomi li ha scelti la persona
+        persona = f"{t.persona_txt} {getattr(t, 'domanda_fidata', '') or ''}"
+        return cls(prov.parole(t.testo), prov.parole(persona), prov.parole(fid),
+                   prov.parole(esterni), _gettoni_numeri(t.testo), _gettoni_numeri(persona),
                    _gettoni_numeri(esterni), "foto" in (t.contaminazione or ()))
 
 
@@ -423,10 +430,15 @@ def etichetta(valore, tipo: str, f: Fonti) -> str:
         # «Cerno Maggiore» detto, «Cerro Maggiore» nel valore)
         if w in f.frase or prov.vicina(w, f.frase):
             e = DETTO
-        elif w in f.persona:
-            # Detto solo prima e anche nel dato: per un bersaglio può averlo scelto il dato
-            # (il «latte» del 06/10)
-            e = DATO if tipo == BERSAGLIO and w in f.dato else PERSONA
+        elif w in f.persona or prov.vicina(w, f.persona):
+            # Detto dalla persona in questa conversazione (un turno di prima, o la risposta a
+            # una domanda di Calliope fatta con nomi fidati: Turno.domanda_fidata) vale suo,
+            # anche se un dato lo ripete (09/10, casi veri della DGX: «Meteocittà» nominata da
+            # Dario più volte e ripetuta negli annunci dell'agente → «viene dal lavoro di un
+            # agente, non da te»). Storico (08/10–09/10): per un bersaglio valeva «dato» (il
+            # «latte» del 06/10, detto prima e scelto dal dato); resta «dato» solo una parola
+            # che sta SOLO nel dato
+            e = PERSONA
         elif w in f.dato:
             # Il dato prima del fidato: un valore del dato che un tool interno ha ripetuto
             # (il nome di un timer messo da una pagina) non diventa fidato
@@ -509,7 +521,16 @@ def personali(valore, t, ctx) -> list[str]:
 VALORE_REGOLE = (
     "valore_lettura", "valore_non_ancorata", "valore_bersaglio_dato", "valore_contenuto_dato",
     "valore_contenuto_non_detto", "valore_dati_personali", "valore_esegue",
-    "valore_voce", "valore_e3_chiede", "valore_e4_sfida")
+    "valore_voce", "valore_e3_chiede", "valore_e4_sfida", "valore_consenso_breve")
+
+
+def consenso_della_persona(ctx) -> bool:
+    """Il «sì» viene dalla persona della conversazione: riconosciuta dalla voce in questa
+    frase o, per una frase breve, dalla conversazione (ciclo.py: in compagnia una frase breve
+    non vale nessuno). Non la zona grigia, non un ospite, non scritto da uno schermo."""
+    sc = getattr(ctx, "speaker_ctx", None)
+    return (sc is not None and getattr(sc, "current_speaker", None) is not None
+            and getattr(sc, "identified_by", None) in ("voce", "breve"))
 
 
 def ancorata(cl, name: str, args: dict, t) -> bool:
@@ -551,8 +572,17 @@ def decidi_valore(name: str, args: dict, cl, t, base, conferma_voce: bool = Fals
                 return base, det
         except Exception:  # noqa: BLE001
             pass
-    proposta, _ripetuta, _stessa = pol.consenso_turno(name, args, cl, t)
+    proposta, _ripetuta, stessa = pol.consenso_turno(name, args, cl, t)
     if proposta:
+        # Il «sì» breve della persona della conversazione a una domanda su un'azione E1–E2
+        # (09/10, caso vero della DGX delle 20:39: «Sì.» a «vuoi che spenga la luce della
+        # taverna?» → «C'è di mezzo una pagina internet… ripeti: …»). La frase di sfida della
+        # politica di prima serve all'identità per le azioni che contano; qui la domanda era
+        # sull'intento, e la stessa azione chiesta con le sue parole si sarebbe eseguita
+        # senza domande. Mai per i tool con la sfida, per E3–E4, per un ospite o uno scritto
+        if (base.esito == "sfida" and base.regola == "politica_sfida" and not cl.sfida
+                and E <= E2 and consenso_della_persona(ctx)):
+            return pol.Decisione("esegui", "valore_consenso_breve", accettata=stessa), det
         return base, det
     fonte = sorted(t.contaminazione)[0]
     cosa = cosa or pol._cosa(cl, args)

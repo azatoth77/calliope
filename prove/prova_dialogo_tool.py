@@ -330,7 +330,10 @@ def prova_giro_di_correzione():
     ultima = b.backend.messaggi[-1]
     verifica("richiamate subito sbagliate: dopo 2 giri di correzione niente quarta chiamata",
              r == "Di quale argomento vuoi le notizie?" and not cercate
-             and regole.count("tool_argomenti_mancanti") == 3
+             # la prima eseguita, le due identiche dopo con il suo esito (09/10,
+             # `chiamata_ripetuta`)
+             and regole.count("tool_argomenti_mancanti") == 1
+             and regole.count("chiamata_ripetuta") == 2
              and "correzioni_esaurite" in regole and len(b.backend.messaggi) == 4,
              f"{r!r} {cercate} {regole} {len(b.backend.messaggi)}")
     verifica("…l'ultima passata ha l'errore e «non richiamarlo»",
