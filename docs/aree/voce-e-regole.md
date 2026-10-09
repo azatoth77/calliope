@@ -884,3 +884,20 @@ riproduce (0/3: la e4b risponde in un altro modo), le prove sono a secco
 
 Il tool `conversazione_nuova` (stesso giorno) e la coda dopo una pausa sono in
 [contesto-conversazione](contesto-conversazione.md).
+
+## Chiamate ripetute nella stessa risposta e passata finale (09/10 sera, ramo `sera-politica-strumenti`)
+
+- Una chiamata identica (tool e argomenti normalizzati, `brain.chiave_di_chiamata`) a una già
+  fatta nella stessa risposta non si riesegue: il modello riceve l'esito della prima con una
+  `nota` (regola `chiamata_ripetuta`; caso vero della DGX delle 20:39: due `casa_comando`
+  uguali, la seconda fermata dalla politica e la domanda detta dopo «Ho spento…»). Il rifiuto
+  leggero della politica non conta come esito (il modello che insiste porta la domanda alla
+  persona). Anche il giro di correzione ne beneficia: una richiamata identica sbagliata riceve
+  lo stesso errore senza rieseguire.
+- La passata finale senza tool non ha più la spinta dell'ultimo giro (`tail` azzerato: prima
+  c'erano insieme «richiamalo» e «non richiamarlo»), e una passata finale vuota dice il
+  ripiego (`vuoto_ripiego`). Dall'analisi delle regole § 3.7; dettagli in
+  [sicurezza-politica](sicurezza-politica.md).
+- I campi della forma degli errori di `tools/dialogo.py` (`campo`, `correggibile`) e l'elenco
+  dei lavori veri di `lavoro_risultato` non entrano più nella busta dei dati non fidati
+  (`_CAMPI_ERRORE`): un errore senza dati non contamina la conversazione.

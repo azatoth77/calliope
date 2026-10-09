@@ -557,6 +557,7 @@ _TOOL_CHIAVE = {
     "web_cerca": "internet",
     "lavoro_affida": "agenti", "lavoro_rispondi": "agenti", "lavoro_risultato": "agenti",
     "documento_crea": "documenti", "documento_modifica": "documenti",
+    "documento_leggi": "documenti",
 }
 _UFFICIO = {"modello_compila", "anagrafica_cerca", "anagrafica_salva", "archivio_cerca",
             "archivio_scadenze", "archivio_somma",

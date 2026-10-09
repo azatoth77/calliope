@@ -330,7 +330,10 @@ def prova_giro_di_correzione():
     ultima = b.backend.messaggi[-1]
     verifica("richiamate subito sbagliate: dopo 2 giri di correzione niente quarta chiamata",
              r == "Di quale argomento vuoi le notizie?" and not cercate
-             and regole.count("tool_argomenti_mancanti") == 3
+             # la prima eseguita, le due identiche dopo con il suo esito (09/10,
+             # `chiamata_ripetuta`)
+             and regole.count("tool_argomenti_mancanti") == 1
+             and regole.count("chiamata_ripetuta") == 2
              and "correzioni_esaurite" in regole and len(b.backend.messaggi) == 4,
              f"{r!r} {cercate} {regole} {len(b.backend.messaggi)}")
     verifica("…l'ultima passata ha l'errore e «non richiamarlo»",
@@ -338,6 +341,17 @@ def prova_giro_di_correzione():
                  and "«domanda»" in str(m.get("content")) for m in ultima
                  if m.get("role") == "system"), str([m for m in ultima
                                                      if m.get("role") == "system"][-1:])[:300])
+    verifica("…e nella passata finale non c'è più la spinta «richiamalo» (09/10, analisi delle "
+             "regole § 3.7)",
+             not any("Non l'hai ancora richiamato" in str(m.get("content")) for m in ultima
+                     if m.get("role") == "system"),
+             str([str(m.get("content"))[:80] for m in ultima if m.get("role") == "system"][-2:]))
+    # La passata finale vuota (una chiamata scritta come testo, trattenuta): il ripiego
+    b, cercate = _brain_con_web()
+    r = turno(b, "le ultime notizie", sbagliata, sbagliata, sbagliata, testo(""))
+    verifica("passata finale vuota: la frase di ripiego, mai il silenzio",
+             r == "Non ci sono riuscita: puoi ripetere la richiesta?"
+             and "vuoto_ripiego" in b.rules_fired(), f"{r!r} {b.rules_fired()}")
     # Contrario: corretta al secondo giro → nessun tetto
     b, cercate = _brain_con_web()
     r = turno(b, "le ultime notizie", sbagliata, sbagliata,

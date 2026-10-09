@@ -1384,7 +1384,12 @@ def _result_text(res: dict) -> str:
 
 # I campi di un risultato fallito di un tool di Calliope che il suo codice scrive: senza
 # altro, non c'è nessun dato non fidato da mettere nella busta (Brain._run_tool)
-_CAMPI_ERRORE = frozenset(provenienza.CONTROLLO) | {"cosa_dire", "serve_ricerca", "risultati"}
+_CAMPI_ERRORE = frozenset(provenienza.CONTROLLO) | {"cosa_dire", "serve_ricerca", "risultati",
+                                                    # la forma degli errori di tools/dialogo.py
+                                                    # e l'elenco dei lavori veri e del
+                                                    # documento di lavoro_risultato (09/10)
+                                                    "campo", "correggibile", "lavori",
+                                                    "documento"}
 
 
 def _senza_dato(name: str, spec, res: dict) -> bool:
@@ -1428,6 +1433,41 @@ def _loads_dict(raw: str) -> dict:
     except json.JSONDecodeError:
         return {}
     return val if isinstance(val, dict) else {}
+
+
+def _norm_argomento(v):
+    """Un valore di un argomento in forma confrontabile: testi minuscoli, senza spazi doppi né
+    punteggiatura ai lati; elenchi e oggetti ricorsivi; vuoti tolti."""
+    if isinstance(v, str):
+        return " ".join(v.lower().split()).strip(" .,;:!?«»\"'")
+    if isinstance(v, dict):
+        return {str(k): _norm_argomento(x) for k, x in v.items()
+                if x not in (None, "", [], {})}
+    if isinstance(v, (list, tuple)):
+        return [_norm_argomento(x) for x in v]
+    return v
+
+
+def chiave_di_chiamata(nome: str, args: dict) -> str:
+    """Stesso tool e stessi argomenti normalizzati → la stessa chiave (regola
+    `chiamata_ripetuta`)."""
+    try:
+        testo = json.dumps(_norm_argomento(args or {}), ensure_ascii=False, sort_keys=True,
+                           default=str)
+        return f"{nome}:{testo}"
+    except (TypeError, ValueError):
+        return f"{nome}:{args!r}"
+
+
+def _esito_ripetuto(primo: str) -> str:
+    """L'esito della prima chiamata identica, con la nota per il modello (fuori dalla busta dei
+    dati non fidati: `nota` è un campo di controllo)."""
+    nota = ("questa chiamata è identica a una già fatta in questa risposta: non l'ho "
+            "rieseguita, l'esito è quello della prima. Non richiamarla.")
+    res = _loads_dict(primo)
+    if not res:
+        return primo
+    return json.dumps({**res, "nota": nota}, ensure_ascii=False)
 
 
 def make_backend(cfg: Config):
@@ -2118,6 +2158,10 @@ class Brain:
                 self._rule("consenso_avversativo")
         self._letto_ora = ""      # un tool non fidato ha già risposto in questa risposta
         self._politica_risposta = {}  # stato della politica per questa risposta (Turno.risposta)
+        # Le chiamate già fatte in questa risposta (09/10, regola `chiamata_ripetuta`) e i nomi
+        # fidati delle domande di questa risposta (Turno.domanda_fidata del turno dopo)
+        self._chiamate_risposta = {}
+        self._fidate_risposta = []
         self.last_turn_at = time.monotonic()
         start = len(self.history)
         # Frase di sfida in corso (04/10, conferme.py): se la frase la ripete, decide il codice
@@ -2150,6 +2194,7 @@ class Brain:
         said = (last.get("content") or "").strip() if last.get("role") == "assistant" else ""
         if self._offer and said.endswith("?") and self._net("azione_in_sospeso"):
             self.set_pending(self._offer)
+        self._ricorda_domanda_fidata(said)
         self._scalda_se_cambiato(firma)
 
     def _rifiuto_proposta(self, user_text: str | None, pending: str | None) -> str | None:
@@ -3428,8 +3473,18 @@ class Brain:
         fine = (CORREZIONE_ESAURITA.format(tool=esaurita["nome"],
                                            errore=esaurita.get("errore") or "")
                 if esaurita is not None else "Rispondi ora, senza chiamare altri tool.")
+        # La spinta dell'ultimo giro non resta (09/10, analisi delle regole § 3.7: con
+        # CORREZIONE_NUDGE «richiamalo» in fondo e CORREZIONE_ESAURITA «non richiamarlo»
+        # davanti, la passata finale riceveva due ordini opposti)
+        tail = []
         messages = with_memory(system + [{"role": "system", "content": fine}])
         text, _, _, _, _ = yield from self._turn(messages, [])
+        if not (text or "").strip():
+            # Una chiamata scritta come testo (trattenuta) o niente: meglio una frase vera del
+            # silenzio
+            self._rule("vuoto_ripiego")
+            text = "Non ci sono riuscita: puoi ripetere la richiesta?"
+            yield text
         self.history.append({"role": "assistant", "content": text})
 
     def strip_tool_mentions(self, sentence: str) -> str:
@@ -3853,6 +3908,28 @@ class Brain:
         """Esegue un tool nativo e restituisce il risultato (JSON) al modello."""
         self._nome_corretto(call)
         args = call["arguments"] if isinstance(call["arguments"], dict) else {}
+        # La stessa chiamata (stesso tool, stessi argomenti normalizzati) già fatta in questa
+        # risposta non si riesegue: il modello riceve l'esito della prima (09/10, regola
+        # `chiamata_ripetuta`; casi veri della DGX: due casa_comando «spegni la luce della
+        # Taverna» nella stessa risposta, la prima eseguita e la seconda fermata dalla
+        # politica, con la domanda detta dopo «Ho spento…»). Due chiamate con argomenti diversi
+        # (due collaudi con due città) restano due
+        fatte = getattr(self, "_chiamate_risposta", None)
+        chiave_chiamata = chiave_di_chiamata(call["name"], args)
+        if isinstance(fatte, dict) and fatte.get(chiave_chiamata) is not None:
+            self._rule("chiamata_ripetuta")
+            print(f"   [TOOL] {call['name']}: chiamata identica a una di questa risposta, "
+                  f"non la rieseguo", flush=True)
+            return _esito_ripetuto(fatte[chiave_chiamata])
+        result = self._run_tool_una_volta(call, args, level)
+        if isinstance(fatte, dict):
+            # Il rifiuto leggero della politica (la prima volta nella risposta) non vale come
+            # esito: se il modello insiste, la domanda va alla persona (politica.decidi)
+            fatte[chiave_chiamata] = (None if getattr(self, "_ultima_decisione", None)
+                                      == "rifiuta" else result)
+        return result
+
+    def _run_tool_una_volta(self, call: dict, args: dict, level: str) -> str:
         spec = self.tools.get(call["name"])
         hidden = set(getattr(spec, "segreti", ()) or ())
         shown = {k: ("******" if k in hidden and v not in (None, "") else v)
@@ -3903,6 +3980,8 @@ class Brain:
         # La decisione della politica per questa chiamata: intenzione e ombra (08/10)
         esito_pol = getattr(self.tool_ctx, "politica_esito", None)
         self._set_ctx("politica_esito", None)
+        self._ultima_decisione = (esito_pol.get("decisione") if isinstance(esito_pol, dict)
+                                  else None)
         if getattr(spec, "non_fidato", False) and '"risultati"' in result:
             # Dato non fidato in questa risposta: solo letture fino alla fine (DOPO_DATO)
             self._letto_ora = politica.fonte_di(call["name"], spec) or "web"
@@ -3936,6 +4015,19 @@ class Brain:
             if isinstance(parsed, dict) and "riferimento_agenda" in parsed:
                 self.set_agenda_reference(parsed.pop("riferimento_agenda"))
                 result = json.dumps(parsed, ensure_ascii=False)
+            # I nomi da fonti fidate che il tool mette davanti alla persona (09/10): i nomi
+            # delle entità di casa vicini a quello detto (`nomi_vicini`, `stanze`), il titolo
+            # di uno sviluppo dall'indice (`_fidati`, per Brain e non per il modello). Se la
+            # risposta finisce con una domanda, al turno dopo valgono come parole della persona
+            # (Turno.domanda_fidata). Mai da un tool con una fonte non fidata
+            if isinstance(parsed, dict) and "_fidati" in parsed:
+                fid = parsed.pop("_fidati")
+                result = json.dumps(parsed, ensure_ascii=False)
+                if not politica.fonte_di(call["name"], spec):
+                    self._nomi_fidati(fid)
+            if isinstance(parsed, dict) and not politica.fonte_di(call["name"], spec):
+                for k in ("nomi_vicini", "stanze"):
+                    self._nomi_fidati(parsed.get(k))
             # Anche il rifiuto per permessi (ok=False, senza «errore») è un fallimento:
             # prima nel registro risultava riuscito
             ok = _result_ok(parsed)
@@ -4157,6 +4249,36 @@ class Brain:
         conv.fidati.append(str(risultato)[:4000])
         del conv.fidati[:-30]
 
+    def _nomi_fidati(self, nomi):
+        """Nomi da fonti fidate messi davanti alla persona in questa risposta (Brain._run_tool)."""
+        if isinstance(nomi, str):
+            nomi = [nomi]
+        if not isinstance(nomi, (list, tuple)):
+            return
+        if not isinstance(getattr(self, "_fidate_risposta", None), list):
+            self._fidate_risposta = []
+        self._fidate_risposta += [str(n)[:120] for n in nomi[:20] if isinstance(n, str) and n]
+        del self._fidate_risposta[:-40]
+
+    def _ricorda_domanda_fidata(self, detto: str):
+        """A fine risposta: se Calliope ha chiuso con una domanda e in questa risposta un tool
+        interno le ha dato nomi fidati, il turno dopo (la risposta della persona) li vede come
+        parole sue (Turno.domanda_fidata). Vale un turno solo."""
+        conv = self._c()
+        nomi = getattr(self, "_fidate_risposta", None) or []
+        try:
+            conv.domanda_fidata = ({"turno": getattr(self, "turn_number", 0),
+                                    "testo": " ".join(nomi)}
+                                   if nomi and (detto or "").rstrip().endswith("?") else None)
+        except AttributeError:
+            pass
+
+    def _domanda_fidata(self) -> str:
+        d = getattr(self._c(), "domanda_fidata", None)
+        if isinstance(d, dict) and d.get("turno") == getattr(self, "turn_number", 0) - 1:
+            return str(d.get("testo") or "")
+        return ""
+
     def _quarantena(self):
         q = getattr(self, "_quar", None)
         if q is None:
@@ -4313,7 +4435,9 @@ class Brain:
             rifiuti=self._rifiuti(),
             # La città della casa (09/10) viene dalla configurazione, non da un dato esterno
             # (o salvata a voce da chi amministra, luogo.json: 09/10)
-            da_config=luogo.citta_casa(self.cfg))
+            da_config=luogo.citta_casa(self.cfg),
+            # La domanda di Calliope con nomi fidati a cui questa frase risponde (09/10)
+            domanda_fidata=self._domanda_fidata())
 
     def _intenzioni(self) -> list:
         conv = self._c()

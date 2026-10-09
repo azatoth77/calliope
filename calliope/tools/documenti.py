@@ -77,6 +77,19 @@ def _schermo_dopo(ctx: ToolContext, job):
     job.on_scheda = lambda card: hub.invia(card, sender)
 
 
+def _su_scheda(ctx) -> bool:
+    """Chi parla ha adesso uno schermo personale aperto: la scheda del documento ci arriva,
+    con «Scarica» (schermi/hub.py)."""
+    hub = getattr(ctx, "schermi", None)
+    vero = getattr(hub, "personale_collegato", None)
+    if vero is None:
+        return False
+    try:
+        return bool(vero(hub.mittente(ctx)))
+    except Exception:  # noqa: BLE001 — nel dubbio, la frase di sempre
+        return False
+
+
 def _rifiuto(motivo: str, cosa_dire: str) -> dict:
     return {"ok": False, "fatto": NIENTE, "motivo": motivo, "cosa_dire": cosa_dire}
 
@@ -86,8 +99,13 @@ def _spoken(res: dict, ctx: ToolContext | None = None) -> dict:
     schermi («scheda») resta solo se ci sono gli schermi: Brain la toglie prima del modello,
     che il testo del documento non lo vede mai."""
     text = res.get("frase") or ""
-    drop = {"frase", "annuncio"} | ({"scheda"} if getattr(ctx, "schermi", None) is None
-                                    else set())
+    if res.get("frase_scheda") and _su_scheda(ctx):
+        # Rimasto sul server, e chi l'ha chiesto ha uno schermo personale aperto: la scheda ha
+        # «Scarica» (09/10)
+        note_rule(ctx, "documento_sulla_scheda")
+        text = res["frase_scheda"]
+    drop = {"frase", "annuncio", "frase_scheda", "annuncio_scheda"} | (
+        {"scheda"} if getattr(ctx, "schermi", None) is None else set())
     out = {k: v for k, v in res.items() if k not in drop}
     if text:
         out["conferma"] = text
@@ -190,6 +208,73 @@ def _documento_modifica(ctx: ToolContext, modifica: str = "") -> dict:
             "conferma": text, "risposta_finale": text}
 
 
+MODI_LEGGI = ("riassunto", "leggi", "mostra")
+CONTENUTO_MAX = 4000        # caratteri del documento dati al modello per dirlo a voce
+
+
+def _documento_leggi(ctx: ToolContext, documento: str = "", modo: str = "riassunto") -> dict:
+    """Che cosa c'è in un documento preparato da Calliope per chi parla (09/10, caso vero della
+    DGX delle 18:56: il foglio Excel appena creato «sul server» non si poteva più rileggere, e
+    lavoro_risultato ripiegava sul lavoro dell'agente del mattino). Il documento è nell'archivio
+    dei documenti (il JSON, ovunque sia finito il file): `riassunto` e `leggi` danno il testo al
+    modello, che lo dice a voce; `mostra` («aprilo», «fammelo vedere») lo manda sulla scheda
+    dello schermo personale, con «Scarica». Solo i documenti di chi parla."""
+    svc = getattr(ctx, "documenti", None)
+    if svc is None:
+        return {"ok": False, "fatto": NIENTE, "errore": "documenti non disponibili"}
+    prof = _person(ctx)
+    if prof is None:
+        return _rifiuto("chi sta parlando non è riconosciuto: un documento lo rilegge solo chi "
+                        "lo ha fatto preparare", "spiega che non puoi farlo per questa persona")
+    modo = str(modo or "riassunto").strip().lower()
+    modo = modo if modo in MODI_LEGGI else "riassunto"
+    doc = svc.archive.trova(prof.id, str(documento or ""))
+    if doc is None:
+        recenti = [d.get("titolo") for d in svc.archive.recenti(prof.id, 5) if d.get("titolo")]
+        if not recenti:
+            return {"ok": False, "fatto": NIENTE,
+                    "errore": "chi parla non ha documenti preparati da Calliope",
+                    "cosa_fare": "dillo in breve; se vuole un documento nuovo, documento_crea"}
+        note_rule(ctx, "documento_non_trovato")
+        return {"ok": False, "fatto": NIENTE, "campo": "documento", "correggibile": True,
+                "errore": f"nessun documento di chi parla corrisponde a «{documento}»",
+                "documenti": recenti,
+                "cosa_fare": "richiama documento_leggi con documento uguale a uno dei titoli di "
+                             "«documenti» (vuoto per l'ultimo); se nessuno è quello che "
+                             "intende, chiediglielo. Non usare un altro tool al suo posto"}
+    from ..documenti import markdown as md
+    from ..documenti.servizio import _scheda
+    contenuto, formato = doc["contenuto"], doc["formato"]
+    titolo = str(doc.get("titolo") or "il documento")
+    hub = getattr(ctx, "schermi", None)
+    sullo_schermo = False
+    if hub is not None and (modo == "mostra" or _su_scheda(ctx)):
+        card = _scheda(contenuto, formato, str(doc.get("nome_file") or ""), ident=doc["id"])
+        if card:
+            try:
+                esito = hub.invia(card, hub.mittente(ctx), forza=modo == "mostra")
+                sullo_schermo = bool(esito.get("schermi"))
+            except Exception:  # noqa: BLE001 — lo schermo non ferma la voce
+                sullo_schermo = False
+    if modo == "mostra" and sullo_schermo:
+        note_rule(ctx, "documento_mostrato")
+        frase = f"Te l'ho mandato sullo schermo: «{titolo}». Per averlo, tocca «Scarica»."
+        return {"ok": True, "documento": doc["id"], "conferma": frase, "risposta_finale": frase}
+    note_rule(ctx, "documento_letto")
+    testo = md.da_blocchi(contenuto)
+    frasi = "da quattro a sei" if modo == "leggi" else "due o tre"
+    pre = ("Non vedo un tuo schermo aperto, quindi diglielo a voce. "
+           if modo == "mostra" else "")
+    return {"ok": True, "documento": doc["id"], "titolo": titolo, "formato": formato,
+            "contenuto": testo[:CONTENUTO_MAX], "tagliato": len(testo) > CONTENUTO_MAX,
+            **({"sullo_schermo": True} if sullo_schermo else {}),
+            "cosa_fare": (f"{pre}È un documento che hai preparato tu per chi parla: di' a voce "
+                          f"che cosa contiene in {frasi} frasi semplici e complete, rispondendo "
+                          "alla sua domanda; niente elenchi, tabelle o markdown, i numeri come "
+                          "nel documento"
+                          + (". Il documento è anche sul suo schermo" if sullo_schermo else ""))}
+
+
 _WAIT = ("Subito.", "Va bene.", "Certo, un attimo.")
 
 _LABELS = {"word": "word (lettere, testi, documenti)", "excel": "excel (tabelle con numeri, "
@@ -234,4 +319,20 @@ def documenti_specs(formati, agenti: bool = False) -> list[ToolSpec]:
                         "properties": {"modifica": {"type": "string"}},
                         "required": ["modifica"]},
             func=_documento_modifica, risk="azione", levels=FAMILY, announce=_WAIT),
+        # 09/10: rileggere un documento preparato da Calliope (anche rimasto sul server)
+        ToolSpec(
+            name="documento_leggi",
+            description=("Che cosa c'è in un documento preparato da te per chi parla (con "
+                         "documento_crea o documento_modifica), anche se il file è rimasto sul "
+                         "server: «cosa c'è in quel file?», «riassumimelo», «leggimelo», "
+                         "«aprilo», «fammelo vedere». documento: parole del titolo, vuoto per "
+                         "l'ultimo. modo: riassunto (predefinito), leggi (più dettagliato), "
+                         "mostra (sulla scheda dello schermo, con Scarica)."
+                         + (" NON per il risultato di un lavoro dell'agente: lavoro_risultato."
+                            if agenti else "")),
+            parameters={"type": "object",
+                        "properties": {"documento": {"type": "string"},
+                                       "modo": {"type": "string", "enum": list(MODI_LEGGI)}},
+                        "required": []},
+            func=_documento_leggi, risk="lettura", levels=FAMILY),
     ]

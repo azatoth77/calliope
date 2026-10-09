@@ -879,11 +879,68 @@ def prova_casi_pomeriggio():
     verifica("il messaggio della spinta dice di leggere l'errore", "cosa_fare" in FAILED_NUDGE)
 
 
+def prova_non_trovato():
+    """Caso vero della DGX del 09/10 (18:56, nomi di fantasia): lavoro_risultato con il titolo
+    di un foglio Excel appena creato da Calliope dava il risultato dell'ultimo lavoro dell'agente
+    (una ricerca del mattino), tre volte. Un riferimento che non è un lavoro non ripiega mai."""
+    sezione("lavoro_risultato: un riferimento che non è un lavoro")
+    agente = FakeOllama(modelli=("qwen3.6:35b",), caricati=("qwen3.6:35b",)).avvia()
+    try:
+        cfg, svc = servizio(agente, "nt")
+        lav = finito(svc)
+        ctx, _ = contesto(cfg, svc, detto="Raccontami cosa c'è in quel file.")
+        r = ta._risultato_lavoro(ctx, lavoro="Tabella Comparativa Idratazione Pizza",
+                                 modo="leggi")
+        testo = json.dumps(r, ensure_ascii=False)
+        verifica("titolo che non è un lavoro: errore, mai il risultato di un altro lavoro",
+                 r.get("ok") is False and "Solaris offre" not in testo
+                 and r.get("correggibile") is True and r.get("campo") == "lavoro"
+                 and "risultato_lavoro_non_trovato" in ctx.regole, testo[:300])
+        verifica("…con l'elenco dei lavori veri (per richiamarlo giusto)",
+                 any(x.get("lavoro") == lav.id for x in r.get("lavori") or []), testo[:300])
+        # Il riferimento è un documento preparato da Calliope: lo strumento giusto
+        ctx.documenti = SimpleNamespace(archive=SimpleNamespace(
+            trova=lambda owner, q: ({"titolo": "Tabella Comparativa Idratazione Pizza", "id": 3}
+                                    if "pizza" in q.lower() else None)))
+        r = ta._risultato_lavoro(ctx, lavoro="Excel pizza idratazione")
+        verifica("…ed è un documento di Calliope: dice documento_leggi",
+                 r.get("ok") is False and "documento_leggi" in (r.get("cosa_fare") or "")
+                 and r.get("documento") == "Tabella Comparativa Idratazione Pizza"
+                 and "risultato_era_documento" in ctx.regole, str(r))
+        r = ta._risultato_lavoro(ctx, lavoro="id_del_lavoro_excel_pizza")
+        verifica("un id inventato non è l'ultimo lavoro", r.get("ok") is False, str(r)[:200])
+        r = ta._risultato_lavoro(ctx, lavoro="L9")
+        verifica("un id che non c'è non è l'ultimo lavoro", r.get("ok") is False
+                 and "Solaris offre" not in json.dumps(r, ensure_ascii=False), str(r)[:200])
+        # Contrari: vuoto o «l'ultimo» → il più recente; le parole del titolo → quello
+        for quale in ("", "l'ultimo", "il risultato"):
+            ctx, _ = contesto(cfg, svc, detto="E il risultato?")
+            r = ta._risultato_lavoro(ctx, lavoro=quale)
+            verifica(f"contrario: lavoro «{quale}» → il più recente", r.get("ok")
+                     and r.get("lavoro") == lav.id, str(r)[:200])
+        r = ta._risultato_lavoro(ctx, lavoro="pannelli Solaris")
+        verifica("contrario: le parole del titolo → quel lavoro", r.get("ok")
+                 and r.get("lavoro") == lav.id, str(r)[:200])
+        # Un lavoro detto per nome ancora in corso: «non è ancora finito»
+        corso = svc.nuovo("ricerca", "Cerca i prezzi delle batterie di accumulo", "marta",
+                          "Marta", "amministra")
+        corso.stato = "in_corso"
+        with svc._lock:
+            svc.lavori.append(corso)
+        r = ta._risultato_lavoro(ctx, lavoro="prezzi batterie accumulo")
+        verifica("il lavoro detto è in corso: «non è ancora finito», non un altro",
+                 "non è ancora finito" in detta(r) and "Solaris" not in detta(r), detta(r))
+        svc.close()
+    finally:
+        agente.ferma()
+
+
 prova_consenso()
 prova_dichiarazioni()
 prova_proposta_altrui()
 prova_risultato()
 prova_casi_mattina()
 prova_casi_pomeriggio()
+prova_non_trovato()
 print(f"\n{errori} errori" if errori else "\nTutto a posto.")
 sys.exit(1 if errori else 0)

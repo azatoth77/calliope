@@ -1770,7 +1770,8 @@ class Config:
         kinds = ("lettere, tabelle, elenchi, anche di compiti o di cose da fare" if agenti
                  else "lettere, tabelle, elenchi")
         documents = (f"per creare un documento Word, Excel o PDF ({kinds}) "
-                     "documento_crea e per cambiarlo documento_modifica; " if documenti
+                     "documento_crea, per cambiarlo documento_modifica e per dire cosa c'è in "
+                     "uno già fatto documento_leggi; " if documenti
                      else "")
         # «Fammelo vedere sullo schermo» dopo un calcolo: senza l'esempio il modello chiedeva
         # «cosa vuoi che mostri?» (1 volta su 2, 02/10)

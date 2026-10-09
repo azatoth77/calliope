@@ -757,8 +757,14 @@ def _revisione(ctx, svs, sv) -> dict:
         if not rev["approvabile"]:
             return _final(f"{rev['frase']} {detto_coll} Così non si può approvare: dimmi cosa "
                           "correggere.", fatto="revisione detta")
-        frase = f"{rev['frase']} {detto_coll} Vuoi attivarla? Ti chiederò la frase di conferma."
+        # La domanda in fondo (09/10, caso vero della DGX delle 21:00: con «Vuoi attivarla? Ti
+        # chiederò la frase di conferma.» la risposta non finiva con «?», l'azione in sospeso
+        # non restava e «Sì, attivarla.» arrivava alla politica senza la proposta). Il titolo
+        # viene dallo stato dello sviluppo: un nome fidato per la risposta (`_fidati`)
+        frase = (f"{rev['frase']} {detto_coll} Ti chiederò la frase di conferma: vuoi "
+                 "attivarla?")
         return _final(frase, fatto="revisione detta: NON è ancora attiva",
+                      _fidati=[str(sv.titolo or "")],
                       in_sospeso={"domanda": "Vuoi attivarla?",
                                   "cosa": f"attivare «{sv.titolo}»", "tool": "sviluppo_passo",
                                   "argomenti": {"azione": "avanti"}})

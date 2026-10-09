@@ -160,3 +160,34 @@ una modifica salvata come «Titolo (2)» perché l'originale era aperto, «Apro 
 `cosa_fare` di `documento_modifica` dice che il risultato 1 è la versione nuova e che il numero
 tra parentesi del nome non è il risultato (caso vero della DGX: il modello chiamava
 `pc_apri_file(2)`). Il resto in [pc](pc.md) e [sicurezza-politica](sicurezza-politica.md).
+
+## Il foglio Excel «perso» e `documento_leggi` (09/10 sera, ramo `sera-politica-strumenti`)
+
+Caso vero della DGX (18:56–19:13, dal telefono): «mettere giù una tabella comparativa» →
+`documento_crea` → «Ho preparato il foglio Excel …, sul server, perché il satellite collegato
+non riceve documenti» (la scheda con «Scarica» era arrivata al telefono, ma la frase non lo
+diceva); «raccontami cosa c'è in quel file» → `lavoro_risultato` con il titolo del foglio, che
+ripiegava sull'ultimo lavoro dell'agente (una ricerca del mattino) tre volte; poi «non ho i
+permessi per accedere ai file del server» (falso) e `pc_cerca_file` sul PC non collegato.
+
+- **`documento_leggi`** (nuovo, lettura, familiari): rilegge un documento preparato da Calliope
+  per chi parla dall'archivio dei documenti (il JSON, ovunque sia finito il file): `riassunto`
+  e `leggi` danno il testo (Markdown, al più 4000 caratteri) al modello, che lo dice a voce;
+  `mostra` («aprilo», «fammelo vedere») lo manda sulla scheda dello schermo personale con
+  «Scarica». Si sceglie per parole del titolo (`Archive.trova`: le parole che dicono il tipo di
+  file non contano, «il foglio Excel della pizza»), vuoto per l'ultimo; un titolo che non c'è
+  è un errore correggibile con i titoli veri, **mai un altro documento**; solo i documenti di
+  chi parla. Il `cosa_fare` di `documento_crea` lo nomina. Con lui i tool sono **74**.
+- Rimasto **sul server** (`RemoteDelivery`, `remoto: False`) con uno schermo personale di chi
+  l'ha chiesto aperto (`Schermi.personale_collegato`): la frase dice «È sulla scheda del tuo
+  schermo: per averlo tocca «Scarica».» (`frase_scheda`, regola `documento_sulla_scheda`), e
+  così l'annuncio se finisce in secondo piano e la scheda arriva. Senza schermo, o consegnato
+  davvero al portatile, la frase di sempre.
+- `lavoro_risultato` con un riferimento che non è un lavoro non ripiega più: vedi
+  [agenti-estensioni](agenti-estensioni.md).
+
+Misura col modello locale (gemma4 e4b, Brain vero con la consegna «sul server» e un telefono
+finto, 3 giri): la frase della scheda con «Scarica» 3/3; «Puoi raccontarmi cosa c'è in quel
+file?» → `documento_leggi` **3/3** con il contenuto giusto detto in due frasi; il riassunto
+chiesto dopo, 3/3 dalla conversazione senza un altro tool. Prove: `prova_documenti`
+(`prova_rilettura`).
