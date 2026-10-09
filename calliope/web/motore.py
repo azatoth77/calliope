@@ -13,6 +13,11 @@ tempo. Il giudizio (`giudica`):
 - «degradata»: una prova con meno di `web_searxng_min_risultati` risultati, oppure risultati o
   motori sotto `web_searxng_soglia` dell'ultimo controllo buono;
 - «buona» altrimenti (diventa il nuovo «ultimo buono»).
+Motori in pausa (09/10 sera, `aggiorna_motori`): un motore che non risponde in
+`web_searxng_pausa_controlli` controlli di fila (mentre altri danno risultati) va in pausa
+(`searxng.sh pausa`: impostazioni senza di lui, container rifatto; in automatico solo a Calliope
+ferma), si riprova dopo `web_searxng_pausa_giorni` giorni; con meno di `web_searxng_min_motori`
+motori e qualcuno in pausa la ricerca è «degradata». Su Windows o senza docker niente pause.
 Il controllo automatico parte una volta ogni `web_searxng_controllo_ore`, solo con Calliope
 ferma da `web_searxng_inattivita_min` (nessun turno su nessuna corsia) e nessun lavoro
 dell'agente in coda o in corso; il manuale (cruscotto, terminale) subito.
@@ -184,6 +189,64 @@ def giudica(esito: dict, buono: dict | None, minimo: int = 3, soglia: float = 0.
         if rb and r < soglia * rb:
             return "degradata", f"{r} risultati in tutto contro {rb} dell'ultimo controllo buono"
     return "buona", ""
+
+
+# ─────────────────────────── motori in pausa (09/10 sera) ───────────────────────────
+# SearXNG aspetta fino al suo timeout i motori che non rispondono: Brave («too many requests»)
+# e Wikidata (timeout) costavano 3 s a ogni ricerca generale (controllo della DGX del 09/10:
+# «meteo Roma domani» 3006 ms, con il solo DuckDuckGo a dare risultati). Un motore che non
+# risponde in `web_searxng_pausa_controlli` controlli di fila va in pausa (searxng.sh pausa: le
+# impostazioni si rifanno senza di lui), e dopo `web_searxng_pausa_giorni` giorni si riprova.
+# Conta come fallito solo se nella stessa prova un altro motore ha dato risultati (altrimenti
+# è più probabile che manchi internet); un motore che dà risultati azzera il conto.
+
+def aggiorna_motori(motori: dict, esito: dict, ora: float, controlli: int, giorni: float
+                    ) -> tuple[dict, list[str], list[tuple[str, str, str]]]:
+    """(motori aggiornati, nomi in pausa, eventi [(«pausa»|«riprovo», nome, perché)]).
+    `motori`: {nome: {"falliti", "perche", "pausa_dal"}} dallo stato salvato."""
+    out = {str(k)[:40]: dict(v) for k, v in (motori or {}).items() if isinstance(v, dict)}
+    rispondono = {m for r in esito.get("prove") or () for m in r.get("motori") or ()}
+    falliti: dict[str, str] = {}
+    for r in esito.get("prove") or ():
+        if not r.get("ok") or not r.get("motori"):
+            continue
+        for g in r.get("giu") or ():
+            nome = str(g[0])[:40] if g else ""
+            if nome and nome not in rispondono:
+                falliti.setdefault(nome, str(g[1] if len(g) > 1 else "")[:60])
+    eventi = []
+    for nome in rispondono:
+        if nome in out:
+            out[nome].update(falliti=0, perche="")
+    for nome, perche in falliti.items():
+        m = out.setdefault(nome, {"falliti": 0, "perche": "", "pausa_dal": None})
+        m["falliti"] = int(m.get("falliti") or 0) + 1
+        m["perche"] = perche
+    for nome, m in sorted(out.items()):
+        if m.get("pausa_dal") is not None:
+            if controlli <= 0 or ora - float(m["pausa_dal"]) >= giorni * 86400:
+                # Si riprova: un altro controllo fallito la rimette subito in pausa
+                m["pausa_dal"] = None
+                m["falliti"] = max(0, controlli - 1)
+                eventi.append(("riprovo", nome, m.get("perche") or ""))
+        elif controlli > 0 and int(m.get("falliti") or 0) >= controlli:
+            m["pausa_dal"] = ora
+            eventi.append(("pausa", nome, m.get("perche") or ""))
+    # Si dimenticano i motori che rispondono e non sono in pausa (resta solo chi ha un conto)
+    out = {k: v for k, v in out.items() if v.get("pausa_dal") is not None
+           or int(v.get("falliti") or 0) > 0}
+    return out, sorted(k for k, v in out.items() if v.get("pausa_dal") is not None), eventi
+
+
+def frase_motori(eventi, motori: dict) -> str:
+    pausa = [f"{n} ({p})" if p else n for e, n, p in eventi if e == "pausa"]
+    riprovo = [n for e, n, _ in eventi if e == "riprovo"]
+    pezzi = []
+    if pausa:
+        pezzi.append("metto in pausa " + ", ".join(pausa))
+    if riprovo:
+        pezzi.append("riprovo " + ", ".join(riprovo))
+    return "; ".join(pezzi)
 
 
 def almeno_come(nuovo: dict, vecchio: dict, minimo: int = 3) -> tuple[bool, str]:
@@ -366,7 +429,10 @@ class MotoreRicerca:
         self.file = Path(str(getattr(cfg, "web_searxng_stato", "") or "motore/searxng.json"))
         self.minimo = int(getattr(cfg, "web_searxng_min_risultati", 3) or 1)
         self.soglia = float(getattr(cfg, "web_searxng_soglia", 0.6) or 0.0)
-        self._lock = threading.Lock()          # una operazione alla volta (questo processo)
+        self.pausa_controlli = int(getattr(cfg, "web_searxng_pausa_controlli", 2) or 0)
+        self.pausa_giorni = float(getattr(cfg, "web_searxng_pausa_giorni", 3.0) or 0.0)
+        self.min_motori = int(getattr(cfg, "web_searxng_min_motori", 3) or 0)
+        self._lock = threading.Lock()         # una operazione alla volta (questo processo)
         self._lock_file = threading.Lock()     # lettura e scrittura dello stato
         self._avvio = threading.Lock()         # due pulsanti insieme: ne parte uno
         self._cache: tuple = (None, {})
@@ -499,6 +565,9 @@ class MotoreRicerca:
                 "esito": st.get("esito") if isinstance(st.get("esito"), dict) else None,
                 "in_corso": dict(self.in_corso) if self.in_corso else None,
                 "storia": storia, "giorni": float(getattr(self.cfg, "web_searxng_giorni", 3.0)),
+                # I motori in pausa (09/10 sera), con il perché
+                "in_pausa": [{"motore": k, "perche": (st.get("motori") or {}).get(k, {})
+                              .get("perche") or ""} for k in st.get("in_pausa") or ()],
                 "comando": "calliope motore searxng controlla | aggiorna"}
 
     # ── condizioni ──
@@ -562,17 +631,32 @@ class MotoreRicerca:
             buono = None
         stato, motivo = giudica(esito, buono, self.minimo, self.soglia)
         prima = self.giudizio().get("stato")
+        # I motori che non rispondono di fila: in pausa (solo dove SearXNG si può rifare)
+        motori, in_pausa, eventi = aggiorna_motori(
+            st.get("motori") or {}, esito, self.orologio(),
+            self.pausa_controlli if self.aggiornabile else 0, self.pausa_giorni)
+        n = len(esito.get("motori") or ())
+        if in_pausa and n < self.min_motori:
+            if stato == "buona":
+                stato, motivo = "degradata", (f"danno risultati solo {n} motori, in pausa "
+                                              f"{', '.join(in_pausa)}")
+            elif stato == "degradata":
+                motivo += f"; in pausa {', '.join(in_pausa)}"
         campi = {"ultimo": esito, "giudizio": {"stato": stato, "motivo": motivo,
-                                                "quando": esito["quando"]}}
+                                                "quando": esito["quando"]},
+                 "motori": motori}
         if immagine:
             campi["immagine"] = immagine
         if stato == "buona":
             campi["buono"] = esito
         frase = (f"controllo: {_dici(stato)}" + (f", {motivo}" if motivo else "")
-                 + f" ({esito['risultati']} risultati, {len(esito['motori'])} motori)")
+                 + f" ({esito['risultati']} risultati, {n} motori)")
         self._aggiorna_stato(**campi, evento={"evento": "controllo", "esito": stato,
                                               "frase": frase, "chi": chi})
         self.log(f"[WEB] SearXNG: {frase}")
+        applicate = sorted(str(x) for x in (st.get("in_pausa") or ()))
+        if in_pausa != applicate:
+            self._applica_pause(in_pausa, applicate, frase_motori(eventi, motori), chi)
         if self.web is not None and stato == "giù":
             self.web.diagnosi = {"codice": "searxng_giu", "quando": time.time()}
         if stato == "degradata" and prima != "degradata" and chi == "automatico":
@@ -582,6 +666,32 @@ class MotoreRicerca:
                             if self.modo == "automatico" and self.aggiornabile else
                             "Dal cruscotto puoi provare «Aggiorna»."))
         return {"stato": stato, "motivo": motivo, "esito": esito}
+
+    def _applica_pause(self, in_pausa: list[str], applicate: list[str], perche: str, chi: str):
+        """Le impostazioni di SearXNG senza i motori in pausa e il container rifatto (pochi
+        secondi senza ricerca): in automatico solo con Calliope ferma, altrimenti alla prossima
+        volta. Se SearXNG non riparte, si torna alle pause di prima."""
+        if not self.aggiornabile:
+            return
+        if chi == "automatico":
+            libera, motivo = self.libera()
+            if not libera:
+                self.log(f"[WEB] SearXNG: {perche or 'pause cambiate'}: le applico più tardi "
+                         f"({motivo})")
+                return
+        self._fase("motori in pausa")
+        rc, out = self.script("pausa", *in_pausa, timeout=300)
+        if rc == 0:
+            frase = (perche or "motori in pausa cambiati") + (
+                f": in pausa {', '.join(in_pausa)}" if in_pausa else ": nessuno in pausa")
+            self._aggiorna_stato(in_pausa=in_pausa, evento={"evento": "motori", "frase": frase,
+                                                            "chi": chi})
+            self.log(f"[WEB] SearXNG: {frase}")
+            return
+        rc2, _ = self.script("pausa", *applicate, timeout=300)
+        self._registra("errore", f"pause dei motori non applicate ({out[-120:]})"
+                       + ("" if rc2 == 0 else "; e il ritorno alle pause di prima non è "
+                          "riuscito: calliope motore searxng avvia"), chi)
 
     # ── aggiornamento ──
     def novita(self) -> list[dict]:

@@ -61,9 +61,14 @@ def _web_cerca(ctx: ToolContext, domanda: str = "", tipo: str = "web") -> dict:
             return err
         # Le notizie senza tema (09/10, caso vero della DGX: «le ultime notizie» →
         # web_cerca({'tipo': 'notizie'}), fermato tre volte): le ultime notizie generali,
-        # dell'ultima settimana (servizio.tema_notizie e PERIODO_NOTIZIE)
-        domanda = "notizie"
-        note_rule(ctx, "notizie_generali")
+        # dell'ultima settimana (servizio.tema_notizie e PERIODO_NOTIZIE). Ma se la frase di chi
+        # parla dice il tema (09/10 sera, caso vero della DGX: «Le notizie di sport» →
+        # web_cerca({'tipo': 'notizie'}) → notizie generali), si cerca quello
+        # (servizio.tema_dalla_frase)
+        from ..web.servizio import tema_dalla_frase
+        tema = tema_dalla_frase(getattr(ctx, "user_text", "") or "")
+        domanda = tema or "notizie"
+        note_rule(ctx, "notizie_tema_frase" if tema else "notizie_generali")
     from .. import minori
     prof = minori.profilo(ctx)
     ss = minori.safesearch(prof) if prof is not None else 1
@@ -124,7 +129,8 @@ def _web_cerca(ctx: ToolContext, domanda: str = "", tipo: str = "web") -> dict:
 
 DESCRIZIONE = (
     "Cerca su internet ciò che cambia nel tempo o è di oggi: meteo e previsioni, "
-    "notizie, risultati sportivi, orari, prezzi, eventi, aperture. Per i fatti "
+    "notizie, risultati sportivi, orari, prezzi, eventi, aperture; e le guide pratiche "
+    "(come si fa), i consigli e i prodotti. Per i fatti "
     "stabili (storia, geografia, scienza, persone famose, opere, definizioni) usa "
     "invece biblioteca_cerca, se c'è. domanda: breve, come per un motore di ricerca, "
     "con luogo e giorno («meteo Milano domani», «risultato Inter ieri»), MAI con "

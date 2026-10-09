@@ -357,6 +357,25 @@ for q, atteso in [("notizie di sport", "sport"), ("Notizie sport", "sport"),
                   ("Newsweek", "Newsweek"), ("economia e finanza", "economia e finanza")]:
     verifica(f"tema delle notizie: «{q}» → «{atteso}»", tema_notizie(q) == atteso,
              tema_notizie(q))
+# Il tema dalla frase di chi parla, quando il modello non mette la domanda (09/10 sera, caso
+# vero della DGX alle 21:04: «Le notizie di sport» → web_cerca({'tipo': 'notizie'}))
+from calliope.web.servizio import tema_dalla_frase  # noqa: E402
+for f, atteso in [("Le notizie di sport.", "sport"), ("Sentimi le notizie di sport", "sport"),
+                  ("Che notizie ci sono da Torino?", "Torino"),
+                  ("Ci sono novità sul Trapanese?", "Trapanese"),
+                  ("Dimmi le notizie sportive di oggi", "sportive"),
+                  ("Mi dici le ultime notizie di economia per favore", "economia"),
+                  ("Le notizie di oggi sul Milan", "Milan"), ("Notizie su La Spezia", "La Spezia"),
+                  ("Le notizie di sport e poi spegni la luce", "sport"),
+                  # contrari: nessun tema → notizie generali
+                  ("Calliope. Le ultime notizie.", ""), ("notizie di oggi", ""),
+                  ("Le notizie di oggi?", ""), ("le notizie del giorno", ""),
+                  ("le notizie più recenti", ""), ("Leggimi le notizie, per favore", ""),
+                  ("Che si dice nello sport?", ""), ("", ""),
+                  ("Le notizie che mi interessano sono quelle che parlano di cose belle e "
+                   "lontane", "")]:
+    verifica(f"tema dalla frase: «{f}» → «{atteso}»", tema_dalla_frase(f) == atteso,
+             tema_dalla_frase(f))
 web.cerca("la quarta")
 r = web.cerca("ancora")
 verifica("tetto al minuto (4)", r.get("codice") == "troppe", str(r))
@@ -606,7 +625,8 @@ verifica("ricerca: al primo turno niente dati sulla ricerca",
          and "ricerca_recente" not in b.rules_fired())
 detto = "".join(b.stream_reply("Approfondiamo il primo", "familiare"))
 verifica("ricerca: il turno dopo ha l'ultima ricerca nei dati del turno",
-         "poco fa hai cercato con web_cerca («ultime notizie»)" in b.backend.visti[2]
+         "hai cercato (dalla più recente) «ultime notizie» con web_cerca tipo notizie"
+         in b.backend.visti[2]
          and "ricerca_recente" in b.rules_fired(), b.backend.visti[2][-300:])
 verifica("ricerca: «non ho altre informazioni» senza cercare non si dice, spinta e ricerca",
          "non ho altre" not in detto and "terapia intensiva" in detto
@@ -614,15 +634,27 @@ verifica("ricerca: «non ho altre informazioni» senza cercare non si dice, spin
          and [t["nome"] for t in b.last_tools] == ["web_cerca"], detto)
 verifica("ricerca: la frase trattenuta non è nella storia",
          not any(NON_HO in (m.get("content") or "") for m in b.history))
-# Due turni senza ricerca dopo l'ultima: i dati non ci sono più
-b.backend.copione = [[("text", "Prego.")], [("text", "Va bene.")], [("text", "Certo.")]]
+# Due turni senza ricerca dopo l'ultima: la spinta non c'è più, l'elenco delle ricerche resta
+# fino a RICERCA_TURNI_ELENCO turni (09/10 sera)
+b.backend.copione = [[("text", "Prego.")], [("text", "Va bene.")], [("text", "Certo.")],
+                     [("text", "Sì.")], [("text", "Bene.")], [("text", "Ecco.")],
+                     [("text", "Già.")]]
 "".join(b.stream_reply("Grazie", "familiare"))
 verifica("ricerca: un turno dopo ancora nei dati", "ricerca_recente" in b.rules_fired())
 "".join(b.stream_reply("Ok", "familiare"))
 verifica("ricerca: ancora al secondo turno", "ricerca_recente" in b.rules_fired())
 "".join(b.stream_reply("Parliamo d'altro", "familiare"))
-verifica("ricerca: al terzo turno non c'è più", "ricerca_recente" not in b.rules_fired()
-         and "poco fa hai cercato" not in b.backend.visti[-1])
+verifica("ricerca: al terzo turno l'elenco, senza la spinta",
+         "ricerca_recente" not in b.rules_fired() and "ricerca_elenco" in b.rules_fired()
+         and "«condizioni re di Norvegia» con web_cerca tipo notizie; «ultime notizie» con "
+             "web_cerca tipo notizie" in b.backend.visti[-1], b.backend.visti[-1][-400:])
+for frase in ("Uno", "Due", "Tre"):
+    "".join(b.stream_reply(frase, "familiare"))
+verifica("ricerca: al sesto turno dopo ancora l'elenco", "ricerca_elenco" in b.rules_fired())
+"".join(b.stream_reply("Quattro", "familiare"))
+verifica("ricerca: al settimo turno dopo non c'è più",
+         "ricerca_elenco" not in b.rules_fired() and "ricerca_recente" not in b.rules_fired()
+         and "hai cercato" not in b.backend.visti[-1])
 # Contrario: nessuna ricerca prima → niente dati e niente spinta, il «non ho altro» si dice
 b = brain([[("text", "Ti ho detto quello che so.")], [("text", NON_HO)]])
 "".join(b.stream_reply("Parliamo dei gatti", "familiare"))
@@ -660,7 +692,7 @@ b = brain([
 detto = "".join(b.stream_reply("Approfondiamo", "familiare"))
 cfg.llm_reti_spente = []
 verifica("ricerca: rete spenta, come prima", detto == NON_HO
-         and "poco fa hai cercato" not in b.backend.visti[-1])
+         and "hai cercato" not in b.backend.visti[-1])
 # ricerca_recente (la usa il ciclo per «approfondisci»): anche biblioteca_cerca
 b = brain([])
 b.history = [{"role": "user", "content": "Quanto è lungo il Tevere?"},
@@ -673,6 +705,84 @@ verifica("ricerca_recente: biblioteca_cerca", b.ricerca_recente()
 b.history += [{"role": "user", "content": "x"}, {"role": "assistant", "content": "y"},
               {"role": "user", "content": "z"}, {"role": "assistant", "content": "w"}]
 verifica("ricerca_recente: due turni dopo, niente", b.ricerca_recente() is None)
+
+# ── 6c. le ricerche della conversazione, ognuna con la sua fonte (09/10 sera) ──
+# Caso vero della DGX alle 21:06: notizie della tromba marina con web_cerca, poi timer, ora e la
+# Torre di Pisa con biblioteca_cerca; «Torniamo alla notizia del trapanese di prima. Dimmi di
+# più» → biblioteca_cerca (i dati del turno dicevano solo l'ultima ricerca)
+reg_bib = build_registry(web=cfg, casa=True, biblioteca=True)
+
+
+def turno(utente, risposta, chiamata=None):
+    out = [{"role": "user", "content": utente}]
+    if chiamata:
+        out += [{"role": "assistant", "content": "", "tool_calls": [chiamata]},
+                {"role": "tool", "name": chiamata["name"], "content": "{}"}]
+    return out + [{"role": "assistant", "content": risposta}]
+
+
+b = brain([[("text", "Secondo l'ANSA…")]])
+b.tools = reg_bib
+b.history = (turno("Le notizie di sport", "Secondo l'ANSA…",
+                   call(0, "web_cerca", {"tipo": "notizie"}))
+             + turno("Approfondiamo la prima", "Una tromba marina nel Trapanese…",
+                     call(1, "web_cerca", {"domanda": "tromba marina Trapanese",
+                                           "tipo": "notizie"}))
+             + turno("Metti un timer di 5 minuti", "Fatto.")
+             + turno("Che ore sono?", "Le 21:05.")
+             + turno("Dimmi qualcosa sulla torre di Pisa", "Secondo Wikipedia…",
+                     call(2, "biblioteca_cerca", {"domanda": "torre di Pisa"})))
+"".join(b.stream_reply("Torniamo alla notizia del trapanese di prima. Dimmi di più.",
+                       "familiare"))
+dati = b.backend.visti[-1]
+verifica("ricerche: l'elenco con la fonte di ognuna, dalla più recente",
+         "«torre di Pisa» con biblioteca_cerca; «tromba marina Trapanese» con web_cerca tipo "
+         "notizie; «ultime notizie» con web_cerca tipo notizie" in dati, dati[-700:])
+verifica("ricerche: il criterio biblioteca/internet con tutti e due i tool",
+         "biblioteca_cerca per i fatti da enciclopedia, web_cerca per guide pratiche" in dati)
+verifica("ricerche: la più recente nei due turni prima, la spinta resta",
+         "ricerca_recente" in b.rules_fired())
+lista = b.ricerche_conversazione()
+verifica("ricerche_conversazione: tre, con tipo e turni",
+         [(r["tool"], r["tipo"], r["turni"]) for r in lista]
+         == [("biblioteca_cerca", "", 1), ("web_cerca", "notizie", 4),
+             ("web_cerca", "notizie", 5)], str(lista))
+# Contrari: la stessa ricerca due volte una volta sola; senza biblioteca niente criterio;
+# un'altra ricerca uguale per testo ma con un'altra fonte resta
+b.history += turno("E ancora la torre?", "Sì.", call(3, "biblioteca_cerca",
+                                                     {"domanda": "Torre di  Pisa"}))
+verifica("ricerche: la stessa due volte, una sola",
+         [r["domanda"] for r in b.ricerche_conversazione()].count("Torre di Pisa")
+         + [r["domanda"] for r in b.ricerche_conversazione()].count("torre di Pisa") == 1,
+         str(b.ricerche_conversazione()))
+b = brain([[("text", "Ok.")]])
+b.history = turno("Notizie?", "Ecco.", call(0, "web_cerca", {"domanda": "Pisa",
+                                                             "tipo": "notizie"}))
+"".join(b.stream_reply("E poi?", "familiare"))
+verifica("ricerche: senza biblioteca il criterio non c'è",
+         "«Pisa» con web_cerca tipo notizie" in b.backend.visti[-1]
+         and "fatti da enciclopedia" not in b.backend.visti[-1])
+
+# Precedenze fra i dati del turno (analisi delle regole del 09/10, § 3.10): con un'estensione
+# nominata vale quella; la nota dell'archivio non dice più «di' che non lo sai» senza condizioni
+import calliope.brain as _brain  # noqa: E402
+b = brain([[("text", "Ok.")]])
+b.history = turno("Notizie?", "Ecco.", call(0, "web_cerca", {"domanda": "Pisa",
+                                                             "tipo": "notizie"}))
+b._estensioni_nominate = lambda testo: "Dati del turno: chi parla nomina l'estensione «meteo»."
+"".join(b.stream_reply("Usa l'estensione meteo per Pisa", "familiare"))
+verifica("precedenza: con un'estensione nominata la riga delle ricerche le lascia il posto",
+         _brain.RICERCA_EST.strip() in b.backend.visti[-1]
+         and "ricerca_recente" in b.rules_fired(), b.backend.visti[-1][-400:])
+b = brain([[("text", "Ok.")]])
+b.history = turno("Notizie?", "Ecco.", call(0, "web_cerca", {"domanda": "Pisa",
+                                                             "tipo": "notizie"}))
+"".join(b.stream_reply("E poi?", "familiare"))
+verifica("precedenza, contrario: senza estensione nominata niente frase in più",
+         _brain.RICERCA_EST.strip() not in b.backend.visti[-1])
+verifica("archivio con le ricerche: «non lo so» solo dopo la ricerca di prima",
+         "solo se nemmeno lì c'entra, di' che non lo sai" in _brain.ARCHIVIO_NOTA_RICERCHE
+         and "richiama il tool di quella ricerca" in _brain.ARCHIVIO_NOTA_RICERCHE)
 
 # ─────────────────────────── 7. capacità e caricamento ───────────────────────────
 c0 = Config()

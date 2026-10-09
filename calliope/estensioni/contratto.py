@@ -228,6 +228,9 @@ def testo(cfg=None, tipo: str = "estensione", linguaggi=("python",)) -> str:
                          f"{classe_detta(az).capitalize()}.")
         righe += ["- Ogni metodo può alzare ErroreCalliope (permesso negato, «no» della "
                   "persona, quota): gestiscila e restituisci un da_dire che lo spiega.",
+                  "- Se non trovi quello che ti è stato chiesto (una città, un nome, un "
+                  "file), restituisci anche «trovato»: false accanto al da_dire che lo dice: "
+                  "così Calliope può chiedere se intendeva un nome simile.",
                   "- Non te li dai da sola: flussi in «invia», rete.post, scrive.casa. Mettili "
                   "nel manifesto solo dopo chiedi_permesso (con lo scope): lo chiedo io alla "
                   "persona.",

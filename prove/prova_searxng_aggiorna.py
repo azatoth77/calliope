@@ -412,6 +412,137 @@ def prova_automatico():
              not any("Ho aggiornato" in x for _, x in avvisi), avvisi)
 
 
+def prova_pause():
+    """Motori in pausa (09/10 sera): il conto dei controlli falliti di fila, la pausa, la ripresa
+    dopo i giorni, «degradata» con pochi motori, l'applicazione con lo script e i contrari."""
+    ora = 1_800_000_000.0
+    giu_brave = {"ok": True, "motori": ["duckduckgo"], "giu": [["brave", "too many requests"]]}
+    esito = {"prove": [giu_brave, {"ok": True, "motori": ["ansa"], "giu": []}]}
+    m, p, ev = M.aggiorna_motori({}, esito, ora, 2, 3.0)
+    verifica("pause: un controllo fallito non basta", p == [] and m["brave"]["falliti"] == 1
+             and not ev, m)
+    m, p, ev = M.aggiorna_motori(m, esito, ora + 86400, 2, 3.0)
+    verifica("pause: due di fila → in pausa con il perché", p == ["brave"]
+             and ev == [("pausa", "brave", "too many requests")], (m, ev))
+    verifica("pause: la frase per il registro",
+             M.frase_motori(ev, m) == "metto in pausa brave (too many requests)")
+    # Tutti giù nella stessa prova (manca internet?): non conta
+    tutti = {"prove": [{"ok": True, "motori": [], "giu": [["duckduckgo", "timeout"],
+                                                          ["qwant", "CAPTCHA"]]}]}
+    m2, p2, _ = M.aggiorna_motori({}, tutti, ora, 1, 3.0)
+    verifica("pause, contrario: nessun motore risponde nella prova → nessun conto", not m2 and
+             not p2, m2)
+    # Un motore che risponde azzera il conto
+    m3, _, _ = M.aggiorna_motori({"qwant": {"falliti": 1, "perche": "CAPTCHA"}},
+                                 {"prove": [{"ok": True, "motori": ["qwant", "duckduckgo"],
+                                             "giu": []}]}, ora, 2, 3.0)
+    verifica("pause, contrario: risponde di nuovo → conto azzerato", "qwant" not in m3, m3)
+    # In giu ma con risultati in un'altra prova: non fallito
+    m4, _, _ = M.aggiorna_motori({}, {"prove": [giu_brave, {"ok": True, "motori": ["brave"],
+                                                             "giu": []}]}, ora, 1, 3.0)
+    verifica("pause, contrario: giù in una prova, risultati in un'altra → non conta",
+             "brave" not in m4, m4)
+    # Dopo i giorni si riprova; un altro fallimento la rimette subito in pausa
+    m5, p5, ev5 = M.aggiorna_motori(m, {"prove": [{"ok": True, "motori": ["duckduckgo"],
+                                                   "giu": []}]}, ora + 5 * 86400, 2, 3.0)
+    verifica("pause: dopo i giorni si riprova", p5 == [] and ev5 == [("riprovo", "brave",
+                                                                      "too many requests")], ev5)
+    m6, p6, _ = M.aggiorna_motori(m5, esito, ora + 6 * 86400, 2, 3.0)
+    verifica("pause: e se non risponde ancora, di nuovo in pausa al primo controllo",
+             p6 == ["brave"], m6)
+    m7, p7, ev7 = M.aggiorna_motori(m, esito, ora + 86400, 0, 3.0)
+    verifica("pause, contrario: 0 controlli = mai in pausa (e le pause tolte)", p7 == [] and
+             ev7 and ev7[0][0] == "riprovo", ev7)
+
+    # Con il motore: il controllo che fallisce due volte mette in pausa (lo script), lo stato
+    h = HttpFinto()
+    h.profili["http://127.0.0.1:8004"] = (8, ("duckduckgo", "startpage", "qwant", "ansa"),
+                                          (("brave", "too many requests"),
+                                           ("wikidata", "timeout")))
+    sc = ScriptFinto()
+    orologio = [ora]
+    mr = motore("pause", h, sc, [], orologio=lambda: orologio[0])
+    mr.controlla("terminale")
+    verifica("motore: al primo controllo nessuna pausa", not any(c[0] == "pausa"
+                                                                 for c in sc.chiamate))
+    orologio[0] += 86400
+    mr.controlla("terminale")
+    verifica("motore: al secondo, searxng.sh pausa brave wikidata",
+             ("pausa", "brave", "wikidata") in sc.chiamate, sc.chiamate)
+    st = mr.leggi()
+    v = mr.vista()
+    verifica("motore: in pausa nello stato, nella storia e nella vista",
+             st.get("in_pausa") == ["brave", "wikidata"]
+             and any(e.get("evento") == "motori" and "metto in pausa brave" in e.get("frase", "")
+                     for e in st.get("storia") or [])
+             and [x["motore"] for x in v["in_pausa"]] == ["brave", "wikidata"]
+             and v["in_pausa"][0]["perche"] == "too many requests", (st.get("in_pausa"), v))
+    n = len(sc.chiamate)
+    mr.controlla("terminale")
+    verifica("motore: pause invariate → lo script non si richiama",
+             not any(c[0] == "pausa" for c in sc.chiamate[n:]), sc.chiamate[n:])
+    # Pochi motori con qualcuno in pausa: degradata
+    h.profili["http://127.0.0.1:8004"] = (8, ("duckduckgo",), ())
+    r = mr.controlla("terminale")
+    verifica("motore: pochi motori e qualcuno in pausa → degradata con il perché",
+             r["stato"] == "degradata" and "in pausa brave, wikidata" in r["motivo"], r["motivo"])
+    # Dopo i giorni si riprovano: lo script senza di loro
+    orologio[0] += 4 * 86400
+    h.profili["http://127.0.0.1:8004"] = (8, ("duckduckgo", "startpage", "qwant", "ansa"), ())
+    n = len(sc.chiamate)
+    r = mr.controlla("terminale")
+    verifica("motore: dopo i giorni si riprovano (pausa senza motori), buona",
+             ("pausa",) in sc.chiamate[n:] and mr.leggi().get("in_pausa") == []
+             and r["stato"] == "buona", (sc.chiamate[n:], r["stato"]))
+    # In automatico con Calliope ferma la pausa si applica; in uso no (la prossima volta)
+    profilo = (8, ("duckduckgo", "startpage", "qwant"), (("brave", "too many requests"),))
+    h2 = HttpFinto()
+    h2.profili["http://127.0.0.1:8004"] = profilo
+    sc2 = ScriptFinto()
+    m2 = motore("pause-auto", h2, sc2, [], inattivita=lambda: 7200.0, lavori=lambda: 0,
+                web_searxng_pausa_controlli=1)
+    m2.controlla("automatico")
+    verifica("automatico, ferma: pausa applicata", ("pausa", "brave") in sc2.chiamate,
+             sc2.chiamate)
+    h3 = HttpFinto()
+    h3.profili["http://127.0.0.1:8004"] = profilo
+    sc3 = ScriptFinto()
+    m3 = motore("pause-occupata", h3, sc3, [], inattivita=lambda: 10.0, lavori=lambda: 0,
+                web_searxng_pausa_controlli=1)
+    m3.controlla("automatico")
+    verifica("automatico, in uso: niente riavvio, la pausa resta da applicare",
+             not any(c[0] == "pausa" for c in sc3.chiamate)
+             and not m3.leggi().get("in_pausa"), sc3.chiamate)
+
+    # Lo script non riesce: si torna alle pause di prima, errore nella storia
+    class ScriptRotto(ScriptFinto):
+        def __call__(self, *args, timeout=0):
+            if args[0] == "pausa" and args[1:]:
+                self.chiamate.append(args)
+                return 1, "non risponde"
+            return super().__call__(*args, timeout=timeout)
+    h4 = HttpFinto()
+    h4.profili["http://127.0.0.1:8004"] = profilo
+    sc4 = ScriptRotto()
+    m4 = motore("pause-rotto", h4, sc4, [], web_searxng_pausa_controlli=1)
+    m4.controlla("terminale")
+    verifica("script che non riesce: ritorno alle pause di prima ed errore nella storia",
+             sc4.chiamate[-1] == ("pausa",) and not m4.leggi().get("in_pausa")
+             and any(e.get("evento") == "errore" for e in m4.leggi().get("storia") or []),
+             sc4.chiamate)
+    # Dove SearXNG non si rifà (Windows, altra macchina): niente pause
+    h5 = HttpFinto()
+    h5.profili["http://127.0.0.1:8004"] = profilo
+    sc5 = ScriptFinto()
+    m5 = M.MotoreRicerca(cfg_di("pause-win", web_searxng_pausa_controlli=1), http=h5,
+                         script=sc5, log=lambda x: None, controllabile=True, aggiornabile=False,
+                         attendi=lambda s: None)
+    m5.controlla("terminale")
+    verifica("non aggiornabile: niente pause né script",
+             not any(c[0] == "pausa" for c in sc5.chiamate)
+             and not m5.leggi().get("in_pausa"), sc5.chiamate)
+
+
 def prova_blocchi():
     h = HttpFinto()
     h.profili["http://127.0.0.1:8004"] = BUONO
@@ -746,6 +877,40 @@ def prova_script():
     rc, out = corri("dimentica")
     rc, out = corri("immagine")
     verifica("script: «dimentica» torna alla fissata", out == fissata, out)
+    # Motori in pausa e tempi massimi (09/10 sera)
+    comandi()
+    rc, out = corri("pausa", "brave", "wikidata")
+    impost = (cartella / "settings.yml").read_text(encoding="utf-8")
+    keep = impost.split("keep_only:", 1)[1].split("general:", 1)[0]
+    cmd = comandi()
+    verifica("script: «pausa» scrive i motori e rifà il container",
+             rc == 0 and (cartella / "in-pausa").read_text(encoding="utf-8").split()
+             == ["brave", "wikidata"] and "In pausa: brave, wikidata" in out
+             and any(c.startswith("run ") and "--name calliope-searxng " in c for c in cmd),
+             (rc, out, cmd))
+    verifica("script: le impostazioni senza i motori in pausa",
+             '"brave"' not in keep and '"wikidata"' not in keep and '"duckduckgo"' in keep
+             and '"ansa"' in keep, keep)
+    verifica("script: timeout 2 s ai generali, 3 s alle notizie, ANSA accesa",
+             "request_timeout: 2.0" in impost
+             and '- name: "ansa"\n    timeout: 3.0\n    disabled: false' in impost
+             and '- name: "bing news"\n    timeout: 3.0' in impost,
+             impost.split("outgoing:", 1)[1])
+    rc, out = corri("pausa", "ansa")
+    impost = (cartella / "settings.yml").read_text(encoding="utf-8")
+    verifica("script: un motore delle notizie in pausa sparisce anche dalle sue impostazioni",
+             '"ansa"' not in impost.split("general:", 1)[0] and 'name: "ansa"' not in impost,
+             impost)
+    rc, out = corri("pausa", "brave; rm -rf /")
+    verifica("script: «pausa» rifiuta un motore sconosciuto, il file resta",
+             rc == 2 and (cartella / "in-pausa").read_text(encoding="utf-8").split() == ["ansa"],
+             (rc, out))
+    rc, out = corri("pausa")
+    impost = (cartella / "settings.yml").read_text(encoding="utf-8")
+    verifica("script: «pausa» senza motori toglie tutte le pause",
+             rc == 0 and not (cartella / "in-pausa").read_text(encoding="utf-8").strip()
+             and '"brave"' in impost and 'name: "ansa"' in impost, (rc, out))
+    comandi()
 
 
 def main() -> int:
@@ -758,6 +923,7 @@ def main() -> int:
         prova_registro()
         prova_aggiornamento()
         prova_automatico()
+        prova_pause()
         prova_blocchi()
         prova_capacita()
         prova_ambiente()
