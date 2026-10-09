@@ -27,6 +27,7 @@ from pathlib import Path
 
 import numpy as np
 
+from . import cancelli as cancelli_mod
 from . import contesto, corsie, minori
 from . import pause as pause_mod
 from . import guardiano as guardia
@@ -84,6 +85,10 @@ def domanda_guardia(text: str, files, massimo: int = 3000) -> str:
 # ripete al turno dopo della stessa persona entro questi secondi
 UNIONE_PEZZI_S = 30.0
 RIPETI_PROTEZIONE_S = 300.0
+_LOCK_CANCELLI = threading.Lock()
+# Un avviso «sicurezza» rinviato perché il minore ha parlato qui da poco (09/10): la frase a
+# voce non dice né il nome né l'argomento
+AVVISO_PRIVATO = "Ho un avviso importante per te: lo trovi sul tuo schermo personale."
 
 
 # ─────────────────────────────── SERVIZI ───────────────────────────────
@@ -112,6 +117,7 @@ class Servizi:
     guardiano: object = None
     foto_attesa: object = None           # immagini.InAttesa (foto e file senza domanda)
     cassetto: object = None              # cassetto.Cassetto: i file per persona (08/10)
+    cancelli: object = None              # cancelli.Cancelli: i segnali da verificare (09/10)
     cortesia: object = None
     turns: object = None                 # TurnLog
     attiva_minori: object = None         # () → True se ha registrato i tool dei minori
@@ -167,6 +173,8 @@ class Turno:
     first: bool = True
     said: list = dataclasses.field(default_factory=list)
     protezione: str | None = None        # la frase di protezione detta in questo turno
+    testo_guardia: str = ""              # la frase giudicata dal guardiano (solo in memoria)
+    pericolo: dict | None = None         # il giro a due cancelli (09/10): livello e motivo
 
 
 def solo_nome_acustico(text: str, voiced_s: float, cfg) -> bool:
@@ -234,6 +242,11 @@ class Ciclo:
         # L'ultima persona riconosciuta dalla voce (sopra soglia) su questo satellite e quando
         # (monotonic): per le frasi cortissime fuori dalla conversazione (08/10, continuità)
         self._voce_recente: tuple[str, float] | None = None
+        # I minori sentiti su questa corsia (id → monotonic, 09/10): un avviso «sicurezza» non
+        # si dice a voce al tutore dove il minore ha parlato da poco (minori_avviso_privato_s);
+        # gli avvisi rinviati di cui si è già detta la frase neutra
+        self._minori_sentiti: dict[str, float] = {}
+        self._avvisi_accennati: set = set()
         self._collega_voce()
         if self.listener is not None and not getattr(self.listener, "remoto", False)                 and hasattr(self.listener, "ripresa_muto"):
             # In locale le casse sono qui: la voce di Calliope e i suoni non sono una ripresa
@@ -412,30 +425,164 @@ class Ciclo:
             return True
         return False
 
-    def proteggi(self, prof, categorie, rec_):
+    def proteggi(self, prof, categorie, rec_, motivo: str = "acuto", voce_incerta=False,
+                 categorie_prima=None):
         """Un minore in pericolo (05/10, calliope/guardiano.py): avviso discreto e urgente ai
-        tutori, solo l'argomento; nel registro dei turni niente frasi del minore."""
+        tutori, solo l'argomento; nel registro dei turni niente frasi del minore. Dal 09/10
+        (calliope/cancelli.py) l'avviso dice il livello («confermato»), perché (`motivo`:
+        acuto, secondo_cancello, secondo_segnale…) e se la voce non era sicura."""
         rec_["testo"] = rec_["richiesta"] = None
-        rec_["guardiano"] = {"esito": "pericolo", "categorie": list(categorie or ())}
+        g = rec_.get("guardiano") if isinstance(rec_.get("guardiano"), dict) else {}
+        g.update(esito="pericolo", categorie=list(categorie or ()))
+        rec_["guardiano"] = g
         self.rule("guardiano_pericolo")
-        av = minori.avvisi()
-        if prof is None or av is None:
+        if prof is None:
             return
-        argomento = next((guardia.ARGOMENTI[c] for c in (categorie or ())
-                          if c in guardia.ARGOMENTI), "ha detto una cosa che mi preoccupa")
+        self.rule("pericolo_" + motivo)
+        if voce_incerta:
+            self.rule("pericolo_voce_incerta")
+        # Lo stesso episodio non si avvisa due volte (prova e2e del 06/10: la frase di Sofia
+        # spezzata in due turni mandava due avvisi uguali); un argomento diverso sì
+        n = self._cancelli().avvisa(prof, categorie, cancelli_mod.CONFERMATO, motivo,
+                                    bool(voce_incerta), urgente=True,
+                                    categorie_prima=categorie_prima, registry=self.s.registry)
+        if n == -1:
+            self.rule("avviso_pericolo_ripetuto")
+
+    def _cancelli(self):
+        """I segnali da verificare, condivisi dalle corsie (creati alla prima occorrenza)."""
+        c = getattr(self.s, "cancelli", None)
+        if c is None:
+            with _LOCK_CANCELLI:
+                c = getattr(self.s, "cancelli", None)
+                if c is None:
+                    turns = getattr(self.s, "turns", None)
+                    c = self.s.cancelli = cancelli_mod.Cancelli(
+                        self.s.cfg, log=lambda m: print(m, flush=True),
+                        registra=getattr(turns, "write", None))
+        return c
+
+    def _voce_incerta(self) -> bool:
+        """Chi parla non è stato riconosciuto con sicurezza dalla voce: zona grigia, frase
+        breve, continuità o profilo più protetto (09/10, giro a due cancelli)."""
+        return getattr(self.speaker_ctx, "identified_by", None) in ("breve", "conversazione")
+
+    def _decidi_pericolo(self, t, g) -> str:
+        """«Pericolo» sulla domanda di un minore (filtra, al_pericolo): la frase da dire.
+        Acuto (o giudizio guasto, o secondo segnale ravvicinato): la protezione, e l'avviso in
+        `_registra_controlli`. Da verificare: il primo cancello, una frase che rassicura e
+        chiede (calliope/cancelli.py). Regole `pericolo_*`."""
+        prof = t.prof_turno
+        info = {"livello": cancelli_mod.CONFERMATO, "voce_incerta": self._voce_incerta()}
+        t.pericolo = info
+        c = self._cancelli()
+        if not c.attivo or prof is None:
+            info["motivo"] = "verifica_spenta" if prof is not None else "acuto"
+            return guardia.PROTEZIONE
+        prima = c.aperto_per(prof.id, self.corsia.chiave) or c.recente(prof.id)
+        if prima is not None:
+            if prima.aperto:
+                c.chiudi(prima, "conferma")
+            info.update(motivo="secondo_segnale", categorie_prima=prima.categorie,
+                        voce_incerta=info["voce_incerta"] and prima.voce_incerta)
+            return guardia.PROTEZIONE
+        fn = getattr(self.s.guardiano, "gravita", None)
+        gr = None
+        if callable(fn):
+            try:
+                gr = fn(t.testo_guardia or t.text)
+            except Exception:  # noqa: BLE001 — nel dubbio, acuto
+                gr = None
+        if gr is not None:
+            info.update(gravita=gr.esito, gravita_ms=gr.ms)
+        if gr is None or gr.esito != guardia.DUBBIO:
+            info["motivo"] = ("acuto" if gr is not None and gr.esito == guardia.ACUTO
+                              else "gravita_guasta")
+            return guardia.PROTEZIONE
+        c.apri(prof, t.testo_guardia or t.text, g.categorie, info["voce_incerta"],
+               self.corsia.chiave)
+        info.update(livello=cancelli_mod.DA_VERIFICARE, motivo="dubbio", cancello=1)
+        return cancelli_mod.rassicura(prof)
+
+    def _da_verificare(self, t, categorie, rec_):
+        """Cancello 1 (09/10): il segnale resta aperto, nessun avviso; nel registro dei turni
+        niente frasi del minore, come per un pericolo."""
+        rec_["testo"] = rec_["richiesta"] = None
+        g = rec_.get("guardiano") if isinstance(rec_.get("guardiano"), dict) else {}
+        g.update(esito="pericolo", categorie=list(categorie or ()))
+        rec_["guardiano"] = g
+        self.rule("guardiano_pericolo")
+        self.rule("pericolo_da_verificare")
+        if (t.pericolo or {}).get("voce_incerta"):
+            self.rule("pericolo_voce_incerta")
+        print(f"   [MINORI] segnale poco chiaro per {t.speaker_name}: rassicuro e chiedo "
+              f"(da verificare)", flush=True)
+
+    def _secondo_cancello(self, t):
+        """Cancello 2 (09/10, calliope/cancelli.py): c'è un segnale da verificare per chi parla
+        (lo stesso minore, o chiunque su questo satellite se la voce non era sicura). La frase
+        va al rilevatore con il primo segnale: conferma (o giudizio guasto) → protezione e
+        avviso urgente; smentita → si risponde come sempre, il segnale resta nella finestra.
+        Regole `pericolo_confermato`, `pericolo_smentito`."""
+        s = self.s
+        c = getattr(s, "cancelli", None)
+        if c is None or not t.text:
+            return None
+        prof = s.registry.get(t.speaker_name) if t.speaker_name else None
+        pid = getattr(prof, "id", None) if prof is not None and minori.e_minore(prof) else None
+        seg = c.aperto_per(pid, self.corsia.chiave)
+        if seg is None:
+            return None
+        fn = getattr(s.guardiano, "verifica", None)
+        v = None
+        if callable(fn):
+            try:
+                v = fn(seg.testo, t.text)
+            except Exception:  # noqa: BLE001 — nel dubbio, conferma
+                v = None
+        smentita = v is not None and v.esito == guardia.SMENTITA
+        self.rec["pericolo"] = {"livello": cancelli_mod.DA_VERIFICARE, "cancello": 2,
+                                "esito": ("smentita" if smentita else "conferma" if v is not None
+                                          and v.esito == guardia.CONFERMA else "guasto"),
+                                "verifica_ms": getattr(v, "ms", None),
+                                "voce_incerta": seg.voce_incerta,
+                                "stessa_persona": bool(pid and pid == seg.persona_id)}
+        if smentita:
+            c.chiudi(seg, "smentita")
+            self.rule("pericolo_smentito")
+            print(f"   [MINORI] segnale per {seg.nome} smentito dalla risposta: nessun avviso",
+                  flush=True)
+            return None
+        c.chiudi(seg, "conferma")
+        self.rule("pericolo_confermato")
+        self.rec["pericolo"]["livello"] = cancelli_mod.CONFERMATO
+        print(f"   [MINORI] segnale per {seg.nome} confermato dalla risposta: protezione e "
+              f"avviso", flush=True)
+        minore = s.registry.by_id(seg.persona_id) if hasattr(s.registry, "by_id") else None
+        if minore is None:
+            minore = next((u for u in getattr(s.registry, "users", {}).values()
+                           if getattr(u, "id", None) == seg.persona_id), None)
+        self.rec["esito"] = "protezione"
+        self.proteggi(minore, seg.categorie, self.rec, motivo="secondo_cancello",
+                      voce_incerta=seg.voce_incerta)
+        speaker = self.speaker
+        speaker.start_turn()
+        self.protezione_in_corso = True
         try:
-            # Lo stesso episodio non si avvisa due volte (prova e2e del 06/10: la frase di
-            # Sofia spezzata in due turni mandava due avvisi uguali); un argomento diverso sì
-            n = av.manda(prof, "sicurezza", f"{prof.name} {argomento}. Gli ho detto di "
-                                            f"parlarne con un adulto e gli ho dato il numero del "
-                                            f"Telefono Azzurro. Parlagli appena puoi, con calma.",
-                         urgente=True,
-                         non_ripetere_s=float(getattr(self.s.cfg, "minori_avviso_ripetuto_s",
-                                                      0) or 0))
-            if n == -1:
-                self.rule("avviso_pericolo_ripetuto")
-        except Exception as e:  # noqa: BLE001
-            print(f"   [MINORI] avviso non mandato: {type(e).__name__}: {e}", flush=True)
+            speaker.say(guardia.PROTEZIONE)
+            speaker.wait()
+        finally:
+            self.protezione_in_corso = False
+        self.rec["risposta"] = guardia.PROTEZIONE
+        scambio = getattr(self.brain, "record_courtesy", None)
+        if callable(scambio):
+            try:
+                # Nella storia lo scambio chiuso: il modello sa che ha già dato la protezione
+                scambio(t.text, guardia.PROTEZIONE)
+            except Exception:  # noqa: BLE001
+                pass
+        self.awake_until = time.monotonic() + s.cfg.followup_s
+        return _FINE
 
     def avvisi_ai_tutori(self, nome):
         """Gli avvisi per chi ha appena parlato, se è un tutore riconosciuto dalla voce: con il
@@ -463,12 +610,26 @@ class Ciclo:
         prof = registry.get(nome) if nome else None
         if prof is None or self.speaker_ctx.identified_by != "voce":
             return
-        lista = av.da_dire(prof.id)
+        privato = float(getattr(cfg, "minori_avviso_privato_s", 0.0) or 0.0)
+        lista = av.da_dire(prof.id, segna=False)
+        ora = time.monotonic()
+        rinviati = [a for a in lista if privato > 0 and a.get("tipo") == "sicurezza"
+                    and ora - self._minori_sentiti.get(a.get("minore"), -1e18) < privato]
+        lista = [a for a in lista if a not in rinviati]
         if lista:
+            av.segna([a["id"] for a in lista])
+        nuovi = [a for a in rinviati if a["id"] not in self._avvisi_accennati]
+        if rinviati:
+            # Il minore ha parlato qui da poco (09/10): potrebbe essere lì vicino. Una frase
+            # neutra una volta; il testo è sullo schermo personale, a voce più tardi
+            self.rule("avviso_sicurezza_rinviato")
+            self._avvisi_accennati.update(a["id"] for a in rinviati)
+        if lista or nuovi:
             self.rule("avviso_tutore")
             speaker.start_turn()
             speaker.chime()
-            speaker.say(av.frase(lista))
+            speaker.say(" ".join(x for x in (av.frase(lista) if lista else "",
+                                             AVVISO_PRIVATO if nuovi else "") if x))
             speaker.wait()
         self.richieste_al_tutore(prof)
 
@@ -614,7 +775,8 @@ class Ciclo:
                      self._trascrivi, self._chi_parla, self._conversazione_del_turno,
                      self._arruolamento, self._nome_reale, self._richiamo, self._primo_avvio,
                      self._mostra_richiesta, self._uscite, self._chiusure,
-                     self._fuori_orario, self._contesto_e_allegati):
+                     self._secondo_cancello, self._fuori_orario,
+                     self._contesto_e_allegati):
             esito = fase(t)
             if esito is not None:
                 return None if esito is _FINE else esito
@@ -1176,9 +1338,17 @@ class Ciclo:
             self._chi_scrive(t)
         if t.emb_job is not None:
             self._riconosci_voce(t)
+        self._segna_minore(t.speaker_name)
         self.rec.update(livello=speaker_ctx.current_level, testo=t.text,
                         stt_s=round(time.perf_counter() - t.t0, 2))
         return None
+
+    def _segna_minore(self, nome):
+        """Un minore ha parlato (o scritto) su questa corsia: per un po' gli avvisi «sicurezza»
+        non si dicono a voce qui (`avvisi_ai_tutori`)."""
+        prof = self.s.registry.get(nome) if nome else None
+        if prof is not None and getattr(prof, "id", None) and minori.e_minore(prof):
+            self._minori_sentiti[prof.id] = time.monotonic()
 
     def _chi_scrive(self, t):
         """Scritto da uno schermo personale: vale come il suo proprietario, con identified_by
@@ -1869,7 +2039,8 @@ class Ciclo:
         self.rule("minore_fuori_orario")
         g = s.guardiano.giudica_domanda(t.text) if s.guardiano is not None else None
         if g is not None and g.esito == guardia.PERICOLO:
-            self.proteggi(t.prof_turno, g.categorie, self.rec)
+            self.proteggi(t.prof_turno, g.categorie, self.rec, motivo="fuori_orario",
+                          voce_incerta=self._voce_incerta())
             self.speaker.say(guardia.PROTEZIONE)
         else:
             self.speaker.say(minori.frase_fuori_orario(t.prof_turno, orario))
@@ -2092,11 +2263,14 @@ class Ciclo:
             if t.usa_guardia:
                 # Il guardiano (05/10): domanda e ogni frase prima della voce. Con un file
                 # allegato da un minore giudica anche il testo estratto (dato, 05/10)
+                t.testo_guardia = self._testo_per_guardia(t)
                 frasi = guardia.filtra(s.guardiano, frasi,
-                                       domanda_guardia(self._testo_per_guardia(t), t.files),
+                                       domanda_guardia(t.testo_guardia, t.files),
                                        t.minore_turno, t.esito_g,
                                        None if t.minore_turno else guardia.MODERATO,
-                                       al_giudizio=brain.rilascia_schede if trattieni else None)
+                                       al_giudizio=brain.rilascia_schede if trattieni else None,
+                                       al_pericolo=((lambda g: self._decidi_pericolo(t, g))
+                                                    if t.minore_turno else None))
             for sentence in frasi:
                 if speaker.interrupted:
                     break          # chiude lo stream dell'LLM: Ollama smette di generare
@@ -2285,8 +2459,18 @@ class Ciclo:
             guardia.correggi_storia(brain, esito_g.detto)
             print(f"\n   [GUARDIANO] risposta fermata: {esito_g.fermata} "
                   f"{list(esito_g.categorie)}", flush=True)
-            if esito_g.fermata == guardia.PERICOLO:
-                self.proteggi(t.prof_turno if t.minore_turno else None, esito_g.categorie, rec)
+            p = t.pericolo or {}
+            if p:
+                rec["pericolo"] = {k: (list(v) if isinstance(v, tuple) else v)
+                                   for k, v in p.items() if k != "categorie_prima"}
+            if esito_g.fermata == guardia.PERICOLO and p.get("livello") == \
+                    cancelli_mod.DA_VERIFICARE:
+                self._da_verificare(t, esito_g.categorie, rec)
+            elif esito_g.fermata == guardia.PERICOLO:
+                self.proteggi(t.prof_turno if t.minore_turno else None, esito_g.categorie, rec,
+                              motivo=p.get("motivo", "acuto"),
+                              voce_incerta=p.get("voce_incerta", False),
+                              categorie_prima=p.get("categorie_prima"))
             else:
                 self.rule("guardiano_" + esito_g.fermata)
                 if t.minore_turno:
