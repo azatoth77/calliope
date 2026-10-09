@@ -640,24 +640,27 @@ class Schermi:
     def _voce_effettiva(self, chiave) -> dict:
         v = self._voce.get(chiave, self._DORME)
         if v["stato"] == "ascolta" and v["fino"] is not None and v["fino"] <= time.time():
-            return dict(self._DORME)
+            return dict(self._DORME, **({"compagnia": True} if v.get("compagnia") else {}))
         return dict(v)
 
     _PRIORITA = {"parla": 3, "pensa": 2, "ascolta": 1, "dorme": 0}
 
     def voce(self, stato: str, fino: float | None = None, stanza: str | None = None,
-             sorgente: str | None = None) -> int:
+             sorgente: str | None = None, compagnia: bool = False) -> int:
         """Nuovo stato della voce, da mandare agli schermi di `stanza` (la corsia del
         satellite che lo cambia) o, senza, del microfono che ascolta. Non blocca (lock breve e
         `call_soon_threadsafe`): si chiama dal ciclo, dal thread della riproduzione e dal VAD.
         `fino` (epoch) solo con «ascolta»: la fine della finestra di follow-up. `sorgente`
         (la corsia, «sat:<id>»): con più satelliti nella stessa stanza gli schermi mostrano
-        l'unione dei loro stati (`_unione`). Restituisce quante pagine l'hanno ricevuto (0 se
-        lo stato della stanza è lo stesso di prima)."""
+        l'unione dei loro stati (`_unione`). `compagnia` (09/10, calliope/compagnia.py): altre
+        voci vicino al satellite, una sconosciuta: lo schermo mostra «In compagnia: chiamami per
+        nome». Restituisce quante pagine l'hanno ricevuto (0 se lo stato della stanza è lo stesso
+        di prima)."""
         if stato not in VOCE_STATI:
             raise ValueError(f"stato della voce sconosciuto: {stato!r}")
         nuovo = {"stato": stato,
-                 "fino": round(fino, 3) if stato == "ascolta" and fino else None}
+                 "fino": round(fino, 3) if stato == "ascolta" and fino else None,
+                 **({"compagnia": True} if compagnia else {})}
         with self._lock:
             chiave = self._chiave_voce(stanza)
             n = 0
@@ -693,13 +696,15 @@ class Schermi:
         ora = time.time()
         vivi = [v for v in srcs.values()
                 if not (v["stato"] == "ascolta" and v["fino"] is not None and v["fino"] <= ora)]
+        # In compagnia se lo è una delle sorgenti (anche una la cui finestra è scaduta)
+        comp = {"compagnia": True} if any(v.get("compagnia") for v in srcs.values()) else {}
         if not vivi:
-            return dict(self._DORME)
+            return dict(self._DORME, **comp)
         primo = max(vivi, key=lambda v: self._PRIORITA.get(v["stato"], 0))
         if primo["stato"] != "ascolta":
-            return {"stato": primo["stato"], "fino": None}
+            return {"stato": primo["stato"], "fino": None, **comp}
         fini = [v["fino"] for v in vivi if v["stato"] == "ascolta"]
-        return {"stato": "ascolta", "fino": None if None in fini else max(fini)}
+        return {"stato": "ascolta", "fino": None if None in fini else max(fini), **comp}
 
     def _ricalcola_voce(self, chiave) -> int:
         """Lo stato della stanza dopo un cambio di una sua sorgente: alle pagine solo se è
@@ -743,7 +748,9 @@ class Schermi:
                         # mostra l'unione di quello che resta
                         for k, x in list((self._voce_src.get(chiave) or {}).items()):
                             if x["stato"] == "ascolta" and x["fino"] is not None                                     and x["fino"] <= ora:
-                                self._voce_src[chiave][k] = dict(self._DORME)
+                                self._voce_src[chiave][k] = dict(
+                                    self._DORME, **({"compagnia": True} if x.get("compagnia")
+                                                    else {}))
                         srcs = self._voce_src.get(chiave)
                         self._voce[chiave] = (self._unione(srcs) if srcs
                                               else dict(self._DORME))

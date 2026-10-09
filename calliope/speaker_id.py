@@ -508,6 +508,11 @@ class SpeakerContext:
         # ma un minore ha un punteggio troppo vicino per dargli i permessi di chi amministra
         self.incerta: tuple[str, str] | None = None
         self.minore_vicino: str | None = None
+        # In compagnia (09/10, calliope/compagnia.py, con `compagnia_enabled: attiva`): più voci
+        # vicino a questo satellite negli ultimi minuti. Le azioni vogliono la voce riconosciuta
+        # in questa frase (la zona grigia non basta: tools/registry.py) e per i minori la voce
+        # vale «non sicura» nei due cancelli. Vale una frase (ciclo._chi_parla)
+        self.compagnia: bool = False
 
     def aggiorna_conversazione(self, name: str | None, how: str | None, in_session: bool,
                                score: float | None, altro_piu_vicino: bool = False):

@@ -1295,7 +1295,40 @@ class Config:
     # frasi brevi vere di Dario rifiutate 12 % (allora la frase di sfida). Con 0,35 lo stesso
     # canale arrivava al 3,6 %
     speaker_conferma_breve_soglia: float = 0.40
-    speaker_enroll_phrases: int = 5       # frasi di arruolamento (con 5: Dario rifiutato 4 %)
+    # Compagnia (09/10, calliope/compagnia.py, docs/ricerche/2026-10-09-piu-persone.md): più
+    # voci vicino allo stesso satellite negli ultimi `compagnia_finestra_s`, dalle impronte
+    # tenute solo in memoria. Prove: una frase di almeno `compagnia_voce_min_s` sotto
+    # `compagnia_soglia_profilo` sul profilo di chi è stato riconosciuto lì (stessa persona
+    # sotto 0,20: ≤ 0,5 %; un'altra voce: 66–90 %), gruppi tra frasi di almeno
+    # `compagnia_gruppi_min_s` (coseno ≥ `compagnia_soglia_gruppi`; gruppo valido con due frasi
+    # o una di `compagnia_gruppo_lungo_s`; false compagnie ≤ 2 % delle sessioni), due persone
+    # registrate. «attiva»: niente frase breve, continuità né conferma breve, le azioni vogliono
+    # la voce nella frase, per i minori «voce non sicura» nei due cancelli; «ombra»: solo il
+    # registro dei turni (`voce.compagnia`, regola `voci_compagnia`); «spenta»
+    compagnia_enabled: str = "attiva"
+    compagnia_finestra_s: float = 300.0
+    compagnia_soglia_profilo: float = 0.20
+    compagnia_voce_min_s: float = 1.0
+    compagnia_soglia_gruppi: float = 0.25
+    compagnia_gruppi_min_s: float = 1.5
+    compagnia_gruppo_lungo_s: float = 3.0
+    # In compagnia con una voce sconosciuta la finestra d'ascolto senza il nome si chiude
+    # (serve il nome a ogni frase, regola `compagnia_nome`) finché per `compagnia_finestra_s`
+    # non si sente più l'altra voce; sullo schermo «In compagnia: chiamami per nome». Il nome da
+    # solo («Calliope.» e poi la domanda) vale ancora. Con le voci tutte riconosciute (minore e
+    # adulto di casa) la finestra resta e decide il giudizio qui sotto
+    compagnia_nome_obbligatorio: bool = True
+    # Il giudizio «la frase è rivolta a Calliope?» (calliope/rivolta.py) sulle frasi senza il nome
+    # nella finestra d'ascolto, in compagnia, in parallelo alla risposta: «ombra» registra
+    # (`rivolta` nel registro, regola `non_rivolta_ombra`) e non tace; «attiva»: una frase non
+    # rivolta → silenzio e niente finestra nuova (regola `non_rivolta`); «spenta». Misura sul
+    # portatile: 26/27 rivolte e 27/29 non rivolte giuste, 285 ms. Modello vuoto = quello del
+    # rilevatore di pericolo (`guardiano_pericolo_modello`), poi quello della voce. Un giudizio
+    # guasto o oltre `compagnia_rivolta_timeout_s` vale «rivolta»
+    compagnia_rivolta: str = "ombra"
+    compagnia_rivolta_modello: str = ""
+    compagnia_rivolta_timeout_s: float = 2.0
+    speaker_enroll_phrases: int = 5      # frasi di arruolamento (con 5: Dario rifiutato 4 %)
     speaker_enroll_min_s: float = 1.5     # voce minima per una frase di arruolamento
     # Una registrazione della voce senza frasi valide per questo tempo si chiude da sola:
     # aperta per sempre, la prima voce che passava (anche la TV) diventava una frase
@@ -2288,7 +2321,12 @@ SEZIONI: dict[str, list[str]] = {
                   "speaker_id_threshold", "speaker_id_session_margin", "speaker_id_margine",
                   "speaker_min_voice_s", "speaker_continuita_s", "speaker_continuita_soglia",
                   "speaker_continuita_margine",
-                  "speaker_conferma_breve_soglia", "speaker_enroll_phrases", "speaker_enroll_min_s", "speaker_enroll_timeout_s",
+                  "speaker_conferma_breve_soglia",
+                  "compagnia_enabled", "compagnia_finestra_s", "compagnia_soglia_profilo",
+                  "compagnia_voce_min_s", "compagnia_soglia_gruppi", "compagnia_gruppi_min_s",
+                  "compagnia_gruppo_lungo_s", "compagnia_nome_obbligatorio",
+                  "compagnia_rivolta", "compagnia_rivolta_modello",
+                  "compagnia_rivolta_timeout_s", "speaker_enroll_phrases", "speaker_enroll_min_s", "speaker_enroll_timeout_s",
                   "speaker_adapt_threshold",
                   "speaker_adapt_alpha", "speaker_adapt_max_drift"],
     "minori": ["minori_enabled", "minori_margine_ambiguo", "minori_margine_amministra",
@@ -2545,6 +2583,10 @@ LIMITI: dict[str, tuple[float, float]] = {
     "speaker_id_margine": (0.0, 1.0), "minori_margine_amministra": (0.0, 1.0),
     "speaker_continuita_s": (0.0, 86400.0), "speaker_continuita_soglia": (0.0, 1.0),
     "speaker_continuita_margine": (0.0, 1.0),
+    "compagnia_finestra_s": (10.0, 86_400.0), "compagnia_soglia_profilo": (0.0, 1.0),
+    "compagnia_voce_min_s": (0.0, 30.0), "compagnia_soglia_gruppi": (0.0, 1.0),
+    "compagnia_gruppi_min_s": (0.0, 30.0), "compagnia_gruppo_lungo_s": (0.0, 60.0),
+    "compagnia_rivolta_timeout_s": (0.2, 30.0),
     "minori_pericolo_attesa_s": (0.0, 86_400.0), "minori_pericolo_finestra_s": (0.0, 604_800.0),
     "minori_avviso_privato_s": (0.0, 86_400.0),
     "esercizi_verifica_timeout_s": (0.5, 300.0), "esercizi_pronti": (0, 50),

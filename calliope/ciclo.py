@@ -17,6 +17,7 @@ errore (così era nato il difetto dello stato della voce sugli schermi, P9). Qui
 `main.main()` prepara i servizi e il ciclo della corsia locale; `main.esegui_corsie` crea un
 `Ciclo` per ogni satellite che si collega.
 """
+import concurrent.futures
 import dataclasses
 import datetime
 import re
@@ -28,7 +29,9 @@ from pathlib import Path
 import numpy as np
 
 from . import cancelli as cancelli_mod
+from . import compagnia as compagnia_mod
 from . import contesto, corsie, minori
+from . import rivolta as rivolta_mod
 from . import pause as pause_mod
 from . import guardiano as guardia
 from . import provenienza, riferire
@@ -175,6 +178,15 @@ class Turno:
     protezione: str | None = None        # la frase di protezione detta in questo turno
     testo_guardia: str = ""              # la frase giudicata dal guardiano (solo in memoria)
     pericolo: dict | None = None         # il giro a due cancelli (09/10): livello e motivo
+    # Compagnia (09/10, calliope/compagnia.py): chi la voce ha riconosciuto sopra soglia (per la
+    # memoria della corsia), la frase presa nella finestra aperta dal nome da solo, la frase
+    # nella finestra senza il nome, il giudizio «rivolta a Calliope» (Future) e il suo esito
+    nome_voce: str | None = None
+    dal_nome: bool = False
+    senza_nome: bool = False
+    rivolta: object = None
+    non_rivolta: bool = False
+    compagnia: dict | None = None        # lo stato «in compagnia» dopo questa frase
 
 
 def solo_nome_acustico(text: str, voiced_s: float, cfg) -> bool:
@@ -247,6 +259,13 @@ class Ciclo:
         # gli avvisi rinviati di cui si è già detta la frase neutra
         self._minori_sentiti: dict[str, float] = {}
         self._avvisi_accennati: set = set()
+        # Più voci vicino a questa corsia (09/10, calliope/compagnia.py): le impronte delle
+        # ultime frasi solo in memoria; la finestra d'ascolto aperta dal nome da solo (vale anche
+        # in compagnia); l'ultimo stato detto in console; il giudizio «rivolta a Calliope»
+        self.compagnia = compagnia_mod.Compagnia(servizi.cfg, servizi.registry)
+        self._finestra_dal_nome = False
+        self._compagnia_detta: dict | None = None
+        self._giudice = None
         self._collega_voce()
         if self.listener is not None and not getattr(self.listener, "remoto", False)                 and hasattr(self.listener, "ripresa_muto"):
             # In locale le casse sono qui: la voce di Calliope e i suoni non sono una ripresa
@@ -275,11 +294,36 @@ class Ciclo:
             stanza = self.stanza_voce()
             if stanza != "":
                 # La corsia come sorgente (Q9): con due satelliti nella stessa stanza gli
-                # schermi mostrano l'unione dei loro stati, non l'ultimo scritto
+                # schermi mostrano l'unione dei loro stati, non l'ultimo scritto. In compagnia
+                # con una voce sconosciuta (09/10) il segno «chiamami per nome»
                 schermi.voce(stato, fino, stanza=stanza,
-                             **({"sorgente": self.corsia.chiave} if stanza else {}))
+                             **({"sorgente": self.corsia.chiave} if stanza else {}),
+                             **({"compagnia": True} if self._chiede_nome() else {}))
         except Exception:  # noqa: BLE001
             pass
+
+    # ── compagnia (09/10, calliope/compagnia.py) ──
+    def _stato_compagnia(self) -> dict | None:
+        try:
+            return self.compagnia.stato()
+        except Exception:  # noqa: BLE001 — la compagnia non ferma la voce
+            return None
+
+    def _compagnia_attiva(self) -> bool:
+        """Gli effetti sull'identità (F1) valgono: `compagnia_enabled: attiva` e più voci qui."""
+        return (compagnia_mod.modo(self.s.cfg) == compagnia_mod.ATTIVA
+                and self._stato_compagnia() is not None)
+
+    def _chiede_nome(self, st: dict | None | bool = False) -> bool:
+        """In compagnia con una voce sconosciuta serve il nome a ogni frase (regola
+        `compagnia_nome`): la finestra d'ascolto senza il nome resta chiusa."""
+        cfg = self.s.cfg
+        if (compagnia_mod.modo(cfg) != compagnia_mod.ATTIVA
+                or not getattr(cfg, "compagnia_nome_obbligatorio", True)):
+            return False
+        if st is False:
+            st = self._stato_compagnia()
+        return bool(st and st.get("sconosciute"))
 
     def _collega_voce(self):
         """Il VAD (inizio e scarto di una frase) e la riproduzione cambiano lo stato della voce
@@ -426,7 +470,7 @@ class Ciclo:
         return False
 
     def proteggi(self, prof, categorie, rec_, motivo: str = "acuto", voce_incerta=False,
-                 categorie_prima=None):
+                 categorie_prima=None, compagnia=None):
         """Un minore in pericolo (05/10, calliope/guardiano.py): avviso discreto e urgente ai
         tutori, solo l'argomento; nel registro dei turni niente frasi del minore. Dal 09/10
         (calliope/cancelli.py) l'avviso dice il livello («confermato»), perché (`motivo`:
@@ -441,11 +485,16 @@ class Ciclo:
         self.rule("pericolo_" + motivo)
         if voce_incerta:
             self.rule("pericolo_voce_incerta")
+        if compagnia is None:
+            compagnia = self._in_compagnia()
+        if compagnia:
+            self.rule("pericolo_compagnia")
         # Lo stesso episodio non si avvisa due volte (prova e2e del 06/10: la frase di Sofia
         # spezzata in due turni mandava due avvisi uguali); un argomento diverso sì
         n = self._cancelli().avvisa(prof, categorie, cancelli_mod.CONFERMATO, motivo,
                                     bool(voce_incerta), urgente=True,
-                                    categorie_prima=categorie_prima, registry=self.s.registry)
+                                    categorie_prima=categorie_prima, registry=self.s.registry,
+                                    compagnia=bool(compagnia))
         if n == -1:
             self.rule("avviso_pericolo_ripetuto")
 
@@ -464,8 +513,14 @@ class Ciclo:
 
     def _voce_incerta(self) -> bool:
         """Chi parla non è stato riconosciuto con sicurezza dalla voce: zona grigia, frase
-        breve, continuità o profilo più protetto (09/10, giro a due cancelli)."""
-        return getattr(self.speaker_ctx, "identified_by", None) in ("breve", "conversazione")
+        breve, continuità o profilo più protetto (09/10, giro a due cancelli). In compagnia
+        (09/10, calliope/compagnia.py) la voce non è mai sicura: con altre persone vicine il
+        segnale può essere di un altro."""
+        return (getattr(self.speaker_ctx, "identified_by", None) in ("breve", "conversazione")
+                or bool(getattr(self.speaker_ctx, "compagnia", False)))
+
+    def _in_compagnia(self) -> bool:
+        return bool(getattr(self.speaker_ctx, "compagnia", False))
 
     def _decidi_pericolo(self, t, g) -> str:
         """«Pericolo» sulla domanda di un minore (filtra, al_pericolo): la frase da dire.
@@ -474,6 +529,8 @@ class Ciclo:
         chiede (calliope/cancelli.py). Regole `pericolo_*`."""
         prof = t.prof_turno
         info = {"livello": cancelli_mod.CONFERMATO, "voce_incerta": self._voce_incerta()}
+        if self._in_compagnia():
+            info["compagnia"] = True
         t.pericolo = info
         c = self._cancelli()
         if not c.attivo or prof is None:
@@ -500,7 +557,7 @@ class Ciclo:
                               else "gravita_guasta")
             return guardia.PROTEZIONE
         c.apri(prof, t.testo_guardia or t.text, g.categorie, info["voce_incerta"],
-               self.corsia.chiave)
+               self.corsia.chiave, compagnia=bool(info.get("compagnia")))
         info.update(livello=cancelli_mod.DA_VERIFICARE, motivo="dubbio", cancello=1)
         return cancelli_mod.rassicura(prof)
 
@@ -568,7 +625,8 @@ class Ciclo:
                            if getattr(u, "id", None) == seg.persona_id), None)
         self.rec["esito"] = "protezione"
         self.proteggi(minore, seg.categorie, self.rec, motivo="secondo_cancello",
-                      voce_incerta=seg.voce_incerta)
+                      voce_incerta=seg.voce_incerta,
+                      compagnia=bool(getattr(seg, "compagnia", False)))
         speaker = self.speaker
         speaker.start_turn()
         self.protezione_in_corso = True
@@ -776,7 +834,8 @@ class Ciclo:
             self._di_gli_annunci()
             return None
         for fase in (self._prendi_scritto, self._scritto_senza_domanda, self._ascolta,
-                     self._trascrivi, self._chi_parla, self._conversazione_del_turno,
+                     self._trascrivi, self._chi_parla, self._compagnia_senza_nome,
+                     self._conversazione_del_turno,
                      self._arruolamento, self._nome_reale, self._richiamo, self._primo_avvio,
                      self._mostra_richiesta, self._uscite, self._chiusure,
                      self._secondo_cancello, self._fuori_orario,
@@ -796,6 +855,19 @@ class Ciclo:
         Restituisce `guided`: durante una registrazione della voce (o in attesa del nome del
         primo utente) si ascolta senza bisogno del nome."""
         s, cfg, speaker_ctx = self.s, self.s.cfg, self.speaker_ctx
+        if time.monotonic() >= self.awake_until:
+            self._finestra_dal_nome = False
+        # In compagnia con una voce sconosciuta (09/10) la finestra d'ascolto senza il nome si
+        # chiude: serve il nome a ogni frase. Non quella aperta dal nome da solo («Calliope.» e
+        # poi la domanda), né durante una registrazione della voce
+        chiudi_finestra = (time.monotonic() < self.awake_until and not self._finestra_dal_nome
+                           and not speaker_ctx.is_enrolling and self.pending_real_name is None
+                           and self._chiede_nome())
+        if chiudi_finestra:
+            print("   [VOCE] in compagnia con una voce sconosciuta: finestra d'ascolto chiusa, "
+                  "chiamami per nome", flush=True)
+            if self.rec is not None:
+                self.rule("compagnia_nome")
         if self.rec:
             # Il turno finito nell'archivio delle conversazioni (08/10: la scheda «Conversazione»)
             self._archivia_turno()
@@ -805,6 +877,8 @@ class Ciclo:
         # Il turno di prima è finito: voce di nuovo accesa, il satellite in prestito resta
         # attivo fino alla fine della finestra di follow-up (calliope/rispondi.py)
         self.awake_until = s.instradamento.dopo_turno(self.awake_until)
+        if chiudi_finestra:
+            self.awake_until = 0.0        # dopo dopo_turno, che può rimettere una finestra
         self.corsia.fine_turno()          # la conversazione del turno torna libera (corsie.py)
         if s.satelliti is not None:
             # Senza un satellite collegato nessuno sente: anche gli annunci (timer, lavori
@@ -868,6 +942,7 @@ class Ciclo:
         self._annuncia_giochi()
         self.speaker.wait()
         self.awake_until = time.monotonic() + self.s.cfg.followup_s   # per rispondere senza nome
+        self._finestra_dal_nome = False
         self.rec = None
 
     def _annuncia_agenda(self):
@@ -1226,6 +1301,10 @@ class Ciclo:
             self.frasi_prese += 1    # la finestra del nome da solo non suona più la fine
             s.instradamento.inizio_voce()
             t.barged, self.barge_seed = self.barge_seed is not None, None
+            # La frase nella finestra aperta dal nome da solo: vale anche in compagnia (una)
+            t.dal_nome, self._finestra_dal_nome = (self._finestra_dal_nome
+                                                   and listener.started_at <= self.awake_until,
+                                                   False)
             # Frase presa (suono di fine ascolto): con la wake word acustica listen restituisce
             # solo le frasi rivolte a Calliope; con quella testuale si aspetta il nome (sotto)
             if s.suoni is not None and s.satelliti is None and s.wake is not None \
@@ -1338,6 +1417,7 @@ class Ciclo:
         t.prev_how, speaker_ctx.identified_by = speaker_ctx.identified_by, None
         speaker_ctx.conferma_breve = speaker_ctx.sfida_superata = False   # valgono una frase
         speaker_ctx.incerta = speaker_ctx.minore_vicino = None            # anche queste
+        speaker_ctx.compagnia = False                                     # e questa (09/10)
         if t.scritto is not None:
             self._chi_scrive(t)
         if t.emb_job is not None:
@@ -1420,12 +1500,33 @@ class Ciclo:
         else:
             name, how = None, None
             speaker_ctx.from_session = False
+        # Compagnia (09/10, F1, calliope/compagnia.py): più voci qui negli ultimi minuti. Una
+        # frase sotto speaker_min_voice_s non eredita chi parlava, non vale per continuità né
+        # per la voce (sotto ~1 s l'impronta non decide): in compagnia non si sa chi è, quindi
+        # ospite (il minore resta se supera la soglia piena, qui sotto). La zona grigia resta
+        # per la conversazione, ma le azioni vogliono la voce nella frase (tools/registry.py).
+        # Mai il contrario: la compagnia non rende nessuno un adulto
+        corta = t.voiced_s < cfg.speaker_min_voice_s
+        t.nome_voce = best if sim >= thr and netta and not corta else None
+        if t.emb_job is not None:
+            # La frase stessa entra nella memoria della corsia prima della decisione: la voce
+            # che rivela la compagnia vale già per questa frase
+            t.compagnia = self._osserva_compagnia(t, emb)
+        in_compagnia = self._compagnia_attiva()
+        speaker_ctx.compagnia = in_compagnia
+        if in_compagnia and corta and name is not None:
+            print(f"   [VOCE] in compagnia: frase breve ({t.voiced_s:.1f} s), non vale "
+                  f"{name}", flush=True)
+            self.rule("compagnia_senza_breve")
+            name, how, t.continuita = None, None, False
+            speaker_ctx.from_session = False
         speaker_ctx.identified_by = how
         # Voce incerta tra un minore e un altro profilo (05/10, minori.piu_protetto): vale
         # il profilo più protetto, mai un adulto
         if not netta and sim >= thr and how != "breve":
             self.rule("voce_margine")
-        protetto = minori.piu_protetto(s.registry, emb, name, how, sim, cfg)
+        protetto = minori.piu_protetto(s.registry, emb, name,
+                                       "breve" if in_compagnia and corta else how, sim, cfg)
         if protetto is not None and protetto != name:
             print(f"   [VOCE] incerta tra {name or 'ospite'} e {protetto}: vale {protetto} "
                   f"(il profilo più protetto)", flush=True)
@@ -1480,6 +1581,56 @@ class Ciclo:
               and name != self._voce_recente[0]):
             self._voce_recente = None
 
+    def _osserva_compagnia(self, t, emb) -> dict | None:
+        """La frase nella memoria della corsia (calliope/compagnia.py): lo stato «in compagnia»
+        dopo questa frase, la regola `voci_compagnia` e, quando cambia, una riga in console."""
+        try:
+            st = self.compagnia.osserva(emb, t.voiced_s, t.nome_voce)
+        except Exception as e:  # noqa: BLE001 — la compagnia non ferma la voce
+            print(f"   [VOCE] compagnia non calcolata: {type(e).__name__}: {e}", flush=True)
+            return None
+        prima = self._compagnia_detta
+        if bool(st) != bool(prima) or (st and prima and st.get("sconosciute")
+                                       != prima.get("sconosciute")):
+            if st:
+                dist = st.get("distanza")
+                print(f"   [VOCE] in compagnia: {st['voci']} voci (prova {st['prova']}"
+                      + (f", {dist:.2f}" if dist is not None else "") + ")"
+                      + (": serve il nome a ogni frase" if self._chiede_nome(st) else ""),
+                      flush=True)
+            else:
+                print("   [VOCE] di nuovo una voce sola qui", flush=True)
+        self._compagnia_detta = st
+        if st:
+            self.rule("voci_compagnia")
+        return st
+
+    def _compagnia_senza_nome(self, t):
+        """In compagnia con una voce sconosciuta (09/10) una frase detta nella finestra
+        d'ascolto senza il nome non si prende (regola `compagnia_nome`): non va al modello e non
+        si conserva, come le frasi ignorate. Il nome vale sempre, e la frase dopo il nome da solo
+        anche. È la catena del caso vero: chiunque parlasse negli 8 s dopo una risposta la
+        riceveva, e la risposta riapriva la finestra."""
+        cfg, listener = self.s.cfg, self.listener
+        if (t.scritto is not None or t.guided or t.barged or t.dal_nome or not t.text
+                or not cfg.wake_word_enabled or self.speaker_ctx.is_enrolling
+                or self.pending_real_name is not None
+                or listener.started_at > self.awake_until):
+            return None
+        # Il nome, anche storpiato (tolleranza larga, in qualunque punto): la frase passa e
+        # decide _cerca_il_nome
+        if find_wake_word(t.text, cfg.wake_names, 0.5) is not None:
+            return None
+        if not self._chiede_nome():
+            return None
+        print("   (in compagnia con una voce sconosciuta: frase senza il nome, non la prendo)",
+              flush=True)
+        self.rule("compagnia_nome")
+        self.rec["esito"] = "ignorato"
+        self.rec["testo"] = None          # come le frasi ignorate senza niente del nome
+        self.awake_until = 0.0
+        return _FINE
+
     def _minore_vicino(self, name, sim, classifica) -> str | None:
         """Il minore con un punteggio a meno di `minori_margine_amministra` da chi amministra
         riconosciuto dalla voce (None se chi parla non amministra o nessun minore è vicino)."""
@@ -1512,6 +1663,7 @@ class Ciclo:
         altro = bool(own is not None and best is not None and best != name and sim >= own)
         speaker_ctx.aggiorna_conversazione(name, how, t.in_session, own, altro)
         self._ricorda_voce(t, name, how)
+        comp = t.compagnia
         if t.continuita:
             self.rule("voce_continuita")
         adapted = how == "voce" and registry.adapt(name, emb, sim)
@@ -1543,7 +1695,9 @@ class Ciclo:
                                if getattr(speaker_ctx, "minore_vicino", None) else {}),
                             **({"conferma_breve": speaker_ctx.conferma_breve,
                                 "punteggio_conversazione": round(own, 3)}
-                               if how == "breve" and own is not None else {})}
+                               if how == "breve" and own is not None else {}),
+                            # Più voci qui (09/10): solo numeri, mai le impronte
+                            **({"compagnia": comp} if comp else {})}
         if name:
             t.speaker_name = name
             # Se l'utente ha una voce preferita, usala
@@ -1838,6 +1992,9 @@ class Ciclo:
                 self.rec["testo"] = None
             return _FINE
         self._segna_conversazione(t)                 # la frase è rivolta a Calliope
+        # Nella finestra d'ascolto senza il nome (09/10): in compagnia il modello giudica se
+        # è rivolta a Calliope (calliope/rivolta.py)
+        t.senza_nome = request is None
         if request == "":                            # ha detto solo "Calliope"
             return self._solo_il_nome(t)
         if listener.started_at > self.awake_until:   # svegliata ora: vale ciò che segue
@@ -1888,6 +2045,8 @@ class Ciclo:
             self.speaker.say("Sì?")
         self.speaker.wait()
         self.awake_until = time.monotonic() + cfg.followup_s
+        # La domanda dopo il nome da solo vale anche in compagnia (09/10): è rivolta a Calliope
+        self._finestra_dal_nome = True
         if suoni is not None and not s.enroll_pending and hasattr(self.speaker, "suono"):
             self._fine_se_nessuno_parla(suoni, cfg.followup_s)
         return _FINE
@@ -2138,6 +2297,10 @@ class Ciclo:
         rec, t0, speaker = self.rec, t.t0, self.speaker
 
         def announce(phrase):
+            # In compagnia, con il giudizio acceso (09/10): una frase non rivolta a Calliope
+            # non riceve nemmeno la frase d'attesa
+            if not self._rivolta_ok(t):
+                return
             # Tool lento: la frase d'attesa parte subito e copre la seconda passata
             rec["primo_suono_s"] = round(time.perf_counter() - t0, 2)
             self._fine_ripresa()
@@ -2230,9 +2393,19 @@ class Ciclo:
         """Il modello risponde in streaming, frase per frase verso la voce (con i controlli
         di ciò che dice e, per minori e ospiti, il guardiano)."""
         s, cfg, brain, speaker = self.s, self.s.cfg, self.brain, self.speaker
+        # In compagnia, una frase senza il nome nella finestra d'ascolto: il giudizio «rivolta a
+        # Calliope» parte adesso, in parallelo alla risposta (09/10, calliope/rivolta.py)
+        t.rivolta = self._avvia_rivolta(t)
         self._prepara_risposta(t)
         self._ascolta_il_nome(t)
         t.first, t.said = True, []
+        attivo = bool(t.rivolta) and t.rivolta["modo"] == compagnia_mod.ATTIVA
+        if attivo:
+            # Nessun tool prima del giudizio: una frase non rivolta non fa niente
+            try:
+                brain.prima_del_tool = lambda: self._rivolta_ok(t)
+            except AttributeError:
+                pass
         try:
             if t.foto and s.schermi is not None:
                 # Le miniature agli schermi personali di chi parla (dopo l'identità)
@@ -2275,6 +2448,8 @@ class Ciclo:
                                        al_giudizio=brain.rilascia_schede if trattieni else None,
                                        al_pericolo=((lambda g: self._decidi_pericolo(t, g))
                                                     if t.minore_turno else None))
+            if attivo:
+                frasi = self._solo_se_rivolta(t, frasi)
             for sentence in frasi:
                 if speaker.interrupted:
                     break          # chiude lo stream dell'LLM: Ollama smette di generare
@@ -2294,7 +2469,110 @@ class Ciclo:
             # trattenute non partono
             if getattr(brain, "trattieni_schede", None) is not None:
                 brain.rilascia_schede(False)
+            if attivo:
+                try:
+                    brain.prima_del_tool = None
+                except AttributeError:
+                    pass
         self.corsia.esci_llm()          # il modello ha finito: il posto a chi aspetta
+
+    # ── «la frase è rivolta a Calliope?» (09/10, calliope/rivolta.py) ──
+    def _avvia_rivolta(self, t) -> dict | None:
+        """Il giudizio sulle frasi senza il nome nella finestra d'ascolto, solo in compagnia
+        (con una persona sola non scatta mai), in un thread: {"fut", "modo", "esito"}."""
+        cfg = self.s.cfg
+        m = compagnia_mod.modo_rivolta(cfg)
+        if (m == compagnia_mod.SPENTA or compagnia_mod.modo(cfg) == compagnia_mod.SPENTA
+                or not t.senza_nome or t.dal_nome or t.scritto is not None or t.barged
+                or t.guided or not t.text or self._stato_compagnia() is None):
+            return None
+        if self._giudice is None:
+            self._giudice = rivolta_mod.Giudice(cfg)
+        giudice, frase = self._giudice, t.text
+        # Nel contesto il nome di chi ha la conversazione (misura: aiuta sulle frasi che
+        # nominano qualcuno), mai la voce
+        owner = getattr(self.brain, "conv_owner", None)
+        prof = None
+        if isinstance(owner, str) and hasattr(self.s.registry, "by_id"):
+            try:
+                prof = self.s.registry.by_id(owner)
+            except Exception:  # noqa: BLE001
+                prof = None
+        contesto_r = rivolta_mod.righe_contesto(
+            getattr(self.brain, "history", None),
+            persona=rivolta_mod.etichetta(getattr(prof, "name", None)))
+        fut = concurrent.futures.Future()
+
+        def lavora():
+            try:
+                fut.set_result(giudice.giudica(contesto_r, frase))
+            except Exception as e:  # noqa: BLE001
+                fut.set_exception(e)
+        threading.Thread(target=lavora, daemon=True, name="rivolta").start()
+        return {"fut": fut, "modo": m, "esito": None}
+
+    def _giudizio_rivolta(self, t, attesa_s: float | None = None):
+        """L'esito del giudizio (aspettato al più `attesa_s`): un guasto o un ritardo vale
+        «rivolta» (per_calliope None)."""
+        r = t.rivolta
+        if not r:
+            return None
+        if r["esito"] is None:
+            if attesa_s is None:
+                attesa_s = float(getattr(self.s.cfg, "compagnia_rivolta_timeout_s", 2.0)
+                                 or 2.0) + 0.5
+            try:
+                r["esito"] = r["fut"].result(timeout=max(0.0, attesa_s))
+            except concurrent.futures.TimeoutError:
+                return rivolta_mod.Giudizio(None, attesa_s * 1000, "tempo")
+            except Exception as e:  # noqa: BLE001
+                r["esito"] = rivolta_mod.Giudizio(None, 0.0, type(e).__name__)
+        return r["esito"]
+
+    def _rivolta_ok(self, t) -> bool:
+        """Con il giudizio acceso: la frase è rivolta a Calliope (o il giudizio non c'è)."""
+        r = t.rivolta
+        if not r or r["modo"] != compagnia_mod.ATTIVA:
+            return True
+        g = self._giudizio_rivolta(t)
+        if g is not None and not g.rivolta:
+            t.non_rivolta = True
+            return False
+        return True
+
+    def _solo_se_rivolta(self, t, frasi):
+        """Le frasi della risposta, dopo il giudizio (aspettato solo prima della prima): una
+        frase non rivolta a Calliope non riceve risposta, e lo stream del modello si chiude."""
+        primo = True
+        try:
+            for sentence in frasi:
+                if primo:
+                    primo = False
+                    # Una protezione (minore od ospite in pericolo) si dice sempre
+                    protezione = (sentence in (guardia.PROTEZIONE, guardia.PROTEZIONE_OSPITE)
+                                  or bool(t.pericolo))
+                    if not protezione and not self._rivolta_ok(t):
+                        return
+                yield sentence
+        finally:
+            chiudi = getattr(frasi, "close", None)
+            if callable(chiudi):
+                chiudi()
+
+    def _registra_rivolta(self, t):
+        """Il giudizio nel registro dei turni (`rivolta`), e in ombra la regola
+        `non_rivolta_ombra` quando dice di no (la risposta c'è stata comunque)."""
+        r = t.rivolta
+        if not r or self.rec is None:
+            return
+        g = self._giudizio_rivolta(t, None if r["modo"] == compagnia_mod.ATTIVA else 1.0)
+        if g is None:
+            return
+        self.rec["rivolta"] = g.per_registro(r["modo"])
+        if g.per_calliope is False and r["modo"] == compagnia_mod.OMBRA:
+            self.rule("non_rivolta_ombra")
+            print(f"   [VOCE] (ombra) frase giudicata non rivolta a me ({g.ms:.0f} ms)",
+                  flush=True)
 
     def _frase_da_dire(self, t, sentence: str) -> str:
         """Una frase del modello pronta per la voce ("" = non si dice)."""
@@ -2351,6 +2629,8 @@ class Ciclo:
         controlli di ciò che dice e del guardiano, la compressione, il contesto; tolti i dati
         che non devono restare (riservati, codici, frase di sfida)."""
         brain, rec = self.brain, self.rec
+        if t.non_rivolta:
+            return self._registra_non_rivolta(t)
         rec.update(risposta=" ".join(t.said), tool=brain.last_tools)
         if t.files:
             # Di nuovo dopo la risposta: il numero del file lo dà la conversazione (Brain)
@@ -2387,6 +2667,23 @@ class Ciclo:
             # può ascoltare (04/10). Prima di aspettare la voce: si legge subito
             rec["risposta_scritta"] = self.s.instradamento.risposta_scritta(
                 t.scritto, t.text, " ".join(t.said))
+
+    def _registra_non_rivolta(self, t):
+        """Frase non rivolta a Calliope col giudizio acceso (09/10): silenzio, regola
+        `non_rivolta`, niente testo nel registro (come le frasi ignorate) e niente nella storia
+        del modello."""
+        rec = self.rec
+        g = self._giudizio_rivolta(t, 0.0)
+        print(f"(non rivolta a me: taccio{f', giudizio in {g.ms:.0f} ms' if g else ''})",
+              flush=True)
+        rec.update(esito="non_rivolta", testo=None, richiesta=None, risposta=None)
+        self.rule("non_rivolta")
+        dimentica = getattr(self.brain, "dimentica_ultimo_turno", None)
+        if callable(dimentica):
+            try:
+                dimentica()
+            except Exception as e:  # noqa: BLE001 — la storia non ferma la voce
+                print(f"   [VOCE] storia non ripulita: {type(e).__name__}: {e}", flush=True)
 
     def _luogo_turno(self, t) -> str:
         """Il satellite o lo schermo del turno, per la scheda «Conversazione» (08/10)."""
@@ -2474,7 +2771,8 @@ class Ciclo:
                 self.proteggi(t.prof_turno if t.minore_turno else None, esito_g.categorie, rec,
                               motivo=p.get("motivo", "acuto"),
                               voce_incerta=p.get("voce_incerta", False),
-                              categorie_prima=p.get("categorie_prima"))
+                              categorie_prima=p.get("categorie_prima"),
+                              compagnia=p.get("compagnia", None))
             else:
                 self.rule("guardiano_" + esito_g.fermata)
                 if t.minore_turno:
@@ -2601,6 +2899,12 @@ class Ciclo:
             t.watch_stop.set()
             t.watcher.join()
         self.protezione_in_corso = False
+        self._registra_rivolta(t)
+        if t.non_rivolta:
+            # Non rivolta a Calliope (09/10): nessuna finestra nuova, così la conversazione tra
+            # le persone non diventa una catena di risposte; resta quella di prima, se c'è
+            speaker.start_turn()
+            return
         if t.watch.get("seed"):
             # Interrotta: nella storia solo le frasi pronunciate per intero; si ascolta
             # subito, partendo dall'audio che contiene il nome

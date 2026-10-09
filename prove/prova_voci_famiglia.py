@@ -312,7 +312,10 @@ def prova_continuita():
     n, how, lv, v, t = riconosci(ciclo, sc, frase_con(0.44, 0.11), 0.5)
     verifica("contrario: dopo una frase lunga di un'altra voce → ospite",
              ciclo._voce_recente is None and n is None)
-    # Il minore: riconosciuto dalla voce, poi una frase cortissima sua → vale lui
+    # Il minore: riconosciuto dalla voce, poi una frase cortissima sua → vale lui. La voce
+    # dell'ospite qui sopra ha acceso la compagnia (09/10), che spegne la continuità: qui si
+    # prova la continuità da sola (la compagnia è in prova_compagnia.py)
+    ciclo.compagnia.dimentica()
     riconosci(ciclo, sc, frase_con(0.20, 0.70), 2.0)
     n, how, lv, v, t = riconosci(ciclo, sc, frase_con(0.08, 0.42), 0.5)
     verifica("minore riconosciuto qui, frase cortissima sua → il minore per continuità",

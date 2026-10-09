@@ -13,7 +13,9 @@ il prossimo passo (registro delle capacità, calliope/capacita.py).
                                               sicurezza per giorno (calliope/attrito.py);
                                               argomenti che nominano qualcosa: probabilità di
                                               Whisper, nomi noti vicini, esiti vuoti
-                                              (calliope/argomenti_incerti.py)
+                                              (calliope/argomenti_incerti.py); compagnia: frasi
+                                              con più voci vicino a un satellite, regole e
+                                              giudizi «rivolta a Calliope» (calliope/compagnia.py)
     python -m calliope.stato --turni --pause [--giorni N]
                                               pause dentro la frase per persona e canale,
                                               tagli probabili e la soglia che si sceglierebbe
@@ -226,10 +228,13 @@ def main(argv=None) -> int:
         # Gli argomenti che nominano qualcosa (08/10, F0: calliope/argomenti_incerti.py)
         from . import argomenti_incerti
         argomenti = argomenti_incerti.riassunto(turni)
+        # Più voci vicino a un satellite (09/10, calliope/compagnia.py)
+        from . import compagnia
+        comp = compagnia.riassunto(turni)
         if as_json:
             print(json.dumps({"giorni": dati, "soglia_s": getattr(cfg, "latenza_avviso_s", None),
                               "attrito": sicurezza, "attrito_soglia": soglia_a,
-                              "argomenti": argomenti},
+                              "argomenti": argomenti, "compagnia": comp},
                              ensure_ascii=False, indent=2))
         else:
             print(latenza.testo(dati, soglia))
@@ -237,6 +242,8 @@ def main(argv=None) -> int:
             print(attrito.testo(sicurezza, soglia_a))
             print()
             print(argomenti_incerti.testo(argomenti))
+            print()
+            print(compagnia.testo(comp))
         return 0
     if "--piano" in argv:
         return piano_main(cfg, argv, as_json)

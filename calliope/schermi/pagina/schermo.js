@@ -82,6 +82,9 @@
     pensa: "Ci penso…",
     parla: "Parlo",
   };
+  // In compagnia con una voce sconosciuta (09/10, calliope/compagnia.py): la finestra d'ascolto
+  // senza il nome è chiusa, serve il nome a ogni frase
+  const TESTO_COMPAGNIA = "In compagnia: chiamami per nome";
   const $ = (id) => document.getElementById(id);
 
   // ─── piccoli aiuti ───
@@ -3046,7 +3049,10 @@
 
   // ─── stato della voce ───
   function mostraVoce(v) {
-    if (INCORPORATA) return;              // lo stato lo disegna il telefono
+    if (INCORPORATA) {                    // lo stato lo disegna il telefono, anche la compagnia
+      emetti("compagnia", { attiva: !!(v && v.compagnia), testo: TESTO_COMPAGNIA });
+      return;
+    }
     const box = $("voce");
     S.voce = v && TESTI_VOCE[v.stato] ? v : null;
     if (!S.voce) { box.hidden = true; return; }
@@ -3064,7 +3070,7 @@
     if (stato === "ascolta" && v.fino) {
       const ms = v.fino * 1000 - ora();
       if (ms <= 0) {                     // finestra di follow-up finita: si riaddormenta
-        S.voce = { stato: "dorme", fino: null };
+        S.voce = { stato: "dorme", fino: null, compagnia: !!v.compagnia };
         stato = "dorme";
       } else {
         resto = Math.ceil(ms / 1000) + " s";
@@ -3075,6 +3081,11 @@
     box.className = "voce " + stato + (resto ? " conta" : "");
     box.querySelector(".voce-testo").textContent = TESTI_VOCE[stato];
     box.querySelector(".voce-resto").textContent = resto;
+    const comp = box.querySelector(".voce-compagnia");
+    if (comp) {
+      comp.hidden = !v.compagnia;
+      comp.textContent = v.compagnia ? TESTO_COMPAGNIA : "";
+    }
   }
 
   // ─── orologio e conti alla rovescia ───

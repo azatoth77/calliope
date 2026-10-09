@@ -46,6 +46,7 @@ const st = {
   tocco: 0,              // ultimo tocco sulla pagina
   tieni: leggi(CHIAVE_TIENI) !== "0",
   risposta: { turno: -1, testo: "", ora: 0 },   // l'ultima risposta di Calliope (prima del carosello)
+  compagnia: "",         // «In compagnia: chiamami per nome» (09/10), dallo stato della voce
 };
 const param = Object.assign({}, PARAMETRI);
 const ascolto = new Ascolto(param);
@@ -132,7 +133,9 @@ function statoVista(cls) {
 
 function disegna() {
   const [cls] = voceLocale();
-  const [gc, parola, sotto] = statoVista(cls);
+  const [gc, parola, dove] = statoVista(cls);
+  // In compagnia con una voce sconosciuta (09/10): la riga piccola lo dice, sotto il resto
+  const sotto = st.compagnia && st.collegato ? (dove ? dove + " · " : "") + st.compagnia : dove;
   const v = $("tel-voce");
   if (v.className !== "voce " + gc) v.className = "voce " + gc;
   metti(v.querySelector(".voce-testo"), parola);
@@ -1738,6 +1741,12 @@ async function avvio() {
   document.addEventListener("calliope:schede", (ev) => sincronizza(ev.detail));
   document.addEventListener("calliope:mostra", (ev) => { if (ev.detail.scheda) suMostra(ev.detail.scheda); });
   document.addEventListener("calliope:scrivi", (ev) => suScrivi(ev.detail));
+  // Lo stato della voce della stanza del telefono dice se è in compagnia (09/10)
+  document.addEventListener("calliope:compagnia", (ev) => {
+    const d = ev.detail || {};
+    st.compagnia = d.attiva ? String(d.testo || "In compagnia: chiamami per nome") : "";
+    disegna();
+  });
   document.addEventListener("calliope:scritto", () => setTimeout(() => chiudiStrato("strato-scrivi"), 1200));
   // «Prova con…», «Chiedi all'agente…» della vista dello sviluppo (08/10): la frase da finire
   // nella casella dello scritto (lo strato dello sviluppo si chiude, e si riapre dalla scheda)
