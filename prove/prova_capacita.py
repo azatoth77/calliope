@@ -233,8 +233,8 @@ o = stato("ospite", "biblioteca")
 verifica("ospite su una capacità: niente diagnosi", "libzim" not in o["risposta_finale"]
          and "manca" not in o["risposta_finale"], o["risposta_finale"])
 f = stato("familiare")
-verifica("familiare: cosa funziona e «chiedi a chi amministra»",
-         f["risposta_finale"].startswith("Posso") and "chiedi a chi amministra"
+verifica("familiare: le aree e «chiedi a chi amministra»",
+         f["risposta_finale"].startswith("Posso aiutarti con") and "chiedi a chi amministra"
          in f["risposta_finale"] and "Ollama" not in f["risposta_finale"], f["risposta_finale"])
 f = stato("familiare", "casa")
 verifica("familiare su una capacità che manca: senza dettagli",
@@ -245,8 +245,13 @@ verifica("familiare su una capacità attiva: cosa può chiedere",
          "funzionano" in f["risposta_finale"] and "Puoi chiedermi" in f["risposta_finale"],
          f["risposta_finale"])
 a = stato("amministra")
-verifica("chi amministra: cosa non va e perché", "Non funzionano ancora" in a["risposta_finale"]
-         and "Ollama non risponde" in a["risposta_finale"], a["risposta_finale"])
+# 09/10 (caso vero: l'elenco intero interrotto): a «cosa sai fare?» le aree e i nomi di ciò che
+# non va, il perché solo con «cosa manca?»
+verifica("chi amministra: le aree e cosa non va, senza il perché",
+         a["risposta_finale"].startswith("Posso aiutarti con")
+         and "Non funzionano ancora: modello linguistico, voce, wake word e altre" in
+         a["risposta_finale"] and "Ollama non risponde" not in a["risposta_finale"]
+         and "«cosa manca?»" in a["risposta_finale"], a["risposta_finale"])
 a = stato("amministra", "casa")
 verifica("chi amministra su una capacità: motivo e passo",
          "manca casa url" in a["risposta_finale"] and "calliope.locale.yaml"
@@ -259,8 +264,9 @@ _reg_k.segnala("archivio", "da_configurare", "spento (archivio_enabled)",
 _ctx_k = ToolContext(cfg=cfg, speakers=None, speaker_ctx=Spk("amministra"), speaker=None,
                      capacita=_reg_k)
 for _cap_k in ("tutte", "archivio"):
-    k = json.loads(build_registry().call("calliope_stato", {"capacita": _cap_k}, _ctx_k,
-                                         "amministra"))["risposta_finale"]
+    k = json.loads(build_registry().call(
+        "calliope_stato", {"capacita": _cap_k, "cosa": "manca" if _cap_k == "tutte" else ""},
+        _ctx_k, "amministra"))["risposta_finale"]
     verifica(f"a voce il motivo in parole, senza il nome della chiave ({_cap_k})",
              "_enabled" not in k and "(archivio" not in k
              and "spento nella configurazione" in k, k)
@@ -316,9 +322,8 @@ verifica("chi amministra, «cosa manca?»: cosa non va, cosa si può aggiungere 
          and "Vikidia, per le spiegazioni semplici" in a and "le voci Serena, Paola e Riccardo" in a
          and "che per ora non uso nelle risposte" in a and "«scarica Wikipedia completa»" in a, a)
 a = stato_cosa("amministra", "sa_fare")
-verifica("chi amministra, «cosa sai fare?»: le aggiunte in una frase sola, in fondo",
-         a.startswith("Posso dirti") and "Posso ancora aggiungere Wikipedia completa, Vikidia, "
-         "altre 6 fonti e le voci Serena, Paola e Riccardo." in a
+verifica("chi amministra, «cosa sai fare?»: solo le aree, le aggiunte con «cosa manca?»",
+         a.startswith("Posso aiutarti con") and "aggiungere" not in a
          and "per le spiegazioni semplici" not in a, a)
 a = stato_cosa("amministra", "manca", installazioni=False)
 verifica("installazioni spente: niente «dimmi quale installare», il terminale",
