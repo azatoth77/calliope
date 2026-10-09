@@ -43,9 +43,10 @@ radice = Path(__file__).resolve().parent.parent
 try:
     elenco = subprocess.run(["git", "ls-files", "-z"], cwd=radice, capture_output=True,
                             check=True).stdout.decode("utf-8", "replace").split("\0")
-except (OSError, subprocess.CalledProcessError) as e:
-    print(f"git ls-files non riuscito ({e}): prova saltata")
-    sys.exit(77)
+except (OSError, subprocess.CalledProcessError):
+    # La copia dell'indice dell'hook non è un repository: lì ci sono solo i file tracciati
+    elenco = [str(q.relative_to(radice)).replace("\\", "/") for q in radice.rglob("*")
+              if q.is_file() and ".git" not in q.parts and ".venv" not in q.parts]
 trovati = []
 for nome in elenco:
     if not nome or Path(nome).suffix.lower() not in TESTO or nome == "prove/prova_conflitti.py":
