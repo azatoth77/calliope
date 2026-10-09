@@ -278,6 +278,9 @@ CLASSI: dict[str, Classe] = {
                     verbo_sempre=lambda testo: chiesto_di_dimenticare(testo)),
     "documento_crea": _c(A, cosa=lambda a: "prepari il documento"),
     "documento_modifica": _c(A, cosa=lambda a: "modifichi il documento"),
+    # 09/10: rilegge un documento preparato da Calliope per chi parla (il testo l'ha scritto
+    # lo scrittore dei documenti, non un dato esterno)
+    "documento_leggi": _c(S),
     "lavoro_annulla": _c(A, cosa=lambda a: "fermi il lavoro"),
     "lavoro_rispondi": _c(A, cosa=lambda a: "mandi la risposta all'agente"),
     "immagine_archivia": _c(A, cosa=lambda a: "archivi la foto"),
@@ -430,7 +433,12 @@ VERBI = {
 # VERBI_AZIONE: le parole di un'altra azione dello stesso tool non la confermano
 _W = r"(?<![a-zà-ù])"
 VERBI.update({
-    "casa_comando": (_W + r"(accend|speng|apr[iaeo]|aprir|chiud|alz|abbass|regol|impost|"
+    # «spegni», «spegnere», «spegnessi» hanno «spegn», non «speng» (09/10, caso vero della DGX
+    # delle 20:39: «No, io volevo che la spegnessi.» non era una richiesta di casa_comando e la
+    # politica per valore rispondeva «Non me l'hai chiesto…»); con le storpiature di Whisper
+    # che sicurezza.ACTION_REQUEST già conosce («Spenni la luce», «Sprengi la»)
+    "casa_comando": (_W + r"(accend|acces[oaie]|speng|spegn|spent[oaie]|spre(?:i?gn|ngh?|n)i|"
+                     r"spenn?i|apr[iaeo]|aprir|chiud|alz|abbass|regol|impost|"
                      r"attiv|disattiv|luc[ei]|lampad|tapparell|serrand|clima|riscald|"
                      r"termostat|condizionat|temperatur|ventil|cancell[oi]|garage|porta)"),
     "pc_apri_app": _W + r"(apr[iaeo]|aprir|avvi|lanc|fa(?:mm|ll)\w* partire|programm|app)",
@@ -460,7 +468,7 @@ VERBI_AZIONE = {
         "elenca": _W + r"(elenc|quali|lista|stato)",
         "approva": _W + r"(approv|attiv|accett|conferm|install)",
         "rifiuta": _W + r"(rifiut|scart|bocci)",
-        "disattiva": _W + r"(disattiv|speng|ferm|sospend)",
+        "disattiva": _W + r"(disattiv|speng|spegn|ferm|sospend)",
         "riattiva": _W + r"(riattiv|attiv|riaccend|accend)",
         "indietro": _W + r"(indietro|precedent|torn|ripristin|vecchi)",
         "revoca": _W + r"(revoc|togli\w* .*permess)",
@@ -646,6 +654,10 @@ class Turno:
     # Valori della configurazione della casa che Calliope dà al modello (09/10, `casa_citta`):
     # fidati come le parole della persona nel controllo della provenienza
     da_config: str = ""
+    # I nomi fidati della domanda di Calliope a cui questa frase risponde (09/10: i nomi delle
+    # entità di Home Assistant in «Taverna o Bagno della Taverna?», il titolo di uno sviluppo
+    # dall'indice): valgono come parole della persona per la politica per valore
+    domanda_fidata: str = ""
 
 
 # Le azioni interne chieste con un verbo che il lessico delle azioni sul mondo non ha
@@ -1381,6 +1393,20 @@ def detti_qui(cl: Classe, args: dict, t: Turno) -> bool:
     return True
 
 
+# Il perché della frase di sfida quando la causa è la voce (Decisione.domanda, prima di «: vuoi»)
+VOCE_INCERTA = "Dalla voce non sono sicura che sia tu"
+
+
+def fonte_principale(t: Turno) -> str:
+    """La fonte detta in «C'è di mezzo…» quando non c'è un valore preciso: quella del dato non
+    fidato più recente (09/10; prima la prima in ordine alfabetico)."""
+    fonti = set(t.contaminazione or ())
+    for f, _ in reversed(list(t.esterni or ())):
+        if f in fonti:
+            return f
+    return sorted(fonti)[0] if fonti else ""
+
+
 def _proposta(t: Turno, name: str) -> bool:
     """Questo tool è la risposta alla proposta in sospeso? Non con foto o file arrivati con
     la frase (Turno.dato_nuovo)."""
@@ -1544,7 +1570,7 @@ def decidi(name: str, args: dict, cl: Classe, t: Turno | None,
         # Frase di sfida superata per proprio questa chiamata: era la conferma
         # (o il «sì» alla domanda di prima, che descriveva proprio questa chiamata)
         return ACCETTATA if stessa and (t.sfida or consenso(t.testo)) else ESEGUI
-    fonte = sorted(t.contaminazione)[0]
+    fonte = fonte_principale(t)
     # Con dati non fidati una proposta vale come richiesta solo se la frase acconsente: con una
     # parola di consenso, o ripetendo la richiesta (07/10) se gli argomenti sono quelli della
     # domanda (o la domanda lasciava scegliere: «Quale apro?» → «apri il secondo»)
@@ -1613,7 +1639,9 @@ def decidi(name: str, args: dict, cl: Classe, t: Turno | None,
             if ripetuta:
                 return Decisione("esegui", "consenso_richiesta", accettata=stessa)
             return ACCETTATA if stessa else ESEGUI
-        return Decisione("sfida", "politica_sfida", "", fonte)
+        # La sfida qui è per la voce, non per il dato: lo si dice (09/10, analisi delle regole
+        # § 3.3: «C'è di mezzo una pagina internet» per spegnere una luce)
+        return Decisione("sfida", "politica_sfida", f"{VOCE_INCERTA}: vuoi che {cosa}?", fonte)
     # Richiesta esplicita della persona, dalla voce, con le parole del tool (Classe.richiesta_voce)
     if (cl.richiesta_voce and not proposta and voce_frase and cl.verbi
             and re.search(cl.verbi, t.testo or "", re.I)):
@@ -1766,7 +1794,11 @@ SVILUPPO_SALTA = frozenset({"politica_conferma", "politica_azione_non_chiesta",
 # sviluppo aperto `sviluppo.passo_interno` controlla già che il bersaglio sia proprio quello
 # dello sviluppo (lo stato, non il testo del dato): solo questi argomenti
 SVILUPPO_BERSAGLIO = {"estensione_gestisci": frozenset({"nome"}),
-                      "sviluppo_apri": frozenset({"modifica"})}
+                      "sviluppo_apri": frozenset({"modifica"}),
+                      # 09/10 (caso vero della DGX delle 21:00: «Sì, attivarla.» → «“Meteocittà”
+                      # viene dal lavoro di un agente»): `quale` sceglie tra gli sviluppi di chi
+                      # parla, e il passo interno è quello del suo sviluppo aperto
+                      "sviluppo_passo": frozenset({"quale"})}
 
 
 def _gia_rifiutata(name: str, args: dict, cl: Classe, t: Turno | None, ctx, spec) -> dict | None:
@@ -1800,6 +1832,11 @@ def _gia_rifiutata(name: str, args: dict, cl: Classe, t: Turno | None, ctx, spec
             "cosa_fare": "non richiamare questo tool e non riproporlo: rispondi a quello che "
                          "ha detto adesso, senza domande su questo. Lo fai solo se te lo chiede "
                          "di nuovo lei, con parole sue"}
+
+
+def _finale(ombra: dict | None, esito: str, regola: str):
+    if isinstance(ombra, dict):
+        ombra["finale"], ombra["finale_regola"] = esito, regola or ""
 
 
 def controlla(spec, name: str, args: dict, ctx) -> dict | None:
@@ -1877,6 +1914,10 @@ def controlla(spec, name: str, args: dict, ctx) -> dict | None:
                 d = Decisione("esegui", "sviluppo_senza_domanda")
         except Exception as e:  # noqa: BLE001 — nel dubbio, la decisione di sempre
             print(f"   [POLITICA] sviluppo: {type(e).__name__}: {e}", flush=True)
+    # L'ombra segue la decisione finale (09/10, analisi delle regole § 3.4): `nuova` è la
+    # matrice, `finale` ciò che è successo dopo le correzioni (sviluppo, domanda non ripetuta,
+    # persona non riconosciuta); attrito.py conta su `finale`
+    _finale(ombra, d.esito, d.regola)
     _esito_per_brain(ctx, name, args, cl, t, d, intento, cv, vf, cosa, spec, ombra)
     _segna_accettata(ctx, d.accettata)
     if d.esito == "esegui":
@@ -1904,6 +1945,7 @@ def controlla(spec, name: str, args: dict, ctx) -> dict | None:
     # proposta, ancora valida, esegue
     if d.esito == "conferma" and _domanda_ripetuta(name, args, cl, t):
         note_rule(ctx, "politica_domanda_non_ripetuta")
+        _finale(ombra, "rifiuta", "politica_domanda_non_ripetuta")
         return {"ok": False, "fatto": NIENTE,
                 "errore": "la persona non ha confermato la domanda di prima: "
                           f"«{d.domanda}»",
@@ -1918,6 +1960,7 @@ def controlla(spec, name: str, args: dict, ctx) -> dict | None:
         from .conferme import chiedi_conferma
         sc = getattr(ctx, "speaker_ctx", None)
         if getattr(sc, "current_speaker", None) is None:
+            _finale(ombra, "vieta", "sfida_senza_voce")
             frase = ("Con " + prov.detta(d.fonte or "web") + " di mezzo questo lo faccio solo "
                      "per chi vive in casa, riconosciuto dalla voce.")
             return {"ok": False, "fatto": NIENTE,

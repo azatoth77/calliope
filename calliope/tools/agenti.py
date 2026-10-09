@@ -825,6 +825,8 @@ def _risultato_lavoro(ctx: ToolContext, lavoro: str = "", modo: str = "riassunto
     if lav is None:
         if altrui:
             return _rifiuto(ctx, frase, "risultato_lavoro_altrui")
+        if frase.startswith(ar.NON_TROVATO.split("«")[0]):
+            return _lavoro_non_trovato(ctx, svc, prof, str(lavoro or ""))
         return _final(frase, ok=False, fatto=NIENTE)
     titolo = _titolo_detto(lav.titolo)
     testo = ar.testo_intero(lav)
@@ -918,6 +920,46 @@ def _risultato_lavoro(ctx: ToolContext, lavoro: str = "", modo: str = "riassunto
         pass
     note_rule(ctx, f"risultato_{come}")
     return _final(frase, fatto="detto il risultato", lavoro=lav.id)
+
+
+def _lavoro_non_trovato(ctx, svc, prof, quale: str) -> dict:
+    """lavoro_risultato con un riferimento che non è un lavoro dell'agente (09/10, caso vero
+    della DGX delle 18:56: il titolo di un foglio Excel appena creato). L'errore per il modello,
+    nella forma di tools/dialogo.py: i lavori veri di chi parla e, se il riferimento è un
+    documento preparato da Calliope, lo strumento giusto. Mai un altro lavoro al suo posto."""
+    from ..agenti import risultato as ar
+    note_rule(ctx, "risultato_lavoro_non_trovato")
+    try:
+        fin = ar.recenti(svc, prof.id, prof.name, 5)
+    except Exception:  # noqa: BLE001
+        fin = []
+    lavori = [{"lavoro": ar.chiave(lv), "titolo": _titolo_detto(lv.titolo)} for lv in fin]
+    out = {"ok": False, "fatto": NIENTE, "campo": "lavoro", "correggibile": True,
+           "errore": f"nessun lavoro dell'agente finito corrisponde a «{quale}»",
+           "lavori": lavori}
+    doc = None
+    docs = getattr(ctx, "documenti", None)
+    if docs is not None:
+        try:
+            doc = docs.archive.trova(prof.id, quale)
+        except Exception:  # noqa: BLE001
+            doc = None
+    if doc is not None:
+        note_rule(ctx, "risultato_era_documento")
+        out["documento"] = str(doc.get("titolo") or "")
+        out["cosa_fare"] = (f"«{doc.get('titolo')}» è un documento che hai preparato tu "
+                            "(documento_crea), non un lavoro dell'agente: chiama "
+                            f"documento_leggi con documento «{doc.get('titolo')}» (modo "
+                            "riassunto, leggi o mostra). Non usare lavoro_risultato")
+    elif lavori:
+        out["cosa_fare"] = ("richiama lavoro_risultato con lavoro uguale a uno di «lavori» "
+                            "se è quello che intende; altrimenti di' che quel lavoro non c'è e "
+                            "chiedi quale intende. Mai il risultato di un altro lavoro al suo "
+                            "posto")
+    else:
+        out["cosa_fare"] = ("di' che non ci sono lavori dell'agente finiti con quel nome; se "
+                            "intende un documento preparato da te, documento_leggi")
+    return out
 
 
 def _gia_detto(ctx, frase: str) -> bool:

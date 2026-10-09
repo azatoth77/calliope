@@ -1112,3 +1112,89 @@ for f in sorted(glob.glob("registro/turni-*.jsonl"))[-3:]:
                       o["nuova_regola"] or o["nuova"], o["effetto"], o["argomenti"])
 EOF
 ```
+
+## Casi veri della sera e incongruenze dell'analisi delle regole (09/10 sera, ramo `sera-politica-strumenti`)
+
+Casi veri della DGX del 09/10 (registro dei turni, sola lettura; riscritti con nomi di fantasia
+nelle prove) con la politica per valore accesa da poche ore.
+
+**A. Valori della persona trattati come «non suoi».**
+
+- 20:38–20:39, la taverna: «Spenni la luce in taberno» → «Taverna o Bagno della Taverna?» (nomi
+  delle entità di Home Assistant) → «Alla luce della taverna» → il modello **accende** → «No, io
+  volevo che la spegnessi.» → `valore_non_ancorata` («Non me l'hai chiesto…») → «Sì.» breve →
+  `politica_sfida` «C'è di mezzo una pagina internet… ripeti» per una luce (le notizie di inizio
+  conversazione). Cause: (1) le parole di `casa_comando` avevano «speng» ma non **«spegn»**
+  («spegni», «spegnere», «spegnessi»): ora anche «spegn», «spento», «acceso» e le storpiature
+  di Whisper di `sicurezza.ACTION_REQUEST`; (2) il «sì» alla domanda della politica nuova lo
+  giudicava quella di prima (pericolosa + dato → la voce sopra soglia, altrimenti la sfida).
+  Ora un «sì» breve della persona della conversazione (voce o frase breve, mai zona grigia,
+  ospite o scritto) a una domanda su un'azione **E1–E2** esegue (`valore_consenso_breve`).
+- 21:00:58, «Sì, attivarla.» → «“Meteocittà” viene dal lavoro di un agente, non da te»: Dario
+  l'aveva nominata più volte, e gli annunci dell'agente la ripetevano. La regola del «latte»
+  (06/10: per un bersaglio, detto prima *e* nel dato valeva «dato») è **storica dal 09/10**:
+  un valore detto dalla persona in questa conversazione (o una sua storpiatura, `prov.vicina`)
+  vale `persona` anche se un dato lo ripete; resta `dato` una parola che sta **solo** nel
+  dato. In più `sviluppo_passo.quale` è tra i bersagli dello sviluppo aperto
+  (`SVILUPPO_BERSAGLIO`), e la revisione chiude con «…: vuoi attivarla?» (prima «Vuoi
+  attivarla? Ti chiederò la frase di conferma.» non finiva con «?» e la proposta non restava).
+- La risposta a una domanda di Calliope fatta con **nomi fidati** (i `nomi_vicini` e le
+  `stanze` della casa, il titolo dello sviluppo dall'indice: `_fidati` dei tool interni, che
+  Brain toglie prima del modello) vale come parola della persona **per un turno**
+  (`Turno.domanda_fidata`, `Brain._ricorda_domanda_fidata`): «Taverna o Bagno della
+  Taverna?» → «quella del bagno, spegnila» non è «dal dato» anche se la pagina dice «taverna».
+- 20:39:41, `sviluppo_apri` con il compito parafrasato → `valore_contenuto_non_detto`: era il
+  `nome` inventato dal modello («Meteocittà suggerimenti», «suggerimenti» non detto). `nome`
+  ora è un testo libero come il compito: conta solo una parola distintiva (nome proprio, sigla,
+  numero) presa da un dato.
+
+**B. Chiamate identiche nella stessa risposta** (20:39:05 due `casa_comando` uguali, 20:40:04
+due `estensione_gestisci`, 20:40:30 due `sviluppo_apri`): una chiamata con lo stesso tool e gli
+stessi argomenti normalizzati (minuscole, spazi, punteggiatura ai lati, vuoti tolti:
+`brain.chiave_di_chiamata`) di una già fatta in questa risposta non si riesegue; il modello
+riceve l'esito della prima con una `nota` (regola `chiamata_ripetuta`). Il rifiuto leggero
+della politica non conta come esito: se il modello insiste, la domanda va alla persona come
+prima. Contrari: argomenti diversi (due stanze, due collaudi), la stessa chiamata in un'altra
+risposta. Nota: le chiamate delle 20:40 avevano argomenti diversi (un `tipo` in più, una
+`modifica` in più) e restano due, com'è giusto.
+
+**Incongruenze dell'analisi delle regole** ([`2026-10-09-regole-incongruenze.md`](../ricerche/2026-10-09-regole-incongruenze.md)):
+
+- § 3.8: la **frase di sfida della classe è un pavimento** anche con la politica per valore
+  (`valore.decidi_valore` sopra `_matrice`): `installa_avvia` (`sfida=True`, E3) con la voce
+  riconosciuta eseguiva senza sfida; ora `valore_sfida_classe`, salvo la sfida superata in
+  questo turno. Provati tutti i tool con `sfida=True`. `politica_valore_detto` (la rinomina
+  detta per intero) passa anche con la nuova; la città della casa (`da_config`) vale come
+  parola della persona anche per la nuova.
+- § 3.2: il «sì» alla stessa chiamata di una domanda della politica lo giudica la nuova anche
+  per **E3** (voce riconosciuta in questa frase → `valore_consenso_voce`; altrimenti la sfida,
+  `valore_consenso_sfida`) ed **E4** (sempre la sfida, salvo superata). Il consenso unico
+  (6–7 criteri) resta da fare con Dario dopo l'unione dei rami della sera.
+- § 3.3: il **motivo detto** è la fonte vera del valore (`valore.fonte_del_valore`) o la più
+  recente (`politica.fonte_principale`), non la prima in ordine alfabetico; quando la sfida è
+  per la voce lo dice: «Dalla voce non sono sicura che sia tu.» (`politica.VOCE_INCERTA`).
+- § 3.4: l'**ombra segue la decisione finale**: `finale` e `finale_regola` dopo le correzioni
+  a valle (`sviluppo_intento`, `politica_domanda_non_ripetuta`, persona non riconosciuta:
+  `sfida_senza_voce`); `attrito.py` conta su `finale` (prima le 4 chiamate dello sviluppo
+  eseguite il 09/10 risultavano «rifiuta» o «conferma»).
+- § 3.7 (Brain): la spinta (`tail`) si azzera prima della passata finale, e lì c'è il ripiego
+  sul vuoto (`vuoto_ripiego`).
+
+Regole nuove nel registro: `chiamata_ripetuta`, `valore_consenso_breve`,
+`valore_consenso_voce`, `valore_consenso_sfida`, `valore_sfida_classe` (le ultime due
+contano nell'attrito).
+
+**Prove** (a secco, nell'hook): `prova_valore` §§ 12–13 (la taverna con la stessa chiamata due
+volte, il «sì» breve e i contrari E4, E3, ospite, zona grigia; la domanda con i nomi della casa
+e i contrari senza domanda e due turni dopo; «Meteoborgo» detta prima e mai detta; il nome
+inventato e i contrari con un nome della pagina; i punti dell'analisi con i contrari), il banco
+d'attacco **99/99** acceso e gli 8 attacchi del § 6.2 **fermati**; `prova_dialogo_tool` (la
+passata finale senza spinta e il ripiego sul vuoto).
+
+**Misura col modello locale** (gemma4 e4b, script di misura nel rapporto del ramo, la taverna
+con le notizie di mezzo e il secondo turno dal copione che accende come il 26B):
+
+| Caso | main | ramo |
+|---|---|---|
+| «No, io volevo che la spegnessi.» → luce spenta senza domande | **0/4** (il rifiuto leggero; il modello si scusa e chiede) | **3/4** (1 volta il modello dice «spengo» senza chiamare il tool) |
+| domande della politica nei 4 giri | 0 dette, 4 rifiuti leggeri | 0 |

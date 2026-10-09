@@ -397,7 +397,7 @@ def prova_revisione(tmp: Path, iso):
                                                      "Borgoverde e Valfiorita»")
              and "Permessi:" in f and "Analisi del codice:" in f and "Test:" in f
              and "Rispetto alla versione 1" in f and "righe in più" in f and "Prove: 1" in f
-             and f.endswith("Ti chiederò la frase di conferma."), f)
+             and f.endswith("Ti chiederò la frase di conferma: vuoi attivarla?"), f)
     verifica("…con i permessi nuovi rispetto alla versione approvata",
              "geocoding-api.open-meteo.com" in f, f)
     verifica("…mai i nomi dei file né il codice a voce", "estensione.py" not in f

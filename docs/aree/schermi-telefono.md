@@ -692,3 +692,12 @@ c'è).
   `prova_cruscotto_pagina` (Edge headless: sezione e pulsanti, primo tocco che chiede la
   conferma senza far partire niente, secondo che fa il controllo, esito sulla scheda, un
   familiare senza pulsanti, nessun errore JS né CSP).
+
+## Il documento rimasto sul server va sulla scheda (09/10 sera, ramo `sera-politica-strumenti`)
+
+`Schermi.personale_collegato(mittente)`: una scheda personale arriverebbe adesso, con «Scarica»,
+a uno schermo personale di chi parla con la pagina aperta (identità dalla voce, schede
+automatiche accese). La usa `documento_crea`: un documento rimasto sul server perché il telefono
+non riceve file si dice «sulla scheda del tuo schermo: tocca «Scarica»». `documento_leggi`
+«mostra» manda la scheda del documento con «Scarica». Dettagli in
+[documenti-ufficio](documenti-ufficio.md).

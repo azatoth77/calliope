@@ -60,7 +60,7 @@ DOMANDE = frozenset({
     # rifiutano o sfidano (valore_esegue, valore_voce e valore_lettura eseguono)
     "valore_non_ancorata", "valore_bersaglio_dato", "valore_contenuto_dato",
     "valore_contenuto_non_detto", "valore_dati_personali", "valore_e3_chiede",
-    "valore_e4_sfida"})
+    "valore_e4_sfida", "valore_consenso_sfida", "valore_sfida_classe"})
 RIFERIRE = frozenset({"uscita_istruzione", "uscita_contatto", "uscita_segreti", "uscita_soldi",
                       "uscita_numero_pagamento"})
 # «Te l'ho già detto», «quante volte», «ti ho detto di sì», «me lo chiedi ancora?»
@@ -175,7 +175,9 @@ def _ombra(turni: list[dict]) -> dict:
             if o.get("attiva"):
                 out["attive"] += 1
                 attiva = True
-            vera, nuova = o.get("vera"), o.get("nuova")
+            # `finale` (dal 09/10 sera): la decisione dopo le correzioni a valle (sviluppo,
+            # domanda non ripetuta); senza, la nuova della matrice
+            vera, nuova = o.get("vera"), o.get("finale") or o.get("nuova")
             if vera != nuova:
                 out["diverse"] += 1
             if vera in CHIEDE and nuova == "esegui":
