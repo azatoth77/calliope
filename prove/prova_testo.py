@@ -536,6 +536,13 @@ for testo, atteso in [
         ("Non ho registrato alcuna raccomandazione del medico.", True),
         ("Non ricordo di cosa abbiamo parlato.", True),
         ("Non so quando arriva tua sorella.", True),
+        # Dopo una ricerca (09/10, RICERCA_NUDGE; caso vero della DGX)
+        ("Mi spiace, ma non ho informazioni più dettagliate sulle condizioni del re.", True),
+        ("Non ho altre informazioni oltre a quelle che ti ho riportato.", True),
+        ("Purtroppo non ho ulteriori dettagli sul festival.", True),
+        ("Non ho notizie più recenti.", True),
+        ("Non ho altro da fare oggi?", False),
+        ("Non ho dubbi: è una bella notizia.", False),
         ("Non ho capito la domanda, puoi ripetere?", False),
         ("Non posso aprire il garage.", False),
         ("Il film non mi è piaciuto molto.", False),
