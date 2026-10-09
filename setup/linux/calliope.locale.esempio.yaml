@@ -47,6 +47,9 @@ audio:
   output_device: null
 
 casa:
+  # La città della casa (09/10): per il meteo e ciò che dipende dal luogo quando chi parla non
+  # ne nomina un altro («che tempo fa?»). Solo la città, mai l'indirizzo.
+  # casa_citta: Borgoverde
   # Server fuori casa: Home Assistant si raggiunge con il suo indirizzo DuckDNS
   # pubblico, con la verifica TLS normale (il certificato è proprio per quel nome), senza
   # casa_tls_nome né impronta. Con il server in casa: l'IP di Home Assistant e

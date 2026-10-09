@@ -2837,7 +2837,9 @@ class Brain:
                                                   agenti="lavoro_affida" in names,
                                                   archivio="archivio_cerca" in names,
                                                   ufficio="modello_compila" in names,
-                                                  web="web_cerca" in names)}]
+                                                  web="web_cerca" in names,
+                                                  estensioni=any(n.startswith("est_")
+                                                                 for n in names))}]
         return system
 
     def _reply(self, user_text: str, level: str, context: str | None, pending: str | None):

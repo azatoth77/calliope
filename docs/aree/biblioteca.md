@@ -137,3 +137,34 @@ ha nei dati del turno l'ultima ricerca e l'indicazione di cercare di nuovo con u
 (`spinta_ricerca`), e `approfondisci` non rifà la biblioteca (`approfondisci_al_modello`). Con la
 ricerca su internet non disponibile, i dati del turno dicono di ammetterlo. Dettagli e misure:
 [voce-e-regole](voce-e-regole.md); prove `prova_web` (6b) e `prova_ricerca_seguito_ollama`.
+
+## Le notizie per tema e il meteo della casa (09/10, ramo `citta-casa-notizie`)
+
+Due casi veri della DGX (09/10, 10:30): «Sentimi le notizie di sport» → `web_cerca` tipo
+notizie → «le notizie che ho trovato non contengono aggiornamenti sportivi»; «Che tempo fa?»
+senza città → ricerca generica, «non so dove ti trovi… se mi dici la tua città».
+
+- **Cosa arrivava a SearXNG** (`Web.cerca`): la domanda del modello com'era («notizie sport»,
+  «ultime notizie»), categoria `news`, nessun periodo. Misura in sola lettura sul SearXNG della
+  DGX (richieste HTTP dalla DGX stessa, 09/10 mattina): nella categoria news la parola «notizie»
+  non filtra niente e pesa come un tema. «notizie di economia» → titoli con «notizia» dentro
+  (Nobel, il Brasile, «ottima notizia» per lo sport di Foggia), «economia» → solo economia;
+  «notizie sport» → 13 risultati, ANSA con «buone notizie per Allegri» e articoli vecchi in
+  testa, «sport» con una settimana → 40 risultati, tutti di sport e recenti; «Torino» con una
+  settimana → cronaca di Torino. Senza periodo DuckDuckGo News metteva tra i primi pagine del
+  2021 e 2022; con `day` Bing News dava titoli in portoghese e spagnolo («economia») e per
+  temi piccoli quasi niente. Attenzione: una ventina di ricerche di fila fa smettere ANSA e
+  DuckDuckGo per qualche minuto (risultati da 40 a 1–5): le misure vanno fatte con poche
+  richieste.
+- **Correzione** (`calliope/web/servizio.py`): con tipo notizie la domanda perde le parole che
+  dicono «notizie» (`tema_notizie`: notizie, news, novità, ultime notizie, ultim'ora,
+  aggiornamenti, in tempo reale) e le preposizioni rimaste in testa o in coda, mai gli articoli
+  dei nomi («La Spezia», «Il Sole 24 Ore»); senza tema resta «notizie». In più
+  `time_range=week` (`PERIODO_NOTIZIE`). Conversione della forma di una scelta del modello
+  (principio 10), regola `notizie_tema` nel registro dei turni; il tipo `web` non cambia.
+  La descrizione di `web_cerca` chiede il tema o il luogo nella domanda delle notizie.
+  Contrari a secco in `prova_web.py` (tipo web, «sport» già senza la parola, «Ultime parole
+  famose», «le ultime dal fronte», «notiziario», «Newsweek», «ultime notizie su» dopo il filtro
+  della privacy → «notizie»).
+- **Il meteo della casa**: il campo nuovo `casa_citta` e le estensioni prima di internet, in
+  [voce-e-regole](voce-e-regole.md) (stessa data). Con gemma4 e4b: `prova_citta_casa_ollama`.

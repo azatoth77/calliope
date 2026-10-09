@@ -863,6 +863,14 @@ documenti:
   documenti_max_token: 2048
 
 casa:
+  # La città (o il paese) dove sta la casa (09/10, caso della DGX: «che tempo fa?» cercava
+  # il meteo senza luogo e rispondeva «non so dove ti trovi»). Va nel prompt di sistema,
+  # uguale per tutti (anche per gli ospiti: è un dato della casa, non di una persona, e il
+  # prefisso resta in cache): per il meteo e ciò che dipende dal luogo, se chi parla non ne
+  # nomina un altro. Solo la città, MAI l'indirizzo (quello va in web_dati_privati). Non
+  # metterla in web_dati_privati, altrimenti si toglie dalle ricerche. Il valore vero in
+  # calliope.locale.yaml. Vuoto = Calliope non sa dov'è la casa (e lo chiede)
+  casa_citta: ''
   # Casa a voce (calliope/casa/): luci, tapparelle, termostato, prese e sensori tramite
   # Home Assistant. Senza indirizzo o senza token i tool casa_comando e casa_stato non ci
   # sono, e casa_integrazione spiega a voce cosa manca. Calliope parte anche con HA spento.
