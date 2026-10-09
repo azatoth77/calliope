@@ -665,3 +665,16 @@ decide il modello:
   24/29 (sotto soglia: «Questa era terribile, Marco.», «Chiedile se domani piove…»): per questo il
   nome. Sbaglia ancora «Che ne pensi dei cani?» (detto dall'ospite a Calliope), «Dille alle sette…»
   e «Ok.». Da accendere dopo qualche giorno di ombra sulla DGX, letti i `non_rivolta_ombra`.
+
+## Domande su di sé: chi sei, novità, versione (09/10, ramo `stato-novita`)
+
+Caso vero della DGX (09/10 mattina): alle «ultime novità sul tuo aggiornamento» Calliope ha letto
+l'elenco intero delle capacità, poi ha inventato «non ho un registro delle versioni» e «il mio
+codice è distribuito su diversi server». Accanto alla spinta dell'08/10 («non inventare
+spiegazioni sul tuo funzionamento»), la frase del prompt sulle capacità
+(`capacita.testo_prompt`) manda a `calliope_stato` anche «cosa sai fare con la casa?» e le
+domande su di sé (chi sei, dove giri, chi ti ha fatta, che versione sei, cosa c'è di nuovo):
+`cosa=novita` (con `periodo`), `cosa=chi_sei`, `area`. Le risposte sono frasi pronte dal codice
+(`risposta_finale`): fatti letti da CHANGELOG.md, dal gestore e dall'inventario della macchina.
+Regola nuova `stato_periodo_novita` (solo `periodo` → novità), con il contrario. Dettagli e
+misure (29/32 con gemma4 e4b sul portatile): [capacita-installazioni](capacita-installazioni.md).
