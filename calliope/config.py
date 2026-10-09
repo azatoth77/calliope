@@ -2315,9 +2315,10 @@ RETI: dict[str, Rete] = {
         "«ho avuto un piccolo intoppo, riprovo subito» senza riprovare dopo web_cerca senza "
         "domanda (09/10, DGX, quattro volte)"),
     "ricerca_recente": Rete(
-        "dopo una ricerca (web_cerca, biblioteca_cerca) nei due turni prima: l'ultima ricerca "
-        "nei dati del turno (RICERCA_MSG) e la spinta su «non ho altre informazioni» senza "
-        "cercare (RICERCA_NUDGE)", MODELLO,
+        "dopo le ricerche (web_cerca, biblioteca_cerca) dei sei turni prima: le ricerche con la "
+        "loro fonte nei dati del turno (RICERCA_MSG, dal 09/10 sera) e, con una ricerca nei due "
+        "turni prima, la spinta su «non ho altre informazioni» senza cercare (RICERCA_NUDGE)",
+        MODELLO,
         "«Approfondiamo le condizioni del re» dopo le notizie: «non ho informazioni più "
         "dettagliate» senza cercare, col 26B (09/10, DGX)"),
     # ── sicurezza: sempre accese, per ogni modello ──

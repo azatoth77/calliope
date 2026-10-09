@@ -1323,6 +1323,21 @@ def _agenda_annulla(ctx: ToolContext, cosa: str) -> dict:
 # passaggi brevi) per non allungare il prompt, con l'istruzione di rispondere in breve
 # e non di leggere i passaggi.
 
+# Passaggi fuori tema su una domanda pratica (09/10, caso vero della DGX alle 18:47: tre
+# biblioteca_cerca per «tecniche di produzione casalinga della birra», passaggi su un film di
+# Chaplin, e internet solo dopo averlo proposto): con la ricerca su internet disponibile, il
+# risultato lo ricorda. Contesto per il modello, che decide
+_WEB_DOPO_BIBLIOTECA = {True: " Se la domanda è pratica (come si fa, consigli, prodotti) o "
+                              "su cose recenti e i passaggi non rispondono, cerca invece con "
+                              "web_cerca."}
+
+
+def _web_disponibile(ctx) -> bool:
+    web = getattr(ctx, "web", None)
+    cfg = getattr(ctx, "cfg", None)
+    return web is not None and bool(getattr(cfg, "online", True))
+
+
 def _biblioteca_cerca(ctx: ToolContext, domanda: str) -> dict:
     """Cerca un fatto nella biblioteca offline."""
     if ctx.biblioteca is None:
@@ -1370,7 +1385,8 @@ def _biblioteca_cerca(ctx: ToolContext, domanda: str) -> dict:
                          "frasi con quel dato e cita la fonte in breve («secondo "
                          "Wikipedia…», «secondo il Wikizionario…»), senza leggere i "
                          "passaggi. Se i passaggi parlano d'altro, ignorali: rispondi con "
-                         "quello che sai, se ne sei sicura, senza citare fonti."}
+                         "quello che sai, se ne sei sicura, senza citare fonti."
+                         + _WEB_DOPO_BIBLIOTECA.get(_web_disponibile(ctx), "")}
     if simple:
         out["stile"] = ("Spiega in modo semplice e chiaro, con parole adatte a un ragazzo "
                         "delle medie, magari con un esempio; niente termini difficili.")
@@ -1404,7 +1420,8 @@ _BIBLIOTECA_SPEC = ToolSpec(
     description=("Cerca nella biblioteca offline (Wikipedia italiana) un fatto preciso: "
                  "date, numeri, misure, persone, luoghi, opere, definizioni. Il parametro "
                  "è la domanda, con i nomi propri. Usalo invece di rispondere a memoria "
-                 "sui fatti; non serve per conti, ora, opinioni o chiacchiere."),
+                 "sui fatti; non serve per conti, ora, opinioni o chiacchiere, né per guide "
+                 "pratiche, consigli e prodotti (quelli su internet, se c'è)."),
     parameters={"type": "object",
                 "properties": {"domanda": {"type": "string"}},
                 "required": ["domanda"]},

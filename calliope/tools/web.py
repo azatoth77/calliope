@@ -129,7 +129,8 @@ def _web_cerca(ctx: ToolContext, domanda: str = "", tipo: str = "web") -> dict:
 
 DESCRIZIONE = (
     "Cerca su internet ciò che cambia nel tempo o è di oggi: meteo e previsioni, "
-    "notizie, risultati sportivi, orari, prezzi, eventi, aperture. Per i fatti "
+    "notizie, risultati sportivi, orari, prezzi, eventi, aperture; e le guide pratiche "
+    "(come si fa), i consigli e i prodotti. Per i fatti "
     "stabili (storia, geografia, scienza, persone famose, opere, definizioni) usa "
     "invece biblioteca_cerca, se c'è. domanda: breve, come per un motore di ricerca, "
     "con luogo e giorno («meteo Milano domani», «risultato Inter ieri»), MAI con "
