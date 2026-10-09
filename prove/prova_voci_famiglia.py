@@ -498,8 +498,8 @@ def ciclo_telefono(proprietario="carlo-id"):
 
 def prova_proprietario():
     """Caso vero della DGX del 09/10 alle 18:48 (telefono personale di Dario, qui Carlo): dopo
-    frasi sue riconosciute dalla voce, «Sì, sì, grazie.» (0,79 s: Carlo 0,50, il figlio 0,485) e
-    «Io volevo che tu facessi la ricerca…» (3,0 s: 0,61 contro 0,54) valevano il figlio, con una
+    frasi sue riconosciute dalla voce, «Sì, sì, grazie.» (0,79 s: Carlo 0,50, il minore 0,485) e
+    «Io volevo che tu facessi la ricerca…» (3,0 s: 0,61 contro 0,54) valevano il minore, con una
     conversazione nuova e quella di prima persa. Regola `voce_proprietario`."""
     from calliope import minori
     from calliope.corsie import RegistroConversazioni
@@ -510,7 +510,7 @@ def prova_proprietario():
     regole.clear()
     n, how, lv, v, t = riconosci(ciclo, sc, frase_con(0.50, 0.485), 0.79, in_session=True,
                                  prev="Carlo")
-    verifica("caso vero 1: frase breve incerta col figlio → resta Carlo, al più familiare",
+    verifica("caso vero 1: frase breve incerta col minore → resta Carlo, al più familiare",
              (n, how, lv) == ("Carlo", "conversazione", "familiare") and t.proprietario
              and v["modo"] == "proprietario" and "voce_proprietario" in regole
              and "minore_piu_protetto" not in regole, f"{n} {how} {lv} {regole}")

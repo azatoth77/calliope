@@ -863,3 +863,24 @@ da `Brain._system_messages` a `Config.prompt_for` (`meteo_casa`, `citta`, `citta
 - Regole nuove nel registro dei turni: `citta_casa_proposta` (una conferma senza la proposta in
   sospeso vale come proposta), `citta_casa_solo_admin`. Dettagli, casi e misure in
   [casa](casa.md) (stessa data).
+
+## La risposta uguale alla precedente e «ricominciamo» come tool (09/10 sera, ramo `sera-voce-conversazione`)
+
+**Caso vero della DGX** (09/10 19:06:49 e 19:07:04): a «No, mi riferivo esattamente alla richiesta
+che ti avevo fatto un attimo fa.» e poi a «Punto prima.» il modello (26B) ha detto due volte,
+identica, «Mi hai chiesto esattamente cos'è che mi avevi chiesto un attimo fa. Un loop degno di
+un film di Christopher Nolan, ma con meno effetti speciali.»
+
+**Fatto** (rete del modello `risposta_ripetuta`, `calliope/ripetizione.py`): `ClaimHold` trattiene
+anche la prima frase che comincia come la risposta precedente (nessuna latenza in più: la voce
+aspetta comunque la fine della prima frase) e, se comincia così, il resto; a risposta finita, se
+è quasi uguale per intero (almeno 8 parole, somiglianza delle parole 0,85), non si dice né entra
+nella storia e il modello riceve `RIPETUTA_NUDGE` (rispondi a quello che ha detto adesso; se non
+capisci chiedi; se ti ha chiesto di ripetere, ripeti), una volta: la seconda risposta si dice
+anche se uguale. Regola `spinta_ripetuta`. Le risposte brevi uguali («Fatto.», «Va bene, nessun
+problema.») non si guardano. Si spegne con `llm_reti_spente`. Col modello locale il caso non si
+riproduce (0/3: la e4b risponde in un altro modo), le prove sono a secco
+(`prova_conversazioni`: caso vero, ripetere chiesto, breve uguale, risposta diversa, rete spenta).
+
+Il tool `conversazione_nuova` (stesso giorno) e la coda dopo una pausa sono in
+[contesto-conversazione](contesto-conversazione.md).

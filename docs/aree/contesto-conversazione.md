@@ -663,3 +663,45 @@ I «da rimisurare» delle voci precedenti (testo→voce sulla DGX, prefisso dopo
 modalità) sono chiusi da queste misure: testo→voce 0,35 s, cache del prefisso persa in 1 turno
 su 125 il 09/10.
 
+
+## Dopo una pausa: «cosa ti ho chiesto?», gli ultimi scambi, «ricominciamo» con parole sue (09/10 sera, ramo `sera-voce-conversazione`)
+
+**Caso vero della DGX** (09/10 19:06, telefono): la conversazione della pizza e del foglio Excel
+(18:45–18:56) chiusa per tempo all'inizio del turno (`conversazione_scaduta`); «Calliope,
+scusami, ma cos'è che ti ho chiesto esattamente?» → `conversazione_cerca` cronologico. **Perché
+la conversazione sbagliata**: la più recente era giusta (l'archiviazione a turno finito c'era, e
+l'esclusione `conv_archivio` era della conversazione nuova), ma il modo cronologico cerca anche
+per argomento (`sull_argomento`, 09/10 mattina) e l'argomento estratto era «scusami chiesto
+esattamente»: «esattamente» era in 5 turni della conversazione delle 12:41 (i video) e in nessuno
+di quella della pizza; il modello ha raccontato quelli. Il riassunto di chiusura della pizza è
+arrivato nell'archivio alle 19:08 (in secondo piano), e la ripresa non aveva niente.
+
+**Fatto**:
+- Le parole delle domande su cosa si è chiesto (chiesto, richiesta, esattamente, scusami,
+  attimo, poco, ultima…) sono cornice, non argomento (`tools/conversazioni._CORNICE`); un turno
+  trovato per argomento in una conversazione più vecchia di quella raccontata lo dice
+  (`conversazione: «un'altra, più vecchia…»`).
+- **La coda**: una conversazione chiusa per una pausa (`conversazione_scaduta`, anche dalla
+  pulizia delle corsie) lascia alla nuova della stessa persona i suoi ultimi
+  `conversazione_coda_scambi` (3) scambi, solo le frasi dette (`compressione.coda_scambi`,
+  `testo_coda`: dati, non istruzioni), al posto della riga «l'ultima volta…» e per
+  `conversazione_ripresa_ore`; regola `conversazione_coda`. Mai per un ospite (due ospiti dello
+  stesso satellite sono persone diverse), mai dopo «ricominciamo», «esci» o un cambio di persona.
+  `conversazione_cerca` lo sa (`conv_coda`): senza risultati non dà la frase finale «non trovo
+  niente», decide il modello con la coda davanti. Una conversazione con la sola coda non si
+  archivia né si riassume.
+- **«Ricominciamo» con parole sue** (caso vero delle 21:04: «No, voglio che ricominciamo da capo,
+  quindi Calliope ricominciamo.» non è la forma chiusa, e il modello rispondeva «Certamente,
+  ricominciamo pure» senza farlo): tool `conversazione_nuova(cosa)`, per tutti i livelli, classe
+  sicura (si disfa: l'archivio). Segna la richiesta e il ciclo chiude a risposta finita come la
+  regola breve (`ciclo._conversazione_nuova_chiesta`). `cosa` dice che cosa ricominciare con le
+  parole della persona: se nomina un'altra cosa («il collaudo», «la lista della spesa», «da dove
+  eravamo») il tool non fa niente e lo dice (regola `conversazione_nuova_altro`: controllo della
+  forma di un argomento del modello). La regola breve (`wakeword.nuova_conversazione`) resta.
+- **Misura** (`prove/prova_ricominciamo_ollama.py`, gemma4 e4b locale, 3 giri): senza `cosa` i
+  contrari ricominciavano 4 volte su 9 («il collaudo» 3/3); con `cosa` e la descrizione nuova 9/9
+  richieste giuste e 9/9 contrari senza ricominciare (il modello a volte chiama il tool con «il
+  collaudo» e riceve il no). Dopo la pausa 3/3 risposte dalla coda (pizza e foglio), mai i video;
+  la prima versione dava 2/3 («Non trovo niente…» come frase finale dell'archivio).
+  `prova_conversazioni_ollama` 1 giro: tutto giusto, prima frase mediana 1,24 s.
+- Prove a secco in `prova_conversazioni` (casi veri e contrari).

@@ -1323,7 +1323,7 @@ class Config:
     # riconosciuto con sicurezza. Vale come la zona grigia (al più familiare, le azioni vogliono
     # la voce nella frase), e la prudenza per i minori resta: guardiano, cancelli e preset del
     # minore valgono per la frase. Caso vero della DGX del 09/10 (18:48): due frasi di chi
-    # amministra prese per il figlio (0,50 contro 0,485 e 0,61 contro 0,54) aprivano una
+    # amministra prese per il minore (0,50 contro 0,485 e 0,61 contro 0,54) aprivano una
     # conversazione nuova, e quella di prima si perdeva. 0 = spenta
     speaker_proprietario_s: float = 180.0
     # Conferma breve (04/10, calliope/conferme.py): un «sì» sotto `speaker_min_voice_s`

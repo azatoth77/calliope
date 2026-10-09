@@ -10,7 +10,7 @@
 |---|---|---|
 | Cattura + VAD | sounddevice + Silero VAD (PyTorch, oppure il suo ONNX con onnxruntime senza torch: Linux) | `calliope/audio.py` → `Listener` (`listen`, `watch_for_name`, `measure_echo`); `calliope/vad.py` → `carica_vad`, `SileroOnnx`, `SileroTorch`; pause e fine del turno (dal 07/10, solo misura) `calliope/pause.py` → `MisuraPause`, `OsservaRipresa`, `inizio_ripresa`, `riassunto` (sotto) |
 | Chi parla | CAM++ (3D-Speaker) in ONNX con onnxruntime | `calliope/speaker_id.py` → `SpeakerEmbedder`, `SpeakerRegistry`, `SpeakerContext`; `arruola.py`; margine tra i profili e voce incerta tra un adulto e un minore (07/10) `Ciclo._confronta_voce`, `Ciclo._chiedi_chi_parla`, `SpeakerContext.incerta`; continuità delle frasi cortissime (08/10) `Ciclo._per_continuita`; il nome da solo dopo lo scatto acustico `ciclo.solo_nome_acustico`; più voci vicino allo stesso satellite (dal 09/10, sotto) `calliope/compagnia.py` → `Compagnia`, `modo`, `riassunto`, e il giudizio «rivolta a Calliope» `calliope/rivolta.py` → `Giudice`, `etichetta` |
-| Speech-to-Text | faster-whisper nel processo, oppure un server con l'API OpenAI (sulla DGX whisper.cpp con CUDA, servizio `calliope-whisper`; vLLM scartato) con ripiego su faster-whisper su CPU (modello di riserva dal catalogo, `whisper_riserva`) | `calliope/stt.py` → `Transcriber`, `ServerTranscriber`, `make_transcriber`, `modello_whisper`; server in `setup/linux/motore/whisper.sh`; correzione delle frasi incerte (spenta) `calliope/stt_correzione.py` → `Correttore`, `accettabile`, `min_utile`; a capo di whisper-server tolti `stt.unisci_righe`; parole incerte al modello (B, spenta) `stt_correzione.parole_incerte`, `Brain.STT_INCERTE_MSG`; frase capita trattenuta (B2, spenta) `Brain.CapitoHold`, `Brain._applica_capito`, `STT_RISCRIVI_MSG` (confronto A/B/B2/C in fondo); parole incerte negli argomenti dei tool (dal 08/10, F0 e F1, sotto) `calliope/argomenti_incerti.py` → `Ascolto`, `Misura`, `Vocabolario`, `allinea`, `esito`, `suggerimento`, `riassunto`, con le probabilità per parola `Transcriber.parole` e `ServerTranscriber.parole` |
+| Speech-to-Text | faster-whisper nel processo, oppure un server con l'API OpenAI (sulla DGX whisper.cpp con CUDA, servizio `calliope-whisper`; vLLM scartato) con ripiego su faster-whisper su CPU (modello di riserva dal catalogo, `whisper_riserva`) | `calliope/stt.py` → `Transcriber`, `ServerTranscriber`, `make_transcriber`, `modello_whisper`; server in `setup/linux/motore/whisper.sh`; correzione delle frasi incerte (spenta) `calliope/stt_correzione.py` → `Correttore`, `accettabile`, `min_utile`; a capo di whisper-server tolti `stt.unisci_righe`; parole incerte al modello (B, spenta) `stt_correzione.parole_incerte`, `Brain.STT_INCERTE_MSG`; frase capita trattenuta (B2, spenta) `Brain.CapitoHold`, `Brain._applica_capito`, `STT_RISCRIVI_MSG` (confronto A/B/B2/C in fondo); parole incerte negli argomenti dei tool (dal 08/10, F0 e F1, sotto) `calliope/argomenti_incerti.py` → `Ascolto`, `Misura`, `Vocabolario`, `allinea`, `esito`, `suggerimento`, `riassunto`, con le probabilità per parola `Transcriber.parole` e `ServerTranscriber.parole`; frasi tipiche delle allucinazioni scartate per intero in `calliope/allucinazioni.py` (09/10) |
 | Wake word acustica | classificatore addestrato in formato openWakeWord (ONNX) | `calliope/wakeword.py` → `WakeWordDetector`, `load_wake_detector`; usato da `Listener.listen(wake, awake_until)`. Modelli e addestramento in `wakeword/` |
 | Text-to-Speech | Piper (voce `it_IT-serena-high`) | `calliope/tts.py` → `Speaker` (2 thread: sintesi e riproduzione, `_pcm`; la prima frase lunga a pezzi `primo_pezzo`, `tts_spezza_prima`, `tts_primo_pezzo_min`, e i thread di onnxruntime `carica_voce`, `tts_thread`, dal 07/10; velocità e costo della voce misurati all'avvio e con l'uso `calliope/taratura_voce.py` → `Taratura` (file voce_taratura.json), `tts_thread` «auto»; dal 07/10 sera Piper anche sulla GPU con onnxruntime-gpu, `tts_dispositivo` auto/cpu/cuda, scelta secondo la macchina e ripiego sulla CPU (`_su_gpu`, `prova_dispositivo`): [contesto-conversazione](contesto-conversazione.md)); inglesismi detti all'inglese `calliope/pronuncia.py` → `Pronuncia`, `LESSICO` (`tts_pronuncia`, `tts_pronuncia_extra`) |
 
@@ -625,3 +625,61 @@ sconosciuta in compagnia serve il nome a ogni frase.
   resta ospite (niente guardiano del minore né avviso), la frase a 0,433 sul minore vale ancora il
   minore ma con la voce non sicura; il 09/10 le frasi lunghe dell'ospite a 0,22–0,33 accendono la
   compagnia dai gruppi alla seconda e le frasi senza nome nella finestra non si prendono.
+
+## Allucinazioni di Whisper scartate per intero (09/10 sera, ramo `sera-voce-conversazione`)
+
+**Caso vero della DGX** (registro dei turni): «e con il nostro corso gratuito
+www.mesmerism.info.it», identica l'08/10 alle 17:03 e il 09/10 alle 20:41, su 1,7 s di rumore
+nella finestra d'ascolto dello studio; presa per una frase di Dario (0,59 e 0,54) e mandata al
+modello con un'azione in sospeso. È una riga dei titoli di coda dei video: Whisper è addestrato
+anche sui sottotitoli e su rumore breve li ricopia. La lista di prima (`config.HALLUCINATIONS`,
+24/09) aveva solo sei frasi esatte.
+
+**Fatto** (`calliope/allucinazioni.py`, regola `allucinazione_whisper`, principio 10: riguarda la
+trascrizione): la frase si scarta solo **per intero** (minuscole, punteggiatura e nome a parte),
+per famiglie prese dalle liste note (discussioni di openai/whisper, soppressioni di
+faster-whisper e whisper.cpp) e dai registri: `sottotitoli` («Sottotitoli creati dalla comunità
+Amara.org», «… a cura di …»), `saluti_video` («Grazie per la visione», «Ciao a tutti», «Thanks
+for watching»), `canale` («Iscriviti al canale»), `promozione` (corso/canale «gratuito/online» con
+un indirizzo in fondo, «seguici su …»), `indirizzo` (solo un sito), `suoni` ([Musica], (applausi),
+♪♪). Con il nome davanti restano rumore solo sottotitoli, canale e promozione: «Calliope, ciao a
+tutti» o «Calliope, www.ilpost.it» possono essere frasi vere. Il trascrittore restituisce la frase
+vuota e dice la famiglia (`ultima_scartata`, per corsia in `STTCondiviso`); il ciclo la scrive
+nel registro (`allucinazione`) e il turno vale «vuoto», come prima per la lista vecchia.
+- Contrari (in `prova_testo`): «Grazie.», «Grazie per la cena di ieri.», «Ho trovato un corso
+  gratuito di inglese.», «Mi iscrivi al corso gratuito online www.esempio.it?», «Apri
+  www.ilpost.it», «Visita www.esempio.com» (può essere una richiesta), «Attiva i sottotitoli.»,
+  «Calliope, silenzio!» e «Musica.» senza parentesi.
+- **Misura sui registri della DGX** (1437 turni dal 02/10, solo conteggi): 2 frasi scartate, i due
+  casi veri; nessun'altra. Le frasi della lista vecchia non sono nel registro (erano già vuote).
+
+## Il proprietario del telefono e il minore: la frase resta sua (09/10 sera, ramo `sera-voce-conversazione`)
+
+**Caso vero della DGX** (09/10 18:48, telefono personale di Dario, registro dei turni): dopo otto
+frasi di Dario riconosciute dalla voce (0,66–0,75, il minore a 0,25–0,40), «Sì, sì, grazie.»
+(0,79 s: Dario 0,50, il minore 0,485 sopra soglia) e «Io volevo che tu facessi la ricerca in
+realtà.» (3,0 s: Dario 0,61, il minore 0,54, margine 0,06) valevano il minore per
+`minori.piu_protetto`: conversazione anonima nuova (`conversazione_altra_persona`), il contesto
+della birra perso, «non ho capito a quale ricerca». Dodici secondi dopo Dario di nuovo a 0,72.
+
+**Fatto** (`ciclo._proprietario_continua`, regola `voce_proprietario`, principio 10: riguarda
+l'audio): quando la frase sarebbe del minore come profilo più protetto, resta del **proprietario
+del satellite personale** (abbinato con `--personale`) se il più simile è lui (almeno
+`speaker_continuita_soglia`, 0,36), se lì è stato riconosciuto dalla voce negli ultimi
+`speaker_proprietario_s` (180 s) e se non c'è compagnia. Il minore prende il posto solo
+riconosciuto con sicurezza (sopra soglia e con il margine: modo «voce»).
+- Vale come la continuità: al più familiare (`identified_by = "conversazione"`), nella
+  conversazione del proprietario su quel satellite (corsie: «continuita»), nel registro
+  `voce.modo = "proprietario"`. L'incertezza resta nota (`incerta = (proprietario, minore)`): per
+  un'azione di chi amministra la frase di sfida e «non sono sicura di chi parla», come dal 07/10.
+- La prudenza per il minore resta (`SpeakerContext.minore_incerto`, una frase): preset dei tool,
+  contenuti e documenti guardano lui (`minori.profilo`), il guardiano giudica la frase come per lui
+  e un pericolo avvisa i suoi tutori; nei due cancelli la voce vale «non sicura». Le risposte
+  restano nel tono di chi amministra (il preset del minore nei dati del turno no).
+- Contrari (`prova_voci_famiglia`): minore riconosciuto con sicurezza, minore più simile del
+  proprietario, satellite di stanza, telefono di un'altra persona, finestra scaduta, compagnia,
+  spenta (`speaker_proprietario_s: 0`), proprietario mai riconosciuto lì; la prudenza vale una
+  frase. Le prove di prima (`prova_voci_famiglia`, `prova_corsie`, `prova_minori_cancelli`,
+  `prova_compagnia`) passano uguali.
+- Resta il problema di fondo del canale del telefono (vedi «Voci di famiglia»): da ritarare con
+  le registrazioni per canale.
