@@ -523,7 +523,8 @@ regole) è in [voce-e-regole](voce-e-regole.md). Prova a secco `prove/prova_argo
   ridotte); «forse» da 0,7 (`stt_argomenti_soglia_noto`).
 - **Esito del tool** (`esito`): vuoto (campo d'errore o testo «non trovato», «nessun risultato»,
   risultati vuoti, `trovato: false`), errore, pieno, fermato (una domanda della politica o del tool
-  al posto del tool).
+  al posto del tool). *Dal 09/10 sera* il testo conta solo se il «non trovato» riguarda un nome e
+  senza dati accanto, e «NIENTE: l'azione NON è stata eseguita» è «fermato» (sezione più sotto).
 - **F1**: dopo un esito vuoto, con un nome noto vicino il risultato del tool porta
   `nome_incerto` («chiudi con la domanda «Intendevi X?»»; fuori dalla busta dei dati non fidati) e
   una proposta in sospeso con il nome suggerito: il «sì» richiama il tool con quello, senza altre
@@ -552,6 +553,48 @@ Limite: il collaudo che si ferma con un campo d'errore nel risultato (`_fallito`
 `tools/sviluppo.py`) risponde con la sua frase pronta «Lo faccio correggere?»: lì F1 non arriva al
 modello (la misura resta). Da rimisurare sulla DGX con la voce vera: soglie, quanti esiti vuoti
 hanno un nome noto vicino, quante correzioni spontanee (`calliope stato --turni`).
+
+## «Forse intendevi…?» che non scattava nel collaudo (09/10 sera, ramo `sera-ricerca`)
+
+Casi veri della DGX (09/10, collaudo di Meteocittà; qui nomi di fantasia al posto di quelli detti, le somiglianze sono misurate sui nomi veri). 20:47:47
+«Prova con Cerro Maggiore e poi con Pradello Lugnasco» → l'estensione risponde come risultato
+riuscito `{"da_dire": "Non ho trovato la città 'Pradello Lugnasco'. Controlla il nome e riprova."}`;
+20:48:22 «Pradello Duniasco» → collaudo fermato dalla politica per valore
+(`valore_non_ancorata`) e la risposta «anche per Pradello Duniasco non ho trovato nulla»; niente
+«intendevi Pradello Dugnasco?» in nessuno dei due.
+
+Dal registro (`stt_argomento`): alle 20:47 l'esito era già **vuoto** (il testo del da_dire
+contava), ma il nome noto più vicino era «Cerro Maggiore» (0,40): **«Pradello Dugnasco» non era nel
+vocabolario**. Era riuscito l'08/10 (15:44 e 20:11), ma prima che la misura F0 scrivesse
+`stt_argomento` nel registro, e il vocabolario si ricarica solo da lì. C'è dal collaudo riuscito
+delle 20:59 (esito pieno, valore dalla frase); al prossimo avvio si ricarica dal registro.
+Verificato sul registro vero copiato in locale: `Vocabolario.carica_dal_registro` →
+`Pradello Dugnasco, Cerro Maggiore, …`; «Pradello Lugnasco» e «Pradello Duniasco» → Pradello Dugnasco
+0,93, «Patello Duniasco» 0,86, «Pradello Bluniasco» 0,83 (tutti sopra 0,7). Alle 20:48:22 l'esito
+risultava **errore** invece di «fermato»: il rifiuto della politica non ha `motivo`, ha `fatto`
+«NIENTE: l'azione NON è stata eseguita».
+
+Correzioni (`calliope/argomenti_incerti.py`):
+- **Esito vuoto dalle parole, con un criterio più stretto** (`dice_non_trovato`, `esito(res,
+  argomenti)`, Brain passa gli argomenti): il «non trovato» in un risultato riuscito conta solo
+  se riguarda un nome, cioè è seguito o preceduto da una cosa che si cerca per nome (città,
+  località, comune, nome, contatto, file, voce, risultato, «nulla», «niente») o ha il valore
+  passato **subito** accanto («non ho trovato 'Pradello Lugnasco'», «Pradello Lugnasco non è stato
+  trovato»), e solo se accanto non ci sono dati (il valore passato ripetuto non è un dato). Si
+  aggiunge «non riconosce». Contrari: «Non ho trovato pioggia, è sereno», «Non ho trovato
+  pioggia a Milano» (con o senza temperatura e cielo), «Milano: non ci sono allerte meteo» → pieno.
+- **Fermato**: un risultato con `fatto` «NIENTE: l'azione NON è stata eseguita» (politica,
+  schema) senza «non trovato» è «fermato», non «errore».
+- **Contratto delle estensioni** (`estensioni/contratto.py`, cioè CAPACITA.md, e
+  `estensioni/prompt.py`): quando non trova quello che è stato chiesto, l'estensione restituisce
+  anche `trovato: false` accanto al da_dire. Il campo vince sulle parole (lo leggeva già
+  `esito`); le estensioni vecchie restano coperte dal testo.
+- Prove a secco in `prova_argomenti_incerti`: 15 casi con gli argomenti (anche i contrari) e il
+  collaudo con il da_dire che con Brain dà «intendevi Pradello Dugnasco?» e la proposta in sospeso.
+
+Resta (non di quest'area): alle 20:48:22 il modello ha detto «non ho trovato nulla» dopo un
+collaudo **non eseguito** dalla politica; e il vocabolario non conosce i nomi riusciti prima
+dell'08/10 sera (nessun altro registro da cui ricavarli con l'esito).
 
 ## Più persone che parlano: la «modalità compagnia» (09/10, analisi, ramo `analisi-compagnia`)
 

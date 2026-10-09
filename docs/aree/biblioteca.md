@@ -319,3 +319,79 @@ many requests»).
   `ENGINES`; Bing News resta per le notizie). Si applica al prossimo avvio del container
   (`calliope motore searxng avvia` o un aggiornamento dell'immagine, che riscrive le impostazioni).
 
+## Notizie senza tema, ricerche con la loro fonte, motori in pausa (09/10 sera, ramo `sera-ricerca`)
+
+Tre casi veri della DGX del 09/10 sera (registro e journal).
+
+**Notizie a tema senza tema** (21:04:34): «Le notizie di sport» → `web_cerca({'tipo':
+'notizie'})` senza `domanda` (facoltativa dal ramo `ricerche-distanza`) → notizie generali e
+«le notizie sportive non sono arrivate tramite la ricerca». Ora, con tipo notizie e senza
+domanda, `web_cerca` prende il tema dalla frase di chi parla (`servizio.tema_dalla_frase`): le
+parole dopo «notizie» (o news, novità, aggiornamenti) fino alla fine dell'enunciato (punto,
+virgola, «e poi»), senza preposizioni ai bordi (mai gli articoli dei nomi: «Notizie su La
+Spezia» → «La Spezia»), senza «ci sono», «c'è» in testa né il tempo («di oggi», «del giorno»,
+«recenti», «per favore»); più di sei parole non è un tema. Regola `notizie_tema_frase`; se non
+resta niente, notizie generali come prima (`notizie_generali`). Conversione della forma di una
+scelta già fatta dal modello (principio 10). Contrari a secco in `prova_web` («Calliope. Le
+ultime notizie.», «notizie di oggi», «le notizie più recenti», «Leggimi le notizie, per favore»,
+«Che si dice nello sport?» → generali) e `prova_dialogo_tool` (con la domanda del modello vale
+quella).
+
+**«Dimmi di più» sulla fonte sbagliata** (21:06:06): notizie della tromba marina con `web_cerca`
+(21:04:57), poi timer, ora e la Torre di Pisa con `biblioteca_cerca`; «Torniamo alla notizia del
+trapanese di prima. Dimmi di più.» → `biblioteca_cerca` e una risposta vaga. `RICERCA_MSG` diceva
+solo l'ultima ricerca, quella della biblioteca. Ora elenca le ricerche della conversazione con la
+loro fonte; e la descrizione dei due tool e il risultato della biblioteca con passaggi fuori tema
+dicono il criterio «biblioteca per i fatti da enciclopedia, internet per guide pratiche, consigli,
+prodotti e cose recenti» (caso delle 18:47: tre `biblioteca_cerca` per «tecniche di produzione
+casalinga della birra», passaggi su un film di Chaplin, internet solo dopo averlo proposto).
+Dettagli in [voce-e-regole](voce-e-regole.md) (stessa data).
+
+**Ricerche lente** (notizie 7,9 s, approfondimento 5,5 s, web 5–6 s alla prima frase, 18:49–18:52 e
+20:37). La prima frase comprende due passate del modello; la parte di SearXNG è al più il suo
+timeout: SearXNG aspetta il motore più lento fino a `request_timeout`. Ultimo controllo della DGX
+(`motore/searxng.json`): «meteo Roma domani» **3006 ms**, risultati solo da DuckDuckGo, Brave «too
+many requests» e Wikidata in timeout; «Serie A risultati» 3006 ms con ANSA in timeout; «notizie
+Italia oggi» 513 ms (Google News «access denied» risponde subito). Misura in sola lettura sul
+SearXNG della DGX (tre richieste a 20 s l'una dall'altra, «meteo Roma domani», 09/10 sera): così
+com'è 1428 ms; con `timeout_limit` 2,0 655 ms; con 2,0 e senza Brave e Wikidata 520 ms. In
+tutte e tre i risultati venivano solo da DuckDuckGo: Brave «Suspended: too many requests», Qwant
+«CAPTCHA», Startpage e Mojeek niente. Correzioni (`calliope/web/motore.py`,
+`setup/linux/motore/searxng.sh`):
+- **Motori in pausa** (`aggiorna_motori`): per ogni motore il conto dei controlli di fila in cui
+  non risponde mentre nella stessa prova un altro dà risultati (se nessuno risponde manca
+  internet: non conta); chi dà risultati azzera il conto. A `web_searxng_pausa_controlli` (2)
+  il motore va in pausa: `searxng.sh pausa MOTORE…` scrive `~/calliope-motore/searxng/in-pausa`,
+  rifà le impostazioni senza di lui (anche nelle voci delle notizie: un motore nominato lì e non
+  in `keep_only` sarebbe un errore) e rifà il container, in automatico solo a Calliope ferma
+  (altrimenti al prossimo controllo); se SearXNG non riparte si torna alle pause di prima, con
+  l'errore nella storia. Dopo `web_searxng_pausa_giorni` (3) si riprova; un altro controllo
+  fallito lo rimette subito in pausa. Con meno di `web_searxng_min_motori` (3) motori che danno
+  risultati e qualcuno in pausa la ricerca è «degradata» (il motivo dice chi è in pausa). Stato
+  (`motori`, `in_pausa`), storia (evento «motori»: «metto in pausa brave (too many requests)»,
+  «riprovo …») e vista del cruscotto (`in_pausa` con il perché). Su Windows o senza docker
+  niente pause. `0` controlli = mai. Le pause le gestisce il controllo: una pausa messa a mano
+  con `calliope motore searxng pausa …` vale fino al prossimo cambio deciso dal controllo.
+- **Timeout**: `request_timeout` 2,0 s per i generali (DuckDuckGo risponde in 0,5–1,4 s), le
+  notizie (Bing News, DuckDuckGo News, Google News, ANSA) a 3,0 s con `timeout` per motore: ANSA
+  a volte è lenta e senza di lei le notizie italiane sono più povere. Guadagno atteso: fino a 1 s
+  per ricerca generale quando un motore non risponde, tutto il tempo d'attesa quando quel motore
+  è in pausa (sulla DGX, con Brave e Wikidata in pausa, ~0,5 s invece di 3 s).
+- **Si applica** al prossimo avvio del container (`calliope motore searxng avvia`, un
+  aggiornamento dell'immagine o la prima pausa decisa dal controllo): `calliope aggiorna` da solo
+  non rifà SearXNG.
+- **Prove** a secco in `prova_searxng_aggiorna` (conto, pausa, ripresa, contrari: tutti giù,
+  risultati in un'altra prova, 0 controlli; degradata con pochi motori; automatico in uso; script
+  che non riesce; Windows; lo script con il docker finto: `in-pausa`, impostazioni, timeout,
+  motore sconosciuto rifiutato, pause tolte).
+
+**«Forse intendevi…?» non scattato** (20:47–20:48, collaudo di Meteocittà): in
+[stt-tts](stt-tts.md) (stessa data).
+
+**Misura col modello** (gemma4 e4b sul portatile, SearXNG e biblioteca finti,
+`prove/misura_ricerche_fonte.py 3`, 3 giri per lato, «prima» col codice di main): «torniamo alla notizia del trapanese di prima» dopo
+notizie, ora, un conto e la Torre di Pisa nella biblioteca → `web_cerca` con «tromba
+marina/Marsala» **3/3 prima e 3/3 dopo** (il 4B ci arrivava già: il guasto del caso vero è del
+26B, da riguardare sulla DGX), prima frase mediana 2,9 s prima e 2,0 s dopo; «Quali sono le
+tecniche per fare la birra in casa?» → `web_cerca` **0/3 prima** (sempre `biblioteca_cerca` e una
+risposta a memoria) **e 3/3 dopo**.
