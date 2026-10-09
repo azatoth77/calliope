@@ -203,6 +203,33 @@ verifica("niente voci con la punteggiatura finale (mai confrontate)",
 verifica("«Grazie.» detto da una persona non è un'allucinazione",
          "Grazie.".lower().strip(" .!?…") in HALLUCINATIONS, False)
 
+# Le frasi tipiche delle allucinazioni di Whisper, per intero (09/10, calliope/allucinazioni.py,
+# regola `allucinazione_whisper`): il caso vero della DGX (08/10 17:03 e 09/10 20:41) e le
+# famiglie delle liste note, con i contrari (una frase vera con «grazie», «corso», un sito)
+from calliope.allucinazioni import allucinazione  # noqa: E402
+
+for testo, atteso in [
+        ("e con il nostro corso gratuito www.mesmerism.info.it", "promozione"),
+        ("E con il nostro corso gratuito, www.mesmerism.info.it.", "promozione"),
+        ("Sottotitoli creati dalla comunità Amara.org", "sottotitoli"),
+        ("Sottotitoli e revisione a cura di QTSS.", "sottotitoli"),
+        ("Sottotitoli a cura di Mario Bianchi", "sottotitoli"),
+        ("Calliope, sottotitoli a cura di QTSS", "sottotitoli"),
+        ("Grazie per la visione!", "saluti_video"), ("Grazie a tutti.", "saluti_video"),
+        ("Thank you for watching.", "saluti_video"),
+        ("Iscriviti al canale!", "canale"), ("Non dimenticate di iscrivervi al canale.", "canale"),
+        ("[Musica]", "suoni"), ("(applausi)", "suoni"), ("♪♪", "suoni"),
+        ("www.mesmerism.info.it", "indirizzo"),
+        # contrari: frasi vere che contengono le stesse parole
+        ("Grazie.", None), ("Grazie per la cena di ieri.", None),
+        ("Calliope, grazie a tutti", None), ("Ho trovato un corso gratuito di inglese.", None),
+        ("Mi iscrivi al corso gratuito online www.esempio.it?", None),
+        ("Apri www.ilpost.it", None), ("Calliope, www.ilpost.it", None),
+        ("Visita www.esempio.com", None), ("Attiva i sottotitoli.", None),
+        ("Calliope, silenzio!", None), ("Musica.", None), ("Accendi la tv.", None),
+        ("Ricominciamo il corso di inglese.", None), ("", None)]:
+    verifica(f"allucinazione «{testo}»", allucinazione(testo, ["Calliope"]), atteso)
+
 # Prompt iniziale ricopiato da Whisper, anche con il nome davanti (01/10): senza modello
 from calliope.config import Config  # noqa: E402
 from calliope.stt import Transcriber  # noqa: E402
@@ -213,6 +240,14 @@ _t.prompt = f"Conversazione con {_t.cfg.name}."
 for testo, atteso in [("Calliope Conversazione con Calliope", True), ("Conversazione con Calliope.", True),
                       ("Calliope, che ore sono?", False), ("Calliope", False)]:
     verifica(f"eco del prompt «{testo}»", _t._is_prompt_echo(testo), atteso)
+
+# Il trascrittore scarta l'allucinazione e dice quale (il ciclo la scrive nel registro)
+_t._run = lambda audio: "e con il nostro corso gratuito www.mesmerism.info.it"
+verifica("trascrittore: l'allucinazione diventa la frase vuota", _t.transcribe(None), "")
+verifica("trascrittore: la famiglia per il registro", _t.ultima_scartata, "promozione")
+_t._run = lambda audio: "Ho fatto un corso gratuito di yoga."
+verifica("trascrittore: contrario, la frase vera passa",
+         (_t.transcribe(None), _t.ultima_scartata), ("Ho fatto un corso gratuito di yoga.", None))
 
 # ── pulizia per la voce e frasi ──
 verifica("niente markdown né emoji", clean_for_speech("**Ciao** 😀 a _tutti_"), "Ciao a tutti")

@@ -1343,6 +1343,14 @@ class Ciclo:
         t.emb_job = (s.embed_pool.submit(s.registry.embed, t.audio, cfg.sample_rate)
                      if identify else None)
         t.text = s.stt.transcribe(t.audio) if t.scritto is None else t.scritto["testo"]
+        scartata = getattr(s.stt, "ultima_scartata", None) if t.scritto is None else None
+        if isinstance(scartata, str):
+            # Una frase tipica delle allucinazioni di Whisper, per intero (09/10,
+            # calliope/allucinazioni.py): vale come rumore, prima del modello
+            print(f"   [STT] frase tipica delle allucinazioni di Whisper ({scartata}): rumore",
+                  flush=True)
+            self.rec["allucinazione"] = scartata
+            self.rule("allucinazione_whisper")
         if t.scritto is None and isinstance(self.rec.get("ascolto"), dict):
             # «aspetta», «non ho finito»… in testa alla frase: solo un segnale nel registro
             # (07/10, pause.py), nessun effetto sul turno

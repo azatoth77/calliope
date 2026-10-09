@@ -77,6 +77,9 @@ class Transcriber:
     # La confidenza dell'ultima frase (stt_correzione.Confidenza) per la correzione delle
     # frasi incerte: la dà solo il server (verbose_json); qui None, e non si corregge
     ultima_confidenza = None
+    # La famiglia dell'ultima frase scartata come allucinazione (calliope/allucinazioni.py,
+    # 09/10), o None: il ciclo la scrive nel registro dei turni (regola allucinazione_whisper)
+    ultima_scartata = None
 
     def __init__(self, cfg: Config, solo_cpu: bool = False):
         from faster_whisper import WhisperModel
@@ -181,8 +184,15 @@ class Transcriber:
             if not self._ripiega_su_cpu(e):
                 raise
             text = self._run(audio)
-        # Confronto senza punteggiatura finale: «Grazie a tutti.» sfuggiva (test del 24/09)
-        if text.lower().strip(" .!?…") in HALLUCINATIONS or self._is_prompt_echo(text):
+        # Confronto senza punteggiatura finale: «Grazie a tutti.» sfuggiva (test del 24/09).
+        # Dal 09/10 le frasi tipiche delle allucinazioni di Whisper, per intero
+        # (calliope/allucinazioni.py: «e con il nostro corso gratuito www.…» su rumore)
+        from .allucinazioni import allucinazione
+        famiglia = ("sottotitoli" if text.lower().strip(" .!?…") in HALLUCINATIONS
+                    else allucinazione(text, getattr(self.cfg, "wake_names", None)
+                                       or [self.cfg.name]))
+        self.ultima_scartata = famiglia
+        if famiglia is not None or self._is_prompt_echo(text):
             return ""
         return text
 
