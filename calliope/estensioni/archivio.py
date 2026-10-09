@@ -18,6 +18,7 @@ import json
 import os
 import shutil
 import stat
+import sys
 import threading
 import time
 from pathlib import Path
@@ -59,10 +60,54 @@ def _sola_lettura(cartella: Path, si: bool = True):
             pass
 
 
+def _scrivibile(p: Path):
+    """Rende scrivibile `p` e ogni cartella sotto, dall'alto (09/10): su Linux si cancella un
+    file solo se la sua **cartella** è scrivibile, e le versioni approvate hanno cartelle
+    r-x (`_sola_lettura`); una cartella si apre prima di leggerne il contenuto."""
+    try:
+        os.chmod(p, stat.S_IMODE(os.lstat(p).st_mode) | stat.S_IRWXU)
+    except OSError:
+        pass
+    for radice, cartelle, file in os.walk(p):
+        for x in [radice] + [os.path.join(radice, c) for c in cartelle]:
+            try:
+                os.chmod(x, stat.S_IMODE(os.lstat(x).st_mode) | stat.S_IRWXU)
+            except OSError:
+                pass
+        for f in file:
+            q = os.path.join(radice, f)
+            try:
+                if not os.path.islink(q):
+                    os.chmod(q, stat.S_IMODE(os.lstat(q).st_mode) | stat.S_IWRITE
+                             | stat.S_IREAD)
+            except OSError:
+                pass
+
+
+def _riprova(f, q, *_):
+    """Per rmtree: un file o una cartella che non si toglie (sola lettura, anche la cartella
+    che lo contiene) si rende scrivibile e si riprova una volta."""
+    for x in (os.path.dirname(q), q):
+        try:
+            os.chmod(x, stat.S_IMODE(os.lstat(x).st_mode) | stat.S_IWRITE | stat.S_IREAD
+                     | (stat.S_IXUSR if os.path.isdir(x) else 0))
+        except OSError:
+            pass
+    f(q)
+
+
 def _togli_cartella(p: Path):
-    if p.exists():
-        _sola_lettura(p, False)
-        shutil.rmtree(p, onerror=lambda f, q, e: (os.chmod(q, stat.S_IWRITE), f(q)))
+    """Cancella la cartella con tutto dentro, anche i file approvati in sola lettura (su
+    Windows l'attributo dei file, su Linux i permessi delle cartelle)."""
+    if p.exists() or p.is_symlink():
+        if p.is_symlink() or not p.is_dir():
+            p.unlink()
+            return
+        _scrivibile(p)
+        if sys.version_info >= (3, 12):
+            shutil.rmtree(p, onexc=_riprova)
+        else:  # pragma: no cover — Python 3.11
+            shutil.rmtree(p, onerror=_riprova)
 
 
 class Archivio:

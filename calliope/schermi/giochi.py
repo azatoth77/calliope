@@ -584,6 +584,17 @@ class Giochi:
                 p = self.partite.pop(pid)
                 self._per_gettone.pop(p.gettone, None)
 
+    def chiudi_di(self, nome: str) -> list[str]:
+        """Le partite di un gioco eliminato (09/10, estensione_gestisci rimuovi): finite, il
+        loro indirizzo non vale più. Gli id, per togliere le loro schede."""
+        with self._lock:
+            pids = [k for k, v in self.partite.items() if v.nome == nome]
+            for pid in pids:
+                p = self.partite.pop(pid)
+                self._per_gettone.pop(p.gettone, None)
+            self._documenti = {k: v for k, v in self._documenti.items() if k[0] != nome}
+        return pids
+
     def stato(self) -> dict:
         with self._lock:
             return {"partite": len(self.partite), "guasti_recenti": len(

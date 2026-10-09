@@ -7,7 +7,8 @@ I tool delle estensioni (04/10/2026, calliope/estensioni/).
   per l'agente, con proposta e «sì» (sviluppo_apri proposta=id). A lavoro finito la versione
   è «da approvare» e si annuncia.
 - estensione_gestisci (fino al 08/10 estensioni_gestisci)(azione, nome, esecuzione, sempre): elenca; approva, indietro (sempre
-  con la frase di sfida); rifiuta, disattiva, riattiva, revoca, rimuovi (con «Procedo?»);
+  con la frase di sfida); rifiuta, disattiva, riattiva, revoca, rimuovi (con «Procedo?»; dal
+  09/10 l'eliminazione definitiva di una disattivata: un'attiva prima si disattiva);
   consenti e nega per un'azione pericolosa sospesa di un'estensione.
 - est_<nome>: un tool per estensione attiva (calliope/estensioni/servizio.py, `specs`).
 """
@@ -381,8 +382,9 @@ def estensioni_specs(crea: bool = True) -> list[ToolSpec]:
                      "approvare: chiamalo prima di rispondere a una domanda sulle estensioni o "
                      "di dire come usarne una); approva una versione nuova («attiva la versione nuova», "
                      "«usa la nuova»), rifiuta, disattiva, riattiva (una disattivata), indietro "
-                     "(torna alla versione precedente), revoca (i permessi «sempre»), rimuovi, "
-                     "rinomina (titolo = il nome nuovo detto: cambia solo come si chiama, "
+                     "(torna alla versione precedente), revoca (i permessi «sempre»), rimuovi "
+                     "(elimina per sempre una disattivata: file e versioni; un'attiva va prima "
+                     "disattivata), rinomina (titolo = il nome nuovo detto: cambia solo come si chiama, "
                      "senza agente); "
                      "consenti o nega un'azione che un'estensione ha chiesto (esecuzione = l'id, "
                      "es. «E3»; sempre=true se la persona dice «sì, sempre»). Per USARE "

@@ -1572,3 +1572,64 @@ sonde usa qwen3.6 e quante ne rifiuta il vocabolario (se tante, allargarlo con u
 nella prova, mai con un'eccezione larga); il tempo in più per consegna (atteso sotto i 10 s per
 tre casi); una settimana di `uscite.jsonl` con sonde e ricollaudi contati a parte; il banco con
 `--docker`.
+
+## Eliminazione definitiva di un'estensione (09/10, ramo `rimuovi-documenti`)
+
+Decisione di Dario del 09/10. `estensione_gestisci azione=rimuovi` c'era già (con «Procedo?»),
+ma la scelta del nome detto (`servizio._nome` con `preferenza(azione)`) per «rimuovi» preferiva
+l'**attiva** tra due estensioni con lo stesso titolo detto. Sulla DGX ci sono «Meteo città»
+(`meteo_citta`, disattivata) e «Meteocittà» (`meteo_codifica_citta`, attiva), che a voce si
+confrontano uguali (`_compatto`): «rimuovi l'estensione Meteo città» avrebbe eliminato quella
+attiva (letto in sola lettura, i nomi qui sono quelli delle cartelle).
+
+- **Quale**: per `rimuovi` (e i sinonimi «elimina», «cancella», «togli») la preferenza è la
+  **disattivata**, poi rifiutata, da approvare, attiva. Tra più estensioni nello stato preferito
+  (tutte e due disattivate) vince quella con il titolo detto proprio così, spazi compresi; per
+  usarla, cambiarla o disattivarla resta l'attiva.
+- **Un'attiva non si elimina in un passo** (la via prudente, scelta qui invece di una conferma
+  più forte): «Meteocittà» è attiva, versione 5: prima la disattivo? Poi, se vuoi, la posso
+  eliminare.», in sospeso `disattiva` (regola `estensione_rimuovi_attiva`, vincolo di
+  sicurezza). Due passi detti, ognuno reversibile fino all'ultimo; il controllo viene prima della
+  frase di sfida, che così non si chiede per niente.
+- **Occupata**: uno sviluppo aperto o sospeso su di lei (`Sviluppi.dell_estensione`) o un lavoro
+  dell'agente in coda, in corso o in attesa che la cambia la bloccano con una frase chiara («c'è
+  uno sviluppo aperto su di lei (S3). Prima chiudilo, poi la posso eliminare»; «un agente ci sta
+  lavorando (L9). Aspetta che finisca, o annulla il lavoro…»; regola
+  `estensione_rimuovi_occupata`).
+- **La domanda** dice quale e che è definitiva: «Elimino per sempre «Meteo città»
+  (disattivata, versione 5): dice il meteo di una città. «Meteocittà», attiva, resta com'è.
+  Cancello i file di tutte le versioni e i suoi dati: non si torna indietro. Procedo?». In
+  sospeso il nome interno; il «sì» vale da 1 a 3 turni dopo, mai nella stessa risposta.
+- **Dopo il sì**: la cartella (tutte le versioni e `dati/`, anche i dati dei giochi) e la voce
+  dell'indice, quindi i permessi «sempre» e la voce dell'elenco; il tool `est_` (`aggiorna_tool`);
+  le partite dei suoi giochi (`Giochi.chiudi_di`, il gettone non vale più); le offerte in
+  sospeso; le schede che rimandano a lei (lo sviluppo `sviluppo:<id>`, il lavoro
+  `lavoro:<id>` e `registro:<id>`, le partite `gioco:<id>`) escono dalla cronologia di ogni
+  schermo, dall'ultima scheda di ogni persona e dalla cronologia su disco
+  (`Schermi.togli_schede`, `CronologiaSchede.togli`). Le pagine già aperte le tengono finché non
+  si ricollegano. Nel registro delle decisioni una riga `esito: eliminata` con chi e quante
+  schede.
+- **File in sola lettura**: `_togli_cartella` ora rende scrivibili le cartelle dall'alto prima di
+  leggerle (`_scrivibile`) e riprova un file che non si toglie rendendo scrivibile anche la sua
+  cartella (`onexc`). Provato con file e cartelle r-x su Windows e su Linux con un utente non
+  root (la distribuzione WSL di Podman, Python 3.14): passa; anche la versione di prima passava
+  su Linux. La cancellazione fallita dell'08/10 era a mano (`rm` senza `-f` o senza i permessi
+  della cartella): per farla a mano sulla DGX, `chmod -R u+w <cartella>` prima di `rm -r`.
+  Sulla DGX tutti i file delle estensioni sono dell'utente di Calliope (letto in sola lettura:
+  nessun file del container con un altro proprietario).
+- Vale per chi amministra, come le altre azioni di gestione (un familiare: «solo chi
+  amministra»).
+
+**Prove**: a secco `prove/prova_estensione_rimuovi.py` (livello 1, ~1 s; `--solo-file` fa solo
+la parte dei file con la libreria standard, per Linux); `prova_estensioni.py` aggiornata
+(un'attiva prima si disattiva). Con gemma4 e4b sul portatile
+`prove/prova_estensione_rimuovi_ollama.py`, 3 giri più 1:
+
+| caso | ramo |
+|---|---|
+| «Calliope, rimuovi l'estensione Meteo città.» → la domanda sulla disattivata | 4/4 |
+| «Sì, procedi.» → eliminata la disattivata, l'attiva resta col suo tool | 4/4 |
+| contrario: «disattiva l'estensione Meteocittà» → l'attiva spenta, niente eliminato | 4/4 |
+| contrario: con la sola attiva «elimina l'estensione Meteocittà» → «prima la disattivo?» | 4/4 |
+
+Sulla DGX le due estensioni restano com'erano: l'eliminazione la decide Dario a voce.

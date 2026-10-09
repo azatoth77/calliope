@@ -424,6 +424,25 @@ class Schermi:
                 self.invia_a(sid, c)
         return n
 
+    def togli_schede(self, togliere) -> int:
+        """Le schede per cui `togliere(scheda)` è vero escono dalla cronologia di ogni
+        schermo, dall'ultima scheda di ogni persona e dalla cronologia su disco (09/10: cosa
+        rimandava a un'estensione eliminata). Le pagine aperte le tengono finché non si
+        ricollegano. Quante schede (al più, tra memoria e disco)."""
+        n = 0
+        with self._lock:
+            for sid, h in list(self._storia.items()):
+                tieni = [c for c in h if not togliere(c)]
+                if len(tieni) != len(h):
+                    n += len(h) - len(tieni)
+                    self._storia[sid] = deque(tieni, maxlen=self._n_storia())
+            for k, c in list(self._ultime.items()):
+                if isinstance(c, dict) and togliere(c):
+                    self._ultime.pop(k, None)
+        if self.cronologia is not None:
+            n = max(n, self.cronologia.togli(togliere))
+        return n
+
     # ── la scheda «Conversazione» (08/10): i turni della persona dall'archivio ──
     def _n_chat(self) -> int:
         return max(0, int(getattr(self.cfg, "schermi_chat_turni", 80) or 0))
