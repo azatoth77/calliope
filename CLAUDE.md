@@ -64,7 +64,7 @@ per stadio, solo i moduli principali: librerie, classi e dettagli sono nei docum
 | Una conversazione per persona, satelliti insieme | `corsie.py` | [contesto-conversazione](docs/aree/contesto-conversazione.md) |
 | Politica dei tool, provenienza, quarantena, ciò che dice; sicurezza per valore (attrito, memoria dell'intento, matrice in ombra: dall'08/10) | `politica.py`, `provenienza.py`, `valore.py`, `attrito.py`, `quarantena.py`, `riferire.py` | [sicurezza-politica](docs/aree/sicurezza-politica.md) |
 | Conferme e frase di sfida, sicurezza | `conferme.py`, `sicurezza.py`, `guardrail.py` | [sicurezza-politica](docs/aree/sicurezza-politica.md) |
-| Minori e guardiano; esercizi generati da Calliope (matematica e italiano, dal 08/10) | `minori.py`, `guardiano.py`, `esercizi/`, `tools/esercizi.py` | [minori](docs/aree/minori.md) |
+| Minori e guardiano, segnali di pericolo poco chiari a due cancelli (dal 09/10); esercizi generati da Calliope (matematica e italiano, dal 08/10) | `minori.py`, `guardiano.py`, `cancelli.py`, `esercizi/`, `tools/esercizi.py` | [minori](docs/aree/minori.md) |
 | Biblioteca offline (ZIM in puro Python, FTS5) | `biblioteca.py`, `zim.py`, `biblioteca_indice.py` | [biblioteca](docs/aree/biblioteca.md) |
 | Ricerca su internet (SearXNG sulla DGX) | `web/` | [biblioteca](docs/aree/biblioteca.md) |
 | PC a voce (locale o del satellite) | `pc/` (`PCExecutor`, `windows.py`, `remoto.py`), `tools/pc.py` | [pc](docs/aree/pc.md) |

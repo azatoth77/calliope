@@ -1338,6 +1338,28 @@ class Config:
     # manda di nuovo ai tutori: una frase spezzata in due turni lo mandava due volte (prova
     # e2e del 06/10). Un argomento diverso parte sempre; 0 = ogni volta
     minori_avviso_ripetuto_s: float = 600.0
+    # Il giro a due cancelli (09/10, calliope/cancelli.py): un segnale di pericolo poco chiaro
+    # di un minore (una parola, un saluto, un modo di dire: lo decide il rilevatore) non manda
+    # subito l'avviso. Cancello 1: una frase che rassicura e chiede se va tutto bene; cancello
+    # 2: la sua risposta torna al rilevatore con il primo segnale (conferma → protezione e
+    # avviso, smentita → niente avviso). Un segnale esplicito, o un giudizio guasto, vale come
+    # prima (protezione e avviso subito). Caso vero dell'08/10: un adulto ospite preso per il
+    # ragazzo saluta e il tutore riceve un avviso «sicurezza». false = ogni segnale come prima
+    minori_pericolo_verifica: bool = True
+    # Secondi in cui il segnale da verificare aspetta la risposta (poi vale il silenzio); 0 =
+    # senza limite (il silenzio non scatta mai: sconsigliato)
+    minori_pericolo_attesa_s: float = 300.0
+    # Senza risposta entro l'attesa: «avvisa» = avviso non urgente «da verificare, segnale
+    # debole» ai tutori (scelta prudente: chi dice una cosa preoccupante e poi tace non resta
+    # senza nessuno che lo sappia); «niente» = solo il registro dei turni
+    minori_pericolo_silenzio: str = "avvisa"
+    # Secondi in cui un secondo segnale poco chiaro dello stesso minore (dopo uno smentito o
+    # senza risposta) vale confermato: protezione e avviso subito
+    minori_pericolo_finestra_s: float = 1800.0
+    # Un avviso «sicurezza» non si dice a voce al tutore sul satellite dove il minore ha
+    # parlato da meno di tanti secondi (potrebbe essere lì vicino): una frase neutra e il testo
+    # resta sul suo schermo personale; a voce più tardi. 0 = sempre a voce (come prima)
+    minori_avviso_privato_s: float = 600.0
     # Esercizi generati da Calliope (08/10, calliope/esercizi/, docs/ricerche/
     # 2026-10-08-esercizi.md): matematica e italiano per i ragazzi di casa, a voce e sulla
     # scheda, con la correzione nel codice e il registro dei tentativi per i tutori
@@ -2272,7 +2294,9 @@ SEZIONI: dict[str, list[str]] = {
     "minori": ["minori_enabled", "minori_margine_ambiguo", "minori_margine_amministra",
                "minori_compiti_tentativi",
                "minori_impronta_mesi", "minori_gioco_minuti", "minori_richieste_giorni",
-               "minori_avviso_ripetuto_s",
+               "minori_avviso_ripetuto_s", "minori_pericolo_verifica",
+               "minori_pericolo_attesa_s", "minori_pericolo_silenzio",
+               "minori_pericolo_finestra_s", "minori_avviso_privato_s",
                "esercizi_enabled", "esercizi_verifica_modello", "esercizi_verifica_url",
                "esercizi_verifica_timeout_s", "esercizi_senza_secondo_parere",
                "esercizi_pronti", "esercizi_campione",
@@ -2521,6 +2545,8 @@ LIMITI: dict[str, tuple[float, float]] = {
     "speaker_id_margine": (0.0, 1.0), "minori_margine_amministra": (0.0, 1.0),
     "speaker_continuita_s": (0.0, 86400.0), "speaker_continuita_soglia": (0.0, 1.0),
     "speaker_continuita_margine": (0.0, 1.0),
+    "minori_pericolo_attesa_s": (0.0, 86_400.0), "minori_pericolo_finestra_s": (0.0, 604_800.0),
+    "minori_avviso_privato_s": (0.0, 86_400.0),
     "esercizi_verifica_timeout_s": (0.5, 300.0), "esercizi_pronti": (0, 50),
     "esercizi_campione": (0, 50),
     "suoni_volume": (0.0, 1.0),

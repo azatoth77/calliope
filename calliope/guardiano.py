@@ -123,6 +123,40 @@ PERICOLO_PROMPT = (
     "tenere un segreto con i genitori o di incontrarlo da solo.\n"
     "NO: in tutti gli altri casi, anche domande difficili su morte, guerra, corpo o droghe, e "
     "richieste di cose vietate.\n\nFrase: «{frase}»")
+# Il giro a due cancelli (09/10, calliope/cancelli.py). Dopo un «pericolo» sulla domanda di un
+# minore, quanto è chiaro il segnale: ACUTO (esplicito: protezione e avviso subito, come prima)
+# o DUBBIO (una parola, un saluto, un modo di dire, manca il contesto: prima si rassicura e si
+# chiede). Caso vero sulla DGX dell'08/10: un adulto ospite preso per il ragazzo saluta e il
+# rilevatore dice PERICOLO. Un giudizio guasto vale ACUTO (come prima del giro)
+ACUTO, DUBBIO = "acuto", "dubbio"
+GRAVITA_PROMPT = (
+    "Sei il controllo di sicurezza di un'assistente vocale di casa usata anche da bambini e "
+    "ragazzi. La frase qui sotto, detta forse da un bambino, è stata segnalata come un "
+    "possibile pericolo. Decidi quanto è chiaro il segnale e rispondi in JSON con «gravita».\n"
+    "ACUTO: una frase che dice in modo esplicito, anche breve, che vuole farsi del male, "
+    "uccidersi, morire o sparire («voglio morire», «mi voglio uccidere»), o che smette di "
+    "mangiare o mangia pochissimo per dimagrire; che qualcuno gli fa del male, lo picchia, lo "
+    "tocca, lo minaccia, gli chiede di tenere un segreto con i genitori o di incontrarlo da "
+    "solo; che è in pericolo adesso; oppure una richiesta d'aiuto che dice cosa succede "
+    "(«aiutami, mi segue un uomo»).\n"
+    "DUBBIO: una parola sola, senza un verbo che dica chi e cosa («addio», «aiuto», «morire», "
+    "«sparisco»): da sola non basta mai per ACUTO; un saluto («addio a tutti», «ciao per "
+    "sempre»); un modo di dire o uno scherzo («muoio di noia», «che palle, mi sparo», «ti "
+    "ammazzo se perdi»); una frase di un gioco, di un film, di una canzone o di un compito.\n"
+    "\nFrase: «{frase}»")
+# Il secondo cancello: la risposta dopo la domanda delicata. Un giudizio guasto vale CONFERMA
+CONFERMA, SMENTITA = "conferma", "smentita"
+VERIFICA_PROMPT = (
+    "Sei il controllo di sicurezza di un'assistente vocale di casa usata anche da bambini e "
+    "ragazzi. Poco fa un bambino ha detto una frase che poteva far pensare a un pericolo: "
+    "«{primo}». L'assistente gli ha chiesto con delicatezza se va tutto bene. Adesso dice: "
+    "«{risposta}». Rispondi in JSON con «esito».\n"
+    "CONFERMA: conferma che qualcosa non va, aggiunge un altro segnale di pericolo, di paura o "
+    "di tristezza, chiede aiuto, oppure evita la domanda in un modo che preoccupa («non posso "
+    "dirlo», «lascia stare», «non lo so», «niente…»).\n"
+    "SMENTITA: dice chiaramente che va tutto bene, che era un saluto, un gioco, uno scherzo o "
+    "un modo di dire, oppure parla tranquillamente di un'altra cosa normale.\n"
+    "Se non sei sicuro, CONFERMA.")
 # Avviso ai tutori: solo l'argomento, mai le parole del minore
 ARGOMENTI = {"autolesionismo": "ha parlato di farsi del male o di stare molto male",
              "abuso": "ha parlato di qualcuno che potrebbe fargli del male o metterlo in "
@@ -550,6 +584,59 @@ class Guardiano:
             return Giudizio(PERICOLO, ("pericolo",), ms, testo.strip()[:40])
         return Giudizio(OK, (), ms, testo.strip()[:40])
 
+    def _strutturato(self, prompt: str, chiave: str, valori: tuple,
+                     timeout: float | None = None) -> Giudizio:
+        """Una domanda al modello del rilevatore con l'output strutturato (un enum): esito il
+        valore in minuscolo, GUASTO se il modello non c'è, sbaglia o scade."""
+        dove = self._pericolo_modello()
+        if dove is None:
+            return Giudizio(GUASTO, grezzo="spento")
+        url, modello = dove
+        cfg = self.cfg
+        stesso = self.condivide_voce()
+        try:
+            from .config import keep_alive_valido
+            from .contesto import finestra
+            num_ctx = finestra(cfg) if stesso else int(getattr(cfg, "guardiano_num_ctx", 2048))
+            keep = (keep_alive_valido(getattr(cfg, "llm_keep_alive", "-1m")) if stesso
+                    else getattr(cfg, "guardiano_keep_alive", "-1m"))
+        except Exception:  # noqa: BLE001
+            num_ctx, keep = int(getattr(cfg, "llm_num_ctx", 16384) or 16384), "-1m"
+        body = {"model": modello, "stream": False, "think": False, "keep_alive": keep,
+                "messages": [{"role": "user", "content": prompt}],
+                "format": {"type": "object", "properties": {chiave: {
+                    "type": "string", "enum": list(valori)}}, "required": [chiave]},
+                "options": {"temperature": 0, "num_predict": 16, "num_ctx": num_ctx}}
+        t0 = time.perf_counter()
+        try:
+            r = self._http().post(url + "/api/chat", json=body, timeout=timeout or self.timeout_s)
+            if r.status_code != 200:
+                raise RuntimeError(f"HTTP {r.status_code}")
+            testo = ((r.json().get("message") or {}).get("content") or "").upper()
+        except Exception as e:  # noqa: BLE001
+            return Giudizio(GUASTO, ms=round((time.perf_counter() - t0) * 1000, 1),
+                            grezzo=type(e).__name__)
+        ms = round((time.perf_counter() - t0) * 1000, 1)
+        trovati = [v for v in valori if v in testo]
+        if len(trovati) != 1:
+            return Giudizio(GUASTO, ms=ms, grezzo=testo.strip()[:40])
+        return Giudizio(trovati[0].lower(), (), ms, testo.strip()[:40])
+
+    def gravita(self, frase: str, timeout: float | None = None) -> Giudizio:
+        """Primo cancello (09/10, calliope/cancelli.py): il segnale di pericolo di un minore è
+        ACUTO (esplicito) o DUBBIO (manca il contesto)? Esito ACUTO, DUBBIO o GUASTO (chi lo
+        usa tratta il guasto come ACUTO: si protegge e si avvisa come prima)."""
+        return self._strutturato(GRAVITA_PROMPT.format(frase=_pulito(frase)[:600]), "gravita",
+                                 ("ACUTO", "DUBBIO"), timeout)
+
+    def verifica(self, primo: str, risposta: str, timeout: float | None = None) -> Giudizio:
+        """Secondo cancello: dopo la domanda delicata, la risposta conferma il problema o lo
+        smentisce? Esito CONFERMA, SMENTITA o GUASTO (chi lo usa tratta il guasto come
+        CONFERMA)."""
+        return self._strutturato(VERIFICA_PROMPT.format(primo=_pulito(primo)[:600],
+                                                        risposta=_pulito(risposta)[:600]),
+                                 "esito", ("CONFERMA", "SMENTITA"), timeout)
+
     def condivide_voce(self) -> bool:
         """Il rilevatore di pericolo usa il modello della voce (stesso Ollama, stesso modello)."""
         dove = self._pericolo_modello()
@@ -597,7 +684,7 @@ class Esito:
 
 
 def filtra(guardiano: Guardiano, frasi, domanda: str, minore: bool, esito: Esito,
-           categorie_attive: set | None = None, al_giudizio=None):
+           categorie_attive: set | None = None, al_giudizio=None, al_pericolo=None):
     """Le frasi della risposta (generatore di stringhe, già divise) che si possono dire.
 
     Generatore: la domanda si giudica subito in parallelo; ogni frase aspetta il proprio
@@ -609,7 +696,10 @@ def filtra(guardiano: Guardiano, frasi, domanda: str, minore: bool, esito: Esito
 
     `al_giudizio(ok)`: chiamata una volta, appena arriva il giudizio sulla domanda (ok =
     si può rispondere): per i minori le schede della prima passata aspettano lei
-    (Brain.trattieni_schede)."""
+    (Brain.trattieni_schede).
+
+    `al_pericolo(giudizio) -> frase`: chiamata con «pericolo» sulla domanda, sceglie la frase
+    da dire al posto della protezione (None o un errore = la protezione)."""
     # La domanda si giudica mentre il modello comincia a rispondere (in_parallelo): nessuna
     # frase va alla voce prima del suo giudizio (domanda_ok)
     fut = guardiano.in_parallelo(domanda, None, categorie_attive)
@@ -637,11 +727,19 @@ def filtra(guardiano: Guardiano, frasi, domanda: str, minore: bool, esito: Esito
         return stato
 
     def ferma(stato: str) -> str:
-        """La frase fissa per una domanda fermata (pericolo o guasto)."""
+        """La frase fissa per una domanda fermata (pericolo o guasto). Con `al_pericolo` (il
+        giro a due cancelli dei minori, calliope/cancelli.py) la frase la sceglie lui: la
+        protezione, o la domanda che rassicura per un segnale da verificare."""
         if stato == PERICOLO:
             esito.fermata, esito.categorie = PERICOLO, esito.domanda.categorie
-            esito.detto.append(protezione)
-            return protezione
+            frase = protezione
+            if al_pericolo is not None:
+                try:
+                    frase = al_pericolo(esito.domanda) or protezione
+                except Exception:  # noqa: BLE001 — nel dubbio, la protezione
+                    frase = protezione
+            esito.detto.append(frase)
+            return frase
         esito.fermata = GUASTO
         esito.detto.append(GUASTO_FRASE)
         return GUASTO_FRASE

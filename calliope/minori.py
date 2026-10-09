@@ -992,6 +992,18 @@ class Avvisi:
         return [{"id": r[0], "minore": r[1], "tipo": r[2], "testo": r[3], "urgente": bool(r[4])}
                 for r in rows]
 
+    def segna(self, ids):
+        """Segna come detti questi avvisi (09/10: gli avvisi «sicurezza» rinviati perché il
+        minore ha parlato da poco sullo stesso satellite restano da dire)."""
+        ids = [int(i) for i in ids or ()]
+        if not ids:
+            return
+        ora = datetime.datetime.now().isoformat(timespec="seconds")
+        with self._lock:
+            self.db.executemany("UPDATE avvisi_tutori SET detto = ? WHERE id = ? AND detto IS "
+                                "NULL", [(ora, i) for i in ids])
+            self.db.commit()
+
     def frase(self, avvisi_: list[dict]) -> str:
         if not avvisi_:
             return ""

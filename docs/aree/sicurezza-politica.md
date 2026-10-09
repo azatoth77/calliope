@@ -929,3 +929,13 @@ senza i dati del turno; nessuna chiamata di `registra_utente` dopo il «no» in 
 26B della DGX la richiamava: lì la ferma la politica). Contrari col modello 10/10 («Sì,
 registralo pure» dopo la proposta; la richiesta nuova dopo il «no»). Da riprovare col 26B sulla
 DGX con la stessa sequenza a voce.
+
+## Minori: pericolo poco chiaro a due cancelli (09/10, ramo `minori-due-cancelli`)
+
+Dopo un falso positivo vero (adulto ospite preso per il ragazzo, un saluto letto come pericolo,
+avviso urgente al tutore) un segnale di pericolo **poco chiaro** di un minore non manda subito
+l'avviso: prima una frase che rassicura e chiede, poi la risposta torna al rilevatore; l'avviso
+parte se conferma, non urgente se tace, mai se smentisce (salvo un secondo segnale entro 30
+minuti). I segnali espliciti e i giudizi guasti restano come prima. Gli avvisi «sicurezza» non si
+dicono a voce sul satellite dove il minore ha parlato da poco. Dettagli, regole e misure in
+[minori](minori.md#pericolo-poco-chiaro-il-giro-a-due-cancelli-0910-ramo-minori-due-cancelli).
