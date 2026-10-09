@@ -110,11 +110,12 @@ def ambiente(tmp, iso, chiamate, citta, estensione):
     return cfg, reg, ctx
 
 
-def parla(cfg, reg, ctx, chiamate, frase):
+def parla(cfg, reg, ctx, chiamate, frase, b=None):
+    """Una frase; con `b` nella stessa conversazione (il turno dopo una ricerca)."""
     chiamate.clear()
     voce = Voce("Dario", "amministra")
     ctx.speaker_ctx = voce
-    b = Brain(cfg, reg, ctx)
+    b = b or Brain(cfg, reg, ctx)
     t0 = time.perf_counter()
     risposta = "".join(b.stream_reply(frase, "amministra")).strip()
     return risposta, list(chiamate), time.perf_counter() - t0
@@ -147,6 +148,16 @@ def main():
             ("Dimmi le ultime notizie.", "notizie"),
             ("Che notizie ci sono su Torino?", "notizie_torino")]),
         ("senza città, estensione", "", True, [("Che tempo fa?", "senza_citta")]),
+        # Nella stessa conversazione, subito dopo una ricerca (09/10: il turno dopo una ricerca
+        # ha RICERCA_MSG nei dati del turno, «chiama di nuovo web_cerca se vuole approfondire»).
+        # Con l'estensione si conta soltanto: un'estensione che legge internet è un'«azione» per
+        # la politica (estensioni/servizio._agisce) e con un risultato web nella conversazione
+        # «Che tempo fa?» non la chiede (politica_azione_non_chiesta); il 4B allora inventa il
+        # meteo. Problema della politica, non del prompt (docs/aree/voce-e-regole.md, 09/10)
+        ("dopo le notizie, estensione", CITTA, True, [
+            ("Sentimi le notizie di sport.", "notizie_sport"), ("Che tempo fa?", "meteo_casa_est")]),
+        ("dopo le notizie, senza estensione", CITTA, False, [
+            ("Sentimi le notizie di sport.", "notizie_sport"), ("Che tempo fa?", "meteo_casa_web")]),
     ]
     for etichetta, citta, est, frasi in scenari:
         for i in range(RIPETI):
@@ -154,8 +165,9 @@ def main():
             cfg, reg, ctx = ambiente(tmp0 / f"{etichetta[:5]}{i}".replace(" ", "_")
                                      .replace(",", "").replace("+", "_"), iso, chiamate,
                                      citta, est)
+            stessa = Brain(cfg, reg, ctx) if etichetta.startswith("dopo") else None
             for frase, chiave in frasi:
-                r, ch, s = parla(cfg, reg, ctx, chiamate, frase)
+                r, ch, s = parla(cfg, reg, ctx, chiamate, frase, stessa)
                 nomi = [n for n, _ in ch]
                 args = [a for _, a in ch]
                 if chiave == "meteo_casa_est":
@@ -204,7 +216,9 @@ def main():
                           ("città, senza estensione|meteo_casa_web",
                            "«che tempo fa?» senza estensione → internet con la città"),
                           ("città, senza estensione|notizie_sport",
-                           "«le notizie di sport» → notizie con «sport»")):
+                           "«le notizie di sport» → notizie con «sport»"),
+                          ("dopo le notizie, senza estensione|meteo_casa_web",
+                           "dopo le notizie, «che tempo fa?» → internet con la città")):
         ok, det = quota(chiave, 2)
         verifica(descr + " (almeno 2 su 3)", ok, det)
     for chiave, descr in (("città+estensione|parigi_mai_casa", "Parigi mai Borgoverde (estensione)"),

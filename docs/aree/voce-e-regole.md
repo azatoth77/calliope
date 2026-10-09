@@ -718,6 +718,49 @@ domande su di sé (chi sei, dove giri, chi ti ha fatta, che versione sei, cosa c
 Regola nuova `stato_periodo_novita` (solo `periodo` → novità), con il contrario. Dettagli e
 misure (29/32 con gemma4 e4b sul portatile): [capacita-installazioni](capacita-installazioni.md).
 
+## Approfondire dopo una ricerca (09/10, ramo `approfondisci-notizie`)
+
+Caso vero della DGX (09/10, 10:21, 26B): «Prendevo le ultime notizie, altre news» → `web_cerca`
+(notizie) → «Secondo l'ANSA, le condizioni di salute del re … Ci sono anche notizie sulle
+proteste … e sul festival …». Poi «Approfondiamo le condizioni reale.» (= «del re»): regola
+`approfondisci` scattata, nessun tool, e «Mi spiace, ma non ho informazioni più dettagliate…
+oltre a quelle che ti ho appena riportato». Falso: poteva cercare.
+
+Perché: la regola `approfondisci` (`ciclo._contesto_e_allegati`, `DEEPEN_WORDS`) cercava nella
+biblioteca **la frase del turno prima** («Si, prendevo con le ultime notizie altre news…», campo
+`approfondimento` del registro), trovava passaggi fuori tema e passava al modello «rispondi con
+questi passaggi… se non contengono la risposta dillo, senza inventare». Il modello ha eseguito
+l'istruzione. In più il testo dei siti esce dalla storia a risposta finita (`WEB_TOLTO`): il
+modello vede solo ciò che ha detto e crede di non avere altro.
+
+Correzione generale, non per il singolo caso (decide il modello, il sistema gli dà il contesto):
+- **Dati del turno `RICERCA_MSG`** (`brain.py`, rete `ricerca_recente`, categoria «modello»):
+  se in uno dei due turni prima c'è una ricerca (`web_cerca` o `biblioteca_cerca`), il modello
+  riceve tool e domanda dell'ultima ricerca e l'indicazione: per approfondire, dire di più o
+  rispondere su una delle cose riferite, chiamare di nuovo quel tool con una domanda mirata, con
+  i nomi detti; se la persona parla d'altro, la riga non conta. Non guarda la frase: vale anche
+  per «dimmi di più sul festival» o «e le condizioni del re?», che `DEEPEN_WORDS` non prende.
+  Regola `ricerca_recente`. Se quella ricerca adesso non c'è (senza rete, livello che non la
+  può usare): `RICERCA_SPENTA_MSG`, dire onestamente che non si può cercare, regola
+  `ricerca_recente_spenta`.
+- **Spinta `spinta_ricerca`** (`RICERCA_NUDGE`, stessa rete): dopo una ricerca, un «non ho altre
+  informazioni» senza aver chiamato tool in questa risposta non si dice né entra nella storia; il
+  modello riceve la spinta a cercare, una volta (poi la sua risposta si dice). Usa `ClaimHold`
+  come `spinta_archivio` (e prima di lei); `NON_SO` ora prende anche «altre/ulteriori
+  informazioni», «dettagli», «notizie», «aggiornamenti» (casi in `prova_testo`).
+- **`approfondisci` non rifà la biblioteca dopo una ricerca**: con una ricerca nei due turni prima
+  (`Brain.ricerca_recente`) il ciclo lascia la frase al modello con i dati del turno (regola
+  `approfondisci_al_modello`). Dopo una risposta a memoria resta com'era (il Tevere del 26/09).
+
+Misura (portatile, gemma4 e4b, SearXNG finto, `prove/prova_ricerca_seguito_ollama.py 2`): «prima»
+(rete spenta e biblioteca con la domanda di prima) seguiti 8/8, contrari 4/6; «dopo» seguiti 8/8,
+contrari 6/6. Il 4B cercava già da solo anche «prima»: il guasto del caso vero è del 26B, da
+riprovare sulla DGX. Il «prima» sbagliava con internet spento (biblioteca e «venti mostre» dal
+risultato vecchio); il «dopo» dice «adesso non riesco a raggiungere internet». Prima frase
+1,7–2,0 s in tutti e due. Limite visto: senza rete (`online` falso) `web_cerca` esce dall'elenco
+ma il modello lo chiama lo stesso dalla storia e il registro lo esegue (qui fallisce con la frase
+pronta: onesto, ma il tool non dovrebbe partire).
+
 ## La città della casa e le estensioni nel prompt (09/10, ramo `citta-casa-notizie`)
 
 Caso vero della DGX (09/10, 10:30): «Che tempo fa?» → `web_cerca` generico → «Non so
@@ -748,3 +791,18 @@ chiaro e il modello decide.
   «un posto di cui non sai dove sia», 0/1: cercava il meteo della casa); notizie di sport con
   la città dentro 1 volta su 7 (si conta). `prova_estensione_nominata_ollama` e
   `prova_web_ollama` invariate (1 giro). Da guardare sulla DGX col 26B.
+- **Dopo una ricerca** (unione con `approfondisci-notizie`, `RICERCA_MSG`): nella stessa
+  conversazione «Sentimi le notizie di sport» e poi «Che tempo fa?». Senza estensione →
+  internet con la città 3/3: `RICERCA_MSG` («se parla d'altro questa riga non conta») non
+  disturba. Con l'estensione **0/3, e il 4B inventa il meteo** («sereno, 18 gradi»), con la
+  rete `ricerca_recente` accesa o spenta (3/3 e 3/3 uguali): il modello chiama
+  l'estensione con la città, ma la politica la ferma. Un'estensione che legge internet è
+  un'«azione» (`estensioni/servizio._agisce`: `rete.pubblica` o `host`) e, con un risultato web
+  nella conversazione, «Che tempo fa?» non è una richiesta d'azione (`chiesta_azione`) →
+  `politica_azione_non_chiesta`, prima volta «rifiuta» con «rispondi con quello che vedi o
+  leggi», e il 4B risponde inventando. Non dipende da questo ramo (la città e la frase del prompt
+  lo rendono solo più frequente: senza, l'estensione non si chiamava proprio). Da decidere nella
+  sicurezza per valore ([sicurezza-politica](sicurezza-politica.md)): un'estensione che solo
+  legge internet, senza dati da mandare (`invia` vuoto, niente `scrive` né `legge.dati`), con
+  argomenti detti dalla persona o presi dal prompt di sistema (la città) potrebbe valere come
+  lettura. In `prova_citta_casa_ollama` il caso è contato, non fa fallire.

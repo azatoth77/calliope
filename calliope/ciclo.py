@@ -2218,6 +2218,16 @@ class Ciclo:
         s = self.s
         if (s.biblioteca and self.last_question and len(t.text.split()) <= 6
                 and DEEPEN_WORDS.search(t.text)):
+            # Dopo una ricerca (web o biblioteca) nei turni appena prima decide il modello, con
+            # l'ultima ricerca nei dati del turno (brain.RICERCA_MSG). Caso vero della DGX del
+            # 09/10, 10:21: notizie con web_cerca, poi «Approfondiamo le condizioni [del re]» →
+            # la biblioteca cercava la frase di prima («altre news…»), passaggi fuori tema, e
+            # «non ho informazioni più dettagliate» senza cercare
+            ricerca = getattr(self.brain, "ricerca_recente", None)
+            if callable(ricerca) and ricerca():
+                self.rule("approfondisci_al_modello")
+                self._foto_e_file(t)
+                return None
             t.context = biblioteca_contesto(self.tool_ctx, self.last_question)
             self.rec["approfondimento"] = self.last_question
             self.rule("approfondisci")

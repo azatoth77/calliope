@@ -462,7 +462,10 @@ class ContextEcho:
 # risposte «non so» su cose dette prima). Rete, non regola: il modello riceve una spinta e
 # decide (ARCHIVIO_NUDGE), solo quando la conversazione è stata compressa, il tool c'è e in
 # questa risposta non è ancora stato chiamato nessun tool.
-NON_SO = re.compile(r"\bnon (?:ho (?:(?:nessuna |alcuna )?informazion[ei]|dati|traccia|"
+# Dal 09/10 anche «non ho altre informazioni», «ulteriori dettagli», «notizie più recenti»
+# (RICERCA_NUDGE, caso vero della DGX: «Mi spiace, ma non ho informazioni più dettagliate»)
+NON_SO = re.compile(r"\bnon (?:ho (?:(?:nessuna |alcuna |altre |ulteriori |altri |nessun )?"
+                    r"(?:informazion[ei]|dettagli|notizie|aggiornamenti)|dati|traccia|"
                     r"registrat\w*|memoria)|(?:mi |me ne )?(?:hai|avevi|avete) (?:mai |ancora )?"
                     r"(?:detto|menzionat\w*|parlato|specificato|indicato|raccontato)|"
                     r"(?:ne )?(?:ho|abbiamo) (?:mai )?parlato|ricordo|mi ricordo|lo so|so (?:cosa|"
@@ -476,6 +479,31 @@ NON_SO = re.compile(r"\bnon (?:ho (?:(?:nessuna |alcuna )?informazion[ei]|dati|t
 ARCHIVIO_NOTA = ("La conversazione è stata accorciata: qui sopra c'è la ricerca nei suoi turni "
                  "archiviati. Rispondi alla domanda di chi parla con questi risultati; se non c'è "
                  "niente di pertinente, di' che non lo sai.")
+
+# Una ricerca nei turni appena prima (09/10, caso vero della DGX alle 10:21: notizie con
+# web_cerca, poi «Approfondiamo le condizioni [del re]» → «non ho informazioni più dettagliate
+# oltre a quelle che ti ho riportato», senza cercare). Il testo dei siti esce dalla storia
+# (WEB_TOLTO) e il modello crede di non avere altro. Dati del turno, non una regola sul testo
+# (principio 10): ci sono quando nei turni appena prima c'è una ricerca, qualunque cosa dica
+# la persona, e il modello decide se la frase parla di quello. Rete `ricerca_recente`.
+RICERCA_TOOLS = ("web_cerca", "biblioteca_cerca")
+RICERCA_TURNI = 2              # la ricerca in uno degli ultimi due turni prima di questo
+RICERCA_MSG = ("Dati del turno: poco fa hai cercato con {tool} («{domanda}») e hai riferito "
+               "quello che hai trovato; quei risultati non sono più qui. Se ora chi parla vuole "
+               "approfondire, sapere di più o chiede di una delle cose che hai riferito, chiama "
+               "di nuovo {tool} con una domanda breve e mirata su quell'argomento, con i nomi "
+               "che hai detto, e rispondi con quello che trovi: non dire che non hai altre "
+               "informazioni senza aver cercato. Se parla d'altro (agenda, liste, casa, una "
+               "chiacchiera), questa riga non conta.")
+RICERCA_SPENTA_MSG = ("Dati del turno: poco fa hai cercato {dove}, ma adesso quella ricerca non "
+                      "è disponibile. Se chi parla vuole approfondire quello che hai riferito, "
+                      "digli onestamente che adesso non puoi cercare {dove}; non inventare.")
+RICERCA_DOVE = {"web_cerca": "su internet", "biblioteca_cerca": "nella biblioteca"}
+# «Non ho altre informazioni» senza aver cercato, con la ricerca disponibile: la frase non si
+# dice e il modello riceve la spinta, una volta (poi decide lui)
+RICERCA_NUDGE = ("Hai risposto di non avere altre informazioni senza cercare. Chiama {tool} con "
+                 "una domanda breve e mirata su quello che chiede chi parla, poi rispondi con "
+                 "quello che trovi; se non trovi niente, dillo.")
 
 
 class ClaimHold:
@@ -2443,6 +2471,48 @@ class Brain:
                 return None
         return r["messaggio"]
 
+    def ricerca_recente(self, upto: int | None = None) -> dict | None:
+        """L'ultima ricerca (RICERCA_TOOLS) negli ultimi RICERCA_TURNI turni della storia fino
+        a `upto` (escluso; None = tutta, prima che cominci il turno): {"tool", "domanda"}, o
+        None. La usa anche il ciclo: dopo una ricerca, «approfondisci» non rifà da sé la
+        biblioteca con la domanda di prima (09/10)."""
+        hist = self.history if upto is None else self.history[:upto]
+        turni = 0
+        for m in reversed(hist):
+            role = m.get("role")
+            if role == "user":
+                turni += 1
+                if turni >= RICERCA_TURNI:
+                    break
+            elif role == "assistant":
+                for c in reversed(m.get("tool_calls") or []):
+                    nome = c.get("name") or (c.get("function") or {}).get("name")
+                    if nome not in RICERCA_TOOLS:
+                        continue
+                    args = c.get("arguments")
+                    if args is None:
+                        args = (c.get("function") or {}).get("arguments")
+                    if isinstance(args, str):
+                        args = _loads_dict(args)
+                    domanda = str((args or {}).get("domanda") or "").strip()
+                    return {"tool": nome, "domanda": domanda[:120]}
+        return None
+
+    def _ricerca_turno(self, start: int, level: str) -> tuple[str, str | None] | None:
+        """(RICERCA_MSG o RICERCA_SPENTA_MSG, tool da richiamare o None) dopo una ricerca nei
+        turni appena prima, o None."""
+        if not self._net("ricerca_recente"):
+            return None
+        r = self.ricerca_recente(start)
+        if r is None:
+            return None
+        tool = r["tool"]
+        spec = self.tools.get(tool)
+        if (spec is not None and self.tools.allowed(tool, level)
+                and (self.cfg.online or not getattr(spec, "requires_internet", False))):
+            return RICERCA_MSG.format(tool=tool, domanda=r["domanda"] or "…"), tool
+        return RICERCA_SPENTA_MSG.format(dove=RICERCA_DOVE.get(tool, "")), None
+
     def _lavoro_turno(self) -> tuple[str, dict] | None:
         """(LAVORO_MSG, {"lavoro", "titolo", "avvisato", "parole"}) per il lavoro finito di chi
         parla di cui si è appena parlato, o None."""
@@ -2847,6 +2917,11 @@ class Brain:
         if lavoro_ref:
             memory = memory + [{"role": "system", "content": lavoro_ref[0]}]
             self._rule("riferimento_lavoro")
+        # Una ricerca nei turni appena prima, per «approfondiamo», «e il festival?» (RICERCA_MSG)
+        ricerca = self._ricerca_turno(start, level) if user_text else None
+        if ricerca:
+            memory = memory + [{"role": "system", "content": ricerca[0]}]
+            self._rule("ricerca_recente" if ricerca[1] else "ricerca_recente_spenta")
         # Un'estensione nominata nella frase (EST_NOMINATA_MSG)
         est_msg = self._estensioni_nominate(user_text) if user_text else None
         if est_msg:
@@ -2908,6 +2983,9 @@ class Brain:
                         and getattr(self._c(), "compressioni", 0) > 0
                         and self.tools.get("conversazione_cerca") is not None
                         and self.tools.allowed("conversazione_cerca", level))
+        # Dopo una ricerca nei turni prima: un «non ho altre informazioni» senza aver cercato
+        # riceve la spinta a cercare di nuovo (RICERCA_NUDGE), una volta. Prima dell'archivio
+        ricerca_tool = ricerca[1] if ricerca else None
         # «Non posso creare un'estensione» con il tool disponibile a chi parla (06/10):
         # la frase si trattiene e il modello riceve una spinta (politica.rinuncia)
         disp = ({n for n in politica.RINUNCE if self.tools.get(n) is not None
@@ -2938,7 +3016,7 @@ class Brain:
                 or corr is not None,
                 actions=actions,
                 hold_names=bool(schemas) and not self.last_tools and not explaining,
-                hold_non_so=archive_hold and not self.last_tools,
+                hold_non_so=bool(archive_hold or ricerca_tool) and not self.last_tools,
                 hold_rinuncia=rinuncia_di if disp and not nudged and not self.last_tools
                 else None,
                 hold_fallito=self._solo_falliti())
@@ -2968,6 +3046,16 @@ class Brain:
                       f"«{held[:80]}»", flush=True)
                 tail = [{"role": "system",
                          "content": politica.RINUNCIA_NUDGE.format(tool=tool)}]
+                continue
+            if held and self._held_kind == "non_so" and ricerca_tool:
+                # «Non ho altre informazioni» subito dopo una ricerca, senza aver cercato: non
+                # si dice né entra nella storia; il modello riceve la spinta e decide
+                nudged = True
+                tool, ricerca_tool = ricerca_tool, None
+                self._rule("spinta_ricerca")
+                print(f"   [TOOL] «non ho altre informazioni» senza cercare con {tool}, non lo "
+                      f"dico: «{held[:80]}»", flush=True)
+                tail = [{"role": "system", "content": RICERCA_NUDGE.format(tool=tool)}]
                 continue
             if held and self._held_kind == "non_so":
                 # «Non ho informazioni su…» con la storia compressa: non si dice; Brain cerca
