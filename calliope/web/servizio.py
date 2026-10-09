@@ -121,6 +121,45 @@ def data_estratto(testo: str, pubblicato: str = "", oggi: datetime.date | None =
     return testo, "", None
 
 
+# Il tema di una ricerca di notizie (09/10, caso della DGX: «Sentimi le notizie di sport» →
+# risultati senza sport). Nella categoria news di SearXNG la parola «notizie» non filtra niente
+# (sono già notizie) e pesa come un tema: con «notizie di economia» uscivano titoli con
+# «notizia» dentro («buone notizie per Allegri», il Nobel), con «economia» solo economia
+# (misura sul SearXNG della DGX, docs/aree/biblioteca.md). Conversione della forma di una
+# scelta del modello (principio 10): si tolgono le parole che dicono «notizie» e le
+# preposizioni rimaste in testa o in coda; il tema resta come l'ha scritto il modello. Se non
+# resta niente («ultime notizie») la domanda è «notizie». Regola `notizie_tema`
+_PAROLE_NOTIZIE = re.compile(
+    r"(?<![\w'’])(?:(?:le|la|una|delle|alcune)\s+)?(?:(?:ultim[ei]|principali|nuove)\s+)?"
+    r"(?:notizi[ae]|news|novità)(?![\w'’])"
+    r"|(?<![\w'’])(?:l[’']\s*)?(?:ultim[’']ora|ultima\s+ora|aggiornament[oi]|in\s+tempo\s+reale)"
+    r"(?![\w'’])", re.I)
+# Solo le preposizioni rimaste attaccate a ciò che si è tolto («notizie di sport» → «di
+# sport»): mai gli articoli, che fanno parte dei nomi («La Spezia», «Il Sole 24 Ore»)
+_PREPOSIZIONI = (r"(?:di|del|dello|della|dei|degli|delle|dell[’']|su|sul|sullo|sulla|sui|"
+                 r"sugli|sulle|sull[’']|da|dal|dallo|dalla|dai|dagli|dalle|dall[’']|"
+                 r"nel|nella|nei|nelle|in|e|ed)")
+_TESTA = re.compile(r"^(?:" + _PREPOSIZIONI + r"(?:\s+|(?<=[’'])|$))+", re.I)
+_CODA = re.compile(r"(?:\s+" + _PREPOSIZIONI + r")+$", re.I)
+# Le notizie dell'ultima settimana (time_range di SearXNG): via le pagine di anni fa di
+# DuckDuckGo News («sport» senza periodo: 2021 e 2022 tra i primi). «day» è troppo stretto:
+# con «economia» Bing News dava titoli in portoghese e spagnolo, e per un paese piccolo
+# non resta niente. ANSA non ha date e non ne tiene conto
+PERIODO_NOTIZIE = "week"
+
+
+def tema_notizie(domanda: str) -> str:
+    """«notizie di sport» → «sport», «ultime notizie economia» → «economia», «le notizie di
+    oggi» → «oggi», «ultime notizie» → «notizie»; «sport», «La Spezia» restano come sono."""
+    q = str(domanda or "")
+    t = _PAROLE_NOTIZIE.sub(" ", q)
+    if t == q:
+        return q
+    t = re.sub(r"\s+", " ", t).strip(" ,;:.-")
+    t = _CODA.sub("", _TESTA.sub("", t)).strip(" ,;:.-")
+    return t if len(re.sub(r"\W", "", t)) >= 2 else "notizie"
+
+
 @dataclass
 class Risultato:
     titolo: str
@@ -211,6 +250,10 @@ class Web:
         q, tolti = self.ripulitore.pulisci(domanda)
         if len(re.sub(r"\W", "", q)) < 2:
             return {"ok": False, "codice": "vuota", "tolti": tolti}
+        # Le notizie: solo il tema, dell'ultima settimana (tema_notizie, PERIODO_NOTIZIE)
+        tema = tema_notizie(q) if tipo == "notizie" else q
+        tema_cambiato = tema != q
+        q = tema
         if not self._posto():
             return {"ok": False, "codice": "troppe", "tolti": tolti}
         n = max(1, min(int(n or self.n_risultati), 10))
@@ -219,6 +262,8 @@ class Web:
         dati = {"q": q, "format": "json", "language": self.lingua,
                 "safesearch": str(max(0, min(2, int(safesearch)))),
                 "categories": "news" if tipo == "notizie" else "general"}
+        if tipo == "notizie":
+            dati["time_range"] = PERIODO_NOTIZIE
         try:
             r = self._http().post(self.url + "/search", data=dati, timeout=self.timeout_s,
                                   headers={"Accept": "application/json"})
@@ -261,7 +306,8 @@ class Web:
                              "motori": [str(g[0]) for g in giu if g]}
             return {"ok": False, "codice": "internet", "tolti": tolti}
         self.diagnosi = {"codice": "ok", "quando": time.time()}
-        return {"ok": True, "risultati": risultati, "domanda": q, "tolti": tolti, "ms": ms}
+        return {"ok": True, "risultati": risultati, "domanda": q, "tolti": tolti, "ms": ms,
+                **({"tema": True} if tema_cambiato else {})}
 
     # ── pagine (per l'agente) ──
     def leggi(self, url: str, max_caratteri: int | None = None) -> dict:

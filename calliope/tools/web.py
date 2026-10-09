@@ -53,6 +53,9 @@ def _web_cerca(ctx: ToolContext, domanda: str, tipo: str = "web") -> dict:
         # Solo i tipi di dato, mai i dati (registro dei turni)
         note_rule(ctx, "web_dati_tolti")
         print(f"   [WEB] tolti dalla domanda: {', '.join(res['tolti'])}", flush=True)
+    if res.get("tema"):
+        # Le notizie cercate per tema, senza la parola «notizie» (servizio.tema_notizie)
+        note_rule(ctx, "notizie_tema")
     if not res.get("ok"):
         frase = _GUASTI.get(res.get("codice"), _GUASTI["errore"])
         return {"ok": False, "errore": res.get("codice"), "risposta_finale": frase,
@@ -103,7 +106,8 @@ def web_spec(cfg=None) -> ToolSpec:
             "invece biblioteca_cerca, se c'è. domanda: breve, come per un motore di ricerca, "
             "con luogo e giorno («meteo Milano domani», «risultato Inter ieri»), MAI con "
             "nomi delle persone di casa, indirizzi, numeri di telefono o altri dati personali. "
-            "tipo: «notizie» per le notizie del giorno, altrimenti «web»."),
+            "tipo: «notizie» per le notizie, con il tema o il luogo nella domanda («sport», "
+            "«economia», «Torino»; senza tema «notizie»), altrimenti «web»."),
         parameters={"type": "object",
                     "properties": {"domanda": {"type": "string"},
                                    "tipo": {"type": "string", "enum": ["web", "notizie"]}},

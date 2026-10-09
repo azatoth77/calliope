@@ -717,3 +717,34 @@ domande su di sé (chi sei, dove giri, chi ti ha fatta, che versione sei, cosa c
 (`risposta_finale`): fatti letti da CHANGELOG.md, dal gestore e dall'inventario della macchina.
 Regola nuova `stato_periodo_novita` (solo `periodo` → novità), con il contrario. Dettagli e
 misure (29/32 con gemma4 e4b sul portatile): [capacita-installazioni](capacita-installazioni.md).
+
+## La città della casa e le estensioni nel prompt (09/10, ramo `citta-casa-notizie`)
+
+Caso vero della DGX (09/10, 10:30): «Che tempo fa?» → `web_cerca` generico → «Non so
+esattamente dove ti trovi… se mi dici la tua città», con l'estensione «Meteo città» attiva
+(città, giorni, paese). Principio di Dario: niente regole per il singolo caso, un contesto
+chiaro e il modello decide.
+
+- **`casa_citta`** (configurazione nuova, sezione `casa`): la città o il paese della casa, mai
+  l'indirizzo. Sta nel prompt di sistema (`Config.prompt_for`), uguale per tutti i livelli,
+  ospiti compresi: è un dato della casa, non di una persona, e così il prefisso resta in cache
+  (cambia solo con la configurazione). Frase: la casa è lì, per ciò che dipende dal luogo
+  (meteo, orari, negozi, eventi) se chi parla non nomina nessun posto; se nomina un posto di cui
+  non si sa dove sia (la casa di qualcuno, un locale) si chiede dov'è. Senza città il prompt è
+  quello di prima, parola per parola. Non va in `web_dati_privati` (si toglierebbe dalle
+  ricerche). Il valore vero sta in `calliope.locale.yaml`.
+- **Le estensioni prima di internet**: con almeno un tool `est_*` il prompt dice che le
+  estensioni sono funzioni sue aggiunte dalla famiglia, da usare quando fanno proprio quello
+  che si chiede, non `web_cerca` né `biblioteca_cerca`; e la frase del web diventa «chiama
+  l'estensione che lo fa, se c'è, altrimenti web_cerca». Detta solo dopo la frase del web, il
+  4B non la seguiva (0/2): conta l'ordine e la frase del web stessa. Il prompt cambia solo
+  quando un'estensione si attiva o si spegne (cambia già l'elenco dei tool).
+- **Misura** (`prove/prova_citta_casa_ollama.py`, gemma4 e4b locale, docker finto, 3
+  ripetizioni; tra parentesi il codice di main): con città ed estensione «Che tempo fa?» e «Che
+  tempo farà domani?» → l'estensione con la città 6/6 (0/6: chiede la città); senza
+  estensione → internet con la città 3/3 (0/3: «meteo oggi», il caso della DGX); «Che tempo
+  fa a Parigi?» → Parigi, mai la casa, 6/6 (6/6; con l'estensione la usa 3/3 contro 0/3);
+  «Che tempo fa da Ettore?» → chiede dov'è, mai la casa, 3/3 (3/3; con la prima frase, senza
+  «un posto di cui non sai dove sia», 0/1: cercava il meteo della casa); notizie di sport con
+  la città dentro 1 volta su 7 (si conta). `prova_estensione_nominata_ollama` e
+  `prova_web_ollama` invariate (1 giro). Da guardare sulla DGX col 26B.

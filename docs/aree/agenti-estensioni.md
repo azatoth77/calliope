@@ -1641,3 +1641,14 @@ la parte dei file con la libreria standard, per Linux); `prova_estensioni.py` ag
 | contrario: con la sola attiva «elimina l'estensione Meteocittà» → «prima la disattivo?» | 4/4 |
 
 Sulla DGX le due estensioni restano com'erano: l'eliminazione la decide Dario a voce.
+
+## Le estensioni attive prima di internet (09/10, ramo `citta-casa-notizie`)
+
+Caso vero della DGX (09/10): «Che tempo fa?» con «Meteo città» attiva andava a `web_cerca`,
+perché il prompt diceva «per il meteo… chiama web_cerca» e niente diceva che un'estensione è
+una capacità di Calliope. Ora, con almeno un tool `est_*`, il prompt di sistema le presenta
+come funzioni aggiunte dalla famiglia da usare per il loro scopo prima di internet e della
+biblioteca, e la frase del web dice «l'estensione che lo fa, se c'è, altrimenti web_cerca».
+Nessuna regola sul testo: decide il modello dalla descrizione del tool (`descrizione_tool`,
+invariata). Con la città della casa (`casa_citta`) «Che tempo fa?» → l'estensione con la città
+6/6 col 4B (main 0/6). Dettagli e contrari in [voce-e-regole](voce-e-regole.md).
