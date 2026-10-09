@@ -580,3 +580,16 @@ sé è in [voce-e-regole](voce-e-regole.md).
 il tool, la prima chiamata cronologica dopo ridà la stessa conversazione (lo stato parte dalla
 chiamata, non da ciò che è stato detto). Nel banco non è successo: la prima frase ha sempre
 chiamato il tool.
+
+## La finestra d'ascolto in compagnia (09/10, ramo `compagnia`)
+
+La finestra d'ascolto senza il nome (`followup_s`) era la causa principale del «risponde a
+chiunque» in compagnia (rapporto [`../ricerche/2026-10-09-piu-persone.md`](../ricerche/2026-10-09-piu-persone.md)).
+Dal 09/10: con una voce sconosciuta vicino al satellite la finestra si chiude in cima al giro
+(dopo `rispondi.dopo_turno`) e una frase senza il nome non si prende (regola `compagnia_nome`);
+quella aperta dal nome da solo resta. Con le voci tutte riconosciute la finestra resta, e il
+giudizio «rivolta a Calliope» (in ombra) dice se la frase era per lei; acceso, una frase non
+rivolta non riceve risposta né apre una finestra nuova ed esce dalla storia della conversazione
+([voce-e-regole](voce-e-regole.md)). Latenza: il giudizio gira in parallelo alla risposta
+(~0,29 s sul portatile); in ombra non si aspetta mai prima di parlare. Da misurare sulla DGX con
+`calliope stato --turni`.

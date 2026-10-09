@@ -369,6 +369,10 @@ pre.uscita-esecuzione .omessi, pre.uscita-esecuzione .vuoto { color: var(--tenue
   background: color-mix(in srgb, var(--c) 20%, transparent); overflow: hidden; display: none; }
 .voce-barra span { display: block; height: 100%; width: 100%; background: var(--c); }
 .voce.ascolta.conta .voce-barra { display: block; }
+/* In compagnia con una voce sconosciuta (09/10): serve il nome a ogni frase. Discreto, sotto */
+.voce-compagnia { grid-column: 1 / -1; font-size: 1.05rem; font-weight: 500; color: var(--tenue);
+  margin-top: 0.15rem; }
+.voce-compagnia[hidden] { display: none; }
 
 /* Le forme: 3 elementi <i> dentro .forma, disegnati diversamente per ogni stato */
 .forma { position: relative; width: 2.6rem; height: 2.6rem; display: inline-flex;

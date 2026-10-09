@@ -66,6 +66,7 @@ A_SECCO = [
     ("prova_vista_sviluppo_pagina.py", [], "vista dello sviluppo e lavoro in diretta nella pagina vera (08/10): fasi, due colonne, flusso che si accumula senza buchi né doppioni anche dopo una riconnessione, scorrimento e «In fondo», schermo intero sul computer, giro 2 e correzione, comandi a tocco innocui, uscita dalla vista, telefono in una colonna, nessun errore JS né CSP"),
     ("prova_esercizi_pagina.py", [], "scheda degli esercizi nella pagina vera (08/10): domanda grande, risposta scritta sbagliata e giusta, indizio, segnalazione, fine, scelte d'italiano come pulsanti, risposta attesa mai nel DOM, telefono con la scheda nel carosello, nessun errore JS né CSP"),
     ("prova_minori_pericolo.py", [], "minore in pericolo con la frase spezzata (06/10, e2e): pezzi uniti per il guardiano, protezione senza barge-in con la sola voce e ripetuta se il nome la interrompe, avviso non ripetuto per lo stesso episodio, con i contrari"),
+    ("prova_compagnia.py", [], "modalità compagnia (09/10): più voci vicino allo stesso satellite (profilo recente, gruppi tra ospiti, due profili) con i contrari (voce variabile, altro microfono, frasi brevi, finestra scaduta, altro satellite, stesso ospite, spenta), i due episodi veri della DGX in numeri, niente frase breve né continuità, voce non sicura per i due cancelli e l'avviso che lo dice, azioni con la voce nella frase, nome a ogni frase con una voce sconosciuta (il nome passa sempre), famiglia tutta riconosciuta, ombra senza effetti; giudizio «rivolta a Calliope» finto in ombra e acceso (silenzio, protezione sempre, guasto = rivolta, nessun tool, storia ripulita); calliope stato --turni"),
     ("prova_minori_cancelli.py", [], "minore forse in pericolo, giro a due cancelli (09/10, caso vero della DGX: adulto ospite preso per il ragazzo che saluta): acuto come prima, da verificare → rassicura e chiede, conferma o smentita della risposta, silenzio con avviso non urgente, due segnali ravvicinati, voce incerta, giudizi guasti, avviso «sicurezza» non a voce vicino al minore, con i contrari"),
     ("prova_brain.py", [], "filtro del thinking, guardia, ciclo dei tool, storia"),
     ("prova_tempi.py", [], "durate e orari detti a voce"),
@@ -119,6 +120,7 @@ A_SECCO = [
     ("prova_cassetto.py", [], "cassetto dei file per persona (08/10): entrata (foto, file, audio; mai programmi né ospiti), scadenza e «ho eliminato», revisione una volta al giorno, tieni/elimina/tieni ancora, tetto, minore e tutore, zona grigia, ritrovamento dopo un riavvio, contenuto in busta, /api/cassetto, ciclo finto"),
     # ~15 s: la scheda del cassetto in Edge o Chromium senza finestra; senza browser si salta
     ("prova_cronologia_schede.py", [], "cronologia delle schede per persona e scheda «Conversazione» (08/10): salvataggio solo personale e certo, chiavi, tenuta e tetti, ripresa dopo un riavvio con le schede finali (lavoro interrotto, esercizi, sviluppo ricostruito, modulo e timer saltati), «Scarica» con un gettone nuovo, pulizia (tool, /api/schede, evento), conversazione dall'archivio (meta, sfida e codici tolti, in diretta solo ai propri schermi, dimentica, tenuta, Markdown), server vero"),
+    ("prova_compagnia_pagina.py", [], "segno della compagnia nella pagina vera (09/10): «In compagnia: chiamami per nome» sotto lo stato della voce dello schermo di stanza e sul telefono, resta addormentata, sparisce con una voce sola, mai in un'altra stanza, nessun errore JS né CSP"),
     ("prova_cronologia_pagina.py", [], "cronologia delle schede e conversazione nella pagina vera: riavvio del server, schermo nuovo che ritrova schede e chat, turno nuovo in fondo senza riscrivere, Scarica, stanza vuota, Pulisci con due tocchi, vista dello sviluppo dopo un riavvio, telefono dal menu, nessun errore JS né CSP"),
     ("prova_cassetto_pagina.py", [], "scheda del cassetto nella pagina vera: carosello (miniatura, sigle), Tieni solo dove si può, Tieni ancora, Tieni, Elimina tutti con due tocchi, schermo di un'altra persona vuoto, nessun errore JS né CSP"),
     # ~15 s: la pagina in Edge o Chromium senza finestra; senza browser si salta
@@ -204,6 +206,7 @@ CON_OLLAMA = [
     ("prova_agenti_ollama.py", ["1"], "delega, stato e annullo a voce con il modello (agente finto)"),
     ("prova_archivio_ollama.py", ["1"], "documenti di casa a voce con il modello (archivio finto)"),
     ("prova_web_ollama.py", ["1"], "ricerca su internet a voce (SearXNG finto): biblioteca o web, iniezione, privacy"),
+    ("prova_rivolta_ollama.py", ["1"], "giudizio «rivolta a Calliope» (09/10, F2 della compagnia) sul modello del rilevatore: 56 frasi di fantasia, almeno 25/27 rivolte e 26/29 non rivolte giuste, tempo mediano"),
     ("prova_brain_ollama.py", ["1"], "tool di base con il modello"),
     ("prova_rinomina_ollama.py", ["1"], "rinominare chi parla: mai al primo turno, solo dopo il «sì»"),
     ("prova_allegati_ollama.py", ["1"], "allegati con gemma4: bolletta, Excel, PDF lungo, Word, archivia, spesa, vocale; banco di sicurezza (istruzioni nei file e negli audio, esci, sì procedi, sfida): zero azioni"),
@@ -291,6 +294,7 @@ LIVELLO_3 = {
     "prova_corsie_satelliti.py", "prova_installa_satellite.py", "prova_cruscotto_pagina.py",
     "prova_scheda_intera.py", "prova_markdown_pagina.py", "prova_cassetto_pagina.py",
     "prova_esercizi_pagina.py", "prova_vista_sviluppo_pagina.py", "prova_cronologia_pagina.py",
+    "prova_compagnia_pagina.py",
 }
 # Mai nel gruppo parallelo, anche quando una prova li sceglie nel livello 2: un browser, un
 # tempo reale o tanti processi, che sotto carico falliscono a caso. Tutto il livello 3 è

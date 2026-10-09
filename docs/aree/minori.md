@@ -253,3 +253,17 @@ aperto (verifica); la voce degli altri turni non cambia. Da rimisurare sulla DGX
 **Da confermare con Dario**: avviso non urgente sul silenzio (o niente); attesa 300 s e finestra
 1800 s; acuto con la voce incerta come acuto (protezione e avviso «la voce non era sicura»);
 «Aiuto.» da solo acuto; avviso «sicurezza» rinviato a voce per 600 s sul satellite del minore.
+
+## In compagnia la voce non è sicura (09/10, ramo `compagnia`)
+
+Con più voci vicino al satellite ([stt-tts](stt-tts.md), `compagnia_enabled: attiva`) la voce di un
+minore non è mai «sicura» per i due cancelli, anche se riconosciuta sopra soglia: un segnale poco
+chiaro va al primo cancello come con la zona grigia, e il secondo cancello si chiude anche con la
+risposta di chi parla sullo stesso satellite. Il segnale aperto ricorda la compagnia
+(`Segnale.compagnia`) fino al secondo cancello o al silenzio. L'avviso al tutore lo dice, al posto
+della frase della voce incerta: «Attenzione: vicino al microfono parlavano anche altre persone e la
+voce non era sicura, potrebbe non essere stato lui.» (regola `pericolo_compagnia`; anche
+nell'avviso «da verificare»). In compagnia una frase sotto 1 s non eredita più il minore della
+conversazione (nel caso vero dell'08/10 la frase di 0,57 s dell'amico): resta ospite, salvo il
+minore sopra la soglia piena. Mai il contrario: la compagnia non rende nessuno un adulto né toglie
+la protezione.

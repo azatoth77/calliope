@@ -627,6 +627,33 @@ resta aperta), `politica_proposta_rifiutata` e `rifiuto_superato` (la politica n
 tool rifiutato per lo stesso bersaglio finché la persona non lo chiede con le parole del tool),
 `consenso_avversativo` («Sì, però ascolta…» non è un consenso). Contrari in `prove/prova_testo.py`.
 
+## La compagnia e il giudizio «rivolta a Calliope» (09/10, ramo `compagnia`)
+
+Più voci vicino allo stesso satellite (dettagli in [stt-tts](stt-tts.md)). Regole nuove nel campo
+`regole` del registro: `voci_compagnia`, `compagnia_nome`, `compagnia_senza_breve`,
+`compagnia_voce_nella_frase`, `pericolo_compagnia`, `non_rivolta_ombra`, `non_rivolta`. Sono regole
+sull'audio e sulla voce (ciò che il modello non vede, principio 10); il significato della frase lo
+decide il modello:
+
+- **F2, «la frase è rivolta a Calliope?»** (`calliope/rivolta.py`): solo in compagnia, solo sulle
+  frasi senza il nome dentro la finestra d'ascolto (mai con il nome, dopo il nome da solo, scritte,
+  con una persona sola). Giudizio separato con l'output strutturato `{"per_calliope": bool}` sul
+  modello del rilevatore di pericolo (`compagnia_rivolta_modello` vuoto), in un thread in parallelo
+  alla risposta; nel contesto gli ultimi scambi con il **nome di chi ha la conversazione**
+  (`rivolta.etichetta`), mai la voce. `compagnia_rivolta: ombra` (predefinito): `rivolta` nel
+  registro e la regola `non_rivolta_ombra`, Calliope risponde come prima. `attiva`: il giudizio si
+  aspetta solo prima della prima frase, della frase d'attesa e dei tool (`Brain.prima_del_tool`);
+  non rivolta → silenzio, lo stream del modello si chiude, nessuna finestra nuova, niente testo
+  nel registro, la frase e la risposta taciuta escono dalla storia (`Brain.dimentica_ultimo_turno`;
+  esito `non_rivolta`). Una protezione si dice sempre. Guasto o oltre
+  `compagnia_rivolta_timeout_s` (2 s) = rivolta.
+- **Misura col modello** (`prove/prova_rivolta_ollama.py`, nel runner `--ollama`; gemma4 e4b sul
+  portatile, 56 frasi di fantasia, due giri uguali): 26/27 rivolte e 27/29 non rivolte giuste,
+  mediana 287 ms, p90 295 ms (soglie 25 e 26). Con «Persona» al posto del nome nel contesto 27/27 e
+  24/29 (sotto soglia: «Questa era terribile, Marco.», «Chiedile se domani piove…»): per questo il
+  nome. Sbaglia ancora «Che ne pensi dei cani?» (detto dall'ospite a Calliope), «Dille alle sette…»
+  e «Ok.». Da accendere dopo qualche giorno di ombra sulla DGX, letti i `non_rivolta_ombra`.
+
 ## Domande su di sé: chi sei, novità, versione (09/10, ramo `stato-novita`)
 
 Caso vero della DGX (09/10 mattina): alle «ultime novità sul tuo aggiornamento» Calliope ha letto
