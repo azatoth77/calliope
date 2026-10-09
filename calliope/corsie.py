@@ -652,6 +652,7 @@ class STTCondiviso:
         with self._lock:
             testo = self._stt.transcribe(audio, *a, **k)
             self._qui.conf = getattr(self._stt, "ultima_confidenza", None)
+            self._qui.scartata = getattr(self._stt, "ultima_scartata", None)
         return testo
 
     def parole(self, audio):
@@ -663,6 +664,11 @@ class STTCondiviso:
     @property
     def ultima_confidenza(self):
         return getattr(self._qui, "conf", None)
+
+    @property
+    def ultima_scartata(self):
+        """La famiglia dell'allucinazione scartata nell'ultima frase di questa corsia (09/10)."""
+        return getattr(self._qui, "scartata", None)
 
     def __getattr__(self, nome):
         return getattr(self._stt, nome)

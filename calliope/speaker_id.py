@@ -508,6 +508,10 @@ class SpeakerContext:
         # ma un minore ha un punteggio troppo vicino per dargli i permessi di chi amministra
         self.incerta: tuple[str, str] | None = None
         self.minore_vicino: str | None = None
+        # Il proprietario di un satellite personale (09/10, ciclo._proprietario_continua): la
+        # frase vale lui, ma era incerta con questo minore. La prudenza per i minori (preset dei
+        # tool, guardiano) guarda il minore (minori.profilo). Vale una frase
+        self.minore_incerto: str | None = None
         # In compagnia (09/10, calliope/compagnia.py, con `compagnia_enabled: attiva`): più voci
         # vicino a questo satellite negli ultimi minuti. Le azioni vogliono la voce riconosciuta
         # in questa frase (la zona grigia non basta: tools/registry.py) e per i minori la voce

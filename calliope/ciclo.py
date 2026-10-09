@@ -159,6 +159,7 @@ class Turno:
     prev_how: str | None = None          # come era riconosciuto chi parlava prima
     voce_secondo: tuple = (None, None)   # il secondo profilo e il suo punteggio (07/10)
     continuita: bool = False             # chi parla vale per continuità (08/10, _per_continuita)
+    proprietario: bool = False           # incerta con un minore, resta del proprietario (09/10)
     speaker_name: str | None = None
     prof_turno: object = None            # profilo di chi parla (minori, orari)
     context: str | None = None           # contesto del turno (biblioteca, foto non viste)
@@ -1343,6 +1344,14 @@ class Ciclo:
         t.emb_job = (s.embed_pool.submit(s.registry.embed, t.audio, cfg.sample_rate)
                      if identify else None)
         t.text = s.stt.transcribe(t.audio) if t.scritto is None else t.scritto["testo"]
+        scartata = getattr(s.stt, "ultima_scartata", None) if t.scritto is None else None
+        if isinstance(scartata, str):
+            # Una frase tipica delle allucinazioni di Whisper, per intero (09/10,
+            # calliope/allucinazioni.py): vale come rumore, prima del modello
+            print(f"   [STT] frase tipica delle allucinazioni di Whisper ({scartata}): rumore",
+                  flush=True)
+            self.rec["allucinazione"] = scartata
+            self.rule("allucinazione_whisper")
         if t.scritto is None and isinstance(self.rec.get("ascolto"), dict):
             # «aspetta», «non ho finito»… in testa alla frase: solo un segnale nel registro
             # (07/10, pause.py), nessun effetto sul turno
@@ -1417,6 +1426,7 @@ class Ciclo:
         t.prev_how, speaker_ctx.identified_by = speaker_ctx.identified_by, None
         speaker_ctx.conferma_breve = speaker_ctx.sfida_superata = False   # valgono una frase
         speaker_ctx.incerta = speaker_ctx.minore_vicino = None            # anche queste
+        speaker_ctx.minore_incerto = None                                 # (09/10)
         speaker_ctx.compagnia = False                                     # e questa (09/10)
         if t.scritto is not None:
             self._chi_scrive(t)
@@ -1527,7 +1537,22 @@ class Ciclo:
             self.rule("voce_margine")
         protetto = minori.piu_protetto(s.registry, emb, name,
                                        "breve" if in_compagnia and corta else how, sim, cfg)
-        if protetto is not None and protetto != name:
+        proprietario = (self._proprietario_continua(best, sim, in_compagnia)
+                        if protetto is not None and protetto != name else None)
+        if proprietario is not None:
+            # Sul satellite personale di chi è stato riconosciuto da poco: la frase resta sua e
+            # della sua conversazione; il minore resta per la prudenza (minore_incerto)
+            print(f"   [VOCE] incerta tra {proprietario} e {protetto} sul satellite di "
+                  f"{proprietario}, riconosciuto da poco: resta {proprietario} (al più "
+                  f"familiare, prudenza per {protetto})", flush=True)
+            self.rule("voce_proprietario")
+            speaker_ctx.incerta = (proprietario, protetto)
+            speaker_ctx.minore_incerto = protetto
+            name, how = proprietario, "conversazione"
+            speaker_ctx.from_session = True
+            speaker_ctx.identified_by = how
+            t.continuita, t.proprietario = False, True
+        elif protetto is not None and protetto != name:
             print(f"   [VOCE] incerta tra {name or 'ospite'} e {protetto}: vale {protetto} "
                   f"(il profilo più protetto)", flush=True)
             self.rule("minore_piu_protetto")
@@ -1571,6 +1596,50 @@ class Ciclo:
             return False
         return sim2 is None or sim - sim2 >= float(getattr(cfg, "speaker_continuita_margine",
                                                            0.20))
+
+    def _proprietario_satellite(self) -> str | None:
+        """Il nome del proprietario del satellite di questa corsia, se è personale (abbinato con
+        --personale: il telefono di una persona); None con l'audio locale o un satellite di
+        stanza."""
+        sid = getattr(self.corsia, "satellite_id", None)
+        sat = self.s.satelliti
+        if sid is None or sat is None:
+            return None
+        try:
+            coll = sat.per_id(sid)
+            pid = (getattr(coll, "satellite", None) or {}).get("proprietario")
+        except Exception:  # noqa: BLE001 — il proprietario non ferma la voce
+            return None
+        reg = self.s.registry
+        prof = reg.by_id(pid) if pid and hasattr(reg, "by_id") else None
+        return getattr(prof, "name", None)
+
+    def _proprietario_continua(self, best, sim: float, in_compagnia: bool) -> str | None:
+        """Regola `voce_proprietario` (09/10, riguarda l'audio: principio 10). La frase è incerta
+        tra il migliore e un minore (minori.piu_protetto darebbe il minore): resta del
+        proprietario del satellite personale se il migliore è lui, con almeno
+        `speaker_continuita_soglia`, riconosciuto dalla voce qui negli ultimi
+        `speaker_proprietario_s` secondi, e senza compagnia. None altrimenti (vale il minore,
+        come prima)."""
+        cfg = self.s.cfg
+        finestra = float(getattr(cfg, "speaker_proprietario_s", 0.0) or 0.0)
+        # Mai oltre la vita della conversazione (docs/ricerche/2026-10-09-regole-incongruenze.md
+        # § 3.12, tempi diversi per lo stesso concetto): chiusa per tempo, non c'è più niente da
+        # continuare
+        vita = float(getattr(cfg, "storia_inattiva_s", 0.0) or 0.0)
+        if vita > 0:
+            finestra = min(finestra, vita)
+        recente = self._voce_recente
+        if finestra <= 0 or in_compagnia or best is None or recente is None:
+            return None
+        if recente[0] != best or time.monotonic() - recente[1] > finestra:
+            return None
+        if sim < float(getattr(cfg, "speaker_continuita_soglia", 0.36)):
+            return None
+        prop = self._proprietario_satellite()
+        if prop is None or prop != best or minori.e_minore(self.s.registry.get(prop)):
+            return None
+        return prop
 
     def _ricorda_voce(self, t, name, how):
         """Chi è stato riconosciuto dalla voce su questo satellite (per la continuità). Una
@@ -1683,7 +1752,8 @@ class Ciclo:
         speaker_ctx.current_speaker = name
         secondo, sim2 = getattr(t, "voce_secondo", (None, None))
         self.rec["voce"] = {"nome": name, "migliore": best, "punteggio": round(sim, 3),
-                            "modo": "continuita" if t.continuita else how,
+                            "modo": ("continuita" if t.continuita else "proprietario"
+                                     if t.proprietario else how),
                             "voce_s": round(t.voiced_s, 2), "aggiornata": adapted,
                             # Il secondo profilo e la distanza dal primo (07/10): per tarare
                             # `speaker_id_margine` e `minori_margine_amministra` sui turni veri
@@ -1721,7 +1791,8 @@ class Ciclo:
         # Chi amministra con un minore vicino (07/10): la voce lo ha riconosciuto (sopra il
         # margine), quindi la sua conversazione; i permessi restano da familiare
         how = ("voce" if getattr(self.speaker_ctx, "minore_vicino", None)
-               else "continuita" if t.continuita else self.speaker_ctx.identified_by)
+               else "continuita" if t.continuita or t.proprietario
+               else self.speaker_ctx.identified_by)
         if not self.corsia.turno(self.brain, t.speaker_name, how,
                                  t.in_session, t.text, self.rec, t.scritto,
                                  persona_id=self._persona_id(t.speaker_name),
@@ -2298,6 +2369,14 @@ class Ciclo:
         if s.compressore is not None:
             s.compressore.voce_occupata()
         t.level = self.speaker_ctx.current_level
+        # Incerta tra il proprietario del satellite e un minore (09/10, voce_proprietario): la
+        # frase resta del proprietario, ma il guardiano la giudica come per il minore, e un
+        # pericolo avvisa i suoi tutori
+        incerto = getattr(self.speaker_ctx, "minore_incerto", None)
+        prof_mi = s.registry.get(incerto) if incerto else None
+        if prof_mi is not None and minori.e_minore(prof_mi) and not (
+                t.prof_turno is not None and minori.e_minore(t.prof_turno)):
+            t.prof_turno = prof_mi
         # Minori e ospiti: il guardiano sulle frasi (gli adulti riconosciuti non pagano niente)
         t.minore_turno = t.prof_turno is not None and minori.e_minore(t.prof_turno)
         t.usa_guardia = s.guardiano is not None and (t.minore_turno or (
@@ -2946,6 +3025,7 @@ class Ciclo:
             self.avvisi_ai_tutori(t.speaker_name)
             self._cassetto_dopo(t)
         speaker.start_turn()     # azzera un'interruzione arrivata a risposta finita
+        self._conversazione_nuova_chiesta()
         if speaker_ctx.is_enrolling and not t.was_enrolling:
             self.enroll_reminded.discard(speaker_ctx.enrolling_name)
             speaker.say(f"{speaker_ctx.enrolling_name}, adesso parla tu, e comincia ogni "
@@ -2953,6 +3033,20 @@ class Ciclo:
                         f"frasi, una alla volta. {speaker_ctx.enroll_prompt}")
             speaker.wait()
         self.awake_until = time.monotonic() + cfg.followup_s
+
+    def _conversazione_nuova_chiesta(self) -> bool:
+        """Il modello ha chiamato conversazione_nuova (09/10, «voglio che ricominciamo da capo»
+        detto con parole sue): la conversazione si chiude come con la regola breve, a risposta
+        finita (la risposta resta in quella chiusa, nell'archivio)."""
+        if not getattr(self.tool_ctx, "conversazione_nuova", False):
+            return False
+        self.tool_ctx.conversazione_nuova = False
+        print("   [STORIA] conversazione nuova, chiesta con parole sue", flush=True)
+        if self.rec is not None:
+            self.rec["conversazione_nuova"] = True
+        self.brain.end_conversation("nuova")
+        self.last_question = None
+        return True
 
     def _ricerca_promessa(self, t):
         """Ricerca promessa e non fatta («devo fare una ricerca», 26/09): la si fa subito.

@@ -279,3 +279,14 @@ nell'avviso «da verificare»). In compagnia una frase sotto 1 s non eredita pi�
 conversazione (nel caso vero dell'08/10 la frase di 0,57 s dell'amico): resta ospite, salvo il
 minore sopra la soglia piena. Mai il contrario: la compagnia non rende nessuno un adulto né toglie
 la protezione.
+
+## La frase incerta sul telefono di un adulto (09/10 sera, ramo `sera-voce-conversazione`)
+
+Sul satellite personale di un adulto riconosciuto dalla voce da poco, una frase incerta tra lui e
+un minore non vale più il minore come profilo più protetto: resta dell'adulto e della sua
+conversazione (regola `voce_proprietario`, dettagli in [stt-tts](stt-tts.md)). La prudenza per il
+minore non cambia: per quella frase preset dei tool, contenuti e documenti guardano il minore
+(`minori.profilo` con `SpeakerContext.minore_incerto`), il guardiano la giudica come per lui e
+un pericolo avvisa i suoi tutori; la voce vale «non sicura» nei due cancelli e le azioni di chi
+amministra vogliono la frase di sfida. Il minore riconosciuto con sicurezza, un satellite di
+stanza, la compagnia o la finestra scaduta (180 s) lasciano tutto come prima.

@@ -462,7 +462,146 @@ def prova_azione_in_sospeso():
              not ciclo._chiedi_chi_parla(Turno(in_session=False, text="Sì, procedi.")))
 
 
+# ─────────────────────────── il proprietario del telefono (09/10) ───────────────────────────
+
+class Collegato:
+    def __init__(self, proprietario):
+        self.satellite = {"id": 7, "nome": "telefono di Carlo", "proprietario": proprietario}
+
+
+class Satelliti:
+    def __init__(self, proprietario="carlo-id"):
+        self.proprietario = proprietario
+
+    def per_id(self, sid):
+        return Collegato(self.proprietario) if sid == 7 else None
+
+
+class CorsiaTelefono:
+    conv = None
+    satellite_id = 7
+    chiave = "sat:7"
+
+
+def ciclo_telefono(proprietario="carlo-id"):
+    """Il ciclo della corsia del telefono di Carlo (satellite personale)."""
+    reg = Reg()
+    sc = SpeakerContext(reg)
+    ciclo = Ciclo(Servizi(reg.cfg, registry=reg, satelliti=Satelliti(proprietario)),
+                  CorsiaTelefono(), None, None, sc, None, None, None, None, None)
+    ciclo.speaker = VoceFinta()
+    regole = []
+    ciclo.rule = regole.append
+    ciclo.rec = {}
+    return reg, sc, ciclo, regole
+
+
+def prova_proprietario():
+    """Caso vero della DGX del 09/10 alle 18:48 (telefono personale di Dario, qui Carlo): dopo
+    frasi sue riconosciute dalla voce, «Sì, sì, grazie.» (0,79 s: Carlo 0,50, il minore 0,485) e
+    «Io volevo che tu facessi la ricerca…» (3,0 s: 0,61 contro 0,54) valevano il minore, con una
+    conversazione nuova e quella di prima persa. Regola `voce_proprietario`."""
+    from calliope import minori
+    from calliope.corsie import RegistroConversazioni
+    reg, sc, ciclo, regole = ciclo_telefono()
+    verifica("predefinito: speaker_proprietario_s 180", reg.cfg.speaker_proprietario_s == 180.0)
+    n, *_ = riconosci(ciclo, sc, frase_con(0.70, 0.37), 6.0, in_session=True, prev="Carlo")
+    verifica("Carlo dalla voce sul suo telefono", n == "Carlo" and ciclo._voce_recente[0] == "Carlo")
+    regole.clear()
+    n, how, lv, v, t = riconosci(ciclo, sc, frase_con(0.50, 0.485), 0.79, in_session=True,
+                                 prev="Carlo")
+    verifica("caso vero 1: frase breve incerta col minore → resta Carlo, al più familiare",
+             (n, how, lv) == ("Carlo", "conversazione", "familiare") and t.proprietario
+             and v["modo"] == "proprietario" and "voce_proprietario" in regole
+             and "minore_piu_protetto" not in regole, f"{n} {how} {lv} {regole}")
+    verifica("caso vero 1: si sa tra chi (le azioni chiedono chi parla), prudenza per Luca",
+             sc.incerta == ("Carlo", "Luca") and sc.minore_incerto == "Luca"
+             and C.incerta_con_admin(ToolContext(cfg=reg.cfg, speakers=reg, speaker_ctx=sc,
+                                                 speaker=None)) == ("Carlo", "Luca"))
+    ctx = ToolContext(cfg=reg.cfg, speakers=reg, speaker_ctx=sc, speaker=None)
+    verifica("prudenza: i preset dei tool e dei contenuti guardano Luca",
+             getattr(minori.profilo(ctx), "name", None) == "Luca")
+    regole.clear()
+    n, how, lv, v, t = riconosci(ciclo, sc, frase_con(0.606, 0.544), 3.03, in_session=True,
+                                 prev="Carlo")
+    verifica("caso vero 2: frase lunga incerta (margine 0,06) → resta Carlo",
+             n == "Carlo" and t.proprietario and "voce_proprietario" in regole, f"{n} {regole}")
+    # La conversazione: «continuita» continua quella di Carlo su questo satellite
+    rc = RegistroConversazioni(reg.cfg, log=lambda *a: None)
+
+    class Cors:
+        chiave = "sat:7"
+        conv = None
+    cors = Cors()
+    c1, come = rc.scegli(cors, "carlo-id", "voce", True)
+    cors.conv = c1
+    c2, come2 = rc.scegli(cors, "carlo-id", "continuita", True)
+    verifica("la frase resta nella conversazione di Carlo (non una nuova anonima)",
+             c2 is c1 and come2 == "continuita", come2)
+    # Il minore riconosciuto con sicurezza prende il posto
+    regole.clear()
+    n, how, lv, v, t = riconosci(ciclo, sc, frase_con(0.25, 0.70), 2.5, in_session=True,
+                                 prev="Carlo")
+    verifica("contrario: Luca riconosciuto con sicurezza → Luca", n == "Luca" and how == "voce"
+             and not t.proprietario and "voce_proprietario" not in regole, f"{n} {how}")
+    # Contrari, ognuno su un ciclo nuovo con Carlo appena riconosciuto
+    def dopo_carlo(**kw):
+        r_, sc_, ci_, reg_ = ciclo_telefono(**kw)
+        riconosci(ci_, sc_, frase_con(0.70, 0.37), 6.0, in_session=True, prev="Carlo")
+        reg_.clear()
+        return r_, sc_, ci_, reg_
+    r_, sc_, ci_, reg_ = dopo_carlo()
+    n, how, lv, v, t = riconosci(ci_, sc_, frase_con(0.47, 0.52), 1.5, in_session=True,
+                                 prev="Carlo")
+    verifica("contrario: il più simile è il minore → il minore (il più protetto)",
+             n == "Luca" and not t.proprietario, f"{n}")
+    r_, sc_, ci_, reg_ = dopo_carlo(proprietario=None)
+    n, how, lv, v, t = riconosci(ci_, sc_, frase_con(0.50, 0.485), 0.79, in_session=True,
+                                 prev="Carlo")
+    verifica("contrario: satellite di stanza (nessun proprietario) → il minore",
+             n == "Luca" and "minore_piu_protetto" in reg_, f"{n}")
+    r_, sc_, ci_, reg_ = dopo_carlo(proprietario="bianca-id")
+    n, how, lv, v, t = riconosci(ci_, sc_, frase_con(0.50, 0.485), 0.79, in_session=True,
+                                 prev="Carlo")
+    verifica("contrario: telefono di un'altra persona → il minore", n == "Luca", f"{n}")
+    r_, sc_, ci_, reg_ = dopo_carlo()
+    ci_._voce_recente = ("Carlo", time.monotonic() - 181)
+    n, how, lv, v, t = riconosci(ci_, sc_, frase_con(0.50, 0.485), 0.79, in_session=True,
+                                 prev="Carlo")
+    verifica("contrario: finestra scaduta (oltre 180 s) → il minore", n == "Luca", f"{n}")
+    r_, sc_, ci_, reg_ = dopo_carlo()
+    r_.cfg.storia_inattiva_s = 100.0
+    ci_._voce_recente = ("Carlo", time.monotonic() - 150)
+    n, how, lv, v, t = riconosci(ci_, sc_, frase_con(0.50, 0.485), 0.79, in_session=True,
+                                 prev="Carlo")
+    verifica("contrario: mai oltre la vita della conversazione (storia_inattiva_s 100 s)",
+             n == "Luca", f"{n}")
+    r_, sc_, ci_, reg_ = dopo_carlo()
+    ci_._compagnia_attiva = lambda: True
+    n, how, lv, v, t = riconosci(ci_, sc_, frase_con(0.606, 0.544), 3.03, in_session=True,
+                                 prev="Carlo")
+    verifica("contrario: in compagnia → il minore", n == "Luca" and not t.proprietario, f"{n}")
+    r_, sc_, ci_, reg_ = dopo_carlo()
+    r_.cfg.speaker_proprietario_s = 0
+    n, how, lv, v, t = riconosci(ci_, sc_, frase_con(0.50, 0.485), 0.79, in_session=True,
+                                 prev="Carlo")
+    verifica("contrario: speaker_proprietario_s 0 → spenta, il minore", n == "Luca", f"{n}")
+    r_, sc_, ci_, reg_ = ciclo_telefono()
+    n, how, lv, v, t = riconosci(ci_, sc_, frase_con(0.50, 0.485), 0.79, in_session=True,
+                                 prev="Carlo")
+    verifica("contrario: Carlo mai riconosciuto qui dalla voce → il minore", n == "Luca", f"{n}")
+    # La frase dopo, sicura, toglie la prudenza
+    riconosci(ciclo, sc, frase_con(0.70, 0.37), 6.0, in_session=True, prev="Carlo")
+    t = Turno()
+    ciclo.rec = {}
+    sc.minore_incerto = "Luca"
+    ciclo._chi_parla(t)
+    verifica("la prudenza vale una frase (azzerata a ogni frase)", sc.minore_incerto is None)
+
+
 if __name__ == "__main__":
+    print("── il proprietario del telefono ──")
+    prova_proprietario()
     print("── i quattro casi ──")
     prova_casi()
     print("── il verso pericoloso ──")

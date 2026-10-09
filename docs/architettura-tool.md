@@ -49,7 +49,7 @@ calliope/                 # package: python -m calliope
 │   ├── agenti.py         # lavoro_affida, lavoro_stato, lavoro_annulla, lavoro_rispondi, lavoro_risultato, programma_esegui
 │   ├── sviluppo.py       # sviluppo_apri, sviluppo_passo, sviluppo_collauda, sviluppo_chiedi, sviluppo_correggi (modalità sviluppo, 08/10)
 │   ├── estensioni.py     # estensione_gestisci e i tool est_<nome> delle estensioni attive
-│   ├── conversazioni.py  # conversazione_cerca (anche cronologica, 08/10), conversazioni_dimentica
+│   ├── conversazioni.py  # conversazione_cerca (anche cronologica, 08/10), conversazioni_dimentica, conversazione_nuova (09/10)
 │   ├── web.py            # web_cerca (SearXNG)
 │   ├── immagini.py, allegati.py  # immagine_guarda, immagine_archivia, pc_guarda; allegato_leggi, allegato_archivia, cassetto_gestisci
 │   ├── archivio.py, ufficio.py   # archivio_cerca/scadenze/somma; modello_compila, anagrafica_cerca/salva
@@ -257,6 +257,7 @@ controllo nelle prove a secco), ma tocca tutti i tool e le prove con Ollama che 
 | `sviluppo_correggi` | familiare (il codice: solo chi amministra) | azione | la correzione come passo a sé (08/10): un lavoro sui file della versione provata, con i collaudi che non vanno e la diagnosi di `sviluppo_chiedi`, la specifica resta; a una tappa «cambia e continua» |
 | `estensione_gestisci` | familiare (il codice: approvare, consentire e gestire solo chi amministra) | azione | le estensioni attive o no: elenca, approva una versione nuova, rifiuta, disattiva, riattiva, indietro, revoca, rimuovi, rinomina (08/10, solo il titolo, senza agente), consenti o nega un'azione chiesta da un'estensione; per usarne una il modello chiama il suo `est_<nome>` (era `estensioni_gestisci`) |
 | `conversazione_cerca` | familiare | lettura | ciò che ci siamo detti nelle conversazioni passate di chi parla (archivio di 30 giorni, ricerca ibrida); con `cronologico` (08/10) le ultime conversazioni in ordine di tempo, «più indietro» continua; `ospiti` solo per chi amministra |
+| `conversazione_nuova` | ospite | azione (classe sicura) | chiude la conversazione di adesso e ne comincia una nuova quando la persona lo chiede con parole sue (09/10); `cosa` con la cosa nominata («il collaudo») non fa niente; la regola breve «ricominciamo» resta |
 | `conversazioni_dimentica` | familiare | azione | cancella dall'archivio le conversazioni di chi parla, dopo la conferma (i ricordi restano) |
 | `web_cerca` | da `web_livello` (predefinito familiare) | lettura, risultato non fidato | ciò che cambia nel tempo (meteo, notizie, orari) da SearXNG; nomi delle persone tolti dalla domanda |
 | `immagine_guarda`, `immagine_archivia` | familiare | lettura; azione | rivedere una foto della conversazione; archiviarla tra i documenti di casa solo se chiesto |

@@ -319,7 +319,7 @@ class Config:
     # riferimento_casa, riferimento_agenda, conferma_al_posto_del_vuoto,
     # vuoto_seconda_passata, ricerca_promessa, citazione_tolta, nome_tool_parlato,
     # eco_contesto, spinta_archivio, spinta_rinuncia, spinta_esercizi, correzione_tool,
-    # ricerca_recente; "tutte"
+    # ricerca_recente, risposta_ripetuta; "tutte"
     # le spegne tutte. Quelle di
     # «sicurezza» (permessi, politica…) non si spengono: un nome di sicurezza o sconosciuto si
     # segnala all'avvio. Quelle del profilo (llm_profilo) si aggiungono a queste.
@@ -526,6 +526,11 @@ class Config:
     # Una conversazione nuova della stessa persona nello stesso posto, entro queste ore dalla
     # fine della precedente, parte con la riga «l'ultima volta avete parlato di…». 0 = mai
     conversazione_ripresa_ore: float = 4.0
+    # Una conversazione chiusa per una pausa (storia_inattiva_s) lascia alla nuova della stessa
+    # persona i suoi ultimi scambi, solo le frasi dette, per `conversazione_ripresa_ore` (09/10,
+    # caso vero della DGX: dopo 10 minuti «cos'è che ti ho chiesto?» non aveva niente, e il
+    # riassunto di chiusura arriva in secondo piano dopo). 0 = solo il riassunto, come prima
+    conversazione_coda_scambi: int = 3
     # Risposte del modello della voce insieme (06/10, calliope/corsie.py: più persone da
     # satelliti diversi). Oltre, chi parla sente «Sto rispondendo anche a un'altra persona:
     # dammi un attimo.» e aspetta il suo turno, in ordine d'arrivo; una risposta cominciata
@@ -1310,6 +1315,18 @@ class Config:
     speaker_continuita_s: float = 900.0
     speaker_continuita_soglia: float = 0.36
     speaker_continuita_margine: float = 0.20
+    # Il proprietario di un satellite personale (09/10, regola `voce_proprietario`): sul telefono
+    # di una persona, una frase incerta tra lei e un minore (che varrebbe il minore, il profilo
+    # più protetto) resta sua, nella sua conversazione, se negli ultimi
+    # `speaker_proprietario_s` secondi è stata riconosciuta dalla voce lì, è lei la più simile
+    # (almeno `speaker_continuita_soglia`) e non c'è compagnia. Il minore prende il posto solo
+    # riconosciuto con sicurezza. Vale come la zona grigia (al più familiare, le azioni vogliono
+    # la voce nella frase), e la prudenza per i minori resta: guardiano, cancelli e preset del
+    # minore valgono per la frase. Caso vero della DGX del 09/10 (18:48): due frasi di chi
+    # amministra prese per il minore (0,50 contro 0,485 e 0,61 contro 0,54) aprivano una
+    # conversazione nuova, e quella di prima si perdeva. Mai oltre `storia_inattiva_s` (la
+    # conversazione chiusa per tempo non si continua). 0 = spenta
+    speaker_proprietario_s: float = 180.0
     # Conferma breve (04/10, calliope/conferme.py): un «sì» sotto `speaker_min_voice_s`
     # conferma un'azione proposta a chi amministra se nella conversazione era già stato
     # riconosciuto dalla voce e l'impronta della frase breve arriva almeno qui contro il suo
@@ -2333,6 +2350,11 @@ RETI: dict[str, Rete] = {
         MODELLO,
         "«Approfondiamo le condizioni del re» dopo le notizie: «non ho informazioni più "
         "dettagliate» senza cercare, col 26B (09/10, DGX)"),
+    "risposta_ripetuta": Rete(
+        "risposta (quasi) uguale alla precedente, lunga: trattenuta, spinta a rispondere a ciò "
+        "che è stato detto adesso (calliope/ripetizione.py)", MODELLO,
+        "la stessa frase su Christopher Nolan detta due volte a due richieste diverse (26B, "
+        "09/10, DGX)"),
     # ── sicurezza: sempre accese, per ogni modello ──
     "permessi": Rete(
         "livello di chi parla e preset dei minori, a ogni esecuzione (ToolRegistry.call)",
@@ -2472,7 +2494,7 @@ SEZIONI: dict[str, list[str]] = {
     "chi_parla": ["speaker_id_enabled", "speaker_model", "speaker_threads",
                   "speaker_id_threshold", "speaker_id_session_margin", "speaker_id_margine",
                   "speaker_min_voice_s", "speaker_continuita_s", "speaker_continuita_soglia",
-                  "speaker_continuita_margine",
+                  "speaker_continuita_margine", "speaker_proprietario_s",
                   "speaker_conferma_breve_soglia",
                   "compagnia_enabled", "compagnia_finestra_s", "compagnia_soglia_profilo",
                   "compagnia_voce_min_s", "compagnia_soglia_gruppi", "compagnia_gruppi_min_s",
@@ -2498,7 +2520,7 @@ SEZIONI: dict[str, list[str]] = {
     "conversazioni": ["conversazioni_enabled", "conversazioni_db", "conversazioni_giorni",
                       "conversazioni_embedding", "conversazioni_embedding_url",
                       "conversazioni_embedding_cpu", "conversazioni_vettori_inattivita_s",
-                      "conversazione_ripresa_ore",
+                      "conversazione_ripresa_ore", "conversazione_coda_scambi",
                       "conversazioni_parallele", "conversazione_doppione_s"],
     "biblioteca": ["biblioteca_enabled", "biblioteca_mini", "biblioteca_completa",
                    "biblioteca_ragazzi", "biblioteca_ragazzi_vantaggio",
@@ -2739,7 +2761,7 @@ LIMITI: dict[str, tuple[float, float]] = {
     "speaker_id_threshold": (0.0, 1.0), "wake_threshold": (0.0, 1.0),
     "speaker_id_margine": (0.0, 1.0), "minori_margine_amministra": (0.0, 1.0),
     "speaker_continuita_s": (0.0, 86400.0), "speaker_continuita_soglia": (0.0, 1.0),
-    "speaker_continuita_margine": (0.0, 1.0),
+    "speaker_continuita_margine": (0.0, 1.0), "speaker_proprietario_s": (0.0, 3600.0),
     "compagnia_finestra_s": (10.0, 86_400.0), "compagnia_soglia_profilo": (0.0, 1.0),
     "compagnia_voce_min_s": (0.0, 30.0), "compagnia_soglia_gruppi": (0.0, 1.0),
     "compagnia_gruppi_min_s": (0.0, 30.0), "compagnia_gruppo_lungo_s": (0.0, 60.0),
@@ -2765,7 +2787,7 @@ LIMITI: dict[str, tuple[float, float]] = {
     "contesto_turni_intatti": (1, 50), "contesto_riassunto_token": (100, 4000),
     "contesto_dura_attesa_s": (0.0, 120.0), "contesto_riassunto_attesa_s": (0.0, 600.0),
     "contesto_riassunto_max_s": (0.0, 3600.0), "conversazioni_giorni": (0, 3650),
-    "conversazione_ripresa_ore": (0.0, 720.0), "conversazioni_parallele": (0, 16),
+    "conversazione_ripresa_ore": (0.0, 720.0), "conversazione_coda_scambi": (0, 10), "conversazioni_parallele": (0, 16),
     "conversazione_doppione_s": (0.0, 30.0),
     "agenti_num_ctx": (2048, 1_048_576), "agenti_contesti_paralleli": (1, 64),
     "sviluppo_sospendi_min": (0.0, 1440.0), "sviluppo_programma_righe": (10, 100_000),

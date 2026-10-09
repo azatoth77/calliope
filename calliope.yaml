@@ -295,7 +295,7 @@ llm:
   # riferimento_casa, riferimento_agenda, conferma_al_posto_del_vuoto,
   # vuoto_seconda_passata, ricerca_promessa, citazione_tolta, nome_tool_parlato,
   # eco_contesto, spinta_archivio, spinta_rinuncia, spinta_esercizi, correzione_tool,
-  # ricerca_recente; "tutte"
+  # ricerca_recente, risposta_ripetuta; "tutte"
   # le spegne tutte. Quelle di
   # «sicurezza» (permessi, politica…) non si spengono: un nome di sicurezza o sconosciuto si
   # segnala all'avvio. Quelle del profilo (llm_profilo) si aggiungono a queste.
@@ -525,6 +525,18 @@ chi_parla:
   speaker_continuita_s: 900.0
   speaker_continuita_soglia: 0.36
   speaker_continuita_margine: 0.2
+  # Il proprietario di un satellite personale (09/10, regola `voce_proprietario`): sul telefono
+  # di una persona, una frase incerta tra lei e un minore (che varrebbe il minore, il profilo
+  # più protetto) resta sua, nella sua conversazione, se negli ultimi
+  # `speaker_proprietario_s` secondi è stata riconosciuta dalla voce lì, è lei la più simile
+  # (almeno `speaker_continuita_soglia`) e non c'è compagnia. Il minore prende il posto solo
+  # riconosciuto con sicurezza. Vale come la zona grigia (al più familiare, le azioni vogliono
+  # la voce nella frase), e la prudenza per i minori resta: guardiano, cancelli e preset del
+  # minore valgono per la frase. Caso vero della DGX del 09/10 (18:48): due frasi di chi
+  # amministra prese per il minore (0,50 contro 0,485 e 0,61 contro 0,54) aprivano una
+  # conversazione nuova, e quella di prima si perdeva. Mai oltre `storia_inattiva_s` (la
+  # conversazione chiusa per tempo non si continua). 0 = spenta
+  speaker_proprietario_s: 180.0
   # Conferma breve (04/10, calliope/conferme.py): un «sì» sotto `speaker_min_voice_s`
   # conferma un'azione proposta a chi amministra se nella conversazione era già stato
   # riconosciuto dalla voce e l'impronta della frase breve arriva almeno qui contro il suo
@@ -730,6 +742,11 @@ conversazioni:
   # Una conversazione nuova della stessa persona nello stesso posto, entro queste ore dalla
   # fine della precedente, parte con la riga «l'ultima volta avete parlato di…». 0 = mai
   conversazione_ripresa_ore: 4.0
+  # Una conversazione chiusa per una pausa (storia_inattiva_s) lascia alla nuova della stessa
+  # persona i suoi ultimi scambi, solo le frasi dette, per `conversazione_ripresa_ore` (09/10,
+  # caso vero della DGX: dopo 10 minuti «cos'è che ti ho chiesto?» non aveva niente, e il
+  # riassunto di chiusura arriva in secondo piano dopo). 0 = solo il riassunto, come prima
+  conversazione_coda_scambi: 3
   # Risposte del modello della voce insieme (06/10, calliope/corsie.py: più persone da
   # satelliti diversi). Oltre, chi parla sente «Sto rispondendo anche a un'altra persona:
   # dammi un attimo.» e aspetta il suo turno, in ordine d'arrivo; una risposta cominciata

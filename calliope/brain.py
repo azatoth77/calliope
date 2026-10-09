@@ -592,20 +592,29 @@ class ClaimHold:
     compressione (NON_SO); `kind` dice quale dei due ("claim" o "non_so")."""
 
     def __init__(self, active: bool, actions=(), non_so: bool = False, rinuncia=None,
-                 fallito: bool = False):
+                 fallito: bool = False, ripetuta: str | None = None):
         self.claims = active
+        # La risposta precedente (09/10, calliope/ripetizione.py): una risposta che la ripete
+        # uguale si trattiene allo stesso modo, kind "ripetuta"
+        self.ripetuta = ripetuta
         self.fallito = fallito          # i tool di questa risposta sono tutti falliti
         self.non_so = non_so
         # «Non posso creare un'estensione» con il tool disponibile (06/10, politica.rinuncia):
         # trattenuto allo stesso modo, kind "rinuncia"
         self.rinuncia = rinuncia
         self.kind = None
-        self.state = "probe" if (active or non_so or rinuncia) else "pass"  # probe|hold|pass
+        self.state = ("probe" if (active or non_so or rinuncia or ripetuta)
+                      else "pass")                                       # probe|hold|pass
         self.buf = ""
         self.held = ""
         self.actions = list(actions)
 
-    def _match(self, text: str) -> bool:
+    def _match(self, text: str, intera: bool = False) -> bool:
+        if self.ripetuta:
+            from .ripetizione import inizia_come, ripete
+            if (ripete if intera else inizia_come)(text, self.ripetuta):
+                self.kind = "ripetuta"
+                return True
         if self.claims and is_claim(text, self.actions):
             self.kind = "claim"
             return True
@@ -638,9 +647,9 @@ class ClaimHold:
         return out
 
     def flush(self) -> str:
-        if self.state == "probe" and self._match(self.buf.strip()):
+        if self.state == "probe" and self._match(self.buf.strip(), intera=True):
             self.state = "hold"
-        if self.state == "hold" and not self._match(self.buf.strip()):
+        if self.state == "hold" and not self._match(self.buf.strip(), intera=True):
             self.state = "pass"            # il seguito ne fa un ricordo
         if self.state == "hold":
             self.held, self.buf = self.buf, ""
@@ -1715,6 +1724,16 @@ class Brain:
                 print(f"   [CONTESTO] compressione non applicata: {type(e).__name__}: {e}",
                       flush=True)
         arch = getattr(self, "archivio_conv", None)
+        r0 = conv.riassunto if isinstance(conv.riassunto, dict) else {}
+        if not conv.history and r0.get("tipo") == "coda":
+            # Gli ultimi scambi della conversazione chiusa per una pausa (09/10): valgono per
+            # le ore della ripresa, poi la ripresa di sempre
+            ore = float(getattr(self.cfg, "conversazione_ripresa_ore", 4) or 0)
+            if time.time() - float(r0.get("quando") or 0) <= ore * 3600:
+                conv.ripresa_provata = True
+                self._rule("conversazione_coda")
+            else:
+                conv.riassunto = None
         if (arch is not None and not conv.history and conv.riassunto is None
                 and not getattr(conv, "ripresa_provata", False)):
             conv.ripresa_provata = True
@@ -1861,7 +1880,7 @@ class Brain:
 
     def _turn(self, messages, schemas, hold_claims: bool = False, hold_request: bool = False,
               actions=(), hold_names: bool = False, hold_non_so: bool = False,
-              hold_rinuncia=None, hold_fallito: bool = False):
+              hold_rinuncia=None, hold_fallito: bool = False, hold_ripetuta=None):
         """Una passata: rilascia il testo pulito e restituisce (testo, chiamate, trattenuto,
         richiesta_trattenuta, nome_trattenuto).
 
@@ -1885,7 +1904,8 @@ class Brain:
         echo = ContextEcho(getattr(self, "_who_name", None), self._net("eco_contesto"))
         guard = TextCallGuard(self.tools.all_schemas() if self._net("textcallguard") else [])
         hold = ClaimHold(hold_claims and self._net("spinta_dichiarata"), actions,
-                         non_so=hold_non_so, rinuncia=hold_rinuncia, fallito=hold_fallito)
+                         non_so=hold_non_so, rinuncia=hold_rinuncia, fallito=hold_fallito,
+                         ripetuta=hold_ripetuta)
         self._held_kind = None
         self.mentions_tool("")                       # prepara _tool_re
         names = ToolNameHold(self._tool_re, hold_names and self._net("chiamata_in_mezzo"))
@@ -2141,6 +2161,10 @@ class Brain:
             # conversazione_cerca la salta, perché è già qui nella storia
             try:
                 self.tool_ctx.conv_archivio = getattr(self._c(), "id_archivio", None)
+                # Gli ultimi scambi della conversazione chiusa per una pausa sono nei dati
+                # (09/10): conversazione_cerca non risponde «non trovo niente» per lei
+                r0 = self._c().riassunto
+                self.tool_ctx.conv_coda = isinstance(r0, dict) and r0.get("tipo") == "coda"
             except AttributeError:
                 pass
         self._offer = None        # azione proposta da un tool in questa risposta
@@ -2919,7 +2943,11 @@ class Brain:
         il riassunto di chiusura si fa in secondo piano (calliope/compressione.py: la voce
         non aspetta). La conversazione nuova è un oggetto nuovo nello stesso posto."""
         old = self._c()
-        if old.history or old.riassunto:
+        # Una conversazione con la sola riga di ripresa (o la coda di quella chiusa) non ha
+        # niente da archiviare né da riassumere (09/10)
+        solo_ripresa = (not old.history and isinstance(old.riassunto, dict)
+                        and old.riassunto.get("tipo") in ("ripresa", "coda"))
+        if (old.history or old.riassunto) and not solo_ripresa:
             self._archivia_turni()
             comp = getattr(self, "compressore", None)
             arch = getattr(self, "archivio_conv", None)
@@ -2940,6 +2968,8 @@ class Brain:
             alleg.svuota()               # e anche i file allegati (mai su disco)
         self.conv = Conversazione(old.chiave)
         self.conv.luogo = old.luogo
+        if motivo == "conversazione_scaduta":
+            self._coda_della_chiusa(old)      # gli ultimi scambi restano nella ripresa (09/10)
         # Il numero delle risposte continua (prima era di Brain e non si azzerava): una
         # proposta della conversazione chiusa non diventa mai «la risposta precedente»
         self.conv.turn_number = getattr(old, "turn_number", 0)
@@ -2952,6 +2982,22 @@ class Brain:
         sc = getattr(self.tool_ctx, "speaker_ctx", None)
         if sc is not None and getattr(sc, "sfida", None) is not None:
             sc.sfida = None              # la frase di conferma era di questa conversazione
+
+    def _coda_della_chiusa(self, old):
+        """Chiusa per una pausa (09/10): gli ultimi scambi nella ripresa della nuova, per
+        `conversazione_ripresa_ore` (compressione.coda_scambi). Solo la stessa persona: la
+        nuova ha la stessa chiave, e mai per un ospite (due ospiti dello stesso satellite sono
+        due persone diverse)."""
+        from .compressione import coda_scambi, testo_coda
+        owner = getattr(old, "owner", None)
+        if owner is None or owner is UNSET:
+            return
+        n = int(getattr(self.cfg, "conversazione_coda_scambi", 0) or 0)
+        scambi = coda_scambi(old.history, n) if n > 0 else []
+        if scambi:
+            ora = time.time()
+            self.conv.riassunto = {"tipo": "coda", "testo": testo_coda(scambi, ora),
+                                   "quando": ora}
 
     def chiudi_conversazione(self, conv, motivo: str):
         """Chiude una conversazione che non è quella del turno (06/10: il registro delle
@@ -3133,6 +3179,10 @@ class Brain:
         actions = self._recent_actions(start) + [FACT_PREFIX + f.lower()
                                                  for f in self._remembered_facts()]
         spoke = announced = nudged = retried_empty = nudged_fallito = False
+        # La risposta di prima (09/10, rete risposta_ripetuta): una uguale si trattiene, una volta
+        from .ripetizione import RIPETUTA_NUDGE, risposta_precedente
+        precedente = (risposta_precedente(self.history[:start], user_text)
+                      if user_text and self._net("risposta_ripetuta") else None)
         claim_at = None          # risposta già detta che dichiarava un'azione senza tool
         # La domanda chiede un file o un documento e c'è il PC per cercarlo: se il modello
         # risponde con testo senza tool scatta la spinta, quindi quel testo non va detto prima
@@ -3199,8 +3249,18 @@ class Brain:
                 hold_non_so=bool(archive_hold or ricerca_tool) and not self.last_tools,
                 hold_rinuncia=rinuncia_di if disp and not nudged and not self.last_tools
                 else None,
-                hold_fallito=self._solo_falliti())
+                hold_fallito=self._solo_falliti(),
+                hold_ripetuta=precedente if not self.last_tools else None)
             tail = []
+            if held and self._held_kind == "ripetuta" and not calls:
+                # Uguale alla risposta di prima: non si dice né entra nella storia; la spinta,
+                # una volta (poi la sua risposta si dice, anche uguale)
+                precedente = None
+                self._rule("spinta_ripetuta")
+                print(f"   [LLM] risposta uguale alla precedente, non la dico: «{held[:80]}»",
+                      flush=True)
+                tail = [{"role": "system", "content": RIPETUTA_NUDGE}]
+                continue
             if corr is not None and held_req and not held and not calls:
                 if held_req.rstrip().endswith("?") and correzioni > 1:
                     # Chiede il dato alla persona dopo aver riletto l'errore con la spinta: è la

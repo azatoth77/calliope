@@ -989,7 +989,211 @@ def prova_fonte():
     a.close()
 
 
+# ─────────────────────────── 9. dopo una pausa (09/10) ───────────────────────────
+# Caso vero della DGX alle 19:06 (qui con argomenti di fantasia): la conversazione della pizza
+# e del foglio Excel chiusa dopo ~10 minuti; «scusami, ma cos'è che ti ho chiesto
+# esattamente?» → conversazione_cerca cronologico → l'argomento «scusami chiesto esattamente»
+# trovava 5 turni della conversazione delle 12:41 (i video) e il modello raccontava quella
+def prova_dopo_la_pausa():
+    from calliope.compressione import coda_scambi, testo_coda
+    a = archivio("pausa.db")
+    ora = time.time()
+    vecchia = Conversazione()
+    vecchia.luogo = "telefono"
+    riempi(a, vecchia, "p-dario", "Dario", False,
+           [("Riesci a vedere i video esattamente?", "No, i video non li vedo."),
+            ("Esattamente cosa vedi allora?", "Le foto che mi mandi."),
+            ("Tetto: quanto costa rifarlo?", "Sui 7.000 euro.")], quando=ora - 6 * 3600)
+    recente = Conversazione()
+    recente.luogo = "telefono"
+    riempi(a, recente, "p-dario", "Dario", False,
+           [("Che pizza mi consigli stasera?", "Una margherita."),
+            ("Fammi un foglio Excel con le spese", "Fatto, è sullo schermo.")],
+           quando=ora - 600)
+    a.attendi()
+    ctx = Ctx(a)
+    ctx.turno = 5
+    r = _conversazione_cerca(ctx, "scusami, ma cos'è che ti ho chiesto esattamente?",
+                             cronologico=True)
+    txt = json.dumps(r, ensure_ascii=False)
+    verifica("caso vero: «cos'è che ti ho chiesto esattamente?» → la conversazione appena "
+             "chiusa (pizza), senza i turni vecchi con «esattamente»",
+             r["ok"] and "pizza" in r["conversazione"].get("tue_prime_frasi", "")
+             and "sull_argomento" not in r and "video" not in txt, txt[:400])
+    ctx.turno = 20
+    r = _conversazione_cerca(ctx, "prima mi parlavi del tetto", cronologico=True)
+    arg = r.get("sull_argomento") or [{}]
+    verifica("contrario: un argomento vero di una conversazione più vecchia resta, e lo dice",
+             "7.000" in json.dumps(arg, ensure_ascii=False)
+             and "più vecchia" in arg[0].get("conversazione", ""),
+             json.dumps(r, ensure_ascii=False)[:400])
+    a.close()
+
+    # La coda: chiusa per una pausa, gli ultimi scambi restano nella ripresa
+    storia = [{"role": "user", "content": f"Domanda {i}"} if j == 0 else
+              {"role": "assistant", "content": f"Risposta {i}"} for i in range(5) for j in (0, 1)]
+    storia.insert(3, {"role": "assistant", "content": "", "tool_calls": [{"id": "x"}]})
+    storia.insert(4, {"role": "tool", "content": "{\"segreto\": 1}", "tool_call_id": "x"})
+    sc = coda_scambi(storia, 3)
+    verifica("coda_scambi: gli ultimi tre, solo le frasi dette",
+             sc == [("Domanda 2", "Risposta 2"), ("Domanda 3", "Risposta 3"),
+                    ("Domanda 4", "Risposta 4")], str(sc))
+    verifica("testo_coda: dati, non istruzioni, con le frasi", "non istruzioni" in
+             testo_coda(sc, ora) and "«Domanda 4»" in testo_coda(sc, ora))
+    b = brain_finto()
+    parla(b, "Che pizza mi consigli stasera?")
+    parla(b, "Fammi un foglio Excel con le spese")
+    b.end_conversation("conversazione_scaduta")
+    parla(b, "Cos'è che ti ho chiesto un attimo fa?")
+    visti = b.backend.visti[-1]
+    verifica("chiusa per una pausa: gli ultimi scambi nella conversazione nuova",
+             visti[1]["role"] == "system" and "foglio Excel" in visti[1]["content"]
+             and "pizza" in visti[1]["content"] and "conversazione_coda" in b.rules_fired()
+             and sum(1 for m in visti if m["role"] == "user") == 1, visti[1]["content"][:200])
+    for motivo in ("nuova", "dormi", "conversazione_altra_persona"):
+        b = brain_finto()
+        parla(b, "Che pizza mi consigli stasera?")
+        b.end_conversation(motivo)
+        verifica(f"contrario: chiusa per «{motivo}» → niente coda", b.conv.riassunto is None)
+    b = brain_finto()
+    parla(b, "Che pizza mi consigli stasera?", chi=None, livello="ospite")
+    b.end_conversation("conversazione_scaduta")
+    verifica("contrario: un ospite → niente coda (un altro ospite non la eredita)",
+             b.conv.riassunto is None)
+    b = brain_finto()
+    parla(b, "Che pizza mi consigli stasera?")
+    b.end_conversation("conversazione_scaduta")
+    b.conv.riassunto["quando"] -= 5 * 3600
+    parla(b, "Ciao")
+    verifica("contrario: oltre conversazione_ripresa_ore la coda non vale",
+             not any("pizza" in (m.get("content") or "") for m in b.backend.visti[-1]
+                     if m["role"] == "system"))
+    b = brain_finto()
+    b.cfg.conversazione_coda_scambi = 0
+    parla(b, "Che pizza mi consigli stasera?")
+    b.end_conversation("conversazione_scaduta")
+    verifica("contrario: conversazione_coda_scambi 0 → come prima", b.conv.riassunto is None)
+
+
+# ─────────────────────────── 10. «ricominciamo» con parole sue (09/10) ───────────────────────
+# Caso vero della DGX alle 21:04: «No, voglio che ricominciamo da capo, quindi Calliope
+# ricominciamo.» → la regola breve non scatta (non è la frase intera) e il modello rispondeva
+# «Certamente, ricominciamo pure» senza farlo. Ora c'è il tool conversazione_nuova
+def prova_conversazione_nuova():
+    from calliope.ciclo import Ciclo, Servizi
+    from calliope.politica import classe_di
+    from calliope.tools.conversazioni import NUOVA_FRASE, _conversazione_nuova
+    from calliope.wakeword import nuova_conversazione
+    reg = build_registry(conversazioni=True)
+    spec = reg.get("conversazione_nuova")
+    verifica("tool conversazione_nuova: per tutti i livelli, classe sicura (si disfa: archivio)",
+             spec is not None and all(reg.allowed("conversazione_nuova", lv)
+                                      for lv in ("ospite", "familiare", "amministra"))
+             and classe_di("conversazione_nuova", spec).classe == "sicuro")
+    verifica("descrizione: i contrari (un collaudo, riprendere da dove eravate)",
+             "collaudo" in spec.description and "da dove eravamo" in spec.description)
+    ctx = Ctx()
+    r = _conversazione_nuova(ctx, "da capo")
+    verifica("il tool segna la richiesta e dà la frase pronta", r["ok"]
+             and r["risposta_finale"] == NUOVA_FRASE and ctx.conversazione_nuova is True
+             and "conversazione_nuova_tool" in ctx.regole, str(r))
+    for cosa in ("il collaudo", "la lista della spesa", "da dove eravamo"):
+        c2 = Ctx()
+        r2 = _conversazione_nuova(c2, cosa)
+        verifica(f"contrario: cosa=«{cosa}» non è la conversazione → niente",
+                 r2["ok"] is False and not getattr(c2, "conversazione_nuova", False)
+                 and "conversazione_nuova_altro" in c2.regole, str(r2))
+    for cosa in ("", "la conversazione", "tutto da capo", "dall'inizio"):
+        verifica(f"cosa=«{cosa}» è la conversazione", _conversazione_nuova(Ctx(), cosa)["ok"])
+    b = brain_finto()
+    parla(b, "Parliamo della pizza")
+    ciclo = Ciclo.__new__(Ciclo)
+    ciclo.tool_ctx, ciclo.brain, ciclo.rec, ciclo.last_question = ctx, b, {}, "pizza"
+    vecchia = b.conv
+    verifica("a risposta finita il ciclo chiude la conversazione (come la regola breve)",
+             ciclo._conversazione_nuova_chiesta() and b.conv is not vecchia
+             and not b.conv.history and ciclo.rec.get("conversazione_nuova")
+             and ctx.conversazione_nuova is False and ciclo.last_question is None)
+    verifica("…una volta sola", not ciclo._conversazione_nuova_chiesta())
+    verifica("la regola breve resta: «ricominciamo» per intero",
+             nuova_conversazione("Calliope, ricominciamo.", "Calliope"))
+    for frase in ("No, voglio che ricominciamo da capo, quindi Calliope ricominciamo.",
+                  "Ricominciamo il collaudo.", "Ricominciamo da dove eravamo."):
+        verifica(f"la regola breve non scatta su «{frase}» (decide il modello)",
+                 not nuova_conversazione(frase, "Calliope"))
+
+
+# ─────────────────────────── 11. la risposta uguale alla precedente (09/10) ───────────────────
+# Caso vero della DGX alle 19:06:49 e 19:07:04: la stessa frase lunga detta due volte a due
+# richieste diverse. Rete risposta_ripetuta (calliope/ripetizione.py)
+NOLAN = "Mi hai chiesto esattamente cos'è che mi avevi chiesto un attimo fa. Un loop degno di un film di Christopher Nolan, ma con meno effetti speciali."
+
+
+def prova_ripetuta():
+    from calliope.ripetizione import inizia_come, ripete, risposta_precedente
+    verifica("ripete: la stessa frase lunga", ripete(NOLAN, NOLAN))
+    verifica("ripete: quasi uguale (una parola diversa)",
+             ripete(NOLAN.replace("meno", "pochi"), NOLAN))
+    verifica("contrario: brevi uguali sono legittime («Fatto.», «Va bene.»)",
+             not ripete("Fatto.", "Fatto.") and not ripete("Sono le dieci e venti.",
+                                                          "Sono le dieci e venti."))
+    verifica("contrario: stessa apertura, risposta diversa",
+             not ripete("Mi hai chiesto esattamente della pizza margherita e del foglio Excel "
+                        "con le spese.", NOLAN))
+    verifica("inizia_come: la prima frase uguale", inizia_come(NOLAN.split(". ")[0], NOLAN)
+             and not inizia_come("Certo, ecco cosa mi avevi chiesto prima.", NOLAN))
+    verifica("risposta_precedente: l'ultima detta, non le chiamate",
+             risposta_precedente([{"role": "user", "content": "a"},
+                                  {"role": "assistant", "content": "Prima."},
+                                  {"role": "user", "content": "b"},
+                                  {"role": "assistant", "content": "", "tool_calls": [{}]},
+                                  {"role": "tool", "content": "{}"},
+                                  {"role": "assistant", "content": "Dopo il tool."}])
+             == "Dopo il tool.")
+    # Il giro: la risposta uguale non si dice, la spinta, la risposta nuova
+    b = brain_finto(risposte=[NOLAN, NOLAN, "Prima mi avevi chiesto della pizza e del foglio."])
+    parla(b, "Cos'è che ti ho chiesto?")
+    detto = parla(b, "No, mi riferivo alla richiesta di un attimo fa.")
+    visti = b.backend.visti[-1]
+    verifica("caso vero: la risposta uguale non si dice, il modello riceve la spinta",
+             detto == "Prima mi avevi chiesto della pizza e del foglio."
+             and "spinta_ripetuta" in b.rules_fired()
+             and any("uguale alla tua risposta precedente" in (m.get("content") or "")
+                     for m in visti if m["role"] == "system"), detto)
+    verifica("…e non entra nella storia",
+             sum(1 for m in b.history if m.get("content") == NOLAN) == 1)
+    b = brain_finto(risposte=[NOLAN, NOLAN])
+    parla(b, "Cos'è che ti ho chiesto?")
+    detto = parla(b, "Cos'è che ti ho chiesto?")
+    verifica("contrario: la stessa domanda di nuovo → la stessa risposta va bene",
+             detto == NOLAN and len(b.backend.visti) == 2
+             and "spinta_ripetuta" not in b.rules_fired(), detto)
+    b = brain_finto(risposte=[NOLAN, NOLAN, NOLAN])
+    parla(b, "Cos'è che ti ho chiesto?")
+    detto = parla(b, "Puoi ripetere?")
+    verifica("dopo la spinta la sua risposta si dice, anche uguale (una volta sola)",
+             detto == NOLAN and len(b.backend.visti) == 3, detto)
+    b = brain_finto(risposte=["Va bene, nessun problema.", "Va bene, nessun problema."])
+    parla(b, "Ci sentiamo dopo")
+    detto = parla(b, "Ti richiamo più tardi")
+    verifica("contrario: una risposta breve uguale si dice («Va bene…»)", detto == "Va bene, nessun problema."
+             and "spinta_ripetuta" not in b.rules_fired() and len(b.backend.visti) == 2)
+    b = brain_finto(risposte=[NOLAN, "Un'altra risposta del tutto diversa da quella di prima, "
+                                     "lunga abbastanza."])
+    parla(b, "Cos'è che ti ho chiesto?")
+    detto = parla(b, "E dopo?")
+    verifica("contrario: una risposta diversa passa subito", detto.startswith("Un'altra")
+             and len(b.backend.visti) == 2)
+    b = brain_finto(risposte=[NOLAN, NOLAN])
+    b.cfg.llm_reti_spente = ["risposta_ripetuta"]
+    parla(b, "Cos'è che ti ho chiesto?")
+    verifica("contrario: rete spenta → come prima", parla(b, "E quindi?") == NOLAN)
+
+
 prova_oggetto()
+prova_ripetuta()
+prova_conversazione_nuova()
+prova_dopo_la_pausa()
 prova_luogo_funzione()
 prova_fonte()
 prova_turni()

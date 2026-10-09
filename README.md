@@ -62,7 +62,7 @@ flowchart LR
 | Ingresso | `calliope/satellite/` (`ServerSatelliti`, client), `calliope/schermi/` (Starlette, SSE, PWA del telefono) | WSS, PCM 16 kHz; da addormentata nessun audio lascia il dispositivo |
 | VAD e wake word | `vad.py` (Silero ONNX), `wakeword.py` (classificatore formato openWakeWord) | ripiego testuale se manca il modello acustico |
 | STT | `stt.py` | faster-whisper nel processo o whisper.cpp come server (API OpenAI), ripiego su CPU |
-| Chi parla | `speaker_id.py` (CAM++ ONNX, fbank in numpy) | soglia 0,48; sotto ~1 s di voce vale la conversazione, o la persona riconosciuta da poco sullo stesso satellite (08/10), al più familiare |
+| Chi parla | `speaker_id.py` (CAM++ ONNX, fbank in numpy) | soglia 0,48; sotto ~1 s di voce vale la conversazione, o la persona riconosciuta da poco sullo stesso satellite (08/10), al più familiare; sul telefono di una persona una frase incerta col minore resta sua, con la prudenza per il minore (09/10) |
 | Ciclo | `ciclo.py` (`Ciclo`, `Servizi`), `main.py` (`Avvio`, `Corsie`), `corsie.py` | un ciclo per satellite, una conversazione per persona |
 | Contesto | `brain.py`, `contesto.py`, `conversazione.py`, `compressione.py`, `conversazioni.py` | prefisso fisso in cache; `llm_num_ctx: auto`; compressione a 75/90 %; archivio FTS5 + embedding (RRF) |
 | LLM | `brain.py` (`OllamaBackend`, `OpenAIBackend`), `config.PROFILI_LLM` | `llm_profilo` sceglie backend, URL, modello, thinking e reti in una riga |
