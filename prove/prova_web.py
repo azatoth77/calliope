@@ -455,6 +455,93 @@ sist0 = b0._system_messages()[0]["content"]
 verifica("prompt senza web: come prima", "Non puoi sapere meteo" in sist0
          and "web_cerca" not in sist0 and "cercare su internet" in sist0)
 
+# ── 6b. dopo una ricerca (09/10, brain.RICERCA_MSG e RICERCA_NUDGE, rete `ricerca_recente`) ──
+# Caso vero della DGX del 09/10, 10:21: notizie con web_cerca, poi «Approfondiamo le condizioni
+# [del re]» → «non ho informazioni più dettagliate» senza cercare
+NON_HO = "Mi spiace, ma non ho altre informazioni oltre a quelle che ti ho riportato."
+b = brain([
+    [("calls", [call(0, "web_cerca", {"domanda": "ultime notizie", "tipo": "notizie"})])],
+    [("text", "Secondo l'ANSA, il re di Norvegia è grave e a Lodi apre un festival.")],
+    # «Approfondiamo il primo»: prima il «non ho altro», poi (dopo la spinta) la ricerca
+    [("text", NON_HO)],
+    [("calls", [call(1, "web_cerca", {"domanda": "condizioni re di Norvegia",
+                                      "tipo": "notizie"})])],
+    [("text", "Secondo l'ANSA, il re è ricoverato in terapia intensiva.")],
+])
+"".join(b.stream_reply("Dimmi le ultime notizie", "familiare"))
+verifica("ricerca: al primo turno niente dati sulla ricerca",
+         "poco fa hai cercato" not in b.backend.visti[0]
+         and "ricerca_recente" not in b.rules_fired())
+detto = "".join(b.stream_reply("Approfondiamo il primo", "familiare"))
+verifica("ricerca: il turno dopo ha l'ultima ricerca nei dati del turno",
+         "poco fa hai cercato con web_cerca («ultime notizie»)" in b.backend.visti[2]
+         and "ricerca_recente" in b.rules_fired(), b.backend.visti[2][-300:])
+verifica("ricerca: «non ho altre informazioni» senza cercare non si dice, spinta e ricerca",
+         "non ho altre" not in detto and "terapia intensiva" in detto
+         and "spinta_ricerca" in b.rules_fired()
+         and [t["nome"] for t in b.last_tools] == ["web_cerca"], detto)
+verifica("ricerca: la frase trattenuta non è nella storia",
+         not any(NON_HO in (m.get("content") or "") for m in b.history))
+# Due turni senza ricerca dopo l'ultima: i dati non ci sono più
+b.backend.copione = [[("text", "Prego.")], [("text", "Va bene.")], [("text", "Certo.")]]
+"".join(b.stream_reply("Grazie", "familiare"))
+verifica("ricerca: un turno dopo ancora nei dati", "ricerca_recente" in b.rules_fired())
+"".join(b.stream_reply("Ok", "familiare"))
+verifica("ricerca: ancora al secondo turno", "ricerca_recente" in b.rules_fired())
+"".join(b.stream_reply("Parliamo d'altro", "familiare"))
+verifica("ricerca: al terzo turno non c'è più", "ricerca_recente" not in b.rules_fired()
+         and "poco fa hai cercato" not in b.backend.visti[-1])
+# Contrario: nessuna ricerca prima → niente dati e niente spinta, il «non ho altro» si dice
+b = brain([[("text", "Ti ho detto quello che so.")], [("text", NON_HO)]])
+"".join(b.stream_reply("Parliamo dei gatti", "familiare"))
+detto = "".join(b.stream_reply("Approfondiamo", "familiare"))
+verifica("ricerca: senza ricerca prima niente dati né spinta", detto == NON_HO
+         and "spinta_ricerca" not in b.rules_fired() and "ricerca_recente" not in b.rules_fired())
+# Dopo la spinta un secondo «non ho altro» si dice (una volta sola)
+b = brain([
+    [("calls", [call(0, "web_cerca", {"domanda": "ultime notizie"})])], [("text", "Ecco.")],
+    [("text", NON_HO)], [("text", "Non ho altre informazioni su questo, mi dispiace davvero.")]])
+"".join(b.stream_reply("Notizie?", "familiare"))
+detto = "".join(b.stream_reply("Dimmi di più", "familiare"))
+verifica("ricerca: dopo la spinta il «non ho altro» si dice", "mi dispiace davvero" in detto,
+         detto)
+# Ricerca su internet non disponibile adesso (senza rete): i dati per dirlo, nessuna spinta
+b = brain([
+    [("calls", [call(0, "web_cerca", {"domanda": "ultime notizie"})])], [("text", "Ecco.")],
+    [("text", NON_HO)]])
+"".join(b.stream_reply("Notizie?", "familiare"))
+cfg.online = False
+try:
+    detto = "".join(b.stream_reply("Approfondiamo", "familiare"))
+finally:
+    cfg.online = True
+verifica("ricerca: internet spento, i dati per dirlo onestamente, nessuna spinta",
+         "adesso non puoi cercare su internet" in b.backend.visti[-1]
+         and "ricerca_recente_spenta" in b.rules_fired()
+         and "spinta_ricerca" not in b.rules_fired() and detto == NON_HO)
+# La rete spenta dal profilo: come prima
+cfg.llm_reti_spente = ["ricerca_recente"]
+b = brain([
+    [("calls", [call(0, "web_cerca", {"domanda": "ultime notizie"})])], [("text", "Ecco.")],
+    [("text", NON_HO)]])
+"".join(b.stream_reply("Notizie?", "familiare"))
+detto = "".join(b.stream_reply("Approfondiamo", "familiare"))
+cfg.llm_reti_spente = []
+verifica("ricerca: rete spenta, come prima", detto == NON_HO
+         and "poco fa hai cercato" not in b.backend.visti[-1])
+# ricerca_recente (la usa il ciclo per «approfondisci»): anche biblioteca_cerca
+b = brain([])
+b.history = [{"role": "user", "content": "Quanto è lungo il Tevere?"},
+             {"role": "assistant", "content": "", "tool_calls": [
+                 call(0, "biblioteca_cerca", {"domanda": "lunghezza Tevere"})]},
+             {"role": "tool", "name": "biblioteca_cerca", "content": "{}"},
+             {"role": "assistant", "content": "405 chilometri."}]
+verifica("ricerca_recente: biblioteca_cerca", b.ricerca_recente()
+         == {"tool": "biblioteca_cerca", "domanda": "lunghezza Tevere"})
+b.history += [{"role": "user", "content": "x"}, {"role": "assistant", "content": "y"},
+              {"role": "user", "content": "z"}, {"role": "assistant", "content": "w"}]
+verifica("ricerca_recente: due turni dopo, niente", b.ricerca_recente() is None)
+
 # ─────────────────────────── 7. capacità e caricamento ───────────────────────────
 c0 = Config()
 d = capacita.check_web(c0)

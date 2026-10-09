@@ -314,7 +314,8 @@ class Config:
     # textcallguard, chiamata_in_mezzo, spinta_promessa, spinta_richiesta, spinta_dichiarata,
     # riferimento_casa, riferimento_agenda, conferma_al_posto_del_vuoto,
     # vuoto_seconda_passata, ricerca_promessa, citazione_tolta, nome_tool_parlato,
-    # eco_contesto, spinta_archivio, spinta_rinuncia, spinta_esercizi, correzione_tool; "tutte"
+    # eco_contesto, spinta_archivio, spinta_rinuncia, spinta_esercizi, correzione_tool,
+    # ricerca_recente; "tutte"
     # le spegne tutte. Quelle di
     # «sicurezza» (permessi, politica…) non si spengono: un nome di sicurezza o sconosciuto si
     # segnala all'avvio. Quelle del profilo (llm_profilo) si aggiungono a queste.
@@ -2228,6 +2229,12 @@ RETI: dict[str, Rete] = {
         "detta, il modello rilegge l'errore e richiama (tool_correzioni_max giri)", MODELLO,
         "«ho avuto un piccolo intoppo, riprovo subito» senza riprovare dopo web_cerca senza "
         "domanda (09/10, DGX, quattro volte)"),
+    "ricerca_recente": Rete(
+        "dopo una ricerca (web_cerca, biblioteca_cerca) nei due turni prima: l'ultima ricerca "
+        "nei dati del turno (RICERCA_MSG) e la spinta su «non ho altre informazioni» senza "
+        "cercare (RICERCA_NUDGE)", MODELLO,
+        "«Approfondiamo le condizioni del re» dopo le notizie: «non ho informazioni più "
+        "dettagliate» senza cercare, col 26B (09/10, DGX)"),
     # ── sicurezza: sempre accese, per ogni modello ──
     "permessi": Rete(
         "livello di chi parla e preset dei minori, a ogni esecuzione (ToolRegistry.call)",

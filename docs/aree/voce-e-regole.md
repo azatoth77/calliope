@@ -717,3 +717,46 @@ domande su di sé (chi sei, dove giri, chi ti ha fatta, che versione sei, cosa c
 (`risposta_finale`): fatti letti da CHANGELOG.md, dal gestore e dall'inventario della macchina.
 Regola nuova `stato_periodo_novita` (solo `periodo` → novità), con il contrario. Dettagli e
 misure (29/32 con gemma4 e4b sul portatile): [capacita-installazioni](capacita-installazioni.md).
+
+## Approfondire dopo una ricerca (09/10, ramo `approfondisci-notizie`)
+
+Caso vero della DGX (09/10, 10:21, 26B): «Prendevo le ultime notizie, altre news» → `web_cerca`
+(notizie) → «Secondo l'ANSA, le condizioni di salute del re … Ci sono anche notizie sulle
+proteste … e sul festival …». Poi «Approfondiamo le condizioni reale.» (= «del re»): regola
+`approfondisci` scattata, nessun tool, e «Mi spiace, ma non ho informazioni più dettagliate…
+oltre a quelle che ti ho appena riportato». Falso: poteva cercare.
+
+Perché: la regola `approfondisci` (`ciclo._contesto_e_allegati`, `DEEPEN_WORDS`) cercava nella
+biblioteca **la frase del turno prima** («Si, prendevo con le ultime notizie altre news…», campo
+`approfondimento` del registro), trovava passaggi fuori tema e passava al modello «rispondi con
+questi passaggi… se non contengono la risposta dillo, senza inventare». Il modello ha eseguito
+l'istruzione. In più il testo dei siti esce dalla storia a risposta finita (`WEB_TOLTO`): il
+modello vede solo ciò che ha detto e crede di non avere altro.
+
+Correzione generale, non per il singolo caso (decide il modello, il sistema gli dà il contesto):
+- **Dati del turno `RICERCA_MSG`** (`brain.py`, rete `ricerca_recente`, categoria «modello»):
+  se in uno dei due turni prima c'è una ricerca (`web_cerca` o `biblioteca_cerca`), il modello
+  riceve tool e domanda dell'ultima ricerca e l'indicazione: per approfondire, dire di più o
+  rispondere su una delle cose riferite, chiamare di nuovo quel tool con una domanda mirata, con
+  i nomi detti; se la persona parla d'altro, la riga non conta. Non guarda la frase: vale anche
+  per «dimmi di più sul festival» o «e le condizioni del re?», che `DEEPEN_WORDS` non prende.
+  Regola `ricerca_recente`. Se quella ricerca adesso non c'è (senza rete, livello che non la
+  può usare): `RICERCA_SPENTA_MSG`, dire onestamente che non si può cercare, regola
+  `ricerca_recente_spenta`.
+- **Spinta `spinta_ricerca`** (`RICERCA_NUDGE`, stessa rete): dopo una ricerca, un «non ho altre
+  informazioni» senza aver chiamato tool in questa risposta non si dice né entra nella storia; il
+  modello riceve la spinta a cercare, una volta (poi la sua risposta si dice). Usa `ClaimHold`
+  come `spinta_archivio` (e prima di lei); `NON_SO` ora prende anche «altre/ulteriori
+  informazioni», «dettagli», «notizie», «aggiornamenti» (casi in `prova_testo`).
+- **`approfondisci` non rifà la biblioteca dopo una ricerca**: con una ricerca nei due turni prima
+  (`Brain.ricerca_recente`) il ciclo lascia la frase al modello con i dati del turno (regola
+  `approfondisci_al_modello`). Dopo una risposta a memoria resta com'era (il Tevere del 26/09).
+
+Misura (portatile, gemma4 e4b, SearXNG finto, `prove/prova_ricerca_seguito_ollama.py 2`): «prima»
+(rete spenta e biblioteca con la domanda di prima) seguiti 8/8, contrari 4/6; «dopo» seguiti 8/8,
+contrari 6/6. Il 4B cercava già da solo anche «prima»: il guasto del caso vero è del 26B, da
+riprovare sulla DGX. Il «prima» sbagliava con internet spento (biblioteca e «venti mostre» dal
+risultato vecchio); il «dopo» dice «adesso non riesco a raggiungere internet». Prima frase
+1,7–2,0 s in tutti e due. Limite visto: senza rete (`online` falso) `web_cerca` esce dall'elenco
+ma il modello lo chiama lo stesso dalla storia e il registro lo esegue (qui fallisce con la frase
+pronta: onesto, ma il tool non dovrebbe partire).

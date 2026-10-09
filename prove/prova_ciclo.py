@@ -127,6 +127,7 @@ class Persone:
 class Cervello:
     last_tools, last_private, on_tool_start, conv, turn_number = [], False, None, None, 0
     uso_precedente = last_context = last_compressione = last_lettura_s = None
+    ricerca = None                       # brain.ricerca_recente (09/10)
 
     def __init__(self):
         self.richieste, self.fine, self.risposte = [], [], []
@@ -138,6 +139,9 @@ class Cervello:
     def stream_continuation(self, level, context=None):
         self.richieste.append(("(continuazione)", context))
         yield "Il Po è lungo 652 km."
+
+    def ricerca_recente(self):
+        return self.ricerca
 
     def end_conversation(self, motivo="fine"):
         self.fine.append(motivo)
@@ -230,6 +234,15 @@ def main():
              detto[0] == "Controllo nella biblioteca."
              and cervello.richieste[-1] == ("Approfondisci.", "CONTESTO di «Che ore sono?»")
              and c.last_question == "Che ore sono?", str(detto))
+    # Dopo una ricerca nei turni prima (09/10, caso vero della DGX): decide il modello, con
+    # l'ultima ricerca nei suoi dati del turno; niente biblioteca con la domanda di prima
+    cervello.ricerca = {"tool": "web_cerca", "domanda": "ultime notizie"}
+    _, detto = giro("Approfondisci.")
+    cervello.ricerca = None
+    verifica("«approfondisci» dopo una ricerca: al modello, senza la biblioteca",
+             cervello.richieste[-1] == ("Approfondisci.", None)
+             and "approfondisci_al_modello" in c.rec.get("regole", [])
+             and "approfondisci" not in c.rec.get("regole", []), str(detto))
     _, detto = giro("Quanto è lungo il Po?", "Devo fare una ricerca per risponderti bene.")
     verifica("ricerca promessa e fatta subito",
              detto == ["Devo fare una ricerca per risponderti bene.",

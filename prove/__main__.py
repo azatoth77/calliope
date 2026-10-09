@@ -210,6 +210,7 @@ CON_OLLAMA = [
     ("prova_agenti_ollama.py", ["1"], "delega, stato e annullo a voce con il modello (agente finto)"),
     ("prova_archivio_ollama.py", ["1"], "documenti di casa a voce con il modello (archivio finto)"),
     ("prova_web_ollama.py", ["1"], "ricerca su internet a voce (SearXNG finto): biblioteca o web, iniezione, privacy"),
+    ("prova_ricerca_seguito_ollama.py", ["1"], "approfondire dopo una ricerca (09/10, caso vero della DGX: «Approfondiamo le condizioni [del re]» dopo le notizie, senza cercare): nuova ricerca mirata, contrari (chiacchierata, lista della spesa, internet spento); prima e dopo"),
     ("prova_rivolta_ollama.py", ["1"], "giudizio «rivolta a Calliope» (09/10, F2 della compagnia) sul modello del rilevatore: 56 frasi di fantasia, almeno 25/27 rivolte e 26/29 non rivolte giuste, tempo mediano"),
     ("prova_brain_ollama.py", ["1"], "tool di base con il modello"),
     ("prova_rinomina_ollama.py", ["1"], "rinominare chi parla: mai al primo turno, solo dopo il «sì»"),

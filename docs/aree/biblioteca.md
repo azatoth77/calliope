@@ -217,3 +217,15 @@ Poi il cruscotto dal telefono di chi amministra: sezione «Ricerca web (SearXNG)
 con due tocchi. Da verificare sul vero: tempo del `docker pull` sulla DGX, che `docker image rm`
 non tocchi l'immagine dell'altro SearXNG, i motivi veri di `unresponsive_engines`, e se le
 soglie (3 risultati, 0,6) reggono un giorno normale senza falsi «degradata».
+
+## Approfondire dopo una ricerca (09/10, ramo `approfondisci-notizie`)
+
+Caso vero della DGX (09/10, 10:21): dopo le notizie con `web_cerca`, «Approfondiamo le
+condizioni [del re]» → «non ho informazioni più dettagliate» senza cercare: la regola
+`approfondisci` cercava nella biblioteca la frase di prima («altre news…») e il testo dei siti era
+già uscito dalla storia. Ora, dopo una ricerca (web o biblioteca) nei due turni prima, il modello
+ha nei dati del turno l'ultima ricerca e l'indicazione di cercare di nuovo con una domanda mirata
+(`RICERCA_MSG`, rete `ricerca_recente`), la spinta su «non ho altre informazioni» senza cercare
+(`spinta_ricerca`), e `approfondisci` non rifà la biblioteca (`approfondisci_al_modello`). Con la
+ricerca su internet non disponibile, i dati del turno dicono di ammetterlo. Dettagli e misure:
+[voce-e-regole](voce-e-regole.md); prove `prova_web` (6b) e `prova_ricerca_seguito_ollama`.
