@@ -2,7 +2,7 @@
 
 *Wikipedia italiana e le altre fonti Kiwix in puro Python con FTS5; ricerca su internet con SearXNG. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-*Stato al 09/10: biblioteca e ricerca web invariate dalla pubblicazione (07/10). Dall'08/10 notte il testo dei siti letto dall'agente (`web_leggi`) arriva in busta come ogni dato non fidato, e i nomi pubblici di casa sono vietati nella rete delle estensioni e dell'agente ([agenti-estensioni](agenti-estensioni.md)). Restano aperti le tabelle delle voci non lette e i «perché…?» che trovano titoli omonimi.*
+*Stato al 09/10: biblioteca e ricerca web invariate dalla pubblicazione (07/10). Dall'08/10 notte il testo dei siti letto dall'agente (`web_leggi`) arriva in busta come ogni dato non fidato, e i nomi pubblici di casa sono vietati nella rete delle estensioni e dell'agente ([agenti-estensioni](agenti-estensioni.md)). Restano aperti le tabelle delle voci non lette e i «perché…?» che trovano titoli omonimi. Dal 09/10 SearXNG si tiene aggiornato da solo (controllo quotidiano, aggiornamento provato accanto con il ritorno indietro, «Controlla» e «Aggiorna» nel cruscotto: sezione in fondo); la prima prova vera sulla DGX è da fare.*
 
 ## Moduli
 
@@ -10,6 +10,7 @@
 |---|---|---|
 | Biblioteca offline | Wikipedia italiana in ZIM di Kiwix, letta in puro Python (solo libreria standard, solo CPU) con un indice SQLite FTS5 accanto; niente `libzim` dal 01/10 | `calliope/biblioteca.py` → `Biblioteca.cerca`, `load_biblioteca`; `calliope/zim.py` → `ZimFile`; `calliope/biblioteca_indice.py` → `costruisci`, `apri`, `stato_indice`; tool `biblioteca_cerca`; file in `biblioteca/` (`scarica.sh`), indici in `biblioteca/indici/` |
 | Ricerca su internet (facoltativa, solo con la rete) | SearXNG in un container di Calliope sulla DGX (`calliope-searxng`, 127.0.0.1:8004, niente log; `setup/linux/motore/searxng.sh`), httpx in POST; pagine con http.client e html.parser, senza SSRF | `calliope/web/` → `Web` (`servizio.py`), `Ripulitore` (`privacy.py`: niente dati personali nelle domande), `scarica`, `estrai_testo` (`pagina.py`), `load_web`; tool `web_cerca` in `calliope/tools/web.py`; `web_cerca` e `web_leggi` dell'agente in `calliope/agenti/ciclo.py`; solo letture dopo un risultato web: `politica.DOPO_DATO` (`politica.bloccata`) |
+| SearXNG tenuto aggiornato (09/10) | ricerche di prova fisse in POST, registro delle immagini (Docker Hub) con tag e digest, docker tramite lo script | `calliope/web/motore.py` → `MotoreRicerca` (`controlla`, `aggiorna`, `passo`, `avvia_azione`), `giudica`, `almeno_come`, `tag_recenti`; `setup/linux/motore/searxng.sh` (`candidata`, `usa`, `pulisci-immagini`…); `calliope motore searxng controlla|aggiorna|novita|storia` |
 
 ## Problemi noti
 
@@ -125,6 +126,101 @@
   - Le pagine di disambiguazione non si usano come passaggi. Limite noto: le domande con
     «perché» su fenomeni («perché piove?») trovano titoli omonimi (canzoni) invece della
     voce giusta.
+
+## SearXNG tenuto aggiornato (09/10, ramo `searxng-aggiornamento`)
+
+Decisione di Dario del 09/10: i motori a cui SearXNG si appoggia (DuckDuckGo, Brave, Bing,
+Google News…) cambiano spesso le loro pagine e un'immagine di SearXNG vecchia di qualche
+settimana smette di trovare; l'immagine di Calliope era fissata al 03/10 (`2026.10.2-…`), il 09/10 sul
+registro c'erano già tag più nuovi (2026.10.4 e 2026.10.7). Codice in `calliope/web/motore.py`, script in
+`setup/linux/motore/searxng.sh`, prova `prove/prova_searxng_aggiorna.py` (a secco) e
+`prova_cruscotto_pagina.py` (pagina vera).
+
+- **Controllo** (sempre, in tutti e due i modi): `web_searxng_prove` («categoria:domanda»,
+  predefinite «meteo Roma domani», «notizie Italia oggi», «Serie A risultati»: frasi fisse,
+  nessun dato di nessuno) in POST contro il SearXNG locale, come le ricerche vere ma fuori dal
+  tetto al minuto; per ciascuna risultati, motori che hanno dato risultati, motori che non
+  rispondono con il motivo di SearXNG (CAPTCHA, timeout, accesso negato), errori e tempo.
+  Giudizio: «giù» se nessuna risponde (la capacità diventa «guasta», come dopo una ricerca
+  fallita); «degradata» se una prova ha meno di `web_searxng_min_risultati` (3) risultati, o
+  se motori o risultati scendono sotto `web_searxng_soglia` (0,6) dell'**ultimo controllo
+  buono della stessa immagine**; «buona» altrimenti (diventa il nuovo buono). Una volta ogni
+  `web_searxng_controllo_ore` (24), solo con Calliope ferma da `web_searxng_inattivita_min`
+  (30: nessun turno su nessuna corsia, `Avvio.inattivita_s`) e nessun lavoro dell'agente in
+  coda o in corso; un thread che guarda ogni 5 minuti.
+- **Registro delle capacità**: stato nuovo **«degradata»** (funziona, ma peggio: `Capacita.funziona`);
+  la ricerca web lo diventa con il motivo del controllo e il passo («Aggiorna» nel cruscotto, o
+  «provo da sola» in automatico). «Cosa sai fare?» e chi non amministra la contano come
+  funzionante; a chi amministra «funziona, ma peggio del solito: …».
+- **Aggiornamento** (`web_searxng_aggiorna`: «automatico», predefinito, oppure «manuale»; un
+  valore sconosciuto vale manuale): tag dal registro delle immagini (`web_searxng_registro`,
+  Docker Hub), solo «AAAA.M.G-hash», attivi, con il digest dell'indice e arm64 e amd64: **mai
+  `latest`**, l'immagine è sempre `searxng/searxng:TAG@sha256:…`. In automatico il più
+  recente pubblicato da almeno `web_searxng_giorni` (3) giorni, o il più recente in assoluto
+  se la ricerca è degradata; un tag già scartato non si riprova da solo. Poi: prove sulla
+  vecchia **adesso**; la nuova scaricata e avviata **accanto** (`searxng.sh candidata`,
+  container `calliope-searxng-candidata` su 127.0.0.1:10004, stesse regole del vero, senza
+  riavvio automatico) e le stesse prove; la copia di prova si toglie. Se va peggio
+  (`almeno_come`: prove riuscite non meno, motori non meno di uno in meno, risultati almeno
+  l'80 %) **la vecchia resta e non si è fermato niente**, il tag è scartato. Se va almeno come
+  la vecchia: in automatico si ricontrolla che nessuno abbia cominciato a parlare intanto
+  (altrimenti «rinviato»), poi `searxng.sh usa` sceglie l'immagine (`~/calliope-motore/searxng/immagine`)
+  e rifà il container vero (pochi secondi senza ricerca), le prove di nuovo; se non risponde
+  o va peggio `usa` con la vecchia: **ritorno indietro**. Dopo un cambio riuscito
+  `pulisci-immagini` toglie solo le immagini scaricate da qui (`scaricate`), tenute quella in
+  uso e la precedente, senza `-f` (un'immagine usata da un container, anche fermo, resta):
+  mai quelle di altri progetti (sulla DGX c'è un altro SearXNG, che non si tocca).
+- **Lo script** sceglie l'immagine così: `IMMAGINE` dall'ambiente; altrimenti quella in
+  `DIR/immagine` se non è più vecchia (per data del tag) di quella fissata nello script;
+  altrimenti la fissata. Così `calliope motore searxng avvia` dopo un aggiornamento non torna
+  indietro, e una versione di Calliope che fissa un tag più nuovo vince. `dimentica` torna alla
+  fissata. Le forme sbagliate (latest, senza digest, altro repository, caratteri in più) si
+  rifiutano prima di qualunque comando docker.
+- **Registro delle decisioni**: `web_searxng_stato` (`motore/searxng.json` nella cartella dei
+  dati): ultimo controllo, ultimo buono, giudizio, immagine, tag più recente visto, tag
+  scartati, ultimo esito e la **storia** (ultime 40: controlli, aggiornamenti, chi: automatico,
+  terminale, `cruscotto:<id>`), più le righe `[WEB] SearXNG: …` nel log. L'esito di un
+  aggiornamento automatico (aggiornata, tenuta, tornata indietro, errore) e il passaggio a
+  «degradata» arrivano come scheda «Da leggere» sugli **schermi personali di chi amministra**
+  (`Cruscotto.avvisa`), mai a voce né sugli schermi di stanza.
+- **Poche ricerche, distanziate** (09/10: una ventina di fila fa smettere ANSA e DuckDuckGo per
+  qualche minuto): 4 s tra una prova e l'altra (`PAUSA_PROVE_S`), 20 s prima del cambio
+  (`PAUSA_GIRI_S`), e per la vecchia valgono le prove del controllo appena fatto (stessa
+  immagine, meno di 15 minuti): un controllo con aggiornamento fa 9 ricerche in ~1–2 minuti.
+- **Un'operazione alla volta**: un lock nel processo e un file di blocco accanto allo stato
+  (Calliope e il terminale insieme: «occupato»); un blocco di un processo morto o più vecchio di
+  3 ore si ignora.
+- **Manuale**: «Controlla» e «Aggiorna» nel cruscotto di chi amministra
+  ([schermi-telefono](schermi-telefono.md)); da terminale sulla DGX
+  `calliope motore searxng controlla | aggiorna | novita | storia` (in Python, nella cartella
+  dei dati, con lo stesso stato e lo stesso blocco). «Aggiorna» a mano prende il tag più
+  recente qualunque età abbia, anche uno scartato; con lavori dell'agente in corso no.
+- **Dove non c'è il container**: su Windows, con SearXNG su un'altra macchina o senza docker il
+  controllo resta (se SearXNG è raggiungibile) e l'aggiornamento si spegne con il suo perché
+  (nel cruscotto niente «Aggiorna»); senza `web_searxng_url` o con `online: false` niente.
+- **Non a voce**: non c'è un tool per cambiare le impostazioni; il modo si cambia in
+  `calliope.locale.yaml` (sezione web) con un riavvio.
+- **Prove** (09/10): `prova_searxng_aggiorna` 5 s, tutto finto (SearXNG, registro, docker; lo
+  script con il bash di Git e un `docker` finto che registra i comandi), livello 2 legato a
+  `calliope/web/`, allo script, al cruscotto e alle capacità; `prova_cruscotto_pagina` con i
+  due pulsanti nella pagina vera. Niente rete vera.
+
+**Prima prova vera sulla DGX (da fare, non fatta il 09/10).** Dopo `calliope aggiorna` con
+questo ramo, da terminale:
+
+1. `calliope motore searxng stato` (container, immagine in uso, JSON acceso);
+2. `calliope motore searxng novita` (solo il registro delle immagini: i tag e la loro età);
+3. `calliope motore searxng controlla` (le tre ricerche di prova: risultati, motori, motori
+   giù con il motivo; esce con 3 se degradata);
+4. `calliope motore searxng aggiorna` (scarica il tag più recente, lo prova accanto sulla
+   porta 10004, cambia o resta; durata attesa 1–3 minuti, pochi secondi senza ricerca);
+5. `calliope motore searxng storia` e `calliope motore searxng stato`; in caso di guai
+   `calliope motore searxng dimentica` e `calliope motore searxng avvia` tornano all'immagine
+   fissata nello script.
+Poi il cruscotto dal telefono di chi amministra: sezione «Ricerca web (SearXNG)», «Controlla»
+con due tocchi. Da verificare sul vero: tempo del `docker pull` sulla DGX, che `docker image rm`
+non tocchi l'immagine dell'altro SearXNG, i motivi veri di `unresponsive_engines`, e se le
+soglie (3 risultati, 0,6) reggono un giorno normale senza falsi «degradata».
 
 ## Approfondire dopo una ricerca (09/10, ramo `approfondisci-notizie`)
 

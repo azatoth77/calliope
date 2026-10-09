@@ -14,8 +14,12 @@ schermi e dei satelliti veri su 127.0.0.1, registro dei turni finto.
   apre nemmeno chiamandola a mano;
 - telefono di chi amministra: la voce del menu c'è, apre la scheda nel carosello (in vista);
   telefono di un familiare: niente voce;
+- la ricerca web (09/10, calliope/web/motore.py, con SearXNG e docker finti): con il motore la
+  sezione «Ricerca web (SearXNG)» e i pulsanti «Controlla» e «Aggiorna»; il primo tocco chiede
+  la conferma («Tocca ancora…»), il secondo fa partire il controllo e l'esito arriva sulla
+  scheda; uno schermo di un familiare non ha né scheda né pulsanti;
 - nessun errore JavaScript né violazione della CSP. Con CALLIOPE_FOTO=<cartella> salva gli
-  screenshot (pagina 1280×800, telefono 390×844). ~20 s.
+  screenshot (pagina 1280×800, telefono 390×844). ~25 s.
 """
 
 import base64
@@ -189,6 +193,65 @@ def schermo(exe, hub, web):
             p.chiudi()
 
 
+def motore_pagina(exe, hub, web):
+    """I pulsanti della ricerca web nella pagina vera (09/10)."""
+    import prova_searxng_aggiorna as PS
+    h = PS.HttpFinto(PS._registro_hub(time.time()))
+    h.profili["http://127.0.0.1:8004"] = PS.BUONO
+    PS.TMP = TMP / "motore"
+    m = PS.motore("pagina", h, PS.ScriptFinto(in_uso=PS.VECCHIA))
+    hub.cruscotto.motore = m
+    m.avvisa = hub.cruscotto.avvisa
+    arch = hub.archivio
+    _, t_admin = arch.crea_con_token("ufficio", proprietario="dario", proprietario_nome="Dario")
+    _, t_fam = arch.crea_con_token("cameretta", proprietario="bianca", proprietario_nome="Bianca")
+    hub._rinfresca()
+    base = f"http://127.0.0.1:{web.port}/"
+    p = PTP.Pagina(exe, base + f"#t={t_admin}", profilo="profilo-admin-motore",
+                   opzioni=("--window-size=1280,800",))
+    try:
+        aspetta(lambda: p.valuta("!!document.getElementById('cruscotto-apri') && "
+                                 "!document.getElementById('cruscotto-apri').hidden"), 10)
+        tocca(p, "#cruscotto-apri")
+        ok = aspetta(lambda: p.valuta("[...document.querySelectorAll('#principale .cr-titolo')]"
+                                      ".some(e => e.textContent === 'Ricerca web (SearXNG)')"), 10)
+        verifica("ricerca web: la sezione c'è", bool(ok))
+        bottoni = p.valuta("[...document.querySelectorAll('#principale [data-motore]')].map(b => b.textContent)")
+        verifica("ricerca web: «Controlla» e «Aggiorna»", bottoni == ["Controlla", "Aggiorna"], bottoni)
+        tocca(p, "[data-motore='controlla']")
+        ok = aspetta(lambda: p.valuta("(document.querySelector(\"#principale [data-motore='controlla']\") || {}).textContent")
+                     == "Tocca ancora: controlla", 5)
+        verifica("primo tocco: chiede la conferma, niente parte", bool(ok) and m.giudizio()["stato"] == "mai")
+        foto(p, "cruscotto-motore-conferma.png", 1280, 800)
+        tocca(p, "[data-motore='controlla']")
+        ok = aspetta(lambda: m.giudizio()["stato"] == "buona", 10)
+        verifica("secondo tocco: il controllo parte", bool(ok))
+        ok = aspetta(lambda: "va bene" in (p.valuta("document.querySelector('#principale .tipo-cruscotto').innerText") or ""), 10)
+        verifica("l'esito arriva sulla scheda", bool(ok))
+        testo = p.valuta("document.querySelector('#principale .tipo-cruscotto').innerText") or ""
+        verifica("la scheda dice le prove e i motori", "meteo Roma domani" in testo
+                 and "motori che rispondono" in testo, "")
+        foto(p, "cruscotto-motore.png", 1280, 800)
+        p.pompa(0.3)
+        errori = [r for r in p.log if r.startswith("ECCEZIONE") or "Content Security" in r]
+        verifica("ricerca web: nessun errore JS né CSP", not errori, "; ".join(errori)[:300])
+    finally:
+        p.chiudi()
+    p = PTP.Pagina(exe, base + f"#t={t_fam}", profilo="profilo-fam-motore")
+    try:
+        aspetta(lambda: p.valuta("document.getElementById('stato-testo').textContent") == "collegato", 10)
+        p.valuta("window.calliopeSchermo.cruscotto && window.calliopeSchermo.cruscotto(); 1")
+        time.sleep(0.5)
+        verifica("familiare: nessun pulsante della ricerca web",
+                 p.valuta("document.querySelectorAll('[data-motore]').length") == 0)
+        r = p.valuta("(async () => { const s = await fetch('/api/motore', {method: 'POST', headers: "
+                     "{'X-Calliope-Sessione': 'x', 'Content-Type': 'application/json'}, body: '{}'}); return s.status; })()")
+        verifica("familiare: /api/motore con una sessione falsa → 401", r == 401, r)
+    finally:
+        p.chiudi()
+    shutil.rmtree(PS.TMP, ignore_errors=True)
+
+
 def telefono(exe, srv, web, proprietario, admin):
     nome = "Dario" if admin else "Bianca"
     _, token = srv.archivio.crea_con_token("telefono-" + proprietario, proprietario=proprietario,
@@ -250,6 +313,7 @@ def main() -> int:
             schermo(exe, hub, web)
             telefono(exe, srv, web, "dario", True)
             telefono(exe, srv, web, "bianca", False)
+            motore_pagina(exe, hub, web)
         finally:
             web.ferma()
             srv.ferma()

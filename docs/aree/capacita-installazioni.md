@@ -264,3 +264,14 @@ sempre. Prima della frase «sempre, mai a memoria» nella descrizione le domande
 erano 0/3. Contrari («chi sono?», «che ore sono?», la lista della spesa, «chi ha inventato il
 telefono?») 8/8 senza novità né chi sei. Prima frase mediana 0,52 s. Da rimisurare sulla DGX
 col 26B. Prova a secco `prove/prova_novita.py`.
+
+## Stato «degradata» (09/10, ramo `searxng-aggiornamento`)
+
+Un quinto stato nel registro (`capacita.STATI`): **«degradata»**, funziona ma peggio del
+solito. Per ora lo usa solo la ricerca web, quando il controllo quotidiano di SearXNG trova
+pochi risultati o pochi motori ([biblioteca](biblioteca.md), `calliope/web/motore.py`).
+`Capacita.attiva` resta vero solo per «attiva»; `Capacita.funziona` vale anche per
+«degradata» e lo usano «cosa sai fare?» (`aree`) e le risposte a chi non amministra
+(`tools/stato.py`): una ricerca web degradata non sparisce dall'elenco. A chi amministra
+«La ricerca su internet funziona, ma peggio del solito: <motivo>. <passo>». Nel riassunto
+dell'avvio «va peggio: ricerca web (…)»; nel cruscotto il badge come per «da configurare».

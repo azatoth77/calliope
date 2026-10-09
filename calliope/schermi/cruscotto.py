@@ -13,8 +13,15 @@ ad altri; anche sul telefono, nel carosello) con:
 - richieste in attesa: avvisi ai tutori non ancora detti, estensioni da approvare, lavori che
   aspettano una risposta.
 
-Nessuna azione: revoche e approvazioni restano a voce o da terminale, qui solo il comando da
-dire o da lanciare, come testo. Nessun dato personale di altri: niente testi delle
+Nessuna azione, salvo una (09/10): la ricerca web (SearXNG, calliope/web/motore.py) ha due
+pulsanti, «Controlla» (le ricerche di prova adesso) e «Aggiorna» (l'immagine più recente
+provata accanto a quella in uso, con il ritorno indietro). Sono le prime azioni del cruscotto:
+solo dallo schermo personale di chi amministra (ricontrollato a ogni richiesta, mai stanza né
+zona grigia: lo schermo è suo), con due tocchi (il primo chiede un gettone legato allo schermo
+e all'azione, che scade in GETTONE_S secondi e vale una volta; il secondo lo usa), al più
+AZIONI_MINUTO richieste al minuto per schermo, ogni azione nel log e nella storia del motore.
+Revoche e approvazioni restano a voce o da terminale, qui solo il comando da dire o da
+lanciare, come testo. Nessun dato personale di altri: niente testi delle
 conversazioni, ricordi, documenti, titoli dei lavori; solo conteggi e stati (le regole del
 registro dei turni restano: degli ospiti il registro non ha testi). Nessun tool nuovo,
 niente nel prompt: il prefisso del modello non cambia.
@@ -28,6 +35,7 @@ from __future__ import annotations
 
 import json
 import re
+import secrets
 import sqlite3
 import subprocess
 import threading
@@ -41,6 +49,9 @@ CACHE_S = 25.0            # la pagina aggiorna ogni ~30 s: una richiesta, un cal
 FORZA_MIN_S = 5.0         # «Aggiorna» non ricalcola più spesso di così
 GIORNI = 7                # latenza, regole ed errori: gli ultimi giorni del registro
 ERRORI_MAX = 10           # gli errori recenti mostrati
+GETTONE_S = 60.0          # il secondo tocco entro tanto
+AZIONI_MINUTO = 6         # richieste di azioni (gettoni e conferme) al minuto per schermo
+AZIONI = ("controlla", "aggiorna")
 
 _RADICE = Path(__file__).resolve().parents[2]
 
@@ -215,6 +226,10 @@ class Cruscotto:
         self._quando = 0.0
         self.calcoli = 0
         self.ultimo_ms = 0.0
+        # Il controllo e l'aggiornamento di SearXNG (09/10, web/motore.py), se c'è
+        self.motore = None
+        self._gettoni: dict[str, dict] = {}
+        self._richieste: dict = {}
 
     # ── chi può vederlo ──
     def _registry(self):
@@ -236,18 +251,83 @@ class Cruscotto:
 
     # ── dati ──
     def dati(self, forza: bool = False) -> dict:
-        """I dati (dalla cache se recenti). Da chiamare fuori dal thread della voce."""
+        """I dati (dalla cache se recenti). Da chiamare fuori dal thread della voce. La
+        sezione della ricerca web è sempre fresca (un file piccolo): mostra la fase di un
+        controllo in corso."""
         with self._lock:
             eta = time.monotonic() - self._quando
-            if self._dati is not None and (eta < CACHE_S and not (forza and eta >= FORZA_MIN_S)):
-                return self._dati
-            t0 = time.perf_counter()
-            self._dati = self._calcola()
-            self.ultimo_ms = round((time.perf_counter() - t0) * 1000, 1)
-            self._dati["calcolo_ms"] = self.ultimo_ms
-            self._quando = time.monotonic()
-            self.calcoli += 1
-            return self._dati
+            if self._dati is None or not (eta < CACHE_S and not (forza and eta >= FORZA_MIN_S)):
+                t0 = time.perf_counter()
+                self._dati = self._calcola()
+                self.ultimo_ms = round((time.perf_counter() - t0) * 1000, 1)
+                self._dati["calcolo_ms"] = self.ultimo_ms
+                self._quando = time.monotonic()
+                self.calcoli += 1
+            dati = self._dati
+        if self.motore is None:
+            return dati
+        return {**dati, "motore": self._parte(self.motore.vista)}
+
+    # ── azioni: la ricerca web (09/10) ──
+    def _conta(self, sid) -> bool:
+        ora = time.monotonic()
+        with self._lock:
+            fatti = [t for t in self._richieste.get(sid, []) if ora - t < 60.0]
+            if len(fatti) >= AZIONI_MINUTO:
+                self._richieste[sid] = fatti
+                return False
+            self._richieste[sid] = fatti + [ora]
+            return True
+
+    def gettone(self, schermo: dict, azione: str) -> dict:
+        """Il primo tocco: un gettone per `azione` legato a questo schermo. ValueError con la
+        frase per la pagina."""
+        if self.motore is None:
+            raise ValueError("qui la ricerca web non c'è")
+        if azione not in AZIONI:
+            raise ValueError("azione sconosciuta")
+        if not self._conta(schermo.get("id")):
+            raise ValueError("troppe richieste: aspetta un momento")
+        g = secrets.token_urlsafe(18)
+        ora = time.monotonic()
+        with self._lock:
+            for k in [k for k, v in self._gettoni.items() if v["scade"] < ora]:
+                del self._gettoni[k]
+            self._gettoni[g] = {"sid": schermo.get("id"), "azione": azione,
+                                "scade": ora + GETTONE_S}
+            while len(self._gettoni) > 32:
+                self._gettoni.pop(next(iter(self._gettoni)))
+        return {"gettone": g, "azione": azione, "scade_s": round(GETTONE_S)}
+
+    def esegui(self, schermo: dict, azione: str, gettone: str, log=None) -> tuple[bool, str]:
+        """Il secondo tocco: il gettone (una volta sola, stesso schermo, stessa azione, non
+        scaduto) e l'azione in un thread. (partita, frase)."""
+        if self.motore is None:
+            return False, "qui la ricerca web non c'è"
+        if not self._conta(schermo.get("id")):
+            return False, "troppe richieste: aspetta un momento"
+        with self._lock:
+            g = self._gettoni.pop(str(gettone or ""), None)
+        if (g is None or g["scade"] < time.monotonic() or g["sid"] != schermo.get("id")
+                or g["azione"] != azione):
+            return False, "conferma scaduta: tocca di nuovo"
+        chi = f"cruscotto:{schermo.get('proprietario')}"
+        ok, frase = self.motore.avvia_azione(azione, chi)
+        if log is not None:
+            log(f"[CRUSCOTTO] {azione} di SearXNG da «{schermo.get('nome')}» "
+                f"({schermo.get('proprietario')}): {frase}")
+        return ok, frase
+
+    def avvisa(self, titolo: str, testo: str) -> int:
+        """Un avviso sugli schermi personali di chi amministra (l'esito di un aggiornamento
+        automatico di SearXNG): quanti schermi. Mai su quelli di stanza."""
+        from . import schede
+        n = 0
+        for s in self.hub.abbinati():
+            if self.amministra(s):
+                n += bool(self.hub.invia_a(s["id"], schede.testo(titolo, testo,
+                                                                 schede.PERSONALE)))
+        return n
 
     def _parte(self, fn, *a):
         """Una sezione che non va non rompe le altre: lo dice al suo posto."""

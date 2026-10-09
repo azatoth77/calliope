@@ -588,7 +588,11 @@ body.trascina-foto { outline: 4px dashed var(--accento); outline-offset: -8px; }
 .cr-motivo, .cr-passo { color: var(--tenue); font-size: 0.9rem; }
 .cr-passo::before { content: "→ "; }
 .cr-voce.guasta .cr-stato, .cr-abbinato.inattivo .cr-stato { color: var(--allarme); border-color: var(--allarme); }
-.cr-voce.mancante .cr-stato, .cr-voce.da_configurare .cr-stato { color: var(--accento); border-color: var(--accento); }
+.cr-voce.mancante .cr-stato, .cr-voce.da_configurare .cr-stato, .cr-voce.degradata .cr-stato { color: var(--accento); border-color: var(--accento); }
+/* La ricerca web (09/10, web/motore.py): i due pulsanti, il secondo tocco in evidenza */
+.cr-azioni { display: flex; gap: 0.6rem; flex-wrap: wrap; margin: 0.4rem 0; }
+.cr-azioni .armato { background: var(--accento); color: var(--sfondo); border-color: var(--accento); }
+.cr-azioni button:disabled { opacity: 0.5; }
 .cr-abbinato.collegato .punto { background: var(--ok); }
 .cr-abbinato.inattivo .punto { background: var(--allarme); }
 .cr-giorno { padding: 0.25rem 0; font-variant-numeric: tabular-nums; }

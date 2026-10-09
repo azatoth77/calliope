@@ -1384,6 +1384,73 @@
     else if (b.dataset.cruscotto === "chiudi") togliCruscotto();
   });
 
+  // ─── le azioni del cruscotto sulla ricerca web (09/10, calliope/web/motore.py) ───
+  // «Controlla» e «Aggiorna» di SearXNG, con due tocchi: il primo chiede al server un gettone
+  // (legato a questo schermo e all'azione, scade in un minuto) e il pulsante diventa «Tocca
+  // ancora…»; il secondo lo usa e l'azione parte. Mentre gira, il cruscotto si aggiorna ogni
+  // 2 s per mostrarne la fase e l'esito. Il server ricontrolla tutto a ogni richiesta
+  S.motore = { armato: null, msg: "", corsa: null };
+
+  async function chiediMotore(corpo) {
+    try {
+      const x = await fetch("/api/motore", { method: "POST", cache: "no-store",
+        headers: { "X-Calliope-Sessione": S.sessione, "Content-Type": "application/json" },
+        body: JSON.stringify(corpo) });
+      return { status: x.status, dati: await x.json().catch(() => ({})) };
+    } catch (e) {
+      return { status: 0, dati: { errore: "Calliope non risponde" } };
+    }
+  }
+
+  function ridisegnaCruscotto() {
+    const c = S.cronologia.find((x) => chiaveDi(x) === CRUSCOTTO);
+    if (c && S.corrente && chiaveDi(S.corrente) === CRUSCOTTO) ridisegna(c);
+    else if (c) emetti("schede", {});
+  }
+
+  async function toccaMotore(azione) {
+    if (!S.sessione || !S.amministra) return;
+    const a = S.motore.armato;
+    if (a && a.azione === azione && ora() < a.fino) {
+      S.motore.armato = null;
+      const r = await chiediMotore({ azione, gettone: a.gettone });
+      S.motore.msg = r.status === 200 ? (r.dati.frase || "Partito.") : (r.dati.frase || r.dati.errore || "errore " + r.status);
+      if (r.status === 200) seguiMotore();
+      await apriCruscotto(false, true);
+      ridisegnaCruscotto();
+      return;
+    }
+    const r = await chiediMotore({ azione });
+    if (r.status === 403 || r.status === 401) { impostaAmministra(false); return; }
+    if (r.status !== 200) { S.motore.msg = r.dati.errore || "errore " + r.status; ridisegnaCruscotto(); return; }
+    const fino = ora() + Math.min(60, r.dati.scade_s || 60) * 1000 - 1500;
+    S.motore.armato = { azione, gettone: r.dati.gettone, fino };
+    S.motore.msg = "";
+    ridisegnaCruscotto();
+    setTimeout(() => {
+      if (S.motore.armato && S.motore.armato.gettone === r.dati.gettone) { S.motore.armato = null; ridisegnaCruscotto(); }
+    }, Math.max(1000, fino - ora()));
+  }
+
+  // Finché un controllo o un aggiornamento gira: il cruscotto ogni 2 s (al più 20 minuti)
+  function seguiMotore() {
+    if (S.motore.corsa) return;
+    const fine = ora() + 20 * 60 * 1000;
+    S.motore.corsa = setInterval(async () => {
+      if (!cruscottoAperto() || ora() > fine) { clearInterval(S.motore.corsa); S.motore.corsa = null; return; }
+      await apriCruscotto(false);
+      const c = S.cronologia.find((x) => chiaveDi(x) === CRUSCOTTO);
+      const m = c && c.dati && c.dati.motore;
+      if (m && !m.in_corso) { clearInterval(S.motore.corsa); S.motore.corsa = null; S.motore.msg = ""; ridisegnaCruscotto(); }
+    }, 2000);
+  }
+
+  document.addEventListener("click", (ev) => {
+    const b = ev.target.closest && ev.target.closest("[data-motore]");
+    if (!b || b.disabled) return;
+    toccaMotore(b.dataset.motore);
+  });
+
   // ─── la scheda «Conversazione» (08/10, calliope/conversazioni.py) ───
   // Le frasi della persona (come trascritte o scritte) e le risposte di Calliope, con l'ora e il
   // satellite, dall'archivio delle conversazioni: solo sugli schermi personali del proprietario
@@ -1714,6 +1781,66 @@
       (c.righe || []).map((x) => [x.quando, x.argomento, x.domanda, x.data, ESITI[x.esito] || x.esito]));
   };
 
+  const STATI_MOTORE = { buona: "va bene", degradata: "degradata", "giù": "non risponde", mai: "mai controllata" };
+  const ESITI_MOTORE = { aggiornata: "aggiornata", tenuta: "tenuta la vecchia", indietro: "tornata indietro",
+    ultima: "già all'ultima", rinviato: "rinviato", errore: "errore", occupato: "occupato" };
+
+  function disegnaMotore(s, m) {
+    if (m.errore) { s.append(el("p", "cr-avviso", m.errore)); return; }
+    const g = m.giudizio || {};
+    const r1 = el("div", "cr-riga1");
+    r1.append(el("span", "cr-nome", m.immagine ? "Immagine " + m.immagine : "Immagine non letta"));
+    r1.append(el("span", "badge cr-stato", STATI_MOTORE[g.stato] || g.stato || "?"));
+    s.append(r1);
+    if (g.motivo) s.append(el("p", "cr-motivo", g.motivo));
+    const u = m.ultimo;
+    if (u) {
+      s.append(el("p", "cr-tenue", "Ultimo controllo " + fa(u.quando) + ": " + u.risultati + " risultati, "
+        + (u.motori || []).length + " motori che rispondono" + (u.ms_max ? ", la più lenta " + secondiDetti(u.ms_max / 1000) : "")));
+      const ul = el("ul", "cr-lista");
+      (u.prove || []).forEach((x) => {
+        const giu = (x.giu || []).map((y) => y[0] + (y[1] ? " (" + y[1] + ")" : "")).join(", ");
+        ul.append(el("li", "cr-tenue", x.categoria + " «" + x.domanda + "»: " + (x.errore ? "errore " + x.errore
+          : x.risultati + " risultati") + (giu ? " · non rispondono " + giu : "")));
+      });
+      s.append(ul);
+    } else s.append(el("p", "cr-tenue", "Nessun controllo ancora."));
+    if (m.novita && m.novita.tag) {
+      s.append(el("p", "cr-tenue", "Più recente nel registro: " + m.novita.tag + " (pubblicata " + fa(m.novita.pubblicata) + ")"
+        + (m.novita.tag === m.immagine ? ", in uso" : "")));
+    }
+    s.append(el("p", "cr-tenue", m.modo === "automatico" && m.aggiornabile
+      ? "Aggiornamento automatico: se è degradata, o con un'immagine nuova da almeno " + m.giorni + " giorni, a Calliope ferma."
+      : "Aggiornamento " + (m.aggiornabile ? "manuale" : "non disponibile qui: " + m.perche) + "."));
+    if (m.in_corso) s.append(el("p", "cr-avviso", (m.in_corso.azione === "aggiorna" ? "Aggiornamento" : "Controllo")
+      + " in corso: " + m.in_corso.fase + "…"));
+    const e = m.esito;
+    if (e && e.frase) s.append(el("p", e.esito === "aggiornata" || e.esito === "ultima" ? "cr-motivo" : "cr-avviso",
+      "Ultimo esito (" + (ESITI_MOTORE[e.esito] || e.esito) + ", " + fa(e.quando) + "): " + e.frase));
+    // I pulsanti: la pagina li disegna solo nel cruscotto (solo chi amministra lo vede); il
+    // server lo ricontrolla a ogni tocco
+    const riga = el("div", "cr-azioni");
+    const arm = S.motore.armato && ora() < S.motore.armato.fino ? S.motore.armato.azione : null;
+    for (const [az, t, conf, si] of [["controlla", "Controlla", "Tocca ancora: controlla", m.controllabile],
+      ["aggiorna", "Aggiorna", "Tocca ancora: aggiorna", m.aggiornabile]]) {
+      if (!si) continue;
+      const b = el("button", "piccolo-bottone" + (arm === az ? " armato" : ""), arm === az ? conf : t);
+      b.type = "button";
+      b.dataset.motore = az;
+      b.disabled = !!m.in_corso;
+      riga.append(b);
+    }
+    if (riga.children.length) s.append(riga);
+    if (S.motore.msg) s.append(el("p", "cr-motivo", S.motore.msg));
+    if (m.storia && m.storia.length) {
+      s.append(el("h3", "cr-sotto", "Decisioni recenti"));
+      const ul = el("ul", "cr-lista");
+      m.storia.forEach((x) => ul.append(el("li", "cr-tenue", fa(x.quando) + " · " + (x.chi || "") + " · " + (x.frase || x.evento))));
+      s.append(ul);
+    }
+    comando(s, "Da terminale: " + m.comando);
+  }
+
   DISEGNA.cruscotto = function (c, corpo) {
     const d = c.dati || {};
     const testa = el("div", "cr-testa");
@@ -1727,7 +1854,9 @@
       testa.append(b);
     }
     corpo.append(testa);
-    corpo.append(el("p", "cr-nota", "Solo lettura: per cambiare qualcosa usa la voce o il terminale."));
+    corpo.append(el("p", "cr-nota", d.motore
+      ? "Solo lettura, salvo la ricerca web: per il resto usa la voce o il terminale."
+      : "Solo lettura: per cambiare qualcosa usa la voce o il terminale."));
     if (c.errore) corpo.append(el("p", "cr-avviso", "Non riesco a leggere lo stato: " + c.errore));
     if (!c.dati) return;
 
@@ -1762,6 +1891,9 @@
       if (attive.length) s.append(el("p", "cr-tenue", "Attive: " + attive.join(", ")));
       comando(s, "Da terminale: " + cap.comando);
     }
+
+    // Ricerca web (09/10): il controllo di SearXNG e i suoi due pulsanti
+    if (d.motore) disegnaMotore(sezione(corpo, "Ricerca web (SearXNG)"), d.motore);
 
     // Latenza
     s = sezione(corpo, "Latenza della voce");
