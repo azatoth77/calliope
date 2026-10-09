@@ -1623,6 +1623,12 @@ class Ciclo:
         come prima)."""
         cfg = self.s.cfg
         finestra = float(getattr(cfg, "speaker_proprietario_s", 0.0) or 0.0)
+        # Mai oltre la vita della conversazione (docs/ricerche/2026-10-09-regole-incongruenze.md
+        # § 3.12, tempi diversi per lo stesso concetto): chiusa per tempo, non c'è più niente da
+        # continuare
+        vita = float(getattr(cfg, "storia_inattiva_s", 0.0) or 0.0)
+        if vita > 0:
+            finestra = min(finestra, vita)
         recente = self._voce_recente
         if finestra <= 0 or in_compagnia or best is None or recente is None:
             return None

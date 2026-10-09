@@ -570,6 +570,13 @@ def prova_proprietario():
                                  prev="Carlo")
     verifica("contrario: finestra scaduta (oltre 180 s) → il minore", n == "Luca", f"{n}")
     r_, sc_, ci_, reg_ = dopo_carlo()
+    r_.cfg.storia_inattiva_s = 100.0
+    ci_._voce_recente = ("Carlo", time.monotonic() - 150)
+    n, how, lv, v, t = riconosci(ci_, sc_, frase_con(0.50, 0.485), 0.79, in_session=True,
+                                 prev="Carlo")
+    verifica("contrario: mai oltre la vita della conversazione (storia_inattiva_s 100 s)",
+             n == "Luca", f"{n}")
+    r_, sc_, ci_, reg_ = dopo_carlo()
     ci_._compagnia_attiva = lambda: True
     n, how, lv, v, t = riconosci(ci_, sc_, frase_con(0.606, 0.544), 3.03, in_session=True,
                                  prev="Carlo")

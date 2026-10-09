@@ -666,7 +666,10 @@ della birra perso, «non ho capito a quale ricerca». Dodici secondi dopo Dario 
 l'audio): quando la frase sarebbe del minore come profilo più protetto, resta del **proprietario
 del satellite personale** (abbinato con `--personale`) se il più simile è lui (almeno
 `speaker_continuita_soglia`, 0,36), se lì è stato riconosciuto dalla voce negli ultimi
-`speaker_proprietario_s` (180 s) e se non c'è compagnia. Il minore prende il posto solo
+`speaker_proprietario_s` (180 s, mai oltre `storia_inattiva_s`: i tempi incoerenti del § 3.12
+di [`2026-10-09-regole-incongruenze`](../ricerche/2026-10-09-regole-incongruenze.md)) e se non
+c'è compagnia. Segue il criterio delle corsie per «altra persona» (§ 3.11: una conversazione per
+persona, mai chiusa da una frase incerta), senza aggiungerne uno. Il minore prende il posto solo
 riconosciuto con sicurezza (sopra soglia e con il margine: modo «voce»).
 - Vale come la continuità: al più familiare (`identified_by = "conversazione"`), nella
   conversazione del proprietario su quel satellite (corsie: «continuita»), nel registro
