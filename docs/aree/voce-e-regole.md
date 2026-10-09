@@ -800,7 +800,15 @@ solo nei due turni prima.
   la birra fatta in casa → `web_cerca` **0/3 prima, 3/3 dopo**. Prima frase mediana del seguito
   2,9 s prima, 2,0 s dopo (rumore: stesse chiamate).
 - Prove a secco in `prova_web` (6b aggiornata, 6c nuova: l'elenco con le fonti, l'ordine, i
-  turni, il criterio solo con tutti e due i tool, la stessa ricerca una volta sola).
+  turni, il criterio solo con tutti e due i tool, la stessa ricerca una volta sola, le
+  precedenze qui sotto).
+- **Precedenze fra i dati del turno** (dall'analisi delle regole del 09/10, § 3.10, coppie
+  `RICERCA_MSG` contro `ARCHIVIO_NOTA` ed `EST_NOMINATA_MSG` contro `RICERCA_MSG`): con le
+  ricerche nei dati del turno, dopo la ricerca automatica nell'archivio (`spinta_archivio`) la nota
+  è `ARCHIVIO_NOTA_RICERCHE`: risultati dell'archivio, se non c'entrano e la domanda riguarda una
+  delle ricerche di prima si richiama quel tool, «non lo so» solo dopo; senza ricerche resta
+  `ARCHIVIO_NOTA`. Con un'estensione nominata nella frase la riga delle ricerche finisce con
+  `RICERCA_EST` («vale la riga dell'estensione, non queste ricerche»). Un solo ordine, scritto.
 
 ## La città della casa e le estensioni nel prompt (09/10, ramo `citta-casa-notizie`)
 

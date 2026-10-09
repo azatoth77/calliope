@@ -527,6 +527,15 @@ NON_SO = re.compile(r"\bnon (?:ho (?:(?:nessuna |alcuna |altre |ulteriori |altri
 ARCHIVIO_NOTA = ("La conversazione è stata accorciata: qui sopra c'è la ricerca nei suoi turni "
                  "archiviati. Rispondi alla domanda di chi parla con questi risultati; se non c'è "
                  "niente di pertinente, di' che non lo sai.")
+# Con le ricerche della conversazione nei dati del turno (RICERCA_MSG) la nota non dice più «di'
+# che non lo sai» senza condizioni (analisi delle regole del 09/10, § 3.10: contraddiceva «non
+# dire che non hai altre informazioni senza aver cercato»): un solo ordine fra archivio,
+# ricerche di prima e «non lo so»
+ARCHIVIO_NOTA_RICERCHE = ("La conversazione è stata accorciata: qui sopra c'è la ricerca nei "
+                          "suoi turni archiviati. Rispondi alla domanda di chi parla con questi "
+                          "risultati; se non c'è niente di pertinente ma la domanda riguarda una "
+                          "delle ricerche dei dati del turno, richiama il tool di quella ricerca; "
+                          "solo se nemmeno lì c'entra, di' che non lo sai.")
 
 # Una ricerca nei turni appena prima (09/10, caso vero della DGX alle 10:21: notizie con
 # web_cerca, poi «Approfondiamo le condizioni [del re]» → «non ho informazioni più dettagliate
@@ -556,6 +565,10 @@ RICERCA_MSG = ("Dati del turno: in questa conversazione hai cercato (dalla più 
 # tema, e internet solo dopo averlo proposto): solo con tutti e due i tool disponibili
 RICERCA_CRITERIO = (" Per una ricerca nuova: biblioteca_cerca per i fatti da enciclopedia, "
                     "web_cerca per guide pratiche, consigli, prodotti e cose recenti.")
+# Con un'estensione nominata nella frase (EST_NOMINATA_MSG) la precedenza è sua (analisi delle
+# regole del 09/10, § 3.10: «chiama quel tool, non un altro» contro «richiama la ricerca»)
+RICERCA_EST = (" Se però chi parla nomina un'estensione e chiede di usarla, vale la riga "
+               "dell'estensione, non queste ricerche.")
 RICERCA_SPENTA_MSG = ("Dati del turno: poco fa hai cercato {dove}, ma adesso quella ricerca non "
                       "è disponibile. Se chi parla vuole approfondire quello che hai riferito, "
                       "digli onestamente che adesso non puoi cercare {dove}; non inventare.")
@@ -3071,11 +3084,16 @@ class Brain:
         # Le ricerche nei turni prima, per «approfondiamo», «e il festival?», «torniamo alla
         # notizia di prima» (RICERCA_MSG)
         ricerca = self._ricerca_turno(start, level) if user_text else None
-        if ricerca:
-            memory = memory + [{"role": "system", "content": ricerca[0]}]
-            self._rule(ricerca[2])
         # Un'estensione nominata nella frase (EST_NOMINATA_MSG)
         est_msg = self._estensioni_nominate(user_text) if user_text else None
+        if ricerca:
+            testo_ricerca = ricerca[0]
+            if est_msg and "nomina" in est_msg:
+                # Precedenza scritta (analisi delle regole del 09/10, § 3.10): con
+                # un'estensione nominata nella frase vale quella, non la ricerca di prima
+                testo_ricerca += RICERCA_EST
+            memory = memory + [{"role": "system", "content": testo_ricerca}]
+            self._rule(ricerca[2])
         if est_msg:
             memory = memory + [{"role": "system", "content": est_msg}]
             if "nomina" in est_msg:
@@ -3240,7 +3258,8 @@ class Brain:
                 content = self._run_tool(call, level)
                 self.history.append({"role": "tool", "tool_call_id": call["id"],
                                      "name": call["name"], "content": content})
-                tail = [{"role": "system", "content": ARCHIVIO_NOTA}]
+                tail = [{"role": "system", "content": ARCHIVIO_NOTA_RICERCHE
+                         if ricerca else ARCHIVIO_NOTA}]
                 continue
             if named and not calls:
                 if nudged:

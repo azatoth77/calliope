@@ -763,6 +763,27 @@ verifica("ricerche: senza biblioteca il criterio non c'è",
          "«Pisa» con web_cerca tipo notizie" in b.backend.visti[-1]
          and "fatti da enciclopedia" not in b.backend.visti[-1])
 
+# Precedenze fra i dati del turno (analisi delle regole del 09/10, § 3.10): con un'estensione
+# nominata vale quella; la nota dell'archivio non dice più «di' che non lo sai» senza condizioni
+import calliope.brain as _brain  # noqa: E402
+b = brain([[("text", "Ok.")]])
+b.history = turno("Notizie?", "Ecco.", call(0, "web_cerca", {"domanda": "Pisa",
+                                                             "tipo": "notizie"}))
+b._estensioni_nominate = lambda testo: "Dati del turno: chi parla nomina l'estensione «meteo»."
+"".join(b.stream_reply("Usa l'estensione meteo per Pisa", "familiare"))
+verifica("precedenza: con un'estensione nominata la riga delle ricerche le lascia il posto",
+         _brain.RICERCA_EST.strip() in b.backend.visti[-1]
+         and "ricerca_recente" in b.rules_fired(), b.backend.visti[-1][-400:])
+b = brain([[("text", "Ok.")]])
+b.history = turno("Notizie?", "Ecco.", call(0, "web_cerca", {"domanda": "Pisa",
+                                                             "tipo": "notizie"}))
+"".join(b.stream_reply("E poi?", "familiare"))
+verifica("precedenza, contrario: senza estensione nominata niente frase in più",
+         _brain.RICERCA_EST.strip() not in b.backend.visti[-1])
+verifica("archivio con le ricerche: «non lo so» solo dopo la ricerca di prima",
+         "solo se nemmeno lì c'entra, di' che non lo sai" in _brain.ARCHIVIO_NOTA_RICERCHE
+         and "richiama il tool di quella ricerca" in _brain.ARCHIVIO_NOTA_RICERCHE)
+
 # ─────────────────────────── 7. capacità e caricamento ───────────────────────────
 c0 = Config()
 d = capacita.check_web(c0)
