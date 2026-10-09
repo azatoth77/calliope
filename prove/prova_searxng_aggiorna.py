@@ -145,6 +145,7 @@ def cfg_di(nome, **kw):
 def motore(nome, http, script, avvisi=None, **kw):
     cfg = cfg_di(nome, **{k: v for k, v in kw.items() if k.startswith("web_")})
     altri = {k: v for k, v in kw.items() if not k.startswith("web_")}
+    altri.setdefault("attendi", lambda s: None)
     return M.MotoreRicerca(cfg, http=http, script=script, log=lambda m: None,
                            avvisa=(lambda t, x: avvisi.append((t, x))) if avvisi is not None else None,
                            controllabile=True, aggiornabile=True, **altri)
@@ -347,8 +348,9 @@ def prova_automatico():
     h.profili["http://127.0.0.1:10004"] = BUONO
     sc = ScriptFinto()
     st = {"inattiva": 60.0, "lavori": 0}
+    pause = []
     m = motore("auto", h, sc, [], inattivita=lambda: st["inattiva"], lavori=lambda: st["lavori"],
-               orologio=lambda: ora[0])
+               orologio=lambda: ora[0], attendi=pause.append)
     verifica("automatico: Calliope in uso → niente", m.passo() == "occupata" and not h.chiamate)
     st["inattiva"], st["lavori"] = 7200.0, 1
     verifica("automatico: lavori in corso → niente", m.passo() == "occupata" and not h.chiamate)
@@ -356,6 +358,11 @@ def prova_automatico():
     r = m.passo()
     verifica("automatico: ferma e senza lavori → controllo e aggiornamento",
              r == "buona:aggiornata" and sc.in_uso == NUOVA, r)
+    ricerche = [c for c in h.chiamate if c[0] == "POST"]
+    verifica("poche ricerche: le prove del controllo valgono per la vecchia (9 in tutto, non 12)",
+             len(ricerche) == 9, len(ricerche))
+    verifica("ricerche distanziate: pause tra le prove e tra i giri",
+             pause.count(M.PAUSA_PROVE_S) == 6 and pause.count(M.PAUSA_GIRI_S) == 1, pause)
     n = len(h.chiamate)
     verifica("automatico: controllo appena fatto → presto", m.passo() == "presto" and len(h.chiamate) == n)
     ora[0] += 25 * 3600

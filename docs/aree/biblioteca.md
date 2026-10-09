@@ -183,6 +183,10 @@ registro c'erano già tag più nuovi (2026.10.4 e 2026.10.7). Codice in `calliop
   aggiornamento automatico (aggiornata, tenuta, tornata indietro, errore) e il passaggio a
   «degradata» arrivano come scheda «Da leggere» sugli **schermi personali di chi amministra**
   (`Cruscotto.avvisa`), mai a voce né sugli schermi di stanza.
+- **Poche ricerche, distanziate** (09/10: una ventina di fila fa smettere ANSA e DuckDuckGo per
+  qualche minuto): 4 s tra una prova e l'altra (`PAUSA_PROVE_S`), 20 s prima del cambio
+  (`PAUSA_GIRI_S`), e per la vecchia valgono le prove del controllo appena fatto (stessa
+  immagine, meno di 15 minuti): un controllo con aggiornamento fa 9 ricerche in ~1–2 minuti.
 - **Un'operazione alla volta**: un lock nel processo e un file di blocco accanto allo stato
   (Calliope e il terminale insieme: «occupato»); un blocco di un processo morto o più vecchio di
   3 ore si ignora.

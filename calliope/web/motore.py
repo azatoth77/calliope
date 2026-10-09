@@ -72,6 +72,12 @@ STORIA_MAX = 40
 TOLLERANZA_MOTORI = 1          # un motore in meno tra due giri è rumore, non un peggioramento
 TOLLERANZA_RISULTATI = 0.8     # e così un quinto di risultati in meno
 GIRO_S = 300.0                 # ogni quanto il thread guarda se è ora del controllo
+# Poche ricerche e distanziate (09/10: una ventina di fila fa smettere ANSA e DuckDuckGo per
+# qualche minuto): una pausa tra una prova e l'altra e tra la vecchia e la nuova; le prove
+# sulla vecchia di un controllo appena fatto valgono per l'aggiornamento (FRESCO_S)
+PAUSA_PROVE_S = 4.0
+PAUSA_GIRI_S = 20.0
+FRESCO_S = 900.0
 BLOCCO_VECCHIO_S = 3 * 3600.0  # un blocco più vecchio è di un processo caduto
 
 _RADICE = Path(__file__).resolve().parents[2]
@@ -95,11 +101,13 @@ def prove_da(cfg) -> list[tuple[str, str]]:
 
 
 def misura(url: str, prove, http, timeout_s: float = 10.0, lingua: str = "it-IT",
-           immagine: str = "") -> dict:
+           immagine: str = "", pausa_s: float = 0.0, attendi=time.sleep) -> dict:
     """Le ricerche di prova contro un SearXNG (`url`, senza la barra finale). Mai eccezioni:
     una prova che non va ha `errore`."""
     righe = []
-    for cat, q in prove:
+    for i, (cat, q) in enumerate(prove):
+        if i and pausa_s > 0:
+            attendi(pausa_s)
         r = {"categoria": cat, "domanda": q, "ok": False, "risultati": 0, "motori": [],
              "giu": [], "ms": 0}
         t0 = time.perf_counter()
@@ -335,7 +343,7 @@ class MotoreRicerca:
     `orologio` si sostituiscono nelle prove."""
 
     def __init__(self, cfg, *, http=None, script=None, log=print, inattivita=None,
-                 lavori=None, avvisa=None, web=None, orologio=time.time,
+                 lavori=None, avvisa=None, web=None, orologio=time.time, attendi=None,
                  controllabile: bool | None = None, aggiornabile: bool | None = None):
         self.cfg = cfg
         self.url = str(getattr(cfg, "web_searxng_url", "") or "").rstrip("/")
@@ -353,6 +361,8 @@ class MotoreRicerca:
         self.avvisa = avvisa
         self.web = web
         self.orologio = orologio
+        # Le pause tra le ricerche di prova (le prove le tolgono); `ferma` le interrompe
+        self.attendi = attendi or (lambda s: self._ferma.wait(s))
         self.file = Path(str(getattr(cfg, "web_searxng_stato", "") or "motore/searxng.json"))
         self.minimo = int(getattr(cfg, "web_searxng_min_risultati", 3) or 1)
         self.soglia = float(getattr(cfg, "web_searxng_soglia", 0.6) or 0.0)
@@ -531,7 +541,7 @@ class MotoreRicerca:
         return misura(url, prove_da(self.cfg), self.http(),
                       timeout_s=max(5.0, float(getattr(self.cfg, "web_timeout_s", 6.0)) + 4),
                       lingua=str(getattr(self.cfg, "web_lingua", "it-IT") or "it-IT"),
-                      immagine=immagine)
+                      immagine=immagine, pausa_s=PAUSA_PROVE_S, attendi=self.attendi)
 
     def controlla(self, chi: str = "automatico") -> dict:
         """Le prove adesso, il giudizio e lo stato salvato. {"stato", "motivo", "esito"}."""
@@ -642,9 +652,16 @@ class MotoreRicerca:
                                   f"usare ({tag_di(vecchia)}).", chi, manuale)
             return self._fine("niente", "", chi, manuale)
         nuova = scelta["immagine"]
-        # Le prove sulla vecchia adesso: stessa rete e stessi motori della nuova
-        self._fase(f"provo quella in uso ({tag_di(vecchia)})")
-        prima = self._misura(self.url, vecchia)
+        # Le prove sulla vecchia: quelle del controllo appena fatto se sono fresche (stessa
+        # immagine, meno di FRESCO_S), altrimenti adesso. Stessa rete e stessi motori della nuova
+        ultimo = self.leggi().get("ultimo")
+        if (isinstance(ultimo, dict) and ultimo.get("immagine") == vecchia
+                and self.orologio() - float(ultimo.get("quando") or 0) < FRESCO_S):
+            prima = ultimo
+        else:
+            self._fase(f"provo quella in uso ({tag_di(vecchia)})")
+            prima = self._misura(self.url, vecchia)
+            self.attendi(PAUSA_GIRI_S)
         self._fase(f"scarico e provo {scelta['tag']} accanto")
         rc, out = self.script("candidata", nuova)
         if rc != 0:
@@ -673,6 +690,7 @@ class MotoreRicerca:
                 return self._fine("rinviato", f"SearXNG {scelta['tag']} va bene, ma "
                                   f"{motivo}: lo cambio la prossima volta.", chi, manuale)
         self._fase(f"passo a {scelta['tag']}")
+        self.attendi(PAUSA_GIRI_S)
         rc, out = self.script("usa", nuova, timeout=300)
         dopo = self._misura(self.url, nuova) if rc == 0 else None
         ok, perche = almeno_come(dopo, prima, self.minimo) if dopo else (False, "non risponde")
