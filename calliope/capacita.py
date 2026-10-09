@@ -141,6 +141,92 @@ DEFINIZIONI: dict[str, Definizione] = {
 }
 
 
+# ─────────────────────────── aree («cosa sai fare?») ───────────────────────────
+# 09/10/2026 (caso vero sulla DGX: «cosa sai fare?» → l'elenco intero delle capacità, così
+# lungo che la persona l'ha interrotta). A voce si dicono solo le grandi aree; il dettaglio di
+# un'area lo si chiede («cosa sai fare con la casa?», parametro `area` del tool, scelto dal
+# modello da un elenco chiuso). Le aree raggruppano le capacità del registro qui sopra e i
+# tool che non hanno una capacità loro (ora e conti, foto, sviluppo, esercizi): un'area c'è
+# se una sua capacità è attiva o se uno dei suoi tool è registrato per chi parla.
+
+@dataclass(frozen=True)
+class Area:
+    nome: str                               # «la casa», per l'elenco a voce
+    con: str                                # «Con la casa», in testa al dettaglio
+    titolo: str                             # sulla scheda, per esteso
+    capacita: tuple[str, ...] = ()          # capacità del registro (il loro sa_fare)
+    # (prefisso o nome del tool, cosa sa fare): ciò che non ha una capacità sua
+    tool: tuple[tuple[str, str], ...] = ()
+    sempre: bool = False                    # c'è anche senza sapere quali tool ci sono
+
+
+# Ordine = ordine a voce e sulla scheda. Il nome detto è una cosa sola, senza «e» né virgole:
+# in fila («la casa, l'agenda, le ricerche…») si capisce dove finisce ognuno
+AREE: dict[str, Area] = {
+    "casa": Area("la casa", "Con la casa", "La casa", ("casa",)),
+    "agenda": Area("l'agenda", "Con l'agenda", "Timer, promemoria, agenda e liste",
+                   ("memoria",)),
+    "ricerca": Area("le ricerche", "Per le ricerche", "Ricerche",
+                    ("biblioteca", "web", "conversazioni")),
+    "documenti": Area("i documenti", "Con i documenti", "Documenti, ufficio e archivio",
+                      ("documenti", "ufficio", "archivio")),
+    "pc": Area("il computer", "Con il computer", "Il computer", ("pc",)),
+    "lavori": Area("i lavori lunghi", "Per i lavori lunghi", "Lavori lunghi e programmi",
+                   ("agenti",),
+                   (("sviluppo_", "costruire con te un programma o un'estensione un passo "
+                                  "alla volta, con il collaudo prima di approvarla"),
+                    ("estensione_", "gestire le estensioni che ho già"))),
+    "schermi": Area("gli schermi", "Con gli schermi", "Gli schermi", ("schermi",)),
+    "foto": Area("le foto", "Con foto e file", "Foto e file", (),
+                 (("immagine_", "guardare una foto o lo schermo del computer"),
+                  ("allegato_", "leggere i file che mi mandi"),
+                  ("cassetto_", "tenere i tuoi file per qualche giorno"))),
+    "tempi": Area("i calcoli", "Con ora, date e conti", "Ora, date e conti", (),
+                  (("ora_attuale", "dirti l'ora e la data"),
+                   ("data_calcola", "calcolare date e giorni"), ("calcola", "fare conti")),
+                  sempre=True),
+    "persone": Area("le persone", "Con le persone", "Voce e persone", ("chi_parla", "voce"),
+                    (("ricorda", "ricordare cose di te"),
+                     ("registra_utente", "imparare a riconoscere una persona nuova"))),
+    "esercizi": Area("i compiti", "Con i compiti", "Esercizi e compiti", (),
+                     (("esercizi", "preparare esercizi di matematica e di italiano"),
+                      ("compiti_aiuto", "aiutare con i compiti"))),
+}
+
+
+def aree(registro: "Registro | None", tool_names=None) -> list[dict]:
+    """Le aree per «cosa sai fare?»: chiave, nome, se c'è, cosa sa fare (dalle capacità
+    attive e dai tool presenti) e le capacità dell'area che non funzionano (nomi del
+    registro). `tool_names` = i tool che chi parla può usare; None se non si sa (allora
+    contano solo le capacità, e le aree `sempre`)."""
+    names = set(tool_names) if tool_names is not None else None
+    out = []
+    for chiave, a in AREE.items():
+        fa, mancano = [], []
+        for nome in a.capacita:
+            c = registro.get(nome, fresca=True) if registro is not None else None
+            d = DEFINIZIONI.get(nome)
+            if c is None or d is None:
+                continue
+            if c.attiva:
+                if d.sa_fare:
+                    fa.append(d.sa_fare)
+            else:
+                mancano.append(nome)
+        for pref, cosa in a.tool:
+            if names is None:
+                ok = a.sempre
+            else:
+                ok = any(n == pref or (pref.endswith("_") and n.startswith(pref))
+                         for n in names)
+            if ok:
+                fa.append(cosa)
+        out.append({"chiave": chiave, "nome": a.nome, "con": a.con, "titolo": a.titolo,
+                    "attiva": bool(fa),
+                    "sa_fare": fa, "mancano": mancano})
+    return out
+
+
 @dataclass
 class Capacita:
     nome: str
@@ -345,7 +431,9 @@ def testo_prompt(registro: Registro | None = None, tools=()) -> str:
     helpers = [n for n in ("calliope_stato", "casa_integrazione") if n in names]
     if helpers:
         parti.append("Se invece chiedono perché qualcosa non funziona, come averlo o "
-                     "collegarlo, o «cosa sai fare?» e «cosa manca?», non rispondere a "
+                     "collegarlo, «cosa sai fare?» (anche «con la casa?», «con i "
+                     "documenti?»…) e «cosa manca?», o domande su di te (chi sei, dove giri, "
+                     "chi ti ha fatta, che versione sei, cosa c'è di nuovo), non rispondere a "
                      "memoria: "
                      + ("chiama calliope_stato" if "calliope_stato" in names else "")
                      + ((", e per la casa, la domotica o Home Assistant casa_integrazione"

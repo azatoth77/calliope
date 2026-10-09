@@ -312,12 +312,16 @@ def prova_argomenti_mancanti():
              reg.mancanti("lavoro_affida", {"proposta": "L1"}) == [])
     attese = []
     b.on_tool_start = attese.append
+    # Dal 09/10 (tools/dialogo.py) l'errore è correggibile: «Non trovo niente.» senza aver
+    # cercato non si dice (giro di correzione); la domanda alla persona sì
     r = turno(b, "di cosa abbiamo parlato ieri?", chiama("conversazione_cerca", {}),
-              testo("Non trovo niente."))
+              testo("Non trovo niente."), testo("Di quale argomento vuoi sapere?"))
     verifica("conversazione_cerca({}): niente frase d'attesa, niente ricerca, errore al modello",
              not attese and not chiamato and "tool_argomenti_mancanti" in b.rules_fired(),
              f"{attese} {chiamato} {b.rules_fired()}")
-    verifica("…e la risposta del modello dopo l'errore si dice", r == "Non trovo niente.", r)
+    verifica("…la risposta senza richiamare non si dice, la domanda alla persona sì",
+             r == "Di quale argomento vuoi sapere?"
+             and b.rules_fired().count("correzione_tool") == 1, f"{r} {b.rules_fired()}")
     r = turno(b, "di cosa abbiamo parlato ieri?",
               chiama("conversazione_cerca", {"domanda": "ieri"}), testo("Del preventivo."))
     verifica("contrario: con la domanda la frase d'attesa e la ricerca partono",

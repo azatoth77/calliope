@@ -8,7 +8,7 @@
 
 | Stadio | Libreria | Dove |
 |---|---|---|
-| Registro delle capacità | — (controlli rapidi in sola lettura) | `calliope/capacita.py` → `Registro`, `REGISTRO`, `segnala`, `controlla`, `testo_prompt`; terminale `calliope/stato.py` (`python -m calliope.stato`); tool `calliope_stato` in `calliope/tools/stato.py` (con `cosa=macchina` la macchina e i modelli: `calliope/macchina.py`) |
+| Registro delle capacità | — (controlli rapidi in sola lettura) | `calliope/capacita.py` → `Registro`, `REGISTRO`, `segnala`, `controlla`, `testo_prompt`; terminale `calliope/stato.py` (`python -m calliope.stato`); tool `calliope_stato` in `calliope/tools/stato.py` (con `cosa=macchina` la macchina e i modelli: `calliope/macchina.py`; dal 09/10 le aree `capacita.AREE`/`aree`, `cosa=novita` e `cosa=chi_sei`: `calliope/novita.py`) |
 | Piano dei modelli per la macchina, in sola lettura (dal 08/10) | — (nvidia-smi, /proc/meminfo, registro di Windows, Ollama `/api/version` `/api/tags` `/api/ps`, vLLM `/v1/models` `/version` `/metrics`, `systemctl show` in sola lettura) | `calliope/macchina.py` → `inventario`, `Sonde`; catalogo `calliope/modelli.py` → `MODELLI`, `GPU`, `WHISPER`, `VERSIONE`; regole `calliope/piano.py` → `piano`, `da_config`, `testo`, `Funzioni`; terminale `python -m calliope.stato --piano [--json] [--inventario FILE]`; prova `prove/prova_piano.py` |
 | Installazioni dal catalogo | httpx (Range, checksum), API `/api/pull` di Ollama | `calliope/installa/` → `catalogo` (`catalogo.py`), `scarica_file` (`scarica.py`), `Installazioni` (`servizio.py`); tool `installa_proponi`, `installa_avvia`, `installa_gestisci` in `calliope/tools/stato.py`; anche `whisper_riserva` e `telefono` nel catalogo (vedi [setup-dgx](setup-dgx.md), [schermi-telefono](schermi-telefono.md)) |
 
@@ -209,3 +209,58 @@ Resta (fasi 3–6 della ricerca): la prova breve con `size_vram` e la generazion
 `taratura.json`, i campi «auto», il catalogo per ruolo, `calliope_stato(cosa=piano)`, gli
 installatori. Da misurare prima (§7.2): η su più modelli, il rapporto vero/pulita dai nuovi
 `generazione_tps`, Whisper e guardiano 1B sulla CPU.
+
+## «Cosa sai fare?» per aree, novità e «chi sei?» (09/10)
+
+Caso vero sulla DGX (09/10, 08:16–08:18): «Hai modo di sapere quali sono state le ultime
+novità sul tuo aggiornamento?» → `calliope_stato{"capacita":"tutte","cosa":"sa_fare"}` →
+l'elenco intero delle capacità, così lungo che chi parlava l'ha interrotta; poi «non ho un
+registro delle versioni» (falso: c'è CHANGELOG.md) e «il mio codice risiede… distribuito su
+diversi server» (falso: gira in locale). Tre cambiamenti:
+
+- **Aree.** `capacita.AREE` raggruppa le capacità del registro e i tool senza capacità propria
+  (ora e conti, foto e file, sviluppo, esercizi) in 11 aree; `capacita.aree(registro,
+  tool_names)` dice quali ci sono per chi parla (una capacità attiva o un suo tool ammesso a
+  quel livello, da `ToolRegistry.schemas_for`). «Cosa sai fare?» dice solo i nomi brevi («la
+  casa, l'agenda, le ricerche, i documenti, il computer…», senza «e» né virgole dentro un
+  nome), per chi amministra i nomi di ciò che non va («il perché con "cosa manca?"»), un
+  esempio di domanda sull'area e, se c'è uno schermo personale collegato, «l'elenco completo è
+  sullo schermo»: la scheda personale «Cosa so fare» in Markdown, con «Scarica», ha le aree con
+  il dettaglio. Il parametro `area` (elenco chiuso, lo sceglie il modello anche detto a parole
+  diverse) dà il dettaglio: «Con la casa posso comandare luci, tapparelle e termostato di
+  casa.»; chi amministra sente il perché delle capacità dell'area che non vanno, i familiari
+  «chiedi a chi amministra». «Cosa manca?» e l'ospite restano com'erano.
+- **Novità** (`cosa=novita`, `periodo` = ultimo_aggiornamento, oggi, da_ieri, settimana, mese):
+  `calliope/novita.py` legge la versione (numero da pyproject.toml, commit e data del codice
+  da `cruscotto.versione_in_uso`, cioè VERSIONE.json del gestore o il git del portatile;
+  quando è stata messa in uso e la versione di prima dalla `storia` di
+  `gestione.json`, due cartelle sopra `versioni/<id>/`: il gestore non cambia) e le righe di
+  CHANGELOG.md **della versione installata**: di norma quelle dopo la data del codice della
+  versione di prima, senza gestore le ultime due date, con un periodo quelle del periodo (se
+  non c'è niente lo dice e dà le ultime). Mai voci oltre la data del codice. A voce ~40 parole
+  di novità, al più tre date, ogni voce tagliata a 18 parole; tolte le parentesi e il codice
+  tra apici, e **tolti interi** i pezzi con un indirizzo, un host o un percorso (anche se il
+  CHANGELOG è pubblico). La scheda «Novità di Calliope» ha versione, commit, date e le righe
+  intere (link ridotti al testo). Per tutti i livelli: il registro è pubblico. Regola
+  `stato_periodo_novita`: col solo `periodo` (gemma4 e4b, «cosa è cambiato da ieri?» →
+  `{periodo: da_ieri}` senza `cosa`) si completa la forma della scelta del modello (principio
+  10, conversione); contrario: con `cosa=sa_fare` il periodo non cambia niente.
+- **Chi sei** (`cosa=chi_sei`): nome, «gira in casa, su questo computer» con il tipo di
+  macchina dall'inventario (mai il nome host), il modello della voce (sullo stesso computer o
+  «su un altro computer della casa», mai l'indirizzo) e dell'agente, niente cloud (internet
+  solo per le ricerche, se la ricerca web è attiva), versione, «il mio codice è libero, con
+  licenza AGPL, ed è pubblico; qui mi installa e mi aggiorna chi amministra». Nessun URL del
+  repository: non è né nel README né nella configurazione, e la `sorgente` del gestore può
+  essere un indirizzo privato. La spinta del prompt (`capacita.testo_prompt`, accanto a quella
+  dell'08/10 sulle spiegazioni inventate) manda a `calliope_stato` anche le domande su di sé.
+
+Misure col modello locale (gemma4 e4b, `prove/prova_chi_sei_ollama.py 2`, portatile): 29/32;
+caso vero, «quali sono le novità?», «da ieri», «che versione sei?» (chi_sei), «dove gira il
+tuo codice?», «chi ti ha programmato?», «cosa sai fare?» (solo aree), «e con la casa?» 2/2;
+«chi sei?» senza tool «Sono Calliope…» (vero, accettato); «cosa sai fare con i documenti?» 1/2
+e «cosa puoi fare per appuntamenti e promemoria?» 0/2 a conversazione appena aperta:
+risponde dalle descrizioni dei tool (vero, ma senza `area`); dopo «cosa sai fare?» `area` c'è
+sempre. Prima della frase «sempre, mai a memoria» nella descrizione le domande d'area a freddo
+erano 0/3. Contrari («chi sono?», «che ore sono?», la lista della spesa, «chi ha inventato il
+telefono?») 8/8 senza novità né chi sei. Prima frase mediana 0,52 s. Da rimisurare sulla DGX
+col 26B. Prova a secco `prove/prova_novita.py`.

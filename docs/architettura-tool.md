@@ -167,6 +167,10 @@ servirà un secondo fattore (vedi visione).
 4. Accumula i `tool_calls`, esegue, reimmetti i risultati, ripete (tetto `max_tool_turns`).
 5. `tool_choice` non è supportato da Ollama: **il modello decide da solo** se chiamare un
    tool. Per questo i tool nativi vanno tenuti semplici, con campi vincolati.
+6. Dal 09/10 gli argomenti si controllano contro lo schema prima della chiamata e un errore
+   torna al modello in parole, con esempio e `cosa_fare` (`calliope/tools/dialogo.py`); dopo
+   un errore correggibile il modello richiama invece di dire «riprovo» (giro di correzione,
+   [`ricerche/2026-10-09-dialogo-tool.md`](ricerche/2026-10-09-dialogo-tool.md)).
 
 ### 6.1 Contratto dei risultati (proposta del 03/10, da fare)
 
@@ -232,7 +236,7 @@ controllo nelle prove a secco), ma tocca tutti i tool e le prove con Ollama che 
 | `casa_comando` | familiare (ospite per i domini di `casa_ospite_domini`) | azione | un comando per la casa in una frase breve nella forma di Home Assistant («accendi la luce della cucina»); verifica a secco, regole di Calliope, poi l'agente integrato di HA; la sua risposta è la `risposta_finale` |
 | `casa_stato` | familiare (ospite come sopra) | lettura | com'è la casa dagli stati delle entità esposte, senza richieste a HA: «temperatura in camera», «cosa c'è acceso», «porta del garage» |
 | `casa_integrazione` | familiare | lettura | a che punto è il collegamento con HA e il prossimo passo (dettagli solo a chi amministra); con `per_iscritto` la guida in PDF o Word, da un testo fisso |
-| `calliope_stato` | ospite | lettura | «cosa sai fare?», «cosa manca?», «perché non va…?» dal registro delle capacità: chi amministra sente motivo e prossimo passo, i familiari cosa funziona, gli ospiti cosa possono chiedere; `risposta_finale` |
+| `calliope_stato` | ospite | lettura | «cosa sai fare?», «cosa manca?», «perché non va…?» dal registro delle capacità: chi amministra sente motivo e prossimo passo, i familiari cosa funziona, gli ospiti cosa possono chiedere; dal 09/10 «cosa sai fare?» per grandi aree (`area` per il dettaglio), `cosa=novita` (con `periodo`) dal CHANGELOG della versione installata, `cosa=chi_sei` con fatti veri; `risposta_finale` |
 | `installa_proponi` | familiare (il codice accetta solo chi amministra, riconosciuto dalla voce nel turno) | lettura | proposta di un'azione del catalogo (enum): dimensione, spazio libero, tempo, internet, domanda finale; prerequisiti controllati; non scarica niente |
 | `installa_avvia` | amministra | sensibile | avvia l'azione proposta nel turno **prima** alla stessa persona; senza offerta valida rifiuta |
 | `installa_gestisci` | familiare (annullare solo chi amministra) | azione | «a che punto è?», «annulla il download» |

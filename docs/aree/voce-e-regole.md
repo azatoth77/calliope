@@ -663,3 +663,57 @@ decide il modello:
   24/29 (sotto soglia: «Questa era terribile, Marco.», «Chiedile se domani piove…»): per questo il
   nome. Sbaglia ancora «Che ne pensi dei cani?» (detto dall'ospite a Calliope), «Dille alle sette…»
   e «Ok.». Da accendere dopo qualche giorno di ombra sulla DGX, letti i `non_rivolta_ombra`.
+
+## Il dialogo tra tool e modello: errori in parole e giri di correzione (09/10, ramo `dialogo-tool`)
+
+Caso vero della DGX (09/10 08:19–08:20): «Raccontami le ultime novità della giornata» →
+`web_cerca({'tipo': 'notizie'})` → la traccia del `TypeError` («_web_cerca() missing 1 required
+positional argument: 'domanda'») → «ho avuto un piccolo intoppo, riprovo subito» senza
+riprovare, quattro volte. Decisione di Dario: nessuna regola per il caso, un protocollo
+generale. Progetto e misure: [`../ricerche/2026-10-09-dialogo-tool.md`](../ricerche/2026-10-09-dialogo-tool.md).
+- **Errori come messaggi per il modello** (`calliope/tools/dialogo.py`, in `ToolRegistry.call`
+  per ogni tool, estensioni comprese): gli argomenti contro lo schema e la firma prima della
+  chiamata (obbligatorio assente o vuoto che la funzione non completa da sé, argomento
+  sconosciuto); l'errore dice quale argomento, tipo, valori ammessi, la sua descrizione (dallo
+  schema o dalla descrizione del tool), un esempio con la chiamata del modello completata, la
+  frase della persona e `cosa_fare` (richiamare con le sue parole; chiedere solo se non c'è
+  niente che serva), `correggibile: true`. Eccezioni dei tool senza traccia
+  (`tool_errore_interno`: un errore di programmazione non è correggibile, un `ValueError` sì);
+  `{errore}` senza `ok` uniformato. Conversioni di forma (`tool_argomento_forma`: maiuscole,
+  accenti, un solo valore ammesso che comincia così, numeri e vero/falso come testo); un
+  valore fuori dai valori ammessi **non** è un errore (decide il tool: «stop», cambia
+  «nessuno»… avevano già le loro risposte e le loro prove). `ToolRegistry.mancanti` dice ora
+  tutti gli argomenti che fermano la chiamata (niente frase d'attesa per una chiamata che non
+  parte). Regole: `tool_argomenti_mancanti` (com'era), `tool_argomenti_non_validi`. L'errore
+  del registro non porta dati: fuori dalla busta dei dati non fidati
+  (`ToolContext.errore_registro`, regola `fallito_senza_dato`).
+- **Giro di correzione in Brain**: `last_tools` segna `correggibile`. Dopo un errore
+  correggibile il testo della passata aspetta la fine; senza chiamata non si dice e il modello
+  riceve `CORREZIONE_NUDGE` (regola `correzione_tool`, rete del modello `correzione_tool`). Una
+  domanda alla persona si dice dal secondo giro (al primo il 4B chiedeva il dato appena
+  detto). Tetto `tool_correzioni_max` (2) dentro `max_tool_turns`; un errore non correggibile
+  non trattiene niente. Prima, le spinte sulle promesse valevano solo senza nessun tool nella
+  risposta, e «riprovo subito» dopo un tool fallito passava.
+- **La persona aggiornata**: oltre `tool_correzione_avviso_s` (2 s) dall'inizio della risposta
+  senza aver detto niente, una frase di `dialogo.FRASI_CORREZIONE` («Un attimo, sistemo la
+  richiesta.»), una volta, dalle frasi d'attesa (`announcements`, sintetizzate all'avvio).
+- **Misura** (gemma4 e4b locale, prima passata forzata con la chiamata sbagliata, 3 giri):
+  corrette 18/21 contro 2/21 di main (notizie, Ansa, meteo con `query`, timer, promemoria,
+  calcola 3/3; lista 0/3: il 4B chiede «Cosa vuoi aggiungere?»); contrari giusti (dato non
+  deducibile → domanda; errore interno → detto, nessun giro). Ogni giro 0,4–0,7 s col 4B.
+  Prova a secco `prove/prova_dialogo_tool.py` (la chiamata vuota a ognuno dei 42 tool con
+  argomenti obbligatori). Da guardare sulla DGX: `correzione_tool` e `correzione_avviso` nel
+  registro dei turni, e se il 26B risolve la lista.
+
+## Domande su di sé: chi sei, novità, versione (09/10, ramo `stato-novita`)
+
+Caso vero della DGX (09/10 mattina): alle «ultime novità sul tuo aggiornamento» Calliope ha letto
+l'elenco intero delle capacità, poi ha inventato «non ho un registro delle versioni» e «il mio
+codice è distribuito su diversi server». Accanto alla spinta dell'08/10 («non inventare
+spiegazioni sul tuo funzionamento»), la frase del prompt sulle capacità
+(`capacita.testo_prompt`) manda a `calliope_stato` anche «cosa sai fare con la casa?» e le
+domande su di sé (chi sei, dove giri, chi ti ha fatta, che versione sei, cosa c'è di nuovo):
+`cosa=novita` (con `periodo`), `cosa=chi_sei`, `area`. Le risposte sono frasi pronte dal codice
+(`risposta_finale`): fatti letti da CHANGELOG.md, dal gestore e dall'inventario della macchina.
+Regola nuova `stato_periodo_novita` (solo `periodo` → novità), con il contrario. Dettagli e
+misure (29/32 con gemma4 e4b sul portatile): [capacita-installazioni](capacita-installazioni.md).

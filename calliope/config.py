@@ -244,6 +244,15 @@ class Config:
     # (contesto_soglia_morbida) e quello che si toglie resta nell'archivio: prima era 10
     max_history_turns: int = 40
     max_tool_turns: int = 4               # tetto di giri di tool calling per risposta
+    # Giri di correzione (09/10, docs/ricerche/2026-10-09-dialogo-tool.md): dopo un tool che
+    # non è partito per un errore correggibile (argomenti contro lo schema), al più questi giri
+    # in cui il testo del modello senza chiamata e senza domanda non si dice e il modello
+    # rilegge l'errore e richiama (rete `correzione_tool`). Dentro max_tool_turns. 0 = niente
+    tool_correzioni_max: int = 2
+    # Durante un giro di correzione, se non si è detto ancora niente e dall'inizio della
+    # risposta sono passati più di questi secondi, una frase breve
+    # («Un attimo, sistemo la richiesta.»), una volta per risposta
+    tool_correzione_avviso_s: float = 2.0
     # Azione in sospeso («Lo apro?», «Procedo?»): la proposta arriva al modello nei turni dopo
     # della stessa persona, al più per `azione_in_sospeso_turni` turni ed entro
     # `azione_in_sospeso_s` secondi; una proposta nuova sostituisce la vecchia. Fino al 04/10
@@ -305,7 +314,8 @@ class Config:
     # textcallguard, chiamata_in_mezzo, spinta_promessa, spinta_richiesta, spinta_dichiarata,
     # riferimento_casa, riferimento_agenda, conferma_al_posto_del_vuoto,
     # vuoto_seconda_passata, ricerca_promessa, citazione_tolta, nome_tool_parlato,
-    # eco_contesto, spinta_archivio, spinta_rinuncia, spinta_esercizi; "tutte" le spegne tutte. Quelle di
+    # eco_contesto, spinta_archivio, spinta_rinuncia, spinta_esercizi, correzione_tool; "tutte"
+    # le spegne tutte. Quelle di
     # «sicurezza» (permessi, politica…) non si spengono: un nome di sicurezza o sconosciuto si
     # segnala all'avvio. Quelle del profilo (llm_profilo) si aggiungono a queste.
     # Vuoto = tutte accese (o quelle del profilo).
@@ -2182,6 +2192,11 @@ RETI: dict[str, Rete] = {
         "risultato del tool (calliope/argomenti_incerti.py)", MODELLO,
         "dati del turno: «Patello Giugnasco» non trovato, e la persona doveva ripetere da sola "
         "(08/10, DGX)"),
+    "correzione_tool": Rete(
+        "tool non partito per un errore correggibile e risposta senza chiamata né domanda: non "
+        "detta, il modello rilegge l'errore e richiama (tool_correzioni_max giri)", MODELLO,
+        "«ho avuto un piccolo intoppo, riprovo subito» senza riprovare dopo web_cerca senza "
+        "domanda (09/10, DGX, quattro volte)"),
     # ── sicurezza: sempre accese, per ogni modello ──
     "permessi": Rete(
         "livello di chi parla e preset dei minori, a ogni esecuzione (ToolRegistry.call)",
@@ -2299,7 +2314,8 @@ SEZIONI: dict[str, list[str]] = {
             "contesto_soglia_dura", "contesto_turni_intatti", "contesto_riassunto_token",
             "contesto_riassuntore", "contesto_dura_attesa_s", "contesto_riassunto_attesa_s",
             "contesto_riassunto_max_s",
-            "max_history_turns", "max_tool_turns", "azione_in_sospeso_s", "azione_in_sospeso_turni",
+            "max_history_turns", "max_tool_turns", "tool_correzioni_max",
+            "tool_correzione_avviso_s", "azione_in_sospeso_s", "azione_in_sospeso_turni",
             "conferma_sfida", "conferma_sfida_s", "conferma_sfida_parole", "quarantena_token",
             "intento_valido_s", "politica_per_valore",
             "uscita_controllo",
@@ -2574,7 +2590,8 @@ LIMITI: dict[str, tuple[float, float]] = {
     "llm_num_ctx": (512, 1_048_576), "llm_temperature": (0.0, 2.0),
     "contesto_ripiego": (2048, 1_048_576), "contesto_rilettura_max_s": (0.1, 60.0),
     "contesto_conversazioni": (1, 64), "contesto_margine_gb": (0.0, 512.0),
-    "max_history_turns": (0, 200), "max_tool_turns": (1, 20), "followup_s": (0.0, 600.0), "wake_solo_nome_s": (0.0, 3.0),
+    "max_history_turns": (0, 200), "max_tool_turns": (1, 20), "tool_correzioni_max": (0, 10),
+    "tool_correzione_avviso_s": (0.0, 60.0), "followup_s": (0.0, 600.0), "wake_solo_nome_s": (0.0, 3.0),
     "sample_rate": (8000, 48000), "whisper_beam_size": (1, 20), "stt_timeout_s": (0.5, 600.0),
     "stt_correzione_soglia": (0.0, 1.01), "stt_correzione_timeout_s": (0.2, 30.0),
     "stt_argomenti_soglia_noto": (0.0, 1.0), "stt_argomenti_soglia_p": (0.0, 1.01),
