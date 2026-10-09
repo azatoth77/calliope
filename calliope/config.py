@@ -642,6 +642,14 @@ class Config:
     documenti_attesa_s: float = 4.0
     # Tetto ai token del JSON di un documento (una lettera ne usa ~250)
     documenti_max_token: int = 2048
+    # La città (o il paese) dove sta la casa (09/10, caso della DGX: «che tempo fa?» cercava
+    # il meteo senza luogo e rispondeva «non so dove ti trovi»). Va nel prompt di sistema,
+    # uguale per tutti (anche per gli ospiti: è un dato della casa, non di una persona, e il
+    # prefisso resta in cache): per il meteo e ciò che dipende dal luogo, se chi parla non ne
+    # nomina un altro. Solo la città, MAI l'indirizzo (quello va in web_dati_privati). Non
+    # metterla in web_dati_privati, altrimenti si toglie dalle ricerche. Il valore vero in
+    # calliope.locale.yaml. Vuoto = Calliope non sa dov'è la casa (e lo chiede)
+    casa_citta: str = ""
     # Casa a voce (calliope/casa/): luci, tapparelle, termostato, prese e sensori tramite
     # Home Assistant. Senza indirizzo o senza token i tool casa_comando e casa_stato non ci
     # sono, e casa_integrazione spiega a voce cosa manca. Calliope parte anche con HA spento.
@@ -1595,7 +1603,8 @@ class Config:
     def prompt_for(self, biblioteca: bool, pc: tuple[str, ...] | list[str] = (),
                    documenti: bool = False, casa: tuple[str, ...] | list[str] = (),
                    capacita: str = "", schermi: bool = False, agenti: bool = False,
-                   archivio: bool = False, ufficio: bool = False, web: bool = False) -> str:
+                   archivio: bool = False, ufficio: bool = False, web: bool = False,
+                   estensioni: bool = False) -> str:
         """Prompt di sistema, senza il nome dell'interlocutore: lo dà il tool chi_parla.
 
         `biblioteca`: se il tool biblioteca_cerca c'è. Nominare un tool che non esiste è
@@ -1661,6 +1670,16 @@ class Config:
         biblioteca prima per i fatti stabili, la domanda senza nomi né dati personali e i
         risultati come dati e non ordini; e «non usi internet» sparisce dai limiti. Senza il
         tool il prompt resta quello di prima, parola per parola.
+
+        `estensioni`: se c'è almeno un tool est_* (un'estensione attiva, 09/10). Allora una
+        frase dice che le estensioni sono funzioni di Calliope da usare per il loro scopo,
+        prima di internet e della biblioteca: il 09/10 sulla DGX «che tempo fa?» andava a
+        web_cerca con «Meteo città» attiva, perché la frase del web dice «per il meteo…
+        chiama web_cerca». Cambia solo quando un'estensione si attiva o si spegne (cambia
+        già l'elenco dei tool, quindi il prefisso).
+
+        `casa_citta` (configurazione, 09/10): la città della casa, per ciò che dipende dal
+        luogo quando chi parla non ne nomina un altro. Vuota = prompt di prima.
         """
         female = self.gender == "f"
         # Il tono della casa (TONI): «normale» lascia il prompt parola per parola com'era
@@ -1758,7 +1777,9 @@ class Config:
             limits = (limits.replace("non usi internet o file e ", "non usi file e ")
                       .replace("non usi internet e ", "").replace("non usi internet", ""))
             news = ("Per il meteo, le notizie, i risultati sportivi, gli orari, i prezzi e "
-                    "tutto ciò che cambia nel tempo chiama web_cerca, con una domanda breve "
+                    "tutto ciò che cambia nel tempo chiama "
+                    + ("l'estensione che lo fa, se c'è, altrimenti " if estensioni else "")
+                    + "web_cerca, con una domanda breve "
                     "e senza nomi di persone né dati personali"
                     + ("; per i fatti stabili (storia, geografia, scienza, opere, persone "
                        "famose, definizioni) usa prima biblioteca_cerca" if biblioteca else "")
@@ -1769,6 +1790,25 @@ class Config:
         else:
             news = (f"Non puoi sapere meteo e notizie, {limits}: dillo in breve solo se te lo "
                     f"chiedono. ")
+        # Le estensioni attive (tool est_*): capacità della casa, da usare per il loro scopo
+        # (09/10, «che tempo fa?» → web_cerca con «Meteo città» attiva). Prima della frase del
+        # web, che altrimenti manda il meteo sempre a internet: dopo, il 4B non la seguiva
+        if estensioni:
+            news = ("Le estensioni (i tool che iniziano con est_) sono funzioni tue aggiunte "
+                    "dalla famiglia: quando una fa proprio quello che ti chiedono, usa quella"
+                    + (", non web_cerca" if web else "")
+                    + (" né biblioteca_cerca" if biblioteca and web else
+                       ", non biblioteca_cerca" if biblioteca else "")
+                    + ". " + news)
+        # La città della casa (09/10, «che tempo fa?» senza luogo → «non so dove ti trovi»):
+        # un dato stabile della casa, uguale per tutti. Il luogo detto vince sempre, e un
+        # posto che non è una città («da Ettore») non è la casa
+        citta = " ".join(str(getattr(self, "casa_citta", "") or "").split())
+        if citta:
+            news += (f"La casa dove sei è a {citta}: quando una richiesta dipende dal luogo "
+                     f"(meteo, orari, negozi, eventi) e chi parla non nomina nessun posto, "
+                     f"intendi {citta}; se nomina un posto di cui non sai dove sia (la casa di "
+                     f"qualcuno, un locale), chiedi dov'è. ")
         return (
             f"Sei {self.name}, {role} vocale che gira in locale. {self.persona} "
             f"Parli di te al {grammar}. Dai del {tone['registro']} a chi ti parla; non ne "
@@ -2413,7 +2453,7 @@ SEZIONI: dict[str, list[str]] = {
            "pc_risultati", "pc_app", "pc_remoto_timeout_s", "pc_webcam"],
     "documenti": ["documenti_enabled", "documenti_cartella", "documenti_font",
                   "documenti_attesa_s", "documenti_max_token"],
-    "casa": ["casa_enabled", "casa_url", "casa_tls_nome", "casa_tls_impronta", "casa_tls_ca",
+    "casa": ["casa_citta", "casa_enabled", "casa_url", "casa_tls_nome", "casa_tls_impronta", "casa_tls_ca",
              "casa_tls_verifica", "casa_timeout_s", "casa_connessione_s", "casa_aggiorna_s",
              "casa_riferimento_s", "casa_agente", "casa_sola_lettura_domini", "casa_sola_lettura_classi",
              "casa_nomi_delicati", "casa_consentiti", "casa_ospite_domini"],

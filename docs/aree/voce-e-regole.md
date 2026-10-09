@@ -760,3 +760,49 @@ risultato vecchio); il «dopo» dice «adesso non riesco a raggiungere internet�
 1,7–2,0 s in tutti e due. Limite visto: senza rete (`online` falso) `web_cerca` esce dall'elenco
 ma il modello lo chiama lo stesso dalla storia e il registro lo esegue (qui fallisce con la frase
 pronta: onesto, ma il tool non dovrebbe partire).
+
+## La città della casa e le estensioni nel prompt (09/10, ramo `citta-casa-notizie`)
+
+Caso vero della DGX (09/10, 10:30): «Che tempo fa?» → `web_cerca` generico → «Non so
+esattamente dove ti trovi… se mi dici la tua città», con l'estensione «Meteo città» attiva
+(città, giorni, paese). Principio di Dario: niente regole per il singolo caso, un contesto
+chiaro e il modello decide.
+
+- **`casa_citta`** (configurazione nuova, sezione `casa`): la città o il paese della casa, mai
+  l'indirizzo. Sta nel prompt di sistema (`Config.prompt_for`), uguale per tutti i livelli,
+  ospiti compresi: è un dato della casa, non di una persona, e così il prefisso resta in cache
+  (cambia solo con la configurazione). Frase: la casa è lì, per ciò che dipende dal luogo
+  (meteo, orari, negozi, eventi) se chi parla non nomina nessun posto; se nomina un posto di cui
+  non si sa dove sia (la casa di qualcuno, un locale) si chiede dov'è. Senza città il prompt è
+  quello di prima, parola per parola. Non va in `web_dati_privati` (si toglierebbe dalle
+  ricerche). Il valore vero sta in `calliope.locale.yaml`.
+- **Le estensioni prima di internet**: con almeno un tool `est_*` il prompt dice che le
+  estensioni sono funzioni sue aggiunte dalla famiglia, da usare quando fanno proprio quello
+  che si chiede, non `web_cerca` né `biblioteca_cerca`; e la frase del web diventa «chiama
+  l'estensione che lo fa, se c'è, altrimenti web_cerca». Detta solo dopo la frase del web, il
+  4B non la seguiva (0/2): conta l'ordine e la frase del web stessa. Il prompt cambia solo
+  quando un'estensione si attiva o si spegne (cambia già l'elenco dei tool).
+- **Misura** (`prove/prova_citta_casa_ollama.py`, gemma4 e4b locale, docker finto, 3
+  ripetizioni; tra parentesi il codice di main): con città ed estensione «Che tempo fa?» e «Che
+  tempo farà domani?» → l'estensione con la città 6/6 (0/6: chiede la città); senza
+  estensione → internet con la città 3/3 (0/3: «meteo oggi», il caso della DGX); «Che tempo
+  fa a Parigi?» → Parigi, mai la casa, 6/6 (6/6; con l'estensione la usa 3/3 contro 0/3);
+  «Che tempo fa da Ettore?» → chiede dov'è, mai la casa, 3/3 (3/3; con la prima frase, senza
+  «un posto di cui non sai dove sia», 0/1: cercava il meteo della casa); notizie di sport con
+  la città dentro 1 volta su 7 (si conta). `prova_estensione_nominata_ollama` e
+  `prova_web_ollama` invariate (1 giro). Da guardare sulla DGX col 26B.
+- **Dopo una ricerca** (unione con `approfondisci-notizie`, `RICERCA_MSG`): nella stessa
+  conversazione «Sentimi le notizie di sport» e poi «Che tempo fa?». Senza estensione →
+  internet con la città 3/3: `RICERCA_MSG` («se parla d'altro questa riga non conta») non
+  disturba. Con l'estensione **0/3, e il 4B inventa il meteo** («sereno, 18 gradi»), con la
+  rete `ricerca_recente` accesa o spenta (3/3 e 3/3 uguali): il modello chiama
+  l'estensione con la città, ma la politica la ferma. Un'estensione che legge internet è
+  un'«azione» (`estensioni/servizio._agisce`: `rete.pubblica` o `host`) e, con un risultato web
+  nella conversazione, «Che tempo fa?» non è una richiesta d'azione (`chiesta_azione`) →
+  `politica_azione_non_chiesta`, prima volta «rifiuta» con «rispondi con quello che vedi o
+  leggi», e il 4B risponde inventando. Non dipende da questo ramo (la città e la frase del prompt
+  lo rendono solo più frequente: senza, l'estensione non si chiamava proprio). Da decidere nella
+  sicurezza per valore ([sicurezza-politica](sicurezza-politica.md)): un'estensione che solo
+  legge internet, senza dati da mandare (`invia` vuoto, niente `scrive` né `legge.dati`), con
+  argomenti detti dalla persona o presi dal prompt di sistema (la città) potrebbe valere come
+  lettura. In `prova_citta_casa_ollama` il caso è contato, non fa fallire.
