@@ -196,12 +196,90 @@ def allinea(valore: str, parole: list[tuple[str, float]], nomi_sveglia=()) -> di
 # ─────────────────────────────── esito del tool ───────────────────────────────
 _NON_TROVATO = re.compile(
     r"non\s+(?:l['’]\s*ho\s+|ho\s+|è\s+stat[oa]\s+|sono\s+stat[ie]\s+)?trovat|"
-    r"non\s+(?:esist|c['’]è|ci\s+sono|risult)|nessun[oa]?\s+(?:risultat|città|luog|corrispond|"
+    r"non\s+(?:esist|c['’]è|ci\s+sono|risult|(?:lo\s+|la\s+|l['’]\s*)?riconosc)|"
+    r"nessun[oa]?\s+(?:risultat|città|luog|corrispond|"
     r"element|dato|dati|file|voce|contatt|dispositiv|estension|localit|comune)|"
     r"\bsconosciut|\binesistent|not\s+found|no\s+results?|no\s+match|unknown\s+(?:city|place|"
     r"location)|could\s+not\s+find|couldn['’]t\s+find|\b404\b", re.I)
 # Le decisioni della politica e dei permessi non sono un esito del tool
 _MOTIVI_FERMO = re.compile(r"permess|politic|conferm|sfida|minor|guardian|bloccat", re.I)
+# «L'azione NON è stata eseguita» (testi.NIENTE): la politica o lo schema l'hanno fermata (caso
+# vero della DGX, 09/10 alle 20:48: sviluppo_collauda fermato da valore_non_ancorata contava
+# come «errore» del tool)
+_NIENTE = "NIENTE: l'azione NON è stata eseguita"
+# Un risultato riuscito che dice a parole di non aver trovato (09/10 sera, caso vero della DGX
+# alle 20:47: «Non ho trovato la città 'Pradello Lugnasco'» nel da_dire di un collaudo) conta come
+# vuoto solo se il «non trovato» riguarda un nome: seguito o preceduto da una cosa che si cerca
+# per nome («la città», «località non trovata»), da «nulla», «niente», o con dentro il valore
+# passato al tool; e solo se accanto non ci sono dati. «Non ho trovato pioggia, è sereno» non è
+# vuoto. Meglio ancora il campo «trovato»: false, che il contratto delle estensioni chiede dal
+# 09/10 sera (CAPACITA.md, estensioni/prompt.py)
+_COSE = (r"(?:citt[aà]|comun[ei]|localit[aà]|luogh?[oi]|paes[ei]|post[oi]|indirizz[oi]|"
+         r"nom[ei]|contatt[oi]|client[ei]|fornitor[ei]|person[ae]|file|document[oi]|"
+         r"cartell[ae]|voc[ei]|dispositiv[oi]|entit[aà]|stanz[ae]|estension[ei]|element[oi]|"
+         r"corrispondenz[ae]|risultat[oi]|dat[oi]|niente|nulla|city|place|location|town|name|"
+         r"results?|match)\b")
+_COSA_DOPO = re.compile(r"^\W*(?:(?:il|lo|la|l['’]|i|gli|le|un|una|uno|un['’]|alcun[oa]?|"
+                        r"nessun[oa]?|del|dello|della|dell['’]|dei|degli|delle|the|any|a)"
+                        r"(?:\s+|(?<=['’])))*" + _COSE, re.I)
+_COSA_PRIMA = re.compile(_COSE + r"[^.;:!?]{0,12}$", re.I)
+_ATTACCO = re.compile(r"^(?:[\s'\"«»‘’:,]|\b(?:il|lo|la|l|per|di|a|in|con|su)\b)*", re.I)
+_CHIUSI = re.compile(r"(?:nessun|not\s+found|no\s+results?|no\s+match|unknown|could|couldn|"
+                     r"sconosciut|inesistent|404)", re.I)
+# I campi di un risultato che sono solo parole per chi parla: il resto sono dati
+_CAMPI_MESSAGGIO = frozenset({"da_dire", "messaggio", "message", "errore", "error", "avviso",
+                              "nota", "consiglio", "suggerimento", "suggerimenti", "trovato",
+                              "trovata", "ok"})
+
+
+def dice_non_trovato(testo: str, valori=()) -> bool:
+    """Il testo dice di non aver trovato un nome? (vedi sopra)"""
+    t = str(testo or "")
+    valori = [v for v in valori or () if len(chiave(v)) >= 3]
+    for m in _NON_TROVATO.finditer(t):
+        if _CHIUSI.match(m.group(0)):
+            return True
+        dopo = re.sub(r"^\w*", "", t[m.end():m.end() + 80])       # il resto della parola
+        prima = t[:m.start()]
+        if _COSA_DOPO.match(dopo):
+            return True
+        # Prima della frase, e il valore, solo con «trovato» e «riconosce» («Località non
+        # trovata»; «Milano: non ci sono allerte» non dice che Milano non c'è)
+        if not re.search(r"trovat|riconosc", m.group(0), re.I):
+            continue
+        if _COSA_PRIMA.search(prima):
+            return True
+        # Il valore subito dopo («non ho trovato 'Pradello Lugnasco'») o subito prima
+        # («Pradello Lugnasco non è stato trovato»): mai più in là («non ho trovato pioggia a
+        # Milano» non dice che Milano non c'è)
+        dopo = _ATTACCO.sub("", dopo)
+        if any(chiave(dopo[:len(v) + 12]).startswith(chiave(v))
+               or chiave(prima[-(len(v) + 12):]).endswith(chiave(v)) for v in valori):
+            return True
+    return False
+
+
+def _valori(argomenti) -> list[str]:
+    out = []
+    for v in (argomenti.values() if isinstance(argomenti, dict) else ()):
+        if isinstance(v, str) and v.strip():
+            out.append(v.strip())
+        elif isinstance(v, dict):
+            out += [x.strip() for x in v.values() if isinstance(x, str) and x.strip()]
+    return out
+
+
+def _ha_dati(ris: dict, valori) -> bool:
+    """Il risultato ha dati oltre alle parole per chi parla (e oltre ai valori passati, che
+    un'estensione può ripetere)?"""
+    for k, v in ris.items():
+        if k in _CAMPI_MESSAGGIO or _vuoto(v) or isinstance(v, bool):
+            continue
+        if isinstance(v, str) and any(uguali(v, x) or chiave(x) in chiave(v) for x in valori
+                                      if len(chiave(x)) >= 3):
+            continue
+        return True
+    return False
 
 
 def _testi(x, prof: int = 0):
@@ -221,15 +299,19 @@ def _vuoto(x) -> bool:
     return x is None or (isinstance(x, (list, dict, str)) and not x)
 
 
-def esito(res) -> str:
+def esito(res, argomenti=None) -> str:
     """Com'è andato il tool, per la misura e per F1:
-    - «fermato»: non è partito (politica, permessi, conferma o domanda in sospeso);
+    - «fermato»: non è partito (politica, permessi, conferma o domanda in sospeso; «NIENTE:
+      l'azione NON è stata eseguita»);
     - «vuoto»: è partito e non ha trovato niente (campo d'errore o testo «non trovato», «nessun
-      risultato»; risultati vuoti; «trovato»: false);
+      risultato» riferito a un nome e senza dati accanto, `dice_non_trovato`; risultati vuoti;
+      «trovato»: false);
     - «errore»: è partito e si è rotto per altro (rete, codice);
     - «pieno»: ha trovato qualcosa.
     Il testo dei risultati di un'estensione è un dato non fidato: qui decide solo se aggiungere
-    un suggerimento, mai un'azione."""
+    un suggerimento, mai un'azione. `argomenti`: quelli passati al tool (un «non trovato» con
+    dentro il valore riguarda quel nome; il valore ripetuto nel risultato non è un dato)."""
+    valori = _valori(argomenti)
     if not isinstance(res, dict):
         return "errore"
     if "in_sospeso" in res or _MOTIVI_FERMO.search(str(res.get("motivo") or "")):
@@ -249,7 +331,9 @@ def esito(res) -> str:
             return "vuoto"                # {"previsioni": []}
         err = " ".join(str(ris.get(k) or "") for k in ("errore", "error", "messaggio",
                                                          "message", "da_dire"))
-        if _NON_TROVATO.search(err):
+        # Le parole contano solo senza dati accanto: «Non ho trovato pioggia» con temperatura e
+        # cielo è un risultato pieno
+        if not _ha_dati(ris, valori) and dice_non_trovato(err, valori):
             return "vuoto"
         if ris.get("errore") or ris.get("error") or ris.get("ok") is False:
             return "errore"
@@ -260,12 +344,13 @@ def esito(res) -> str:
     testo = " ".join(str(res.get(k) or "") for k in ("errore", "conferma", "risposta_finale",
                                                       "fatto"))
     if fallito:
-        return "vuoto" if _NON_TROVATO.search(testo) or res.get("nomi_vicini") is not None \
-            else "errore"
+        if _NON_TROVATO.search(testo) or res.get("nomi_vicini") is not None:
+            return "vuoto"
+        return "fermato" if str(res.get("fatto") or "").startswith(_NIENTE) else "errore"
     # Riuscito, ma il risultato dice a parole che non c'è («Località non trovata»)
-    if isinstance(ris, (dict, list, str)):
+    if isinstance(ris, (list, str)) or (isinstance(ris, dict) and not _ha_dati(ris, valori)):
         corto = " ".join(_testi(ris))[:600]
-        if corto and len(corto) < 300 and _NON_TROVATO.search(corto):
+        if corto and len(corto) < 300 and dice_non_trovato(corto, valori):
             return "vuoto"
     return "pieno"
 

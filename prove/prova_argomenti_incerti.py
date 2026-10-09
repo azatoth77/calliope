@@ -123,6 +123,52 @@ def prova_pezzi():
     ]
     sbagliati = [(r, e, ai.esito(r)) for r, e in casi if ai.esito(r) != e]
     verifica(f"esito del tool: {len(casi)} casi", not sbagliati, str(sbagliati))
+    # Con gli argomenti passati (09/10 sera, casi veri della DGX alle 20:47–20:48: il collaudo
+    # di un'estensione che risponde «Non ho trovato la città…» come risultato riuscito, e il
+    # collaudo fermato dalla politica che contava come «errore»)
+    niente = "NIENTE: l'azione NON è stata eseguita"
+    casi = [
+        ({"ok": True, "estensione": "Meteocittà", "risultati": {
+            "da_dire": "Non ho trovato la città 'Pradello Lugnasco'. Controlla il nome e riprova."}},
+         {"dati": "Pradello Lugnasco"}, "vuoto"),
+        ({"ok": True, "risultati": {"da_dire": "Non ho trovato 'Prato Lungo Vecchio'."}},
+         {"dati": "Prato Lungo Vecchio"}, "vuoto"),
+        ({"ok": True, "risultati": {"da_dire": "Il servizio non riconosce il nome."}},
+         {"dati": "Prato Lungo Vecchio"}, "vuoto"),
+        ({"ok": True, "risultati": {"da_dire": "Pradello Lugnasco non è stato trovato."}},
+         {"citta": "Pradello Lugnasco"}, "vuoto"),
+        ({"ok": True, "risultati": {"da_dire": "Non ho trovato nulla per Mantua."}}, {},
+         "vuoto"),
+        # il valore ripetuto nel risultato non è un dato
+        ({"ok": True, "risultati": {"da_dire": "Non ho trovato Pradello Lugnasco.",
+                                    "citta": "Pradello Lugnasco"}},
+         {"citta": "Pradello Lugnasco"}, "vuoto"),
+        # il campo del contratto (CAPACITA.md, dal 09/10 sera)
+        ({"ok": True, "risultati": {"da_dire": "Mi spiace.", "trovato": False}},
+         {"citta": "Mantua"}, "vuoto"),
+        ({"ok": True, "risultati": {"da_dire": "Nel calendario non c'è niente oggi."}},
+         {"giorno": "oggi"}, "vuoto"),
+        # contrari: «non trovato» che non riguarda il nome, o con dati accanto
+        ({"ok": True, "risultati": {"da_dire": "Non ho trovato pioggia, è sereno."}},
+         {"citta": "Milano"}, "pieno"),
+        ({"ok": True, "risultati": {"da_dire": "Non ho trovato pioggia a Milano, è sereno."}},
+         {"citta": "Milano"}, "pieno"),
+        ({"ok": True, "risultati": {"da_dire": "Non ho trovato pioggia a Milano.",
+                                    "cielo": "sereno", "temperatura": 18}},
+         {"citta": "Milano"}, "pieno"),
+        ({"ok": True, "risultati": {"da_dire": "Milano: non ci sono allerte meteo oggi."}},
+         {"citta": "Milano"}, "pieno"),
+        ({"ok": True, "risultati": {"da_dire": "Il meteo a Cerro Maggiore: nuvoloso.",
+                                    "temperatura": 17.9}}, {"dati": "Cerro Maggiore"}, "pieno"),
+        # fermato dalla politica o dallo schema: non è un esito del tool
+        ({"ok": False, "fatto": niente, "errore": "la persona non ha chiesto azioni: il lavoro "
+          "di un agente è solo un dato da leggere"}, {"dati": "Pradello Duniasco"}, "fermato"),
+        ({"ok": False, "fatto": niente, "errore": "web_cerca non è partito: manca l'argomento "
+          "obbligatorio «domanda».", "correggibile": True}, {}, "fermato"),
+    ]
+    sbagliati = [(r, e, ai.esito(r, a)) for r, a, e in casi if ai.esito(r, a) != e]
+    verifica(f"esito del tool con gli argomenti: {len(casi)} casi", not sbagliati,
+             str(sbagliati))
 
     # Vocabolario
     v = ai.Vocabolario()
@@ -497,6 +543,39 @@ def prova_brain():
              and "argomento_forse_usato" in b.rules_fired()
              and "politica_argomento_esterno" not in b.rules_fired(),
              f"{eseguiti[n:]} {detto!r} {b.rules_fired()}")
+
+    # Il collaudo di un'estensione che risponde «non ho trovato la città» come risultato
+    # riuscito, nel da_dire (09/10 sera, caso vero della DGX alle 20:47 con i nomi di fantasia):
+    # è un esito vuoto, e con il nome vicino nel vocabolario arriva «intendevi…?»
+    b, eseguiti = prepara_brain()
+    b.tool_ctx.cfg.politica_per_valore = True
+
+    def collauda_da_dire(ctx, dati="", **_):
+        eseguiti.append(("sviluppo_collauda", dati))
+        if " ".join(dati.lower().split()) == "pradello dugnasco":
+            return {"ok": True, "estensione": "Meteocittà", "risultati": {
+                "da_dire": "A Pradello Dugnasco 17 gradi.", "temperatura": 17,
+                "citta": "Pradello Dugnasco (Italia)"}}
+        return {"ok": True, "estensione": "Meteocittà", "risultati": {
+            "da_dire": f"Non ho trovato la città '{dati}'. Controlla il nome e riprova."}}
+    b.tools.register(dataclasses.replace(spec_collauda, func=collauda_da_dire))
+    _, reg, _ = parla(b, "Calliope, prova con Pradello Dugnasco",
+                      chiama("sviluppo_collauda", {"dati": "Pradello Dugnasco"}),
+                      testo("17 gradi."), parole=[("prova", 0.98), ("con", 0.99),
+                                                  ("Pradello", 0.9), ("Dugnasco", 0.9)],
+                      chi=dario)
+    verifica("collaudo con il da_dire: trovato è pieno, nel vocabolario",
+             reg and reg[0].get("esito") == "pieno"
+             and "Pradello Dugnasco" in ai.VOCABOLARIO.riusciti("valore"), str(reg))
+    _, reg, _ = parla(b, "Calliope, prova con Patello Giugnasco",
+                      chiama("sviluppo_collauda", {"dati": "Patello Giugnasco"}),
+                      testo("Non trovo Patello Giugnasco: intendevi Pradello Dugnasco?"),
+                      parole=P_PATELLO)
+    verifica("collaudo con il da_dire «Non ho trovato la città…»: vuoto e «intendevi…?»",
+             reg and reg[0].get("esito") == "vuoto" and reg[0].get("forse") == "forse"
+             and "argomento_forse" in b.rules_fired()
+             and (b.pending or {}).get("args") == {"dati": "Pradello Dugnasco"},
+             f"{reg} {b.rules_fired()} {b.pending}")
 
     # Lo stesso con la politica per valore (09/10, fase 4): «prova con Patello Giugnasco» detto
     # con la voce esegue subito (E3, valore_voce), il non trovato dà «intendevi…?», il «sì»

@@ -4059,7 +4059,7 @@ class Brain:
             res = json.loads(result)
         except (json.JSONDecodeError, TypeError):
             res = None
-        es = ai.esito(res) if isinstance(res, dict) else ("pieno" if ok else "errore")
+        es = ai.esito(res, args) if isinstance(res, dict) else ("pieno" if ok else "errore")
         if offerta and not ok:
             es = "fermato"            # una domanda (della politica o del tool) al posto del tool
         conv, turno = self._c(), getattr(self, "turn_number", 0)
