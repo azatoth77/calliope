@@ -23,6 +23,9 @@ REFUSAL = {
               "la riconosco.",
     "familiare": "Mi dispiace, questo può chiederlo solo chi amministra Calliope.",
 }
+# In compagnia (09/10, calliope/compagnia.py) un'azione vuole la voce riconosciuta nella frase
+COMPAGNIA_RIPETI = ("Ci sono altre voci qui vicino e non sono sicura di chi parla: ripetimelo "
+                    "con una frase un po' più lunga, cominciando con il mio nome.")
 # Una frase breve (meno di un secondo di voce) vale al più come familiare. Per chi amministra
 # con una frase che non basta, dal 04/10 la frase di sfida (conferme.chiedi_conferma), non più
 # «dimmelo con una frase un po' più lunga» del 03/10
@@ -210,6 +213,24 @@ class ToolRegistry:
         if breve:
             note_rule(ctx, "conferma_breve")
             level = "amministra"
+        # In compagnia (09/10, calliope/compagnia.py): altre voci vicino al satellite, e la voce
+        # di questa frase è solo nella zona grigia (o vale il profilo più protetto). Le azioni
+        # che vogliono un livello vogliono la voce riconosciuta nella frase: qui vale ospite
+        # (chi amministra riceve la frase di sfida, gli altri la richiesta di ripetere)
+        compagnia = (level not in (None, "ospite") and "ospite" not in spec.levels
+                     and getattr(sc, "compagnia", False)
+                     and getattr(sc, "identified_by", None) in ("breve", "conversazione"))
+        if compagnia:
+            note_rule(ctx, "compagnia_voce_nella_frase")
+            if (not ("amministra" in spec.levels and e_admin(ctx))
+                    and incerta_con_admin(ctx) is None):
+                return json.dumps({"ok": False, "fatto": NIENTE,
+                                   "motivo": "in compagnia la voce di questa frase non basta",
+                                   "per_il_resto": "per le altre richieste chiama i tool come "
+                                                   "sempre",
+                                   "conferma": COMPAGNIA_RIPETI,
+                                   "risposta_finale": COMPAGNIA_RIPETI}, ensure_ascii=False)
+            level = "ospite"
         if level is not None and level not in spec.levels:
             # Chi amministra, ma questa frase non basta (breve incerta, zona grigia): la frase
             # di sfida, mai «chiedi a chi amministra» (04/10)

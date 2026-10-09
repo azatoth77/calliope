@@ -7,7 +7,7 @@
 | Stadio | Libreria | Dove |
 |---|---|---|
 | Cattura + VAD | sounddevice + Silero VAD (PyTorch, oppure il suo ONNX con onnxruntime senza torch: Linux) | `calliope/audio.py` → `Listener` (`listen`, `watch_for_name`, `measure_echo`); `calliope/vad.py` → `carica_vad`, `SileroOnnx`, `SileroTorch`; pause e fine del turno (dal 07/10, solo misura) `calliope/pause.py` → `MisuraPause`, `OsservaRipresa`, `inizio_ripresa`, `riassunto` (sotto) |
-| Chi parla | CAM++ (3D-Speaker) in ONNX con onnxruntime | `calliope/speaker_id.py` → `SpeakerEmbedder`, `SpeakerRegistry`, `SpeakerContext`; `arruola.py` |
+| Chi parla | CAM++ (3D-Speaker) in ONNX con onnxruntime | `calliope/speaker_id.py` → `SpeakerEmbedder`, `SpeakerRegistry`, `SpeakerContext`; `arruola.py`; più voci vicino allo stesso satellite (dal 09/10, sotto) `calliope/compagnia.py` → `Compagnia`, `modo`, `riassunto`, e il giudizio «rivolta a Calliope» `calliope/rivolta.py` → `Giudice`, `etichetta` |
 | Speech-to-Text | faster-whisper nel processo, oppure un server con l'API OpenAI (sulla DGX whisper.cpp con CUDA, servizio `calliope-whisper`; vLLM scartato) con ripiego su faster-whisper su CPU (modello di riserva dal catalogo, `whisper_riserva`) | `calliope/stt.py` → `Transcriber`, `ServerTranscriber`, `make_transcriber`, `modello_whisper`; server in `setup/linux/motore/whisper.sh`; correzione delle frasi incerte (spenta) `calliope/stt_correzione.py` → `Correttore`, `accettabile`, `min_utile`; a capo di whisper-server tolti `stt.unisci_righe`; parole incerte al modello (B, spenta) `stt_correzione.parole_incerte`, `Brain.STT_INCERTE_MSG`; frase capita trattenuta (B2, spenta) `Brain.CapitoHold`, `Brain._applica_capito`, `STT_RISCRIVI_MSG` (confronto A/B/B2/C in fondo); parole incerte negli argomenti dei tool (dal 08/10, F0 e F1, sotto) `calliope/argomenti_incerti.py` → `Ascolto`, `Misura`, `Vocabolario`, `allinea`, `esito`, `suggerimento`, `riassunto`, con le probabilità per parola `Transcriber.parole` e `ServerTranscriber.parole` |
 | Wake word acustica | classificatore addestrato in formato openWakeWord (ONNX) | `calliope/wakeword.py` → `WakeWordDetector`, `load_wake_detector`; usato da `Listener.listen(wake, awake_until)`. Modelli e addestramento in `wakeword/` |
 | Text-to-Speech | Piper (voce `it_IT-serena-high`) | `calliope/tts.py` → `Speaker` (2 thread: sintesi e riproduzione, `_pcm`; la prima frase lunga a pezzi `primo_pezzo`, `tts_spezza_prima`, `tts_primo_pezzo_min`, e i thread di onnxruntime `carica_voce`, `tts_thread`, dal 07/10; velocità e costo della voce misurati all'avvio e con l'uso `calliope/taratura_voce.py` → `Taratura` (file voce_taratura.json), `tts_thread` «auto»; dal 07/10 sera Piper anche sulla GPU con onnxruntime-gpu, `tts_dispositivo` auto/cpu/cuda, scelta secondo la macchina e ripiego sulla CPU (`_su_gpu`, `prova_dispositivo`): [contesto-conversazione](contesto-conversazione.md)); inglesismi detti all'inglese `calliope/pronuncia.py` → `Pronuncia`, `LESSICO` (`tts_pronuncia`, `tts_pronuncia_extra`) |
@@ -581,3 +581,50 @@ Raccomandazione a fasi: F0 in ombra (registro `voce.compagnia`, regola `voci_com
 in ombra), poi niente frase breve né continuità in compagnia e la compagnia come «voce non sicura»
 per i due cancelli dei minori, poi il giudizio sulla finestra d'ascolto (regola `non_rivolta`).
 Impronte delle frasi solo in memoria per corsia, 5 minuti, mai su disco.
+
+## La modalità compagnia accesa (09/10, ramo `compagnia`)
+
+Decisione di Dario dopo la rilettura dei momenti veri (quelli segnati dal «profilo recente» avevano
+davvero altre persone): il § 6 del [rapporto](../ricerche/2026-10-09-piu-persone.md), con F0 e F1
+accesi e F2 in ombra. Di base il modello giudica se la frase è rivolta a Calliope; con una voce
+sconosciuta in compagnia serve il nome a ogni frase.
+
+- **Stato per corsia** (`calliope/compagnia.py`, `Ciclo.compagnia`): le impronte CAM++ delle frasi
+  dell'ultima `compagnia_finestra_s` (300 s) **solo in memoria**, per satellite, mai su disco né nel
+  registro. Tre prove: **profilo** (una frase di almeno 1 s di nessuno sotto 0,20 sul profilo di chi è
+  stato riconosciuto lì, in qualunque ordine), **gruppi** tra frasi di almeno 1,5 s (coseno 0,25,
+  gruppo valido con due frasi o una di 3 s; serve tra ospiti, due gruppi della stessa persona
+  riconosciuta valgono una voce), **due profili** (due persone registrate riconosciute). La frase
+  entra nella memoria prima della decisione su chi parla: la voce che rivela la compagnia vale già
+  per la sua frase. Nel registro `voce.compagnia = {voci, prova, distanza, sconosciute}` e la regola
+  `voci_compagnia`; in console una riga quando cambia. `calliope stato --turni` ha la sezione
+  «Compagnia» (frasi in compagnia per prova, con voci sconosciute, regole, giudizi).
+- Correzione rispetto al rapporto: nella prova del profilo contano solo le frasi **di nessuno**;
+  una frase riconosciuta come un'altra persona registrata è la prova «due profili», non una voce
+  sconosciuta (in auto Carlo e il minore stanno a 0,17 tra loro: altrimenti la famiglia
+  riconosciuta avrebbe chiesto il nome a ogni frase).
+- **Effetti con `compagnia_enabled: attiva`** (predefinito; «ombra» registra soltanto, «spenta»):
+  una frase sotto `speaker_min_voice_s` non eredita chi parlava, non vale per continuità né per la
+  conferma breve (regola `compagnia_senza_breve`: ospite, il minore resta solo sopra la soglia
+  piena); la zona grigia resta per la conversazione ma le azioni vogliono la voce nella frase
+  (`tools/registry.py`, regola `compagnia_voce_nella_frase`: per chi amministra la frase di sfida,
+  per gli altri «ripetimelo con una frase un po' più lunga, cominciando con il mio nome»); per i
+  minori la voce non è mai sicura nei due cancelli ([minori](minori.md)).
+- **Nome a ogni frase** con una voce sconosciuta (`compagnia_nome_obbligatorio`, regola
+  `compagnia_nome`): la finestra d'ascolto senza il nome si chiude in cima al giro e una frase senza
+  il nome presa nella finestra non va al modello e non si conserva (`Ciclo._compagnia_senza_nome`).
+  Passano sempre il nome (anche storpiato, tolleranza larga), la domanda dopo il nome da solo, lo
+  scritto e la registrazione della voce. Torna normale quando le frasi dell'altra voce escono dai 5
+  minuti. Segno sugli schermi della stanza e sul telefono ([schermi-telefono](schermi-telefono.md)).
+- **Contrari** (`prove/prova_compagnia.py`, impronte sintetiche): una voce sola, la voce variabile
+  della stessa persona (0,25–0,35, anche su un altro microfono), frasi sotto 1 s, finestra scaduta,
+  altro satellite, lo stesso ospite tre volte, spenta; la TV crea compagnia (giusto: non va
+  ascoltata). Famiglia tutta riconosciuta: compagnia sì (niente frase breve), nome obbligatorio no,
+  decide il giudizio. **Telefono in auto** con il minore: è compagnia vera («due profili»), costo
+  più sfide per chi amministra nella zona grigia; i margini stretti del canale restano quelli delle
+  «Voci di famiglia». La falsa compagnia della persona sola resta quella misurata (≤ 0,5 % delle
+  frasi sul profilo, ≤ 2 % delle sessioni coi gruppi); il punto debole è il telefono (p5 0,37).
+- **I due episodi veri** riscritti in numeri nella prova: l'08/10 la frase di 0,57 s dell'amico
+  resta ospite (niente guardiano del minore né avviso), la frase a 0,433 sul minore vale ancora il
+  minore ma con la voce non sicura; il 09/10 le frasi lunghe dell'ospite a 0,22–0,33 accendono la
+  compagnia dai gruppi alla seconda e le frasi senza nome nella finestra non si prendono.

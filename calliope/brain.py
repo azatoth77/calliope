@@ -1393,6 +1393,9 @@ class Brain:
         self.prefix_tokens = None
         # Chiamata con una frase d'attesa quando parte un tool lento (ToolSpec.announce)
         self.on_tool_start = None
+        # In compagnia, con il giudizio «rivolta a Calliope» acceso (09/10, calliope/rivolta.py):
+        # () → False se la frase non era rivolta a Calliope, e allora nessun tool si esegue
+        self.prima_del_tool = None
         # Le foto della conversazione (05/10, calliope/immagini.py): in memoria, si azzerano
         # con la conversazione
         self.album = Album(getattr(cfg, "immagini_max_conversazione", 8))
@@ -3357,6 +3360,17 @@ class Brain:
             self.history.append({"role": "assistant", "content": text})
         self.salva_conversazione()
 
+    def dimentica_ultimo_turno(self):
+        """Una frase non rivolta a Calliope (09/10, calliope/rivolta.py, giudizio acceso): via
+        dalla storia l'ultimo messaggio della persona e ciò che lo segue (la risposta taciuta,
+        le chiamate dei tool fermate)."""
+        h = self.history
+        for i in range(len(h) - 1, -1, -1):
+            if isinstance(h[i], dict) and h[i].get("role") == "user":
+                del h[i:]
+                break
+        self.salva_conversazione()
+
     def record_stop(self, user_text: str):
         """Dopo «Calliope, basta»: lo scambio entra nella storia come chiuso.
 
@@ -3572,6 +3586,11 @@ class Brain:
             from .schermi.moduli import oscura, oscura_tutto
             shown = oscura_tutto(shown)
         print(f"   [TOOL] {call['name']}({shown})", flush=True)
+        prima = getattr(self, "prima_del_tool", None)
+        if callable(prima) and not prima():
+            # La frase non era rivolta a Calliope (09/10): niente azione, la risposta si tace
+            return json.dumps({"ok": False, "fatto": "NIENTE: la frase non era rivolta a te",
+                               "risposta_finale": ""}, ensure_ascii=False)
         # La politica dei tool (calliope/politica.py) decide nell'esecutore con lo stato del
         # turno: frase, fonti non fidate nella conversazione, dati letti in questa risposta o
         # arrivati con la frase, proposta in sospeso

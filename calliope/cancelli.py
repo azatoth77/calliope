@@ -66,7 +66,7 @@ def argomento(categorie) -> str:
 
 
 def testo_avviso(nome: str, categorie, livello: str, motivo: str, voce_incerta: bool,
-                 categorie_prima=None) -> str:
+                 categorie_prima=None, compagnia: bool = False) -> str:
     """L'avviso ai tutori: livello, argomento (mai le parole del minore), cosa ha fatto
     Calliope. Con lo stesso minore, argomento e motivo il testo è uguale (l'avviso ripetuto
     entro `minori_avviso_ripetuto_s` si riconosce dal testo)."""
@@ -87,7 +87,11 @@ def testo_avviso(nome: str, categorie, livello: str, motivo: str, voce_incerta: 
         out = (f"Segnale confermato: {nome} {arg}. " + (come + " " if come else "")
                + "Gli ho detto di parlarne con un adulto e gli ho dato il numero del Telefono "
                  "Azzurro. Parlagli appena puoi, con calma.")
-    if voce_incerta:
+    if compagnia:
+        # In compagnia (09/10, calliope/compagnia.py): c'erano altre voci vicino al satellite
+        out += (" Attenzione: vicino al microfono parlavano anche altre persone e la voce non "
+                "era sicura, potrebbe non essere stato lui.")
+    elif voce_incerta:
         out += " Attenzione: la voce non era sicura, potrebbe non essere stato lui."
     return out
 
@@ -103,6 +107,7 @@ class Segnale:
     corsia: str | None
     ora: float                                   # monotonic
     aperto: bool = True
+    compagnia: bool = False                      # altre voci vicino al satellite (09/10)
     esito: str | None = None                     # "smentita" | "conferma" | "silenzio"
     timer: object = None
 
@@ -135,12 +140,13 @@ class Cancelli:
         keep = max(self._finestra(), self._attesa())
         self.segnali = [s for s in self.segnali if s.aperto or ora - s.ora <= keep]
 
-    def apri(self, prof, testo: str, categorie, voce_incerta: bool, corsia) -> Segnale:
+    def apri(self, prof, testo: str, categorie, voce_incerta: bool, corsia,
+             compagnia: bool = False) -> Segnale:
         """Cancello 1 superato con un segnale da verificare: resta aperto fino alla risposta o
         a `minori_pericolo_attesa_s` (poi `scaduto`)."""
         ora = self.orologio()
         s = Segnale(prof.id, prof.name, str(testo or ""), tuple(categorie or ()),
-                    bool(voce_incerta), corsia, ora)
+                    bool(voce_incerta), corsia, ora, compagnia=bool(compagnia))
         with self._lock:
             self._pulisci(ora)
             self.segnali.append(s)
@@ -202,17 +208,19 @@ class Cancelli:
                                "voce": {"nome": s.nome},
                                "pericolo": {"livello": DA_VERIFICARE, "cancello": 2,
                                             "esito": "silenzio", "avviso": avvisa,
-                                            "voce_incerta": s.voce_incerta}})
+                                            "voce_incerta": s.voce_incerta,
+                                            **({"compagnia": True} if s.compagnia
+                                               else {})}})
             except Exception:  # noqa: BLE001 — il registro non ferma l'avviso
                 pass
         if not avvisa:
             return False
         return self.avvisa(s.persona_id, s.categorie, DA_VERIFICARE, "silenzio",
-                           s.voce_incerta, urgente=False) is not None
+                           s.voce_incerta, urgente=False, compagnia=s.compagnia) is not None
 
     def avvisa(self, minore, categorie, livello: str, motivo: str,
                voce_incerta: bool, urgente: bool = True, categorie_prima=None,
-               registry=None) -> int | None:
+               registry=None, compagnia: bool = False) -> int | None:
         """L'avviso ai tutori del minore (il profilo o il suo id; tipo «sicurezza»). Il numero
         di tutori, -1 se è lo stesso avviso ripetuto entro `minori_avviso_ripetuto_s`, None se
         non è partito."""
@@ -229,7 +237,7 @@ class Cancelli:
         try:
             return av.manda(prof, "sicurezza",
                             testo_avviso(prof.name, categorie, livello, motivo, voce_incerta,
-                                         categorie_prima),
+                                         categorie_prima, compagnia),
                             urgente=urgente, registry=reg,
                             non_ripetere_s=float(getattr(self.cfg, "minori_avviso_ripetuto_s",
                                                          0) or 0))
