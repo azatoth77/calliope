@@ -617,3 +617,12 @@ probabilità, vocabolario e misure in [stt-tts](stt-tts.md).
   con «?»), con gli stessi argomenti: nessuna domanda in più (`politica_conferma_unica` nella prova
   del collaudo). Se il modello richiama con gli argomenti in un'altra forma (`argomenti` invece di
   `dati`) la politica chiede come sempre: non si allenta la provenienza per F1.
+
+## Il «no» alla proposta e il «sì» che passa ad altro (09/10, ramo `intento-no`)
+
+Regole nuove sul testo (principio 10), descritte con il caso vero e le misure in
+[sicurezza-politica](sicurezza-politica.md): `proposta_rifiutata` (un «no» in testa chiude la
+proposta e la sfida), `rifiuto_nei_dati` (dati del turno `RIFIUTO_MSG` finché la conversazione
+resta aperta), `politica_proposta_rifiutata` e `rifiuto_superato` (la politica non richiama il
+tool rifiutato per lo stesso bersaglio finché la persona non lo chiede con le parole del tool),
+`consenso_avversativo` («Sì, però ascolta…» non è un consenso). Contrari in `prove/prova_testo.py`.

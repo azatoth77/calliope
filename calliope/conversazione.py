@@ -70,6 +70,9 @@ class Conversazione:
         # provenienza «fidato» di un valore, per esempio il nome di un file trovato)
         self.intenzioni: list = []
         self.fidati: list = []
+        # I «no» della persona alle proposte (09/10, calliope/politica.py `rifiuto`): il tool e
+        # il bersaglio rifiutati non si richiamano finché lei non li chiede di nuovo
+        self.rifiutate: list = []
         # Le foto della conversazione (calliope/immagini.py, Album): solo in memoria, mai su
         # disco (esporta non le salva); si svuotano con la conversazione. Lo crea Brain
         self.album = None

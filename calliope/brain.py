@@ -632,6 +632,16 @@ def proposta_altrui(pending: dict | None, chi) -> dict | None:
             "cosa": pending.get("cosa") or "l'azione proposta"}
 
 
+# Il «no» a una proposta (09/10, caso vero della DGX dell'08/10 sera: dopo «No, non mi interessa
+# che lo registri» il modello ha richiamato registra_utente per Marco due volte, fino alla frase
+# di sfida). Dati del turno finché la conversazione resta aperta: la politica lo fa rispettare
+# (`politica_proposta_rifiutata`), questo evita che il modello ci provi. Regola `rifiuto_nei_dati`
+RIFIUTO_MSG = ("Dati del turno: in questa conversazione chi parla ha detto di no quando le hai "
+               "proposto che {cosa}. Non riproporlo, non chiederglielo di nuovo e non chiamare "
+               "{tool} per questo: rispondi a quello che dice adesso. Solo se te lo richiede lei, "
+               "con parole sue, lo fai.")
+
+
 # Riferimento dei pronomi (01/10, prova a voce): dopo «chiudi taverna» → «Ho spento
 # Taverna», «Scendila» (accendila o spegnila) portava a «Ho bisogno di sapere a quale
 # dispositivo…», e «accendi l'ultima stanza che abbiamo spento» a «dimmi il nome della
@@ -1956,6 +1966,8 @@ class Brain:
         # Turni finiti nell'archivio, compressione pronta, ripresa (05/10)
         self._inizio_conversazione()
         pending = self._take_pending() if self._net("azione_in_sospeso") else None
+        # Un «no» alla proposta la chiude, e la politica non la lascia riproporre (09/10)
+        pending = self._rifiuto_proposta(user_text, pending)
         self._chiudi_intenzioni(user_text)
         # Numero della risposta: un'installazione proposta in questa risposta si può avviare
         # solo nella prossima (calliope/installa/servizio.py)
@@ -1983,6 +1995,9 @@ class Brain:
             # Un «ok» solo in coda a un pezzo lungo non vale come consenso (08/10)
             if politica.consenso_in_coda(user_text or ""):
                 self._rule("consenso_in_coda")
+            # «Sì, però ascolta…»: il «sì» passa ad altro, non è un consenso (09/10)
+            if politica.consenso_avversativo(user_text or ""):
+                self._rule("consenso_avversativo")
         self._letto_ora = ""      # un tool non fidato ha già risposto in questa risposta
         self._politica_risposta = {}  # stato della politica per questa risposta (Turno.risposta)
         self.last_turn_at = time.monotonic()
@@ -2018,6 +2033,68 @@ class Brain:
         if self._offer and said.endswith("?") and self._net("azione_in_sospeso"):
             self.set_pending(self._offer)
         self._scalda_se_cambiato(firma)
+
+    def _rifiuto_proposta(self, user_text: str | None, pending: str | None) -> str | None:
+        """Un «no» esplicito alla proposta in sospeso, o alla frase di sfida in corso («No, non
+        mi interessa che lo registri, però almeno salutalo.»: calliope/politica.py `rifiuto`):
+        la proposta si chiude (niente più «azione in sospeso» nei turni dopo, la sfida si
+        toglie), e il tool con quel bersaglio va in `Conversazione.rifiutate`: i dati del turno
+        lo dicono al modello (RIFIUTO_MSG) e la politica non lo esegue finché la persona non lo
+        chiede di nuovo (`politica_proposta_rifiutata`). Caso vero della DGX dell'08/10 sera:
+        senza, la proposta restava valida e «Sì, però ascolta…» la faceva ripartire. Regola
+        `proposta_rifiutata`. Restituisce il messaggio dell'azione in sospeso da usare."""
+        if not user_text:
+            return pending
+        p = getattr(self, "pending", None)
+        sc = getattr(self.tool_ctx, "speaker_ctx", None)
+        s = getattr(sc, "sfida", None)
+        tool = getattr(self, "turn_pending_tool", None)
+        if pending and isinstance(p, dict) and tool and p.get("tool") == tool:
+            if not politica.domanda_si_no(p.get("domanda")):
+                return pending               # «Quando è nato?»: «No, è maggiorenne» risponde
+            args = p.get("args")
+        elif s is not None and not s.scaduta() and getattr(s, "tool", None):
+            tool, args = s.tool, s.argomenti
+        else:
+            return pending
+        spec = self.tools.get(tool) if hasattr(self.tools, "get") else None
+        cl = politica.classe_di(tool, spec)
+        if not politica.rifiuto(user_text, politica.verbi_di(cl, args)):
+            return pending
+        if pending:
+            self.pending = None
+            self.turn_pending_tool = None
+            if self.tool_ctx is not None:
+                try:
+                    self.tool_ctx.tool_in_sospeso = None
+                except AttributeError:
+                    pass
+        if s is not None and getattr(s, "tool", None) == tool:
+            sc.sfida = None
+        try:
+            chiave = valore.chiave_intento(tool, args or {}, None, spec)
+        except Exception:  # noqa: BLE001
+            chiave = dict(args or {})
+        rif = self._rifiuti()
+        rif[:] = [r for r in rif if not (r.get("tool") == tool and r.get("chiave") == chiave)]
+        rif.append({"tool": tool, "chiave": chiave, "cosa": politica._cosa(cl, args or {})})
+        del rif[:-5]
+        self._rule("proposta_rifiutata")
+        return None
+
+    def _rifiuti(self) -> list:
+        conv = self._c()
+        if not isinstance(getattr(conv, "rifiutate", None), list):
+            conv.rifiutate = []
+        return conv.rifiutate
+
+    def _rifiuti_msg(self) -> str | None:
+        """I dati del turno sui «no» della conversazione (RIFIUTO_MSG), o None."""
+        rif = getattr(self._c(), "rifiutate", None)
+        if not rif:
+            return None
+        return " ".join(RIFIUTO_MSG.format(cosa=r.get("cosa") or "lo facessi",
+                                           tool=r.get("tool")) for r in rif)
 
     def _chiudi_intenzioni(self, user_text: str | None):
         """Le intenzioni confermate e non ancora riuscite (calliope/valore.py, fase 2) si
@@ -2293,6 +2370,8 @@ class Brain:
             "satellite": getattr(self, "satellite", None),
             "turno": getattr(self, "turn_number", 0),
             "scade": time.monotonic() + secondi_validi(self.cfg),
+            # La domanda è della politica (09/10): la chiamata vale solo con un consenso
+            "politica": offer.get("politica"),
             # Gli argomenti proposti, per la politica dei tool (05/10): sul «sì» con gli
             # stessi valori la persona li ha già sentiti (calliope/politica.py)
             "args": dict(offer.get("argomenti")) if isinstance(offer.get("argomenti"),
@@ -2765,6 +2844,11 @@ class Brain:
         # dei ricordi (o senza), il «sì» dopo «La apro?» veniva preso per un ringraziamento
         if pending:
             memory = memory + [{"role": "system", "content": pending}]
+        # I «no» della persona alle proposte di questa conversazione (09/10, RIFIUTO_MSG)
+        rif_msg = self._rifiuti_msg() if user_text else None
+        if rif_msg:
+            memory = memory + [{"role": "system", "content": rif_msg}]
+            self._rule("rifiuto_nei_dati")
         # Il «sì» di chi non ha la proposta (07/10, SOSPESO_ALTRUI_MSG)
         if getattr(self, "_altrui_msg", None):
             memory = memory + [{"role": "system", "content": self._altrui_msg}]
@@ -3899,7 +3983,11 @@ class Brain:
             # conversazione), i risultati dei tool fidati
             persona=self._speaker_key(),
             intenzioni=self._intenzioni(),
-            fidati=list(getattr(self._c(), "fidati", None) or ()))
+            fidati=list(getattr(self._c(), "fidati", None) or ()),
+            # La proposta è una domanda della politica (09/10): vale solo con un consenso
+            sospeso_politica=bool(p.get("politica")) and p.get("tool") == tool,
+            # I «no» della conversazione (09/10): la lista viva, la politica la aggiorna
+            rifiuti=self._rifiuti())
 
     def _intenzioni(self) -> list:
         conv = self._c()

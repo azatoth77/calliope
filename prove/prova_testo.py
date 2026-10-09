@@ -556,5 +556,44 @@ for testo, atteso in [
     verifica(f"conversazione nuova «{testo}»", nuova_conversazione(testo, "Calliope"), atteso)
 
 
+# Il «no» alla proposta (09/10, politica.rifiuto, regola `proposta_rifiutata`; caso vero della
+# DGX dell'08/10 sera): forma chiusa in testa; contrari con il consenso, la correzione o le
+# parole del tool dopo il «no»
+from calliope import politica as _pol  # noqa: E402
+_V = _pol.verbi_di(_pol.classe_di("registra_utente"), {"nome": "Ettore"})
+for testo, atteso in [
+        ("No.", True), ("No, non mi interessa che lo registri, però almeno salutalo.", True),
+        ("No, non mi interessa che la registi, però almeno salutalo.", True),
+        ("No, non voglio farlo.", True), ("Non mi interessa.", True), ("Lascia stare.", True),
+        ("Calliope, no grazie.", True), ("No no, lascia perdere, andiamo a berci una birra.", True),
+        ("Non voglio che lo registri.", True), ("No non lo registrare.", True),
+        ("Per ora no, magari domani.", True),
+        ("No, aspetta, registralo.", False), ("No no, va bene, fallo.", False),
+        ("No no va bene fallo", False), ("No, registralo domani.", False),
+        ("No registralo domani", False), ("No, ho detto Ettore, non Ettora.", False),
+        ("Sì, registralo.", False), ("Noi siamo qui.", False), ("Non so.", False),
+        ("Nonna Ilaria è qui.", False), ("Non ho capito.", False),
+        ("No, anzi sì.", False)]:
+    verifica(f"rifiuto «{testo}»", _pol.rifiuto(testo, _V), atteso)
+for domanda, atteso in [
+        ("Non me l'hai chiesto: vuoi che registri la voce di Ettore?", True), ("Lo apro?", True),
+        ("Procedo?", True), ("Quando è nato o nata Ettore?", False), ("Quale apro?", False),
+        ("Come si chiama?", False)]:
+    verifica(f"domanda sì/no «{domanda}»", _pol.domanda_si_no(domanda), atteso)
+
+# Il «sì» che passa ad altro (09/10, politica.consenso_avversativo, regola
+# `consenso_avversativo`): non è un consenso; contrari con il consenso vero
+for testo, atteso in [
+        ("Sì, però ascolta, qua noi stiamo andando a berci una birra.", False),
+        ("Sì ma ascolta, è tardi.", False), ("Sì, comunque domani piove.", False),
+        ("Sì, senti, che ore sono?", False),
+        ("Sì, non preoccuparti, adesso gli parlerò.", False),      # (la negazione, già prima)
+        ("Sì, registralo pure.", True), ("Sì, va bene.", True), ("Sì.", True),
+        ("Ma sì dai, perché no?", True), ("Sì, però fallo dopo.", True),
+        ("Sì, è maggiorenne.", True), ("Sì ma solo per oggi.", True),
+        ("Va bene, però ascolta: fallo.", True)]:
+    verifica(f"consenso «{testo}»", _pol.consenso(testo), atteso)
+
+
 print(f"\n{errori} errori" if errori else "\nTutto a posto.")
 sys.exit(1 if errori else 0)

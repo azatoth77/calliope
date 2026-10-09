@@ -868,3 +868,64 @@ della persona ma con meno permessi di un collaudo.
   noto, nomi pubblici di casa anche «concessi», quote fino al minuto, injection dalle risposte,
   risposte enormi, lente e bombe, ricollaudo che legge, scrive, invia, mostra e chiama host della
   sola candidata) e i contrari: **0 passaggi su 59**, ~3 s. Da rifare sulla DGX con `--docker`.
+
+## Il «no» alla proposta e il «sì» che passa ad altro (09/10, ramo `intento-no`)
+
+Caso vero della DGX dell'08/10 sera (22:22–22:25, registro dei turni, qui con nomi di
+fantasia). «Un mio amico qua con me si chiama Ettore.» → `registra_utente` → «Non me l'hai
+chiesto: vuoi che registri la voce di Ettore?» (`politica_azione_non_chiesta`). «No, non mi
+interessa che lo registri, però almeno salutalo.» → il saluto, ma la proposta restava valida
+(`azione_in_sospeso` nei tre turni dopo: dal 04/10 vale più turni della stessa persona e non si
+consumava con un «no»). «Sì, però ascolta, qua noi stiamo andando a berci una birra.» → di nuovo
+`registra_utente`, preso per il «sì» alla domanda (`politica_conferma_unica`, poi la domanda
+della data di nascita); più tardi «Sì, non preoccuparti, adesso gli parlerò.» → `registra_utente`
+→ **frase di sfida**; solo «No, non voglio farlo.» → `intento_chiuso`. Tre correzioni:
+
+1. **Il «no» chiude la proposta** (`politica.rifiuto`, `Brain._rifiuto_proposta`, regola
+   `proposta_rifiutata`). Forma chiusa **in testa** alla frase: il primo pezzo comincia con «no»
+   (anche «no no», «no grazie», «ma no»), «non mi interessa», «non voglio», «non serve», «non
+   importa», «lascia stare/perdere», «annulla», «niente», «per ora no», «meglio di no»; il resto
+   può parlare d'altro («…, però almeno salutalo»). Non è un rifiuto se dopo c'è un consenso
+   («no no, va bene, fallo»), una correzione («no, aspetta, registralo», «no, ho detto Ettore»,
+   «anzi», «cioè») o le parole del tool non negate («no, registralo domani», anche senza la
+   virgola di Whisper; «non voglio che lo registri» resta un rifiuto). Vale solo come risposta a
+   una proposta sì/no in sospeso della stessa persona (`domanda_si_no`: non a «Quando è nato?» o
+   «Quale apro?», dove «No, è maggiorenne» risponde) o a una frase di sfida in corso, che si
+   toglie. La proposta si cancella e il tool con il suo bersaglio (`valore.chiave_intento`: il
+   nome per `registra_utente`) va in `Conversazione.rifiutate` (solo in memoria, al più 5, si
+   svuota con la conversazione).
+2. **Il rifiuto vale finché la persona non richiede**: nei dati del turno `RIFIUTO_MSG` («chi
+   parla ha detto di no quando le hai proposto che registri la voce di Ettore: non riproporlo…»,
+   regola `rifiuto_nei_dati`) e nella politica, prima di ogni altra decisione,
+   `politica_proposta_rifiutata`: la chiamata dello stesso tool per lo stesso bersaglio non si
+   esegue e il modello riceve «la persona ha già detto di no…: non richiamarlo e non
+   riproporlo». Passano le letture e le chiamate innocue dello stesso tool, e un bersaglio
+   diverso (che segue la politica di sempre). La richiesta nuova con le parole del tool
+   (`Classe.verbi`, senza negazioni: «Adesso registra la voce di Ettore») toglie il rifiuto
+   (`rifiuto_superato`) e la chiamata segue la politica di sempre (per `registra_utente` la
+   sfida resta). Un «sì» non basta: non c'è più una proposta a cui dirlo.
+3. **Il «sì» che passa ad altro non è un consenso** (`politica.consenso_avversativo`, regola
+   `consenso_avversativo`): un «sì» seguito subito da «però», «ascolta», «senti», «aspetta»,
+   «non preoccuparti», «comunque», «intanto» (anche dopo «ma») vale solo se dopo c'è un'altra
+   parola di consenso («Sì, però fallo dopo»). `consenso()` lo esclude, quindi vale per la
+   proposta con dati di mezzo, per il «sì» di un'altra persona e per la domanda non ripetuta.
+   E con la conversazione **pulita**, alla domanda della politica («Non me l'hai chiesto: vuoi
+   che…?», ora marcata `politica` nella proposta e `Turno.sospeso_politica`) il tool proposto
+   vale come risposta solo con un consenso, la sfida superata o le parole del tool: prima
+   bastava che il modello lo richiamasse (così «Sì, non preoccuparti, adesso gli parlerò» era
+   arrivato alla sfida). Senza consenso la domanda non si ripete (`politica_domanda_non_ripetuta`:
+   il modello chiede con parole sue). Le domande del tool che chiedono un dato (la data di
+   nascita) restano al modello come prima.
+
+Principio 10: vincoli di permesso su un'azione già scelta dal modello, forme chiuse in testa,
+effetto reversibile (una domanda in più, o la persona richiede con parole sue); i contrari sono
+in `prove/prova_testo.py` (23 frasi del rifiuto, 6 domande, 13 consensi) e in
+`prove/prova_intento_no.py` (Brain vero e modello finto che richiama il tool: la sequenza vera,
+la sfida, i contrari). Misura con gemma4 e4b in locale (`prova_intento_no_ollama.py`, 5 giri,
+il primo turno dal copione come il 26B: il 4B sceglie di solito `rinomina_interlocutore`): com'era
+l'08/10 il 4B, con la proposta ancora in sospeso, rispondeva a «Sì, però ascolta…» «Perfetto,
+allora registro la voce di Ettore.» senza tool 4 volte su 5; con il «no» che chiude 0 su 5, con o
+senza i dati del turno; nessuna chiamata di `registra_utente` dopo il «no» in nessun modo (il
+26B della DGX la richiamava: lì la ferma la politica). Contrari col modello 10/10 («Sì,
+registralo pure» dopo la proposta; la richiesta nuova dopo il «no»). Da riprovare col 26B sulla
+DGX con la stessa sequenza a voce.
