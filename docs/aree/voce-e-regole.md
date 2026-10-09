@@ -736,7 +736,8 @@ modello vede solo ciò che ha detto e crede di non avere altro.
 Correzione generale, non per il singolo caso (decide il modello, il sistema gli dà il contesto):
 - **Dati del turno `RICERCA_MSG`** (`brain.py`, rete `ricerca_recente`, categoria «modello»):
   se in uno dei due turni prima c'è una ricerca (`web_cerca` o `biblioteca_cerca`), il modello
-  riceve tool e domanda dell'ultima ricerca e l'indicazione: per approfondire, dire di più o
+  riceve tool e domanda dell'ultima ricerca (*storico: dal 09/10 sera le ricerche dei sei turni
+  prima con la loro fonte, sezione seguente*) e l'indicazione: per approfondire, dire di più o
   rispondere su una delle cose riferite, chiamare di nuovo quel tool con una domanda mirata, con
   i nomi detti; se la persona parla d'altro, la riga non conta. Non guarda la frase: vale anche
   per «dimmi di più sul festival» o «e le condizioni del re?», che `DEEPEN_WORDS` non prende.
@@ -760,6 +761,54 @@ risultato vecchio); il «dopo» dice «adesso non riesco a raggiungere internet�
 1,7–2,0 s in tutti e due. Limite visto: senza rete (`online` falso) `web_cerca` esce dall'elenco
 ma il modello lo chiama lo stesso dalla storia e il registro lo esegue (qui fallisce con la frase
 pronta: onesto, ma il tool non dovrebbe partire).
+
+## Le ricerche della conversazione con la loro fonte (09/10 sera, ramo `sera-ricerca`)
+
+Caso vero della DGX (09/10, 21:04–21:06, 26B): notizie della tromba marina nel Trapanese con
+`web_cerca` tipo notizie, poi «Metti un timer di 5 minuti», «Che ore sono?», «Dimmi qualcosa
+sulla torre di Pisa» (`biblioteca_cerca`), poi «Torniamo alla notizia del trapanese di prima.
+Dimmi di più.» → `biblioteca_cerca("tromba marina Marsala danni feriti")` e una risposta vaga
+sulla tromba marina in generale. `RICERCA_MSG` diceva solo l'ultima ricerca (la biblioteca), e
+solo nei due turni prima.
+
+- **`RICERCA_MSG` con l'elenco** (`brain.py`, `Brain.ricerche_conversazione`): le ricerche
+  (`web_cerca`, `biblioteca_cerca`) degli ultimi `RICERCA_TURNI_ELENCO` (6) turni, dalla più
+  recente, una per argomento e fonte, al più `RICERCA_ELENCO_MAX` (4), compatte: «in questa
+  conversazione hai cercato (dalla più recente) «torre di Pisa» con biblioteca_cerca; «tromba
+  marina Trapanese» con web_cerca tipo notizie; «ultime notizie» con web_cerca tipo notizie»; se
+  chi parla torna a una di queste, richiamare il tool di quell'argomento (le notizie con tipo
+  notizie). Una fonte che adesso non c'è è segnata «(adesso non disponibile)». Con tutti e due i
+  tool c'è anche il criterio per una ricerca nuova (`RICERCA_CRITERIO`): biblioteca per i fatti da
+  enciclopedia, internet per guide pratiche, consigli, prodotti e cose recenti. Restano dati del
+  turno: decide il modello (principio 10), «se parla d'altro questa riga non conta».
+- **La spinta resta stretta**: `spinta_ricerca` («non ho altre informazioni» senza cercare) e
+  `Brain.ricerca_recente` (il ciclo che non rifà la biblioteca per «approfondisci») valgono solo
+  con una ricerca nei due turni prima (regola `ricerca_recente`); dal terzo al sesto turno solo
+  l'elenco (regola `ricerca_elenco`). Con l'ultima ricerca dei due turni prima non disponibile
+  resta `RICERCA_SPENTA_MSG`.
+- *Storico (09/10 sera):* nella sezione «Approfondire dopo una ricerca» qui sopra, «tool e domanda
+  dell'ultima ricerca» nei due turni prima: ora l'elenco dei sei turni.
+- **Il criterio anche nei tool**: la descrizione di `web_cerca` nomina guide pratiche, consigli e
+  prodotti; quella di `biblioteca_cerca` dice che non serve per quelli; il risultato della
+  biblioteca con passaggi fuori tema, con la ricerca su internet disponibile, aggiunge «se la
+  domanda è pratica o su cose recenti e i passaggi non rispondono, cerca con web_cerca» (caso
+  vero delle 18:47: tre `biblioteca_cerca` per la birra fatta in casa, passaggi su un film di
+  Chaplin). Rete `ricerca_recente` (descrizione aggiornata).
+- **Misura** (`prove/misura_ricerche_fonte.py 3`, gemma4 e4b sul portatile, SearXNG e biblioteca
+  finti; «prima» col codice di main): «torniamo alla notizia del trapanese» → `web_cerca` sulla
+  tromba marina 3/3 prima e 3/3 dopo (il 4B ci arrivava già: da riguardare col 26B sulla DGX);
+  la birra fatta in casa → `web_cerca` **0/3 prima, 3/3 dopo**. Prima frase mediana del seguito
+  2,9 s prima, 2,0 s dopo (rumore: stesse chiamate).
+- Prove a secco in `prova_web` (6b aggiornata, 6c nuova: l'elenco con le fonti, l'ordine, i
+  turni, il criterio solo con tutti e due i tool, la stessa ricerca una volta sola, le
+  precedenze qui sotto).
+- **Precedenze fra i dati del turno** (dall'analisi delle regole del 09/10, § 3.10, coppie
+  `RICERCA_MSG` contro `ARCHIVIO_NOTA` ed `EST_NOMINATA_MSG` contro `RICERCA_MSG`): con le
+  ricerche nei dati del turno, dopo la ricerca automatica nell'archivio (`spinta_archivio`) la nota
+  è `ARCHIVIO_NOTA_RICERCHE`: risultati dell'archivio, se non c'entrano e la domanda riguarda una
+  delle ricerche di prima si richiama quel tool, «non lo so» solo dopo; senza ricerche resta
+  `ARCHIVIO_NOTA`. Con un'estensione nominata nella frase la riga delle ricerche finisce con
+  `RICERCA_EST` («vale la riga dell'estensione, non queste ricerche»). Un solo ordine, scritto.
 
 ## La città della casa e le estensioni nel prompt (09/10, ramo `citta-casa-notizie`)
 

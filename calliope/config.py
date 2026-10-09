@@ -1535,6 +1535,17 @@ class Config:
         "general:meteo Roma domani", "news:notizie Italia oggi", "news:Serie A risultati"])
     web_searxng_min_risultati: int = 3
     web_searxng_soglia: float = 0.6
+    # Motori in pausa (09/10 sera): SearXNG aspetta fino al suo timeout i motori che non
+    # rispondono (Brave «too many requests», Wikidata in timeout: 3 s su «meteo Roma domani»).
+    # Un motore che non risponde in web_searxng_pausa_controlli controlli di fila (mentre altri
+    # danno risultati nella stessa prova) va in pausa: le impostazioni si rifanno senza di lui e
+    # SearXNG si riavvia (pochi secondi, solo con Calliope ferma o a richiesta). Dopo
+    # web_searxng_pausa_giorni giorni si riprova; se non risponde ancora, di nuovo in pausa.
+    # Con meno di web_searxng_min_motori motori che danno risultati e qualcuno in pausa la
+    # ricerca è «degradata». 0 controlli = mai in pausa
+    web_searxng_pausa_controlli: int = 2
+    web_searxng_pausa_giorni: float = 3.0
+    web_searxng_min_motori: int = 3
     # Lo stato del controllo e la storia delle decisioni (nella cartella dei dati), e il
     # registro delle immagini da cui si leggono tag e digest
     web_searxng_stato: str = "motore/searxng.json"
@@ -2316,9 +2327,10 @@ RETI: dict[str, Rete] = {
         "«ho avuto un piccolo intoppo, riprovo subito» senza riprovare dopo web_cerca senza "
         "domanda (09/10, DGX, quattro volte)"),
     "ricerca_recente": Rete(
-        "dopo una ricerca (web_cerca, biblioteca_cerca) nei due turni prima: l'ultima ricerca "
-        "nei dati del turno (RICERCA_MSG) e la spinta su «non ho altre informazioni» senza "
-        "cercare (RICERCA_NUDGE)", MODELLO,
+        "dopo le ricerche (web_cerca, biblioteca_cerca) dei sei turni prima: le ricerche con la "
+        "loro fonte nei dati del turno (RICERCA_MSG, dal 09/10 sera) e, con una ricerca nei due "
+        "turni prima, la spinta su «non ho altre informazioni» senza cercare (RICERCA_NUDGE)",
+        MODELLO,
         "«Approfondiamo le condizioni del re» dopo le notizie: «non ho informazioni più "
         "dettagliate» senza cercare, col 26B (09/10, DGX)"),
     # ── sicurezza: sempre accese, per ogni modello ──
@@ -2573,7 +2585,8 @@ SEZIONI: dict[str, list[str]] = {
             "web_agente_pagine", "web_reti_vietate", "web_nomi_casa", "web_searxng_aggiorna",
             "web_searxng_giorni", "web_searxng_controllo_ore", "web_searxng_inattivita_min",
             "web_searxng_prove", "web_searxng_min_risultati", "web_searxng_soglia",
-            "web_searxng_stato", "web_searxng_registro"],
+            "web_searxng_pausa_controlli", "web_searxng_pausa_giorni",
+            "web_searxng_min_motori", "web_searxng_stato", "web_searxng_registro"],
     "segreti": ["segreti_file"],
     "registro": ["turn_log_dir", "turn_log_days", "latenza_avviso_s", "attrito_avviso",
                  "debug_audio_dir"],
@@ -2767,7 +2780,8 @@ LIMITI: dict[str, tuple[float, float]] = {
     "schermi_scarica_s": (10.0, 3600.0),
     "web_searxng_giorni": (0.0, 365.0), "web_searxng_controllo_ore": (1.0, 720.0),
     "web_searxng_inattivita_min": (0.0, 1440.0), "web_searxng_min_risultati": (1, 50),
-    "web_searxng_soglia": (0.0, 1.0),
+    "web_searxng_soglia": (0.0, 1.0), "web_searxng_pausa_controlli": (0, 30),
+    "web_searxng_pausa_giorni": (0.0, 365.0), "web_searxng_min_motori": (0, 50),
     "schermi_cronologia": (1, 200), "schermi_cronologia_giorni": (0.01, 365.0),
     "schermi_cronologia_max": (1, 1000), "schermi_cronologia_mb": (0.1, 1000.0),
     "schermi_chat_turni": (0, 2000),

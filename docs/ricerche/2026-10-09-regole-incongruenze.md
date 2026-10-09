@@ -469,7 +469,11 @@ sempre, può essere quella sbagliata (§ 3.7).
   estensione nominata > ricerca recente quando il nome dell'estensione è nella frase.
 - (b) Un solo messaggio «ricerca» che decide fra internet, biblioteca e archivio (il ramo
   `sera-ricerca` sta già unendo l'elenco delle ricerche: lì si toglie anche `ARCHIVIO_NOTA`
-  come messaggio separato).
+  come messaggio separato). *Fatto il 09/10 sera (ramo `sera-ricerca`):* `RICERCA_MSG` elenca le
+  ricerche con la loro fonte; con le ricerche nei dati del turno la nota dell'archivio è
+  `ARCHIVIO_NOTA_RICERCHE` (prima le ricerche di prima, poi «non lo so»), e con un'estensione
+  nominata la riga delle ricerche le cede il posto (`RICERCA_EST`): le prime due coppie della
+  tabella sono risolte, le altre restano.
 - (c) Un tetto ai dati del turno, con l'ordine di (a), e la lunghezza nel registro (campo
   numerico, niente testo).
 

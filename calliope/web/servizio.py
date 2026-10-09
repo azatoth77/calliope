@@ -160,6 +160,52 @@ def tema_notizie(domanda: str) -> str:
     return t if len(re.sub(r"\W", "", t)) >= 2 else "notizie"
 
 
+# Il tema dalla frase di chi parla (09/10 sera, caso vero della DGX alle 21:04: «Le notizie di
+# sport» → web_cerca({'tipo': 'notizie'}) senza domanda → notizie generali e «le notizie
+# sportive non sono arrivate»). Il modello ha già scelto le notizie e ha lasciato vuoto il tema:
+# lo si prende dalle parole che seguono «notizie» nella frase, fino alla fine dell'enunciato
+# (principio 10: correzione della forma di una scelta del modello, e il tema c'è solo se è
+# nella frase). Si tolgono le preposizioni ai bordi (come tema_notizie, mai gli articoli dei
+# nomi), «ci sono», «c'è» in testa, il tempo («di oggi», «del giorno», «recenti»), «per favore».
+# Se non resta niente («le ultime notizie», «notizie di oggi»), notizie generali. Regola
+# `notizie_tema_frase`
+_PAROLA_NOTIZIE = re.compile(r"(?<![\w'’])(?:notizi[ae]|news|novità|aggiornament[oi])"
+                             r"(?![\w'’])", re.I)
+_FINE_ENUNCIATO = re.compile(r"[.,;:?!«»\"]|\s(?:e\s+)?poi\b|\se\s+(?:dimmi|dammi|anche)\b",
+                             re.I)
+_RIEMPITIVI = re.compile(
+    r"^(?:(?:che\s+)?(?:ci\s+sono(?:\s+state)?|c['’]\s*è(?:\s+stat[oa])?|hai|abbiamo|sono\s+"
+    r"uscite|di\s+cui\s+parlano)(?:\s+|$))+", re.I)
+_TEMPO = (r"(?:oggi|ieri|stamattina|stamani|stasera|stanotte|adesso|giornata|giorno|"
+          r"questa\s+settimana|settimana|ultime\s+ore|ora|più\s+recenti|recenti|fresche|"
+          r"importanti|principali|ultime|nuove|per\s+favore|grazie|calliope)")
+_TEMPO_CODA = re.compile(r"(?:^|\s+)(?:" + _PREPOSIZIONI + r"\s+)?" + _TEMPO + r"$", re.I)
+_TEMPO_TESTA = re.compile(r"^(?:" + _PREPOSIZIONI + r"\s+)?" + _TEMPO + r"(?:\s+|$)", re.I)
+TEMA_FRASE_PAROLE = 6           # oltre, non è un tema ma un'altra frase
+
+
+def tema_dalla_frase(frase: str) -> str:
+    """«Le notizie di sport» → «sport», «Che notizie ci sono da Torino?» → «Torino», «le
+    notizie sportive di oggi» → «sportive»; «Le ultime notizie», «notizie di oggi», una frase
+    senza «notizie» → "" (notizie generali)."""
+    trovate = list(_PAROLA_NOTIZIE.finditer(str(frase or "")))
+    if not trovate:
+        return ""
+    coda = str(frase)[trovate[-1].end():]
+    fine = _FINE_ENUNCIATO.search(coda)
+    t = re.sub(r"\s+", " ", coda[:fine.start()] if fine else coda).strip(" ,;:.-")
+    for _ in range(8):
+        prima = t
+        t = _RIEMPITIVI.sub("", t).strip()
+        t = _CODA.sub("", _TESTA.sub("", t)).strip(" ,;:.-")
+        t = _TEMPO_TESTA.sub("", _TEMPO_CODA.sub("", t)).strip(" ,;:.-")
+        if t == prima:
+            break
+    if len(re.sub(r"\W", "", t)) < 2 or len(t.split()) > TEMA_FRASE_PAROLE:
+        return ""
+    return t
+
+
 # ─────────────────────────── lingua dei risultati (09/10) ───────────────────────────
 # Caso vero della DGX (09/10, 12:54): «qual è la miglior salsa di pomodoro» con
 # language=it-IT → Bing dava forum taiwanesi e Zhihu tra i primi (Bing ignora la lingua di

@@ -527,6 +527,15 @@ NON_SO = re.compile(r"\bnon (?:ho (?:(?:nessuna |alcuna |altre |ulteriori |altri
 ARCHIVIO_NOTA = ("La conversazione è stata accorciata: qui sopra c'è la ricerca nei suoi turni "
                  "archiviati. Rispondi alla domanda di chi parla con questi risultati; se non c'è "
                  "niente di pertinente, di' che non lo sai.")
+# Con le ricerche della conversazione nei dati del turno (RICERCA_MSG) la nota non dice più «di'
+# che non lo sai» senza condizioni (analisi delle regole del 09/10, § 3.10: contraddiceva «non
+# dire che non hai altre informazioni senza aver cercato»): un solo ordine fra archivio,
+# ricerche di prima e «non lo so»
+ARCHIVIO_NOTA_RICERCHE = ("La conversazione è stata accorciata: qui sopra c'è la ricerca nei "
+                          "suoi turni archiviati. Rispondi alla domanda di chi parla con questi "
+                          "risultati; se non c'è niente di pertinente ma la domanda riguarda una "
+                          "delle ricerche dei dati del turno, richiama il tool di quella ricerca; "
+                          "solo se nemmeno lì c'entra, di' che non lo sai.")
 
 # Una ricerca nei turni appena prima (09/10, caso vero della DGX alle 10:21: notizie con
 # web_cerca, poi «Approfondiamo le condizioni [del re]» → «non ho informazioni più dettagliate
@@ -536,13 +545,30 @@ ARCHIVIO_NOTA = ("La conversazione è stata accorciata: qui sopra c'è la ricerc
 # la persona, e il modello decide se la frase parla di quello. Rete `ricerca_recente`.
 RICERCA_TOOLS = ("web_cerca", "biblioteca_cerca")
 RICERCA_TURNI = 2              # la ricerca in uno degli ultimi due turni prima di questo
-RICERCA_MSG = ("Dati del turno: poco fa hai cercato con {tool} («{domanda}») e hai riferito "
-               "quello che hai trovato; quei risultati non sono più qui. Se ora chi parla vuole "
-               "approfondire, sapere di più o chiede di una delle cose che hai riferito, chiama "
-               "di nuovo {tool} con una domanda breve e mirata su quell'argomento, con i nomi "
-               "che hai detto, e rispondi con quello che trovi: non dire che non hai altre "
-               "informazioni senza aver cercato. Se parla d'altro (agenda, liste, casa, una "
+# Le ricerche della conversazione, ognuna con la sua fonte (09/10 sera, caso vero della DGX
+# alle 21:06: notizie della tromba marina con web_cerca, poi timer, ora e la Torre di Pisa con
+# biblioteca_cerca; «Torniamo alla notizia del trapanese di prima. Dimmi di più» →
+# biblioteca_cerca, risposta vaga: i dati del turno dicevano solo l'ultima ricerca, quella
+# della biblioteca). Restano negli ultimi RICERCA_TURNI_ELENCO turni, al più RICERCA_ELENCO_MAX
+RICERCA_TURNI_ELENCO = 6
+RICERCA_ELENCO_MAX = 4
+RICERCA_MSG = ("Dati del turno: in questa conversazione hai cercato (dalla più recente) "
+               "{elenco}, e hai riferito quello che hai trovato; quei risultati non sono più "
+               "qui. Se ora chi parla vuole approfondire, sapere di più o torna a una di queste "
+               "cose, richiama il tool della ricerca di quell'argomento (le notizie con "
+               "web_cerca tipo notizie) con una domanda breve e mirata, con i nomi che hai "
+               "detto, e rispondi con quello che trovi: non dire che non hai altre informazioni "
+               "senza aver cercato.{criterio} Se parla d'altro (agenda, liste, casa, una "
                "chiacchiera), questa riga non conta.")
+# Il criterio per scegliere la fonte di una ricerca nuova (caso vero della DGX, 09/10 alle
+# 18:47: tre biblioteca_cerca per «tecniche di produzione casalinga della birra», passaggi fuori
+# tema, e internet solo dopo averlo proposto): solo con tutti e due i tool disponibili
+RICERCA_CRITERIO = (" Per una ricerca nuova: biblioteca_cerca per i fatti da enciclopedia, "
+                    "web_cerca per guide pratiche, consigli, prodotti e cose recenti.")
+# Con un'estensione nominata nella frase (EST_NOMINATA_MSG) la precedenza è sua (analisi delle
+# regole del 09/10, § 3.10: «chiama quel tool, non un altro» contro «richiama la ricerca»)
+RICERCA_EST = (" Se però chi parla nomina un'estensione e chiede di usarla, vale la riga "
+               "dell'estensione, non queste ricerche.")
 RICERCA_SPENTA_MSG = ("Dati del turno: poco fa hai cercato {dove}, ma adesso quella ricerca non "
                       "è disponibile. Se chi parla vuole approfondire quello che hai riferito, "
                       "digli onestamente che adesso non puoi cercare {dove}; non inventare.")
@@ -2569,13 +2595,23 @@ class Brain:
         a `upto` (escluso; None = tutta, prima che cominci il turno): {"tool", "domanda"}, o
         None. La usa anche il ciclo: dopo una ricerca, «approfondisci» non rifà da sé la
         biblioteca con la domanda di prima (09/10)."""
+        elenco = self.ricerche_conversazione(upto, RICERCA_TURNI)
+        if not elenco:
+            return None
+        return {"tool": elenco[0]["tool"], "domanda": elenco[0]["domanda"]}
+
+    def ricerche_conversazione(self, upto: int | None = None,
+                               turni_max: int = RICERCA_TURNI_ELENCO) -> list[dict]:
+        """Le ricerche (RICERCA_TOOLS) negli ultimi `turni_max` turni della storia fino a `upto`
+        (escluso), dalla più recente, una per argomento e fonte, al più RICERCA_ELENCO_MAX:
+        [{"tool", "tipo", "domanda", "turni"}] (turni: 0 = nel turno appena prima)."""
         hist = self.history if upto is None else self.history[:upto]
-        turni = 0
+        turni, out, visti = 0, [], set()
         for m in reversed(hist):
             role = m.get("role")
             if role == "user":
                 turni += 1
-                if turni >= RICERCA_TURNI:
+                if turni >= turni_max:
                     break
             elif role == "assistant":
                 for c in reversed(m.get("tool_calls") or []):
@@ -2587,24 +2623,49 @@ class Brain:
                         args = (c.get("function") or {}).get("arguments")
                     if isinstance(args, str):
                         args = _loads_dict(args)
-                    domanda = str((args or {}).get("domanda") or "").strip()
-                    return {"tool": nome, "domanda": domanda[:120]}
-        return None
+                    args = args or {}
+                    domanda = re.sub(r"\s+", " ", str(args.get("domanda") or "")).strip()[:120]
+                    tipo = ("notizie" if nome == "web_cerca"
+                            and str(args.get("tipo") or "").lower().startswith("notiz") else "")
+                    k = (nome, tipo, domanda.lower())
+                    if k in visti:
+                        continue
+                    visti.add(k)
+                    out.append({"tool": nome, "tipo": tipo, "domanda": domanda,
+                                "turni": turni})
+                    if len(out) >= RICERCA_ELENCO_MAX:
+                        return out
+        return out
 
-    def _ricerca_turno(self, start: int, level: str) -> tuple[str, str | None] | None:
-        """(RICERCA_MSG o RICERCA_SPENTA_MSG, tool da richiamare o None) dopo una ricerca nei
-        turni appena prima, o None."""
+    def _ricerca_turno(self, start: int, level: str) -> tuple[str, str | None, str] | None:
+        """(RICERCA_MSG o RICERCA_SPENTA_MSG, tool da richiamare o None, regola) dopo una o più
+        ricerche nei turni prima, o None. La spinta su «non ho altre informazioni» (il tool)
+        solo con l'ultima ricerca nei RICERCA_TURNI turni appena prima."""
         if not self._net("ricerca_recente"):
             return None
-        r = self.ricerca_recente(start)
-        if r is None:
+        elenco = self.ricerche_conversazione(start)
+        if not elenco:
             return None
-        tool = r["tool"]
-        spec = self.tools.get(tool)
-        if (spec is not None and self.tools.allowed(tool, level)
-                and (self.cfg.online or not getattr(spec, "requires_internet", False))):
-            return RICERCA_MSG.format(tool=tool, domanda=r["domanda"] or "…"), tool
-        return RICERCA_SPENTA_MSG.format(dove=RICERCA_DOVE.get(tool, "")), None
+
+        def disponibile(tool):
+            spec = self.tools.get(tool)
+            return (spec is not None and self.tools.allowed(tool, level)
+                    and (self.cfg.online or not getattr(spec, "requires_internet", False)))
+        recente = elenco[0]["turni"] < RICERCA_TURNI
+        if recente and not disponibile(elenco[0]["tool"]):
+            return (RICERCA_SPENTA_MSG.format(dove=RICERCA_DOVE.get(elenco[0]["tool"], "")),
+                    None, "ricerca_recente_spenta")
+        pezzi = []
+        for r in elenco:
+            fonte = r["tool"] + (" tipo notizie" if r["tipo"] else "")
+            detto = r["domanda"] or ("ultime notizie" if r["tipo"] else "…")
+            pezzi.append(f"«{detto}» con {fonte}"
+                         + ("" if disponibile(r["tool"]) else " (adesso non disponibile)"))
+        criterio = (RICERCA_CRITERIO if all(disponibile(t) for t in RICERCA_TOOLS) else "")
+        msg = RICERCA_MSG.format(elenco="; ".join(pezzi), criterio=criterio)
+        if recente:
+            return msg, elenco[0]["tool"], "ricerca_recente"
+        return msg, None, "ricerca_elenco"
 
     def _lavoro_turno(self) -> tuple[str, dict] | None:
         """(LAVORO_MSG, {"lavoro", "titolo", "avvisato", "parole"}) per il lavoro finito di chi
@@ -3020,13 +3081,19 @@ class Brain:
         if lavoro_ref:
             memory = memory + [{"role": "system", "content": lavoro_ref[0]}]
             self._rule("riferimento_lavoro")
-        # Una ricerca nei turni appena prima, per «approfondiamo», «e il festival?» (RICERCA_MSG)
+        # Le ricerche nei turni prima, per «approfondiamo», «e il festival?», «torniamo alla
+        # notizia di prima» (RICERCA_MSG)
         ricerca = self._ricerca_turno(start, level) if user_text else None
-        if ricerca:
-            memory = memory + [{"role": "system", "content": ricerca[0]}]
-            self._rule("ricerca_recente" if ricerca[1] else "ricerca_recente_spenta")
         # Un'estensione nominata nella frase (EST_NOMINATA_MSG)
         est_msg = self._estensioni_nominate(user_text) if user_text else None
+        if ricerca:
+            testo_ricerca = ricerca[0]
+            if est_msg and "nomina" in est_msg:
+                # Precedenza scritta (analisi delle regole del 09/10, § 3.10): con
+                # un'estensione nominata nella frase vale quella, non la ricerca di prima
+                testo_ricerca += RICERCA_EST
+            memory = memory + [{"role": "system", "content": testo_ricerca}]
+            self._rule(ricerca[2])
         if est_msg:
             memory = memory + [{"role": "system", "content": est_msg}]
             if "nomina" in est_msg:
@@ -3191,7 +3258,8 @@ class Brain:
                 content = self._run_tool(call, level)
                 self.history.append({"role": "tool", "tool_call_id": call["id"],
                                      "name": call["name"], "content": content})
-                tail = [{"role": "system", "content": ARCHIVIO_NOTA}]
+                tail = [{"role": "system", "content": ARCHIVIO_NOTA_RICERCHE
+                         if ricerca else ARCHIVIO_NOTA}]
                 continue
             if named and not calls:
                 if nudged:
@@ -4102,7 +4170,7 @@ class Brain:
             res = json.loads(result)
         except (json.JSONDecodeError, TypeError):
             res = None
-        es = ai.esito(res) if isinstance(res, dict) else ("pieno" if ok else "errore")
+        es = ai.esito(res, args) if isinstance(res, dict) else ("pieno" if ok else "errore")
         if offerta and not ok:
             es = "fermato"            # una domanda (della politica o del tool) al posto del tool
         conv, turno = self._c(), getattr(self, "turn_number", 0)

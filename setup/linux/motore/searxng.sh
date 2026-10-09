@@ -26,6 +26,10 @@
 #   … dimentica             torna all'immagine fissata qui (toglie DIR/immagine)
 #   … pulisci-immagini I…   cancella le immagini scaricate da qui (DIR/scaricate) tranne I… e
 #                           quella in uso: mai quelle di altri progetti, mai con -f
+#   … pausa [MOTORE…]       (09/10 sera) mette in pausa i motori dati (DIR/in-pausa: le
+#                           impostazioni si rifanno senza di loro) e rifà il container; senza
+#                           motori toglie le pause. La usa il controllo quotidiano per i motori
+#                           che non rispondono in più controlli di fila
 #
 # Calliope lo usa con, in ~/calliope/calliope.locale.yaml:
 #     web:
@@ -93,6 +97,35 @@ immagine_scelta() {
 # francesi e tedesche fuori tema; Bing News resta per le notizie.
 ENGINES=(duckduckgo brave startpage qwant mojeek wikipedia wikidata "bing news"
          "duckduckgo news" "google news" ansa currency)
+# Il tempo massimo per i motori (09/10 sera): SearXNG aspetta il più lento fino al suo timeout,
+# e un motore che non risponde (Brave «too many requests», Wikidata) costava 3 s a ogni ricerca
+# generale (controllo sulla DGX: «meteo Roma domani» 3006 ms con il timeout a 3 s). Ai generali
+# bastano 2 s (DuckDuckGo risponde in 0,5–1,4 s); le notizie restano a 3 s (ANSA a volte è
+# lenta, e senza ANSA le notizie italiane sono più povere)
+TIMEOUT=2.0
+NOTIZIE=("bing news" "duckduckgo news" "google news" ansa)
+TIMEOUT_NOTIZIE=3.0
+
+# I motori in pausa (DIR/in-pausa, uno per riga), scelti dal controllo quotidiano di Calliope
+# (calliope/web/motore.py): solo nomi dell'elenco qui sopra
+in_pausa() {
+  local e x
+  [ -s "$DIR/in-pausa" ] || return 0
+  while IFS= read -r e; do
+    e="${e%$'\r'}"
+    for x in "${ENGINES[@]}"; do
+      if [ "$x" = "$e" ]; then echo "$e"; break; fi
+    done
+  done < "$DIR/in-pausa"
+}
+
+attivo() {
+  local p
+  while IFS= read -r p; do
+    if [ -n "$p" ] && [ "$p" = "$1" ]; then return 1; fi
+  done <<< "$(in_pausa)"
+  return 0
+}
 
 impostazioni() {
   mkdir -p "$DIR"
@@ -100,8 +133,18 @@ impostazioni() {
   if [ ! -s "$DIR/segreto" ]; then
     (umask 077; head -c 32 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' > "$DIR/segreto")
   fi
-  local keep=""
-  for e in "${ENGINES[@]}"; do keep+="      - \"$e\""$'\n'; done
+  local keep="" extra="" e
+  for e in "${ENGINES[@]}"; do
+    attivo "$e" || continue
+    keep+="      - \"$e\""$'\n'
+  done
+  # Le notizie con il loro tempo massimo, ANSA accesa (è spenta nelle impostazioni di SearXNG):
+  # solo i motori non in pausa (uno nominato qui e non in keep_only sarebbe un errore)
+  for e in "${NOTIZIE[@]}"; do
+    attivo "$e" || continue
+    extra+="  - name: \"$e\""$'\n'"    timeout: $TIMEOUT_NOTIZIE"$'\n'
+    if [ "$e" = "ansa" ]; then extra+="    disabled: false"$'\n'; fi
+  done
   # Riscritto a ogni avvio dal testo qui sotto: segue gli aggiornamenti di Calliope. Il
   # segreto (chiave dei cookie di SearXNG, che qui non servono) resta lo stesso
   cat > "$DIR/settings.yml.tmp" <<EOF
@@ -128,11 +171,10 @@ server:
   image_proxy: false
   method: "POST"
 outgoing:
-  request_timeout: 3.0
+  request_timeout: $TIMEOUT
   max_request_timeout: 6.0
 engines:
-  - name: ansa
-    disabled: false
+$extra
 EOF
   chmod 644 "$DIR/settings.yml.tmp"
   mv -f -- "$DIR/settings.yml.tmp" "$DIR/settings.yml"
@@ -258,6 +300,25 @@ for x in r[:5]:
     IMMAGINE="$IMG" avvia
     ;;
   dimentica) rm -f -- "$DIR/immagine"; echo "Si torna all'immagine fissata nello script: $0 avvia" ;;
+  pausa)
+    # I motori in pausa, poi il container rifatto con le impostazioni nuove (avvia)
+    shift
+    mkdir -p "$DIR"
+    : > "$DIR/in-pausa.tmp"
+    for m in "$@"; do
+      ok=""
+      for x in "${ENGINES[@]}"; do if [ "$x" = "$m" ]; then ok=1; fi; done
+      if [ -z "$ok" ]; then
+        echo "Motore sconosciuto: $m" >&2
+        rm -f -- "$DIR/in-pausa.tmp"
+        exit 2
+      fi
+      echo "$m" >> "$DIR/in-pausa.tmp"
+    done
+    mv -f -- "$DIR/in-pausa.tmp" "$DIR/in-pausa"
+    echo "In pausa: $(in_pausa | paste -sd, - | sed 's/,/, /g')"
+    avvia
+    ;;
   pulisci-immagini)
     shift
     [ -s "$DIR/scaricate" ] || { echo "Nessuna immagine scaricata da qui."; exit 0; }
@@ -274,7 +335,7 @@ for x in r[:5]:
     mv -f -- "$DIR/scaricate.tmp" "$DIR/scaricate"
     ;;
   *)
-    echo "Uso: $0 avvia|ferma|rimuovi|stato|prova [domanda]|diagnosi|immagine|candidata IMMAGINE|togli-candidata|usa IMMAGINE|dimentica|pulisci-immagini [IMMAGINE…]" >&2
+    echo "Uso: $0 avvia|ferma|rimuovi|stato|prova [domanda]|diagnosi|immagine|candidata IMMAGINE|togli-candidata|usa IMMAGINE|dimentica|pulisci-immagini [IMMAGINE…]|pausa [MOTORE…]" >&2
     exit 2
     ;;
 esac
