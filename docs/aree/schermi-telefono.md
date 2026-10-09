@@ -647,3 +647,13 @@ Richiesta di Dario: la cronologia stava solo in memoria per schermo (`_storia`, 
 - Cache del service worker `calliope-telefono-pagina-v8` (era v7).
 - Da fare o da provare sul vero: molti lavori in diretta insieme (una scrittura su disco al più
   ogni 0,8 s per persona); «mostramelo» dopo un riavvio (oggi `Schermi.ultima` è solo in memoria).
+
+## Il segno della compagnia (09/10, ramo `compagnia`)
+
+In compagnia con una voce sconosciuta ([stt-tts](stt-tts.md)) serve il nome a ogni frase, e lo
+schermo lo dice in modo discreto: lo stato della voce porta `compagnia: true`
+(`Schermi.voce(..., compagnia=True)`, mandato da `Ciclo.voce` quando serve il nome; con più
+satelliti nella stessa stanza vale se lo è una sorgente). La pagina degli schermi mostra sotto lo
+stato la riga piccola «In compagnia: chiamami per nome» (`.voce-compagnia`), anche quando si
+riaddormenta; il telefono la aggiunge alla riga sotto lo stato (evento `calliope:compagnia` dalla
+pagina incorporata). Sparisce con una voce sola. Prova `prove/prova_compagnia_pagina.py` (livello 3).
