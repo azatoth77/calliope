@@ -6,7 +6,7 @@ docs/ricerche/2026-10-08-modalita-sviluppo.md).
   collaudo → revisione, alla revisione → attivazione con la frase di sfida per un'estensione,
   chiusura per un programma; all'analisi conferma la specifica); analisi (si torna all'analisi
   da qualunque fase, con la modifica detta: il lavoro in corso si ferma, la specifica nuova si
-  propone); sospendi, riprendi, esci; promuovi (un programma diventa un'estensione).
+  propone); sospendi, riprendi, chiudi («esci» vale come chiudi); promuovi (un programma diventa un'estensione).
 - sviluppo_collauda(dati): il collaudo, la versione candidata provata PRIMA dell'approvazione
   (calliope/estensioni/servizio.Estensioni.prova_candidata) o il programma eseguito di nuovo
   (programma_esegui). Il risultato è un dato non fidato (fonte «estensione», come gli est_).
