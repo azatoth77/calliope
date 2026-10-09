@@ -601,3 +601,47 @@ rivolta non riceve risposta né apre una finestra nuova ed esce dalla storia del
 ([voce-e-regole](voce-e-regole.md)). Latenza: il giudizio gira in parallelo alla risposta
 (~0,29 s sul portatile); in ombra non si aspetta mai prima di parlare. Da misurare sulla DGX con
 `calliope stato --turni`.
+
+## Ricerche a distanza di turni: fonte, recenza e conversazione in corso (09/10, ramo `ricerche-distanza`)
+
+Giro di prova vero della DGX (09/10, 11:03–11:24). Alle 11:03 le notizie (`web_cerca` tipo
+notizie, tra cui un festival della fotografia). Alle 11:23, conversazione ripresa: «Prima mi
+parlavi di un festival, dimmi di più» → `conversazione_cerca`, poi `biblioteca_cerca`
+(Wikipedia offline) invece del web, e la risposta (riferita da Dario: nel registro i turni con
+un tool riservato non hanno testo) parlava di un altro festival, di una conversazione di ieri.
+Alle 11:07, conversazione aperta: «Quella cosa delle proteste che mi dicevi all'inizio» →
+`conversazione_cerca` invece della storia.
+
+- **Fonte e quando** (`calliope/tools/conversazioni.py`, `fonte_turno`): ogni turno ritrovato ha
+  «quando» (c'era) e ora «fonte», dalle `azioni` del turno archiviato: «le notizie su internet
+  (web_cerca con tipo «notizie»)», «la biblioteca offline (biblioteca_cerca)», i documenti di
+  casa, i file del computer. Il tipo della chiamata è l'unica eccezione alla regola «mai gli
+  argomenti dei tool» nell'archivio (`conversazione.turni`): solo se è una parola sola (gli
+  elenchi chiusi; mai la domanda). `cosa_fare`: per «dimmi di più» cercare di nuovo con lo
+  strumento della fonte e i nomi del risultato; non mescolare giorni diversi.
+- **A pari pertinenza il più recente** (`per_recenti`): i risultati con i punti della fusione
+  almeno all'85 % del migliore (`PARI_PERTINENZA`) vanno dal più recente; uno molto più
+  pertinente resta primo anche se più vecchio. `arch.cerca` restituisce anche l'id della
+  conversazione.
+- **Ordine e argomento insieme**: con `cronologico=true` e parole d'argomento nella domanda
+  («prima mi parlavi di un festival»; le parole di cornice come «stavamo parlando», «più
+  indietro» non contano, `_CORNICE`) il risultato porta anche `sull_argomento`, i turni che ne
+  parlano (per parole), dal più recente, con la fonte. Senza argomento come prima.
+- **Conversazione in corso**: la descrizione dice che l'archivio è per le conversazioni già
+  chiuse e che «quella cosa che mi dicevi all'inizio» si risolve dalla storia. Il turno
+  ritrovato della conversazione in corso è segnato («questa, ancora aperta»). Se il modello
+  chiama comunque, il tool restituisce le frasi di Calliope della storia che parlano
+  dell'argomento (`in_questa_conversazione`, al più 3) con «rispondi da lì»; e senza risultati,
+  con una conversazione in corso, niente frase pronta «Non trovo nostre conversazioni passate.»
+  (che chiudeva il turno: nella misura il 4B la diceva con le proteste nella storia) ma un
+  risultato per il modello.
+- **Misura** (`prova_ricerche_distanza_ollama`, gemma4 e4b locale, archivio finto con due
+  festival di fantasia: oggi dalle notizie, ieri dalla biblioteca). Codice di main (2 giri):
+  festival di oggi 0/2 (raccontava quello di ieri), proteste giuste 1/2. Dopo (3 giri): festival
+  di oggi 3/3, mai la biblioteca 3/3, contrario «Cosa ti avevo chiesto ieri sul festival di
+  Borgo Lieto?» 3/3, proteste giuste 3/3; prima frase mediana 1,6 s. Restano (solo misura): dopo
+  «dimmi di più» il 4B racconta il turno ritrovato senza cercare di nuovo (0/3), e nella
+  conversazione aperta chiama ancora l'archivio (0/3; la risposta giusta viene dalle frasi della
+  storia nel risultato). Da rimisurare col modello della DGX.
+- **Diagnosi**: la traccia senza testo delle risposte riservate nel registro dei turni è in
+  [voce-e-regole](voce-e-regole.md) (stessa data).

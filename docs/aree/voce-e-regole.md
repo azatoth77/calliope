@@ -806,3 +806,36 @@ chiaro e il modello decide.
   legge internet, senza dati da mandare (`invia` vuoto, niente `scrive` né `legge.dati`), con
   argomenti detti dalla persona o presi dal prompt di sistema (la città) potrebbe valere come
   lettura. In `prova_citta_casa_ollama` il caso è contato, non fa fallire.
+
+## Giro di prova del 09/10 mattina: tetto delle correzioni, cortesia, risposte riservate (09/10, ramo `ricerche-distanza`)
+
+Dal giro vero della DGX (09/10, 11:03–11:24; casi delle ricerche in
+[biblioteca](biblioteca.md) e [contesto-conversazione](contesto-conversazione.md)).
+
+- **Il tetto dei giri di correzione non teneva** (`calliope/brain.py`). Alle 11:03 tre
+  `web_cerca` fermati e la quarta giusta, con `tool_correzioni_max` = 2. Il difetto: il tetto
+  limitava solo i giri con la spinta (testo senza chiamata, `CORREZIONE_NUDGE`); un modello che
+  richiamava subito il tool, di nuovo sbagliato, non consumava giri e andava avanti fino a
+  `max_tool_turns`. Ora ogni passata dopo un errore correggibile conta; finiti i giri, con
+  l'ultimo tool ancora fermo, un'ultima passata senza tool con l'errore davanti
+  (`CORREZIONE_ESAURITA`: chiedere il dato o dire che non ci è riuscita, senza inventare),
+  regola `correzioni_esaurite`. Prove a secco in `prova_dialogo_tool` (tre richiamate sbagliate:
+  niente quarta chiamata; contrari: corretta al secondo giro, `tool_correzioni_max` = 3).
+- **Cortesia dopo un'offerta** (`calliope/ciclo.py`, `Ciclo._chiusure`). Alle 11:24, dopo «… se
+  vuoi cerco su internet», «Sì, grazie.» è arrivato come «Grazie.» (così nel registro) →
+  «Prego, lo metto in conto», nessuna ricerca. Il blocco dopo una domanda valeva solo per la
+  forma «conferma» («ok»), non per «grazie», e non vedeva le offerte senza punto
+  interrogativo. Ora `Brain.ultima_domanda` vale per la domanda finale e per l'offerta finale
+  (`brain.OFFERTA`: «se vuoi», «se ti va», «se preferisce», «dimmi se», «fammi sapere se»,
+  «vuoi che…» nell'ultima frase; forma chiusa sulla frase di Calliope che toglie una
+  scorciatoia e non decide niente, principio 10), e vale anche per «grazie»: la frase va al
+  modello, regola `cortesia_dopo_domanda`. «Sì, grazie.» e «No, grazie.» non sono mai state
+  chiusure (vanno al modello; il caso del 07/10 in `prova_corsie` passa). Contrari in
+  `prova_testo` (risposte normali, «se» o «vuoi» in una frase non finale) e in `prova_ciclo`
+  («Grazie.» dopo una risposta normale resta cortesia).
+- **Traccia delle risposte riservate** (`brain.traccia_risposta`, `Ciclo._oscura_registro`):
+  con un tool riservato (`conversazione_cerca`, documenti di casa) la risposta resta fuori dal
+  registro dei turni; ora c'è `risposta_traccia` = {caratteri, frasi, non_so (dichiara di non
+  sapere o non trovare: `NON_SO` o `NON_TROVO`), finisce_con: domanda | offerta | null},
+  accanto a `risposta_parole` e ai tool con l'esito. Nessun testo: `prova_ciclo` lo controlla
+  sul file scritto da `TurnLog`.
