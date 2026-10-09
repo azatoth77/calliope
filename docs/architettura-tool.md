@@ -43,7 +43,7 @@ calliope/                 # package: python -m calliope
 │   ├── registry.py       # filtro per livello, esecuzione
 │   ├── builtin.py        # i tool nativi di Calliope
 │   ├── pc.py             # i tool pc_* (PC a voce)
-│   ├── documenti.py      # documento_crea, documento_modifica
+│   ├── documenti.py      # documento_crea, documento_modifica, documento_leggi
 │   ├── casa.py           # casa_comando, casa_stato, casa_integrazione
 │   ├── schermi.py        # schermo_mostra, schermo_gestisci, schede_pulisci
 │   ├── agenti.py         # lavoro_affida, lavoro_stato, lavoro_annulla, lavoro_rispondi, lavoro_risultato, programma_esegui
@@ -233,6 +233,7 @@ controllo nelle prove a secco), ma tocca tutti i tool e le prove con Ollama che 
 | `pc_apri_file` | proprietario o chi amministra | azione | apre il risultato n dell'ultima ricerca della stessa persona (15 minuti); anche chi non è proprietario, se è un documento appena fatto preparare da lui |
 | `documento_crea` | familiare | azione | documento Word, Excel o PDF nuovo; il modello passa formato e richiesta come detta, il testo lo scrive una seconda richiesta a Ollama (`calliope/documenti/`) |
 | `documento_modifica` | familiare | azione | cambia l'ultimo documento di chi parla («cambia la data in 15 ottobre», «aggiungi una riga: internet 30»); il file si riscrive con lo stesso nome |
+| `documento_leggi` | familiare | lettura | che cosa c'è in un documento preparato da Calliope per chi parla, anche rimasto sul server («cosa c'è in quel file?», «riassumimelo», «aprilo»: sulla scheda con «Scarica»); mai un altro documento al posto di quello detto (09/10) |
 | `casa_comando` | familiare (ospite per i domini di `casa_ospite_domini`) | azione | un comando per la casa in una frase breve nella forma di Home Assistant («accendi la luce della cucina»); verifica a secco, regole di Calliope, poi l'agente integrato di HA; la sua risposta è la `risposta_finale` |
 | `casa_stato` | familiare (ospite come sopra) | lettura | com'è la casa dagli stati delle entità esposte, senza richieste a HA: «temperatura in camera», «cosa c'è acceso», «porta del garage» |
 | `casa_integrazione` | familiare | lettura | a che punto è il collegamento con HA e il prossimo passo (dettagli solo a chi amministra); con `per_iscritto` la guida in PDF o Word, da un testo fisso |

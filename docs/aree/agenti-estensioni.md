@@ -1687,3 +1687,19 @@ con POST che resta un'azione), `prova_estensioni_attacchi` (estensione ostile di
 0 passaggi). Col 4B (`prova_citta_casa_ollama.py`): dopo le notizie l'estensione con la città
 di casa 0/3 → 5/6, mai più il meteo inventato. Dettagli in
 [sicurezza-politica](sicurezza-politica.md#sicurezza-per-valore-fase-4-accesa-0910-ramo-valore-fase4).
+
+## `lavoro_risultato` non ripiega su un altro lavoro; la revisione chiude con la domanda (09/10 sera, ramo `sera-politica-strumenti`)
+
+- Caso vero della DGX (18:56): `lavoro_risultato{"lavoro": "Tabella Comparativa Idratazione
+  Pizza"}` (un foglio appena creato da Calliope) dava il risultato dell'ultimo lavoro
+  dell'agente, tre volte. Ora un riferimento detto (parole o id) che non corrisponde a un lavoro
+  finito non ripiega mai (`risultato.NON_TROVATO`): l'errore correggibile ha i lavori veri di chi
+  parla (`lavori`, per richiamarlo giusto) e, se il riferimento è un documento preparato da
+  Calliope, `documento_leggi` in `cosa_fare` (regole `risultato_lavoro_non_trovato`,
+  `risultato_era_documento`); il lavoro detto e ancora in corso dice «non è ancora finito».
+  Vuoto, «l'ultimo», «il risultato» restano il più recente. Prove: `prova_risultati`
+  (`prova_non_trovato`).
+- La revisione di un'estensione chiude con «Ti chiederò la frase di conferma: vuoi
+  attivarla?»: prima la domanda non era in fondo e l'azione in sospeso non restava (caso vero
+  delle 21:00, «Sì, attivarla.»). `sviluppo_passo.quale` è un bersaglio dello sviluppo aperto
+  per la politica (`SVILUPPO_BERSAGLIO`). Dettagli in [sicurezza-politica](sicurezza-politica.md).
