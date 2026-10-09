@@ -160,6 +160,59 @@ def tema_notizie(domanda: str) -> str:
     return t if len(re.sub(r"\W", "", t)) >= 2 else "notizie"
 
 
+# ─────────────────────────── lingua dei risultati (09/10) ───────────────────────────
+# Caso vero della DGX (09/10, 12:54): «qual è la miglior salsa di pomodoro» con
+# language=it-IT → Bing dava forum taiwanesi e Zhihu tra i primi (Bing ignora la lingua di
+# SearXNG), DuckDuckGo i siti italiani. Si preferiscono i risultati in italiano: prima loro,
+# poi gli incerti, in fondo quelli in un'altra lingua (nessuno si toglie: se mancano gli
+# italiani restano gli altri). Si riconosce la lingua del risultato (un dato, non le parole
+# della persona) dalle parole più comuni di titolo ed estratto e dal dominio .it.
+_PAROLE_IT = frozenset(
+    "il lo gli della delle degli dello dei del nella nelle nel nei alla alle allo ai al "
+    "che per sono è più anche questo questa come non di un una ed perché quando dove quale "
+    "qual cosa migliore migliori ecco tutti tutte essere stato stata hanno ha".split())
+_PAROLE_ALTRE = frozenset(
+    "the and of to is are with for this that what how best your from "      # inglese
+    "el los las y para por es está qué cómo mejor muy "                       # spagnolo
+    "les et est pour une des avec dans sur qui meilleur "                    # francese
+    "der die das und ist mit für nicht ein eine "                            # tedesco
+    "os não são uma com melhor".split())                                     # portoghese
+_NON_LATINO = re.compile(r"[\u0400-\u04ff\u0590-\u06ff\u0e00-\u0e7f\u3040-\u30ff"
+                         r"\u3400-\u9fff\uac00-\ud7af]")
+# La domanda chiede un'altra lingua o siti stranieri («in inglese», «siti spagnoli»,
+# «giornali stranieri», «site:…»): allora nessuna preferenza e language=all. È la forma
+# della domanda già scritta dal modello, non la frase della persona. «Calciatori stranieri»,
+# «notizie internazionali», «ristorante inglese» non chiedono un'altra lingua
+ALTRA_LINGUA = re.compile(
+    r"\b(?:in|en)\s+(?:inglese|spagnolo|francese|tedesco|portoghese|russo|cinese|"
+    r"giapponese|arabo|olandese|greco|polacco|coreano|english|spanish|french|german)\b|"
+    r"\b(?:english|español|espanol|français|francais|deutsch)\b|\bsite:|"
+    r"\b(?:sit[oi]|giornal[ei]|fonti|stampa)\s+(?:stranier|ester|ingles|american|spagnol|"
+    r"frances|tedesc|portoghes)\w*", re.I)
+
+
+def lingua_risultato(titolo: str, testo: str, url: str = "") -> str:
+    """"it", "altra" o "" (non si capisce) per un risultato."""
+    t = f"{titolo} {testo}"
+    if len(_NON_LATINO.findall(t)) >= 3:
+        return "altra"
+    parole = re.findall(r"[^\W\d_]+", t.lower())
+    it = sum(p in _PAROLE_IT for p in parole)
+    altre = sum(p in _PAROLE_ALTRE for p in parole)
+    host = (urlsplit(url).hostname or "").lower()
+    if host.endswith(".it"):
+        it += 2
+    if it >= 2 and it > altre:
+        return "it"
+    if altre >= 2 and altre > it:
+        return "altra"
+    return ""
+
+
+def chiede_altra_lingua(domanda: str) -> bool:
+    return bool(ALTRA_LINGUA.search(str(domanda or "")))
+
+
 @dataclass
 class Risultato:
     titolo: str
@@ -188,6 +241,7 @@ class Web:
         self.max_minuto = int(getattr(cfg, "web_max_minuto", 10))
         self.n_risultati = int(getattr(cfg, "web_risultati", 5))
         self.lingua = str(getattr(cfg, "web_lingua", "it-IT") or "it-IT")
+        self.preferisci_lingua = bool(getattr(cfg, "web_preferisci_lingua", True))
         self.vietate = reti(getattr(cfg, "web_reti_vietate", None) or ())
         # Per le prove (un server finto su 127.0.0.1): mai da configurazione
         self.eccezioni: frozenset = frozenset()
@@ -261,7 +315,9 @@ class Web:
         n = max(1, min(int(n or self.n_risultati), 10))
         t0 = time.perf_counter()
         # SafeSearch: 1 moderato; 2 rigoroso per i ragazzi 11–13 (calliope/minori.py, 05/10)
-        dati = {"q": q, "format": "json", "language": self.lingua,
+        # Un'altra lingua chiesta nella domanda: nessuna preferenza (09/10)
+        altra = chiede_altra_lingua(q)
+        dati = {"q": q, "format": "json", "language": "all" if altra else self.lingua,
                 "safesearch": str(max(0, min(2, int(safesearch)))),
                 "categories": "news" if tipo == "notizie" else "general"}
         if tipo == "notizie":
@@ -292,8 +348,15 @@ class Web:
                 titolo=ripulisci_testo(x.get("title"), 150), url=url, sito=nome_sito(url),
                 testo=testo[:400], data=data, giorni=giorni,
                 motori=list(x.get("engines") or [x.get("engine")])))
-        # I vecchi in fondo (ordine stabile), poi i primi n
-        risultati = sorted(risultati, key=lambda r: r.vecchio)[:n]
+        # I vecchi in fondo (ordine stabile); poi, a pari età, prima quelli nella lingua di
+        # casa (09/10, solo con web_lingua italiana), gli incerti, le altre lingue
+        preferisci = (self.preferisci_lingua and not altra
+                      and self.lingua.lower().startswith("it"))
+        rango = {"it": 0, "": 1, "altra": 2}
+        lingue = {id(r): lingua_risultato(r.titolo, r.testo, r.url) for r in risultati}
+        n_altre = sum(v == "altra" for v in lingue.values())
+        risultati = sorted(risultati, key=lambda r: (
+            r.vecchio, rango[lingue[id(r)]] if preferisci else 0))[:n]
         # Risposte dirette (cambi di valuta): come un risultato in testa, senza sito
         for a in (js.get("answers") or [])[:1]:
             testo = a.get("answer") if isinstance(a, dict) else a
@@ -309,7 +372,9 @@ class Web:
             return {"ok": False, "codice": "internet", "tolti": tolti}
         self.diagnosi = {"codice": "ok", "quando": time.time()}
         return {"ok": True, "risultati": risultati, "domanda": q, "tolti": tolti, "ms": ms,
-                **({"tema": True} if tema_cambiato else {})}
+                **({"tema": True} if tema_cambiato else {}),
+                **({"altra_lingua": True} if altra else {}),
+                **({"lingua_preferita": n_altre} if preferisci and n_altre else {})}
 
     # ── pagine (per l'agente) ──
     def leggi(self, url: str, max_caratteri: int | None = None) -> dict:

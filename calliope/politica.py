@@ -225,6 +225,9 @@ CLASSI: dict[str, Classe] = {
     "calcola": _c(S), "data_calcola": _c(S), "elenca_utenti": _c(S), "agenda_elenca": _c(S),
     "appuntamenti_elenca": _c(S), "lista_leggi": _c(S), "biblioteca_cerca": _c(S),
     "casa_stato": _c(S), "casa_integrazione": _c(S), "schermo_mostra": _c(S),
+    # il meteo di casa dall'entità weather di Home Assistant (09/10): stati e previsioni di
+    # HA, valori numerici e condizioni di un insieme chiuso
+    "meteo_leggi": _c(S),
     "anagrafica_cerca": _c(S), "calliope_stato": _c(S), "installa_proponi": _c(S),
     "pc_stato": _c(S), "pc_cerca_file": _c(S),
     # le conversazioni passate di chi parla (calliope/conversazioni.py): parole sue e risposte
@@ -245,6 +248,11 @@ CLASSI: dict[str, Classe] = {
     "allegato_leggi": _c(S, fonte="allegato"),
     # ── azioni di Calliope, della persona, reversibili ──
     "cambia_voce": _c(A, cosa=lambda a: "cambi la voce"),
+    # la città di casa detta a voce (09/10, calliope/luogo.py): solo chi amministra, reversibile
+    # Senza `conferma` è solo la proposta («vuoi che mi ricordi…?»): risponde e basta
+    "citta_casa_salva": _c(A, cosa=lambda a: f"ricordi che la casa è a {_s(a, 'citta')}",
+                           innocua=lambda a: _s(a, "conferma").lower() not in (
+                               "true", "1", "sì", "si", "yes")),
     "timer_imposta": _c(A, chiave=("nome",), cambio="cambia", cosa=lambda a: _timer_cosa(a)),
     "promemoria_imposta": _c(A, chiave=("testo",), cambio="cambia",
                              cosa=lambda a: f"sposti il promemoria «{_s(a, 'testo')}»"
@@ -376,6 +384,7 @@ CLASSI: dict[str, Classe] = {
 # generici come «metti» dove l'oggetto distingue («metti un timer» non giustifica la lista)
 VERBI = {
     "cambia_voce": r"voc[ei]|parl|ton[oi]|formal|amichevol|ironic|modalit|trek|computer",
+    "citta_casa_salva": r"ricord|salv|segn|memorizz|casa|abit|citt|paese|sta a|siamo a|vivo",
     "timer_imposta": (r"timer|minut|second|or[ae](?![a-z])|svegli|cronometr|conto alla "
                       r"rovescia|avvisami|imposta|cambi|aggiung|togl|allung|accorc|sposta"),
     "promemoria_imposta": r"ricord|promemoria|avvis|memo|dimentic|sposta|cambi|segn",

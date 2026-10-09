@@ -65,6 +65,8 @@ B, Z, S, C, L, X = BERSAGLIO, AZIONE, SCELTA, CONTENUTO, LIBERO, IGNORA
 # fallisce se un tool d'azione di un registro completo non è qui
 ARGOMENTI: dict[str, dict[str, str]] = {
     "cambia_voce": {"voce": S, "tono": Z, "per_tutti": S, "modalita": Z},
+    # la città di casa detta a voce (09/10, calliope/luogo.py)
+    "citta_casa_salva": {"citta": B, "conferma": S},
     "rinomina_interlocutore": {"nome": B},
     "registra_utente": {"nome": B, "nascita": C, "maggiorenne": S, "tutori": B},
     "timer_imposta": {"durata": S, "nome": C, "cambia": Z},
@@ -202,6 +204,7 @@ EFFETTI: dict[str, object] = {
     "allegato_archivia": E1, "cassetto_gestisci": E2,
     # E2: resta, altri lo vedono o cambia le risposte future
     "lista_aggiungi": E2, "lista_togli": E2, "ricorda": _ricorda, "dimentica": E2,
+    "citta_casa_salva": E2,
     "appuntamento_aggiungi": E2, "agenda_annulla": E2, "anagrafica_salva": E2,
     "modello_compila": E2, "richiesta_tutore": E2, "lavoro_rispondi": E2,
     "lavoro_annulla": E2, "pc_guarda": E2, "schede_pulisci": E2,

@@ -80,7 +80,9 @@ reg = build_registry()
 # ── permessi per livello (cosa il registro esegue; il modello li vede tutti) ──
 OSPITE = {"chi_parla", "elenca_voci", "ora_attuale", "data_oggi", "calcola", "data_calcola",
           "timer_imposta",
-          "agenda_elenca", "agenda_annulla", "calliope_stato"}
+          "agenda_elenca", "agenda_annulla", "calliope_stato",
+          # la città di casa (09/10): per tutti, ma la salva solo chi amministra (nel codice)
+          "citta_casa_salva"}
 FAMILIARE = OSPITE | {"elenca_utenti", "cambia_voce", "rinomina_interlocutore",
                       "promemoria_imposta", "ricorda", "dimentica", "lista_aggiungi",
                       "lista_leggi", "lista_togli", "appuntamento_aggiungi",

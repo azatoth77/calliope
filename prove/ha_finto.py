@@ -170,6 +170,10 @@ class FakeHA:
         # stato esposto», che la verifica a secco non aveva previsto)
         self.errori_forzati: dict[str, tuple[str, str, dict]] = {}
         self.ssl_files = ssl_files
+        # Le previsioni delle entità meteo (09/10): {(entity_id, tipo): [voci]} per
+        # weather.get_forecasts; i servizi chiamati restano in `chiamate_servizi`
+        self.previsioni: dict[tuple[str, str], list[dict]] = {}
+        self.chiamate_servizi: list[tuple] = []
         self.servizi: list[tuple] = []          # (servizio, entity_id, valore)
         self.richieste: list[str] = []          # tipi dei messaggi ricevuti
         self.testi: list[tuple[str, str]] = []  # (tipo, testo) di debug e process
@@ -301,6 +305,22 @@ class FakeHA:
                 self.testi.append(("debug", s))
                 results.append(self._debug(s))
             return self._ok(conn, mid, {"results": results})
+        if t == "call_service":
+            dom, srv = m.get("domain"), m.get("service")
+            eid = (m.get("target") or {}).get("entity_id")
+            tipo = (m.get("service_data") or {}).get("type")
+            self.chiamate_servizi.append((dom, srv, eid, tipo, bool(m.get("return_response"))))
+            if (dom, srv) != ("weather", "get_forecasts"):
+                return self._err(conn, mid, "not_found", f"Service {dom}.{srv} not found.")
+            if not m.get("return_response"):
+                return self._err(conn, mid, "service_validation_error",
+                                 "Service call requires responses but caller did not ask for "
+                                 "responses")
+            e = self.entita.get(eid)
+            if e is None or not eid.startswith("weather."):
+                return self._err(conn, mid, "service_validation_error", "entity not found")
+            return self._ok(conn, mid, {"context": {"id": "x"}, "response": {
+                eid: {"forecast": list(self.previsioni.get((eid, tipo), []))}}})
         if t == "conversation/process":
             self.testi.append(("process", m.get("text", "")))
             return self._ok(conn, mid, self._process(m.get("text", "")))

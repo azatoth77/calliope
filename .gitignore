@@ -142,6 +142,8 @@ calliope.locale*.yaml
 dgx*.yaml
 # Il tono della casa detto a voce (calliope/personalita.py): dato di questa installazione
 personalita.json
+# La città di casa detta a voce da chi amministra (calliope/luogo.py, 09/10)
+luogo.json
 # Configurazioni di strumenti personali dell'editor o dell'agente
 opencode.json
 .claude/

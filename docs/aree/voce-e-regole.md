@@ -839,3 +839,27 @@ Dal giro vero della DGX (09/10, 11:03–11:24; casi delle ricerche in
   sapere o non trovare: `NON_SO` o `NON_TROVO`), finisce_con: domanda | offerta | null},
   accanto a `risposta_parole` e ai tool con l'esito. Nessun testo: `prova_ciclo` lo controlla
   sul file scritto da `TurnLog`.
+
+## Il meteo di casa nel prompt (09/10 pomeriggio, ramo `meteo-casa`)
+
+Seguito della sezione sulla città della casa. Decisione di Dario: il meteo senza luogo è quello di
+casa; il modello sceglie (principio 10) con un contesto chiaro e la disponibilità vera, passata
+da `Brain._system_messages` a `Config.prompt_for` (`meteo_casa`, `citta`, `citta_salva`):
+
+- **entità meteo esposta in HA** (`meteo_leggi` registrato, `allinea_meteo`): «Il meteo senza un
+  posto nominato è quello di casa: chiedilo a meteo_leggi…; per un altro posto non usarlo, e se
+  chi parla nomina un posto di cui non sai dove sia chiedi dov'è». La frase del web diventa «Per
+  il meteo di altri posti, le notizie…», la frase della città non dice più «meteo» (resta per
+  orari, negozi, eventi); senza web «Non puoi sapere le notizie né il meteo di altri posti».
+- **solo la città** (configurazione valida o salvata a voce, `calliope/luogo.py`): la frase della
+  città di prima, parola per parola.
+- **niente**, con web o estensioni: «Non sai in che città è la casa dove sei: se una richiesta
+  dipende dal luogo… chiedi in che città è la casa; quando te lo dice, chiama citta_casa_salva
+  con la città e rispondi alla richiesta per quella città». Senza web né estensioni nessuna
+  frase (non servirebbe a niente).
+- Il prompt cambia solo quando cambia l'esposizione o si salva la città: il prefisso nuovo si
+  scalda (`prefisso_scaldato`). La città salvata vale come configurazione anche per la politica
+  (`Turno.da_config`).
+- Regole nuove nel registro dei turni: `citta_casa_proposta` (una conferma senza la proposta in
+  sospeso vale come proposta), `citta_casa_solo_admin`. Dettagli, casi e misure in
+  [casa](casa.md) (stessa data).

@@ -1547,6 +1547,13 @@ web:
   web_risultati: 5
   web_timeout_s: 6.0
   web_lingua: it-IT
+  # Preferire i risultati nella lingua di casa (09/10, caso della DGX: «la miglior salsa di
+  # pomodoro» → Bing ignora `web_lingua` e dava forum in cinese tra i primi): con
+  # web_lingua italiana, prima i risultati in italiano (riconosciuti dalle parole comuni e
+  # dal dominio .it), poi gli incerti, in fondo le altre lingue; nessuno si toglie. Se la
+  # domanda chiede un'altra lingua o siti stranieri («in inglese», «site:…») nessuna
+  # preferenza e language=all. false = l'ordine di SearXNG, come prima
+  web_preferisci_lingua: true
   # Stringhe che non devono mai uscire di casa in una ricerca, oltre ai nomi delle persone
   # registrate e ai dati dell'emittente delle fatture: l'indirizzo di casa, il cognome…
   # (in calliope.locale.yaml). Codici fiscali, IBAN, email e telefoni si tolgono comunque

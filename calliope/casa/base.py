@@ -111,6 +111,19 @@ class HomeBackend:
         Solleva CasaNonRisponde."""
         raise NotImplementedError
 
+    def meteo_esposte(self) -> list[str]:
+        """Gli id delle entità meteo (`weather.*`) esposte, **senza aspettare** il sistema:
+        quelle viste all'ultimo caricamento (09/10). Serve al prompt di sistema, che si
+        costruisce a ogni turno e non deve mai bloccarsi su HA spento."""
+        return []
+
+    def previsioni(self, entity_id: str, tipo: str = "daily") -> list[dict]:
+        """Le previsioni di un'entità meteo esposta (`tipo`: daily, hourly, twice_daily),
+        come le dà il sistema: voci con datetime, condition, temperature, templow,
+        precipitation, precipitation_probability, wind_speed. Solo lettura. Solleva
+        CasaNonRisponde."""
+        raise NotImplementedError
+
     def diagnosi(self, riprova: bool = False) -> Diagnosi:
         """Lo stato del collegamento; con `riprova` tenta subito di collegarsi."""
         raise NotImplementedError

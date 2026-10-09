@@ -260,6 +260,61 @@ verifica("ricerca in POST, JSON, lingua, ricerca sicura",
 verifica("la domanda esce senza il nome", ultima[2]["q"] == "meteo Milano domani per",
          ultima[2]["q"])
 verifica("tipi tolti", r["tolti"] == ["nome"])
+
+# La lingua dei risultati (09/10, caso vero della DGX: «qual è la miglior salsa di pomodoro»
+# → Bing dava forum in cinese tra i primi, ignorando language=it-IT)
+from prove.searxng_finto import risultato as _ris  # noqa: E402
+from calliope.web.servizio import chiede_altra_lingua, lingua_risultato  # noqa: E402
+sx_l = SearxngFinto().avvia()      # il suo: le richieste di sopra restano contate
+sx_l.risposte["salsa"] = [
+    _ris("https://forum.esempio.com.tw/C.php?bsn=1", "番茄醬哪個牌子最好吃",
+         "大家覺得番茄醬哪個牌子最好吃？我自己是比較喜歡"),
+    _ris("https://www.esempio.es/salsa", "¿Cuál es la mejor salsa de tomate?",
+         "Probamos las salsas de tomate del supermercado y esta es la mejor para la pasta."),
+    _ris("https://www.salse-esempio.it/salsa-di-pomodoro", "La migliore salsa di pomodoro",
+         "Abbiamo provato le passate del supermercato: ecco quale è la migliore per il sugo.",
+         motore="duckduckgo"),
+    _ris("https://www.example.com/tomato", "Best tomato sauce brands of the year",
+         "We tested the best tomato sauce brands and this is what we found for your pasta."),
+    _ris("https://www.ricette-esempio.it/passata", "Passata o polpa?",
+         "Come scegliere la passata di pomodoro più adatta, con i consigli dello chef.",
+         motore="duckduckgo"),
+]
+cfg_l = Config()
+cfg_l.web_searxng_url = sx_l.url
+cfg_l.web_max_minuto = 20
+cfg_l.web_risultati = 3
+web_l = Web(cfg_l, Ripulitore(lambda: [], []))
+r = web_l.cerca("qual è la miglior salsa di pomodoro")
+verifica("lingua: prima i risultati in italiano",
+         [x.sito for x in r["risultati"][:2]] == [nome_sito("https://www.salse-esempio.it/x"),
+                                                  nome_sito("https://www.ricette-esempio.it/x")]
+         and r.get("lingua_preferita") == 3, str([x.url for x in r["risultati"]]))
+verifica("lingua: la richiesta a SearXNG resta it-IT", sx_l.richieste[-1][2].get("language")
+         == "it-IT")
+verifica("lingua: nessuno si toglie (3 risultati, gli altri in fondo)",
+         len(r["risultati"]) == 3 and "forum" in r["risultati"][2].url,
+         str([x.url for x in r["risultati"]]))
+r = web_l.cerca("migliore salsa di pomodoro in inglese")
+verifica("contrario: «in inglese» → language=all e l'ordine di SearXNG",
+         sx_l.richieste[-1][2].get("language") == "all" and r.get("altra_lingua")
+         and "forum" in r["risultati"][0].url, str([x.url for x in r["risultati"]]))
+for q in ("salsa di pomodoro siti spagnoli", "salsa di pomodoro site:esempio.es",
+          "elezioni giornali stranieri", "tomato sauce in english"):
+    verifica(f"contrario: «{q}» chiede un'altra lingua", chiede_altra_lingua(q))
+for q in ("miglior salsa di pomodoro", "ristorante inglese a Milano", "lezioni di spagnolo",
+          "notizie internazionali", "calciatori stranieri in serie A", "lavorare all'estero"):
+    verifica(f"contrario: «{q}» non chiede un'altra lingua", not chiede_altra_lingua(q))
+verifica("riconosce l'italiano, lo spagnolo, l'inglese, il cinese",
+         lingua_risultato("La migliore salsa", "ecco quale è la migliore per il sugo") == "it"
+         and lingua_risultato("¿Cuál es la mejor salsa?", "esta es la mejor para la pasta")
+         == "altra" and lingua_risultato("Best sauce", "this is what we found for the pasta")
+         == "altra" and lingua_risultato("番茄醬哪個牌子", "") == "altra"
+         and lingua_risultato("Pasta", "") == "")
+cfg_l.web_preferisci_lingua = False
+r = Web(cfg_l, Ripulitore(lambda: [], [])).cerca("qual è la miglior salsa di pomodoro")
+verifica("web_preferisci_lingua false: l'ordine di SearXNG", "forum" in r["risultati"][0].url
+         and "lingua_preferita" not in r)
 r = web.cerca("Dario")
 verifica("domanda vuota dopo il filtro: niente ricerca", r == {"ok": False, "codice": "vuota",
                                                                "tolti": ["nome"]}
@@ -507,8 +562,11 @@ p_citta = c_citta.prompt_for(False, web=True)
 verifica("prompt: la città della casa, per ciò che dipende dal luogo",
          "La casa dove sei è a Borgoverde" in p_citta and "meteo" in p_citta.split(
              "La casa dove sei")[1][:200], p_citta[-500:])
-verifica("contrario prompt: senza città né estensioni è quello di prima",
-         Config().prompt_for(False, web=True) == re.sub(
+# Senza città (09/10 pomeriggio, meteo di casa): al posto della frase della città quella che
+# chiede dove si trova la casa; il resto è uguale
+verifica("contrario prompt: senza città né estensioni cambia solo la frase della città",
+         re.sub(r"Non sai in che città è la casa dove sei: [^.]*\. ", "",
+                Config().prompt_for(False, web=True)) == re.sub(
              r"La casa dove sei è a Borgoverde: [^.]*\. ", "", p_citta))
 c_citta.casa_citta = "  "
 verifica("contrario prompt: città vuota → niente frase",
@@ -687,5 +745,6 @@ r = ag._web(lav, web, "web_cerca", {"domanda": "meteo"}, rete2)
 verifica("agente: dopo i documenti di casa niente internet", "spenta" in r.get("errore", ""))
 
 sx.ferma()
+sx_l.ferma()
 print(f"{'Tutto bene' if not errori else f'{errori} errori'}.")
 sys.exit(1 if errori else 0)
