@@ -1475,6 +1475,13 @@ class Config:
     web_risultati: int = 5
     web_timeout_s: float = 6.0
     web_lingua: str = "it-IT"
+    # Preferire i risultati nella lingua di casa (09/10, caso della DGX: «la miglior salsa di
+    # pomodoro» → Bing ignora `web_lingua` e dava forum in cinese tra i primi): con
+    # web_lingua italiana, prima i risultati in italiano (riconosciuti dalle parole comuni e
+    # dal dominio .it), poi gli incerti, in fondo le altre lingue; nessuno si toglie. Se la
+    # domanda chiede un'altra lingua o siti stranieri («in inglese», «site:…») nessuna
+    # preferenza e language=all. false = l'ordine di SearXNG, come prima
+    web_preferisci_lingua: bool = True
     # Stringhe che non devono mai uscire di casa in una ricerca, oltre ai nomi delle persone
     # registrate e ai dati dell'emittente delle fatture: l'indirizzo di casa, il cognome…
     # (in calliope.locale.yaml). Codici fiscali, IBAN, email e telefoni si tolgono comunque
@@ -1604,7 +1611,8 @@ class Config:
                    documenti: bool = False, casa: tuple[str, ...] | list[str] = (),
                    capacita: str = "", schermi: bool = False, agenti: bool = False,
                    archivio: bool = False, ufficio: bool = False, web: bool = False,
-                   estensioni: bool = False) -> str:
+                   estensioni: bool = False, meteo_casa: bool = False,
+                   citta: str | None = None, citta_salva: bool = False) -> str:
         """Prompt di sistema, senza il nome dell'interlocutore: lo dà il tool chi_parla.
 
         `biblioteca`: se il tool biblioteca_cerca c'è. Nominare un tool che non esiste è
@@ -1680,6 +1688,15 @@ class Config:
 
         `casa_citta` (configurazione, 09/10): la città della casa, per ciò che dipende dal
         luogo quando chi parla non ne nomina un altro. Vuota = prompt di prima.
+
+        Il meteo di casa (09/10 pomeriggio, decisione di Dario: «il meteo senza indicazioni è
+        quello di casa»), con la disponibilità vera passata da Brain:
+        `meteo_casa`: un'entità meteo è esposta in Home Assistant e c'è meteo_leggi → il meteo
+        senza luogo lo si chiede a lei. `citta`: la città di casa valida (calliope/luogo.py:
+        configurazione, poi quella salvata a voce; None = `casa_citta` così com'è, validata).
+        `citta_salva`: c'è il tool citta_casa_salva. Senza entità né città, con un modo di
+        sapere il meteo (web o estensioni), si chiede dove si trova la casa e la si propone da
+        ricordare. Senza nessuna delle tre condizioni il prompt è quello di prima.
         """
         female = self.gender == "f"
         # Il tono della casa (TONI): «normale» lascia il prompt parola per parola com'era
@@ -1776,7 +1793,9 @@ class Config:
         if web:
             limits = (limits.replace("non usi internet o file e ", "non usi file e ")
                       .replace("non usi internet e ", "").replace("non usi internet", ""))
-            news = ("Per il meteo, le notizie, i risultati sportivi, gli orari, i prezzi e "
+            # Con il meteo di casa da Home Assistant (09/10) internet è per gli altri posti
+            news = ("Per il meteo" + (" di altri posti" if meteo_casa else "")
+                    + ", le notizie, i risultati sportivi, gli orari, i prezzi e "
                     "tutto ciò che cambia nel tempo chiama "
                     + ("l'estensione che lo fa, se c'è, altrimenti " if estensioni else "")
                     + "web_cerca, con una domanda breve "
@@ -1793,6 +1812,9 @@ class Config:
         # Le estensioni attive (tool est_*): capacità della casa, da usare per il loro scopo
         # (09/10, «che tempo fa?» → web_cerca con «Meteo città» attiva). Prima della frase del
         # web, che altrimenti manda il meteo sempre a internet: dopo, il 4B non la seguiva
+        if meteo_casa and not web:
+            # Il meteo di casa c'è (Home Assistant): «non puoi sapere il meteo» vale per il resto
+            news = news.replace("meteo e notizie", "le notizie né il meteo di altri posti")
         if estensioni:
             news = ("Le estensioni (i tool che iniziano con est_) sono funzioni tue aggiunte "
                     "dalla famiglia: quando una fa proprio quello che ti chiedono, usa quella"
@@ -1803,12 +1825,31 @@ class Config:
         # La città della casa (09/10, «che tempo fa?» senza luogo → «non so dove ti trovi»):
         # un dato stabile della casa, uguale per tutti. Il luogo detto vince sempre, e un
         # posto che non è una città («da Ettore») non è la casa
-        citta = " ".join(str(getattr(self, "casa_citta", "") or "").split())
+        if citta is None:
+            from .luogo import valida
+            citta = valida(getattr(self, "casa_citta", "") or "")
+        citta = " ".join(str(citta or "").split())
+        # Il meteo di casa da Home Assistant (09/10): prima della città, che allora non dice
+        # più «meteo» (resta per orari, negozi, eventi)
+        if meteo_casa:
+            news += ("Il meteo senza un posto nominato è quello di casa: chiedilo a "
+                     "meteo_leggi (anche le previsioni: quando = oggi, domani, stasera…); per "
+                     "un altro posto non usarlo, e se chi parla nomina un posto di cui non sai "
+                     "dove sia (la casa di qualcuno, un locale) chiedi dov'è. ")
         if citta:
             news += (f"La casa dove sei è a {citta}: quando una richiesta dipende dal luogo "
-                     f"(meteo, orari, negozi, eventi) e chi parla non nomina nessun posto, "
+                     f"({'' if meteo_casa else 'meteo, '}orari, negozi, eventi) e chi parla "
+                     f"non nomina nessun posto, "
                      f"intendi {citta}; se nomina un posto di cui non sai dove sia (la casa di "
                      f"qualcuno, un locale), chiedi dov'è. ")
+        elif not meteo_casa and (web or estensioni):
+            # Né entità meteo né città (09/10): si chiede, e chi amministra può farla ricordare
+            news += ("Non sai in che città è la casa dove sei: se una richiesta dipende dal "
+                     "luogo (meteo, orari, negozi, eventi) e chi parla non nomina nessun "
+                     "posto, chiedi in che città è la casa"
+                     + ("; quando te lo dice, chiama citta_casa_salva con la città e "
+                        "rispondi alla richiesta per quella città" if citta_salva else "")
+                     + ". ")
         return (
             f"Sei {self.name}, {role} vocale che gira in locale. {self.persona} "
             f"Parli di te al {grammar}. Dai del {tone['registro']} a chi ti parla; non ne "
@@ -2522,7 +2563,7 @@ SEZIONI: dict[str, list[str]] = {
     "ufficio": ["ufficio_enabled", "ufficio_modelli", "ufficio_livello_fiscale", "ufficio_bozza_s",
                 "ufficio_serie", "fatture_emittente", "fatture_xsd"],
     "web": ["web_enabled", "web_searxng_url", "web_livello", "web_max_minuto", "web_risultati",
-            "web_timeout_s", "web_lingua", "web_dati_privati", "web_pagina_max_kb",
+            "web_timeout_s", "web_lingua", "web_preferisci_lingua", "web_dati_privati", "web_pagina_max_kb",
             "web_pagina_timeout_s", "web_pagina_caratteri", "web_agente_ricerche",
             "web_agente_pagine", "web_reti_vietate", "web_nomi_casa", "web_searxng_aggiorna",
             "web_searxng_giorni", "web_searxng_controllo_ore", "web_searxng_inattivita_min",

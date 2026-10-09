@@ -289,3 +289,31 @@ c'è.
 - **Fonte nell'archivio**: le conversazioni ritrovate dicono se l'informazione veniva dalle
   notizie su internet o dalla biblioteca, così «dimmi di più» può cercare di nuovo nello stesso
   posto: [contesto-conversazione](contesto-conversazione.md) (stessa data).
+
+## Risultati in italiano per primi (09/10 pomeriggio, ramo `meteo-casa`)
+
+Caso vero della DGX (09/10, 12:54): «cercami qual è la miglior salsa di pomodoro» → risultati da
+un sito spagnolo e da uno in un'altra lingua. La lingua a SearXNG c'era già (`language=it-IT`,
+`web_lingua`, per web e notizie): con la stessa domanda sulla DGX (una richiesta, in sola
+lettura) DuckDuckGo dava solo siti italiani, **Bing li ignorava** e metteva in mezzo pagine di
+Baidu e Zhihu in cinese, forum di Taiwan, forum francesi e tedeschi (Brave era fermo per «too
+many requests»).
+
+- **Preferenza** (`calliope/web/servizio.py`: `lingua_risultato`, `Web.cerca`): ogni risultato è
+  «it», «altra» o incerto dalle parole più comuni di titolo ed estratto (italiane contro inglesi,
+  spagnole, francesi, tedesche, portoghesi), dal dominio `.it` e dalle scritture non latine. I
+  vecchi restano in fondo; a pari età prima gli italiani, poi gli incerti, poi le altre lingue.
+  Nessun risultato si toglie: se gli italiani mancano restano gli altri. Vale per web e notizie,
+  solo con `web_lingua` italiana. Sui 15 risultati veri della DGX: i 7 di DuckDuckGo «it», 4 di
+  Bing «altra» (Baidu, in cinese), 4 incerti (forum francesi e tedeschi con titoli brevi): i primi 5 dati al modello sono tutti
+  italiani.
+- **Un'altra lingua chiesta** (`ALTRA_LINGUA`, sulla domanda già scritta dal modello): «in
+  inglese», «english», «site:…», «siti spagnoli», «giornali stranieri» → `language=all` e
+  l'ordine di SearXNG. Contrari: «ristorante inglese», «calciatori stranieri», «notizie
+  internazionali», «lavorare all'estero», «lezioni di spagnolo».
+- **Configurazione**: `web_preferisci_lingua` (predefinito true; false = l'ordine di SearXNG).
+  Registro dei turni: `web_lingua_preferita` (qualcosa è finito in fondo), `web_altra_lingua`.
+- **Prove** a secco in `prova_web` (SearXNG finto suo, così i conteggi delle richieste di sopra
+  non cambiano). Da valutare con Dario: togliere Bing dai motori di SearXNG (`settings.yml`),
+  visto che con `it-IT` dà risultati fuori lingua e fuori tema.
+

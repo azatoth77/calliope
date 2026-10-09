@@ -73,7 +73,10 @@ INTENTI_LETTURA = {"HassGetState", "HassClimateGetTemperature"}
 
 # Attributi tenuti per le frasi di stato
 _ATTRIBUTI = ("current_position", "brightness", "current_temperature", "temperature",
-              "hvac_action", "unit_of_measurement", "device_class", "friendly_name")
+              "hvac_action", "unit_of_measurement", "device_class", "friendly_name",
+              # le entità meteo (09/10, casa/meteo.py)
+              "humidity", "apparent_temperature", "wind_speed", "pressure", "cloud_coverage",
+              "temperature_unit", "wind_speed_unit", "supported_features")
 
 
 class _ErroreHA(Exception):
@@ -629,6 +632,29 @@ class HomeAssistantBackend(HomeBackend):
                 stato=st.get("s"), unita=attrs.get("unit_of_measurement"),
                 attributi={k: attrs[k] for k in _ATTRIBUTI if k in attrs}))
         return out
+
+    def meteo_esposte(self) -> list[str]:
+        # Nessun _assicura: l'elenco dell'ultimo caricamento (resta anche con HA spento). Con HA
+        # collegata l'esposizione si rilegge in secondo piano ogni aggiorna_s (non blocca)
+        if self._ready.is_set():
+            self._forse_aggiorna()
+        return [eid for eid in list(self._esposte) if eid.startswith("weather.")]
+
+    def previsioni(self, entity_id: str, tipo: str = "daily") -> list[dict]:
+        """`weather.get_forecasts` (HA 2023.12 e seguenti), servizio di sola lettura con la
+        risposta: `call_service` con `return_response`. Solo un'entità meteo esposta e solo
+        questo servizio: nessun altro servizio di HA si chiama fuori dai comandi verificati a
+        secco."""
+        if not str(entity_id).startswith("weather.") or entity_id not in self._esposte:
+            raise ValueError("entità meteo non esposta")
+        if tipo not in ("daily", "hourly", "twice_daily"):
+            raise ValueError("tipo di previsione sconosciuto")
+        r = self._richiesta({"type": "call_service", "domain": "weather",
+                             "service": "get_forecasts", "service_data": {"type": tipo},
+                             "target": {"entity_id": entity_id}, "return_response": True})
+        resp = (r or {}).get("response") or {}
+        voci = (resp.get(entity_id) or {}).get("forecast") or []
+        return [v for v in voci if isinstance(v, dict)]
 
     def _interpreta(self, res: dict | None) -> Interpretazione:
         if not res:

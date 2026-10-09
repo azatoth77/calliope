@@ -9,7 +9,7 @@ Calliope lo cerca tra le esposte per nome (`casa/nomi.py`, sezione in fondo). Gl
 `casa_comando` e `casa_stato` sono misurati dalle parole incerte (solo misura, niente «forse
 intendevi»: la casa ha i suoi nomi vicini; [voce-e-regole](voce-e-regole.md)); il nome pubblico
 di casa è vietato alle sonde dell'agente (`web/rete.py`, [agenti-estensioni](agenti-estensioni.md)).
-Da fare a mano: le aree delle luci «Soggiorno» e «Cucina» (fondo del documento).
+Da fare a mano: le aree delle luci «Soggiorno» e «Cucina» (fondo del documento). Dal 09/10 pomeriggio il meteo di casa viene dall'entità meteo esposta, se c'è (sezione in fondo).
 
 ## Moduli
 
@@ -17,6 +17,7 @@ Da fare a mano: le aree delle luci «Soggiorno» e «Cucina» (fondo del documen
 |---|---|---|
 | Casa (luci, tapparelle, termostato, sensori) | Home Assistant via WebSocket (`websockets`): agente di conversazione integrato per i comandi, stati delle entità esposte per le letture | `calliope/casa/` → `HomeBackend` (`base.py`), `HomeAssistantBackend` (`homeassistant.py`), `Regole` (`regole.py`), `descrivi` (`parole.py`), `diagnose`, `load_casa`, guida scritta in `guida.py`; tool in `calliope/tools/casa.py` |
 | Errori di HA in italiano normale | i modelli veri delle risposte d'errore di HA (home-assistant-intents) | `calliope/casa/errori.py` → `riformula_errore`, usato da `HomeAssistantBackend._esito` |
+| Meteo di casa (09/10) | entità `weather.*` esposta: stati in memoria e `weather.get_forecasts` | `calliope/casa/meteo.py` → `MeteoCasa`, `CONDIZIONI`, `giorni_chiesti`; `HomeAssistantBackend.meteo_esposte`, `previsioni`; tool `meteo_leggi` e `allinea_meteo` in `tools/casa.py`; città di casa a voce in `calliope/luogo.py` e `citta_casa_salva` |
 | Comando capito ma senza dispositivi (08/10) | nessuna: le entità esposte già in memoria | `calliope/casa/nomi.py` → `candidate`, `frase_fatto`, `frase_quale`, consigli a chi amministra; usato da `tools/casa.py` (`_per_nome`) |
 
 ## Problemi noti
@@ -195,3 +196,55 @@ Da fare a mano: le aree delle luci «Soggiorno» e «Cucina» (fondo del documen
 - **Da fare a mano** sulla casa vera: spostare la luce «Soggiorno» nell'area Soggiorno (o
   darle l'alias) e controllare l'area della luce «Cucina»; rimisurare a voce «spegni la luce
   in soggiorno» e «in cucina».
+
+## Il meteo di casa (09/10 pomeriggio, ramo `meteo-casa`)
+
+Decisione di Dario (09/10): «se chiedo il meteo senza indicazioni specifiche si intende quello di
+casa», e niente internet quando se ne può fare a meno (le coordinate di Home Assistant non si
+convertono in un nome di città con servizi esterni). Tre casi, in ordine:
+
+1. **Entità meteo esposta in HA** (`weather.*`, per esempio Met.no, che HA scarica da sé):
+   `meteo_leggi(quando)` (`calliope/casa/meteo.py`, `tools/casa.py`). Adesso dagli stati già in
+   memoria (condizione, temperatura, umidità, vento: nessuna richiesta); le previsioni con il
+   servizio di sola lettura `weather.get_forecasts` (`call_service` con `return_response`,
+   `HomeAssistantBackend.previsioni`: solo il dominio `weather`, solo un'entità esposta),
+   giornaliere o orarie secondo `supported_features` («stasera», «domani mattina» → orarie della
+   fascia), tenute 10 minuti. Le 15 condizioni di HA in italiano (`CONDIZIONI`: «partlycloudy»
+   → «parzialmente nuvoloso»); anche `casa_stato` letto per nome sull'entità meteo dice la
+   condizione in italiano. Il giorno («domani», «sabato», «weekend», «prossimi giorni») lo
+   sceglie il modello, il codice lo converte in date. Per tutti i livelli, anche gli ospiti.
+   **Il tool c'è solo con l'entità esposta** (`allinea_meteo`, chiamato da Brain prima del
+   prompt, con l'elenco dell'ultimo caricamento: mai un'attesa su HA spento): col 4B, presente
+   ma non nominato, veniva chiamato lo stesso e dopo il suo «non c'è» non cercava più su
+   internet (0/1). Esporre o togliere l'entità in HA cambia tool e prompt da soli (rilettura
+   ogni `casa_aggiorna_s`; il prefisso nuovo si scalda).
+2. **Nessuna entità esposta**: la città di casa (`casa_citta`, o quella salvata a voce) con
+   l'estensione del meteo o `web_cerca`, come dal 09/10 mattina ([voce-e-regole](voce-e-regole.md)).
+   Una configurazione vuota o un segnaposto («<città>», «TODO», «la tua città»…) vale come
+   nessuna città (`luogo.valida`; «Città di Castello» è una città).
+3. **Né entità né città**: il prompt dice di chiedere in che città è la casa; quando la persona
+   risponde, il modello chiama `citta_casa_salva(citta)` e risponde per quella città. Il tool, a
+   chi amministra, propone «Vuoi che mi ricordi che la casa è a …?» (azione in sospeso); al «sì»
+   salva in `luogo.json` accanto alla configurazione (`calliope/luogo.py`, scrittura atomica di
+   `persistenza.py`, come `personalita.json`; mai `calliope.yaml`, fuori da git). Una conferma
+   senza la proposta in sospeso vale come proposta (regola `citta_casa_proposta`: col 4B «A
+   Borgoverde.» → `conferma=true` subito). Familiari e ospiti: «vale solo per questa richiesta»
+   (`citta_casa_solo_admin`). La configurazione vince sempre sulla città salvata; con la città in
+   configurazione a voce non si cambia. La proposta è innocua per la politica.
+
+**Misure** (gemma4 e4b locale, `prova_meteo_casa_ollama`, 3 giri, HA finto e ricerca finta):
+«Che tempo fa?» con l'entità → `meteo_leggi` 3/3; «Domani piove?» → `meteo_leggi(quando=domani)`
+3/3; senza entità con la città → `web_cerca` con la città 3/3; né entità né città → chiede dove
+6/6, «A Borgoverde.» → ricerca con la città e proposta 6/6, «Sì.» → salvata 3/3 per chi
+amministra, 0/3 per una familiare. Contrari: Parigi → mai `meteo_leggi`, cerca Parigi 3/3; «da
+Ettore» → chiede dov'è 3/3; «temperatura in sala» → `casa_stato` 3/3. `prova_citta_casa_ollama`
+invariata (estensione con la città 5/6 su due passate, l'altra 4/4).
+
+**Casa vera (DGX, 09/10, in sola lettura dal giornale di Calliope)**: HA espone 13 entità (light
+10, sensor 2, vacuum 1), **nessuna `weather.*`**: oggi vale il caso 2 o 3. Se l'entità esiste non
+si è potuto vedere senza leggere i segreti. Per esporla: in HA, Impostazioni → Dispositivi e
+servizi → Met.no (o un'altra integrazione meteo; se manca «Aggiungi integrazione» → Met.no, che
+usa la posizione di casa di HA), poi Impostazioni → Assistenti vocali → Esponi → attivare
+l'entità meteo (di solito «Forecast Casa»/«Forecast Home»). Calliope la vede entro
+`casa_aggiorna_s` (300 s) dal turno dopo, senza riavvio (l'esposizione si rilegge in secondo
+piano anche solo costruendo il prompt).

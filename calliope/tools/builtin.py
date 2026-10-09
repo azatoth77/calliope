@@ -2101,6 +2101,9 @@ def build_registry(biblioteca: bool = False, pc: dict | None = None,
         from .documenti import documenti_specs
         for spec in documenti_specs(documenti, agenti=bool(agenti)):
             reg.register(spec)
+    # La città di casa detta a voce (09/10, calliope/luogo.py): c'è sempre, anche senza casa
+    from .casa import luogo_spec
+    reg.register(luogo_spec())
     if casa is not None:
         from .casa import casa_specs
         for spec in casa_specs(bool(casa), casa_ospite,

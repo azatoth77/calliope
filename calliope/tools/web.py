@@ -74,6 +74,12 @@ def _web_cerca(ctx: ToolContext, domanda: str = "", tipo: str = "web") -> dict:
         # Solo i tipi di dato, mai i dati (registro dei turni)
         note_rule(ctx, "web_dati_tolti")
         print(f"   [WEB] tolti dalla domanda: {', '.join(res['tolti'])}", flush=True)
+    if res.get("altra_lingua"):
+        # La domanda chiede un'altra lingua o siti stranieri: nessuna preferenza (09/10)
+        note_rule(ctx, "web_altra_lingua")
+    elif res.get("lingua_preferita"):
+        # Risultati in un'altra lingua messi in fondo (09/10, servizio.lingua_risultato)
+        note_rule(ctx, "web_lingua_preferita")
     if res.get("tema"):
         # Le notizie cercate per tema, senza la parola «notizie» (servizio.tema_notizie)
         note_rule(ctx, "notizie_tema")

@@ -447,6 +447,9 @@ def registro_completo():
                          minori_tool=True, allegati=True)
     for s in estensioni_specs(crea=True):
         reg.register(s)
+    # meteo_leggi c'è solo con un'entità meteo esposta in HA (09/10, allinea_meteo)
+    from calliope.tools.casa import meteo_spec
+    reg.register(meteo_spec())
     return reg
 
 

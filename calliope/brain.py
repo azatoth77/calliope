@@ -33,7 +33,7 @@ from .allegati import Allegati, Allegato
 from .conversazione import UNSET, Conversazione
 from .immagini import Album
 from .memory import HOUSE
-from . import argomenti_incerti, politica, provenienza, valore
+from . import argomenti_incerti, luogo, politica, provenienza, valore
 from .sicurezza import instruction_fact
 from .testi import MESI as _MESI, SENTENCE_END as _SENTENCE_END
 from .tools import dialogo
@@ -2867,6 +2867,13 @@ class Brain:
         """Il prompt di sistema (uguale per tutti i livelli, così il prefisso resta in cache).
         Lo usano le risposte e il riscaldamento. Ciò che dipende da chi parla (nome, ricordi)
         va nei messaggi subito prima della domanda (_memory_message), mai qui."""
+        # Il meteo di casa (09/10): meteo_leggi c'è solo con un'entità meteo esposta in Home
+        # Assistant (l'elenco dell'ultimo caricamento, senza aspettare HA). Cambia di rado:
+        # tool e prompt insieme, e il prefisso nuovo si scalda (_scalda_se_cambiato)
+        cerca_tool = getattr(self.tools, "get", None)
+        if cerca_tool is not None and cerca_tool("casa_stato") is not None:
+            from .tools.casa import allinea_meteo
+            allinea_meteo(self.tools, getattr(self.tool_ctx, "casa", None))
         # Il prompt nomina biblioteca_cerca solo se il tool c'è davvero
         names = [s["function"]["name"] for s in self.tools.all_schemas()]
         has_library = "biblioteca_cerca" in names
@@ -2887,7 +2894,10 @@ class Brain:
                                                   ufficio="modello_compila" in names,
                                                   web="web_cerca" in names,
                                                   estensioni=any(n.startswith("est_")
-                                                                 for n in names))}]
+                                                                 for n in names),
+                                                  meteo_casa="meteo_leggi" in names,
+                                                  citta=luogo.citta_casa(self.cfg),
+                                                  citta_salva="citta_casa_salva" in names)}]
         return system
 
     def _reply(self, user_text: str, level: str, context: str | None, pending: str | None):
@@ -4242,7 +4252,8 @@ class Brain:
             # I «no» della conversazione (09/10): la lista viva, la politica la aggiorna
             rifiuti=self._rifiuti(),
             # La città della casa (09/10) viene dalla configurazione, non da un dato esterno
-            da_config=" ".join(str(getattr(self.cfg, "casa_citta", "") or "").split()))
+            # (o salvata a voce da chi amministra, luogo.json: 09/10)
+            da_config=luogo.citta_casa(self.cfg))
 
     def _intenzioni(self) -> list:
         conv = self._c()

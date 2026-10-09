@@ -337,6 +337,160 @@ def _casa_stato(ctx: ToolContext, cosa: str = "") -> dict:
     return _non_trovato(ctx, "casa_stato", tries[0], visible, (res or {}).get("motivo", ""))
 
 
+# ─────────────────────────── meteo_leggi ───────────────────────────
+
+def _meteo_leggi(ctx: ToolContext, quando: str = "") -> dict:
+    """Il meteo di casa dall'entità weather esposta in Home Assistant (casa/meteo.py, 09/10).
+    Senza entità esposta: la città di casa (luogo.py) o la domanda «dove si trova la casa?»,
+    detto al modello in `cosa_fare`."""
+    from .. import luogo
+    from ..casa.meteo import MeteoCasa
+    be = getattr(ctx, "casa", None)
+    citta = luogo.citta_casa(ctx.cfg)
+    altrimenti = (f"Home Assistant non ha il meteo di casa: chiama subito l'estensione del "
+                  f"meteo, se c'è, altrimenti web_cerca con la domanda «meteo {citta}», senza "
+                  f"chiedere niente a chi parla (la casa è a {citta})." if citta else
+                  "Home Assistant non ha il meteo di casa e non sai dove si trova la casa: "
+                  "chiedi a chi parla in che città è.")
+    if be is None:
+        return {"ok": False, "errore": "la casa non è collegata", "cosa_fare": altrimenti}
+    # Uno per adattatore (la cache delle previsioni vale tra un turno e l'altro)
+    meteo = getattr(be, "_meteo_casa", None)
+    if meteo is None:
+        meteo = MeteoCasa(be)
+        try:
+            be._meteo_casa = meteo
+        except AttributeError:
+            pass
+    try:
+        res = meteo.leggi(quando)
+    except CasaNonRisponde as e:
+        print(f"   [CASA] meteo: Home Assistant non risponde ({e})", flush=True)
+        return {"ok": False, "errore": "Home Assistant non risponde", "cosa_fare": altrimenti}
+    if not res.get("ok"):
+        print(f"   [CASA] meteo «{quando}»: {res.get('errore')}", flush=True)
+        # Con l'entità meteo che risponde manca solo quel giorno: niente internet per casa
+        senza_entita = res.get("entita") is False
+        return {**{k: v for k, v in res.items() if k != "entita"}, "cosa_fare": (
+            altrimenti if senza_entita else
+            "Di' in breve che per quel giorno Home Assistant non ha previsioni"
+            + (", e il meteo di adesso." if "frase_adesso" in res else "."))}
+    print(f"   [CASA] meteo «{quando or 'adesso'}» → {res['frase']}", flush=True)
+    return {**res, "cosa_fare": ("È il meteo di casa. Rispondi alla domanda in 1–2 frasi da "
+                                 "questi dati, senza nominare Home Assistant.")}
+
+
+# ─────────────────────────── citta_casa_salva ───────────────────────────
+
+def _citta_casa_salva(ctx: ToolContext, citta: str = "", conferma=False) -> dict:
+    """La città di casa detta a voce (luogo.py, 09/10). Senza `conferma`: a chi amministra
+    propone di ricordarla (azione in sospeso, il «sì» lo decide il modello); con `conferma`
+    la salva in luogo.json. Familiari e ospiti non la salvano. Mai calliope.yaml."""
+    from .. import luogo
+    c = luogo.valida(citta)
+    if not c:
+        return {"ok": False, "fatto": NIENTE, "errore": "manca la città, o non sembra una città",
+                "cosa_fare": "chiedi in che città si trova la casa"}
+    gia = luogo.da_config(ctx.cfg)
+    if gia:
+        same = norm(gia) == norm(c)
+        return {"ok": same, "fatto": NIENTE, "citta_di_casa": gia,
+                "nota": ("è già la città di casa" if same else
+                         f"la città di casa è {gia}, scritta nella configurazione: si cambia "
+                         f"lì, non a voce"),
+                "cosa_fare": "non proporre di ricordarla"}
+    per_ora = (f"Rispondi alla richiesta di prima per {c}: per il meteo chiama web_cerca (o "
+               f"l'estensione del meteo, se c'è) con {c}, senza inventare.")
+    if _level(ctx) != "amministra":
+        note_rule(ctx, "citta_casa_solo_admin")
+        return {"ok": False, "fatto": NIENTE,
+                "nota": "la città di casa la salva solo chi amministra: vale solo per questa "
+                        "richiesta",
+                "cosa_fare": "Non proporre di ricordarla. " + per_ora}
+    if luogo.salvata(ctx.cfg) and norm(luogo.salvata(ctx.cfg)) == norm(c):
+        return {"ok": True, "fatto": NIENTE, "nota": "è già la città di casa",
+                "cosa_fare": "non proporre di ricordarla"}
+    # Si salva solo dopo il «sì» alla proposta (la proposta in sospeso è di questo tool): una
+    # conferma alla prima chiamata vale come proposta (09/10, col 4B: «A Borgoverde.» →
+    # conferma=true subito). Regola `citta_casa_proposta`
+    confermata = str(conferma).strip().lower() in ("true", "1", "sì", "si", "yes")
+    if confermata and getattr(ctx, "tool_in_sospeso", None) != "citta_casa_salva":
+        note_rule(ctx, "citta_casa_proposta")
+        confermata = False
+    if not confermata:
+        domanda = f"Vuoi che mi ricordi che la casa è a {c}?"
+        return {"ok": True, "fatto": "NIENTE ancora: è una proposta, non è salvata",
+                "cosa_fare": f"{per_ora} Poi chiudi la risposta con questa domanda: "
+                             f"«{domanda}»",
+                "in_sospeso": {"domanda": domanda, "cosa": f"ricordare che la casa è a {c}",
+                               "tool": "citta_casa_salva",
+                               "argomenti": {"citta": c, "conferma": True}}}
+    chi = getattr(getattr(ctx, "speaker_ctx", None), "current_speaker", None)
+    try:
+        salvata = luogo.salva(ctx.cfg, c, chi)
+    except (ValueError, OSError) as e:
+        print(f"   [LUOGO] città di casa non salvata: {e}", flush=True)
+        return _final("Non sono riuscita a salvarla: vale solo per adesso.", ok=False,
+                      fatto=NIENTE, errore=str(e))
+    print(f"   [LUOGO] città di casa salvata a voce: {salvata}" + (f" (da {chi})" if chi else ""),
+          flush=True)
+    return _final(f"Fatto: da adesso so che la casa è a {salvata}.", ok=True,
+                  fatto="salvata", citta=salvata)
+
+
+def meteo_spec() -> ToolSpec:
+    """meteo_leggi: per tutti, anche gli ospiti (il meteo non è un dato della famiglia). Si
+    registra solo con un'entità meteo esposta (allinea_meteo): col 4B, presente ma non
+    nominato dal prompt, veniva chiamato lo stesso e dopo il suo «non c'è» non cercava più
+    su internet (09/10)."""
+    return ToolSpec(
+        name="meteo_leggi",
+        description=("Il meteo di casa (dove sei) da Home Assistant: cielo, temperatura, "
+                     "umidità, vento e previsioni. Solo quando chiedono il meteo senza "
+                     "nominare un altro posto; non per la temperatura delle stanze "
+                     "(casa_stato). quando: «adesso» (o vuoto), «oggi», «stasera», «domani», "
+                     "«domani mattina», «dopodomani», un giorno della settimana, «weekend», "
+                     "«prossimi giorni»."),
+        parameters={"type": "object",
+                    "properties": {"quando": {"type": "string"}}, "required": []},
+        func=_meteo_leggi, risk="lettura", levels=ALL)
+
+
+def allinea_meteo(reg, be) -> bool:
+    """meteo_leggi c'è se e solo se un'entità meteo è esposta in Home Assistant (l'elenco
+    dell'ultimo caricamento: non aspetta HA). Lo chiama Brain prima di costruire il prompt:
+    tool e prompt cambiano insieme, di rado (il prefisso nuovo si scalda). True se è
+    cambiato qualcosa."""
+    try:
+        esposta = be is not None and bool(be.meteo_esposte())
+    except Exception:  # noqa: BLE001 — un adattatore senza meteo
+        esposta = False
+    presente = reg.get("meteo_leggi") is not None
+    if esposta and not presente:
+        reg.register(meteo_spec())
+        return True
+    if presente and not esposta:
+        reg.unregister("meteo_leggi")
+        return True
+    return False
+
+
+def luogo_spec() -> ToolSpec:
+    """citta_casa_salva: c'è sempre (anche senza Home Assistant), uguale per tutti i livelli;
+    chi non amministra riceve «vale solo per questa richiesta»."""
+    return ToolSpec(
+        name="citta_casa_salva",
+        description=("Ricorda in che città si trova la casa, per il meteo e ciò che dipende "
+                     "dal luogo. Chiamalo quando chi parla ti dice dove si trova la casa, dopo "
+                     "che gliel'hai chiesto: citta = la città detta; conferma=true solo dopo "
+                     "il suo «sì» alla tua domanda «vuoi che mi ricordi…»."),
+        parameters={"type": "object",
+                    "properties": {"citta": {"type": "string"},
+                                   "conferma": {"type": "boolean"}},
+                    "required": ["citta"]},
+        func=_citta_casa_salva, risk="azione", levels=ALL)
+
+
 # ─────────────────────────── casa_integrazione ───────────────────────────
 
 def _esempio(be) -> str:

@@ -200,6 +200,11 @@ def stato_detto(e: Entita) -> str:
         last = parts[-1]
         joint = (" ed " if last.startswith("è") else " e ") if len(parts) > 1 else ""
         return ", ".join(parts[:-1]) + joint + last
+    if d == "weather":
+        # L'entità meteo letta per nome da casa_stato (09/10): «partlycloudy» in italiano
+        from .meteo import condizione
+        t = a.get("temperature")
+        return f"dice {condizione(s)}" + (f", {numero(t)} gradi" if t is not None else "")
     if d == "sensor" and _is_number(s):
         u = unita_detta(e.unita)
         return f"segna {numero(s)}" + (f" {u}" if u else "")

@@ -93,6 +93,7 @@ A_SECCO = [
     ("prova_documenti.py", [], "documenti Word, Excel e PDF: file, formule, modifiche, permessi"),
     ("prova_ufficio.py", [], "ufficio: conti, XML FatturaPA (XSD se c'è), numerazione concorrente, rubrica, modelli Word e PowerPoint, flusso a voce"),
     ("prova_casa_ha.py", [], "casa via Home Assistant con un HA finto: regole, permessi, TLS, diagnosi"),
+    ("prova_meteo_casa.py", [], "meteo di casa (09/10): condizioni di HA in italiano, giorni chiesti, entità weather esposta con l'HA finto (adesso, domani, stasera, cache, solo weather.get_forecasts, ospite), non esposta mai vista, prompt secondo la disponibilità (entità, città, segnaposto, niente, HA spento), città salvata a voce solo da chi amministra (proposta e conferma, luogo.json, configurazione che vince)"),
     ("prova_casa_nomi.py", [], "casa: comando capito da HA ma senza dispositivi (08/10), la candidata tra le esposte per nome o area, domanda, mai allargare, consiglio a chi amministra"),
     ("prova_capacita.py", [], "registro delle capacità: stati, riassunto, prompt, calliope_stato, macchina nuova"),
     ("prova_novita.py", [], "chi è Calliope e cosa c'è di nuovo (09/10, caso vero della DGX): CHANGELOG finto (tabella, sezioni, intervalli, «(notte)»), gestore finto (versione installata, storia, versione di prima), voci per periodo e dall'ultimo aggiornamento, frase breve senza host né percorsi, scheda personale con «Scarica»; «chi sei?» con fatti veri; «cosa sai fare?» per aree e il dettaglio con area; contrari"),
@@ -221,6 +222,7 @@ CON_OLLAMA = [
     ("prova_conversazioni_ollama.py", ["1"], "domande cronologiche sulle conversazioni passate con gemma4 (08/10, caso della DGX): «di cosa stavamo parlando?», «prima di questo?», «più indietro ancora» → cronologico=true con l'argomento giusto; contrari per argomento; spiegazioni su sé stessa (misura)"),
     ("prova_risultati_ollama.py", ["1"], "il risultato di un lavoro finito con gemma4 (07/10, caso della DGX): «E il risultato?», «leggili e dammi un bel riassunto» subito dopo l'annuncio, senza programma_esegui né lavoro_rispondi"),
     ("prova_estensione_nominata_ollama.py", ["1"], "l'estensione nominata a voce con gemma4 (08/10, caso della DGX): «invoca l'estensione meteo per città su Bergamo» dopo l'approvazione della versione 2 e nella conversazione pulita → est_, mai web_cerca; «che tempo fa?» contato; con e senza i dati del turno"),
+    ("prova_meteo_casa_ollama.py", ["1"], "il meteo di casa con gemma4 (09/10): entità meteo di HA esposta → meteo_leggi (adesso e domani), senza entità la città di casa su internet, né entità né città → chiede dove e chi amministra la fa ricordare; contrari Parigi, «da Ettore», «temperatura in sala», una familiare non la salva"),
     ("prova_citta_casa_ollama.py", ["1"], "la città della casa, le estensioni prima di internet e le notizie per tema con gemma4 (09/10, casi della DGX): «che tempo fa?» → l'estensione con la città, senza estensione internet con la città; contrari Parigi e «da Ettore»; «le notizie di sport» esce come «sport»"),
     ("prova_sviluppo_ollama.py", ["1"], "la modalità sviluppo con gemma4 (08/10): la sessione del meteo per città della DGX come iter (richiesta, sì, fuori tema, collaudo con sviluppo_collauda, sviluppo nuovo che non parte, ritorno all'analisi, revisione, attivazione con la sfida), con i dati del turno e con la rete spenta"),
     ("prova_sviluppo_v2_ollama.py", ["1"], "la modalità sviluppo, versione 2, con gemma4 (08/10, il giro vero della DGX): apertura detta, collaudo che non va e «Lo faccio correggere?», «Perché?» → sviluppo_chiedi, la correzione, «Ok, chiuso a long» che non chiude, la correzione finita che riapre al collaudo, attivazione; chiamate come testo e nomi di tool detti"),
@@ -265,6 +267,7 @@ def keep_alive_della_voce():
 # Le durate tra parentesi sono del 06/10 sul portatile, nel gruppo parallelo.
 LIVELLO_2 = {
     "prova_casa_ha.py",              # 13 s
+    "prova_meteo_casa.py",           # ~3 s (09/10)
     "prova_capacita.py",             # 11 s
     "prova_installa.py",             # 6 s
     "prova_schermi.py",              # 13 s
@@ -323,7 +326,8 @@ LEGAMI = [
     ("calliope/main.py", ["prova_linux_import.py"]),
     ("calliope/config.py", ["prova_linux_import.py"]),
     ("calliope/tools/dialogo.py", ["prova_dialogo_tool.py"]),
-    ("calliope/tools/casa.py", ["prova_casa_ha.py"]),
+    ("calliope/tools/casa.py", ["prova_casa_ha.py", "prova_meteo_casa.py"]),
+    ("calliope/luogo.py", ["prova_meteo_casa.py"]),
     ("calliope/tools/agenti.py", ["prova_agenti.py", "prova_agenti_domande.py",
                                  "prova_analisi_richiesta.py",
                                  "prova_esecuzione.py", "prova_avanzamento.py"]),
@@ -353,7 +357,7 @@ LEGAMI = [
     ("calliope/minori.py", ["prova_voci_famiglia.py", "prova_minori.py"]),
     ("calliope/tools/documenti.py", ["prova_documenti.py", "prova_lavori_criteri.py"]),
     ("calliope/tools/conversazioni.py", ["prova_conversazioni.py"]),
-    ("calliope/casa/", ["prova_casa_ha.py"]),
+    ("calliope/casa/", ["prova_casa_ha.py", "prova_meteo_casa.py"]),
     ("calliope/capacita.py", ["prova_capacita.py", "prova_novita.py"]),
     ("calliope/stato.py", ["prova_capacita.py", "prova_piano.py"]),
     ("calliope/macchina.py", ["prova_capacita.py", "prova_piano.py"]),
