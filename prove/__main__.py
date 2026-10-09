@@ -28,6 +28,7 @@ RADICE = Path(__file__).resolve().parent.parent
 A_SECCO = [
     ("prova_testo.py", [], "wake word testuale, uscite, pulizia, frasi, calcola"),
     ("prova_runner.py", [], "il runner stesso (06/10, Q7): ogni prova registrata o manuale, legami dei tool d'area, salti parziali segnalati"),
+    ("prova_conflitti.py", [], "nessun segno di conflitto di git (<<<<<<<, =======, >>>>>>>) nei file di testo tracciati (09/10: il CHANGELOG letto a voce dalle novità li aveva)"),
     ("prova_dati_privati.py", [], "nessun dato privato nei file tracciati (06/10, pubblicazione): file vietati, segreti, IP privati non d'esempio, DuckDNS, percorsi utente, termini di privato/termini.txt"),
     ("prova_docs_aree.py", [], "documenti d'area (06/10, Q8): i nomi in backtick delle tabelle «Moduli» esistono nel codice"),
     ("prova_e2e_copioni.py", [], "prova end-to-end della DGX (prove/e2e/) a secco: copioni ben fatti, controllo dei passi, sfida, nessun dato personale"),
