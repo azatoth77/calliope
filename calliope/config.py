@@ -1310,6 +1310,17 @@ class Config:
     speaker_continuita_s: float = 900.0
     speaker_continuita_soglia: float = 0.36
     speaker_continuita_margine: float = 0.20
+    # Il proprietario di un satellite personale (09/10, regola `voce_proprietario`): sul telefono
+    # di una persona, una frase incerta tra lei e un minore (che varrebbe il minore, il profilo
+    # più protetto) resta sua, nella sua conversazione, se negli ultimi
+    # `speaker_proprietario_s` secondi è stata riconosciuta dalla voce lì, è lei la più simile
+    # (almeno `speaker_continuita_soglia`) e non c'è compagnia. Il minore prende il posto solo
+    # riconosciuto con sicurezza. Vale come la zona grigia (al più familiare, le azioni vogliono
+    # la voce nella frase), e la prudenza per i minori resta: guardiano, cancelli e preset del
+    # minore valgono per la frase. Caso vero della DGX del 09/10 (18:48): due frasi di chi
+    # amministra prese per il figlio (0,50 contro 0,485 e 0,61 contro 0,54) aprivano una
+    # conversazione nuova, e quella di prima si perdeva. 0 = spenta
+    speaker_proprietario_s: float = 180.0
     # Conferma breve (04/10, calliope/conferme.py): un «sì» sotto `speaker_min_voice_s`
     # conferma un'azione proposta a chi amministra se nella conversazione era già stato
     # riconosciuto dalla voce e l'impronta della frase breve arriva almeno qui contro il suo
@@ -2459,7 +2470,7 @@ SEZIONI: dict[str, list[str]] = {
     "chi_parla": ["speaker_id_enabled", "speaker_model", "speaker_threads",
                   "speaker_id_threshold", "speaker_id_session_margin", "speaker_id_margine",
                   "speaker_min_voice_s", "speaker_continuita_s", "speaker_continuita_soglia",
-                  "speaker_continuita_margine",
+                  "speaker_continuita_margine", "speaker_proprietario_s",
                   "speaker_conferma_breve_soglia",
                   "compagnia_enabled", "compagnia_finestra_s", "compagnia_soglia_profilo",
                   "compagnia_voce_min_s", "compagnia_soglia_gruppi", "compagnia_gruppi_min_s",
@@ -2725,7 +2736,7 @@ LIMITI: dict[str, tuple[float, float]] = {
     "speaker_id_threshold": (0.0, 1.0), "wake_threshold": (0.0, 1.0),
     "speaker_id_margine": (0.0, 1.0), "minori_margine_amministra": (0.0, 1.0),
     "speaker_continuita_s": (0.0, 86400.0), "speaker_continuita_soglia": (0.0, 1.0),
-    "speaker_continuita_margine": (0.0, 1.0),
+    "speaker_continuita_margine": (0.0, 1.0), "speaker_proprietario_s": (0.0, 3600.0),
     "compagnia_finestra_s": (10.0, 86_400.0), "compagnia_soglia_profilo": (0.0, 1.0),
     "compagnia_voce_min_s": (0.0, 30.0), "compagnia_soglia_gruppi": (0.0, 1.0),
     "compagnia_gruppi_min_s": (0.0, 30.0), "compagnia_gruppo_lungo_s": (0.0, 60.0),

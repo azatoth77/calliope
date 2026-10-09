@@ -525,6 +525,17 @@ chi_parla:
   speaker_continuita_s: 900.0
   speaker_continuita_soglia: 0.36
   speaker_continuita_margine: 0.2
+  # Il proprietario di un satellite personale (09/10, regola `voce_proprietario`): sul telefono
+  # di una persona, una frase incerta tra lei e un minore (che varrebbe il minore, il profilo
+  # più protetto) resta sua, nella sua conversazione, se negli ultimi
+  # `speaker_proprietario_s` secondi è stata riconosciuta dalla voce lì, è lei la più simile
+  # (almeno `speaker_continuita_soglia`) e non c'è compagnia. Il minore prende il posto solo
+  # riconosciuto con sicurezza. Vale come la zona grigia (al più familiare, le azioni vogliono
+  # la voce nella frase), e la prudenza per i minori resta: guardiano, cancelli e preset del
+  # minore valgono per la frase. Caso vero della DGX del 09/10 (18:48): due frasi di chi
+  # amministra prese per il figlio (0,50 contro 0,485 e 0,61 contro 0,54) aprivano una
+  # conversazione nuova, e quella di prima si perdeva. 0 = spenta
+  speaker_proprietario_s: 180.0
   # Conferma breve (04/10, calliope/conferme.py): un «sì» sotto `speaker_min_voice_s`
   # conferma un'azione proposta a chi amministra se nella conversazione era già stato
   # riconosciuto dalla voce e l'impronta della frase breve arriva almeno qui contro il suo

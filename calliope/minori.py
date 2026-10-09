@@ -375,9 +375,11 @@ def preset(prof, oggi: datetime.date | None = None, reg: Regole | None = None) -
 # ─────────────────────────── chi parla ───────────────────────────
 
 def profilo(ctx):
-    """Il profilo di chi parla (o None: ospite)."""
+    """Il profilo di chi parla per la prudenza dei minori (o None: ospite). Una frase rimasta
+    del proprietario di un satellite personale ma incerta con un minore (09/10, regola
+    `voce_proprietario`) vale il minore: preset dei tool, contenuti, documenti."""
     sc = getattr(ctx, "speaker_ctx", None)
-    name = getattr(sc, "current_speaker", None)
+    name = getattr(sc, "minore_incerto", None) or getattr(sc, "current_speaker", None)
     speakers = getattr(ctx, "speakers", None)
     try:
         return speakers.get(name) if (name and speakers is not None) else None
