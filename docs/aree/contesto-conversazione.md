@@ -645,3 +645,21 @@ Alle 11:07, conversazione aperta: «Quella cosa delle proteste che mi dicevi all
   storia nel risultato). Da rimisurare col modello della DGX.
 - **Diagnosi**: la traccia senza testo delle risposte riservate nel registro dei turni è in
   [voce-e-regole](voce-e-regole.md) (stessa data).
+
+## Latenza accettata (09/10)
+
+Dario, 09/10: «i lavori di latenza possiamo definirli buoni e accettati così». Misure del
+registro dei turni della DGX (`calliope stato --turni --giorni 2`):
+
+| Giorno | Risposte | Prima frase mediana | p90 | Base senza tool | Dal testo alla voce | STT |
+|---|---|---|---|---|---|---|
+| 08/10 (giornata di modalità sviluppo, 158 turni con tool) | 251 | 1,42 s | 3,82 s | 1,22 s | 0,35 s | 0,17 s |
+| 09/10 | 125 | 1,28 s | 2,79 s | 1,18 s | 0,36 s | 0,18 s |
+
+Dal 05/10 (mediana 2,05 s, p90 4,1 s) la prima frase è scesa di circa 0,8 s. Il resto oltre la
+base viene dai turni con tool (1,8–2,1 s) e dal guardiano. Niente più lavori dedicati alla
+latenza: resta l'avviso automatico di `calliope stato --turni` (soglia 1,2 s) come sentinella.
+I «da rimisurare» delle voci precedenti (testo→voce sulla DGX, prefisso dopo un cambio di
+modalità) sono chiusi da queste misure: testo→voce 0,35 s, cache del prefisso persa in 1 turno
+su 125 il 09/10.
+
