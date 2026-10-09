@@ -19,7 +19,7 @@ minore in pericolo è peggio di un falso positivo.
   (`rassicura`); il segnale resta aperto su quel minore (e su quel satellite) per
   `minori_pericolo_attesa_s`.
 - **Cancello 2**: la frase dopo dello stesso minore (o, se la voce non era sicura, di chi parla
-  su quel satellite) va al rilevatore con il primo segnale (`Guardiano.verifica`). Conferma (o
+  su quel satellite, ma mai di un adulto riconosciuto con sicurezza) va al rilevatore con il primo segnale (`Guardiano.verifica`). Conferma (o
   guasto) → protezione e avviso urgente con i due segnali; smentita → si risponde normalmente,
   niente avviso, ma il segnale conta per `minori_pericolo_finestra_s`: un secondo segnale
   dubbio in quella finestra vale confermato.
@@ -153,7 +153,8 @@ class Cancelli:
 
     def aperto_per(self, persona_id: str | None, corsia) -> Segnale | None:
         """Il segnale aperto a cui risponde questa frase: dello stesso minore, oppure (voce non
-        sicura al primo segnale) di chiunque parli su quel satellite."""
+        sicura al primo segnale) di chi parla su quel satellite senza essere un adulto
+        riconosciuto con sicurezza (chi chiama passa `corsia` None)."""
         ora = self.orologio()
         with self._lock:
             for s in reversed(self.segnali):

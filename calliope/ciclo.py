@@ -530,7 +530,11 @@ class Ciclo:
             return None
         prof = s.registry.get(t.speaker_name) if t.speaker_name else None
         pid = getattr(prof, "id", None) if prof is not None and minori.e_minore(prof) else None
-        seg = c.aperto_per(pid, self.corsia.chiave)
+        # Un adulto riconosciuto con sicurezza (voce o schermo) non risponde per il minore:
+        # la sua frase non apre né chiude il cancello, nemmeno sullo stesso satellite
+        adulto_sicuro = prof is not None and pid is None and getattr(
+            self.speaker_ctx, "identified_by", None) in ("voce", "schermo")
+        seg = c.aperto_per(pid, None if adulto_sicuro else self.corsia.chiave)
         if seg is None:
             return None
         fn = getattr(s.guardiano, "verifica", None)

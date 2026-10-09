@@ -211,8 +211,9 @@ un minore in pericolo è peggio di un falso positivo). Realizzato in `calliope/c
   **Conferma** (anche una reticenza che preoccupa, «non posso dirlo», «lascia stare») o giudizio
   guasto → protezione e avviso urgente, senza il modello (regola `pericolo_confermato`); **smentita**
   (va tutto bene, era un saluto o un gioco, parla tranquillo d'altro) → si risponde come sempre,
-  nessun avviso (`pericolo_smentito`). Con la voce sicura del minore la frase di un adulto non
-  chiude il cancello.
+  nessun avviso (`pericolo_smentito`). La frase di un adulto riconosciuto con sicurezza (voce o
+  schermo) non chiude mai il cancello; con la voce incerta al primo segnale conta anche quella di
+  un ospite sullo stesso satellite (nel caso vero, l'amico stesso).
 - **Due segnali poco chiari** dello stesso minore entro `minori_pericolo_finestra_s` (1800 s,
   anche dopo una smentita o un silenzio) → il secondo vale confermato: protezione e avviso
   (`pericolo_secondo_segnale`, l'avviso dice anche l'argomento del primo).
@@ -237,7 +238,7 @@ un minore in pericolo è peggio di un falso positivo). Realizzato in `calliope/c
 - Invariati: adulti, ospiti veri (protezione per gli ospiti, senza avvisi), fuori orario (protezione
   come prima, motivo `fuori_orario`), `minori_pericolo_verifica: false` = tutto come prima.
 
-**Prove**: `prove/prova_minori_cancelli.py` (a secco, 32 controlli: acuto, caso vero riscritto,
+**Prove**: `prove/prova_minori_cancelli.py` (a secco, 34 controlli: acuto, caso vero riscritto,
 conferma, smentita, silenzio col timer vero, due segnali, voce incerta, giudizi guasti, ospiti,
 avviso non a voce, con i contrari); `prova_minori_pericolo.py` invariata e verde.
 

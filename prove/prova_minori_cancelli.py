@@ -286,6 +286,18 @@ def main():
     verifica("smentito: il segnale non è più aperto",
              srv.cancelli.aperto_per("tommaso", "sat:telefono") is None)
 
+    # 2b. Voce incerta: un adulto riconosciuto con sicurezza sullo stesso satellite non chiude
+    srv.cancelli.segnali.clear()               # il segnale smentito sopra non conta qui
+    turno("Tommaso", "Addio.", come="breve")
+    detto, regole, rec, modello = turno("Carlo", "Che ore sono?")
+    verifica("contrario: con la voce incerta un adulto sicuro sullo stesso satellite non "
+             "chiude il cancello", modello and "pericolo_smentito" not in regole
+             and srv.cancelli.aperto_per("tommaso", "sat:telefono") is not None, str(regole))
+    detto, regole, rec, modello = turno("Tommaso", "Tutto bene, era un saluto.", come="breve")
+    verifica("poi la frase attribuita al ragazzo lo chiude", "pericolo_smentito" in regole
+             and not avvisi_di("tommaso"), str(regole))
+    srv.cancelli.segnali.clear()
+
     # 3. Conferma al secondo cancello (voce sicura)
     c.rec = {}
     detto, regole, rec, _ = turno("Luca", "Sparisco.")
