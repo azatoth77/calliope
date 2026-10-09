@@ -228,6 +228,7 @@ class Avvio:
         self.s = Servizi(cfg)
         self.echo_level = None
         self.corsie_tutte: dict = {}
+        self.avviata = time.monotonic()
 
     def prepara(self):
         cfg = self.cfg
@@ -504,6 +505,23 @@ class Avvio:
             atexit.register(web.close)
             if lavori is not None:
                 lavori.agente.web = web                # le ricerche delegate leggono anche il web
+            # SearXNG tenuto aggiornato (09/10, web/motore.py): il controllo quotidiano a
+            # Calliope ferma e senza lavori; l'esito automatico a chi amministra (cruscotto)
+            motore = getattr(web, "motore", None)
+            if motore is not None:
+                motore.lavori = (lambda: len(lavori.attivi())) if lavori is not None else None
+                motore.inattivita = self.inattivita_s
+                cr = getattr(s.schermi, "cruscotto", None) if s.schermi is not None else None
+                if cr is not None:
+                    cr.motore = motore
+                    motore.avvisa = cr.avvisa
+                atexit.register(motore.ferma)
+                motore.avvia()
+
+    def inattivita_s(self) -> float:
+        """Secondi dall'ultimo turno su qualunque corsia (dall'avvio, se non ce ne sono)."""
+        ultimo = max((c.ultimo_turno for c in list(self.corsie_tutte.values())), default=0.0)
+        return time.monotonic() - (ultimo or self.avviata)
 
     def _tool(self):
         cfg, s = self.cfg, self.s

@@ -172,6 +172,8 @@ A_SECCO = [
     # con Edge o Chromium anche la pagina /telefono attraverso l'inoltro
     ("prova_inoltro.py", [], "inoltro del satellite per il telefono: reti ammesse, limiti, TLS da capo a capo, Host e Origin, impronta nuova al ponte"),
     ("prova_web.py", [], "ricerca su internet con SearXNG e siti finti: privacy, SSRF, testo non fidato, azioni bloccate, agente"),
+    # ~5 s: SearXNG, registro delle immagini e docker finti; lo script con bash di Git se c'è
+    ("prova_searxng_aggiorna.py", [], "SearXNG tenuto aggiornato (09/10): prove e giudizio (degradata), registro delle immagini (mai latest), aggiornamento accanto con ritorno indietro, automatico solo a Calliope ferma e senza lavori, modo manuale, blocchi, capacità «degradata», Windows spento, cruscotto con gettoni a due tocchi solo per chi amministra, script con docker finto"),
     ("prova_lavori_criteri.py", [], "criteri del banco dei documenti: titoli, dati in lettere, numeri ricavati"),
     ("prova_agenti_openai.py", [], "agenti con il motore «openai» (vLLM): traduzione, client, lavori, --prova"),
     ("prova_arbitro_vllm.py", [], "arbitro con l'agente su vLLM sulla GPU della voce: stessa_gpu, uno stream per thread, pausa, archivio e ufficio cedevoli"),
@@ -289,6 +291,7 @@ LIVELLO_2 = {
     "prova_markdown.py",             # 8 s (07/10)
     "prova_pause.py",                # 9 s (07/10)
     "prova_esercizi.py",             # 8 s (08/10)
+    "prova_searxng_aggiorna.py",     # 5 s (09/10)
 }
 LIVELLO_3 = {
     "prova_schermi_pagina.py", "prova_scritto_pagina.py", "prova_immagini_pagina.py",
@@ -374,7 +377,11 @@ LEGAMI = [
  ["prova_estensioni.py", "prova_estensioni_piano.py",
                               "prova_estensioni_attacchi.py", "prova_giochi.py"]),
     ("calliope/guardrail.py", ["prova_estensioni.py", "prova_estensioni_attacchi.py"]),
-    ("calliope/web/", ["prova_web.py", "prova_estensioni_attacchi.py"]),
+    ("calliope/web/", ["prova_web.py", "prova_estensioni_attacchi.py",
+                       "prova_searxng_aggiorna.py"]),
+    ("setup/linux/motore/searxng.sh", ["prova_searxng_aggiorna.py"]),
+    ("calliope/schermi/cruscotto.py", ["prova_searxng_aggiorna.py"]),
+    ("calliope/capacita.py", ["prova_searxng_aggiorna.py"]),
     ("calliope/archivio/", ["prova_archivio.py"]),
     ("calliope/documenti/", ["prova_lavori_criteri.py", "prova_markdown.py"]),
     # Il Markdown dell'agente, il lettore e «Scarica» (07/10)

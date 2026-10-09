@@ -161,6 +161,8 @@ class Web:
         # Ultimo esito visto (registro delle capacità, senza rete): ok | non_provato |
         # searxng_giu | internet | errore
         self.diagnosi = {"codice": "non_provato"}
+        # Il controllo quotidiano e l'aggiornamento di SearXNG (motore.py, 09/10), se c'è
+        self.motore = None
 
     # ── collegamento ──
     def _http(self):

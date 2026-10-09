@@ -36,6 +36,11 @@ Indirizzi:
   POST /api/esercizio            «X-Calliope-Sessione», {azione, esercizio, risposta}: la
                                  scheda degli esercizi (08/10, calliope/esercizi/), solo da uno
                                  schermo personale con la sessione aperta; la correzione è qui
+  POST /api/motore               «X-Calliope-Sessione», {azione: controlla|aggiorna, gettone?}:
+                                 le azioni del cruscotto sulla ricerca web (09/10,
+                                 cruscotto.py, web/motore.py): senza gettone lo dà (primo
+                                 tocco), con il gettone fa partire l'azione (secondo tocco).
+                                 Stesse regole di /api/cruscotto
   POST /api/scarica              «X-Calliope-Sessione», {chiave, formato}: l'indirizzo per
                                  scaricare il documento di una scheda (07/10, scarica.py), solo
                                  da uno schermo personale a cui la scheda è arrivata
@@ -555,6 +560,42 @@ def crea_app(hub: Schermi) -> Starlette:
             return _json({"errore": f"cruscotto non calcolato ({type(e).__name__})"}, 500)
         return _json(dati)
 
+    # ── le azioni del cruscotto sulla ricerca web (09/10, cruscotto.py) ──
+    async def motore(request: Request):
+        """«Controlla» e «Aggiorna» di SearXNG: le prime azioni del cruscotto. Come
+        /api/cruscotto (sessione in un'intestazione, HTTPS fuori da questo computer, schermo
+        personale di chi amministra ricontrollato adesso), più il corpo JSON e i due tocchi
+        con il gettone. L'azione gira in un thread del motore: la pagina ne vede la fase e
+        l'esito nel cruscotto."""
+        cr = getattr(hub, "cruscotto", None)
+        if cr is None or getattr(cr, "motore", None) is None:
+            return _json({"errore": "qui la ricerca web non c'è"}, 404)
+        client = request.client.host if request.client else ""
+        if request.url.scheme != "https" and client not in ("127.0.0.1", "::1"):
+            return _json({"errore": "solo in HTTPS"}, 403)
+        sess = request.headers.get("x-calliope-sessione", "")
+        with lock:
+            sid = sessioni.get(sess) if sess else None
+        schermo = next((s for s in hub.abbinati() if s["id"] == sid), None) if sid else None
+        if schermo is None:
+            return _json({"errore": "sessione non valida"}, 401)
+        if not cr.amministra(schermo):
+            return _json({"errore": "solo sugli schermi personali di chi amministra"}, 403)
+        dati, errore = await corpo_json(request, 1024)
+        if errore is not None:
+            return errore
+        if not isinstance(dati, dict):
+            return _json({"errore": "dati non validi"}, 400)
+        azione = str(dati.get("azione") or "")
+        gettone = dati.get("gettone")
+        if not gettone:
+            try:
+                return _json(cr.gettone(schermo, azione))
+            except ValueError as e:
+                return _json({"errore": str(e)}, 429 if "troppe" in str(e) else 400)
+        ok, frase = await asyncio.to_thread(cr.esegui, schermo, azione, str(gettone), hub.log)
+        return _json({"ok": ok, "frase": frase}, 200 if ok else 409)
+
     # ── «Scarica» nella scheda del documento (07/10, scarica.py) ──
     async def scarica_gettone(request: Request):
         """L'indirizzo per scaricare il documento di una scheda: sessione in un'intestazione
@@ -825,6 +866,7 @@ def crea_app(hub: Schermi) -> Starlette:
         Route("/api/immagine", immagine, methods=["POST"]),
         Route("/api/allegato", allegato, methods=["POST"]),
         Route("/api/cruscotto", cruscotto),
+        Route("/api/motore", motore, methods=["POST"]),
         Route("/api/scarica", scarica_gettone, methods=["POST"]),
         Route("/scarica/{gettone}", scarica_file),
         Route("/api/cassetto", cassetto, methods=["POST"]),
