@@ -17,6 +17,7 @@ prezzi. La biblioteca resta la prima scelta per i fatti stabili (descrizione e p
 import datetime
 
 from ..schermi import schede
+from . import dialogo
 from .spec import ToolContext, ToolSpec, note_rule
 from ..testi import LIVELLI_DA, MESI
 
@@ -37,12 +38,32 @@ _GUASTI = {
 }
 
 
-def _web_cerca(ctx: ToolContext, domanda: str, tipo: str = "web") -> dict:
+def _web_cerca(ctx: ToolContext, domanda: str = "", tipo: str = "web") -> dict:
     web = getattr(ctx, "web", None)
     if web is None:
         return {"ok": False, "errore": "ricerca su internet non disponibile",
                 "risposta_finale": "La ricerca su internet qui non è disponibile."}
     tipo = "notizie" if str(tipo or "").lower().startswith("notiz") else "web"
+    if not str(domanda or "").strip():
+        if tipo == "web":
+            # La domanda serve solo alla ricerca web (09/10): l'errore come quello dello
+            # schema (tools/dialogo.py), correggibile, fuori dalla busta dei dati non fidati
+            note_rule(ctx, "tool_argomenti_mancanti")
+            try:
+                ctx.errore_registro = True
+            except AttributeError:
+                pass
+            err = dialogo.errore_argomenti(
+                "web_cerca", PARAMETRI, {"tipo": tipo}, DESCRIZIONE, manca=["domanda"],
+                frase=getattr(ctx, "user_text", "") or "")
+            err["errore"] = err["errore"].replace("obbligatorio ", "") \
+                .rstrip(".") + " (serve per tipo «web»; per le notizie è facoltativa)."
+            return err
+        # Le notizie senza tema (09/10, caso vero della DGX: «le ultime notizie» →
+        # web_cerca({'tipo': 'notizie'}), fermato tre volte): le ultime notizie generali,
+        # dell'ultima settimana (servizio.tema_notizie e PERIODO_NOTIZIE)
+        domanda = "notizie"
+        note_rule(ctx, "notizie_generali")
     from .. import minori
     prof = minori.profilo(ctx)
     ss = minori.safesearch(prof) if prof is not None else 1
@@ -95,23 +116,31 @@ def _web_cerca(ctx: ToolContext, domanda: str, tipo: str = "web") -> dict:
     return out
 
 
+DESCRIZIONE = (
+    "Cerca su internet ciò che cambia nel tempo o è di oggi: meteo e previsioni, "
+    "notizie, risultati sportivi, orari, prezzi, eventi, aperture. Per i fatti "
+    "stabili (storia, geografia, scienza, persone famose, opere, definizioni) usa "
+    "invece biblioteca_cerca, se c'è. domanda: breve, come per un motore di ricerca, "
+    "con luogo e giorno («meteo Milano domani», «risultato Inter ieri»), MAI con "
+    "nomi delle persone di casa, indirizzi, numeri di telefono o altri dati personali; "
+    "obbligatoria per tipo «web». tipo: «notizie» per le notizie, con il tema o il luogo "
+    "nella domanda («sport», «economia», «Torino»); per le notizie la domanda è "
+    "facoltativa: senza, le ultime notizie generali. Altrimenti tipo «web».")
+# Dal 09/10 `domanda` non è più obbligatoria nello schema: serve solo a tipo «web», e lì la
+# chiede la funzione con lo stesso errore dello schema (caso vero della DGX: «le ultime
+# notizie» → web_cerca({'tipo': 'notizie'}) fermato tre volte, prima frase 5,1 s)
+PARAMETRI = {"type": "object",
+             "properties": {"domanda": {"type": "string"},
+                            "tipo": {"type": "string", "enum": ["web", "notizie"]}},
+             "required": []}
+
+
 def web_spec(cfg=None) -> ToolSpec:
     livello = str(getattr(cfg, "web_livello", "familiare") or "familiare")
     return ToolSpec(
         name="web_cerca",
-        description=(
-            "Cerca su internet ciò che cambia nel tempo o è di oggi: meteo e previsioni, "
-            "notizie, risultati sportivi, orari, prezzi, eventi, aperture. Per i fatti "
-            "stabili (storia, geografia, scienza, persone famose, opere, definizioni) usa "
-            "invece biblioteca_cerca, se c'è. domanda: breve, come per un motore di ricerca, "
-            "con luogo e giorno («meteo Milano domani», «risultato Inter ieri»), MAI con "
-            "nomi delle persone di casa, indirizzi, numeri di telefono o altri dati personali. "
-            "tipo: «notizie» per le notizie, con il tema o il luogo nella domanda («sport», "
-            "«economia», «Torino»; senza tema «notizie»), altrimenti «web»."),
-        parameters={"type": "object",
-                    "properties": {"domanda": {"type": "string"},
-                                   "tipo": {"type": "string", "enum": ["web", "notizie"]}},
-                    "required": ["domanda"]},
+        description=DESCRIZIONE,
+        parameters=PARAMETRI,
         func=_web_cerca, risk="lettura", levels=LIVELLI_DA.get(livello, LIVELLI_DA["familiare"]),
         requires_internet=True, segreti=("domanda",), non_fidato=True,
         # La ricerca costa ~1–2 s (SearXNG chiede a più motori): la frase copre l'attesa

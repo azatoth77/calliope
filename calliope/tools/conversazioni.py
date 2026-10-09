@@ -182,7 +182,8 @@ def _conversazione_cerca(ctx: ToolContext, domanda: str = "", quando: str = "",
         return _final(f"Non trovo niente nelle {chi} conversazioni{dove}{su}.", ok=False)
     adesso = time.time()
     risultati = []
-    for x in r["risultati"]:
+    in_corso = getattr(ctx, "conv_archivio", None)
+    for x in per_recenti(r["risultati"]):
         voce = {"quando": quando_detto(x["quando"], adesso),
                 "detto_da_" + ("ospite" if ospiti else "te"): f"«{x['domanda']}»"
                 if x["domanda"] else "",
@@ -190,12 +191,66 @@ def _conversazione_cerca(ctx: ToolContext, domanda: str = "", quando: str = "",
         fatti = [a.get("detto") for a in x["azioni"] if a.get("detto")]
         if fatti:
             voce["fatto"] = "; ".join(fatti)[:300]
+        fonte = fonte_turno(x["azioni"])
+        if fonte:
+            voce["fonte"] = fonte
+        if in_corso is not None and x.get("conv") == in_corso:
+            voce["conversazione"] = "questa, ancora aperta: è nella storia qui sopra"
         risultati.append({k: v for k, v in voce.items() if v})
     extra = ({"periodo": f"niente {detto_periodo}: questi sono di altri giorni"}
              if fuori_periodo else {})
-    return {"ok": True, "nota": NOTA, "risultati": risultati, "ricerca": r["modo"], **extra,
+    storia = getattr(ctx, "storia", None) or []
+    if any(ruolo == "user" for ruolo, _ in storia):
+        extra["conversazione_di_adesso"] = ("i turni di questa conversazione sono nella storia "
+                                            "qui sopra: se la domanda parla di quelli, "
+                                            "rispondi da lì")
+    return {"ok": True, "nota": NOTA, "risultati": risultati, "ricerca": r["modo"],
+            "ordine": "dal più pertinente; a pari pertinenza dal più recente", **extra,
             "cosa_fare": "rispondi in una o due frasi con quello che serve alla domanda, "
-                         "dicendo quando ne avete parlato; se nei risultati non c'è, dillo"}
+                         "dicendo quando ne avete parlato; se più risultati vanno bene, vale il "
+                         "più recente, salvo che la persona indichi un altro momento. Per "
+                         "saperne di più su un risultato con «fonte», cerca di nuovo con lo "
+                         "stesso strumento della fonte, con i nomi detti in quel risultato. "
+                         "Se nei risultati non c'è, dillo"}
+
+
+# Da dove veniva l'informazione di un turno ritrovato (09/10, caso vero della DGX alle 11:23:
+# «prima mi parlavi di un festival, dimmi di più» → conversazione_cerca, poi biblioteca_cerca
+# invece del web da cui veniva il festival). Il nome dello strumento c'è perché il modello
+# possa richiamarlo
+FONTI = {"web_cerca": "una ricerca su internet (web_cerca)",
+         "biblioteca_cerca": "la biblioteca offline (biblioteca_cerca)",
+         "archivio_cerca": "i documenti di casa (archivio_cerca)",
+         "pc_cerca_file": "i file del computer (pc_cerca_file)"}
+FONTI_TIPO = {("web_cerca", "notizie"): "le notizie su internet (web_cerca con tipo «notizie»)"}
+# A pari pertinenza (punti della fusione almeno questa parte del migliore) vince il più recente
+PARI_PERTINENZA = 0.85
+
+
+def fonte_turno(azioni) -> str:
+    """Le fonti riuscite di un turno archiviato, in parole e con lo strumento, o ""."""
+    fonti = []
+    for a in azioni or ():
+        if not isinstance(a, dict) or not a.get("ok"):
+            continue
+        f = FONTI_TIPO.get((a.get("tool"), a.get("tipo"))) or FONTI.get(a.get("tool"))
+        if f and f not in fonti:
+            fonti.append(f)
+    return "; ".join(fonti)
+
+
+def per_recenti(risultati: list[dict]) -> list[dict]:
+    """I risultati in ordine di pertinenza, ma quelli a pari pertinenza con il migliore
+    (PARI_PERTINENZA) dal più recente (09/10: due festival, quello di oggi e quello di ieri,
+    e il modello raccontava quello di ieri)."""
+    if not risultati:
+        return []
+    migliore = max(float(x.get("punti") or 0) for x in risultati)
+    if migliore <= 0:
+        return list(risultati)
+    pari = [x for x in risultati if float(x.get("punti") or 0) >= migliore * PARI_PERTINENZA]
+    resto = [x for x in risultati if x not in pari]
+    return sorted(pari, key=lambda x: -float(x.get("quando") or 0)) + resto
 
 
 def _utili(risultati: list[dict]) -> list[dict]:
@@ -250,11 +305,15 @@ def conversazioni_specs() -> list[ToolSpec]:
         ToolSpec(
             name="conversazione_cerca",
             description=(
-                "Ritrova cosa ci siamo detti nelle conversazioni passate con chi parla (anche "
-                "di giorni fa), quando la persona ci fa riferimento e nella conversazione di "
-                "adesso non c'è: «cosa ti avevo detto stamattina sul preventivo?», «di cosa "
-                "abbiamo parlato ieri?», «che libro mi avevi consigliato?», «come si chiamava "
-                "quel ristorante di cui ti ho parlato?». Chiamalo subito, senza chiedere "
+                "Ritrova cosa ci siamo detti nelle conversazioni passate con chi parla, già "
+                "chiuse (anche di giorni fa), quando la persona ci fa riferimento e nella "
+                "conversazione di adesso non c'è: «cosa ti avevo detto stamattina sul "
+                "preventivo?», «di cosa abbiamo parlato ieri?», «che libro mi avevi "
+                "consigliato?», «come si chiamava quel ristorante di cui ti ho parlato?». "
+                "Quello che vi siete detti in questa conversazione è già qui sopra nella "
+                "storia: per «quella cosa che mi dicevi all'inizio», «prima hai detto…» rispondi "
+                "da lì senza chiamarlo, e per saperne di più cerca di nuovo con lo strumento "
+                "usato allora. Chiamalo subito, senza chiedere "
                 "prima di cosa si parlava. domanda: le parole utili; quando: il "
                 "periodo come detto («stamattina», «ieri», «la settimana scorsa»), se c'è. Per "
                 "le domande sull'ordine e non su un argomento («di cosa stavamo parlando?», «e "

@@ -2164,10 +2164,15 @@ class Ciclo:
         (storia e riferimenti: «grazie» a metà non la chiude), ma la finestra di follow-up si
         chiude: è la fine dello scambio, e il parlato della stanza dopo un «grazie» non va
         trascritto. «Ok», «va bene» dopo una domanda di Calliope sono una risposta: vanno al
-        modello."""
+        modello. Dal 09/10 anche «grazie», e anche dopo un'offerta («Se vuoi cerco su
+        internet.», brain.OFFERTA): caso vero della DGX, «Sì, grazie.» trascritto «Grazie.»
+        riceveva «Prego, lo metto in conto» e la ricerca non partiva (regola
+        `cortesia_dopo_domanda`)."""
         s, cfg, brain, text = self.s, self.s.cfg, self.brain, t.text
         forma = closing_kind(text, cfg.wake_names) if not brain.has_pending() else None
-        if forma == "conferma" and brain.ultima_domanda():
+        if forma in ("grazie", "conferma") and brain.ultima_domanda():
+            if forma == "grazie":
+                self.rule("cortesia_dopo_domanda")
             forma = None
         if forma in ("grazie", "conferma"):
             prof = s.registry.get(t.speaker_name) if t.speaker_name else None
@@ -2823,8 +2828,12 @@ class Ciclo:
             # Documenti di casa (tool riservati): la risposta contiene i loro dati, e nel
             # registro dei turni restano solo i nomi dei tool. Il numero di parole sì (07/10):
             # «risposta: null» si leggeva come una risposta muta
-            rec.update(risposta=None, riservato=True,
-                       risposta_parole=len(" ".join(t.said).split()))
+            # Dal 09/10 una traccia senza testo per la diagnosi (brain.traccia_risposta):
+            # caratteri, frasi, «non so / non trovo», domanda o offerta finale
+            from .brain import traccia_risposta
+            detta = " ".join(t.said)
+            rec.update(risposta=None, riservato=True, risposta_parole=len(detta.split()),
+                       risposta_traccia=traccia_risposta(detta))
         # Il codice di abbinamento di uno schermo non resta nel registro dei turni
         for key in ("testo", "richiesta", "risposta"):
             rec[key] = brain.redact(rec.get(key))

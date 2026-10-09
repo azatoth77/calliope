@@ -190,6 +190,10 @@ def senza_sfida(testo: str) -> str:
     return _RIPETI.sub(r"\1 …", testo or "")
 
 
+# Il tipo di una chiamata che si può tenere: una parola sola, breve (gli elenchi chiusi)
+_TIPO = re.compile(r"[A-Za-zÀ-ÿ_]{2,20}")
+
+
 def turni(messaggi: list[dict], riservati=frozenset(), segreti: dict | None = None,
           quando: float | None = None, redact=None) -> list[dict]:
     """I messaggi della storia divisi in turni da archiviare: {domanda, risposta, azioni,
@@ -203,10 +207,13 @@ def turni(messaggi: list[dict], riservati=frozenset(), segreti: dict | None = No
     l'istante del turno, il satellite o lo schermo e il canale (`meta` del turno, per la scheda
     «Conversazione»), e se era la frase di sfida (`sfida`: al suo posto SFIDA_DETTA) o se la
     risposta la chiedeva (`sfida_chiesta`: le parole tolte). `redact` (Brain.redact): i
-    segreti detti nel turno (il codice di abbinamento di uno schermo)."""
+    segreti detti nel turno (il codice di abbinamento di uno schermo). Dal 09/10 l'unica
+    eccezione agli argomenti: il `tipo` della chiamata, se è una parola sola (web_cerca
+    «notizie»), perché conversazione_cerca dica da quale fonte veniva il turno."""
     oscura = oscura_archivio
     out: list[dict] = []
     cur = None
+    tipi: dict[str, str] = {}       # id della chiamata → tipo
     for m in messaggi:
         ruolo = m.get("role")
         if ruolo == "user" or cur is None:
@@ -235,6 +242,20 @@ def turni(messaggi: list[dict], riservati=frozenset(), segreti: dict | None = No
             testo = str(m.get("content") or "").strip()
             if testo:
                 cur["risposta"].append(testo)
+            for c in m.get("tool_calls") or ():
+                # Degli argomenti solo il «tipo» (09/10), un valore di un elenco chiuso
+                # (web_cerca «notizie»): la fonte del turno ritrovato con conversazione_cerca
+                if not isinstance(c, dict):
+                    continue
+                args = c.get("arguments")
+                if isinstance(args, str):
+                    try:
+                        args = json.loads(args)
+                    except json.JSONDecodeError:
+                        args = None
+                tipo = args.get("tipo") if isinstance(args, dict) else None
+                if c.get("id") and isinstance(tipo, str) and _TIPO.fullmatch(tipo):
+                    tipi[str(c["id"])] = tipo.lower()
         elif ruolo == "tool":
             nome = str(m.get("name") or "")
             if nome in riservati:
@@ -250,7 +271,8 @@ def turni(messaggi: list[dict], riservati=frozenset(), segreti: dict | None = No
                 if isinstance(res.get(k), str) and res[k].strip():
                     detto = res[k].strip()
                     break
-            cur["azioni"].append({"tool": nome, "ok": ok,
+            tipo = tipi.get(str(m.get("tool_call_id") or ""))
+            cur["azioni"].append({"tool": nome, "ok": ok, **({"tipo": tipo} if tipo else {}),
                                   **({"detto": oscura(detto)[:300]} if detto
                                      and nome not in riservati else {})})
     def pulito(x: str) -> str:
