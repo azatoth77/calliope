@@ -13,6 +13,9 @@ area e, in fondo, la roadmap com'era, con le voci fatte segnate. Nessuna data pr
   mediana per la prima voce sentita dal satellite
   ([`../prove/manuali/e2e-dgx.md`](../prove/manuali/e2e-dgx.md)). L'obiettivo di 1,2 s resta
   la metrica (`calliope stato --turni`), non più un blocco.
+- **Latenza accettata da Dario il 09/10** (mediana 1,42 s l'08/10 con molti tool, 1,28 s il
+  09/10, base 1,18 s): chiusa come lavoro; resta solo l'avviso come sentinella
+  ([contesto-conversazione](aree/contesto-conversazione.md)). Q1 è quindi chiusa.
 - Proposte delle due analisi del 06/10: P1–P11, Q2–Q11 fatte; aperte Q1, Q12–Q14 (sotto).
 - Trascrizione: confronto A / B / B2 / C chiuso il 07/10, si resta su A (correzione spenta);
   C solo con un posto dedicato alla correzione ([`aree/stt-tts.md`](aree/stt-tts.md)).
