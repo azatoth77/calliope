@@ -14,7 +14,7 @@ nomi di fantasia: la casa è a Borgoverde).
    notizie»; «Che notizie ci sono su Torino?».
 
 Fallisce se, con città ed estensione, «Che tempo fa?» non va all'estensione con Borgoverde
-almeno 2 volte su 3; se senza estensione non va a internet con Borgoverde almeno 2 su 3; se un
+almeno 2 volte su 3 (anche subito dopo le notizie, dal 09/10); se senza estensione non va a internet con Borgoverde almeno 2 su 3; se un
 contrario prende Borgoverde; se «le notizie di sport» non esce con «sport» almeno 2 su 3.
 `CALLIOPE_RADICE`: un'altra copia del codice (il confronto con main).
 
@@ -150,10 +150,11 @@ def main():
         ("senza città, estensione", "", True, [("Che tempo fa?", "senza_citta")]),
         # Nella stessa conversazione, subito dopo una ricerca (09/10: il turno dopo una ricerca
         # ha RICERCA_MSG nei dati del turno, «chiama di nuovo web_cerca se vuole approfondire»).
-        # Con l'estensione si conta soltanto: un'estensione che legge internet è un'«azione» per
-        # la politica (estensioni/servizio._agisce) e con un risultato web nella conversazione
-        # «Che tempo fa?» non la chiede (politica_azione_non_chiesta); il 4B allora inventa il
-        # meteo. Problema della politica, non del prompt (docs/aree/voce-e-regole.md, 09/10)
+        # Fino al 09/10 un'estensione che legge internet era un'«azione» per la politica e con
+        # un risultato web nella conversazione «Che tempo fa?» la fermava
+        # (politica_azione_non_chiesta): il 4B inventava il meteo (0/3). Dal 09/10 (fase 4
+        # della sicurezza per valore) un'estensione che legge soltanto è una lettura
+        # (estensioni/servizio._agisce): 3/3
         ("dopo le notizie, estensione", CITTA, True, [
             ("Sentimi le notizie di sport.", "notizie_sport"), ("Che tempo fa?", "meteo_casa_est")]),
         ("dopo le notizie, senza estensione", CITTA, False, [
@@ -218,7 +219,9 @@ def main():
                           ("città, senza estensione|notizie_sport",
                            "«le notizie di sport» → notizie con «sport»"),
                           ("dopo le notizie, senza estensione|meteo_casa_web",
-                           "dopo le notizie, «che tempo fa?» → internet con la città")):
+                           "dopo le notizie, «che tempo fa?» → internet con la città"),
+                          ("dopo le notizie, estensione|meteo_casa_est",
+                           "dopo le notizie, «che tempo fa?» → l'estensione con la città")):
         ok, det = quota(chiave, 2)
         verifica(descr + " (almeno 2 su 3)", ok, det)
     for chiave, descr in (("città+estensione|parigi_mai_casa", "Parigi mai Borgoverde (estensione)"),

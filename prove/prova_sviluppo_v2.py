@@ -493,8 +493,11 @@ def prova_riapertura(tmp, iso):
                                  {"dati": CITTA_FINTA}, ctx)
     finally:
         ctx.politica = None
-    verifica("«prova con…» nello sviluppo riaperto: niente «C'è di mezzo…» (sviluppo_intento)",
-             res is None and "sviluppo_intento" in ctx.regole, str(res))
+    # (con la politica per valore, accesa dal 09/10, il collaudo chiesto con la voce e la città
+    # detta esegue già per la matrice: valore_voce)
+    verifica("«prova con…» nello sviluppo riaperto: niente «C'è di mezzo…» (sviluppo_intento "
+             "o valore_voce)",
+             res is None and {"sviluppo_intento", "valore_voce"} & set(ctx.regole), str(res))
     out = P.chiama(reg, ctx, "sviluppo_collauda", {"dati": "Bergamo"}, turno=9)
     verifica("…e il collaudo va (niente «Non c'è nessuno sviluppo aperto»)",
              "A Bergamo ci sono 18 gradi" in json.dumps(out, ensure_ascii=False), detta(out))

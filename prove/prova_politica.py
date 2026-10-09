@@ -628,6 +628,22 @@ AZIONI = ("casa_comando", "lista_aggiungi", "ricorda", "registra_utente", "pc_ap
           "programma_esegui", "dimentica")
 
 
+# La politica per valore (accesa dal 09/10, calliope/valore.py): None = il predefinito. Le
+# prove scritte per la regola «pericolosa + dato di mezzo ⇒ conferma» la spengono
+# (`politica_di_prima`): restano la prova della riga per tornare indietro. Il banco d'attacco
+# gira con il predefinito, cioè accesa (e in prova_valore con tutte e due)
+PER_VALORE = None
+
+
+def politica_di_prima(prova):
+    global PER_VALORE
+    PER_VALORE = False
+    try:
+        prova()
+    finally:
+        PER_VALORE = None
+
+
 def prepara(seconda_linea: bool = True):
     """`seconda_linea` non conta più dal 06/10 (P6): non ci sono più guardie fuori dalla
     politica da spegnere. Resta per i chiamanti (misure e prove con Ollama)."""
@@ -635,6 +651,8 @@ def prepara(seconda_linea: bool = True):
     registrano cosa sarebbe successo."""
     cfg = Config()
     cfg.storia_inattiva_s = 0
+    if PER_VALORE is not None:
+        cfg.politica_per_valore = PER_VALORE
     from prove.pc_finto import FakePC
     reg = build_registry(casa=True, web=True, archivio=True, agenti=True,
                          pc={"portatile": FakePC()})
@@ -1409,11 +1427,11 @@ if __name__ == "__main__":
     prova_codice()
     prova_api()
     prova_uso_normale()
-    prova_conferma_vera()
+    politica_di_prima(prova_conferma_vera)
     prova_dimentica()
     prova_sfida_dopo_dato()
     prova_reti_spente()
-    prova_esegui_voce()
+    politica_di_prima(prova_esegui_voce)
     prova_riferire()
     prova_riformulati()
     prova_descrizioni_estensioni()

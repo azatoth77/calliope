@@ -397,9 +397,10 @@ def prova_politica_e_busta():
     res = next(m["content"] for m in b.backend.visti[1] if m["role"] == "tool")
     verifica("contenuto del cassetto in busta: «DATO NON FIDATO (fonte: allegato)»",
              "DATO NON FIDATO (fonte: allegato)" in res and "82,40" in res, res[:300])
+    # (politica_* con la politica di prima, valore_* con la politica per valore, dal 09/10)
     verifica("…e l'azione dettata dal file non parte: la ferma la politica",
              not any(t.get("ok") for t in b.last_tools if t.get("nome") == "casa_comando")
-             and any(r.startswith("politica_") for r in b.rules_fired()),
+             and any(r.startswith(("politica_", "valore_")) for r in b.rules_fired()),
              (b.last_tools, b.rules_fired()))
     cas.close()
 

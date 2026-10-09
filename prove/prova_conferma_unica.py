@@ -507,14 +507,30 @@ def prova_dimostrazione():
              "argomenti_esempio" in cons["function"]["parameters"]["properties"])
 
 
+def prova_estensione_con_foto_valore():
+    """Lo stesso caso con la politica per valore (accesa dal 09/10): l'estensione chiesta con
+    la voce e la foto di mezzo (E2, il compito detto) non ha la domanda della politica, resta il
+    «Procedo?» del tool. Una domanda sola anche qui."""
+    b, svc = prepara_dgx()
+    r1 = turno(b, DETTA, chiama("sviluppo_apri", EST), testo("Va bene."))
+    verifica("per valore, DGX 1: niente avviato prima del «sì», una domanda",
+             not svc.avviati and r1.rstrip().endswith("?"), r1)
+    r2 = turno(b, "Sì procedi pure.", chiama("sviluppo_apri", {"proposta": "L1"}),
+               testo("Fatto."))
+    verifica("per valore, DGX 2: al «sì» parte, una domanda in tutto",
+             len(svc.avviati) == 1 and domande(r1, r2) == 1, f"{r1!r} / {r2!r} {svc.avviati}")
+
+
 if __name__ == "__main__":
+    import prove.prova_politica as pp
     prova_lessico()
     prova_decidi()
-    prova_estensione_con_foto()
-    prova_delega_con_foto_sfida()
-    prova_delega_con_foto_voce()
-    prova_contrari()
-    prova_doppione()
+    # La politica di prima (per tornare indietro con una riga): queste sequenze provano la
+    # conferma della politica per il dato di mezzo fusa con il «Procedo?» del tool
+    for prova in (prova_estensione_con_foto, prova_delega_con_foto_sfida,
+                  prova_delega_con_foto_voce, prova_contrari, prova_doppione):
+        pp.politica_di_prima(prova)
+    prova_estensione_con_foto_valore()
     prova_doppione_piano()
     prova_rinuncia()
     prova_descrizioni()

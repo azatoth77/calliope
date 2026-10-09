@@ -494,8 +494,17 @@ def prova_consenso():
     RIC = {"tipo": "ricerca", "compito": "Esegui una ricerca su internet: il robot "
                                         "aspirapolvere Lefa si integra con Home Assistant?"}
 
+    import prove.prova_politica as pp
+
     def brain():
-        b, _, _ = prepara(True)
+        # La domanda della politica di prima per il dato di mezzo (con la politica per valore,
+        # accesa dal 09/10, la ricerca chiesta a voce parte con il solo «Procedo?» del tool):
+        # qui si prova il consenso in forma chiusa alla domanda
+        pp.PER_VALORE = False
+        try:
+            b, _, _ = prepara(True)
+        finally:
+            pp.PER_VALORE = None
         reg = b.tools
         reg.register(dataclasses.replace(reg.get("lavoro_affida"), func=ta._delega_lavoro))
         svc = LavoriFinti()

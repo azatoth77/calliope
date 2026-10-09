@@ -275,9 +275,38 @@ def prova_allegato_fallito():
              not _senza_dato("archivio_cerca", None, {"ok": False, "risultati": [{"t": "x"}]}))
 
 
+def prova_brain_valore():
+    """Con la politica per valore (accesa dal 09/10): il proprio documento e il file di una
+    ricerca (indice nell'elenco fidato di pc_cerca_file, E1) si aprono alla richiesta, senza
+    domande; una frase che non chiede di aprire non apre."""
+    b, pc = _brain_con_foto()
+    b.tool_ctx.regole = []
+    r = turno(b, "Sì, intendo di dire che volevo che tu aprissi il file.",
+              chiama("pc_apri_file", {"risultato": 2}), testo("Ecco."))
+    verifica("per valore: il proprio documento si apre senza «C'è di mezzo una foto»",
+             ("apri", FILE_NUOVO["percorso"]) in pc.azioni and "foto" not in r,
+             f"{pc.azioni} {r}")
+    b, pc = _brain_con_foto()
+    turno(b, "grazie, e che ore sono?", chiama("pc_apri_file", {"risultato": 1}),
+          testo("Sono le dieci."))
+    verifica("per valore, contrario: frase che non chiede di aprire → non aperto",
+             not pc.azioni and "valore_non_ancorata" in b.rules_fired(),
+             f"{pc.azioni} {b.rules_fired()}")
+    b, pc = _brain_con_foto(ChiParla("Dario", "amministra"))
+    turno(b, "cerca la bolletta dell'acqua", chiama("pc_cerca_file", {"testo": "bolletta acqua"}),
+          testo("Ho trovato la bolletta."))
+    turno(b, "aprila", chiama("pc_apri_file", {"risultato": 1}), testo("Fatto."))
+    verifica("per valore: il file di una ricerca si apre (E1, elenco fidato)",
+             [a for a in pc.azioni if a[0] == "apri"] and "valore_esegue" in b.rules_fired(),
+             f"{pc.azioni} {b.rules_fired()}")
+
+
 if __name__ == "__main__":
+    import prove.prova_politica as pp
     prova_decidi()
-    prova_brain()
+    # La politica di prima (per tornare indietro con una riga)
+    pp.politica_di_prima(prova_brain)
+    prova_brain_valore()
     prova_sfida_fallita()
     prova_allegato_fallito()
     print(f"\n{'TUTTO OK' if not errori else f'{errori} ERRORI'}")

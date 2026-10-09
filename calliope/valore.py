@@ -434,7 +434,10 @@ def etichetta(valore, tipo: str, f: Fonti) -> str:
         elif w in f.fidato:
             e = FIDATO
         else:
-            e = DATO if (tipo == BERSAGLIO and f.foto) else MODELLO
+            # Con una foto le parole senza fonte possono venire dalla foto (lo scontrino, la
+            # scritta): per un bersaglio e, dal 09/10 (fase 4), per un contenuto, come
+            # politica.valori_esterni (««birra» viene da una foto, non da te»)
+            e = DATO if (tipo in (BERSAGLIO, CONTENUTO) and f.foto) else MODELLO
         if peggiore is None or ORDINE[e] > ORDINE[peggiore]:
             peggiore = e
     for n in _gettoni_numeri(testo):
@@ -450,6 +453,21 @@ def etichetta(valore, tipo: str, f: Fonti) -> str:
 # contano (§ 5.2: la quota di parole della persona in un compito ha mediana 0,17)
 _DISTINTIVA = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+|https?://\S+|www\.\S+|"
                          r"(?<=[^.!?:\s«\"'(]\s)[A-ZÀ-Ý][\wà-ÿ']{2,}|\b[A-Z]{2,}\b|\b\w*\d\w*\b")
+
+
+def fuori_dai_valori(spec, k: str, valore) -> bool:
+    """Il valore di testo `valore` dell'argomento `k` non è tra i valori ammessi (enum) dello
+    schema del tool. Senza enum: False."""
+    if not isinstance(valore, str) or not valore.strip():
+        return False
+    try:
+        p = ((getattr(spec, "parameters", None) or {}).get("properties") or {}).get(k) or {}
+        ammessi = p.get("enum")
+    except AttributeError:
+        return False
+    if not ammessi:
+        return False
+    return valore.strip().lower() not in {str(a).strip().lower() for a in ammessi}
 
 
 def distintive(valore, f: Fonti) -> list[str]:
@@ -554,6 +572,11 @@ def decidi_valore(name: str, args: dict, cl, t, base, conferma_voce: bool = Fals
         tipo = (tipi or {}).get(k, BERSAGLIO)
         if tipo == IGNORA:
             continue
+        # Una «scelta» fuori dai valori ammessi dello schema non è una scelta (09/10, fase 4:
+        # il modello scrive un testo dove lo schema vuole un enum, e il tool decide da sé):
+        # vale come contenuto, con l'etichetta delle sue parole
+        if tipo in (AZIONE, SCELTA) and fuori_dai_valori(spec, k, v):
+            tipo = CONTENUTO
         e = etichetta(v, tipo, f)
         # senza tipi dichiarati: un argomento senza fonte vale come preso dal dato (§ 5.2)
         if tipi is None and e == MODELLO:
@@ -565,7 +588,8 @@ def decidi_valore(name: str, args: dict, cl, t, base, conferma_voce: bool = Fals
             cont_dato.append(k)
         elif tipo == LIBERO and distintive(v, f):
             cont_dato.append(k)
-        elif tipo == CONTENUTO and e == MODELLO and prov.parole(_testo(v) or ""):
+        # (anche i soli numeri, 09/10: «eseguilo di nuovo» con dati 7 e 9 che nessuno ha detto)
+        elif tipo == CONTENUTO and e == MODELLO:
             cont_modello.append(k)
     det["argomenti"] = etichette
     det["bersagli"] = sorted({etichette[k].split("/")[1] for k in etichette

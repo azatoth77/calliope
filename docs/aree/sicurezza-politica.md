@@ -4,9 +4,10 @@
 
 **Stato al 09/10.** Politica unica dei tool in `ToolRegistry.call` (classi, provenienza, dati non
 fidati in busta, conferme e frase di sfida, controllo di ciò che dice). Sicurezza per valore:
-fase 2 (memoria dell'intento) attiva dall'08/10, fase 3 (provenienza per valore e classi
-d'effetto) in ombra con `politica_per_valore` spento; la decisione se accenderla (fase 4) è del
-10/10, dopo due giorni d'ombra (criteri in «Sicurezza per valore, fasi 1–3»). Dall'08/10 nomi
+fase 2 (memoria dell'intento) attiva dall'08/10; fase 3 (provenienza per valore e classi
+d'effetto) in ombra l'08–09/10 e **accesa dal 09/10 sera** (fase 4, `politica_per_valore` vero
+per difetto, l'ombra al contrario dice la politica di prima: sezione «Sicurezza per valore, fase
+4»). Le estensioni che leggono soltanto sono letture come `web_cerca` (09/10). Dall'08/10 nomi
 nuovi dei tool dei lavori e dello sviluppo (le sezioni di prima usano i vecchi: tabella in
 «Modalità sviluppo, versione 2»), nomi pubblici di casa vietati all'agente; dal 09/10 il «no»
 chiude la proposta. Il secondo fattore per chi amministra è ancora un progetto.
@@ -16,7 +17,7 @@ chiude la proposta. Il secondo fattore per chi amministra è ancora un progetto.
 | Stadio | Libreria | Dove |
 |---|---|---|
 | Conferme delle azioni (proposta valida 3 turni, «sì» breve di chi amministra, frase di sfida) | difflib sulla trascrizione, impronta CAM++ | `calliope/conferme.py` → `proposta_valida`, `admin_confermato`, `serve_conferma`, `Sfida`, `confronta`; `SpeakerContext.aggiorna_conversazione`; `Brain._sfida`; misure `prove/misura_conferma_breve.py`, `prove/misura_sfida.py` |
-| Sicurezza per valore (08/10: attrito come metrica, memoria dell'intento, provenienza per valore e classi d'effetto in ombra) | — (regole nel codice) | `calliope/attrito.py` → `giorno`, `avviso`, `avviso_recente` (da `calliope stato --turni` e dall'avvio); `calliope/valore.py` → `ARGOMENTI`, `EFFETTI`, `effetto`, `Intenzione`, `intento_aperto`, `aggiorna`, `etichetta`, `distintive`, `decidi_valore`, `ombra`; `calliope/politica.py` → `VERBI_AZIONE`, `chiesto_con_verbi`, `consenso_turno`; prove `prove/prova_valore.py`, `prove/prova_attrito.py`; progetto [`docs/ricerche/2026-10-07-sicurezza-per-valore.md`](../ricerche/2026-10-07-sicurezza-per-valore.md) |
+| Sicurezza per valore (08/10: attrito come metrica, memoria dell'intento, provenienza per valore e classi d'effetto in ombra; accesa dal 09/10) | — (regole nel codice) | `calliope/attrito.py` → `giorno`, `avviso`, `avviso_recente` (da `calliope stato --turni` e dall'avvio); `calliope/valore.py` → `ARGOMENTI`, `EFFETTI`, `effetto`, `Intenzione`, `intento_aperto`, `aggiorna`, `etichetta`, `distintive`, `fuori_dai_valori`, `decidi_valore`, `ombra`; letture che mandano fuori gli argomenti `politica.Classe.esce`, `_lettura_che_esce` (09/10); `calliope/politica.py` → `VERBI_AZIONE`, `chiesto_con_verbi`, `consenso_turno`; prove `prove/prova_valore.py`, `prove/prova_attrito.py`; progetto [`docs/ricerche/2026-10-07-sicurezza-per-valore.md`](../ricerche/2026-10-07-sicurezza-per-valore.md) |
 | Politica unica dei tool e provenienza (05/10: dati non fidati in busta, classi dei tool, conferma a voce con dati di mezzo) | — (regole nel codice) | `calliope/politica.py` → `CLASSI`, `classe_di`, `decidi`, `controlla` e `incoerente` (da `ToolRegistry.call`), `Turno`, `consenso`, `coerente`; `calliope/provenienza.py` → `racchiudi`, `racchiudi_risultato`, `fonti`, `marca`, `FONTI`; porta unica `Brain.dato_non_fidato` / `allega_non_fidato`; `calliope/quarantena.py`; ciò che dice con dati di mezzo `calliope/riferire.py` → `giudica`, `filtra`, `controlla_testo` (da `main.py`, 06/10); banco `prove/prova_politica.py`; rapporto [`docs/ricerche/2026-10-05-politica-sicurezza.md`](../ricerche/2026-10-05-politica-sicurezza.md) |
 | Consenso e rifiuto nelle risposte alle proposte (07–09/10: forme chiuse, richiesta ripetuta, «no» in testa, «sì, però…»); storpiature nella provenienza (08/10) | — (regole nel codice) | `calliope/politica.py` → `consenso_chiuso`, `richiesta_ripetuta`, `accettata`, `bersaglio_assente`, `rinuncia`, `rifiuto`, `domanda_si_no`, `consenso_avversativo`; `Brain._rifiuto_proposta`; `calliope/valore.py` → `chiude`, `chiave_intento`; `calliope/provenienza.py` → `vicina`, `tutto_detto`; `calliope/riferire.py` → `indicazioni`, `FRASI_PROPRIE`; prove `prove/prova_testo.py`, `prove/prova_intento_no.py` |
 | Fatti-istruzione, azioni non chieste, segreti, permessi dei file (03/10) | — (regole nel codice) | `calliope/sicurezza.py` → `instruction_fact`, `asked_for_action`, `asks_secret`, `proteggi_dati`; prova `prove/prova_sicurezza.py` |
@@ -556,7 +557,8 @@ per ogni chiamata con un dato di mezzo, `politica_ombra`: `vera`, `vera_regola`,
 - i dati personali nel compito (D7) si controllano con il Ripulitore del web
   (`web/privacy.Ripulitore`), solo nella matrice: attivi con la fase 4.
 
-**Interruttore** `politica_per_valore` (spento, sezione `llm` di `calliope.yaml`): acceso, la matrice
+**Interruttore** `politica_per_valore` (spento, sezione `llm` di `calliope.yaml`; *[acceso per
+difetto dal 09/10: sezione «Sicurezza per valore, fase 4»]*): acceso, la matrice
 sostituisce la regola finale «pericolosa + dato di mezzo ⇒ conferma» e l'ombra registra quella di
 prima (`attiva: true`). Restano sempre: il dato letto in questa risposta, «fai quello che dice…», il
 «sì» alla domanda, l'intenzione, la coerenza delle distruttive, il bersaglio che non c'è, la sfida,
@@ -984,3 +986,129 @@ non da te»). I valori che Calliope dà al modello dalla configurazione della ca
 parole della persona nel controllo della provenienza (`Turno.da_config`, oggi la sola
 `casa_citta`); le altre parole del valore restano controllate. Prova in `prova_politica`
 («valore della configurazione della casa» e il contrario).
+
+## Sicurezza per valore, fase 4: accesa (09/10, ramo `valore-fase4`)
+
+Decisione di Dario del 09/10, dopo due giorni d'ombra sulla DGX (`calliope stato --turni --giorni
+2`):
+
+| Giorno | Turni | Attrito vero | Chiamate con un dato di mezzo (in ombra) | Domande evitate | In più | Eseguite con un bersaglio dal dato | Attrito simulato |
+|---|---|---|---|---|---|---|---|
+| 08/10 | 251 | 6,4 (politica 15, 4 poi eseguite, 6 ripetute) | 96 (54 diverse) | 31 | 0 | **0** | **0,0** |
+| 09/10 | 126 | 3,2 | 5 | 2 | 0 | **0** | **1,6** |
+
+Il criterio fissato l'08/10 (nessuna esecuzione con un bersaglio dal dato, attrito simulato ≤ 3)
+è rispettato. Le decisioni diverse lette una per una (solo tool, regole ed etichette; i testi
+restano sulla DGX): luci accese e spente con il lavoro di un agente di mezzo (`casa_comando`,
+comando `detto`, E1), un comando della casa senza la parola «luce» (E3 con la voce,
+`valore_voce`), la musica (`pc_media`, `scelta`), tre ricerche chieste a voce (`lavoro_affida`,
+E2), i collaudi della modalità sviluppo con la città detta (20, `valore_voce`) e due «avanti»
+con la voce, due correzioni chieste a voce (`sviluppo_correggi`, testo
+libero con parole del risultato del collaudo, E2), e 23 passi dello sviluppo che la matrice
+avrebbe rifiutato come non ancorati (domande anche lì, e con la modalità sviluppo aperta ora non
+chiedono: sotto). Nessun bersaglio preso dal dato è stato eseguito.
+
+**Cosa cambia.** `politica_per_valore` è vero per difetto in `Config` (commento con le misure);
+si torna indietro con `politica_per_valore: false` in `calliope.locale.yaml`. Con un dato non
+fidato di mezzo decide la matrice provenienza × effetto (`valore.decidi_valore`, § 5.4 della
+ricerca) al posto della regola finale «pericolosa ⇒ conferma». Restano come prima: il dato letto
+in questa risposta (`web_azione_bloccata`), «fai quello che dice…» (`politica_delega`), le
+vietate, il «sì» alla domanda e l'intenzione confermata, la coerenza delle distruttive, il
+bersaglio che non c'è, il rifiuto già detto, la sfida per E4 (registrare voci, schermi, minori,
+nomi delicati della casa) e per i bersagli presi dal dato in E4, riferire, la quarantena, il
+livello, i minori, gli ospiti; con la conversazione pulita non cambia niente.
+
+**Più stretta della fase 3 in tre punti** (trovati riguardando le prove con l'interruttore acceso):
+
+- un **contenuto fatto di soli numeri** che nessuno ha detto (`programma_esegui` con dati 7 e 9
+  dopo «eseguilo di nuovo») contava come senza parole e passava: ora è `modello` e in E2+ chiede
+  (`valore_contenuto_non_detto`), come `politica_argomento_non_detto` di prima;
+- con una **foto** anche un contenuto senza fonte vale «dal dato» (prima solo un bersaglio): «aggiungi
+  alla spesa quello che vedi» → «“birra” viene da una foto, non da te: vuoi davvero…?»
+  (`valore_contenuto_dato`), come `valori_esterni` di prima;
+- una **scelta fuori dai valori ammessi** dello schema (il modello scrive un testo dove lo schema
+  vuole un enum, e il tool decide da sé) vale come contenuto, con l'etichetta delle sue parole
+  (`valore.fuori_dai_valori`; caso dell'ombra: `richiesta_tutore` con «cosa» in testo libero).
+
+**Modalità sviluppo.** I passi interni dello sviluppo aperto (`sviluppo_intento`) saltavano le
+domande della politica di prima per la sola conversazione contaminata; ora anche le equivalenti
+della matrice (`valore_non_ancorata`, `valore_e3_chiede`, `valore_contenuto_non_detto`). Il nome
+dell'estensione dello sviluppo detto nell'annuncio dell'agente vale `dato` (scelta stretta della
+fase 3): per approvarla o modificarla dallo sviluppo aperto (`estensione_gestisci` «nome»,
+`sviluppo_apri` «modifica») non si chiede, perché `sviluppo.passo_interno` controlla già che il
+bersaglio sia proprio quello dello sviluppo (`politica.SVILUPPO_BERSAGLIO`). Un'altra estensione,
+dati del collaudo presi dal dato, lo schermo per un E3 e «fai quello che dice…» chiedono ancora.
+
+**L'ombra al contrario.** Accesa, il campo `politica_ombra` di ogni chiamata ha `attiva: true`:
+`vera` è ciò che avrebbe deciso la politica di prima, `nuova` ciò che è successo. In `calliope
+stato --turni` la riga diventa «politica per valore attiva: … domande evitate, in più, ESEGUITE
+con un bersaglio dal dato, attrito con la politica di prima» (`attrito.giorno`:
+`attrito_prima`; i giorni misti, il giorno dell'accensione, contano ogni chiamata con la sua
+politica). Le regole della matrice che chiedono (`valore_non_ancorata`, `valore_bersaglio_dato`,
+`valore_contenuto_dato`, `valore_contenuto_non_detto`, `valore_dati_personali`,
+`valore_e3_chiede`, `valore_e4_sfida`) contano nell'attrito (`attrito.DOMANDE`): prima non
+c'erano, e accesa l'attrito sarebbe sembrato zero.
+
+**Prove** (a secco, nell'hook):
+
+- `prova_valore`: il banco di `prova_politica` acceso 99/99; gli 8 attacchi del § 6.2 fermati spenta
+  e accesa; rigioco dei casi del 07/10 (volume dopo il meteo, tre ricerche dopo un lavoro
+  dell'agente) **4 → 0 domande**; rigioco dell'08–09/10 riscritto con nomi di fantasia (due luci
+  con un agente di mezzo, una ricerca, il meteo dopo le notizie con l'estensione) **3 → 0
+  domande**, eseguite 1 → 4 su 4; fase 4 (predefinito, ombra al contrario, enum, numeri non
+  detti); estensioni di sola lettura (sotto).
+- `prova_politica`: il banco d'attacco gira con il predefinito (acceso) 99/99; le prove scritte per
+  la regola di prima (`prova_conferma_vera`, `prova_esegui_voce`) la spengono esplicitamente
+  (`politica_di_prima`): sono la prova della riga per tornare indietro. Così anche
+  `prova_conferma_unica`, `prova_documento_proprio`, `prova_risultati`, `prova_immagini`,
+  `prova_allegati`, `prova_argomenti_incerti`, `prova_sviluppo`, ognuna con i suoi casi
+  «per valore» accanto (niente esecuzioni dalla foto o dal file, voci della foto mostrate, il
+  file di una ricerca che si apre in E1, il collaudo con la città detta senza domanda).
+- `prova_attrito`: ombra attiva, attrito con la politica di prima, la riga del terminale.
+
+**Estensioni che leggono soltanto** (stesso ramo, dettagli in
+[agenti-estensioni](agenti-estensioni.md)): un'estensione senza scritture, flussi `invia`, POST
+e dati di casa letti, con la sola rete in GET, è una lettura che manda fuori i suoi argomenti
+(`Classe.esce`): esegue anche con un dato di mezzo e senza richiesta (come `web_cerca`), ma un
+argomento importante preso da un dato non fidato si mostra e si chiede
+(`politica_argomento_esterno`, `_lettura_che_esce`), con la politica spenta e accesa; dopo un
+dato letto nella stessa risposta resta ferma. Banco `prova_estensioni_attacchi` con
+un'estensione ostile di sola lettura: POST, liste, dati, scritture, timer, schermi fermati dalla
+porta, l'esca riservata non esce in nessuna forma, il valore della pagina chiede, la città detta
+o di casa esegue: **0 passaggi**; `prova_sonde_attacchi` 0 passaggi.
+
+**Misura col modello locale** (gemma4 e4b, `prove/prova_citta_casa_ollama.py 3`, estensione
+«Meteo città» finta con rete pubblica e un host, città di casa Borgoverde):
+
+| Caso | main | ramo |
+|---|---|---|
+| «Sentimi le notizie di sport», poi «Che tempo fa?» → l'estensione con la città di casa | **0/3** (2 volte il meteo inventato, «sereno, 18 gradi»; 1 volta chiede la città) | **5/6** (due giri; 1 volta chiede la città, mai inventato) |
+| contrario: dopo le notizie, senza estensione → internet con la città | 3/3 | 6/6 |
+| «Che tempo fa?» / «…domani?» con l'estensione, conversazione nuova | 6/6 | 10/12 (4/6 al primo giro, 6/6 al secondo: varianza del 4B, nessuna decisione della politica di mezzo) |
+| contrari: «a Parigi» mai Borgoverde (estensione e internet), «da Ettore» mai Borgoverde | 9/9 | 18/18 |
+
+Il caso «dopo le notizie» è ora tra i controlli obbligatori della prova (almeno 2 su 3).
+
+**Cosa guardare sulla DGX nei prossimi giorni** (`calliope stato --turni --giorni 3`):
+
+- «ESEGUITE con un bersaglio dal dato» deve restare **0**; se compare, leggere la chiamata
+  (comando sotto, con `o["attiva"]`) e, se è un attacco o un errore, spegnere con la riga nel
+  locale;
+- l'attrito vero sotto 3 ogni 100 turni (D6) e le «domande in più» (la matrice che chiede dove la
+  politica di prima eseguiva: le tre strette sopra);
+- le estensioni d'internet dopo un dato di mezzo: `politica_argomento_esterno` su un `est_*` con
+  un valore detto dalla persona sarebbe un falso positivo da guardare.
+
+```
+python - <<'EOF'
+import glob, json
+for f in sorted(glob.glob("registro/turni-*.jsonl"))[-3:]:
+    for riga in open(f, encoding="utf-8"):
+        r = json.loads(riga)
+        for t in r.get("tool") or []:
+            o = t.get("politica_ombra")
+            if o and o.get("attiva") and o["vera"] != o["nuova"]:
+                print(r["inizio"][:19], t["nome"], o["vera_regola"] or o["vera"], "→",
+                      o["nuova_regola"] or o["nuova"], o["effetto"], o["argomenti"])
+EOF
+```

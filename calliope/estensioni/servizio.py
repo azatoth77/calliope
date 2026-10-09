@@ -164,6 +164,8 @@ class Estensioni:
             if m.get("scheda"):
                 out.append(self._spec_gioco(m))
                 continue
+            chiave = tuple(k for k, v in ((m["input"] or {}).get("properties") or {}).items()
+                           if isinstance(v, dict) and v.get("type") in ("string", "array"))
             out.append(ToolSpec(
                 name=PREFISSO + nome,
                 # Composta dal codice, con i testi già controllati (manifesto.controlla_testi)
@@ -173,10 +175,10 @@ class Estensioni:
                 risk="azione" if _agisce(m) else "lettura",
                 levels=LIVELLI_DA[m["livello"]], non_fidato=True,
                 # Politica dei tool (05/10): il risultato è un dato non fidato; gli argomenti
-                # di testo sono importanti (un valore preso da un dato non fidato si chiede)
-                classe="azione" if _agisce(m) else "sicuro", fonte="estensione",
-                chiave=tuple(k for k, v in ((m["input"] or {}).get("properties") or {}).items()
-                             if isinstance(v, dict) and v.get("type") in ("string", "array")),
+                # di testo sono importanti (un valore preso da un dato non fidato si chiede).
+                # Dal 09/10 un'estensione che legge soltanto, anche da internet, è una lettura
+                # (`_classe`)
+                classe=_classe(m, chiave), fonte="estensione", chiave=chiave,
                 announce=("Un attimo.",),
                 # Gli input di testo nominano qualcosa (08/10, calliope/argomenti_incerti.py)
                 nomi=nomi_estensione(m["input"])))
@@ -1475,13 +1477,48 @@ def approvabile_da_familiare(ver: dict) -> bool:
 
 
 def _agisce(m: dict) -> bool:
-    """L'estensione cambia qualcosa o parla con internet? (il rischio del suo tool)"""
+    """L'estensione cambia qualcosa o può mandare fuori dati di casa? (il rischio del suo
+    tool)
+
+    Dal 09/10 (fase 4 della sicurezza per valore) un'estensione che **legge soltanto** da
+    internet non è più un'azione: niente scritture, niente flussi `invia`, nessun dato di casa
+    letto (casa, liste, agenda, dati), rete in sola lettura (GET, senza `rete.post`) verso gli
+    host che il manifesto ammette. Prima contava come azione, e con un risultato web nella
+    conversazione «che tempo fa?» fermava l'estensione meteo (`politica_azione_non_chiesta`):
+    il modello piccolo inventava il meteo. Il suo tool vale come `web_cerca`, con gli argomenti
+    che escono (`politica.Classe.esce`): un valore preso da un dato non fidato si mostra e si
+    chiede; host e porta restano quelli del manifesto e i dati riservati negli argomenti non
+    escono comunque (`_riservati_in`). Senza rete, leggere casa, liste o agenda resta una
+    lettura come prima; con la rete è un'azione."""
     try:
         p = normalizza_permessi(m.get("permessi") or {})
     except ManifestoNonValido:
         return True
-    return (any(p["scrive"].values()) or p["rete"]["pubblica"] or bool(p["rete"]["host"])
-            or bool(p["invia"]) or p["legge"]["dati"])
+    legge = p["legge"]
+    legge_casa = bool(legge["casa"]) or bool(legge["liste"]) or legge["agenda"]
+    return (any(p["scrive"].values()) or bool(p["invia"]) or p["rete"]["post"]
+            or legge["dati"] or (legge_casa and _rete(p)))
+
+
+def _rete(p: dict) -> bool:
+    return p["rete"]["pubblica"] or bool(p["rete"]["host"])
+
+
+def _classe(m: dict, chiave: tuple):
+    """La classe del tool per la politica: un'azione, una lettura che manda fuori i suoi
+    argomenti (rete in GET: `Classe.esce`) o una lettura."""
+    from ..politica import Classe
+    if _agisce(m):
+        return "azione"
+    try:
+        rete = _rete(normalizza_permessi(m.get("permessi") or {}))
+    except ManifestoNonValido:
+        return "azione"
+    if not rete:
+        return "sicuro"
+    titolo = str(m.get("titolo") or m.get("nome") or "")[:60]
+    return Classe("sicuro", fonte="estensione", chiave=chiave, esce=True,
+                  cosa=lambda a, _t=titolo: f"usi «{_t}» con questi dati")
 
 
 def _ripulisci(argomenti: dict, m: dict) -> dict:

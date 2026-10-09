@@ -17,6 +17,15 @@ fidato, parole distintive solo nomi propri, sigle e numeri, tool senza classe ma
 leggere l'ombra sono nel documento d'area
 [sicurezza-politica](../aree/sicurezza-politica.md#sicurezza-per-valore-fasi-13-0810-ramo-sicurezza-valore).
 
+**Stato al 09/10 sera** (ramo `valore-fase4`). Fase 4 fatta: due giorni d'ombra sulla DGX con 0
+esecuzioni da un bersaglio del dato e attrito simulato 0,0 (08/10) e 1,6 (09/10), quindi
+`politica_per_valore` acceso per difetto, l'ombra al contrario, tre strette in più (numeri non
+detti, contenuto di una foto, scelta fuori dall'enum) e le estensioni che leggono soltanto come
+letture: [sicurezza-politica](../aree/sicurezza-politica.md#sicurezza-per-valore-fase-4-accesa-0910-ramo-valore-fase4).
+Del piano del § 7 non sono stati fatti a parte il Ripulitore sul compito (era già nella matrice
+della fase 3, `valore_dati_personali`) né le conferme riscritte: le domande della matrice dicono
+già il valore e l'origine.
+
 ## 0. In breve
 
 **La domanda di Dario (07/10).** «Ho dei dubbi sul modello di security: più il contesto è
