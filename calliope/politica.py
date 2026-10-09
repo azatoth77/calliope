@@ -621,6 +621,12 @@ class Turno:
     persona: object = None
     intenzioni: list = field(default_factory=list)
     fidati: list = field(default_factory=list)
+    # La proposta in sospeso è una domanda della politica («Non me l'hai chiesto: vuoi che…?»):
+    # vale come richiesta solo con un consenso (09/10, `_risultato` la marca)
+    sospeso_politica: bool = False
+    # I «no» della persona alle proposte di questa conversazione (09/10, la lista viva di
+    # Conversazione.rifiutate: {"tool", "chiave", "cosa"}): regola `politica_proposta_rifiutata`
+    rifiuti: list = field(default_factory=list)
 
 
 # Le azioni interne chieste con un verbo che il lessico delle azioni sul mondo non ha
@@ -713,12 +719,136 @@ def _si_in_testa(t: str) -> bool:
     return False
 
 
+# Il «sì» che apre un altro discorso (09/10, caso vero della DGX dell'08/10 sera: a «vuoi che
+# registri la voce di Marco?», già rifiutata, «Sì, però ascolta, qua noi stiamo andando a berci
+# una birra.» è valso come consenso e la registrazione è ripartita). Un «sì» seguito subito da
+# «però», «ascolta», «senti», «aspetta», «non preoccuparti», «comunque», «intanto» è un
+# intercalare che passa ad altro, non il «sì» alla domanda: vale solo se dopo c'è un'altra
+# parola di consenso («Sì, però fallo dopo»). Vincolo di permesso su un'azione già scelta
+# (principio 10): l'effetto è una domanda in più. Regola `consenso_avversativo`
+_AVVERSATIVO = re.compile(
+    r"^[\s,.;:!?…\-]*(?:ma\s+)?(?:però|pero|ascolta\w*|senti|aspetta|"
+    r"non\s+(?:ti\s+)?preoccupar\w*|comunque|intanto)(?![a-zà-ù])", re.I)
+
+
+def consenso_avversativo(testo: str) -> bool:
+    """Il primo «sì» della frase (in testa a un pezzo) è seguito da «però», «ascolta»… e dopo
+    non c'è un'altra parola di consenso: non è un consenso."""
+    t = testo or ""
+    for pezzo_m in re.finditer(r"[^,.;:!?…]+", t):
+        pezzo = pezzo_m.group(0)
+        for m in _SI.finditer(pezzo):
+            if len(re.findall(r"[\wà-ù']+", pezzo[:m.start()])) >= TESTA_SI:
+                continue
+            resto = t[pezzo_m.start() + m.end():]
+            mm = _AVVERSATIVO.match(resto)
+            return bool(mm) and not _SI.search(resto[mm.end():])
+    return False
+
+
 def consenso(testo: str) -> bool:
     """La frase acconsente a una proposta: una parola di consenso in testa a un suo pezzo,
-    nessuna negazione; oppure tutta fatta di forme chiuse di consenso (FORME_SI, anche «perché
-    no»)."""
+    nessuna negazione, e non seguita da «però», «ascolta»… (`consenso_avversativo`); oppure
+    tutta fatta di forme chiuse di consenso (FORME_SI, anche «perché no»)."""
     t = testo or ""
-    return consenso_chiuso(t) or (_si_in_testa(t) and not _NO.search(t))
+    return consenso_chiuso(t) or (_si_in_testa(t) and not _NO.search(t)
+                                  and not consenso_avversativo(t))
+
+
+# Il «no» alla proposta (09/10, caso vero della DGX dell'08/10 sera: «No, non mi interessa che
+# lo registri, però almeno salutalo.» non chiudeva la proposta di registrare Marco, che restava
+# valida per tre turni; il modello l'ha richiamata due volte e una è arrivata alla frase di
+# sfida). Forma chiusa **in testa** alla frase (principio 10: vincolo di permesso su un'azione
+# già scelta, effetto reversibile: la persona la può chiedere di nuovo): il primo pezzo comincia
+# con un rifiuto, e il resto non contiene un consenso («no no, va bene, fallo»), una correzione
+# («no, aspetta, registralo», «no, ho detto Marco») né le parole del tool non negate («no,
+# registralo domani»). Solo come risposta a una proposta sì/no in sospeso (Brain). Regola
+# `proposta_rifiutata`
+_RIFIUTO_TESTA = re.compile(
+    r"^(?:calliope[\s,]+)?(?:(?:ma|eh|ah|beh)[\s,]+)?(?:"
+    r"no(?:\s+no)*(?:\s+grazie)?|per\s+ora\s+no|meglio\s+di\s+no|assolutamente\s+no|"
+    r"non\s+(?:mi\s+interessa|m'interessa|voglio|vogliamo|serve|importa|occorre|mi\s+va|ora|"
+    r"adesso|farlo|lo\s+fare|la\s+fare|ci\s+pensare|pensarci|è\s+il\s+caso)|"
+    r"lascia(?:\s+(?:stare|perdere))?|lasciamo\s+(?:stare|perdere)|annulla|niente|"
+    r"(?:nemmeno|neanche|neppure)\s+per\s+sogno)(?![a-zà-ù])", re.I)
+_NO_SECCO = re.compile(r"(?:calliope[\s,]+)?(?:(?:ma|eh|ah|beh)[\s,]+)?no(?:\s+no)*", re.I)
+_CORREZIONE = re.compile(
+    r"(?<![a-zà-ù])(?:aspetta|anzi|cioè|scusa|un\s+attimo|un\s+momento|ho\s+detto|intendevo|"
+    r"volevo\s+dire|ripensandoci|ci\s+ho\s+ripensato)(?![a-zà-ù])", re.I)
+
+
+def _pulito(testo: str) -> str:
+    p = (testo or "").lower().replace("’", "'")
+    return re.sub(r"\s+", " ", re.sub(r"[^\wà-ù',.;:!?… ]", " ", p)).strip()
+
+
+def rifiuto(testo: str, verbi: str | None = None) -> bool:
+    """La frase rifiuta la proposta in sospeso: comincia con un «no» o una forma chiusa di
+    rifiuto («non mi interessa», «non voglio», «lascia stare») e dopo non ci sono consensi,
+    correzioni o le parole del tool (`verbi`, Classe.verbi) non negate."""
+    t = _pulito(testo)
+    m = _RIFIUTO_TESTA.match(t)
+    if not m:
+        return False
+    resto = t[m.end():]
+    if _SI.search(resto) or _CORREZIONE.search(resto):
+        return False
+    # «Non voglio che lo registri», «Non mi interessa che lo registri»: le parole del tool nello
+    # stesso pezzo di un rifiuto con il verbo sono ciò che si rifiuta; dopo un «no» da solo
+    # («No registralo domani», senza la virgola di Whisper) sono una richiesta
+    secco = bool(_NO_SECCO.fullmatch(m.group(0).strip()))
+    if verbi:
+        for i, pezzo in enumerate(re.split(r"[,.;:!?…]+", resto)):
+            pezzo = pezzo.strip()
+            if not pezzo or _RIFIUTO_TESTA.match(pezzo) or (i == 0 and not secco):
+                continue                     # «…, non voglio che lo registri»: rifiuta ancora
+            for v in re.finditer(verbi, pezzo, re.I):
+                if not _NEGATO.search(pezzo[:v.start()]):
+                    return False
+    return True
+
+
+# Le domande che non si rifiutano con un «no»: chiedono un dato («Quando è nato Marco?»,
+# «Quale apro?»), e «No, è maggiorenne» è una risposta
+_DOMANDA_APERTA = re.compile(r"^\W*(?:quando|qual[ei]?|come|chi|dove|cosa|che\s+cosa|quant[aeio]|"
+                             r"perché|a\s+che|in\s+che|di\s+che)(?![a-zà-ù])", re.I)
+
+
+def domanda_si_no(domanda: str | None) -> bool:
+    """La domanda della proposta si risponde con un sì o con un no («vuoi che…?», «Lo
+    apro?»)."""
+    return bool(domanda) and not _DOMANDA_APERTA.match(domanda)
+
+
+def rifiutata(name: str, args: dict | None, rifiuti, spec=None):
+    """Il rifiuto della persona (Brain, `Conversazione.rifiutate`) che vale per questa
+    chiamata: stesso tool e stesso bersaglio (valore.chiave_intento; una proposta senza
+    argomenti vale per tutto il tool), o None."""
+    if not rifiuti:
+        return None
+    from . import valore
+    try:
+        chiave = valore.chiave_intento(name, args or {}, None, spec)
+    except Exception:  # noqa: BLE001
+        chiave = dict(args or {})
+    for r in reversed(rifiuti):
+        if r.get("tool") != name:
+            continue
+        if not r.get("chiave") or _uguali(chiave, r["chiave"], None):
+            return r
+    return None
+
+
+def chiesta_di_nuovo(cl: Classe, testo: str, args: dict | None = None) -> bool:
+    """Dopo un rifiuto, la persona chiede di nuovo proprio quest'azione: le parole del tool
+    (Classe.verbi) non negate, nessuna negazione nella frase; per un tool senza parole, una
+    richiesta d'azione. Un «sì» non basta (non c'è più nessuna proposta a cui dirlo)."""
+    t = testo or ""
+    if not t or _NO.search(t):
+        return False
+    if verbi_di(cl, args):
+        return chiesto_con_verbi(cl, t, args)
+    return chiesta_azione_mondo(t) or chiesta_azione(t)
 
 
 def consenso_in_coda(testo: str) -> bool:
@@ -1349,6 +1479,13 @@ def decidi(name: str, args: dict, cl: Classe, t: Turno | None,
     if intento and not DELEGA.search(t.testo or ""):
         return Decisione("esegui", "intento_confermato", accettata=True)
     if not contaminata:
+        # Alla domanda della politica («Non me l'hai chiesto: vuoi che…?») la chiamata vale come
+        # risposta solo con un consenso, la frase di sfida o le parole del tool (09/10, caso vero
+        # della DGX: «Sì, non preoccuparti, adesso gli parlerò.» ha portato registra_utente alla
+        # frase di sfida). Le domande del tool che chiedono un dato («Quando è nato Marco?») no
+        if (proposta and cl.chiesta and t.sospeso_politica
+                and not (consenso(t.testo) or t.sfida or chiesto_con_verbi(cl, t.testo, args))):
+            proposta = False
         eccetto = (cl.chiesta_eccetto is not None
                    and _s(args, cl.chiesta_eccetto[0]).lower() in cl.chiesta_eccetto[1])
         if cl.chiesta and not proposta and not eccetto and not chiesta_azione_mondo(t.testo):
@@ -1537,7 +1674,7 @@ def _risultato(domanda: str, name: str, args: dict, regola: str, fonte: str = ""
     return {"ok": False, "fatto": f"{NIENTE}, chiedo conferma",
             "conferma": domanda, "risposta_finale": domanda,
             "in_sospeso": {"domanda": domanda, "cosa": "l'azione proposta", "tool": name,
-                           "argomenti": clean}}
+                           "argomenti": clean, "politica": regola}}
 
 
 def _domanda_ripetuta(name: str, args: dict, cl: Classe, t: Turno | None) -> bool:
@@ -1584,6 +1721,39 @@ SVILUPPO_SALTA = frozenset({"politica_conferma", "politica_azione_non_chiesta",
                             "politica_azione_non_giustificata", "politica_argomento_non_detto"})
 
 
+def _gia_rifiutata(name: str, args: dict, cl: Classe, t: Turno | None, ctx, spec) -> dict | None:
+    """Il risultato per il modello se la persona ha già detto di no a questa chiamata (stesso
+    tool, stesso bersaglio) in questa conversazione e non la sta chiedendo di nuovo; None
+    altrimenti. Con la richiesta nuova il rifiuto si toglie (regola `rifiuto_superato`). Le
+    letture e le chiamate innocue passano. Regola `politica_proposta_rifiutata`."""
+    from .tools.spec import note_rule
+    if t is None or not t.rifiuti or cl.classe in (SICURO, VIETATO):
+        return None
+    if cl.sola_lettura is not None and _s(args, cl.sola_lettura[0]).lower() in cl.sola_lettura[1]:
+        return None
+    if callable(cl.innocua) and cl.innocua(args or {}):
+        return None
+    r = rifiutata(name, args, t.rifiuti, spec)
+    if r is None:
+        return None
+    if chiesta_di_nuovo(cl, t.testo, args):
+        try:
+            t.rifiuti.remove(r)
+        except ValueError:
+            pass
+        note_rule(ctx, "rifiuto_superato")
+        return None
+    note_rule(ctx, "politica_proposta_rifiutata")
+    print(f"   [POLITICA] {name}: politica_proposta_rifiutata", flush=True)
+    cosa = r.get("cosa") or "lo faccia"
+    return {"ok": False, "fatto": NIENTE,
+            "errore": f"la persona ha già detto di no quando le hai proposto che {cosa}, e non "
+                      "l'ha chiesto di nuovo",
+            "cosa_fare": "non richiamare questo tool e non riproporlo: rispondi a quello che "
+                         "ha detto adesso, senza domande su questo. Lo fai solo se te lo chiede "
+                         "di nuovo lei, con parole sue"}
+
+
 def controlla(spec, name: str, args: dict, ctx) -> dict | None:
     """Il risultato da dare al posto dell'esecuzione, o None se il tool si esegue. Lo chiama
     ToolRegistry.call dopo il controllo del livello."""
@@ -1607,6 +1777,11 @@ def controlla(spec, name: str, args: dict, ctx) -> dict | None:
                 else:
                     cosa = v if isinstance(v, str) and v.strip() else None
     from . import valore
+    # Un «no» della persona a questa proposta, prima in questa conversazione (09/10): il
+    # modello non la richiama finché lei non la chiede di nuovo con le parole del tool
+    respinta = _gia_rifiutata(name, args, cl, t, ctx, spec)
+    if respinta is not None:
+        return respinta
     cv = conferma_voce(ctx) if t is not None else False
     vf = voce_frase(ctx) if t is not None else False
     # Memoria dell'intento (08/10, fase 2 della sicurezza per valore): un'azione confermata
