@@ -2,11 +2,13 @@
 
 *Schede sugli schermi, abbinamento, visibilità, scrivere invece di parlare, telefono come satellite (PWA), rispondi dove ti ho chiesto. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
+*Stato al 09/10: schermi e telefono come dal 06/10 (scheda a schermo intero, cruscotto in sola lettura), più il lettore Markdown e «Scarica» (07/10), la scheda degli esercizi e del cassetto, la vista dello sviluppo con il flusso dell'agente e la cronologia delle schede per persona con la scheda «Conversazione» (08/10), il segno della compagnia (09/10). Restano da provare sul vero l'iPhone (audio, schermo acceso, auto) e lo scaricamento dalla PWA.*
+
 ## Moduli
 
 | Stadio | Libreria | Dove |
 |---|---|---|
-| Schermi (schede su PC, tablet, TV) | Starlette + uvicorn senza extra (puro Python) in un thread, SSE verso una pagina kiosk locale; abbinamento a codice in SQLite (stesso file della memoria) | `calliope/schermi/` → `Schermi` (`hub.py`: destinatari, visibilità, consegna), `ArchivioSchermi` (`archivio.py`), `schede.py`, `ServerSchermi` (`server.py`), `pagina/`, `load_schermi`; tool in `calliope/tools/schermi.py`; terminale `python -m calliope.schermi` |
+| Schermi (schede su PC, tablet, TV) | Starlette + uvicorn senza extra (puro Python) in un thread, SSE verso una pagina kiosk locale; abbinamento a codice in SQLite (stesso file della memoria) | `calliope/schermi/` → `Schermi` (`hub.py`: destinatari, visibilità, consegna), `ArchivioSchermi` (`archivio.py`), `schede.py`, `ServerSchermi` (`server.py`), `pagina/`, `load_schermi`; HTTPS in rete `tls.py`, ponte TLS del satellite `ponte.py`; schede degli esercizi (POST `/api/esercizio`, area [minori](minori.md)) e del cassetto (POST `/api/cassetto`, area [immagini-allegati](immagini-allegati.md)), dall'08/10; segno della compagnia `Schermi.voce(compagnia=…)` (09/10); tool in `calliope/tools/schermi.py`; terminale `python -m calliope.schermi` |
 | Telefono (satellite nel browser, PWA, dal 03/10) | stessa porta degli schermi: WebSocket di uvicorn con `websockets` sans-I/O e lo stesso protocollo dei satelliti; nel browser onnxruntime-web 1.30 in WebAssembly (Silero VAD e wake word), AudioWorklet, Web Audio, Screen Wake Lock API; CA di casa con `openssl` | `calliope/schermi/telefono.py` → `rotte`, `PonteWs`, `stato`; «Prova il microfono» `telefono_diagnostica.py`; `calliope/schermi/pagina/telefono/` (`telefono.js`, `voce.js`, `microfono.js`, `schermo-acceso.js` (`SchermoAcceso`, `diagnosi`: schermo acceso, dal 04/10), `sw.js`, manifest; una vista sola col carosello delle schede, dal 04/10: `sincronizza`, `disponi`, `vaiA`, strati menu/modulo/scrivi e, dal 06/10, la scheda a schermo intero (`apriIntera`, `disegnaIntera`, `chiudiIntera`); schede da `schermo.js` con `data-carosello` ed eventi `calliope:*`); `ServerSatelliti.prendi` / `lascia` / `per_pc`; `tls.certificato_telefono`; terminale `python -m calliope.schermi --certificato` |
 | Scrivere invece di parlare (moduli e casella sugli schermi personali, dal 03/10) | POST `/api/scrivi` e `/api/modulo` del server degli schermi (sessione in un'intestazione, JSON, solo HTTPS in rete); controlli dei codici in Python e in JS (`schermo.js`, condiviso col telefono); dal 05/10 solo durante una conversazione a voce | `calliope/schermi/moduli.py` → `Moduli`, `Ingresso`, `controlla_campo`, `offri`, `completa`, `oscura`; `Ufficio.completa_modulo` / `rubrica_da_modulo`; `tools/spec.serve_la_voce`; ciclo in `main.py` (`scritto`); `calliope/schermi/conversazione.py` → `scrittura_consentita`, `Conversazioni`; `Schermi.scrittura_consentita` (il punto unico, anche per le foto) |
 | Cruscotto di chi amministra (fase 1, sola lettura, dal 06/10) | — (solo libreria standard: registro dei turni, SQLite in sola lettura, `indice.json` delle estensioni) | `calliope/schermi/cruscotto.py` → `Cruscotto` (`amministra`, `dati`), `LettoreTurni`, `versione_in_uso`, `tipo_errore`; GET `/api/cruscotto` (`server.py`); `Schermi.cruscotto`; scheda locale `cruscotto` in `schermo.js` (`apriCruscotto`, `impostaAmministra`), voce del menu del telefono; `latenza.leggi_file` |
@@ -443,7 +445,7 @@ risultato del lavoro appena annunciato (che non sta in quell'archivio).
 - **Quale documento** (`tools/schermi._documento`): il più recente tra l'ultimo documento della
   persona e il risultato del suo ultimo lavoro riuscito (`agenti.risultato.recenti`, per `fine`),
   con la scheda del risultato (`risultato.scheda`, testo intero in Markdown).
-- **Zona grigia** (regola `risultato_schermo_proprio`, la stessa di `risultato_lavoro`): il
+- **Zona grigia** (regola `risultato_schermo_proprio`, la stessa di `risultato_lavoro`, dall'08/10 `lavoro_risultato`): il
   documento o il risultato della persona della conversazione (proprietario uguale a
   `mittente.persona`) **appena consegnato** (il suo titolo è in una risposta recente della
   conversazione, `ToolContext.storia`: l'annuncio, la conferma) va sui suoi schermi personali
@@ -479,11 +481,11 @@ il fuoco. La risposta attesa non arriva mai alla pagina. Prove `prova_esercizi` 
 
 La modalità sviluppo ([agenti-estensioni](agenti-estensioni.md#modalità-sviluppo-0810-ramo-modalita-sviluppo))
 ha una scheda per sviluppo sugli schermi personali di chi amministra, chiave `sviluppo:<id>` (si
-aggiorna al suo posto): nessun JavaScript nuovo nella pagina, è `schede.documento_markdown` con il
+aggiorna al suo posto): nessun JavaScript nuovo nella pagina *[superato lo stesso giorno: dal ramo `scheda-sviluppo` la scheda ha `tipo: "sviluppo"` e una vista sua, due sezioni sotto; il Markdown resta per il lettore e «Scarica»]*, è `schede.documento_markdown` con il
 lettore Markdown e «Scarica» che ci sono già (`Sviluppi.scheda`, `testo_scheda`). Dentro: le fasi
 (fatta, **adesso**, manca), la specifica, i collaudi con dati, esito e ora, la revisione (permessi,
 analisi, test, prove, e il diff in un blocco `diff`), cosa si può dire. Si manda a ogni passo dei
-tool `sviluppo` e `sviluppo_prova` (`hub.mittente`) e a lavoro finito (`lav.on_scheda`); durante lo
+tool `sviluppo` e `sviluppo_prova` *[dall'08/10, versione 2: `sviluppo_passo` e `sviluppo_collauda`]* (`hub.mittente`) e a lavoro finito (`lav.on_scheda`); durante lo
 sviluppo resta anche la scheda del lavoro in diretta. Il testo dei collaudi viene dall'estensione:
 il lettore usa `textContent`, mai `innerHTML`.
 
@@ -506,6 +508,8 @@ Misure dal worktree senza file locali (08/10): 27 controlli superati, preparazio
 browser 7,6 %.
 
 ## La scheda dello sviluppo, versione 2 (08/10, ramo `modalita-sviluppo-2`)
+
+*Le tre sezioni sulla scheda dello sviluppo (questa, quella sopra e quella sotto) sono tre passi successivi dello stesso giorno, non copie: lo stato attuale è quello della sezione `scheda-sviluppo` qui sotto.*
 
 La scheda `sviluppo:<id>` mostra anche le domande fatte a chi ha scritto il codice
 (`sviluppo_chiedi`) con i dettagli della risposta (la voce ne dice una o due frasi), i collaudi

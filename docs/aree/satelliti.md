@@ -2,11 +2,13 @@
 
 *Microfono e casse in rete con Calliope sul server: protocollo, TLS, inoltro, esecutore remoto, uno schermo per satellite. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
+**Stato al 09/10.** Calliope gira sulla DGX e il portatile e il telefono sono satelliti, con TLS, inoltro, esecutore del PC, installazione con un comando e aggiornamenti. Dal 06/10 i satelliti ascoltano **tutti insieme**, una corsia e una conversazione per persona ciascuno ([contesto-conversazione](contesto-conversazione.md)); dal 06/10 il satellite manda quando una frase comincia a suonare (prima voce sentita), dal 07/10 le pause dentro la frase (solo misura). Più voci vicino allo stesso satellite (modalità compagnia, 09/10) sono in [voce-e-regole](voce-e-regole.md) e [stt-tts](stt-tts.md). Non provato: un PC Windows pulito come satellite.
+
 ## Moduli
 
 | Stadio | Libreria | Dove |
 |---|---|---|
-| Satelliti (microfono e casse in rete, Calliope sul server) | `websockets` (API sincrona), PCM 16 kHz, TLS con `ssl` della libreria standard e impronta fissata; sul satellite lo stesso `Listener` (VAD ONNX, wake word) e `tts.UscitaLocale` | `calliope/satellite/` → `ServerSatelliti`, `AscoltoRemoto`, `UscitaRemota` (`server.py`), `Satellite`, `Riproduttore` (`client.py`), `protocollo.py`, `ArchivioSatelliti`, `load_satelliti`; inoltro TCP per il telefono di casa `Inoltro` (`inoltro.py`, dal 03/10); PC nuovo con un comando e aggiornamenti con ritorno indietro (dal 03/10): pagina `/satellite` e `/installa` (`web.py`), pacchetto da `uv.lock` (`pacchetto.py`: `Distributore`), `Aggiornatore` (`aggiorna.py`), `installazione/avvio.py` e `installazione/installa.ps1` (uv 0.12.22, Python 3.14.8); `audio_modo` in `Config`; terminale `python -m calliope.satellite`; avvio `avvia_satellite.py`, `setup/satellite/` |
+| Satelliti (microfono e casse in rete, Calliope sul server) | `websockets` (API sincrona), PCM 16 kHz, TLS con `ssl` della libreria standard e impronta fissata; sul satellite lo stesso `Listener` (VAD ONNX, wake word) e `tts.UscitaLocale` | `calliope/satellite/` → `ServerSatelliti`, `AscoltoRemoto`, `UscitaRemota` (`server.py`), `Collegamento` (`suonata`, `canale`, dal 06–07/10), `valida_evento`, `ServerSatelliti.insieme` e `per_pc` (tutti insieme dal 06/10), `Satellite`, `Riproduttore` (`client.py`), `protocollo.py`, `ArchivioSatelliti`, `load_satelliti`; inoltro TCP per il telefono di casa `Inoltro` (`inoltro.py`, dal 03/10); PC nuovo con un comando e aggiornamenti con ritorno indietro (dal 03/10): pagina `/satellite` e `/installa` (`web.py`), pacchetto da `uv.lock` (`pacchetto.py`: `Distributore`), `Aggiornatore` (`aggiorna.py`), `installazione/avvio.py` e `installazione/installa.ps1` (uv 0.12.22, Python 3.14.8); `audio_modo` in `Config`; terminale `python -m calliope.satellite`; avvio `avvia_satellite.py`, `setup/satellite/` |
 
 ## Note dalla sezione «Stato attuale» di CLAUDE.md (fino al 06/10)
 
@@ -83,8 +85,8 @@
     satellite, o se cade durante l'invio, il file resta sul server e la frase lo dice («…, sul
     server, perché il portatile non è collegato.», niente «Lo apro?»). Misure in locale: giro di
     una richiesta 0,3–0,4 ms di mediana, consegna 20 MB in 0,25 s (~80 MB/s). Restano: più
-    satelliti con esecutore (oggi vale quello attivo), i risultati degli agenti
-    (`agenti/servizio.py` scrive ancora con `LocalDelivery`), il registro delle richieste sul
+    satelliti con esecutore (oggi vale quello attivo) *[dal 06/10 quello della corsia che chiede, altrimenti un altro collegato con l'esecutore: `ServerSatelliti.per_pc`]*, i risultati degli agenti
+    (`agenti/servizio.py` scrive ancora con `LocalDelivery`) *[superato il 07/10: il risultato di un lavoro va al portatile con `RemoteDelivery`, vedi [agenti-estensioni](agenti-estensioni.md)]*, il registro delle richieste sul
     satellite oltre al log.
   - **Sul satellite** lo stesso `audio.Listener` (VAD ONNX senza torch, wake word, pre-roll,
     `watch_for_name`, `measure_echo`) con due aggiunte: la sorgente del microfono iniettabile e
@@ -99,7 +101,7 @@
     `started_at`, `woke`, `wake_score`, avvisi all'arbitro) e `UscitaRemota` (l'uscita di
     `Speaker`: `fine_turno` aspetta le frasi «dette per intero» dal satellite). La finestra di
     follow-up passa come secondi che restano (niente orologi da allineare). Un satellite alla
-    volta (l'ultimo collegato sostituisce il precedente); la sua stanza va agli schermi
+    volta (l'ultimo collegato sostituisce il precedente) *[superato il 06/10: con `satelliti_insieme` ogni satellite ha la sua corsia, vedi [contesto-conversazione](contesto-conversazione.md)]*; la sua stanza va agli schermi
     (`Schermi.stanza_corrente`). Senza satellite collegato gli annunci aspettano. Il server
     accoglie i satelliti solo a Calliope avviata (prima non c'è il saluto). Ogni connessione
     ha i suoi turni: un server riavviato ripartiva da 1 e il satellite scartava tutto (trovato
@@ -141,7 +143,7 @@ della frase, ritardo dell'uscita) quando comincia a riprodurre una frase
 dà la prima del turno, `Speaker.prima_voce` anche con le casse locali, e il registro dei turni
 ha `prima_voce_s` (da `t0`, comprende la frase d'attesa). `calliope/latenza.py` e il cruscotto
 mostrano la prima voce sentita e la stessa dalla fine del parlato. Compatibile nei due sensi.
-Il telefono (pagina web) non lo manda ancora.
+Il telefono (pagina web) non lo manda ancora. *[superato il 07/10: anche il telefono manda `suona` (`player.onSuona` in `telefono.js`)]*
 
 ## Pause dentro la frase e ripresa (07/10, solo misura)
 

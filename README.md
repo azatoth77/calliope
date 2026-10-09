@@ -361,19 +361,21 @@ Finestra di contesto scelta dal setup: 20 480 (PC) e 24 576 (DGX), prima frase i
 ## Roadmap
 
 Il congelamento delle funzionalità nuove (dal 06/10, per la latenza) è stato tolto l'08/10.
-Prossimi passi decisi, senza date:
+In coda, dopo una lettura dei dati:
 
-1. **Modulo studio per i ragazzi**: gli esercizi generati e corretti dal programma ci sono per
-   matematica e italiano (08/10); restano le altre materie e la simulazione d'interrogazione con
-   domande a tempo, registrazione delle risposte e valutazione di contenuti ed esposizione.
-2. **Immagini generate in locale** (FLUX.2 [klein] 4B), con filtri e regole per i minori.
-3. **Secondo fattore** per chi amministra: conferma dal telefono, chiave vocale.
-4. **Pannello di amministrazione** con le azioni.
-5. Frasi pronte dei tool meno monotone (la ricerca cronologica nelle conversazioni, «di cosa
-   stavamo parlando?», «più indietro», c'è dall'08/10).
-6. Sicurezza per valore: decidere se accenderla dopo i giorni in ombra.
-7. Poi: interfono tra satelliti, conversazione di stanza, mappe e luoghi, satellite su
-   Raspberry, altre fonti italiane nella biblioteca.
+1. **Sicurezza per valore**: leggere i giorni in ombra e decidere se accenderla (10/10).
+2. **Frasi pronte dei tool meno monotone** (varianti per tono, forma breve), in attesa del via.
+3. **Nomi dei tool**: la regola dell'08/10 (nome singolare + verbo) anche per gli altri tool.
+4. **Parole incerte e compagnia**: tarare le soglie sulla voce vera; decidere la correzione sullo
+   schermo, il dizionario delle correzioni e il giudizio «rivolta a me?» oggi in ombra.
+
+Funzionalità decise, senza date: **modulo studio** (le altre materie e la simulazione
+d'interrogazione con domande a tempo e valutazione di contenuti ed esposizione; gli esercizi di
+matematica e italiano ci sono dall'08/10), **immagini generate in locale** (FLUX.2 [klein] 4B, con
+filtri e regole per i minori), **secondo fattore** per chi amministra (conferma dal telefono,
+chiave vocale), **pannello di amministrazione** con le azioni; poi interfono tra satelliti,
+conversazione di stanza, mappe e luoghi, satellite su Raspberry, altre fonti italiane nella
+biblioteca.
 
 In valutazione: riscontro emotivo dalla voce nello studio. Scartato: Kolibri (catalogo italiano
 quasi vuoto, contenuti creati solo con un servizio online). Dettagli: [`docs/roadmap.md`](docs/roadmap.md).
@@ -479,14 +481,22 @@ restarts); extensions written by the agent and approved with the challenge phras
 staged development mode (analysis, build and test, acceptance test of the candidate with a
 network trace for the agent, review, activation; versions, rename) and a live development view
 on screens; generated exercises for students (maths, Italian); a per-person file drawer (7
-days); Piper on the GPU when available; a read-only model plan from a hardware inventory; sandboxed games on screens; satellites with
+days); chronological conversation search and a per-person card history; a spoken «no» closes a
+pending proposal; unclear danger signals from minors go through two gates (reassure and ask,
+then alert the guardian); misheard names in tool arguments measured from Whisper word
+probabilities, with «did you mean…?» after an empty result; a «company mode» when several
+voices are near the same satellite (name required in every sentence with an unknown voice, an
+«is it addressed to me?» judgement in shadow mode); Piper on the GPU when available; a read-only model plan from a hardware inventory; sandboxed games on screens; satellites with
 one-command install and self-update with rollback; phone PWA; kiosk screens and an admin
 dashboard; per-person card history and a live conversation transcript on personal screens; personalities and a Star Trek mode; capability registry and catalogue installs;
 turn log with latency statistics; tiered tests and an end-to-end test.
 
-**Roadmap.** The feature freeze (for latency) was lifted on 08/10. Next: the rest of the study
-module (more subjects, oral exam simulation), chronological conversation search, local image generation (FLUX.2 [klein] 4B), a second factor for admins, an
-admin panel with actions; then intercom, room conversations, maps, Raspberry satellites. A
+**Roadmap.** The feature freeze (for latency) was lifted on 08/10. Queued: deciding on the
+value-based tool policy after its shadow days (10/10), less repetitive canned tool phrases,
+renaming the remaining tools, tuning the uncertain-word and company-mode thresholds on real
+voices. Decided: the rest of the study module (more subjects, oral exam simulation), local image
+generation (FLUX.2 [klein] 4B), a second factor for admins, an admin panel with actions; then
+intercom, room conversations, maps, Raspberry satellites. A
 speech-to-text correction study (07/10) kept Whisper output uncorrected. Contributions: open an
 issue first ([`CONTRIBUTING.md`](CONTRIBUTING.md)).
 

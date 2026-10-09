@@ -1,7 +1,10 @@
 # Calliope — architettura dei tool
 
 *Proposta del 23 settembre 2026. Fonti: [`docs/visione.md`](visione.md) (principi 5, 6, 9) e
-[`ricerche/2026-09-21-orchestrazione-agenti.md`](ricerche/2026-09-21-orchestrazione-agenti.md).*
+[`ricerche/2026-09-21-orchestrazione-agenti.md`](ricerche/2026-09-21-orchestrazione-agenti.md).
+Tenuto allineato al codice: tabella dei tool e `ToolSpec` riviste il 09/10 (72 schemi uguali per
+ogni livello, più `esercizi` solo con un minore in casa; nomi nuovi dall'08/10, i vecchi validi in
+`ToolRegistry.NOMI_VECCHI`).*
 
 ## 1. Due famiglie: nativi e MCP
 
@@ -45,6 +48,12 @@ calliope/                 # package: python -m calliope
 │   ├── schermi.py        # schermo_mostra, schermo_gestisci, schede_pulisci
 │   ├── agenti.py         # lavoro_affida, lavoro_stato, lavoro_annulla, lavoro_rispondi, lavoro_risultato, programma_esegui
 │   ├── sviluppo.py       # sviluppo_apri, sviluppo_passo, sviluppo_collauda, sviluppo_chiedi, sviluppo_correggi (modalità sviluppo, 08/10)
+│   ├── estensioni.py     # estensione_gestisci e i tool est_<nome> delle estensioni attive
+│   ├── conversazioni.py  # conversazione_cerca (anche cronologica, 08/10), conversazioni_dimentica
+│   ├── web.py            # web_cerca (SearXNG)
+│   ├── immagini.py, allegati.py  # immagine_guarda, immagine_archivia, pc_guarda; allegato_leggi, allegato_archivia, cassetto_gestisci
+│   ├── archivio.py, ufficio.py   # archivio_cerca/scadenze/somma; modello_compila, anagrafica_cerca/salva
+│   ├── minori.py, esercizi.py    # richiesta_tutore, compiti_aiuto, minore_gestisci; esercizi (08/10)
 │   └── stato.py          # calliope_stato, installa_proponi, installa_avvia, installa_gestisci
 ├── pc/                   # capacità dei PC: PCExecutor (base.py), LocalWindowsExecutor (windows.py)
 ├── documenti/            # Word, Excel, PDF: formato.py (JSON e validazione), scrittore.py
@@ -86,7 +95,17 @@ class ToolSpec:
     requires_internet: bool   # principio 5
     announce: tuple[str, ...] # frasi d'attesa dei tool lenti
     segreti: tuple[str, ...]  # argomenti mai scritti nei log (il codice di uno schermo)
+    riservato: bool           # argomenti e risultato fuori dal registro (archivio di casa)
+    non_fidato: bool          # il risultato è testo esterno (web_cerca)
+    classe, fonte, chiave     # politica unica (05/10): classe del tool, fonte del dato, argomenti chiave
+    prepara: Callable | None  # conversione di forma degli argomenti prima dei permessi (08/10)
+    nomi: dict                # argomenti che nominano qualcosa → tipo (08/10, argomenti_incerti.py)
 ```
+
+`nomi` (08/10) dice quali argomenti nominano un luogo, un dispositivo di casa, un'estensione,
+un contatto, una persona, un file o un valore: su questi si misura quanto Whisper era sicuro
+delle parole e, dopo un esito vuoto, il modello riceve «forse intendeva…»
+([stt-tts](aree/stt-tts.md)).
 
 `ToolContext` porta ai tool ciò che serve loro del processo (config, registro utenti,
 contesto speaker, oggetto voce). Le funzioni dei tool ricevono `ctx` come primo argomento
@@ -107,7 +126,10 @@ e restituiscono un `dict` serializzabile.
   può cercarli), non al prompt.
 - `call(nome, argomenti, ctx, livello)` → ricontrolla il permesso, esegue la funzione nativa
   e restituisce JSON; un errore non solleva un'eccezione verso il modello, torna come
-  risultato da leggere.
+  risultato da leggere. Un nome di prima dell'08/10 (`NOMI_VECCHI`: `delega_lavoro`,
+  `lavori_stato`, `estensione_crea`, `estensioni_gestisci`, `sviluppo`, `sviluppo_prova`…)
+  vale come il nome nuovo, con tutti i controlli (regola `tool_nome_vecchio`); un nome
+  storpiato dal modello entro due lettere vale il tool vicino (regola `tool_nome_corretto`).
 - Senza rete (`online=False`) i tool con `requires_internet=True` **spariscono
   dall'elenco** (principio 5) e il resto continua a funzionare.
 
@@ -228,10 +250,21 @@ controllo nelle prove a secco), ma tocca tutti i tool e le prove con Ollama che 
 | `lavoro_risultato` | familiare | lettura, risultato non fidato | il risultato di un lavoro finito: riassunto, più dettaglio, sullo schermo, PDF o Word (era `risultato_lavoro`) |
 | `programma_esegui` | familiare (chi l'ha chiesto o chi amministra) | azione | esegue di nuovo il programma di un lavoro di codice finito (era `lavori_esegui`) |
 | `sviluppo_apri` | familiare (il codice e le estensioni: solo chi amministra, dalla voce; un gioco anche un familiare adulto) | azione | apre uno sviluppo (08/10, versione 2): `tipo` estensione (anche `modifica` di una che c'è, `gioco`) o programma (anche su un `file` del PC o un `allegato`); proposta «Entriamo in modalità sviluppo per «…». Ho capito così: … Va bene così, o la cambiamo?»; il «sì» con `proposta` = l'id (fino al 08/10 `estensione_crea` e `delega_lavoro` di codice) |
-| `sviluppo_passo` | familiare (il codice: solo chi amministra) | azione | la modalità sviluppo (`calliope/sviluppo.py`): stato, avanti (anche «continua» a una tappa), analisi (con `cambia`), sospendi, riprendi (`quale`), chiudi (con la conferma; con l'agente al lavoro sospende), promuovi; le fasi le cambia il codice (era `sviluppo`) |
-| `sviluppo_collauda` | familiare (il codice: solo chi amministra) | azione, risultato non fidato | il collaudo: la versione candidata dell'estensione provata prima dell'approvazione nel suo container, o il programma eseguito di nuovo; un collaudo che non va → «Lo faccio correggere?» (era `sviluppo_prova`) |
+| `sviluppo_passo` | familiare (il codice: solo chi amministra) | azione | la modalità sviluppo (`calliope/sviluppo.py`): stato, avanti (anche «continua» a una tappa), analisi (con `cambia`), rifai (dopo un lavoro fermato o non andato riparte subito con la stessa specifica, 08/10 sera), ferma (il lavoro dell'agente si ferma subito, 08/10 sera), sospendi (una pausa: il lavoro in corso finisce), riprendi (`quale`), chiudi (con la conferma), promuovi; le fasi le cambia il codice (era `sviluppo`) |
+| `sviluppo_collauda` | familiare (il codice: solo chi amministra) | azione, risultato non fidato | il collaudo: la versione candidata dell'estensione provata prima dell'approvazione nel suo container, o il programma eseguito di nuovo; `argomenti` per un'estensione con più input, più valori detti insieme = un collaudo per valore (08/10 sera); un collaudo che non va → «Lo faccio correggere?» (era `sviluppo_prova`) |
 | `sviluppo_chiedi` | familiare (il codice: solo chi amministra) | lettura, risultato non fidato | la domanda a chi ha scritto il codice (08/10): una passata del modello dell'agente in sola lettura con il contesto dello sviluppo conservato (specifica, collaudi, diario, file, fonti), entro `sviluppo_chiedi_s` |
 | `sviluppo_correggi` | familiare (il codice: solo chi amministra) | azione | la correzione come passo a sé (08/10): un lavoro sui file della versione provata, con i collaudi che non vanno e la diagnosi di `sviluppo_chiedi`, la specifica resta; a una tappa «cambia e continua» |
+| `estensione_gestisci` | familiare (il codice: approvare, consentire e gestire solo chi amministra) | azione | le estensioni attive o no: elenca, approva una versione nuova, rifiuta, disattiva, riattiva, indietro, revoca, rimuovi, rinomina (08/10, solo il titolo, senza agente), consenti o nega un'azione chiesta da un'estensione; per usarne una il modello chiama il suo `est_<nome>` (era `estensioni_gestisci`) |
+| `conversazione_cerca` | familiare | lettura | ciò che ci siamo detti nelle conversazioni passate di chi parla (archivio di 30 giorni, ricerca ibrida); con `cronologico` (08/10) le ultime conversazioni in ordine di tempo, «più indietro» continua; `ospiti` solo per chi amministra |
+| `conversazioni_dimentica` | familiare | azione | cancella dall'archivio le conversazioni di chi parla, dopo la conferma (i ricordi restano) |
+| `web_cerca` | da `web_livello` (predefinito familiare) | lettura, risultato non fidato | ciò che cambia nel tempo (meteo, notizie, orari) da SearXNG; nomi delle persone tolti dalla domanda |
+| `immagine_guarda`, `immagine_archivia` | familiare | lettura; azione | rivedere una foto della conversazione; archiviarla tra i documenti di casa solo se chiesto |
+| `pc_guarda` | familiare | sensibile | una foto nuova dalla webcam o una schermata, su richiesta |
+| `allegato_leggi`, `allegato_archivia` | familiare | lettura; azione | una parte di un file allegato (anche dal cassetto dei giorni passati, 08/10); archiviarlo solo se chiesto |
+| `cassetto_gestisci` | familiare (`di`: solo un tutore per i file del ragazzo) | azione | il cassetto dei file della persona (7 giorni, 08/10): tieni tra i documenti, elimina, ancora una settimana |
+| `archivio_cerca`, `archivio_scadenze`, `archivio_somma` | familiare | lettura (riservati) | i documenti di casa archiviati: un dato, cosa scade, quanto si è speso (la somma la fa il programma) |
+| `modello_compila`, `anagrafica_cerca`, `anagrafica_salva` | familiare | azione; lettura; azione | ufficio: fattura (anche XML), nota di credito, preventivo, DDT e modelli dell'utente; la rubrica dei clienti e fornitori, con la proposta e il sì |
+| `richiesta_tutore` | familiare (solo con un minore in casa) | azione | il minore chiede al tutore un gioco, un'estensione, l'agente, più tempo di gioco o di restare sveglio |
 
 I tool `pc_*` ci sono solo se il PC c'è (`calliope.pc.load_pc`: Windows e librerie
 presenti), e ciascuno solo se il PC ha quella capacità. «Proprietario» è un controllo nel
@@ -316,7 +349,9 @@ satellite (`Mittente.stanza`). Nel registro dei turni ogni tool con schede ha `s
 (`schermo_personale`, `schermo_ospite`, `schermo_zona_grigia`).
 
 Gli **agenti** (02/10/2026, «gemma davanti, agenti dietro»,
-[`ricerche/2026-10-02-llm-per-spark.md`](ricerche/2026-10-02-llm-per-spark.md)). I tre tool ci
+[`ricerche/2026-10-02-llm-per-spark.md`](ricerche/2026-10-02-llm-per-spark.md)). I tre tool
+*[storico: dall'08/10 sono i cinque `lavoro_*` e `programma_esegui` della tabella, e il codice passa
+dalla modalità sviluppo; dettagli in [agenti-estensioni](aree/agenti-estensioni.md)]* ci
 sono solo con un agente configurato: `dgx.yaml` accanto a `calliope.yaml` (la DGX via tunnel
 SSH, o «diretto» in LAN) oppure `agenti_url`. Il front-end (gemma4) decide se delegare: il
 criterio sta nella descrizione e nel prompt (il risultato è un programma o un file complesso;
@@ -360,6 +395,10 @@ il blocco `cryptography`. Allowlist per server e per livello.
 - `sensibile` — chiede conferma (in futuro un secondo fattore, vedi visione).
 
 ## 10. Roadmap
+
+*Storica (23/09); la roadmap di oggi è in [`roadmap.md`](roadmap.md). Fatti: memoria SQLite
+(26/09), agenti e arbitro (02/10), domande a metà lavoro (`lavoro_rispondi`, 03/10), docxtpl e
+python-pptx (03/10), l'agente su vLLM invece di llama-server (02/10); resta il ponte MCP.*
 
 1. **Oggi**: registro, ciclo di tool calling, tool di identità/voce/ora.
 2. **Da discutere**: memoria (SQLite contro altre strade).
