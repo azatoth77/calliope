@@ -14,22 +14,14 @@
 | Wake word acustica | classificatore addestrato in formato openWakeWord (ONNX) | `calliope/wakeword.py` → `WakeWordDetector`, `load_wake_detector`; usato da `Listener.listen(wake, awake_until)`. Modelli e addestramento in `wakeword/` |
 | Text-to-Speech | Piper (voce `it_IT-serena-high`) | `calliope/tts.py` → `Speaker` (2 thread: sintesi e riproduzione, `_pcm`; la prima frase lunga a pezzi `primo_pezzo`, `tts_spezza_prima`, `tts_primo_pezzo_min`, e i thread di onnxruntime `carica_voce`, `tts_thread`, dal 07/10; velocità e costo della voce misurati all'avvio e con l'uso `calliope/taratura_voce.py` → `Taratura` (file voce_taratura.json), `tts_thread` «auto»; dal 07/10 sera Piper anche sulla GPU con onnxruntime-gpu, `tts_dispositivo` auto/cpu/cuda, scelta secondo la macchina e ripiego sulla CPU (`_su_gpu`, `prova_dispositivo`): [contesto-conversazione](contesto-conversazione.md)); inglesismi detti all'inglese `calliope/pronuncia.py` → `Pronuncia`, `LESSICO` (`tts_pronuncia`, `tts_pronuncia_extra`) |
 
-## Note dalla sezione «Stato attuale» di CLAUDE.md (fino al 06/10)
+## Problemi noti
 
-  - **Riconoscimento di chi parla** con impronta neurale CAM++ e registrazione a voce
-    (o `arruola.py`): al primo avvio il primo utente diventa «Primo/Prima» e amministra
-    (`admin` in `speakers.json`).
+*Fuse il 09/10 le due sezioni nate dalla divisione di CLAUDE.md (stato e problemi fino al
+06/10): ogni voce una volta sola, le superate segnate come storiche.*
 
-  - **Wake word acustica** dedicata: da addormentata Whisper non trascrive nulla.
+- **Barge-in con il nome** («Calliope, basta») mentre parla.
 
-  - **Barge-in con il nome** («Calliope, basta») mentre parla.
-
-  - **Cambio voce per utente.**
-
-- Dopo ogni risposta resta sveglia per `followup_s` secondi: dentro questa finestra si
-  trascrive senza bisogno del nome.
-
-## Note dalla sezione «Problemi noti» di CLAUDE.md (fino al 06/10)
+- **Cambio voce per utente.**
 
 - **Confronto STT e correzione delle frasi incerte** (05/10, [`docs/ricerche/2026-10-05-stt-confronto.md`](../ricerche/2026-10-05-stt-confronto.md),
   `prove/misura_stt.py`): whisper.cpp resta il migliore (WER 13,4 % sulle 104 vere, 20,6 % su 150
@@ -101,9 +93,10 @@
 - **Allucinazioni di Whisper** su silenzio o rumore: c'è un elenco in
   `HALLUCINATIONS`, da estendere se ne compaiono altre.
 
-- La **finestra di follow-up** ora è misurata sull'istante in cui inizia il parlato
-  (`Listener.started_at`); prima si usava la fine della frase e le frasi lunghe venivano
-  ignorate.
+- **Finestra di follow-up**: dopo ogni risposta resta sveglia per `followup_s` secondi, e
+  dentro questa finestra si trascrive senza bisogno del nome. È misurata sull'istante in cui
+  inizia il parlato (`Listener.started_at`); prima si usava la fine della frase e le frasi
+  lunghe venivano ignorate.
 
 - **Il flusso del microfono resta sempre aperto** (`Listener.__init__`); mentre Calliope
   parla l'audio viene scartato (half-duplex). Riaprirlo a ogni turno tagliava l'attacco
@@ -124,7 +117,9 @@
   ma non può allontanarsi da quella iniziale. **Punteggi su scala nuova**: Dario
   ~0,45–0,9, non più 0,7–0,97. Cambiando modello le impronte vecchie si scartano: si
   registra di nuovo la voce con `python arruola.py <nome>` (microfono o `--da <cartelle>`).
-  Soglia da ritarare quando arriva il secondo familiare.
+  Soglia da ritarare quando arriva il secondo familiare. Registrazione a voce (o
+  `arruola.py`): al primo avvio il primo utente diventa «Primo/Prima» e amministra (`admin` in
+  `speakers.json`).
 
 - **Cuffie Bluetooth** (I52):
   - tengono un buffer loro oltre a quello di PortAudio: chiudendo l'uscita si perde la

@@ -14,7 +14,9 @@ come farlo, niente è ancora nel codice.
 |---|---|---|
 | Personalità: tono di voce, modalità startrek, suoni di ascolto (dal 04/10) | testo nel prompt (`TONI`) o nei dati del turno; suoni sintetici con numpy, WAV con `wave` | `calliope/config.py` → `TONI`, `nome_tono`, `frase_tono`, `MODALITA`, `apply_modalita`; `calliope/personalita.py` (tono della casa, `personalita.json`); `Brain._tone_note`; tool `cambia_voce` (`tono`, `per_tutti`); `calliope/suoni.py` → `SuoniAscolto`, `sintetico`; `Listener.on_wake`; addestramento di un'altra parola `wakeword/parole.py` (`WW_PAROLA`); vedi [`docs/ricerche/2026-10-04-personalita-wake-word.md`](../ricerche/2026-10-04-personalita-wake-word.md) |
 
-## Note dalla sezione «Stato attuale» di CLAUDE.md (fino al 06/10)
+## Problemi noti
+
+*Dalla divisione di CLAUDE.md (note fino al 06/10); dal 09/10 una sola sezione per area.*
 
 - **Personalità** (04/10, [`docs/ricerche/2026-10-04-personalita-wake-word.md`](../ricerche/2026-10-04-personalita-wake-word.md),
   prove `prova_personalita.py`, `prova_personalita_ollama.py`, misura `misura_tono.py`): sei

@@ -810,15 +810,33 @@ def prova_ciclo_di_vita(tmp: Path, isolamento):
     verifica("riattiva", reg.get("est_convertitore_unita") is not None, r["risposta_finale"])
     r = chiama(reg, ctx, "estensione_gestisci", {"azione": "rimuovi",
                                                  "nome": "convertitore_unita"}, turno=15)
-    verifica("rimuovi: prima la domanda", r["risposta_finale"].endswith("Procedo?")
-             and est.archivio.voce("convertitore_unita") is not None)
+    verifica("rimuovi un'attiva (09/10): niente, prima propone di disattivarla",
+             r["risposta_finale"].startswith("«Convertitore di unità» è attiva, versione")
+             and "prima la disattivo?" in r["risposta_finale"]
+             and (r.get("in_sospeso") or {}).get("argomenti", {}).get("azione") == "disattiva"
+             and est.archivio.voce("convertitore_unita") is not None
+             and reg.get("est_convertitore_unita") is not None, r["risposta_finale"])
+    chiama(reg, ctx, "estensione_gestisci", {"azione": "disattiva",
+                                             "nome": "convertitore_unita"}, turno=16)
+    cart = est.archivio.cartella / "convertitore_unita"
+    r = chiama(reg, ctx, "estensione_gestisci", {"azione": "rimuovi",
+                                                 "nome": "convertitore_unita"}, turno=17)
+    verifica("rimuovi una disattivata: prima la domanda, con stato, versione, cosa fa, e "
+             "definitiva",
+             r["risposta_finale"].startswith("Elimino per sempre «Convertitore di unità» "
+                                             "(disattivata, versione ")
+             and "non si torna indietro" in r["risposta_finale"]
+             and r["risposta_finale"].endswith("Procedo?")
+             and est.archivio.voce("convertitore_unita") is not None, r["risposta_finale"])
     r2 = chiama(reg, ctx, "estensione_gestisci", {"azione": "rimuovi",
-                                                  "nome": "convertitore_unita"}, turno=15)
+                                                  "nome": "convertitore_unita"}, turno=17)
     verifica("…mai nella stessa risposta", est.archivio.voce("convertitore_unita") is not None)
     r2 = chiama(reg, ctx, "estensione_gestisci", {"azione": "rimuovi",
-                                                  "nome": "convertitore_unita"}, turno=16)
-    verifica("…poi il sì la toglie", est.archivio.voce("convertitore_unita") is None
-             and reg.get("est_convertitore_unita") is None, str(r2)[-200:])
+                                                  "nome": "convertitore_unita"}, turno=18)
+    verifica("…poi il sì la toglie: indice, tool e cartella (anche le versioni in sola "
+             "lettura)", est.archivio.voce("convertitore_unita") is None
+             and reg.get("est_convertitore_unita") is None and not cart.exists(),
+             str(r2)[-200:])
 
 
 def prova_agente(tmp: Path):

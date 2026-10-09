@@ -24,7 +24,9 @@ misure di questo documento sono col 4B in locale: da rifare col 26B sulla DGX do
 | Registro dei turni | JSONL, un file al giorno in `registro/` | `calliope/turnlog.py` → `TurnLog`; analisi con `revisione.py` |
 | Persistenza comune | SQLite in WAL, file di stato atomici, versioni dello schema | `calliope/persistenza.py` → `apri_db`, `scrivi_atomico` / `scrivi_json` / `leggi_json`, `migra` / `prepara_schema` (tabella `meta_schema`) |
 
-## Note dalla sezione «Stato attuale» di CLAUDE.md (fino al 06/10)
+## Problemi noti
+
+*Fuse il 09/10 le due sezioni nate dalla divisione di CLAUDE.md (stato e problemi fino al 06/10): ogni voce una volta sola, le superate segnate come storiche.*
 
   - **Tool calling nativo**: 20 tool (ora, data, calcola, timer, promemoria, agenda,
     annulla, chi parla, voci, utenti, cambio voce, rinomina, registrazione, ricorda,
@@ -36,8 +38,6 @@ misure di questo documento sono col 4B in locale: da rifare col 26B sulla DGX do
     `lavori_annulla` (43). *[Conteggi storici: il 06/10 i tool sono 65 schemi, con 65 classi in `politica.CLASSI`.]* *[Superato l'08/10: 72 schemi sulla DGX (più `esercizi` con un minore), e i tool dei lavori si chiamano `lavoro_affida`, `lavoro_stato`, `lavoro_annulla`… (sezione «Modalità sviluppo, versione 2»).]*
 
   - **Registro dei turni** (`registro/`) per l'auto-miglioramento.
-
-## Note dalla sezione «Problemi noti» di CLAUDE.md (fino al 06/10)
 
 - **Robustezza** (03/10, analisi in `prove/prova_robustezza.py`, una sezione per difetto): i thread della voce non muoiono (frase saltata nel log, uscita guasta riaperta da sola, `Speaker.wait()` con tempo massimo e thread rifatti); il giro del ciclo principale è `giro()` dentro un try (scuse, errore nel registro dei turni, si continua; 5 errori in 120 s → uscita con errore per systemd); `TurnLog.write` non solleva; Whisper passa alla CPU anche durante l'uso, con una frase d'attesa; all'avvio si aspetta il modello (`llm_attesa_avvio_s`, 15 minuti) invece di uscire. `memoria.db` in WAL con `busy_timeout` 30 s per tutti i servizi (`apri_db`); il thread dell'agenda riprova dopo un errore; la numerazione prenota il numero, prepara i file **fuori** dalla transazione e lo conferma (se fallisce: libero se è l'ultimo, altrimenti annullato con la nota). `speakers.json` atomico con la copia `.bak`: un file illeggibile **non** è un primo avvio (tutti ospiti, nessun salvataggio sopra, capacità «chi_parla» guasta). Ogni database ha la sua versione in `meta_schema`: dati di una versione più nuova si aprono in sola lettura. Il gestore ferma il servizio prima di ripristinare, sposta -wal/-shm/-journal con il database e copia anche `archivio.db`. «Tra N minuti» è tempo reale (ora legale). Restano: le attese fisse di `prova_satellite` (negative o di assestamento) e la soglia di 50 ms in `prova_agenti` (fallita una volta sotto carico, 51,7 ms).
 
@@ -62,7 +62,10 @@ misure di questo documento sono col 4B in locale: da rifare col 26B sulla DGX do
   `TextCallGuard` la intercetta e la esegue come chiamata vera. Con il thinking acceso i
   tool sono sempre giusti, ma la prima risposta passa da ~0,3 s a 0,6–2,5 s. Un prompt
   generico faceva dire «ora controllo l'ora» senza chiamare nulla: il prompt nomina i
-  tool uno per uno.
+  tool uno per uno. Dal 26/09 `TextCallGuard` riconosce anche i qualificatori («calliope.»,
+  «default_api.», «call_») e le funzioni matematiche scritte come testo («sqrt(144)» diventa
+  `calcola`); una risposta di una sola parola si trattiene per un token (~20 ms); le frasi che
+  nominano un tool con «_» non si dicono (`Brain.mentions_tool`).
 
 - **Wake word testuale**: soglia 0,78 e niente parole molto più corte del nome. Con 0,65
   «cavallo», «calcio», «calle» e «callo» svegliavano Calliope. Con il nome in mezzo e
@@ -219,11 +222,6 @@ misure di questo documento sono col 4B in locale: da rifare col 26B sulla DGX do
   La sceglie il codice (`Brain.on_tool_start`), una volta per risposta, solo se Calliope
   non ha già parlato, e non entra nella storia. Il registro ha `primo_suono_s` e
   `prima_frase_s`. Non va messa sui tool veloci (ora, calcoli): sarebbe tempo perso.
-
-- **TextCallGuard** (26/09): riconosce anche i qualificatori («calliope.», «default_api.»,
-  «call_») e le funzioni matematiche scritte come testo («sqrt(144)» diventa `calcola`).
-  Una risposta di una sola parola si trattiene per un token (~20 ms). Le frasi che nominano
-  un tool con «_» non si dicono (`Brain.mentions_tool`).
 
 - **Frase superflua prima della spinta** (01/10, `brain.TOOL_REQUEST`): «Calliope, apri il
   PDF della spesa» diceva «Non ho trovato alcun PDF…, potresti dirmi il nome?» e subito dopo

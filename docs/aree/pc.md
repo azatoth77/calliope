@@ -10,21 +10,20 @@
 |---|---|---|
 | PC a voce (il portatile stesso, o quello del satellite) | pycaw, WinRT (GSMTC), screen_brightness_control, pywin32 (Windows Search via ADODB), psutil | `calliope/pc/` → `PCExecutor` (`base.py`: `cerca_file` dal più recente, `risultato` con un solo file, dal 07/10), `LocalWindowsExecutor` (`windows.py`), `RemotePCExecutor` (`remoto.py`, dal 03/10), `load_pc`; sul satellite `EsecutoreSatellite` (`calliope/satellite/esecutore.py`); tool in `calliope/tools/pc.py` (`_elenco_sospeso` con le date, `file_assente`, dal 07/10); documenti al satellite con `RemoteDelivery` (`calliope/documenti/consegna.py`) |
 
-## Note dalla sezione «Stato attuale» di CLAUDE.md (fino al 06/10)
+## Problemi noti
+
+*Fuse il 09/10 le due sezioni nate dalla divisione di CLAUDE.md (stato e problemi fino al
+06/10): ogni voce una volta sola, le superate segnate come storiche.*
 
   - **Esecutore remoto del PC** (03/10, protocollo 2 dei satelliti): con Calliope sulla DGX i
     tool `pc_*` comandano il portatile Windows collegato come satellite, e i documenti si
     salvano nella sua cartella Documenti\Calliope. Provato a secco (`prova_esecutore.py`):
     la prova vera con la DGX e il portatile no. *[superato il 07/10: usato sulla DGX dal satellite dello studio, casi veri nelle sezioni del 07/10 qui sotto]*
 
-  - **PC a voce** (26/09, `calliope/pc/`): volume, musica, luminosità, batteria, programmi
-    aperti, app del catalogo, blocco dello schermo, ricerca e apertura di file sul portatile
-    stesso, con 8 tool `pc_*`.
-
-## Note dalla sezione «Problemi noti» di CLAUDE.md (fino al 06/10)
-
 - **PC a voce** (26/09, `calliope/pc/`, `calliope/tools/pc.py`, prove `prove/prova_pc.py` e
-  `prove/prova_pc_ollama.py`):
+  `prove/prova_pc_ollama.py`): volume, musica, luminosità, batteria, programmi aperti, app del
+  catalogo, blocco dello schermo, ricerca e apertura di file sul portatile stesso, con 8 tool
+  `pc_*`.
   - `PCExecutor` prende e restituisce solo dati JSON: domani passa per un WebSocket. Le
     regole comuni stanno nella classe base: app solo dal catalogo `pc_app`, file solo
     come «risultato n dell'ultima ricerca» della stessa persona (valida 15 minuti, i

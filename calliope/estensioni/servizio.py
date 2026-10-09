@@ -598,6 +598,11 @@ class Estensioni:
             # → «Fatto: «Meteo Borgoverde…» è di nuovo attiva», e la persona voleva la versione
             # nuova): niente «Fatto», si dice com'è e, se c'è, si propone la versione nuova
             return self._gia_attiva(ctx, nome, voce, titolo)
+        if azione == "rimuovi":
+            # Prima di ogni frase di sfida: un'attiva o un'occupata non si elimina comunque
+            no = self._non_eliminabile(ctx, nome, voce, titolo)
+            if no is not None:
+                return no
         if not forte and azione in ("rifiuta", "riattiva", "rimuovi", "revoca"):
             sf = self._sfida(ctx, {"azione": azione, "nome": nome}, f"«{azione}» su «{titolo}»")
             if sf is not None:
@@ -636,23 +641,151 @@ class Estensioni:
             return _final(f"Fatto: per «{titolo}» ho tolto {n} permessi «sempre»." if n else
                           f"«{titolo}» non aveva permessi «sempre».")
         if azione == "rimuovi":
-            chiave = (_chi(ctx), "rimuovi", nome)
-            turno = int(getattr(ctx, "turno", 0) or 0)
-            off = self._offerte.get(chiave)
-            if off is not None and 1 <= turno - off <= 3:
-                self._offerte.pop(chiave, None)
-                self.archivio.rimuovi(nome)
-                self.aggiorna_tool()
-                return _final(f"Fatto: ho tolto «{titolo}» con tutte le sue versioni e i suoi "
-                              f"dati.")
-            self._offerte[chiave] = turno
-            frase = (f"Tolgo «{titolo}» con tutte le versioni e i suoi dati: non si potrà "
-                     f"tornare indietro. Procedo?")
-            return _final(frase, fatto="proposta: NON è ancora stato tolto niente",
-                          in_sospeso={"domanda": "Procedo?", "cosa": f"togliere «{titolo}»",
-                                      "tool": "estensione_gestisci",
-                                      "argomenti": {"azione": "rimuovi", "nome": nome}})
+            return self._rimuovi(ctx, nome, voce, titolo)
         return {"ok": False, "fatto": NIENTE, "errore": f"azione sconosciuta: {azione}"}
+
+    # ─────────────────────────── eliminazione (09/10) ───────────────────────────
+    def _rimuovi(self, ctx, nome: str, voce: dict, titolo: str) -> dict:
+        """L'eliminazione definitiva (09/10, decisione di Dario). Sulla DGX «Meteo città»
+        (disattivata) e «Meteocittà» (attiva) si dicono uguali, e fino al 09/10 «rimuovi»
+        sceglieva l'attiva. Ora: per «rimuovi» si preferisce la disattivata (`preferenza`);
+        un'estensione **attiva** non si elimina: prima si disattiva (la via prudente: due passi
+        detti, ognuno reversibile fino all'ultimo); uno sviluppo aperto o un lavoro dell'agente
+        su di lei la bloccano. La domanda dice quale (titolo, stato, versione, cosa fa, e
+        l'omonima che resta) e che è definitiva; il «sì» arriva in un turno dopo."""
+        no = self._non_eliminabile(ctx, nome, voce, titolo)
+        if no is not None:
+            return no
+        ver = voce.get("attiva") or voce.get("candidata")
+        stato = STATI_DETTI.get(voce.get("stato"), voce.get("stato") or "")
+        chiave = (_chi(ctx), "rimuovi", nome)
+        turno = int(getattr(ctx, "turno", 0) or 0)
+        off = self._offerte.get(chiave)
+        if off is not None and 1 <= turno - off <= 3:
+            self._offerte.pop(chiave, None)
+            try:
+                self.archivio.rimuovi(nome)
+            except OSError as e:
+                self.log(f"[ESTENSIONI] {nome}: eliminazione non riuscita: {e}")
+                return _final(f"Non sono riuscita a eliminare tutti i file di «{titolo}». "
+                              f"Chi amministra lo trova scritto nel registro.", ok=False,
+                              fatto="eliminazione NON riuscita del tutto")
+            schede = self._dimentica(nome)
+            self.archivio.registra({"estensione": nome, "esito": "eliminata", "titolo": titolo,
+                                    "chi": _chi(ctx), "schede_tolte": schede})
+            self.log(f"[ESTENSIONI] {nome} («{titolo}») eliminata; schede tolte: {schede}")
+            self.aggiorna_tool()
+            return _final(f"Fatto: «{titolo}» è eliminata, con tutte le sue versioni e i suoi "
+                          f"dati.")
+        self._offerte[chiave] = turno
+        m = self.archivio.manifesto(nome, ver) or {}
+        cosa = str(m.get("descrizione") or "").strip().rstrip(".")
+        chi = f"«{titolo}» ({stato}" + (f", versione {ver}" if ver else "") + ")"
+        frase = f"Elimino per sempre {chi}" + (
+            f": {cosa[:1].lower() + cosa[1:]}" if cosa else "") + "."
+        omonime = self._omonime(nome)
+        if omonime:
+            frase += " " + " ".join(f"«{t}», {s}, resta com'è." for t, s in omonime)
+        frase += (" Cancello i file di tutte le versioni e i suoi dati: non si torna indietro. "
+                  "Procedo?")
+        return _final(frase, fatto="proposta: NON è ancora stato eliminato niente",
+                      in_sospeso={"domanda": "Procedo?", "cosa": f"eliminare per sempre {chi}",
+                                  "tool": "estensione_gestisci",
+                                  "argomenti": {"azione": "rimuovi", "nome": nome}})
+
+    def _non_eliminabile(self, ctx, nome: str, voce: dict, titolo: str) -> dict | None:
+        """La risposta se `nome` adesso non si può eliminare (None se si può): occupata da
+        uno sviluppo o da un lavoro, oppure attiva."""
+        occupata = self._occupata(ctx, nome)
+        if occupata:
+            note_rule(ctx, "estensione_rimuovi_occupata")
+            return _final(f"Non posso eliminare «{titolo}»: {occupata}.", ok=False,
+                          fatto="NIENTE eliminato")
+        if voce.get("stato") == "attiva":
+            # Mai un'attiva in un passo solo: la frase propone di disattivarla (il «sì»
+            # disattiva e basta); per eliminarla poi si richiede (regola
+            # `estensione_rimuovi_attiva`, vincolo di sicurezza)
+            note_rule(ctx, "estensione_rimuovi_attiva")
+            frase = (f"«{titolo}» è attiva, versione {voce.get('attiva')}: prima la "
+                     f"disattivo? Poi, se vuoi, la posso eliminare.")
+            return _final(frase, ok=False, fatto="NIENTE eliminato: è attiva",
+                          in_sospeso={"domanda": "Prima la disattivo?",
+                                      "cosa": f"disattivare «{titolo}»",
+                                      "tool": "estensione_gestisci",
+                                      "argomenti": {"azione": "disattiva", "nome": nome}})
+        return None
+
+    def _omonime(self, nome: str) -> list[tuple[str, str]]:
+        """Le altre estensioni che si dicono come `nome` («Meteo città» e «Meteocittà»): titolo
+        e stato, per la domanda di eliminazione."""
+        v = self.archivio.voce(nome) or {}
+        mio = _compatto((self.archivio.manifesto(nome, v.get("attiva") or v.get("candidata"))
+                         or {}).get("titolo", nome))
+        out = []
+        for altro in self.archivio.nomi():
+            if altro == nome:
+                continue
+            va = self.archivio.voce(altro) or {}
+            t = (self.archivio.manifesto(altro, va.get("attiva") or va.get("candidata"))
+                 or {}).get("titolo", altro)
+            if _compatto(t) == mio:
+                out.append((t, STATI_DETTI.get(va.get("stato"), va.get("stato") or "")))
+        return out
+
+    def _occupata(self, ctx, nome: str) -> str:
+        """Perché `nome` non si può eliminare adesso ("" se si può): uno sviluppo aperto o
+        sospeso su di lei, un lavoro dell'agente che la sta cambiando."""
+        lavori = getattr(ctx, "lavori", None) or getattr(self.tool_ctx, "lavori", None)
+        svs = getattr(lavori, "sviluppi", None)
+        try:
+            sv = svs.dell_estensione(nome) if svs is not None else None
+        except Exception:  # noqa: BLE001
+            sv = None
+        if sv is not None:
+            stato = "sospeso" if sv.stato == "sospesa" else "aperto"
+            return (f"c'è uno sviluppo {stato} su di lei ({sv.id}). Prima chiudilo, poi la "
+                    f"posso eliminare")
+        try:
+            vivi = [lv for lv in lavori.attivi(attesa=True)
+                    if getattr(lv, "estensione", None) == nome] if lavori is not None else []
+        except Exception:  # noqa: BLE001
+            vivi = []
+        if vivi:
+            return (f"un agente ci sta lavorando ({vivi[0].id}). Aspetta che finisca, o "
+                    f"annulla il lavoro, poi la posso eliminare")
+        return ""
+
+    def _dimentica(self, nome: str) -> int:
+        """Dopo l'eliminazione: le partite dei suoi giochi, le offerte in sospeso e le schede
+        che rimandano a lei (lo sviluppo, il lavoro dell'agente, le partite) escono dalla
+        cronologia degli schermi, in memoria e su disco. Quante schede."""
+        for k in [k for k in self._offerte if isinstance(k, tuple) and k[-1:] == (nome,)]:
+            self._offerte.pop(k, None)
+        chiavi: set[str] = set()
+        giochi = getattr(self, "giochi", None)
+        if giochi is not None and hasattr(giochi, "chiudi_di"):
+            chiavi |= {f"gioco:{pid}" for pid in giochi.chiudi_di(nome)}
+        lavori = getattr(self.tool_ctx, "lavori", None)
+        for lv in list(getattr(lavori, "lavori", None) or ()):
+            if getattr(lv, "estensione", None) == nome:
+                chiavi |= {f"lavoro:{lv.id}", f"registro:{lv.id}"}
+        svs = getattr(lavori, "sviluppi", None)
+        for sv in list(getattr(svs, "sviluppi", None) or ()):
+            if getattr(sv, "estensione", None) == nome:
+                chiavi.add(f"sviluppo:{sv.id}")
+
+        def sua(c: dict) -> bool:
+            return (str(c.get("chiave") or "") in chiavi
+                    or (c.get("tipo") == "sviluppo"
+                        and (c.get("sviluppo") or {}).get("nome") == nome))
+        hub = getattr(self.tool_ctx, "schermi", None)
+        if hub is None or not hasattr(hub, "togli_schede"):
+            return 0
+        try:
+            return hub.togli_schede(sua)
+        except Exception as e:  # noqa: BLE001 — l'estensione è già eliminata
+            self.log(f"[ESTENSIONI] schede di {nome} non tolte: {type(e).__name__}: {e}")
+            return 0
 
     def _rinomina(self, ctx, nome: str, nuovo, vecchio: str) -> dict:
         """Il titolo nuovo detto dalla persona (08/10, caso vero della DGX: «chiamala solo
@@ -1150,12 +1283,21 @@ def prepara_gestisci(ctx, argomenti: dict) -> dict:
 
 def preferenza(azione) -> tuple:
     """Lo stato da preferire tra due estensioni con lo stesso titolo detto (`_nome`): per
-    riattivarla la disattivata, per tutto il resto l'attiva."""
+    riattivarla o eliminarla (09/10) la disattivata, per tutto il resto l'attiva."""
     a = str(azione or "").strip().lower()
+    if a == "rimuovi" or _SINONIMI.get(a) == "rimuovi":
+        # Un'attiva non si elimina in un passo (Estensioni._rimuovi): tra due omonime la
+        # persona che dice «elimina» parla di quella spenta
+        return ("disattivata", "rifiutata", "da_approvare", "attiva")
     if a in ("riattiva", "riattivala", "riaccendi") or a in _SINONIMI_ATTIVA:
         return ("da_approvare", "disattivata", "attiva") if a in _SINONIMI_ATTIVA else (
             "disattivata", "attiva")
     return ("attiva", "da_approvare")
+
+
+# Gli stati di un'estensione detti a voce
+STATI_DETTI = {"attiva": "attiva", "disattivata": "disattivata", "da_approvare": "da approvare",
+               "rifiutata": "rifiutata"}
 
 
 def _compatto(s) -> str:
@@ -1195,7 +1337,13 @@ def _nome(nome, archivio, preferisci: tuple = ("attiva",)) -> str:
         for stato in preferisci or ():
             scelti = [n for n in uguali if (archivio.voce(n) or {}).get("stato") == stato]
             if scelti:
-                return scelti[0]
+                # Più d'una nello stesso stato (09/10: tutte e due disattivate prima di
+                # eliminarne una): quella con il titolo detto proprio così, spazi compresi
+                esatti = [n for n in scelti if _norm_testo(s) == _norm_testo(
+                    (archivio.manifesto(n, (archivio.voce(n) or {}).get("attiva")
+                                        or (archivio.voce(n) or {}).get("candidata")) or {})
+                    .get("titolo", n))]
+                return (esatti or scelti)[0]
         return uguali[0]
     vicini = difflib.get_close_matches(s, list(titoli) + nomi, n=1, cutoff=0.6)
     if vicini:

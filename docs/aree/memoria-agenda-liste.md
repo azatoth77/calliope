@@ -16,20 +16,12 @@ di quest'area dopo il 07/10. Da rimisurare col 26B: età dai ricordi e dal profi
 | Timer, promemoria, appuntamenti | SQLite (stesso file della memoria), thread di scadenza | `calliope/agenda.py` → `Agenda` (`find`, `reschedule`), `announcement`; `calliope/tempi.py` → `parse_duration`, `parse_when`, `parse_shift`, `parse_day_range`, `parse_date`, `anni_compiuti` (età e date: tool `data_calcola`, dal 05/10) |
 | Liste della casa | SQLite (stesso file della memoria) | `calliope/liste.py` → `Liste`, `list_key`, `split_items` |
 
-## Note dalla sezione «Stato attuale» di CLAUDE.md (fino al 06/10)
+## Problemi noti
 
-  - **Liste, appuntamenti e memoria della casa** (26/09): liste condivise (spesa, cose da
-    fare…), appuntamenti personali con avviso un'ora prima, fatti della casa («ricorda per
-    tutti» la password del wifi) visti da tutti i familiari.
+*Fuse il 09/10 le due sezioni nate dalla divisione di CLAUDE.md (stato e problemi fino al 06/10): ogni voce una volta sola, le superate segnate come storiche.*
 
-  - **Timer e promemoria** (26/09, `calliope/agenda.py` + `calliope/tempi.py`): annunciati con un segnale
-    acustico e il nome; i promemoria sopravvivono a un riavvio.
-
-  - **Memoria persistente per persona** (26/09): «ricordati che…» sopravvive alla chiusura.
-
-## Note dalla sezione «Problemi noti» di CLAUDE.md (fino al 06/10)
-
-- **Memoria** (`calliope/memory.py`, 26/09): i fatti sono legati a `UserProfile.id` (non al nome)
+- **Memoria persistente per persona** (`calliope/memory.py`, 26/09): «ricordati che…»
+  sopravvive alla chiusura. I fatti sono legati a `UserProfile.id` (non al nome)
   e arrivano al modello come messaggio di sistema **subito prima della domanda**, non nel
   prompt, così la cache del prefisso resta valida e un 4B non deve ricordarsi di chiamare
   un tool per leggerli. Un fatto con lo stesso soggetto sostituisce il vecchio («numero
@@ -52,7 +44,8 @@ di quest'area dopo il 07/10. Da rimisurare col 26B: età dai ricordi e dal profi
   resta in ascolto. «Alle 6» alle 14 vale le 18 (primo orario futuro). I timer sono della
   casa (anche per gli ospiti), i promemoria sono personali (familiari). I risultati dei
   tool hanno una `conferma` già pronta: senza, il modello ripeteva la richiesta invece di
-  confermarla. Prova su Ollama `prove/prova_agenda.py`: 14/14.
+  confermarla. I promemoria sopravvivono a un riavvio. Prova su Ollama `prove/prova_agenda.py`:
+  14/14.
   **Cambiare una voce già messa** (03/10: «Mettimi un timer di un secondo», poi «impostalo
   di un minuto» ne avviava un secondo): `timer_imposta`, `promemoria_imposta` e
   `appuntamento_aggiungi` hanno `cambia` (`imposta` | `aggiungi` | `togli`), invece di un tool
@@ -70,7 +63,9 @@ di quest'area dopo il 07/10. Da rimisurare col 26B: età dai ricordi e dal profi
   durata detta sostituisce la vecchia («impostalo di cinque minuti» diventava «aggiungi»);
   i casi contrari («un altro timer», «che ore sono?», «anche un timer per le uova») 6/6.
 
-- **Liste, appuntamenti, memoria della casa** (26/09). Liste (`calliope/liste.py`) della
+- **Liste, appuntamenti, memoria della casa** (26/09): liste condivise (spesa, cose da fare…),
+  appuntamenti personali con avviso un'ora prima, fatti della casa («ricorda per tutti» la
+  password del wifi) visti da tutti i familiari. Liste (`calliope/liste.py`) della
   famiglia, non degli ospiti: le voci si confrontano senza articoli, maiuscole e vocale
   finale («le uova» = «uovo»), così niente doppioni e «ho preso il latte» toglie la voce
   giusta; attenzione, per lo stesso motivo due voci quasi uguali («pila AA», «pila AAA»)

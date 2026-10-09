@@ -139,7 +139,9 @@ vLLM e SearXNG, HA e PC finti, due satelliti veri con microfono e casse finti; p
 Calliope vera tace da 180 s e alla fine lascia solo `~/calliope-e2e/risultati/`. Passi e cosa
 prova: [`prove/manuali/e2e-dgx.md`](../../prove/manuali/e2e-dgx.md).
 
-## Note dalla sezione «Stato attuale» di CLAUDE.md (fino al 06/10)
+## Problemi noti
+
+*Dalla divisione di CLAUDE.md (note fino al 06/10); dal 09/10 una sola sezione per area.*
 
   - **Impacchettamento per la DGX Linux** (02/10, [`docs/ricerche/2026-10-02-impacchettamento-dgx-linux.md`](../ricerche/2026-10-02-impacchettamento-dgx-linux.md)):
     `pyproject.toml` + `uv.lock`, gestore `calliope` (installa, aggiorna con verifica e

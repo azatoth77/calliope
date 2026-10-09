@@ -15,24 +15,9 @@
 | Sonde dell'agente e ricollaudo alla consegna (08/10 notte) | solo libreria standard; il container delle estensioni per il ricollaudo, `RetePubblica` per le sonde | `calliope/sonde.py` → `ricollaudo`, `casi_da_riprovare`, `sonda`, `sonde_ok`, `host_noti`, `concedi`, `vocabolario`, `Vocabolario`, `controlla_url`, `come_l_ha_letto`, `SONDA_RETE`; `Estensioni.prova_bozza` (`estensioni/servizio.py`), `restringi_per_sonda` (`estensioni/manifesto.py`), `Lavori._controlla_estensione` (`agenti/servizio.py`), `Agente._sonda_rete` (`agenti/ciclo.py`); nomi pubblici di casa in `calliope/web/rete.py` → `nomi_casa`; specifica in [`docs/ricerche/2026-10-08-sonde-agente.md`](../ricerche/2026-10-08-sonde-agente.md) § 9; prove `prova_sonde.py`, `prova_sonde_attacchi.py` |
 | Estensioni permanenti e guardrail (04/10) | container della sandbox (Docker) per ogni chiamata, JSON-RPC su stdin/stdout (cornice stdio di MCP, senza SDK), solo libreria standard | `calliope/guardrail.py` → `valuta_porta`, `SecondoParere`, `domanda` (la porta delle estensioni: sicura / pericolosa / vietata; i tool di Calliope li decide `politica.decidi` dal 06/10); `calliope/estensioni/` → `Estensioni` (`servizio.py`), `Porta` (`porta.py`), `Esecuzione` (`esecuzione.py`), `Archivio` (`archivio.py`: versioni, impronta), `valida` (`manifesto.py`), `analizza` (`analisi.py`), runtime `_ospite.py` (nel container: `calliope_estensione`), prompt dell'agente (`prompt.py`: `sistema_estensione`), contratto delle capacità (`contratto.py`: `testo`, `CAPACITA_IDS`, CAPACITA.md); rete solo pubblica `calliope/web/rete.py` → `RetePubblica` (registro `uscite.jsonl`, `riepilogo`), dati riservati nel traffico `calliope/web/riservati.py` → `Riservati`, `da_contesto`; piano e permessi dell'agente in `agenti/ciclo.py` (`PIANO`, `CHIEDI_PERMESSO`, `_piano`, `_fuori_piano`); tool `estensione_gestisci` (era `estensioni_gestisci`) in `calliope/tools/estensioni.py`, la creazione passa da `sviluppo_apri` dal 08/10 (prima `estensione_crea`); progetto in `docs/ricerche/2026-10-04-estensioni-e-guardrail.md` (§11–§14 dal 05/10) |
 
-## Note dalla sezione «Stato attuale» di CLAUDE.md (fino al 06/10)
+## Problemi noti
 
-  - **Domande dell'agente e file della persona** (03/10, `lavori_rispondi`, `delega_lavoro(file=…)`):
-    un dato mancante lascia il lavoro in attesa con il suo contesto e la domanda si annuncia
-    (azione in sospeso); «correggi lo script backup.py» manda all'agente una copia del file
-    (dal satellite a pezzi con lo SHA-256) e il risultato torna come file nuovo. A secco
-    (`prova_agenti_domande.py`); con il modello e la DGX no.
-
-  - **Agenti in secondo piano** (02/10, `calliope/agenti/`, architettura della ricerca
-    [`docs/ricerche/2026-10-02-llm-per-spark.md`](../ricerche/2026-10-02-llm-per-spark.md)):
-    gemma riconosce un lavoro lungo (programmi e script, pagine web, relazioni lunghe,
-    documenti da un modello, ricerche a più passi) e lo affida a un modello grande sulla DGX
-    Spark (tunnel SSH automatico) o sullo stesso Ollama; codice in una sandbox con i test,
-    documenti con lo scrittore di `calliope/documenti/`, annuncio a lavoro finito e scheda con
-    il risultato sullo schermo. Provato con ssh e Ollama finti e con gemma4 locale come agente:
-    la DGX vera non è ancora stata contattata. *[Storico (02/10): dalla sera del 02/10 Calliope gira sulla DGX come servizio; vedi [setup-dgx](setup-dgx.md).]*
-
-## Note dalla sezione «Problemi noti» di CLAUDE.md (fino al 06/10)
+*Fuse il 09/10 le due sezioni nate dalla divisione di CLAUDE.md (stato e problemi fino al 06/10): ogni voce una volta sola, le superate segnate come storiche.*
 
 - **Arbitro con vLLM sulla stessa GPU** (04/10, `arbitro.py`, prova `prova_arbitro_vllm.py`,
   misura `prove/misura_arbitro_vllm.py`): sulla DGX la voce (Ollama) e l'agente (vLLM) hanno la
@@ -158,8 +143,13 @@
 
 - **Agenti in secondo piano** (02/10, `calliope/agenti/`, `calliope/tools/agenti.py`; prove
   `prova_agenti.py` a secco, `prova_agenti_ollama.py`, banco `prova_lavori.py`; passi per la
-  DGX in `prove/LEGGIMI.md`). Architettura della ricerca del 02/10: gemma davanti, un modello
-  grande dietro. **La DGX vera non è ancora stata contattata** *[Storico (02/10): dalla sera del 02/10 Calliope gira sulla DGX come servizio; vedi [setup-dgx](setup-dgx.md).]*: tunnel, Ollama remoto e
+  DGX in `prove/LEGGIMI.md`). Architettura della ricerca del 02/10
+  ([`docs/ricerche/2026-10-02-llm-per-spark.md`](../ricerche/2026-10-02-llm-per-spark.md)):
+  gemma davanti, un modello grande dietro. Gemma riconosce un lavoro lungo (programmi e script,
+  pagine web, relazioni lunghe, documenti da un modello, ricerche a più passi) e lo affida a un
+  modello grande sulla DGX Spark (tunnel SSH automatico) o sullo stesso Ollama; codice in una
+  sandbox con i test, documenti con lo scrittore di `calliope/documenti/`, annuncio a lavoro
+  finito e scheda con il risultato sullo schermo; provato anche con gemma4 locale come agente. **La DGX vera non è ancora stata contattata** *[Storico (02/10): dalla sera del 02/10 Calliope gira sulla DGX come servizio; vedi [setup-dgx](setup-dgx.md).]*: tunnel, Ollama remoto e
   `qwen3.6:35b` sono provati solo con un ssh finto e un Ollama finto.
   - **Collegamento**: `dgx.yaml` (tunnel o diretto) oppure `agenti_url`; tunnel `ssh -N -L
     127.0.0.1:11435:127.0.0.1:11434 -- <alias>` con `BatchMode=yes`,
@@ -343,7 +333,8 @@
     Risposta nel turno dopo o più tardi («per il lavoro della relazione: …», per id o parole
     del titolo); solo chi l'ha chiesto o chi amministra (`lavori_risposta_altrui`). L'attesa
     non conta nel tetto dei minuti; al più `agenti_domande_max` (3) domande, poi si chiude
-    come prima; dopo `agenti_attesa_risposta_min` (120) si chiude da solo e lo dice.
+    come prima; dopo `agenti_attesa_risposta_min` (120) si chiude da solo e lo dice. A secco
+    (`prova_agenti_domande.py`); con il modello e la DGX non ancora (03/10).
   - **File della persona all'agente** (03/10, `file_utente.py`): `delega_lavoro(file=nome o
     numero)` cerca con l'esecutore del PC e le regole di `pc_cerca_file` (proprietari o chi
     amministra, o un documento appena scritto per chi parla; `lavori_file_permesso`), conferma
@@ -1590,3 +1581,63 @@ Parte del protocollo di [`../ricerche/2026-10-09-dialogo-tool.md`](../ricerche/2
 - **Esiti dei lavori verso la voce**: già frasi (`motivo`, `riassunto`); il tipo dell'eccezione
   resta nei dati del lavoro e nel log. Inventario completo nel § 7 del documento di progetto.
 
+## Eliminazione definitiva di un'estensione (09/10, ramo `rimuovi-documenti`)
+
+Decisione di Dario del 09/10. `estensione_gestisci azione=rimuovi` c'era già (con «Procedo?»),
+ma la scelta del nome detto (`servizio._nome` con `preferenza(azione)`) per «rimuovi» preferiva
+l'**attiva** tra due estensioni con lo stesso titolo detto. Sulla DGX ci sono «Meteo città»
+(`meteo_citta`, disattivata) e «Meteocittà» (`meteo_codifica_citta`, attiva), che a voce si
+confrontano uguali (`_compatto`): «rimuovi l'estensione Meteo città» avrebbe eliminato quella
+attiva (letto in sola lettura, i nomi qui sono quelli delle cartelle).
+
+- **Quale**: per `rimuovi` (e i sinonimi «elimina», «cancella», «togli») la preferenza è la
+  **disattivata**, poi rifiutata, da approvare, attiva. Tra più estensioni nello stato preferito
+  (tutte e due disattivate) vince quella con il titolo detto proprio così, spazi compresi; per
+  usarla, cambiarla o disattivarla resta l'attiva.
+- **Un'attiva non si elimina in un passo** (la via prudente, scelta qui invece di una conferma
+  più forte): «Meteocittà» è attiva, versione 5: prima la disattivo? Poi, se vuoi, la posso
+  eliminare.», in sospeso `disattiva` (regola `estensione_rimuovi_attiva`, vincolo di
+  sicurezza). Due passi detti, ognuno reversibile fino all'ultimo; il controllo viene prima della
+  frase di sfida, che così non si chiede per niente.
+- **Occupata**: uno sviluppo aperto o sospeso su di lei (`Sviluppi.dell_estensione`) o un lavoro
+  dell'agente in coda, in corso o in attesa che la cambia la bloccano con una frase chiara («c'è
+  uno sviluppo aperto su di lei (S3). Prima chiudilo, poi la posso eliminare»; «un agente ci sta
+  lavorando (L9). Aspetta che finisca, o annulla il lavoro…»; regola
+  `estensione_rimuovi_occupata`).
+- **La domanda** dice quale e che è definitiva: «Elimino per sempre «Meteo città»
+  (disattivata, versione 5): dice il meteo di una città. «Meteocittà», attiva, resta com'è.
+  Cancello i file di tutte le versioni e i suoi dati: non si torna indietro. Procedo?». In
+  sospeso il nome interno; il «sì» vale da 1 a 3 turni dopo, mai nella stessa risposta.
+- **Dopo il sì**: la cartella (tutte le versioni e `dati/`, anche i dati dei giochi) e la voce
+  dell'indice, quindi i permessi «sempre» e la voce dell'elenco; il tool `est_` (`aggiorna_tool`);
+  le partite dei suoi giochi (`Giochi.chiudi_di`, il gettone non vale più); le offerte in
+  sospeso; le schede che rimandano a lei (lo sviluppo `sviluppo:<id>`, il lavoro
+  `lavoro:<id>` e `registro:<id>`, le partite `gioco:<id>`) escono dalla cronologia di ogni
+  schermo, dall'ultima scheda di ogni persona e dalla cronologia su disco
+  (`Schermi.togli_schede`, `CronologiaSchede.togli`). Le pagine già aperte le tengono finché non
+  si ricollegano. Nel registro delle decisioni una riga `esito: eliminata` con chi e quante
+  schede.
+- **File in sola lettura**: `_togli_cartella` ora rende scrivibili le cartelle dall'alto prima di
+  leggerle (`_scrivibile`) e riprova un file che non si toglie rendendo scrivibile anche la sua
+  cartella (`onexc`). Provato con file e cartelle r-x su Windows e su Linux con un utente non
+  root (la distribuzione WSL di Podman, Python 3.14): passa; anche la versione di prima passava
+  su Linux. La cancellazione fallita dell'08/10 era a mano (`rm` senza `-f` o senza i permessi
+  della cartella): per farla a mano sulla DGX, `chmod -R u+w <cartella>` prima di `rm -r`.
+  Sulla DGX tutti i file delle estensioni sono dell'utente di Calliope (letto in sola lettura:
+  nessun file del container con un altro proprietario).
+- Vale per chi amministra, come le altre azioni di gestione (un familiare: «solo chi
+  amministra»).
+
+**Prove**: a secco `prove/prova_estensione_rimuovi.py` (livello 1, ~1 s; `--solo-file` fa solo
+la parte dei file con la libreria standard, per Linux); `prova_estensioni.py` aggiornata
+(un'attiva prima si disattiva). Con gemma4 e4b sul portatile
+`prove/prova_estensione_rimuovi_ollama.py`, 3 giri più 1:
+
+| caso | ramo |
+|---|---|
+| «Calliope, rimuovi l'estensione Meteo città.» → la domanda sulla disattivata | 4/4 |
+| «Sì, procedi.» → eliminata la disattivata, l'attiva resta col suo tool | 4/4 |
+| contrario: «disattiva l'estensione Meteocittà» → l'attiva spenta, niente eliminato | 4/4 |
+| contrario: con la sola attiva «elimina l'estensione Meteocittà» → «prima la disattivo?» | 4/4 |
+
+Sulla DGX le due estensioni restano com'erano: l'eliminazione la decide Dario a voce.

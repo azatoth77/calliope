@@ -22,7 +22,9 @@ chiude la proposta. Il secondo fattore per chi amministra è ancora un progetto.
 | Fatti-istruzione, azioni non chieste, segreti, permessi dei file (03/10) | — (regole nel codice) | `calliope/sicurezza.py` → `instruction_fact`, `asked_for_action`, `asks_secret`, `proteggi_dati`; prova `prove/prova_sicurezza.py` |
 | Nomi pubblici di casa vietati all'agente, sonde e ricollaudo (08/10 notte) | solo libreria standard | `calliope/web/rete.py` → `nomi_casa`; `calliope/sonde.py` → `sonda`, `ricollaudo`; dettagli in [agenti-estensioni](agenti-estensioni.md); banco `prove/prova_sonde_attacchi.py` |
 
-## Note dalla sezione «Stato attuale» di CLAUDE.md (fino al 06/10)
+## Problemi noti
+
+*Fuse il 09/10 le due sezioni nate dalla divisione di CLAUDE.md (stato e problemi fino al 06/10): ogni voce una volta sola, le superate segnate come storiche.*
 
 - **Politica unica dei tool** (05/10, `calliope/politica.py`, `calliope/provenienza.py`, rapporto
   [`docs/ricerche/2026-10-05-politica-sicurezza.md`](../ricerche/2026-10-05-politica-sicurezza.md)):
@@ -71,8 +73,6 @@ chiude la proposta. Il secondo fattore per chi amministra è ancora un progetto.
   `Classe.dichiarazione`, `fatto_detto`, regola `politica_fatto_detto`); «usa», «usare»,
   «usiamo» sono richieste d'azione interne (`_INTERNE`; «usato» e «usanza» no). Casi contrari
   in `prova_decidi` (parole non dette, due parole in più, per tutti, lista).
-
-## Note dalla sezione «Problemi noti» di CLAUDE.md (fino al 06/10)
 
 - **Permessi dei tool** (03/10): il modello vede **gli stessi tool a ogni livello**
   (`ToolRegistry.schemas`): prompt di sistema e schemi identici byte per byte per ospite,

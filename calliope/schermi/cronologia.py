@@ -212,6 +212,36 @@ class CronologiaSchede:
             self.scrivi_ora()
         return n
 
+    def persone(self) -> list[str]:
+        """Le persone con una cronologia, in memoria o su disco."""
+        with self._lock:
+            out = {p for p, v in self._dati.items() if v}
+        for f in self.cartella.glob("*.json"):
+            try:
+                d = json.loads(f.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if isinstance(d, dict) and isinstance(d.get("persona"), str) and d["persona"]:
+                out.add(d["persona"])
+        return sorted(out)
+
+    def togli(self, togliere) -> int:
+        """Le schede per cui `togliere(scheda)` è vero escono dalla cronologia di tutte le
+        persone, anche su disco (09/10: un'estensione eliminata non lascia schede che rimandano
+        a lei). Quante."""
+        n = 0
+        for persona in self.persone():
+            with self._lock:
+                lst = list(self._lista(persona))
+                tieni = [v for v in lst if not togliere(v.get("scheda") or {})]
+                if len(tieni) != len(lst):
+                    n += len(lst) - len(tieni)
+                    self._dati[persona] = tieni
+                    self._sporca(persona)
+        if n and self._subito:
+            self.scrivi_ora()
+        return n
+
     def _sporca(self, persona: str):
         """Con il lock: il file di `persona` va riscritto (dal thread; con `scrivi_subito` lo
         scrive chi ha chiamato, appena lasciato il lock)."""
