@@ -2,6 +2,13 @@
 
 *Ciclo principale, modello della voce, tool calling, reti e spinte di Brain, regole deterministiche sul testo, azione in sospeso, robustezza. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
+**Stato al 09/10.** Sulla DGX la voce è gemma4 26B su Ollama (`llm_profilo`), 72 schemi di tool
+uguali per ogni livello, con i nomi nuovi dei lavori e dello sviluppo dall'08/10 (i vecchi valgono
+ancora nel registro, regola `tool_nome_vecchio`). Le reti di Brain e le regole sul testo seguono il
+principio 10; le ultime entrate: «forse intendevi…» dopo un esito vuoto (08/10), il «no» che chiude
+la proposta (09/10), la compagnia con il giudizio «rivolta a Calliope» in ombra (09/10). Molte
+misure di questo documento sono col 4B in locale: da rifare col 26B sulla DGX dove è scritto.
+
 ## Moduli
 
 | Stadio | Libreria | Dove |
@@ -9,7 +16,9 @@
 | Ciclo principale | — | `calliope/main.py` → `main`, `Avvio` (i passi dell'avvio), `Corsie` (un ciclo per satellite), `single_instance_lock`, `check_audio_devices`, `notifica_systemd` (READY=1 per systemd); il ciclo della voce `calliope/ciclo.py` → `Ciclo` (`giro` in fasi, dal 06/10: P8), `Servizi`, `Turno`, `save_debug_audio`, `domanda_guardia` |
 | Wake word testuale (ripiego, conferma, estrazione della richiesta), uscita, stop, cortesia | difflib sulla trascrizione | `calliope/wakeword.py` → `find_wake_word` (più parole, `start_only`), `exit_intent` / `exit_request`, `is_stop`, `closing_kind`, `said_name`; `calliope/cortesia.py` → `Cortesia` («Prego!», «Bene!» per tono); le parole in `Config.wake_names` (`wake_word`, dal 04/10) |
 | LLM + tool calling | Ollama, API nativa `/api/chat` (httpx) o `/v1` (`openai`) | `calliope/brain.py` → `Brain`, `OllamaBackend`, `OpenAIBackend`; modello della voce in una riga, `llm_profilo` (`calliope/config.py` → `PROFILI_LLM`, con le reti adatte in `llm_reti_spente`); banco `prove/prova_regressione.py` |
-| Tool nativi | — | `calliope/tools/` (`spec.py`, `registry.py`, `builtin.py`); argomenti che nominano qualcosa `ToolSpec.nomi` e la loro misura in Brain (`_argomenti_inizio`, `_argomenti_fine`, `argomenti_per_registro`, dal 08/10: [stt-tts](stt-tts.md)) |
+| Tool nativi | — | `calliope/tools/` (`spec.py`, `registry.py`, `builtin.py`); argomenti che nominano qualcosa `ToolSpec.nomi` e la loro misura in Brain (`_argomenti_inizio`, `_argomenti_fine`, `argomenti_per_registro`, dal 08/10: [stt-tts](stt-tts.md)); forma degli argomenti ricondotta a quella del tool `ToolSpec.prepara` (dal 08/10) |
+| Dati del turno (contesti prima della domanda, mai nel prompt di sistema) | — | `calliope/brain.py` → `TURN_CONTEXT_MSG`, `PENDING_MSG`, `AGENDA_MSG`, `SOSPESO_ALTRUI_MSG`, `EST_NOMINATA_MSG`, `RIFIUTO_MSG` (dal 09/10); modalità sviluppo `calliope/sviluppo.py` → `SVILUPPO_MSG`, `Sviluppi.dati_turno` (dal 08/10) |
+| «La frase è rivolta a Calliope?» in compagnia (dal 09/10, in ombra) | Ollama, output strutturato sul modello del rilevatore di pericolo | `calliope/rivolta.py` → `Giudice`, `etichetta`; `Brain.dimentica_ultimo_turno`; la compagnia è in [stt-tts](stt-tts.md) |
 | Pulizia output | regex | `calliope/brain.py` → `ThinkFilter`, `TextCallGuard`; `calliope/tts.py` → `split_sentences`, `clean_for_speech` |
 | Configurazione | dataclass + YAML (PyYAML) | `calliope/config.py` → `Config`, `load_config`, `VOICE_MAP`; file `calliope.yaml` |
 | Registro dei turni | JSONL, un file al giorno in `registro/` | `calliope/turnlog.py` → `TurnLog`; analisi con `revisione.py` |
@@ -24,7 +33,7 @@
     (34 in tutto; senza Home Assistant configurato resta solo `casa_integrazione`); dal
     01/10 `calliope_stato` e i 3 delle installazioni (38); dal 02/10 `schermo_mostra` e
     `schermo_gestisci` (40), e con un agente configurato `delega_lavoro`, `lavori_stato`,
-    `lavori_annulla` (43). *[Conteggi storici: il 06/10 i tool sono 65 schemi, con 65 classi in `politica.CLASSI`.]*
+    `lavori_annulla` (43). *[Conteggi storici: il 06/10 i tool sono 65 schemi, con 65 classi in `politica.CLASSI`.]* *[Superato l'08/10: 72 schemi sulla DGX (più `esercizi` con un minore), e i tool dei lavori si chiamano `lavoro_affida`, `lavoro_stato`, `lavoro_annulla`… (sezione «Modalità sviluppo, versione 2»).]*
 
   - **Registro dei turni** (`registro/`) per l'auto-miglioramento.
 
@@ -36,7 +45,9 @@
   `localhost` perde ~2 s nel tentativo IPv6. Usare sempre `127.0.0.1` in `llm_base_url`.
 
 - **L'LLM si inventa capacità** che non ha (es. "posso cambiare voce"): il prompt di
-  sistema non dice cosa Calliope non sa fare.
+  sistema non dice cosa Calliope non sa fare. *[Superato dal 01/10: in fondo al prompt c'è
+  l'elenco di cosa c'è e cosa manca (`capacita.testo_prompt`), vedi
+  [capacita-installazioni](capacita-installazioni.md).]*
 
 - **Modelli "ragionanti"**: misurato su `qwen3:8b`, con il thinking la prima frase passa
   da 0,57 s a 4,96 s di media (fino a 9,75 s) senza risposte visibilmente migliori.
@@ -226,7 +237,8 @@
   sul banco dalle frasi vere (`prove/prova_regressione.py`, 116 turni) Gemma 4 26B-A4B NVFP4 su
   vLLM fa 112/116 contro 98–100 del 4B, senza chiamate scritte come testo, ma la prima frase è
   0,90 s di mediana e ~1,9 s al p90 (il 4B 0,48 / 1,33): genera a 29 token/s (esperti FP4,
-  il resto BF16). **La DGX resta sul 4B.** `gemma4:26b-a4b-it-qat` su Ollama (scaricato il
+  il resto BF16). **La DGX resta sul 4B.** *[Superato: almeno dal 06/10 la DGX usa
+  `llm_profilo: gemma4-26b-ollama`, vedi [capacita-installazioni](capacita-installazioni.md).]* `gemma4:26b-a4b-it-qat` su Ollama (scaricato il
   03/10, profilo `gemma4-26b-ollama`, non attivato): 74–79 token/s, banco 110/116, prima
   frase 0,73 s (0,70 / 1,19 s a livello costante; ~2 s quando cambiava il livello di chi
   parla, prefisso nuovo: dal 03/10 i tool sono gli stessi per tutti e il salto non c'è più,

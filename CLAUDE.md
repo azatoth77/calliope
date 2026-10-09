@@ -53,7 +53,7 @@ per stadio, solo i moduli principali: librerie, classi e dettagli sono nei docum
 | Cattura, VAD, wake word acustica, barge-in; pause e fine del turno (solo misura, dal 07/10) | `audio.py` (`Listener`), `vad.py`, `wakeword.py` (`WakeWordDetector`), `pause.py` | [stt-tts](docs/aree/stt-tts.md) |
 | Chi parla (CAM++ in ONNX); più voci vicino a un satellite e «rivolta a Calliope» (dal 09/10) | `speaker_id.py`, `arruola.py`, `compagnia.py`, `rivolta.py` | [stt-tts](docs/aree/stt-tts.md) |
 | Speech-to-Text (faster-whisper o whisper.cpp sulla DGX, ripiego su CPU); nomi incerti negli argomenti dei tool, misura e «forse intendeva» dopo un esito vuoto (dal 08/10) | `stt.py`, `stt_correzione.py`, `argomenti_incerti.py` | [stt-tts](docs/aree/stt-tts.md) |
-| Text-to-Speech (Piper), pronuncia degli inglesismi | `tts.py` (`Speaker`), `pronuncia.py` | [stt-tts](docs/aree/stt-tts.md) |
+| Text-to-Speech (Piper, sulla GPU secondo la macchina), pronuncia degli inglesismi, taratura della voce (dal 07/10) | `tts.py` (`Speaker`), `pronuncia.py`, `taratura_voce.py` | [stt-tts](docs/aree/stt-tts.md) |
 | Regole sul testo: wake word testuale, uscita, stop, cortesia | `wakeword.py`, `cortesia.py` | [voce-e-regole](docs/aree/voce-e-regole.md) |
 | LLM e tool calling (Ollama nativo o API OpenAI), reti e spinte | `brain.py` (`Brain`), `tools/` (`spec`, `registry`, `builtin`) | [voce-e-regole](docs/aree/voce-e-regole.md) |
 | Configurazione (dataclass + YAML), profili del modello | `config.py` (`Config`, `PROFILI_LLM`, `TONI`) | [voce-e-regole](docs/aree/voce-e-regole.md) |
@@ -147,7 +147,7 @@ Tool e livelli di permesso (ospite / familiare / amministra) sono descritti in
 - **DGX Linux** (target principale dal 02/10, servizio systemd utente, `calliope aggiorna` con
   ritorno automatico): [`docs/aree/setup-dgx.md`](docs/aree/setup-dgx.md).
 
-## Stato attuale (06/10/2026)
+## Stato attuale (09/10/2026)
 
 Calliope gira sulla **DGX Spark** dal 02/10 come servizio (voce gemma4 su Ollama, profilo in
 `llm_profilo`; Whisper con whisper.cpp; agente qwen3.6 su vLLM); portatile e telefono sono
@@ -166,28 +166,29 @@ satelliti. Cronologia e primi test in [`docs/aree/cronologia.md`](docs/aree/cron
 - **Satelliti** con TLS, inoltro, installazione con un comando e aggiornamenti ([satelliti](docs/aree/satelliti.md)).
 - **Agenti** sulla DGX (sandbox Docker, arbitro e pausa di vLLM, programmi in diretta, C#) ed **estensioni** con guardrail ([agenti-estensioni](docs/aree/agenti-estensioni.md)); **giochi** ([giochi](docs/aree/giochi.md)).
 - **Minori** con guardiano ([minori](docs/aree/minori.md)); **personalità** e modalità startrek ([personalita](docs/aree/personalita.md)).
-- Analisi complessiva del 06/10 e proposte P1–P11: [`docs/ricerche/2026-10-06-analisi-complessiva.md`](docs/ricerche/2026-10-06-analisi-complessiva.md); cosa resta: [`docs/roadmap.md`](docs/roadmap.md).
+- Analisi del 06/10: P1–P11 e Q2–Q11 fatte, aperte Q1 e Q12–Q14 ([`docs/ricerche/2026-10-06-analisi-complessiva.md`](docs/ricerche/2026-10-06-analisi-complessiva.md)); congelamento delle funzionalità nuove finito l'08/10; tappe in [`CHANGELOG.md`](CHANGELOG.md), cosa resta e cosa è in coda in [`docs/roadmap.md`](docs/roadmap.md).
 - **Pubblicazione** (06/10): repository pubblico con licenza AGPL-3.0-or-later ([`LICENSE`](LICENSE), [`TERZE-PARTI.md`](TERZE-PARTI.md)); nel repository solo nomi, indirizzi e dati **di fantasia**, i documenti privati in `privato/` (ignorata da git), `prova_dati_privati` nell'hook: [`docs/pubblicazione.md`](docs/pubblicazione.md).
 - La **visione** (server di casa con satelliti, famiglia, ospiti, musica, agenti) è in [`docs/visione.md`](docs/visione.md): leggerla prima di toccare l'architettura.
 
 ## Problemi aperti
 
-Solo ciò che è ancora vero il 06/10; storia e misure nei documenti d'area.
+Solo ciò che è ancora vero il 09/10; storia e misure nei documenti d'area.
 
 - **Latenza vera sulla DGX**: il 05/10 prima frase mediana 2,05 s, p90 4,1 s, contro 0,7 s dei banchi. P1–P4 fatti (`calliope stato --turni`), da rimisurare con un giorno d'uso vero (Q1 della [seconda analisi](docs/ricerche/2026-10-06-analisi-2.md)). Ollama della DGX con 4 modelli (26B, guardiano, rilevatore, embedding): dal 06/10 gli embedding aspettano Calliope inattiva (`calliope/ollama_carico.py`) e sulla DGX ci sono `OLLAMA_MAX_LOADED_MODELS=4` e `OLLAMA_NUM_PARALLEL=2` (verificato il 07/10). Dal testo alla voce (07/10): 0,89 s sullo studio, quasi tutto Piper sulla prima frase intera; ora prima frase a pezzi e 8 thread (banco DGX 0,66 → 0,19 s), da rimisurare. Dopo un cambio di modalità il prefisso nuovo si scalda in secondo piano (07/10, locale 2,44 → 0,08 s di lettura), da rimisurare sulla DGX. [contesto-conversazione](docs/aree/contesto-conversazione.md)
-- **Prove**: attese fisse di `prova_satellite` (dal 08/10 `prova_telefono_pagina` gira anche nei worktree: onnxruntime-web dal repository principale). [`prove/LEGGIMI.md`](prove/LEGGIMI.md)
+- **Prove**: attese fisse di `prova_satellite`; `prova_cronologia_pagina` con «Scarica Markdown» salva il file nella cartella Download vera di chi la lancia (da correggere). [`prove/LEGGIMI.md`](prove/LEGGIMI.md)
 - **whisper.cpp senza hotwords**: «Che ore sono» detto subito dopo il nome diventa «Chiori sono». [stt-tts](docs/aree/stt-tts.md)
-- **Voci di famiglia al telefono**: in auto la voce di chi amministra vale come quella di un minore (canale, non voci simili); dal 07/10 margine, chi amministra solo familiare col minore vicino e «chi parla?» solo per un'azione; resta da registrare di nuovo per canale e ritarare. [stt-tts](docs/aree/stt-tts.md)
+- **Voci di famiglia al telefono**: in auto la voce di chi amministra vale come quella di un minore (canale, non voci simili); dal 07/10 margine, chi amministra solo familiare col minore vicino e «chi parla?» solo per un'azione, dal 09/10 è compagnia vera (più sfide nella zona grigia); resta da registrare di nuovo per canale e ritarare. [stt-tts](docs/aree/stt-tts.md)
+- **Compagnia** (09/10): la falsa compagnia di una persona sola è misurata bassa ma il punto debole è il telefono, da osservare nell'uso; il giudizio «rivolta a Calliope?» (F2) è in ombra, da rileggere prima di accenderlo. **Parole incerte**: soglie di F0 da tarare sulla voce vera, F2–F3 da decidere. [stt-tts](docs/aree/stt-tts.md)
 - **Cuffie Bluetooth** che restano collegate ma mute: spegnerle e riaccenderle. [stt-tts](docs/aree/stt-tts.md)
-- **Attrito della politica**: con un dato di mezzo (agente, foto, meteo) ogni azione «pericolosa» chiede conferma; il 07/10 15,8 domande ogni 100 turni, 68 % falsi positivi. Progetto per valore ed effetto, dopo il 10/10: [`docs/ricerche/2026-10-07-sicurezza-per-valore.md`](docs/ricerche/2026-10-07-sicurezza-per-valore.md). [sicurezza-politica](docs/aree/sicurezza-politica.md)
-- **Voce unico fattore**: la frase di sfida ferma registrazioni e TV, non una voce clonata in tempo reale. Progetto del secondo fattore (telefono obbligatorio per chi amministra, chiave vocale), da fare dopo il congelamento: [`docs/ricerche/2026-10-06-secondo-fattore.md`](docs/ricerche/2026-10-06-secondo-fattore.md). [sicurezza-politica](docs/aree/sicurezza-politica.md)
+- **Attrito della politica**: con un dato di mezzo (agente, foto, meteo) ogni azione «pericolosa» chiede conferma; il 07/10 15,8 domande ogni 100 turni, 68 % falsi positivi. Dall'08/10 attrito misurato, memoria dell'intento attiva e politica per valore ed effetto in ombra; la decisione (fase 4) il 10/10: [`docs/ricerche/2026-10-07-sicurezza-per-valore.md`](docs/ricerche/2026-10-07-sicurezza-per-valore.md). [sicurezza-politica](docs/aree/sicurezza-politica.md)
+- **Voce unico fattore**: la frase di sfida ferma registrazioni e TV, non una voce clonata in tempo reale. Progetto del secondo fattore (telefono obbligatorio per chi amministra, chiave vocale), in roadmap: [`docs/ricerche/2026-10-06-secondo-fattore.md`](docs/ricerche/2026-10-06-secondo-fattore.md). [sicurezza-politica](docs/aree/sicurezza-politica.md)
 - **Sandbox**: kernel condiviso, utente di Calliope nel gruppo `docker`; su Windows il codice dell'agente non si esegue. **Pausa di vLLM** in modalità sviluppo (endpoint senza chiave su 127.0.0.1; dopo un SIGKILL `calliope motore vllm agente riprendi`). [agenti-estensioni](docs/aree/agenti-estensioni.md)
 - **Wake word**: feature ACAV100M (CC-BY-NC-SA), non distribuibile; il modello di «computer» c'è sul portatile e sulla DGX, non nel repository. [stt-tts](docs/aree/stt-tts.md), [personalita](docs/aree/personalita.md)
 - **Modello**: «Calliope, chi sono?» → «Calliope.» dopo le 20:30; «Ricorda che a Dario piace la pizza» scritto come testo; ricordi fuori tema e correzioni del 04/10 da riprovare col 26B. [voce-e-regole](docs/aree/voce-e-regole.md)
 - **Foto**: con una foto nella conversazione «cosa vedi sul mio schermo?» riceve «Non me l'hai chiesto». [immagini-allegati](docs/aree/immagini-allegati.md)
 - **Non provati sul vero**: iPhone (audio, schermo acceso, auto), PC Windows pulito come satellite, installazioni con internet vero, misure su Windows ARM. [roadmap](docs/roadmap.md)
 - **Biblioteca**: tabelle delle voci non lette; «perché piove?» trova titoli omonimi. [biblioteca](docs/aree/biblioteca.md)
-- **Agente**: il codice fiscale (qwen3.6 non conosce il carattere di controllo); il giro del gioco con `require` da rifare. [agenti-estensioni](docs/aree/agenti-estensioni.md), [giochi](docs/aree/giochi.md)
+- **Agente**: il codice fiscale (qwen3.6 non conosce il carattere di controllo); il giro del gioco con `require` da rifare; una ricerca dell'agente lenta da guardare. [agenti-estensioni](docs/aree/agenti-estensioni.md), [giochi](docs/aree/giochi.md)
 
 **Trappole note** (vere ancora oggi): usare sempre `127.0.0.1` e mai `localhost` su Windows
 (~2 s persi in IPv6); non riaprire il flusso del microfono a ogni turno; `ollama ps`

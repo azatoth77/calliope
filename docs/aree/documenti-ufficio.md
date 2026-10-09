@@ -2,6 +2,8 @@
 
 *Documenti Word/Excel/PDF a voce, ufficio (modelli, rubrica, fatture, DDT), archivio dei documenti di casa. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
+*Stato al 09/10: documenti, ufficio e archivio invariati nella sostanza dalla pubblicazione; dal 07/10 i testi dell'agente si consegnano in Markdown (sezione sotto) e il file offerto dopo una modifica ha il suo nome vero. Il contatto cercato in rubrica (`anagrafica_cerca`) rientra dall'08/10 nella misura delle parole incerte ([stt-tts](stt-tts.md)).*
+
 ## Moduli
 
 | Stadio | Libreria | Dove |
@@ -148,12 +150,12 @@ lavori un `.txt`.
   testo sembra Markdown (`sembra_markdown`), e il codice tra apici resta riconoscibile per
   essere scartato come prima.
 - **Conversioni a richiesta** («fammene un PDF», «lo voglio in Word»): `risultato_lavoro` con
-  `modo` pdf o word (`agenti/risultato.converti`, area agenti-estensioni) e «Scarica» nella
+  `modo` pdf o word *[dall'08/10 il tool si chiama `lavoro_risultato`; il vecchio nome resta valido nel registro]* (`agenti/risultato.converti`, area agenti-estensioni) e «Scarica» nella
   scheda (`schermi/scarica.py`, area schermi-telefono).
 
 ## Il nome del file offerto dopo una modifica (07/10 sera, ramo `correzioni-giro9`)
 
-`DocumentService._offer` offre al PC il file con il suo nome vero (lo stem di `nome_file`): dopo
+`Documenti._offer` (`documenti/servizio.py`) offre al PC il file con il suo nome vero (lo stem di `nome_file`): dopo
 una modifica salvata come «Titolo (2)» perché l'originale era aperto, «Apro Titolo (2).»; il
 `cosa_fare` di `documento_modifica` dice che il risultato 1 è la versione nuova e che il numero
 tra parentesi del nome non è il risultato (caso vero della DGX: il modello chiamava

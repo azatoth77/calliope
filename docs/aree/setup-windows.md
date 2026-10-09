@@ -2,6 +2,8 @@
 
 *Installazione su Windows: Calliope completa, casa, biblioteca, schermi, agenti, satellite, telefono. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
+**Stato al 09/10.** Dal 02/10 il target principale è la DGX Linux ([setup-dgx](setup-dgx.md)): su Windows oggi gira soprattutto il **satellite** (portatile e PC di casa, installazione con un comando), mentre Calliope completa sul portatile resta per lo sviluppo e le prove. I passi qui sotto valgono per tutte e due; il satellite nel dettaglio è in [satelliti](satelliti.md), il PC a voce in [pc](pc.md). Non provati sul vero: un PC Windows pulito come satellite e Windows su ARM.
+
 ## Setup (Windows)
 
 ```powershell
@@ -140,6 +142,7 @@ python -m calliope.agenti --prova    # SOLO: apre il tunnel, versione e modelli,
 ```
 
 Senza `dgx.yaml` (né `agenti_url`) i tool `delega_lavoro`, `lavori_stato`, `lavori_annulla`
+*[nomi superati il 08/10: oggi `lavoro_affida`, `lavoro_stato`, `lavoro_annulla` e gli altri tool dei lavori e della modalità sviluppo, vedi [agenti-estensioni](agenti-estensioni.md)]*
 non ci sono e la capacità «agenti» è da configurare; con la VPN spenta Calliope parte uguale,
 la delega dice «la DGX non risponde (VPN spenta?)» e riprova al lavoro dopo. Per un Ollama
 raggiungibile senza tunnel (una DGX in casa): `agenti_url: http://<IP>:11434` in

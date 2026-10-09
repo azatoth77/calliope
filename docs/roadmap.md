@@ -5,45 +5,91 @@
 In alto lo stato e i prossimi passi; poi le proposte delle analisi, ciò che resta da fare per
 area e, in fondo, la roadmap com'era, con le voci fatte segnate. Nessuna data promessa.*
 
-## Stato (07/10/2026)
+## Stato (09/10/2026)
 
-- **Funzionalità nuove congelate** finché la latenza vera della voce non sta stabilmente sotto
-  1,2 s di mediana per la prima frase: si fanno solo correzioni, misure e prove. Dopo le
-  correzioni del 06/10 la mediana dei turni veri è 1,31 s (p90 3,33) su un campione piccolo, e
-  la prova end-to-end dà 1,94–2,03 s di mediana per la prima voce sentita dal satellite
-  ([`../prove/manuali/e2e-dgx.md`](../prove/manuali/e2e-dgx.md)).
-- Proposte delle due analisi del 06/10: P1–P11 e Q2–Q3, Q5–Q11 fatte; aperte Q1, Q4, Q12–Q14
-  (sotto).
+- **Congelamento finito l'08/10.** Dal 06/10 si facevano solo correzioni, misure e prove
+  finché la latenza vera non scendeva; dopo le correzioni del 06/10 la mediana dei turni veri
+  era 1,31 s (p90 3,33) su un campione piccolo e la prova end-to-end dava 1,94–2,03 s di
+  mediana per la prima voce sentita dal satellite
+  ([`../prove/manuali/e2e-dgx.md`](../prove/manuali/e2e-dgx.md)). L'obiettivo di 1,2 s resta
+  la metrica (`calliope stato --turni`), non più un blocco.
+- Proposte delle due analisi del 06/10: P1–P11, Q2–Q11 fatte; aperte Q1, Q12–Q14 (sotto).
 - Trascrizione: confronto A / B / B2 / C chiuso il 07/10, si resta su A (correzione spenta);
   C solo con un posto dedicato alla correzione ([`aree/stt-tts.md`](aree/stt-tts.md)).
 
-## Prossimi passi (decisi, dopo il congelamento)
+### Fatto dal 07/10 al 09/10
 
-1. **Modulo studio per i ragazzi**: esercizi generati al momento, con la verifica automatica
-   delle risposte, in tutte le materie dalle elementari alle superiori; uno strumento di
-   **simulazione d'interrogazione** con domande a tempo, registrazione delle risposte e
-   valutazione finale di contenuti ed esposizione. Base: compiti guidati e minori
-   ([`aree/minori.md`](aree/minori.md)), ricerca in
-   [`ricerche/2026-10-07-kolibri.md`](ricerche/2026-10-07-kolibri.md).
+Dettagli in [`../CHANGELOG.md`](../CHANGELOG.md) e nei documenti d'area.
+
+- **Sicurezza per valore**, fasi 1–3 (attrito misurato, memoria dell'intento attiva, matrice per
+  valore ed effetto in ombra); un «no» chiude la proposta (09/10)
+  ([sicurezza-politica](aree/sicurezza-politica.md)).
+- **Modalità sviluppo** per estensioni e programmi, versione 2 e giri 3–6 dai casi veri,
+  confronto dei collaudi, ricollaudo alla consegna, sonde verso i soli host noti; vista dello
+  sviluppo sugli schermi ([agenti-estensioni](aree/agenti-estensioni.md),
+  [schermi-telefono](aree/schermi-telefono.md)).
+- **Modulo studio, primo passo**: esercizi generati e corretti dal programma, matematica e
+  italiano ([minori](aree/minori.md)); minori: segnali di pericolo poco chiari a due cancelli.
+- **Taratura della macchina**, fasi 0–2: inventario, catalogo, `calliope stato --piano` in sola
+  lettura ([capacita-installazioni](aree/capacita-installazioni.md)); voce: prima frase a pezzi,
+  taratura di Piper, Piper sulla GPU.
+- **Conversazioni**: ricerca cronologica, continuità per le frasi cortissime, cronologia delle
+  schede per persona e scheda «Conversazione»; cassetto dei file per persona.
+- **Parole incerte**, F0 (misura) e F1 («forse intendevi…?» dopo un esito vuoto)
+  ([stt-tts](aree/stt-tts.md)).
+- **Modalità compagnia**, F0 e F1 accese (più voci vicino a un satellite: nome a ogni frase con
+  una voce sconosciuta, niente frase breve); F2 («rivolta a Calliope?») in ombra.
+- Casa: il dispositivo cercato per nome quando Home Assistant non lo trova ([casa](aree/casa.md)).
+
+## Prossimi passi
+
+**In coda (decisi o in attesa di una lettura dei dati)**
+
+1. **Sicurezza per valore, fase 4** (10/10): leggere i giorni d'ombra (`politica_ombra` nel
+   registro dei turni) e decidere se accendere `politica_per_valore`
+   ([`ricerche/2026-10-07-sicurezza-per-valore.md`](ricerche/2026-10-07-sicurezza-per-valore.md)).
+2. **Frasi pronte meno monotone**, fasi 0–1 (campo `pronte` nel registro, catalogo con varianti
+   per tono e forma breve), in attesa del via
+   ([`ricerche/2026-10-08-frasi-pronte.md`](ricerche/2026-10-08-frasi-pronte.md)).
+3. **Rinomina degli altri tool** con la regola dei nomi dell'08/10 (nome singolare + verbo,
+   prefisso per famiglia; i nomi vecchi in `ToolRegistry.NOMI_VECCHI`).
+4. **Parole incerte**: tarare le soglie di F0 con qualche giorno di voce vera, poi decidere F2
+   (la parola da correggere sullo schermo personale) e F3 (dizionario delle correzioni)
+   ([`ricerche/2026-10-08-parole-incerte.md`](ricerche/2026-10-08-parole-incerte.md)).
+5. **Compagnia**: rileggere l'ombra del giudizio «rivolta a Calliope?» e decidere F2 (la finestra
+   d'ascolto decisa dal giudizio); osservare la falsa compagnia al telefono
+   ([`ricerche/2026-10-09-piu-persone.md`](ricerche/2026-10-09-piu-persone.md)).
+6. **Taratura della macchina**, fasi 3–6: prova breve, `taratura.json`, campi «auto»; il
+   profilo per il portatile da 8 GB.
+
+**Funzionalità decise, senza date**
+
+1. **Modulo studio per i ragazzi**: le altre materie (logica, analisi logica e grammaticale,
+   scienze…) e lo strumento di **simulazione d'interrogazione** con domande a tempo,
+   registrazione delle risposte e valutazione finale di contenuti ed esposizione. Base: esercizi
+   e compiti guidati ([`aree/minori.md`](aree/minori.md),
+   [`ricerche/2026-10-08-esercizi.md`](ricerche/2026-10-08-esercizi.md)).
 2. **Generazione di immagini in locale**: FLUX.2 [klein] 4B (Apache 2.0), con filtri e regole
    per i minori ([`ricerche/2026-10-06-generazione-immagini.md`](ricerche/2026-10-06-generazione-immagini.md)).
 3. **Secondo fattore per chi amministra**: conferma dal telefono, chiave vocale
    ([`ricerche/2026-10-06-secondo-fattore.md`](ricerche/2026-10-06-secondo-fattore.md)).
 4. **Pannello di amministrazione con le azioni** (oggi il cruscotto è in sola lettura).
 5. Poi: **interfono** tra satelliti, **conversazione di stanza** (più persone nella stessa
-   conversazione), **mappe e luoghi**, **satellite su Raspberry** (senza PC), **altre fonti
-   italiane** nella biblioteca.
+   conversazione: la compagnia oggi le distingue, non le unisce), **mappe e luoghi**,
+   **satellite su Raspberry** (senza PC), **altre fonti italiane** nella biblioteca.
 
-**In valutazione (non promesso)**: riscontro emotivo dalla voce durante le sessioni di studio.
+**In valutazione (non promesso)**: riscontro emotivo dalla voce durante le sessioni di studio
+([`ricerche/2026-10-07-emozioni-voce.md`](ricerche/2026-10-07-emozioni-voce.md)).
 
 **Scartato**: Kolibri come base del modulo studio, perché il catalogo in italiano è quasi vuoto
 (sola matematica di Khan Academy) e i contenuti nuovi si creano solo con il servizio online di
-Kolibri Studio, contro il principio «niente cloud».
+Kolibri Studio, contro il principio «niente cloud»
+([`ricerche/2026-10-07-kolibri.md`](ricerche/2026-10-07-kolibri.md)).
 
 ## Subito: le proposte delle analisi del 06/10
 
 Decisione del 06/10: farle tutte, da subito, e congelare le funzionalità nuove (solo
-correzioni) finché non sono chiuse.
+correzioni) finché non sono chiuse *[storico: congelamento tolto l'08/10]*.
 
 **Prima analisi** ([`ricerche/2026-10-06-analisi-complessiva.md`](ricerche/2026-10-06-analisi-complessiva.md)):
 P1–P11 **fatte** il 06/10. La verifica è nel § 2 della
@@ -71,7 +117,7 @@ parte, e le Q qui sotto le completano.
 | Q1 | Un giorno d'uso vero sulla DGX con un elenco di casi | **aperta** |
 | Q2 | Sfida dopo una foto o un file | fatta (ramo `correzioni-q`) |
 | Q3 | Guardiano che non tace: rilevatore nel registro, guasto = guasto per i minori, schede trattenute | fatta (ramo `correzioni-q`) |
-| Q4 | Ollama della DGX: 4 modelli e posto per 3 (`OLLAMA_MAX_LOADED_MODELS=4` o embedding fuori) | **aperta** (serve sudo) |
+| Q4 | Ollama della DGX: 4 modelli e posto per 3 (`OLLAMA_MAX_LOADED_MODELS=4` o embedding fuori) | fatta: embedding a Calliope inattiva (06/10), `OLLAMA_MAX_LOADED_MODELS=4` e `OLLAMA_NUM_PARALLEL=2` sulla DGX (verificato il 07/10) |
 | Q5 | P3 completo: storia scaldata già compattata | fatta (ramo `correzioni-q`) |
 | Q6 | Reti di sicurezza con un effetto vero (`azione_in_sospeso`, `riferire`) | fatta (ramo `correzioni-q`) |
 | Q7 | Hook: legami dei tool d'area, import su Linux, prove manuali, salti parziali | fatta (ramo `correzioni-q`) |
@@ -81,7 +127,7 @@ parte, e le Q qui sotto le completano.
 | Q11 | Tetto totale al riassunto della compressione | fatta (ramo `correzioni-q`) |
 | Q12 | Ridurre la configurazione (−50 campi) | **aperta** |
 | Q13 | Spegnere nel 26B le reti «modello» a zero scatti (dopo due settimane di registro) | **aperta** |
-| Q14 | Spezzare `Brain._reply` | **aperta** (da sola, a congelamento attivo) |
+| Q14 | Spezzare `Brain._reply` | **aperta** (da fare da sola, senza altri lavori su `brain.py`) |
 
 ## Resta da fare (controllato sul codice il 06/10)
 
@@ -98,8 +144,8 @@ parte, e le Q qui sotto le completano.
   conferma (non esiste); stato del PC nel messaggio di contesto.
 - «Annulla l'ultima modifica» di un documento (le versioni ci sono, il tool no).
 - Ponte MCP verso Home Assistant, biblioteca, musica (le estensioni usano già la cornice stdio).
-- Recupero dei tool con bge-m3 solo oltre 40–50 tool: oggi i tool sono 65 schemi e la scelta
-  regge; da rimisurare se la qualità scende.
+- Recupero dei tool con bge-m3 solo oltre 40–50 tool: oggi i tool sono 65 schemi *[09/10: 72,
+  più `esercizi` con un minore in casa]* e la scelta regge; da rimisurare se la qualità scende.
 - Casa: conferme a secondo fattore per i domini delicati; direzione opposta (HA che usa
   Calliope come agente per i satelliti).
 
