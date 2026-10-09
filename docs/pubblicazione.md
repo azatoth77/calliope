@@ -1,9 +1,9 @@
-# Pubblicazione del sorgente: cosa entra in git e cosa no (06/10/2026)
+# Pubblicazione del sorgente: cosa entra in git e cosa no (07/10/2026)
 
-Il repository è pubblico (licenza AGPL-3.0-or-later, [`LICENSE`](../LICENSE); componenti di
-terzi in [`TERZE-PARTI.md`](../TERZE-PARTI.md)). Calliope però gira in una casa vera, con
-persone vere: questo documento dice come si tiene separato ciò che si pubblica da ciò che resta
-privato, e cosa controlla la prova nell'hook.
+Il repository è pubblico dal 07/10/2026, preparato il 06/10 (licenza AGPL-3.0-or-later,
+[`LICENSE`](../LICENSE); componenti di terzi in [`TERZE-PARTI.md`](../TERZE-PARTI.md)).
+Calliope però gira in una casa vera, con persone vere: questo documento dice come si tiene
+separato ciò che si pubblica da ciò che resta privato, e cosa controlla la prova nell'hook.
 
 ## 1. La regola
 

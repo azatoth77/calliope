@@ -167,7 +167,7 @@ satelliti. Cronologia e primi test in [`docs/aree/cronologia.md`](docs/aree/cron
 - **Agenti** sulla DGX (sandbox Docker, arbitro e pausa di vLLM, programmi in diretta, C#) ed **estensioni** con guardrail ([agenti-estensioni](docs/aree/agenti-estensioni.md)); **giochi** ([giochi](docs/aree/giochi.md)).
 - **Minori** con guardiano ([minori](docs/aree/minori.md)); **personalità** e modalità startrek ([personalita](docs/aree/personalita.md)).
 - Analisi del 06/10: P1–P11 e Q2–Q11 fatte, aperte Q1 e Q12–Q14 ([`docs/ricerche/2026-10-06-analisi-complessiva.md`](docs/ricerche/2026-10-06-analisi-complessiva.md)); congelamento delle funzionalità nuove finito l'08/10; tappe in [`CHANGELOG.md`](CHANGELOG.md), cosa resta e cosa è in coda in [`docs/roadmap.md`](docs/roadmap.md).
-- **Pubblicazione** (06/10): repository pubblico con licenza AGPL-3.0-or-later ([`LICENSE`](LICENSE), [`TERZE-PARTI.md`](TERZE-PARTI.md)); nel repository solo nomi, indirizzi e dati **di fantasia**, i documenti privati in `privato/` (ignorata da git), `prova_dati_privati` nell'hook: [`docs/pubblicazione.md`](docs/pubblicazione.md).
+- **Pubblicazione** (07/10): repository pubblico con licenza AGPL-3.0-or-later ([`LICENSE`](LICENSE), [`TERZE-PARTI.md`](TERZE-PARTI.md)); nel repository solo nomi, indirizzi e dati **di fantasia**, i documenti privati in `privato/` (ignorata da git), `prova_dati_privati` nell'hook: [`docs/pubblicazione.md`](docs/pubblicazione.md).
 - La **visione** (server di casa con satelliti, famiglia, ospiti, musica, agenti) è in [`docs/visione.md`](docs/visione.md): leggerla prima di toccare l'architettura.
 
 ## Problemi aperti

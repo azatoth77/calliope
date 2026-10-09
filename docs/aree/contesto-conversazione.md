@@ -160,6 +160,11 @@ Dal rapporto [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-
   (Q11 della seconda analisi) anche un tetto in tutto, `contesto_riassunto_max_s` (60 s, dal
   primo tentativo anche se cede alla voce e riparte): oltre, `TroppoLungo` e la voce o i tagli
   (riassunto più corto, mai la storia piena per minuti).
+- **Misura dell'08/10** (fonte: il registro dei turni della DGX dell'08/10, letto con
+  `calliope stato --turni`; spostata qui dal README il 09/10): una giornata di prove della
+  modalità sviluppo, 185 risposte, molte con tool, 26B su Ollama con l'agente al lavoro: prima
+  frase mediana 1,51 s, p90 3,91 s. Non è un giorno d'uso normale (tool e agente quasi a ogni
+  turno): resta da misurare un giorno d'uso vero.
 - Prova `prova_latenza.py`.
 
 ## La soglia di fine turno nella latenza sentita (07/10, solo misura)
