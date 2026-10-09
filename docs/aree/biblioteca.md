@@ -11,7 +11,9 @@
 | Biblioteca offline | Wikipedia italiana in ZIM di Kiwix, letta in puro Python (solo libreria standard, solo CPU) con un indice SQLite FTS5 accanto; niente `libzim` dal 01/10 | `calliope/biblioteca.py` → `Biblioteca.cerca`, `load_biblioteca`; `calliope/zim.py` → `ZimFile`; `calliope/biblioteca_indice.py` → `costruisci`, `apri`, `stato_indice`; tool `biblioteca_cerca`; file in `biblioteca/` (`scarica.sh`), indici in `biblioteca/indici/` |
 | Ricerca su internet (facoltativa, solo con la rete) | SearXNG in un container di Calliope sulla DGX (`calliope-searxng`, 127.0.0.1:8004, niente log; `setup/linux/motore/searxng.sh`), httpx in POST; pagine con http.client e html.parser, senza SSRF | `calliope/web/` → `Web` (`servizio.py`), `Ripulitore` (`privacy.py`: niente dati personali nelle domande), `scarica`, `estrai_testo` (`pagina.py`), `load_web`; tool `web_cerca` in `calliope/tools/web.py`; `web_cerca` e `web_leggi` dell'agente in `calliope/agenti/ciclo.py`; solo letture dopo un risultato web: `politica.DOPO_DATO` (`politica.bloccata`) |
 
-## Note dalla sezione «Stato attuale» di CLAUDE.md (fino al 06/10)
+## Problemi noti
+
+*Fuse il 09/10 le due sezioni nate dalla divisione di CLAUDE.md (stato e problemi fino al 06/10): ogni voce una volta sola, le superate segnate come storiche.*
 
   - **Ricerca su internet quando c'è** (03/10, `calliope/web/`, rapporto
     [`docs/ricerche/2026-10-03-ricerca-web.md`](../ricerche/2026-10-03-ricerca-web.md)):
@@ -29,14 +31,9 @@
     giri): attualità 10/10, fatti stabili alla biblioteca 12/12, iniezione 0 azioni provate su
     8. Vera sulla DGX: ricerca 0,6–3,1 s (mediana 1,3), prima frase 1,55 s con la frase d'attesa.
 
-  - **Biblioteca offline** (26/09): Wikipedia italiana per i fatti precisi, con la fonte
-    citata a voce. Dal 01/10 senza `libzim` (lettore ZIM in puro Python e indice SQLite
-    FTS5, anche su Windows ARM) e con Wikiquote per le citazioni.
-
-## Note dalla sezione «Problemi noti» di CLAUDE.md (fino al 06/10)
-
-- **Biblioteca offline** (26/09, [`docs/ricerche/2026-09-26-biblioteca-prova.md`](../ricerche/2026-09-26-biblioteca-prova.md)).
-  La ricerca è lessicale, su CPU, in ~30 ms (massimo ~110). Usa i titoli esatti presi dalla
+- **Biblioteca offline** (26/09, [`docs/ricerche/2026-09-26-biblioteca-prova.md`](../ricerche/2026-09-26-biblioteca-prova.md)):
+  Wikipedia italiana per i fatti precisi, con la fonte citata a voce; dal 01/10 senza `libzim`
+  (sotto) e con Wikiquote per le citazioni. La ricerca è lessicale, su CPU, in ~30 ms (massimo ~110). Usa i titoli esatti presi dalla
   frase, le parole di attributo con i sinonimi delle infobox, l'infobox per le domande sui
   dati, la voce completa se nel mini manca il dato e le voci-elenco per i superlativi.
   Recall@3 50/56. Il rerank con bge-m3 non migliorava (stesso recall, +169 ms, +0,76 GB):

@@ -10,7 +10,9 @@
 |---|---|---|
 | Giochi e schede interattive delle estensioni (05/10) | JavaScript nel browser degli schermi in un `<iframe sandbox="allow-scripts">` (origine opaca, CSP senza rete, script con l'impronta), ponte `postMessage` controllato dalla pagina e dal server; test della logica con Node in un container (`Dockerfile.node`) | `calliope/estensioni/scheda.py` (sezione «scheda» del manifesto, gioco puro, `documento`, `RUNTIME_JS`, `analizza_js`); `calliope/schermi/giochi.py` → `Giochi` (partite, `GET /gioco/<gettone>`, `POST /api/gioco`), `AzioneGioco`; cane da guardia in `schermo.js`; `minori.TempoGioco`, `minori.Richieste`, tool `richiesta_tutore`; `calliope/agenti/test_js.mjs`, prova di fumo `calliope/agenti/fumo_js.mjs`; rapporto [`docs/ricerche/2026-10-05-giochi.md`](../ricerche/2026-10-05-giochi.md) |
 
-## Note dalla sezione «Stato attuale» di CLAUDE.md (fino al 06/10)
+## Problemi noti
+
+*Dalla divisione di CLAUDE.md (note fino al 06/10); dal 09/10 una sola sezione per area.*
 
 - **Giochi sugli schermi** (05/10, [`docs/ricerche/2026-10-05-giochi.md`](../ricerche/2026-10-05-giochi.md)):
   un'estensione può avere una scheda interattiva (un gioco) che gira nel browser in un riquadro

@@ -17,7 +17,10 @@
 | Cronologia delle schede per persona e scheda «Conversazione» (08/10) | solo libreria standard: un file JSON per persona (scrittura atomica da un thread), l'archivio delle conversazioni in SQLite | `calliope/schermi/cronologia.py` → `CronologiaSchede` (`aggiungi`, `ultime`, `pulisci`), `rivedi`, `lavoro_finale`; `hub.py` → `Schermi.ripresa`, `collega(ripresa=…)`, `pulisci_schede`, `chat_per`, `chat_nuovi`, `chat_dimenticata`, `registra_chat`, `ricostruttori`; `carica_cronologia`, `cartella_cronologia` (`schermi/__init__.py`); POST `/api/schede` (`server.py`); `conversazioni.py` → `ArchivioConversazioni.chat`, `chat_markdown`, `su_turni`, `su_dimentica`, `voce_chat`; `conversazione.turni` (`_turno`, `senza_sfida`); `Ciclo._archivia_turno`, `_luogo_turno`; `Brain.archivia_turni`; tool `schede_pulisci`; `schermo.js` → `DISEGNA.chat`, `impostaChat`, `chatDalServer`, `apriChat`, `pulisciSchede`, `pulisciLocale`; telefono: «La nostra conversazione» e «Pulisci le mie schede» nel menu |
 | Rispondi dove ti ho chiesto | — (prestito del satellite attivo, origine del turno) | `calliope/rispondi.py` → `Instradamento`; `ServerSatelliti.presta` / `restituisci` / `per_schermo`; `Schermi.origine_corrente`, `invia_a`, `Mittente.schermo`; `Speaker.muto` |
 
-## Note dalla sezione «Stato attuale» di CLAUDE.md (fino al 06/10)
+## Problemi noti
+
+*Fuse il 09/10 le due sezioni nate dalla divisione di CLAUDE.md (stato e problemi fino al
+06/10): ogni voce una volta sola, le superate segnate come storiche.*
 
 - **Scrivere solo in conversazione** (05/10, `calliope/schermi/conversazione.py`, prove
   `prova_scritto_conversazione.py` e quelle dello scritto e delle foto adattate): casella,
@@ -57,24 +60,13 @@
   quando il tool chiede i dati; per «fammi un preventivo» senza prezzi gemma4 chiede da sé
   (0/6 chiamate) e il modulo non compare. Non provato con un telefono vero.
 
-  - **Telefono come satellite** (03/10, `calliope/schermi/telefono.py`): web app servita dal
-    server degli schermi, stesso protocollo dei satelliti, wake word e VAD nel browser con gli
-    stessi numeri del Python, schede come uno schermo personale. Più satelliti collegati, uno
-    attivo (`prendi` / `lascia`). Provato in Edge senza finestra con il microfono finto
-    (`prova_telefono_pagina.py`): i telefoni veri e l'auto no.
-
-  - **Schermi** (02/10, `calliope/schermi/`, fase 1 di
-    [`docs/ricerche/2026-10-01-mappe-e-schermi.md`](../ricerche/2026-10-01-mappe-e-schermi.md)):
-    una pagina kiosk su PC, tablet o TV, abbinata con un codice detto a voce, mostra le schede
-    dei tool (lista della spesa, timer con il conto alla rovescia, voce della biblioteca,
-    anteprima dei documenti, stato della casa, calcoli) mentre Calliope risponde. Le schede
-    personali vanno solo sugli schermi personali. Mappe, luoghi e percorsi (fasi 2–3) no.
-
-## Note dalla sezione «Problemi noti» di CLAUDE.md (fino al 06/10)
-
 - **Schermi** (02/10, `calliope/schermi/`, `calliope/tools/schermi.py`; prove
   `prova_schermi.py` a secco e `prova_schermi_ollama.py`; prova manuale in `prove/LEGGIMI.md`).
-  Fase 1 del rapporto sulle mappe e gli schermi; le fasi 2–4 no.
+  Fase 1 di [`docs/ricerche/2026-10-01-mappe-e-schermi.md`](../ricerche/2026-10-01-mappe-e-schermi.md);
+  le fasi 2–4 (mappe, luoghi, percorsi) no. Una pagina kiosk su PC, tablet o TV, abbinata con
+  un codice detto a voce, mostra le schede dei tool (lista della spesa, timer con il conto alla
+  rovescia, voce della biblioteca, anteprima dei documenti, stato della casa, calcoli) mentre
+  Calliope risponde; le schede personali vanno solo sugli schermi personali.
   - **Server**: Starlette 1.7.0 + uvicorn 0.54.0 senza extra in un thread daemon, sul socket
     aperto da Calliope (porta occupata = capacità «guasta», non un `sys.exit` nel thread),
     `log_config=None`, log degli accessi spento, `ws="none"`, `http="h11"`. Il ciclo asyncio è
@@ -201,7 +193,11 @@
   dell'agenda) e di documenti e lavori (per persona) si dicono dal satellite da cui erano stati
   chiesti, se è collegato; in memoria, dopo un riavvio vale l'attivo.
 
-- **Telefono (web app)** (03/10, [`docs/ricerche/2026-10-03-webapp-telefono.md`](../ricerche/2026-10-03-webapp-telefono.md)):
+- **Telefono (web app)** (03/10, `calliope/schermi/telefono.py`, [`docs/ricerche/2026-10-03-webapp-telefono.md`](../ricerche/2026-10-03-webapp-telefono.md)):
+  web app servita dal server degli schermi, stesso protocollo dei satelliti, wake word e VAD nel
+  browser con gli stessi numeri del Python, schede come uno schermo personale. Provato in Edge
+  senza finestra con il microfono finto (`prova_telefono_pagina.py`): i telefoni veri e l'auto
+  no. Più satelliti collegati, uno attivo (`prendi` / `lascia`):
   prima un satellite nuovo toglieva il posto (4409) a quello collegato: portatile e telefono si
   sarebbero sostituiti all'infinito. Ora ne è attivo uno, il telefono lo prende con «Parla» o
   il microfono acceso e lo restituisce spegnendolo o andando in secondo piano; `pc_*` e

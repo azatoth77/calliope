@@ -12,7 +12,9 @@
 | Cassetto dei file per persona (08/10): ogni foto, file o audio di chi è riconosciuto resta 7 giorni, poi si elimina | SQLite (tabelle `cassetto_*` in `memory_db`), file sul disco; niente librerie nuove | `calliope/cassetto.py` → `Cassetto` (`metti_allegato`, `metti_foto`, `cerca`, `esegui`, `pulisci`, `da_dire`, `frase`, `scheda`, `da_pagina`), `load_cassetto`; nel ciclo `Ciclo._nel_cassetto`, `_cassetto_dopo`; `allegato_leggi(cassetto=…, di=…)` e `cassetto_gestisci` in `calliope/tools/allegati.py`; POST `/api/cassetto` (`schermi/server.py`); scheda `cassetto` (carosello) in `schermo.js` |
 | Allegati di qualsiasi tipo (telefono e pagina degli schermi, «Allega», trascina, incolla, dal 05/10) | tipo dai byte; pypdf e pypdfium2 (pagine scansionate → immagini), python-docx, openpyxl, python-pptx (o ElementTree), zipfile (solo elenco), PyAV + il Whisper della voce per l'audio; niente librerie nuove | `calliope/allegati.py` → `riconosci`, `prepara`, `Allegato` (`blocco`, `parte`), `Allegati` (in `Brain.allegati`, per conversazione), `trascrivi`; `Brain.allega_non_fidato` (porta unica), `_accogli_allegati`, `_quarantena_allegati`, `_con_allegati`, `_blocchi_allegati`, `_allegati_tokens`, nella politica `Turno.dato_nuovo` e la delega al dato (regola «politica_delega»); POST `/api/allegato`; tool `allegato_leggi`, `allegato_archivia` in `calliope/tools/allegati.py`, `lavoro_affida(allegato=…)` (fino all'08/10 `delega_lavoro`); scheda `allegato`; vedi [`docs/ricerche/2026-10-05-allegati.md`](../ricerche/2026-10-05-allegati.md) |
 
-## Note dalla sezione «Stato attuale» di CLAUDE.md (fino al 06/10)
+## Problemi noti
+
+*Dalla divisione di CLAUDE.md (note fino al 06/10); dal 09/10 una sola sezione per area.*
 
 - **Foto in ingresso** (05/10, [`docs/ricerche/2026-10-05-immagini.md`](../ricerche/2026-10-05-immagini.md),
   prove `prova_immagini*.py`): «Foto» sul telefono e sulla pagina degli schermi (anche

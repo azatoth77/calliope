@@ -13,7 +13,9 @@
 | Conversazione, compressione e archivio delle conversazioni (dal 05/10) | SQLite in WAL con FTS5 (`conversazioni.db`), vettori da Ollama `/api/embed` sulla CPU (`qwen3-embedding:0.6b`) o `/v1/embeddings`, coseno in numpy, RRF | `calliope/conversazione.py` → `Conversazione` (Brain la espone con `history`, `pending`…, `brain.conv`), `turni`; `calliope/compressione.py` → `Compressore` (soglie 75/90 %, `avvia`, `comprimi_ora`, `applica`, `chiudi`), `RiassuntoreLLM` (agente o voce), `RiassuntoreTagli`, `crea_riassuntori`; `calliope/conversazioni.py` → `ArchivioConversazioni` (`archivia`, `cerca`, `ultima`, `dimentica`, conversazione corrente; dall'08/10 `recenti` per le domande cronologiche, `su_turni` e `chat` per la scheda «Conversazione»), `Embedder`, `load_conversazioni`; tool `conversazione_cerca`, `conversazioni_dimentica` in `calliope/tools/conversazioni.py`; «ricominciamo» `wakeword.nuova_conversazione`; terminale `python -m calliope.conversazioni`; misure `prove/misura_conversazioni.py` |
 | Latenza come metrica, cache scaldata, modelli di Ollama (dal 06/10) | solo libreria standard (registro dei turni, Ollama `/api/ps`) | `calliope/latenza.py` → `giorno`, `per_giorno`, `testo`, `avviso`, `avviso_recente`, `scalda_ripresa`, `leggi_file` (`calliope stato --turni`); `Brain.scalda_conversazione`, `Brain._scalda_se_cambiato` (prefisso nuovo dopo un cambio di modalità, 07/10); `calliope/ollama_carico.py` → `residenti`, `limite`, `usati`, `avviso`, `puo_caricare`; la prima frase a pezzi e la taratura della voce (sezioni del 07/10 sotto) hanno il codice in `tts.py` e `taratura_voce.py`, area [stt-tts](stt-tts.md) |
 
-## Note dalla sezione «Stato attuale» di CLAUDE.md (fino al 06/10)
+## Problemi noti
+
+*Fuse il 09/10 le due sezioni nate dalla divisione di CLAUDE.md (stato e problemi fino al 06/10): ogni voce una volta sola, le superate segnate come storiche.*
 
 - **Una conversazione per persona, satelliti insieme** (06/10, `calliope/corsie.py`, rapporto
   [`docs/ricerche/2026-10-06-conversazione-persona.md`](../ricerche/2026-10-06-conversazione-persona.md),
@@ -107,8 +109,6 @@
   rilettura della storia alla soglia morbida (`contesto_rilettura_max_s` 4 s): **20 480 sul
   portatile, 24 576 sulla DGX**, prima frase in cache invariata (0,51 / 0,49 / 0,52 s a 16k /
   20k / 24k). `max_history_turns` 40 (limite di sicurezza).
-
-## Note dalla sezione «Problemi noti» di CLAUDE.md (fino al 06/10)
 
 - **Contesto di Ollama**: l'endpoint `/v1` ignora `num_ctx` e usa 4096 token; per questo
   il backend predefinito è quello nativo. `ollama ps` **sottostima la VRAM**: va misurata

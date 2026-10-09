@@ -15,24 +15,9 @@
 | Sonde dell'agente e ricollaudo alla consegna (08/10 notte) | solo libreria standard; il container delle estensioni per il ricollaudo, `RetePubblica` per le sonde | `calliope/sonde.py` → `ricollaudo`, `casi_da_riprovare`, `sonda`, `sonde_ok`, `host_noti`, `concedi`, `vocabolario`, `Vocabolario`, `controlla_url`, `come_l_ha_letto`, `SONDA_RETE`; `Estensioni.prova_bozza` (`estensioni/servizio.py`), `restringi_per_sonda` (`estensioni/manifesto.py`), `Lavori._controlla_estensione` (`agenti/servizio.py`), `Agente._sonda_rete` (`agenti/ciclo.py`); nomi pubblici di casa in `calliope/web/rete.py` → `nomi_casa`; specifica in [`docs/ricerche/2026-10-08-sonde-agente.md`](../ricerche/2026-10-08-sonde-agente.md) § 9; prove `prova_sonde.py`, `prova_sonde_attacchi.py` |
 | Estensioni permanenti e guardrail (04/10) | container della sandbox (Docker) per ogni chiamata, JSON-RPC su stdin/stdout (cornice stdio di MCP, senza SDK), solo libreria standard | `calliope/guardrail.py` → `valuta_porta`, `SecondoParere`, `domanda` (la porta delle estensioni: sicura / pericolosa / vietata; i tool di Calliope li decide `politica.decidi` dal 06/10); `calliope/estensioni/` → `Estensioni` (`servizio.py`), `Porta` (`porta.py`), `Esecuzione` (`esecuzione.py`), `Archivio` (`archivio.py`: versioni, impronta), `valida` (`manifesto.py`), `analizza` (`analisi.py`), runtime `_ospite.py` (nel container: `calliope_estensione`), prompt dell'agente (`prompt.py`: `sistema_estensione`), contratto delle capacità (`contratto.py`: `testo`, `CAPACITA_IDS`, CAPACITA.md); rete solo pubblica `calliope/web/rete.py` → `RetePubblica` (registro `uscite.jsonl`, `riepilogo`), dati riservati nel traffico `calliope/web/riservati.py` → `Riservati`, `da_contesto`; piano e permessi dell'agente in `agenti/ciclo.py` (`PIANO`, `CHIEDI_PERMESSO`, `_piano`, `_fuori_piano`); tool `estensione_gestisci` (era `estensioni_gestisci`) in `calliope/tools/estensioni.py`, la creazione passa da `sviluppo_apri` dal 08/10 (prima `estensione_crea`); progetto in `docs/ricerche/2026-10-04-estensioni-e-guardrail.md` (§11–§14 dal 05/10) |
 
-## Note dalla sezione «Stato attuale» di CLAUDE.md (fino al 06/10)
+## Problemi noti
 
-  - **Domande dell'agente e file della persona** (03/10, `lavori_rispondi`, `delega_lavoro(file=…)`):
-    un dato mancante lascia il lavoro in attesa con il suo contesto e la domanda si annuncia
-    (azione in sospeso); «correggi lo script backup.py» manda all'agente una copia del file
-    (dal satellite a pezzi con lo SHA-256) e il risultato torna come file nuovo. A secco
-    (`prova_agenti_domande.py`); con il modello e la DGX no.
-
-  - **Agenti in secondo piano** (02/10, `calliope/agenti/`, architettura della ricerca
-    [`docs/ricerche/2026-10-02-llm-per-spark.md`](../ricerche/2026-10-02-llm-per-spark.md)):
-    gemma riconosce un lavoro lungo (programmi e script, pagine web, relazioni lunghe,
-    documenti da un modello, ricerche a più passi) e lo affida a un modello grande sulla DGX
-    Spark (tunnel SSH automatico) o sullo stesso Ollama; codice in una sandbox con i test,
-    documenti con lo scrittore di `calliope/documenti/`, annuncio a lavoro finito e scheda con
-    il risultato sullo schermo. Provato con ssh e Ollama finti e con gemma4 locale come agente:
-    la DGX vera non è ancora stata contattata. *[Storico (02/10): dalla sera del 02/10 Calliope gira sulla DGX come servizio; vedi [setup-dgx](setup-dgx.md).]*
-
-## Note dalla sezione «Problemi noti» di CLAUDE.md (fino al 06/10)
+*Fuse il 09/10 le due sezioni nate dalla divisione di CLAUDE.md (stato e problemi fino al 06/10): ogni voce una volta sola, le superate segnate come storiche.*
 
 - **Arbitro con vLLM sulla stessa GPU** (04/10, `arbitro.py`, prova `prova_arbitro_vllm.py`,
   misura `prove/misura_arbitro_vllm.py`): sulla DGX la voce (Ollama) e l'agente (vLLM) hanno la
@@ -158,8 +143,13 @@
 
 - **Agenti in secondo piano** (02/10, `calliope/agenti/`, `calliope/tools/agenti.py`; prove
   `prova_agenti.py` a secco, `prova_agenti_ollama.py`, banco `prova_lavori.py`; passi per la
-  DGX in `prove/LEGGIMI.md`). Architettura della ricerca del 02/10: gemma davanti, un modello
-  grande dietro. **La DGX vera non è ancora stata contattata** *[Storico (02/10): dalla sera del 02/10 Calliope gira sulla DGX come servizio; vedi [setup-dgx](setup-dgx.md).]*: tunnel, Ollama remoto e
+  DGX in `prove/LEGGIMI.md`). Architettura della ricerca del 02/10
+  ([`docs/ricerche/2026-10-02-llm-per-spark.md`](../ricerche/2026-10-02-llm-per-spark.md)):
+  gemma davanti, un modello grande dietro. Gemma riconosce un lavoro lungo (programmi e script,
+  pagine web, relazioni lunghe, documenti da un modello, ricerche a più passi) e lo affida a un
+  modello grande sulla DGX Spark (tunnel SSH automatico) o sullo stesso Ollama; codice in una
+  sandbox con i test, documenti con lo scrittore di `calliope/documenti/`, annuncio a lavoro
+  finito e scheda con il risultato sullo schermo; provato anche con gemma4 locale come agente. **La DGX vera non è ancora stata contattata** *[Storico (02/10): dalla sera del 02/10 Calliope gira sulla DGX come servizio; vedi [setup-dgx](setup-dgx.md).]*: tunnel, Ollama remoto e
   `qwen3.6:35b` sono provati solo con un ssh finto e un Ollama finto.
   - **Collegamento**: `dgx.yaml` (tunnel o diretto) oppure `agenti_url`; tunnel `ssh -N -L
     127.0.0.1:11435:127.0.0.1:11434 -- <alias>` con `BatchMode=yes`,
@@ -343,7 +333,8 @@
     Risposta nel turno dopo o più tardi («per il lavoro della relazione: …», per id o parole
     del titolo); solo chi l'ha chiesto o chi amministra (`lavori_risposta_altrui`). L'attesa
     non conta nel tetto dei minuti; al più `agenti_domande_max` (3) domande, poi si chiude
-    come prima; dopo `agenti_attesa_risposta_min` (120) si chiude da solo e lo dice.
+    come prima; dopo `agenti_attesa_risposta_min` (120) si chiude da solo e lo dice. A secco
+    (`prova_agenti_domande.py`); con il modello e la DGX non ancora (03/10).
   - **File della persona all'agente** (03/10, `file_utente.py`): `delega_lavoro(file=nome o
     numero)` cerca con l'esecutore del PC e le regole di `pc_cerca_file` (proprietari o chi
     amministra, o un documento appena scritto per chi parla; `lavori_file_permesso`), conferma

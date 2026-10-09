@@ -10,21 +10,10 @@
 |---|---|---|
 | Satelliti (microfono e casse in rete, Calliope sul server) | `websockets` (API sincrona), PCM 16 kHz, TLS con `ssl` della libreria standard e impronta fissata; sul satellite lo stesso `Listener` (VAD ONNX, wake word) e `tts.UscitaLocale` | `calliope/satellite/` → `ServerSatelliti`, `AscoltoRemoto`, `UscitaRemota` (`server.py`), `Collegamento` (`suonata`, `canale`, dal 06–07/10), `valida_evento`, `ServerSatelliti.insieme` e `per_pc` (tutti insieme dal 06/10), `Satellite`, `Riproduttore` (`client.py`), `protocollo.py`, `ArchivioSatelliti`, `load_satelliti`; inoltro TCP per il telefono di casa `Inoltro` (`inoltro.py`, dal 03/10); PC nuovo con un comando e aggiornamenti con ritorno indietro (dal 03/10): pagina `/satellite` e `/installa` (`web.py`), pacchetto da `uv.lock` (`pacchetto.py`: `Distributore`), `Aggiornatore` (`aggiorna.py`), `installazione/avvio.py` e `installazione/installa.ps1` (uv 0.12.22, Python 3.14.8); `audio_modo` in `Config`; terminale `python -m calliope.satellite`; avvio `avvia_satellite.py`, `setup/satellite/` |
 
-## Note dalla sezione «Stato attuale» di CLAUDE.md (fino al 06/10)
+## Problemi noti
 
-  - **Satelliti** (02/10, `calliope/satellite/`, [`docs/ricerche/2026-10-02-satellite.md`](../ricerche/2026-10-02-satellite.md)):
-    con `audio_modo: satellite` microfono, VAD, wake word e casse sono di un satellite in rete
-    (il portatile), Whisper, modello, Piper e tool restano sul server; stesso ciclo di
-    `main.py`. Provato con Calliope vera e un satellite con microfono e casse finti: la DGX
-    vera non è ancora stata provata. *[Storico (02/10): dalla sera del 02/10 Calliope gira sulla DGX come servizio; vedi [setup-dgx](setup-dgx.md).]*
-    Dal 03/10 un PC Windows vuoto diventa satellite con un comando dalla pagina `/satellite`
-    (chiave del certificato fissata con curl, uv e Python con versioni e SHA-256 fissati) e si
-    aggiorna da solo con ritorno indietro (`prova_installa_satellite`; con `--vera` installazione
-    vera in ~30 s, aggiornamento preparato dalla cache in ~2,5 s). Provato in locale con un
-    satellite vero sotto `avvio.py`: aggiornamento confermato in 6 s, versione che non si
-    ricollega tornata indietro. Non provato su un PC pulito né contro la DGX.
-
-## Note dalla sezione «Problemi noti» di CLAUDE.md (fino al 06/10)
+*Fuse il 09/10 le due sezioni nate dalla divisione di CLAUDE.md (stato e problemi fino al
+06/10): ogni voce una volta sola, le superate segnate come storiche.*
 
 - **TLS e thread** (03/10, `calliope/tls_sicuro.py`): websockets sincrono legge da un thread e
   scrive da altri; con l'`SSLSocket` normale sono `SSL_read` e `SSL_write` insieme sullo stesso
@@ -42,9 +31,18 @@
   secondo) `send` tiene il lucchetto del protocollo mentre il socket è pieno e i due lati si
   bloccano; l'audio dei satelliti è molto sotto.
 
-- **Satelliti** (02/10, `calliope/satellite/`; prova a secco `prove/prova_satellite.py`, prova
-  manuale e passi per la DGX in `prove/LEGGIMI.md`). Il portatile come satellite di Calliope
-  sulla DGX. **La DGX vera non è ancora stata contattata.** *[Storico (02/10): dalla sera del 02/10 Calliope gira sulla DGX come servizio; vedi [setup-dgx](setup-dgx.md).]*
+- **Satelliti** (02/10, `calliope/satellite/`, [`docs/ricerche/2026-10-02-satellite.md`](../ricerche/2026-10-02-satellite.md);
+  prova a secco `prove/prova_satellite.py`, prova manuale e passi per la DGX in
+  `prove/LEGGIMI.md`). Il portatile come satellite di Calliope sulla DGX: con `audio_modo:
+  satellite` microfono, VAD, wake word e casse sono di un satellite in rete, Whisper, modello,
+  Piper e tool restano sul server; stesso ciclo di `main.py`. Provato con Calliope vera e un
+  satellite con microfono e casse finti. **La DGX vera non è ancora stata contattata.** *[Storico (02/10): dalla sera del 02/10 Calliope gira sulla DGX come servizio; vedi [setup-dgx](setup-dgx.md).]*
+  Dal 03/10 un PC Windows vuoto diventa satellite con un comando dalla pagina `/satellite`
+  (chiave del certificato fissata con curl, uv e Python con versioni e SHA-256 fissati) e si
+  aggiorna da solo con ritorno indietro (`prova_installa_satellite`; con `--vera` installazione
+  vera in ~30 s, aggiornamento preparato dalla cache in ~2,5 s). Provato in locale con un
+  satellite vero sotto `avvio.py`: aggiornamento confermato in 6 s, versione che non si
+  ricollega tornata indietro. Non provato su un PC pulito né contro la DGX.
   - **WebSocket aperto dal satellite** (`websockets` 17.1, API sincrona), JSON per i comandi,
     binario per l'audio: PCM 16 kHz verso il server, la voce di Piper a pezzi da 0,2 s verso il
     satellite (comincia a suonare al primo). Niente Opus (librerie native senza wheel

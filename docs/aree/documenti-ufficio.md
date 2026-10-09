@@ -13,7 +13,10 @@
 | Archivio dei documenti di casa (bollette, contratti, polizze, garanzie, referti…) | cartella osservata; pypdfium2, Pillow, python-docx; OCR ed estrazione con il modello grande (qwen3.6 su vLLM, client degli agenti, output strutturati); grafo in SQLite (nodi e archi tipizzati con la fonte, alias, FTS5) | `calliope/archivio/` → `Archivio` (`servizio.py`: coda, permessi, interrogazioni), `Grafo` (`grafo.py`), `tipi.py` (schede, controllo contro il testo, `nel_grafo`), `testo.py` (`leggi`, `OcrVisivo`), `Estrattore`, `esplora.py` (strumenti dell'agente), `load_archivio`; tool in `calliope/tools/archivio.py`; terminale `python -m calliope.archivio` |
 | Ufficio: modelli di documento, rubrica, numerazione, fatture e DDT | docxtpl (Word) e python-pptx (PowerPoint) per i modelli dell'utente con un `.yaml` di descrizione; SQLite (stesso file della memoria); `Decimal` per i conti; XML FatturaPA FPR12 1.2.3 con la libreria standard, XSD ufficiale con lxml se scaricato; PDF con i documenti | `calliope/ufficio/` → `Ufficio` (`servizio.py`), `modelli.py`, `Rubrica`, `Numeratore`, `conti.py`, `fatturapa.py`, `stampe.py`; tool `modello_compila`, `anagrafica_cerca`, `anagrafica_salva` in `calliope/tools/ufficio.py`; terminale `python -m calliope.ufficio`; vedi [`docs/ricerche/2026-10-03-template.md`](../ricerche/2026-10-03-template.md) |
 
-## Note dalla sezione «Stato attuale» di CLAUDE.md (fino al 06/10)
+## Problemi noti
+
+*Fuse il 09/10 le due sezioni nate dalla divisione di CLAUDE.md (stato e problemi fino al
+06/10): ogni voce una volta sola, le superate segnate come storiche.*
 
 - **Ufficio** (03/10, `calliope/ufficio/`, [`docs/ricerche/2026-10-03-template.md`](../ricerche/2026-10-03-template.md)):
   fatture elettroniche (PDF di cortesia + XML FPR12 da caricare a mano: Calliope non invia
@@ -24,6 +27,14 @@
   programma. Rubrica con `anagrafica_cerca`/`anagrafica_salva` (proposta e «sì»). Chi emette
   in `calliope.locale.yaml`, `fatture_emittente`; schema XSD con `python -m calliope.ufficio
   --scarica-xsd` (non in git: licenza non dichiarata). Fatture solo a chi amministra.
+  A voce (03/10, `prova_ufficio_ollama` 27/30 in 2 giri, estrazione dei campi
+  ~2,2 s): senza «chiamalo subito, senza chiedere i dati» nella descrizione gemma4 chiedeva
+  partita IVA e indirizzi invece di chiamare `modello_compila`; la stessa frase nel prompt
+  faceva chiedere dettagli anche alle lettere (il prompt dice che le lettere restano a
+  `documento_crea` «anche se mancano dei dettagli»). Il «sì» chiama il tool solo se l'azione in
+  sospeso ha tutti gli argomenti obbligatori. `ACTION_CLAIM` ora prende anche «ho
+  preparato/emesso» e il passivo («è stata preparata»). Restano: «Prepara una fattura.» senza
+  dati → il modello chiede da sé, e la risposta dopo a volte non chiama il tool.
 
   - **Archivio dei documenti di casa** (03/10, `calliope/archivio/`, rapporto
     [`docs/ricerche/2026-10-03-documenti-grafo.md`](../ricerche/2026-10-03-documenti-grafo.md)):
@@ -42,13 +53,10 @@
     personale. L'agente esplora il grafo con sei strumenti chiusi (`grafo_*`) nelle ricerche
     delegate.
 
-  - **Documenti a voce** (27/09, `calliope/documenti/`): lettere, tabelle ed elenchi in Word,
-    Excel o PDF, creati e modificati a voce, salvati in Documenti\Calliope; «aprilo» li apre.
-
-## Note dalla sezione «Problemi noti» di CLAUDE.md (fino al 06/10)
-
 - **Documenti Word, Excel, PDF** (27/09, `calliope/documenti/`, `calliope/tools/documenti.py`,
-  prove `prove/prova_documenti.py` e `prove/prova_documenti_ollama.py`):
+  prove `prove/prova_documenti.py` e `prove/prova_documenti_ollama.py`): lettere, tabelle ed
+  elenchi in Word, Excel o PDF, creati e modificati a voce, salvati in Documenti\Calliope;
+  «aprilo» li apre.
   - Il modello chiama `documento_crea(formato, richiesta)` con i dati come detti; il testo lo
     scrive una **seconda richiesta a Ollama** (stesso modello e `num_ctx`, `format` = schema
     JSON, non in streaming), poi validazione, file e consegna. Negli argomenti del tool il
@@ -107,14 +115,6 @@
   - Backend `openai`: lo scrittore usa `response_format` di tipo `json_schema` su `/v1`
     (provato; lì Ollama ricarica il modello a 4096 token).
 
-- **Ufficio a voce** (03/10, `prova_ufficio_ollama` 27/30 in 2 giri, estrazione dei campi
-  ~2,2 s): senza «chiamalo subito, senza chiedere i dati» nella descrizione gemma4 chiedeva
-  partita IVA e indirizzi invece di chiamare `modello_compila`; la stessa frase nel prompt
-  faceva chiedere dettagli anche alle lettere (il prompt dice che le lettere restano a
-  `documento_crea` «anche se mancano dei dettagli»). Il «sì» chiama il tool solo se l'azione in
-  sospeso ha tutti gli argomenti obbligatori. `ACTION_CLAIM` ora prende anche «ho
-  preparato/emesso» e il passivo («è stata preparata»). Restano: «Prepara una fattura.» senza
-  dati → il modello chiede da sé, e la risposta dopo a volte non chiama il tool.
 
 ## Markdown per i testi dell'agente (07/10)
 

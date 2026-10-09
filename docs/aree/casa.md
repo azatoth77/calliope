@@ -19,17 +19,14 @@ Da fare a mano: le aree delle luci «Soggiorno» e «Cucina» (fondo del documen
 | Errori di HA in italiano normale | i modelli veri delle risposte d'errore di HA (home-assistant-intents) | `calliope/casa/errori.py` → `riformula_errore`, usato da `HomeAssistantBackend._esito` |
 | Comando capito ma senza dispositivi (08/10) | nessuna: le entità esposte già in memoria | `calliope/casa/nomi.py` → `candidate`, `frase_fatto`, `frase_quale`, consigli a chi amministra; usato da `tools/casa.py` (`_per_nome`) |
 
-## Note dalla sezione «Stato attuale» di CLAUDE.md (fino al 06/10)
+## Problemi noti
 
-  - **Casa via Home Assistant** (01/10, `calliope/casa/`): luci, tapparelle, termostato,
-    prese e sensori, solo entità esposte ad Assist; serrature, allarme, cancello e porta del
-    garage solo in lettura. Provata con un HA finto: l'HA vero non è ancora collegato. *[Superato il 01/10 sera: prima prova con l'HA vero, vedi sotto «Prima prova con l'HA vero».]*
-
-## Note dalla sezione «Problemi noti» di CLAUDE.md (fino al 06/10)
+*Fuse il 09/10 le due sezioni nate dalla divisione di CLAUDE.md (stato e problemi fino al 06/10): ogni voce una volta sola, le superate segnate come storiche.*
 
 - **Casa via Home Assistant** (01/10, `calliope/casa/`, `calliope/tools/casa.py`, prove
   `prove/prova_casa_ha.py`, `prove/prova_casa_ha_ollama.py`, sonda manuale
-  `prove/sonda_ha.py`). Tutto provato con un HA finto (`prove/ha_finto.py`: server
+  `prove/sonda_ha.py`): luci, tapparelle, termostato, prese e sensori, solo entità esposte ad
+  Assist; serrature, allarme, cancello e porta del garage solo in lettura. Tutto provato con un HA finto (`prove/ha_finto.py`: server
   WebSocket vero e le frasi italiane vere di HA, con hassil e home-assistant-intents);
   l'HA di casa non è ancora stato contattato. *[Superato: prima prova con l'HA vero il 01/10 sera, qui sotto.]* Scoperte, verificate sul sorgente di HA:
   - **Comandi tramite l'agente integrato**, non con le entità in `enum` come proponeva la

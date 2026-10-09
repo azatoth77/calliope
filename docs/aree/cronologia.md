@@ -4,7 +4,9 @@
 
 *Questo file copre i primi giorni (fino al 06/10). Dal 06/10 in poi le tappe, una riga per giorno fino al 09/10, sono nella tabella «Tappe dello sviluppo» di [`../../CHANGELOG.md`](../../CHANGELOG.md); i dettagli nei documenti d'area.*
 
-## Note dalla sezione «Stato attuale» di CLAUDE.md (fino al 06/10)
+## Problemi noti
+
+*Dalla divisione di CLAUDE.md (note fino al 06/10); dal 09/10 una sola sezione per area.*
 
 - **v0.3 (22–26/09/2026)**: il codice è il package `calliope/` (26/09), con la
   configurazione in `calliope.yaml`; si avvia con `python -m calliope`.

@@ -12,19 +12,14 @@
 | Piano dei modelli per la macchina, in sola lettura (dal 08/10) | — (nvidia-smi, /proc/meminfo, registro di Windows, Ollama `/api/version` `/api/tags` `/api/ps`, vLLM `/v1/models` `/version` `/metrics`, `systemctl show` in sola lettura) | `calliope/macchina.py` → `inventario`, `Sonde`; catalogo `calliope/modelli.py` → `MODELLI`, `GPU`, `WHISPER`, `VERSIONE`; regole `calliope/piano.py` → `piano`, `da_config`, `testo`, `Funzioni`; terminale `python -m calliope.stato --piano [--json] [--inventario FILE]`; prova `prove/prova_piano.py` |
 | Installazioni dal catalogo | httpx (Range, checksum), API `/api/pull` di Ollama | `calliope/installa/` → `catalogo` (`catalogo.py`), `scarica_file` (`scarica.py`), `Installazioni` (`servizio.py`); tool `installa_proponi`, `installa_avvia`, `installa_gestisci` in `calliope/tools/stato.py`; anche `whisper_riserva` e `telefono` nel catalogo (vedi [setup-dgx](setup-dgx.md), [schermi-telefono](schermi-telefono.md)) |
 
-## Note dalla sezione «Stato attuale» di CLAUDE.md (fino al 06/10)
+## Problemi noti
 
-  - **Registro delle capacità e installazioni a voce** (01/10, `calliope/capacita.py`,
-    `calliope/installa/`): cosa funziona, cosa manca e il prossimo passo, all'avvio, da
-    terminale (`python -m calliope.stato`) e a voce; download solo da un catalogo nel codice
-    (fonti italiane di Kiwix, voci di Piper, CAM++, modello di Ollama), solo chi amministra,
-    sempre con proposta e «sì».
-
-## Note dalla sezione «Problemi noti» di CLAUDE.md (fino al 06/10)
+*Fuse il 09/10 le due sezioni nate dalla divisione di CLAUDE.md (stato e problemi fino al 06/10): ogni voce una volta sola, le superate segnate come storiche.*
 
 - **Registro delle capacità** (01/10, `calliope/capacita.py`, `calliope/stato.py`, tool
   `calliope_stato` in `calliope/tools/stato.py`; prove `prova_capacita.py`,
-  `prova_stato_ollama.py`):
+  `prova_stato_ollama.py`): cosa funziona, cosa manca e il prossimo passo, all'avvio, da
+  terminale e a voce (le installazioni dal catalogo sono la voce sotto).
   - 11 capacità *[storico, 01/10: il 06/10 sono 18, `capacita.DEFINIZIONI`]*, quattro stati (`attiva`, `da_configurare`, `mancante`, `guasta`), con
     motivo, prossimo passo per la voce e dettagli. I caricamenti (`load_biblioteca`,
     `load_pc`, `load_documenti`, `load_casa`, `load_wake_detector`, `Transcriber`,
