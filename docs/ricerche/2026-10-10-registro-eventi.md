@@ -794,6 +794,52 @@ conserva in modo esplicito e con quale prova.*
     `prova_eventi_satellite`: il «sì» breve dalla cucina non esegue la proposta dello studio, la
     frase intera con la voce sicura sì, come oggi in `prova_corsie`.
 
+## 13. Argomenti al posto della «conversazione nuova» (deciso da Dario il 10/10)
+
+**Il caso.** Terzo giro della DGX del 10/10 (10:39–10:41): sviluppo «Celsius in Fahrenheit»
+all'analisi, poi «Calliope, ricominciamo», poi «scrivimi un programma che converte i chilometri in
+miglia» → trattato come una modifica dell'analisi di Celsius, due volte. Dario: «quando ti ho detto
+Calliope ricominciamo io intendevo esclusivamente ripartire da capo».
+
+**Il ragionamento (Dario).** Una «conversazione nuova» come azzeramento ha poco senso: non si
+dimentica nulla (le conversazioni sono salvate per persona, la compressione le riassume, la ricerca
+le ritrova; l'unica dimenticanza vera è «dimentica», che resta esplicita perché è privacy). La parola
+chiave «ricominciamo» è arbitraria, ambigua («ripartiamo da capo» o «riprendiamo da dove eravamo»)
+e obbliga chi parla a imparare un comando, contro il principio 10 e contro l'idea di un'assistente
+colloquiale. Ciò che una conversazione nuova dà davvero — il modello non trascinato dal discorso di
+prima, le cose aperte che non catturano le risposte nuove, un contesto più piccolo — sono effetti di
+un **cambio d'argomento**, che si capisce dal contenuto.
+
+**La proposta.**
+
+1. **Un flusso per persona, a argomenti.** Il segmento «conversazione» del registro diventa un
+   **argomento**: evento `argomento_nuovo` (con titolo breve) al posto di `conversazione_aperta`
+   per i cambi decisi nel dialogo. La chiusura per inattività resta (con la coda del passo 0).
+2. **Decide il modello.** Ogni frase continua l'argomento corrente, ne riprende uno precedente o ne
+   apre uno nuovo: un esito del modello (campo di `proposta_rispondi` o tool `argomento`, da
+   scegliere misurando), con il blocco dello stato che elenca l'argomento corrente e quelli da parte.
+   «Parliamo d'altro», «lasciamo perdere», «da capo», «ricominciamo», «dove eravamo?» sono indizi
+   per il modello, non comandi; la forma chiusa `nuova_conversazione` della corsia veloce si toglie in
+   questo passo (resta solo «dimentica»).
+3. **Ciò che era aperto va da parte, non si chiude.** Al cambio d'argomento lo sviluppo all'analisi
+   va in pausa (il lavoro dell'agente continua), la proposta aperta scade con il segno «da parte»;
+   Calliope lo dice in mezza frase («metto da parte lo sviluppo di Celsius»), atto di dialogo a testo
+   fisso. Nel blocco dello stato: «da parte: sviluppo Celsius», non più SVILUPPO_MSG.
+4. **La proiezione del contesto**: l'argomento corrente per intero, gli altri come indice con
+   riassunto (titolo, quando, cosa resta aperto), recuperabili per intero con la ricerca o
+   riprendendoli («torniamo al programma dei gradi»).
+5. **Reversibile.** Un cambio sbagliato si annulla a voce («no, parlavo ancora di Celsius»): evento
+   `argomento_ripreso`, niente si perde.
+
+**Prove**: i tre giri del 10/10 (Celsius → chilometri senza parola chiave e con «ricominciamo»;
+«ricominciamo» detto per «riprendiamo»; «torniamo a…»), i contrari (domanda di dettaglio sullo
+stesso argomento, «e poi?», risposta a una proposta aperta), il banco d'attacco (un dato non fidato
+non apre né riprende argomenti).
+
+**Quando**: con il passo 3 (contesto dagli eventi), di cui diventa parte; prima sarebbe una toppa
+sulla storia di oggi. Misura in ombra dal passo 1 possibile: l'esito «argomento» del modello
+registrato accanto alla decisione di oggi.
+
 ## 12. Documentazione da aggiornare quando si fanno i passi
 
 - [`voce-e-regole`](../aree/voce-e-regole.md): una sezione «Il registro degli eventi» (tipi, uscita
