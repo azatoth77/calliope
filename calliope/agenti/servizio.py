@@ -119,7 +119,8 @@ def titolo_da(compito: str, parole: int = 7) -> str:
     t = _VERBI.sub("", t, count=1)
     t = _ARTICOLI.sub("", t, count=1)
     # Anche a «(»: «carattere_controllo(cf15)» nel titolo finiva letto a voce (04/10)
-    tutte = re.split(r"[,;:(]", t)[0].split()
+    # e alla fine di una frase: un compito lungo ne ha più d'una (10/10)
+    tutte = _testa_del_nome(re.split(r"[,;:(]|[.!?]\s", t)[0].split())
     words = tutte[:parole]
     # Il complemento del nome su cui cade il taglio resta (10/10, secondo giro della DGX: «…che
     # conti il numero di vocali presenti…» e «…il numero di parole in un testo…» diventavano
@@ -140,6 +141,40 @@ def titolo_da(compito: str, parole: int = 7) -> str:
     return " ".join(words) or "lavoro"
 
 
+# Il nome della cosa in un compito lungo (10/10, DGX delle 17:32: «Crea un gioco di Halloween per
+# schermi dove i giocatori devono scegliere tra diverse porte…» → lo sviluppo si chiamava con
+# l'inizio del compito troncato a 80 caratteri, e titolo_da dava «gioco di Halloween per
+# schermi dove»). Prima di un «che» (che regge i titoli buoni: «programma che converte…»), una
+# relativa di luogo o di tempo («dove i giocatori…», «in cui», «nel quale», «mentre») è già la
+# descrizione, non il nome; «per gli schermi», «sugli schermi di Calliope» lì non distingue
+# niente (sono tutti sugli schermi). Dopo un «che» resta tutto («estensione che dice dove si
+# trova la farmacia»)
+_RELATIVE = frozenset("dove mentre affinché cosicché".split())
+_RELATIVE_2 = frozenset({("in", "cui"), ("nel", "quale"), ("nella", "quale"),
+                         ("nei", "quali"), ("nelle", "quali"), ("con", "cui")})
+_SCHERMI = re.compile(r"(?:per|sugli|sullo|sul|negli|nello|nel)\s+(?:(?:gli|lo|il|i)\s+)?"
+                      r"schermi?(?:\s+di\s+calliope)?|(?:per|di)\s+calliope", re.I)
+
+
+def _testa_del_nome(tutte: list[str]) -> list[str]:
+    basse = [w.lower().strip("«»\"'") for w in tutte]
+    che = basse.index("che") if "che" in basse else len(tutte)
+    for i in range(2, che):
+        w = basse[i]
+        if w in _RELATIVE or (i + 1 < len(basse) and (w, basse[i + 1]) in _RELATIVE_2):
+            return _senza_schermi(tutte[:i])          # la relativa è la descrizione
+    if che == len(tutte):
+        return tutte          # niente «che» né relativa: «gioco memory da giocare sullo schermo»
+    return _senza_schermi(tutte[:che], minimo=1) + tutte[che:]
+
+
+def _senza_schermi(testa: list[str], minimo: int = 2) -> list[str]:
+    """La testa senza «per gli schermi (di Calliope)», se restano almeno `minimo` parole (una
+    basta se segue il «che…»: «estensione che dice il meteo»)."""
+    pulita = re.sub(r"\s+", " ", _SCHERMI.sub(" ", " ".join(testa))).split()
+    return pulita if len(pulita) >= min(minimo, len(testa)) and pulita else testa
+
+
 # Le parole che distinguono il compito, dopo il taglio (10/10, terzo giro della DGX: «…converte i
 # gradi Celsius in Fahrenheit» e «…converte i chilometri in miglia» diventavano «programma in
 # Python che converte i gradi» e «…converte i chilometri»: senza le unità i due titoli non
@@ -151,7 +186,9 @@ def titolo_da(compito: str, parole: int = 7) -> str:
 # (principio 10), con un tetto per la voce
 TITOLO_MAX_PAROLE = 12
 _PREP_SEMPLICI = frozenset("in di da a con su per tra fra".split())
-_NON_NUDE = frozenset("ogni questo questa quel quello ne ci si".split())
+# e i numeri in lettere («per due» giocatori, 10/10: un numero da solo in fondo è una coda monca)
+_NON_NUDE = frozenset("ogni questo questa quel quello ne ci si due tre quattro cinque sei sette "
+                      "otto nove dieci venti cento mille".split())
 
 
 def _nuda(w: str) -> bool:

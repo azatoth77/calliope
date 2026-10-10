@@ -84,6 +84,20 @@ def leggibile(titolo: str) -> str:
     return t
 
 
+
+def titolo_richiesta(tipo: str, richiesta: str) -> str:
+    """Il titolo di uno sviluppo senza un nome dal modello: il nome della cosa chiesta
+    (`agenti.servizio.titolo_da`), non l'inizio della richiesta troncato a 80 caratteri (10/10,
+    DGX delle 17:32: «Crea un gioco di Halloween per schermi dove i giocatori devono scegliere
+    tra div» → «gioco di Halloween»)."""
+    from .agenti.servizio import senza_estensione, titolo_da
+    r = str(richiesta or "").strip()
+    if not r:
+        return "sviluppo"
+    t = titolo_da(r)
+    return senza_estensione(t) if tipo == "programma" else t
+
+
 def _migliaia(n) -> str:
     return f"{int(n or 0):,}".replace(",", "\u202f")
 
@@ -364,7 +378,7 @@ class Sviluppi:
             self._n += 1
             adesso = time.time()
             sv = Sviluppo(f"S{self._n}", persona, persona_nome or "", tipo,
-                          titolo=leggibile(titolo or richiesta or "sviluppo")[:80],
+                          titolo=leggibile(titolo or titolo_richiesta(tipo, richiesta))[:80],
                           richiesta=str(richiesta or "")[:600], aperta=adesso, ultimo=adesso,
                           gioco=bool(gioco), estensione=estensione)
             sv.da_programma = str(self.da_programma.pop(persona, "") or "")
@@ -447,7 +461,9 @@ class Sviluppi:
             if getattr(lav, "estensione", None):
                 sv.estensione = lav.estensione
             titolo = leggibile(getattr(lav, "titolo", "") or "")
-            if titolo and (not sv.titolo or sv.titolo == leggibile(sv.richiesta[:80])):
+            if titolo and (not sv.titolo or sv.titolo in (
+                    leggibile(sv.richiesta[:80]),
+                    leggibile(titolo_richiesta(sv.tipo, sv.richiesta))[:80])):
                 sv.titolo = titolo[:80]
             sv.ultimo = time.time()
             if sv.da_programma and getattr(lav, "tipo", "") == "estensione":
