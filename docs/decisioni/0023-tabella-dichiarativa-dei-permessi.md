@@ -38,6 +38,16 @@ Guardrails.
 - La tabella diventa il documento dei permessi: le pagine sulla sicurezza potranno rimandare a lei.
 - Insieme al consenso unico, prima in ombra e poi accesa sui numeri ([0019](0019-ombra-prima-di-accendere.md)).
 
+## Configurazione da parte di Primo/a (proposta del 10/10)
+
+La tabella si potrà personalizzare da **Primo/a**: base intoccabile nel repository più uno strato
+dell'installazione nel DB, con la storia, la validazione delle stesse prove e il ripristino (riga,
+area, tutto). Modifiche che **stringono** libere; che **allargano** con la frase di sfida, prima in
+ombra e con la simulazione d'impatto sulle conversazioni vere. Un limite che nemmeno Primo/a allenta:
+minori, dati non fidati come consenso, «dimentica» di altri, la sfida come pavimento. Dettagli nel
+§ 11 di [`2026-10-10-macchina-stati.md`](../ricerche/2026-10-10-macchina-stati.md); da rivedere quando
+si realizza.
+
 ## Fonti
 
 - [`2026-10-10-macchina-stati.md`](../ricerche/2026-10-10-macchina-stati.md), «Aggiunte decise dopo il

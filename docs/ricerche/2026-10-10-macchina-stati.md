@@ -1311,3 +1311,64 @@ non alla voce, e la misura delle frasi scritte dal codice per turno.
 **Decisione di Dario (10/10)**: la seconda strada, direttamente, con un registro **per
 persona** (anonimo per satellite per gli ospiti). Progetto in [`2026-10-10-registro-eventi.md`](2026-10-10-registro-eventi.md),
 decisione [0027](../decisioni/0027-conversazione-come-registro-di-eventi.md).
+
+## 11. La configurazione da parte di Primo/a (proposta del 10/10, da rivedere quando si realizza)
+
+Ragionamento con Dario dopo le tre righe del § 10: con la macchina a stati accesa, buona parte del
+suo comportamento è **dati** (tabelle), non codice, e quindi si può configurare. Chi: **Primo/a**
+(la persona registrata per prima, chi amministra), con le dovute cautele e avvisi e la possibilità di
+tornare sempre a com'era stato pensato. Cosa: «un po' tutto», con cautele diverse per rischio.
+
+**Cosa è dato (configurabile) e cosa resta codice.**
+
+- Dati: la tabella dei permessi (tool o famiglia × effetto E1–E4 × provenienza × chi parla → esegui,
+  chiedi, sfida, rifiuta; decisione [0023](../decisioni/0023-tabella-dichiarativa-dei-permessi.md));
+  la tabella del consenso (tipo di proposta × esito → transizione: le tre righe del § 10 ne sono un
+  esempio); le azioni reversibili da sé (`REVERSIBILI_DA_SE`); i tool per stato; i testi fissi degli
+  atti di dialogo (con le varianti per tono); i tempi (`Tempi`: validità di una proposta, attese per
+  persona, scadenze).
+- Codice: gli stati e il motore; le garanzie di sicurezza; l'interprete (il modello si cambia con
+  `llm_profilo`, non con una tabella).
+
+**Base intoccabile più uno strato di Primo/a.**
+
+- **Base**: le tabelle nel repository, versionate e verificate dalle prove (copertura, nessuna
+  contraddizione, banco d'attacco a 0). Non si modifica dall'installazione.
+- **Strato di Primo/a**: le personalizzazioni dell'installazione, in una tabella del DB con la storia
+  di ogni modifica (chi, quando, valore di prima). All'avvio e a ogni modifica lo strato è validato con
+  le stesse prove della base; uno strato incoerente non si applica (resta la versione valida di prima,
+  con un avviso).
+- **Ripristino**: di una riga, di un'area (tutti i testi, tutti i tempi…) o di tutto, tornando alla
+  base; più la cronologia delle versioni («com'era martedì»).
+
+**Cautele per rischio.**
+
+| Cosa | Esempi | Cautela |
+|---|---|---|
+| Testi e tempi | «Lo chiudo?», varianti, validità di una proposta | libero, con validazione (una domanda resta una domanda) |
+| Tool per stato | cosa vede il modello nello sviluppo | avviso; prova che ogni stato abbia la sua uscita |
+| Consenso | «no» a un'analisi, reversibili | avviso con la simulazione d'impatto |
+| Permessi che **stringono** | più domande, più sfide | libero |
+| Permessi che **allargano** | meno domande o sfide, un livello in più per gli ospiti | frase di sfida, avviso esplicito, prima **in ombra** per qualche giorno, poi conferma |
+
+**Simulazione d'impatto.** Prima di applicare una modifica, Calliope la rigioca sulle conversazioni
+vere degli ultimi giorni dal registro degli eventi ([0027](../decisioni/0027-conversazione-come-registro-di-eventi.md))
+e dice cosa avrebbe cambiato («con questa regola, in 3 casi avrei eseguito senza chiedere: questi»).
+È la stessa macchina dell'ombra, messa a disposizione di Primo/a.
+
+**Il limite (approvato da Dario).** Primo/a può solo **stringere**, mai allentare:
+
+- le protezioni dei minori (soglie, guardiano, avvisi ai tutori);
+- la regola per cui un dato non fidato (internet, documenti, allegati) non vale mai come consenso;
+- «dimentica» di un'altra persona;
+- la frase di sfida come pavimento per le azioni distruttive di ogni classe.
+
+Proteggono gli altri, non chi configura.
+
+**Da dove.** Dal pannello di amministrazione con le azioni (in roadmap; oggi il cruscotto è in sola
+lettura): differenze rispetto alla base, simulazione, ripristino. A voce solo le modifiche semplici e
+reversibili (un testo, «non chiedermi più conferma per sospendere»), sempre con l'avviso; i permessi
+non a voce.
+
+**Quando.** Dopo che la macchina a stati è accesa e la tabella dei permessi del passo 2 esiste: si
+costruisce sopra. Da rivedere al momento di realizzarla.
