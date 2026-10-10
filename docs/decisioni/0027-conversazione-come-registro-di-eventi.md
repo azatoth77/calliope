@@ -20,8 +20,9 @@ chiesto. Il passo 1-bis della macchina a stati ([0022](0022-macchina-a-stati-del
 
 Dario, 10/10: la **versione forte**, senza la versione intermedia.
 
-- **Un registro degli eventi per conversazione** (per persona o per corsia, come le conversazioni di
-  oggi), in sola aggiunta: detto dalla persona, detto da Calliope frase per frase (autore: contenuto
+- **Un registro degli eventi per persona** (come la conversazione di oggi, da qualunque satellite;
+  la corsia è solo il canale), più un registro anonimo per satellite per ospiti e voci incerte; le
+  conversazioni sono segmenti del registro. In sola aggiunta: detto dalla persona, detto da Calliope frase per frase (autore: contenuto
   del modello, atto di dialogo, esito di un tool; interruzione), chiamate ed esiti dei tool, proposte
   aperte e chiuse con il motivo, compressioni, chiusure. Nessun registro globale.
 - **Tutto il resto è una proiezione**, funzione pura degli eventi: il contesto del modello (con la
@@ -44,7 +45,7 @@ Dario, 10/10: la **versione forte**, senza la versione intermedia.
   ma lascia tre copie e i punti che modificano la storia; scartata.
 - **Solo il modello parla**: coerenza senza atti, ma +1 s circa sui turni con una frase pronta, e i
   testi che devono essere fissi (protezione dei minori, sfida, politica) non lo sarebbero; scartata.
-- **Un registro globale** o una libreria di event sourcing: isolamento fra persone da ricostruire con
+- **Un registro per satellite**: la stessa persona avrebbe due storie; **un registro globale** o una libreria di event sourcing: isolamento fra persone da ricostruire con
   filtri, dipendenze in più; scartati.
 
 ## Conseguenze

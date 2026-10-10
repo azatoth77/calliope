@@ -1,7 +1,7 @@
 # La conversazione come registro degli eventi: progetto (10/10/2026)
 
 *Progetto del 10 ottobre 2026, dopo la decisione di Dario sul passo 1-bis della macchina a stati
-([`2026-10-10-macchina-stati.md`](2026-10-10-macchina-stati.md) § 10.1 e § 10.2): «una voce sola» si
+([`2026-10-10-macchina-stati.md`](2026-10-10-macchina-stati.md) § 10, punto 1 e § 10, punto 2): «una voce sola» si
 fa **direttamente nella versione forte**, la conversazione come registro degli eventi, senza la
 versione incrementale. Fatto sul codice di `main` a e4b09f2. **Nessuna modifica al codice.** Gli
 script di conteggio (frasi pronte e domande nel codice) sono nella cartella temporanea della
@@ -9,8 +9,9 @@ sessione, non nel repository. Nomi e dati degli esempi sono di fantasia.*
 
 *Aggiunte di Dario durante il lavoro (10/10): i costi della versione forte gestiti e controllati di
 continuo, con guardie misurabili (§ 10); ciò che oggi funziona proprio perché le copie sono
-separate, da conservare in modo esplicito (§ 11); **un registro per conversazione**, non uno
-globale, con ciò che attraversa le conversazioni progettato a parte (§ 2.5).*
+separate, da conservare in modo esplicito (§ 11); **un registro per persona** (la corsia è solo il
+canale; ospiti e voci incerte in un registro anonimo per satellite), non uno globale, con ciò che
+attraversa le persone progettato a parte (§ 2.5, § 2.6).*
 
 ## In breve
 
@@ -26,9 +27,10 @@ che il codice fa a voce diventano una proposta solo se il testo **finisce** con 
 sei volte, e il modello, a cui la persona lo spiegava, rispondeva che «il sistema richiede una
 conferma» senza sapere che cosa avesse chiesto.
 
-**La proposta.** **Un registro per conversazione** (per persona o per corsia, come le
-conversazioni di oggi), non un registro globale: «fonte unica» vuol dire che **ciascuna**
-conversazione ha una sola fonte invece delle tre copie. Il registro è **in sola aggiunta**: gli
+**La proposta.** **Un registro per persona** (come la conversazione di oggi in `corsie.py`: una per
+persona, da qualunque satellite; il satellite è solo il canale), più un registro **anonimo per
+satellite** per ospiti e voci incerte; nessun registro globale. «Fonte unica» vuol dire che
+**ciascuna** persona ha una sola fonte invece delle tre copie. Il registro è **in sola aggiunta**: gli
 eventi (detto dalla persona, detto da Calliope frase per frase con autore e interruzione,
 chiamate ed esiti dei tool, proposte aperte e chiuse, compressioni, chiusure). Tutto il resto è
 una **proiezione**, cioè una funzione pura degli eventi: il contesto del modello, lo stato della
@@ -41,11 +43,16 @@ contesto è ciò che la persona ha sentito**, con un'eccezione chiusa e dichiara
 **Costo e piano.** Sei passi, ognuno con le sue prove, le sue guardie e un interruttore di ritorno
 (`eventi: spento | ombra | attivo`); il primo scrive gli eventi **accanto** alla storia di oggi e
 confronta le due proiezioni turno per turno. Stima: **4–5 giorni** di lavoro d'agente (più dei 2–3
-del § 10.2: i punti da migrare sono 48 voci e ~30 modifiche della storia, non una manciata).
+del § 10, punto 2: i punti da migrare sono 48 voci e ~30 modifiche della storia, non una manciata).
 Latenza: nessuna scrittura su disco nel percorso della prima frase; la ricostruzione del contesto
 costa qualche millisecondo e tiene la cache del prefisso **meglio di oggi** (§ 5).
 
 ## 1. Inventario: chi parla e chi tocca la storia oggi
+
+Oggi le conversazioni sono già **per persona** (`corsie.RegistroConversazioni`: `persona:<id>` da
+qualunque satellite) e **per corsia solo per ospiti e voci incerte** (`ospite:<corsia>`, l'anonima
+del satellite); il registro degli eventi segue la stessa divisione. Il satellite è il canale da cui
+la frase arriva o verso cui va la voce.
 
 Legenda della colonna «nella storia»: **testuale** = la storia ha esattamente ciò che si è sentito;
 **diverso** = la storia ha altro (di più, di meno, o testo mai detto); **niente** = si sente ma la
@@ -148,6 +155,20 @@ stesso controllo. Restano fuori, per costruzione:
 | `Conversazione.importa` (riavvio) | storia da `correnti` | rigioco degli eventi |
 | `corsie.Corsia.turno`, `annuncio_per` | cambiano `brain.conv` | la conversazione è il flusso; la corsia sceglie quale |
 
+### 1.4 Che cosa ha solo ciascuna delle tre copie
+
+| Copia | Pezzi che ha solo lei |
+|---|---|
+| **Storia di Brain** (`Conversazione.history`, salvata in `correnti`) e **`conversazioni.db`** (`turni`, FTS, vettori, `conversazioni`) | gli esiti interi dei tool del turno e del precedente; le chiamate con gli argomenti; le buste dei dati non fidati e le etichette delle foto; la provenienza (`_prov`, `_fonte`); il riassunto della compressione e quello di chiusura con i ricordi proposti; i vettori e l'indice per `conversazione_cerca`; la conversazione in corso per il riavvio |
+| **Registro dei turni** (`turni-AAAA-MM-GG.jsonl`, un file al giorno per tutti) | le frasi captate e **non** rivolte a Calliope (`ignorato`, `scartato`, con il testo solo se simile al nome); i tempi (STT, prima frase, prima voce, sintesi, coda), il modo del riconoscimento e i punteggi; le regole scattate; l'ombra della politica, del dialogo e della compagnia; guardiano e controlli dell'uscita; `risposta_inviata` accanto alla sentita; righe senza conversazione (installazioni, lavori, estensioni, giochi, moduli, rifiuti dello scritto); campi `conversazione` e `satellite` |
+| **Schermi** (cronologia per persona su disco, scheda «Conversazione», risposta scritta) | il contenuto delle **schede** (testo intero «sul tuo schermo», tabelle, flusso di un lavoro, cassetto, moduli e i loro valori scritti, che non passano dal modello); la risposta scritta di un turno muto; la sorgente di «Scarica» |
+
+Il registro degli eventi prende tutto ciò che è **della conversazione** (prima e seconda colonna, per
+le frasi rivolte a Calliope); restano fuori, di proposito, le frasi non rivolte a Calliope (non sono
+di nessuno: restano solo nel registro dei turni, con la privacy di oggi), i valori scritti nei moduli
+(mai al modello: § 11.1) e il contenuto delle schede (una scheda mandata è un evento `scheda_mandata`
+con tipo, chiave e titolo; il contenuto resta nella cronologia degli schermi, che ne è la fonte).
+
 ## 2. Il modello degli eventi
 
 ### 2.1 L'evento
@@ -155,8 +176,10 @@ stesso controllo. Restano fuori, per costruzione:
 ```python
 @dataclass(frozen=True)
 class Evento:
-    conv: str            # id della conversazione (uuid breve, nuovo a ogni apertura)
-    seq: int             # 1, 2, 3… dentro la conversazione, senza buchi
+    registro: str        # persona:<id> | ospite:<corsia>
+    seq: int             # 1, 2, 3… dentro il registro, senza buchi
+    conv: str            # il segmento: id della conversazione (uuid breve, nuovo a ogni apertura)
+    corsia: str | None   # il canale da cui è arrivato o verso cui è andato (satellite, schermo)
     t: float             # time.time() (per il disco) — il monotonic resta in memoria
     tipo: str            # dall'elenco chiuso TIPI (§ 2.2)
     turno: int           # numero della risposta (Conversazione.turn_number)
@@ -165,13 +188,17 @@ class Evento:
     v: int = 1           # versione del tipo (rigioco dei registri vecchi)
 ```
 
-**Un registro per conversazione.** L'oggetto è `RegistroConversazione` (uno per `Conversazione`,
-`persona:<id>` o `ospite:<corsia>` come oggi, con un `conv` nuovo a ogni apertura); **non esiste**
-un registro globale né un'API che legga gli eventi di più conversazioni insieme. **Identità**:
-`(conv, seq)`; l'ordine dentro una conversazione è quello di `seq`, e fra conversazioni non serve
-un ordine totale. L'isolamento fra persone è il **comportamento predefinito**: la proiezione riceve
-il registro di una conversazione e basta. Ciò che deve attraversare le conversazioni passa da porte
-esplicite (§ 2.5).
+**Un registro per persona.** L'oggetto è `Registro`, con la chiave delle conversazioni di oggi:
+`persona:<id>` (una per persona, da qualunque satellite) o `ospite:<corsia>` (anonimo, uno per
+satellite). Dentro un registro le conversazioni sono **segmenti** delimitati da
+`conversazione_aperta` e `conversazione_chiusa`, ognuno con il suo `conv` (uuid breve): la
+proiezione del contesto prende il segmento aperto, la coda e la ripresa leggono il segmento chiuso
+prima **nello stesso registro**. **Non esiste** un registro globale né un'API che legga gli eventi
+di più registri insieme. **Identità**: `(registro, seq)`; l'ordine dentro un registro è quello di
+`seq`, e fra registri non serve un ordine totale. L'isolamento fra persone è il **comportamento
+predefinito**: la proiezione riceve un registro e basta. Ciò che deve attraversare le persone passa
+da porte esplicite (§ 2.5); i casi difficili (stessa persona su due satelliti, conferme legate al
+satellite, turni che cambiano proprietario) sono nel § 2.6.
 
 ### 2.2 I tipi
 
@@ -195,6 +222,8 @@ esplicite (§ 2.5).
 | `modulo_compilato` | modulo, campi (nomi, mai i valori) | |
 | `turno_escluso` | turno, motivo (`non_rivolta`) | la proiezione salta tutto il turno |
 | `compressione` | fino a `seq`, riassunto (testo e dati), usato | |
+| `scheda_mandata` | tipo, chiave, titolo, schermi | il contenuto resta nella cronologia degli schermi (§ 1.4) |
+| `turno_riassegnato` | da/a registro, seq, motivo | mai riscrittura (§ 2.6 c) |
 | `turno_chiuso` | esito, regole, tempi (STT, prima frase, prima voce), contesto (token, `lettura_s`, riletti), controlli | sorgente del registro dei turni |
 
 **Tre categorie del parlato** (`autore` di `detto_calliope`, § 4): `contenuto` (parole del modello),
@@ -203,15 +232,17 @@ di un tool). Le frasi d'attesa sono `atto` con il nome `attesa_*`.
 
 ### 2.3 Persistenza
 
-- **In memoria** ogni `Conversazione` tiene la sua lista di eventi (`eventi: list[Evento]`), la
-  fonte per il processo che gira. Aggiungere un evento è un `append` sotto il lock della
-  conversazione (§ 11.7): microsecondi.
+- **In memoria** ogni registro (una persona, o l'anonimo di un satellite) tiene la sua lista di
+  eventi, la fonte per il processo che gira; la `Conversazione` di oggi diventa la vista del
+  segmento aperto. Aggiungere un evento è un `append` sotto il lock del registro (§ 2.6 a):
+  microsecondi.
 - **Su disco**: i registri delle conversazioni stanno in una tabella `eventi` di
   `conversazioni.db` (stesso file e stesso thread dell'archivio, WAL, scrittura a lotti a fine frase
-  e a fine turno), **partizionata per conversazione**: ogni lettura e ogni cancellazione è per
-  `conv` o per `persona`, mai «tutto». Un file per conversazione è stato valutato: isolamento fisico
-  più netto, ma migliaia di file, «dimentica» e rotazione da fare sul file system, e nessun
-  vantaggio per la voce; la tabella con la chiave di partizione è la scelta. Chiave `(conv, seq)`,
+  e a fine turno), **partizionata per registro**: ogni lettura e ogni cancellazione è per
+  `registro`, mai «tutto». Un file per persona è stato valutato: isolamento fisico più netto e
+  «dimentica» = cancellare un file, ma file aperti a ogni turno, rotazione e WAL da rifare a mano;
+  la tabella con la chiave di partizione è la scelta, con «dimentica» = `DELETE … WHERE registro = ?`
+  più `secure_delete` (§ 2.6 f). Chiave `(registro, seq)`,
   colonne `t`, `tipo`, `turno`, `persona`, `ospite`, `dati` (JSON già filtrato per il disco,
   § 11.1). **Sola aggiunta** per costruzione dell'API: nessun `UPDATE`; `DELETE` solo da «dimentica»,
   dalla rotazione e dalla chiusura degli ospiti (§ 10).
@@ -230,7 +261,7 @@ di un tool). Le frasi d'attesa sono `atto` con il nome `attesa_*`.
   `conversazioni.dimentica`, tool `conversazione_dimentica`) cancella **le righe** di tutte le
   conversazioni della persona, con `PRAGMA secure_delete` e un checkpoint del WAL, poi le proiezioni
   che ne derivano (archivio, cronologia delle schede, `correnti` finché esiste); le conversazioni
-  in memoria della persona si chiudono e si svuotano (§ 10.1).
+  in memoria della persona si chiudono e si svuotano (§ 10, punto 1).
 - **Ospiti**: come oggi nessun testo nel registro dei turni; gli eventi con testo di una
   conversazione `ospite:` si cancellano alla sua chiusura, tenendo solo ciò che l'archivio tiene
   già oggi.
@@ -242,11 +273,11 @@ di un tool). Le frasi d'attesa sono `atto` con il nome `attesa_*`.
 
 ### 2.5 Ciò che attraversa le conversazioni
 
-Con un registro per conversazione, ogni passaggio fra conversazioni è una **porta esplicita**, con
+Con un registro per persona, ogni passaggio fra registri è una **porta esplicita**, con
 un nome, una prova e una riga nel registro dei turni. Nessuna porta copia eventi da un registro a
 un altro: si scrive un evento **nuovo** nel registro di destinazione, con la sua visibilità.
 
-| Cosa attraversa | Oggi | Con un registro per conversazione |
+| Cosa attraversa | Oggi | Con un registro per persona |
 |---|---|---|
 | **Annunci e risultati dei lavori dell'agente** consegnati a una persona | la coda degli annunci; `corsia.annuncio_per(brain, item["chi"])` sposta la corsia sulla conversazione della persona e `record_announcement` scrive nella storia | la corsia che lo dice scrive `detto_calliope(autore="esito", atto="annuncio_lavoro", fonte="agente")` nel registro di `item["chi"]` (mai «di chi ha parlato per ultimo», buco 5); senza una conversazione aperta della persona se ne apre una (`conversazione_aperta(come="annuncio")`), come fa oggi `di_persona(crea=True)` |
 | **Documenti, installazioni, estensioni, agenda** | come sopra; l'agenda non scrive niente | come sopra, nel registro di chi li ha chiesti (`owner`, `item["chi"]`; per l'agenda l'origine già salvata da `rispondi.segna`) |
@@ -262,6 +293,54 @@ un altro: si scrive un evento **nuovo** nel registro di destinazione, con la sua
 Prova `prova_eventi_porte`: ogni scrittura in un registro da un'altra conversazione passa da una
 delle porte dell'elenco (AST: nessuna chiamata a `RegistroConversazione.aggiungi` con un registro
 che non sia quello della corsia o quello restituito da una porta).
+
+### 2.6 Una persona, più satelliti: i casi difficili
+
+**(a) La stessa persona su due satelliti insieme.** Oggi `RegistroConversazioni.occupa` dà la
+conversazione a una corsia per volta (l'altra aspetta la fine del turno, al più 60 s). Si conserva
+così: **un solo scrittore per registro**, la corsia che lo occupa per il turno; il `seq` lo assegna
+il registro sotto il suo lock, quindi l'ordine è quello di scrittura e senza buchi. Un annuncio per
+una persona occupata da un'altra corsia aspetta come oggi (`annuncio_per` → `occupa`). Ogni evento
+porta la sua `corsia`. Prova: due corsie che parlano per la stessa persona a 100 ms di distanza →
+turni interi uno dopo l'altro, mai mescolati.
+
+**(b) Conferme legate al satellite.** L'evento `proposta_aperta` porta il **satellite d'origine**
+(oggi `pending["satellite"]`, regola `sospeso_altro_satellite`: un «sì» breve vale solo lì). La
+proiezione verso il modello lo dice nel blocco dello stato quando la frase arriva da un'altra corsia:
+«proposta aperta sullo studio: da qui non si conferma con un sì breve». La decisione resta di
+`consenso.basta` (macchina a stati § 3.5), non del modello.
+
+**(c) Turni che cambiano proprietario.** Una frase breve finita nel registro anonimo e poi
+riconosciuta, una voce attribuita alla persona sbagliata, la coda della conversazione del passo 0:
+**mai riscrittura**. Un evento `turno_riassegnato {da_registro, seq, a_registro, motivo}` nel
+registro di origine (che da lì non proietta più quel turno) e, nel registro di destinazione, un
+`detto_persona` nuovo con `riassegnato_da` (il testo copiato una volta, con la sua visibilità).
+Chi lo decide: oggi nessuno (la frase resta dove è finita); il progetto prevede solo la porta e la
+riassegnazione **esplicita** (a voce, «ero io», o da chi amministra), non automatica. Prova: una
+frase breve nell'anonimo, riassegnata, sparisce dalla proiezione dell'anonimo e compare in quella
+della persona; l'anonimo non vede eventi della persona.
+
+**(d) Eventi tra persone senza trascinare la conversazione.** L'avviso del guardiano al tutore,
+il risultato di un lavoro, gli annunci della casa: un **evento nuovo** nel registro del
+destinatario con il **solo testo detto** (o da dire) e la fonte, mai un riferimento agli eventi
+dell'altro registro, mai il contenuto del minore (§ 2.5). La conversazione del destinatario non
+si apre «dentro» quella di chi ha generato l'evento: se non ne ha una aperta se ne apre una
+(`conversazione_aperta(come="annuncio")`), come oggi `di_persona(crea=True)`.
+
+**(e) Statistiche globali.** Oggi il registro dei turni è un file al giorno per tutti, con i campi
+`conversazione` e `satellite`. Resta così, come **indice** derivato: ogni `turno_chiuso` di ogni
+registro scrive la sua riga (stessa privacy di oggi), e le frasi non rivolte a Calliope continuano
+a scriverla direttamente (non appartengono a nessun registro). `calliope stato --turni`, il
+cruscotto, l'attrito e le misure leggono l'indice, mai i registri.
+
+**(f) «Dimentica» per persona.** Con un registro per persona diventa una sola operazione
+verificabile: `DELETE FROM eventi WHERE registro = 'persona:<id>'` con `secure_delete` e il
+checkpoint del WAL, più le proiezioni su disco della persona (archivio `turni` per `persona`,
+cronologia delle schede per persona, avvisi ai tutori che la nominano), e il registro in memoria
+svuotato. Il controllo di `calliope stato` conta le righe rimaste con quella chiave (deve essere 0)
+e cerca la frase di prova nei byte dei file (§ 10, punto 1). Il registro dei turni (indice) non ha testo
+delle persone dimenticate oltre la sua tenuta di 30 giorni: «dimentica» toglie anche lì i campi di
+testo delle righe con quell'id (oggi non lo fa: da aggiungere con il passo 5).
 
 ## 3. Le proiezioni
 
@@ -438,11 +517,11 @@ vecchi (risultati oltre 400 caratteri del turno n-2, l'ora): quando succede la r
 
 **CPU per turno**: il fold e la proiezione di una conversazione (al più qualche centinaio di eventi,
 turni definitivi già pronti) costano meno di un millisecondo in Python; la serializzazione per il
-disco gira nel thread dell'archivio. Si misura (`contesto_ms`, § 10.2).
+disco gira nel thread dell'archivio. Si misura (`contesto_ms`, § 10, punto 2).
 
 **Prima frase (principio 6)**: nessuna scrittura su disco nel percorso; l'`append` in memoria prima di
 `say` costa microsecondi; la proiezione si costruisce dove oggi si costruisce `with_memory`. Effetto
-atteso nullo, verificato con l'avviso di `calliope stato --turni` (1,2 s) e con `riletti` (§ 10.5).
+atteso nullo, verificato con l'avviso di `calliope stato --turni` (1,2 s) e con `riletti` (§ 10, punto 5).
 
 ## 6. Invarianti e prove
 
@@ -453,12 +532,15 @@ atteso nullo, verificato con l'avviso di `calliope stato --turni` (1,2 s) e con 
 | **Nessuna domanda fuori da una proposta** | `prova_domande_proposte`: AST sui testi pronti di tool e ciclo, «?» solo negli atti dichiarati e nelle domande rese dalla macchina | `domande_non_registrate`: frasi sentite che finiscono con «?» senza `proposta_aperta` né atto dichiarato (il contenuto del modello conta a parte, come offerta) |
 | **Visibilità** (§ 11.1) | `prova_eventi_visibilita`: banco d'attacco di `prova_politica` e di `prova_valore` rigiocato sul registro; la proiezione del modello non contiene mai eventi `mai`, né `turno` fuori dal loro turno, né le parole della sfida, i codici, le buste di turni passati | `fughe_proiezione` (0) |
 | **Partizione** (§ 11.2) | `prova_eventi_partizione`: due persone (un adulto e un minore di fantasia) e un ospite su due satelliti insieme; nessun evento di una conversazione nella proiezione di un'altra | — |
+| **Un solo scrittore** (§ 2.6 a) | `prova_eventi_due_corsie`: la stessa persona da due satelliti a 100 ms; turni interi, `seq` senza buchi | — |
+| **Satellite d'origine** (§ 2.6 b) | `prova_eventi_satellite`: il «sì» breve da un altro satellite non conferma; il blocco dello stato lo dice | — |
+| **Riassegnazione** (§ 2.6 c) | `prova_eventi_riassegna`: il turno esce dalla proiezione d'origine ed entra in quella di destinazione, nessuna riscrittura | — |
 | **Porte fra conversazioni** (§ 2.5) | `prova_eventi_porte`: ogni scrittura in un registro di un'altra conversazione passa da una porta dichiarata; annuncio del lavoro nel registro di `chi`, coda solo alla stessa chiave, avviso al tutore senza le frasi del minore | `porte` per nome nel registro dei turni |
-| **Proiezioni pure** (§ 10.2) | `prova_proiezioni_pure`: AST, `proiezioni.py` importa solo `eventi.tipi`, `config` e la libreria standard; niente `time`, `random`, attributi di Brain o del ciclo; stessa proiezione due volte e dopo il rigioco dal disco | `contesto_ms` con avviso |
-| **Ogni tipo proiettato o escluso** (§ 10.4) | `prova_eventi_tipi`: ogni tipo in `TIPI` ha una riga in `PROIEZIONE_CONTESTO` (resa o `ESCLUSO` con il motivo) e nel registro dei turni | — |
-| **Dimentica vera** (§ 10.1) | `prova_eventi_dimentica`: dopo «dimentica» la frase di prova («zafferano viola 42») non c'è nel registro, nelle proiezioni, nei file (`conversazioni.db`, WAL, turni, cronologia: ricerca nei byte) | `dimentica_residui` (0) |
-| **Crescita** (§ 10.3) | `prova_eventi_rotazione` | `eventi_mb_giorno` con avviso |
-| **Cache** (§ 10.5) | `prova_eventi_prefisso`: due turni di fila, i messaggi fino al turno n-2 identici byte per byte | `riletti` e `cache_rotta` |
+| **Proiezioni pure** (§ 10, punto 2) | `prova_proiezioni_pure`: AST, `proiezioni.py` importa solo `eventi.tipi`, `config` e la libreria standard; niente `time`, `random`, attributi di Brain o del ciclo; stessa proiezione due volte e dopo il rigioco dal disco | `contesto_ms` con avviso |
+| **Ogni tipo proiettato o escluso** (§ 10, punto 4) | `prova_eventi_tipi`: ogni tipo in `TIPI` ha una riga in `PROIEZIONE_CONTESTO` (resa o `ESCLUSO` con il motivo) e nel registro dei turni | — |
+| **Dimentica vera** (§ 10, punto 1) | `prova_eventi_dimentica`: dopo «dimentica» la frase di prova («zafferano viola 42») non c'è nel registro, nelle proiezioni, nei file (`conversazioni.db`, WAL, turni, cronologia: ricerca nei byte) | `dimentica_residui` (0) |
+| **Crescita** (§ 10, punto 3) | `prova_eventi_rotazione` | `eventi_mb_giorno` con avviso |
+| **Cache** (§ 10, punto 5) | `prova_eventi_prefisso`: due turni di fila, i messaggi fino al turno n-2 identici byte per byte | `riletti` e `cache_rotta` |
 | **Rigioco di un giro vero** | `prova_eventi_rigioco` (livello 3, con Ollama): un giro scritto in eventi (nomi di fantasia) rigiocato col modello locale; il contesto ricostruito uguale a quello registrato | — |
 | **Riavvio** | `prova_eventi_riavvio`: conversazione aperta, proposta aperta, file troncato a metà riga → stessa proiezione, proposta `persa_riavvio`, nessun arresto | — |
 
@@ -508,8 +590,8 @@ partire dopo il passo 4.
   (`applica`). Rischio: un riassunto applicato su eventi cambiati nel frattempo; difesa: il lavoro
   porta il `seq` del taglio (oggi l'identità dell'oggetto `taglio`).
 - **Conversazioni per persona e satelliti insieme**: oggi `RegistroConversazioni.occupa` dà la
-  conversazione a una corsia per turno; gli annunci arrivano da altri thread. Con gli eventi il lock
-  è per conversazione e il `seq` lo assegna il registro (§ 11.7).
+  conversazione a una corsia per turno; gli annunci arrivano da altri thread. Con gli eventi c'è un solo scrittore
+  per registro e il `seq` lo assegna il registro (§ 2.6 a, § 11.7).
 - **Canale scritto**: `detto_calliope.canale` (voce, scritto, muta); per lo scritto «sentito» vuol
   dire «mandato allo schermo», e la proiezione lo tratta come detto.
 - **Backend OpenAI di ripiego**: la proiezione produce gli stessi dizionari di oggi (`role`,
@@ -517,7 +599,7 @@ partire dopo il passo 4.
   ogni passo con tutti e due.
 - **Windows su ARM**: solo Python e `sqlite3` della libreria standard; nessuna dipendenza nuova.
 - **Dimensione**: una conversazione lunga ha più eventi che messaggi (una per frase); tetto e
-  rotazione nel § 10.3.
+  rotazione nel § 10, punto 3.
 - **Due fonti durante la migrazione**: nei passi 1–2 la storia di Brain resta la fonte e gli eventi
   sono l'ombra; dal passo 3 il contrario; mai due fonti che decidono insieme.
 
@@ -534,7 +616,7 @@ partire dopo il passo 4.
   numero, frase di sfida, domande della politica, cortesia senza modello) non lo possono essere.
   Scartata.
 - **Una libreria o un framework di event sourcing**, o un registro esterno: dipendenze in più (ARM),
-  servizi da far girare; il bisogno è una lista per conversazione e una tabella SQLite.
+  servizi da far girare; il bisogno è una lista per persona e una tabella SQLite.
 - **Il registro dei turni come fonte** (allungarlo con tutti gli eventi): ha la privacy e la tenuta
   sbagliate (riga per turno, niente testo degli ospiti, 30 giorni); resta una proiezione.
 
@@ -578,9 +660,12 @@ conserva in modo esplicito e con quale prova.*
    `prova_eventi_visibilita` con il banco d'attacco di `prova_politica` (99) e i 27 attacchi del passo
    1 rigiocati come eventi, più un controllo per ogni turno in ombra (`fughe_proiezione`).
 2. **Isolamento tra persone e conversazioni.** Oggi strutture separate (`RegistroConversazioni`,
-   `ospite:<corsia>`, `occupa`). Conservato **per costruzione**: un registro per conversazione
-   (precisazione di Dario del 10/10), partizionato anche su disco, nessuna API che legga «tutti gli
-   eventi»; ciò che attraversa le conversazioni passa dalle porte del § 2.5. Prova
+   `ospite:<corsia>`, `occupa`). Conservato **per costruzione**: un registro per persona e uno
+   anonimo per satellite (precisazione di Dario del 10/10), partizionato anche su disco, nessuna API che legga «tutti gli
+   eventi»; ciò che attraversa le conversazioni passa dalle porte del § 2.5. Un turno finito nel
+   registro sbagliato (frase breve nell'anonimo poi riconosciuta, voce attribuita alla persona
+   sbagliata, la coda del passo 0) non si riscrive: `turno_riassegnato` (§ 2.6 c, prova
+   `prova_eventi_riassegna`). Prova
    `prova_eventi_partizione` (adulto, minore e ospite di fantasia su due satelliti), con i casi del
    passo 0 (coda all'ospite, proposta intestata a un altro).
 3. **Testo per la voce diverso dal testo mostrato.** Verificato: `pronuncia.py` cambia solo il testo
@@ -608,11 +693,12 @@ conserva in modo esplicito e con quale prova.*
    (finto registro che solleva se lo fa).
 7. **Concorrenza.** Oggi più corsie insieme, annunci dal thread del ciclo, lavori dell'agente da un
    altro thread (che mettono in coda, non scrivono la storia), compressione in secondo piano.
-   Conservato: un lock **per conversazione**; il `seq` lo assegna il registro sotto il lock; i
+   Conservato: un solo scrittore per registro (§ 2.6 a); il `seq` lo assegna il registro sotto il suo lock; i
    thread fuori dal ciclo (agenti, estensioni, installazioni) non scrivono eventi: mettono in coda
    come oggi, e l'evento lo scrive la corsia che lo dice; la compressione scrive il suo evento sul
-   thread della voce (`applica`). Prova con due corsie e un annuncio insieme, ordine e assenza di
-   buchi nei `seq`.
+   thread della voce (`applica`). La stessa persona su due satelliti insieme: due corsie, **un
+   registro**, un solo scrittore per turno (`occupa`, § 2.6 a). Prova `prova_eventi_due_corsie`
+   (due corsie e un annuncio insieme: turni interi, ordine di scrittura, nessun buco nei `seq`).
 8. **Migrazione.** Conversazioni in corso al primo avvio: si importano da `correnti` come eventi
    sintetici (un `detto_persona`/`detto_calliope` per messaggio, `migrato: true`), poi `correnti`
    non si scrive più; l'**archivio** (`turni`) resta com'è e continua a ricevere i turni; le
@@ -630,6 +716,14 @@ conserva in modo esplicito e con quale prova.*
 11. **Il registro dei turni senza testo per gli ospiti e per i minori fermati** (verificato in
     `TurnLog.write` e `_registra_controlli`). Conservato come proiezione con le stesse regole; prova
     che confronta il registro di oggi e quello proiettato su un giro sintetico.
+
+12. **Conferme brevi legate al satellite** (verificato: `pending["satellite"]`, regola
+    `sospeso_altro_satellite`). Con un registro per persona la proposta è visibile da tutti i
+    satelliti della persona; il vincolo resta esplicito: `proposta_aperta.satellite`, il blocco dello
+    stato che lo dice al modello quando la frase arriva da un'altra corsia («aperta sullo studio: da
+    qui non si conferma con un sì breve»), e la decisione in `consenso.basta` (§ 2.6 b). Prova
+    `prova_eventi_satellite`: il «sì» breve dalla cucina non esegue la proposta dello studio, la
+    frase intera con la voce sicura sì, come oggi in `prova_corsie`.
 
 ## 12. Documentazione da aggiornare quando si fanno i passi
 
