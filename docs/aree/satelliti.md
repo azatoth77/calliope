@@ -157,3 +157,20 @@ server la tiene in `Collegamento.riprese` (le ultime 20). Compatibile nei due se
 vecchio ignora i campi e il tipo, un satellite vecchio non li manda (turno senza pause). Prova
 `prove/prova_pause.py` (server vero con un client WebSocket, satellite in Python con un listener
 finto).
+
+## Voice PE e satelliti di Home Assistant (10/10, solo analisi)
+
+Richiesta di Dario: i satelliti open di Home Assistant (Voice PE, ESP32-S3 con ESPHome, Raspberry)
+come satelliti di Calliope. Analisi in [`../ricerche/2026-10-10-wyoming.md`](../ricerche/2026-10-10-wyoming.md),
+nessuna modifica al codice. Esito: quei dispositivi **non parlano Wyoming** ma l'API nativa di
+ESPHome (protobuf su TCP 6053, cifrata con Noise); `wyoming-satellite` è archiviato dal 27/01/2026
+e Wyoming resta solo tra Home Assistant e i servizi. Strada raccomandata: un adattatore ESPHome
+dentro Calliope (`aioesphomeapi`, solo sul server) che fa verso il Voice PE quello che oggi fa Home
+Assistant, dietro `AscoltoRemoto`/`UscitaRemota`: l'audio (due canali, 16 kHz) arriva al server per
+Whisper e CAM++, la risposta va in streaming da un URL HTTP, LED, pulsante, follow-up, timer e
+annunci li guida il firmware dagli eventi. Un dispositivo ha un solo padrone per la voce (HA o
+Calliope). Prima prova in ufficio sulla rete della DGX; a casa serve un ponte finché la DGX è in
+ufficio. Wyoming scritto a mano costa ~100 righe e < 10 ms (`prove/misura_wyoming.py`): utile solo
+per offrire STT e TTS di Calliope alle pipeline di HA. *[Superata in parte la nota del 02/10 sopra:
+«niente Wyoming» resta vero per il nostro protocollo, ma l'adattatore per i satelliti di stanza
+sarà ESPHome, non Wyoming.]*
