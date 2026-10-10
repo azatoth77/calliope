@@ -1559,6 +1559,10 @@ def _esito_ripetuto(primo: str) -> str:
 # parte o torna, detta dall'uscita unica dentro la risposta (atto `argomento_da_parte`)
 ARGOMENTO_DA_PARTE = "Metto da parte {cosa}."
 ARGOMENTO_RIPRESO = "Riprendo {cosa}."
+# Con gli argomenti, nei dati dello sviluppo aperto: passare ad altro non è vietato
+SVILUPPO_ARGOMENTO = (" Se invece chi parla passa a un'altra cosa che non è questo sviluppo (un "
+                      "altro programma, un altro argomento), chiama argomento con azione nuovo "
+                      "insieme ai tool della richiesta: questo sviluppo va in pausa da solo.")
 # «Ricominciamo» con gli eventi accesi: un indizio nei dati del turno, non un comando
 INDIZIO_RICOMINCIAMO = ("La frase è «ricominciamo» o simile: può voler dire ripartire da capo "
                         "con un argomento nuovo (argomento con azione nuovo) oppure riprendere "
@@ -3420,7 +3424,10 @@ class Brain:
         try:
             sv = svs.corrente(chi)
             if sv is not None:
-                return svs.dati_turno(sv)
+                # Con gli argomenti (10/10, § 13, eventi attivi) passare ad altro non è
+                # bloccato: lo sviluppo va in pausa da solo
+                return svs.dati_turno(sv) + (SVILUPPO_ARGOMENTO if Brain.eventi_attivo(self)
+                                             else "")
             if SVILUPPO_RIPRENDI.search(testo or ""):
                 return svs.dati_sospesi(chi)
         except Exception as e:  # noqa: BLE001 — sono solo dati del turno

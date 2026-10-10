@@ -309,9 +309,15 @@ class VoceFinta:
         self.played, self.detto = [], []
         self.interrupted = self.muto = False
         self.turno = 0
+        self.interrompi_dopo = None         # il nome arriva dopo tante frasi sentite
 
     def say(self, t):
         self.detto.append(t)
+        if self.interrupted:
+            return
+        if self.interrompi_dopo is not None and len(self.played) >= self.interrompi_dopo:
+            self.interrupted = True
+            return
         self.played.append(t)
 
     def say_cached(self, t):
@@ -379,6 +385,8 @@ class GiroAttivo:
                 pezzi.append(p)
                 yield p
         for f in split_sentences(flusso()):
+            if self.voce.interrupted:
+                break                         # come il ciclo: lo stream del modello si chiude
             autore, atto = "contenuto", "risposta"
             for testo, a, at in getattr(b, "parlato_marcato", None) or ():
                 if f in testo or testo in f:
@@ -391,6 +399,14 @@ class GiroAttivo:
             self.fughe += int(p.get("fughe") or 0)
         self.fughe += int((rec.get("eventi_ombra") or {}).get("fughe") or 0)
         return "".join(pezzi)
+
+
+def stop(g: GiroAttivo, frase: str = "Calliope, basta."):
+    """«Calliope, basta» dopo un'interruzione: un turno della persona senza Brain."""
+    g.uscita.turno()
+    g.ombra.chiudi_turno({"esito": "interruzione", "testo": frase, "regole": []},
+                         types.SimpleNamespace(text=frase, scritto=None))
+    g.b.dalla_proiezione()
 
 
 def _giro(b) -> GiroAttivo:
