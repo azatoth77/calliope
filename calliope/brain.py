@@ -4742,6 +4742,18 @@ class Brain:
         nome = call.get("name")
         if tools is None or not nome or tools.get(nome) is not None:
             return
+        # `sviluppo_<azione>` inventato (10/10, DGX delle 15:57: `sviluppo_ferma`, e
+        # `sviluppo_chiudi` che qui sotto diventava sviluppo_chiedi): sviluppo_passo con
+        # quell'azione negli argomenti, prima del nome vicino. Regola `tool_nome_azione`
+        from .tools.registry import argomenti_con_azione, nome_con_azione
+        conv = nome_con_azione(nome)
+        if conv is not None and tools.get(conv[0]) is not None:
+            call["name"] = conv[0]
+            call["arguments"] = argomenti_con_azione(conv[1], call.get("arguments"))
+            print(f"   [TOOL] nome con l'azione: {nome} → {conv[0]}({call['arguments']})",
+                  flush=True)
+            self._rule("tool_nome_azione")
+            return
         vicino = getattr(tools, "nome_vicino", None)
         vero = vicino(nome) if vicino is not None else None
         if vero:

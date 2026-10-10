@@ -156,7 +156,10 @@ def capacita(cfg, tipo: str, linguaggi=("python",)) -> str:
             "messaggi, restare acceso in secondo piano.\nLe estensioni di Calliope (funzioni "
             "permanenti che si usano a voce) NON sono lavori di codice ma si possono fare, con "
             "un'altra richiesta: se la richiesta è creare, cambiare o correggere un'estensione, "
-            "in impossibile scrivi solo la parola ESTENSIONE.")
+            "in impossibile scrivi solo la parola ESTENSIONE. Anche un gioco o un minigioco "
+            "(con grafica, animazioni, punti) si fa: è un'estensione con una scheda che si "
+            "gioca sugli schermi di Calliope, e anche lì scrivi solo ESTENSIONE; impossibile "
+            "resta solo un programma con le finestre per il desktop.")
 
 
 SISTEMA = """Sei l'analista delle richieste di lavoro di Calliope, un'assistente vocale di casa. Prima che un agente programmatore cominci, controlli se la richiesta basta per lavorare. Non scrivi codice e non rispondi alla persona: compili il JSON, campo per campo, nell'ordine.

@@ -44,10 +44,29 @@ NOMI_VECCHI = {
     "risultato_lavoro": "lavoro_risultato", "lavori_esegui": "programma_esegui",
     "estensione_crea": "sviluppo_apri", "estensioni_gestisci": "estensione_gestisci",
     "sviluppo": "sviluppo_passo", "sviluppo_prova": "sviluppo_collauda",
-    # Non un nome vecchio ma uno inventato dal 26B tre volte nei giri del 10/10 («che sviluppi
-    # ho aperti?»): vale sviluppo_passo, e senza `azione` risponde l'errore strutturato
-    "sviluppo_stato": "sviluppo_passo",
+    # «sviluppo_stato», inventato dal 26B tre volte nei giri del 10/10 («che sviluppi ho
+    # aperti?»), stava qui fino al 10/10 pomeriggio: ora è uno dei nomi `sviluppo_<azione>`
+    # (tools/sviluppo.azione_dal_nome, regola `tool_nome_azione`), con l'azione dal nome
 }
+
+
+def nome_con_azione(name: str) -> tuple[str, dict] | None:
+    """Un nome inventato con l'azione dentro (`sviluppo_ferma`, `sviluppo_chiudi`, 10/10) →
+    (sviluppo_passo, {"azione": …}); None per gli altri. Solo la famiglia sviluppo: i lavori
+    dell'agente hanno un tool per azione (lavoro_stato, lavoro_annulla…), non un tool con
+    `azione`."""
+    from .sviluppo import azione_dal_nome
+    a = azione_dal_nome(name)
+    return ("sviluppo_passo", {"azione": a}) if a else None
+
+
+def argomenti_con_azione(extra: dict, arguments) -> dict:
+    """Gli argomenti della chiamata con l'azione del nome, se non ne hanno già una valida."""
+    from .sviluppo import azione_dal_nome
+    args = dict(arguments) if isinstance(arguments, dict) else {}
+    if not azione_dal_nome(f"sviluppo_{str(args.get('azione') or '').strip().lower()}"):
+        args.update(extra)
+    return args
 NOME_DISTANZA_MAX = 2
 NOME_LUNGHEZZA_MIN = 6
 NOME_SUGGERIMENTI_MAX = 4
@@ -165,8 +184,12 @@ class ToolRegistry:
         completano (la proposta in sospeso di lavoro_affida, l'esercizio di compiti_aiuto)."""
         spec = self._tools.get(name)
         if spec is None:
-            vero = NOMI_VECCHI.get(name) or self.nome_vicino(name)
-            spec = self._tools.get(vero) if vero else None
+            conv = nome_con_azione(name)
+            if conv is not None and self._tools.get(conv[0]) is not None:
+                spec, arguments = self._tools[conv[0]], argomenti_con_azione(conv[1], arguments)
+            else:
+                vero = NOMI_VECCHI.get(name) or self.nome_vicino(name)
+                spec = self._tools.get(vero) if vero else None
         if spec is None:
             return []
         _, _, err = dialogo.controlla(spec.name, spec.parameters, arguments, spec.func,
@@ -209,6 +232,14 @@ class ToolRegistry:
             note_rule(ctx, "tool_nome_vecchio")
             name = NOMI_VECCHI[name]
             spec = self._tools[name]
+        if spec is None:
+            # `sviluppo_<azione>` inventato (10/10): sviluppo_passo con quell'azione, prima del
+            # nome vicino (`sviluppo_chiudi` è a una lettera da sviluppo_chiedi)
+            conv = nome_con_azione(name)
+            if conv is not None and self._tools.get(conv[0]) is not None:
+                note_rule(ctx, "tool_nome_azione")
+                name, spec = conv[0], self._tools[conv[0]]
+                arguments = argomenti_con_azione(conv[1], arguments)
         if spec is None:
             # Nome storpiato ma senza dubbi: vale il tool giusto, con tutti i controlli qui
             # sotto (politica, livello, minori) come se il modello l'avesse scritto bene

@@ -403,7 +403,8 @@ def _analisi(ctx, svc, prof, tipo: str, compito: str, crea, tool: str, nota: str
         ci_sono = elenco_breve(est) if est is not None else ""
         return {"ok": False, "fatto": f"{NIENTE}: il lavoro NON è stato affidato",
                 "errore": "è un'estensione: si crea o si cambia con sviluppo_apri",
-                "cosa_fare": ("richiama sviluppo_apri con lo stesso compito"
+                "cosa_fare": ("richiama sviluppo_apri con lo stesso compito, tipo estensione "
+                              "(per un gioco anche gioco = true: si gioca sugli schermi)"
                               + (f"; per cambiarne una che c'è, modifica = il suo nome tra "
                                  f"questi: {ci_sono}" if ci_sono else ""))}, e, ""
     if e.esito == "impossibile":

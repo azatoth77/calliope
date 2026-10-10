@@ -729,6 +729,10 @@ class Sviluppi:
         self._salva()
         cosa = "il programma " if sv.tipo == "programma" else ""
         testa = (f"Entriamo in modalità sviluppo per {cosa}«{sv.titolo}». " if prima else "")
+        if sv.gioco:
+            # Un gioco si fa come scheda sugli schermi (10/10, DGX delle 15:56: un gioco chiesto
+            # come programma era «impossibile»): lo si dice, insieme alla specifica
+            testa += "Lo faccio come gioco sugli schermi di Calliope. "
         return f"{testa}Ho capito così: {spec}. Va bene così, o la cambiamo?"
 
     # ─────────────────────────── il contesto conservato (versione 2) ───────────────────────────
