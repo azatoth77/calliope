@@ -775,3 +775,20 @@ di Brain resta la fonte, accanto a ogni conversazione c'è il suo registro e la 
   il checkpoint del WAL.
 
 Misure: prima frase invariata: con Calliope vera in `prova_satellite` (modello e Whisper finti, Piper vero; 3 giri per lato, 27 risposte ciascuno) `prima_frase_s` mediana 0,09 s prima e dopo (media 0,095 → 0,093 s), prima voce sentita mediana 0,37 s uguale, «dalla fine della frase alla prima voce» 0,63–0,77 s prima e 0,68–0,73 s dopo (rumore della macchina); osservatore della voce ~1 µs per frase; `contesto_ms` al più 0,14 ms (24 turni veri della prova) e 0,06 ms sul giro sintetico; su disco ~0,4–0,6 kB per turno di mediana, fino a ~2,5 kB con risultati di tool.
+
+## Le frasi fra le chiamate nella proiezione, e la risposta scritta dagli eventi (10/10, ramo `eventi-passo-2`)
+
+Passo 2 del [registro degli eventi](../ricerche/2026-10-10-registro-eventi.md): l'uscita unica verso
+la voce (`calliope/eventi/uscita.py`, in [voce-e-regole](voce-e-regole.md)). Per la conversazione:
+
+- **Posizione delle chiamate.** Ogni `detto_calliope` ha `dopo_chiamate` (quante chiamate dei tool
+  c'erano già nella risposta quando la frase è andata alla voce) e ogni `chiamata_tool` la sua
+  `passata` (il messaggio dell'assistente della storia di Brain). La proiezione rende un messaggio
+  dell'assistente per passata, con il testo detto prima delle sue chiamate, poi i risultati (in
+  ordine, uno per chiamata: gli id `call_0` si ripetono da una passata all'altra), poi le frasi dette
+  dopo: la stessa forma della storia. Gli eventi del passo 1 (senza i due campi) si rendono come
+  prima (chiamate, risultati, testo).
+- **La risposta scritta** sullo schermo da cui è arrivata la frase viene dalle frasi dell'uscita
+  (`Uscita.testo_scritto()`), le stesse degli eventi, attese escluse.
+- Il contesto del modello resta la storia di Brain (passo 3 dopo): con `eventi: ombra` nulla cambia
+  in ciò che il modello vede.

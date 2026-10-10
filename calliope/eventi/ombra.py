@@ -4,11 +4,12 @@ di docs/ricerche/2026-10-10-registro-eventi.md).
 
 Una `Ombra` per corsia. Non decide niente e non tocca la storia di Brain:
 
-1. **Che cosa è andato alla voce.** La voce della corsia (`tts.Speaker.osservatore`) le dice
-   ogni frase mandata (`say`, `say_cached`) e, a ogni `start_turn`, quali si sono sentite per
-   intero (`played`) e se c'è stata un'interruzione. In memoria, microsecondi: niente disco nel
-   percorso della prima frase. L'atto (quale parte del ciclo ha parlato) si ricava dalla funzione
-   del ciclo che chiama la voce: nel passo 2 lo dirà l'uscita unica (`Uscita.di`).
+1. **Che cosa è andato alla voce.** Dal passo 2 l'uscita unica della corsia
+   (`calliope/eventi/uscita.py`, `Uscita.osservatore`) le dice ogni frase mandata, già con
+   l'atto, l'autore, il canale e la posizione fra le chiamate dei tool (il `detto_calliope` nato
+   all'invio), e, a ogni turno della voce nuovo, quali si sono sentite per intero (`played`) e se
+   c'è stata un'interruzione. In memoria, microsecondi: niente disco nel percorso della prima
+   frase. Nel passo 1 l'atto si ricavava dalla funzione del ciclo che chiamava la voce (pila).
 2. **A turno finito** (`chiudi_turno`, in cima al giro dopo, quando la voce ha finito): il passo 0
    (`misura.misura_finestra`: parlato diverso dalla storia, domande non registrate) nel campo
    `parlato` del registro dei turni; gli eventi del turno nel registro della conversazione
@@ -26,7 +27,6 @@ Non solleva mai: un errore si conta (`errori`) e il turno continua come prima.
 from __future__ import annotations
 
 import json
-import sys
 import threading
 import time
 import weakref
@@ -34,7 +34,7 @@ import weakref
 from . import misura, proiezioni
 from .registro import (Registri, porta_annuncio, porta_avviso_tutore, porta_coda,
                        porte_usate)
-from .tipi import per_disco
+from .tipi import e_annuncio, per_disco
 
 SPENTO, OMBRA, ATTIVO = "spento", "ombra", "attivo"
 MODI = (SPENTO, OMBRA)
@@ -47,52 +47,12 @@ def modo(cfg) -> str:
     return m if m in MODI else OMBRA
 
 
-# La funzione del ciclo che ha chiamato la voce → l'atto (§ 1.1, § 4.2)
-ATTI = {
-    "_di_frase": "risposta", "_ricerca_promessa": "risposta",
-    "_rispondi": "errore", "errore_nel_giro": "errore",
-    "_chiusure": "cortesia",
-    "_secondo_cancello": "protezione_cancello",
-    "richieste_al_tutore": "richiesta_tutore",
-    "_annuncia_documenti": "annuncio", "_annuncia_installazioni": "annuncio",
-    "_annuncia_lavori": "annuncio", "_annuncia_estensioni": "annuncio",
-    "_cassetto_dopo": "cassetto", "_modulo_dallo_schermo": "modulo",
-    "_annuncia_agenda": "agenda", "avvisi_ai_tutori": "avviso_tutore",
-    "_inizio_giro": "registrazione", "_esito_registrazione": "registrazione",
-    "_arruolamento": "registrazione", "_dopo_la_risposta": "registrazione",
-    "_inizia_primo_utente": "registrazione", "_nome_reale": "registrazione",
-    "_solo_il_nome": "saluto", "_chiedi_chi_parla": "chi_parla",
-    "_senza_domanda": "senza_domanda",
-    "_fuori_orario": "protezione", "_protezione_dopo": "protezione",
-    "_annuncia_giochi": "giochi",
-    "_addormentati": "chiusura", "_uscite": "chiusura", "_esci_dalla_registrazione": "chiusura",
-    "_saluto_ed_eco": "saluto_avvio",
-}
-_FILE_CICLO = ("ciclo.py", "main.py")
 # Esiti del turno con la frase della persona nella conversazione (oggi entra nella storia)
 ESITI_PERSONA = frozenset({"risposta", "interruzione", "cortesia", "protezione",
                            "non_rivolta", "modulo"})
 # Esiti che chiudono la conversazione: la frase e la chiusura vanno nel segmento che si chiude
 ESITI_CHIUSURA = frozenset({"dormi", "uscita", "nuova_conversazione"})
 FINESTRA_MAX = 400                  # frasi in memoria al più (un ciclo finto che non chiude mai)
-
-
-def atto_del_chiamante(tipo: str, profondita: int = 12) -> str:
-    """Il nome dell'atto dalla funzione del ciclo che ha chiamato la voce. `say_cached` è una
-    frase d'attesa, tranne la cortesia («Prego!»)."""
-    f = sys._getframe(2)
-    nome = None
-    for _ in range(profondita):
-        if f is None:
-            break
-        co = f.f_code
-        if co.co_name in ATTI and co.co_filename.endswith(_FILE_CICLO):
-            nome = co.co_name
-            break
-        f = f.f_back
-    if tipo == "cached":
-        return "cortesia" if nome == "_chiusure" else "attesa"
-    return ATTI.get(nome, "altro") if nome else "altro"
 
 
 def _forma_brain() -> proiezioni.Forma:
@@ -165,21 +125,15 @@ class Ombra:
         self._riporto: dict = {}
         self._forma = None
 
-    # ── 1. che cosa va alla voce (dal thread di chi chiama say) ──
-    def collega(self, speaker):
-        try:
-            speaker.osservatore = self.sente
-        except Exception:  # noqa: BLE001 — una voce finta senza attributi
-            pass
+    # ── 1. che cosa va alla voce (dall'uscita unica, nel thread di chi parla) ──
+    def collega(self, uscita):
+        uscita.osservatore = self.sente
 
-    def sente(self, tipo: str, testo=None, played=None, interrotta=False, muto=False):
-        """Dalla voce: «say» e «cached» (una frase mandata), «fine» (le frasi sentite per
-        intero del pezzo che si chiude). In memoria e basta."""
+    def sente(self, item):
+        """Dall'uscita unica: ("frase", detto) per una frase mandata (il detto_calliope nato
+        all'invio), ("fine", played, interrotta) per il pezzo che si chiude. In memoria e
+        basta."""
         try:
-            if tipo == "fine":
-                item = ("fine", list(played or ()), bool(interrotta))
-            else:
-                item = (tipo, str(testo or ""), atto_del_chiamante(tipo), bool(muto))
             with self._lock:
                 if len(self._finestra) < FINESTRA_MAX:
                     self._finestra.append(item)
@@ -212,24 +166,20 @@ class Ombra:
         """I pezzi di voce della finestra, fra un `start_turn` e l'altro, con le frasi sentite
         per intero (tutte senza interruzione; con l'interruzione quelle in `played`)."""
         speaker = getattr(self.c, "speaker", None)
-        scritto = t is not None and getattr(t, "scritto", None) is not None
         pezzi: list[dict] = []
-        cur: list[tuple] = []
+        cur: list[dict] = []
 
         def chiudi(played, interrotta):
             if not cur:
                 return
-            frasi = []
-            for tipo, testo, atto, muto in cur:
-                canale = "muta" if muto else ("scritto" if scritto and atto == "risposta"
-                                               else "voce")
-                frasi.append((testo, atto, canale, tipo))
+            frasi = [(str(d.get("testo") or ""), d.get("atto"), d.get("canale") or "voce",
+                      bool(d.get("pronta"))) for d in cur]
             k = len(frasi)
             if interrotta:
                 sentito = _norm(" ".join(played or ()))
                 k, pos = 0, 0
-                for testo, _a, _c, tipo in frasi:
-                    if tipo == "cached":
+                for testo, _a, _c, pronta in frasi:
+                    if pronta:
                         k += 1
                         continue
                     n = _norm(testo)
@@ -241,14 +191,15 @@ class Ombra:
                     else:
                         break
             pezzi.append({"frasi": [(a, b, c) for a, b, c, _ in frasi], "sentite": k,
-                          "inviate": len(frasi), "interrotta": bool(interrotta)})
+                          "inviate": len(frasi), "interrotta": bool(interrotta),
+                          "detti": list(cur)})
             cur.clear()
 
         for item in finestra:
             if item[0] == "fine":
                 chiudi(item[1], item[2])
-            else:
-                cur.append(item)
+            elif item[0] == "frase" and isinstance(item[1], dict):
+                cur.append(item[1])
         if cur:
             chiudi(list(getattr(speaker, "played", None) or ()),
                    bool(getattr(speaker, "interrupted", False)))
@@ -329,8 +280,8 @@ class Ombra:
         atti = {a for p in pezzi for _t, a, _c in p["frasi"]}
         persona = (rec or {}).get("esito") in ESITI_PERSONA
         try:
-            if not persona and atti and atti <= misura.ANNUNCI | {"attesa"} \
-                    and "avviso_tutore" not in atti:
+            if not persona and atti and all(e_annuncio(a) or a in misura.VOLUTI for a in atti) \
+                    and any(e_annuncio(a) for a in atti) and "avviso_tutore" not in atti:
                 return porta_annuncio(self.registri, chiave)
             if not persona and atti == {"avviso_tutore"} and chiave.startswith("persona:"):
                 return porta_avviso_tutore(self.registri, chiave)
@@ -531,22 +482,23 @@ class Ombra:
                     add("turno_escluso", escluso=persona.seq, motivo="non_rivolta")
                 elif not solo_chiusura and turni_s is not None:
                     scritti += self._dalla_storia(reg, conv, persona, info, turni_s, add)
-        # Ciò che è andato alla voce, frase per frase, e quanto si è sentito
+        # Ciò che è andato alla voce, frase per frase, e quanto si è sentito: i detto_calliope
+        # nati all'invio nell'uscita unica (autore, atto, canale, posizione fra le chiamate)
         for p in pezzi:
-            frasi = [(i, f) for i, f in enumerate(p["frasi"])
-                     if not solo_chiusura or f[1] == "chiusura"]
+            detti = p.get("detti") or [{"testo": a, "atto": b, "canale": c}
+                                       for a, b, c in p["frasi"]]
+            frasi = [(i, d) for i, d in enumerate(detti)
+                     if not solo_chiusura or d.get("atto") == "chiusura"]
             if not frasi:
                 continue
             da = st.get("frase", 0)
-            for i, (testo_f, atto, canale) in frasi:
-                autore = "contenuto" if atto == "risposta" else "atto"
-                if atto == "risposta" and any(_norm(testo_f) and _norm(testo_f) in _norm(f)
-                                              for f, _s in info.get("frasi_tool") or ()):
-                    autore = "esito"
-                add("detto_calliope", testo=testo_f, autore=autore, atto=atto,
-                    frase=st.get("frase", 0), canale=canale, satellite=sat,
-                    vis="registro" if atto in proiezioni.ATTI_FUORI else None,
-                    **riservato(testo_f))
+            for i, d in frasi:
+                testo_f, atto = str(d.get("testo") or ""), d.get("atto")
+                extra = {k: d[k] for k in ("fonte", "dopo_chiamate") if d.get(k) is not None}
+                add("detto_calliope", testo=testo_f, autore=d.get("autore") or "atto",
+                    atto=atto, frase=st.get("frase", 0), canale=d.get("canale") or "voce",
+                    satellite=sat, vis="registro" if atto in proiezioni.ATTI_FUORI else None,
+                    **extra, **riservato(testo_f))
                 st["frase"] = st.get("frase", 0) + 1
             add("voce_fine", da=da, inviate=len(frasi), sentite=min(p["sentite"], len(frasi)),
                 interrotta=p["interrotta"])
@@ -598,12 +550,15 @@ class Ombra:
             if tipo == "dato_in_ingresso":
                 dati["fonte"] = "busta"
             scritti.append(add(tipo, **dati))
+        passata = 0
         for m in msgs:
             if m.get("role") == "assistant" and m.get("tool_calls"):
                 for c in m["tool_calls"]:
                     if isinstance(c, dict):
                         scritti.append(add("chiamata_tool", id=c.get("id"), nome=c.get("name"),
-                                           argomenti=c.get("arguments") or {}))
+                                           argomenti=c.get("arguments") or {},
+                                           passata=passata))
+                passata += 1
             elif m.get("role") == "tool":
                 scritti.append(add("esito_tool", id=m.get("tool_call_id"), nome=m.get("name"),
                                    contenuto=str(m.get("content") or "")))

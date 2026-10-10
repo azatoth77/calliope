@@ -315,7 +315,8 @@ def prova_sfida_su_disco():
                                                                         nome="locale"),
             speaker_ctx=None, rule=lambda n: None)
         o = Ombra(types.SimpleNamespace(eventi="ombra"), r, c, log=lambda m: None)
-        o._finestra.append(("say", "Per conferma ripeti: girasole, treno.", "risposta", False))
+        o.sente(("frase", {"testo": "Per conferma ripeti: girasole, treno.", "atto": "sfida",
+                           "autore": "atto", "canale": "voce"}))
         t = types.SimpleNamespace(text="Calliope, cancella il documento.", scritto=None)
         o.chiudi_turno({"esito": "risposta", "regole": ["sfida_voce"]}, t)
         d.db.commit()
@@ -328,7 +329,8 @@ def prova_sfida_su_disco():
         conv.history += [{"role": "user", "content": "Il codice è 123456."},
                          {"role": "assistant", "content": "Abbinato."}]
         t.text = "Il codice è 123456."
-        o._finestra.append(("say", "Abbinato.", "risposta", False))
+        o.sente(("frase", {"testo": "Abbinato.", "atto": "risposta", "autore": "esito",
+                           "canale": "voce"}))
         o.chiudi_turno({"esito": "risposta", "regole": []}, t)
         dentro = b"123456" in Path(tmp, "c.db").read_bytes() + (
             Path(tmp, "c.db-wal").read_bytes() if Path(tmp, "c.db-wal").exists() else b"")

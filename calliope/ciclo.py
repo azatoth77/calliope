@@ -40,6 +40,9 @@ from .cassetto import CassettoPieno
 from .agenda import announcement
 from .compressione import FRASE_DURA
 from .eventi import ombra as ombra_mod
+from .eventi.misura import norm as _norm_frase
+from .eventi.uscita import per_voce
+from .tools.dialogo import FRASI_CORREZIONE
 from .config import Config, DEEPEN_WORDS, SEARCH_PROMISE
 from .immagini import FOTO_IN_ATTESA, FOTO_NON_VISTA, Immagine
 from .schermi import schede as schede_foto
@@ -283,11 +286,25 @@ class Ciclo:
         if ombra_mod.modo(servizi.cfg) != ombra_mod.SPENTO:
             self.ombra = ombra_mod.Ombra(servizi.cfg, servizi.eventi, self,
                                          log=lambda m: print(m, flush=True))
-            self.ombra.collega(speaker)
+        # L'uscita unica verso la voce (10/10, passo 2, calliope/eventi/uscita.py): ogni frase
+        # della corsia passa da lì, con l'atto e l'autore; l'ombra la sente da lì
+        _ = self.uscita
         self._collega_voce()
         if self.listener is not None and not getattr(self.listener, "remoto", False)                 and hasattr(self.listener, "ripresa_muto"):
             # In locale le casse sono qui: la voce di Calliope e i suoni non sono una ripresa
             self.listener.ripresa_muto = self._casse_occupate
+
+    # ── l'uscita unica verso la voce (10/10, passo 2 del registro degli eventi) ──
+    @property
+    def uscita(self):
+        """L'uscita della voce di questa corsia (`eventi.uscita.per_voce`): la stessa per tutto
+        ciò che la corsia dice. Se la voce cambia (le prove la sostituiscono) segue la voce."""
+        u = per_voce(self.speaker, log=lambda m: print(m, flush=True))
+        u.cervello = getattr(self, "brain", None)
+        ombra = getattr(self, "ombra", None)
+        if ombra is not None and u.osservatore is None:
+            ombra.collega(u)
+        return u
 
     # ── stato della voce sugli schermi ──
     def stanza_voce(self) -> str | None:
@@ -660,12 +677,12 @@ class Ciclo:
         self.proteggi(minore, seg.categorie, self.rec, motivo="secondo_cancello",
                       voce_incerta=seg.voce_incerta,
                       compagnia=bool(getattr(seg, "compagnia", False)))
-        speaker = self.speaker
-        speaker.start_turn()
+        u = self.uscita
+        u.turno()
         self.protezione_in_corso = True
         try:
-            speaker.say(guardia.PROTEZIONE)
-            speaker.wait()
+            u.di(guardia.PROTEZIONE, "protezione_cancello")
+            u.aspetta()
         finally:
             self.protezione_in_corso = False
         self.rec["risposta"] = guardia.PROTEZIONE
@@ -682,7 +699,7 @@ class Ciclo:
     def avvisi_ai_tutori(self, nome):
         """Gli avvisi per chi ha appena parlato, se è un tutore riconosciuto dalla voce: con il
         segnale, dopo la risposta. Una volta al giorno anche i promemoria dell'impronta."""
-        cfg, registry, speaker = self.s.cfg, self.s.registry, self.speaker
+        cfg, registry, u = self.s.cfg, self.s.registry, self.uscita
         controllo_impronte = self.s.controllo_impronte
         av = minori.avvisi()
         if av is None:
@@ -721,11 +738,11 @@ class Ciclo:
             self._avvisi_accennati.update(a["id"] for a in rinviati)
         if lista or nuovi:
             self.rule("avviso_tutore")
-            speaker.start_turn()
-            speaker.chime()
-            speaker.say(" ".join(x for x in (av.frase(lista) if lista else "",
-                                             AVVISO_PRIVATO if nuovi else "") if x))
-            speaker.wait()
+            u.turno()
+            u.segnale()
+            u.di(" ".join(x for x in (av.frase(lista) if lista else "",
+                                      AVVISO_PRIVATO if nuovi else "") if x), "avviso_tutore")
+            u.aspetta()
         self.richieste_al_tutore(prof)
 
     def richieste_al_tutore(self, prof):
@@ -741,7 +758,7 @@ class Ciclo:
         (a «che ore sono?» il 26B rispondeva «Mi hai interrotta…»). Ora le richieste elencate
         dal tool in questa risposta contano come dette, e dopo una risposta che chiede
         qualcosa (Brain.ultima_domanda) la richiesta aspetta una risposta dopo."""
-        brain, registry, speaker = self.brain, self.s.registry, self.speaker
+        brain, registry, u = self.brain, self.s.registry, self.uscita
         rq = minori.richieste()
         if rq is None or minori.e_minore(prof) or brain.has_pending():
             return
@@ -782,9 +799,9 @@ class Ciclo:
                      + rq.frase(r, nome_m) + ". Va bene?")
         self.rule("richiesta_al_tutore")
         print(f"   [MINORI] richiesta R{r['id']} detta a {prof.name}", flush=True)
-        speaker.start_turn()
-        speaker.say(frase)
-        speaker.wait()
+        u.turno()
+        u.di(frase, "richiesta_tutore")
+        u.aspetta()
         args = {"nome": nome_m, "azione": "approva_richiesta", "valore": f"R{r['id']}"}
         brain.record_announcement(frase, {
             "tool": "minore_gestisci", "argomenti": args, "domanda": "Va bene?",
@@ -815,9 +832,10 @@ class Ciclo:
             self._scrivi_turno(self.rec)
             self.rec = None
         try:
-            self.speaker.start_turn()
-            self.speaker.say("Scusa, ho avuto un problema.")
-            self.speaker.wait()
+            u = self.uscita
+            u.turno()
+            u.di("Scusa, ho avuto un problema.", "errore")
+            u.aspetta()
         except Exception:  # noqa: BLE001 — anche la voce può essere il guasto
             pass
         if len(errori) >= ERRORI_MAX:
@@ -867,6 +885,7 @@ class Ciclo:
         if not t.guided and self._annunci_pronti():
             self._di_gli_annunci()
             return None
+        self.uscita.persona(scritto=False)    # le frasi per lo schermo ripartono
         foto = None          # lo stato del dialogo prima delle fasi che decidono da sole
         for fase in (self._prendi_scritto, self._scritto_senza_domanda, self._ascolta,
                      self._trascrivi, self._chi_parla, self._compagnia_senza_nome,
@@ -954,9 +973,8 @@ class Ciclo:
             name_exp = speaker_ctx.enrolling_name
             speaker_ctx.stop_enroll()
             print(f"   [SPEAKER] Registrazione di «{name_exp}» scaduta.", flush=True)
-            self.speaker.start_turn()     # fuori da un turno (10/10, vedi _di_e_aspetta)
-            self.speaker.say("La registrazione della voce è scaduta: se vuoi, chiedimela di nuovo.")
-            self.speaker.wait()
+            self.uscita.di_e_aspetta("La registrazione della voce è scaduta: se vuoi, "
+                                     "chiedimela di nuovo.", "registrazione")
         if self.pending_real_name is not None and time.monotonic() > self._nome_vero_fino:
             # «Vuoi dirmi il tuo nome?» senza risposta (10/10): l'attesa finisce, il profilo
             # resta com'è (si rinomina più tardi a voce, rinomina_interlocutore)
@@ -1002,31 +1020,33 @@ class Ciclo:
 
     def _di_gli_annunci(self):
         self.sveglia.clear()
-        self.speaker.start_turn()     # un turno della voce suo (10/10, vedi _di_e_aspetta)
+        u = self.uscita
+        u.persona(scritto=False)
+        u.turno()                     # un turno della voce suo (10/10, quarto giro)
         self._annuncia_agenda()
         self._annuncia_documenti()
         self._annuncia_installazioni()
         self._annuncia_lavori()
         self._annuncia_estensioni()
         self._annuncia_giochi()
-        self.speaker.wait()
+        u.aspetta()
         self.awake_until = time.monotonic() + self.s.cfg.followup_s   # per rispondere senza nome
         self._finestra_dal_nome = False
         self.rec = None
 
     def _annuncia_agenda(self):
-        coda, speaker = self.annunci.agenda, self.speaker
+        coda, u = self.annunci.agenda, self.uscita
         while not coda.empty():
             item = coda.get_nowait()
             msg = announcement(item)
             print(f"\n   [AGENDA] {msg}", flush=True)
             # Dal satellite da cui era stato chiesto, se è collegato (04/10)
             self.s.instradamento.annuncia_verso(("agenda", item.get("id")))
-            speaker.chime()
-            speaker.say(msg)
+            u.segnale()
+            u.di(msg, "annuncio_agenda")
 
     def _annuncia_documenti(self):
-        coda, speaker, brain = self.annunci.documenti, self.speaker, self.brain
+        coda, u, brain = self.annunci.documenti, self.uscita, self.brain
         while coda is not None and not coda.empty():
             done_item = coda.get_nowait()
             if self.rinvia(coda, done_item):
@@ -1036,8 +1056,8 @@ class Ciclo:
             self.s.instradamento.annuncia_verso(persona=done_item.get("owner"))
             # Nella conversazione di chi l'aveva chiesto (06/10, corsie.py)
             self.corsia.annuncio_per(brain, done_item.get("owner"))
-            speaker.chime()
-            speaker.say(msg)
+            u.segnale()
+            u.di(msg, "annuncio_documento")
             # Nella storia: a «sì, aprilo» il modello sa quale documento; «La apro?»
             # diventa un'azione in sospeso per il turno dopo
             brain.record_announcement(msg, done_item.get("in_sospeso"), fonte=None)
@@ -1045,7 +1065,7 @@ class Ciclo:
     def _annuncia_installazioni(self):
         """Installazioni finite: si attivano qui (thread della corsia), poi l'annuncio; nel
         registro dei turni chi, cosa, quando ed esito."""
-        coda, speaker = self.annunci.installazioni, self.speaker
+        coda, u = self.annunci.installazioni, self.uscita
         while coda is not None and not coda.empty():
             item = coda.get_nowait()
             msg = self.s.installazioni.completa(item) if item["annuncia"] else ""
@@ -1054,15 +1074,15 @@ class Ciclo:
                                 "risposta": msg or None})
             if msg:
                 print(f"\n   [INSTALLA] {msg}", flush=True)
-                speaker.chime()
-                speaker.say(msg)
+                u.segnale()
+                u.di(msg, "annuncio_installazione")
                 self.brain.record_announcement(msg, fonte=None)
 
     def _annuncia_lavori(self):
         """Lavori dell'agente finiti: segnale, frase breve (mai il codice: quello è sullo
         schermo e nei file), nella storia per «aprilo» e «cosa hai fatto?», e una riga nel
         registro dei turni."""
-        s, coda, speaker, brain = self.s, self.annunci.lavori, self.speaker, self.brain
+        s, coda, u, brain = self.s, self.annunci.lavori, self.uscita, self.brain
         while coda is not None and not coda.empty():
             item = coda.get_nowait()
             if self.rinvia(coda, item):
@@ -1087,8 +1107,8 @@ class Ciclo:
             print(f"\n   [AGENTI] {msg}", flush=True)
             s.instradamento.annuncia_verso(persona=item.get("chi"))
             self.corsia.annuncio_per(brain, item.get("chi"))
-            speaker.chime()
-            speaker.say(msg)
+            u.segnale()
+            u.di(msg, "annuncio_lavoro", fonte="agente")
             # Una domanda dell'agente («… ho una domanda: …?») diventa un'azione in
             # sospeso: la risposta nel turno dopo va a lavoro_rispondi. Il riassunto è
             # dell'agente: dato non fidato (calliope/provenienza.py)
@@ -1097,7 +1117,7 @@ class Ciclo:
     def _annuncia_estensioni(self):
         """Estensioni che il tool non ha aspettato: il risultato, o l'azione pericolosa che
         aspetta il «sì» (diventa un'azione in sospeso, come le domande dei lavori)."""
-        s, coda, speaker, brain = self.s, self.annunci.estensioni, self.speaker, self.brain
+        s, coda, u, brain = self.s, self.annunci.estensioni, self.uscita, self.brain
         while coda is not None and not coda.empty():
             item = coda.get_nowait()
             if self.rinvia(coda, item):
@@ -1114,8 +1134,8 @@ class Ciclo:
                                                                  if k != "messaggio"},
                            "risposta": msg})
             print(f"\n   [ESTENSIONI] {msg}", flush=True)
-            speaker.chime()
-            speaker.say(msg)
+            u.segnale()
+            u.di(msg, "annuncio_estensione", fonte="estensione")
             brain.record_announcement(msg, item.get("in_sospeso"), fonte="estensione")
 
     def _annuncia_giochi(self):
@@ -1134,7 +1154,7 @@ class Ciclo:
             print(f"\n   [GIOCHI] «{item.get('titolo')}»: "
                   f"{'(frase di un gioco di un minore)' if item.get('minore') else msg}",
                   flush=True)
-            self.speaker.say(msg)
+            self.uscita.di(msg, "annuncio_gioco")
 
     # ── fase 1: scrivere invece di parlare ──
     def _prendi_scritto(self, t):
@@ -1169,6 +1189,7 @@ class Ciclo:
             print(f"   [SCHERMI] risposta {'solo scritta' if come == 'muta' else 'qui'}"
                   f" per lo schermo «{scritto.get('schermo')}»", flush=True)
         t.scritto = scritto
+        self.uscita.persona(scritto=True)
         return None
 
     def _scritto_senza_domanda(self, t):
@@ -1185,10 +1206,12 @@ class Ciclo:
 
     def _senza_domanda(self, t, frase: str):
         """La frase detta (e scritta sullo schermo) per un file o una foto senza domanda."""
-        self.s.instradamento.risposta_scritta(t.scritto, "", frase)
-        self.speaker.start_turn()
-        self.speaker.say(frase)
-        self.speaker.wait()
+        u = self.uscita
+        u.turno()
+        u.di(frase, "senza_domanda")
+        # Sullo schermo ciò che è andato alla voce (dagli eventi, § 3.5): prima di aspettarla
+        self.s.instradamento.risposta_scritta(t.scritto, "", u.testo_scritto())
+        u.aspetta()
         self.rec["risposta"] = frase
         self.awake_until = time.monotonic() + self.s.cfg.followup_s
         return _FINE
@@ -1321,15 +1344,16 @@ class Ciclo:
             return
         frase = " ".join(frasi)
         print(f"   [CASSETTO] {frase}", flush=True)
-        self.speaker.start_turn()
-        self.speaker.say(frase)
-        self.speaker.wait()
+        u = self.uscita
+        u.turno()
+        u.di(frase, "annuncio_cassetto")
+        u.aspetta()
         # Nella storia: a «tienili tutti» il modello sa di quali file si parla
         self.brain.record_announcement(frase, fonte=None)
 
     def _modulo_dallo_schermo(self, t):
         """Un modulo inviato: dritto al tool che l'aveva chiesto (schermi/moduli.py)."""
-        scritto, brain, speaker = t.scritto, self.brain, self.speaker
+        scritto, brain, u = t.scritto, self.brain, self.uscita
         self.voce("pensa")
         # Il modulo è della conversazione della persona (06/10, corsie.py)
         self.corsia.turno(brain, None, "schermo", True, persona_id=scritto.get("persona"))
@@ -1340,10 +1364,10 @@ class Ciclo:
               f"({', '.join(self.rec['campi'])})")
         if esito["frase"]:
             print(f"{self.s.cfg.name}: {oscura(esito['frase'])}", flush=True)
-            self.s.instradamento.risposta_scritta(scritto, "", esito["frase"])
-            speaker.start_turn()
-            speaker.say(esito["frase"])
-            speaker.wait()
+            u.turno()
+            u.di(esito["frase"], "modulo")
+            self.s.instradamento.risposta_scritta(scritto, "", u.testo_scritto())
+            u.aspetta()
             self.rec["risposta"] = oscura(esito["frase"])
         self.awake_until = time.monotonic() + self.s.cfg.followup_s
         return _FINE
@@ -1378,7 +1402,7 @@ class Ciclo:
             # solo le frasi rivolte a Calliope; con quella testuale si aspetta il nome (sotto)
             if s.suoni is not None and s.satelliti is None and s.wake is not None \
                     and not t.guided:
-                self.speaker.suono_ascolto(s.suoni, FINE)
+                self.uscita.segnale_ascolto(s.suoni, FINE)
             t.in_session = listener.started_at <= self.awake_until   # nella finestra
             started = time.time() - (time.monotonic() - listener.started_at)
         else:
@@ -1400,8 +1424,9 @@ class Ciclo:
         # cortesia, registrazione della voce, «Sì?», la frase d'attesa di Whisper su CPU).
         # Il satellite scarta le frasi di un turno non oltre l'ultimo fermato: al turno 0 di
         # una corsia nuova, o in un turno già fermato quando ha sentito il nome, la frase
-        # non si sentiva (10/10, quarto giro: «ricominciamo» al turno 0)
-        self.speaker.start_turn()
+        # non si sentiva (10/10, quarto giro: «ricominciamo» al turno 0). Dal passo 2 l'uscita
+        # unica apre comunque un turno per un atto detto senza (Uscita.di)
+        self.uscita.turno()
         return None
 
     # ── fase 3: trascrizione ──
@@ -1906,9 +1931,10 @@ class Ciclo:
         frase = CHI_PARLA.format(adulto=inc[0], minore=inc[1])
         print(f"   [VOCE] incerta con un'azione in sospeso: chiedo chi parla", flush=True)
         self.rule("voce_incerta_chiede")
-        self.speaker.start_turn()
-        self.speaker.say(frase)
-        self.speaker.wait()
+        u = self.uscita
+        u.turno()
+        u.di(frase, "chi_parla")
+        u.aspetta()
         self.rec.update(esito="chi_parla", risposta=frase)
         self.awake_until = time.monotonic() + self.s.cfg.followup_s
         return True
@@ -1940,7 +1966,7 @@ class Ciclo:
     # ── fase 6: registrazione della voce e nome del primo utente ──
     def _arruolamento(self, t):
         """Una frase della registrazione della voce (o il suo annullo)."""
-        s, cfg, speaker_ctx, speaker = self.s, self.s.cfg, self.speaker_ctx, self.speaker
+        s, cfg, speaker_ctx, u = self.s, self.s.cfg, self.speaker_ctx, self.uscita
         if not speaker_ctx.is_enrolling:
             return None
         text = t.text
@@ -1948,8 +1974,8 @@ class Ciclo:
         enrolling_name = speaker_ctx.enrolling_name
         if re.match(r"\W*(annulla|basta|stop|lascia stare)\b", text, re.I):
             speaker_ctx.stop_enroll()
-            speaker.say("Va bene, registrazione annullata.")
-            speaker.wait()
+            u.di("Va bene, registrazione annullata.", "registrazione")
+            u.aspetta()
             return _FINE
         # Anche qui le uscite valgono: il 26/09 «Calliope, esci» veniva preso come frase
         # di registrazione (troppo breve) e Calliope restava accesa. «Esci» annulla e
@@ -1968,8 +1994,9 @@ class Ciclo:
             # Il promemoria una volta sola: con la TV accesa non si ripete a ogni frase
             if enrolling_name not in self.enroll_reminded:
                 self.enroll_reminded.add(enrolling_name)
-                speaker.say("Comincia la frase con il mio nome, così so che parli a me.")
-                speaker.wait()
+                u.di("Comincia la frase con il mio nome, così so che parli a me.",
+                     "registrazione")
+                u.aspetta()
             return _FINE
         done = speaker_ctx.enroll_sample(t.audio, cfg.sample_rate, voiced_s=t.voiced_s)
         self._esito_registrazione(done, enrolling_name)
@@ -1981,54 +2008,57 @@ class Ciclo:
         if how == "spegni":
             self.rec["esito"] = "uscita"
             self._scrivi_turno(self.rec)
-            self.speaker.say("Registrazione annullata. Mi spengo: a presto!")
-            self.speaker.wait()
+            u = self.uscita
+            u.di("Registrazione annullata. Mi spengo: a presto!", "chiusura")
+            u.aspetta()
             return "esci"
         self.rec["esito"] = "dormi"
         if self.s.schermi is not None:
             self.s.schermi.conversazioni.chiudi(self.corsia.chiave_schermi)
-        self.speaker.say("Registrazione annullata. " + (
-            SPEGNI_SATELLITE_MSG if how == "spegni_satellite" else "Chiamami quando vuoi."))
-        self.speaker.wait()
+        u = self.uscita
+        u.di("Registrazione annullata. " + (
+            SPEGNI_SATELLITE_MSG if how == "spegni_satellite" else "Chiamami quando vuoi."),
+            "chiusura")
+        u.aspetta()
         self.brain.end_conversation()
         self.awake_until, self.last_question = 0.0, None
         return _FINE
 
     def _esito_registrazione(self, done, enrolling_name):
-        speaker, speaker_ctx = self.speaker, self.speaker_ctx
+        u, speaker_ctx = self.uscita, self.speaker_ctx
         if done == "scaduto":
-            speaker.say("La registrazione della voce è scaduta: se vuoi, chiedimela "
-                        "di nuovo.")
-            speaker.wait()
+            u.di("La registrazione della voce è scaduta: se vuoi, chiedimela di nuovo.",
+                 "registrazione")
+            u.aspetta()
         elif done == "non_somiglia":
-            speaker.say(f"Questa voce non somiglia a quella di {enrolling_name}: deve "
-                        f"parlare {enrolling_name}. {speaker_ctx.enroll_prompt}")
-            speaker.wait()
+            u.di(f"Questa voce non somiglia a quella di {enrolling_name}: deve "
+                 f"parlare {enrolling_name}. {speaker_ctx.enroll_prompt}", "registrazione")
+            u.aspetta()
         elif done == "breve":
-            speaker.say(f"Un po' più lunga, per favore. {speaker_ctx.enroll_prompt}")
-            speaker.wait()
+            u.di(f"Un po' più lunga, per favore. {speaker_ctx.enroll_prompt}", "registrazione")
+            u.aspetta()
         elif done.startswith("altra_voce:"):
             other = done.split(":", 1)[1]
-            speaker.say(f"Questa mi sembra la voce di {other}. Deve parlare "
-                        f"{enrolling_name}: {speaker_ctx.enroll_prompt}")
-            speaker.wait()
+            u.di(f"Questa mi sembra la voce di {other}. Deve parlare "
+                 f"{enrolling_name}: {speaker_ctx.enroll_prompt}", "registrazione")
+            u.aspetta()
         elif done == "fatto":
             if self.s.attiva_minori():
                 self.brain.rileggi_tool()        # mentions_tool rilegge i nomi dei tool
-            speaker.say(f"Registrato {enrolling_name}. Ora ti riconosco.")
+            u.di(f"Registrato {enrolling_name}. Ora ti riconosco.", "registrazione")
             # Se è Primo/Prima, chiedi subito se vuole dire il suo nome
             if enrolling_name in ("Primo", "Prima"):
-                speaker.say("Vuoi dirmi il tuo nome?")
-                speaker.wait()
+                u.di("Vuoi dirmi il tuo nome?", "registrazione")
+                u.aspetta()
                 self.pending_real_name = enrolling_name
                 self._nome_vero_fino = time.monotonic() + NOME_VERO_ATTESA_S
             else:
-                speaker.wait()
+                u.aspetta()
         else:
             n = speaker_ctx.enroll_remaining
-            speaker.say(f"Grazie. {'Ancora una' if n == 1 else f'Ancora {n}'}: "
-                        f"{speaker_ctx.enroll_prompt}")
-            speaker.wait()
+            u.di(f"Grazie. {'Ancora una' if n == 1 else f'Ancora {n}'}: "
+                 f"{speaker_ctx.enroll_prompt}", "registrazione")
+            u.aspetta()
 
     def _nome_reale(self, t):
         """Attesa del nome vero dopo l'arruolamento di Primo/Prima.
@@ -2040,7 +2070,7 @@ class Ciclo:
         profilo («Sì» → «Sì»). Regole `nome_vero_*`."""
         if not self.pending_real_name:
             return None
-        speaker, text, cfg = self.speaker, t.text, self.s.cfg
+        u, text, cfg = self.uscita, t.text, self.s.cfg
         if time.monotonic() > self._nome_vero_fino:
             self.pending_real_name = None
             self.rule("nome_vero_scaduto")
@@ -2056,14 +2086,14 @@ class Ciclo:
         if forma == "si":
             # «Sì»: il nome deve ancora arrivare (stessa attesa, stessa persona)
             self.rule("nome_vero_si")
-            speaker.say("Dimmi pure il tuo nome.")
-            speaker.wait()
+            u.di("Dimmi pure il tuo nome.", "registrazione")
+            u.aspetta()
             return _FINE
         old, self.pending_real_name = self.pending_real_name, None
         if forma == "no":
             self.rule("nome_vero_no")
-            speaker.say(f"Va bene, ti chiamerò {old}.")
-            speaker.wait()
+            u.di(f"Va bene, ti chiamerò {old}.", "registrazione")
+            u.aspetta()
             return _FINE
         if forma == "nome":
             # «Mi chiamo Dario» → «Dario», non «Mi Chiamo Dario» (rapporto del 01/10)
@@ -2072,8 +2102,8 @@ class Ciclo:
             prof = self.s.registry.rename(old, name)
             if prof:
                 self.speaker_ctx.current_speaker = name
-                speaker.say(f"Ok, ti chiamerò {name}.")
-            speaker.wait()
+                u.di(f"Ok, ti chiamerò {name}.", "registrazione")
+            u.aspetta()
             return _FINE
         # Non è una forma chiusa: la frase va al modello (che ha rinomina_interlocutore),
         # come una domanda nella finestra d'ascolto
@@ -2171,7 +2201,7 @@ class Ciclo:
         # Wake word testuale: la frase è presa solo ora, con il nome trovato (o nella
         # finestra di ascolto)
         if s.suoni is not None and s.satelliti is None and s.wake is None:
-            self.speaker.suono_ascolto(s.suoni, FINE)
+            self.uscita.segnale_ascolto(s.suoni, FINE)
         return None
 
     def _inizia_primo_utente(self, t):
@@ -2183,9 +2213,9 @@ class Ciclo:
         speaker_ctx.enroll_sample(t.audio, cfg.sample_rate, detect_gender=True,
                                   voiced_s=t.voiced_s)
         self.s.enroll_pending = False
-        self.speaker.say(f"Ah, sei il mio {title}! Ancora "
-                         f"{speaker_ctx.enroll_remaining} frasi per registrare la tua voce. "
-                         f"{speaker_ctx.enroll_prompt}")
+        self.uscita.di(f"Ah, sei il mio {title}! Ancora "
+                       f"{speaker_ctx.enroll_remaining} frasi per registrare la tua voce. "
+                       f"{speaker_ctx.enroll_prompt}", "registrazione")
 
     def _solo_il_nome(self, t):
         """Il nome da solo («Calliope.», «Computer» e una pausa): il saluto breve, oppure,
@@ -2197,6 +2227,7 @@ class Ciclo:
         self.rec["esito"] = "saluto"
         suoni = (s.suoni if getattr(cfg, "suoni_ascolto", False)
                  and getattr(s.suoni, "attivi", True) else None)
+        u = self.uscita
         if s.enroll_pending:
             self._inizia_primo_utente(t)
         elif suoni is not None and hasattr(self.speaker, "suono"):
@@ -2205,12 +2236,12 @@ class Ciclo:
             # Dario credeva che l'ascolto fosse chiuso)
             self.rule("nome_da_solo_suono")
             self.rec["risposta"] = "(suono d'inizio ascolto)"
-            self.speaker.suono(suoni, INIZIO)
+            u.segnale_suono(suoni, INIZIO)
         elif t.speaker_name:
-            self.speaker.say(f"Ciao {t.speaker_name}.")
+            u.di(f"Ciao {t.speaker_name}.", "saluto")
         else:
-            self.speaker.say("Sì?")
-        self.speaker.wait()
+            u.di("Sì?", "saluto")
+        u.aspetta()
         self.awake_until = time.monotonic() + cfg.followup_s
         # La domanda dopo il nome da solo vale anche in compagnia (09/10): è rivolta a Calliope
         self._finestra_dal_nome = True
@@ -2229,7 +2260,7 @@ class Ciclo:
             if self.frasi_prese == prese and time.monotonic() >= self.awake_until - 0.2:
                 print("   (finestra d'ascolto chiusa: nessuno ha parlato)", flush=True)
                 try:
-                    self.speaker.suono(suoni, FINE)
+                    self.uscita.segnale_suono(suoni, FINE)
                 except Exception:  # noqa: BLE001 — un suono non ferma il ciclo
                     pass
         self._fine_attesa = threading.Timer(max(0.0, dopo_s), chiudi)
@@ -2243,7 +2274,7 @@ class Ciclo:
             return None
         self.rec["esito"] = "arruolamento"
         self._inizia_primo_utente(t)
-        self.speaker.wait()
+        self.uscita.aspetta()
         self.awake_until = time.monotonic() + self.s.cfg.followup_s
         return _FINE
 
@@ -2276,20 +2307,12 @@ class Ciclo:
         Apre sempre un turno della voce (10/10, quarto giro): il satellite scarta le frasi di
         un turno che non supera l'ultimo fermato (`Riproduttore._scartata`), e la voce di una
         corsia nuova sta al turno 0. «Calliope, ricominciamo» detto per primo dopo un riavvio
-        partiva al turno 0 e il satellite lo scartava («[VOCE] … turno 0»)."""
-        sp = self.speaker
-        sp.start_turn()
-        prima = len(getattr(sp, "played", None) or [])
-        sp.say(frase)
-        finita = sp.wait()
-        if getattr(sp, "remota", None) is None or getattr(sp, "muto", False):
+        partiva al turno 0 e il satellite lo scartava («[VOCE] … turno 0»).
+
+        Dal passo 2 del registro degli eventi è `Uscita.di_e_aspetta` (atto `chiusura`): qui
+        resta la regola."""
+        if self.uscita.di_e_aspetta(frase, "chiusura"):
             return True
-        dette = [d.strip() for d in list(getattr(sp, "played", None) or [])[prima:]]
-        if any(d and d in frase for d in dette):
-            return True
-        print(f"   [VOCE] il satellite non ha detto «{frase}» (turno "
-              f"{getattr(sp, 'turno', '?')}, interrotta {getattr(sp, 'interrupted', None)}, "
-              f"attesa finita {finita})", flush=True)
         self.rule("voce_frase_non_detta")
         return False
 
@@ -2387,8 +2410,9 @@ class Ciclo:
             self.rec["esito"] = "cortesia"
             self.rec["risposta"] = frase
             self.rule("cortesia")
-            self.speaker.say_cached(frase)
-            self.speaker.wait()
+            u = self.uscita
+            u.di(frase, "cortesia", pronta=True)
+            u.aspetta()
             brain.record_courtesy(text, frase)
             self.awake_until = 0.0
             return _FINE
@@ -2414,10 +2438,10 @@ class Ciclo:
         if g is not None and g.esito == guardia.PERICOLO:
             self.proteggi(t.prof_turno, g.categorie, self.rec, motivo="fuori_orario",
                           voce_incerta=self._voce_incerta())
-            self.speaker.say(guardia.PROTEZIONE)
+            self.uscita.di(guardia.PROTEZIONE, "protezione")
         else:
-            self.speaker.say(minori.frase_fuori_orario(t.prof_turno, orario))
-        self.speaker.wait()
+            self.uscita.di(minori.frase_fuori_orario(t.prof_turno, orario), "fuori_orario")
+        self.uscita.aspetta()
         return _FINE
 
     # ── fase 9: contesto, foto e file del turno ──
@@ -2521,10 +2545,11 @@ class Ciclo:
         t.esito_u = riferire.Esito()
         self.rec.update(esito="risposta", richiesta=t.text)
         t.was_enrolling = self.speaker_ctx.is_enrolling
-        self.speaker.start_turn()
-        rec, t0, speaker = self.rec, t.t0, self.speaker
+        u = self.uscita
+        u.turno()
+        rec, t0 = self.rec, t.t0
 
-        def announce(phrase):
+        def announce(phrase, atto=None):
             # In compagnia, con il giudizio acceso (09/10): una frase non rivolta a Calliope
             # non riceve nemmeno la frase d'attesa
             if not self._rivolta_ok(t):
@@ -2533,14 +2558,15 @@ class Ciclo:
             rec["primo_suono_s"] = round(time.perf_counter() - t0, 2)
             self._fine_ripresa()
             print(f"[attesa {rec['primo_suono_s']:.2f}s] {phrase} ", end="", flush=True)
-            speaker.say_cached(phrase)
+            u.di(phrase, atto or ("attesa_correzione" if phrase in FRASI_CORREZIONE
+                                  else "attesa_tool"), pronta=True)
         brain.on_tool_start = announce
         # Soglia dura del contesto (05/10, calliope/compressione.py): l'ultima risposta ha
         # riempito più del 90 % della finestra e la compressione in secondo piano non è
         # bastata: si comprime adesso, con una frase d'attesa breve
         if s.compressore is not None and s.compressore.soglia(
                 getattr(brain, "uso_precedente", None)) == "dura":
-            announce(FRASE_DURA)
+            announce(FRASE_DURA, "attesa_contesto")
             self.rule("contesto_dura")
             try:
                 s.compressore.comprimi_ora(brain)
@@ -2548,7 +2574,7 @@ class Ciclo:
                 print(f"   [CONTESTO] compressione non riuscita: {type(e).__name__}: {e}",
                       flush=True)
         if t.context:
-            announce("Controllo nella biblioteca.")
+            announce("Controllo nella biblioteca.", "attesa_biblioteca")
 
     def _testo_per_guardia(self, t) -> str:
         """La frase da far giudicare a guardiano e rilevatore di pericolo. Un pezzo detto da un
@@ -2596,8 +2622,8 @@ class Ciclo:
         self.protezione_da_ripetere = None
         self.rule("protezione_ripetuta")
         print("   [GUARDIANO] protezione interrotta: la ripeto per intero", flush=True)
-        self.speaker.say(da_ripetere[2])
-        self.speaker.wait()
+        self.uscita.di(da_ripetere[2], "protezione")
+        self.uscita.aspetta()
 
     def _ascolta_il_nome(self, t):
         """Barge-in: mentre parla, un thread ascolta solo la wake word (e la voce di chi è
@@ -2620,7 +2646,7 @@ class Ciclo:
     def _rispondi(self, t):
         """Il modello risponde in streaming, frase per frase verso la voce (con i controlli
         di ciò che dice e, per minori e ospiti, il guardiano)."""
-        s, cfg, brain, speaker = self.s, self.s.cfg, self.brain, self.speaker
+        s, cfg, brain, speaker, u = self.s, self.s.cfg, self.brain, self.speaker, self.uscita
         # In compagnia, una frase senza il nome nella finestra d'ascolto: il giudizio «rivolta a
         # Calliope» parte adesso, in parallelo alla risposta (09/10, calliope/rivolta.py)
         t.rivolta = self._avvia_rivolta(t)
@@ -2647,7 +2673,7 @@ class Ciclo:
             # oltre, una frase già pronta e la coda in ordine d'arrivo
             attesa_coda = self.corsia.entra_llm(lambda: (
                 self.rule("coda_risposte"), print("[in coda] ", end="", flush=True),
-                speaker.say_cached(corsie.FRASE_CODA)))
+                u.di(corsie.FRASE_CODA, "attesa_coda", pronta=True)))
             if attesa_coda:
                 self.rec["coda_s"] = round(attesa_coda, 2)
             # Per un minore le schede dei tool aspettano il giudizio sulla domanda (Q3
@@ -2693,11 +2719,11 @@ class Ciclo:
                     if protezione:
                         # Da qui la voce di chi parla non la interrompe (known_voice)
                         self.protezione_in_corso, t.protezione = True, sentence
-                    self._di_frase(t, sentence)
+                    self._di_frase(t, sentence, protezione=protezione)
         except Exception as e:
             print(f"\n[LLM] Errore: {e}")
             self.rec["errore"] = str(e)
-            speaker.say("Scusa, ho avuto un problema a rispondere.")
+            u.di("Scusa, ho avuto un problema a rispondere.", "errore")
         finally:
             # Nessun giudizio sulla domanda (risposta interrotta o errore): le schede
             # trattenute non partono
@@ -2840,7 +2866,23 @@ class Ciclo:
             sentence = cleaned
         return sentence
 
-    def _di_frase(self, t, sentence: str):
+    def _autore(self, sentence: str, protezione: bool = False) -> tuple[str, str]:
+        """Chi ha scritto una frase della risposta (passo 2): la frase pronta di un tool
+        (`esito`), un ripiego o la riga dello sviluppo (`atto`, li marca Brain quando li manda:
+        `Brain.parlato_marcato`), la protezione del guardiano (`atto`), oppure il modello
+        (`contenuto`). (autore, atto)."""
+        if protezione:
+            return "atto", "protezione_risposta"
+        n = _norm_frase(sentence)
+        for testo, autore, atto in getattr(self.brain, "parlato_marcato", None) or ():
+            m = _norm_frase(str(testo))
+            # La frase è (un pezzo di) quella marcata, o la contiene (split_sentences unisce le
+            # frasi brevi: «…» del modello e il ripiego dopo)
+            if n and m and (n in m or m in n):
+                return autore, atto or "risposta"
+        return "contenuto", "risposta"
+
+    def _di_frase(self, t, sentence: str, protezione: bool = False):
         rec = self.rec
         if t.first:
             self._fine_ripresa()            # Calliope risponde: la ripresa non si misura più
@@ -2856,7 +2898,8 @@ class Ciclo:
             t.first = False
         print(self.in_console(oscura(sentence) if t.scritto is not None else sentence,
                               risposta=True), end=" ", flush=True)
-        self.speaker.say(sentence)
+        autore, atto = self._autore(sentence, protezione)
+        self.uscita.di(sentence, atto, autore)
         t.said.append(sentence)
 
     # ── fase 11: dopo la risposta ──
@@ -2906,7 +2949,7 @@ class Ciclo:
             # Anche scritta, sullo schermo da cui è arrivata la frase: chi scrive spesso non
             # può ascoltare (04/10). Prima di aspettare la voce: si legge subito
             rec["risposta_scritta"] = self.s.instradamento.risposta_scritta(
-                t.scritto, t.text, " ".join(t.said))
+                t.scritto, t.text, self.uscita.testo_scritto())
 
     def _registra_non_rivolta(self, t):
         """Frase non rivolta a Calliope col giudizio acceso (09/10): silenzio, regola
@@ -3136,8 +3179,8 @@ class Ciclo:
     def _dopo_la_risposta(self, t):
         """Finita la voce: interruzione, ricerca promessa, avvisi ai tutori, registrazione
         appena chiesta, finestra di ascolto."""
-        cfg, speaker, speaker_ctx = self.s.cfg, self.speaker, self.speaker_ctx
-        speaker.wait()
+        cfg, speaker, speaker_ctx, u = self.s.cfg, self.speaker, self.speaker_ctx, self.uscita
+        u.aspetta()
         self._prima_voce(t)
         if t.watcher:
             t.watch_stop.set()
@@ -3147,7 +3190,7 @@ class Ciclo:
         if t.non_rivolta:
             # Non rivolta a Calliope (09/10): nessuna finestra nuova, così la conversazione tra
             # le persone non diventa una catena di risposte; resta quella di prima, se c'è
-            speaker.start_turn()
+            u.turno()
             return
         if not t.watch.get("seed"):
             self._storia_come_detta(t)
@@ -3172,15 +3215,15 @@ class Ciclo:
         if not t.watch.get("seed"):
             self.avvisi_ai_tutori(t.speaker_name)
             self._cassetto_dopo(t)
-        speaker.start_turn()     # azzera un'interruzione arrivata a risposta finita
+        u.turno()                # azzera un'interruzione arrivata a risposta finita
         self._conversazione_nuova_chiesta()
         self._conversazioni_dimenticate()
         if speaker_ctx.is_enrolling and not t.was_enrolling:
             self.enroll_reminded.discard(speaker_ctx.enrolling_name)
-            speaker.say(f"{speaker_ctx.enrolling_name}, adesso parla tu, e comincia ogni "
-                        f"frase con il mio nome: ti chiederò {speaker_ctx.enroll_needed} "
-                        f"frasi, una alla volta. {speaker_ctx.enroll_prompt}")
-            speaker.wait()
+            u.di(f"{speaker_ctx.enrolling_name}, adesso parla tu, e comincia ogni "
+                 f"frase con il mio nome: ti chiederò {speaker_ctx.enroll_needed} "
+                 f"frasi, una alla volta. {speaker_ctx.enroll_prompt}", "registrazione")
+            u.aspetta()
         self.awake_until = time.monotonic() + cfg.followup_s
 
     def _storia_come_detta(self, t):
@@ -3253,7 +3296,7 @@ class Ciclo:
     def _ricerca_promessa(self, t):
         """Ricerca promessa e non fatta («devo fare una ricerca», 26/09): la si fa subito.
         Non su una domanda («Lo cerco nella biblioteca?»): lì decide la persona."""
-        s, cfg, brain, speaker = self.s, self.s.cfg, self.brain, self.speaker
+        s, cfg, brain, u = self.s, self.s.cfg, self.brain, self.uscita
         detto = " ".join(t.said)
         promised = (s.biblioteca and cfg.rete("ricerca_promessa") and not t.watch.get("seed")
                     and not t.context
@@ -3264,8 +3307,8 @@ class Ciclo:
             return
         self.rule("ricerca_promessa")
         print("   [BIBLIOTECA] aveva promesso una ricerca: la faccio", flush=True)
-        speaker.start_turn()
-        speaker.say_cached("Controllo nella biblioteca.")
+        u.turno()
+        u.di("Controllo nella biblioteca.", "attesa_biblioteca", pronta=True)
         extra = biblioteca_contesto(self.tool_ctx, t.text)
         self.corsia.entra_llm()
         try:
@@ -3279,13 +3322,13 @@ class Ciclo:
                 if sentence:
                     print(self.in_console(oscura(sentence) if t.scritto is not None
                                           else sentence, risposta=True), end=" ", flush=True)
-                    speaker.say(sentence)
+                    u.di(sentence, "risposta")
                     t.said.append(sentence)
         except Exception as e:
             print(f"\n[LLM] Errore: {e}")
         self.corsia.esci_llm()
         print()
-        speaker.wait()
+        u.aspetta()
         self.rec.update(risposta=" ".join(t.said), ricerca_promessa=True)
         if t.scritto is not None:
-            s.instradamento.risposta_scritta(t.scritto, t.text, " ".join(t.said))
+            s.instradamento.risposta_scritta(t.scritto, t.text, u.testo_scritto())

@@ -28,16 +28,27 @@ from __future__ import annotations
 
 import re
 
-# Le categorie degli atti (nome della fase del ciclo che ha parlato, eventi/ombra.py)
-CONTENUTO = frozenset({"risposta"})
+from .tipi import ATTI, atti_di
+
+# Le categorie degli atti: l'elenco chiuso di tipi.ATTI (dal passo 2 l'atto lo dice chi manda la
+# frase all'uscita unica, calliope/eventi/uscita.py)
+CONTENUTO = atti_di("risposta")
 # Atti che oggi entrano nella storia (testuale, § 1.1 righe 3–8)
-REGISTRATI = frozenset({"cortesia", "protezione_cancello", "annuncio", "richiesta_tutore",
-                        "cassetto", "modulo"})
+REGISTRATI = atti_di("registrato")
 # Atti voluti fuori dalla conversazione del modello (si contano a parte)
-VOLUTI = frozenset({"attesa", "saluto_avvio", "giochi", "chiusura"})
-# Atti con una domanda che oggi vive fuori dalla storia (stati della corsia, § 1.2)
-FUORI_STORIA = frozenset({"registrazione", "saluto", "chi_parla", "senza_domanda"})
-ANNUNCI = frozenset({"annuncio", "agenda", "cassetto", "richiesta_tutore", "avviso_tutore"})
+VOLUTI = atti_di("voluto")
+# Atti sentiti in una conversazione viva che oggi la storia non ha (§ 1.1): il loro
+# `non_in_storia:<atto>` è atteso fino al passo 3
+FUORI_STORIA = atti_di("fuori_storia")
+ANNUNCI = frozenset(n for n, (_c, annuncio, _r) in ATTI.items() if annuncio)
+
+
+def atteso(motivo: str) -> bool:
+    """Un motivo `non_in_storia:<atto>` è atteso (l'atto oggi non entra nella storia, § 1.1)
+    o no (un atto che dovrebbe esserci, o un atto fuori dall'elenco: da guardare)."""
+    if not motivo.startswith("non_in_storia:"):
+        return True
+    return motivo.split(":", 1)[1] in FUORI_STORIA
 
 STOP = "Va bene, mi fermo. (argomento chiuso)"
 RIPETI = re.compile(r"puoi ripetere la richiesta\?\s*$", re.I)
@@ -81,7 +92,7 @@ def motivi_parlato(sentite: list[tuple], storia: str, info: dict) -> list[str]:
             motivi.append("claim_at" if {"spinta_dichiarata", "spinta_rinuncia"} & regole
                           else "filtri_frase")
         else:
-            motivi.append(f"non_in_storia:{atto or 'altro'}")
+            motivi.append(f"non_in_storia:{atto or 'sconosciuto'}")
     # Il resto della storia non sentito: solo per un turno nuovo (gli annunci fra un turno e
     # l'altro si attaccano a una risposta già contata), e non se è la frase del modello di cui
     # si è sentita la resa per la voce (già filtri_frase o claim_at)
@@ -104,12 +115,14 @@ def motivi_parlato(sentite: list[tuple], storia: str, info: dict) -> list[str]:
 def motivo_domanda(testo: str, atto: str | None, info: dict) -> str | None:
     """Perché una frase sentita che finisce con «?» non è una proposta (None: è un'offerta del
     modello, contata a parte)."""
-    if atto in FUORI_STORIA:
-        return "fuori_dalla_storia"
     if atto in ANNUNCI:
         return "annuncio_senza_proposta"
+    if atto in FUORI_STORIA or atto in VOLUTI:
+        return "fuori_dalla_storia"
+    if atto in REGISTRATI:
+        return "atto_senza_proposta"
     if atto not in CONTENUTO:
-        return "fuori_dalla_storia" if atto in VOLUTI else "altro"
+        return "atto_sconosciuto"
     if (info.get("cancello") or 0) == 1:
         return "stato_a_parte"
     if RIPETI.search(testo):
@@ -166,7 +179,7 @@ def misura_finestra(pezzi: list[dict], storia: str, info: dict) -> dict:
                                 {**info, "interrotta": interrotta, "persa": persa,
                                  "canale": canale})
     else:
-        motivi = [f"non_in_storia:{a or 'altro'}" for _, a in sentite_conv]
+        motivi = [f"non_in_storia:{a or 'sconosciuto'}" for _, a in sentite_conv]
         motivi = list(dict.fromkeys(motivi))
     if motivi:
         out["diverso"] = 1
@@ -271,6 +284,12 @@ def testo(r: dict, contesto_ms_avviso: float = 20.0) -> str:
                      f"offerte del modello {g['offerte']})")
         if g["motivi"]:
             righe.append(f"    parlato: {_elenco(g['motivi'])}")
+            # Ogni non_in_storia è di un atto dell'elenco (passo 2): atteso se l'atto oggi non
+            # entra nella storia (§ 1.1), altrimenti da guardare
+            inattesi = {k: v for k, v in g["motivi"].items() if not atteso(k)}
+            if inattesi:
+                righe.append(f"    ATTENZIONE: parole sentite fuori dalla storia per atti che "
+                             f"dovrebbero esserci: {_elenco(inattesi)}")
         if g["domande_motivi"]:
             righe.append(f"    domande: {_elenco(g['domande_motivi'])}")
         if g["voluti"]:

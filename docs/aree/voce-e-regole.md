@@ -23,7 +23,7 @@ misure di questo documento sono col 4B in locale: da rifare col 26B sulla DGX do
 | Configurazione | dataclass + YAML (PyYAML) | `calliope/config.py` → `Config`, `load_config`, `VOICE_MAP`; file `calliope.yaml` |
 | Stato del dialogo (dal 10/10, in ombra) | — | `calliope/stato_dialogo.py` → `Proposta`, `StatoPersona`, `StatoCorsia`, `blocco`, `decidi`, `consenso_progetto`, `confronto`; corsia veloce `calliope/risposte.py` → `forma_chiusa`; tool di risposta `calliope/tools/proposta.py` → `proposta_rispondi`; in Brain `_dialogo_inizio`, `_proposta_rispondi`, `_dialogo_fine` (sezione «Stato del dialogo, passo 1») |
 | Registro dei turni | JSONL, un file al giorno in `registro/` | `calliope/turnlog.py` → `TurnLog`; analisi con `revisione.py` |
-| Registro degli eventi (dal 10/10, in ombra: passi 0 e 1 della decisione 0027) | SQLite in WAL, tabella `eventi` di `conversazioni.db` | `calliope/eventi/` → `tipi.py` (`TIPI`, `Evento`, `per_disco`), `registro.py` (`Registro`, `Registri`, `Disco`, `porta_annuncio`, `porta_avviso_tutore`, `porta_coda`, `porta_riassegna`, `stato_disco`), `proiezioni.py` (`PROIEZIONE_CONTESTO`, `PROIEZIONE_TURNI`, `turni`, `messaggi`, `contesto`), `misura.py` (`misura_finestra`, `motivi_parlato`, `riassunto`), `ombra.py` (`Ombra`, `ATTI`); voce `Speaker.osservatore`; ciclo `Ciclo._scrivi_turno`, `Ciclo._conversazioni_dimenticate`; `Brain.dimentica_conversazione` (sezione «Una voce sola, passi 0 e 1») |
+| Registro degli eventi (dal 10/10, in ombra: passi 0 e 1 della decisione 0027) | SQLite in WAL, tabella `eventi` di `conversazioni.db` | `calliope/eventi/` → `tipi.py` (`TIPI`, `Evento`, `per_disco`), `registro.py` (`Registro`, `Registri`, `Disco`, `porta_annuncio`, `porta_avviso_tutore`, `porta_coda`, `porta_riassegna`, `stato_disco`), `proiezioni.py` (`PROIEZIONE_CONTESTO`, `PROIEZIONE_TURNI`, `turni`, `messaggi`, `contesto`), `misura.py` (`misura_finestra`, `motivi_parlato`, `riassunto`), `ombra.py` (`Ombra`), dal passo 2 (10/10) `uscita.py` (`Uscita`, `per_voce`: l'uscita unica verso la voce) e l'elenco degli atti `tipi.ATTI`; ciclo `Ciclo._scrivi_turno`, `Ciclo._conversazioni_dimenticate`; `Brain.dimentica_conversazione` (sezione «Una voce sola, passi 0 e 1») |
 | Persistenza comune | SQLite in WAL, file di stato atomici, versioni dello schema | `calliope/persistenza.py` → `apri_db`, `scrivi_atomico` / `scrivi_json` / `leggi_json`, `migra` / `prepara_schema` (tabella `meta_schema`) |
 
 ## Problemi noti
@@ -1290,7 +1290,8 @@ fonte; gli eventi si scrivono accanto e si confrontano. Interruttore `eventi: sp
 `ombra` come `dialogo_interprete: acceso`). Con `spento` niente osservatore, niente campi nuovi,
 niente tabella: come prima.
 
-**Che cosa è andato alla voce.** `tts.Speaker.osservatore` (una funzione, None di solito): `say` e
+**Che cosa è andato alla voce.** *Storico: dal passo 2 lo dice l'uscita unica (sezione «Una voce
+sola, passo 2»), e `Speaker.osservatore` non c'è più.* `tts.Speaker.osservatore` (una funzione, None di solito): `say` e
 `say_cached` le dicono ogni frase mandata, `start_turn` le frasi sentite per intero (`played`) e
 l'interruzione del pezzo che si chiude. In memoria, dal thread di chi chiama: ~1 µs per frase
 (misura della prova), nessun file aperto. Chi ha parlato (l'**atto**) si ricava, nel passo 1, dalla
@@ -1457,3 +1458,75 @@ traccia senza testo lo dicono. Due buchi veri, trovati provando il caso:
   ripiego guardava solo il testo vuoto): ora anche la sola punteggiatura ha «Non ci sono
   riuscita: puoi ripetere la richiesta?» (`risposta_solo_punteggiatura`, `vuoto_ripiego`).
 - Prova: `prova_giro4` (A, D).
+
+## Una voce sola, passo 2: l'uscita unica verso la voce (10/10, ramo `eventi-passo-2`)
+
+Passo 2 del § 8 del progetto [`2026-10-10-registro-eventi.md`](../ricerche/2026-10-10-registro-eventi.md)
+(§ 3.2). **Niente cambia in ciò che Calliope dice né in ciò che il modello vede** (il contesto resta
+la storia di Brain fino al passo 3): cambia da dove passano le frasi.
+
+**Un punto solo.** `calliope/eventi/uscita.py` → `Uscita` (una per voce, quindi per corsia:
+`per_voce(speaker)`, la stessa per il ciclo, `main.py` e `rispondi.py`). Le 48 chiamate dirette di
+`ciclo.py` e `main.py` (`say`, `say_cached`, `chime`, i suoni, `start_turn`, `wait`) e lo stream di
+Brain passano da lì: `di(testo, atto, autore)`, `di_e_aspetta` (le chiusure: il controllo del
+satellite di `_di_e_aspetta` è suo, la regola `voce_frase_non_detta` resta del ciclo), `turno()`,
+`aspetta()`, `segnale()`, `segnale_suono`, `segnale_ascolto`; il saluto dei satelliti con
+`sintetizza_saluto` (atto `saluto_avvio`, fuori conversazione). `prova_uscita_unica` (AST) fallisce
+se fuori da `eventi/uscita.py` e `tts.py` qualcuno chiama `say`, `say_cached`, `chime`, `suono`,
+`suono_ascolto`, `sintetizza`, `start_turn`, `wait` sulla voce o le sue code, e se lo stream di Brain
+si legge fuori da `Ciclo._rispondi` e `Ciclo._ricerca_promessa`. `Speaker.osservatore` (passo 1) non
+c'è più: l'ombra la avvisa l'uscita.
+
+**Il detto nasce all'invio.** `Uscita.di` scrive in memoria il `detto_calliope` prima di mandare la
+frase al TTS: testo (quello dato a Piper, prima della pronuncia), **atto** dall'elenco chiuso
+`tipi.ATTI` (detto da chi chiama, non più ricavato dalla pila delle chiamate), **autore**
+(`contenuto` per il modello; `esito` per la frase pronta di un tool e `atto` per il ripiego «Non ci
+sono riuscita…», la riga dello sviluppo e la frase della sfida, che Brain marca quando le manda,
+`Brain.parlato_marcato`/`_marca`; `atto` per la protezione del guardiano dentro una risposta), canale
+(`voce`, `scritto` per una frase scritta, `muta` con la voce muta), fonte (agente, estensione) e
+`dopo_chiamate` (quante chiamate dei tool c'erano già nella risposta). Costo ~1,5 µs a frase, nessun
+file né database (prova con `open` e `sqlite3` sorvegliati).
+
+**L'elenco degli atti** (`calliope/eventi/tipi.py`, con la categoria e la riga del § 1.1):
+`risposta` (contenuto ed esiti), `ripeti`, `riga_sviluppo`, `sfida`, `protezione_risposta` (parole
+della risposta); `cortesia`, `protezione_cancello`, `richiesta_tutore`, `annuncio_documento`,
+`annuncio_installazione`, `annuncio_lavoro`, `annuncio_estensione`, `annuncio_cassetto`, `modulo`
+(oggi nella storia); `annuncio_agenda`, `avviso_tutore`, `errore`, `registrazione`, `saluto`,
+`chi_parla`, `senza_domanda`, `protezione`, `fuori_orario` (sentiti e oggi fuori dalla storia: il
+loro `non_in_storia:<atto>` è **atteso** fino al passo 3); `attesa_tool`, `attesa_correzione`,
+`attesa_coda`, `attesa_contesto`, `attesa_biblioteca`, `attesa_stt`, `annuncio_gioco`, `chiusura`,
+`saluto_avvio` (voluti fuori). I nomi del passo 1 (`attesa`, `agenda`, `annuncio`, `cassetto`,
+`giochi`) restano per il rigioco degli eventi già su disco. *Storico: fino al passo 1 i motivi si
+chiamavano `non_in_storia:agenda`, `non_in_storia:annuncio`…; dal passo 2 `non_in_storia:annuncio_agenda`,
+`non_in_storia:annuncio_documento`…* In `calliope stato --turni` un `non_in_storia` di un atto che
+dovrebbe essere nella storia (o fuori dall'elenco) ha la sua riga ATTENZIONE; le domande di un atto
+hanno sempre un motivo con un nome (`atto_senza_proposta`, mai «altro»).
+
+**Nessuna frase fuori turno** (correzione del quarto giro, ora nell'uscita): un atto detto senza un
+turno della voce aperto (turno 0 di una corsia nuova) o in un turno fermato da un'interruzione apre
+prima un turno nuovo; le parole di una risposta interrotta restano nel loro turno (la voce le scarta
+come prima). Gli `start_turn` espliciti del ciclo restano (`_ascolta`, annunci, chiusure…), come
+`uscita.turno()`.
+
+**`voce_fine` e risposta scritta.** A ogni turno nuovo l'uscita dice all'ombra le frasi sentite per
+intero (`played`) e l'interruzione del pezzo che si chiude. La risposta scritta sullo schermo
+(`rispondi.risposta_scritta`) viene dalle frasi dell'uscita (`Uscita.testo_scritto()`: quelle della
+persona in corso, attese escluse), non più da `" ".join(t.said)`: anche per «Ho la foto…» e la frase
+di un modulo, ora scritte sullo schermo dopo averle mandate alla voce.
+
+**Il passo 0 e l'ombra.** `parlato` (passo 0) e il confronto dell'ombra leggono gli stessi detti
+nati all'invio: atto e autore registrati dove nascono, non ricostruiti (prima l'esito si indovinava a
+fine turno confrontando il testo con le frasi pronte nella storia). La proiezione mette le frasi
+nella posizione in cui sono andate alla voce rispetto alle chiamate (`dopo_chiamate` del detto,
+`passata` della chiamata): la frase detta prima di un tool è il testo del messaggio con la chiamata,
+come nella storia di Brain (prima stava dopo i risultati). **Limite**: `split_sentences` tiene una
+frase finché non arriva lo spazio dopo il punto, quindi una frase scritta dal modello subito prima di
+una chiamata può partire dopo il tool; la proiezione la mette dove si è sentita (il confronto
+dell'ombra è per turno e non la conta).
+
+Prove: `prova_uscita_unica` (AST, atti, turni, latenza), `prova_eventi_ciclo` (passo 2: autore e atto
+all'invio, posizione delle chiamate, risposta scritta, atti classificati, nessuna frase fuori turno),
+adattate `prova_eventi`, `prova_eventi_disco`, `prova_cassetto`. Misure (`prova_satellite` con
+Calliope vera, modello e Whisper finti, Piper vero; 3 giri sul ramo e 4 su `main`): `prima_frase_s`
+mediana 0,09 s su `main` e 0,08 s sul ramo, prima voce sentita 0,36 → 0,35 s, «dalla fine della
+frase alla prima voce» 0,65–0,80 s e 0,68–0,76 s (rumore); `Uscita.di` ~1,5 µs a frase.

@@ -599,7 +599,23 @@ partire dopo il passo 4.
   (proiezione e contatori su un giro sintetico, latenza), `prova_eventi_disco` (riavvio,
   dimentica). Misure: prima frase invariata: con Calliope vera in `prova_satellite` (modello e Whisper finti, Piper vero; 3 giri per lato, 27 risposte ciascuno) `prima_frase_s` mediana 0,09 s prima e dopo (media 0,095 → 0,093 s), prima voce sentita mediana 0,37 s uguale, «dalla fine della frase alla prima voce» 0,63–0,77 s prima e 0,68–0,73 s dopo (rumore della macchina); osservatore della voce ~1 µs per frase; `contesto_ms` al più 0,14 ms (24 turni veri della prova) e 0,06 ms sul giro sintetico; su disco ~0,4–0,6 kB per turno di mediana, fino a ~2,5 kB con risultati di tool. **Da fare sulla DGX**: una settimana di base del passo 0 e
   dell'ombra (§ 8.1 per cosa guardare), poi il passo 2.
-- Passi 2–6: da fare.
+- **Passo 2: fatto il 10/10** (ramo `eventi-passo-2`, in ombra). L'uscita unica
+  `calliope/eventi/uscita.py` (`Uscita`, `per_voce`, una per voce/corsia): le 48 chiamate dirette
+  (46 in `ciclo.py`, 2 in `main.py`), lo stream di Brain, i segnali, `start_turn` e `wait` passano
+  da lì (anche `rispondi.py`); `prova_uscita_unica` (AST) fallisce per ogni chiamata alla voce da
+  un altro punto. Il `detto_calliope` nasce all'invio con autore (`contenuto`, `atto`, `esito`: le
+  frasi pronte e i ripieghi li marca Brain, `Brain.parlato_marcato`), atto dall'elenco chiuso
+  `tipi.ATTI` (con la categoria e la riga del § 1.1), canale, fonte e `dopo_chiamate`; `voce_fine`
+  a ogni turno della voce nuovo; risposta scritta sugli schermi da `Uscita.testo_scritto()`.
+  Nessuna frase fuori turno (correzione del quarto giro del 10/10) dentro l'uscita.
+  `Speaker.osservatore` e l'atto dalla pila (`ombra.ATTI`, `atto_del_chiamante`) tolti. Misure
+  (`prova_satellite` con Calliope vera, modello e Whisper finti, Piper vero; 3 giri sul ramo, 4 su
+  `main` intercalati, 27 e 36 risposte): `prima_frase_s` mediana 0,09 s su `main` e 0,08 s sul ramo
+  (media 0,091 → 0,088 s), prima voce sentita mediana 0,36 → 0,35 s, «dalla fine della frase alla
+  prima voce» 0,65–0,80 s su `main` e 0,68–0,76 s sul ramo (rumore della macchina); `Uscita.di`
+  ~1,5 µs a frase, nessun file né database; in ombra sugli stessi giri gli stessi motivi
+  (`stop_non_detto` soltanto) ed `errori` 0.
+- Passi 3–6: da fare.
 
 ### 8.1 Punti del progetto rivisti nei passi 0 e 1 (10/10)
 
@@ -643,6 +659,39 @@ da decidere.
    `conversazione_aperta.riassunto_tipo`; l'id di una proposta è `p<seq>`.
 10. **`contesto_ms`** in ombra è il tempo della proiezione, fuori dal percorso della voce: il costo
     vero si vedrà al passo 3, con la stessa guardia.
+
+11. **Passo 2 (10/10): che cosa ha risolto e che cosa no.**
+    - *Atto dalla funzione del ciclo* (punto 4): **risolto**. L'atto lo dice chi chiama
+      `Uscita.di`, da un elenco chiuso (`tipi.ATTI`) con la categoria; l'autore `esito` non si
+      indovina più a fine turno confrontando il testo con le frasi pronte nella storia: Brain marca
+      le frasi che non sono del modello quando le manda. Gli atti hanno nomi nuovi, più fini
+      (`annuncio_agenda`, `annuncio_documento`, `attesa_tool`, `attesa_stt`…, come il § 4.2): i motivi
+      `non_in_storia:agenda` e simili del passo 1 diventano `non_in_storia:annuncio_agenda`…; i nomi
+      del passo 1 restano nell'elenco per il rigioco degli eventi già su disco. Ogni
+      `non_in_storia` è classificato: atteso per gli atti `fuori_storia`, altrimenti ATTENZIONE in
+      `calliope stato --turni`.
+    - *Posizione delle chiamate fra le frasi* (punto 4): **risolto, con un limite**. Campi in più
+      rispetto al § 2.2: `detto_calliope.dopo_chiamate` (quante chiamate c'erano già nella risposta
+      quando la frase è partita, dal `last_tools` di Brain) e la `passata` di `chiamata_tool`; la
+      proiezione rende un messaggio dell'assistente per passata, con il testo detto prima delle sue
+      chiamate. Limite: `split_sentences` tiene una frase finché non arriva lo spazio dopo il punto,
+      quindi la frase scritta dal modello subito prima di una chiamata può partire *dopo* il tool;
+      la proiezione la mette dove si è sentita, la storia di Brain nel messaggio con la chiamata. Il
+      confronto dell'ombra resta per turno e non lo conta. Gli esiti si accoppiano alle chiamate in
+      ordine, non per id (gli id `call_0` si ripetono da una passata all'altra).
+    - *`detto_calliope` scritto all'invio* (punto 5): **in parte**. Nasce all'invio, in memoria,
+      nell'uscita (con l'ora dell'invio); entra nel **registro** (con il suo `seq`) a turno finito,
+      dopo il `detto_persona` del turno, perché finché l'ombra scrive il turno a cose fatte il
+      segmento e la frase della persona si sanno solo lì. Il registro in ordine d'invio arriva con il
+      passo 3, quando Brain scriverà gli eventi dove nascono.
+    - *Nessuna frase fuori turno*: la correzione del quarto giro (`_di_e_aspetta`, turno aperto in
+      `_ascolta`) è dentro l'uscita: un atto senza turno aperto (turno 0) o in un turno fermato da
+      un'interruzione ne apre uno; le parole di una risposta interrotta no (la voce le scarta).
+    - *`parlato_diverso` dall'ombra*: il passo 0 e il confronto leggono gli stessi detti nati
+      all'invio (atto e autore registrati dove nascono); il valore resta per costruzione diverso da
+      0 fino al passo 3 (il contesto è ancora la storia di Brain).
+    - La risposta scritta di «Ho la foto…» e della frase di un modulo va sullo schermo dopo essere
+      andata alla voce (prima: subito prima). Il saluto locale apre un turno della voce (innocuo).
 
 **Da guardare sulla DGX dopo l'installazione** (`calliope stato --turni`, sezione «Una voce sola»):
 quanti turni con il parlato diverso e con quali motivi (attesi: `non_in_storia:*` degli annunci e

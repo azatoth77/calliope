@@ -59,8 +59,9 @@ TIPI: dict[str, Tipo] = dict([
     _t("chiamata_tool", "id nome argomenti passata origine", "modello"),
     _t("esito_tool", "id nome ok contenuto riservato personale non_fidato correggibile "
                      "frase in_sospeso", "modello", "visibilità per tipo di tool (§ 11.1)"),
-    _t("detto_calliope", "testo autore atto frase canale satellite fonte", "modello",
-       "scritto all'invio (§ 3.2)"),
+    _t("detto_calliope", "testo autore atto frase canale satellite fonte dopo_chiamate",
+       "modello", "nasce all'invio nell'uscita unica (§ 3.2); dopo_chiamate: quante chiamate "
+                  "dei tool c'erano già nella risposta (la posizione fra le frasi)"),
     _t("voce_fine", "da inviate sentite interrotta parziale", "modello",
        "quante frasi del pezzo si sono sentite per intero"),
     _t("interruzione", "seme durante", "registro"),
@@ -83,6 +84,76 @@ TIPI: dict[str, Tipo] = dict([
 
 # Tre categorie del parlato (§ 2.2, § 4): l'autore di detto_calliope
 AUTORI = ("contenuto", "atto", "esito")
+
+# Gli atti: chi, nel ciclo, manda una frase alla voce (passo 2, l'uscita unica: lo dice chi
+# chiama `Uscita.di`, non più la funzione del ciclo ricavata dalla pila). Elenco chiuso: un atto
+# nuovo si aggiunge qui, con la sua categoria (prova_uscita_unica controlla che ogni atto scritto
+# nel codice ci sia). Categorie:
+# - `risposta`: parole della risposta (contenuto del modello, frase pronta di un tool, ripiego
+#   di Brain), che oggi la storia ha;
+# - `registrato`: atto del ciclo che oggi entra nella storia (`record_courtesy`,
+#   `record_announcement`);
+# - `fuori_storia`: sentito in una conversazione viva, oggi la storia non lo sa (§ 1.1: il
+#   motivo `non_in_storia:<atto>` è atteso, e sparisce al passo 3);
+# - `voluto`: fuori dalla conversazione per scelta (frasi d'attesa, saluto dell'avvio, giochi,
+#   chiusure; decisione di Dario del 10/10).
+# Ogni voce: (categoria, annuncio fra un turno e l'altro, riga del § 1.1 del progetto)
+CATEGORIE_ATTO = ("risposta", "registrato", "fuori_storia", "voluto")
+ATTI: dict[str, tuple[str, bool, str]] = {
+    "risposta": ("risposta", False, "1"),
+    "ripeti": ("risposta", False, "1c"),
+    "riga_sviluppo": ("risposta", False, "1f"),
+    "sfida": ("risposta", False, "1g"),
+    "protezione_risposta": ("risposta", False, "1"),
+    "cortesia": ("registrato", False, "3"),
+    "protezione_cancello": ("registrato", False, "4"),
+    "richiesta_tutore": ("registrato", True, "5"),
+    "annuncio_documento": ("registrato", True, "6"),
+    "annuncio_installazione": ("registrato", True, "6"),
+    "annuncio_lavoro": ("registrato", True, "6"),
+    "annuncio_estensione": ("registrato", True, "6"),
+    "annuncio_cassetto": ("registrato", True, "7"),
+    "modulo": ("registrato", False, "8"),
+    "annuncio_agenda": ("fuori_storia", True, "10"),
+    "avviso_tutore": ("fuori_storia", True, "11"),
+    "errore": ("fuori_storia", False, "12"),
+    "registrazione": ("fuori_storia", False, "13, 14"),
+    "saluto": ("fuori_storia", False, "15"),
+    "chi_parla": ("fuori_storia", False, "16"),
+    "senza_domanda": ("fuori_storia", False, "17"),
+    "protezione": ("fuori_storia", False, "18"),
+    "fuori_orario": ("fuori_storia", False, "18"),
+    "attesa_tool": ("voluto", False, "2"),
+    "attesa_correzione": ("voluto", False, "2"),
+    "attesa_coda": ("voluto", False, "2"),
+    "attesa_contesto": ("voluto", False, "2"),
+    "attesa_biblioteca": ("voluto", False, "2"),
+    "attesa_stt": ("voluto", False, "2"),
+    "annuncio_gioco": ("voluto", True, "19"),
+    "chiusura": ("voluto", False, "20"),
+    "saluto_avvio": ("voluto", False, "21"),
+    # I nomi del passo 1 (ricavati dalla pila), per il rigioco degli eventi già su disco
+    "attesa": ("voluto", False, "2"),
+    "giochi": ("voluto", True, "19"),
+    "annuncio": ("registrato", True, "6"),
+    "agenda": ("fuori_storia", True, "10"),
+    "cassetto": ("registrato", True, "7"),
+}
+ATTI_PASSO_1 = frozenset({"attesa", "giochi", "annuncio", "agenda", "cassetto"})
+
+
+def atti_di(categoria: str) -> frozenset:
+    return frozenset(n for n, (c, _a, _r) in ATTI.items() if c == categoria)
+
+
+def categoria(atto) -> str | None:
+    v = ATTI.get(atto)
+    return v[0] if v else None
+
+
+def e_annuncio(atto) -> bool:
+    v = ATTI.get(atto)
+    return bool(v and v[1])
 # Canali di ciò che dice Calliope e di ciò che dice la persona
 CANALI_CALLIOPE = ("voce", "scritto", "muta")
 CANALI_PERSONA = ("voce", "scritto", "modulo")

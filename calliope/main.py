@@ -58,6 +58,7 @@ from .speaker_id import SpeakerRegistry, SpeakerContext
 from .stt import make_transcriber
 from .tools.builtin import biblioteca_spec, build_registry
 from .tools.spec import ToolContext
+from .eventi.uscita import per_voce, sintetizza_saluto
 from .tts import Speaker
 from .turnlog import TurnLog
 from .web import load_web
@@ -356,19 +357,21 @@ class Avvio:
             speaker = self.speaker = Speaker(cfg, uscita=UscitaRemota(s.satelliti))
             # Il saluto lo dice ogni satellite alla prima connessione, e intanto misura l'eco:
             # si sintetizza ora, prima che altri thread usino la voce
-            s.satelliti.saluto = speaker.sintetizza(self.greeting)
+            s.satelliti.saluto = sintetizza_saluto(speaker, self.greeting)
         # Suoni di inizio e fine ascolto (04/10, calliope/suoni.py; modalità startrek): li suona
         # chi ha il microfono. In locale l'inizio allo scatto della wake word acustica, dentro
         # Listener.listen; con un satellite o un telefono glieli manda il benvenuto
         s.suoni = suoni = SuoniAscolto(cfg) if cfg.suoni_ascolto else None
         if suoni is not None and s.satelliti is None:
-            self.listener.on_wake = lambda: speaker.suono_ascolto(suoni, INIZIO)
+            self.listener.on_wake = lambda: per_voce(speaker).segnale_ascolto(suoni, INIZIO)
         if s.satelliti is not None:
             s.satelliti.suoni = suoni
         # Whisper che passa alla CPU durante l'uso (errore della GPU, server di trascrizione
         # giù): la prima frase costa secondi, e Calliope lo dice invece di tacere (03/10)
         stt = s.stt
-        stt.on_ripiego = lambda: corsie.per_corsia(speaker, "speaker").say_cached(stt.ATTESA)
+        # Dall'uscita unica della corsia che sta trascrivendo (10/10, passo 2): atto attesa_stt
+        stt.on_ripiego = lambda: per_voce(corsie.per_corsia(speaker, "speaker")).di(
+            stt.ATTESA, "attesa_stt", pronta=True)
         # Voci caricate in secondo piano: così un cambio di voce non ritarda la risposta
         # (~1,2 s l'una): prima le preferite degli utenti, poi le altre.
         speaker.preload([s.registry.get(n).preferred_voice for n in s.registry.known_speakers()]
@@ -867,15 +870,15 @@ class Avvio:
 
     def _saluto_ed_eco(self):
         """Il saluto, e intanto si misura se il microfono sente la sua voce (eco)."""
-        speaker = self.speaker
-        speaker.say(self.greeting)
+        uscita = per_voce(self.speaker)
+        uscita.di(self.greeting, "saluto_avvio")    # fuori da una conversazione
         echo_stop = threading.Event()
         echo = {}
         echo_thread = threading.Thread(
             target=lambda: echo.setdefault("q", self.listener.measure_echo(echo_stop)),
             daemon=True)
         echo_thread.start()
-        speaker.wait()
+        uscita.aspetta()
         echo_stop.set()
         echo_thread.join()
         self.echo_level = echo.get("q", 1.0)
@@ -911,7 +914,7 @@ class Avvio:
         suoni = s.suoni = SuoniAscolto(cfg) if cfg.suoni_ascolto else None
         if s.satelliti is None:
             s.wake = load_wake_detector(cfg)     # rileva anche «Calliope» (Config.wake_models)
-            self.listener.on_wake = ((lambda: speaker.suono_ascolto(suoni, INIZIO))
+            self.listener.on_wake = ((lambda: per_voce(speaker).segnale_ascolto(suoni, INIZIO))
                                      if suoni is not None else None)
             s.barge_in = s.wake is not None and cfg.barge_in_enabled
             s.barge_voice = s.barge_in and cfg.barge_in_voice and (
@@ -930,7 +933,7 @@ class Avvio:
 
         def rifai_saluto(testo=self.testo_saluto(primo)):
             try:
-                s.satelliti.saluto = speaker.sintetizza(testo)
+                s.satelliti.saluto = sintetizza_saluto(speaker, testo)
             except Exception as e:  # noqa: BLE001
                 print(f"[MODALITÀ] saluto non rifatto: {type(e).__name__}: {e}", flush=True)
         threading.Thread(target=rifai_saluto, daemon=True, name="saluto").start()
