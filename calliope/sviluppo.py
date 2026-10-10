@@ -1796,6 +1796,78 @@ def tipo_richiesta(name: str, args: dict) -> str | None:
     return None
 
 
+# ─────────────────────── un altro compito (10/10) ───────────────────────
+# Giro vero della DGX del 10/10 mattina: con lo sviluppo di «programma in Python che sommi due
+# numeri» aperto all'analisi, «scrivi un programma in Python che moltiplica due numeri» →
+# sviluppo_apri con il compito nuovo, e il codice (difflib ≥ 0,6: le due frasi differiscono di
+# una parola) lo prendeva per il «sì» alla proposta di prima: partiva il lavoro sulla SOMMA. Lo
+# stesso alle 06:16 con «conta le parole» e «conta le vocali». Un compito è un altro quando
+# toglie una parola piena del titolo dello sviluppo aperto e ne mette una che lì non c'è (una
+# sostituzione: «sommi» → «moltiplichi»). Le sole aggiunte sono dettagli o una modifica dello
+# stesso programma («che somma e moltiplica»); le parole generiche delle richieste («scrivi»,
+# «programma», «Python») non contano. Una correzione della forma di una scelta già fatta dal
+# modello (ha chiamato sviluppo_apri con un compito nuovo, non con la proposta), con un effetto
+# reversibile: una domanda (principio 10)
+_PAROLA = re.compile(r"[a-zàèéìòù]+", re.I)
+_GENERICHE = ("scriv", "fammi", "facci", "crea", "prepar", "vogli", "vorre", "potre", "progr",
+              "script", "codic", "pytho", "appli", "calliop", "favor", "inizi", "aiut")
+_VUOTE = frozenset("anche alla alle allo agli dalla dalle dallo dagli della delle dello degli "
+                   "nella nelle nello negli sulla sulle sullo sugli come cosa dove quando solo "
+                   "tutto tutti tutte tutta sono essere fare fallo farlo deve devi puoi vuoi "
+                   "ogni altro altra altri nuovo nuova però invece oppure mentre senza dopo "
+                   "prima ancora qualche qualcosa perché questo questa questi quello quella "
+                   "quelli loro suoi tuoi miei mio tuo che chi dall nell sull dell all quindi "
+                   "allora adesso subito".split())
+
+
+def parole_piene(testo: str) -> list[str]:
+    """Le parole piene di un compito (almeno 4 lettere, niente parole generiche)."""
+    out = []
+    for w in _PAROLA.findall(str(testo or "").lower()):
+        if len(w) < 4 or w in _VUOTE or w.startswith(_GENERICHE):
+            continue
+        out.append(w)
+    return out
+
+
+def _simili(a: str, b: str) -> bool:
+    """La stessa parola con un'altra desinenza («somma», «sommi»; «conta», «contare»)."""
+    soglia = min(5, len(a) - 1, len(b) - 1)
+    if soglia < 3:
+        return a == b
+    n = 0
+    for x, y in zip(a, b):
+        if x != y:
+            break
+        n += 1
+    return n >= soglia
+
+
+def aggiunte(testo: str, *riferimenti: str) -> list[str]:
+    """Le parole piene di `testo` che non sono in nessuno dei riferimenti."""
+    rif = [w for r in riferimenti for w in parole_piene(r)]
+    return [w for w in parole_piene(testo) if not any(_simili(w, x) for x in rif)]
+
+
+def altro_compito(compito: str, titolo: str, *riferimenti: str) -> bool:
+    """Il compito è un altro rispetto allo sviluppo (o alla proposta) col titolo `titolo`: una
+    parola piena del titolo manca e ce n'è una nuova, che non è nemmeno nella richiesta o nella
+    specifica (`riferimenti`: i dettagli aggiunti dal modello non contano)."""
+    if not str(compito or "").strip() or not str(titolo or "").strip():
+        return False
+    nuove = aggiunte(compito, titolo, *riferimenti)
+    if not nuove:
+        return False
+    detto = parole_piene(compito)
+    tolte = [w for w in parole_piene(titolo) if not any(_simili(w, x) for x in detto)]
+    return bool(tolte)
+
+
+def _altro_dello_sviluppo(a: dict, sv) -> bool:
+    return altro_compito(str(a.get("compito") or ""), sv.titolo, sv.richiesta,
+                         sv.specifica or "")
+
+
 def estraneo(name: str, args: dict, ctx) -> Sviluppo | None:
     """Lo sviluppo aperto di chi parla se questa chiamata è una richiesta NUOVA che non gli
     appartiene (un'altra estensione, un programma, una ricerca: decisione di Dario dell'08/10,
@@ -1818,7 +1890,10 @@ def estraneo(name: str, args: dict, ctx) -> Sviluppo | None:
             return None
         if not mod and sv.fase == "analisi" and sv.lavoro is None:
             return None                     # le risposte alle domande dell'analisi
-    if tipo == "programma" and sv.tipo == "programma" and sv.fase == "analisi"             and sv.lavoro is None:
+    if (tipo == "programma" and sv.tipo == "programma" and sv.fase == "analisi"
+            and sv.lavoro is None and not _altro_dello_sviluppo(a, sv)):
+        # le risposte alle domande dell'analisi, o una modifica; non un programma diverso
+        # (10/10: «moltiplica due numeri» con «sommi due numeri» aperto)
         return None
     return sv
 
@@ -1849,7 +1924,8 @@ def passo_interno(name: str, args: dict, ctx) -> bool:
         return sv.fase == "analisi" and sv.lavoro is None
     if tipo == "programma":
         return (sv.tipo == "programma" and sv.fase == "analisi" and sv.lavoro is None
-                and not a.get("file") and a.get("allegato") in (None, ""))
+                and not a.get("file") and a.get("allegato") in (None, "")
+                and not _altro_dello_sviluppo(a, sv))
     if name == "estensione_gestisci":
         return (str(a.get("azione") or "").lower() in ("approva", "rifiuta")
                 and bool(sv.estensione) and _nome_estensione(ctx, a.get("nome")) == sv.estensione)

@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 
 from .spec import ToolContext, ToolSpec, note_rule
 from ..testi import FAMILY, NIENTE
@@ -83,23 +84,96 @@ def _schermo(ctx, sv):
 
 # ─────────────────────────── agganci per i tool dei lavori ───────────────────────────
 
-def controlla_nuovo(ctx, tool: str, args: dict) -> dict | None:
+def controlla_nuovo(ctx, tool: str, args: dict, riapri: dict | None = None) -> dict | None:
     """Uno sviluppo nuovo (un'estensione, un programma, un lavoro dell'agente) mentre uno è
     aperto: non parte, Calliope lo dice e propone di sospendere quello aperto (decisione di
-    Dario dell'08/10). None se la richiesta è dello sviluppo aperto, o non ce n'è uno."""
-    from ..sviluppo import ALLA, estraneo
+    Dario dell'08/10). None se la richiesta è dello sviluppo aperto, o non ce n'è uno.
+
+    `riapri` (10/10): gli argomenti di sviluppo_apri per la richiesta nuova. La domanda dice
+    allora i due titoli («Vuoi che sospenda «somma…» e apra «moltiplica…»?») e il «sì»
+    (sviluppo_passo sospendi, entro due turni) sospende quello aperto e apre il nuovo, senza
+    farlo ripetere (`_PROSSIMI`, regola `sviluppo_cambio`)."""
+    from ..sviluppo import ALLA, chi, estraneo
     sv = estraneo(tool, args, ctx)
     if sv is None:
         return None
     note_rule(ctx, "sviluppo_altro_bloccato")
-    frase = (f"Adesso stiamo sviluppando «{sv.titolo}» e siamo {ALLA.get(sv.fase, sv.fase)}: "
-             "un'altra cosa per l'agente la comincio dopo. Vuoi che sospenda questo sviluppo? "
-             "Lo riprendiamo quando vuoi.")
+    alla = ALLA.get(sv.fase, sv.fase)
+    nuovo = _titolo_nuovo(riapri) if riapri else ""
+    svs = _svs(ctx)
+    if nuovo and svs is not None and not svs.lavoro_attivo(sv):
+        sc = getattr(ctx, "speaker_ctx", None)
+        _PROSSIMI[_chiave(chi(ctx))] = {
+            "argomenti": dict(riapri), "titolo": nuovo, "da": sv.id,
+            "turno": int(getattr(ctx, "turno", 0) or 0), "quando": time.time(),
+            # la richiesta è stata detta con la voce riconosciuta (o con la sfida superata):
+            # il «sì» breve che la conferma non deve ripeterla (tools/agenti._permesso)
+            "voce": getattr(sc, "identified_by", "voce") in ("voce", None)
+            or bool(getattr(sc, "sfida_superata", False))}
+        domanda = f"Vuoi che sospenda «{sv.titolo}» e apra «{nuovo}»?"
+        altro = ("un altro programma" if _tipo(riapri.get("tipo")) == "programma"
+                 else "un'altra estensione")
+        frase = (f"Adesso stiamo sviluppando «{sv.titolo}» e siamo {alla}: «{nuovo}» è "
+                 f"{altro}, e ne seguo uno per volta; il primo lo riprendiamo quando vuoi. "
+                 f"{domanda}")
+        cosa = f"sospendere lo sviluppo di «{sv.titolo}» e aprire quello di «{nuovo}»"
+    else:
+        domanda = "Vuoi che sospenda questo sviluppo?"
+        frase = (f"Adesso stiamo sviluppando «{sv.titolo}» e siamo {alla}: "
+                 "un'altra cosa per l'agente la comincio dopo. Vuoi che sospenda questo "
+                 "sviluppo? Lo riprendiamo quando vuoi.")
+        cosa = f"sospendere lo sviluppo di «{sv.titolo}»"
     return {"ok": False, "fatto": f"{NIENTE}: c'è uno sviluppo aperto, il lavoro NON è partito",
             "conferma": frase, "risposta_finale": frase,
-            "in_sospeso": {"domanda": "Vuoi che sospenda questo sviluppo?",
-                           "cosa": f"sospendere lo sviluppo di «{sv.titolo}»",
+            "in_sospeso": {"domanda": domanda, "cosa": cosa,
                            "tool": "sviluppo_passo", "argomenti": {"azione": "sospendi"}}}
+
+
+# La richiesta nuova in attesa del «sì» a «sospendo quello aperto e apro questo?» (10/10), per
+# persona; solo in memoria, vale due turni (e al più tre minuti)
+_PROSSIMI: dict = {}
+PROSSIMO_TURNI = 2
+PROSSIMO_S = 180
+
+
+def _chiave(persona) -> str:
+    return str(persona or "")
+
+
+def _titolo_nuovo(riapri: dict) -> str:
+    from ..agenti.servizio import senza_estensione, titolo_da
+    compito = str((riapri or {}).get("compito") or "").strip()
+    if compito:
+        t = titolo_da(compito)
+        return senza_estensione(t) if _tipo((riapri or {}).get("tipo")) == "programma" else t
+    return str((riapri or {}).get("nome") or (riapri or {}).get("modifica") or "").strip()
+
+
+def _apri_prossimo(ctx, sv) -> dict | None:
+    """Dopo «sospendi»: apre lo sviluppo nuovo chiesto al turno della domanda, se c'è (stessa
+    persona, entro PROSSIMO_TURNI turni e PROSSIMO_S secondi)."""
+    from ..sviluppo import chi
+    p = _PROSSIMI.pop(_chiave(chi(ctx)), None)
+    if p is None or p.get("da") != sv.id:
+        return None
+    dt = int(getattr(ctx, "turno", 0) or 0) - int(p.get("turno") or 0)
+    if not 0 <= dt <= PROSSIMO_TURNI or time.time() - float(p.get("quando") or 0) > PROSSIMO_S:
+        return None
+    note_rule(ctx, "sviluppo_cambio")
+    prima = getattr(ctx, "voce_della_richiesta", False)
+    try:
+        ctx.voce_della_richiesta = bool(p.get("voce"))
+        out = dict(_sviluppo_apri(ctx, **p["argomenti"]))
+    finally:
+        ctx.voce_della_richiesta = prima
+    testa = f"Ho sospeso lo sviluppo di «{sv.titolo}»: lo riprendiamo quando vuoi."
+    out["fatto"] = f"sviluppo di «{sv.titolo}» sospeso; " + str(out.get("fatto") or "")
+    detto = str(out.get("risposta_finale") or "").strip()
+    if detto:
+        out["risposta_finale"] = f"{testa} {detto}"
+        if out.get("conferma"):
+            out["conferma"] = out["risposta_finale"]
+    return out
 
 
 def apri_se_serve(ctx, tipo: str, compito: str, titolo: str = "", gioco: bool = False,
@@ -273,6 +347,11 @@ def _sviluppo(ctx: ToolContext, azione: str = "stato", quale: str = "", cambia: 
         svs.sospendi(sv)
         note_rule(ctx, "sviluppo_sospeso")
         _schermo(ctx, sv)
+        if not svs.lavoro_attivo(sv):
+            # «Sì» a «sospendo questo e apro l'altro?» (10/10, controlla_nuovo)
+            cambio = _apri_prossimo(ctx, sv)
+            if cambio is not None:
+                return cambio
         frase = (f"D'accordo: sospendo lo sviluppo di «{sv.titolo}», eravamo {_alla(sv)}. "
                  "Quando vuoi, dimmi «riprendiamo lo sviluppo».")
         if svs.lavoro_attivo(sv):

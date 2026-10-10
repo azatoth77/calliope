@@ -1716,3 +1716,50 @@ quella risposta. Dallo stesso giro restano documentati, per il passo 5 della mac
 dei servizi (qui quella di `Lavori.proponi`) che sopravvivono alla chiusura della conversazione, e
 la proposta nata da un annuncio intestata all'ultimo che ha parlato sul satellite invece che alla
 persona dell'annuncio.
+
+## Un programma diverso non conferma lo sviluppo aperto (10/10, ramo `giro-ombra-correzioni`)
+
+Giro vero della DGX del 10/10 mattina (06:09–06:18, satellite «studio»). Alle 06:10:59, con lo
+sviluppo di «programma in Python che sommi due numeri» aperto all'analisi (proposta in attesa del
+«sì»), «Scrivi un programma in Python che moltiplica due numeri» → `sviluppo_apri` con il compito
+nuovo, regole `lavori_conferma_implicita` e `sviluppo_fase`, «Ci lavoro in secondo piano», e il
+«stop» successivo fermava il lavoro dell'agente sulla **somma**. Alle 06:16:44 lo stesso schema:
+«conta le parole» con «conta le vocali» aperto, e l'agente lavorava sulle vocali.
+
+- **Causa**: la conferma implicita (`tools/agenti._delega_lavoro`, il modello che dopo il «sì»
+  richiama il tool senza l'id) guardava solo lo stesso tipo e difflib ≥ 0,6 tra il compito della
+  proposta e quello nuovo; due compiti scritti dal modello con lo stesso stampo («…che sommi due
+  numeri inseriti dall'utente e ne stampi il risultato» e «…che moltiplichi…») stanno a 0,9.
+  E `sviluppo.estraneo` considerava ogni programma chiesto con un programma all'analisi senza
+  lavoro come «le risposte alle domande dell'analisi»: anche senza la conferma implicita la
+  moltiplicazione sarebbe finita nella specifica dello sviluppo della somma.
+- **Correzione** (`sviluppo.altro_compito`): un compito è un altro quando toglie una parola piena
+  del titolo (dello sviluppo o della proposta) e ne mette una che non è né nel titolo né nella
+  richiesta o nella specifica: una sostituzione («sommi» → «moltiplichi», «vocali» → «parole»).
+  Parole piene: almeno 4 lettere, senza le parole generiche delle richieste («scrivi», «fammi»,
+  «programma», «script», «Python», «Calliope»…), con la stessa radice per le desinenze («somma»,
+  «sommi»). Le sole aggiunte sono dettagli del modello, risposte all'analisi o una modifica dello
+  stesso programma («che somma e moltiplica»). È una correzione della forma di una scelta già
+  fatta dal modello (ha chiamato `sviluppo_apri` con un compito, non con la proposta) con un
+  effetto reversibile, una domanda (principio 10).
+  - La conferma implicita vale solo se il compito non è un altro e la persona ha detto un
+    consenso («Sì, procedi.») o ha ripetuto la richiesta senza parole piene nuove; altrimenti
+    regola `lavori_conferma_diversa` e si va avanti come per una richiesta nuova.
+  - `estraneo` (e `passo_interno`, per la politica) con un programma all'analisi senza lavoro:
+    un altro compito è uno sviluppo nuovo, che non parte (`sviluppo_altro_bloccato`).
+  - **La domanda dice i due titoli** (`controlla_nuovo` con `riapri`): «Adesso stiamo sviluppando
+    «programma in Python che sommi due numeri» e siamo all'analisi: «programma in Python che
+    moltiplichi due numeri» è un altro programma, e ne seguo uno per volta; il primo lo
+    riprendiamo quando vuoi. Vuoi che sospenda «…sommi…» e apra «…moltiplichi…»?». Il «sì»
+    (`sviluppo_passo sospendi`, entro due turni e tre minuti, stessa persona) sospende quello
+    aperto e apre il nuovo con la sua analisi e la sua proposta (regola `sviluppo_cambio`): il
+    lavoro parte solo al «sì» a quella proposta. La richiesta detta con la voce riconosciuta non
+    va ripetuta dopo il «sì» breve (`voce_della_richiesta` in `_permesso`); detta con una frase
+    breve, dopo il «sì» si chiede la frase di sfida. Uno sviluppo con l'agente al lavoro resta
+    con la domanda di prima (sospendere lascia finire il lavoro).
+- **Limite**: un sinonimo («addiziona» per «somma») è una sostituzione: la richiesta ripetuta
+  con un sinonimo riceve la domanda «sospendo e apro?» invece di valere come «sì». Va nella
+  direzione sicura (niente parte senza un «sì»).
+- **Prove**: `prova_giro_ombra.py` (i due turni veri, il «sì» che sospende e apre, «sospendi» sei
+  turni dopo, la richiesta senza la voce; contrari: la richiesta ripetuta con altre parole, il
+  «sì» con il compito riscritto, la modifica che resta dello sviluppo aperto).

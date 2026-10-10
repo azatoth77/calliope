@@ -154,7 +154,10 @@ def _estensione_crea(ctx: ToolContext, compito: str = "", nome: str = "", propos
     # diversa non parte finché non è chiuso o sospeso; le risposte all'analisi e la modifica
     # della sua estensione sì
     from .sviluppo import apri_se_serve, controlla_nuovo
-    blocco = controlla_nuovo(ctx, "sviluppo_apri", {"modifica": modifica, "gioco": gioco})
+    blocco = controlla_nuovo(ctx, "sviluppo_apri", {"modifica": modifica, "gioco": gioco},
+                             riapri={k: v for k, v in {"tipo": "estensione", "compito": compito,
+                                                      "nome": nome, "modifica": modifica,
+                                                      "gioco": gioco}.items() if v})
     if blocco is not None:
         return blocco
     # Una richiesta nuova di chi amministra apre lo sviluppo, in analisi (08/10). Per una

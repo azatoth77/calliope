@@ -119,9 +119,12 @@ def _permesso(ctx, tipo: str, rigido: bool, args: dict | None = None):
     prof = _person(ctx)
     if prof is None:
         return None, "Non so chi sei: i lavori li affido solo per le persone registrate."
+    # La richiesta nuova detta prima con la voce, confermata ora col «sì» a «sospendo quello
+    # aperto e apro questo?» (10/10, tools/sviluppo._apri_prossimo): non si fa ripetere
     if rigido and tipo in ("codice", "estensione") and getattr(
             ctx.speaker_ctx, "identified_by", "voce") not in ("voce", None) \
-            and not getattr(ctx.speaker_ctx, "sfida_superata", False):
+            and not getattr(ctx.speaker_ctx, "sfida_superata", False) \
+            and not getattr(ctx, "voce_della_richiesta", False):
         # Un'estensione (08/10, DGX delle 16:45: «Sì, te lo confermo» dopo la richiesta detta
         # con la voce → frase di sfida «per creare una funzione nuova», poi sprecata): aprire
         # lo sviluppo è solo l'analisi e la proposta, e niente diventa attivo senza
@@ -484,6 +487,23 @@ def _avvia(ctx, svc, lav) -> dict:
                   lavoro=lav.id, titolo=lav.titolo)
 
 
+def _stessa_offerta(lav, compito: str, detto: str) -> bool:
+    """Il richiamo senza id vale come il «sì» alla proposta `lav` (conferma implicita): il
+    compito del modello non sostituisce una parola piena del titolo della proposta (10/10,
+    sviluppo.altro_compito) e la persona ha detto un consenso, oppure ha ripetuto la richiesta
+    senza parole piene nuove. Anche dopo un «sì» un compito diverso non conferma: il «sì» a
+    «sospendo quello aperto e apro l'altro?» (tools/sviluppo._apri_prossimo) confermava la
+    proposta vecchia."""
+    from ..sviluppo import aggiunte, altro_compito
+    rif = (str(getattr(lav, "compito", "") or ""), str(getattr(lav, "specifica", "") or ""),
+           str(getattr(lav, "titolo", "") or ""))
+    if altro_compito(compito, rif[2] or rif[0], *rif):
+        return False
+    if detto and politica.consenso(detto):
+        return True
+    return not (detto and aggiunte(detto, *rif))
+
+
 def _delega_lavoro(ctx: ToolContext, tipo: str = "", compito: str = "", formato: str = "",
                    modello: str = "", vincoli: str = "", proposta: str = "", file: str = "",
                    allegato=None, **altro) -> dict:
@@ -554,6 +574,11 @@ def _delega_lavoro(ctx: ToolContext, tipo: str = "", compito: str = "", formato:
     off = svc.offerta(getattr(prof, "id", None), turno) if hasattr(svc, "offerta") else None
     implicita = (off is not None and off["lavoro"].tipo == tipo and difflib.SequenceMatcher(
         None, off["lavoro"].compito.lower(), compito.lower()).ratio() >= 0.6)
+    if implicita and not _stessa_offerta(off["lavoro"], compito, detto):
+        # Un compito diverso da quello proposto non è il «sì» alla proposta (10/10, giro vero
+        # della DGX: «moltiplica due numeri» confermava «sommi due numeri»)
+        implicita = False
+        note_rule(ctx, "lavori_conferma_diversa")
     # Prima senza la voce: un «sì» breve dopo la proposta (conferma implicita, qui sotto) vale
     # come il «sì» con proposta=id, che non la chiede. Fino al 03/10 il controllo rigido
     # veniva prima e «Sì, vai.» riceveva «non ti ho riconosciuto bene dalla voce»
@@ -579,7 +604,9 @@ def _delega_lavoro(ctx: ToolContext, tipo: str = "", compito: str = "", formato:
     # Uno sviluppo aperto (08/10, modalità sviluppo): niente lavori nuovi dell'agente finché
     # non è chiuso o sospeso (decisione di Dario), salvo il programma di quello sviluppo
     from .sviluppo import apri_se_serve, controlla_nuovo
-    blocco = controlla_nuovo(ctx, "lavoro_affida", {"tipo": tipo})
+    blocco = controlla_nuovo(ctx, "lavoro_affida", {"tipo": tipo, "compito": compito},
+                             riapri={"tipo": "programma", "compito": compito}
+                             if tipo == "codice" else None)
     if blocco is not None:
         return blocco
     # Una richiesta nuova di codice vuole la voce riconosciuta in questa frase
