@@ -1889,3 +1889,48 @@ sono in [voce-e-regole](voce-e-regole.md).
   «e un altro» / «e altri N» (`ELENCO_VOCE`), il conto è di tutti; nei dati del turno fino a otto
   (`ELENCO_MODELLO`).
 - **Prove**: `prova_giro4.py` (B, C, con i turni veri e i contrari).
+
+## Un gioco non è impossibile, e i nomi `sviluppo_<azione>` (10/10 pomeriggio, ramo `pomeriggio-correzioni`)
+
+Giro vero della DGX del 10/10, 15:56–15:58 (uso normale di Dario, 26B e qwen3.6).
+
+- **Giochi dichiarati impossibili.** 15:56:05 «Vorrei sviluppare un gioco all'interno di
+  Calliope.» → `sviluppo_apri(compito="un gioco", tipo="programma")` → analisi di un lavoro di
+  codice → «Questo qui non posso farlo: non si possono creare giochi interattivi o programmi con
+  finestre e grafica.» (`analisi_impossibile`). Alle 15:56:24 e 15:56:47 (il gioco di Halloween:
+  porte, mostri, animazione, punti) il modello, senza tool, prometteva al più uno script di testo.
+  **Causa**: il tipo programma porta all'analisi del codice, che conosce solo la sandbox («niente
+  programmi con finestre»), mentre i giochi sugli schermi ([giochi](giochi.md)) sono estensioni
+  con `gioco`. **Correzione**: in `_sviluppo_apri` un compito che **è** un gioco
+  (`gioco_sugli_schermi`: «un gioco», «un piccolo gioco di paura…», «crea un minigioco», in
+  testa al compito) senza le parole di un programma (finestra, desktop, Windows, terminale,
+  Python, C#, PC) nel compito o nella frase diventa un'estensione con `gioco` (regola
+  `sviluppo_gioco_schermi`, correzione della forma della scelta del modello, principio 10);
+  `tipo="gioco"` vale `gioco` (prima diventava un'estensione senza gioco). La proposta di un
+  gioco dice «Lo faccio come gioco sugli schermi di Calliope.» prima di «Ho capito così: …»
+  (`Sviluppi.frase_proposta`). La descrizione di sviluppo_apri dice che un gioco, anche con
+  grafica e animazioni, è un'estensione con gioco=true; l'analisi di codice
+  (`richiesta.capacita`) che un gioco si fa (ESTENSIONE) e che impossibile resta il programma con
+  le finestre per il desktop; il rimando dell'esito estensione dice gioco = true. Contrari: «un
+  programma con una finestra per il desktop», «un gioco da terminale in Python», «un programma
+  che conta i punti del gioco di carte» restano programmi.
+- **`sviluppo_ferma` e `sviluppo_chiudi` inventati.** 15:57:35 e 15:57:43 «fermo tutti gli
+  sviluppi» → `sviluppo_ferma({})` due volte → «tool sconosciuto» → «Non ci sono riuscita»;
+  15:57:59 «preferisco che tu chiuda tutti gli sviluppi aperti» → `sviluppo_chiedi` con la
+  regola `tool_nome_corretto`: il modello aveva scritto `sviluppo_chiudi`, a una lettera da
+  sviluppo_chiedi, e il nome vicino ne aveva fatto la domanda all'agente («di quale codice
+  parli?»). **Correzione** (forma della scelta del modello, principio 10): un nome
+  `sviluppo_<x>` che non esiste, con <x> un'azione di sviluppo_passo o un suo sinonimo chiaro
+  (`SINONIMI_AZIONE`: ferma, stop, stoppa, blocca, interrompi, chiudi, esci, sospendi, pausa,
+  riprendi, rifai, riprova, stato, elenco, lista, avanti, continua, analisi, promuovi…) è
+  sviluppo_passo con quell'azione (`azione_dal_nome`, `registry.nome_con_azione`, regola
+  `tool_nome_azione`), in `Brain._nome_corretto` **prima** del nome vicino, in
+  `ToolRegistry.call` e `mancanti`; un'azione valida già negli argomenti resta. `sviluppo_stato`
+  (in `NOMI_VECCHI` dalla mattina) è uno di questi. Non generalizzato a `lavoro_<x>`: i lavori
+  hanno un tool per azione (lavoro_stato, lavoro_annulla…), non un tool con `azione`. Le
+  descrizioni: sviluppo_chiedi «solo per DOMANDE sul codice: per chiudere, fermare o sospendere
+  c'è sviluppo_passo»; sviluppo_passo «non ci sono tool sviluppo_ferma, sviluppo_chiudi o
+  sviluppo_stato». Contrari: i tool veri, `sviluppo_prova` (nome vecchio di sviluppo_collauda),
+  `sviluppo_xyz` (errore strutturato), `lavoro_ferma`, un nome storpiato (`tool_nome_corretto`).
+- **Prove**: `prova_giro_pomeriggio.py` (2 e 3); `prova_sviluppo_v2` aggiornata
+  (`sviluppo_stato` → `tool_nome_azione`).

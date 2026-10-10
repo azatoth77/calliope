@@ -1290,3 +1290,45 @@ frase della conversazione restava fuori dalla finestra della proiezione: 6 attac
 Il cambio d'argomento (§ 13, tool `argomento`, classe sicura: non esegue niente) non vale dopo un
 dato non fidato letto nella risposta (`argomento_dopo_dato`): un dato non apre né riprende
 argomenti, e quindi non mette in pausa uno sviluppo né fa scadere una proposta.
+
+## L'avviso dei segreti una volta, nel turno del dato (10/10 pomeriggio, ramo `pomeriggio-correzioni`)
+
+Giro vero della DGX del 10/10, 15:11–15:58 (uso normale di Dario, 26B). Alle 15:52:45 una ricerca
+sul software di grafica riscritto con l'IA (una pagina senza richieste di codici); alle 15:54:01
+(«Quindi anche tu puoi ottenere un risultato simile», nessun tool) e alle 15:55:02 (la domanda sul
+gioco, nessuna ricerca) al posto di una frase del modello «Una pagina internet chiede anche dei
+codici o delle password: non lo ripeto. Non darli a nessuno senza controllare chi li chiede.»
+(`uscita_segreti`). Nel turno della pagina, nessun avviso.
+
+**Causa** (riprodotta a secco con le frasi probabili: la frase fermata non è nel journal): non il
+dato ancora in finestra né il modello che ripete, ma `riferire.giudica`. La conversazione resta
+contaminata finché la traccia `_fonte` della pagina è nella storia (`prov.fonti` su tutta la
+storia: giusto, la pagina c'è ancora), e `uscita_segreti`, a differenza di `uscita_contatto` e
+`uscita_istruzione`, non guarda se il segreto viene dal dato: basta una parola di `_SEGRETO`
+(«codice», «token») e un verbo di `_DARE` («scriv», «legg», «dar») nella frase. In una
+conversazione sull'IA che scrive programmi, «Anch'io posso scrivere codice, ma il limite è il
+numero di token che posso leggere» o «posso scrivere uno script e darti il codice» lo sono, e la
+frase fissa si diceva a ogni turno.
+
+**Correzione**:
+- `Contesto.nuove` (le fonti arrivate in questo turno, `riferire.fonti_del_turno`: dalla frase
+  della persona in poi) e `Contesto.segreti_nel_dato()`: nei turni **senza un dato nuovo**
+  `uscita_segreti` vale solo se un dato ancora in memoria (la storia e `conv.esterni`) chiede
+  davvero codici o password (una sua frase con il segreto e il verbo di chi lo chiede,
+  `_CHIEDE_NEL_DATO`; con una foto senza testo, nel dubbio sì). Nel turno del dato il controllo
+  è quello di prima. Un `Contesto` costruito senza `nuove` (gli annunci, `controlla_testo`, le
+  prove) vale come dato nuovo.
+- In `filtra` la frase fissa già detta in questa conversazione, in un turno senza un dato nuovo,
+  non si ripete: la frase fermata si toglie e basta (`gia_detta`); se così non resterebbe niente,
+  si dice. Vale per tutte le frasi fisse.
+- «codice» oggetto di chi programma anche senza articolo o con «un» («scrivere codice»,
+  «scrivere un codice simile») e «il codice in Python» (`_CODICE_LAVORO`, `_CODICE_PROGRAMMA`);
+  «il codice in cui…» resta un segreto possibile.
+- Il journal scrive la frase fermata (accorciata a 160 caratteri): finora i casi veri si
+  indovinavano.
+
+Contrari (`prova_giro_pomeriggio`): la pagina che chiede il codice OTP → avviso nel suo turno; al
+turno dopo la frase che ripete il codice resta fermata, in silenzio; con solo quella frase
+l'avviso si dice; un'altra pagina nuova con il PIN → di nuovo. Con il codice di prima la prova
+riproduce i due avvisi della DGX. Banco di `prova_politica` (attacchi e contrari di riferire)
+invariato, 0 errori.
