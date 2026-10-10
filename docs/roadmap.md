@@ -66,6 +66,12 @@ Dettagli in [`../CHANGELOG.md`](../CHANGELOG.md) e nei documenti d'area.
    ([`ricerche/2026-10-09-piu-persone.md`](ricerche/2026-10-09-piu-persone.md)).
 6. **Taratura della macchina**, fasi 3–6: prova breve, `taratura.json`, campi «auto»; il
    profilo per il portatile da 8 GB.
+7. **Notizie dai feed RSS** (deciso il 10/10): i feed delle testate italiane scaricati ogni tanto
+   in un indice locale (FTS5, come la biblioteca), con la fonte detta; SearXNG resta il ripiego.
+   Nessuna chiave, nessuno scraping: Google News e Brave oggi bloccano le notizie di SearXNG.
+8. **Satelliti ESPHome** (decisione [0026](decisioni/0026-satelliti-esphome-senza-home-assistant.md),
+   10/10): adattatore in Calliope provato con un dispositivo finto, poi il Voice PE in ufficio
+   ([`ricerche/2026-10-10-wyoming.md`](ricerche/2026-10-10-wyoming.md), piano a passi).
 
 **Funzionalità decise, senza date**
 

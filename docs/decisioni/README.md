@@ -36,6 +36,7 @@ cancella: si segna come tale.
 | [0023](0023-tabella-dichiarativa-dei-permessi.md) | Una tabella dichiarativa dei permessi | proposta (10/10) |
 | [0024](0024-niente-internet-se-non-serve.md) | Niente internet quando se ne può fare a meno: il meteo di casa | accettata, 09/10 |
 | [0025](0025-minori-due-cancelli.md) | Minori: un segnale di pericolo poco chiaro passa da due cancelli | accettata, 09/10 |
+| [0026](0026-satelliti-esphome-senza-home-assistant.md) | I satelliti parlano direttamente con Calliope (API di ESPHome), Home Assistant solo per la casa | accettata, 10/10 |
 
 Una decisione nuova prende il numero successivo e segue lo stesso formato; quando ne supera una
 vecchia, la vecchia cambia solo lo stato («superata il …, vedi NNNN»).
