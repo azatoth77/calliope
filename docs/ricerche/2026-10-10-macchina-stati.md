@@ -1221,3 +1221,34 @@ comunque).
 `proposta_diversa` (devono sparire o quasi), `id_argomento`, le `spinta_dichiarata` dopo una
 proposta dello sviluppo (devono tornare come con lo spento), la prima frase delle risposte a una
 proposta con e senza chiamata.
+
+## 10. Il secondo giro del 10/10 (07:11–07:21) e cosa cambia per il passo 2
+
+Dopo le correzioni del mattino (ombra neutra, `id_della_proposta`): il «sì» all'analisi detto con
+la corsia veloce o col modello fa partire il lavoro, il modello risponde con `proposta_rispondi`
+usando l'id del lavoro (accettato), «Lo apro?» → «Sì» apre il file. Sei disaccordi tra oggi e la
+macchina; in tre la decisione di oggi era quella giusta, e vanno nella tabella del passo 2 prima di
+accendere:
+
+1. **Un «no» all'analisi di uno sviluppo vuol dire «cambiala»**, non «chiudi la proposta»
+   («No, non mi va bene così» → oggi «dimmi cosa modificare», giusto; la macchina avrebbe chiuso).
+   Nella tabella: per le proposte d'analisi, `no` → resta aperta e si chiede la modifica.
+2. **«Sospendi» non chiede la frase di sfida**: è reversibile da sé (si riprende con una parola).
+   Il consenso del progetto lo metteva a `sfida` per una frase breve; va a E1.
+3. **Una richiesta nuova prende il posto della proposta aperta** (oggi `sostituita`): la macchina
+   la teneva viva. Con il tetto di tre attese per persona resta da decidere se la vecchia scade
+   subito o resta in coda; la scelta più semplice e coerente con il comportamento di oggi è che la
+   nuova la sostituisca.
+
+**Osservazione di Dario: la persona ascolta l'audio, il modello vede la storia.** Le frasi aggiunte
+dal ciclo e dai tool («Chiudo lo sviluppo…? Se vuoi solo una pausa…», «Intanto restiamo sullo
+sviluppo di…», le frasi pronte) sono ciò che la persona ha sentito, ma il modello non sempre le ha
+come sue parole, e il ciclo che le gestisce rende più difficile al modello capire la conversazione.
+Il caso del giro: sette risposte di fila a «Chiudo lo sviluppo…?» rimandate al tool, che rifaceva la
+domanda (la domanda non era in fondo e non diventava una proposta). Principio per il passo 2, in
+aggiunta alla «storia pulita» del § 3: **nella storia l'ultimo messaggio dell'assistente è
+esattamente ciò che la persona ha sentito** (le frasi dei tool e del ciclo comprese, senza ciò che è
+stato interrotto prima di essere detto); gli scambi tecnici restano fuori. Ogni domanda che il
+codice fa a voce è una proposta della macchina, con la domanda in fondo, oppure non è una domanda.
+La verifica di come stanno oggi le cose e la correzione della chiusura sono nel ramo
+`sviluppo-chiusura` (10/10).
