@@ -1198,6 +1198,8 @@ comunque).
    l'indicazione «se vuoi solo una pausa…»), oppure `set_pending` che accetta l'`in_sospeso` quando
    la domanda c'è nel testo detto e non solo alla fine. Piccolo, ma cambia il comportamento (oggi
    la chiusura confermata non scatta mai): da fare a parte, con la sua prova.
+   *Fatto il 10/10 (ramo `sviluppo-chiusura`, `prova_giro_chiusura`): la domanda in fondo,
+   «… Lo chiudo?», anche per uno sviluppo sospeso.*
 4. **Niente secondo giro per `no` e `rinvio`, niente `altro`.** Il risultato di `no` e `rinvio`
    porta una `risposta_finale` corta della macchina («Va bene, lascio stare.», «D'accordo, più
    tardi.»): niente secondo giro del modello, ~1 s in meno su quei turni. `altro` esce dall'enum
