@@ -83,6 +83,8 @@ A_SECCO = [
     ("prova_argomenti_incerti.py", [], "parole incerte negli argomenti dei tool (08/10, F0 e F1): argomenti marcati, allineamento alle parole di Whisper, esito vuoto, vocabolario dei nomi noti, probabilità in parallelo al tool, «forse intendeva» con la proposta e il sì senza altre domande, «ripeti o scrivi», contrari (pieno, nome lontano, ospite, zona grigia, casa, frase pronta, la gente), registro e riassunto"),
     ("prova_latenza.py", [], "latenza vera della voce (06/10, P2–P4, P11): guardiano e rilevatore caldi e ricaricati, domanda giudicata in parallelo, conversazione ripresa in cache, mediana e p90 per giorno con le cause e l'avviso, riassunto dell'agente con un tempo massimo; prima frase a pezzi, taratura della voce, Piper sulla CPU o sulla GPU secondo la macchina e dal testo alla voce (07/10)"),
     # ~9 s: microfono e VAD finti in tempo quasi reale, server dei satelliti vero, node se c'è
+    ("prova_frase_lunga.py", [], "frase lunga (10/10, caso vero della DGX: dettatura tagliata a 30 s): tetto a 120 s, tempo massimo di whisper-server in proporzione, Listener che al tetto prepara il seguito senza doppioni né buchi, il seguito unito allo stesso turno (`frase_tetto`) con i contrari (nessuno continua, rumore continuo, frase chiusa dal silenzio), giro del ciclo, satellite finto su server vero, niente suono di fine al tetto (satellite e telefono)"),
+    ("prova_frase_lunga_voce.py", [], "frase lunga con la voce vera (10/10): dettatura sintetica di ~70 s (Piper) in un Listener con Silero VAD, tetto a 30 s raggiunto due volte, pezzi uniti e trascritti da faster-whisper oltre la finestra di 30 s, con il contrario del primo pezzo tagliato"),
     ("prova_pause.py", [], "pause e fine del turno (07/10, solo misura): pause interne e parlato da Listener, satellite e telefono (voce.js con node), ripresa dopo la frase con i contrari (casse, risposta, oltre 2 s), «aspetta»/«non ho finito» con i contrari, campo «ascolto» del registro, frase_finita e «ripresa» nel protocollo (satellite vecchio), riassunto e soglia stimata in `calliope stato --turni --pause`"),
     ("prova_eventi.py", [], "registro degli eventi a secco (10/10, passo 1 in ombra): ogni tipo proiettato o escluso, controlli e disco (sfida, dati non fidati, riservati, «mai»), proiezioni pure (import, tetto di righe, determinismo anche dopo il rigioco), partizione (adulto, minore e ospite su due satelliti), due corsie della stessa persona, riassegnazione, porte (AST, annuncio, avviso al tutore, coda)"),
     ("prova_eventi_ciclo.py", [], "registro degli eventi sul ciclo della voce (10/10, passi 0–2): contatori del passo 0 e confronto dell'ombra su un giro sintetico (interruzione, stop, cortesia, timer, frase filtrata, «Lo apro?», domanda con il testo dopo, «Sì?»), garanzia detto = proiezione, niente disco prima della prima frase, eventi: spento come prima; passo 2: autore e atto all'invio (frase pronta, ripiego, contenuto), chiamate fra le frasi nella proiezione, risposta scritta dagli eventi, ogni atto classificato, nessuna frase fuori turno"),
@@ -314,6 +316,7 @@ LIVELLO_2 = {
     "prova_biblioteca.py",           # 6 s, con i file della biblioteca
     "prova_markdown.py",             # 8 s (07/10)
     "prova_pause.py",                # 9 s (07/10)
+    "prova_frase_lunga.py",          # ~6 s (10/10)
     "prova_esercizi.py",             # 8 s (08/10)
     "prova_searxng_aggiorna.py",     # 5 s (09/10)
 }
@@ -324,7 +327,7 @@ LIVELLO_3 = {
     "prova_corsie_satelliti.py", "prova_installa_satellite.py", "prova_cruscotto_pagina.py",
     "prova_scheda_intera.py", "prova_markdown_pagina.py", "prova_cassetto_pagina.py",
     "prova_esercizi_pagina.py", "prova_vista_sviluppo_pagina.py", "prova_cronologia_pagina.py",
-    "prova_compagnia_pagina.py",
+    "prova_compagnia_pagina.py", "prova_frase_lunga_voce.py",
 }
 # Mai nel gruppo parallelo, anche quando una prova li sceglie nel livello 2: un browser, un
 # tempo reale o tanti processi, che sotto carico falliscono a caso. Tutto il livello 3 è
@@ -428,7 +431,7 @@ LEGAMI = [
                              "prova_telefono_abbina.py"]),
     ("calliope/pc/", ["prova_esecutore.py", "prova_documento_proprio.py"]),
     ("calliope/vad.py", ["prova_linux.py"]),
-    ("calliope/stt.py", ["prova_linux.py", "prova_robustezza.py"]),
+    ("calliope/stt.py", ["prova_linux.py", "prova_robustezza.py", "prova_frase_lunga.py"]),
     ("setup/linux/", ["prova_linux.py", "prova_gestore.py"]),
     ("prove/e2e/", ["prova_e2e_copioni.py"]),
     # La modalità sviluppo (08/10), e la sua versione 2 (tappe nel ciclo dell'agente, nomi)
@@ -528,13 +531,13 @@ LEGAMI = [
     ("calliope/zim.py", ["prova_zim.py", "prova_biblioteca.py"]),
     ("calliope/biblioteca", ["prova_biblioteca_indice.py", "prova_biblioteca.py"]),
     # Pause e fine del turno (07/10, solo misura): dove sta il VAD e il registro
-    ("calliope/pause.py", ["prova_pause.py"]),
-    ("calliope/audio.py", ["prova_pause.py"]),
-    ("calliope/ciclo.py", ["prova_pause.py"]),
+    ("calliope/pause.py", ["prova_pause.py", "prova_frase_lunga.py"]),
+    ("calliope/audio.py", ["prova_pause.py", "prova_frase_lunga.py"]),
+    ("calliope/ciclo.py", ["prova_pause.py", "prova_frase_lunga.py"]),
     ("calliope/stato.py", ["prova_pause.py"]),
-    ("calliope/satellite/", ["prova_pause.py"]),
+    ("calliope/satellite/", ["prova_pause.py", "prova_frase_lunga.py"]),
     ("calliope/schermi/telefono.py", ["prova_pause.py"]),
-    ("calliope/schermi/pagina/telefono/", ["prova_pause.py"]),
+    ("calliope/schermi/pagina/telefono/", ["prova_pause.py", "prova_frase_lunga.py"]),
     ("pyproject.toml", ["prova_linux.py", "prova_gestore.py"]),
     ("uv.lock", ["prova_linux.py"]),
 ]

@@ -335,6 +335,9 @@ export class Ascolto {
             r.pause = misura.pause.slice();
             r.parlato = misura.parlatoMs(silenzio);
             r.chiusura = rilascio ? "rilascio" : silenzio * fms >= p.silence_ms ? "silenzio" : "lunga";
+            // Al tetto (10/10, come Listener._dopo_il_tetto): il pre-roll dell'ascolto dopo è il
+            // seguito non ancora letto, non la coda di questa frase (il server unisce i pezzi)
+            if (r.chiusura === "lunga") this.recenti = this.coda.slice(-maxPre);
             return r;
           }
           if (segnalata && o.onFine) o.onFine();

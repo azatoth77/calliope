@@ -15,7 +15,7 @@ const ATTESE_MS = [1000, 2000, 5000, 10000, 15000];
 // Valori di riserva finché il server non manda i suoi (benvenuto: calliope.yaml del server)
 const PARAMETRI = {
   name: "Calliope", wake_word: null, wake_anche_nome: true, sample_rate: 16000, vad_threshold: 0.5, silence_ms: 700, preroll_ms: 300,
-  min_speech_ms: 250, max_utterance_s: 20, wake_threshold: 0.5, wake_consecutive: 2,
+  min_speech_ms: 250, max_utterance_s: 120, wake_threshold: 0.5, wake_consecutive: 2,
   barge_in_threshold: 0.5, barge_in_seed_s: 2.0,
 };
 
@@ -1325,8 +1325,9 @@ async function avviaAscolto(L, seme) {
 }
 
 function mandaFine(u, r) {
-  st.pensa = true;
-  suona("fine");                    // frase presa: il segnale prima della rete
+  // Frase presa: il segnale prima della rete. Non al tetto (10/10): la persona parla ancora e
+  // il server chiede subito il seguito (Ciclo._seguito_del_tetto)
+  if (r.chiusura !== "lunga") { st.pensa = true; suona("fine"); }
   // pause_ms, parlato_ms, chiusura: solo misura (07/10, calliope/pause.py), un server vecchio
   // li ignora
   u.fine({ tipo: "frase_finita", fa_s: Math.round(performance.now() - r.inizio) / 1000,

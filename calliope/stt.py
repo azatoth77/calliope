@@ -247,6 +247,7 @@ class ServerTranscriber(Transcriber):
     7). Il registro delle capacità lo dice."""
 
     RIPROVA_S = 30.0         # dopo un errore il server si riprova a questa distanza
+    AUDIO_PER_TIMEOUT_S = 15.0   # secondi di frase coperti da stt_timeout_s (tempo_massimo)
 
     def __init__(self, cfg: Config, http=None):
         import httpx
@@ -283,7 +284,7 @@ class ServerTranscriber(Transcriber):
                 "prompt": self.prompt, "temperature": "0",
                 "response_format": "verbose_json" if verbose else "json"}
         self.ultima_confidenza = None
-        r = self.http.post(self.url, files=files, data=data)
+        r = self._post(audio, files, data)
         r.raise_for_status()
         try:
             v = r.json()
@@ -307,9 +308,26 @@ class ServerTranscriber(Transcriber):
         data = {"model": self.cfg.stt_modello, "language": self.cfg.language,
                 "prompt": self.prompt, "temperature": "0", "response_format": "verbose_json",
                 "token_timestamps": "false"}
-        r = self.http.post(self.url, files=files, data=data)
+        r = self._post(audio, files, data)
         r.raise_for_status()
         return [(w, round(p, 3)) for w, p in parole_whisper(r.json())]
+
+    def tempo_massimo(self, audio) -> float:
+        """Il tempo massimo della richiesta (10/10): `stt_timeout_s` per una frase fino a
+        AUDIO_PER_TIMEOUT_S secondi, in proporzione oltre. Con max_utterance_s a 120 (e i
+        seguiti uniti dal ciclo) una dettatura ne dura minuti: whisper.cpp la trascrive a
+        finestre di 30 s, e con i 5 s fissi sarebbe finita su CPU, molto più lenta (misure in
+        docs/aree/stt-tts.md, 10/10)."""
+        durata = len(audio) / self.cfg.sample_rate
+        return self.cfg.stt_timeout_s * max(1.0, durata / self.AUDIO_PER_TIMEOUT_S)
+
+    def _post(self, audio, files, data):
+        t = self.tempo_massimo(audio)
+        if t <= self.cfg.stt_timeout_s:      # una frase normale: il client com'è
+            return self.http.post(self.url, files=files, data=data)
+        import httpx
+        return self.http.post(self.url, files=files, data=data,
+                              timeout=httpx.Timeout(t, connect=min(2.0, t)))
 
     def _segnala_ok(self):
         from . import capacita

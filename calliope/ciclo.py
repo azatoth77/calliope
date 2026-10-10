@@ -1405,6 +1405,7 @@ class Ciclo:
             self.attesa_voce[:] = ["ascolta", time.time() + (self.awake_until - time.monotonic())]
         else:
             self.attesa_voce[:] = ["dorme", None]
+        tetto = None
         if t.scritto is None:
             self.voce(*self.attesa_voce)
             audio = listener.listen(None if t.guided else s.wake,
@@ -1413,6 +1414,7 @@ class Ciclo:
                                     wakeup=self.sveglia if not t.guided else None)
             if audio is None:        # svegliata dall'agenda o da una pagina: al giro dopo
                 return _FINE
+            audio, tetto = self._seguito_del_tetto(t, audio)
             self.frasi_prese += 1    # la finestra del nome da solo non suona più la fine
             s.instradamento.inizio_voce()
             t.barged, self.barge_seed = self.barge_seed is not None, None
@@ -1442,6 +1444,11 @@ class Ciclo:
                     "esito": None, **({"canale": "scritto"} if t.scritto else {})}
         if t.scritto is None:
             self.rec["ascolto"] = self._misure_ascolto(t)
+            if tetto:
+                # La frase è arrivata al tetto (max_utterance_s): quanti pezzi uniti, e se
+                # l'ultimo è ancora chiuso dal tetto (seguiti finiti: frase tagliata)
+                self.rec["ascolto"]["tetto"] = tetto
+                self.rule("frase_tetto")
         # Un turno della voce per ciò che si dirà prima della risposta del modello (uscite,
         # cortesia, registrazione della voce, «Sì?», la frase d'attesa di Whisper su CPU).
         # Il satellite scarta le frasi di un turno non oltre l'ultimo fermato: al turno 0 di
@@ -1450,6 +1457,55 @@ class Ciclo:
         # unica apre comunque un turno per un atto detto senza (Uscita.di)
         self.uscita.turno()
         return None
+
+    def _seguito_del_tetto(self, t, audio):
+        """La frase chiusa dal tetto (`max_utterance_s`, chiusura «lunga») e il suo seguito, in
+        un turno solo (10/10, regola `frase_tetto`). Caso vero della DGX (10/10 17:32): Dario
+        dettava le regole di un gioco, la frase si è chiusa a 30,02 s a metà («…possono
+        aumentare o diminuire troppo»), Calliope è partita con lo sviluppo mentre lui parlava
+        ancora e il resto è diventato un turno nuovo. Il tetto non è la fine del turno: si
+        ascolta subito di nuovo, senza dire niente né suonare (la persona sta parlando), e se la
+        voce continua entro `pause.TETTO_ATTESA_S` l'audio si unisce prima di Whisper. Il
+        Listener ha già preparato il pre-roll con l'audio arrivato intanto (`_dopo_il_tetto`).
+        Al più `pause.TETTO_SEGUITI` seguiti: contro un rumore continuo (la TV) il turno non
+        resta aperto per sempre. Restituisce (audio, None) per una frase normale, altrimenti
+        (audio unito, {"pezzi": n, "tagliata": l'ultimo pezzo è ancora chiuso dal tetto})."""
+        L = self.listener
+        if getattr(L, "chiusura", None) != "lunga":
+            return audio, None
+        pezzi = [audio]
+        inizio, woke, score = L.started_at, L.woke, L.wake_score
+        pause_ms = list(getattr(L, "pause_ms", None) or [])
+        parlato = getattr(L, "parlato_ms", None)
+        tagliata = False
+        while getattr(L, "chiusura", None) == "lunga":
+            if len(pezzi) > pause_mod.TETTO_SEGUITI:
+                tagliata = True              # ancora al tetto dopo i seguiti: vale com'è
+                print("   [MIC] frase ancora al tetto dopo i seguiti: vale com'è", flush=True)
+                break
+            print(f"   [MIC] frase arrivata al tetto ({self.s.cfg.max_utterance_s} s): "
+                  f"ascolto il seguito", flush=True)
+            fermo = threading.Event()
+            timer = threading.Timer(pause_mod.TETTO_ATTESA_S, fermo.set)
+            timer.daemon = True
+            timer.start()
+            try:
+                seguito = L.listen(None if t.guided else self.s.wake,
+                                   time.monotonic() + pause_mod.TETTO_ATTESA_S, wakeup=fermo)
+            finally:
+                timer.cancel()
+            if seguito is None:              # nessuno ha continuato: la frase vale com'è
+                break
+            pezzi.append(seguito)
+            woke, score = woke or L.woke, max(score, L.wake_score)
+            pause_ms += list(getattr(L, "pause_ms", None) or [])
+            p = getattr(L, "parlato_ms", None)
+            parlato = parlato + p if parlato is not None and p is not None else parlato
+        # La frase unita, per il resto del turno: inizio del primo pezzo, fine dell'ultimo
+        L.started_at, L.woke, L.wake_score = inizio, woke, score
+        L.pause_ms = pause_ms[:pause_mod.MAX_PAUSE]
+        L.parlato_ms = parlato
+        return np.concatenate(pezzi), {"pezzi": len(pezzi), "tagliata": tagliata}
 
     # ── fase 3: trascrizione ──
     def _trascrivi(self, t):

@@ -119,7 +119,8 @@ def valida_evento(t: str, m: dict) -> dict | None:
         return None
     out = {"id": ident}
     if t == "frase_finita":
-        out.update(fa_s=_numero(m.get("fa_s"), 0.0, 120.0), woke=m.get("woke") is True,
+        # fa_s fino a 600 (10/10): con max_utterance_s a 120 una frase intera ne supera 120
+        out.update(fa_s=_numero(m.get("fa_s"), 0.0, 600.0), woke=m.get("woke") is True,
                    wake_score=_numero(m.get("wake_score"), 0.0, 1.0))
         # Pause dentro la frase, parlato, chiusura (07/10, solo misura: calliope/pause.py):
         # facoltativi, un satellite vecchio non li manda

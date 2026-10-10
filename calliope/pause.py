@@ -20,6 +20,8 @@ del turno»). Qui c'è ciò che serve a misurare, senza cambiare nessun comporta
 - `riassunto` e `testo`: per persona e canale, p50/p90/p95 delle pause interne, frasi, tagli
   probabili e la soglia che si sceglierebbe (p95 + margine, tra `SOGLIA_MIN_MS` e
   `SOGLIA_MAX_MS`), **come stima**: non si applica (`calliope stato --turni --pause`).
+- `TETTO_ATTESA_S`, `TETTO_SEGUITI` (10/10): la frase chiusa dal tetto e il suo seguito nello
+  stesso turno (regola `frase_tetto`, nel ciclo).
 
 Solo libreria standard (e il VAD che c'è già): gira anche sul satellite.
 """
@@ -41,6 +43,13 @@ MIN_PAUSE_STIMA = 20      # sotto, la stima della soglia non è affidabile
 TAGLI_FREQUENTI = 0.05    # oltre questa quota di frasi tagliate le pause misurate sono
 #                           troncate dalla soglia in uso: la stima sale oltre la soglia
 CHIUSURE = ("silenzio", "lunga", "rilascio", "muta")
+# Frase chiusa dal tetto (`max_utterance_s`, chiusura «lunga») mentre la persona parla ancora
+# (10/10, regola `frase_tetto` in Ciclo._seguito_del_tetto: questo sì cambia il comportamento):
+# si ascolta subito di nuovo e il seguito si unisce allo stesso turno, senza dire niente. Se
+# nessuno parla entro TETTO_ATTESA_S la frase vale com'è; al più TETTO_SEGUITI seguiti per
+# turno (un rumore continuo non tiene aperto il turno per sempre)
+TETTO_ATTESA_S = 2.0
+TETTO_SEGUITI = 2
 
 
 class MisuraPause:

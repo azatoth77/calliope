@@ -130,6 +130,18 @@ class Listener:
             self._vad_per_ripresa, self.cfg.vad_threshold, frame_ms, self.ended_at,
             muto=self.ripresa_muto, avvisa=self.ripresa_avviso)
 
+    def _dopo_il_tetto(self):
+        """Frase chiusa dal tetto (`max_utterance_s`) mentre la persona parla ancora (10/10):
+        il pre-roll della frase dopo deve essere il seguito, non la coda di questa. Si smette
+        di ascoltare e il pre-roll riparte dai frame non ancora letti: così il ciclo, che
+        ascolta subito di nuovo (Ciclo._seguito_del_tetto), unisce i pezzi senza ripetere né
+        perdere audio (fino a `preroll_ms` tra un ascolto e l'altro)."""
+        with self._recent_lock:
+            self.active = False
+            self._recent.clear()
+            while not self.frames.empty():
+                self._recent.append(self.frames.get_nowait())
+
     def ferma_ripresa(self):
         """Fine dell'osservazione della ripresa (Calliope parla, o si ascolta di nuovo)."""
         r, self._ripresa = self._ripresa, None
@@ -366,6 +378,8 @@ class Listener:
                         self.parlato_ms = misura.parlato_ms(silent)
                         self.chiusura = ("silenzio" if silent * frame_ms >= cfg.silence_ms
                                          else "lunga")
+                        if self.chiusura == "lunga":
+                            self._dopo_il_tetto()
                         self._osserva_ripresa(frame_ms)
                         return np.concatenate(speech)
                     if signaled and on_end is not None:
