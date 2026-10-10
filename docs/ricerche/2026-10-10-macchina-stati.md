@@ -1000,3 +1000,27 @@ Da riscrivere quando si fanno i passi (non ora):
 livelli, schema fisso), quando valgono (solo con uno stato aperto, prima passata, prima di un dato
 letto), cosa resta nella storia (niente o una riga di fatto), cosa resta nel registro (tutto), e
 l'elenco: `proposta_rispondi` e, se servirà, gli altri con la regola `oggetto_verbo`.
+
+## Aggiunte decise da Dario dopo il progetto (10/10)
+
+- **Percorso più corto**: in ombra solo le parti che decidono se un'azione si esegue
+  (interprete del modello, passo 1; consenso unico, passo 2). Le parti senza rischio si
+  accendono direttamente, una dopo l'altra, mentre l'ombra raccoglie i dati: uscite e stop
+  dopo la proposta, profilo «sviluppo» dei tool, altra persona e tempi, dati del turno e storia
+  pulita, nomi delle regole con l'esito.
+- **Decisioni sui punti aperti**: la sfida resta legata al satellite in cui è stata chiesta; al
+  più tre attese per persona, la più vecchia scade; una proposta aperta si perde a un riavvio.
+- **Passo 0** (prima della macchina): una prova per ciascuno dei 10 stati a rischio, e subito
+  le correzioni della coda della conversazione (solo alla stessa persona), di
+  `pending_real_name` (scade), dei segnali dei cancelli dei minori (su disco) e del «no» a una
+  domanda dell'agente.
+- **Tabella dichiarativa dei permessi** nel passo 2, insieme al consenso unico (idea presa da
+  Claude Code, dagli SDK per agenti e da NeMo Guardrails): una sola tabella leggibile
+  `tool/famiglia × effetto E1–E4 × provenienza del valore × chi parla (livello, voce sicura,
+  zona grigia, ospite, minore) → esegui | chiedi | sfida | rifiuta`, da cui `politica`,
+  `valore` e `consenso.basta()` leggono e basta. Verificata da una prova automatica (ogni riga
+  coperta, nessuna contraddizione, il banco d'attacco a 0), consultabile dal cruscotto di chi
+  amministra (prima in sola lettura; la modifica dal cruscotto, se mai, dopo e con la sfida).
+- **Da tenere d'occhio** (altri progetti): la fine del turno decisa da un modello piccolo
+  (smart turn di Pipecat/LiveKit) per la fase 2 della misura delle pause; i modelli voce→voce
+  in full duplex come direzione futura.
