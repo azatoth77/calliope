@@ -1245,3 +1245,19 @@ la sicurezza. **In ombra la politica di oggi decide sempre.**
   o `valore_consenso_breve` eseguono) sono l'attrito in più dell'accensione; i `esegue_vs_chiede`
   quello in meno. Il passo 2 accende il consenso unico solo dopo una settimana di ombra con zero
   esecuzioni che la decisione di oggi avrebbe fermato.
+
+## Un lavoro dell'agente da una frase breve senza le sue parole (10/10, ramo `forme-storpiate`)
+
+Casi veri della DGX del 10/10: «Am nulla il lavoro.» (Whisper per «annulla il lavoro») è diventato
+`sviluppo_passo(rifai)` e ha rifatto il lavoro dell'agente; «E lì appena ricominciamo.» (per
+«Calliope, ricominciamo») `sviluppo_passo(avanti)` e l'ha fatto partire. Con la conversazione
+pulita la politica eseguiva: `sviluppo_passo` non ha `chiesta`, e `riprendi` è innocua.
+
+Regola `politica_avvio_non_chiesto` (`politica.avvio_non_chiesto`, prima del controllo delle
+innocue in `decidi`): `sviluppo_passo` avanti/rifai/riprendi e `lavoro_affida` da una frase di al
+più 6 parole senza le parole dell'azione (`VERBI_AZIONE`), senza consenso né sfida superata (e
+per avanti e riprendi senza le parole generiche di un avvio) → conferma «Non sono sicura di aver
+capito: vuoi che {cosa}?»; il «sì» la esegue. Alla proposta dello stesso tool decide il modello,
+salvo una forma storpiata nota (`calliope/storpiature.py`). Sui 30 avvii veri dell'08–10/10: 7
+domande, 6 giuste e 1 dubbia. Dettagli, misure e contrari in [voce-e-regole](voce-e-regole.md),
+«Forme chiuse storpiate da Whisper»; prova `prova_storpiature`.

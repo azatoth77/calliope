@@ -34,7 +34,7 @@ from . import contesto, corsie, minori
 from . import rivolta as rivolta_mod
 from . import pause as pause_mod
 from . import guardiano as guardia
-from . import provenienza, riferire, stato_dialogo
+from . import provenienza, riferire, stato_dialogo, storpiature
 from . import allegati as allegati_mod
 from .cassetto import CassettoPieno
 from .agenda import announcement
@@ -48,7 +48,7 @@ from .suoni import FINE, INIZIO
 from .tools.builtin import biblioteca_contesto
 from .tts import split_sentences, clean_for_speech, strip_false_citation
 from .wakeword import (SPEGNI_SATELLITE_MSG, closing_kind, exit_action, exit_request,
-                       find_wake_word, is_stop, nuova_conversazione, risposta_al_nome)
+                       find_wake_word, is_stop, nuova_conversazione_come, risposta_al_nome)
 
 # Errori imprevisti nel ciclo (03/10): oltre ERRORI_MAX in ERRORI_FINESTRA_S Calliope esce con
 # un errore (sotto systemd riparte da capo) invece di girare a vuoto chiedendo scusa
@@ -2275,11 +2275,18 @@ class Ciclo:
             return self._addormentati("A presto!")
         # «Ricominciamo», «nuova conversazione» (05/10): la conversazione si chiude come con
         # «esci» (archiviata, riassunto in secondo piano) ma Calliope resta in ascolto. Solo
-        # la frase intera (wakeword.nuova_conversazione)
-        if nuova_conversazione(text, cfg.wake_names):
+        # la frase intera (wakeword.nuova_conversazione_come). Dal 10/10 anche le storpiature
+        # di Whisper di «ricominciamo» e del nome davanti («Calliope ricominciava.», «E lì
+        # appena ricominciamo.»), solo a voce: regola `nuova_conversazione_storpiata` in più
+        come = nuova_conversazione_come(text, cfg.wake_names)
+        if come == "storpiata" and t.scritto is not None:
+            come = None
+        if come:
             print(f"Tu: {self.in_console(text)}  (conversazione nuova)")
             self.rec["esito"] = "nuova_conversazione"
             self.rule("nuova_conversazione")
+            if come == "storpiata":
+                self.rule("nuova_conversazione_storpiata")
             self.brain.end_conversation("nuova")
             self.speaker.say("Va bene, ricominciamo da capo.")
             self.speaker.wait()
@@ -2590,6 +2597,12 @@ class Ciclo:
             # L'audio della frase per gli argomenti che nominano qualcosa (08/10): un attributo
             # e non un argomento, così i Brain finti delle prove restano com'erano
             brain.ascolto_turno = self._ascolto_turno(t)
+            # Una forma chiusa breve forse storpiata da Whisper («Spendilo.», «Am nulla il
+            # lavoro.», 10/10, calliope/storpiature.py): un dato del turno, solo a voce
+            brain.storpiata_turno = (storpiature.suggerisci(t.text, cfg.wake_names)
+                                     if t.scritto is None else None)
+            if brain.storpiata_turno:
+                self.rec["forma_storpiata"] = brain.storpiata_turno["forma"]
             frasi = split_sentences(brain.stream_reply(
                 t.text, t.level, context=t.context, **({"immagini": t.foto} if t.foto else {}),
                 **({"incerte": incerte} if incerte else {})))

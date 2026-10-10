@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import re
 
+from .storpiature import suggerisci
 from .wakeword import _NAME_MARK, _plain_words, nuova_conversazione, uscita_intera
 
 SI, NO, STOP, GRAZIE, USCITA, NUOVA = "si", "no", "stop", "grazie", "uscita", "nuova"
@@ -108,4 +109,10 @@ def forma_chiusa(testo: str, name="Calliope") -> str | None:
     # Un'uscita: la frase intera, e senza un «sì» in mezzo
     if uscita_intera(t, name) and not (set(parole) & _PAROLE_SI):
         return USCITA
+    # «Annulla» storpiato da Whisper, da solo («Annullahi.», «Anzi, no, a nulla.», 10/10,
+    # calliope/storpiature.py): a una proposta vale «no», un effetto reversibile. Le altre
+    # storpiature («Spendilo», «Chiudin») restano al modello, con un dato del turno
+    sugg = suggerisci(t, name)
+    if sugg and sugg["corsia"]:
+        return NO
     return None

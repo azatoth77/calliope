@@ -33,7 +33,7 @@ from .allegati import Allegati, Allegato
 from .conversazione import UNSET, Conversazione
 from .immagini import Album
 from .memory import HOUSE
-from . import argomenti_incerti, luogo, politica, provenienza, stato_dialogo, valore
+from . import argomenti_incerti, luogo, politica, provenienza, stato_dialogo, storpiature, valore
 from .risposte import forma_chiusa
 from .sicurezza import instruction_fact
 from .testi import MESI as _MESI, NIENTE, SENTENCE_END as _SENTENCE_END
@@ -2168,6 +2168,9 @@ class Brain:
         # argomento che nomina qualcosa (last_argomenti, campo stt_argomento del registro)
         # (dal ciclo come attributo `ascolto_turno`, che vale una risposta sola)
         turno_asc = self.__dict__.pop("ascolto_turno", None)
+        # Una forma chiusa breve forse storpiata da Whisper (10/10, calliope/storpiature.py):
+        # dal ciclo come attributo, vale una risposta sola; nei dati del turno (_turn_context)
+        self._storpiata = self.__dict__.pop("storpiata_turno", None)
         self._ascolto = ascolto if ascolto is not None else turno_asc
         self.last_argomenti = []
         self._riscrivi_turno = bool(self._incerte_turno) and bool(
@@ -3917,6 +3920,13 @@ class Brain:
             regola = "stt_capito_chiesto" if riscrivi else "stt_incerte"
             if regola not in (getattr(self, "last_rules", None) or ()):
                 self._rule(regola)
+        # La forma chiusa forse storpiata (10/10, calliope/storpiature.py): un dato, non un
+        # ordine; decide il modello, e chiede se non è chiaro (principio 10)
+        storpiata = storpiature.nota(getattr(self, "_storpiata", None))
+        if storpiata:
+            who += " " + storpiata
+            if "forma_storpiata" not in (getattr(self, "last_rules", None) or ()):
+                self._rule("forma_storpiata")
         return [{"role": "system", "content": TURN_CONTEXT_MSG.format(
             ora=f"{now:%H:%M}", giorno=_GIORNI[now.weekday()],
             data=f"{now.day} {_MESI[now.month - 1]} {now.year}", chi=who)}]

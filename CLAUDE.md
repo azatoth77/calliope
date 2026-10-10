@@ -54,7 +54,7 @@ per stadio, solo i moduli principali: librerie, classi e dettagli sono nei docum
 | Chi parla (CAM++ in ONNX); più voci vicino a un satellite e «rivolta a Calliope» (dal 09/10) | `speaker_id.py`, `arruola.py`, `compagnia.py`, `rivolta.py` | [stt-tts](docs/aree/stt-tts.md) |
 | Speech-to-Text (faster-whisper o whisper.cpp sulla DGX, ripiego su CPU); nomi incerti negli argomenti dei tool, misura e «forse intendeva» dopo un esito vuoto (dal 08/10) | `stt.py`, `stt_correzione.py`, `argomenti_incerti.py` | [stt-tts](docs/aree/stt-tts.md) |
 | Text-to-Speech (Piper, sulla GPU secondo la macchina), pronuncia degli inglesismi, taratura della voce (dal 07/10) | `tts.py` (`Speaker`), `pronuncia.py`, `taratura_voce.py` | [stt-tts](docs/aree/stt-tts.md) |
-| Regole sul testo: wake word testuale, uscita, stop, cortesia | `wakeword.py`, `cortesia.py` | [voce-e-regole](docs/aree/voce-e-regole.md) |
+| Regole sul testo: wake word testuale, uscita, stop, cortesia; forme chiuse storpiate da Whisper (dal 10/10) | `wakeword.py`, `cortesia.py`, `storpiature.py` | [voce-e-regole](docs/aree/voce-e-regole.md) |
 | LLM e tool calling (Ollama nativo o API OpenAI), reti e spinte; errori dei tool in parole e giri di correzione (dal 09/10) | `brain.py` (`Brain`), `tools/` (`spec`, `registry`, `builtin`, `dialogo`) | [voce-e-regole](docs/aree/voce-e-regole.md) |
 | Stato del dialogo come macchina a stati, passo 1 in ombra (dal 10/10): proposta aperta, corsia veloce, `proposta_rispondi`, confronto nel registro | `stato_dialogo.py`, `risposte.py`, `tools/proposta.py` | [voce-e-regole](docs/aree/voce-e-regole.md) |
 | Configurazione (dataclass + YAML), profili del modello | `config.py` (`Config`, `PROFILI_LLM`, `TONI`) | [voce-e-regole](docs/aree/voce-e-regole.md) |
