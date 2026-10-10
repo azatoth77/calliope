@@ -48,7 +48,10 @@ def _piano(s) -> str:
 
 
 def _vuoto(v) -> bool:
-    return v is None or (isinstance(v, str) and not v.strip())
+    """Assente, vuoto, o un testo senza una lettera né una cifra («…», «.», «?»): un testo di
+    sola punteggiatura non è un valore (10/10, quarto giro della DGX: una ricerca con «…» al
+    posto del nome; il campo vuoto ha l'errore strutturato, non arriva al tool come testo)."""
+    return v is None or (isinstance(v, str) and not any(c.isalnum() for c in v))
 
 
 def firma(func):
