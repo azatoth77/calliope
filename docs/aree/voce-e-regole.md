@@ -983,14 +983,18 @@ cambia.**
   `seconda_passata`, `dopo_dato`, `proposta_diversa`, `tipo_dato`, `chiusa`, `esito_non_valido`).
   A turno finito le chiamate a `proposta_rispondi` e i loro esiti escono dalla storia
   (`_togli_proposta_rispondi`, § 3.8 del progetto).
-- **Il blocco dello stato** (≤ 400 caratteri, effimero: nei dati del turno subito prima della
+- **Il blocco dello stato** (≤ 520 caratteri, effimero: nei dati del turno subito prima della
   frase, mai nella storia né nel prompt di sistema) prende il posto di `PENDING_MSG` /
   `PENDING_LATER_MSG` per le proposte sì/no: «Stato del dialogo: proposta aperta p3, «…?»
-  (casa_comando, gravità E1), chiesta nell'ultima risposta. Chi parla l'ha ricevuta, voce sicura.
-  Se la frase risponde alla proposta, chiama proposta_rispondi con l'esito…». Gli argomenti non
-  ci sono (li tiene la macchina). Le domande che chiedono un dato (testo proprio del tool, come
-  la domanda dell'agente, o una domanda non sì/no) tengono il loro messaggio di oggi
-  (`set_pending` segna `su_misura`).
+  (casa_comando con comando="…", gravità E1), chiesta nell'ultima risposta. Chi parla l'ha
+  ricevuta, voce sicura. Se la frase risponde alla proposta, chiama proposta_rispondi con
+  l'esito…». Gli argomenti restano come in `PENDING_MSG`: in ombra la chiamata diretta del tool
+  proposto è il percorso di oggi, e alcuni argomenti riconoscono l'offerta (l'id `proposta` di
+  `lavoro_affida`: senza, `prova_lavori_riavvio` e `prova_agenti` fallivano, il «sì» diventava una
+  richiesta nuova con la sfida). Dal passo 2, quando la macchina eseguirà lei la proposta, si
+  potranno togliere. Le domande che chiedono un dato (testo proprio del tool, come la domanda
+  dell'agente, o una domanda non sì/no) tengono il loro messaggio di oggi (`set_pending` segna
+  `su_misura`).
 - **La corsia veloce** (`risposte.forma_chiusa`): ogni pezzo della frase, tolti il nome e i
   riempitivi in testa e in coda, è una forma dell'elenco (`si`: sì, certo, vai, procedi, ok, va
   bene, d'accordo, perché no…; `no`: no, no grazie, annulla, lascia stare, non importa, per ora
@@ -1022,7 +1026,7 @@ cambia.**
   allo spento con le stesse esecuzioni e regole della politica, gli altri esiti senza effetto,
   difese, storia pulita, due proposte, proposta + sfida, sviluppo, cancello, conversazione chiusa,
   frasi decise prima di Brain, banco nuovo); `prova_testo` (corsia veloce, 60 casi);
-  `prova_dialogo_ollama` (il modello vero). `prova_brain` e `prova_conferme` accettano il blocco
+  `prova_dialogo_ollama` (il modello vero). `prova_brain`, `prova_conferme` e `prova_agenti` accettano il blocco
   al posto di `PENDING_MSG`.
 - **Misura col 4B (gemma4 e4b sul portatile, 10/10, `prova_dialogo_ollama 2`)**: 100 risposte a
   una proposta aperta (16 frasi del registro e dell'analisi, più una correzione, su tre proposte:

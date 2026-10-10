@@ -14,7 +14,7 @@ Cosa c'è in questo passo, e solo questo:
   lettura** sugli stati di oggi (`Conversazione.pending` con il tool del turno, la domanda della
   politica, la frase di sfida di `SpeakerContext`, lo sviluppo aperto, il cancello dei minori):
   la macchina è una facciata, non una copia, e non scrive niente;
-- il **blocco dello stato** per il turno (`blocco`, ≤ 400 caratteri) che in ombra prende il posto
+- il **blocco dello stato** per il turno (`blocco`, ≤ 520 caratteri) che in ombra prende il posto
   di `PENDING_MSG` per le proposte sì/no: proposta aperta, gravità E1–E4, chi parla e quanto è
   sicura la voce, e l'invito a rispondere con `proposta_rispondi`;
 - la **decisione che prenderebbe la macchina** (`decidi`), con il **consenso del progetto**
@@ -193,8 +193,8 @@ def sfida_da_oggi(sc, chiave, proposta: Proposta | None) -> dict | None:
 
 # ─────────────────────────── il blocco dello stato (§ 3.4) ───────────────────────────
 
-BLOCCO_MSG = ("Stato del dialogo: proposta aperta {id}, «{domanda}»{per} ({tool}, gravità "
-              "{effetto}), chiesta {quando}. Chi parla l'ha ricevuta, voce {sicurezza}. Se la "
+BLOCCO_MSG = ("Stato del dialogo: proposta aperta {id}, «{domanda}»{per} ({tool}{argomenti}, "
+              "gravità {effetto}), chiesta {quando}. Chi parla l'ha ricevuta, voce {sicurezza}. Se la "
               "frase risponde alla proposta, chiama proposta_rispondi con l'esito (si, no, "
               "correzione, rinvio, altro): il sì lo esegue il sistema. Se chiede altro, rispondi "
               "a quello.")
@@ -206,7 +206,7 @@ def _corto(t: str, n: int) -> str:
 
 
 def blocco(stato: StatoPersona, corsia: StatoCorsia) -> str | None:
-    """Il blocco effimero del turno (≤ 400 caratteri; dopo la parte stabile, subito prima della
+    """Il blocco effimero del turno (≤ 520 caratteri; dopo la parte stabile, subito prima della
     frase; mai nella storia), o None: solo con una proposta sì/no aperta per chi parla. Le domande che chiedono
     un dato tengono il loro messaggio di oggi."""
     p = stato.proposta
@@ -215,8 +215,15 @@ def blocco(stato: StatoPersona, corsia: StatoCorsia) -> str | None:
     # La cosa proposta solo se la domanda da sola non la dice («Lo apro?», «Procedo?»)
     per = (f" per {_corto(p.cosa, 50)}" if p.cosa and len(p.domanda) < 30
            and p.cosa != "l'azione proposta" else "")
+    # Gli argomenti restano (come in PENDING_MSG): in ombra il modello che chiama direttamente
+    # il tool proposto è il percorso di oggi, e alcuni servono a riconoscere l'offerta (l'id
+    # `proposta` di lavoro_affida, prova_lavori_riavvio)
+    import json
+    arg = ", ".join(f"{k}={json.dumps(v, ensure_ascii=False)}"
+                    for k, v in (p.argomenti or {}).items())
+    argomenti = f" con {_corto(arg, 110)}" if arg else ""
     return BLOCCO_MSG.format(
-        id=p.id, domanda=_corto(p.domanda, 80), per=per, tool=p.tool, effetto=valore.NOMI_EFFETTO.get(p.effetto, "E3"),
+        id=p.id, domanda=_corto(p.domanda, 80), per=per, tool=p.tool, argomenti=argomenti, effetto=valore.NOMI_EFFETTO.get(p.effetto, "E3"),
         quando="nell'ultima risposta" if p.turni <= 1 else f"{p.turni} turni fa",
         sicurezza=corsia.persona.sicurezza)
 

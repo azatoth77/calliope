@@ -6,7 +6,7 @@ calliope/risposte.py; progetto docs/ricerche/2026-10-10-macchina-stati.md). A se
 vero, i tool veri nei nomi, nelle classi e nei permessi, e un modello finto dal copione.
 
 1. **Funzioni pure**: sicurezza della voce, consenso del progetto (tabella del § 3.5), priorità
-   della macchina (§ 3.3), blocco dello stato (≤ 400 caratteri, gravità, nessun argomento),
+   della macchina (§ 3.3), blocco dello stato (≤ 520 caratteri, gravità, argomenti),
    esito di oggi e accordo, riassunto per `calliope stato --turni`.
 2. **In ombra non cambia nessuna decisione**: `proposta_rispondi(si)` diventa la chiamata di
    oggi (il tool proposto con i suoi argomenti) e decide la politica di oggi: stesse esecuzioni
@@ -233,11 +233,11 @@ def prova_pure():
     # Blocco dello stato
     blk = sd.blocco(sd.StatoPersona(proposta=dataclasses.replace(
         prop(), domanda="Vuoi che spenga la luce della taverna?" * 5, cosa="spenga " * 40)), co)
-    verifica("blocco: breve (≤ 400 caratteri)", blk is not None and len(blk) <= 400, len(blk or ""))
+    verifica("blocco: breve (≤ 520 caratteri)", blk is not None and len(blk) <= 520, len(blk or ""))
     verifica("blocco: id, tool, gravità, voce e proposta_rispondi",
              all(x in blk for x in ("p3", "casa_comando", "gravità E2", "voce sicura",
                                     "proposta_rispondi")), blk)
-    verifica("blocco: niente argomenti («comando=…»)", "comando=" not in blk)
+    verifica("blocco: gli argomenti come in PENDING_MSG (percorso di oggi)", 'comando="x"' in blk)
     verifica("blocco: niente per una domanda che chiede un dato",
              sd.blocco(sd.StatoPersona(proposta=prop(tipo="dato")), co) is None)
     verifica("blocco: niente senza proposta", sd.blocco(sd.StatoPersona(), co) is None)
