@@ -531,6 +531,173 @@ def prova_situazioni():
              "conversazione_scaduta" and o.get("macchina") == "proposta_persa_scaduta", o)
 
 
+# ─────────────────────────── 4-bis. le tre righe del § 10 (giri veri del 10/10) ───────────────────────────
+
+def _p(tool, args, effetto=None, turno_p=4):
+    eff = valore.effetto(tool, args or {}) if effetto is None else effetto
+    return sd.Proposta(id=f"p{turno_p}", tool=tool, argomenti=args, cosa="x", domanda="Va bene?",
+                       origine="tool", effetto=int(eff), sfida_classe=False, tipo="si_no",
+                       chi="dario", satellite=None, turno=turno_p, turni=1)
+
+
+def _registra_offerta(b, nome, tool, args, domanda):
+    from calliope.tools.spec import ToolSpec
+
+    def f(ctx, **a):
+        return {"ok": True, "conferma": domanda, "risposta_finale": domanda,
+                "in_sospeso": {"domanda": domanda, "cosa": nome, "tool": tool, "argomenti": args}}
+    b.tools.register(ToolSpec(name=nome, description=nome, parameters={}, classe="sicuro",
+                              func=f, levels=frozenset({"ospite", "familiare", "amministra"})))
+
+
+def prova_tre_righe():
+    """Le tre righe del § 10 del progetto: nei giri veri del 10/10 la macchina sbagliava e la
+    decisione di oggi azzeccava. Ciascuna sul turno vero e con i suoi contrari."""
+    sicura = sd.chi_da_oggi(SC(), "dario")
+    breve = sd.chi_da_oggi(SC(come="breve", punteggio=0.5), "dario")
+    breve_incerta = sd.chi_da_oggi(SC(come="breve", punteggio=0.1), "dario")
+    compagnia = sd.chi_da_oggi(SC(come="breve", compagnia=True), "dario")
+
+    def dec(p, chi=sicura, forma=None, r=None, dir=False, dargs=None, nuova=False):
+        return sd.decidi(sd.StatoPersona(proposta=p), sd.StatoCorsia(persona=chi), forma, r, dir,
+                         diretta_args=dargs, nuova=nuova)
+
+    # 1. «no» a un testo da approvare (l'analisi): resta aperta, si chiede cosa cambiare.
+    #    Giro vero 07:20:07 «No, non mi va bene così.» sopra «Va bene così, o la cambiamo?»
+    analisi = _p("sviluppo_apri", {"proposta": "L1"})
+    verifica("§10.1 07:20:07: «no» del modello all'analisi → resta e chiede la modifica",
+             dec(analisi, r="no")["macchina"] == "resta_chiede_modifica"
+             and sd.accordo("resta_chiede_modifica", "resta") == (True, None))
+    verifica("§10.1: «No.» per intero (corsia) all'analisi → resta e chiede la modifica",
+             dec(analisi, forma="no")["macchina"] == "resta_chiede_modifica")
+    verifica("§10.1: anche la richiesta analizzata di un lavoro (lavoro_affida con proposta)",
+             dec(_p("lavoro_affida", {"proposta": "L2"}), r="no")["macchina"]
+             == "resta_chiede_modifica")
+    verifica("§10.1 contrario: «no» a una proposta d'azione resta chiude_no (casa, corsia e "
+             "modello)", dec(prop(), r="no")["macchina"] == "chiude_no"
+             and dec(prop(), forma="no")["macchina"] == "chiude_no")
+    verifica("§10.1 contrario: «no» a «Vuoi comunque che lo affidi all'agente?» (07:11:32, "
+             "sviluppo_apri senza un testo da approvare) → chiude_no",
+             dec(_p("sviluppo_apri", {"tipo": "programma", "compito": "x"}), r="no")["macchina"]
+             == "chiude_no")
+    verifica("§10.1 contrario: «no» a «Lo chiudo?» → chiude_no",
+             dec(_p("sviluppo_passo", {"azione": "chiudi", "quale": "S1"}), r="no")["macchina"]
+             == "chiude_no")
+    verifica("§10.1 contrario: la correzione dell'analisi la chiude (la sostituisce l'analisi "
+             "nuova), il «sì» la esegue",
+             dec(analisi, r="correzione")["macchina"] == "chiude_correzione"
+             and dec(analisi, forma="si")["macchina"] == "esegue")
+
+    # 2. Il tool proposto chiamato con un'altra azione reversibile da sé: E1, niente sfida.
+    #    Giro vero 07:14:53 «Sospendilo.» (voce breve) sopra «lo rifaccio così com'è?»: la
+    #    proposta ha gli argomenti come testo (None) e vale E3; la chiamata è sospendi
+    rifaccio = _p("sviluppo_passo", None)
+    verifica("§10.2 la proposta «lo rifaccio così com'è?» vale E3", rifaccio.effetto == valore.E3)
+    d = dec(rifaccio, breve, dir=True, dargs={"azione": "sospendi"})
+    verifica("§10.2 07:14:53: «Sospendilo.» con la voce breve → esegue, senza sfida",
+             d["macchina"] == "esegue" and d["consenso"] == "esegue", d)
+    verifica("§10.2: sospendere è E1 e reversibile da sé",
+             valore.effetto("sviluppo_passo", {"azione": "sospendi"}) == valore.E1
+             and sd.reversibile_da_se("sviluppo_passo", {"azione": "Sospendi"}))
+    sosp = _p("sviluppo_passo", {"azione": "sospendi"})
+    verifica("§10.2: «Vuoi che sospenda questo sviluppo?» → «sì» esegue anche con la voce "
+             "incerta o in compagnia",
+             dec(sosp, breve_incerta, forma="si")["macchina"] == "esegue"
+             and dec(sosp, compagnia, forma="si")["macchina"] == "esegue")
+    verifica("§10.2 contrario: «rifallo» (E3) chiamato direttamente resta con la sfida (10:42:54)",
+             dec(rifaccio, sicura, dir=True, dargs={"azione": "rifai"})["macchina"] == "sfida")
+    verifica("§10.2 contrario: «chiudi» non è reversibile da sé: con la voce incerta sfida",
+             not sd.reversibile_da_se("sviluppo_passo", {"azione": "chiudi"})
+             and dec(_p("sviluppo_passo", {"azione": "chiudi", "quale": "S1"}), breve_incerta,
+                     forma="si")["macchina"] == "sfida")
+    verifica("§10.2 contrario: E4 resta con la sfida, anche alla voce sicura",
+             dec(prop(valore.E4), sicura, forma="si")["macchina"] == "sfida")
+    verifica("§10.2 contrario: la proposta di un'altra persona non si sospende (no), il livello "
+             "che non basta nemmeno, la voce incerta fra chi amministra e un minore chiede chi "
+             "parla",
+             sd.consenso_progetto(sd.chi_da_oggi(SC(nome="Bianca"), "bianca"), sosp) == "no"
+             and sd.consenso_progetto(sicura, sosp, frozenset({"ospite"})) == "no"
+             and sd.consenso_progetto(sd.chi_da_oggi(SC(), "dario", admin_incerta=True), sosp)
+             == "chi_parla")
+    verifica("§10.2 contrario: la chiamata diretta con gli stessi argomenti usa la proposta "
+             "(E3 diretta → sfida)",
+             dec(_p("sviluppo_passo", {"azione": "rifai"}), breve, dir=True,
+                 dargs={"azione": "rifai"})["macchina"] == "sfida")
+
+    # 3. Una richiesta nuova che apre una proposta sua sostituisce quella aperta.
+    #    Giri veri 07:15:43 (documento_crea → «Lo apro?» sopra l'analisi), 07:20:19 (la modifica
+    #    → l'analisi nuova), 10:37:51 («Chiudi proprio lo sviluppo.» → «Lo chiudo?»)
+    verifica("§10.3: richiesta nuova con una proposta sua → sostituita (chiude, come oggi)",
+             dec(analisi, nuova=True)["macchina"] == "sostituita"
+             and sd.accordo("sostituita", "sostituita") == (True, None))
+    verifica("§10.3: «altro» e poi una proposta nuova → sostituita",
+             dec(analisi, r="altro", nuova=True)["macchina"] == "sostituita")
+    verifica("§10.3 contrario: senza proposta nuova la proposta resta",
+             dec(analisi)["macchina"] == "resta" and dec(analisi, r="altro")["macchina"] == "resta")
+    verifica("§10.3 contrario: una risposta alla proposta non è una richiesta nuova (sì della "
+             "corsia o del modello, no, chiamata diretta)",
+             dec(prop(), forma="si", nuova=True)["macchina"] == "esegue"
+             and dec(prop(), r="si", nuova=True)["macchina"] == "esegue"
+             and dec(prop(), r="no", nuova=True)["macchina"] == "chiude_no"
+             and dec(prop(), dir=True, nuova=True)["macchina"] == "esegue")
+    p = _p("sviluppo_apri", {"proposta": "L1"}, turno_p=4)
+    verifica("§10.3 proposta_nuova: nata in questo turno da un altro tool → sì",
+             sd.proposta_nuova(p, {"tool": "sviluppo_passo", "turno": 5}, 5))
+    verifica("§10.3 proposta_nuova contrari: la stessa di prima, nessuna, nata prima, lo stesso "
+             "tool chiamato come risposta che chiede di nuovo",
+             not sd.proposta_nuova(p, {"tool": "sviluppo_apri", "turno": 4}, 5)
+             and not sd.proposta_nuova(p, None, 5)
+             and not sd.proposta_nuova(p, {"tool": "x", "turno": 3}, 5)
+             and not sd.proposta_nuova(p, {"tool": "sviluppo_apri", "turno": 5}, 5, diretta=True))
+
+    # Il confronto sul turno vero di 10:37:51 (tool del turno e proposta dopo come nel registro)
+    stato = sd.StatoPersona(turno=5, proposta=p)
+    d = {"stato": stato, "corsia": sd.StatoCorsia(persona=sicura), "forma": None,
+         "risposte": [], "diretta": False}
+    o = sd.confronto(d, {"sviluppo_modalita"},
+                     [{"nome": "sviluppo_passo", "argomenti": {"azione": "chiudi"}, "ok": False}],
+                     {"tool": "sviluppo_passo", "turno": 5}, None, 5)
+    verifica("§10.3 confronto 10:37:51: macchina sostituita, oggi sostituita, accordo",
+             o["macchina"] == "sostituita" and o["oggi"] == "sostituita" and o["accordo"] is True,
+             o)
+    # Il confronto sul turno vero di 07:14:53 (diretta con gli argomenti dal registro dei tool)
+    d = {"stato": sd.StatoPersona(turno=5, proposta=rifaccio), "corsia":
+         sd.StatoCorsia(persona=breve), "forma": None, "risposte": [], "diretta": True}
+    o = sd.confronto(d, set(), [{"nome": "sviluppo_passo", "argomenti": {"azione": "sospendi"},
+                                 "ok": True}], None, None, 5)
+    verifica("§10.2 confronto 07:14:53: consenso esegue, oggi eseguita, accordo",
+             o["consenso"] == "esegue" and o["oggi"] == "eseguita" and o["accordo"] is True, o)
+
+    # Con Brain vero: l'analisi proposta, poi «No, non mi va bene così.» (07:20:07)
+    b, eseguiti = prepara()
+    _registra_offerta(b, "proponi_analisi", "sviluppo_apri", {"proposta": "L1"},
+                      "Ho capito così: un programma che conta le parole. Va bene così, o la "
+                      "cambiamo?")
+    turno(b, "Scrivimi un programma che conta le parole.", chiama("proponi_analisi", {}))
+    verifica("[Brain] l'analisi è una proposta aperta", b.has_pending()
+             and b.pending.get("tool") == "sviluppo_apri", getattr(b, "pending", None))
+    turno(b, "No, non mi va bene così.", risponde("no"),
+          testo("Va bene: dimmi cosa vuoi cambiare."))
+    o = b.last_dialogo_ombra or {}
+    verifica("[Brain] 07:20:07: la macchina tiene l'analisi e chiede la modifica, d'accordo con "
+             "oggi", o.get("macchina") == "resta_chiede_modifica" and o.get("oggi") == "resta"
+             and o.get("accordo") is True and b.has_pending(), o)
+    # … poi la richiesta nuova che apre la sua proposta (07:15:43: «Lo apro?»)
+    _registra_offerta(b, "proponi_foglio", "pc_apri_file", {"risultato": 1},
+                      "Ho preparato il foglio. Lo apro?")
+    turno(b, "Crea un foglio Excel con la lista della spesa.", chiama("proponi_foglio", {}))
+    o = b.last_dialogo_ombra or {}
+    verifica("[Brain] 07:15:43: la richiesta nuova sostituisce la proposta, d'accordo con oggi",
+             o.get("macchina") == "sostituita" and o.get("oggi") == "sostituita"
+             and o.get("accordo") is True and b.pending.get("tool") == "pc_apri_file", o)
+    # Contrario: la risposta alla proposta nuova non è una richiesta nuova
+    turno(b, "Raccontami una barzelletta.", testo("Ecco una barzelletta."))
+    o = b.last_dialogo_ombra or {}
+    verifica("[Brain] contrario: un'altra frase senza proposta nuova la lascia aperta",
+             o.get("macchina") == "resta" and o.get("oggi") == "resta"
+             and o.get("accordo") is True, o)
+
+
 def prova_prima_di_brain():
     """Le frasi che il ciclo decide prima di Brain (uscite, stop, interruzione)."""
     b, eseguiti = prepara()
@@ -623,6 +790,7 @@ if __name__ == "__main__":
     prova_stesse_decisioni()
     prova_difesa()
     prova_situazioni()
+    prova_tre_righe()
     prova_prima_di_brain()
     prova_attacchi()
     prova_latenza()
