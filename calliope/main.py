@@ -31,6 +31,7 @@ from pathlib import Path
 import sounddevice as sd
 
 from . import attrito, capacita, contesto, corsie, latenza, minori
+from . import cancelli as cancelli_mod
 from . import guardiano as guardia
 from .agenda import Agenda
 from .agenti import load_agenti
@@ -605,6 +606,18 @@ class Avvio:
         # Minori (05/10, calliope/minori.py): regole per persona, compiti, avvisi ai tutori
         # (stesso file della memoria)
         minori.prepara(cfg, schermi=s.schermi, registry=s.registry)
+        # I segnali dei cancelli dei minori su disco (10/10, calliope/cancelli.py): quelli aperti
+        # prima del riavvio riprendono, quelli scaduti nel frattempo avvisano come un silenzio
+        s.cancelli_percorso = cancelli_mod.percorso(cfg) if cfg.minori_enabled else None
+        if s.cancelli_percorso is not None and s.cancelli_percorso.exists():
+            try:
+                s.cancelli = cancelli_mod.Cancelli(
+                    cfg, log=lambda m: print(m, flush=True),
+                    registra=lambda r: s.turns.write(r) if s.turns is not None else None,
+                    percorso=s.cancelli_percorso)
+            except Exception as e:  # noqa: BLE001 — Calliope parte lo stesso
+                print(f"[MINORI] segnali dei cancelli non ripresi: {type(e).__name__}: {e}",
+                      flush=True)
         # Esercizi generati da Calliope (08/10, calliope/esercizi/): stesso file della memoria;
         # la scheda risponde da /api/esercizio (schermi/server.py)
         try:

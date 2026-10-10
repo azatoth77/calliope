@@ -15,7 +15,7 @@ Dario le scelte prudenti dei cancelli (fondo del documento); da rimisurare tutto
 |---|---|---|
 | Minori (fasce d'età, preset per fascia, permessi nel codice, orari, compiti, avvisi ai tutori; dal 05/10) | SQLite (stesso file della memoria: `minori_regole`, `avvisi_tutori`, `compiti_giorno`); guardiano Llama Guard 3 8B su Ollama + rilevatore di pericolo (gemma4 e4b, output strutturato) | `calliope/minori.py` → `fascia`, `preset`, `permesso` (da `ToolRegistry.call`), `dato_turno`, `fuori_orario`, `piu_protetto`, `Compiti`, `Avvisi`, `estensione_consentita`, `conversazioni_visibili_ai_tutori`; `calliope/guardiano.py` → `Guardiano`, `filtra` (in `main.py`), `correggi_storia`; tool `compiti_aiuto`, `minore_gestisci` (`calliope/tools/minori.py`); terminale `python -m calliope.minori`; banchi `prove/prova_minori_ollama.py`, `prove/misura_guardiano.py`; [`docs/ricerche/2026-10-05-minori.md`](../ricerche/2026-10-05-minori.md) |
 | Esercizi generati da Calliope (dal 08/10): matematica e italiano, a voce e sulla scheda, correzione nel codice, registro dei tentativi per i tutori | libreria standard; SQLite (stesso file della memoria: `esercizi_tentativi`, `esercizi_segnalazioni`, `esercizi_banco`); Wikizionario della biblioteca; secondo modello su Ollama | `calliope/esercizi/` → `matematica.genera`, `italiano.genera`, `numeri.leggi_valore`, `verifica.Wikizionario`, `verifica.SecondoParere`, `registro.Registro`, `sessione.Servizio`; tool `esercizi` (`calliope/tools/esercizi.py`); scheda `DISEGNA.esercizio` e `POST /api/esercizio`; rete `spinta_esercizi`; prove `prove/prova_esercizi.py`, `prove/prova_esercizi_pagina.py`, `prove/prova_esercizi_ollama.py`; [`docs/ricerche/2026-10-08-esercizi.md`](../ricerche/2026-10-08-esercizi.md) |
-| Pericolo poco chiaro verificato in due cancelli prima dell'avviso (dal 09/10); in compagnia la voce del minore non è mai sicura | stesso rilevatore (gemma4 e4b, output strutturato) per gravità e verifica | `calliope/cancelli.py` → `Cancelli`, `Segnale`, `RASSICURA`, `rassicura`, `testo_avviso`; `calliope/guardiano.py` → `Guardiano.gravita`, `Guardiano.verifica`; `calliope/ciclo.py` → `Ciclo._decidi_pericolo`, `Ciclo._secondo_cancello`; prove `prove/prova_minori_cancelli.py`, misura `prove/misura_cancelli.py` |
+| Pericolo poco chiaro verificato in due cancelli prima dell'avviso (dal 09/10); in compagnia la voce del minore non è mai sicura | stesso rilevatore (gemma4 e4b, output strutturato) per gravità e verifica | `calliope/cancelli.py` → `Cancelli`, `Segnale`, `RASSICURA`, `rassicura`, `testo_avviso`, `percorso` (segnali su disco dal 10/10); `calliope/guardiano.py` → `Guardiano.gravita`, `Guardiano.verifica`; `calliope/ciclo.py` → `Ciclo._decidi_pericolo`, `Ciclo._secondo_cancello`; prove `prove/prova_minori_cancelli.py`, misura `prove/misura_cancelli.py` |
 
 ## Problemi noti
 
@@ -290,3 +290,30 @@ minore non cambia: per quella frase preset dei tool, contenuti e documenti guard
 un pericolo avvisa i suoi tutori; la voce vale «non sicura» nei due cancelli e le azioni di chi
 amministra vogliono la frase di sfida. Il minore riconosciuto con sicurezza, un satellite di
 stanza, la compagnia o la finestra scaduta (180 s) lasciano tutto come prima.
+
+## I segnali dei cancelli dopo un riavvio (10/10, ramo `stati-passo0`)
+
+Buco 10 del [progetto della macchina a stati](../ricerche/2026-10-10-macchina-stati.md): i segnali «da verificare» stavano solo in memoria, e un riavvio tra il
+cancello 1 e la risposta li perdeva senza nessun avviso (né il secondo giudizio, né il silenzio).
+Ora `Cancelli` li salva in `cancelli.json` accanto a `memory_db` (`cancelli.percorso`, scrittura
+atomica, a ogni apertura, chiusura e scadenza) **senza la frase del minore**: chi, argomento
+(categorie), voce incerta, satellite, compagnia, stato, ora. All'avvio (`main._minori_e_guardiano`,
+solo se il file c'è):
+
+- un segnale ancora aperto riprende con il tempo che gli restava; il secondo giudizio vede
+  l'argomento al posto della frase (`TESTO_RIPRESO`);
+- uno scaduto durante il riavvio vale come **silenzio**: avviso non urgente «da verificare» con
+  `minori_pericolo_silenzio: avvisa` (decisione di Dario del 10/10), e nel registro dei turni
+  `pericolo_silenzio` con `dopo_riavvio`; un altro riavvio non lo ripete;
+- quelli chiusi restano per `minori_pericolo_finestra_s` (un secondo segnale dubbio vale ancora
+  confermato).
+
+Senza `memory_db` (o nelle prove che non passano `percorso`) tutto resta in memoria come prima;
+un file rovinato si ignora. Rifiuti e intenzioni della conversazione possono ancora perdersi a un
+riavvio (decisione di Dario). Prove in `prova_stati_buchi` (caso 10), `prova_minori_cancelli`
+invariata.
+
+Dallo stesso giro, documentato e non corretto (buco 2, passo 3 della macchina): il «Va tutto
+bene?» del cancello 1 non è una proposta, quindi la cortesia («grazie» → «Prego») risponde prima
+del cancello 2 e il segnale resta aperto fino al silenzio, e un «sì» del minore arriva al modello
+come consenso a una proposta fatta prima.

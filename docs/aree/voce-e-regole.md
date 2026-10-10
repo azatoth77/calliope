@@ -950,3 +950,32 @@ Il tool `conversazione_nuova` (stesso giorno) e la coda dopo una pausa sono in
 - I campi della forma degli errori di `tools/dialogo.py` (`campo`, `correggibile`) e l'elenco
   dei lavori veri di `lavoro_risultato` non entrano più nella busta dei dati non fidati
   (`_CAMPI_ERRORE`): un errore senza dati non contamina la conversazione.
+
+## Stato del dialogo, passo 0: i dieci buchi provati, il nome vero, il «no» all'agente (10/10, ramo `stati-passo0`)
+
+Prima di cominciare la macchina a stati ([progetto della macchina a stati](../ricerche/2026-10-10-macchina-stati.md), § 1.10 e § 8) una prova per ciascuno dei
+dieci stati che rischiano di non essere gestiti, a secco: `prove/prova_stati_buchi.py`. Tutti e
+dieci si riproducono con il codice di main a e023602. Sei restano **documentati** come buchi
+«attesi da correggere» con il passo che li chiuderà (la prova fallisce quando un passo li
+corregge, e va trasformata in una verifica con i contrari): 1 e 2 al passo 3, 4, 5 e 7 al passo 5,
+8 al passo 2. Quattro sono **corretti** subito (3, 6, 9, 10).
+
+- **«Vuoi dirmi il tuo nome?»** dopo la registrazione di Primo/Prima (buco 9). Prima
+  `pending_real_name` non scadeva e qualunque frase di al più cinque parole, di chiunque, rinominava
+  il profilo: con il codice di prima «Sì.» diventava il nome «Sì» e «Che tempo fa domani?» il nome
+  «Che Tempo Fa Domani». Ora l'attesa dura `NOME_VERO_ATTESA_S` (120 s, `calliope/ciclo.py`), vale
+  solo per la voce appena registrata (con il riconoscimento acceso) e per una risposta sola; il
+  nome vale solo in **forma chiusa intera** (principio 10, `wakeword.risposta_al_nome`): una
+  presentazione («Mi chiamo Dario», «Il mio nome è Maria Rosa», «Sono Luca» con il nome maiuscolo)
+  o il nome da solo (una parola che non è una risposta comune, due con la seconda maiuscola).
+  «Sì» chiede il nome e aspetta ancora, «no» chiude, tutto il resto va al modello (che ha
+  `rinomina_interlocutore`) come una frase nella finestra d'ascolto. Regole `nome_vero_si`,
+  `nome_vero_no`, `nome_vero_al_modello`, `nome_vero_altra_persona`, `nome_vero_scaduto`
+  (`nome_detto` resta). Casi e contrari in `prova_testo` e `prova_stati_buchi`.
+- **Il «no» a una domanda dell'agente** (buco 3): la domanda a metà lavoro passava da
+  `_rifiuto_proposta` come una proposta sì/no, il «no» finiva tra i rifiuti e la politica bloccava
+  `lavoro_rispondi` (`politica_proposta_rifiutata`): l'agente non riceveva la risposta e il lavoro
+  aspettava fino alla scadenza (120 minuti). Ora l'offerta della domanda dell'agente ha
+  `risposta: True` (`Lavori.offerta_risposta`, salvato da `Brain.set_pending`): un «no» è la
+  risposta, la proposta resta e il modello la passa con `lavoro_rispondi`. Regola
+  `risposta_non_rifiuto`. Il «no» a una proposta normale («La apro?») resta un rifiuto.
