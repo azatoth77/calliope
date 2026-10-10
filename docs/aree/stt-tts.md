@@ -8,9 +8,9 @@
 
 | Stadio | Libreria | Dove |
 |---|---|---|
-| Cattura + VAD | sounddevice + Silero VAD (PyTorch, oppure il suo ONNX con onnxruntime senza torch: Linux) | `calliope/audio.py` → `Listener` (`listen`, `watch_for_name`, `measure_echo`); `calliope/vad.py` → `carica_vad`, `SileroOnnx`, `SileroTorch`; pause e fine del turno (dal 07/10, solo misura) `calliope/pause.py` → `MisuraPause`, `OsservaRipresa`, `inizio_ripresa`, `riassunto` (sotto) |
+| Cattura + VAD | sounddevice + Silero VAD (PyTorch, oppure il suo ONNX con onnxruntime senza torch: Linux) | `calliope/audio.py` → `Listener` (`listen`, `watch_for_name`, `measure_echo`); `calliope/vad.py` → `carica_vad`, `SileroOnnx`, `SileroTorch`; pause e fine del turno (dal 07/10, solo misura) `calliope/pause.py` → `MisuraPause`, `OsservaRipresa`, `inizio_ripresa`, `riassunto` (sotto); la frase al tetto e il suo seguito nello stesso turno (dal 10/10, sotto) `Listener._dopo_il_tetto`, `Ciclo._seguito_del_tetto`, `pause.TETTO_ATTESA_S` |
 | Chi parla | CAM++ (3D-Speaker) in ONNX con onnxruntime | `calliope/speaker_id.py` → `SpeakerEmbedder`, `SpeakerRegistry`, `SpeakerContext`; `arruola.py`; margine tra i profili e voce incerta tra un adulto e un minore (07/10) `Ciclo._confronta_voce`, `Ciclo._chiedi_chi_parla`, `SpeakerContext.incerta`; continuità delle frasi cortissime (08/10) `Ciclo._per_continuita`; il nome da solo dopo lo scatto acustico `ciclo.solo_nome_acustico`; più voci vicino allo stesso satellite (dal 09/10, sotto) `calliope/compagnia.py` → `Compagnia`, `modo`, `riassunto`, e il giudizio «rivolta a Calliope» `calliope/rivolta.py` → `Giudice`, `etichetta` |
-| Speech-to-Text | faster-whisper nel processo, oppure un server con l'API OpenAI (sulla DGX whisper.cpp con CUDA, servizio `calliope-whisper`; vLLM scartato) con ripiego su faster-whisper su CPU (modello di riserva dal catalogo, `whisper_riserva`) | `calliope/stt.py` → `Transcriber`, `ServerTranscriber`, `make_transcriber`, `modello_whisper`; server in `setup/linux/motore/whisper.sh`; correzione delle frasi incerte (spenta) `calliope/stt_correzione.py` → `Correttore`, `accettabile`, `min_utile`; a capo di whisper-server tolti `stt.unisci_righe`; parole incerte al modello (B, spenta) `stt_correzione.parole_incerte`, `Brain.STT_INCERTE_MSG`; frase capita trattenuta (B2, spenta) `Brain.CapitoHold`, `Brain._applica_capito`, `STT_RISCRIVI_MSG` (confronto A/B/B2/C in fondo); parole incerte negli argomenti dei tool (dal 08/10, F0 e F1, sotto) `calliope/argomenti_incerti.py` → `Ascolto`, `Misura`, `Vocabolario`, `allinea`, `esito`, `suggerimento`, `riassunto`, con le probabilità per parola `Transcriber.parole` e `ServerTranscriber.parole`; frasi tipiche delle allucinazioni scartate per intero in `calliope/allucinazioni.py` (09/10) |
+| Speech-to-Text | faster-whisper nel processo, oppure un server con l'API OpenAI (sulla DGX whisper.cpp con CUDA, servizio `calliope-whisper`; vLLM scartato) con ripiego su faster-whisper su CPU (modello di riserva dal catalogo, `whisper_riserva`) | `calliope/stt.py` → `Transcriber`, `ServerTranscriber`, `make_transcriber`, `modello_whisper`; server in `setup/linux/motore/whisper.sh`; correzione delle frasi incerte (spenta) `calliope/stt_correzione.py` → `Correttore`, `accettabile`, `min_utile`; a capo di whisper-server tolti `stt.unisci_righe`; parole incerte al modello (B, spenta) `stt_correzione.parole_incerte`, `Brain.STT_INCERTE_MSG`; frase capita trattenuta (B2, spenta) `Brain.CapitoHold`, `Brain._applica_capito`, `STT_RISCRIVI_MSG` (confronto A/B/B2/C in fondo); parole incerte negli argomenti dei tool (dal 08/10, F0 e F1, sotto) `calliope/argomenti_incerti.py` → `Ascolto`, `Misura`, `Vocabolario`, `allinea`, `esito`, `suggerimento`, `riassunto`, con le probabilità per parola `Transcriber.parole` e `ServerTranscriber.parole`; tempo massimo della richiesta in proporzione alla frase `ServerTranscriber.tempo_massimo` (10/10); frasi tipiche delle allucinazioni scartate per intero in `calliope/allucinazioni.py` (09/10) |
 | Wake word acustica | classificatore addestrato in formato openWakeWord (ONNX) | `calliope/wakeword.py` → `WakeWordDetector`, `load_wake_detector`; usato da `Listener.listen(wake, awake_until)`. Modelli e addestramento in `wakeword/` |
 | Text-to-Speech | Piper (voce `it_IT-serena-high`) | `calliope/tts.py` → `Speaker` (2 thread: sintesi e riproduzione, `_pcm`; la prima frase lunga a pezzi `primo_pezzo`, `tts_spezza_prima`, `tts_primo_pezzo_min`, e i thread di onnxruntime `carica_voce`, `tts_thread`, dal 07/10; velocità e costo della voce misurati all'avvio e con l'uso `calliope/taratura_voce.py` → `Taratura` (file voce_taratura.json), `tts_thread` «auto»; dal 07/10 sera Piper anche sulla GPU con onnxruntime-gpu, `tts_dispositivo` auto/cpu/cuda, scelta secondo la macchina e ripiego sulla CPU (`_su_gpu`, `prova_dispositivo`): [contesto-conversazione](contesto-conversazione.md)); inglesismi detti all'inglese `calliope/pronuncia.py` → `Pronuncia`, `LESSICO` (`tts_pronuncia`, `tts_pronuncia_extra`) |
 
@@ -399,7 +399,8 @@ via `protocollo.PARAMETRI`; il telefono in `voce.js`). Chi fa pause lunghe (un b
 la parola, un anziano, chi detta un numero) viene tagliato; chi parla svelto aspetta 700 ms
 per niente. In futuro la soglia si adatterà per persona, età e canale, con una partenza
 anticipata. **Per ora solo misura: nessun comportamento cambiato** (stessa soglia, stessa
-chiusura, nessuna regola sul testo).
+chiusura, nessuna regola sul testo). *Dal 10/10 una cosa cambia, il tetto `max_utterance_s`:
+la frase che ci arriva non chiude più il turno (sotto, «La frase lunga»).*
 
 Cosa si registra (campo `ascolto` del registro dei turni, nessun dato personale nuovo):
 
@@ -759,3 +760,75 @@ Hugging Face al primo uso (ruote anche per win_arm64 e manylinux aarch64). Aggiu
 hotwords di faster-whisper peggiora turbo (11,9 → 14,1 %): la sola «Calliope» resta giusta. Restano
 le 40 frasi dubbie da correggere a mano (`privato/misura-whistle/dubbie.html`) e 28 frasi mirate da
 registrare (`prove/manuali/registra_whistle.py`, `frasi_whistle.tsv`), utili anche per whisper.cpp.
+
+## La frase lunga: il tetto non chiude il turno (10/10, ramo `frase-lunga`)
+
+**Caso vero della DGX, 10/10 17:32:17, satellite «studio».** Dario detta le specifiche di un gioco
+parlando spedito; il turno ha `voce_s` 29,02 e il testo finisce a metà («…queste porte possono
+aumentare o diminuire troppo»); Calliope parte subito con lo sviluppo mentre lui parla ancora, e il
+resto diventa un turno nuovo («Vince 15 turni, ha la fortuna di beccare più.»).
+
+**Causa confermata: il tetto, non una pausa.** `voce_s` è la durata della frase meno pre-roll e
+silenzio di chiusura (300 + 700 ms): 29,02 s vuol dire 30,02 s di frase, cioè esattamente 938 frame
+da 32 ms, il primo multiplo oltre `max_utterance_s` = 30 s (`Listener.listen`: `too_long`). Una
+chiusura per silenzio darebbe una durata qualsiasi. Lo stesso tetto valeva sul satellite (stesso
+`Listener`, parametro mandato dal server con `protocollo.PARAMETRI`) e sul telefono (`voce.js`,
+riserva 20 s finché il server non manda il suo). **`silence_ms` resta 700**: il giro dice tetto, e
+la fine del turno intelligente è la fase 1 qui sopra. Nella dettatura sintetica (pause di respiro
+250–500 ms) nessuna pausa ha chiuso il turno.
+
+**Correzione.**
+
+1. **Tetto a 120 s** (`max_utterance_s`, intervallo ammesso 5–600; `calliope.yaml` rigenerato; nel
+   telefono la riserva 120). Resta un tetto contro il rumore continuo (la TV).
+2. **Il tetto non chiude il turno** (regola `frase_tetto`). Scelta la soluzione più semplice che non
+   perde parole: quando la frase arriva al tetto `Ciclo._seguito_del_tetto` ascolta **subito** di
+   nuovo, senza dire niente né suonare, e se la voce continua entro `pause.TETTO_ATTESA_S` (2 s)
+   l'audio si unisce **prima di Whisper** (una trascrizione, una richiesta al modello). Dire
+   «continua pure» avrebbe perso, in half-duplex, proprio le parole dette mentre Calliope parla.
+   Perché l'unione sia pulita, al tetto `Listener._dopo_il_tetto` riparte il pre-roll dai frame non
+   ancora letti: l'ascolto dopo comincia dal frame seguente, senza la coda della frase (doppioni) e
+   senza buchi fino a `preroll_ms` tra un ascolto e l'altro (la prova a secco lo controlla con frame
+   numerati; senza la correzione 8 frame si ripetevano). Lo stesso nel telefono (`voce.js`: al
+   tetto `recenti` riparte dai blocchi non letti; provato con node). Sul satellite il seguito è un `ascolta`
+   nuovo con `sveglia_per_s` = 2 s, il buco è il giro di rete coperto dal pre-roll; se nessuno
+   continua il server manda `sveglia` e la frase vale com'è. Al più `TETTO_SEGUITI` (2) seguiti per
+   turno, cioè 6 minuti: poi la frase vale com'è («tagliata»). Al tetto né il satellite in Python
+   né il telefono suonano la fine ascolto (la persona parla ancora); in locale il suono arriva una
+   volta, a frase intera. Il registro dei turni ha la regola e `ascolto.tetto` = `{"pezzi": n,
+   "tagliata": …}`; `ascolto.chiusura` è quella dell'ultimo pezzo, `pause_ms` e `parlato_ms` sono
+   della frase intera, l'inizio è quello del primo pezzo. Principio 10: non è una regola sul testo,
+   riguarda l'audio che il modello non vede. `frase_finita` accetta `fa_s` fino a 600 s (era 120).
+3. **Tempo massimo di whisper-server in proporzione** (`ServerTranscriber.tempo_massimo`):
+   `stt_timeout_s` (5 s) vale fino a 15 s di frase, oltre cresce in proporzione (30 s → 10 s,
+   120 s → 40 s, 360 s → 120 s). Con i 5 s fissi una dettatura lunga sarebbe finita su CPU
+   (molto più lenta) e il server segnato giù per 30 s. Le frasi normali usano il client com'è.
+
+**Whisper oltre i 30 s: funziona, misurato il 10/10** su una dettatura sintetica (Piper
+`it_IT-giorgio-medium`, 12 frasi con pause di 250–500 ms, 70 s; script in scratchpad, non nel
+repository). faster-whisper (large-v3-turbo) e whisper.cpp scorrono l'audio a finestre di 30 s da
+soli: il testo arriva intero fino all'ultima frase, senza ripetizioni.
+
+| Audio | faster-whisper GPU (RTX 5070 Laptop, int8_float16) | faster-whisper CPU (int8, ripiego) | whisper-server CPU (whisper.cpp b5130, ggml-base, -bs 5, 8 thread) |
+|---|---|---|---|
+| 10 s | 0,43 s | 8,9 s | 1,9 s |
+| 30 s | 0,85 s | 18,8 s | 2,7 s |
+| 70 s | 1,93 s | 31,5 s | 5,4 s |
+| 211 s | 6,0 s | 80,0 s | 15,2 s |
+
+Crescita quasi lineare (~0,03 s per secondo di voce sulla GPU). Con il tetto di 30 s di prima, il
+pezzo di 30 s finiva su «…vince chi ha la fortuna di beccare più» come nel caso vero. Sulla DGX
+(whisper.cpp large-v3-turbo su CUDA) non misurato: la DGX non si tocca da questo ramo; atteso nello
+stesso ordine della GPU del portatile (0,18 s mediana per una frase breve). Il ggml-base sul
+portatile è servito solo a provare il server con l'audio lungo (con il tempo massimo di prima il
+70 s sarebbe andato su CPU).
+
+Prove: `prove/prova_frase_lunga.py` (livello 2, a secco: tetto, tempo massimo, Listener con frame
+numerati, `voce.js` con node, seguito unito con i contrari, giro del ciclo, satellite finto su
+server vero, suoni) e
+`prove/prova_frase_lunga_voce.py` (livello 3: la dettatura sintetica in un Listener con Silero VAD
+vero e il tetto a 30 s raggiunto due volte, pezzi uniti e trascritti da faster-whisper: le frasi
+intorno al primo taglio intere, la parola proprio sull'unione a volte storpiata da Whisper,
+«paemi» per «premi»; STT 1,8–2,6 s per 70 s). Da guardare sulla DGX nel registro dei
+turni: `frase_tetto` e `ascolto.tetto` (quante dettature arrivano a 120 s), `tagliata` (deve restare
+rarissima).

@@ -50,7 +50,7 @@ per stadio, solo i moduli principali: librerie, classi e dettagli sono nei docum
 | Stadio | Dove | Area |
 |---|---|---|
 | Ciclo principale, robustezza | `main.py` (`Avvio`, `Corsie`), `ciclo.py` (`Ciclo`, `Servizi`: dal 06/10, P8), `persistenza.py`, `turnlog.py` | [voce-e-regole](docs/aree/voce-e-regole.md) |
-| Cattura, VAD, wake word acustica, barge-in; pause e fine del turno (solo misura, dal 07/10) | `audio.py` (`Listener`), `vad.py`, `wakeword.py` (`WakeWordDetector`), `pause.py` | [stt-tts](docs/aree/stt-tts.md) |
+| Cattura, VAD, wake word acustica, barge-in; pause e fine del turno (solo misura, dal 07/10); frase al tetto di 120 s unita al seguito (dal 10/10) | `audio.py` (`Listener`), `vad.py`, `wakeword.py` (`WakeWordDetector`), `pause.py` | [stt-tts](docs/aree/stt-tts.md) |
 | Chi parla (CAM++ in ONNX); più voci vicino a un satellite e «rivolta a Calliope» (dal 09/10) | `speaker_id.py`, `arruola.py`, `compagnia.py`, `rivolta.py` | [stt-tts](docs/aree/stt-tts.md) |
 | Speech-to-Text (faster-whisper o whisper.cpp sulla DGX, ripiego su CPU); nomi incerti negli argomenti dei tool, misura e «forse intendeva» dopo un esito vuoto (dal 08/10) | `stt.py`, `stt_correzione.py`, `argomenti_incerti.py` | [stt-tts](docs/aree/stt-tts.md) |
 | Text-to-Speech (Piper, sulla GPU secondo la macchina), pronuncia degli inglesismi, taratura della voce (dal 07/10) | `tts.py` (`Speaker`), `pronuncia.py`, `taratura_voce.py` | [stt-tts](docs/aree/stt-tts.md) |
