@@ -26,8 +26,10 @@ chiunque.
 
 ## Alternative considerate
 
-- Le API di ricerca commerciali non sono state prese in considerazione: richiedono una chiave e un
-  account, e manderebbero ogni domanda a un'azienda. Nessun confronto formale nel progetto.
+- Le API di ricerca commerciali sono escluse per principio, non per un confronto (deciso da chi
+  amministra il 10/10): richiedono una chiave, un account e un pagamento, e manderebbero ogni domanda
+  a un'unica azienda. In un progetto aperto, che ognuno deve poter installare così com'è, non hanno
+  posto.
 - Dentro SearXNG: Google web spento (captcha), Bing web tolto il 09/10 (ignorava l'italiano).
 
 ## Conseguenze

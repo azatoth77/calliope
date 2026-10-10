@@ -30,8 +30,11 @@ la persona deve poterla interrompere.
 - **AEC3 di WebRTC** (binding livekit): sopprime la voce durante il doppio parlato e non ha wheel
   `win_arm64`. **speexdsp**: 17–19 dB, troppo poco.
 - **Satelliti con XMOS** (AEC in hardware): la soluzione giusta per le stanze, quando ci saranno.
-- **Modelli voce→voce in full duplex**: non valutati finora; sono segnati come direzione da tenere
-  d'occhio nel progetto della macchina a stati del 10/10
+- **Modelli voce→voce in full duplex**: guardati il 10/10, nessuno è adatto oggi. Quelli aperti e
+  davvero full duplex (Moshi di Kyutai, i suoi derivati, VoiceChat di NVIDIA) parlano inglese.
+  Qwen3-Omni (pesi aperti, Apache 2.0) capisce e parla l'italiano in streaming, ma a turni, non in
+  full duplex. Tutti sostituirebbero l'intera catena: chi parla, la politica dei tool e la frase di
+  sfida stanno tra la trascrizione e il modello. Restano una direzione da tenere d'occhio
   ([0022](0022-macchina-a-stati-del-dialogo.md)).
 
 ## Conseguenze
