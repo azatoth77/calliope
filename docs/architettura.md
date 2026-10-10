@@ -212,7 +212,10 @@ Dettagli in [agenti-estensioni](aree/agenti-estensioni.md).
 ## 7. Satelliti, telefono e schermi
 
 Dettagli in [satelliti](aree/satelliti.md) e [schermi-telefono](aree/schermi-telefono.md);
-decisione in [0010](decisioni/0010-server-di-casa-e-satelliti.md).
+decisione in [0010](decisioni/0010-server-di-casa-e-satelliti.md). Dal 10/10 è deciso che i satelliti
+pronti (Home Assistant Voice PE, schede ESP32 con ESPHome) parleranno direttamente con Calliope
+attraverso l'API nativa di ESPHome, con Home Assistant solo per i dispositivi di casa
+([0026](decisioni/0026-satelliti-esphome-senza-home-assistant.md)); l'adattatore è in coda.
 
 - **Satelliti**: un WebSocket proprio con TLS e impronta fissata, audio PCM 16 kHz. Un PC Windows si
   installa con un comando e si aggiorna da solo con il ritorno indietro; fa anche da esecutore delle

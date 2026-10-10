@@ -363,11 +363,18 @@ Finestra di contesto scelta dal setup: 20 480 (PC) e 24 576 (DGX), prima frase i
 Il congelamento delle funzionalità nuove (dal 06/10, per la latenza) è stato tolto l'08/10.
 In coda, dopo una lettura dei dati:
 
-1. **Sicurezza per valore**: leggere i giorni in ombra e decidere se accenderla (10/10).
+1. **Stato del dialogo come macchina a stati**: passo 0 fatto il 10/10, poi l'interprete in ombra,
+   il consenso unico e una tabella dichiarativa dei permessi
+   ([0022](docs/decisioni/0022-macchina-a-stati-del-dialogo.md),
+   [0023](docs/decisioni/0023-tabella-dichiarativa-dei-permessi.md)). La sicurezza per valore è
+   accesa dal 09/10.
 2. **Frasi pronte dei tool meno monotone** (varianti per tono, forma breve), in attesa del via.
 3. **Nomi dei tool**: la regola dell'08/10 (nome singolare + verbo) anche per gli altri tool.
 4. **Parole incerte e compagnia**: tarare le soglie sulla voce vera; decidere la correzione sullo
    schermo, il dizionario delle correzioni e il giudizio «rivolta a me?» oggi in ombra.
+5. **Notizie dai feed RSS** delle testate italiane in un indice locale, SearXNG come ripiego.
+6. **Satelliti ESPHome** (Home Assistant Voice PE) che parlano direttamente con Calliope
+   ([0026](docs/decisioni/0026-satelliti-esphome-senza-home-assistant.md)).
 
 Funzionalità decise, senza date: **modulo studio** (le altre materie e la simulazione
 d'interrogazione con domande a tempo e valutazione di contenuti ed esposizione; gli esercizi di
@@ -497,8 +504,11 @@ one-command install and self-update with rollback; phone PWA; kiosk screens and 
 dashboard; per-person card history and a live conversation transcript on personal screens; personalities and a Star Trek mode; capability registry and catalogue installs;
 turn log with latency statistics; tiered tests and an end-to-end test.
 
-**Roadmap.** The feature freeze (for latency) was lifted on 08/10. Queued: deciding on the
-value-based tool policy after its shadow days (10/10), less repetitive canned tool phrases,
+**Roadmap.** The feature freeze (for latency) was lifted on 08/10. Queued: the dialogue state
+machine (step 0 done on 10/10; model interpreter in shadow mode, single consent, a declarative
+permission table; the value-based tool policy is on since 09/10), news from Italian RSS feeds in a
+local index, ESPHome satellites (Home Assistant Voice PE) talking directly to Calliope, less
+repetitive canned tool phrases,
 renaming the remaining tools, tuning the uncertain-word and company-mode thresholds on real
 voices. Decided: the rest of the study module (more subjects, oral exam simulation), local image
 generation (FLUX.2 [klein] 4B), a second factor for admins, an admin panel with actions; then
