@@ -301,14 +301,21 @@ def _sviluppo_apri(ctx: ToolContext, tipo: str = "", compito: str = "", nome: st
     if str(tipo or "").strip().lower() == "gioco":
         gioco = True
     prop = str(proposta or "").strip()
-    if (t in ("programma", "") and not prop and not str(modifica or "").strip()
+    gia_gioco = gioco in (True, "true", "sì", "si", 1)
+    if (t in ("programma", "estensione", "") and not gia_gioco and not prop
+            and not str(modifica or "").strip()
             and gioco_sugli_schermi(compito, getattr(ctx, "user_text", ""))):
         # Un gioco chiesto come programma (10/10, DGX delle 15:56: «Vorrei sviluppare un
         # gioco all'interno di Calliope» → tipo programma → «non si possono creare giochi
         # interattivi o programmi con finestre»): i giochi di Calliope sono estensioni con
         # una scheda sugli schermi. Correzione della forma della scelta del modello
         # (principio 10, regola `sviluppo_gioco_schermi`); un programma con una finestra per
-        # il desktop, o un gioco da terminale in Python, resta un programma
+        # il desktop, o un gioco da terminale in Python, resta un programma.
+        # Anche con tipo «estensione» senza il flag (10/10, DGX delle 17:32, dopo la
+        # correzione: «Crea un gioco di Halloween per schermi dove i giocatori devono
+        # scegliere tra diverse porte…» → l'analisi delle estensioni, e alla seconda passata
+        # «impossibile: la richiesta non specifica la sezione scheda»): un gioco è
+        # un'estensione con la scheda, e l'analisi delle estensioni non fa per lui
         note_rule(ctx, "sviluppo_gioco_schermi")
         gioco = True
     if gioco in (True, "true", "sì", "si", 1) or str(modifica or "").strip():
