@@ -705,3 +705,17 @@ arrivato nell'archivio alle 19:08 (in secondo piano), e la ripresa non aveva nie
   la prima versione dava 2/3 («Non trovo niente…» come frase finale dell'archivio).
   `prova_conversazioni_ollama` 1 giro: tutto giusto, prima frase mediana 1,24 s.
 - Prove a secco in `prova_conversazioni` (casi veri e contrari).
+
+## La coda della conversazione solo alla stessa persona (10/10, ramo `stati-passo0`)
+
+Buco 6 del [progetto della macchina a stati](../ricerche/2026-10-10-macchina-stati.md). La voce del 09/10 sera diceva «mai per un ospite»: era vero solo per una
+conversazione di un ospite, non per una **persona riconosciuta finita nella conversazione anonima**
+del satellite (frase breve, zona grigia): la coda restava nella nuova `ospite:<corsia>` e la
+riceveva il prossimo ospite. E con la conversazione unica («casa», senza le corsie per persona)
+la coda arrivava a chiunque parlasse dopo la pausa, perché la conversazione nuova non ha ancora un
+proprietario. Ora (`Brain._coda_della_chiusa`, `Brain._inizio_conversazione`): niente coda nelle
+conversazioni `ospite:`, e la coda porta `per` (la chiave di chi parlava): vale solo se a parlare
+dopo la pausa è la stessa persona, altrimenti si toglie (regola
+`conversazione_coda_altra_persona`). Una coda salvata prima di questa versione (senza `per`) si
+toglie al primo turno. Prove in `prova_stati_buchi` (anonima del satellite, altra persona, ospite,
+la stessa persona sì) e `prova_conversazioni` invariata.
