@@ -1287,3 +1287,7 @@ stato chiesto davvero.
 In tutti e due i casi valgono le tre categorie del parlato (contenuto del modello, atti di dialogo
 della macchina con testi fissi, esiti dei tool), i promemoria per il modello nel blocco dello stato e
 non alla voce, e la misura delle frasi scritte dal codice per turno.
+
+**Decisione di Dario (10/10)**: la seconda strada, direttamente, con un registro **per
+conversazione**. Progetto in [`2026-10-10-registro-eventi.md`](2026-10-10-registro-eventi.md),
+decisione [0027](../decisioni/0027-conversazione-come-registro-di-eventi.md).
