@@ -1362,3 +1362,47 @@ sentito di una frase interrotta non lo dice il satellite (`interrotta_persa`).
 Prove: `prova_eventi` (tipi, proiezioni pure, partizione, porte, due corsie, riassegnazione),
 `prova_eventi_ciclo` (passo 0 e ombra su un giro sintetico del ciclo vero, latenza),
 `prova_eventi_disco` (riavvio, «dimentica»). Misure: prima frase invariata: con Calliope vera in `prova_satellite` (modello e Whisper finti, Piper vero; 3 giri per lato, 27 risposte ciascuno) `prima_frase_s` mediana 0,09 s prima e dopo (media 0,095 → 0,093 s), prima voce sentita mediana 0,37 s uguale, «dalla fine della frase alla prima voce» 0,63–0,77 s prima e 0,68–0,73 s dopo (rumore della macchina); osservatore della voce ~1 µs per frase; `contesto_ms` al più 0,14 ms (24 turni veri della prova) e 0,06 ms sul giro sintetico; su disco ~0,4–0,6 kB per turno di mediana, fino a ~2,5 kB con risultati di tool.
+
+## Una conferma senza parole, e «ricominciamo» muto sul satellite (10/10, ramo `giro3-correzioni`)
+
+Terzo giro vero della DGX del 10/10 (10:37–10:44, satellite «studio»; l'altro compito
+nell'analisi, i titoli e «chiudi tutti gli sviluppi» in [agenti-estensioni](agenti-estensioni.md)).
+
+**«CQD» non è un sì.** 10:39:07, a «…Lo chiudo?» per lo sviluppo delle parole, Whisper ha scritto
+«CQD» (forse «Sì, chiudi»): il modello ha richiamato chiudi, la conferma breve l'ha fatto passare
+(`conferma_breve`) e lo sviluppo si è chiuso. Ora (`politica.consenso_irriconoscibile`, chiamata
+da `ToolRegistry.call` **prima** della conferma breve) la chiamata del tool proposto da una frase
+**detta** senza nessuna parola riconoscibile non esegue: «Non ho capito: lo chiudo?», con la
+stessa proposta in sospeso (regola `consenso_irriconoscibile`). Vale per ogni strada del «sì»: la
+chiamata diretta, la conferma breve, `proposta_rispondi(si)` in ombra (che diventa la stessa
+chiamata); la corsia veloce già non prende «CQD» (non è una forma). Non vale per lo scritto (non è
+una trascrizione), per la frase di sfida superata, per una proposta che chiede un dato (la domanda
+dell'agente) né per gli altri tool. **Riconoscibile** (`risposte.senza_parole`,
+`parola_riconoscibile`), senza un dizionario nuovo: le parole brevi chiuse dell'italiano (sì, no,
+ok, va, e, il, per, non…), un numero, o una parola di almeno tre lettere con una vocale e una
+vocale in fondo, non una sigla tutta maiuscola; il nome non conta; una storpiatura nota
+(`storpiature.suggerisci`: «Chiudin», «Spendilo», «Annullahi») ha il suo percorso e non è toccata.
+Principio 10: riguarda la trascrizione, che il modello non vede come tale, e l'effetto è una
+domanda in più. Per la domanda la politica sa ora la domanda e la cosa della proposta
+(`Turno.domanda_sospeso`, `cosa_sospeso`, `risposta_dato`). Contrari in `prova_giro3`: «sì», «sì
+sì», «ok», «va bene», «certo», «chiudilo», «d'accordo», «3», le storpiature. **Limite**: una
+risposta di una sola parola che finisce in consonante e non è tra le brevi («Sport») vale come
+senza parole; a una domanda sì/no non capita.
+
+**«Ricominciamo» muto sul satellite.** Nei tre giri del 10/10 «Calliope, ricominciamo» chiudeva
+la conversazione ma Dario non sentiva «Va bene, ricominciamo da capo.» e il ciclo tornava subito
+«In ascolto…»; «A presto!» di «esci» si è sempre sentito. Le due strade differivano nell'ordine:
+«esci» (`_addormentati`) dice la frase e poi chiude la conversazione, «ricominciamo» chiudeva e
+poi diceva. **Non riprodotto in locale**: con Calliope vera (Piper, Brain, archivio, corsie, un
+satellite finto a livello di protocollo e uno vero in processo con microfono e casse finti, come
+`prova_satellite` e `prova_corsie_satelliti`), con la voce riconosciuta e anche detto come
+barge-in durante una risposta, la frase arriva e si sente (0,6–0,7 s dalla fine della frase).
+Correzione nel solo ramo di «ricominciamo»: la frase prima di `end_conversation("nuova")`, come
+«esci»; un'interruzione rimasta accesa (che farebbe scartare la frase senza sintetizzarla) si
+azzera; e `Ciclo._di_e_aspetta` controlla, con l'uscita di un satellite, che lui l'abbia detta per
+intero (le frasi dette tornano con la fine del turno): se no scrive nel log «[VOCE] il satellite
+non ha detto …» con il turno e lo stato della voce, e la regola `voce_frase_non_detta`. **Da
+guardare sulla DGX** dopo l'aggiornamento: se la frase ancora non si sente, quella riga del
+journal dice dove si perde. Prova: `prova_giro3` (corsia di un satellite finto con lo Speaker
+vero: la frase va prima della chiusura, anche con un'interruzione accesa; contrario: il satellite
+che non la dice → la regola; «esci» com'era).
