@@ -661,6 +661,12 @@ class Turno:
     # entità di Home Assistant in «Taverna o Bagno della Taverna?», il titolo di uno sviluppo
     # dall'indice): valgono come parole della persona per la politica per valore
     domanda_fidata: str = ""
+    # La domanda della proposta in sospeso e che cosa propone (10/10: «Non ho capito: lo
+    # chiudo?» a una risposta senza parole, `consenso_irriconoscibile`); `risposta_dato`: la
+    # proposta chiede un dato, non un sì (la domanda dell'agente): lì vale qualunque risposta
+    domanda_sospeso: str = ""
+    cosa_sospeso: str = ""
+    risposta_dato: bool = False
 
 
 # Le azioni interne chieste con un verbo che il lessico delle azioni sul mondo non ha
@@ -1738,6 +1744,37 @@ def avvio_non_chiesto(name: str, args: dict, cl: Classe, t: Turno | None) -> boo
     if chiesto_con_verbi(cl, testo, args):
         return False
     return not (azione in ("avanti", "riprendi") and _AVVIO_GENERICO.search(testo))
+
+
+def consenso_irriconoscibile(name: str, args: dict | None, ctx) -> dict | None:
+    """La chiamata del tool proposto (il «sì» alla sua domanda: chiamata diretta, la conferma
+    breve, proposta_rispondi in ombra) da una frase **detta** senza nessuna parola riconoscibile
+    («CQD», 10/10 alle 10:39:07 sulla DGX: lo sviluppo si è chiuso). Non è un consenso: la
+    domanda si ripete («Non ho capito: lo chiudo?») e la proposta resta. Regola
+    `consenso_irriconoscibile`. None se non è questo caso (anche una frase scritta, la frase di
+    sfida superata, una proposta che chiede un dato)."""
+    t = getattr(ctx, "politica", None)
+    if not isinstance(t, Turno) or t.in_sospeso != name or t.sfida or t.risposta_dato:
+        return None
+    sc = getattr(ctx, "speaker_ctx", None)
+    if getattr(sc, "identified_by", None) == "schermo" or getattr(sc, "from_session", False):
+        return None
+    from .risposte import senza_parole
+    nomi = getattr(getattr(ctx, "cfg", None), "wake_names", None) or "Calliope"
+    if not senza_parole(t.testo or "", nomi):
+        return None
+    domanda = (t.domanda_sospeso or "").strip()
+    if not domanda or domanda == "?":
+        domanda = "Lo faccio?"
+    frase = f"Non ho capito: {domanda[:1].lower()}{domanda[1:]}"
+    sosp = t.args_sospeso if isinstance(t.args_sospeso, dict) else {
+        k: v for k, v in (args or {}).items() if v not in (None, "")}
+    return {"ok": False, "fatto": f"{NIENTE}: la risposta non si capisce, chiedo di nuovo",
+            "conferma": frase, "risposta_finale": frase,
+            "in_sospeso": {"domanda": domanda, "cosa": t.cosa_sospeso or "l'azione proposta",
+                           "tool": name, "argomenti": dict(sosp),
+                           **({"politica": "consenso_irriconoscibile"}
+                              if t.sospeso_politica else {})}}
 
 
 def chiesta_azione_mondo(testo: str) -> bool:

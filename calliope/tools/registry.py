@@ -235,6 +235,14 @@ class ToolRegistry:
         fermo = politica.incoerente(spec, name, arguments or {}, ctx)
         if fermo is not None:
             return json.dumps(fermo, ensure_ascii=False)
+        # Il «sì» al tool proposto da una frase senza parole riconoscibili («CQD», 10/10):
+        # prima della conferma breve, che altrimenti lo prenderebbe per la voce di chi
+        # amministra. La domanda si ripete
+        fermo = politica.consenso_irriconoscibile(name, arguments or {}, ctx)
+        if fermo is not None:
+            note_rule(ctx, "consenso_irriconoscibile")
+            print(f"   [POLITICA] {name}: consenso_irriconoscibile", flush=True)
+            return json.dumps(fermo, ensure_ascii=False)
         # «Sì» breve di chi amministra al tool proposto, in una conversazione in cui la sua
         # voce era già stata riconosciuta e con l'impronta compatibile (conferme.py): per
         # questo tool, e solo per lui, vale come la sua voce

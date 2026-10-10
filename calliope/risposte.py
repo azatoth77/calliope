@@ -116,3 +116,49 @@ def forma_chiusa(testo: str, name="Calliope") -> str | None:
     if sugg and sugg["corsia"]:
         return NO
     return None
+
+
+# ─────────────── una risposta senza parole riconoscibili (10/10) ───────────────
+# Terzo giro vero della DGX, 10:39:07: a «…Lo chiudo?» Whisper ha scritto «CQD» (era forse «Sì,
+# chiudi») e il modello l'ha preso per un «sì»: lo sviluppo si è chiuso. Una frase senza nessuna
+# parola italiana riconoscibile (una sigla, sillabe, rumore) non è una risposta: riguarda la
+# trascrizione, che il modello non vede come tale (principio 10), e l'effetto è una domanda in
+# più («Non ho capito: lo chiudo?», politica.consenso_irriconoscibile). Niente dizionario: le
+# parole brevi chiuse qui sotto, e per le altre la forma delle parole italiane (una vocale, e in
+# fondo una vocale); una sigla tutta maiuscola non è una parola. Le storpiature note
+# (calliope/storpiature.py: «Spendilo», «Chiudin», «Annullahi») restano al loro percorso.
+PAROLE_BREVI = frozenset(
+    "si no ok okay yes sì è e o ed od ma se ne ci vi mi ti lo la le li gli il i un uno una a ad "
+    "da di in con per su tra fra fa fai va vai do sto sta hai ha ho più piu già gia qui qua là la' "
+    "lì li' poi ora tu io lui lei noi voi chi che ciò cio mio tuo suo due tre sei non bel bar gas "
+    "sud nord est ovest".split())
+_VOCALI = frozenset("aeiouàèéìíòóùú")
+_TOKEN = re.compile(r"[^\W\d_]+|\d+")
+
+
+def parola_riconoscibile(parola: str) -> bool:
+    """Una parola che può essere italiana: una delle brevi, un numero, o almeno tre lettere con
+    una vocale e una vocale in fondo, e non una sigla tutta maiuscola."""
+    w = str(parola or "")
+    lw = w.lower()
+    if not lw:
+        return False
+    if lw.isdigit() or lw in PAROLE_BREVI:
+        return True
+    if len(lw) < 3 or (w.isupper() and len(w) <= 5):
+        return False
+    return any(c in _VOCALI for c in lw) and lw[-1] in _VOCALI
+
+
+def senza_parole(testo: str, name="Calliope") -> bool:
+    """La frase non ha nessuna parola riconoscibile, tolto il nome («CQD», «Mh.», «Ehm…»).
+    False per una storpiatura nota di una forma chiusa (ha il suo percorso)."""
+    t = str(testo or "").strip()
+    if not t:
+        return False
+    if suggerisci(t, name):
+        return False
+    parole = [w for w in _TOKEN.findall(t)
+              if [x for x in _plain_words(w, name) if x != _NAME_MARK]]
+    return not any(parola_riconoscibile(w) for w in parole)
+
