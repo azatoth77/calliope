@@ -210,7 +210,9 @@ class Instradamento:
             return False
         voce = self._voce()
         if voce is not None:
-            voce.wait()                   # ciò che è già in coda si dice dove stava andando
+            # Ciò che è già in coda si dice dove stava andando (dall'uscita unica, 10/10)
+            from .eventi.uscita import per_voce
+            per_voce(voce).aspetta()
         return srv.presta(coll)
 
     def corsia_di(self, chiave=None, persona=None) -> str | None:

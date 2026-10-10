@@ -145,6 +145,10 @@ TOOL_REQUEST = re.compile(r"\b(apri\w*|trova\w*|cerca\w*)\s+(\w+\s+){0,2}"
 PROMISE_NUDGE = ("Non hai chiamato nessun tool. Chiama adesso il tool giusto con gli "
                  "argomenti presi dalla domanda (bastano le parole dette), senza ripetere la "
                  "frase e senza chiedere altro.")
+# Il ripiego quando non si riesce a rispondere (atto «ripeti» del registro degli eventi)
+RIPETI_FRASE = "Non ci sono riuscita: puoi ripetere la richiesta?"
+
+
 def _parlabile(text) -> bool:
     """La risposta ha almeno una lettera o una cifra (06/10: «…» da solo, dopo
     conversazione_cerca, finiva alla voce): fatta solo di punteggiatura vale come vuota."""
@@ -2249,6 +2253,10 @@ class Brain:
             if politica.consenso_avversativo(user_text or ""):
                 self._rule("consenso_avversativo")
         self._letto_ora = ""      # un tool non fidato ha già risposto in questa risposta
+        # Le frasi che non sono contenuto del modello (frasi pronte dei tool, ripieghi, la riga
+        # dello sviluppo): chi le dice (l'uscita unica, passo 2 del registro degli eventi) ne
+        # scrive l'autore e l'atto all'invio
+        self.parlato_marcato = []
         self._politica_risposta = {}  # stato della politica per questa risposta (Turno.risposta)
         # Le chiamate già fatte in questa risposta (09/10, regola `chiamata_ripetuta`) e i nomi
         # fidati delle domande di questa risposta (Turno.domanda_fidata del turno dopo)
@@ -2272,7 +2280,7 @@ class Brain:
                 coda = self._sviluppo_coda(user_text, level)
                 if coda:
                     self._aggiungi_detto(coda)
-                    yield " " + coda
+                    yield " " + self._marca(coda, "atto", "riga_sviluppo")
         finally:
             # Anche se la risposta è interrotta: il testo dei siti non resta nella storia, e
             # nemmeno i risultati riservati e personali di questa risposta
@@ -2704,7 +2712,8 @@ class Brain:
                 frase = "Fatto."
             frase = frase or "Fatto."
         self.history.append({"role": "assistant", "content": frase})
-        yield frase
+        yield self._marca(frase, "esito" if sfida is not None else "atto",
+                          "risposta" if sfida is not None else "sfida")
 
     def stream_continuation(self, level: str = "ospite", context: str | None = None):
         """Continua la risposta appena data, con un contesto in più per il solo turno (i
@@ -3611,10 +3620,10 @@ class Brain:
                 if nudged:
                     # Di nuovo un nome di tool senza chiamata, anche dopo la spinta: mai muta
                     self._rule("nome_tool_ripetuto")
-                    said = "Non ci sono riuscita: puoi ripetere la richiesta?"
+                    said = RIPETI_FRASE
                     self.history.append({"role": "assistant",
                                          "content": f"{text} {said}".strip()})
-                    yield said
+                    yield self._marca(RIPETI_FRASE, "atto", "ripeti")
                     return
                 # Un tool nominato in mezzo alla frase ma non eseguibile così: la frase non si
                 # dice né entra nella storia, il modello riceve la spinta e lo chiama
@@ -3654,9 +3663,9 @@ class Brain:
                 print(f"   [TOOL] di nuovo un'azione dichiarata senza tool: «{held[:80]}»",
                       flush=True)
                 self._rule("dichiarata_taciuta")
-                said = "Non ci sono riuscita: puoi ripetere la richiesta?"
+                said = RIPETI_FRASE
                 self.history.append({"role": "assistant", "content": said})
-                yield said
+                yield self._marca(RIPETI_FRASE, "atto", "ripeti")
                 return
             if held:
                 # Dichiarava un'azione fatta senza tool, e non è ancora stata detta: non va
@@ -3728,8 +3737,8 @@ class Brain:
                         in self.last_rules and claim_at is None:
                     # Dopo la spinta il modello non ha detto niente e non ha fatto niente:
                     # meglio una frase vera del silenzio (la dichiarazione falsa non si dice)
-                    assistant["content"] = "Non ci sono riuscita: puoi ripetere la richiesta?"
-                    yield assistant["content"]
+                    assistant["content"] = RIPETI_FRASE
+                    yield self._marca(RIPETI_FRASE, "atto", "ripeti")
                     return
                 # Risposta vuota dopo un tool riuscito (cambia_voce 1 volta su 5, una ricerca
                 # di file il 27/09): si dice la conferma già pronta del tool, non il silenzio
@@ -3760,13 +3769,13 @@ class Brain:
                     if said:
                         self._rule("conferma_al_posto_del_vuoto")
                         assistant["content"] = said
-                        yield said
+                        yield self._marca(said, "esito", "risposta")
                     elif solo_punteggiatura or (muta and not self._acted()):
                         # Di nuovo vuota (o solo punteggiatura): meglio una frase vera del
                         # silenzio
                         self._rule("vuoto_ripiego")
-                        assistant["content"] = "Non ci sono riuscita: puoi ripetere la richiesta?"
-                        yield assistant["content"]
+                        assistant["content"] = RIPETI_FRASE
+                        yield self._marca(RIPETI_FRASE, "atto", "ripeti")
                 return
             if claim_at is not None:
                 # Dopo la spinta il tool c'è: «Ho acceso le luci» detto prima non resta
@@ -3819,7 +3828,7 @@ class Brain:
                 said = " ".join(f for i, f in enumerate(finals)
                                 if f.strip() not in " ".join(finals[:i]))
                 self.history.append({"role": "assistant", "content": said})
-                yield said
+                yield self._marca(said, "esito", "risposta")
                 return
 
         # Tetto dei giri raggiunto: un'ultima passata senza tool, così risponde comunque.
@@ -3841,9 +3850,20 @@ class Brain:
             if (text or "").strip():
                 self._rule("risposta_solo_punteggiatura")
             self._rule("vuoto_ripiego")
-            text = "Non ci sono riuscita: puoi ripetere la richiesta?"
-            yield text
+            text = RIPETI_FRASE
+            yield self._marca(RIPETI_FRASE, "atto", "ripeti")
         self.history.append({"role": "assistant", "content": text})
+
+    def _marca(self, testo: str, autore: str, atto: str | None = None) -> str:
+        """Una frase della risposta che non è contenuto del modello: la frase pronta di un tool
+        (`esito`), un ripiego o la riga dello sviluppo (`atto`). La legge l'uscita unica quando
+        la frase va alla voce (Ciclo._di_frase), per l'autore e l'atto del detto_calliope."""
+        m = self.__dict__.get("parlato_marcato")
+        if not isinstance(m, list):
+            m = self.parlato_marcato = []
+        if len(m) < 50:
+            m.append((testo, autore, atto))
+        return testo
 
     def strip_tool_mentions(self, sentence: str) -> str:
         """Toglie le parentesi che nominano un tool («(fonte: biblioteca_cerca)»): la frase

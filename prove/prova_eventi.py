@@ -381,7 +381,8 @@ def prova_porte():
     ginevra = Conversazione("persona:p-ginevra")
     ginevra.history = [{"role": "assistant", "content": "Il riassunto del lavoro è pronto."}]
     o, c = _ombra(ginevra, r)
-    o._finestra.append(("say", "Il riassunto del lavoro è pronto.", "annuncio", False))
+    o.sente(("frase", {"testo": "Il riassunto del lavoro è pronto.", "atto": "annuncio_lavoro",
+                       "autore": "atto", "canale": "voce", "fonte": "agente"}))
     porte_usate()
     o.chiudi_turno(None)
     rec = {"esito": "risposta", "regole": []}
@@ -403,8 +404,8 @@ def prova_porte():
            ["Ci sono io."], "sat:cameretta", 1)
     tutore = Conversazione("persona:p-ginevra")
     o2, _c = _ombra(tutore, r2)
-    o2._finestra.append(("say", "Tommaso ha avuto paura stasera: parlatene insieme.",
-                         "avviso_tutore", False))
+    o2.sente(("frase", {"testo": "Tommaso ha avuto paura stasera: parlatene insieme.",
+                        "atto": "avviso_tutore", "autore": "atto", "canale": "voce"}))
     o2.chiudi_turno(None)
     pt = json.dumps(proiezioni.contesto(r2.della_corsia("persona:p-ginevra").eventi()),
                     ensure_ascii=False)

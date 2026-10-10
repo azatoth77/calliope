@@ -448,6 +448,9 @@ def ciclo_finto(cas, hub, come="voce", livello="familiare", pending=False):
                                     annunci.append((f, fonte))),
         CASSETTO_PIENO=Ciclo.CASSETTO_PIENO, annunci=annunci)
     k.rule = regole.append
+    # L'uscita unica verso la voce (10/10, passo 2 del registro degli eventi)
+    from calliope.eventi.uscita import per_voce
+    k.uscita = per_voce(k.speaker)
     k._nel_cassetto = types.MethodType(Ciclo._nel_cassetto, k)
     k._cassetto_dopo = types.MethodType(Ciclo._cassetto_dopo, k)
     k._frase_pieno = types.MethodType(Ciclo._frase_pieno, k)

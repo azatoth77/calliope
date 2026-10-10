@@ -17,7 +17,7 @@ from __future__ import annotations
 import dataclasses
 import json
 
-from .tipi import TIPI, Evento
+from .tipi import TIPI, Evento, atti_di
 
 
 class Escluso(str):
@@ -92,8 +92,9 @@ PROIEZIONE_TURNI: dict[str, str] = {
 
 # Atti di Calliope che non entrano nella conversazione del modello: frasi d'attesa (decisione di
 # Dario del 10/10, § 4.2), saluto all'avvio e frasi dei giochi (fuori conversazione, § 1.1),
-# chiusure («A presto!»: vanno nel segmento che si chiude, mai nel contesto di uno aperto)
-ATTI_FUORI = frozenset({"attesa", "saluto_avvio", "giochi", "chiusura"})
+# chiusure («A presto!»: vanno nel segmento che si chiude, mai nel contesto di uno aperto). La
+# categoria «voluto» dell'elenco chiuso degli atti (tipi.ATTI, passo 2)
+ATTI_FUORI = atti_di("voluto")
 
 SEGNO_INTERROTTA = " … (interrotta)"
 TESTO_INTERROTTA_VUOTA = "… (interrotta)"
@@ -171,13 +172,15 @@ def turni(eventi, da: int | None = None) -> dict:
             cur["ingressi"] += str(d.get("testo") or "")
         elif tipo == "chiamata_tool":
             cur["chiamate"].append({"id": d.get("id"), "name": d.get("nome"),
-                                    "arguments": d.get("argomenti") or {}})
+                                    "arguments": d.get("argomenti") or {},
+                                    "_passata": d.get("passata")})
         elif tipo == "esito_tool":
             cur["esiti"].append({"id": d.get("id"), "name": d.get("nome"),
                                  "content": str(d.get("contenuto") or "")})
         elif tipo == "detto_calliope":
             cur["inviate"].append((int(d.get("frase") or 0), str(d.get("testo") or ""),
-                                   d.get("atto"), d.get("autore"), d.get("canale")))
+                                   d.get("atto"), d.get("autore"), d.get("canale"),
+                                   d.get("dopo_chiamate")))
         elif tipo == "voce_fine":
             da_f, n = int(d.get("da") or 0), int(d.get("sentite") or 0)
             cur["sentite"].update(range(da_f, da_f + n))
@@ -201,9 +204,33 @@ def turni(eventi, da: int | None = None) -> dict:
 def detto(turno: dict) -> list[tuple]:
     """Le frasi sentite del turno che entrano nella conversazione: (testo, atto, autore,
     canale), nell'ordine."""
-    return [(testo, atto, autore, canale) for frase, testo, atto, autore, canale
+    return [(testo, atto, autore, canale) for frase, testo, atto, autore, canale, _c
             in turno["inviate"] if frase in turno["sentite"] and atto not in ATTI_FUORI
             and testo.strip()]
+
+
+def _posizioni(turno: dict) -> list[tuple]:
+    """Le frasi sentite con la loro posizione fra le chiamate (passo 2): (testo, quante chiamate
+    c'erano già quando è partita; None = dopo tutte, come gli eventi del passo 1)."""
+    return [(testo, c) for frase, testo, atto, _a, _can, c in turno["inviate"]
+            if frase in turno["sentite"] and atto not in ATTI_FUORI and testo.strip()]
+
+
+def _gruppi(chiamate: list[dict]) -> list[list[dict]]:
+    """Le chiamate del turno per passata del modello (un messaggio dell'assistente per passata,
+    come nella storia di Brain); senza la passata (eventi del passo 1) un gruppo solo."""
+    gruppi: list[list[dict]] = []
+    prima = object()
+    for c in chiamate:
+        p = c.get("_passata")
+        if not gruppi or p is None or p != prima:
+            if gruppi and p is None and prima is None:
+                gruppi[-1].append(c)
+                continue
+            gruppi.append([])
+        gruppi[-1].append(c)
+        prima = p
+    return gruppi
 
 
 def testo_assistente(turno: dict) -> str:
@@ -254,16 +281,40 @@ def messaggi(vista: dict, forma: Forma = FORMA) -> list[dict]:
     for i, t in enumerate(tt):
         if t["persona"] is not None:
             out.append({"role": "user", "content": (t["ingressi"] + t["persona"]).strip()})
-        if t["chiamate"]:
-            out.append({"role": "assistant", "content": "",
-                        "tool_calls": [dict(c) for c in t["chiamate"]]})
-            vecchio = rif is not None and i < rif - 1
-            ora = rif is not None and i < rif
-            for r in t["esiti"]:
+        if not t["chiamate"]:
+            testo = testo_assistente(t)
+            if testo:
+                out.append({"role": "assistant", "content": testo})
+            continue
+        # Le frasi nella posizione in cui sono state dette rispetto alle chiamate (passo 2:
+        # `dopo_chiamate` dell'uscita unica): quelle partite prima di un gruppo di chiamate
+        # sono il testo del messaggio con le chiamate, come nella storia di Brain
+        vecchio = rif is not None and i < rif - 1
+        ora = rif is not None and i < rif
+        gruppi = _gruppi(t["chiamate"])
+        fatti: list[int] = []
+        for g in gruppi:
+            fatti.append((fatti[-1] if fatti else 0) + len(g))
+        pezzi: list[list[str]] = [[] for _ in range(len(gruppi) + 1)]
+        for testo, c in _posizioni(t):
+            k = len(gruppi) if c is None else sum(1 for f in fatti if f <= c)
+            pezzi[k].append(testo)
+        # Gli esiti in ordine, uno per chiamata (gli id si ripetono da una passata all'altra:
+        # «call_0»); quelli in più dopo l'ultimo gruppo, come prima
+        esiti = list(t["esiti"])
+        for k, g in enumerate(gruppi):
+            out.append({"role": "assistant", "content": " ".join(pezzi[k]).strip(),
+                        "tool_calls": [{x: v for x, v in c.items() if x != "_passata"}
+                                       for c in g]})
+            n = len(esiti) if k == len(gruppi) - 1 else len(g)
+            for r in esiti[:n]:
                 out.append({"role": "tool", "tool_call_id": r["id"], "name": r["name"],
                             "content": _forma_esito(r["content"], r["name"], vecchio, ora,
                                                     forma)})
-        testo = testo_assistente(t)
+            esiti = esiti[n:]
+        testo = " ".join(pezzi[-1]).strip()
+        if t["interrotta"]:
+            testo = (testo + SEGNO_INTERROTTA) if testo else TESTO_INTERROTTA_VUOTA
         if testo:
             out.append({"role": "assistant", "content": testo})
     return out
