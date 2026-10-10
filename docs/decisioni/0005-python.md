@@ -32,7 +32,7 @@ Calliope resta in Python. Il risparmio di codice è piccolo, e ciò che rende Ca
 resterebbe da scrivere comunque, e in parte **contro** il framework. Per i problemi veri che una
 riscrittura risolverebbe (ARM, distribuzione dei satelliti) ci sono risposte più piccole.
 
-### Cosa darebbe un framework per agenti in C#
+### Cosa darebbe un framework per agenti in C#/.NET
 
 Agent Framework gestisce bene il **giro conversazionale standard**:
 
