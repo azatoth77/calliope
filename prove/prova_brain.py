@@ -8,6 +8,13 @@ from calliope.brain import Brain, TextCallGuard, ThinkFilter, merge_tool_deltas,
 from calliope.config import Config
 from calliope.tools.builtin import build_registry
 
+
+def sospeso_in(testo) -> bool:
+    """L'azione in sospeso davanti al modello: il messaggio di oggi (PENDING_MSG) o, con lo stato
+    del dialogo in ombra (10/10, calliope/stato_dialogo.py), il blocco dello stato."""
+    t = str(testo or "")
+    return "Azione in sospeso" in t or "Stato del dialogo: proposta aperta" in t
+
 errori = 0
 
 
@@ -420,17 +427,19 @@ def prova_sospeso():
     visti = b.backend.visti[-2] if len(b.backend.visti) >= 2 else []
     sistema = [m["content"] for m in visti if m["role"] == "system"]
     verifica("sospeso: dopo i ricordi, subito prima della domanda",
-             (visti[-2]["role"], "Azione in sospeso" in visti[-2]["content"], sistema[-2] == "RICORDI",
+             (visti[-2]["role"], sospeso_in(visti[-2]["content"]), sistema[-2] == "RICORDI",
               visti[-1]["content"]),
              ("system", True, True, "Sì grazie."))
-    verifica("sospeso: nomina il tool e gli argomenti",
-             "pc_apri_file con risultato=1" in visti[-2]["content"]
+    # Con lo stato del dialogo in ombra (10/10) il blocco dello stato nomina il tool e la
+    # domanda; gli argomenti li tiene la macchina (prima: «pc_apri_file con risultato=1»)
+    verifica("sospeso: nomina il tool e la domanda",
+             "pc_apri_file" in visti[-2]["content"]
              and "«La apro?»" in visti[-2]["content"], True)
     verifica("sospeso: nel registro", "azione_in_sospeso" in b.rules_fired(), True)
     verifica("sospeso: vale un turno solo", b.has_pending(), False)
     "".join(b.stream_reply("Grazie.", "amministra"))
     verifica("sospeso: il turno dopo non c'è più",
-             any("Azione in sospeso" in m["content"] for m in b.backend.visti[-1]
+             any(sospeso_in(m["content"]) for m in b.backend.visti[-1]
                  if m["role"] == "system"), False)
     # Scade dopo azione_in_sospeso_s
     b.set_pending(offerta)
@@ -499,7 +508,7 @@ def prova_rinomina():
     detto = "".join(b.stream_reply("Sì.", "amministra"))
     visti = b.backend.visti[-2]
     verifica("rinomina: azione in sospeso con il tool e il nome", any(
-        "rinomina_interlocutore con nome=\"Davio\"" in m["content"] for m in visti
+        "rinomina_interlocutore" in m["content"] and "Davio" in m["content"] for m in visti
         if m["role"] == "system"), True)
     verifica("rinomina: con il «sì» nel turno dopo il nome cambia",
              (sorted(voci.users), chi.current_speaker), (["Davio", "Ilaria"], "Davio"))
@@ -783,7 +792,7 @@ def prova_reti_spente():
              any("Contesto della casa" in c for c in sistema), False)
     # Q6 (06/10): l'azione in sospeso è una rete di sicurezza (il consenso dipende da lei)
     verifica("azione in sospeso: resta accesa anche se un profilo la spegne",
-             any("Azione in sospeso" in c for c in sistema), True)
+             any(sospeso_in(c) for c in sistema), True)
 
 
 def prova_nomi_tool_parlati():
@@ -846,7 +855,7 @@ def prova_conversazione_per_persona():
     b.set_pending({"tool": "pc_apri_file", "argomenti": {"risultato": 1}, "domanda": "Lo apro?"})
     "".join(b.stream_reply("Ciao.", "familiare"))
     verifica("Bianca dopo l'ospite: si riparte da capo, anche l'azione in sospeso",
-             (len(b.history), any("Azione in sospeso" in (m.get("content") or "")
+             (len(b.history), any(sospeso_in((m.get("content") or ""))
                                   for m in b.backend.visti[-1])), (2, False))
     # Rinomina: stesso profilo, stesso id, la conversazione continua
     b, chi = nuovo([[("text", "Ciao.")], [("text", "Sì.")]])
@@ -993,12 +1002,12 @@ def prova_sospeso_per_persona():
     b.conv_owner = "dario-id"               # (stessa conversazione: solo il sospeso conta)
     "".join(b.stream_reply("Sì.", "amministra"))
     verifica("sospeso: il «sì» di un'altra persona non conferma",
-             (any("Azione in sospeso" in (m.get("content") or "") for m in b.backend.visti[-1]),
+             (any(sospeso_in((m.get("content") or "")) for m in b.backend.visti[-1]),
               "sospeso_altra_persona" in b.last_rules), (False, True))
     b.set_pending({"tool": "pc_apri_file", "argomenti": {"risultato": 1}, "domanda": "Lo apro?"})
     "".join(b.stream_reply("Sì.", "amministra"))
     verifica("sospeso: il «sì» della stessa persona sì",
-             any("Azione in sospeso" in (m.get("content") or "") for m in b.backend.visti[-1]),
+             any(sospeso_in((m.get("content") or "")) for m in b.backend.visti[-1]),
              True)
 
 

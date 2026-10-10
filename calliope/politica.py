@@ -243,6 +243,9 @@ CLASSI: dict[str, Classe] = {
     # minori (calliope/minori.py): il registro dei compiti è contabilità interna, senza effetti
     # fuori (con la foto del compito di mezzo non deve chiedere a ogni risposta)
     "compiti_aiuto": _c(S),
+    # la risposta strutturata a una proposta (10/10, calliope/stato_dialogo.py): non fa niente
+    # da sé; il «sì» diventa la chiamata del tool proposto, che passa da qui come sempre
+    "proposta_rispondi": _c(S),
     # ── letture di dati non fidati ──
     "web_cerca": _c(S, fonte="web"),
     "archivio_cerca": _c(S, fonte="archivio"), "archivio_scadenze": _c(S, fonte="archivio"),

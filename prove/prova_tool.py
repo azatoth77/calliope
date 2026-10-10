@@ -82,7 +82,10 @@ OSPITE = {"chi_parla", "elenca_voci", "ora_attuale", "data_oggi", "calcola", "da
           "timer_imposta",
           "agenda_elenca", "agenda_annulla", "calliope_stato",
           # la città di casa (09/10): per tutti, ma la salva solo chi amministra (nel codice)
-          "citta_casa_salva"}
+          "citta_casa_salva",
+          # la risposta a una proposta aperta (10/10, calliope/stato_dialogo.py): di servizio,
+          # per tutti; vale solo con una proposta di chi parla
+          "proposta_rispondi"}
 FAMILIARE = OSPITE | {"elenca_utenti", "cambia_voce", "rinomina_interlocutore",
                       "promemoria_imposta", "ricorda", "dimentica", "lista_aggiungi",
                       "lista_leggi", "lista_togli", "appuntamento_aggiungi",

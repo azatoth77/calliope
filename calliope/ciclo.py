@@ -34,7 +34,7 @@ from . import contesto, corsie, minori
 from . import rivolta as rivolta_mod
 from . import pause as pause_mod
 from . import guardiano as guardia
-from . import provenienza, riferire
+from . import provenienza, riferire, stato_dialogo
 from . import allegati as allegati_mod
 from .cassetto import CassettoPieno
 from .agenda import announcement
@@ -595,6 +595,12 @@ class Ciclo:
         seg = c.aperto_per(pid, None if adulto_sicuro else self.corsia.chiave)
         if seg is None:
             return None
+        # Per lo stato del dialogo in ombra (10/10): la frase è passata dal cancello 2, che per
+        # il progetto viene prima della proposta aperta (§ 3.3)
+        try:
+            self.brain.dialogo_cancello = 2
+        except AttributeError:
+            pass
         fn = getattr(s.guardiano, "verifica", None)
         v = None
         if callable(fn):
@@ -834,6 +840,7 @@ class Ciclo:
         if not t.guided and self._annunci_pronti():
             self._di_gli_annunci()
             return None
+        foto = None          # lo stato del dialogo prima delle fasi che decidono da sole
         for fase in (self._prendi_scritto, self._scritto_senza_domanda, self._ascolta,
                      self._trascrivi, self._chi_parla, self._compagnia_senza_nome,
                      self._conversazione_del_turno,
@@ -841,13 +848,36 @@ class Ciclo:
                      self._mostra_richiesta, self._uscite, self._chiusure,
                      self._secondo_cancello, self._fuori_orario,
                      self._contesto_e_allegati):
+            if fase == self._richiamo:
+                foto = stato_dialogo.istantanea(self.brain)
             esito = fase(t)
             if esito is not None:
+                self._dialogo_prima_di_brain(t, fase, foto)
                 return None if esito is _FINE else esito
         self._rispondi(t)
         self._registra_risposta(t)
         self._dopo_la_risposta(t)
         return None
+
+    def _dialogo_prima_di_brain(self, t, fase, foto):
+        """Lo stato del dialogo in ombra (10/10, calliope/stato_dialogo.py): una frase decisa
+        prima di Brain (interruzione, uscite, chiusure, cancello 2) con una proposta aperta.
+        Nel registro dei turni il confronto con la macchina (`dialogo_ombra`): per il progetto
+        la proposta viene prima di uscite e stop (§ 3.3). Non decide niente."""
+        try:
+            vars(self.brain).pop("dialogo_cancello", None)   # vale solo per Brain di questo turno
+        except TypeError:
+            pass
+        nome = getattr(fase, "__name__", "").strip("_")
+        if nome not in ("richiamo", "uscite", "chiusure", "secondo_cancello") or foto is None:
+            return
+        rec = self.rec
+        if rec is None or rec.get("dialogo_ombra"):
+            return
+        o = stato_dialogo.confronto_prima_di_brain(self.brain, getattr(t, "text", "") or "",
+                                                    nome, foto)
+        if o:
+            rec["dialogo_ombra"] = o
 
     # ── fase 0: tra un turno e l'altro ──
     def _inizio_giro(self) -> bool:
@@ -2726,6 +2756,10 @@ class Ciclo:
         if t.non_rivolta:
             return self._registra_non_rivolta(t)
         rec.update(risposta=" ".join(t.said), tool=brain.last_tools)
+        # Lo stato del dialogo in ombra (10/10, calliope/stato_dialogo.py): interprete del
+        # modello e corsia veloce accanto alla decisione di oggi, senza testo
+        if getattr(brain, "last_dialogo_ombra", None):
+            rec["dialogo_ombra"] = brain.last_dialogo_ombra
         if t.files:
             # Di nuovo dopo la risposta: il numero del file lo dà la conversazione (Brain)
             rec["allegati"] = [a.per_registro() for a in t.files]

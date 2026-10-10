@@ -296,6 +296,16 @@ class Config:
     # avrebbe deciso la politica di prima (`calliope stato --turni`). Per tornare indietro:
     # `politica_per_valore: false` in calliope.locale.yaml
     politica_per_valore: bool = True
+    # Lo stato del dialogo (10/10, calliope/stato_dialogo.py, passo 1 del progetto
+    # docs/ricerche/2026-10-10-macchina-stati.md): la risposta a una proposta aperta la
+    # interpreta il modello con il tool `proposta_rispondi` (sì, no, correzione, rinvio, altro)
+    # e una corsia veloce riconosce le forme chiuse dette per intero (calliope/risposte.py).
+    # «ombra»: lo schema c'è sempre, lo stato del turno sostituisce il messaggio dell'azione in
+    # sospeso, il «sì» del tool diventa la chiamata di oggi (decide ancora la politica) e il
+    # registro dei turni scrive il confronto (`dialogo_ombra`, `calliope stato --turni`).
+    # «spento»: il percorso di prima, identico (niente schema né confronto). «acceso» (la
+    # macchina che esegue la proposta) non è ancora realizzato: si segnala e resta «ombra»
+    dialogo_interprete: str = "ombra"
     # Ciò che Calliope dice con dati non fidati di mezzo (06/10, calliope/riferire.py): ogni
     # frase della risposta si controlla prima di dirla (numeri a pagamento, codici e password da
     # dare, soldi verso un conto, recapiti presi solo dal dato e non chiesti, indicazioni
@@ -2475,7 +2485,7 @@ SEZIONI: dict[str, list[str]] = {
             "max_history_turns", "max_tool_turns", "tool_correzioni_max",
             "tool_correzione_avviso_s", "azione_in_sospeso_s", "azione_in_sospeso_turni",
             "conferma_sfida", "conferma_sfida_s", "conferma_sfida_parole", "quarantena_token",
-            "intento_valido_s", "politica_per_valore",
+            "intento_valido_s", "politica_per_valore", "dialogo_interprete",
             "uscita_controllo",
             "storia_inattiva_s",
             "llm_reti_spente"],
@@ -2878,6 +2888,18 @@ def _tts_thread_valido(value):
     raise ValueError("serve un numero di thread o «auto»")
 
 
+def _dialogo_interprete_valido(value):
+    """«spento» o «ombra» (10/10, calliope/stato_dialogo.py). «acceso» è il passo 2 del progetto,
+    non ancora realizzato: si rifiuta (resta il valore di prima, cioè «ombra»)."""
+    s = str(value or "").strip().lower()
+    if s in ("spento", "ombra"):
+        return s
+    if s == "acceso":
+        raise ValueError("«acceso» non è ancora realizzato (passo 2 della macchina a stati): "
+                         "resta «ombra»")
+    raise ValueError("serve «spento» o «ombra»")
+
+
 def _tts_dispositivo_valido(value):
     """«auto», «cpu» o «cuda»."""
     s = str(value or "").strip().lower()
@@ -2889,7 +2911,8 @@ def _tts_dispositivo_valido(value):
 VALIDATORI = {"llm_keep_alive": keep_alive_valido, "llm_num_ctx": _num_ctx_valido,
               "tts_thread": _tts_thread_valido, "tts_dispositivo": _tts_dispositivo_valido,
               "agenti_num_ctx": _num_ctx_agenti_valido,
-              "contesto_riassuntore": _riassuntore_valido}
+              "contesto_riassuntore": _riassuntore_valido,
+              "dialogo_interprete": _dialogo_interprete_valido}
 
 
 def fuori_limiti(key: str, value) -> tuple[float, float] | None:
