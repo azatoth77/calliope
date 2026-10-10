@@ -1052,3 +1052,172 @@ Rifiuti e intenzioni possono ancora perdersi a un riavvio (decisione di Dario de
 dettagli delle correzioni sono nei documenti d'area: [voce-e-regole](../aree/voce-e-regole.md)
 (nome vero, «no» all'agente), [contesto-conversazione](../aree/contesto-conversazione.md) (coda),
 [minori](../aree/minori.md) (cancelli), [agenti-estensioni](../aree/agenti-estensioni.md).
+
+## 9. Il giro col 26B del 10/10 mattina
+
+*Aggiunto il 10/10 (ramo `stati-indagine-26b`). Il giro vero sulla DGX delle 06:09–06:18, con il
+passo 1 installato (`dialogo_interprete: ombra`, voce gemma4 26B su Ollama): 43 turni, 9 risposte
+a una proposta sì/no arrivate a Brain e 6 frasi con una proposta decise prima (uscite, stop). I
+turni con una proposta sono stati ricostruiti sul codice di main (1830135) e rigiocati col 4B
+(gemma4 e4b sull'Ollama del portatile, registro pieno di 76 schemi, primo turno dal copione con
+la chiamata vera del registro, secondo turno col modello vero; 5 giri per caso e per modo). La
+DGX non è stata toccata. Script e risultati nella cartella temporanea della sessione.*
+
+### 9.1 Che cosa vuol dire `proposta_diversa`
+
+`dialogo_ombra.modello` è l'esito di una chiamata **valida** a `proposta_rispondi`; una chiamata
+scartata compare solo in `scartate`. Quindi `proposta_diversa` con `modello: null` vuol dire che
+il modello **ha chiamato** il tool, con un id della proposta che non era né vuoto né quello del
+blocco. Il riassunto di `calliope stato --turni` contava quei turni come «non chiama»: il giro
+sembrava 1 chiamata su 9, ed erano **6 su 9** (5 scartate, 1 valida).
+
+| Ora | Frase | Proposta aperta | Il 26B |
+|---|---|---|---|
+| 06:10:26 | «Sì, però fallo dopo.» | `sviluppo_apri` («Va bene così, o la cambiamo?») | chiama, scartata `proposta_diversa` |
+| 06:10:40 | «Annullahi.» | la stessa | chiama, scartata |
+| 06:12:47 | «Non c'è problema.» | `sviluppo_apri` | chiama, scartata → «procedo con lo sviluppo» **senza tool** (`spinta_dichiarata`) |
+| 06:13:05 | «Nulla è lavoro.» | la stessa | chiama, valida: `altro` |
+| 06:13:16 | «Calliope torna alla modalità normale.» | la stessa | non chiama (parla d'altro: giusto) |
+| 06:14:17 | «Non.» | `sviluppo_passo` riprendi («vuoi riprenderlo?») | chiama, scartata |
+| 06:14:29 | «Un mio amico, qui con me, si chiama Ettore.» | la stessa | non chiama (altro: giusto) |
+| 06:14:36 | «No, non mi va bene.» | la stessa | non chiama: il «no» resta a parole e la proposta resta aperta |
+| 06:16:18 | «Sì.» dopo «Calliope. Stop.» | `sviluppo_apri` | chiama, scartata → «Non ci sono riuscita: puoi ripetere?» (`dichiarata_taciuta`) |
+
+Delle 7 frasi che rispondono alla proposta, il 26B ne chiama 6 (il 4B, nella misura del passo 1,
+46 risposte su 100); le 2 che parlano d'altro le risponde senza il tool, come chiede il blocco.
+
+**La causa è un nome.** Le proposte di `sviluppo_apri` e di `lavoro_affida` hanno un argomento che
+si chiama anch'esso `proposta`: l'id del lavoro proposto («L1»). Il blocco dello stato lo mostra
+accanto all'id del dialogo, e la riga della fase di `SVILUPPO_MSG` dice di usarlo (prompt
+ricostruito di 06:12:47, i due messaggi di sistema subito prima della frase):
+
+```
+Modalità sviluppo aperta con chi parla …: … La specifica è stata proposta (lavoro L1): se chi
+parla la conferma («sì», «va bene»), sviluppo_apri con proposta = L1; …
+
+Stato del dialogo: proposta aperta p1, «Va bene così, o la cambiamo?» per affidare all'agente
+«programma in Python che molt… (sviluppo_apri con proposta="L1", gravità E2), chiesta nell'ultima
+risposta. Chi parla l'ha ricevuta, voce probabile. Se la frase risponde alla proposta, chiama
+proposta_rispondi con l'esito (si, no, correzione, rinvio, altro): il sì lo esegue il sistema. …
+```
+
+Il modello fonde le due istruzioni: `proposta_rispondi(esito=si, proposta="L1")`. Col 4B, sui turni
+ricostruiti, lo fa 9 volte su 10 («Non c'è problema.» e «Sì.»). Non è un id di un'altra proposta:
+l'adattatore legge bene la proposta di `sviluppo_apri` e il blocco mostra lo stesso id (p1) che la
+validazione si aspetta; è la validazione che non riconosceva la proposta nominata con il suo
+argomento. Per 06:14:17 (`sviluppo_passo` con `quale` = l'id dello sviluppo, «S…») l'id passato
+non è nel registro: l'ipotesi è lo stesso scambio, che col 4B non si verifica (non chiama).
+
+**L'ombra non era neutra.** Una chiamata scartata riceve un errore («proposta_rispondi non vale qui»)
+e non diventa la chiamata di oggi; il modello, che crede di aver risposto, dichiara un'azione che
+non c'è stata. Col 4B sugli stessi turni: «Non c'è problema.» esegue `sviluppo_apri` 1 volta su 5
+in ombra contro 3 su 5 con lo stato del dialogo spento (4 volte «procediamo» senza tool); «Sì.»
+dopo lo stop 0 su 5 contro 5 su 5 (3 volte «Ho eseguito il programma…»). Le due frasi della DGX
+con un'azione dichiarata senza tool di questo giro (06:12:47, 06:16:18) vengono da qui.
+
+**Correzione** (commit 67339be, in ombra; nessuna decisione di Calliope cambia):
+`stato_dialogo.id_della_proposta` riconosce come la stessa proposta l'id vuoto, il suo id, un
+valore dei suoi argomenti o il nome del tool (c'è una sola proposta aperta per persona); un id del
+dialogo di un'altra proposta (p9 con p1 aperta) resta `proposta_diversa`, e l'errore dice qual è
+quella aperta. Nel registro `dialogo_ombra.id_argomento`; il riassunto conta a parte le chiamate
+scartate. Le difese non cambiano (prima passata, prima di un dato letto, proposta sì/no di chi
+parla); il banco del passo 1 resta a 27 attacchi e zero esecuzioni. Prove in
+`prova_stato_dialogo` (l'id «L1», anche «l1» tra virgolette, uguale alla chiamata diretta; «p9»
+scartato), che falliscono sul codice di prima.
+
+### 9.2 Il blocco dello stato è arrivato al modello?
+
+Sì, in tutti e 9 i turni di Brain con una proposta sì/no: il blocco al posto di `PENDING_MSG`, con
+le parole del § 9.1. Ma per lo sviluppo non era solo:
+
+- **Proposte della modalità sviluppo** (`sviluppo_apri` in analisi, `sviluppo_passo` con
+  «riprendi», «ferma», «rifai»): il blocco **e** `SVILUPPO_MSG` con la riga della fase, che dice di
+  chiamare il tool dello sviluppo («sviluppo_apri con proposta = L1»). Due istruzioni diverse per la
+  stessa risposta: in ombra stanno insieme (la chiamata diretta è il percorso di oggi), al passo 2
+  la riga va riscritta (§ 9.4).
+- **«Lo apro?» di `documento_crea`**: è una proposta normale (`pc_apri_file` con risultato=1), con
+  il blocco; in più il `cosa_fare` del risultato nella storia («se chiede di aprirlo chiama
+  pc_apri_file»). Col 4B, «Si puoi andare.» data a Brain: `proposta_rispondi(si, p1)` 5 volte su
+  5, e il file si apre come con lo spento (5 su 5 con la chiamata diretta). Sulla DGX la frase non
+  arriva a Brain: «puoi andare» è un'uscita per intero e il ciclo dorme prima (`uscita_dormi`,
+  `prima_di_brain`, disaccordo `resta_vs_chiude`): è il caso del passo 3 (la proposta prima delle
+  uscite).
+- **«Chiudo lo sviluppo…?»** (06:11:28) **non è mai una proposta**: la frase finisce con «Se vuoi
+  solo una pausa, dimmi «sospendi» e lo riprendiamo quando vuoi.», e `set_pending` vuole la
+  domanda in fondo alla risposta. Niente blocco, niente `azione_in_sospeso`, e la conferma della
+  chiusura (`sviluppo_passo` chiudi, che vuole `tool_in_sospeso == "sviluppo_passo"`) non può
+  scattare: alle 06:11:40 la stessa domanda ritorna. È un difetto della modalità sviluppo, non
+  dell'ombra: non corretto qui perché cambia il comportamento (§ 9.4 punto 3).
+- **«Fermo anche il lavoro dell'agente?»** detta dal modello senza un tool (06:16:55, come chiede
+  la riga della fase con l'agente al lavoro): non è una proposta (§ 1.10 punto 2). Il «Sì.» dopo
+  è andato bene (`sviluppo_passo` ferma) perché la domanda era l'ultima frase della storia.
+
+### 9.3 I turni rigiocati col 4B
+
+Primo turno dal copione (la chiamata vera del registro), secondo col modello vero; chi parla come
+nel registro (voce sicura o breve probabile). 5 giri per caso e per modo. «Prima» = main a
+1830135, «dopo» = con la correzione.
+
+| Caso (DGX) | Spento | Ombra prima | Ombra dopo |
+|---|---|---|---|
+| 06:10:26 «Sì, però fallo dopo.» (`sviluppo_apri`) | nessun tool 4, sospende 1; 2 volte «non ho capito "fallilo dopo"» | `rinvio` 5/5 (id vuoto 4, p1 1), niente eseguito | `rinvio` 5/5 |
+| 06:12:47 «Non c'è problema.» | `sviluppo_apri` 3/5 | chiama 5/5, valide 1 (id «L1» 4); eseguito 1/5, «procediamo» senza tool 4/5 | valide 5/5 (L1 3, p1 2), eseguito 5/5 |
+| 06:15:44 «Si puoi andare.» (a Brain) | `pc_apri_file` 5/5 | `si` 5/5, aperto 5/5 | uguale |
+| 06:16:18 «Sì.» dopo lo stop | `sviluppo_apri` 5/5 | chiama 5/5, tutte scartate (L1); eseguito 0/5 | valide 5/5, eseguito 5/5 |
+| 06:14:17 «Non.» (`sviluppo_passo` riprendi) | nessun tool 5/5 | non chiama 5/5 | uguale |
+
+Col 4B su questi turni: chiamate 20 su 25 prima e dopo, valide **11 prima, 20 dopo**. Il 26B
+chiamava 6 volte su 9 (su 7 risposte alla proposta); con la correzione le 4 scartate per l'id «L…»
+(e probabilmente quella di 06:14:17) sarebbero state valide e il «sì» sarebbe diventato la chiamata
+di oggi. Da rimisurare sulla DGX dopo l'aggiornamento.
+
+Il «Sì.» delle 06:16:18 risponde a una domanda che la persona **non ha sentito** (la risposta era
+stata interrotta dopo la prima frase, e lo stop non chiude la proposta): con la correzione lo
+sviluppo parte, come con lo spento. È il buco 1 del passo 0, che chiude il passo 3.
+
+**Latenza** (26B, prima frase del giro): risposte a una proposta con la chiamata 1,52–3,54 s
+(mediana 1,83), senza 0,73–1,01 s (mediana 0,73), turni senza proposta mediana 1,40. Con `no`,
+`rinvio` e `altro` la chiamata non porta un tool vero ma costa lo stesso un secondo giro del
+modello per dire la risposta: circa **+1 s** sui pochi casi di questo giro. Col 4B il passo 1
+misurava +0,07–0,13 s perché il 4B chiamava meno, e soprattutto sul «sì» (dove il tool vero c'è
+comunque).
+
+### 9.4 Proposta per il passo 2
+
+1. **L'id della proposta fuori dallo schema** (o almeno con un altro nome). Con una proposta sola
+   per persona l'id non serve a scegliere; serviva contro la risposta a una proposta vecchia, che
+   la macchina scarta già da sé (`chiusa`, turni, persona). Toglierlo leva lo scambio con
+   l'argomento `proposta` dei lavori e una trentina di token dallo schema (prefisso in cache: cambia
+   una volta). Nessun rischio nuovo. Finché c'è, resta la tolleranza di questo ramo.
+2. **Un'istruzione sola per proposta.** Con il blocco presente, la riga della fase dello sviluppo
+   («sviluppo_apri con proposta = L1») e il `cosa_fare` dei risultati che propongono («se chiede di
+   aprirlo chiama pc_apri_file») vanno ridotti a «se conferma, rispondi alla proposta dello stato
+   del dialogo». Solo con l'interprete acceso (la macchina esegue lei la proposta); in ombra devono
+   restare, perché la chiamata diretta è il percorso di oggi. Token: in meno.
+3. **«Chiudo lo sviluppo…?» come proposta vera**: la domanda in fondo alla risposta (prima
+   l'indicazione «se vuoi solo una pausa…»), oppure `set_pending` che accetta l'`in_sospeso` quando
+   la domanda c'è nel testo detto e non solo alla fine. Piccolo, ma cambia il comportamento (oggi
+   la chiusura confermata non scatta mai): da fare a parte, con la sua prova.
+4. **Niente secondo giro per `no` e `rinvio`, niente `altro`.** Il risultato di `no` e `rinvio`
+   porta una `risposta_finale` corta della macchina («Va bene, lascio stare.», «D'accordo, più
+   tardi.»): niente secondo giro del modello, ~1 s in meno su quei turni. `altro` esce dall'enum
+   (chi parla d'altro non chiama, e il 26B lo fa già 2 volte su 3), così il tool si chiama solo
+   per decidere. Rischio: una frase fissa suona meno naturale di quella del modello.
+5. **`proposta_rispondi` come unico modo di rispondere**: non ancora. Il 26B chiama 6 risposte su
+   7, ma il «no» lungo (06:14:36) si perde e la proposta resta aperta per tre turni; e in modalità
+   sviluppo il modello vuole chiamare il tool vero (la chiamata fusa del § 9.1). Il sì implicito
+   (fallback 2 del § 3.4) resta finché una settimana di ombra con la correzione non mostra più del
+   90 % di risposte con un esito strutturato (tool o corsia); dopo, solo per E1–E2.
+6. **Corsia veloce e giudice isolato**: in questo giro la corsia copre 1 frase su 9 («Sì.»); le
+   altre non sono forme chiuse («Sì, però fallo dopo», «Non c'è problema», «Annullahi», «Nulla è
+   lavoro», «Non.», un «no» storpiato che per il principio 10 non entra nell'elenco). Tutte le
+   proposte del giro erano E1–E2: il giudice isolato (solo E3–E4) non sarebbe partito. Restano
+   come nel progetto, senza allargarli: il lavoro lo fa il modello della voce, e col 26B regge.
+7. **Costi**: il blocco è 391 caratteri contro 309 di `PENDING_MSG` (~25 token, dopo la parte
+   stabile); lo schema in più ~200 token nel prefisso in cache; il blocco della modalità sviluppo
+   (~1900 caratteri) pesa molto di più, ed è il profilo «sviluppo» del passo 4 a ridurlo.
+
+**Da guardare sulla DGX dopo l'aggiornamento** (`calliope stato --turni`): le chiamate scartate per
+`proposta_diversa` (devono sparire o quasi), `id_argomento`, le `spinta_dichiarata` dopo una
+proposta dello sviluppo (devono tornare come con lo spento), la prima frase delle risposte a una
+proposta con e senza chiamata.
