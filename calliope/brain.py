@@ -1727,9 +1727,14 @@ class Brain:
         r0 = conv.riassunto if isinstance(conv.riassunto, dict) else {}
         if not conv.history and r0.get("tipo") == "coda":
             # Gli ultimi scambi della conversazione chiusa per una pausa (09/10): valgono per
-            # le ore della ripresa, poi la ripresa di sempre
+            # le ore della ripresa, poi la ripresa di sempre. Solo per la persona di quella
+            # conversazione (10/10, passo 0 della macchina a stati, buco 6): un'altra persona
+            # o un ospite che apre la conversazione dopo non li riceve
             ore = float(getattr(self.cfg, "conversazione_ripresa_ore", 4) or 0)
-            if time.time() - float(r0.get("quando") or 0) <= ore * 3600:
+            if r0.get("per", _UNSET) != self._speaker_key():
+                conv.riassunto = None
+                self._rule("conversazione_coda_altra_persona")
+            elif time.time() - float(r0.get("quando") or 0) <= ore * 3600:
                 conv.ripresa_provata = True
                 self._rule("conversazione_coda")
             else:
@@ -2241,6 +2246,13 @@ class Brain:
         if pending and isinstance(p, dict) and tool and p.get("tool") == tool:
             if not politica.domanda_si_no(p.get("domanda")):
                 return pending               # «Quando è nato?»: «No, è maggiorenne» risponde
+            if p.get("risposta"):
+                # La domanda dell'agente a metà lavoro (10/10, passo 0 della macchina a stati,
+                # buco 3): «no» è la risposta da passargli con lavoro_rispondi, non un rifiuto.
+                # Prima chiudeva la domanda e bloccava lavoro_rispondi: il lavoro aspettava fino
+                # alla scadenza (120 minuti)
+                self._rule("risposta_non_rifiuto")
+                return pending
             args = p.get("args")
         elif s is not None and not s.scaduta() and getattr(s, "tool", None):
             tool, args = s.tool, s.argomenti
@@ -2561,6 +2573,9 @@ class Brain:
             "scade": time.monotonic() + secondi_validi(self.cfg),
             # La domanda è della politica (09/10): la chiamata vale solo con un consenso
             "politica": offer.get("politica"),
+            # Si risponde con un dato, anche «no» (10/10: la domanda dell'agente): un «no» non
+            # la rifiuta (_rifiuto_proposta)
+            "risposta": bool(offer.get("risposta")),
             # Gli argomenti proposti, per la politica dei tool (05/10): sul «sì» con gli
             # stessi valori la persona li ha già sentiti (calliope/politica.py)
             "args": dict(offer.get("argomenti")) if isinstance(offer.get("argomenti"),
@@ -2992,12 +3007,17 @@ class Brain:
         owner = getattr(old, "owner", None)
         if owner is None or owner is UNSET:
             return
+        # Una persona riconosciuta finita nella conversazione anonima del satellite (frase
+        # breve, zona grigia): la coda resterebbe nella nuova «ospite:<corsia>», che il prossimo
+        # ospite riceve (10/10, passo 0 della macchina a stati, buco 6)
+        if str(getattr(old, "chiave", "") or "").startswith("ospite:"):
+            return
         n = int(getattr(self.cfg, "conversazione_coda_scambi", 0) or 0)
         scambi = coda_scambi(old.history, n) if n > 0 else []
         if scambi:
             ora = time.time()
             self.conv.riassunto = {"tipo": "coda", "testo": testo_coda(scambi, ora),
-                                   "quando": ora}
+                                   "quando": ora, "per": owner}
 
     def chiudi_conversazione(self, conv, motivo: str):
         """Chiude una conversazione che non è quella del turno (06/10: il registro delle

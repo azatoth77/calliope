@@ -48,12 +48,15 @@ from .suoni import FINE, INIZIO
 from .tools.builtin import biblioteca_contesto
 from .tts import split_sentences, clean_for_speech, strip_false_citation
 from .wakeword import (SPEGNI_SATELLITE_MSG, closing_kind, exit_action, exit_request,
-                       find_wake_word, is_stop, nuova_conversazione, said_name)
+                       find_wake_word, is_stop, nuova_conversazione, risposta_al_nome)
 
 # Errori imprevisti nel ciclo (03/10): oltre ERRORI_MAX in ERRORI_FINESTRA_S Calliope esce con
 # un errore (sotto systemd riparte da capo) invece di girare a vuoto chiedendo scusa
 ERRORI_MAX = 5
 ERRORI_FINESTRA_S = 120.0
+# «Vuoi dirmi il tuo nome?» dopo la registrazione di Primo/Prima (10/10, passo 0 della
+# macchina a stati): la risposta vale entro questo tempo, poi il profilo resta com'è
+NOME_VERO_ATTESA_S = 120.0
 
 
 # ─────────────────────────────── DIAGNOSTICA ───────────────────────────────
@@ -121,6 +124,7 @@ class Servizi:
     foto_attesa: object = None           # immagini.InAttesa (foto e file senza domanda)
     cassetto: object = None              # cassetto.Cassetto: i file per persona (08/10)
     cancelli: object = None              # cancelli.Cancelli: i segnali da verificare (09/10)
+    cancelli_percorso: object = None     # dove si salvano (10/10, main.py); None = in memoria
     cortesia: object = None
     turns: object = None                 # TurnLog
     attiva_minori: object = None         # () → True se ha registrato i tool dei minori
@@ -228,6 +232,7 @@ class Ciclo:
         self.barge_seed = None               # audio dell'interruzione, da cui riparte l'ascolto
         self.last_question = None            # ultima domanda con risposta («approfondisci»)
         self.pending_real_name = None        # attende il nome vero del primo utente
+        self._nome_vero_fino = 0.0           # fino a quando (monotonic, NOME_VERO_ATTESA_S)
         self.enroll_reminded: set = set()    # registrazioni a cui si è ricordato il nome
         # Annunci che chiudono con una domanda mentre un'altra aspetta: al giro dopo (rinvia)
         self.annunci_rinviati: list[tuple] = []
@@ -509,7 +514,8 @@ class Ciclo:
                     turns = getattr(self.s, "turns", None)
                     c = self.s.cancelli = cancelli_mod.Cancelli(
                         self.s.cfg, log=lambda m: print(m, flush=True),
-                        registra=getattr(turns, "write", None))
+                        registra=getattr(turns, "write", None),
+                        percorso=getattr(self.s, "cancelli_percorso", None))
         return c
 
     def _voce_incerta(self) -> bool:
@@ -896,6 +902,12 @@ class Ciclo:
             print(f"   [SPEAKER] Registrazione di «{name_exp}» scaduta.", flush=True)
             self.speaker.say("La registrazione della voce è scaduta: se vuoi, chiedimela di nuovo.")
             self.speaker.wait()
+        if self.pending_real_name is not None and time.monotonic() > self._nome_vero_fino:
+            # «Vuoi dirmi il tuo nome?» senza risposta (10/10): l'attesa finisce, il profilo
+            # resta com'è (si rinomina più tardi a voce, rinomina_interlocutore)
+            print(f"   [SPEAKER] Nessun nome per «{self.pending_real_name}»: resta così.",
+                  flush=True)
+            self.pending_real_name = None
         guided = speaker_ctx.is_enrolling or self.pending_real_name is not None
         # SearXNG era giù all'avvio e ora risponde: il tool compare tra un turno e l'altro
         # (il prompt lo nomina dal turno dopo), senza riavvio
@@ -1947,6 +1959,7 @@ class Ciclo:
                 speaker.say("Vuoi dirmi il tuo nome?")
                 speaker.wait()
                 self.pending_real_name = enrolling_name
+                self._nome_vero_fino = time.monotonic() + NOME_VERO_ATTESA_S
             else:
                 speaker.wait()
         else:
@@ -1956,34 +1969,55 @@ class Ciclo:
             speaker.wait()
 
     def _nome_reale(self, t):
-        """Attesa del nome vero dopo l'arruolamento di Primo/Prima."""
+        """Attesa del nome vero dopo l'arruolamento di Primo/Prima.
+
+        Dal 10/10 (passo 0 della macchina a stati, buco 9) l'attesa scade
+        (`NOME_VERO_ATTESA_S`), vale solo per la persona appena registrata e per una risposta
+        sola; vale come nome solo una forma chiusa intera (wakeword.risposta_al_nome). Prima
+        qualunque frase di al più cinque parole, di chiunque e a qualunque ora, rinominava il
+        profilo («Sì» → «Sì»). Regole `nome_vero_*`."""
         if not self.pending_real_name:
             return None
-        speaker, text = self.speaker, t.text
-        self.rec["esito"] = "nome"
-        negative = re.match(r"\b(no|non|nessuno|basta)\b", text, re.I)
-        if negative:
-            speaker.say(f"Va bene, ti chiamerò {self.pending_real_name}.")
+        speaker, text, cfg = self.speaker, t.text, self.s.cfg
+        if time.monotonic() > self._nome_vero_fino:
             self.pending_real_name = None
+            self.rule("nome_vero_scaduto")
+            return None
+        chi = getattr(self.speaker_ctx, "current_speaker", None)
+        if cfg.speaker_id_enabled and chi != self.pending_real_name:
+            # Un'altra voce (o nessuna riconosciuta): non risponde per la persona registrata
+            self.rule("nome_vero_altra_persona")
+            return None
+        forma, name = risposta_al_nome(text, cfg.wake_names)
+        if forma != "altro":
+            self.rec["esito"] = "nome"
+        if forma == "si":
+            # «Sì»: il nome deve ancora arrivare (stessa attesa, stessa persona)
+            self.rule("nome_vero_si")
+            speaker.say("Dimmi pure il tuo nome.")
             speaker.wait()
             return _FINE
-        # «Mi chiamo Dario» → «Dario», non «Mi Chiamo Dario» (rapporto del 01/10)
-        name = said_name(text, self.s.cfg.wake_names)
-        if name != text.strip().title().rstrip(".,!?;:"):
-            self.rule("nome_detto")
-        if len(name.split()) <= 5 and name:
-            old = self.pending_real_name
+        old, self.pending_real_name = self.pending_real_name, None
+        if forma == "no":
+            self.rule("nome_vero_no")
+            speaker.say(f"Va bene, ti chiamerò {old}.")
+            speaker.wait()
+            return _FINE
+        if forma == "nome":
+            # «Mi chiamo Dario» → «Dario», non «Mi Chiamo Dario» (rapporto del 01/10)
+            if name != text.strip().title().rstrip(".,!?;:"):
+                self.rule("nome_detto")
             prof = self.s.registry.rename(old, name)
             if prof:
                 self.speaker_ctx.current_speaker = name
                 speaker.say(f"Ok, ti chiamerò {name}.")
-            self.pending_real_name = None
             speaker.wait()
             return _FINE
-        speaker.say("Non ho capito. Dimmi il tuo nome o 'no'.")
-        speaker.wait()
-        self.awake_until = time.monotonic() + self.s.cfg.followup_s
-        return _FINE
+        # Non è una forma chiusa: la frase va al modello (che ha rinomina_interlocutore),
+        # come una domanda nella finestra d'ascolto
+        self.rule("nome_vero_al_modello")
+        self.awake_until = max(self.awake_until, time.monotonic() + cfg.followup_s)
+        return None
 
     # ── fase 7: il nome (wake word) ──
     def _richiamo(self, t):

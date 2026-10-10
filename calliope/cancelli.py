@@ -29,17 +29,28 @@ minore in pericolo è peggio di un falso positivo.
 
 Il testo del primo segnale resta solo in memoria per il secondo giudizio: mai nel registro dei
 turni, nel journal o negli avvisi (che dicono solo l'argomento). Ospiti e adulti: niente cambia.
+
+**Riavvio** (10/10, passo 0 della macchina a stati, buco 10): i segnali si salvano in
+`cancelli.json` accanto a `memory_db` (`percorso`), **senza il testo**: chi, argomento
+(categorie), voce incerta, satellite, compagnia, stato e l'ora. Dopo un riavvio un segnale
+ancora aperto riprende con il tempo che gli restava (il secondo giudizio vede l'argomento al
+posto della frase); uno scaduto durante il riavvio vale come silenzio (avviso non urgente «da
+verificare», decisione di Dario del 10/10); quelli chiusi contano ancora per la finestra dei
+due segnali. Prima un riavvio li perdeva senza avvisi.
 """
 
 from __future__ import annotations
 
 import dataclasses
 import datetime
+import os
 import threading
 import time
+from pathlib import Path
 
 from . import guardiano as guardia
 from . import minori
+from .persistenza import FileRovinato, leggi_json, scrivi_json
 
 CONFERMATO, DA_VERIFICARE = "confermato", "da_verificare"
 
@@ -54,6 +65,21 @@ RASSICURA = {
     "adolescenti": "Ehi, se c'è qualcosa che ti pesa puoi parlarmene, quando vuoi. Va tutto "
                    "bene?",
 }
+
+
+# Il file dei segnali (formato 1), accanto alla memoria
+FILE = "cancelli.json"
+FORMATO = 1
+# Al posto della frase del primo segnale dopo un riavvio (il testo non si salva mai)
+TESTO_RIPRESO = "{nome} {argomento} (la frase esatta non c'è più: Calliope è ripartita)"
+
+
+def percorso(cfg) -> Path | None:
+    """Dove si salvano i segnali: `cancelli.json` accanto a `memory_db` (None senza)."""
+    db = str(getattr(cfg, "memory_db", None) or "")
+    if not db or db.startswith(":memory:") or db.startswith("file::memory:"):
+        return None
+    return Path(os.path.abspath(db)).parent / FILE
 
 
 def rassicura(prof) -> str:
@@ -115,14 +141,20 @@ class Segnale:
 class Cancelli:
     """I segnali da verificare, condivisi da tutte le corsie (un minore può cambiare stanza)."""
 
-    def __init__(self, cfg, log=print, avvisi=None, registra=None, orologio=time.monotonic):
+    def __init__(self, cfg, log=print, avvisi=None, registra=None, orologio=time.monotonic,
+                 percorso=None, ora=time.time):
         self.cfg = cfg
         self.log = log
         self._avvisi = avvisi                    # None = minori.avvisi()
         self.registra = registra                 # turns.write (registro dei turni) o None
         self.orologio = orologio
+        self.ora = ora                           # l'ora vera, per il file (time.time)
         self._lock = threading.Lock()
         self.segnali: list[Segnale] = []
+        # Su disco (10/10): None = solo in memoria (le prove, il terminale)
+        self.percorso = Path(percorso) if percorso else None
+        if self.percorso is not None:
+            self._riprendi()
 
     # ── configurazione ──
     @property
@@ -152,10 +184,75 @@ class Cancelli:
             self.segnali.append(s)
         attesa = self._attesa()
         if attesa > 0:
-            s.timer = threading.Timer(attesa, self.scaduto, args=(s,))
-            s.timer.daemon = True
-            s.timer.start()
+            self._avvia_timer(s, attesa)
+        self._salva()
         return s
+
+    def _avvia_timer(self, s: Segnale, dopo: float):
+        s.timer = threading.Timer(max(0.0, dopo), self.scaduto, args=(s,))
+        s.timer.daemon = True
+        s.timer.start()
+
+    # ── su disco (10/10) ──
+    def _salva(self):
+        """I segnali nel file, senza il testo (atomico). Un errore non ferma i cancelli."""
+        if self.percorso is None:
+            return
+        ora_m, ora_w = self.orologio(), self.ora()
+        with self._lock:
+            righe = [{"persona_id": s.persona_id, "nome": s.nome,
+                      "categorie": list(s.categorie), "voce_incerta": s.voce_incerta,
+                      "corsia": s.corsia, "compagnia": s.compagnia, "aperto": s.aperto,
+                      "esito": s.esito, "quando": round(ora_w - (ora_m - s.ora), 3)}
+                     for s in self.segnali]
+        try:
+            scrivi_json(self.percorso, {"formato": FORMATO, "segnali": righe})
+        except OSError as e:
+            self.log(f"   [MINORI] segnali dei cancelli non salvati: {type(e).__name__}: {e}")
+
+    def _riprendi(self):
+        """All'avvio: i segnali salvati. Aperti → riprendono con il tempo che restava; scaduti
+        durante il riavvio → silenzio (`scaduto`, avviso non urgente); chiusi → restano per la
+        finestra dei due segnali."""
+        try:
+            dati, _ = leggi_json(self.percorso)
+        except FileRovinato as e:
+            self.log(f"   [MINORI] {e}: segnali dei cancelli persi")
+            return
+        if not isinstance(dati, dict) or dati.get("formato") != FORMATO:
+            return
+        ora_m, ora_w = self.orologio(), self.ora()
+        presi = []
+        for d in dati.get("segnali") or ():
+            try:
+                eta = max(0.0, ora_w - float(d["quando"]))
+                cat = tuple(str(c) for c in (d.get("categorie") or ()))
+                nome = str(d.get("nome") or "")
+                s = Segnale(str(d["persona_id"]), nome,
+                            TESTO_RIPRESO.format(nome=nome or "il minore",
+                                                 argomento=argomento(cat)),
+                            cat, bool(d.get("voce_incerta")), d.get("corsia"), ora_m - eta,
+                            aperto=bool(d.get("aperto")), compagnia=bool(d.get("compagnia")),
+                            esito=d.get("esito"))
+            except (KeyError, TypeError, ValueError):
+                continue
+            presi.append(s)
+        with self._lock:
+            self.segnali = presi
+            self._pulisci(ora_m)
+            aperti = [s for s in self.segnali if s.aperto]
+        attesa = self._attesa()
+        for s in aperti:
+            resta = attesa - (ora_m - s.ora)
+            if attesa > 0 and resta <= 0:
+                self.log(f"   [MINORI] segnale da verificare per {s.nome} scaduto durante il "
+                         f"riavvio: vale come silenzio")
+                self.scaduto(s, dopo_riavvio=True)
+            elif attesa > 0:
+                self.log(f"   [MINORI] segnale da verificare per {s.nome} ripreso dopo il "
+                         f"riavvio ({resta:.0f} s)")
+                self._avvia_timer(s, resta)
+        self._salva()
 
     def aperto_per(self, persona_id: str | None, corsia) -> Segnale | None:
         """Il segnale aperto a cui risponde questa frase: dello stesso minore, oppure (voce non
@@ -189,15 +286,17 @@ class Cancelli:
             s.aperto, s.esito = False, esito
         if s.timer is not None:
             s.timer.cancel()
+        self._salva()
 
-    def scaduto(self, s: Segnale) -> bool:
+    def scaduto(self, s: Segnale, dopo_riavvio: bool = False) -> bool:
         """Nessuna risposta entro l'attesa (il timer, o una prova): con
         `minori_pericolo_silenzio: avvisa` l'avviso non urgente «da verificare». True se
-        l'avviso è partito."""
+        l'avviso è partito. `dopo_riavvio`: l'attesa è finita mentre Calliope era spenta."""
         with self._lock:
             if not s.aperto:
                 return False
             s.aperto, s.esito = False, "silenzio"
+        self._salva()
         avvisa = str(getattr(self.cfg, "minori_pericolo_silenzio", "avvisa")) == "avvisa"
         self.log(f"   [MINORI] segnale da verificare per {s.nome} senza risposta: "
                  + ("avviso non urgente ai tutori" if avvisa else "nessun avviso"))
@@ -210,6 +309,8 @@ class Cancelli:
                                             "esito": "silenzio", "avviso": avvisa,
                                             "voce_incerta": s.voce_incerta,
                                             **({"compagnia": True} if s.compagnia
+                                               else {}),
+                                            **({"dopo_riavvio": True} if dopo_riavvio
                                                else {})}})
             except Exception:  # noqa: BLE001 — il registro non ferma l'avviso
                 pass

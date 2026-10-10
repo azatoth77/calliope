@@ -195,6 +195,20 @@ for testo, atteso in [("Mi chiamo Dario.", "Dario"), ("Dario.", "Dario"),
                       ("Ok, mi chiamo Luca!", "Luca"), ("Giulia", "Giulia")]:
     verifica(f"nome detto «{testo}»", said_name(testo), atteso)
 
+# ── risposta a «Vuoi dirmi il tuo nome?» (10/10, regole `nome_vero_*`): solo forme chiuse ──
+from calliope.wakeword import risposta_al_nome  # noqa: E402
+for testo, atteso in [("Mi chiamo Dario.", ("nome", "Dario")), ("Dario.", ("nome", "Dario")),
+                      ("Il mio nome è Maria Rosa.", ("nome", "Maria Rosa")),
+                      ("Sono Luca, grazie.", ("nome", "Luca")), ("chiamami giulia", ("nome", "Giulia")),
+                      ("Sì.", ("si", None)), ("Certo.", ("si", None)), ("No.", ("no", None)),
+                      ("Non voglio.", ("no", None)),
+                      # contrari: frasi brevi che non sono un nome (prima diventavano il nome)
+                      ("Che ore sono?", ("altro", None)), ("Sono stanco.", ("altro", None)),
+                      ("Ho fame.", ("altro", None)), ("Buongiorno.", ("altro", None)),
+                      ("Sì, mi chiamo Dario e abito a Lodi.", ("altro", None)),
+                      ("Accendi la luce.", ("altro", None)), ("Dario 2", ("altro", None))]:
+    verifica(f"risposta al nome «{testo}»", risposta_al_nome(testo), atteso)
+
 # ── allucinazioni: si confrontano senza punteggiatura (stt.py) ──
 verifica("allucinazione con il punto finale",
          "Grazie a tutti.".lower().strip(" .!?…") in HALLUCINATIONS, True)

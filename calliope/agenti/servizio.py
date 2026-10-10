@@ -492,6 +492,8 @@ class Lavori:
         return {"domanda": lav.domanda, "tool": "lavoro_rispondi",
                 "cosa": f"la domanda del lavoro «{lav.titolo}»",
                 "argomenti": {"lavoro": lav.id},
+                # Si risponde con un dato, anche «no» (10/10): non è un consenso da rifiutare
+                "risposta": True,
                 "messaggio": RISPOSTA_MSG.format(titolo=lav.titolo, domanda=lav.domanda,
                                                  id=lav.id)}
 
