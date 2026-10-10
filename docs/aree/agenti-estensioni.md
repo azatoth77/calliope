@@ -1763,3 +1763,37 @@ nuovo, regole `lavori_conferma_implicita` e `sviluppo_fase`, «Ci lavoro in seco
 - **Prove**: `prova_giro_ombra.py` (i due turni veri, il «sì» che sospende e apre, «sospendi» sei
   turni dopo, la richiesta senza la voce; contrari: la richiesta ripetuta con altre parole, il
   «sì» con il compito riscritto, la modifica che resta dello sviluppo aperto).
+
+## Chiudere uno sviluppo a voce, e titoli che distinguono (10/10, ramo `sviluppo-chiusura`)
+
+Secondo giro vero della DGX del 10/10 (07:11–07:21, satellite «studio»).
+
+- **Chiudere era impossibile.** «Chiudino sviluppo.» → `sviluppo_passo` chiudi → «Chiudo lo
+  sviluppo di «…»? Se vuoi solo una pausa, dimmi «sospendi» e lo riprendiamo quando vuoi.». La
+  domanda non era in fondo, `Brain.set_pending` (che vuole la risposta finita con «?») non
+  registrava la proposta, e la conferma della chiusura, che vuole `tool_in_sospeso ==
+  "sviluppo_passo"`, non poteva scattare: «No, chiudilo», «Non voglio una pausa, voglio che lo
+  chiudi», «…voglio che tu lo chiudi proprio», «Sì, chiudi» richiamavano chiudi, che rifaceva la
+  domanda (07:17:03–07:18:33, 7 volte; il difetto era già annotato nel § 9.2 della [macchina a
+  stati](../ricerche/2026-10-10-macchina-stati.md), punto 3 del § 9.4). Ora: «Chiudere lo
+  sviluppo di «…» vuol dire finirlo qui; se vuoi solo una pausa, dimmi «sospendi» e lo
+  riprendiamo quando vuoi. Lo chiudo?» (`in_sospeso.domanda` = «Lo chiudo?», come chiede
+  `PENDING_MSG`). Il «sì», anche lungo, è la chiamata di chiudi con l'azione in sospeso, e chiude;
+  «sospendi» sospende, «no» rifiuta (`proposta_rifiutata`). Con due tool nella stessa risposta
+  (07:20:43 «ferma il lavoro e chiudi», 07:21:20 «sospendilo e chiudilo») la frase di chiudi è
+  l'ultima e la domanda resta in fondo.
+- **Uno sviluppo sospeso non si chiudeva**: chiudi senza uno sviluppo aperto rispondeva «Lo
+  sviluppo di «…» è sospeso: vuoi riprenderlo?» (07:14:03, 07:21:20). Ora chiudi su uno sospeso
+  (il primo di `trova`, con `quale`) ha la stessa conferma e lo chiude al «sì»; se l'agente ci
+  sta ancora lavorando chiede prima di fermare il lavoro. «Riprendi» resta com'era.
+- **Titoli senza la parola che distingue**: «Scrivimi un programma in Python che conta le vocali»
+  e «…che conta le parole» diventavano entrambi «programma in Python che conti il numero» (il
+  compito del modello «…che conti il numero di vocali presenti…» tagliato a sette parole). Ora
+  `agenti.servizio.titolo_da`, quando il taglio cade su un nome seguito da «di», «delle»…, tiene
+  la preposizione e la parola piena dopo («…il numero di vocali», «…la somma di tutti i numeri»,
+  «l'elenco dell'agenda»). I titoli già buoni restano uguali (`prova_agenti`, `prova_giro_ombra`).
+  È la forma di un nome scelto dal modello (principio 10), senza regola nel registro.
+- **La dichiarazione senza tool** di 07:14:12 («Ho capito, chiudo definitivamente lo sviluppo…»)
+  e la storia della conversazione: in [voce-e-regole](voce-e-regole.md).
+- **Prove**: `prova_giro_chiusura.py` (turni veri e contrari); `prova_sviluppo_v2` e
+  `prova_giro_ombra` aggiornate alla frase nuova.

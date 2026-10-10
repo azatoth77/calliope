@@ -1102,7 +1102,8 @@ cambia.**
   nome del tool; un altro id del dialogo resta scartato; `dialogo_ombra.id_argomento`; il
   riassunto conta a parte le chiamate scartate. Dopo: 5/5 e 5/5, valide 20/25 contro 11/25. Restano
   fuori dall'ombra e annotati nel § 9: «Chiudo lo sviluppo…?» che non diventa mai una proposta (la
-  domanda non è in fondo alla risposta) e il secondo giro del modello per `no`, `rinvio`, `altro`
+  domanda non è in fondo alla risposta; *corretto il 10/10, ramo `sviluppo-chiusura`*) e il
+  secondo giro del modello per `no`, `rinvio`, `altro`
   (~+1 s col 26B).
 
 ## Le fasi dello sviluppo nelle dichiarazioni d'azione (10/10, ramo `giro-ombra-correzioni`)
@@ -1143,3 +1144,48 @@ la ricerca». Come le altre forme, solo nelle risposte senza tool del turno: un 
 fatto davvero da `sviluppo_passo` si dice. Con Brain e un modello finto le due frasi del giro non
 si dicono (la prima diventa la chiamata del tool dopo la spinta, la seconda «Non ci sono
 riuscita…», `dichiarata_taciuta`).
+
+## Azioni al presente su una cosa di Calliope, e la storia uguale a ciò che si è sentito (10/10, ramo `sviluppo-chiusura`)
+
+Secondo giro vero della DGX del 10/10 (07:11–07:21, satellite «studio»; la chiusura dello
+sviluppo e i titoli in [agenti-estensioni](agenti-estensioni.md)).
+
+**Dichiarazioni al presente.** 07:14:12 «No, chiudilo.» → «Ho capito, chiudo definitivamente lo
+sviluppo di «…».», nessun tool, e lo sviluppo restava sospeso. `ACTION_CLAIM` prendeva il
+presente solo a inizio risposta e solo per i verbi della casa e dei file. Ora (generale) un verbo
+al presente sulle cose di Calliope (chiudo, apro, riapro, sospendo, fermo, annullo, riprendo,
+interrompo, blocco), al più due avverbi (definitivamente, subito, allora, proprio…) e l'oggetto
+(sviluppo, lavoro, programma, estensione, anche al plurale). Contrari (`prova_giro_chiusura`): le
+domande («Chiudo lo sviluppo?», «Lo chiudo?»), le offerte («se vuoi[,] chiudo lo sviluppo»,
+«quando vuoi apro il programma»), un condizionale nella stessa proposizione («chiudo lo sviluppo
+se me lo confermi», «…quando vuoi»: vale ora anche per la forma a inizio risposta, «Accendo la
+luce quando vuoi»), «non chiudo», «chiuderei», «posso chiudere». Limite: «Chiudo lo sviluppo, se
+vuoi.» (condizionale dopo la virgola) resta una dichiarazione, come «Apro il file, se ti serve
+altro dimmelo.». Come le altre forme vale solo nelle risposte senza un tool d'azione riuscito: la
+frase pronta di `sviluppo_passo` («D'accordo: chiudo lo sviluppo…») si dice.
+
+**La storia è ciò che la persona ha sentito.** Dario alle 07:17:50: «questa cosa della frase che
+dici è qualcosa che non arriva dall'LLM e non è nel contesto». Verificato col turno ricostruito
+(07:17:03–07:18:33, ciclo della voce con la resa per la voce di `Ciclo._frase_da_dire` e Brain
+vero con un modello finto): la frase pronta di `sviluppo_passo` («Chiudo lo sviluppo…?») **c'era**
+nella storia, uguale parola per parola a ciò che è andato alla voce (`risposta` del registro), dopo
+la chiamata e il risultato del tool; così la riga in coda dello sviluppo (`_aggiungi_detto`) e gli
+annunci (`record_announcement`). Il giro a vuoto veniva dalla proposta non registrata (sopra e in
+agenti-estensioni): senza `PENDING_MSG` il modello non sapeva come confermare (lo dice lui alle
+07:17:50). Dove invece la storia poteva divergere da ciò che si è sentito: la resa per la voce
+(markdown tolto, nomi dei tool detti a parole, una frase che annuncia un tool taciuta, «secondo
+Wikipedia» tolto) e una frase cambiata dai controlli dell'uscita senza fermate (la fonte aggiunta).
+Ora, a turno finito e non interrotto, `Ciclo._storia_come_detta` → `Brain.allinea_detto`: ogni
+messaggio dell'assistente del turno diventa la sua resa per la voce; se insieme non danno le frasi
+andate alla voce, il testo dei messaggi con le chiamate si svuota e l'ultima risposta diventa ciò
+che si è sentito. Regola `storia_come_detta` quando la storia cambia (di solito non cambia: la
+maggior parte dei turni è testo semplice o frasi pronte). Restano come prima: l'interruzione
+(`record_interruption`, solo le frasi sentite per intero), le risposte fermate dal guardiano e dai
+controlli dell'uscita (`correggi_storia`), gli scambi tecnici (chiamate e risultati dei tool: la
+loro pulizia è il passo della storia pulita, § 3.8 della [macchina a
+stati](../ricerche/2026-10-10-macchina-stati.md)). **Fuori dalla storia restano le frasi
+d'attesa** («Vediamo…», «Controllo nella biblioteca.»), come dal 26/09: non dicono niente della
+conversazione e, viste come risposte di Calliope prima di un tool, il modello tenderebbe a
+ripeterle; da decidere con Dario se vanno dentro. Streaming: niente cambia durante la risposta, la
+storia si tocca dopo l'ultima frase. Cache del prefisso: cambia solo il turno appena finito, che
+il turno dopo rilegge comunque dalla frase nuova; nei turni che non cambiano nulla, niente.

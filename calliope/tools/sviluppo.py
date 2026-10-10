@@ -334,6 +334,11 @@ def _sviluppo(ctx: ToolContext, azione: str = "stato", quale: str = "", cambia: 
             return _ferma(ctx, svs, al_lavoro[0], prof)
     if sv is None:
         sospesi = svs.trova(persona, quale)
+        if sospesi and azione == "chiudi":
+            # Chiudere uno sviluppo sospeso (10/10, DGX delle 07:14 e 07:21: «Chiudi proprio lo
+            # sviluppo» e «Sospendilo e chiudilo definitivamente» → «è sospeso: vuoi
+            # riprenderlo?», e non si chiudeva mai): la stessa conferma di quello aperto
+            return _chiudi(ctx, svs, sospesi[0])
         if sospesi:
             s = sospesi[0]
             frase = f"Lo sviluppo di «{s.titolo}» è sospeso: vuoi riprenderlo?"
@@ -395,7 +400,21 @@ def _chiudi(ctx, svs, sv) -> dict:
     """«Chiudi» (08/10, versione 2; DGX, 11:30: «Ok, chiuso a long», storpiato, chiudeva lo
     sviluppo con l'agente al lavoro, senza domande). Con un lavoro in corso diventa «sospendi»;
     altrimenti chiede conferma, e chiude solo al «sì» a quella domanda (il turno dopo, con
-    l'azione in sospeso di sviluppo_passo): una frase breve o storpiata non chiude mai da sola."""
+    l'azione in sospeso di sviluppo_passo): una frase breve o storpiata non chiude mai da sola.
+
+    10/10 (DGX delle 07:17–07:18): la domanda va in fondo alla frase. Prima finiva con «Se vuoi
+    solo una pausa, dimmi «sospendi»…», `Brain.set_pending` non la registrava (vuole la domanda
+    alla fine), la conferma non poteva scattare e ogni «sì, chiudi» rifaceva la domanda (7 volte).
+    Vale anche per uno sviluppo sospeso (`_sviluppo`)."""
+    if sv.stato == "sospesa" and (svs.lavoro_attivo(sv) or _in_tappa(svs, sv) is not None):
+        # Già sospeso, con l'agente ancora al lavoro: prima si ferma il lavoro
+        domanda = "Vuoi che fermi il lavoro dell'agente?"
+        return _final(f"Lo sviluppo di «{sv.titolo}» è sospeso, ma l'agente ci sta ancora "
+                      "lavorando: prima di chiuderlo va fermato il lavoro. " + domanda,
+                      ok=False, fatto="NIENTE chiuso: c'è un lavoro dell'agente in corso",
+                      in_sospeso={"domanda": domanda,
+                                  "cosa": f"fermare il lavoro dell'agente su «{sv.titolo}»",
+                                  "tool": "sviluppo_passo", "argomenti": {"azione": "ferma"}})
     if svs.lavoro_attivo(sv) or _in_tappa(svs, sv) is not None:
         svs.sospendi(sv, "chiesto di chiudere con l'agente al lavoro")
         note_rule(ctx, "sviluppo_chiudi_sospende")
@@ -429,9 +448,9 @@ def _chiudi(ctx, svs, sv) -> dict:
     if sv.tipo == "estensione" and sv.estensione and sv.fase in ("collaudo", "revisione",
                                                                   "attivazione"):
         extra = " La versione nuova non è ancora approvata."
-    domanda = f"Chiudo lo sviluppo di «{sv.titolo}»?"
-    frase = (f"{domanda}{extra} Se vuoi solo una pausa, dimmi «sospendi» e lo riprendiamo "
-             "quando vuoi.")
+    domanda = "Lo chiudo?"
+    frase = (f"Chiudere lo sviluppo di «{sv.titolo}» vuol dire finirlo qui; se vuoi solo una "
+             f"pausa, dimmi «sospendi» e lo riprendiamo quando vuoi.{extra} {domanda}")
     return _final(frase, ok=False, fatto="NIENTE chiuso: aspetta la conferma",
                   in_sospeso={"domanda": domanda, "cosa": f"chiudere lo sviluppo di «{sv.titolo}»",
                               "tool": "sviluppo_passo", "argomenti": {"azione": "chiudi"}})

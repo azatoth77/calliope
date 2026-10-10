@@ -2732,9 +2732,11 @@ class Ciclo:
             print(f"   [VOCE] (ombra) frase giudicata non rivolta a me ({g.ms:.0f} ms)",
                   flush=True)
 
-    def _frase_da_dire(self, t, sentence: str) -> str:
-        """Una frase del modello pronta per la voce ("" = non si dice)."""
+    def _frase_da_dire(self, t, sentence: str, registra: bool = True) -> str:
+        """Una frase del modello pronta per la voce ("" = non si dice). `registra=False`: senza
+        le regole nel registro (la stessa resa, rifatta per la storia: `_storia_come_detta`)."""
         cfg, brain = self.s.cfg, self.brain
+        rule = self.rule if registra else (lambda _nome: None)
         sentence = brain.strip_tool_mentions(sentence)
         # Prima della pulizia: clean_for_speech toglie «_» e il nome del tool non
         # si riconosceva più («Uso bibliotecacerca» detto ad alta voce, 01/10)
@@ -2742,9 +2744,9 @@ class Ciclo:
             parlata = brain.speak_tool_names(sentence)
             if parlata is None:
                 print(f"({sentence!r}: annuncia un tool, non la dico) ", end="", flush=True)
-                self.rule("annuncio_tool_taciuto")
+                rule("annuncio_tool_taciuto")
                 return ""
-            self.rule("nome_tool_parlato")
+            rule("nome_tool_parlato")
             sentence = parlata
         sentence = clean_for_speech(sentence)
         if not re.search(r"[^\W_]", sentence or ""):
@@ -2758,7 +2760,7 @@ class Ciclo:
                             for x in brain.last_tools)):
             cleaned = strip_false_citation(sentence)
             if cleaned != sentence:
-                self.rule("citazione_tolta")
+                rule("citazione_tolta")
             sentence = cleaned
         return sentence
 
@@ -3071,6 +3073,8 @@ class Ciclo:
             # le persone non diventa una catena di risposte; resta quella di prima, se c'è
             speaker.start_turn()
             return
+        if not t.watch.get("seed"):
+            self._storia_come_detta(t)
         if t.watch.get("seed"):
             # Interrotta: nella storia solo le frasi pronunciate per intero; si ascolta
             # subito, partendo dall'audio che contiene il nome
@@ -3101,6 +3105,29 @@ class Ciclo:
                         f"frasi, una alla volta. {speaker_ctx.enroll_prompt}")
             speaker.wait()
         self.awake_until = time.monotonic() + cfg.followup_s
+
+    def _storia_come_detta(self, t):
+        """Nella storia la risposta di Calliope è ciò che la persona ha sentito (10/10, giro
+        della DGX delle 07:17: Dario «la frase che dici non arriva all'LLM»). Le frasi pronte
+        dei tool, la riga in coda dello sviluppo e gli annunci ci sono già; qui la resa per la
+        voce (nomi dei tool detti a parole, annunci di un tool taciuti, markdown tolto, «secondo
+        Wikipedia» tolto) e le frasi cambiate dai controlli dell'uscita. Le frasi d'attesa
+        («Vediamo…») restano fuori, come dal 26/09. Turno finito e non interrotto (per
+        l'interruzione c'è `Brain.record_interruption`); regola `storia_come_detta` quando la
+        storia cambia."""
+        allinea = getattr(self.brain, "allinea_detto", None)
+        if not callable(allinea) or not t.said or t.non_rivolta:
+            return
+
+        def rendi(testo: str) -> str:
+            frasi = (self._frase_da_dire(t, f, registra=False)
+                     for f in split_sentences([testo]))
+            return " ".join(f for f in frasi if f)
+        try:
+            if allinea(t.said, rendi):
+                self.rule("storia_come_detta")
+        except Exception as e:  # noqa: BLE001 — la storia com'era: la voce non si ferma
+            print(f"   [STORIA] allineamento non riuscito: {type(e).__name__}: {e}", flush=True)
 
     def _conversazione_nuova_chiesta(self) -> bool:
         """Il modello ha chiamato conversazione_nuova (09/10, «voglio che ricominciamo da capo»

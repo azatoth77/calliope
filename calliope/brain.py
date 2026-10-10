@@ -245,6 +245,19 @@ ACTION_CLAIM = re.compile(
     r"|(?:lo|la|li|le|l['’])\s*(?:affido|delego)\b(?!\s+a\s+te)"
     r"|(?:lo|la|li|le|l['’])\s*(?:mando|passo|giro)\s+(?:subito\s+)?all['’]agente)"
     r"(?![^.!?]*\?)"
+    # Un'azione su una cosa di Calliope annunciata al presente (10/10, secondo giro della DGX:
+    # a «No, chiudilo.» «Ho capito, chiudo definitivamente lo sviluppo di «…».» senza nessun
+    # tool, e lo sviluppo restava sospeso). Il verbo, al più due avverbi e l'oggetto (sviluppo,
+    # lavoro, programma, estensione). Non una domanda («Chiudo lo sviluppo?»), non un'offerta o
+    # un condizionale («se vuoi chiudo lo sviluppo», «quando vuoi apro il programma», «chiudo
+    # lo sviluppo se me lo confermi»), non «non chiudo», non «chiuderei»
+    r"|(?<![\w'’])" + _CLAIM_NON_OFFERTA + r"(?<!puoi )(?<!posso )"
+    r"(?:chiudo|apro|riapro|sospendo|fermo|annullo|riprendo|interrompo|blocco)\s+"
+    r"(?:(?:subito|ora|adesso|quindi|allora|dunque|pure|definitivamente|davvero|proprio|"
+    r"anche|intanto|senz['’]altro)\s+){0,2}"
+    r"(?:(?:il|lo|la|i|gli|le|questo|quest['’]|quello|quell['’]|tutti\s+gli|tutte\s+le)\s*|"
+    r"l['’]\s*)?(?:sviluppo|sviluppi|lavoro|lavori|programma|programmi|estension[ei])\b"
+    r"(?![^.!?]*\?|[^.!?,;:]*\b(?:se|quando|appena|finché)\b)"
     # cambiat, rinominat: 02/10, «Ho cambiato il modo in cui ti chiamo, Davide.» dopo «Sì»
     # alla domanda di rinomina_interlocutore, senza richiamarlo (1 volta su 3)
     # «Ti ricorderò alle 9 di chiamare la mamma» senza promemoria_imposta
@@ -277,7 +290,9 @@ ACTION_CLAIM = re.compile(
     r"(?:" + _CLAIM_PARTS + r")[oaie]\b(?![^.!?]*\?)"
     r"|^\W*(?:(?:certo|ok|okay|va bene|sì|si|perfetto|subito)\W+)?fatto\b(?!\s+sta\b)"
     r"|^\W*(?:(?:certo|ok|okay|va bene|sì|si|perfetto)\W+)?"
-    r"(?:apro|accendo|spengo|chiudo|imposto|alzo|abbasso|avvio)\b(?![^.!?]*\?)", re.I)
+    r"(?:apro|accendo|spengo|chiudo|imposto|alzo|abbasso|avvio)\b"
+    # 10/10: nemmeno con un condizionale nella frase («Chiudo lo sviluppo quando vuoi.»)
+    r"(?![^.!?]*\?|[^.!?,;:]*\b(?:se|quando|appena|finché)\b)", re.I)
 # Ricordo, non dichiarazione (01/10, prova a voce): dopo «chiudi taverna» → casa_comando e
 # «Ho spento Taverna.», a «voglio che accendi l'ultima stanza che abbiamo spento» il modello
 # cominciava «Ho spento Taverna, quindi se intendi riaccenderla, posso…»; la rete la
@@ -293,7 +308,8 @@ _CLAIM_PAST = re.compile(r"\b(prima|poco fa|in precedenza|l'ultima volta|nel tur
                          r"precedente)\b", re.I)
 # Participio (o presente) dichiarato → radici dello stesso verbo nelle richieste e nei tool
 _CLAIM_VERB = re.compile(r"\b(" + _CLAIM_PARTS + r")[oaie]\b"
-                         r"|\b(apro|accendo|spengo|chiudo|imposto|alzo|abbasso|avvio)\b", re.I)
+                         r"|\b(apro|accendo|spengo|chiudo|imposto|alzo|abbasso|avvio|riapro|"
+                         r"sospendo|fermo|annullo|riprendo|interrompo|blocco)\b", re.I)
 _VERB_ROOTS = {"apert": ("apr", "apert"), "acces": ("accend", "acces"),
                "spent": ("spegn", "spent"), "creat": ("crea",), "impostat": ("impost",),
                "chius": ("chiud", "chius"), "alzat": ("alz",), "abbassat": ("abbass",),
@@ -317,7 +333,10 @@ _VERB_ROOTS = {"apert": ("apr", "apert"), "acces": ("accend", "acces"),
                "apro": ("apr", "apert"), "accendo": ("accend", "acces"),
                "spengo": ("spegn", "spent"), "chiudo": ("chiud", "chius"),
                "imposto": ("impost",), "alzo": ("alz",), "abbasso": ("abbass",),
-               "avvio": ("avvi",)}
+               "avvio": ("avvi",), "riapro": ("riapr", "riprend"),
+               "sospendo": ("sospend", "sospes"), "fermo": ("ferm", "annull"),
+               "annullo": ("annull", "ferm"), "riprendo": ("riprend", "riapr"),
+               "interrompo": ("interromp", "ferm"), "blocco": ("blocc", "ferm")}
 _OBJ_STOP = frozenset("il lo la i gli le l un una uno in di del della dello dei degli delle nel "
                       "nella nei nelle sul sulla al alla ai alle a e ed per con da dal dalla "
                       "che già appena anche tutte tutti tutto ora adesso".split())
@@ -3997,6 +4016,52 @@ class Brain:
         else:
             self.history.append({"role": "assistant", "content": text})
         self.salva_conversazione()
+
+    def allinea_detto(self, detto: list[str], rendi=None) -> bool:
+        """La risposta di questo turno nella storia diventa ciò che la persona ha sentito
+        (10/10, calliope/ciclo.py `_storia_come_detta`): `detto` sono le frasi andate alla voce,
+        `rendi(testo)` la resa per la voce di un testo del modello. Prima si prova la resa di
+        ogni messaggio dell'assistente del turno (la struttura resta: testo prima di un tool,
+        chiamate, risposta); se insieme non danno ciò che si è sentito (una frase cambiata dai
+        controlli dell'uscita, una detta senza passare dalla storia), il testo dei messaggi con
+        le chiamate si svuota e l'ultima risposta diventa ciò che si è sentito. True se la
+        storia è cambiata. La cache del prefisso: cambia solo il turno appena finito, che il
+        turno dopo rilegge comunque dalla sua frase in poi."""
+        sentito = re.sub(r"\s+", " ", " ".join(x for x in detto if x)).strip()
+        if not sentito:
+            return False
+        h = self.history
+        inizio = next((i for i in range(len(h) - 1, -1, -1) if h[i].get("role") == "user"),
+                      None)
+        if inizio is None:
+            return False
+        msgs = [m for m in h[inizio + 1:] if m.get("role") == "assistant"]
+        if not msgs:
+            return False
+
+        def norm(x: str) -> str:
+            return re.sub(r"\s+", " ", x or "").strip()
+        resi = [rendi(m.get("content") or "") if rendi and (m.get("content") or "").strip()
+                else (m.get("content") or "") for m in msgs]
+        cambiato = False
+        if norm(" ".join(r for r in resi if norm(r))) == sentito:
+            for m, r in zip(msgs, resi):
+                if norm(m.get("content") or "") != norm(r):
+                    m["content"] = r
+                    cambiato = True
+        else:
+            for m in msgs:
+                if m.get("tool_calls") and (m.get("content") or "").strip():
+                    m["content"] = ""
+            ultimo = msgs[-1]
+            if ultimo.get("tool_calls"):
+                ultimo = {"role": "assistant", "content": ""}
+                h.append(ultimo)
+            ultimo["content"] = sentito
+            cambiato = True
+        if cambiato:
+            self.salva_conversazione()
+        return cambiato
 
     def dimentica_ultimo_turno(self):
         """Una frase non rivolta a Calliope (09/10, calliope/rivolta.py, giudizio acceso): via
