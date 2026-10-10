@@ -742,3 +742,20 @@ ricominciava.», «Calliope ricominciavo.», «E lì appena ricominciamo.», «D
 su 1299 frasi vere, nessun falso) sono in [voce-e-regole](voce-e-regole.md), «Forme chiuse
 storpiate da Whisper». Il rimedio alla radice resta un'hotword o un prompt per whisper.cpp
 (problema aperto «Chiori sono»).
+
+## Whistle (Cactus Compute) misurato sulla voce vera (10/10, ramo `misura-whistle`)
+
+Rapporto: [`../ricerche/2026-10-10-whistle.md`](../ricerche/2026-10-10-whistle.md), script
+`prove/manuali/misura_whistle.py` (fuori dal runner). Whistle (`cactus-needle`, 16,9 MB, solo CPU,
+italiano tra sette lingue, `keywords`, tempi e probabilità per parola) sulle 350 registrazioni vere,
+contro faster-whisper come sul portatile. Sulle 104 frasi verificate a mano: **WER 62 %** (con le
+keyword dei nomi 58,7 %) contro 11,9 % di large-v3-turbo, 35,3 % di small e 58,0 % di base; il nome
+in testa 28–38 frasi su 172 (turbo 160), «che ore sono» 0 su 9, frasi inventate («grazie a tutti»)
+16 su 344; lingua da riconoscere giusta solo in 210 su 350. Velocissimo (0,05–0,07 s a frase su CPU,
+~40 MB; turbo su CPU 6,6 s), ma inutilizzabile: **nessun uso** (né sostituto, né ripiego su CPU o
+ARM, né parole suggerite contro «Chiori sono», né F0/F1: a p < 0,5 segnala il 24 % delle parole
+sbagliate, turbo il 47 %). Il pacchetto ha la telemetria accesa di serie e scarica il motore nativo da
+Hugging Face al primo uso (ruote anche per win_arm64 e manylinux aarch64). Aggiungere i nomi alle
+hotwords di faster-whisper peggiora turbo (11,9 → 14,1 %): la sola «Calliope» resta giusta. Restano
+le 40 frasi dubbie da correggere a mano (`privato/misura-whistle/dubbie.html`) e 28 frasi mirate da
+registrare (`prove/manuali/registra_whistle.py`, `frasi_whistle.tsv`), utili anche per whisper.cpp.
