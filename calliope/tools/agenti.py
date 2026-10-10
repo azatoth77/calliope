@@ -671,10 +671,12 @@ def _delega_lavoro(ctx: ToolContext, tipo: str = "", compito: str = "", formato:
         da_estensione = _a_estensione(ctx, compito)
         if da_estensione is not None:
             return da_estensione
+    sviluppo = None
     if tipo == "codice" and not modello:
         # Un programma di chi amministra è uno sviluppo (08/10): si apre qui, in analisi
         from ..agenti.servizio import senza_estensione, titolo_da
-        apri_se_serve(ctx, "codice", compito, titolo=senza_estensione(titolo_da(compito)))
+        sviluppo = apri_se_serve(ctx, "codice", compito,
+                                 titolo=senza_estensione(titolo_da(compito)))
     # L'analisi della richiesta prima della proposta (06/10): solo i lavori di codice
     esito = None
     if tipo == "codice" and not modello:
@@ -700,8 +702,15 @@ def _delega_lavoro(ctx: ToolContext, tipo: str = "", compito: str = "", formato:
     # alla domanda della politica, la proposta vale come accettata. Non con un file della
     # persona: lì la domanda dice anche che il file lascia il PC
     if svc.serve_conferma(lav):
-        # (né con una specifica raffinata dall'analisi: la persona non l'ha ancora sentita)
-        if not politica.accettata(ctx) or candidati or raffinata:
+        # (né con una specifica raffinata dall'analisi: la persona non l'ha ancora sentita).
+        # Né con uno sviluppo all'analisi (10/10, quarto giro della DGX: dopo il cambio di
+        # sviluppo la frase di sfida, che conferma la richiesta detta senza la voce, valeva
+        # come il «sì» all'analisi mai sentita, e il lavoro partiva): lo sviluppo si apre
+        # all'analisi con «Va bene così, o la cambiamo?», come un'apertura normale
+        if (not politica.accettata(ctx) or candidati or raffinata
+                or (sviluppo is not None and sviluppo.fase == "analisi")):
+            if politica.accettata(ctx) and sviluppo is not None:
+                note_rule(ctx, "sviluppo_analisi_prima")
             return _proponi(ctx, svc, lav, turno)
         # (nel registro basta `politica_conferma_unica`, scritta dalla politica)
     return _avvia(ctx, svc, lav)

@@ -117,6 +117,25 @@ def _e(cose: list[str]) -> str:
     return ", ".join(cose[:-1]) + " e " + cose[-1]
 
 
+# Quanti sviluppi sospesi si dicono per nome (10/10, quarto giro della DGX): gli altri sono
+# «e altri N». Prima i primi quattro in ordine di apertura, con «Ho 4 sviluppi sospesi»: il
+# quinto, il più recente (Celsius, sospeso al cambio), non c'era né nel conto né nei nomi
+ELENCO_VOCE = 4
+ELENCO_MODELLO = 8
+
+
+def elenco(svs: list, voce, quanti: int = ELENCO_VOCE) -> str:
+    """««a» (…), «b» (…) e altri 2»: i primi `quanti` per nome (`voce(sv)`), poi quanti
+    restano."""
+    voci = [voce(s) for s in svs[:quanti]]
+    altri = len(svs) - len(voci)
+    if altri == 1:
+        voci.append("un altro")
+    elif altri > 1:
+        voci.append(f"altri {altri}")
+    return _e(voci)
+
+
 @dataclass
 class Sviluppo:
     id: str
@@ -289,9 +308,13 @@ class Sviluppi:
             return sv
 
     def sospesi(self, persona) -> list[Sviluppo]:
+        """Gli sviluppi sospesi di `persona`, dal più recente (come `trova`; dal 10/10: prima
+        in ordine di apertura, e un elenco tagliato perdeva gli ultimi)."""
         with self._lock:
             self.corrente(persona)          # una scadenza appena passata conta già
-            return [s for s in self.sviluppi if s.persona == persona and s.stato == "sospesa"]
+            out = [s for s in self.sviluppi if s.persona == persona and s.stato == "sospesa"]
+        out.sort(key=lambda s: -float(s.ultimo or 0))
+        return out
 
     def trova(self, persona, quale: str = "", stati=("sospesa",)) -> list[Sviluppo]:
         """Gli sviluppi di `persona` negli `stati`, quello detto per primo: per id («S2») o
@@ -939,8 +962,8 @@ class Sviluppi:
             return (f"A proposito: lo sviluppo {sv.di()} è sospeso, eravamo "
                     f"{ALLA.get(sv.fase, sv.fase)}. Quando vuoi, dimmi «riprendiamo lo sviluppo "
                     f"di {sv.titolo[:1].lower() + sv.titolo[1:]}».")
-        voci = [f"«{s.titolo}» ({ALLA.get(s.fase, s.fase)})" for s in sospesi[:4]]
-        return (f"A proposito: hai {len(sospesi)} sviluppi sospesi: {_e(voci)}. Quando vuoi, "
+        voci = elenco(sospesi, lambda s: f"«{s.titolo}» ({ALLA.get(s.fase, s.fase)})")
+        return (f"A proposito: hai {len(sospesi)} sviluppi sospesi: {voci}. Quando vuoi, "
                 f"dimmi quale riprendere.")
 
     def ricordato(self, persona):
@@ -1055,9 +1078,10 @@ class Sviluppi:
         sospesi = self.sospesi(persona)
         if not sospesi:
             return None
-        voci = [f"«{s.titolo}» ({s.id}, {ALLA.get(s.fase, s.fase)})" for s in sospesi[:4]]
-        msg = SOSPESI_MSG.format(voci=_e(voci))
-        al_lavoro = [s for s in sospesi[:4] if self.lavoro_attivo(s)]
+        msg = SOSPESI_MSG.format(voci=elenco(
+            sospesi, lambda s: f"«{s.titolo}» ({s.id}, {ALLA.get(s.fase, s.fase)})",
+            ELENCO_MODELLO))
+        al_lavoro = [s for s in sospesi[:ELENCO_MODELLO] if self.lavoro_attivo(s)]
         if al_lavoro:
             # Sospeso con l'agente al lavoro (08/10 sera, DGX delle 19:07: «Ti ho detto di
             # stopparlo, non deve più continuare»)

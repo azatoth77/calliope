@@ -384,19 +384,33 @@ def prova_tutti_brain(tmp, iso):
 # ═══════════════════════════ E. «ricominciamo» sul satellite ═══════════════════════════
 
 class Remota:
-    """L'uscita di un satellite finto: riceve le frasi e a fine turno dice quali ha detto."""
+    """L'uscita di un satellite finto: riceve le frasi e a fine turno dice quali ha detto.
+    Come il satellite vero (dal 10/10, quarto giro) non dice le frasi di un turno che non
+    supera l'ultimo fermato (`Riproduttore._scartata`, la stessa funzione): al turno 0 di una
+    corsia nuova, o dopo un «ferma» (il nome sentito sul satellite, `sente_il_nome`)."""
 
     def __init__(self, dice=True):
         self.frasi, self._in_coda_s, self.dice = [], 0.0, dice
+        self.scarta_fino = 0
+
+    def _scartata(self, turno) -> bool:
+        from calliope.satellite.client import Riproduttore, _Frase
+        vero = types.SimpleNamespace(sessione=1, scarta_fino=self.scarta_fino)
+        return Riproduttore._scartata(vero, _Frase(1, turno, 0, "", 16000, 0))
 
     def invia(self, turno, testo, audio, rate):
         self.frasi.append((turno, testo))
 
     def fine_turno(self):
-        return [x[1] for x in self.frasi] if self.dice else []
+        return [t for n, t in self.frasi if not self._scartata(n)] if self.dice else []
 
     def ferma(self, turno):
-        pass
+        self.scarta_fino = max(self.scarta_fino, int(turno or 0))
+
+    def sente_il_nome(self):
+        """Il satellite sente il nome: si ferma da sé e scarta fino all'ultimo turno ricevuto
+        (client.py: `self.player.ferma()` senza turno)."""
+        self.scarta_fino = max([self.scarta_fino] + [n for n, _ in self.frasi])
 
     def prima_voce(self, turno):
         return None

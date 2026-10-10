@@ -5,6 +5,10 @@ quando il server ascolta, come farebbe un satellite dopo la wake word. Niente mi
 né wake word: serve a far parlare più satelliti insieme, a comando, e a misurare quando
 arriva la voce di Calliope. Tiene le frasi ricevute (testo e istante) e risponde a
 «fine_turno», «sveglia» e «fine_veglia» come il satellite vero (calliope/satellite/client.py).
+Come il vero (dal 10/10, quarto giro) scarta le frasi di un turno che non supera l'ultimo
+fermato (`Riproduttore._scartata`: al turno 0, o dopo un «ferma» di quel turno): non finiscono
+in `frasi` né tra le dette, ma in `scartate`. Prima le teneva tutte, e «ricominciamo» al turno
+0, muto sulla DGX, qui si sentiva.
 
     s = SatelliteFinto("ws://127.0.0.1:8771", token, "studio")
     s.avvia()
@@ -31,7 +35,9 @@ class SatelliteFinto:
         self._cond = threading.Condition()
         self._lid = None                     # «ascolta» in corso (id), None se non ascolta
         self._dette: list[str] = []          # frasi del turno, per «turno_finito»
-        self.frasi: list[tuple[float, str]] = []      # (monotonic, testo) ricevute
+        self.frasi: list[tuple[float, str]] = []      # (monotonic, testo) ricevute e dette
+        self.scartate: list[tuple[int, str]] = []     # (turno, testo) scartate come il vero
+        self.scarta_fino = 0                 # come Riproduttore.scarta_fino
         self.voce: list[float] = []          # istanti dei pezzi di voce ricevuti
         self.turni_finiti: list[float] = []
         self.ascolti = 0
@@ -96,9 +102,16 @@ class SatelliteFinto:
                         self._manda(tipo="nessuna_frase", id=d.get("id"))
                 elif t == "frase":
                     with self._cond:
-                        self.frasi.append((ora, str(d.get("testo") or "")))
-                        self._dette.append(str(d.get("testo") or ""))
+                        turno = int(d.get("turno") or 0)
+                        if turno <= self.scarta_fino:
+                            self.scartate.append((turno, str(d.get("testo") or "")))
+                        else:
+                            self.frasi.append((ora, str(d.get("testo") or "")))
+                            self._dette.append(str(d.get("testo") or ""))
                         self._cond.notify_all()
+                elif t == "ferma":
+                    with self._cond:
+                        self.scarta_fino = max(self.scarta_fino, int(d.get("turno") or 0))
                 elif t == "fine_turno":
                     with self._cond:
                         dette, self._dette = self._dette, []

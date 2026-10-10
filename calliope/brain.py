@@ -3834,9 +3834,12 @@ class Brain:
         messages = with_memory(system + [{"role": "system", "content": fine}])
         self._passata = getattr(self, "_passata", 0) + 1
         text, _, _, _, _ = yield from self._turn(messages, [])
-        if not (text or "").strip():
+        if not _parlabile(text):
             # Una chiamata scritta come testo (trattenuta) o niente: meglio una frase vera del
-            # silenzio
+            # silenzio. Anche la sola punteggiatura (10/10, quarto giro: dopo i giri di
+            # correzione finiti la passata finale rispondeva «…» e restava il silenzio)
+            if (text or "").strip():
+                self._rule("risposta_solo_punteggiatura")
             self._rule("vuoto_ripiego")
             text = "Non ci sono riuscita: puoi ripetere la richiesta?"
             yield text

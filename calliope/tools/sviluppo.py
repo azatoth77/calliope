@@ -657,10 +657,12 @@ def _stato(ctx, svs, sv, persona) -> dict:
         sospesi = svs.sospesi(persona)
         if not sospesi:
             return _final("Non c'è nessuno sviluppo aperto.", fatto="niente")
-        voci = [f"«{s.titolo}» ({_alla(s)})" for s in sospesi[:4]]
-        from ..sviluppo import _e
-        return _final(("Ho uno sviluppo sospeso: " if len(voci) == 1 else
-                       f"Ho {len(voci)} sviluppi sospesi: ") + _e(voci)
+        # Tutti nel conto, i più recenti per nome (10/10: «Ho 4 sviluppi sospesi» con il
+        # quinto, il più recente, mancante)
+        from ..sviluppo import elenco
+        voci = elenco(sospesi, lambda s: f"«{s.titolo}» ({_alla(s)})")
+        return _final(("Ho uno sviluppo sospeso: " if len(sospesi) == 1 else
+                       f"Ho {len(sospesi)} sviluppi sospesi: ") + voci
                       + ". Dimmi quale riprendere.", fatto="nessuno sviluppo aperto")
     frase = f"Stiamo sviluppando «{sv.titolo}»: {svs.dove(sv)}."
     lav = svs._lavoro(sv.lavoro)
