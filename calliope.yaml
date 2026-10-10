@@ -346,7 +346,8 @@ stt:
   stt_url: null
   # il nome servito dal server
   stt_modello: openai/whisper-large-v3-turbo
-  # oltre, la frase si trascrive su CPU
+  # Oltre, la frase si trascrive su CPU. Vale per una frase fino a 15 s; dal 10/10 per una
+  # più lunga (una dettatura) cresce in proporzione: 120 s di frase → 40 s
   stt_timeout_s: 5.0
   # Correzione delle frasi incerte (05/10, prototipo: calliope/stt_correzione.py, rapporto
   # docs/ricerche/2026-10-05-stt-confronto.md). Solo con stt_motore «server»: la risposta
@@ -486,7 +487,14 @@ audio:
   preroll_ms: 300
   # sotto questa durata è rumore
   min_speech_ms: 250
-  max_utterance_s: 30
+  # Tetto di una frase: oltre, il VAD la chiude anche se la persona parla ancora (contro un
+  # rumore continuo, la TV). Era 30: il 10/10 una dettatura delle regole di un gioco è stata
+  # tagliata a 30,02 s di frase («…possono aumentare o diminuire troppo») e Calliope è partita
+  # mentre Dario parlava ancora. Con 120 una dettatura sta in una frase; se il tetto arriva
+  # comunque, il ciclo continua ad ascoltare e unisce il seguito allo stesso turno (regola
+  # frase_tetto, calliope/pause.py). Whisper trascrive anche oltre i 30 s della sua finestra
+  # (misure del 10/10 in docs/aree/stt-tts.md: 70 s in 1,9 s sulla GPU del portatile)
+  max_utterance_s: 120
   # Microfono e uscita di Calliope completa con l'audio di questo PC (audio_modo: locale).
   # Il satellite usa i suoi, nella sezione satellite (satellite_microfono, satellite_casse):
   # questi gli valgono solo da ripiego, con un avviso. None = predefinito.

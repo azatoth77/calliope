@@ -882,7 +882,10 @@ class Satellite:
         if audio is None:
             self._manda(tipo="nessuna_frase", id=lid)
             return
-        self._suona("fine")              # frase presa: il segnale prima della rete
+        if getattr(L, "chiusura", None) != "lunga":
+            # Frase presa: il segnale prima della rete. Non al tetto (10/10): la persona parla
+            # ancora e il server ascolta subito il seguito (Ciclo._seguito_del_tetto)
+            self._suona("fine")
         self.frasi_inviate += 1
         # Le pause dentro la frase, il parlato e come si è chiusa (07/10, solo misura): campi
         # facoltativi, un server vecchio li ignora

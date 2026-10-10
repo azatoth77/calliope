@@ -366,7 +366,9 @@ class Config:
     stt_motore: str = "locale"
     stt_url: str | None = None            # es. http://127.0.0.1:8002/v1
     stt_modello: str = "openai/whisper-large-v3-turbo"   # il nome servito dal server
-    stt_timeout_s: float = 5.0            # oltre, la frase si trascrive su CPU
+    # Oltre, la frase si trascrive su CPU. Vale per una frase fino a 15 s; dal 10/10 per una
+    # più lunga (una dettatura) cresce in proporzione: 120 s di frase → 40 s
+    stt_timeout_s: float = 5.0
     # Correzione delle frasi incerte (05/10, prototipo: calliope/stt_correzione.py, rapporto
     # docs/ricerche/2026-10-05-stt-confronto.md). Solo con stt_motore «server»: la risposta
     # verbose_json di whisper-server dà la probabilità di ogni parola; se la più debole è
@@ -493,7 +495,14 @@ class Config:
     silence_ms: int = 700                 # pausa che chiude il turno
     preroll_ms: int = 300                 # audio tenuto prima dell'inizio del parlato
     min_speech_ms: int = 250              # sotto questa durata è rumore
-    max_utterance_s: int = 30
+    # Tetto di una frase: oltre, il VAD la chiude anche se la persona parla ancora (contro un
+    # rumore continuo, la TV). Era 30: il 10/10 una dettatura delle regole di un gioco è stata
+    # tagliata a 30,02 s di frase («…possono aumentare o diminuire troppo») e Calliope è partita
+    # mentre Dario parlava ancora. Con 120 una dettatura sta in una frase; se il tetto arriva
+    # comunque, il ciclo continua ad ascoltare e unisce il seguito allo stesso turno (regola
+    # frase_tetto, calliope/pause.py). Whisper trascrive anche oltre i 30 s della sua finestra
+    # (misure del 10/10 in docs/aree/stt-tts.md: 70 s in 1,9 s sulla GPU del portatile)
+    max_utterance_s: int = 120
     # Microfono e uscita di Calliope completa con l'audio di questo PC (audio_modo: locale).
     # Il satellite usa i suoi, nella sezione satellite (satellite_microfono, satellite_casse):
     # questi gli valgono solo da ripiego, con un avviso. None = predefinito.
@@ -2813,7 +2822,7 @@ LIMITI: dict[str, tuple[float, float]] = {
     "conferma_sfida_parole": (2, 4), "speaker_conferma_breve_soglia": (0.0, 1.0),
     "tts_lead_s": (0.0, 5.0), "tts_tail_s": (0.0, 5.0), "tts_spezza_prima": (0, 10_000), "tts_thread": (0, 256),
     "tts_primo_pezzo_min": (1, 1000),
-    "silence_ms": (100, 10_000),
+    "silence_ms": (100, 10_000), "max_utterance_s": (5, 600),
     "preroll_ms": (0, 5000), "memory_max_facts": (1, 10_000), "speaker_threads": (1, 64),
     "appuntamento_anticipo_min": (0, 10_080), "casa_timeout_s": (0.5, 300.0),
     "documenti_attesa_s": (0.0, 300.0),
