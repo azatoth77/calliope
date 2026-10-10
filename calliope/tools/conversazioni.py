@@ -479,10 +479,12 @@ def conversazioni_specs() -> list[ToolSpec]:
         ToolSpec(
             name="conversazione_nuova",
             description=(
-                "Butta via la conversazione di adesso e ne comincia una nuova, vuota: solo quando "
-                "chi parla vuole ripartire da zero con te («voglio che ricominciamo da capo», "
-                "«facciamo finta di niente e ripartiamo da zero», «dimentica quello che ci siamo "
-                "detti adesso e ricominciamo»). Quello che vi siete detti resta nell'archivio. "
+                "Chiude la conversazione di adesso e ne comincia una nuova: solo quando chi "
+                "parla vuole ripartire da zero con te («voglio che ricominciamo da capo», "
+                "«facciamo finta di niente e ripartiamo da zero»). NON cancella niente: quello "
+                "che vi siete detti si archivia e si ritrova con conversazione_cerca; se ne "
+                "parli o chiedi conferma, di' così, mai che verrà cancellato. Cancellare è "
+                "un'altra cosa (conversazioni_dimentica, dimentica). "
                 "NON chiamarlo quando vuole ricominciare una cosa precisa (il collaudo, un "
                 "gioco, un esercizio, un timer, una lista: per quelle c'è il loro strumento) né "
                 "quando vuole riprendere o continuare («ricominciamo da dove eravamo», "
