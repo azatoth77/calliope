@@ -200,7 +200,7 @@ misure di questo documento sono col 4B in locale: da rifare col 26B sulla DGX do
   `agenda_tutto`, `formato_detto`, `lettera_non_excel`, `valore_assoluto_detto`,
   `casa_riscrittura`, `casa_delicata`, `casa_domanda_letta` (dall'08/10 anche `casa_nome_entita`, [casa](casa.md)); dal 02/10 `persona_io` e, dagli
   agenti, `lavori_permesso`, `lavori_senza_offerta`, `lavori_proposta_non_id`,
-  `lavori_conferma_implicita`, `lavori_agente_irraggiungibile`; dal 03/10 `schermo_personale_senza_codice`, `schermo_personale_con_codice`, `schermo_proprietario_permesso`. Solo nomi: per gli ospiti il
+  `lavori_conferma_implicita` (dal 10/10 `lavori_conferma_diversa`, e `sviluppo_cambio`), `lavori_agente_irraggiungibile`; dal 03/10 `schermo_personale_senza_codice`, `schermo_personale_con_codice`, `schermo_proprietario_permesso`. Solo nomi: per gli ospiti il
   registro non tiene più dati di prima.
 
 - **Ripetizioni come segnale di errore** (`revisione.py`): sulle registrazioni del 21 e
@@ -1088,3 +1088,34 @@ cambia.**
   un'esecuzione). E la prima frase dei turni con una proposta, con e senza (`dialogo_interprete:
   spento` nel locale per un giorno di confronto). Per tornare indietro: `dialogo_interprete:
   spento` in `calliope.locale.yaml`.
+
+## Le fasi dello sviluppo nelle dichiarazioni d'azione (10/10, ramo `giro-ombra-correzioni`)
+
+Giro vero della DGX del 10/10 mattina, satellite «studio», modalità sviluppo aperta:
+- 06:10:40 «Annullahi.» (Whisper per «Annulla») → «Ho capito, l'analisi è stata annullata.
+  Siamo ancora in fase di analisi…», nessun tool, e lo sviluppo restava aperto;
+- 06:12:47 «Non c'è problema.» → la rete scatta sulla prima passata (`spinta_dichiarata`), e
+  dopo la spinta il modello dice «D'accordo, procedo allora con lo sviluppo. Siamo passati alla
+  fase di sviluppo…», di nuovo senza tool; il turno dopo «Restiamo pure in fase di analisi».
+
+**Perché la rete non scattava** (nessuna esclusione per la modalità sviluppo): il vocabolario di
+`ACTION_CLAIM`. Il passivo vale solo con una cosa di Calliope come soggetto (`_CLAIM_THINGS`), e
+analisi, sviluppo, collaudo, revisione, fase e modalità non c'erano; «procedo … con» ammetteva tra
+i due solo «subito/ora/adesso/quindi», non «allora»; un cambio di fase («siamo passati alla fase
+di…», «passiamo allo sviluppo») non era una forma della rete. Dopo la spinta il controllo è solo
+sulla prima frase (`ClaimHold`), e la seconda passata passava intera.
+
+**Correzione** (generale, non per le due frasi): `_CLAIM_THINGS_PASSIVE` aggiunge al passivo le
+fasi e la modalità («l'analisi è stata annullata», «lo sviluppo è stato sospeso», «la revisione è
+stata chiusa»; non alla forma senza verbo, dove «il collaudo dei file creati…» descriverebbe);
+«procedo» ammette fino a due avverbi di raccordo (allora, dunque, quindi, pure, senz'altro,
+intanto…); il cambio di fase è una dichiarazione, al passato («siamo/sono/è passat-, tornat-,
+entrat- alla/allo/in [fase di] sviluppo, analisi, collaudo, revisione, attivazione, modalità») e
+al presente («passiamo/torniamo/entriamo allo sviluppo»). Contrari in `prova_giro_ombra.py`: lo
+stato («siamo all'analisi», «siamo ancora in fase di analisi», «restiamo pure in fase di
+analisi», «lo sviluppo resta aperto»), l'offerta («quando vuoi[,] passiamo allo sviluppo», «se
+vuoi, torniamo all'analisi», «dopo passiamo al collaudo»), le domande, la negazione, «procedo con
+la ricerca». Come le altre forme, solo nelle risposte senza tool del turno: un passaggio di fase
+fatto davvero da `sviluppo_passo` si dice. Con Brain e un modello finto le due frasi del giro non
+si dicono (la prima diventa la chiamata del tool dopo la spinta, la seconda «Non ci sono
+riuscita…», `dichiarata_taciuta`).
