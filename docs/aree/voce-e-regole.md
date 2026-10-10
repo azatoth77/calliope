@@ -1088,3 +1088,19 @@ cambia.**
   un'esecuzione). E la prima frase dei turni con una proposta, con e senza (`dialogo_interprete:
   spento` nel locale per un giorno di confronto). Per tornare indietro: `dialogo_interprete:
   spento` in `calliope.locale.yaml`.
+- **Il giro col 26B del 10/10 mattina** (ramo `stati-indagine-26b`, § 9 del
+  [progetto](../ricerche/2026-10-10-macchina-stati.md)): su 9 risposte a una proposta il 26B
+  chiamava `proposta_rispondi` **6 volte** (su 7 risposte vere; le 2 frasi che parlano d'altro
+  senza tool, giusto), non 1: 5 chiamate erano scartate per `proposta_diversa` e il riassunto le
+  contava come «non chiama». Causa: le proposte di `sviluppo_apri` e `lavoro_affida` hanno un
+  argomento che si chiama anch'esso `proposta` (l'id del lavoro, «L1»), che il blocco mostra e la
+  riga della fase dello sviluppo dice di usare; il modello passava `proposta="L1"`. Scartata, la
+  chiamata non diventava quella di oggi e il modello dichiarava un'azione mai fatta («procedo con
+  lo sviluppo» senza tool, «Non ci sono riuscita»): col 4B sui turni rigiocati `sviluppo_apri` al
+  «sì» 1/5 e 0/5 in ombra contro 3/5 e 5/5 con lo spento. **Corretto** (in ombra):
+  `stato_dialogo.id_della_proposta` accetta l'id vuoto, il suo, un valore dei suoi argomenti o il
+  nome del tool; un altro id del dialogo resta scartato; `dialogo_ombra.id_argomento`; il
+  riassunto conta a parte le chiamate scartate. Dopo: 5/5 e 5/5, valide 20/25 contro 11/25. Restano
+  fuori dall'ombra e annotati nel § 9: «Chiudo lo sviluppo…?» che non diventa mai una proposta (la
+  domanda non è in fondo alla risposta) e il secondo giro del modello per `no`, `rinvio`, `altro`
+  (~+1 s col 26B).
