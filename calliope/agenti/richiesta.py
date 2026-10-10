@@ -138,9 +138,18 @@ def capacita(cfg, tipo: str, linguaggi=("python",)) -> str:
         from ..estensioni import contratto as c
         righe = ["Un'estensione è un piccolo programma Python che resta e si usa a voce; gira "
                  "in un contenitore isolato.", "Da sola: " + "; ".join(
-                     f"{v}" for v in c.DA_SOLA.values()) + ".",
+                     f"{v}" for k, v in c.DA_SOLA.items() if k != "scheda") + ".",
                  "Chiedendo a Calliope: " + "; ".join(
-                     cosa for _, _, cosa in c.PORTA.values()) + "."]
+                     cosa for _, _, cosa in c.PORTA.values()) + ".",
+                 # 10/10, DGX delle 17:32: con la riga del contratto («JavaScript nel browser,
+                 # con la sezione «scheda» del manifesto») l'analista ha dichiarato impossibile
+                 # il gioco di Halloween perché «la richiesta non specifica di usare la sezione
+                 # scheda»: qui la scheda è detta come la fa l'agente, non come la chiede la
+                 # persona
+                 "Giochi e cose da toccare sugli schermi: un gioco (anche con grafica, "
+                 "animazioni, più giocatori, turni e punti) o una scheda da usare toccando si "
+                 "fanno, con una scheda interattiva sugli schermi di Calliope; la scheda e il "
+                 "JavaScript li sceglie l'agente, la persona non deve chiederli né nominarli."]
         righe.append("Impossibile: " + "; ".join(cosa for cosa, _ in c.IMPOSSIBILI.values())
                      + ".")
         return "\n".join(righe)
@@ -201,6 +210,13 @@ NOTA_TIPO = {
 # Il lavoro di codice che crea o cambia un'estensione (08/10): non è impossibile, è un'altra
 # richiesta; la parola chiave la legge `interpreta` (esito «estensione»)
 NOTA_IMPOSSIBILE = {
+    # 10/10 (DGX delle 17:32, il gioco di Halloween «impossibile» perché la richiesta non
+    # diceva la scheda): impossibile è solo ciò che è nell'elenco, mai un dettaglio tecnico
+    # che la persona non ha detto
+    "estensione": (" Impossibile è solo ciò che è nell'elenco «Impossibile»; un dettaglio "
+                   "tecnico che la persona non ha detto (la scheda, JavaScript, il manifesto, "
+                   "il linguaggio) lo sceglie l'agente e non rende impossibile niente. Un gioco "
+                   "sugli schermi NON è impossibile."),
     "codice": (" ECCEZIONE: se la richiesta è creare, cambiare, correggere o rifare "
                "un'estensione di Calliope (una sua funzione permanente, anche nominata per "
                "titolo), NON è impossibile: scrivi solo la parola ESTENSIONE."),

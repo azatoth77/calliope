@@ -1934,3 +1934,44 @@ Giro vero della DGX del 10/10, 15:56–15:58 (uso normale di Dario, 26B e qwen3.
   `sviluppo_xyz` (errore strutturato), `lavoro_ferma`, un nome storpiato (`tool_nome_corretto`).
 - **Prove**: `prova_giro_pomeriggio.py` (2 e 3); `prova_sviluppo_v2` aggiornata
   (`sviluppo_stato` → `tool_nome_azione`).
+
+## Un gioco con tipo estensione, e il titolo di un compito lungo (10/10 sera, ramo `gioco-estensione`)
+
+Giro vero della DGX del 10/10, 17:32–17:33, versione 040317d (cioè **dopo** la correzione del
+pomeriggio). Dario descrive un gioco di Halloween per più giocatori (porte da scegliere, dietro
+mostri, dolcetti o cose buffe, punti, porte che aumentano o diminuiscono). Il 26B chiama
+`sviluppo_apri(tipo="estensione", compito="Crea un gioco di Halloween per schermi dove i giocatori
+devono scegliere tra diverse porte…")`, senza `gioco`. L'analisi delle estensioni chiede prima
+(vaga: giusto), poi, dopo «la partita dura 15 turni, vince chi ha più punti», risponde
+«impossibile: un gioco interattivo con grafica e logica complessa richiede JavaScript nel browser,
+ma la richiesta non specifica di usare la sezione 'scheda' del manifesto…» → sviluppo chiuso.
+
+- **Causa 1**: la regola `sviluppo_gioco_schermi` guardava solo il tipo programma (o nessun
+  tipo). Con tipo estensione senza flag il gioco andava all'analisi delle estensioni, che un
+  gioco non ha mai avuto (il flag la salta dal 05/10). **Correzione**: la stessa regola anche per
+  il tipo estensione (stessa `gioco_sugli_schermi`, stessi contrari, non per una modifica né se
+  `gioco` è già detto). Con il flag l'analisi non parte: la proposta dice «Lo faccio come gioco
+  sugli schermi di Calliope.».
+- **Causa 2**: per l'analista la riga del contratto («una scheda interattiva… JavaScript nel
+  browser… con la sezione «scheda» del manifesto (vedi §5)») era un requisito che la richiesta
+  doveva dire. **Correzione** (`richiesta.capacita`, `NOTA_IMPOSSIBILE["estensione"]`): «Cosa si
+  può fare qui» dice che un gioco (anche con grafica, animazioni, più giocatori, turni e punti) si
+  fa con una scheda sugli schermi, e che scheda e JavaScript li sceglie l'agente, la persona non
+  deve chiederli; la nota dell'impossibile dice che impossibile è solo ciò che è nell'elenco e che
+  un dettaglio tecnico non detto (scheda, JavaScript, manifesto, linguaggio) non rende impossibile
+  niente. L'esito resta del modello: nessuna regola riscrive un «impossibile». Gli impossibili veri
+  (finestre per il desktop nel lavoro di codice, email, rete di casa, file del PC…) restano.
+  Misura: qwen3.6 sul portatile non c'è; con qwen3:8b (solo indicativo) la stessa richiesta è
+  chiara/raffinabile sia col testo di prima sia con quello nuovo, quindi il difetto non si
+  riproduce lì: la prova è la regola, che toglie il gioco dall'analisi.
+- **Causa 3, il titolo**: lo sviluppo senza un nome dal modello prendeva l'inizio della richiesta
+  troncato a 80 caratteri («Crea un gioco di Halloween per schermi dove i giocatori devono
+  scegliere tra div»). **Correzione**: `Sviluppi.apri` usa `titolo_richiesta` (cioè `titolo_da`,
+  con «programma» per un programma), e `titolo_da` taglia anche a fine frase, a una relativa
+  («dove…», «in cui…», «mentre…») prima di un «che», toglie «per gli schermi», «di/per Calliope»
+  prima di un «che», e non chiude con un numero in lettere («per due»). Risultati: «gioco di
+  Halloween», «gioco di memoria con le carte», «estensione che dice il meteo»; uguali i titoli
+  buoni (Celsius in Fahrenheit, numero di vocali, foto per data, «dice dove si trova», «gioco
+  memory da giocare sullo schermo»: senza «che» né relativa lo schermo resta).
+- **Prove**: `prova_giro_sera_gioco.py` (analizzatore vero con le risposte vere dell'agente: la
+  riprova senza flag dà vaga e poi impossibile, con la correzione nessuna chiamata).
