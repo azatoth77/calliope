@@ -357,9 +357,82 @@ _NUOVA = re.compile(
 
 
 def nuova_conversazione(text: str, name="Calliope") -> bool:
-    """La frase intera chiede una conversazione nuova?"""
-    core = _exit_core(_plain_words(text, name))
-    return bool(core) and bool(_NUOVA.fullmatch(" ".join(w for w in core if w != _NAME_MARK)))
+    """La frase intera chiede una conversazione nuova (anche con le storpiature di Whisper:
+    nuova_conversazione_come)?"""
+    return nuova_conversazione_come(text, name) is not None
+
+
+# Storpiature di «ricominciamo» (10/10, casi veri della DGX con whisper.cpp: «Calliope
+# ricominciava.» ha fatto riprendere uno sviluppo sospeso, «Calliope ricominciavo.»,
+# «ricominciammo»). Principio 10: la trascrizione, che il modello non vede. Solo la parola da
+# sola (dopo il nome e i riempitivi), con «da capo» in coda come la forma giusta: un'altra
+# forma del verbo detta da sola non è una frase italiana che chiede altro. Mai con un oggetto
+# («ricominciava il timer»), mai «riconosciamo», «ricomponiamo» (somiglianza 0,83, sotto soglia)
+_RICOMINCIA_FORME = re.compile(
+    r"ricominci(?:a|o|amo|ammo|ava|avo|avi|avamo|avano|ano|are|ate|ato|asse|assimo|ai)")
+_RICOMINCIA_CODA = re.compile(r"(?: (?:da capo|daccapo|da zero|dall inizio|tutto))?$")
+_RICOMINCIA_SIMILE = 0.88
+
+
+def _ricomincia_storpiato(parole: list[str]) -> bool:
+    """Le parole (già senza nome né riempitivi) sono una storpiatura di «ricominciamo»?"""
+    testo = _RICOMINCIA_CODA.sub("", " ".join(parole))
+    ws = testo.split()
+    if len(ws) == 2 and ws[0] in ("ri", "rico"):             # «ri cominciamo»
+        ws = ["".join(ws)]
+    if len(ws) != 1:
+        return False
+    w = ws[0]
+    if _RICOMINCIA_FORME.fullmatch(w):
+        return True
+    return (w.startswith("ri") and not w.startswith("ricominci")
+            and difflib.SequenceMatcher(None, w, "ricominciamo").ratio() >= _RICOMINCIA_SIMILE)
+
+
+# Il nome storpiato in più parole in testa alla frase (10/10, casi veri della DGX: «E lì appena
+# ricominciamo.», «Da lì poi ricominciamo.», «E lì è per ricominciare.», tutti al posto di
+# «Calliope, ricominciamo»; «Alla ora, ok.» per «Calliope, ok»). La somiglianza delle lettere
+# non li distingue («dalipoi» 0,53, come «allora» 0,57): li distingue lo scheletro delle
+# consonanti di «Calliope», c-l-p, con la prima che cade o diventa un'altra occlusiva e una
+# nasale o una r in coda («e lì appena» → l-p-n, «da lì poi» → d-l-p). Da una a tre parole, al
+# più 10 lettere; «alla ora» è il caso vero senza la p. Contrari: «allora» (l-r), «e poi»,
+# «dall'inizio», «la lista», «il gioco» non lo sono
+_SCHELETRO_NOME = re.compile(r"[cgkdtb]?lp[nr]?")
+_NOME_STORPIATO_NOTI = frozenset({"alla ora"})
+
+
+def prefisso_nome(parole: list[str]) -> bool:
+    """Le parole (1–3) sono il nome di Calliope storpiato in più pezzi?"""
+    if not 1 <= len(parole) <= 3 or _NAME_MARK in parole:
+        return False
+    if " ".join(parole) in _NOME_STORPIATO_NOTI:
+        return True
+    lettere = "".join(parole)
+    if len(lettere) > 10 or not lettere.isalpha():
+        return False
+    scheletro = re.sub(r"(.)\1+", r"\1", re.sub(r"[aeiouyhj]", "", lettere))
+    if not _SCHELETRO_NOME.fullmatch(scheletro):
+        return False
+    # Una parola sola dev'essere anche vicina al nome («Luipe» 0,62): «colpa», «lupo» no
+    return len(parole) > 1 or difflib.SequenceMatcher(None, lettere, "calliope").ratio() >= 0.6
+
+
+def nuova_conversazione_come(text: str, name="Calliope") -> str | None:
+    """«esatta» se la frase intera chiede una conversazione nuova, «storpiata» se lo chiede con
+    una storpiatura di Whisper di «ricominciamo» o del nome davanti (10/10), None altrimenti."""
+    core = [w for w in _exit_core(_plain_words(text, name)) if w != _NAME_MARK]
+    if not core:
+        return None
+    if _NUOVA.fullmatch(" ".join(core)):
+        return "esatta"
+    if _ricomincia_storpiato(core):
+        return "storpiata"
+    for k in (1, 2, 3):
+        resto = core[k:]
+        if resto and prefisso_nome(core[:k]) and (
+                _NUOVA.fullmatch(" ".join(resto)) or _ricomincia_storpiato(resto)):
+            return "storpiata"
+    return None
 
 
 def is_short_exit(text: str, name="Calliope") -> bool:

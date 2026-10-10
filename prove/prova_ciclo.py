@@ -294,6 +294,20 @@ def main():
     verifica("«ricominciamo»: conversazione nuova, resta in ascolto",
              detto == ["Va bene, ricominciamo da capo."] and cervello.fine == ["nuova"]
              and c.awake_until > time.monotonic(), str(detto))
+    # Le storpiature di Whisper (10/10, casi veri della DGX): «ricominciamo» con il nome
+    # storpiato davanti è la stessa forma chiusa; «Spendilo.» va al modello con il dato del turno
+    _, detto = giro("E lì appena ricominciamo.")
+    verifica("«E lì appena ricominciamo.»: conversazione nuova (storpiata)",
+             detto == ["Va bene, ricominciamo da capo."] and cervello.fine == ["nuova", "nuova"]
+             and "nuova_conversazione_storpiata" in c.rec.get("regole", []), str(detto))
+    _, detto = giro("Spendilo.")
+    verifica("«Spendilo.»: al modello, con «sospendilo» nei dati del turno",
+             detto == ["Risposta a «Spendilo.»."]
+             and (cervello.storpiata_turno or {}).get("forse") == "sospendilo"
+             and c.rec.get("forma_storpiata") == "sospendilo", str(detto))
+    _, detto = giro("Che tempo fa?")
+    verifica("…e una frase normale senza", cervello.storpiata_turno is None
+             and "forma_storpiata" not in c.rec, str(detto))
     _, detto = giro("Grazie.")
     verifica("cortesia: una frase breve senza il modello, finestra chiusa",
              len(detto) == 1 and c.rec["esito"] == "cortesia" and c.awake_until == 0.0,
@@ -317,7 +331,7 @@ def main():
              str(c.rec))
     _, detto = giro("Calliope, esci.")
     verifica("«esci»: «A presto!» e la conversazione si chiude",
-             detto == ["A presto!"] and cervello.fine == ["nuova", "fine"]
+             detto == ["A presto!"] and cervello.fine == ["nuova", "nuova", "fine"]
              and c.awake_until == 0.0, str(detto))
     esito, detto = giro("Calliope, spegniti.")
     verifica("«spegniti»: «Mi spengo» e il giro restituisce «esci»",

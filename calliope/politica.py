@@ -1535,6 +1535,10 @@ def decidi(name: str, args: dict, cl: Classe, t: Turno | None,
     sosp = t.args_sospeso if isinstance(t.args_sospeso, dict) else {}
     puliti, sosp_puliti = _conta(cl, args or {}), _conta(cl, sosp)
     stessa = proposta and bool(sosp_puliti) and _uguali(puliti, sosp_puliti, None)
+    # Un lavoro dell'agente che parte o riparte da una frase breve senza le sue parole (10/10)
+    if avvio_non_chiesto(name, args, cl, t):
+        return Decisione("conferma", "politica_avvio_non_chiesto",
+                         f"Non sono sicura di aver capito: vuoi che {cosa}?")
     # Una chiamata che risponde soltanto (innocua), se non è il «sì» alla sua domanda
     if callable(cl.innocua) and cl.innocua(args or {}) and not (
             stessa and (consenso(t.testo) or t.sfida)):
@@ -1681,6 +1685,59 @@ def chiesto_di_dimenticare(testo: str) -> bool:
         if m.group(0).lower().startswith("non") or not _NEGATO.search(t[:m.start()]):
             return True
     return False
+
+
+# Rete generale per le storpiature (10/10, casi veri della DGX con whisper.cpp): una frase breve
+# che il modello traduce in un lavoro dell'agente che parte o riparte. «Am nulla il lavoro.»
+# (annulla) è diventato sviluppo_passo(rifai) e ha RIFATTO il lavoro; «E lì appena
+# ricominciamo.» (Calliope, ricominciamo) sviluppo_passo(avanti) e l'ha fatto partire; «Spendilo.»
+# (sospendilo) avanti; «Calliope ricominciava.» riprendi. Il meccanismo c'è già: le parole di
+# ogni azione (VERBI_AZIONE, quelle che la sicurezza per valore usa come ancora). Qui si chiede
+# conferma quando la frase è breve (al più AVVIO_PAROLE parole, il nome escluso), non risponde
+# con un consenso alla proposta di questo tool e non ha né le parole dell'azione scelta né quelle
+# generiche di un avvio. Le probabilità di Whisper non servono (sono un segnale sui nomi, non
+# sulle frasi: docs/ricerche/2026-10-08-parole-incerte.md, e costano una richiesta in più);
+# la frase lunga senza parole dell'azione («Direi che ci siamo, secondo me è a posto.») resta
+# al modello. Vincolo su un'azione già scelta dal modello (principio 10): l'effetto è una
+# domanda in più, e il «sì» la esegue (Decisione.accettata). Alla proposta di questo stesso tool
+# la risposta la legge il modello (salvo una forma storpiata nota). Sui turni veri dall'08/10 al
+# 10/10: 7 domande su 30 avvii, 6 giuste (le storpiature, «Szi, vogliati várla!», «Rifallo
+# così com'è» letto come avanti) e una dubbia («E lo sviluppo di metricità.» → riprendi)
+AVVIO = {"sviluppo_passo": frozenset({"avanti", "rifai", "riprendi"}), "lavoro_affida": None}
+AVVIO_PAROLE = 6
+# Le parole generiche di un avvio, per avanti e riprendi («vai», «parti pure», «inizia»,
+# «cominciamo», «passiamo alla revisione», «lancialo»); non «ricominciamo» (cominc dopo «ri»)
+_AVVIO_GENERICO = re.compile(
+    _W + r"(vai|va'|andiamo|parti|partiamo|inizi|cominc|avvi|lanci|fall[oa]|fai|procedi|"
+         r"proced|prosegu|continu|esegu|pass[aio]|riprend|avanti|approv|attiv)", re.I)
+
+
+def avvio_non_chiesto(name: str, args: dict, cl: Classe, t: Turno | None) -> bool:
+    """La chiamata fa partire o ripartire un lavoro dell'agente (AVVIO) da una frase breve che
+    non lo chiede con le sue parole né acconsente alla proposta di questo tool?"""
+    azioni = AVVIO.get(name, False)
+    if azioni is False or t is None or not t.testo:
+        return False
+    azione = _s(args or {}, "azione").lower()
+    if azioni is not None and azione not in azioni:
+        return False
+    testo = t.testo
+    # un consenso (alla proposta di questo tool o a un'altra domanda) o la sfida superata
+    if t.sfida or consenso(testo):
+        return False
+    # La risposta alla proposta di questo tool la legge il modello («Non c'è problema.», «no,
+    # lascia stare»): la rete guarda solo una forma storpiata nota («Spendilo.» a «vuoi che
+    # vada avanti?», 07:14:44), calliope/storpiature.py
+    if t.in_sospeso == name:
+        from .storpiature import suggerisci
+        if not suggerisci(testo):
+            return False
+    parole = [w for w in re.findall(r"[\wà-ù']+", testo) if w.lower() != "calliope"]
+    if len(parole) > AVVIO_PAROLE:
+        return False
+    if chiesto_con_verbi(cl, testo, args):
+        return False
+    return not (azione in ("avanti", "riprendi") and _AVVIO_GENERICO.search(testo))
 
 
 def chiesta_azione_mondo(testo: str) -> bool:
