@@ -150,6 +150,9 @@ def prova_rete():
                  d.esito == "conferma" and d.regola == "politica_avvio_non_chiesto"
                  and d.domanda.startswith("Non sono sicura di aver capito: vuoi che"),
                  f"{d.esito} {d.regola} {d.domanda}")
+    # Con lo sviluppo aperto i passi interni saltano alcune domande (SVILUPPO_SALTA): non questa
+    verifica("la domanda della rete non si salta con lo sviluppo aperto",
+             "politica_avvio_non_chiesto" not in pol.SVILUPPO_SALTA)
     # Alla proposta dello stesso tool: solo una forma storpiata nota («Spendilo.» a «vuoi che
     # vada avanti?», 07:14:44); il resto lo legge il modello («Non c'è problema.», 06:12:47)
     sosp = {"in_sospeso": "sviluppo_passo", "args_sospeso": AV}

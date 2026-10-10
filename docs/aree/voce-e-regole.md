@@ -1223,5 +1223,12 @@ al 10/10, prove end-to-end comprese: 1531 turni, 1299 frasi distinte):
   programma», «Ricominciava a piovere», «Domani ricominciamo», «Annulla la sveglia delle 7»,
   «Chiudi la finestra», «Spendi meno», «Spendi tutto», «Non serve a nulla», «Vai avanti»,
   «Riprova», «Fai una ricerca…»); `prova_ciclo` con «E lì appena ricominciamo.» e «Spendilo.» nel
-  ciclo vero. Il modello vero non è stato misurato col dato del turno: da guardare sulla DGX
-  (`forma_storpiata` e `politica_avvio_non_chiesto` nel campo `regole`).
+  ciclo vero.
+- **Col 4B** (gemma4 e4b sul portatile, sviluppo al collaudo con il lavoro dell'agente fermato,
+  6 frasi × 2 giri, con e senza il dato del turno): nessun lavoro ripartito in nessuno dei 24
+  turni. Senza il dato «Spendilo.» e «Giudino.» ricevono «Non ho capito cosa intendi…» (4/4),
+  «Annullahi.» `lavoro_annulla` (2/2); con il dato «Spendilo.» e «Annullahi.» sospendono lo
+  sviluppo (4/4, «L'agente non sta lavorando: ho sospeso lo sviluppo»), «Giudino.» 1 domanda e 1
+  «Chiudilo.» detto come testo (sbagliato, innocuo), «Chiudin.» chiede la conferma di chiudere
+  con e senza (4/4). Il 26B va guardato sulla DGX (`forma_storpiata` e
+  `politica_avvio_non_chiesto` nel campo `regole`).
