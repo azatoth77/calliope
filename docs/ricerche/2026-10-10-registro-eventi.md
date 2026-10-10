@@ -38,7 +38,8 @@ macchina a stati, il registro dei turni, l'archivio delle conversazioni, la sche
 la risposta scritta sugli schermi. Un'**uscita unica verso la voce** scrive l'evento e manda la
 frase al TTS nello stesso gesto. Le domande sono **oggetti** (proposte della macchina), non punti
 interrogativi nel testo. La garanzia, per costruzione: **l'ultimo messaggio dell'assistente nel
-contesto è ciò che la persona ha sentito**, con un'eccezione chiusa e dichiarata (le frasi d'attesa).
+contesto è ciò che la persona ha sentito**, con un'eccezione chiusa e dichiarata (le frasi d'attesa, fuori dalla storia: confermato da Dario
+il 10/10).
 
 **Costo e piano.** Sei passi, ognuno con le sue prove, le sue guardie e un interruttore di ritorno
 (`eventi: spento | ombra | attivo`); il primo scrive gli eventi **accanto** alla storia di oggi e
@@ -680,8 +681,8 @@ conserva in modo esplicito e con quale prova.*
    oggi. Con gli eventi c'è di meglio: il **previsto** resta (`detto_calliope` inviati oltre
    `voce_fine.sentite` e la `passata_modello`), il **detto** va nella storia con il segno
    d'interruzione, e il blocco dello stato del turno dopo può dire, come promemoria non parlato,
-   «la risposta di prima è stata interrotta dopo: … ; non detto: …» (tetto di caratteri). Da
-   decidere con Dario se accenderlo; prova con «ripeti il secondo punto».
+   «la risposta di prima è stata interrotta dopo: … ; non detto: …» (tetto di caratteri).
+   **Deciso da Dario il 10/10: sì**; prova con «ripeti il secondo punto».
 5. **Guasti isolati.** Oggi `TurnLog.write` non solleva mai, e l'archivio scrive in un thread che
    non ferma la voce. Conservato: la fonte del processo è **in memoria**; il disco è una copia a
    lotti nel thread dell'archivio; un errore di scrittura si conta e si dice nel log come oggi
