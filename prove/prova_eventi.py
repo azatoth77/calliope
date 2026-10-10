@@ -62,7 +62,9 @@ TIPI_PROGETTO = {
     "passata_modello", "chiamata_tool", "esito_tool", "detto_calliope", "voce_fine",
     "interruzione", "proposta_aperta", "proposta_chiusa", "sfida_chiesta", "sfida_esito",
     "modulo_compilato", "turno_escluso", "compressione", "scheda_mandata", "turno_riassegnato",
-    "turno_chiuso"}
+    "turno_chiuso",
+    # § 13 (passo 3): gli argomenti al posto della «conversazione nuova»
+    "argomento_nuovo", "argomento_ripreso"}
 
 
 def ev(tipo, vis=None, **dati):
@@ -73,7 +75,7 @@ def ev(tipo, vis=None, **dati):
 # ─────────────────────────── tipi ───────────────────────────
 def prova_tipi():
     print("— tipi: proiezione per ogni tipo, controlli, disco")
-    verifica("l'elenco chiuso dei tipi è quello del § 2.2", set(TIPI) == TIPI_PROGETTO,
+    verifica("l'elenco chiuso dei tipi è quello del § 2.2 (più gli argomenti del § 13)", set(TIPI) == TIPI_PROGETTO,
              str(set(TIPI) ^ TIPI_PROGETTO))
     verifica("ogni tipo ha la sua riga nella proiezione del contesto e nel registro dei turni",
              set(proiezioni.PROIEZIONE_CONTESTO) == set(TIPI)

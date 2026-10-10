@@ -2173,4 +2173,8 @@ def build_registry(biblioteca: bool = False, pc: dict | None = None,
     # ogni livello; con `dialogo_interprete: spento` Brain non la mette negli schemi
     from .proposta import proposta_spec
     reg.register(proposta_spec())
+    # Il cambio d'argomento (10/10, § 13 del registro degli eventi): sempre registrato; Brain lo
+    # mette negli schemi solo con `eventi: attivo` (al posto di conversazione_nuova)
+    from .argomento import argomento_spec
+    reg.register(argomento_spec())
     return reg

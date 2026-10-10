@@ -23,6 +23,13 @@ dopo. Le buste e le etichette delle foto davanti alla frase della persona si ric
 modo (`dato_in_ingresso`). Dal passo 3 li scriverà Brain dove nascono.
 
 Non solleva mai: un errore si conta (`errori`) e il turno continua come prima.
+
+**Passo 3** (`eventi: attivo`): l'ombra è anche il proiettore di Brain (`contesto`): i turni chiusi
+della conversazione per la risposta che comincia (§ 3.1), l'indice degli argomenti, i promemoria
+non parlati. Gli eventi del turno si scrivono dal turno vivo di Brain non sigillato, con la
+visibilità di ogni esito decisa qui; il passo 0 si misura sulla proiezione; il turno chiuso va
+nell'archivio dalla proiezione (`_archivia`). Un turno non scritto rimanda Brain alla sua storia
+per quella conversazione (`_guasti`).
 """
 from __future__ import annotations
 
@@ -37,12 +44,12 @@ from .registro import (Registri, porta_annuncio, porta_avviso_tutore, porta_coda
 from .tipi import e_annuncio, per_disco
 
 SPENTO, OMBRA, ATTIVO = "spento", "ombra", "attivo"
-MODI = (SPENTO, OMBRA)
+MODI = (SPENTO, OMBRA, ATTIVO)
 
 
 def modo(cfg) -> str:
-    """`eventi` della configurazione: «spento» o «ombra» («attivo» è il passo 3: config.py lo
-    rifiuta e resta «ombra»)."""
+    """`eventi` della configurazione: «spento», «ombra» (passi 1–2, il predefinito) o «attivo»
+    (passo 3: Brain legge il contesto dalla proiezione, `Proiettore`)."""
     m = str(getattr(cfg, "eventi", OMBRA) or OMBRA).strip().lower()
     return m if m in MODI else OMBRA
 
@@ -60,7 +67,8 @@ def _forma_brain() -> proiezioni.Forma:
     try:
         from .. import brain as b
         return proiezioni.Forma(risultato_max=int(b.OLD_RESULT_CHARS), traccia=b._OLD_TRACE,
-                                ora_di_allora=tuple(dict(b._OLD_TIME).items()))
+                                ora_di_allora=tuple(dict(b._OLD_TIME).items()),
+                                web_tolto=b.WEB_TOLTO, traccia_privata=b._PRIVATE_TRACE)
     except Exception:  # noqa: BLE001
         return proiezioni.FORMA
 
@@ -124,6 +132,12 @@ class Ombra:
         self.errori = 0
         self._riporto: dict = {}
         self._forma = None
+        # Passo 3: Brain legge il contesto da qui (Proiettore); il confronto con la sua storia
+        # non serve più (la storia è la proiezione), resta la misura del passo 0 sulla proiezione
+        self.attivo = modo(cfg) == ATTIVO
+        self._vista = None
+        self._pezzi_turno: list = []
+        self._guasti: set = set()           # conversazioni con un turno non scritto (attivo)
 
     # ── 1. che cosa va alla voce (dall'uscita unica, nel thread di chi parla) ──
     def collega(self, uscita):
@@ -148,11 +162,78 @@ class Ombra:
             self._chiudi_turno(rec, t)
         except Exception as e:  # noqa: BLE001
             self.errori += 1
+            if self.attivo:
+                # Un turno non scritto per intero: la proiezione di questa conversazione non è
+                # più completa (potrebbe mancare la traccia di un dato non fidato). Brain torna
+                # alla sua storia, con le scritture a mano di prima (`contesto` → None)
+                conv = getattr(getattr(self.c, "brain", None), "conv", None)
+                if conv is not None:
+                    self._guasti.add(id(conv))
             if self.errori == 1 or self.errori % 100 == 0:
                 self.log(f"   [EVENTI] ombra non riuscita ({type(e).__name__}: {e}); errori "
                          f"finora: {self.errori}")
             if rec is not None:
                 rec.setdefault("eventi_ombra", {})["errori"] = 1
+
+    # ── 3. passo 3: il contesto della risposta dalla proiezione ──
+    def contesto(self, conv) -> dict | None:
+        """Con `eventi: attivo`, all'inizio di una risposta (e in cima al giro): la proiezione
+        della conversazione `conv` per il modello (§ 3.1), dal suo registro. None se il registro
+        non è (ancora) quello di `conv` (una conversazione appena aperta: la sua storia è vuota o
+        è la coda; Brain tiene la sua). Dopo un riavvio adotta qui il segmento rigiocato. Puro
+        in lettura: niente disco.
+
+        Restituisce {"messaggi" (turni chiusi dell'argomento corrente, con `_seq`), "indice"
+        (gli argomenti messi da parte, o None), "argomenti" (il fold), "interrotta" e
+        "cosa_fare" (promemoria non parlati), "fughe", "ms"}."""
+        if not self.attivo or self.registri is None or conv is None:
+            return None
+        if id(conv) in self._guasti:
+            return None
+        chiave = getattr(conv, "chiave", None)
+        if not isinstance(chiave, str):
+            return None
+        try:
+            if not self.registri.esiste(chiave):
+                return None
+            reg = self.registri.della_corsia(chiave)
+        except Exception:  # noqa: BLE001 — una chiave che non è una conversazione
+            return None
+        t0 = time.perf_counter()
+        with reg.lotto():
+            st = reg.stato
+            ref = st.get("conv_ref")
+            prima = ref() if ref is not None else None
+            if prima is not conv:
+                if not (prima is None and st.get("ripreso") and not st.get("adottato")
+                        and reg.conv is not None):
+                    return None
+                # Dopo un riavvio: il segmento rigiocato è la conversazione ripresa da Brain
+                # (da `correnti`, con i `_seq` della proiezione di prima)
+                st["conv_ref"], st["adottato"] = weakref.ref(conv), True
+                r0 = getattr(conv, "riassunto", None)
+                st.setdefault("riassunto", r0.get("testo") if isinstance(r0, dict) else None)
+                seqs = [m["_seq"] for m in getattr(conv, "history", None) or ()
+                        if isinstance(m, dict) and m.get("role") == "user"
+                        and isinstance(m.get("_seq"), int)]
+                if seqs:
+                    st["da"] = min(seqs)
+            if reg.conv is None:
+                return None
+            eventi = reg.eventi()
+            da = st.get("da")
+        if self._forma is None:
+            self._forma = _forma_brain()
+        vista = proiezioni.turni(eventi, da)
+        msgs = proiezioni.messaggi(vista, self._forma, per_risposta=True, seq=True,
+                                   riassunto=False)
+        out = {"messaggi": msgs, "indice": proiezioni.indice(vista),
+               "argomenti": proiezioni.argomenti(vista),
+               "interrotta": proiezioni.promemoria_interrotta(vista),
+               "cosa_fare": proiezioni.promemoria_cosa_fare(vista),
+               "fughe": proiezioni.fughe(eventi, msgs)}
+        out["ms"] = round((time.perf_counter() - t0) * 1000.0, 3)
+        return out
 
     def dimentica(self, chiave: str):
         """«Dimentica le nostre conversazioni» (§ 2.4): la finestra in corso e il registro in
@@ -241,16 +322,22 @@ class Ombra:
         st = reg.stato if reg is not None else self.__dict__.setdefault("_stato_locale", {})
         pending = getattr(conv, "pending", None) if conv is not None else None
         info["proposta_nuova"] = bool(pending) and pending is not st.get("pending")
-        parlato = misura.misura_finestra(pezzi, _testo_assistente(ultimo), info)
+        # Passo 3: il passo 0 si misura sulla proiezione (la storia del modello), dopo la
+        # scrittura; in ombra sulla storia di Brain, prima
+        parlato = (misura.misura_finestra(pezzi, _testo_assistente(ultimo), info)
+                   if not self.attivo else {})
         if reg is None:
             st["pending"] = pending
         ombra = None
+        self._vista = None
         # Una frase non rivolta a Calliope (ignorata, scartata, vuota, doppione) non è di
         # nessuna conversazione: resta solo nel registro dei turni (§ 1.4)
         esito = (rec or {}).get("esito")
         della_conv = bool(pezzi) or esito in ESITI_PERSONA or esito in ESITI_CHIUSURA
         if reg is not None and della_conv:
             ombra = self._scrivi_e_confronta(reg, conv, rec, t, pezzi, info, turni_s)
+        if self.attivo:
+            parlato = self._parlato_attivo(pezzi, info)
         if rec is None:
             self._riporta(parlato, ombra)
             return
@@ -259,6 +346,22 @@ class Ombra:
             rec["parlato"] = _somma(rec.get("parlato") or {}, parlato)
         if ombra is not None:
             rec["eventi_ombra"] = _somma(rec.get("eventi_ombra") or {}, ombra)
+
+    def _parlato_attivo(self, pezzi, info) -> dict:
+        """Il passo 0 con `eventi: attivo`: ciò che si è sentito contro la proiezione dell'ultimo
+        turno, cioè la storia che il modello vedrà. Deve dare 0 per costruzione (§ 3.1); la frase
+        interrotta non è più «persa» (la parte non detta è il promemoria del turno dopo, § 11.4)."""
+        vista = self._vista
+        storia = ""
+        if vista is not None and vista["turni"]:
+            storia = proiezioni.testo_assistente(vista["turni"][-1])
+        parlato = misura.misura_finestra(pezzi, storia, info)
+        motivi = parlato.get("motivi") or {}
+        motivi.pop("interrotta_persa", None)
+        if "motivi" in parlato and not motivi:
+            parlato.pop("motivi")
+            parlato.pop("diverso", None)
+        return parlato
 
     # ── annunci fra un turno e l'altro: si aggiungono al turno dopo ──
     def _riporta(self, parlato: dict, ombra: dict | None):
@@ -306,13 +409,14 @@ class Ombra:
                 st["conv_ref"], st["adottato"] = weakref.ref(conv), True
                 r0 = getattr(conv, "riassunto", None)
                 st.setdefault("riassunto", r0.get("testo") if isinstance(r0, dict) else None)
-                self._ritagga(reg, conv, nuovo=bool(info.get("turno_nuovo")))
-                # Le differenze già nella conversazione ripresa erano state contate prima del
-                # riavvio: si segnano come dette, senza contarle di nuovo
-                if self._forma is None:
-                    self._forma = _forma_brain()
-                v0 = proiezioni.turni(reg.eventi(), st.get("da"))
-                self._confronta(reg, conv, v0, proiezioni.messaggi(v0, self._forma))
+                if not self.attivo:
+                    self._ritagga(reg, conv, nuovo=bool(info.get("turno_nuovo")))
+                    # Le differenze già nella conversazione ripresa erano state contate prima
+                    # del riavvio: si segnano come dette, senza contarle di nuovo
+                    if self._forma is None:
+                        self._forma = _forma_brain()
+                    v0 = proiezioni.turni(reg.eventi(), st.get("da"))
+                    self._confronta(reg, conv, v0, proiezioni.messaggi(v0, self._forma))
                 cambiata = False
             chiusura = esito in ESITI_CHIUSURA
             if cambiata:
@@ -330,18 +434,33 @@ class Ombra:
                                             **_turno_chiuso(rec_)))
             eventi = reg.eventi()
             st["pending"] = getattr(conv, "pending", None)
-            st["da"] = _finestra(st, conv) or st.get("da")
+            if self.attivo:
+                da = _finestra_attiva(conv, scritti)
+                if da is not None:
+                    st["da"] = max(int(st.get("da") or 0), da)
+            else:
+                st["da"] = _finestra(st, conv) or st.get("da")
         if self.registri is not None:
             self.registri.scrivi()
         if self._forma is None:
             self._forma = _forma_brain()
         t0 = time.perf_counter()
         vista = proiezioni.turni(eventi, st.get("da"))
-        msgs = proiezioni.messaggi(vista, self._forma)
+        msgs = proiezioni.messaggi(vista, self._forma, per_risposta=self.attivo,
+                                   seq=self.attivo, riassunto=not self.attivo)
         ms = (time.perf_counter() - t0) * 1000.0
-        diff, non_oss, aperte = self._confronta(reg, conv, vista, msgs)
+        self._vista = vista
+        if self.attivo:
+            # La storia del modello è questa proiezione: niente da confrontare. Il turno appena
+            # chiuso va nell'archivio dalla proiezione (sigillato, ciò che si è sentito)
+            diff, non_oss, aperte = {}, 0, 0
+            if rec is not None and n0 < reg.seq:
+                self._archivia(conv, vista, n0)
+        else:
+            diff, non_oss, aperte = self._confronta(reg, conv, vista, msgs)
         out: dict = {"eventi": reg.seq - n0, "contesto_ms": round(ms, 3),
                      "registro": reg.chiave.split(":", 1)[0],
+                     **({"modo": ATTIVO} if self.attivo else {}),
                      "byte": sum(len(json.dumps(per_disco(e), ensure_ascii=False,
                                                 sort_keys=True, default=str))
                                  for e in scritti)}
@@ -365,6 +484,32 @@ class Ombra:
             except Exception:  # noqa: BLE001
                 pass
         return out
+
+    def _archivia(self, conv, vista, n0: int):
+        """Passo 3: il turno appena scritto nell'archivio delle conversazioni, dalla proiezione
+        (la scheda «Conversazione» lo mostra subito, come Ciclo._archivia_turno di prima), con
+        dove e come è arrivato (`_meta_turno` del ciclo). Gli annunci attaccati a un turno già
+        archiviato non si riarchiviano (come prima)."""
+        nuovi = [x for x in vista["turni"] if x["chiave"] > n0 and x["persona"] is not None]
+        if not nuovi:
+            return
+        msgs = proiezioni.messaggi({"riassunto": None, "turni": nuovi}, self._forma)
+        meta = getattr(self.c, "_meta_turno", None)
+        try:
+            self.c._meta_turno = None
+        except AttributeError:
+            pass
+        if isinstance(meta, dict):
+            for m in reversed(msgs):
+                if m.get("role") == "user":
+                    m["_turno"] = meta
+                    break
+        archivia = getattr(getattr(self.c, "brain", None), "archivia_messaggi", None)
+        if callable(archivia):
+            try:
+                archivia(conv, msgs)
+            except Exception as e:  # noqa: BLE001 — l'archivio non ferma la voce
+                self.log(f"   [EVENTI] turno non archiviato: {type(e).__name__}: {e}")
 
     def _motivo(self, rec: dict) -> str:
         esito = rec.get("esito")
@@ -459,6 +604,7 @@ class Ombra:
             return {"_non_su_disco": ["testo"]} if sfida_t or segreto else {}
 
         persona = None
+        self._pezzi_turno = pezzi
         if esito in ESITI_PERSONA or (solo_chiusura and esito in ESITI_CHIUSURA):
             sc = getattr(self.c, "speaker_ctx", None)
             canale = "scritto" if t is not None and getattr(t, "scritto", None) is not None \
@@ -516,25 +662,45 @@ class Ombra:
         if isinstance(r, dict) and r.get("testo") and r.get("tipo") not in ("ripresa", "coda") \
                 and r.get("testo") != st.get("riassunto"):
             st["riassunto"] = r["testo"]
-            da = _finestra(st, conv)
+            da = (_finestra_attiva(conv, scritti) if self.attivo else _finestra(st, conv))
             add("compressione", fino_a=max(0, int(da or 1) - 1), riassunto=str(r["testo"]))
         return scritti
 
+    def _turno_vivo(self, conv) -> tuple | None:
+        """Passo 3: il turno vivo della storia di Brain (dopo `vivo_da`, la parte che la
+        proiezione non ha ancora): (messaggio della persona, [messaggi dopo]), o None."""
+        hist = getattr(conv, "history", None) or []
+        vivo = getattr(conv, "vivo_da", None)
+        vivi = [m for m in hist[vivo if isinstance(vivo, int) else len(hist):]
+                if isinstance(m, dict)]
+        i = next((k for k, m in enumerate(vivi) if m.get("role") == "user"), None)
+        if i is None:
+            return None
+        return vivi[i], vivi[i + 1:]
+
     def _dalla_storia(self, reg, conv, persona, info, turni_s, add) -> list:
         """Il messaggio nuovo della persona nella storia: lo si riconosce (per il confronto),
-        gli ingressi davanti alla frase e le chiamate del turno (ricopiate a fine turno)."""
+        gli ingressi davanti alla frase e le chiamate del turno (ricopiate a fine turno). Con
+        `eventi: attivo` dal turno vivo di Brain, non sigillato: la visibilità e i campi di ogni
+        esito si decidono qui, alla scrittura (§ 11.1)."""
         st = reg.stato
-        nuovi = [(u, msgs) for u, msgs in turni_s if u is not None
-                 and id(u) not in st["visti"]]
-        for u, _m in turni_s:
-            if u is not None:
-                st["visti"].add(id(u))
-        if not nuovi:
-            return []
-        u, msgs = nuovi[-1]
-        st["tag"][id(u)] = (u, persona.seq)
-        if st.get("da") is None:
-            st["da"] = persona.seq
+        if self.attivo:
+            vivo = self._turno_vivo(conv)
+            if vivo is None:
+                return []
+            u, msgs = vivo
+        else:
+            nuovi = [(u, msgs) for u, msgs in turni_s if u is not None
+                     and id(u) not in st["visti"]]
+            for u, _m in turni_s:
+                if u is not None:
+                    st["visti"].add(id(u))
+            if not nuovi:
+                return []
+            u, msgs = nuovi[-1]
+            st["tag"][id(u)] = (u, persona.seq)
+        if st.get("da") is None and not self.attivo:
+            st["da"] = persona.seq           # in ombra: il primo turno osservato
         scritti = []
         contenuto = str(u.get("content") or "")
         frase = str(persona.dati.get("testo") or "") if persona.tipo == "detto_persona" else ""
@@ -543,25 +709,62 @@ class Ombra:
             scritti.append(add("trascrizione_capita", prima=cap.get("prima"),
                                dopo=cap.get("dopo"), accettata=True))
             frase = str(cap.get("dopo") or frase)
+        fonti = _fonti_di(u)
         if frase and contenuto.endswith(frase) and len(contenuto) > len(frase):
             prefisso = contenuto[:len(contenuto) - len(frase)]
             tipo = "foto_in_ingresso" if u.get("_img") else "dato_in_ingresso"
-            dati = {"testo": prefisso}
-            if tipo == "dato_in_ingresso":
-                dati["fonte"] = "busta"
+            dati = {"testo": prefisso, "fonte": fonti or "busta"}
+            if tipo == "foto_in_ingresso":
+                dati["numeri"] = [n for n in u.get("_img") or () if isinstance(n, int)]
             scritti.append(add(tipo, **dati))
+        elif u.get("_img"):
+            scritti.append(add("foto_in_ingresso", testo="", fonte=fonti or "foto",
+                               numeri=[n for n in u["_img"] if isinstance(n, int)]))
+        if u.get("_all"):
+            scritti.append(add("allegato_in_ingresso", testo="", fonte=fonti or "allegato",
+                               numeri=[n for n in u["_all"] if isinstance(n, int)],
+                               info=[str(x) for x in u.get("_all_info") or ()]))
+        brain = getattr(self.c, "brain", None)
+        # Gli argomenti decisi dal modello in questa risposta (§ 13): subito dopo la frase,
+        # così il turno che ha cambiato argomento è del nuovo
+        if self.attivo:
+            for a in list(getattr(brain, "last_argomento", None) or ()):
+                if isinstance(a, dict) and a.get("tipo") in ("argomento_nuovo",
+                                                             "argomento_ripreso"):
+                    scritti.append(add(a["tipo"], **{k: v for k, v in a.items()
+                                                     if k != "tipo"}))
+        tools = getattr(brain, "tools", None)
         passata = 0
         for m in msgs:
             if m.get("role") == "assistant" and m.get("tool_calls"):
                 for c in m["tool_calls"]:
                     if isinstance(c, dict):
+                        # proposta_rispondi: stato della macchina, mai storia (§ 3.8): la
+                        # visibilità lo dice alla scrittura
+                        fuori = c.get("name") == STATO_TOOL
                         scritti.append(add("chiamata_tool", id=c.get("id"), nome=c.get("name"),
                                            argomenti=c.get("arguments") or {},
-                                           passata=passata))
+                                           passata=passata,
+                                           **({"vis": "registro"} if fuori else {})))
                 passata += 1
             elif m.get("role") == "tool":
-                scritti.append(add("esito_tool", id=m.get("tool_call_id"), nome=m.get("name"),
-                                   contenuto=str(m.get("content") or "")))
+                nome = m.get("name")
+                spec = tools.get(nome) if tools is not None and hasattr(tools, "get") else None
+                f = _fonti_di(m)
+                scritti.append(add(
+                    "esito_tool", id=m.get("tool_call_id"), nome=nome,
+                    contenuto=str(m.get("content") or ""),
+                    riservato=bool(getattr(spec, "riservato", False)),
+                    personale=nome in _personali(),
+                    non_fidato=bool(getattr(spec, "non_fidato", False)),
+                    **({"fonte": f} if f else {}),
+                    **({"vis": "registro"} if nome == STATO_TOOL else {})))
+        # Il testo generato del turno (vis registro): serve al promemoria della parte non
+        # detta se la risposta è stata interrotta (§ 11.4)
+        generato = getattr(brain, "testo_generato", None) if self.attivo else None
+        if generato and any(x.get("interrotta") for x in self._pezzi_turno):
+            scritti.append(add("passata_modello", n=len(generato),
+                               testo=" ".join(str(x) for x in generato)[-4000:]))
         return scritti
 
     def _proposte(self, reg, conv, add) -> list:
@@ -573,6 +776,8 @@ class Ombra:
         scritti = []
         if st.get("proposta"):
             come = "sostituita" if p else "chiusa_oggi"
+            if getattr(getattr(self.c, "brain", None), "_proposta_da_parte", False):
+                come = "da_parte"               # il cambio d'argomento (§ 13)
             if prima and isinstance(prima, dict) and time.monotonic() > float(
                     prima.get("scade") or 0):
                 come = "scaduta_tempo"
@@ -667,12 +872,44 @@ class Ombra:
              "canale": "scritto" if canali & {"scritto", "muta"} else "voce"})
 
 
+STATO_TOOL = "proposta_rispondi"
+
+
+def _personali() -> frozenset:
+    """I tool personali di Brain (la loro frase pronta resta, i dati no: `_seal_private`)."""
+    try:
+        from ..brain import _PERSONAL_TOOLS
+        return _PERSONAL_TOOLS
+    except Exception:  # noqa: BLE001
+        return frozenset()
+
+
+def _fonti_di(m: dict) -> str:
+    """Le fonti non fidate di un messaggio (la busta nel testo, la traccia `_fonte`, le foto)."""
+    try:
+        from ..provenienza import fonti
+        return ",".join(sorted(fonti([m])))
+    except Exception:  # noqa: BLE001
+        return str(m.get("_fonte") or "")
+
+
 def _finestra(st: dict, conv) -> int | None:
     """Il primo turno della storia di Brain ancora in vista (dopo un taglio o una compressione):
     il seq del suo detto_persona, o None."""
     vivi = {id(m) for m in getattr(conv, "history", None) or () if isinstance(m, dict)}
     seqs = [s for k, (u, s) in (st.get("tag") or {}).items() if k in vivi and u is not None]
     return min(seqs) if seqs else None
+
+
+def _finestra_attiva(conv, scritti=()) -> int | None:
+    """Passo 3: il primo turno ancora nella storia di Brain dopo un taglio in testa o una
+    compressione (`Conversazione.finestra_da`, scritto da `togli_in_testa`): il `_seq` del
+    primo turno proiettato rimasto, o il turno di adesso se non ne è rimasto nessuno."""
+    f = getattr(conv, "finestra_da", None)
+    if f == "vivo":
+        return next((e.seq for e in scritti
+                     if e.tipo in ("detto_persona", "modulo_compilato")), None)
+    return f if isinstance(f, int) and not isinstance(f, bool) else None
 
 
 def _turno_chiuso(rec: dict) -> dict:

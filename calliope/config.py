@@ -563,8 +563,11 @@ class Config:
     # il registro dei turni scrive le differenze per meccanismo (`parlato`, `eventi_ombra`:
     # calliope stato --turni). Nessun cambiamento di ciò che Calliope dice, tranne «dimentica le
     # nostre conversazioni», che con il registro acceso chiude anche la conversazione in corso
-    # (§ 2.4). «spento»: niente eventi né confronti, come prima. «attivo» (Brain legge il
-    # contesto dagli eventi) è il passo 3, non ancora realizzato: si segnala e resta «ombra»
+    # (§ 2.4). «spento»: niente eventi né confronti, come prima. «attivo» (passo 3, dal 10/10):
+    # Brain legge il contesto dalla proiezione degli eventi (ciò che si è sentito, risultati
+    # sigillati alla scrittura, promemoria non parlati nel blocco dello stato) e una conversazione
+    # non si azzera più: cambia argomento (tool `argomento`, «ricominciamo» è un indizio per il
+    # modello). Si accende a mano nel file locale; per tornare indietro «ombra»
     eventi: str = "ombra"
     # Dopo questi giorni gli eventi di una conversazione chiusa si cancellano: resta la forma dei
     # turni nell'archivio (§ 2.3). 0 = mai
@@ -2924,16 +2927,11 @@ def _dialogo_interprete_valido(value):
 
 
 def _eventi_valido(value):
-    """«spento» o «ombra» (10/10, calliope/eventi/). «attivo» è il passo 3 del progetto del
-    registro degli eventi, non ancora realizzato: si rifiuta (resta il valore di prima,
-    cioè «ombra»)."""
+    """«spento», «ombra» o «attivo» (10/10, calliope/eventi/; «attivo» dal passo 3)."""
     s = str(value or "").strip().lower()
-    if s in ("spento", "ombra"):
+    if s in ("spento", "ombra", "attivo"):
         return s
-    if s == "attivo":
-        raise ValueError("«attivo» non è ancora realizzato (passo 3 del registro degli "
-                         "eventi): resta «ombra»")
-    raise ValueError("serve «spento» o «ombra»")
+    raise ValueError("serve «spento», «ombra» o «attivo»")
 
 
 def _tts_dispositivo_valido(value):

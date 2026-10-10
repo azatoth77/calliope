@@ -1261,3 +1261,32 @@ capito: vuoi che {cosa}?»; il «sì» la esegue. Alla proposta dello stesso too
 salvo una forma storpiata nota (`calliope/storpiature.py`). Sui 30 avvii veri dell'08–10/10: 7
 domande, 6 giuste e 1 dubbia. Dettagli, misure e contrari in [voce-e-regole](voce-e-regole.md),
 «Forme chiuse storpiate da Whisper»; prova `prova_storpiature`.
+
+## La visibilità per evento, con il contesto dagli eventi (10/10, ramo `eventi-passo-3`)
+
+Passo 3 del [registro degli eventi](../ricerche/2026-10-10-registro-eventi.md) (§ 11.1): con
+`eventi: attivo` (non il predefinito) il modello legge i turni chiusi dalla proiezione degli
+eventi, non più dalla storia sigillata a mano a fine risposta. L'isolamento che prima veniva dalle
+copie separate è un **campo dell'evento deciso alla scrittura**, dall'ombra, dal tool che l'ha
+prodotto: `esito_tool.riservato` (`ToolSpec.riservato`: nel contesto la traccia, su disco la
+traccia), `personale` (i tool personali di Brain: la sola frase pronta, anche su disco),
+`non_fidato` (`ToolSpec.non_fidato`: dopo il turno `WEB_TOLTO`), `fonte` (le fonti della busta: la
+traccia `_fonte` resta sul messaggio proiettato, la conversazione resta contaminata);
+`dato_in_ingresso`, `foto_in_ingresso`, `allegato_in_ingresso` con la loro fonte (la traccia anche
+senza il testo, dopo un riavvio); `proposta_rispondi` scritto con visibilità «registro». La
+proiezione ammette solo «modello» e «turno»; `fughe` resta 0.
+
+**Il banco rigiocato sul registro** (`prova_eventi_attivo`, `prova_eventi_visibilita`): le prove di
+`prova_politica` (attacchi 99/99 da web, foto, allegati, audio, pagina, estensioni, archivio,
+agente; riformulati; sfida dopo un dato; conferma vera) e `attacchi_nuovi` di `prova_valore` (con la
+politica per valore accesa e spenta) girano con `attivo`: ogni turno passa dall'uscita unica,
+l'ombra lo scrive, il turno dopo il modello vede la proiezione. Tutti fermati, fughe 0, il testo dei
+siti fuori con la traccia «web». **Due difetti trovati e corretti** dal banco: (1) il turno della
+foto non si scriveva (un campo `fonte` non previsto in `foto_in_ingresso`) e con lui spariva la
+contaminazione: 7 attacchi passati (86/99 al primo giro); ora un turno non scritto rimanda Brain alla sua storia per
+quella conversazione (mai una proiezione incompleta); (2) un annuncio dell'agente prima della prima
+frase della conversazione restava fuori dalla finestra della proiezione: 6 attacchi passati.
+
+Il cambio d'argomento (§ 13, tool `argomento`, classe sicura: non esegue niente) non vale dopo un
+dato non fidato letto nella risposta (`argomento_dopo_dato`): un dato non apre né riprende
+argomenti, e quindi non mette in pausa uno sviluppo né fa scadere una proposta.

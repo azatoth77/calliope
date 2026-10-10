@@ -218,14 +218,26 @@ def riassunto(turni: list[dict]) -> dict:
     giorni: dict[str, dict] = {}
     for t in turni:
         p, o = t.get("parlato"), t.get("eventi_ombra")
-        if not isinstance(p, dict) and not isinstance(o, dict):
+        ca = t.get("cache") if isinstance(t.get("cache"), dict) else None
+        if not isinstance(p, dict) and not isinstance(o, dict) and ca is None:
             continue
         g = giorni.setdefault(str(t.get("inizio") or "")[:10] or "?", {
             "turni": 0, "parlato_diverso": 0, "motivi": {}, "domande_non_registrate": 0,
             "domande_motivi": {}, "domande_registrate": 0, "offerte": 0, "voluti": {},
             "ombra": 0, "ombra_diversi": 0, "differenze": {}, "contesto_ms": [],
             "byte": [], "fughe": 0, "troncati": 0, "errori": 0, "porte": {},
-            "dimentica": 0})
+            "dimentica": 0, "attivo": 0, "riletti": [], "stimati": [], "cache_rotta": 0,
+            "proiezione_ms": []})
+        if ca is not None:
+            # La cache del prefisso (passo 3, § 10 punto 5): riletti dal motore e stimati
+            if isinstance(ca.get("riletti"), int):
+                g["riletti"].append(ca["riletti"])
+            if isinstance(ca.get("riletti_stimati"), int):
+                g["stimati"].append(ca["riletti_stimati"])
+            g["cache_rotta"] += 1 if ca.get("rotta") else 0
+            if isinstance(ca.get("proiezione_ms"), (int, float)):
+                g["proiezione_ms"].append(float(ca["proiezione_ms"]))
+            g["fughe"] += int(ca.get("fughe") or 0)
         if isinstance(p, dict):
             g["turni"] += 1
             g["parlato_diverso"] += int(p.get("diverso") or 0)
@@ -240,6 +252,7 @@ def riassunto(turni: list[dict]) -> dict:
                 g["voluti"][k] = g["voluti"].get(k, 0) + int(v or 0)
         if isinstance(o, dict):
             g["ombra"] += 1
+            g["attivo"] += 1 if o.get("modo") == "attivo" else 0
             diff = o.get("differenze") or {}
             if diff:
                 g["ombra_diversi"] += 1
@@ -263,6 +276,11 @@ def riassunto(turni: list[dict]) -> dict:
         b = sorted(g.pop("byte"))
         g["byte_turno"] = ({"n": len(b), "mediana": b[len(b) // 2], "max": b[-1],
                             "totale": sum(b)} if b else {"n": 0})
+        for k in ("riletti", "stimati", "proiezione_ms"):
+            v = sorted(g.pop(k))
+            g[k] = ({"n": len(v), "mediana": v[len(v) // 2],
+                     "p90": v[min(len(v) - 1, int(0.9 * len(v)))], "max": v[-1]}
+                    if v else {"n": 0})
     return dict(sorted(giorni.items()))
 
 
@@ -319,6 +337,23 @@ def testo(r: dict, contesto_ms_avviso: float = 20.0) -> str:
         if c.get("n") and c["max"] > contesto_ms_avviso:
             righe.append(f"    ATTENZIONE: la proiezione del contesto ha superato "
                          f"{contesto_ms_avviso:.0f} ms (massimo {c['max']:.1f} ms)")
+        r_, s_, pm = g["riletti"], g["stimati"], g["proiezione_ms"]
+        if r_.get("n") or s_.get("n") or g["cache_rotta"]:
+            righe.append("    cache del prefisso: "
+                         + (f"riletti dal motore mediana {r_['mediana']} token (p90 {r_['p90']}); "
+                            if r_.get("n") else "")
+                         + (f"stimati mediana {s_['mediana']} (p90 {s_['p90']}); "
+                            if s_.get("n") else "")
+                         + f"cache_rotta {g['cache_rotta']}"
+                         + (f"; contesto dagli eventi in {g['attivo']} turni, proiezione nella "
+                            f"risposta mediana {pm['mediana']:.2f} ms, massimo {pm['max']:.2f}"
+                            if pm.get("n") else ""))
+        if g["cache_rotta"]:
+            righe.append(f"    ATTENZIONE: in {g['cache_rotta']} turni la richiesta è cambiata "
+                         f"dentro i turni definitivi (cache_rotta: deve restare 0)")
+        if pm.get("n") and pm["max"] > contesto_ms_avviso:
+            righe.append(f"    ATTENZIONE: la proiezione nella risposta ha superato "
+                         f"{contesto_ms_avviso:.0f} ms (massimo {pm['max']:.1f} ms)")
         if g["fughe"]:
             righe.append(f"    ATTENZIONE: {g['fughe']} fughe nella proiezione (deve essere 0)")
     return "\n".join(righe)
