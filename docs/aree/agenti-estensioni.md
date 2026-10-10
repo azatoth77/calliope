@@ -1797,3 +1797,59 @@ Secondo giro vero della DGX del 10/10 (07:11–07:21, satellite «studio»).
   e la storia della conversazione: in [voce-e-regole](voce-e-regole.md).
 - **Prove**: `prova_giro_chiusura.py` (turni veri e contrari); `prova_sviluppo_v2` e
   `prova_giro_ombra` aggiornate alla frase nuova.
+
+## Un altro compito nell'analisi, titoli con le unità, chiudere tutti gli sviluppi (10/10, ramo `giro3-correzioni`)
+
+Terzo giro vero della DGX del 10/10 (10:37–10:44, satellite «studio»). La conferma senza parole
+(«CQD») e «ricominciamo» muto sul satellite sono in [voce-e-regole](voce-e-regole.md).
+
+- **Un altro compito messo nella modifica dell'analisi.** 10:39:47, con «programma in Python che
+  converte i gradi» (Celsius in Fahrenheit) aperto all'analisi: «Scrivimi un programma in Python
+  che converte i chilometri in miglia.» → `sviluppo_passo` analisi con cambia = «scrivi un
+  programma in Python che converte i chilometri in miglia» → «Ho capito così: …Celsius… Con
+  questa modifica: …chilometri…». Di nuovo alle 10:40:08, anche dopo «Voglio che sospendi quello
+  in Celsius e applichi lo sviluppo soltanto alla versione chilometri in miglia». La correzione
+  della mattina (`sviluppo.altro_compito`) guardava solo `sviluppo_apri`. Ora lo stesso criterio
+  vale per `cambia` (`sviluppo.altro_compito_in_cambia`), con una condizione in più: una modifica
+  dice cosa cambiare («deve contare anche le righe», «usa una funzione», «aggiungi i decimali»)
+  e non ripete le parole del titolo, quindi `altro_compito` da solo la prenderebbe sempre per un
+  altro compito. Conta solo se il testo **nomina una cosa nuova** con l'articolo indeterminativo
+  («un programma…», «uno script…», «un'estensione…», «un altro programma…») e sostituisce una
+  parola piena del titolo. Allora, prima di fermare o cambiare qualcosa, la stessa domanda di
+  `controlla_nuovo` con i due titoli («Vuoi che sospenda «…Celsius in Fahrenheit» e apra
+  «…chilometri in miglia»?», regole `sviluppo_analisi_altro` e `sviluppo_altro_bloccato`), e il
+  «sì» sospende e apre (`sviluppo_cambio`). È la forma di una scelta del modello (un compito
+  intero dove va una modifica, principio 10), con un effetto reversibile: una domanda. Anche una
+  richiesta di **estensione** diversa all'analisi di un'altra estensione, che prima finiva tra
+  «le risposte alle domande dell'analisi», ora passa da `altro_compito` (in `estraneo` e
+  `passo_interno`, con il compito passato da `_estensione_crea`). **Limite**: «un programma che
+  conti anche le righe» detto come modifica riceve la domanda (sostituisce «numero» e «vocali»
+  del titolo); va nella direzione sicura.
+- **Titoli con le parole che distinguono.** «…converte i gradi Celsius in Fahrenheit» →
+  «programma in Python che converte i gradi», «…converte i chilometri in miglia» → «…converte i
+  chilometri»: la correzione della mattina allungava solo dopo «di». Ora
+  (`agenti.servizio.titolo_da`, `_con_le_parole_che_distinguono`) dopo il taglio il titolo
+  continua con una parola maiuscola attaccata («Celsius») e con una preposizione semplice seguita
+  da una parola senza articolo («in Fahrenheit», «in miglia», «da Celsius a Fahrenheit», «in
+  JSON»), al più 12 parole (`TITOLO_MAX_PAROLE`); si ferma a un articolo («in una stringa», «di
+  una città»), a un participio o a un verbo («inseriti dall'utente», «e ne stampi»). I titoli
+  buoni di prima restano uguali (somma, moltiplica, numero di vocali e di parole, «script che
+  rinomina le foto per data», «estensione che dica il meteo»). Forma di un nome scelto dal
+  modello, senza regola nel registro.
+- **Chiudere tutti gli sviluppi.** 10:43:09 «Calliope ferma il lavoro e chiudi tutti gli
+  sviluppi.» → solo `sviluppo_passo` ferma (la sua frase pronta chiude il turno: niente seconda
+  passata), la seconda parte persa; 10:43:26 «Ti ho chiesto di fermare il lavoro e di chiudere
+  tutti gli sviluppi» → chiudi del solo sviluppo aperto. Valutate due strade: una rete che, con
+  due richieste coordinate nella frase e un tool solo, lo fa notare al modello (ma riconoscere
+  «due richieste d'azione» vuol dire indovinare il significato con una regola sul testo,
+  principio 10), o dare al tool il modo di fare in una chiamata la cosa chiesta. Scelta la
+  seconda: `sviluppo_passo` chiudi con `quale = "tutti"` (lo sceglie il modello; la descrizione
+  del tool lo dice) prende lo sviluppo aperto e i sospesi di chi parla, con **una domanda sola**
+  («Chiuderli vuol dire finirli qui; su «…» l'agente sta lavorando, e il lavoro si ferma; se vuoi
+  solo una pausa, dimmi «sospendi». Chiudo «…» e «…»?»); al «sì» (anche richiamato senza
+  `quale`, entro `CHIUSURA_TURNI`) li chiude tutti e ferma il lavoro dell'agente (regola
+  `sviluppo_chiusi_tutti`). «Ferma il lavoro e chiudi tutti» diventa così una chiamata sola. Con
+  un solo sviluppo è la conferma di sempre («Lo chiudo?»). Resta vero che una richiesta doppia
+  con un tool dalla frase pronta perde la seconda parte se il modello chiama solo il primo: da
+  guardare nei giri veri.
+- **Prove**: `prova_giro3.py` (turni veri e contrari).

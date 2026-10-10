@@ -1863,6 +1863,26 @@ def altro_compito(compito: str, titolo: str, *riferimenti: str) -> bool:
     return bool(tolte)
 
 
+# Il testo di una modifica che nomina una cosa nuova da fare (10/10, terzo giro della DGX: con
+# «…converte i gradi Celsius in Fahrenheit» all'analisi il modello ha chiamato sviluppo_passo
+# analisi con cambia = «scrivi un programma in Python che converte i chilometri in miglia»).
+# Una modifica dice cosa cambiare («deve contare anche le righe», «usa una funzione»,
+# «aggiungi i decimali»): non introduce un programma, uno script o un'estensione con l'articolo
+# indeterminativo. Forma della scelta del modello (ha messo un compito intero dove va una
+# modifica), con la sostituzione di altro_compito sul titolo: l'effetto è una domanda
+_COSA_NUOVA = re.compile(
+    r"(?<![a-zà-ù'’])(?:un['’]\s*|(?:un|uno|una)\s+)(?:(?:altr[oa]|nuov[oa]|second[oa])\s+)?"
+    r"(?:programm\w*|script\w*|estension[ei]|gioc\w*|app|applicazion[ei])(?![a-zà-ù])", re.I)
+
+
+def altro_compito_in_cambia(cambia: str, sv) -> bool:
+    """`cambia` (la modifica di sviluppo_passo analisi) è un altro compito: nomina una cosa
+    nuova («un programma che…») e sostituisce una parola piena del titolo dello sviluppo."""
+    testo = str(cambia or "")
+    return bool(_COSA_NUOVA.search(testo)) and altro_compito(
+        testo, sv.titolo, sv.richiesta, sv.specifica or "")
+
+
 def _altro_dello_sviluppo(a: dict, sv) -> bool:
     return altro_compito(str(a.get("compito") or ""), sv.titolo, sv.richiesta,
                          sv.specifica or "")
@@ -1888,8 +1908,10 @@ def estraneo(name: str, args: dict, ctx) -> Sviluppo | None:
         mod = str(a.get("modifica") or "").strip()
         if mod and sv.estensione and _nome_estensione(ctx, mod) == sv.estensione:
             return None
-        if not mod and sv.fase == "analisi" and sv.lavoro is None:
-            return None                     # le risposte alle domande dell'analisi
+        if (not mod and sv.fase == "analisi" and sv.lavoro is None
+                and not _altro_dello_sviluppo(a, sv)):
+            # le risposte alle domande dell'analisi; non un'altra estensione (10/10)
+            return None
     if (tipo == "programma" and sv.tipo == "programma" and sv.fase == "analisi"
             and sv.lavoro is None and not _altro_dello_sviluppo(a, sv)):
         # le risposte alle domande dell'analisi, o una modifica; non un programma diverso
@@ -1920,8 +1942,9 @@ def passo_interno(name: str, args: dict, ctx) -> bool:
         mod = str(a.get("modifica") or "").strip()
         if mod:
             return bool(sv.estensione) and _nome_estensione(ctx, mod) == sv.estensione
-        # le risposte alle domande dell'analisi, prima del lavoro
-        return sv.fase == "analisi" and sv.lavoro is None
+        # le risposte alle domande dell'analisi, prima del lavoro (non un'altra estensione)
+        return (sv.fase == "analisi" and sv.lavoro is None
+                and not _altro_dello_sviluppo(a, sv))
     if tipo == "programma":
         return (sv.tipo == "programma" and sv.fase == "analisi" and sv.lavoro is None
                 and not a.get("file") and a.get("allegato") in (None, "")

@@ -93,11 +93,19 @@ def controlla_nuovo(ctx, tool: str, args: dict, riapri: dict | None = None) -> d
     allora i due titoli («Vuoi che sospenda «somma…» e apra «moltiplica…»?») e il «sì»
     (sviluppo_passo sospendi, entro due turni) sospende quello aperto e apre il nuovo, senza
     farlo ripetere (`_PROSSIMI`, regola `sviluppo_cambio`)."""
-    from ..sviluppo import ALLA, chi, estraneo
+    from ..sviluppo import estraneo
     sv = estraneo(tool, args, ctx)
     if sv is None:
         return None
     note_rule(ctx, "sviluppo_altro_bloccato")
+    return _domanda_cambio(ctx, sv, riapri)
+
+
+def _domanda_cambio(ctx, sv, riapri: dict | None) -> dict:
+    """Il risultato «c'è già uno sviluppo aperto»: con `riapri` la domanda con i due titoli
+    («Vuoi che sospenda «…» e apra «…»?», e il «sì» sospende e apre), senza la domanda di
+    sospendere e basta. Da controlla_nuovo e dall'analisi con un altro compito (10/10)."""
+    from ..sviluppo import ALLA, chi
     alla = ALLA.get(sv.fase, sv.fase)
     nuovo = _titolo_nuovo(riapri) if riapri else ""
     svs = _svs(ctx)
@@ -322,6 +330,9 @@ def _sviluppo(ctx: ToolContext, azione: str = "stato", quale: str = "", cambia: 
     persona = chi(ctx)
     if azione == "riprendi":
         return _riprendi(ctx, svs, persona, quale)
+    if azione == "chiudi" and (_tutti(quale) or (not str(quale or "").strip()
+                                                and _tutti_chiesti(ctx, persona) is not None)):
+        return _chiudi_tutti(ctx, svs, persona, prof)
     sv = svs.corrente(persona)
     if azione == "stato":
         return _stato(ctx, svs, sv, persona)
@@ -454,6 +465,85 @@ def _chiudi(ctx, svs, sv) -> dict:
     return _final(frase, ok=False, fatto="NIENTE chiuso: aspetta la conferma",
                   in_sospeso={"domanda": domanda, "cosa": f"chiudere lo sviluppo di «{sv.titolo}»",
                               "tool": "sviluppo_passo", "argomenti": {"azione": "chiudi"}})
+
+
+# «Chiudi tutti gli sviluppi» (10/10, terzo giro della DGX, 10:43: «Calliope ferma il lavoro e
+# chiudi tutti gli sviluppi.» → solo ferma, e la seconda parte persa; 10:43:26 «Ti ho chiesto
+# di fermare il lavoro e di chiudere tutti gli sviluppi» → chiudi del solo sviluppo aperto).
+# `quale = "tutti"`: lo sviluppo aperto e i sospesi di chi parla, con una sola domanda («Chiudo
+# «…» e «…»?»); al «sì» si chiudono tutti, e il lavoro dell'agente su uno di loro si ferma (la
+# domanda lo dice). Una richiesta doppia («ferma e chiudi tutti») è una sola chiamata. Lo
+# sceglie il modello (principio 10): nessuna regola sul testo
+_TUTTI_DETTI = frozenset({"tutti", "tutte", "tutto", "*", "entrambi", "entrambe",
+                          "tutti e due", "tutte e due", "tutti e tre", "tutti gli sviluppi",
+                          "ogni sviluppo", "all"})
+_TUTTI_CHIESTI: dict = {}           # persona → {"ids", "turno"}: la domanda di _chiudi_tutti
+
+
+def _tutti(quale) -> bool:
+    return str(quale or "").strip().lower().rstrip(".") in _TUTTI_DETTI
+
+
+def _tutti_chiesti(ctx, persona) -> dict | None:
+    """La domanda «Chiudo «…» e «…»?» ancora valida per chi parla, o None."""
+    from ..sviluppo import CHIUSURA_TURNI
+    p = _TUTTI_CHIESTI.get(_chiave(persona))
+    if p is None:
+        return None
+    dt = int(getattr(ctx, "turno", 0) or 0) - int(p.get("turno") or 0)
+    return p if 1 <= dt <= CHIUSURA_TURNI else None
+
+
+def _al_lavoro(svs, sv) -> bool:
+    return svs.lavoro_attivo(sv) or _in_tappa(svs, sv) is not None
+
+
+def _chiudi_tutti(ctx, svs, persona, prof) -> dict:
+    from ..sviluppo import _e
+    lista = []
+    sv = svs.corrente(persona)
+    if sv is not None:
+        lista.append(sv)
+    lista += [s for s in svs.trova(persona, "") if s not in lista]
+    if not lista:
+        return _no(ctx, "Non c'è nessuno sviluppo aperto né sospeso.")
+    if len(lista) == 1:
+        return _chiudi(ctx, svs, lista[0])
+    ids = sorted(s.id for s in lista)
+    p = _tutti_chiesti(ctx, persona)
+    if (p is not None and p.get("ids") == ids
+            and getattr(ctx, "tool_in_sospeso", None) == "sviluppo_passo"):
+        _TUTTI_CHIESTI.pop(_chiave(persona), None)
+        svc = getattr(ctx, "lavori", None)
+        fermati = []
+        for s in lista:
+            if _al_lavoro(svs, s) and svc is not None and s.lavoro:
+                res = svc.annulla(prof.id, tutti_di_tutti=True, quale=s.lavoro)
+                if res.get("ok"):
+                    fermati.append(f"«{s.titolo}»")
+            svs.chiudi(s, "uscita")
+            _schermo(ctx, s)
+        note_rule(ctx, "sviluppo_chiusi_tutti")
+        titoli = _e([f"«{s.titolo}»" for s in lista])
+        fermo = (f"; ho fermato il lavoro dell'agente su {_e(fermati)}" if fermati else "")
+        return _final(f"D'accordo: ho chiuso gli sviluppi di {titoli}{fermo}. Torniamo alla "
+                      "conversazione normale.",
+                      fatto=f"{len(lista)} sviluppi chiusi"
+                            + (f", {len(fermati)} lavori dell'agente fermati" if fermati
+                               else ""))
+    _TUTTI_CHIESTI[_chiave(persona)] = {"ids": ids, "turno": int(getattr(ctx, "turno", 0) or 0)}
+    note_rule(ctx, "sviluppo_chiudi_conferma")
+    lavorano = [f"«{s.titolo}»" for s in lista if _al_lavoro(svs, s)]
+    titoli = _e([f"«{s.titolo}»" for s in lista])
+    domanda = f"Chiudo {titoli}?"
+    perche = (f"; su {_e(lavorano)} l'agente sta lavorando, e il lavoro si ferma" if lavorano
+              else "")
+    frase = (f"Chiuderli vuol dire finirli qui{perche}; se vuoi solo una pausa, dimmi "
+             f"«sospendi». {domanda}")
+    return _final(frase, ok=False, fatto="NIENTE chiuso: aspetta la conferma",
+                  in_sospeso={"domanda": domanda, "cosa": f"chiudere gli sviluppi di {titoli}",
+                              "tool": "sviluppo_passo",
+                              "argomenti": {"azione": "chiudi", "quale": "tutti"}})
 
 
 def _rifaccio(sv) -> str:
@@ -735,6 +825,17 @@ def _analisi(ctx, svs, sv, prof, cambia: str) -> dict:
     svc = getattr(ctx, "lavori", None)
     if svc is None:
         return _no(ctx, "Qui non ci sono agenti.")
+    if cambia and sv.tipo in ("programma", "estensione"):
+        from ..sviluppo import altro_compito_in_cambia
+        if altro_compito_in_cambia(cambia, sv):
+            # Un altro compito non è una modifica dell'analisi (10/10, terzo giro della DGX:
+            # con «…converte i gradi Celsius in Fahrenheit» all'analisi, «…converte i
+            # chilometri in miglia» → analisi con cambia = il compito nuovo → «Ho capito così:
+            # …Celsius… Con questa modifica: …chilometri…», due volte). La stessa domanda di
+            # sviluppo_apri con un compito diverso: niente si ferma né cambia prima del «sì»
+            note_rule(ctx, "sviluppo_altro_bloccato")
+            note_rule(ctx, "sviluppo_analisi_altro")
+            return _domanda_cambio(ctx, sv, {"tipo": sv.tipo, "compito": cambia})
     note_rule(ctx, "sviluppo_analisi")
     fermato = ""
     if svs.lavoro_attivo(sv) or (svs._lavoro(sv.lavoro) is not None
@@ -1459,7 +1560,9 @@ def sviluppo_specs(file_pc: bool = False, allegati: bool = False) -> list[ToolSp
                          "(«ferma/stoppa/blocca lo sviluppo», «fermalo»: il lavoro dell'agente "
                          "si ferma subito); sospendi (una pausa, «mettiamo in pausa»: un lavoro "
                          "dell'agente in corso finisce); riprendi («riprendiamo lo sviluppo del meteo»: quale "
-                         "= le parole del titolo); chiudi (chiede conferma); promuovi (un "
+                         "= le parole del titolo); chiudi (chiede conferma; «chiudi tutti gli "
+                         "sviluppi»: quale = \"tutti\", e ferma anche il lavoro dell'agente); "
+                         "promuovi (un "
                          "programma diventa un'estensione). Cosa fare in ogni fase è nei dati "
                          "del turno."),
             parameters={"type": "object", "properties": {

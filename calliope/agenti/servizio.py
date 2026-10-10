@@ -133,10 +133,54 @@ def titolo_da(compito: str, parole: int = 7) -> str:
             words = tutte[:parole + 2 + piena]
     elif len(tutte) > parole and re.match(r"(?:dell|d)['’]\w", tutte[parole], re.I):
         words = tutte[:parole + 1]                    # «il numero d'iscrizione»
+    words = _con_le_parole_che_distinguono(words, tutte)
     # Niente coda monca («…rinomina le foto di»)
     while len(words) > 2 and words[-1].lower() in _CODA:
         words.pop()
     return " ".join(words) or "lavoro"
+
+
+# Le parole che distinguono il compito, dopo il taglio (10/10, terzo giro della DGX: «…converte i
+# gradi Celsius in Fahrenheit» e «…converte i chilometri in miglia» diventavano «programma in
+# Python che converte i gradi» e «…converte i chilometri»: senza le unità i due titoli non
+# dicevano che cosa converte). Il titolo continua con una parola maiuscola attaccata (un nome
+# proprio o un'unità: «Celsius») e con una preposizione semplice seguita da una parola senza
+# articolo («in Fahrenheit», «in miglia», «da Celsius»), che fa parte del nome della cosa; si
+# ferma a un articolo («in una stringa», «di una città»), a un participio o a un verbo
+# («inseriti dall'utente», «e ne stampi»). È la forma di un nome scelto dal modello
+# (principio 10), con un tetto per la voce
+TITOLO_MAX_PAROLE = 12
+_PREP_SEMPLICI = frozenset("in di da a con su per tra fra".split())
+_NON_NUDE = frozenset("ogni questo questa quel quello ne ci si".split())
+
+
+def _nuda(w: str) -> bool:
+    """Una parola piena senza articolo davanti (né un articolo apostrofato attaccato)."""
+    lw = w.lower()
+    return (bool(re.fullmatch(r"[a-zà-ù]{2,}", lw)) and lw not in _NON_NUDE
+            and lw not in _CODA and lw not in _QUANTI
+            and not re.match(r"(?:l|un|dell|all|nell|sull|dall|d)['’]", lw))
+
+
+def _con_le_parole_che_distinguono(words: list[str], tutte: list[str]) -> list[str]:
+    words = list(words)
+    i = len(words)
+    while i < len(tutte) and len(words) < TITOLO_MAX_PAROLE:
+        w = tutte[i]
+        ultima = words[-1].lower() if words else ""
+        if ultima in _PREP_SEMPLICI and _nuda(w):
+            words.append(w)                           # il taglio cadeva sulla preposizione
+            i += 1
+        elif (w.lower() in _PREP_SEMPLICI and i + 1 < len(tutte) and _nuda(tutte[i + 1])
+              and len(words) + 2 <= TITOLO_MAX_PAROLE):
+            words += [w, tutte[i + 1]]                # «in Fahrenheit», «in miglia»
+            i += 2
+        elif w[:1].isupper() and _nuda(w):
+            words.append(w)                           # «Celsius»
+            i += 1
+        else:
+            break
+    return words
 
 
 # Un lavoro di codice non è un'estensione di Calliope (06/10, caso vero della DGX: sviluppo_apri

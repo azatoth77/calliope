@@ -4851,7 +4851,12 @@ class Brain:
             # (o salvata a voce da chi amministra, luogo.json: 09/10)
             da_config=luogo.citta_casa(self.cfg),
             # La domanda di Calliope con nomi fidati a cui questa frase risponde (09/10)
-            domanda_fidata=self._domanda_fidata())
+            domanda_fidata=self._domanda_fidata(),
+            # La domanda della proposta (10/10, politica.consenso_irriconoscibile)
+            domanda_sospeso=str(p.get("domanda") or "") if p.get("tool") == tool else "",
+            cosa_sospeso=str(p.get("cosa") or "") if p.get("tool") == tool else "",
+            risposta_dato=bool(p.get("su_misura") or p.get("risposta"))
+            and p.get("tool") == tool)
 
     def _intenzioni(self) -> list:
         conv = self._c()
