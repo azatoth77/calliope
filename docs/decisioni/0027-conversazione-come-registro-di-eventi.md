@@ -1,6 +1,6 @@
 # 0027. La conversazione come registro degli eventi
 
-- **Stato**: **proposta** (10/10/2026)
+- **Stato**: **accettata** (10/10/2026, piano approvato da chi amministra), realizzazione in corso
 - **Area**: [voce-e-regole](../aree/voce-e-regole.md), [contesto-conversazione](../aree/contesto-conversazione.md)
 
 ## Contesto
