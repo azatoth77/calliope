@@ -423,6 +423,9 @@ def _conversazioni_dimentica(ctx: ToolContext) -> dict:
     if p is not None and 0 < turno - p <= 3:
         proposte.pop(persona, None)
         n = arch.dimentica(persona)
+        # La conversazione in corso: la chiude il ciclo a risposta finita (10/10, registro degli
+        # eventi: Ciclo._conversazioni_dimenticate)
+        ctx.conversazioni_dimenticate = persona
         frase = ("Fatto: ho cancellato le nostre conversazioni archiviate."
                  if n else "Non c'erano conversazioni archiviate da cancellare.")
         return _final(frase, cancellate=n)

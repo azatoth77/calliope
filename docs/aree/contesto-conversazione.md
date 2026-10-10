@@ -10,7 +10,7 @@
 |---|---|---|
 | Conversazione per persona, satelliti insieme (dal 06/10) | thread per satellite («corsie»), solo libreria standard | `calliope/corsie.py` → `Corsia`, `RegistroConversazioni` (`scegli`, `occupa`, `doppione`, `pulisci`, `riprendi`), `Varco` (`conversazioni_parallele`), `Smistatore`; il ciclo di ogni corsia `calliope/ciclo.py` → `Ciclo` (dal 06/10, P8), `Servizi`, `Turno`; `main.Corsie` (una corsia per satellite), `main.Avvio`; `ServerSatelliti.insieme`; rapporto [`docs/ricerche/2026-10-06-conversazione-persona.md`](../ricerche/2026-10-06-conversazione-persona.md) |
 | Finestra di contesto (dal 05/10) | — (Ollama `/api/show` e `/api/ps`, vLLM `/v1/models` e `/metrics`, nvidia-smi, /proc/meminfo) | `calliope/contesto.py` → `prepara`, `calcola`, `finestra` (il num_ctx di tutti), `testo_stato`; `llm_num_ctx: auto`, scelta in `contesto.json`; token veri in `Brain.last_context`; barra `Schermi.contesto`; misure `prove/misura_contesto.py` |
-| Conversazione, compressione e archivio delle conversazioni (dal 05/10) | SQLite in WAL con FTS5 (`conversazioni.db`), vettori da Ollama `/api/embed` sulla CPU (`qwen3-embedding:0.6b`) o `/v1/embeddings`, coseno in numpy, RRF | `calliope/conversazione.py` → `Conversazione` (Brain la espone con `history`, `pending`…, `brain.conv`), `turni`; `calliope/compressione.py` → `Compressore` (soglie 75/90 %, `avvia`, `comprimi_ora`, `applica`, `chiudi`), `RiassuntoreLLM` (agente o voce), `RiassuntoreTagli`, `crea_riassuntori`; `calliope/conversazioni.py` → `ArchivioConversazioni` (`archivia`, `cerca`, `ultima`, `dimentica`, conversazione corrente; dall'08/10 `recenti` per le domande cronologiche, `su_turni` e `chat` per la scheda «Conversazione»), `Embedder`, `load_conversazioni`; tool `conversazione_cerca`, `conversazioni_dimentica` in `calliope/tools/conversazioni.py`; «ricominciamo» `wakeword.nuova_conversazione`; terminale `python -m calliope.conversazioni`; misure `prove/misura_conversazioni.py` |
+| Conversazione, compressione e archivio delle conversazioni (dal 05/10) | SQLite in WAL con FTS5 (`conversazioni.db`), vettori da Ollama `/api/embed` sulla CPU (`qwen3-embedding:0.6b`) o `/v1/embeddings`, coseno in numpy, RRF | `calliope/conversazione.py` → `Conversazione` (Brain la espone con `history`, `pending`…, `brain.conv`), `turni`; `calliope/compressione.py` → `Compressore` (soglie 75/90 %, `avvia`, `comprimi_ora`, `applica`, `chiudi`), `RiassuntoreLLM` (agente o voce), `RiassuntoreTagli`, `crea_riassuntori`; `calliope/conversazioni.py` → `ArchivioConversazioni` (`archivia`, `cerca`, `ultima`, `dimentica`, conversazione corrente; dall'08/10 `recenti` per le domande cronologiche, `su_turni` e `chat` per la scheda «Conversazione»; dal 10/10 `pulisci_wal`, `su_pulizia` e «dimentica» vera), `Embedder`, `load_conversazioni`; il registro degli eventi accanto (`calliope/eventi/registro.py` → `Registri`, `Disco`, dal 10/10 in ombra: sezione «La storia come proiezione degli eventi»); tool `conversazione_cerca`, `conversazioni_dimentica` in `calliope/tools/conversazioni.py`; «ricominciamo» `wakeword.nuova_conversazione`; terminale `python -m calliope.conversazioni`; misure `prove/misura_conversazioni.py` |
 | Latenza come metrica, cache scaldata, modelli di Ollama (dal 06/10) | solo libreria standard (registro dei turni, Ollama `/api/ps`) | `calliope/latenza.py` → `giorno`, `per_giorno`, `testo`, `avviso`, `avviso_recente`, `scalda_ripresa`, `leggi_file` (`calliope stato --turni`); `Brain.scalda_conversazione`, `Brain._scalda_se_cambiato` (prefisso nuovo dopo un cambio di modalità, 07/10); `calliope/ollama_carico.py` → `residenti`, `limite`, `usati`, `avviso`, `puo_caricare`; la prima frase a pezzi e la taratura della voce (sezioni del 07/10 sotto) hanno il codice in `tts.py` e `taratura_voce.py`, area [stt-tts](stt-tts.md) |
 
 ## Problemi noti
@@ -719,3 +719,59 @@ dopo la pausa è la stessa persona, altrimenti si toglie (regola
 `conversazione_coda_altra_persona`). Una coda salvata prima di questa versione (senza `per`) si
 toglie al primo turno. Prove in `prova_stati_buchi` (anonima del satellite, altra persona, ospite,
 la stessa persona sì) e `prova_conversazioni` invariata.
+
+## La storia come proiezione degli eventi, in ombra (10/10, ramo `eventi-passi-0-1`)
+
+Passo 1 del [registro degli eventi](../ricerche/2026-10-10-registro-eventi.md) (decisione
+[0027](../decisioni/0027-conversazione-come-registro-di-eventi.md)); il ciclo, i tipi e la misura
+del passo 0 sono in [voce-e-regole](voce-e-regole.md). Qui la parte della conversazione: la storia
+di Brain resta la fonte, accanto a ogni conversazione c'è il suo registro e la sua proiezione.
+
+- **Un registro per chiave di conversazione** (`calliope/eventi/registro.py` → `Registri`,
+  `Registro`): `persona:<id>` da qualunque satellite, `ospite:<corsia>` anonimo per satellite, le
+  stesse chiavi di `corsie.RegistroConversazioni`. Una `Conversazione` di Brain è un segmento
+  (`conversazione_aperta` … `conversazione_chiusa`, motivo `esci`, `nuova`, `altra_persona`,
+  `scaduta`, `sostituita`, `dimentica`); la ripresa e la coda sono il loro testo
+  nell'apertura (la coda solo per la stessa chiave: `porta_coda`). Un solo scrittore per registro:
+  il turno intero si scrive sotto il lock del registro, `seq` senza buchi anche con la stessa
+  persona su due satelliti insieme. Nessuna API legge più registri insieme.
+- **Su disco**: tabella `eventi` di `conversazioni.db` (modulo di schema suo, `eventi`, in
+  `meta_schema`: un ritorno indietro di `calliope aggiorna` non se ne accorge), scritta a **lotti a
+  fine turno nel thread dell'archivio** (`Disco.da_archivio`): niente disco fra il modello e la prima
+  frase. Mai su disco: le parole della sfida (chiesta o ripetuta), i segreti detti nel turno
+  (`Brain.redact`), il testo dei dati non fidati, le foto, i risultati riservati (solo la
+  traccia), il testo di un minore fermato dal guardiano. Gli eventi di un ospite si cancellano alla
+  chiusura della sua conversazione (o dopo un giorno, se non torna); quelli delle conversazioni
+  chiuse dopo
+  `eventi_giorni` (7: resta la forma dei turni nell'archivio), con la pulizia di ogni giorno
+  dell'archivio.
+- **Riavvio** (`Registri.riprendi`, da `main.Avvio._registro_eventi`): il segmento aperto e non
+  scaduto (`storia_inattiva_s`) di ogni registro si rigioca; una proposta aperta diventa
+  `proposta_chiusa(persa_riavvio)`; una riga rovinata ferma il rigioco di quel registro all'ultimo
+  evento buono (`eventi_troncati`, nel registro dei turni del turno dopo) e il registro continua dopo
+  l'ultima riga del disco. La conversazione ripresa da `correnti` (messaggi nuovi) si riconosce dalla
+  coda, frase per frase, e il confronto riparte senza differenze.
+- **La proiezione** (`calliope/eventi/proiezioni.py`, funzioni pure, ≤ 600 righe): il riassunto
+  (ripresa, coda o compressione) come messaggio di sistema; per ogni turno il messaggio della
+  persona con gli ingressi davanti, le chiamate e i risultati (forma viva nel turno e nel precedente,
+  definitiva prima: l'ora «di allora» e i risultati lunghi ridotti, gli stessi numeri di Brain
+  passati con `Forma`), poi **un** messaggio dell'assistente con le frasi sentite e il segno
+  « … (interrotta)». La finestra (`da`): il primo turno ancora nella storia dopo un taglio
+  (`_trim_history`, `_trim_tokens`) o una compressione (evento `compressione` con `fino_a`).
+  Stessi eventi, stessi byte.
+- **Il confronto** (ogni turno, `eventi_ombra` nel registro dei turni): frase della persona,
+  testo dell'assistente (i meccanismi del § 1 del progetto), nomi delle chiamate, forma dei
+  risultati, turni solo da una parte, riassunto. `contesto_ms` (il tempo della proiezione) e i byte
+  del turno su disco in `calliope stato --turni`, con l'avviso oltre `eventi_contesto_ms_avviso`
+  (20 ms).
+- **Guardie in `calliope stato`** (§ 10 del progetto): «Registro degli eventi: N eventi in R registri,
+  X MB; oggi Y MB» con l'avviso oltre `eventi_avviso_mb` (50 MB al giorno, o 10 volte in tutto) e
+  «Dimentica: N richieste, residui 0» (righe rimaste di una persona dimenticata, scritte prima della
+  richiesta, negli eventi, nell'archivio e nella conversazione salvata, più i turni orfani);
+  dettagli con `calliope stato --eventi`.
+- **Archivio**: `secure_delete` sempre acceso sulla sua connessione (le pagine liberate si
+  azzerano), e «dimentica» ora aspetta i lavori in coda, ricompatta l'indice FTS5, cancella la
+  conversazione salvata e i turni orfani (prima il turno in corso finiva su una riga già tolta) e fa
+  il checkpoint del WAL.
+
+Misure: prima frase invariata: con Calliope vera in `prova_satellite` (modello e Whisper finti, Piper vero; 3 giri per lato, 27 risposte ciascuno) `prima_frase_s` mediana 0,09 s prima e dopo (media 0,095 → 0,093 s), prima voce sentita mediana 0,37 s uguale, «dalla fine della frase alla prima voce» 0,63–0,77 s prima e 0,68–0,73 s dopo (rumore della macchina); osservatore della voce ~1 µs per frase; `contesto_ms` al più 0,14 ms (24 turni veri della prova) e 0,06 ms sul giro sintetico; su disco ~0,4–0,6 kB per turno di mediana, fino a ~2,5 kB con risultati di tool.

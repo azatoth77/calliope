@@ -539,6 +539,7 @@ class Avvio:
                 schermi.chat_fonte = conv_arch
                 conv_arch.su_turni.append(schermi.chat_nuovi)
                 conv_arch.su_dimentica.append(schermi.chat_dimenticata)
+        self._registro_eventi(conv_arch)
         # Il cassetto dei file per persona (08/10, calliope/cassetto.py): foto, file e audio
         # restano 7 giorni; con gli allegati dagli schermi
         cassetto = None
@@ -588,6 +589,32 @@ class Avvio:
                                     lavori=lavori, ufficio=ufficio, archivio=self.archivio,
                                     web=web, conversazioni=conv_arch, modalita=self.modalita,
                                     cassetto=cassetto)
+
+    def _registro_eventi(self, conv_arch):
+        """Il registro degli eventi (10/10, calliope/eventi/, passi 0 e 1 in ombra): un registro
+        per persona e uno anonimo per satellite, su disco nella tabella `eventi` di
+        conversazioni.db, scritto a lotti dal thread dell'archivio. All'avvio le conversazioni
+        aperte e non scadute si rigiocano; ogni giorno la rotazione (`eventi_giorni`)."""
+        cfg, s = self.cfg, self.s
+        from .eventi import ombra as ombra_mod
+        from .eventi.registro import Disco, Registri
+        if ombra_mod.modo(cfg) == ombra_mod.SPENTO:
+            s.eventi = None
+            return
+        log = lambda m: print(m, flush=True)  # noqa: E731
+        disco = None
+        if conv_arch is not None:
+            try:
+                disco = Disco.da_archivio(conv_arch, log=log)
+                conv_arch.eventi = disco
+                giorni = int(getattr(cfg, "eventi_giorni", 7) or 0)
+                conv_arch.su_pulizia.append(lambda: disco.ruota(giorni))
+            except Exception as e:  # noqa: BLE001 — senza disco gli eventi restano in memoria
+                print(f"[EVENTI] tabella degli eventi non pronta ({type(e).__name__}: {e}): "
+                      f"solo in memoria", flush=True)
+                disco = None
+        s.eventi = Registri(disco, log=log)
+        s.eventi.riprendi(float(getattr(cfg, "storia_inattiva_s", 0) or 0))
 
     def attiva_minori(self) -> bool:
         """I tool compiti_aiuto e minore_gestisci solo con un minore in casa: True se li ha

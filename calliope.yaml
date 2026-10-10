@@ -771,6 +771,25 @@ conversazioni:
   # La stessa frase presa da un'altra corsia entro questi secondi (due satelliti nella stessa
   # stanza la sentono tutti e due) è un doppione: risponde solo il primo. 0 = mai
   conversazione_doppione_s: 2.0
+  # La conversazione come registro degli eventi (10/10, decisione 0027, calliope/eventi/,
+  # progetto docs/ricerche/2026-10-10-registro-eventi.md): un registro per persona (anonimo
+  # per satellite per ospiti e voci incerte), in sola aggiunta, nella tabella `eventi` di
+  # conversazioni.db. «ombra» (passi 0 e 1): gli eventi si scrivono accanto alla storia di
+  # Brain, che resta la fonte; a ogni turno la proiezione del contesto si confronta con lei e
+  # il registro dei turni scrive le differenze per meccanismo (`parlato`, `eventi_ombra`:
+  # calliope stato --turni). Nessun cambiamento di ciò che Calliope dice, tranne «dimentica le
+  # nostre conversazioni», che con il registro acceso chiude anche la conversazione in corso
+  # (§ 2.4). «spento»: niente eventi né confronti, come prima. «attivo» (Brain legge il
+  # contesto dagli eventi) è il passo 3, non ancora realizzato: si segnala e resta «ombra»
+  eventi: ombra
+  # Dopo questi giorni gli eventi di una conversazione chiusa si cancellano: resta la forma dei
+  # turni nell'archivio (§ 2.3). 0 = mai
+  eventi_giorni: 7
+  # Avviso in `calliope stato` se il registro cresce oltre questi MB al giorno (§ 10, punto 3)
+  eventi_avviso_mb: 50.0
+  # Avviso in `calliope stato --turni` se costruire la proiezione del contesto costa più di
+  # questi millisecondi (§ 10, punto 2: dal passo 3 sta nel percorso della risposta)
+  eventi_contesto_ms_avviso: 20.0
 
 biblioteca:
   # Biblioteca offline (calliope/biblioteca.py): Wikipedia italiana in file ZIM di Kiwix,

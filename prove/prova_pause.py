@@ -354,7 +354,8 @@ def prova_ciclo():
     # i metodi nuovi: getattr, nessun errore)
     src = (RADICE / "calliope" / "ciclo.py").read_text(encoding="utf-8")
     verifica("ciclo: misura chiusa prima di scrivere il turno, ferma alla prima frase",
-             "self._chiudi_ascolto(self.rec)\n            s.turns.write(self.rec)" in src
+             # dal 10/10 il turno si scrive con `_scrivi_turno` (ombra degli eventi, poi TurnLog)
+             "self._chiudi_ascolto(self.rec)\n            self._scrivi_turno(self.rec)" in src
              and src.count("self._fine_ripresa()") == 2)
 
 

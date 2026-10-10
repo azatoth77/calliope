@@ -81,6 +81,9 @@ A_SECCO = [
     ("prova_latenza.py", [], "latenza vera della voce (06/10, P2–P4, P11): guardiano e rilevatore caldi e ricaricati, domanda giudicata in parallelo, conversazione ripresa in cache, mediana e p90 per giorno con le cause e l'avviso, riassunto dell'agente con un tempo massimo; prima frase a pezzi, taratura della voce, Piper sulla CPU o sulla GPU secondo la macchina e dal testo alla voce (07/10)"),
     # ~9 s: microfono e VAD finti in tempo quasi reale, server dei satelliti vero, node se c'è
     ("prova_pause.py", [], "pause e fine del turno (07/10, solo misura): pause interne e parlato da Listener, satellite e telefono (voce.js con node), ripresa dopo la frase con i contrari (casse, risposta, oltre 2 s), «aspetta»/«non ho finito» con i contrari, campo «ascolto» del registro, frase_finita e «ripresa» nel protocollo (satellite vecchio), riassunto e soglia stimata in `calliope stato --turni --pause`"),
+    ("prova_eventi.py", [], "registro degli eventi a secco (10/10, passo 1 in ombra): ogni tipo proiettato o escluso, controlli e disco (sfida, dati non fidati, riservati, «mai»), proiezioni pure (import, tetto di righe, determinismo anche dopo il rigioco), partizione (adulto, minore e ospite su due satelliti), due corsie della stessa persona, riassegnazione, porte (AST, annuncio, avviso al tutore, coda)"),
+    ("prova_eventi_ciclo.py", [], "registro degli eventi sul ciclo della voce (10/10, passi 0 e 1): contatori del passo 0 e confronto dell'ombra su un giro sintetico (interruzione, stop, cortesia, timer, frase filtrata, «Lo apro?», domanda con il testo dopo, «Sì?»), garanzia detto = proiezione, niente disco prima della prima frase, eventi: spento come prima"),
+    ("prova_eventi_disco.py", [], "registro degli eventi su disco (10/10): riavvio con rigioco, proposta persa, riga rovinata (eventi_troncati), disco in sola lettura o che non scrive; «dimentica» vera (byte di conversazioni.db e del WAL, residui in calliope stato, conversazione in corso chiusa); rotazione, ospiti cancellati alla chiusura, sfida e segreti mai su disco"),
     ("prova_config.py", [], "calliope.yaml, variabili d'ambiente, chiavi sbagliate"),
     ("prova_config_satellite.py", [], "microfono, casse e webcam nella sezione satellite, ripiego con avviso"),
     ("prova_contesto.py", [], "finestra di contesto dal setup (modello, memoria, tempo) e token veri a ogni turno"),
@@ -378,6 +381,8 @@ LEGAMI = [
     ("calliope/piano.py", ["prova_piano.py"]),
     ("calliope/installa/", ["prova_installa.py", "prova_capacita.py"]),
     ("calliope/latenza.py", ["prova_cruscotto.py"]),
+    # Il registro degli eventi (10/10): le prove sono del livello 1; qui quelle che lo usano
+    ("calliope/eventi/", ["prova_linux_import.py"]),
     # La cronologia delle schede per persona e la scheda «Conversazione» (08/10)
     ("calliope/schermi/", ["prova_cronologia_schede.py"]),
     ("calliope/conversazioni.py", ["prova_cronologia_schede.py", "prova_conversazioni.py"]),
