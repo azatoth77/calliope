@@ -91,7 +91,12 @@ Dettagli in [`../CHANGELOG.md`](../CHANGELOG.md) e nei documenti d'area.
    per i minori ([`ricerche/2026-10-06-generazione-immagini.md`](ricerche/2026-10-06-generazione-immagini.md)).
 3. **Secondo fattore per chi amministra**: conferma dal telefono, chiave vocale
    ([`ricerche/2026-10-06-secondo-fattore.md`](ricerche/2026-10-06-secondo-fattore.md)).
-4. **Pannello di amministrazione con le azioni** (oggi il cruscotto è in sola lettura).
+4. **Pannello di amministrazione con le azioni** (oggi il cruscotto è in sola lettura): dal 10/10 è
+   la pagina della **modalità configurazione guidata dalla voce** (Primo/a configura permessi,
+   consenso, testi, tempi e tool per stato della macchina a stati, con base intoccabile, strato
+   dell'installazione, simulazione d'impatto, ripristino e un limite che si può solo stringere;
+   dopo la macchina a stati accesa;
+   [`ricerche/2026-10-10-macchina-stati.md`](ricerche/2026-10-10-macchina-stati.md) § 11).
 5. Poi: **interfono** tra satelliti, **conversazione di stanza** (più persone nella stessa
    conversazione: la compagnia oggi le distingue, non le unisce), **mappe e luoghi**,
    **satellite su Raspberry** (senza PC), **altre fonti italiane** nella biblioteca.
