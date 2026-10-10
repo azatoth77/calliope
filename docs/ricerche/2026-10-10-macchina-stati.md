@@ -1365,10 +1365,31 @@ e dice cosa avrebbe cambiato («con questa regola, in 3 casi avrei eseguito senz
 
 Proteggono gli altri, non chi configura.
 
-**Da dove.** Dal pannello di amministrazione con le azioni (in roadmap; oggi il cruscotto è in sola
-lettura): differenze rispetto alla base, simulazione, ripristino. A voce solo le modifiche semplici e
-reversibili (un testo, «non chiedermi più conferma per sospendere»), sempre con l'avviso; i permessi
-non a voce.
+**Da dove: la modalità configurazione, guidata dalla voce** (indicazione di Dario, 10/10: è la
+modalità da spingere). Una modalità della macchina a stati al pari di «conversazione» e «sviluppo»:
+
+- **Si entra a voce** («Calliope, configuriamo…», o una richiesta di modifica detta da Primo/a), e lo
+  schermo personale va subito alla **pagina della configurazione**. La voce guida, lo schermo fa
+  vedere e verificare.
+- **Profilo di tool proprio**, stretto: mostrare, proporre una modifica, simulare, applicare,
+  ripristinare, uscire. Il resto dei tool non c'è finché si è in configurazione.
+- **Più severa su ciò che non riconosce**: in questa modalità una frase incerta (parole incerte,
+  storpiature, voce non sicura) non si interpreta per approssimazione ma si fa ripetere o scrivere.
+- **Voce e testo insieme**: si può dettare e si può scrivere sulla pagina (lo «scrivere invece di
+  parlare» che c'è già), anche nella stessa modifica (detto «cambia la frase di chiusura», scritto il
+  testo esatto).
+- **Ogni modifica è mostrata strutturata prima di applicarla** («Ho capito: per "sospendi" non chiedo
+  più conferma. Giusto?»), con la riga di prima e quella nuova e la simulazione d'impatto: l'errore
+  di comprensione del modello si vede sullo schermo e si corregge prima che conti.
+- **Le cautele della tabella sopra valgono uguali**: i permessi che allargano chiedono la frase di
+  sfida e passano prima in ombra; il limite non si tocca.
+- **Solo Primo/a, solo sul suo schermo personale**, voce riconosciuta; la modalità non si apre con
+  un minore vicino (compagnia) né da un satellite di stanza senza schermo personale.
+- **Si esce** a voce o dopo un tempo di inattività; le modifiche applicate restano, quelle solo
+  proposte si scartano (detto).
+
+Il pannello di amministrazione (in roadmap) diventa la pagina di questa modalità, non uno strumento
+separato.
 
 **Quando.** Dopo che la macchina a stati è accesa e la tabella dei permessi del passo 2 esiste: si
 costruisce sopra. Da rivedere al momento di realizzarla.
