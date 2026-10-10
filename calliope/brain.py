@@ -198,6 +198,20 @@ _CLAIM_THINGS = (r"fattura|preventivo|ddt|nota di credito|documento|file|pdf|let
                  r"foglio|timer|promemoria|sveglia|appuntamento|luc[ei]|lampad[ae]|"
                  r"tapparell[ae]|presa|termostato|lista|voce|schermo|lavoro|ordine|profilo|"
                  r"scheda|estensione")
+# Le fasi della modalità sviluppo (10/10, giro vero della DGX: «Ho capito, l'analisi è stata
+# annullata.» a «Annullahi.» senza nessun tool, e lo sviluppo restava aperto): soggetto di una
+# dichiarazione al passivo. Solo lì, non nella forma senza verbo: «Lo sviluppo del programma
+# letto…» o «Il collaudo dei file creati…» descrivono, non dichiarano
+_CLAIM_THINGS_PASSIVE = (_CLAIM_THINGS + r"|analisi|sviluppo|collaudo|revisione|fase|"
+                         r"modalità")
+# Un cambio di fase dichiarato (10/10, stesso giro: a «Non c'è problema.» «Siamo passati alla
+# fase di sviluppo», senza sviluppo_apri, e il turno dopo «Restiamo pure in fase di analisi»).
+# Non lo stato («siamo all'analisi», «siamo ancora in fase di analisi»), non l'offerta
+# («quando vuoi passiamo allo sviluppo», «se vuoi torniamo all'analisi»), non una domanda
+_CLAIM_FASE = (r"(?:alla|allo|al|all['’]|in|nella|nello|nel)\s*(?:fase\s+(?:di|del|della)\s+)?"
+               r"(?:fase|sviluppo|collaudo|revisione|analisi|attivazione|modalità)\b")
+_CLAIM_NON_OFFERTA = (r"(?<!quando )(?<!appena )(?<!se )(?<!non )(?<!che )(?<!vuoi )"
+                      r"(?<!vuoi, )(?<!vuole )(?<!poi )(?<!dopo )")
 ACTION_CLAIM = re.compile(
     # Mai dentro una parola o dopo un apostrofo: in «non l'ho aperto» il «ho» dopo «l'»
     # sfuggiva a «non» (03/10) e il rifiuto diventava una dichiarazione
@@ -211,7 +225,10 @@ ACTION_CLAIM = re.compile(
     # familiare, niente installazione): un'azione annunciata come in corso. Non una domanda
     # («Procedo?», «procedo con l'installazione?»), non «non procedo», non i verbi di lettura
     # («procedo a elencare le voci», «procedo con la ricerca»)
-    r"|(?<![\w'’])(?<!non )procedo\s+(?:subito\s+|ora\s+|adesso\s+|quindi\s+)?"
+    # 10/10, giro vero della DGX: «D'accordo, procedo allora con lo sviluppo.» senza tool (gli
+    # avverbi di raccordo tra «procedo» e «con»)
+    r"|(?<![\w'’])(?<!non )procedo\s+(?:(?:subito|ora|adesso|quindi|allora|dunque|pure|"
+    r"senz['’]altro|intanto)\s+){0,2}"
     r"(?:(?:con|ad|al|allo|alla|ai|alle|a)\b|all['’])\s*(?:l['’]\s*|(?:la|il|lo|i|gli|le)\s+)?+"
     r"(?!elenc|legg|lettur|cerc|ricerc|controll|verific|dirt|dirl|mostr|spieg|rispond|chied|"
     r"domand)[a-zà-ù]+(?![^.!?,;:]*\?)"
@@ -235,8 +252,17 @@ ACTION_CLAIM = re.compile(
     # Al passivo (03/10, prova a voce dell'ufficio): a «Sì, preparala» dopo «La preparo?»
     # gemma4 rispondeva «La fattura è stata preparata.» senza chiamare il tool. Solo con una
     # cosa di Calliope come soggetto, nella stessa frase
-    r"|\b(?:" + _CLAIM_THINGS + r")\b[^.!?]{0,40}?(?<!non )\b(?:è|sono)\s+stat[oaie]\s+"
+    r"|\b(?:" + _CLAIM_THINGS_PASSIVE + r")\b[^.!?]{0,40}?(?<!non )\b(?:è|sono)\s+stat[oaie]\s+"
     r"(?:appena\s+|già\s+)?(?:" + _CLAIM_PARTS + r")[oaie]\b(?![^.!?]*\?)"
+    # Il cambio di fase già avvenuto («siamo passati alla fase di sviluppo», «sono tornata
+    # all'analisi», «lo sviluppo è passato al collaudo») o annunciato al presente («passiamo
+    # allo sviluppo.», «torniamo all'analisi»)
+    r"|(?<![\w'’])" + _CLAIM_NON_OFFERTA + r"(?:siamo|sono|è)\s+"
+    r"(?:(?:appena|già|ora|adesso|quindi|allora|ufficialmente)\s+)?"
+    r"(?:passat|tornat|entrat)[oaie]\s+" + _CLAIM_FASE + r"(?![^.!?]*\?)"
+    r"|(?<![\w'’])" + _CLAIM_NON_OFFERTA + r"(?:passiamo|torniamo|entriamo)\s+"
+    r"(?:(?:subito|ora|adesso|quindi|allora|dunque|pure)\s+)?" + _CLAIM_FASE
+    + r"(?![^.!?]*\?)"
     # Senza verbo, a inizio frase: «Timer avviato.», «Promemoria impostato per le 18.»,
     # «Luce accesa.»; non «La luce in taverna è accesa.» (uno stato letto)
     r"|(?:^|[.!?]\s+)\W*(?:(?:ok|okay|certo|va bene|perfetto|fatto|sì|si|ricevuto|"
