@@ -181,6 +181,125 @@ def prova_ombra_come_prima():
     registri.disco.db.close()
 
 
+def prova_riavvio():
+    print("— 1c. riavvio con eventi: attivo: la conversazione ripresa dalla proiezione")
+    from calliope.conversazione import Conversazione
+    tmp = tempfile.mkdtemp(prefix="eventi-att-riavvio-")
+    b, c, voce, stt, turni, annunci, registri = pe.prepara(
+        tmp, [sb.chiama("ora_attuale"), [("text", "Sono le dieci.")],
+              [("text", "Il Po è lungo 652 chilometri.")]], modo="attivo")
+    pe.giro(c, stt, "Calliope, che ore sono?")
+    pe.giro(c, stt, "Calliope, quanto è lungo il Po?")
+    c._inizio_giro()                         # il turno nel registro, su disco
+    prima = [dict(m) for m in b.history[:b.conv.vivo_da]]
+    salvata = b.conv.esporta()
+    registri.disco.db.close()
+    r2 = Registri(Disco.file(os.path.join(tmp, "conversazioni.db")), log=lambda m: None)
+    esito = r2.riprendi(3600.0)
+    b2, c2, voce2, stt2, turni2, _a, _r = pe.prepara(
+        tempfile.mkdtemp(prefix="eventi-att-x-"), [[("text", "Prego.")]], modo="attivo")
+    c2.s.eventi = r2
+    c2.ombra.registri = r2
+    b2.conv = Conversazione.importa(salvata, 3600.0)
+    verifica("correnti: la storia salvata è la proiezione (con i _seq), senza il turno vivo",
+             esito["ripresi"] == 1 and all("_seq" in m for m in b2.conv.history)
+             and b2.conv.history == prima, f"{esito} {len(b2.conv.history)} {len(prima)}")
+    scaldati = []
+    b2.backend.warmup = lambda msgs, tools: scaldati.append(msgs) or {"prompt": 1}
+    b2.scalda_conversazione(b2.conv)
+    pe.giro(c2, stt2, "Calliope, grazie mille per tutto.")
+    c2._inizio_giro()
+    v = b2.backend.visti[-1]
+
+    def pulito(ms):
+        return [{k: x for k, x in m.items() if not k.startswith("_")} for m in ms]
+    n = len(scaldati[0]) - 1 if scaldati else 0
+    verifica("il riscaldamento dopo il riavvio è il prefisso vero del primo turno (proiezione)",
+             scaldati and pulito(scaldati[0][:n]) == pulito(v[:n]), f"{n}")
+    utenti = [m["content"] for m in v if m["role"] == "user"]
+    verifica("il primo turno dopo il riavvio adotta il segmento rigiocato e lo proietta",
+             len(utenti) == 3 and "che ore sono" in utenti[0] and "Po" in utenti[1],
+             str(utenti))
+    r = turni2[-1]
+    verifica("…senza differenze né errori (parlato 0, ombra attiva)",
+             not (r.get("parlato") or {}).get("diverso")
+             and (r.get("eventi_ombra") or {}).get("modo") == "attivo"
+             and not (r.get("eventi_ombra") or {}).get("errori"), str(r.get("eventi_ombra")))
+    r2.disco.db.close()
+
+
+def prova_compressione():
+    print("— 1d. compressione con eventi: attivo: il taglio ritrovato dal _seq, la finestra")
+    from calliope.compressione import Compressore, RiassuntoreTagli
+    tmp = tempfile.mkdtemp(prefix="eventi-att-comp-")
+    b, c, voce, stt, turni, annunci, registri = pe.prepara(
+        tmp, [[("text", f"Risposta numero {i}.")] for i in range(1, 9)], modo="attivo")
+    b.cfg.contesto_turni_intatti = 2
+    comp = Compressore(b.cfg, [RiassuntoreTagli()], log=lambda m: None)
+    for i in range(5):
+        pe.giro(c, stt, f"Calliope, domanda numero {i}.")
+    lav = comp.prepara(b)                    # il lavoro sulla storia di adesso
+    c._inizio_giro()                         # in cima al giro: la storia rifatta dagli eventi
+    taglio_nuovo = next(m for m in b.history if m.get("_seq") == lav.taglio.get("_seq"))
+    verifica("la storia rifatta ha messaggi nuovi (l'identità del taglio non vale più)",
+             taglio_nuovo is not lav.taglio)
+    info = comp._applica_risultato(b, lav, RiassuntoreTagli().riassumi(lav)["dati"], "tagli")
+    verifica("la compressione si applica lo stesso (il taglio ritrovato dal _seq)",
+             info is not None and b.conv.riassunto and b.conv.riassunto.get("tipo")
+             == "compressione", str(info))
+    verifica("…e la finestra della proiezione parte dal taglio",
+             b.conv.finestra_da == lav.taglio["_seq"], str(b.conv.finestra_da))
+    pe.giro(c, stt, "Calliope, domanda numero 5.")
+    pe.giro(c, stt, "Calliope, domanda numero 6.")
+    c._scrivi_turno(c.rec)
+    c.rec = None
+    reg = registri.della_corsia(b.conv.chiave)
+    ev = [e for e in reg.eventi() if e.tipo == "compressione"]
+    v = b.backend.visti[-1]
+    utenti = [m["content"] for m in v if m["role"] == "user"]
+    verifica("l'evento compressione con fino_a, e nella richiesta dopo solo i turni intatti",
+             len(ev) == 1 and ev[0].dati["fino_a"] == lav.taglio["_seq"] - 1
+             and not any("numero 0" in u or "numero 1" in u or "numero 2" in u for u in utenti)
+             and any(m["role"] == "system" and m["content"] == b.conv.riassunto["testo"]
+                     for m in v), f"{[e.dati.get('fino_a') for e in ev]} {utenti}")
+    comp.close()
+    registri.disco.db.close()
+
+
+def prova_latenza():
+    print("— 1e. latenza con eventi: attivo: niente disco fra il modello e la prima frase")
+    tmp = tempfile.mkdtemp(prefix="eventi-att-lat-")
+    pe.DiscoSorvegliato.violazioni = 0
+    b, c, voce, stt, turni, annunci, registri = pe.prepara(
+        tmp, [[("text", "Uno. Due. Tre.")] for _ in range(4)], modo="attivo",
+        disco_cls=pe.DiscoSorvegliato)
+    stream = b.backend.stream
+
+    def stream_sorvegliato(messages, tools):
+        pe.DiscoSorvegliato.in_risposta = True
+        yield from stream(messages, tools)
+    b.backend.stream = stream_sorvegliato
+    say = voce.say
+
+    def say_sorvegliata(t):
+        pe.DiscoSorvegliato.in_risposta = False
+        say(t)
+    voce.say = say_sorvegliata
+    for f in ("Calliope, conta fino a tre.", "Calliope, ancora.", "Calliope, di nuovo.",
+              "Calliope, l'ultima volta."):
+        pe.giro(c, stt, f)
+    c._scrivi_turno(c.rec)
+    pe.DiscoSorvegliato.in_risposta = False
+    verifica("nessuna scrittura del registro fra la richiesta al modello e la prima frase",
+             pe.DiscoSorvegliato.violazioni == 0, str(pe.DiscoSorvegliato.violazioni))
+    ms = [r["cache"]["proiezione_ms"] for r in turni if (r.get("cache") or {}).get(
+        "proiezione_ms") is not None]
+    print(f"    misura: proiezione nella risposta {max(ms) if ms else 0:.3f} ms al più")
+    verifica("la proiezione nella risposta costa meno di 20 ms (guardia)", ms and max(ms) < 20,
+             str(ms))
+    registri.disco.db.close()
+
+
 # ─────────────────────────── 2. promemoria non parlati ───────────────────────────
 def prova_promemoria():
     print("— 2. promemoria: la parte non detta, i cosa_fare")
@@ -774,6 +893,9 @@ def prova_openai():
 def main():
     prova_giro()
     prova_ombra_come_prima()
+    prova_riavvio()
+    prova_compressione()
+    prova_latenza()
     prova_promemoria()
     prova_prefisso()
     prova_sigilli()

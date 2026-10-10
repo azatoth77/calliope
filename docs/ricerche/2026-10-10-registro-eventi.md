@@ -568,7 +568,8 @@ mano dal codice).
 
 ## 8. Piano a passi
 
-Interruttore unico `eventi: spento | ombra | attivo` (predefinito `ombra` dal passo 1). Ogni passo
+Interruttore unico `eventi: spento | ombra | attivo` (predefinito `ombra` dal passo 1; `attivo`
+accettato dal passo 3, il 10/10, e acceso a mano). Ogni passo
 porta le sue guardie (§ 10) e le sue prove, nell'hook e in `--completo`.
 
 | Passo | Cosa | Prove e guardie | Ritorno | Stima |
@@ -615,7 +616,35 @@ partire dopo il passo 4.
   prima voce» 0,65–0,80 s su `main` e 0,68–0,76 s sul ramo (rumore della macchina); `Uscita.di`
   ~1,5 µs a frase, nessun file né database; in ombra sugli stessi giri gli stessi motivi
   (`stop_non_detto` soltanto) ed `errori` 0.
-- Passi 3–6: da fare.
+- **Passo 3: fatto il 10/10, insieme agli argomenti del § 13** (ramo `eventi-passo-3`; `eventi:
+  attivo` accettato, **predefinito ancora `ombra`**: si accende a mano nel file locale). Con
+  `attivo` Brain legge i turni chiusi dalla proiezione (`Ombra.contesto`, il `proiettore` di Brain)
+  all'inizio di ogni risposta e in cima al giro (`Ciclo._rifletti`); il turno vivo resta la lista di
+  lavoro di Brain dopo `Conversazione.vivo_da`. Spariscono, con `attivo`, `record_*`,
+  `allinea_detto`, `dimentica_ultimo_turno`, `_seal_private`, `_togli_non_fidati` (resta la traccia
+  `_fonte`), `_togli_proposta_rispondi`, `del history[claim_at]`, `_compact_old_results`,
+  `_aggiungi_detto`, `guardiano.correggi_storia` e il messaggio del modulo; con `ombra` restano.
+  Visibilità decisa alla scrittura: `esito_tool` con `riservato`, `personale`, `non_fidato`,
+  `fonte`; gli ingressi con la loro fonte; `proposta_rispondi` scritto «registro»; la proiezione
+  sigilla dai campi (pura). Garanzia del § 3.1 per costruzione (il passo 0 si misura sulla
+  proiezione e dà 0: `stop_non_detto` e `interrotta_persa` spariscono); promemoria non parlati nel
+  blocco dello stato (parte non detta di una risposta interrotta, § 11.4; i `cosa_fare` dell'ultima
+  risposta, tolti dai risultati proiettati); archivio dalla proiezione (l'ombra), `correnti` senza
+  il turno vivo, riavvio con l'adozione del segmento rigiocato, compressione e taglio con
+  `finestra_da` e il `_seq`. Guardie: `riletti` (Ollama `prompt_eval_cached_count`, vLLM
+  `cached_tokens`), `riletti_stimati`, `cache_rotta`, `proiezione_ms` nel campo `cache` del
+  registro dei turni e in `calliope stato --turni`. Argomenti: tool `argomento` (forma misurata,
+  § 13). Prove `prova_eventi_attivo` (livello 1: con il banco d'attacco di `prova_politica` 99/99 e
+  gli attacchi di `prova_valore` rigiocati con `attivo` sul registro, fughe 0) e
+  `prova_argomenti_ollama`. Misure (`prova_satellite` con Calliope vera, modello e Whisper finti, Piper vero; 3 giri per lato
+  intercalati, 27 risposte ciascuno): `prima_frase_s` mediana 0,08 s con `ombra` e con `attivo`
+  (media 0,081 e 0,081, massimo 0,12 e 0,13), prima voce sentita mediana 0,34 s uguale, «dalla fine
+  della frase alla prima voce» 0,62–0,74 s e 0,63–0,70 s (rumore); la proiezione nella risposta
+  mediana 0,12 ms, massimo 0,24 ms; token stimati riletti nella prima passata mediana 190 con
+  `ombra` e 158 con `attivo`; `cache_rotta` 0 su 36 turni per lato; parlato diverso 6 turni con
+  `ombra` (`stop_non_detto`) e 0 con `attivo`; errori e fughe 0. Sul giro sintetico la proiezione
+  costa al più ~0,1 ms; nessuna scrittura su disco fra il modello e la prima frase (prova).
+- Passi 4–6: da fare (il 6 dopo una settimana di `attivo` senza differenze).
 
 ### 8.1 Punti del progetto rivisti nei passi 0 e 1 (10/10)
 
@@ -693,6 +722,34 @@ da decidere.
     - La risposta scritta di «Ho la foto…» e della frase di un modulo va sullo schermo dopo essere
       andata alla voce (prima: subito prima). Il saluto locale apre un turno della voce (innocuo).
 
+12. **Passo 3 (10/10): scostamenti dal progetto.**
+    - *Brain non scrive ancora gli eventi dove nascono.* L'ombra li scrive a turno finito, come nei
+      passi 1–2, ma dal **turno vivo** di Brain non sigillato (dopo `vivo_da`), con i campi della
+      visibilità decisi lì (§ 11.1). La proiezione serve ai turni chiusi; il turno in corso resta la
+      lista di lavoro di Brain fra una passata e l'altra (§ 3.1: «nel turno in corso tutto»).
+    - *Le forme definitive non sono memorizzate* per `(conv, turno)`: si ricalcolano a ogni
+      proiezione, deterministiche (stessi eventi, stessi byte: la prova lo controlla). Costo misurato
+      sotto 0,1 ms; la memoria si aggiunge se `proiezione_ms` cresce.
+    - *Lo stop*: dopo la frase della persona senza niente di detto, un messaggio vuoto
+      dell'assistente (i ruoli si alternano: alcuni modelli di chat lo vogliono, e il backend OpenAI
+      di ripiego con vLLM). Non è un detto: è il vuoto.
+    - *I `cosa_fare`* escono da **tutti** i risultati proiettati (non solo dal turno n-1) e vanno nel
+      blocco del solo turno dopo: lì valgono (§ 4.3).
+    - *L'archivio delle conversazioni* con `attivo` viene già dalla proiezione (anticipo del passo 5,
+      per non archiviare il turno vivo non sigillato); il registro dei turni resta del ciclo.
+    - *Un turno non scritto* dall'ombra (un errore) rimanda Brain alla sua storia per quella
+      conversazione, con le scritture a mano: trovato dal banco d'attacco (un campo che mancava in
+      `foto_in_ingresso` faceva perdere il turno della foto e la sua contaminazione; e un annuncio
+      dell'agente prima della prima frase usciva dalla finestra): entrambi corretti, e il ripiego
+      resta come difesa.
+    - *La finestra* dopo un taglio o una compressione è `Conversazione.finestra_da` (scritta da
+      `togli_in_testa`), non più l'identità dei messaggi; la compressione ritrova il suo taglio dal
+      `_seq`.
+    - *La guardia dei riletti* «mediana oltre metà quella del passo 0» non c'è ancora: serve la base
+      della DGX; per ora `cache_rotta` (deve restare 0) e i numeri.
+    - *`conversazione_nuova`* (il tool del modello del 09/10) con `attivo` lascia il posto ad
+      `argomento` (stesso numero di schemi).
+
 **Da guardare sulla DGX dopo l'installazione** (`calliope stato --turni`, sezione «Una voce sola»):
 quanti turni con il parlato diverso e con quali motivi (attesi: `non_in_storia:*` degli annunci e
 della registrazione, `interrotta_persa`, `stop_non_detto`, `canale_scritto`; `filtri_frase` e
@@ -700,6 +757,19 @@ della registrazione, `interrotta_persa`, `stop_non_detto`, `canale_scritto`; `fi
 motivo, le differenze dell'ombra per meccanismo (una differenza fuori da quelle del § 1 è un difetto
 della proiezione da guardare), `contesto_ms` (atteso sotto 1 ms), byte per turno, `fughe` (0),
 `errori` (0); in `calliope stato` la crescita del registro e «Dimentica: … residui 0».
+
+**Quando Dario accende `attivo`** (`eventi: attivo` in `calliope.locale.yaml`, `calliope aggiorna`
+o un riavvio; per tornare indietro `ombra`): in `calliope stato --turni`, «Una voce sola», il
+parlato diverso deve essere 0 in ogni turno (un motivo vuol dire che la proiezione non è ciò che si
+è sentito: un difetto), `fughe` 0, `errori` 0 (un errore rimanda quella conversazione alla storia
+di Brain: guardare il journal, «[EVENTI] ombra non riuscita»), `cache_rotta` 0 e i riletti
+(mediana e p90) da confrontare con i giorni in ombra della stessa settimana, la proiezione nella
+risposta sotto 1 ms (avviso oltre 20). Nei turni veri: le regole `promemoria_interrotta` dopo un
+«basta» (e se la risposta dopo usa la parte non detta), `argomento_*` (quanti cambi, se a
+proposito, se lo sviluppo in pausa torna con «torniamo a…»), `nuova_conversazione_indizio` (cosa
+fa il modello di «ricominciamo»), le frasi «Metto da parte…». La scheda «Conversazione» degli
+schermi (archivio dalla proiezione) e, dopo un riavvio, che la conversazione continui con la sua
+storia.
 
 ### Rischi
 
@@ -888,6 +958,31 @@ non apre né riprende argomenti).
 **Quando**: con il passo 3 (contesto dagli eventi), di cui diventa parte; prima sarebbe una toppa
 sulla storia di oggi. Misura in ombra dal passo 1 possibile: l'esito «argomento» del modello
 registrato accanto alla decisione di oggi.
+
+**Stato (10/10): fatto con il passo 3** (ramo `eventi-passo-3`, solo con `eventi: attivo`).
+- **La forma: tool `argomento(azione nuovo|riprendi, titolo)`**, misurata con gemma4 e4b sui casi
+  dei giri del 10/10 (`prove/misura_argomenti.py`, 3 giri): tool 12/12 cambi con una parola di
+  cambio e contrari 12/12; campo di `proposta_rispondi` 0/9 sui cambi che può esprimere (solo con
+  una proposta aperta: «ricominciamo da dove eravamo», «torniamo a…» e «e poi?» non li può dire) e
+  contrari 9/9. Il tool si chiama insieme a quelli della richiesta («ricominciamo da capo: scrivimi
+  … chilometri» → `argomento` e `sviluppo_apri` nella stessa passata, 3/3); da solo vuole una
+  passata in più, coperta dalla mezza frase.
+- **Punto 3** fatto come scritto: lo sviluppo aperto va in pausa (sospeso, motivo «argomento»; in
+  qualunque fase, il lavoro dell'agente continua), la proposta scade «da parte»
+  (`proposta_chiusa.come = da_parte`), la mezza frase «Metto da parte lo sviluppo di «…».» (atto
+  `argomento_da_parte`). Con gli eventi accesi i dati dello sviluppo aperto dicono che passare ad
+  altro lo mette in pausa (prima solo «niente sviluppi nuovi finché questo è aperto»).
+- **Punto 4**: l'indice è senza un riassunto fatto da un modello: titolo, da che ora, ciò che è
+  rimasto aperto, l'ultima cosa detta (deterministico, fermo finché non cambia argomento: cache).
+  L'argomento d'inizio, senza titolo, prende quello dello sviluppo che ha lasciato.
+- **Punto 2**: la forma chiusa `nuova_conversazione` con `attivo` è un indizio nei dati del turno
+  (`nuova_conversazione_indizio`), non tolta: con `ombra` resta il comando di prima (il ritorno).
+- **Non regge del tutto**: «scrivimi un programma … chilometri» **senza** nessuna parola di cambio
+  durante l'analisi di un altro (giro 4, 11:47) resta 0/3 con tutte e due le forme: risponde lo
+  sviluppo («ne seguo uno per volta: vuoi sospendere il primo?»), come oggi. Da guardare con il 26B.
+- Prove: `prova_eventi_attivo` (i casi a secco e i contrari, il banco d'attacco: un dato non fidato
+  non apre né riprende argomenti, `argomento_dopo_dato`), `prova_argomenti_ollama` (i giri veri,
+  «ripeti il secondo consiglio» 3/3 col promemoria della parte non detta e 0/3 senza).
 
 ## 12. Documentazione da aggiornare quando si fanno i passi
 

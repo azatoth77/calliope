@@ -23,6 +23,13 @@ dopo. Le buste e le etichette delle foto davanti alla frase della persona si ric
 modo (`dato_in_ingresso`). Dal passo 3 li scriverà Brain dove nascono.
 
 Non solleva mai: un errore si conta (`errori`) e il turno continua come prima.
+
+**Passo 3** (`eventi: attivo`): l'ombra è anche il proiettore di Brain (`contesto`): i turni chiusi
+della conversazione per la risposta che comincia (§ 3.1), l'indice degli argomenti, i promemoria
+non parlati. Gli eventi del turno si scrivono dal turno vivo di Brain non sigillato, con la
+visibilità di ogni esito decisa qui; il passo 0 si misura sulla proiezione; il turno chiuso va
+nell'archivio dalla proiezione (`_archivia`). Un turno non scritto rimanda Brain alla sua storia
+per quella conversazione (`_guasti`).
 """
 from __future__ import annotations
 

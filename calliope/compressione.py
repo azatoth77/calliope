@@ -616,9 +616,13 @@ class Compressore:
     def _applica_risultato(self, brain, lav: Lavoro, dati: dict, usato: str,
                            finale: bool = True) -> dict | None:
         conv = brain.conv
-        try:
-            idx = next(i for i, m in enumerate(conv.history) if m is lav.taglio)
-        except StopIteration:
+        # Il primo messaggio che resta: per identità, o (registro degli eventi acceso, passo 3:
+        # la storia si ricostruisce dalla proiezione a ogni turno) per il `_seq` del suo turno
+        seq = lav.taglio.get("_seq") if isinstance(lav.taglio, dict) else None
+        idx = next((i for i, m in enumerate(conv.history) if m is lav.taglio
+                    or (seq is not None and isinstance(m, dict) and m.get("_seq") == seq
+                        and m.get("role") == "user")), None)
+        if idx is None:
             return None                          # la storia è cambiata: niente
         brain._archivia_turni()                  # prima di togliere: tutto è nell'archivio
         prima = brain._stima_storia()

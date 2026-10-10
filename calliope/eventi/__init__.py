@@ -2,8 +2,10 @@
 La conversazione come registro degli eventi (10/10/2026, decisione 0027, progetto
 docs/ricerche/2026-10-10-registro-eventi.md).
 
-Passi 0 e 1 del § 8, **in ombra**: la storia di Brain resta la fonte, gli eventi si scrivono
-accanto e la proiezione del contesto si confronta con lei a ogni turno.
+Passi 0 e 1 del § 8, **in ombra** (il predefinito): la storia di Brain resta la fonte, gli eventi
+si scrivono accanto e la proiezione del contesto si confronta con lei a ogni turno. Passo 2:
+l'uscita unica verso la voce (`uscita.py`). Passo 3 (`eventi: attivo`, acceso a mano): Brain legge
+il contesto dei turni chiusi dalla proiezione (`ombra.Ombra.contesto`), con gli argomenti del § 13.
 
 - `tipi.py`: l'evento, l'elenco chiuso dei tipi con la visibilità predefinita, ciò che va su
   disco (§ 2.1, § 2.2, § 2.4);

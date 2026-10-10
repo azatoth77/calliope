@@ -1991,6 +1991,22 @@ class Brain:
         Restituisce {"token", "s"}."""
         hist = [m for m in (getattr(conv, "history", None) or []) if isinstance(m, dict)]
         riassunto = self._riassunto_msgs(conv)
+        # Con il registro degli eventi acceso (10/10, passo 3) la storia del primo turno sarà la
+        # proiezione degli eventi, già nella forma della risposta: si scalda proprio quella
+        pr = getattr(self, "proiettore", None)
+        p = None
+        if pr is not None:
+            try:
+                p = pr.contesto(conv)
+            except Exception:  # noqa: BLE001 — senza, la storia salvata come prima
+                p = None
+        if p is not None:
+            r = getattr(conv, "riassunto", None)
+            riassunto = ([{"role": "system", "content": r["testo"]}]
+                         if isinstance(r, dict) and r.get("testo") else [])
+            if p.get("indice"):
+                riassunto.append({"role": "system", "content": p["indice"]})
+            hist = list(p["messaggi"])
         if not hist and not riassunto:
             return None
         # La storia come la vedrà il primo turno (Q5 dell'analisi del 06/10): con la domanda
@@ -2001,9 +2017,10 @@ class Brain:
         users = sum(1 for m in hist if m.get("role") == "user")
         if users + 1 > int(getattr(self.cfg, "max_history_turns", 40) or 40):
             return None          # il primo turno la taglierà: il prefisso cambia comunque
-        hist = [dict(m) for m in hist] + [{"role": "user", "content": "ciao"}]
-        _compatta_storia(hist)
-        hist = hist[:-1]
+        if p is None:
+            hist = [dict(m) for m in hist] + [{"role": "user", "content": "ciao"}]
+            _compatta_storia(hist)
+            hist = hist[:-1]
         system = self._system_messages()
         schemas = self.schemi()
         msgs = system + riassunto + hist

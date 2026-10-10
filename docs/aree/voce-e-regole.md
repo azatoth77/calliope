@@ -1530,3 +1530,41 @@ adattate `prova_eventi`, `prova_eventi_disco`, `prova_cassetto`. Misure (`prova_
 Calliope vera, modello e Whisper finti, Piper vero; 3 giri sul ramo e 4 su `main`): `prima_frase_s`
 mediana 0,09 s su `main` e 0,08 s sul ramo, prima voce sentita 0,36 → 0,35 s, «dalla fine della
 frase alla prima voce» 0,65–0,80 s e 0,68–0,76 s (rumore); `Uscita.di` ~1,5 µs a frase.
+
+## Una voce sola, passo 3: il contesto dagli eventi con `eventi: attivo` (10/10, ramo `eventi-passo-3`)
+
+Passo 3 del § 8 del progetto [`2026-10-10-registro-eventi.md`](../ricerche/2026-10-10-registro-eventi.md)
+e argomenti del § 13. Dettagli della conversazione (proiezione, sigilli, cache, argomenti, misure)
+in [contesto-conversazione](contesto-conversazione.md). Per le regole e il ciclo:
+
+- **Interruttore.** `eventi: spento | ombra | attivo` (config.py, `_eventi_valido` accetta `attivo`
+  dal 10/10); il predefinito resta `ombra`. Con `attivo` il ciclo collega l'ombra a Brain
+  (`Brain.proiettore`), e in cima a ogni giro, scritto il turno finito, la storia di Brain diventa
+  la proiezione (`Ciclo._rifletti`): le fasi del giro che la leggono (la cortesia dopo una domanda,
+  `ultima_domanda`) vedono ciò che si è sentito, annunci compresi.
+- **La garanzia** del § 3.1 per costruzione: in ogni richiesta l'ultimo messaggio dell'assistente è
+  ciò che la persona ha sentito (eccezione dichiarata: le frasi d'attesa). Il passo 0 (`parlato`) si
+  misura sulla proiezione, dopo la scrittura: con `attivo` deve dare 0 (`stop_non_detto`,
+  `interrotta_persa`, `non_in_storia:*`, `filtri_frase`, `storia_non_detta` spariscono; la frase
+  interrotta non è più «persa» perché la parte non detta è nel promemoria del turno dopo).
+  `eventi_ombra` ha `modo: attivo` e niente confronto con la storia (che è la proiezione).
+- **Regole nuove** (nel registro dei turni, campo `regole`): `promemoria_interrotta`,
+  `promemoria_cosa_fare` (i promemoria non parlati nel blocco dello stato), `argomento_stato`,
+  `argomento_nuovo`, `argomento_ripreso`, `argomento_sviluppo_in_pausa`,
+  `argomento_sviluppo_ripreso`, `argomento_proposta_da_parte`, `argomento_dopo_dato`,
+  `argomento_non_trovato`, `argomento_spento`, `nuova_conversazione_indizio`.
+- **«Ricominciamo» non è più un comando con `attivo`** (principio 10): la forma chiusa
+  `nuova_conversazione` (anche storpiata) diventa un indizio nei dati del turno
+  (`INDIZIO_RICOMINCIAMO`) e la frase va al modello, che decide (argomento nuovo, ripreso, o chiede).
+  Con `ombra` e `spento` resta com'era. Contrari nelle prove (`prova_eventi_attivo`, casi c e c').
+- **Atto nuovo** `argomento_da_parte` (categoria `risposta`): la mezza frase fissa del cambio
+  d'argomento, marcata da Brain e detta dall'uscita unica.
+- **Schemi**: `Brain.schemi()` è l'elenco unico per risposte, riscaldamento e compressione (prima
+  `tools.schemas()` e i filtri solo nella risposta: con lo stato del dialogo spento il
+  riscaldamento aveva un tool in più); con `attivo` `argomento` al posto di `conversazione_nuova`.
+- **Un turno non scritto** dall'ombra (un errore) rimanda Brain alla sua storia per quella
+  conversazione (`Ombra._guasti`): con le scritture a mano di prima, mai una proiezione incompleta.
+  Trovato dal banco d'attacco rigiocato: un campo mancante in `foto_in_ingresso` faceva perdere il
+  turno della foto e con lui la contaminazione.
+
+Prova `prova_eventi_attivo` (livello 1, ~7 s); `prova_eventi_ciclo` aggiornata (l'interruttore).

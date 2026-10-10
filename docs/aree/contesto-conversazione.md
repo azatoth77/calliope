@@ -792,3 +792,108 @@ la voce (`calliope/eventi/uscita.py`, in [voce-e-regole](voce-e-regole.md)). Per
   (`Uscita.testo_scritto()`), le stesse degli eventi, attese escluse.
 - Il contesto del modello resta la storia di Brain (passo 3 dopo): con `eventi: ombra` nulla cambia
   in ciò che il modello vede.
+
+## Il contesto dalla proiezione degli eventi, e gli argomenti (10/10, ramo `eventi-passo-3`)
+
+Passo 3 del [registro degli eventi](../ricerche/2026-10-10-registro-eventi.md) (§ 8, § 3.1, § 5)
+e argomenti al posto della «conversazione nuova» (§ 13, deciso da Dario il 10/10). Interruttore
+`eventi: attivo` (accettato dalla configurazione dal 10/10); **il predefinito resta `ombra`**: si
+accende a mano nel file locale, si torna indietro con `ombra` (Brain di nuovo sulla sua storia, che
+l'ombra continua a tenere).
+
+**Che cosa cambia con `attivo`.** Brain legge i turni chiusi dalla proiezione degli eventi
+(`Ombra.contesto`, il `proiettore` che il ciclo collega a Brain) all'inizio di ogni risposta e in
+cima al giro, appena l'ombra ha scritto il turno finito (`Ciclo._rifletti`): la storia della
+conversazione diventa la proiezione (ogni messaggio con `_seq`, la chiave del suo turno) e il turno
+vivo si aggiunge dopo `Conversazione.vivo_da`. Il modello vede:
+
+- **ciò che si è sentito**: le frasi dette e sentite per intero (atti e annunci compresi: timer,
+  avvisi, «Sì?», protezione, registrazione della voce), il segno « … (interrotta)» (scelto al passo
+  3, § 8.1 punto 6: quello di oggi) e niente di mai detto («Va bene, mi fermo» dello stop non c'è
+  più; dopo uno stop un messaggio vuoto dell'assistente, così i ruoli si alternano come vogliono
+  alcuni modelli di chat). Le frasi d'attesa restano fuori (eccezione dichiarata);
+- **i risultati sigillati dai campi dell'evento**, decisi alla scrittura (`riservato`, `personale`,
+  `non_fidato`, `fonte`: § 11.1): riservati la traccia, personali la sola frase pronta (anche su
+  disco), il testo dei siti `WEB_TOLTO` con la traccia `_fonte`; `proposta_rispondi` scritto con
+  visibilità «registro», quindi fuori;
+- **la forma dei turni** per la risposta che comincia (`messaggi(…, per_risposta=True)`): l'ora «di
+  allora» prima del turno vivo, i risultati lunghi ridotti prima del precedente, una volta sola e poi
+  fermi (turni definitivi immutabili);
+- **senza i `cosa_fare`** dei risultati: sono promemoria del turno dopo, nel blocco dello stato.
+
+**Il blocco dello stato** (dati del turno, mai storia; `Brain._blocco_eventi`): l'argomento corrente
+e quelli messi da parte; la **parte non detta** di una risposta interrotta (anche dopo uno stop: le
+frasi mandate e non sentite e il resto generato dal modello, `passata_modello` in memoria, ≤ 400
+caratteri; deciso da Dario il 10/10, § 11.4); i `cosa_fare` dell'ultima risposta. `PENDING_MSG` e i
+dati dello sviluppo stavano già lì.
+
+**Spariscono con `attivo`** (restano per `ombra` fino al passo 6): `record_interruption`,
+`record_stop`, `record_courtesy`, la scrittura di `record_announcement` (resta la proposta e il testo
+esterno in memoria), `allinea_detto`, `dimentica_ultimo_turno` (lo fa `turno_escluso`),
+`_seal_private`, `_togli_non_fidati` (resta la traccia `_fonte` del turno vivo),
+`_togli_proposta_rispondi`, `del history[claim_at]` (una dichiarazione detta resta: è stata
+sentita), `_compact_old_results`, `_aggiungi_detto`, `guardiano.correggi_storia`, il messaggio del
+modulo in `schermi/moduli.py`.
+
+**Archivio, `correnti`, riavvio.** I turni chiusi li archivia l'ombra dalla proiezione
+(`Brain.archivia_messaggi`, con dove e come è arrivato il turno); `correnti` salva solo la parte
+proiettata (`esporta` fino a `vivo_da`): il turno vivo va su disco come eventi. Dopo un riavvio il
+proiettore adotta il segmento rigiocato (la finestra dai `_seq` della storia ripresa). Il taglio in
+testa (`_trim_history`, `_trim_tokens`) e la compressione scrivono `Conversazione.finestra_da` (il
+`_seq` del primo turno rimasto); la compressione ritrova il suo taglio dal `_seq` (la storia si
+rifà a ogni turno). **Un turno non scritto per intero** dall'ombra (un errore) rimanda Brain alla
+sua storia, con le scritture a mano di prima, per quella conversazione: nessuna proiezione
+incompleta (potrebbe mancare la traccia di un dato non fidato).
+
+**Cache del prefisso** (§ 5, § 10 punto 5). `Brain._misura_prefisso` confronta i messaggi della
+prima passata con quelli della richiesta di prima della stessa conversazione: messaggi uguali byte
+per byte, token stimati riletti dopo, `rotta` se la differenza comincia prima dell'ultimo turno
+chiuso della richiesta di prima con sistema e riassunto uguali e senza taglio, compressione o
+ripresa. I riletti veri dal motore: Ollama dà `prompt_eval_cached_count` (0.40, misurato sul
+portatile: 1820 token, la seconda volta 1819 in cache; il `prompt_eval_count` è il prompt intero),
+vLLM `prompt_tokens_details.cached_tokens`. Nel registro dei turni il campo `cache` (`prefisso`,
+`riletti_stimati`, `riletti`, `rotta`, `proiezione_ms`); in `calliope stato --turni` la riga «cache
+del prefisso» con l'avviso se `cache_rotta` non è 0 e se la proiezione nella risposta supera
+`eventi_contesto_ms_avviso`.
+
+**Argomenti (§ 13).** Una conversazione non si azzera più: cambia argomento. Lo decide il modello con
+il tool `argomento(azione nuovo|riprendi, titolo)` (`calliope/tools/argomento.py`, gestito da
+`Brain._argomento`; negli schemi solo con `attivo`, al posto di `conversazione_nuova`: stesso numero
+di schemi). Al cambio: lo sviluppo aperto di chi parla va in pausa (sospeso con motivo «argomento»,
+il lavoro dell'agente continua), la proposta aperta scade «da parte» (`proposta_chiusa` con
+`come = da_parte`), Calliope lo dice con la mezza frase fissa «Metto da parte lo sviluppo di «…».»
+(atto `argomento_da_parte`, dall'uscita unica, dentro la risposta: copre la passata dopo). Eventi
+`argomento_nuovo`/`argomento_ripreso` subito dopo la frase della persona (il turno che cambia è del
+nuovo). Proiezione: l'argomento corrente per intero; gli altri in un **indice** dopo il riassunto
+(titolo, da che ora, ciò che è rimasto aperto, l'ultima cosa detta), fermo finché non cambia
+argomento; l'argomento d'inizio senza titolo prende quello dello sviluppo che ha lasciato. Ripreso
+(«torniamo a…», «no, parlavo ancora di…»): i suoi turni tornano per intero e lo sviluppo messo in
+pausa da lui si riapre («Riprendo lo sviluppo di …»). Con gli eventi accesi i dati dello sviluppo
+aperto dicono che passare ad altro lo mette in pausa (`SVILUPPO_ARGOMENTO`; prima soltanto «niente
+sviluppi nuovi finché questo è aperto»). Mai dopo un dato non fidato letto nella risposta (regola
+`argomento_dopo_dato`); un titolo che non c'è: `argomento_non_trovato`, il modello chiede. Regole:
+`argomento_nuovo`, `argomento_ripreso`, `argomento_stato`, `argomento_sviluppo_in_pausa`,
+`argomento_sviluppo_ripreso`, `argomento_proposta_da_parte`.
+
+**«Ricominciamo» con `attivo`** (la forma chiusa `nuova_conversazione`, anche storpiata) non chiude
+più la conversazione: va al modello con un indizio nei dati del turno (`INDIZIO_RICOMINCIAMO`:
+«ripartire da capo» o «riprendere», decide lui e chiede se non è chiaro), regola
+`nuova_conversazione_indizio`. Con `ombra` resta il comando di prima. «Dimentica» resta esplicita.
+
+**La forma dell'esito, misurata** (`prove/misura_argomenti.py`, gemma4 e4b sul portatile, prompt e
+schemi veri, 3 giri per caso). Tool `argomento`: i cambi con una parola di cambio 12/12
+(«ricominciamo» durante l'analisi di Celsius 3/3, «ricominciamo da capo» e i chilometri 3/3 con
+`argomento` e `sviluppo_apri` nella stessa passata, «ricominciamo da dove eravamo con i consigli»
+3/3 ripreso, «torniamo al programma dei gradi» 3/3 ripreso), i contrari 12/12 (un dettaglio dello
+stesso sviluppo, il «sì», l'ora, «e poi?»). Campo `argomento` in `proposta_rispondi`: 0/9 sui cambi
+che può esprimere (solo con una proposta aperta: gli altri 4 casi no), contrari 9/9. **Si tiene il
+tool.** Limite: «scrivimi un programma … chilometri» senza nessuna parola di cambio durante
+l'analisi di un altro 0/3 con tutte e due le forme: risponde lo sviluppo («ne seguo uno per volta:
+vuoi sospendere il primo?», come nel giro 4 delle 11:47). Costo: un argomento da solo vuole una
+passata in più (la mezza frase la copre); con un tool della richiesta nella stessa passata nessuna.
+«Ripeti il secondo consiglio» dopo un'interruzione e lo stop (giro 3, 10:44): 3/3 con il promemoria
+della parte non detta, 0/3 senza (il modello inventava un secondo consiglio).
+
+Prove: `prova_eventi_attivo` (livello 1: giro sintetico, ombra come prima, riavvio, compressione,
+latenza, promemoria, cache, sigilli, banchi d'attacco con `attivo`, argomenti, backend OpenAI),
+`prova_argomenti_ollama` (con il modello). Misure della prima frase nel § 8 del progetto.
