@@ -1270,3 +1270,18 @@ Per chiudere il problema per costruzione e non caso per caso:
 
 L'interprete del passo 2 si accende solo dopo questo passo: regge solo se il modello sa che cosa è
 stato chiesto davvero.
+
+### 10.2 Due modi di fare «una voce sola» (decisione di Dario dopo i numeri del ramo `sviluppo-chiusura`)
+
+- **Incrementale** (~1 giorno): un'uscita unica verso il TTS che aggiunge alla storia ciò che è stato
+  detto; Brain continua a mantenere la storia, il registro dei turni resta una copia.
+- **Registro degli eventi** (~2–3 giorni): una sola fonte di verità in sola aggiunta (detto dalla
+  persona, detto da Calliope con l'eventuale interruzione, tool ed esito, proposta aperta e chiusa);
+  il contesto del modello, la voce, lo stato della macchina, il registro dei turni e la scheda
+  «Conversazione» si ricavano da lì. Coerenza per costruzione, rigioco dei giri veri in prova,
+  transizioni della macchina come eventi; la cache del prefisso si conserva ricostruendo la storia in
+  sola aggiunta in coda. È la raccomandazione, se la storia di oggi diverge in molti punti.
+
+In tutti e due i casi valgono le tre categorie del parlato (contenuto del modello, atti di dialogo
+della macchina con testi fissi, esiti dei tool), i promemoria per il modello nel blocco dello stato e
+non alla voce, e la misura delle frasi scritte dal codice per turno.
