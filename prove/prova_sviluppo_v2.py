@@ -198,6 +198,11 @@ def prova_nomi(tmp, iso):
                                                              "valute", "nome": "Valute"}, turno=1)
     verifica("il nome vecchio estensione_crea vale come sviluppo_apri (tool_nome_vecchio)",
              "tool_nome_vecchio" in ctx.regole and "Va bene così" in detta(out), detta(out))
+    # sviluppo_stato, inventato dal 26B nei giri del 10/10, vale come sviluppo_passo
+    ctx.regole = []
+    out = P.chiama(reg2, ctx, "sviluppo_stato", {"azione": "stato"}, turno=2)
+    verifica("sviluppo_stato (inventato dal modello) vale come sviluppo_passo stato",
+             "tool_nome_vecchio" in ctx.regole and "Valute" in detta(out), detta(out))
     svs = svc.sviluppi
     svs.sospendi(svs.corrente("u1"))
     ctx.regole = []

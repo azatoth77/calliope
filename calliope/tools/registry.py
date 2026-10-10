@@ -44,6 +44,9 @@ NOMI_VECCHI = {
     "risultato_lavoro": "lavoro_risultato", "lavori_esegui": "programma_esegui",
     "estensione_crea": "sviluppo_apri", "estensioni_gestisci": "estensione_gestisci",
     "sviluppo": "sviluppo_passo", "sviluppo_prova": "sviluppo_collauda",
+    # Non un nome vecchio ma uno inventato dal 26B tre volte nei giri del 10/10 («che sviluppi
+    # ho aperti?»): vale sviluppo_passo, e senza `azione` risponde l'errore strutturato
+    "sviluppo_stato": "sviluppo_passo",
 }
 NOME_DISTANZA_MAX = 2
 NOME_LUNGHEZZA_MIN = 6
