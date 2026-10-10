@@ -413,6 +413,12 @@ satelliti, voci e Home Assistant finti.
 
 Contributi: prima una issue, poi la pull request ([`CONTRIBUTING.md`](CONTRIBUTING.md)); tappe dello sviluppo in [`CHANGELOG.md`](CHANGELOG.md).
 
+**Perché Calliope è fatta così**: [`docs/architettura.md`](docs/architettura.md) è il documento
+d'ingresso (vincoli, pipeline della voce, cervello, contesto, sicurezza, agenti, prove, direzione
+futura); [`docs/decisioni/`](docs/decisioni/) è il registro delle decisioni architetturali, una per
+file con contesto, alternative scartate e conseguenze; [`docs/analisi.md`](docs/analisi.md) racconta
+il metodo (casi veri → analisi → progetto → ombra → accensione sui numeri) con quattro esempi.
+
 [`CLAUDE.md`](CLAUDE.md) (mappa, principi, stato) · [`docs/installazione.md`](docs/installazione.md)
 · [`docs/aree/`](docs/aree/) · [`docs/ricerche/`](docs/ricerche/) ·
 [`docs/architettura-tool.md`](docs/architettura-tool.md) · [`docs/roadmap.md`](docs/roadmap.md) ·
@@ -499,6 +505,9 @@ generation (FLUX.2 [klein] 4B), a second factor for admins, an admin panel with 
 intercom, room conversations, maps, Raspberry satellites. A
 speech-to-text correction study (07/10) kept Whisper output uncorrected. Contributions: open an
 issue first ([`CONTRIBUTING.md`](CONTRIBUTING.md)).
+
+**Design rationale.** Start from [`docs/architettura.md`](docs/architettura.md) (in Italian, with an
+English summary at the end); architecture decision records are in [`docs/decisioni/`](docs/decisioni/).
 
 **License.** [AGPL-3.0-or-later](LICENSE). Third-party notices: [`TERZE-PARTI.md`](TERZE-PARTI.md).
 Security: [`SECURITY.md`](SECURITY.md).

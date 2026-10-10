@@ -87,6 +87,7 @@ per stadio, solo i moduli principali: librerie, classi e dettagli sono nei docum
 
 Tool e livelli di permesso (ospite / familiare / amministra) sono descritti in
 [`docs/architettura-tool.md`](docs/architettura-tool.md).
+Il perché delle scelte, per chi arriva da GitHub: [`docs/architettura.md`](docs/architettura.md), decisioni in [`docs/decisioni/`](docs/decisioni/) (una nuova decisione di fondo vi aggiunge un file), metodo in [`docs/analisi.md`](docs/analisi.md).
 
 ## Principi di progetto (da rispettare)
 
