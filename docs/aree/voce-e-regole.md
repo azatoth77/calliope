@@ -1028,25 +1028,26 @@ cambia.**
   frasi decise prima di Brain, banco nuovo); `prova_testo` (corsia veloce, 60 casi);
   `prova_dialogo_ollama` (il modello vero). `prova_brain`, `prova_conferme` e `prova_agenti` accettano il blocco
   al posto di `PENDING_MSG`.
-- **Misura col 4B (gemma4 e4b sul portatile, 10/10, `prova_dialogo_ollama 2`)**: 100 risposte a
-  una proposta aperta (16 frasi del registro e dell'analisi, più una correzione, su tre proposte:
-  «La apro?» di un tool, «Vuoi che accenda la luce della taverna?», la domanda della politica per
-  registrare una voce). Il modello chiama `proposta_rispondi` **45 volte su 100**, chiama
-  direttamente il tool proposto 20, nessuno dei due 35 (quasi tutti i «no», che il 4B dice solo a
-  parole: la proposta resta, come oggi). Esito giusto 41/45: tutti i rinvii (12/12, «Sì, però
-  fallo dopo», «Magari stasera») e i sì chiamati (29/29); «altro» chiamato 4 volte, sempre come
-  `si` (sbagliato: «Sì, però ascolta, stiamo uscendo a cena» dopo «La apro?»). Per proposta: la
-  domanda della politica 22/32, «La apro?» 19/34, la luce 4/34 (il 4B chiama `casa_comando` da
-  solo, 19). Con la corsia veloce un esito strutturato c'è per 73/100. **Accordo con lo spento**
-  (stessa esecuzione per la stessa frase): 93/100; dei 7 diversi, 4 sono rinvii che oggi
-  eseguono subito e in ombra no (la macchina ha ragione), 2 «Sì, però ascolta…» che il modello in
-  ombra chiama `si` (la politica di oggi, a conversazione pulita, non giudica il consenso per un
-  E1), 1 «No, mi va bene» eseguito solo nello spento. «No» eseguiti: 0 in tutti e due i modi.
-  **Latenza**: lettura del prompt 0,07 s in tutti e due i modi; prima frase mediana fra +0,00 e
-  +0,10 s in tre misure (−0,01, +0,07, +0,10: rumore dello stesso ordine); stato del turno e
+- **Misura col 4B (gemma4 e4b sul portatile, 10/10, `prova_dialogo_ollama 2`, blocco con gli
+  argomenti)**: 100 risposte a una proposta aperta (16 frasi del registro e dell'analisi, più una
+  correzione, su tre proposte: «La apro?» di un tool, «Vuoi che accenda la luce della taverna?»,
+  la domanda della politica per registrare una voce). Il modello chiama `proposta_rispondi`
+  **46 volte su 100**, chiama direttamente il tool proposto 15, nessuno dei due 39 (tutti i «no»,
+  che il 4B dice solo a parole: la proposta resta, come oggi; e qualche sì perso, «Sì, grazie»
+  alla registrazione). Esito giusto 42/46: i sì chiamati 31/31, i rinvii 11/12 («Sì, però fallo
+  dopo», «Magari stasera»); «altro» chiamato 4 volte, sempre come `si` (sbagliato: «Sì, però
+  ascolta, stiamo uscendo a cena» dopo «La apro?»); correzioni mai. Per proposta: la domanda
+  della politica 21/32, «La apro?» 17/34, la luce 8/34 (il 4B chiama `casa_comando` da solo, 12).
+  Con la corsia veloce un esito strutturato c'è per 73/100. **Accordo con lo spento** (stessa
+  esecuzione per la stessa frase): 92/100; degli 8 diversi, 5 sono rinvii che oggi eseguono
+  subito e in ombra no (la macchina ha ragione), 1 «Sì, però ascolta…» che il modello in ombra
+  chiama `si` (a conversazione pulita la politica di oggi non giudica il consenso di un E1), 1
+  «No, mi va bene» e 1 «Sì, grazie» eseguiti solo nello spento. «No» eseguiti: 0 in tutti e due
+  i modi. **Latenza**: lettura del prompt 0,07 s in tutti e due i modi; prima frase mediana +0,07,
+  +0,10, +0,13 s in tre misure (0,49–0,62 s: piccola, da rimisurare col 26B); stato del turno e
   corsia veloce 0,03 ms; niente secondo modello. Il blocco con «e non {tool}» non cambiava niente
-  (38 %); la descrizione «chiama questo al posto del tool proposto» porta al 40–45 %. **Il 26B va
-  misurato sulla DGX** (sotto).
+  (38 %); la descrizione «chiama questo al posto del tool proposto» porta al 40–46 %. **Il 26B
+  va misurato sulla DGX** (sotto).
 - **Cosa guardare sulla DGX per decidere il passo 2** (`calliope stato --turni`, sezione «Stato
   del dialogo»): quante proposte sì/no il 26B risponde con `proposta_rispondi` (e quante con il
   tool diretto o senza niente); i disaccordi per tipo: `chiede_vs_esegue` (il consenso del
