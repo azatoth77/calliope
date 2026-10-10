@@ -1252,3 +1252,21 @@ stato interrotto prima di essere detto); gli scambi tecnici restano fuori. Ogni 
 codice fa a voce è una proposta della macchina, con la domanda in fondo, oppure non è una domanda.
 La verifica di come stanno oggi le cose e la correzione della chiusura sono nel ramo
 `sviluppo-chiusura` (10/10).
+
+### 10.1 Passo 1-bis, «una voce sola» (deciso da Dario il 10/10, prima del passo 2)
+
+Per chiudere il problema per costruzione e non caso per caso:
+
+1. **Un'uscita sola verso la voce.** Ogni parola che va al TTS (risposte del modello, frasi dei
+   tool, righe e annunci del ciclo) passa da un solo punto, che la manda alla voce **e** la scrive
+   nella storia come messaggio dell'assistente così come è stata detta; se interrotta, solo la parte
+   riprodotta, marcata come interrotta. Una prova statica fallisce se il TTS è chiamato da un altro
+   punto.
+2. **Le domande sono oggetti.** Un tool o il ciclo non mettono un «?» nel testo parlato: restituiscono
+   una proposta (cosa, effetto, chi risponde) alla macchina a stati, che rende la domanda in fondo e
+   la registra. Una prova fallisce se una frase pronta contiene una domanda che non è una proposta.
+3. **Due contatori a zero** in `calliope stato --turni`, accanto all'avviso della latenza: «parlato
+   diverso dalla storia» e «domande non registrate».
+
+L'interprete del passo 2 si accende solo dopo questo passo: regge solo se il modello sa che cosa è
+stato chiesto davvero.
