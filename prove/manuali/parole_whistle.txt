@@ -1,0 +1,13 @@
+# parole suggerite per le frasi di frasi_whistle.tsv (nomi di fantasia)
+Ottavio
+Brambilla
+Gilda
+Scarpellini
+Ernesto
+Pellizzari
+Ludovica
+veranda
+Marcolini
+Fenoglio
+Bressanone
+Ferragosto
