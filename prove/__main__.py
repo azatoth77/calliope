@@ -87,6 +87,8 @@ A_SECCO = [
     ("prova_eventi_ciclo.py", [], "registro degli eventi sul ciclo della voce (10/10, passi 0–2): contatori del passo 0 e confronto dell'ombra su un giro sintetico (interruzione, stop, cortesia, timer, frase filtrata, «Lo apro?», domanda con il testo dopo, «Sì?»), garanzia detto = proiezione, niente disco prima della prima frase, eventi: spento come prima; passo 2: autore e atto all'invio (frase pronta, ripiego, contenuto), chiamate fra le frasi nella proiezione, risposta scritta dagli eventi, ogni atto classificato, nessuna frase fuori turno"),
     ("prova_eventi_disco.py", [], "registro degli eventi su disco (10/10): riavvio con rigioco, proposta persa, riga rovinata (eventi_troncati), disco in sola lettura o che non scrive; «dimentica» vera (byte di conversazioni.db e del WAL, residui in calliope stato, conversazione in corso chiusa); rotazione, ospiti cancellati alla chiusura, sfida e segreti mai su disco"),
     ("prova_uscita_unica.py", [], "l'uscita unica verso la voce (10/10, passo 2 del registro degli eventi): AST (fuori da eventi/uscita.py e tts.py nessuno chiama say, say_cached, chime, suono, sintetizza, start_turn, wait sulla voce; lo stream di Brain letto solo da _rispondi e _ricerca_promessa), atti dell'elenco chiuso con la loro categoria, nessuna frase fuori turno (turno 0, turno interrotto, satellite che non la dice), niente disco e microsecondi per frase"),
+    # ~7 s: con i banchi d'attacco di prova_politica e prova_valore rigiocati sul registro
+    ("prova_eventi_attivo.py", [], "registro degli eventi acceso (10/10, passo 3 e argomenti del § 13): eventi: attivo sul ciclo vero (parlato diverso 0, garanzia detto = storia, stop e interruzione senza frasi mai dette, annunci e «Sì?» nella storia, storia di Brain = proiezione, correnti senza il turno vivo), ombra come prima; promemoria della parte non detta («ripeti il secondo punto») e dei cosa_fare nel blocco dello stato; cache del prefisso (turni definitivi uguali byte per byte, riletti, cache_rotta in calliope stato --turni); visibilità decisa alla scrittura (banco di prova_politica 99/99 e attacchi di prova_valore rigiocati con attivo, fughe 0, sigilli, proposta_rispondi fuori); argomenti (Celsius → chilometri, sviluppo in pausa e proposta da parte con la mezza frase, indice, ripresa, «ricominciamo» indizio con attivo e comando con ombra, contrari); backend OpenAI"),
     ("prova_config.py", [], "calliope.yaml, variabili d'ambiente, chiavi sbagliate"),
     ("prova_config_satellite.py", [], "microfono, casse e webcam nella sezione satellite, ripiego con avviso"),
     ("prova_contesto.py", [], "finestra di contesto dal setup (modello, memoria, tempo) e token veri a ogni turno"),
@@ -341,6 +343,7 @@ LEGAMI = [
     ("calliope/tools/dialogo.py", ["prova_dialogo_tool.py"]),
     # Lo stato del dialogo (10/10): il tool di risposta, la macchina in ombra, la corsia veloce
     ("calliope/tools/proposta.py", ["prova_stato_dialogo.py"]),
+    ("calliope/tools/argomento.py", ["prova_eventi_attivo.py"]),
     ("calliope/stato_dialogo.py", ["prova_stato_dialogo.py"]),
     ("calliope/risposte.py", ["prova_testo.py", "prova_stato_dialogo.py"]),
     ("calliope/tools/casa.py", ["prova_casa_ha.py", "prova_meteo_casa.py"]),

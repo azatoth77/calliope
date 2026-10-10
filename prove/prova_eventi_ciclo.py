@@ -470,18 +470,19 @@ def prova_latenza():
 
 
 def prova_modo():
-    print("— l'interruttore: spento | ombra; attivo rifiutato")
-    from calliope.config import _eventi_valido
-    verifica("«ombra» e «spento» valgono", _eventi_valido("Ombra") == "ombra"
-             and _eventi_valido("spento") == "spento")
+    print("— l'interruttore: spento | ombra | attivo (dal passo 3), ombra il predefinito")
+    from calliope.config import Config, _eventi_valido
+    verifica("«ombra», «spento» e «attivo» valgono", _eventi_valido("Ombra") == "ombra"
+             and _eventi_valido("spento") == "spento" and _eventi_valido("attivo") == "attivo")
     try:
-        _eventi_valido("attivo")
+        _eventi_valido("acceso")
         rifiutato = False
-    except ValueError as e:
-        rifiutato = "passo 3" in str(e)
-    verifica("«attivo» rifiutato (passo 3, resta «ombra»)", rifiutato)
-    cfg = types.SimpleNamespace(eventi="attivo")
-    verifica("un «attivo» passato a mano vale «ombra»", ombra_mod.modo(cfg) == "ombra")
+    except ValueError:
+        rifiutato = True
+    verifica("un valore sconosciuto rifiutato", rifiutato)
+    verifica("il predefinito resta «ombra» (attivo si accende a mano)", Config().eventi == "ombra")
+    cfg = types.SimpleNamespace(eventi="boh")
+    verifica("un valore sconosciuto passato a mano vale «ombra»", ombra_mod.modo(cfg) == "ombra")
 
 
 def prova_taglio_e_compressione():

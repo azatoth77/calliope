@@ -85,7 +85,10 @@ OSPITE = {"chi_parla", "elenca_voci", "ora_attuale", "data_oggi", "calcola", "da
           "citta_casa_salva",
           # la risposta a una proposta aperta (10/10, calliope/stato_dialogo.py): di servizio,
           # per tutti; vale solo con una proposta di chi parla
-          "proposta_rispondi"}
+          "proposta_rispondi",
+          # il cambio d'argomento (10/10, § 13 del registro degli eventi): di servizio, per
+          # tutti; negli schemi solo con `eventi: attivo`
+          "argomento"}
 FAMILIARE = OSPITE | {"elenca_utenti", "cambia_voce", "rinomina_interlocutore",
                       "promemoria_imposta", "ricorda", "dimentica", "lista_aggiungi",
                       "lista_leggi", "lista_togli", "appuntamento_aggiungi",

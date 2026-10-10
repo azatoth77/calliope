@@ -395,7 +395,7 @@ def prova_compressione():
              r.visti and r.visti[0].messaggi_voce[0]["role"] == "system"
              and any(m.get("content") == "Domanda numero 7 sul tetto"
                      for m in r.visti[0].messaggi_voce))
-    verifica("…con gli stessi tool", r.visti[0].schemi == b.tools.schemas(online=b.cfg.online))
+    verifica("…con gli stessi tool", r.visti[0].schemi == b.schemi())
     users_prima = sum(1 for m in b.history if m["role"] == "user")
     parla(b, "E quindi il tetto?")
     users = [m["content"] for m in b.history if m["role"] == "user"]

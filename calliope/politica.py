@@ -246,6 +246,10 @@ CLASSI: dict[str, Classe] = {
     # la risposta strutturata a una proposta (10/10, calliope/stato_dialogo.py): non fa niente
     # da sé; il «sì» diventa la chiamata del tool proposto, che passa da qui come sempre
     "proposta_rispondi": _c(S),
+    # il cambio d'argomento (10/10, § 13 del registro degli eventi): mette da parte ciò che è
+    # aperto (sviluppo in pausa, proposta scaduta), non esegue niente; Brain lo rifiuta dopo un
+    # dato non fidato letto nella risposta
+    "argomento": _c(S),
     # ── letture di dati non fidati ──
     "web_cerca": _c(S, fonte="web"),
     "archivio_cerca": _c(S, fonte="archivio"), "archivio_scadenze": _c(S, fonte="archivio"),

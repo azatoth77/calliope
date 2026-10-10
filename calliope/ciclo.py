@@ -286,6 +286,12 @@ class Ciclo:
         if ombra_mod.modo(servizi.cfg) != ombra_mod.SPENTO:
             self.ombra = ombra_mod.Ombra(servizi.cfg, servizi.eventi, self,
                                          log=lambda m: print(m, flush=True))
+            if self.ombra.attivo and servizi.eventi is not None and brain is not None:
+                # Passo 3 (`eventi: attivo`): Brain legge il contesto dalla proiezione
+                try:
+                    brain.proiettore = self.ombra
+                except AttributeError:
+                    pass
         # L'uscita unica verso la voce (10/10, passo 2, calliope/eventi/uscita.py): ogni frase
         # della corsia passa da lì, con l'atto e l'autore; l'ombra la sente da lì
         _ = self.uscita
@@ -482,6 +488,17 @@ class Ciclo:
         turni (campo `regole`), così la revisione può misurare quanto scatta e quando."""
         if self.rec is not None:
             self.rec.setdefault("regole", []).append(name)
+
+    def _rifletti(self):
+        """Passo 3 del registro degli eventi: scritto il turno, la storia di Brain diventa la
+        proiezione (le fasi del giro che la leggono, come la cortesia dopo una domanda, vedono
+        ciò che si è sentito, annunci compresi), e la conversazione salvata è quella."""
+        try:
+            if self.brain.dalla_proiezione():
+                self.brain.salva_conversazione()
+        except Exception as e:  # noqa: BLE001 — la storia di prima resta: la voce continua
+            print(f"   [EVENTI] proiezione in cima al giro non riuscita: {type(e).__name__}: "
+                  f"{e}", flush=True)
 
     def _scrivi_turno(self, rec: dict):
         """Il turno nel registro dei turni, con prima il passo 0 e l'ombra del registro degli
@@ -945,15 +962,20 @@ class Ciclo:
                   "chiamami per nome", flush=True)
             if self.rec is not None:
                 self.rule("compagnia_nome")
+        attivo = self.ombra is not None and self.ombra.attivo
         if self.rec:
-            # Il turno finito nell'archivio delle conversazioni (08/10: la scheda «Conversazione»)
-            self._archivia_turno()
+            # Il turno finito nell'archivio delle conversazioni (08/10: la scheda «Conversazione»).
+            # Con gli eventi accesi (passo 3) lo archivia l'ombra, dalla proiezione
+            if not attivo:
+                self._archivia_turno()
             self._chiudi_ascolto(self.rec)
             self._scrivi_turno(self.rec)
             self.rec = None
         elif self.ombra is not None:
             # Annunci fra un turno e l'altro: l'ombra li tiene per il turno dopo
             self.ombra.chiudi_turno(None, self._turno)
+        if attivo:
+            self._rifletti()
         # Il turno di prima è finito: voce di nuovo accesa, il satellite in prestito resta
         # attivo fino alla fine della finestra di follow-up (calliope/rispondi.py)
         self.awake_until = s.instradamento.dopo_turno(self.awake_until)
@@ -2361,6 +2383,17 @@ class Ciclo:
         come = nuova_conversazione_come(text, cfg.wake_names)
         if come == "storpiata" and t.scritto is not None:
             come = None
+        if come and self.ombra is not None and self.ombra.attivo:
+            # Con il registro degli eventi acceso (10/10, § 13) una conversazione non si azzera:
+            # «ricominciamo» va al modello come indizio (argomento nuovo o ripreso, decide lui)
+            print(f"   («{self.in_console(text)}»: un indizio per il modello, non un comando)",
+                  flush=True)
+            self.rule("nuova_conversazione_indizio")
+            try:
+                self.brain.indizio_turno = {"forma": "nuova_conversazione", "come": come}
+            except AttributeError:
+                pass
+            return None
         if come:
             print(f"Tu: {self.in_console(text)}  (conversazione nuova)")
             self.rec["esito"] = "nuova_conversazione"
@@ -3137,6 +3170,19 @@ class Ciclo:
         # prefisso non è servita (riavvio, altra conversazione)
         if getattr(brain, "last_lettura_s", None) is not None:
             self.rec["lettura_s"] = brain.last_lettura_s
+        # La cache del prefisso (10/10, guardie del registro degli eventi, § 10 punto 5): i token
+        # riletti dal motore nella prima passata e il confronto con la richiesta di prima
+        cache = dict(getattr(brain, "last_cache", None) or {})
+        if isinstance(getattr(brain, "last_riletti", None), int):
+            cache["riletti"] = brain.last_riletti
+        p = getattr(brain, "_stato_eventi", None)
+        if isinstance(p, dict) and isinstance(p.get("ms"), (int, float)):
+            # Con `eventi: attivo` la proiezione sta nel percorso della risposta
+            cache["proiezione_ms"] = p["ms"]
+            if p.get("fughe"):
+                cache["fughe"] = p["fughe"]
+        if cache:
+            self.rec["cache"] = cache
         # Velocità di generazione del turno (08/10, fase 0 della taratura): tutte le passate
         gen = getattr(brain, "last_generazione", None)
         if isinstance(gen, dict) and gen.get("token") and gen.get("ns"):

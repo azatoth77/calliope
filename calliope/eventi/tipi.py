@@ -51,14 +51,18 @@ TIPI: dict[str, Tipo] = dict([
        "la proiezione usa «dopo» solo se accettata"),
     _t("dato_in_ingresso", "fonte testo caratteri", "modello",
        "su disco solo fonte e caratteri"),
-    _t("foto_in_ingresso", "testo numeri", "modello", "solo il riferimento, mai i byte"),
-    _t("allegato_in_ingresso", "testo info", "modello", "solo il riferimento, mai il contenuto"),
+    _t("foto_in_ingresso", "testo numeri fonte", "modello",
+       "solo il riferimento (etichetta e numeri nell'album), mai i byte"),
+    _t("allegato_in_ingresso", "testo info numeri fonte", "modello",
+       "solo il riferimento (numeri nell'album, tipo e dimensione), mai il contenuto"),
     _t("dati_del_turno", "blocchi", "turno", "su disco solo nomi e lunghezze"),
     _t("passata_modello", "n spinta testo trattenuto chiamate", "registro",
        "per il rigioco e la diagnosi"),
     _t("chiamata_tool", "id nome argomenti passata origine", "modello"),
     _t("esito_tool", "id nome ok contenuto riservato personale non_fidato correggibile "
-                     "frase in_sospeso", "modello", "visibilità per tipo di tool (§ 11.1)"),
+                     "frase in_sospeso fonte", "modello",
+       "visibilità per tipo di tool decisa alla scrittura (§ 11.1): riservato, personale, "
+       "non_fidato e la fonte della busta"),
     _t("detto_calliope", "testo autore atto frase canale satellite fonte dopo_chiamate",
        "modello", "nasce all'invio nell'uscita unica (§ 3.2); dopo_chiamate: quante chiamate "
                   "dei tool c'erano già nella risposta (la posizione fra le frasi)"),
@@ -80,6 +84,12 @@ TIPI: dict[str, Tipo] = dict([
        "mai riscrittura (§ 2.6 c)"),
     _t("turno_chiuso", "esito regole tempi contesto controlli", "registro",
        "sorgente del registro dei turni"),
+    # Gli argomenti della conversazione (§ 13, passo 3): li decide il modello (tool `argomento`)
+    _t("argomento_nuovo", "id titolo ora motivo prima da_parte", "modello",
+       "da qui il turno e i seguenti sono dell'argomento nuovo; `da_parte`: ciò che era aperto "
+       "nell'argomento lasciato (sviluppo in pausa, proposta scaduta)"),
+    _t("argomento_ripreso", "id titolo ora motivo prima da_parte ripresi", "modello",
+       "un argomento messo da parte torna corrente (si annulla anche così un cambio sbagliato)"),
 ])
 
 # Tre categorie del parlato (§ 2.2, § 4): l'autore di detto_calliope
@@ -104,6 +114,9 @@ ATTI: dict[str, tuple[str, bool, str]] = {
     "ripeti": ("risposta", False, "1c"),
     "riga_sviluppo": ("risposta", False, "1f"),
     "sfida": ("risposta", False, "1g"),
+    # La mezza frase fissa al cambio d'argomento (§ 13, passo 3): «Metto da parte lo sviluppo
+    # di …», detta da Brain dentro la risposta
+    "argomento_da_parte": ("risposta", False, "§ 13"),
     "protezione_risposta": ("risposta", False, "1"),
     "cortesia": ("registrato", False, "3"),
     "protezione_cancello": ("registrato", False, "4"),
@@ -194,6 +207,47 @@ def controlla(tipo: str, vis: str | None, dati: dict) -> str:
 
 # ─────────────────────────── su disco (§ 2.4) ───────────────────────────
 TRACCIA_RISERVATA = {"nota": "risultato riservato: non conservato"}
+# La traccia di un risultato riservato nel contesto del modello (la stessa di Brain._seal_private,
+# brain._PRIVATE_TRACE: Brain la passa alla proiezione, qui il valore per il disco e le prove)
+TRACCIA_PRIVATA = ("Risultato riservato, tolto dalla conversazione dopo la risposta: se serve di "
+                   "nuovo, richiama il tool.")
+
+
+def esito_ok(res) -> bool:
+    """Un risultato di tool è riuscito (come brain._result_ok)."""
+    return isinstance(res, dict) and "errore" not in res and res.get("ok") is not False
+
+
+def frase_esito(res) -> str:
+    """La frase pronta di un risultato (come brain._result_text)."""
+    if not isinstance(res, dict):
+        return ""
+    for k in ("conferma", "risposta_finale", "da_dire"):
+        v = res.get(k)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    return ""
+
+
+def sigillato(contenuto: str, riservato: bool, personale: bool,
+              traccia: str = TRACCIA_PRIVATA) -> str:
+    """Il risultato di un tool riservato o personale dopo la risposta (passo 3: la forma di
+    Brain._seal_private, decisa dai campi dell'evento scritti alla scrittura): i riservati una
+    traccia neutra, i personali la sola frase già pronta; un personale fallito resta com'è.
+    Puro."""
+    if not riservato and not personale:
+        return contenuto
+    try:
+        res = json.loads(contenuto or "{}")
+    except (ValueError, TypeError):
+        res = {}
+    res = res if isinstance(res, dict) else {}
+    ok = esito_ok(res)
+    if not ok and not riservato:
+        return contenuto
+    detta = "" if riservato else frase_esito(res)
+    return json.dumps({"ok": ok, **({"conferma": detta} if detta else {"nota": traccia})},
+                      ensure_ascii=False)
 
 
 def per_disco(ev: Evento) -> dict:
@@ -212,12 +266,21 @@ def per_disco(ev: Evento) -> dict:
     elif tipo in ("foto_in_ingresso", "allegato_in_ingresso"):
         testo = d.pop("testo", None)
         d["caratteri"] = len(testo or "")
+    elif tipo == "passata_modello":
+        # Il testo generato e non detto (dopo un'interruzione) resta in memoria: su disco la
+        # lunghezza
+        testo = d.pop("testo", None)
+        d["caratteri"] = len(testo or "")
     elif tipo == "dati_del_turno":
         d["blocchi"] = [{"nome": b.get("nome"), "caratteri": len(b.get("testo") or "")}
                         for b in d.get("blocchi") or () if isinstance(b, dict)]
     elif tipo == "esito_tool":
         if d.get("riservato"):
             d["contenuto"] = json.dumps(TRACCIA_RISERVATA, ensure_ascii=False)
+        elif d.get("personale"):
+            # Su disco come nel contesto dopo la risposta (passo 3: la storia non è più
+            # sigillata a mano prima di arrivare qui): la sola frase pronta
+            d["contenuto"] = sigillato(str(d.get("contenuto") or ""), False, True)
         elif d.get("non_fidato"):
             d["contenuto"] = json.dumps({"caratteri": len(str(d.get("contenuto") or ""))},
                                         ensure_ascii=False)

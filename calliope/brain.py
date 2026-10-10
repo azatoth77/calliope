@@ -38,6 +38,7 @@ from .risposte import forma_chiusa
 from .sicurezza import instruction_fact
 from .testi import MESI as _MESI, NIENTE, SENTENCE_END as _SENTENCE_END
 from .tools import dialogo
+from .tools.argomento import AZIONI as ARGOMENTO_AZIONI, TOOL as ARGOMENTO_TOOL
 from .tools.registry import ToolRegistry
 from .tools.spec import ToolContext
 
@@ -1298,6 +1299,9 @@ class OllamaBackend:
                     # Con il tempo di lettura del prompt (06/10): solo la parte non in cache
                     # Con la generazione (08/10, fase 0 della taratura): token/s del turno
                     yield "usage", {"prompt": obj.get("prompt_eval_count"),
+                                    # La parte del prompt trovata in cache (Ollama ≥ 0.40):
+                                    # i riletti sono il resto (10/10, guardia della cache)
+                                    "in_cache": obj.get("prompt_eval_cached_count"),
                                     "output": obj.get("eval_count"),
                                     "lettura_ns": obj.get("prompt_eval_duration"),
                                     "generati": obj.get("eval_count"),
@@ -1402,6 +1406,11 @@ class OpenAIBackend:
         if usage is not None:
             out = getattr(usage, "completion_tokens", None)
             u = {"prompt": getattr(usage, "prompt_tokens", None), "output": out}
+            # vLLM con il prefix caching: i token trovati in cache (10/10, guardia della cache)
+            det = getattr(usage, "prompt_tokens_details", None)
+            cached = getattr(det, "cached_tokens", None) if det is not None else None
+            if isinstance(cached, int):
+                u["in_cache"] = cached
             # vLLM non dice i tempi (08/10): la generazione è dal primo all'ultimo pezzo,
             # senza il primo token (che paga la lettura del prompt)
             if isinstance(out, int) and out > 1 and primo and ultimo and ultimo > primo:
@@ -1546,6 +1555,42 @@ def _esito_ripetuto(primo: str) -> str:
     return json.dumps({**res, "nota": nota}, ensure_ascii=False)
 
 
+# Gli argomenti (10/10, § 13 del registro degli eventi). La mezza frase fissa su ciò che va da
+# parte o torna, detta dall'uscita unica dentro la risposta (atto `argomento_da_parte`)
+ARGOMENTO_DA_PARTE = "Metto da parte {cosa}."
+ARGOMENTO_RIPRESO = "Riprendo {cosa}."
+# «Ricominciamo» con gli eventi accesi: un indizio nei dati del turno, non un comando
+INDIZIO_RICOMINCIAMO = ("La frase è «ricominciamo» o simile: può voler dire ripartire da capo "
+                        "con un argomento nuovo (argomento con azione nuovo) oppure riprendere "
+                        "da dove eravate (azione riprendi, o continua e basta); decidi dalla "
+                        "conversazione e, se non è chiaro, chiedi cosa vuole fare.")
+
+
+def _argomento_simile(titolo: str, parte: list[dict]) -> dict | None:
+    """L'argomento messo da parte che il titolo detto nomina (parole in comune, o simile), o
+    l'ultimo se il titolo è vuoto. None se nessuno."""
+    import difflib
+    if not parte:
+        return None
+    t = (titolo or "").lower()
+    if not t:
+        return parte[0]
+
+    def parole(x):
+        return {w[:5] for w in re.findall(r"[a-zà-ù0-9]{3,}", (x or "").lower())}
+    tp = parole(t)
+    migliore, punti = None, 0.0
+    for a in parte:
+        at = str(a.get("titolo") or "")
+        altro = " ".join([str(a.get("ultimo") or "")] + [
+            str(x.get("cosa") if isinstance(x, dict) else x) for x in a.get("lasciato") or ()])
+        p = (len(tp & parole(at)) + 0.5 * len(tp & parole(altro))
+             + difflib.SequenceMatcher(None, t, at.lower()).ratio())
+        if p > punti:
+            migliore, punti = a, p
+    return migliore if punti >= 0.6 else None
+
+
 def make_backend(cfg: Config):
     if cfg.llm_backend == "ollama":
         return OllamaBackend(cfg)
@@ -1625,6 +1670,10 @@ class Brain:
         # Schede in attesa del giudizio del guardiano sulla domanda (minori): None = partono
         # subito (_send_cards, rilascia_schede)
         self.trattieni_schede: list | None = None
+        # Il registro degli eventi acceso (10/10, passo 3, `eventi: attivo`): il contesto dei
+        # turni chiusi viene dalla proiezione degli eventi (`eventi.ombra.Ombra.contesto`, lo
+        # collega il ciclo). None = la storia di Brain, come prima (`eventi: ombra`)
+        self.proiettore = None
 
     # ── la conversazione corrente (calliope/conversazione.py) ──
     def _c(self) -> Conversazione:
@@ -1655,6 +1704,101 @@ class Brain:
     uso_precedente = property(lambda self: getattr(self._c(), "uso_precedente", None),
                               lambda self, v: setattr(self._c(), "uso_precedente", v))
 
+    def schemi(self) -> list[dict]:
+        """Gli schemi dei tool per il modello, uguali in ogni richiesta (risposte, riscaldamento,
+        compressione: il prefisso in cache). Con lo stato del dialogo spento senza il tool di
+        risposta (10/10); con il registro degli eventi acceso (§ 13) `argomento` al posto di
+        conversazione_nuova, senza il contrario: lo stesso numero di schemi."""
+        schemas = self.tools.schemas(online=self.cfg.online)
+        if stato_dialogo.modo(self.cfg) == stato_dialogo.SPENTO:
+            schemas = [s for s in schemas if s["function"]["name"] != stato_dialogo.TOOL]
+        via = ("conversazione_nuova" if getattr(self, "proiettore", None) is not None
+               else ARGOMENTO_TOOL)
+        return [s for s in schemas if s["function"]["name"] != via]
+
+    # ── il registro degli eventi acceso (10/10, passo 3) ──
+    def eventi_attivo(self) -> bool:
+        """Il contesto viene dalla proiezione degli eventi: le scritture a mano della storia
+        (record_*, _seal_private, _togli_*, claim_at, _compatta_storia, correggi_storia…) non
+        servono più e non si fanno. False con `eventi: ombra` o se la proiezione non c'è stata
+        (una conversazione che il registro non ha: si torna alla storia di Brain)."""
+        return (getattr(self, "proiettore", None) is not None
+                and bool(self.__dict__.get("_da_eventi", True)))
+
+    def dalla_proiezione(self) -> bool:
+        """Con `eventi: attivo`: la storia della conversazione corrente diventa la proiezione
+        degli eventi (turni chiusi dell'argomento corrente; il turno vivo si aggiungerà dopo
+        `vivo_da`), con l'indice degli argomenti messi da parte e i promemoria non parlati per
+        il blocco dello stato. All'inizio di ogni risposta e in cima al giro (dopo che l'ombra ha
+        scritto il turno). True se la proiezione c'è stata."""
+        pr = getattr(self, "proiettore", None)
+        if pr is None:
+            return False
+        conv = self._c()
+        try:
+            p = pr.contesto(conv)
+        except Exception as e:  # noqa: BLE001 — la proiezione non ferma la voce
+            print(f"   [EVENTI] proiezione non riuscita: {type(e).__name__}: {e}", flush=True)
+            p = None
+        if p is None:
+            # Il registro non ha questa conversazione: la storia di Brain (vuota o la coda per
+            # una appena aperta), con le scritture a mano di prima se non è vuota
+            self._da_eventi = not conv.history
+            conv.vivo_da = len(conv.history)
+            self._stato_eventi = None
+            return False
+        self._da_eventi = True
+        conv.history = list(p["messaggi"])
+        conv.vivo_da = len(conv.history)
+        conv.archiviati = len(conv.history)       # l'archivio lo scrive l'ombra, dagli eventi
+        conv.indice_argomenti = p.get("indice")
+        self._stato_eventi = p
+        return True
+
+    def archivia_messaggi(self, conv, msgs: list[dict]):
+        """Passo 3: i turni appena chiusi nell'archivio delle conversazioni, dalla proiezione
+        (l'ombra, a turno finito): sigillati e come si sono sentiti."""
+        arch = getattr(self, "archivio_conv", None)
+        if arch is None or not msgs:
+            return
+        from .conversazione import turni
+        owner = None if conv.owner is UNSET else conv.owner
+        arch.archivia(conv, turni(msgs, self._riservati(), redact=self.redact), owner,
+                      conv.nome, ospite=owner is None)
+
+    def _blocco_eventi(self) -> list[dict]:
+        """Il blocco dello stato del turno con `eventi: attivo` (dati del turno, mai storia):
+        l'argomento corrente e quelli messi da parte (§ 13), la parte non detta della risposta
+        interrotta (§ 11.4), i `cosa_fare` dei risultati dell'ultima risposta (§ 4.3)."""
+        p = getattr(self, "_stato_eventi", None)
+        if not Brain.eventi_attivo(self) or not isinstance(p, dict):
+            return []
+        out = []
+        arg = p.get("argomenti") or {}
+        cur = arg.get("corrente") or {}
+        parte = arg.get("da_parte") or []
+        if cur.get("titolo") or parte:
+            righe = [f"Stato della conversazione (dati del turno, non da ripetere): argomento di "
+                     f"adesso «{cur.get('titolo') or 'quello di questa conversazione'}»."]
+            if parte:
+                voci = []
+                for a in parte[:4]:
+                    lasciato = [str(x.get("cosa") if isinstance(x, dict) else x)
+                                for x in a.get("lasciato") or ()]
+                    voci.append(f"«{a.get('titolo') or 'la conversazione di prima'}»"
+                                + (f" ({'; '.join(lasciato)})" if lasciato else ""))
+                righe.append("Messi da parte: " + "; ".join(voci) + ".")
+            righe.append("Se chi parla cambia argomento o torna a uno messo da parte, chiama "
+                         "argomento.")
+            out.append({"role": "system", "content": " ".join(righe)})
+            self._rule("argomento_stato")
+        for k, regola in (("interrotta", "promemoria_interrotta"),
+                          ("cosa_fare", "promemoria_cosa_fare")):
+            if p.get(k):
+                out.append({"role": "system", "content": p[k]})
+                self._rule(regola)
+        return out
+
     def _album(self):
         """Le foto della conversazione corrente (calliope/immagini.py): vivono e finiscono con
         lei, mai su disco."""
@@ -1680,10 +1824,16 @@ class Brain:
     def _riassunto_msgs(self, conv=None) -> list[dict]:
         """Il riassunto dei turni compressi (o la riga di ripresa), subito dopo il prompt di
         sistema: fermo fino alla compressione dopo, così resta nella cache del prefisso."""
-        r = (conv or self._c()).riassunto
-        if isinstance(r, dict) and r.get("testo"):
-            return [{"role": "system", "content": r["testo"]}]
-        return []
+        c = conv or self._c()
+        r = c.riassunto
+        out = ([{"role": "system", "content": r["testo"]}]
+               if isinstance(r, dict) and r.get("testo") else [])
+        # Gli argomenti messi da parte (10/10, § 13, `eventi: attivo`): dopo il riassunto,
+        # fermi finché non cambia argomento
+        ind = getattr(c, "indice_argomenti", None)
+        if isinstance(ind, str) and ind and getattr(self, "proiettore", None) is not None:
+            out.append({"role": "system", "content": ind})
+        return out
 
     def _stima_storia(self) -> int:
         """Token stimati di riassunto e storia (per il registro della compressione)."""
@@ -1710,7 +1860,8 @@ class Brain:
         Dall'08/10 anche a turno finito (`archivia_turni`, dal ciclo)."""
         arch = getattr(self, "archivio_conv", None)
         conv = self._c()
-        if arch is None:
+        if arch is None or Brain.eventi_attivo(self):
+            # Passo 3: i turni chiusi li archivia l'ombra dalla proiezione (archivia_messaggi)
             conv.archiviati = len(conv.history)
             return
         nuovi = conv.da_archiviare()
@@ -1818,7 +1969,7 @@ class Brain:
         tool: sulla DGX la prima frase di «che ore sono?» arrivava a 1,89 s, le successive a
         0,81 e 0,39. Il messaggio dell'utente è breve e neutro: la cache serve fino a lì."""
         system = self._system_messages()
-        schemas = self.tools.schemas(online=self.cfg.online)
+        schemas = self.schemi()
         res = self.backend.warmup(system + [{"role": "user", "content": "ciao"}], schemas)
         # Token del prefisso (prompt di sistema, schemi e «ciao»), per calliope/contesto.py
         if isinstance(res, dict) and res.get("prompt"):
@@ -1850,7 +2001,7 @@ class Brain:
         _compatta_storia(hist)
         hist = hist[:-1]
         system = self._system_messages()
-        schemas = self.tools.schemas(online=self.cfg.online)
+        schemas = self.schemi()
         msgs = system + riassunto + hist
         ctx = finestra(self.cfg)
         if ctx > 0 and _tokens(msgs) + _tokens(schemas) > ctx - CTX_RESERVE:
@@ -1866,7 +2017,7 @@ class Brain:
         system = [dict(m) for m in self._system_messages()]
         system[0]["content"] = f"[misura {time.time():.0f}]\n" + system[0]["content"]
         return self.backend.measure_prefill(system + [{"role": "user", "content": "ciao"}],
-                                            self.tools.schemas(online=self.cfg.online))
+                                            self.schemi())
 
     def _trim_history(self):
         """Taglia la storia a blocchi, sempre all'inizio di un turno dell'utente.
@@ -1965,6 +2116,13 @@ class Brain:
         self.mentions_tool("")                       # prepara _tool_re
         names = ToolNameHold(self._tool_re, hold_names and self._net("chiamata_in_mezzo"))
         out, calls, waiting = [], [], []
+        # Il testo generato di questa passata, anche se la risposta viene interrotta (passo 3: la
+        # parte non detta nel promemoria del turno dopo, § 11.4)
+        gen = self.__dict__.get("testo_generato")
+        if isinstance(gen, list) and len(gen) < 20:
+            gen.append(out)
+        if int(getattr(self, "_passata", 0) or 0) <= 1:
+            self._misura_prefisso(messages)
         for kind, payload in self.backend.stream(messages, schemas):
             if kind == "calls":
                 calls.extend(payload)
@@ -2045,6 +2203,45 @@ class Brain:
             else:
                 return "".join(out).strip(), calls, held, "".join(waiting).strip(), named
         return "".join(out).strip(), calls, held, "", named
+
+    def _misura_prefisso(self, messages: list[dict]):
+        """La guardia della cache del prefisso (10/10, § 10 punto 5 del registro degli eventi):
+        quanti messaggi della prima passata sono uguali, byte per byte, a quelli della richiesta
+        di prima della stessa conversazione, i token stimati riletti dopo e `rotta` se la
+        differenza comincia prima dell'ultimo turno chiuso della richiesta di prima (cioè dentro
+        turni che erano già definitivi: il passaggio di quello da forma viva a definitiva, una
+        volta sola, è atteso), con il prompt di sistema e il riassunto uguali, senza un taglio, una
+        compressione o una ripresa. Solo in memoria."""
+        try:
+            def chiave(m):
+                return json.dumps({k: v for k, v in m.items()
+                                   if not k.startswith("_") and k != "images"},
+                                  ensure_ascii=False, sort_keys=True, default=str)
+            ora = [chiave(m) for m in messages]
+            conv = self._c()
+            prima = getattr(self, "_richiesta_prima", None)
+            confine = getattr(self, "_confine_cache", None)
+            fissi = getattr(self, "_fissi_cache", 0)
+            self._richiesta_prima = (id(conv), ora, confine)
+            if not prima or prima[0] != id(conv):
+                self.last_cache = {"prima": True}
+                return
+            vecchia = prima[1]
+            k = 0
+            for a, b in zip(ora, vecchia):
+                if a != b:
+                    break
+                k += 1
+            scusa = {"storia_tagliata", "conversazione_coda", "conversazione_ripresa",
+                     "prefisso_scaldato"} & set(getattr(self, "last_rules", None) or ())
+            confine_prima = prima[2]
+            rotta = (isinstance(confine_prima, int) and fissi <= k < confine_prima
+                     and not scusa and not getattr(self, "last_compressione", None))
+            self.last_cache = {"prefisso": k, "messaggi": len(ora),
+                               "riletti_stimati": _tokens(messages[k:]),
+                               **({"rotta": True} if rotta else {})}
+        except Exception:  # noqa: BLE001 — una misura non ferma la risposta
+            self.last_cache = None
 
     def _applica_capito(self, dopo: str):
         """La frase come l'ha capita il modello (B2). Vale per la politica dei tool, per i tool
@@ -2131,6 +2328,13 @@ class Brain:
         ns = payload.get("lettura_ns")
         if isinstance(ns, (int, float)) and getattr(self, "last_lettura_s", None) is None:
             self.last_lettura_s = round(ns / 1e9, 3)
+        # I token riletti dal motore nella prima passata (10/10, passo 3, guardia della cache
+        # del prefisso): il prompt meno la parte trovata in cache (Ollama
+        # `prompt_eval_cached_count`, vLLM `cached_tokens`)
+        cached = payload.get("in_cache")
+        if (isinstance(cached, int) and isinstance(payload.get("prompt"), int)
+                and getattr(self, "last_riletti", None) is None):
+            self.last_riletti = max(0, int(payload["prompt"]) - cached)
         last = getattr(self, "last_context", None)
         if u and (last is None or u["token"] >= last["token"]):
             self.last_context = u
@@ -2211,6 +2415,17 @@ class Brain:
         # La conversazione è di chi parla: cambiata la persona, o passato troppo tempo, si
         # chiude come con «esci» (prima di leggere l'azione in sospeso e i riferimenti)
         self._check_conversation()
+        # Il registro degli eventi acceso (10/10, passo 3): la storia dei turni chiusi è la
+        # proiezione degli eventi; gli argomenti decisi in questa risposta, il testo generato
+        self.last_argomento = []
+        self._proposta_da_parte = False
+        self.testo_generato = []
+        self.last_cache = None
+        self.last_riletti = None
+        self.dalla_proiezione()
+        # Una forma chiusa diventata un indizio per il modello («ricominciamo», § 13): dal
+        # ciclo, vale una risposta sola
+        self._indizio = self.__dict__.pop("indizio_turno", None)
         # Turni finiti nell'archivio, compressione pronta, ripresa (05/10)
         self._inizio_conversazione()
         pending = self._take_pending() if self._net("azione_in_sospeso") else None
@@ -2279,16 +2494,23 @@ class Brain:
                 # domanda fuori tema, o il promemoria del giorno degli sviluppi sospesi
                 coda = self._sviluppo_coda(user_text, level)
                 if coda:
-                    self._aggiungi_detto(coda)
+                    if not Brain.eventi_attivo(self):
+                        self._aggiungi_detto(coda)
                     yield " " + self._marca(coda, "atto", "riga_sviluppo")
         finally:
-            # Anche se la risposta è interrotta: il testo dei siti non resta nella storia, e
-            # nemmeno i risultati riservati e personali di questa risposta
-            self._togli_non_fidati()
-            self._seal_private(start)
-            # proposta_rispondi non resta nella storia (§ 3.8 del progetto: lo stato è della
-            # macchina; il «sì» tradotto resta come la chiamata del tool vero)
-            self._togli_proposta_rispondi(start)
+            if Brain.eventi_attivo(self):
+                # Passo 3: la storia del turno vivo non si sigilla a mano. La sigillano gli
+                # eventi (riservato, personale, non fidato decisi alla scrittura) e la risposta
+                # dopo legge la proiezione. Resta la traccia della provenienza nel turno vivo
+                provenienza.marca(self.history)
+            else:
+                # Anche se la risposta è interrotta: il testo dei siti non resta nella storia,
+                # e nemmeno i risultati riservati e personali di questa risposta
+                self._togli_non_fidati()
+                self._seal_private(start)
+                # proposta_rispondi non resta nella storia (§ 3.8 del progetto: lo stato è della
+                # macchina; il «sì» tradotto resta come la chiamata del tool vero)
+                self._togli_proposta_rispondi(start)
             self.last_turn_at = time.monotonic()
             self.salva_conversazione()
             self._dialogo_fine(interrotta=True)
@@ -2419,6 +2641,136 @@ class Brain:
                           "un promemoria.",
                 "altro": "La proposta resta aperta: rispondi a quello che chiede chi parla."}[esito]
         return json.dumps({"ok": True, "esito": esito, "cosa_fare": cosa}, ensure_ascii=False)
+
+    # ─────────────── gli argomenti (10/10, § 13 del registro degli eventi) ───────────────
+    def _argomento(self, args: dict) -> str:
+        """`argomento(azione, titolo)`: chi parla cambia argomento («nuovo») o torna a uno messo
+        da parte («riprendi»). Ciò che era aperto va da parte, non si chiude: lo sviluppo di chi
+        parla in pausa (il lavoro dell'agente continua), la proposta aperta scaduta «da parte».
+        Lo dice la mezza frase fissa (`_da_dire_argomento`, atto `argomento_da_parte`); l'evento
+        lo scrive l'ombra a turno finito (`last_argomento`). Solo con gli eventi accesi; mai
+        dopo un dato non fidato letto in questa risposta (un dato non apre né riprende
+        argomenti)."""
+        def errore(e, cosa="rispondi a quello che chiede chi parla, chiamando i tool come sempre"):
+            return json.dumps({"ok": False, "fatto": NIENTE, "errore": e, "cosa_fare": cosa},
+                              ensure_ascii=False)
+        if not Brain.eventi_attivo(self):
+            self._rule("argomento_spento")
+            return errore("gli argomenti non sono attivi qui")
+        if getattr(self, "_letto_ora", ""):
+            self._rule("argomento_dopo_dato")
+            return errore("vale solo prima di leggere un dato in questa risposta")
+        azione = str(args.get("azione") or "").strip().lower()
+        azione = {"ripreso": "riprendi", "riprendere": "riprendi", "torna": "riprendi",
+                  "nuova": "nuovo", "cambia": "nuovo"}.get(azione, azione)
+        titolo = re.sub(r"\s+", " ", str(args.get("titolo") or "")).strip().strip("«»\"'.")[:60]
+        if azione not in ARGOMENTO_AZIONI:
+            return errore(f"azione «{azione}» sconosciuta: nuovo o riprendi")
+        stato = (getattr(self, "_stato_eventi", None) or {}).get("argomenti") or {}
+        corrente = dict(stato.get("corrente") or {"id": "a0"})
+        parte = list(stato.get("da_parte") or [])
+        # Più cambi nella stessa risposta: vale l'ultimo
+        fatti = getattr(self, "last_argomento", None)
+        if not isinstance(fatti, list):
+            fatti = self.last_argomento = []
+        if fatti:
+            corrente = {"id": fatti[-1]["id"], "titolo": fatti[-1]["titolo"]}
+        bersaglio = None
+        if azione == "riprendi":
+            bersaglio = _argomento_simile(titolo, parte)
+            if bersaglio is None:
+                titoli = ", ".join(f"«{a.get('titolo')}»" for a in parte if a.get("titolo"))
+                self._rule("argomento_non_trovato")
+                return errore("nessun argomento messo da parte con quel titolo"
+                              + (f": ci sono {titoli}" if titoli else ""),
+                              "rispondi a chi parla; se non è chiaro a cosa vuole tornare, "
+                              "chiediglielo")
+        if not titolo and bersaglio is None:
+            return errore("manca il titolo dell'argomento nuovo")
+        da_parte = self._metti_da_parte()
+        ripresi = self._riprendi_da_parte(bersaglio) if bersaglio is not None else []
+        ora = datetime.datetime.now()
+        n = int(getattr(self, "turn_number", 0) or 0)
+        ident = (bersaglio["id"] if bersaglio is not None
+                 else f"a{n}" + (f"_{len(fatti)}" if fatti else ""))
+        titolo = (bersaglio.get("titolo") or titolo) if bersaglio is not None else titolo
+        fatti.append({"tipo": "argomento_ripreso" if bersaglio is not None
+                      else "argomento_nuovo", "id": ident, "titolo": titolo,
+                      "ora": f"{ora:%H:%M}", "motivo": "modello", "prima": corrente.get("id"),
+                      "da_parte": da_parte,
+                      **({"ripresi": ripresi} if bersaglio is not None else {})})
+        self._rule("argomento_ripreso" if bersaglio is not None else "argomento_nuovo")
+        frasi = [ARGOMENTO_DA_PARTE.format(cosa=d["detto"]) for d in da_parte if d.get("detto")]
+        frasi += [ARGOMENTO_RIPRESO.format(cosa=d) for d in ripresi]
+        if frasi:
+            self._da_dire_argomento = " ".join(frasi)
+        print(f"   [ARGOMENTO] {'ripreso' if bersaglio is not None else 'nuovo'} «{titolo}»"
+              + (f"; da parte: {', '.join(d['cosa'] for d in da_parte)}" if da_parte else ""),
+              flush=True)
+        return json.dumps({"ok": True, "azione": azione, "argomento": titolo,
+                           **({"messo_da_parte": [d["cosa"] for d in da_parte]}
+                              if da_parte else {}),
+                           **({"ripreso": ripresi} if ripresi else {}),
+                           "cosa_fare": "rispondi adesso alla frase di chi parla, sul nuovo "
+                                        "argomento: ciò che è messo da parte è già stato detto"},
+                          ensure_ascii=False)
+
+    def _metti_da_parte(self) -> list[dict]:
+        """Ciò che è aperto nell'argomento che si lascia: lo sviluppo aperto di chi parla va in
+        pausa (sospeso, motivo «argomento»: il lavoro dell'agente continua), la proposta aperta
+        scade «da parte». [{"tipo", "cosa", "detto", "id"}]."""
+        out = []
+        svs = self._sviluppi()
+        chi = self._speaker_key()
+        if svs is not None and chi is not None:
+            try:
+                sv = svs.corrente(chi)
+                if sv is not None:
+                    from .sviluppo import ALLA
+                    svs.sospendi(sv, "argomento")
+                    out.append({"tipo": "sviluppo", "id": sv.id, "titolo": sv.titolo,
+                                "cosa": f"lo sviluppo {sv.di()}, in pausa {ALLA.get(sv.fase, '')}"
+                                .strip(), "detto": f"lo sviluppo {sv.di()}"})
+                    self._rule("argomento_sviluppo_in_pausa")
+            except Exception as e:  # noqa: BLE001 — l'argomento cambia comunque
+                print(f"   [ARGOMENTO] sviluppo non messo da parte: {type(e).__name__}: {e}",
+                      flush=True)
+        p = getattr(self, "pending", None)
+        if isinstance(p, dict) and p.get("tool"):
+            self.pending = None
+            self.turn_pending_tool = None
+            self._set_ctx("tool_in_sospeso", None)
+            self._proposta_da_parte = True
+            # La proposta dello sviluppo appena messo in pausa è già detta con lui
+            if not any(d["tipo"] == "sviluppo" for d in out):
+                out.append({"tipo": "proposta", "cosa": f"la domanda «{p.get('domanda')}» "
+                                                         f"(scaduta)",
+                            "detto": "la domanda di prima"})
+            self._rule("argomento_proposta_da_parte")
+        return out
+
+    def _riprendi_da_parte(self, arg: dict) -> list[str]:
+        """Ciò che l'argomento ripreso aveva lasciato in pausa: lo sviluppo torna aperto (se
+        era stato sospeso per il cambio d'argomento). Le proposte scadute non tornano."""
+        out = []
+        svs = self._sviluppi()
+        chi = self._speaker_key()
+        if svs is None or chi is None:
+            return out
+        for d in arg.get("lasciato") or ():
+            if not isinstance(d, dict) or d.get("tipo") != "sviluppo":
+                continue
+            try:
+                sv = next((x for x in svs.trova(chi, str(d.get("id") or ""))
+                           if x.id == d.get("id")), None)
+                if sv is not None and sv.stato == "sospesa" and sv.motivo == "argomento":
+                    svs.riprendi(sv)
+                    out.append(f"lo sviluppo {sv.di()}")
+                    self._rule("argomento_sviluppo_ripreso")
+            except Exception as e:  # noqa: BLE001
+                print(f"   [ARGOMENTO] sviluppo non ripreso: {type(e).__name__}: {e}",
+                      flush=True)
+        return out
 
     def _dialogo_diretta(self, name: str):
         """Il modello ha chiamato direttamente il tool proposto (il «sì» implicito di oggi)."""
@@ -3365,7 +3717,9 @@ class Brain:
                                      self.tool_ctx, "speaker_ctx", None))})
             self._allega_dati()
             self._trim_history()
-            self._compact_old_results()
+            if not Brain.eventi_attivo(self):
+                # Con gli eventi la forma definitiva dei turni la dà la proiezione (§ 5)
+                self._compact_old_results()
             self._turn_text = user_text   # per la politica dei tool (Turno.testo)
             self._accogli_immagini()
             self._accogli_allegati()
@@ -3378,10 +3732,7 @@ class Brain:
         # Stessi tool per tutti i livelli (03/10): con un elenco per livello, quando cambiava
         # chi parla Ollama rileggeva ~6000 token di prefisso (+1,5 s col 4B, +2 s col 26B).
         # I permessi li ricontrolla ToolRegistry.call a ogni esecuzione
-        schemas = self.tools.schemas(online=self.cfg.online)
-        if stato_dialogo.modo(self.cfg) == stato_dialogo.SPENTO:
-            # Lo stato del dialogo spento (10/10): il percorso di prima, senza il tool di risposta
-            schemas = [s for s in schemas if s["function"]["name"] != stato_dialogo.TOOL]
+        schemas = self.schemi()
         system = self._system_messages()
         self._trim_tokens(system, schemas)
         # I ricordi di chi parla vanno subito prima della sua domanda, non nel prompt di
@@ -3445,6 +3796,10 @@ class Brain:
         if sv_msg:
             memory = memory + [{"role": "system", "content": sv_msg}]
             self._rule("sviluppo_modalita")
+        # Il blocco dello stato del registro degli eventi (10/10, passo 3): argomenti e
+        # promemoria non parlati
+        if user_text:
+            memory = memory + self._blocco_eventi()
         # Azione in sospeso: dopo i ricordi, l'ultima cosa prima della domanda. Messa prima
         # dei ricordi (o senza), il «sì» dopo «La apro?» veniva preso per un ringraziamento
         if pending:
@@ -3468,6 +3823,12 @@ class Brain:
             return self._con_allegati(self._con_immagini(
                 prefix + summary + self.history[:start] + memory + self.history[start:]
                 + tail, self.history[start] if user_text else None))
+
+        # Per la guardia della cache (_misura_prefisso): i messaggi fissi (sistema e riassunto)
+        # e dove comincia il turno precedente; prima di lì i turni sono definitivi
+        utenti_prima = [i for i, m in enumerate(self.history[:start]) if m.get("role") == "user"]
+        self._fissi_cache = len(system) + len(summary)
+        self._confine_cache = self._fissi_cache + (utenti_prima[-1] if utenti_prima else 0)
 
         # Azioni vere dei turni prima: una dichiarazione che le ricorda non fa scattare la rete
         actions = self._recent_actions(start) + [FACT_PREFIX + f.lower()
@@ -3779,8 +4140,10 @@ class Brain:
                 return
             if claim_at is not None:
                 # Dopo la spinta il tool c'è: «Ho acceso le luci» detto prima non resta
-                # nella storia come se fosse stato vero già allora
-                del self.history[claim_at]
+                # nella storia come se fosse stato vero già allora. Con gli eventi resta: è
+                # stato detto, e la storia è ciò che si è sentito (§ 1.1, riga 1e)
+                if not Brain.eventi_attivo(self):
+                    del self.history[claim_at]
                 claim_at = None
             # Tool lento chiamato prima di aver detto qualcosa: una frase d'attesa copre la
             # seconda passata («Vediamo…»). Una volta per risposta, e fuori dalla storia.
@@ -3817,6 +4180,12 @@ class Brain:
             finally:
                 self._set_ctx("attesa", None)
             announced = announced or bool(attese)
+            # Il cambio d'argomento (§ 13): la mezza frase fissa su ciò che va da parte, detta
+            # subito (copre anche la passata dopo)
+            frase_arg = self.__dict__.pop("_da_dire_argomento", None)
+            if frase_arg:
+                spoke = True
+                yield " " + self._marca(frase_arg, "atto", "argomento_da_parte") + " "
             # Tool con la frase finale già pronta (documenti): si dice quella e il turno
             # finisce, senza un'altra passata del modello. Ollama può essere ancora occupato
             # a generare il documento in secondo piano: la seconda passata aspetterebbe la
@@ -3962,6 +4331,10 @@ class Brain:
                 self._rule(regola)
         # La forma chiusa forse storpiata (10/10, calliope/storpiature.py): un dato, non un
         # ordine; decide il modello, e chiede se non è chiaro (principio 10)
+        indizio = getattr(self, "_indizio", None)
+        if isinstance(indizio, dict) and indizio.get("forma") == "nuova_conversazione":
+            # «Ricominciamo» con gli eventi accesi (10/10, § 13): non un comando, un indizio
+            who += " " + INDIZIO_RICOMINCIAMO     # la regola la scrive il ciclo
         storpiata = storpiature.nota(getattr(self, "_storpiata", None))
         if storpiata:
             who += " " + storpiata
@@ -4058,6 +4431,8 @@ class Brain:
         Senza correzione il modello crederebbe di aver detto frasi mai pronunciate, o
         vedrebbe due messaggi dell'utente di fila.
         """
+        if Brain.eventi_attivo(self):
+            return            # passo 3: lo dice voce_fine, e il promemoria della parte non detta
         text = " ".join(spoken).strip()
         text = (text + " …" if text else "…") + " (interrotta)"
         last = self.history[-1] if self.history else None
@@ -4077,6 +4452,8 @@ class Brain:
         le chiamate si svuota e l'ultima risposta diventa ciò che si è sentito. True se la
         storia è cambiata. La cache del prefisso: cambia solo il turno appena finito, che il
         turno dopo rilegge comunque dalla sua frase in poi."""
+        if Brain.eventi_attivo(self):
+            return False      # passo 3: la storia è già ciò che si è sentito (detto_calliope)
         sentito = re.sub(r"\s+", " ", " ".join(x for x in detto if x)).strip()
         if not sentito:
             return False
@@ -4117,6 +4494,8 @@ class Brain:
         """Una frase non rivolta a Calliope (09/10, calliope/rivolta.py, giudizio acceso): via
         dalla storia l'ultimo messaggio della persona e ciò che lo segue (la risposta taciuta,
         le chiamate dei tool fermate)."""
+        if Brain.eventi_attivo(self):
+            return            # passo 3: turno_escluso, scritto dall'ombra
         h = self.history
         for i in range(len(h) - 1, -1, -1):
             if isinstance(h[i], dict) and h[i].get("role") == "user":
@@ -4131,6 +4510,8 @@ class Brain:
         riprendeva: il 26/09, dopo «basta» su Venezia, a «raccontami la storia di Roma»
         ha risposto di nuovo su Venezia.
         """
+        if Brain.eventi_attivo(self):
+            return            # passo 3: niente «Va bene, mi fermo» mai detto (stop_non_detto)
         self.history.append({"role": "user", "content": user_text})
         self.history.append({"role": "assistant",
                              "content": "Va bene, mi fermo. (argomento chiuso)"})
@@ -4139,6 +4520,8 @@ class Brain:
     def record_courtesy(self, user_text: str, reply: str):
         """«Grazie» → «Prego!» (05/10, calliope/cortesia.py): detto senza il modello, entra
         nella storia come scambio chiuso, così il modello non lo ripete né lo riprende."""
+        if Brain.eventi_attivo(self):
+            return            # passo 3: detto_persona e detto_calliope(cortesia) dall'ombra
         self._c().scambio(user_text, reply)
         self.salva_conversazione()
 
@@ -4174,6 +4557,13 @@ class Brain:
         self.last_turn_at = time.monotonic()
         if pending and text.rstrip().endswith("?"):
             self.set_pending(pending)
+        if Brain.eventi_attivo(self):
+            # Passo 3: l'annuncio è un detto_calliope con la sua fonte (la traccia `_fonte`
+            # nella proiezione); in memoria resta il testo esterno per la provenienza
+            if fonte:
+                provenienza.fonte_valida(fonte)
+                self._ricorda_esterno(fonte, text)
+            return
         last = self.history[-1] if self.history else None
         if last and last["role"] == "assistant" and not last.get("tool_calls"):
             last["content"] = f"{last['content']} {text}".strip()
@@ -4342,6 +4732,9 @@ class Brain:
         if call["name"] == stato_dialogo.TOOL:
             # La risposta strutturata a una proposta (10/10, calliope/stato_dialogo.py)
             return self._proposta_rispondi(call, args, level)
+        if call["name"] == ARGOMENTO_TOOL:
+            # Il cambio d'argomento (10/10, § 13 del registro degli eventi)
+            return self._argomento(args)
         self._dialogo_diretta(call["name"])
         # La stessa chiamata (stesso tool, stessi argomenti normalizzati) già fatta in questa
         # risposta non si riesegue: il modello riceve l'esito della prima (09/10, regola

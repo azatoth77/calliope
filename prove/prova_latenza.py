@@ -240,7 +240,7 @@ def prova_ripresa():
              and msgs[len(sistema) + 1]["content"] == "Che tempo fa?"
              and msgs[-1] == {"role": "user", "content": "ciao"},
              str([m["content"][:20] for m in msgs[-4:]]))
-    verifica("stessi tool della risposta vera", tools == b.tools.schemas(online=b.cfg.online))
+    verifica("stessi tool della risposta vera", tools == b.schemi())
     verifica("la conversazione corrente di Brain non cambia", b.history == [])
     verifica("riga nel log con turni e token", res and res["token"] == 4321
              and righe and "1 turni" in righe[0] and "4321" in righe[0], str(righe))

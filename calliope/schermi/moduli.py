@@ -534,8 +534,11 @@ def completa(hub, item: dict, brain, turno: int) -> dict:
     if brain is not None:
         nomi = ", ".join(c["etichetta"].lower() for c in m.campi if c["nome"] in valori)
         brain.pending = None          # la domanda a voce ha avuto risposta
-        brain.history.append({"role": "user", "content": f"(Ho scritto sullo schermo i dati "
-                                                        f"per «{m.titolo}»: {nomi}.)"})
+        attivo = getattr(brain, "eventi_attivo", None)
+        if not (callable(attivo) and attivo()):
+            # Con il registro degli eventi acceso (passo 3) è il modulo_compilato dell'ombra
+            brain.history.append({"role": "user", "content": f"(Ho scritto sullo schermo i "
+                                                            f"dati per «{m.titolo}»: {nomi}.)"})
         if frase:
             brain.record_announcement(frase, res.get("in_sospeso"), fonte=None)
     return {"frase": frase, "rec": dict(rec, esito="modulo",

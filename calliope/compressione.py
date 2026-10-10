@@ -417,7 +417,8 @@ class Compressore:
         voce = [OllamaBackend._native(m) for m in
                 system + brain._riassunto_msgs(conv) + hist]
         return Lavoro(conv, tipo, taglio, [dict(m) for m in vecchi], voce,
-                      brain.tools.schemas(online=self.cfg.online), conv.nome,
+                      (brain.schemi() if hasattr(brain, "schemi")
+                       else brain.tools.schemas(online=self.cfg.online)), conv.nome,
                       riass.get("testo") if riass.get("tipo") == "compressione" else None,
                       riass.get("dati") if riass.get("tipo") == "compressione" else None,
                       motivo)

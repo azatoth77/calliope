@@ -88,6 +88,15 @@ class Conversazione:
         # una conversazione chiusa: mai «la risposta precedente» per sbaglio)
         self.turn_number = 0
         self.uso_precedente = None
+        # Passo 3 del registro degli eventi (10/10, `eventi: attivo`): la storia fino a `vivo_da`
+        # è la proiezione degli eventi (turni chiusi, ogni messaggio con `_seq`); da lì in poi il
+        # turno vivo della risposta, che la proiezione non ha ancora. None = tutta di Brain (come
+        # prima). `finestra_da`: dopo un taglio in testa, il `_seq` del primo turno rimasto
+        # ("vivo" se è rimasto solo il turno vivo), per la finestra della proiezione.
+        # `indice_argomenti`: gli argomenti messi da parte (§ 13), dopo il riassunto
+        self.vivo_da: int | None = None
+        self.finestra_da = None
+        self.indice_argomenti: str | None = None
 
     # ── stato ──
     def vuota(self) -> bool:
@@ -105,6 +114,13 @@ class Conversazione:
             return
         self.history = self.history[n:]
         self.archiviati = max(0, self.archiviati - n)
+        if self.vivo_da is not None:
+            self.vivo_da = max(0, self.vivo_da - n)
+            primo = next((m for m in self.history if isinstance(m, dict)
+                          and m.get("role") == "user"), None)
+            if primo is not None:
+                self.finestra_da = (primo["_seq"] if isinstance(primo.get("_seq"), int)
+                                    else "vivo")
 
     def da_archiviare(self) -> list[dict]:
         """I messaggi finiti e non ancora archiviati, e li segna come archiviati."""
@@ -119,12 +135,16 @@ class Conversazione:
         owner = None if self.owner is UNSET else self.owner
         # Le foto della conversazione (calliope/immagini.py) non si riscrivono su disco a ogni
         # turno: dopo un riavvio resta il testo
+        # Passo 3 (`vivo_da`): solo la parte proiettata, già sigillata; il turno vivo va su
+        # disco come eventi, a turno finito
+        hist = self.history if self.vivo_da is None else self.history[:self.vivo_da]
         storia = [{k: v for k, v in m.items() if k != "images"} if m.get("images") else m
-                  for m in self.history]
+                  for m in hist]
         return {"formato": FORMATO, "chiave": self.chiave, "history": storia,
                 "riassunto": self.riassunto, "owner": owner,
                 "owner_aperto": self.owner is UNSET, "nome": self.nome, "luogo": self.luogo,
-                "id_archivio": self.id_archivio, "archiviati": self.archiviati,
+                "id_archivio": self.id_archivio,
+                "archiviati": min(self.archiviati, len(hist)),
                 "inizio": self.inizio, "compressioni": self.compressioni,
                 "ultimo": (time.time() - (time.monotonic() - self.last_turn_at)
                            if self.last_turn_at is not None else None)}

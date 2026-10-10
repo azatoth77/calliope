@@ -804,6 +804,9 @@ def filtra(guardiano: Guardiano, frasi, domanda: str, minore: bool, esito: Esito
 def correggi_storia(brain, detto: list[str]):
     """Dopo una risposta fermata dal guardiano la storia deve contenere solo ciò che è stato
     detto (come dopo un barge-in): il modello non deve credere di aver detto il resto."""
+    attivo = getattr(brain, "eventi_attivo", None)
+    if callable(attivo) and attivo():
+        return       # passo 3 del registro degli eventi: la storia è già ciò che si è detto
     testo = " ".join(x for x in detto if x).strip()
     h = getattr(brain, "history", None)
     if not isinstance(h, list):
