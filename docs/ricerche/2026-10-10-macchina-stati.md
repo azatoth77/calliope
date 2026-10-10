@@ -1289,5 +1289,5 @@ della macchina con testi fissi, esiti dei tool), i promemoria per il modello nel
 non alla voce, e la misura delle frasi scritte dal codice per turno.
 
 **Decisione di Dario (10/10)**: la seconda strada, direttamente, con un registro **per
-conversazione**. Progetto in [`2026-10-10-registro-eventi.md`](2026-10-10-registro-eventi.md),
+persona** (anonimo per satellite per gli ospiti). Progetto in [`2026-10-10-registro-eventi.md`](2026-10-10-registro-eventi.md),
 decisione [0027](../decisioni/0027-conversazione-come-registro-di-eventi.md).
