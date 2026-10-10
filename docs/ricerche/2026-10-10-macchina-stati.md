@@ -1242,6 +1242,26 @@ accendere:
    subito o resta in coda; la scelta più semplice e coerente con il comportamento di oggi è che la
    nuova la sostituisca.
 
+*Fatte il 10/10 (ramo `stati-tre-righe`, solo la decisione in ombra: nessun comportamento visibile
+cambia).* Nella tabella del § 3.5 e nelle priorità di `decidi`:
+
+1. `no` (corsia o modello) a una proposta con un **testo da approvare** (`TESTO_DA_APPROVARE`:
+   `sviluppo_apri` e `lavoro_affida` con l'argomento `proposta`) → `resta_chiede_modifica`
+   (categoria `resta`); a una proposta d'azione resta `chiude_no`.
+2. Una riga nuova del consenso, prima delle righe per la voce: un'azione **reversibile da sé**
+   (`REVERSIBILI_DA_SE`: `sviluppo_passo` con `sospendi` o `esci`) esegue senza sfida per chi ha la
+   proposta, salvo la classe con la sfida; «chiudi» no. E il tool proposto chiamato direttamente
+   con **altri argomenti** si giudica con i suoi (effetto e azione), non con quelli della proposta:
+   il caso vero era «Sospendilo.» sopra «lo rifaccio così com'è?» (E3).
+3. Una proposta nuova nata nel turno da un'altra richiesta (`proposta_nuova`) → `sostituita`
+   (categoria `chiude`); una risposta alla proposta (corsia, modello, tool proposto) non lo è.
+
+Rigiocati i giri veri: i disaccordi passano da 7 a 2 (07:11–07:21) e da 6 a 2 (10:37–10:44). I
+quattro che restano non sono di queste righe: un «chiudi lo sviluppo» letto dal modello come «no» a
+un'altra domanda (07:13:41), «No, chiudilo.» che oggi chiude col lessico e il modello non chiama
+(07:14:12), la frase di sfida (10:41:46), un «rifai» E3 chiamato direttamente (sì implicito: la
+sfida è voluta, 10:42:54). Prove in `prova_stato_dialogo` (`prova_tre_righe`).
+
 **Osservazione di Dario: la persona ascolta l'audio, il modello vede la storia.** Le frasi aggiunte
 dal ciclo e dai tool («Chiudo lo sviluppo…? Se vuoi solo una pausa…», «Intanto restiamo sullo
 sviluppo di…», le frasi pronte) sono ciò che la persona ha sentito, ma il modello non sempre le ha

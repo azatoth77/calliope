@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
+from dataclasses import replace as dataclass_replace
 
 from . import politica, valore
 from .risposte import GRAZIE, NO, NUOVA, SI, STOP, USCITA, forma_chiusa
@@ -259,6 +260,33 @@ def blocco(stato: StatoPersona, corsia: StatoCorsia) -> str | None:
 
 ESEGUE, SFIDA, CHI_PARLA, A_VOCE, NO_CONSENSO = "esegue", "sfida", "chi_parla", "a_voce", "no"
 
+# Le proposte il cui oggetto è un **testo da approvare** (l'analisi di uno sviluppo, la richiesta
+# analizzata di un lavoro: «Va bene così, o la cambiamo?»), riconosciute dal tool e
+# dall'argomento che porta l'id del testo proposto. A queste un «no» vuol dire «cambiala», non
+# «lascia stare» (§ 10 punto 1, giro della DGX del 10/10 07:20:07: «No, non mi va bene così.» →
+# oggi «dimmi cosa modificare», giusto; la macchina chiudeva la proposta)
+TESTO_DA_APPROVARE = {"sviluppo_apri": "proposta", "lavoro_affida": "proposta"}
+
+# Le azioni **reversibili da sé**: si disfano con una parola e cambiano solo lo stato dell'iter
+# (sospendere uno sviluppo, uscire dalla modalità: si riprende con «riprendiamo»). Niente frase
+# di sfida, qualunque sia la voce di chi ha la proposta (§ 10 punto 2, 07:14:53 «Sospendilo.»).
+# «chiudi» no: chiude lo sviluppo per sempre, e segue la tabella
+REVERSIBILI_DA_SE = {"sviluppo_passo": ("azione", frozenset({"sospendi", "esci"}))}
+
+
+def testo_da_approvare(p: Proposta | None) -> bool:
+    """La proposta chiede di approvare un testo (un'analisi), non di fare un'azione."""
+    k = TESTO_DA_APPROVARE.get(getattr(p, "tool", None) or "")
+    return bool(k) and isinstance(p.argomenti, dict) and bool(p.argomenti.get(k))
+
+
+def reversibile_da_se(tool: str | None, args: dict | None) -> bool:
+    """L'azione si disfa da sé con una parola (`REVERSIBILI_DA_SE`)."""
+    r = REVERSIBILI_DA_SE.get(tool or "")
+    if not r or not isinstance(args, dict):
+        return False
+    return str(args.get(r[0]) or "").strip().lower() in r[1]
+
 
 def consenso_progetto(chi: Chi, p: Proposta, livelli=None) -> str:
     """`consenso.basta` del progetto (§ 3.5), **in ombra**: esegue | sfida | chi_parla | a_voce |
@@ -269,6 +297,8 @@ def consenso_progetto(chi: Chi, p: Proposta, livelli=None) -> str:
     - il livello della **persona** non basta per il tool: no;
     - voce incerta fra chi amministra e un minore: «chi parla?»;
     - compagnia senza la voce nella frase: sfida;
+    - un'azione reversibile da sé (sospendere uno sviluppo: `REVERSIBILI_DA_SE`, § 10 punto 2):
+      esegue, senza sfida, salvo la classe con la sfida;
     - scritto dallo schermo personale: E0–E2 esegue, oltre «a voce»;
     - voce sicura in questa frase: E0–E3 esegue, E4 o sfida della classe sfida (salvo superata);
     - breve probabile (voce sicura nella finestra, impronta ≥ soglia): E0–E2 esegue, oltre sfida;
@@ -287,6 +317,8 @@ def consenso_progetto(chi: Chi, p: Proposta, livelli=None) -> str:
         return ESEGUE
     if chi.incerta_admin:
         return CHI_PARLA
+    if reversibile_da_se(p.tool, p.argomenti) and not p.sfida_classe:
+        return ESEGUE
     if chi.compagnia and chi.come != "voce":
         return SFIDA
     if chi.sicurezza == "scritta":
@@ -301,11 +333,32 @@ def consenso_progetto(chi: Chi, p: Proposta, livelli=None) -> str:
 # ─────────────────────────── la decisione della macchina (§ 3.3) ───────────────────────────
 
 def decidi(stato: StatoPersona, corsia: StatoCorsia, forma: str | None,
-           risposta: str | None = None, diretta: bool = False, livelli=None) -> dict:
+           risposta: str | None = None, diretta: bool = False, livelli=None,
+           diretta_args: dict | None = None, nuova: bool = False) -> dict:
     """Cosa deciderebbe la macchina con le priorità del § 3.3: {"macchina", "consenso", "via"}.
     `forma` è la corsia veloce, `risposta` l'esito valido di `proposta_rispondi`, `diretta` il
-    modello che ha chiamato direttamente il tool proposto (sì implicito)."""
+    modello che ha chiamato direttamente il tool proposto (sì implicito), `diretta_args` gli
+    argomenti di quella chiamata, `nuova` una proposta nuova aperta in questo turno da un'altra
+    richiesta (`proposta_nuova`).
+
+    Le tre righe del § 10 (giri veri del 10/10, dove la decisione di oggi era quella giusta):
+
+    1. un «no» (corsia o modello) a una proposta con un **testo da approvare** (l'analisi) la
+       tiene aperta e chiede che cosa cambiare (`resta_chiede_modifica`), non la chiude;
+    2. il tool proposto chiamato direttamente **con altri argomenti** («Sospendilo.» sopra «lo
+       rifaccio così com'è?») è l'azione detta adesso: il consenso guarda il suo effetto e i suoi
+       argomenti (sospendere: E1, reversibile da sé, niente sfida), non quelli della proposta;
+    3. una **richiesta nuova** che apre una proposta sua prende il posto di quella aperta
+       (`sostituita`): una proposta sola per persona. Una risposta alla proposta (corsia, modello,
+       tool proposto) non è una richiesta nuova."""
     p = stato.proposta
+    if p is not None and diretta and isinstance(diretta_args, dict) \
+            and diretta_args != (p.argomenti or {}):
+        try:
+            eff = valore.effetto(p.tool, diretta_args)
+        except Exception:  # noqa: BLE001 — nel dubbio, E3 (come valore.effetto)
+            eff = valore.E3
+        p = dataclass_replace(p, argomenti=dict(diretta_args), effetto=int(eff))
     out = {"macchina": None, "consenso": None, "via": None}
     if corsia.cancello:
         out["macchina"] = "proposta_persa_cancello" if p is not None else "cancello"
@@ -319,6 +372,9 @@ def decidi(stato: StatoPersona, corsia: StatoCorsia, forma: str | None,
         si = None
         if forma == SI:
             si, out["via"] = True, "corsia"
+        elif forma == NO and testo_da_approvare(p):
+            out["macchina"], out["via"] = "resta_chiede_modifica", "corsia"
+            return out
         elif forma in (NO, STOP, USCITA, NUOVA):
             out["via"] = "corsia"
             out["macchina"] = {NO: "chiude_no", STOP: "chiude_stop", USCITA: "proposta_persa_uscita",
@@ -328,9 +384,14 @@ def decidi(stato: StatoPersona, corsia: StatoCorsia, forma: str | None,
             out["via"] = "modello"
             if risposta == "si":
                 si = True
+            elif risposta == "no" and testo_da_approvare(p):
+                out["macchina"] = "resta_chiede_modifica"
+                return out
             else:
                 out["macchina"] = {"no": "chiude_no", "correzione": "chiude_correzione",
                                    "rinvio": "chiude_rinvio", "altro": "resta"}.get(risposta, "resta")
+                if out["macchina"] == "resta" and nuova:
+                    out["macchina"] = "sostituita"      # «altro», e poi una richiesta nuova
                 return out
         elif diretta:
             si, out["via"] = True, "diretta"
@@ -343,7 +404,7 @@ def decidi(stato: StatoPersona, corsia: StatoCorsia, forma: str | None,
             out["consenso"] = c
             out["macchina"] = c
             return out
-        out["macchina"] = "resta"
+        out["macchina"] = "sostituita" if nuova else "resta"
         return out
     if p is not None:                         # una domanda che chiede un dato
         if forma == NO:
@@ -396,7 +457,8 @@ _CAT_MACCHINA = {"esegue": "esegue", "sfida": "chiede", "chi_parla": "chiede", "
                  "chiude_stop": "chiude", "chiude_correzione": "chiude", "chiude_rinvio": "chiude",
                  "proposta_persa_uscita": "chiude", "proposta_persa_nuova": "chiude",
                  "proposta_persa_cancello": "chiude", "avvisa_servizio_no": "chiude",
-                 "resta": "resta", "al_modello": "resta", "al_servizio": "esegue"}
+                 "resta": "resta", "al_modello": "resta", "al_servizio": "esegue",
+                 "resta_chiede_modifica": "resta", "sostituita": "chiude"}
 _CAT_OGGI = {"eseguita": "esegue", "sfida": "chiede", "domanda": "chiede", "fermata": "chiude",
              "rifiutata": "chiude", "chiusa": "chiude", "sostituita": "chiude", "resta": "resta",
              "stop": "chiude", "uscita": "chiude", "cortesia": "resta",
@@ -433,6 +495,29 @@ def lessico_oggi(testo: str, p: Proposta | None) -> str | None:
     return None
 
 
+def _args_diretta(p: Proposta | None, tools_turno) -> dict | None:
+    """Gli argomenti della prima chiamata del tool proposto in questo turno (il sì implicito),
+    dal registro dei tool del turno; None se non ci sono."""
+    if p is None:
+        return None
+    for x in tools_turno or ():
+        if isinstance(x, dict) and x.get("nome") == p.tool and isinstance(x.get("argomenti"), dict):
+            return x["argomenti"]
+    return None
+
+
+def proposta_nuova(p: Proposta | None, pending_dopo, turno: int, diretta: bool = False) -> bool:
+    """In questo turno si è aperta una proposta nuova, non chiesta dal tool proposto: una
+    richiesta nuova detta sopra la proposta aperta (§ 10 punto 3). La proposta che c'è dopo il
+    turno è nata adesso; se è dello stesso tool chiamato come risposta (`diretta`), è la stessa
+    proposta che chiede di nuovo, non una richiesta nuova."""
+    if p is None or not isinstance(pending_dopo, dict) or not pending_dopo.get("tool"):
+        return False
+    if pending_dopo.get("turno") != turno or pending_dopo.get("turno") == p.turno:
+        return False
+    return not (diretta and pending_dopo.get("tool") == p.tool)
+
+
 def confronto(d: dict, regole, tools_turno, pending_dopo, sfida_dopo, turno: int,
               livelli=None, interrotta: bool = False) -> dict | None:
     """Il campo `dialogo_ombra` del registro dei turni (nessun testo, nessun valore), o None se
@@ -447,8 +532,10 @@ def confronto(d: dict, regole, tools_turno, pending_dopo, sfida_dopo, turno: int
     if not (p or stato.sfida or stato.chiusa_da or risposte or corsia.cancello or offerte > 1
             or (stato.attivita and d.get("forma"))):
         return None
+    diretta = bool(d.get("diretta"))
     dec = decidi(stato, corsia, d.get("forma"), valida.get("esito") if valida else None,
-                 bool(d.get("diretta")), livelli)
+                 diretta, livelli, diretta_args=_args_diretta(p, tools_turno) if diretta else None,
+                 nuova=proposta_nuova(p, pending_dopo, turno, diretta))
     oggi = esito_oggi(p, regole, tools_turno, pending_dopo, sfida_dopo, turno)
     if p is None and stato.chiusa_da:
         dec["macchina"] = ("resta_altra_persona" if stato.chiusa_da == "conversazione_altra_persona"

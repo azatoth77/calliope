@@ -1106,6 +1106,37 @@ cambia.**
   domanda non è in fondo alla risposta; *corretto il 10/10, ramo `sviluppo-chiusura`*) e il
   secondo giro del modello per `no`, `rinvio`, `altro`
   (~+1 s col 26B).
+- **Le tre righe del secondo giro** (10/10, ramo `stati-tre-righe`, § 10 del
+  [progetto](../ricerche/2026-10-10-macchina-stati.md); solo la decisione in ombra, nessun
+  comportamento visibile cambia). Nei giri veri del 10/10 la macchina sbagliava tre casi che la
+  decisione di oggi azzeccava; ora `decidi` e `consenso_progetto`:
+  1. un «no» (corsia o modello) a una proposta con un **testo da approvare**
+     (`TESTO_DA_APPROVARE`: `sviluppo_apri` e `lavoro_affida` con l'argomento `proposta`, cioè
+     l'analisi, «Va bene così, o la cambiamo?») la tiene aperta e chiede che cosa cambiare
+     (`resta_chiede_modifica`); caso vero 07:20:07 «No, non mi va bene così.». A una proposta
+     d'azione, a «Vuoi comunque che lo affidi?» e a «Lo chiudo?» il «no» resta `chiude_no`;
+  2. il tool proposto chiamato direttamente **con altri argomenti** è l'azione detta adesso: il
+     consenso guarda i suoi argomenti e il suo effetto (`diretta_args`, dal registro dei tool del
+     turno), e le azioni **reversibili da sé** (`REVERSIBILI_DA_SE`: `sviluppo_passo` con
+     `sospendi` o `esci`) eseguono senza sfida per chi ha la proposta; caso vero 07:14:53
+     «Sospendilo.» con la voce breve sopra «lo rifaccio così com'è?» (E3). «chiudi» (definitivo),
+     «rifai» (E3) ed E4 restano con la sfida dove la tabella la chiede; la proposta di un'altra
+     persona, il livello che non basta e la voce incerta fra chi amministra e un minore non
+     cambiano;
+  3. una **richiesta nuova** che apre una proposta sua (`proposta_nuova`: la proposta dopo il
+     turno è nata adesso, e non è lo stesso tool chiamato come risposta) sostituisce quella aperta
+     (`sostituita`); casi veri 07:15:43, 07:20:19, 10:37:51, 10:38:53, 10:40:08, 10:40:34. Una
+     risposta alla proposta (sì della corsia o del modello, «no», chiamata diretta) non è una
+     richiesta nuova; una frase senza proposta nuova la lascia aperta.
+
+  Rigiocati i giri veri (giro delle 07:11–07:21 e delle 10:37–10:44; i due del pomeriggio non
+  hanno il campo dell'ombra): i disaccordi passano da 7 a 2 e da 6 a 2. Restano 07:13:41
+  («Chiudi proprio lo sviluppo.» letto dal modello come «no» a «fermo anche il lavoro
+  dell'agente?»: errore del modello), 07:14:12 («No, chiudilo.», che oggi chiude con
+  `politica.rifiuto` e il modello non chiama), 10:41:46 (la frase di sfida: `sfida_in_corso`
+  contro l'esecuzione) e 10:42:54 («No, rifallo così com'è.», E3 chiamato direttamente: la sfida
+  è voluta). Prove in `prova_stato_dialogo` (`prova_tre_righe`: i turni veri e i contrari, anche
+  con Brain vero).
 
 ## Le fasi dello sviluppo nelle dichiarazioni d'azione (10/10, ramo `giro-ombra-correzioni`)
 
