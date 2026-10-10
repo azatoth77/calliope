@@ -33,9 +33,10 @@ from .allegati import Allegati, Allegato
 from .conversazione import UNSET, Conversazione
 from .immagini import Album
 from .memory import HOUSE
-from . import argomenti_incerti, luogo, politica, provenienza, valore
+from . import argomenti_incerti, luogo, politica, provenienza, stato_dialogo, valore
+from .risposte import forma_chiusa
 from .sicurezza import instruction_fact
-from .testi import MESI as _MESI, SENTENCE_END as _SENTENCE_END
+from .testi import MESI as _MESI, NIENTE, SENTENCE_END as _SENTENCE_END
 from .tools import dialogo
 from .tools.registry import ToolRegistry
 from .tools.spec import ToolContext
@@ -2145,12 +2146,24 @@ class Brain:
         self._altrui_msg = None
         if altrui and user_text and politica.consenso(user_text):
             self._altrui_msg = SOSPESO_ALTRUI_MSG.format(**altrui)
+        # Lo stato del dialogo (10/10, calliope/stato_dialogo.py, passo 1 in ombra): la proposta
+        # di prima, per sapere se la chiusura della conversazione l'ha persa; il cancello dei
+        # minori da cui è passata la frase (lo segna il ciclo)
+        self.last_dialogo_ombra, self._dialogo = None, None
+        self._passata, self._offerte_risposta = 0, 0
+        dmodo = stato_dialogo.modo(self.cfg)
+        cancello = self.__dict__.pop("dialogo_cancello", None)
+        prima = getattr(self, "pending", None) if dmodo != stato_dialogo.SPENTO else None
+        prima = prima if isinstance(prima, dict) and time.monotonic() <= prima.get(
+            "scade", 0) else None
         # La conversazione è di chi parla: cambiata la persona, o passato troppo tempo, si
         # chiude come con «esci» (prima di leggere l'azione in sospeso e i riferimenti)
         self._check_conversation()
         # Turni finiti nell'archivio, compressione pronta, ripresa (05/10)
         self._inizio_conversazione()
         pending = self._take_pending() if self._net("azione_in_sospeso") else None
+        if dmodo != stato_dialogo.SPENTO:
+            pending = self._dialogo_inizio(user_text, pending, prima, cancello)
         # Un «no» alla proposta la chiude, e la politica non la lascia riproporre (09/10)
         pending = self._rifiuto_proposta(user_text, pending)
         self._chiudi_intenzioni(user_text)
@@ -2217,8 +2230,12 @@ class Brain:
             # nemmeno i risultati riservati e personali di questa risposta
             self._togli_non_fidati()
             self._seal_private(start)
+            # proposta_rispondi non resta nella storia (§ 3.8 del progetto: lo stato è della
+            # macchina; il «sì» tradotto resta come la chiamata del tool vero)
+            self._togli_proposta_rispondi(start)
             self.last_turn_at = time.monotonic()
             self.salva_conversazione()
+            self._dialogo_fine(interrotta=True)
         # Arrivati qui la risposta è finita (non interrotta): se chiude con la domanda del
         # tool, la proposta resta per il turno dopo
         last = self.history[-1] if self.history else {}
@@ -2226,7 +2243,173 @@ class Brain:
         if self._offer and said.endswith("?") and self._net("azione_in_sospeso"):
             self.set_pending(self._offer)
         self._ricorda_domanda_fidata(said)
+        self._dialogo_fine()
         self._scalda_se_cambiato(firma)
+
+    # ─────────────── lo stato del dialogo (10/10, calliope/stato_dialogo.py, in ombra) ───────────────
+    def _dialogo_inizio(self, user_text: str | None, pending: str | None, prima, cancello):
+        """Legge lo stato del dialogo di oggi (adattatori in sola lettura: la proposta valida per
+        questo turno, la frase di sfida, chi parla e quanto è sicura la voce, la proposta di prima
+        persa con la chiusura della conversazione, il cancello dei minori) e la corsia veloce
+        della frase. Con una proposta sì/no restituisce il blocco dello stato al posto del
+        messaggio dell'azione in sospeso (`PENDING_MSG`); altrimenti il messaggio di oggi."""
+        try:
+            sc = getattr(self.tool_ctx, "speaker_ctx", None)
+            chiave = self._speaker_key()
+            turno = int(getattr(self, "turn_number", 0) or 0)
+            prop = stato_dialogo.proposta_da_oggi(getattr(self, "pending", None),
+                                                  getattr(self, "turn_pending_tool", None),
+                                                  turno, self.tools)
+            chiusa_da = None
+            if prima is not None and getattr(self, "pending", None) is not prima:
+                chiusa_da = next((r for r in ("conversazione_altra_persona",
+                                              "conversazione_scaduta")
+                                  if r in (getattr(self, "last_rules", None) or ())), None)
+            stato = stato_dialogo.StatoPersona(
+                turno=turno, proposta=prop, sfida=stato_dialogo.sfida_da_oggi(sc, chiave, prop),
+                rifiuti=len(getattr(self._c(), "rifiutate", None) or ()), chiusa_da=chiusa_da)
+            corsia = stato_dialogo.StatoCorsia(
+                satellite=getattr(self, "satellite", None),
+                persona=stato_dialogo.chi_da_oggi(
+                    sc, chiave, self.cfg, incerta_con_admin(self.tool_ctx) is not None),
+                cancello=cancello)
+            self._dialogo = {"stato": stato, "corsia": corsia,
+                             "forma": forma_chiusa(user_text or ""),
+                             "lessico": (stato_dialogo.lessico_oggi(user_text or "", prop)
+                                         if prop is not None else None),
+                             "risposte": [], "diretta": False, "offerte": 0}
+            blocco = stato_dialogo.blocco(stato, corsia)
+            if pending and blocco:
+                return blocco
+        except Exception as e:  # noqa: BLE001 — l'ombra non ferma mai la risposta
+            print(f"   [DIALOGO] stato del dialogo non letto: {type(e).__name__}: {e}",
+                  flush=True)
+            self._dialogo = None
+        return pending
+
+    def _proposta_rispondi(self, call: dict, args: dict, level: str) -> str:
+        """`proposta_rispondi(esito, proposta, correzione, quando)` (calliope/tools/proposta.py).
+        Vale solo con una proposta sì/no aperta per chi parla, nella **prima passata** della
+        risposta e **prima** che un tool legga un dato non fidato (difesa: un dato appena letto
+        non può «rispondere» alla proposta). In ombra il «sì» diventa la chiamata di oggi (il
+        tool proposto con i suoi argomenti, attraverso ToolRegistry.call e la politica, che
+        decide); gli altri esiti non fanno niente. Nella storia non resta (§ 3.8)."""
+        d = getattr(self, "_dialogo", None)
+        esito = str(args.get("esito") or "").strip().lower()
+        esito = {"sì": "si", "yes": "si", "s": "si"}.get(esito, esito)
+        prop = d["stato"].proposta if d else None
+        p = getattr(self, "pending", None)
+        motivo = None
+        if d is None:
+            motivo = "senza_stato"
+        elif esito not in stato_dialogo.ESITI:
+            motivo = "esito_non_valido"
+        elif prop is None:
+            motivo = "nessuna_proposta"
+        elif int(getattr(self, "_passata", 0) or 0) != 1:
+            motivo = "seconda_passata"
+        elif getattr(self, "_letto_ora", ""):
+            motivo = "dopo_dato"
+        elif str(args.get("proposta") or "").strip().lower() not in ("", prop.id):
+            motivo = "proposta_diversa"
+        elif prop.tipo != "si_no":
+            motivo = "tipo_dato"
+        elif not (isinstance(p, dict) and p.get("tool") == prop.tool
+                  and p.get("turno") == prop.turno):
+            motivo = "chiusa"
+        elif esito == "si" and prop.argomenti is None:
+            motivo = "senza_argomenti"
+        if d is not None:
+            d["risposte"].append({"esito": esito if esito in stato_dialogo.ESITI else "?",
+                                  **({"scartata": motivo} if motivo else {})})
+        print(f"   [DIALOGO] proposta_rispondi({esito}): "
+              + (f"scartata ({motivo})" if motivo else "valida"), flush=True)
+        if motivo:
+            tool = prop.tool if prop is not None else "il tool giusto"
+            cosa = {"tipo_dato": f"questa domanda chiede un dato: rispondi chiamando {tool} con "
+                                 f"il dato detto da chi parla",
+                    "senza_argomenti": f"se chi parla acconsente, chiama tu {tool}"}.get(
+                motivo, "rispondi a quello che chiede chi parla, chiamando i tool come sempre")
+            errore = {"nessuna_proposta": "nessuna proposta aperta",
+                      "seconda_passata": "vale solo prima di ogni altro tool della risposta",
+                      "dopo_dato": "vale solo prima di leggere un dato in questa risposta",
+                      "chiusa": "la proposta non è più aperta"}.get(
+                motivo, f"proposta_rispondi non vale qui ({motivo})")
+            return json.dumps({"ok": False, "fatto": NIENTE, "errore": errore,
+                               "cosa_fare": cosa}, ensure_ascii=False)
+        if esito == "si":
+            # In ombra: la chiamata che il modello avrebbe fatto oggi, con gli argomenti della
+            # proposta; nella storia resta come quella (la politica di oggi decide)
+            call["name"], call["arguments"] = prop.tool, dict(prop.argomenti or {})
+            self._traduzione = True
+            try:
+                return self._run_tool(call, level)
+            finally:
+                self._traduzione = False
+        cosa = {"no": "Non farlo: di' in breve che va bene così, senza riproporlo.",
+                "correzione": "Non fare la proposta così com'era: se chi parla ha detto il dato "
+                              "giusto, chiama il tool con quel dato; altrimenti chiediglielo.",
+                "rinvio": "Non farlo adesso: dillo in breve; se ha detto quando, puoi proporre "
+                          "un promemoria.",
+                "altro": "La proposta resta aperta: rispondi a quello che chiede chi parla."}[esito]
+        return json.dumps({"ok": True, "esito": esito, "cosa_fare": cosa}, ensure_ascii=False)
+
+    def _dialogo_diretta(self, name: str):
+        """Il modello ha chiamato direttamente il tool proposto (il «sì» implicito di oggi)."""
+        d = getattr(self, "_dialogo", None)
+        if d and not getattr(self, "_traduzione", False):
+            pr = d["stato"].proposta
+            if pr is not None and name == pr.tool:
+                d["diretta"] = True
+
+    def _togli_proposta_rispondi(self, start: int = 0):
+        """Le chiamate a proposta_rispondi e i loro esiti escono dalla storia a turno finito
+        (§ 3.8: lo stato è della macchina). Il «sì» tradotto è già la chiamata del tool vero e
+        resta; nel registro dei turni c'è tutto (`dialogo_ombra`)."""
+        hist = self.history
+        nuovi, tolti = [], False
+        for m in hist:
+            if m.get("role") == "tool" and m.get("name") == stato_dialogo.TOOL:
+                tolti = True
+                continue
+            calls = m.get("tool_calls") if m.get("role") == "assistant" else None
+            if calls:
+                keep = [c for c in calls if c.get("name") != stato_dialogo.TOOL]
+                if len(keep) != len(calls):
+                    tolti = True
+                    if keep:
+                        m["tool_calls"] = keep
+                    else:
+                        del m["tool_calls"]
+                        if not (m.get("content") or "").strip():
+                            continue
+            nuovi.append(m)
+        if tolti:
+            hist[:] = nuovi
+
+    def _dialogo_fine(self, interrotta: bool = False):
+        """Il confronto per il registro dei turni (`last_dialogo_ombra`, campo `dialogo_ombra`):
+        cosa avrebbero deciso corsia veloce, modello e consenso del progetto, cosa è successo."""
+        d = getattr(self, "_dialogo", None)
+        if not d:
+            return
+        try:
+            regole = set(self.rules_fired())
+            stato = d["stato"]
+            if "sviluppo_modalita" in regole:
+                stato.attivita = "sviluppo"
+            elif getattr(self, "turn_pending_tool", None) == "esercizi":
+                stato.attivita = "esercizi"
+            d["offerte"] = int(getattr(self, "_offerte_risposta", 0) or 0)
+            sc = getattr(self.tool_ctx, "speaker_ctx", None)
+            pr = stato.proposta
+            spec = self.tools.get(pr.tool) if pr is not None and self.tools is not None else None
+            self.last_dialogo_ombra = stato_dialogo.confronto(
+                d, regole, self.last_tools, getattr(self, "pending", None),
+                getattr(sc, "sfida", None), int(getattr(self, "turn_number", 0) or 0),
+                livelli=getattr(spec, "levels", None), interrotta=interrotta)
+        except Exception as e:  # noqa: BLE001 — l'ombra non ferma mai la risposta
+            print(f"   [DIALOGO] confronto non scritto: {type(e).__name__}: {e}", flush=True)
 
     def _rifiuto_proposta(self, user_text: str | None, pending: str | None) -> str | None:
         """Un «no» esplicito alla proposta in sospeso, o alla frase di sfida in corso («No, non
@@ -2471,6 +2654,7 @@ class Brain:
         main.py). Niente messaggio dell'utente finto nella storia (fino al 03/10 «Cerca
         pure.»), niente turno nuovo: l'azione in sospeso e le installazioni non lo contano."""
         self._offer = None
+        self._passata = 99           # proposta_rispondi vale solo nella prima passata (10/10)
         yield from self._reply(None, level, context, None)
 
     def _togli_non_fidati(self):
@@ -2559,6 +2743,9 @@ class Brain:
         self.pending = {
             "tool": offer["tool"],
             "messaggio": str(offer.get("messaggio") or "") or PENDING_MSG.format(**fields),
+            # Un testo proprio (la domanda dell'agente, a cui si risponde con un dato): per lo
+            # stato del dialogo è una proposta di tipo «dato» (10/10)
+            "su_misura": bool(offer.get("messaggio")),
             # Nei turni dopo il primo (04/10): la domanda non è più alla fine dell'ultima risposta
             "messaggio_dopo": str(offer.get("messaggio") or "") or PENDING_LATER_MSG.format(
                 **fields),
@@ -3108,6 +3295,9 @@ class Brain:
         # chi parla Ollama rileggeva ~6000 token di prefisso (+1,5 s col 4B, +2 s col 26B).
         # I permessi li ricontrolla ToolRegistry.call a ogni esecuzione
         schemas = self.tools.schemas(online=self.cfg.online)
+        if stato_dialogo.modo(self.cfg) == stato_dialogo.SPENTO:
+            # Lo stato del dialogo spento (10/10): il percorso di prima, senza il tool di risposta
+            schemas = [s for s in schemas if s["function"]["name"] != stato_dialogo.TOOL]
         system = self._system_messages()
         self._trim_tokens(system, schemas)
         # I ricordi di chi parla vanno subito prima della sua domanda, non nel prompt di
@@ -3259,6 +3449,7 @@ class Brain:
                     on_tool_start(random.choice(dialogo.FRASI_CORREZIONE))
                     announced = True
                     self._rule("correzione_avviso")
+            self._passata = getattr(self, "_passata", 0) + 1
             text, calls, held, held_req, named = yield from self._turn(
                 with_memory(system), schemas,
                 hold_claims=bool(schemas) and not self._acted(),
@@ -3566,6 +3757,7 @@ class Brain:
         # davanti, la passata finale riceveva due ordini opposti)
         tail = []
         messages = with_memory(system + [{"role": "system", "content": fine}])
+        self._passata = getattr(self, "_passata", 0) + 1
         text, _, _, _, _ = yield from self._turn(messages, [])
         if not (text or "").strip():
             # Una chiamata scritta come testo (trattenuta) o niente: meglio una frase vera del
@@ -3996,6 +4188,10 @@ class Brain:
         """Esegue un tool nativo e restituisce il risultato (JSON) al modello."""
         self._nome_corretto(call)
         args = call["arguments"] if isinstance(call["arguments"], dict) else {}
+        if call["name"] == stato_dialogo.TOOL:
+            # La risposta strutturata a una proposta (10/10, calliope/stato_dialogo.py)
+            return self._proposta_rispondi(call, args, level)
+        self._dialogo_diretta(call["name"])
         # La stessa chiamata (stesso tool, stessi argomenti normalizzati) già fatta in questa
         # risposta non si riesegue: il modello riceve l'esito della prima (09/10, regola
         # `chiamata_ripetuta`; casi veri della DGX: due casa_comando «spegni la luce della
@@ -4095,6 +4291,8 @@ class Brain:
             if isinstance(parsed, dict) and "in_sospeso" in parsed:
                 self._offer = parsed.pop("in_sospeso")
                 offerta = True
+                # Due domande nella stessa risposta: vince l'ultima (10/10, contate per l'ombra)
+                self._offerte_risposta = getattr(self, "_offerte_risposta", 0) + 1
                 result = json.dumps(parsed, ensure_ascii=False)
             # L'ultimo dispositivo della casa, per i pronomi dei turni dopo (REFERENCE_MSG)
             if isinstance(parsed, dict) and "riferimento" in parsed:

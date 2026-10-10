@@ -272,6 +272,16 @@ llm:
   # avrebbe deciso la politica di prima (`calliope stato --turni`). Per tornare indietro:
   # `politica_per_valore: false` in calliope.locale.yaml
   politica_per_valore: true
+  # Lo stato del dialogo (10/10, calliope/stato_dialogo.py, passo 1 del progetto
+  # docs/ricerche/2026-10-10-macchina-stati.md): la risposta a una proposta aperta la
+  # interpreta il modello con il tool `proposta_rispondi` (sì, no, correzione, rinvio, altro)
+  # e una corsia veloce riconosce le forme chiuse dette per intero (calliope/risposte.py).
+  # «ombra»: lo schema c'è sempre, lo stato del turno sostituisce il messaggio dell'azione in
+  # sospeso, il «sì» del tool diventa la chiamata di oggi (decide ancora la politica) e il
+  # registro dei turni scrive il confronto (`dialogo_ombra`, `calliope stato --turni`).
+  # «spento»: il percorso di prima, identico (niente schema né confronto). «acceso» (la
+  # macchina che esegue la proposta) non è ancora realizzato: si segnala e resta «ombra»
+  dialogo_interprete: ombra
   # Ciò che Calliope dice con dati non fidati di mezzo (06/10, calliope/riferire.py): ogni
   # frase della risposta si controlla prima di dirla (numeri a pagamento, codici e password da
   # dare, soldi verso un conto, recapiti presi solo dal dato e non chiesti, indicazioni

@@ -2169,4 +2169,8 @@ def build_registry(biblioteca: bool = False, pc: dict | None = None,
     from .stato import stato_specs
     for spec in stato_specs(installa):
         reg.register(spec)
+    # La risposta a una proposta aperta (10/10, calliope/stato_dialogo.py): sempre, uguale per
+    # ogni livello; con `dialogo_interprete: spento` Brain non la mette negli schemi
+    from .proposta import proposta_spec
+    reg.register(proposta_spec())
     return reg

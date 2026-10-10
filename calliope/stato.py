@@ -15,7 +15,10 @@ il prossimo passo (registro delle capacità, calliope/capacita.py).
                                               Whisper, nomi noti vicini, esiti vuoti
                                               (calliope/argomenti_incerti.py); compagnia: frasi
                                               con più voci vicino a un satellite, regole e
-                                              giudizi «rivolta a Calliope» (calliope/compagnia.py)
+                                              giudizi «rivolta a Calliope» (calliope/compagnia.py);
+                                              stato del dialogo in ombra: proposte aperte,
+                                              proposta_rispondi chiamato o no, accordo con la
+                                              decisione di oggi (calliope/stato_dialogo.py)
     python -m calliope.stato --turni --pause [--giorni N]
                                               pause dentro la frase per persona e canale,
                                               tagli probabili e la soglia che si sceglierebbe
@@ -231,10 +234,15 @@ def main(argv=None) -> int:
         # Più voci vicino a un satellite (09/10, calliope/compagnia.py)
         from . import compagnia
         comp = compagnia.riassunto(turni)
+        # Lo stato del dialogo in ombra (10/10, calliope/stato_dialogo.py): il modello chiama
+        # proposta_rispondi? accordo con la decisione di oggi
+        from . import stato_dialogo
+        dialogo = stato_dialogo.riassunto(turni)
         if as_json:
             print(json.dumps({"giorni": dati, "soglia_s": getattr(cfg, "latenza_avviso_s", None),
                               "attrito": sicurezza, "attrito_soglia": soglia_a,
-                              "argomenti": argomenti, "compagnia": comp},
+                              "argomenti": argomenti, "compagnia": comp,
+                              "dialogo": dialogo},
                              ensure_ascii=False, indent=2))
         else:
             print(latenza.testo(dati, soglia))
@@ -244,6 +252,8 @@ def main(argv=None) -> int:
             print(argomenti_incerti.testo(argomenti))
             print()
             print(compagnia.testo(comp))
+            print()
+            print(stato_dialogo.testo(dialogo))
         return 0
     if "--piano" in argv:
         return piano_main(cfg, argv, as_json)

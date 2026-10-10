@@ -157,6 +157,12 @@ def sistema(visti) -> str:
     return " ".join(m.get("content") or "" for m in visti if m.get("role") == "system")
 
 
+def sospeso(testo: str) -> bool:
+    """La proposta davanti al modello: il messaggio di oggi (PENDING_MSG) o, con lo stato del
+    dialogo in ombra (passo 1, 10/10), il blocco dello stato."""
+    return "Azione in sospeso" in testo or "Stato del dialogo: proposta aperta" in testo
+
+
 # ─────────────────────────── 1. proposta interrotta, stop ───────────────────────────
 def caso_1():
     print("— 1. proposta detta e interrotta; stop dopo l'interruzione")
@@ -186,7 +192,7 @@ def caso_2():
     di(b, "Sì, va tutto bene.")
     buco(2, "il «sì» al cancello 1 arriva al modello come consenso alla proposta di prima "
             "(«Azione in sospeso … La apro?»)",
-         "Azione in sospeso" in sistema(b.backend.visti[-1])
+         sospeso(sistema(b.backend.visti[-1]))
          and "apri_finto" in sistema(b.backend.visti[-1]),
          "passo 3 (il cancello ha priorità e chiude la proposta: proposta_persa_cancello)")
 
@@ -319,7 +325,7 @@ def caso_5():
     buco(5, "l'annuncio per Dario finisce intestato a Bianca: al «sì» di Dario la proposta "
             "risulta di Bianca e non vale", intestata == "bianca-id"
          and ("sospeso_altra_persona" in regole or "sospeso_altrui_consenso" in regole)
-         and "Azione in sospeso" not in sistema(b.backend.visti[-1]),
+         and not sospeso(sistema(b.backend.visti[-1])),
          "passo 5 (annunci intestati a item[\"chi\"])", f"{intestata} {b.rules_fired()}")
 
 

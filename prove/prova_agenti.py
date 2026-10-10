@@ -989,7 +989,7 @@ verifica("proposta detta così com'è, azione in sospeso", risposta.endswith("Pr
 
 def conferma_dal_sospeso(body):
     pend = [m["content"] for m in body["messages"] if m["role"] == "system"
-            and m["content"].startswith("Azione in sospeso")]
+            and m["content"].startswith(("Azione in sospeso", "Stato del dialogo"))]
     import re as _re
     lid = _re.search(r"proposta=\"(L\d+)\"", pend[-1]).group(1) if pend else "?"
     return {"tool_calls": [call("lavoro_affida", {"tipo": "codice", "compito": "Sì",

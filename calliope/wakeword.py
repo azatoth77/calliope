@@ -298,6 +298,20 @@ def _is_sleep(core: list[str], words: list[str]) -> bool:
     return False
 
 
+def uscita_intera(text: str, name="Calliope") -> str | None:
+    """Come exit_intent, ma solo sulla frase **intera** (senza il ripiego sulla prima clausola
+    di «dormi»): "dormi", "spegni" o None. Per la corsia veloce delle risposte a una proposta
+    (calliope/risposte.py, 10/10): «Esci un attimo, facciamo una prova dopo» non è una forma
+    chiusa."""
+    words = _plain_words(text, name)
+    core = _exit_core(words)
+    if not core:
+        return None
+    if _SHUTDOWN.fullmatch(" ".join(core)):
+        return "spegni"
+    return "dormi" if _is_sleep(core, words) else None
+
+
 def exit_request(text: str, name="Calliope", spegni_nomi=None) -> str | None:
     """exit_intent sulla frase intera o, se c'è il nome, sulla richiesta che lo
     accompagna: «Puoi mischiare con il resto. Grazie. Puoi uscire Calliope.» (26/09)."""

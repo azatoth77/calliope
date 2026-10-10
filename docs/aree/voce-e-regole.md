@@ -21,6 +21,7 @@ misure di questo documento sono col 4B in locale: da rifare col 26B sulla DGX do
 | «La frase è rivolta a Calliope?» in compagnia (dal 09/10, in ombra) | Ollama, output strutturato sul modello del rilevatore di pericolo | `calliope/rivolta.py` → `Giudice`, `etichetta`; `Brain.dimentica_ultimo_turno`; la compagnia è in [stt-tts](stt-tts.md) |
 | Pulizia output | regex | `calliope/brain.py` → `ThinkFilter`, `TextCallGuard`; `calliope/tts.py` → `split_sentences`, `clean_for_speech` |
 | Configurazione | dataclass + YAML (PyYAML) | `calliope/config.py` → `Config`, `load_config`, `VOICE_MAP`; file `calliope.yaml` |
+| Stato del dialogo (dal 10/10, in ombra) | — | `calliope/stato_dialogo.py` → `Proposta`, `StatoPersona`, `StatoCorsia`, `blocco`, `decidi`, `consenso_progetto`, `confronto`; corsia veloce `calliope/risposte.py` → `forma_chiusa`; tool di risposta `calliope/tools/proposta.py` → `proposta_rispondi`; in Brain `_dialogo_inizio`, `_proposta_rispondi`, `_dialogo_fine` (sezione «Stato del dialogo, passo 1») |
 | Registro dei turni | JSONL, un file al giorno in `registro/` | `calliope/turnlog.py` → `TurnLog`; analisi con `revisione.py` |
 | Persistenza comune | SQLite in WAL, file di stato atomici, versioni dello schema | `calliope/persistenza.py` → `apri_db`, `scrivi_atomico` / `scrivi_json` / `leggi_json`, `migra` / `prepara_schema` (tabella `meta_schema`) |
 
@@ -979,3 +980,111 @@ corregge, e va trasformata in una verifica con i contrari): 1 e 2 al passo 3, 4,
   `risposta: True` (`Lavori.offerta_risposta`, salvato da `Brain.set_pending`): un «no» è la
   risposta, la proposta resta e il modello la passa con `lavoro_rispondi`. Regola
   `risposta_non_rifiuto`. Il «no» a una proposta normale («La apro?») resta un rifiuto.
+
+## Stato del dialogo, passo 1: interprete del modello e corsia veloce in ombra (10/10, ramo `stati-passo1`)
+
+Primo passo del piano del progetto [«lo stato del dialogo come macchina a
+stati»](../ricerche/2026-10-10-macchina-stati.md) (§ 6), con le due decisioni di Dario del 10/10:
+la macchina **non interpreta il linguaggio** (il significato della risposta lo dà il modello in
+forma strutturata, o una corsia veloce per le forme chiuse dette per intero) e gli scambi fra
+macchina e modello **non inquinano la conversazione**. **In ombra: nessuna decisione di oggi
+cambia.**
+
+- **Moduli.** `calliope/stato_dialogo.py`: l'ossatura (`Proposta`, `Chi`, `StatoPersona`,
+  `StatoCorsia`) con **adattatori in sola lettura** sugli stati di oggi (`Conversazione.pending`
+  con il tool del turno lasciato da `_take_pending`, la domanda della politica, la frase di sfida
+  di `SpeakerContext`, lo sviluppo aperto, il cancello 2 dei minori), il blocco dello stato, la
+  decisione della macchina con le priorità del § 3.3 (`decidi`) e il consenso del progetto (§ 3.5,
+  `consenso_progetto`, solo per il confronto), il confronto per il registro. È una facciata: non
+  scrive niente negli stati di oggi. `calliope/risposte.py`: la corsia veloce (`forma_chiusa`).
+  `calliope/tools/proposta.py`: lo schema del tool di risposta.
+- **`proposta_rispondi(esito, proposta, correzione, quando)`**, esito `si | no | correzione |
+  rinvio | altro`: sempre negli schemi, uguale per ogni livello (uno schema in più: il prefisso
+  cambia una volta sola). Lo gestisce Brain (`_proposta_rispondi`), mai il registro. In ombra
+  `si` diventa **la chiamata che il modello farebbe oggi**: il tool proposto con gli argomenti
+  della proposta, attraverso `ToolRegistry.call` e la politica di oggi (decide lei; nella storia
+  resta come chiamata del tool vero); `no`, `correzione`, `rinvio`, `altro` non fanno niente
+  (oggi, senza un sì, il modello non chiama il tool e la proposta resta: il rifiuto lo decide
+  ancora `politica.rifiuto` all'inizio del turno). Il modello che chiama direttamente il tool
+  proposto (il sì implicito di oggi) resta il percorso di sempre. Vale solo con una proposta
+  sì/no aperta per chi parla, **nella prima passata** e **prima di un dato non fidato letto nella
+  stessa risposta**; altrimenti un errore corto e niente (scartata: `nessuna_proposta`,
+  `seconda_passata`, `dopo_dato`, `proposta_diversa`, `tipo_dato`, `chiusa`, `esito_non_valido`).
+  A turno finito le chiamate a `proposta_rispondi` e i loro esiti escono dalla storia
+  (`_togli_proposta_rispondi`, § 3.8 del progetto).
+- **Il blocco dello stato** (≤ 520 caratteri, effimero: nei dati del turno subito prima della
+  frase, mai nella storia né nel prompt di sistema) prende il posto di `PENDING_MSG` /
+  `PENDING_LATER_MSG` per le proposte sì/no: «Stato del dialogo: proposta aperta p3, «…?»
+  (casa_comando con comando="…", gravità E1), chiesta nell'ultima risposta. Chi parla l'ha
+  ricevuta, voce sicura. Se la frase risponde alla proposta, chiama proposta_rispondi con
+  l'esito…». Gli argomenti restano come in `PENDING_MSG`: in ombra la chiamata diretta del tool
+  proposto è il percorso di oggi, e alcuni argomenti riconoscono l'offerta (l'id `proposta` di
+  `lavoro_affida`: senza, `prova_lavori_riavvio` e `prova_agenti` fallivano, il «sì» diventava una
+  richiesta nuova con la sfida). Dal passo 2, quando la macchina eseguirà lei la proposta, si
+  potranno togliere. Le domande che chiedono un dato (testo proprio del tool, come la domanda
+  dell'agente, o una domanda non sì/no) tengono il loro messaggio di oggi (`set_pending` segna
+  `su_misura`).
+- **La corsia veloce** (`risposte.forma_chiusa`): ogni pezzo della frase, tolti il nome e i
+  riempitivi in testa e in coda, è una forma dell'elenco (`si`: sì, certo, vai, procedi, ok, va
+  bene, d'accordo, perché no…; `no`: no, no grazie, annulla, lascia stare, non importa, per ora
+  no…; `stop`: basta, stop; `grazie`: grazie, perfetto, ottimo); l'uscita
+  (`wakeword.uscita_intera`: la frase intera, senza il ripiego sulla prima clausola) e
+  «ricominciamo» per intero, mai con un «sì» nella frase. Tutto il resto va al modello. I casi e
+  i contrari (le frasi del § 3.5 dell'analisi del 09/10: «No, mi va bene», «Sì, però fallo dopo»,
+  «Si chiama Marco», «Sicuro?», «Sì, puoi andare», «Ok, esci»…) in `prove/prova_testo.py`. In
+  ombra non decide niente: si scrive nel confronto.
+- **Registro dei turni**: campo `dialogo_ombra` (nessun testo, nessun valore): la proposta (id,
+  origine `tool | politica | forse`, tipo `si_no | dato`, gravità, sfida della classe, da quanti
+  turni), chi parla (`come`, sicurezza), `forma_chiusa`, `lessico` (come leggono la frase
+  `politica.consenso` e `rifiuto`), `modello` (l'esito valido di `proposta_rispondi`), `diretta`,
+  `scartate`, `consenso` (del progetto), `macchina`, `via` (corsia, modello, diretta, sfida,
+  pavimento), `oggi` (eseguita, sfida, domanda, fermata, rifiutata, resta, sostituita, chiusa),
+  `accordo` e `disaccordo` per categoria (`esegue`, `chiede`, `chiude`, `resta`: per esempio
+  `chiude_vs_resta`); in più `sfida`, `attivita`, `chiusa_da`, `cancello`, `proposte_risposta`
+  (due domande nella stessa risposta), `interrotta`. Le frasi che il ciclo decide **prima** di
+  Brain (interruzione, uscite, chiusure, cancello 2) con una proposta aperta hanno il loro
+  confronto (`prima_di_brain`, da un'istantanea presa prima della fase: un'uscita chiude la
+  conversazione). `calliope stato --turni` ha una sezione «Stato del dialogo»: proposte aperte,
+  il modello chiama o non chiama `proposta_rispondi`, chiamate dirette, corsia veloce, scartate,
+  accordo e disaccordi per tipo, esiti del modello e consenso del progetto.
+- **Interruttore** `dialogo_interprete` in `Config` (sezione `llm`): `ombra` (predefinito),
+  `spento` (il percorso di prima, identico: niente schema, niente blocco, niente confronto).
+  `acceso` (la macchina che esegue la proposta) non è realizzato: la configurazione lo rifiuta e
+  resta `ombra`.
+- **Prove**: `prova_stato_dialogo` (a secco: funzioni pure, `si` uguale alla chiamata diretta e
+  allo spento con le stesse esecuzioni e regole della politica, gli altri esiti senza effetto,
+  difese, storia pulita, due proposte, proposta + sfida, sviluppo, cancello, conversazione chiusa,
+  frasi decise prima di Brain, banco nuovo); `prova_testo` (corsia veloce, 60 casi);
+  `prova_dialogo_ollama` (il modello vero). `prova_brain`, `prova_conferme` e `prova_agenti` accettano il blocco
+  al posto di `PENDING_MSG`.
+- **Misura col 4B (gemma4 e4b sul portatile, 10/10, `prova_dialogo_ollama 2`, blocco con gli
+  argomenti)**: 100 risposte a una proposta aperta (16 frasi del registro e dell'analisi, più una
+  correzione, su tre proposte: «La apro?» di un tool, «Vuoi che accenda la luce della taverna?»,
+  la domanda della politica per registrare una voce). Il modello chiama `proposta_rispondi`
+  **46 volte su 100**, chiama direttamente il tool proposto 15, nessuno dei due 39 (tutti i «no»,
+  che il 4B dice solo a parole: la proposta resta, come oggi; e qualche sì perso, «Sì, grazie»
+  alla registrazione). Esito giusto 42/46: i sì chiamati 31/31, i rinvii 11/12 («Sì, però fallo
+  dopo», «Magari stasera»); «altro» chiamato 4 volte, sempre come `si` (sbagliato: «Sì, però
+  ascolta, stiamo uscendo a cena» dopo «La apro?»); correzioni mai. Per proposta: la domanda
+  della politica 21/32, «La apro?» 17/34, la luce 8/34 (il 4B chiama `casa_comando` da solo, 12).
+  Con la corsia veloce un esito strutturato c'è per 73/100. **Accordo con lo spento** (stessa
+  esecuzione per la stessa frase): 92/100; degli 8 diversi, 5 sono rinvii che oggi eseguono
+  subito e in ombra no (la macchina ha ragione), 1 «Sì, però ascolta…» che il modello in ombra
+  chiama `si` (a conversazione pulita la politica di oggi non giudica il consenso di un E1), 1
+  «No, mi va bene» e 1 «Sì, grazie» eseguiti solo nello spento. «No» eseguiti: 0 in tutti e due
+  i modi. **Latenza**: lettura del prompt 0,07 s in tutti e due i modi; prima frase mediana +0,07,
+  +0,10, +0,13 s in tre misure (0,49–0,62 s: piccola, da rimisurare col 26B); stato del turno e
+  corsia veloce 0,03 ms; niente secondo modello. Il blocco con «e non {tool}» non cambiava niente
+  (38 %); la descrizione «chiama questo al posto del tool proposto» porta al 40–46 %. **Il 26B
+  va misurato sulla DGX** (sotto).
+- **Cosa guardare sulla DGX per decidere il passo 2** (`calliope stato --turni`, sezione «Stato
+  del dialogo»): quante proposte sì/no il 26B risponde con `proposta_rispondi` (e quante con il
+  tool diretto o senza niente); i disaccordi per tipo: `chiede_vs_esegue` (il consenso del
+  progetto avrebbe chiesto la sfida dove oggi `conferma_breve` esegue: l'attrito in più
+  dell'accensione, «Rischi» del progetto), `esegue_vs_chiede` (oggi si chiede e il progetto
+  eseguirebbe: attrito in meno), `chiude_vs_resta` (rinvii e «no» che oggi lasciano viva la
+  proposta), le frasi `prima_di_brain` (uscite e stop con una proposta aperta: i casi del § 3.6
+  dell'analisi); le `scartate` per `dopo_dato` e `seconda_passata` (poche, e mai seguite da
+  un'esecuzione). E la prima frase dei turni con una proposta, con e senza (`dialogo_interprete:
+  spento` nel locale per un giorno di confronto). Per tornare indietro: `dialogo_interprete:
+  spento` in `calliope.locale.yaml`.

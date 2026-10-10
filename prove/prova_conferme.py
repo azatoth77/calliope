@@ -23,6 +23,13 @@ from calliope.speaker_id import SpeakerContext
 from calliope.tools.registry import REFUSAL, ToolRegistry
 from calliope.tools.spec import ToolContext, ToolSpec
 
+
+def sospeso_in(testo) -> bool:
+    """L'azione in sospeso davanti al modello: il messaggio di oggi (PENDING_MSG) o, con lo stato
+    del dialogo in ombra (10/10, calliope/stato_dialogo.py), il blocco dello stato."""
+    t = str(testo or "")
+    return "Azione in sospeso" in t or "Stato del dialogo: proposta aperta" in t
+
 errori = 0
 
 
@@ -207,7 +214,7 @@ def prova_validita():
     visti = []
     for _ in range(4):
         "".join(b.stream_reply("Parliamo d'altro.", "amministra"))
-        visti.append(any("Azione in sospeso" in m.get("content", "")
+        visti.append(any(sospeso_in(m.get("content", ""))
                          for m in b.backend.visti[-1] if m["role"] == "system"))
     verifica("azione in sospeso: nei 3 turni dopo sì, al quarto no", visti
              == [True, True, True, False], str(visti))
@@ -217,13 +224,13 @@ def prova_validita():
     b.pending["scade"] = time.monotonic() - 1
     "".join(b.stream_reply("Sì.", "amministra"))
     verifica("azione in sospeso: scaduta dopo i secondi", not any(
-        "Azione in sospeso" in m.get("content", "") for m in b.backend.visti[-1]))
+        sospeso_in(m.get("content", "")) for m in b.backend.visti[-1]))
     b.set_pending({"tool": "azione_admin", "domanda": "Procedo?", "cosa": "x",
                    "argomenti": {"x": 1}})
     frase(sc, "Bianca", "voce", 0.7)
     "".join(b.stream_reply("Sì.", "familiare"))
     verifica("azione in sospeso: il «sì» di un'altra persona no", not any(
-        "Azione in sospeso" in m.get("content", "") for m in b.backend.visti[-1])
+        sospeso_in(m.get("content", "")) for m in b.backend.visti[-1])
              and b.pending is None)
 
 

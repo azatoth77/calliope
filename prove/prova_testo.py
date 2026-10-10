@@ -696,6 +696,41 @@ for testo, atteso in [
         ("Va bene, però ascolta: fallo.", True)]:
     verifica(f"consenso «{testo}»", _pol.consenso(testo), atteso)
 
+# La corsia veloce delle risposte a una proposta (10/10, calliope/risposte.py, in ombra): solo
+# le forme chiuse brevi dette per intero (principio 10). Le frasi del § 3.5 dell'analisi delle
+# regole del 09/10 e del § 5.2 del progetto della macchina a stati sono i contrari: vanno al
+# modello (None)
+from calliope.risposte import forma_chiusa
+for testo, atteso in [
+        # forme chiuse
+        ("Sì.", "si"), ("Sì sì.", "si"), ("Sì, grazie.", "si"), ("Certo.", "si"),
+        ("Vai pure.", "si"), ("Procedi.", "si"), ("Ok.", "si"), ("Calliope, ok.", "si"),
+        ("Va bene.", "si"), ("D'accordo.", "si"), ("Ma sì dai, perché no?", "si"),
+        ("Eh, sì.", "si"), ("Sì, va bene.", "si"), ("Esatto.", "si"), ("Si", "si"),
+        ("No.", "no"), ("No no.", "no"), ("No, grazie.", "no"), ("Annulla.", "no"),
+        ("Lascia stare.", "no"), ("Lascia perdere.", "no"), ("Non importa.", "no"),
+        ("Per ora no.", "no"), ("Meglio di no.", "no"), ("No, lascia stare.", "no"),
+        ("Basta.", "stop"), ("Stop.", "stop"), ("Calliope, basta.", "stop"),
+        ("Basta così.", "stop"), ("Basta, grazie.", "stop"),
+        ("Grazie.", "grazie"), ("Grazie mille.", "grazie"), ("Perfetto, grazie.", "grazie"),
+        ("Ottimo.", "grazie"), ("Perfetto.", "grazie"),
+        ("Esci.", "uscita"), ("Calliope, esci.", "uscita"), ("Vai a dormire.", "uscita"),
+        ("Spegniti.", "uscita"), ("Ricominciamo.", "nuova"), ("Nuova conversazione.", "nuova"),
+        # contrari: il «sì» o il «no» con altre parole, una parola dentro la frase
+        ("No, mi va bene.", None), ("No no, va bene, fallo.", None), ("No, aspetta, sì.", None),
+        ("Sì, però fallo dopo.", None), ("Sì, non c'è problema.", None),
+        ("Sì, certo, non preoccuparti.", None), ("Si chiama Marco.", None),
+        ("Sicuro?", None), ("Giusto per sapere, che ore sono?", None),
+        ("Lascia la luce accesa.", None), ("Sì, puoi andare.", None), ("Ok, esci.", None),
+        ("Sì, registralo pure.", None), ("No, quella del bagno.", None),
+        ("Sì, però ascolta, qua noi stiamo andando a berci una birra.", None),
+        ("No, non mi interessa che lo registri, però almeno salutalo.", None),
+        ("Esci un attimo, facciamo una prova dopo.", None), ("Ricominciamo il timer.", None),
+        ("Grazie, e domani che tempo fa?", None), ("Va bene così.", None),
+        ("Basta con questa musica.", None), ("Calliope.", None), ("", None),
+        ("No, sì, sì.", None), ("Sì, no.", None), ("Perché no il gas?", None)]:
+    verifica(f"corsia veloce «{testo}»", forma_chiusa(testo), atteso)
+
 
 print(f"\n{errori} errori" if errori else "\nTutto a posto.")
 sys.exit(1 if errori else 0)
