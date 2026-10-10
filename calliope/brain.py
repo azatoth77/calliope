@@ -2300,6 +2300,10 @@ class Brain:
         prop = d["stato"].proposta if d else None
         p = getattr(self, "pending", None)
         motivo = None
+        # L'id dato dal modello: vuoto, quello della proposta, o un suo argomento («L1» di
+        # sviluppo_apri e lavoro_affida, giro della DGX del 10/10 mattina)
+        come_id = (stato_dialogo.id_della_proposta(args.get("proposta"), prop)
+                   if prop is not None else None)
         if d is None:
             motivo = "senza_stato"
         elif esito not in stato_dialogo.ESITI:
@@ -2310,7 +2314,7 @@ class Brain:
             motivo = "seconda_passata"
         elif getattr(self, "_letto_ora", ""):
             motivo = "dopo_dato"
-        elif str(args.get("proposta") or "").strip().lower() not in ("", prop.id):
+        elif come_id is None:
             motivo = "proposta_diversa"
         elif prop.tipo != "si_no":
             motivo = "tipo_dato"
@@ -2321,14 +2325,20 @@ class Brain:
             motivo = "senza_argomenti"
         if d is not None:
             d["risposte"].append({"esito": esito if esito in stato_dialogo.ESITI else "?",
-                                  **({"scartata": motivo} if motivo else {})})
+                                  **({"scartata": motivo} if motivo else {}),
+                                  **({"id": come_id} if come_id == "argomento" else {})})
         print(f"   [DIALOGO] proposta_rispondi({esito}): "
               + (f"scartata ({motivo})" if motivo else "valida"), flush=True)
         if motivo:
             tool = prop.tool if prop is not None else "il tool giusto"
             cosa = {"tipo_dato": f"questa domanda chiede un dato: rispondi chiamando {tool} con "
                                  f"il dato detto da chi parla",
-                    "senza_argomenti": f"se chi parla acconsente, chiama tu {tool}"}.get(
+                    "senza_argomenti": f"se chi parla acconsente, chiama tu {tool}",
+                    # Un id che non è della proposta aperta: il modello sa qual è, e non
+                    # dichiara un'azione che non c'è stata (giro della DGX del 10/10)
+                    "proposta_diversa": (f"la proposta aperta è {prop.id}: se la frase risponde "
+                                         f"a quella, richiama proposta_rispondi con proposta "
+                                         f"vuota" if prop is not None else "")}.get(
                 motivo, "rispondi a quello che chiede chi parla, chiamando i tool come sempre")
             errore = {"nessuna_proposta": "nessuna proposta aperta",
                       "seconda_passata": "vale solo prima di ogni altro tool della risposta",

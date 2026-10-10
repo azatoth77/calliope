@@ -180,6 +180,30 @@ def proposta_valida(p, chiave, cfg, turno_ora: int, ora: float | None = None) ->
     return "chi" not in p or p.get("chi") == chiave
 
 
+def _id_pulito(t) -> str:
+    return str(t if t is not None else "").strip().strip("«»\"'`.,;: ").lower()
+
+
+def id_della_proposta(dato, p: Proposta) -> str | None:
+    """Come l'id passato a `proposta_rispondi` indica la proposta aperta: "vuoto", "id" (il suo
+    id), "argomento" (un valore dei suoi argomenti o il nome del tool), oppure None (un'altra
+    proposta: `proposta_diversa`).
+
+    Giro della DGX del 10/10 mattina (26B): le proposte di `sviluppo_apri` e `lavoro_affida`
+    hanno un argomento che si chiama anch'esso `proposta` (l'id del lavoro, «L1»), il blocco dice
+    «sviluppo_apri con proposta="L1"» e SVILUPPO_MSG «sviluppo_apri con proposta = L1»: il
+    modello passava `proposta="L1"`, la chiamata era scartata e il «sì» non diventava la
+    chiamata di oggi (5 chiamate su 6 nel giro; col 4B, rigiocate, 9 su 15). C'è una sola
+    proposta aperta per persona: un id che la nomina per i suoi argomenti è la stessa; un id del
+    dialogo di un'altra proposta (p3 con p7 aperta) resta diverso."""
+    d = _id_pulito(dato)
+    if d in ("", _id_pulito(p.id)):
+        return "vuoto" if not d else "id"
+    valori = {_id_pulito(p.tool)} | {_id_pulito(v) for v in (p.argomenti or {}).values()
+                                     if isinstance(v, (str, int)) and not isinstance(v, bool)}
+    return "argomento" if d in valori - {""} else None
+
+
 def sfida_da_oggi(sc, chiave, proposta: Proposta | None) -> dict | None:
     s = getattr(sc, "sfida", None)
     if s is None:
@@ -442,6 +466,8 @@ def confronto(d: dict, regole, tools_turno, pending_dopo, sfida_dopo, turno: int
     scartate = [r.get("scartata") for r in risposte if r.get("scartata")]
     if scartate:
         out["scartate"] = scartate
+    if any(r.get("id") == "argomento" for r in risposte):
+        out["id_argomento"] = True               # l'id era un argomento della proposta («L1»)
     if stato.sfida:
         out["sfida"] = {"stesso_tool": stato.sfida.get("stesso_tool"),
                         "stessa_persona": stato.sfida.get("stessa_persona")}
@@ -516,7 +542,8 @@ def riassunto(turni: list[dict]) -> dict:
         if not isinstance(o, dict):
             continue
         g = giorni.setdefault(str(t.get("inizio") or "")[:10] or "?", {
-            "turni": 0, "con_proposta": 0, "modello_chiama": 0, "modello_non_chiama": 0,
+            "turni": 0, "con_proposta": 0, "modello_chiama": 0, "modello_scartato": 0,
+            "modello_non_chiama": 0,
             "diretta": 0, "corsia": 0, "scartate": 0, "accordo": 0, "disaccordo": 0,
             "prima_di_brain": 0, "disaccordi": {}, "esiti_modello": {}, "consenso": {}})
         g["turni"] += 1
@@ -527,6 +554,10 @@ def riassunto(turni: list[dict]) -> dict:
             g["con_proposta"] += 1
             if o.get("modello"):
                 g["modello_chiama"] += 1
+            elif o.get("scartate"):
+                # Chiamato, ma scartato (10/10: prima contava come «non chiama», e il giro
+                # della DGX della mattina sembrava 1 su 9 invece di 6 su 9)
+                g["modello_scartato"] += 1
             else:
                 g["modello_non_chiama"] += 1
         if o.get("diretta"):
@@ -555,7 +586,9 @@ def testo(r: dict) -> str:
              "proposta_rispondi? accordo con la decisione di oggi)", ""]
     for data, g in r.items():
         righe.append(f"{data}  {g['turni']} turni  proposte aperte {g['con_proposta']}: il "
-                     f"modello chiama {g['modello_chiama']}, non chiama {g['modello_non_chiama']}"
+                     f"modello chiama {g['modello_chiama']}"
+                     f" (più {g.get('modello_scartato', 0)} scartate), non chiama "
+                     f"{g['modello_non_chiama']}"
                      f" (tool proposto chiamato direttamente {g['diretta']}), corsia veloce "
                      f"{g['corsia']}, scartate {g['scartate']}")
         righe.append(f"    accordo {g['accordo']}, disaccordo {g['disaccordo']}"
