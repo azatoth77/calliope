@@ -954,6 +954,7 @@ class Ciclo:
             name_exp = speaker_ctx.enrolling_name
             speaker_ctx.stop_enroll()
             print(f"   [SPEAKER] Registrazione di «{name_exp}» scaduta.", flush=True)
+            self.speaker.start_turn()     # fuori da un turno (10/10, vedi _di_e_aspetta)
             self.speaker.say("La registrazione della voce è scaduta: se vuoi, chiedimela di nuovo.")
             self.speaker.wait()
         if self.pending_real_name is not None and time.monotonic() > self._nome_vero_fino:
@@ -1001,6 +1002,7 @@ class Ciclo:
 
     def _di_gli_annunci(self):
         self.sveglia.clear()
+        self.speaker.start_turn()     # un turno della voce suo (10/10, vedi _di_e_aspetta)
         self._annuncia_agenda()
         self._annuncia_documenti()
         self._annuncia_installazioni()
@@ -1394,6 +1396,12 @@ class Ciclo:
                     "esito": None, **({"canale": "scritto"} if t.scritto else {})}
         if t.scritto is None:
             self.rec["ascolto"] = self._misure_ascolto(t)
+        # Un turno della voce per ciò che si dirà prima della risposta del modello (uscite,
+        # cortesia, registrazione della voce, «Sì?», la frase d'attesa di Whisper su CPU).
+        # Il satellite scarta le frasi di un turno non oltre l'ultimo fermato: al turno 0 di
+        # una corsia nuova, o in un turno già fermato quando ha sentito il nome, la frase
+        # non si sentiva (10/10, quarto giro: «ricominciamo» al turno 0)
+        self.speaker.start_turn()
         return None
 
     # ── fase 3: trascrizione ──
@@ -2263,8 +2271,14 @@ class Ciclo:
         satellite controlla che lui l'abbia detta per intero (le frasi dette tornano in
         `played` con la fine del turno): se no lo scrive nel log, con lo stato della voce, per
         capire dove si perde (10/10, «ricominciamo» muto sulla DGX; regola
-        `voce_frase_non_detta`). True se detta (o se non si può sapere)."""
+        `voce_frase_non_detta`). True se detta (o se non si può sapere).
+
+        Apre sempre un turno della voce (10/10, quarto giro): il satellite scarta le frasi di
+        un turno che non supera l'ultimo fermato (`Riproduttore._scartata`), e la voce di una
+        corsia nuova sta al turno 0. «Calliope, ricominciamo» detto per primo dopo un riavvio
+        partiva al turno 0 e il satellite lo scartava («[VOCE] … turno 0»)."""
         sp = self.speaker
+        sp.start_turn()
         prima = len(getattr(sp, "played", None) or [])
         sp.say(frase)
         finita = sp.wait()
@@ -2283,8 +2297,7 @@ class Ciclo:
         """«Esci»: lo scritto si spegne subito, la conversazione si chiude."""
         if self.s.schermi is not None:
             self.s.schermi.conversazioni.chiudi(self.corsia.chiave_schermi)
-        self.speaker.say(frase)
-        self.speaker.wait()
+        self._di_e_aspetta(frase)          # in un turno della voce suo (10/10)
         self.brain.end_conversation()
         self.awake_until, self.last_question = 0.0, None
         return _FINE
@@ -2310,8 +2323,7 @@ class Ciclo:
             self.rec["esito"] = "uscita"
             self.rule("uscita_spegni")
             self._scrivi_turno(self.rec)
-            self.speaker.say("Mi spengo. A presto!")
-            self.speaker.wait()
+            self._di_e_aspetta("Mi spengo. A presto!")
             return "esci"
         if how == "dormi":
             print(f"Tu: {self.in_console(text)}  (torno a dormire)")
@@ -2336,9 +2348,9 @@ class Ciclo:
             # giri della DGX col satellite «studio» la frase di «ricominciamo», detta dopo
             # end_conversation, non si sentiva e il ciclo tornava subito «In ascolto…»; quella
             # di «esci», detta prima, sì). Un'interruzione rimasta accesa la scarterebbe senza
-            # sintetizzarla: si azzera. Se il satellite non la dice, il log lo scrive
-            if getattr(self.speaker, "interrupted", False):
-                self.speaker.start_turn()
+            # sintetizzarla: si azzera (start_turn in _di_e_aspetta, che apre anche il turno
+            # della voce: quarto giro del 10/10, la frase al turno 0 scartata dal satellite).
+            # Se il satellite non la dice, il log lo scrive
             self._di_e_aspetta("Va bene, ricominciamo da capo.")
             self.brain.end_conversation("nuova")
             self.awake_until, self.last_question = time.monotonic() + cfg.followup_s, None
