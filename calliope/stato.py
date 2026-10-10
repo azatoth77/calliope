@@ -18,7 +18,14 @@ il prossimo passo (registro delle capacità, calliope/capacita.py).
                                               giudizi «rivolta a Calliope» (calliope/compagnia.py);
                                               stato del dialogo in ombra: proposte aperte,
                                               proposta_rispondi chiamato o no, accordo con la
-                                              decisione di oggi (calliope/stato_dialogo.py)
+                                              decisione di oggi (calliope/stato_dialogo.py);
+                                              una voce sola: parlato diverso dalla storia,
+                                              domande non registrate e il registro degli
+                                              eventi in ombra (calliope/eventi/misura.py)
+    python -m calliope.stato --eventi [--json]
+                                              il registro degli eventi (10/10, in ombra:
+                                              calliope/eventi/): MB per giorno, registri,
+                                              «dimentica» con i residui (solo conteggi)
     python -m calliope.stato --turni --pause [--giorni N]
                                               pause dentro la frase per persona e canale,
                                               tagli probabili e la soglia che si sceglierebbe
@@ -238,11 +245,15 @@ def main(argv=None) -> int:
         # proposta_rispondi? accordo con la decisione di oggi
         from . import stato_dialogo
         dialogo = stato_dialogo.riassunto(turni)
+        # Una voce sola (10/10, calliope/eventi/misura.py): passo 0 e registro in ombra
+        from .eventi import misura as misura_eventi
+        voce_sola = misura_eventi.riassunto(turni)
+        soglia_ms = float(getattr(cfg, "eventi_contesto_ms_avviso", 20.0) or 20.0)
         if as_json:
             print(json.dumps({"giorni": dati, "soglia_s": getattr(cfg, "latenza_avviso_s", None),
                               "attrito": sicurezza, "attrito_soglia": soglia_a,
                               "argomenti": argomenti, "compagnia": comp,
-                              "dialogo": dialogo},
+                              "dialogo": dialogo, "voce_sola": voce_sola},
                              ensure_ascii=False, indent=2))
         else:
             print(latenza.testo(dati, soglia))
@@ -254,6 +265,19 @@ def main(argv=None) -> int:
             print(compagnia.testo(comp))
             print()
             print(stato_dialogo.testo(dialogo))
+            print()
+            print(misura_eventi.testo(voce_sola, soglia_ms))
+        return 0
+    if "--eventi" in argv:
+        d = _eventi_disco(cfg)
+        if as_json:
+            print(json.dumps(d, ensure_ascii=False, indent=2))
+        else:
+            from .eventi.registro import testo_stato
+            print(testo_stato(d, float(getattr(cfg, "eventi_avviso_mb", 50.0) or 0))
+                  or "Registro degli eventi: nessuna tabella (spento, o mai partito).")
+            for g in (d or {}).get("per_giorno") or ():
+                print(f"    {g['giorno']}  {g['eventi']} eventi  {g['mb']:.3f} MB")
         return 0
     if "--piano" in argv:
         return piano_main(cfg, argv, as_json)
@@ -313,7 +337,24 @@ def main(argv=None) -> int:
         if avviso:
             print()
             print(f"{avviso} Dettagli: --turni")
+        # Il registro degli eventi (10/10): crescita e «dimentica» (§ 10 del progetto)
+        try:
+            from .eventi.registro import testo_stato
+            riga = testo_stato(_eventi_disco(cfg),
+                               float(getattr(cfg, "eventi_avviso_mb", 50.0) or 0))
+        except Exception:  # noqa: BLE001 — lo stato non cade per il registro
+            riga = None
+        if riga:
+            print()
+            print(riga + " Dettagli: --eventi")
     return 0
+
+
+def _eventi_disco(cfg) -> dict | None:
+    """Le guardie del registro degli eventi (crescita, dimentica), dal file dell'archivio."""
+    from .conversazioni import percorso_db
+    from .eventi.registro import stato_disco
+    return stato_disco(percorso_db(cfg), 7, float(getattr(cfg, "eventi_avviso_mb", 50.0) or 0))
 
 
 if __name__ == "__main__":

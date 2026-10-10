@@ -455,6 +455,10 @@ class Speaker:
 
     PLAY_BLOCK_S = 0.1          # granularità dell'interruzione
     muto = False                # vedi __init__ (anche per gli Speaker costruiti senza)
+    # Il registro degli eventi in ombra (10/10, calliope/eventi/ombra.py): una funzione che
+    # riceve ogni frase mandata e, a ogni start_turn, le frasi sentite per intero. In memoria,
+    # dal thread di chi chiama: la voce non aspetta niente. None = nessuno ascolta
+    osservatore = None
 
     def __init__(self, cfg: Config, uscita=None, base: "Speaker | None" = None):
         """`uscita` None: le casse di questo computer (UscitaLocale). Altrimenti un'uscita
@@ -870,10 +874,25 @@ class Speaker:
                     self._fillers[key] = self._pcm(voice, text)
         threading.Thread(target=work, daemon=True).start()
 
+    def _osserva(self, tipo: str, testo: str | None = None):
+        """L'osservatore (registro degli eventi in ombra): mai un errore verso la voce."""
+        oss = self.__dict__.get("osservatore")
+        if oss is None:
+            return
+        try:
+            if tipo == "fine":
+                oss("fine", None, played=list(self.played),
+                    interrotta=self._interrupted.is_set(), muto=self.muto)
+            else:
+                oss(tipo, testo, muto=self.muto)
+        except Exception:  # noqa: BLE001 — l'ombra non ferma mai la voce
+            pass
+
     def say_cached(self, text: str):
         """Dice una frase d'attesa: subito se è già pronta per la voce attuale, altrimenti
         la sintetizza (~0,2 s) e intanto prepara le altre per questa voce. Non finisce in
         `played` (quindi nemmeno nella storia dopo un'interruzione)."""
+        self._osserva("cached", text)
         if self.muto:
             return
         audio = self._fillers.get((self._current_voice_path, text))
@@ -928,6 +947,7 @@ class Speaker:
 
     def start_turn(self):
         """Inizio di una risposta: azzera le frasi pronunciate e l'interruzione."""
+        self._osserva("fine")
         self.played = []
         self.turno += 1          # il satellite scarta solo le frasi del turno interrotto
         self._prima_del_turno = True
@@ -948,6 +968,7 @@ class Speaker:
         return self._interrupted.is_set()
 
     def say(self, text: str):
+        self._osserva("say", text)
         if self.muto:
             return
         if self.__dict__.get("_prima_del_turno", False):

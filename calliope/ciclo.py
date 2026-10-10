@@ -39,6 +39,7 @@ from . import allegati as allegati_mod
 from .cassetto import CassettoPieno
 from .agenda import announcement
 from .compressione import FRASE_DURA
+from .eventi import ombra as ombra_mod
 from .config import Config, DEEPEN_WORDS, SEARCH_PROMISE
 from .immagini import FOTO_IN_ATTESA, FOTO_NON_VISTA, Immagine
 from .schermi import schede as schede_foto
@@ -125,6 +126,9 @@ class Servizi:
     cassetto: object = None              # cassetto.Cassetto: i file per persona (08/10)
     cancelli: object = None              # cancelli.Cancelli: i segnali da verificare (09/10)
     cancelli_percorso: object = None     # dove si salvano (10/10, main.py); None = in memoria
+    # Il registro degli eventi (10/10, calliope/eventi/): i registri per persona e anonimi per
+    # satellite, condivisi dalle corsie; None = solo in memoria per corsia (prove)
+    eventi: object = None
     cortesia: object = None
     turns: object = None                 # TurnLog
     attiva_minori: object = None         # () → True se ha registrato i tool dei minori
@@ -272,6 +276,14 @@ class Ciclo:
         self._finestra_dal_nome = False
         self._compagnia_detta: dict | None = None
         self._giudice = None
+        # Il registro degli eventi in ombra (10/10, calliope/eventi/ombra.py, passi 0 e 1): ciò
+        # che va alla voce e la storia di Brain, confrontati a turno finito. Non decide niente
+        self._turno = None                   # il Turno del giro di prima (per l'ombra)
+        self.ombra = None
+        if ombra_mod.modo(servizi.cfg) != ombra_mod.SPENTO:
+            self.ombra = ombra_mod.Ombra(servizi.cfg, servizi.eventi, self,
+                                         log=lambda m: print(m, flush=True))
+            self.ombra.collega(speaker)
         self._collega_voce()
         if self.listener is not None and not getattr(self.listener, "remoto", False)                 and hasattr(self.listener, "ripresa_muto"):
             # In locale le casse sono qui: la voce di Calliope e i suoni non sono una ripresa
@@ -453,6 +465,14 @@ class Ciclo:
         turni (campo `regole`), così la revisione può misurare quanto scatta e quando."""
         if self.rec is not None:
             self.rec.setdefault("regole", []).append(name)
+
+    def _scrivi_turno(self, rec: dict):
+        """Il turno nel registro dei turni, con prima il passo 0 e l'ombra del registro degli
+        eventi (10/10, calliope/eventi/ombra.py): la voce ha già finito, il disco del registro
+        degli eventi va a lotti nel thread dell'archivio."""
+        if self.ombra is not None:
+            self.ombra.chiudi_turno(rec, self._turno)
+        self.s.turns.write(rec)
 
     def rinvia(self, coda, item) -> bool:
         """Annunci che chiudono con una domanda («… La apro?», «il lavoro ha una domanda:
@@ -792,7 +812,7 @@ class Ciclo:
         traceback.print_exc()
         if self.rec is not None:
             self.rec["errore"] = f"{type(e).__name__}: {e}"[:300]
-            self.s.turns.write(self.rec)
+            self._scrivi_turno(self.rec)
             self.rec = None
         try:
             self.speaker.start_turn()
@@ -842,6 +862,7 @@ class Ciclo:
         cade) non chiude più Calliope. Dal 06/10 (P8) è diviso in fasi: ognuna restituisce
         None per passare alla successiva, `_FINE` per chiudere il giro o "esci"."""
         t = Turno(guided=self._inizio_giro())
+        self._turno = t
         self._riprendi_rinviati()
         if not t.guided and self._annunci_pronti():
             self._di_gli_annunci()
@@ -909,8 +930,11 @@ class Ciclo:
             # Il turno finito nell'archivio delle conversazioni (08/10: la scheda «Conversazione»)
             self._archivia_turno()
             self._chiudi_ascolto(self.rec)
-            s.turns.write(self.rec)
+            self._scrivi_turno(self.rec)
             self.rec = None
+        elif self.ombra is not None:
+            # Annunci fra un turno e l'altro: l'ombra li tiene per il turno dopo
+            self.ombra.chiudi_turno(None, self._turno)
         # Il turno di prima è finito: voce di nuovo accesa, il satellite in prestito resta
         # attivo fino alla fine della finestra di follow-up (calliope/rispondi.py)
         self.awake_until = s.instradamento.dopo_turno(self.awake_until)
@@ -1948,7 +1972,7 @@ class Ciclo:
         self.rule("uscita_" + how)
         if how == "spegni":
             self.rec["esito"] = "uscita"
-            self.s.turns.write(self.rec)
+            self._scrivi_turno(self.rec)
             self.speaker.say("Registrazione annullata. Mi spengo: a presto!")
             self.speaker.wait()
             return "esci"
@@ -2264,7 +2288,7 @@ class Ciclo:
         if how == "spegni":
             self.rec["esito"] = "uscita"
             self.rule("uscita_spegni")
-            s.turns.write(self.rec)
+            self._scrivi_turno(self.rec)
             self.speaker.say("Mi spengo. A presto!")
             self.speaker.wait()
             return "esci"
@@ -3111,6 +3135,7 @@ class Ciclo:
             self._cassetto_dopo(t)
         speaker.start_turn()     # azzera un'interruzione arrivata a risposta finita
         self._conversazione_nuova_chiesta()
+        self._conversazioni_dimenticate()
         if speaker_ctx.is_enrolling and not t.was_enrolling:
             self.enroll_reminded.discard(speaker_ctx.enrolling_name)
             speaker.say(f"{speaker_ctx.enrolling_name}, adesso parla tu, e comincia ogni "
@@ -3153,6 +3178,36 @@ class Ciclo:
         if self.rec is not None:
             self.rec["conversazione_nuova"] = True
         self.brain.end_conversation("nuova")
+        self.last_question = None
+        return True
+
+    def _conversazioni_dimenticate(self):
+        """«Dimentica le nostre conversazioni» (conversazioni_dimentica, al «sì»): l'archivio e il
+        registro degli eventi su disco li ha già cancellati il tool. Con il registro degli
+        eventi acceso (10/10, § 2.4 del progetto) anche la conversazione in corso si chiude e si
+        svuota, senza archiviarla: il modello non la vede più, e niente torna su disco (prima
+        restava in memoria e in `correnti`, e alla chiusura tornava nell'archivio). Con
+        `eventi: spento` come prima."""
+        persona = getattr(self.tool_ctx, "conversazioni_dimenticate", None)
+        if not persona:
+            return False
+        self.tool_ctx.conversazioni_dimenticate = None
+        if self.ombra is None:
+            return False
+        chiave = f"persona:{persona}"
+        self.ombra.dimentica(chiave)
+        conv = getattr(self.brain, "conv", None)
+        if getattr(conv, "chiave", None) in (chiave, "casa"):
+            dimentica = getattr(self.brain, "dimentica_conversazione", None)
+            if callable(dimentica):
+                dimentica()
+        arch = getattr(self.tool_ctx, "conversazioni", None)
+        if arch is not None and hasattr(arch, "pulisci_wal"):
+            arch.pulisci_wal()
+        self.rule("conversazioni_dimenticate")
+        if self.rec is not None:
+            self.rec.setdefault("eventi_ombra", {})["dimentica"] = 1
+        print("   [STORIA] conversazioni dimenticate: anche quella in corso", flush=True)
         self.last_question = None
         return True
 

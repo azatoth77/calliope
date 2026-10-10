@@ -21,7 +21,10 @@ stamattina sul preventivo?».
   chi amministra, da terminale (`python -m calliope.conversazioni --elenco/--mostra`) e a voce
   solo se riconosciuto dalla voce (tool con `ospiti=true`).
 - **Cancellazione**: per persona («dimentica le nostre conversazioni»), e dopo
-  `conversazioni_giorni` giorni (all'avvio e una volta al giorno).
+  `conversazioni_giorni` giorni (all'avvio e una volta al giorno). Dal 10/10 «dimentica» è vera
+  (§ 2.4 del progetto del registro degli eventi): `secure_delete`, l'indice FTS5 ricompattato,
+  il checkpoint del WAL, anche la conversazione in corso salvata (`correnti`) e il registro
+  degli eventi della persona (tabella `eventi`, calliope/eventi/registro.py).
 - **Scheda «Conversazione»** (08/10): ogni turno porta in `meta` il satellite o lo schermo e il
   canale (colonna della versione 2); dal ciclo si archivia a turno finito, e `su_turni` lo
   manda in diretta agli schermi personali della persona (mai per gli ospiti); `chat` e
@@ -194,6 +197,12 @@ class ArchivioConversazioni:
         self.soglia_vettori = soglia_vettori(getattr(embedder, "modello", "") or "")
         self.log = log
         self.db = apri_db(self.path)
+        # Le pagine liberate si azzerano (10/10, «dimentica» vera: anche la conversazione in
+        # corso riscritta a ogni turno non lascia le versioni vecchie nel file)
+        try:
+            self.db.execute("PRAGMA secure_delete = ON")
+        except sqlite3.Error:
+            pass
         self.lock = threading.Lock()
         self.scrivibile = prepara_schema(self.db, MODULO, MIGRAZIONI, "conversazioni")
         # Stato dei vettori per il registro delle capacità: None (non ancora provato), True,
@@ -209,6 +218,12 @@ class ArchivioConversazioni:
         # una persona che ha cancellato le sue conversazioni (funzioni(persona))
         self.su_turni: list = []
         self.su_dimentica: list = []
+        # Lavori in più della pulizia di ogni giorno (10/10: la rotazione del registro degli
+        # eventi), dal thread dell'archivio
+        self.su_pulizia: list = []
+        # Il registro degli eventi su disco (calliope/eventi/registro.Disco), se c'è: «dimentica»
+        # cancella anche lì
+        self.eventi = None
         if avvia:
             self.avvia()
 
@@ -612,20 +627,72 @@ class ArchivioConversazioni:
 
     # ── cancellazione ──
     def dimentica(self, persona: str) -> int:
-        """Cancella tutte le conversazioni di una persona. Restituisce quante."""
+        """Cancella tutte le conversazioni di una persona. Restituisce quante.
+
+        Dal 10/10 per davvero (§ 2.4 e § 10 del progetto del registro degli eventi): prima si
+        aspettano i lavori in coda (un turno ancora da archiviare tornerebbe dopo la
+        cancellazione), poi `secure_delete` (le pagine liberate si azzerano), l'indice FTS5
+        ricompattato (le parole dei turni tolti non restano nei suoi segmenti), la conversazione
+        in corso salvata (`correnti`), il registro degli eventi della persona, e il checkpoint del
+        WAL (le versioni vecchie delle pagine non restano nel file accanto)."""
+        from .eventi.registro import checkpoint
+        self.attendi(3.0)
         with self.lock:
             ids = [r[0] for r in self.db.execute(
                 "SELECT id FROM conversazioni WHERE persona = ? AND ospite = 0",
                 (str(persona),))]
-            self._togli(ids)
+            prima = self.db.execute("PRAGMA secure_delete").fetchone()
+            self.db.execute("PRAGMA secure_delete = ON")
+            try:
+                self._togli(ids)
+                # I turni orfani: archiviati dopo una cancellazione di prima del 10/10 (la
+                # conversazione in corso restava, e i suoi turni finivano su una riga tolta)
+                orfani = [r[0] for r in self.db.execute(
+                    "SELECT id FROM turni WHERE conv NOT IN (SELECT id FROM conversazioni)")]
+                for t in orfani:
+                    self.db.execute("DELETE FROM turni_fts WHERE rowid = ?", (t,))
+                    self.db.execute("DELETE FROM turni WHERE id = ?", (t,))
+                ids += [None] * bool(orfani)
+                # La conversazione in corso salvata per il riavvio
+                self.db.execute("DELETE FROM correnti WHERE chiave = ?",
+                                (f"persona:{persona}",))
+                if ids:
+                    try:
+                        self.db.execute("INSERT INTO turni_fts(turni_fts) VALUES('optimize')")
+                    except sqlite3.Error:
+                        pass
+            finally:
+                if prima is not None and not prima[0]:
+                    self.db.execute("PRAGMA secure_delete = OFF")
             self.db.commit()
+            ev = self.eventi
+        if ev is not None:
+            try:
+                ev.dimentica(f"persona:{persona}")
+            except Exception as e:  # noqa: BLE001
+                self.log(f"[CONVERSAZIONI] registro degli eventi non cancellato: "
+                         f"{type(e).__name__}")
+        else:
+            with self.lock:
+                checkpoint(self.db)
         # Anche dalla scheda «Conversazione» dei suoi schermi personali (08/10)
         for g in list(self.su_dimentica):
             try:
                 g(str(persona))
             except Exception as e:  # noqa: BLE001
                 self.log(f"[CONVERSAZIONI] schermi non avvisati: {type(e).__name__}")
-        return len(ids)
+        return len([i for i in ids if i is not None])
+
+    def pulisci_wal(self):
+        """Dopo i lavori in coda, il WAL ricopiato nel file e troncato (10/10: dopo «dimentica»
+        la conversazione in corso, salvata ancora una volta durante il turno, non resta nelle
+        versioni vecchie delle pagine)."""
+        from .eventi.registro import checkpoint
+
+        def f():
+            with self.lock:
+                checkpoint(self.db)
+        self._in_coda(f)
 
     def _togli(self, ids: list[int]):
         for cid in ids:
@@ -638,6 +705,11 @@ class ArchivioConversazioni:
 
     def _pulizia(self):
         self._ultima_pulizia = time.time()
+        for f in list(self.su_pulizia):
+            try:
+                f()
+            except Exception as e:  # noqa: BLE001
+                self.log(f"[CONVERSAZIONI] pulizia: {type(e).__name__}: {e}")
         if not self.scrivibile or self.giorni <= 0:
             return
         limite = time.time() - self.giorni * 86400

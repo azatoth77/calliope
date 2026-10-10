@@ -3243,6 +3243,23 @@ class Brain:
         if sc is not None and getattr(sc, "sfida", None) is not None:
             sc.sfida = None              # la frase di conferma era di questa conversazione
 
+    def dimentica_conversazione(self):
+        """«Dimentica le nostre conversazioni» con il registro degli eventi acceso (10/10, § 2.4
+        di docs/ricerche/2026-10-10-registro-eventi.md, dal ciclo a risposta finita): la
+        conversazione in corso si svuota e si chiude **senza** archiviarla né riassumerla (le
+        conversazioni archiviate le ha già cancellate il tool). La nuova è vuota e sostituisce
+        anche la copia su disco (`correnti`)."""
+        old = self._c()
+        old.history = []
+        old.archiviati = 0
+        old.riassunto = None
+        old.id_archivio = None
+        old.pending = old.reference = old.agenda_reference = None
+        for k in ("esterni", "intenzioni", "fidati", "rifiutate"):
+            if isinstance(getattr(old, k, None), list):
+                setattr(old, k, [])
+        self.end_conversation("dimentica")
+
     def _coda_della_chiusa(self, old):
         """Chiusa per una pausa (09/10): gli ultimi scambi nella ripresa della nuova, per
         `conversazione_ripresa_ore` (compressione.coda_scambi). Solo la stessa persona: la

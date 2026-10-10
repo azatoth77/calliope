@@ -584,6 +584,74 @@ porta le sue guardie (§ 10) e le sue prove, nell'hook e in `--completo`.
 Totale **4,5–5 giorni**, più la settimana d'ombra fra 3 e 6. Il passo 2 della macchina a stati può
 partire dopo il passo 4.
 
+### Stato dei passi
+
+- **Passi 0 e 1: fatti il 10/10** (ramo `eventi-passi-0-1`, in ombra, `eventi: ombra` predefinito).
+  Codice in `calliope/eventi/` (`tipi.py`, `registro.py`, `proiezioni.py`, `misura.py`,
+  `ombra.py`), osservatore della voce `tts.Speaker.osservatore`, ciclo `Ciclo._scrivi_turno`.
+  Passo 0: `parlato` nel registro dei turni (parlato diverso e domande non registrate con i motivi
+  del § 1), sezione «Una voce sola» in `calliope stato --turni` con gli avvisi. Passo 1: un registro
+  per persona e uno anonimo per satellite, tabella `eventi` di `conversazioni.db` a lotti nel thread
+  dell'archivio, rigioco al riavvio con `eventi_troncati`, rotazione a `eventi_giorni`, «dimentica»
+  vera, proiezione del contesto confrontata a ogni turno (`eventi_ombra`); guardie `contesto_ms`
+  (`--turni`), `eventi_mb_giorno` e `dimentica_residui` (`calliope stato`, `--eventi`). Prove
+  `prova_eventi` (tipi, pure, partizione, porte, due corsie, riassegnazione), `prova_eventi_ciclo`
+  (proiezione e contatori su un giro sintetico, latenza), `prova_eventi_disco` (riavvio,
+  dimentica). Misure: prima frase invariata: con Calliope vera in `prova_satellite` (modello e Whisper finti, Piper vero; 3 giri per lato, 27 risposte ciascuno) `prima_frase_s` mediana 0,09 s prima e dopo (media 0,095 → 0,093 s), prima voce sentita mediana 0,37 s uguale, «dalla fine della frase alla prima voce» 0,63–0,77 s prima e 0,68–0,73 s dopo (rumore della macchina); osservatore della voce ~1 µs per frase; `contesto_ms` al più 0,14 ms (24 turni veri della prova) e 0,06 ms sul giro sintetico; su disco ~0,4–0,6 kB per turno di mediana, fino a ~2,5 kB con risultati di tool. **Da fare sulla DGX**: una settimana di base del passo 0 e
+  dell'ombra (§ 8.1 per cosa guardare), poi il passo 2.
+- Passi 2–6: da fare.
+
+### 8.1 Punti del progetto rivisti nei passi 0 e 1 (10/10)
+
+Dove il progetto, messo sul codice, non reggeva così com'era scritto: la scelta fatta e cosa resta
+da decidere.
+
+1. **«Dimentica» vera e «nessun cambiamento visibile».** Il § 2.4 vuole che le conversazioni in
+   memoria della persona si chiudano e si svuotino; il passo 1 doveva non cambiare niente di ciò che
+   si sente. Le due cose insieme non si possono: finché la conversazione in corso resta, la frase da
+   dimenticare torna su disco a ogni turno (`correnti`) e alla chiusura torna nell'archivio e nel
+   riassunto. Scelta: la chiusura della conversazione in corso c'è **solo con il registro acceso**
+   (`eventi: ombra`; con `spento` come prima), ed è l'unico cambiamento che si sente. **Da confermare
+   con Dario.** Restano fuori, per il passo 5: la cronologia delle schede per persona, gli avvisi ai
+   tutori che nominano la persona e il testo nel registro dei turni (§ 2.6 f).
+2. **La riga troncata.** Su SQLite non c'è «un file troncato a metà riga»: c'è una riga con il JSON
+   rovinato o un buco nei `seq`. Il rigioco si ferma lì (`eventi_troncati`); la riga rovinata resta
+   (sola aggiunta) e il registro continua dopo l'ultimo `seq` del disco, così non c'è mai una chiave
+   doppia.
+3. **Lo schema.** La tabella `eventi` ha un modulo suo in `meta_schema` («eventi») invece di una
+   versione nuova di «conversazioni»: un ritorno indietro di `calliope aggiorna` con la versione di
+   prima non trova uno schema «più nuovo» e non passa l'archivio in sola lettura.
+4. **In ombra non tutto nasce dove nasce.** Chiamate ed esiti dei tool e le buste davanti alla frase
+   della persona si ricopiano dalla storia di Brain a fine risposta (già sigillati e senza il web):
+   il confronto ne controlla solo la forma nei turni dopo. L'atto di ciò che va alla voce si ricava
+   dalla funzione del ciclo che la chiama. La posizione delle chiamate fra le frasi non si conosce:
+   la proiezione le mette prima del testo e il confronto è per turno, non messaggio per messaggio.
+   Tutto questo lo risolvono i passi 2 (l'uscita unica, con l'atto) e 3 (Brain che scrive gli
+   eventi dove nascono). `passata_modello`, `dati_del_turno` e `scheda_mandata` non si scrivono
+   ancora.
+5. **Scrittura a lotti «a fine frase e a fine turno».** In ombra gli eventi si scrivono a turno
+   finito (l'ombra osserva il turno dopo che è finito): in memoria e poi su disco nello stesso giro.
+   Dal passo 2 il `detto_calliope` si scrive all'invio, in memoria, come nel § 3.2.
+6. **Il segno d'interruzione.** Il § 3.1 scrive « … [interrotta]»; l'ombra usa quello di oggi,
+   « … (interrotta)», così il confronto misura i meccanismi e non il formato. Da scegliere al passo 3.
+7. **Il pezzo sentito di una frase interrotta** (`voce_fine.parziale`): il satellite non lo dice.
+   Il passo 0 conta questi casi come `interrotta_persa`.
+8. **Gli annunci fra un turno e l'altro** non hanno una riga nel registro dei turni (sarà il passo
+   5): i loro contatori si sommano al turno dopo della stessa corsia (`fra_turni`).
+9. **Campi in più rispetto al § 2.2**: `detto_persona.brain` (il turno è passato dal modello: è il
+   riferimento per la forma viva e definitiva, perché Brain compatta solo alle sue risposte) e
+   `conversazione_aperta.riassunto_tipo`; l'id di una proposta è `p<seq>`.
+10. **`contesto_ms`** in ombra è il tempo della proiezione, fuori dal percorso della voce: il costo
+    vero si vedrà al passo 3, con la stessa guardia.
+
+**Da guardare sulla DGX dopo l'installazione** (`calliope stato --turni`, sezione «Una voce sola»):
+quanti turni con il parlato diverso e con quali motivi (attesi: `non_in_storia:*` degli annunci e
+della registrazione, `interrotta_persa`, `stop_non_detto`, `canale_scritto`; `filtri_frase` e
+`storia_non_detta` dovrebbero essere rari dopo `storia_come_detta`), le domande non registrate per
+motivo, le differenze dell'ombra per meccanismo (una differenza fuori da quelle del § 1 è un difetto
+della proiezione da guardare), `contesto_ms` (atteso sotto 1 ms), byte per turno, `fughe` (0),
+`errori` (0); in `calliope stato` la crescita del registro e «Dimentica: … residui 0».
+
 ### Rischi
 
 - **Compressione**: oggi taglia la storia in mano a Brain mentre un thread riassume; con gli eventi il

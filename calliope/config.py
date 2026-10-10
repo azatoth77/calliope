@@ -555,6 +555,25 @@ class Config:
     # La stessa frase presa da un'altra corsia entro questi secondi (due satelliti nella stessa
     # stanza la sentono tutti e due) è un doppione: risponde solo il primo. 0 = mai
     conversazione_doppione_s: float = 2.0
+    # La conversazione come registro degli eventi (10/10, decisione 0027, calliope/eventi/,
+    # progetto docs/ricerche/2026-10-10-registro-eventi.md): un registro per persona (anonimo
+    # per satellite per ospiti e voci incerte), in sola aggiunta, nella tabella `eventi` di
+    # conversazioni.db. «ombra» (passi 0 e 1): gli eventi si scrivono accanto alla storia di
+    # Brain, che resta la fonte; a ogni turno la proiezione del contesto si confronta con lei e
+    # il registro dei turni scrive le differenze per meccanismo (`parlato`, `eventi_ombra`:
+    # calliope stato --turni). Nessun cambiamento di ciò che Calliope dice, tranne «dimentica le
+    # nostre conversazioni», che con il registro acceso chiude anche la conversazione in corso
+    # (§ 2.4). «spento»: niente eventi né confronti, come prima. «attivo» (Brain legge il
+    # contesto dagli eventi) è il passo 3, non ancora realizzato: si segnala e resta «ombra»
+    eventi: str = "ombra"
+    # Dopo questi giorni gli eventi di una conversazione chiusa si cancellano: resta la forma dei
+    # turni nell'archivio (§ 2.3). 0 = mai
+    eventi_giorni: int = 7
+    # Avviso in `calliope stato` se il registro cresce oltre questi MB al giorno (§ 10, punto 3)
+    eventi_avviso_mb: float = 50.0
+    # Avviso in `calliope stato --turni` se costruire la proiezione del contesto costa più di
+    # questi millisecondi (§ 10, punto 2: dal passo 3 sta nel percorso della risposta)
+    eventi_contesto_ms_avviso: float = 20.0
     # Appuntamenti (agenda.py, stesso file): l'avviso automatico arriva tanti minuti
     # prima; se ne manca meno, si segna solo l'appuntamento. 0 = nessun avviso.
     appuntamento_anticipo_min: int = 60
@@ -2531,7 +2550,9 @@ SEZIONI: dict[str, list[str]] = {
                       "conversazioni_embedding", "conversazioni_embedding_url",
                       "conversazioni_embedding_cpu", "conversazioni_vettori_inattivita_s",
                       "conversazione_ripresa_ore", "conversazione_coda_scambi",
-                      "conversazioni_parallele", "conversazione_doppione_s"],
+                      "conversazioni_parallele", "conversazione_doppione_s",
+                      "eventi", "eventi_giorni", "eventi_avviso_mb",
+                      "eventi_contesto_ms_avviso"],
     "biblioteca": ["biblioteca_enabled", "biblioteca_mini", "biblioteca_completa",
                    "biblioteca_ragazzi", "biblioteca_ragazzi_vantaggio",
                    "biblioteca_dizionario", "biblioteca_k", "biblioteca_voci",
@@ -2799,6 +2820,8 @@ LIMITI: dict[str, tuple[float, float]] = {
     "contesto_riassunto_max_s": (0.0, 3600.0), "conversazioni_giorni": (0, 3650),
     "conversazione_ripresa_ore": (0.0, 720.0), "conversazione_coda_scambi": (0, 10), "conversazioni_parallele": (0, 16),
     "conversazione_doppione_s": (0.0, 30.0),
+    "eventi_giorni": (0, 365), "eventi_avviso_mb": (0.0, 100_000.0),
+    "eventi_contesto_ms_avviso": (0.0, 10_000.0),
     "agenti_num_ctx": (2048, 1_048_576), "agenti_contesti_paralleli": (1, 64),
     "sviluppo_sospendi_min": (0.0, 1440.0), "sviluppo_programma_righe": (10, 100_000),
     "sviluppo_chiedi_s": (5.0, 600.0),
@@ -2900,6 +2923,19 @@ def _dialogo_interprete_valido(value):
     raise ValueError("serve «spento» o «ombra»")
 
 
+def _eventi_valido(value):
+    """«spento» o «ombra» (10/10, calliope/eventi/). «attivo» è il passo 3 del progetto del
+    registro degli eventi, non ancora realizzato: si rifiuta (resta il valore di prima,
+    cioè «ombra»)."""
+    s = str(value or "").strip().lower()
+    if s in ("spento", "ombra"):
+        return s
+    if s == "attivo":
+        raise ValueError("«attivo» non è ancora realizzato (passo 3 del registro degli "
+                         "eventi): resta «ombra»")
+    raise ValueError("serve «spento» o «ombra»")
+
+
 def _tts_dispositivo_valido(value):
     """«auto», «cpu» o «cuda»."""
     s = str(value or "").strip().lower()
@@ -2912,7 +2948,8 @@ VALIDATORI = {"llm_keep_alive": keep_alive_valido, "llm_num_ctx": _num_ctx_valid
               "tts_thread": _tts_thread_valido, "tts_dispositivo": _tts_dispositivo_valido,
               "agenti_num_ctx": _num_ctx_agenti_valido,
               "contesto_riassuntore": _riassuntore_valido,
-              "dialogo_interprete": _dialogo_interprete_valido}
+              "dialogo_interprete": _dialogo_interprete_valido,
+              "eventi": _eventi_valido}
 
 
 def fuori_limiti(key: str, value) -> tuple[float, float] | None:
