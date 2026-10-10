@@ -2258,6 +2258,27 @@ class Ciclo:
         return None
 
     # ── fase 8: comandi fissi (uscite, cortesia), orari dei minori ──
+    def _di_e_aspetta(self, frase: str) -> bool:
+        """Dice una frase fuori da una risposta e aspetta che sia finita. Con l'uscita di un
+        satellite controlla che lui l'abbia detta per intero (le frasi dette tornano in
+        `played` con la fine del turno): se no lo scrive nel log, con lo stato della voce, per
+        capire dove si perde (10/10, «ricominciamo» muto sulla DGX; regola
+        `voce_frase_non_detta`). True se detta (o se non si può sapere)."""
+        sp = self.speaker
+        prima = len(getattr(sp, "played", None) or [])
+        sp.say(frase)
+        finita = sp.wait()
+        if getattr(sp, "remota", None) is None or getattr(sp, "muto", False):
+            return True
+        dette = [d.strip() for d in list(getattr(sp, "played", None) or [])[prima:]]
+        if any(d and d in frase for d in dette):
+            return True
+        print(f"   [VOCE] il satellite non ha detto «{frase}» (turno "
+              f"{getattr(sp, 'turno', '?')}, interrotta {getattr(sp, 'interrupted', None)}, "
+              f"attesa finita {finita})", flush=True)
+        self.rule("voce_frase_non_detta")
+        return False
+
     def _addormentati(self, frase: str):
         """«Esci»: lo scritto si spegne subito, la conversazione si chiude."""
         if self.s.schermi is not None:
@@ -2311,9 +2332,15 @@ class Ciclo:
             self.rule("nuova_conversazione")
             if come == "storpiata":
                 self.rule("nuova_conversazione_storpiata")
+            # La frase prima della chiusura, come «A presto!» in _addormentati (10/10: nei tre
+            # giri della DGX col satellite «studio» la frase di «ricominciamo», detta dopo
+            # end_conversation, non si sentiva e il ciclo tornava subito «In ascolto…»; quella
+            # di «esci», detta prima, sì). Un'interruzione rimasta accesa la scarterebbe senza
+            # sintetizzarla: si azzera. Se il satellite non la dice, il log lo scrive
+            if getattr(self.speaker, "interrupted", False):
+                self.speaker.start_turn()
+            self._di_e_aspetta("Va bene, ricominciamo da capo.")
             self.brain.end_conversation("nuova")
-            self.speaker.say("Va bene, ricominciamo da capo.")
-            self.speaker.wait()
             self.awake_until, self.last_question = time.monotonic() + cfg.followup_s, None
             return _FINE
         return None
