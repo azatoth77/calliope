@@ -1088,6 +1088,22 @@ cambia.**
   un'esecuzione). E la prima frase dei turni con una proposta, con e senza (`dialogo_interprete:
   spento` nel locale per un giorno di confronto). Per tornare indietro: `dialogo_interprete:
   spento` in `calliope.locale.yaml`.
+- **Il giro col 26B del 10/10 mattina** (ramo `stati-indagine-26b`, § 9 del
+  [progetto](../ricerche/2026-10-10-macchina-stati.md)): su 9 risposte a una proposta il 26B
+  chiamava `proposta_rispondi` **6 volte** (su 7 risposte vere; le 2 frasi che parlano d'altro
+  senza tool, giusto), non 1: 5 chiamate erano scartate per `proposta_diversa` e il riassunto le
+  contava come «non chiama». Causa: le proposte di `sviluppo_apri` e `lavoro_affida` hanno un
+  argomento che si chiama anch'esso `proposta` (l'id del lavoro, «L1»), che il blocco mostra e la
+  riga della fase dello sviluppo dice di usare; il modello passava `proposta="L1"`. Scartata, la
+  chiamata non diventava quella di oggi e il modello dichiarava un'azione mai fatta («procedo con
+  lo sviluppo» senza tool, «Non ci sono riuscita»): col 4B sui turni rigiocati `sviluppo_apri` al
+  «sì» 1/5 e 0/5 in ombra contro 3/5 e 5/5 con lo spento. **Corretto** (in ombra):
+  `stato_dialogo.id_della_proposta` accetta l'id vuoto, il suo, un valore dei suoi argomenti o il
+  nome del tool; un altro id del dialogo resta scartato; `dialogo_ombra.id_argomento`; il
+  riassunto conta a parte le chiamate scartate. Dopo: 5/5 e 5/5, valide 20/25 contro 11/25. Restano
+  fuori dall'ombra e annotati nel § 9: «Chiudo lo sviluppo…?» che non diventa mai una proposta (la
+  domanda non è in fondo alla risposta) e il secondo giro del modello per `no`, `rinvio`, `altro`
+  (~+1 s col 26B).
 
 ## Le fasi dello sviluppo nelle dichiarazioni d'azione (10/10, ramo `giro-ombra-correzioni`)
 
@@ -1097,6 +1113,14 @@ Giro vero della DGX del 10/10 mattina, satellite «studio», modalità sviluppo 
 - 06:12:47 «Non c'è problema.» → la rete scatta sulla prima passata (`spinta_dichiarata`), e
   dopo la spinta il modello dice «D'accordo, procedo allora con lo sviluppo. Siamo passati alla
   fase di sviluppo…», di nuovo senza tool; il turno dopo «Restiamo pure in fase di analisi».
+
+**Due cause diverse.** Alle 06:12:47 la causa a monte è l'ombra del passo 1 (voce qui sopra, ramo
+`stati-indagine-26b`): il 26B rispondeva al «sì» con `proposta_rispondi(proposta="L1")`, la
+chiamata era scartata (`proposta_diversa` nel `dialogo_ombra` del turno) e il modello, senza la
+chiamata di oggi, dichiarava il passaggio. Corretta lì (`id_della_proposta`). Alle 06:10:40 invece
+nessuna `proposta_rispondi` (nel `dialogo_ombra` `modello: null`): è una dichiarazione senza tool
+e basta, il caso della rete. La correzione qui sotto vale per entrambe le forme: una frase così,
+da qualunque strada arrivi, non si dice senza il tool.
 
 **Perché la rete non scattava** (nessuna esclusione per la modalità sviluppo): il vocabolario di
 `ACTION_CLAIM`. Il passivo vale solo con una cosa di Calliope come soggetto (`_CLAIM_THINGS`), e

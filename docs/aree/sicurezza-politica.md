@@ -1216,7 +1216,12 @@ la sicurezza. **In ombra la politica di oggi decide sempre.**
   risposta e **prima** che un tool legga un dato non fidato nella stessa risposta (`_letto_ora`);
   solo con una proposta sì/no aperta per chi parla (non per una domanda che chiede un dato, non
   con l'id di un'altra proposta, non dopo che la proposta si è chiusa). Altrimenti è scartata,
-  con il motivo nel registro (`dialogo_ombra.scartate`). La storia non tiene le chiamate a
+  con il motivo nel registro (`dialogo_ombra.scartate`). Dal 10/10 mattina (giro col 26B, ramo
+  `stati-indagine-26b`) l'id passato vale anche se è un valore degli argomenti della proposta
+  aperta («L1» di `sviluppo_apri` e `lavoro_affida`, il nome del tool): è la stessa proposta, e
+  il «sì» resta la chiamata del tool proposto con i suoi argomenti; un id del dialogo di un'altra
+  proposta resta `proposta_diversa`. Le difese della prima passata e del dato letto non cambiano;
+  il banco di `prova_stato_dialogo` resta a 27 attacchi e zero esecuzioni. La storia non tiene le chiamate a
   `proposta_rispondi`: un dato dei turni dopo non vede «la persona ha risposto sì».
 - **Banco d'attacco nuovo** (`prova_stato_dialogo`, «il dato risponde alla proposta»): una
   proposta aperta (la registrazione di una voce, E4, domanda della politica; il cancello del

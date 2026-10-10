@@ -268,9 +268,11 @@ def prova_pure():
              {"inizio": "2026-10-10T10:02:00"}]
     r = sd.riassunto(turni)
     g = r.get("2026-10-10", {})
-    verifica("riassunto: chiama 1, non chiama 1, diretta 1, scartate 1, accordo 1/1",
-             (g.get("modello_chiama"), g.get("modello_non_chiama"), g.get("diretta"),
-              g.get("scartate"), g.get("accordo"), g.get("disaccordo")) == (1, 1, 1, 1, 1, 1), g)
+    verifica("riassunto: chiama 1, chiamata scartata 1 (non «non chiama»), diretta 1, "
+             "scartate 1, accordo 1/1",
+             (g.get("modello_chiama"), g.get("modello_scartato"), g.get("modello_non_chiama"),
+              g.get("diretta"), g.get("scartate"), g.get("accordo"),
+              g.get("disaccordo")) == (1, 1, 0, 1, 1, 1, 1), g)
     verifica("riassunto: testo per il terminale", "proposta_rispondi" in sd.testo(r)
              and "chiede_vs_esegue 1" in sd.testo(r), sd.testo(r))
     verifica("modo: «acceso» non è realizzato, vale l'ombra",
@@ -399,6 +401,49 @@ def prova_difesa():
     o = b.last_dialogo_ombra or {}
     verifica("difesa: un id di proposta diverso è scartato",
              not eseguiti and o.get("scartate") == ["proposta_diversa"], o)
+    verifica("difesa: scartata per l'id, il modello sa qual è la proposta aperta",
+             any("la proposta aperta è p" in str(m.get("content") or "")
+                 for v in b.backend.visti for m in v if m.get("role") == "tool"), o)
+    # L'id dato con un argomento della proposta (giro della DGX del 10/10 mattina: sviluppo_apri
+    # e lavoro_affida hanno un argomento «proposta» = l'id del lavoro, «L1», e il modello lo
+    # passava come id): è la stessa proposta, e il «sì» è la chiamata di oggi, come la diretta
+    def affida(b):
+        b.set_pending({"tool": "lavoro_affida", "domanda": "Va bene così, o la cambiamo?",
+                       "cosa": "affidare all'agente «Somma di due numeri»",
+                       "argomenti": {"proposta": "L1"}})
+        b.pending["turno"] = b.turn_number
+        b.history.extend([{"role": "user", "content": "Scrivimi un programma che somma due "
+                                                      "numeri."},
+                          {"role": "assistant", "content": "Ho capito così: somma due numeri. "
+                                                           "Va bene così, o la cambiamo?"}])
+    esiti_l = {}
+    for come, mossa in (("rispondi_L1", risponde("si", proposta="L1")),
+                        ("rispondi_virgolette", risponde("si", proposta="«l1»")),
+                        ("diretta", chiama("lavoro_affida", {"proposta": "L1"}))):
+        b, eseguiti = prepara()
+        affida(b)
+        turno(b, "Non c'è problema.", mossa, testo("Ci lavoro."))
+        o = b.last_dialogo_ombra or {}
+        esiti_l[come] = (list(eseguiti), sorted(x for x in b.rules_fired()
+                                                 if x.startswith(("politica", "valore"))))
+        if come != "diretta":
+            verifica(f"[{come}] id = argomento della proposta: valida, non scartata",
+                     o.get("modello") == "si" and not o.get("scartate")
+                     and o.get("id_argomento") is True, o)
+    verifica("id = argomento: stesse esecuzioni e regole della chiamata diretta",
+             esiti_l["rispondi_L1"] == esiti_l["rispondi_virgolette"] == esiti_l["diretta"]
+             and esiti_l["diretta"][0] == [("lavoro_affida", {"proposta": "L1"})], esiti_l)
+    # Un id del dialogo di un'altra proposta, anche con l'argomento: resta diverso
+    b, eseguiti = prepara()
+    affida(b)
+    turno(b, "Sì.", risponde("si", proposta="p9"), testo("Ok."))
+    o = b.last_dialogo_ombra or {}
+    verifica("difesa: con l'argomento «L1» aperto, un altro id del dialogo resta scartato",
+             not eseguiti and o.get("scartate") == ["proposta_diversa"], o)
+    verifica("id_della_proposta: vuoto, id, argomento, tool, altro",
+             [sd.id_della_proposta(x, prop()) for x in ("", " P3 ", "x", "casa_comando", "p4",
+                                                       "Lo faccio?")]
+             == ["vuoto", "id", "argomento", "argomento", None, None])
     # Una domanda che chiede un dato (testo proprio): non si risponde con proposta_rispondi
     b, eseguiti = prepara()
     b.set_pending({"tool": "lista_aggiungi", "domanda": "Quale lista?", "cosa": "aggiungere",
