@@ -79,6 +79,11 @@ Dettagli in [`../CHANGELOG.md`](../CHANGELOG.md) e nei documenti d'area.
 9. **Satelliti ESPHome** (decisione [0026](decisioni/0026-satelliti-esphome-senza-home-assistant.md),
    10/10): adattatore in Calliope provato con un dispositivo finto, poi il Voice PE in ufficio
    ([`ricerche/2026-10-10-wyoming.md`](ricerche/2026-10-10-wyoming.md), piano a passi).
+10. **La scelta dei tool come metrica e un banco con le frasi vere** (proposta del 10/10): contatori
+    in `calliope stato --turni` (nomi inventati, correzioni, ripieghi, richieste ripetute), l'errore
+    che propone la chiamata completa, un banco di casi veri dal registro degli eventi su cui provare
+    nomi, descrizioni, tool per stato e modelli. Dopo il passo 4 del registro, prima del passo 2 della
+    macchina a stati ([`ricerche/2026-10-10-scelta-dei-tool.md`](ricerche/2026-10-10-scelta-dei-tool.md)).
 
 **Funzionalità decise, senza date**
 
