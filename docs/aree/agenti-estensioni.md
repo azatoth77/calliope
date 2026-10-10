@@ -1853,3 +1853,39 @@ Terzo giro vero della DGX del 10/10 (10:37–10:44, satellite «studio»). La co
   con un tool dalla frase pronta perde la seconda parte se il modello chiama solo il primo: da
   guardare nei giri veri.
 - **Prove**: `prova_giro3.py` (turni veri e contrari).
+
+## Il cambio di sviluppo si apre all'analisi, e l'elenco di tutti gli sviluppi (10/10, ramo `giro4-correzioni`)
+
+Quarto giro vero della DGX del 10/10 (11:46–11:51, satellite «studio»). Decisione di Dario: solo
+correzioni puntuali, nessuna regola nuova sul testo per il flusso dello sviluppo («chiudi tutti»
+non scelto dal modello e «parole invece delle vocali» riscritto come modifica si risolveranno con
+gli argomenti e i tool per stato del registro degli eventi). «Ricominciamo» muto e «…» nel journal
+sono in [voce-e-regole](voce-e-regole.md).
+
+- **Il cambio faceva partire il lavoro senza analisi.** 11:47:14, con Celsius all'analisi,
+  «Scrivimi un programma in Python che converte i chilometri in miglia.» → la domanda «Vuoi che
+  sospenda … e apra …?»; 11:47:41 «Sì.» → Celsius sospeso e la frase di sfida (la richiesta era
+  detta senza la voce riconosciuta in quella frase: `voce_della_richiesta` falso, come previsto
+  dal 10/10 mattina); 11:47:56 la sfida superata → `sviluppo_apri` (tipo «codice», gli argomenti
+  della sfida) → «Ci lavoro in secondo piano» (`politica_conferma_unica`, `analisi_chiara`,
+  `sviluppo_fase`). **Causa**: la frase di sfida superata è per la politica la conferma di
+  *questa* chiamata (`Decisione.accettata`), e in `tools/agenti._delega_lavoro` una conferma della
+  politica valeva come il «sì» alla proposta (06/10, «una conferma per azione»: niente «Procedo?»
+  dopo la sfida). Con la modalità sviluppo la proposta è l'analisi («Ho capito così: … Va bene
+  così, o la cambiamo?»), che la persona non aveva ancora sentito. Lo stesso valeva per
+  un'apertura normale con la frase di sfida. **Correzione**: con uno sviluppo all'analisi la
+  proposta si dice sempre (regola `sviluppo_analisi_prima` quando la politica l'aveva data per
+  accettata) e il lavoro parte al «sì» all'analisi, che basta breve per chi amministra
+  (`_permesso` non rigido), come in un'apertura normale. **La sfida nel cambio** resta: è la
+  stessa di un'apertura normale con la richiesta detta senza la voce riconosciuta (la voce che
+  manca alla richiesta di codice), non una conferma in più per l'analisi; con la voce
+  riconosciuta nella richiesta il «sì» breve apre l'analisi senza sfida (`prova_giro_ombra`).
+- **L'elenco degli sviluppi incompleto.** 11:49:39 «Calliope, che sviluppi ho aperto?» → «Ho 4
+  sviluppi sospesi: somma, moltiplichi, vocali, moltiplica» senza Celsius, sospeso un minuto
+  prima. **Causa**: `Sviluppi.sospesi` in ordine di apertura e `_stato` con `sospesi[:4]`, e il
+  conto era quello dei nomi detti: il quinto, il più recente, spariva dal conto e dai nomi. Lo
+  stesso tetto nel promemoria del giorno e nei dati del turno per il modello. **Correzione**:
+  `sospesi` dal più recente (come `trova`), `sviluppo.elenco` dice i primi quattro per nome e poi
+  «e un altro» / «e altri N» (`ELENCO_VOCE`), il conto è di tutti; nei dati del turno fino a otto
+  (`ELENCO_MODELLO`).
+- **Prove**: `prova_giro4.py` (B, C, con i turni veri e i contrari).

@@ -201,7 +201,7 @@ misure di questo documento sono col 4B in locale: da rifare col 26B sulla DGX do
   `agenda_tutto`, `formato_detto`, `lettera_non_excel`, `valore_assoluto_detto`,
   `casa_riscrittura`, `casa_delicata`, `casa_domanda_letta` (dall'08/10 anche `casa_nome_entita`, [casa](casa.md)); dal 02/10 `persona_io` e, dagli
   agenti, `lavori_permesso`, `lavori_senza_offerta`, `lavori_proposta_non_id`,
-  `lavori_conferma_implicita` (dal 10/10 `lavori_conferma_diversa`, e `sviluppo_cambio`), `lavori_agente_irraggiungibile`; dal 03/10 `schermo_personale_senza_codice`, `schermo_personale_con_codice`, `schermo_proprietario_permesso`. Solo nomi: per gli ospiti il
+  `lavori_conferma_implicita` (dal 10/10 `lavori_conferma_diversa`, `sviluppo_cambio` e `sviluppo_analisi_prima`), `lavori_agente_irraggiungibile`; dal 03/10 `schermo_personale_senza_codice`, `schermo_personale_con_codice`, `schermo_proprietario_permesso`. Solo nomi: per gli ospiti il
   registro non tiene più dati di prima.
 
 - **Ripetizioni come segnale di errore** (`revisione.py`): sulle registrazioni del 21 e
@@ -1393,7 +1393,8 @@ senza parole; a una domanda sì/no non capita.
 la conversazione ma Dario non sentiva «Va bene, ricominciamo da capo.» e il ciclo tornava subito
 «In ascolto…»; «A presto!» di «esci» si è sempre sentito. Le due strade differivano nell'ordine:
 «esci» (`_addormentati`) dice la frase e poi chiude la conversazione, «ricominciamo» chiudeva e
-poi diceva. **Non riprodotto in locale**: con Calliope vera (Piper, Brain, archivio, corsie, un
+poi diceva. **Non riprodotto in locale** (*storico: la causa l'ha trovata il controllo qui sotto
+nel quarto giro, ed era un'altra; vedi la voce del ramo `giro4-correzioni`*): con Calliope vera (Piper, Brain, archivio, corsie, un
 satellite finto a livello di protocollo e uno vero in processo con microfono e casse finti, come
 `prova_satellite` e `prova_corsie_satelliti`), con la voce riconosciuta e anche detto come
 barge-in durante una risposta, la frase arriva e si sente (0,6–0,7 s dalla fine della frase).
@@ -1406,3 +1407,53 @@ guardare sulla DGX** dopo l'aggiornamento: se la frase ancora non si sente, quel
 journal dice dove si perde. Prova: `prova_giro3` (corsia di un satellite finto con lo Speaker
 vero: la frase va prima della chiusura, anche con un'interruzione accesa; contrario: il satellite
 che non la dice → la regola; «esci» com'era).
+
+## Frasi fuori turno sul satellite, e «…» nel journal (10/10, ramo `giro4-correzioni`)
+
+Quarto giro vero della DGX del 10/10 (11:46–11:51, satellite «studio»; il cambio di sviluppo e
+l'elenco degli sviluppi in [agenti-estensioni](agenti-estensioni.md)).
+
+**«Ricominciamo» muto: la causa.** Il controllo messo nel terzo giro l'ha detta al primo turno:
+«[VOCE] il satellite non ha detto «Va bene, ricominciamo da capo.» (turno 0, interrotta False,
+attesa finita True)». Il satellite scarta le frasi di un turno che non supera l'ultimo fermato
+(`client.Riproduttore._scartata`: `turno <= scarta_fino`, che parte da 0 e sale con un «ferma»,
+anche suo quando sente il nome). La voce di una corsia nuova (ogni satellite dopo un riavvio di
+Calliope, cioè dopo ogni `calliope aggiorna`) sta al turno 0, e il turno sale solo con
+`start_turn`, che il ciclo chiamava all'inizio di una risposta del modello e alla sua fine. Una
+frase detta fuori da una risposta **prima di ogni altra** partiva al turno 0 e il satellite la
+buttava: nei giri del 10/10 «Calliope, ricominciamo» era sempre la prima frase dopo
+l'aggiornamento. A metà giro (11:50:48) si è sentita: il turno era già salito. «A presto!» di
+«esci» si sentiva solo perché non era mai detto per primo. In locale non si riproduceva perché
+le prove facevano prima un turno normale e il satellite finto non controllava il turno.
+- **Correzione**: `Ciclo._di_e_aspetta` apre sempre un turno della voce prima della frase
+  («ricominciamo», «esci» con `_addormentati`, «Mi spengo. A presto!»), e anche
+  `Ciclo._ascolta` lo apre per la frase presa: tutto ciò che si dice prima della risposta del
+  modello (uscite, cortesia, registrazione della voce, «Sì?», la frase d'attesa di Whisper su
+  CPU, la guardia dei minori) sta in un turno nuovo, che il satellite non ha fermato. Lo aprono
+  anche gli annunci fra un turno e l'altro (`_di_gli_annunci`: timer, documenti, lavori finiti)
+  e la registrazione della voce scaduta. Lo stesso difetto c'era per tutte queste frasi, sia al
+  turno 0 di una corsia nuova sia dopo che il satellite aveva sentito il nome (si ferma da sé
+  fino all'ultimo turno ricevuto) senza una risposta del modello in mezzo. Un `start_turn` in più
+  non cambia l'ombra degli eventi (un pezzo senza frasi non conta). Niente regola nel registro:
+  non è una regola sul testo.
+- **Il satellite finto scarta come il vero**: `prova_giro3.Remota` usa
+  `Riproduttore._scartata` (e `sente_il_nome` per il «ferma» senza turno),
+  `prove/satellite_finto.py` scarta il turno 0 e i turni fermati (le frasi in `scartate`). Sul
+  codice di prima `prova_giro4` fallisce in cinque punti.
+
+**«C'è Locutti.» e «…».** 11:49:12: nel journal `anagrafica_cerca({'testo': '…'})`, «→
+(riservato)» e la risposta «…». Sono le **oscurazioni** di un tool riservato (rubrica, documenti
+di casa): `Brain._run_tool_una_volta` mostra gli argomenti come «…» e `Ciclo.in_console` la
+risposta come «…» (analisi di sicurezza S9, 03/10). Il turno ha la prima frase a 0,98 s e una
+frase sentita: con ogni probabilità Calliope ha detto la frase del tool («In rubrica non trovo
+…»), senza un secondo giro del modello; nel registro dei turni della DGX `risposta_parole` e la
+traccia senza testo lo dicono. Due buchi veri, trovati provando il caso:
+- un argomento di **sola punteggiatura** («…», «?», «-») arrivava al tool come testo:
+  `tools/dialogo._vuoto` ora lo tratta come vuoto, e il campo obbligatorio ha l'errore
+  strutturato del dialogo dei tool (`tool_argomenti_mancanti`, giri di correzione). È la forma
+  di un argomento, non il suo significato (principio 10); contrari: «Locutti», «3», «Rossi
+  S.r.l.», «è»;
+- dopo i giri di correzione finiti, la **passata finale** che rispondeva «…» restava muta (il
+  ripiego guardava solo il testo vuoto): ora anche la sola punteggiatura ha «Non ci sono
+  riuscita: puoi ripetere la richiesta?» (`risposta_solo_punteggiatura`, `vuoto_ripiego`).
+- Prova: `prova_giro4` (A, D).
