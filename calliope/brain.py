@@ -4017,6 +4017,52 @@ class Brain:
             self.history.append({"role": "assistant", "content": text})
         self.salva_conversazione()
 
+    def allinea_detto(self, detto: list[str], rendi=None) -> bool:
+        """La risposta di questo turno nella storia diventa ciò che la persona ha sentito
+        (10/10, calliope/ciclo.py `_storia_come_detta`): `detto` sono le frasi andate alla voce,
+        `rendi(testo)` la resa per la voce di un testo del modello. Prima si prova la resa di
+        ogni messaggio dell'assistente del turno (la struttura resta: testo prima di un tool,
+        chiamate, risposta); se insieme non danno ciò che si è sentito (una frase cambiata dai
+        controlli dell'uscita, una detta senza passare dalla storia), il testo dei messaggi con
+        le chiamate si svuota e l'ultima risposta diventa ciò che si è sentito. True se la
+        storia è cambiata. La cache del prefisso: cambia solo il turno appena finito, che il
+        turno dopo rilegge comunque dalla sua frase in poi."""
+        sentito = re.sub(r"\s+", " ", " ".join(x for x in detto if x)).strip()
+        if not sentito:
+            return False
+        h = self.history
+        inizio = next((i for i in range(len(h) - 1, -1, -1) if h[i].get("role") == "user"),
+                      None)
+        if inizio is None:
+            return False
+        msgs = [m for m in h[inizio + 1:] if m.get("role") == "assistant"]
+        if not msgs:
+            return False
+
+        def norm(x: str) -> str:
+            return re.sub(r"\s+", " ", x or "").strip()
+        resi = [rendi(m.get("content") or "") if rendi and (m.get("content") or "").strip()
+                else (m.get("content") or "") for m in msgs]
+        cambiato = False
+        if norm(" ".join(r for r in resi if norm(r))) == sentito:
+            for m, r in zip(msgs, resi):
+                if norm(m.get("content") or "") != norm(r):
+                    m["content"] = r
+                    cambiato = True
+        else:
+            for m in msgs:
+                if m.get("tool_calls") and (m.get("content") or "").strip():
+                    m["content"] = ""
+            ultimo = msgs[-1]
+            if ultimo.get("tool_calls"):
+                ultimo = {"role": "assistant", "content": ""}
+                h.append(ultimo)
+            ultimo["content"] = sentito
+            cambiato = True
+        if cambiato:
+            self.salva_conversazione()
+        return cambiato
+
     def dimentica_ultimo_turno(self):
         """Una frase non rivolta a Calliope (09/10, calliope/rivolta.py, giudizio acceso): via
         dalla storia l'ultimo messaggio della persona e ciò che lo segue (la risposta taciuta,
