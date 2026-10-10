@@ -266,7 +266,7 @@ def prova_brain(tmp, iso):
     verifica("06:10:40: «l'analisi è stata annullata» senza tool → spinta, e il modello chiama "
              "il tool (la frase falsa non si dice)",
              "annullata" not in detto and "spinta_dichiarata" in b.last_rules
-             and "sviluppo_passo" in str(b.last_tools) and "Chiudo lo sviluppo" in detto,
+             and "sviluppo_passo" in str(b.last_tools) and "Chiudere lo sviluppo" in detto,
              f"{b.last_rules} {detto}")
     b.backend.risposte = [[("text", "Ho avviato lo sviluppo.")],
                           [("text", "D'accordo, procedo allora con lo sviluppo. Siamo passati "

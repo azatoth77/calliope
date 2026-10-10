@@ -427,8 +427,9 @@ def prova_chiusura(tmp, iso):
     ctx.regole = []
     out = P.chiama(reg, ctx, "sviluppo_passo", {"azione": "esci"}, turno=10)
     verifica("«Ok, chiuso a long» → sviluppo_passo(esci): chiede conferma, non chiude",
-             sv.stato == "aperta" and detta(out).startswith("Chiudo lo sviluppo di «Meteo per "
-                                                            "città»?")
+             sv.stato == "aperta" and detta(out).startswith("Chiudere lo sviluppo di «Meteo per "
+                                                            "città»")
+             and detta(out).endswith("Lo chiudo?")
              and "sospendi" in detta(out) and "non è ancora approvata" in detta(out)
              and "sviluppo_chiudi_conferma" in ctx.regole
              and (out.get("in_sospeso") or {}).get("argomenti") == {"azione": "chiudi"},
