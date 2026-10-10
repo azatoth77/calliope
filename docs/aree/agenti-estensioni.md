@@ -1703,3 +1703,16 @@ di casa 0/3 → 5/6, mai più il meteo inventato. Dettagli in
   attivarla?»: prima la domanda non era in fondo e l'azione in sospeso non restava (caso vero
   delle 21:00, «Sì, attivarla.»). `sviluppo_passo.quale` è un bersaglio dello sviluppo aperto
   per la politica (`SVILUPPO_BERSAGLIO`). Dettagli in [sicurezza-politica](sicurezza-politica.md).
+
+## Il «no» a una domanda dell'agente arriva all'agente (10/10, ramo `stati-passo0`)
+
+Buco 3 del [progetto della macchina a stati](../ricerche/2026-10-10-macchina-stati.md), confermato da `prova_stati_buchi`: a «Vuoi che lo salvi anche in PDF?»
+dell'agente un «No.» chiudeva la domanda come il rifiuto di una proposta (`proposta_rifiutata`) e
+la politica fermava `lavoro_rispondi` (`politica_proposta_rifiutata`): il lavoro restava
+`in_attesa` fino alla scadenza di 120 minuti. Ora `Lavori.offerta_risposta` segna l'offerta con
+`risposta: True` e `Brain._rifiuto_proposta` non la tratta come un rifiuto (regola
+`risposta_non_rifiuto`): il «no» passa all'agente con `lavoro_rispondi` e il lavoro riprende con
+quella risposta. Dallo stesso giro restano documentati, per il passo 5 della macchina: le offerte
+dei servizi (qui quella di `Lavori.proponi`) che sopravvivono alla chiusura della conversazione, e
+la proposta nata da un annuncio intestata all'ultimo che ha parlato sul satellite invece che alla
+persona dell'annuncio.

@@ -153,7 +153,10 @@ def proposta_da_oggi(p, tool_turno: str | None, turno_ora: int, tools=None) -> P
     domanda = str(p.get("domanda") or "")
     origine = ("politica" if p.get("politica") else
                "forse" if domanda.startswith("Intendevi") else "tool")
-    tipo = ("dato" if p.get("su_misura") or not politica.domanda_si_no(domanda) else "si_no")
+    # «dato»: un testo proprio, una domanda non sì/no, o una domanda a cui si risponde con
+    # il tool del dato (`risposta`, passo 0: la domanda dell'agente, il «no» passa al servizio)
+    tipo = ("dato" if p.get("su_misura") or p.get("risposta")
+            or not politica.domanda_si_no(domanda) else "si_no")
     nata = int(p.get("turno", turno_ora) or 0)
     return Proposta(id=f"p{nata}", tool=tool, argomenti=args, cosa=str(p.get("cosa") or ""),
                     domanda=domanda, origine=origine, effetto=int(eff),

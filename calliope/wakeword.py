@@ -428,6 +428,69 @@ def said_name(text: str, name="Calliope") -> str:
     return t.strip(" ,.!?;:").title()
 
 
+# La risposta a «Vuoi dirmi il tuo nome?» (10/10, passo 0 della macchina a stati, buco 9):
+# prima qualunque frase di al più cinque parole, detta da chiunque e in qualunque momento,
+# diventava il nome del profilo («Sì» → «Sì»). Vale come nome solo una forma chiusa detta per
+# intero (principio 10): una presentazione («Mi chiamo Dario», «Il mio nome è Maria Rosa»,
+# «Sono Luca» con il nome maiuscolo come lo scrive Whisper) o il nome da solo (una parola che
+# non è una risposta comune, o due con la seconda maiuscola). «Sì» chiede il nome, «no» chiude;
+# tutto il resto va al modello, che ha `rinomina_interlocutore`. Regole `nome_vero_*` (ciclo).
+_NOME_SI = {"sì", "si", "certo", "ok", "okay", "va bene", "volentieri", "sì certo",
+            "certo che sì", "sì volentieri", "ok va bene", "sì va bene", "perché no"}
+_NOME_NO = {"no", "no grazie", "nessuno", "basta", "non voglio", "non ora", "per ora no",
+            "preferisco di no", "meglio di no", "lascia stare", "lascia perdere", "no no",
+            "non adesso", "va bene così", "niente"}
+# Parole che da sole non sono un nome: risposte comuni dopo una domanda
+_NON_NOME = {"sì", "si", "no", "ok", "okay", "certo", "grazie", "ciao", "salve", "buongiorno",
+             "buonasera", "buonanotte", "prego", "boh", "forse", "allora", "bene", "benissimo",
+             "dopo", "aspetta", "niente", "nessuno", "basta", "pronto", "eh", "ah", "mah", "uh",
+             "cosa", "come", "chi", "dove", "quando", "perché", "perfetto", "esatto", "giusto",
+             "stop", "fermo", "fermati", "silenzio", "scusa", "dimmi", "ascolta", "sento",
+             "nome", "io", "tu", "lui", "lei", "noi", "voi", "loro", "adesso", "ora", "poi",
+             "sempre", "mai", "anche", "ancora", "basta così", "capito", "sicuro", "davvero"}
+_NOME_PAROLA = re.compile(r"[^\W\d_][\w'’]*")
+_NOME_INTRO_CHIUSA = re.compile(
+    r"(?:(?:ok|okay|allora|sì|si|certo|va bene|ciao)\s+)*"
+    r"(mi chiamo|il mio nome è|il mio nome e'|chiamami|io sono|sono)\s+(.+)", re.I)
+_NOME_CODA = re.compile(r"(?:\s+(?:grazie|per favore|ciao))+$", re.I)
+
+
+def risposta_al_nome(text: str, name="Calliope") -> tuple[str, str | None]:
+    """La risposta a «Vuoi dirmi il tuo nome?»: ("nome", «Maria Rosa»), ("si", None),
+    ("no", None) o ("altro", None) se non è una forma chiusa (la decide il modello)."""
+    t = text or ""
+    for n in _names(name):
+        t = re.sub(rf"\b{re.escape(n)}\b", " ", t, flags=re.I)
+    t = re.sub(r"[\s,.!?;:…]+", " ", t).strip()
+    low = t.lower()
+    if not low:
+        return "altro", None
+    if low in _NOME_SI:
+        return "si", None
+    if low in _NOME_NO:
+        return "no", None
+    m = _NOME_INTRO_CHIUSA.fullmatch(t)
+    resto = _NOME_CODA.sub("", m.group(2) if m else t).strip()
+    parole = resto.split()
+    if not parole or not all(_NOME_PAROLA.fullmatch(p) for p in parole):
+        return "altro", None
+    if any(p.lower() in _NON_NOME for p in parole):
+        return "altro", None
+    intro = m.group(1).lower() if m else ""
+    if intro and intro not in ("sono", "io sono"):
+        ok = len(parole) <= 3               # «mi chiamo», «il mio nome è», «chiamami»
+    elif intro:
+        # «Sono stanco» non è un nome: dopo «sono» solo nomi maiuscoli (come li scrive Whisper)
+        ok = len(parole) <= 3 and all(p[:1].isupper() for p in parole)
+    else:
+        # Il nome da solo: una parola, o due con la seconda maiuscola («Maria Rosa», non «Ho
+        # fame»)
+        ok = len(parole) == 1 or (len(parole) == 2 and parole[1][:1].isupper())
+    if not ok:
+        return "altro", None
+    return "nome", " ".join(p[:1].upper() + p[1:] for p in parole)
+
+
 def load_wake_detector(cfg: Config):
     """Il rilevatore della wake word acustica, oppure None (modalità testo).
 

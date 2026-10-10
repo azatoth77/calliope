@@ -223,6 +223,8 @@ e aggiunta dal codice.
 
 ### 1.10 Stati che oggi rischiano di non essere gestiti
 
+*Dal 10/10 le prove del passo 0 (§ 8): confermati tutti quelli provati; corretti il 3, il 6, `pending_real_name` del 10 e i segnali dei cancelli dell'11.*
+
 1. **Proposta detta e interrotta**: si perde (`set_pending` non gira); uno stop dopo
    un'interruzione non chiude la proposta di prima, che dice «argomento chiuso» e resta.
 2. **Domande che non sono proposte** (sviluppo, cancello 1, «Fermo anche il lavoro?», offerte
@@ -1000,3 +1002,53 @@ Da riscrivere quando si fanno i passi (non ora):
 livelli, schema fisso), quando valgono (solo con uno stato aperto, prima passata, prima di un dato
 letto), cosa resta nella storia (niente o una riga di fatto), cosa resta nel registro (tutto), e
 l'elenco: `proposta_rispondi` e, se servirà, gli altri con la regola `oggetto_verbo`.
+
+## Aggiunte decise da Dario dopo il progetto (10/10)
+
+- **Percorso più corto**: in ombra solo le parti che decidono se un'azione si esegue
+  (interprete del modello, passo 1; consenso unico, passo 2). Le parti senza rischio si
+  accendono direttamente, una dopo l'altra, mentre l'ombra raccoglie i dati: uscite e stop
+  dopo la proposta, profilo «sviluppo» dei tool, altra persona e tempi, dati del turno e storia
+  pulita, nomi delle regole con l'esito.
+- **Decisioni sui punti aperti**: la sfida resta legata al satellite in cui è stata chiesta; al
+  più tre attese per persona, la più vecchia scade; una proposta aperta si perde a un riavvio.
+- **Passo 0** (prima della macchina): una prova per ciascuno dei 10 stati a rischio, e subito
+  le correzioni della coda della conversazione (solo alla stessa persona), di
+  `pending_real_name` (scade), dei segnali dei cancelli dei minori (su disco) e del «no» a una
+  domanda dell'agente.
+- **Tabella dichiarativa dei permessi** nel passo 2, insieme al consenso unico (idea presa da
+  Claude Code, dagli SDK per agenti e da NeMo Guardrails): una sola tabella leggibile
+  `tool/famiglia × effetto E1–E4 × provenienza del valore × chi parla (livello, voce sicura,
+  zona grigia, ospite, minore) → esegui | chiedi | sfida | rifiuta`, da cui `politica`,
+  `valore` e `consenso.basta()` leggono e basta. Verificata da una prova automatica (ogni riga
+  coperta, nessuna contraddizione, il banco d'attacco a 0), consultabile dal cruscotto di chi
+  amministra (prima in sola lettura; la modifica dal cruscotto, se mai, dopo e con la sfida).
+- **Da tenere d'occhio** (altri progetti): la fine del turno decisa da un modello piccolo
+  (smart turn di Pipecat/LiveKit) per la fase 2 della misura delle pause; i modelli voce→voce
+  in full duplex come direzione futura.
+
+## 8. Passo 0 (10/10): i buchi provati
+
+*Aggiunto il 10/10 dopo la decisione di Dario («passo 0»: una prova per ciascuno dei dieci casi,
+quattro corretti subito). Prove a secco in `prove/prova_stati_buchi.py`, sul codice di main a
+e023602; i buchi corretti si riproducono anche sul codice di prima delle correzioni. Numerazione
+del passo 0: l'8 unisce i punti 8 e 9 del § 1.10, il 9 è il punto 10 (solo `pending_real_name`),
+il 10 è l'11; il 12 («basta» dalla TV) non è nel passo 0.*
+
+| # | Caso | Confermato | Ora |
+|---|---|---|---|
+| 1 | Proposta detta e interrotta persa, resta viva quella di prima; stop dopo l'interruzione che scrive «argomento chiuso» e lascia la proposta | sì | documentato, **passo 3** |
+| 2 | Domande che non sono proposte: il «sì» al cancello 1 arriva al modello come consenso alla proposta di prima; la cortesia («grazie» → «Prego») risponde prima del cancello 2, che non giudica; sviluppo e «Fermo anche il lavoro?» solo dal codice (fuori da `pending`, la cortesia le vede solo se sono l'ultima frase) | sì | documentato, **passo 3** |
+| 3 | «No» a una domanda dell'agente: `proposta_rifiutata`, `lavoro_rispondi` bloccato, il lavoro aspetta 120 min | sì | **corretto** (`risposta_non_rifiuto`) |
+| 4 | Offerte dei servizi dopo la chiusura della conversazione (provata quella dei lavori); `sv.proposto` senza scadenza solo dal codice (`_proposta_scaduta`, voluto l'08/10) | sì | documentato, **passo 5** |
+| 5 | Proposta di un annuncio intestata all'ultimo che ha parlato sul satellite: il «sì» della persona dell'annuncio non vale (`sospeso_altrui_consenso` o `sospeso_altra_persona`) | sì | documentato, **passo 5** |
+| 6 | Coda della conversazione all'ospite dopo (nella `ospite:<corsia>`, e con la conversazione unica a chiunque parli dopo la pausa) | sì | **corretto** (`conversazione_coda_altra_persona`) |
+| 7 | `has_pending` e `proposta_altrui` a soli secondi: una proposta morta per i turni conta ancora | sì | documentato, **passo 5** |
+| 8 | Due proposte: vince l'ultima; una nuova senza «?» lascia viva la vecchia; il «no» chiude la proposta e lascia la sfida di un altro tool | sì | documentato, **passo 2** |
+| 9 | `pending_real_name` senza scadenza: «Sì.» → nome «Sì», «Che tempo fa domani?» → «Che Tempo Fa Domani» | sì | **corretto** (scadenza, stessa persona, una risposta, `risposta_al_nome`) |
+| 10 | Segnali dei cancelli dei minori persi a un riavvio | sì | **corretto** (`cancelli.json` senza testo; scaduto nel riavvio → silenzio) |
+
+Rifiuti e intenzioni possono ancora perdersi a un riavvio (decisione di Dario del 10/10). I
+dettagli delle correzioni sono nei documenti d'area: [voce-e-regole](../aree/voce-e-regole.md)
+(nome vero, «no» all'agente), [contesto-conversazione](../aree/contesto-conversazione.md) (coda),
+[minori](../aree/minori.md) (cancelli), [agenti-estensioni](../aree/agenti-estensioni.md).
