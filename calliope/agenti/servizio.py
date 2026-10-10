@@ -119,7 +119,20 @@ def titolo_da(compito: str, parole: int = 7) -> str:
     t = _VERBI.sub("", t, count=1)
     t = _ARTICOLI.sub("", t, count=1)
     # Anche a «(»: «carattere_controllo(cf15)» nel titolo finiva letto a voce (04/10)
-    words = re.split(r"[,;:(]", t)[0].split()[:parole]
+    tutte = re.split(r"[,;:(]", t)[0].split()
+    words = tutte[:parole]
+    # Il complemento del nome su cui cade il taglio resta (10/10, secondo giro della DGX: «…che
+    # conti il numero di vocali presenti…» e «…il numero di parole in un testo…» diventavano
+    # entrambi «programma in Python che conti il numero»): con «di», «delle»… subito dopo, il
+    # titolo prende la preposizione e la parola piena che segue («di tutti i numeri»)
+    if len(tutte) > parole and tutte[parole].lower().rstrip("'’") in _DI:
+        extra = tutte[parole + 1: parole + 4]
+        piena = next((i for i, w in enumerate(extra)
+                      if w.lower().rstrip("'’") not in _CODA | _QUANTI), None)
+        if piena is not None:
+            words = tutte[:parole + 2 + piena]
+    elif len(tutte) > parole and re.match(r"(?:dell|d)['’]\w", tutte[parole], re.I):
+        words = tutte[:parole + 1]                    # «il numero d'iscrizione»
     # Niente coda monca («…rinomina le foto di»)
     while len(words) > 2 and words[-1].lower() in _CODA:
         words.pop()
@@ -200,6 +213,9 @@ def titolo_detto(titolo: str) -> str:
 _CODA = frozenset("di a da in con su per tra fra e o il lo la i gli le un uno una del dello "
                   "della dei degli delle al allo alla ai agli alle dal dalla nel nella sul "
                   "sulla che".split())
+# Le preposizioni del complemento di un nome («il numero di vocali», «l'elenco delle foto»)
+_DI = frozenset("di del dello della dei degli delle dell d".split())
+_QUANTI = frozenset("tutti tutte tutto tutta ogni questi queste quei quelle".split())
 
 
 # Il testo dell'agente nella cartella del lavoro (07/10, documenti/markdown.py)
