@@ -14,7 +14,7 @@ misure di questo documento sono col 4B in locale: da rifare col 26B sulla DGX do
 | Stadio | Libreria | Dove |
 |---|---|---|
 | Ciclo principale | — | `calliope/main.py` → `main`, `Avvio` (i passi dell'avvio), `Corsie` (un ciclo per satellite), `single_instance_lock`, `check_audio_devices`, `notifica_systemd` (READY=1 per systemd); il ciclo della voce `calliope/ciclo.py` → `Ciclo` (`giro` in fasi, dal 06/10: P8), `Servizi`, `Turno`, `save_debug_audio`, `domanda_guardia` |
-| Wake word testuale (ripiego, conferma, estrazione della richiesta), uscita, stop, cortesia | difflib sulla trascrizione | `calliope/wakeword.py` → `find_wake_word` (più parole, `start_only`), `exit_intent` / `exit_request`, `is_stop`, `closing_kind`, `said_name`; `calliope/cortesia.py` → `Cortesia` («Prego!», «Bene!» per tono); le parole in `Config.wake_names` (`wake_word`, dal 04/10) |
+| Wake word testuale (ripiego, conferma, estrazione della richiesta), uscita, stop, cortesia | difflib sulla trascrizione | `calliope/wakeword.py` → `find_wake_word` (più parole, `start_only`), `exit_intent` / `exit_request`, `is_stop`, `closing_kind`, `said_name`, `nuova_conversazione_come` e `prefisso_nome` (storpiature, dal 10/10); `calliope/storpiature.py` → `suggerisci`, `nota` (forme chiuse storpiate da Whisper, dal 10/10); `calliope/cortesia.py` → `Cortesia` («Prego!», «Bene!» per tono); le parole in `Config.wake_names` (`wake_word`, dal 04/10) |
 | LLM + tool calling | Ollama, API nativa `/api/chat` (httpx) o `/v1` (`openai`) | `calliope/brain.py` → `Brain`, `OllamaBackend`, `OpenAIBackend`; modello della voce in una riga, `llm_profilo` (`calliope/config.py` → `PROFILI_LLM`, con le reti adatte in `llm_reti_spente`); banco `prove/prova_regressione.py` |
 | Tool nativi | — | `calliope/tools/` (`spec.py`, `registry.py`, `builtin.py`); argomenti che nominano qualcosa `ToolSpec.nomi` e la loro misura in Brain (`_argomenti_inizio`, `_argomenti_fine`, `argomenti_per_registro`, dal 08/10: [stt-tts](stt-tts.md)); forma degli argomenti ricondotta a quella del tool `ToolSpec.prepara` (dal 08/10) |
 | Dati del turno (contesti prima della domanda, mai nel prompt di sistema) | — | `calliope/brain.py` → `TURN_CONTEXT_MSG`, `PENDING_MSG`, `AGENDA_MSG`, `SOSPESO_ALTRUI_MSG`, `EST_NOMINATA_MSG`, `RIFIUTO_MSG` (dal 09/10); modalità sviluppo `calliope/sviluppo.py` → `SVILUPPO_MSG`, `Sviluppi.dati_turno` (dal 08/10) |
@@ -1143,3 +1143,85 @@ la ricerca». Come le altre forme, solo nelle risposte senza tool del turno: un 
 fatto davvero da `sviluppo_passo` si dice. Con Brain e un modello finto le due frasi del giro non
 si dicono (la prima diventa la chiamata del tool dopo la spinta, la seconda «Non ci sono
 riuscita…», `dichiarata_taciuta`).
+
+## Forme chiuse storpiate da Whisper (10/10, ramo `forme-storpiate`)
+
+**Casi veri della DGX** (whisper.cpp, satellite «studio», giri delle 06:09–06:18 e 07:11–07:21,
+modalità sviluppo aperta): le forme chiuse brevi arrivano storpiate e le storpiature facevano
+partire azioni vere.
+- «Calliope ricominciava.» (07:18:55) → `sviluppo_passo(riprendi)`: ha RIPRESO uno sviluppo
+  sospeso invece della conversazione nuova; «Calliope ricominciavo.» (07:11:47) è finito in
+  `conversazione_nuova` per caso;
+- «E lì appena ricominciamo.» (07:16:39, era «Calliope, ricominciamo») →
+  `sviluppo_passo(avanti)`: ha FATTO PARTIRE il lavoro dell'agente; «Da lì poi ricominciamo.»
+  (06:13:43) e «E lì è per ricominciare.» (09/10 21:03) lo stesso, senza danni;
+- «Am nulla il lavoro.» (07:12:53) → `sviluppo_passo(rifai)`: ha RIFATTO il lavoro invece di
+  annullarlo; «Annullahi.» (06:10:40), «Nulla è lavoro.» (06:13:05), «Anzi, no a nulla.» (02/10);
+- «Spendilo.» (07:14:44) → `avanti`, «Spendilo pure.» (07:21:06) non capito; «Chiudin.»,
+  «Giudino.», «Chiudino sviluppo.» per «chiudi/chiudilo»; «Alla ora, ok.» (06:18:17, era
+  «Calliope, ok») → l'ora.
+
+**Tre pezzi**, dal più stretto al più largo (principio 10: la trascrizione è ciò che il modello non
+vede; sempre la frase intera, mai una parola dentro una frase):
+
+1. **«Ricominciamo» storpiato è la forma chiusa** (`wakeword.nuova_conversazione_come`, regola
+   `nuova_conversazione_storpiata` accanto a `nuova_conversazione`), come il nome e «esci»: un'altra
+   forma del verbo detta da sola (`ricominci` + a, o, amo, ammo, ava, avo, avamo, ano, are, ato…),
+   «ri cominciamo», una parola che comincia con «ri» e somiglia a «ricominciamo» ≥ 0,88
+   («riccominciamo», «ricominchiamo»; non «riconosciamo», «ricomponiamo» a 0,83); e il **nome
+   storpiato in più parole davanti** (`wakeword.prefisso_nome`): la somiglianza delle lettere non
+   li distingue («dalipoi» 0,53 contro «allora» 0,57), lo scheletro delle consonanti di «Calliope»
+   sì: c-l-p con la prima che cade o diventa un'altra occlusiva e una nasale o una r in coda («e lì
+   appena» → l-p-n, «da lì poi» → d-l-p, «e lì è per» → l-p-r), da una a tre parole e al più 10
+   lettere, una parola sola anche vicina al nome (≥ 0,6: «Luipe» sì, «colpa», «lupo» no); «alla ora»
+   è il caso vero senza la p. Solo a voce (uno scritto non è storpiato). L'effetto è reversibile:
+   la conversazione resta nell'archivio. Limite noto: «Lì poi ricominciamo.» detto davvero diventa
+   una conversazione nuova.
+2. **Le altre storpiature sono un dato del turno** (`calliope/storpiature.py` → `suggerisci`,
+   regola `forma_storpiata`, campo `forma_storpiata` nel registro dei turni con la forma, mai il
+   testo): «La frase è una trascrizione automatica e forse è storpiata: «Spendilo» potrebbe essere
+   «sospendilo». Se così ha senso, intendila così; se non è chiaro cosa vuole, chiedilo prima di fare
+   qualcosa.», dentro i dati del turno dopo chi parla (come le parole incerte), una risposta sola,
+   solo a voce. Forme: «annulla» (annullahi/annullai/annulle…, «am/an/a nulla», «nulla è/il
+   lavoro», con il lavoro, lo sviluppo, il programma, tutto), «chiudilo» (chiudin, chiudino,
+   giudino, giudilo…; non le forme vere né «giudice», «giudizio»), «sospendilo» (spendilo, spendila,
+   spendi, con lo sviluppo; non «spendi tutto»), e il nome storpiato davanti a una forma chiusa
+   («Alla ora, ok», «Luipe. Stop.» → «Calliope, ok/stop»). Al più 4 parole, tolti il nome, «anzi»,
+   «no», «niente» e i riempitivi in testa. Non decide niente: «Spendilo» è anche una parola vera.
+   Nella **corsia veloce** (`risposte.forma_chiusa`, in ombra) solo «annulla» senza oggetto vale
+   «no» (a una proposta: la chiude, si richiede).
+3. **La rete generale della politica** (`politica.avvio_non_chiesto`, regola
+   `politica_avvio_non_chiesto`): `sviluppo_passo` con azione avanti, rifai o riprendi e
+   `lavoro_affida` (un lavoro dell'agente che parte o riparte) da una frase **breve** (al più 6
+   parole, il nome escluso) che non ha **le parole dell'azione scelta** (`VERBI_AZIONE`, le stesse
+   che la politica per valore usa come ancora), né un consenso o la sfida superata, né per avanti e
+   riprendi le parole generiche di un avvio (vai, parti, inizia, cominciamo, procedi, passiamo,
+   riprendi, continua, approva, attiva…) diventano «Non sono sicura di aver capito: vuoi che
+   {cosa}?» (conferma: il «sì» la esegue, `Decisione.accettata`). Alla proposta di questo stesso
+   tool la risposta la legge il modello («Non c'è problema.», «no, lascia stare»: `prova_stato_dialogo`
+   e `prova_conferma_unica`), salvo una forma storpiata nota («Spendilo.» a «vuoi che vada
+   avanti?»). Valutati e scartati: le probabilità per parola di Whisper (un segnale sui nomi, non
+   sulle frasi: [parole incerte](../ricerche/2026-10-08-parole-incerte.md); e su whisper.cpp
+   costano una richiesta in più) e F0/F1 di `argomenti_incerti` (guardano gli argomenti che
+   nominano qualcosa, e qui l'argomento è un'azione scelta in un enum). La rete vale per ogni
+   frase breve, non solo per le storpiature: «Szi, vogliati várla!» (08/10) era lo stesso caso.
+
+**Misure** (tutti i turni veri raccolti sul portatile, registri della DGX e del portatile dal 24/09
+al 10/10, prove end-to-end comprese: 1531 turni, 1299 frasi distinte):
+- «ricominciamo»: 17 esatte di prima, **5 storpiate prese** (i cinque casi veri), **0 falsi**;
+- dato del turno: **12 frasi** (i casi veri sopra più «No, niente a nulla.», «Luipe. Stop.»),
+  **0 falsi** sulle altre 1287; corsia veloce «no»: 3 («Annullahi.», «Anzi, no a nulla.»,
+  «No, niente a nulla.»);
+- rete della politica: sui **30 avvii veri** dell'agente (`sviluppo_passo` avanti/rifai/riprendi
+  e `lavoro_affida`, 08–10/10) chiede **7 volte**: 6 giuste («Am nulla il lavoro.», «E lì appena
+  ricominciamo.», «Spendilo.», «Calliope ricominciava.», «Szi, vogliati várla!», «Rifallo così
+  com'è.» che il modello aveva letto come avanti) e 1 dubbia («E lo sviluppo di metricità.» →
+  riprendi); le altre 23 eseguono come prima (frasi con le parole dell'azione, consensi, frasi
+  lunghe come «Direi che ci siamo, secondo me è a posto.»). Senza le parole generiche di un avvio
+  «Riprendiamo lo sviluppo.» (→ avanti) chiedeva anche lui.
+- Contrari scritti in `prove/prova_storpiature.py` (150 verifiche: «Ricomincia da capo il
+  programma», «Ricominciava a piovere», «Domani ricominciamo», «Annulla la sveglia delle 7»,
+  «Chiudi la finestra», «Spendi meno», «Spendi tutto», «Non serve a nulla», «Vai avanti»,
+  «Riprova», «Fai una ricerca…»); `prova_ciclo` con «E lì appena ricominciamo.» e «Spendilo.» nel
+  ciclo vero. Il modello vero non è stato misurato col dato del turno: da guardare sulla DGX
+  (`forma_storpiata` e `politica_avvio_non_chiesto` nel campo `regole`).

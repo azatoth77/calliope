@@ -729,3 +729,16 @@ riconosciuto con sicurezza (sopra soglia e con il margine: modo «voce»).
   `prova_compagnia`) passano uguali.
 - Resta il problema di fondo del canale del telefono (vedi «Voci di famiglia»): da ritarare con
   le registrazioni per canale.
+
+## Forme chiuse storpiate da whisper.cpp (10/10, ramo `forme-storpiate`)
+
+Senza hotwords whisper.cpp storpia le forme chiuse brevi, e il nome davanti a loro: «Calliope
+ricominciava.», «Calliope ricominciavo.», «E lì appena ricominciamo.», «Da lì poi ricominciamo.»,
+«E lì è per ricominciare.» (tutti «Calliope, ricominciamo»), «Annullahi.», «Am nulla il lavoro.»,
+«Nulla è lavoro.», «Chiudin.», «Giudino.», «Spendilo.» (sospendilo), «Alla ora, ok.» (Calliope, ok),
+«Luipe. Stop.». Il nome storpiato in più parole non si riconosce con la somiglianza delle lettere
+(«dalipoi» 0,53 contro «calliope», come «allora» 0,57), ma con lo scheletro delle consonanti c-l-p
+(`wakeword.prefisso_nome`). Le regole e le misure (5 «ricominciamo» storpiati e 12 dati del turno
+su 1299 frasi vere, nessun falso) sono in [voce-e-regole](voce-e-regole.md), «Forme chiuse
+storpiate da Whisper». Il rimedio alla radice resta un'hotword o un prompt per whisper.cpp
+(problema aperto «Chiori sono»).

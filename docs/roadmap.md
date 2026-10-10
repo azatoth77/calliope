@@ -69,9 +69,13 @@ Dettagli in [`../CHANGELOG.md`](../CHANGELOG.md) e nei documenti d'area.
 7. **Notizie dai feed RSS** (deciso il 10/10): i feed delle testate italiane scaricati ogni tanto
    in un indice locale (FTS5, come la biblioteca), con la fonte detta; SearXNG resta il ripiego.
    Nessuna chiave, nessuno scraping: Google News e Brave oggi bloccano le notizie di SearXNG.
-8. **Storpiature delle forme chiuse** (giro del 10/10): «Annullahi», «Nulla è lavoro», «Chiudin»,
-   «Giudino», «Alla ora, ok» non arrivano alla corsia veloce. Tolleranza per le storpiature di
-   «annulla», «chiudi» e «ok» come per il nome e «esci» (principio 10: ciò che il modello non vede).
+8. ~~**Storpiature delle forme chiuse**~~ *[fatto il 10/10, ramo `forme-storpiate`]* (giro del
+   10/10): «Annullahi», «Nulla è lavoro», «Chiudin», «Giudino», «Alla ora, ok» non arrivavano
+   alla corsia veloce. «Ricominciamo» storpiato (anche con il nome storpiato davanti) è la
+   conversazione nuova; le altre sono un dato del turno («potrebbe essere «sospendilo»»), e
+   «annulla» da solo vale «no» nella corsia veloce; un lavoro dell'agente che parte da una frase
+   breve senza le sue parole chiede conferma
+   ([voce-e-regole](aree/voce-e-regole.md), «Forme chiuse storpiate da Whisper»).
 9. **Satelliti ESPHome** (decisione [0026](decisioni/0026-satelliti-esphome-senza-home-assistant.md),
    10/10): adattatore in Calliope provato con un dispositivo finto, poi il Voice PE in ufficio
    ([`ricerche/2026-10-10-wyoming.md`](ricerche/2026-10-10-wyoming.md), piano a passi).
