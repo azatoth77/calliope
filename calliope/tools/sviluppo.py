@@ -41,7 +41,31 @@ from ..testi import FAMILY, NIENTE
 
 AZIONI = ["stato", "avanti", "analisi", "rifai", "ferma", "sospendi", "riprendi", "chiudi",
           "promuovi"]
+# Le parole che il modello usa al posto di un'azione (in `azione`, o nel nome del tool:
+# `azione_dal_nome`)
+SINONIMI_AZIONE = {
+    "continua": "avanti", "prosegui": "avanti", "procedi": "avanti", "cambia": "analisi",
+    "modifica": "analisi", "esci": "chiudi", "basta": "chiudi", "pausa": "sospendi",
+    "riapri": "riprendi", "stop": "ferma", "blocca": "ferma", "interrompi": "ferma",
+    "fermalo": "ferma", "rifallo": "rifai", "rifare": "rifai", "riprova": "rifai",
+    "ricomincia": "rifai", "elenco": "stato", "elenca": "stato", "lista": "stato",
+    "stoppa": "ferma"}
 TIPI_APRI = ["estensione", "programma"]
+
+
+def azione_dal_nome(name) -> str | None:
+    """L'azione di sviluppo_passo nel nome di un tool che non esiste (10/10, DGX delle 15:57:
+    il 26B chiamava `sviluppo_ferma` due volte, «Non ci sono riuscita», e `sviluppo_chiudi`
+    diventava `sviluppo_chiedi` per la distanza di una lettera). `sviluppo_<azione>`, con
+    un'azione di AZIONI o un suo sinonimo chiaro (`SINONIMI_AZIONE`), vale sviluppo_passo con
+    quell'azione: correzione della forma di una scelta già fatta dal modello (principio 10,
+    regola `tool_nome_azione`). Il chiamante controlla prima che il nome non sia un tool vero.
+    None per ogni altro nome (`sviluppo_prova`, `sviluppo_xyz`)."""
+    m = re.fullmatch(r"sviluppo_([a-z]+)", str(name or "").strip().lower())
+    if not m:
+        return None
+    a = SINONIMI_AZIONE.get(m.group(1), m.group(1))
+    return a if a in AZIONI else None
 
 
 def _final(text: str, **extra) -> dict:
@@ -234,6 +258,26 @@ def su_proposta(svc, lav):
 
 # ─────────────────────────── sviluppo_apri ───────────────────────────
 
+# Il compito È un gioco (la cosa da fare, in testa): «un gioco», «un piccolo gioco di paura»,
+# «crea un minigioco…»; non «un programma che conta i punti del gioco di carte»
+_GIOCO = re.compile(r"^\W*(?:(?:crea\w*|fa\w*|scriv\w*|svilupp\w*|progett\w*|realizz\w*)\s+)?"
+                    r"(?:(?:un|uno|una|il|lo|dei|degli|del)\s+)?(?:(?:piccol\w*|semplic\w*|"
+                    r"nuov\w*|bel|bell\w*|breve)\s+)?(gioc(o|hi|hino|hini)|minigioc\w*|"
+                    r"videogioc\w*|giochett\w*)(?![a-zà-ù])", re.I)
+# Ciò che fa di un gioco un programma: una finestra sul desktop, il terminale, un linguaggio
+_GIOCO_PROGRAMMA = re.compile(
+    r"(?<![a-zà-ù])(finestr\w*|desktop|windows|eseguibile|\.?exe|terminale|console|"
+    r"riga di comando|testuale|solo testo|python|c#|c sharp|per il pc|sul pc|"
+    r"del pc)(?![a-zà-ù])", re.I)
+
+
+def gioco_sugli_schermi(compito: str, frase: str = "") -> bool:
+    """Il compito è un gioco, e né il compito né la frase dicono che è un programma per il
+    desktop o il terminale (vedi _sviluppo_apri, 10/10)."""
+    return bool(_GIOCO.search(str(compito or ""))) and not _GIOCO_PROGRAMMA.search(
+        f"{compito or ''} {frase or ''}")
+
+
 def _tipo(tipo) -> str:
     t = str(tipo or "").strip().lower()
     if t in ("programma", "codice", "script", "programmi"):
@@ -254,9 +298,21 @@ def _sviluppo_apri(ctx: ToolContext, tipo: str = "", compito: str = "", nome: st
     from . import agenti as ta
     from . import estensioni as te
     t = _tipo(tipo)
+    if str(tipo or "").strip().lower() == "gioco":
+        gioco = True
+    prop = str(proposta or "").strip()
+    if (t in ("programma", "") and not prop and not str(modifica or "").strip()
+            and gioco_sugli_schermi(compito, getattr(ctx, "user_text", ""))):
+        # Un gioco chiesto come programma (10/10, DGX delle 15:56: «Vorrei sviluppare un
+        # gioco all'interno di Calliope» → tipo programma → «non si possono creare giochi
+        # interattivi o programmi con finestre»): i giochi di Calliope sono estensioni con
+        # una scheda sugli schermi. Correzione della forma della scelta del modello
+        # (principio 10, regola `sviluppo_gioco_schermi`); un programma con una finestra per
+        # il desktop, o un gioco da terminale in Python, resta un programma
+        note_rule(ctx, "sviluppo_gioco_schermi")
+        gioco = True
     if gioco in (True, "true", "sì", "si", 1) or str(modifica or "").strip():
         t = "estensione"
-    prop = str(proposta or "").strip()
     scaduta = _proposta_scaduta(ctx, prop)
     if scaduta is not None:
         return scaduta
@@ -322,11 +378,7 @@ def _sviluppo(ctx: ToolContext, azione: str = "stato", quale: str = "", cambia: 
     if prof is None or not _admin(ctx):
         return _no(ctx, "La modalità sviluppo è di chi amministra.", "sviluppo_permesso")
     azione = str(azione or "stato").strip().lower()
-    azione = {"continua": "avanti", "prosegui": "avanti", "procedi": "avanti",
-              "cambia": "analisi", "modifica": "analisi", "esci": "chiudi", "basta": "chiudi",
-              "pausa": "sospendi", "riapri": "riprendi", "stop": "ferma", "blocca": "ferma",
-              "interrompi": "ferma", "fermalo": "ferma", "rifallo": "rifai",
-              "rifare": "rifai", "riprova": "rifai", "ricomincia": "rifai"}.get(azione, azione)
+    azione = SINONIMI_AZIONE.get(azione, azione)
     persona = chi(ctx)
     if azione == "riprendi":
         return _riprendi(ctx, svs, persona, quale)
@@ -1528,8 +1580,11 @@ def sviluppo_apri_spec(file_pc: bool = False, allegati: bool = False) -> ToolSpe
             "tipo estensione: una funzione permanente di Calliope, che resta e si usa a voce "
             "(«fammi una funzione che "
             "converte le unità di misura»), o una versione nuova di un'estensione che c'è («falla "
-            "funzionare per ogni città», «correggila»: modifica = il suo nome); gioco=true per un "
-            "gioco sullo schermo. tipo programma: uno script o un programma da usare adesso, in "
+            "funzionare per ogni città», «correggila»: modifica = il suo nome). Un gioco o un "
+            "minigioco, anche con grafica, animazioni e punti, è un'estensione con gioco=true: "
+            "si gioca sugli schermi di Calliope (tipo programma solo se chiede proprio un "
+            "programma per il desktop o il terminale). "
+            "tipo programma: uno script o un programma da usare adesso, in "
             "Python o C# («scrivimi uno script che rinomina le foto»)"
             + (", anche su un file della persona sul PC (file = il nome detto)" if file_pc
                else "")
@@ -1565,8 +1620,9 @@ def sviluppo_specs(file_pc: bool = False, allegati: bool = False) -> list[ToolSp
                          "= le parole del titolo); chiudi (chiede conferma; «chiudi tutti gli "
                          "sviluppi»: quale = \"tutti\", e ferma anche il lavoro dell'agente); "
                          "promuovi (un "
-                         "programma diventa un'estensione). Cosa fare in ogni fase è nei dati "
-                         "del turno."),
+                         "programma diventa un'estensione). L'azione va nell'argomento azione: "
+                         "non ci sono tool sviluppo_ferma, sviluppo_chiudi o sviluppo_stato. "
+                         "Cosa fare in ogni fase è nei dati del turno."),
             parameters={"type": "object", "properties": {
                 "azione": {"type": "string", "enum": AZIONI},
                 "quale": {"type": "string"}, "cambia": {"type": "string"}},
@@ -1595,7 +1651,10 @@ def sviluppo_specs(file_pc: bool = False, allegati: bool = False) -> list[ToolSp
             description=("Nella modalità sviluppo, una domanda a chi ha scritto il codice: "
                          "perché un collaudo dà quel risultato, come funziona, cosa fa in un "
                          "caso («perché non trova Cerro Maggiore?», «come mai?», «che fonte "
-                         "usa?»). Risponde senza cambiare niente. domanda: come detta."),
+                         "usa?»). Risponde senza cambiare niente. domanda: come detta. Solo "
+                         "per DOMANDE sul codice: per chiudere, fermare o sospendere uno "
+                         "sviluppo («chiudi tutti gli sviluppi») c'è sviluppo_passo con "
+                         "l'azione."),
             parameters={"type": "object", "properties": {"domanda": {"type": "string"}},
                         "required": ["domanda"]},
             func=_sviluppo_chiedi, risk="lettura", levels=FAMILY, non_fidato=True,

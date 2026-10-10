@@ -201,8 +201,9 @@ def prova_nomi(tmp, iso):
     # sviluppo_stato, inventato dal 26B nei giri del 10/10, vale come sviluppo_passo
     ctx.regole = []
     out = P.chiama(reg2, ctx, "sviluppo_stato", {"azione": "stato"}, turno=2)
+    # (dal 10/10 pomeriggio con la regola dei nomi con l'azione, `tool_nome_azione`)
     verifica("sviluppo_stato (inventato dal modello) vale come sviluppo_passo stato",
-             "tool_nome_vecchio" in ctx.regole and "Valute" in detta(out), detta(out))
+             "tool_nome_azione" in ctx.regole and "Valute" in detta(out), detta(out))
     svs = svc.sviluppi
     svs.sospendi(svs.corrente("u1"))
     ctx.regole = []

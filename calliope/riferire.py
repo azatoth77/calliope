@@ -147,7 +147,8 @@ def email(testo: str) -> list[str]:
 # logica di un'estensione esistente; l'agente può solo scrivere nuovi programmi…», la risposta
 # di lavoro_affida, fermata due volte come `uscita_segreti`): solo con la cosa scritta subito
 # dopo, che dice di quale codice si parla. «Comunica il codice ricevuto» resta un segreto
-_CODICE_PROGRAMMA = (r"sorgente|python|javascript|c#|del programma|dei programmi|di un programma|"
+_CODICE_PROGRAMMA = (r"sorgente|python|javascript|c#|(in|per) (python|javascript|c#|rust|java|c(?![a-zà-ù]))|"
+                     r"del programma|dei programmi|di un programma|"
                      r"dello script|di uno script|dell'estension\w*|di un'estension\w*|"
                      r"delle estension\w*|dell'agente|del gioco|o (la )?logica|e (la )?logica|"
                      r"e (i )?test")
@@ -166,7 +167,9 @@ _CODICE_LAVORO = re.compile(
     r"(?<![a-zà-ù])(scriver\w*|scrivend\w*|scritt\w*|scrive|riscriver\w*|correg\w*|"
     r"corrett\w*|sistem\w*|modific\w*|lavor\w*|rived\w*|rilegg\w*|ricontroll\w*|test\w*|"
     r"aggiorn\w*|svilupp\w*)\s+(?:(?:ancora|tutto|bene|meglio|subito)\s+)?"
-    r"(?:il|al|sul|nel|del|dal|lo|questo|quel)\s+(?:(?:nuovo|suo|tuo|vostro|loro)\s+)?"
+    # «scrivere codice», «scrivere un codice simile» (10/10, DGX delle 15:54: la frase del
+    # modello sull'IA che riscrive i programmi): anche senza articolo o con «un»
+    r"(?:(?:il|al|sul|nel|del|dal|lo|questo|quel|un|uno)\s+)?(?:(?:nuovo|suo|tuo|vostro|loro)\s+)?"
     r"codic[ei](?![a-zà-ù])", re.I)
 _CODICE_SEGRETO_DOPO = re.compile(
     r"^\s*(che (hai|ti è|ti hanno|ti arriva|ricevi|riceverai)|ricevut\w*|arrivat\w*|via |per sms|"
@@ -180,6 +183,33 @@ _IMPERATIVO_CODICE = re.compile(r"(?<![a-zà-ù])(scrivi|correggi|sistema|modifi
 _DARLO = re.compile(r"(?<![a-zà-ù])(comunic|dett|mand|invi|inser|inseris|digit|scriv|fornisc|"
                     r"condivid|rivel|ripet|incoll|copi|riferisc|da)[a-zà-ù]*?(l[oi]|gliel[oi])"
                     r"(?![a-zà-ù])", re.I)
+
+
+# Un testo d'altri che chiede un segreto: il verbo di chi lo chiede o lo vuole ricevere, nella
+# stessa frase del segreto (10/10, `Contesto.segreti_nel_dato`)
+_CHIEDE_NEL_DATO = re.compile(
+    r"(?<![a-zà-ù])(inserisc\w*|inserir\w*|inserite|comunic(a|ar\w*|ate|aci|atelo|alo)|"
+    r"digit\w*|invia\w*|inviar\w*|mand(a|aci|ateci|are|arci)|confermar\w*|fornisc\w*|"
+    r"fornir\w*|dett(a|are|atelo)|condivid\w*|rivel\w*|scriv(i|ete|ere|ilo|etelo)|immett\w*|"
+    r"indica(re)?|chied\w*|richied\w*|serv(e|ono) (il|la|i|le)|enter|type|provide|send|share|"
+    r"confirm|verify)(?![a-zà-ù])", re.I)
+_FRASI_DATO = re.compile(r"[.!?;\n]+|\\n|\",\s*\"")
+
+
+def _chiede_segreti(ctx: "Contesto") -> bool:
+    """Una frase di un dato non fidato del contesto chiede codici, password, PIN (il segreto e
+    il verbo di chi lo chiede nella stessa frase)? Con una foto senza testo, nel dubbio sì."""
+    if "foto" in ctx.fonti and not any(f == "foto" for f, _ in ctx.esterni):
+        return True
+    for _, testo in ctx.esterni:
+        for frase in _FRASI_DATO.split(str(testo or "")):
+            if not _SEGRETO.search(frase):
+                continue
+            if any(not _codice_di_programma(frase, x) for x in _SEGRETO.finditer(frase)) and (
+                    _CHIEDE_NEL_DATO.search(frase) or _DIRETTA.search(frase)
+                    or _DARLO.search(frase)):
+                return True
+    return False
 
 
 def _codice_di_programma(t: str, m) -> bool:
@@ -322,10 +352,27 @@ class Contesto:
     domanda: str = ""                                   # la frase di questo turno
     persona_txt: str = ""                               # tutte le parole della persona
     propri: tuple = ()                                  # frasi pronte dei tool fidati (_norm)
+    # Le fonti arrivate in QUESTO turno (dalla frase della persona in poi); None = tutte (un
+    # testo giudicato da solo, come l'annuncio di un agente, è esso stesso il dato nuovo)
+    nuove: frozenset | None = None
+    _segreti_nel_dato: bool | None = field(default=None, repr=False, compare=False)
 
     @property
     def contaminata(self) -> bool:
         return bool(self.fonti)
+
+    @property
+    def dato_nuovo(self) -> bool:
+        """In questo turno è arrivato un dato non fidato (o non si sa: Contesto senza `nuove`)."""
+        return self.nuove is None or bool(self.nuove)
+
+    def segreti_nel_dato(self) -> bool:
+        """Un dato non fidato ancora in memoria chiede davvero codici o password (una sua
+        frase li chiede come `uscita_segreti` li riconosce in una risposta)? Con una foto senza
+        testo da leggere, nel dubbio sì. Calcolato una volta per contesto."""
+        if self._segreti_nel_dato is None:
+            self._segreti_nel_dato = _chiede_segreti(self)
+        return self._segreti_nel_dato
 
     def fonte(self) -> str:
         return sorted(self.fonti)[0] if self.fonti else ""
@@ -474,9 +521,14 @@ def giudica(frase: str, ctx: Contesto, solo_gravi: bool = False) -> Giudizio:
         if a_pagamento(n) and _cifre(n) not in _cifre(ctx.domanda):
             return Giudizio("uscita_numero_pagamento",
                             _dal_dato(ctx, n, _cifre) or ctx.fonte(), n)
-    # 2. Codici, password, PIN da dare: se la persona non ne ha parlato
+    # 2. Codici, password, PIN da dare: se la persona non ne ha parlato. Nei turni dopo quello
+    # del dato, senza un dato nuovo, solo se il dato chiedeva davvero dei codici (10/10, DGX
+    # delle 15:54 e 15:55: una pagina sul software riscritto con l'IA, letta due turni prima,
+    # e l'avviso «chiede anche dei codici o delle password» detto al posto di frasi del modello
+    # sul codice dei programmi, in turni senza ricerche)
     m = next((x for x in _SEGRETO.finditer(t) if not _codice_di_programma(t, x)), None)
-    if m and (_DARE.search(t) or _DIRETTA.search(t)) and not _SEGRETO.search(persona):
+    if (m and (_DARE.search(t) or _DIRETTA.search(t)) and not _SEGRETO.search(persona)
+            and (ctx.dato_nuovo or ctx.segreti_nel_dato())):
         return Giudizio("uscita_segreti", ctx.fonte(), m.group(0))
     # 3. Soldi: IBAN, carte regalo, criptovalute; un pagamento verso un conto detto come ordine
     iban = _IBAN.search(t)
@@ -570,7 +622,17 @@ def contesto_da(brain, domanda: str) -> Contesto:
     except Exception:  # noqa: BLE001
         pass
     return Contesto(frozenset(fonti), esterni, domanda, prov.testo_persona(hist),
-                    tuple(_propri(hist)))
+                    tuple(_propri(hist)), frozenset(fonti_del_turno(hist)))
+
+
+def fonti_del_turno(hist) -> set[str]:
+    """Le fonti non fidate arrivate in questo turno: dall'ultima frase della persona in poi
+    (lei compresa: un allegato arriva con la frase). Una pagina letta in un turno di prima conta
+    nella conversazione (`prov.fonti`), non qui (10/10)."""
+    hist = list(hist or ())
+    inizio = next((i for i in range(len(hist) - 1, -1, -1)
+                   if hist[i].get("role") == "user"), 0)
+    return prov.fonti(hist[inizio:])
 
 
 def _propri(hist) -> list[str]:
@@ -604,13 +666,29 @@ class Esito:
     fonte_aggiunta: int = 0
 
 
+def gia_detta(brain, frase: str) -> bool:
+    """La frase fissa è già in una risposta di Calliope di questa conversazione?"""
+    n = _norm(frase)
+    return bool(n) and any(
+        m.get("role") == "assistant" and isinstance(m.get("content"), str)
+        and n in _norm(m["content"]) for m in (getattr(brain, "history", None) or ()))
+
+
 def filtra(brain, frasi, domanda: str, esito: Esito):
     """Le frasi della risposta (già divise) che si possono dire. Generatore: ogni frase si
     giudica appena arriva (qualche decimo di millisecondo, nessuna attesa in più per la voce);
     il contesto si rilegge a ogni frase, perché un risultato non fidato può arrivare a metà
-    risposta. Una frase fermata diventa la sua frase fissa (una per tipo); le altre passano."""
+    risposta. Una frase fermata diventa la sua frase fissa (una per tipo); le altre passano.
+
+    La frase fissa si dice una volta (10/10, DGX delle 15:54 e 15:55: «Una pagina internet
+    chiede anche dei codici…» in due turni di fila senza ricerche): in un turno senza un dato
+    nuovo, se è già stata detta in questa conversazione, la frase fermata si toglie e basta;
+    con un dato nuovo (un'altra pagina) si dice di nuovo. Se così non resterebbe niente da dire,
+    la frase fissa si dice lo stesso."""
     dette: set[str] = set()
     cache: dict = {}
+    taciute: list[str] = []
+    detta_una = False
     try:
         for frase in frasi:
             t0 = time.perf_counter()
@@ -618,24 +696,37 @@ def filtra(brain, frasi, domanda: str, esito: Esito):
                                                                               None)))
             if cache.get("k") != chiave:
                 cache["k"], cache["ctx"] = chiave, contesto_da(brain, domanda)
-            g = giudica(frase, cache["ctx"])
+            ctx = cache["ctx"]
+            g = giudica(frase, ctx)
             esito.ms.append(round((time.perf_counter() - t0) * 1000, 2))
             if g.esito == OK:
                 if g.frase != frase:
                     esito.fonte_aggiunta += 1
                 esito.detto.append(g.frase)
+                detta_una = True
                 yield g.frase
                 continue
             esito.fermate.append((g.esito, g.fonte, g.dettaglio))
-            print(f"\n   [USCITA] frase fermata: {g.esito} (dati da {g.fonte or '?'})",
-                  flush=True)
+            # La frase fermata nel journal (accorciata): senza, i casi veri si indovinavano
+            print(f"\n   [USCITA] frase fermata: {g.esito} (dati da {g.fonte or '?'}): "
+                  f"«{frase.strip()[:160]}»", flush=True)
             if g.esito in dette:
                 continue
             dette.add(g.esito)
             s = sostituta(g)
+            if not ctx.dato_nuovo and gia_detta(brain, s):
+                print("   [USCITA] frase fissa già detta, senza un dato nuovo: non la ripeto",
+                      flush=True)
+                taciute.append(s)
+                continue
             esito.detto.append(s)
             esito.sostitute.append(s)
+            detta_una = True
             yield s
+        if taciute and not detta_una:
+            esito.detto.append(taciute[0])
+            esito.sostitute.append(taciute[0])
+            yield taciute[0]
     finally:
         try:
             frasi.close()

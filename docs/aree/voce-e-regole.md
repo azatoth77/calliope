@@ -1599,3 +1599,24 @@ in [contesto-conversazione](contesto-conversazione.md). Per le regole e il ciclo
   turno della foto e con lui la contaminazione.
 
 Prova `prova_eventi_attivo` (livello 1, ~7 s); `prova_eventi_ciclo` aggiornata (l'interruttore).
+
+## Nomi `sviluppo_<azione>` e «conversazione nuova» che non cancella (10/10 pomeriggio, ramo `pomeriggio-correzioni`)
+
+Giro vero della DGX del 10/10, 15:11–15:58 (uso normale di Dario, 26B).
+
+- **Regola `tool_nome_azione`** (forma della scelta del modello, principio 10): un nome inventato
+  `sviluppo_<azione>` (`sviluppo_ferma`, `sviluppo_chiudi`, `sviluppo_stato`…) vale
+  sviluppo_passo con quell'azione, prima del nome vicino (`sviluppo_chiudi` diventava
+  sviluppo_chiedi per una lettera). Dettagli e contrari in
+  [agenti-estensioni](agenti-estensioni.md), stessa data.
+- **«Conversazione nuova» non cancella.** 15:55:35 «Partiamo dal presupposto che io vorrei
+  ricominciare da capo.» → «Se procedo, tutto quello che ci siamo detti finora verrà cancellato
+  e inizieremo una nuova sessione vuota.» Falso: la conversazione si archivia (riassunto in
+  secondo piano) e si ritrova con conversazione_cerca. **Causa**: la descrizione del tool
+  («Butta via la conversazione di adesso e ne comincia una nuova, vuota», tra gli esempi
+  «dimentica quello che ci siamo detti adesso e ricominciamo»). **Correzione**: «Chiude la
+  conversazione di adesso e ne comincia una nuova… NON cancella niente: quello che vi siete detti
+  si archivia e si ritrova con conversazione_cerca; se ne parli o chiedi conferma, di' così, mai
+  che verrà cancellato. Cancellare è un'altra cosa (conversazioni_dimentica, dimentica).»; tolto
+  l'esempio con «dimentica». Il prompt di sistema e `argomento` non lo dicevano.
+- **Prova**: `prova_giro_pomeriggio.py` (3 e 4).
