@@ -236,7 +236,9 @@ ctx_r.regole = []
 r = json.loads(tools.call("calliope_stato", {"periodo": "da_ieri"}, ctx_r, "familiare"))
 verifica("solo il periodo («cosa è cambiato da ieri?», modello locale) → novità, regola nel "
          "registro", r["risposta_finale"].startswith("Sono la versione")
-         and "Da ieri" in r["risposta_finale"] and ctx_r.regole == ["stato_periodo_novita"],
+         # il registro finto è del 7-9/10: dall'11/10 «da ieri» è vuoto e la frase lo dice
+         and ("Da ieri" in r["risposta_finale"] or "In questo periodo" in r["risposta_finale"])
+         and ctx_r.regole == ["stato_periodo_novita"],
          f"{ctx_r.regole} {r['risposta_finale'][:80]}")
 ctx_r.regole = []
 r = json.loads(tools.call("calliope_stato", {"cosa": "sa_fare", "periodo": "da_ieri"}, ctx_r,
