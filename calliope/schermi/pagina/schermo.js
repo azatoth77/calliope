@@ -2832,6 +2832,9 @@
       else if (v.tappa) corpo.append(el("p", "passo-lavoro", "Fermo a una tappa: aspetta che tu dica se continuare."));
       const ult = (v.collaudi || []).slice(-1)[0];
       if (ult) corpo.append(el("p", "sotto", "Ultima prova: «" + ult.dati + "», " + (ult.ok ? "riuscita" : "non riuscita")));
+      // Rispetto alla richiesta (11/10, revisione onesta): quante cose mancano
+      const mancano = (v.requisiti || []).filter((x) => x.si_puo && (x.stato === "manca" || x.stato === "parziale")).length;
+      if (mancano) corpo.append(el("p", "sotto", "Rispetto alla richiesta: " + (mancano === 1 ? "manca una cosa" : "mancano " + mancano + " cose") + "."));
       if (!CAROSELLO && v.stato === "aperta") {
         const b = el("button", "piccolo-bottone tasto-svil", "Apri la vista dello sviluppo");
         b.type = "button";
@@ -2907,6 +2910,33 @@
         });
         return b;
       },
+      // Requisito per requisito rispetto alla richiesta (11/10, revisione onesta): il confronto
+      // fatto da Calliope tra la specifica approvata e il codice consegnato
+      requisiti: () => {
+        const r = v.requisiti || [];
+        if (!r.length) return null;
+        const b = el("section", "svil-sez");
+        b.append(el("h2", "", "Rispetto alla richiesta"));
+        if (v.tappa_n) b.append(el("p", "sotto", "A tappe: adesso la tappa " + v.tappa_n + "."));
+        if (v.confronto !== "fatto") b.append(el("p", "sotto", "Il confronto con il codice non c'è ancora: i requisiti sono questi."));
+        const ol = el("ol", "prove-svil");
+        r.forEach((x) => {
+          const dopo = !!(v.tappa_n && x.tappa > v.tappa_n);
+          const stato = !x.si_puo ? "non si può" : x.stato === "fatto" ? "fatto" : x.stato === "parziale" ? "in parte"
+            : x.stato === "manca" ? "manca" : dopo ? "tappa dopo" : "da controllare";
+          const ok = x.si_puo && x.stato === "fatto";
+          const li = el("li", "prova " + (ok ? "ok" : "ko"));
+          const t = el("div", "prova-testa");
+          t.append(el("span", "badge " + (ok ? "ok" : "ko"), stato), el("span", "prova-dati", x.testo || ""));
+          if (dopo && x.stato) t.append(el("span", "prova-quando", "tappa dopo"));
+          li.append(t);
+          const nota = x.nota || (!x.si_puo ? x.limite : "");
+          if (nota) li.append(el("p", "prova-esito", nota));
+          ol.append(li);
+        });
+        b.append(ol);
+        return b;
+      },
       revisione: () => {
         if (!v.revisione) return null;
         const b = el("section", "svil-sez");
@@ -2916,7 +2946,7 @@
       },
     };
     const prima = { analisi: "analisi", sviluppo: "analisi", collaudo: "collaudo", revisione: "revisione", attivazione: "revisione" }[v.fase] || "analisi";
-    const ordine = [prima].concat(["collaudo", "domande", "revisione", "analisi"].filter((x) => x !== prima));
+    const ordine = [prima, "requisiti"].concat(["collaudo", "domande", "revisione", "analisi"].filter((x) => x !== prima));
     const g = el("div", "svil-sezioni");
     ordine.forEach((k) => { const n = sez[k](); if (n) g.append(n); });
     // Al centro: a sinistra il riepilogo e sotto le sezioni (sul computer scorrono insieme), a

@@ -116,6 +116,8 @@ ARGOMENTI: dict[str, dict[str, str]] = {
     # giudica sulle parole distintive prese da un dato
     "sviluppo_apri": {"tipo": Z, "compito": L, "nome": L, "gia_fatto_da": S,
                       "come_chiederlo": L, "proposta": X, "gioco": S, "vincoli": L,
+                      # 11/10: «no, tutto insieme» alla proposta a tappe (un sì o no)
+                      "tappe": S,
                       "file": B, "allegato": "indice:allegato",
                       # 08/10 (giro 10): l'estensione esistente di cui fare una versione nuova
                       "modifica": B},
@@ -191,7 +193,7 @@ def _sviluppo(a: dict) -> int:
         return E1
     if az in ("analisi", "promuovi", "ferma"):
         return E2                            # ferma: come lavoro_annulla (08/10 sera)
-    return E3                                # avanti, rifai (riparte un lavoro dell'agente)
+    return E3                                # avanti, rifai, completa (11/10): riparte un lavoro
 
 
 def _ricorda(a: dict) -> int:

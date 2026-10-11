@@ -609,7 +609,11 @@ def prova_tappe(tmp):
                  lav.stato == "fatto" and lav.passi == 5
                  and any("Hai un altro giro di lavoro" in str(m.get("content"))
                          and "prova con a + b" in str(m.get("content"))
-                         for m in fake.richieste[-1]["messages"]), f"{lav.stato} {lav.passi}")
+                         # l'ultima richiesta dell'agente (dal 11/10 dopo la consegna c'è
+                         # il confronto con i requisiti, con lo schema in «format»)
+                         for m in [r for r in fake.richieste
+                                   if "format" not in r][-1]["messages"]),
+                 f"{lav.stato} {lav.passi}")
         verifica("…e il lavoro finito porta lo sviluppo al collaudo",
                  sv.fase == "collaudo" and "è pronto: siamo al collaudo" in item["messaggio"],
                  item["messaggio"])

@@ -40,7 +40,7 @@ from .spec import ToolContext, ToolSpec, note_rule
 from ..testi import FAMILY, NIENTE
 
 AZIONI = ["stato", "avanti", "analisi", "rifai", "ferma", "sospendi", "riprendi", "chiudi",
-          "promuovi"]
+          "promuovi", "completa"]
 # Le parole che il modello usa al posto di un'azione (in `azione`, o nel nome del tool:
 # `azione_dal_nome`)
 SINONIMI_AZIONE = {
@@ -290,7 +290,7 @@ def _tipo(tipo) -> str:
 def _sviluppo_apri(ctx: ToolContext, tipo: str = "", compito: str = "", nome: str = "",
                    modifica: str = "", proposta: str = "", gioco=False, gia_fatto_da: str = "",
                    come_chiederlo: str = "", vincoli: str = "", file: str = "", allegato=None,
-                   **_altro) -> dict:
+                   tappe=None, **_altro) -> dict:
     """Uno sviluppo nuovo (08/10, versione 2): un'estensione (tools/estensioni._estensione_crea)
     o un programma (tools/agenti._delega_lavoro di tipo codice), con la stessa analisi, la
     stessa proposta e gli stessi permessi di prima. `proposta` = l'id del lavoro proposto: il
@@ -320,6 +320,8 @@ def _sviluppo_apri(ctx: ToolContext, tipo: str = "", compito: str = "", nome: st
         gioco = True
     if gioco in (True, "true", "sì", "si", 1) or str(modifica or "").strip():
         t = "estensione"
+    if prop and tappe in (False, "false", "no", 0, "0"):
+        _tappe_rifiutate(ctx, prop)
     scaduta = _proposta_scaduta(ctx, prop)
     if scaduta is not None:
         return scaduta
@@ -336,6 +338,24 @@ def _sviluppo_apri(ctx: ToolContext, tipo: str = "", compito: str = "", nome: st
     return te._estensione_crea(ctx, compito=compito, nome=nome, proposta=proposta,
                                gia_fatto_da=gia_fatto_da, come_chiederlo=come_chiederlo,
                                gioco=gioco, modifica=modifica)
+
+
+def _tappe_rifiutate(ctx, prop: str):
+    """«No, tutto insieme» alla proposta a tappe (11/10): il lavoro proposto `prop` perde il
+    vincolo della prima tappa e parte con tutti i requisiti (regola `sviluppo_tappe_rifiutate`).
+    Solo per lo sviluppo aperto di chi parla, in analisi, con quella proposta."""
+    from ..sviluppo import chi
+    svs = _svs(ctx)
+    sv = svs.corrente(chi(ctx)) if svs is not None else None
+    if sv is None or sv.fase != "analisi" or sv.proposto != prop or             sv.tappe_stato != "proposte":
+        return
+    svc = getattr(ctx, "lavori", None)
+    prof = _prof(ctx)
+    off = (svc.offerta(getattr(prof, "id", None), int(getattr(ctx, "turno", 0) or 0))
+           if svc is not None and hasattr(svc, "offerta") else None)
+    lav = off["lavoro"] if off is not None and getattr(off["lavoro"], "id", "") == prop else None
+    svs.tappe_rifiutate(sv, lav)
+    note_rule(ctx, "sviluppo_tappe_rifiutate")
 
 
 def _proposta_scaduta(ctx, prop: str):
@@ -384,8 +404,8 @@ def _sviluppo(ctx: ToolContext, azione: str = "stato", quale: str = "", cambia: 
     prof = _prof(ctx)
     if prof is None or not _admin(ctx):
         return _no(ctx, "La modalità sviluppo è di chi amministra.", "sviluppo_permesso")
-    azione = str(azione or "stato").strip().lower()
-    azione = SINONIMI_AZIONE.get(azione, azione)
+    grezza = str(azione or "stato").strip().lower()
+    azione = SINONIMI_AZIONE.get(grezza, grezza)
     persona = chi(ctx)
     if azione == "riprendi":
         return _riprendi(ctx, svs, persona, quale)
@@ -418,6 +438,16 @@ def _sviluppo(ctx: ToolContext, azione: str = "stato", quale: str = "", cambia: 
                                       "argomenti": {"azione": "riprendi", "quale": s.id}})
         return _no(ctx, "Non c'è nessuno sviluppo aperto.")
     svs.tocca(sv)
+    if (grezza in ("continua", "prosegui") and sv.fase == "revisione"
+            and svs.da_completare(sv)[0]):
+        # Alla revisione con qualcosa che manca la domanda è «attivarla così com'è, o faccio
+        # continuare l'agente con quello che manca?» (11/10): «continua» è la seconda
+        # (correzione della forma della scelta del modello, principio 10). «Avanti» resta
+        # l'attivazione, con la sua frase di conferma
+        note_rule(ctx, "sviluppo_continua_completa")
+        azione = "completa"
+    if azione == "completa":
+        return _completa(ctx, svs, sv, prof)
     if azione == "sospendi":
         svs.sospendi(sv)
         note_rule(ctx, "sviluppo_sospeso")
@@ -900,6 +930,8 @@ def _nuovo_lavoro(ctx, svs, sv, prof, compito: str, cambia: str = "",
         lav.file_iniziali = file_di_codice(sv.cartella) if sv.cartella else {}
     lav.specifica = compito
     _con_esempi(svs, sv, lav)
+    # La tappa decisa con la persona e ciò che qui non si può fare (11/10)
+    svs._metti_vincoli(sv, lav)
     if avvia:
         return ta._avvia(ctx, svc, lav)
     return ta._proponi(ctx, svc, lav, turno)
@@ -1044,6 +1076,64 @@ def _avanti(ctx, svs, sv, prof) -> dict:
     return _no(ctx, "Non c'è niente da far andare avanti.")
 
 
+def _verifica_per_la_voce(ctx, svs, sv):
+    """Il confronto con la richiesta per la versione di adesso: quello fatto alla consegna o,
+    se manca, uno nuovo nel turno della voce (con la frase d'attesa, entro
+    sviluppo_verifica_voce_s)."""
+    if svs.verifica_valida(sv) or not getattr(ctx.cfg, "sviluppo_requisiti", True):
+        return
+    svs.verifica_consegna(sv, attesa=getattr(ctx, "attesa", None), dalla_voce=True,
+                          tempo_s=float(getattr(ctx.cfg, "sviluppo_verifica_voce_s", 20.0)
+                                        or 20.0))
+
+
+def _completa(ctx, svs, sv, prof) -> dict:
+    """«Continua a farli» (11/10, revisione onesta): l'agente fa quello che manca rispetto
+    alla specifica approvata (i requisiti della tappa di adesso mancanti o fatti in parte; se
+    non ce ne sono, la tappa dopo). È una modifica dello stesso sviluppo: la specifica non
+    cambia, i file di partenza sono quelli della versione consegnata, il lavoro parte subito
+    (la persona ha appena detto di sì a «faccio continuare l'agente?»)."""
+    from ..requisiti import elenco_voce, pulito
+    if svs.lavoro_attivo(sv) or _in_tappa(svs, sv) is not None:
+        return _stato(ctx, svs, sv, sv.persona)
+    if sv.fase not in ("collaudo", "revisione", "attivazione"):
+        return _no(ctx, "Prima finiamo questo giro: quando l'agente consegna, ti dico cosa "
+                        "manca rispetto alla richiesta.")
+    _verifica_per_la_voce(ctx, svs, sv)
+    voci, tappa_dopo = svs.da_completare(sv)
+    if not voci:
+        if svs.verifica_valida(sv):
+            return _final("Rispetto alla richiesta non manca niente: se vuoi cambiare qualcosa, "
+                          "dimmi cosa.", ok=False, fatto=NIENTE)
+        return _no(ctx, "Non sono riuscita a confrontarla con la richiesta, quindi non so dirti "
+                        "cosa manca: dimmi tu cosa far fare all'agente.")
+    note_rule(ctx, "sviluppo_completa")
+    fase_prima, tappa_prima = sv.fase, sv.tappa
+    if tappa_dopo:
+        sv.tappa = max(1, sv.tappa) + 1
+        note_rule(ctx, "sviluppo_tappa_dopo")
+    elenco = "; ".join(v["testo"] + (f" (ora: {pulito(v['nota'], 120)})" if v.get("nota")
+                                      else "") for v in voci)
+    cambia = (f"Tappa {sv.tappa} dello stesso sviluppo, aggiungi: {elenco}" if tappa_dopo else
+              f"Completa quello che manca rispetto alla specifica approvata: {elenco}")
+    base = (sv.specifica or sv.richiesta or "").strip().rstrip(".")
+    svs.passa(sv, "sviluppo", "completa: " + ", ".join(v["testo"] for v in voci)[:120])
+    out = _nuovo_lavoro(ctx, svs, sv, prof, base, cambia, avvia=True)
+    testi = elenco_voce([v["testo"] for v in voci])
+    testa = (f"D'accordo, passiamo alla tappa {sv.tappa}: {testi}. " if tappa_dopo else
+             f"D'accordo: l'agente continua con quello che manca, {testi}. ")
+    if isinstance(out, dict) and out.get("ok") is not False:
+        for k in ("conferma", "risposta_finale"):
+            if isinstance(out.get(k), str):
+                out[k] = testa + out[k]
+    elif isinstance(out, dict):
+        # Non è partito (agenti o estensioni che mancano): si torna dov'eravamo
+        sv.tappa = tappa_prima
+        svs.passa(sv, fase_prima, "completa non partito")
+    _schermo(ctx, sv)
+    return out
+
+
 def _revisione(ctx, svs, sv) -> dict:
     """Dal collaudo alla revisione: permessi, rete, analisi del codice, test, collaudi e
     differenze, detti in breve e per intero sulla scheda."""
@@ -1061,24 +1151,53 @@ def _revisione(ctx, svs, sv) -> dict:
                       + (f" {detto_coll}" if collaudi else ""))
     elif svs.e_gioco(sv):
         detto_coll = "Non l'hai ancora visto in prova sullo schermo."
+    # La revisione onesta (11/10, caso vero del gioco di Halloween: «tutto sembra in ordine: i
+    # test passano tutti» con voce, musica e porte variabili mancanti): requisito per requisito,
+    # la specifica approvata confrontata con i file consegnati (calliope/requisiti.py); se il
+    # confronto non c'è lo si dice. Poi la domanda: attivarla così com'è o completarla
+    _verifica_per_la_voce(ctx, svs, sv)
+    confronto = svs.frase_confronto(sv) if (sv.requisiti or sv.verifica) else ""
+    manca, tappa_dopo = svs.da_completare(sv)
+    if confronto:
+        note_rule(ctx, "sviluppo_revisione_requisiti")
+    if manca:
+        note_rule(ctx, "sviluppo_revisione_manca")
     if sv.tipo == "estensione":
         est = getattr(ctx, "estensioni", None)
         rev = est.revisione(sv.estensione) if est is not None and sv.estensione else None
         if rev is None:
             return _no(ctx, "Non c'è una versione da rivedere: forse è già stata approvata.")
         sv.revisione = rev["testo"] + f"\n- {detto_coll}"
+        fumo = ""
+        if svs.e_gioco(sv):
+            # La prova di fumo è un test di avvio, non delle regole (11/10)
+            from ..requisiti import frase_fumo
+            fumo = frase_fumo(_test_della_versione(est, sv, rev))
+            if fumo:
+                sv.revisione += f"\n- {fumo}"
         svs.passa(sv, "revisione", "avanti dal collaudo")
         note_rule(ctx, "sviluppo_revisione")
         _schermo(ctx, sv)
+        detto = " ".join(x for x in (rev["frase"], fumo, detto_coll, confronto) if x)
         if not rev["approvabile"]:
-            return _final(f"{rev['frase']} {detto_coll} Così non si può approvare: dimmi cosa "
-                          "correggere.", fatto="revisione detta")
+            return _final(f"{detto} Così non si può approvare: dimmi cosa correggere.",
+                          fatto="revisione detta")
+        if manca:
+            # Manca qualcosa (11/10): attivarla così com'è, o far continuare l'agente
+            domanda = ("Vuoi attivarla così com'è, o passo alla tappa dopo?" if tappa_dopo else
+                       "Vuoi attivarla così com'è, o faccio continuare l'agente con quello che "
+                       "manca?")
+            return _final(f"{detto} {domanda}", fatto="revisione detta: NON è ancora attiva",
+                          _fidati=[str(sv.titolo or "")],
+                          in_sospeso={"domanda": domanda,
+                                      "cosa": f"attivare «{sv.titolo}» così com'è o completarla",
+                                      "tool": "sviluppo_passo",
+                                      "argomenti": ARGOMENTI_COMPLETA})
         # La domanda in fondo (09/10, caso vero della DGX delle 21:00: con «Vuoi attivarla? Ti
         # chiederò la frase di conferma.» la risposta non finiva con «?», l'azione in sospeso
         # non restava e «Sì, attivarla.» arrivava alla politica senza la proposta). Il titolo
         # viene dallo stato dello sviluppo: un nome fidato per la risposta (`_fidati`)
-        frase = (f"{rev['frase']} {detto_coll} Ti chiederò la frase di conferma: vuoi "
-                 "attivarla?")
+        frase = f"{detto} Ti chiederò la frase di conferma: vuoi attivarla?"
         return _final(frase, fatto="revisione detta: NON è ancora attiva",
                       _fidati=[str(sv.titolo or "")],
                       in_sospeso={"domanda": "Vuoi attivarla?",
@@ -1096,7 +1215,8 @@ def _revisione(ctx, svs, sv) -> dict:
         t = f" Test: {k - f} su {k} passano." if f else f" Test: passano, {k} su {k}."
     frase = (f"Revisione di «{sv.titolo}»: {misura['file']} "
              + ("file" if misura["file"] != 1 else "file") + f" di codice, {misura['righe']} "
-             f"righe.{t} {detto_coll} Il codice è sullo schermo, se ce l'hai.")
+             f"righe.{t} {detto_coll}" + (f" {confronto}" if confronto else "")
+             + " Il codice è sullo schermo, se ce l'hai.")
     sv.revisione = (f"- File di codice: {misura['file']}\n- Righe: {misura['righe']}\n"
                     f"- {t.strip() or 'Test: nessuno'}\n- {detto_coll}")
     svs.passa(sv, "revisione", "avanti dal collaudo")
@@ -1104,7 +1224,7 @@ def _revisione(ctx, svs, sv) -> dict:
     soglia = int(getattr(ctx.cfg, "sviluppo_programma_righe", 150) or 150)
     grande = misura["righe"] >= soglia or misura["file"] >= 3 or len(collaudi) >= 3
     _schermo(ctx, sv)
-    if grande and not sv.proposta_estensione:
+    if grande and not sv.proposta_estensione and not manca:
         sv.proposta_estensione = True
         svs.tocca(sv)
         note_rule(ctx, "sviluppo_proposta_estensione")
@@ -1114,10 +1234,33 @@ def _revisione(ctx, svs, sv) -> dict:
         return _final(f"{frase} {domanda}", fatto="revisione detta",
                       in_sospeso={"domanda": domanda, "cosa": "farne un'estensione",
                                   "tool": "sviluppo_passo", "argomenti": {"azione": "promuovi"}})
+    if manca:
+        # Manca qualcosa (11/10): chiuderlo così com'è, o far continuare l'agente
+        domanda = ("Lo chiudo così com'è, o passo alla tappa dopo?" if tappa_dopo else
+                   "Lo chiudo così com'è, o faccio continuare l'agente con quello che manca?")
+        return _final(f"{frase} {domanda}", fatto="revisione detta",
+                      in_sospeso={"domanda": domanda,
+                                  "cosa": f"chiudere «{sv.titolo}» così com'è o completarlo",
+                                  "tool": "sviluppo_passo", "argomenti": ARGOMENTI_COMPLETA})
     frase += " Va bene così?"
     return _final(frase, fatto="revisione detta",
                   in_sospeso={"domanda": "Va bene così?", "cosa": "chiudere lo sviluppo",
                               "tool": "sviluppo_passo", "argomenti": {"azione": "avanti"}})
+
+
+# La domanda della revisione quando manca qualcosa (11/10): due strade, le sceglie il modello
+ARGOMENTI_COMPLETA = ("azione = completa se vuole che l'agente faccia quello che manca "
+                      "(«continua», «falli», «completalo», «sì, continua»); azione = avanti se "
+                      "va bene così com'è («attivala così», «va bene così»)")
+
+
+def _test_della_versione(est, sv, rev) -> dict | None:
+    """I test della versione in revisione (archivio delle estensioni), o None."""
+    try:
+        ver = est.archivio.versione(sv.estensione, rev.get("versione") or sv.versione) or {}
+        return ver.get("test") or None
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _test_su_disco(cartella):
@@ -1695,7 +1838,8 @@ def sviluppo_apri_spec(file_pc: bool = False, allegati: bool = False) -> ToolSpe
                  "compito = \"aggiungi i giorni\"); MAI cosa cambiare, che va in compito; "
                  "vuoto per una nuova")},
              "gia_fatto_da": {"type": "string"}, "come_chiederlo": {"type": "string"},
-             "proposta": {"type": "string"}, "gioco": {"type": "boolean"}}
+             "proposta": {"type": "string"}, "gioco": {"type": "boolean"},
+             "tappe": {"type": "boolean"}}
     if file_pc:
         props["file"] = {"type": "string"}
     if allegati:
@@ -1723,7 +1867,8 @@ def sviluppo_apri_spec(file_pc: bool = False, allegati: bool = False) -> ToolSpe
             "dei tuoi tool fa "
             "già la stessa cosa (sommare = calcola), il suo nome, e come_chiederlo: la frase per "
             "chiederlo a voce. Se il risultato finisce con una domanda («Va bene così, o la "
-            "cambiamo?»), dopo il sì richiamalo con proposta = l'id proposto (es. «L3»)."),
+            "cambiamo?»), dopo il sì richiamalo con proposta = l'id proposto (es. «L3»); "
+            "alla proposta a tappe, se vuole tutto insieme, anche tappe = false."),
         parameters={"type": "object", "properties": props, "required": ["compito"]},
         func=_sviluppo_apri, risk="azione", levels=FAMILY,
         # Il nome di un'estensione da cambiare (calliope/argomenti_incerti.py)
@@ -1748,7 +1893,9 @@ def sviluppo_specs(file_pc: bool = False, allegati: bool = False) -> list[ToolSp
                          "= le parole del titolo); chiudi (chiede conferma; «chiudi tutti gli "
                          "sviluppi»: quale = \"tutti\", e ferma anche il lavoro dell'agente); "
                          "promuovi (un "
-                         "programma diventa un'estensione). L'azione va nell'argomento azione: "
+                         "programma diventa un'estensione); completa (dopo la consegna, "
+                         "l'agente fa quello che manca rispetto alla richiesta, o la tappa dopo: "
+                         "«continua a farli»). L'azione va nell'argomento azione: "
                          "non ci sono tool sviluppo_ferma, sviluppo_chiudi o sviluppo_stato. "
                          "Cosa fare in ogni fase è nei dati del turno."),
             parameters={"type": "object", "properties": {

@@ -69,6 +69,9 @@ MAX_LAVORI = 40
 CHIUSURA_TURNI = 3              # la conferma della chiusura vale per tanti turni
 # Al collaudo di un gioco (11/10): il «sì» lo apre in prova sullo schermo (sviluppo_collauda)
 DOMANDA_GIOCO = "Lo apro in prova?"
+# La proposta in analisi, e quella a tappe (11/10, calliope/requisiti.py)
+DOMANDA_PROPOSTA = "Va bene così, o la cambiamo?"
+DOMANDA_TAPPE = "Comincio dalla prima tappa, o lo faccio tutto insieme?"
 
 
 def leggibile(titolo: str) -> str:
@@ -197,6 +200,17 @@ class Sviluppo:
     sonde: list = field(default_factory=list)
     # Gli host concessi con chiedi_permesso in un lavoro dello sviluppo (noti per le sonde)
     host_concessi: list = field(default_factory=list)
+    # ── revisione onesta e tappe (11/10, calliope/requisiti.py) ──
+    # I requisiti della specifica approvata: [{testo, nucleo, si_puo, limite, tappa}], estratti
+    # dal modello dell'agente; `requisiti_da` = l'impronta della specifica da cui vengono
+    requisiti: list = field(default_factory=list)
+    requisiti_da: str = ""
+    stima: str = ""                   # la stima dell'agente: piccolo, medio, grande
+    tappa: int = 0                    # 0 = senza tappe; 1, 2 = la tappa di adesso
+    tappe_stato: str = ""             # "", proposte, accettate, rifiutate
+    # L'ultimo confronto requisito per requisito con i file consegnati: {lavoro, versione,
+    # quando, esito, voci: [{stato, nota}] allineate a `requisiti`, requisiti_da}
+    verifica: dict = field(default_factory=dict)
 
     def fasi(self) -> tuple[str, ...]:
         return FASI_PROGRAMMA if self.tipo == "programma" else FASI_ESTENSIONE
@@ -495,6 +509,10 @@ class Sviluppi:
                 sv.estensione = lav.estensione
             if sv.da_programma and getattr(lav, "tipo", "") == "estensione":
                 self._file_del_programma(sv, lav)
+            if sv.tappe_stato == "proposte":
+                # Il «sì» alla proposta a tappe (11/10): la prima tappa parte
+                sv.tappe_stato = "accettate"
+                self.log(f"[SVILUPPO] {sv.id}: regola sviluppo_tappe_accettate")
         self.passa(sv, "sviluppo", f"lavoro {lav.id}")
         return sv
 
@@ -628,6 +646,10 @@ class Sviluppi:
             altro = None
             if sv.stato != "aperta":
                 altro = self.riprendi(sv)
+            # La revisione onesta (11/10): i file consegnati confrontati con i requisiti della
+            # specifica, qui nel thread dei lavori (la voce non aspetta); l'annuncio e la
+            # revisione lo dicono
+            self.verifica_consegna(sv, lav)
             self.passa(sv, "collaudo", f"lavoro {lav.id} finito")
             item["messaggio"] = self.frase_pronto(sv, lav, altro)
             # Niente «Vuoi approvarla?» in sospeso: prima si prova; «Con cosa provo?» va al
@@ -680,6 +702,14 @@ class Sviluppi:
             ko = int(t.get("falliti") or 0) + int(t.get("errori") or 0)
             parti.append(f"I test passano, {n} su {n}." if (r.get("test_passano") or not ko)
                          else f"Attenzione: {ko} test su {max(n, ko)} non passano.")
+            if self.e_gioco(sv):
+                # La prova di fumo è un test di avvio, non delle regole (11/10)
+                from .requisiti import frase_fumo
+                parti.append(frase_fumo(t))
+        # Cosa manca rispetto alla richiesta (11/10, revisione onesta): detto subito, in breve
+        mancanza = self.mancanze_dette(sv)
+        if mancanza:
+            parti.append(mancanza)
         rc = getattr(lav, "ricollaudo", None) or {}
         riprovata = self._frase_ricollaudo(rc)
         if riprovata:
@@ -756,9 +786,76 @@ class Sviluppi:
         self._manda_scheda(sv, getattr(lav, "on_scheda", None))
         return item
 
-    def frase_proposta(self, sv: Sviluppo, lav) -> str:
+    def frase_proposta(self, sv: Sviluppo, lav, attesa=None) -> str:
         """La proposta in analisi (versione 2): la specifica letta sempre, che chiude
-        l'analisi; la prima volta con l'apertura esplicita della modalità."""
+        l'analisi; la prima volta con l'apertura esplicita della modalità. Dal 11/10, alla
+        prima proposta, i requisiti della specifica (calliope/requisiti.py): ciò che oggi non si
+        può fare, e la proposta delle tappe per una richiesta troppo ricca."""
+        testo = self._frase_proposta(sv, lav)
+        aggiunta = self._requisiti_proposta(sv, lav, attesa)
+        if not aggiunta:
+            return testo
+        return testo[: -len(DOMANDA_PROPOSTA)].rstrip() + " " + aggiunta
+
+    def domanda_proposta(self, sv: Sviluppo) -> str:
+        """La domanda in fondo alla proposta (l'azione in sospeso, tools/agenti._proponi)."""
+        return DOMANDA_TAPPE if sv.tappe_stato == "proposte" else DOMANDA_PROPOSTA
+
+    def _requisiti_proposta(self, sv: Sviluppo, lav, attesa=None) -> str:
+        """Alla prima proposta: i requisiti estratti, i limiti detti, le tappe proposte (con la
+        domanda in fondo) e i vincoli per l'agente. "" se non c'è niente da aggiungere (e la
+        proposta resta com'era)."""
+        from . import requisiti as rq
+        if sv.tappe_stato or sv.requisiti or not getattr(self.cfg, "sviluppo_requisiti", True):
+            # Una proposta dopo la prima (una modifica): la tappa decisa vale ancora
+            self._metti_vincoli(sv, lav)
+            return ""
+        spec = sv.specifica or sv.richiesta
+        req, stima, esito = rq.estrai(
+            self.lavori, self.cfg, spec, sv.richiesta, sv.tipo, bool(sv.gioco),
+            float(getattr(self.cfg, "sviluppo_requisiti_s", 8.0) or 8.0), attesa)
+        if not req:
+            self.log(f"[SVILUPPO] {sv.id}: requisiti non estratti ({esito})")
+            return ""
+        soglia = int(getattr(self.cfg, "sviluppo_tappe_requisiti", 6) or 0)
+        tappe = rq.servono_tappe(req, stima, soglia)
+        rq.assegna_tappe(req, tappe)
+        with self._lock:
+            sv.requisiti, sv.requisiti_da, sv.stima = req, rq.impronta(spec), stima
+            if tappe:
+                sv.tappa, sv.tappe_stato = 1, "proposte"
+        self.log(f"[SVILUPPO] {sv.id}: {len(req)} requisiti, stima {stima or '?'}"
+                 + (", regola sviluppo_tappe_proposte" if tappe else ""))
+        self._salva()
+        self._metti_vincoli(sv, lav)
+        parti = [rq.frase_limiti(req)]
+        if tappe:
+            parti.append(rq.frase_tappe(req))
+            parti.append(DOMANDA_TAPPE)
+        else:
+            parti.append(DOMANDA_PROPOSTA)
+        return " ".join(p for p in parti if p)
+
+    def _metti_vincoli(self, sv: Sviluppo, lav):
+        """La tappa decisa e i limiti in coda ai vincoli del lavoro (una volta)."""
+        from . import requisiti as rq
+        if lav is None or not sv.requisiti:
+            return
+        base = rq.senza_vincoli_tappa(getattr(lav, "vincoli", "") or "")
+        lav.vincoli = (base + rq.vincoli_tappa(
+            sv.requisiti, sv.tappa, sv.tappe_stato in ("proposte", "accettate"))).strip()
+
+    def tappe_rifiutate(self, sv: Sviluppo, lav=None):
+        """«No, tutto insieme» (11/10): niente tappe, il lavoro proposto con tutti i requisiti."""
+        from . import requisiti as rq
+        with self._lock:
+            sv.tappa, sv.tappe_stato = 0, "rifiutate"
+            rq.assegna_tappe(sv.requisiti, False)
+        self.log(f"[SVILUPPO] {sv.id}: regola sviluppo_tappe_rifiutate")
+        self._salva()
+        self._metti_vincoli(sv, lav)
+
+    def _frase_proposta(self, sv: Sviluppo, lav) -> str:
         spec = re.sub(r"\s+", " ", str(getattr(lav, "specifica", "") or "").strip()
                       or str(getattr(lav, "compito", "") or "").strip()).rstrip(". ")
         if len(spec) > 420:
@@ -777,7 +874,134 @@ class Sviluppi:
             # Un gioco si fa come scheda sugli schermi (10/10, DGX delle 15:56: un gioco chiesto
             # come programma era «impossibile»): lo si dice, insieme alla specifica
             testa += "Lo faccio come gioco sugli schermi di Calliope. "
-        return f"{testa}Ho capito così: {spec}. Va bene così, o la cambiamo?"
+        return f"{testa}Ho capito così: {spec}. {DOMANDA_PROPOSTA}"
+
+    # ─────────────────────────── revisione onesta (11/10) ───────────────────────────
+    def file_consegnati(self, sv: Sviluppo) -> dict:
+        """I file della versione consegnata: per un'estensione quelli della candidata
+        nell'archivio (proprio la versione che si approverebbe), altrimenti la cartella dei
+        risultati del lavoro."""
+        est = getattr(self.lavori, "estensioni", None)
+        if sv.tipo == "estensione" and est is not None and sv.estensione and sv.versione:
+            try:
+                file = est.file_versione(sv.estensione, sv.versione)
+                if file:
+                    return file
+            except Exception:  # noqa: BLE001 — si ripiega sulla cartella del lavoro
+                pass
+        return file_di_codice(sv.cartella) if sv.cartella else {}
+
+    def verifica_consegna(self, sv: Sviluppo, lav=None, attesa=None, dalla_voce: bool = False,
+                          tempo_s: float | None = None) -> dict:
+        """Il confronto requisito per requisito tra la specifica approvata e i file consegnati
+        (calliope/requisiti.py), salvato in `sv.verifica`. I requisiti si estraggono (di nuovo)
+        se mancano o se la specifica è cambiata dopo un ritorno all'analisi; la tappa di un
+        requisito che c'era resta. Mai un'eccezione."""
+        from . import requisiti as rq
+        if not getattr(self.cfg, "sviluppo_requisiti", True):
+            return {}
+        tempo = float(tempo_s if tempo_s is not None else
+                      getattr(self.cfg, "sviluppo_verifica_s", 60.0) or 60.0)
+        fine = time.monotonic() + tempo
+        spec = sv.specifica or sv.richiesta
+        ident = getattr(lav, "id", None) or sv.lavoro or ""
+        try:
+            if not sv.requisiti or sv.requisiti_da != rq.impronta(spec):
+                req, stima, esito = rq.estrai(
+                    self.lavori, self.cfg, spec, sv.richiesta, sv.tipo, bool(sv.gioco),
+                    min(tempo, float(getattr(self.cfg, "sviluppo_requisiti_s", 8.0) or 8.0)
+                        * 2), attesa, dalla_voce)
+                if req:
+                    prima = {r["testo"].lower(): r.get("tappa") for r in sv.requisiti}
+                    for r in req:
+                        r["tappa"] = prima.get(r["testo"].lower()) or max(1, sv.tappa)
+                    with self._lock:
+                        sv.requisiti, sv.requisiti_da = req, rq.impronta(spec)
+                        sv.stima = stima or sv.stima
+                elif not sv.requisiti:
+                    v = {"lavoro": ident, "versione": sv.versione, "quando": time.time(),
+                         "esito": f"requisiti: {esito}", "voci": None}
+                    with self._lock:
+                        sv.verifica = v
+                    self._salva()
+                    return v
+            voci, esito = rq.confronta(self.lavori, sv.requisiti, self.file_consegnati(sv),
+                                       max(1.0, fine - time.monotonic()), attesa, dalla_voce)
+        except Exception as e:  # noqa: BLE001 — il confronto è un di più: si dice che manca
+            voci, esito = None, f"errore: {type(e).__name__}: {e}"
+        v = {"lavoro": ident, "versione": sv.versione, "quando": time.time(), "esito": esito,
+             "voci": voci, "requisiti_da": sv.requisiti_da}
+        with self._lock:
+            sv.verifica = v
+        n_ko = sum(1 for x in voci or () if x["stato"] != "fatto")
+        self.log(f"[SVILUPPO] {sv.id}: confronto con la richiesta "
+                 + (f"{len(voci) - n_ko} su {len(voci)} fatti" if voci is not None
+                    else f"non fatto ({esito})"))
+        self._salva()
+        return v
+
+    def verifica_valida(self, sv: Sviluppo) -> bool:
+        """C'è un confronto fatto per la versione consegnata di adesso?"""
+        v = sv.verifica or {}
+        return (v.get("voci") is not None and v.get("versione") == sv.versione
+                and (sv.versione is not None or v.get("lavoro") == (sv.lavoro or ""))
+                and v.get("requisiti_da") == sv.requisiti_da
+                and len(v.get("voci") or ()) == len(sv.requisiti))
+
+    def esiti(self, sv: Sviluppo) -> dict | None:
+        """Le liste del confronto valido (fatti, parziali, mancano, dopo, limiti), o None."""
+        from . import requisiti as rq
+        if not sv.requisiti or not self.verifica_valida(sv):
+            return None
+        return rq.esiti(sv.requisiti, sv.verifica["voci"], sv.tappa)
+
+    def mancanze_dette(self, sv: Sviluppo) -> str:
+        """Alla consegna, in breve: cosa manca rispetto alla richiesta (niente se c'è tutto o se
+        il confronto non c'è: la revisione lo dirà per intero)."""
+        from . import requisiti as rq
+        e = self.esiti(sv)
+        if e is None or (not e["mancano"] and not e["parziali"]):
+            return ""
+        t = rq.frase_confronto({**e, "fatti": [], "dopo": [], "limiti": []}, sv.tappa)
+        return "Attenzione: " + t[:1].lower() + t[1:]
+
+    def da_completare(self, sv: Sviluppo) -> tuple[list[dict], bool]:
+        """(i requisiti da far fare all'agente con «continua», tappa successiva?): prima quelli
+        della tappa di adesso mancanti o fatti in parte; se non ce ne sono, quelli della tappa
+        dopo. ([], False) se non manca niente."""
+        e = self.esiti(sv)
+        if e is None:
+            return [], False
+        ora = sorted(e["mancano"] + e["parziali"], key=lambda x: x.get("i", 0))
+        if ora:
+            return ora, False
+        return (e["dopo"], True) if e["dopo"] else ([], False)
+
+    def frase_confronto(self, sv: Sviluppo) -> str:
+        """La frase della revisione: il confronto, o che il confronto non c'è."""
+        from . import requisiti as rq
+        e = self.esiti(sv)
+        if e is not None:
+            return rq.frase_confronto(e, sv.tappa)
+        return rq.frase_senza_confronto(sv.requisiti)
+
+    def righe_confronto(self, sv: Sviluppo) -> list[str]:
+        from . import requisiti as rq
+        voci = sv.verifica.get("voci") if self.verifica_valida(sv) else None
+        return rq.righe_scheda(sv.requisiti, voci, sv.tappa,
+                               str((sv.verifica or {}).get("esito") or ""))
+
+    def dati_requisiti(self, sv: Sviluppo) -> list[dict]:
+        """I requisiti per la vista dello sviluppo (testo e numeri; textContent)."""
+        voci = sv.verifica.get("voci") if self.verifica_valida(sv) else None
+        out = []
+        for i, r in enumerate(sv.requisiti):
+            v = voci[i] if voci and i < len(voci) else {}
+            out.append({"testo": str(r.get("testo") or ""), "tappa": int(r.get("tappa") or 1),
+                        "si_puo": bool(r.get("si_puo", True)),
+                        "limite": str(r.get("limite") or ""),
+                        "stato": str(v.get("stato") or ""), "nota": str(v.get("nota") or "")})
+        return out
 
     # ─────────────────────────── il contesto conservato (versione 2) ───────────────────────────
     def _file_contesto(self, sv: Sviluppo) -> Path:
@@ -905,6 +1129,12 @@ class Sviluppi:
             # «Ma si capisce perché è rimasto bloccato?» → un errore nel codice delle porte,
             # mentre Calliope l'aveva fermato per il ragionamento ripetuto)
             righe.append(f"PERCHÉ IL LAVORO SI È FERMATO (lo ha deciso Calliope): {arresto}")
+        req = self.righe_confronto(sv)
+        if req:
+            # Requisito per requisito rispetto alla richiesta (11/10): quello che Calliope ha
+            # confrontato, per «è tutto fatto?» e per le correzioni
+            righe.append("CONFRONTO CON LA RICHIESTA (fatto da Calliope sui file consegnati):")
+            righe += [r for r in req if r.startswith("- ")]
         inp = self.input_in_prova(sv)
         if inp:
             righe.append("Input della versione in prova: " + "; ".join(inp))
@@ -1065,6 +1295,14 @@ class Sviluppi:
     def riga_fase(self, sv: Sviluppo) -> str:
         """La riga dei dati del turno che dice al modello cosa si fa in questa fase."""
         if sv.fase == "analisi":
+            if sv.proposto and sv.tappe_stato == "proposte":
+                # La proposta a tappe (11/10): il «sì» fa la prima tappa
+                return ("La specifica è stata proposta A TAPPE (lavoro " + sv.proposto + "): se "
+                        "chi parla accetta («sì», «va bene», «comincia dalla prima»), "
+                        "sviluppo_apri con proposta = " + sv.proposto + "; se vuole tutto "
+                        "insieme («no, tutto insieme», «fallo tutto subito»), sviluppo_apri con "
+                        "proposta = " + sv.proposto + " e tappe = false; se vuole cambiarla, "
+                        "sviluppo_passo con azione analisi e cambia = la modifica.")
             if sv.proposto:
                 return ("La specifica è stata proposta (lavoro " + sv.proposto + "): se chi parla "
                         "la conferma («sì», «va bene»), sviluppo_apri con proposta = "
@@ -1100,6 +1338,11 @@ class Sviluppi:
                 "non trova…?»), sviluppo_chiedi con domanda = la domanda come detta: risponde "
                 "chi l'ha scritto; se va corretto («correggilo», «fallo sistemare»), "
                 "sviluppo_correggi con problema = cosa non va, come detto.")
+        if sv.fase == "collaudo" and self.da_completare(sv)[0]:
+            # 11/10: alla consegna Calliope ha detto cosa manca rispetto alla richiesta
+            dopo += (" All'annuncio hai detto cosa manca rispetto alla richiesta: se chi parla "
+                     "vuole che l'agente lo faccia adesso («continua a farli», «falli», "
+                     "«completalo»), sviluppo_passo con azione completa.")
         if sv.fase == "collaudo" and self.e_gioco(sv):
             return (f"È un GIOCO: la versione {sv.versione or 'nuova'} è pronta ma NON è ancora "
                     "attiva, e si prova guardandola. Se chiede di vederlo o provarlo («fammelo "
@@ -1122,14 +1365,22 @@ class Sviluppi:
                     "bene o di andare avanti, sviluppo_passo con azione avanti (la revisione)."
                     + dopo)
         if sv.fase == "revisione":
+            # La revisione onesta (11/10): cosa c'è e cosa manca l'ha detto il tool
+            manca = ""
+            if self.da_completare(sv)[0]:
+                manca = (" Rispetto alla richiesta manca qualcosa (l'ha detto il tool): se chi "
+                         "parla vuole che l'agente lo faccia («continua», «falli», «completalo», "
+                         "«passa alla tappa dopo»), sviluppo_passo con azione completa.")
+            onesta = (" Cosa c'è e cosa manca rispetto alla richiesta lo dice solo il tool, "
+                      "requisito per requisito: non dire che è tutto a posto o in ordine.")
             if sv.tipo == "programma":
                 return ("Hai detto la revisione del programma. Se dice che va bene, sviluppo_passo "
                         "con azione avanti (chiude lo sviluppo); se vuole farne un'estensione, "
-                        "sviluppo_passo con azione promuovi.")
+                        "sviluppo_passo con azione promuovi." + manca + onesta)
             return ("Hai detto la revisione (permessi, rete, analisi del codice, differenze). "
-                    "Se dice di attivarla o che va bene, chiama subito sviluppo_passo con azione "
-                    "avanti: la frase di conferma la chiede il tool, non tu. Può ancora provarla "
-                    "con sviluppo_collauda." + dopo)
+                    "Se dice di attivarla così com'è o che va bene, chiama subito sviluppo_passo "
+                    "con azione avanti: la frase di conferma la chiede il tool, non tu. Può "
+                    "ancora provarla con sviluppo_collauda." + manca + onesta + dopo)
         return ("Manca la frase di conferma per approvarla: se chiede di attivarla, chiama "
                 "subito sviluppo_passo con azione avanti (la frase la chiede il tool).")
 
@@ -1207,6 +1458,10 @@ class Sviluppi:
             else:
                 righe.append(f"- manca: {NOMI[f]}")
         righe += ["", "## Specifica", "", sv.specifica or sv.richiesta or "da definire"]
+        if sv.tappa and sv.tappe_stato in ("proposte", "accettate"):
+            righe += ["", f"A tappe: adesso la tappa {sv.tappa}."]
+        # Requisito per requisito, rispetto alla richiesta (11/10, revisione onesta)
+        righe += self.righe_confronto(sv)
         if sv.collaudi:
             righe += ["", "## Collaudi", ""]
             for c in sv.collaudi[-10:]:
@@ -1313,6 +1568,11 @@ class Sviluppi:
                 "richiesta": sv.richiesta, "specifica": sv.specifica,
                 "collaudi": collaudi, "chiesti": chiesti, "revisione": sv.revisione,
                 "nota": sv.nota, "totali": self.totali(sv),
+                # Requisito per requisito rispetto alla richiesta, e la tappa (11/10)
+                "requisiti": self.dati_requisiti(sv),
+                "tappa_n": sv.tappa if sv.tappe_stato in ("proposte", "accettate") else 0,
+                "confronto": ("fatto" if self.verifica_valida(sv) else
+                              str((sv.verifica or {}).get("esito") or "")),
                 # Le prove di Calliope alla consegna e le sonde dell'agente (08/10 notte)
                 "ricollaudi": [dict(r) for r in sv.ricollaudi[-10:]],
                 "sonde": [{k: s.get(k) for k in ("quando", "perche", "url", "esito")}
@@ -2100,6 +2360,8 @@ SISTEMA_CHIEDI = (
     "Se chiede perché il lavoro si è fermato o bloccato, il motivo è la riga «PERCHÉ IL LAVORO "
     "SI È FERMATO» del contesto (l'ha deciso Calliope): dillo per primo, con quelle parole; un "
     "difetto del codice, se lo vedi, viene dopo e non è il motivo dell'arresto. "
+    "Se chiede se è tutto fatto o se va bene, non dire che è tutto in ordine: di' cosa della "
+    "specifica il codice fa e cosa non fa (c'è la riga «CONFRONTO CON LA RICHIESTA»). "
     "Rispondi in JSON: voce = una o due frasi semplici in italiano da dire ad alta voce (niente "
     "codice, nomi di file, simboli, indirizzi web); dettagli = la spiegazione per lo schermo "
     "(file, funzioni, la causa); serve_correzione = true se il codice va corretto; "

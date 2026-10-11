@@ -375,7 +375,9 @@ CLASSI: dict[str, Classe] = {
                                    "promuovi": "faccia diventare il programma un'estensione",
                                    "ferma": "fermi il lavoro dell'agente sullo sviluppo",
                                    "rifai": "rifaccia il lavoro dello sviluppo con la stessa "
-                                            "specifica"
+                                            "specifica",
+                                   "completa": "faccia fare all'agente quello che manca "
+                                               "nello sviluppo"
                                    }.get(_s(a, "azione").lower(),
                                          f"faccia «{_s(a, 'azione')}» sullo sviluppo")),
     # il collaudo: esegue la versione da approvare nel container, con la porta stretta; il
@@ -517,7 +519,10 @@ VERBI_AZIONE = {
         "riprendi": _W + r"(riprend|continu|riapr|torn)",
         "chiudi": _W + r"(esci|uscir|chiud|basta|abbandon|lascia perdere)",
         "esci": _W + r"(esci|uscir|chiud|basta|abbandon|lascia perdere)",
-        "promuovi": _W + r"(estension|promuov|trasform|diventi|diventa)"}),
+        "promuovi": _W + r"(estension|promuov|trasform|diventi|diventa)",
+        # 11/10, revisione onesta: l'agente fa quello che manca (o la tappa dopo)
+        "completa": _W + r"(complet|manc|continu|prosegu|fall[io]|fai|tapp|rest[oa]|"
+                         r"aggiung)"}),
 }
 CLASSI.update({n: replace(CLASSI[n], verbi=v) for n, v in VERBI.items()})
 CLASSI.update({n: replace(CLASSI[n], verbi_azione=v) for n, v in VERBI_AZIONE.items()})
@@ -1713,7 +1718,8 @@ def chiesto_di_dimenticare(testo: str) -> bool:
 # la risposta la legge il modello (salvo una forma storpiata nota). Sui turni veri dall'08/10 al
 # 10/10: 7 domande su 30 avvii, 6 giuste (le storpiature, «Szi, vogliati várla!», «Rifallo
 # così com'è» letto come avanti) e una dubbia («E lo sviluppo di metricità.» → riprendi)
-AVVIO = {"sviluppo_passo": frozenset({"avanti", "rifai", "riprendi"}), "lavoro_affida": None}
+AVVIO = {"sviluppo_passo": frozenset({"avanti", "rifai", "riprendi", "completa"}),
+         "lavoro_affida": None}
 AVVIO_PAROLE = 6
 # Le parole generiche di un avvio, per avanti e riprendi («vai», «parti pure», «inizia»,
 # «cominciamo», «passiamo alla revisione», «lancialo»); non «ricominciamo» (cominc dopo «ri»)
