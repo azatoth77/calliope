@@ -4,13 +4,13 @@
 
 **Stato al 11/10.** I giochi sono estensioni con una scheda. Dal 08/10 quelli chiesti da chi amministra seguono la modalità sviluppo come le altre estensioni (`sviluppo_apri` con `gioco`, prima `estensione_crea`; vedi [agenti-estensioni](agenti-estensioni.md)), ma il collaudo prima dell'approvazione non li eseguiva («Un gioco si prova sullo schermo dopo l'approvazione»; storico: dall'11/10 si aprono in prova, vedi sotto) e il ricollaudo alla consegna li salta; quelli chiesti da un familiare adulto restano come prima. Il giro dell'agente vero col `require` in gioco.js è ancora da rifare. Dal 10/10 pomeriggio un gioco chiesto come programma («Vorrei sviluppare un gioco all'interno di Calliope», prima «impossibile») diventa un gioco sugli schermi e la proposta lo dice (`sviluppo_gioco_schermi`, vedi [agenti-estensioni](agenti-estensioni.md)); dal 10/10 sera anche quando il modello lo chiede come estensione senza `gioco` (prima andava all'analisi delle estensioni, che lo dichiarava impossibile perché «la richiesta non specifica la scheda»).
 
-**11/10.** Il collaudo di un gioco è vederlo: alla consegna Calliope dice che è un gioco e chiede «Lo apro in prova?»; `sviluppo_collauda` apre la versione candidata sullo schermo da cui si parla in una **partita di prova** (`Giochi.avvia_prova`, scheda con `"prova": true`, cornice «PROVA» disegnata dalla pagina), nello stesso riquadro e con la stessa CSP dei giochi approvati e senza ponte verso Calliope (dal riquadro solo pronto, battito, fine, errore, guasto). Non diventa attiva né chiedibile. Perché è sicuro e i casi veri: [agenti-estensioni](agenti-estensioni.md) (sezione dell'11/10). Dal 11/10 un gioco si apre nella **modalità gioco**: a tutta la finestra (schermo intero vero dove il browser lo permette), con ✕, il pallino della voce e la variante «collaudo» per un gioco in prova; vedi la sezione in fondo.
+**11/10.** Il collaudo di un gioco è vederlo: alla consegna Calliope dice che è un gioco e chiede «Lo apro in prova?»; `sviluppo_collauda` apre la versione candidata sullo schermo da cui si parla in una **partita di prova** (`Giochi.avvia_prova`, scheda con `"prova": true`, cornice «PROVA» disegnata dalla pagina), nello stesso riquadro e con la stessa CSP dei giochi approvati e senza ponte verso Calliope (dal riquadro solo pronto, battito, fine, errore, guasto). Non diventa attiva né chiedibile. Perché è sicuro e i casi veri: [agenti-estensioni](agenti-estensioni.md) (sezione dell'11/10). Dal 11/10 un gioco si apre nella **modalità gioco**: a tutta la finestra (schermo intero vero dove il browser lo permette), con ✕, il pallino della voce e la variante «collaudo» per un gioco in prova; vedi la sezione in fondo. Dall'11/10 sera un gioco può anche **ascoltare la voce**: dichiara un elenco chiuso di comandi (`scheda.ascolta`), le frasi che corrispondono per intero vanno dritte al gioco senza il modello (regola `gioco_comando`) e, finché il gioco aspetta una mossa, anche senza il nome (vedi «I comandi a voce di un gioco»).
 
 ## Moduli
 
 | Stadio | Libreria | Dove |
 |---|---|---|
-| Giochi e schede interattive delle estensioni (05/10) | JavaScript nel browser degli schermi in un `<iframe sandbox="allow-scripts">` (origine opaca, CSP senza rete, script con l'impronta), ponte `postMessage` controllato dalla pagina e dal server; test della logica con Node in un container (`Dockerfile.node`) | `calliope/estensioni/scheda.py` (sezione «scheda» del manifesto, gioco puro, `documento`, `RUNTIME_JS`, `analizza_js`); `calliope/schermi/giochi.py` → `Giochi` (partite, `GET /gioco/<gettone>`, `POST /api/gioco`), `AzioneGioco`; cane da guardia in `schermo.js`; `minori.TempoGioco`, `minori.Richieste`, tool `richiesta_tutore`; `calliope/agenti/test_js.mjs`, prova di fumo `calliope/agenti/fumo_js.mjs`; rapporto [`docs/ricerche/2026-10-05-giochi.md`](../ricerche/2026-10-05-giochi.md) |
+| Giochi e schede interattive delle estensioni (05/10) | JavaScript nel browser degli schermi in un `<iframe sandbox="allow-scripts">` (origine opaca, CSP senza rete, script con l'impronta), ponte `postMessage` controllato dalla pagina e dal server; test della logica con Node in un container (`Dockerfile.node`) | `calliope/estensioni/scheda.py` (sezione «scheda» del manifesto, gioco puro, `documento`, `RUNTIME_JS`, `analizza_js`); `calliope/schermi/giochi.py` → `Giochi` (partite, `GET /gioco/<gettone>`, `POST /api/gioco`), `AzioneGioco`; cane da guardia in `schermo.js`; `minori.TempoGioco`, `minori.Richieste`, tool `richiesta_tutore`; `calliope/agenti/test_js.mjs`, prova di fumo `calliope/agenti/fumo_js.mjs`; comandi a voce (11/10) `calliope/gioco_voce.py` (forme e regola `gioco_comando`), `Giochi.ascolto`, `Giochi.comando`, `Giochi.schermi_voce`, `Ciclo._comando_gioco`, tool `gioco_comando` in `tools/schermi.py`; rapporto [`docs/ricerche/2026-10-05-giochi.md`](../ricerche/2026-10-05-giochi.md) |
 
 ## Problemi noti
 
@@ -118,3 +118,168 @@ scheletri di partenza, spinta concreta»; per i giochi:
 - lo scheletro del gioco nel prompt: logica.js e gioco.js senza nomi doppi, i gestori passati
   da `sicuro()` che cattura e mostra l'errore nel gioco, il test con node:test (591 token);
 - `modifica_file` e `leggi_file` con `riga` per correggere un punto senza riscrivere il file.
+
+## I comandi a voce di un gioco (11/10 sera, ramo `gioco-voce`)
+
+Richiesta approvata da Dario: un gioco può usare la voce come modalità di interazione. Prima un
+gioco poteva solo far parlare Calliope (`voce: true`, poche frasi al minuto), ma non sentiva
+niente. Ora:
+
+- **Il gioco dichiara cosa ascolta.** Nel manifesto della scheda, `"ascolta": {"comandi":
+  {"uno": ["uno", "la porta uno"], "ricomincia": ["ricomincia"]}, "giocatore": false}`: al più
+  24 comandi (nome `[a-z0-9_]`, al più 24 caratteri), ognuno con 1–6 forme di 1–5 parole e al
+  più 40 caratteri. Rifiutate: le forme che coprirebbero l'uscita («esci», «spegniti») o lo
+  stop («basta», «stop»), quelle che dopo la normalizzazione valgono per due comandi, il solo
+  nome. «Ricomincia» si può: dentro il gioco riavvia il gioco, non la conversazione (la fase del
+  gioco viene prima delle uscite). Validazione in `calliope/gioco_voce.py` (`valida_elenco`) da
+  `scheda.normalizza`; chi approva sente «si gioca anche a voce, con N comandi» (e «il nome di
+  chi gioca»), e una versione nuova che li aggiunge lo dice come un permesso nuovo.
+- **Il sottoinsieme a runtime.** Nel riquadro `calliope.comandiAttivi(["uno", "tre"])` dice quali
+  valgono adesso (le porte ancora chiuse; `[]` durante un'animazione o a gioco finito): il
+  server accetta solo nomi dichiarati (`_t_comandi`, regola `gioco_comando_non_dichiarato`),
+  mai comandi nuovi. All'avvio (`pronto`, anche «Riapri») valgono tutti.
+- **La mossa arriva al riquadro** con `calliope.quandoComando(f)`: f riceve `{comando,
+  giocatore?}` come oggi riceve i tocchi. Dal server è l'evento SSE «gioco» di tipo «comando»;
+  la pagina (schermo.js, anche sul telefono) lo passa al riquadro solo se il nome è un nome di
+  comando valido, con al più `giocatore` (testo fino a 40 caratteri), nient'altro.
+
+### Senza il modello: la regola `gioco_comando`
+
+Una frase che corrisponde **per intero** a una forma di un comando attivo del gioco aperto sullo
+schermo del satellite che l'ha sentita diventa una mossa (`Ciclo._comando_gioco`, subito dopo
+Whisper). Ammesse solo le normalizzazioni della forma: maiuscole, accenti, punteggiatura, numeri
+in parole o in cifre («la porta tre» = «la porta 3»), il nome davanti («Calliope, tre», anche
+storpiato come per la wake word testuale). È il caso ammesso dal principio 10: forma chiusa e
+breve, per intero, effetto reversibile (una mossa). Calliope non parla dopo una mossa (il gioco
+mostra la mossa; se ha `voce` può farla dire lui). Nel registro dei turni `esito:
+gioco_comando`, regola `gioco_comando`, `gioco: {partita, comando, ms}` e **nessun testo**.
+
+Contrari (provati in `prove/prova_testo.py` e `prove/prova_gioco_voce.py`): il comando dentro una
+frase più lunga («apri la porta tre per favore», «tre gatti», «ok, uno»), nessun gioco aperto,
+il gioco sullo schermo di un altro satellite, un comando dichiarato ma non attivo adesso, una
+domanda di Calliope in sospeso (la frase va al modello), il gioco chiuso (✕, Esc, «chiudi il
+gioco»: la pagina manda `chiuso`), una pagina senza segni da oltre 40 s (`VIVO_S`: schermo
+spento, gioco nascosto, il battito non arriva), una frase scritta o durante una registrazione
+della voce.
+
+Quale schermo è «del satellite» (`Giochi.schermi_voce`): lo schermo del satellite se ne ha uno
+(la pagina del PC, il telefono); un satellite senza schermo (in futuro gli XMOS accanto alla TV)
+vale per gli schermi della sua stanza che non sono di un altro satellite; l'audio di questo
+computer per quelli della stanza predefinita.
+
+Ciò che non è nell'elenco va al modello come sempre. Se il gioco aspetta un comando, il modello
+riceve nel contesto del turno una riga con i comandi («Sullo schermo c'è il gioco «Apri le
+porte», che aspetta un comando a voce tra: uno, due, tre, ricomincia…») e ha il tool
+`gioco_comando(comando)` («apri la terza» → «tre»): il codice accetta solo un comando attivo
+dell'elenco (o una sua forma), mai testo libero, e la mossa parte come quella diretta. Qui
+Calliope dice la forma del comando («Tre.»): è un'interpretazione delle parole, e chi parla deve
+sentire cosa ha capito. Il tool è sicuro (`ToolSpec.classe`), per tutti i livelli, registrato
+solo con i giochi accesi (main.py); lo schema costa circa 106 token in più nel prompt della voce
+(stima su 367 caratteri), in cache come gli altri.
+
+**Latenza.** La mossa non passa dal modello: dalla fine dell'ascolto alla mossa conta solo
+Whisper (sulla DGX ~0,18 s di STT) più il confronto e l'evento SSE, sotto il millisecondo a
+secco (`gioco.ms` nel registro dei turni, nella prova 0 ms con lo STT finto). Da misurare sulla
+DGX con `calliope stato --turni` (esito `gioco_comando`).
+
+### Il nome non serve a ogni mossa: la finestra del gioco
+
+Finché il gioco aperto sullo schermo di quel satellite aspetta una mossa (comandi attivi non
+vuoti), l'ascolto resta aperto senza il nome per `giochi_ascolto_s` (60 s, `calliope.yaml`,
+sezione estensioni) dall'ultima mossa, dall'apertura del gioco o dall'ultima risposta. Come la
+finestra verde di oggi dopo una risposta (`awake_until`, `followup_s`), ma senza il nome valgono
+**solo** le forme dell'elenco: tutto il resto si ignora come a Calliope addormentata (regola
+`gioco_finestra_ignorata`, `esito: ignorato`, testo non conservato). Una frase con il nome (o
+sentita dalla wake word acustica) va avanti come sempre. Oltre il tetto senza mosse torna
+«dormo»; con 0 il nome serve sempre (i comandi detti dopo il nome vanno comunque al gioco).
+
+- Come funziona: `Ciclo._ascolta` chiede `Giochi.ascolto(schermi)` e passa al `listen` la fine
+  più lontana tra la finestra di sempre e quella del gioco; il satellite (e il telefono) la
+  ricevono come sempre in `sveglia_per_s`, quindi la wake word del satellite lascia passare le
+  frasi senza nome. Il gioco che apre o cambia i suoi comandi suona `sveglia_gioco` del ciclo
+  (`Giochi.sveglia_voce`), e l'ascolto riparte con la finestra giusta.
+- **Il pallino verde** della modalità gioco riflette questa finestra: sulla pagina degli schermi
+  è lo stato `ascolta` con il suo `fino` (evento `voce`), sul telefono è `sveglia_per_s` del suo
+  ascolto (telefono.js: «Ti ascolto», «N s senza nome»). Nessun cambiamento nella pagina.
+- **Half-duplex (principio 8)**: invariato. La finestra vale solo mentre si ascolta: mentre
+  Calliope parla (anche una frase del gioco con `voce`) non si trascrive, resta solo la wake word
+  acustica per «Calliope, basta». Le frasi del gioco si dicono tra un giro e l'altro come gli
+  annunci, e la finestra riparte dopo.
+- Costo: per tutta la finestra le frasi della stanza vanno a Whisper (il testo non resta: o è
+  un comando o si butta). Per questo il tetto, e per questo la finestra vale solo con un gioco
+  che aspetta una mossa.
+- Vale anche per il telefono come satellite: è lo stesso `listen` remoto, e il suo schermo è
+  quello del satellite.
+
+### Chi parla
+
+Con `"giocatore": true` la mossa porta il nome della persona **riconosciuta dalla voce in quella
+frase** (sopra soglia, con il margine sul secondo profilo, lunga almeno `speaker_min_voice_s`):
+mai per continuità né dalla zona grigia, e per gli ospiti niente nome. Un comando di una parola
+è spesso più corto di quanto serve all'impronta: allora la mossa arriva senza `giocatore`, e il
+gioco deve saperlo gestire (chiedere di toccare, alternare i turni da sé). Con il modello
+(`gioco_comando`) vale lo stesso criterio (`identified_by == "voce"`). Per i minori va il nome
+di casa: in [minori](minori.md) non ci sono vincoli contrari (i dati dei minori non escono da
+Calliope, e qui non escono: vedi sotto). Un gioco con `rete_leggi` non può chiedere il nome di
+chi gioca (manifesto rifiutato).
+
+### Perché è sicuro
+
+- Al riquadro arrivano solo il nome di un comando del suo elenco (controllato dal server, poi di
+  nuovo dalla pagina con un'espressione chiusa) e al più il nome di chi gioca: **mai audio né
+  testo libero**. Il riquadro resta quello di prima (sandbox senza `allow-same-origin`, CSP
+  senza rete, runtime che toglie fetch e WebRTC): niente esce dal riquadro se non con
+  `calliope.*`, controllati come prima.
+- Il gioco non può allargare ciò che sente: `comandiAttivi` restringe soltanto, l'elenco è nel
+  manifesto approvato (e chi approva lo sente).
+- La regola decide solo una mossa nel gioco aperto su quello schermo: reversibile, nessun tool,
+  nessun permesso. Le forme che fermerebbero la voce o la farebbero uscire non si possono
+  dichiarare; «basta» ed «esci» restano di Calliope anche nella finestra del gioco.
+- Il nome di chi gioca resta dentro Calliope: il riquadro non ha rete; con `manda` arriva solo
+  agli altri schermi della partita (in casa) e con `di` passa dai controlli delle frasi; un
+  gioco con `rete_leggi` non lo riceve.
+- Il limite di frasi al minuto della `voce` resta (`giochi_frasi_minuto`).
+- **Partita di prova** (`"prova": true`, `Giochi.avvia_prova`, senza ponte): i comandi a voce
+  arrivano comunque (`comandi` e `chiuso` sono in `TIPI_PROVA`). Decisione: sono un ingresso
+  come i tocchi, non un ponte verso Calliope (non leggono dati, non salvano, non parlano, non
+  chiamano tool), e senza di loro il collaudo di un gioco a voce non proverebbe la cosa che
+  conta. `salva`, `leggi`, `manda`, `chat`, `di` e `azione` restano vietati in prova.
+
+### Per l'agente
+
+Lo scheletro del gioco (`agenti/scheletri.py`) mostra `"ascolta"` nella scheda e
+`calliope.quandoComando(sicuro(...))`: 231 caratteri, circa 67 token in più (591 → ~658; stima
+con il rapporto caratteri/token della misura di Qwen3.6, 3,47; la misura esatta si rifà sulla
+DGX con lo script dell'11/10). Il contratto (§ 5, «Scheda interattiva») ha una riga: comandi a
+voce solo se la richiesta chiede di giocare a voce, i limiti, `quandoComando`, `comandiAttivi`,
+e il gioco che si gioca anche con i tocchi (circa 177 token). La prova di fumo
+(`agenti/fumo_js.mjs`) manda anche comandi a voce a caso tra quelli attivi (una volta ogni
+quattro tocchi, dopo il tocco), con il nome finto «Ada» se il manifesto chiede il giocatore; un
+gestore che lancia dice quale comando («comando «tre»: Error: …» con file e riga), e
+`comandiAttivi` con un nome non dichiarato (o senza `ascolta` nel manifesto) è un errore della
+prova.
+
+### La macchina a stati
+
+È il primo pezzo dello stato «gioco» della macchina a stati del dialogo (`stato_dialogo.py`,
+progetto in [voce-e-regole](voce-e-regole.md)): mentre si gioca, alcune frasi brevi hanno un
+significato chiuso che non passa dal modello. La macchina a stati qui non si tocca: la regola
+sta nel ciclo come le altre forme chiuse, e la finestra è una finestra d'ascolto.
+
+### Prove
+
+`prova_gioco_voce` (a secco, ~2 s: manifesto, server, ciclo con tutti i contrari, il tool,
+chi gioca, la prova di fumo con i comandi), `prova_testo` (le forme e i contrari della regola),
+`prova_giochi_pagina` (Edge: la mossa arriva nel riquadro con il solo comando e il nome, il
+sottoinsieme a runtime, la pagina non passa nomi non validi né testo libero, ✕ chiude anche
+l'ascolto, i comandi nella partita di prova), `prova_agente_guida` (lo scheletro passa i suoi
+test). Il gioco delle prove è `prove/giochi/porte`.
+
+### Da fare sulla DGX
+
+Il giro vero: chiedere a voce una modifica al gioco di Halloween perché si giochi anche a voce
+(«Calliope, nel gioco di Halloween voglio aprire le porte a voce, dicendo il numero della
+porta»), guardare che lo sviluppo aggiunga `ascolta` e `quandoComando`, aprirlo in prova
+(i comandi arrivano anche lì), poi giocare dal satellite e dal telefono dicendo «la porta
+due», «tre», «ricomincia» senza il nome; misurare con `calliope stato --turni` la latenza
+delle mosse e quante frasi la finestra del gioco ignora.

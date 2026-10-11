@@ -83,7 +83,7 @@ per stadio, solo i moduli principali: librerie, classi e dettagli sono nei docum
 | Satelliti (WebSocket, TLS, inoltro, installazione) | `satellite/`, `tls_sicuro.py` | [satelliti](docs/aree/satelliti.md) |
 | Agenti in secondo piano (vLLM sulla DGX, sandbox Docker, arbitro), analisi della richiesta prima di partire (dal 06/10), modalità sviluppo a fasi con il collaudo prima dell'approvazione e la sua vista sugli schermi (dal 08/10), ricollaudo alla consegna e sonde verso i soli host noti (dal 08/10 notte) | `agenti/` (`richiesta.py`), `tools/agenti.py`, `sviluppo.py`, `tools/sviluppo.py`, `sonde.py` | [agenti-estensioni](docs/aree/agenti-estensioni.md) |
 | Estensioni permanenti e guardrail | `estensioni/`, `tools/estensioni.py` | [agenti-estensioni](docs/aree/agenti-estensioni.md) |
-| Giochi sugli schermi; modalità gioco a tutta la finestra con pallino della voce e variante «collaudo» (dal 11/10) | estensioni con scheda, `agenti/fumo_js.mjs`, `schermi/pagina/schermo.js` | [giochi](docs/aree/giochi.md) |
+| Giochi sugli schermi; modalità gioco a tutta la finestra con pallino della voce e variante «collaudo» (dal 11/10); comandi a voce dichiarati dal gioco, senza il modello e senza il nome mentre aspetta una mossa (dal 11/10 sera) | estensioni con scheda, `gioco_voce.py`, `agenti/fumo_js.mjs`, `schermi/pagina/schermo.js` | [giochi](docs/aree/giochi.md) |
 | Installazione e aggiornamento su Linux | `pyproject.toml`, `uv.lock`, `setup/linux/` (`gestore.py`) | [setup-dgx](docs/aree/setup-dgx.md) |
 | Prova end-to-end sulla DGX (istanza di prova, satelliti finti, voce vera) | `prove/e2e/` (`python -m prove.e2e.lancia`, `calliope prova-e2e`) | [setup-dgx](docs/aree/setup-dgx.md), [manuale](prove/manuali/e2e-dgx.md) |
 

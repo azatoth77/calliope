@@ -2159,3 +2159,23 @@ Decisione di Dario: valgono per **tutti** gli sviluppi, non solo per i giochi.
 - **Prove**: `prova_agente_guida.py` (livello 2, ~10 s; il caso del gioco ricostruito con nomi
   di fantasia); `prova_contesto_agenti` ha 400 token di margine per il prompt fisso nuovo (con
   8 192 di finestra il picco era già 4 086 su 4 096); `prova_agenti` conta 7 strumenti.
+
+## I giochi a voce nello scheletro e nella prova di fumo (11/10 sera, ramo `gioco-voce`)
+
+Un gioco può dichiarare i suoi comandi a voce (`scheda.ascolta`, [giochi](giochi.md)). Per
+l'agente:
+
+- **Scheletro del gioco** (`agenti/scheletri.py`): una riga di commento con `"ascolta"` nella
+  scheda e `calliope.quandoComando(sicuro(...))`: 231 caratteri, circa 67 token in più (stima
+  con il rapporto 3,47 caratteri per token della misura dell'11/10; da rimisurare sulla DGX).
+  Il tetto di `prova_agente_guida` per lo scheletro del gioco passa da 2 100 a 2 300 caratteri.
+- **Contratto** (§ 5): comandi a voce **solo se la richiesta chiede di giocare a voce**, i limiti
+  dell'elenco, `quandoComando`, `comandiAttivi`, e il gioco che si gioca anche con i tocchi
+  (circa 177 token).
+- **Prova di fumo** (`fumo_js.mjs`, chiamata da `test_js.mjs` con `ascolta.comandi` e
+  `ascolta.giocatore` del manifesto): una volta ogni quattro tocchi un comando a voce a caso tra
+  quelli attivi (all'inizio tutti, poi quelli di `comandiAttivi`), con «Ada» come giocatore se
+  il manifesto lo chiede. Un gestore che lancia dice il comando, file e riga; `comandiAttivi` con
+  un nome non dichiarato, o senza `ascolta` nel manifesto, è un errore che dice cosa correggere.
+- **Prove**: `prova_gioco_voce.py` (prova di fumo con i comandi: buono, gestore che lancia, fuori
+  elenco, senza `ascolta`, contrario), `prova_agente_guida.py`.

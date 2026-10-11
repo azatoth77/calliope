@@ -724,3 +724,16 @@ per un gioco in prova (`"prova": true` nella scheda). Dettagli, contratto e prov
   il gioco);
 - la voce non si ferma: lo schermo intero non cambia la visibilità della pagina, il microfono del
   telefono resta acceso (verificato in `prova_telefono_schermo`).
+
+## La finestra del gioco e il pallino (11/10 sera, ramo `gioco-voce`)
+
+Con un gioco che ascolta la voce ([giochi](giochi.md), «I comandi a voce di un gioco») il
+pallino della modalità gioco resta verde («ascolto») finché il gioco aspetta una mossa, per
+`giochi_ascolto_s` dall'ultima mossa: è lo stesso stato `ascolta` con il suo `fino` che il ciclo
+manda già (evento `voce`), con la fine della finestra del gioco. Sul telefono è il
+`sveglia_per_s` del suo ascolto (stesso protocollo dei satelliti): «Ti ascolto», «N s senza
+nome». Niente di nuovo nella pagina per il pallino; schermo.js passa al riquadro la mossa
+(evento «gioco» di tipo «comando», solo un nome di comando valido e al più il nome di chi gioca)
+e, quando il gioco si chiude con ✕, Esc o la scheda vuota, manda `chiuso` al server, così
+l'ascolto senza nome finisce. Prove in `prova_giochi_pagina` (la mossa nel riquadro, il
+sottoinsieme a runtime, niente fuori elenco, ✕).

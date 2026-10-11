@@ -1620,3 +1620,36 @@ Giro vero della DGX del 10/10, 15:11–15:58 (uso normale di Dario, 26B).
   che verrà cancellato. Cancellare è un'altra cosa (conversazioni_dimentica, dimentica).»; tolto
   l'esempio con «dimentica». Il prompt di sistema e `argomento` non lo dicevano.
 - **Prova**: `prova_giro_pomeriggio.py` (3 e 4).
+
+## I comandi a voce di un gioco: la regola `gioco_comando` (11/10 sera, ramo `gioco-voce`)
+
+Un gioco sullo schermo dichiara un elenco chiuso di comandi (`scheda.ascolta`); una frase che
+corrisponde **per intero** a una forma di un comando attivo del gioco aperto sullo schermo del
+satellite che l'ha sentita è una mossa e va dritta al gioco, senza il modello e senza che
+Calliope parli (`Ciclo._comando_gioco`, fase subito dopo Whisper, prima di chi parla, delle
+uscite e della cortesia). Principio 10: forma chiusa e breve, per intero, effetto reversibile.
+Normalizzazioni ammesse (`calliope/gioco_voce.py`): maiuscole, accenti, punteggiatura, numeri in
+parole o in cifre, il nome davanti (anche storpiato, come la wake word testuale). Mai una parola
+dentro la frase.
+
+- **Regole nel registro dei turni**: `gioco_comando` (la mossa, con `gioco: {partita, comando,
+  ms}` e nessun testo), `gioco_finestra_ignorata` (una frase senza il nome nella finestra del
+  gioco che non è un comando: ignorata e non conservata, come a Calliope addormentata);
+  dal tool `gioco_comando_dal_modello`, `gioco_comando_fuori_elenco`,
+  `gioco_comando_senza_gioco`; dal server `gioco_comando_non_dichiarato`.
+- **Contrari** (`prove/prova_testo.py`, `prove/prova_gioco_voce.py`): frase più lunga, nessun
+  gioco aperto, gioco su un altro satellite, comando non attivo, domanda di Calliope in sospeso,
+  gioco chiuso, frase scritta, registrazione della voce.
+- **Precedenza**: dentro un gioco che dichiara «ricomincia», «Ricomincia.» riavvia il gioco e non
+  la conversazione; «ricominciamo» (non dichiarato) resta la conversazione nuova. «Basta»,
+  «stop», «esci», «spegniti» non si possono dichiarare: restano di Calliope.
+- **Finestra senza nome**: finché il gioco aspetta una mossa, `giochi_ascolto_s` (60 s)
+  dall'ultima mossa, apertura o risposta; senza il nome valgono solo le forme dell'elenco. È una
+  finestra d'ascolto, non uno stato: la macchina a stati del dialogo non cambia (è il primo pezzo
+  del futuro stato «gioco»). Half-duplex invariato.
+- **Il modello** riceve nel contesto del turno i comandi del gioco che aspetta e il tool
+  `gioco_comando(comando)` (sicuro, tutti i livelli, solo con i giochi accesi): un comando
+  dell'elenco detto in altro modo («apri la terza» → «tre»), mai testo libero; Calliope dice la
+  forma del comando, perché è un'interpretazione. Schema ~106 token in più (stima).
+- Dettagli, sicurezza e giro da fare sulla DGX in [giochi](giochi.md), «I comandi a voce di un
+  gioco».
