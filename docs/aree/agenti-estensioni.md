@@ -1975,3 +1975,93 @@ ma la richiesta non specifica di usare la sezione 'scheda' del manifesto…» �
   memory da giocare sullo schermo»: senza «che» né relativa lo schermo resta).
 - **Prove**: `prova_giro_sera_gioco.py` (analizzatore vero con le risposte vere dell'agente: la
   riprova senza flag dà vaga e poi impossibile, con la correzione nessuna chiamata).
+
+## Il gioco di Halloween: il collaudo si guarda, correggere da fermo, perché si è fermato (11/10, ramo `sviluppo-gioco-correzioni`)
+
+Giro vero della DGX dell'11/10, 15:37–16:27 (satellite «studio», 26B e qwen3.6): lo sviluppo di
+un gioco di Halloween con le porte, chiesto a voce in due frasi lunghe. Sei difetti, tutti
+corretti a secco (`prove/prova_giro_halloween.py`).
+
+- **Il collaudo di un gioco è vederlo.** 16:25:19 il lavoro è pronto, «Con cosa provo?»; Dario:
+  «Non lo so, è un gioco, dovrei vederlo»; 16:25:54 «Fammelo vedere e fallo girare» →
+  `sviluppo_collauda` (dati inventati dal modello) → «Un gioco si prova sullo schermo dopo
+  l'approvazione: qui non lo eseguo.» (`Estensioni.prova_candidata`, dal 08/10). Dario ha
+  saltato il collaudo e approvato senza averlo visto. **Correzione**: per uno sviluppo che è un
+  gioco (`Sviluppi.e_gioco`: il flag `gioco`, o la candidata ha la sezione `scheda`)
+  l'annuncio dice «È un gioco: per provarlo lo apro sullo schermo da cui mi parli, in prova,
+  senza attivarlo. Lo apro in prova?» (`DOMANDA_GIOCO`, in sospeso `sviluppo_collauda` senza
+  argomenti), e così lo stato e la ripresa; i dati del turno al collaudo lo dicono («È un
+  GIOCO… sviluppo_collauda senza dati… se dice cosa cambiare, sviluppo_correggi»).
+  `sviluppo_collauda` su un gioco chiama `Estensioni.prova_gioco` (stessi controlli del
+  collaudo: è la candidata, impronta di quando l'agente l'ha consegnata, sintassi) →
+  `Giochi.avvia_prova`: una **partita di prova** con la versione candidata sullo schermo da cui
+  si parla (o il personale di chi parla, o il primo della stanza; visibilità della casa), con
+  la scheda di gioco `"prova": true` (e `versione`); la pagina, fatta dal ramo
+  `gioco-schermo-intero`, la mostra a tutto schermo con la cornice ambra «PROVA». Il collaudo
+  resta nello sviluppo come **anteprima** (`collaudi[].anteprima`, «aperto in prova sullo
+  schermo»): la revisione dice «L'hai visto in prova sullo schermo» (o «Non l'hai ancora visto
+  in prova sullo schermo»), mai «prove riuscite»; se poi dice cosa cambiare,
+  `sviluppo_correggi` prende l'anteprima come caso (giudizio della persona). «Va bene,
+  attivalo» va alla revisione e all'approvazione come prima. Regole `sviluppo_collaudo_gioco`,
+  `gioco_prova`, `gioco_prova_senza_ponte`.
+- **Perché la prova è sicura.** La versione non approvata gira **dove gira un gioco
+  approvato**: il riquadro `<iframe sandbox="allow-scripts">` della pagina degli schermi (origine
+  opaca), con il documento composto da `scheda.documento` e la stessa CSP (`sandbox
+  allow-scripts`, `default-src 'none'`, `connect-src 'none'`, `frame-src 'none'`, script solo
+  con l'impronta), il runtime che toglie fetch, WebRTC e worker, il cane da guardia della
+  pagina. In più la prova non ha **nessun ponte verso Calliope**: dal riquadro il server accetta
+  solo `pronto`, `battito`, `fine`, `errore` e `guasto` (`TIPI_PROVA`); `salva` e `leggi` (lo
+  spazio dati dell'estensione), `manda` e `chat` (altri schermi), `di` (Calliope che parla) e
+  `azione` (la porta stretta, i tool) rispondono 403 anche se il manifesto li dichiara. Quindi
+  un gioco in prova non legge né scrive dati, non parla, non comanda niente e non esce dallo
+  schermo: il peggio che può fare è disegnare male, cioè quello che la persona è lì a guardare.
+  Non diventa attivo: la versione resta `da_approvare`, nessun tool `est_` si registra, non
+  compare tra le estensioni chiedibili; una partita vera non si unisce mai a quella di prova
+  (non è condivisa). Il documento c'è finché quella versione è la candidata con i file di
+  quando è stata consegnata (`candidata_intatta`): con i file cambiati, dopo l'approvazione o
+  dopo una versione nuova l'indirizzo non vale più; una seconda prova dello stesso gioco
+  sostituisce la prima. L'apre solo chi amministra (il collaudo, come prima).
+- **`sviluppo_correggi` su uno sviluppo fermo.** 15:52:19 Calliope ferma il lavoro («ha
+  ripetuto lo stesso ragionamento in 3 passate di fila senza decidere»: nessuna versione
+  consegnata) e chiede «lo rifaccio così com'è, o vuoi cambiare qualcosa?»; dopo «perché?» il
+  modello propone «Lo faccio correggere?», e a «Sì.» e a «Sì, fallo correggere.»
+  `sviluppo_correggi` → «Qui le estensioni non ci sono.» (due volte: `_lavoro_dello_sviluppo`
+  voleva la versione provata, che non c'era). Valutate due strade: l'errore strutturato con la
+  chiamata giusta (`sviluppo_passo` rifai o analisi) o la conversione. **Scelta la
+  conversione** (forma corretta di una scelta del modello, principio 10, regola
+  `sviluppo_correggi_rifai`): il modello ha scelto «correggi» e la persona ha detto sì; senza
+  una versione, correggere vuol dire rifare il lavoro con quello che va corretto, cioè il
+  «rifallo» che la persona aveva già davanti, con in più nei vincoli il problema detto, il
+  motivo dell'arresto e i file che l'agente aveva già scritto (dalla cartella del lavoro
+  fermato, senza `lavoro.json`; il runtime resta quello di partenza). Un errore strutturato
+  avrebbe chiesto un giro di correzione in più al modello per arrivare allo stesso punto, e
+  la specifica non cambia (non è un ritorno all'analisi). Contrari: con l'agente al lavoro
+  «ci sta già lavorando», all'analisi «prima finiamo l'analisi», senza sviluppo
+  `sviluppo_correggi_nuovo` come prima. «Qui le estensioni non ci sono.» resta solo quando le
+  estensioni mancano davvero; con uno sviluppo senza versione le frasi dicono che non c'è
+  ancora una versione da provare, attivare o correggere.
+- **Perché si è fermato.** 15:52:40 «Ma si capisce qual è il motivo per cui è rimasto
+  bloccato?» → `sviluppo_chiedi` → «c'è un errore nel codice che genera le porte». Il motivo
+  vero (il ragionamento ripetuto, deciso da Calliope) non era nel contesto: `testo_per_agente`
+  scriveva per ogni lavoro il riassunto **oppure** il motivo, e il riassunto c'era. Ora
+  `Sviluppi.motivo_arresto` (tappa con il tetto e i segnali di giro a vuoto; il ragionamento
+  ripetuto o un altro limite da `sv.nota`; fermato dalla persona; un riavvio) va in testa al
+  contesto («PERCHÉ IL LAVORO SI È FERMATO (lo ha deciso Calliope): …»), ogni lavoro ha
+  riassunto **e** motivo, il sistema dell'agente dice di dirlo per primo, e l'esito del tool ha
+  `motivo` («Il lavoro l'ho fermato io: ha ripetuto…», fuori dalla busta del dato: è un campo
+  di controllo scritto dal codice) con `cosa_fare` «di' PRIMA il motivo» (regola
+  `sviluppo_chiedi_arresto`); anche quando l'agente non risponde la frase comincia dal motivo.
+  Al collaudo, con l'agente al lavoro o senza un arresto niente motivo.
+- **L'avviso di tappa che si contraddiceva.** 16:19:54 «Finora 21 test su 22 passano. I test
+  passano, 22 su 22. Manca: far passare i test che falliscono.»: «Finora» è il diario
+  estrattivo (l'ultimo `esegui_test` dell'agente), il secondo conteggio sono i test rifatti alla
+  tappa. Ora (`frase_tappa`) con i test rifatti il riassunto perde i pezzi che contano i test
+  (`_senza_conti_dei_test`) e, se passano, «far passare i test» non manca più: un conteggio
+  solo, quello vero e più recente. Senza test rifatti il conteggio del riassunto resta (è
+  l'unico).
+- **Titolo troncato.** «videogioco a tema Halloween da giocare sugli»: `titolo_da` non toglieva
+  in coda le preposizioni articolate che mancavano in `_CODA` («sugli», «nei», «dai»…). Ora ci
+  sono tutte, con le congiunzioni («ed», «ma», «oppure»…) e un articolo o una preposizione
+  apostrofati staccati: «videogioco a tema Halloween da giocare». I titoli buoni restano.
+- **Provenienza del titolo del proprio sviluppo**: in [sicurezza-politica](sicurezza-politica.md).
+- **Prove**: `prova_giro_halloween.py` (le sei parti con i contrari, ~3 s).

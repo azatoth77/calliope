@@ -160,6 +160,22 @@ verifica("contrario: senza CHANGELOG lo dice, niente invenzioni",
 
 
 # ── il tool ──
+# Il tool non riceve la data: «oggi» per novita è OGGI (11/10: dal giorno dopo la data delle
+# prove, «cosa è cambiato da ieri?» non trovava più le voci del CHANGELOG finto e la prova
+# falliva per la data, non per il codice)
+class _OggiFinto(dt.date):
+    @classmethod
+    def today(cls):
+        return OGGI
+
+
+class _DtFinto:
+    date, datetime, timedelta = _OggiFinto, dt.datetime, dt.timedelta
+
+
+novita._dt = _DtFinto
+
+
 class Spk:
     def __init__(self, level, name="Dario"):
         self.current_level = level

@@ -325,8 +325,8 @@ class Estensioni:
                           ok=False, fatto=NIENTE)
         m = ver.get("manifesto") or {}
         if m.get("scheda"):
-            return _final("Un gioco si prova sullo schermo dopo l'approvazione: qui non lo "
-                          "eseguo.", ok=False, fatto=NIENTE)
+            # Un gioco si prova guardandolo: prova_gioco (11/10). Nel container non gira
+            return self.prova_gioco(ctx, nome)
         if not self.pronto():
             return _rifiuto(ctx, "Le estensioni girano solo nel loro contenitore isolato, e "
                                  "qui adesso non è pronto.", "estensione_senza_container")
@@ -343,6 +343,33 @@ class Estensioni:
             # modello della voce e la conserva nel collaudo, per l'agente
             out[CHIAVE_TRACCIA] = list(es.traccia)
         return out
+
+    def prova_gioco(self, ctx, nome: str) -> dict:
+        """Il collaudo di un gioco (11/10, DGX delle 16:25: «Un gioco si prova sullo schermo dopo
+        l'approvazione: qui non lo eseguo», e la persona ha approvato senza averlo visto): la
+        versione candidata si apre in una partita di prova sullo schermo da cui si parla
+        (schermi/giochi.Giochi.avvia_prova). Stessi controlli di prova_candidata (impronta,
+        sintassi); gira nel riquadro isolato degli schermi, senza ponte verso Calliope, e non
+        diventa attiva: nessun tool est_ nuovo, niente approvazione."""
+        from ..schermi.giochi import candidata_intatta
+        n = self.archivio.candidata(nome)
+        if n is None:
+            return _final("Non c'è una versione nuova da provare.", ok=False, fatto=NIENTE)
+        ver = self.archivio.versione(nome, n) or {}
+        m = ver.get("manifesto") or {}
+        if not m.get("scheda"):
+            return _final("Non è un gioco: si prova con dei dati.", ok=False, fatto=NIENTE)
+        if not candidata_intatta(self, nome, n):
+            return _rifiuto(ctx, "Non la provo: i suoi file sono cambiati dopo che l'agente l'ha "
+                                 "consegnata.", "estensione_impronta")
+        if (ver.get("analisi") or {}).get("sintassi"):
+            return _final("Non si può provare: il codice ha errori. Dimmi cosa correggere.",
+                          ok=False, fatto=NIENTE)
+        giochi = getattr(self, "giochi", None)
+        if giochi is None:
+            return _rifiuto(ctx, "Per vederlo serve uno schermo collegato, e qui non c'è.",
+                            "gioco_senza_schermi")
+        return giochi.avvia_prova(ctx, nome, n, m)
 
     def prova_bozza(self, cartella, manifesto: dict, argomenti: dict, origine: dict,
                     attesa_s: float | None = None) -> dict:

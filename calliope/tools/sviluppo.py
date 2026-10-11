@@ -662,11 +662,15 @@ def _ferma(ctx, svs, sv, prof) -> dict:
                   fatto="lavoro dell'agente FERMATO", lavoro=getattr(lav, "id", None))
 
 
-def _rifai(ctx, svs, sv, prof) -> dict:
+def _rifai(ctx, svs, sv, prof, problema: str = "") -> dict:
     """«Sì, rifallo» dopo un lavoro fermato o non andato: un lavoro nuovo uguale all'ultimo
     dello sviluppo (stessa specifica, stessi vincoli e file di partenza), avviato subito: la
     specifica la persona l'aveva già accettata. Senza l'ultimo lavoro in memoria (un riavvio),
-    il lavoro nuovo dalla specifica dello sviluppo."""
+    il lavoro nuovo dalla specifica dello sviluppo.
+
+    Con `problema` (11/10, sviluppo_correggi su uno sviluppo fermo senza una versione): lo
+    stesso lavoro con il problema detto e il motivo dell'arresto nei vincoli, e i file che
+    l'agente aveva già scritto (la cartella del lavoro fermato) come punto di partenza."""
     from . import agenti as ta
     svc = getattr(ctx, "lavori", None)
     if svc is None:
@@ -678,7 +682,15 @@ def _rifai(ctx, svs, sv, prof) -> dict:
     if sv.fase != "sviluppo":
         return _no(ctx, f"Non c'è un lavoro da rifare: siamo {_alla(sv)}. Se qualcosa non va, "
                         "lo faccio correggere.")
-    note_rule(ctx, "sviluppo_rifai")
+    problema = str(problema or "").strip()
+    note_rule(ctx, "sviluppo_correggi_rifai" if problema else "sviluppo_rifai")
+    nota = ""
+    if problema:
+        arresto = svs.motivo_arresto(sv)
+        nota = (" Il lavoro di prima si è fermato senza consegnare"
+                + (f" ({arresto.rstrip('.')})" if arresto else "")
+                + ": i file che avevi già scritto sono nella cartella, riparti da quelli e "
+                  "decidi. Da correggere, detto dalla persona: «" + problema[:400] + "».")
     ultimo = None
     for voce in reversed(sv.lavori or []):
         lv = svs._lavoro(voce.get("id"))
@@ -686,24 +698,45 @@ def _rifai(ctx, svs, sv, prof) -> dict:
             ultimo = lv
             break
     if ultimo is None:
-        out = _nuovo_lavoro(ctx, svs, sv, prof, sv.specifica or sv.richiesta, avvia=True)
+        out = _nuovo_lavoro(ctx, svs, sv, prof, sv.specifica or sv.richiesta, cambia=problema,
+                            avvia=True)
         _schermo(ctx, sv)
         return out
     lav = svc.nuovo(ultimo.tipo, ultimo.compito, prof.id, prof.name, "amministra",
                     getattr(ultimo, "formato", "") or "", getattr(ultimo, "modello", "") or "",
-                    getattr(ultimo, "vincoli", "") or "",
+                    ((getattr(ultimo, "vincoli", "") or "") + nota).strip(),
                     list(getattr(ultimo, "dati", None) or []))
     for k in ("titolo", "estensione", "gioco", "specifica", "correzione"):
         if getattr(ultimo, k, None) is not None:
             setattr(lav, k, getattr(ultimo, k))
     lav.file_iniziali = dict(getattr(ultimo, "file_iniziali", None) or {})
+    if problema:
+        # I file del lavoro fermato (agenti/servizio._parziale li copia nella sua cartella);
+        # il runtime di Calliope resta quello di partenza
+        from ..sviluppo import file_di_codice
+        cartella = str((getattr(ultimo, "risultato", None) or {}).get("cartella") or "")
+        for k, v in file_di_codice(cartella).items():
+            if k != "calliope_estensione.py":
+                lav.file_iniziali[k] = v
     out = ta._avvia(ctx, svc, lav)
     if isinstance(out, dict):
-        frase = (f"D'accordo: rifaccio il lavoro di «{sv.titolo}» con la stessa specifica. Ci "
-                 "lavora in secondo piano: te lo dico quando è pronto.")
+        if problema:
+            frase = (f"D'accordo: non c'era ancora una versione da correggere, quindi rifaccio il "
+                     f"lavoro di «{sv.titolo}» con la correzione, ripartendo da quello che "
+                     "aveva già scritto. Ci lavora in secondo piano: te lo dico quando è pronto.")
+        else:
+            frase = (f"D'accordo: rifaccio il lavoro di «{sv.titolo}» con la stessa specifica. "
+                     "Ci lavora in secondo piano: te lo dico quando è pronto.")
         out["conferma"] = out["risposta_finale"] = frase
     _schermo(ctx, sv)
     return out
+
+
+def _sospeso_gioco(sv) -> dict:
+    """La domanda «Lo apro in prova?» al collaudo di un gioco: il «sì» è sviluppo_collauda."""
+    from ..sviluppo import DOMANDA_GIOCO
+    return {"domanda": DOMANDA_GIOCO, "tool": "sviluppo_collauda",
+            "cosa": f"aprire «{sv.titolo}» in prova sullo schermo", "argomenti": {}}
 
 
 def _alla(sv) -> str:
@@ -739,6 +772,13 @@ def _stato(ctx, svs, sv, persona) -> dict:
         _schermo(ctx, sv)
         return _final(frase, fatto="stato dello sviluppo: nessun lavoro in corso",
                       sviluppo=sv.id, in_sospeso=_rifaccio_sospeso(sv))
+    elif sv.fase == "collaudo" and svs.e_gioco(sv):
+        # Un gioco si prova guardandolo (11/10)
+        from ..sviluppo import DOMANDA_GIOCO
+        frase += f" È un gioco: lo apro sullo schermo, in prova, senza attivarlo. {DOMANDA_GIOCO}"
+        _schermo(ctx, sv)
+        return _final(frase, fatto="stato dello sviluppo", sviluppo=sv.id,
+                      in_sospeso=_sospeso_gioco(sv))
     elif sv.fase == "collaudo":
         n = len(sv.collaudi)
         frase += (f" Hai fatto {'una prova' if n == 1 else f'{n} prove'}." if n else
@@ -762,7 +802,11 @@ def _riprendi(ctx, svs, persona, quale: str) -> dict:
     frase = (f"Ho sospeso «{prima.titolo}». " if prima is not None else "")
     frase += f"Riprendiamo «{sv.titolo}»: {svs.dove(sv)}."
     extra = {}
-    if sv.fase == "collaudo":
+    if sv.fase == "collaudo" and svs.e_gioco(sv):
+        from ..sviluppo import DOMANDA_GIOCO
+        frase += f" È un gioco: lo apro sullo schermo, in prova, senza attivarlo. {DOMANDA_GIOCO}"
+        extra["in_sospeso"] = _sospeso_gioco(sv)
+    elif sv.fase == "collaudo":
         frase += (" Puoi provarla prima di approvarla: dimmi «prova con…» e i dati."
                   if sv.tipo == "estensione" else " Puoi provarlo con dati tuoi.")
     elif sv.fase == "revisione":
@@ -795,7 +839,8 @@ def _collaudi_per_agente(svs, sv) -> str:
     casi = "; ".join(f"«{c.get('dati') or 'senza dati'}»"
                      + (f" (argomenti passati: {argomenti_detti(c)})" if c.get("argomenti")
                         else "")
-                     + f" → {'riuscito' if c.get('ok') else 'NON riuscito'}: "
+                     + " → " + ("aperto in prova sullo schermo" if c.get("anteprima")
+                                else "riuscito" if c.get("ok") else "NON riuscito") + ": "
                      + f"{c.get('esito') or 'errore'}"
                      + (f" (la persona: {c['giudizio']})" if c.get("giudizio") else "")
                      for c in sv.collaudi[-5:])
@@ -984,8 +1029,11 @@ def _avanti(ctx, svs, sv, prof) -> dict:
                           "nella cartella Lavori: per usarlo di nuovo, chiedimi di eseguirlo.",
                           fatto="sviluppo chiuso")
         est = getattr(ctx, "estensioni", None)
-        if est is None or not sv.estensione:
+        if est is None:
             return _no(ctx, "Qui le estensioni non ci sono.")
+        if not sv.estensione:
+            return _no(ctx, "Non c'è ancora una versione da attivare: prima la facciamo e la "
+                            "proviamo.")
         svs.passa(sv, "attivazione", "avanti")
         out = est.gestisci(ctx, "approva", sv.estensione)
         fatto = str((out or {}).get("fatto") or "") if isinstance(out, dict) else ""
@@ -1000,11 +1048,19 @@ def _revisione(ctx, svs, sv) -> dict:
     """Dal collaudo alla revisione: permessi, rete, analisi del codice, test, collaudi e
     differenze, detti in breve e per intero sulla scheda."""
     from ..sviluppo import misura_programma
-    collaudi = sv.collaudi
+    # Le anteprime di un gioco (11/10) non sono prove «riuscite»: l'ha visto la persona
+    anteprime = [c for c in sv.collaudi if c.get("anteprima")]
+    collaudi = [c for c in sv.collaudi if not c.get("anteprima")]
     riusciti = sum(1 for c in collaudi if c.get("ok"))
     detto_coll = ("Nessuna prova fatta." if not collaudi else
                   f"Prove: {len(collaudi)}, " + ("tutte riuscite." if riusciti == len(collaudi)
                                                  else f"{riusciti} riuscite."))
+    if anteprime:
+        detto_coll = (("L'hai visto in prova sullo schermo." if len(anteprime) == 1 else
+                       f"L'hai visto in prova sullo schermo {len(anteprime)} volte.")
+                      + (f" {detto_coll}" if collaudi else ""))
+    elif svs.e_gioco(sv):
+        detto_coll = "Non l'hai ancora visto in prova sullo schermo."
     if sv.tipo == "estensione":
         est = getattr(ctx, "estensioni", None)
         rev = est.revisione(sv.estensione) if est is not None and sv.estensione else None
@@ -1321,6 +1377,36 @@ def _piu_collaudi(ctx, svs, sv, est, valori: list[tuple[str, dict]]) -> dict:
     return res
 
 
+ANTEPRIMA = "in prova sullo schermo"
+
+
+def _collauda_gioco(ctx, svs, sv, est) -> dict:
+    """Il collaudo di un gioco è vederlo (11/10, DGX delle 16:25–16:26: «Con cosa provo?» →
+    «è un gioco, dovrei vederlo» → «Fammelo vedere e fallo girare» → «Un gioco si prova sullo
+    schermo dopo l'approvazione: qui non lo eseguo», e Dario ha saltato il collaudo e approvato
+    senza averlo visto). La versione candidata si apre in prova sullo schermo da cui si parla
+    (Estensioni.prova_gioco → Giochi.avvia_prova, scheda con `"prova": true`): niente dati da
+    passare, il giudizio è della persona. Resta nello sviluppo come un collaudo «anteprima»: se
+    poi dice cosa non va, sviluppo_correggi lo prende come caso (giudizio)."""
+    out = est.prova_gioco(ctx, sv.estensione)
+    if not isinstance(out, dict) or out.get("ok") is False:
+        return out
+    frase = str(out.get("risposta_finale") or out.get("conferma") or "").strip()
+    svs.collaudo(sv, ANTEPRIMA, True, frase or "aperto in prova sullo schermo",
+                 anteprima=True)
+    note_rule(ctx, "sviluppo_collauda")
+    note_rule(ctx, "sviluppo_collaudo_gioco")
+    _schermo(ctx, sv)
+    domanda = "Quando l'hai provato, dimmi se va bene o cosa cambiare."
+    frase = f"{frase} {domanda}".strip()
+    return {**out, "conferma": frase, "risposta_finale": frase,
+            "collaudo": (f"«{sv.titolo}» è aperto IN PROVA sullo schermo: NON è approvato né "
+                         "attivo, e non lo è finché la persona non dice di attivarlo"),
+            "cosa_fare": ("se dice che va bene o di attivarlo, sviluppo_passo con azione avanti "
+                          "(la revisione); se dice cosa cambiare, sviluppo_correggi con "
+                          "problema = la modifica come detta")}
+
+
 def _sviluppo_prova(ctx: ToolContext, dati: str = "", argomenti=None, **_altro) -> dict:
     from ..sviluppo import chi
     svs = _svs(ctx)
@@ -1349,12 +1435,16 @@ def _sviluppo_prova(ctx: ToolContext, dati: str = "", argomenti=None, **_altro) 
     passati = None
     if sv.tipo == "estensione":
         est = getattr(ctx, "estensioni", None)
-        if est is None or not sv.estensione:
+        if est is None:
             return _no(ctx, "Qui le estensioni non ci sono.")
+        if not sv.estensione:
+            return _no(ctx, f"Non c'è ancora una versione da provare: siamo {_alla(sv)}.")
         n = est.archivio.candidata(sv.estensione)
         m = est.archivio.manifesto(sv.estensione, n) if n else None
         if m is None:
             return _no(ctx, "Non c'è una versione nuova da provare.")
+        if m.get("scheda"):
+            return _collauda_gioco(ctx, svs, sv, est)
         passati = _argomenti(m, argomenti if argomenti is not None else dati)
         if argomenti is None and len(passati) > 1:
             note_rule(ctx, "collaudo_input_dal_testo")
@@ -1425,7 +1515,9 @@ def _sviluppo_chiedi(ctx: ToolContext, domanda: str = "", **_altro) -> dict:
     if r is None:
         note_rule(ctx, "sviluppo_chiedi_guasto")
         getattr(svc, "log", print)(f"[SVILUPPO] {sv.id}: domanda all'agente: {esito}")
-        return _final("Adesso chi l'ha scritta non mi risponde"
+        arresto = svs.motivo_arresto(sv, voce=True)
+        return _final((arresto + " " if arresto else "")
+                      + "Adesso chi l'ha scritta non mi risponde"
                       + (" in tempo" if esito == "tempo" else "")
                       + ". Riprova tra poco, oppure lo faccio correggere?", ok=False,
                       fatto=NIENTE, guasto="un guasto di adesso, non una cosa che non sai fare",
@@ -1441,6 +1533,17 @@ def _sviluppo_chiedi(ctx: ToolContext, domanda: str = "", **_altro) -> dict:
            "cosa_fare": ("di' in breve la risposta, come risposta di chi l'ha scritta"
                          + (", e chiedi «Lo faccio correggere?»" if r.get("serve_correzione")
                             else ""))}
+    arresto = svs.motivo_arresto(sv, voce=True)
+    if arresto:
+        # Il motivo dell'arresto deciso da Calliope (11/10, DGX delle 15:52: «perché è rimasto
+        # bloccato?» → «un errore nel codice delle porte», e il ragionamento ripetuto non
+        # arrivava alla voce). «motivo» resta fuori dalla busta del dato: lo scrive il codice
+        out["motivo"] = arresto
+        out["cosa_fare"] = ("se chiede perché il lavoro si è fermato o è bloccato, di' PRIMA "
+                            "il «motivo» (l'arresto l'hai deciso tu, non è la risposta "
+                            "dell'agente), poi in breve la risposta di chi l'ha scritto; "
+                            + out["cosa_fare"])
+        note_rule(ctx, "sviluppo_chiedi_arresto")
     if r.get("serve_correzione"):
         out["in_sospeso"] = {"domanda": "Lo faccio correggere?", "tool": "sviluppo_correggi",
                              "cosa": f"far correggere «{sv.titolo}»",
@@ -1486,6 +1589,19 @@ def _sviluppo_correggi(ctx: ToolContext, problema: str = "", **_altro) -> dict:
                       "proviamo.", ok=False, fatto=NIENTE)
     if sv.fase == "analisi" and not (sv.estensione or sv.cartella):
         return _no(ctx, "Non c'è ancora codice da correggere: prima finiamo l'analisi.")
+    if sv.fase == "sviluppo" and not (sv.estensione if sv.tipo == "estensione"
+                                      else sv.cartella):
+        # Uno sviluppo fermo prima della prima consegna (11/10, DGX delle 15:53: il lavoro del
+        # gioco di Halloween fermato per il ragionamento ripetuto, «Lo faccio correggere?», «Sì»
+        # → sviluppo_correggi → «Qui le estensioni non ci sono.», due volte: non c'era una
+        # versione da cui partire). Il modello ha scelto «correggi» e la persona ha detto sì:
+        # la forma corretta di quella scelta è rifare il lavoro con il problema detto e i file
+        # già scritti (principio 10, regola `sviluppo_correggi_rifai`). Effetto: lo stesso di
+        # «rifallo», che la persona aveva davanti («lo rifaccio così com'è, o vuoi cambiare
+        # qualcosa?»), con in più la nota
+        if not problema:
+            note_rule(ctx, "sviluppo_correggi_rifai")
+        return _rifai(ctx, svs, sv, prof, problema)
     # Un collaudo riuscito per il codice ma sbagliato per la persona: è lui il caso
     if problema and sv.collaudi and sv.collaudi[-1].get("ok") and \
             not sv.collaudi[-1].get("giudizio"):
@@ -1540,8 +1656,13 @@ def _lavoro_dello_sviluppo(ctx, svc, sv, prof, compito: str, vincoli: str):
     storia = list(getattr(ctx, "storia", None) or [])
     if sv.tipo == "estensione":
         est = getattr(ctx, "estensioni", None)
-        if est is None or not sv.estensione:
+        if est is None:
             return _no(ctx, "Qui le estensioni non ci sono.")
+        if not sv.estensione:
+            # (con uno sviluppo fermo prima della prima versione ci pensa _sviluppo_correggi,
+            # 11/10: qui non si arriva; la frase resta vera)
+            return _no(ctx, "Non c'è ancora una versione da correggere: lo rifaccio così com'è, "
+                            "o vuoi cambiare qualcosa?")
         from ..estensioni.servizio import runtime_testo
         from .estensioni import funzioni_di_calliope, titolo_vincolo
         v = (f"È lo sviluppo dell'estensione «{sv.estensione}»: tieni lo stesso nome nel "
@@ -1639,7 +1760,8 @@ def sviluppo_specs(file_pc: bool = False, allegati: bool = False) -> list[ToolSp
             name="sviluppo_collauda",
             description=("Il collaudo nella modalità sviluppo: prova la versione nuova "
                          "dell'estensione (non ancora attiva) o il programma, con i dati detti "
-                         "(«prova con Bergamo», «provalo con 3 e 5»). Per un'estensione, più "
+                         "(«prova con Bergamo», «provalo con 3 e 5»); un gioco si apre in prova "
+                         "sullo schermo, senza dati («fammelo vedere»). Per un'estensione, più "
                          "valori detti insieme («prova con Bergamo e Roma») sono un collaudo "
                          "ciascuno: una chiamata per valore. dati: i dati come detti. "
                          "argomenti: per un'estensione con più input (sono nei dati del "
