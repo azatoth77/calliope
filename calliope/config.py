@@ -1288,6 +1288,21 @@ class Config:
     sviluppo_sonde_giorno: int = 12
     sviluppo_sonda_kb: int = 256
     sviluppo_sonda_s: float = 8.0
+    # Revisione onesta e tappe (11/10, calliope/requisiti.py; caso vero del gioco di Halloween,
+    # consegnato senza voce né musica e rivisto con «tutto sembra in ordine»). Alla prima
+    # proposta il modello dell'agente elenca i requisiti della specifica (entro
+    # sviluppo_requisiti_s, con «Un attimo…» oltre 1,2 s): Calliope dice ciò che oggi non si può
+    # fare e, con almeno sviluppo_tappe_requisiti requisiti da fare (o la stima «grande»
+    # dell'agente) e almeno due fuori dal nucleo, propone di farlo a tappe (0 = mai). Alla
+    # consegna il modello dell'agente confronta i file con i requisiti, uno per uno (entro
+    # sviluppo_verifica_s, nel thread dei lavori; alla revisione, se manca, entro
+    # sviluppo_verifica_voce_s): annuncio, revisione e scheda dicono cosa c'è e cosa manca.
+    # false = come prima (niente requisiti, niente tappe)
+    sviluppo_requisiti: bool = True
+    sviluppo_requisiti_s: float = 8.0
+    sviluppo_tappe_requisiti: int = 6
+    sviluppo_verifica_s: float = 60.0
+    sviluppo_verifica_voce_s: float = 20.0
     # I file della persona dati all'agente (03/10, «correggi lo script backup.py»): solo
     # testo, codice, Word, Excel e PDF, al più tanti MB; del testo di un documento l'agente
     # legge al più tanti caratteri
@@ -2631,7 +2646,9 @@ SEZIONI: dict[str, list[str]] = {
                "sviluppo_enabled", "sviluppo_sospendi_min", "sviluppo_promemoria",
                "sviluppo_programma_righe", "sviluppo_chiedi_s", "sviluppo_ricollaudo",
                "sviluppo_ricollaudo_max", "sviluppo_sonde_max", "sviluppo_sonde_passata",
-               "sviluppo_sonde_giorno", "sviluppo_sonda_kb", "sviluppo_sonda_s"],
+               "sviluppo_sonde_giorno", "sviluppo_sonda_kb", "sviluppo_sonda_s",
+               "sviluppo_requisiti", "sviluppo_requisiti_s", "sviluppo_tappe_requisiti",
+               "sviluppo_verifica_s", "sviluppo_verifica_voce_s"],
     "estensioni": ["estensioni_enabled", "estensioni_cartella", "estensioni_max_attive",
                    "estensioni_attesa_s", "estensioni_conferma_s", "estensioni_tempo_max_s",
                    "estensioni_memoria_max_mb", "estensioni_secondo_parere",
@@ -2840,6 +2857,8 @@ LIMITI: dict[str, tuple[float, float]] = {
     "sviluppo_ricollaudo_max": (1, 10), "sviluppo_sonde_max": (0, 20),
     "sviluppo_sonde_passata": (1, 10), "sviluppo_sonde_giorno": (0, 200),
     "sviluppo_sonda_kb": (1, 4096), "sviluppo_sonda_s": (1.0, 60.0),
+    "sviluppo_requisiti_s": (1.0, 60.0), "sviluppo_tappe_requisiti": (0, 50),
+    "sviluppo_verifica_s": (5.0, 600.0), "sviluppo_verifica_voce_s": (2.0, 120.0),
     "agenti_token_passata": (512, 262_144), "agenti_ragionamento_passata": (0, 262_144),
     "agenti_soglia_file": (0.1, 0.95), "agenti_passi_intatti": (1, 20),
     "agenti_analisi_s": (1.0, 60.0),

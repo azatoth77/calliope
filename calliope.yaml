@@ -1482,6 +1482,21 @@ agenti:
   sviluppo_sonde_giorno: 12
   sviluppo_sonda_kb: 256
   sviluppo_sonda_s: 8.0
+  # Revisione onesta e tappe (11/10, calliope/requisiti.py; caso vero del gioco di Halloween,
+  # consegnato senza voce né musica e rivisto con «tutto sembra in ordine»). Alla prima
+  # proposta il modello dell'agente elenca i requisiti della specifica (entro
+  # sviluppo_requisiti_s, con «Un attimo…» oltre 1,2 s): Calliope dice ciò che oggi non si può
+  # fare e, con almeno sviluppo_tappe_requisiti requisiti da fare (o la stima «grande»
+  # dell'agente) e almeno due fuori dal nucleo, propone di farlo a tappe (0 = mai). Alla
+  # consegna il modello dell'agente confronta i file con i requisiti, uno per uno (entro
+  # sviluppo_verifica_s, nel thread dei lavori; alla revisione, se manca, entro
+  # sviluppo_verifica_voce_s): annuncio, revisione e scheda dicono cosa c'è e cosa manca.
+  # false = come prima (niente requisiti, niente tappe)
+  sviluppo_requisiti: true
+  sviluppo_requisiti_s: 8.0
+  sviluppo_tappe_requisiti: 6
+  sviluppo_verifica_s: 60.0
+  sviluppo_verifica_voce_s: 20.0
 
 estensioni:
   # Estensioni (calliope/estensioni/, 04/10, docs/ricerche/2026-10-04-estensioni-e-guardrail.md):

@@ -329,10 +329,13 @@ def _proponi(ctx, svc, lav, turno) -> dict:
         # Versione 2 (08/10): l'apertura esplicita e la specifica letta sempre, che chiude
         # l'analisi («Entriamo in modalità sviluppo per «…». Ho capito così: … Va bene così, o
         # la cambiamo?»). Prima la modalità non si vedeva (DGX, 08/10 11:06)
-        frase = svc.sviluppi.frase_proposta(sv, lav)
-        domanda = "Va bene così, o la cambiamo?"
+        frase = svc.sviluppi.frase_proposta(sv, lav, attesa=getattr(ctx, "attesa", None))
+        # Dal 11/10 la proposta a tappe chiude con la sua domanda (calliope/requisiti.py)
+        domanda = svc.sviluppi.domanda_proposta(sv)
         if ctx is not None:
             note_rule(ctx, "sviluppo_apertura")
+            if sv.tappe_stato == "proposte":
+                note_rule(ctx, "sviluppo_tappe_proposte")
     return _final(frase, fatto="proposta: il lavoro NON è ancora cominciato",
                   in_sospeso={"domanda": domanda, "cosa": f"affidare all'agente "
                               f"«{lav.titolo}»", "tool": tool,
