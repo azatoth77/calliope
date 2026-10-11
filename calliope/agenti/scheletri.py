@@ -12,7 +12,10 @@ forma del codice, che il modello copia.
 
 Sono corti apposta: stanno nel prompt di sistema, quindi in ogni passata. Misura (11/10, con
 il tokenizer di Qwen3.6 sulla DGX): gioco 591 token (il prompt del gioco arriva a 5 522),
-estensione 476 (prompt 4 562), programma Python 190, C# 168.
+estensione 476 (prompt 4 562), programma Python 190, C# 168. Dall'11/10 sera il gioco mostra
+anche i comandi a voce (`ascolta` e `quandoComando`, docs/aree/giochi.md): 231 caratteri, circa
+67 token in più (stima con il rapporto caratteri/token della misura sopra, 3,47; quella esatta
+si rifà sulla DGX), e la riga del contratto sui comandi a voce circa 177.
 """
 
 GIOCO = """SCHELETRO DI PARTENZA (gioco): parti da qui e cambia solo quello che serve.
@@ -45,6 +48,11 @@ function disegna() {
   radice.appendChild(b);
 }
 calliope.quandoPronto(() => disegna());
+// A voce, se la richiesta lo chiede: nella scheda "ascolta": {"comandi": {"mossa": \
+["mossa", "vai"]}}
+calliope.quandoComando(sicuro((m) => {
+  if (m.comando === "mossa" && partita) { partita = mossa(partita, 0); disegna(); }
+}));
 logica.test.js:
 const { test } = require("node:test");
 const assert = require("node:assert");

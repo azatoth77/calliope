@@ -716,6 +716,10 @@ class Avvio:
             giochi.guardiano = s.guardiano
             giochi.on_frase = self.due_event.set
             s.schermi.giochi = estensioni.giochi = giochi
+            # I comandi a voce dei giochi detti con altre parole (11/10, gioco_comando): solo
+            # con i giochi accesi; il ciclo mette nel turno il gioco che aspetta un comando
+            from .tools.schermi import gioco_spec
+            s.tools.register(gioco_spec())
 
     def _luogo_satellite(self):
         """La stanza del satellite per l'archivio delle conversazioni. stanza_corrente è la

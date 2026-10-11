@@ -600,6 +600,56 @@ def _classe_pulisci():
                   verbi=r"pulisc|pulir|togl|cancell|elimin|svuot|sched")
 
 
+def _gioco_comando(ctx, comando: str = "", **_) -> dict:
+    """Un comando dell'elenco del gioco aperto sullo schermo di chi parla, chiesto con altre
+    parole («apri la terza» → «tre», 11/10): il modello sceglie quale, il codice controlla che
+    sia uno dei comandi attivi del gioco (calliope/gioco_voce.py) e lo manda come una mossa a
+    voce. Mai testo libero al gioco. La frase detta è la forma del comando: chi parla sente cosa
+    ho capito (la mossa diretta, senza modello, è muta)."""
+    from .. import gioco_voce
+    info = getattr(ctx, "gioco_turno", None)
+    giochi = getattr(getattr(ctx, "schermi", None), "giochi", None)
+    if not isinstance(info, dict) or giochi is None:
+        note_rule(ctx, "gioco_comando_senza_gioco")
+        return {"ok": False, "fatto": "NIENTE: qui nessun gioco aspetta un comando a voce",
+                "errore": "nessun gioco in ascolto sullo schermo di chi parla"}
+    comandi = info.get("comandi") or {}
+    c = str(comando or "").strip()
+    cid = c.lower() if c.lower() in comandi else gioco_voce.trova(
+        c, comandi, None, getattr(getattr(ctx, "cfg", None), "wake_names", ("Calliope",)))
+    if cid is None:
+        note_rule(ctx, "gioco_comando_fuori_elenco")
+        return {"ok": False, "fatto": "NIENTE: non è un comando del gioco",
+                "errore": f"«{c[:40]}» non è tra i comandi del gioco",
+                "comandi": list(comandi)}
+    sc = getattr(ctx, "speaker_ctx", None)
+    giocatore = (getattr(sc, "current_speaker", None)
+                 if getattr(sc, "identified_by", None) == "voce" else None)
+    if not giochi.comando(info.get("partita"), info.get("schermo"), cid, giocatore):
+        return {"ok": False, "fatto": "NIENTE: il gioco non aspetta più quel comando",
+                "errore": "il gioco è chiuso o quel comando non vale adesso"}
+    note_rule(ctx, "gioco_comando_dal_modello")
+    forme = comandi.get(cid) or [cid]
+    frase = str(forme[0]).strip().rstrip(".!?")
+    frase = (frase[:1].upper() + frase[1:] + ".") if frase else "Fatto."
+    return {"ok": True, "comando": cid, "conferma": frase, "risposta_finale": frase}
+
+
+def gioco_spec() -> ToolSpec:
+    return ToolSpec(
+        name="gioco_comando",
+        description=("Passa al gioco sullo schermo un suo comando a voce detto con altre parole "
+                     "(«apri la terza» → tre). comando: uno dei comandi del gioco elencati nel "
+                     "contesto del turno, mai altro testo."),
+        parameters={"type": "object",
+                    "properties": {"comando": {"type": "string"}},
+                    "required": ["comando"]},
+        # Sicuro (politica.py): solo uno dei comandi attivi del gioco già aperto sullo schermo
+        # di chi parla, mai testo libero; l'effetto è una mossa nel gioco. Registrato solo con
+        # i giochi accesi (main.py), quindi la classe sta qui e non nella tabella
+        func=_gioco_comando, risk="lettura", levels=ALL, classe="sicuro")
+
+
 def schermi_specs() -> list[ToolSpec]:
     return [
         ToolSpec(

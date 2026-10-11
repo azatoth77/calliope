@@ -55,7 +55,9 @@ if (scheda && Array.isArray(scheda.file) && !conto.errori) {
   const presenti = scheda.file.filter((f) => file.includes(f));
   conto.eseguiti++;
   const errori = presenti.length === scheda.file.length
-    ? await fumo(presenti, { massimo: (scheda.giocatori || {}).max || 1 })
+    ? await fumo(presenti, { massimo: (scheda.giocatori || {}).max || 1,
+                             comandi: (scheda.ascolta || {}).comandi || {},
+                             giocatore: !!(scheda.ascolta || {}).giocatore })
     : ["i file della scheda non ci sono tutti: " + scheda.file.join(", ")];
   if (errori.length) {
     conto.falliti++;
@@ -64,7 +66,7 @@ if (scheda && Array.isArray(scheda.file) && !conto.errori) {
     scrivi("FALLITO prova di fumo del gioco: " + errori.join(" | ") + " — la prova carica "
       + "gli script di «scheda.file» come nel riquadro (document finto con <div id=\"gioco\">, "
       + "l'oggetto calliope, timer finti), chiama quandoPronto e tocca a caso gli elementi con "
-      + "un gestore; correggi il punto indicato, non riscrivere il file. Se l'errore è di un "
+      + "un gestore (con «ascolta» manda anche comandi a voce a caso tra quelli attivi); correggi il punto indicato, non riscrivere il file. Se l'errore è di un "
       + "metodo del DOM che il finto non conosce, scrivilo in un modo più comune\n");
   } else {
     scrivi("ok prova di fumo del gioco\n");

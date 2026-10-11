@@ -438,6 +438,10 @@ def _atomi_scheda(m: dict) -> list[tuple[tuple, str]]:
             chiavi.append(("scheda", k))
     if s.get("azioni"):
         chiavi.append(("scheda", "azioni", tuple(s["azioni"])))
+    if s.get("ascolta"):
+        # I comandi a voce (11/10): una versione nuova che li aggiunge, o che aggiunge il nome
+        # di chi gioca, lo dice a chi approva
+        chiavi.append(("scheda", "ascolta", bool(s["ascolta"].get("giocatore"))))
     return list(zip(chiavi, frasi))
 
 

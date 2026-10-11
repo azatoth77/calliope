@@ -377,8 +377,10 @@ def prova_scheletri(tmp: Path):
     verifica("contrari: niente gioco nel prompt dell'estensione, niente C# senza il C#",
              "SCHELETRO DI PARTENZA (gioco)" not in pe and "(programma C#)" not in pp
              and "(estensione)" not in pg)
-    verifica("corti: al più 2 100 caratteri il gioco, 1 600 l'estensione, 600 i programmi",
-             len(SCHELETRI["gioco"]) <= 2100 and len(SCHELETRI["estensione"]) <= 1600
+    # Il gioco dall'11/10 sera mostra anche i comandi a voce (ascolta, quandoComando): ~215
+    # caratteri in più, circa 60 token
+    verifica("corti: al più 2 300 caratteri il gioco, 1 600 l'estensione, 600 i programmi",
+             len(SCHELETRI["gioco"]) <= 2300 and len(SCHELETRI["estensione"]) <= 1600
              and len(SCHELETRI["python"]) <= 600 and len(SCHELETRI["csharp"]) <= 600,
              str({k: len(v) for k, v in SCHELETRI.items()}))
     g = _estrai(SCHELETRI["gioco"], {"logica.js", "gioco.js", "logica.test.js"})

@@ -36,6 +36,7 @@ from . import pause as pause_mod
 from . import guardiano as guardia
 from . import provenienza, riferire, stato_dialogo, storpiature
 from . import allegati as allegati_mod
+from . import gioco_voce
 from .cassetto import CassettoPieno
 from .agenda import announcement
 from .compressione import FRASE_DURA
@@ -199,6 +200,12 @@ class Turno:
     rivolta: object = None
     non_rivolta: bool = False
     compagnia: dict | None = None        # lo stato «in compagnia» dopo questa frase
+    # I comandi a voce di un gioco (11/10, calliope/gioco_voce.py): il gioco aperto sullo
+    # schermo di questo satellite che aspettava un comando quando si è aperto l'ascolto, e se
+    # la frase è cominciata nella sua finestra senza nome (fuori da quella di sempre)
+    gioco: dict | None = None
+    finestra_gioco: bool = False
+    contesto_gioco: str | None = None    # per il modello: i comandi del gioco (gioco_comando)
 
 
 def solo_nome_acustico(text: str, voiced_s: float, cfg) -> bool:
@@ -210,6 +217,30 @@ def solo_nome_acustico(text: str, voiced_s: float, cfg) -> bool:
     if not re.sub(r"[\W_]+", "", text or ""):
         return True
     return voiced_s <= float(getattr(cfg, "wake_solo_nome_s", 0.0) or 0.0)
+
+
+class _UnaDelle:
+    """Una sveglia che suona se suona una delle due: la corsia (annunci, frasi scritte) o il
+    gioco (comandi a voce aperti o cambiati). Listener.listen guarda solo is_set; wait e set
+    come threading.Event per chi aspetta (set suona la prima)."""
+
+    def __init__(self, *eventi):
+        self.eventi = [e for e in eventi if e is not None]
+
+    def is_set(self) -> bool:
+        return any(e.is_set() for e in self.eventi)
+
+    def set(self):
+        if self.eventi:
+            self.eventi[0].set()
+
+    def wait(self, timeout: float | None = None) -> bool:
+        fine = None if timeout is None else time.monotonic() + float(timeout)
+        while not self.is_set():
+            if fine is not None and time.monotonic() >= fine:
+                return False
+            time.sleep(0.02)
+        return True
 
 
 # ─────────────────────────────── CICLO ───────────────────────────────
@@ -277,6 +308,13 @@ class Ciclo:
         # in compagnia); l'ultimo stato detto in console; il giudizio «rivolta a Calliope»
         self.compagnia = compagnia_mod.Compagnia(servizi.cfg, servizi.registry)
         self._finestra_dal_nome = False
+        # I comandi a voce di un gioco (11/10): l'ultima risposta (monotonic: la finestra senza
+        # nome del gioco riparte anche da lì) e la sveglia che il gioco suona quando apre o
+        # cambia i suoi comandi, così l'ascolto riparte con la finestra giusta
+        self._gioco_segno = 0.0
+        self.sveglia_gioco = threading.Event()
+        if servizi.giochi is not None and hasattr(servizi.giochi, "aggiungi_sveglia"):
+            servizi.giochi.aggiungi_sveglia(self.sveglia_gioco)
         self._compagnia_detta: dict | None = None
         self._giudice = None
         # Il registro degli eventi in ombra (10/10, calliope/eventi/ombra.py, passi 0 e 1): ciò
@@ -905,7 +943,8 @@ class Ciclo:
         self.uscita.persona(scritto=False)    # le frasi per lo schermo ripartono
         foto = None          # lo stato del dialogo prima delle fasi che decidono da sole
         for fase in (self._prendi_scritto, self._scritto_senza_domanda, self._ascolta,
-                     self._trascrivi, self._chi_parla, self._compagnia_senza_nome,
+                     self._trascrivi, self._comando_gioco, self._chi_parla,
+                     self._compagnia_senza_nome,
                      self._conversazione_del_turno,
                      self._arruolamento, self._nome_reale, self._richiamo, self._primo_avvio,
                      self._mostra_richiesta, self._uscite, self._chiusure,
@@ -963,6 +1002,10 @@ class Ciclo:
             if self.rec is not None:
                 self.rule("compagnia_nome")
         attivo = self.ombra is not None and self.ombra.attivo
+        if self.rec and self.rec.get("esito") not in (None, "ignorato", "scartato", "vuoto",
+                                                      "rifiutato"):
+            # Una risposta (o una mossa): la finestra senza nome di un gioco riparte da qui
+            self._gioco_segno = time.monotonic()
         if self.rec:
             # Il turno finito nell'archivio delle conversazioni (08/10: la scheda «Conversazione»).
             # Con gli eventi accesi (passo 3) lo archivia l'ombra, dalla proiezione
@@ -1399,20 +1442,29 @@ class Ciclo:
         """Lo stato della voce sugli schermi, poi una frase dal microfono (o quella scritta).
         Apre il turno nel registro."""
         s, cfg, listener = self.s, self.s.cfg, self.listener
+        # Un gioco sullo schermo di questo satellite che aspetta un comando (11/10): l'ascolto
+        # resta aperto anche senza il nome, ma lì valgono solo le forme del suo elenco
+        # (_comando_gioco); la sveglia del gioco si ricalcola adesso
+        self.sveglia_gioco.clear()
+        fino_gioco = 0.0
+        if t.scritto is None and not t.guided:
+            t.gioco, fino_gioco = self._finestra_gioco()
+        ascolto_fino = max(self.awake_until, fino_gioco)
         if t.guided or not cfg.wake_word_enabled:
             self.attesa_voce[:] = ["ascolta", None]
-        elif time.monotonic() < self.awake_until:
-            self.attesa_voce[:] = ["ascolta", time.time() + (self.awake_until - time.monotonic())]
+        elif time.monotonic() < ascolto_fino:
+            self.attesa_voce[:] = ["ascolta", time.time() + (ascolto_fino - time.monotonic())]
         else:
             self.attesa_voce[:] = ["dorme", None]
         tetto = None
         if t.scritto is None:
             self.voce(*self.attesa_voce)
             audio = listener.listen(None if t.guided else s.wake,
-                                    self.awake_until if not t.guided else float("inf"),
+                                    ascolto_fino if not t.guided else float("inf"),
                                     seed=self.barge_seed,
-                                    wakeup=self.sveglia if not t.guided else None)
-            if audio is None:        # svegliata dall'agenda o da una pagina: al giro dopo
+                                    wakeup=(_UnaDelle(self.sveglia, self.sveglia_gioco)
+                                            if not t.guided else None))
+            if audio is None:        # svegliata dall'agenda, da una pagina o da un gioco
                 return _FINE
             audio, tetto = self._seguito_del_tetto(t, audio)
             self.frasi_prese += 1    # la finestra del nome da solo non suona più la fine
@@ -1428,6 +1480,9 @@ class Ciclo:
                     and not t.guided:
                 self.uscita.segnale_ascolto(s.suoni, FINE)
             t.in_session = listener.started_at <= self.awake_until   # nella finestra
+            # Nella finestra del gioco e fuori da quella di sempre: senza nome solo i comandi
+            t.finestra_gioco = (not t.in_session and not t.guided
+                                and listener.started_at <= fino_gioco)
             started = time.time() - (time.monotonic() - listener.started_at)
         else:
             audio = np.zeros(0, dtype=np.float32)     # niente audio: il testo è già scritto
@@ -1548,6 +1603,131 @@ class Ciclo:
         if s.correttore is not None:
             self._correggi_frase(t, conf_stt)
         return None
+
+    # ── fase 3 bis: i comandi a voce di un gioco (11/10, calliope/gioco_voce.py) ──
+    def _schermi_voce(self) -> list:
+        """Gli schermi del satellite di questa corsia (Giochi.schermi_voce)."""
+        g, sat = self.s.giochi, self.s.satelliti
+        if g is None:
+            return []
+        coll = None
+        if sat is not None:
+            sid = getattr(self.corsia, "satellite_id", None)
+            try:
+                coll = sat.per_id(sid) if sid is not None else getattr(sat, "attivo", None)
+            except Exception:  # noqa: BLE001
+                coll = None
+            if coll is None:
+                return []
+        try:
+            return g.schermi_voce(coll)
+        except Exception:  # noqa: BLE001 — un gioco non ferma la voce
+            return []
+
+    def _gioco_in_ascolto(self) -> dict | None:
+        g = self.s.giochi
+        if g is None or not getattr(self.s.cfg, "giochi_enabled", True):
+            return None
+        try:
+            return g.ascolto(self._schermi_voce())
+        except Exception:  # noqa: BLE001
+            return None
+
+    def _finestra_gioco(self) -> tuple[dict | None, float]:
+        """(il gioco che aspetta un comando sullo schermo di questo satellite, fine della sua
+        finestra senza nome in monotonic). La finestra dura `giochi_ascolto_s` dall'ultima
+        mossa, dall'apertura del gioco o dall'ultima risposta; 0 se non c'è."""
+        info = self._gioco_in_ascolto()
+        tetto = float(getattr(self.s.cfg, "giochi_ascolto_s", 0.0) or 0.0)
+        if info is None or tetto <= 0:
+            return info, 0.0
+        return info, max(float(info.get("segno") or 0.0), self._gioco_segno) + tetto
+
+    def _comando_gioco(self, t):
+        """Regola `gioco_comando` (11/10, principio 10: forma chiusa e breve, per intero, effetto
+        reversibile). Una frase che corrisponde per intero a una forma di un comando attivo del
+        gioco aperto sullo schermo di questo satellite è una mossa: va dritta al gioco, senza il
+        modello e senza che Calliope parli. Vale se è rivolta a Calliope: col nome davanti (anche
+        sentito solo dalla wake word acustica), nella finestra d'ascolto di sempre o in quella
+        del gioco. Nella finestra del gioco senza il nome tutto il resto si ignora (regola
+        `gioco_finestra_ignorata`), come a Calliope addormentata. Non con una domanda di
+        Calliope che aspetta la risposta (la frase va al modello), né scritta, né durante una
+        registrazione della voce."""
+        s, cfg, listener = self.s, self.s.cfg, self.listener
+        try:
+            self.tool_ctx.gioco_turno = None
+        except AttributeError:
+            pass
+        if (s.giochi is None or t.scritto is not None or t.guided or t.barged or not t.text
+                or self.speaker_ctx.is_enrolling or self.pending_real_name is not None):
+            return None
+        nomi = cfg.wake_names
+        info = self._gioco_in_ascolto()          # adesso: i comandi possono essere cambiati
+        cid = None
+        if info is not None and not self.brain.has_pending():
+            cid = gioco_voce.trova(t.text, info["comandi"], None, nomi)
+        rivolta = (not cfg.wake_word_enabled or t.in_session or t.finestra_gioco
+                   or bool(getattr(listener, "woke", False))
+                   or gioco_voce.ha_il_nome(t.text, nomi))
+        if cid is not None and rivolta:
+            giocatore = self._giocatore_dalla_voce(t) if info.get("giocatore") else None
+            if s.giochi.comando(info["partita"], info["schermo"], cid, giocatore):
+                ms = round((time.perf_counter() - t.t0) * 1000)
+                print(f"Tu: (comando del gioco «{cid}»)  → mossa a «{info.get('titolo')}» "
+                      f"[STT e mossa {ms} ms]" + (f"  ({giocatore})" if giocatore else ""),
+                      flush=True)
+                self.rule("gioco_comando")
+                self.rec.update(esito="gioco_comando", testo=None,
+                                stt_s=round(time.perf_counter() - t.t0, 2),
+                                gioco={"partita": info["partita"], "comando": cid, "ms": ms,
+                                       **({"giocatore": True} if giocatore else {}),
+                                       **({"prova": True} if info.get("prova") else {})})
+                return _FINE
+        if (t.finestra_gioco and not getattr(listener, "woke", False)
+                and find_wake_word(t.text, nomi, 0.5) is None):
+            # Senza il nome nella finestra del gioco: solo le forme dell'elenco. Il resto non
+            # va al modello e non si conserva, come una frase a Calliope addormentata
+            print("   (finestra del gioco: non è un comando del gioco, la ignoro)", flush=True)
+            self.rule("gioco_finestra_ignorata")
+            self.rec.update(esito="ignorato", testo=None)
+            return _FINE
+        if info is not None:
+            # La frase va al modello: i comandi del gioco nel contesto del turno, e
+            # gioco_comando passa quello che la persona chiede con altre parole
+            try:
+                self.tool_ctx.gioco_turno = info
+            except AttributeError:
+                pass
+            nomi_c = ", ".join(f"{c} («{f[0]}»)" if f and gioco_voce.normalizza(f[0], nomi)
+                               != gioco_voce.normalizza(c, nomi) else c
+                               for c, f in list(info["comandi"].items())[:24])
+            t.contesto_gioco = (
+                f"Sullo schermo c'è il gioco «{str(info.get('titolo') or '')[:60]}», che aspetta "
+                f"un comando a voce tra: {nomi_c}. Se la frase chiede uno di questi con altre "
+                "parole, passalo al gioco con gioco_comando; altrimenti rispondi come sempre.")
+        return None
+
+    def _giocatore_dalla_voce(self, t) -> str | None:
+        """Il nome di chi ha detto la mossa, solo se la voce è riconosciuta in questa frase
+        (sopra la soglia, con margine sul secondo profilo, lunga abbastanza): mai per continuità,
+        mai la zona grigia. Gli ospiti non hanno un profilo: niente nome."""
+        s, cfg = self.s, self.s.cfg
+        if t.emb_job is None:
+            return None
+        try:
+            emb = t.emb_job.result()
+            classifica = self._classifica(emb)
+        except Exception:  # noqa: BLE001
+            return None
+        if not classifica or t.voiced_s < cfg.speaker_min_voice_s:
+            return None
+        best, sim = classifica[0]
+        sim2 = classifica[1][1] if len(classifica) > 1 else None
+        netta = sim2 is None or sim - sim2 >= float(getattr(cfg, "speaker_id_margine", 0.0))
+        if best is None or sim < cfg.speaker_id_threshold or not netta:
+            return None
+        prof = s.registry.get(best)
+        return getattr(prof, "name", None) or None
 
     def _parole_incerte(self, t) -> list[str]:
         """Le parole incerte da dire al modello della voce (stt_incerte_al_modello, 07/10),
@@ -2781,8 +2961,12 @@ class Ciclo:
                                      if t.scritto is None else None)
             if brain.storpiata_turno:
                 self.rec["forma_storpiata"] = brain.storpiata_turno["forma"]
+            contesto_turno = t.context
+            if t.contesto_gioco:
+                contesto_turno = (contesto_turno + "\n" if contesto_turno else "") + t.contesto_gioco
             frasi = split_sentences(brain.stream_reply(
-                t.text, t.level, context=t.context, **({"immagini": t.foto} if t.foto else {}),
+                t.text, t.level, context=contesto_turno,
+                **({"immagini": t.foto} if t.foto else {}),
                 **({"incerte": incerte} if incerte else {})))
             if cfg.rete("riferire"):
                 frasi = riferire.filtra(brain, frasi, t.text, t.esito_u)
