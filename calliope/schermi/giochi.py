@@ -28,6 +28,14 @@ partita che l'ha letto non manda più messaggi agli altri schermi (`gioco_dati_p
   `pronto`, `battito`, `fine`, `errore` e `guasto` (`TIPI_PROVA`), mai `salva`/`leggi`, `manda`,
   `chat`, `di` né `azione`. Un posto solo, nessuno si unisce; il documento c'è finché quella
   versione è la candidata con l'impronta di quando è stata consegnata.
+
+- **Comandi a voce** (11/10, `scheda.ascolta`, calliope/gioco_voce.py): il riquadro dichiara
+  quali dei suoi comandi valgono adesso (`comandi`, solo un sottoinsieme di quelli del
+  manifesto); il ciclo della voce chiede `ascolto(schermi)` per il gioco aperto sullo schermo
+  del satellite che ascolta e manda la mossa con `comando` (evento SSE «gioco» di tipo
+  «comando», la pagina la passa al riquadro). Al gioco arrivano solo il nome del comando e, se
+  il manifesto lo chiede, il nome di chi è riconosciuto dalla voce. Valgono anche in una partita
+  di prova: sono un ingresso, come i tocchi, non un ponte verso Calliope.
 """
 
 from __future__ import annotations
@@ -59,9 +67,15 @@ NOTE_GUASTO = {"non risponde": "Il gioco non rispondeva più: l'ho chiuso.",
                "messaggi non validi": "Il gioco mandava messaggi non validi: l'ho chiuso.",
                "non parte": "Il gioco non è partito: l'ho chiuso."}
 TIPI_PAGINA = ("pronto", "battito", "salva", "leggi", "manda", "chat", "di", "azione", "fine",
-               "errore", "guasto")
-# Una partita di prova (11/10): il gioco gira e basta, senza ponte verso Calliope né dati
-TIPI_PROVA = ("pronto", "battito", "fine", "errore", "guasto")
+               "errore", "guasto", "comandi", "chiuso")
+# Una partita di prova (11/10): il gioco gira e basta, senza ponte verso Calliope né dati. I
+# comandi a voce sì (`comandi` sceglie quali valgono, `chiuso` lo manda la pagina quando il
+# gioco si chiude): sono un ingresso, come i tocchi, e non portano niente fuori dal riquadro
+TIPI_PROVA = ("pronto", "battito", "fine", "errore", "guasto", "comandi", "chiuso")
+# Un riquadro di cui la pagina non dice niente da tanto (il battito arriva ogni 15 s mentre si
+# vede) non riceve comandi a voce: lo schermo è spento, la pagina è altrove o il gioco è nascosto
+VIVO_S = 40.0
+MAX_ATTIVI = 64
 
 
 def candidata_intatta(est, nome: str, n) -> bool:
@@ -100,6 +114,13 @@ class Posto:
         self.fermato = False
         self.messaggi: deque = deque(maxlen=200)     # istanti, per la frequenza
         self.chat: deque = deque(maxlen=50)
+        # I comandi a voce (11/10): il riquadro è aperto (dopo «pronto», fino a «chiuso» o al
+        # cane da guardia), l'ultimo messaggio della pagina (time.time), i comandi che valgono
+        # adesso (None: tutti quelli del manifesto) e l'ultima mossa o apertura (monotonic)
+        self.aperto = False
+        self.contatto = 0.0
+        self.attivi: list[str] | None = None
+        self.segno = 0.0
 
 
 class Partita:
@@ -129,6 +150,12 @@ class Partita:
     def massimo(self) -> int:
         return int((self.scheda.get("giocatori") or {}).get("max", 1))
 
+    @property
+    def ascolta(self) -> dict | None:
+        """La sezione «ascolta» del manifesto (comandi a voce), o None."""
+        a = self.scheda.get("ascolta")
+        return a if isinstance(a, dict) and a.get("comandi") else None
+
     def protetta(self) -> bool:
         """Nella partita c'è un minore o un ospite (testo libero dal guardiano)."""
         return any(p.minore or not p.persona for p in self.posti.values())
@@ -150,6 +177,9 @@ class Giochi:
         self.on_frase = None
         self.guardiano = None              # main.py: calliope.guardiano.Guardiano (o None)
         self.guasti: deque = deque(maxlen=100)
+        # Le sveglie dei cicli della voce (11/10): un gioco che apre o cambia i suoi comandi a
+        # voce le suona, così l'ascolto riparte con la finestra giusta (Ciclo._ascolta)
+        self._sveglie: list = []
 
     # ── configurazione ──
     def _c(self, k: str, d):
@@ -376,6 +406,7 @@ class Giochi:
             self._registra(p, "messaggio_grande", regola="gioco_messaggio_grande")
             return {"errore": "messaggio troppo grande", "_stato": 413}
         p.ultimo = ora
+        posto.contatto = ora
         f = getattr(self, "_t_" + tipo)
         try:
             return f(p, posto, dati)
@@ -384,9 +415,11 @@ class Giochi:
             return {"errore": "non riuscito", "_stato": 500}
 
     def _avvio(self, p: Partita, posto: Posto) -> dict:
+        a = p.ascolta
         return {"partita": p.id, "giocatore": posto.giocatore,
                 "giocatori": len(p.posti), "massimo": p.massimo, "condivisa": p.condivisa,
-                "storia": list(p.storia)[-100:], "lingua": "it"}
+                "storia": list(p.storia)[-100:], "lingua": "it",
+                **({"comandi": list(a["comandi"])} if a else {})}
 
     def _t_pronto(self, p: Partita, posto: Posto, dati) -> dict:
         from .. import minori
@@ -402,6 +435,11 @@ class Giochi:
                 return {"ok": False, "fine_tempo": True,
                         "nota": "Per oggi il tempo dei giochi è finito."}
         posto.fermato = False
+        # Riquadro nuovo (anche «Riapri» o la pagina ricaricata): tutti i comandi valgono, e la
+        # finestra senza nome riparte da adesso
+        posto.aperto, posto.attivi, posto.segno = True, None, time.monotonic()
+        if p.ascolta:
+            self.sveglia_voce()
         self._agli_altri(p, posto, "giocatori", {"giocatori": len(p.posti),
                                                  "pronto": posto.giocatore})
         return {"ok": True, "avvio": self._avvio(p, posto)}
@@ -579,6 +617,38 @@ class Giochi:
         es = AzioneGioco(self, p, posto, nome, args, rif)
         return es.avvia()
 
+    def _t_comandi(self, p: Partita, posto: Posto, dati) -> dict:
+        """Il riquadro dice quali dei suoi comandi a voce valgono adesso (le porte ancora
+        chiuse, niente durante un'animazione): solo un sottoinsieme di quelli del manifesto,
+        mai comandi nuovi."""
+        a = p.ascolta
+        if a is None:
+            return {"errore": "questo gioco non ha comandi a voce", "_stato": 403}
+        lista = dati.get("attivi")
+        if not isinstance(lista, list) or len(lista) > MAX_ATTIVI:
+            return {"errore": "attivi: un elenco di nomi di comandi", "_stato": 400}
+        nomi = [x for x in lista if isinstance(x, str)]
+        fuori = [x[:24] for x in nomi if x not in a["comandi"]]
+        if fuori or len(nomi) != len(lista):
+            self._registra(p, "comandi_rifiutati", regola="gioco_comando_non_dichiarato",
+                           comandi=fuori[:5])
+            return {"errore": "comandi non dichiarati nel manifesto: "
+                              + ", ".join(fuori[:5] or ["(non testo)"]), "_stato": 400}
+        prima = self._attivi(p, posto)
+        scelti = set(nomi)
+        posto.attivi = [c for c in a["comandi"] if c in scelti]
+        if bool(prima) != bool(posto.attivi):
+            self.sveglia_voce()
+        return {"ok": True, "attivi": list(posto.attivi)}
+
+    def _t_chiuso(self, p: Partita, posto: Posto, dati) -> dict:
+        """La pagina ha chiuso il gioco (✕, Esc, «chiudi il gioco»): niente più comandi a voce
+        finché un riquadro nuovo non manda «pronto» («Riapri»)."""
+        posto.aperto = False
+        if p.ascolta:
+            self.sveglia_voce()
+        return {"ok": True}
+
     def _t_fine(self, p: Partita, posto: Posto, dati) -> dict:
         self._registra(p, "fine", giocatore=posto.giocatore)
         return {"ok": True}
@@ -602,10 +672,114 @@ class Giochi:
                                            "sposta": False}
             self.hub.invia_a(posto.sid, chiusa)
         posto.fermato = True
+        posto.aperto = False
         self._registra(p, "guasto", regola="gioco_chiuso_dal_controllo", motivo=motivo)
         self.log(f"[GIOCHI] «{p.titolo}» chiuso sullo schermo "
                  f"{self._nome_schermo(posto.sid)}: {motivo}")
         return {"ok": True}
+
+    # ── i comandi a voce (11/10, calliope/gioco_voce.py) ──
+    @staticmethod
+    def _attivi(p: Partita, posto: Posto) -> list[str]:
+        a = p.ascolta
+        if a is None:
+            return []
+        return list(a["comandi"]) if posto.attivi is None else list(posto.attivi)
+
+    def aggiungi_sveglia(self, ev):
+        """La sveglia di un ciclo della voce (Ciclo.__init__)."""
+        with self._lock:
+            if ev not in self._sveglie:
+                self._sveglie.append(ev)
+
+    def sveglia_voce(self):
+        for ev in list(self._sveglie):
+            try:
+                ev.set()
+            except Exception:  # noqa: BLE001
+                pass
+
+    def schermi_voce(self, coll=None) -> list:
+        """Gli schermi del satellite che ascolta, per i comandi a voce: il suo schermo, se ne ha
+        uno (la pagina del PC, il telefono); se no quelli della sua stanza che non sono di un
+        altro satellite (un satellite senza schermo accanto alla TV). Senza satellite (l'audio
+        di questo computer) quelli della stanza predefinita, o quelli di nessun satellite."""
+        hub = self.hub
+        sid = getattr(coll, "schermo_id", None) if coll is not None else None
+        if sid is not None:
+            return [sid]
+        try:
+            righe = hub.abbinati()
+        except Exception:  # noqa: BLE001
+            return []
+        sat = getattr(hub, "satelliti", None)
+
+        def di_un_satellite(x) -> bool:
+            try:
+                c = sat.per_schermo(x.get("id")) if sat is not None else None
+            except Exception:  # noqa: BLE001
+                c = None
+            return c is not None and c is not coll
+        if coll is not None:
+            stanza = getattr(coll, "stanza", None) or ""
+            if not stanza:
+                return []
+        else:
+            stanza = getattr(hub, "stanza_predefinita", None) or ""
+        from .archivio import norm_stanza
+        st = norm_stanza(stanza) if stanza else ""
+        return [x.get("id") for x in righe
+                if (not st or x.get("stanza") == st) and not di_un_satellite(x)]
+
+    def ascolto(self, schermi) -> dict | None:
+        """Il gioco aperto su uno di questi schermi che aspetta un comando a voce (comandi
+        attivi non vuoti), il più recente: {partita, schermo, titolo, comandi: {id: forme}
+        (solo gli attivi), giocatore, segno (monotonic dell'ultima mossa o apertura), prova}.
+        None se nessuno."""
+        ids = {x for x in (schermi or []) if x is not None}
+        if not ids:
+            return None
+        ora = time.time()
+        migliore = None
+        with self._lock:
+            for p in self.partite.values():
+                if p.ascolta is None:
+                    continue
+                for sid, posto in p.posti.items():
+                    if sid not in ids or not posto.aperto or posto.fermato \
+                            or ora - posto.contatto > VIVO_S:
+                        continue
+                    attivi = self._attivi(p, posto)
+                    if attivi and (migliore is None or posto.contatto > migliore[1].contatto):
+                        migliore = (p, posto, attivi)
+        if migliore is None:
+            return None
+        p, posto, attivi = migliore
+        a = p.ascolta
+        return {"partita": p.id, "schermo": posto.sid, "titolo": p.titolo,
+                "comandi": {c: list(a["comandi"][c]) for c in attivi},
+                "giocatore": bool(a.get("giocatore")), "segno": posto.segno,
+                "prova": p.prova}
+
+    def comando(self, partita: str, schermo, comando: str, giocatore: str | None = None) -> bool:
+        """Manda una mossa a voce al riquadro della partita su quello schermo (evento «gioco»
+        di tipo «comando»). Solo un comando attivo di quel gioco; il nome di chi gioca solo se
+        il manifesto lo chiede. True se mandata."""
+        with self._lock:
+            p = self.partite.get(str(partita or ""))
+            posto = p.posti.get(schermo) if p is not None else None
+            if p is None or posto is None or not posto.aperto or posto.fermato:
+                return False
+            a = p.ascolta
+            if a is None or comando not in self._attivi(p, posto):
+                return False
+            dati = {"comando": comando}
+            if giocatore and a.get("giocatore"):
+                dati["giocatore"] = str(giocatore)[:40]
+            posto.segno = time.monotonic()
+            p.ultimo = time.time()
+        self.hub.evento_a(posto.sid, "gioco", {"partita": p.id, "tipo": "comando", "dati": dati})
+        return True
 
     # ── utilità ──
     def _profilo(self, pid):

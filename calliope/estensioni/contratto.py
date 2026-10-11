@@ -180,6 +180,14 @@ def scheda_testo(cfg=None) -> list[str]:
         "della porta elencati in «azioni» e con lo scope in «permessi»); calliope.fine(esito); "
         "calliope.risorsa(\"carta.svg\") → indirizzo data: del disegno; "
         "calliope.quandoGiocatori(f), calliope.quandoFineTempo(f)",
+        "- comandi a voce, solo se la richiesta chiede di giocare a voce: nella scheda "
+        "\"ascolta\": {\"comandi\": {\"uno\": [\"uno\", \"la porta uno\"], \"ricomincia\": "
+        "[\"ricomincia\"]}, \"giocatore\": false}; al più 24 comandi, ognuno con 1–6 forme "
+        "brevi (1–5 parole) che vanno dette per intero (il nome davanti e i numeri in cifre o "
+        "in parole valgono già), non «basta», «stop», «esci»; calliope.quandoComando(f) (f "
+        "riceve {comando, giocatore}: giocatore solo con \"giocatore\": true, il nome di chi "
+        "è riconosciuto dalla voce) e calliope.comandiAttivi([nomi]) per dire quali valgono "
+        "adesso ([] nessuno). Il gioco si gioca anche con i tocchi",
         f"- tetti: un messaggio fino a {c('giochi_messaggio_max', 4096)} byte, "
         f"{c('giochi_messaggi_secondo', 10)} al secondo; se il riquadro non risponde per "
         f"{c('giochi_watchdog_s', 6.0):g} s (un ciclo infinito) si chiude; script "

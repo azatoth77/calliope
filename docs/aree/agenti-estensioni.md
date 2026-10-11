@@ -2274,3 +2274,23 @@ estensione, gioco). Modulo nuovo `calliope/requisiti.py`.
   la consegna c'è il confronto); `prova_valore` ha il tipo di `tappe`.
 
 **Presence penalty misurato (11/10 sera).** Con `prove/manuali/misura_presence_penalty.py` sulla DGX (qwen3.6 su vLLM, caso vero del gioco con la prova di fumo che falliva, 6 passate per valore, messaggio della prova vecchio e nuovo): col messaggio nuovo l'agente trova la causa in tutte le passate; a 0 una passata a vuoto, mediana 7,6 s e 561 token; a 0,5 nessuna a vuoto, 6 correzioni mirate su 6, mediana 3,6 s e 264 token; a 1,5 simile (3,7 s). Dall'11/10 `agenti_presence_penalty.estensione` (anche i giochi) è 0,5; `codice` resta 0, non misurato. Si torna indietro con quella riga.
+
+## I giochi a voce nello scheletro e nella prova di fumo (11/10 sera, ramo `gioco-voce`)
+
+Un gioco può dichiarare i suoi comandi a voce (`scheda.ascolta`, [giochi](giochi.md)). Per
+l'agente:
+
+- **Scheletro del gioco** (`agenti/scheletri.py`): una riga di commento con `"ascolta"` nella
+  scheda e `calliope.quandoComando(sicuro(...))`: 231 caratteri, circa 67 token in più (stima
+  con il rapporto 3,47 caratteri per token della misura dell'11/10; da rimisurare sulla DGX).
+  Il tetto di `prova_agente_guida` per lo scheletro del gioco passa da 2 100 a 2 300 caratteri.
+- **Contratto** (§ 5): comandi a voce **solo se la richiesta chiede di giocare a voce**, i limiti
+  dell'elenco, `quandoComando`, `comandiAttivi`, e il gioco che si gioca anche con i tocchi
+  (circa 177 token).
+- **Prova di fumo** (`fumo_js.mjs`, chiamata da `test_js.mjs` con `ascolta.comandi` e
+  `ascolta.giocatore` del manifesto): una volta ogni quattro tocchi un comando a voce a caso tra
+  quelli attivi (all'inizio tutti, poi quelli di `comandiAttivi`), con «Ada» come giocatore se
+  il manifesto lo chiede. Un gestore che lancia dice il comando, file e riga; `comandiAttivi` con
+  un nome non dichiarato, o senza `ascolta` nel manifesto, è un errore che dice cosa correggere.
+- **Prove**: `prova_gioco_voce.py` (prova di fumo con i comandi: buono, gestore che lancia, fuori
+  elenco, senza `ascolta`, contrario), `prova_agente_guida.py`.

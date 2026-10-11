@@ -171,8 +171,10 @@ A_SECCO = [
     ("prova_estensioni.py", [], "estensioni e guardrail: manifesto, porta stretta, azioni pericolose sospese e confermate, sfida, versioni, impronta"),
     # ~5 s: hub degli schermi vero, server su 127.0.0.1, docker finto con il Node della macchina
     ("prova_giochi.py", [], "giochi e schede interattive (05/10): manifesto con la scheda, documento e CSP del riquadro, approvazione dei giochi puri, partite su uno schermo e condivise, chat e frasi col guardiano, azioni della porta, banco d'attacco dei messaggi, tempo di gioco dei minori, richieste ai tutori, test JavaScript"),
+    # ~3 s: i comandi a voce dei giochi (11/10), hub vero, ciclo finto, Node se c'è
+    ("prova_gioco_voce.py", [], "comandi a voce dei giochi (11/10): scheda.ascolta nel manifesto, sottoinsieme a runtime e mai comandi nuovi, la mossa con il solo comando e il nome di chi gioca, chiuso e partita di prova; nel ciclo la regola gioco_comando con i contrari (frase più lunga, nessun gioco, altro satellite, comando non attivo, domanda in sospeso), la finestra senza nome solo per le forme dell'elenco e il suo tetto, contesto e gioco_comando per il modello, chi gioca solo con la voce riconosciuta; prova di fumo con i comandi"),
     # ~60 s: la pagina degli schermi in Edge o Chromium senza finestra (senza si salta)
-    ("prova_giochi_pagina.py", [], "giochi nella pagina vera: il riquadro ostile non legge la pagina né il localStorage, niente rete né WebRTC, messaggi falsi rifiutati, cane da guardia (ciclo infinito, navigazione, inondazione), partita di tris tra due pagine"),
+    ("prova_giochi_pagina.py", [], "giochi nella pagina vera: il riquadro ostile non legge la pagina né il localStorage, niente rete né WebRTC, messaggi falsi rifiutati, cane da guardia (ciclo infinito, navigazione, inondazione), partita di tris tra due pagine, comandi a voce (la mossa nel riquadro, il sottoinsieme a runtime, niente fuori elenco, partita di prova)"),
     ("prova_contesto_agenti.py", [], "contesto degli agenti (05/10): finestra dal setup, tetti della passata e del ragionamento, risultati lunghi in .calliope, diario del lavoro alle soglie, domanda a metà lavoro"),
     ("prova_estensioni_piano.py", [], "contratto delle capacità, piano di fattibilità, chiedi_permesso, guardia contro il ragionamento a vuoto (agente finto)"),
     ("prova_estensioni_attacchi.py", [], "banco d'attacco delle estensioni: rete interna, indirizzi travestiti, rebinding, slowloris, dati esca, flussi, contaminazione, scarica_esempio"),
@@ -309,6 +311,7 @@ LIVELLO_2 = {
     "prova_estensioni_attacchi.py",  # 30 s
     "prova_sonde_attacchi.py",       # ~3 s (08/10 notte)
     "prova_giochi.py",               # 7 s
+    "prova_gioco_voce.py",           # ~3 s (11/10, Node per la prova di fumo)
     "prova_agente_guida.py",         # ~10 s (11/10)
     "prova_esecutore.py",            # 12 s
     "prova_inoltro.py",              # 18 s, con il browser (seriale)
@@ -498,6 +501,14 @@ LEGAMI = [
     ("calliope/sviluppo.py", ["prova_giro_halloween.py"]),
     ("calliope/agenti/servizio.py", ["prova_giro_halloween.py"]),
     ("calliope/schermi/giochi.py", ["prova_giro_halloween.py"]),
+    # I comandi a voce dei giochi (11/10): regola sul testo, server, ciclo, riquadro, fumo
+    ("calliope/gioco_voce.py", ["prova_testo.py", "prova_gioco_voce.py"]),
+    ("calliope/schermi/giochi.py", ["prova_gioco_voce.py"]),
+    ("calliope/estensioni/scheda.py", ["prova_gioco_voce.py"]),
+    ("calliope/ciclo.py", ["prova_gioco_voce.py"]),
+    ("calliope/agenti/fumo_js.mjs", ["prova_gioco_voce.py"]),
+    ("calliope/agenti/test_js.mjs", ["prova_gioco_voce.py"]),
+    ("calliope/tools/schermi.py", ["prova_gioco_voce.py"]),
     ("calliope/estensioni/servizio.py", ["prova_giro_halloween.py"]),
     ("calliope/valore.py", ["prova_giro_halloween.py"]),
     # Revisione onesta e tappe (11/10)

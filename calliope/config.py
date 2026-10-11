@@ -1187,6 +1187,13 @@ class Config:
     giochi_watchdog_s: float = 6.0
     # Ore di vita di una partita senza segni dalle pagine: poi il suo indirizzo non vale più
     giochi_partita_ore: float = 6.0
+    # Comandi a voce di un gioco (11/10, «ascolta» nel manifesto, calliope/gioco_voce.py): dopo
+    # una mossa o una risposta, finché il gioco aperto sullo schermo del satellite aspetta un
+    # comando, l'ascolto resta aperto senza il nome per questi secondi, ma senza nome valgono
+    # SOLO le forme dell'elenco del gioco (il resto si ignora come a Calliope addormentata).
+    # Senza mosse per tanto torna «dormo». 0 = il nome serve sempre (i comandi detti dopo il
+    # nome vanno comunque al gioco)
+    giochi_ascolto_s: float = 60.0
     # Archivio dei documenti di casa (calliope/archivio/, 03/10): bollette, ricevute, contratti,
     # polizze, garanzie, referti, documenti d'identità e manuali di una cartella, letti in
     # secondo piano (testo dei PDF, OCR con il modello visivo per scansioni e foto), schedati dal
@@ -2657,7 +2664,8 @@ SEZIONI: dict[str, list[str]] = {
                    "estensioni_memoria_max_mb", "estensioni_secondo_parere",
                    "estensioni_parere_s", "estensioni_rete_max_minuto", "giochi_enabled",
                    "giochi_frasi_minuto", "giochi_messaggi_secondo", "giochi_messaggio_max",
-                   "giochi_chat_minuto", "giochi_watchdog_s", "giochi_partita_ore"],
+                   "giochi_chat_minuto", "giochi_watchdog_s", "giochi_partita_ore",
+                   "giochi_ascolto_s"],
     "archivio": ["archivio_enabled", "archivio_cartella", "archivio_db",
                  "archivio_intervallo_min", "archivio_ocr", "archivio_url", "archivio_modello",
                  "archivio_ocr_modello", "archivio_intestatari", "archivio_max_pagine",
@@ -2817,6 +2825,7 @@ LIMITI: dict[str, tuple[float, float]] = {
     "contesto_conversazioni": (1, 64), "contesto_margine_gb": (0.0, 512.0),
     "max_history_turns": (0, 200), "max_tool_turns": (1, 20), "tool_correzioni_max": (0, 10),
     "tool_correzione_avviso_s": (0.0, 60.0), "followup_s": (0.0, 600.0), "wake_solo_nome_s": (0.0, 3.0),
+    "giochi_ascolto_s": (0.0, 600.0),
     "sample_rate": (8000, 48000), "whisper_beam_size": (1, 20), "stt_timeout_s": (0.5, 600.0),
     "stt_correzione_soglia": (0.0, 1.01), "stt_correzione_timeout_s": (0.2, 30.0),
     "stt_argomenti_soglia_noto": (0.0, 1.0), "stt_argomenti_soglia_p": (0.0, 1.01),

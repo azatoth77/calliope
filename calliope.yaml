@@ -1544,6 +1544,13 @@ estensioni:
   giochi_watchdog_s: 6.0
   # Ore di vita di una partita senza segni dalle pagine: poi il suo indirizzo non vale più
   giochi_partita_ore: 6.0
+  # Comandi a voce di un gioco (11/10, «ascolta» nel manifesto, calliope/gioco_voce.py): dopo
+  # una mossa o una risposta, finché il gioco aperto sullo schermo del satellite aspetta un
+  # comando, l'ascolto resta aperto senza il nome per questi secondi, ma senza nome valgono
+  # SOLO le forme dell'elenco del gioco (il resto si ignora come a Calliope addormentata).
+  # Senza mosse per tanto torna «dormo». 0 = il nome serve sempre (i comandi detti dopo il
+  # nome vanno comunque al gioco)
+  giochi_ascolto_s: 60.0
 
 archivio:
   # Archivio dei documenti di casa (calliope/archivio/, 03/10): bollette, ricevute, contratti,

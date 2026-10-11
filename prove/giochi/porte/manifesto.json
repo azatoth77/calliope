@@ -1,0 +1,16 @@
+{
+  "nome": "porte",
+  "titolo": "Apri le porte",
+  "cosa_fa": {"verbo": "propone", "oggetto": "un gioco di porte da aprire a voce"},
+  "input": {"type": "object", "properties": {}, "required": []},
+  "permessi": {},
+  "scheda": {"tipo": "gioco", "file": ["logica.js", "gioco.js"],
+             "giocatori": {"min": 1, "max": 4}, "salva": true, "azioni": [],
+             "ascolta": {"comandi": {"uno": ["uno", "la porta uno"],
+                                     "due": ["due", "la porta due"],
+                                     "tre": ["tre", "la porta tre"],
+                                     "ricomincia": ["ricomincia"]},
+                         "giocatore": true}},
+  "livello": "familiare",
+  "limiti": {"tempo_s": 5, "memoria_mb": 128}
+}

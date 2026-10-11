@@ -732,5 +732,53 @@ for testo, atteso in [
     verifica(f"corsia veloce «{testo}»", forma_chiusa(testo), atteso)
 
 
+# ── comandi a voce di un gioco (11/10, regola `gioco_comando`, calliope/gioco_voce.py) ──
+# Solo la frase intera, con le normalizzazioni della forma: maiuscole, punteggiatura, accenti,
+# numeri in parole o cifre, il nome davanti. I contrari della regola nel ciclo (nessun gioco
+# aperto, gioco su un altro satellite, comando non attivo, finestra senza nome) sono in
+# prove/prova_gioco_voce.py
+from calliope import gioco_voce as GV  # noqa: E402
+PORTE = {"uno": ["uno", "la porta uno"], "due": ["due", "la porta due", "2"],
+         "tre": ["la porta tre"], "ventuno": ["ventuno"], "ricomincia": ["ricomincia"],
+         "passo": ["passo"]}
+for testo, atteso in [
+        ("Uno.", "uno"), ("uno", "uno"), ("UNO!", "uno"), ("1", "uno"), ("1.", "uno"),
+        ("Calliope, uno.", "uno"), ("Calliope uno", "uno"), ("Caliope, la porta uno.", "uno"),
+        ("La porta 1.", "uno"), ("la porta UNO", "uno"), ("Due?", "due"), ("La porta due!", "due"),
+        ("la porta 3", "tre"), ("La porta tre.", "tre"), ("21", "ventuno"), ("Ventuno.", "ventuno"),
+        ("Ricomincia.", "ricomincia"), ("Calliope, ricomincia!", "ricomincia"), ("Passo.", "passo"),
+        # contrari: parole dentro una frase più lunga, altre parole, forme non dichiarate
+        ("Apri la porta uno.", None), ("La porta uno, per favore.", None),
+        ("Uno due tre.", None), ("Tre gatti.", None), ("Tre.", None),       # «tre» da solo non c'è
+        ("Ricominciamo.", None), ("Ricomincia da capo.", None), ("Passo dopo.", None),
+        ("Ok, uno.", None), ("Allora due.", None), ("Uno di noi.", None),
+        ("La terza.", None), ("Apri la terza porta.", None), ("Calliope.", None), ("", None),
+        ("Calliope, che ore sono?", None), ("Ventidue.", None), ("Porta uno.", None)]:
+    verifica(f"gioco_comando «{testo}»", GV.trova(testo, PORTE), atteso)
+verifica("gioco_comando: solo tra gli attivi («due» quando non vale)",
+         GV.trova("Due.", PORTE, attivi=["uno", "ricomincia"]), None)
+verifica("gioco_comando: tra gli attivi", GV.trova("Uno.", PORTE, attivi=["uno"]), "uno")
+verifica("gioco_comando: nessun elenco", GV.trova("Uno.", {}), None)
+verifica("gioco_comando: la wake word «computer» davanti (modalità startrek)",
+         GV.trova("Computer, la porta due.", PORTE, nomi=["Computer", "Calliope"]), "due")
+verifica("gioco_comando: numeri in parole → cifre", GV.normalizza("Ventotto e trentuno, tré!"),
+         "28 e 31 3")
+for elenco, nome in [({"x": ["esci"]}, "un'uscita della voce"),
+                     ({"x": ["basta"]}, "lo stop della voce"),
+                     ({"a": ["uno"], "b": ["1"]}, "la stessa forma per due comandi"),
+                     ({"A": ["a"]}, "nome di comando non valido"),
+                     ({"a": ["uno due tre quattro cinque sei"]}, "forma troppo lunga"),
+                     ({"a": ["Calliope"]}, "il solo nome"),
+                     ({"a": []}, "nessuna forma"),
+                     ({f"c{i}": [f"parola{i}"] for i in range(GV.MAX_COMANDI + 1)}, "troppi comandi")]:
+    try:
+        GV.valida_elenco(elenco)
+        verifica(f"elenco dei comandi rifiutato: {nome}", "accettato", "rifiutato")
+    except GV.ElencoNonValido:
+        verifica(f"elenco dei comandi rifiutato: {nome}", "rifiutato", "rifiutato")
+verifica("elenco dei comandi: «ricomincia» si può (dentro il gioco vale per il gioco)",
+         list(GV.valida_elenco({"ricomincia": ["ricomincia"]})), ["ricomincia"])
+
+
 print(f"\n{errori} errori" if errori else "\nTutto a posto.")
 sys.exit(1 if errori else 0)

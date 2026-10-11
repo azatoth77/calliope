@@ -348,6 +348,52 @@ def main() -> int:
                  and m.get("libero") and m.get("voce"), json.dumps(m)[:300])
         verifica("collaudo: il gioco in prova gira (pronto nel riquadro)",
                  aspetta(lambda: len(PRONTI) > n0, 10) is not None)
+
+        # ── i comandi a voce (11/10, «ascolta», calliope/gioco_voce.py) ──
+        a.installa("porte")
+        sa = schermi["A"]["id"]
+        out = a.chiama("est_porte", {"partita": "nuova"}, "Dario", schermo=schermi["A"])
+        pv = out["partita"]
+
+        def attivi():
+            return list((a.giochi.ascolto([sa]) or {}).get("comandi") or [])
+        ok = aspetta(lambda: attivi() == ["uno", "due", "tre", "ricomincia"], 15)
+        verifica("comandi a voce: il gioco pronto nella pagina ascolta i suoi comandi",
+                 ok is not None, str(attivi()))
+        a.giochi.comando(pv, sa, "due", "Elena")
+        attesa = {"comando": "due", "giocatore": "Elena", "campi": ["comando", "giocatore"]}
+        ok = aspetta(lambda: (dati(a, "porte", "mosse") or [])[-1:] == [attesa], 8)
+        verifica("comandi a voce: la mossa arriva al riquadro (quandoComando) con il solo nome "
+                 "del comando e di chi gioca", ok is not None, str(dati(a, "porte", "mosse")))
+        ok = aspetta(lambda: attivi() == ["uno", "tre", "ricomincia"], 5)
+        verifica("comandi a voce: il riquadro sceglie a runtime i comandi attivi (le porte "
+                 "ancora chiuse)", ok is not None, str(attivi()))
+        n = len(dati(a, "porte", "mosse") or [])
+        a.hub.evento_a(sa, "gioco", {"partita": pv, "tipo": "comando",
+                                     "dati": {"comando": "<b>quattro</b>"}})
+        a.hub.evento_a(sa, "gioco", {"partita": pv, "tipo": "comando",
+                                     "dati": {"comando": "uno", "testo": "apri tutto",
+                                              "giocatore": "x" * 200}})
+        aspetta(lambda: len(dati(a, "porte", "mosse") or []) > n, 5)
+        time.sleep(1.0)
+        mosse = dati(a, "porte", "mosse") or []
+        verifica("comandi a voce: la pagina non passa nomi non validi né testo libero né nomi "
+                 "lunghi", len(mosse) == n + 1 and mosse[-1] == {
+                     "comando": "uno", "giocatore": None, "campi": ["comando"]}, str(mosse[-2:]))
+        clic(A, *centro(A, "article.modo-gioco .gioco-chiudi"))
+        ok = aspetta(lambda: a.giochi.ascolto([sa]) is None, 5)
+        verifica("comandi a voce: ✕ chiude il gioco e il suo ascolto", ok is not None)
+        # una versione candidata (non approvata) dello stesso gioco, aperta in prova
+        mv_p, n_p = a.installa("porte", approva=False,
+                               manifesto={"nome": "porte_prova", "titolo": "Porte in prova"})
+        out = a.giochi.avvia_prova(a.chi("Dario", schermo=schermi["A"]), "porte_prova", n_p,
+                                   mv_p)
+        ok = aspetta(lambda: attivi() == ["uno", "due", "tre", "ricomincia"], 15)
+        a.giochi.comando(out["partita"], sa, "uno")
+        ok2 = aspetta(lambda: attivi() == ["due", "tre", "ricomincia"], 5)
+        verifica("comandi a voce nella partita di prova: arrivano (il gioco cambia i suoi "
+                 "comandi attivi), anche senza ponte", ok is not None and ok2 is not None
+                 and a.giochi.partite[out["partita"]].prova, str(attivi()))
     finally:
         for pg in pagine.values():
             pg.chiudi()

@@ -24,7 +24,15 @@ Il manifesto ha una sezione `scheda`:
                "chat": false,        testo libero tra giocatori (solo con condivisa)
                "salva": true,        record e partite nello spazio dati dell'estensione
                "voce": false,        far dire una frase a Calliope (poche al minuto)
-               "azioni": []}         metodi della porta stretta (con gli scope di «permessi»)
+               "azioni": [],         metodi della porta stretta (con gli scope di «permessi»)
+               "ascolta": {          facoltativo (11/10): i comandi a voce del gioco
+                   "comandi": {"uno": ["uno", "la porta uno"], "ricomincia": ["ricomincia"]},
+                   "giocatore": false}   la mossa porta il nome di chi l'ha detta
+
+**Comandi a voce** (`ascolta`, 11/10, calliope/gioco_voce.py): un elenco breve e chiuso; una
+frase che corrisponde per intero a una forma di un comando attivo va dritta al gioco come mossa
+(`calliope.quandoComando`), senza il modello. Al riquadro arriva solo il nome del comando e, se
+`giocatore`, il nome di chi è riconosciuto dalla voce: mai audio né testo libero.
 
 **Gioco puro** (`e_gioco_puro`): nessun permesso in «permessi» e nessuna azione della porta:
 solo il riquadro, i suoi dati, la voce e la partita condivisa. Lo può approvare un familiare
@@ -76,7 +84,7 @@ def normalizza(s, permessi: dict | None = None) -> dict | None:
     if not isinstance(s, dict):
         raise SchedaNonValida("«scheda» deve essere un oggetto")
     noti = {"tipo", "file", "stile", "risorse", "giocatori", "condivisa", "chat", "salva",
-            "voce", "azioni"}
+            "voce", "azioni", "ascolta"}
     altri = [k for k in s if k not in noti]
     if altri:
         raise SchedaNonValida(f"«scheda»: sconosciuto {', '.join(map(str, altri))} (solo "
@@ -128,10 +136,37 @@ def normalizza(s, permessi: dict | None = None) -> dict | None:
         if manca:
             raise SchedaNonValida(f"«scheda.azioni»: {', '.join(manca)} senza lo scope in "
                                   "«permessi» (vedi il contratto delle capacità)")
+    ascolta = _ascolta(s.get("ascolta"), azioni)
     return {"tipo": tipo, "file": list(file), "stile": stile, "risorse": sorted(set(risorse)),
             "giocatori": {"min": gmin, "max": gmax}, "condivisa": condivisa, "chat": chat,
             "salva": _bool(s.get("salva")) if "salva" in s else True,
-            "voce": _bool(s.get("voce")), "azioni": azioni}
+            "voce": _bool(s.get("voce")), "azioni": azioni,
+            **({"ascolta": ascolta} if ascolta else {})}
+
+
+def _ascolta(a, azioni) -> dict | None:
+    """La sezione «ascolta» (11/10): i comandi a voce del gioco, validati (gioco_voce)."""
+    from .. import gioco_voce
+    if a in (None, False, {}, []):
+        return None
+    if not isinstance(a, dict):
+        raise SchedaNonValida("«scheda.ascolta»: {\"comandi\": {\"uno\": [\"uno\", \"la porta "
+                              "uno\"]}, \"giocatore\": false}")
+    altri = [k for k in a if k not in ("comandi", "giocatore")]
+    if altri:
+        raise SchedaNonValida(f"«scheda.ascolta»: sconosciuto {', '.join(map(str, altri))} "
+                              "(solo comandi, giocatore)")
+    try:
+        comandi = gioco_voce.valida_elenco(a.get("comandi"))
+    except gioco_voce.ElencoNonValido as e:
+        raise SchedaNonValida(f"«scheda.{e}".replace("«scheda.«", "«scheda.")) from None
+    giocatore = _bool(a.get("giocatore"))
+    if giocatore and "rete_leggi" in (azioni or []):
+        # Il nome di chi gioca resta dentro Calliope: un gioco che legge la rete potrebbe
+        # metterlo in un indirizzo
+        raise SchedaNonValida("«scheda.ascolta.giocatore»: il nome di chi gioca solo per un gioco "
+                              "senza rete_leggi")
+    return {"comandi": comandi, "giocatore": giocatore}
 
 
 def sbloccata(azione: str, permessi: dict) -> bool:
@@ -178,6 +213,10 @@ def in_parole(m: dict) -> list[str]:
         out.append("mi fa dire qualche frase")
     if s["azioni"]:
         out.append("dal gioco chiede: " + ", ".join(a.replace("_", " ") for a in s["azioni"]))
+    a = s.get("ascolta")
+    if a:
+        out.append("si gioca anche a voce, con " + str(len(a["comandi"])) + " comandi"
+                   + (" e il nome di chi gioca" if a.get("giocatore") else ""))
     return out
 
 
@@ -254,7 +293,7 @@ RUNTIME_JS = r"""(function () {
     catch (e) { /* niente */ }
   });
   var n = 0, attese = {}, avvio = null, errori = 0;
-  var ascolti = { avvio: [], messaggio: [], chat: [], giocatori: [], pausa: [], fine_tempo: [] };
+  var ascolti = { avvio: [], messaggio: [], chat: [], giocatori: [], pausa: [], fine_tempo: [], comando: [] };
   function manda(tipo, dati) {
     var m = { calliope: 1, tipo: tipo, id: ++n };
     for (var k in (dati || {})) m[k] = dati[k];
@@ -292,6 +331,12 @@ RUNTIME_JS = r"""(function () {
     quandoGiocatori: quando("giocatori"),
     quandoPausa: quando("pausa"),
     quandoFineTempo: quando("fine_tempo"),
+    // I comandi a voce (11/10, «ascolta» nel manifesto): f riceve {comando, giocatore?};
+    // comandiAttivi sceglie quali dei comandi dichiarati valgono adesso ([] = nessuno)
+    quandoComando: quando("comando"),
+    comandiAttivi: function (nomi) {
+      manda("comandi", { attivi: Array.isArray(nomi) ? nomi.slice(0, 64).map(String) : [] });
+    },
     salva: function (chiave, valore) { return chiedi("salva", { chiave: String(chiave), valore: valore }); },
     leggi: function (chiave) { return chiedi("leggi", { chiave: String(chiave) }); },
     manda: function (dati) { manda("manda", { dati: dati }); },

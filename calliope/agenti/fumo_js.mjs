@@ -214,14 +214,26 @@ export async function fumo(file, opzioni = {}) {
   const radice = doc.body.appendChild(new Nodo("div"));
   radice.id = "gioco";
   // ── calliope finto ──
-  const ascolti = { avvio: [], messaggio: [], chat: [], giocatori: [], pausa: [], fine_tempo: [] };
-  const avvio = { partita: "P1", giocatore: 1, giocatori: 1, massimo: opzioni.massimo || 1, condivisa: false, storia: [], lingua: "it" };
+  const ascolti = { avvio: [], messaggio: [], chat: [], giocatori: [], pausa: [], fine_tempo: [], comando: [] };
+  // I comandi a voce (11/10, «ascolta» nel manifesto): quelli dichiarati, e quelli che il gioco
+  // dice attivi adesso con comandiAttivi (all'inizio tutti); un nome non dichiarato è un errore
+  const dichiarati = Object.keys(opzioni.comandi || {});
+  let attivi = dichiarati.slice();
+  const avvio = { partita: "P1", giocatore: 1, giocatori: 1, massimo: opzioni.massimo || 1, condivisa: false, storia: [], lingua: "it",
+    ...(dichiarati.length ? { comandi: dichiarati.slice() } : {}) };
   const dati = {};
   const quando = (t) => (f) => { if (typeof f === "function") ascolti[t].push(f); };
   const calliope = Object.freeze({
     quandoPronto: (f) => { if (typeof f === "function") ascolti.avvio.push(f); },
     quandoMessaggio: quando("messaggio"), quandoChat: quando("chat"), quandoGiocatori: quando("giocatori"),
-    quandoPausa: quando("pausa"), quandoFineTempo: quando("fine_tempo"),
+    quandoPausa: quando("pausa"), quandoFineTempo: quando("fine_tempo"), quandoComando: quando("comando"),
+    comandiAttivi: (nomi) => {
+      const l = Array.isArray(nomi) ? nomi.map(String) : [];
+      const fuori = l.filter((x) => !dichiarati.includes(x));
+      if (fuori.length && !dichiarati.length) nota("comandiAttivi", new Error("il manifesto non ha «ascolta.comandi»: dichiara lì i comandi a voce (scheda.ascolta), o togli comandiAttivi"));
+      else if (fuori.length) nota("comandiAttivi", new Error(`comandi non dichiarati in «ascolta.comandi» del manifesto: ${fuori.join(", ")} (solo un sottoinsieme di ${dichiarati.join(", ")})`));
+      else attivi = l;
+    },
     salva: (k, v) => { dati[k] = JSON.parse(JSON.stringify(v ?? null)); return Promise.resolve(null); },
     leggi: (k) => Promise.resolve(k in dati ? dati[k] : null),
     manda: () => {}, chat: () => Promise.resolve(null), di: () => Promise.resolve(null),
@@ -273,11 +285,23 @@ export async function fumo(file, opzioni = {}) {
   const TOCCHI = ["click", "pointerdown", "pointerup", "mousedown", "mouseup", "touchstart", "touchend"];
   for (let i = 0; i < (opzioni.tocchi || 300); i++) {
     const vivi = nodi.filter((n) => n.isConnected && TOCCHI.some((t) => (n._h[t] || []).length));
-    if (!vivi.length) break;
+    if (!vivi.length && !(attivi.length && ascolti.comando.length)) break;
+    if (!vivi.length) vivi.push(radice);
     const n = vivi[caso(vivi.length)];
     tocchi.push(descrivi(n));
     if (tocchi.length > 8) tocchi.shift();
     for (const t of TOCCHI) if ((n._h[t] || []).length) lancia(n, t, evento(t, n));
+    if (attivi.length && ascolti.comando.length && caso(4) === 0) {
+      // Una mossa a voce a caso tra i comandi attivi (11/10), come arriva dalla pagina
+      const c = attivi[caso(attivi.length)];
+      tocchi.push(`comando a voce «${c}»`);
+      if (tocchi.length > 8) tocchi.shift();
+      const dati = Object.freeze({ comando: c, ...(opzioni.giocatore ? { giocatore: "Ada" } : {}) });
+      for (const f of [...ascolti.comando]) {
+        try { const r = f(dati); if (r && typeof r.catch === "function") r.catch((e) => nota(`comando «${c}» (promessa)`, e, { gestore: true })); }
+        catch (e) { nota(`comando «${c}»`, e, { gestore: true }); }
+      }
+    }
     if (i % 25 === 0) {
       const tasto = ["ArrowUp", "ArrowLeft", " ", "Enter"][caso(4)];
       tocchi.push(`tasto «${tasto}»`);

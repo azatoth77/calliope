@@ -94,6 +94,10 @@ class ToolContext:
     # schema o eccezione del tool), non il tool: niente dati, quindi niente busta dei dati non
     # fidati. Brain lo azzera prima di ogni chiamata e lo legge dopo
     errore_registro: bool = False
+    # Il gioco sullo schermo di chi parla che aspetta un comando a voce (11/10, la imposta il
+    # ciclo per il turno, Giochi.ascolto): {partita, schermo, titolo, comandi, giocatore}, o
+    # None. gioco_comando passa solo uno di questi comandi
+    gioco_turno: Any = None
 
 
 

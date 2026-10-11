@@ -3334,8 +3334,11 @@
   const TIPI_DAL_RIQUADRO = {
     pronto: [], pong: ["n"], salva: ["chiave", "valore"], leggi: ["chiave"], manda: ["dati"],
     chat: ["testo"], di: ["testo"], azione: ["nome", "argomenti"], fine: ["esito"],
-    errore: ["testo"],
+    errore: ["testo"], comandi: ["attivi"],
   };
+  // Una mossa a voce (11/10, «ascolta» nel manifesto) verso il riquadro: solo il nome del
+  // comando e, al più, il nome di chi gioca (il server li ha già scelti dall'elenco)
+  const COMANDO_GIOCO = /^[a-z0-9][a-z0-9_]{0,23}$/;
   const CON_RISPOSTA = ["salva", "leggi", "chat", "di", "azione"];
   const GIOCO_MAX = 8192;            // caratteri di un messaggio (il server ha il suo tetto)
   const GIOCO_AL_SECONDO = 25;       // oltre: il riquadro si chiude
@@ -3525,7 +3528,10 @@
   function chiudiGiocoDaTe(p) {
     if (!p) return;
     CHIUSI_DA_TE[p] = true;
-    riquadri().filter((f) => f.dataset.partita === p).forEach((f) => {
+    const aperti = riquadri().filter((f) => f.dataset.partita === p);
+    // Il gioco non ascolta più i comandi a voce (11/10) finché «Riapri» non lo rimette
+    if (aperti.length) alServerGioco(p, { tipo: "chiuso" });
+    aperti.forEach((f) => {
       const st = statoGioco(f);
       st.chiuso = true;
       const box = f.parentElement;
@@ -3691,6 +3697,14 @@
       const nota = x.nota || "Il gioco è chiuso.";
       GIOCHI_CHIUSI[d.partita] = nota;
       fs.forEach((f) => { versoRiquadro(f, { tipo: d.tipo, dati: x }); chiudiGioco(f, nota); });
+      return;
+    }
+    if (d.tipo === "comando") {
+      // Una mossa a voce (11/10): solo un nome di comando e, al più, il nome di chi gioca
+      if (typeof x.comando !== "string" || !COMANDO_GIOCO.test(x.comando)) return;
+      const dati = { comando: x.comando };
+      if (typeof x.giocatore === "string" && x.giocatore.length <= 40) dati.giocatore = x.giocatore;
+      fs.forEach((f) => { if (!statoGioco(f).chiuso) versoRiquadro(f, { tipo: "comando", dati }); });
       return;
     }
     if (d.tipo === "risposta") {
