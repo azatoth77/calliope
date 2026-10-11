@@ -1332,3 +1332,27 @@ turno dopo la frase che ripete il codice resta fermata, in silenzio; con solo qu
 l'avviso si dice; un'altra pagina nuova con il PIN → di nuovo. Con il codice di prima la prova
 riproduce i due avvisi della DGX. Banco di `prova_politica` (attacchi e contrari di riferire)
 invariato, 0 errori.
+
+## Il titolo del proprio sviluppo, e la prova di un gioco (11/10, ramo `sviluppo-gioco-correzioni`)
+
+- **«ESEGUITE con un bersaglio dal dato» = 1 all'11/10.** 15:53:13 «Fallo continuare
+  allora» → `sviluppo_passo {azione: avanti, quale: "videogioco a tema Halloween da
+  giocare"}`: `quale` era bersaglio/dato perché il titolo stava nell'annuncio del lavoro
+  (scritto dal lavoro di un agente) e nelle parole della persona non c'era tutto. Ma il titolo
+  di uno sviluppo lo dà Calliope (dalla richiesta della persona) e `quale` sceglie comunque solo
+  tra gli sviluppi di chi parla. **Correzione** (`valore.sviluppo_suo`, `SVILUPPO_NOMINATO`):
+  l'argomento `quale` di `sviluppo_passo` che è l'id («S3») o parole tutte del titolo (o del
+  nome dell'estensione) di uno sviluppo **aperto o sospeso della stessa persona** vale
+  bersaglio/fidato, come la città di casa (`da_config`). Non allenta altro: solo quel tool e
+  quell'argomento (non `cambia`, non un altro tool con le stesse parole), solo con una persona
+  riconosciuta, mai lo sviluppo di un'altra persona né un titolo che non è di nessuno sviluppo
+  (restano dato, con la domanda «… viene dal lavoro di un agente, non da te»). Prova:
+  `prova_giro_halloween.py` (parte 6).
+- **La prova di un gioco nel collaudo** (vedi [agenti-estensioni](agenti-estensioni.md)): la
+  versione candidata di un gioco si apre sullo schermo prima dell'approvazione, nella stessa
+  sandbox dei giochi approvati (riquadro con origine opaca, CSP senza rete né frame, runtime che
+  toglie le vie verso fuori) e **senza ponte verso Calliope**: il server rifiuta dal riquadro
+  ogni messaggio che non sia `pronto`, `battito`, `fine`, `errore`, `guasto` (regola
+  `gioco_prova_senza_ponte`), quindi niente dati, niente altri schermi, niente frasi dette,
+  niente tool, anche se il manifesto li chiede. Non diventa attiva né un tool `est_`; la apre
+  solo chi amministra; il documento sparisce se i file cambiano o la versione viene approvata.
