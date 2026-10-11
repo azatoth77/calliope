@@ -385,6 +385,26 @@ def _priorita(nome: str) -> int:
     return 1
 
 
+_COMMENTO_CODA = re.compile(r"(?<=[;{}()\]\w'\"])\s+//\s.*$", re.M)
+_COMMENTO_BLOCCO = re.compile(r"/\*.*?\*/", re.S)
+# Testi che dicono, non fanno: non sono prove di niente
+_SOLO_TESTO = (".md", ".txt", ".rst")
+
+
+def senza_commenti(nome: str, testo: str) -> str:
+    """Il codice senza i commenti (11/10, misura con qwen3:8b: «// Musica cupa e comandi a voce:
+    fatto» in testa a un file bastava al modello per dire «fatto»). Conversione della forma: si
+    tolgono le righe di commento e i commenti in coda dopo uno spazio; il codice resta."""
+    n = nome.lower()
+    if n.endswith((".js", ".mjs", ".cs", ".css")):
+        testo = _COMMENTO_BLOCCO.sub("", testo)
+        testo = _COMMENTO_CODA.sub("", testo)
+        return re.sub(r"(?m)^[ \t]*//.*\n?", "", testo)
+    if n.endswith((".py", ".sh", ".ps1")):
+        return re.sub(r"(?m)^[ \t]*#(?!!).*\n?", "", testo)
+    return testo
+
+
 def testo_dei_file(file: dict, massimo: int = MAX_FILE_CAR) -> str:
     """I file consegnati per il confronto: prima il manifesto, poi il codice, poi i test; senza
     il runtime di Calliope, gli esempi veri e i file di un programma promosso."""
@@ -392,14 +412,14 @@ def testo_dei_file(file: dict, massimo: int = MAX_FILE_CAR) -> str:
     for nome, contenuto in (file or {}).items():
         n = str(nome)
         if n.startswith(("esempi_veri/", "programma/", "__pycache__/")) or n in (
-                "calliope_estensione.py", "lavoro.json") or n.startswith("."):
+                "calliope_estensione.py", "lavoro.json") or n.startswith(".") or                 n.lower().endswith(_SOLO_TESTO):
             continue
         if isinstance(contenuto, bytes):
             try:
                 contenuto = contenuto.decode("utf-8")
             except UnicodeDecodeError:
                 continue
-        scelti.append((_priorita(n), n, str(contenuto)))
+        scelti.append((_priorita(n), n, senza_commenti(n, str(contenuto))))
     scelti.sort(key=lambda x: (x[0], x[1]))
     out, totale = [], 0
     for _, nome, contenuto in scelti:

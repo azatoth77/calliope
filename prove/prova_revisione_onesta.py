@@ -396,6 +396,15 @@ def prova_contrari(tmp: Path):
                  {"testo": "**musica** https://x.it", "nucleo": True, "si_puo": True},
                  {"testo": "musica", "nucleo": False, "si_puo": True}]})[0]] == ["musica"])
 
+    # I file al confronto: senza commenti né testi che dicono «fatto» (misura con qwen3:8b)
+    t = rq.testo_dei_file({"gioco.js": "// Musica e comandi a voce: fatto\nconst PORTE = 5; "
+                                       "// tutte\nconst u = \"http://x.it\";\n",
+                           "LEGGIMI.md": "Tutto fatto.", "logica.py": "# fatto\nx = 1\n",
+                           "calliope_estensione.py": "runtime"})
+    verifica("al confronto vanno il codice senza commenti, niente README né runtime",
+             "const PORTE = 5;" in t and "http://x.it" in t and "fatto" not in t.lower()
+             and "LEGGIMI" not in t and "runtime" not in t and "x = 1" in t, t)
+
     # Un programma con qualcosa che manca
     agente = AgenteRequisiti([{"testo": "somma due numeri", "nucleo": True, "si_puo": True},
                               {"testo": "scrive il risultato in un file", "nucleo": True,

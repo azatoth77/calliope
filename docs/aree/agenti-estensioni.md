@@ -2110,8 +2110,8 @@ estensione, gioco). Modulo nuovo `calliope/requisiti.py`.
   aspetta), prima dell'annuncio: il modello dell'agente in una passata **nuova** riceve i
   requisiti e **i file consegnati**. Per un'estensione sono i file della candidata nell'archivio,
   cioè proprio la versione che si approverebbe; per un programma la cartella del risultato.
-  Prima viene il manifesto, poi il codice, poi i test, fino a 60 000 caratteri; il runtime e gli
-  esempi veri restano fuori. Entro `sviluppo_verifica_s` (60 s). **Perché questa fonte**: il
+  Prima viene il manifesto, poi il codice, poi i test, fino a 60 000 caratteri, senza commenti;
+  il runtime, gli esempi veri e i testi (`.md`, `.txt`) restano fuori. Entro `sviluppo_verifica_s` (60 s). **Perché questa fonte**: il
   rapporto o il riassunto dell'agente è ciò che l'agente dice di sé (l'11/10 diceva che andava
   tutto bene) e non entra; la conversazione dell'agente giustificherebbe il proprio lavoro; la
   voce (gemma) è più piccola, non legge codice e serve la conversazione. Il prompt dice di
@@ -2161,6 +2161,16 @@ estensione, gioco). Modulo nuovo `calliope/requisiti.py`.
   confronto) prima dell'annuncio. **Da misurare sulla DGX** con qwen3.6 vero: i tempi, e se il
   confronto trova davvero le mancanze del caso vero (porte fisse, niente musica) senza «parziale»
   di troppo.
+- **Misura indicativa** (portatile, qwen3:8b su Ollama, perché qwen3.6 qui non c'è; la
+  specifica di Halloween e un gioco finto con 5 porte fisse, senza musica, punti solo per i dolci
+  e il commento «// Musica cupa e comandi a voce: fatto»). L'estrazione dà 6 requisiti, stima
+  «medio», in 23–26 s (a freddo, sul portatile). Il confronto, con i commenti nei file, ha creduto
+  al commento e ha detto «musica: fatto». Per questo i file arrivano al confronto **senza
+  commenti** (`senza_commenti`: righe `//`, `#` e blocchi `/* */`, commenti in coda dopo uno
+  spazio; gli indirizzi nelle stringhe restano) e senza `.md`/`.txt`. Così, in 9,7 s, ha detto
+  «manca: musica… Le porte sono sempre 5, non variabili», ma «parziale» sulla scelta a voce invece
+  di «non si può» e la nota «solo 1-4 giocatori». È un modello piccolo e il dato è solo
+  indicativo: il 35B va misurato sulla DGX.
 - **Prove**: `prova_revisione_onesta.py` (a secco, ~2 s: il caso di Halloween con le tappe
   proposte, accettate e rifiutate; il caso vero alla consegna e alla revisione; la tappa dopo;
   contrari: richiesta semplice senza tappe, tutto fatto senza «manca», confronto non riuscito o
