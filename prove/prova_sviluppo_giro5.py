@@ -395,9 +395,9 @@ def prova_ripetizioni():
 
     print("— 5b. presence_penalty per tipo di lavoro")
     pp = cfg.agenti_presence_penalty
-    verifica("Config: 0 per codice ed estensioni (scheda di Qwen3.6, «precise coding»), 1,5 "
-             "per ricerche, documenti e altro",
-             pp.get("codice") == 0 and pp.get("estensione") == 0 and pp.get("ricerca") == 1.5
+    verifica("Config: 0 per il codice (scheda di Qwen3.6, «precise coding»), 0,5 per le "
+             "estensioni (misurato sulla DGX l'11/10), 1,5 per ricerche, documenti e altro",
+             pp.get("codice") == 0 and pp.get("estensione") == 0.5 and pp.get("ricerca") == 1.5
              and pp.get("documento") == 1.5 and pp.get("altro") == 1.5, str(pp))
     cli = _ClienteFinto([("testo", "ok")])
     ag = Agente(cfg, imp, cli, Arbitro(False, 0), log=log.append)

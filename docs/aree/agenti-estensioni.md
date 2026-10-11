@@ -2272,3 +2272,5 @@ estensione, gioco). Modulo nuovo `calliope/requisiti.py`.
   non allineato, note che parlano all'assistente, «continua» al collaudo, programma; scheda,
   vista, disco). `prova_sviluppo_v2` guarda l'ultima richiesta dell'agente senza lo schema (dopo
   la consegna c'è il confronto); `prova_valore` ha il tipo di `tappe`.
+
+**Presence penalty misurato (11/10 sera).** Con `prove/manuali/misura_presence_penalty.py` sulla DGX (qwen3.6 su vLLM, caso vero del gioco con la prova di fumo che falliva, 6 passate per valore, messaggio della prova vecchio e nuovo): col messaggio nuovo l'agente trova la causa in tutte le passate; a 0 una passata a vuoto, mediana 7,6 s e 561 token; a 0,5 nessuna a vuoto, 6 correzioni mirate su 6, mediana 3,6 s e 264 token; a 1,5 simile (3,7 s). Dall'11/10 `agenti_presence_penalty.estensione` (anche i giochi) è 0,5; `codice` resta 0, non misurato. Si torna indietro con quella riga.

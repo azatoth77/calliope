@@ -1071,9 +1071,12 @@ class Config:
     # Ollama non si manda). La scheda di Qwen3.6 consiglia 0 nel ragionamento sul codice
     # («precise coding tasks»: un codice ripete per forza gli stessi token) e 1,5 nel
     # ragionamento generale, contro le ripetizioni senza fine dei modelli quantizzati; oltre
-    # 1,5 a volte mescola le lingue. Non ancora misurato sulla DGX. 0 = non si manda
+    # 1,5 a volte mescola le lingue. 0 = non si manda. Misurato sulla DGX l'11/10 per
+    # «estensione» (anche i giochi) sul caso vero del gioco con la prova di fumo
+    # (prove/manuali/misura_presence_penalty.py, 6 passate per valore): con 0,5 nessun giro a
+    # vuoto, 6 correzioni mirate su 6, mediana 3,6 s contro 7,6 s a 0. «codice» non misurato
     agenti_presence_penalty: dict[str, float] = field(default_factory=lambda: {
-        "codice": 0.0, "estensione": 0.0, "ricerca": 1.5, "documento": 1.5, "altro": 1.5})
+        "codice": 0.0, "estensione": 0.5, "ricerca": 1.5, "documento": 1.5, "altro": 1.5})
     # Token del JSON di un documento scritto dall'agente (una relazione ne usa 2–4 mila)
     agenti_max_token_documento: int = 8192
     # Sandbox del codice: secondi per un'esecuzione di Python o dei test, memoria del processo
