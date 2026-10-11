@@ -701,3 +701,26 @@ automatiche accese). La usa `documento_crea`: un documento rimasto sul server pe
 non riceve file si dice «sulla scheda del tuo schermo: tocca «Scarica»». `documento_leggi`
 «mostra» manda la scheda del documento con «Scarica». Dettagli in
 [documenti-ufficio](documenti-ufficio.md).
+
+## La modalità gioco (11/10, ramo `gioco-schermo-intero`)
+
+Un gioco nel riquadro della scheda era troppo piccolo per giocarci (Dario, 11/10). Ora la scheda
+di un gioco che arriva occupa tutta la finestra, sulla pagina degli schermi e nel carosello del
+telefono, con ✕ per chiudere, ⛶ per lo schermo intero vero dove il browser lo permette e un
+pallino colorato con lo stato della voce; c'è anche la variante «collaudo» con la cornice arancio
+per un gioco in prova (`"prova": true` nella scheda). Dettagli, contratto e prove in
+[giochi](giochi.md) («La modalità gioco»). Per gli schermi:
+
+- è tutto in `schermo.js` (sezione «la modalità gioco»: `GIOCO`, `comandiGioco`,
+  `aggiornaModoGioco`) e nei CSS; la scheda non si sposta nel DOM (diventa `position: fixed`) e
+  sul telefono sta **sotto** gli strati (z-index 9 contro 10): un modulo che arriva, il menu o la
+  vista dello sviluppo si aprono sopra il gioco. Uscendo, il carosello torna sulla scheda che si
+  guardava (evento `calliope:gioco`);
+- il pallino della pagina degli schermi usa l'evento `voce` che c'era già (dorme, ascolta, pensa,
+  parla): nessun cambiamento nell'hub; sul telefono lo stato è quello del telefono e il pallino fa
+  anche da «Parla»;
+- «Calliope, chiudi il gioco» passa da `schermo_mostra` con `niente` (la scheda vuota), che ora
+  chiude la modalità gioco anche nel carosello del telefono (prima lì la scheda vuota non toglieva
+  il gioco);
+- la voce non si ferma: lo schermo intero non cambia la visibilità della pagina, il microfono del
+  telefono resta acceso (verificato in `prova_telefono_schermo`).
