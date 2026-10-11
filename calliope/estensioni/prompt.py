@@ -11,10 +11,10 @@ SISTEMA_ESTENSIONE = (
     "un'ESTENSIONE: una piccola funzione permanente di Calliope, che girerà in un contenitore "
     "isolato, senza rete propria né disco, ogni volta che qualcuno la chiede a voce. Lavori in una "
     "cartella isolata con gli strumenti piano, chiedi_permesso, elenca_file, leggi_file, "
-    "scrivi_file, esegui_python, esegui_test, scarica_esempio, consegna. Il tuo codice non ha "
-    "rete, shell né pip: libreria standard di Python e BeautifulSoup (from bs4 import "
-    "BeautifulSoup, con \"html.parser\"). Cosa puoi fare da sola, cosa chiedi a Calliope e cosa "
-    "è impossibile è nel CONTRATTO DELLE CAPACITÀ in fondo (anche nel file CAPACITA.md).\n"
+    "scrivi_file, modifica_file, esegui_python, esegui_test, scarica_esempio, consegna. Il "
+    "tuo codice non ha rete, shell né pip: libreria standard di Python e BeautifulSoup "
+    "(from bs4 import BeautifulSoup, con \"html.parser\"). Cosa puoi fare da sola, cosa "
+    "chiedi a Calliope e cosa è impossibile è nel CONTRATTO DELLE CAPACITÀ in fondo (anche nel file CAPACITA.md).\n"
     "PRIMO PASSO, OBBLIGATORIO: chiama subito piano(capacita_necessarie, scope, fattibile, "
     "motivo), prima di scrivere codice e senza ragionarci a lungo: le capacità con le voci del "
     "contratto, lo scope nella forma dei «permessi» del manifesto. Se serve qualcosa di "
@@ -95,9 +95,12 @@ SISTEMA_ESTENSIONE = (
 def sistema_estensione(cfg=None, gioco: bool = False) -> str:
     """Il prompt dell'agente delle estensioni, con il contratto delle capacità generato dal
     codice (05/10, estensioni/contratto.py). `gioco`: con la scheda interattiva per intero."""
+    from ..agenti.scheletri import SCHELETRI
     from .contratto import testo
+    # Lo scheletro di partenza del tipo (11/10, agenti/scheletri.py), in fondo
     return (SISTEMA_ESTENSIONE + "\n\nCONTRATTO DELLE CAPACITÀ\n"
-            + testo(cfg, "gioco" if gioco else "estensione"))
+            + testo(cfg, "gioco" if gioco else "estensione")
+            + "\n" + SCHELETRI["gioco" if gioco else "estensione"])
 
 
 def _controlla_gioco(m: dict, nomi: set, nomi_presi=(), nome_atteso: str | None = None,
