@@ -20,6 +20,14 @@ qui il lato di Calliope. Rapporto: docs/ricerche/2026-10-05-giochi.md.
 
 Nessun dato di casa passa di qui se il gioco non l'ha chiesto con la porta stretta; e una
 partita che l'ha letto non manda più messaggi agli altri schermi (`gioco_dati_personali`).
+
+- **Partita di prova** (11/10, collaudo di un gioco nella modalità sviluppo: `avvia_prova`): la
+  versione candidata, NON approvata, sullo schermo da cui parla chi amministra, con il campo
+  `"prova": true` nella scheda (la pagina la mostra con la cornice «PROVA»). Stesso riquadro e
+  stessa CSP di una partita vera; in più nessun ponte verso Calliope: dal riquadro passano solo
+  `pronto`, `battito`, `fine`, `errore` e `guasto` (`TIPI_PROVA`), mai `salva`/`leggi`, `manda`,
+  `chat`, `di` né `azione`. Un posto solo, nessuno si unisce; il documento c'è finché quella
+  versione è la candidata con l'impronta di quando è stata consegnata.
 """
 
 from __future__ import annotations
@@ -52,6 +60,22 @@ NOTE_GUASTO = {"non risponde": "Il gioco non rispondeva più: l'ho chiuso.",
                "non parte": "Il gioco non è partito: l'ho chiuso."}
 TIPI_PAGINA = ("pronto", "battito", "salva", "leggi", "manda", "chat", "di", "azione", "fine",
                "errore", "guasto")
+# Una partita di prova (11/10): il gioco gira e basta, senza ponte verso Calliope né dati
+TIPI_PROVA = ("pronto", "battito", "fine", "errore", "guasto")
+
+
+def candidata_intatta(est, nome: str, n) -> bool:
+    """La versione `n` di `nome` è ancora la candidata (non approvata) e i suoi file sono quelli
+    consegnati dall'agente (impronta di quando è stata consegnata)."""
+    from ..estensioni.archivio import impronta
+    try:
+        if n is None or est.archivio.candidata(nome) != n:
+            return False
+        ver = est.archivio.versione(nome, n) or {}
+        return bool(ver.get("impronta")) and impronta(
+            est.archivio.cartella_versione(nome, n)) == ver.get("impronta")
+    except (OSError, AttributeError, TypeError, ValueError):
+        return False
 
 
 def _final(testo: str, **extra) -> dict:
@@ -79,8 +103,11 @@ class Posto:
 
 
 class Partita:
-    def __init__(self, nome: str, versione: int, manifesto: dict, avviata_da: Mittente):
+    def __init__(self, nome: str, versione: int, manifesto: dict, avviata_da: Mittente,
+                 prova: bool = False):
         self.id = "P" + secrets.token_hex(4)
+        # La versione candidata nel collaudo (11/10): niente ponte verso Calliope
+        self.prova = bool(prova)
         self.gettone = secrets.token_urlsafe(24)
         self.nome, self.versione, self.manifesto = nome, versione, manifesto
         self.titolo = manifesto.get("titolo", nome)
@@ -96,7 +123,7 @@ class Partita:
 
     @property
     def condivisa(self) -> bool:
-        return bool(self.scheda.get("condivisa"))
+        return bool(self.scheda.get("condivisa")) and not self.prova
 
     @property
     def massimo(self) -> int:
@@ -186,7 +213,7 @@ class Giochi:
             p = None
             if m.get("scheda", {}).get("condivisa") and unisciti:
                 aperte = [x for x in self.partite.values() if x.nome == nome
-                          and x.versione == versione and sid not in x.posti
+                          and x.versione == versione and not x.prova and sid not in x.posti
                           and len(x.posti) < x.massimo and time.time() - x.ultimo < 1800]
                 p = max(aperte, key=lambda x: x.ultimo) if aperte else None
             nuova = p is None
@@ -220,6 +247,55 @@ class Giochi:
         note_rule(ctx, "gioco_avviato")
         return _final(frase, partita=p.id)
 
+    def avvia_prova(self, ctx, nome: str, versione: int, m: dict) -> dict:
+        """Il collaudo di un gioco (11/10, DGX delle 16:25: «è un gioco, dovrei vederlo» e
+        «Un gioco si prova sullo schermo dopo l'approvazione»): la versione candidata, non
+        approvata, in una partita di prova sullo schermo da cui si parla (o il personale di chi
+        parla, o il primo della stanza), con `"prova": true` nella scheda. Solo per chi vive in
+        casa (la chiede chi amministra, nella modalità sviluppo); una prova per gioco alla
+        volta. Il risultato per la voce."""
+        if not getattr(self.cfg, "giochi_enabled", True):
+            return _rifiuto(ctx, "I giochi sugli schermi sono spenti.", "gioco_spento")
+        self.pulisci()
+        titolo = m.get("titolo", nome)
+        mitt = self.hub.mittente(ctx)
+        stanza = mitt.stanza or self.hub.stanza_predefinita or None
+        dest, motivo = destinatari(schede.CASA, mitt, self.hub.abbinati(), stanza)
+        if not dest:
+            frasi = {"nessuno_schermo": "Per vederlo serve uno schermo abbinato: non ne ho.",
+                     "zona_grigia": "Non ti ho riconosciuto bene: ripetimelo con una frase più "
+                                    "lunga.",
+                     "stanza": "Qui non c'è uno schermo dove mostrarlo."}
+            return _rifiuto(ctx, frasi.get(motivo, "Non trovo uno schermo dove mostrarlo."),
+                            "gioco_senza_schermo")
+        s = next((x for x in dest if x.get("id") == mitt.schermo), None) or next(
+            (x for x in dest if mitt.persona and x.get("proprietario") == mitt.persona), dest[0])
+        sid = s["id"]
+        with self._lock:
+            # Una prova per gioco: quella di prima non vale più (il suo indirizzo muore)
+            for vecchia in [k for k, v in self.partite.items() if v.prova and v.nome == nome]:
+                self._per_gettone.pop(self.partite.pop(vecchia).gettone, None)
+            p = Partita(nome, versione, m, mitt, prova=True)
+            self.partite[p.id] = p
+            self._per_gettone[p.gettone] = p.id
+            p.posti[sid] = Posto(sid, mitt, False)
+        card = schede.nuova("gioco", titolo, schede.CASA, durata_s=None,
+                            chiave=f"gioco:{p.id}", partita=p.id, doc=f"/gioco/{p.gettone}",
+                            condivisa=False, giocatori=p.massimo,
+                            watchdog_s=self._c("giochi_watchdog_s", 6.0), prova=True,
+                            versione=versione)
+        self.hub.ricorda(card, mitt)
+        p.carte[sid] = card
+        collegato = self.hub.invia_a(sid, card)
+        self._registra(p, "prova", schermo=s.get("nome"), persona=mitt.nome)
+        frase = (f"Ecco «{titolo}» in prova sullo schermo {self._di(s.get('nome') or 'schermo')}"
+                 f": è la versione {versione}, non ancora attiva.")
+        if not collegato:
+            frase += " Lo schermo sembra spento: lo vedrai appena si riaccende."
+        from ..tools.spec import note_rule
+        note_rule(ctx, "gioco_prova")
+        return _final(frase, partita=p.id, schermo=s.get("nome"))
+
     def _nome_schermo(self, sid) -> str:
         s = self.hub.schermo(sid) or {}
         return f"lo schermo {self._di(s.get('nome') or 'senza nome')}"
@@ -240,11 +316,17 @@ class Giochi:
         est = self.estensioni
         if p is None or est is None:
             return None
-        voce = est.archivio.voce(p.nome) or {}
-        if voce.get("stato") != "attiva" or voce.get("attiva") != p.versione \
-                or not est.archivio.verifica(p.nome):
-            return None
-        chiave = (p.nome, p.versione)
+        if p.prova:
+            # La versione candidata (11/10): ancora la candidata, con i file di quando l'agente
+            # l'ha consegnata (come Estensioni.prova_candidata)
+            if not candidata_intatta(est, p.nome, p.versione):
+                return None
+        else:
+            voce = est.archivio.voce(p.nome) or {}
+            if voce.get("stato") != "attiva" or voce.get("attiva") != p.versione \
+                    or not est.archivio.verifica(p.nome):
+                return None
+        chiave = (p.nome, p.versione, p.prova)
         d = self._documenti.get(chiave)
         if d is None:
             d = documento(p.scheda, est.file_versione(p.nome, p.versione))
@@ -266,6 +348,12 @@ class Giochi:
             posto = p.posti.get(sid) if p is not None else None
         if p is None or posto is None:
             return {"errore": "partita sconosciuta per questo schermo", "_stato": 404}
+        if p.prova and tipo not in TIPI_PROVA:
+            # Una versione non approvata non parla con Calliope (11/10): né dati, né altri
+            # schermi, né frasi, né tool
+            self._registra(p, "prova_rifiutata", regola="gioco_prova_senza_ponte", tipo=tipo)
+            return {"errore": "gioco in prova: qui gira e basta, senza dati né azioni",
+                    "_stato": 403}
         # Frequenza (il battito e il cane da guardia non contano)
         ora = time.time()
         if tipo not in ("battito", "guasto"):

@@ -67,6 +67,8 @@ CONTESTI = "sviluppi"           # la cartella dei contesti conservati, accanto a
 MAX_CHIESTI = 10
 MAX_LAVORI = 40
 CHIUSURA_TURNI = 3              # la conferma della chiusura vale per tanti turni
+# Al collaudo di un gioco (11/10): il «sì» lo apre in prova sullo schermo (sviluppo_collauda)
+DOMANDA_GIOCO = "Lo apro in prova?"
 
 
 def leggibile(titolo: str) -> str:
@@ -633,6 +635,11 @@ class Sviluppi:
             item["in_sospeso"] = {"domanda": "Con cosa provo?", "tool": "sviluppo_collauda",
                                   "cosa": f"provare «{sv.titolo}»",
                                   "argomenti": "dati = i dati detti dalla persona"}
+            if self.e_gioco(sv):
+                # Un gioco si prova guardandolo (11/10): il «sì» lo apre in prova sullo schermo
+                item["in_sospeso"] = {"domanda": DOMANDA_GIOCO, "tool": "sviluppo_collauda",
+                                      "cosa": f"aprire «{sv.titolo}» in prova sullo schermo",
+                                      "argomenti": {}}
             item["sviluppo"] = sv.id
             self._manda_scheda(sv, getattr(lav, "on_scheda", None))
             return item
@@ -679,7 +686,12 @@ class Sviluppi:
             parti.append(riprovata)
             self.log(f"[SVILUPPO] {sv.id}: regola sviluppo_pronto_riprovato")
         falliti = [c for c in sv.collaudi if not c.get("ok") and c.get("dati")]
-        if rc.get("vanno") and not rc.get("rimandata"):
+        if self.e_gioco(sv):
+            # «Con cosa provo?» per un gioco non ha risposta (11/10, DGX delle 16:25: «Non lo
+            # so, è un gioco, dovrei vederlo»): si propone di aprirlo in prova
+            parti.append("È un gioco: per provarlo lo apro sullo schermo da cui mi parli, in "
+                         f"prova, senza attivarlo. {DOMANDA_GIOCO}")
+        elif rc.get("vanno") and not rc.get("rimandata"):
             parti.append("Con cosa provo?")
         elif falliti and getattr(lav, "correzione", False):
             parti.append(f"Con cosa provo? Per esempio di nuovo con «{falliti[-1]['dati']}», "
@@ -689,6 +701,22 @@ class Sviluppi:
         testo = " ".join(parti)
         testo = testo[:1].upper() + testo[1:] if not who else testo
         return who + testo
+
+    def e_gioco(self, sv: Sviluppo) -> bool:
+        """Lo sviluppo è un gioco sugli schermi: chiesto come gioco, o la versione da provare ha
+        la scheda (11/10: il collaudo di un gioco è vederlo)."""
+        if sv.tipo != "estensione":
+            return False
+        if getattr(sv, "gioco", False):
+            return True
+        arch = getattr(getattr(self.lavori, "estensioni", None), "archivio", None)
+        if arch is None or not sv.estensione:
+            return False
+        try:
+            n = arch.candidata(sv.estensione) or sv.versione
+            return bool((arch.manifesto(sv.estensione, n) or {}).get("scheda"))
+        except Exception:  # noqa: BLE001 — nel dubbio, il collaudo con i dati
+            return False
 
     @staticmethod
     def _frase_ricollaudo(rc: dict) -> str:
@@ -834,12 +862,49 @@ class Sviluppi:
             return {}
         return file_di_codice(sv.cartella, max_file=12, max_byte=60_000)
 
+    def motivo_arresto(self, sv: Sviluppo, voce: bool = False) -> str:
+        """Perché il lavoro dello sviluppo è fermo, come l'ha deciso Calliope (11/10): un tetto
+        del giro con i segnali di giro a vuoto (tappa), il ragionamento ripetuto o un altro
+        limite (sv.nota), la persona, un riavvio. "" con l'agente al lavoro o senza un arresto
+        (collaudo, revisione…). `voce`: la frase da dire, in prima persona («L'ho fermato
+        io: …»)."""
+        if sv.fase != "sviluppo" or self.lavoro_attivo(sv):
+            return ""
+        lav = self._lavoro(sv.lavoro)
+        r = (getattr(lav, "risultato", None) or {}) if lav is not None else {}
+        if lav is not None and getattr(lav, "stato", "") == "in_attesa" \
+                and r.get("esito") == "tappa":
+            perche = {"passate": "ha finito le passate del giro", "tempo": "è finito il tempo "
+                      "del giro", "token": "ha finito i token del giro"}.get(
+                r.get("tipo_limite"), "è arrivato al limite del giro")
+            seg = (r.get("segnali") or {}).get("frasi") or []
+            return ("Il lavoro è fermo a una tappa: " if voce else "è fermo a una tappa: ") \
+                + perche + (f"; segnali di giro a vuoto: {', '.join(seg)}" if seg else "") + "."
+        nota = str(sv.nota or "").strip()
+        if not nota:
+            return ""
+        if nota in ("annullato", "fermato"):
+            return "Il lavoro l'hai fermato tu." if voce else "l'ha fermato la persona."
+        if "riavvio" in nota:
+            return f"{nota[:1].upper() + nota[1:].rstrip('.')}: non è un problema del codice."
+        # «ho dovuto fermarlo: ha ripetuto lo stesso ragionamento…» → il motivo
+        nota = re.sub(r"^ho dovuto fermarlo:\s*", "", nota).rstrip(".")
+        if voce:
+            return f"Il lavoro l'ho fermato io: {nota}."
+        return f"Calliope ha fermato il lavoro dell'agente: {nota}."
+
     def testo_per_agente(self, sv: Sviluppo, massimo: int = 30_000) -> str:
         """Il contesto dello sviluppo per sviluppo_chiedi e sviluppo_correggi: specifica,
         collaudi con gli esiti, domande già fatte, test, diario e ultimi passi dell'agente, i
         file (troncati), le fonti del manifesto."""
         righe = [f"Sviluppo: {sv.cosa()} «{sv.titolo}» ({sv.id}), fase: {NOMI.get(sv.fase)}.",
                  f"Specifica: {sv.specifica or sv.richiesta}"]
+        arresto = self.motivo_arresto(sv)
+        if arresto:
+            # Il perché dell'arresto lo decide Calliope, non il codice (11/10, DGX delle 15:52:
+            # «Ma si capisce perché è rimasto bloccato?» → un errore nel codice delle porte,
+            # mentre Calliope l'aveva fermato per il ragionamento ripetuto)
+            righe.append(f"PERCHÉ IL LAVORO SI È FERMATO (lo ha deciso Calliope): {arresto}")
         inp = self.input_in_prova(sv)
         if inp:
             righe.append("Input della versione in prova: " + "; ".join(inp))
@@ -856,7 +921,9 @@ class Sviluppi:
                 righe.append(f"- «{c.get('dati') or 'senza dati'}»"
                              + (f" (argomenti passati all'estensione: {argomenti_detti(c)})"
                                 if c.get("argomenti") else "") + " → "
-                             f"{'riuscito' if c.get('ok') else 'NON riuscito'}: "
+                             + ("aperto in prova sullo schermo (il giudizio è della "
+                                "persona)" if c.get("anteprima") else "riuscito" if c.get("ok")
+                                else "NON riuscito") + ": "
                              f"{c.get('esito') or ''}{giudizio}")
                 # Le richieste di rete vere del collaudo (08/10): la causa che, nel giro della
                 # DGX, l'agente non vedeva e indovinava
@@ -869,8 +936,12 @@ class Sviluppi:
             righe.append(f"Domanda già fatta: «{q.get('domanda')}» → {q.get('dettagli') or q.get('voce')}")
         ctx = self.contesto(sv)
         for lv in (ctx.get("lavori") or [])[-2:]:
+            # Il motivo anche con un riassunto (prima o l'uno o l'altro: il motivo spariva)
+            motivo = str(lv.get("motivo") or "").strip()
+            riass = str(lv.get("riassunto") or "").strip()
             righe.append(f"Lavoro {lv.get('lavoro')} ({lv.get('esito') or lv.get('stato')}): "
-                         f"{lv.get('riassunto') or lv.get('motivo') or ''}")
+                         + "; ".join(x for x in (riass, f"motivo dell'arresto: {motivo}"
+                                                 if motivo else "") if x))
             d = lv.get("diario") or {}
             for k in ("piano", "fatto", "dati", "decisioni", "test", "manca"):
                 v = d.get(k)
@@ -1029,6 +1100,14 @@ class Sviluppi:
                 "non trova…?»), sviluppo_chiedi con domanda = la domanda come detta: risponde "
                 "chi l'ha scritto; se va corretto («correggilo», «fallo sistemare»), "
                 "sviluppo_correggi con problema = cosa non va, come detto.")
+        if sv.fase == "collaudo" and self.e_gioco(sv):
+            return (f"È un GIOCO: la versione {sv.versione or 'nuova'} è pronta ma NON è ancora "
+                    "attiva, e si prova guardandola. Se chiede di vederlo o provarlo («fammelo "
+                    "vedere», «fallo girare», «provalo», «sì» alla domanda), sviluppo_collauda "
+                    "senza dati: si apre in prova sullo schermo da cui parla, non attivo. Se dice "
+                    "che va bene o di attivarlo, sviluppo_passo con azione avanti (la revisione); "
+                    "se dice cosa cambiare, sviluppo_correggi con problema = la modifica come "
+                    "detta." + dopo)
         if sv.fase == "collaudo":
             if sv.tipo == "programma":
                 return ("Il programma è pronto: se chiede di provarlo («provalo con 3 e 5»), "
@@ -1134,8 +1213,10 @@ class Sviluppi:
                 dati = c.get("dati") or "senza dati"
                 righe.append(f"- {_ora(float(c.get('quando') or 0))}, «{dati}»"
                              + (f" ({argomenti_detti(c)})" if c.get("argomenti") else "") + ": "
-                             f"{'riuscito' if c.get('ok') else 'non riuscito'}"
-                             + (f" — {c['esito']}" if c.get("esito") else ""))
+                             + ("aperto in prova sullo schermo" if c.get("anteprima") else
+                                "riuscito" if c.get("ok") else "non riuscito")
+                             + (f" — {c['esito']}" if c.get("esito") else "")
+                             + (f" (la persona: {c['giudizio']})" if c.get("giudizio") else ""))
         if sv.chiesti:
             righe += ["", "## Domande a chi l'ha scritta", ""]
             for q in sv.chiesti[-5:]:
@@ -1261,7 +1342,7 @@ class Sviluppi:
             self.log(f"[SVILUPPO] scheda non inviata: {type(e).__name__}: {e}")
 
     def collaudo(self, sv: Sviluppo, dati: str, ok: bool, esito: str, rete=None,
-                 argomenti: dict | None = None):
+                 argomenti: dict | None = None, anteprima: bool = False):
         """Un collaudo fatto. `rete`: la traccia di rete dell'esecuzione (08/10,
         estensioni/porta.py: metodo, URL ripulito, esito, inizio della risposta o errore,
         durata), per l'agente in sviluppo_chiedi e sviluppo_correggi. `argomenti`: gli input
@@ -1270,6 +1351,10 @@ class Sviluppi:
         c = {"quando": time.time(), "dati": str(dati or "")[:120], "ok": bool(ok),
              "esito": re.sub(r"\s+", " ", str(esito or "")).strip()[:200],
              "versione": sv.versione}
+        if anteprima:
+            # Un gioco aperto in prova sullo schermo (11/10): l'ha visto la persona, il giudizio
+            # è suo (non un «riuscito» del codice)
+            c["anteprima"] = True
         if isinstance(argomenti, dict) and argomenti:
             c["argomenti"] = {str(k)[:40]: (v if isinstance(v, (int, float, bool))
                                             else str(v)[:120]) for k, v in
@@ -2012,6 +2097,9 @@ SISTEMA_CHIEDI = (
     "Le richieste di rete dei collaudi sono quelle vere fatte dall'estensione (URL, esito, "
     "errore o inizio della risposta): se una non va, la causa parte da lì; non indovinare una "
     "causa che la traccia smentisce. "
+    "Se chiede perché il lavoro si è fermato o bloccato, il motivo è la riga «PERCHÉ IL LAVORO "
+    "SI È FERMATO» del contesto (l'ha deciso Calliope): dillo per primo, con quelle parole; un "
+    "difetto del codice, se lo vedi, viene dopo e non è il motivo dell'arresto. "
     "Rispondi in JSON: voce = una o due frasi semplici in italiano da dire ad alta voce (niente "
     "codice, nomi di file, simboli, indirizzi web); dettagli = la spiegazione per lo schermo "
     "(file, funzioni, la causa); serve_correzione = true se il codice va corretto; "
