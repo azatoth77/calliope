@@ -463,6 +463,41 @@ def etichetta(valore, tipo: str, f: Fonti) -> str:
     return peggiore or SCELTO
 
 
+# Gli argomenti che nominano uno sviluppo di chi parla (11/10, DGX delle 15:53: «Fallo continuare
+# allora» → sviluppo_passo {azione: avanti, quale: "videogioco a tema Halloween da giocare"}, e
+# `quale` era bersaglio/dato perché il titolo stava nell'annuncio del lavoro, scritto dal lavoro
+# di un agente: «ESEGUITE con un bersaglio dal dato» = 1). Il titolo di uno sviluppo aperto o
+# sospeso della STESSA persona lo ha dato Calliope (sviluppo.Sviluppi, dalla sua richiesta): è
+# un bersaglio fidato, come la città di casa (`da_config`). Solo questi argomenti, e solo se
+# il valore è l'id o parole del titolo di un suo sviluppo; un titolo di un altro, o che non è
+# di nessuno sviluppo, resta quello che era
+SVILUPPO_NOMINATO: dict[str, tuple[str, ...]] = {"sviluppo_passo": ("quale",)}
+
+
+def sviluppo_suo(name: str, k: str, valore, ctx) -> bool:
+    """`valore` (l'argomento `k` di `name`) nomina uno sviluppo aperto o sospeso di chi parla:
+    il suo id («S3») o parole tutte del suo titolo (o del nome della sua estensione)."""
+    if k not in SVILUPPO_NOMINATO.get(name, ()) or ctx is None:
+        return False
+    if not isinstance(valore, str) or not valore.strip():
+        return False
+    try:
+        from .sviluppo import chi, servizio
+        svs, persona = servizio(ctx), chi(ctx)
+        if svs is None or persona is None:
+            return False
+        with svs._lock:
+            suoi = [(s.id, f"{s.titolo} {s.estensione or ''}") for s in svs.sviluppi
+                    if s.persona == persona and s.stato in ("aperta", "sospesa")]
+    except Exception:  # noqa: BLE001 — nel dubbio resta l'etichetta di prima
+        return False
+    v = valore.strip().lower()
+    if re.fullmatch(r"s\d+", v):
+        return any(i.lower() == v for i, _ in suoi)
+    pv = prov.parole(valore)
+    return bool(pv) and any(pv <= prov.parole(titolo) for _, titolo in suoi)
+
+
 # Nomi propri, sigle, numeri, indirizzi: le parole «distintive» di un testo libero. Le parole
 # comuni che il modello aggiunge espandendo la richiesta («approfondita», «analizzando») non
 # contano (§ 5.2: la quota di parole della persona in un compito ha mediana 0,17)
@@ -661,6 +696,8 @@ def _matrice(name: str, args: dict, cl, t, base, conferma_voce: bool = False,
         # senza tipi dichiarati: un argomento senza fonte vale come preso dal dato (§ 5.2)
         if tipi is None and e == MODELLO:
             e = DATO
+        if e in (DATO, MODELLO) and sviluppo_suo(name, k, v, ctx):
+            e = FIDATO
         etichette[k] = f"{tipo.partition(':')[0]}/{e}"
         if (tipo == BERSAGLIO or tipo.startswith(INDICE)) and e == DATO:
             bers_dato.append(k)
