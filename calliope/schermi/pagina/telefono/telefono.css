@@ -355,6 +355,19 @@ button.grande {
 /* Giochi (05/10): nel carosello il riquadro prende tutta la pagina */
 .telefono .scheda-gioco > .corpo { overflow: hidden; }
 .telefono .riquadro-box { min-height: 0; }
+/* La modalità gioco (11/10): la pagina del carosello diventa fissa a tutta la finestra (le
+   regole di .pagina-car qui sopra vincerebbero a parità di peso) */
+.telefono .pagina-car.scheda-gioco.modo-gioco {
+  flex: none; width: auto; height: auto; border: 0; border-radius: 0; background: #000;
+  padding: env(safe-area-inset-top, 0) env(safe-area-inset-right, 0) env(safe-area-inset-bottom, 0) env(safe-area-inset-left, 0);
+}
+.telefono .pagina-car.scheda-gioco.modo-gioco > .corpo { overflow: hidden; margin: 0; padding: 0; }
+.telefono .pagina-car.scheda-gioco.gioco-prova { border: 0.3rem solid var(--prova); }
+.telefono .pagina-car.scheda-gioco.modo-gioco.gioco-prova {
+  background: var(--prova);
+  padding: max(0.4rem, env(safe-area-inset-top, 0)) max(0.4rem, env(safe-area-inset-right, 0))
+           max(0.4rem, env(safe-area-inset-bottom, 0)) max(0.4rem, env(safe-area-inset-left, 0));
+}
 
 /* Il cruscotto di chi amministra (06/10): voce del menu, la scheda va nel carosello */
 #cruscotto-tel { margin: 0.2rem 0 0.4rem; background: var(--pannello-2); color: var(--testo);

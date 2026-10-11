@@ -132,9 +132,13 @@ class Giochi:
             return d
 
     # ── dal tool del gioco ──
-    def avvia(self, ctx, nome: str, versione: int, m: dict, argomenti: dict) -> dict:
+    def avvia(self, ctx, nome: str, versione: int, m: dict, argomenti: dict,
+              prova: bool = False) -> dict:
         """Apre una partita (o si unisce a quella aperta da un altro schermo) e manda la
-        scheda del gioco a uno schermo. Il risultato per la voce."""
+        scheda del gioco a uno schermo. Il risultato per la voce. `prova` (11/10): un gioco
+        non ancora approvato, aperto per il collaudo: la scheda porta "prova": true e la
+        pagina lo mostra nella modalità gioco con la cornice arancio e «PROVA» (contratto in
+        docs/aree/giochi.md; chi apre la versione non attiva è lo sviluppo, non questo)."""
         from .. import minori
         from ..estensioni.scheda import e_gioco_puro
         if not getattr(self.cfg, "giochi_enabled", True):
@@ -198,7 +202,8 @@ class Giochi:
             p.ultimo = time.time()
         card = schede.nuova("gioco", titolo, vis, durata_s=None, chiave=f"gioco:{p.id}",
                             partita=p.id, doc=f"/gioco/{p.gettone}", condivisa=p.condivisa,
-                            giocatori=p.massimo, watchdog_s=self._c("giochi_watchdog_s", 6.0))
+                            giocatori=p.massimo, watchdog_s=self._c("giochi_watchdog_s", 6.0),
+                            **({"prova": True} if prova else {}))
         self.hub.ricorda(card, mitt)
         p.carte[sid] = card
         collegato = self.hub.invia_a(sid, card)

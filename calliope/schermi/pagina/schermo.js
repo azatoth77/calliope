@@ -234,6 +234,11 @@
     chat() { return apriChat(); },
     haChat() { return S.chatOk; },
     pulisci() { return pulisciSchede(); },
+    // La modalità gioco (11/10): il telefono passa lo stato della sua voce per il pallino;
+    // `gioco()` dice quale partita è a tutto schermo (per le prove e per il carosello)
+    voceGioco(stato) { voceGioco(stato); },
+    gioco() { return { partita: GIOCO.attivo, schermoIntero: !!document.fullscreenElement, voce: GIOCO.voce }; },
+    chiudiGioco() { if (GIOCO.attivo) chiudiGiocoDaTe(GIOCO.attivo); },
     NOMI_TIPO,
   };
 
@@ -334,6 +339,9 @@
       if (!CAROSELLO && vistaSviluppo(c)) { if (S.intera) disegnaInteroPC(); return; }
       if (S.intera && chiaveDi(c) === S.intera) setTimeout(disegnaInteroPC, 0);
       if (c.tipo === "vuota") {
+        // «Calliope, chiudi il gioco» (11/10): la scheda vuota di schermo_mostra chiude anche
+        // la modalità gioco, sul telefono come qui
+        if (GIOCO.attivo) chiudiGiocoDaTe(GIOCO.attivo);
         if (moduloInCorso()) return;       // non si cancella un modulo mentre si scrive
         S.corrente = null; mostraInattiva(); return;
       }
@@ -355,7 +363,13 @@
         return;
       }
       aggiungiCronologia(c);
+      // Un gioco appena arrivato (11/10) si apre nella modalità gioco: GIOCO.attivo prima di
+      // mostra, così la scheda nasce già a tutto schermo
+      const gioca = c.tipo === "gioco" && c.stato !== "chiuso" && !GIOCHI_CHIUSI[c.partita]
+        && !CHIUSI_DA_TE[c.partita];
+      if (gioca) GIOCO.attivo = c.partita;
       mostra(c);
+      if (gioca) entraModoGioco(c.partita, false);
     });
     es.addEventListener("voce", (ev) => { vivo(); mostraVoce(JSON.parse(ev.data)); });
     es.addEventListener("scrittura", (ev) => { vivo(); applicaScrittura(JSON.parse(ev.data)); });
@@ -3187,7 +3201,7 @@
     }
     const box = $("voce");
     S.voce = v && TESTI_VOCE[v.stato] ? v : null;
-    if (!S.voce) { box.hidden = true; return; }
+    if (!S.voce) { box.hidden = true; voceGioco(""); return; }
     S.voceTotale = S.voce.fino ? Math.max(1, S.voce.fino * 1000 - ora()) : 0;
     box.hidden = false;
     disegnaVoce();
@@ -3210,6 +3224,7 @@
           Math.max(0, Math.min(100, (ms / S.voceTotale) * 100)) + "%";
       }
     }
+    voceGioco(stato);
     box.className = "voce " + stato + (resto ? " conta" : "");
     box.querySelector(".voce-testo").textContent = TESTI_VOCE[stato];
     box.querySelector(".voce-resto").textContent = resto;
@@ -3331,7 +3346,9 @@
     GIOCHI_CHIUSI[partita] = nota;
     const box = f.parentElement;
     f.remove();                       // il riquadro sparisce: niente più codice del gioco
+    togliComandiGioco(box);
     if (box) box.replaceChildren(el("p", "nota gioco-chiuso", nota));
+    if (GIOCO.attivo === partita) esciModoGioco();
     if (motivo) alServerGioco(partita, { tipo: "guasto", motivo });
     if (motivo === "non risponde") {
       // Un riquadro bloccato in un ciclo infinito tiene occupato il suo processo, e il
@@ -3342,8 +3359,199 @@
     }
   }
 
+  // ─── la modalità gioco (11/10) ───
+  // Nel riquadro della scheda un gioco era troppo piccolo per giocarci davvero. Quando arriva
+  // un gioco la sua scheda occupa tutta la finestra (position: fixed: il riquadro NON si
+  // sposta nella pagina, perché un iframe spostato si ricarica e la partita ripartirebbe) e,
+  // dove il browser lo permette, la pagina va a schermo intero vero (requestFullscreen vuole
+  // un gesto: se il gioco arriva dalla voce senza un tocco recente, ⛶ lo fa con un tocco; su
+  // iPhone l'API non c'è e basta la finestra piena). Sopra il gioco, negli angoli: il pallino
+  // della voce (ascolto, serve il nome, penso, parlo), ⛶ e ✕ per chiudere. Si esce con ✕, Esc,
+  // «Calliope, chiudi il gioco» (la scheda vuota di schermo_mostra) o quando il gioco si chiude.
+  // La voce non c'entra: è una vista della pagina, il microfono e la riproduzione (telefono) o
+  // il satellite (PC) continuano come prima. Il riquadro, la sua sandbox e la CSP non cambiano.
+  const GIOCO = { attivo: null, fs: false, voce: "", ultimo: null };
+  const CHIUSI_DA_TE = {};           // partita → true: chiuso con ✕, «Riapri» lo rimette
+  // Il pallino: [etichetta minima, descrizione per il title e i lettori di schermo]
+  const VOCE_GIOCO = {
+    ascolta: ["ascolto", "Calliope ti ascolta"],
+    dorme: ["dormo", "Calliope è a disposizione: chiamala per nome"],
+    pensa: ["penso", "Calliope ci sta pensando"],
+    parla: ["parlo", "Calliope sta parlando"],
+    spento: ["spento", "Il microfono di questo telefono è spento"],
+  };
+
+  function schermoInteroPossibile() {
+    return !!(document.fullscreenEnabled && document.documentElement.requestFullscreen);
+  }
+  function chiediSchermoIntero() {
+    if (!schermoInteroPossibile() || document.fullscreenElement) return;
+    try {
+      const p = document.documentElement.requestFullscreen({ navigationUI: "hide" });
+      GIOCO.fs = true;
+      if (p && p.catch) p.catch(() => { GIOCO.fs = false; aggiornaModoGioco(); });
+    } catch (e) { GIOCO.fs = false; }
+  }
+  function lasciaSchermoIntero() {
+    if (!GIOCO.fs) return;               // lo schermo intero chiesto da altri resta
+    GIOCO.fs = false;
+    if (document.fullscreenElement && document.exitFullscreen) {
+      try { const p = document.exitFullscreen(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* niente */ }
+    }
+  }
+
+  function comandiGioco(c) {
+    const box = el("div", "gioco-comandi");
+    // Sul telefono il pallino è anche «Parla» (tocca e parla, tieni premuto per parlare a
+    // lungo: telefono.js): sopra il gioco il pulsante grande non si vede
+    const v = el(INCORPORATA ? "button" : "span", "gioco-voce");
+    if (INCORPORATA) v.type = "button"; else v.setAttribute("role", "status");
+    v.append(el("i", "gioco-pallino"), el("span", "gioco-voce-testo", ""));
+    disegnaVoceGioco(v);
+    const tutto = el("button", "gioco-tasto gioco-tutto", "⛶");
+    tutto.type = "button";
+    tutto.dataset.giocoTutto = "1";
+    tutto.title = "Schermo intero";
+    tutto.setAttribute("aria-label", "Schermo intero");
+    tutto.hidden = !schermoInteroPossibile() || !!document.fullscreenElement;
+    const ch = el("button", "gioco-tasto gioco-chiudi", "✕");
+    ch.type = "button";
+    ch.dataset.giocoChiudi = String(c.partita || "");
+    ch.title = "Chiudi il gioco";
+    ch.setAttribute("aria-label", "Chiudi il gioco");
+    const entra = el("button", "piccolo-bottone gioco-entra", "Gioca a tutto schermo");
+    entra.type = "button";
+    entra.dataset.giocoEntra = String(c.partita || "");
+    box.append(v);
+    if (c.prova === true) {
+      const pr = el("span", "gioco-prova-etichetta", "PROVA");
+      pr.title = "Gioco in prova: non ancora approvato";
+      box.append(pr);
+    }
+    box.append(tutto, ch, entra);
+    return box;
+  }
+  function togliComandiGioco(box) {
+    const corpo = box && box.parentElement;
+    if (corpo) corpo.querySelectorAll(":scope > .gioco-comandi").forEach((x) => x.remove());
+  }
+
+  // Lo stato della voce per il pallino: sulla pagina degli schermi quello del server (evento
+  // «voce», come la fascia in alto), sul telefono quello del telefono (telefono.js lo passa
+  // con calliopeSchermo.voceGioco). Vuoto: questa pagina non lo conosce, il pallino non c'è
+  function disegnaVoceGioco(v) {
+    const st = GIOCO.voce;
+    const d = VOCE_GIOCO[st];
+    v.className = "gioco-voce" + (d ? " " + st : "");
+    v.hidden = !d;
+    const t = v.querySelector(".gioco-voce-testo");
+    if (t && t.textContent !== (d ? d[0] : "")) t.textContent = d ? d[0] : "";
+    const descr = d ? d[1] + (v.tagName === "BUTTON" ? ". Tocca per parlarle" : "") : "";
+    if (v.title !== descr) { v.title = descr; v.setAttribute("aria-label", descr); }
+  }
+  function voceGioco(stato) {
+    const nuovo = VOCE_GIOCO[stato] ? stato : "";
+    if (nuovo === GIOCO.voce) return;
+    GIOCO.voce = nuovo;
+    document.querySelectorAll(".gioco-voce").forEach(disegnaVoceGioco);
+  }
+
+  function articoloGioco(p) {
+    if (!p) return null;
+    return [...document.querySelectorAll("article.scheda-gioco")].find((a) => a.dataset.partita === p
+      && a.querySelector("iframe.riquadro-gioco") && !a.closest("[hidden]")) || null;
+  }
+  // Mette la pagina d'accordo con GIOCO.attivo: la classe sulla scheda e sul body, ⛶ visibile
+  // solo dove serve; il telefono lo sa con l'evento «calliope:gioco»
+  function aggiornaModoGioco() {
+    let art = articoloGioco(GIOCO.attivo);
+    if (GIOCO.attivo && !art) { GIOCO.attivo = null; lasciaSchermoIntero(); }
+    document.querySelectorAll("article.scheda-gioco.modo-gioco").forEach((a) => {
+      if (a !== art) a.classList.remove("modo-gioco");
+    });
+    if (art && !art.classList.contains("modo-gioco")) art.classList.add("modo-gioco");
+    document.body.classList.toggle("in-modo-gioco", !!art);
+    const fs = !!document.fullscreenElement;
+    document.querySelectorAll(".gioco-tutto").forEach((b) => { b.hidden = !schermoInteroPossibile() || fs; });
+    if (GIOCO.ultimo !== GIOCO.attivo) {
+      GIOCO.ultimo = GIOCO.attivo;
+      emetti("gioco", { partita: GIOCO.attivo });
+    }
+  }
+  function entraModoGioco(p, gesto) {
+    if (!p || GIOCHI_CHIUSI[p]) return;
+    GIOCO.attivo = p;
+    // Un gesto di chi guarda (un tocco su «Riapri», o «Parla» appena toccato): schermo intero vero
+    if (gesto || (navigator.userActivation && navigator.userActivation.isActive)) chiediSchermoIntero();
+    aggiornaModoGioco();
+  }
+  function esciModoGioco() {
+    GIOCO.attivo = null;
+    lasciaSchermoIntero();
+    aggiornaModoGioco();
+  }
+  // ✕, Esc, la voce: il gioco si chiude davvero (il riquadro sparisce, il suo codice non
+  // gira più e il tempo di gioco non conta); «Riapri» sulla scheda lo rimette
+  function chiudiGiocoDaTe(p) {
+    if (!p) return;
+    CHIUSI_DA_TE[p] = true;
+    riquadri().filter((f) => f.dataset.partita === p).forEach((f) => {
+      const st = statoGioco(f);
+      st.chiuso = true;
+      const box = f.parentElement;
+      f.remove();
+      togliComandiGioco(box);
+      if (box) {
+        const corpo = box.parentElement;
+        const b = el("button", "piccolo-bottone gioco-riapri", "Riapri");
+        b.type = "button";
+        b.dataset.giocoRiapri = p;
+        box.replaceWith(el("p", "nota gioco-chiuso", "Hai chiuso il gioco."));
+        if (corpo) corpo.append(b);
+      }
+    });
+    if (GIOCO.attivo === p) esciModoGioco();
+  }
+  function riapriGioco(p, bottone) {
+    delete CHIUSI_DA_TE[p];
+    const s = bottone && bottone.closest("article.scheda-gioco");
+    const c = (s && schedaDi(s.dataset.chiave))
+      || (S.corrente && S.corrente.tipo === "gioco" && S.corrente.partita === p ? S.corrente : null);
+    if (!s || !c) return;
+    GIOCO.attivo = p;
+    const corpo = el("div", "corpo");
+    DISEGNA.gioco(c, corpo, s);
+    const vecchio = s.querySelector(":scope > .corpo");
+    if (vecchio) vecchio.replaceWith(corpo); else s.append(corpo);
+    entraModoGioco(p, true);
+  }
+
+  document.addEventListener("click", (ev) => {
+    const t = ev.target && ev.target.closest ? ev.target.closest("[data-gioco-chiudi], [data-gioco-tutto], [data-gioco-entra], [data-gioco-riapri]") : null;
+    if (!t) return;
+    if (t.dataset.giocoChiudi !== undefined) chiudiGiocoDaTe(t.dataset.giocoChiudi || GIOCO.attivo);
+    else if (t.dataset.giocoTutto !== undefined) chiediSchermoIntero();
+    else if (t.dataset.giocoEntra !== undefined) entraModoGioco(t.dataset.giocoEntra, true);
+    else if (t.dataset.giocoRiapri !== undefined) riapriGioco(t.dataset.giocoRiapri, t);
+    aggiornaModoGioco();
+  });
+  // Esc (quando il tasto arriva alla pagina: dentro il riquadro lo tiene il gioco), se sopra
+  // il gioco non c'è uno strato aperto (il telefono e la pagina degli schermi chiudono prima quello)
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key !== "Escape" || !GIOCO.attivo) return;
+    if (document.querySelector(".strato:not([hidden]), .strato-intero:not([hidden])")) return;
+    chiudiGiocoDaTe(GIOCO.attivo);
+  });
+  // Lo schermo intero lasciato dal browser (Esc, il gesto indietro): la modalità gioco resta,
+  // a finestra piena, e ⛶ torna
+  document.addEventListener("fullscreenchange", () => {
+    if (!document.fullscreenElement) GIOCO.fs = false;
+    aggiornaModoGioco();
+  });
+
   DISEGNA.gioco = function (c, corpo, s) {
     s.classList.add("scheda-gioco");
+    s.dataset.partita = String(c.partita || "");
     const chiuso = GIOCHI_CHIUSI[c.partita];
     if (chiuso || c.stato === "chiuso") {
       corpo.append(el("p", "nota gioco-chiuso", chiuso || c.nota || "Il gioco è chiuso."));
@@ -3353,6 +3561,22 @@
       corpo.append(el("p", "nota", "Questo gioco non si può aprire."));
       return;
     }
+    if (CHIUSI_DA_TE[c.partita]) {
+      // Chiuso con ✕ (11/10): il riquadro non c'è più; «Riapri» lo rimette, a tutto schermo
+      corpo.append(el("p", "nota gioco-chiuso", "Hai chiuso il gioco."));
+      const b = el("button", "piccolo-bottone gioco-riapri", "Riapri");
+      b.type = "button";
+      b.dataset.giocoRiapri = String(c.partita || "");
+      corpo.append(b);
+      return;
+    }
+    // La modalità gioco (11/10): la classe nasce con la scheda, così un allineamento
+    // (allinea copia le classi della scheda nuova) non la toglie a metà partita
+    if (GIOCO.attivo && GIOCO.attivo === c.partita) s.classList.add("modo-gioco");
+    // La variante «collaudo» (11/10): un gioco non ancora approvato, aperto per provarlo (il
+    // server mette "prova": true nella scheda): cornice ambra e «PROVA» sopra il gioco
+    if (c.prova === true) s.classList.add("gioco-prova");
+    corpo.append(comandiGioco(c));
     const box = el("div", "riquadro-box");
     const f = document.createElement("iframe");
     f.className = "riquadro-gioco";
@@ -3499,6 +3723,7 @@
     aggiornaTimer();
     aggiornaLavori();
     disegnaVoce();
+    if (GIOCO.attivo) aggiornaModoGioco();
     if (S.vista === "scheda" && S.corrente && !valida(S.corrente) && !vistaAttiva()) {
       S.corrente = null;
       mostraInattiva();

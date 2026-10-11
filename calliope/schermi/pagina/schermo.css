@@ -563,6 +563,72 @@ body.trascina-foto { outline: 4px dashed var(--accento); outline-offset: -8px; }
 .riquadro-gioco { flex: 1; width: 100%; min-height: min(60vh, 40rem); border: 0; border-radius: 0.6rem; background: #111; }
 .gioco-chiuso { color: var(--tenue); font-size: 1.2rem; }
 
+/* ── la modalità gioco (11/10): il gioco occupa tutta la finestra ──
+   La scheda resta dov'è nel documento (un iframe spostato si ricarica) e diventa fissa sopra
+   la pagina. Sopra il gioco, negli angoli e mai sotto il riquadro: il pallino della voce a
+   sinistra, ⛶ e ✕ a destra. Il pallino ha colore E parola (mai solo il colore). Sotto gli
+   strati del telefono (z-index 10: un modulo, il menu restano raggiungibili) */
+:root { --prova: #f39a2e; }
+.gioco-comandi { display: flex; align-items: center; gap: 0.5rem; }
+.gioco-comandi > .gioco-voce, .gioco-comandi > .gioco-tasto, .gioco-comandi > .gioco-prova-etichetta { display: none; }
+.gioco-entra { margin: 0 0 0.4rem; }
+.gioco-riapri { margin-top: 0.6rem; }
+body.in-modo-gioco { overflow: hidden; }
+.scheda-gioco.modo-gioco {
+  position: fixed; inset: 0; z-index: 9; margin: 0; width: auto; height: auto; max-width: none;
+  border: 0; border-radius: 0; box-shadow: none; animation: none; background: #000;
+  padding: env(safe-area-inset-top, 0) env(safe-area-inset-right, 0) env(safe-area-inset-bottom, 0) env(safe-area-inset-left, 0);
+  display: flex; flex-direction: column;
+}
+.scheda-gioco.modo-gioco::after { display: none; }
+.scheda-gioco.modo-gioco > .etichetta, .scheda-gioco.modo-gioco > h1.titolo,
+.scheda-gioco.modo-gioco > .espandi, .scheda-gioco.modo-gioco .gioco-entra { display: none; }
+.scheda-gioco.modo-gioco > .corpo {
+  flex: 1; min-height: 0; margin: 0; padding: 0; overflow: hidden; position: relative;
+  -webkit-mask-image: none; mask-image: none;
+}
+.scheda-gioco.modo-gioco .riquadro-box { flex: 1; min-height: 0; }
+.scheda-gioco.modo-gioco .riquadro-gioco { min-height: 0; height: 100%; border-radius: 0; }
+.scheda-gioco.modo-gioco .gioco-comandi {
+  position: absolute; top: 0.4rem; left: 0.4rem; right: 0.4rem; z-index: 1; pointer-events: none;
+}
+.scheda-gioco.modo-gioco .gioco-comandi > * { pointer-events: auto; }
+.scheda-gioco.modo-gioco .gioco-voce { display: inline-flex; margin-right: auto; }
+.scheda-gioco.modo-gioco .gioco-tasto, .scheda-gioco.modo-gioco .gioco-prova-etichetta { display: inline-flex; }
+.scheda-gioco.modo-gioco .gioco-comandi > [hidden] { display: none; }
+.gioco-voce {
+  --c: var(--v-dorme);
+  align-items: center; gap: 0.35rem; padding: 0.2rem 0.6rem 0.2rem 0.45rem; border-radius: 999px;
+  background: rgba(0, 0, 0, 0.62); color: var(--testo); font-size: 0.75rem; font-weight: 600;
+  line-height: 1.2; letter-spacing: 0.02em;
+}
+button.gioco-voce { border: 0; font-family: inherit; min-height: 44px; cursor: pointer; }
+button.gioco-voce:focus-visible { outline: 3px solid var(--accento); outline-offset: 2px; }
+.gioco-pallino { display: block; width: 0.75rem; height: 0.75rem; border-radius: 50%; background: var(--c); }
+.gioco-voce.ascolta { --c: var(--v-ascolta); }
+.gioco-voce.pensa { --c: var(--v-pensa); }
+.gioco-voce.parla { --c: var(--v-parla); }
+.gioco-voce.spento { --c: #5d6472; }
+.gioco-voce.spento .gioco-pallino { background: transparent; border: 2px solid var(--c); box-sizing: border-box; }
+.gioco-tasto {
+  align-items: center; justify-content: center; width: 2.75rem; height: 2.75rem; min-width: 44px; min-height: 44px;
+  padding: 0; border: 1px solid rgba(255, 255, 255, 0.28); border-radius: 50%;
+  background: rgba(0, 0, 0, 0.62); color: #fff; font: inherit; font-size: 1.15rem; line-height: 1; cursor: pointer;
+}
+.gioco-tasto:focus-visible { outline: 3px solid var(--accento); outline-offset: 2px; }
+/* La variante «collaudo»: un gioco non ancora approvato, in prova. Cornice arancio piena
+   attorno al gioco (lo sfondo della scheda tra il bordo e il riquadro) e «PROVA» in alto */
+.scheda-gioco.gioco-prova { border: 0.3rem solid var(--prova); }
+.scheda-gioco.modo-gioco.gioco-prova {
+  border: 0; background: var(--prova);
+  padding: max(0.4rem, env(safe-area-inset-top, 0)) max(0.4rem, env(safe-area-inset-right, 0))
+           max(0.4rem, env(safe-area-inset-bottom, 0)) max(0.4rem, env(safe-area-inset-left, 0));
+}
+.gioco-prova-etichetta {
+  align-items: center; padding: 0.2rem 0.55rem; border-radius: 0.35rem; background: var(--prova);
+  color: #1a1206; font-size: 0.75rem; font-weight: 800; letter-spacing: 0.08em;
+}
+
 /* ── cruscotto di chi amministra (06/10, cruscotto.py): sola lettura, testo piccolo e fitto ── */
 .apri-cruscotto { min-height: 2.2rem; padding: 0.2rem 0.8rem; font-size: 0.85rem; }
 .apri-cruscotto[hidden] { display: none; }
