@@ -32,7 +32,14 @@ if (prove.length && !conto.errori) {
     conto.falliti++;
     const err = e.details && e.details.error;
     const causa = err && (err.cause || err);
-    scrivi(`FALLITO ${e.name}: ${String((causa && causa.message) || causa || "").slice(0, 600)}\n`);
+    // Dove (11/10): la prima riga dello stack in un file del lavoro, non in Node
+    const dove = String((causa && causa.stack) || "").split("\n")
+      .map((r) => r.match(/([^\s()\/\\]+\.js):(\d+)(?::\d+)?\)?\s*$/))
+      .find((m) => m && file.some((f) => f.replace(/\\/g, "/").split("/").pop() === m[1]));
+    // Il messaggio su una riga (le asserzioni di node:assert vanno a capo)
+    const msg = String((causa && causa.message) || causa || "").replace(/\s+/g, " ").trim();
+    scrivi(`FALLITO ${e.name}: ${msg.slice(0, 600)}` + (dove ? ` [in ${dove[1]}:${dove[2]}]` : "")
+      + "\n");
   });
   flusso.on("test:diagnostic", () => {});
   await new Promise((ok) => { flusso.on("end", ok); flusso.on("close", ok); flusso.resume(); });
@@ -52,9 +59,13 @@ if (scheda && Array.isArray(scheda.file) && !conto.errori) {
     : ["i file della scheda non ci sono tutti: " + scheda.file.join(", ")];
   if (errori.length) {
     conto.falliti++;
-    scrivi("FALLITO prova di fumo del gioco (gli script di «scheda.file» caricati con un DOM "
-      + "finto semplice e trecento tocchi a caso; se l'errore è di un metodo del DOM che il finto "
-      + "non conosce, scrivilo in un modo più comune): " + errori.join(" | ") + "\n");
+    // Prima l'errore, poi come lavora la prova (11/10: l'agente credeva che nella prova
+    // mancassero «calliope» o il contenitore, e che la prova fosse da cambiare)
+    scrivi("FALLITO prova di fumo del gioco: " + errori.join(" | ") + " — la prova carica "
+      + "gli script di «scheda.file» come nel riquadro (document finto con <div id=\"gioco\">, "
+      + "l'oggetto calliope, timer finti), chiama quandoPronto e tocca a caso gli elementi con "
+      + "un gestore; correggi il punto indicato, non riscrivere il file. Se l'errore è di un "
+      + "metodo del DOM che il finto non conosce, scrivilo in un modo più comune\n");
   } else {
     scrivi("ok prova di fumo del gioco\n");
   }

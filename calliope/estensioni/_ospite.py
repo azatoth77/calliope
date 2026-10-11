@@ -381,7 +381,18 @@ def _servi(lavoro):
             except BaseException as e:  # noqa: BLE001 — l'errore torna a Calliope
                 import traceback
                 traceback.print_exc(file=sys.stderr)
-                testo = f"{type(e).__name__}: {e}"[:500]
+                # Dove (11/10): l'ultima riga dei file dell'estensione nel traceback, per il
+                # collaudo e il ricollaudo che la riportano all'agente
+                dove = ""
+                try:
+                    for fr, n in reversed(list(traceback.walk_tb(e.__traceback__))):
+                        nome = fr.f_code.co_filename
+                        if os.path.realpath(nome).startswith(lavoro + os.sep):
+                            dove = f" (in {os.path.basename(nome)}:{n})"
+                            break
+                except Exception:  # noqa: BLE001 — il messaggio va anche senza
+                    dove = ""
+                testo = f"{type(e).__name__}: {str(e)[:440]}{dove}"[:500]
                 scrivi({"jsonrpc": "2.0", "id": mid, "result": {
                     "content": [{"type": "text", "text": testo}], "isError": True}})
         elif mid is not None:

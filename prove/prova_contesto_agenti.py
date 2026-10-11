@@ -307,8 +307,12 @@ verifica("il diario sta nel messaggio del compito, con il compito intero",
 verifica("il diario dice i file nella cartella",
          "File nella cartella adesso:" in ultimo[1]["content"]
          and "note/n1.txt" in ultimo[1]["content"])
-verifica("il prompt resta sotto la finestra meno il tetto della passata", picco <= budget,
-         f"picco {picco} su {budget}")
+# Il prompt fisso (sistema e strumenti) è cresciuto di ~330 token l'11/10 (modifica_file,
+# leggi_file con «riga», lo scheletro di partenza: agenti/scheletri.py); l'ultimo passo resta
+# intero, e con 8 192 di finestra il picco era già a 4 086 su 4 096. Il vincolo vero è quello
+# sotto (prompt + passata dentro la finestra): qui il margine del prompt fisso nuovo
+verifica("il prompt resta sotto la finestra meno il tetto della passata (+ il prompt fisso "
+         "dell'11/10)", picco <= budget + 400, f"picco {picco} su {budget}")
 richieste = [v["body"] for v in cli.visti if not v["body"].get("format")]
 verifica("ogni passata: prompt stimato + max_tokens dentro la finestra", all(
     int(ContestoLavoro.caratteri(r["messages"], r.get("tools")) / 3.5)

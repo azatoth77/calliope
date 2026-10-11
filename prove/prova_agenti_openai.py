@@ -299,9 +299,9 @@ dest = Path((item or {}).get("cartella") or TMP)
 verifica("file nella cartella del lavoro", (dest / "somma.py").is_file()
          and (dest / "test_somma.py").is_file())
 r0, r2 = fake.richieste[0], fake.richieste[2] if len(fake.richieste) > 2 else {}
-verifica("prima richiesta: 6 strumenti, thinking acceso, niente num_ctx, tetto della passata e "
-         "del ragionamento",
-         len(r0.get("tools", [])) == 6 and r0["chat_template_kwargs"]["enable_thinking"] is True
+verifica("prima richiesta: 7 strumenti (modifica_file dall'11/10), thinking acceso, niente "
+         "num_ctx, tetto della passata e del ragionamento",
+         len(r0.get("tools", [])) == 7 and r0["chat_template_kwargs"]["enable_thinking"] is True
          and "options" not in r0 and r0.get("max_tokens") == cfg.agenti_token_passata
          and r0.get("thinking_token_budget") == cfg.agenti_ragionamento_passata,
          str({k: r0.get(k) for k in ("max_tokens", "thinking_token_budget")}))

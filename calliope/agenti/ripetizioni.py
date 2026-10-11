@@ -17,6 +17,12 @@ parole chiave di Python in testa), le frasi corte («Leggo il file.»). Il ciclo
 (`Agente.passata`) allora chiude lo stream e restituisce la passata come «giro a vuoto»: chi
 la chiama aggiunge la spinta («stai ripetendo lo stesso ragionamento: decidi e chiama uno
 strumento»).
+
+Dall'11/10 (il gioco di Halloween sulla DGX: un piano ripetuto una decina di volte, poi gioco.js
+riscritto intero nove volte) la spinta usa l'ultimo errore noto del lavoro (diagnosi.py):
+«l'ultimo errore è X in file:riga; leggi quel punto e correggi solo quello con modifica_file;
+non riscrivere il file intero». `spinta_riscritture` è la stessa spinta dopo tre riscritture
+intere di fila dello stesso file con lo stesso errore (ciclo.py, RISCRITTURE_MAX).
 """
 
 from __future__ import annotations
@@ -98,9 +104,52 @@ class Ripetizioni:
             self.scattato = frase.strip()[:160]
 
 
-def spinta(frase: str) -> str:
-    """Il messaggio per l'agente dopo una passata fermata per giro a vuoto."""
-    return ("Ti ho fermato: stai ripetendo lo stesso ragionamento"
-            + (f" («{frase[:120]}»)" if frase else "") + ". Non ripensarci: decidi adesso e "
-            "chiama uno strumento (leggi o scrivi un file, esegui i test, oppure consegna). Se "
-            "sei incerto tra due strade, scegli la più semplice e provala con un test.")
+def errore_detto(errore: dict | None) -> str:
+    """«l'ultimo errore è X in gioco.js:412» (diagnosi.py), o vuoto."""
+    if not errore:
+        return ""
+    from .diagnosi import riga
+    dove = errore.get("dove") or ""
+    testo = riga(dict(errore, dove=""), 240)
+    return f"l'ultimo errore è «{testo}»" + (f" in {dove}" if dove else "")
+
+
+def _primo_punto(errore: dict) -> tuple[str, str]:
+    """(file, riga) del punto più interno di «dove» («logica.js:20 (crea) ← gioco.js:4»)."""
+    m = re.match(r"\s*([\w./-]+\.\w+):(\d+)", str(errore.get("dove") or ""))
+    return (m.group(1), m.group(2)) if m else ("", "")
+
+
+def correggi_li(errore: dict | None) -> str:
+    """Il passo concreto sull'ultimo errore (11/10): leggi quel punto, correggi solo quello."""
+    detto = errore_detto(errore)
+    if not detto:
+        return ""
+    f, r = _primo_punto(errore)
+    leggi = (f"leggi quel punto (leggi_file con percorso «{f}» e riga {r})" if f
+             else "leggi il codice che lo produce")
+    return (f"{detto[:1].upper()}{detto[1:]}. Adesso {leggi} e correggi solo quello con "
+            "modifica_file; non riscrivere il file intero.")
+
+
+def spinta(frase: str, errore: dict | None = None) -> str:
+    """Il messaggio per l'agente dopo una passata fermata per giro a vuoto. Con l'ultimo errore
+    noto (11/10, giro vero della DGX: un piano ripetuto una decina di volte, poi gioco.js
+    riscritto intero) la spinta dice quale punto correggere, non solo «decidi»."""
+    testa = ("Ti ho fermato: stai ripetendo lo stesso ragionamento"
+             + (f" («{frase[:120]}»)" if frase else "") + ". Non ripensarci: ")
+    concreto = correggi_li(errore)
+    if concreto:
+        return testa + concreto
+    return (testa + "decidi adesso e chiama uno strumento (leggi o scrivi un file, esegui i "
+            "test, oppure consegna). Se sei incerto tra due strade, scegli la più semplice e "
+            "provala con un test.")
+
+
+def spinta_riscritture(percorso: str, volte: int, errore: dict | None = None) -> str:
+    """Il messaggio dopo `volte` riscritture intere dello stesso file con lo stesso errore."""
+    base = (f"Hai riscritto {percorso} per intero {volte} volte e i test falliscono ancora "
+            "allo stesso modo: riscriverlo non serve.")
+    concreto = correggi_li(errore)
+    return base + " " + (concreto or "Leggi l'uscita dei test, trova la riga che sbaglia e "
+                                     "correggi solo quella con modifica_file.")

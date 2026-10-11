@@ -22,10 +22,64 @@ export async function fumo(file, opzioni = {}) {
      + "logica.js, senza require, import né const { … } = …; require serve solo nei test)"],
     [/is not defined/, " (dichiara la variabile con let o const prima di usarla)"],
   ];
-  const nota = (dove, e) => {
+  // Dove e perché (11/10, giro vero della DGX: «tocco (click): Error: Devi inserire da 1 a 4
+  // giocatori» senza elemento né riga, e l'agente ha riscritto gioco.js intero nove volte): le
+  // righe degli script della scheda nello stack, l'elemento toccato, gli ultimi tocchi
+  const base = (p) => String(p).replace(/\\/g, "/").split("/").pop();
+  const suoi = new Set(file.map(base));
+  const testi = {};
+  const frame = (e) => {
+    const out = [];
+    for (const m of String(e && e.stack || "").matchAll(/(?:at (?:async )?([^\s()]+) \()?([^\s()]+?\.js):(\d+)(?::\d+)?/g)) {
+      const f = base(m[2]);
+      if (!suoi.has(f)) continue;
+      const s = `${f}:${m[3]}` + (m[1] && !m[1].includes("<anonymous>") && !m[1].startsWith("<") ? ` (${m[1]})` : "");
+      if (!out.includes(s)) out.push(s);
+      if (out.length >= 3) break;
+    }
+    return out;
+  };
+  const descrivi = (n) => {
+    if (!n || !n.tagName) return "il documento";
+    let s = "<" + n.tagName.toLowerCase() + (n.id ? ` id="${n.id}"` : "");
+    const c = n.className;
+    if (c) s += ` class="${c.slice(0, 40)}"`;
+    s += ">";
+    const t = String(n.textContent || n.value || "").trim().replace(/\s+/g, " ");
+    return t ? `${s} «${t.slice(0, 40)}${t.length > 40 ? "…" : ""}»` : s;
+  };
+  const tocchi = [];               // gli ultimi tocchi, per dire cosa c'era prima dell'errore
+  const dichiarato = (nome) => {
+    const rx = new RegExp(`^\\s*(?:export\\s+)?(?:const|let|var|class|(?:async\\s+)?function\\*?)\\s+${nome.replace(/[$]/g, "\\$")}\\b`);
+    const dove = [];
+    for (const [f, t] of Object.entries(testi)) {
+      t.split("\n").forEach((r, i) => { if (rx.test(r)) dove.push(`${f}:${i + 1}`); });
+    }
+    return dove;
+  };
+  const nota = (dove, e, ctx = {}) => {
+    if (errori.length >= 5) return;
     const msg = String(e && e.message || e);
-    const consiglio = (CONSIGLI.find(([rx]) => rx.test(msg)) || [null, ""])[1];
-    if (errori.length < 5) errori.push(`${dove}: ${e && e.name ? e.name + ": " : ""}${msg.slice(0, 200)}${consiglio}`);
+    let consiglio = (CONSIGLI.find(([rx]) => rx.test(msg)) || [null, ""])[1];
+    let fr = frame(e);
+    const doppio = msg.match(/Identifier '([^']+)' has already been declared/);
+    if (doppio) {
+      // Node dice la riga 1 dello script: le righe vere sono quelle delle dichiarazioni
+      const d = dichiarato(doppio[1]);
+      fr = d.filter((x) => ctx.file && x.startsWith(ctx.file + ":"));
+      if (d.length) consiglio = ` («${doppio[1]}» è dichiarato in ${d.join(" e ")}: tienilo in un file solo, o cambia nome in gioco.js)` + consiglio;
+    }
+    let t = dove + (ctx.elemento ? ` su ${descrivi(ctx.elemento)}` : "")
+      + (ctx.bersaglio && ctx.bersaglio !== ctx.elemento ? ` (toccato ${descrivi(ctx.bersaglio)})` : "")
+      + `: ${e && e.name ? e.name + ": " : ""}${msg.slice(0, 200)}`
+      + (fr.length ? ` [in ${fr.join(" ← ")}]` : "");
+    if (ctx.gestore) {
+      t += ". Un gestore di evento ha lanciato un'eccezione: ogni gestore deve catturare gli "
+        + "errori della logica (try/catch) e mostrarli nel gioco, senza lasciarli uscire";
+      const prima = tocchi.slice(-6, -1);
+      if (prima.length) t += `. Tocchi prima: ${prima.join(", ")}`;
+    }
+    errori.push(t + consiglio);
   };
   // ── tempo finto ──
   let adesso = 0, nTimer = 0;
@@ -131,13 +185,15 @@ export async function fumo(file, opzioni = {}) {
   }
   function lancia(n, tipo, ev) {
     for (let x = n; x; x = x.parentNode) {
+      const ctx = { elemento: x, bersaglio: n, gestore: true };
       for (const f of [...((x._h || {})[tipo] || [])]) {
-        try { ev.currentTarget = x; const r = f.call(x, ev); if (r && typeof r.catch === "function") r.catch((e) => nota(`tocco (${tipo}, promessa)`, e)); }
-        catch (e) { nota(`tocco (${tipo})`, e); }
+        try { ev.currentTarget = x; const r = f.call(x, ev); if (r && typeof r.catch === "function") r.catch((e) => nota(`tocco (${tipo}, promessa)`, e, ctx)); }
+        catch (e) { nota(`tocco (${tipo})`, e, ctx); }
       }
       if (x === doc.documentElement) {
+        const c2 = { bersaglio: n, gestore: true };
         for (const f of [...(doc._h[tipo] || []), ...(finestra._h[tipo] || [])]) {
-          try { const r = f(ev); if (r && typeof r.catch === "function") r.catch((e) => nota(`${tipo} (promessa)`, e)); } catch (e) { nota(tipo, e); }
+          try { const r = f(ev); if (r && typeof r.catch === "function") r.catch((e) => nota(`${tipo} (promessa)`, e, c2)); } catch (e) { nota(tipo, e, c2); }
         }
       }
     }
@@ -192,8 +248,11 @@ export async function fumo(file, opzioni = {}) {
   const contesto = vm.createContext(g, { codeGeneration: { strings: false, wasm: false } });
   process.on("unhandledRejection", (e) => nota("promessa", e));
   for (const f of file) {
-    try { vm.runInContext(readFileSync(f, "utf8"), contesto, { filename: f, timeout: 2000 }); }
-    catch (e) { nota(`caricamento di ${f}`, e); return errori; }
+    try { testi[base(f)] = readFileSync(f, "utf8"); } catch (e) { testi[base(f)] = ""; }
+  }
+  for (const f of file) {
+    try { vm.runInContext(testi[base(f)], contesto, { filename: f, timeout: 2000 }); }
+    catch (e) { nota(`caricamento di ${base(f)}`, e, { file: base(f) }); return errori; }
   }
   lancia(doc.documentElement, "DOMContentLoaded", evento("DOMContentLoaded", doc));
   lancia(doc.documentElement, "load", evento("load", doc));
@@ -216,8 +275,14 @@ export async function fumo(file, opzioni = {}) {
     const vivi = nodi.filter((n) => n.isConnected && TOCCHI.some((t) => (n._h[t] || []).length));
     if (!vivi.length) break;
     const n = vivi[caso(vivi.length)];
+    tocchi.push(descrivi(n));
+    if (tocchi.length > 8) tocchi.shift();
     for (const t of TOCCHI) if ((n._h[t] || []).length) lancia(n, t, evento(t, n));
-    if (i % 25 === 0) for (const k of ["keydown", "keyup"]) lancia(doc.documentElement, k, evento(k, doc.body, { key: ["ArrowUp", "ArrowLeft", " ", "Enter"][caso(4)] }));
+    if (i % 25 === 0) {
+      const tasto = ["ArrowUp", "ArrowLeft", " ", "Enter"][caso(4)];
+      tocchi.push(`tasto «${tasto}»`);
+      for (const k of ["keydown", "keyup"]) lancia(doc.documentElement, k, evento(k, doc.body, { key: tasto }));
+    }
     await respira();
     avanza(caso(3) === 0 ? 1200 : 150);
     await respira();

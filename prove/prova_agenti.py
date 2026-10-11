@@ -418,7 +418,8 @@ verifica("file di risultato nella cartella del lavoro, con lavoro.json",
 verifica("la cartella dei risultati è quella configurata", dest.parent == TMP / "risultati")
 body = fake.richieste[0]
 verifica("richiesta all'agente: modello, tool, thinking acceso, contesto dell'agente",
-         body["model"] == MODELLO and body.get("think") is True and len(body["tools"]) == 6
+         # 7 strumenti dall'11/10 (modifica_file)
+         body["model"] == MODELLO and body.get("think") is True and len(body["tools"]) == 7
          # agenti_num_ctx «auto» con un Ollama remoto che non dice il contesto: 32 768 (05/10);
          # tetto della passata agenti_token_passata; il tetto del ragionamento è di vLLM e a
          # Ollama non arriva

@@ -8,6 +8,7 @@ Formato in docs/ricerche/2026-10-04-estensioni-e-guardrail.md §3.
 
 from __future__ import annotations
 
+import json
 import re
 
 from ..sicurezza import instruction_fact
@@ -91,8 +92,9 @@ def cosa_fa(d: dict) -> str:
         verbo = " ".join(str(c.get("verbo") or "").split()).lower()
         oggetto = " ".join(str(c.get("oggetto") or "").split()).rstrip(".")
         if verbo not in VERBI_DESCRIZIONE:
-            raise ManifestoNonValido("«cosa_fa.verbo»: uno tra " + ", ".join(
-                sorted(VERBI_DESCRIZIONE)))
+            # Con il valore ricevuto (11/10): l'agente vede cosa ha scritto e cosa va
+            raise ManifestoNonValido(f"«cosa_fa.verbo» «{verbo[:30]}» non va: uno tra "
+                                     + ", ".join(sorted(VERBI_DESCRIZIONE)))
         if not oggetto:
             raise ManifestoNonValido("manca «cosa_fa.oggetto»")
         return f"{verbo.capitalize()} {oggetto}."
@@ -466,15 +468,17 @@ def valida(d, tempo_max_s: float = 30.0, memoria_max_mb: int = 512, nomi_tool=()
         raise ManifestoNonValido("il manifesto deve essere un oggetto JSON")
     nome = d.get("nome")
     if not isinstance(nome, str) or not NOME.match(nome):
-        raise ManifestoNonValido("«nome»: minuscole, cifre e trattini bassi, da 3 a 31 "
-                                 "caratteri, prima una lettera")
+        raise ManifestoNonValido(f"«nome» {json.dumps(nome, ensure_ascii=False)[:40]} non va: "
+                                 "minuscole, cifre e trattini bassi, da 3 a 31 caratteri, "
+                                 "prima una lettera")
     titolo = _testo(d, "titolo", 60)
     # La descrizione va nel tool che il modello legge a ogni turno: è un canale per dargli
     # istruzioni. Dal 06/10 la compone il codice (cosa_fa) e passa il controllo dei testi
     descr = cosa_fa(d)
     livello = d.get("livello") or "familiare"
     if livello not in LIVELLI:
-        raise ManifestoNonValido(f"«livello»: uno tra {', '.join(LIVELLI)}")
+        raise ManifestoNonValido(f"«livello» «{str(livello)[:30]}» non va: uno tra "
+                                 f"{', '.join(LIVELLI)}")
     lim = d.get("limiti") or {}
     if not isinstance(lim, dict):
         raise ManifestoNonValido("«limiti» deve essere un oggetto")

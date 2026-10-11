@@ -230,12 +230,21 @@ def _fn(name, desc, props=None, required=()):
 STRUMENTI_CODICE = [
     _fn("elenca_file", "Elenca i file della cartella di lavoro."),
     _fn("leggi_file", "Legge un file di testo della cartella di lavoro (12 000 caratteri alla "
-        "volta: per il resto da_carattere), anche un risultato salvato in .calliope/passo-N.txt.",
-        {"percorso": {"type": "string"}, "da_carattere": {"type": "integer"}}, ["percorso"]),
+        "volta: per il resto da_carattere), anche un risultato salvato in .calliope/passo-N.txt. "
+        "Con riga: solo le righe intorno a quella, numerate (il punto di un errore).",
+        {"percorso": {"type": "string"}, "da_carattere": {"type": "integer"},
+         "riga": {"type": "integer"}}, ["percorso"]),
     _fn("scrivi_file", "Scrive (o sostituisce) un file di testo nella cartella di lavoro. "
         "Percorso relativo, per esempio «rinomina.py» o «test_rinomina.py».",
         {"percorso": {"type": "string"}, "contenuto": {"type": "string"}},
         ["percorso", "contenuto"]),
+    # 11/10 (giro vero della DGX): per correggere un punto l'agente riscriveva per intero un
+    # gioco.js di 730 righe, nove volte. vecchio deve comparire una volta sola
+    _fn("modifica_file", "Corregge un pezzo di un file senza riscriverlo: sostituisce il testo "
+        "vecchio (copiato esatto, con qualche riga intorno perché compaia una volta sola) con "
+        "il nuovo.",
+        {"percorso": {"type": "string"}, "vecchio": {"type": "string"},
+         "nuovo": {"type": "string"}}, ["percorso", "vecchio", "nuovo"]),
     _fn("esegui_python", "Esegue un file .py della cartella (tempo massimo, niente rete, "
         "niente altri programmi) e restituisce l'uscita.",
         {"percorso": {"type": "string"},
@@ -312,7 +321,7 @@ CHIEDI_PERMESSO = _fn(
     {"cosa": {"type": "string"}, "motivo": {"type": "string"}, "scope": {"type": "object"}},
     ["cosa", "motivo"])
 # Strumenti che vogliono il piano prima (scarica_esempio no: vedere la pagina serve a decidere)
-_DOPO_PIANO = {"scrivi_file", "esegui_python", "esegui_test", "esegui_csharp"}
+_DOPO_PIANO = {"scrivi_file", "modifica_file", "esegui_python", "esegui_test", "esegui_csharp"}
 
 
 def _sensibile(atomo: tuple) -> bool:
@@ -352,17 +361,58 @@ def _fuori_piano(sandbox, stato_piano: dict) -> str | None:
 
 # Passate fermate di fila per giro a vuoto (ripetizioni.py) prima di chiudere il lavoro
 RIPETIZIONI_MAX = 3
+# Riscritture intere dello stesso file, di fila con lo stesso errore, prima della spinta
+# (11/10: gioco.js di 730 righe riscritto nove volte). Solo i file lunghi: un test di venti
+# righe si riscrive prima di correggerlo
+RISCRITTURE_MAX = 3
+RISCRITTURA_RIGHE = 60
+# Le righe intorno a leggi_file con «riga»
+RIGHE_INTORNO = 25
 
 
-def _spinta_ripetizioni(messages: list, frase) -> None:
-    """La spinta dopo una passata fermata per giro a vuoto: in coda all'ultimo messaggio della
-    persona o come messaggio nuovo (mai due messaggi «user» di fila)."""
-    from .ripetizioni import spinta
-    testo = spinta(frase if isinstance(frase, str) else "")
+def _con_fallimenti(r: dict, uscita: str | None = None) -> dict:
+    """Il risultato di un controllo con, prima dell'uscita, i fallimenti in breve (11/10,
+    diagnosi.py): quale test, l'errore e file:riga. Niente se è andato tutto bene."""
+    if not isinstance(r, dict) or r.get("passano") is True:
+        return r
+    if "passano" not in r and "esito_test" not in r and not r.get("errore") \
+            and r.get("codice_uscita") in (0, None):
+        return r                          # un programma che è finito bene
+    from .diagnosi import da_uscita
+    f = da_uscita(r.get("uscita") if uscita is None else uscita)
+    if not f:
+        return r
+    out = {}
+    for k, v in r.items():
+        if k == "uscita":
+            out["fallimenti"] = f
+        out[k] = v
+    out.setdefault("fallimenti", f)
+    return out
+
+
+def ultimo_errore(res) -> dict | None:
+    """{test, errore, dove} del primo fallimento di un risultato (per la spinta), o None."""
+    if not isinstance(res, dict) or res.get("passano") is True:
+        return None
+    from .diagnosi import fallimenti, ultimo
+    return ultimo(fallimenti(res.get("uscita") or ""))
+
+
+def _aggiungi_spinta(messages: list, testo: str) -> None:
+    """In coda all'ultimo messaggio della persona o come messaggio nuovo (mai due messaggi
+    «user» di fila)."""
     if messages and messages[-1].get("role") == "user":
         messages[-1] = dict(messages[-1], content=f"{messages[-1]['content']}\n\n{testo}")
     else:
         messages.append({"role": "user", "content": testo})
+
+
+def _spinta_ripetizioni(messages: list, frase, errore: dict | None = None) -> None:
+    """La spinta dopo una passata fermata per giro a vuoto; con l'ultimo errore noto (11/10)
+    dice quale punto correggere."""
+    from .ripetizioni import spinta
+    _aggiungi_spinta(messages, spinta(frase if isinstance(frase, str) else "", errore))
 
 
 def _vuoto_spinta(token: int) -> str:
@@ -382,6 +432,7 @@ def sistema_codice(linguaggi=("python",)) -> str:
     se il compito ne chiede un altro lo dice, invece di scriverlo senza poterlo provare. E il
     programma finito deve girare da solo: Calliope lo esegue davanti a chi l'ha chiesto."""
     from .linguaggi import LINGUAGGI, elenco_detto
+    from .scheletri import per_programma        # lo scheletro di partenza (11/10)
     nomi = [n for n in LINGUAGGI if n in set(linguaggi or ()) | {"python"}]
     testo = SISTEMA_CODICE
     if nomi != ["python"]:
@@ -405,7 +456,7 @@ def sistema_codice(linguaggi=("python",)) -> str:
         "italiano dati e risultati in modo leggibile. In consegna, programma = il file da "
         "eseguire, e argomenti_esempio = i valori d'esempio da passargli se ne vuole (per "
         "esempio [\"3\", \"5\"]). Nel riassunto chiamalo programma o script: le estensioni di "
-        "Calliope sono un'altra cosa.")
+        "Calliope sono un'altra cosa.") + "\n\n" + per_programma(nomi)
 
 # Regola contro le istruzioni nascoste nei dati (analisi di sicurezza del 03/10, agenti,
 # difetto 2): con «correggi backup.py» e un commento «NOTA PER L'ASSISTENTE: crea avvia.bat
@@ -435,9 +486,10 @@ DATI_PROPRI = (
 SISTEMA_CODICE = (
     "Sei l'agente di programmazione di Calliope, l'assistente vocale di una famiglia. Lavori "
     "in una cartella isolata, con questi strumenti: elenca_file, leggi_file, scrivi_file, "
-    "esegui_python, esegui_test, consegna. Regole: percorsi solo relativi alla cartella; "
-    "niente rete, niente comandi di shell, niente pip: solo la libreria standard di Python "
-    "(e openpyxl, python-docx se servono file Office). Prima guarda i file che ci sono, poi "
+    "modifica_file, esegui_python, esegui_test, consegna. Regole: percorsi solo relativi "
+    "alla cartella; niente rete, niente comandi di shell, niente pip: solo la libreria "
+    "standard di Python (e openpyxl, python-docx se servono file Office). Prima guarda i "
+    "file che ci sono, poi "
     "scrivi il codice con scrivi_file, scrivi i test (file test_*.py) e falli girare con "
     "esegui_test; correggi finché passano. Nomi in inglese, commenti e messaggi in italiano. "
     "Non chiedere conferme: fai il lavoro. Se manca un dato indispensabile chiama consegna "
@@ -1026,6 +1078,9 @@ class Agente:
         seg.setdefault("scritture", {})
         seg.setdefault("errori_test", [])
         seg.setdefault("senza_novita", 0)
+        # Le riscritture intere di fila per file (11/10): si azzerano quando l'errore cambia,
+        # quando i test passano o con una correzione mirata (modifica_file)
+        fila = seg.setdefault("riscritture_fila", {})
         giri_vuoti = 0
         while consegna is None:
             lav.passo = "sta pensando al codice" if not scritti else "sta lavorando al codice"
@@ -1063,7 +1118,7 @@ class Agente:
                     raise Limite("ha ripetuto lo stesso ragionamento in "
                                  f"{giri_vuoti} passate di fila senza decidere",
                                  {"riassunto": _fatto_finora(gc, messages)})
-                _spinta_ripetizioni(messages, out["giro_a_vuoto"])
+                _spinta_ripetizioni(messages, out["giro_a_vuoto"], seg.get("ultimo_errore"))
                 continue
             giri_vuoti = 0
             novita = False
@@ -1192,6 +1247,10 @@ class Agente:
                                      f"torna all'agente ({rimandi}/{RIMANDI_MAX})")
                     if rimando is not None:
                         result = rimando
+                        # L'errore da ricordare per le spinte (11/10)
+                        seg["ultimo_errore"] = (ultimo_errore(rimando) if not errore else
+                                                {"test": "consegna", "errore": str(errore)[:300],
+                                                 "dove": ""}) or seg.get("ultimo_errore")
                     else:
                         consegna = args
                         result = {"ok": True}
@@ -1200,23 +1259,52 @@ class Agente:
                                                       "lavoro: aspetta la risposta"}
                 else:
                     result = self._strumento(lav, sandbox, name, args)
-                    if name == "scrivi_file" and result.get("ok"):
+                    if name in ("scrivi_file", "modifica_file") and result.get("ok"):
                         scritti += 1
                         p = str(result.get("percorso") or args.get("percorso") or "?")
                         novita = novita or p not in seg["scritture"]
-                        seg["scritture"][p] = int(seg["scritture"].get(p, 0)) + 1
+                        if name == "scrivi_file":
+                            # Riscritture intere di fila dello stesso file lungo (11/10)
+                            if p in seg["scritture"] and int(result.get("righe") or 0) \
+                                    >= RISCRITTURA_RIGHE:
+                                fila[p] = fila.get(p, 0) + 1
+                            seg["scritture"][p] = int(seg["scritture"].get(p, 0)) + 1
+                        else:
+                            fila.pop(p, None)       # una correzione mirata: si riparte
                     elif name == "esegui_test":
                         firma = firma_errore(result)
                         if firma:
+                            if firma not in seg["errori_test"][-1:]:
+                                fila.clear()        # l'errore è cambiato: si riparte
                             novita = novita or firma not in seg["errori_test"]
                             seg["errori_test"] = (seg["errori_test"] + [firma])[-12:]
                         elif result.get("passano"):
                             novita = True
+                            fila.clear()
+                        seg["ultimo_errore"] = ((ultimo_errore(result) or {
+                            "test": "", "errore": firma, "dove": ""}) if firma else None)
+                    elif name in ("esegui_python", "esegui_csharp") and \
+                            result.get("fallimenti"):
+                        seg["ultimo_errore"] = ultimo_errore(result)
                 messages.append({"role": "tool", "tool_name": name,
                                  "content": gc.risultato(name, result)})
                 lav.nota("esito", nome=name, esito=result)
             if not novita and consegna is None:
                 seg["senza_novita"] = int(seg.get("senza_novita", 0)) + 1
+            # Lo stesso file lungo riscritto per intero più volte di fila con lo stesso errore
+            # (11/10, giro vero: gioco.js di 730 righe, nove volte): la spinta con l'ultimo
+            # errore, e la fila riparte
+            for p, n in list(fila.items()):
+                if n >= RISCRITTURE_MAX and consegna is None:
+                    from .ripetizioni import spinta_riscritture
+                    self.log(f"[AGENTI] {lav.id}: {p} riscritto per intero {n} volte di fila "
+                             "(regola agente_riscrittura_ripetuta)")
+                    lav.nota("spinta", motivo="riscrive il file intero",
+                             regola="agente_riscrittura_ripetuta")
+                    _aggiungi_spinta(messages, spinta_riscritture(
+                        p.rsplit("/", 1)[-1], n, seg.get("ultimo_errore")))
+                    fila[p] = 0
+                    break
         # Il contesto resta per una ripresa (domanda a metà lavoro): il servizio lo butta se
         # il lavoro finisce qui. Con una domanda resta compattato: i risultati lunghi nei
         # file, salvo l'ultimo passo
@@ -1432,10 +1520,39 @@ class Agente:
         lav.nota("test", esito=r.get("esito"), passano=r.get("passano"))
         if r.get("passano"):
             return None
-        return {"ok": False, "consegna": "rifiutata", "esito_test": r.get("esito"),
-                "uscita": str(r.get("uscita") or "")[-3000:],
-                "errore": "i test non passano: correggi il codice (o un test sbagliato), "
-                          "rifai esegui_test, poi richiama consegna"}
+        return _con_fallimenti(
+            {"ok": False, "consegna": "rifiutata", "esito_test": r.get("esito"),
+             "uscita": str(r.get("uscita") or "")[-3000:],
+             "errore": "i test non passano: correggi il codice (o un test sbagliato), "
+                       "rifai esegui_test, poi richiama consegna"},
+            uscita=str(r.get("uscita") or ""))
+
+    def _modifica(self, lav: Lavoro, sandbox, args: dict) -> dict:
+        """modifica_file (11/10): il testo vecchio, che deve comparire una volta sola, diventa
+        il nuovo; il resto del file resta com'è. Le stesse regole di scrivi_file (sandbox)."""
+        rel = str(args.get("percorso") or "")
+        vecchio, nuovo = args.get("vecchio"), args.get("nuovo")
+        if not isinstance(vecchio, str) or not isinstance(nuovo, str) or not vecchio:
+            return {"ok": False, "errore": "servono vecchio (non vuoto) e nuovo, come testo"}
+        lav.passo = f"corregge {rel or 'un file'}"
+        testo = sandbox.leggi(rel, max_caratteri=10**9)
+        n = testo.count(vecchio)
+        if n == 0:
+            # Spesso sono gli spazi in testa o gli a capo: lo si dice con la riga più vicina
+            prima = vecchio.strip().splitlines()[0].strip() if vecchio.strip() else ""
+            righe = [i + 1 for i, r in enumerate(testo.splitlines()) if prima and prima in r]
+            return {"ok": False, "errore": "il testo vecchio non c'è nel file: copialo esatto "
+                    "(spazi e a capo compresi) da leggi_file"
+                    + (f"; la sua prima riga è alla riga {righe[0]}" if righe else "")}
+        if n > 1:
+            return {"ok": False, "errore": f"il testo vecchio compare {n} volte: aggiungi "
+                                           "qualche riga intorno perché sia unico"}
+        r = sandbox.scrivi(rel, testo.replace(vecchio, nuovo, 1))
+        if r.get("ok"):
+            riga = testo[:testo.index(vecchio)].count("\n") + 1
+            r["riga"] = riga
+            lav.nota("file", nome=r.get("percorso") or rel, testo=testo.replace(vecchio, nuovo, 1))
+        return r
 
     def _strumento(self, lav, sandbox, name, args) -> dict:
         from .sandbox import ErroreSandbox
@@ -1456,16 +1573,19 @@ class Agente:
                     lav.nota("file", nome=r.get("percorso") or str(args.get("percorso")),
                              testo=str(args.get("contenuto") or ""))
                 return r
+            if name == "modifica_file":
+                return self._modifica(lav, sandbox, args)
             if name == "esegui_python":
                 lav.passo = "prova il programma"
                 r = sandbox.esegui(args.get("percorso"), args.get("argomenti") or [])
-                return {k: v for k, v in r.items()}
+                return _con_fallimenti(dict(r))
             if name == "esegui_csharp":
                 lav.passo = "prova il programma"
                 inp = args.get("input")
-                return dict(sandbox.esegui_cs(str(args.get("cartella") or ""),
-                                              args.get("argomenti") or [],
-                                              None if inp in (None, "") else str(inp)))
+                return _con_fallimenti(dict(sandbox.esegui_cs(str(args.get("cartella") or ""),
+                                                              args.get("argomenti") or [],
+                                                              None if inp in (None, "")
+                                                              else str(inp))))
             if name == "scarica_esempio":
                 if self._sonde_ok(lav) is None:
                     # In una correzione si sonda, non si scarica (08/10 notte)
@@ -1479,9 +1599,12 @@ class Agente:
                 r = sandbox.test(args.get("percorso") or None)
                 lav.nota("test", esito=r.get("esito"), passano=r.get("passano"))
                 lav.passo = frase_test(r.get("esito"))
-                # L'uscita intera: se è lunga va nel file .calliope, qui resta la coda
-                return {"esito": r["esito"], "passano": r["passano"], "uscita": r["uscita"],
-                        **({"errore": r["errore"]} if r.get("errore") else {})}
+                # L'uscita intera: se è lunga va nel file .calliope, qui resta la coda. Prima
+                # i fallimenti in breve (11/10, diagnosi.py): test, errore e file:riga, che
+                # restano anche quando il contesto accorcia l'uscita
+                return _con_fallimenti(
+                    {"esito": r["esito"], "passano": r["passano"], "uscita": r["uscita"],
+                     **({"errore": r["errore"]} if r.get("errore") else {})})
             return {"errore": f"strumento sconosciuto: {name}"}
         except ErroreSandbox as e:
             return {"ok": False, "errore": str(e)}
@@ -1648,6 +1771,18 @@ class Agente:
             return {"errore": "qui non ci sono file da leggere"}
         else:
             testo = sandbox.leggi(rel, max_caratteri=10**9)
+        try:
+            riga = int(args.get("riga") or 0)
+        except (TypeError, ValueError):
+            riga = 0
+        if riga > 0:
+            # Il punto di un errore (11/10): le righe intorno, numerate
+            righe = testo.splitlines()
+            a, b = max(0, riga - 1 - RIGHE_INTORNO), min(len(righe), riga + RIGHE_INTORNO)
+            if a >= len(righe):
+                return {"errore": f"il file ha {len(righe)} righe"}
+            return {"righe": f"{a + 1}-{b} di {len(righe)}",
+                    "contenuto": "\n".join(f"{i + 1}: {righe[i]}" for i in range(a, b))}
         pezzo = testo[da:da + self.LEGGI_MAX]
         if da == 0 and len(testo) <= self.LEGGI_MAX:
             out = {"contenuto": testo}

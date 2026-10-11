@@ -2065,3 +2065,97 @@ corretti a secco (`prove/prova_giro_halloween.py`).
   apostrofati staccati: «videogioco a tema Halloween da giocare». I titoli buoni restano.
 - **Provenienza del titolo del proprio sviluppo**: in [sicurezza-politica](sicurezza-politica.md).
 - **Prove**: `prova_giro_halloween.py` (le sei parti con i contrari, ~3 s).
+## Dove e perché, scheletri di partenza, spinta concreta (11/10, ramo `agente-guida`)
+
+Giro vero della DGX dell'11/10, 15:40–16:30 (due lavori, cartelle `2026-10-11 1540 …` e
+`… 1553 videogioco a tema Halloween da giocare`): qwen3.6 su vLLM sviluppa il gioco
+«Halloween - Apri le porte» e gira a vuoto per **45 minuti** (34 passate nel secondo lavoro, 378
+kB di registro). Quello che ha visto e fatto, dal registro e da `.calliope/passo-N.txt`:
+
+- prima un `SyntaxError: Identifier 'TIPI_SORPRESA' has already been declared` (le stesse
+  costanti in logica.js e in gioco.js, che nel riquadro stanno nello stesso spazio globale);
+- poi la prova di fumo: `tocco (click): Error: Devi inserire da 1 a 4 giocatori`. Era
+  un'eccezione di `creaStato` (logica.js) uscita dal gestore del pulsante «Inizia» (i campi dei
+  nomi vuoti, come li lascia la prova). Il messaggio non diceva quale elemento, quale riga né
+  quali tocchi prima;
+- l'agente ha riscritto gioco.js **intero** (~730 righe) nove volte con ipotesi sbagliate (il
+  contenitore fuori dal DOM, `document.body`, «`calliope` non è definito»: la prova lo dà) e ha
+  scritto «La prova di fumo è nel codice di Calliope, non posso modificarla»;
+- nella passata 1 ha ripetuto una decina di volte lo stesso piano senza chiamare strumenti; la
+  spinta delle ripetizioni diceva solo «decidi e chiama uno strumento»;
+- il registro del lavoro diceva solo «← 21 test su 22 passano», tre volte.
+
+Decisione di Dario: valgono per **tutti** gli sviluppi, non solo per i giochi.
+
+- **Ogni controllo che boccia dice dove e perché** (`calliope/agenti/diagnosi.py`, nuovo).
+  Dall'uscita di un controllo l'elenco dei fallimenti: quale test, l'errore (l'asserzione con i
+  valori, senza il confronto riga per riga di difflib) e file:riga nel codice dell'agente (mai
+  nella libreria standard, nel runner o in Node); al più 4, 360 caratteri per errore, 900 in
+  tutto.
+  - Prova di fumo (`fumo_js.mjs`): l'elemento toccato (tag, id, classi, testo) e quello che
+    ascolta se è un altro, le righe degli script della scheda nello stack (`[in logica.js:4
+    (creaStato) ← gioco.js:8 (avvia) ← gioco.js:14]`), la frase «Un gestore di evento ha
+    lanciato un'eccezione: ogni gestore deve catturare gli errori della logica (try/catch) e
+    mostrarli nel gioco, senza lasciarli uscire», gli ultimi tocchi prima. Le dichiarazioni
+    doppie dicono le righe vere delle due dichiarazioni (Node dice sempre la riga 1 dello
+    script). Il messaggio (`test_js.mjs`) mette prima l'errore e poi come lavora la prova
+    («document finto con <div id="gioco">, l'oggetto calliope, timer finti… correggi il punto
+    indicato, non riscrivere il file»).
+  - Test JavaScript: l'asserzione su una riga e `[in logica.test.js:6]`.
+  - Test Python: già interi nell'uscita (unittest con verbosità 2); ora anche in breve
+    («test_gradi: AssertionError: 'Ci sono 19 gradi.' != 'Ci sono 18 gradi.' (in
+    test_estensione.py:11)», «KeyError: 'gradi' (in estensione.py:5 ← test_estensione.py:16)»,
+    l'import rotto, il programma di esegui_python che si ferma).
+  - C#: gli errori di compilazione avevano già file e riga; le eccezioni no, perché csc
+    compilava senza simboli: `esegui_cs.sh` compila con `-debug:portable` (il .pdb accanto alla
+    dll, «in /lavoro/Program.cs:line 2»; provato con il csc dell'SDK sul portatile, nel
+    container della DGX ancora da vedere).
+  - Il risultato di esegui_test (e di esegui_python/esegui_csharp che falliscono, e della
+    consegna rifiutata dai test) ha `fallimenti` **prima** di `uscita`: quando il contesto
+    accorcia i risultati vecchi l'uscita perde l'inizio, i fallimenti no. Il registro del
+    lavoro (`avanzamento.esito_breve`, fino a 700 caratteri) scrive «2 test su 3 passano · prova
+    di fumo del gioco: tocco (click) su <button id="inizia"> «Inizia»: Error: … (in
+    logica.js:4 …)»; il diario estrattivo tiene il primo fallimento.
+  - Estensioni: l'errore di un'estensione che si ferma nel contenitore (`_ospite.py`, quindi
+    collaudi e ricollaudo) dice il file e la riga («KeyError: 'manca' (in estensione.py:3)»);
+    il manifesto sbagliato dice il valore ricevuto per `nome`, `cosa_fa.verbo` e `livello`.
+    Inventario degli altri controlli: gli errori del manifesto e della scheda dicevano già il
+    campo e il perché; la sintassi di estensione.py file e riga (`analisi.py`); il ricollaudo
+    il caso, l'esito, il motivo e la traccia di rete; le sonde il motivo e cosa fare. Restano
+    così.
+- **Scheletri di partenza** (`calliope/agenti/scheletri.py`, nuovo), in fondo al prompt: gioco
+  (logica.js con `module.exports` in fondo, gioco.js che usa le funzioni di logica.js senza
+  ridichiararle, il contenitore `#gioco`, ogni gestore passato da `sicuro()` che cattura, il
+  test con node:test, come la prova di fumo prova la scheda), estensione Python (estensione.py
+  con `ErroreCalliope`, `trovato: false`, `urlencode`; test con `CalliopeFinta` e la rete
+  negata), programma Python e C# (valori d'esempio senza argomenti). Ognuno passa i suoi test
+  (e il gioco la prova di fumo e la consegna): lo controlla la prova. **Misura** con il
+  tokenizer di Qwen3.6 sulla DGX: gioco 591 token (il prompt del gioco arriva a 5 522),
+  estensione 476 (prompt 4 562), Python 190, C# 168; più ~110 token per `modifica_file` e
+  `riga` negli strumenti.
+- **Spinta concreta** (`ripetizioni.py`, `ciclo.py`):
+  - il ciclo ricorda l'ultimo errore (`segnali.ultimo_errore`: dopo esegui_test,
+    esegui_python/esegui_csharp che falliscono, una consegna rifiutata; si azzera quando i test
+    passano). Dopo una passata fermata per ragionamento ripetuto la spinta dice «L'ultimo
+    errore è «…» in logica.js:4 …. Adesso leggi quel punto (leggi_file con percorso «logica.js»
+    e riga 4) e correggi solo quello con modifica_file; non riscrivere il file intero.»; senza
+    un errore noto resta quella di prima;
+  - **riscritture intere ripetute**: lo stesso file di almeno 60 righe riscritto per intero con
+    scrivi_file 3 volte di fila (`RISCRITTURE_MAX`) senza che l'errore dei test cambi → la
+    spinta «Hai riscritto gioco.js per intero 3 volte e i test falliscono ancora allo stesso
+    modo: riscriverlo non serve.» con lo stesso passo concreto; regola
+    `agente_riscrittura_ripetuta` nel log e sulla scheda. La fila riparte quando l'errore
+    cambia, quando i test passano o con una correzione mirata;
+  - perché «correggi solo quello» si possa fare: lo strumento **`modifica_file`** (percorso,
+    vecchio, nuovo: il testo vecchio deve comparire una volta sola; se non c'è dice la riga
+    della sua prima riga, se compare più volte chiede più righe intorno; le regole di
+    scrivi_file, sola lettura compresa) e **`leggi_file` con `riga`** (le righe intorno,
+    numerate). Prima l'unico modo di correggere una riga era riscrivere 730 righe;
+  - `agenti_presence_penalty` per «estensione» resta 0 (la scheda di Qwen3.6 lo consiglia per
+    il codice): si cambia solo con una misura. Script pronto,
+    `prove/manuali/misura_presence_penalty.py` (sul caso vero, valori 0/0,5/1/1,5, messaggio di
+    fumo vecchio e nuovo; da lanciare sulla DGX libera, comando in testa al file). **Da
+    misurare.**
+- **Prove**: `prova_agente_guida.py` (livello 2, ~10 s; il caso del gioco ricostruito con nomi
+  di fantasia); `prova_contesto_agenti` ha 400 token di margine per il prompt fisso nuovo (con
+  8 192 di finestra il picco era già 4 086 su 4 096); `prova_agenti` conta 7 strumenti.
