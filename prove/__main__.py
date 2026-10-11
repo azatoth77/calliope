@@ -47,6 +47,7 @@ A_SECCO = [
     ("prova_sviluppo_giro4.py", [], "il giro vero della DGX dell'08/10 sera (giro 4 della modalità sviluppo): modifica con una descrizione al posto del nome → l'unica estensione nominata, una disattivata non rende ambiguo il titolo di un'attiva, il «sì» breve apre lo sviluppo di un'estensione senza sfida e la sfida tiene la chiamata intera, collaudo con più input (argomenti, «N giorni» nei dati, gli input nei dati del turno, gli argomenti veri per l'agente), analisi senza testo ripetuto e «avanti» che accetta, il titolo della persona nella revisione e nell'approvazione"),
     ("prova_estensione_rimuovi.py", [], "eliminazione definitiva di un'estensione (09/10): «rimuovi» sceglie la disattivata tra due omonime, la domanda dice quale (stato, versione, cosa fa, l'omonima che resta) e che è definitiva, un'attiva prima si disattiva, sviluppo aperto o lavoro in corso la bloccano, dopo spariscono tool, «sempre», elenco, partite e schede che rimandano a lei; cartella in sola lettura cancellata"),
     ("prova_sviluppo_giro5.py", [], "il giro vero della DGX dell'08/10 sera (giro 5 della modalità sviluppo): doppia codifica (quote_plus e poi urlencode) segnalata nella traccia del collaudo, nei vincoli della correzione e dell'analisi, nel registro delle uscite e in CalliopeFinta, mai rifiutata; il secondo collaudo nella stessa frase con `argomenti` detti (anche i numeri a parole) e i contrari, il rifiuto «NON è partito»; «la gente» per «l'agente» nei dati del turno; il lavoro che riparte dall'analisi con i collaudi e la traccia; il giro a vuoto nel ragionamento dell'agente fermato (spinta, segnale, passo sulla scheda) e i contrari (codice, tabelle, frasi corte); presence_penalty per tipo di lavoro solo per vLLM"),
+    ("prova_agente_guida.py", [], "la guida dell'agente (11/10, il gioco «Halloween» della DGX, 45 minuti a vuoto): ogni controllo dice dove e perché (prova di fumo con l'elemento, file:riga, la frase sul gestore e i tocchi prima; dichiarazioni doppie con le due righe; test JS e Python con asserzione e riga; programma e C#; registro, diario, consegna rifiutata; l'estensione che si ferma; il manifesto con il valore), scheletri di partenza per tipo che passano i loro test, spinta con l'ultimo errore dopo un giro a vuoto e dopo tre riscritture intere, modifica_file e leggi_file con riga; contrari"),
     ("prova_sviluppo_giro6.py", [], "il giro vero della DGX dell'08/10 sera (giro 6 della modalità sviluppo): «ferma» che ferma il lavoro dell'agente e «sospendi» che lo lascia finire (con la domanda), «rifai» che riparte subito con la stessa specifica dopo un lavoro fermato o non andato, un collaudo per valore quando il modello ha separato i valori di un elenco (contrari: un nome solo con «e», un numero, solo dati), i valori della chiamata di prima validi dopo il risultato, i dati del turno"),
     ("prova_giro_ombra.py", [], "il giro vero della DGX del 10/10 mattina (06:09–06:18): un programma diverso con uno sviluppo aperto non conferma quello vecchio (sostituzione di una parola piena del titolo: «moltiplica» per «somma», «parole» per «vocali»), la domanda con i due titoli e il «sì» che sospende e apre il nuovo; contrari: la stessa richiesta con altre parole e il «sì» restano conferma, una modifica resta dello sviluppo aperto; dichiarazioni d'azione sulle fasi dello sviluppo («l'analisi è stata annullata», «procedo allora con lo sviluppo», «siamo passati alla fase di sviluppo») trattenute, con i contrari (lo stato, l'offerta, le domande)"),
     ("prova_giro_chiusura.py", [], "il secondo giro vero della DGX del 10/10 (07:11–07:21): chiudere uno sviluppo a voce (la domanda «… Lo chiudo?» in fondo, registrata come proposta; il sì anche lungo chiude, «sospendi» e «no» no; uno sviluppo sospeso si chiude con la stessa conferma), «chiudo definitivamente lo sviluppo» senza tool trattenuto con i contrari (domande, offerte, condizionali), titoli che tengono la parola che distingue («il numero di vocali» / «di parole»), la storia uguale a ciò che è andato alla voce (turno ricostruito col ciclo; resa per la voce allineata, `storia_come_detta`; frasi d'attesa fuori)"),
@@ -307,6 +308,7 @@ LIVELLO_2 = {
     "prova_estensioni_attacchi.py",  # 30 s
     "prova_sonde_attacchi.py",       # ~3 s (08/10 notte)
     "prova_giochi.py",               # 7 s
+    "prova_agente_guida.py",         # ~10 s (11/10)
     "prova_esecutore.py",            # 12 s
     "prova_inoltro.py",              # 18 s, con il browser (seriale)
     "prova_telefono_abbina.py",      # 12 s, con il browser (seriale)
@@ -413,10 +415,12 @@ LEGAMI = [
                           "prova_avanzamento.py", "prova_esecuzione.py",
                           "prova_agenti_openai.py", "prova_arbitro_vllm.py",
                           "prova_arbitro_pausa.py", "prova_contesto_agenti.py",
-                          "prova_estensioni_piano.py", "prova_analisi_richiesta.py"]),
+                          "prova_estensioni_piano.py", "prova_analisi_richiesta.py",
+                          "prova_agente_guida.py"]),
     ("calliope/estensioni/",
  ["prova_estensioni.py", "prova_estensioni_piano.py",
-                              "prova_estensioni_attacchi.py", "prova_giochi.py"]),
+                              "prova_estensioni_attacchi.py", "prova_giochi.py",
+                              "prova_agente_guida.py"]),
     ("calliope/guardrail.py", ["prova_estensioni.py", "prova_estensioni_attacchi.py"]),
     ("calliope/web/", ["prova_web.py", "prova_estensioni_attacchi.py",
                        "prova_searxng_aggiorna.py"]),

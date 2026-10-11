@@ -100,3 +100,21 @@ come «Parla», ✕, «Riapri», scheda vuota, collaudo). Le foto con `CALLIOPE_
 Per vederla: ricaricare la pagina degli schermi e quella del telefono dopo l'aggiornamento della
 DGX (sono file statici serviti da Calliope: niente da installare sul portatile o sul telefono);
 poi chiedere un gioco a voce.
+## Il gioco di Halloween: la prova di fumo dice dove (11/10, ramo `agente-guida`)
+
+Giro vero della DGX dell'11/10: qwen3.6 sviluppa «Halloween - Apri le porte» e gira a vuoto 45
+minuti. Prima le stesse costanti dichiarate in logica.js e gioco.js («Identifier
+'TIPI_SORPRESA' has already been declared»), poi la prova di fumo con «tocco (click): Error:
+Devi inserire da 1 a 4 giocatori», un'eccezione della logica uscita dal gestore di «Inizia» (i
+nomi vuoti). Senza elemento né riga, l'agente ha riscritto gioco.js intero nove volte e ha
+creduto che nella prova mancassero `calliope` o il contenitore. Storia completa e correzioni
+(valgono per tutti gli sviluppi) in [agenti-estensioni](agenti-estensioni.md), «Dove e perché,
+scheletri di partenza, spinta concreta»; per i giochi:
+
+- la prova di fumo dice l'elemento toccato, `[in logica.js:4 (creaStato) ← gioco.js:8
+  (avvia)]`, «Un gestore di evento ha lanciato un'eccezione: ogni gestore deve catturare gli
+  errori della logica…» e i tocchi prima; le dichiarazioni doppie dicono le due righe; il
+  messaggio spiega che la prova dà `document` con `<div id="gioco">`, `calliope` e i timer;
+- lo scheletro del gioco nel prompt: logica.js e gioco.js senza nomi doppi, i gestori passati
+  da `sicuro()` che cattura e mostra l'errore nel gioco, il test con node:test (591 token);
+- `modifica_file` e `leggi_file` con `riga` per correggere un punto senza riscrivere il file.

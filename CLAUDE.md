@@ -191,7 +191,7 @@ Solo ciò che è ancora vero il 09/10; storia e misure nei documenti d'area.
 - **Foto**: con una foto nella conversazione «cosa vedi sul mio schermo?» riceve «Non me l'hai chiesto». [immagini-allegati](docs/aree/immagini-allegati.md)
 - **Non provati sul vero**: iPhone (audio, schermo acceso, auto), PC Windows pulito come satellite, installazioni con internet vero, misure su Windows ARM. [roadmap](docs/roadmap.md)
 - **Biblioteca**: tabelle delle voci non lette; «perché piove?» trova titoli omonimi. [biblioteca](docs/aree/biblioteca.md)
-- **Agente**: il codice fiscale (qwen3.6 non conosce il carattere di controllo); il giro del gioco con `require` da rifare; una ricerca dell'agente lenta da guardare. [agenti-estensioni](docs/aree/agenti-estensioni.md), [giochi](docs/aree/giochi.md)
+- **Agente**: il codice fiscale (qwen3.6 non conosce il carattere di controllo); il giro del gioco con `require` da rifare; una ricerca dell'agente lenta da guardare; il presence_penalty delle estensioni da misurare (`prove/manuali/misura_presence_penalty.py`, dopo il giro a vuoto dell'11/10). [agenti-estensioni](docs/aree/agenti-estensioni.md), [giochi](docs/aree/giochi.md)
 
 **Trappole note** (vere ancora oggi): usare sempre `127.0.0.1` e mai `localhost` su Windows
 (~2 s persi in IPv6); non riaprire il flusso del microfono a ogni turno; `ollama ps`
