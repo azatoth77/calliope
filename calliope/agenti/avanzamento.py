@@ -64,6 +64,7 @@ REGISTRO_MAX = 16_000_000          # byte del registro completo di un lavoro
 REGISTRO_ATTESA = 2_000_000        # caratteri tenuti in memoria finché manca la cartella
 REGISTRO_NOME = ".registro-agente.md"
 ESITO_MAX = 240                    # caratteri dell'esito breve di uno strumento
+ESITO_TEST_MAX = 700               # …dei test con i fallimenti (11/10)
 # Le sezioni del flusso
 TIPI_FLUSSO = ("pensiero", "testo", "codice", "strumento", "esito", "passata")
 
@@ -194,12 +195,26 @@ def esito_breve(nome: str, r) -> str:
         return _breve((f"stato {r.get('stato')}, {r.get('byte', 0)} byte" if r.get("stato") == 200
                        else f"errore del sito: {r.get('errore_del_sito') or ''}")
                       + (f" · il server ha letto {primo[0]} = «{primo[1]}»" if primo else ""))
+    # I fallimenti in breve (11/10, diagnosi.py): il registro del lavoro conserva l'errore dei
+    # test, non solo «21 test su 22 passano»
+    fall = str(r.get("fallimenti") or "").replace("\n", " · ")
+    if nome == "esegui_test" or "esito_test" in r:
+        frase = frase_test(r.get("esito") or r.get("esito_test")).replace("prova il codice: ", "")
+        if r.get("consegna") == "rifiutata":
+            frase = "consegna rifiutata: " + frase
+        if fall:
+            return _breve(f"{frase} · {fall}", ESITO_TEST_MAX)
+        if r.get("errore"):
+            return _breve(f"{frase} · errore: {r['errore']}", ESITO_TEST_MAX)
+        return frase
+    if fall:
+        return _breve(f"errore: {fall}", ESITO_TEST_MAX)
     if r.get("errore"):
         return _breve(f"errore: {r['errore']}")
     if nome == "scrivi_file":
         return "scritto" + (f" ({r['righe']} righe)" if r.get("righe") else "")
-    if nome == "esegui_test" or "esito_test" in r:
-        return frase_test(r.get("esito") or r.get("esito_test")).replace("prova il codice: ", "")
+    if nome == "modifica_file":
+        return "corretto" + (f" alla riga {r['riga']}" if r.get("riga") else "")
     if nome == "elenca_file" and isinstance(r.get("file"), list):
         return f"{len(r['file'])} file"
     if nome == "leggi_file":

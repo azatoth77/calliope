@@ -19,8 +19,10 @@ if [ ! -s "$uscita/file.rsp" ]; then
   echo "— nessun file .cs da compilare —" >&2
   exit 2
 fi
+# -debug:portable (11/10): il .pdb accanto alla dll, così un'eccezione non gestita dice file e
+# riga («in /lavoro/Program.cs:line 12»), che diagnosi.py riporta all'agente
 dotnet /opt/csc/csc.dll -nologo -target:exe -langversion:latest -nullable:enable \
-  -optimize+ -deterministic -warn:1 -out:"$uscita/programma.dll" \
+  -optimize+ -deterministic -debug:portable -warn:1 -out:"$uscita/programma.dll" \
   @/opt/csc/riferimenti.rsp /opt/csc/usings.cs @"$uscita/file.rsp" >&2
 codice=$?
 if [ "$codice" -ne 0 ]; then

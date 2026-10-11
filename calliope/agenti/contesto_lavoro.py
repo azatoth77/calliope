@@ -539,9 +539,14 @@ def estrattivo(vecchi: list, prima: dict | None) -> dict:
                 if nome == "esegui_test":
                     test = _esito_test(res) or test
                     falliscono = isinstance(res, dict) and res.get("passano") is False
-                    fatto.append(f"esegui_test: {_esito_test(res) or 'eseguiti'}")
-                elif nome == "scrivi_file":
-                    fatto.append(f"scritto {a.get('percorso') or 'un file'}"
+                    # Con il primo fallimento (11/10): il diario non perde l'errore
+                    primo = (str(res.get("fallimenti") or "").split("\n")[0]
+                             if isinstance(res, dict) else "")
+                    fatto.append(f"esegui_test: {_esito_test(res) or 'eseguiti'}"
+                                 + (f" ({_breve(primo, 160)})" if primo else ""))
+                elif nome in ("scrivi_file", "modifica_file"):
+                    fatto.append(("corretto " if nome == "modifica_file" else "scritto ")
+                                 + f"{a.get('percorso') or 'un file'}"
                                  + ("" if ok else " (non riuscito)"))
                 elif nome in ("leggi_file", "esegui_python", "scarica_esempio", "web_leggi",
                               "biblioteca_cerca", "web_cerca", "esegui_csharp"):
