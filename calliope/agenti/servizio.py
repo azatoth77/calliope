@@ -136,7 +136,9 @@ def titolo_da(compito: str, parole: int = 7) -> str:
         words = tutte[:parole + 1]                    # «il numero d'iscrizione»
     words = _con_le_parole_che_distinguono(words, tutte)
     # Niente coda monca («…rinomina le foto di»)
-    while len(words) > 2 and words[-1].lower() in _CODA:
+    # (né un articolo o una preposizione apostrofati staccati: «dell'», «un'»)
+    while len(words) > 2 and (words[-1].lower() in _CODA
+                              or re.fullmatch(r"[^\W\d_]+['’]", words[-1])):
         words.pop()
     return " ".join(words) or "lavoro"
 
@@ -291,9 +293,13 @@ def titolo_detto(titolo: str) -> str:
     return detto or "il lavoro"
 
 
-_CODA = frozenset("di a da in con su per tra fra e o il lo la i gli le un uno una del dello "
-                  "della dei degli delle al allo alla ai agli alle dal dalla nel nella sul "
-                  "sulla che".split())
+# Le parole che non chiudono un titolo: preposizioni (anche articolate: tutte, dall'11/10, DGX
+# delle 15:38: «videogioco a tema Halloween da giocare sugli» perché «sugli» mancava), articoli,
+# congiunzioni
+_CODA = frozenset("di a ad da in con su per tra fra e ed o od ma oppure né sia il lo la i gli "
+                  "le un uno una del dello della dei degli delle al allo alla ai agli alle dal "
+                  "dallo dalla dai dagli dalle nel nello nella nei negli nelle sul sullo sulla "
+                  "sui sugli sulle col coi pel pei che".split())
 # Le preposizioni del complemento di un nome («il numero di vocali», «l'elenco delle foto»)
 _DI = frozenset("di del dello della dei degli delle dell d".split())
 _QUANTI = frozenset("tutti tutte tutto tutta ogni questi queste quei quelle".split())
@@ -301,6 +307,18 @@ _QUANTI = frozenset("tutti tutte tutto tutta ogni questi queste quei quelle".spl
 
 # Il testo dell'agente nella cartella del lavoro (07/10, documenti/markdown.py)
 NOME_RISULTATO = "risultato.md"
+
+
+# Un conteggio dei test in un riassunto del diario («21 test su 22 passano», «esegui_test: i
+# test non passano»)
+_CONTI_TEST = re.compile(r"\b\d+\s+test\s+su\s+\d+\s+passan|\b(?:i\s+)?test\s+(?:non\s+)?"
+                         r"passan|\besegui_test\b", re.I)
+
+
+def _senza_conti_dei_test(testo: str) -> str:
+    """Il riassunto senza i pezzi che contano i test (separati da «;» o dal punto)."""
+    pezzi = [p.strip() for p in re.split(r"[;.]\s+|[;.]$", str(testo or ""))]
+    return "; ".join(p for p in pezzi if p and not _CONTI_TEST.search(p))
 
 
 def frase_tappa(lav, titolo: str) -> str:
@@ -311,16 +329,27 @@ def frase_tappa(lav, titolo: str) -> str:
               "token": "ha finito i token del giro: ho compresso il suo diario"}.get(
         r.get("tipo_limite"), "è arrivato al limite del giro")
     parti = [f"«{titolo}» si è fermato a una tappa: {perche}."]
-    fatto = per_la_voce(str(r.get("riassunto") or ""), 220).rstrip(".")
-    if fatto:
-        parti.append(f"Finora {fatto[:1].lower() + fatto[1:]}.")
     t = r.get("test") or {}
-    if isinstance(t, dict) and t.get("eseguiti"):
+    rifatti = isinstance(t, dict) and bool(t.get("eseguiti"))
+    riassunto = str(r.get("riassunto") or "")
+    passano = False
+    if rifatti:
+        # Un conteggio solo, quello dei test rifatti adesso alla tappa (11/10, DGX delle 16:19:
+        # «Finora 21 test su 22 passano. I test passano, 22 su 22.»: il riassunto viene dal
+        # diario, con l'ultimo esegui_test dell'agente, più vecchio)
+        riassunto = _senza_conti_dei_test(riassunto)
         n = int(t.get("eseguiti") or 0)
         ko = int(t.get("falliti") or 0) + int(t.get("errori") or 0)
-        parti.append(f"I test passano, {n} su {n}." if r.get("test_passano") or not ko
+        passano = bool(r.get("test_passano") or not ko)
+    fatto = per_la_voce(riassunto, 220).rstrip(".")
+    if fatto:
+        parti.append(f"Finora {fatto[:1].lower() + fatto[1:]}.")
+    if rifatti:
+        parti.append(f"I test passano, {n} su {n}." if passano
                      else f"Dei test ne passano {max(0, n - ko)} su {max(n, ko)}.")
-    manca = [per_la_voce(str(x), 120).rstrip(".") for x in (r.get("manca") or [])[:2]]
+    manca = [per_la_voce(str(x), 120).rstrip(".") for x in (r.get("manca") or [])[:2]
+             # con i test che passano adesso, «far passare i test» non manca più
+             if not (passano and re.search(r"\btest\b", str(x), re.I))]
     manca = [m for m in manca if m]
     if manca:
         parti.append("Manca: " + "; ".join(manca) + ".")
