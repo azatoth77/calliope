@@ -153,6 +153,8 @@ function disegna() {
   metti($("mic-stato"), st.mic ? "acceso" : "spento");
   disegnaRisposta();
   segnaTagli();
+  // Il pallino sopra un gioco (11/10, modalità gioco di schermo.js): lo stato di QUESTO telefono
+  if (sch() && sch().voceGioco) sch().voceGioco(gc);
 }
 setInterval(disegna, 250);
 
@@ -1748,6 +1750,28 @@ async function avvio() {
     st.compagnia = d.attiva ? String(d.testo || "In compagnia: chiamami per nome") : "";
     disegna();
   });
+  // La modalità gioco (11/10): il gioco copre il carosello; uscendo, il carosello torna sulla
+  // scheda che si guardava (lo scorrimento con una scheda fissa non vale)
+  document.addEventListener("calliope:gioco", (ev) => {
+    if (!(ev.detail || {}).partita) requestAnimationFrame(() => { vaiA(car.vista); segnaTagli(); });
+  });
+  // Il pallino della voce sopra il gioco è anche «Parla»: tocca e parla, tieni premuto per
+  // parlare a lungo (come preparaPulsante, ma per delega: schermo.js ridisegna il pallino)
+  let giocoPremuto = 0;
+  document.addEventListener("pointerdown", (ev) => {
+    const b = ev.target && ev.target.closest ? ev.target.closest("button.gioco-voce") : null;
+    if (!b) return;
+    ev.preventDefault();
+    giocoPremuto = performance.now();
+    tocca();
+  });
+  const giocoSu = () => {
+    if (!giocoPremuto) return;
+    if (performance.now() - giocoPremuto > 600) st.rilascio = true;
+    giocoPremuto = 0;
+  };
+  document.addEventListener("pointerup", giocoSu);
+  document.addEventListener("pointercancel", giocoSu);
   document.addEventListener("calliope:scritto", () => setTimeout(() => chiudiStrato("strato-scrivi"), 1200));
   // «Prova con…», «Chiedi all'agente…» della vista dello sviluppo (08/10): la frase da finire
   // nella casella dello scritto (lo strato dello sviluppo si chiude, e si riapre dalla scheda)

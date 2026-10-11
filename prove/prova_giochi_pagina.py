@@ -110,6 +110,45 @@ def cella(pagina, i):
     return left + c * (i % 3) + c / 2, top + c * (i // 3) + c / 2
 
 
+# La modalità gioco (11/10): geometria della scheda a tutta la finestra e dei comandi sopra il
+# gioco; `libero`: un tocco al centro di ✕ arriva proprio a ✕
+MISURA_GIOCO = r"""(() => {
+  const a = document.querySelector('article.scheda-gioco.modo-gioco');
+  const f = a && a.querySelector('iframe.riquadro-gioco');
+  const r = (e) => { if (!e) return null; const b = e.getBoundingClientRect(); return [b.left, b.top, b.width, b.height]; };
+  const ch = a && a.querySelector('.gioco-chiudi');
+  const v = a && a.querySelector('.gioco-voce');
+  let libero = false;
+  if (ch) { const b = ch.getBoundingClientRect(); libero = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2) === ch; }
+  const pr = a && a.querySelector('.gioco-prova-etichetta');
+  return {
+    W: innerWidth, H: innerHeight, articolo: r(a), riquadro: r(f), fissa: !!a && getComputedStyle(a).position === 'fixed',
+    chiudi: r(ch), libero, voce: v && !v.hidden ? v.className : null, voceTesto: v ? v.textContent : '',
+    prova: !!a && a.classList.contains('gioco-prova'), provaTesto: pr && getComputedStyle(pr).display !== 'none' ? pr.textContent : '',
+    sfondo: a ? getComputedStyle(a).backgroundColor : '',
+  };
+})()"""
+DOPO_CHIUSO = r"""(() => { const a = document.querySelector('#principale article.scheda-gioco');
+  return {riquadro: !!(a && a.querySelector('iframe')), riapri: !!(a && a.querySelector('.gioco-riapri')),
+          fs: !!document.fullscreenElement, body: document.body.classList.contains('in-modo-gioco')}; })()"""
+
+
+def pieno(m, margine=0.0):
+    """La scheda copre tutta la finestra e il riquadro tutta la scheda (meno la cornice)."""
+    a, f = m.get("articolo"), m.get("riquadro")
+    if not a or not f:
+        return False
+    W, H = m["W"], m["H"]
+    return (abs(a[0]) < 1 and abs(a[1]) < 1 and abs(a[2] - W) < 1 and abs(a[3] - H) < 1
+            and f[2] >= W - 2 * margine - 2 and f[3] >= H - 2 * margine - 2)
+
+
+def centro(pagina, sel):
+    r = pagina.valuta(f"(() => {{ const e = document.querySelector({json.dumps(sel)}); if (!e) return null;"
+                      f" const b = e.getBoundingClientRect(); return [b.x + b.width / 2, b.y + b.height / 2]; }})()")
+    return r or (-1, -1)
+
+
 def aspetta(cond, s):
     return psp.aspetta(cond, s, 0.2)
 
@@ -224,6 +263,91 @@ def main() -> int:
                  aspetta(lambda: any((m.get("dati") or {}).get("mossa") == 0
                                      and m.get("da") == 2 for m in p.storia), 8) is not None,
                  str(list(p.storia)))
+
+        # ── la modalità gioco (11/10) ──
+        PRONTI = []
+        pronto_vero = a.giochi._t_pronto
+        a.giochi._t_pronto = lambda p_, posto, d: (PRONTI.append(p_.id), pronto_vero(p_, posto, d))[1]
+        # Il tris qui sopra si è già giocato a tutta la finestra (le celle sono misurate sul
+        # riquadro): qui la geometria, il pallino della voce, ⛶, ✕, «Riapri», Esc, la scheda
+        # vuota della voce e la variante «collaudo»
+        for nome_p, pg in (("prima", A), ("seconda", B)):
+            m = pg.valuta(MISURA_GIOCO) or {}
+            verifica(f"modalità gioco ({nome_p} pagina): il gioco arrivato prende tutta la finestra, "
+                     "✕ in alto e niente lo copre",
+                     m.get("fissa") and pieno(m) and m.get("libero") and m["chiudi"][1] < 80,
+                     json.dumps(m)[:300])
+        for stato, parola in (("ascolta", "ascolto"), ("pensa", "penso"), ("parla", "parlo"),
+                              ("dorme", "dormo")):
+            a.hub.voce(stato, fino=time.time() + 30 if stato == "ascolta" else None,
+                       stanza="soggiorno")
+            ok = aspetta(lambda: ((A.valuta(MISURA_GIOCO) or {}).get("voce") or "")
+                         .endswith(" " + stato), 3)
+            m = A.valuta(MISURA_GIOCO) or {}
+            verifica(f"modalità gioco: il pallino segue la voce della stanza ({stato} → «{parola}»)",
+                     ok is not None and m.get("voceTesto") == parola,
+                     f"{m.get('voce')} {m.get('voceTesto')}")
+        m = B.valuta(MISURA_GIOCO) or {}
+        verifica("modalità gioco: la pagina della cucina (altra stanza) non mostra la voce del "
+                 "soggiorno", not (m.get("voce") or "").endswith(" parla"), str(m.get("voce")))
+        sel = "article.modo-gioco .gioco-tutto"
+        if A.valuta(f"!!document.querySelector('{sel}') && "
+                    f"!document.querySelector('{sel}').hidden"):
+            clic(A, *centro(A, sel))
+            ok = aspetta(lambda: A.valuta("!!document.fullscreenElement"), 3)
+            verifica("⛶: un tocco porta allo schermo intero vero (requestFullscreen nel gesto)",
+                     ok is not None)
+        else:
+            verifica("⛶: c'è quando il browser ha lo schermo intero", False,
+                     str(A.valuta("document.fullscreenEnabled")))
+        part = A.valuta("window.calliopeSchermo.gioco().partita")
+        clic(A, *centro(A, "article.modo-gioco .gioco-chiudi"))
+        ok = aspetta(lambda: not A.valuta("window.calliopeSchermo.gioco().partita"), 3)
+        stato_a = A.valuta(DOPO_CHIUSO) or {}
+        verifica("✕: modalità e schermo intero lasciati, riquadro tolto, «Riapri» sulla scheda",
+                 ok is not None and stato_a.get("riapri") and not stato_a.get("riquadro")
+                 and not stato_a.get("fs") and not stato_a.get("body"), json.dumps(stato_a))
+        n0 = len(PRONTI)
+        clic(A, *centro(A, "article.scheda-gioco .gioco-riapri"))
+        ok = aspetta(lambda: A.valuta("window.calliopeSchermo.gioco().partita") == part, 3)
+        verifica("«Riapri»: il gioco torna a tutta la finestra e riparte",
+                 ok is not None and pieno(A.valuta(MISURA_GIOCO) or {})
+                 and aspetta(lambda: len(PRONTI) > n0, 10) is not None)
+        for _ in range(2):          # il primo Esc può servire al browser per lasciare lo schermo intero
+            for t_ in ("keyDown", "keyUp"):
+                cdp(A, "Input.dispatchKeyEvent", {"type": t_, "key": "Escape", "code": "Escape",
+                                                  "windowsVirtualKeyCode": 27})
+            if aspetta(lambda: not A.valuta("window.calliopeSchermo.gioco().partita"), 1.5):
+                break
+        stato_a = A.valuta(DOPO_CHIUSO) or {}
+        verifica("Esc: chiude il gioco come ✕", stato_a.get("riapri") and not stato_a.get("body"),
+                 json.dumps(stato_a))
+        from calliope.schermi import schede as SCH
+        a.chiama("est_tris", {"partita": "nuova"}, "Dario", schermo=schermi["A"])
+        aspetta(lambda: A.valuta("window.calliopeSchermo.gioco().partita"), 5)
+        a.hub.invia_a(schermi["A"]["id"], SCH.vuota())
+        ok = aspetta(lambda: not A.valuta("window.calliopeSchermo.gioco().partita"), 3)
+        verifica("«Calliope, chiudi il gioco» (la scheda vuota di schermo_mostra): modalità chiusa, "
+                 "niente riquadro", ok is not None and not A.valuta(
+                     "!!document.querySelector('iframe.riquadro-gioco')"))
+        # la variante «collaudo»: la scheda con "prova": true (Giochi.avvia(prova=True))
+        avvia_vero = a.giochi.avvia
+        a.giochi.avvia = lambda *x, **k: avvia_vero(*x, **dict(k, prova=True))
+        try:
+            out = a.chiama("est_tris", {"partita": "nuova"}, "Dario", schermo=schermi["A"])
+        finally:
+            a.giochi.avvia = avvia_vero
+        n0 = len(PRONTI)
+        carta = a.giochi.partite[out["partita"]].carte.get(schermi["A"]["id"]) or {}
+        ok = aspetta(lambda: (A.valuta(MISURA_GIOCO) or {}).get("prova"), 5)
+        m = A.valuta(MISURA_GIOCO) or {}
+        verifica("collaudo: la scheda porta \"prova\": true e la pagina mostra cornice arancio, "
+                 "«PROVA», ✕ e pallino a tutta la finestra",
+                 carta.get("prova") is True and ok is not None and pieno(m, 30)
+                 and m.get("provaTesto") == "PROVA" and m.get("sfondo") == "rgb(243, 154, 46)"
+                 and m.get("libero") and m.get("voce"), json.dumps(m)[:300])
+        verifica("collaudo: il gioco in prova gira (pronto nel riquadro)",
+                 aspetta(lambda: len(PRONTI) > n0, 10) is not None)
     finally:
         for pg in pagine.values():
             pg.chiudi()

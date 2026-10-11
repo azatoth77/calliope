@@ -738,6 +738,128 @@ def misure_strati(t, hub, spec):
     t.p._chiama("Emulation.clearDeviceMetricsOverride")
 
 
+# La geometria della modalità gioco (11/10): la scheda e il riquadro rispetto alla finestra, i
+# comandi sopra il gioco e se un tocco al centro di ✕ arriva proprio a ✕ (niente lo copre)
+MISURA_GIOCO = r"""(() => {
+  const a = document.querySelector('article.scheda-gioco.modo-gioco');
+  const f = a && a.querySelector('iframe.riquadro-gioco');
+  const r = (e) => { if (!e) return null; const b = e.getBoundingClientRect(); return [b.left, b.top, b.width, b.height]; };
+  const ch = a && a.querySelector('.gioco-chiudi');
+  const v = a && a.querySelector('.gioco-voce');
+  let libero = false;
+  if (ch) { const b = ch.getBoundingClientRect(); libero = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2) === ch; }
+  const pr = a && a.querySelector('.gioco-prova-etichetta');
+  return {
+    W: innerWidth, H: innerHeight, articolo: r(a), riquadro: r(f), fissa: !!a && getComputedStyle(a).position === 'fixed',
+    chiudi: r(ch), libero, voce: v && !v.hidden ? v.className : null, voceTesto: v ? v.textContent : '',
+    prova: !!a && a.classList.contains('gioco-prova'), provaTesto: pr && getComputedStyle(pr).display !== 'none' ? pr.textContent : '',
+    sfondo: a ? getComputedStyle(a).backgroundColor : '', body: document.body.classList.contains('in-modo-gioco'),
+  };
+})()"""
+
+
+def pieno(m, margine=0.0):
+    """La scheda copre tutta la finestra e il riquadro tutta la scheda (meno la cornice)."""
+    a, f = m.get("articolo"), m.get("riquadro")
+    if not a or not f:
+        return False
+    W, H = m["W"], m["H"]
+    return (abs(a[0]) < 1 and abs(a[1]) < 1 and abs(a[2] - W) < 1 and abs(a[3] - H) < 1
+            and f[2] >= W - 2 * margine - 2 and f[3] >= H - 2 * margine - 2)
+
+
+def gioco(t: Tel, hub):
+    """La modalità gioco sul telefono (11/10): un gioco che arriva prende tutta la finestra,
+    il pallino segue lo stato del telefono ed è anche «Parla», ✕ chiude e «Riapri» rimette;
+    il microfono resta acceso; la variante «collaudo» ("prova": true) ha la cornice e «PROVA».
+    Il documento del gioco qui non esiste (il riquadro carica un 404): bastano la scheda e il
+    riquadro, la prova vera dei giochi è prova_giochi_pagina."""
+    from calliope.schermi import schede
+    T = "window.calliopeTelefono"
+    G = "window.calliopeSchermo.gioco()"
+    dimensione(t, 390, 844)
+    if not t.mic():
+        t.tocca("microfono")
+        aspetta(lambda: t.mic(), 5)
+    mic_prima = t.mic()
+
+    def carta(pid, **extra):
+        return schede.nuova("gioco", "Memory", schede.PUBBLICA, durata_s=None, chiave=f"gioco:{pid}",
+                            partita=pid, doc="/gioco/" + "x" * 24, condivisa=False, giocatori=1,
+                            watchdog_s=6.0, **extra)
+
+    def voce():
+        return (t.v(MISURA_GIOCO) or {}).get("voce") or ""
+
+    tutti(hub, carta("finta1"))
+    ok = aspetta(lambda: (t.v(G) or {}).get("partita") == "finta1", 5)
+    time.sleep(0.2)
+    m = t.v(MISURA_GIOCO) or {}
+    foto(t, "telefono-gioco.png")
+    verifica("modalità gioco: il gioco arrivato prende tutta la finestra (scheda fissa, riquadro pieno)",
+             bool(ok) and m.get("fissa") and pieno(m) and m.get("body"), json.dumps(m)[:300])
+    verifica("modalità gioco: ✕ in alto, ≥ 44 px, niente lo copre",
+             bool(m.get("chiudi")) and m["chiudi"][2] >= 44 and m["chiudi"][1] < 80 and m.get("libero"),
+             json.dumps(m.get("chiudi")))
+    verifica("modalità gioco: il microfono resta acceso entrando", mic_prima and t.mic())
+    # il pallino segue lo stato di questo telefono
+    t.v(f"{T}.st.pensa = true; {T}.st.attivo = true; 1")
+    ok = aspetta(lambda: "pensa" in voce(), 2)
+    verifica("modalità gioco: il pallino dice «penso» quando Calliope pensa", bool(ok), voce())
+    t.v(f"{T}.st.pensa = false; {T}.st.L = null; 1")
+    ok = aspetta(lambda: "dorme" in voce(), 2)
+    m = t.v(MISURA_GIOCO) or {}
+    verifica("modalità gioco: poi torna «dormo» (a disposizione, serve la wake word)",
+             bool(ok) and m.get("voceTesto") == "dormo", f"{m.get('voce')} {m.get('voceTesto')}")
+    # il pallino è anche «Parla»: un tocco apre la frase senza il nome
+    t.tocca_sel("article.modo-gioco .gioco-voce")
+    ok = aspetta(lambda: t.v(f"!!({T}.st.forza || {T}.st.reg)") or "ascolta" in voce(), 3)
+    verifica("modalità gioco: toccare il pallino è come «Parla» (la frase comincia senza il nome)",
+             bool(ok), voce())
+    t.v(f"{T}.st.forza = false; 1")
+    t.v(f"if ({T}.st.reg) {T}.st.reg.finisci = true; 1")
+    time.sleep(0.5)
+    # ✕ chiude: la scheda torna nel carosello con «Riapri», il microfono resta
+    t.tocca_sel("article.modo-gioco .gioco-chiudi")
+    ok = aspetta(lambda: not (t.v(G) or {}).get("partita"), 3)
+    stato = t.v("(() => { const a = document.querySelector('#binario article.scheda-gioco');"
+                " return {riquadro: !!(a && a.querySelector('iframe')), riapri: !!(a && a.querySelector('.gioco-riapri')),"
+                " fissa: !!a && getComputedStyle(a).position === 'fixed',"
+                " body: document.body.classList.contains('in-modo-gioco')}; })()") or {}
+    verifica("✕: modalità gioco chiusa, il riquadro sparisce, «Riapri» sulla scheda",
+             bool(ok) and not stato.get("riquadro") and stato.get("riapri") and not stato.get("fissa")
+             and not stato.get("body"), json.dumps(stato))
+    verifica("✕: il microfono resta acceso", t.mic() == mic_prima)
+    t.v(f"{T}.vaiA('gioco:finta1'); 1")
+    t.tocca_sel("#binario article.scheda-gioco .gioco-riapri")
+    ok = aspetta(lambda: (t.v(G) or {}).get("partita") == "finta1", 3)
+    m = t.v(MISURA_GIOCO) or {}
+    verifica("«Riapri»: di nuovo a tutta la finestra", bool(ok) and pieno(m), json.dumps(m.get("articolo")))
+    # la scheda vuota (schermo_mostra niente: «Calliope, chiudi il gioco») la chiude
+    tutti(hub, schede.vuota())
+    ok = aspetta(lambda: not (t.v(G) or {}).get("partita"), 3)
+    verifica("«chiudi il gioco» a voce (scheda vuota): modalità gioco chiusa", bool(ok)
+             and not t.v("document.body.classList.contains('in-modo-gioco')"))
+    # la variante «collaudo»
+    tutti(hub, carta("finta2", prova=True))
+    ok = aspetta(lambda: (t.v(G) or {}).get("partita") == "finta2", 5)
+    time.sleep(0.2)
+    m = t.v(MISURA_GIOCO) or {}
+    foto(t, "telefono-gioco-prova.png")
+    verifica("collaudo: a tutta la finestra con la cornice arancio e «PROVA», ✕ e pallino",
+             bool(ok) and pieno(m, 14) and m.get("prova") and m.get("provaTesto") == "PROVA"
+             and m.get("sfondo") == "rgb(243, 154, 46)" and m.get("libero") and m.get("voce"),
+             json.dumps(m)[:300])
+    t.tocca_sel("article.modo-gioco .gioco-chiudi")
+    aspetta(lambda: not (t.v(G) or {}).get("partita"), 3)
+    verifica("dopo il gioco: modalità gioco chiusa, il microfono acceso",
+             t.mic() == mic_prima and not t.v("document.body.classList.contains('in-modo-gioco')"))
+    if t.mic():
+        t.tocca("microfono")
+        aspetta(lambda: not t.mic(), 3)
+    t.p._chiama("Emulation.clearDeviceMetricsOverride")
+
+
 def senza_api(t: Tel):
     T = "window.calliopeTelefono"
     t.v("localStorage.setItem('__wl_assente', '1'); 1")
@@ -798,6 +920,7 @@ def main() -> int:
             _, spec = modulo_e_scrivi(t, hub)
             compila(t, hub)
             misure_strati(t, hub, spec)
+            gioco(t, hub)
             senza_api(t)
             pagina.pompa(0.3)
             errori = [r for r in pagina.log if r.startswith("ECCEZIONE") or "Content Security" in r]

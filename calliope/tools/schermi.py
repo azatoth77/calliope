@@ -606,12 +606,12 @@ def schermi_specs() -> list[ToolSpec]:
             name="schermo_mostra",
             description=("Mostra qualcosa su uno schermo di casa, quando lo chiedono: "
                          "«mostramelo sullo schermo», «fammelo vedere», «fammelo leggere», "
-                         "«metti la lista sullo schermo», «togli dallo schermo». cosa: "
+                         "«metti la lista sullo schermo», «togli dallo schermo», «chiudi il gioco». cosa: "
                          "ultima (quello di cui si parla adesso), risposta (il testo della "
                          "tua ultima risposta), lista, timer, promemoria (i promemoria, gli "
                          "appuntamenti e l'agenda di chi parla: «mettimi sullo schermo i miei "
                          "appuntamenti»), documento (l'ultimo preparato), casa (luci e "
-                         "temperature), niente (pulisci lo schermo). lista: il nome della "
+                         "temperature), niente (pulisci lo schermo, chiude anche un gioco). lista: il nome della "
                          "lista, se cosa=lista."),
             parameters={"type": "object",
                         "properties": {"cosa": {"type": "string", "enum": list(COSE)},
