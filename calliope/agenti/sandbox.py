@@ -416,6 +416,22 @@ class Sandbox:
         args, stdin = self._argomenti(argomenti, stdin)
         return self._lancia("csharp", cart, args, stdin=stdin, flusso=flusso, isolamento=iso)
 
+    def esegui_js(self, rel, argomenti=(), stdin: str | None = None) -> dict:
+        """Un file .js della cartella con Node, nel container di Node (12/10 sera, esegui_js
+        dell'agente: provare un pezzo di logica invece di ragionarci a mente). Gli stessi
+        limiti dei test JavaScript: niente rete, disco in sola lettura salvo la cartella, tempo
+        e memoria; mai sull'host."""
+        iso = self.linguaggi.get("javascript")
+        if iso is None or not iso.pronto:
+            raise ErroreSandbox("il JavaScript qui non si esegue: manca il container di Node "
+                                "(calliope motore sandbox costruisci javascript)")
+        path = self.percorso(rel)
+        if path.suffix.lower() != ".js" or not path.is_file():
+            raise ErroreSandbox("si eseguono solo file .js della cartella del lavoro")
+        args, stdin = self._argomenti(argomenti, stdin)
+        return self._lancia("js", path.relative_to(self.root).as_posix(), args, stdin=stdin,
+                            isolamento=iso)
+
     def test(self, rel=None, fumo: bool = True) -> dict:
         """I test della cartella: quelli Python (test_*.py) e, dal 05/10, quelli JavaScript
         (*.test.js, con la sintassi degli altri .js) nel container di Node. Con tutti e due i
@@ -514,7 +530,7 @@ class Sandbox:
         if docker:
             # Le cartelle dei pacchetti sono quelle dell'immagine: niente siti dall'host. Il
             # C# non ha la riga di configurazione: lo stdin è tutto del programma
-            conf = ("" if modo == "csharp" else nonce + "\n" if modo == "test_js" else
+            conf = ("" if modo in ("csharp", "js") else nonce + "\n" if modo == "test_js" else
                     json.dumps({"nonce": nonce, "siti": [], "leggibili": []}) + "\n")
             nome = "calliope-sandbox-" + secrets.token_hex(6)
             cmd = self._comando_docker(nome, modo, target, args, isolamento=iso)
@@ -639,7 +655,7 @@ class Sandbox:
         «csharp»: l'immagine del C# ed esegui_cs.sh al posto di _avvio.py (04/10)."""
         iso = isolamento or self.isolamento
         csharp = modo == "csharp"
-        node = modo == "test_js"
+        node = modo in ("test_js", "js")
         mem = max(64, self.memoria_mb)
         try:
             utente = f"{os.getuid()}:{os.getgid()}"
@@ -680,6 +696,9 @@ class Sandbox:
         cmd += [iso.immagine or "calliope-sandbox", "timeout", "-s", "KILL", str(dentro)]
         if csharp:
             return cmd + ["sh", _ESEGUI_CS_C, target, *args]
+        if modo == "js":
+            # Un file dell'agente (esegui_js, 12/10 sera): Node e basta, nella cartella
+            return cmd + ["node", f"{_LAVORO_C}/{target}", *args]
         if node:
             return cmd + ["node", _TEST_JS_C, *args]
         return cmd + ["python", "-I", "-B", "-u", "-X", "utf8", _AVVIO_C, _LAVORO_C, modo, target,

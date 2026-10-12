@@ -20,6 +20,11 @@ gioco delle porte del 12/10, qui con nomi di fantasia).
      attivo, nessuna scheda;
    - c. la riproduzione di una correzione di gioco: il test del disegno è rosso sulla versione
      di prima; contrario: un test nuovo solo sulla logica passa anche prima.
+3. **esegui_js e il seme**: esegui_js nel container di Node (la stampa dell'esito annidato,
+   un errore, solo .js, mai senza container), i file prova_*.js fuori dal codice; al
+   ricontrollo i test due volte: un test che cambia esito torna all'agente con «fissa il seme»
+   (regola agente_test_instabili); contrari: sempre verdi, sempre rossi, i test con creaCaso e
+   apriGioco con il seme.
 
     python prove/prova_fasi_agente.py
 """
@@ -429,6 +434,110 @@ def prova_disegno(tmp: Path):
              and "apriGioco" in VINCOLO_CORREZIONE_GIOCO)
 
 
+# ═══════════════════════════ 3. esegui_js e i test con il seme ═══════════════════════════
+
+# Un test che cambia esito a ogni esecuzione (un contatore su file: qui deterministico, come
+# un Math.random senza seme il 12/10 alle 07:39)
+TEST_INSTABILE = ("import os\nimport unittest\n\n\nclass P(unittest.TestCase):\n"
+                  "    def test_caso(self):\n"
+                  "        n = int(open('conta.txt').read()) if os.path.exists('conta.txt') else 0\n"
+                  "        open('conta.txt', 'w').write(str(n + 1))\n"
+                  "        self.assertEqual(n % 2, 0)\n")
+
+
+def prova_js_e_seme(tmp: Path):
+    sezione("3a. esegui_js: un pezzo di JavaScript nella sandbox")
+    from calliope.agenti.ciclo import ESEGUI_JS, Lavoro, strumenti_codice
+    from calliope.agenti.sandbox import ErroreSandbox
+    nomi = lambda ling: [t["function"]["name"] for t in strumenti_codice(ling)]  # noqa: E731
+    verifica("esegui_js solo con il container di Node",
+             "esegui_js" in nomi(["python", "javascript"]) and "esegui_js" not in nomi(["python"])
+             and "prova_*.js" in ESEGUI_JS["function"]["description"])
+    if not shutil.which("node"):
+        print("SALTATA IN PARTE: node non c'è")
+    else:
+        sb = _gioco(tmp, "js", GIOCO_ROTTO, None, {"prova_esito.js": (
+            'const { nuovaPartita, apriPorta } = require("./logica.js");\n'
+            'const s = apriPorta(nuovaPartita(2), 0);\n'
+            'console.log(Object.keys(s).join(","), s.emoji, s.risultato.nome);\n')})
+        r = sb.esegui_js("prova_esito.js")
+        verifica("la stampa mostra l'esito annidato (quello che il 12/10 si cercava a mente)",
+                 r.get("codice_uscita") == 0 and "risultato" in r["uscita"]
+                 and "undefined Fantasmino" in r["uscita"], str(r)[:300])
+        sb.scrivi("prova_rotta.js", "const x = nonDichiarata + 1;\n")
+        r = sb.esegui_js("prova_rotta.js")
+        verifica("…un errore esce con il codice e il messaggio", r.get("codice_uscita") != 0
+                 and "nonDichiarata" in r["uscita"], str(r)[:300])
+        try:
+            sb.esegui_js("manifesto.json")
+            verifica("esegui_js: solo file .js", False)
+        except ErroreSandbox as e:
+            verifica("esegui_js: solo file .js della cartella", ".js" in str(e), str(e))
+        cli = G._Copione([[{"name": "esegui_js", "arguments": {"percorso": "prova_esito.js"}}],
+                          [{"name": "consegna", "arguments": {"riassunto": "x",
+                                                              "esito": "fatto"}}]])
+        lav = Lavoro("J1", "codice", "una prova")
+        G.agente(cli, []).codice(lav, sb)
+        res = next((json.loads(m["content"]) for m in lav.contesto["messages"]
+                    if m.get("tool_name") == "esegui_js"), {})
+        verifica("…nel ciclo dell'agente esegui_js restituisce l'uscita",
+                 "Fantasmino" in str(res.get("uscita")), str(res)[:200])
+    sb = _sb(tmp, "senza_node", {"prova.js": "console.log(1)\n"})
+    sb.linguaggi = {}
+    try:
+        sb.esegui_js("prova.js")
+        verifica("senza il container di Node: lo dice", False)
+    except ErroreSandbox as e:
+        verifica("contrario: senza il container di Node lo dice, mai sull'host",
+                 "container di Node" in str(e), str(e))
+    from calliope.agenti.riproduzione import codice as solo_codice
+    from calliope.estensioni.servizio import _solo_usati
+    verifica("i file prova_*.js non sono codice del gioco né della versione",
+             "prova_esito.js" not in solo_codice({"prova_esito.js": "x", "gioco.js": "y"})
+             and "prova_esito.js" not in _solo_usati({"prova_esito.js": b"x", "gioco.js": b"y"})
+             and "gioco.js" in _solo_usati({"prova_esito.js": b"x", "gioco.js": b"y"}))
+
+    sezione("3b. al ricontrollo i test si eseguono due volte")
+    from calliope.agenti import diagnosi
+    a = {"passano": True, "esito": {"eseguiti": 2, "falliti": 0, "errori": 0}, "uscita": ""}
+    b = {"passano": False, "esito": {"eseguiti": 2, "falliti": 1, "errori": 0},
+         "uscita": "FALLITO punti a caso: 3 !== 4 [in logica.test.js:9]\n"}
+    verifica("diagnosi.instabili: esiti diversi → i nomi; uguali → None",
+             diagnosi.instabili(a, b) == ["punti a caso"] and diagnosi.instabili(a, a) is None
+             and diagnosi.instabili(b, dict(b)) is None
+             and diagnosi.conto_detto(b) == "1 su 2 passano")
+    log = []
+    ag = G.agente(None, log)
+    lav = _lav(correzione=False)
+    sb = _sb(tmp, "instabile", {"calcola.py": CALCOLA_GIUSTO, "test_calcola.py": TEST_INSTABILE})
+    r = ag._test_falliti(lav, sb)
+    err = (r or {}).get("errore", "")
+    verifica("un test che cambia esito tra due esecuzioni: la consegna torna con «fissa il "
+             "seme» e il nome del test", r is not None and "test_caso" in err
+             and "fissa il seme" in err and "prima 1 su 1 passano, poi 0 su 1" in err, err[:300])
+    verifica("…la regola agente_test_instabili", lav.segnali.get("regole", {}).get(
+        "agente_test_instabili") == 1 and any("agente_test_instabili" in x for x in log))
+    sb = _sb(tmp, "stabile", {"calcola.py": CALCOLA_GIUSTO, "test_calcola.py": TEST_ROSSO})
+    verifica("contrario: i test che passano sempre → la consegna va",
+             ag._test_falliti(_lav(), sb) is None)
+    sb = _sb(tmp, "sempre_rosso", {"calcola.py": CALCOLA_ROTTO, "test_calcola.py": TEST_ROSSO})
+    r = ag._test_falliti(_lav(), sb) or {}
+    verifica("contrario: un test che fallisce sempre → il rimando di sempre, niente «seme»",
+             r.get("consegna") == "rifiutata" and "seme" not in r.get("errore", "")
+             and "i test non passano" in r.get("errore", ""), str(r)[:300])
+    if shutil.which("node"):
+        test_seme = ('const { test } = require("node:test");\n'
+                     'const assert = require("node:assert");\n'
+                     'test("caso con il seme", () => { const a = creaCaso(5), b = creaCaso(5); '
+                     'assert.strictEqual(a(), b()); });\n'
+                     'test("disegno con il seme", async () => { '
+                     'const g = await apriGioco({ seme: 5 }); await g.tocca("Inizia"); '
+                     'assert.match(g.testo(), /Porta 1/); });\n')
+        sb = _gioco(tmp, "seme_js", GIOCO_GIUSTO, test_seme)
+        verifica("contrario: i test JavaScript con il seme (creaCaso, apriGioco) danno lo "
+                 "stesso esito due volte", ag._test_falliti(_lav(), sb) is None)
+
+
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8")
     radice = Path(tempfile.mkdtemp(prefix="calliope-fasi-"))
@@ -437,6 +546,7 @@ if __name__ == "__main__":
         prova_ciclo(radice / "ciclo")
         prova_frase(radice / "frase")
         prova_disegno(radice / "disegno")
+        prova_js_e_seme(radice / "js")
     finally:
         shutil.rmtree(radice, ignore_errors=True)
     print(f"\n{'TUTTO OK' if not errori else f'{errori} ERRORI'} "

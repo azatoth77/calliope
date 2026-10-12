@@ -199,3 +199,36 @@ def ultimo(fall: list[dict]) -> dict | None:
         if f.get("dove") or re.search(r"\[in [^\]]+\]", f.get("errore") or ""):
             return f
     return fall[0] if fall else None
+
+
+# ─────────────────────────── test instabili (12/10 sera) ───────────────────────────
+# Il 12/10 alle 07:39 un test dipendeva da Math.random senza seme: 28 su 28 per l'agente, 27 su
+# 28 al ricontrollo del codice. Alla consegna i test si eseguono due volte: un esito diverso
+# senza che niente sia cambiato è un test che dipende dal caso o dal tempo
+
+def _conto(r: dict) -> tuple:
+    e = r.get("esito") or {}
+    return tuple(int(e.get(k, 0) or 0) for k in ("eseguiti", "falliti", "errori"))
+
+
+def instabili(r1: dict, r2: dict) -> list[str] | None:
+    """I test che hanno dato esiti diversi in due esecuzioni uguali (i nomi, o «i test» se
+    l'uscita non li dice), o None se le due esecuzioni sono andate allo stesso modo. Un tempo
+    scaduto non conta (è un altro problema)."""
+    if not isinstance(r1, dict) or not isinstance(r2, dict):
+        return None
+    if r1.get("scaduto") or r2.get("scaduto"):
+        return None
+    f1 = {f["test"] for f in fallimenti(str(r1.get("uscita") or ""))}
+    f2 = {f["test"] for f in fallimenti(str(r2.get("uscita") or ""))}
+    if (bool(r1.get("passano")) == bool(r2.get("passano")) and f1 == f2
+            and _conto(r1) == _conto(r2)):
+        return None
+    return sorted(f1 ^ f2) or ["i test"]
+
+
+def conto_detto(r: dict) -> str:
+    """«27 su 28 passano» di un'esecuzione dei test."""
+    n, ko, err = _conto(r)
+    tot = max(n, ko + err)
+    return f"{max(0, tot - ko - err)} su {tot} passano"

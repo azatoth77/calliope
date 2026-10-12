@@ -549,7 +549,7 @@ def estrattivo(vecchi: list, prima: dict | None) -> dict:
                                  + f"{a.get('percorso') or 'un file'}"
                                  + ("" if ok else " (non riuscito)"))
                 elif nome in ("leggi_file", "esegui_python", "scarica_esempio", "web_leggi",
-                              "biblioteca_cerca", "web_cerca", "esegui_csharp"):
+                              "biblioteca_cerca", "web_cerca", "esegui_csharp", "esegui_js"):
                     cosa = a.get("percorso") or a.get("url") or a.get("domanda") or ""
                     esito = ""
                     if isinstance(res, dict) and res.get("errore"):
