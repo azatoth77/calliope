@@ -141,6 +141,24 @@ def decidi(prof, cosa: str, modo: str | None = None, dubbi=(), cfg=None) -> Deci
     return Decisione(True, cat)
 
 
+def console_riservata(speaker_ctx, registry) -> str | None:
+    """Le parole di questa frase vanno nel terminale? Sulla DGX la console finisce nel journal di
+    systemd, che resta: è conservazione anche lei. «ospite» (dal 03/10, analisi S9) o «minore»
+    (dal 12/10 sera: un minore riconosciuto, o la frase nel dubbio tra un adulto e un minore,
+    come per il registro dei turni) → niente parole; None → come prima."""
+    if speaker_ctx is None:
+        return None
+    if getattr(speaker_ctx, "current_level", None) == "ospite":
+        return "ospite"
+    if any(getattr(speaker_ctx, k, None) for k in DUBBI_MINORE):
+        return "minore"
+    nome = getattr(speaker_ctx, "current_speaker", None)
+    get = getattr(registry, "get", None)
+    if nome and callable(get) and categoria(get(nome)) == "minore":
+        return "minore"
+    return None
+
+
 def dubbi_del_turno(rec: dict) -> set:
     """I segni di dubbio scritti dal ciclo nel campo `voce` del turno."""
     v = rec.get("voce") if isinstance(rec.get("voce"), dict) else {}

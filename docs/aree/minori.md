@@ -675,3 +675,30 @@ cancello 1, e se tace parte l'avviso non urgente come per ogni silenzio. Prova
 `prova_minori_cancelli` (casi 5–5c: dopo la smentita rassicura e chiede di nuovo la gravità; il caso
 vero riscritto; voce incerta in compagnia; contrari: silenzio e conferma → secondo segnale,
 acuto in compagnia → protezione).
+
+## Le parole dei minori fuori dal journal (12/10 sera, ramo `compagnia-guardia`)
+
+Dalla decisione [0028](../decisioni/0028-decisioni-roadmap-12-10.md) T1 il registro dei turni non
+tiene le parole dei minori (sezione «Nessuna conservazione per i minori»), ma la console, che sulla
+DGX finisce nel journal di systemd e resta, le stampava: «Tu: <frase> (Nicola)» nel test vero del
+12/10 sera, la risposta di Calliope (che spesso ripete ciò che ha detto il ragazzo), gli argomenti
+dei tool, le frasi del modello trattenute dalle reti («[LLM] risposta uguale alla precedente…»,
+«[TOOL] azione dichiarata senza tool…»), il titolo dell'argomento, la frase fermata dall'uscita.
+
+Ora, come per gli ospiti dal 03/10 (stesso stile): **un solo posto decide**,
+`conserva.console_riservata` («ospite», «minore» o niente), con la regola del registro dei turni:
+minore riconosciuto, oppure frase nel dubbio tra un adulto e un minore (`incerta`, `minore_vicino`,
+`minore_incerto`). Per un minore:
+- «Tu: (una frase di un minore)» (`Ciclo.in_console`), anche nelle righe «(ignorato: …)», nella
+  registrazione della voce e nell'approfondimento della biblioteca;
+- la risposta «…» frase per frase (si vede quante frasi, non cosa): la soluzione degli ospiti,
+  preferita a «(N caratteri)» perché uniforme e già letta dalle prove;
+- in Brain (`cita_in_console`) le frasi del modello citate dalle reti «…», gli argomenti dei tool
+  con i soli nomi (`ricorda({'fatto': '…'})`, come i documenti di casa) e il risultato
+  «(riservato)»; la frase fermata dall'uscita (`riferire.filtra`) «…».
+
+Per gli adulti niente cambia; per gli ospiti anche le citazioni delle reti, che prima passavano,
+sono «…». Restano con le parole: i comandi della casa (`[CASA] «accendi…»`, un comando a un
+dispositivo e non la conversazione) e le frasi fisse dette fuori da una risposta. Prova
+`prova_console_minori`.
+

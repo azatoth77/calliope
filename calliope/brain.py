@@ -2259,7 +2259,7 @@ class Brain:
         if qui.tolte:
             self._rule("scrivo_qui_tolto")
             print(f"   [LLM] «scrivo qui» a chi parla a voce, non lo dico: "
-                  f"«{qui.tolte[0][:80]}»", flush=True)
+                  f"«{self.cita_in_console(qui.tolte[0])}»", flush=True)
         if capito.capito is not None:
             self._applica_capito(capito.capito)
         if capito.scartata:
@@ -2272,7 +2272,7 @@ class Brain:
             else:
                 yield piece
         if echo.dropped:
-            print(f"   [LLM] contesto ripetuto in testa, non lo dico: «{echo.dropped[:60]}»",
+            print(f"   [LLM] contesto ripetuto in testa, non lo dico: «{self.cita_in_console(echo.dropped, 60)}»",
                   flush=True)
             self._rule("eco_contesto")
         if not calls and guard.call:
@@ -2285,7 +2285,7 @@ class Brain:
             call = self._call_in_text(named)
             if call is not None:
                 print(f"   [TOOL] chiamata scritta in mezzo alla frase, eseguita: {call['name']} "
-                      f"(non detto: «{named[:80]}»)", flush=True)
+                      f"(non detto: «{self.cita_in_console(named)}»)", flush=True)
                 self._rule("chiamata_in_mezzo")
                 calls, named = [call], ""
         elif named:
@@ -2821,7 +2821,8 @@ class Brain:
         frasi += [ARGOMENTO_RIPRESO.format(cosa=d) for d in ripresi]
         if frasi:
             self._da_dire_argomento = " ".join(frasi)
-        print(f"   [ARGOMENTO] {'ripreso' if bersaglio is not None else 'nuovo'} «{titolo}»"
+        print(f"   [ARGOMENTO] {'ripreso' if bersaglio is not None else 'nuovo'} "
+              f"«{self.cita_in_console(titolo)}»"
               + (f"; da parte: {', '.join(d['cosa'] for d in da_parte)}" if da_parte else ""),
               flush=True)
         return json.dumps({"ok": True, "azione": azione, "argomento": titolo,
@@ -4078,7 +4079,7 @@ class Brain:
                 # una volta (poi la sua risposta si dice, anche uguale)
                 precedente = None
                 self._rule("spinta_ripetuta")
-                print(f"   [LLM] risposta uguale alla precedente, non la dico: «{held[:80]}»",
+                print(f"   [LLM] risposta uguale alla precedente, non la dico: «{self.cita_in_console(held)}»",
                       flush=True)
                 tail = [{"role": "system", "content": RIPETUTA_NUDGE}]
                 continue
@@ -4094,7 +4095,7 @@ class Brain:
                     # l'errore e richiama (o chiede), entro tool_correzioni_max
                     self._rule("correzione_tool")
                     print(f"   [TOOL] {corr['nome']} non è partito e il modello non l'ha "
-                          f"richiamato, non dico: «{held_req[:80]}»", flush=True)
+                          f"richiamato, non dico: «{self.cita_in_console(held_req)}»", flush=True)
                     tail = [{"role": "system", "content": CORREZIONE_NUDGE.format(
                         tool=corr["nome"], errore=corr.get("errore") or "")}]
                     continue
@@ -4104,7 +4105,7 @@ class Brain:
                 tool = rinuncia_di(held) or "il tool giusto"
                 self._rule("spinta_rinuncia")
                 print(f"   [TOOL] «non posso» con {tool} disponibile, non lo dico: "
-                      f"«{held[:80]}»", flush=True)
+                      f"«{self.cita_in_console(held)}»", flush=True)
                 tail = [{"role": "system",
                          "content": politica.RINUNCIA_NUDGE.format(tool=tool)}]
                 continue
@@ -4115,7 +4116,7 @@ class Brain:
                 tool, ricerca_tool = ricerca_tool, None
                 self._rule("spinta_ricerca")
                 print(f"   [TOOL] «non ho altre informazioni» senza cercare con {tool}, non lo "
-                      f"dico: «{held[:80]}»", flush=True)
+                      f"dico: «{self.cita_in_console(held)}»", flush=True)
                 tail = [{"role": "system", "content": RICERCA_NUDGE.format(tool=tool)}]
                 continue
             if held and self._held_kind == "non_so":
@@ -4126,7 +4127,7 @@ class Brain:
                 archive_hold = False
                 self._rule("spinta_archivio")
                 print(f"   [CONTESTO] «non lo so» con la storia compressa, cerco "
-                      f"nell'archivio: «{held[:80]}»", flush=True)
+                      f"nell'archivio: «{self.cita_in_console(held)}»", flush=True)
                 call = {"id": "call_archivio", "name": "conversazione_cerca",
                         "arguments": {"domanda": user_text}}
                 # La frase d'attesa del tool («Fammi ricordare.») copre la seconda passata
@@ -4155,7 +4156,7 @@ class Brain:
                 # dice né entra nella storia, il modello riceve la spinta e lo chiama
                 nudged = True
                 self._rule("spinta_nome_tool")
-                print(f"   [TOOL] tool nominato senza chiamata, non dico: «{named[:80]}»",
+                print(f"   [TOOL] tool nominato senza chiamata, non dico: «{self.cita_in_console(named)}»",
                       flush=True)
                 if text:
                     self.history.append({"role": "assistant", "content": text})
@@ -4172,7 +4173,7 @@ class Brain:
                 if tipo == "domanda":
                     self._rule("esercizi_domanda_inventata")
                     print(f"   [TOOL] domanda d'esercizio inventata dal modello, non la dico: "
-                          f"«{held_req[:80]}»", flush=True)
+                          f"«{self.cita_in_console(held_req)}»", flush=True)
                     call = {"id": "call_esercizi_ripeti", "name": "esercizi",
                             "arguments": {"azione": "ripeti"}}
                     self.history.append({"role": "assistant", "content": "",
@@ -4187,7 +4188,7 @@ class Brain:
                 if tipo == "promessa":
                     self._rule("esercizi_promessa_taciuta")
                     print(f"   [TOOL] promessa sugli esercizi senza tool, non la dico: "
-                          f"«{held_req[:80]}»", flush=True)
+                          f"«{self.cita_in_console(held_req)}»", flush=True)
                     self.history.append({"role": "assistant", "content": PROMESSA_FRASE})
                     yield self._marca(PROMESSA_FRASE, "atto", "ripeti")
                     return
@@ -4206,7 +4207,7 @@ class Brain:
                 self._rule("spinta_esercizi" if esercizi else "spinta_sviluppo"
                            if sviluppo_sosp else "richiesta_trattenuta")
                 print(f"   [TOOL] {'esercizio' if esercizi else 'risposta allo sviluppo' if sviluppo_sosp else 'richiesta di un file'} senza "
-                      f"tool, non dico: «{held_req[:80]}»", flush=True)
+                      f"tool, non dico: «{self.cita_in_console(held_req)}»", flush=True)
                 if esercizi:
                     from .esercizi.sessione import ESERCIZI_NUDGE
                 tail = [{"role": "system", "content": ESERCIZI_NUDGE if esercizi
@@ -4220,13 +4221,13 @@ class Brain:
                 nudged = nudged_fallito = True
                 self._rule("dichiarata_tool_fallito")
                 print(f"   [TOOL] dato dichiarato dopo tool falliti, non lo dico: "
-                      f"«{held[:80]}»", flush=True)
+                      f"«{self.cita_in_console(held)}»", flush=True)
                 tail = [{"role": "system", "content": FAILED_NUDGE}]
                 continue
             if held and nudged:
                 # Di nuovo «ho aperto…» senza tool, anche dopo la spinta (misura del 01/10:
                 # «Sì.» senza azione in sospeso, 2 volte su 3): la frase falsa non si dice
-                print(f"   [TOOL] di nuovo un'azione dichiarata senza tool: «{held[:80]}»",
+                print(f"   [TOOL] di nuovo un'azione dichiarata senza tool: «{self.cita_in_console(held)}»",
                       flush=True)
                 if solo_note(held):
                     # Solo una nota dichiarata (12/10 sera): una frase onesta, non il ripiego
@@ -4246,7 +4247,7 @@ class Brain:
                 # nella storia, il modello la rivede solo con la spinta e decide
                 nudged = True
                 self._rule("spinta_dichiarata")
-                print(f"   [TOOL] azione dichiarata senza tool, non la dico: «{held[:80]}»",
+                print(f"   [TOOL] azione dichiarata senza tool, non la dico: «{self.cita_in_console(held)}»",
                       flush=True)
                 # La frase trattenuta non si mostra: con lei davanti il modello la ripeteva
                 # («Accendi la luce in taverna» dopo lo stesso scambio, misura del 01/10)
@@ -4401,7 +4402,7 @@ class Brain:
                     # del modello di prima non si dice, e non resta nella storia
                     self._rule("sviluppo_testo_taciuto")
                     print(f"   [TOOL] testo prima del tool con la sua frase, non lo dico: "
-                          f"«{tenuto.strip()[:80]}»", flush=True)
+                          f"«{self.cita_in_console(tenuto.strip())}»", flush=True)
                     assistant["content"] = ""
                 else:
                     spoke = True
@@ -4457,6 +4458,24 @@ class Brain:
             return aperta_di(getattr(self, "tool_ctx", None))
         except Exception:  # noqa: BLE001
             return False
+
+    def console_riservata(self) -> str | None:
+        """«ospite» o «minore» se le parole di questo turno non vanno nel terminale (sulla DGX il
+        journal, che resta: conserva.console_riservata, dal 12/10 sera anche i minori)."""
+        from . import conserva
+        ctx = getattr(self, "tool_ctx", None)
+        try:
+            return conserva.console_riservata(getattr(ctx, "speaker_ctx", None),
+                                              getattr(ctx, "speakers", None))
+        except Exception:  # noqa: BLE001 — nel dubbio, niente parole
+            return "minore"
+
+    def cita_in_console(self, testo, n: int = 80) -> str:
+        """Il testo (del modello o di chi parla) da citare in una riga del terminale: accorciato,
+        o «…» per un ospite o un minore (le reti lo citavano per intero, 12/10 sera)."""
+        if self.console_riservata() is not None:
+            return "…"
+        return str(testo or "")[:n]
 
     def _marca(self, testo: str, autore: str, atto: str | None = None) -> str:
         """Una frase della risposta che non è contenuto del modello: la frase pronta di un tool
@@ -4967,7 +4986,8 @@ class Brain:
         if conv is not None and tools.get(conv[0]) is not None:
             call["name"] = conv[0]
             call["arguments"] = argomenti_con_azione(conv[1], call.get("arguments"))
-            print(f"   [TOOL] nome con l'azione: {nome} → {conv[0]}({call['arguments']})",
+            print(f"   [TOOL] nome con l'azione: {nome} → {conv[0]}("
+                  f"{'…' if self.console_riservata() else call['arguments']})",
                   flush=True)
             self._nome_inventato = nome
             self._rule("tool_nome_azione")
@@ -5032,6 +5052,11 @@ class Brain:
         quiet = private or level == "ospite"
         if level == "ospite":
             shown = {}
+        elif self.console_riservata() == "minore":
+            # Un minore (12/10 sera, decisione 0028 T1): i nomi degli argomenti dati, senza i
+            # valori, come per i documenti di casa; il risultato «(riservato)»
+            shown = {k: "…" for k, v in args.items() if v not in (None, "")}
+            quiet = True
         if hidden:
             if not isinstance(getattr(self, "last_secrets", None), list):
                 self.last_secrets = []
