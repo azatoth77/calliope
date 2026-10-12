@@ -35,9 +35,36 @@ def _segue_qualcuno(prof, speakers) -> bool:
     return False
 
 
-def _esercizi(ctx: ToolContext, azione: str = "inizia", materia: str = "", argomento: str = "",
+def _azione(ctx, srv, prof, azione, materia, argomento, risposta) -> str:
+    """L'azione chiamata. Senza azione (banco del 12/10, chimica: 11 chiamate su 17 con soli
+    materia, argomento e risposta; il registro dei tool le lascia passare perché `azione`
+    ha un valore predefinito) prima valeva «inizia», che a sessione aperta ricominciava da
+    un esercizio nuovo a ogni risposta. Ora,
+    con una sessione aperta: con la risposta è «rispondi», senza un argomento diverso
+    «ripeti»; altrimenti «inizia» come prima. Correzione della forma di una chiamata già
+    fatta (principio 10), regola `esercizi_azione_dedotta`."""
+    a = str(azione or "").strip().lower()
+    if a:
+        return a
+    s = srv.sessione(prof.id)
+    if s is None:
+        return "inizia"
+    from ..esercizi import argomento_da_testo, materia_da_testo
+    if str(materia or "").strip() and materia_da_testo(materia) not in (None, s.materia):
+        return "inizia"
+    if str(risposta or "").strip():
+        note_rule(ctx, "esercizi_azione_dedotta")
+        return "rispondi"
+    altro = argomento_da_testo(argomento) if str(argomento or "").strip() else None
+    if altro is None or altro == s.argomento:
+        note_rule(ctx, "esercizi_azione_dedotta")
+        return "ripeti"
+    return "inizia"
+
+
+def _esercizi(ctx: ToolContext, azione: str = "", materia: str = "", argomento: str = "",
               classe: str = "", risposta: str = "", nota: str = "", nome: str = "") -> dict:
-    from ..esercizi import classe_da_eta, classe_da_testo, materia_da_testo
+    from ..esercizi import classe_da_eta, classe_da_testo, elenco_materie, materia_da_testo
     from ..esercizi import sessione as S
     srv = S.servizio()
     if srv is None:
@@ -47,7 +74,7 @@ def _esercizi(ctx: ToolContext, azione: str = "inizia", materia: str = "", argom
     if prof is None:
         note_rule(ctx, "esercizi_ospite")
         return _final("Gli esercizi sono per i ragazzi di casa.", ok=False, fatto=NIENTE)
-    azione = str(azione or "inizia").strip().lower()
+    azione = _azione(ctx, srv, prof, azione, materia, argomento, risposta)
     minore = M.e_minore(prof)
     if azione == "riepilogo":
         bersaglio = prof if (minore and not str(nome or "").strip()) else None
@@ -84,7 +111,7 @@ def _esercizi(ctx: ToolContext, azione: str = "inizia", materia: str = "", argom
         cl = classe_da_testo(classe) or classe_da_eta(eta)
         el = srv.elenco_argomenti(cl, materia_da_testo(materia))
         return _final(f"Posso farti esercizi di {el}." if el else
-                      "Per ora ho esercizi di matematica e di italiano.")
+                      f"Ho esercizi di {elenco_materie()}.")
     if azione == "inizia":
         hub = getattr(ctx, "schermi", None)
         mitt = None
@@ -132,9 +159,12 @@ def esercizi_spec() -> ToolSpec:
         name="esercizi",
         description=("Esercizi di studio preparati da Calliope per i ragazzi di casa "
                      "(matematica: operazioni, tabelline, frazioni, problemi, potenze, "
-                     "equazioni; italiano: analisi grammaticale e logica). «Facciamo esercizi "
-                     "di frazioni», «interrogami di analisi logica»: azione=inizia (materia, "
-                     "argomento, classe solo se la dice, come «terza elementare»). Durante gli "
+                     "equazioni; italiano: analisi grammaticale e logica; logica: sequenze, "
+                     "insiemi, vero o falso; fisica: velocità, densità, forze, peso e lavoro; "
+                     "chimica: massa molare, moli, bilanciamento). «Facciamo esercizi di "
+                     "frazioni», «interrogami di fisica sulla densità»: azione=inizia con "
+                     "materia e argomento se lo dice, classe solo se la dice («terza "
+                     "elementare»). Durante gli "
                      "esercizi: rispondi con la risposta così come l'ha detta (la corregge il "
                      "programma, tu non dire se è giusta), aiuto, salta, ripeti, segnala («secondo "
                      "me è sbagliato»), soluzione, fine. argomenti: cosa si può fare. riepilogo: "
@@ -142,7 +172,11 @@ def esercizi_spec() -> ToolSpec:
                      "da scuola: quelli sono compiti_aiuto."),
         parameters={"type": "object", "properties": {
             "azione": {"type": "string", "enum": AZIONI},
-            "materia": {"type": "string"}, "argomento": {"type": "string"},
+            "materia": {"type": "string", "enum": ["matematica", "italiano", "logica",
+                                                   "fisica", "chimica"]},
+            "argomento": {"type": "string",
+                          "description": "con le sue parole, se lo dice: «densità», «analisi "
+                                         "logica», «sequenze», «le moli»"},
             "classe": {"type": "string"}, "risposta": {"type": "string"},
             "nota": {"type": "string"}, "nome": {"type": "string"}},
             "required": ["azione"]},

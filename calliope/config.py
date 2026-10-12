@@ -1514,7 +1514,8 @@ class Config:
     minori_avviso_privato_s: float = 600.0
     # Esercizi generati da Calliope (08/10, calliope/esercizi/, docs/ricerche/
     # 2026-10-08-esercizi.md): matematica e italiano per i ragazzi di casa, a voce e sulla
-    # scheda, con la correzione nel codice e il registro dei tentativi per i tutori
+    # scheda, con la correzione nel codice e il registro dei tentativi per i tutori; dal 12/10
+    # anche logica, fisica e chimica (calcolabili, unità di misura in calliope/unita.py)
     esercizi_enabled: bool = True
     # Il secondo modello che risolve da solo gli esercizi d'italiano (se non concorda,
     # l'esercizio si scarta). Vuoto = il modello della voce sullo stesso Ollama; sulla DGX si

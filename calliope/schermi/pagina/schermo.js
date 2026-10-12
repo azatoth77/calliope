@@ -1737,6 +1737,7 @@
       i.maxLength = 80;
       i.setAttribute("autocapitalize", "off");
       if (c.campo === "numero") i.placeholder = "per esempio 12, 3/4 o -2";
+      if (c.campo === "misura") i.placeholder = "per esempio 2,5 m/s o 18 g/mol";
       const b = el("button", "invia-modulo", "Rispondi");
       b.type = "submit";
       bottoni.push(b);

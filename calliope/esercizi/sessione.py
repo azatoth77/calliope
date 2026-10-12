@@ -34,9 +34,9 @@ import secrets
 import threading
 import time
 
-from . import (MATERIE, Classe, adatto, argomenti, argomento_da_testo, classe_da_eta,
-               classe_da_testo, controlla, genera, livello_per, materia_da_testo,
-               nome_argomento)
+from . import (MATERIE, Classe, adatto, argomenti, argomento_da_testo, calcolata,
+               classe_da_eta, classe_da_testo, controlla, elenco_materie, genera, livello_per,
+               materia_da_testo, nome_argomento, solo_materia)
 from .modello import Esercizio, Esito
 from .registro import Registro
 
@@ -162,12 +162,17 @@ class Servizio:
     def _prossimo(self, s: Sessione) -> Esercizio | None:
         escludi = set(s.recenti) | self.registro.fatti_di_recente(s.persona)
         mod = MATERIE[s.materia]
-        if s.materia == "italiano":
+        if not calcolata(s.materia):
             es = self._prossimo_italiano(s.argomento, s.livello, escludi)
         else:
             es = None
             for _ in range(30):
-                cand = mod.genera(s.argomento, s.livello, self._nuovo_seme())
+                try:
+                    cand = mod.genera(s.argomento, s.livello, self._nuovo_seme())
+                except ValueError as e:
+                    # Il ricalcolo non torna (o una sequenza ambigua): mai al ragazzo
+                    self.log(f"   [ESERCIZI] scartato dal ricalcolo: {e}")
+                    continue
                 if cand.firma not in escludi:
                     es = cand
                     break
@@ -266,9 +271,19 @@ class Servizio:
     def _domanda(self, s: Sessione) -> str:
         return s.es.voce if s.es else ""
 
+    @staticmethod
+    def _chiedi(s: Sessione) -> str:
+        """«quanto ti viene?» per un conto, «con l'unità di misura» per una misura, «che cosa
+        rispondi?» per le parole e le scelte."""
+        es = s.es
+        if es is not None and es.tipo == "misura":
+            return "quanto ti viene, con l'unità di misura?"
+        if calcolata(s.materia) and (es is None or es.tipo != "scelta"):
+            return "quanto ti viene?"
+        return "che cosa rispondi?"
+
     def _riprova(self, s: Sessione) -> str:
-        return ("Riprova: quanto ti viene?" if s.materia == "matematica" else
-                "Riprova: che cosa rispondi?")
+        return "Riprova: " + self._chiedi(s)
 
     def _risultato(self, s: Sessione, frase: str, domanda: bool = True, **extra) -> dict:
         """Il risultato per il tool: frase pronta, sessione in sospeso, scheda aggiornata."""
@@ -287,18 +302,21 @@ class Servizio:
     # ── azioni ──
     def inizia(self, prof, fascia: str | None, eta: int | None, materia: str = "",
                argomento: str = "", classe: str = "", mittente=None) -> dict:
+        # «logica» come argomento è la materia, non l'analisi logica (conversione di forma)
+        if argomento and solo_materia(argomento) and not materia_da_testo(materia):
+            materia, argomento = solo_materia(argomento), ""
         arg = argomento_da_testo(argomento, materia_da_testo(materia)) if argomento else None
         mat = materia_da_testo(materia) or (argomenti()[arg][0] if arg else None)
-        if arg is None and argomento:
+        if arg is None and argomento and not materia_da_testo(materia):
             arg = argomento_da_testo(argomento)
             mat = argomenti()[arg][0] if arg else mat
         cl = classe_da_testo(classe) or classe_da_eta(eta)
         if mat is None and arg is None:
-            return self._final("Di che materia? Per ora ho matematica e italiano.", ok=True,
+            return self._final(f"Di che materia? Ho {elenco_materie()}.", ok=True,
                                in_sospeso={"tool": "esercizi", "argomenti": {"azione": "inizia"},
                                            "domanda": "?", "cosa": "gli esercizi",
                                            "messaggio": ARGOMENTO_MSG.format(
-                                               materia="matematica o italiano",
+                                               materia=elenco_materie().replace(" e ", " o "),
                                                classe="")})
         if arg is None:
             adatti = [a for a, (m, _) in argomenti(mat).items() if cl is None or adatto(a, cl)]
@@ -452,7 +470,7 @@ class Servizio:
         else:
             frase = "Gli indizi sono finiti: prova a rispondere, oppure dimmi «salta»."
         s.esito = {"testo": frase, "giusta": None}
-        return self._risultato(s, f"{frase} {'Che cosa ti viene?' if s.materia == 'matematica' else 'Che cosa rispondi?'}")
+        return self._risultato(s, f"{frase} {self._chiedi(s)[0].upper()}{self._chiedi(s)[1:]}")
 
     def salta(self, prof, canale: str = "voce") -> dict:
         s = self.sessione(prof.id)
@@ -526,9 +544,8 @@ class Servizio:
                                fatto="NIENTE")
         s.ultimo = time.monotonic()
         es = s.es
-        if es.materia == "matematica":
-            from .matematica import verifica as ricalcola
-            ok = ricalcola(es)
+        if calcolata(es.materia):
+            ok = bool(MATERIE[es.materia].verifica(es))
             ricontrollo = {"tipo": "ricalcolo", "torna": ok}
         else:
             from .verifica import verifica_italiano
@@ -554,7 +571,7 @@ class Servizio:
                 return self._chiudi(s, frase)
             return self._risultato(s, f"{frase} Prossima: {self._domanda(s)}",
                                    regola="esercizi_segnalato_tolto")
-        frase = (f"L'ho ricontrollato{' con un altro conto' if es.materia == 'matematica' else ''}"
+        frase = (f"L'ho ricontrollato{' con un altro conto' if calcolata(es.materia) else ''}"
                  f" e mi torna, ma l'ho segnato e lo dico {a_chi}.")
         s.esito = {"testo": "Segnalato: lo guarderà un adulto.", "giusta": None}
         return self._risultato(s, f"{frase} {self._riprova(s)}",
@@ -641,7 +658,8 @@ class Servizio:
             pub = es.pubblico()
             dati.update(domanda=pub["testo"], tipo_risposta=pub["tipo"], scelte=pub["scelte"],
                         esercizio=pub["id"],
-                        campo="numero" if s.materia == "matematica" else "testo")
+                        campo=("misura" if es.tipo == "misura" else
+                               "numero" if calcolata(s.materia) else "testo"))
         return schede.nuova("esercizio", f"Esercizi: {nome_argomento(s.argomento)}",
                             schede.PERSONALE, durata_s=None, chiave=f"esercizi:{s.persona}",
                             **dati)

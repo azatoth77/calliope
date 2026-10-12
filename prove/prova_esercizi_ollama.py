@@ -13,9 +13,13 @@ al tool `esercizi` con l'azione giusta: la correzione la fa il codice. Si contan
 - tool chiamato con l'azione attesa, turni senza tool, prima frase (mediana, p90);
 - il secondo parere vero sugli esercizi d'italiano (stesso modello: accordo e tempi).
 
+Dal 12/10 anche le materie calcolabili (`--materie logica,fisica,chimica`: risposte con le
+unità dette come le scrive Whisper) e `--scelta`: frasi d'inizio diverse, il modello deve
+scegliere la materia e l'argomento giusti (lo stato della sessione dopo il turno).
+
     python prove/prova_esercizi_ollama.py [--giri 1] [--url http://127.0.0.1:11434]
         [--modello gemma4:e4b-it-qat] [--num-ctx 16384] [--keep-alive -1m]
-        [--materie matematica,italiano] [--json uscita.json]
+        [--materie matematica,italiano,logica,fisica,chimica] [--scelta] [--json uscita.json]
 """
 
 import datetime
@@ -33,6 +37,7 @@ from calliope import minori as M  # noqa: E402
 from calliope.brain import Brain  # noqa: E402
 from calliope.config import Config  # noqa: E402
 from calliope.esercizi import sessione as SE  # noqa: E402
+from calliope import unita as U  # noqa: E402
 from calliope.esercizi.numeri import frazione_detta, in_lettere  # noqa: E402
 from calliope.speaker_id import SpeakerContext, UserProfile, name_key  # noqa: E402
 from calliope.tools.builtin import build_registry  # noqa: E402
@@ -54,6 +59,7 @@ NUM_CTX = int(arg("--num-ctx", "16384"))
 KEEP = arg("--keep-alive", "-1m")
 MATERIE = arg("--materie", "matematica,italiano").split(",")
 USCITA = arg("--json")
+SCELTA = "--scelta" in sys.argv
 OGGI = datetime.date.today()
 
 
@@ -93,7 +99,29 @@ COPIONE = [["giusta"], ["giusta_lettere"], ["sbagliata", "aiuto", "giusta"], ["g
            ["segnala", "giusta"], ["giusta_lettere"], ["sbagliata", "sbagliata", "giusta"],
            ["giusta"], ["aiuto", "giusta_lettere"], ["giusta"]]
 INIZIO = {"matematica": ("Bianca", "Calliope, facciamo un po' di esercizi di frazioni?"),
-          "italiano": ("Luca", "Mi fai fare qualche esercizio di analisi grammaticale?")}
+          "italiano": ("Luca", "Mi fai fare qualche esercizio di analisi grammaticale?"),
+          "logica": ("Luca", "Facciamo un po' di logica? Le sequenze di numeri."),
+          "fisica": ("Sara", "Calliope, mi fai fare esercizi di fisica sulla velocità?"),
+          "chimica": ("Sara", "Interrogami di chimica, sulla massa molare.")}
+
+# Frasi d'inizio per --scelta: (chi, frase, materia attesa, argomento atteso o None se basta
+# la materia, cioè se Calliope deve chiedere l'argomento)
+SCELTE = (
+    ("Sara", "Calliope, facciamo esercizi di fisica sulla densità.", "fisica", "densita"),
+    ("Sara", "Mi interroghi sulle moli? Chimica.", "chimica", "moli"),
+    ("Sara", "Voglio esercitarmi a bilanciare le reazioni chimiche.", "chimica",
+     "bilanciamento"),
+    ("Sara", "Facciamo qualche problema sulla forza e sul peso, in newton.", "fisica", "forze"),
+    ("Sara", "Esercizi di logica, vero o falso con i connettivi.", "logica", "vero_falso"),
+    ("Luca", "Facciamo un po' di logica.", "logica", None),
+    ("Luca", "Mi fai fare esercizi sugli insiemi?", "logica", "insiemi"),
+    ("Luca", "Facciamo analisi logica.", "italiano", "analisi_logica"),
+    ("Luca", "Esercizi di fisica, velocità.", "fisica", "velocita"),
+    ("Bianca", "Facciamo le sequenze di numeri, quelle dove trovi il numero dopo.", "logica",
+     "sequenze"),
+    ("Sara", "Calliope, esercizi di chimica.", "chimica", None),
+    ("Bianca", "Facciamo le frazioni.", "matematica", "frazioni"),
+)
 
 
 def detta(es, mossa: str, n: int) -> str:
@@ -102,7 +130,25 @@ def detta(es, mossa: str, n: int) -> str:
         return ("Non lo so, mi dai un indizio?", "Mi aiuti? Dammi un suggerimento.")[n % 2]
     if mossa == "segnala":
         return "Secondo me questo esercizio è sbagliato."
-    if es.materia == "matematica":
+    if es.tipo == "misura":
+        from fractions import Fraction
+        v, u = Fraction(es.risposta), es.dati["unita"]
+        if mossa == "sbagliata":
+            v = v + (1 if n % 2 else 2)
+        alias = U.UNITA[u].alias
+        if mossa == "giusta_lettere" or (mossa == "sbagliata" and n % 2):
+            num = U.numero_detto(v).replace(",", " virgola ")
+            parole = " ".join(in_lettere(int(x)) if x.isdigit() else x for x in num.split())
+            # Una forma storpiata come la scrive Whisper («metri al secondi», «chilometri allora»)
+            nome = (alias[2] if len(alias) > 2 else alias[-1]) if alias else U.detta(u, v)
+            return f"{parole.capitalize()} {nome}."
+        return (f"Fa {U.misura_scritta(v, u)}.", f"{U.misura_detta(v, u).capitalize()}.",
+                f"Credo {U.misura_detta(v, u)}.")[n % 3]
+    if es.tipo == "scelta" and es.materia == "logica":
+        r = es.risposta if mossa.startswith("giusta") else ("falso" if es.risposta == "vero"
+                                                           else "vero")
+        return (f"È {r[:-1]}a.", f"{r.capitalize()}.")[n % 2]
+    if es.materia != "italiano":
         from fractions import Fraction
         v = Fraction(es.risposta)
         if mossa == "sbagliata":
@@ -135,7 +181,8 @@ def una_sessione(materia: str, giro: int) -> list[dict]:
     cfg.guardiano_modello = ""
     dario, elena = prof("Dario", admin=True, gender="m"), prof("Elena")
     reg = Reg([dario, elena, prof("Bianca", 9, tutori=["dario-id", "elena-id"]),
-               prof("Luca", 12, gender="m", tutori=["elena-id"])])
+               prof("Luca", 12, gender="m", tutori=["elena-id"]),
+               prof("Sara", 16, tutori=["elena-id"])])
     M.prepara(cfg, registry=reg, log=lambda *a: None)
     srv = SE.prepara(cfg, registry=reg, log=lambda *a: print(*a, flush=True))
     tools = build_registry()
@@ -213,7 +260,69 @@ def una_sessione(materia: str, giro: int) -> list[dict]:
     return righe
 
 
+def scelta_materia() -> list[dict]:
+    """Ogni frase d'inizio in una conversazione nuova: il modello deve chiamare esercizi con
+    la materia (e l'argomento) giusti; si guarda lo stato della sessione dopo il turno."""
+    tmp = Path(tempfile.mkdtemp())
+    cfg = Config()
+    cfg.llm_backend, cfg.llm_native_url, cfg.llm_model = "ollama", URL, MODELLO
+    cfg.llm_num_ctx, cfg.llm_keep_alive = NUM_CTX, KEEP
+    cfg.llm_profilo = None
+    cfg.memory_db = str(tmp / "memoria.db")
+    cfg.guardiano_modello = ""
+    cfg.esercizi_pronti = 0
+    reg = Reg([prof("Dario", admin=True, gender="m"), prof("Elena"),
+               prof("Bianca", 9, tutori=["dario-id", "elena-id"]),
+               prof("Luca", 12, gender="m", tutori=["elena-id"]),
+               prof("Sara", 16, tutori=["elena-id"])])
+    M.prepara(cfg, registry=reg, log=lambda *a: None)
+    srv = SE.prepara(cfg, registry=reg, log=lambda *a: None)
+    righe = []
+    print(f"\n── scelta della materia ({MODELLO}) ──", flush=True)
+    for chi, frase, materia, argomento in SCELTE:
+        tools = build_registry()
+        for spec in minori_specs():
+            tools.register(spec)
+        sc = SpeakerContext(reg)
+        sc.current_speaker, sc.identified_by = chi, "voce"
+        ctx = ToolContext(cfg=cfg, speakers=reg, speaker_ctx=sc, speaker=None)
+        b = Brain(cfg, tools, ctx)
+        pid = reg.get(chi).id
+        t0 = time.perf_counter()
+        prima, detto = None, []
+        for s in split_sentences(b.stream_reply(frase, sc.current_level)):
+            s = clean_for_speech(b.strip_tool_mentions(s))
+            if s:
+                prima = prima if prima is not None else time.perf_counter() - t0
+                detto.append(s)
+        chiamate = [x.get("argomenti") for x in b.last_tools if x["nome"] == "esercizi"]
+        sess = srv.sessione(pid)
+        if argomento is None:
+            # Deve chiedere l'argomento della materia giusta (nessuna sessione aperta)
+            ok = sess is None and bool(chiamate) and materia in " ".join(detto).lower()
+        else:
+            ok = sess is not None and sess.materia == materia and sess.argomento == argomento
+        if sess is not None:
+            srv.fine(reg.get(chi))
+        r = {"frase": frase, "materia": materia, "argomento": argomento, "ok": ok,
+             "chiamate": chiamate, "detto": " ".join(detto), "prima_s": round(prima or 0, 2)}
+        righe.append(r)
+        print(f"{'ok ' if ok else 'ERR'} «{frase}» → {chiamate} «{r['detto'][:110]}» "
+              f"{r['prima_s']} s", flush=True)
+    ok = sum(r["ok"] for r in righe)
+    ps = sorted(r["prima_s"] for r in righe)
+    print(f"\nScelta della materia: {ok}/{len(righe)} giuste, prima frase mediana "
+          f"{statistics.median(ps):.2f} s")
+    return righe
+
+
 def main():
+    if SCELTA:
+        righe = scelta_materia()
+        if USCITA:
+            Path(USCITA).write_text(json.dumps(righe, ensure_ascii=False, indent=1),
+                                    encoding="utf-8")
+        sys.exit(0 if all(r["ok"] for r in righe) else 1)
     tutte = []
     for g in range(1, GIRI + 1):
         for m in MATERIE:

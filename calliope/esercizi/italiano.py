@@ -24,6 +24,7 @@ import unicodedata
 from .modello import Classe, Esercizio, Esito
 
 MATERIA = "italiano"
+VERIFICA = "linguistico"          # Wikizionario e secondo modello, banco per firma
 
 ARGOMENTI = {
     "analisi_grammaticale": {"nome": "analisi grammaticale",

@@ -109,3 +109,15 @@ class Esito:
     letta: str = ""                # la risposta come l'ha capita il codice («3/4»)
     nota: str = ""                 # per il ragazzo: «quasi: si può semplificare ancora»
     conta: bool = True             # vale come tentativo sbagliato
+
+
+def livello_da_classe(classi: tuple, classe: Classe) -> int:
+    """Il livello da cui partire per la classe, dentro l'intervallo (dalla, alla)
+    dell'argomento: 1 all'inizio, 3 alla fine (la regola della matematica)."""
+    da, a = classi
+    if classe.indice <= da.indice:
+        return 1
+    if classe.indice >= a.indice:
+        return 3
+    pos = (classe.indice - da.indice) / max(1, a.indice - da.indice)
+    return 1 if pos < 0.34 else 2 if pos < 0.67 else 3
