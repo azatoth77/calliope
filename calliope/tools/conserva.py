@@ -10,7 +10,7 @@ dati_conservati(azione, persona):
   le registrazioni che c'erano si cancellano. Basta essere riconosciuti (anche una frase breve).
 - `stato`: cosa tengo di te, e per quanto (solo conteggi).
 - `svuota`: solo chi amministra, con la voce: tutto, o i dati di una persona (`persona`), dopo
-  la domanda e il «sì».
+  la domanda e il «sì». Dal 12/10 sera anche l'archivio delle conversazioni.
 
 Per chi amministra la voce si tiene finché non dice di no; per gli altri adulti solo dopo il
 loro «sì»; per i minori mai. Il dubbio lo scioglie calliope.conserva.decidi.
@@ -139,8 +139,8 @@ def _dati_conservati(ctx: ToolContext, azione: str = "", persona: str = "") -> d
         r = (cons.svuota(bersaglio.id, bersaglio.name) if bersaglio else cons.svuota())
         note_rule(ctx, "conservati_svuotati")
         return _final(f"Fatto: ho cancellato i dati conservati {di_chi}.", **r)
-    domanda = (f"Cancello i dati conservati {di_chi}: testi dei turni, eventi e registrazioni "
-               "della voce? Le conversazioni archiviate e i ricordi restano.")
+    domanda = (f"Cancello i dati conservati {di_chi}: testi dei turni, conversazioni "
+               "archiviate, eventi e registrazioni della voce? I ricordi restano.")
     return _final(domanda, ok=False,
                   in_sospeso={"domanda": domanda, "cosa": f"cancellare i dati conservati {di_chi}",
                               "tool": "dati_conservati",
@@ -159,19 +159,21 @@ def _classe():
                   distruttiva={"svuota": (
                       lambda a: "cancellare i dati conservati" + (
                           f" di {a.get('persona')}" if a.get("persona") else ""),
-                      "Così testi, eventi e registrazioni per le misure non si recuperano.")})
+                      "Così testi, conversazioni, eventi e registrazioni non si "
+                      "recuperano.")})
 
 
 def conserva_specs() -> list[ToolSpec]:
     return [ToolSpec(
         name="dati_conservati",
         description=(
-            "I dati che tengo per migliorare (testi dei turni e registrazioni della voce, solo "
-            "degli adulti). azione: consenso_voce quando chi parla mi permette di tenere la sua "
+            "I dati che tengo per migliorare (testi dei turni, conversazioni archiviate e "
+            "registrazioni della voce, solo degli adulti). azione: consenso_voce quando chi parla mi permette di tenere la sua "
             "voce («puoi registrare la mia voce»); revoca_voce quando non vuole più («non "
             "tenere la mia voce»); stato per «cosa tieni di me?»; svuota solo se chi amministra "
-            "chiede di cancellare questi dati (persona: di chi, vuoto per tutti). Non per le "
-            "conversazioni archiviate (conversazioni_dimentica) né per i ricordi."),
+            "chiede di cancellare questi dati (persona: di chi, vuoto per tutti). Non quando "
+            "chi parla vuole cancellare le sue conversazioni (conversazioni_dimentica) né per "
+            "i ricordi."),
         parameters={"type": "object",
                     "properties": {"azione": {"type": "string", "enum": list(AZIONI)},
                                    "persona": {"type": "string"}},

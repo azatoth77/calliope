@@ -18,6 +18,11 @@ audio oltre a ciò che serve al turno.
 - `eventi` (il registro degli eventi su disco): i registri delle persone adulte. Quelli dei
   minori e degli ospiti restano solo in memoria (`registro_su_disco`), e quelli già su disco
   li cancella la rotazione.
+- `conversazioni` (l'archivio delle conversazioni, calliope/conversazioni.py, dal 12/10 sera):
+  come gli eventi, le conversazioni delle persone adulte (`conversazioni_su_disco`); quelle di
+  minori e ospiti stanno nell'archivio della sessione, in memoria. Dentro la conversazione di un
+  adulto, i turni le cui parole non restano (`testo_turno`: zona grigia, dubbio con un minore)
+  non vanno su disco. Stessi `turn_log_days` giorni.
 
 **Il consenso** è un dato della persona, nel suo profilo (speakers.json, `voce_conservata`):
 None = mai detto, True = «sì» detto una volta a Calliope (tool `dati_conservati`), False =
@@ -37,7 +42,8 @@ solo conteggi, mai testo né nomi. La conservazione non usa la GPU: nel profilo 
 c'è uguale.
 
     python -m calliope.conserva                  quanto è conservato (solo conteggi)
-    python -m calliope.conserva --svuota         tutto: voce, eventi e registro dei turni
+    python -m calliope.conserva --svuota         tutto: voce, eventi, registro dei turni e
+                                                 archivio delle conversazioni
     python -m calliope.conserva --svuota --persona NOME
                                                  i dati di una persona
 
@@ -61,7 +67,7 @@ from pathlib import Path
 
 CARTELLA_VOCE = "voce"
 SEGNO_RIPULITO = ".conservazione-1"       # il registro dei turni di prima è già stato ripulito
-COSE = ("testo", "voce", "eventi")
+COSE = ("testo", "voce", "eventi", "conversazioni")
 # Come è stata decisa l'identità della frase (SpeakerContext.identified_by e i modi del ciclo):
 # con questi il testo resta. Fuori: la zona grigia («conversazione»), il proprietario incerto
 # con un minore («proprietario»), nessun modo
@@ -109,14 +115,14 @@ def consenso_voce(prof) -> bool:
 def decidi(prof, cosa: str, modo: str | None = None, dubbi=(), cfg=None) -> Decisione:
     """Il solo posto che decide se qualcosa di questa persona si conserva. Puro.
 
-    `cosa`: «testo», «voce» o «eventi»; `modo`: come è stata decisa l'identità della frase;
+    `cosa`: «testo», «voce», «eventi» o «conversazioni»; `modo`: come è stata decisa l'identità della frase;
     `dubbi`: i segni del turno («incerta», «minore_vicino», «compagnia»…)."""
     if cosa not in COSE:
         raise ValueError(f"cosa sconosciuta: {cosa!r}")
     cat = categoria(prof)
     if cat in ("ospite", "minore"):
         return Decisione(False, cat)
-    if cosa == "eventi":
+    if cosa in ("eventi", "conversazioni"):
         return Decisione(True, cat)
     dubbi = set(dubbi or ())
     if dubbi & set(DUBBI_MINORE):
@@ -320,6 +326,9 @@ class Conservazione:
         self.giorni = int(getattr(cfg, "turn_log_days", 60) or 60)
         self.mb = float(getattr(cfg, "conserva_voce_mb", 2000) or 0)
         self.eventi = None          # eventi.registro.Disco, se c'è (main.py)
+        # L'archivio delle conversazioni (calliope/conversazioni.ArchivioConversazioni), se c'è:
+        # «svuota» lo svuota e il riepilogo lo conta (main.py e il terminale)
+        self.conversazioni = None
         self.turnlog = None         # TurnLog, se c'è (main.py)
         self._lock = threading.Lock()
         self._ruotata_il = None
@@ -384,6 +393,19 @@ class Conservazione:
         if not chiave.startswith("persona:"):
             return False
         return bool(decidi(self.profilo(persona_id=chiave.split(":", 1)[1]), "eventi"))
+
+    def conversazioni_su_disco(self, persona_id) -> bool | None:
+        """Le conversazioni di questa persona vanno nell'archivio su disco? Gli adulti sì;
+        minori, ospiti e profili tolti no (restano nell'archivio della sessione). None quando
+        non si può dire: nessun profilo letto (speakers.json mancante o illeggibile). Allora
+        l'archivio non scrive su disco (nel dubbio no), ma la rotazione non cancella le
+        conversazioni delle persone (un file illeggibile per un momento non toglie 60 giorni)."""
+        reg = self.registry
+        if reg is None or not getattr(reg, "users", None):
+            return None
+        if not persona_id:
+            return False
+        return bool(decidi(self.profilo(persona_id=str(persona_id)), "conversazioni"))
 
     # ── al turno (il ciclo, prima del registro degli eventi e di quello dei turni) ──
     def al_turno(self, rec: dict, audio=None, sr: int = 16000) -> dict:
@@ -528,8 +550,10 @@ class Conservazione:
     # ── svuotare ──
     def svuota(self, persona_id: str | None = None, nome: str | None = None) -> dict:
         """Tutto (persona_id None) o i dati di una persona: la voce, gli eventi su disco (con
-        `secure_delete`) e, nel registro dei turni, le parole (di tutti: i file interi)."""
-        out = {"voce": 0, "eventi": 0, "turni": 0}
+        `secure_delete`), nel registro dei turni le parole (di tutti: i file interi) e, dal 12/10
+        sera, l'archivio delle conversazioni (anche le conversazioni in corso salvate)."""
+        out = {"voce": 0, "eventi": 0, "turni": 0, "conversazioni": 0}
+        arch = self.conversazioni
         lock = getattr(self.turnlog, "_lock", None)
         if persona_id is None:
             if self.voce_dir and self.voce_dir.exists():
@@ -540,6 +564,8 @@ class Conservazione:
                     with (lock or threading.Lock()):
                         f.unlink(missing_ok=True)
                     out["turni"] += 1
+            if arch is not None:
+                out["conversazioni"] = arch.svuota()
             out["eventi"] = self._svuota_eventi(None)
             return out
         out["voce"] = self.cancella_voce(persona_id)
@@ -548,6 +574,8 @@ class Conservazione:
                 v = r.get("voce") if isinstance(r.get("voce"), dict) else {}
                 return not (v.get("id") == persona_id or (nome and v.get("nome") == nome))
             out["turni"] = ripulisci_turni(self.cartella, tieni, lock)["turni"]
+        if arch is not None:
+            out["conversazioni"] = arch.dimentica(str(persona_id))
         out["eventi"] = self._svuota_eventi(f"persona:{persona_id}")
         return out
 
@@ -562,7 +590,7 @@ class Conservazione:
         out = {"giorni": self.giorni, "voce_mb_tetto": self.mb,
                "voce_accesa": bool(getattr(self.cfg, "conserva_voce", True)),
                "voce_file": 0, "voce_mb": 0.0, "voce_persone": 0, "voce_giorni": 0,
-               "turni_file": 0}
+               "turni_file": 0, "conversazioni": 0, "conversazioni_turni": 0}
         if self.voce_dir and self.voce_dir.exists():
             persone = [x for x in self.voce_dir.iterdir() if x.is_dir()]
             out["voce_persone"] = len(persone)
@@ -572,6 +600,20 @@ class Conservazione:
                                       if g.is_dir()})
         if self.cartella and self.cartella.exists():
             out["turni_file"] = len(list(self.cartella.glob("turni-*.jsonl")))
+        out.update(self.conta_conversazioni())
+        return out
+
+    def conta_conversazioni(self, persona_id=None) -> dict:
+        """Quante conversazioni (e turni) ci sono nell'archivio su disco, di tutti o di una
+        persona: dall'archivio aperto, o dal file in sola lettura (`calliope stato`)."""
+        out = {"conversazioni": 0, "conversazioni_turni": 0}
+        try:
+            arch = self.conversazioni
+            c = (arch.conteggi(persona_id) if arch is not None
+                 else conta_archivio(self.cfg, persona_id))
+            out["conversazioni"], out["conversazioni_turni"] = c["conversazioni"], c["turni"]
+        except Exception:  # noqa: BLE001 — i conteggi non fermano niente
+            pass
         return out
 
 
@@ -581,8 +623,31 @@ def testo_stato(d: dict | None) -> str | None:
         return None
     voce = (f"voce {d['voce_file']} frasi di {d['voce_persone']} persone, {d['voce_mb']:.1f} MB "
             f"(tetto {d['voce_mb_tetto']:.0f})" if d.get("voce_accesa") else "voce spenta")
+    conv = (f"; {d['conversazioni']} conversazioni archiviate ({d['conversazioni_turni']} "
+            f"turni)" if "conversazioni" in d else "")
     return (f"Conservazione ({d['giorni']} giorni, soli adulti): {d['turni_file']} giorni di "
-            f"turni; {voce}")
+            f"turni; {voce}{conv}")
+
+
+def conta_archivio(cfg, persona_id=None) -> dict:
+    """Le conversazioni e i turni nel file dell'archivio, in sola lettura (senza aprire
+    l'archivio né il suo thread). File mancante: zero."""
+    import sqlite3
+    from .conversazioni import percorso_db
+    p = Path(percorso_db(cfg))
+    if not p.exists():
+        return {"conversazioni": 0, "turni": 0}
+    db = sqlite3.connect(f"file:{p.resolve().as_posix()}?mode=ro", uri=True, timeout=2.0)
+    try:
+        dove, args = ("WHERE persona = ?", (str(persona_id),)) if persona_id else ("", ())
+        n = db.execute(f"SELECT COUNT(*) FROM conversazioni {dove}", args).fetchone()[0]
+        t = db.execute(f"SELECT COUNT(*) FROM turni WHERE conv IN (SELECT id FROM "
+                       f"conversazioni {dove})", args).fetchone()[0]
+        return {"conversazioni": int(n), "turni": int(t)}
+    except sqlite3.Error:
+        return {"conversazioni": 0, "turni": 0}
+    finally:
+        db.close()
 
 
 # ─────────────────────────── da terminale ───────────────────────────
@@ -635,6 +700,17 @@ def main(argv=None) -> int:
             c.eventi = Disco.file(p, log=lambda m: None)
     except Exception:  # noqa: BLE001 — senza la tabella degli eventi si svuota il resto
         c.eventi = None
+    if "--svuota" in argv:
+        # L'archivio delle conversazioni (12/10 sera): si apre solo per svuotarlo, senza il suo
+        # thread né l'archivio della sessione (quello vive nel processo di Calliope)
+        try:
+            from .conversazioni import ArchivioConversazioni, percorso_db
+            p = Path(percorso_db(cfg))
+            if p.exists():
+                c.conversazioni = ArchivioConversazioni(p, giorni=c.giorni, log=lambda m: None,
+                                                        avvia=False, sessione=False)
+        except Exception:  # noqa: BLE001 — senza l'archivio si svuota il resto
+            c.conversazioni = None
 
     def nome_arg(opz):
         i = argv.index(opz)
@@ -651,11 +727,15 @@ def main(argv=None) -> int:
                 return 1
             r = c.svuota(prof.id, nome)
             print(f"Dati conservati di {nome} cancellati: {r['voce']} registrazioni, "
-                  f"{r['eventi']} eventi, parole tolte da {r['turni']} turni.")
+                  f"{r['eventi']} eventi, parole tolte da {r['turni']} turni, "
+                  f"{r['conversazioni']} conversazioni archiviate.")
         else:
             r = c.svuota()
             print(f"Dati conservati cancellati: {r['voce']} registrazioni, {r['eventi']} eventi, "
-                  f"{r['turni']} giorni del registro dei turni.")
+                  f"{r['turni']} giorni del registro dei turni, {r['conversazioni']} "
+                  f"conversazioni archiviate.")
+        if c.conversazioni is not None:
+            c.conversazioni.close()
         return 0
     d = c.stato()
     if "--json" in argv:
@@ -669,8 +749,9 @@ def main(argv=None) -> int:
             else:
                 stato_voce = "sì" if consenso_voce(u) else (
                     "no" if u.voce_conservata is False else "non chiesto")
+            conv = c.conta_conversazioni(u.id)["conversazioni"]
             print(f"    {u.name}: {cat}, voce {stato_voce}, registrazioni "
-                  f"{c.registrazioni(u.id)}")
+                  f"{c.registrazioni(u.id)}, conversazioni archiviate {conv}")
     return 0
 
 

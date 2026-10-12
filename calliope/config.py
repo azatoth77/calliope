@@ -528,15 +528,16 @@ class Config:
     memory_db: str | None = os.environ.get("CALLIOPE_MEMORY_DB", "memoria.db") or None
     memory_max_facts: int = 50            # per persona; oltre si toglie il più vecchio
     # Archivio delle conversazioni (05/10, calliope/conversazioni.py): ogni turno finito si
-    # salva in un file a parte (i ricordi restano per sempre, le conversazioni
-    # `conversazioni_giorni` giorni), così la compressione e la fine di una conversazione non
-    # perdono niente e conversazione_cerca ritrova «cosa ti avevo detto stamattina…».
-    # Ognuno ritrova solo le sue; quelle degli ospiti le vede solo chi amministra (terminale:
-    # python -m calliope.conversazioni). Anche la conversazione in corso, a ogni turno: un
-    # riavvio non la perde
+    # salva in un file a parte (i ricordi restano per sempre, le conversazioni `turn_log_days`
+    # giorni), così la compressione e la fine di una conversazione non perdono niente e
+    # conversazione_cerca ritrova «cosa ti avevo detto stamattina…». Ognuno ritrova solo le
+    # sue. Anche la conversazione in corso, a ogni turno: un riavvio non la perde. Dal 12/10
+    # (decisione 0028 T1, calliope/conserva.py) su disco solo quelle degli adulti riconosciuti,
+    # per gli stessi giorni del registro dei turni (prima `conversazioni_giorni`, 30): quelle di
+    # minori e ospiti restano in memoria fino al riavvio (gli ospiti le vede solo chi
+    # amministra, a voce)
     conversazioni_enabled: bool = True
     conversazioni_db: str = os.environ.get("CALLIOPE_CONVERSAZIONI_DB", "conversazioni.db")
-    conversazioni_giorni: int = 30
     # Ricerca per significato: il modello di embedding sul server del modello (Ollama
     # /api/embed; con un indirizzo che finisce in /v1, /v1/embeddings). Vuoto = solo ricerca
     # per parole (FTS5). Scelto il 05/10 sul banco delle conversazioni (vedi il rapporto
@@ -1345,7 +1346,8 @@ class Config:
     # ospiti, minori e voci incerte solo i numeri (12/10, decisione 0028, calliope/conserva.py).
     # La cartella è privata (fuori da git, permessi 700 su Linux) e tiene anche la voce
     turn_log_dir: str | None = os.environ.get("CALLIOPE_TURN_LOG", "registro") or None
-    # Dopo questi giorni turni e voce si cancellano (60 dal 12/10: prima 30)
+    # Dopo questi giorni turni, voce e archivio delle conversazioni si cancellano (60 dal 12/10:
+    # prima 30)
     turn_log_days: int = 60
     # La voce degli adulti riconosciuti sopra soglia, con il loro consenso detto a Calliope (chi
     # amministra: sì finché non dice no), in turn_log_dir/voce, in μ-law (~16 KB al secondo,
@@ -2610,7 +2612,7 @@ SEZIONI: dict[str, list[str]] = {
                "guardiano_num_ctx", "guardiano_ospiti", "guardiano_pericolo",
                "guardiano_pericolo_modello", "guardiano_pericolo_url"],
     "memoria": ["memory_db", "memory_max_facts", "appuntamento_anticipo_min"],
-    "conversazioni": ["conversazioni_enabled", "conversazioni_db", "conversazioni_giorni",
+    "conversazioni": ["conversazioni_enabled", "conversazioni_db",
                       "conversazioni_embedding", "conversazioni_embedding_url",
                       "conversazioni_embedding_cpu", "conversazioni_vettori_inattivita_s",
                       "conversazione_ripresa_ore", "conversazione_coda_scambi",
@@ -2886,7 +2888,7 @@ LIMITI: dict[str, tuple[float, float]] = {
     "contesto_soglia_morbida": (0.3, 0.98), "contesto_soglia_dura": (0.4, 0.99),
     "contesto_turni_intatti": (1, 50), "contesto_riassunto_token": (100, 4000),
     "contesto_dura_attesa_s": (0.0, 120.0), "contesto_riassunto_attesa_s": (0.0, 600.0),
-    "contesto_riassunto_max_s": (0.0, 3600.0), "conversazioni_giorni": (0, 3650),
+    "contesto_riassunto_max_s": (0.0, 3600.0),
     "conversazione_ripresa_ore": (0.0, 720.0), "conversazione_coda_scambi": (0, 10), "conversazioni_parallele": (0, 16),
     "conversazione_doppione_s": (0.0, 30.0),
     "eventi_giorni": (0, 365), "eventi_avviso_mb": (0.0, 100_000.0),

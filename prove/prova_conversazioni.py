@@ -181,7 +181,9 @@ def prova_oggetto():
     b.end_conversation("dormi")
     verifica("fine della conversazione: album nuovo e vuoto", b.album is not album
              and len(b.album) == 0 and len(album) == 0)
-    # La cortesia («grazie» → «Prego!») passa dalla conversazione e si salva
+    # La cortesia («grazie» → «Prego!») passa dalla conversazione e si salva (di una persona:
+    # dal 12/10 sera una conversazione senza proprietario non va su disco)
+    b.conv.owner = "p-dario"
     b.record_courtesy("Grazie.", "Prego!")
     verifica("cortesia nella conversazione e su disco", b.conv.history[-1]["content"] ==
              "Prego!" and b.archivio_conv.leggi_corrente("casa")["history"][-1]["content"]
@@ -246,8 +248,11 @@ def prova_archivio():
     riempi(a, co, None, None, True, [
         ("Il codice del cancello è 4455, preventivo segreto", "Va bene.")])
     a._vettori_mancanti()
-    verifica("vettori calcolati per tutti i turni", a.conteggi()["vettori"] == 5,
+    # Dal 12/10 sera (T1) l'ospite non va su disco: è nell'archivio della sessione, senza vettori
+    verifica("vettori calcolati per tutti i turni su disco", a.conteggi()["vettori"] == 4,
              str(a.conteggi()))
+    verifica("l'ospite non è su disco ma nella sessione", a.conteggi()["conversazioni"] == 2
+             and a.sessione.conteggi()["turni"] == 1, str(a.sessione.conteggi()))
     r = a.cerca("quanto era il preventivo?", "p-dario")
     verifica("ricerca ibrida", r["modo"] == "ibrida")
     testi = [x["domanda"] for x in r["risultati"]]
@@ -288,7 +293,8 @@ def prova_archivio():
     m = a.mostra(cd.id_archivio)
     verifica("--mostra: turni e ricordi proposti", len(m["turni"]) == 3
              and m["ricordi_proposti"] == ["ha un bagno"])
-    # Corrente
+    # Corrente (di una persona: senza proprietario non va su disco, 12/10 sera)
+    cd.owner = "p-dario"
     cd.history = [{"role": "user", "content": "x"}]
     cd.last_turn_at = time.monotonic()
     a.salva_corrente(cd)
@@ -299,7 +305,7 @@ def prova_archivio():
     verifica("dimentica: solo quelle di Dario", n == 1 and a.cerca("preventivo", "p-bianca")
              ["risultati"], str(n))
     verifica("dimentica: FTS ripulito", a.db.execute(
-        "SELECT COUNT(*) FROM turni_fts").fetchone()[0] == 2)
+        "SELECT COUNT(*) FROM turni_fts").fetchone()[0] == 1)
     # Pulizia dei vecchi
     cvec = Conversazione(); cvec.inizio = time.time() - 40 * 86400
     riempi(a, cvec, "p-bianca", "Bianca", False, [("vecchia frase", "ok")],
@@ -308,7 +314,7 @@ def prova_archivio():
     a.db.execute("UPDATE conversazioni SET fine = ? WHERE id = ?",
                  (time.time() - 40 * 86400, cvec.id_archivio))
     a._pulizia()
-    verifica("pulizia oltre conversazioni_giorni", a.mostra(cvec.id_archivio) is None)
+    verifica("pulizia oltre la tenuta", a.mostra(cvec.id_archivio) is None)
     a.close()
 
 
@@ -334,13 +340,15 @@ def prova_brain_archivio():
     verifica("cambio di persona: la conversazione di Dario chiusa nell'archivio",
              any(c["nome"] == "Dario" and c["motivo"] == "conversazione_altra_persona"
                  and c["turni"] == 2 for c in lista), str(lista))
-    # Ospite: archiviato come ospite
+    # Ospite: dal 12/10 sera (T1) mai su disco, archiviato come ospite nella sessione
     parla(b, "Sono un ospite", chi=None, livello="ospite")
     parla(b, "E adesso?", chi=None, livello="ospite")
     b.end_conversation("dormi")
     lista = a.elenco()
-    verifica("ospite archiviato come ospite", any(c["ospite"] and c["turni"] == 2
-                                                  for c in lista), str(lista))
+    verifica("ospite: niente su disco", not any(c["ospite"] for c in lista), str(lista))
+    lista = a.sessione.elenco()
+    verifica("ospite archiviato come ospite nella sessione",
+             any(c["ospite"] and c["turni"] == 2 for c in lista), str(lista))
     a.close()
 
 
@@ -637,7 +645,9 @@ def prova_tool():
     ctx.turno = 6
     r = _conversazioni_dimentica(ctx)
     verifica("dimentica: al «sì» cancella", r["ok"] and r["cancellate"] == 1)
-    verifica("dimentica: quelle dell'ospite restano", a.conteggi()["conversazioni"] == 1)
+    verifica("dimentica: quelle dell'ospite restano (nella sessione, 12/10 sera)",
+             a.conteggi()["conversazioni"] == 0
+             and a.sessione.conteggi()["conversazioni"] == 1)
     verifica("quando_detto", quando_detto(time.time() - 86400).startswith("ieri alle"))
     a.close()
 
@@ -709,9 +719,9 @@ def prova_varie():
     cfg = Config()
     verifica("config: soglie e archivio", (cfg.contesto_soglia_morbida,
                                            cfg.contesto_soglia_dura, cfg.contesto_turni_intatti,
-                                           cfg.contesto_riassunto_token, cfg.conversazioni_giorni,
+                                           cfg.contesto_riassunto_token, cfg.turn_log_days,
                                            cfg.conversazione_ripresa_ore)
-             == (0.75, 0.90, 4, 800, 30, 4.0))
+             == (0.75, 0.90, 4, 800, 60, 4.0))
     from calliope.config import _riassuntore_valido
     try:
         _riassuntore_valido("chissà")

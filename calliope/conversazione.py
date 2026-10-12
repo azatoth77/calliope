@@ -56,6 +56,10 @@ class Conversazione:
         self.riassunto: dict | None = None    # {"testo", "dati", "tipo", "quando"}
         self.archiviati = 0               # messaggi in testa già archiviati
         self.id_archivio = None           # id della riga in conversazioni.db (dal worker)
+        # In quale archivio sono i suoi turni (12/10 sera, T1): "disco", "sessione" (minori e
+        # ospiti, in memoria) o None (ancora nessuno). Non si esporta: la sessione non
+        # sopravvive a un riavvio, e una conversazione ripresa è su disco
+        self.archiviata_in = None
         self.nome = None                  # nome di chi parla (per il riassunto)
         self.luogo = None                 # satellite o "locale" (ripresa entro qualche ora)
         self.inizio = time.time()
@@ -248,6 +252,10 @@ def turni(messaggi: list[dict], riservati=frozenset(), segreti: dict | None = No
             info = {k: str(meta[k])[:60] for k in ("luogo", "canale") if meta.get(k)}
             if info:
                 cur["meta"] = info
+            if meta.get("conserva") is False:
+                # Le parole di questo turno non restano (12/10 sera, conserva.testo_turno: zona
+                # grigia, dubbio con un minore): l'archivio su disco lo salta
+                cur["non_conservare"] = True
             out.append(cur)
             if ruolo == "user":
                 # Senza le buste dei dati non fidati (allegati: calliope/provenienza.py)

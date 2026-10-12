@@ -12,7 +12,7 @@
 | Finestra di contesto (dal 05/10) | — (Ollama `/api/show` e `/api/ps`, vLLM `/v1/models` e `/metrics`, nvidia-smi, /proc/meminfo) | `calliope/contesto.py` → `prepara`, `calcola`, `finestra` (il num_ctx di tutti), `testo_stato`; `llm_num_ctx: auto`, scelta in `contesto.json`; token veri in `Brain.last_context`; barra `Schermi.contesto`; misure `prove/misura_contesto.py` |
 | Conversazione, compressione e archivio delle conversazioni (dal 05/10) | SQLite in WAL con FTS5 (`conversazioni.db`), vettori da Ollama `/api/embed` sulla CPU (`qwen3-embedding:0.6b`) o `/v1/embeddings`, coseno in numpy, RRF | `calliope/conversazione.py` → `Conversazione` (Brain la espone con `history`, `pending`…, `brain.conv`), `turni`; `calliope/compressione.py` → `Compressore` (soglie 75/90 %, `avvia`, `comprimi_ora`, `applica`, `chiudi`), `RiassuntoreLLM` (agente o voce), `RiassuntoreTagli`, `crea_riassuntori`; `calliope/conversazioni.py` → `ArchivioConversazioni` (`archivia`, `cerca`, `ultima`, `dimentica`, conversazione corrente; dall'08/10 `recenti` per le domande cronologiche, `su_turni` e `chat` per la scheda «Conversazione»; dal 10/10 `pulisci_wal`, `su_pulizia` e «dimentica» vera), `Embedder`, `load_conversazioni`; il registro degli eventi accanto (`calliope/eventi/registro.py` → `Registri`, `Disco`, dal 10/10 in ombra: sezione «La storia come proiezione degli eventi»); tool `conversazione_cerca`, `conversazioni_dimentica` in `calliope/tools/conversazioni.py`; «ricominciamo» `wakeword.nuova_conversazione`; terminale `python -m calliope.conversazioni`; misure `prove/misura_conversazioni.py` |
 | Latenza come metrica, cache scaldata, modelli di Ollama (dal 06/10) | solo libreria standard (registro dei turni, Ollama `/api/ps`) | `calliope/latenza.py` → `giorno`, `per_giorno`, `testo`, `avviso`, `avviso_recente`, `scalda_ripresa`, `leggi_file` (`calliope stato --turni`); `Brain.scalda_conversazione`, `Brain._scalda_se_cambiato` (prefisso nuovo dopo un cambio di modalità, 07/10); `calliope/ollama_carico.py` → `residenti`, `limite`, `usati`, `avviso`, `puo_caricare`; la prima frase a pezzi e la taratura della voce (sezioni del 07/10 sotto) hanno il codice in `tts.py` e `taratura_voce.py`, area [stt-tts](stt-tts.md) |
-| Conservazione dei dati per le misure, scelta dei tool come metrica (dal 12/10) | solo libreria standard e numpy (voce in G.711 μ-law), SQLite della tabella `eventi` | `calliope/conserva.py` → `decidi` (il solo posto), `Conservazione` (`testo_turno`, `voce_turno`, `registro_su_disco`, `al_turno`, `salva_voce`, `imposta_consenso`, `ruota`, `ripulisci_registro`, `svuota`, `stato`), `python -m calliope.conserva`; `calliope/tools/conserva.py` (`dati_conservati`); `calliope/scelta_tool.py` → `turno`, `giorno`, `per_giorno`, `testo`, `avviso`, `avviso_recente` (`calliope stato --turni`) |
+| Conservazione dei dati per le misure, scelta dei tool come metrica (dal 12/10) | solo libreria standard e numpy (voce in G.711 μ-law), SQLite della tabella `eventi` | `calliope/conserva.py` → `decidi` (il solo posto), `Conservazione` (`testo_turno`, `voce_turno`, `registro_su_disco`, `conversazioni_su_disco` (12/10 sera), `conta_conversazioni`, `al_turno`, `salva_voce`, `imposta_consenso`, `ruota`, `ripulisci_registro`, `svuota`, `stato`), `python -m calliope.conserva`; `calliope/tools/conserva.py` (`dati_conservati`); `calliope/scelta_tool.py` → `turno`, `giorno`, `per_giorno`, `testo`, `avviso`, `avviso_recente` (`calliope stato --turni`) |
 
 ## Problemi noti
 
@@ -955,7 +955,9 @@ conversazione, degli ospiti), voce mai (solo `CALLIOPE_DEBUG_AUDIO`).
   dei turni) o `--svuota --persona NOME` (la sua voce, i suoi eventi, le parole dei suoi turni);
   sulla DGX `calliope conserva …`. A voce solo chi amministra (`dati_conservati` azione `svuota`,
   con la domanda e il «sì»). Non tocca l'archivio delle conversazioni né i ricordi
-  («dimentica» resta per quelli). `python -m calliope.conserva` (e una riga in `calliope stato`)
+  («dimentica» resta per quelli). *(Storico per l'archivio: dal 12/10 sera svuota anche le
+  conversazioni archiviate; i ricordi restano. Sezione «L'archivio delle conversazioni
+  allineato alla conservazione».)* `python -m calliope.conserva` (e una riga in `calliope stato`)
   dice quanto c'è, solo conteggi; i nomi solo da terminale a chi amministra.
 - **Privacy**: niente esce (nessun invio, nessun tool che legga la cartella della voce, niente
   testo né nomi nei log: solo conteggi). **Profilo ridotto da 8 GB**: la conservazione non usa la
@@ -964,7 +966,8 @@ conversazione, degli ospiti), voce mai (solo `CALLIOPE_DEBUG_AUDIO`).
 **Resta aperto**: l'archivio delle conversazioni (`conversazioni_giorni`, la memoria di
 «cosa ti avevo detto») tiene ancora le conversazioni di minori e ospiti (gli ospiti mai recuperati
 dal modello): è una funzione per chi parla, non una misura, e non fa parte di T1; da decidere con chi
-amministra se allinearlo. Che Calliope chieda il consenso di sua iniziativa non c'è: la persona
+amministra se allinearlo. *(Storico: Dario ha deciso il 12/10 di allinearlo, fatto la sera stessa;
+sezione qui sotto.)* Che Calliope chieda il consenso di sua iniziativa non c'è: la persona
 lo dice quando vuole (o chi amministra glielo spiega).
 
 **La scelta dei tool come metrica** (punto 1 di
@@ -987,3 +990,75 @@ prima.
 Prove a secco: `prova_conserva` (decisioni, registro, voce, consenso, rotazione, svuota, eventi,
 tool, terminale, con i contrari minore, ospite, voce incerta, adulto senza consenso, revoca,
 svuotamento), `prova_scelta_tool`, `prova_eventi_ciclo` (i `dati_del_turno` sul giro sintetico).
+
+## L'archivio delle conversazioni allineato alla conservazione (12/10 sera, ramo `archivio-t1`)
+
+Decisione di Dario del 12/10 ([0028](../decisioni/0028-decisioni-roadmap-12-10.md), T1): l'archivio
+delle conversazioni (`conversazioni.db`, la memoria di «cosa ti avevo detto») segue la stessa
+conservazione di turni, eventi e voce. Prima teneva 30 giorni (`conversazioni_giorni`) le
+conversazioni di tutti, anche di minori e ospiti (quelle degli ospiti mai recuperate dal modello,
+ma lette da chi amministra con `python -m calliope.conversazioni --ospiti`).
+
+- **Chi va su disco**: lo decide `conserva.decidi(profilo, "conversazioni")`, il solo posto
+  (come gli eventi: adulti riconosciuti e chi amministra sì; minori, ospiti e profili tolti no),
+  attraverso `Conservazione.conversazioni_su_disco(persona)`, che l'archivio riceve da `main.py`
+  prima del suo thread (`ArchivioConversazioni(conserva=…)`, `load_conversazioni(conserva=…)`).
+  Restituisce None quando non sa (nessun profilo letto: `speakers.json` mancante o illeggibile):
+  allora l'archivio non scrive su disco (nel dubbio no) ma la rotazione non cancella le persone.
+- **Il turno incerto di un adulto** (zona grigia, dubbio con un minore): la decisione è quella del
+  registro dei turni (`Conservazione.testo_turno`), presa dal ciclo a turno finito
+  (`Ciclo._segna_conserva`) e scritta come `conserva: false` nel `_turno` del messaggio dell'utente
+  (anche con gli eventi accesi, dove archivia l'ombra). `conversazione.turni` lo porta come
+  `non_conservare`, e l'archivio su disco salta il turno; la conversazione in corso salvata
+  (`correnti`) lo toglie con le risposte dopo (`senza_non_conservati`). Nella conversazione in
+  memoria resta: il modello lo vede finché la conversazione dura.
+- **Minori e ospiti: l'archivio della sessione.** Lo stesso `ArchivioConversazioni` in un SQLite
+  `:memory:` (`arch.sessione`), senza thread né vettori (ricerca per parole), con gli stessi
+  avvisi agli schermi. Ogni metodo sceglie l'archivio dalla persona (`_dove`), e la conversazione
+  ricorda dov'è finita (`Conversazione.archiviata_in`, non esportato). Così per chi non va su disco
+  nella sessione funziona tutto come prima: `conversazione_cerca` (anche «riprendi la
+  conversazione di ieri», «di cosa parlavamo prima?» in modo cronologico), la riga «l'ultima
+  volta…» entro `conversazione_ripresa_ore`, la scheda «Conversazione» del telefono di un ragazzo
+  con «Scarica», «dimentica le nostre conversazioni», e per chi amministra riconosciuto dalla voce
+  `ospiti=true`. **Dopo un riavvio** (anche `calliope aggiorna`) non c'è più niente: «riprendi la
+  conversazione di ieri» per un ragazzo trova solo ciò che è stato detto da quando Calliope è
+  ripartita, e la conversazione in corso di un minore o di un ospite non si riprende (si riparte
+  da capo, come per il registro degli eventi). Nella sessione vale la stessa tenuta (pulizia di
+  ogni giorno). Da terminale (`python -m calliope.conversazioni --elenco --ospiti`) le
+  conversazioni degli ospiti non si vedono più: non sono su disco.
+- **Tenuta**: `turn_log_days` (60), la stessa del registro dei turni e della voce, non un numero
+  suo. Il campo `conversazioni_giorni` (30) è tolto dalla configurazione: se è ancora in un
+  `calliope.locale.yaml` l'avvio lo segnala come chiave sconosciuta e va avanti.
+- **Le conversazioni di prima**: la pulizia di ogni giorno, la prima subito all'avvio
+  (`togli_non_conservate`), toglie con `secure_delete`, indice FTS5 ricompattato e checkpoint del
+  WAL le conversazioni e le conversazioni in corso salvate di ospiti (`ospite = 1`, chiavi
+  `ospite:*`), minori e profili tolti. Niente migrazioni morbide (Calliope non è in produzione).
+- **Svuotare**: `calliope conserva --svuota` svuota anche l'archivio (`ArchivioConversazioni.svuota`:
+  conversazioni, turni, indice e conversazioni in corso); `--svuota --persona NOME` e il tool
+  `dati_conservati` (azione `svuota`) tolgono quelle della persona come «dimentica», anche
+  nell'archivio della sessione. La domanda del tool lo dice («testi dei turni, conversazioni
+  archiviate, eventi e registrazioni della voce? I ricordi restano»). Una conversazione che
+  continua dopo lo svuotamento apre una riga nuova (niente turni orfani).
+- **Riepilogo**: `calliope conserva` (e la riga di `calliope stato`) conta le conversazioni
+  archiviate e i loro turni, anche per persona (`conta_archivio`, il file in sola lettura).
+- **Profilo ridotto da 8 GB**: identico. L'archivio della sessione non usa la GPU né un modello
+  (niente vettori: proprio per non caricare l'embedding), e la decisione è una lettura del profilo.
+  La memoria in più è quella del testo delle conversazioni di minori e ospiti dall'avvio (pochi
+  kB per conversazione).
+
+**Altri posti su disco con testo di minori o ospiti** (non cambiati: elenco per decidere):
+la cronologia delle schede per persona (`schede/<persona>.json`, schede personali con l'identità
+certa, anche dei minori, mai degli ospiti: 7 giorni, al più 40 schede e 4 MB per persona); il
+cassetto dei file (foto, file, audio di chi è riconosciuto, anche dei minori, visibili ai tutori
+sotto i 14 anni, mai degli ospiti: 7 giorni, 500 MB per persona); i ricordi (`memoria.db`,
+`facts`, anche dei minori, per sempre, al più 50 per persona; degli ospiti niente); gli esercizi
+(`esercizi_tentativi`: domanda, risposta attesa e risposta del ragazzo fino a 60 caratteri, senza
+scadenza: è il dettaglio dei tutori); le richieste ai tutori (`richieste_tutori.oggetto`, senza
+scadenza della riga), gli avvisi ai tutori (solo l'argomento) e i compiti del giorno (argomento e
+conteggi); agenda e liste (ciò che la persona ha chiesto di segnare, finché non si cancella).
+Senza testo: `cancelli.json`.
+
+Prove a secco: `prova_conserva` (sezione dell'archivio: adulto su disco, i contrari minore, ospite
+e turno incerto, la sessione, la conversazione in corso, la rotazione di prima con i profili non
+letti, 61 e 59 giorni, svuota per persona e tutto, conteggi e terminale), `prova_conversazioni` e
+`prova_corsie` aggiornate (l'ospite nella sessione, la conversazione di un ospite non si riprende).

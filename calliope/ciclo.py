@@ -1050,7 +1050,10 @@ class Ciclo:
             self._gioco_segno = time.monotonic()
         if self.rec:
             # Il turno finito nell'archivio delle conversazioni (08/10: la scheda «Conversazione»).
-            # Con gli eventi accesi (passo 3) lo archivia l'ombra, dalla proiezione
+            # Con gli eventi accesi (passo 3) lo archivia l'ombra, dalla proiezione. Prima, se le
+            # parole del turno non restano (12/10 sera, conserva.testo_turno: zona grigia, dubbio
+            # con un minore), il segno nel `_turno` del messaggio: l'archivio su disco lo salta
+            self._segna_conserva(self.rec)
             if not attivo:
                 self._archivia_turno()
             self._chiudi_ascolto(self.rec)
@@ -3304,6 +3307,22 @@ class Ciclo:
             return str(info.get("nome") or getattr(att, "stanza", "") or "satellite")
         return "questo computer"
 
+    def _segna_conserva(self, rec: dict):
+        """Le parole di questo turno restano? La decisione è quella del registro dei turni
+        (conserva.Conservazione.testo_turno → decidi, il solo posto che decide): se no, il segno
+        `conserva: False` va nel `_turno` del messaggio (Ciclo._archivia_turno, o l'ombra con gli
+        eventi accesi) e l'archivio delle conversazioni su disco salta il turno."""
+        cons = getattr(self.s, "conserva", None)
+        if cons is None or not isinstance(rec, dict):
+            return
+        try:
+            tieni = bool(cons.testo_turno(rec))
+        except Exception:  # noqa: BLE001 — nel dubbio no
+            tieni = False
+        if not tieni:
+            meta = self._meta_turno if isinstance(self._meta_turno, dict) else {}
+            self._meta_turno = {**meta, "conserva": False}
+
     def _archivia_turno(self):
         """In cima al giro dopo (08/10): il turno appena finito nell'archivio delle
         conversazioni, con dove e come è arrivato, così la scheda «Conversazione» degli schermi
@@ -3313,8 +3332,13 @@ class Ciclo:
         brain = self.brain
         hist = getattr(brain, "history", None)
         if meta and isinstance(hist, list):
-            for m in reversed(hist):
+            conv = getattr(brain, "conv", None)
+            gia = int(getattr(conv, "archiviati", 0) or 0)
+            for i in range(len(hist) - 1, -1, -1):
+                m = hist[i]
                 if isinstance(m, dict) and m.get("role") == "user":
+                    if meta.get("conserva") is False and i < gia and len(meta) == 1:
+                        break      # il segno della conservazione mai su un turno già archiviato
                     m.setdefault("_turno", meta)
                     break
         archivia = getattr(brain, "archivia_turni", None)
