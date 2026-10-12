@@ -497,6 +497,39 @@ def prova_correzioni(tmp: Path):
              and _detto_adesso(SimpleNamespace(user_text="Sì."), problema) == "")
 
 
+# ═══════════════════════════ 8. l'avviso di fine giro in uno sviluppo ═══════════════════════════
+
+def prova_avviso_giro():
+    print("— 8. l'avviso vicino al tetto: in uno sviluppo è la fine del giro, non del lavoro")
+    from calliope.agenti.ciclo import Agente
+
+    class Lav:
+        avvisato = False
+        id = "L1"
+
+        def __init__(self, tappe):
+            self.tappe = tappe
+
+        def nota(self, *a, **k):
+            pass
+    finto = SimpleNamespace(tetto_token=lambda lav: 100_000, trascorso=lambda lav: 10,
+                            passi_giro=lambda lav: 22, max_passi=24, token_giro=lambda lav: 10,
+                            tempo_max_s=1800, log=lambda *a: None)
+    m = [{"role": "user", "content": "compito"}]
+    Agente._avviso_fine(finto, Lav(True), m)
+    testo = m[-1]["content"]
+    verifica("sviluppo: «questo giro sta per finire… non è la fine del lavoro», niente "
+             "«chiama consegna con un riassunto» a metà",
+             "non è la fine del lavoro" in testo and "le passate del giro" in testo
+             and "non consegnare a metà" in testo and "sta per finire le sue passate"
+             not in testo, testo)
+    m = [{"role": "user", "content": "compito"}]
+    Agente._avviso_fine(finto, Lav(False), m)
+    verifica("contrario: un lavoro fuori da uno sviluppo ha l'avviso di sempre",
+             "il lavoro sta per finire le sue passate" in m[-1]["content"]
+             and "chiama consegna" in m[-1]["content"], m[-1]["content"])
+
+
 def main():
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
         tmp = Path(d)
@@ -507,6 +540,7 @@ def main():
         prova_scelta(tmp)
         prova_testi(tmp)
         prova_correzioni(tmp)
+        prova_avviso_giro()
     print()
     print("Tutto bene." if not errori else f"{errori} errori.")
     return 1 if errori else 0

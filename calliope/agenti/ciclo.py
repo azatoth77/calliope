@@ -82,6 +82,16 @@ AVVISO_FINE = {
     "codice": ("Attenzione: il lavoro sta per finire {cosa}. Non cominciare cose nuove: "
                "sistema quello che hai, rifai esegui_test se hai cambiato il codice e chiama "
                "consegna con un riassunto onesto di cosa funziona e cosa manca."),
+    # Un lavoro di uno sviluppo (12/10 sera): il tetto è una tappa, non la fine. Con l'avviso
+    # di sopra l'agente consegnava a metà o ragionava se consegnare (il gioco delle porte: tre
+    # lavori fermati per il ragionamento ripetuto o per «15 passate senza novità»), e scriveva
+    # «il lavoro si è fermato perché stava per finire le sue passate», ridetto a voce come
+    # risposta di sviluppo_chiedi
+    "tappa": ("Questo giro sta per finire {cosa}: non è la fine del lavoro, il giro dopo riparte "
+              "da qui con i tuoi file. Se il lavoro è finito e i test passano, chiama consegna; "
+              "altrimenti non consegnare a metà e non fermarti a ragionarci: fai il prossimo "
+              "passo concreto (scrivi o correggi un file, esegui_test) e scrivi in una riga cosa "
+              "resta da fare."),
     "ricerca": ("Attenzione: il lavoro sta per finire {cosa}. Non fare altre ricerche: chiama "
                 "adesso consegna con la relazione su quello che hai trovato (quello che non hai "
                 "trovato dillo, non inventarlo)."),
@@ -933,6 +943,9 @@ class Agente:
         else:
             return
         lav.avvisato = True
+        if tipo == "codice" and getattr(lav, "tappe", False):
+            tipo = "tappa"
+            cosa = cosa.replace("le sue passate", "le passate del giro")
         testo = AVVISO_FINE.get(tipo, AVVISO_FINE["codice"]).format(cosa=cosa)
         self.log(f"[AGENTI] {lav.id}: avviso di chiusura ({cosa})")
         lav.nota("spinta", motivo="vicino ai tetti del lavoro")

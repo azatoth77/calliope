@@ -532,6 +532,10 @@ LEGAMI = [
     # La specifica viva (12/10)
     ("calliope/sviluppo.py", ["prova_giro_porte.py"]),
     ("calliope/tools/sviluppo.py", ["prova_giro_porte.py"]),
+    ("calliope/brain.py", ["prova_giro_porte.py"]),
+    ("calliope/stato_dialogo.py", ["prova_giro_porte.py"]),
+    ("calliope/estensioni/scheda.py", ["prova_giro_porte.py"]),
+    ("calliope/agenti/ciclo.py", ["prova_giro_porte.py"]),
     ("calliope/requisiti.py", ["prova_specifica_viva.py"]),
     ("calliope/sviluppo.py", ["prova_specifica_viva.py"]),
     ("calliope/tools/sviluppo.py", ["prova_specifica_viva.py"]),
