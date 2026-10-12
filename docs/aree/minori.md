@@ -4,7 +4,8 @@
 
 **Stato al 09/10.** Profili dei minori con fasce, preset e tutori; guardiano (Llama Guard 3) su
 domanda e frasi, rilevatore di pericolo sulla domanda; compiti guidati; esercizi di matematica e italiano
-generati da Calliope (pilota dall'08/10); dal 09/10 un pericolo poco chiaro passa da due cancelli
+generati da Calliope (pilota dall'08/10), dal 12/10 anche logica, fisica e chimica con le unità di
+misura; dal 09/10 un pericolo poco chiaro passa da due cancelli
 (rassicurare, poi verificare) prima dell'avviso ai tutori, quelli acuti come prima, e con più voci
 vicino al satellite (modalità compagnia) la voce del minore non vale mai sicura. Da confermare con
 Dario le scelte prudenti dei cancelli (fondo del documento); da rimisurare tutto sulla DGX col 26B.
@@ -15,6 +16,7 @@ Dario le scelte prudenti dei cancelli (fondo del documento); da rimisurare tutto
 |---|---|---|
 | Minori (fasce d'età, preset per fascia, permessi nel codice, orari, compiti, avvisi ai tutori; dal 05/10) | SQLite (stesso file della memoria: `minori_regole`, `avvisi_tutori`, `compiti_giorno`); guardiano Llama Guard 3 8B su Ollama + rilevatore di pericolo (gemma4 e4b, output strutturato) | `calliope/minori.py` → `fascia`, `preset`, `permesso` (da `ToolRegistry.call`), `dato_turno`, `fuori_orario`, `piu_protetto`, `Compiti`, `Avvisi`, `estensione_consentita`, `conversazioni_visibili_ai_tutori`; `calliope/guardiano.py` → `Guardiano`, `filtra` (in `main.py`), `correggi_storia`; tool `compiti_aiuto`, `minore_gestisci` (`calliope/tools/minori.py`); terminale `python -m calliope.minori`; banchi `prove/prova_minori_ollama.py`, `prove/misura_guardiano.py`; [`docs/ricerche/2026-10-05-minori.md`](../ricerche/2026-10-05-minori.md) |
 | Esercizi generati da Calliope (dal 08/10): matematica e italiano, a voce e sulla scheda, correzione nel codice, registro dei tentativi per i tutori | libreria standard; SQLite (stesso file della memoria: `esercizi_tentativi`, `esercizi_segnalazioni`, `esercizi_banco`); Wikizionario della biblioteca; secondo modello su Ollama | `calliope/esercizi/` → `matematica.genera`, `italiano.genera`, `numeri.leggi_valore`, `verifica.Wikizionario`, `verifica.SecondoParere`, `registro.Registro`, `sessione.Servizio`; tool `esercizi` (`calliope/tools/esercizi.py`); scheda `DISEGNA.esercizio` e `POST /api/esercizio`; rete `spinta_esercizi`; prove `prove/prova_esercizi.py`, `prove/prova_esercizi_pagina.py`, `prove/prova_esercizi_ollama.py`; [`docs/ricerche/2026-10-08-esercizi.md`](../ricerche/2026-10-08-esercizi.md) |
+| Materie calcolabili (dal 12/10): logica, fisica e chimica con lo schema della matematica; unità di misura dette per esteso e lette dalle risposte come le scrive Whisper | libreria standard | `calliope/esercizi/` → `logica.py`, `fisica.py`, `chimica.py`, `misure.py` (risposte con l'unità), `modello.livello_da_classe`; `calliope/unita.py` → `UNITA`, `leggi_misura`, `misura_detta`, `SIMBOLI_DETTI` (anche per `pronuncia.Pronuncia`); prove `prove/prova_materie.py`, `prove/prova_esercizi_ollama.py --materie logica,fisica,chimica` e `--scelta` |
 | Pericolo poco chiaro verificato in due cancelli prima dell'avviso (dal 09/10); in compagnia la voce del minore non è mai sicura | stesso rilevatore (gemma4 e4b, output strutturato) per gravità e verifica | `calliope/cancelli.py` → `Cancelli`, `Segnale`, `RASSICURA`, `rassicura`, `testo_avviso`, `percorso` (segnali su disco dal 10/10); `calliope/guardiano.py` → `Guardiano.gravita`, `Guardiano.verifica`; `calliope/ciclo.py` → `Ciclo._decidi_pericolo`, `Ciclo._secondo_cancello`; prove `prove/prova_minori_cancelli.py`, misura `prove/misura_cancelli.py` |
 
 ## Problemi noti
@@ -186,9 +188,105 @@ schermo; i tutori vedono il dettaglio dei tentativi anche dai 14 anni.
   11/18: il 4B copiava «Perfetto! Prossima: …» dalla storia senza il tool); prima frase mediana
   0,77 s (matematica) e 1,29 s (italiano, con il secondo parere sullo stesso modello); secondo
   parere 60/60 d'accordo, 30/30 errori del generatore presi, 299 ms di mediana.
-- **Resta**: logica, fisica, chimica (calcolabili), grammatica oltre il pilota, storia e scienze
-  (fattuali, blocchi dall'agente con le fonti della biblioteca); prova d'uso con un ragazzo;
-  misura col 26B e qwen3.6 sulla DGX.
+- **Resta**: ~~logica, fisica, chimica (calcolabili)~~ (fatte il 12/10, sezione sotto), grammatica
+  oltre il pilota, storia e scienze (fattuali, blocchi dall'agente con le fonti della biblioteca);
+  prova d'uso con un ragazzo; misura col 26B e qwen3.6 sulla DGX.
+
+## Materie calcolabili: logica, fisica e chimica (12/10, ramo `materie-calcolabili`)
+
+S1 della [roadmap](../roadmap.md). Stesso schema della matematica: Calliope **genera** l'esercizio
+dalla soluzione con un seme e **calcola** la risposta nel codice; un ricalcolo **indipendente** la
+rifà da capo e, se non torna, l'esercizio non nasce. Il modello passa solo ciò che il ragazzo ha
+detto (`azione=rispondi`), non vede mai la risposta attesa, non inventa né numeri né soluzioni.
+
+| Materia | Argomento | Classi | Livello 1 → 3 | Ricalcolo indipendente |
+|---|---|---|---|---|
+| logica | sequenze di numeri | 2ª el. – 2ª sup. | +d → −d, ×2/×3, +a +b alternati → quadrati, differenze crescenti, somma dei due prima, «doppio più uno» | catalogo di regole provato sui soli numeri mostrati: tutte quelle che li spiegano devono dare lo **stesso** numero dopo (una sequenza ambigua non nasce) |
+| | insiemi | 3ª el. – 1ª sup. | intersezione e unione di elenchi → «né l'una né l'altra» → «una cosa sola» | insiemi veri (Python) o inclusione ed esclusione dai numeri detti |
+| | vero o falso con i connettivi | 4ª el. – 5ª sup. | «e», «oppure», «non è vero che» con frasi → lettere A, B, C → «se… allora», «se e solo se» | valutatore a parte della formula scritta (`A and not B`); l'«oppure» non ha mai le due parti vere (inclusivo o esclusivo è ambiguo in italiano) |
+| fisica | velocità e moto | 1ª media – 5ª sup. | v = s/t in m/s → s = v·t e t = s/v in km, km/h e ore → conversioni km/h ↔ m/s, accelerazione | conto nelle unità di base rifatto dal valutatore a frazioni esatte della matematica e confrontato con la risposta convertita |
+| | densità | 1ª media – 5ª sup. | d = m/V in g/cm³ → massa o volume → kg/m³ e conversione | come sopra |
+| | forze, peso e lavoro | 2ª media – 5ª sup. | peso con g = 9,8 N/kg → F = m·a e a = F/m → lavoro (J) e potenza (W) | come sopra |
+| chimica | massa molare | 3ª media – 5ª sup. | composti semplici → acidi, glucosio, carbonati → ossidi, saccarosio, bicarbonato | la **formula** riletta da capo (`atomi`) contro la composizione scritta a mano accanto al composto |
+| | moli e concentrazione | 1ª – 5ª sup. | n = m/M (M data) → m = n·M (masse atomiche date) → mol/L da moli o da grammi | conto nelle unità di base |
+| | bilanciamento delle reazioni | 3ª media – 5ª sup. | un coefficiente mancante (reazioni semplici → più specie) → «con i coefficienti più piccoli» | atomi contati ai due lati, MCD 1, soluzione unica (rango = specie − 1), nessun altro valore del coefficiente chiesto bilancia |
+
+Valori didattici dichiarati nella domanda: g = 9,8 N/kg, masse atomiche arrotondate come sui libri
+(cloro 35,5), densità dei materiali dei libri delle medie. Ogni risposta ha al più due decimali (si
+costruisce dalla soluzione): il confronto è **esatto**, senza tolleranza né arrotondamenti.
+
+**Unità di misura dette a voce** (il punto aperto della roadmap; `calliope/unita.py`). Misurato
+con il fonemizzatore di piper (espeak-ng italiano): i simboli si leggono lettera per lettera («2,5
+m/s» → «emme barra esse», «3 kg» → «kappagì», «m/s²» → «… esse due», «°C» → «gradi ci»), i
+decimali con la virgola bene («due virgola cinque»), quelli col punto no («due punto cinque»),
+«joule» come «giòule». Scelta:
+
+- nelle frasi degli esercizi le unità sono **per esteso** e accordate al numero («1 metro», «2,5
+  metri al secondo», «9,8 metri al secondo quadrato», «chilometri all'ora», «grammi per mole»,
+  «moli al litro»), i numeri **in cifre con la virgola** (espeak li legge in italiano), gli
+  esponenti a parole («quadrato», «cubo»), mai apici né barre; i tempi come si dicono («un'ora e
+  mezza», «mezz'ora»); sulla scheda i simboli («2,5 m/s», «H₂O»);
+- le **formule chimiche** dopo il nome del composto, lettera per lettera con i pedici come numeri
+  («l'acido solforico, acca 2 esse o 4»; «NaCl» scritto com'è diventava «na ci elle», ora «enne a
+  ci elle»); a voce il bilanciamento dice «più» e «dà» al posto di «+» e «→»;
+- per **ogni frase** che va a Piper (anche quelle del modello) `Pronuncia` cambia un simbolo
+  **subito dopo un numero** nel nome per esteso («36 km/h» → «36 chilometri all'ora», «1 kg» → «1
+  chilogrammo»), e «joule» → «giùl» nel lessico ([stt-tts](stt-tts.md)); niente «h», «s», «G» da
+  soli («5G» resta).
+
+**Risposte del ragazzo trascritte da Whisper** (`unita.leggi_misura`, `misure.controlla`):
+numero e unità si leggono in tutte le forme: simboli («m/s», «km/h», «g/cm3», «m/s²»), nomi interi
+o storpiati («metri al secondi», «chilometri orari», «chilometri allora», «kilogrammi», «chili»,
+«niuton», «giul», «molare»), numeri in lettere, decimali detti anche con gli zeri («zero virgola
+zero cinque»), «2 virgola 5», migliaia col punto all'italiana («1.000»; mai «0.125» né «2.5»), «un
+chilo e mezzo», «2 ore e mezza», «mezz'ora». Un simbolo breve («m», «g», «s») vale solo subito
+dopo un numero; «secondo me» non è un'unità; l'unità conta solo se viene subito dopo il numero
+scelto. Il confronto:
+
+- numero e unità giusti → giusta; **senza unità** con il numero giusto (la domanda la dice già) →
+  giusta, con «ricordati di dire anche l'unità»;
+- un'unità **equivalente** («10 metri al secondo» per 36 km/h) → giusta con la misura nell'unità
+  chiesta, ma non nelle **conversioni** (lì «te l'ho chiesta in…», non conta come errore);
+- un'unità di **un'altra grandezza** → «qui serve una velocità»; con il numero giusto non conta
+  come errore; massa molare detta in grammi o in «u» → giusta con la forma corretta;
+- un numero con le cifre giuste e la virgola spostata → «controlla la virgola»; il segno →
+  «controlla il segno»; un coefficiente con la virgola → «è un numero intero»;
+- vero o falso (`logica.leggi_vero_falso`): «vero», «è vera», «non è vero» (falso), «non è falsa»
+  (vero); «sì», «no», «forse» o le due risposte insieme non si capiscono e non contano.
+
+**Il tool**: `materia` con i valori ammessi (le cinque), `argomento` con una descrizione («con le
+sue parole: «densità», «analisi logica», «sequenze»»). «logica» detta come argomento è la materia,
+non l'analisi logica (`esercizi.solo_materia`); «analisi logica» resta italiano. Con una sessione
+aperta e **l'azione omessa** (il modello la tralasciava accanto a materia, argomento e risposta, e
+il valore predefinito «inizia» ricominciava da un esercizio nuovo a ogni risposta) vale
+«rispondi» se c'è la risposta, «ripeti» se non cambia argomento, «inizia» se cambia materia o
+argomento (regola `esercizi_azione_dedotta`; correzione della forma di una chiamata, principio 10).
+Scheda: campo «misura» (segnaposto «per esempio 2,5 m/s o 18 g/mol»), vero o falso come pulsanti,
+coefficienti e sequenze nel campo dei numeri. «Secondo me è sbagliato» rifà il ricalcolo della
+materia; la sessione chiede «quanto ti viene, con l'unità di misura?».
+
+**Misure** (portatile, gemma4 e4b-it-qat su Ollama, 12/10): scelta della materia da 12 frasi
+d'inizio (`prova_esercizi_ollama.py --scelta`) **12/12** e 11/12 in due giri dopo la descrizione
+di `argomento` (prima 9/12 e 8/12: la materia sempre giusta, l'argomento a volte omesso o
+«problemi» al posto delle forze; con l'argomento omesso Calliope chiede «su che cosa?», nessun
+errore); sessioni di 10 esercizi con 18 frasi del ragazzo per materia, due giri: logica **36/36**,
+fisica **35/36** (una risposta con «km allora», unità sintetica improbabile, passata dal modello
+come «km»: «il numero è giusto, ma l'unità no», non contata), chimica **36/36** dopo
+`esercizi_azione_dedotta` (prima 13/18); prima frase mediana 0,78 s (logica), 0,82 s (fisica), 0,89
+s (chimica), p90 sotto 1,15 s. Matematica 18/18 e italiano 17/18 nello stesso giro (il solito «Non
+è corretto…» del 4B senza il tool). Prova a secco `prova_materie` (~9 s): 8 100 esercizi delle tre
+materie senza un ricalcolo che non torni né una risposta giusta rifiutata, in tutte le forme.
+
+**Profilo ridotto da 8 GB** (decisione [0028](../decisioni/0028-decisioni-roadmap-12-10.md)): c'è
+uguale. Generatori, ricalcolo, lettura delle risposte e unità sono codice della libreria standard
+(microsecondi, niente GPU, nessun modello in più: a differenza dell'italiano non serve il secondo
+parere); l'unico modello è quello della voce che sceglie il tool e passa la frase, ed è proprio il
+4B del profilo piccolo quello misurato qui sopra. La rete `spinta_esercizi` resta accesa nel
+profilo ridotto.
+
+**Resta**: prova d'uso con un ragazzo (le frasi vere di Whisper per le unità); la misura sulla DGX
+col 26B; argomenti in più (pressione, energia cinetica, stechiometria con il reagente limitante,
+probabilità) con lo stesso schema.
 
 ## Pericolo poco chiaro: il giro a due cancelli (09/10, ramo `minori-due-cancelli`)
 
