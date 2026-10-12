@@ -1710,8 +1710,12 @@ def _sviluppo_prova(ctx: ToolContext, dati: str = "", argomenti=None, **_altro) 
                      argomenti=passati, tipo=tipo)
     note_rule(ctx, "sviluppo_collauda")
     _schermo(ctx, sv)
-    cosa = f"con «{detti}»" if detti else "senza dati"
-    n = sv.versione if sv.tipo == "estensione" else None
+    # Il caso detto con i valori passati davvero (12/10, prova col modello: dati = «prova con
+    # Bergamo» diventava «La prova con «prova con Bergamo»»), come sonde.detto
+    valori = [str(v) for v in (passati or {}).values() if str(v).strip()]
+    caso = ", ".join(valori)[:80] if valori else str(detti or "").strip()
+    cosa = f"con «{caso}»" if caso else "senza dati"
+    n = None
     if sv.tipo == "estensione":
         n = est.archivio.candidata(sv.estensione) or sv.versione
     if tipo == "errore":

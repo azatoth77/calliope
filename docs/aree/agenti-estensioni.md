@@ -2374,5 +2374,5 @@ di conferma: vuoi attivarla?» (B4).
 
 Prove: `prova_voce_onesta.py` (nuova, livello 1) e le prove dello sviluppo aggiornate alle frasi
 nuove (`prova_sviluppo`, `prova_sviluppo_v2`, `prova_revisione_onesta`, `prova_giro_halloween`).
-Da guardare sulla DGX: la coda della fase nelle risposte (deve sparire, salvo la riga di
+Con il modello locale (`prova_sviluppo_ollama.py 1`, gemma4 e4b, 12/10): collaudi detti dal codice («La prova con «Atlantide» è girata senza trovare niente: la versione 1 risponde «Non ho trovato la città Atlantide»…»), fuori tema con la sola riga di Calliope e nessuna coda del modello, iter fino all'attivazione con la sfida; un primo giro si era fermato a «Attivala.» (risposta del modello sulla proposta aperta, non riprodotta al secondo). Il caso detto è quello degli argomenti passati (prima «La prova con «prova con Bergamo»»). Da guardare sulla DGX: la coda della fase nelle risposte (deve sparire, salvo la riga di
 Calliope), e l'attrito della modalità sviluppo in `calliope stato --turni`.
