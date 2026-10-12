@@ -37,6 +37,13 @@ sito prendo i dati?»).
 Una sola analisi per richiesta: dopo le domande, la risposta (il modello della voce richiama il
 tool) si analizza di nuovo senza l'esito vaga; dopo «c'è già» o «impossibile qui», il «sì,
 comunque» procede come oggi (`recente`).
+
+Dal 12/10 (M4, M5): anche un gioco ha l'analisi, con la sua lista di controllo (giocatori,
+regole, come si vince, voce); prima la specifica di un gioco la scriveva la voce, senza domande.
+Dopo le risposte un punto a cui la persona non ha risposto (o «fai tu», o una domanda che non ha
+sentito) non diventa più «dal contesto» d'ufficio: resta «manca», e l'analisi dice la scelta fatta
+al suo posto (`scelte`), che la proposta dice a voce. Prima i dati mancanti si inventavano in
+silenzio, mentre il prompt diceva «MAI inventarli».
 """
 
 from __future__ import annotations
@@ -51,6 +58,8 @@ ESITI = ("chiara", "raffinabile", "vaga", "gia_fatto", "impossibile", "estension
 PUNTI = {
     "estensione": ("input", "output", "fonte", "non_trovato", "permessi"),
     "codice": ("input", "output", "dati_persona", "linguaggio"),
+    # 12/10 (M4): il gioco, che prima non aveva l'analisi
+    "gioco": ("giocatori", "regole", "come_si_vince", "voce"),
 }
 PUNTI_DETTI = {
     "input": "cosa entra (i dati che dà chi la usa)",
@@ -62,6 +71,10 @@ PUNTI_DETTI = {
                      "usa e che non si inventano (tariffe, stipendi, rendite); le preferenze "
                      "di forma non sono dati della persona"),
     "linguaggio": "il linguaggio, se conta (altrimenti Python)",
+    "giocatori": "quanti giocano e come (a turno sullo stesso schermo, contro Calliope)",
+    "regole": "cosa si fa a ogni mossa e cosa succede (cosa c'è dietro, cosa fa punti)",
+    "come_si_vince": "quando finisce e chi vince",
+    "voce": "se si gioca anche a voce, con dei comandi detti, o solo toccando",
 }
 # Tool che non sono «funzioni» da proporre al posto di un lavoro: i lavori stessi, le
 # installazioni, la gestione delle persone e di Calliope
@@ -94,10 +107,12 @@ class Esito:
     secondi: float = 0.0
     errore: str = ""
     stati: dict = field(default_factory=dict)   # punto → detto | dal_contesto | …
+    # Le scelte fatte al posto della persona dove non ha risposto (12/10, M5): dette a voce
+    scelte: list = field(default_factory=list)
 
     def per_registro(self) -> dict:
         d = {"esito": self.esito, "s": round(self.secondi, 2)}
-        for k in ("mancano", "domande", "specifica", "tool", "fonte_ok", "errore"):
+        for k in ("mancano", "domande", "specifica", "tool", "fonte_ok", "errore", "scelte"):
             v = getattr(self, k)
             if v not in (None, "", []):
                 d[k] = v
@@ -134,6 +149,9 @@ def funzioni(strumenti) -> list[tuple[str, str]]:
 
 def capacita(cfg, tipo: str, linguaggi=("python",)) -> str:
     """Cosa si può fare qui, dal codice (contratto delle estensioni, linguaggi della sandbox)."""
+    if tipo == "gioco":
+        from ..requisiti import CAPACITA_GIOCO
+        return CAPACITA_GIOCO
     if tipo == "estensione":
         from ..estensioni import contratto as c
         righe = ["Un'estensione è un piccolo programma Python che resta e si usa a voce; gira "
@@ -185,7 +203,7 @@ Lavoro: {tipo_detto}
    Sono manca: un valore fisso della persona, della sua casa o azienda che il lavoro usa (la tariffa della sua azienda, lo stipendio di Luca, la rendita della casa: MAI inventarli né usare valori tipici); quale cosa precisa tra tante (quale file suo, quale linea di quale azienda, quale negozio, quale testata); lo scopo di una richiesta molto generica («un programma per la contabilità»); una richiesta che si legge in modi molto diversi («le città di una regione»: tutti i comuni? i capoluoghi? sopra quanti abitanti? cosa dire di ognuna?). Una fonte di internet è scelta_ragionevole se è una fonte pubblica nota che sai nominare e che ha quel dato (una voce o una tabella di Wikipedia, i cambi della BCE, il meteo di Open-Meteo); altrimenti manca.
 3. dal_contesto: i dati presi dalla conversazione recente che servono al lavoro e che la richiesta non dice (es. «120 000 euro, 20 anni, 3,1 %»); vuoto se nessuno.
 4. domande: una domanda breve a voce per ogni punto «manca», la più importante prima (al più 3); vuoto se non manca niente. Per ognuna, senza_risposta: «sbaglia» se senza la risposta l'agente farebbe una cosa diversa da quella voluta o inventerebbe un dato, «sceglie» se un buon programmatore sceglierebbe da solo (quali caratteri in una password, come mostrare un totale, che calcolo d'esempio fare).
-5. specifica: la richiesta completa in una frase sola, naturale, da dire a voce alla persona (cosa riceve, cosa dà, da dove prende i dati), al più 40 parole, con i dati della conversazione; niente etichette come «Input:» (es. «dato il nome di una regione, ti dico i suoi capoluoghi di provincia con gli abitanti, presi da Wikipedia»).
+5. specifica: la richiesta completa {specifica_forma}, naturale, da dire a voce alla persona (cosa riceve, cosa dà, da dove prende i dati), con i dati della conversazione; niente etichette come «Input:» (es. «dato il nome di una regione, ti dico i suoi capoluoghi di provincia con gli abitanti, presi da Wikipedia»).
 
 6. nome: {nome_regola}
 7. fonte_url: per un'estensione che prende dati da internet, l'indirizzo pubblico esatto, solo se lo conosci con certezza; altrimenti vuoto. Fonti note: Wikipedia in italiano https://it.wikipedia.org/wiki/<Titolo_della_voce>; cambi di riferimento dell'euro della BCE https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml; meteo di Open-Meteo https://api.open-meteo.com/v1/forecast.
@@ -206,6 +224,12 @@ NOTA_TIPO = {
     "codice": ("Un programma si può rieseguire a voce con dei valori: i valori che cambiano "
                "a ogni esecuzione (i chilometri di un viaggio, l'IBAN da controllare, il numero "
                "da convertire) non mancano; un file della persona da leggere invece va indicato."),
+    "gioco": ("Un gioco per la casa: i numeri (quante porte, quanti punti, quanti turni), la "
+              "grafica, i suoni e le regole minori li sceglie l'agente se la persona non li dice "
+              "(scelta_ragionevole); se non dice di giocare a voce, si gioca toccando "
+              "(scelta_ragionevole). Manca solo ciò senza cui il gioco sarebbe un altro: che "
+              "gioco è, per una richiesta generica («un gioco per i bambini»), o una regola "
+              "detta a metà («se esce il mostro…» e poi niente)."),
 }
 # Il lavoro di codice che crea o cambia un'estensione (08/10): non è impossibile, è un'altra
 # richiesta; la parola chiave la legge `interpreta` (esito «estensione»)
@@ -217,6 +241,8 @@ NOTA_IMPOSSIBILE = {
                    "tecnico che la persona non ha detto (la scheda, JavaScript, il manifesto, "
                    "il linguaggio) lo sceglie l'agente e non rende impossibile niente. Un gioco "
                    "sugli schermi NON è impossibile."),
+    "gioco": (" Impossibile è solo ciò che è nell'elenco «Impossibile»; un dettaglio tecnico "
+              "che la persona non ha detto lo sceglie l'agente."),
     "codice": (" ECCEZIONE: se la richiesta è creare, cambiare, correggere o rifare "
                "un'estensione di Calliope (una sua funzione permanente, anche nominata per "
                "titolo), NON è impossibile: scrivi solo la parola ESTENSIONE."),
@@ -224,19 +250,24 @@ NOTA_IMPOSSIBILE = {
 STATI = ("detto", "dal_contesto", "scelta_ragionevole", "manca")
 # Punti che non mancano mai: li sceglie l'agente (il linguaggio, cosa dire se un dato non c'è)
 # o li dice chi usa l'estensione a ogni uso (l'input). Nello schema non hanno «manca»
-SENZA_MANCA = {"estensione": ("input", "non_trovato"), "codice": ("linguaggio",)}
+SENZA_MANCA = {"estensione": ("input", "non_trovato"), "codice": ("linguaggio",),
+               "gioco": ("voce",)}
 
 
 def schema(tipo: str, senza_domande: bool = False) -> dict:
     stringa = {"type": "string"}
 
     def stati(p):
-        no = senza_domande or p in SENZA_MANCA.get(tipo, ())
+        # Dopo le risposte «manca» resta possibile (12/10, M5): un punto senza risposta non
+        # diventa un dato inventato
+        no = p in SENZA_MANCA.get(tipo, ())
         return {"type": "string", "enum": [s for s in STATI if not (no and s == "manca")]}
+    extra = {"scelte": {"type": "array", "items": stringa, "maxItems": 3}} if senza_domande \
+        else {}
     return {"type": "object", "additionalProperties": False,
             "required": ["impossibile", "punti", "dal_contesto", "domande", "specifica", "nome",
-                         "fonte_url", "gia_fatto", "come_chiederlo"],
-            "properties": {
+                         "fonte_url", "gia_fatto", "come_chiederlo"] + list(extra),
+            "properties": {**extra,
                 "impossibile": stringa,
                 "punti": {"type": "object", "additionalProperties": False,
                           "required": list(PUNTI[tipo]),
@@ -268,16 +299,22 @@ def _conversazione(storia, max_voci: int = 8, max_car: int = 400) -> str:
 def messaggi(cfg, tipo: str, compito: str, storia=(), detto: str = "", strumenti=None,
              linguaggi=("python",), nota: str = "", senza_domande: bool = False) -> list[dict]:
     fz = funzioni(strumenti)
+    detto_tipo = {"estensione": "un'estensione nuova di Calliope (una funzione permanente, "
+                                "usata a voce). ",
+                  "gioco": "un gioco sugli schermi di Calliope (si gioca toccando, e a voce se "
+                           "lo chiede). "}.get(tipo, "un programma da scrivere ed eseguire una "
+                                                     "volta. ")
     sistema = SISTEMA.format(
-        tipo_detto=("un'estensione nuova di Calliope (una funzione permanente, usata a voce). "
-                    if tipo == "estensione" else "un programma da scrivere ed eseguire una "
-                    "volta. ") + "Lista di controllo: " + "; ".join(
-                        f"{p} = {PUNTI_DETTI[p]}" for p in PUNTI[tipo]) + ".",
+        tipo_detto=detto_tipo + "Lista di controllo: " + "; ".join(
+            f"{p} = {PUNTI_DETTI[p]}" for p in PUNTI[tipo]) + ".",
         nota_tipo=NOTA_TIPO.get(tipo, ""), nota_impossibile=NOTA_IMPOSSIBILE.get(tipo, ""),
         capacita=capacita(cfg, tipo, linguaggi),
         funzioni="\n".join(f"- {n}: {d}" if d else f"- {n}" for n, d in fz) or "(nessuna)",
+        # Un gioco ha più regole di una funzione: la specifica le dice tutte (12/10)
+        specifica_forma=("in poche frasi, con tutte le regole dette, al più 90 parole"
+                         if tipo == "gioco" else "in una frase sola, al più 40 parole"),
         nome_regola=("un nome breve in italiano, 2-4 parole minuscole (es. «città della "
-                     "regione»)." if tipo == "estensione" else "vuoto."))
+                     "regione»)." if tipo in ("estensione", "gioco") else "vuoto."))
     utente = (f"Conversazione recente:\n{_conversazione(storia)}\n\n"
               f"Richiesta di lavoro: «{str(compito).strip()}»")
     d = str(detto or "").strip()
@@ -286,8 +323,13 @@ def messaggi(cfg, tipo: str, compito: str, storia=(), detto: str = "", strumenti
     if nota:
         utente += "\n" + nota
     if senza_domande:
-        utente += ("\nLe domande le hai già fatte e la persona ha risposto: niente più «manca», "
-                   "usa le risposte (dal_contesto) e scrivi la specifica completa.")
+        utente += ("\nLe domande le hai già fatte e la persona ha risposto: usa le risposte "
+                   "(dal_contesto) e scrivi la specifica completa. Un punto a cui la persona non "
+                   "ha risposto (anche «fai tu», «boh», o una domanda che non ha sentito) resta "
+                   "manca: MAI un valore inventato in silenzio. Per ognuno, in scelte, la scelta "
+                   "che fai al suo posto in una frase breve da dire a voce (es. «la tariffa non "
+                   "me l'hai detta: metto 0,20 euro al chilowattora, da cambiare»), e la stessa "
+                   "scelta nella specifica.")
     return [{"role": "system", "content": sistema}, {"role": "user", "content": utente}]
 
 
@@ -321,8 +363,8 @@ def interpreta(testo: str, tipo: str, senza_domande: bool = False,
         stati[p] = s if s in STATI else "scelta_ragionevole"
         if stati[p] == "manca" and p in SENZA_MANCA.get(tipo, ()):
             stati[p] = "scelta_ragionevole"
-    if senza_domande:
-        stati = {p: ("dal_contesto" if s == "manca" else s) for p, s in stati.items()}
+    # Dopo le risposte (12/10, M5) un punto che manca ancora resta «manca»: la specifica dice
+    # la scelta fatta al suo posto (`scelte`), che la proposta dice a voce; niente altre domande
     # Solo le domande senza le quali l'agente sbaglierebbe (06/10: «vuoi anche i simboli nella
     # password?» non si chiede); una domanda scritta come testo semplice vale
     grezze = []
@@ -334,7 +376,13 @@ def interpreta(testo: str, tipo: str, senza_domande: bool = False,
         grezze.append(x)
     domande = [_pulisci(x, 200) for x in grezze if _pulisci(x, 200)][:3]
     domande = [q if q.endswith("?") else q.rstrip(".") + "?" for q in domande]
-    e = Esito(specifica=_pulisci(d.get("specifica"), 400), domande=domande,
+    scelte = []
+    if senza_domande:
+        domande = []
+        scelte = [_pulisci(x, 200).rstrip(".") for x in (d.get("scelte") or [])
+                  if isinstance(x, str) and _pulisci(x, 200)][:3]
+    e = Esito(specifica=_pulisci(d.get("specifica"), 900 if tipo == "gioco" else 400),
+              domande=domande, scelte=scelte,
               mancano=[p for p, s in stati.items() if s == "manca"],
               nome=_pulisci(d.get("nome"), 60).lower().strip(" .«»\"'"),
               fonte_url=str(d.get("fonte_url") or "").strip()[:300],
@@ -349,6 +397,10 @@ def interpreta(testo: str, tipo: str, senza_domande: bool = False,
         e.esito = "gia_fatto"
     elif e.mancano and e.domande:
         e.esito = "vaga"
+    elif senza_domande and e.specifica and (e.scelte or e.mancano):
+        # Dopo le risposte, con delle scelte fatte al posto della persona: la specifica le
+        # contiene, e la proposta le dice (12/10, M5)
+        e.esito = "raffinabile"
     elif conversazione and e.specifica and (any(
             s == "dal_contesto" for s in stati.values()) or any(
             str(x).strip() for x in (d.get("dal_contesto") or []))):

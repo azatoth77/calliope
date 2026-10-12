@@ -728,8 +728,9 @@ def _rifai(ctx, svs, sv, prof, problema: str = "") -> dict:
             ultimo = lv
             break
     if ultimo is None:
-        out = _nuovo_lavoro(ctx, svs, sv, prof, sv.specifica or sv.richiesta, cambia=problema,
-                            avvia=True)
+        out = _nuovo_lavoro(ctx, svs, sv, prof, sv.specifica or sv.richiesta,
+                            (f"Da correggere, detto dalla persona: «{problema[:400]}»."
+                             if problema else ""), avvia=True)
         _schermo(ctx, sv)
         return out
     lav = svc.nuovo(ultimo.tipo, ultimo.compito, prof.id, prof.name, "amministra",
@@ -739,7 +740,12 @@ def _rifai(ctx, svs, sv, prof, problema: str = "") -> dict:
     for k in ("titolo", "estensione", "gioco", "specifica", "correzione"):
         if getattr(ultimo, k, None) is not None:
             setattr(lav, k, getattr(ultimo, k))
+    if getattr(lav, "tipo", "") == "estensione" and svs.e_gioco(sv):
+        lav.gioco = True                    # A7: il tipo dallo sviluppo, non dal flag
     lav.file_iniziali = dict(getattr(ultimo, "file_iniziali", None) or {})
+    if getattr(lav, "tipo", "") == "codice" and not getattr(lav, "input", None):
+        # Il file della persona resta (12/10, A6)
+        _file_della_persona(ctx, svs, sv, lav)
     if problema:
         # I file del lavoro fermato (agenti/servizio._parziale li copia nella sua cartella);
         # il runtime di Calliope resta quello di partenza
@@ -885,56 +891,105 @@ def _collaudi_per_agente(svs, sv) -> str:
               "con ogni caso che non andava.")
 
 
-def _nuovo_lavoro(ctx, svs, sv, prof, compito: str, cambia: str = "",
-                  avvia: bool = False) -> dict:
-    """Il lavoro dello sviluppo con la specifica nuova, proposto con «Ho capito così: …
-    Procedo?» (la persona conferma la specifica: è la fine dell'analisi). `avvia`: la persona
-    l'ha già sentita e accettata («avanti»), il lavoro parte."""
+def _nuovo_lavoro(ctx, svs, sv, prof, compito: str, nota: str = "", avvia: bool = False,
+                  cambiamento: list | None = None, da_correggere: str = "") -> dict:
+    """Il lavoro dello sviluppo con la specifica di adesso, proposto con «Ho capito così: …
+    Va bene così?» (la persona conferma la specifica: è la fine dell'analisi). `avvia`: la
+    persona l'ha già sentita e accettata («avanti», «completa»), il lavoro parte. `nota`: per
+    l'agente, nei vincoli (quello che manca, per «completa»). `cambiamento` (12/10, la specifica
+    viva): i cambi dei requisiti appena fatti; la proposta dice solo quelli."""
     from . import agenti as ta
     svc = getattr(ctx, "lavori", None)
     turno = int(getattr(ctx, "turno", 0) or 0)
+    lav = _lavoro_dello_sviluppo(ctx, svs, sv, prof, compito,
+                                 _unisci(nota, _collaudi_per_agente(svs, sv)))
+    if isinstance(lav, dict):
+        return lav
+    _con_esempi(svs, sv, lav)
+    # La tappa decisa con la persona, ciò che qui non si può fare e ciò che c'era già (11/10)
+    svs._metti_vincoli(sv, lav)
+    if cambiamento is not None:
+        lav.cambiamento = list(cambiamento)
+    if da_correggere:
+        lav.da_correggere = da_correggere
+    if avvia:
+        return ta._avvia(ctx, svc, lav)
+    return ta._proponi(ctx, svc, lav, turno)
+
+
+def _unisci(*parti) -> str:
+    return " ".join(str(p).strip() for p in parti if p and str(p).strip())
+
+
+def _file_della_persona(ctx, svs, sv, lav):
+    """Il file della persona di un programma (12/10, A6: «rinomina le foto di questo file», poi
+    «ordina per data», e il lavoro nuovo non aveva più il file): la copia del lavoro di prima
+    (in memoria o su disco), oppure, se la proposta di prima non è ancora partita, lo stesso
+    file da prendere."""
+    inp = svs.file_persona(sv)
+    if inp is not None:
+        lav.input = inp
+        pronto = getattr(lav, "input_pronto", None)
+        if pronto is not None:
+            pronto.set()
+        return
+    svc = getattr(ctx, "lavori", None)
+    prof = _prof(ctx)
+    off = (svc.offerta(getattr(prof, "id", None), int(getattr(ctx, "turno", 0) or 0))
+           if svc is not None and hasattr(svc, "offerta") else None)
+    prima = off["lavoro"] if off is not None and sv.proposto and \
+        getattr(off["lavoro"], "id", None) == sv.proposto else None
+    if prima is not None and getattr(prima, "file_utente", None) is not None:
+        lav.file_utente = prima.file_utente
+        lav.file_candidati = list(getattr(prima, "file_candidati", None) or [])
+
+
+def _lavoro_dello_sviluppo(ctx, svs, sv, prof, compito: str, vincoli: str = ""):
+    """Il costruttore unico dei lavori di uno sviluppo (12/10, A6; prima tre, e ognuno copiava
+    cose diverse): modifica, correzione, «completa». Per un'estensione la versione provata, se
+    c'è, con lo stesso nome; un gioco ha il contratto e lo scheletro del gioco anche se il
+    modello non l'ha detto (A7: il tipo viene dallo sviluppo e dal manifesto, `e_gioco`). Per
+    un programma la sua cartella, se c'è («riparti dal programma di prima» solo allora), e il
+    file della persona. In ogni lavoro: i vincoli della persona e la fonte del primo lavoro, lo
+    storico delle modifiche (a parte dalla specifica)."""
+    svc = getattr(ctx, "lavori", None)
+    if svc is None:
+        return _no(ctx, "Qui non ci sono agenti.")
     storia = list(getattr(ctx, "storia", None) or [])
+    ing = sv.ingressi if isinstance(sv.ingressi, dict) else {}
+    storico = svs.storico_per_agente(sv)
     if sv.tipo == "estensione":
         est = getattr(ctx, "estensioni", None)
         if est is None:
             return _no(ctx, "Qui le estensioni non ci sono.")
-        if not sv.estensione:
-            # Nessuna versione ancora: la richiesta rifatta passa dall'analisi come la prima
-            from .estensioni import _estensione_crea
-            return _estensione_crea(ctx, compito=compito, nome=sv.titolo, gioco=sv.gioco,
-                                    accanto=True)
         from ..estensioni.servizio import runtime_testo
-        from .estensioni import funzioni_di_calliope
-        from .estensioni import titolo_vincolo
-        vincoli = (f"È lo sviluppo dell'estensione «{sv.estensione}»: i suoi file (la versione che "
-                   "la persona ha provato) sono già nella cartella; tieni lo stesso nome nel "
-                   "manifesto. " + titolo_vincolo(est, sv.estensione)
-                   + (f" Cambiamento chiesto dalla persona: «{cambia}»." if cambia
-                      else "") + _collaudi_per_agente(svs, sv) + " "
-                   + funzioni_di_calliope())
-        lav = svc.nuovo("estensione", compito, prof.id, prof.name, "amministra", "", "",
-                        vincoli, storia)
-        lav.titolo = sv.titolo
-        lav.estensione = sv.estensione
-        lav.gioco = bool(sv.gioco)
-        lav.file_iniziali = {"calliope_estensione.py": runtime_testo(),
-                             **est.file_per_modifica(sv.estensione, candidata=True)}
+        from .estensioni import VINCOLO_GIOCO, funzioni_di_calliope, titolo_vincolo
+        gioco = svs.e_gioco(sv)
+        file = {"calliope_estensione.py": runtime_testo()}
+        testa = ""
+        if sv.estensione:
+            testa = (f"È lo sviluppo dell'estensione «{sv.estensione}»: i suoi file (la versione "
+                     "che la persona ha provato) sono già nella cartella; tieni lo stesso nome "
+                     "nel manifesto. " + titolo_vincolo(est, sv.estensione))
+            file.update(est.file_per_modifica(sv.estensione, candidata=True))
+        v = _unisci(testa, ing.get("vincoli"), storico, vincoli, funzioni_di_calliope(),
+                    VINCOLO_GIOCO if gioco else "")
+        lav = svc.nuovo("estensione", compito, prof.id, prof.name, "amministra", "", "", v,
+                        storia)
+        lav.estensione = sv.estensione or None
+        lav.gioco = gioco
+        lav.file_iniziali = file
     else:
         from ..sviluppo import file_di_codice
-        vincoli = ("Riparti dal programma di prima: i suoi file sono già nella cartella."
-                   + (f" Cambiamento chiesto dalla persona: «{cambia}»." if cambia else "")
-                   + _collaudi_per_agente(svs, sv))
-        lav = svc.nuovo("codice", compito, prof.id, prof.name, "amministra", "", "", vincoli,
-                        storia)
-        lav.titolo = sv.titolo
-        lav.file_iniziali = file_di_codice(sv.cartella) if sv.cartella else {}
+        file = file_di_codice(sv.cartella) if sv.cartella else {}
+        v = _unisci("Riparti dal programma di prima: i suoi file sono già nella cartella."
+                    if file else "", ing.get("vincoli"), storico, vincoli)
+        lav = svc.nuovo("codice", compito, prof.id, prof.name, "amministra", "", "", v, storia)
+        lav.file_iniziali = file
+        _file_della_persona(ctx, svs, sv, lav)
+    lav.titolo = sv.titolo
     lav.specifica = compito
-    _con_esempi(svs, sv, lav)
-    # La tappa decisa con la persona e ciò che qui non si può fare (11/10)
-    svs._metti_vincoli(sv, lav)
-    if avvia:
-        return ta._avvia(ctx, svc, lav)
-    return ta._proponi(ctx, svc, lav, turno)
+    return lav
 
 
 def _con_esempi(svs, sv, lav) -> int:
@@ -958,8 +1013,10 @@ def _con_esempi(svs, sv, lav) -> int:
 
 
 def _analisi(ctx, svs, sv, prof, cambia: str) -> dict:
-    """Si torna all'analisi da qualunque fase: il lavoro in corso si ferma, la specifica con la
-    modifica si propone (la persona la conferma con il «sì»)."""
+    """Si torna all'analisi da qualunque fase, con la modifica detta. Dal 12/10 (la specifica
+    viva) la modifica è un'operazione sui requisiti (`_modifica`): il lavoro si ferma e la
+    proposta nuova dice solo cosa è cambiato; se la frase non dice cosa cambiare, o dice una
+    cosa che c'è già, niente si ferma."""
     svc = getattr(ctx, "lavori", None)
     if svc is None:
         return _no(ctx, "Qui non ci sono agenti.")
@@ -975,16 +1032,11 @@ def _analisi(ctx, svs, sv, prof, cambia: str) -> dict:
             note_rule(ctx, "sviluppo_analisi_altro")
             return _domanda_cambio(ctx, sv, {"tipo": sv.tipo, "compito": cambia})
     note_rule(ctx, "sviluppo_analisi")
-    fermato = ""
-    if svs.lavoro_attivo(sv) or (svs._lavoro(sv.lavoro) is not None
-                                 and svs._lavoro(sv.lavoro).stato == "in_attesa"):
-        res = svc.annulla(prof.id, tutti_di_tutti=True, quale=sv.lavoro)
-        if res.get("ok"):
-            fermato = "Ho fermato il lavoro dell'agente. "
-    svs.passa(sv, "analisi", cambia or "torna all'analisi")
-    sv.lavoro, sv.nota = None, ""
-    svs.tocca(sv)
     if not cambia:
+        fermato = _ferma_per_analisi(ctx, svs, sv, prof)
+        svs.passa(sv, "analisi", "torna all'analisi")
+        sv.lavoro, sv.nota = None, ""
+        svs.tocca(sv)
         frase = fermato + "D'accordo, torniamo all'analisi: cosa vuoi cambiare?"
         _schermo(ctx, sv)
         return _final(frase, fatto="sviluppo all'analisi: manca la modifica",
@@ -992,9 +1044,38 @@ def _analisi(ctx, svs, sv, prof, cambia: str) -> dict:
                                   "tool": "sviluppo_passo",
                                   "argomenti": "azione = analisi, cambia = la modifica come "
                                                "detta dalla persona"})
+    m = _modifica(ctx, svs, sv, cambia, "analisi")
+    if m["esito"] == "risposta":
+        return m["out"]
+    if m["esito"] == "cambi":
+        return _proponi_modifica(ctx, svs, sv, prof, cambia, m["cambi"])
+    if m["esito"] in ("difetto", "gia"):
+        return _gia_nella_richiesta(ctx, svs, sv, cambia, m["esito"])
+    # Senza i requisiti (sviluppo_requisiti: false, o niente agente): come prima del 12/10
+    fermato = _ferma_per_analisi(ctx, svs, sv, prof)
+    svs.passa(sv, "analisi", cambia)
+    sv.lavoro, sv.nota = None, ""
+    svs.tocca(sv)
     base = (sv.specifica or sv.richiesta or "").strip().rstrip(".")
-    compito = _con_modifica(base, cambia)
-    out = _nuovo_lavoro(ctx, svs, sv, prof, compito, cambia)
+    out = _nuovo_lavoro(ctx, svs, sv, prof, _con_modifica(base, cambia),
+                        f"Cambiamento chiesto dalla persona: «{cambia}».")
+    return _con_fermato(ctx, sv, out, fermato)
+
+
+def _ferma_per_analisi(ctx, svs, sv, prof) -> str:
+    """Il lavoro in corso (o fermo a una tappa) si ferma per tornare all'analisi: «Ho fermato
+    il lavoro dell'agente. » o ""."""
+    svc = getattr(ctx, "lavori", None)
+    lav = svs._lavoro(sv.lavoro)
+    if svc is not None and (svs.lavoro_attivo(sv) or (lav is not None
+                                                      and lav.stato == "in_attesa")):
+        res = svc.annulla(prof.id, tutti_di_tutti=True, quale=sv.lavoro)
+        if res.get("ok"):
+            return "Ho fermato il lavoro dell'agente. "
+    return ""
+
+
+def _con_fermato(ctx, sv, out, fermato: str):
     if isinstance(out, dict) and fermato:
         for k in ("conferma", "risposta_finale"):
             if isinstance(out.get(k), str):
@@ -1003,11 +1084,140 @@ def _analisi(ctx, svs, sv, prof, cambia: str) -> dict:
     return out
 
 
+# «Cosa non va?» chiesto da sviluppo_correggi (12/10): persona → turno. La risposta richiama
+# sviluppo_correggi con l'azione in sospeso, e allora non si richiede
+_COSA_CHIESTA: dict = {}
+
+
+def _modifica(ctx, svs, sv, testo: str, da: str, gia_chiesto: bool = False) -> dict:
+    """La frase della persona diventa un'operazione sui requisiti (12/10, la specifica viva,
+    A3): la stessa per «cambia» (sviluppo_passo analisi) e per «correggi»
+    (sviluppo_correggi). Il modello dell'agente dice se chiede un comportamento diverso
+    (cambia: i requisiti si aggiornano), un difetto del codice o niente di preciso (vago: si
+    chiede). Restituisce {esito}: «cambi» (con i cambi applicati), «difetto», «gia» (c'era
+    già), «risposta» (con `out`, da dare: la domanda, o il guasto per «cambia»), «senza» (i
+    requisiti non si usano: come prima)."""
+    if not getattr(ctx.cfg, "sviluppo_requisiti", True):
+        return {"esito": "senza"}
+    r = svs.aggiorna_requisiti(sv, testo, str(getattr(ctx, "user_text", "") or ""),
+                               attesa=getattr(ctx, "attesa", None))
+    esito = r.get("esito")
+    if esito in ("senza agente", "nessun requisito", "senza specifica"):
+        # Niente requisiti da cui partire (l'agente non c'è, o non ne ha estratti): come prima
+        return {"esito": "senza"}
+    tool = "sviluppo_correggi" if da == "correggi" else "sviluppo_passo"
+    if esito != "modello":
+        if da == "correggi":
+            return {"esito": "difetto"}       # la correzione parte comunque, come prima
+        note_rule(ctx, "sviluppo_modifica_guasto")
+        domanda = "Riprovo?"
+        frase = ("Adesso non riesco a mettere la modifica nella richiesta"
+                 + (": ci mette troppo" if esito == "tempo" else "") + ". " + domanda)
+        return {"esito": "risposta", "out": _final(
+            frase, ok=False, fatto=f"{NIENTE}: la richiesta NON è cambiata",
+            guasto="un guasto di adesso, non una cosa che non sai fare",
+            in_sospeso={"domanda": domanda, "cosa": "rifare la modifica", "tool": tool,
+                        "argomenti": {"azione": "analisi", "cambia": testo}})}
+    if r.get("cambi"):
+        note_rule(ctx, "sviluppo_modifica_requisiti")
+        return {"esito": "cambi", "cambi": r["cambi"]}
+    if r.get("tipo") == "vago":
+        if da == "correggi" and not _va_chiesto(ctx, svs, sv, gia_chiesto):
+            return {"esito": "difetto"}
+        note_rule(ctx, "sviluppo_modifica_vaga")
+        domanda = r.get("domanda") or ("Cosa non va, di preciso?" if da == "correggi"
+                                       else "Cosa vuoi cambiare, di preciso?")
+        return {"esito": "risposta", "out": _chiedi_cosa(ctx, sv, domanda, da)}
+    return {"esito": "difetto" if r.get("tipo") == "difetto" else "gia"}
+
+
+def _cosa_appena_chiesta(ctx, consuma: bool = False) -> bool:
+    """«Cosa non va?» è stato chiesto a chi parla da poco (la risposta arriva adesso);
+    `consuma`: la domanda vale una volta."""
+    from ..sviluppo import chi
+    chiave = str(chi(ctx))
+    turno = int(getattr(ctx, "turno", 0) or 0)
+    si = 0 <= turno - int(_COSA_CHIESTA.get(chiave, -99)) <= 2
+    if consuma:
+        _COSA_CHIESTA.pop(chiave, None)
+    return si
+
+
+def _va_chiesto(ctx, svs, sv, gia_chiesto: bool = False) -> bool:
+    """«Correggilo» senza dire cosa: si chiede solo se l'agente non ha niente da cui partire
+    (nessun collaudo fallito o giudicato sbagliato, nessuna diagnosi da correggere) e non si è
+    appena chiesto."""
+    if gia_chiesto or _cosa_appena_chiesta(ctx) or sv.fase not in ("collaudo", "revisione",
+                                                                    "attivazione"):
+        # Un lavoro fermo prima della consegna ha il motivo dell'arresto da cui ripartire
+        return False
+    if any((not c.get("ok") and not c.get("anteprima")) or c.get("giudizio")
+           for c in sv.collaudi[-5:]):
+        return False
+    return not any(q.get("correzione") for q in sv.chiesti[-3:])
+
+
+def _chiedi_cosa(ctx, sv, domanda: str, da: str) -> dict:
+    from ..sviluppo import chi
+    if da == "correggi":
+        # 12/10, caso vero (11/10 19:25): «non ci siamo, ci sono cose che non funzionano,
+        # correggile» → all'agente il problema «il gioco non funziona correttamente»
+        _COSA_CHIESTA[str(chi(ctx))] = int(getattr(ctx, "turno", 0) or 0)
+        note_rule(ctx, "sviluppo_correggi_chiede")
+        _schermo(ctx, sv)
+        return _final(domanda, ok=False, fatto=f"{NIENTE}: chiesto cosa non va, l'agente NON è "
+                                               "ripartito",
+                      in_sospeso={"domanda": domanda, "cosa": "cosa correggere",
+                                  "tool": "sviluppo_correggi",
+                                  "argomenti": "problema = cosa non va, come detto dalla "
+                                               "persona"})
+    return _final(domanda, ok=False, fatto=f"{NIENTE}: chiesto cosa cambiare",
+                  in_sospeso={"domanda": domanda, "cosa": "la modifica allo sviluppo",
+                              "tool": "sviluppo_passo",
+                              "argomenti": "azione = analisi, cambia = la modifica come detta "
+                                           "dalla persona"})
+
+
+def _proponi_modifica(ctx, svs, sv, prof, detto: str, cambi: list) -> dict:
+    """I requisiti sono cambiati (12/10): il lavoro in corso si ferma, si torna all'analisi e
+    il lavoro nuovo (dai file della versione provata, se c'è) si propone dicendo solo cosa è
+    cambiato («Ho cambiato due cose: … Va bene così, o la cambiamo?»)."""
+    fermato = _ferma_per_analisi(ctx, svs, sv, prof)
+    svs.passa(sv, "analisi", "modifica: " + str(detto or "")[:120])
+    sv.lavoro, sv.nota = None, ""
+    svs.tocca(sv)
+    out = _nuovo_lavoro(ctx, svs, sv, prof, sv.specifica or sv.richiesta, cambiamento=cambi)
+    return _con_fermato(ctx, sv, out, fermato)
+
+
+def _gia_nella_richiesta(ctx, svs, sv, detto: str, esito: str) -> dict:
+    """La modifica detta c'era già nei requisiti: niente si ferma. Con del codice consegnato e
+    un difetto («non lo fa»), la domanda «Lo faccio correggere?» (il «sì» va a
+    sviluppo_correggi); con una proposta aperta, la sua domanda di nuovo."""
+    note_rule(ctx, "sviluppo_modifica_gia")
+    if esito == "difetto" and (sv.versione or sv.cartella or sv.estensione):
+        domanda = "Lo faccio correggere?"
+        return _final(f"Questo la richiesta lo dice già: se non lo fa, è il codice da correggere. "
+                      f"{domanda}", ok=False, fatto=f"{NIENTE}: la richiesta non cambia",
+                      in_sospeso={"domanda": domanda, "tool": "sviluppo_correggi",
+                                  "cosa": f"far correggere «{sv.titolo}»",
+                                  "argomenti": {"problema": detto}})
+    if sv.proposto and sv.fase == "analisi":
+        domanda = svs.domanda_proposta(sv)
+        return _final(f"Questo nella richiesta c'è già: non cambio niente. {domanda}", ok=False,
+                      fatto=f"{NIENTE}: la richiesta non cambia",
+                      in_sospeso={"domanda": domanda, "tool": "sviluppo_apri",
+                                  "cosa": f"affidare all'agente «{sv.titolo}»",
+                                  "argomenti": {"proposta": sv.proposto}})
+    return _final("Questo nella richiesta c'è già: non cambio niente.", ok=False,
+                  fatto=f"{NIENTE}: la richiesta non cambia")
+
+
 def _con_modifica(base: str, cambia: str) -> str:
-    """La specifica con la modifica detta (08/10, DGX delle 17:01: «Ho capito così: aggiungi
-    la possibilità di scegliere quanti giorni… Con questa modifica: aggiungere la possibilità
-    di scegliere quanti giorni…»): se la modifica è la specifica di adesso detta di nuovo, o
-    ci sta dentro, la specifica resta com'è."""
+    """La specifica con la modifica detta, SOLO senza i requisiti (`sviluppo_requisiti:
+    false`): dal 12/10 la modifica cambia i requisiti e la specifica si rigenera (la coda «Con
+    questa modifica» lasciava le contraddizioni). Se la modifica è la specifica di adesso detta
+    di nuovo, o ci sta dentro, la specifica resta com'è."""
     import difflib
     from ..estensioni.servizio import _norm_testo
     base, cambia = str(base or "").strip(), str(cambia or "").strip().rstrip(".")
@@ -1701,7 +1911,13 @@ def _sviluppo_correggi(ctx: ToolContext, problema: str = "", **_altro) -> dict:
     """La correzione come passo a sé (08/10, versione 2; DGX, 11:15: «fai revisionare il codice
     all'agente» tornava all'analisi e rileggeva la specifica). La specifica resta: l'agente
     riparte dai suoi file, dai collaudi che non vanno e dalla risposta di sviluppo_chiedi; poi
-    di nuovo collaudo. A una tappa è «cambia e continua»: il giro nuovo con la nota."""
+    di nuovo collaudo. A una tappa è «cambia e continua»: il giro nuovo con la nota.
+
+    Dal 12/10 (la specifica viva, A3): se la persona chiede un comportamento diverso («metti 7
+    porte», «i mostri danno punti»), è la stessa operazione sui requisiti di «cambia»: la
+    richiesta si aggiorna, e il lavoro nuovo si propone dicendo cosa è cambiato. «Non funziona,
+    correggi» senza dire cosa, e senza collaudi falliti da cui partire, chiede «Cosa non va?»
+    prima di far ripartire l'agente."""
     from ..sviluppo import chi
     svs = _svs(ctx)
     sv = svs.corrente(chi(ctx)) if svs is not None else None
@@ -1732,6 +1948,23 @@ def _sviluppo_correggi(ctx: ToolContext, problema: str = "", **_altro) -> dict:
                       "proviamo.", ok=False, fatto=NIENTE)
     if sv.fase == "analisi" and not (sv.estensione or sv.cartella):
         return _no(ctx, "Non c'è ancora codice da correggere: prima finiamo l'analisi.")
+    # Un comportamento diverso, un difetto o niente di preciso (12/10, la specifica viva, A3):
+    # lo dice il modello dell'agente, con la stessa operazione sui requisiti di «cambia». Il
+    # «sì» a «Lo faccio correggere?» (un collaudo fallito, una diagnosi) è una correzione e
+    # basta; la risposta a «Cosa non va?» si guarda di nuovo
+    risposta = _cosa_appena_chiesta(ctx, consuma=True)
+    si_alla_domanda = (getattr(ctx, "tool_in_sospeso", None) == "sviluppo_correggi"
+                       and not risposta)
+    if not problema and not si_alla_domanda and not risposta and _va_chiesto(ctx, svs, sv):
+        return _chiedi_cosa(ctx, sv, "Cosa non va? Dimmi cosa hai visto o cosa deve fare di "
+                                     "diverso, così lo dico a chi l'ha scritto.", "correggi")
+    if problema and not si_alla_domanda:
+        m = _modifica(ctx, svs, sv, problema, "correggi", gia_chiesto=risposta)
+        if m["esito"] == "risposta":
+            return m["out"]
+        if m["esito"] == "cambi":
+            note_rule(ctx, "sviluppo_correggi_cambia")
+            return _proponi_modifica(ctx, svs, sv, prof, problema, m["cambi"])
     if sv.fase == "sviluppo" and not (sv.estensione if sv.tipo == "estensione"
                                       else sv.cartella):
         # Uno sviluppo fermo prima della prima consegna (11/10, DGX delle 15:53: il lavoro del
@@ -1761,8 +1994,10 @@ def _sviluppo_correggi(ctx: ToolContext, problema: str = "", **_altro) -> dict:
     # La traccia di rete dei collaudi (08/10): le richieste vere con l'esito, la causa che nel
     # giro della DGX l'agente non vedeva (nella sandbox non ha rete)
     rete = svs.testo_traccia(sv)
-    vincoli = (f"È una CORREZIONE dello sviluppo «{sv.titolo}»: la specifica NON cambia "
-               f"(«{(sv.specifica or sv.richiesta)[:500]}»). I file della versione che la "
+    # Cosa deve fare è la specifica del compito, intera (12/10: prima una copia tagliata a 500
+    # caratteri e «la specifica NON cambia» anche quando la persona chiedeva altro, A3)
+    vincoli = (f"È una CORREZIONE dello sviluppo «{sv.titolo}»: cosa deve fare resta quello del "
+               "compito. I file della versione che la "
                "persona ha provato sono già nella cartella: riparti da quelli, non riscrivere da "
                "zero."
                + (f" Collaudi che non vanno (dati → esito): {casi}." if casi else "")
@@ -1774,10 +2009,11 @@ def _sviluppo_correggi(ctx: ToolContext, problema: str = "", **_altro) -> dict:
                + (f" {rete}" if rete else "")
                + " Trova la causa, correggi il codice, aggiungi un test con ogni caso che non "
                  "andava, rifai i test, poi consegna.")
-    lav = _lavoro_dello_sviluppo(ctx, svc, sv, prof, sv.specifica or sv.richiesta, vincoli)
+    lav = _lavoro_dello_sviluppo(ctx, svs, sv, prof, sv.specifica or sv.richiesta, vincoli)
     if isinstance(lav, dict):
         return lav
     _con_esempi(svs, sv, lav)
+    svs._metti_vincoli(sv, lav)
     lav.correzione = True
     with svs._lock:
         sv.correzioni += 1
@@ -1791,40 +2027,6 @@ def _sviluppo_correggi(ctx: ToolContext, problema: str = "", **_altro) -> dict:
     out["conferma"] = out["risposta_finale"] = frase
     _schermo(ctx, sv)
     return out
-
-
-def _lavoro_dello_sviluppo(ctx, svc, sv, prof, compito: str, vincoli: str):
-    """Il lavoro dell'agente sui file dello sviluppo (correzione): per un'estensione la
-    versione provata, con lo stesso nome; per un programma la sua cartella."""
-    storia = list(getattr(ctx, "storia", None) or [])
-    if sv.tipo == "estensione":
-        est = getattr(ctx, "estensioni", None)
-        if est is None:
-            return _no(ctx, "Qui le estensioni non ci sono.")
-        if not sv.estensione:
-            # (con uno sviluppo fermo prima della prima versione ci pensa _sviluppo_correggi,
-            # 11/10: qui non si arriva; la frase resta vera)
-            return _no(ctx, "Non c'è ancora una versione da correggere: lo rifaccio così com'è, "
-                            "o vuoi cambiare qualcosa?")
-        from ..estensioni.servizio import runtime_testo
-        from .estensioni import funzioni_di_calliope, titolo_vincolo
-        v = (f"È lo sviluppo dell'estensione «{sv.estensione}»: tieni lo stesso nome nel "
-             f"manifesto. {titolo_vincolo(est, sv.estensione)} {vincoli} "
-             f"{funzioni_di_calliope()}")
-        lav = svc.nuovo("estensione", compito, prof.id, prof.name, "amministra", "", "", v,
-                        storia)
-        lav.estensione = sv.estensione
-        lav.gioco = bool(sv.gioco)
-        lav.file_iniziali = {"calliope_estensione.py": runtime_testo(),
-                             **est.file_per_modifica(sv.estensione, candidata=True)}
-    else:
-        from ..sviluppo import file_di_codice
-        lav = svc.nuovo("codice", compito, prof.id, prof.name, "amministra", "", "", vincoli,
-                        storia)
-        lav.file_iniziali = file_di_codice(sv.cartella) if sv.cartella else {}
-    lav.titolo = sv.titolo
-    lav.specifica = compito
-    return lav
 
 
 def sviluppo_apri_spec(file_pc: bool = False, allegati: bool = False) -> ToolSpec:
@@ -1938,11 +2140,11 @@ def sviluppo_specs(file_pc: bool = False, allegati: bool = False) -> list[ToolSp
         ToolSpec(
             name="sviluppo_correggi",
             description=("Solo con uno sviluppo aperto (nei dati del turno): fa correggere il "
-                         "codice dello sviluppo da chi l'ha scritto, senza cambiare cosa deve "
-                         "fare («correggilo», «fallo sistemare», «sì» a «Lo faccio "
-                         "correggere?»; a una tappa, «cambia e continua»). problema: cosa non "
-                         "va, come detto. Per cambiare cosa deve fare, sviluppo_passo con azione "
-                         "analisi; per correggere uno script o un file fuori da uno sviluppo, "
+                         "codice dello sviluppo da chi l'ha scritto («correggilo», «fallo "
+                         "sistemare», «sì» a «Lo faccio correggere?»; a una tappa, «cambia e "
+                         "continua»). problema: cosa non va o cosa deve fare di diverso, come "
+                         "detto (se chiede un comportamento diverso, la richiesta si aggiorna da "
+                         "sé). Per correggere uno script o un file fuori da uno sviluppo, "
                          "sviluppo_apri tipo programma."),
             parameters={"type": "object", "properties": {"problema": {"type": "string"}},
                         "required": []},

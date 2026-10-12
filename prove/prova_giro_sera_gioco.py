@@ -13,10 +13,12 @@ complessa richiede JavaScript nel browser, ma la richiesta non specifica di usar
 troncato a 80 caratteri («…devono scegliere tra div»).
 
 1. **Il flag del gioco anche con tipo estensione** (tools/sviluppo.py): la stessa regola, e
-   l'analisi delle estensioni non parte (un gioco non ne ha mai avuta una). L'analizzatore qui è
-   quello vero con un client finto che darebbe le stesse risposte dell'agente: non deve essere
-   chiamato. Contrari: un gioco per Windows con una finestra, un'estensione che conta i punti
-   del gioco di carte (analisi, niente flag), gioco=true già detto (niente regola).
+   l'analisi delle estensioni non parte. Dal 12/10 (M4) un gioco ha la sua analisi, con la lista
+   di controllo del gioco e «cosa si può fare» del gioco: l'analizzatore qui è quello vero con un
+   client finto che darebbe le stesse risposte dell'agente, chiamato una volta con il prompt del
+   gioco, e mai «impossibile». Contrari: un gioco per Windows con una finestra, un'estensione che
+   conta i punti del gioco di carte (analisi, niente flag), gioco=true già detto (niente
+   regola).
 2. **L'analisi delle estensioni sa dei giochi** (agenti/richiesta.py): «Cosa si può fare qui»
    dice che un gioco si fa con una scheda che sceglie l'agente, e la nota dell'impossibile che
    un dettaglio tecnico non detto (scheda, JavaScript, manifesto) non rende impossibile niente.
@@ -136,17 +138,19 @@ def prova_flag(tmp: Path):
     verifica("17:32, tipo estensione senza flag → sviluppo_gioco_schermi, sviluppo di un gioco",
              "sviluppo_gioco_schermi" in ctx.regole and sv is not None and sv.gioco
              and sv.tipo == "estensione" and sv.fase == "analisi", f"{ctx.regole} {out}")
-    verifica("l'analisi delle estensioni non parte (nessuna chiamata all'agente, niente "
-             "«impossibile»)", not cliente.chiamate and not any(
-                 r.startswith("analisi_") for r in ctx.regole), f"{ctx.regole}")
+    sistema = cliente.chiamate[0]["messages"][0]["content"] if cliente.chiamate else ""
+    verifica("l'analisi delle estensioni non parte: quella del gioco sì (12/10), niente "
+             "«impossibile»", len(cliente.chiamate) == 1 and "giocatori = quanti giocano"
+             in sistema and "Un'estensione è un piccolo programma Python" not in sistema
+             and "analisi_impossibile" not in ctx.regole, f"{ctx.regole}")
     verifica("la proposta dice «Lo faccio come gioco sugli schermi», non è un rifiuto",
              "Lo faccio come gioco sugli schermi" in frase and "non posso" not in frase.lower(),
              frase)
     lav = svc.offerte["u1"]["lavoro"]
     verifica("il lavoro è un gioco (scheda, gioco puro)", lav.gioco and "GIOCO" in lav.vincoli,
              lav.vincoli)
-    verifica("il titolo dello sviluppo è breve: «gioco di Halloween»",
-             sv.titolo == "gioco di Halloween" and lav.titolo == "gioco di Halloween",
+    verifica("il titolo dello sviluppo è breve (il nome dell'analisi), non il compito troncato",
+             sv.titolo == "porte di halloween" and lav.titolo == "porte di halloween",
              f"{sv.titolo!r} {lav.titolo!r}")
     verifica("lo sviluppo resta aperto (non chiuso come impossibile)",
              sv.stato == "aperta" and "chiuso" not in json.dumps(sv.storia), sv.stato)
@@ -177,9 +181,9 @@ def prova_flag(tmp: Path):
     P.chiama(reg, ctx, "sviluppo_apri", {"tipo": "estensione", "compito": COMPITO,
                                          "gioco": True}, turno=1)
     sv = svc.sviluppi.corrente("u1")
-    verifica("contrario: gioco=true già detto dal modello → un gioco, senza la regola",
-             "sviluppo_gioco_schermi" not in ctx.regole and sv is not None and sv.gioco
-             and not cliente.chiamate, f"{ctx.regole}")
+    verifica("contrario: gioco=true già detto dal modello → un gioco, senza la regola (e la "
+             "sua analisi)", "sviluppo_gioco_schermi" not in ctx.regole and sv is not None
+             and sv.gioco and len(cliente.chiamate) == 1, f"{ctx.regole}")
     cfg, reg, ctx, est, svc = V.ambiente(tmp / "modifica", iso)
     svc.analizzatore, cliente = analizzatore(cfg)
     ctx.regole = []

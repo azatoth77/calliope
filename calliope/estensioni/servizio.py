@@ -954,6 +954,12 @@ class Estensioni:
                 if svs.estensione_approvata(nome, n) is not None:
                     note_rule(ctx, "sviluppo_chiuso")
                     fine = " Lo sviluppo è finito: torniamo alla conversazione normale."
+                    # La tappa che restava non si perde (12/10, M2): resta con l'estensione
+                    dopo = svs.restano_dopo(nome)
+                    if dopo:
+                        from ..requisiti import elenco_voce
+                        fine += (f" Per la tappa dopo restano {elenco_voce(dopo)}: quando "
+                                 f"vuoi, chiedimi di continuare «{m['titolo']}».")
             except Exception as e:  # noqa: BLE001 — l'approvazione è fatta comunque
                 self.log(f"[ESTENSIONI] sviluppo non chiuso: {type(e).__name__}: {e}")
         return _final(f"Fatto: «{m['titolo']}» è attiva, versione {n}"

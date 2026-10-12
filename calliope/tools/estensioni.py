@@ -108,6 +108,13 @@ def _estensione_crea(ctx: ToolContext, compito: str = "", nome: str = "", propos
     esistente, rifiuto = _da_cambiare(ctx, est, modifica, nome, compito)
     if rifiuto is not None:
         return rifiuto
+    if esistente and not gioco and e_gioco_estensione(est, esistente):
+        # Una versione nuova di un gioco senza gioco=true (12/10, A7): il tipo viene dal
+        # manifesto (la scheda), non dal flag del modello; altrimenti l'agente riceveva il
+        # contratto e lo scheletro delle estensioni Python. Correzione della forma della scelta
+        # già fatta dal modello (cambiare quel gioco), regola `estensione_gioco_dal_manifesto`
+        ta.note_rule(ctx, "estensione_gioco_dal_manifesto")
+        gioco = True
     simile = "" if esistente else _simile(nome, est)
     if simile and not accanto and not _scelta_gia_detta(ctx, est, simile):
         # Un nome simile a un'estensione che c'è, senza `modifica` (08/10, caso vero della DGX
@@ -184,14 +191,24 @@ def _estensione_crea(ctx: ToolContext, compito: str = "", nome: str = "", propos
 
     def crea(compito_agente: str, esito=None, gia_detto: bool = False, gia: str = ""):
         v = vincoli
+        # Quello che vale per tutti i lavori dello sviluppo (12/10, A6): la scelta del doppione,
+        # la fonte verificata, le scelte fatte al posto della persona (calliope/sviluppo.py,
+        # `ingressi`). La richiesta come detta no: dopo una modifica la contraddirebbe
+        persona = ""
         if gia_detto:
-            v += (f" La persona sa che Calliope lo fa già con {gia} e vuole comunque "
-                  "l'estensione: nel piano gia_fatto_da resta vuoto.")
+            persona += (f" La persona sa che Calliope lo fa già con {gia} e vuole comunque "
+                        "l'estensione: nel piano gia_fatto_da resta vuoto.")
         if esito is not None and esito.esito == "raffinabile":
             v += f" Richiesta come detta dalla persona: «{compito}»."
         if esito is not None and esito.fonte_ok and esito.fonte_url:
             # La fonte che l'analisi ha già verificato (06/10): l'agente parte da lì
-            v += f" Fonte pubblica verificata (risponde): {esito.fonte_url}"
+            persona += f" Fonte pubblica verificata (risponde): {esito.fonte_url}"
+        scelte = list(getattr(esito, "scelte", None) or []) if esito is not None else []
+        if scelte:
+            # Dove la persona non ha risposto (12/10, M5): la scelta detta nella proposta
+            persona += (" Scelte fatte da Calliope dove la persona non ha risposto (dette a lei "
+                        "nella proposta): " + "; ".join(scelte) + ".")
+        v += persona
 
         lav = svc.nuovo("estensione", compito_agente, prof.id, prof.name, level, "", "", v,
                         storia)
@@ -207,19 +224,20 @@ def _estensione_crea(ctx: ToolContext, compito: str = "", nome: str = "", propos
         lav.doppione_chiesto = gia_detto
         lav.estensione = esistente or None
         lav.gioco = bool(gioco)
+        lav.vincoli_persona = persona.strip()
+        lav.scelte = scelte
         if gioco:
-            lav.vincoli = ((lav.vincoli + " ") if lav.vincoli else "") + (
-                "È un GIOCO sullo schermo: scheda interattiva (§5 del contratto), gioco puro, "
-                "senza estensione.py.")
+            lav.vincoli = ((lav.vincoli + " ") if lav.vincoli else "") + VINCOLO_GIOCO
         lav.file_iniziali = {"calliope_estensione.py": runtime_testo(), **file}
         return lav
 
-    # L'analisi della richiesta prima della proposta (06/10, calliope/agenti/richiesta.py): non
-    # per un gioco né per la modifica di un'estensione che c'è già
+    # L'analisi della richiesta prima della proposta (06/10, calliope/agenti/richiesta.py), dal
+    # 12/10 anche per un gioco (M4: con la sua lista di controllo). Non per la modifica di
+    # un'estensione che c'è già: lì la modifica cambia i suoi requisiti (`_modifica_esistente`)
     esito = None
-    if not esistente and not gioco and not gia_detto:
-        ris, esito, gia_an = ta._analisi(ctx, svc, prof, "estensione", compito, crea,
-                                         "sviluppo_apri")
+    if not esistente and not gia_detto:
+        ris, esito, gia_an = ta._analisi(ctx, svc, prof, "gioco" if gioco else "estensione",
+                                         compito, crea, "sviluppo_apri")
         if ris is not None:
             if esito is not None and esito.esito in ("impossibile", "gia_fatto"):
                 from .sviluppo import chiudi_se_vuoto
@@ -228,15 +246,91 @@ def _estensione_crea(ctx: ToolContext, compito: str = "", nome: str = "", propos
         if gia_an:                       # «sì, comunque» dopo il «c'è già» dell'analisi
             gia, gia_detto = gia_an, True
     raffinata = esito is not None and esito.esito == "raffinabile"
-    lav = crea(esito.specifica if raffinata else compito, esito, gia_detto, gia)
+    cambi = None
+    if esistente:
+        mod = _modifica_esistente(ctx, esistente, compito)
+        if mod is not None and mod.get("risposta") is not None:
+            return mod["risposta"]
+        if mod is not None:
+            cambi = mod
+    if cambi is not None:
+        # La specifica è quella dell'estensione con la modifica, rigenerata dai requisiti
+        lav = crea(cambi["specifica"], esito, gia_detto, gia)
+        lav.specifica = cambi["specifica"]
+        lav.cambiamento = cambi["cambi"]
+        if cambi.get("da_correggere"):
+            lav.da_correggere = cambi["da_correggere"]
+            lav.vincoli = (f"{lav.vincoli} Da correggere, detto dalla persona: "
+                           f"«{str(cambi['da_correggere'])[:400]}».").strip()
+    else:
+        lav = crea(esito.specifica if raffinata else compito, esito, gia_detto, gia)
     turno = int(getattr(ctx, "turno", 0) or 0)
     # Già confermata alla domanda della politica (06/10): niente secondo «Procedo?» (salvo una
-    # specifica raffinata dall'analisi, che la persona non ha ancora sentito)
-    if politica.accettata(ctx) and not raffinata:   # regola `politica_conferma_unica`
-        out = ta._avvia(ctx, svc, lav)
+    # specifica raffinata dall'analisi, che la persona non ha ancora sentita). Né con lo
+    # sviluppo all'analisi (12/10, A2: la stessa guardia dei programmi, tools/agenti): la
+    # specifica, i limiti e le tappe si dicono prima, anche dopo il «sì» della politica o del
+    # cambio di sviluppo
+    all_analisi = _sviluppo_all_analisi(ctx)
+    if politica.accettata(ctx) and not raffinata and not all_analisi and cambi is None:
+        out = ta._avvia(ctx, svc, lav)       # regola `politica_conferma_unica`
     else:
+        if politica.accettata(ctx) and all_analisi:
+            ta.note_rule(ctx, "sviluppo_analisi_prima")
         out = ta._proponi(ctx, svc, lav, turno)
     return _con_avviso(out, esistente, simile, est)
+
+
+VINCOLO_GIOCO = ("È un GIOCO sullo schermo: scheda interattiva (§5 del contratto), gioco puro, "
+                 "senza estensione.py.")
+
+
+def e_gioco_estensione(est, nome: str) -> bool:
+    """L'estensione `nome` è un gioco: la sua versione (candidata o attiva) ha la scheda."""
+    try:
+        arch = est.archivio
+        for n in (arch.candidata(nome), None):
+            m = arch.manifesto(nome, n) if n else arch.manifesto(nome)
+            if m:
+                return bool(m.get("scheda"))
+    except Exception:  # noqa: BLE001 — nel dubbio, come chiesto dal modello
+        return False
+    return False
+
+
+def _sviluppo_all_analisi(ctx) -> bool:
+    from ..sviluppo import chi, servizio
+    svs = servizio(ctx)
+    sv = svs.corrente(chi(ctx)) if svs is not None else None
+    return sv is not None and sv.fase == "analisi"
+
+
+def _modifica_esistente(ctx, esistente: str, compito: str) -> dict | None:
+    """La modifica di un'estensione che c'è, con i requisiti ereditati dall'estensione
+    attivata (12/10, M2 e M4): la stessa operazione sui requisiti di «cambia». None se lo
+    sviluppo non ha requisiti o il modello non risponde (allora come prima: la modifica è il
+    compito); altrimenti {specifica, cambi, da_correggere} o {risposta} (la domanda, se non
+    dice cosa cambiare)."""
+    from ..sviluppo import chi, servizio
+    from .sviluppo import _chiedi_cosa
+    svs = servizio(ctx)
+    sv = svs.corrente(chi(ctx)) if svs is not None else None
+    if (sv is None or sv.estensione != esistente or sv.fase != "analisi" or not sv.requisiti
+            or not getattr(ctx.cfg, "sviluppo_requisiti", True)):
+        return None
+    r = svs.aggiorna_requisiti(sv, compito, str(getattr(ctx, "user_text", "") or ""),
+                               attesa=getattr(ctx, "attesa", None))
+    if r.get("esito") != "modello":
+        return None
+    from .spec import note_rule
+    if r.get("tipo") == "vago":
+        note_rule(ctx, "sviluppo_modifica_vaga")
+        return {"risposta": _chiedi_cosa(ctx, sv, r.get("domanda") or "Cosa vuoi cambiare, di "
+                                                                    "preciso?", "analisi")}
+    if r.get("cambi"):
+        note_rule(ctx, "sviluppo_modifica_requisiti")
+        return {"specifica": sv.specifica, "cambi": r["cambi"]}
+    # Un difetto (o una cosa che c'è già): la richiesta resta, e si fa correggere
+    return {"specifica": sv.specifica or compito, "cambi": [], "da_correggere": compito}
 
 
 def _da_cambiare(ctx, est, modifica, nome, compito) -> tuple[str, dict | None]:
