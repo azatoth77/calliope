@@ -2643,7 +2643,10 @@ class Ciclo:
             # sintetizzarla: si azzera (start_turn in _di_e_aspetta, che apre anche il turno
             # della voce: quarto giro del 10/10, la frase al turno 0 scartata dal satellite).
             # Se il satellite non la dice, il log lo scrive
-            self._di_e_aspetta("Va bene, ricominciamo da capo.")
+            # Con uno sviluppo aperto (12/10, lavoro 3): si sospende, e la frase lo dice
+            sospeso = self._sviluppo_sospeso_ricominciando()
+            self._di_e_aspetta("Va bene, ricominciamo da capo." + (f" {sospeso}" if sospeso
+                                                                  else ""))
             self.brain.end_conversation("nuova")
             self.awake_until, self.last_question = time.monotonic() + cfg.followup_s, None
             return _FINE
@@ -3534,6 +3537,20 @@ class Ciclo:
                 self.rule("storia_come_detta")
         except Exception as e:  # noqa: BLE001 — la storia com'era: la voce non si ferma
             print(f"   [STORIA] allineamento non riuscito: {type(e).__name__}: {e}", flush=True)
+
+    def _sviluppo_sospeso_ricominciando(self) -> str:
+        """«Ricominciamo» con uno sviluppo aperto di chi parla (12/10, lavoro 3): lo sviluppo
+        si sospende (tools/sviluppo.sospendi_per_ricominciare). La frase da aggiungere, o ""."""
+        try:
+            from .tools.sviluppo import sospendi_per_ricominciare
+            frase = sospendi_per_ricominciare(self.tool_ctx)
+        except Exception as e:  # noqa: BLE001 — la conversazione nuova parte comunque
+            print(f"   [SVILUPPO] sospensione per «ricominciamo»: {type(e).__name__}: {e}",
+                  flush=True)
+            return ""
+        if frase:
+            self.rule("sviluppo_sospeso_ricominciando")
+        return frase
 
     def _conversazione_nuova_chiesta(self) -> bool:
         """Il modello ha chiamato conversazione_nuova (09/10, «voglio che ricominciamo da capo»

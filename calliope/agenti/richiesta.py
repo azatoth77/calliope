@@ -24,6 +24,9 @@ Lista di controllo chiusa per tipo (`PUNTI`): estensione = input, output, fonte 
   elenco scritto a mano): lo dice e come chiederlo, senza costruire un doppione;
 - **impossibile** («impossibile qui»): serve qualcosa che la sandbox o la porta delle estensioni
   non hanno (rete di casa, file del PC…): lo dice subito, senza domande;
+- **rinomina** (12/10, solo per un'estensione): la richiesta è cambiare soltanto il nome di
+  un'estensione che c'è, che fa Calliope da sé (estensione_gestisci rinomina) e non l'agente;
+  scritto come `impossibile` = «RINOMINA», come qui sotto;
 - **estensione** (08/10, solo per un lavoro di codice): la richiesta è creare o cambiare
   un'estensione di Calliope, che non è impossibile ma è un'altra richiesta (sviluppo_apri, con
   modifica per una che c'è). Il modello lo scrive come `impossibile` = «ESTENSIONE» (lo schema
@@ -54,7 +57,8 @@ import threading
 import time
 from dataclasses import dataclass, field
 
-ESITI = ("chiara", "raffinabile", "vaga", "gia_fatto", "impossibile", "estensione")
+ESITI = ("chiara", "raffinabile", "vaga", "gia_fatto", "impossibile", "estensione",
+         "rinomina")
 PUNTI = {
     "estensione": ("input", "output", "fonte", "non_trovato", "permessi"),
     "codice": ("input", "output", "dati_persona", "linguaggio"),
@@ -240,7 +244,9 @@ NOTA_IMPOSSIBILE = {
     "estensione": (" Impossibile è solo ciò che è nell'elenco «Impossibile»; un dettaglio "
                    "tecnico che la persona non ha detto (la scheda, JavaScript, il manifesto, "
                    "il linguaggio) lo sceglie l'agente e non rende impossibile niente. Un gioco "
-                   "sugli schermi NON è impossibile."),
+                   "sugli schermi NON è impossibile. Cambiare SOLO il nome di un'estensione che "
+                   "c'è non è impossibile e non è un lavoro: Calliope lo fa da sé, quindi "
+                   "scrivi solo la parola RINOMINA."),
     "gioco": (" Impossibile è solo ciò che è nell'elenco «Impossibile»; un dettaglio tecnico "
               "che la persona non ha detto lo sceglie l'agente."),
     "codice": (" ECCEZIONE: se la richiesta è creare, cambiare, correggere o rifare "
@@ -391,6 +397,10 @@ def interpreta(testo: str, tipo: str, senza_domande: bool = False,
               motivo=_pulisci(d.get("impossibile"), 300), stati=stati)
     if tipo == "codice" and re.match(r"\W*estension[ei]\W*$", e.motivo, re.I):
         e.esito, e.motivo = "estensione", ""
+    elif tipo == "estensione" and re.match(r"\W*rinomin\w*\W*$", e.motivo, re.I):
+        # Solo il nome (12/10, lavoro 3; caso vero dell'08/10: «rinominiamola» detta
+        # impossibile dall'analisi, e un'ora dopo estensione_gestisci la faceva al primo colpo)
+        e.esito, e.motivo = "rinomina", ""
     elif e.motivo:
         e.esito = "impossibile"
     elif e.tool:

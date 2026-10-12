@@ -115,7 +115,7 @@ def _estensione_crea(ctx: ToolContext, compito: str = "", nome: str = "", propos
         # già fatta dal modello (cambiare quel gioco), regola `estensione_gioco_dal_manifesto`
         ta.note_rule(ctx, "estensione_gioco_dal_manifesto")
         gioco = True
-    simile = "" if esistente else _simile(nome, est)
+    simile = "" if esistente else (_simile(nome, est) or _detta_nella_frase(ctx, est, compito))
     if simile and not accanto and not _scelta_gia_detta(ctx, est, simile):
         # Un nome simile a un'estensione che c'è, senza `modifica` (08/10, caso vero della DGX
         # delle 15:36: «Modifica l'estensione Meteocittà: fai codificare il nome…» → il 26B
@@ -239,7 +239,7 @@ def _estensione_crea(ctx: ToolContext, compito: str = "", nome: str = "", propos
         ris, esito, gia_an = ta._analisi(ctx, svc, prof, "gioco" if gioco else "estensione",
                                          compito, crea, "sviluppo_apri")
         if ris is not None:
-            if esito is not None and esito.esito in ("impossibile", "gia_fatto"):
+            if esito is not None and esito.esito in ("impossibile", "gia_fatto", "rinomina"):
                 from .sviluppo import chiudi_se_vuoto
                 chiudi_se_vuoto(ctx, esito.esito)
             return ris
@@ -386,6 +386,35 @@ def _nominata(ctx, est, nome, compito) -> str:
     return nomi[0] if len(nomi) == 1 else ""
 
 
+def _detta_nella_frase(ctx, est, compito: str) -> str:
+    """Senza `modifica` né un nome simile: l'unica estensione che c'è nominata dalla persona
+    nella sua frase («Modifica l'estensione Meteocittà: …», 12/10, lavoro 3; caso vero dell'08/10
+    alle 15:36 con il modello che non passava né modifica né nome, e un'estensione nuova accanto
+    a quella da cambiare). Come per un nome simile, la scelta torna al modello. "" se la frase
+    ne nomina nessuna o più d'una, o se c'è già uno sviluppo aperto."""
+    testo = str(getattr(ctx, "user_text", "") or "")
+    if not testo.strip():
+        return ""
+    try:
+        trovate = est.nominate(testo, tutte=True)
+    except Exception:  # noqa: BLE001 — nel dubbio, come prima
+        return ""
+    nomi = sorted({t["nome"] for t in trovate})
+    if len(nomi) > 1:
+        nomi = [n for n in nomi if (est.archivio.voce(n) or {}).get("stato") == "attiva"]
+    if len(nomi) != 1:
+        return ""
+    try:
+        from ..sviluppo import chi, servizio
+        svs = servizio(ctx)
+        sv = svs.corrente(chi(ctx)) if svs is not None else None
+    except Exception:  # noqa: BLE001
+        sv = None
+    if sv is not None:
+        return ""                          # dentro uno sviluppo aperto decide lui (analisi)
+    return nomi[0]
+
+
 def titolo_vincolo(est, nome: str) -> str:
     """Per l'agente che scrive una versione nuova: il titolo dato dalla persona resta (08/10)."""
     titolo = str((est.archivio.voce(nome) or {}).get("titolo") or "").strip()
@@ -447,6 +476,38 @@ def _con_avviso(out: dict, esistente: str, simile: str, est) -> dict:
         sosp["domanda"] = f"{avviso} {sosp['domanda']}"
     return out
 
+
+
+# Le azioni che il modello inventa per CAMBIARE un'estensione (12/10, lavoro 3; caso vero del
+# 09/10 alle 20:40: `estensione_gestisci modifica`, che non esiste, poi «dimmi esattamente cosa
+# deve fare» e la stessa frase ripetuta tre volte): una versione nuova si fa con lo sviluppo.
+# («aggiorna» no: per estensione_gestisci vuol dire approvare la versione nuova)
+MODIFICA_INVENTATA = frozenset({"modifica", "modificare", "modificala", "cambia", "cambiare",
+                                "cambiala", "correggi", "correggere", "correggila", "migliora",
+                                "sviluppa", "nuova_versione", "versione_nuova", "edita",
+                                "modify", "edit"})
+
+
+def modifica_inventata(argomenti, ctx) -> dict | None:
+    """estensione_gestisci con un'azione che CAMBIA l'estensione (MODIFICA_INVENTATA): gli
+    argomenti di sviluppo_apri per la stessa scelta del modello (modifica = il nome, compito =
+    ciò che ha passato o la frase della persona), da chiamare al suo posto con tutti i suoi
+    controlli (ToolRegistry.call, regola `estensione_gestisci_modifica`: forma di una scelta
+    già fatta, principio 10). None per ogni altra azione."""
+    if not isinstance(argomenti, dict):
+        return None
+    if str(argomenti.get("azione") or "").strip().lower() not in MODIFICA_INVENTATA:
+        return None
+    compito = str(argomenti.get("compito") or argomenti.get("cambia")
+                  or argomenti.get("descrizione") or getattr(ctx, "user_text", "") or "").strip()
+    nome = str(argomenti.get("nome") or argomenti.get("estensione")
+               or argomenti.get("titolo") or "").strip()
+    est = getattr(ctx, "estensioni", None)
+    if not nome and est is not None:
+        nome = _nominata(ctx, est, "", compito)
+    nome = nome or "(non detta)"         # _da_cambiare risponde con l'elenco di quelle che ci sono
+    return {k: v for k, v in {"tipo": "estensione", "compito": compito,
+                              "modifica": nome}.items() if v}
 
 
 def _estensioni_gestisci(ctx: ToolContext, azione: str = "elenca", nome: str = "",

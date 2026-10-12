@@ -2380,7 +2380,8 @@ fonte, per giochi, estensioni e programmi, con la correzione nel punto comune.
   diventa un'operazione su di loro (`_modifica_esistente`, anche «anticipa» per la tappa dopo),
   senza estrarli da capo dalla sola frase della modifica, e quello che la versione attiva fa già
   va nei vincoli. Un'estensione attivata prima del 12/10 non ha requisiti salvati e fa come prima.
-  Un programma chiuso non li tiene (resta da fare, con la sua riapertura: M7).
+  Un programma chiuso non li tiene (resta da fare, con la sua riapertura: M7). *Storico: fatto la
+  sera del 12/10, ramo `flusso-ripresa` (sezione «Comandi del flusso e ripresa»).*
 - **A2**: estensioni e giochi non partono senza la specifica letta. In `_estensione_crea` vale la
   stessa guardia dei programmi: con lo sviluppo all'analisi si propone anche dopo il «sì» della
   politica o del cambio di sviluppo (`sviluppo_analisi_prima`).
@@ -2423,7 +2424,8 @@ fonte, per giochi, estensioni e programmi, con la correzione nel punto comune.
 - **Non toccato qui** (altri lavori): come la voce riferisce l'esito dell'agente e del collaudo
   (M1, M9), la revisione detta dal modello, conferme e frase di sfida, le forme chiuse dei comandi
   del flusso. Restano aperti A4 (l'analisi che ferma il lavoro prima del «sì»: ora almeno non lo
-  ferma se la frase non cambia niente), A5, M7, M8, M10 e M11.
+  ferma se la frase non cambia niente), A5, M7, M8, M10 e M11. *Storico: A4, A5, M7 e i comandi
+  del flusso fatti la sera del 12/10 (ramo `flusso-ripresa`); restano M8, M10 e M11.*
 - **Prove**: `prova_specifica_viva.py` (a secco, ~3 s): il caso vero con tre modifiche di fila,
   correggi, i contrari, le operazioni, la prima proposta, le scelte, A2, A6, A7, M2 e M4.
   Aggiornate `prova_revisione_onesta` (il dettaglio nella vista), `prova_analisi_richiesta`
@@ -2511,3 +2513,146 @@ Prove: `prova_voce_onesta.py` (nuova, livello 1) e le prove dello sviluppo aggio
 nuove (`prova_sviluppo`, `prova_sviluppo_v2`, `prova_revisione_onesta`, `prova_giro_halloween`).
 Con il modello locale (`prova_sviluppo_ollama.py 1`, gemma4 e4b, 12/10): collaudi detti dal codice («La prova con «Atlantide» è girata senza trovare niente: la versione 1 risponde «Non ho trovato la città Atlantide»…»), fuori tema con la sola riga di Calliope e nessuna coda del modello, iter fino all'attivazione con la sfida; un primo giro si era fermato a «Attivala.» (risposta del modello sulla proposta aperta, non riprodotta al secondo). Il caso detto è quello degli argomenti passati (prima «La prova con «prova con Bergamo»»). Da guardare sulla DGX: la coda della fase nelle risposte (deve sparire, salvo la riga di
 Calliope), e l'attrito della modalità sviluppo in `calliope stato --turni`.
+
+## Comandi del flusso e ripresa (12/10, ramo `flusso-ripresa`)
+
+Lavoro 3 dell'analisi del flusso del 12/10 (log veri della DGX del 06–12/10, punti 5, 8, 9 e 14
+della classifica; A4, A5 e M7 della revisione del codice), per giochi, estensioni e programmi con
+la correzione nel punto comune (`tools/sviluppo.py`, `calliope/sviluppo.py`). Prima si è guardato
+cosa copriva già il lavoro «forme storpiate» del 10/10 ([voce-e-regole](voce-e-regole.md)): il
+dato del turno per «Annullahi.», «Am nulla il lavoro.», «Spendilo.», «Chiudin.», la rete degli
+avvii (`politica_avvio_non_chiesto`, che chiede prima di rifare o far partire un lavoro da una
+frase breve), «ricominciamo» storpiato; e dal giro 6 e dai giri del 10/10 `ferma` distinto da
+`sospendi`, la chiusura con la domanda in fondo, `quale = "tutti"`, i nomi `sviluppo_<azione>`
+inventati. Qui solo ciò che mancava.
+
+**Casi veri** (nomi di fantasia nelle prove):
+- 10/10, «chiudi tutti gli sviluppi» detto cinque volte: chiuso uno per volta, una volta preso per
+  una domanda all'agente («Non c'è nessuno sviluppo aperto: di quale codice parli?», falso);
+- 10/10 07:12, «Am nulla il lavoro.» → `rifai` (ora la rete degli avvii chiede); con il dato del
+  turno il modello può scegliere `ferma`, e fermare non si disfa;
+- 10/10 10:39, «ricominciamo» e poi un altro programma: diventato una modifica di quello aperto
+  («quando ti ho detto ricominciamo intendevo ripartire da capo»);
+- 09/10 20:40, `estensione_gestisci modifica` (che non esiste) e la stessa frase ripetuta tre
+  volte; 08/10 15:36, «Modifica l'estensione Meteocittà…» diventata un'estensione nuova accanto;
+  08/10 15:46, «rinominiamola» detta impossibile dall'analisi (la rinomina è arrivata alle 16:06);
+- 09/10 20:41, ripartire dopo «fermo lo sviluppo»: «Riprendiamo lo sviluppo di…» → «è già
+  aperto» → «l'hai fermato tu: lo rifaccio così com'è, o vuoi cambiare qualcosa?» → «Sì,
+  rifallo»: quattro turni (08/10 20:05: cinque, con «cosa vuoi cambiare?» e «va bene così?»);
+- 08/10 11:19, «Ok, chiuso a long» → uscita con il lavoro in corso, e alle 11:31 il collaudo non
+  c'era più (dal giro 2 dell'08/10 `chiudi` con l'agente al lavoro sospende: qui verificato, ed
+  esteso al lavoro fermo a una domanda).
+
+**Cosa cambia:**
+1. **Comandi del flusso** (principio 10: forme chiuse brevi per intero, effetto reversibile o al
+   più una domanda; casi e contrari in `prova_testo` e `prova_flusso_ripresa`):
+   - «Chiudi tutti gli sviluppi», «chiudili tutti», «chiudi gli sviluppi» detti per intero
+     (`tools/sviluppo.chiudi_tutti_detto`; non «chiudi tutte le finestre», «chiudi tutti i
+     programmi del PC», «ferma il lavoro e chiudi tutti gli sviluppi»): quando il modello ha già
+     scelto `chiudi` senza `quale`, vale `quale = "tutti"`, una domanda sola con i titoli
+     (regola `sviluppo_chiudi_tutti_forma`); quando l'ha presa per `sviluppo_chiedi`, è la stessa
+     domanda di chiusura. Il «sì» li chiude e ferma il lavoro dell'agente, come dal 10/10.
+   - **Un'azione che non si disfa non parte da una storpiatura**
+     (`politica.irreversibile_storpiato`, regola `politica_storpiatura_irreversibile`):
+     `sviluppo_passo ferma`, `lavoro_annulla` e `chiudi` al «sì» della sua domanda, da una frase
+     che è per intero una forma storpiata nota (`storpiature.suggerisci`), diventano «Non sono
+     sicura di aver capito: vuoi che…?», e il «sì» le esegue. Le parole vere («ferma il lavoro»,
+     «sì, chiudi»), la frase di sfida e le azioni che si disfano (sospendi, riprendi) non chiedono
+     niente. «Chiudin.» alla domanda «Lo chiudo?» prima chiudeva (`prova_giro3` aggiornata).
+   - **«Ricominciamo» con uno sviluppo aperto lo sospende** (`sospendi_per_ricominciare`, nella
+     regola `nuova_conversazione` del ciclo e nel tool `conversazione_nuova`; regola
+     `sviluppo_sospeso_ricominciando`): «Va bene, ricominciamo da capo. Lo sviluppo di «…» l'ho
+     sospeso: lo riprendiamo quando vuoi.» L'agente, se lavora, finisce; la richiesta dopo è uno
+     sviluppo nuovo. Con il registro degli eventi acceso «ricominciamo» resta un indizio e non
+     sospende niente.
+   - `estensione_gestisci` con un'azione che **cambia** l'estensione («modifica», «cambia»,
+     «correggi»…; non «aggiorna», che approva) è `sviluppo_apri` con `modifica` = il nome e
+     `compito` = la frase della persona (`tools/registry`, regola `estensione_gestisci_modifica`),
+     con tutti i controlli di `sviluppo_apri`. **«Modifica l'estensione X»** chiamato senza
+     `modifica` né `nome`: se la frase della persona nomina una sola estensione che c'è (e non c'è
+     uno sviluppo aperto) la scelta torna al modello come per un nome simile
+     (`estensione_simile_scelta`), invece di nascere un'estensione nuova accanto. Due nomi quasi
+     uguali («Meteo città» e «Meteocittà») li distingueva già dall'08/10 `_nome` (titolo
+     compatto, l'attiva prima), con il controllo «c'è già» prima della sfida.
+   - **«Rinomina» all'analisi**: cambiare solo il nome di un'estensione non è impossibile né un
+     lavoro; l'analista scrive RINOMINA (esito `rinomina`) e il modello riceve «estensione_gestisci
+     con azione rinomina, titolo = il nome nuovo» (nessuno sviluppo resta aperto).
+2. **A4, la modifica non butta via niente prima del «sì».** «Torniamo all'analisi» senza dire
+   cosa non ferma il lavoro né cambia fase: «D'accordo: cosa vuoi cambiare?» (regola
+   `sviluppo_analisi_senza_modifica`). Una modifica (`analisi` con `cambia`, o `sviluppo_correggi`
+   con un comportamento diverso, con o senza i requisiti) torna all'analisi e propone, ma il
+   lavoro in corso **continua**: si ferma solo al «sì» alla proposta (`Sviluppi.avviato`, regola
+   `sviluppo_modifica_ferma_prima` nel log), e il lavoro nuovo parte dai file che aveva scritto
+   (anche alla prima versione, senza candidata). Lo sviluppo tiene dove tornare
+   (`Sviluppo.ritorno`: fase, lavoro, versione, cartella, requisiti, specifica, tappe, verifica,
+   storico): **«lascia com'era»** (`sviluppo_passo indietro`, sinonimo `ripristina`, innocua,
+   effetto E1; regola `sviluppo_modifica_lasciata`) rimette tutto e ritira la proposta
+   (`Lavori.ritira`). La proposta lo dice in una frase: «Il lavoro di prima intanto continua: lo
+   fermo solo al tuo sì.» oppure «La versione 2 resta: se lasci com'era, torniamo a provarla.».
+   Se il lavoro di prima finisce mentre la modifica aspetta, la fase resta l'analisi e l'annuncio
+   lo dice senza domande («…è pronto. La modifica aspetta il tuo sì; se invece lasci com'era, lo
+   proviamo.»); «lascia com'era» porta al collaudo di quella versione. Il lavoro di prima vivo
+   tiene lo sviluppo aperto (niente sospensione dopo 30 minuti).
+3. **A5, i giri fermi non si perdono.** Lo sviluppo tiene l'ultimo giro fermo prima di consegnare
+   (`Sviluppo.giro`: lavoro, cartella, perché: fermato, tappa, attesa, limite, errore, scaduto).
+   **«Rifallo»** (e «correggi» su uno sviluppo senza versione, e la modifica confermata) riparte
+   dai file di quel giro (`file_del_giro`: senza `lavoro.json`, runtime, `CAPACITA.md`, esempi
+   veri), con il vincolo `VINCOLO_GIRO`; il thread dei lavori li rilegge quando il lavoro nuovo
+   comincia (`Lavori._file_del_giro`, `lav.parti_da`), perché un lavoro appena fermato li sta
+   ancora copiando; dopo un riavvio dalla cartella salvata nello sviluppo. A una tappa «rifallo»
+   è un altro giro dello stesso lavoro. **Una tappa che aspetta** più di
+   `agenti_attesa_risposta_min` (120 minuti) scade come prima (libera sandbox e memoria), ma il
+   servizio la segna (`tappa: true`) e lo sviluppo la dice «messa da parte, con i file che aveva
+   scritto», senza domanda (prima «non è andato: lo rifaccio così com'è?», e il «sì» ripartiva da
+   zero); così anche una domanda dell'agente scaduta. Lo sviluppo con una tappa si sospende dopo
+   30 minuti come prima (non blocca gli altri sviluppi), e la ripresa dice «Il lavoro dell'agente
+   è fermo a una tappa e aspetta te. Continuo con un altro giro?».
+4. **Ripresa in una domanda.** «Riprendiamo lo sviluppo di…» con lo sviluppo già aperto vale come
+   ripresa (regola `sviluppo_ripreso_aperto`; prima «è già aperto»); la frase è corta
+   («Riprendiamo «…», eravamo allo sviluppo.», senza «(2 di 5): fatta…, mancano…») con al più una
+   domanda che dice cosa farà: «Il lavoro dell'agente l'hai fermato tu: lo rifaccio ripartendo da
+   quello che aveva già scritto?» («così com'è?» senza file; «era fermo a una tappa e l'ho messo
+   da parte: riparto da lì?»). Il «sì» è `rifai`, che parte senza rileggere la specifica; anche
+   «avanti» con il lavoro fermo lo rifà (regola `sviluppo_avanti_rifai`). Da 4–5 turni a 2. Con
+   l'agente al lavoro la ripresa lo dice senza domande; con una modifica in attesa chiede
+   «Affido la richiesta cambiata, o lascio com'era?».
+5. **M7, il programma chiuso si riapre.** «Va bene così» alla revisione chiude un programma
+   (`consegnato`) e la frase dice «per cambiarlo, di riaprirlo»; lo sviluppo chiuso tiene
+   richiesta, specifica, requisiti, cartella, contesto dei lavori e file della persona finché si
+   tiene (30 giorni). «Riapri il programma della somma» (`riprendi` con `quale`, regola
+   `sviluppo_riaperto`) lo riapre al collaudo. Senza dire quale non si riapre (si riprendono i
+   sospesi); uno chiuso con «chiudi» resta chiuso.
+6. **Uscire con un lavoro in corso.** `chiudi`/`esci` con l'agente al lavoro sospendeva già (giro
+   2 dell'08/10) e il lavoro consegnato riapre il collaudo: verificato nel giro intero (esci,
+   consegna, collaudo). Ora anche con il lavoro fermo a una domanda per la persona.
+
+**Profilo ridotto (8 GB, decisione [0028](../decisioni/0028-decisioni-roadmap-12-10.md)).** Tutto è
+codice deterministico e stato, senza passate del modello in più: c'è uguale dove c'è la modalità
+sviluppo (cioè un agente; senza, «Qui la modalità sviluppo non c'è: servono gli agenti»). Le regole
+sul testo (chiudi tutti, storpiatura, ricominciamo) non dipendono dal modello e valgono uguali,
+anzi servono di più con un modello piccolo. In forma minore solo «rinomina» all'analisi, che
+dipende dal modello dell'analisi: se non scrive RINOMINA l'analisi resta com'era. I file dei giri
+stanno su disco (nessuna memoria in più).
+
+**Regole nel registro:** `sviluppo_chiudi_tutti_forma`, `politica_storpiatura_irreversibile`,
+`sviluppo_sospeso_ricominciando`, `estensione_gestisci_modifica`, `sviluppo_analisi_senza_modifica`,
+`sviluppo_modifica_lavoro_continua`, `sviluppo_modifica_lasciata`, `sviluppo_ripreso_aperto`,
+`sviluppo_riaperto`, `sviluppo_avanti_rifai`; `sviluppo_modifica_ferma_prima` nel log del servizio.
+
+**Prove:** `prova_flusso_ripresa.py` (nuova, livello 1, ~2 s: i casi veri con parole e nomi nostri
+e i contrari) e i casi in `prova_testo`; aggiornate `prova_sviluppo`, `prova_sviluppo_v2`,
+`prova_sviluppo_giro6` (le frasi nuove, «avanti» che rifà), `prova_specifica_viva` (la frase della
+versione che resta), `prova_giro3` («Chiudin.» alla domanda chiede ancora). Col modello locale
+`prova_flusso_ripresa_ollama.py` (gemma4 e4b, 3 giri): la ripresa in una domanda 2/3 (una volta il
+modello ha scritto la chiamata come testo) e il «sì» che riparte 3/3; «Am nulla il lavoro.» senza
+niente fermato né rifatto 3/3, il contrario «Ferma il lavoro dell'agente» 3/3; «Chiudi tutti gli
+sviluppi.» una domanda con i due titoli e il «sì» 3/3; la modifica con l'agente al lavoro che non lo
+ferma e «No, lascia com'era.» 3/3. Prima frase mediana 3,9 s, la stessa di
+`prova_sviluppo_giro6_ollama` lanciata subito dopo sullo stesso portatile (la macchina, non il
+lavoro). In quel giro `prova_sviluppo_giro6_ollama` ha fallito «Valfiorita e Borgo Alto» (il
+secondo collaudo fermato da `valore_contenuto_dato` per i «3» giorni presi dal risultato): non
+toccato qui, da guardare.
+
+**Da guardare sulla DGX** (26B): le regole qui sopra nel campo `regole` di `calliope stato
+--turni`; «chiudi tutti» e «lascia com'era» detti dal modello senza la forma chiusa; quante volte
+la proposta della modifica arriva con il lavoro di prima ancora vivo.

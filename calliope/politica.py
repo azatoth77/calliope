@@ -367,7 +367,7 @@ CLASSI: dict[str, Classe] = {
     # promuovi) porta a un lavoro dell'agente o all'approvazione, che ha la sua sfida
     "sviluppo_passo": _c(P, sola_lettura=("azione", frozenset({"stato"})),
                    innocua=lambda a: _s(a, "azione").lower() in ("sospendi", "riprendi", "esci",
-                                                                  "chiudi", "stato"),
+                                                                  "chiudi", "stato", "indietro"),
                    cosa=lambda a: {"avanti": "vada avanti con lo sviluppo",
                                    "analisi": "torni all'analisi dello sviluppo"
                                    + (f" con «{_corto(_s(a, 'cambia'))}»" if _s(a, "cambia")
@@ -377,7 +377,9 @@ CLASSI: dict[str, Classe] = {
                                    "rifai": "rifaccia il lavoro dello sviluppo con la stessa "
                                             "specifica",
                                    "completa": "faccia fare all'agente quello che manca "
-                                               "nello sviluppo"
+                                               "nello sviluppo",
+                                   "chiudi": "chiuda lo sviluppo",
+                                   "indietro": "lasci lo sviluppo com'era prima della modifica"
                                    }.get(_s(a, "azione").lower(),
                                          f"faccia «{_s(a, 'azione')}» sullo sviluppo")),
     # il collaudo: esegue la versione da approvare nel container, con la porta stretta; il
@@ -518,6 +520,8 @@ VERBI_AZIONE = {
         "rifai": _W + r"(rifa|riprov|ricominc|riparti|di nuovo|ancora|così com|cos[iì] com)",
         "riprendi": _W + r"(riprend|continu|riapr|torn)",
         "chiudi": _W + r"(esci|uscir|chiud|basta|abbandon|lascia perdere)",
+        # 12/10 (lavoro 3): la modifica proposta si scarta, lo sviluppo torna com'era
+        "indietro": _W + r"(indietro|com.era|lascia|ripristin|torn|prima|annull|scarta)",
         "esci": _W + r"(esci|uscir|chiud|basta|abbandon|lascia perdere)",
         "promuovi": _W + r"(estension|promuov|trasform|diventi|diventa)",
         # 11/10, revisione onesta: l'agente fa quello che manca (o la tappa dopo)
@@ -1554,6 +1558,10 @@ def decidi(name: str, args: dict, cl: Classe, t: Turno | None,
     if avvio_non_chiesto(name, args, cl, t):
         return Decisione("conferma", "politica_avvio_non_chiesto",
                          f"Non sono sicura di aver capito: vuoi che {cosa}?")
+    # Un'azione che non si disfa da una forma storpiata (12/10, lavoro 3): al più una domanda
+    if irreversibile_storpiato(name, args, t):
+        return Decisione("conferma", "politica_storpiatura_irreversibile",
+                         f"Non sono sicura di aver capito: vuoi che {cosa}?")
     # Una chiamata che risponde soltanto (innocua), se non è il «sì» alla sua domanda
     if callable(cl.innocua) and cl.innocua(args or {}) and not (
             stessa and (consenso(t.testo) or t.sfida)):
@@ -1754,6 +1762,34 @@ def avvio_non_chiesto(name: str, args: dict, cl: Classe, t: Turno | None) -> boo
     if chiesto_con_verbi(cl, testo, args):
         return False
     return not (azione in ("avanti", "riprendi") and _AVVIO_GENERICO.search(testo))
+
+
+# Un'azione che non si disfa da una forma storpiata (12/10, lavoro 3 «comandi del flusso»).
+# «Am nulla il lavoro.» (annulla) è diventato `rifai` il 10/10, e la rete degli avvii qui sopra
+# lo prende; con il dato del turno della storpiatura (calliope/storpiature.py) il modello può
+# scegliere l'azione giusta, ma la trascrizione resta incerta: fermare il lavoro dell'agente,
+# chiudere uno sviluppo al «sì» della sua domanda o annullare un lavoro non partono mai da una
+# frase che è per intero una storpiatura nota («Annullahi.», «Chiudin.», «Giudino.»). Vincolo di
+# sicurezza su un'azione già scelta dal modello (principio 10): l'effetto è una domanda, e il
+# «sì» la esegue (Decisione.accettata). Una frase con le parole vere («ferma il lavoro»,
+# «chiudilo», «sì, chiudi») non è una storpiatura e non chiede niente; neanche lo scritto
+IRREVERSIBILI = {"sviluppo_passo": frozenset({"ferma", "chiudi"}), "lavoro_annulla": None}
+
+
+def irreversibile_storpiato(name: str, args: dict, t: Turno | None) -> bool:
+    """La chiamata fa un'azione che non si disfa (IRREVERSIBILI) e la frase di questo turno è
+    per intero una forma chiusa storpiata (storpiature.suggerisci)? Per «chiudi» solo al «sì»
+    della sua domanda (prima chiede comunque)."""
+    azioni = IRREVERSIBILI.get(name, False)
+    if azioni is False or t is None or not t.testo or t.sfida:
+        return False
+    azione = _s(args or {}, "azione").lower()
+    if azioni is not None and azione not in azioni:
+        return False
+    if azione == "chiudi" and t.in_sospeso != name:
+        return False
+    from .storpiature import suggerisci
+    return suggerisci(t.testo) is not None
 
 
 def consenso_irriconoscibile(name: str, args: dict | None, ctx) -> dict | None:

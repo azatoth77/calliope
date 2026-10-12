@@ -197,8 +197,8 @@ def _sviluppo(a: dict) -> int:
     # all'analisi o promuovere preparano un lavoro dell'agente da confermare (E2); avanti può
     # arrivare all'approvazione, che ha la sua sfida (E3)
     az = pol._s(a, "azione").lower()
-    if az in ("sospendi", "riprendi", "chiudi", "esci"):
-        return E1
+    if az in ("sospendi", "riprendi", "chiudi", "esci", "indietro"):
+        return E1                            # indietro (12/10): scarta una modifica proposta
     if az in ("analisi", "promuovi", "ferma"):
         return E2                            # ferma: come lavoro_annulla (08/10 sera)
     return E3                                # avanti, rifai, completa (11/10): riparte un lavoro

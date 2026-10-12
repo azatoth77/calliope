@@ -1653,3 +1653,39 @@ dentro la frase.
   forma del comando, perché è un'interpretazione. Schema ~106 token in più (stima).
 - Dettagli, sicurezza e giro da fare sulla DGX in [giochi](giochi.md), «I comandi a voce di un
   gioco».
+
+## Comandi del flusso dello sviluppo: tre forme chiuse in più (12/10, ramo `flusso-ripresa`)
+
+Lavoro 3 dell'analisi del flusso del 12/10 (il resto in [agenti-estensioni](agenti-estensioni.md),
+«Comandi del flusso e ripresa»). Il lavoro «forme storpiate» del 10/10 (qui sopra) copriva già
+«ricominciamo» storpiato, il dato del turno per «Annullahi.», «Spendilo.», «Chiudin.» e la rete
+degli avvii; restavano tre buchi, tutti nel perimetro del principio 10:
+
+1. **«Chiudi tutti gli sviluppi» per intero** (`tools/sviluppo.chiudi_tutti_detto`, regola
+   `sviluppo_chiudi_tutti_forma`): «chiudi tutti gli sviluppi», «chiudili tutti», «chiudi gli
+   sviluppi (aperti/sospesi)», «chiudili tutti e due», con il nome, un «sì»/«ok» davanti e la
+   cortesia in coda; mai una parola dentro una frase più lunga. Vale solo dopo che il modello ha
+   già scelto `sviluppo_passo chiudi` senza `quale` (correzione della forma della sua scelta) o
+   `sviluppo_chiedi` (la stessa domanda di chiusura), e l'effetto è una domanda. Contrari in
+   `prova_testo`: «chiudi tutte le finestre», «chiudi tutti i programmi del PC», «chiudi lo
+   sviluppo», «chiudilo», «…tranne quello del meteo», «non chiudere tutti gli sviluppi», «ferma il
+   lavoro e chiudi tutti gli sviluppi», «tutti».
+2. **Un'azione che non si disfa non parte da una storpiatura** (`politica.irreversibile_storpiato`,
+   regola `politica_storpiatura_irreversibile`, vincolo di sicurezza su una scelta già fatta):
+   `sviluppo_passo ferma`, `lavoro_annulla`, e `chiudi` al «sì» della sua domanda, da una frase che
+   è per intero una forma storpiata nota (`storpiature.suggerisci`: «Am nulla il lavoro.»,
+   «Annullahi.», «Nulla è lavoro.», «Chiudin.», «Calliope, giudino.») chiedono «Non sono sicura di
+   aver capito: vuoi che…?», e il «sì» esegue. Contrari: le parole vere («Ferma il lavoro.»,
+   «Annulla il lavoro.», «Sì, chiudi.»), `chiudi` senza la sua domanda (chiede comunque lui), le
+   azioni che si disfano (`sospendi` da «Spendilo.», `riprendi`), un altro tool, «annulla» dentro
+   una frase, la frase di sfida superata. Cambia un contrario del 10/10: «Chiudin.» a «Lo chiudo?»
+   non chiude più al primo colpo (`prova_giro3`).
+3. **«Ricominciamo» con uno sviluppo aperto lo sospende** (regola `sviluppo_sospeso_ricominciando`
+   accanto a `nuova_conversazione`, e nel tool `conversazione_nuova`): un effetto in più della
+   forma chiusa che c'è già, reversibile («riprendiamo lo sviluppo»), detto nella frase («Va bene,
+   ricominciamo da capo. Lo sviluppo di «…» l'ho sospeso: lo riprendiamo quando vuoi.»). Caso vero
+   del 10/10 alle 10:39: «ricominciamo» e poi un altro programma, preso per una modifica di quello
+   aperto. Con il registro degli eventi acceso «ricominciamo» resta un indizio e non sospende.
+
+Profilo ridotto (8 GB): le tre regole non dipendono dal modello e valgono uguali. Misure col modello
+locale in [agenti-estensioni](agenti-estensioni.md).

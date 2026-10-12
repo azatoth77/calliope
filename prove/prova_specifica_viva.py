@@ -214,13 +214,14 @@ def prova_caso_vero(tmp: Path):
              "anche i mostri danno punti" in agente.utente("voci")
              and "perdere un turno" not in agente.utente("voci"), agente.utente("voci")[:400])
     # Modifica 2, al collaudo, con «correggi» (il gioco: «se dice cosa cambiare»), capita al
-    # contrario
+    # contrario. Dal 12/10 (lavoro 3, A4) la frase dice anche che la versione provata resta
+    RESTA = "La versione 2 resta: se lasci com'era, torniamo a provarla. "
     out = chiama(reg, ctx, "sviluppo_correggi", {"problema": "all'inizio il numero di porte e i "
                  "punti per vincere li puoi decidere tu"}, 5, "Il numero di porte e i punti li "
                  "puoi decidere tu.")
     f = detta(out)
     verifica("modifica 2 (al collaudo, «correggi»): la stessa operazione sui requisiti",
-             f == "Ho cambiato due cose: aggiungo «la persona sceglie il numero di porte»; "
+             f == RESTA + "Ho cambiato due cose: aggiungo «la persona sceglie il numero di porte»; "
                   "aggiungo «la persona sceglie i punti per vincere». " + DOMANDA_PROPOSTA
              and "sviluppo_correggi_cambia" in ctx.regole and sv.fase == "analisi", f)
     verifica("…la persona sente come è stato capito (qui al contrario), e niente è partito",
@@ -230,7 +231,7 @@ def prova_caso_vero(tmp: Path):
                  "li decide il gioco, non io"}, 6, "No, al contrario: li decide il gioco.")
     f = detta(out)
     verifica("modifica 3: la correzione sostituisce i due requisiti sbagliati",
-             f == "Ho cambiato due cose: «la persona sceglie il numero di porte» diventa «il "
+             f == RESTA + "Ho cambiato due cose: «la persona sceglie il numero di porte» diventa «il "
                   "gioco decide il numero di porte»; «la persona sceglie i punti per vincere» "
                   "diventa «il gioco decide i punti per vincere». " + DOMANDA_PROPOSTA, f)
     spec = sv.specifica

@@ -101,6 +101,13 @@ class Lavori:
         off = self.offerte.get(persona)
         return off if off and 1 <= turno - off["turno"] <= 3 else None
 
+    def ritira(self, persona, ident):
+        off = self.offerte.get(persona)
+        if off is None or off["lavoro"].id != ident:
+            return False
+        self.offerte.pop(persona, None)
+        return True
+
     def conferma(self, persona, ident, turno):
         off = self.offerta(persona, turno)
         if off is None or off["lavoro"].id != ident:
@@ -294,7 +301,7 @@ def prova_stati(tmp: Path, iso):
                        messaggio="non sono riuscita a finire «x»: tetto delle passate.")
     verifica("lavoro fallito: lo sviluppo resta aperto, allo sviluppo, senza lavoro",
              sv.fase == "sviluppo" and sv.lavoro is None and sv.stato == "aperta"
-             and "lo rifaccio così com'è" in item["messaggio"]
+             and "lo rifaccio così com'è?" in item["messaggio"]
              and (item.get("in_sospeso") or {}).get("tool") == "sviluppo_passo",
              item["messaggio"])
     verifica("riga per il modello: il lavoro non è andato → analisi",
@@ -464,12 +471,13 @@ def prova_analisi(tmp: Path, iso):
     ta._delega_lavoro(ctx, proposta=nuovo.id)
     verifica("il «sì» → di nuovo allo sviluppo con il lavoro nuovo",
              sv.fase == "sviluppo" and sv.lavoro == nuovo.id)
-    # Durante lo sviluppo: il lavoro in corso si ferma
+    # Durante lo sviluppo: dal 12/10 (lavoro 3, A4) il lavoro in corso si ferma solo al «sì»
     out = P.chiama(reg, ctx, "sviluppo_passo", {"azione": "analisi",
                                           "cambia": "solo le città italiane"}, turno=8)
-    verifica("dallo sviluppo: il lavoro in corso si ferma e lo dice",
-             nuovo.id in svc.annullati and detta(out).startswith("Ho fermato il lavoro")
-             and sv.fase == "analisi", detta(out))
+    verifica("dallo sviluppo: il lavoro in corso NON si ferma prima del «sì», e lo dice",
+             nuovo.id not in svc.annullati and nuovo.stato == "in_corso"
+             and detta(out).startswith("Il lavoro di prima intanto continua")
+             and sv.fase == "analisi" and sv.ritorno.get("lavoro") == nuovo.id, detta(out))
     # Senza dire cosa cambiare: la domanda
     out = P.chiama(reg, ctx, "sviluppo_passo", {"azione": "analisi"}, turno=9)
     verifica("«torniamo all'analisi» senza la modifica: «cosa vuoi cambiare?» in sospeso",
@@ -642,7 +650,7 @@ def prova_sospensione(tmp: Path, iso):
     verifica("«riprendiamo lo sviluppo del meteo»: ripreso, e quello aperto si sospende",
              sv.stato == "aperta" and sv2.stato == "sospesa"
              and detta(out).startswith("Ho sospeso «rinomina foto». Riprendiamo «Meteo per "
-                                       "città»: siamo al collaudo")
+                                       "città», eravamo al collaudo.")
              and "sviluppo_ripreso" in ctx.regole, detta(out))
     verifica("una sola aperta per persona",
              sum(1 for s in svs.sviluppi if s.persona == "u1" and s.stato == "aperta") == 1)
