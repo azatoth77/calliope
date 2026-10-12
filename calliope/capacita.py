@@ -191,7 +191,8 @@ AREE: dict[str, Area] = {
                     (("ricorda", "ricordare cose di te"),
                      ("registra_utente", "imparare a riconoscere una persona nuova"))),
     "esercizi": Area("i compiti", "Con i compiti", "Esercizi e compiti", (),
-                     (("esercizi", "preparare esercizi di matematica e di italiano"),
+                     (("esercizi", "preparare esercizi di matematica, italiano, logica, fisica e "
+                                   "chimica"),
                       ("compiti_aiuto", "aiutare con i compiti"))),
 }
 

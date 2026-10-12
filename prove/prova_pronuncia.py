@@ -70,6 +70,37 @@ for t in CONTRARI:
     out = P.applica(t)
     verifica(f"invariata: {t!r}", out == t, out)
 
+# ── unità di misura dopo un numero (12/10, calliope/unita.py) ──
+UNITA_CASI = [
+    ("Corre a 36 km/h.", "Corre a 36 chilometri all'ora."),
+    ("Pesa 1 kg, anzi 1,5 kg.", "Pesa 1 chilogrammo, anzi 1,5 chilogrammi."),
+    ("Accelera di 9,8 m/s², oggi 15 °C.",
+     "Accelera di 9,8 metri al secondo quadrato, oggi 15 gradi."),
+    ("Densità 1000 kg/m³ o 1 g/cm3.",
+     "Densità 1000 chilogrammi al metro cubo o 1 grammo al centimetro cubo."),
+    ("Ho corso 100 m e poi 2km.", "Ho corso 100 metri e poi 2 chilometri."),
+    ("Un lavoro di 10 J in 2 secondi: 5 W.", "Un lavoro di 10 giùl in 2 secondi: 5 watt."),
+    ("Sono 18 g/mol, cioè 0,5 mol/L.", "Sono 18 grammi per mole, cioè 0,5 moli al litro."),
+]
+for prima, attesa in UNITA_CASI:
+    out = P.applica(prima)
+    verifica(f"unità: {prima!r}", out == attesa, out)
+UNITA_CONTRARI = [
+    "Il 5G e il 3G vanno bene.",          # reti, maiuscola e senza spazio
+    "Usa i kg e i m/s, non le libbre.",   # simboli senza un numero davanti
+    "Corre 100 m/sec? No.",               # «m/sec» non è nell'elenco: resta
+    "Ho 2 GB e 10 s di pausa, alle 5 h.", # «s» e «h» da soli restano
+    "La stanza B12 ha 3m2 di finestre.",  # «m2» senza apice non è nell'elenco
+    "Il tavolo misura 2 metri e pesa 30 chili.",  # già per esteso
+]
+for t in UNITA_CONTRARI:
+    out = P.applica(t)
+    verifica(f"unità, invariata: {t!r}", out == t, out)
+verifica("unità spente con la pronuncia spenta",
+         Pronuncia(attiva=False).applica("Corre a 36 km/h.") == "Corre a 36 km/h.")
+verifica("unità spente da sole (unita=False)",
+         Pronuncia(unita=False).applica("Corre a 36 km/h.") == "Corre a 36 km/h.")
+
 # ── voci dell'utente, fonemi tra [[ ]], disattivata ──
 U = Pronuncia({"podcast": "pòdcast", "Spotify": "[[spˈɔtifaɪ]]", "windows": ""})
 verifica("voce aggiunta (grafia)", U.applica("Metto il podcast.") == "Metto il pòdcast.",
@@ -146,6 +177,7 @@ FONEMI_ATTESI = {
     "uandràiv": "wandɾˈaɪv", "kròm": "kɾˈɔm", "èdset": "ˈɛdset",
     "rèsberri": "ɾˈɛzberɾɪ", "uìsper": "wˈispeɾ", "pàiper": "pˈaɪpeɾ", "dòker": "dˈɔkeɾ",
     "uikikuòt": "wikikʊˈɔt", "dàk di ènne èsse": "dˈak dɪ ˈɛnne ˈɛsse",
+    "giùl": "dʒˈul",
 }
 verifica("ogni grafia del lessico ha i suoi fonemi attesi",
          set(LESSICO.values()) == set(FONEMI_ATTESI),

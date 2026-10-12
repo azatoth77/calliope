@@ -231,14 +231,12 @@ def _token_numeri(t: str) -> list[tuple[int, Fraction, int]]:
             i += 1
             continue
         valore, fine, k = Fraction(n), ej, j + 1
-        # «uno virgola cinque»
+        # «uno virgola cinque», «zero virgola zero cinque», «due virgola venticinque»
         if k + 1 < len(parole) and parole[k][2] == "virgola":
-            cifre = parole[k + 1][2]
-            dec = parola_numero(cifre)
-            if dec is not None:
-                # «zero virgola zero cinque» non serve agli esercizi: decimali come detti
-                valore = Fraction(f"{n}.{dec}")
-                fine, k = parole[k + 1][1], k + 2
+            cifre, k2 = _decimali_detti([w for _, _, w in parole], k + 1)
+            if cifre:
+                valore = Fraction(f"{n}.{cifre}")
+                fine, k = parole[k2 - 1][1], k2
         # «tre quarti», «due su tre», «due fratto tre», «tre mezzi»
         elif k < len(parole):
             den = _denominatore_da_parola(parole[k][2])
@@ -256,6 +254,29 @@ def _token_numeri(t: str) -> list[tuple[int, Fraction, int]]:
     return out
 
 
+def _decimali_detti(parole: list[str], k: int) -> tuple[str, int]:
+    """Le cifre dopo «virgola», dette: «cinque» → "5", «zero cinque» → "05", «venticinque»
+    → "25", «zero zero tre» → "003". Gli zeri davanti si dicono uno a uno, poi una cifra o un
+    numero fino a 99. ("", k) se non c'è niente."""
+    cifre = ""
+    while k < len(parole) and parole[k] == "zero":
+        cifre += "0"
+        k += 1
+    if k < len(parole):
+        n = parola_numero(parole[k])
+        if n is not None and 0 < n < 100:
+            return cifre + str(n), k + 1
+    return cifre, k
+
+
+def prepara_cifre(t: str) -> str:
+    """Su un testo già semplificato: «2 virgola 5» → «2,5»; le migliaia col punto
+    all'italiana («1.000», «12.500» → «1000», «12500»; mai «0.125» né «2.5»)."""
+    t = re.sub(r"(\d)\s*virgola\s*(\d)", r"\1,\2", t)
+    return re.sub(r"(?<![\d.,])([1-9]\d{0,2})((?:\.\d{3})+)(?![\d.,])",
+                  lambda m: m.group(1) + m.group(2).replace(".", ""), t)
+
+
 def leggi_valore(testo) -> Fraction | None:
     """Il numero di una risposta detta o scritta, esatto. Con più numeri, quello dopo «fa»,
     «uguale», «=», «è»… se c'è; altrimenti il primo («56, credo» → 56). None se non c'è."""
@@ -263,7 +284,7 @@ def leggi_valore(testo) -> Fraction | None:
         return Fraction(testo)
     if isinstance(testo, float):
         return Fraction(str(testo))
-    t = _semplice(testo)
+    t = prepara_cifre(_semplice(testo))
     t = re.sub(r"(\d)\s*[x×]\s*(\d)", r"\1 per \2", t)
     t = re.sub(r"\bx\s*(?==|uguale)", " ", t)         # «x = 4»: la x non è un numero
     t = re.sub(r"\b(un|una)'", r"\1 ", t)

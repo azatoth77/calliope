@@ -211,8 +211,13 @@ voce raccontava male gli esiti, i comandi del flusso si perdevano.
 ### 4. Studio, immagini, sicurezza, estensioni (S1–S13)
 
 1. **Materie calcolabili** (S1): logica, fisica e chimica con i numeri, con lo stesso schema della
-   matematica ([`ricerche/2026-10-08-esercizi.md`](ricerche/2026-10-08-esercizi.md)). *Pronta* ·
-   dipende da: come si dicono a voce le unità di misura.
+   matematica ([`ricerche/2026-10-08-esercizi.md`](ricerche/2026-10-08-esercizi.md)). **Fatta il
+   12/10** (ramo `materie-calcolabili`): logica (sequenze, insiemi, vero o falso), fisica
+   (velocità, densità, forze e lavoro), chimica (massa molare, moli, bilanciamento), ognuna col
+   ricalcolo indipendente; le unità a voce per esteso e lette dalle risposte di Whisper
+   (`calliope/unita.py`), i simboli dopo un numero detti per esteso in ogni frase; nel profilo
+   ridotto c'è uguale (solo codice, il 4B misurato). Resta la prova d'uso con un ragazzo
+   ([minori](aree/minori.md)).
 2. **Grammatica oltre il pilota** con il secondo parere di un modello diverso da quello della voce,
    il modello dell'agente (S2). *Quasi* · dipende da: il piano della memoria (0.2).
 3. **Storia e scienze** (S3): i testi solo dalla biblioteca (Vikidia e Wikibooks da scaricare) e

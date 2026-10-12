@@ -73,6 +73,16 @@
 - **API di Piper**: cambia tra le versioni. `Speaker._synth` gestisce sia la vecchia
   (`synthesize_stream_raw`) sia la nuova (`synthesize` → chunk).
 
+- **Unità di misura** (12/10, ramo `materie-calcolabili`, `calliope/unita.py`, prova
+  `prova_pronuncia.py`): espeak legge i simboli lettera per lettera («3 kg» → «tre kappagì», «2,5
+  m/s» → «… emme barra esse», «m/s²» → «… esse due», «°C» → «gradi ci»), legge bene i decimali con
+  la virgola e male quelli col punto («due punto cinque»), e «joule» come «giòule». `Pronuncia`
+  cambia un simbolo **subito dopo un numero** nel nome per esteso accordato al numero («36 km/h» →
+  «36 chilometri all'ora», «1 kg» → «1 chilogrammo», «9,8 m/s²» → «9,8 metri al secondo
+  quadrato»; elenco `unita.SIMBOLI_DETTI`, senza «h», «s» e «G» da soli: «5G» resta), «joule» →
+  «giùl» nel lessico (fonemi `dʒˈul` controllati). Spento con `tts_pronuncia: false` come il resto;
+  `Pronuncia(unita=False)` per spegnere solo le unità. Le frasi degli esercizi le scrivono già per
+  esteso ([minori](minori.md)).
 - **Inglesismi** (04/10, `calliope/pronuncia.py`, prove `prova_pronuncia.py`, misura
   `misura_pronuncia.py`): espeak italiano leggeva «fìle» (anche per i file del computer),
   «èmail», «uìfi», «bekàp», «pipèr»… Il suo dizionario conosce già computer, mouse, timer,

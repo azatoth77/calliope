@@ -81,6 +81,8 @@ A_SECCO = [
     ("prova_eta_utenti.py", [], "età e compleanni dai profili (07/10, DGX): data di oggi come nascita rifiutata, persona=io o un nome, giorni contati dal programma, privacy (chi amministra e i tutori), impronta della voce in elenca_utenti, rubrica distinta, tool *_cerca con argomenti obbligatori, parole di un ospite nel registro; la propria data di nascita nel profilo con ricorda e la data dai ricordi in data_calcola (07/10 pomeriggio)"),
     # ~8 s: generatori su migliaia di semi, secondo parere finto, server degli schermi vero
     ("prova_esercizi.py", [], "esercizi generati da Calliope (08/10): numeri detti, generatori di matematica (ricalcolo indipendente) e d'italiano (forme chiuse, lessico sul Wikizionario), secondo parere finto (buono, scartato, guasto, banco), flusso a voce (indizi, 5 errori con avviso ai tutori una volta, salta, soluzione, segnala, livelli, fine), permessi (ospite, adulto che non segue ragazzi, tutore, riepilogo), dato del turno, /api/esercizio sul server vero (schermo personale, fuori orario, limite, mai la risposta attesa)"),
+    # ~9 s: generatori di logica, fisica e chimica su migliaia di semi, tool e sessione veri
+    ("prova_materie.py", [], "materie calcolabili (12/10, S1: logica, fisica, chimica con lo schema della matematica): unità di misura lette come le scrive Whisper (simboli, nomi storpiati, numeri in lettere, decimali detti, «un chilo e mezzo», «mezz'ora») e dette per esteso, con i contrari; decimali e migliaia; 300 semi per argomento e livello con il ricalcolo indipendente, risposta giusta in ogni forma, senza unità con il promemoria, unità equivalente (non nelle conversioni), sbagliata e di un'altra grandezza rifiutate; il ricalcolo che prende gli errori (composizione, reazione non bilanciata o non minima, sequenza ambigua, risposte rovesciate); vero o falso letto; materia e argomento dal testo («logica» non è l'analisi logica); flusso dal tool con la scheda «misura», segnalazione e argomenti per età"),
     # ~25 s: la pagina degli schermi e del telefono in Edge o Chromium senza finestra
     ("prova_vista_sviluppo_pagina.py", [], "vista dello sviluppo e lavoro in diretta nella pagina vera (08/10): fasi, due colonne, flusso che si accumula senza buchi né doppioni anche dopo una riconnessione, scorrimento e «In fondo», schermo intero sul computer, giro 2 e correzione, comandi a tocco innocui, uscita dalla vista, telefono in una colonna, nessun errore JS né CSP"),
     ("prova_esercizi_pagina.py", [], "scheda degli esercizi nella pagina vera (08/10): domanda grande, risposta scritta sbagliata e giusta, indizio, segnalazione, fine, scelte d'italiano come pulsanti, risposta attesa mai nel DOM, telefono con la scheda nel carosello, nessun errore JS né CSP"),
@@ -333,6 +335,7 @@ LIVELLO_2 = {
     "prova_pause.py",                # 9 s (07/10)
     "prova_frase_lunga.py",          # ~6 s (10/10)
     "prova_esercizi.py",             # 8 s (08/10)
+    "prova_materie.py",              # ~9 s (12/10)
     "prova_searxng_aggiorna.py",     # 5 s (09/10)
 }
 LIVELLO_3 = {
@@ -388,8 +391,10 @@ LEGAMI = [
     ("calliope/cassetto.py", ["prova_cassetto.py"]),
     ("calliope/tools/minori.py", ["prova_minori.py", "prova_giochi.py", "prova_esercizi.py"]),
     # Esercizi (08/10): il pacchetto, il tool, la scheda e il dato del turno dei minori
-    ("calliope/esercizi/", ["prova_esercizi.py"]),
-    ("calliope/tools/esercizi.py", ["prova_esercizi.py"]),
+    ("calliope/esercizi/", ["prova_esercizi.py", "prova_materie.py"]),
+    ("calliope/tools/esercizi.py", ["prova_esercizi.py", "prova_materie.py"]),
+    # Materie calcolabili e unità di misura (12/10): anche la pronuncia dei simboli
+    ("calliope/unita.py", ["prova_materie.py", "prova_pronuncia.py"]),
     ("calliope/minori.py", ["prova_esercizi.py"]),
     ("calliope/schermi/", ["prova_esercizi.py"]),
     ("calliope/speaker_id.py", ["prova_voci_famiglia.py", "prova_conferme.py"]),

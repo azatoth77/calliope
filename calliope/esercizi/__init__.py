@@ -3,9 +3,13 @@ Esercizi nativi di Calliope, generati al momento (08/10/2026, decisioni di Dario
 progetto in docs/ricerche/2026-10-08-esercizi.md, area minori).
 
 Pilota: matematica (operazioni, frazioni, problemi, potenze, equazioni di primo grado) e
-italiano (analisi grammaticale, analisi logica di base), dalle elementari alle superiori.
+italiano (analisi grammaticale, analisi logica di base), dalle elementari alle superiori. Dal
+12/10 le materie calcolabili: logica (sequenze, insiemi, vero o falso), fisica (velocità,
+densità, forze) e chimica (massa molare, moli, bilanciamento), con le unità di misura dette e
+lette in `calliope/unita.py`.
 
-- `matematica.py`, `italiano.py`: i generatori, deterministici dal seme, e la correzione;
+- `matematica.py`, `italiano.py`, `logica.py`, `fisica.py`, `chimica.py`: i generatori,
+  deterministici dal seme, e la correzione; `misure.py`: le risposte con l'unità di misura;
 - `numeri.py`: numeri e frazioni detti a voce e scritti;
 - `verifica.py`: Wikizionario e secondo modello per gli esercizi linguistici;
 - `registro.py`: tentativi, segnalazioni e banco degli esercizi controllati in memoria.db;
@@ -14,9 +18,9 @@ italiano (analisi grammaticale, analisi logica di base), dalle elementari alle s
 - il tool a voce è in `calliope/tools/esercizi.py`, la scheda in `schermi/pagina/schermo.js`.
 
 Come si aggiunge una materia: un modulo con `MATERIA`, `ARGOMENTI` (nome, alias, classi),
-`genera(argomento, livello, seme)`, `controlla(es, risposta)` e `livello_per(argomento,
-classe)`, aggiunto a `MATERIE` qui sotto; il tipo di verifica (calcolata, linguistica,
-fattuale) decide quali controlli fa `Servizio._verifica`.
+`genera(argomento, livello, seme)`, `controlla(es, risposta)`, `livello_per(argomento,
+classe)` e `VERIFICA` («calcolato», con `verifica(es)` che rifà il conto; «linguistico», con
+Wikizionario e secondo parere), aggiunto a `MATERIE` qui sotto.
 """
 
 from __future__ import annotations
@@ -24,12 +28,27 @@ from __future__ import annotations
 import re
 import unicodedata
 
-from . import italiano, matematica
+from . import chimica, fisica, italiano, logica, matematica
 from .modello import Classe, Esercizio, Esito
 
-MATERIE = {"matematica": matematica, "italiano": italiano}
+MATERIE = {"matematica": matematica, "italiano": italiano, "logica": logica, "fisica": fisica,
+           "chimica": chimica}
+# L'ordine conta: «analisi logica» è italiano (alias «analisi») prima di logica
 _ALIAS_MATERIE = {"matematica": ("matematic", "aritmetic", "conti", "algebra", "geometri"),
-                  "italiano": ("italian", "grammatic", "analisi")}
+                  "italiano": ("italian", "grammatic", "analisi"),
+                  "logica": ("logic", "ragionament", "rompicap"),
+                  "fisica": ("fisic",), "chimica": ("chimic",)}
+
+
+def calcolata(materia: str) -> bool:
+    """La materia ha esercizi «calcolabili» (il codice rifà il conto)."""
+    return getattr(MATERIE.get(materia), "VERIFICA", "calcolato") == "calcolato"
+
+
+def elenco_materie() -> str:
+    """«matematica, italiano, logica, fisica e chimica»."""
+    m = list(MATERIE)
+    return ", ".join(m[:-1]) + " e " + m[-1]
 
 
 def _semplice(t: str) -> str:
@@ -66,6 +85,14 @@ def materia_da_testo(testo: str) -> str | None:
         if any(a in t for a in alias):
             return m
     return None
+
+
+def solo_materia(testo: str) -> str | None:
+    """La materia, se il testo è soltanto il nome di una materia («logica», «la fisica»,
+    «esercizi di chimica»): allora non è un argomento (l'analisi logica è un'altra cosa)."""
+    t = re.sub(r"^(?:(?:gli |degli )?esercizi (?:di |sulla |sulle |sul )?)?(?:la |le |il )?", "",
+               _semplice(testo))
+    return t if t in MATERIE else None
 
 
 def argomento_da_testo(testo: str, materia: str | None = None) -> str | None:
@@ -139,5 +166,5 @@ def livello_per(argomento: str, classe: Classe) -> int:
 
 
 __all__ = ["MATERIE", "Classe", "Esercizio", "Esito", "argomenti", "nome_argomento",
-           "materia_da_testo", "argomento_da_testo", "classe_da_testo", "classe_da_eta",
+           "calcolata", "elenco_materie", "solo_materia", "materia_da_testo", "argomento_da_testo", "classe_da_testo", "classe_da_eta",
            "adatto", "genera", "controlla", "livello_per"]

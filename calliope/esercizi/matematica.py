@@ -23,6 +23,7 @@ from .numeri import ORDINALI_F, frazione_detta, frazione_scritta, leggi_frazione
     leggi_valore
 
 MATERIA = "matematica"
+VERIFICA = "calcolato"            # il codice rifà il conto (sessione: ricalcolo, scheda)
 
 # Argomento → nome detto, parole con cui si chiede, classi (dalla, alla)
 ARGOMENTI = {
