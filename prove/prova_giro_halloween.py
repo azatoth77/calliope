@@ -254,7 +254,8 @@ def prova_collaudo_gioco(tmp: Path):
     sv3, _, _, _ = al_collaudo(a3, svc3)
     out = a3.chiama("sviluppo_passo", {"azione": "avanti"}, "Dario", schermo=studio3, turno=5)
     verifica("contrario: un gioco approvato senza averlo visto → la revisione lo dice",
-             "Non l'hai ancora visto in prova sullo schermo" in detta(out), detta(out))
+             "Il collaudo l'hai saltato: non l'hai visto in prova sullo schermo" in detta(out)
+             and "sviluppo_revisione_senza_collaudo" in (a3.ctx.regole or []), detta(out))
 
 
 # ═══════════════════════════ 2. correggere uno sviluppo fermo ═══════════════════════════

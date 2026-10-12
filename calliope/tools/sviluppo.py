@@ -865,12 +865,12 @@ def _collaudi_per_agente(svs, sv) -> str:
     "" senza collaudi."""
     if not sv.collaudi:
         return ""
-    from ..sviluppo import argomenti_detti
+    from ..sviluppo import NOMI_COLLAUDO, argomenti_detti, tipo_collaudo
     casi = "; ".join(f"«{c.get('dati') or 'senza dati'}»"
                      + (f" (argomenti passati: {argomenti_detti(c)})" if c.get("argomenti")
                         else "")
                      + " → " + ("aperto in prova sullo schermo" if c.get("anteprima")
-                                else "riuscito" if c.get("ok") else "NON riuscito") + ": "
+                                else NOMI_COLLAUDO[tipo_collaudo(c)]) + ": "
                      + f"{c.get('esito') or 'errore'}"
                      + (f" (la persona: {c['giudizio']})" if c.get("giudizio") else "")
                      for c in sv.collaudi[-5:])
@@ -1137,20 +1137,24 @@ def _completa(ctx, svs, sv, prof) -> dict:
 def _revisione(ctx, svs, sv) -> dict:
     """Dal collaudo alla revisione: permessi, rete, analisi del codice, test, collaudi e
     differenze, detti in breve e per intero sulla scheda."""
-    from ..sviluppo import misura_programma
+    from ..sviluppo import conto_collaudi, misura_programma
     # Le anteprime di un gioco (11/10) non sono prove «riuscite»: l'ha visto la persona
     anteprime = [c for c in sv.collaudi if c.get("anteprima")]
-    collaudi = [c for c in sv.collaudi if not c.get("anteprima")]
-    riusciti = sum(1 for c in collaudi if c.get("ok"))
-    detto_coll = ("Nessuna prova fatta." if not collaudi else
-                  f"Prove: {len(collaudi)}, " + ("tutte riuscite." if riusciti == len(collaudi)
-                                                 else f"{riusciti} riuscite."))
+    # Le prove di questa versione (12/10): quelle delle versioni di prima non dicono niente di lei
+    collaudi = [c for c in sv.collaudi if not c.get("anteprima")
+                and (sv.versione is None or c.get("versione") in (None, sv.versione))]
+    # Le risposte buone separate da ciò che è girato senza trovare niente (12/10, caso vero:
+    # «Prove: 16, 15 riuscite» con sette «non trovato»); il collaudo saltato si dice (caso vero
+    # dell'11/10 16:26: niente prove e «tutto sembra in ordine» detto dal modello)
+    detto_coll = conto_collaudi(collaudi) or "Il collaudo l'hai saltato: nessuna prova fatta."
+    if not collaudi and not anteprime:
+        note_rule(ctx, "sviluppo_revisione_senza_collaudo")
     if anteprime:
         detto_coll = (("L'hai visto in prova sullo schermo." if len(anteprime) == 1 else
                        f"L'hai visto in prova sullo schermo {len(anteprime)} volte.")
                       + (f" {detto_coll}" if collaudi else ""))
     elif svs.e_gioco(sv):
-        detto_coll = "Non l'hai ancora visto in prova sullo schermo."
+        detto_coll = "Il collaudo l'hai saltato: non l'hai visto in prova sullo schermo."
     # La revisione onesta (11/10, caso vero del gioco di Halloween: «tutto sembra in ordine: i
     # test passano tutti» con voce, musica e porte variabili mancanti): requisito per requisito,
     # la specifica approvata confrontata con i file consegnati (calliope/requisiti.py); se il
@@ -1390,22 +1394,95 @@ def _fallito(out, ris) -> bool:
     return False
 
 
+def tipo_collaudo(out, ris, passati=None) -> str:
+    """Il tipo di un collaudo (12/10, calliope/sviluppo.TIPI_COLLAUDO): «errore» se si è
+    fermata (nessun risultato), poi dal risultato come per gli altri tool
+    (argomenti_incerti.esito): «vuoto» per un «non trovato», «errore_dichiarato» per un campo
+    d'errore che l'estensione restituisce, «risposta» per il resto."""
+    if not isinstance(out, dict) or ris is None:
+        return "errore"
+    from ..argomenti_incerti import esito
+    try:
+        e = esito(out, passati)
+    except Exception:  # noqa: BLE001 — nel dubbio, dal solo campo d'errore
+        e = "errore" if _fallito(out, ris) else "pieno"
+    if e == "vuoto":
+        return "vuoto"
+    if e == "errore" or _fallito(out, ris):
+        return "errore_dichiarato"
+    if isinstance(ris, dict) and _solo_non_trovato(ris, passati):
+        return "vuoto"
+    return "risposta"
+
+
+def _solo_non_trovato(ris: dict, passati) -> bool:
+    """Il risultato è solo una frase che comincia dicendo di non aver trovato (S1 dell'08/10:
+    «Non ho trovato il meteo per Borgoverde Alto. Verifica i nomi.», per argomenti_incerti
+    «pieno» perché il nome non segue subito «trovato»), senza nessun dato accanto. Decide solo
+    il conteggio e le parole della frase (che sono comunque quelle dell'estensione); contrario:
+    «Non ho trovato pioggia: sereno, 21 gradi» con i dati."""
+    from .. import argomenti_incerti as ai
+    testo = str(ris.get("da_dire") or ris.get("messaggio") or "").strip()
+    if not testo or ai._ha_dati(ris, ai._valori(passati)):
+        return False
+    m = ai._NON_TROVATO.search(testo)
+    return bool(m) and m.start() <= 3
+
+
 def _collauda_estensione(ctx, svs, sv, est, passati: dict, detti: str):
     """Un collaudo della versione candidata con questi argomenti: (risultato per il modello,
-    fallito, rifiutato prima di partire). Un collaudo partito resta nello sviluppo con la sua
-    traccia di rete (08/10: per l'agente, mai alla voce)."""
+    fallito, rifiutato prima di partire, tipo). Un collaudo partito resta nello sviluppo con la
+    sua traccia di rete (08/10: per l'agente, mai alla voce)."""
     from ..estensioni.servizio import CHIAVE_TRACCIA
     out = est.prova_candidata(ctx, sv.estensione, passati)
     traccia = out.pop(CHIAVE_TRACCIA, None) if isinstance(out, dict) else None
     ris = (out or {}).get("risultati") if isinstance(out, dict) else None
     if isinstance(out, dict) and ris is None and not out.get("errore"):
-        return out, False, True
+        return out, False, True, ""
     esito = (ris.get("da_dire") if isinstance(ris, dict) and ris.get("da_dire")
              else json.dumps(ris, ensure_ascii=False) if ris is not None
              else str((out or {}).get("errore") or (out or {}).get("conferma") or ""))
     fallito = _fallito(out, ris)
-    svs.collaudo(sv, detti, not fallito, esito, rete=traccia, argomenti=passati)
-    return out, fallito, False
+    tipo = tipo_collaudo(out, ris, passati)
+    svs.collaudo(sv, detti, not fallito, esito, rete=traccia, argomenti=passati, tipo=tipo)
+    return out, fallito, False, tipo
+
+
+def _detto_estensione(out) -> str:
+    """Le parole dell'estensione da dire tra virgolette: il suo da_dire o il suo errore; per un
+    collaudo fermato, l'errore dell'esecuzione (senza «l'estensione «X» non è riuscita:»)."""
+    from ..sviluppo import testo_detto
+    if not isinstance(out, dict):
+        return ""
+    ris = out.get("risultati")
+    if isinstance(ris, dict):
+        for k in ("da_dire", "errore", "error", "messaggio", "message"):
+            if isinstance(ris.get(k), str) and ris[k].strip():
+                return testo_detto(ris[k])
+        return ""
+    if isinstance(ris, str):
+        return testo_detto(ris)
+    err = str(out.get("errore") or "")
+    err = re.sub(r"^l'estensione «[^»]*» non è riuscita:\s*", "", err)
+    return testo_detto(err, 120, 1)
+
+
+def frase_collaudo(cosa: str, tipo: str, detto: str, n=None) -> str:
+    """La frase di un collaudo, con l'esito vero (12/10): le parole dell'estensione, mai una causa
+    inventata. `cosa`: «con «Bergamo»» o «senza dati»."""
+    ver = f"la versione {n}" if n else "la versione in prova"
+    if tipo == "errore":
+        return (f"La prova {cosa} si è fermata con un errore"
+                + (f": {detto}." if detto else ".") + " I dettagli sono sulla scheda.")
+    if not detto:
+        return ""
+    if tipo == "vuoto":
+        return (f"La prova {cosa} è girata senza trovare niente: {ver} risponde «{detto}». Se "
+                "non è la risposta giusta, dimmelo e la faccio correggere.")
+    if tipo == "errore_dichiarato":
+        return (f"La prova {cosa} è girata e {ver} risponde con un suo errore: «{detto}». Se "
+                "con questo dato non è giusto, dimmelo e la faccio correggere.")
+    return f"La prova {cosa}: {ver} risponde «{detto}»."
 
 
 # Più valori da provare detti insieme (08/10 sera, DGX delle 20:10, con nomi di fantasia: «prova
@@ -1479,26 +1556,40 @@ def _piu_collaudi(ctx, svs, sv, est, valori: list[tuple[str, dict]]) -> dict:
     """I collaudi di più valori detti insieme, uno dopo l'altro: ognuno resta nello sviluppo
     come un collaudo a sé (con la sua traccia), il modello riceve i risultati in fila."""
     note_rule(ctx, "collaudo_piu_valori")
-    fatti, falliti = [], []
+    fatti, fermati, frasi = [], [], []
     primo_out = None
+    tutte = True                             # ogni prova ha una frase con l'esito vero
     for detto, args in valori:
-        out, fallito, prima = _collauda_estensione(ctx, svs, sv, est, args, detto)
+        out, fallito, prima, tipo = _collauda_estensione(ctx, svs, sv, est, args, detto)
         if prima:
             if not fatti:
                 return out                   # il primo non è partito: nessuno parte
-            fatti.append({"provato": detto, "partito": False,
-                          "nota": str((out or {}).get("conferma") or (out or {}).get("fatto")
-                                      or "non partito")})
+            nota = str((out or {}).get("conferma") or (out or {}).get("fatto") or "non partito")
+            fatti.append({"provato": detto, "partito": False, "nota": nota})
+            tutte = False
             continue
         primo_out = primo_out or out
-        voce = {"provato": detto, "argomenti_passati": args, "riuscito": not fallito}
+        voce = {"provato": detto, "argomenti_passati": args, "riuscito": not fallito,
+                "esito": tipo}
         if isinstance(out, dict) and out.get("risultati") is not None:
             voce["risultati"] = out["risultati"]
         else:
             voce["errore"] = "si è fermata con un errore: i dettagli sono sulla scheda"
-        if fallito:
-            falliti.append(detto)
+        if tipo == "errore":
+            fermati.append(detto)
             note_rule(ctx, "sviluppo_collaudo_fallito")
+        elif fallito:
+            note_rule(ctx, "sviluppo_collaudo_errore_dichiarato")
+        if tipo == "vuoto":
+            note_rule(ctx, "sviluppo_collaudo_vuoto")
+        parole = _detto_estensione(out)
+        if tipo == "errore":
+            frasi.append(f"Con «{detto}» si è fermata con un errore"
+                         + (f": {parole}." if parole else "."))
+        elif parole:
+            frasi.append(f"Con «{detto}» risponde «{parole}».")
+        else:
+            tutte = False
         fatti.append(voce)
     note_rule(ctx, "sviluppo_collauda")
     _schermo(ctx, sv)
@@ -1506,17 +1597,27 @@ def _piu_collaudi(ctx, svs, sv, est, valori: list[tuple[str, dict]]) -> dict:
     res = {"ok": True, "estensione": (primo_out or {}).get("estensione") or sv.titolo,
            "collaudi": fatti,
            "collaudo": (f"{len(fatti)} prove della versione {n}, NON ancora approvata né attiva, "
-                        "una per valore detto: di' in breve il risultato di OGNUNA")}
+                        "una per valore detto: di' in breve il risultato di OGNUNA, con le "
+                        "parole dei risultati, mai una causa che non dicono")}
     if isinstance(primo_out, dict) and primo_out.get("avviso"):
         res["avviso"] = primo_out["avviso"]
-    if falliti:
-        cosa = ", ".join(f"«{x}»" for x in falliti)
+    domanda = ""
+    if fermati:
+        cosa = ", ".join(f"«{x}»" for x in fermati)
+        domanda = "Lo faccio correggere?"
         res["cosa_fare"] = (f"per {cosa} di' che la prova si è fermata con un errore (i dettagli "
                             "sono sulla scheda) e chiedi «Lo faccio correggere?»")
-        res["in_sospeso"] = {"domanda": "Lo faccio correggere?", "tool": "sviluppo_correggi",
+        res["in_sospeso"] = {"domanda": domanda, "tool": "sviluppo_correggi",
                              "cosa": f"far correggere «{sv.titolo}» all'agente",
                              "argomenti": {"problema": f"il collaudo con {cosa} si ferma con "
                                                        "un errore"}}
+    if tutte and frasi:
+        # L'esito vero di ogni prova detto dal codice (12/10): le parole dell'estensione, non
+        # un riassunto del modello della voce («errore di rete» per un «non trovato»)
+        note_rule(ctx, "sviluppo_collaudo_detto")
+        frase = (f"Versione {n} in prova. " if n else "") + " ".join(frasi) + (
+            f" {domanda}" if domanda else "")
+        res["conferma"] = res["risposta_finale"] = frase.strip()
     return res
 
 
@@ -1594,7 +1695,7 @@ def _sviluppo_prova(ctx: ToolContext, dati: str = "", argomenti=None, **_altro) 
         valori = piu_valori(m, argomenti, dati, passati)
         if valori:
             return _piu_collaudi(ctx, svs, sv, est, valori)
-        out, fallito, prima = _collauda_estensione(ctx, svs, sv, est, passati, detti)
+        out, fallito, prima, tipo = _collauda_estensione(ctx, svs, sv, est, passati, detti)
         if prima:
             # Un rifiuto prima dell'esecuzione (file cambiati, contenitore spento, un gioco)
             # non è un collaudo: si dice e basta
@@ -1604,27 +1705,58 @@ def _sviluppo_prova(ctx: ToolContext, dati: str = "", argomenti=None, **_altro) 
         lav_id = sv.lavoro if svs._lavoro(sv.lavoro) is not None else ""
         out = ta._lavori_esegui(ctx, lavoro=lav_id, dati=dati)
         fallito = not bool((out or {}).get("ok"))
+        tipo = "errore" if fallito else "risposta"
         svs.collaudo(sv, detti, not fallito, str((out or {}).get("conferma") or ""),
-                     argomenti=passati)
+                     argomenti=passati, tipo=tipo)
     note_rule(ctx, "sviluppo_collauda")
     _schermo(ctx, sv)
-    if fallito:
-        # Un collaudo che non va diventa un caso per l'agente (versione 2): la frase la dice il
-        # codice (niente testo dell'estensione), e il «sì» va a sviluppo_correggi
+    # Il caso detto con i valori passati davvero (12/10, prova col modello: dati = «prova con
+    # Bergamo» diventava «La prova con «prova con Bergamo»»), come sonde.detto
+    valori = [str(v) for v in (passati or {}).values() if str(v).strip()]
+    caso = ", ".join(valori)[:80] if valori else str(detti or "").strip()
+    cosa = f"con «{caso}»" if caso else "senza dati"
+    n = None
+    if sv.tipo == "estensione":
+        n = est.archivio.candidata(sv.estensione) or sv.versione
+    if tipo == "errore":
+        # Un collaudo che si è fermato diventa un caso per l'agente (versione 2): la frase la
+        # dice il codice, dal 12/10 con la causa che dice l'esecuzione (M1: prima solo «si è
+        # fermata con un errore»), e il «sì» va a sviluppo_correggi
         note_rule(ctx, "sviluppo_collaudo_fallito")
-        cosa = f"con «{detti}»" if detti else "senza dati"
         domanda = "Lo faccio correggere?"
-        frase = (f"La prova {cosa} non è andata: si è fermata con un errore. I dettagli sono "
-                 f"sulla scheda dello sviluppo. {domanda}")
+        if sv.tipo == "estensione":
+            causa = _detto_estensione(out)
+        else:
+            from ..sviluppo import testo_detto
+            causa = testo_detto((out or {}).get("conferma") or (out or {}).get("errore"), 140)
+        frase = f"{frase_collaudo(cosa, 'errore', causa, n)} {domanda}"
         return _final(frase, ok=False, fatto="collaudo NON riuscito",
                       in_sospeso={"domanda": domanda, "tool": "sviluppo_correggi",
                                   "cosa": f"far correggere «{sv.titolo}» all'agente",
                                   "argomenti": {"problema": f"il collaudo {cosa} si ferma con "
-                                                            "un errore"}})
+                                                            "un errore"
+                                                            + (f": {causa}" if causa else "")}})
     if isinstance(out, dict) and passati is not None:
         # Gli argomenti veri dell'esecuzione (08/10): il modello vede se il problema è nel
         # passaggio («citta = "Guanzate, 5 giorni"») e non nel codice
         out = {**out, "argomenti_passati": passati}
+    if sv.tipo == "estensione" and isinstance(out, dict):
+        # L'esito vero detto dal codice (12/10, caso vero dell'08/10: l'esito era «Non ho
+        # trovato il meteo per…» e la voce ha detto quattro volte «errore di rete»). Un «non
+        # trovato» o un errore che l'estensione restituisce apposta non è un difetto: niente
+        # «Lo faccio correggere?» (M1); lo dice la persona, se è sbagliato
+        if tipo == "vuoto":
+            note_rule(ctx, "sviluppo_collaudo_vuoto")
+        elif tipo == "errore_dichiarato":
+            note_rule(ctx, "sviluppo_collaudo_errore_dichiarato")
+        frase = frase_collaudo(cosa, tipo, _detto_estensione(out), n)
+        if frase:
+            note_rule(ctx, "sviluppo_collaudo_detto")
+            out = {**out, "conferma": frase, "risposta_finale": frase, "esito": tipo}
+        else:
+            out = {**out, "esito": tipo,
+                   "cosa_fare": "di' in breve il risultato con le parole dei risultati; mai una "
+                                "causa (la rete, i nomi…) che i risultati non dicono"}
     return out
 
 
@@ -1692,6 +1824,26 @@ def _sviluppo_chiedi(ctx: ToolContext, domanda: str = "", **_altro) -> dict:
                              "cosa": f"far correggere «{sv.titolo}»",
                              "argomenti": {"problema": str(r.get("cosa_correggere") or domanda)
                                            [:300]}}
+    # La risposta detta dal codice (12/10, caso vero del 09/10 20:42: l'agente aveva scritto che
+    # la ricerca dei nomi simili non c'era, con correzione = true; la voce ha letto solo il
+    # messaggio e chiesto «Ti va bene o lo faccio correggere?», e la persona ha detto «mi va
+    # bene»). Se va corretto lo si dice PER PRIMO, con le parole dell'agente; poi la risposta
+    from ..sviluppo import testo_detto
+    voce = testo_detto(r.get("voce"), 260, 2)
+    parti = [arresto] if arresto else []
+    if r.get("serve_correzione"):
+        note_rule(ctx, "sviluppo_chiedi_correzione_detta")
+        manca = testo_detto(r.get("cosa_correggere"), 140, 1)
+        parti.append("Chi l'ha scritta dice che va corretto" + (f": {manca}." if manca else "."))
+        if voce:
+            parti.append(f"La sua risposta: {voce}.")
+        parti.append("Lo faccio correggere?")
+    elif voce:
+        parti.append(f"Chi l'ha scritta risponde: {voce}.")
+    else:
+        parti.append("La risposta di chi l'ha scritta è sulla scheda dello sviluppo.")
+    frase = " ".join(p for p in parti if p)
+    out["conferma"] = out["risposta_finale"] = frase
     return out
 
 

@@ -391,13 +391,17 @@ def prova_revisione(tmp: Path, iso):
     ctx.regole = []
     out = P.chiama(reg, ctx, "sviluppo_passo", {"azione": "avanti"}, turno=6)
     f = detta(out)
-    verifica("avanti dal collaudo: la revisione detta (permessi, analisi, test, differenze, "
-             "prove)",
+    # 12/10 (voce onesta, meno parole): a voce permessi, chi la usa e le prove; analisi e test
+    # solo se c'è un problema, file e righe cambiati solo sulla scheda
+    verifica("avanti dal collaudo: la revisione detta in breve (permessi, chi la usa, prove)",
              sv.fase == "revisione" and f.startswith("Revisione della versione 2 di «Meteo "
                                                      "Borgoverde e Valfiorita»")
-             and "Permessi:" in f and "Analisi del codice:" in f and "Test:" in f
-             and "Rispetto alla versione 1" in f and "righe in più" in f and "Prove: 1" in f
+             and "Permessi:" in f and "la può usare" in f and "Prova: una, con una risposta." in f
+             and "righe in più" not in f and "Test:" not in f
+             and "Analisi del codice:" not in f
              and f.endswith("Ti chiederò la frase di conferma: vuoi attivarla?"), f)
+    verifica("…file e righe cambiati sulla scheda", "Rispetto alla versione 1" in sv.revisione
+             and "righe in più" in sv.revisione, sv.revisione[:300])
     verifica("…con i permessi nuovi rispetto alla versione approvata",
              "geocoding-api.open-meteo.com" in f, f)
     verifica("…mai i nomi dei file né il codice a voce", "estensione.py" not in f
@@ -428,7 +432,8 @@ def prova_revisione(tmp: Path, iso):
     out = P.chiama(reg, ctx, "sviluppo_passo", {"azione": "avanti"}, turno=6)
     verifica("contrario: test rossi → «Così non si può approvare», niente domanda; prima "
              "versione", "non si può approvare" in detta(out) and "in_sospeso" not in out
-             and "È la prima versione" in detta(out), detta(out))
+             and "Test: non passano." in detta(out)
+             and "Il collaudo l'hai saltato" in detta(out), detta(out))
 
 
 # ═══════════════════════════ 4. ritorno all'analisi ═══════════════════════════
