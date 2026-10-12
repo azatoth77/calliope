@@ -231,6 +231,18 @@ def leggi_wav(path) -> tuple:
     raise ValueError(f"formato WAV {fmt} non letto")
 
 
+def _segreto(rec: dict) -> bool:
+    """Nella frase c'è qualcosa che non deve restare nemmeno come suono: le parole della frase
+    di sfida, un codice o un segreto detto (tolti dal testo: «******»)."""
+    if {"sfida_voce", "sfida_risposta"} & set(rec.get("regole") or ()):
+        return True
+    if rec.get("testo") == "(frase di conferma)" or "******" in str(rec.get("testo") or ""):
+        return True
+    return any(isinstance(ev, dict) and "******" in json.dumps(ev.get("argomenti") or {},
+                                                               ensure_ascii=False)
+               for ev in rec.get("tool") or ())
+
+
 def _scrivi_privato(path: Path, dati: bytes):
     """Il file con i permessi stretti già alla creazione (600 su Linux), atomico."""
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -354,6 +366,8 @@ class Conservazione:
             return Decisione(False, "non_rivolta")
         if not self.voce_dir:
             return Decisione(False, "spenta")
+        if _segreto(rec):
+            return Decisione(False, "segreto")
         d = self.testo_turno(rec)
         if not d:
             return d
@@ -439,9 +453,17 @@ class Conservazione:
 
     # ── rotazione ──
     def ruota_se_serve(self):
+        """Una volta al giorno, in secondo piano: la voce non aspetta il giro delle cartelle."""
         oggi = datetime.date.today()
         if self._ruotata_il != oggi:
-            self.ruota()
+            self._ruotata_il = oggi
+
+            def giro():
+                try:
+                    self.ruota(oggi)
+                except Exception as e:  # noqa: BLE001 — la rotazione non ferma niente
+                    self.log(f"   [CONSERVA] rotazione non riuscita: {type(e).__name__}")
+            threading.Thread(target=giro, daemon=True, name="conserva-rotazione").start()
 
     def ruota(self, oggi: datetime.date | None = None) -> dict:
         """La voce: via i giorni oltre `turn_log_days`, le persone senza più il diritto (consenso

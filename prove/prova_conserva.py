@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
   ospiti, voci incerte, zona grigia senza parole (restano i numeri e quante parole);
 - voce: μ-law che si rilegge (errore piccolo), un file per frase nella cartella della persona,
   permessi 600/700 fuori da Windows; mai per minore, ospite, adulto senza consenso, scritto,
-  frase ignorata, compagnia;
+  frase ignorata, compagnia, frase di sfida, codice detto;
 - consenso: il «sì» salvato nel profilo; la revoca cancella le registrazioni;
 - rotazione: giorni vecchi, persone senza più il diritto, tetto di spazio;
 - il registro dei turni di prima ripulito una volta (segno nella cartella);
@@ -134,6 +134,9 @@ try:
     cfg.turn_log_days = 60
     cfg.conserva_voce, cfg.conserva_voce_mb = True, 2000
     cons = C.Conservazione(cfg, reg, log=lambda m: None)
+    # La rotazione del giorno parte in secondo piano al primo salvataggio: qui la si chiama a
+    # mano, quando serve (niente thread che corrono con la prova)
+    cons._ruotata_il = datetime.date.today()
     log = TurnLog(cfg.turn_log_dir, 60, conserva=cons)
     cons.turnlog = log
     oggi = datetime.date.today().isoformat()
@@ -212,13 +215,30 @@ try:
                     ("compagnia", turno("Primo", voce={"compagnia": {"voci": 2}})),
                     ("scritta", turno("Primo", modo="schermo", canale="scritto")),
                     ("ignorata", {**turno("Primo"), "esito": "ignorato"}),
-                    ("incerta con un minore", turno("Primo", voce={"minore_vicino": "Leo"}))):
+                    ("incerta con un minore", turno("Primo", voce={"minore_vicino": "Leo"})),
+                    ("frase di sfida", {**turno("Primo"), "regole": ["sfida_risposta"]}),
+                    ("codice detto", {**turno("Primo"), "tool": [
+                        {"nome": "schermo_gestisci", "argomenti": {"codice": "******"}}]})):
         if nome == "adulto senza consenso":
             adulto.voce_conservata = None
         cons.al_turno(r, audio, sr)
         verifica(f"voce, contrario «{nome}»: non salvata", not r.get("voce_file"), str(r)[:200])
         adulto.voce_conservata = True
     verifica("nessun file per il minore", not (cons.voce_dir / "p-min").exists())
+    # Dal ciclo: _scrivi_turno prende l'audio del turno di questo rec, poi il registro dei turni
+    from calliope.ciclo import Ciclo
+    finto = SimpleNamespace(s=SimpleNamespace(conserva=cons, cfg=cfg, turns=log), ombra=None,
+                            _turno=SimpleNamespace(audio=audio, scritto=None))
+    rec = turno("Primo", livello="amministra")
+    Ciclo._scrivi_turno(finto, rec)
+    scritta = [json.loads(x) for x in (Path(cfg.turn_log_dir) / f"turni-{oggi}.jsonl").read_text(
+        encoding="utf-8").splitlines()][-1]
+    verifica("ciclo: la voce del turno salvata e citata nel registro dei turni",
+             bool(scritta.get("voce_file")) and (cons.voce_dir / scritta["voce_file"]).exists())
+    finto._turno = SimpleNamespace(audio=audio, scritto={"testo": "x"})
+    rec = turno("Primo", livello="amministra")
+    Ciclo._scrivi_turno(finto, rec)
+    verifica("ciclo, contrario: un turno scritto non ha audio", not rec.get("voce_file"))
 
     # ───────── consenso e revoca ─────────
     n = cons.registrazioni("p-adu")
