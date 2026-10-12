@@ -9,7 +9,8 @@ vicino con «cosa si voleva» dalla chiamata riuscita dopo; nei turni di prima l
 correzioni riuscite al giro dopo, giri esauriti, ripieghi (regola o «Non ci sono riuscita»),
 richieste ripetute della stessa persona entro 90 s (contrari: un'altra persona, troppo tardi,
 un'altra frase, un turno senza parole), indice e avviso (contrario: pochi turni con tool), la
-sezione in `calliope stato --turni` (testo e JSON); Brain segna il nome inventato. ~1 s.
+sezione in `calliope stato --turni` (testo e JSON); Brain segna il nome inventato e le schede
+mandate (per l'evento scheda_mandata). ~1 s.
 """
 
 import contextlib
@@ -155,6 +156,20 @@ b._nome_inventato = None
 call = {"id": "c2", "name": "accendi_tutto", "arguments": {}}
 b._nome_corretto(call)
 verifica("Brain, contrario: un nome lontano non è «corretto»", b._nome_inventato is None)
+
+# Le schede mandate in questa risposta, per l'evento scheda_mandata del registro degli eventi
+class Hub:
+    def invia(self, card, sender):
+        return {"schermi": ["studio", "telefono"]}
+
+
+b.last_schede_mandate, b.last_rules = [], []
+out = b._invia_schede(Hub(), [{"tipo": "testo", "titolo": "Lista della spesa", "chiave": "k1"}],
+                      None)
+verifica("Brain: la scheda mandata ricordata con tipo, chiave, titolo e schermi",
+         b.last_schede_mandate == [{"tipo": "testo", "chiave": "k1",
+                                    "titolo": "Lista della spesa", "schermi": 2}]
+         and out[0]["schermi"] == 2, str(b.last_schede_mandate))
 
 print(f"\n{errori} errori" if errori else "\nTutto a posto.")
 sys.exit(1 if errori else 0)

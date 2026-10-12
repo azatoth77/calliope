@@ -12,6 +12,7 @@
 | Finestra di contesto (dal 05/10) | — (Ollama `/api/show` e `/api/ps`, vLLM `/v1/models` e `/metrics`, nvidia-smi, /proc/meminfo) | `calliope/contesto.py` → `prepara`, `calcola`, `finestra` (il num_ctx di tutti), `testo_stato`; `llm_num_ctx: auto`, scelta in `contesto.json`; token veri in `Brain.last_context`; barra `Schermi.contesto`; misure `prove/misura_contesto.py` |
 | Conversazione, compressione e archivio delle conversazioni (dal 05/10) | SQLite in WAL con FTS5 (`conversazioni.db`), vettori da Ollama `/api/embed` sulla CPU (`qwen3-embedding:0.6b`) o `/v1/embeddings`, coseno in numpy, RRF | `calliope/conversazione.py` → `Conversazione` (Brain la espone con `history`, `pending`…, `brain.conv`), `turni`; `calliope/compressione.py` → `Compressore` (soglie 75/90 %, `avvia`, `comprimi_ora`, `applica`, `chiudi`), `RiassuntoreLLM` (agente o voce), `RiassuntoreTagli`, `crea_riassuntori`; `calliope/conversazioni.py` → `ArchivioConversazioni` (`archivia`, `cerca`, `ultima`, `dimentica`, conversazione corrente; dall'08/10 `recenti` per le domande cronologiche, `su_turni` e `chat` per la scheda «Conversazione»; dal 10/10 `pulisci_wal`, `su_pulizia` e «dimentica» vera), `Embedder`, `load_conversazioni`; il registro degli eventi accanto (`calliope/eventi/registro.py` → `Registri`, `Disco`, dal 10/10 in ombra: sezione «La storia come proiezione degli eventi»); tool `conversazione_cerca`, `conversazioni_dimentica` in `calliope/tools/conversazioni.py`; «ricominciamo» `wakeword.nuova_conversazione`; terminale `python -m calliope.conversazioni`; misure `prove/misura_conversazioni.py` |
 | Latenza come metrica, cache scaldata, modelli di Ollama (dal 06/10) | solo libreria standard (registro dei turni, Ollama `/api/ps`) | `calliope/latenza.py` → `giorno`, `per_giorno`, `testo`, `avviso`, `avviso_recente`, `scalda_ripresa`, `leggi_file` (`calliope stato --turni`); `Brain.scalda_conversazione`, `Brain._scalda_se_cambiato` (prefisso nuovo dopo un cambio di modalità, 07/10); `calliope/ollama_carico.py` → `residenti`, `limite`, `usati`, `avviso`, `puo_caricare`; la prima frase a pezzi e la taratura della voce (sezioni del 07/10 sotto) hanno il codice in `tts.py` e `taratura_voce.py`, area [stt-tts](stt-tts.md) |
+| Conservazione dei dati per le misure, scelta dei tool come metrica (dal 12/10) | solo libreria standard e numpy (voce in G.711 μ-law), SQLite della tabella `eventi` | `calliope/conserva.py` → `decidi` (il solo posto), `Conservazione` (`testo_turno`, `voce_turno`, `registro_su_disco`, `al_turno`, `salva_voce`, `imposta_consenso`, `ruota`, `ripulisci_registro`, `svuota`, `stato`), `python -m calliope.conserva`; `calliope/tools/conserva.py` (`dati_conservati`); `calliope/scelta_tool.py` → `turno`, `giorno`, `per_giorno`, `testo`, `avviso`, `avviso_recente` (`calliope stato --turni`) |
 
 ## Problemi noti
 
@@ -897,3 +898,92 @@ della parte non detta, 0/3 senza (il modello inventava un secondo consiglio).
 Prove: `prova_eventi_attivo` (livello 1: giro sintetico, ombra come prima, riavvio, compressione,
 latenza, promemoria, cache, sigilli, banchi d'attacco con `attivo`, argomenti, backend OpenAI),
 `prova_argomenti_ollama` (con il modello). Misure della prima frase nel § 8 del progetto.
+
+## Conservazione dei dati e la scelta dei tool come metrica (12/10, ramo `conserva-metrica`)
+
+Decisione [0028](../decisioni/0028-decisioni-roadmap-12-10.md) T1 con la seconda tornata del 12/10:
+turni, eventi e voce dei **soli adulti riconosciuti** si tengono **60 giorni**, in privato, per il
+banco della scelta dei tool, i set di regressione, il dizionario delle correzioni e la taratura
+delle soglie; di **minori e ospiti mai**. Prima: turni 30 giorni con le parole di tutti tranne gli
+ospiti (anche dei minori), eventi 7 giorni (anche dei minori e, fino alla chiusura della loro
+conversazione, degli ospiti), voce mai (solo `CALLIOPE_DEBUG_AUDIO`).
+
+- **Un solo posto decide** (`conserva.decidi(profilo, cosa, modo, dubbi)`, puro). Testo: adulto
+  riconosciuto dalla voce, da una frase breve, per continuità o da uno schermo personale. **Nel
+  dubbio no**: zona grigia (`conversazione`), proprietario incerto con un minore, `incerta`,
+  `minore_vicino`. Voce: in più la voce sopra soglia **in quella frase** (`modo: voce`), nessuna
+  altra voce vicino al satellite (`compagnia`: l'audio potrebbe avere dentro un'altra persona), il
+  consenso, una frase rivolta a Calliope (non ignorata né scritta), `conserva_voce` acceso. Eventi
+  su disco: i registri delle persone adulte (e quello della casa).
+- **Dove**: la cartella del registro dei turni (`turn_log_dir`, `registro/`, già in .gitignore;
+  sulla DGX `~/calliope/registro`, la cartella dei dati del servizio), la voce in
+  `registro/voce/<id della persona>/<AAAA-MM-GG>/<ora>.wav`; gli eventi restano nella tabella
+  `eventi` di `conversazioni.db`. File 600 e cartelle 700 su Linux (già `umask 077` da
+  `sicurezza.proteggi_dati`, più i permessi alla creazione dei file della voce).
+- **Registro dei turni** (`TurnLog(conserva=…)`): le parole restano solo per gli adulti; per
+  minori, ospiti e voci incerte `conserva.togli_testo` (la regola degli ospiti di prima, ora anche
+  `risposta_scritta`, i valori di `stt_argomento` e `approfondimento`), con il numero di parole. Il
+  ciclo segna il motivo nel turno (`conserva: {testo: false, motivo}`, letto anche dall'ombra degli
+  eventi) e l'id del profilo in `voce.id`; le righe scritte da altri (cassetto, schermi,
+  installazioni) le decide il registro. All'avvio, una volta, le parole di minori, ospiti e voci
+  incerte dei file di prima si tolgono (segno `.conservazione-1` nella cartella).
+  `turn_log_days` da 30 a **60**.
+- **Registro degli eventi** (`Registri(conserva=…)`): i registri di minori, ospiti e voci incerte
+  stanno **solo in memoria**, per la conversazione: non vanno su disco e dopo un riavvio non si
+  riprendono (si riparte da capo: per un ragazzo è il prezzo accettato). Quelli rimasti da prima li
+  toglie la rotazione (`Disco.ruota(effimero=…)`, con `secure_delete`). Nel registro di un adulto,
+  un turno incerto tiene le parole solo in memoria (`tipi.senza_parole`, i campi di
+  `tipi.CAMPI_TESTO`). `eventi_giorni` da 7 a **60**.
+- **Voce**: G.711 μ-law, 8 bit a 16 kHz (WAV con il formato 7, letto da ffmpeg e sox;
+  `conserva.leggi_wav` per il banco), codificata con numpy: niente librerie native nuove
+  (principio 4; `audioop` non c'è più da Python 3.13). Metà della PCM a 16 bit, errore
+  quadratico < 0,01 su un tono di prova. **Quanto pesa**: dal registro dei turni della DGX (copie
+  locali del 24/09–10/10) le giornate piene dell'08–09/10 hanno ~1 300 s di parlato, ~75 % con la
+  voce riconosciuta sopra soglia: ~15 MB al giorno, ~0,9 GB in 60 giorni (una giornata media,
+  ~600 s, ~7 MB). Tetto `conserva_voce_mb: 2000`: oltre, la rotazione toglie i giorni più vecchi.
+  La rotazione (al primo salvataggio di ogni giorno e all'avvio) toglie anche le persone che non ne
+  hanno più il diritto: consenso revocato, profilo tolto, diventata minore, `conserva_voce: false`.
+- **Consenso**: nel profilo (`speakers.json`, `voce_conservata` e la data; None = mai detto).
+  Chi amministra: sì finché non dice di no. Gli altri adulti: solo dopo il loro «sì» a Calliope,
+  con il tool `dati_conservati` (azione `consenso_voce`): la richiesta con la voce sopra soglia
+  (mai scritta né dalla zona grigia), la domanda con cosa e per quanto, il «sì» nella risposta dopo
+  (anche breve: arriva nella conversazione della stessa persona). Revoca a voce (`revoca_voce`),
+  subito e senza domanda, con le registrazioni cancellate. Un minore non può dare il consenso. Dopo
+  un `calliope torna` a una versione di prima il campo si perde: si torna a «mai detto» (per chi
+  amministra il sì di partenza, e un suo «no» va ridetto).
+- **Svuotare**: `python -m calliope.conserva --svuota` (tutto: voce, eventi, file del registro
+  dei turni) o `--svuota --persona NOME` (la sua voce, i suoi eventi, le parole dei suoi turni);
+  sulla DGX `calliope conserva …`. A voce solo chi amministra (`dati_conservati` azione `svuota`,
+  con la domanda e il «sì»). Non tocca l'archivio delle conversazioni né i ricordi
+  («dimentica» resta per quelli). `python -m calliope.conserva` (e una riga in `calliope stato`)
+  dice quanto c'è, solo conteggi; i nomi solo da terminale a chi amministra.
+- **Privacy**: niente esce (nessun invio, nessun tool che legga la cartella della voce, niente
+  testo né nomi nei log: solo conteggi). **Profilo ridotto da 8 GB**: la conservazione non usa la
+  GPU né un modello; c'è uguale.
+
+**Resta aperto**: l'archivio delle conversazioni (`conversazioni_giorni`, la memoria di
+«cosa ti avevo detto») tiene ancora le conversazioni di minori e ospiti (gli ospiti mai recuperati
+dal modello): è una funzione per chi parla, non una misura, e non fa parte di T1; da decidere con chi
+amministra se allinearlo. Che Calliope chieda il consenso di sua iniziativa non c'è: la persona
+lo dice quando vuole (o chi amministra glielo spiega).
+
+**La scelta dei tool come metrica** (punto 1 di
+[`2026-10-10-scelta-dei-tool.md`](../ricerche/2026-10-10-scelta-dei-tool.md)), in `calliope stato
+--turni` (testo e JSON) e con un avviso in `calliope stato` (`calliope/scelta_tool.py`, dal
+registro dei turni): **nomi inventati** (corretti da Brain, con il nome scritto nel campo
+`nome_inventato` del tool; o senza un tool vicino, `sconosciuto`, con «cosa si voleva» dalla
+chiamata riuscita dopo nella risposta; nei turni di prima del 12/10 solo le regole
+`tool_nome_corretto` e `tool_nome_azione`), **correzioni** riuscite al giro dopo ed **esaurite**,
+**ripieghi** («Non ci sono riuscita…»), **richieste ripetute** della stessa persona entro 90 s con
+le parole simili (difflib ≥ 0,6; solo turni con le parole, quindi solo adulti), un **indice**
+(problemi ogni 100 turni con tool) e l'**avviso** oltre 10 con almeno 20 turni con tool (costanti
+nel modulo, niente campi nuovi). Per il banco futuro il registro degli eventi scrive ora i due tipi
+dichiarati e mai scritti: `dati_del_turno` (i nomi dei blocchi davanti alla frase: `turno`,
+`ricordi`, `foto`, `contesto`, `riferimento_*`, `ricerca`, `estensioni`, `sviluppo`,
+`stato_eventi`, `proposta`, `rifiuti`, `proposta_altrui`, con la lunghezza; mai il testo, nemmeno in
+memoria) e `scheda_mandata` (tipo, chiave, titolo, su quanti schermi). La proiezione li esclude come
+prima.
+
+Prove a secco: `prova_conserva` (decisioni, registro, voce, consenso, rotazione, svuota, eventi,
+tool, terminale, con i contrari minore, ospite, voce incerta, adulto senza consenso, revoca,
+svuotamento), `prova_scelta_tool`, `prova_eventi_ciclo` (i `dati_del_turno` sul giro sintetico).

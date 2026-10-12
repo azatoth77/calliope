@@ -50,6 +50,7 @@ calliope/                 # package: python -m calliope
 │   ├── sviluppo.py       # sviluppo_apri, sviluppo_passo, sviluppo_collauda, sviluppo_chiedi, sviluppo_correggi (modalità sviluppo, 08/10)
 │   ├── estensioni.py     # estensione_gestisci e i tool est_<nome> delle estensioni attive
 │   ├── conversazioni.py  # conversazione_cerca (anche cronologica, 08/10), conversazioni_dimentica, conversazione_nuova (09/10)
+│   ├── conserva.py       # dati_conservati: consenso alla voce, revoca, stato, svuota (12/10)
 │   ├── web.py            # web_cerca (SearXNG)
 │   ├── immagini.py, allegati.py  # immagine_guarda, immagine_archivia, pc_guarda; allegato_leggi, allegato_archivia, cassetto_gestisci
 │   ├── archivio.py, ufficio.py   # archivio_cerca/scadenze/somma; modello_compila, anagrafica_cerca/salva
@@ -244,6 +245,7 @@ controllo nelle prove a secco), ma tocca tutti i tool e le prove con Ollama che 
 | `schermo_mostra` | ospite (il codice decide cosa può vedere) | lettura | «mostramelo sullo schermo», «metti la lista sullo schermo», «fammelo leggere», «togli dallo schermo»: `cosa` in enum (ultima, risposta, lista, timer, promemoria, documento, casa, niente); la scheda la costruisce il codice, la frase dice cosa è successo davvero (`risposta_finale`) |
 | `schermo_gestisci` | amministra | azione | abbina (codice di 6 cifre, stanza, personale), scollega, elenca gli schermi; il codice è un argomento segreto (`ToolSpec.segreti`) |
 | `schede_pulisci` | familiare (il codice vuole la voce riconosciuta: mai la zona grigia) | azione | «pulisci le mie schede» (08/10): la cronologia delle schede di chi parla, su disco e sui suoi schermi personali; solo le sue, senza conferma (documenti, lavori e file restano); lo sviluppo aperto resta. Anche il tasto «Pulisci» della pagina (`POST /api/schede`) |
+| `dati_conservati` | familiare (consenso e revoca della propria voce; `svuota` solo chi amministra, con la voce) | azione (`stato` lettura) | i dati tenuti 60 giorni per le misure (12/10, `calliope/conserva.py`): `consenso_voce` con la voce sopra soglia, la domanda e il «sì» (mai scritto né zona grigia né un minore), `revoca_voce` subito con le registrazioni cancellate, `stato` (cosa tengo di te), `svuota` di tutti o di una persona con la domanda. Si registra con la conservazione (`build_registry(conserva=True)`) |
 | `lavoro_affida` | familiare | azione | affida a un agente in secondo piano un lavoro lungo il cui risultato è un file complesso: `tipo` documento (anche da un `modello`), ricerca, altro; `compito` con i dati detti. Dal 08/10 senza il codice: un tipo codice passa da sé a `sviluppo_apri` (regola `lavoro_codice_sviluppo`). I lavori costosi chiudono con «Procedo?» e partono solo con `proposta` = l'id, nella risposta dopo, della stessa persona; `risposta_finale` (fino al 08/10 `delega_lavoro`) |
 | `lavoro_stato` | familiare | lettura | a che punto sono i lavori (passo dell'agente, coda, una tappa, ultimo finito) (era `lavori_stato`) |
 | `lavoro_annulla` | familiare (gli altrui solo chi amministra) | azione | ferma il lavoro in corso, in coda o fermo a una tappa, subito (stream chiuso, sandbox fermata) (era `lavori_annulla`) |

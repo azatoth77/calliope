@@ -1388,3 +1388,23 @@ attrito.py`) legge il registro della DGX, che da qui non si legge: la misura va 
 l'aggiornamento, confrontando i giorni di sviluppo (regole `valore_bersaglio_dato` su
 `sviluppo_collauda` ed `estensione_gestisci`: devono sparire per le città dette e per il proprio
 sviluppo; «ESEGUITE con un bersaglio dal dato» deve restare 0).
+
+## I dati conservati per le misure: permessi, nessun invio, il tool `dati_conservati` (12/10, ramo `conserva-metrica`)
+
+La conservazione dei dati (decisione [0028](../decisioni/0028-decisioni-roadmap-12-10.md) T1,
+`calliope/conserva.py`; dettagli in [contesto-conversazione](contesto-conversazione.md)) tiene per
+60 giorni turni, eventi e voce dei soli adulti riconosciuti. Sicurezza:
+
+- **Permessi**: la voce sta in `registro/voce/` (dentro `turn_log_dir`, già in
+  `sicurezza.file_di_dati`); su Linux oltre a `umask 077` i file della voce nascono 600 e le
+  cartelle 700 (`os.open` con il modo, scrittura atomica). `conversazioni.db` (gli eventi) era già
+  nella lista.
+- **Niente esce**: nessun invio, nessun tool che legga la cartella della voce; nei log solo conteggi
+  (mai testo, nomi o percorsi della voce); `python -m calliope.conserva` mostra i nomi solo da
+  terminale.
+- **Tool `dati_conservati`** (familiare; azione): `consenso_voce` vuole la voce riconosciuta sopra
+  soglia della persona stessa (mai scritto, mai la zona grigia, mai un minore), la domanda e il «sì»
+  nella risposta dopo; `revoca_voce` subito (la direzione sicura); `stato` in sola lettura; `svuota`
+  solo chi amministra con la voce (o il «sì» breve con l'impronta compatibile), con la domanda, ed è
+  `distruttiva` nella classe della politica (verbo coerente nella frase). Effetto E3 nella politica
+  per valore (`valore.EFFETTI`), argomenti `azione` (scelta) e `persona` (bersaglio).
