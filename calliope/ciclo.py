@@ -36,6 +36,8 @@ from . import pause as pause_mod
 from . import guardiano as guardia
 from . import provenienza, riferire, stato_dialogo, storpiature
 from . import allegati as allegati_mod
+from . import frasi
+from .cortesia import Cortesia
 from . import gioco_voce
 from .cassetto import CassettoPieno
 from .agenda import announcement
@@ -348,6 +350,7 @@ class Ciclo:
         ciò che la corsia dice. Se la voce cambia (le prove la sostituiscono) segue la voce."""
         u = per_voce(self.speaker, log=lambda m: print(m, flush=True))
         u.cervello = getattr(self, "brain", None)
+        u.su_pronta = self._pronta_detta     # le frasi pronte nel registro dei turni (12/10)
         ombra = getattr(self, "ombra", None)
         if ombra is not None and u.osservatore is None:
             ombra.collega(u)
@@ -523,6 +526,33 @@ class Ciclo:
         if risposta and getattr(self.brain, "last_private", False):
             return "…"
         return testo
+
+    def _pronta_detta(self, info: dict):
+        """Una frase pronta del catalogo è andata alla voce (12/10, calliope/frasi.py, fase 0):
+        nel registro dei turni il campo `pronte` (id, tono, variante, forma breve o la scelta in
+        ombra; mai parole), una volta per id e turno. La forma breve detta è anche la regola
+        `frase_breve`."""
+        rec = self.rec
+        if rec is None or not isinstance(info, dict) or not info.get("id"):
+            return
+        pronte = rec.setdefault("pronte", [])
+        if any(p.get("id") == info["id"] for p in pronte) or len(pronte) >= 20:
+            return
+        pronte.append(dict(info))
+        if info.get("breve"):
+            self.rule("frase_breve")
+
+    def _frasi_turno(self, t):
+        """Il turno di chi parla per il catalogo delle frasi pronte (12/10): la persona (per la
+        rotazione e la forma breve) e il suo tono, o quello della casa."""
+        try:
+            s = self.s
+            prof = s.registry.get(t.speaker_name) if t.speaker_name else None
+            persona = getattr(prof, "id", None) or t.speaker_name or None
+            tono = Cortesia.tono(getattr(prof, "preferred_tone", None), s.cfg.tono)
+            frasi.FRASI.inizio_turno(persona, tono)
+        except Exception as e:  # noqa: BLE001 — le frasi restano quelle di oggi
+            print(f"   [FRASI] turno non segnato: {type(e).__name__}: {e}", flush=True)
 
     def rule(self, name: str):
         """Una regola sul testo ha deciso qualcosa in questo turno: resta nel registro dei
@@ -2173,6 +2203,7 @@ class Ciclo:
             return _FINE
         # Chi ha chiesto: i suoi documenti e lavori si annunceranno da dove ha chiesto
         s.instradamento.persona(self._persona_id(t.speaker_name))
+        self._frasi_turno(t)           # tono e persona delle frasi pronte (12/10)
         if s.cfg.debug_audio_dir and t.scritto is None:
             self.rec["audio"] = save_debug_audio(s.cfg, t.audio, t.text)
         if not t.text and not self._risveglio_acustico(t):
@@ -2691,7 +2722,8 @@ class Ciclo:
             forma = None
         if forma in ("grazie", "conferma"):
             prof = s.registry.get(t.speaker_name) if t.speaker_name else None
-            frase = s.cortesia.risposta(forma, getattr(prof, "preferred_tone", None), cfg.tono)
+            frase = s.cortesia.risposta(forma, getattr(prof, "preferred_tone", None), cfg.tono,
+                                        persona=getattr(prof, "id", None) or t.speaker_name)
             print(f"Tu: {self.in_console(text)}")
             print(f"{cfg.name}: {frase}")
             self.rec["esito"] = "cortesia"

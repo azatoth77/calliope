@@ -58,6 +58,18 @@ class Config:
     # (per_tutti), salvato in personalita.json accanto a calliope.yaml: vince su questo
     # finché calliope.yaml o calliope.locale.yaml non sono più recenti (vale il più recente)
     tono: str = "normale"
+    # Frasi pronte meno monotone (12/10, calliope/frasi.py, docs/ricerche/2026-10-08-frasi-pronte.md):
+    # le frasi più dette scritte nel codice (lavori, estensione attiva, sviluppo, cortesia) hanno
+    # varianti per tono, col «lei» nel formale, a rotazione per persona, e una forma breve la
+    # seconda volta. «ombra»: Calliope dice la frase di oggi e il registro dei turni scrive anche
+    # la variante che avrebbe scelto (`calliope stato --turni` stima le ripetizioni con le
+    # varianti); «attivo»: dice la variante; «spento»: niente scelta, solo l'id per la misura.
+    # Si accende a mano nel file locale dopo aver riletto il campione:
+    # python -m calliope.frasi --campione. Sfida, permessi e domande della politica non cambiano
+    frasi_varianti: str = "ombra"
+    # La forma breve se la stessa frase è stata detta alla stessa persona in questi ultimi turni
+    # (e nell'ultima ora). 0 = mai
+    frasi_breve_turni: int = 6
     # Modalità (preset): "startrek" = wake word «Computer» (solo all'inizio della frase o
     # dopo una virgola), tono computer_di_bordo e i suoni di inizio e fine ascolto. Vince su
     # calliope.yaml; ciò che scrivi in calliope.locale.yaml vince sulla modalità. Il nome
@@ -2536,7 +2548,8 @@ def apply_llm_profile(cfg: "Config", log: bool = False):
 # Sezioni del file YAML: ogni chiave dentro una sezione è il nome di un campo di Config.
 # Le sezioni servono solo a leggere meglio il file: il caricamento le appiattisce.
 SEZIONI: dict[str, list[str]] = {
-    "identita": ["name", "gender", "persona", "tono", "modalita", "suoni_ascolto",
+    "identita": ["name", "gender", "persona", "tono", "frasi_varianti", "frasi_breve_turni",
+                 "modalita", "suoni_ascolto",
                  "suono_inizio_ascolto", "suono_fine_ascolto", "suoni_volume"],
     "wake_word": ["wake_word", "wake_anche_nome", "wake_posizione", "wake_word_enabled", "wake_mode", "wake_model", "wake_threshold",
                   "wake_consecutive", "wake_confirm_score", "wake_solo_nome_s", "followup_s",
@@ -2877,6 +2890,7 @@ LIMITI: dict[str, tuple[float, float]] = {
     "conversazione_doppione_s": (0.0, 30.0),
     "eventi_giorni": (0, 365), "eventi_avviso_mb": (0.0, 100_000.0),
     "eventi_contesto_ms_avviso": (0.0, 10_000.0),
+    "frasi_breve_turni": (0, 100),
     "agenti_num_ctx": (2048, 1_048_576), "agenti_contesti_paralleli": (1, 64),
     "sviluppo_sospendi_min": (0.0, 1440.0), "sviluppo_programma_righe": (10, 100_000),
     "sviluppo_chiedi_s": (5.0, 600.0),
@@ -2988,6 +3002,14 @@ def _eventi_valido(value):
     raise ValueError("serve «spento», «ombra» o «attivo»")
 
 
+def _frasi_varianti_valido(value):
+    """«spento», «ombra» o «attivo» (12/10, calliope/frasi.py)."""
+    s = str(value or "").strip().lower()
+    if s in ("spento", "ombra", "attivo"):
+        return s
+    raise ValueError("serve «spento», «ombra» o «attivo»")
+
+
 def _tts_dispositivo_valido(value):
     """«auto», «cpu» o «cuda»."""
     s = str(value or "").strip().lower()
@@ -3001,7 +3023,7 @@ VALIDATORI = {"llm_keep_alive": keep_alive_valido, "llm_num_ctx": _num_ctx_valid
               "agenti_num_ctx": _num_ctx_agenti_valido,
               "contesto_riassuntore": _riassuntore_valido,
               "dialogo_interprete": _dialogo_interprete_valido,
-              "eventi": _eventi_valido}
+              "eventi": _eventi_valido, "frasi_varianti": _frasi_varianti_valido}
 
 
 def fuori_limiti(key: str, value) -> tuple[float, float] | None:

@@ -25,6 +25,11 @@ Una `Uscita` per voce (quindi per corsia: `per_voce`), intorno allo `Speaker` di
   un'interruzione: è il `voce_fine`.
 - `testo_scritto()`: la risposta scritta sugli schermi, dalle frasi della persona in corso (le
   stesse degli eventi), non più ricostruita dal ciclo.
+- **le frasi pronte** (12/10, calliope/frasi.py, fase 0 di
+  docs/ricerche/2026-10-08-frasi-pronte.md): ogni frase che va alla voce passa da
+  `frasi.FRASI.detta`, che dice quali frasi pronte del catalogo contiene (id, tono, variante,
+  forma breve, scelta in ombra: mai parole). Finiscono nel detto (`pronte`) e a `su_pronta` (il
+  ciclo le scrive nel registro dei turni); solo allora contano per la rotazione e la forma breve.
 
 Gli eventi entrano nel registro della conversazione a turno finito (`Ombra.chiudi_turno`), con
 il `seq` dopo il `detto_persona` del turno: finché l'ombra scrive il turno a cose fatte (fino al
@@ -50,6 +55,7 @@ class Uscita:
         self.speaker = speaker
         self.log = log
         self.osservatore = None        # il registro in ombra (Ombra.sente), o None
+        self.su_pronta = None          # le frasi pronte dette (12/10): Ciclo._pronta_detta
         self.cervello = None           # Brain: le chiamate dei tool fatte nella risposta
         self.scritto = False           # la frase della persona è scritta (da uno schermo)
         self._aperto = False           # un turno della voce aperto da questa uscita
@@ -126,6 +132,16 @@ class Uscita:
                  "pronta": bool(pronta), "t": time.time(),
                  "dopo_chiamate": self._chiamate() if cat == "risposta" else None,
                  "fonte": fonte}
+        pronte = _pronte(testo)
+        if pronte:
+            detto["pronte"] = pronte
+            cb = self.su_pronta
+            if cb is not None:
+                for p in pronte:
+                    try:
+                        cb(p)
+                    except Exception:  # noqa: BLE001 — la misura non ferma mai la voce
+                        pass
         if cat != "voluto":
             with self._lock:
                 if len(self._scritte) < FRASI_MAX:
@@ -185,6 +201,15 @@ class Uscita:
             oss(item)
         except Exception:  # noqa: BLE001 — l'ombra non ferma mai la voce
             pass
+
+
+def _pronte(testo: str) -> list[dict]:
+    """Le frasi pronte del catalogo dentro questa frase (12/10, calliope/frasi.py)."""
+    try:
+        from .. import frasi
+        return frasi.FRASI.detta(testo)
+    except Exception:  # noqa: BLE001 — la misura non ferma mai la voce
+        return []
 
 
 def per_voce(speaker, log=print) -> Uscita:

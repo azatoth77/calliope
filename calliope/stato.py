@@ -24,7 +24,10 @@ il prossimo passo (registro delle capacità, calliope/capacita.py).
                                               eventi in ombra (calliope/eventi/misura.py);
                                               scelta dei tool: nomi inventati, correzioni,
                                               ripieghi, richieste ripetute, con un avviso
-                                              (calliope/scelta_tool.py)
+                                              (calliope/scelta_tool.py); frasi pronte:
+                                              ripetizioni ogni 100 risposte, pronte e
+                                              modello, e la stima con le varianti in ombra
+                                              (calliope/frasi.py)
     python -m calliope.stato --eventi [--json]
                                               il registro degli eventi (10/10, in ombra:
                                               calliope/eventi/): MB per giorno, registri,
@@ -255,12 +258,15 @@ def main(argv=None) -> int:
         # La scelta dei tool come metrica (12/10, calliope/scelta_tool.py)
         from . import scelta_tool
         scelta = scelta_tool.per_giorno(turni)
+        # Le frasi pronte ripetute (12/10, calliope/frasi.py, fase 0)
+        from . import frasi
+        pronte = frasi.riassunto(turni)
         if as_json:
             print(json.dumps({"giorni": dati, "soglia_s": getattr(cfg, "latenza_avviso_s", None),
                               "attrito": sicurezza, "attrito_soglia": soglia_a,
                               "argomenti": argomenti, "compagnia": comp,
                               "dialogo": dialogo, "voce_sola": voce_sola,
-                              "scelta_tool": scelta},
+                              "scelta_tool": scelta, "frasi_pronte": pronte},
                              ensure_ascii=False, indent=2))
         else:
             print(latenza.testo(dati, soglia))
@@ -276,6 +282,8 @@ def main(argv=None) -> int:
             print(misura_eventi.testo(voce_sola, soglia_ms))
             print()
             print(scelta_tool.testo(scelta))
+            print()
+            print(frasi.testo(pronte))
         return 0
     if "--eventi" in argv:
         d = _eventi_disco(cfg)

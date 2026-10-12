@@ -37,6 +37,7 @@ import json
 import re
 import time
 
+from .. import frasi as frasi_pronte
 from .spec import ToolContext, ToolSpec, note_rule
 from ..testi import FAMILY, NIENTE
 
@@ -921,7 +922,7 @@ def _stato(ctx, svs, sv, persona) -> dict:
         return _final(("Ho uno sviluppo sospeso: " if len(sospesi) == 1 else
                        f"Ho {len(sospesi)} sviluppi sospesi: ") + voci
                       + ". Dimmi quale riprendere.", fatto="nessuno sviluppo aperto")
-    frase = f"Stiamo sviluppando «{sv.titolo}»: {svs.dove(sv)}."
+    frase = frasi_pronte.scegli("sviluppo.stato", titolo=sv.titolo, dove=svs.dove(sv))
     lav = svs._lavoro(sv.lavoro)
     if sv.fase == "sviluppo" and _in_tappa(svs, sv) is not None:
         frase += " Il lavoro dell'agente è fermo a una tappa: continuo con un altro giro?"
@@ -2448,8 +2449,8 @@ def _sviluppo_correggi(ctx: ToolContext, problema: str = "", **_altro) -> dict:
     from . import agenti as ta
     out = ta._avvia(ctx, svc, lav)
     caso = falliti[-1].get("dati") if falliti else ""
-    frase = ("D'accordo: lo faccio correggere a chi l'ha scritto. Ci lavora in secondo piano; "
-             "quando è pronto rifacciamo la prova" + (f" con «{caso}»" if caso else "") + ".")
+    frase = frasi_pronte.scegli("sviluppo.correzione",
+                                caso=(f" con «{caso}»" if caso else ""))   # catalogo (12/10)
     out["conferma"] = out["risposta_finale"] = frase
     _schermo(ctx, sv)
     return out

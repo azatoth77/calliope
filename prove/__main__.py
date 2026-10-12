@@ -34,6 +34,7 @@ A_SECCO = [
     ("prova_e2e_copioni.py", [], "prova end-to-end della DGX (prove/e2e/) a secco: copioni ben fatti, controllo dei passi, sfida, nessun dato personale"),
     ("prova_pronuncia.py", [], "pronuncia degli inglesismi (04/10): «file» → «fàil», contrari, solo il testo per Piper"),
     ("prova_personalita.py", [], "personalità (04/10): toni di voce, wake word cambiata e in testa alla frase, modalità startrek, suoni di ascolto"),
+    ("prova_frasi.py", [], "frasi pronte meno monotone (12/10, calliope/frasi.py): catalogo con varianti per tono e forma breve (segnaposto, domanda in fondo, lei nel formale, classi bloccate), ombra/attivo/spento, rotazione per persona, id dall'uscita unica nel registro dei turni, ripetizioni ogni 100 in stato --turni, campione di 30"),
     ("prova_modalita.py", [], "modalità cambiata a voce (05/10): solo chi amministra dalla voce, subito e salvata, cosa è acceso davvero, satellite collegato aggiornato e modello mandato dal server, satellite vecchio, telefono, ritorno alla normale"),
     ("prova_tool.py", [], "tool nativi e permessi per livello"),
     ("prova_sicurezza.py", [], "sicurezza (analisi del 03/10): registrazione della voce, fatti della casa, sandbox, apri, permessi"),
