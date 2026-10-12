@@ -69,6 +69,9 @@ Dettagli in [`../CHANGELOG.md`](../CHANGELOG.md) e nei documenti d'area.
 7. **Notizie dai feed RSS** (deciso il 10/10): i feed delle testate italiane scaricati ogni tanto
    in un indice locale (FTS5, come la biblioteca), con la fonte detta; SearXNG resta il ripiego.
    Nessuna chiave, nessuno scraping: Google News e Brave oggi bloccano le notizie di SearXNG.
+   Ricerca del 12/10 ([`ricerche/2026-10-12-notizie-rss.md`](ricerche/2026-10-12-notizie-rss.md)):
+   15 risposte su 22 dall'indice (4 in parte), ricerca 0,04 ms, libreria standard, fonte dentro
+   `web_cerca`; scarico ogni 2 ore solo se qualcuno ha chiesto notizie negli ultimi 7 giorni.
 8. ~~**Storpiature delle forme chiuse**~~ *[fatto il 10/10, ramo `forme-storpiate`]* (giro del
    10/10): «Annullahi», «Nulla è lavoro», «Chiudin», «Giudino», «Alla ora, ok» non arrivavano
    alla corsia veloce. «Ricominciamo» storpiato (anche con il nome storpiato davanti) è la
