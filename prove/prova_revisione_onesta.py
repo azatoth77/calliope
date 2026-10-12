@@ -1,20 +1,21 @@
 """
 Revisione onesta e tappe (11/10/2026, calliope/requisiti.py), dal caso vero dell'11/10 riscritto
-con parole nostre: un gioco di Halloween chiesto con le porte in numero variabile, la scelta della
-porta a voce, una musica cupa ma divertente, più giocatori, i punti, mostri, dolci e cose buffe
-dietro le porte. L'agente aveva consegnato un gioco senza voce, senza musica, con 5 porte fisse e
-senza punti crescenti, e la revisione aveva detto «tutto sembra in ordine: i test passano tutti».
+con parole nostre: un gioco di Halloween chiesto con le porte in numero variabile, una
+classifica su internet (al posto della scelta a voce del caso vero, possibile dall'11/10 sera),
+una musica cupa ma divertente, più giocatori, i punti, mostri, dolci e cose buffe dietro le
+porte. L'agente aveva consegnato un gioco senza musica, con 5 porte fisse e senza punti
+crescenti, e la revisione aveva detto «tutto sembra in ordine: i test passano tutti».
 
 Il modello dell'agente è un client finto che risponde allo schema della richiesta (i requisiti
 o il confronto); la sua lista è un dato: stati da un insieme chiuso, allineati ai requisiti.
 
 1. **I requisiti e le tappe all'analisi**: la proposta dice ciò che oggi non si può fare (la
-   scelta a voce in un gioco) e, con 6 requisiti da fare, propone la prima tappa con il nucleo;
+   classifica su internet in un gioco) e, con 6 requisiti da fare, propone la prima tappa con il nucleo;
    il lavoro proposto ha nei vincoli la tappa. Il «sì» fa la prima tappa. Contrari: una
    richiesta semplice (2 requisiti, lavoro piccolo) non ha tappe; tanti requisiti tutti nel
    nucleo nemmeno; «no, tutto insieme» (tappe = false) toglie la tappa dal lavoro.
 2. **Il caso vero alla revisione** (tappe rifiutate): «manca la musica, le porte sono sempre
-   5, i punti non crescono, la scelta a voce oggi non si può», la prova di fumo detta come test
+   5, i punti non crescono, la classifica su internet oggi non si può», la prova di fumo detta come test
    di avvio, la domanda «attivarla così com'è o continuare»; mai «in ordine». «Continua» →
    l'agente completa quello che manca (con le note). Anche l'annuncio della consegna lo dice.
 3. **La tappa dopo**: la prima tappa fatta tutta → «ci sono tutte», «per la tappa dopo
@@ -55,23 +56,23 @@ def detta(out) -> str:
 
 
 COMPITO = ("Crea un gioco di Halloween per più giocatori: si sceglie una porta tra tante, il numero "
-           "delle porte cambia, si sceglie a voce, dietro ci sono mostri, dolci o cose buffe, i "
+           "delle porte cambia, con una classifica su internet, dietro ci sono mostri, dolci o cose buffe, i "
            "punti crescono, con una musica cupa ma divertente e delle animazioni di paura.")
 
 # I requisiti come li darebbe il modello dell'agente (stessa forma, parole nostre)
 REQ_HALLOWEEN = [
     {"testo": "porte in numero variabile", "nucleo": True, "si_puo": True},
-    {"testo": "scelta della porta a voce", "nucleo": False, "si_puo": False,
-     "limite": "Un gioco non sente la voce: si gioca toccando lo schermo."},
+    {"testo": "classifica condivisa su internet", "nucleo": False, "si_puo": False,
+     "limite": "Un gioco non va su internet: i record restano in casa."},
     {"testo": "musica cupa ma divertente", "nucleo": False, "si_puo": True},
     {"testo": "più giocatori", "nucleo": True, "si_puo": True},
     {"testo": "punti che crescono", "nucleo": True, "si_puo": True},
     {"testo": "mostri, dolci e cose buffe dietro le porte", "nucleo": True, "si_puo": True},
     {"testo": "animazioni di paura", "nucleo": False, "si_puo": True},
 ]
-# Il gioco consegnato l'11/10: niente voce né musica, 5 porte fisse, punti che non crescono
+# Il gioco consegnato l'11/10: niente classifica né musica, 5 porte fisse, punti che non crescono
 VOCI_VERE = [{"stato": "parziale", "nota": "Le porte sono sempre 5."},
-             {"stato": "manca", "nota": "Nessun comando a voce."},
+             {"stato": "manca", "nota": "Nessuna classifica in rete."},
              {"stato": "manca", "nota": "Non c'è nessun suono."},
              {"stato": "fatto"},
              {"stato": "parziale", "nota": "I punti non crescono."},
@@ -152,9 +153,9 @@ def prova_analisi(tmp: Path):
     agente = AgenteRequisiti(REQ_HALLOWEEN)
     cfg, reg, ctx, est, svc, sv, out = proposta_gioco(tmp / "tappe", agente)
     f = detta(out)
-    verifica("la proposta dice ciò che oggi non si può fare (la scelta a voce in un gioco)",
-             "Una cosa oggi qui non si può fare: scelta della porta a voce, perché un gioco "
-             "non sente la voce" in f, f)
+    verifica("la proposta dice ciò che oggi non si può fare (la classifica su internet in un gioco)",
+             "Una cosa oggi qui non si può fare: classifica condivisa su internet, perché un gioco "
+             "non va su internet" in f, f)
     verifica("…e propone le tappe: prima il nucleo, poi il resto (6 requisiti da fare)",
              "Sono 6 cose insieme: ti propongo di farlo a tappe, prima porte in numero "
              "variabile, più giocatori, punti che crescono e mostri, dolci e cose buffe dietro "
@@ -170,12 +171,12 @@ def prova_analisi(tmp: Path):
     verifica("il lavoro proposto ha nei vincoli la prima tappa, il resto dopo e il limite",
              "TAPPA 1" in lav.vincoli and "NON farli ora: musica cupa ma divertente; "
              "animazioni di paura" in lav.vincoli and "non si possono fare, non provarci: "
-             "scelta della porta a voce" in lav.vincoli, lav.vincoli)
+             "classifica condivisa su internet" in lav.vincoli, lav.vincoli)
     verifica("la richiesta al modello dell'agente: schema chiuso, temperatura 0, senza "
              "ragionamento, con cosa si può fare in un gioco",
              agente.richieste and agente.richieste[0]["options"]["temperature"] == 0.0
              and agente.richieste[0]["think"] is False
-             and "non sente il microfono" in agente.richieste[0]["messages"][0]["content"])
+             and "riceve solo i comandi che ha dichiarato" in agente.richieste[0]["messages"][0]["content"])
     verifica("i dati del turno: «sì» → la prima tappa, «tutto insieme» → tappe = false",
              "tappe = false" in svc.sviluppi.riga_fase(sv)
              and "A TAPPE" in svc.sviluppi.riga_fase(sv))
@@ -258,7 +259,7 @@ def prova_caso_vero(tmp: Path):
              "Rispetto alla richiesta manca: musica cupa ma divertente. Le porte sono sempre 5. "
              "I punti non crescono. Le altre 3 ci sono." in f, f)
     verifica("…ciò che oggi non si può fare è detto a parte",
-             "Oggi qui non si può fare: scelta della porta a voce." in f, f)
+             "Oggi qui non si può fare: classifica condivisa su internet." in f, f)
     verifica("…la prova di fumo detta come test di avvio",
              "Tra i test c'è la prova di fumo" in f, f)
     verifica("…mai «in ordine» né «tutto a posto»", "in ordine" not in f
@@ -285,7 +286,7 @@ def prova_caso_vero(tmp: Path):
              "Completa quello che manca rispetto alla specifica approvata: porte in numero "
              "variabile (ora: Le porte sono sempre 5)" in nuovo.vincoli
              and "musica cupa ma divertente" in nuovo.vincoli
-             and "scelta della porta a voce (" not in nuovo.vincoli.split("Completa")[1]
+             and "classifica condivisa su internet (" not in nuovo.vincoli.split("Completa")[1]
              .split(".")[0] and nuovo.compito.startswith("Crea un gioco di Halloween")
              and sv.specifica.startswith("Crea un gioco di Halloween"), nuovo.vincoli)
     verifica("…e lo dice", detta(out).startswith("D'accordo: l'agente continua con quello che "
@@ -442,7 +443,7 @@ def prova_scheda(tmp: Path):
     verifica("all'analisi la scheda ha i requisiti, da controllare, e la tappa",
              "## Rispetto alla richiesta" in testo and "- da controllare: porte in numero "
              "variabile" in testo and "- tappa dopo: musica cupa ma divertente" in testo
-             and "- non si può: scelta della porta a voce" in testo
+             and "- non si può: classifica condivisa su internet" in testo
              and "A tappe: adesso la tappa 1." in testo, testo)
     lav = svc.offerte["u1"]["lavoro"]
     chiama(reg, ctx, "sviluppo_apri", {"proposta": lav.id, "tappe": False}, 2, "Tutto insieme.")

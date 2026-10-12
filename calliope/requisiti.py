@@ -49,16 +49,19 @@ NOMI_VOCE = 4                  # quanti requisiti si dicono per nome, poi «e al
 NOTE_VOCE = 2                  # quante note dei requisiti fatti in parte si dicono
 MARCA_TAPPA = "[TAPPE]"        # in coda ai vincoli del lavoro: la tappa decisa con la persona
 
-# Cosa si può fare in un gioco (contratto delle schede, estensioni/contratto.py § 5; giochi.md):
-# la voce dentro il gioco non c'è (mosse a voce solo «in futuro», giochi.md)
+# Cosa si può fare in un gioco (contratto delle schede, estensioni/contratto.py § 5; giochi.md).
+# Dall'11/10 sera il gioco riceve i comandi a voce che dichiara (gioco_voce.py): il testo di
+# prima li diceva impossibili, e il 12/10 l'analisi di un gioco a voce li ha segnati «non si può»
 CAPACITA_GIOCO = (
     "Un gioco gira in un riquadro isolato del browser degli schermi di Calliope (PC, tablet, "
     "telefono): grafica, animazioni, tocchi e clic, più giocatori sullo stesso schermo o tra "
     "schermi, turni, punti, record salvati; Calliope può dire frasi brevi durante il gioco; "
     "suoni e musica solo generati dal codice nel browser (Web Audio), senza file audio né "
-    "internet.\nImpossibile oggi: comandi, scelte o risposte A VOCE dentro il gioco (il gioco "
-    "non sente il microfono né la voce: si gioca toccando o cliccando); internet; i file del "
-    "PC.")
+    "internet; comandi A VOCE brevi dichiarati dal gioco (al più 24, ognuno con forme fisse di "
+    "1-5 parole, numeri compresi: «tre», «la porta tre», «ricomincia»), che Calliope riconosce "
+    "e passa al gioco, anche senza il nome mentre il gioco aspetta una mossa.\nImpossibile "
+    "oggi: frasi libere o lunghe a voce dentro il gioco (il gioco non sente il microfono: "
+    "riceve solo i comandi che ha dichiarato); internet; i file del PC.")
 
 SISTEMA_ESTRAI = """Sei l'analista dei requisiti di Calliope, un'assistente vocale di casa. Dalla specifica che la persona ha approvato elenchi i requisiti: le cose che ha chiesto e che si possono controllare una per una nel risultato. Non scrivi codice e non parli alla persona: compili il JSON.
 
