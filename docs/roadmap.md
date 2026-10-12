@@ -172,8 +172,10 @@ voce raccontava male gli esiti, i comandi del flusso si perdevano.
    (F2), *da approfondire* (F3) · dipende da: le soglie di F0 tarate sulla voce vera.
 5. **Notizie dai feed RSS** (V4): prima una ricerca breve con 10–15 feed veri (copertura contro
    SearXNG, condizioni d'uso); poi lo scarico ogni 2 ore, solo se negli ultimi 7 giorni qualcuno
-   ha chiesto notizie (decisione [0024](decisioni/0024-niente-internet-se-non-serve.md)). *Da
-   approfondire* · dipende da: la ricerca.
+   ha chiesto notizie (decisione [0024](decisioni/0024-niente-internet-se-non-serve.md)).
+   Ricerca fatta il 12/10 ([`ricerche/2026-10-12-notizie-rss.md`](ricerche/2026-10-12-notizie-rss.md)):
+   15 risposte su 22 dall'indice (4 in parte), ricerca 0,04 ms, libreria standard, fonte dentro
+   `web_cerca`. *Quasi* · dipende da: le 5 domande aperte della ricerca (testate, minori).
 6. **Musica** (T2, V8): requisito confermato; Music Assistant in un container apposta, da mettere
    dove serve con la posizione in configurazione; non aspetta la DGX in casa. *Da approfondire* ·
    dipende da: la rilettura della [ricerca del 21/09](ricerche/2026-09-21-musica-e-hardware-audio.md)
