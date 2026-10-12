@@ -116,6 +116,11 @@ voce raccontava male gli esiti, i comandi del flusso si perdevano.
    scrive solo dati, logica pura e disegno. **Prima un progetto scritto.** *Da approfondire* ·
    dipende da: il progetto (rigidità, una sola fonte dello stato, lo slot che allarga la regola
    deterministica, compatibilità dei giochi già approvati).
+5. **Flusso dell'agente a fasi**: la correzione che parte da un test rosso (e si rifiuta a file
+   identici), i giochi provati dal disegno nel DOM finto, i test di accettazione da un contesto
+   separato prima del codice, l'analisi con le domande sulle contraddizioni, `esegui_js` e semi nei
+   test. *Da decidere* · ricerca
+   [`2026-10-12-flusso-agente-fasi.md`](ricerche/2026-10-12-flusso-agente-fasi.md) (§ 5, § 6).
 
 ### 2. Registro degli eventi e dialogo (E1–E11)
 
