@@ -1739,3 +1739,28 @@ Casi veri del gioco delle porte (dettagli in [agenti-estensioni](agenti-estensio
 - **La riga del fuori tema** (`sviluppo_riga_fuori_tema`) è «Lo sviluppo di «…» resta aperto:
   l'agente ci sta lavorando» (o è fermo, o la fase): «Intanto restiamo sullo sviluppo di «…»:
   siamo allo sviluppo.» suonava male (storica dal 12/10 sera la forma citata più su).
+
+## Una nota dichiarata due volte: la frase onesta al posto del ripiego (12/10 sera, ramo `compagnia-guardia`)
+
+**Caso vero** (DGX, 12/10 sera, in auto; nomi di fantasia): dopo un falso allarme dei cancelli dei
+minori ([minori](minori.md)) chi amministra dice «Ma io sono Carlo, non sono in pericolo e non sono
+un bambino». Il modello risponde due volte «Ho registrato che sei un adulto…» senza nessun tool:
+la rete `spinta_dichiarata` la trattiene, spinge, e la seconda volta (`dichiarata_taciuta`) la
+risposta diventava «Non ci sono riuscita: puoi ripetere la richiesta?», cioè una richiesta mai
+fatta da ripetere.
+
+**Correzione** (`brain.solo_note`, ramo `held and nudged` del ciclo dei tool): se tutte le
+dichiarazioni della frase taciuta sono di aver preso nota con il verbo («ho registrato, salvato,
+memorizzato, annotato, segnato, aggiornato…»), invece del ripiego si dice la frase pronta
+`onesta.non_salvato` (`calliope/frasi.py`, classe «onesta», varianti per tono e forma breve; in
+`ombra` la base «Scusa, ho capito. Non ho salvato niente, però: se vuoi che me lo ricordi,
+chiedimelo.»), che non dice di aver salvato e non promette niente; regola `dichiarata_onesta` al
+posto di `dichiarata_taciuta`, atto `onesta` nell'uscita unica (`eventi/tipi.ATTI`). È una
+correzione della forma di una scelta già fatta dal modello due volte (nessun tool), principio 10:
+la frase falsa resta taciuta. Vale anche per «ricorda che…» detto senza `ricorda`: la frase dice
+che non è salvato e invita a chiederlo. **La rete non cambia**: spinta come prima, e con qualunque
+altra azione dichiarata (accesa, aperta, «te lo ricorderò», una nota insieme a un'azione) resta
+«Non ci sono riuscita: puoi ripetere la richiesta?». Prova `prova_brain` (`prova_dichiarata_nota`:
+il caso vero riscritto, nessuna variante che dichiari un'azione, contrari luce, nota con azione,
+promemoria).
+

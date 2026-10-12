@@ -382,6 +382,47 @@ _v("cortesia.conferma", "cortesia", None, toni={
     "essenziale": ("Bene.", "Ottimo.", "D'accordo."),
     "computer_di_bordo": ("Ricevuto.", "Confermato.", "Acquisito.", "Chiaro."),
 })
+# Al posto di una nota dichiarata due volte senza nessun tool (12/10 sera, caso vero in auto:
+# a «io sono Carlo, non sono un bambino» due volte «Ho registrato che sei un adulto…», e il
+# ripiego «Non ci sono riuscita: puoi ripetere la richiesta?» rispondeva a una richiesta che non
+# c'era). Onesta: non dice di aver salvato e non promette niente (brain, `dichiarata_onesta`)
+_v("onesta.non_salvato", "onesta",
+   "Scusa, ho capito. Non ho salvato niente, però: se vuoi che me lo ricordi, chiedimelo.",
+   toni={
+       "normale": (
+           "Scusa, ho capito. Non ho salvato niente, però: se vuoi che me lo ricordi, "
+           "chiedimelo.",
+           "Ho capito, scusa. Non me lo sono segnato: se vuoi che lo ricordi, dimmelo.",
+           "Scusami, ho capito. Non ho salvato niente: se ti serve che lo ricordi, chiedimelo."),
+       "formale": (
+           "Mi scusi, ho capito. Non ho salvato nulla, però: se desidera che lo ricordi, me lo "
+           "chieda.",
+           "Ho capito, mi scusi. Non l'ho annotato: se vuole che lo ricordi, me lo dica.",
+           "Mi scusi, ho compreso. Non ho salvato nulla: se le serve che lo ricordi, me lo "
+           "chieda."),
+       "amichevole": (
+           "Scusa, ho capito! Non ho salvato niente, però: se vuoi che me lo ricordi, "
+           "chiedimelo.",
+           "Ho capito, scusami! Non me lo sono segnato: se vuoi che lo tenga a mente, dimmelo.",
+           "Scusa, chiaro! Non ho salvato niente: se ti va che lo ricordi, chiedimelo pure."),
+       "ironico": (
+           "Scusa, ho capito. Per onestà: non ho salvato niente. Se vuoi che me lo ricordi, "
+           "chiedimelo.",
+           "Ho capito, scusa. Non l'ho scritto da nessuna parte: se vuoi che lo ricordi, "
+           "dimmelo.",
+           "Scusa, chiaro. Non ho salvato niente, giuro: se vuoi che lo ricordi, chiedimelo."),
+       "essenziale": ("Scusa, ho capito. Non ho salvato niente.",
+                      "Ho capito, scusa. Non l'ho salvato."),
+       "computer_di_bordo": ("Ricevuto. Nessun dato in memoria: per salvarlo, chiedimelo.",
+                             "Ricevuto. Niente in memoria: per salvarlo, chiedimelo."),
+   },
+   breve={
+       "normale": ("Scusa, ho capito. Non ho salvato niente.",
+                   "Ho capito, scusa. Non l'ho salvato."),
+       "formale": ("Mi scusi, ho capito. Non ho salvato nulla.",),
+       "amichevole": ("Scusa, ho capito! Non ho salvato niente.",),
+       "ironico": ("Scusa, ho capito. Non ho salvato niente.",),
+   })
 
 # ── solo misura: classi bloccate, parola per parola (§ 2 della ricerca) ──
 _v("politica.conferma", "politica", "C'è di mezzo {fonte}, quindi chiedo a te: vuoi che {cosa}?")

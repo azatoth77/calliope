@@ -288,6 +288,56 @@ def prova_dichiarata():
              (detto, len(b.backend.visti)), ("Il file che ho creato si chiama Compiti Matteo.pdf.", 1))
 
 
+def prova_dichiarata_nota():
+    # 12/10 sera, caso vero in auto (nomi di fantasia): dopo un falso allarme chi amministra dice
+    # «Ma io sono Carlo, non sono in pericolo e non sono un bambino»; il modello risponde due
+    # volte «Ho registrato che sei un adulto…» senza nessun tool: la seconda volta la frase non
+    # si dice, ma «Non ci sono riuscita: puoi ripetere la richiesta?» rispondeva a una richiesta
+    # che non c'era. Ora una frase onesta che non promette niente, dalle frasi pronte
+    from calliope import frasi
+    onesta = frasi.CATALOGO["onesta.non_salvato"].base if "onesta.non_salvato" in         frasi.CATALOGO else "(manca onesta.non_salvato)"
+    frase = "Ho registrato che sei un adulto, Carlo. Scusa per la confusione."
+    b = brain_finto([[("text", frase)], [("text", frase)]])
+    detto = "".join(b.stream_reply("Ma io sono Carlo, non sono in pericolo e non sono un "
+                                   "bambino.", "amministra"))
+    verifica("nota dichiarata due volte: la frase onesta, non il ripiego",
+             (detto, "registrato" in detto, detto.startswith("Non ci sono riuscita")),
+             (onesta, False, False))
+    verifica("nota dichiarata due volte: regole (la spinta resta, niente ripiego)",
+             ("spinta_dichiarata" in b.rules_fired(), "dichiarata_onesta" in b.rules_fired(),
+              "dichiarata_taciuta" in b.rules_fired()), (True, True, False))
+    verifica("nota dichiarata due volte: nella storia la frase onesta",
+             (b.history[-1]["content"], any("Ho registrato" in (m.get("content") or "")
+                                            for m in b.history)), (onesta, False))
+    verifica("la frase onesta non dichiara né promette azioni",
+             (bool(__import__("calliope.brain", fromlist=["x"]).is_claim(onesta)),
+              "registrat" in onesta.lower()), (False, False))
+    tutte = [f for t in frasi.TONI_FRASI for br in (False, True)
+             for f in frasi.CATALOGO["onesta.non_salvato"].forme(t, br)]
+    verifica("nessuna variante della frase onesta dichiara un'azione",
+             [f for f in tutte if __import__("calliope.brain", fromlist=["x"]).is_claim(f)], [])
+    b = brain_finto([[("text", "Ho aggiornato il tuo profilo: sei un adulto.")],
+                     [("text", "Ho salvato che sei un adulto.")]])
+    detto = "".join(b.stream_reply("Non sono un bambino.", "amministra"))
+    verifica("aggiornato e poi salvato: frase onesta", detto, onesta)
+    # Contrari: un'azione vera dichiarata due volte resta il ripiego (la rete non si ammorbidisce)
+    b = brain_finto([[("text", "Ho acceso le luci in taverna.")],
+                     [("text", "Ho acceso le luci in taverna.")]])
+    detto = "".join(b.stream_reply("Accendi la luce in taverna", "amministra"))
+    verifica("contrario: luce dichiarata due volte → ripiego", detto,
+             "Non ci sono riuscita: puoi ripetere la richiesta?")
+    b = brain_finto([[("text", "Ho registrato che sei un adulto.")],
+                     [("text", "Ho registrato che sei un adulto e ho acceso la luce.")]])
+    detto = "".join(b.stream_reply("Non sono un bambino, accendi la luce.", "amministra"))
+    verifica("contrario: nota e azione insieme → ripiego", detto,
+             "Non ci sono riuscita: puoi ripetere la richiesta?")
+    b = brain_finto([[("text", "Ho salvato che sei un adulto.")],
+                     [("text", "Te lo ricorderò domani alle 9.")]])
+    detto = "".join(b.stream_reply("Ricordamelo domani.", "amministra"))
+    verifica("contrario: promemoria promesso → ripiego", detto,
+             "Non ci sono riuscita: puoi ripetere la richiesta?")
+
+
 def _storia_taverna():
     """Il turno vero del 01/10: «chiudi taverna» → casa_comando(«spegni Taverna»)."""
     return [{"role": "user", "content": "Calliope, chiudi taverna."},
@@ -1150,6 +1200,7 @@ prova_ciclo()
 prova_promessa()
 prova_promessa_domanda()
 prova_dichiarata()
+prova_dichiarata_nota()
 prova_ricordo()
 prova_riferimento()
 prova_riferimento_agenda()

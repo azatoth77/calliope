@@ -112,6 +112,8 @@ CATEGORIE_ATTO = ("risposta", "registrato", "fuori_storia", "voluto")
 ATTI: dict[str, tuple[str, bool, str]] = {
     "risposta": ("risposta", False, "1"),
     "ripeti": ("risposta", False, "1c"),
+    # La frase onesta al posto di una nota dichiarata due volte senza tool (12/10 sera)
+    "onesta": ("risposta", False, "1c"),
     "riga_sviluppo": ("risposta", False, "1f"),
     "sfida": ("risposta", False, "1g"),
     # La mezza frase fissa al cambio d'argomento (§ 13, passo 3): «Metto da parte lo sviluppo

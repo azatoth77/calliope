@@ -482,6 +482,33 @@ _MEMORY_VERB = re.compile(r"\b(?:salvat|registrat|memorizzat|annotat|segnat|rico
 FACT_PREFIX = "ricordo salvato: "
 
 
+# Le note dichiarate (12/10 sera, caso vero in auto): «Ho registrato che sei un adulto…» due
+# volte senza nessun tool, a «io sono Carlo, non sono un bambino». Prendere nota è la sola
+# azione dichiarata: niente di acceso, aperto, impostato o promesso. Allora la frase taciuta la
+# seconda volta diventa una frase onesta (frasi «onesta.non_salvato») invece del ripiego, che
+# chiedeva di ripetere una richiesta mai fatta. Una correzione della forma della scelta già
+# fatta dal modello due volte (nessun tool), principio 10; con qualunque altra azione dichiarata
+# resta il ripiego (la rete non si ammorbidisce)
+_NOTE = frozenset({"registrat", "salvat", "memorizzat", "annotat", "segnat", "aggiornat"})
+
+
+def solo_note(text: str) -> bool:
+    """Tutte le dichiarazioni d'azione del testo sono di aver preso nota (registrato, salvato,
+    memorizzato, annotato, segnato, aggiornato) con il verbo («ho registrato che…»)? False se
+    non ce n'è nessuna o se ce n'è anche una d'altro (acceso, «te lo ricorderò», «Timer
+    avviato»)."""
+    trovate = False
+    for m in ACTION_CLAIM.finditer(text or ""):
+        frase = m.group(0)
+        if not re.match(r"\W*(?:ho|l'ho|l’ho|li ho|le ho|gli ho)\s", frase, re.I):
+            return False
+        v = _CLAIM_VERB.search(frase)
+        if v is None or (v.group(1) or "").lower() not in _NOTE:
+            return False
+        trovate = True
+    return trovate
+
+
 def _recalls_fact(sentence: str, actions) -> bool:
     facts = " ".join(a[len(FACT_PREFIX):] for a in actions if a.startswith(FACT_PREFIX))
     v = _MEMORY_VERB.search(sentence)
@@ -4201,6 +4228,14 @@ class Brain:
                 # «Sì.» senza azione in sospeso, 2 volte su 3): la frase falsa non si dice
                 print(f"   [TOOL] di nuovo un'azione dichiarata senza tool: «{held[:80]}»",
                       flush=True)
+                if solo_note(held):
+                    # Solo una nota dichiarata (12/10 sera): una frase onesta, non il ripiego
+                    from . import frasi
+                    self._rule("dichiarata_onesta")
+                    said = frasi.scegli("onesta.non_salvato")
+                    self.history.append({"role": "assistant", "content": said})
+                    yield self._marca(said, "atto", "onesta")
+                    return
                 self._rule("dichiarata_taciuta")
                 said = RIPETI_FRASE
                 self.history.append({"role": "assistant", "content": said})
