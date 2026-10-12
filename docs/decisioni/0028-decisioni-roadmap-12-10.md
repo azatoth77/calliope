@@ -38,7 +38,9 @@ valgono per più aree; quelle di una sola voce sono nella coda di [`roadmap.md`]
      proposta di toglierlo).
 4. **Dove sta la DGX non conta (T3, V8).** In casa o in ufficio con la VPN cambia poco: niente
    aspetta che la DGX arrivi in casa. Le mappe si fanno con la DGX come server. Music Assistant gira
-   in un **container apposta**, da mettere dove serve, con la posizione in configurazione.
+   in un **container apposta**, da mettere dove serve, con la posizione in configurazione. Il
+   satellite su Raspberry senza PC resta in roadmap come satellite di stanza, e non dipende da dove
+   sta la DGX.
 5. **Musica sì, allarme senza data (T2, V9).** La musica è un requisito confermato («assolutamente
    sì»). L'allarme resta in roadmap senza data: inserire a voce si farà più avanti, e oggi Calliope lo
    legge soltanto. I satelliti ESPHome si integrano quando arrivano, anche questi senza data.
@@ -48,12 +50,14 @@ perde le righe superate (T5); prima di scrivere codice si rileggono le ricerche 
 scelte di fondo, qualche ora ciascuna: secondo fattore, musica, mappe, porta delle estensioni,
 immagini (T6).
 
-**Idea non decisa: un LLM nel cloud.** Chi amministra ha scritto che, al limite, chi vuole potrebbe
-collegare un LLM nel cloud e usare sopra tutta l'impalcatura di Calliope, sempre con l'obiettivo di
-tenere tutto offline. Non è una decisione: tocca il principio 9 («niente cloud») e la decisione
-[0001](0001-tutto-in-locale.md). Il backend compatibile OpenAI ([0002](0002-llm-dietro-api-intercambiabile.md))
-lo renderebbe tecnicamente possibile; se un giorno si decide, servirà una decisione propria che dica
-cosa non lascia mai la casa.
+**Proposta in valutazione, non decisa: un LLM nel cloud.** Chi amministra ha scritto che, al limite,
+chi vuole potrebbe collegare un LLM nel cloud e usare sopra tutta l'impalcatura di Calliope, sempre
+con l'obiettivo di tenere tutto offline. Non è una decisione: è in roadmap tra le cose «in
+valutazione (non promesse)». Il backend compatibile OpenAI ([0002](0002-llm-dietro-api-intercambiabile.md))
+basterebbe a collegarlo, ma non basta a deciderlo: servono analisi apposite sul principio 9 («niente
+cloud») e sulla decisione [0001](0001-tutto-in-locale.md), sulla privacy dei dati che uscirebbero di
+casa, sui minori, sui costi e su cosa resta comunque locale. Se un giorno si decide, servirà una
+decisione propria.
 
 ## Alternative considerate
 
