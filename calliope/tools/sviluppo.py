@@ -2397,6 +2397,18 @@ VINCOLO_CORREZIONE_GIOCO = (
     "dice solo che il gioco parte.")
 
 
+# La correzione parte da un test che fallisce (12/10 sera, parte 1 del flusso a fasi; ricerca
+# 2026-10-12-flusso-agente-fasi § 5.1, passo 1). Prima «trova la causa, correggi, aggiungi un
+# test con ogni caso che non andava»: alle 11:37 e alle 11:42 il test non c'era e i test verdi
+# non riguardavano il difetto. Il codice lo controlla alla consegna (agenti/riproduzione.py)
+VINCOLO_RIPRODUCI = (
+    " PRIMA di toccare il codice scrivi un test che riproduce il problema segnalato ed "
+    "eseguilo con esegui_test: deve FALLIRE sul codice di adesso (se passa, non riproduce il "
+    "problema: cambialo). Poi trova la causa e correggi il codice finché quel test e gli altri "
+    "passano, e consegna. Alla consegna Calliope riesegue i tuoi test nuovi sulla versione di "
+    "prima: se lì passano, o se il codice non è cambiato, la correzione non vale.")
+
+
 def _detto_adesso(ctx, problema: str) -> str:
     """Le parole della persona in questo turno, se dicono più del problema passato dal modello
     (12/10 sera: la seconda correzione ha ricevuto lo stesso problema della prima, e «è sempre
@@ -2559,8 +2571,7 @@ def _sviluppo_correggi(ctx: ToolContext, problema: str = "", **_altro) -> dict:
                + _correzione_di_prima(svs, sv)
                + (VINCOLO_CORREZIONE_GIOCO if svs.e_gioco(sv) else "")
                + (f" {rete}" if rete else "")
-               + " Trova la causa, correggi il codice, aggiungi un test con ogni caso che non "
-                 "andava, rifai i test, poi consegna.")
+               + VINCOLO_RIPRODUCI)
     lav = _lavoro_dello_sviluppo(ctx, svs, sv, prof, sv.specifica or sv.richiesta, vincoli)
     if isinstance(lav, dict):
         return lav

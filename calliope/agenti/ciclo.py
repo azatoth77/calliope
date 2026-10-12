@@ -1165,6 +1165,11 @@ class Agente:
                     rimando = (self._test_falliti(lav, sandbox)
                                if rimandi < RIMANDI_MAX and self._resta_tempo(lav) else None)
                     if rimando is None:
+                        # Una correzione senza un test che prima falliva (12/10 sera)
+                        rip = self._riproduzione(lav, sandbox)
+                        if rip:
+                            messages.append({"role": "user", "content": rip})
+                            continue
                         consegna = {"riassunto": out["content"], "esito": "fatto"}
                         break
                     rimandi += 1
@@ -1258,6 +1263,15 @@ class Agente:
                             rimandi += 1
                             self.log(f"[AGENTI] {lav.id}: consegna con i test che falliscono, "
                                      f"torna all'agente ({rimandi}/{RIMANDI_MAX})")
+                    if rimando is None and str(args.get("esito") or "fatto") == "fatto":
+                        # Una correzione vale se un test che prima falliva adesso passa (12/10
+                        # sera, riproduzione.py): rimandata una volta sola
+                        rip = self._riproduzione(lav, sandbox)
+                        if rip:
+                            rimando = {"ok": False, "consegna": "rifiutata", "errore": rip,
+                                       "cosa_fare": "scrivi il test che riproduce il problema, "
+                                                    "correggi, rifai esegui_test e richiama "
+                                                    "consegna"}
                     if rimando is not None:
                         result = rimando
                         # L'errore da ricordare per le spinte (11/10)
@@ -1539,6 +1553,34 @@ class Agente:
              "errore": "i test non passano: correggi il codice (o un test sbagliato), "
                        "rifai esegui_test, poi richiama consegna"},
             uscita=str(r.get("uscita") or ""))
+
+    def _riproduzione(self, lav: Lavoro, sandbox) -> str | None:
+        """La consegna «fatto» di una correzione (12/10 sera, riproduzione.py): un test nuovo o
+        cambiato deve fallire sulla versione di prima, e il codice deve essere cambiato. None
+        se la consegna va avanti; il messaggio che la rimanda all'agente, una volta sola e
+        solo se restano passate. L'esito resta in `lav.riproduzione` (la frase a voce)."""
+        if not getattr(lav, "correzione", False) or lav.tipo not in ("codice", "estensione"):
+            return None
+        from ..sonde import nota as nota_regola
+        from .riproduzione import NON_RIPRODOTTO, controlla, messaggio_agente
+        vecchio = getattr(lav, "riproduzione", None) or {}
+        lav.passo = "riprova i test nuovi sulla versione di prima"
+        esito = controlla(lav, sandbox, self.log)
+        esito["rimandi"] = int(vecchio.get("rimandi", 0) or 0)
+        lav.riproduzione = esito
+        lav.nota("riproduzione", stato=esito["stato"])
+        self.log(f"[AGENTI] {lav.id}: riproduzione della correzione: {esito['stato']}"
+                 + (f" ({esito.get('perche')})" if esito.get("perche") else "")
+                 + (f", test {', '.join(esito.get('test') or [])}" if esito.get("test") else ""))
+        if esito["stato"] not in NON_RIPRODOTTO:
+            return None
+        if esito["rimandi"] >= 1 or not self._resta_tempo(lav):
+            nota_regola(lav, "correzione_non_riprodotta", self.log, esito["stato"])
+            return None
+        esito["rimandi"] += 1
+        nota_regola(lav, "correzione_rimandata", self.log, esito["stato"])
+        return messaggio_agente(esito, getattr(lav, "problema_correzione", ""),
+                                bool(getattr(lav, "gioco", False)))
 
     def _modifica(self, lav: Lavoro, sandbox, args: dict) -> dict:
         """modifica_file (11/10): il testo vecchio, che deve comparire una volta sola, diventa

@@ -416,20 +416,21 @@ class Sandbox:
         args, stdin = self._argomenti(argomenti, stdin)
         return self._lancia("csharp", cart, args, stdin=stdin, flusso=flusso, isolamento=iso)
 
-    def test(self, rel=None) -> dict:
+    def test(self, rel=None, fumo: bool = True) -> dict:
         """I test della cartella: quelli Python (test_*.py) e, dal 05/10, quelli JavaScript
         (*.test.js, con la sintassi degli altri .js) nel container di Node. Con tutti e due i
-        conti si sommano."""
+        conti si sommano. `fumo` False: senza la prova di fumo dei giochi (12/10 sera, la
+        riproduzione di una correzione conta solo i test dell'agente, riproduzione.py)."""
         nomi = [p.relative_to(self.root).as_posix() for p in self._files()]
         js = file_test_js(nomi)
         if rel and str(rel).endswith(".js"):
             path = self.percorso(rel)
             if not path.is_file():
                 raise ErroreSandbox(f"il file di test «{rel}» non c'è")
-            return self.test_js([path.relative_to(self.root).as_posix()])
+            return self.test_js([path.relative_to(self.root).as_posix()], fumo=fumo)
         if not rel and js and not any(Path(n).name.startswith("test") and n.endswith(".py")
                                       or n.endswith("_test.py") for n in nomi):
-            return self.test_js()
+            return self.test_js(fumo=fumo)
         target = ""
         if rel:
             path = self.percorso(rel)
@@ -439,16 +440,17 @@ class Sandbox:
         r = self._lancia("test", target, [])
         if rel or not js:
             return r
-        j = self.test_js()
+        j = self.test_js(fumo=fumo)
         e = {k: int((r.get("esito") or {}).get(k, 0)) + int((j.get("esito") or {}).get(k, 0))
              for k in ("eseguiti", "falliti", "errori", "saltati")}
         return {**r, "esito": e, "passano": bool(r.get("passano") and j.get("passano")),
                 "uscita": (r.get("uscita") or "") + "\n— test JavaScript —\n"
                           + (j.get("uscita") or "")}
 
-    def test_js(self, files=None) -> dict:
+    def test_js(self, files=None, fumo: bool = True) -> dict:
         """I test JavaScript (05/10): node:test nel container di Node, mai sull'host. La
-        sintassi di tutti gli altri .js si controlla prima (senza eseguirli)."""
+        sintassi di tutti gli altri .js si controlla prima (senza eseguirli). `fumo` False:
+        senza la prova di fumo della scheda (primo argomento «--senza-fumo»)."""
         iso = self.linguaggi.get("javascript")
         if iso is None or not iso.pronto:
             vuoto = {"eseguiti": 0, "falliti": 0, "errori": 1, "saltati": 0}
@@ -460,7 +462,8 @@ class Sandbox:
         nomi = [p.relative_to(self.root).as_posix() for p in self._files()
                 if p.suffix.lower() == ".js"]
         tutti = sorted(set(nomi) | set(files or ()))
-        return self._lancia("test_js", "", tutti, isolamento=iso)
+        return self._lancia("test_js", "", ([] if fumo else ["--senza-fumo"]) + tutti,
+                            isolamento=iso)
 
     def termina(self):
         """Ferma l'esecuzione in corso (annullo del lavoro). Non aspetta: si chiama anche dal

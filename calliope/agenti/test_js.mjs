@@ -8,7 +8,9 @@ import { run } from "node:test";
 
 const segno = (readFileSync(0, "utf8").split("\n")[0] || "").trim() || "ESITO";
 const scrivi = process.stdout.write.bind(process.stdout);
-const file = process.argv.slice(2);
+// «--senza-fumo» (12/10 sera, riproduzione.py): solo i test dell'agente, senza la prova di fumo
+const senzaFumo = process.argv[2] === "--senza-fumo";
+const file = process.argv.slice(senzaFumo ? 3 : 2);
 const conto = { eseguiti: 0, falliti: 0, errori: 0, saltati: 0 };
 for (const f of file.filter((x) => !x.endsWith(".test.js"))) {
   try {
@@ -50,7 +52,7 @@ if (prove.length && !conto.errori) {
 // trecento tocchi a caso. Solo se c'è un manifesto con la «scheda»
 let scheda = null;
 try { scheda = JSON.parse(readFileSync("manifesto.json", "utf8")).scheda || null; } catch (e) { /* nessuno */ }
-if (scheda && Array.isArray(scheda.file) && !conto.errori) {
+if (scheda && Array.isArray(scheda.file) && !conto.errori && !senzaFumo) {
   const { fumo } = await import(new URL("./fumo_js.mjs", import.meta.url));
   const presenti = scheda.file.filter((f) => file.includes(f));
   conto.eseguiti++;
