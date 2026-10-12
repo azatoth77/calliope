@@ -260,8 +260,7 @@ def prova_cqd_brain(tmp, iso):
     verifica("proposta_rispondi(si) su «CQD» non chiude", sv.stato == "aperta"
              and "consenso_irriconoscibile" in b.rules_fired(), f"{b.rules_fired()} {detto}")
     # Contrari: le risposte vere chiudono
-    for i, frase in enumerate(("Sì.", "Ok.", "Va bene.", "Certo.", "Sì sì.", "Chiudilo.",
-                               "Chiudin.")):
+    for i, frase in enumerate(("Sì.", "Ok.", "Va bene.", "Certo.", "Sì sì.", "Chiudilo.")):
         cfg, reg, ctx, est, svc, b = S.brain(tmp / f"si{i}", iso)
         sv = _vocali_aperto(svc.sviluppi)
         b.backend.risposte = [S.chiamata("sviluppo_passo", {"azione": "chiudi"})]
@@ -271,6 +270,22 @@ def prova_cqd_brain(tmp, iso):
         verifica(f"contrario: «{frase}» chiude", sv.stato == "chiusa"
                  and "consenso_irriconoscibile" not in b.rules_fired(),
                  f"{b.rules_fired()} {detto}")
+    # «Chiudin.» (storpiatura nota di «chiudilo») non è senza parole, ma una chiusura non parte
+    # da una storpiatura (12/10, lavoro 3): la domanda ancora, e il «sì» chiude
+    cfg, reg, ctx, est, svc, b = S.brain(tmp / "chiudin", iso)
+    sv = _vocali_aperto(svc.sviluppi)
+    b.backend.risposte = [S.chiamata("sviluppo_passo", {"azione": "chiudi"})]
+    S.risposta(b, "Chiudi lo sviluppo delle parole.")
+    b.backend.risposte = [S.chiamata("sviluppo_passo", {"azione": "chiudi"})]
+    detto = S.risposta(b, "Chiudin.")
+    verifica("«Chiudin.» alla domanda: non chiude (storpiatura, non senza parole: la domanda "
+             "resta, il modello chiede con parole sue)",
+             sv.stato == "aperta" and "politica_storpiatura_irreversibile" in b.rules_fired()
+             and "consenso_irriconoscibile" not in b.rules_fired(),
+             f"{b.rules_fired()} {detto}")
+    b.backend.risposte = [S.chiamata("sviluppo_passo", {"azione": "chiudi"})]
+    detto = S.risposta(b, "Sì.")
+    verifica("…e il «sì» chiude", sv.stato == "chiusa", f"{b.rules_fired()} {detto}")
 
 
 # ═══════════════════════════ C. titoli ═══════════════════════════

@@ -248,6 +248,15 @@ class ToolRegistry:
                 return self.sconosciuto(name)
             note_rule(ctx, "tool_nome_corretto")
             name, spec = vero, self._tools[vero]
+        if name == "estensione_gestisci" and self._tools.get("sviluppo_apri") is not None:
+            # «Modifica l'estensione X» chiamato come azione di estensione_gestisci, che non
+            # c'è (12/10, lavoro 3): è sviluppo_apri con modifica = X, con tutti i controlli
+            # di sviluppo_apri qui sotto
+            from .estensioni import modifica_inventata
+            conv = modifica_inventata(arguments, ctx)
+            if conv is not None:
+                note_rule(ctx, "estensione_gestisci_modifica")
+                name, spec, arguments = "sviluppo_apri", self._tools["sviluppo_apri"], conv
         if getattr(spec, "prepara", None) is not None:
             # La forma degli argomenti (ToolSpec.prepara), prima di permessi e politica
             try:

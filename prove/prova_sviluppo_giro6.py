@@ -117,7 +117,7 @@ def prova_ferma(tmp):
     verifica("ferma con l'agente al lavoro: il lavoro si ferma, lo sviluppo resta aperto allo "
              "sviluppo, senza lavoro", lav.stato == "annullato" and sv.stato == "aperta"
              and sv.fase == "sviluppo" and sv.lavoro is None and "non continua" in detta(r)
-             and "lo rifaccio così com'è" in detta(r), detta(r))
+             and "lo rifaccio ripartendo da quello che aveva già scritto" in detta(r), detta(r))
     verifica("…un'azione in più nell'enum (ferma, rifai) e i sinonimi «stop», «rifallo»",
              {"ferma", "rifai"} <= set(ts.AZIONI))
     r = P.chiama(reg, ctx, "sviluppo_passo", {"azione": "ferma"}, turno=4)
@@ -199,10 +199,14 @@ def prova_rifai(tmp):
     nuovo.stato = "errore"
     svc.finisci(nuovo, "errore", motivo="tetto delle passate",
                 messaggio="non sono riuscita a finire «x».")
+    n = len(svc.lavori)
+    ctx.regole = []
     r = P.chiama(reg, ctx, "sviluppo_passo", {"azione": "avanti"}, turno=7)
-    verifica("avanti dopo un lavoro non andato: «non è andato: lo rifaccio così com'è…» con "
-             "l'azione in sospeso rifai", "non è andato" in detta(r)
-             and "azione = rifai" in str((r.get("in_sospeso") or {}).get("argomenti")), detta(r))
+    # Dal 12/10 (lavoro 3) «avanti» con il lavoro fermo è rifarlo, senza un'altra domanda
+    verifica("avanti dopo un lavoro non andato: lo rifà subito (sviluppo_avanti_rifai), senza "
+             "la domanda «lo rifaccio così com'è, o…?»", len(svc.lavori) == n + 1
+             and svc.lavori[-1].stato == "in_corso" and sv.lavoro == svc.lavori[-1].id
+             and "sviluppo_avanti_rifai" in ctx.regole and "?" not in detta(r), detta(r))
     # Senza l'ultimo lavoro in memoria (un riavvio): dalla specifica dello sviluppo
     svc.lavori.clear()
     r = P.chiama(reg, ctx, "sviluppo_passo", {"azione": "rifai"}, turno=8)

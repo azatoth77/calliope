@@ -414,6 +414,14 @@ def _analisi(ctx, svc, prof, tipo: str, compito: str, crea, tool: str, nota: str
                               "(per un gioco anche gioco = true: si gioca sugli schermi)"
                               + (f"; per cambiarne una che c'è, modifica = il suo nome tra "
                                  f"questi: {ci_sono}" if ci_sono else ""))}, e, ""
+    if e.esito == "rinomina":
+        # Cambiare solo il nome (12/10, lavoro 3): non è un lavoro né è impossibile, lo fa
+        # estensione_gestisci. Niente frase detta: continua il modello
+        return {"ok": False, "fatto": f"{NIENTE}: nessuno sviluppo aperto",
+                "errore": "cambiare solo il nome non è un lavoro per l'agente",
+                "cosa_fare": ("chiama estensione_gestisci con azione rinomina, nome = "
+                              "l'estensione e titolo = il nome nuovo detto (se non l'ha detto, "
+                              "chiedi come vuole chiamarla)")}, e, ""
     if e.esito == "impossibile":
         an.ricorda(prof.id, tipo, turno, compito, e)
         return _final(ar.frase_impossibile(e.motivo), ok=False,

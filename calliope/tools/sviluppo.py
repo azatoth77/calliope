@@ -5,8 +5,9 @@ docs/ricerche/2026-10-08-modalita-sviluppo.md).
 - sviluppo(azione, quale, cambia): lo stato dell'iter di chi amministra. stato; avanti (al
   collaudo → revisione, alla revisione → attivazione con la frase di sfida per un'estensione,
   chiusura per un programma; all'analisi conferma la specifica); analisi (si torna all'analisi
-  da qualunque fase, con la modifica detta: il lavoro in corso si ferma, la specifica nuova si
-  propone); sospendi, riprendi, chiudi («esci» vale come chiudi); promuovi (un programma diventa un'estensione).
+  da qualunque fase, con la modifica detta: la specifica nuova si propone, e dal 12/10 il lavoro
+  in corso si ferma solo al «sì»; indietro la scarta); sospendi, riprendi, chiudi («esci» vale
+  come chiudi); promuovi (un programma diventa un'estensione).
 - sviluppo_collauda(dati): il collaudo, la versione candidata provata PRIMA dell'approvazione
   (calliope/estensioni/servizio.Estensioni.prova_candidata) o il programma eseguito di nuovo
   (programma_esegui). Il risultato è un dato non fidato (fonte «estensione», come gli est_).
@@ -40,7 +41,7 @@ from .spec import ToolContext, ToolSpec, note_rule
 from ..testi import FAMILY, NIENTE
 
 AZIONI = ["stato", "avanti", "analisi", "rifai", "ferma", "sospendi", "riprendi", "chiudi",
-          "promuovi", "completa"]
+          "promuovi", "completa", "indietro"]
 # Le parole che il modello usa al posto di un'azione (in `azione`, o nel nome del tool:
 # `azione_dal_nome`)
 SINONIMI_AZIONE = {
@@ -49,7 +50,7 @@ SINONIMI_AZIONE = {
     "riapri": "riprendi", "stop": "ferma", "blocca": "ferma", "interrompi": "ferma",
     "fermalo": "ferma", "rifallo": "rifai", "rifare": "rifai", "riprova": "rifai",
     "ricomincia": "rifai", "elenco": "stato", "elenca": "stato", "lista": "stato",
-    "stoppa": "ferma"}
+    "stoppa": "ferma", "ripristina": "indietro"}
 TIPI_APRI = ["estensione", "programma"]
 
 
@@ -206,6 +207,24 @@ def _apri_prossimo(ctx, sv) -> dict | None:
         if out.get("conferma"):
             out["conferma"] = out["risposta_finale"]
     return out
+
+
+def sospendi_per_ricominciare(ctx) -> str:
+    """«Ricominciamo» con uno sviluppo aperto (12/10, lavoro 3; caso vero del 10/10 alle
+    10:39: «ricominciamo» e poi la richiesta di un altro programma, diventata una modifica di
+    quello aperto, e la persona: «quando ti ho detto ricominciamo intendevo ripartire da
+    capo»): la conversazione nuova sospende lo sviluppo aperto di chi parla (l'agente, se
+    lavora, finisce; si riprende quando si vuole). Effetto di una regola che c'è già
+    (`nuova_conversazione`), reversibile. La frase da aggiungere, o ""."""
+    from ..sviluppo import chi
+    svs = _svs(ctx)
+    persona = chi(ctx)
+    sv = svs.corrente(persona) if svs is not None and persona is not None else None
+    if sv is None:
+        return ""
+    svs.sospendi(sv, "conversazione nuova")
+    note_rule(ctx, "sviluppo_sospeso_ricominciando")
+    return f"Lo sviluppo di «{sv.titolo}» l'ho sospeso: lo riprendiamo quando vuoi."
 
 
 def apri_se_serve(ctx, tipo: str, compito: str, titolo: str = "", gioco: bool = False,
@@ -407,6 +426,12 @@ def _sviluppo(ctx: ToolContext, azione: str = "stato", quale: str = "", cambia: 
     grezza = str(azione or "stato").strip().lower()
     azione = SINONIMI_AZIONE.get(grezza, grezza)
     persona = chi(ctx)
+    if azione == "chiudi" and not str(quale or "").strip() and _chiudi_tutti_detto(ctx):
+        # «Chiudi tutti gli sviluppi» detto per intero (12/10, lavoro 3; il 10/10 cinque volte
+        # su cinque uno per volta): la forma della scelta già fatta dal modello (chiudi), con
+        # una domanda sola per tutti (principio 10, regola `sviluppo_chiudi_tutti_forma`)
+        note_rule(ctx, "sviluppo_chiudi_tutti_forma")
+        quale = "tutti"
     if azione == "riprendi":
         return _riprendi(ctx, svs, persona, quale)
     if azione == "chiudi" and (_tutti(quale) or (not str(quale or "").strip()
@@ -415,11 +440,12 @@ def _sviluppo(ctx: ToolContext, azione: str = "stato", quale: str = "", cambia: 
     sv = svs.corrente(persona)
     if azione == "stato":
         return _stato(ctx, svs, sv, persona)
+    if azione == "indietro":
+        return _indietro(ctx, svs, sv, prof)
     if azione == "ferma" and sv is None:
         # «Sospendi» e poi «no, fermalo» (DGX, 08/10 19:07): lo sviluppo è già sospeso, il
         # lavoro dell'agente va ancora
-        al_lavoro = [s for s in svs.trova(persona, quale)
-                     if svs.lavoro_attivo(s) or _in_tappa(svs, s) is not None]
+        al_lavoro = [s for s in svs.trova(persona, quale) if _al_lavoro(svs, s)]
         if al_lavoro:
             return _ferma(ctx, svs, al_lavoro[0], prof)
     if sv is None:
@@ -496,6 +522,15 @@ def _in_tappa(svs, sv) -> object:
     return None
 
 
+def _in_attesa(svs, sv) -> object:
+    """Il lavoro dello sviluppo fermo a una domanda per la persona (non una tappa), o None."""
+    lav = svs._lavoro(sv.lavoro)
+    if lav is not None and getattr(lav, "stato", "") == "in_attesa" and \
+            _in_tappa(svs, sv) is None:
+        return lav
+    return None
+
+
 def _chiudi(ctx, svs, sv) -> dict:
     """«Chiudi» (08/10, versione 2; DGX, 11:30: «Ok, chiuso a long», storpiato, chiudeva lo
     sviluppo con l'agente al lavoro, senza domande). Con un lavoro in corso diventa «sospendi»;
@@ -506,7 +541,7 @@ def _chiudi(ctx, svs, sv) -> dict:
     solo una pausa, dimmi «sospendi»…», `Brain.set_pending` non la registrava (vuole la domanda
     alla fine), la conferma non poteva scattare e ogni «sì, chiudi» rifaceva la domanda (7 volte).
     Vale anche per uno sviluppo sospeso (`_sviluppo`)."""
-    if sv.stato == "sospesa" and (svs.lavoro_attivo(sv) or _in_tappa(svs, sv) is not None):
+    if sv.stato == "sospesa" and _al_lavoro(svs, sv):
         # Già sospeso, con l'agente ancora al lavoro: prima si ferma il lavoro
         domanda = "Vuoi che fermi il lavoro dell'agente?"
         return _final(f"Lo sviluppo di «{sv.titolo}» è sospeso, ma l'agente ci sta ancora "
@@ -515,7 +550,7 @@ def _chiudi(ctx, svs, sv) -> dict:
                       in_sospeso={"domanda": domanda,
                                   "cosa": f"fermare il lavoro dell'agente su «{sv.titolo}»",
                                   "tool": "sviluppo_passo", "argomenti": {"azione": "ferma"}})
-    if svs.lavoro_attivo(sv) or _in_tappa(svs, sv) is not None:
+    if _al_lavoro(svs, sv):
         svs.sospendi(sv, "chiesto di chiudere con l'agente al lavoro")
         note_rule(ctx, "sviluppo_chiudi_sospende")
         _schermo(ctx, sv)
@@ -584,7 +619,44 @@ def _tutti_chiesti(ctx, persona) -> dict | None:
 
 
 def _al_lavoro(svs, sv) -> bool:
-    return svs.lavoro_attivo(sv) or _in_tappa(svs, sv) is not None
+    """L'agente lavora per lo sviluppo, o il suo lavoro aspetta (una tappa, una domanda):
+    chiudere o uscire lo lascia sospeso, non perso (12/10, lavoro 3: anche una domanda)."""
+    lav = svs._lavoro(sv.lavoro)
+    return svs.lavoro_attivo(sv) or (lav is not None
+                                     and getattr(lav, "stato", "") == "in_attesa")
+
+
+# Le parole intere di «chiudi tutti gli sviluppi» (12/10, lavoro 3), tolti il nome, i riempitivi
+# e la cortesia: mai una parola dentro una frase più lunga («chiudi tutte le finestre»,
+# «chiudi tutti i programmi del PC» restano al modello)
+_CHIUDI_TUTTI = re.compile(
+    r"(?:chiudi|chiudili|chiudile|chiuderli|chiudiamo|chiudiamoli|chiudete)"
+    r"(?: (?:pure|proprio|adesso|ora|subito))?"
+    r"(?: (?:tutti|tutte|entrambi|entrambe)(?: (?:e due|e tre|quanti|insieme))?"
+    r"(?: (?:gli|i) sviluppi(?: (?:aperti|sospesi|aperti e sospesi))?)?"
+    r"| (?:gli|i) sviluppi(?: (?:aperti|sospesi|aperti e sospesi))?(?: tutti)?)")
+_CHIUDI_TESTA = frozenset({"si", "ok", "allora", "e", "dai", "adesso", "ora", "ecco", "no",
+                           "basta", "va", "bene"})
+_CHIUDI_CODA = frozenset({"pure", "grazie", "subito", "adesso", "ora", "per", "favore"})
+
+
+def chiudi_tutti_detto(testo: str, name="Calliope") -> bool:
+    """La frase intera è «chiudi tutti gli sviluppi» (o «chiudili tutti», «chiudi gli
+    sviluppi»…)? Forma chiusa breve (principio 10): il resto lo decide il modello."""
+    from ..wakeword import _NAME_MARK, _plain_words
+    parole = [w for w in _plain_words(str(testo or ""), name) if w != _NAME_MARK]
+    while parole and parole[-1] in _CHIUDI_CODA:
+        parole.pop()
+    while len(parole) > 2 and parole[0] in _CHIUDI_TESTA:
+        parole.pop(0)
+    if not 2 <= len(parole) <= 8:
+        return False
+    return bool(_CHIUDI_TUTTI.fullmatch(" ".join(parole)))
+
+
+def _chiudi_tutti_detto(ctx) -> bool:
+    nomi = getattr(getattr(ctx, "cfg", None), "wake_names", None) or "Calliope"
+    return chiudi_tutti_detto(str(getattr(ctx, "user_text", "") or ""), nomi)
 
 
 def _chiudi_tutti(ctx, svs, persona, prof) -> dict:
@@ -636,23 +708,33 @@ def _chiudi_tutti(ctx, svs, persona, prof) -> dict:
 
 
 def _rifaccio(sv) -> str:
-    """La domanda dopo un lavoro fermato o non andato (nessun lavoro in corso)."""
+    """La domanda dopo un lavoro fermato, non andato o messo da parte (nessun lavoro in corso):
+    una sola, che dice dove siamo e cosa farà (12/10, lavoro 3: prima «lo rifaccio così com'è,
+    o vuoi cambiare qualcosa?», e il «sì» ripartiva da zero)."""
+    from ..sviluppo import MESSO_DA_PARTE
+    giro = sv.giro or {}
+    da_li = bool(giro.get("cartella"))
+    rifaccio = ("lo rifaccio ripartendo da quello che aveva già scritto?" if da_li
+                else "lo rifaccio così com'è?")
     if sv.nota in ("annullato", "fermato"):
-        return ("Il lavoro dell'agente l'hai fermato tu: lo rifaccio così com'è, o vuoi cambiare "
-                "qualcosa?")
-    return "Il lavoro dell'agente non è andato: lo rifaccio così com'è, o vuoi cambiare qualcosa?"
+        return f"Il lavoro dell'agente l'hai fermato tu: {rifaccio}"
+    if sv.nota == MESSO_DA_PARTE or giro.get("perche") in ("tappa", "attesa") and da_li:
+        cosa = "a una tappa" if giro.get("perche") == "tappa" else "a una domanda per te"
+        return f"Il lavoro dell'agente era fermo {cosa} e l'ho messo da parte: riparto da lì?"
+    if "riavvio" in str(sv.nota or ""):
+        return f"Il lavoro dell'agente si è interrotto per un riavvio di Calliope: {rifaccio}"
+    return f"Il lavoro dell'agente non è andato: {rifaccio}"
 
 
 def _rifaccio_sospeso(sv) -> dict:
     """L'azione in sospeso di quella domanda (08/10 sera, DGX delle 20:05: «Sì, rifallo» →
     `analisi` senza modifica → «cosa vuoi cambiare?», poi la specifica riletta e un altro «va
-    bene così»; l'azione in sospeso diceva «azione = analisi, cambia vuota per rifarlo così», che
-    l'analisi non sapeva fare). Il «sì» va a `rifai`, che riparte subito con la stessa
-    specifica; una modifica detta va all'analisi."""
-    return {"domanda": "Lo rifaccio così com'è?",
+    bene così»). Il «sì» va a `rifai`, che riparte subito con la stessa specifica, dai file del
+    giro se ci sono; una modifica detta va all'analisi."""
+    return {"domanda": "Lo rifaccio?",
             "cosa": f"rifare il lavoro di «{sv.titolo}» con la stessa specifica",
             "tool": "sviluppo_passo",
-            "argomenti": "azione = rifai (sì, rifallo così com'è: riparte subito con la stessa "
+            "argomenti": "azione = rifai (sì, rifallo, riparti: riparte subito con la stessa "
                          "specifica); se dice cosa cambiare, azione = analisi e cambia = la "
                          "modifica come detta"}
 
@@ -680,6 +762,8 @@ def _ferma(ctx, svs, sv, prof) -> dict:
     if not res.get("ok"):
         return _final(str(res.get("frase") or "Non sono riuscita a fermare il lavoro."),
                       ok=False, fatto=NIENTE)
+    # I file del giro restano per «rifallo» (12/10, A5)
+    svs.segna_fermato(sv, lav)
     with svs._lock:
         sv.lavoro, sv.nota = None, "annullato"
     svs.tocca(sv)
@@ -688,7 +772,8 @@ def _ferma(ctx, svs, sv, prof) -> dict:
     dove = ("Lo sviluppo resta sospeso" if sv.stato == "sospesa"
             else f"Lo sviluppo resta aperto, {_alla(sv)}")
     return _final(f"Ho fermato il lavoro dell'agente su «{sv.titolo}»: non continua. {dove}: "
-                  "quando vuoi lo rifaccio così com'è, o cambiamo qualcosa.",
+                  "quando vuoi lo rifaccio ripartendo da quello che aveva già scritto, o "
+                  "cambiamo qualcosa.",
                   fatto="lavoro dell'agente FERMATO", lavoro=getattr(lav, "id", None))
 
 
@@ -699,13 +784,25 @@ def _rifai(ctx, svs, sv, prof, problema: str = "") -> dict:
     il lavoro nuovo dalla specifica dello sviluppo.
 
     Con `problema` (11/10, sviluppo_correggi su uno sviluppo fermo senza una versione): lo
-    stesso lavoro con il problema detto e il motivo dell'arresto nei vincoli, e i file che
-    l'agente aveva già scritto (la cartella del lavoro fermato) come punto di partenza."""
+    stesso lavoro con il problema detto e il motivo dell'arresto nei vincoli.
+
+    Dal 12/10 (lavoro 3, A5) sempre dai file del giro fermo (`parti_da`: li legge il thread dei
+    lavori quando il lavoro nuovo comincia, perché un lavoro appena fermato li sta ancora
+    copiando), non solo con `problema`: «rifallo» e «correggi» partono dallo stesso punto. A
+    una tappa «rifallo» è un altro giro dello stesso lavoro."""
     from . import agenti as ta
     svc = getattr(ctx, "lavori", None)
     if svc is None:
         return _no(ctx, "Qui non ci sono agenti.")
-    if svs.lavoro_attivo(sv) or _in_tappa(svs, sv) is not None:
+    tappa = _in_tappa(svs, sv)
+    if tappa is not None and not problema and hasattr(svc, "continua"):
+        frase = svc.continua(tappa)
+        if frase:
+            note_rule(ctx, "sviluppo_tappa_continua")
+            svs.tocca(sv)
+            return _final(frase, fatto="un altro giro avviato: NON è ancora finito",
+                          lavoro=tappa.id)
+    if svs.lavoro_attivo(sv) or tappa is not None or _in_attesa(svs, sv) is not None:
         return _stato(ctx, svs, sv, sv.persona)
     if sv.fase == "analisi":
         return _avanti(ctx, svs, sv, prof)
@@ -719,20 +816,26 @@ def _rifai(ctx, svs, sv, prof, problema: str = "") -> dict:
         arresto = svs.motivo_arresto(sv)
         nota = (" Il lavoro di prima si è fermato senza consegnare"
                 + (f" ({arresto.rstrip('.')})" if arresto else "")
-                + ": i file che avevi già scritto sono nella cartella, riparti da quelli e "
-                  "decidi. Da correggere, detto dalla persona: «" + problema[:400] + "».")
+                + ". Da correggere, detto dalla persona: «" + problema[:400] + "».")
     ultimo = None
     for voce in reversed(sv.lavori or []):
         lv = svs._lavoro(voce.get("id"))
         if lv is not None and svs._stesso_tipo(sv, lv):
             ultimo = lv
             break
+    giro = sv.giro or {}
+    # Da dove ripartire: il lavoro fermo in memoria, o la cartella del giro (dopo un riavvio);
+    # solo se ha una cartella (un lavoro mai cominciato non ha scritto niente)
+    parti_da = (ultimo if ultimo is not None and getattr(ultimo, "stato", "") != "fatto"
+                else giro.get("cartella") or None)
+    if parti_da is not None and not _cartella_di(parti_da):
+        parti_da = None
     if ultimo is None:
         out = _nuovo_lavoro(ctx, svs, sv, prof, sv.specifica or sv.richiesta,
                             (f"Da correggere, detto dalla persona: «{problema[:400]}»."
-                             if problema else ""), avvia=True)
+                             if problema else ""), avvia=True, parti_da=parti_da)
         _schermo(ctx, sv)
-        return out
+        return _frase_rifatto(out, sv, problema, parti_da)
     lav = svc.nuovo(ultimo.tipo, ultimo.compito, prof.id, prof.name, "amministra",
                     getattr(ultimo, "formato", "") or "", getattr(ultimo, "modello", "") or "",
                     ((getattr(ultimo, "vincoli", "") or "") + nota).strip(),
@@ -746,25 +849,51 @@ def _rifai(ctx, svs, sv, prof, problema: str = "") -> dict:
     if getattr(lav, "tipo", "") == "codice" and not getattr(lav, "input", None):
         # Il file della persona resta (12/10, A6)
         _file_della_persona(ctx, svs, sv, lav)
-    if problema:
-        # I file del lavoro fermato (agenti/servizio._parziale li copia nella sua cartella);
-        # il runtime di Calliope resta quello di partenza
-        from ..sviluppo import file_di_codice
-        cartella = str((getattr(ultimo, "risultato", None) or {}).get("cartella") or "")
-        for k, v in file_di_codice(cartella).items():
-            if k != "calliope_estensione.py":
-                lav.file_iniziali[k] = v
+    _metti_giro(lav, parti_da)
     out = ta._avvia(ctx, svc, lav)
-    if isinstance(out, dict):
-        if problema:
-            frase = (f"D'accordo: non c'era ancora una versione da correggere, quindi rifaccio il "
-                     f"lavoro di «{sv.titolo}» con la correzione, ripartendo da quello che "
-                     "aveva già scritto. Ci lavora in secondo piano: te lo dico quando è pronto.")
-        else:
-            frase = (f"D'accordo: rifaccio il lavoro di «{sv.titolo}» con la stessa specifica. "
-                     "Ci lavora in secondo piano: te lo dico quando è pronto.")
-        out["conferma"] = out["risposta_finale"] = frase
     _schermo(ctx, sv)
+    return _frase_rifatto(out, sv, problema, parti_da)
+
+
+def _cartella_di(parti_da) -> str:
+    """La cartella dei risultati di un lavoro (o la cartella stessa), "" se non ce l'ha."""
+    if isinstance(parti_da, str):
+        return parti_da
+    r = getattr(parti_da, "risultato", None) or {}
+    return str(r.get("cartella") or getattr(parti_da, "cartella", "") or "")
+
+
+def _metti_giro(lav, parti_da):
+    """I file del giro fermo nel lavoro nuovo (12/10, A4 e A5): quelli che ci sono già adesso,
+    e `parti_da` perché il thread dei lavori li rilegga quando il lavoro comincia
+    (agenti/servizio._file_del_giro): un lavoro appena fermato li sta ancora copiando, e il
+    lavoro di prima di una modifica intanto va avanti."""
+    if parti_da is None:
+        return
+    from ..sviluppo import VINCOLO_GIRO, file_del_giro
+    giro = file_del_giro(parti_da)
+    if giro:
+        lav.file_iniziali = {**(getattr(lav, "file_iniziali", None) or {}), **giro}
+        if VINCOLO_GIRO not in (getattr(lav, "vincoli", "") or ""):
+            lav.vincoli = ((getattr(lav, "vincoli", "") or "").rstrip() + " "
+                           + VINCOLO_GIRO).strip()
+    lav.parti_da = parti_da
+
+
+def _frase_rifatto(out, sv, problema: str, parti_da) -> dict:
+    if not isinstance(out, dict) or out.get("ok") is False:
+        return out
+    if problema:
+        frase = (f"D'accordo: non c'era ancora una versione da correggere, quindi rifaccio il "
+                 f"lavoro di «{sv.titolo}» con la correzione, ripartendo da quello che aveva "
+                 "già scritto. Ci lavora in secondo piano: te lo dico quando è pronto.")
+    elif parti_da is not None:
+        frase = (f"D'accordo: rifaccio il lavoro di «{sv.titolo}» ripartendo da quello che "
+                 "aveva già scritto. Ci lavora in secondo piano: te lo dico quando è pronto.")
+    else:
+        frase = (f"D'accordo: rifaccio il lavoro di «{sv.titolo}» con la stessa specifica. "
+                 "Ci lavora in secondo piano: te lo dico quando è pronto.")
+    out["conferma"] = out["risposta_finale"] = frase
     return out
 
 
@@ -803,6 +932,9 @@ def _stato(ctx, svs, sv, persona) -> dict:
                                   "argomenti": {"azione": "avanti"}})
     if sv.fase == "sviluppo" and lav is not None and lav.stato in ("in_coda", "in_corso"):
         frase += f" L'agente {getattr(lav, 'passo', 'lavora')}, al passo {lav.passi + 1}."
+    elif sv.fase == "sviluppo" and lav is not None and lav.stato == "in_attesa" and \
+            getattr(lav, "domanda", ""):
+        frase += f" L'agente aspetta una tua risposta: {lav.domanda}"
     elif sv.fase == "sviluppo" and sv.nota:
         frase += " " + _rifaccio(sv)
         _schermo(ctx, sv)
@@ -825,19 +957,68 @@ def _stato(ctx, svs, sv, persona) -> dict:
 
 
 def _riprendi(ctx, svs, persona, quale: str) -> dict:
+    """«Riprendiamo lo sviluppo»: uno sospeso (quello detto, o il più recente), un programma
+    consegnato da riaprire (12/10, M7), o quello già aperto. Dal 12/10 (lavoro 3) una frase
+    sola che dice dove siamo e, se c'è un lavoro fermo, una domanda sola su cosa farà («…: lo
+    rifaccio ripartendo da quello che aveva già scritto?»); il «sì» fa partire il lavoro senza
+    rileggere la specifica (prima 4–5 turni: «è già aperto», «l'hai fermato tu: lo rifaccio
+    così com'è, o vuoi cambiare qualcosa?», «cosa vuoi cambiare?», «va bene così?»)."""
     trovati = svs.trova(persona, quale)
-    if not trovati:
-        aperto = svs.corrente(persona)
+    riaperto = False
+    if str(quale or "").strip():
+        # Un programma consegnato con quel nome vince su uno sospeso che non lo è
+        chiusi = svs.riapribili(persona, quale)
+        if chiusi and (not trovati or _punti(svs, chiusi[0], quale) > _punti(svs, trovati[0],
+                                                                            quale)):
+            trovati, riaperto = chiusi, True
+    # Quello aperto, senza la sospensione pigra di `corrente` (riprenderne un altro lo sospende
+    # comunque, e la frase lo deve dire)
+    with svs._lock:
+        aperto = next((s for s in svs.sviluppi if s.persona == persona
+                       and s.stato == "aperta"), None)
+    if not trovati or (aperto is not None and str(quale or "").strip() and not riaperto
+                       and _punti(svs, aperto, quale) > _punti(svs, trovati[0], quale)):
         if aperto is not None:
-            return _final(f"Lo sviluppo di «{aperto.titolo}» è già aperto: "
-                          f"{svs.dove(aperto)}.", fatto="già aperto")
+            # Già aperto (09/10, DGX delle 20:41: «Riprendiamo lo sviluppo di…» → «è già
+            # aperto», e un turno in più per sentire cosa fare): vale come ripresa
+            note_rule(ctx, "sviluppo_ripreso_aperto")
+            svs.tocca(aperto)
+            return _ripresa(ctx, svs, aperto, "")
         return _no(ctx, "Non ho sviluppi sospesi da riprendere.")
     sv = trovati[0]
+    if riaperto:
+        prima = svs.riapri(sv)
+        note_rule(ctx, "sviluppo_riaperto")
+        testa = (f"Ho sospeso «{prima.titolo}». " if prima is not None else "")
+        frase = (f"{testa}Riapro «{sv.titolo}», con la sua richiesta: siamo al collaudo. Puoi "
+                 "provarlo con dati tuoi, o dirmi cosa cambiare.")
+        _schermo(ctx, sv)
+        return _final(frase, fatto="programma riaperto", sviluppo=sv.id)
     prima = svs.riprendi(sv)
     note_rule(ctx, "sviluppo_ripreso")
-    frase = (f"Ho sospeso «{prima.titolo}». " if prima is not None else "")
-    frase += f"Riprendiamo «{sv.titolo}»: {svs.dove(sv)}."
+    return _ripresa(ctx, svs, sv, f"Ho sospeso «{prima.titolo}». " if prima is not None else "")
+
+
+def _punti(svs, sv, quale: str) -> float:
+    """Quanto il titolo di `sv` somiglia a `quale` (come Sviluppi.trova)."""
+    import difflib
+    q = str(quale or "").strip().lower()
+    if not q:
+        return 0.0
+    def parole(t):
+        return {w for w in re.findall(r"[a-zà-ù0-9]{3,}", t.lower())
+                if w not in ("sviluppo", "estensione", "programma", "della", "dello")}
+    tp = parole(f"{sv.titolo} {sv.estensione or ''}")
+    comuni = sum(1 for w in parole(q) if any(w[:5] == x[:5] for x in tp))
+    return comuni + difflib.SequenceMatcher(None, q, sv.titolo.lower()).ratio()
+
+
+def _ripresa(ctx, svs, sv, testa: str) -> dict:
+    """La frase della ripresa: dove siamo, in breve, e al più una domanda (12/10)."""
+    frase = f"{testa}Riprendiamo «{sv.titolo}», eravamo {_alla(sv)}."
     extra = {}
+    lav = svs._lavoro(sv.lavoro)
+    tappa = _in_tappa(svs, sv)
     if sv.fase == "collaudo" and svs.e_gioco(sv):
         from ..sviluppo import DOMANDA_GIOCO
         frase += f" È un gioco: lo apro sullo schermo, in prova, senza attivarlo. {DOMANDA_GIOCO}"
@@ -849,10 +1030,28 @@ def _riprendi(ctx, svs, persona, quale: str) -> dict:
         frase += " Vuoi andare avanti?"
         extra["in_sospeso"] = {"domanda": "Vuoi andare avanti?", "cosa": "andare avanti",
                                "tool": "sviluppo_passo", "argomenti": {"azione": "avanti"}}
-    elif sv.fase == "sviluppo" and sv.nota and not svs.lavoro_attivo(sv):
+    elif sv.fase == "sviluppo" and tappa is not None:
+        # Fermo a una tappa (12/10, A5): il lavoro c'è ancora e aspetta la persona
+        domanda = "Continuo con un altro giro?"
+        frase += f" Il lavoro dell'agente è fermo a una tappa e aspetta te. {domanda}"
+        extra["in_sospeso"] = {"domanda": domanda, "cosa": "un altro giro di lavoro",
+                               "tool": "sviluppo_passo", "argomenti": {"azione": "avanti"}}
+    elif sv.fase == "sviluppo" and svs.lavoro_attivo(sv):
+        frase += " L'agente ci sta lavorando: te lo dico quando è pronto."
+    elif sv.fase == "sviluppo" and lav is not None and lav.stato == "in_attesa":
+        frase += f" L'agente aspetta una tua risposta: {getattr(lav, 'domanda', '')}"
+    elif sv.fase == "sviluppo" and (sv.nota or sv.giro):
         # DGX, 08/10 20:04: ripreso dopo il lavoro fermato, «siamo allo sviluppo» e basta
         frase += " " + _rifaccio(sv)
         extra["in_sospeso"] = _rifaccio_sospeso(sv)
+    elif sv.fase == "analisi" and sv.ritorno:
+        frase += (" C'è una modifica che aspetta il tuo sì: affido all'agente la richiesta "
+                  "cambiata, o lascio com'era?")
+        extra["in_sospeso"] = {"domanda": "Affido la richiesta cambiata, o lascio com'era?",
+                               "cosa": "affidare la richiesta cambiata",
+                               "tool": "sviluppo_passo",
+                               "argomenti": "azione = avanti per affidarla; azione = indietro "
+                                            "per lasciare com'era"}
     elif sv.fase == "analisi" and sv.specifica:
         frase += " Vuoi che affidi all'agente la specifica di prima?"
         extra["in_sospeso"] = {"domanda": "Vuoi che la affidi all'agente?",
@@ -892,7 +1091,8 @@ def _collaudi_per_agente(svs, sv) -> str:
 
 
 def _nuovo_lavoro(ctx, svs, sv, prof, compito: str, nota: str = "", avvia: bool = False,
-                  cambiamento: list | None = None, da_correggere: str = "") -> dict:
+                  cambiamento: list | None = None, da_correggere: str = "",
+                  parti_da=None) -> dict:
     """Il lavoro dello sviluppo con la specifica di adesso, proposto con «Ho capito così: …
     Va bene così?» (la persona conferma la specifica: è la fine dell'analisi). `avvia`: la
     persona l'ha già sentita e accettata («avanti», «completa»), il lavoro parte. `nota`: per
@@ -912,6 +1112,7 @@ def _nuovo_lavoro(ctx, svs, sv, prof, compito: str, nota: str = "", avvia: bool 
         lav.cambiamento = list(cambiamento)
     if da_correggere:
         lav.da_correggere = da_correggere
+    _metti_giro(lav, parti_da)
     if avvia:
         return ta._avvia(ctx, svc, lav)
     return ta._proponi(ctx, svc, lav, turno)
@@ -1033,22 +1234,28 @@ def _analisi(ctx, svs, sv, prof, cambia: str) -> dict:
             return _domanda_cambio(ctx, sv, {"tipo": sv.tipo, "compito": cambia})
     note_rule(ctx, "sviluppo_analisi")
     if not cambia:
-        fermato = _ferma_per_analisi(ctx, svs, sv, prof)
-        svs.passa(sv, "analisi", "torna all'analisi")
-        sv.lavoro, sv.nota = None, ""
+        # «Torniamo all'analisi» senza dire cosa (12/10, A4): niente si ferma né cambia fase
+        # finché la modifica non c'è e non è confermata; il lavoro in corso continua, la
+        # versione provata resta (prima il lavoro si fermava subito e indietro non si tornava)
+        note_rule(ctx, "sviluppo_analisi_senza_modifica")
         svs.tocca(sv)
-        frase = fermato + "D'accordo, torniamo all'analisi: cosa vuoi cambiare?"
+        frase = "D'accordo: cosa vuoi cambiare?"
+        if svs.lavoro_attivo(sv):
+            frase = ("D'accordo: cosa vuoi cambiare? Intanto l'agente continua: lo fermo solo "
+                     "quando la modifica è decisa.")
         _schermo(ctx, sv)
-        return _final(frase, fatto="sviluppo all'analisi: manca la modifica",
-                      in_sospeso={"domanda": frase, "cosa": "la modifica allo sviluppo",
+        return _final(frase, fatto="niente cambiato: manca la modifica",
+                      in_sospeso={"domanda": "Cosa vuoi cambiare?",
+                                  "cosa": "la modifica allo sviluppo",
                                   "tool": "sviluppo_passo",
                                   "argomenti": "azione = analisi, cambia = la modifica come "
                                                "detta dalla persona"})
+    prima = svs.istantanea(sv)
     m = _modifica(ctx, svs, sv, cambia, "analisi")
     if m["esito"] == "risposta":
         return m["out"]
     if m["esito"] == "cambi":
-        return _proponi_modifica(ctx, svs, sv, prof, cambia, m["cambi"])
+        return _proponi_modifica(ctx, svs, sv, prof, cambia, m["cambi"], prima)
     if m["esito"] in ("difetto", "gia"):
         return _gia_nella_richiesta(ctx, svs, sv, cambia, m["esito"])
     # Senza i requisiti (sviluppo_requisiti: false, o niente agente): come prima del 12/10
@@ -1178,16 +1385,84 @@ def _chiedi_cosa(ctx, sv, domanda: str, da: str) -> dict:
                                            "dalla persona"})
 
 
-def _proponi_modifica(ctx, svs, sv, prof, detto: str, cambi: list) -> dict:
-    """I requisiti sono cambiati (12/10): il lavoro in corso si ferma, si torna all'analisi e
-    il lavoro nuovo (dai file della versione provata, se c'è) si propone dicendo solo cosa è
-    cambiato («Ho cambiato due cose: … Va bene così, o la cambiamo?»)."""
-    fermato = _ferma_per_analisi(ctx, svs, sv, prof)
+def _proponi_modifica(ctx, svs, sv, prof, detto: str, cambi: list,
+                      prima: dict | None = None) -> dict:
+    """I requisiti sono cambiati (12/10): si torna all'analisi e il lavoro nuovo (dai file della
+    versione provata, se c'è) si propone dicendo solo cosa è cambiato («Ho cambiato due cose: …
+    Va bene così, o la cambiamo?»).
+
+    Dal 12/10 (lavoro 3, A4) il lavoro in corso NON si ferma qui: si ferma al «sì» alla
+    proposta (`Sviluppi.avviato`), e il lavoro nuovo riparte dai file che aveva scritto. Fino ad
+    allora «lascia com'era» (`sviluppo_passo indietro`) torna dov'eravamo: al collaudo della
+    versione provata, o al lavoro che intanto è andato avanti (`Sviluppi.ritorno`)."""
+    lav_prima = svs._lavoro(sv.lavoro)
+    vivo = lav_prima is not None and getattr(lav_prima, "stato", "") in (
+        "in_coda", "in_corso", "in_attesa")
+    if prima is None or not svs.tieni_ritorno(sv, prima):
+        # Niente a cui tornare (all'analisi, senza lavoro): come prima
+        vivo = False
+    parti_da = lav_prima if vivo else None
+    if vivo:
+        note_rule(ctx, "sviluppo_modifica_lavoro_continua")
     svs.passa(sv, "analisi", "modifica: " + str(detto or "")[:120])
     sv.lavoro, sv.nota = None, ""
     svs.tocca(sv)
-    out = _nuovo_lavoro(ctx, svs, sv, prof, sv.specifica or sv.richiesta, cambiamento=cambi)
-    return _con_fermato(ctx, sv, out, fermato)
+    out = _nuovo_lavoro(ctx, svs, sv, prof, sv.specifica or sv.richiesta, cambiamento=cambi,
+                        parti_da=parti_da)
+    rit = sv.ritorno or {}
+    testa = ""
+    if vivo:
+        testa = "Il lavoro di prima intanto continua: lo fermo solo al tuo sì. "
+    elif rit.get("fase") in ("collaudo", "revisione", "attivazione") and rit.get("versione"):
+        testa = (f"La versione {rit['versione']} resta: se lasci com'era, torniamo a "
+                 "provarla. ")
+    elif rit.get("fase") in ("collaudo", "revisione"):
+        testa = "Quello che c'è resta: se lasci com'era, torniamo a provarlo. "
+    return _con_fermato(ctx, sv, out, testa)
+
+
+def _indietro(ctx, svs, sv, prof) -> dict:
+    """«Lascia com'era», «no, torna com'era» alla modifica proposta (12/10, A4): lo sviluppo
+    torna dov'era prima della modifica (fase, versione provata, requisiti, il lavoro che intanto
+    è continuato) e la proposta si scarta. Regola `sviluppo_modifica_lasciata`."""
+    if sv is None:
+        return _no(ctx, "Non c'è nessuno sviluppo aperto.")
+    if not sv.ritorno:
+        return _no(ctx, "Non c'è una modifica da togliere: la richiesta è quella di prima.")
+    proposto = sv.proposto
+    svc = getattr(ctx, "lavori", None)
+    r = svs.ripristina(sv)
+    if proposto and svc is not None and hasattr(svc, "ritira"):
+        try:
+            svc.ritira(prof.id, proposto)
+        except Exception:  # noqa: BLE001 — la proposta scade comunque
+            pass
+    note_rule(ctx, "sviluppo_modifica_lasciata")
+    _schermo(ctx, sv)
+    frase = f"D'accordo, lascio «{sv.titolo}» com'era"
+    extra = {}
+    tappa = _in_tappa(svs, sv)
+    if svs.lavoro_attivo(sv):
+        frase += ": l'agente continua il lavoro di prima."
+    elif tappa is not None:
+        domanda = "Continuo con un altro giro?"
+        frase += f": il lavoro di prima è fermo a una tappa. {domanda}"
+        extra["in_sospeso"] = {"domanda": domanda, "cosa": "un altro giro di lavoro",
+                               "tool": "sviluppo_passo", "argomenti": {"azione": "avanti"}}
+    elif sv.fase == "collaudo":
+        v = f", versione {sv.versione}" if sv.versione and sv.tipo == "estensione" else ""
+        frase += f": siamo di nuovo al collaudo{v}."
+        if svs.e_gioco(sv):
+            from ..sviluppo import DOMANDA_GIOCO
+            frase += f" {DOMANDA_GIOCO}"
+            extra["in_sospeso"] = _sospeso_gioco(sv)
+    elif sv.fase == "sviluppo" and (sv.nota or sv.giro):
+        frase += ". " + _rifaccio(sv)
+        extra["in_sospeso"] = _rifaccio_sospeso(sv)
+    else:
+        frase += f": siamo {_alla(sv)}."
+    return _final(frase, fatto="modifica lasciata: lo sviluppo è com'era",
+                  tornato=(r or {}).get("fase"), **extra)
 
 
 def _gia_nella_richiesta(ctx, svs, sv, detto: str, esito: str) -> dict:
@@ -1243,9 +1518,11 @@ def _avanti(ctx, svs, sv, prof) -> dict:
             from ..conferme import admin_confermato
             if admin_confermato(ctx):
                 note_rule(ctx, "sviluppo_avanti_accetta")
-                return _nuovo_lavoro(ctx, svs, sv, prof, sv.specifica, avvia=True)
+                return _nuovo_lavoro(ctx, svs, sv, prof, sv.specifica, avvia=True,
+                                     parti_da=svs.lavoro_di_prima(sv))
         if sv.specifica:
-            return _nuovo_lavoro(ctx, svs, sv, prof, sv.specifica)
+            return _nuovo_lavoro(ctx, svs, sv, prof, sv.specifica,
+                                 parti_da=svs.lavoro_di_prima(sv))
         return _no(ctx, "Siamo ancora all'analisi: prima dimmi cosa deve fare.")
     if sv.fase == "sviluppo":
         tappa = _in_tappa(svs, sv)
@@ -1257,8 +1534,13 @@ def _avanti(ctx, svs, sv, prof) -> dict:
                 svs.tocca(sv)
                 return _final(frase, fatto="un altro giro avviato: NON è ancora finito",
                               lavoro=tappa.id)
-        if svs.lavoro_attivo(sv):
+        if svs.lavoro_attivo(sv) or _in_attesa(svs, sv) is not None:
             return _stato(ctx, svs, sv, sv.persona)
+        if sv.nota or sv.giro:
+            # «Avanti», «sì, procedi» con il lavoro fermo (12/10, lavoro 3): vuol dire rifarlo,
+            # senza un'altra domanda (prima «lo rifaccio così com'è, o…?» di nuovo)
+            note_rule(ctx, "sviluppo_avanti_rifai")
+            return _rifai(ctx, svs, sv, prof)
         return _final(_rifaccio(sv), ok=False, fatto=NIENTE, in_sospeso=_rifaccio_sospeso(sv))
     if sv.fase == "collaudo":
         return _revisione(ctx, svs, sv)
@@ -1268,8 +1550,9 @@ def _avanti(ctx, svs, sv, prof) -> dict:
             note_rule(ctx, "sviluppo_chiuso")
             _schermo(ctx, sv)
             return _final(f"Fatto: lo sviluppo di «{sv.titolo}» è chiuso. Il programma resta "
-                          "nella cartella Lavori: per usarlo di nuovo, chiedimi di eseguirlo.",
-                          fatto="sviluppo chiuso")
+                          "nella cartella Lavori: per usarlo di nuovo, chiedimi di eseguirlo; "
+                          "per cambiarlo, di riaprirlo.",
+                          fatto="sviluppo chiuso: si può riaprire con la sua richiesta")
         est = getattr(ctx, "estensioni", None)
         if est is None:
             return _no(ctx, "Qui le estensioni non ci sono.")
@@ -1984,6 +2267,12 @@ def _sviluppo_chiedi(ctx: ToolContext, domanda: str = "", **_altro) -> dict:
     if prof is None or not _admin(ctx):
         return _no(ctx, "Le domande a chi scrive il codice sono di chi amministra.",
                    "sviluppo_permesso")
+    if _chiudi_tutti_detto(ctx):
+        # «Chiudi tutti gli sviluppi» detto per intero e preso per una domanda (10/10, DGX
+        # delle 11:48: «Non c'è nessuno sviluppo aperto: di quale codice parli?», falso): è la
+        # chiusura, con la sua domanda (forma chiusa, effetto: una domanda; principio 10)
+        note_rule(ctx, "sviluppo_chiudi_tutti_forma")
+        return _sviluppo(ctx, azione="chiudi", quale="tutti")
     sv = svs.corrente(chi(ctx))
     if sv is None:
         return _no(ctx, "Non c'è nessuno sviluppo aperto: di quale codice parli?")
@@ -2111,12 +2400,13 @@ def _sviluppo_correggi(ctx: ToolContext, problema: str = "", **_altro) -> dict:
         return _chiedi_cosa(ctx, sv, "Cosa non va? Dimmi cosa hai visto o cosa deve fare di "
                                      "diverso, così lo dico a chi l'ha scritto.", "correggi")
     if problema and not si_alla_domanda:
+        prima = svs.istantanea(sv)
         m = _modifica(ctx, svs, sv, problema, "correggi", gia_chiesto=risposta)
         if m["esito"] == "risposta":
             return m["out"]
         if m["esito"] == "cambi":
             note_rule(ctx, "sviluppo_correggi_cambia")
-            return _proponi_modifica(ctx, svs, sv, prof, problema, m["cambi"])
+            return _proponi_modifica(ctx, svs, sv, prof, problema, m["cambi"], prima)
     if sv.fase == "sviluppo" and not (sv.estensione if sv.tipo == "estensione"
                                       else sv.cartella):
         # Uno sviluppo fermo prima della prima consegna (11/10, DGX delle 15:53: il lavoro del
@@ -2240,10 +2530,13 @@ def sviluppo_specs(file_pc: bool = False, allegati: bool = False) -> list[ToolSp
                          "«attivala»; a una tappa del lavoro, «continua»); analisi (si torna "
                          "all'analisi per cambiare cosa deve fare: cambia = la modifica come "
                          "detta); rifai (dopo un lavoro fermato o non andato, «sì, rifallo», "
-                         "«riprova così com'è»: riparte subito con la stessa specifica); ferma "
+                         "«riprova così com'è»: riparte subito con la stessa specifica, dai "
+                         "file già scritti); indietro (alla modifica proposta, «lascia com'era»: "
+                         "torna dov'eravamo, la modifica si scarta); ferma "
                          "(«ferma/stoppa/blocca lo sviluppo», «fermalo»: il lavoro dell'agente "
                          "si ferma subito); sospendi (una pausa, «mettiamo in pausa»: un lavoro "
-                         "dell'agente in corso finisce); riprendi («riprendiamo lo sviluppo del meteo»: quale "
+                         "dell'agente in corso finisce); riprendi («riprendiamo lo sviluppo del meteo», anche "
+                         "«riapri il programma delle vocali» già chiuso: quale "
                          "= le parole del titolo); chiudi (chiede conferma; «chiudi tutti gli "
                          "sviluppi»: quale = \"tutti\", e ferma anche il lavoro dell'agente); "
                          "promuovi (un "

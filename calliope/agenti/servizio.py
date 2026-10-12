@@ -690,13 +690,16 @@ class Lavori:
         limite = float(getattr(self.cfg, "agenti_attesa_risposta_min", 120.0)) * 60
         ora = time.time()
         with self._lock:
-            scaduti = [lv for lv in self.lavori if lv.stato == "in_attesa"
+            scaduti = [(lv, self.in_tappa(lv)) for lv in self.lavori if lv.stato == "in_attesa"
                        and ora - (lv.attesa_dal or ora) > limite]
-            for lv in scaduti:
+            for lv, _ in scaduti:
                 lv.stato, lv.fine, lv.passo = "scaduto", ora, "chiuso senza risposta"
-        for lv in scaduti:
+        for lv, tappa in scaduti:
             self.log(f"[AGENTI] {lv.id}: nessuna risposta in {_durata(limite)}: lo chiudo")
-            self._chiudi_attesa(lv, {"esito": "scaduto", "attesa": limite})
+            # Fermo a una tappa (12/10, A5): la modalità sviluppo lo mette da parte con i
+            # file del giro, non lo dice «non andato»
+            self._chiudi_attesa(lv, {"esito": "scaduto", "attesa": limite,
+                                     **({"tappa": True} if tappa else {})})
             self._annuncia(lv)
         if scaduti:
             self._salva_stato()
@@ -959,6 +962,16 @@ class Lavori:
             self._offerte.pop(persona or "?", None)
         return off["lavoro"]
 
+    def ritira(self, persona, ident: str) -> bool:
+        """Toglie l'offerta `ident` di questa persona (12/10, modalità sviluppo: «lascia
+        com'era» scarta la modifica proposta, e un «sì» dopo non deve farla partire)."""
+        with self._lock:
+            off = self._offerte.get(persona or "?")
+            if off is None or getattr(off.get("lavoro"), "id", None) != ident:
+                return False
+            self._offerte.pop(persona or "?", None)
+        return True
+
     def avvia(self, lav: Lavoro) -> str:
         att = self.attivi()
         with self._lock:
@@ -1179,6 +1192,7 @@ class Lavori:
                     self.log(f"[AGENTI] {lav.id}: sandbox {sb.isolamento.descrizione}")
                     lav.sandbox = sb
                     self._salva_stato()
+                    self._file_del_giro(lav, riuso)
                     for nome, testo in (lav.file_iniziali or {}).items():
                         if not (riuso and (sb.root / nome).is_file()):
                             sb.scrivi(nome, testo)
@@ -1299,6 +1313,29 @@ class Lavori:
                 self.esecuzioni.in_cima(es)       # la scheda del lavoro è appena andata in cima
         else:
             self._scheda_finale(lav)
+
+    def _file_del_giro(self, lav: Lavoro, riuso=None):
+        """Un lavoro della modalità sviluppo che riparte da un giro fermo (12/10, A4 e A5:
+        «rifallo» dopo «fermalo», una tappa scaduta, la modifica confermata con il lavoro di
+        prima a metà): i file che quel giro aveva scritto vanno nella sandbox sopra i file di
+        partenza, e il vincolo lo dice. Qui, nel thread dei lavori, perché il lavoro di prima
+        fermato al «sì» ha già copiato i suoi file quando questo comincia."""
+        parti = getattr(lav, "parti_da", None)
+        if parti is None or riuso:
+            return
+        lav.parti_da = None
+        try:
+            from ..sviluppo import VINCOLO_GIRO, file_del_giro
+            giro = file_del_giro(parti)
+        except Exception as e:  # noqa: BLE001 — il lavoro parte comunque, dai suoi file
+            self.log(f"[AGENTI] {lav.id}: file del giro di prima non letti: {e}")
+            return
+        if not giro:
+            return
+        lav.file_iniziali = {**(lav.file_iniziali or {}), **giro}
+        if VINCOLO_GIRO not in (lav.vincoli or ""):
+            lav.vincoli = ((lav.vincoli or "").rstrip() + " " + VINCOLO_GIRO).strip()
+        self.log(f"[AGENTI] {lav.id}: riparte dai {len(giro)} file del giro di prima")
 
     def _conserva(self, lav: Lavoro):
         svs = getattr(self, "sviluppi", None)

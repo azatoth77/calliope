@@ -780,5 +780,47 @@ verifica("elenco dei comandi: «ricomincia» si può (dentro il gioco vale per i
          list(GV.valida_elenco({"ricomincia": ["ricomincia"]})), ["ricomincia"])
 
 
+# ── comandi del flusso dello sviluppo (12/10, lavoro 3) ──
+# «Chiudi tutti gli sviluppi» per intero (regola `sviluppo_chiudi_tutti_forma`, tools/sviluppo):
+# vale solo dopo che il modello ha scelto chiudi (o sviluppo_chiedi), ed è una domanda
+from calliope.tools.sviluppo import chiudi_tutti_detto  # noqa: E402
+for testo, atteso in [
+        ("Chiudi tutti gli sviluppi.", True), ("Calliope, chiudi tutti gli sviluppi.", True),
+        ("Chiudili tutti.", True), ("Chiudi tutti.", True), ("Sì, chiudi tutti gli sviluppi.", True),
+        ("Chiudi gli sviluppi.", True), ("Chiudili tutti e due.", True),
+        ("Chiudi pure tutti gli sviluppi aperti.", True),
+        ("Chiudi tutti gli sviluppi sospesi.", True),
+        # contrari: altre cose da chiudere, una parola dentro una frase, un solo sviluppo
+        ("Chiudi tutte le finestre.", False), ("Chiudi tutti i programmi del PC.", False),
+        ("Chiudi la finestra.", False), ("Chiudi lo sviluppo.", False), ("Chiudilo.", False),
+        ("Chiudi tutti gli sviluppi tranne quello del meteo.", False),
+        ("Non chiudere tutti gli sviluppi.", False), ("Chiudi tutte le tapparelle.", False),
+        ("Ferma il lavoro e chiudi tutti gli sviluppi.", False), ("Tutti.", False), ("", False)]:
+    verifica(f"chiudi tutti «{testo}»", chiudi_tutti_detto(testo), atteso)
+
+# Un'azione che non si disfa non parte da una storpiatura (regola
+# `politica_storpiatura_irreversibile`): la frase intera è una forma storpiata nota
+from calliope import politica as POL  # noqa: E402
+for testo, nome, azione, sospeso, atteso in [
+        ("Am nulla il lavoro.", "sviluppo_passo", "ferma", None, True),
+        ("Annullahi.", "lavoro_annulla", "", None, True),
+        ("Nulla è lavoro.", "sviluppo_passo", "ferma", None, True),
+        ("Chiudin.", "sviluppo_passo", "chiudi", "sviluppo_passo", True),
+        ("Calliope, giudino.", "sviluppo_passo", "chiudi", "sviluppo_passo", True),
+        # contrari: le parole vere, un'azione che si disfa, chiudi che chiede comunque, un altro
+        # tool, «annulla» dentro una frase
+        ("Ferma il lavoro.", "sviluppo_passo", "ferma", None, False),
+        ("Annulla il lavoro.", "lavoro_annulla", "", None, False),
+        ("Sì, chiudi.", "sviluppo_passo", "chiudi", "sviluppo_passo", False),
+        ("Chiudin.", "sviluppo_passo", "chiudi", None, False),
+        ("Spendilo.", "sviluppo_passo", "sospendi", None, False),
+        ("Annullahi.", "sviluppo_passo", "riprendi", None, False),
+        ("Annulla la sveglia delle 7.", "lavoro_annulla", "", None, False),
+        ("Annullahi.", "pc_media", "pausa", None, False)]:
+    verifica(f"irreversibile da storpiatura «{testo}» {nome} {azione}",
+             POL.irreversibile_storpiato(nome, {"azione": azione} if azione else {},
+                                         POL.Turno(testo=testo, in_sospeso=sospeso)), atteso)
+
+
 print(f"\n{errori} errori" if errori else "\nTutto a posto.")
 sys.exit(1 if errori else 0)

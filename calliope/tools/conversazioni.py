@@ -471,7 +471,13 @@ def _conversazione_nuova(ctx: ToolContext, cosa: str = "") -> dict:
     except AttributeError:
         return _final("Non riesco a ricominciare da qui.", ok=False)
     note_rule(ctx, "conversazione_nuova_tool")
-    return _final(NUOVA_FRASE)
+    # Con uno sviluppo aperto (12/10, lavoro 3): si sospende, come con «ricominciamo» detto
+    try:
+        from .sviluppo import sospendi_per_ricominciare
+        sospeso = sospendi_per_ricominciare(ctx)
+    except Exception:  # noqa: BLE001 — la conversazione nuova parte comunque
+        sospeso = ""
+    return _final(NUOVA_FRASE + (f" {sospeso}" if sospeso else ""))
 
 
 def conversazioni_specs() -> list[ToolSpec]:

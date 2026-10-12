@@ -101,6 +101,13 @@ class Lavori:
         off = self.offerte.get(persona)
         return off if off and 1 <= turno - off["turno"] <= 3 else None
 
+    def ritira(self, persona, ident):
+        off = self.offerte.get(persona)
+        if off is None or off["lavoro"].id != ident:
+            return False
+        self.offerte.pop(persona, None)
+        return True
+
     def conferma(self, persona, ident, turno):
         off = self.offerta(persona, turno)
         if off is None or off["lavoro"].id != ident:
@@ -294,7 +301,7 @@ def prova_stati(tmp: Path, iso):
                        messaggio="non sono riuscita a finire «x»: tetto delle passate.")
     verifica("lavoro fallito: lo sviluppo resta aperto, allo sviluppo, senza lavoro",
              sv.fase == "sviluppo" and sv.lavoro is None and sv.stato == "aperta"
-             and "lo rifaccio così com'è" in item["messaggio"]
+             and "lo rifaccio così com'è?" in item["messaggio"]
              and (item.get("in_sospeso") or {}).get("tool") == "sviluppo_passo",
              item["messaggio"])
     verifica("riga per il modello: il lavoro non è andato → analisi",
@@ -642,7 +649,7 @@ def prova_sospensione(tmp: Path, iso):
     verifica("«riprendiamo lo sviluppo del meteo»: ripreso, e quello aperto si sospende",
              sv.stato == "aperta" and sv2.stato == "sospesa"
              and detta(out).startswith("Ho sospeso «rinomina foto». Riprendiamo «Meteo per "
-                                       "città»: siamo al collaudo")
+                                       "città», eravamo al collaudo.")
              and "sviluppo_ripreso" in ctx.regole, detta(out))
     verifica("una sola aperta per persona",
              sum(1 for s in svs.sviluppi if s.persona == "u1" and s.stato == "aperta") == 1)

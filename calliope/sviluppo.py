@@ -77,6 +77,14 @@ DOMANDA_GIOCO = "Lo apro in prova?"
 # La proposta in analisi, e quella a tappe (11/10, calliope/requisiti.py)
 DOMANDA_PROPOSTA = "Va bene così, o la cambiamo?"
 DOMANDA_TAPPE = "Comincio dalla prima tappa, o lo faccio tutto insieme?"
+# La nota di un lavoro fermo a una tappa o a una domanda che ha aspettato troppo (12/10, A5)
+MESSO_DA_PARTE = "messo da parte"
+# I file di un giro fermo che non tornano all'agente: il runtime e il contratto li rimette
+# Calliope, gli esempi veri li rifà `esempi` (12/10, A5)
+GIRO_ESCLUSI = frozenset({"calliope_estensione.py", "CAPACITA.md"})
+VINCOLO_GIRO = ("Il giro di prima si è fermato prima di consegnare: i file che aveva già scritto "
+                "sono nella cartella. Riparti da quelli: tieni ciò che va, correggi o riscrivi il "
+                "resto.")
 
 
 def leggibile(titolo: str) -> str:
@@ -336,6 +344,14 @@ class Sviluppo:
     # La riga «Intanto restiamo sullo sviluppo…» detta dopo un fuori tema (12/10): {fase,
     # quando}; non si ripete nella stessa fase per FUORI_TEMA_S
     fuori_tema: dict = field(default_factory=dict)
+    # ── comandi del flusso e ripresa (12/10, lavoro 3) ──
+    # Dove si torna se la modifica non viene confermata (A4): la fase, il lavoro dell'agente che
+    # intanto continua, la versione provata e i requisiti di prima. {} senza una modifica in
+    # attesa del «sì». Il lavoro di prima si ferma solo al «sì» (`avviato`)
+    ritorno: dict = field(default_factory=dict)
+    # L'ultimo giro fermo prima di consegnare (A5): {lavoro, cartella, perche (fermato, tappa,
+    # attesa, limite, errore, scaduto), domanda, quando}. «Rifallo» riparte dai suoi file
+    giro: dict = field(default_factory=dict)
 
     def fasi(self) -> tuple[str, ...]:
         return FASI_PROGRAMMA if self.tipo == "programma" else FASI_ESTENSIONE
@@ -406,12 +422,16 @@ class Sviluppi:
                 continue
             sv = Sviluppo(**{k: v for k, v in d.items() if k in nomi})
             if sv.stato == "chiusa" and adesso - float(sv.chiusa or 0) > TENUTA_CHIUSE_S:
+                self._togli_contesto(sv)     # anche quello di un programma consegnato (M7)
                 continue
             if sv.stato != "chiusa" and sv.fase == "sviluppo" and sv.lavoro:
                 # Il lavoro dell'agente non sopravvive a un riavvio (agenti/ripresa.py: diventa
                 # «interrotto», e gli id dei lavori ripartono): lo sviluppo resta allo sviluppo,
                 # senza lavoro, e lo dice; un lavoro rifatto si riconosce dal titolo
                 sv.lavoro, sv.nota = None, "interrotto da un riavvio di Calliope"
+            if sv.ritorno.get("lavoro"):
+                # Il lavoro di prima della modifica non c'è più dopo un riavvio (12/10, A4)
+                sv.ritorno["lavoro"] = None
             sv.proposto = None                # le proposte non sopravvivono a un riavvio
             self.sviluppi.append(sv)
         self.ricordati = {str(k): str(v) for k, v in (dati.get("ricordati") or {}).items()}
@@ -448,9 +468,19 @@ class Sviluppi:
         lv = self._lavoro(sv.lavoro)
         return lv is not None and getattr(lv, "stato", "") in ("in_coda", "in_corso")
 
+    def lavoro_di_prima(self, sv: Sviluppo):
+        """Il lavoro dell'agente di prima della modifica in attesa del «sì» (12/10, A4), se è
+        ancora vivo (in coda, in corso, fermo a una tappa o a una domanda), o None."""
+        lv = self._lavoro((sv.ritorno or {}).get("lavoro"))
+        if lv is not None and getattr(lv, "stato", "") in ("in_coda", "in_corso", "in_attesa"):
+            return lv
+        return None
+
     def _da_sospendere(self, sv: Sviluppo) -> bool:
+        lv = self.lavoro_di_prima(sv)
+        vivo = lv is not None and getattr(lv, "stato", "") in ("in_coda", "in_corso")
         return (self.sospendi_s > 0 and time.time() - float(sv.ultimo or sv.aperta or 0)
-                > self.sospendi_s and not self.lavoro_attivo(sv))
+                > self.sospendi_s and not self.lavoro_attivo(sv) and not vivo)
 
     def corrente(self, persona) -> Sviluppo | None:
         """Lo sviluppo aperto di `persona`, o None. Dopo `sviluppo_sospendi_min` minuti senza
@@ -509,7 +539,7 @@ class Sviluppi:
         with self._lock:
             return next((s for s in reversed(self.sviluppi)
                          if (s.stato != "chiusa" or (chiusi and s.motivo in ("uscita",)))
-                         and ident in (s.lavoro, s.proposto)
+                         and ident in (s.lavoro, s.proposto, (s.ritorno or {}).get("lavoro"))
                          and (persona is None or s.persona == persona)), None)
 
     def dell_estensione(self, nome) -> Sviluppo | None:
@@ -619,8 +649,86 @@ class Sviluppi:
         self.log(f"[SVILUPPO] {sv.id} «{sv.titolo}» chiuso ({motivo})")
         self._salva()
         self.agli_schermi(sv)
-        # Il contesto dei lavori serve finché lo sviluppo è aperto o sospeso (versione 2)
-        self._togli_contesto(sv)
+        # Il contesto dei lavori serve finché lo sviluppo è aperto o sospeso (versione 2); un
+        # programma consegnato si può riaprire (12/10, M7): il suo resta, con il file della
+        # persona, finché lo sviluppo chiuso si tiene (TENUTA_CHIUSE_S)
+        if motivo != "consegnato":
+            self._togli_contesto(sv)
+
+    def riapribili(self, persona, quale: str = "") -> list[Sviluppo]:
+        """I programmi consegnati (chiusi con «va bene così» alla revisione) di `persona`, che
+        si possono riaprire con la loro richiesta e i requisiti (12/10, M7): quello detto per
+        primo, come `trova`."""
+        return [s for s in self.trova(persona, quale, stati=("chiusa",))
+                if s.tipo == "programma" and s.motivo == "consegnato"]
+
+    def riapri(self, sv: Sviluppo) -> Sviluppo | None:
+        """Riapre un programma consegnato al collaudo (12/10, M7): la richiesta, la specifica, i
+        requisiti e la cartella sono quelli di quando si è chiuso. Restituisce quello che era
+        aperto (ora sospeso) o None."""
+        prima = self.riprendi(sv)
+        with self._lock:
+            sv.chiusa = None
+            sv.chiusura_chiesta = None
+        self.passa(sv, "collaudo", "riaperto")
+        return prima
+
+    # ─────────────────── la modifica non confermata (12/10, A4) ───────────────────
+    def istantanea(self, sv: Sviluppo) -> dict:
+        """Ciò che una modifica cambia, prima di cambiarlo: si rimette con `ripristina` se la
+        persona lascia com'era."""
+        with self._lock:
+            return {"fase": sv.fase, "lavoro": sv.lavoro, "nota": sv.nota,
+                    "versione": sv.versione, "cartella": sv.cartella,
+                    "specifica": sv.specifica,
+                    "requisiti": [dict(r) for r in sv.requisiti],
+                    "requisiti_da": sv.requisiti_da, "tappa": sv.tappa,
+                    "tappe_stato": sv.tappe_stato, "verifica": dict(sv.verifica or {}),
+                    "modifiche": len(sv.modifiche), "giro": dict(sv.giro or {}),
+                    "quando": time.time()}
+
+    def tieni_ritorno(self, sv: Sviluppo, prima: dict) -> bool:
+        """La modifica sta per tornare all'analisi: se c'è qualcosa a cui tornare (una fase
+        dopo l'analisi o un lavoro vivo) e non c'è già un ritorno, lo tiene. True se c'è un
+        ritorno (nuovo o di prima)."""
+        if sv.ritorno:
+            return True
+        if not prima or (prima.get("fase") == "analisi" and not prima.get("lavoro")):
+            return False
+        with self._lock:
+            sv.ritorno = dict(prima)
+        self._salva()
+        return True
+
+    def ripristina(self, sv: Sviluppo) -> dict | None:
+        """«Lascia com'era» (12/10, A4): lo sviluppo torna dov'era prima della modifica non
+        confermata (fase, lavoro, versione, requisiti). Il ritorno tolto, o None se non c'era."""
+        r = dict(sv.ritorno or {})
+        if not r:
+            return None
+        with self._lock:
+            lavoro = r.get("lavoro") if self._lavoro(r.get("lavoro")) is not None else None
+            sv.lavoro, sv.proposto = lavoro, None
+            sv.nota = str(r.get("nota") or "")
+            sv.specifica = str(r.get("specifica") or sv.specifica)
+            sv.requisiti = [dict(x) for x in r.get("requisiti") or []]
+            sv.requisiti_da = str(r.get("requisiti_da") or "")
+            sv.tappa = int(r.get("tappa") or 0)
+            sv.tappe_stato = str(r.get("tappe_stato") or "")
+            sv.verifica = dict(r.get("verifica") or {})
+            sv.giro = dict(r.get("giro") or {})
+            if r.get("versione") is not None:
+                sv.versione = r["versione"]
+            if r.get("cartella"):
+                sv.cartella = str(r["cartella"])
+            sv.modifiche = sv.modifiche[:int(r.get("modifiche") or 0)]
+            sv.ritorno = {}
+        fase = str(r.get("fase") or "analisi")
+        if fase == "analisi" and lavoro:
+            fase = "sviluppo"
+        self.passa(sv, fase, "modifica lasciata")
+        self._salva()
+        return r
 
     # ─────────────────────────── eventi dei lavori ───────────────────────────
     def proposto(self, lav) -> Sviluppo | None:
@@ -656,7 +764,19 @@ class Sviluppi:
         if sv is None or sv.stato != "aperta" or not self._stesso_tipo(sv, lav) or \
                 sv.fase not in ("analisi", "sviluppo"):
             return None
+        # Il «sì» alla modifica (12/10, A4): solo adesso il lavoro di prima si ferma; il lavoro
+        # nuovo parte dai suoi file (`parti_da`, letti quando il lavoro nuovo comincia)
+        prima = self.lavoro_di_prima(sv)
+        if prima is not None and getattr(prima, "id", None) != lav.id:
+            try:
+                self.lavori.annulla(getattr(lav, "persona", None), tutti_di_tutti=True,
+                                    quale=prima.id)
+                self.log(f"[SVILUPPO] {sv.id}: regola sviluppo_modifica_ferma_prima "
+                         f"({prima.id})")
+            except Exception as e:  # noqa: BLE001 — il lavoro nuovo parte comunque
+                self.log(f"[SVILUPPO] {sv.id}: lavoro di prima non fermato: {e}")
         with self._lock:
+            sv.ritorno, sv.giro = {}, {}
             sv.lavoro, sv.proposto, sv.nota = lav.id, None, ""
             self._registra_lavoro(sv, lav)
             # Ai tetti del giro il lavoro si ferma a una tappa, non si chiude (08/10)
@@ -828,7 +948,11 @@ class Sviluppi:
         stato = getattr(lav, "stato", "")
         r = getattr(lav, "risultato", None) or {}
         msg = str(item.get("messaggio") or "")
+        if (sv.ritorno or {}).get("lavoro") == getattr(lav, "id", None) and sv.lavoro != lav.id:
+            # Il lavoro di prima della modifica non ancora confermata (12/10, A4)
+            return self._finito_di_prima(sv, lav, item)
         if stato == "in_attesa" and r.get("esito") == "tappa":
+            self._segna_giro(sv, lav, "tappa")
             return self._tappa_detta(sv, lav, item)
         if stato == "in_attesa":
             return item                      # una domanda dell'agente: si risponde e basta
@@ -844,6 +968,7 @@ class Sviluppi:
             return item
         if stato == "fatto":
             with self._lock:
+                sv.giro = {}
                 sv.cartella = str(r.get("cartella") or sv.cartella or "")
                 c = r.get("estensione") or {}
                 if sv.tipo == "estensione" and c.get("nome"):
@@ -879,20 +1004,90 @@ class Sviluppi:
             item["sviluppo"] = sv.id
             self._manda_scheda(sv, getattr(lav, "on_scheda", None))
             return item
-        # errore, scaduto, fermato da un tetto: lo sviluppo resta, senza lavoro
+        # errore, scaduto, fermato da un tetto: lo sviluppo resta, senza lavoro, e i file del
+        # giro restano per «rifallo» (12/10, A5)
+        messo_da_parte = stato == "scaduto" and bool(r.get("tappa") or r.get("domanda"))
+        perche = ("tappa" if messo_da_parte and r.get("tappa") else
+                  "attesa" if messo_da_parte else
+                  "limite" if r.get("esito") == "limite" else stato or "errore")
+        self._segna_giro(sv, lav, perche)
         with self._lock:
-            sv.nota = str(r.get("motivo") or stato or "non riuscito")[:200]
+            sv.nota = (MESSO_DA_PARTE if messo_da_parte
+                       else str(r.get("motivo") or stato or "non riuscito")[:200])
             sv.lavoro = None
         self._salva()
-        item["messaggio"] = (msg.rstrip() + f" Lo sviluppo {sv.di()} resta aperto: lo rifaccio "
-                             "così com'è, o vuoi cambiare qualcosa?")
-        # Il «sì» rifà il lavoro con la stessa specifica (08/10 sera, tools/sviluppo._rifai)
-        item["in_sospeso"] = {"domanda": "Lo rifaccio così com'è?", "tool": "sviluppo_passo",
-                              "cosa": f"rifare il lavoro di «{sv.titolo}» con la stessa specifica",
-                              "argomenti": "azione = rifai (sì, rifallo così com'è); se dice "
-                                           "cosa cambiare, azione = analisi e cambia = la "
-                                           "modifica come detta"}
         item["sviluppo"] = sv.id
+        if messo_da_parte:
+            # Un lavoro fermo a una tappa (o a una domanda) che aspettava da troppo (12/10, A5:
+            # prima «non è andato: lo rifaccio così com'è?», e il «sì» ripartiva da zero): non
+            # è un errore, è in pausa con i suoi file; niente domanda, si riprende quando si vuole
+            item.pop("in_sospeso", None)
+            cosa = "a una tappa" if perche == "tappa" else "a una domanda per te"
+            item["messaggio"] = (f"Il lavoro di «{sv.titolo}» era fermo {cosa} e ti ha aspettato "
+                                 "a lungo: l'ho messo da parte, con i file che aveva scritto. "
+                                 "Quando vuoi, dimmi «riprendiamo lo sviluppo» e riparto da lì.")
+            return item
+        da_li = ("ripartendo da quello che aveva già scritto?" if sv.giro.get("cartella")
+                 else "così com'è?")
+        item["messaggio"] = (msg.rstrip() + f" Lo sviluppo {sv.di()} resta aperto: lo rifaccio "
+                             + da_li)
+        # Il «sì» rifà il lavoro con la stessa specifica (08/10 sera, tools/sviluppo._rifai),
+        # dal 12/10 dai file del giro
+        item["in_sospeso"] = {"domanda": "Lo rifaccio?", "tool": "sviluppo_passo",
+                              "cosa": f"rifare il lavoro di «{sv.titolo}» con la stessa specifica",
+                              "argomenti": "azione = rifai (sì, rifallo); se dice cosa cambiare, "
+                                           "azione = analisi e cambia = la modifica come detta"}
+        return item
+
+    def _segna_giro(self, sv: Sviluppo, lav, perche: str):
+        """L'ultimo giro fermo prima di consegnare (12/10, A5): la cartella con i file che
+        l'agente aveva scritto, per «rifallo» e per la ripresa."""
+        r = getattr(lav, "risultato", None) or {}
+        cartella = str(r.get("cartella") or getattr(lav, "cartella", "") or "")
+        with self._lock:
+            sv.giro = {"lavoro": getattr(lav, "id", None), "cartella": cartella,
+                       "perche": perche, "domanda": str(getattr(lav, "domanda", "") or "")[:300],
+                       "quando": time.time()}
+        self._salva()
+
+    def segna_fermato(self, sv: Sviluppo, lav):
+        """«Fermalo» (tools/sviluppo._ferma): il giro fermato dalla persona, con la sua cartella
+        (i file arrivano lì appena il lavoro si ferma)."""
+        self._segna_giro(sv, lav, "fermato")
+
+    def _finito_di_prima(self, sv: Sviluppo, lav, item: dict) -> dict:
+        """Il lavoro di prima della modifica (12/10, A4) arriva mentre la modifica aspetta il
+        «sì»: non cambia la fase. Se è pronto, «lascia com'era» porta al collaudo di questa
+        versione; se si ferma, a quello che c'era prima."""
+        stato = getattr(lav, "stato", "")
+        r = getattr(lav, "risultato", None) or {}
+        with self._lock:
+            rit = sv.ritorno
+            if stato == "fatto":
+                rit["fase"], rit["lavoro"], rit["nota"], rit["giro"] = "collaudo", None, "", {}
+                rit["cartella"] = str(r.get("cartella") or rit.get("cartella") or "")
+                c = r.get("estensione") or {}
+                if sv.tipo == "estensione" and c.get("nome"):
+                    rit["versione"] = c.get("versione")
+                    sv.estensione = sv.estensione or c["nome"]
+            elif stato == "in_attesa":
+                pass                       # a una tappa o a una domanda: resta vivo
+            else:
+                rit["lavoro"] = None
+                rit["nota"] = str(r.get("motivo") or stato or "non riuscito")[:200]
+        self._salva()
+        item.pop("in_sospeso", None)
+        item["sviluppo"] = sv.id
+        if stato == "fatto":
+            item["messaggio"] = (f"Il lavoro di «{sv.titolo}» di prima della modifica è pronto. "
+                                 "La modifica aspetta il tuo sì; se invece lasci com'era, lo "
+                                 "proviamo.")
+        elif stato == "in_attesa":
+            item["messaggio"] = (f"Il lavoro di «{sv.titolo}» di prima della modifica è fermo "
+                                 "e aspetta: prima decidi sulla modifica.")
+        else:
+            item["messaggio"] = (f"Il lavoro di «{sv.titolo}» di prima della modifica si è "
+                                 "fermato. La modifica aspetta il tuo sì.")
         return item
 
     def frase_pronto(self, sv: Sviluppo, lav, altro: Sviluppo | None = None) -> str:
@@ -1745,21 +1940,35 @@ class Sviluppi:
     def riga_fase(self, sv: Sviluppo) -> str:
         """La riga dei dati del turno che dice al modello cosa si fa in questa fase."""
         if sv.fase == "analisi":
-            if sv.proposto and sv.tappe_stato == "proposte":
-                # La proposta a tappe (11/10): il «sì» fa la prima tappa
-                return ("La specifica è stata proposta A TAPPE (lavoro " + sv.proposto + "): se "
-                        "chi parla accetta («sì», «va bene», «comincia dalla prima»), "
-                        "sviluppo_apri con proposta = " + sv.proposto + "; se vuole tutto "
-                        "insieme («no, tutto insieme», «fallo tutto subito»), sviluppo_apri con "
-                        "proposta = " + sv.proposto + " e tappe = false; se vuole cambiarla, "
-                        "sviluppo_passo con azione analisi e cambia = la modifica.")
-            if sv.proposto:
-                return ("La specifica è stata proposta (lavoro " + sv.proposto + "): se chi parla "
-                        "la conferma («sì», «va bene»), sviluppo_apri con proposta = "
-                        + sv.proposto + "; se vuole cambiarla, sviluppo_passo con azione "
-                        "analisi e cambia = la modifica.")
-            return ("Si sta scrivendo la specifica: se chi parla risponde a una domanda di "
-                    "Calliope, richiama il tool che l'ha fatta come dice la domanda in sospeso.")
+            indietro = ""
+            if sv.ritorno:
+                # Una modifica in attesa del «sì» (12/10, lavoro 3, A4): si può lasciare com'era
+                indietro = (" C'è una modifica non ancora confermata: se chi parla ci rinuncia "
+                            "(«lascia com'era», «no, torna com'era», «lascia stare la "
+                            "modifica»), sviluppo_passo con azione indietro.")
+            return self._riga_analisi(sv) + indietro
+        return self._riga_dopo(sv)
+
+    def _riga_analisi(self, sv: Sviluppo) -> str:
+        """La riga dell'analisi: la proposta (a tappe o no), o la specifica da scrivere."""
+        if sv.proposto and sv.tappe_stato == "proposte":
+            # La proposta a tappe (11/10): il «sì» fa la prima tappa
+            return ("La specifica è stata proposta A TAPPE (lavoro " + sv.proposto + "): se "
+                    "chi parla accetta («sì», «va bene», «comincia dalla prima»), "
+                    "sviluppo_apri con proposta = " + sv.proposto + "; se vuole tutto "
+                    "insieme («no, tutto insieme», «fallo tutto subito»), sviluppo_apri con "
+                    "proposta = " + sv.proposto + " e tappe = false; se vuole cambiarla, "
+                    "sviluppo_passo con azione analisi e cambia = la modifica.")
+        if sv.proposto:
+            return ("La specifica è stata proposta (lavoro " + sv.proposto + "): se chi parla "
+                    "la conferma («sì», «va bene»), sviluppo_apri con proposta = "
+                    + sv.proposto + "; se vuole cambiarla, sviluppo_passo con azione "
+                    "analisi e cambia = la modifica.")
+        return ("Si sta scrivendo la specifica: se chi parla risponde a una domanda di "
+                "Calliope, richiama il tool che l'ha fatta come dice la domanda in sospeso.")
+
+    def _riga_dopo(self, sv: Sviluppo) -> str:
+        """La riga delle fasi dopo l'analisi."""
         if sv.fase == "sviluppo":
             lav = self._lavoro(sv.lavoro)
             if lav is not None and getattr(lav, "stato", "") == "in_attesa" and (
@@ -1780,9 +1989,10 @@ class Sviluppi:
             fermato = sv.nota in ("annullato", "fermato")
             return (("Il lavoro dell'agente l'ha fermato chi parla" if fermato else
                      f"Il lavoro dell'agente non è andato ({sv.nota or 'si è fermato'})")
-                    + ": nessun lavoro in corso. Se vuole rifarlo così com'è («sì», «rifallo», "
-                    "«riprova», «partiamo così com'è»), sviluppo_passo con azione rifai: riparte "
-                    "subito con la stessa specifica, senza rileggerla. Se dice cosa cambiare, "
+                    + ": nessun lavoro in corso. Se vuole rifarlo («sì», «rifallo», «riprova», "
+                    "«riparti», «partiamo così com'è»), sviluppo_passo con azione rifai: riparte "
+                    "subito con la stessa specifica, dai file già scritti, senza rileggerla. Se "
+                    "dice cosa cambiare, "
                     "azione analisi con cambia = la modifica; se va corretto, sviluppo_correggi.")
         dopo = (" Se un risultato è sbagliato o la persona chiede perché («perché?», «come mai "
                 "non trova…?»), sviluppo_chiedi con domanda = la domanda come detta: risponde "
@@ -2234,6 +2444,22 @@ def file_di_codice(cartella, max_file: int = 30, max_byte: int = 400_000) -> dic
             break
         out[p.relative_to(radice).as_posix()] = testo
     return out
+
+
+def file_del_giro(parti_da) -> dict[str, str]:
+    """I file che l'agente aveva già scritto in un giro fermo prima di consegnare (12/10, A4 e
+    A5): `parti_da` è il lavoro di prima (la sua cartella dei risultati, dove finiscono i file
+    quando si ferma) o direttamente una cartella. Senza il runtime, il contratto e gli esempi
+    veri, che il lavoro nuovo ha già. {} se la cartella non c'è o è vuota. Lo legge il thread
+    dei lavori quando il lavoro nuovo comincia (agenti/servizio.py): allora il lavoro di prima,
+    fermato al «sì», ha già copiato i suoi file."""
+    if isinstance(parti_da, (str, Path)):
+        cartella = str(parti_da)
+    else:
+        r = getattr(parti_da, "risultato", None) or {}
+        cartella = str(r.get("cartella") or getattr(parti_da, "cartella", "") or "")
+    return {k: v for k, v in file_di_codice(cartella).items()
+            if k not in GIRO_ESCLUSI and not k.startswith(ESEMPI_VERI + "/")}
 
 
 def misura_programma(cartella) -> dict:
