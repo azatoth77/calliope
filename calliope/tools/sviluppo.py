@@ -1688,10 +1688,9 @@ def _revisione(ctx, svs, sv) -> dict:
                        "manca?")
             return _final(f"{detto} {domanda}", fatto="revisione detta: NON è ancora attiva",
                           _fidati=[str(sv.titolo or "")],
-                          in_sospeso={"domanda": domanda,
-                                      "cosa": f"attivare «{sv.titolo}» così com'è o completarla",
-                                      "tool": "sviluppo_passo",
-                                      "argomenti": ARGOMENTI_COMPLETA})
+                          in_sospeso=_sospeso_completa(
+                              domanda, f"attivare «{sv.titolo}» così com'è o completarla",
+                              "attivarla così com'è", tappa_dopo))
         # La domanda in fondo (09/10, caso vero della DGX delle 21:00: con «Vuoi attivarla? Ti
         # chiederò la frase di conferma.» la risposta non finiva con «?», l'azione in sospeso
         # non restava e «Sì, attivarla.» arrivava alla politica senza la proposta). Il titolo
@@ -1738,9 +1737,9 @@ def _revisione(ctx, svs, sv) -> dict:
         domanda = ("Lo chiudo così com'è, o passo alla tappa dopo?" if tappa_dopo else
                    "Lo chiudo così com'è, o faccio continuare l'agente con quello che manca?")
         return _final(f"{frase} {domanda}", fatto="revisione detta",
-                      in_sospeso={"domanda": domanda,
-                                  "cosa": f"chiudere «{sv.titolo}» così com'è o completarlo",
-                                  "tool": "sviluppo_passo", "argomenti": ARGOMENTI_COMPLETA})
+                      in_sospeso=_sospeso_completa(
+                          domanda, f"chiudere «{sv.titolo}» così com'è o completarlo",
+                          "chiuderlo così com'è", tappa_dopo))
     frase += " Va bene così?"
     return _final(frase, fatto="revisione detta",
                   in_sospeso={"domanda": "Va bene così?", "cosa": "chiudere lo sviluppo",
@@ -1751,6 +1750,30 @@ def _revisione(ctx, svs, sv) -> dict:
 ARGOMENTI_COMPLETA = ("azione = completa se vuole che l'agente faccia quello che manca "
                       "(«continua», «falli», «completalo», «sì, continua»); azione = avanti se "
                       "va bene così com'è («attivala così», «va bene così»)")
+
+
+# La domanda con due strade (12/10 sera, caso vero delle 12:20: a «Vuoi attivarla così com'è, o
+# faccio continuare l'agente con quello che manca?» la persona ha detto «No, farlo continuare con
+# quello che manca.»: nessun tool, e la voce ha promesso «Ti avviso quando è pronto»). Il
+# messaggio di sempre diceva «se acconsente chiama…, se rifiuta non farlo», e il blocco dello
+# stato la trattava come un sì/no senza gli argomenti: il «no» davanti alla seconda strada
+# sembrava un rifiuto. Un messaggio suo: le due strade, e il «no» che va alla prima
+SCELTA_COMPLETA_MSG = (
+    "Azione in sospeso: poco fa hai chiesto «{domanda}». È una scelta tra due strade, non un sì "
+    "o un no. Se chi parla vuole che l'agente continui con quello che manca{tappa} («continua», "
+    "«fallo continuare», «completalo», anche con un «no» davanti: «No, fallo continuare con "
+    "quello che manca» rifiuta la prima strada e sceglie la seconda), chiama subito "
+    "sviluppo_passo con azione = completa. Se vuole {prima} («va bene così», «attivala così»), "
+    "sviluppo_passo con azione = avanti. La frase la dice il tool: non promettere niente senza "
+    "chiamarlo. Se chiede altro, rispondi a quello.")
+
+
+def _sospeso_completa(domanda: str, cosa: str, prima: str, tappa_dopo: bool) -> dict:
+    return {"domanda": domanda, "cosa": cosa, "tool": "sviluppo_passo",
+            "argomenti": ARGOMENTI_COMPLETA,
+            "messaggio": SCELTA_COMPLETA_MSG.format(
+                domanda=domanda, prima=prima,
+                tappa=" (o passi alla tappa dopo)" if tappa_dopo else "")}
 
 
 def _test_della_versione(est, sv, rev) -> dict | None:

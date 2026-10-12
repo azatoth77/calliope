@@ -811,7 +811,8 @@ class Ombra:
                 "proposta_aperta", id=pid, tool=p.get("tool"),
                 argomenti=p.get("args") if isinstance(p.get("args"), dict) else None,
                 domanda=p.get("domanda"), cosa=p.get("cosa"), origine="oggi",
-                tipo="dato" if p.get("su_misura") or p.get("risposta") else "si_no",
+                tipo="dato" if p.get("su_misura") or p.get("risposta") or p.get("args_testo")
+                else "si_no",
                 chi=p.get("chi_nome"), satellite=p.get("satellite"),
                 scade=(time.time() + float(scade) - time.monotonic())
                 if isinstance(scade, (int, float)) else None, turni=p.get("turno")))

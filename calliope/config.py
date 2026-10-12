@@ -2423,6 +2423,12 @@ RETI: dict[str, Rete] = {
     "spinta_rinuncia": Rete(
         "«non posso creare un'estensione» con il tool disponibile: spinta", MODELLO,
         "il 26B dopo un rifiuto rimasto nella storia (06/10, DGX)"),
+    "spinta_sviluppo": Rete(
+        "domanda dello sviluppo in sospeso e risposta senza tool: trattenuta, spinta; con il "
+        "tool che ha la sua frase il testo di prima si tace", MODELLO,
+        "il 26B (spinta_promessa spenta) prometteva «faccio continuare l'agente… ti avviso» "
+        "senza tool alla revisione (12/10, 12:20), e il testo prima del tool si attaccava alla "
+        "frase del tool (11:13)"),
     "spinta_esercizi": Rete(
         "esercizio in sospeso e risposta senza il tool esercizi: trattenuta, spinta", MODELLO,
         "il 4B copiava dalla storia «Perfetto! Prossima: …» correggendo da sé (08/10, 7 turni "

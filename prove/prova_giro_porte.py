@@ -47,6 +47,12 @@ REQ = [
 ]
 
 
+# La scheda di un gioco puro come la normalizza estensioni/scheda.py (per la revisione)
+SCHEDA = {"titolo": TITOLO, "giocatori": {"min": 2, "max": 4}, "condivisa": False, "chat": False,
+          "salva": True, "voce": False, "azioni": [],
+          "ascolta": {"comandi": {"ricomincia": ["ricomincia"]}}}
+
+
 def ambiente_gioco(tmp: Path, agente):
     import prova_specifica_viva as S
     cfg, reg, ctx, est, svc = S.ambiente(tmp, agente)
@@ -66,12 +72,6 @@ def al_collaudo(tmp: Path, agente):
     lav = S.ultimo(svc)
     S.chiama(reg, ctx, "sviluppo_apri", {"proposta": lav.id, "tappe": False}, 2, "Sì.")
     S.consegna(svc, est, sv)
-    vero = est.archivio.manifesto
-
-    def con_scheda(nome, n=None):
-        m = vero(nome, n)
-        return dict(m, scheda={"titolo": TITOLO}) if m else m
-    est.archivio.manifesto = con_scheda
     return cfg, reg, ctx, est, svc, sv
 
 
@@ -316,6 +316,111 @@ def prova_chiedi(tmp: Path):
              in SISTEMA_CHIEDI and "serve_correzione = true" in SISTEMA_CHIEDI)
 
 
+# ═══════════════════════════ 5. la scelta alla revisione, detta senza tool ═══════════════════════════
+
+class BackendFinto:
+    def __init__(self, copione):
+        self.copione, self.visti = list(copione), []
+
+    def stream(self, messages, tools):
+        self.visti.append([dict(m) for m in messages])
+        yield from self.copione.pop(0)
+
+
+def brain_finto(cfg, reg, ctx, copione):
+    from calliope.brain import Brain
+    b = Brain.__new__(Brain)
+    b.cfg, b.tools, b.history = cfg, reg, []
+    b.tool_ctx = ctx
+    b.backend = BackendFinto(copione)
+    b.turn_number = 0
+    return b
+
+
+def alla_revisione(tmp: Path):
+    import prova_specifica_viva as S
+    agente = S.AgenteVivo(requisiti=REQ, stima="piccolo", voci=lambda n: [{"stato": "fatto"}] * (
+        n - 1) + [{"stato": "manca", "nota": "Non dà punti."}])
+    cfg, reg, ctx, est, svc, sv = al_collaudo(tmp, agente)
+    out = S.chiama(reg, ctx, "sviluppo_passo", {"azione": "avanti"}, 4,
+                   "Possiamo passare alla revisione.")
+    return cfg, reg, ctx, est, svc, sv, out
+
+
+COMPLETA = [{"id": "c1", "name": "sviluppo_passo", "arguments": {"azione": "completa"}}]
+
+
+def prova_scelta(tmp: Path):
+    print("— 5. la seconda strada della revisione detta per intero → completa")
+    cfg, reg, ctx, est, svc, sv, out = alla_revisione(tmp / "scelta")
+    sosp = out.get("in_sospeso") or {}
+    verifica("la revisione chiede le due strade, con un messaggio suo per il modello",
+             detta(out).endswith("Vuoi attivarla così com'è, o faccio continuare l'agente con "
+                                 "quello che manca?")
+             and "anche con un «no» davanti" in str(sosp.get("messaggio")), str(sosp))
+    from calliope import stato_dialogo
+    ctx.regole, ctx.user_text = [], "No, farlo continuare con quello che manca."
+    promessa = ("D'accordo, allora faccio continuare l'agente per completare quello che manca. "
+                "Ti avviso quando è pronto.")
+    b = brain_finto(cfg, reg, ctx, [[("text", promessa)], [("calls", COMPLETA)]])
+    b.set_pending(sosp)
+    p = stato_dialogo.proposta_da_oggi(b.pending, "sviluppo_passo", 1, reg)
+    verifica("per lo stato del dialogo non è un sì/no (il blocco non toglie le strade)",
+             p is not None and p.tipo == "dato", str(p))
+    n = len(svc.lavori)
+    detto = "".join(b.stream_reply("No, farlo continuare con quello che manca.", "amministra"))
+    verifica("12:20: la promessa senza tool non si dice; la spinta, e la completa parte",
+             "Ti avviso quando è pronto" not in detto.split("D'accordo: l'agente")[0]
+             and "spinta_sviluppo" in b.rules_fired() and len(svc.lavori) == n + 1
+             and detto.strip().startswith("D'accordo: l'agente continua con quello che manca"),
+             f"{b.rules_fired()} «{detto}»")
+    verifica("…il primo giro ha visto il messaggio delle due strade",
+             any("È una scelta tra due strade" in (m.get("content") or "")
+                 for m in b.backend.visti[0]))
+
+    # 6c: il testo del modello prima del tool con la sua frase non si dice
+    cfg, reg, ctx, est, svc, sv, out = alla_revisione(tmp / "taciuto")
+    ctx.regole = []
+    b = brain_finto(cfg, reg, ctx, [[("text", "Ho capito, procedo con la fase successiva."),
+                                     ("calls", COMPLETA)]])
+    b.set_pending(out["in_sospeso"])
+    detto = "".join(b.stream_reply("Assolutamente deve continuare con quello che manca.",
+                                   "amministra"))
+    verifica("11:13: il testo prima del tool non si dice né si attacca alla frase del tool",
+             "procedo" not in detto and detto.startswith("D'accordo: l'agente continua")
+             and "sviluppo_testo_taciuto" in b.rules_fired(), f"{b.rules_fired()} «{detto}»")
+
+    # Contrari
+    b = brain_finto(cfg, reg, ctx, [[("text", "Sono le dieci.")]])
+    detto = "".join(b.stream_reply("Che ore sono?", "amministra"))
+    verifica("contrario: senza una domanda dello sviluppo in sospeso nessuna spinta",
+             detto == "Sono le dieci." and "spinta_sviluppo" not in b.rules_fired()
+             and len(b.backend.visti) == 1, detto)
+    cfg, reg, ctx, est, svc, sv, out = alla_revisione(tmp / "altro")
+    ctx.regole = []
+    b = brain_finto(cfg, reg, ctx, [[("text", "È l'ultimo esame prima dell'attivazione.")]])
+    b.set_pending(out["in_sospeso"])
+    n = len(svc.lavori)
+    detto = "".join(b.stream_reply("Cosa vuol dire revisione?", "amministra"))
+    verifica("contrario: una risposta a parole che non promette niente si dice com'è (una "
+             "passata, niente parte)", detto == "È l'ultimo esame prima dell'attivazione."
+             and len(svc.lavori) == n and len(b.backend.visti) == 1
+             and "spinta_sviluppo" not in b.rules_fired(), detto)
+    from calliope.brain import SVILUPPO_PROMESSA
+    for f, atteso in (("Faccio continuare l'agente.", True), ("Ti avviso quando è pronto.", True),
+                      ("Procedo con la fase successiva.", True), ("Lo faccio correggere.", True),
+                      ("Siamo ancora all'analisi.", False), ("Vuoi che lo apra?", False),
+                      ("La revisione dice cosa manca.", False)):
+        verifica(f"promessa dello sviluppo: «{f}» → {atteso}",
+                 bool(SVILUPPO_PROMESSA.search(f)) == atteso)
+    b = brain_finto(cfg, reg, ctx, [[("text", "Sono le dieci.")]])
+    b._net = lambda nome: nome != "spinta_sviluppo"
+    b.set_pending(out["in_sospeso"])
+    detto = "".join(b.stream_reply("Che ore sono?", "amministra"))
+    verifica("contrario: con la rete spenta il testo si dice com'è", detto == "Sono le dieci."
+             and len(b.backend.visti) == 1, detto)
+
+
 def main():
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
         tmp = Path(d)
@@ -323,6 +428,7 @@ def main():
         prova_modifica_vaga(tmp)
         prova_correzione_vaga(tmp)
         prova_chiedi(tmp)
+        prova_scelta(tmp)
     print()
     print("Tutto bene." if not errori else f"{errori} errori.")
     return 1 if errori else 0
