@@ -134,6 +134,7 @@ try:
     # ───────── registro dei turni ─────────
     cfg = Config()
     cfg.turn_log_dir = str(tmp / "registro")
+    cfg.memory_db = str(tmp / "memoria.db")     # mai quella vera (svuota tutto, 12/10 sera)
     cfg.turn_log_days = 60
     cfg.conserva_voce, cfg.conserva_voce_mb = True, 2000
     cons = C.Conservazione(cfg, reg, log=lambda m: None)
@@ -703,6 +704,69 @@ try:
     cons.conversazioni = None
     arch.close()
 
+    # ───────── esercizi e richieste ai tutori (12/10 sera) ─────────
+    # La stessa tenuta di turni e voce (turn_log_days), alla prima rotazione anche quelli di
+    # prima; svuotati con la persona e con tutto
+    from calliope.esercizi.registro import Registro as RegistroEsercizi
+    from calliope.minori import Richieste
+    RegistroEsercizi(cfg.memory_db).db.close()
+    Richieste(cfg.memory_db, cfg, log=lambda m: None).db.close()
+    import sqlite3
+
+    def riempi():
+        db = sqlite3.connect(cfg.memory_db)
+        db.execute("DELETE FROM esercizi_tentativi")
+        db.execute("DELETE FROM richieste_tutori")
+        for chi in ("p-min", "p-min2"):
+            for fa in (59, 60, 61):
+                g = datetime.date.today() - datetime.timedelta(days=fa)
+                db.execute("INSERT INTO esercizi_tentativi (persona, giorno, quando, materia, "
+                           "argomento, esercizio, domanda, attesa, data, esito) VALUES "
+                           "(?, ?, ?, 'matematica', 'tabelline', 'f', '7 per 8', '56', '54', "
+                           "'sbagliata')", (chi, g.isoformat(), f"{g.isoformat()}T10:00:00"))
+                db.execute("INSERT INTO richieste_tutori (minore, tipo, oggetto, creata, "
+                           "creata_ts) VALUES (?, 'gioco', 'il gioco dei pirati', ?, ?)",
+                           (chi, f"{g.isoformat()}T10:00:00", time.time() - fa * 86400))
+        db.commit()
+        db.close()
+
+    def righe(chi=None):
+        db = sqlite3.connect(cfg.memory_db)
+        out = []
+        for tabella, col, quando in C.TABELLE_MEMORIA:
+            q = f"SELECT {quando} FROM {tabella}" + (f" WHERE {col} = ?" if chi else "")
+            out += [r[0][:10] for r in db.execute(q, (chi,) if chi else ())]
+        db.close()
+        return out
+
+    riempi()
+    giorno = {fa: (datetime.date.today() - datetime.timedelta(days=fa)).isoformat()
+              for fa in (59, 60, 61)}
+    r = cons.ruota()
+    rimaste = righe()
+    verifica("rotazione: esercizi e richieste di 61 giorni fa via, 59 e 60 restano",
+             giorno[61] not in rimaste and rimaste.count(giorno[59]) == 4
+             and rimaste.count(giorno[60]) == 4 and r.get("memoria") == 4, f"{r} {rimaste}")
+    cons.giorni = 30
+    verifica("tenuta: è turn_log_days (con 30 via anche quelli di 59 giorni)",
+             cons.ruota().get("memoria") == 8 and righe() == [])
+    cons.giorni = 60
+    riempi()
+    r = cons.svuota("p-min", "Leo")
+    verifica("svuota una persona: anche i suoi esercizi e le sue richieste ai tutori",
+             r["esercizi_richieste"] == 6 and righe("p-min") == [] and len(righe("p-min2")) == 6,
+             str(r))
+    verifica("svuota, contrario: quelli degli altri restano", len(righe("p-min2")) == 6)
+    r = cons.svuota()
+    verifica("svuota tutto: anche esercizi e richieste", r["esercizi_richieste"] == 6
+             and righe() == [], str(r))
+    cfg_senza = SimpleNamespace(memory_db=str(tmp / "non-esiste.db"), turn_log_dir=None,
+                                turn_log_days=60)
+    verifica("contrario: senza il file della memoria niente errori né file nuovi",
+             C.Conservazione(cfg_senza, reg, log=lambda m: None)._memoria(
+                 limite=datetime.date.today()) == 0
+             and not (tmp / "non-esiste.db").exists())
+
     # ───────── da terminale ─────────
     cart = tmp / "dati"
     cart.mkdir()
@@ -710,12 +774,13 @@ try:
                                         encoding="utf-8")
     prima = os.getcwd()
     env = {k: os.environ.get(k) for k in ("CALLIOPE_TURN_LOG", "CALLIOPE_CONVERSAZIONI_DB",
-                                          "CALLIOPE_CONFIG")}
+                                          "CALLIOPE_CONFIG", "CALLIOPE_MEMORY_DB")}
     try:
         os.chdir(cart)
         os.environ["CALLIOPE_TURN_LOG"] = str(cart / "registro")
         os.environ["CALLIOPE_CONVERSAZIONI_DB"] = str(cart / "conversazioni.db")
         os.environ["CALLIOPE_CONFIG"] = str(cart / "calliope.yaml")
+        os.environ["CALLIOPE_MEMORY_DB"] = str(cart / "memoria.db")
         c2 = C.Conservazione(SimpleNamespace(turn_log_dir=str(cart / "registro"),
                                              turn_log_days=60, conserva_voce=True,
                                              conserva_voce_mb=10), Registro(amm), lambda m: None)

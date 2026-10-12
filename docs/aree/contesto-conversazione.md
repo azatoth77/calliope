@@ -1054,7 +1054,8 @@ sotto i 14 anni, mai degli ospiti: 7 giorni, 500 MB per persona); i ricordi (`me
 `facts`, anche dei minori, per sempre, al più 50 per persona; degli ospiti niente); gli esercizi
 (`esercizi_tentativi`: domanda, risposta attesa e risposta del ragazzo fino a 60 caratteri, senza
 scadenza: è il dettaglio dei tutori); le richieste ai tutori (`richieste_tutori.oggetto`, senza
-scadenza della riga), gli avvisi ai tutori (solo l'argomento) e i compiti del giorno (argomento e
+scadenza della riga) *(storico per queste due: dal 12/10 sera scadono con `turn_log_days` e si
+svuotano con la persona, [minori](minori.md))*, gli avvisi ai tutori (solo l'argomento) e i compiti del giorno (argomento e
 conteggi); agenda e liste (ciò che la persona ha chiesto di segnare, finché non si cancella).
 Senza testo: `cancelli.json`.
 
