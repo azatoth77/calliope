@@ -842,3 +842,27 @@ intorno al primo taglio intere, la parola proprio sull'unione a volte storpiata 
 «paemi» per «premi»; STT 1,8–2,6 s per 70 s). Da guardare sulla DGX nel registro dei
 turni: `frase_tetto` e `ascolto.tetto` (quante dettature arrivano a 120 s), `tagliata` (deve restare
 rarissima).
+
+## L'impronta non si aggiorna in compagnia (12/10 sera, ramo `compagnia-guardia`)
+
+**Caso vero** (DGX, 12/10 sera, in auto, satellite telefono; nomi di fantasia: chi amministra
+Carlo, il ragazzo Nicola, tutti e due registrati): due turni lunghi (16 s e 14 s) in cui parlavano
+insieme Carlo e Nicola, riconosciuti come Nicola sopra `speaker_adapt_threshold`, hanno aggiornato
+l'impronta di Nicola (`SpeakerRegistry.adapt`, media mobile): con due voci nell'audio l'impronta
+della frase è un miscuglio e la sposta verso l'altra persona, cioè verso le frasi incerte tra i due
+che si vedevano già quella sera (Carlo 0,508, Nicola 0,445).
+
+**Correzione** (`Ciclo._riconosci_voce`): quando il turno è in compagnia (`t.compagnia`, lo stato
+della corsia con questa frase dentro, o `SpeakerContext.compagnia`) l'impronta non si aggiorna, per
+nessuno (adulti compresi); regola `impronta_compagnia` e in console «· impronta non aggiornata: in
+compagnia», nel registro dei turni `voce.aggiornata: false`. Vale anche con `compagnia_enabled:
+ombra` (riguarda il dato dell'impronta, non una decisione sulla voce); con `spenta` tutto come
+prima. Un turno con più voci dentro rende la corsia «in compagnia» già per sé (la frase entra nella
+memoria prima della decisione, sezione «La modalità compagnia accesa»), quindi è compreso. Prova
+`prova_compagnia` (`prova_impronta`: da solo aggiornata, in compagnia no per il minore e per chi
+amministra, con la regola e la riga; contrario compagnia spenta).
+
+Resta: l'impronta di Nicola sulla DGX è già stata spostata da quei due turni; va **rifatta** (o
+ripristinata dall'impronta dell'arruolamento) prima di ritarare: vedi il problema aperto «Voci di
+famiglia al telefono».
+

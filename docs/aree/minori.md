@@ -327,6 +327,8 @@ un minore in pericolo è peggio di un falso positivo). Realizzato in `calliope/c
 - **Due segnali poco chiari** dello stesso minore entro `minori_pericolo_finestra_s` (1800 s,
   anche dopo una smentita o un silenzio) → il secondo vale confermato: protezione e avviso
   (`pericolo_secondo_segnale`, l'avviso dice anche l'argomento del primo).
+  *(Storico: dal 12/10 sera non più dopo una smentita, né con la voce incerta in compagnia;
+  sezione «Il secondo segnale dopo una smentita» in fondo.)*
 - **Silenzio** (scelta prudente da confermare): nessuna risposta entro l'attesa → avviso **non
   urgente** «Da verificare, segnale debole: … gli ho chiesto con delicatezza se andava tutto bene e
   non ha risposto. Quando puoi, chiedigli con calma come sta.» e una riga nel registro
@@ -641,3 +643,62 @@ modello (lunghezza e numero controllati, il contenuto no: per una pagina di test
 controllare che le parole vengano dalla pagina); i criteri delle domande aperte e i periodi della
 mappa da rileggere con Dario; italiano: i tempi verbali e i complementi indiretti non si generano;
 geometria, misure e decimali non hanno generatori.
+
+## Il secondo segnale dopo una smentita (12/10 sera, ramo `compagnia-guardia`)
+
+**Caso vero** (DGX, 12/10 sera, in auto, satellite telefono; nomi di fantasia: chi amministra
+Carlo, il ragazzo Nicola di 14 anni, tutti e due registrati). Alle 18:58 una frase breve e
+storpiata di Nicola è «pericolo» per il guardiano: gravità dubbia, cancello 1 («Ehi, se c'è
+qualcosa che ti pesa…»); Nicola risponde «sì, tutto a posto» → `pericolo_smentito`. Quattro minuti
+dopo una frase detta quasi certamente da Carlo («Sì, siamo solo noi due»; voce incerta: Carlo
+0,508, Nicola 0,445, margine 0,06, vale Nicola come profilo più protetto, in compagnia) è di nuovo
+«pericolo» e, siccome `Cancelli.recente` trovava il segnale smentito, andava dritta a
+`pericolo_secondo_segnale`: Telefono Azzurro e 112 nell'auto e avviso urgente al tutore (cioè a
+Carlo stesso). La regola del 09/10 contava anche le smentite («anche dopo una smentita o un
+silenzio»): pensata per un ragazzo che smentisce per chiudere il discorso e poi ci ritorna, ma
+la risposta del cancello 2 è proprio la verifica, e con la voce incerta il secondo segnale può
+essere di un'altra persona.
+
+**Correzione** (`cancelli.Cancelli.recente`, `Ciclo._decidi_pericolo`):
+- un segnale chiuso come **smentita** non vale come primo per la scorciatoia: il segnale nuovo
+  riparte dal cancello 1 con la gravità (acuto → protezione subito come sempre; dubbio → frase che
+  rassicura e chiede, poi la verifica). Regola `pericolo_dopo_smentita`;
+- con la **voce incerta e in compagnia** nessun segnale chiuso (nemmeno confermato o rimasto senza
+  risposta) fa saltare il cancello 1: con altre persone vicine la frase può essere di un'altra.
+  Regola `pericolo_compagnia_cancello1`;
+- invariati: il secondo segnale vero (primo rimasto senza risposta o confermato, voce sicura o
+  senza compagnia) vale confermato; la frase acuta va alla protezione subito; un segnale ancora
+  aperto lo chiude il cancello 2.
+
+Prudenza: chi smentisce e poi torna a dire una cosa poco chiara riceve di nuovo la domanda del
+cancello 1, e se tace parte l'avviso non urgente come per ogni silenzio. Prova
+`prova_minori_cancelli` (casi 5–5c: dopo la smentita rassicura e chiede di nuovo la gravità; il caso
+vero riscritto; voce incerta in compagnia; contrari: silenzio e conferma → secondo segnale,
+acuto in compagnia → protezione).
+
+## Le parole dei minori fuori dal journal (12/10 sera, ramo `compagnia-guardia`)
+
+Dalla decisione [0028](../decisioni/0028-decisioni-roadmap-12-10.md) T1 il registro dei turni non
+tiene le parole dei minori (sezione «Nessuna conservazione per i minori»), ma la console, che sulla
+DGX finisce nel journal di systemd e resta, le stampava: «Tu: <frase> (Nicola)» nel test vero del
+12/10 sera, la risposta di Calliope (che spesso ripete ciò che ha detto il ragazzo), gli argomenti
+dei tool, le frasi del modello trattenute dalle reti («[LLM] risposta uguale alla precedente…»,
+«[TOOL] azione dichiarata senza tool…»), il titolo dell'argomento, la frase fermata dall'uscita.
+
+Ora, come per gli ospiti dal 03/10 (stesso stile): **un solo posto decide**,
+`conserva.console_riservata` («ospite», «minore» o niente), con la regola del registro dei turni:
+minore riconosciuto, oppure frase nel dubbio tra un adulto e un minore (`incerta`, `minore_vicino`,
+`minore_incerto`). Per un minore:
+- «Tu: (una frase di un minore)» (`Ciclo.in_console`), anche nelle righe «(ignorato: …)», nella
+  registrazione della voce e nell'approfondimento della biblioteca;
+- la risposta «…» frase per frase (si vede quante frasi, non cosa): la soluzione degli ospiti,
+  preferita a «(N caratteri)» perché uniforme e già letta dalle prove;
+- in Brain (`cita_in_console`) le frasi del modello citate dalle reti «…», gli argomenti dei tool
+  con i soli nomi (`ricorda({'fatto': '…'})`, come i documenti di casa) e il risultato
+  «(riservato)»; la frase fermata dall'uscita (`riferire.filtra`) «…».
+
+Per gli adulti niente cambia; per gli ospiti anche le citazioni delle reti, che prima passavano,
+sono «…». Restano con le parole: i comandi della casa (`[CASA] «accendi…»`, un comando a un
+dispositivo e non la conversazione) e le frasi fisse dette fuori da una risposta. Prova
+`prova_console_minori`.
+

@@ -30,6 +30,7 @@ import numpy as np
 
 from . import cancelli as cancelli_mod
 from . import compagnia as compagnia_mod
+from . import conserva as conserva_mod
 from . import contesto, corsie, minori
 from . import rivolta as rivolta_mod
 from . import pause as pause_mod
@@ -520,9 +521,12 @@ class Ciclo:
         """Il testo da stampare nel terminale (sulla DGX finisce nel journal di systemd, che
         resta): niente frasi degli ospiti, né risposte con i dati dei tool riservati
         (documenti di casa, rubrica, fatture). Lo stesso criterio del registro dei turni
-        (analisi di sicurezza del 03/10, S9)."""
-        if self.speaker_ctx.current_level == "ospite":
-            return "(una frase di un ospite)" if not risposta else "…"
+        (analisi di sicurezza del 03/10, S9). Dal 12/10 sera nemmeno le frasi dei minori e le
+        risposte a loro, che possono ripetere ciò che hanno detto (decisione 0028 T1, il solo
+        posto che decide è conserva.console_riservata): «(una frase di un minore)» e «…»."""
+        chi = conserva_mod.console_riservata(self.speaker_ctx, self.s.registry)
+        if chi is not None:
+            return f"(una frase di un {chi})" if not risposta else "…"
         if risposta and getattr(self.brain, "last_private", False):
             return "…"
         return testo
@@ -677,7 +681,17 @@ class Ciclo:
         if not c.attivo or prof is None:
             info["motivo"] = "verifica_spenta" if prof is not None else "acuto"
             return guardia.PROTEZIONE
-        prima = c.aperto_per(prof.id, self.corsia.chiave) or c.recente(prof.id)
+        prima = c.aperto_per(prof.id, self.corsia.chiave)
+        if prima is None:
+            # Un segnale chiuso nella finestra (12/10, caso vero in auto): uno smentito non vale
+            # come primo (`recente` lo salta), e con la voce incerta in compagnia nessuno fa
+            # saltare il cancello 1, perché la frase può essere di un'altra persona
+            prima = c.recente(prof.id)
+            if prima is None and c.recente(prof.id, anche_smentiti=True) is not None:
+                self.rule("pericolo_dopo_smentita")
+            if prima is not None and info["voce_incerta"] and info.get("compagnia"):
+                self.rule("pericolo_compagnia_cancello1")
+                prima = None
         if prima is not None:
             if prima.aperto:
                 c.chiudi(prima, "conferma")
@@ -2139,7 +2153,13 @@ class Ciclo:
         comp = t.compagnia
         if t.continuita:
             self.rule("voce_continuita")
-        adapted = how == "voce" and registry.adapt(name, emb, sim)
+        # In compagnia l'impronta non si aggiorna (12/10 sera, caso vero in auto: due turni da
+        # 16 s e 14 s con chi amministra e il ragazzo che parlavano insieme hanno spostato
+        # l'impronta del ragazzo). Anche in ombra: è il dato, non una decisione della voce
+        senza_adatta = how == "voce" and bool(comp or getattr(speaker_ctx, "compagnia", False))
+        if senza_adatta:
+            self.rule("impronta_compagnia")
+        adapted = how == "voce" and not senza_adatta and registry.adapt(name, emb, sim)
         # Punteggio sempre in console: serve a tarare soglia e impronta (docs/test-vocale.md)
         note = {"breve": " frase breve, vale la conversazione",
                 "conversazione": " confermata dalla conversazione"}.get(how, "")
@@ -2150,7 +2170,9 @@ class Ciclo:
                      else f" ({own:.2f})")
         print(f"   [VOCE] {name or 'non riconosciuta'} {sim:.3f}"
               f" (soglia {cfg.speaker_id_threshold:.2f}, voce {t.voiced_s:.1f} s){note}"
-              + (" · impronta aggiornata" if adapted else ""), flush=True)
+              + (" · impronta aggiornata" if adapted else "")
+              + (" · impronta non aggiornata: in compagnia" if senza_adatta else ""),
+              flush=True)
         # Riconosciuto → familiare, non riconosciuto → ospite (principio 9).
         # Azzerare a None evita che resti lo speaker del turno precedente.
         speaker_ctx.current_speaker = name
@@ -2297,7 +2319,8 @@ class Ciclo:
         # non vede (principio 10)
         if find_wake_word(text, cfg.wake_names, 0.5) is None:
             self.rule("arruolamento_senza_nome")
-            print(f"   [SPEAKER] frase senza il mio nome, non contata: «{text}»", flush=True)
+            print(f"   [SPEAKER] frase senza il mio nome, non contata: «{self.in_console(text)}»",
+                  flush=True)
             # Il promemoria una volta sola: con la TV accesa non si ripete a ogni frase
             if enrolling_name not in self.enroll_reminded:
                 self.enroll_reminded.add(enrolling_name)
@@ -2486,7 +2509,7 @@ class Ciclo:
                 else:
                     request = text    # nome storpiato ma scatto sicuro: tutta la frase
         if request is None and listener.started_at > self.awake_until:
-            print(f"   (ignorato: «{text}»)")
+            print(f"   (ignorato: «{self.in_console(text)}»)")
             self.rec["esito"] = "ignorato"
             # Privacy: una frase non rivolta a Calliope non si conserva, a meno che non
             # contenga qualcosa di simile al nome (possibile risveglio mancato, utile
@@ -2787,7 +2810,8 @@ class Ciclo:
             t.context = biblioteca_contesto(self.tool_ctx, self.last_question)
             self.rec["approfondimento"] = self.last_question
             self.rule("approfondisci")
-            print(f"   [BIBLIOTECA] approfondisco «{self.last_question}»", flush=True)
+            print(f"   [BIBLIOTECA] approfondisco «{self.in_console(self.last_question)}»",
+                  flush=True)
         self._foto_e_file(t)
         return None
 
@@ -3171,7 +3195,8 @@ class Ciclo:
         if brain.mentions_tool(sentence) and cfg.rete("nome_tool_parlato"):
             parlata = brain.speak_tool_names(sentence)
             if parlata is None:
-                print(f"({sentence!r}: annuncia un tool, non la dico) ", end="", flush=True)
+                print(f"({self.in_console(sentence, risposta=True)!r}: annuncia un tool, non "
+                      f"la dico) ", end="", flush=True)
                 rule("annuncio_tool_taciuto")
                 return ""
             rule("nome_tool_parlato")

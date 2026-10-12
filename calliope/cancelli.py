@@ -21,8 +21,11 @@ minore in pericolo è peggio di un falso positivo.
 - **Cancello 2**: la frase dopo dello stesso minore (o, se la voce non era sicura, di chi parla
   su quel satellite, ma mai di un adulto riconosciuto con sicurezza) va al rilevatore con il primo segnale (`Guardiano.verifica`). Conferma (o
   guasto) → protezione e avviso urgente con i due segnali; smentita → si risponde normalmente,
-  niente avviso, ma il segnale conta per `minori_pericolo_finestra_s`: un secondo segnale
-  dubbio in quella finestra vale confermato.
+  niente avviso. Un segnale confermato o rimasto senza risposta conta per
+  `minori_pericolo_finestra_s`: un secondo segnale dubbio in quella finestra vale confermato.
+  Dal 12/10 uno smentito no (il nuovo riparte dal cancello 1), e con la voce incerta in
+  compagnia nessun segnale chiuso fa saltare il cancello 1 (caso vero in auto: la frase di chi
+  amministra, attribuita al ragazzo, valeva il secondo segnale dopo una smentita).
 - **Silenzio**: nessuna risposta entro l'attesa → con `minori_pericolo_silenzio: avvisa` un
   avviso **non urgente** «da verificare, segnale debole» (scelta prudente: il minore che dice
   una cosa preoccupante e poi tace non deve restare senza nessuno che lo sappia).
@@ -269,16 +272,24 @@ class Cancelli:
                     return s
         return None
 
-    def recente(self, persona_id: str | None) -> Segnale | None:
+    def recente(self, persona_id: str | None, anche_smentiti: bool = False) -> Segnale | None:
         """Un altro segnale dubbio di questo minore entro `minori_pericolo_finestra_s` (aperto,
-        smentito o rimasto senza risposta): un secondo segnale vale confermato."""
+        confermato o rimasto senza risposta): un secondo segnale vale confermato.
+
+        Dal 12/10 un segnale **smentito** non conta (`anche_smentiti` per vederlo comunque):
+        la risposta ha già detto che andava tutto bene, e nel caso vero in auto la frase di chi
+        amministra, attribuita al ragazzo con la voce incerta, andava dritta alla protezione
+        quattro minuti dopo la smentita. Il segnale nuovo riparte dal cancello 1."""
         if not persona_id:
             return None
         ora = self.orologio()
         with self._lock:
             for s in reversed(self.segnali):
-                if s.persona_id == persona_id and ora - s.ora <= self._finestra():
-                    return s
+                if s.persona_id != persona_id or ora - s.ora > self._finestra():
+                    continue
+                if s.esito == "smentita" and not anche_smentiti:
+                    continue
+                return s
         return None
 
     def chiudi(self, s: Segnale, esito: str):

@@ -15,7 +15,10 @@ temporaneo:
   la risposta dell'ospite sullo stesso satellite lo smentisce → risposta normale, nessun avviso;
 - conferma al secondo cancello → protezione e avviso urgente con i due passaggi, senza il
   modello; un giudizio guasto vale conferma;
-- smentita e poi un secondo segnale poco chiaro nella finestra → confermato subito;
+- un secondo segnale poco chiaro nella finestra dopo un primo rimasto senza risposta o
+  confermato → confermato subito; dopo uno **smentito** riparte dal cancello 1 (caso vero del
+  12/10 in auto: la frase di chi amministra, attribuita al ragazzo in compagnia, andava dritta
+  alla protezione); con la voce incerta e in compagnia nemmeno un primo non smentito la salta;
 - silenzio: avviso non urgente «da verificare» (e niente con `minori_pericolo_silenzio: niente`);
 - voce incerta su un segnale acuto: protezione e avviso che lo dice;
 - con la voce sicura del minore la frase di un'altra persona non chiude il cancello;
@@ -134,7 +137,9 @@ class Persone:
             "Tommaso": p(name="Tommaso", id="tommaso", nascita=nato(12), tutori=["carlo"],
                           preferred_voice=None, preferred_tone=None),
             "Luca": p(name="Luca", id="luca", nascita=nato(8), tutori=["carlo"],
-                      preferred_voice=None, preferred_tone=None)}
+                      preferred_voice=None, preferred_tone=None),
+            "Nicola": p(name="Nicola", id="nicola", nascita=nato(14), tutori=["carlo"],
+                        preferred_voice=None, preferred_tone=None)}
 
     def get(self, nome):
         return self.users.get(nome)
@@ -149,6 +154,7 @@ class Persone:
 class ChiParla:
     is_enrolling, enrolling_name, enroll_expired = False, None, False
     from_session = False
+    compagnia = False
 
     def __init__(self):
         self.current_speaker, self.identified_by = None, None
@@ -325,14 +331,82 @@ def main():
     verifica("poi la risposta di Sofia lo chiude (smentita)",
              "pericolo_smentito" in regole and len(avvisi_di("sofia")) == 1, str(regole))
 
-    # 5. Un secondo segnale poco chiaro nella finestra → confermato subito
+    # 5. Dopo una smentita un altro segnale poco chiaro riparte dal cancello 1 (12/10)
+    cfg.minori_avviso_ripetuto_s = 0           # qui si contano gli avvisi, anche se uguali
+    n_grav = len(guardia.gravita_chieste)
+    detto, regole, rec, _ = turno("Sofia", "Aiuto.")
+    verifica("dopo una smentita: il segnale nuovo riparte dal cancello 1 (rassicura, nessun "
+             "avviso)", detto == [K.RASSICURA["bambini"]] and len(avvisi_di("sofia")) == 1
+             and "pericolo_secondo_segnale" not in regole and "pericolo_dopo_smentita" in regole
+             and "pericolo_da_verificare" in regole, f"{detto} {regole}")
+    verifica("dopo una smentita: la gravità si chiede di nuovo",
+             guardia.gravita_chieste[n_grav:] == ["Aiuto."], str(guardia.gravita_chieste[-1:]))
+    srv.cancelli.segnali.clear()
+
+    # 5b. Il secondo segnale vero: il primo senza risposta (silenzio) → confermato subito
+    turno("Sofia", "Sparisco.")
+    srv.cancelli.scaduto(srv.cancelli.aperto_per("sofia", "sat:telefono"))
+    n = len(avvisi_di("sofia"))
     detto, regole, rec, _ = turno("Sofia", "Aiuto.")
     a = avvisi_di("sofia")
-    verifica("due segnali poco chiari ravvicinati → protezione e avviso",
-             detto == [prot] and len(a) == 2 and "secondo segnale" in a[-1][0]
+    verifica("due segnali poco chiari ravvicinati (il primo senza risposta) → protezione e "
+             "avviso", detto == [prot] and len(a) == n + 1 and "secondo segnale" in a[-1][0]
              and "pericolo_secondo_segnale" in regole, f"{detto} {regole}")
     verifica("il secondo segnale non chiede la gravità (decide la finestra)",
              guardia.gravita_chieste[-1] != "Aiuto.", str(guardia.gravita_chieste[-1:]))
+    srv.cancelli.segnali.clear()
+    # ... e il primo confermato al secondo cancello: anche
+    turno("Sofia", "Sparisco.")
+    turno("Sofia", "Non posso dirlo.")
+    n = len(avvisi_di("sofia"))
+    detto, regole, rec, _ = turno("Sofia", "Addio.")
+    verifica("primo confermato, poi un altro segnale poco chiaro → protezione subito",
+             detto == [prot] and len(avvisi_di("sofia")) == n + 1
+             and "pericolo_secondo_segnale" in regole, f"{detto} {regole}")
+    srv.cancelli.segnali.clear()
+
+    # 5c. Il caso vero del 12/10 (auto, telefono, chi amministra e il ragazzo, nomi di
+    # fantasia): una frase breve storpiata del ragazzo → cancello 1; lui risponde «tutto bene»
+    # → smentito. Quattro minuti dopo una frase di chi amministra, incerta (migliore lui, il
+    # ragazzo vicino: vale il ragazzo, profilo più protetto) e in compagnia, è di nuovo
+    # «pericolo»: prima andava dritta alla protezione (Telefono Azzurro, 112) e all'avviso urgente
+    detto, regole, rec, _ = turno("Nicola", "Sparisco.", come="breve")
+    verifica("caso vero 12/10: la frase breve del ragazzo → cancello 1",
+             detto == [K.RASSICURA["adolescenti"]], str(detto))
+    detto, regole, rec, _ = turno("Nicola", "Sì, tutto bene.", come="breve")
+    verifica("caso vero 12/10: «tutto bene» → smentito", "pericolo_smentito" in regole,
+             str(regole))
+    n_t = len(avvisi_di("nicola"))
+    chi.compagnia = True
+    detto, regole, rec, modello = turno("Nicola", "Sì, siamo solo noi due, addio.",
+                                        come="conversazione")
+    verifica("caso vero 12/10: la frase incerta in compagnia dopo la smentita → cancello 1, "
+             "niente protezione né avviso",
+             detto == [K.RASSICURA["adolescenti"]] and prot not in detto
+             and len(avvisi_di("nicola")) == n_t and "pericolo_secondo_segnale" not in regole
+             and "pericolo_compagnia" not in regole, f"{detto} {regole}")
+    seg = srv.cancelli.aperto_per("nicola", "sat:telefono")
+    verifica("caso vero 12/10: il segnale nuovo è aperto, con la compagnia e la voce incerta",
+             seg is not None and seg.compagnia and seg.voce_incerta, str(seg))
+    srv.cancelli.segnali.clear()
+    # Voce incerta e compagnia: anche un primo segnale non smentito non salta il cancello 1
+    chi.compagnia = False
+    turno("Nicola", "Sparisco.")
+    srv.cancelli.scaduto(srv.cancelli.aperto_per("nicola", "sat:telefono"))
+    n_t = len(avvisi_di("nicola"))
+    chi.compagnia = True
+    detto, regole, rec, _ = turno("Nicola", "Addio.", come="conversazione")
+    verifica("voce incerta in compagnia: il secondo segnale passa dal cancello 1",
+             detto == [K.RASSICURA["adolescenti"]] and len(avvisi_di("nicola")) == n_t
+             and "pericolo_compagnia_cancello1" in regole, f"{detto} {regole}")
+    srv.cancelli.segnali.clear()
+    # Contrario: in compagnia ma con un segnale acuto → protezione subito, come sempre
+    detto, regole, rec, _ = turno("Nicola", "Voglio farmi del male.", come="conversazione")
+    verifica("contrario: in compagnia un segnale acuto → protezione e avviso subito",
+             detto == [prot] and len(avvisi_di("nicola")) == n_t + 1
+             and "pericolo_acuto" in regole, f"{detto} {regole}")
+    chi.compagnia = False
+    srv.cancelli.segnali.clear()
 
     # 6. Silenzio: nessuna risposta entro l'attesa
     srv.cancelli.segnali.clear()
