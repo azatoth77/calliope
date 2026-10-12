@@ -374,7 +374,7 @@ def prova_titolo(tmp, iso):
     ctx.speaker_ctx.sfida_superata = True
     out = est.gestisci(ctx, "approva", "meteo_codificato")
     verifica("approvata: «Fatto: «Meteocittà» è attiva»",
-             S.detta(out).startswith("Fatto: «Meteocittà» è attiva, versione"), S.detta(out))
+             S.detta(out).startswith("Fatto: l'estensione «Meteocittà» è attiva, versione"), S.detta(out))
     verifica("…e l'elenco dice ancora «Meteocittà»", "«Meteocittà» (attiva" in
              S.detta(est.gestisci(ctx, "elenca")))
 

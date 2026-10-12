@@ -118,8 +118,8 @@ _v("lavori.avviato", "avvio",
        "amichevole": (
            "Ci penso io, in secondo piano: ti avviso quando è pronto. Intanto chiedimi pure "
            "quello che vuoi.",
-           "Me ne occupo in secondo piano e ti chiamo quando è pronto. Nel frattempo sono qui "
-           "per altro.",
+           "Me ne occupo in secondo piano e ti avviso quando è pronto. Nel frattempo, se ti "
+           "serve altro, sono qui.",
            "Lo preparo in secondo piano: appena è pronto ti avviso. Intanto, se ti serve altro, "
            "chiedi pure."),
        "ironico": (
@@ -135,6 +135,8 @@ _v("lavori.avviato", "avvio",
            "Elaborazione in secondo piano. Notifica al termine.",
            "In lavorazione in secondo piano. Avviso al completamento."),
    },
+   # Le forme brevi (riviste il 12/10 sera) devono essere vere anche alla prima ripetizione,
+   # con qualunque cosa sia successa nel frattempo: qui «anche questo» è vero (è un altro lavoro)
    breve={
        "normale": ("Ci lavoro, ti avviso.", "Anche questo in secondo piano: ti avviso."),
        "formale": ("Me ne occupo, la avviso.", "Anche questo in secondo piano: la avviso."),
@@ -157,7 +159,7 @@ _v("lavori.in_coda", "avvio",
            "Certamente: viene dopo «{titolo}», e la informo quando è pronto."),
        "amichevole": (
            "Va bene! Lo metto in coda dopo «{titolo}» e ti avviso quando è pronto.",
-           "D'accordo: prima finisco «{titolo}», poi tocca a questo. Ti avviso io."),
+           "D'accordo: prima si finisce «{titolo}», poi tocca a questo. Ti avviso io."),
        "ironico": (
            "D'accordo: si mette in fila dopo «{titolo}», come alle poste. Ti avviso quando è "
            "pronto.",
@@ -174,49 +176,55 @@ _v("lavori.in_coda", "avvio",
        "computer_di_bordo": ("In coda dopo «{titolo}».",),
    })
 
+# `{dopo}` (12/10 sera): per le estensioni « Prima di usarla andrà approvata.», impersonale, così
+# va bene col «tu» e col «lei» (prima la stima diceva «te la faccio approvare» anche nel formale)
 _P = "{cosa}: lo affido all'agente {agente}{coda}{carico}."
 _v("lavori.proposta", "proposta",
-   _P + " {stima} e ti avviso quando ha finito. Procedo?",
-   fissi=("cosa", "agente", "coda", "carico"), domanda="Procedo?",
+   _P + " {stima} e ti avviso quando ha finito.{dopo} Procedo?",
+   fissi=("cosa", "agente", "coda", "carico", "dopo"), domanda="Procedo?",
    esempio={"cosa": "È un lavoro di programmazione", "agente": "sulla DGX", "coda": "",
-            "carico": "", "stima": "Ci vorranno alcuni minuti"},
+            "carico": "", "stima": "Ci vorranno alcuni minuti", "dopo": ""},
    toni={
        "normale": (
-           _P + " {stima} e ti avviso quando ha finito. Procedo?",
+           _P + " {stima} e ti avviso quando ha finito.{dopo} Procedo?",
            "{cosa}: lo passo all'agente {agente}{coda}{carico}. {stima} e ti avviso quando ha "
-           "finito. Procedo?",
+           "finito.{dopo} Procedo?",
            "{cosa}, quindi lo affido all'agente {agente}{coda}{carico}. {stima}; quando ha "
-           "finito ti avviso. Procedo?"),
+           "finito ti avviso.{dopo} Procedo?"),
        "formale": (
            "{cosa}: lo affiderei all'agente {agente}{coda}{carico}. {stima} e la avviso quando "
-           "ha finito. Procedo?",
-           "{cosa}: se è d'accordo lo passo all'agente {agente}{coda}{carico}. {stima}, e la "
-           "informo al termine. Procedo?"),
+           "ha finito.{dopo} Procedo?",
+           "{cosa}: se è d'accordo, lo passo all'agente {agente}{coda}{carico}. {stima}, e la "
+           "informo al termine.{dopo} Procedo?"),
        "amichevole": (
-           "{cosa}: lo do all'agente {agente}{coda}{carico}. {stima} e ti chiamo quando ha "
-           "finito. Procedo?",
-           "{cosa}: ci pensa l'agente {agente}{coda}{carico}. {stima}, poi ti avviso io. "
+           "{cosa}: lo do all'agente {agente}{coda}{carico}. {stima} e ti avviso appena ha "
+           "finito.{dopo} Procedo?",
+           "{cosa}: ci pensa l'agente {agente}{coda}{carico}. {stima}, poi ti avviso io.{dopo} "
            "Procedo?"),
+       # L'inciso prima di {coda}{carico}: dopo («; prima devo caricare il modello, ci vuole un
+       # minuto in più, che ha più pazienza di me») non si legava più all'agente
        "ironico": (
-           "{cosa}: lo affido all'agente {agente}{coda}{carico}, che ha più pazienza di me. "
-           "{stima} e ti avviso quando ha finito. Procedo?",
-           "{cosa}: un lavoro per l'agente {agente}{coda}{carico}. {stima} e ti avviso quando ha "
-           "finito. Procedo?"),
-       "essenziale": ("{cosa}: all'agente {agente}{coda}{carico}. {stima}. Procedo?",),
+           "{cosa}: lo affido all'agente {agente}, che ha più pazienza di me{coda}{carico}. "
+           "{stima} e ti avviso quando ha finito.{dopo} Procedo?",
+           "{cosa}: pane per i denti dell'agente {agente}{coda}{carico}. {stima} e ti avviso "
+           "quando ha finito.{dopo} Procedo?"),
+       "essenziale": ("{cosa}: all'agente {agente}{coda}{carico}. {stima}.{dopo} Procedo?",),
        "computer_di_bordo": (
-           "{cosa}. Assegnazione all'agente {agente}{coda}{carico}. {stima}. Procedo?",),
+           "{cosa}. Assegnazione all'agente {agente}{coda}{carico}. {stima}.{dopo} Procedo?",),
    },
    breve={
-       "normale": ("{cosa}: anche questo all'agente {agente}{coda}{carico}. Procedo?",),
-       "formale": ("{cosa}: come prima, lo affiderei all'agente {agente}{coda}{carico}. "
+       "normale": ("{cosa}: anche questo all'agente {agente}{coda}{carico}.{dopo} Procedo?",),
+       "formale": ("{cosa}: come prima, lo affiderei all'agente {agente}{coda}{carico}.{dopo} "
                    "Procedo?",),
-       "amichevole": ("{cosa}: come prima, ci pensa l'agente {agente}{coda}{carico}. "
+       "amichevole": ("{cosa}: come prima, ci pensa l'agente {agente}{coda}{carico}.{dopo} "
                       "Procedo?",),
-       "ironico": ("{cosa}: di nuovo all'agente {agente}{coda}{carico}. Procedo?",),
-       "essenziale": ("{cosa}: all'agente {agente}{coda}{carico}. Procedo?",),
-       "computer_di_bordo": ("{cosa}. Agente {agente}{coda}{carico}. Procedo?",),
+       "ironico": ("{cosa}: anche questo all'agente {agente}{coda}{carico}.{dopo} Procedo?",),
+       "essenziale": ("{cosa}: all'agente {agente}{coda}{carico}.{dopo} Procedo?",),
+       "computer_di_bordo": ("{cosa}. Agente {agente}{coda}{carico}.{dopo} Procedo?",),
    })
 
+# Le forme brevi senza «ancora» (12/10 sera): «Ancora nessun lavoro in corso» sottintende che
+# dall'ultima volta non è cambiato niente, e un lavoro può essere partito e finito nel frattempo
 _v("lavori.nessuno", "lettura", "Non ho lavori in corso.",
    toni={
        "normale": ("Non ho lavori in corso.", "Al momento non ho lavori in corso.",
@@ -229,12 +237,12 @@ _v("lavori.nessuno", "lettura", "Non ho lavori in corso.",
        "computer_di_bordo": ("Nessun lavoro in corso.", "Coda dei lavori vuota."),
    },
    breve={
-       "normale": ("Ancora nessun lavoro in corso.",),
-       "formale": ("Ancora nessun lavoro in corso.",),
-       "amichevole": ("Ancora niente in corso.",),
-       "ironico": ("Ancora niente: sempre libera.",),
-       "essenziale": ("Ancora nessuno.",),
-       "computer_di_bordo": ("Nessun lavoro in corso.",),
+       "normale": ("Nessun lavoro in corso.",),
+       "formale": ("Nessun lavoro in corso.",),
+       "amichevole": ("Niente in corso.",),
+       "ironico": ("Niente in corso: tutto tranquillo.",),
+       "essenziale": ("Nessun lavoro.",),
+       "computer_di_bordo": ("Coda vuota.",),
    })
 
 _v("lavori.nessuna_domanda", "lettura", "Non ho lavori che aspettano una risposta.",
@@ -251,31 +259,39 @@ _v("lavori.nessuna_domanda", "lettura", "Non ho lavori che aspettano una rispost
        "computer_di_bordo": ("Nessun lavoro in attesa di risposta.",),
    })
 
+# «l'estensione «…»» (12/10 sera): il nome lo sceglie chi la scrive («il convertitore di
+# misure», «Meteo per città»), quindi l'accordo («è attiva», «usarla») va col nome comune davanti
 _v("estensione.attiva", "esito",
-   "Fatto: «{titolo}» è attiva, versione {versione}{cosa}. Da adesso puoi chiedermela.",
+   "Fatto: l'estensione «{titolo}» è attiva, versione {versione}{cosa}. Da adesso puoi usarla.",
    fissi=("titolo", "versione", "cosa"),
    esempio={"titolo": "il convertitore di misure", "versione": 2, "cosa": ""},
    toni={
        "normale": (
-           "Fatto: «{titolo}» è attiva, versione {versione}{cosa}. Da adesso puoi chiedermela.",
-           "Fatto: «{titolo}» è attiva, versione {versione}{cosa}. Puoi chiedermela da subito.",
-           "Fatto: ora «{titolo}» è attiva, versione {versione}{cosa}. Da adesso puoi usarla."),
+           "Fatto: l'estensione «{titolo}» è attiva, versione {versione}{cosa}. Da adesso puoi "
+           "usarla.",
+           "Fatto: l'estensione «{titolo}» è attiva, versione {versione}{cosa}. Puoi usarla da "
+           "subito.",
+           "Fatto: ora l'estensione «{titolo}» è attiva, versione {versione}{cosa}. Chiedimi "
+           "pure di usarla."),
        "formale": (
-           "Fatto: «{titolo}» è attiva, versione {versione}{cosa}. Da adesso può chiedermela.",
-           "Fatto: «{titolo}» è ora attiva, versione {versione}{cosa}. Può usarla da subito."),
+           "Fatto: l'estensione «{titolo}» è attiva, versione {versione}{cosa}. Da adesso può "
+           "usarla.",
+           "Fatto: l'estensione «{titolo}» è ora attiva, versione {versione}{cosa}. Può "
+           "servirsene da subito."),
        "amichevole": (
-           "Fatto! «{titolo}» è attiva, versione {versione}{cosa}. Da adesso puoi chiedermela "
-           "quando vuoi.",
-           "Fatto: «{titolo}» è attiva, versione {versione}{cosa}. Provala pure: chiedimela "
+           "Fatto! L'estensione «{titolo}» è attiva, versione {versione}{cosa}. Da adesso puoi "
+           "usarla quando vuoi.",
+           "Fatto: l'estensione «{titolo}» è attiva, versione {versione}{cosa}. Provala pure "
            "quando vuoi."),
        "ironico": (
-           "Fatto: «{titolo}» è attiva, versione {versione}{cosa}. Da adesso puoi chiedermela, e "
-           "non potrò dire di no.",
-           "Fatto: «{titolo}» è attiva, versione {versione}{cosa}. Un'altra cosa che so fare: "
-           "chiedimela quando vuoi."),
-       "essenziale": ("Fatto: «{titolo}» è attiva, versione {versione}{cosa}.",),
+           "Fatto: l'estensione «{titolo}» è attiva, versione {versione}{cosa}. Da adesso puoi "
+           "usarla, e io non posso più dire di no.",
+           "Fatto: l'estensione «{titolo}» è attiva, versione {versione}{cosa}. Un'altra cosa "
+           "che so fare: usala quando vuoi."),
+       "essenziale": ("Fatto: l'estensione «{titolo}» è attiva, versione {versione}{cosa}.",),
        "computer_di_bordo": (
-           "Fatto: «{titolo}» attiva, versione {versione}{cosa}. Disponibile da subito.",),
+           "Fatto: estensione «{titolo}» attiva, versione {versione}{cosa}. Disponibile da "
+           "subito.",),
    })
 
 _v("sviluppo.correzione", "sviluppo",
@@ -307,26 +323,31 @@ _v("sviluppo.correzione", "sviluppo",
        "computer_di_bordo": (
            "Correzione affidata all'autore, in secondo piano. Nuova prova al termine{caso}.",),
    },
+   # Brevi senza «di nuovo» (12/10 sera): la correzione di prima può essere di un altro sviluppo
    breve={
        "normale": ("Lo rimando in correzione; poi rifacciamo la prova{caso}.",),
        "formale": ("Lo rimando in correzione; poi ripetiamo la prova{caso}.",),
-       "amichevole": ("Di nuovo in correzione; poi rifacciamo la prova{caso}.",),
-       "ironico": ("Di nuovo in correzione, con pazienza; poi rifacciamo la prova{caso}.",),
+       "amichevole": ("Torna in correzione; poi rifacciamo la prova{caso}.",),
+       "ironico": ("Torna in correzione, con pazienza; poi rifacciamo la prova{caso}.",),
        "essenziale": ("In correzione. Poi la prova{caso}.",),
        "computer_di_bordo": ("Correzione in corso. Nuova prova al termine{caso}.",),
    })
 
+# Mai una preposizione davanti a «{titolo}» (12/10 sera): «Quanto a «il convertitore»» e
+# «Sviluppo di «il convertitore»» non si dicono (al, del); il titolo fa da soggetto o da oggetto
 _v("sviluppo.stato", "lettura", "Stiamo sviluppando «{titolo}»: {dove}.",
    fissi=("titolo", "dove"),
    esempio={"titolo": "il convertitore di misure",
             "dove": "siamo al collaudo (3 di 5): fatte analisi e sviluppo; mancano revisione e "
                     "attivazione"},
    toni={
-       "normale": ("Stiamo sviluppando «{titolo}»: {dove}.", "Sviluppo di «{titolo}»: {dove}.",
-                   "Per «{titolo}», {dove}."),
-       "formale": ("Stiamo sviluppando «{titolo}»: {dove}.", "Quanto a «{titolo}», {dove}."),
-       "amichevole": ("Stiamo lavorando a «{titolo}»: {dove}.",
-                      "Stiamo sviluppando «{titolo}»: {dove}."),
+       "normale": ("Stiamo sviluppando «{titolo}»: {dove}.",
+                   "Lo sviluppo in corso è «{titolo}»: {dove}.",
+                   "«{titolo}» è in sviluppo: {dove}."),
+       "formale": ("Stiamo sviluppando «{titolo}»: {dove}.",
+                   "Lo sviluppo in corso è «{titolo}»: {dove}."),
+       "amichevole": ("Stiamo sviluppando «{titolo}»: {dove}.",
+                      "Ecco a che punto siamo con «{titolo}»: {dove}."),
        "ironico": ("Stiamo sviluppando «{titolo}»: {dove}.", "«{titolo}» procede: {dove}."),
        "essenziale": ("«{titolo}»: {dove}.",),
        "computer_di_bordo": ("Sviluppo «{titolo}»: {dove}.",),

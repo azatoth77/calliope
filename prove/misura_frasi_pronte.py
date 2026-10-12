@@ -36,7 +36,7 @@ FRASI = [
      "Ci lavoro in secondo piano: ti avviso quando è pronto. Intanto puoi chiedermi altro.",
      [["avvis", "avvert", "faccio sapere", "dirò", "comunic"]], False),
     ("estensione_attiva", "esito", "Approva l'estensione.",
-     "Fatto: «Meteo città» è attiva, versione 3. Da adesso puoi chiedermela.",
+     "Fatto: l'estensione «Meteo città» è attiva, versione 3. Da adesso puoi usarla.",
      [["«Meteo città»", "Meteo città"], ["3", "tre", "terza"]], False),
     ("politica_agente", "politica", "Affidalo all'agente.",
      "C'è di mezzo il lavoro di un agente, quindi chiedo a te: vuoi che affidi all'agente il "

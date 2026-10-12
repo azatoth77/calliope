@@ -174,11 +174,42 @@ ancora le frasi di oggi, parola per parola, finché chi amministra non rilegge i
   testo in memoria (al più 200 persone e 200 scelte in attesa); nessuna latenza in più (la
   forma breve anzi accorcia la voce). Le varianti valgono per qualunque modello della voce
   perché non passano dal modello.
-- **Limiti**: la stima di `lavori.proposta` contiene ancora «te la faccio approvare» per le
-  estensioni (è un valore, non il modello della frase: nel formale resta il tu in quel pezzo);
-  la frase intera dell'annuncio di fine lavoro, il ripiego «Non ci sono riuscita…» (11 punti in
+- **Limiti**: ~~la stima di `lavori.proposta` contiene ancora «te la faccio approvare» per le
+  estensioni~~ (storico: corretto il 12/10 sera, voce sotto); la frase intera dell'annuncio di fine lavoro, il ripiego «Non ci sono riuscita…» (11 punti in
   Brain) e la cornice della politica sono rimandati (fase 2 e dopo). Il riconoscimento per
   modello di una frase del modello uguale a una del catalogo la conta come pronta.
 
 Prove: `prova_frasi` (livello 1, con i contrari). Da fare sul vero: qualche giorno in ombra,
 leggere la stima in `calliope stato --turni`, rileggere il campione, accendere.
+
+**Correzioni dopo il primo campione (12/10 sera).** Chi amministra ha riletto il campione e ha
+trovato quattro difetti; tutte le forme (132 diverse) rilette da capo:
+
+- **Accordo col nome dell'estensione**: «Fatto: «il convertitore di misure» è attiva» (anche la
+  frase di oggi sottintendeva «l'estensione»). Il nome lo sceglie chi scrive l'estensione, con o
+  senza articolo, maschile o femminile: ora ogni forma dice «l'estensione «…» è attiva» e
+  «usarla» (non più «chiedermela»); il computer di bordo «estensione «…» attiva», senza accordo.
+  Stessa correzione fuori dal catalogo: «L'estensione «…» è attiva, versione N: prima la
+  disattivo?» (`estensione_gestisci` rimuovi), «Fatto: l'estensione «…» è disattivata.» e la
+  risposta di `lavoro_stato` per un'estensione già approvata. Anche `sviluppo.stato` non mette
+  più preposizioni davanti al titolo («Quanto a «il convertitore»», «Sviluppo di «il
+  convertitore»» non si dicono): il titolo fa da soggetto o da oggetto.
+- **Forme brevi**: «Ancora nessun lavoro in corso» dà per scontato che dall'ultima volta non sia
+  cambiato niente, e un lavoro può essere partito e finito nel frattempo; la forma breve si dice
+  alla prima ripetizione, qualunque cosa sia successa. Ora niente «ancora», «di nuovo»,
+  «sempre» nelle forme brevi («Nessun lavoro in corso.», «Torna in correzione…»); «anche
+  questo» resta dove è vero (un altro lavoro avviato, un'altra proposta).
+- **«te la faccio approvare» nel formale**: la stima delle estensioni ora è uguale alle altre
+  («Ci vorranno alcuni minuti») e l'approvazione è un segnaposto a sé, `{dopo}` = « Prima di
+  usarla andrà approvata.», impersonale (va bene col tu e col lei) e tra i fatti fissi, quindi
+  detto anche nella forma breve. Le stime stanno in `agenti/servizio.py` (`STIME`,
+  `APPROVAZIONE`).
+- **Rilettura**: l'inciso ironico «che ha più pazienza di me» finiva dopo «prima devo caricare
+  il modello, ci vuole un minuto in più» (ora subito dopo l'agente); «ti chiamo» nell'amichevole
+  (sembrava una telefonata) è «ti avviso»; «un lavoro per l'agente» dopo «È un lavoro di…»
+  ripeteva «lavoro».
+
+`prova_frasi` controlla ora anche la lingua di tutte le forme non bloccate (accordo col titolo,
+preposizioni davanti a «{titolo}», forme brevi che suppongono che nulla sia cambiato, incisi
+staccati), con i contrari presi dal campione; stima e approvazione senza tu né lei; la proposta
+di un'estensione nel formale, intera e breve.

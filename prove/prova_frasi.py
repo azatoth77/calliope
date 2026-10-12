@@ -89,6 +89,80 @@ verifica("cortesia: almeno 6 frasi per i toni pieni", min(cortesia_n.values()) >
 verifica("cortesia: le frasi di oggi sono tutte nel catalogo",
          all(set(RISPOSTE[t][f]) <= set(F.CATALOGO[f"cortesia.{f}"].forme(t))
              for t in RISPOSTE for f in RISPOSTE[t]), True)
+
+# ── lingua (12/10 sera, dal campione riletto da chi amministra) ──
+# Accordo col titolo: il nome lo sceglie chi scrive l'estensione («il convertitore di misure»),
+# quindi «è attiva» e «usarla» vanno col nome comune davanti, e mai una preposizione attaccata a
+# «{titolo}» («Quanto a «il convertitore»», «Sviluppo di «il convertitore»»)
+_PREP = F.re.compile(r"\b(?:di|a|ad|da|in|su|quanto a)\s+«\{titolo\}»", F.re.I)
+_ACCORDO = F.re.compile(r"(?<!estensione )«\{titolo\}»\s+(?:è\s+)?(?:ora\s+)?attiv[ao]")
+_SUPPONE = F.re.compile(r"\b(?:ancora|di nuovo|sempre)\b", F.re.I)
+
+
+def parole(s):
+    return {w.lower() for w in F.re.findall(r"[^\W\d_]+", s)}
+
+
+def lingua(ident, tono, breve, f):
+    """I difetti di lingua di una forma (lista vuota: va bene)."""
+    out = []
+    if _PREP.search(f):
+        out.append("preposizione davanti al titolo")
+    if _ACCORDO.search(f):
+        out.append("accordo col titolo")
+    # La forma breve si dice alla prima ripetizione, con qualunque cosa sia successa nel
+    # frattempo: niente «ancora», «di nuovo», «sempre» che danno per scontato che nulla sia cambiato
+    if breve and _SUPPONE.search(f):
+        out.append("la forma breve suppone che nulla sia cambiato")
+    if ident == "lavori.proposta":
+        carico = f.format(cosa="X", agente="sulla DGX", coda="", stima="S", dopo="",
+                          carico="; prima devo caricare il modello, ci vuole un minuto in più")
+        if F.re.search(r"in più,\s+che\b", carico):
+            out.append("inciso staccato dall'agente dopo {carico}")
+    return out
+
+
+# Le classi bloccate no: il testo è quello del codice, qui solo per la misura
+difetti = [(v.id, t, b, f, lingua(v.id, t, b, f)) for v in F.CATALOGO.values() if not v.bloccata
+           for t in F.TONI_FRASI for b in (False, True) for f in v.forme(t, b)
+           if lingua(v.id, t, b, f)]
+verifica("lingua: accordo, preposizioni, forme brevi, incisi (nessun problema)", difetti, [])
+verifica("contrari: i difetti del campione del 12/10 si vedono", [lingua(*x) for x in (
+    ("estensione.attiva", "formale", False, "Fatto: «{titolo}» è ora attiva, versione {versione}."),
+    ("sviluppo.stato", "formale", False, "Quanto a «{titolo}», {dove}."),
+    ("sviluppo.stato", "normale", False, "Sviluppo di «{titolo}»: {dove}."),
+    ("lavori.nessuno", "normale", True, "Ancora nessun lavoro in corso."),
+    ("lavori.proposta", "ironico", False, "{cosa}: lo affido all'agente {agente}{coda}{carico}, "
+     "che ha più pazienza di me. {stima}.{dopo} Procedo?"))],
+    [["accordo col titolo"], ["preposizione davanti al titolo"],
+     ["preposizione davanti al titolo"], ["la forma breve suppone che nulla sia cambiato"],
+     ["inciso staccato dall'agente dopo {carico}"]])
+verifica("contrari: forme giuste non segnalate", [lingua(*x) for x in (
+    ("estensione.attiva", "normale", False, "Fatto: l'estensione «{titolo}» è attiva."),
+    ("lavori.in_coda", "normale", True, "In coda dopo «{titolo}», ti avviso."),
+    ("lavori.nessuno", "normale", True, "Nessun lavoro in corso."))], [[], [], []])
+
+# La stima e l'approvazione entrano in ogni tono: mai il «tu» (né il «lei») nei valori
+from calliope.agenti.servizio import APPROVAZIONE, STIME  # noqa: E402
+LEI = {"lei", "può", "sua", "suo", "desidera"}
+verifica("proposta: stima e approvazione senza «tu» né «lei» (valgono per ogni tono)",
+         [x for x in list(STIME.values()) + [APPROVAZIONE] if parole(x) & (TU | LEI)], [])
+verifica("contrario: la stima di prima («te la faccio approvare») si vede",
+         sorted(parole("Ci vorranno alcuni minuti, poi te la faccio approvare") & (TU | LEI)),
+         ["te"])
+fo = F.Frasi("attivo", breve_turni=3)
+fo.inizio_turno("anna", "formale")
+pe = dict(cosa="È una funzione nuova di Calliope", agente="sulla DGX", coda="", carico="",
+          stima=STIME["estensione"], dopo=APPROVAZIONE)
+p1 = fo.scegli("lavori.proposta", **pe)
+fo.detta(p1)
+fo.inizio_turno("anna", "formale")
+p2 = fo.scegli("lavori.proposta", **pe)
+verifica("proposta di un'estensione nel formale: niente «tu», l'approvazione detta, anche breve",
+         [(sorted(parole(x) & TU), "andrà approvata" in x, x.endswith("Procedo?"), x != p1 or k == 0)
+          for k, x in enumerate((p1, p2))],
+         [([], True, True, True), ([], True, True, True)])
+
 verifica("contrario: sfida, permessi, politica, ripieghi senza varianti",
          sorted({v.classe for v in F.CATALOGO.values() if v.bloccata}),
          ["annuncio", "permesso", "politica", "ripiego", "sfida"])
@@ -100,13 +174,14 @@ OGGI = {
     ("lavori.in_coda", (("titolo", "Relazione"),)):
         "D'accordo: lo metto in coda dopo «Relazione». Ti avviso quando è pronto.",
     ("lavori.proposta", (("cosa", "È un lavoro di programmazione"), ("agente", "sulla DGX"),
-                         ("coda", ""), ("carico", ""), ("stima", "Ci vorranno alcuni minuti"))):
+                         ("coda", ""), ("carico", ""), ("stima", "Ci vorranno alcuni minuti"),
+                         ("dopo", ""))):
         "È un lavoro di programmazione: lo affido all'agente sulla DGX. Ci vorranno alcuni "
         "minuti e ti avviso quando ha finito. Procedo?",
     ("lavori.nessuno", ()): "Non ho lavori in corso.",
     ("lavori.nessuna_domanda", ()): "Non ho lavori che aspettano una risposta.",
     ("estensione.attiva", (("titolo", "Meteo"), ("versione", 3), ("cosa", ": dice il meteo"))):
-        "Fatto: «Meteo» è attiva, versione 3: dice il meteo. Da adesso puoi chiedermela.",
+        "Fatto: l'estensione «Meteo» è attiva, versione 3: dice il meteo. Da adesso puoi usarla.",
     ("sviluppo.correzione", (("caso", " con «venti»"),)):
         "D'accordo: lo faccio correggere a chi l'ha scritto. Ci lavora in secondo piano; quando "
         "è pronto rifacciamo la prova con «venti».",

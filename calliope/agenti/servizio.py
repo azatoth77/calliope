@@ -372,6 +372,15 @@ def _nome_cartella(s: str) -> str:
     return s[:60] or "lavoro"
 
 
+# Quanto ci vorrà, nella proposta di un lavoro. Valgono per ogni tono (le varianti delle frasi
+# pronte le mettono dentro frasi diverse): mai il «tu» o il «lei» qui dentro (12/10 sera)
+STIME = {"codice": "Ci vorranno alcuni minuti", "ricerca": "Ci vorrà qualche minuto",
+         "documento": "Ci vorranno un paio di minuti", "estensione": "Ci vorranno alcuni minuti",
+         "altro": "Ci vorrà qualche minuto"}
+# Per le estensioni, dopo la stima: impersonale (prima «poi te la faccio approvare», col «tu»
+# anche nel tono formale); è un fatto su cui si decide, quindi resta anche nella forma breve
+APPROVAZIONE = " Prima di usarla andrà approvata."
+
 # La domanda dell'agente come azione in sospeso (Brain.set_pending con «messaggio»): la
 # risposta di chi parla non è un «sì», quindi il testo generico di PENDING_MSG («se chi parla
 # acconsente…») non va bene. Decide il modello se ciò che dice è la risposta
@@ -892,10 +901,7 @@ class Lavori:
             return (f"Ho trovato {len(cand)} file: " + ", ".join(nomi[:-1]) + " e " + nomi[-1]
                     + ". Quale mando all'agente? Lavora su una copia: l'originale non lo tocco.")
         if lav.file_utente is not None:
-            stima = {"codice": "Ci vorranno alcuni minuti", "ricerca": "Ci vorrà qualche minuto",
-                     "documento": "Ci vorranno un paio di minuti",
-                     "estensione": "Ci vorranno alcuni minuti",
-                     "altro": "Ci vorrà qualche minuto"}[lav.tipo]
+            stima = STIME[lav.tipo]
             return (f"Mando una copia {lav.file_utente['detto_di']} all'agente "
                     f"{self.imp.su_nome}: lavora sulla copia, e il risultato torna come file "
                     f"nuovo; l'originale non lo tocco. {stima}. Procedo?")
@@ -908,10 +914,8 @@ class Lavori:
                     lav, "estensione", None) else "È una funzione nuova di Calliope")}[lav.tipo]
         if lav.modello and lav.modello in self.modelli:
             cosa = f"È {self.modelli[lav.modello].titolo.lower()} da compilare"
-        stima = {"codice": "Ci vorranno alcuni minuti", "ricerca": "Ci vorrà qualche minuto",
-                 "documento": "Ci vorranno un paio di minuti",
-                 "estensione": "Ci vorranno alcuni minuti, poi te la faccio approvare",
-                 "altro": "Ci vorrà qualche minuto"}[lav.tipo]
+        stima = STIME[lav.tipo]
+        dopo = APPROVAZIONE if lav.tipo == "estensione" else ""
         att = self.attivi()
         coda = f"; prima devo finire «{att[0].titolo}»" if att else ""
         carico = ("; prima devo caricare il modello, ci vuole un minuto in più"
@@ -923,7 +927,7 @@ class Lavori:
         # Dal catalogo delle frasi pronte (12/10, calliope/frasi.py): la base è questa frase, le
         # varianti per tono e la forma breve solo con `frasi_varianti: attivo`; «Procedo?» in fondo
         return prima + frasi.scegli("lavori.proposta", cosa=cosa, agente=self.imp.su_nome,
-                                    coda=coda, carico=carico, stima=stima)
+                                    coda=coda, carico=carico, stima=stima, dopo=dopo)
 
 
     def proponi(self, lav: Lavoro, turno: int) -> str:
