@@ -321,7 +321,9 @@ TABELLE_MEMORIA = (("esercizi_tentativi", "persona", "giorno"),
                    ("richieste_tutori", "minore", "creata"),
                    ("esercizi_segnalazioni", "persona", "quando"),
                    # Le preferenze degli esercizi (12/10): 60 giorni dall'ultimo cambio
-                   ("esercizi_preferenze", "persona", "aggiornato"))
+                   ("esercizi_preferenze", "persona", "aggiornato"),
+                   # «A che punto siete» e la classe (12/10 sera): come le preferenze
+                   ("esercizi_punto", "persona", "aggiornato"))
 
 
 class Conservazione:

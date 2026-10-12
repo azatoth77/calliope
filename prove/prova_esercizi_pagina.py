@@ -84,6 +84,7 @@ def avvia():
     cfg.audio_modo = "satellite"
     cfg.telefono_web = str(TMP / "web")
     cfg.esercizi_pronti = 0
+    cfg.esercizi_punto_giorni = 0
     d = datetime.date.today() - datetime.timedelta(days=30)
     bianca = Profilo("bianca", "Bianca", d.replace(year=d.year - 9).isoformat(), ["dario"])
     reg = Reg(Profilo("dario", "Dario", admin=True, gender="m"), bianca)

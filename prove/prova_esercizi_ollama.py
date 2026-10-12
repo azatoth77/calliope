@@ -179,6 +179,7 @@ def una_sessione(materia: str, giro: int) -> list[dict]:
     cfg.llm_profilo = None
     cfg.memory_db = str(tmp / "memoria.db")
     cfg.guardiano_modello = ""
+    cfg.esercizi_punto_giorni = 0
     dario, elena = prof("Dario", admin=True, gender="m"), prof("Elena")
     reg = Reg([dario, elena, prof("Bianca", 9, tutori=["dario-id", "elena-id"]),
                prof("Luca", 12, gender="m", tutori=["elena-id"]),
@@ -271,6 +272,7 @@ def scelta_materia() -> list[dict]:
     cfg.memory_db = str(tmp / "memoria.db")
     cfg.guardiano_modello = ""
     cfg.esercizi_pronti = 0
+    cfg.esercizi_punto_giorni = 0
     reg = Reg([prof("Dario", admin=True, gender="m"), prof("Elena"),
                prof("Bianca", 9, tutori=["dario-id", "elena-id"]),
                prof("Luca", 12, gender="m", tutori=["elena-id"]),
