@@ -65,8 +65,15 @@ def aspetta(cond, max_s=5.0, passo=0.05):
     return None
 
 
-# La Screen Wake Lock API finta, come WebKit: gesto in corso per la prima richiesta
+# La Screen Wake Lock API finta, come WebKit: gesto in corso per la prima richiesta.
+# Page.addScriptToEvaluateOnNewDocument la mette in OGNI riquadro dello stesso processo, anche
+# nel gioco (<iframe sandbox="allow-scripts">, origine opaca), dove leggere localStorage è un
+# SecurityError. Chromium isola di solito i riquadri sandbox in un altro processo, e lì lo script
+# non arriva; sotto carico (troppi processi) li tiene nello stesso, e la prova falliva con
+# «nessun errore JavaScript» (12/10, riprodotto con --disable-features=IsolateSandboxedIframes).
+# Solo la pagina in cima, e localStorage protetto
 FINTA = r"""(() => {
+  if (window.top !== window) return;
   const W = window.__wl = { modo: "webkit", richieste: [], attivi: new Set(), sticky: false, gesto: false };
   for (const t of ["pointerdown", "pointerup", "mousedown", "mouseup", "click", "keydown", "touchend"]) {
     window.addEventListener(t, () => { W.gesto = true; setTimeout(() => { W.gesto = false; }, 0); }, true);
@@ -94,7 +101,9 @@ FINTA = r"""(() => {
   };
   W.togli = () => { for (const s of [...W.attivi]) s.release(); };
   W.n = () => W.attivi.size;
-  if (localStorage.getItem("__wl_assente") === "1") { delete Navigator.prototype.wakeLock; return; }
+  let assente = false;
+  try { assente = localStorage.getItem("__wl_assente") === "1"; } catch (e) { /* niente */ }
+  if (assente) { delete Navigator.prototype.wakeLock; return; }
   Object.defineProperty(Navigator.prototype, "wakeLock", { get: () => api, configurable: true });
 })();"""
 

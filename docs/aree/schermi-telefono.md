@@ -737,3 +737,26 @@ nome». Niente di nuovo nella pagina per il pallino; schermo.js passa al riquadr
 e, quando il gioco si chiude con ✕, Esc o la scheda vuota, manda `chiuso` al server, così
 l'ascolto senza nome finisce. Prove in `prova_giochi_pagina` (la mossa nel riquadro, il
 sottoinsieme a runtime, niente fuori elenco, ✕).
+
+## `prova_telefono_schermo` sotto carico: l'errore era della prova (12/10 sera, ramo `correzioni-12-10`)
+
+Nella suite completa, con altre attività sul portatile, la prova falliva su «nessun errore
+JavaScript» con `SecurityError: Failed to read the 'localStorage' property from 'Window': The
+document is sandboxed and lacks the 'allow-same-origin' flag`; da sola passava. La causa vera:
+la Screen Wake Lock finta della prova (`FINTA`) si mette con `Page.addScriptToEvaluateOnNewDocument`,
+che la esegue in **ogni riquadro dello stesso processo**, compreso quello del gioco
+(`<iframe sandbox="allow-scripts">`, origine opaca), e la sua prima riga leggeva `localStorage`
+senza protezione. Chromium di solito mette i riquadri sandbox in un processo a parte (lì lo
+script non arriva); sotto carico li tiene nello stesso. Riprodotto ogni volta con
+`--disable-features=IsolateSandboxedIframes --disable-site-isolation-trials` (eccezione
+`at <anonymous>:31:3`, la riga di `FINTA`). Il codice della pagina era già a posto
+(`schermo.js` e `telefono.js` leggono `localStorage` dentro try/catch, il gioco non lo vede).
+Correzione nella prova: `FINTA` solo nella pagina in cima (`window.top !== window` → esce) e la
+lettura protetta; con le due opzioni sopra ora passa.
+
+`prova_scritto_calliope` (timeout a 300 s una volta sotto carico): misurata da sola 68 s, con
+ogni attesa strumentata. Nessuna attesa fissa che scade (una sola `time.sleep(0.5)`), tutte a
+condizione: le più lunghe sono Calliope che parte (6 s), il saluto (4 s) e la voce che finisce
+di dire la risposta della rubrica (10 s) e il turno del modulo scritto a frase finita (5 s),
+cioè l'audio in tempo reale di Piper. È solo carico: con il portatile occupato il tempo cresce
+con l'avvio di Calliope e la sintesi; niente da correggere nel codice.
