@@ -1062,3 +1062,29 @@ Prove a secco: `prova_conserva` (sezione dell'archivio: adulto su disco, i contr
 e turno incerto, la sessione, la conversazione in corso, la rotazione di prima con i profili non
 letti, 61 e 59 giorni, svuota per persona e tutto, conteggi e terminale), `prova_conversazioni` e
 `prova_corsie` aggiornate (l'ospite nella sessione, la conversazione di un ospite non si riprende).
+
+## Il riassunto di chiusura senza i turni incerti (12/10 sera, ramo `correzioni-12-10`)
+
+Il buco: il turno incerto di un adulto (`conserva: false`: zona grigia, dubbio con un minore) non
+andava su disco come turno, ma il **riassunto di chiusura** (`Compressore.chiudi`) riassumeva la
+conversazione intera, e finiva intero nell'archivio (`conversazioni.riassunto`, `riassunto_dati`
+e i ricordi proposti). Le parole del turno incerto passavano così su disco dal riassunto.
+
+- **Chiusura** (`Compressore.prepara`, tipo `chiusura`): con un turno incerto nella storia il
+  riassunto si fa dalla storia senza quei turni (`conversazioni.storia_conservata`: il messaggio
+  dell'utente segnato e le risposte dopo, fino alla domanda seguente), sia per il modello della
+  voce (che perde la cache del prefisso: è in secondo piano, a conversazione finita) sia per
+  l'agente e i tagli; senza l'indice degli argomenti. Senza turni incerti tutto come prima.
+- **Riassunti di prima**: un riassunto di compressione fatto anche con un turno incerto (o con un
+  riassunto che lo era), e la coda della conversazione chiusa per una pausa con un turno incerto
+  tra gli ultimi scambi, portano `non_conservati: true`. In memoria valgono come prima (il modello
+  li vede finché la conversazione dura); ma non entrano nel riassunto di chiusura e non vanno su
+  disco con la conversazione in corso (`senza_non_conservati` li toglie da `correnti`: dopo un
+  riavvio la conversazione riparte senza quel riassunto; i turni conservati sono nell'archivio).
+- Si filtra sempre, anche per l'archivio della sessione (minori, ospiti): il riassunto è di ciò
+  che resta, e la ripresa «l'ultima volta…» lo stesso.
+
+Prove a secco in `prova_conserva`: il riassunto su disco senza il turno incerto e il modello che
+non lo riceve, contrario senza turni incerti (la conversazione intera); il riassunto di prima
+segnato che non entra, contrario quello pulito; la conversazione in corso senza il riassunto
+segnato, contrario pulito; la compressione e la coda che segnano solo con il turno incerto.

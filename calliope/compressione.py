@@ -413,9 +413,26 @@ class Compressore:
             taglio, vecchi = None, hist
         riass = conv.riassunto or {}
         system = brain._system_messages()
+        prima = brain._riassunto_msgs(conv)
+        if tipo == "chiusura":
+            # Il riassunto di chiusura va su disco (archivio) intero: senza i turni le cui
+            # parole non restano (12/10 sera, conserva.testo_turno: zona grigia, dubbio con un
+            # minore) e senza un riassunto di prima fatto anche con quelli (compressione, coda
+            # della chiusa). Il modello della voce perde la cache del prefisso: è in secondo
+            # piano, a conversazione finita
+            from .conversazioni import riassunto_non_conservato, storia_conservata
+            pulita = storia_conservata(hist)
+            sporco = riassunto_non_conservato(riass)
+            if len(pulita) != len(hist) or sporco:
+                hist = vecchi = pulita
+                if sporco:
+                    riass, prima = {}, []
+                else:
+                    prima = prima[:1] if riass.get("testo") else []   # niente indice
+                if not any(m.get("role") == "user" for m in hist) and not riass:
+                    return None
         from .brain import OllamaBackend
-        voce = [OllamaBackend._native(m) for m in
-                system + brain._riassunto_msgs(conv) + hist]
+        voce = [OllamaBackend._native(m) for m in system + prima + hist]
         return Lavoro(conv, tipo, taglio, [dict(m) for m in vecchi], voce,
                       (brain.schemi() if hasattr(brain, "schemi")
                        else brain.tools.schemas(online=self.cfg.online)), conv.nome,
@@ -627,9 +644,16 @@ class Compressore:
         brain._archivia_turni()                  # prima di togliere: tutto è nell'archivio
         prima = brain._stima_storia()
         conv.togli_in_testa(idx)
+        from .conversazioni import non_conservato, riassunto_non_conservato
+        # Fatto anche con turni le cui parole non restano (o con un riassunto che li aveva):
+        # vale in memoria, ma non va su disco (12/10 sera, conversazioni.senza_non_conservati)
+        sporco = (any(non_conservato(m) for m in lav.da_riassumere)
+                  or riassunto_non_conservato(conv.riassunto))
         conv.riassunto = {"tipo": "compressione", "dati": dati, "quando": time.time(),
                           "usato": usato,
                           "testo": testo_riassunto(dati, conv.nome, self.max_token)}
+        if sporco:
+            conv.riassunto["non_conservati"] = True
         conv.compressioni += 1
         lav.applicato = True
         if not finale:
