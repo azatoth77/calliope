@@ -421,6 +421,47 @@ def prova_scelta(tmp: Path):
              and len(b.backend.visti) == 1, detto)
 
 
+# ═══════════════════════════ 6. i testi della voce ═══════════════════════════
+
+def prova_testi(tmp: Path):
+    print("— 6. i testi della voce: la prova sullo schermo, i giocatori, i comandi, il fuori tema")
+    import prova_specifica_viva as S
+    from calliope.estensioni.scheda import in_parole
+    agente = S.AgenteVivo(requisiti=REQ, stima="piccolo",
+                          modifiche=[{"tipo": "difetto", "operazioni": []}])
+    cfg, reg, ctx, est, svc, sv = al_collaudo(tmp / "testi", agente)
+    from calliope.tools.sviluppo import ANTEPRIMA
+    svc.sviluppi.collaudo(sv, ANTEPRIMA, True, "aperto in prova sullo schermo", anteprima=True)
+    out = S.chiama(reg, ctx, "sviluppo_correggi", {"problema": "non si vedono i mostri dietro "
+                                                               "le porte"}, 4,
+                   "Non si vedono i mostri dietro le porte.")
+    f = detta(out)
+    verifica("(a) la correzione di un gioco: «…la prova sullo schermo», mai «con «in prova "
+             "sullo schermo»»", "sullo schermo" in f and "«in prova sullo schermo»" not in f, f)
+    s = dict(SCHEDA, ascolta={"comandi": {"ricomincia": ["ricomincia"]}})
+    p = in_parole({"scheda": s})
+    verifica("(b) «è un gioco sullo schermo, da 2 a 4 giocatori» e «con un comando»",
+             p[0] == "è un gioco sullo schermo, da 2 a 4 giocatori"
+             and "si gioca anche a voce, con un comando" in p, str(p))
+    p = in_parole({"scheda": dict(SCHEDA, giocatori={"min": 1, "max": 1},
+                                  ascolta={"comandi": {"a": ["a"], "b": ["b"]}})})
+    verifica("…un giocatore solo e due comandi", p[0] == "è un gioco sullo schermo per un "
+             "giocatore" and "si gioca anche a voce, con 2 comandi" in p, str(p))
+    p = in_parole({"scheda": dict(SCHEDA, giocatori={"min": 2, "max": 2})})
+    verifica("…2 giocatori", p[0] == "è un gioco sullo schermo per 2 giocatori", str(p))
+    svs = svc.sviluppi
+    sv.fuori_tema = {}
+    sv.fase = "sviluppo"
+    r = svs.riga_fuori_tema(sv)
+    verifica("(d) la riga del fuori tema allo sviluppo dice cosa succede, non «siamo allo "
+             "sviluppo»", r.startswith(f"Lo sviluppo di «{sv.titolo}» resta aperto: ")
+             and "siamo allo sviluppo" not in r and "Intanto restiamo" not in r, r)
+    sv.fuori_tema, sv.fase = {}, "collaudo"
+    r = svs.riga_fuori_tema(sv)
+    verifica("…al collaudo «siamo al collaudo»", r.endswith("resta aperto: siamo al collaudo."),
+             r)
+
+
 def main():
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
         tmp = Path(d)
@@ -429,6 +470,7 @@ def main():
         prova_correzione_vaga(tmp)
         prova_chiedi(tmp)
         prova_scelta(tmp)
+        prova_testi(tmp)
     print()
     print("Tutto bene." if not errori else f"{errori} errori.")
     return 1 if errori else 0

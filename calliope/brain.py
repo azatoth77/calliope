@@ -3481,7 +3481,7 @@ class Brain:
         """La frase da aggiungere in coda alla risposta, o None (08/10, modalità sviluppo):
         - una volta al giorno, a chi amministra, gli sviluppi sospesi;
         - con uno sviluppo aperto, dopo una risposta che ha usato soltanto tool d'altro (l'ora,
-          il meteo, la casa) e non lo nomina: «Intanto restiamo sullo sviluppo di …».
+          il meteo, la casa) e non lo nomina: «Lo sviluppo di … resta aperto: …».
         Mai dopo una domanda: deve restare l'ultima cosa detta (l'azione in sospeso)."""
         if not user_text or not self._net("modalita_sviluppo"):
             return None

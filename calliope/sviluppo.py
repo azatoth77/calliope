@@ -341,7 +341,7 @@ class Sviluppo:
     # Gli ingressi del primo lavoro che valgono per tutti i lavori dello sviluppo (A6): i
     # vincoli della persona, la fonte verificata, il file della persona {nome, percorso}
     ingressi: dict = field(default_factory=dict)
-    # La riga «Intanto restiamo sullo sviluppo…» detta dopo un fuori tema (12/10): {fase,
+    # La riga «Lo sviluppo di «…» resta aperto: …» detta dopo un fuori tema (12/10): {fase,
     # quando}; non si ripete nella stessa fase per FUORI_TEMA_S
     fuori_tema: dict = field(default_factory=dict)
     # ── comandi del flusso e ripresa (12/10, lavoro 3) ──
@@ -1932,7 +1932,15 @@ class Sviluppi:
         with self._lock:
             sv.fuori_tema = {"fase": sv.fase, "quando": ora}
         self._salva()
-        return f"Intanto restiamo sullo sviluppo {sv.di()}: siamo {ALLA.get(sv.fase, sv.fase)}."
+        # 12/10 sera: «Intanto restiamo sullo sviluppo di «…»: siamo allo sviluppo.» suonava male
+        if sv.fase == "sviluppo":
+            stato = ("l'agente ci sta lavorando" if self.lavoro_attivo(sv)
+                     else "il lavoro dell'agente è fermo")
+        elif sv.fase == "attivazione":
+            stato = "manca l'attivazione"
+        else:
+            stato = f"siamo {ALLA.get(sv.fase, sv.fase)}"
+        return f"Lo sviluppo {sv.di()} resta aperto: {stato}."
 
     def promemoria_giorno(self, persona) -> str | None:
         """Gli sviluppi sospesi di chi amministra, una volta al giorno (alla prima risposta del

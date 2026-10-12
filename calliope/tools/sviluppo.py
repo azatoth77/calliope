@@ -2533,8 +2533,13 @@ def _sviluppo_correggi(ctx: ToolContext, problema: str = "", **_altro) -> dict:
     from . import agenti as ta
     out = ta._avvia(ctx, svc, lav)
     caso = falliti[-1].get("dati") if falliti else ""
-    frase = frasi_pronte.scegli("sviluppo.correzione",
-                                caso=(f" con «{caso}»" if caso else ""))   # catalogo (12/10)
+    # Un gioco si riprova guardandolo (12/10 sera: «rifacciamo la prova con «in prova sullo
+    # schermo»», il dato del collaudo di un gioco detto come un dato della prova)
+    if svs.e_gioco(sv) or (falliti and falliti[-1].get("anteprima")):
+        caso_detto = " sullo schermo"
+    else:
+        caso_detto = f" con «{caso}»" if caso else ""
+    frase = frasi_pronte.scegli("sviluppo.correzione", caso=caso_detto)   # catalogo (12/10)
     out["conferma"] = out["risposta_finale"] = frase
     _schermo(ctx, sv)
     return out
