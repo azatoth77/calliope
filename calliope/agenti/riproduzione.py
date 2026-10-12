@@ -91,7 +91,12 @@ def _sandbox_prima(sandbox, prima: dict, nuovi: list[str]):
     for f in sandbox.elenca():
         rel = f["percorso"]
         sorgente = Path(sandbox.root) / rel
-        if rel in nuovi or rel in sola or Path(rel).suffix.lower() in ESTENSIONI_DATI:
+        # I test nuovi, il runtime, i file della persona e i dati che non sono codice (esempi
+        # scaricati in questo lavoro, esempi veri): un test che legge un esempio nuovo non deve
+        # «fallire prima» solo perché l'esempio mancava
+        dato = bool(NON_CODICE.search(rel)) and not TEST.search(rel) and rel not in (prima or {})
+        if (rel in nuovi or rel in sola or dato
+                or Path(rel).suffix.lower() in ESTENSIONI_DATI):
             dest = sb.root / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(sorgente.read_bytes())

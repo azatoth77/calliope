@@ -105,6 +105,13 @@ def prova_riproduzione(tmp: Path):
         ("un file di test nuovo accanto a quello di prima → riprodotto", "nuovo_file",
          {"calcola.py": CALCOLA_GIUSTO, "test_calcola.py": TEST_VECCHIO,
           "test_segnalazione.py": TEST_ROSSO}, PRIMA, "riprodotto"),
+        ("contrario: un test nuovo che legge un esempio scaricato adesso e passa anche prima → "
+         "passa_prima (l'esempio va nella versione di prima)", "esempio",
+         {"calcola.py": CALCOLA_GIUSTO, "esempi/zero.json": "[0, 0]\n",
+          "test_calcola.py": TEST_VECCHIO + (
+              "\n    def test_esempio(self):\n        import json\n"
+              "        a, b = json.load(open('esempi/zero.json'))\n"
+              "        self.assertEqual(somma(a, b), 0)\n")}, PRIMA, "passa_prima"),
         ("nessun file di partenza → saltato (la consegna va avanti)", "vuoto",
          {"calcola.py": CALCOLA_GIUSTO, "test_calcola.py": TEST_ROSSO}, {}, "saltato"),
     ]
