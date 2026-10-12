@@ -235,7 +235,10 @@ voce raccontava male gli esiti, i comandi del flusso si perdevano.
    e dove si salvano le scansioni (archivio dei documenti di casa).
 4. **Simulazione d'interrogazione** (S4): prima un progetto. Contenuti dati dal ragazzo o dal libro
    fotografato; giudizio a parole senza voto numerico; l'audio non si salva. *Da approfondire* ·
-   dipende da: il progetto (anche un ascolto lungo senza nome, come nei giochi).
+   dipende da: il progetto (anche un ascolto lungo senza nome, come nei giochi). *(12/10 sera:
+   prima versione come modalità degli esercizi, `esercizi azione=interroga`: domande aperte
+   dall'indice con criteri e giudizio del modello, «da guardare» per i tutori, conti dal codice,
+   pagina del libro chiesta se manca; resta l'ascolto lungo senza nome, [minori](aree/minori.md).)*
 5. **Riscontro emotivo dalla voce** (S5): rimandato a dopo l'interrogazione; resta tra le cose in
    valutazione.
 6. **Immagini con FLUX.2 [klein] 4B** (S6): lo scarico di 40–80 GB e la misura solo quando il piano
