@@ -151,9 +151,12 @@ def stati_schema(sc):
     return sc["properties"]["punti"]["properties"]["input"]["enum"]
 
 
-verifica("schema senza «manca» dopo le domande",
-         "manca" not in stati_schema(ar.schema("codice", True))
-         and "manca" in stati_schema(ar.schema("codice")))
+# Dal 12/10 (M5) «manca» resta possibile dopo le domande: un punto senza risposta non diventa
+# un dato inventato, e lo schema chiede la scelta fatta al suo posto (`scelte`)
+verifica("schema dopo le domande: «manca» resta, con le scelte",
+         "manca" in stati_schema(ar.schema("codice", True))
+         and "scelte" in ar.schema("codice", True)["required"]
+         and "scelte" not in ar.schema("codice")["required"])
 
 # ═══════════════════════════ 2. lavoro_affida di codice ═══════════════════════════
 fake = FakeOllama(modelli=(MODELLO,), caricati=(MODELLO,)).avvia()
@@ -242,7 +245,7 @@ out = delega("Rimborso chilometrico a 0,42 euro al chilometro per 455,5 km", 31,
              testo="0,42 euro al chilometro, ho fatto 455,5 chilometri")
 corpo = nuove(n0)[0]
 verifica("la risposta si analizza di nuovo senza «vaga», con domande e risposta nel prompt",
-         "manca" not in stati_schema(corpo["format"])
+         "scelte" in corpo["format"]["required"]
          and "Domande fatte" in corpo["messages"][1]["content"]
          and "455,5 chilometri" in corpo["messages"][1]["content"])
 verifica("dopo la risposta: la proposta con la specifica", out["risposta_finale"].startswith(

@@ -2869,7 +2869,26 @@
         const b = el("section", "svil-sez");
         b.append(el("h2", "", "Analisi: cosa si è capito"));
         if (v.richiesta) b.append(el("p", "svil-richiesta", "Richiesta: «" + v.richiesta + "»"));
-        b.append(el("p", "", v.specifica || "La specifica non è ancora decisa."));
+        // La specifica rigenerata dai requisiti va a capo per requisito (12/10, la specifica viva)
+        (v.specifica || "La specifica non è ancora decisa.").split("\n").forEach((riga) => {
+          if (riga.trim()) b.append(el("p", "", riga));
+        });
+        // Lo storico delle modifiche, a parte dalla specifica (12/10)
+        const mod = (v.modifiche || []).slice().reverse();
+        if (mod.length) {
+          b.append(el("h3", "", "Modifiche chieste"));
+          const ol = el("ol", "prove-svil");
+          mod.forEach((m) => {
+            const li = el("li", "prova");
+            const t = el("div", "prova-testa");
+            t.append(el("span", "prova-dati", "«" + (m.detto || "") + "»"),
+              el("span", "prova-quando", m.ora ? fmtGiornoOra.format(new Date(m.ora * 1000)) : ""));
+            li.append(t);
+            (m.cambi || []).forEach((c) => li.append(el("p", "prova-esito", c)));
+            ol.append(li);
+          });
+          b.append(ol);
+        }
         return b;
       },
       collaudo: () => {
@@ -2932,6 +2951,7 @@
           li.append(t);
           const nota = x.nota || (!x.si_puo ? x.limite : "");
           if (nota) li.append(el("p", "prova-esito", nota));
+          if (x.dettaglio) li.append(el("p", "sotto", x.dettaglio));
           ol.append(li);
         });
         b.append(ol);

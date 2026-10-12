@@ -6,6 +6,8 @@
 
 **11/10.** Il collaudo di un gioco è vederlo: alla consegna Calliope dice che è un gioco e chiede «Lo apro in prova?»; `sviluppo_collauda` apre la versione candidata sullo schermo da cui si parla in una **partita di prova** (`Giochi.avvia_prova`, scheda con `"prova": true`, cornice «PROVA» disegnata dalla pagina), nello stesso riquadro e con la stessa CSP dei giochi approvati e senza ponte verso Calliope (dal riquadro solo pronto, battito, fine, errore, guasto). Non diventa attiva né chiedibile. Perché è sicuro e i casi veri: [agenti-estensioni](agenti-estensioni.md) (sezione dell'11/10). Dal 11/10 un gioco si apre nella **modalità gioco**: a tutta la finestra (schermo intero vero dove il browser lo permette), con ✕, il pallino della voce e la variante «collaudo» per un gioco in prova; vedi la sezione in fondo. Dall'11/10 sera un gioco può anche **ascoltare la voce**: dichiara un elenco chiuso di comandi (`scheda.ascolta`), le frasi che corrispondono per intero vanno dritte al gioco senza il modello (regola `gioco_comando`) e, finché il gioco aspetta una mossa, anche senza il nome (vedi «I comandi a voce di un gioco»).
 
+**12/10.** Un gioco ha l'analisi della richiesta, con la sua lista di controllo (giocatori, regole, come si vince, voce); la versione nuova di un gioco chiesta senza `gioco=true` è un gioco (il tipo viene dalla scheda del manifesto); le modifiche, anche quelle dette al collaudo con «correggi» («metti sette porte»), cambiano i requisiti, e a voce si dice solo cosa è cambiato. Vedi «La specifica viva» in [agenti-estensioni](agenti-estensioni.md).
+
 ## Moduli
 
 | Stadio | Libreria | Dove |

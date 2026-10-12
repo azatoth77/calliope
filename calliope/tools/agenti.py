@@ -325,7 +325,11 @@ def _proponi(ctx, svc, lav, turno) -> dict:
                                   "argomenti": f'proposta="{lav.id}", file = il numero del '
                                                f'file scelto, tipo e compito come prima'})
     domanda = "Procedo?"
-    if sv is not None and sv.fase == "analisi" and lav.file_utente is None:
+    # Con un file della persona la proposta dice che il file lascia il PC; dopo una modifica
+    # (12/10, la specifica viva: il file resta) si dice cosa è cambiato
+    if sv is not None and sv.fase == "analisi" and (
+            getattr(lav, "file_utente", None) is None
+            or getattr(lav, "cambiamento", None) is not None):
         # Versione 2 (08/10): l'apertura esplicita e la specifica letta sempre, che chiude
         # l'analisi («Entriamo in modalità sviluppo per «…». Ho capito così: … Va bene così, o
         # la cambiamo?»). Prima la modalità non si vedeva (DGX, 08/10 11:06)
@@ -385,7 +389,7 @@ def _analisi(ctx, svc, prof, tipo: str, compito: str, crea, tool: str, nota: str
             e.esito = "chiara"          # un nome inventato non vale: si procede
         else:
             an.ricorda(prof.id, tipo, turno, compito, e)
-            if tipo == "estensione":
+            if tipo in ("estensione", "gioco"):
                 from .estensioni import _gia_fatto
                 return _gia_fatto(ctx, compito, "", e.tool, e.come_chiederlo), e, ""
             esempio = e.come_chiederlo.strip().strip("«»\"' .?")
@@ -423,7 +427,9 @@ def _analisi(ctx, svc, prof, tipo: str, compito: str, crea, tool: str, nota: str
                               "tool": tool,
                               "argomenti": ("compito = la richiesta di prima con le risposte "
                                             "della persona" + {"codice": ", tipo = programma",
-                                                               "estensione": ", tipo = estensione"}
+                                                               "estensione": ", tipo = estensione",
+                                                               "gioco": ", tipo = estensione, "
+                                                                        "gioco = true"}
                                             .get(tipo, ""))}}
         # Tutte le domande anche sul modulo dello schermo personale, se c'è (moduli.offri)
         from ..schermi.moduli import campo
@@ -650,9 +656,20 @@ def _delega_lavoro(ctx: ToolContext, tipo: str = "", compito: str = "", formato:
 
     def crea(compito_agente: str, esito=None):
         v = str(vincoli or "")
+        # I vincoli detti dalla persona e le scelte fatte al suo posto valgono per tutti i
+        # lavori dello sviluppo (12/10, A6: `vincoli_persona`, calliope/sviluppo.py)
+        persona = v
+        scelte = list(getattr(esito, "scelte", None) or []) if esito is not None else []
+        if scelte:
+            persona = (persona + " " if persona else "") + (
+                "Scelte fatte da Calliope dove la persona non ha risposto (dette a lei nella "
+                "proposta): " + "; ".join(scelte) + ".")
+            v = persona
         if esito is not None and esito.esito == "raffinabile":
             v = (v + " " if v else "") + f"Richiesta come detta dalla persona: «{compito}»."
         lv = svc.nuovo(tipo, compito_agente, prof.id, prof.name, level, fmt, modello, v, dati)
+        lv.vincoli_persona = persona.strip()
+        lv.scelte = scelte
         if compito_agente != compito and not modello:
             from ..agenti.servizio import senza_estensione, titolo_da
             lv.titolo = titolo_da(compito)

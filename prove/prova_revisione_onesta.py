@@ -459,7 +459,7 @@ def prova_scheda(tmp: Path):
              v["confronto"] == "fatto" and len(v["requisiti"]) == 7
              and v["requisiti"][0] == {"testo": "porte in numero variabile", "tappa": 1,
                                         "si_puo": True, "limite": "", "stato": "parziale",
-                                        "nota": "Le porte sono sempre 5"}
+                                        "nota": "Le porte sono sempre 5", "dettaglio": ""}
              and v["tappa_n"] == 0, str(v["requisiti"][:2]))
     js = (Path(__file__).resolve().parent.parent / "calliope" / "schermi" / "pagina"
           / "schermo.js").read_text(encoding="utf-8")

@@ -11,7 +11,7 @@
 | Agenti in secondo piano («gemma davanti, agenti dietro») | vLLM con l'API compatibile OpenAI sulla DGX (motore «openai», httpx, via tunnel `ssh -N -L` di OpenSSH), oppure l'API nativa di Ollama (motore «ollama», anche lo stesso Ollama della voce); ciclo scritto in proprio, niente framework; sandbox in un container Docker usa-e-getta sulla DGX (dal 03/10), altrimenti job object di Windows (ctypes) e audit hook | `calliope/agenti/` → `Lavori` (`servizio.py`: coda, proposta, risultati, annuncio, domande a metà lavoro), `Analizzatore` (`richiesta.py`, dal 06/10: analisi della richiesta prima di partire), lavori interrotti da un riavvio (`ripresa.py`, dal 06/10), `Agente` (`ciclo.py`), file della persona (`file_utente.py`), `Tunnel` (`tunnel.py`), `Sandbox` (`sandbox.py` + `_avvio.py`, `scegli_isolamento`; immagine da `setup/linux/sandbox/Dockerfile`), `Arbitro` (`arbitro.py`: anche con vLLM sulla GPU della voce, `ClienteCedevole` per archivio e ufficio; `stessa_gpu` in `impostazioni.py`, `agenti_arbitro`; dal 04/10 `PausaServer`, pausa di vLLM in modalità sviluppo, `pausa_server`, `agenti_pausa_vllm`), `Avanzamento` (`avanzamento.py`: la scheda del lavoro in diretta; dal 08/10 il flusso a sequenza, il registro del flusso e i tetti per giro), `ContestoLavoro` (`contesto_lavoro.py`, dal 05/10: risultati lunghi in `.calliope/passo-N.txt`, diario del lavoro alle soglie; finestra da `contesto.calcola_agenti`), `Ripetizioni` (`ripetizioni.py`, dal 08/10 sera: il giro a vuoto nel ragionamento ferma la passata), `Modello` (`modelli.py`), `carica` (`impostazioni.py`: dgx.yaml / agenti_url), `ClienteOllama` / `ClienteOpenAI` (`remoto.py`, `remoto_openai.py`, `crea_cliente`), `load_agenti`; job object di Windows `winjob.py`; tool in `calliope/tools/agenti.py` (`lavoro_affida`, `lavoro_stato`, `lavoro_annulla`, `lavoro_rispondi`; nomi di prima del 08/10 in `NOMI_VECCHI` di `calliope/tools/registry.py`); terminale `python -m calliope.agenti --prova` |
 | Programmi dell'agente eseguiti in diretta, linguaggi (Python, C#) | stessa sandbox Docker; C# con csc nel container `calliope-sandbox-dotnet` (runtime .NET 10 + Roslyn, niente SDK né NuGet); SSE verso la scheda | `calliope/agenti/esecuzione.py` → `Esecuzioni` (`avvia`, `dimostra`, `ferma`, `frase`); `linguaggi.py`; `esegui_cs.sh`; `setup/linux/sandbox/Dockerfile.dotnet`; tool `programma_esegui` (era `lavori_esegui`), scheda `esecuzione` |
 | Il risultato di un lavoro finito a voce o sullo schermo (07/10) | il modello dell'agente per il riassunto per la voce (thinking spento, tempo massimo) | `calliope/agenti/risultato.py` → `trova`, `scegli`, `dal_disco`, `testo_intero`, `riassunto_voce`, `scheda`, `recenti`, `elenco_detto`, `chiave`, `converti` (dal 07/10: «fammene un PDF»); tool `lavoro_risultato` (era `risultato_lavoro`; `calliope/tools/agenti.py`), `agenti_risultato_s`; prove `prova_risultati.py`, `prova_risultati_ollama.py` |
-| Modalità sviluppo (08/10): un'estensione o un programma come iter a fasi | solo libreria standard; lo stato su disco accanto ai lavori (`sviluppi.json`) | `calliope/sviluppo.py` → `Sviluppi` (`corrente`, `apri`, `passa`, `proposto`, `avviato`, `lavoro_finito`, `estensione_approvata`, `dati_turno`, `promemoria_giorno`, `scheda`, `totali`, `riepilogo_lavoro`, `frase_pronto`), `passo_interno`, `estraneo`, `confronto` e `esempi_veri` (diagnosi dei collaudi, 08/10 notte); tool `sviluppo_apri`, `sviluppo_passo` (azioni in `AZIONI`), `sviluppo_collauda`, `sviluppo_chiedi`, `sviluppo_correggi` in `calliope/tools/sviluppo.py` (prima del 08/10 `sviluppo` e `sviluppo_prova`; `controlla_nuovo`, `apri_se_serve`); `Estensioni.prova_candidata`, `Estensioni.revisione`, `differenze` (`calliope/estensioni/servizio.py`); progetto [`docs/ricerche/2026-10-08-modalita-sviluppo.md`](../ricerche/2026-10-08-modalita-sviluppo.md); prove `prova_sviluppo.py`, `prova_sviluppo_v2.py`, `prova_sviluppo_giro3.py` … `prova_sviluppo_giro6.py`, `prova_diagnosi_collaudi.py`, `prova_scheda_sviluppo.py`, `prova_sviluppo_ollama.py` |
+| Modalità sviluppo (08/10): un'estensione o un programma come iter a fasi | solo libreria standard; lo stato su disco accanto ai lavori (`sviluppi.json`) | `calliope/sviluppo.py` → `Sviluppi` (`corrente`, `apri`, `passa`, `proposto`, `avviato`, `lavoro_finito`, `estensione_approvata`, `dati_turno`, `promemoria_giorno`, `scheda`, `totali`, `riepilogo_lavoro`, `frase_pronto`), `passo_interno`, `estraneo`, `confronto` e `esempi_veri` (diagnosi dei collaudi, 08/10 notte); tool `sviluppo_apri`, `sviluppo_passo` (azioni in `AZIONI`), `sviluppo_collauda`, `sviluppo_chiedi`, `sviluppo_correggi` in `calliope/tools/sviluppo.py` (prima del 08/10 `sviluppo` e `sviluppo_prova`; `controlla_nuovo`, `apri_se_serve`); `Estensioni.prova_candidata`, `Estensioni.revisione`, `differenze` (`calliope/estensioni/servizio.py`); progetto [`docs/ricerche/2026-10-08-modalita-sviluppo.md`](../ricerche/2026-10-08-modalita-sviluppo.md); prove `prova_sviluppo.py`, `prova_sviluppo_v2.py`, `prova_sviluppo_giro3.py` … `prova_sviluppo_giro6.py`, `prova_diagnosi_collaudi.py`, `prova_scheda_sviluppo.py`, `prova_sviluppo_ollama.py`; dal 12/10 la specifica viva (`Sviluppi.aggiorna_requisiti`, `requisiti.chiedi_modifica`, `applica`, `specifica_da_requisiti`, `frase_cambi`; prova `prova_specifica_viva.py`) |
 | Sonde dell'agente e ricollaudo alla consegna (08/10 notte) | solo libreria standard; il container delle estensioni per il ricollaudo, `RetePubblica` per le sonde | `calliope/sonde.py` → `ricollaudo`, `casi_da_riprovare`, `sonda`, `sonde_ok`, `host_noti`, `concedi`, `vocabolario`, `Vocabolario`, `controlla_url`, `come_l_ha_letto`, `SONDA_RETE`; `Estensioni.prova_bozza` (`estensioni/servizio.py`), `restringi_per_sonda` (`estensioni/manifesto.py`), `Lavori._controlla_estensione` (`agenti/servizio.py`), `Agente._sonda_rete` (`agenti/ciclo.py`); nomi pubblici di casa in `calliope/web/rete.py` → `nomi_casa`; specifica in [`docs/ricerche/2026-10-08-sonde-agente.md`](../ricerche/2026-10-08-sonde-agente.md) § 9; prove `prova_sonde.py`, `prova_sonde_attacchi.py` |
 | Estensioni permanenti e guardrail (04/10) | container della sandbox (Docker) per ogni chiamata, JSON-RPC su stdin/stdout (cornice stdio di MCP, senza SDK), solo libreria standard | `calliope/guardrail.py` → `valuta_porta`, `SecondoParere`, `domanda` (la porta delle estensioni: sicura / pericolosa / vietata; i tool di Calliope li decide `politica.decidi` dal 06/10); `calliope/estensioni/` → `Estensioni` (`servizio.py`), `Porta` (`porta.py`), `Esecuzione` (`esecuzione.py`), `Archivio` (`archivio.py`: versioni, impronta), `valida` (`manifesto.py`), `analizza` (`analisi.py`), runtime `_ospite.py` (nel container: `calliope_estensione`), prompt dell'agente (`prompt.py`: `sistema_estensione`), contratto delle capacità (`contratto.py`: `testo`, `CAPACITA_IDS`, CAPACITA.md); rete solo pubblica `calliope/web/rete.py` → `RetePubblica` (registro `uscite.jsonl`, `riepilogo`), dati riservati nel traffico `calliope/web/riservati.py` → `Riservati`, `da_contesto`; piano e permessi dell'agente in `agenti/ciclo.py` (`PIANO`, `CHIEDI_PERMESSO`, `_piano`, `_fuori_piano`); tool `estensione_gestisci` (era `estensioni_gestisci`) in `calliope/tools/estensioni.py`, la creazione passa da `sviluppo_apri` dal 08/10 (prima `estensione_crea`); progetto in `docs/ricerche/2026-10-04-estensioni-e-guardrail.md` (§11–§14 dal 05/10) |
 
@@ -1191,7 +1191,9 @@ attivazione della v4 con i giorni di previsione. I problemi, corretti sul ramo:
   il problema è nel passaggio e non nel codice; il risultato per il modello ha
   `argomenti_passati`.
 - **Analisi** (17:01: «Ho capito così: X. Con questa modifica: X.»): una modifica uguale alla
-  specifica, o che ci sta dentro, non si aggiunge (`_con_modifica`, somiglianza ≥ 0,8). A
+  specifica, o che ci sta dentro, non si aggiunge (`_con_modifica`, somiglianza ≥ 0,8;
+  storico: dal 12/10 `_con_modifica` vale solo con `sviluppo_requisiti: false`, vedi «La
+  specifica viva»). A
   «l'analisi è corretta e voglio implementarla così» (17:02) `sviluppo_passo avanti` ripeteva la
   domanda perché l'offerta era scaduta (tre turni in mezzo): in analisi «avanti» **accetta** la
   specifica già proposta e letta, e il lavoro parte (`sviluppo_avanti_accetta`), con la frase
@@ -2252,7 +2254,7 @@ estensione, gioco). Modulo nuovo `calliope/requisiti.py`.
   `sviluppo_tappe_requisiti` (0 = mai tappe), `sviluppo_verifica_s`, `sviluppo_verifica_voce_s`.
 - **Costo**: alla prima proposta c'è una passata in più del modello dell'agente nel turno della
   voce (stima 1–3 s sulla DGX, da misurare). Per un'estensione si somma all'analisi; per un gioco
-  è l'unica. Alla consegna ci sono una o due passate (estrazione, se la specifica è cambiata, e
+  è l'unica (storico: dal 12/10 anche il gioco ha l'analisi, vedi «La specifica viva»). Alla consegna ci sono una o due passate (estrazione, se la specifica è cambiata, e
   confronto) prima dell'annuncio. **Da misurare sulla DGX** con qwen3.6 vero: i tempi, e se il
   confronto trova davvero le mancanze del caso vero (porte fisse, niente musica) senza «parziale»
   di troppo.
@@ -2294,6 +2296,139 @@ l'agente:
   un nome non dichiarato, o senza `ascolta` nel manifesto, è un errore che dice cosa correggere.
 - **Prove**: `prova_gioco_voce.py` (prova di fumo con i comandi: buono, gestore che lancia, fuori
   elenco, senza `ascolta`, contrario), `prova_agente_guida.py`.
+
+## La specifica viva: i requisiti come fonte delle modifiche (12/10, ramo `specifica-viva`)
+
+Caso vero dell'11–12/10 sulla DGX, uno sviluppo di un gioco (qui con parole nostre: il gioco
+delle porte stregate). La prima specifica diceva «gli oggetti danno punti, i mostri fanno perdere
+un turno»; la persona l'ha corretta («anche i mostri danno punti»). Al collaudo ha chiesto che il
+numero di porte e i punti per vincere «li puoi decidere tu»: è stato registrato al contrario («deve
+permettere di scegliere…»), e la persona l'ha corretto con una terza modifica. Ogni modifica si
+accodava alla specifica con «Con questa modifica: …» (`_con_modifica`), e le contraddizioni
+restavano tutte. La proposta a voce era tagliata a 420 caratteri, quindi le modifiche, in coda,
+non si sentivano mai: «la lettura che segue è identica parola per parola alla precedente». La
+specifica salvata aveva un tetto di 1200 caratteri, e l'ultima modifica sarebbe stata la prima a
+perdersi. I requisiti (`requisiti.py`) non si rifacevano, e alla consegna la revisione onesta ha
+segnalato come difetto proprio ciò che la persona voleva. Analisi del codice e dei log del
+12/10: A1–A7 e M1–M11 (rapporti fuori dal repository). Decisione di Dario: i requisiti sono la
+fonte, per giochi, estensioni e programmi, con la correzione nel punto comune.
+
+- **Una modifica è un'operazione sui requisiti** (`Sviluppi.aggiorna_requisiti`,
+  `requisiti.chiedi_modifica`, `interpreta_modifica`, `applica`). Il modello dell'agente riceve i
+  requisiti numerati (con «tappa dopo», «qui non si può», «già fatto nella versione di prima») e
+  la frase della persona, e risponde con lo schema chiuso a temperatura 0. Il tipo è uno di tre:
+  cambia (un comportamento diverso), difetto (il codice non fa una cosa già chiesta) o vago (non
+  dice cosa, con la domanda). Le operazioni, al più 6, sono aggiungi, sostituisci, togli e
+  anticipa (una cosa di una tappa dopo va fatta adesso). Il codice le applica: numeri fuori
+  dall'elenco e operazioni sconosciute non contano, un requisito si tocca una volta sola per
+  modifica, e sostituire un requisito con lo stesso testo e un dettaglio nuovo è «precisa». Il
+  prompt dice il verso della frase (dal caso vero: «puoi deciderlo tu» vuol dire che lo decide il
+  programma; «anche…» aggiunge e non toglie). Il significato lo decide il modello (principio 10):
+  nessuna regola sul testo nuova.
+- **La specifica si rigenera dai requisiti** (`specifica_da_requisiti`): una riga per requisito,
+  con il dettaglio (numeri e regole che il testo breve non dice: campo `dettaglio`, facoltativo,
+  anche nell'estrazione), e i limiti a parte. Niente coda «Con questa modifica», niente
+  contraddizioni, niente tetto: il 1200 di `proposto`, `avviato` e `_frase_proposta` è tolto.
+  `requisiti_da` è l'impronta della specifica rigenerata, quindi alla consegna i requisiti non si
+  estraggono di nuovo e le tappe non si riassegnano «per testo identico» (M3).
+- **Lo storico a parte** (`Sviluppo.modifiche`: quando, detto, cambi, fase; al più 20). All'agente
+  va come contesto breve nei vincoli («Modifiche chieste dalla persona, dalla più vecchia (la
+  specifica del compito le contiene già, ed è quella che vale): la persona ha detto «…»: «i
+  mostri fanno perdere un turno» è diventato «anche i mostri danno punti»»), le ultime 5; anche
+  in `sviluppo_chiedi`. La scheda ha «## Modifiche chieste», e la vista dello sviluppo le mostra
+  nella sezione dell'analisi (`dati_vista.modifiche`, `textContent`). La specifica sullo schermo
+  va a capo per requisito, e i requisiti mostrano il dettaglio.
+- **Tappe e vincoli dopo una modifica** (M3): un requisito sostituito tiene la sua tappa. Uno
+  aggiunto va con le tappe proposte come all'analisi (il nucleo alla prima), con le tappe accettate
+  nella tappa di adesso (la persona l'ha chiesto adesso), senza tappe alla prima. I vincoli
+  `[TAPPE]` si rifanno sul lavoro nuovo. Quello che il confronto della versione di prima dava per
+  fatto (`era`) va nei vincoli: «Questi la versione di prima li faceva già: devono restare e
+  funzionare come prima». Il confronto alla consegna li ricontrolla tutti.
+- **A voce solo cosa è cambiato** (`frase_cambi`, `Sviluppi._frase_modifica`): «Ho cambiato una
+  cosa: «i mostri fanno perdere un turno» diventa «anche i mostri danno punti». Va bene così, o la
+  cambiamo?» (con le tappe proposte la loro domanda). Oltre tre cambi: «e altre N, sullo
+  schermo». Quello che qui non si può fare si dice («Però «…» oggi qui non si può fare: …»), e
+  anche un'aggiunta che va alla tappa dopo. I testi sono quelli dei requisiti, quindi la persona
+  sente come è stato capito: il 12/10 alle 04:20 avrebbe sentito «aggiungo «la persona sceglie il
+  numero di porte»». Il lavoro in corso si ferma solo quando i requisiti sono cambiati davvero:
+  con una frase vaga o una cosa che c'era già, niente si ferma («Questo nella richiesta c'è già:
+  non cambio niente», con la domanda della proposta aperta; con del codice e un difetto, «Lo
+  faccio correggere?»).
+- **La prima proposta** (`_frase_proposta`): sotto i 420 caratteri la specifica intera, come
+  prima. Oltre non si taglia più in silenzio: «Ho capito così: in breve, …» con il nucleo dei
+  requisiti, «Il resto è sullo schermo.» (senza requisiti, l'inizio fino a una fine di frase e la
+  stessa frase). Ora l'estrazione dei requisiti viene prima della frase.
+- **«Correggi» è la stessa operazione** (A3). `sviluppo_correggi` passa dalla stessa chiamata. Con
+  un comportamento diverso («metti 7 porte», «li puoi decidere tu») i requisiti cambiano, si torna
+  all'analisi e il lavoro nuovo, dai file della versione provata, si propone dicendo cosa è
+  cambiato (`sviluppo_correggi_cambia`). Con un difetto è la correzione di prima. I vincoli dicono
+  «cosa deve fare resta quello del compito», con la specifica intera nel compito; prima c'erano «la
+  specifica NON cambia» e una copia tagliata a 500 caratteri. «Non funziona, correggile» senza dire
+  cosa, al collaudo o alla revisione, senza collaudi falliti né diagnosi da cui partire, dà la
+  domanda del modello o «Cosa non va? Dimmi cosa hai visto o cosa deve fare di diverso…», e
+  l'agente non riparte (`sviluppo_correggi_chiede`, azione in sospeso). La risposta si guarda di
+  nuovo; una seconda risposta vaga non si richiede. Il «sì» a «Lo faccio correggere?» (un collaudo
+  fallito, una diagnosi) non passa dal modello. Un lavoro fermo prima della consegna ha il motivo
+  dell'arresto, e non si chiede. Con il modello in ritardo, «correggi» corregge come prima, mentre
+  «cambia» dice «Adesso non riesco a mettere la modifica nella richiesta. Riprovo?» (niente
+  cambia, `sviluppo_modifica_guasto`).
+- **I requisiti restano con l'estensione** (M2). All'attivazione `estensione_approvata` li salva in
+  `sviluppi.json` (`per_estensione`: requisiti con lo stato del confronto, tappa, tappe, stima,
+  specifica). La frase dell'attivazione dice cosa resta della tappa dopo («Per la tappa dopo
+  restano musica e animazioni: quando vuoi, chiedimi di continuare «…»»). Lo sviluppo di una
+  versione nuova li eredita (`Sviluppi._eredita`): la modifica (`sviluppo_apri` con `modifica`)
+  diventa un'operazione su di loro (`_modifica_esistente`, anche «anticipa» per la tappa dopo),
+  senza estrarli da capo dalla sola frase della modifica, e quello che la versione attiva fa già
+  va nei vincoli. Un'estensione attivata prima del 12/10 non ha requisiti salvati e fa come prima.
+  Un programma chiuso non li tiene (resta da fare, con la sua riapertura: M7).
+- **A2**: estensioni e giochi non partono senza la specifica letta. In `_estensione_crea` vale la
+  stessa guardia dei programmi: con lo sviluppo all'analisi si propone anche dopo il «sì» della
+  politica o del cambio di sviluppo (`sviluppo_analisi_prima`).
+- **A6, il costruttore unico** (`tools/sviluppo._lavoro_dello_sviluppo`): modifica, correzione e
+  «completa» passano dallo stesso; «rifallo» ricopia l'ultimo lavoro e prende il file allo stesso
+  modo. Ogni lavoro ha i vincoli della persona e la fonte verificata del primo lavoro (`ingressi`,
+  da `vincoli_persona` scritto da `tools/agenti` e `tools/estensioni`; non la «richiesta come
+  detta», che dopo una modifica la contraddirebbe), lo storico e, per un programma, il file della
+  persona. Il file viene dal lavoro di prima in memoria, oppure dalla copia su disco
+  (`sviluppi/<S>-file/`, salvata a lavoro finito, tolta alla chiusura), oppure, se la proposta di
+  prima non è partita, è lo stesso file da prendere. «Riparti dal programma di prima» solo con un
+  programma nella cartella. La prima versione di un'estensione non ripassa più dall'analisi a ogni
+  modifica.
+- **A7**: la versione nuova di un gioco senza `gioco=true` è un gioco. Il tipo viene dal manifesto
+  dell'estensione (`e_gioco_estensione`: la scheda), e lo sviluppo e i lavori usano `e_gioco`, non
+  il flag del modello (regola `estensione_gioco_dal_manifesto`, correzione della forma). Contratto,
+  scheletro, requisiti e prompt sono quelli del gioco (`VINCOLO_GIOCO`).
+- **M4 e M5, l'analisi** (`agenti/richiesta.py`). Un gioco ha l'analisi con la sua lista di
+  controllo (giocatori, regole, come si vince, voce), «cosa si può fare» del gioco e una specifica
+  fino a 90 parole. Numeri, grafica, suoni e regole minori sono scelte ragionevoli; manca solo ciò
+  senza cui il gioco sarebbe un altro. Dopo le risposte un punto senza risposta (anche «fai tu», o
+  la terza domanda non sentita) **resta «manca»**: prima diventava «dal contesto» d'ufficio e il
+  dato si inventava in silenzio. L'analisi scrive la scelta fatta al suo posto (`scelte`, al più
+  3), la proposta la dice («Dove non mi hai risposto ho scelto io: la tariffa non me l'hai detta:
+  metto 0,20 euro…, da cambiare») e i vincoli dell'agente la ripetono. Senza altre domande.
+- **Regole nel registro** (nessuna è una regola sul testo: decide il modello o lo stato):
+  `sviluppo_modifica_requisiti`, `sviluppo_modifica_vaga`, `sviluppo_modifica_gia`,
+  `sviluppo_modifica_guasto`, `sviluppo_correggi_cambia`, `sviluppo_correggi_chiede`,
+  `estensione_gioco_dal_manifesto`, e `sviluppo_analisi_prima` anche per le estensioni.
+- **Misura indicativa** (portatile, qwen3:8b su Ollama; qwen3.6 qui non c'è; script fuori dal
+  repository). L'estrazione con il dettaglio dà 9 requisiti in 21 s a caldo (30 a freddo; 23–26 s
+  l'11/10 senza dettaglio). La modifica, su cinque frasi, ha la mediana di 2,7 s (da 1,3 a 9,1 s;
+  la più lunga ha due operazioni con il dettaglio). Tipi giusti 5 su 5 dopo due ritocchi al
+  prompt: la frase vaga ha dato «Quali cose non funzionano?», «le porte non si aprono» è un
+  difetto, «togli la musica» è togli. I contenuti meno: «anche i mostri danno punti» ha sostituito
+  gli oggetti, e «li puoi decidere tu» è diventato «decidi porte e punti». La voce però dice
+  esattamente cosa è cambiato, quindi la persona lo sente e lo corregge. **Da misurare sulla DGX**
+  con qwen3.6: il tempo (`sviluppo_requisiti_s`, 8 s, vale anche per la modifica; oltre 1,2 s «Un
+  attimo, aggiorno la richiesta.») e la qualità delle operazioni sui casi veri.
+- **Non toccato qui** (altri lavori): come la voce riferisce l'esito dell'agente e del collaudo
+  (M1, M9), la revisione detta dal modello, conferme e frase di sfida, le forme chiuse dei comandi
+  del flusso. Restano aperti A4 (l'analisi che ferma il lavoro prima del «sì»: ora almeno non lo
+  ferma se la frase non cambia niente), A5, M7, M8, M10 e M11.
+- **Prove**: `prova_specifica_viva.py` (a secco, ~3 s): il caso vero con tre modifiche di fila,
+  correggi, i contrari, le operazioni, la prima proposta, le scelte, A2, A6, A7, M2 e M4.
+  Aggiornate `prova_revisione_onesta` (il dettaglio nella vista), `prova_analisi_richiesta`
+  («manca» dopo le domande, le scelte), `prova_giro_sera_gioco` (il gioco ha la sua analisi) e
+  `prova_giro_halloween` (un costruttore solo).
 
 ## Voce onesta, meno parole (12/10, ramo `voce-onesta`)
 

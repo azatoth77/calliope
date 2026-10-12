@@ -325,7 +325,7 @@ def prova_correggi_fermo(tmp: Path):
     import inspect
     sorgente = inspect.getsource(ts)
     verifica("«Qui le estensioni non ci sono» solo quando le estensioni mancano davvero",
-             sorgente.count('"Qui le estensioni non ci sono."') == 4
+             sorgente.count('"Qui le estensioni non ci sono."') == 3
              and "if est is None or not sv.estensione:" not in sorgente)
 
 

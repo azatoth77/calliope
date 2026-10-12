@@ -57,6 +57,10 @@ COLLAUDI_CON_ESEMPI = 6
 MAX_ESEMPI = 6
 ESEMPI_VERI = "esempi_veri"
 MAX_STORIA = 60
+MAX_MODIFICHE = 20
+MODIFICHE_AGENTE = 5            # quante modifiche vanno all'agente come contesto
+LIMITE_VOCE = 420               # oltre, la specifica a voce è in breve (12/10)
+FILE_PERSONA = "file"           # la cartella della copia del file della persona (A6)
 TENUTA_CHIUSE_S = 30 * 86400
 # I tool che fanno parte di uno sviluppo: una risposta che ne usa uno è «parlarne»
 TOOL_SVILUPPO = frozenset({"sviluppo_passo", "sviluppo_collauda", "sviluppo_apri", "lavoro_affida",
@@ -322,6 +326,13 @@ class Sviluppo:
     # L'ultimo confronto requisito per requisito con i file consegnati: {lavoro, versione,
     # quando, esito, voci: [{stato, nota}] allineate a `requisiti`, requisiti_da}
     verifica: dict = field(default_factory=dict)
+    # ── la specifica viva (12/10, calliope/requisiti.py) ──
+    # Lo storico delle modifiche, a parte dalla specifica (che si rigenera dai requisiti):
+    # [{quando, detto, cambi: [{op, prima, dopo}], fase}], al più MAX_MODIFICHE
+    modifiche: list = field(default_factory=list)
+    # Gli ingressi del primo lavoro che valgono per tutti i lavori dello sviluppo (A6): i
+    # vincoli della persona, la fonte verificata, il file della persona {nome, percorso}
+    ingressi: dict = field(default_factory=dict)
     # La riga «Intanto restiamo sullo sviluppo…» detta dopo un fuori tema (12/10): {fase,
     # quando}; non si ripete nella stessa fase per FUORI_TEMA_S
     fuori_tema: dict = field(default_factory=dict)
@@ -363,6 +374,10 @@ class Sviluppi:
         self._lock = threading.RLock()
         self.sviluppi: list[Sviluppo] = []
         self.ricordati: dict[str, str] = {}
+        # I requisiti di un'estensione attivata (12/10, M2): una modifica dopo li eredita, e la
+        # tappa che restava non si perde. {nome: {requisiti, tappa, tappe_stato, stima,
+        # specifica, versione, quando}}
+        self.per_estensione: dict[str, dict] = {}
         self._n = 0
         # La cartella di un programma che diventa estensione, per la modalità che si apre subito
         # dopo (tools/sviluppo.py: promuovi → sviluppo_apri)
@@ -400,6 +415,8 @@ class Sviluppi:
             sv.proposto = None                # le proposte non sopravvivono a un riavvio
             self.sviluppi.append(sv)
         self.ricordati = {str(k): str(v) for k, v in (dati.get("ricordati") or {}).items()}
+        self.per_estensione = {str(k): v for k, v in (dati.get("per_estensione") or {}).items()
+                               if isinstance(v, dict)}
         self._n = max([int(dati.get("n") or 0)] + [int(re.sub(r"\D", "", s.id) or 0)
                                                    for s in self.sviluppi])
 
@@ -407,6 +424,7 @@ class Sviluppi:
         from .persistenza import scrivi_json
         with self._lock:
             dati = {"n": self._n, "ricordati": dict(self.ricordati),
+                    "per_estensione": dict(self.per_estensione),
                     "sviluppi": [asdict(s) for s in self.sviluppi]}
         try:
             self.percorso.parent.mkdir(parents=True, exist_ok=True)
@@ -513,11 +531,38 @@ class Sviluppi:
                           gioco=bool(gioco), estensione=estensione)
             sv.da_programma = str(self.da_programma.pop(persona, "") or "")
             sv.storia.append({"quando": adesso, "a": "analisi", "perche": "aperto"})
+            ereditati = self._eredita(sv)
             self.sviluppi.append(sv)
-        self.log(f"[SVILUPPO] {sv.id} aperto: {tipo} «{sv.titolo}» per {persona_nome or persona}")
+        self.log(f"[SVILUPPO] {sv.id} aperto: {tipo} «{sv.titolo}» per {persona_nome or persona}"
+                 + (f", con {ereditati} requisiti dell'estensione" if ereditati else ""))
         self._salva()
         self.agli_schermi(sv)
         return sv
+
+    def _eredita(self, sv: Sviluppo) -> int:
+        """Lo sviluppo di una versione nuova di un'estensione attivata eredita i suoi requisiti
+        (12/10, M2): la tappa che restava resta, e quelli già fatti non si rompono. Il numero
+        dei requisiti ereditati (con il lock)."""
+        rec = self.per_estensione.get(str(sv.estensione or "")) if sv.estensione else None
+        req = [dict(r) for r in (rec or {}).get("requisiti") or [] if isinstance(r, dict)
+               and r.get("testo")]
+        if not req:
+            return 0
+        from . import requisiti as rq
+        sv.requisiti = req
+        sv.tappa = int(rec.get("tappa") or 0)
+        sv.tappe_stato = str(rec.get("tappe_stato") or "")
+        sv.stima = str(rec.get("stima") or "")
+        sv.specifica = str(rec.get("specifica") or "") or rq.specifica_da_requisiti(
+            req, self._cosa_spec(sv), sv.titolo)
+        sv.requisiti_da = rq.impronta(sv.specifica)
+        return len(req)
+
+    @staticmethod
+    def _cosa_spec(sv: Sviluppo) -> str:
+        if sv.tipo == "programma":
+            return "Un programma"
+        return "Un gioco sugli schermi di Calliope" if sv.gioco else "Un'estensione di Calliope"
 
     def tocca(self, sv: Sviluppo):
         """Se ne è parlato adesso (il conto dei minuti per la sospensione riparte)."""
@@ -587,7 +632,10 @@ class Sviluppi:
         with self._lock:
             sv.proposto = lav.id
             spec = str(getattr(lav, "specifica", "") or "").strip()
-            sv.specifica = (spec or str(getattr(lav, "compito", "") or "")).strip()[:1200]
+            # Intera (12/10: il tetto di 1200 caratteri avrebbe perso per prima l'ultima
+            # modifica; dal 12/10 la specifica dopo una modifica è rigenerata dai requisiti)
+            sv.specifica = (spec or str(getattr(lav, "compito", "") or "")).strip()
+            self._ingressi(sv, lav)
             if getattr(lav, "estensione", None):
                 sv.estensione = lav.estensione
             titolo = leggibile(getattr(lav, "titolo", "") or "")
@@ -615,7 +663,8 @@ class Sviluppi:
             lav.tappe = True
             if not sv.specifica:
                 sv.specifica = str(getattr(lav, "specifica", "") or getattr(lav, "compito", "")
-                                   or "")[:1200]
+                                   or "")
+            self._ingressi(sv, lav)
             titolo = leggibile(getattr(lav, "titolo", "") or "")
             if titolo and not getattr(lav, "correzione", False):
                 sv.titolo = titolo[:80]
@@ -714,6 +763,56 @@ class Sviluppi:
                        "test), adattandola a esegui(dati, calliope).").strip()
         sv.da_programma = ""
 
+    # ─────────────────── gli ingressi dello sviluppo (12/10, A6) ───────────────────
+    @staticmethod
+    def _ingressi(sv: Sviluppo, lav):
+        """I vincoli della persona e la fonte verificata del primo lavoro (`vincoli_persona`,
+        scritti da chi crea il lavoro: tools/agenti e tools/estensioni), una volta: valgono
+        per ogni lavoro dello sviluppo (modifica, correzione, «rifallo»). La richiesta come
+        detta la prima volta no: dopo una modifica contraddirebbe i requisiti."""
+        v = str(getattr(lav, "vincoli_persona", "") or "").strip()
+        if v and not sv.ingressi.get("vincoli"):
+            sv.ingressi["vincoli"] = v[:1500]
+
+    def _cartella_file(self, sv: Sviluppo) -> Path:
+        return self.percorso.parent / CONTESTI / f"{sv.id}-{FILE_PERSONA}"
+
+    def salva_file_persona(self, sv: Sviluppo, lav):
+        """La copia del file della persona di un lavoro (A6): su disco accanto ai contesti, per
+        i lavori dopo un riavvio. Una volta; resta finché lo sviluppo è aperto o sospeso."""
+        inp = getattr(lav, "input", None)
+        if not isinstance(inp, dict) or not inp.get("dati") or sv.ingressi.get("file"):
+            return
+        from .persistenza import scrivi_json
+        try:
+            d = self._cartella_file(sv)
+            d.mkdir(parents=True, exist_ok=True)
+            (d / "dati.bin").write_bytes(bytes(inp["dati"]))
+            meta = {k: str(inp.get(k) or "") for k in ("nome", "estensione", "percorso")}
+            scrivi_json(d / "file.json", meta)
+            with self._lock:
+                sv.ingressi["file"] = meta
+        except (OSError, TypeError, ValueError) as e:
+            self.log(f"[SVILUPPO] file della persona di {sv.id} non salvato: {e}")
+
+    def file_persona(self, sv: Sviluppo) -> dict | None:
+        """La copia del file della persona per un lavoro nuovo dello sviluppo: dal lavoro di
+        prima in memoria, o da disco. None se lo sviluppo non ha un file della persona."""
+        for voce in reversed(sv.lavori or []):
+            lv = self._lavoro(voce.get("id"))
+            inp = getattr(lv, "input", None) if lv is not None else None
+            if isinstance(inp, dict) and inp.get("dati"):
+                return dict(inp)
+        meta = sv.ingressi.get("file") if isinstance(sv.ingressi, dict) else None
+        if not meta:
+            return None
+        try:
+            dati = (self._cartella_file(sv) / "dati.bin").read_bytes()
+        except OSError:
+            return None
+        return {"nome": meta.get("nome") or "file", "estensione": meta.get("estensione") or "",
+                "dati": dati, "percorso": meta.get("percorso") or meta.get("nome") or "file"}
+
     def lavoro_finito(self, lav, item: dict) -> dict:
         """L'annuncio di un lavoro di uno sviluppo (dal thread dei lavori, Lavori._annuncia):
         la fase cambia e la frase dice dove siamo. Restituisce l'annuncio (cambiato)."""
@@ -725,6 +824,7 @@ class Sviluppi:
             return item
         with self._lock:
             self._registra_lavoro(sv, lav)          # i numeri finali del lavoro
+        self.salva_file_persona(sv, lav)
         stato = getattr(lav, "stato", "")
         r = getattr(lav, "risultato", None) or {}
         msg = str(item.get("messaggio") or "")
@@ -904,21 +1004,62 @@ class Sviluppi:
         """La proposta in analisi (versione 2): la specifica letta sempre, che chiude
         l'analisi; la prima volta con l'apertura esplicita della modalità. Dal 11/10, alla
         prima proposta, i requisiti della specifica (calliope/requisiti.py): ciò che oggi non si
-        può fare, e la proposta delle tappe per una richiesta troppo ricca."""
-        testo = self._frase_proposta(sv, lav)
-        aggiunta = self._requisiti_proposta(sv, lav, attesa)
-        if not aggiunta:
-            return testo
-        return testo[: -len(DOMANDA_PROPOSTA)].rstrip() + " " + aggiunta
+        può fare, e la proposta delle tappe per una richiesta troppo ricca.
+
+        Dal 12/10 (la specifica viva): dopo una modifica (`lav.cambiamento`) si dice solo cosa è
+        cambiato; alla prima proposta, se la specifica è lunga, a voce i punti principali e «il
+        resto è sullo schermo» (prima un taglio a 420 caratteri nascondeva la coda); le scelte
+        fatte dove la persona non ha risposto si dicono (`lav.scelte`, agenti/richiesta.py)."""
+        cambi = getattr(lav, "cambiamento", None)
+        if cambi is not None:
+            frase = self._frase_modifica(sv, lav, cambi)
+        else:
+            aggiunta = self._requisiti_proposta(sv, lav, attesa)
+            scelte = [str(x).strip().rstrip(".") for x in getattr(lav, "scelte", None) or ()
+                      if str(x).strip()]
+            detto_scelte = ("Dove non mi hai risposto ho scelto io: " + "; ".join(scelte[:3])
+                            + "." if scelte else "")
+            frase = " ".join(p for p in (self._frase_proposta(sv, lav), detto_scelte, aggiunta,
+                                         self.domanda_proposta(sv)) if p)
+        self.agli_schermi(sv)
+        return frase
+
+    def _frase_modifica(self, sv: Sviluppo, lav, cambi: list) -> str:
+        """La proposta dopo una modifica (12/10): solo cosa è cambiato, con i testi dei
+        requisiti (le parole della persona); la specifica intera e i requisiti sono sullo
+        schermo."""
+        from . import requisiti as rq
+        with self._lock:
+            prima = not sv.aperta_detta
+            sv.aperta_detta = True
+            spec = str(getattr(lav, "specifica", "") or "").strip()
+            if spec:
+                sv.specifica = spec
+        self._salva()
+        self._metti_vincoli(sv, lav)
+        cosa = "il programma " if sv.tipo == "programma" else ""
+        parti = [f"Entriamo in modalità sviluppo per {cosa}«{sv.titolo}»." if prima else ""]
+        if cambi:
+            parti.append(rq.frase_cambi(cambi))
+        else:
+            difetto = re.sub(r"\s+", " ", str(getattr(lav, "da_correggere", "") or "")).strip()
+            parti.append(f"Cosa deve fare resta com'era: faccio correggere «{difetto[:200]}»."
+                         if difetto else "Cosa deve fare resta com'era.")
+        dopo = [r["testo"] for r in rq.dopo_la_tappa(sv.requisiti, sv.tappa)] \
+            if sv.tappe_stato in ("proposte", "accettate") and prima else []
+        if dopo:
+            parti.append(f"Per la tappa dopo restano: {rq.elenco_voce(dopo)}.")
+        parti.append(self.domanda_proposta(sv))
+        return " ".join(p for p in parti if p)
 
     def domanda_proposta(self, sv: Sviluppo) -> str:
         """La domanda in fondo alla proposta (l'azione in sospeso, tools/agenti._proponi)."""
         return DOMANDA_TAPPE if sv.tappe_stato == "proposte" else DOMANDA_PROPOSTA
 
     def _requisiti_proposta(self, sv: Sviluppo, lav, attesa=None) -> str:
-        """Alla prima proposta: i requisiti estratti, i limiti detti, le tappe proposte (con la
-        domanda in fondo) e i vincoli per l'agente. "" se non c'è niente da aggiungere (e la
-        proposta resta com'era)."""
+        """Alla prima proposta: i requisiti estratti, i limiti detti, le tappe proposte e i
+        vincoli per l'agente (la domanda la mette `frase_proposta`). "" se non c'è niente da
+        aggiungere (e la proposta resta com'era)."""
         from . import requisiti as rq
         if sv.tappe_stato or sv.requisiti or not getattr(self.cfg, "sviluppo_requisiti", True):
             # Una proposta dopo la prima (una modifica): la tappa decisa vale ancora
@@ -926,7 +1067,7 @@ class Sviluppi:
             return ""
         spec = sv.specifica or sv.richiesta
         req, stima, esito = rq.estrai(
-            self.lavori, self.cfg, spec, sv.richiesta, sv.tipo, bool(sv.gioco),
+            self.lavori, self.cfg, spec, sv.richiesta, sv.tipo, self.e_gioco(sv),
             float(getattr(self.cfg, "sviluppo_requisiti_s", 8.0) or 8.0), attesa)
         if not req:
             self.log(f"[SVILUPPO] {sv.id}: requisiti non estratti ({esito})")
@@ -945,9 +1086,6 @@ class Sviluppi:
         parti = [rq.frase_limiti(req)]
         if tappe:
             parti.append(rq.frase_tappe(req))
-            parti.append(DOMANDA_TAPPE)
-        else:
-            parti.append(DOMANDA_PROPOSTA)
         return " ".join(p for p in parti if p)
 
     def _metti_vincoli(self, sv: Sviluppo, lav):
@@ -969,26 +1107,175 @@ class Sviluppi:
         self._salva()
         self._metti_vincoli(sv, lav)
 
+    # ─────────────────────────── la specifica viva (12/10) ───────────────────────────
+    def _tappa_nuovo(self, sv: Sviluppo):
+        """La tappa di un requisito aggiunto da una modifica: con le tappe proposte il nucleo
+        alla prima e il resto dopo (come all'analisi); con le tappe accettate quella di adesso
+        (la persona l'ha chiesto adesso); senza tappe la prima."""
+        def tappa(r: dict) -> int:
+            if sv.tappe_stato == "proposte":
+                return 1 if r.get("nucleo") else 2
+            if sv.tappe_stato == "accettate":
+                return max(1, sv.tappa)
+            return 1
+        return tappa
+
+    def _annota_fatti(self, sv: Sviluppo):
+        """Lo stato dell'ultimo confronto valido scritto nei requisiti (`era`): dopo una
+        modifica gli indici cambiano, e quello che la versione di prima faceva già non si deve
+        rompere (12/10, M2). Con il lock."""
+        if not self.verifica_valida(sv):
+            return
+        for r, v in zip(sv.requisiti, sv.verifica.get("voci") or ()):
+            if isinstance(v, dict) and v.get("stato"):
+                r["era"] = v["stato"]
+
+    def aggiorna_requisiti(self, sv: Sviluppo, testo: str, detto: str = "", attesa=None,
+                           dalla_voce: bool = True) -> dict:
+        """Una modifica detta dalla persona diventa delle operazioni sui requisiti (12/10, la
+        specifica viva; calliope/requisiti.py): il modello dell'agente le sceglie (una passata
+        breve, schema chiuso, temperatura 0), il codice le applica, la specifica si rigenera dai
+        requisiti e la modifica va nello storico (a parte). Senza requisiti si estraggono prima
+        dalla specifica di adesso. Restituisce {esito, tipo, domanda, cambi}: esito «modello»
+        se il modello ha risposto (altrimenti «tempo», «errore: …», «senza agente»); tipo
+        cambia, difetto o vago; i cambi solo se applicati. Mai un'eccezione."""
+        from . import requisiti as rq
+        tempo = float(getattr(self.cfg, "sviluppo_requisiti_s", 8.0) or 8.0)
+        gioco = self.e_gioco(sv)
+        try:
+            with self._lock:
+                self._annota_fatti(sv)
+                req = [dict(r) for r in sv.requisiti]
+            if not req:
+                spec = sv.specifica or sv.richiesta
+                req, stima, esito = rq.estrai(self.lavori, self.cfg, spec, sv.richiesta, sv.tipo,
+                                              gioco, tempo, attesa, dalla_voce)
+                if not req:
+                    return {"esito": esito}
+                rq.assegna_tappe(req, False)
+                with self._lock:
+                    sv.stima = stima or sv.stima
+            codice = bool(sv.versione or sv.cartella)
+            dati, esito = rq.chiedi_modifica(self.lavori, self.cfg, req, testo, detto, sv.tipo,
+                                             gioco, codice, sv.tappa if sv.tappe_stato in (
+                                                 "proposte", "accettate") else 0, tempo,
+                                             attesa, dalla_voce)
+        except Exception as e:  # noqa: BLE001 — si dice che non è riuscito
+            return {"esito": f"errore: {type(e).__name__}: {e}"}
+        if dati is None:
+            self.log(f"[SVILUPPO] {sv.id}: modifica non tradotta in requisiti ({esito})")
+            return {"esito": esito}
+        mod = rq.interpreta_modifica(dati, len(req))
+        out = {"esito": "modello", "tipo": mod["tipo"], "domanda": mod["domanda"], "cambi": []}
+        if mod["tipo"] != "cambia":
+            self.log(f"[SVILUPPO] {sv.id}: modifica «{testo[:60]}»: {mod['tipo']}")
+            return out
+        tappa = max(1, sv.tappa) if sv.tappe_stato == "accettate" else (
+            1 if sv.tappe_stato == "proposte" else 0)
+        nuovi, cambi = rq.applica(req, mod["operazioni"], self._tappa_nuovo(sv), tappa)
+        if not cambi:
+            self.log(f"[SVILUPPO] {sv.id}: modifica «{testo[:60]}»: c'era già")
+            with self._lock:
+                if not sv.requisiti:
+                    # I requisiti appena estratti restano (la specifica non cambia)
+                    sv.requisiti, sv.requisiti_da = req, rq.impronta(sv.specifica or
+                                                                      sv.richiesta)
+            self._salva()
+            return out
+        with self._lock:
+            sv.requisiti = nuovi
+            sv.specifica = rq.specifica_da_requisiti(nuovi, self._cosa_spec(sv), sv.titolo)
+            sv.requisiti_da = rq.impronta(sv.specifica)
+            sv.modifiche.append({"quando": time.time(), "detto": str(testo or "")[:300],
+                                 "cambi": cambi, "fase": sv.fase})
+            sv.modifiche = sv.modifiche[-MAX_MODIFICHE:]
+        self.log(f"[SVILUPPO] {sv.id}: modifica «{testo[:60]}» → "
+                 + "; ".join(f"{c['op']} {c.get('prima') or ''}→{c.get('dopo') or ''}"
+                             for c in cambi)[:300] + " (regola sviluppo_modifica_requisiti)")
+        self._salva()
+        self.agli_schermi(sv)
+        out["cambi"] = cambi
+        return out
+
+    def storico_per_agente(self, sv: Sviluppo) -> str:
+        """Le ultime modifiche per l'agente, come contesto breve e a parte dalla specifica
+        (12/10): «prima era X, la persona ha chiesto Y»."""
+        voci = []
+        for m in sv.modifiche[-MODIFICHE_AGENTE:]:
+            pezzi = []
+            for c in m.get("cambi") or ():
+                if c.get("op") == "sostituisci":
+                    pezzi.append(f"«{c.get('prima')}» è diventato «{c.get('dopo')}»")
+                elif c.get("op") == "togli":
+                    pezzi.append(f"tolto «{c.get('prima')}»")
+                elif c.get("op") == "anticipa":
+                    pezzi.append(f"«{c.get('dopo')}» anticipato a adesso")
+                elif c.get("op") == "precisa":
+                    pezzi.append(f"«{c.get('dopo')}» precisato: {c.get('dettaglio')}")
+                else:
+                    pezzi.append(f"aggiunto «{c.get('dopo')}»")
+            if pezzi:
+                voci.append(f"la persona ha detto «{str(m.get('detto') or '')[:160]}»: "
+                            + ", ".join(pezzi))
+        if not voci:
+            return ""
+        return ("Modifiche chieste dalla persona, dalla più vecchia (la specifica del compito le "
+                "contiene già, ed è quella che vale): " + "; ".join(voci) + ".")
+
+    def _ricorda_requisiti(self, sv: Sviluppo, n):
+        """I requisiti dell'estensione attivata, per le versioni dopo (12/10, M2)."""
+        if not sv.estensione or not sv.requisiti:
+            return
+        with self._lock:
+            self._annota_fatti(sv)
+            self.per_estensione[sv.estensione] = {
+                "requisiti": [dict(r) for r in sv.requisiti], "tappa": sv.tappa,
+                "tappe_stato": sv.tappe_stato, "stima": sv.stima, "specifica": sv.specifica,
+                "versione": n, "quando": time.time()}
+
+    def restano_dopo(self, nome) -> list[str]:
+        """I requisiti di una tappa dopo, non ancora fatti, dell'estensione attivata `nome`."""
+        from . import requisiti as rq
+        rec = self.per_estensione.get(str(nome or "")) or {}
+        tappa = int(rec.get("tappa") or 0)
+        if rec.get("tappe_stato") not in ("proposte", "accettate") or tappa <= 0:
+            return []
+        return [r["testo"] for r in rq.dopo_la_tappa(rec.get("requisiti") or [], tappa)
+                if r.get("era") != "fatto"]
+
     def _frase_proposta(self, sv: Sviluppo, lav) -> str:
+        """«Entriamo in modalità sviluppo per «…». Ho capito così: ….», senza la domanda. Una
+        specifica lunga (oltre LIMITE_VOCE) non si taglia più in silenzio (12/10: la coda,
+        dove stavano le modifiche, non si sentiva mai): a voce i punti principali dai requisiti
+        (il nucleo), oppure l'inizio fino a una fine di frase, e «il resto è sullo schermo»."""
+        from . import requisiti as rq
         spec = re.sub(r"\s+", " ", str(getattr(lav, "specifica", "") or "").strip()
                       or str(getattr(lav, "compito", "") or "").strip()).rstrip(". ")
-        if len(spec) > 420:
-            taglio = spec[:420]
-            spec = taglio[:taglio.rfind(".")] if "." in taglio[200:] else taglio.rsplit(" ", 1)[0]
+        lunga = len(spec) > LIMITE_VOCE
+        if lunga:
+            fare = rq.da_fare(sv.requisiti)
+            punti = [r["testo"] for r in fare if r.get("nucleo")] or [r["testo"] for r in fare]
+            if punti:
+                spec = "in breve, " + rq.elenco_voce(punti, 5)
+            else:
+                taglio = spec[:LIMITE_VOCE]
+                spec = (taglio[:taglio.rfind(".")] if "." in taglio[200:]
+                        else taglio.rsplit(" ", 1)[0])
         spec = spec[:1].lower() + spec[1:] if spec[:2] != spec[:2].upper() else spec
         with self._lock:
             prima = not sv.aperta_detta
             sv.aperta_detta = True
             sv.specifica = (str(getattr(lav, "specifica", "") or "").strip()
-                            or sv.specifica or str(getattr(lav, "compito", "") or ""))[:1200]
+                            or sv.specifica or str(getattr(lav, "compito", "") or ""))
         self._salva()
         cosa = "il programma " if sv.tipo == "programma" else ""
         testa = (f"Entriamo in modalità sviluppo per {cosa}«{sv.titolo}». " if prima else "")
-        if sv.gioco:
+        if self.e_gioco(sv):
             # Un gioco si fa come scheda sugli schermi (10/10, DGX delle 15:56: un gioco chiesto
             # come programma era «impossibile»): lo si dice, insieme alla specifica
             testa += "Lo faccio come gioco sugli schermi di Calliope. "
-        return f"{testa}Ho capito così: {spec}. {DOMANDA_PROPOSTA}"
+        return (f"{testa}Ho capito così: {spec}."
+                + (" Il resto è sullo schermo." if lunga else ""))
 
     # ─────────────────────────── revisione onesta (11/10) ───────────────────────────
     def file_consegnati(self, sv: Sviluppo) -> dict:
@@ -1022,7 +1309,7 @@ class Sviluppi:
         try:
             if not sv.requisiti or sv.requisiti_da != rq.impronta(spec):
                 req, stima, esito = rq.estrai(
-                    self.lavori, self.cfg, spec, sv.richiesta, sv.tipo, bool(sv.gioco),
+                    self.lavori, self.cfg, spec, sv.richiesta, sv.tipo, self.e_gioco(sv),
                     min(tempo, float(getattr(self.cfg, "sviluppo_requisiti_s", 8.0) or 8.0)
                         * 2), attesa, dalla_voce)
                 if req:
@@ -1114,7 +1401,29 @@ class Sviluppi:
             out.append({"testo": str(r.get("testo") or ""), "tappa": int(r.get("tappa") or 1),
                         "si_puo": bool(r.get("si_puo", True)),
                         "limite": str(r.get("limite") or ""),
-                        "stato": str(v.get("stato") or ""), "nota": str(v.get("nota") or "")})
+                        "stato": str(v.get("stato") or ""), "nota": str(v.get("nota") or ""),
+                        "dettaglio": str(r.get("dettaglio") or "")})
+        return out
+
+    @staticmethod
+    def dati_modifiche(sv: Sviluppo) -> list[dict]:
+        """Lo storico delle modifiche per la vista e la scheda (12/10): ora, detto, cambi."""
+        out = []
+        for m in sv.modifiche[-MAX_MODIFICHE:]:
+            cambi = []
+            for c in m.get("cambi") or ():
+                if c.get("op") == "sostituisci":
+                    cambi.append(f"«{c.get('prima')}» → «{c.get('dopo')}»")
+                elif c.get("op") == "togli":
+                    cambi.append(f"tolto «{c.get('prima')}»")
+                elif c.get("op") == "anticipa":
+                    cambi.append(f"anticipato «{c.get('dopo')}»")
+                elif c.get("op") == "precisa":
+                    cambi.append(f"precisato «{c.get('dopo')}»: {c.get('dettaglio')}")
+                else:
+                    cambi.append(f"aggiunto «{c.get('dopo')}»")
+            out.append({"ora": float(m.get("quando") or 0), "detto": str(m.get("detto") or ""),
+                        "cambi": cambi})
         return out
 
     # ─────────────────────────── il contesto conservato (versione 2) ───────────────────────────
@@ -1183,6 +1492,17 @@ class Sviluppi:
             self._file_contesto(sv).unlink()
         except OSError:
             pass
+        # La copia del file della persona (12/10, A6) se ne va con lo sviluppo
+        d = self._cartella_file(sv)
+        for p in (d / "dati.bin", d / "file.json"):
+            try:
+                p.unlink()
+            except OSError:
+                pass
+        try:
+            d.rmdir()
+        except OSError:
+            pass
 
     def file_sviluppo(self, sv: Sviluppo) -> dict[str, str]:
         """I file dello sviluppo adesso: la versione candidata dell'estensione (o quella
@@ -1237,6 +1557,9 @@ class Sviluppi:
         file (troncati), le fonti del manifesto."""
         righe = [f"Sviluppo: {sv.cosa()} «{sv.titolo}» ({sv.id}), fase: {NOMI.get(sv.fase)}.",
                  f"Specifica: {sv.specifica or sv.richiesta}"]
+        storico = self.storico_per_agente(sv)
+        if storico:
+            righe.append(storico)
         arresto = self.motivo_arresto(sv)
         if arresto:
             # Il perché dell'arresto lo decide Calliope, non il codice (11/10, DGX delle 15:52:
@@ -1360,6 +1683,9 @@ class Sviluppi:
         sv = self.dell_estensione(nome)
         if sv is None:
             return None
+        # I requisiti restano con l'estensione (12/10, M2): la tappa dopo non si perde e una
+        # modifica li eredita
+        self._ricorda_requisiti(sv, n)
         self.passa(sv, "attivazione", f"versione {n} approvata")
         self.chiudi(sv, "attivata")
         return sv
@@ -1550,8 +1876,14 @@ class Sviluppi:
 
     def dati_turno(self, sv: Sviluppo) -> str:
         spec = re.sub(r"\s+", " ", sv.specifica or sv.richiesta or "da definire").strip()
+        if sv.modifiche and sv.requisiti:
+            # Dopo una modifica (12/10) i requisiti, brevi: i primi 600 caratteri della
+            # specifica rigenerata potevano lasciare fuori proprio l'ultima modifica
+            from . import requisiti as rq
+            spec = "requisiti: " + "; ".join(r["testo"] for r in rq.da_fare(sv.requisiti))
         return SVILUPPO_MSG.format(cosa=sv.cosa(), titolo=sv.titolo, id=sv.id,
-                                   dove=self.dove(sv), spec=spec[:600].rstrip("."),
+                                   dove=self.dove(sv),
+                                   spec=spec[:900 if sv.modifiche else 600].rstrip("."),
                                    riga=self.riga_fase(sv), alla=ALLA.get(sv.fase, sv.fase))
 
     def dati_sospesi(self, persona) -> str | None:
@@ -1587,9 +1919,15 @@ class Sviluppi:
                 righe.append(f"- **adesso: {NOMI[f]}**")
             else:
                 righe.append(f"- manca: {NOMI[f]}")
-        righe += ["", "## Specifica", "", sv.specifica or sv.richiesta or "da definire"]
+        righe += ["", "## Specifica", "", (sv.specifica or sv.richiesta or "da definire")
+                  .replace("\n", "\n\n")]
         if sv.tappa and sv.tappe_stato in ("proposte", "accettate"):
             righe += ["", f"A tappe: adesso la tappa {sv.tappa}."]
+        if sv.modifiche:
+            # Lo storico a parte (12/10): la specifica qui sopra le contiene già
+            righe += ["", "## Modifiche chieste", ""]
+            for m in self.dati_modifiche(sv):
+                righe.append(f"- {_ora(m['ora'])}, «{m['detto']}»: " + "; ".join(m["cambi"]))
         # Requisito per requisito, rispetto alla richiesta (11/10, revisione onesta)
         righe += self.righe_confronto(sv)
         if sv.collaudi:
@@ -1697,6 +2035,7 @@ class Sviluppi:
                 "giro": int(getattr(lav, "giro", 1) or 1) if lav is not None else 0,
                 "tappa": tappa, "correzioni": sv.correzioni,
                 "richiesta": sv.richiesta, "specifica": sv.specifica,
+                "modifiche": self.dati_modifiche(sv),
                 "collaudi": collaudi, "chiesti": chiesti, "revisione": sv.revisione,
                 "nota": sv.nota, "totali": self.totali(sv),
                 # Requisito per requisito rispetto alla richiesta, e la tappa (11/10)

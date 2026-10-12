@@ -26,6 +26,17 @@ compone il codice con i testi dei requisiti, e della nota del modello si dice al
 breve ripulita (niente nomi di tool, ordini o indirizzi). Se il confronto non si può fare lo si
 dice: mai «tutto in ordine» senza il confronto.
 
+**La specifica viva (12/10).** Caso vero dell'11–12/10 (un gioco di porte e mostri): ogni
+modifica si accodava alla specifica con «Con questa modifica: …», le contraddizioni restavano
+(prima «gli oggetti danno punti», poi «anche i mostri»), la lettura a voce tagliata a 420
+caratteri non diceva mai la modifica, e la revisione onesta ha segnalato come difetto ciò che la
+persona voleva. Dal 12/10 **i requisiti sono la fonte**: una modifica diventa delle operazioni
+sui requisiti (aggiungi, sostituisci, togli, anticipa), chieste al modello dell'agente con lo
+schema chiuso e la temperatura 0 (`chiedi_modifica`), applicate dal codice (`applica`); la
+specifica per l'agente si rigenera dai requisiti (`specifica_da_requisiti`); a voce si dice solo
+cosa è cambiato (`frase_cambi`). La stessa passata dice se la frase chiede un comportamento
+diverso (cambia), un difetto del codice (difetto) o non dice cosa (vago, con la domanda).
+
 Solo libreria standard; il client è quello dell'agente (agenti/servizio.Lavori.cliente).
 """
 
@@ -40,7 +51,14 @@ import time
 STATI = ("fatto", "parziale", "manca")
 STIME = ("piccolo", "medio", "grande")
 MAX_REQUISITI = 12
+MAX_TUTTI = 24                 # requisiti dopo le modifiche (un tetto di sicurezza, non un taglio)
+MAX_OPERAZIONI = 6             # operazioni per modifica
 MAX_TESTO = 80
+MAX_DETTAGLIO = 240
+OPERAZIONI = ("aggiungi", "sostituisci", "togli", "anticipa")
+TIPI_MODIFICA = ("cambia", "difetto", "vago")
+ATTESA_MODIFICA = "Un attimo, aggiorno la richiesta."
+NOMI_CAMBI = 3                 # quanti cambiamenti si dicono a voce, poi «e altri N»
 MAX_FILE_CAR = 60_000          # i caratteri dei file consegnati dati al confronto
 ATTESA_DOPO_S = 1.2
 ATTESA_ANALISI = "Un attimo, metto in fila quello che mi chiedi."
@@ -68,10 +86,30 @@ SISTEMA_ESTRAI = """Sei l'analista dei requisiti di Calliope, un'assistente voca
 Regole:
 - un requisito per ogni cosa chiesta e indipendente (una funzione, un comportamento, un elemento, un vincolo detto: «porte in numero variabile», «scelta della porta a voce», «musica cupa ma divertente», «più giocatori», «punti che crescono», «mostri, dolci e cose buffe dietro le porte»);
 - testo: poche parole (al più 8), con le parole della persona, da dire a voce; niente markdown;
+- dettaglio: solo se il testo breve perde numeri, valori o regole dette dalla persona («da 3 a 5 porte, a caso a ogni partita»), una frase con quelle; altrimenti vuoto;
 - non inventare requisiti che la persona non ha chiesto (niente test, sicurezza, linguaggio, dettagli tecnici); non spezzare una cosa sola in tanti pezzi, non unire due cose diverse;
 - nucleo: true per il minimo che rende la cosa usabile e giocabile da sola (il cuore); false per ciò che si può aggiungere dopo (abbellimenti, suoni, varianti, comandi in più);
 - si_puo: false solo se qui non si può fare (vedi «Cosa si può fare qui»), con limite = il perché in una frase breve da dire a voce; altrimenti true e limite vuoto;
 - stima: quanto è grande il lavoro per un buon programmatore: piccolo (un'ora), medio (mezza giornata), grande (più di una giornata o molte parti che devono andare insieme).
+
+Cosa si può fare qui:
+{capacita}"""
+
+SISTEMA_MODIFICA = """Sei l'analista dei requisiti di Calliope, un'assistente vocale di casa. Uno sviluppo ha già i suoi requisiti, numerati. La persona ha appena detto qualcosa sullo sviluppo: traduci la sua frase in operazioni sui requisiti. Non scrivi codice e non parli alla persona: compili il JSON.
+
+tipo:
+- cambia: vuole che faccia qualcosa di diverso, in più o in meno rispetto ai requisiti (anche se lo dice come «correggi», «non deve…», «metti 7 porte», «toglila»);
+- difetto: dice che qualcosa non va, non funziona, si blocca o dà un errore in una cosa che i requisiti chiedono già, anche senza nominarla («non trova Bergamo», «si blocca», «il punteggio non si aggiorna», «le porte non si aprono» quando c'è «si sceglie una porta»): nessuna operazione;
+- vago: non dice né cosa vuole di diverso né cosa non va («non funziona», «sistemalo», «ci sono delle cose da sistemare»): nessuna operazione, e domanda = una domanda breve da dire a voce per saperlo.
+
+operazioni (solo con cambia, al più {max_op}):
+- sostituisci (numero): il requisito numero N diventa un altro; usala quando la frase contraddice, rovescia o precisa un requisito che c'è: MAI lasciare due requisiti in contrasto. Il testo nuovo dice com'è adesso, non com'era («i mostri fanno perdere un turno» con la frase «anche i mostri danno punti» → testo «anche i mostri danno punti»);
+- togli (numero): la persona non lo vuole più;
+- aggiungi: una cosa nuova che non tocca nessun requisito che c'è;
+- anticipa (numero): un requisito segnato «tappa dopo» va fatto adesso.
+Per aggiungi e sostituisci: testo = poche parole (al più 8) con le parole della persona, da dire a voce; dettaglio = una frase con i numeri, i valori o le regole che il testo breve non dice, altrimenti vuoto; nucleo = true se è il cuore della cosa; si_puo = false solo se è tra ciò che qui è «Impossibile» (vedi «Cosa si può fare qui»), con limite = il perché in una frase breve; altrimenti true.
+
+Attenzione al verso della frase: «puoi deciderlo tu», «lo decide il gioco», «sceglilo a caso» vogliono dire che lo decide il programma, NON che lo sceglie la persona; «non deve più…» è togli o sostituisci, mai aggiungi; «anche…» aggiunge e non toglie niente («anche i mostri danno punti»: gli oggetti continuano a darne). Non toccare i requisiti di cui la frase non parla. Se chiede una cosa che i requisiti dicono già così com'è: difetto se dice che il codice non la fa, altrimenti cambia senza operazioni.
 
 Cosa si può fare qui:
 {capacita}"""
@@ -94,11 +132,28 @@ def schema_estrai() -> dict:
         "requisiti": {"type": "array", "maxItems": MAX_REQUISITI, "items": {
             "type": "object", "properties": {
                 "testo": {"type": "string", "maxLength": MAX_TESTO},
+                "dettaglio": {"type": "string", "maxLength": MAX_DETTAGLIO},
                 "nucleo": {"type": "boolean"}, "si_puo": {"type": "boolean"},
                 "limite": {"type": "string", "maxLength": 200}},
             "required": ["testo", "nucleo", "si_puo"]}},
         "stima": {"type": "string", "enum": list(STIME)}},
         "required": ["requisiti", "stima"]}
+
+
+def schema_modifica() -> dict:
+    return {"type": "object", "properties": {
+        "tipo": {"type": "string", "enum": list(TIPI_MODIFICA)},
+        "domanda": {"type": "string", "maxLength": 200},
+        "operazioni": {"type": "array", "maxItems": MAX_OPERAZIONI, "items": {
+            "type": "object", "properties": {
+                "op": {"type": "string", "enum": list(OPERAZIONI)},
+                "numero": {"type": "integer"},
+                "testo": {"type": "string", "maxLength": MAX_TESTO},
+                "dettaglio": {"type": "string", "maxLength": MAX_DETTAGLIO},
+                "nucleo": {"type": "boolean"}, "si_puo": {"type": "boolean"},
+                "limite": {"type": "string", "maxLength": 200}},
+            "required": ["op"]}}},
+        "required": ["tipo", "operazioni"]}
 
 
 def schema_confronto(n: int) -> dict:
@@ -261,8 +316,12 @@ def interpreta_estratti(dati) -> tuple[list[dict], str]:
             continue
         visti.add(chiave)
         si_puo = r.get("si_puo") is not False
-        out.append({"testo": testo, "nucleo": r.get("nucleo") is True, "si_puo": si_puo,
-                    "limite": "" if si_puo else pulito(r.get("limite"), 160)})
+        voce = {"testo": testo, "nucleo": r.get("nucleo") is True, "si_puo": si_puo,
+                "limite": "" if si_puo else pulito(r.get("limite"), 160)}
+        dettaglio = pulito(r.get("dettaglio"), MAX_DETTAGLIO)
+        if dettaglio and dettaglio.lower() != chiave:
+            voce["dettaglio"] = dettaglio
+        out.append(voce)
         if len(out) >= MAX_REQUISITI:
             break
     stima = str((dati or {}).get("stima") or "").strip().lower()
@@ -288,6 +347,212 @@ def estrai(svc, cfg, specifica: str, richiesta: str = "", tipo: str = "estension
         return [], "", esito
     req, stima = interpreta_estratti(dati)
     return req, stima, esito if req else "nessun requisito"
+
+
+# ─────────────────────────── la specifica viva (12/10) ───────────────────────────
+
+def _numerati(requisiti: list[dict], tappa: int = 0) -> str:
+    """I requisiti per il prompt della modifica: numero, testo, dettaglio, e lo stato utile (non
+    si può, tappa dopo, già fatto nella versione di prima)."""
+    righe = []
+    for i, r in enumerate(requisiti, 1):
+        segni = []
+        if not r.get("si_puo", True):
+            segni.append("qui non si può" + (f": {r['limite']}" if r.get("limite") else ""))
+        elif tappa > 0 and int(r.get("tappa") or 1) > tappa:
+            segni.append("tappa dopo")
+        if r.get("era") == "fatto":
+            segni.append("già fatto nella versione di prima")
+        righe.append(f"{i}. {r['testo']}" + (f" — {r['dettaglio']}" if r.get("dettaglio") else "")
+                     + (f" [{'; '.join(segni)}]" if segni else ""))
+    return "\n".join(righe)
+
+
+def chiedi_modifica(svc, cfg, requisiti: list[dict], testo: str, detto: str = "",
+                    tipo: str = "estensione", gioco: bool = False, codice: bool = False,
+                    tappa: int = 0, tempo_s: float = 8.0, attesa=None,
+                    dalla_voce: bool = True) -> tuple[dict | None, str]:
+    """(il JSON della modifica, "modello") o (None, esito): la frase della persona tradotta in
+    operazioni sui requisiti, in una passata breve (schema chiuso, temperatura 0, al più
+    MAX_OPERAZIONI operazioni: poche decine di token generati)."""
+    cosa = ("un gioco sugli schermi di Calliope" if gioco else
+            "un'estensione di Calliope (una funzione che resta e si usa a voce)"
+            if tipo == "estensione" else "un programma da eseguire nella sandbox")
+    t = re.sub(r"\s+", " ", str(testo or "")).strip()
+    d = re.sub(r"\s+", " ", str(detto or "")).strip()
+    utente = (f"Cosa si sviluppa: {cosa}. "
+              + ("C'è già del codice consegnato." if codice else "Il codice non c'è ancora.")
+              + f"\nRequisiti di adesso:\n{_numerati(requisiti, tappa)}\n\n"
+              f"Cosa ha chiesto la persona: «{t[:600]}»"
+              + (f"\nLa sua frase, come detta: «{d[:400]}»" if d and d != t else ""))
+    sistema = SISTEMA_MODIFICA.format(max_op=MAX_OPERAZIONI,
+                                      capacita=capacita(cfg, tipo, gioco))
+    return chiama(svc, sistema, utente, schema_modifica(), tempo_s, attesa, ATTESA_MODIFICA,
+                  dalla_voce, num_predict=500)
+
+
+def _numero(v, n: int) -> int | None:
+    try:
+        k = int(str(v).strip())
+    except (TypeError, ValueError):
+        return None
+    return k if 1 <= k <= n else None
+
+
+def interpreta_modifica(dati, n: int) -> dict:
+    """Il JSON del modello validato: {tipo, domanda, operazioni}. Operazioni dall'insieme chiuso,
+    numeri dentro l'elenco (un numero che non c'è vale come niente), testi ripuliti; al più
+    MAX_OPERAZIONI. Un tipo sconosciuto vale «cambia» con delle operazioni, altrimenti «vago»."""
+    ops = []
+    for o in (dati or {}).get("operazioni") or []:
+        if not isinstance(o, dict):
+            continue
+        op = str(o.get("op") or "").strip().lower()
+        if op not in OPERAZIONI:
+            continue
+        num = _numero(o.get("numero"), n)
+        testo = pulito(o.get("testo"))
+        if op in ("sostituisci", "togli", "anticipa") and num is None:
+            continue
+        if op in ("aggiungi", "sostituisci") and not testo:
+            continue
+        si_puo = o.get("si_puo") is not False
+        voce = {"op": op, "numero": num, "testo": testo,
+                "dettaglio": pulito(o.get("dettaglio"), MAX_DETTAGLIO),
+                "si_puo": si_puo, "limite": "" if si_puo else pulito(o.get("limite"), 160)}
+        if isinstance(o.get("nucleo"), bool):
+            voce["nucleo"] = o["nucleo"]
+        ops.append(voce)
+        if len(ops) >= MAX_OPERAZIONI:
+            break
+    tipo = str((dati or {}).get("tipo") or "").strip().lower()
+    if tipo not in TIPI_MODIFICA:
+        tipo = "cambia" if ops else "vago"
+    if tipo != "cambia":
+        ops = []
+    domanda = pulito((dati or {}).get("domanda"), 200).rstrip(".") if tipo == "vago" else ""
+    if domanda and not domanda.endswith("?"):
+        domanda += "?"
+    return {"tipo": tipo, "domanda": domanda, "operazioni": ops}
+
+
+def applica(requisiti: list[dict], operazioni: list[dict], tappa_nuovo,
+            tappa_adesso: int = 1) -> tuple[list[dict], list[dict]]:
+    """(i requisiti nuovi, i cambiamenti) delle operazioni validate. I numeri si riferiscono
+    all'elenco di prima: aggiungi mette in fondo, togli toglie alla fine. Un requisito si tocca
+    una volta sola per modifica; un'aggiunta uguale a un requisito che c'è non conta.
+    `tappa_nuovo(requisito)` dà la tappa di un requisito aggiunto. I cambiamenti:
+    {op, prima, dopo, si_puo, limite, dopo_tappa} (i testi da dire)."""
+    out = [dict(r) for r in requisiti]
+    tolti: set[int] = set()
+    toccati: set[int] = set()
+    cambi: list[dict] = []
+    for o in operazioni:
+        op, k = o["op"], (o.get("numero") or 0) - 1
+        if op in ("sostituisci", "togli", "anticipa"):
+            if not 0 <= k < len(requisiti) or k in toccati:
+                continue
+            vecchio = out[k]
+        if op == "sostituisci":
+            nuovo = {"testo": o["testo"], "nucleo": o.get("nucleo", vecchio.get("nucleo", True)),
+                     "si_puo": o["si_puo"], "limite": o["limite"],
+                     "tappa": int(vecchio.get("tappa") or 1)}
+            if o.get("dettaglio"):
+                nuovo["dettaglio"] = o["dettaglio"]
+            if nuovo["testo"].lower() == vecchio["testo"].lower():
+                if not nuovo.get("dettaglio") or \
+                        nuovo.get("dettaglio", "") == vecchio.get("dettaglio", ""):
+                    continue
+                # Lo stesso requisito, precisato (un numero, una regola): si dice il dettaglio
+                out[k] = nuovo
+                toccati.add(k)
+                cambi.append({"op": "precisa", "dopo": nuovo["testo"],
+                              "dettaglio": nuovo["dettaglio"], "si_puo": nuovo["si_puo"],
+                              "limite": nuovo["limite"]})
+                continue
+            out[k] = nuovo
+            toccati.add(k)
+            cambi.append({"op": op, "prima": vecchio["testo"], "dopo": nuovo["testo"],
+                          "si_puo": nuovo["si_puo"], "limite": nuovo["limite"]})
+        elif op == "togli":
+            tolti.add(k)
+            toccati.add(k)
+            cambi.append({"op": op, "prima": vecchio["testo"]})
+        elif op == "anticipa":
+            if int(vecchio.get("tappa") or 1) <= tappa_adesso:
+                continue
+            vecchio["tappa"] = max(1, tappa_adesso)
+            toccati.add(k)
+            cambi.append({"op": op, "dopo": vecchio["testo"]})
+        elif op == "aggiungi":
+            if any(r["testo"].lower() == o["testo"].lower() for r in out) or \
+                    len(out) - len(tolti) >= MAX_TUTTI:
+                continue
+            nuovo = {"testo": o["testo"], "nucleo": o.get("nucleo", False),
+                     "si_puo": o["si_puo"], "limite": o["limite"]}
+            if o.get("dettaglio"):
+                nuovo["dettaglio"] = o["dettaglio"]
+            nuovo["tappa"] = int(tappa_nuovo(nuovo) or 1)
+            out.append(nuovo)
+            cambi.append({"op": op, "dopo": nuovo["testo"], "si_puo": nuovo["si_puo"],
+                          "limite": nuovo["limite"],
+                          "dopo_tappa": tappa_adesso > 0 and nuovo["tappa"] > tappa_adesso})
+    return [r for i, r in enumerate(out) if i not in tolti], cambi
+
+
+def specifica_da_requisiti(requisiti: list[dict], cosa: str = "", titolo: str = "") -> str:
+    """La specifica per l'agente rigenerata dai requisiti (12/10): niente coda di modifiche,
+    niente contraddizioni (i requisiti non ne hanno), niente taglio. Le tappe non ci sono:
+    vanno nei vincoli (`vincoli_tappa`)."""
+    testa = (f"{cosa} «{titolo}»" if cosa and titolo else cosa or f"«{titolo}»" if titolo
+             else "Lo sviluppo")
+    righe = [f"{testa}: deve fare tutte queste cose, decise con la persona."]
+    for i, r in enumerate(da_fare(requisiti), 1):
+        righe.append(f"{i}. {r['testo']}" + (f": {r['dettaglio']}" if r.get("dettaglio") else "")
+                     + ".")
+    no = limiti(requisiti)
+    if no:
+        righe.append("Qui non si può fare, quindi non va fatto: " + "; ".join(
+            r["testo"] + (f" ({r['limite']})" if r.get("limite") else "") for r in no) + ".")
+    return "\n".join(righe)
+
+
+def _detto(c: dict) -> str:
+    if c["op"] == "sostituisci":
+        return f"«{c['prima']}» diventa «{c['dopo']}»"
+    if c["op"] == "togli":
+        return f"tolgo «{c['prima']}»"
+    if c["op"] == "anticipa":
+        return f"«{c['dopo']}» lo facciamo adesso"
+    if c["op"] == "precisa":
+        return f"per «{c['dopo']}», {c.get('dettaglio') or ''}".rstrip(", ")
+    return f"aggiungo «{c['dopo']}»" + (" per la tappa dopo" if c.get("dopo_tappa") else "")
+
+
+_QUANTE = {1: "una cosa", 2: "due cose", 3: "tre cose", 4: "quattro cose", 5: "cinque cose",
+           6: "sei cose"}
+
+
+def frase_cambi(cambi: list[dict]) -> str:
+    """A voce solo cosa è cambiato (12/10): «Ho cambiato due cose: «oggetti danno punti» diventa
+    «anche i mostri danno punti»; aggiungo «musica di paura».» I testi sono quelli dei requisiti,
+    con le parole della persona; oltre NOMI_CAMBI, «e altre N: le vedi sullo schermo». Ciò che
+    qui non si può fare si dice."""
+    if not cambi:
+        return ""
+    detti = [_detto(c) for c in cambi[:NOMI_CAMBI]]
+    resto = len(cambi) - len(detti)
+    frase = (f"Ho cambiato {_QUANTE.get(len(cambi), f'{len(cambi)} cose')}: "
+             + "; ".join(detti))
+    if resto:
+        frase += ("; e un'altra" if resto == 1 else f"; e altre {resto}") + ", sullo schermo"
+    frase += "."
+    for c in cambi:
+        if c.get("si_puo") is False and c.get("dopo"):
+            frase += (f" Però «{c['dopo']}» oggi qui non si può fare"
+                      + (f": {c['limite'][:1].lower() + c['limite'][1:].rstrip('.')}"
+                         if c.get("limite") else "") + ".")
+    return frase
 
 
 # ─────────────────────────── le tappe ───────────────────────────
@@ -349,6 +614,11 @@ def vincoli_tappa(requisiti: list[dict], tappa: int, tappe: bool) -> str:
         parti.append("Questi qui non si possono fare, non provarci: "
                      + "; ".join(r["testo"] + (f" ({r['limite']})" if r.get("limite") else "")
                                  for r in no) + ".")
+    fatti = [r["testo"] for r in da_fare(requisiti) if r.get("era") == "fatto"]
+    if fatti:
+        # Dopo una modifica (12/10, M2): quello che la versione di prima faceva già non si rompe
+        parti.append("Questi la versione di prima li faceva già: devono restare e funzionare "
+                     "come prima: " + "; ".join(fatti) + ".")
     return (f" {MARCA_TAPPA} " + " ".join(parti)) if parti else ""
 
 
@@ -560,8 +830,9 @@ def righe_scheda(requisiti: list[dict], voci: list[dict] | None, tappa: int,
             stato = "tappa dopo" if dopo else "da controllare"
         else:
             stato = nomi.get(v["stato"], v["stato"]) + (" (tappa dopo)" if dopo else "")
-        righe.append(f"- {stato}: {r['testo']}" + (f" — {pulito(v['nota'], 160)}"
-                                                    if v and v.get("nota") else ""))
+        righe.append(f"- {stato}: {r['testo']}"
+                     + (f" ({r['dettaglio']})" if r.get("dettaglio") else "")
+                     + (f" — {pulito(v['nota'], 160)}" if v and v.get("nota") else ""))
     return righe
 
 
