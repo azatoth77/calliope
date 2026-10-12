@@ -101,10 +101,12 @@ voce raccontava male gli esiti, i comandi del flusso si perdevano.
 2. ~~**Voce onesta**~~ *[fatta il 12/10]*: esito vero del collaudo e dell'agente, conteggio per
    tipo, revisione dal testo del tool, meno parole e meno conferme
    ([agenti-estensioni](aree/agenti-estensioni.md)).
-3. **Comandi del flusso e ripresa**: ferma, annulla, sospendi, chiudi, riprendi come forme chiuse
-   brevi e intere (principio 10, con i casi contrari delle storpiature viste); «chiudi tutti» con un
-   solo sì; «riprendi» su un lavoro fermo vale «rifallo così com'è» senza la seconda domanda.
-   *Pronta* · dipende da: la specifica dai requisiti (punto 1).
+3. ~~**Comandi del flusso e ripresa**~~ *[fatta il 12/10, ramo `flusso-ripresa`]*: «chiudi tutti
+   gli sviluppi» con un solo sì, nessuna azione che non si disfa da una storpiatura, «ricominciamo»
+   che sospende lo sviluppo aperto, la modifica che ferma il lavoro solo al «sì» e «lascia com'era»
+   (A4), i file dei giri fermi per «rifallo» e la tappa messa da parte (A5), la ripresa in una
+   domanda, il programma chiuso che si riapre (M7)
+   ([agenti-estensioni](aree/agenti-estensioni.md)).
 4. **Macchina a stati dei giochi** fornita da Calliope: fasi fisse (preparazione, turno, esito,
    fine) con una fase libera come scappatoia, pagine a schermo fisso ridisegnabili, comandi a voce
    per fase anche con un parametro («porta tre», limitato al dominio dichiarato), l'agente che
