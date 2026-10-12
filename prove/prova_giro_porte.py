@@ -462,6 +462,41 @@ def prova_testi(tmp: Path):
              r)
 
 
+# ═══════════════════════════ 7. le correzioni che non correggono ═══════════════════════════
+
+def prova_correzioni(tmp: Path):
+    print("— 7. la seconda correzione sa che la prima non ha funzionato")
+    import prova_specifica_viva as S
+    from calliope.tools.sviluppo import VINCOLO_CORREZIONE_GIOCO
+    agente = S.AgenteVivo(requisiti=REQ, stima="piccolo",
+                          modifiche=[{"tipo": "difetto", "operazioni": []}] * 2)
+    cfg, reg, ctx, est, svc, sv = al_collaudo(tmp / "correzioni", agente)
+    problema = ("non si vedono i mostri dietro le porte, non vengono assegnati punti e il "
+                "vincitore viene indicato senza spiegazione")
+    S.chiama(reg, ctx, "sviluppo_correggi", {"problema": problema}, 4,
+             "Non ho trovato nessun mostro dietro le porte, nessun punto, e a un certo punto "
+             "vince uno dei due senza motivo.")
+    primo = svc.lavori[-1]
+    verifica("la prima correzione di un gioco: il vincolo del gioco (gioco.js, un test sulle "
+             "mosse dette), niente «la correzione di prima»",
+             primo.correzione and VINCOLO_CORREZIONE_GIOCO.strip() in primo.vincoli
+             and "NON ha funzionato" not in primo.vincoli, primo.vincoli)
+    S.consegna(svc, est, sv)
+    detto = ("È sempre esattamente uguale a prima: quando un giocatore clicca su una porta non "
+             "si vede nessun mostro e la partita finisce senza punti.")
+    S.chiama(reg, ctx, "sviluppo_correggi", {"problema": problema}, 6, detto)
+    secondo = svc.lavori[-1]
+    verifica("11:42: la seconda correzione dice all'agente che la prima non ha funzionato",
+             secondo is not primo and "GIÀ una correzione" in secondo.vincoli
+             and "NON ha funzionato" in secondo.vincoli, secondo.vincoli)
+    verifica("…con le parole dette adesso (il problema passato era lo stesso di prima)",
+             "esattamente uguale a prima" in secondo.vincoli, secondo.vincoli)
+    from calliope.tools.sviluppo import _detto_adesso
+    verifica("contrario: le parole uguali al problema non si ripetono",
+             _detto_adesso(SimpleNamespace(user_text=problema), problema) == ""
+             and _detto_adesso(SimpleNamespace(user_text="Sì."), problema) == "")
+
+
 def main():
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
         tmp = Path(d)
@@ -471,6 +506,7 @@ def main():
         prova_chiedi(tmp)
         prova_scelta(tmp)
         prova_testi(tmp)
+        prova_correzioni(tmp)
     print()
     print("Tutto bene." if not errori else f"{errori} errori.")
     return 1 if errori else 0

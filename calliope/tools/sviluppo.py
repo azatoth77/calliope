@@ -2382,6 +2382,44 @@ def _sviluppo_chiedi(ctx: ToolContext, domanda: str = "", **_altro) -> dict:
 
 MAX_CHIESTI_RIPETUTA = 5
 
+# Le correzioni di un gioco che non correggono (12/10 sera, 11:37 e 11:42: «non si vede nessun
+# mostro, nessun punto, vince V senza motivo», due correzioni finite «fatto» con i test verdi e
+# il gioco uguale; la seconda con lo stesso identico problema della prima). L'agente correggeva
+# logica.js e i suoi test (le regole), mentre ciò che la persona vede passa da gioco.js; e non
+# sapeva che la versione provata era già la correzione di prima
+VINCOLO_CORREZIONE_GIOCO = (
+    " È un GIOCO e il problema l'ha visto la persona sullo schermo: la causa può essere in "
+    "gioco.js (il disegno, i tocchi, cosa si mostra), non solo in logica.js. Segui il tocco "
+    "della persona fino a ciò che appare: che il tocco chiami la regola giusta e che il risultato "
+    "(cosa c'è dietro la porta, i punti, chi vince e perché) venga mostrato. Aggiungi in "
+    "logica.test.js un test che giochi le mosse dette dalla persona e controlli proprio quello "
+    "che lei dice che non va (punti assegnati, esito della mossa, vincitore): la prova di fumo "
+    "dice solo che il gioco parte.")
+
+
+def _detto_adesso(ctx, problema: str) -> str:
+    """Le parole della persona in questo turno, se dicono più del problema passato dal modello
+    (12/10 sera: la seconda correzione ha ricevuto lo stesso problema della prima, e «è sempre
+    esattamente uguale a prima» si perdeva)."""
+    from ..estensioni.servizio import _norm_testo
+    detto = re.sub(r"\s+", " ", str(getattr(ctx, "user_text", "") or "")).strip()
+    if len(detto) < 25 or _norm_testo(detto) in _norm_testo(problema):
+        return ""
+    return f" Le parole della persona adesso: «{detto[:500]}»."
+
+
+def _correzione_di_prima(svs, sv) -> str:
+    """La versione provata era già una correzione: lo si dice all'agente (12/10 sera)."""
+    from ..sviluppo import cambiamento_chiesto
+    c = cambiamento_chiesto(sv)
+    if not c.startswith("correggere: "):
+        return ""
+    return (f" ATTENZIONE: la versione che la persona ha appena provato era GIÀ una correzione "
+            f"(per: «{c.removeprefix('correggere: ')[:300]}»), e la persona dice che non va "
+            "ancora: la correzione di prima NON ha funzionato, anche se i suoi test passavano. "
+            "Non rifare la stessa modifica: trova perché ciò che la persona vede non è "
+            "cambiato.")
+
 
 def _risposta_ripetuta(sv, domanda: str, r: dict) -> bool:
     """La risposta dell'agente è (quasi) uguale a quella di una domanda diversa di prima."""
@@ -2517,6 +2555,9 @@ def _sviluppo_correggi(ctx: ToolContext, problema: str = "", **_altro) -> dict:
                   + (f" Da correggere: {diagnosi['cosa_correggere']}."
                      if diagnosi.get("cosa_correggere") else "") if diagnosi else "")
                + (f" Problema detto dalla persona: «{problema}»." if problema else "")
+               + _detto_adesso(ctx, problema)
+               + _correzione_di_prima(svs, sv)
+               + (VINCOLO_CORREZIONE_GIOCO if svs.e_gioco(sv) else "")
                + (f" {rete}" if rete else "")
                + " Trova la causa, correggi il codice, aggiungi un test con ogni caso che non "
                  "andava, rifai i test, poi consegna.")
