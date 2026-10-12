@@ -315,9 +315,11 @@ def _ha_testo(rec: dict) -> bool:
 # Le tabelle di memoria.db con il testo dei ragazzi che scadono con la stessa tenuta (12/10
 # sera, decisione di Dario): (tabella, colonna della persona, colonna della data ISO). I
 # tentativi degli esercizi (domanda, risposta attesa e data, al più 60 caratteri: il dettaglio
-# dei tutori) e le richieste ai tutori (con `oggetto`, ciò che il ragazzo ha chiesto)
+# dei tutori), le richieste ai tutori (con `oggetto`, ciò che il ragazzo ha chiesto) e le
+# segnalazioni degli esercizi (risposta data e nota del ragazzo; anche queste dal 12/10 sera)
 TABELLE_MEMORIA = (("esercizi_tentativi", "persona", "giorno"),
-                   ("richieste_tutori", "minore", "creata"))
+                   ("richieste_tutori", "minore", "creata"),
+                   ("esercizi_segnalazioni", "persona", "quando"))
 
 
 class Conservazione:

@@ -457,11 +457,13 @@ l'elenco «Altri posti su disco» in [contesto-conversazione](contesto-conversaz
   `svuota`) tolgono anche i tentativi e le richieste di quella persona (`persona` e `minore` sono
   l'id del profilo); `--svuota` senza persona tutti. La domanda del tool lo dice («…registrazioni
   della voce, esercizi e richieste ai tutori? I ricordi restano.») e il terminale li conta.
-- **Restano come prima** (non chiesto): `esercizi_segnalazioni` («secondo me è sbagliato», con la
-  risposta data e la nota), `esercizi_banco` (gli esercizi controllati, senza persona), gli avvisi
+- **Segnalazioni** (12/10 sera, decisione di Dario dopo l'unione): anche `esercizi_segnalazioni`
+  («secondo me è sbagliato», con la risposta data e la nota) scade a 60 giorni (colonna `quando`) e
+  si svuota con la persona, nella stessa `conserva.TABELLE_MEMORIA`.
+- **Restano come prima** (non chiesto): `esercizi_banco` (gli esercizi controllati, senza persona), gli avvisi
   e i compiti del giorno, il tempo di gioco.
 
-Prove a secco in `prova_conserva`: 59 e 60 giorni restano e 61 via in entrambe le tabelle, la tenuta
+Prove a secco in `prova_conserva`: 59 e 60 giorni restano e 61 via in tutte e tre le tabelle, la tenuta
 che segue `turn_log_days`, svuota per persona con il contrario (gli altri restano), svuota tutto,
 il file della memoria che non c'è. La prova usa sempre un file suo (`cfg.memory_db` nella cartella
 temporanea, `CALLIOPE_MEMORY_DB` per il terminale): «svuota tutto» non deve mai toccare la

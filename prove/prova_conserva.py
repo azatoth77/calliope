@@ -717,6 +717,7 @@ try:
         db = sqlite3.connect(cfg.memory_db)
         db.execute("DELETE FROM esercizi_tentativi")
         db.execute("DELETE FROM richieste_tutori")
+        db.execute("DELETE FROM esercizi_segnalazioni")
         for chi in ("p-min", "p-min2"):
             for fa in (59, 60, 61):
                 g = datetime.date.today() - datetime.timedelta(days=fa)
@@ -727,6 +728,9 @@ try:
                 db.execute("INSERT INTO richieste_tutori (minore, tipo, oggetto, creata, "
                            "creata_ts) VALUES (?, 'gioco', 'il gioco dei pirati', ?, ?)",
                            (chi, f"{g.isoformat()}T10:00:00", time.time() - fa * 86400))
+                db.execute("INSERT INTO esercizi_segnalazioni (persona, quando, esercizio, "
+                           "nota) VALUES (?, ?, 'f', 'secondo me è sbagliato')",
+                           (chi, f"{g.isoformat()}T10:00:00"))
         db.commit()
         db.close()
 
@@ -744,21 +748,21 @@ try:
               for fa in (59, 60, 61)}
     r = cons.ruota()
     rimaste = righe()
-    verifica("rotazione: esercizi e richieste di 61 giorni fa via, 59 e 60 restano",
-             giorno[61] not in rimaste and rimaste.count(giorno[59]) == 4
-             and rimaste.count(giorno[60]) == 4 and r.get("memoria") == 4, f"{r} {rimaste}")
+    verifica("rotazione: esercizi, segnalazioni e richieste di 61 giorni fa via, 59 e 60 restano",
+             giorno[61] not in rimaste and rimaste.count(giorno[59]) == 6
+             and rimaste.count(giorno[60]) == 6 and r.get("memoria") == 6, f"{r} {rimaste}")
     cons.giorni = 30
     verifica("tenuta: è turn_log_days (con 30 via anche quelli di 59 giorni)",
-             cons.ruota().get("memoria") == 8 and righe() == [])
+             cons.ruota().get("memoria") == 12 and righe() == [])
     cons.giorni = 60
     riempi()
     r = cons.svuota("p-min", "Leo")
     verifica("svuota una persona: anche i suoi esercizi e le sue richieste ai tutori",
-             r["esercizi_richieste"] == 6 and righe("p-min") == [] and len(righe("p-min2")) == 6,
+             r["esercizi_richieste"] == 9 and righe("p-min") == [] and len(righe("p-min2")) == 9,
              str(r))
-    verifica("svuota, contrario: quelli degli altri restano", len(righe("p-min2")) == 6)
+    verifica("svuota, contrario: quelli degli altri restano", len(righe("p-min2")) == 9)
     r = cons.svuota()
-    verifica("svuota tutto: anche esercizi e richieste", r["esercizi_richieste"] == 6
+    verifica("svuota tutto: anche esercizi e richieste", r["esercizi_richieste"] == 9
              and righe() == [], str(r))
     cfg_senza = SimpleNamespace(memory_db=str(tmp / "non-esiste.db"), turn_log_dir=None,
                                 turn_log_days=60)
