@@ -183,8 +183,13 @@ def un_giro(giro: int) -> list[dict]:
         firma = s.es.firma
         turno(risposta_giusta(s), "rispondi",
               lambda s, a, d: s is not None and s.es is not None and s.es.firma != firma)
+    # Dallo stato della sessione, non dagli argomenti: per un minore in last_tools sono «…»
+    # (12/10 notte, niente parole dei minori nel journal né nel registro)
+    s = srv.sessione(pid)
+    livello = s.livello if s is not None else None
     turno("Sono troppo facili, me ne dai di più difficili?", "piu_difficile",
-          lambda s, a, d: "piu_difficile" in [x.get("azione") for x in a])
+          lambda s, a, d: s is not None and livello is not None
+          and (s.livello > livello or s.oltre))
     turno("Basta così, grazie.", "fine", lambda s, a, d: s is None)
     turno("Facciamo le frazioni.", "fuori programma",
           lambda s, a, d: s is None and "non ho esercizi adatti" in d.lower())
