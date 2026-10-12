@@ -2656,3 +2656,121 @@ toccato qui, da guardare.
 **Da guardare sulla DGX** (26B): le regole qui sopra nel campo `regole` di `calliope stato
 --turni`; «chiudi tutti» e «lascia com'era» detti dal modello senza la forma chiusa; quante volte
 la proposta della modifica arriva con il lavoro di prima ancora vivo.
+
+## Correzioni dai log del 12/10 (il gioco delle porte, 12/10 sera, ramo `log-12-10`)
+
+Il giro vero della DGX del 12/10 (04:18–12:38, il gioco «le porte magiche»; nelle prove nomi di
+fantasia, `prova_giro_porte.py`). Un passo per punto, in `calliope/sviluppo.py` e
+`calliope/tools/sviluppo.py` salvo dove detto.
+
+1. **Una modifica dello stesso gioco presa per «un'altra estensione»** (07:38, 08:47): `cambia` =
+   «…le porte devono rimanere abilitate per il giocatore successivo…» → `_COSA_NUOVA` prendeva
+   «gioc\w*» in «un giocatore», `altro_compito` vedeva mancare «magiche» del titolo, e la domanda
+   «è un'altra estensione… sospendo e apro?» al «sì» apriva davvero lo sviluppo «porte rimanenti».
+   Ora parole intere (gioco/giochi, programma/programmi, script/scripts) e, in uno sviluppo che è
+   già un gioco (`Sviluppi.e_gioco`), «un gioco» vale solo con altro/nuovo/secondo
+   (`sviluppo.cosa_nuova`). La domanda dice «un altro gioco» quando lo è.
+2. **«Vorrei modificare X» senza dire cosa** (08:38): il modello ha inventato `cambia` = «modifica
+   le regole o il funzionamento come desideri», il modello dell'agente l'ha preso per un difetto e
+   la voce ha detto «Questo la richiesta lo dice già… Lo faccio correggere?», poi a «Ma in che
+   senso?» ha proposto una correzione mai chiesta. `sviluppo.senza_contenuto`: tolte le parole
+   vuote, generiche, del titolo e quelle che dicono solo «cambia» (modifica, regole,
+   funzionamento, come desideri, meglio…), non resta niente; un numero o «più/meno» sono già
+   concreti. Allora «Cosa vuoi cambiare, di preciso?» senza chiamare il modello dell'agente, una
+   volta (la risposta passa anche se breve). La frase del difetto è «La richiesta lo dice già: se
+   il gioco non lo fa, va corretto il codice. Lo faccio correggere?».
+3. **Una frase spezzata che fa partire una correzione** (08:46): «Calliope va modificato
+   Calliope.» → `sviluppo_correggi` con «va modificato Calliope» → lavoro partito. Lo stesso
+   criterio, con le parole che dicono solo «non va» («correggilo», «è rotto», «non funziona
+   niente»): senza un collaudo fallito di questa versione «Cosa non va?»; con uno, il problema
+   vuoto non va all'agente. Il «sì» a «Lo faccio correggere?» non passa da qui. **Le pause** (solo
+   osservato, `pause.py` non toccato): la frase si è chiusa dopo il nome detto di nuovo in coda
+   («…Calliope.»), e la persona ha ripreso entro ~2 s con la frase vera (28 s): è il «taglio
+   probabile» che `OsservaRipresa` già misura. Nella modalità sviluppo una frase che finisce con
+   il nome e non dice niente di concreto è quasi sempre il primo pezzo di una frase lunga: se un
+   giorno la fine del turno diventa adattiva, è un buon caso per aspettare di più dopo il nome in
+   coda (oggi la domanda «Cosa non va?» basta: la frase lunga arriva subito dopo e la risponde).
+4. **`sviluppo_chiedi` che ridice una nota vecchia** (11:11:59, 12:06:03): a «Scegliere la prima
+   porta mi sembra che non porti a nulla» e a «Secondo te perché è bloccato?» la stessa risposta
+   («il lavoro si è fermato perché il sistema ha rilevato che stava per finire le sue passate…»).
+   Causa: le «Domanda già fatta» di ogni versione entravano nel contesto, e l'agente (qwen3.6,
+   temperatura 0,2) ricopiava quella di prima; la stessa diagnosi vecchia andava anche nei vincoli
+   delle correzioni delle 11:37 e 11:42. Ora ogni domanda ha versione e lavoro: nel contesto,
+   nella diagnosi per la correzione e per il lavoro dopo una modifica (`Sviluppi.diagnosi`), e in
+   `_va_chiesto` valgono solo quelle della versione di adesso; una risposta quasi uguale (≥ 0,9) a
+   quella di una domanda diversa si richiede una volta senza le domande di prima (regola
+   `sviluppo_chiedi_ripetuta`). La prima frase era una segnalazione: i dati del turno dicevano «Se
+   un risultato è sbagliato… sviluppo_chiedi»; ora «perché, come funziona» → `sviluppo_chiedi`,
+   «non porta a nulla, non si vede niente, è sbagliato» → `sviluppo_correggi` (anche nella
+   descrizione di `sviluppo_chiedi`), e il sistema di `sviluppo_chiedi` dice di rispondere su una
+   segnalazione con `serve_correzione` e di non ripetere risposte di prima. Nessuna regola sul
+   testo nuova.
+5. **Promessa senza tool alla revisione** (12:20): con «Vuoi attivarla così com'è, o faccio
+   continuare l'agente con quello che manca?» in sospeso, «No, farlo continuare con quello che
+   manca.» → nessun tool, «Ti avviso quando è pronto». Cause: la proposta aveva gli argomenti come
+   istruzioni (`ARGOMENTI_COMPLETA`) ma lo stato del dialogo la vedeva come un sì/no e il blocco
+   («Stato del dialogo: proposta aperta…») li toglieva; il messaggio di sempre diceva «se rifiuta
+   non farlo» (il «no» davanti alla seconda strada); `spinta_promessa` è spenta nel profilo 26B e
+   comunque non riconosce «faccio continuare». Ora: argomenti come testo → proposta «dato»
+   (`args_testo`, il messaggio di oggi resta); alla revisione un messaggio suo
+   (`SCELTA_COMPLETA_MSG`: le due strade, e il «no» che va alla prima); la rete nuova
+   **`spinta_sviluppo`** (accesa anche col 26B, [voce-e-regole](voce-e-regole.md)). **Misura**
+   con gemma4 e4b (`prova_giro_porte_ollama.py`, 3 giri): la seconda strada → completa 5/6 (com'era
+   prima 6/6: l'e4b sceglieva già bene; il caso vero è del 26B, che sul portatile non c'è), «Va
+   bene così, attivala.» → la frase di sfida 3/3 (prima 0/3: chiamava `calliope_stato`). La spinta
+   non è mai scattata con l'e4b: va guardata sulla DGX.
+6. **Testi**: (a) «quando è pronto rifacciamo la prova con «in prova sullo schermo»» → per un gioco
+   «…rifacciamo la prova sullo schermo»; (b) «è un gioco sullo schermo per da 2 a 4 giocatori»,
+   «con 1 comandi» → «è un gioco sullo schermo, da 2 a 4 giocatori», «con un comando»
+   (`estensioni/scheda.in_parole`); (c) «…Procedo con la fase successiva.D'accordo: l'agente…»:
+   con una domanda dello sviluppo in sospeso il testo del modello prima di un tool che ha la sua
+   frase non si dice (regola `sviluppo_testo_taciuto`), e la frase del tool dopo un testo detto ha
+   uno spazio davanti; (d) «Intanto restiamo sullo sviluppo di «…»: siamo allo sviluppo.» → «Lo
+   sviluppo di «…» resta aperto: l'agente ci sta lavorando» (o «è fermo», o la fase).
+7. **Correzioni che non correggono** (11:37, 11:42): due correzioni di 9 e 8 passate finite
+   «fatto» con i test verdi e il gioco uguale, la seconda con lo stesso identico `problema` (il
+   modello l'ha ricopiato; Dario aveva detto «è sempre esattamente uguale a prima»). L'agente
+   riceveva: la specifica, il collaudo «in prova sullo schermo» con il giudizio, una diagnosi
+   vecchia, il problema; i suoi test erano su `logica.js`, mentre ciò che la persona vede passa da
+   `gioco.js`. Il passo più piccolo, nei vincoli della correzione: se la versione provata era già
+   una correzione, «la correzione di prima NON ha funzionato, anche se i suoi test passavano»
+   (`cambiamento_chiesto`); le parole della persona di adesso quando dicono più del problema
+   passato; per un gioco `VINCOLO_CORREZIONE_GIOCO` (la causa può essere in `gioco.js`; un test in
+   `logica.test.js` che giochi le mosse dette e controlli punti, esito e vincitore; la prova di
+   fumo dice solo che parte). Niente della macchina a stati dei giochi.
+8. **Agente che gira a vuoto sui giochi** (11:20 e 12:05 «ha ripetuto lo stesso ragionamento in 3
+   passate», 12:17 «15 passate senza file né test nuovi»). Dai soli log della voce (la DGX non è
+   stata toccata) la causa probabile è doppia. Primo, **l'avviso di chiusura** (`_avviso_fine` in
+   `agenti/ciclo.py`, 06/10): a ogni giro di uno sviluppo, a due passate dal tetto, diceva «il
+   lavoro sta per finire: non cominciare cose nuove… chiama consegna con un riassunto onesto», ma
+   in uno sviluppo il tetto è una tappa. L'agente si ritrovava a decidere se consegnare a metà o
+   continuare (il ragionamento ripetuto) e scriveva «il lavoro si è fermato perché stava per finire
+   le passate», poi ridetto da `sviluppo_chiedi`. Ora, con `lav.tappe`, «questo giro sta per
+   finire: non è la fine del lavoro… non consegnare a metà e non fermarti a ragionarci: fai il
+   prossimo passo concreto e scrivi cosa resta da fare»; fuori dagli sviluppi l'avviso di sempre.
+   Non misurato (serve qwen3.6 sulla DGX): da guardare nei prossimi giri quante tappe hanno
+   «ragionamento ripetuto». Secondo, il compito stesso: richieste visive («l'animazione del
+   mostro», «vedere i punti») con i test di `logica.js` già verdi e niente per vedere `gioco.js`
+   girare: l'agente non ha un passo concreto da fare e rimugina. Il vincolo del punto 7 dà un passo
+   (il test sulle mosse); il resto è il progetto della macchina a stati dei giochi.
+
+**Regole e reti nuove**: `sviluppo_modifica_riempitivo` (con `sviluppo_modifica_vaga`),
+`sviluppo_correggi_vago`, `sviluppo_chiedi_ripetuta`, `sviluppo_testo_taciuto`, la rete
+`spinta_sviluppo`.
+
+**Profilo ridotto da 8 GB**: nessuna correzione aggiunge modelli o memoria. I punti 2 e 3 tolgono
+una chiamata al modello dell'agente (la domanda la fa il codice); il punto 4 aggiunge una seconda
+chiamata a `sviluppo_chiedi` solo quando la risposta è ridetta (entro `sviluppo_chiedi_s`); il
+punto 5 aggiunge una passata della voce solo quando il modello promette senza tool, e con una
+domanda dello sviluppo in sospeso il testo della passata aspetta la fine (in quei turni la prima
+frase arriva dopo l'intera passata: con l'e4b una risposta breve); i punti 1, 6, 7, 8 sono solo
+testo e regole.
+
+**Prove:** `prova_giro_porte.py` (nuova, livello 1, ~3 s, tutti i punti con i contrari),
+`prova_giro_porte_ollama.py` (col modello, punti 2, 4, 5); aggiornate `prova_specifica_viva`
+(«cambia le porte» da solo è ora senza contenuto: il caso «vago» del modello usa «cambia le porte,
+falle strane»), `prova_sviluppo` e `prova_voce_onesta` (la riga del fuori tema).
+
+**Da guardare sulla DGX** (26B e qwen3.6): `spinta_sviluppo` e `sviluppo_testo_taciuto` nel campo
+`regole`; la revisione con «no, continua»; quante tappe dei giochi finiscono per ragionamento
+ripetuto dopo l'avviso nuovo; se le correzioni dei giochi aggiungono il test sulle mosse.

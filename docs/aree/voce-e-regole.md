@@ -542,7 +542,8 @@ In coda alla risposta, dal codice (`Brain._sviluppo_coda`, mai dopo una domanda,
 l'ultima cosa detta):
 - **`sviluppo_riga_fuori_tema`**: con uno sviluppo aperto, dopo una risposta che ha usato solo tool
   d'altro e non ne parla («svilupp», «collaud», «estension»… o il titolo), «Intanto restiamo sullo
-  sviluppo di «…»: siamo al collaudo.». Nella misura con gemma4 la riga l'ha sempre scritta il
+  sviluppo di «…»: siamo al collaudo.». *(Storico dal 12/10 sera: ora «Lo sviluppo di «…» resta aperto: siamo al
+  collaudo.», vedi in fondo.)* Nella misura con gemma4 la riga l'ha sempre scritta il
   modello da sé («Ricorda che stiamo collaudando l'estensione…»): è una rete.
 - **`sviluppo_promemoria_giorno`**: una volta al giorno, alla prima risposta a chi amministra, gli
   sviluppi sospesi («A proposito: lo sviluppo di «…» è sospeso, eravamo al collaudo. Quando vuoi,
@@ -1705,3 +1706,36 @@ frase con la lunghezza, mai il testo) e `scheda_mandata` (tipo, chiave, titolo, 
 banco della scelta dei tool; la proiezione li esclude come prima. `Disco.svuota` è il comando per
 svuotare (tutto o una persona), diverso da «dimentica»: non tocca l'archivio. Dettagli e misure in
 [contesto-conversazione](contesto-conversazione.md) § «Conservazione dei dati».
+
+## La modalità sviluppo dai log del 12/10: forme vuote, scelte a due strade, `spinta_sviluppo` (12/10 sera, ramo `log-12-10`)
+
+Casi veri del gioco delle porte (dettagli in [agenti-estensioni](agenti-estensioni.md),
+«Correzioni dai log del 12/10»). Le parti che riguardano le regole sul testo e le reti:
+
+- **`sviluppo_analisi_altro`** (10/10) più stretta: `_COSA_NUOVA` con parole intere (gioco/giochi,
+  non giocatore, giocare, giocata; programma/programmi, non programmatore) e, in uno sviluppo che
+  è un gioco, «un gioco» solo con altro/nuovo/secondo. Contrari in `prova_giro_porte`.
+- **`sviluppo_modifica_riempitivo`** e **`sviluppo_correggi_vago`** (`sviluppo.senza_contenuto`):
+  correzione della forma di una scelta già fatta dal modello (ha passato una modifica o un
+  problema che non dicono niente: «modifica le regole o il funzionamento come desideri», «va
+  modificato Calliope»), con un effetto reversibile, una domanda («Cosa vuoi cambiare, di
+  preciso?», «Cosa non va?»), una volta. Criterio misurabile: tolte le parole vuote, generiche,
+  del titolo e quelle che dicono solo «cambia»/«correggi», non resta niente; un numero basta.
+  Casi contrari: modifiche e problemi veri, numeri, «più porte», il «sì» a «Lo faccio
+  correggere?».
+- **Le proposte con gli argomenti come istruzioni** (una domanda a due strade: «attivarla così
+  com'è, o faccio continuare l'agente…?») sono di tipo «dato» per lo stato del dialogo
+  (`args_testo` in `Brain.set_pending`, `stato_dialogo.proposta_da_oggi`, `eventi/ombra`): il
+  blocco «Stato del dialogo» le trattava come un sì/no e ne toglieva gli argomenti. Alla revisione
+  il messaggio è suo (`SCELTA_COMPLETA_MSG`), con il «no» che va alla prima strada.
+- **Rete `spinta_sviluppo`** (categoria «modello», accesa anche nel profilo 26B, che ha spenta
+  `spinta_promessa`): con una domanda dello sviluppo in sospeso (`turn_pending_tool` che comincia
+  con `sviluppo_`) il testo della passata aspetta la fine (come `spinta_esercizi`). Se arriva un
+  tool con la sua frase il testo di prima si tace (regola `sviluppo_testo_taciuto`: alle 11:13
+  «…Procedo con la fase successiva.D'accordo: l'agente continua…»); senza tool, se il testo
+  promette il passo (`SVILUPPO_PROMESSA`: «faccio continuare», «procedo», «ti avviso quando»…) non
+  si dice e c'è la spinta (`SVILUPPO_NUDGE`), una volta; se non promette niente si dice com'è.
+  La frase pronta di un tool dopo un testo già detto ha uno spazio davanti.
+- **La riga del fuori tema** (`sviluppo_riga_fuori_tema`) è «Lo sviluppo di «…» resta aperto:
+  l'agente ci sta lavorando» (o è fermo, o la fase): «Intanto restiamo sullo sviluppo di «…»:
+  siamo allo sviluppo.» suonava male (storica dal 12/10 sera la forma citata più su).

@@ -274,6 +274,23 @@ compatibilità con i giochi di oggi) è in
 [`2026-10-12-giochi-macchina-stati.md`](../ricerche/2026-10-12-giochi-macchina-stati.md), in
 attesa delle decisioni di chi amministra.
 
+### Correzioni dai log del 12/10 sera
+
+Il giro del gioco delle porte del 12/10 (dettagli e casi in
+[agenti-estensioni](agenti-estensioni.md), «Correzioni dai log del 12/10»), per ciò che riguarda
+i giochi:
+- una modifica dello stesso gioco con «un giocatore» non è più «un'altra estensione»; in uno
+  sviluppo che è un gioco «un gioco» vale come cosa nuova solo con altro/nuovo/secondo;
+- la correzione di un gioco dice «quando è pronto rifacciamo la prova sullo schermo» (prima «…con
+  «in prova sullo schermo»», il dato del collaudo di un gioco); la revisione dice «è un gioco
+  sullo schermo, da 2 a 4 giocatori» e «con un comando» (prima «per da 2 a 4», «con 1 comandi»);
+- nei vincoli della correzione di un gioco: la causa può essere in `gioco.js` (ciò che si vede),
+  un test in `logica.test.js` che giochi le mosse dette e controlli punti, esito e vincitore, e,
+  se la versione provata era già una correzione, che quella non ha funzionato
+  (`VINCOLO_CORREZIONE_GIOCO`, `_correzione_di_prima`);
+- l'avviso vicino al tetto del giro non dice più «il lavoro sta per finire, consegna»: in uno
+  sviluppo è la fine del giro, non del lavoro.
+
 ### Prove
 
 `prova_gioco_voce` (a secco, ~2 s: manifesto, server, ciclo con tutti i contrari, il tool,
