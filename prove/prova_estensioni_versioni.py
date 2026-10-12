@@ -301,8 +301,8 @@ def prova_approvata(tmp: Path, iso):
                  turno=2)
     ctx.speaker_ctx.sfida_superata = False
     verifica("la frase dice cosa fa adesso",
-             detta(r) == "Fatto: «Meteo per città» è attiva, versione 2: dice il meteo attuale "
-                         "in una città. Da adesso puoi chiedermela.", detta(r))
+             detta(r) == "Fatto: l'estensione «Meteo per città» è attiva, versione 2: dice il "
+                         "meteo attuale in una città. Da adesso puoi usarla.", detta(r))
     verifica("per il modello: il tool, l'input e che prima era un'altra versione",
              r.get("tool") == "est_meteo_citta" and r.get("input") == ["citta"]
              and "versione di prima" in r.get("nota", ""), json.dumps(r, ensure_ascii=False))
@@ -471,7 +471,7 @@ def prova_lavori_stato(tmp: Path, iso):
         est.archivio.approva("meteo_citta", n, "Dario")
         r = ta._lavori_stato(ctx)
         verifica("approvata: «è attiva, versione 2», senza domande",
-                 detta(r).endswith("«Meteo per città» è attiva, versione 2.")
+                 detta(r).endswith("L'estensione «Meteo per città» è attiva, versione 2.")
                  and not r.get("in_sospeso"), detta(r))
         lav.tipo, lav.risultato = "ricerca", {"esito": "fatto"}
         r = ta._lavori_stato(ctx)

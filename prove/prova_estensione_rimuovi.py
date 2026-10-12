@@ -209,7 +209,7 @@ def prova_blocchi(tmp, iso):
     r = P.chiama(reg, ctx, "estensione_gestisci", {"azione": "rimuovi",
                                                    "nome": "meteo_codificato"}, turno=2)
     verifica("un'attiva: niente eliminato, prima la disattiva (in sospeso «disattiva»)",
-             detta(r) == "«Meteocittà» è attiva, versione 1: prima la disattivo? Poi, se vuoi, "
+             detta(r) == "L'estensione «Meteocittà» è attiva, versione 1: prima la disattivo? Poi, se vuoi, "
                          "la posso eliminare."
              and (r.get("in_sospeso") or {}).get("argomenti") == {"azione": "disattiva",
                                                                   "nome": "meteo_codificato"}

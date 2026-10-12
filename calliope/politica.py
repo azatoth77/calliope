@@ -987,6 +987,11 @@ def _ricorda_prima(name: str, args, t: "Turno"):
         return
     t.risposta.setdefault("valori_prima", {}).setdefault(name, set()).update(
         _valori_chiave(name, args))
+    # Le parole dei dati non fidati che c'erano già quando il modello ha scelto quei valori
+    # (12/10 sera): la politica per valore distingue così un valore della chiamata di prima da
+    # uno che c'era già in un dato (valore.di_prima)
+    from .valore import parole_dato
+    t.risposta["dato_prima"] = parole_dato(t)
 
 
 # I numeri piccoli detti a parole («per due giorni» → giorni = 2): una conversione di forma
@@ -2031,6 +2036,8 @@ def controlla(spec, name: str, args: dict, ctx) -> dict | None:
                 name, args or {}, cl, t if per_valore else valore.copia_turno(t), vecchia, cv,
                 vf, cosa, ctx, spec, fidati)
             ombra = {**valore.ombra(vecchia, nuova, det), "attiva": per_valore}
+            if det.get("di_prima") and per_valore:
+                note_rule(ctx, "valore_di_prima")    # valore.di_prima (12/10 sera)
             d = nuova if per_valore else vecchia
         except Exception as e:  # noqa: BLE001 — l'ombra non deve mai fermare la politica
             print(f"   [POLITICA] ombra non calcolata: {type(e).__name__}: {e}", flush=True)

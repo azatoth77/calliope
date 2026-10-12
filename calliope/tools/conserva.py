@@ -140,7 +140,8 @@ def _dati_conservati(ctx: ToolContext, azione: str = "", persona: str = "") -> d
         note_rule(ctx, "conservati_svuotati")
         return _final(f"Fatto: ho cancellato i dati conservati {di_chi}.", **r)
     domanda = (f"Cancello i dati conservati {di_chi}: testi dei turni, conversazioni "
-               "archiviate, eventi e registrazioni della voce? I ricordi restano.")
+               "archiviate, eventi, registrazioni della voce, esercizi e richieste ai tutori? "
+               "I ricordi restano.")
     return _final(domanda, ok=False,
                   in_sospeso={"domanda": domanda, "cosa": f"cancellare i dati conservati {di_chi}",
                               "tool": "dati_conservati",

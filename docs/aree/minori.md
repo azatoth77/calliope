@@ -434,3 +434,35 @@ conversazioni (`conversazioni_giorni`, da decidere se allinearlo). Prova `prova_
 restano nell'archivio della sessione in memoria fino al riavvio; quelle di prima le toglie la
 prima pulizia. Dettagli in [contesto-conversazione](contesto-conversazione.md), sezione
 «L'archivio delle conversazioni allineato alla conservazione».)*
+
+## Esercizi e richieste ai tutori scadono con la conservazione (12/10 sera, ramo `correzioni-12-10`)
+
+Decisione di Dario del 12/10: i tentativi degli esercizi (`esercizi_tentativi`: domanda, risposta
+attesa e risposta del ragazzo fino a 60 caratteri, il dettaglio che vedono i tutori) e le richieste
+ai tutori (`richieste_tutori`, compreso `oggetto`, ciò che il ragazzo ha chiesto) non restano più
+per sempre: scadono dopo `turn_log_days` (60), la stessa tenuta di turni, eventi, voce e
+conversazioni, non un numero a parte. *(Storico: fino al 12/10 sera senza scadenza, come diceva
+l'elenco «Altri posti su disco» in [contesto-conversazione](contesto-conversazione.md).)*
+
+- **Dove**: `Conservazione._memoria` in `calliope/conserva.py` (`TABELLE_MEMORIA`: tabella,
+  colonna della persona, colonna della data ISO), con `secure_delete` sul file della memoria
+  (`memory_db`). Una tabella che non c'è (esercizi mai usati) o un file che non si apre non
+  fermano niente.
+- **Rotazione**: `Conservazione.ruota` (all'avvio, poi una volta al giorno) toglie le righe più
+  vecchie di `oggi − turn_log_days` (`giorno` dei tentativi, `creata` delle richieste): 59 e 60
+  giorni restano, 61 via. Quelle di prima si tolgono alla prima rotazione (niente migrazioni).
+  La rotazione degli esercizi non dipende più dalla cartella della voce (prima `ruota` usciva
+  subito senza quella cartella).
+- **Svuotare**: `calliope conserva --svuota --persona NOME` e il tool `dati_conservati` (azione
+  `svuota`) tolgono anche i tentativi e le richieste di quella persona (`persona` e `minore` sono
+  l'id del profilo); `--svuota` senza persona tutti. La domanda del tool lo dice («…registrazioni
+  della voce, esercizi e richieste ai tutori? I ricordi restano.») e il terminale li conta.
+- **Restano come prima** (non chiesto): `esercizi_segnalazioni` («secondo me è sbagliato», con la
+  risposta data e la nota), `esercizi_banco` (gli esercizi controllati, senza persona), gli avvisi
+  e i compiti del giorno, il tempo di gioco.
+
+Prove a secco in `prova_conserva`: 59 e 60 giorni restano e 61 via in entrambe le tabelle, la tenuta
+che segue `turn_log_days`, svuota per persona con il contrario (gli altri restano), svuota tutto,
+il file della memoria che non c'è. La prova usa sempre un file suo (`cfg.memory_db` nella cartella
+temporanea, `CALLIOPE_MEMORY_DB` per il terminale): «svuota tutto» non deve mai toccare la
+`memoria.db` di chi la lancia.

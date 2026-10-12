@@ -834,7 +834,7 @@ def _estensione_del_lavoro(ctx, lav):
                  "tool": "estensione_gestisci",
                  "argomenti": {"azione": "approva", "nome": nome}})
     if voce.get("attiva") == n and voce.get("stato") == "attiva":
-        return (f"«{m.get('titolo', nome)}» è attiva, versione {n}.", None)
+        return (f"L'estensione «{m.get('titolo', nome)}» è attiva, versione {n}.", None)
     return None
 
 

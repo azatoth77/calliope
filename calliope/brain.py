@@ -3670,6 +3670,11 @@ class Brain:
             ora = time.time()
             self.conv.riassunto = {"tipo": "coda", "testo": testo_coda(scambi, ora),
                                    "quando": ora, "per": owner}
+            # Con un turno le cui parole non restano tra gli ultimi scambi: in memoria sì, su
+            # disco no (12/10 sera, conversazioni.senza_non_conservati)
+            from .conversazioni import storia_conservata
+            if coda_scambi(storia_conservata(old.history), n) != scambi:
+                self.conv.riassunto["non_conservati"] = True
 
     def chiudi_conversazione(self, conv, motivo: str):
         """Chiude una conversazione che non è quella del turno (06/10: il registro delle

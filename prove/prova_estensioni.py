@@ -811,7 +811,7 @@ def prova_ciclo_di_vita(tmp: Path, isolamento):
     r = chiama(reg, ctx, "estensione_gestisci", {"azione": "rimuovi",
                                                  "nome": "convertitore_unita"}, turno=15)
     verifica("rimuovi un'attiva (09/10): niente, prima propone di disattivarla",
-             r["risposta_finale"].startswith("«Convertitore di unità» è attiva, versione")
+             r["risposta_finale"].startswith("L'estensione «Convertitore di unità» è attiva, versione")
              and "prima la disattivo?" in r["risposta_finale"]
              and (r.get("in_sospeso") or {}).get("argomenti", {}).get("azione") == "disattiva"
              and est.archivio.voce("convertitore_unita") is not None

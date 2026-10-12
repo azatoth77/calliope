@@ -364,6 +364,62 @@ def prova_collaudi(tmp):
     verifica("contrario: senza una chiamata prima del dato, il 3 non detto → fermato",
              politica.bloccata("sviluppo_collauda", SimpleNamespace(politica=t2, regole=[]),
                                {"argomenti": {"citta": "Borgo Alto", "giorni": 3}}) is not None)
+    # La politica per valore (12/10 sera, prova_sviluppo_giro6_ollama: il secondo collaudo
+    # fermato da valore_contenuto_dato perché il 3 della prima chiamata stava nel risultato)
+    # La matrice da sola: `base` senza il blocco dopo il dato della politica di prima (che
+    # prima della matrice ferma già i contrari: politica.bloccata)
+    def per_valore(esterni_prima, args1, args2, esterni_dopo, letto=True):
+        tv = politica.Turno(testo=frase, risposta={}, contaminazione=frozenset({"agente"}),
+                            esterni=list(esterni_prima))
+        if args1:
+            politica.bloccata("sviluppo_collauda", SimpleNamespace(politica=tv, regole=[]),
+                              args1)
+        if letto:
+            tv.letto_ora = "estensione"
+            tv.contaminazione = frozenset({"agente", "estensione"})
+        tv.esterni = list(esterni_prima) + list(esterni_dopo)
+        base = politica.decidi("sviluppo_collauda", args2, cl,
+                               valore.copia_turno(tv) if not letto else
+                               politica.Turno(**{**tv.__dict__, "letto_ora": ""}), True, True)
+        d, det = valore.decidi_valore("sviluppo_collauda", args2, cl, tv, base, True, True)
+        return d.regola, det.get("di_prima", [])
+
+    annuncio = [("agente", "Il lavoro di «Meteo città» è pronto: siamo al collaudo.")]
+    risultato = [("estensione", "A Valfiorita per 3 giorni: sole.")]
+    a1 = {"argomenti": {"citta": "Valfiorita", "giorni": 3}, "dati": "Valfiorita"}
+    a2 = {"argomenti": {"citta": "Borgo Alto", "giorni": 3}, "dati": "Borgo Alto"}
+    regola, dp = per_valore(annuncio, a1, a2, risultato)
+    verifica("per valore: il secondo collaudo col 3 della prima chiamata non è «dal dato» "
+             "(come la prima: contenuto non detto, che lo sviluppo salta)",
+             regola != "valore_contenuto_dato" and dp == ["argomenti"], f"{regola} {dp}")
+    verifica("…e la prima chiamata stessa è giudicata uguale (contenuto non detto)",
+             per_valore(annuncio, {}, a1, [], letto=False)[0] == regola, regola)
+    for (esterni_prima, args1, args2, perche) in (
+            (annuncio, a1, {"argomenti": {"citta": "Borgo Alto", "giorni": 5},
+                            "dati": "Borgo Alto"}, "un numero che la prima non aveva"),
+            ([("agente", "Prova per 3 giorni, me l'ha detto il sito.")], a1, a2,
+             "un 3 che stava già in un dato quando la prima l'ha scelto"),
+            (annuncio, {}, a2, "nessuna chiamata prima del dato")):
+        esterni_dopo = (risultato if "5" not in json.dumps(args2)
+                        else [("estensione", "A Valfiorita per 3 giorni, o 5: sole.")])
+        r, d2 = per_valore(esterni_prima, args1, args2, esterni_dopo)
+        verifica(f"contrario per valore: {perche} → resta dal dato",
+                 r == "valore_contenuto_dato" and not d2, f"{r} {d2}")
+    tv = politica.Turno(testo=frase, risposta={}, contaminazione=frozenset({"estensione"}),
+                        esterni=list(risultato))
+    tv.risposta = {"valori_prima": {"sviluppo_collauda": {"3"}},
+                   "dato_prima": (set(), set())}
+    verifica("contrario per valore: senza un dato letto in questa risposta (un turno dopo) il "
+             "3 del risultato resta dal dato",
+             valore.di_prima("sviluppo_collauda", "argomenti", "Borgo Alto 3", tv,
+                             valore.Fonti.da(tv)) is False)
+    tv.letto_ora = "estensione"
+    verifica("…con il dato letto ora sì (stesso turno)",
+             valore.di_prima("sviluppo_collauda", "argomenti", "Borgo Alto 3", tv,
+                             valore.Fonti.da(tv)) is True)
+    verifica("contrario per valore: un altro tool (non in DOPO_DATO_SE_DETTO) mai",
+             valore.di_prima("programma_esegui", "dati", "Borgo Alto 3", tv,
+                             valore.Fonti.da(tv)) is False)
     verifica("descrizione di sviluppo_collauda: una chiamata per valore",
              "una chiamata per valore" in next(s for s in ts.sviluppo_specs()
                                                if s.name == "sviluppo_collauda").description)

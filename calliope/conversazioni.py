@@ -989,11 +989,33 @@ def non_conservato(m) -> bool:
             and isinstance(m.get("_turno"), dict) and m["_turno"].get("conserva") is False)
 
 
+def storia_conservata(storia) -> list:
+    """La storia senza i turni le cui parole non restano: il messaggio dell'utente segnato e
+    quelli dopo fino alla domanda seguente (12/10 sera: anche per il riassunto di chiusura)."""
+    tenuti, via = [], False
+    for m in storia or ():
+        if isinstance(m, dict) and m.get("role") == "user":
+            via = non_conservato(m)
+        if not via:
+            tenuti.append(m)
+    return tenuti
+
+
+def riassunto_non_conservato(r) -> bool:
+    """Il riassunto della conversazione (compressione, coda della chiusa) è fatto anche con
+    turni le cui parole non restano (12/10 sera: `non_conservati` nel riassunto)."""
+    return isinstance(r, dict) and bool(r.get("non_conservati"))
+
+
 def senza_non_conservati(dati: dict) -> dict:
     """La conversazione esportata (Conversazione.esporta) senza i turni le cui parole non
     restano: il messaggio dell'utente e quelli dopo fino alla domanda seguente. `archiviati`
     scende di quanti ne sono stati tolti prima di lui. Per la conversazione in corso salvata su
-    disco (`correnti`): dopo un riavvio quei turni non ci sono più."""
+    disco (`correnti`): dopo un riavvio quei turni non ci sono più. Dal 12/10 sera anche il
+    riassunto fatto con quei turni (una compressione, la coda della chiusa) non va su disco:
+    dopo un riavvio la conversazione riparte senza (i turni conservati sono nell'archivio)."""
+    if riassunto_non_conservato(dati.get("riassunto")):
+        dati = {**dati, "riassunto": None}
     storia = dati.get("history")
     if not isinstance(storia, list) or not any(non_conservato(m) for m in storia):
         return dati

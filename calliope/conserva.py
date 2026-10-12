@@ -312,6 +312,14 @@ def _ha_testo(rec: dict) -> bool:
                                         for ev in rec.get("tool") or ())
 
 
+# Le tabelle di memoria.db con il testo dei ragazzi che scadono con la stessa tenuta (12/10
+# sera, decisione di Dario): (tabella, colonna della persona, colonna della data ISO). I
+# tentativi degli esercizi (domanda, risposta attesa e data, al più 60 caratteri: il dettaglio
+# dei tutori) e le richieste ai tutori (con `oggetto`, ciò che il ragazzo ha chiesto)
+TABELLE_MEMORIA = (("esercizi_tentativi", "persona", "giorno"),
+                   ("richieste_tutori", "minore", "creata"))
+
+
 class Conservazione:
     """La conservazione di questa installazione: chi, dove, per quanto. Un oggetto per processo
     (main.py), condiviso da registro dei turni, ciclo, registro degli eventi e tool."""
@@ -488,16 +496,20 @@ class Conservazione:
             threading.Thread(target=giro, daemon=True, name="conserva-rotazione").start()
 
     def ruota(self, oggi: datetime.date | None = None) -> dict:
-        """La voce: via i giorni oltre `turn_log_days`, le persone senza più il diritto (consenso
+        """Esercizi e richieste ai tutori oltre `turn_log_days` (12/10 sera). La voce: via i
+        giorni oltre `turn_log_days`, le persone senza più il diritto (consenso
         revocato, profilo tolto, diventata minore… nel dubbio via) e, oltre il tetto di spazio, i
         giorni più vecchi. Il registro dei turni ha la sua (TurnLog._prune), gli eventi pure
         (Disco.ruota)."""
         oggi = oggi or datetime.date.today()
         self._ruotata_il = oggi
         out = {"giorni": 0, "persone": 0, "tetto": 0}
+        limite = oggi - datetime.timedelta(days=self.giorni)
+        # Esercizi e richieste ai tutori (12/10 sera): la stessa tenuta, anche quelli di prima
+        # (alla prima rotazione, all'avvio: niente migrazioni)
+        out["memoria"] = self._memoria(limite=limite)
         if not self.voce_dir or not self.voce_dir.exists():
             return out
-        limite = oggi - datetime.timedelta(days=self.giorni)
         with self._lock:
             giorni: list[tuple[str, Path]] = []
             for pdir in [x for x in self.voce_dir.iterdir() if x.is_dir()]:
@@ -530,6 +542,48 @@ class Conservazione:
                              f"giorni dei più vecchi")
         return out
 
+    # ── esercizi e richieste ai tutori (memoria.db) ──
+    def _memoria(self, limite: datetime.date | None = None, persona_id=None,
+                 tutto: bool = False) -> int:
+        """Righe tolte da TABELLE_MEMORIA, con `secure_delete`: più vecchie di `limite`, di una
+        persona, o tutte. Una tabella che non c'è (esercizi mai usati) non conta; il file della
+        memoria che non si apre non ferma niente."""
+        path = getattr(self.cfg, "memory_db", None)
+        if not path or not Path(path).exists():
+            return 0
+        if limite is None and persona_id is None and not tutto:
+            return 0
+        import sqlite3
+        from .persistenza import apri_db
+        n = 0
+        try:
+            db = apri_db(path)
+        except (sqlite3.Error, OSError):
+            return 0
+        try:
+            db.execute("PRAGMA secure_delete = ON")
+            for tabella, chi, quando in TABELLE_MEMORIA:
+                if tutto:
+                    sql, arg = f"DELETE FROM {tabella}", ()
+                elif persona_id is not None:
+                    sql, arg = f"DELETE FROM {tabella} WHERE {chi} = ?", (str(persona_id),)
+                else:
+                    # ISO: «2026-08-13» e «2026-08-13T10:00:00» del giorno limite restano
+                    sql, arg = f"DELETE FROM {tabella} WHERE {quando} < ?", (limite.isoformat(),)
+                try:
+                    n += db.execute(sql, arg).rowcount or 0
+                except sqlite3.OperationalError:
+                    continue                      # la tabella non c'è
+            db.commit()
+        except sqlite3.Error as e:
+            self.log(f"   [CONSERVA] esercizi e richieste non ripuliti: {type(e).__name__}")
+        finally:
+            db.close()
+        if n and limite is not None and persona_id is None and not tutto:
+            self.log(f"   [CONSERVA] esercizi e richieste ai tutori oltre {self.giorni} giorni: "
+                     f"{n} righe tolte")
+        return n
+
     # ── il registro dei turni di prima (una volta) ──
     def ripulisci_registro(self, lock=None) -> dict | None:
         """Le parole dei turni di minori, ospiti e voci incerte scritte prima del 12/10 (il
@@ -551,8 +605,11 @@ class Conservazione:
     def svuota(self, persona_id: str | None = None, nome: str | None = None) -> dict:
         """Tutto (persona_id None) o i dati di una persona: la voce, gli eventi su disco (con
         `secure_delete`), nel registro dei turni le parole (di tutti: i file interi) e, dal 12/10
-        sera, l'archivio delle conversazioni (anche le conversazioni in corso salvate)."""
-        out = {"voce": 0, "eventi": 0, "turni": 0, "conversazioni": 0}
+        sera, l'archivio delle conversazioni (anche le conversazioni in corso salvate) e i
+        tentativi degli esercizi e le richieste ai tutori (TABELLE_MEMORIA)."""
+        out = {"voce": 0, "eventi": 0, "turni": 0, "conversazioni": 0,
+               "esercizi_richieste": self._memoria(persona_id=persona_id,
+                                                   tutto=persona_id is None)}
         arch = self.conversazioni
         lock = getattr(self.turnlog, "_lock", None)
         if persona_id is None:
@@ -728,12 +785,14 @@ def main(argv=None) -> int:
             r = c.svuota(prof.id, nome)
             print(f"Dati conservati di {nome} cancellati: {r['voce']} registrazioni, "
                   f"{r['eventi']} eventi, parole tolte da {r['turni']} turni, "
-                  f"{r['conversazioni']} conversazioni archiviate.")
+                  f"{r['conversazioni']} conversazioni archiviate, "
+                  f"{r['esercizi_richieste']} tra esercizi e richieste ai tutori.")
         else:
             r = c.svuota()
             print(f"Dati conservati cancellati: {r['voce']} registrazioni, {r['eventi']} eventi, "
                   f"{r['turni']} giorni del registro dei turni, {r['conversazioni']} "
-                  f"conversazioni archiviate.")
+                  f"conversazioni archiviate, {r['esercizi_richieste']} tra esercizi e "
+                  f"richieste ai tutori.")
         if c.conversazioni is not None:
             c.conversazioni.close()
         return 0

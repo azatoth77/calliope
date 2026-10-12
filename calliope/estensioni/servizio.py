@@ -646,7 +646,7 @@ class Estensioni:
         if azione == "disattiva":
             self.archivio.disattiva(nome)
             self.aggiorna_tool()
-            return _final(f"Fatto: «{titolo}» è disattivata.")
+            return _final(f"Fatto: l'estensione «{titolo}» è disattivata.")
         if azione == "riattiva":
             if not self.archivio.riattiva(nome) or not self.archivio.verifica(nome):
                 self.archivio.disattiva(nome)
@@ -736,7 +736,7 @@ class Estensioni:
             # disattiva e basta); per eliminarla poi si richiede (regola
             # `estensione_rimuovi_attiva`, vincolo di sicurezza)
             note_rule(ctx, "estensione_rimuovi_attiva")
-            frase = (f"«{titolo}» è attiva, versione {voce.get('attiva')}: prima la "
+            frase = (f"L'estensione «{titolo}» è attiva, versione {voce.get('attiva')}: prima la "
                      f"disattivo? Poi, se vuoi, la posso eliminare.")
             return _final(frase, ok=False, fatto="NIENTE eliminato: è attiva",
                           in_sospeso={"domanda": "Prima la disattivo?",

@@ -134,6 +134,7 @@ try:
     # ───────── registro dei turni ─────────
     cfg = Config()
     cfg.turn_log_dir = str(tmp / "registro")
+    cfg.memory_db = str(tmp / "memoria.db")     # mai quella vera (svuota tutto, 12/10 sera)
     cfg.turn_log_days = 60
     cfg.conserva_voce, cfg.conserva_voce_mb = True, 2000
     cons = C.Conservazione(cfg, reg, log=lambda m: None)
@@ -493,6 +494,132 @@ try:
     verifica("senza_non_conservati: niente da togliere, lo stesso dizionario",
              senza_non_conservati({"history": [{"role": "user", "content": "x"}]})
              == {"history": [{"role": "user", "content": "x"}]})
+
+    # Il riassunto di chiusura (12/10 sera): va su disco intero, quindi senza i turni incerti
+    from calliope.compressione import Compressore, Lavoro
+    from calliope.conversazioni import storia_conservata
+
+    class Riassuntore:
+        """Riassume ripetendo le domande che riceve (come il modello della voce e l'agente)."""
+        nome, voce = "finto", True
+
+        def __init__(self):
+            self.visti = []
+
+        def riassumi(self, lav, controlla=None):
+            self.visti.append(lav)
+            testi = [str(m.get("content") or "") for m in (lav.messaggi_voce or [])
+                     + lav.da_riassumere if m.get("role") in ("user", "system")]
+            return {"dati": {"argomenti": [t for t in testi if t and t != "S"][:12]},
+                    "token": 1, "s": 0.0}
+
+    def brain_di(conv):
+        return SimpleNamespace(
+            conv=conv, schemi=lambda: [],
+            _system_messages=lambda: [{"role": "system", "content": "S"}],
+            _riassunto_msgs=lambda c=None: (
+                [{"role": "system", "content": conv.riassunto["testo"]}]
+                if isinstance(conv.riassunto, dict) and conv.riassunto.get("testo") else []))
+
+    def riassunto_su_disco(conv):
+        for _ in range(250):
+            r = archc.db.execute("SELECT riassunto, riassunto_dati FROM conversazioni "
+                                "WHERE id = ?", (conv.id_archivio,)).fetchone()
+            if r and r[0]:
+                return " ".join(str(x) for x in r)
+            time.sleep(0.02)
+        return ""
+
+    rf = Riassuntore()
+    # Un archivio a parte: i conteggi dell'archivio di sopra restano quelli delle prove dopo
+    archc = ArchivioConversazioni(tmp / "chiusura.db", giorni=cons.giorni, log=lambda m: None,
+                                  avvia=False, conserva=cons.conversazioni_su_disco)
+
+    def archivia_c(chi, testo, meta=None, conv=None):
+        conv = conv or Conversazione(f"persona:{chi}")
+        conv.owner, conv.last_turn_at = chi, time.monotonic()
+        m = {"role": "user", "content": testo, **({"_turno": meta} if meta else {})}
+        msgs = [m, {"role": "assistant", "content": "Va bene."}]
+        conv.history += msgs
+        archc.archivia(conv, turni_conv(msgs), chi, nomi.get(chi), ospite=False)
+        return conv
+
+    comp = Compressore(cfg, [rf], archc, log=lambda m: None)
+    cc = archivia_c("p-adu", "parliamo della gita al lago di Braies")
+    archivia_c("p-adu", "il codice del garage è quattro sette due", meta=grigia, conv=cc)
+    archivia_c("p-adu", "e poi la cena da Ottavio", conv=cc)
+    comp.chiudi(brain_di(cc), cc, "esci")
+    disco = riassunto_su_disco(cc)
+    verifica("chiusura: il riassunto su disco senza il turno incerto (zona grigia)",
+             "Braies" in disco and "Ottavio" in disco and "garage" not in disco, disco[:300])
+    verifica("…e il modello non l'ha nemmeno ricevuto (voce e trascrizione)",
+             rf.visti and not any("garage" in str(m.get("content")) for m in
+                                  rf.visti[-1].messaggi_voce + rf.visti[-1].da_riassumere))
+    cn = archivia_c("p-adu", "parliamo della gita al lago di Braies")
+    archivia_c("p-adu", "e poi la cena da Ottavio", conv=cn)
+    comp.chiudi(brain_di(cn), cn, "esci")
+    verifica("contrario: senza turni incerti il modello riceve la conversazione intera",
+             "Ottavio" in riassunto_su_disco(cn) and len(rf.visti[-1].messaggi_voce) == 5,
+             str(len(rf.visti[-1].messaggi_voce)))
+    # Un riassunto di prima (compressione) fatto anche con il turno incerto: non entra in quello
+    # di chiusura e non va su disco con la conversazione in corso
+    cr = archivia_c("p-adu", "e poi la cena da Ottavio")
+    cr.riassunto = {"tipo": "compressione", "testo": "Riassunto: il codice del garage, Braies",
+                    "dati": {}, "non_conservati": True}
+    comp.chiudi(brain_di(cr), cr, "esci")
+    disco = riassunto_su_disco(cr)
+    verifica("chiusura: un riassunto di prima fatto col turno incerto non entra",
+             "Ottavio" in disco and "garage" not in disco, disco[:300])
+    cr2 = archivia_c("p-adu", "e poi la cena da Ottavio")
+    cr2.riassunto = {"tipo": "compressione", "testo": "Riassunto: la gita a Braies", "dati": {}}
+    comp.chiudi(brain_di(cr2), cr2, "esci")
+    verifica("contrario: un riassunto di prima pulito entra", "Braies" in riassunto_su_disco(cr2))
+    verifica("conversazione in corso su disco: senza il riassunto fatto col turno incerto",
+             senza_non_conservati({"history": [], "riassunto": cr.riassunto})["riassunto"]
+             is None)
+    verifica("contrario: il riassunto pulito resta nella conversazione in corso su disco",
+             senza_non_conservati({"history": [], "riassunto": cr2.riassunto})["riassunto"]
+             == cr2.riassunto)
+    # La compressione segna il riassunto fatto con il turno incerto (in memoria vale)
+    cs = Conversazione("persona:p-adu")
+    finto_brain = SimpleNamespace(conv=cs, _archivia_turni=lambda: None,
+                                  _stima_storia=lambda: 0, last_compressione=None,
+                                  last_context=None)
+    for incerto, atteso in ((True, True), (False, False)):
+        cs.history = [{"role": "user", "content": "il codice del garage",
+                       **({"_turno": grigia} if incerto else {})},
+                      {"role": "assistant", "content": "Va bene."},
+                      {"role": "user", "content": "la gita"}]
+        cs.riassunto = None
+        lav = Lavoro(cs, "compressione", cs.history[2], [dict(m) for m in cs.history[:2]],
+                     None, [], "Ginevra", None, None)
+        comp._applica_risultato(finto_brain, lav, {"argomenti": ["x"]}, "finto")
+        verifica(f"compressione: riassunto segnato non conservato = {atteso}",
+                 bool((cs.riassunto or {}).get("non_conservati")) is atteso, str(cs.riassunto))
+    cs.history = [{"role": "user", "content": "il codice del garage", "_turno": grigia},
+                  {"role": "assistant", "content": "Va bene."},
+                  {"role": "user", "content": "la gita"}]
+    verifica("storia_conservata: il turno incerto e le sue risposte via, il resto uguale",
+             [m["content"] for m in storia_conservata(cs.history)] == ["la gita"])
+    # La coda della conversazione chiusa per una pausa (in memoria nella nuova): segnata se tra
+    # gli ultimi scambi c'è il turno incerto, così non va su disco con la conversazione in corso
+    from calliope.brain import Brain
+    for incerto, atteso in ((True, True), (False, False)):
+        vecchia = Conversazione("persona:p-adu")
+        vecchia.owner = "p-adu"
+        vecchia.history = [{"role": "user", "content": "il codice del garage",
+                            **({"_turno": grigia} if incerto else {})},
+                           {"role": "assistant", "content": "Va bene."},
+                           {"role": "user", "content": "la gita"},
+                           {"role": "assistant", "content": "Bella."}]
+        fb = SimpleNamespace(cfg=SimpleNamespace(conversazione_coda_scambi=3),
+                             conv=Conversazione("persona:p-adu"))
+        Brain._coda_della_chiusa(fb, vecchia)
+        verifica(f"coda della chiusa: segnata non conservata = {atteso}",
+                 bool((fb.conv.riassunto or {}).get("non_conservati")) is atteso
+                 and "gita" in fb.conv.riassunto["testo"], str(fb.conv.riassunto)[:200])
+    comp.close()
+    archc.close()
     # Le conversazioni di prima del 12/10 (minore, ospite, profilo tolto): via alla prima
     # rotazione, con le conversazioni in corso salvate; l'adulto e chi amministra restano
     vecchio = ArchivioConversazioni(tmp / "conv.db", log=lambda m: None, avvia=False,
@@ -577,6 +704,69 @@ try:
     cons.conversazioni = None
     arch.close()
 
+    # ───────── esercizi e richieste ai tutori (12/10 sera) ─────────
+    # La stessa tenuta di turni e voce (turn_log_days), alla prima rotazione anche quelli di
+    # prima; svuotati con la persona e con tutto
+    from calliope.esercizi.registro import Registro as RegistroEsercizi
+    from calliope.minori import Richieste
+    RegistroEsercizi(cfg.memory_db).db.close()
+    Richieste(cfg.memory_db, cfg, log=lambda m: None).db.close()
+    import sqlite3
+
+    def riempi():
+        db = sqlite3.connect(cfg.memory_db)
+        db.execute("DELETE FROM esercizi_tentativi")
+        db.execute("DELETE FROM richieste_tutori")
+        for chi in ("p-min", "p-min2"):
+            for fa in (59, 60, 61):
+                g = datetime.date.today() - datetime.timedelta(days=fa)
+                db.execute("INSERT INTO esercizi_tentativi (persona, giorno, quando, materia, "
+                           "argomento, esercizio, domanda, attesa, data, esito) VALUES "
+                           "(?, ?, ?, 'matematica', 'tabelline', 'f', '7 per 8', '56', '54', "
+                           "'sbagliata')", (chi, g.isoformat(), f"{g.isoformat()}T10:00:00"))
+                db.execute("INSERT INTO richieste_tutori (minore, tipo, oggetto, creata, "
+                           "creata_ts) VALUES (?, 'gioco', 'il gioco dei pirati', ?, ?)",
+                           (chi, f"{g.isoformat()}T10:00:00", time.time() - fa * 86400))
+        db.commit()
+        db.close()
+
+    def righe(chi=None):
+        db = sqlite3.connect(cfg.memory_db)
+        out = []
+        for tabella, col, quando in C.TABELLE_MEMORIA:
+            q = f"SELECT {quando} FROM {tabella}" + (f" WHERE {col} = ?" if chi else "")
+            out += [r[0][:10] for r in db.execute(q, (chi,) if chi else ())]
+        db.close()
+        return out
+
+    riempi()
+    giorno = {fa: (datetime.date.today() - datetime.timedelta(days=fa)).isoformat()
+              for fa in (59, 60, 61)}
+    r = cons.ruota()
+    rimaste = righe()
+    verifica("rotazione: esercizi e richieste di 61 giorni fa via, 59 e 60 restano",
+             giorno[61] not in rimaste and rimaste.count(giorno[59]) == 4
+             and rimaste.count(giorno[60]) == 4 and r.get("memoria") == 4, f"{r} {rimaste}")
+    cons.giorni = 30
+    verifica("tenuta: è turn_log_days (con 30 via anche quelli di 59 giorni)",
+             cons.ruota().get("memoria") == 8 and righe() == [])
+    cons.giorni = 60
+    riempi()
+    r = cons.svuota("p-min", "Leo")
+    verifica("svuota una persona: anche i suoi esercizi e le sue richieste ai tutori",
+             r["esercizi_richieste"] == 6 and righe("p-min") == [] and len(righe("p-min2")) == 6,
+             str(r))
+    verifica("svuota, contrario: quelli degli altri restano", len(righe("p-min2")) == 6)
+    r = cons.svuota()
+    verifica("svuota tutto: anche esercizi e richieste", r["esercizi_richieste"] == 6
+             and righe() == [], str(r))
+    cfg_senza = SimpleNamespace(memory_db=str(tmp / "non-esiste.db"), turn_log_dir=None,
+                                turn_log_days=60)
+    verifica("contrario: senza il file della memoria niente errori né file nuovi",
+             C.Conservazione(cfg_senza, reg, log=lambda m: None)._memoria(
+                 limite=datetime.date.today()) == 0
+             and not (tmp / "non-esiste.db").exists())
+
     # ───────── da terminale ─────────
     cart = tmp / "dati"
     cart.mkdir()
@@ -584,12 +774,13 @@ try:
                                         encoding="utf-8")
     prima = os.getcwd()
     env = {k: os.environ.get(k) for k in ("CALLIOPE_TURN_LOG", "CALLIOPE_CONVERSAZIONI_DB",
-                                          "CALLIOPE_CONFIG")}
+                                          "CALLIOPE_CONFIG", "CALLIOPE_MEMORY_DB")}
     try:
         os.chdir(cart)
         os.environ["CALLIOPE_TURN_LOG"] = str(cart / "registro")
         os.environ["CALLIOPE_CONVERSAZIONI_DB"] = str(cart / "conversazioni.db")
         os.environ["CALLIOPE_CONFIG"] = str(cart / "calliope.yaml")
+        os.environ["CALLIOPE_MEMORY_DB"] = str(cart / "memoria.db")
         c2 = C.Conservazione(SimpleNamespace(turn_log_dir=str(cart / "registro"),
                                              turn_log_days=60, conserva_voce=True,
                                              conserva_voce_mb=10), Registro(amm), lambda m: None)

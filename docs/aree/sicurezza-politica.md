@@ -1408,3 +1408,35 @@ La conservazione dei dati (decisione [0028](../decisioni/0028-decisioni-roadmap-
   solo chi amministra con la voce (o il «sì» breve con l'impronta compatibile), con la domanda, ed è
   `distruttiva` nella classe della politica (verbo coerente nella frase). Effetto E3 nella politica
   per valore (`valore.EFFETTI`), argomenti `azione` (scelta) e `persona` (bersaglio).
+
+## Il valore della chiamata di prima nella politica per valore (12/10 sera, ramo `correzioni-12-10`)
+
+`prove/prova_sviluppo_giro6_ollama.py` (gemma4 e4b sul portatile) falliva **su main** il caso
+«io direi di provare con Valfiorita e Borgo Alto»: due `sviluppo_collauda`, il primo con
+`giorni = 3` (non detto, scelto dal modello) eseguito, il secondo con lo stesso 3 fermato da
+`valore_contenuto_dato` («Borgo Alto 3» viene dal risultato di un'estensione), perché il
+risultato del primo diceva «per 3 giorni». È un **falso positivo** nato con la politica per
+valore accesa (fase 4, 09/10 sera): la politica di prima aveva già la regola
+`dopo_dato_valore_di_prima` (08/10 sera, sopra), la matrice di `valore.py` no; il 3 era nei
+numeri del dato e diventava «dato».
+
+Correzione (`valore.di_prima`): per i soli tool di `DOPO_DATO_SE_DETTO` (il collaudo, i cui
+argomenti sono contenuti: lo sviluppo da provare è lo stato, non un argomento) e solo con un
+dato letto in questa risposta, un valore è «dal dato» soltanto per parole o numeri che il
+modello aveva già passato allo stesso tool **prima** di leggere il dato e che **allora non
+stavano in nessun dato**. In quel caso l'etichetta è quella che avrebbe avuto allora (con i soli
+dati di allora: `Turno.risposta["dato_prima"]`, fotografati da `politica._ricorda_prima` con i
+valori). Il secondo collaudo è giudicato come il primo (`valore_contenuto_non_detto`, che lo
+sviluppo aperto della persona riconosciuta salta con `sviluppo_intento`). Regola
+`valore_di_prima` nel registro, argomento in `politica_ombra`.
+
+Perché non indebolisce la sicurezza: un argomento che viene davvero dal dato resta «dato» — un
+numero che la chiamata di prima non aveva («giorni = 5» letto nel risultato), un 3 che stava già
+in un dato quando la prima chiamata l'ha scelto (l'annuncio dell'agente, una pagina), nessuna
+chiamata prima del dato, un turno dopo (niente dato letto ora), ogni altro tool. I bersagli non
+cambiano (il collaudo non ne ha), e il blocco dopo il dato di `bloccata` resta davanti alla
+matrice. Il numero di giorni di un collaudo della propria estensione in sviluppo è un caso
+diverso da un'azione con bersaglio dal dato: esegue la versione da approvare nel container con
+la porta stretta, e il valore l'ha scelto il modello prima che il dato esistesse. Casi contrari a
+secco in `prova_sviluppo_giro6` (sei). Misura col modello dopo la correzione: 3a 2/2 (prima 0/1),
+il resto invariato (2b 1/2 per un giro in cui il modello non chiama il tool: variabilità).

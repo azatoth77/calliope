@@ -475,6 +475,42 @@ def etichetta(valore, tipo: str, f: Fonti) -> str:
     return peggiore or SCELTO
 
 
+def parole_dato(t) -> tuple[set, set]:
+    """Le parole e i numeri dei dati non fidati del turno (come `Fonti.dato` e `numeri_dato`)."""
+    esterni = " ".join(x for _, x in (getattr(t, "esterni", None) or ()))
+    return prov.parole(esterni), _gettoni_numeri(esterni)
+
+
+def di_prima(name: str, k: str, valore, t, f: Fonti) -> bool:
+    """Il valore `valore` dell'argomento `k` è «dal dato» solo per parole o numeri che il modello
+    aveva già passato allo stesso tool in questa risposta PRIMA di leggere un dato, e che allora
+    non stavano in nessun dato (12/10 sera, prove/prova_sviluppo_giro6_ollama.py: «prova con
+    Valfiorita e Borgo Alto» → il primo collaudo con giorni = 3, il risultato «per 3 giorni», il
+    secondo collaudo con lo stesso 3 fermato da `valore_contenuto_dato`). È la regola
+    `dopo_dato_valore_di_prima` della politica di prima (politica.detto_dopo_dato), che la
+    politica per valore non aveva. Solo i tool di politica.DOPO_DATO_SE_DETTO (il collaudo:
+    un contenuto, mai un bersaglio) e solo se un dato è stato letto in questa risposta. Un
+    numero che c'era già in un dato quando è stato scelto (l'annuncio dell'agente), o che la
+    chiamata di prima non aveva, resta dal dato."""
+    if k not in (pol.DOPO_DATO_SE_DETTO.get(name) or ()) or t is None or not t.letto_ora:
+        return False
+    r = t.risposta if isinstance(getattr(t, "risposta", None), dict) else {}
+    prima = (r.get("valori_prima") or {}).get(name)
+    dp = r.get("dato_prima")
+    if not prima or not dp:
+        return False
+    parole_prima, numeri_prima = set(), set()
+    for x in prima:
+        parole_prima |= prov.parole(x)
+        numeri_prima |= _gettoni_numeri(x)
+    testo = _testo(valore) or ""
+    nuove = [w for w in prov.parole(testo) if w in f.dato and w not in dp[0]
+             and w not in f.frase and w not in f.persona]
+    nuovi = [n for n in _gettoni_numeri(testo) if n in f.numeri_dato and n not in dp[1]
+             and n not in f.numeri_frase and n not in f.numeri_persona]
+    return bool(nuove or nuovi) and all(w in parole_prima for w in nuove)         and all(n in numeri_prima for n in nuovi)
+
+
 # Gli argomenti che nominano uno sviluppo di chi parla (11/10, DGX delle 15:53: «Fallo continuare
 # allora» → sviluppo_passo {azione: avanti, quale: "videogioco a tema Halloween da giocare"}, e
 # `quale` era bersaglio/dato perché il titolo stava nell'annuncio del lavoro, scritto dal lavoro
@@ -723,6 +759,12 @@ def _matrice(name: str, args: dict, cl, t, base, conferma_voce: bool = False,
         if k in OGGETTO_VALORI.get(name, ()):
             v = " ".join(pol._valori_foglia(v)) if pol._valori_foglia(v) else v
         e = etichetta(v, tipo, f)
+        # Un valore della chiamata di prima allo stesso tool, scelto prima del dato letto ora
+        # (12/10 sera): l'etichetta che aveva allora, con i soli dati di allora
+        if e == DATO and di_prima(name, k, v, t, f):
+            dp = t.risposta["dato_prima"]
+            e = etichetta(v, tipo, replace(f, dato=dp[0], numeri_dato=dp[1]))
+            det.setdefault("di_prima", []).append(k)
         # senza tipi dichiarati: un argomento senza fonte vale come preso dal dato (§ 5.2)
         if tipi is None and e == MODELLO:
             e = DATO
