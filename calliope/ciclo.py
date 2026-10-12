@@ -677,7 +677,17 @@ class Ciclo:
         if not c.attivo or prof is None:
             info["motivo"] = "verifica_spenta" if prof is not None else "acuto"
             return guardia.PROTEZIONE
-        prima = c.aperto_per(prof.id, self.corsia.chiave) or c.recente(prof.id)
+        prima = c.aperto_per(prof.id, self.corsia.chiave)
+        if prima is None:
+            # Un segnale chiuso nella finestra (12/10, caso vero in auto): uno smentito non vale
+            # come primo (`recente` lo salta), e con la voce incerta in compagnia nessuno fa
+            # saltare il cancello 1, perché la frase può essere di un'altra persona
+            prima = c.recente(prof.id)
+            if prima is None and c.recente(prof.id, anche_smentiti=True) is not None:
+                self.rule("pericolo_dopo_smentita")
+            if prima is not None and info["voce_incerta"] and info.get("compagnia"):
+                self.rule("pericolo_compagnia_cancello1")
+                prima = None
         if prima is not None:
             if prima.aperto:
                 c.chiudi(prima, "conferma")
