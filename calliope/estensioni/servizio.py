@@ -16,6 +16,7 @@ import threading
 import time
 from pathlib import Path
 
+from .. import frasi as frasi_pronte
 from ..argomenti_incerti import nomi_estensione
 from ..tools.spec import ToolSpec, note_rule
 from .analisi import analizza, in_parole
@@ -962,9 +963,11 @@ class Estensioni:
                                  f"vuoi, chiedimi di continuare «{m['titolo']}».")
             except Exception as e:  # noqa: BLE001 — l'approvazione è fatta comunque
                 self.log(f"[ESTENSIONI] sviluppo non chiuso: {type(e).__name__}: {e}")
-        return _final(f"Fatto: «{m['titolo']}» è attiva, versione {n}"
-                      + (f": {cosa[:1].lower() + cosa[1:]}" if cosa else "")
-                      + ". Da adesso puoi chiedermela." + fine, **extra)
+        # Dal catalogo delle frasi pronte (12/10, calliope/frasi.py): titolo, versione e cosa fa
+        # restano in ogni variante
+        return _final(frasi_pronte.scegli(
+            "estensione.attiva", titolo=m["titolo"], versione=n,
+            cosa=(f": {cosa[:1].lower() + cosa[1:]}" if cosa else "")) + fine, **extra)
 
     @staticmethod
     def _voce_sicura(ctx) -> bool:

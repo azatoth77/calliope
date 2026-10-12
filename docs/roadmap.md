@@ -166,7 +166,13 @@ voce raccontava male gli esiti, i comandi del flusso si perdevano.
 2. **Frasi pronte meno monotone**, fasi 0–1 (V3): le varianti le scrive un agente, chi amministra
    ne rilegge un campione di 30 prima dell'accensione; obiettivo sotto 8 ripetizioni ogni 100
    ([`ricerche/2026-10-08-frasi-pronte.md`](ricerche/2026-10-08-frasi-pronte.md)). *Pronta* ·
-   dipende da: niente (l'id della frase pronta passa dall'uscita unica).
+   dipende da: niente (l'id della frase pronta passa dall'uscita unica). **Fatte il 12/10 le fasi
+   0–1, in ombra** (ramo `frasi-pronte`, `calliope/frasi.py`): campo `pronte` nel registro dei
+   turni dall'uscita unica, ripetizioni ogni 100 in `calliope stato --turni` con la stima delle
+   varianti; catalogo di 10 frasi (lavori, estensione attiva, sviluppo, cortesia) per tono e con
+   la forma breve; nel profilo ridotto uguale. Resta: chi amministra rilegge il campione
+   (`python -m calliope.frasi --campione --file campione.md`) e accende `frasi_varianti: attivo`;
+   poi annunci di fine lavoro, ripieghi e la cornice della politica (fase 2).
 3. **Compagnia F2** (V5): si rilegge l'ombra; se regge, il giudizio «rivolta a Calliope?»
    sostituisce il nome a ogni frase solo quando tutte le voci vicine sono riconosciute
    ([`ricerche/2026-10-09-piu-persone.md`](ricerche/2026-10-09-piu-persone.md)). *Quasi* · dipende

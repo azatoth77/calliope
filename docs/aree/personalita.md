@@ -6,13 +6,15 @@
 voce da chi amministra senza riavvio (il ritorno alla normale anche scritto), suoni d'ascolto
 sintetici; il modello acustico di «computer» c'è sul portatile e sulla DGX, non nel repository.
 Le frasi pronte del codice non seguono ancora il tono: l'analisi dell'08/10 (in fondo) propone
-come farlo, niente è ancora nel codice.
+come farlo, niente è ancora nel codice. *(Storico: dal 12/10 le fasi 0–1 ci sono, in ombra:
+vedi «Frasi pronte: misura e catalogo» in fondo.)*
 
 ## Moduli
 
 | Stadio | Libreria | Dove |
 |---|---|---|
 | Personalità: tono di voce, modalità startrek, suoni di ascolto (dal 04/10) | testo nel prompt (`TONI`) o nei dati del turno; suoni sintetici con numpy, WAV con `wave` | `calliope/config.py` → `TONI`, `nome_tono`, `frase_tono`, `MODALITA`, `apply_modalita`; `calliope/personalita.py` (tono della casa, `personalita.json`); `Brain._tone_note`; tool `cambia_voce` (`tono`, `per_tutti`); `calliope/suoni.py` → `SuoniAscolto`, `sintetico`; `Listener.on_wake`; addestramento di un'altra parola `wakeword/parole.py` (`WW_PAROLA`); vedi [`docs/ricerche/2026-10-04-personalita-wake-word.md`](../ricerche/2026-10-04-personalita-wake-word.md) |
+| Frasi pronte meno monotone: catalogo, varianti per tono, forma breve, misura (dal 12/10) | solo libreria standard | `calliope/frasi.py` → `CATALOGO`, `Frasi`, `FRASI`, `scegli`, `riconosci`, `riassunto`, `campione`; `Uscita.di` (`su_pronta`); `Ciclo._pronta_detta`, `Ciclo._frasi_turno`; `Cortesia.risposta` (`persona`); configurazione `frasi_varianti`, `frasi_breve_turni`; vedi [`docs/ricerche/2026-10-08-frasi-pronte.md`](../ricerche/2026-10-08-frasi-pronte.md) |
 
 ## Problemi noti
 
@@ -125,3 +127,58 @@ con varianti per tono e registro, rotazione per persona e forma breve la seconda
 sicurezza, sfida, permessi, numeri e domande in sospeso parola per parola. Dettagli e misure:
 [`../ricerche/2026-10-08-frasi-pronte.md`](../ricerche/2026-10-08-frasi-pronte.md); banco
 `prove/misura_frasi_pronte.py`.
+
+## Frasi pronte: misura e catalogo, fasi 0–1 (12/10, ramo `frasi-pronte`)
+
+Realizzate le fasi 0 e 1 della ricerca dell'08/10 (roadmap V3), **in ombra**: Calliope dice
+ancora le frasi di oggi, parola per parola, finché chi amministra non rilegge il campione.
+
+- **Fase 0, misura.** Ogni frase che va alla voce passa da `frasi.FRASI.detta` dentro
+  `Uscita.di` (l'uscita unica): le frasi scelte dal catalogo si riconoscono dal testo (anche a
+  pezzi, come le divide la voce), le altre del catalogo (politica, sfida, permessi, ripiego,
+  annuncio del collaudo) per modello, in ~13 µs per frase senza frasi pronte. Il ciclo scrive
+  nel registro dei turni il campo `pronte` (id, tono, variante, forma breve, o la scelta in
+  `ombra`; mai parole: resta anche per minori e ospiti) e la regola `frase_breve`. In
+  `calliope stato --turni` le ripetizioni ogni 100 risposte (risposta senza numeri né «…» uguale
+  a una delle ultime 20 alla stessa persona nello stesso giorno) per pronte, modello e tutte,
+  con la **stima delle varianti** in ombra (come se si fossero dette) e le più dette; avviso
+  sopra 8 ogni 100 con almeno 50 frasi pronte. I turni di prima del 12/10 si riconoscono per
+  modello (la cortesia dall'esito).
+- **Fase 1, catalogo** (`calliope/frasi.py`, `CATALOGO`): 10 frasi, 190 forme in tutto,
+  scritte da un agente il 12/10: `lavori.avviato`, `lavori.in_coda`, `lavori.proposta`
+  («Procedo?» identico e in fondo), `lavori.nessuno`, `lavori.nessuna_domanda`,
+  `estensione.attiva`, `sviluppo.correzione`, `sviluppo.stato`, `cortesia.grazie` e
+  `cortesia.conferma` (6–7 frasi per i toni pieni). Per ognuna varianti nei 6 toni (lei nel
+  formale, niente «!» nel computer di bordo, forme asciutte nell'essenziale) e, dove ha senso,
+  una forma breve con gli stessi fatti fissi. Rotazione per persona (mai una delle ultime due
+  dette a lei); forma breve se lo stesso id le è stato detto negli ultimi `frasi_breve_turni`
+  (6) turni e nell'ultima ora. Tono: quello di chi parla o della casa, segnato dal ciclo nella
+  fase 5 (`Ciclo._frasi_turno`). Una scelta conta solo quando l'uscita la dice. Le classi
+  bloccate (sfida, permessi, politica fino alla fase 2, ripiego, annunci con numeri e versioni)
+  sono nel catalogo solo per la misura, senza varianti.
+- **Modi** (`frasi_varianti`): `ombra` (predefinito) dice la base e scrive la variante;
+  `attivo` la dice; `spento` scrive solo l'id. Le 30 e più prove che leggono i testi esatti non
+  cambiano perché in ombra la base è la frase di oggi (lo controlla `prova_frasi`).
+- **Il campione per chi amministra** (roadmap: 30 forme rilette prima dell'accensione):
+  `python -m calliope.frasi --campione --file campione.md` (30 forme, a giro sugli id e sui toni,
+  con valori di fantasia e la frase di oggi accanto, mai la base né le frasi di cortesia già in
+  uso; sempre lo stesso con `--seme 12`; `--tutte` le stampa tutte). Se va bene:
+  `frasi_varianti: attivo` nel file locale e riavvio; per tornare indietro `ombra`.
+- **Simulazione** (script nella cartella temporanea, non nel repository): la distribuzione della
+  settimana dell'08/10 (§ 1.2 della ricerca) su una persona per 7 giorni, coi valori di fantasia,
+  dà 14 ripetizioni ogni 100 frasi pronte in ombra e 0,7 con `attivo`: le ripetizioni che restano
+  sono delle classi bloccate. È una stima grezza (la settimana vera ne misurava 20,5): il numero
+  vero lo dice `calliope stato --turni` dopo qualche giorno in ombra (stima delle varianti) e poi
+  acceso. Obiettivo: sotto 8.
+- **Profilo ridotto da 8 GB** (decisione 0028): c'è uguale. Niente modello, niente GPU, solo
+  testo in memoria (al più 200 persone e 200 scelte in attesa); nessuna latenza in più (la
+  forma breve anzi accorcia la voce). Le varianti valgono per qualunque modello della voce
+  perché non passano dal modello.
+- **Limiti**: la stima di `lavori.proposta` contiene ancora «te la faccio approvare» per le
+  estensioni (è un valore, non il modello della frase: nel formale resta il tu in quel pezzo);
+  la frase intera dell'annuncio di fine lavoro, il ripiego «Non ci sono riuscita…» (11 punti in
+  Brain) e la cornice della politica sono rimandati (fase 2 e dopo). Il riconoscimento per
+  modello di una frase del modello uguale a una del catalogo la conta come pronta.
+
+Prove: `prova_frasi` (livello 1, con i contrari). Da fare sul vero: qualche giorno in ombra,
+leggere la stima in `calliope stato --turni`, rileggere il campione, accendere.

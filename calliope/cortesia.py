@@ -15,9 +15,16 @@ predefiniti «Perfetto» resterebbe ancora senza risposta, che è proprio il dif
 Le frasi seguono il tono di chi parla (profilo) o quello della casa (config.TONI), con il
 «lei» nel tono formale; Calliope parla di sé al femminile. Niente «Fatto.» o «Eseguito.»:
 sarebbero dichiarazioni d'azione (ACTION_CLAIM) senza un'azione.
+
+Dal 12/10 (calliope/frasi.py, fase 1 delle frasi pronte) la scelta passa dal catalogo
+(`cortesia.grazie`, `cortesia.conferma`): con `frasi_varianti` «spento» o «ombra» resta questa
+rotazione per processo e per tono (in ombra il registro dei turni scrive anche cosa avrebbe
+scelto); con «attivo» le frasi del catalogo, 6–8 per tono, a rotazione **per persona** (con
+«Prego, lo metto in conto.» 8 volte in una settimana: era la rotazione per processo).
 """
 from __future__ import annotations
 
+from . import frasi as frasi_mod
 from .config import nome_tono
 
 # tono → forma → frasi (la prima è la più neutra)
@@ -51,22 +58,28 @@ class Cortesia:
         return t if t in RISPOSTE else "normale"
 
     def risposta(self, forma: str, tono_persona: str | None = None,
-                 tono_casa: str | None = None) -> str | None:
-        """La frase per la forma "grazie" o "conferma"; None per le altre ("silenzio")."""
-        frasi = RISPOSTE[self.tono(tono_persona, tono_casa)].get(forma)
+                 tono_casa: str | None = None, persona=None) -> str | None:
+        """La frase per la forma "grazie" o "conferma"; None per le altre ("silenzio").
+        `persona`: chi parla, per la rotazione del catalogo (12/10, `frasi_varianti: attivo`)."""
+        tono = self.tono(tono_persona, tono_casa)
+        frasi = RISPOSTE[tono].get(forma)
         if not frasi:
             return None
-        chiave = (self.tono(tono_persona, tono_casa), forma)
+        chiave = (tono, forma)
         i = self._giro.get(chiave, 0)
         self._giro[chiave] = i + 1
-        return frasi[i % len(frasi)]
+        return frasi_mod.FRASI.scegli(f"cortesia.{forma}", persona=persona, tono=tono,
+                                      base=frasi[i % len(frasi)])
 
     @staticmethod
     def frasi(toni) -> list[str]:
         """Tutte le frasi dei toni dati, da preparare all'avvio (Speaker.prepare)."""
         out: list[str] = []
+        toni = [nome_tono(t) or "normale" for t in toni]
         for t in toni:
-            t = nome_tono(t) or "normale"
             for frasi in RISPOSTE.get(t, RISPOSTE["normale"]).values():
                 out.extend(frasi)
+        if frasi_mod.FRASI.modo == "attivo":     # anche quelle del catalogo (12/10)
+            for forma in RISPOSTE["normale"]:
+                out.extend(frasi_mod.FRASI.tutte(f"cortesia.{forma}", toni))
         return list(dict.fromkeys(out))

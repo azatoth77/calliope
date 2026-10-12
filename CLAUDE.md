@@ -61,7 +61,7 @@ per stadio, solo i moduli principali: librerie, classi e dettagli sono nei docum
 | Configurazione (dataclass + YAML), profili del modello | `config.py` (`Config`, `PROFILI_LLM`, `TONI`) | [voce-e-regole](docs/aree/voce-e-regole.md) |
 | Latenza come metrica | `latenza.py` (`calliope stato --turni`, avviso oltre 1,2 s, `scalda_ripresa`) | [contesto-conversazione](docs/aree/contesto-conversazione.md) |
 | Conservazione per le misure (dal 12/10: turni, eventi e voce dei soli adulti 60 giorni, voce col consenso, `calliope conserva --svuota`) e scelta dei tool come metrica | `conserva.py`, `tools/conserva.py`, `scelta_tool.py` | [contesto-conversazione](docs/aree/contesto-conversazione.md) |
-| Personalità: toni, modalità startrek, suoni | `config.py`, `personalita.py`, `modalita.py` (a voce, senza riavvio), `suoni.py` | [personalita](docs/aree/personalita.md) |
+| Personalità: toni, modalità startrek, suoni; frasi pronte con varianti per tono e forma breve, misura delle ripetizioni (in ombra, dal 12/10) | `config.py`, `personalita.py`, `modalita.py` (a voce, senza riavvio), `suoni.py`, `frasi.py` | [personalita](docs/aree/personalita.md) |
 | Memoria, agenda, liste, tempi | `memory.py`, `agenda.py`, `tempi.py`, `liste.py` | [memoria-agenda-liste](docs/aree/memoria-agenda-liste.md) |
 | Finestra di contesto, conversazione, compressione, archivio | `contesto.py`, `conversazione.py`, `compressione.py`, `conversazioni.py` | [contesto-conversazione](docs/aree/contesto-conversazione.md) |
 | Una conversazione per persona, satelliti insieme | `corsie.py` | [contesto-conversazione](docs/aree/contesto-conversazione.md) |

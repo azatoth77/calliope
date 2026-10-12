@@ -55,6 +55,7 @@ from .remoto import ErroreOllama, crea_cliente
 from .sandbox import ErroreSandbox
 from ..conferme import proposta_valida, secondi_validi
 from ..sicurezza import asks_secret
+from .. import frasi
 from .tunnel import Tunnel
 from . import ripresa
 
@@ -581,7 +582,7 @@ class Lavori:
         import difflib
         tutti = self.in_attesa()
         if not tutti:
-            return None, "Non ho lavori che aspettano una risposta.", False
+            return None, frasi.scegli("lavori.nessuna_domanda"), False
         q = str(quale or "").strip()
         scelto = None
         if re.fullmatch(r"[Ll]\d+", q):
@@ -919,8 +920,10 @@ class Lavori:
         # si farà davvero prima del «sì»
         spec = str(getattr(lav, "specifica", "") or "").strip().rstrip(".")
         prima = f"Ho capito così: {spec[:1].lower() + spec[1:]}. " if spec else ""
-        return (f"{prima}{cosa}: lo affido all'agente {self.imp.su_nome}{coda}{carico}. {stima} "
-                f"e ti avviso quando ha finito. Procedo?")
+        # Dal catalogo delle frasi pronte (12/10, calliope/frasi.py): la base è questa frase, le
+        # varianti per tono e la forma breve solo con `frasi_varianti: attivo`; «Procedo?» in fondo
+        return prima + frasi.scegli("lavori.proposta", cosa=cosa, agente=self.imp.su_nome,
+                                    coda=coda, carico=carico, stima=stima)
 
 
     def proponi(self, lav: Lavoro, turno: int) -> str:
@@ -992,10 +995,8 @@ class Lavori:
             self._coda.put(altro)
         self._salva_stato()
         if att:
-            return (f"D'accordo: lo metto in coda dopo «{att[0].titolo}». Ti avviso quando è "
-                    f"pronto.")
-        return ("Ci lavoro in secondo piano: ti avviso quando è pronto. Intanto puoi chiedermi "
-                "altro.")
+            return frasi.scegli("lavori.in_coda", titolo=att[0].titolo)
+        return frasi.scegli("lavori.avviato")     # catalogo delle frasi pronte (12/10)
 
     def stato(self, persona=None, tutti: bool = False) -> str:
         with self._lock:
@@ -1047,7 +1048,7 @@ class Lavori:
                     "ripreso": "si era interrotto per un riavvio, e l'ho rifatto"}.get(
                 lv.stato, lv.stato)
             return f"Non ho lavori in corso. L'ultimo, «{lv.titolo}», {come}."
-        return "Non ho lavori in corso."
+        return frasi.scegli("lavori.nessuno")
 
     def annulla(self, persona=None, tutti_di_tutti: bool = False, quale: str = "ultimo") -> dict:
         """Ferma il lavoro in corso (o in coda) di `persona`; chi amministra può fermare

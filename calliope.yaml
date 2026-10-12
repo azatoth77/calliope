@@ -18,6 +18,18 @@ identita:
   # (per_tutti), salvato in personalita.json accanto a calliope.yaml: vince su questo
   # finché calliope.yaml o calliope.locale.yaml non sono più recenti (vale il più recente)
   tono: normale
+  # Frasi pronte meno monotone (12/10, calliope/frasi.py, docs/ricerche/2026-10-08-frasi-pronte.md):
+  # le frasi più dette scritte nel codice (lavori, estensione attiva, sviluppo, cortesia) hanno
+  # varianti per tono, col «lei» nel formale, a rotazione per persona, e una forma breve la
+  # seconda volta. «ombra»: Calliope dice la frase di oggi e il registro dei turni scrive anche
+  # la variante che avrebbe scelto (`calliope stato --turni` stima le ripetizioni con le
+  # varianti); «attivo»: dice la variante; «spento»: niente scelta, solo l'id per la misura.
+  # Si accende a mano nel file locale dopo aver riletto il campione:
+  # python -m calliope.frasi --campione. Sfida, permessi e domande della politica non cambiano
+  frasi_varianti: ombra
+  # La forma breve se la stessa frase è stata detta alla stessa persona in questi ultimi turni
+  # (e nell'ultima ora). 0 = mai
+  frasi_breve_turni: 6
   # Modalità (preset): "startrek" = wake word «Computer» (solo all'inizio della frase o
   # dopo una virgola), tono computer_di_bordo e i suoni di inizio e fine ascolto. Vince su
   # calliope.yaml; ciò che scrivi in calliope.locale.yaml vince sulla modalità. Il nome

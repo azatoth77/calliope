@@ -30,7 +30,7 @@ from pathlib import Path
 
 import sounddevice as sd
 
-from . import attrito, capacita, contesto, corsie, latenza, minori
+from . import attrito, capacita, contesto, corsie, frasi, latenza, minori
 from . import cancelli as cancelli_mod
 from . import guardiano as guardia
 from .agenda import Agenda
@@ -830,6 +830,8 @@ class Avvio:
         from .compressione import FRASE_DURA
         # Frasi d'attesa dei tool lenti («Vediamo…»), sintetizzate subito in secondo piano
         # e le risposte di cortesia («Prego!», «Bene!») nel tono della casa e delle persone
+        # Le frasi pronte del catalogo (12/10, calliope/frasi.py): ombra, attivo o spento
+        frasi.FRASI.configura(cfg)
         s.cortesia = Cortesia()
         speaker.prepare(s.tools.announcements() + [s.stt.ATTESA, FRASE_DURA, corsie.FRASE_CODA]
                         + s.cortesia.frasi([cfg.tono] + [u.preferred_tone for u in
