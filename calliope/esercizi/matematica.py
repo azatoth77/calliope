@@ -105,6 +105,95 @@ def verifica(es: Esercizio) -> bool:
         return False
 
 
+# ─────────────────────────── limiti del programma (12/10 sera) ───────────────────────────
+# Decisione di Dario del 12/10 sera: il livello sta dentro la voce dell'indice del programma
+# (calliope/esercizi/programma/), che per le operazioni dice «entro quale numero» e «con o senza
+# cambio» (riporto o prestito). I generatori li ricevono come parametri; `rispetta` li ricontrolla
+# sull'esercizio finito (anche le operazioni di un problema: un'interrogazione sulle addizioni non
+# ha sottrazioni né moltiplicazioni) e un esercizio fuori limite non esce mai (ValueError).
+
+# Gli argomenti per cui «entro» ha senso (il numero più grande, risultato compreso)
+CON_ENTRO = ("addizioni", "sottrazioni", "moltiplicazioni", "divisioni", "problemi")
+# Le operazioni dei generatori, per nome (le stesse parole dell'argomento)
+OPERAZIONI = {"addizioni": "+", "sottrazioni": "-", "moltiplicazioni": "*", "divisioni": "/"}
+TENTATIVI = 400
+
+
+def riporto(a: int, b: int) -> bool:
+    """L'addizione a + b ha almeno un riporto in colonna?"""
+    a, b = abs(int(a)), abs(int(b))
+    while a or b:
+        if a % 10 + b % 10 >= 10:
+            return True
+        a, b = a // 10, b // 10
+    return False
+
+
+def prestito(a: int, b: int) -> bool:
+    """La sottrazione a − b ha almeno un prestito in colonna?"""
+    a, b = abs(int(a)), abs(int(b))
+    while b:
+        if a % 10 < b % 10:
+            return True
+        a, b = a // 10, b // 10
+    return False
+
+
+def _cambio_ok(ha_cambio: bool, cambio: bool | None) -> bool:
+    """cambio None: indifferente; False: mai; True: sempre."""
+    return cambio is None or ha_cambio == bool(cambio)
+
+
+def operazioni_di(espressione: str) -> set[str]:
+    """Le operazioni di un'espressione: {"+", "-", "*", "/", "**"} (senza «=»: il lato
+    sinistro e il destro insieme)."""
+    out: set[str] = set()
+    simboli = {ast.Add: "+", ast.Sub: "-", ast.Mult: "*", ast.Div: "/", ast.Pow: "**"}
+    for pezzo in str(espressione or "").split("="):
+        if not pezzo.strip():
+            continue
+        try:
+            albero = ast.parse(pezzo, mode="eval")
+        except SyntaxError:
+            continue
+        for n in ast.walk(albero):
+            if isinstance(n, ast.BinOp) and type(n.op) in simboli:
+                out.add(simboli[type(n.op)])
+    return out
+
+
+def numeri_di(es: Esercizio) -> list[int]:
+    """Gli interi dell'esercizio: quelli dell'espressione e il risultato."""
+    out = []
+    try:
+        for n in ast.walk(ast.parse(es.espressione.split("=")[0] or "0", mode="eval")):
+            if isinstance(n, ast.Constant) and isinstance(n.value, int):
+                out.append(abs(n.value))
+    except SyntaxError:
+        pass
+    r = es.risposta
+    if isinstance(r, Fraction) and r.denominator == 1:
+        out.append(abs(int(r)))
+    return out
+
+
+def rispetta(es: Esercizio, entro: int | None = None, cambio: bool | None = None,
+             solo: set | frozenset | None = None) -> bool:
+    """L'esercizio sta dentro il limite? `entro`: nessun numero (risultato compreso) oltre;
+    `cambio`: riporto o prestito (addizioni e sottrazioni); `solo`: le operazioni ammesse (un
+    problema in un'interrogazione su un'operazione sola)."""
+    if entro and es.argomento in CON_ENTRO and any(n > entro for n in numeri_di(es)):
+        return False
+    if cambio is not None and es.argomento in ("addizioni", "sottrazioni"):
+        a, b = es.dati.get("operandi", (0, 0))
+        ha = riporto(a, b) if es.argomento == "addizioni" else prestito(a, b)
+        if not _cambio_ok(ha, cambio):
+            return False
+    if solo and not operazioni_di(es.espressione) <= set(solo):
+        return False
+    return True
+
+
 # ─────────────────────────── generatori ───────────────────────────
 
 def _es(argomento, livello, seme, testo, voce, risposta, sugg, spieg, espressione,
@@ -115,14 +204,27 @@ def _es(argomento, livello, seme, testo, voce, risposta, sugg, spieg, espression
                      {"tipo": "calcolato"})
 
 
-def _addizioni(rng: random.Random, L: int, seme: int) -> Esercizio:
-    if L == 1:
-        a = rng.randint(2, 12)
-        b = rng.randint(1, 20 - a)
-    elif L == 2:
-        a, b = rng.randint(12, 89), rng.randint(11, 79)
-    else:
-        a, b = rng.randint(120, 899), rng.randint(105, 899)
+def _scegli(rng: random.Random, estrai, va_bene, cosa: str):
+    """Estrae finché `va_bene` (al più TENTATIVI volte): ValueError se il limite non lascia
+    niente (mai con le voci dell'indice: lo controlla prova_esercizi_programma)."""
+    for _ in range(TENTATIVI):
+        x = estrai()
+        if va_bene(*x):
+            return x
+    raise ValueError(f"nessun esercizio di {cosa} dentro il limite")
+
+
+def _addizioni(rng: random.Random, L: int, seme: int, entro: int | None = None,
+               cambio: bool | None = None) -> Esercizio:
+    def estrai():
+        if L == 1:
+            a = rng.randint(2, 12)
+            return a, rng.randint(1, 20 - a)
+        if L == 2:
+            return rng.randint(12, 89), rng.randint(11, 79)
+        return rng.randint(120, 899), rng.randint(105, 899)
+    a, b = _scegli(rng, estrai, lambda a, b: (not entro or a + b <= entro)
+                   and _cambio_ok(riporto(a, b), cambio), "addizioni")
     s = a + b
     grande, piccolo = max(a, b), min(a, b)
     if L == 1:
@@ -134,19 +236,21 @@ def _addizioni(rng: random.Random, L: int, seme: int) -> Esercizio:
                 f"Le unità: {ua} più {ub} fa {ua + ub}" + (", scrivi l'unità e riporta 1 alle decine."
                                                          if ua + ub >= 10 else ".")]
     return _es("addizioni", L, seme, f"{a} + {b} = ?", f"Quanto fa {a} più {b}?", s, sugg,
-               f"{a} più {b} fa {s}.", f"{a}+{b}")
+               f"{a} più {b} fa {s}.", f"{a}+{b}", operandi=[a, b])
 
 
-def _sottrazioni(rng, L, seme):
-    if L == 1:
-        a = rng.randint(5, 20)
-        b = rng.randint(1, a - 1)
-    elif L == 2:
-        a = rng.randint(30, 99)
-        b = rng.randint(11, a - 5)
-    else:
+def _sottrazioni(rng, L, seme, entro=None, cambio=None):
+    def estrai():
+        if L == 1:
+            a = rng.randint(5, 20)
+            return a, rng.randint(1, a - 1)
+        if L == 2:
+            a = rng.randint(30, 99)
+            return a, rng.randint(11, a - 5)
         a = rng.randint(300, 999)
-        b = rng.randint(101, a - 20)
+        return a, rng.randint(101, a - 20)
+    a, b = _scegli(rng, estrai, lambda a, b: (not entro or a <= entro)
+                   and _cambio_ok(prestito(a, b), cambio), "sottrazioni")
     d = a - b
     if L == 1:
         sugg = [f"Parti da {a} e conta all'indietro di {b}.",
@@ -157,18 +261,21 @@ def _sottrazioni(rng, L, seme):
                 f"in prestito una decina." if a % 10 < b % 10 else
                 f"Le unità: {a % 10} meno {b % 10} fa {a % 10 - b % 10}."]
     return _es("sottrazioni", L, seme, f"{a} − {b} = ?", f"Quanto fa {a} meno {b}?", d, sugg,
-               f"{a} meno {b} fa {d}: infatti {d} più {b} fa {a}.", f"{a}-{b}")
+               f"{a} meno {b} fa {d}: infatti {d} più {b} fa {a}.", f"{a}-{b}", operandi=[a, b])
 
 
-def _moltiplicazioni(rng, L, seme):
-    if L == 1:
-        a, b = rng.randint(2, 5), rng.randint(1, 10)
-    elif L == 2:
-        a, b = rng.randint(3, 10), rng.randint(2, 10)
-    else:
-        a, b = rng.randint(12, 99), rng.randint(3, 9)
-    if rng.random() < 0.5 and L < 3:
-        a, b = b, a
+def _moltiplicazioni(rng, L, seme, entro=None, cambio=None):
+    def estrai():
+        if L == 1:
+            a, b = rng.randint(2, 5), rng.randint(1, 10)
+        elif L == 2:
+            a, b = rng.randint(3, 10), rng.randint(2, 10)
+        else:
+            a, b = rng.randint(12, 99), rng.randint(3, 9)
+        if rng.random() < 0.5 and L < 3:
+            a, b = b, a
+        return a, b
+    a, b = _scegli(rng, estrai, lambda a, b: not entro or a * b <= entro, "moltiplicazioni")
     p = a * b
     if L < 3:
         sugg = [f"È come sommare {b} volte il numero {a}.",
@@ -182,13 +289,14 @@ def _moltiplicazioni(rng, L, seme):
                f"{a} per {b} fa {p}.", f"{a}*{b}")
 
 
-def _divisioni(rng, L, seme):
-    if L == 1:
-        d, q = rng.randint(2, 5), rng.randint(1, 10)
-    elif L == 2:
-        d, q = rng.randint(3, 10), rng.randint(2, 10)
-    else:
-        d, q = rng.randint(2, 9), rng.randint(11, 99)
+def _divisioni(rng, L, seme, entro=None, cambio=None):
+    def estrai():
+        if L == 1:
+            return rng.randint(2, 5), rng.randint(1, 10)
+        if L == 2:
+            return rng.randint(3, 10), rng.randint(2, 10)
+        return rng.randint(2, 9), rng.randint(11, 99)
+    d, q = _scegli(rng, estrai, lambda d, q: not entro or d * q <= entro, "divisioni")
     n = d * q
     sugg = [f"Pensa alla tabellina del {d}: quale numero moltiplicato per {d} fa {n}?",
             f"Prova con un numero e controlla: per esempio {d} per {max(1, q - 2)} fa "
@@ -304,72 +412,118 @@ def _den(d, plurale=True) -> str:
     return denominatore_parola(d, plurale)
 
 
-def _problemi(rng, L, seme):
-    nome, g = rng.choice(NOMI)
-    nome2 = rng.choice([n for n, _ in NOMI if n != nome])
-    cose = rng.choice(COSE)
-    gli = "le" if g == "f" else "gli"
-    if L == 1:
-        if rng.random() < 0.5:
-            a, b = rng.randint(3, 12), rng.randint(2, 8)
-            return _es("problemi", L, seme,
-                       f"{nome} ha {a} {cose}. Ne riceve altre {b}. Quante {cose} ha adesso?",
-                       f"{nome} ha {a} {cose}. Ne riceve altre {b}. Quante {cose} ha adesso?",
-                       a + b, ["Le cose aumentano o diminuiscono?",
-                               f"Aumentano: devi fare {a} più {b}."],
-                       f"Le {cose} aumentano: {a} più {b} fa {a + b}.", f"{a}+{b}")
+# I problemi per livello, con le operazioni che usano (12/10 sera: un'interrogazione sulle
+# addizioni sceglie solo quelli con «+»). Ogni modello riceve (rng, nome, g, nome2, cose) e
+# restituisce (testo, risposta, indizi, spiegazione, espressione).
+def _p_riceve(rng, nome, g, nome2, cose):
+    a, b = rng.randint(3, 12), rng.randint(2, 8)
+    return (f"{nome} ha {a} {cose}. Ne riceve altre {b}. Quante {cose} ha adesso?", a + b,
+            ["Le cose aumentano o diminuiscono?", f"Aumentano: devi fare {a} più {b}."],
+            f"Le {cose} aumentano: {a} più {b} fa {a + b}.", f"{a}+{b}")
+
+
+def _p_regala(rng, nome, g, nome2, cose, grandi=False):
+    if grandi:
+        a = rng.randint(30, 99)
+        b = rng.randint(11, a - 6)
+    else:
         a = rng.randint(6, 18)
         b = rng.randint(2, a - 2)
-        return _es("problemi", L, seme,
-                   f"{nome} ha {a} {cose} e ne regala {b} a {nome2}. Quante {cose} {gli} restano?",
-                   f"{nome} ha {a} {cose} e ne regala {b} a {nome2}. Quante {cose} {gli} restano?",
-                   a - b, ["Le cose aumentano o diminuiscono?",
-                           f"Diminuiscono: devi fare {a} meno {b}."],
-                   f"Le {cose} diminuiscono: {a} meno {b} fa {a - b}.", f"{a}-{b}")
-    if L == 2:
-        if rng.random() < 0.5:
-            a, b = rng.randint(3, 9), rng.randint(3, 9)
-            return _es("problemi", L, seme,
-                       f"In una scatola ci sono {a} file di {b} {cose} ciascuna. Quante {cose} ci "
-                       f"sono in tutto?",
-                       f"In una scatola ci sono {a} file di {b} {cose} ciascuna. Quante {cose} ci "
-                       f"sono in tutto?", a * b,
-                       [f"Ogni fila ha {b} {cose}, e le file sono {a}.",
-                        f"Puoi fare {b} più {b} per {a} volte, o più in fretta {a} per {b}."],
-                       f"{a} file da {b}: {a} per {b} fa {a * b}.", f"{a}*{b}")
-        b, q = rng.randint(2, 6), rng.randint(2, 9)
-        a = b * q
-        return _es("problemi", L, seme,
-                   f"{nome} divide {a} {cose} in parti uguali tra {b} amici. Quante {cose} riceve "
-                   f"ogni amico?",
-                   f"{nome} divide {a} {cose} in parti uguali tra {b} amici. Quante {cose} riceve "
-                   f"ogni amico?", q,
-                   ["Parti uguali: che operazione serve?",
-                    f"Serve una divisione: {a} diviso {b}."],
-                   f"In parti uguali: {a} diviso {b} fa {q}.", f"{a}/{b}")
-    if rng.random() < 0.5:
-        n, p = rng.randint(2, 6), rng.randint(2, 4)
-        t = rng.choice([x for x in (10, 20, 50) if x > n * p])
-        return _es("problemi", L, seme,
-                   f"{nome} compra {n} quaderni da {p} euro l'uno e paga con {t} euro. Quanti "
-                   f"euro riceve di resto?",
-                   f"{nome} compra {n} quaderni da {p} euro l'uno e paga con {t} euro. Quanti "
-                   f"euro riceve di resto?", t - n * p,
-                   ["Prima calcola quanto spende in tutto.",
-                    f"Spende {n} per {p} euro; poi togli la spesa dai {t} euro."],
-                   f"Spende {n} per {p}, cioè {n * p} euro; {t} meno {n * p} fa {t - n * p}.",
-                   f"{t}-{n}*{p}")
+    gli = "le" if g == "f" else "gli"
+    return (f"{nome} ha {a} {cose} e ne regala {b} a {nome2}. Quante {cose} {gli} restano?",
+            a - b, ["Le cose aumentano o diminuiscono?", f"Diminuiscono: devi fare {a} meno {b}."],
+            f"Le {cose} diminuiscono: {a} meno {b} fa {a - b}.", f"{a}-{b}")
+
+
+def _p_regala_grandi(rng, nome, g, nome2, cose):
+    return _p_regala(rng, nome, g, nome2, cose, grandi=True)
+
+
+def _p_insieme(rng, nome, g, nome2, cose):
+    a, b = rng.randint(12, 59), rng.randint(11, 39)
+    return (f"{nome} ha {a} {cose} e {nome2} ne ha {b}. Quante {cose} hanno in tutto?", a + b,
+            ["In tutto: le metti insieme o ne togli?", f"Le metti insieme: {a} più {b}."],
+            f"In tutto: {a} più {b} fa {a + b}.", f"{a}+{b}")
+
+
+def _p_file(rng, nome, g, nome2, cose):
+    a, b = rng.randint(3, 9), rng.randint(3, 9)
+    return (f"In una scatola ci sono {a} file di {b} {cose} ciascuna. Quante {cose} ci sono in "
+            f"tutto?", a * b,
+            [f"Ogni fila ha {b} {cose}, e le file sono {a}.",
+             f"Puoi fare {b} più {b} per {a} volte, o più in fretta {a} per {b}."],
+            f"{a} file da {b}: {a} per {b} fa {a * b}.", f"{a}*{b}")
+
+
+def _p_divide(rng, nome, g, nome2, cose):
+    b, q = rng.randint(2, 6), rng.randint(2, 9)
+    a = b * q
+    return (f"{nome} divide {a} {cose} in parti uguali tra {b} amici. Quante {cose} riceve ogni "
+            f"amico?", q,
+            ["Parti uguali: che operazione serve?", f"Serve una divisione: {a} diviso {b}."],
+            f"In parti uguali: {a} diviso {b} fa {q}.", f"{a}/{b}")
+
+
+def _p_quaderni(rng, nome, g, nome2, cose):
+    n, p = rng.randint(2, 6), rng.randint(2, 4)
+    t = rng.choice([x for x in (10, 20, 50) if x > n * p])
+    return (f"{nome} compra {n} quaderni da {p} euro l'uno e paga con {t} euro. Quanti euro "
+            f"riceve di resto?", t - n * p,
+            ["Prima calcola quanto spende in tutto.",
+             f"Spende {n} per {p} euro; poi togli la spesa dai {t} euro."],
+            f"Spende {n} per {p}, cioè {n * p} euro; {t} meno {n * p} fa {t - n * p}.",
+            f"{t}-{n}*{p}")
+
+
+def _p_pullman(rng, nome, g, nome2, cose):
     a = rng.randint(30, 54)
     b, c = rng.randint(5, 14), rng.randint(5, 14)
-    return _es("problemi", L, seme,
-               f"Un pullman ha {a} posti. Alla prima fermata salgono {b} bambini e alla seconda "
-               f"{c}. Quanti posti restano liberi?",
-               f"Un pullman ha {a} posti. Alla prima fermata salgono {b} bambini e alla seconda "
-               f"{c}. Quanti posti restano liberi?", a - b - c,
-               ["Prima conta quanti bambini salgono in tutto.",
-                f"Salgono {b} più {c} bambini: toglili dai {a} posti."],
-               f"Salgono {b} più {c}, cioè {b + c} bambini; {a} meno {b + c} fa {a - b - c}.",
-               f"{a}-{b}-{c}")
+    return (f"Un pullman ha {a} posti. Alla prima fermata salgono {b} bambini e alla seconda "
+            f"{c}. Quanti posti restano liberi?", a - b - c,
+            ["Prima conta quanti bambini salgono in tutto.",
+             f"Salgono {b} più {c} bambini: toglili dai {a} posti."],
+            f"Salgono {b} più {c}, cioè {b + c} bambini; {a} meno {b + c} fa {a - b - c}.",
+            f"{a}-{b}-{c}")
+
+
+def _p_gita(rng, nome, g, nome2, cose):
+    a, b, c = rng.randint(18, 55), rng.randint(18, 55), rng.randint(18, 55)
+    return (f"Alla gita vanno {a} bambini sul primo pullman, {b} sul secondo e {c} sul terzo. "
+            f"Quanti bambini vanno alla gita in tutto?", a + b + c,
+            ["Devi mettere insieme i bambini dei tre pullman.",
+             f"Prima {a} più {b}, poi aggiungi {c}."],
+            f"{a} più {b} fa {a + b}, più {c} fa {a + b + c}.", f"{a}+{b}+{c}")
+
+
+def _p_scaffali(rng, nome, g, nome2, cose):
+    a, b = rng.randint(12, 40), rng.randint(3, 9)
+    return (f"In biblioteca ci sono {b} scaffali con {a} libri ciascuno. Quanti libri ci sono "
+            f"in tutto?", a * b,
+            [f"Ogni scaffale ha {a} libri, e gli scaffali sono {b}.",
+             f"Fai {a} per {b}: spezza {a} in decine e unità."],
+            f"{b} scaffali da {a}: {a} per {b} fa {a * b}.", f"{a}*{b}")
+
+
+# livello → modelli (le operazioni stanno nell'espressione: le ricontrolla `rispetta`)
+PROBLEMI = {1: (_p_riceve, _p_regala),
+            2: (_p_file, _p_divide, _p_insieme, _p_regala_grandi),
+            3: (_p_quaderni, _p_pullman, _p_gita, _p_scaffali)}
+
+
+def _problemi(rng, L, seme, entro=None, cambio=None, solo=None):
+    """Un problema del livello (o, se nessun modello del livello sta nel limite, del livello
+    sotto), dentro `entro`, con le sole operazioni di `solo`."""
+    for lv in range(L, 0, -1):
+        modelli = list(PROBLEMI[lv])
+        for _ in range(TENTATIVI // 4):
+            nome, g = rng.choice(NOMI)
+            nome2 = rng.choice([n for n, _ in NOMI if n != nome])
+            cose = rng.choice(COSE)
+            testo, r, sugg, spieg, espr = rng.choice(modelli)(rng, nome, g, nome2, cose)
+            es = _es("problemi", lv, seme, testo, testo, r, sugg, spieg, espr)
+            if rispetta(es, entro, None, solo):
+                return es
+    raise ValueError("nessun problema dentro il limite")
 
 
 _SUP = str.maketrans("0123456789-", "⁰¹²³⁴⁵⁶⁷⁸⁹⁻")
@@ -532,13 +686,23 @@ GENERATORI = {"addizioni": _addizioni, "sottrazioni": _sottrazioni,
               "equazioni": _equazioni}
 
 
-def genera(argomento: str, livello: int, seme: int) -> Esercizio:
+def genera(argomento: str, livello: int, seme: int, entro: int | None = None,
+           cambio: bool | None = None, solo=None) -> Esercizio:
     """L'esercizio di quel seme; ValueError se il ricalcolo non torna (mai, se i generatori
-    sono giusti: lo controlla prova_esercizi su migliaia di semi)."""
+    sono giusti: lo controlla prova_esercizi su migliaia di semi) o se esce dal limite del
+    programma (`entro`, `cambio`, `solo`: vedi `rispetta`)."""
     rng = random.Random(f"{argomento}:{livello}:{seme}")
-    es = GENERATORI[argomento](rng, max(1, min(3, int(livello))), seme)
+    L = max(1, min(3, int(livello)))
+    if argomento in OPERAZIONI:
+        es = GENERATORI[argomento](rng, L, seme, entro=entro, cambio=cambio)
+    elif argomento == "problemi":
+        es = _problemi(rng, L, seme, entro=entro, solo=solo)
+    else:
+        es = GENERATORI[argomento](rng, L, seme)
     if not verifica(es):
         raise ValueError(f"esercizio {argomento}/{livello}/{seme}: il ricalcolo non torna")
+    if not rispetta(es, entro, cambio, solo):
+        raise ValueError(f"esercizio {argomento}/{livello}/{seme}: fuori dal limite")
     es.verifica = {"tipo": "calcolato", "ricalcolo": True}
     return es
 
