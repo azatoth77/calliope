@@ -341,7 +341,7 @@ def prova_contrari(tmp: Path):
                            f"{DOMANDA_PROPOSTA}" and sv.specifica == spec0
              and (out.get("in_sospeso") or {}).get("argomenti") == {"proposta": lav0.id}
              and not sv.modifiche, detta(out))
-    out = chiama(reg, ctx, "sviluppo_passo", {"azione": "analisi", "cambia": "cambia le porte"},
+    out = chiama(reg, ctx, "sviluppo_passo", {"azione": "analisi", "cambia": "cambia le porte, falle strane"},
                  3)
     verifica("vaga → la domanda del modello, niente cambia",
              detta(out) == "Cosa vuoi cambiare delle porte?" and sv.specifica == spec0

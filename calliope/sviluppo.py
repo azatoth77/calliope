@@ -3005,6 +3005,48 @@ def altro_compito_in_cambia(cambia: str, sv, gioco: bool | None = None) -> bool:
         testo, sv.titolo, sv.richiesta, sv.specifica or "")
 
 
+# Una modifica o una correzione che non dice niente di concreto (12/10 sera, giro vero del gioco
+# delle porte). 08:38: a «Vorrei modificare Halloween le porte magiche.» il modello ha chiamato
+# l'analisi con cambia = «modifica le regole o il funzionamento come desideri» (un riempitivo
+# inventato), il modello dell'agente l'ha preso per un difetto e la voce ha proposto una
+# correzione mai chiesta. 08:46: «Calliope va modificato Calliope.» (il primo pezzo di una frase
+# tagliata al nome) → sviluppo_correggi con problema «va modificato Calliope», e la correzione è
+# partita senza una domanda. Il criterio: tolte le parole vuote, le parole generiche delle
+# richieste (`_GENERICHE`), le parole del titolo dello sviluppo e quelle che dicono solo «cambia»
+# o «correggi» («modifica», «regole», «funzionamento», «come desideri», «non va», «sistemalo»),
+# non resta niente; un numero o «più»/«meno» sono già qualcosa di concreto. Correzione della
+# forma di una scelta già fatta dal modello (ha passato una modifica vuota), con un effetto
+# reversibile: la domanda «cosa vuoi cambiare?» (principio 10, regole
+# `sviluppo_modifica_riempitivo` e `sviluppo_correggi_vago`)
+_SOLO_CAMBIA = ("modific", "cambi", "regol", "funzion", "comport", "desider", "prefer",
+                "miglior", "megli", "aspett", "dettagl", "qualcos", "cose", "parte", "parti",
+                "gioc", "estension", "version", "piac", "secondo", "indicaz", "richiest", "logic",
+                "manier", "modo", "rivede", "rived", "gestir", "gestisc", "vorre", "vuole",
+                "vorrest", "desider", "vogli", "liber", "sistem", "aggiust", "sviluppo",
+                "programm", "applicaz", "andare", "lavor")
+_SOLO_CORREGGI = _SOLO_CAMBIA + ("corregg", "corrett", "sbagli", "niente", "nulla", "bene",
+                                 "male", "problem", "error", "rott", "difett", "guast", "sistem",
+                                 "aggiust", "ripar", "fixa", "fissa")
+_NUMERI_DETTI = frozenset("uno una due tre quattro cinque sei sette otto nove dieci undici dodici "
+                          "venti trenta cento mille più piu meno doppio metà".split())
+
+
+def senza_contenuto(testo: str, sv, correzione: bool = False) -> bool:
+    """La modifica (o la correzione, `correzione`) detta non dice niente di concreto: tolte le
+    parole vuote, generiche, del titolo e quelle che dicono solo «cambia» o «correggi», non
+    resta niente. False per un testo vuoto (lo gestisce chi chiama) e con un numero detto."""
+    t = str(testo or "").strip()
+    if not t:
+        return False
+    if re.search(r"\d", t) or any(w in _NUMERI_DETTI for w in _PAROLA.findall(t.lower())):
+        return False
+    titolo = parole_piene(getattr(sv, "titolo", "") or "")
+    solo = _SOLO_CORREGGI if correzione else _SOLO_CAMBIA
+    resto = [w for w in parole_piene(t) if not w.startswith(solo)
+             and not any(_simili(w, x) for x in titolo)]
+    return not resto
+
+
 def _altro_dello_sviluppo(a: dict, sv) -> bool:
     return altro_compito(str(a.get("compito") or ""), sv.titolo, sv.richiesta,
                          sv.specifica or "")

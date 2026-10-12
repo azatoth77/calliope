@@ -1237,6 +1237,17 @@ def _analisi(ctx, svs, sv, prof, cambia: str) -> dict:
             note_rule(ctx, "sviluppo_analisi_altro")
             return _domanda_cambio(ctx, sv, {"tipo": sv.tipo, "compito": cambia})
     note_rule(ctx, "sviluppo_analisi")
+    from ..sviluppo import senza_contenuto
+    if cambia and senza_contenuto(cambia, sv) and not _cosa_appena_chiesta(ctx, consuma=True):
+        # Una modifica che non dice cosa cambiare (12/10 sera, 08:38: «Vorrei modificare
+        # Halloween le porte magiche.» → cambia = «modifica le regole o il funzionamento come
+        # desideri», preso per un difetto: «Lo faccio correggere?»). La domanda, una volta: la
+        # risposta che segue passa al modello dell'agente anche se è breve
+        note_rule(ctx, "sviluppo_modifica_riempitivo")
+        note_rule(ctx, "sviluppo_modifica_vaga")
+        svs.tocca(sv)
+        _schermo(ctx, sv)
+        return _chiedi_cosa(ctx, sv, "Cosa vuoi cambiare, di preciso?", "analisi")
     if not cambia:
         # «Torniamo all'analisi» senza dire cosa (12/10, A4): niente si ferma né cambia fase
         # finché la modifica non c'è e non è confermata; il lavoro in corso continua, la
@@ -1354,6 +1365,8 @@ def _va_chiesto(ctx, svs, sv, gia_chiesto: bool = False) -> bool:
 
 def _chiedi_cosa(ctx, sv, domanda: str, da: str) -> dict:
     from ..sviluppo import chi
+    # La risposta che arriva adesso non si richiede (anche per «cambia», 12/10 sera)
+    _COSA_CHIESTA[str(chi(ctx))] = int(getattr(ctx, "turno", 0) or 0)
     if da == "correggi":
         # 12/10, caso vero (11/10 19:25): «non ci siamo, ci sono cose che non funzionano,
         # correggile» → all'agente il problema «il gioco non funziona correttamente»
@@ -1460,7 +1473,9 @@ def _gia_nella_richiesta(ctx, svs, sv, detto: str, esito: str) -> dict:
     note_rule(ctx, "sviluppo_modifica_gia")
     if esito == "difetto" and (sv.versione or sv.cartella or sv.estensione):
         domanda = "Lo faccio correggere?"
-        return _final(f"Questo la richiesta lo dice già: se non lo fa, è il codice da correggere. "
+        cosa = "il gioco" if svs.e_gioco(sv) else sv.cosa()
+        # 12/10 sera: prima «Questo la richiesta lo dice già: …» (sgrammaticato)
+        return _final(f"La richiesta lo dice già: se {cosa} non lo fa, va corretto il codice. "
                       f"{domanda}", ok=False, fatto=f"{NIENTE}: la richiesta non cambia",
                       in_sospeso={"domanda": domanda, "tool": "sviluppo_correggi",
                                   "cosa": f"far correggere «{sv.titolo}»",
