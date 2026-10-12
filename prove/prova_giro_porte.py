@@ -232,12 +232,97 @@ def prova_correzione_vaga(tmp: Path):
              str(ctx.regole))
 
 
+# ═══════════════════════════ 4. sviluppo_chiedi con una risposta vecchia ═══════════════════════════
+
+VECCHIA = ("Il lavoro si è fermato perché stava per finire le sue passate. Il codice fa scegliere "
+           "da 2 a 4 giocatori.")
+NUOVA = "Il tocco sulla porta non chiama la funzione che apre la porta: per questo non succede niente."
+
+
+def agente_chiedi(requisiti=REQ):
+    """Il modello dell'agente che, con le domande di prima nel contesto, ripete la risposta
+    vecchia (come qwen3.6 il 12/10); senza, risponde alla domanda."""
+    import prova_specifica_viva as S
+
+    class Agente(S.AgenteVivo):
+        def chat(self, body, **kw):
+            props = ((body.get("format") or {}).get("properties") or {})
+            if "serve_correzione" in props:
+                self.richieste.append(body)
+                testo = body["messages"][-1]["content"]
+                voce = VECCHIA if "Domanda già fatta" in testo else NUOVA
+                return {"content": json.dumps({"voce": voce, "serve_correzione": False})}
+            return super().chat(body, **kw)
+    return Agente(requisiti=requisiti, stima="piccolo")
+
+
+def prova_chiedi(tmp: Path):
+    print("— 4. sviluppo_chiedi: niente risposte vecchie ridette, le segnalazioni a correggi")
+    import prova_specifica_viva as S
+    agente = agente_chiedi()
+    cfg, reg, ctx, est, svc, sv = al_collaudo(tmp / "chiedi", agente)
+    # Una domanda fatta su una versione di prima (11:11, versione 7 contro la 11 delle 12:06)
+    sv.chiesti.append({"quando": 1.0, "domanda": "scrivere", "voce": VECCHIA, "dettagli": VECCHIA,
+                       "versione": (sv.versione or 1) - 1, "lavoro": "L0",
+                       "correzione": True, "cosa_correggere": "fermarsi prima"})
+    out = S.chiama(reg, ctx, "sviluppo_chiedi", {"domanda": "Secondo te perché è bloccato?"}, 4,
+                   "Secondo te perché è bloccato?")
+    contesto = agente.richieste[-1]["messages"][-1]["content"]
+    verifica("12:06: la domanda di una versione di prima non è nel contesto, e la risposta è "
+             "nuova", "Domanda già fatta" not in contesto and NUOVA.rstrip(".") in detta(out)
+             and VECCHIA[:30] not in detta(out), detta(out))
+    verifica("…e la sua diagnosi non va alla correzione",
+             svc.sviluppi.diagnosi(sv) is not None
+             and svc.sviluppi.diagnosi(sv)["voce"] == NUOVA, str(svc.sviluppi.diagnosi(sv)))
+    # Sulla stessa versione: la risposta di prima ridetta a una domanda diversa → di nuovo,
+    # senza le domande di prima
+    sv.chiesti[-1]["voce"] = VECCHIA
+    n = len(agente.richieste)
+    out = S.chiama(reg, ctx, "sviluppo_chiedi", {"domanda": "Come si assegnano i punti?"}, 5,
+                   "Come si assegnano i punti?")
+    verifica("11:11:59: la stessa risposta a una domanda diversa → chiesta di nuovo senza le "
+             "domande di prima (`sviluppo_chiedi_ripetuta`)",
+             len(agente.richieste) == n + 2 and "sviluppo_chiedi_ripetuta" in ctx.regole
+             and NUOVA.rstrip(".") in detta(out), f"{ctx.regole} {detta(out)}")
+    sv.chiesti = [dict(sv.chiesti[-1], voce=VECCHIA)]
+    n = len(agente.richieste)
+    S.chiama(reg, ctx, "sviluppo_chiedi", {"domanda": "Come si assegnano i punti?"}, 6,
+             "Come si assegnano i punti?")
+    verifica("contrario: la stessa domanda rifatta può avere la stessa risposta (una chiamata)",
+             len(agente.richieste) == n + 1 and "sviluppo_chiedi_ripetuta" not in ctx.regole,
+             str(ctx.regole))
+    # Una correzione con una diagnosi vecchia: non va all'agente
+    sv.chiesti = [dict(sv.chiesti[0], versione=-5, voce="DIAGNOSI VECCHIA",
+                       dettagli="DIAGNOSI VECCHIA")]
+    agente.modifiche.append({"tipo": "difetto", "operazioni": []})
+    n_lav = len(svc.lavori)
+    S.chiama(reg, ctx, "sviluppo_correggi", {"problema": "non si vedono i mostri dietro le "
+                                                         "porte"}, 7, "Non si vedono i mostri.")
+    lav = svc.lavori[-1]
+    verifica("la correzione non riceve la diagnosi di una versione di prima",
+             len(svc.lavori) == n_lav + 1 and "DIAGNOSI VECCHIA" not in (lav.vincoli or "") and "non si vedono i mostri"
+             in (lav.vincoli or ""), lav.vincoli)
+    # I dati del turno e le descrizioni: una segnalazione va a sviluppo_correggi
+    cfg, reg, ctx, est, svc, sv = al_collaudo(tmp / "chiedi_riga", agente_chiedi())
+    riga = svc.sviluppi.riga_fase(sv)
+    spec = reg.get("sviluppo_chiedi").description
+    verifica("dati del turno: «non porta a nulla» → sviluppo_correggi, «perché?» → "
+             "sviluppo_chiedi", "«non porta a nulla»" in riga and "sviluppo_correggi" in riga
+             and "Se un risultato è sbagliato" not in riga, riga)
+    verifica("…e la descrizione di sviluppo_chiedi lo dice", "è sviluppo_correggi" in spec, spec)
+    from calliope.sviluppo import SISTEMA_CHIEDI
+    verifica("…e il sistema dell'agente: una segnalazione si risponde su quella, niente "
+             "risposte di prima", "non ripetere la risposta a una domanda di prima"
+             in SISTEMA_CHIEDI and "serve_correzione = true" in SISTEMA_CHIEDI)
+
+
 def main():
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
         tmp = Path(d)
         prova_stesso_gioco(tmp)
         prova_modifica_vaga(tmp)
         prova_correzione_vaga(tmp)
+        prova_chiedi(tmp)
     print()
     print("Tutto bene." if not errori else f"{errori} errori.")
     return 1 if errori else 0

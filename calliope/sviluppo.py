@@ -1746,7 +1746,23 @@ class Sviluppi:
             return f"Il lavoro l'ho fermato io: {nota}."
         return f"Calliope ha fermato il lavoro dell'agente: {nota}."
 
-    def testo_per_agente(self, sv: Sviluppo, massimo: int = 30_000) -> str:
+    @staticmethod
+    def chiesti_ora(sv: Sviluppo) -> list[dict]:
+        """Le domande fatte a chi l'ha scritto sulla versione di adesso (la stessa versione
+        dell'estensione; per un programma, che non ha versioni, lo stesso lavoro): quelle di
+        prima parlano di un altro codice (12/10 sera)."""
+        if sv.versione is not None:
+            return [q for q in sv.chiesti if q.get("versione") == sv.versione]
+        return [q for q in sv.chiesti if "versione" in q and q.get("lavoro") == sv.lavoro]
+
+    def diagnosi(self, sv: Sviluppo) -> dict | None:
+        """L'ultima risposta di chi l'ha scritto sulla versione di adesso, o None (per la
+        correzione e il lavoro dopo una modifica: una diagnosi vecchia portava fuori strada)."""
+        return next((q for q in reversed(self.chiesti_ora(sv))
+                     if q.get("dettagli") or q.get("voce")), None)
+
+    def testo_per_agente(self, sv: Sviluppo, massimo: int = 30_000,
+                         chiesti: bool = True) -> str:
         """Il contesto dello sviluppo per sviluppo_chiedi e sviluppo_correggi: specifica,
         collaudi con gli esiti, domande già fatte, test, diario e ultimi passi dell'agente, i
         file (troncati), le fonti del manifesto."""
@@ -1794,8 +1810,12 @@ class Sviluppi:
                     righe.append("  richieste di rete (dalla porta di Calliope):")
                     righe.append(_busta("\n".join("   " + r for r in tr[:6]),
                                         "richieste di rete del collaudo"))
-        for q in sv.chiesti[-3:]:
-            righe.append(f"Domanda già fatta: «{q.get('domanda')}» → {q.get('dettagli') or q.get('voce')}")
+        # Le domande già fatte su QUESTA versione (12/10 sera, 11:11 e 12:06: la risposta a una
+        # domanda di prima, su una versione di prima, era ridetta uguale a domande diverse)
+        for q in (self.chiesti_ora(sv)[-3:] if chiesti else []):
+            righe.append(f"Domanda già fatta su questa versione (non ripetere la sua risposta a "
+                         f"una domanda diversa): «{q.get('domanda')}» → "
+                         f"{q.get('dettagli') or q.get('voce')}")
         ctx = self.contesto(sv)
         for lv in (ctx.get("lavori") or [])[-2:]:
             # Il motivo anche con un riassunto (prima o l'uno o l'altro: il motivo spariva)
@@ -1846,6 +1866,7 @@ class Sviluppi:
     def chiesto(self, sv: Sviluppo, domanda: str, risposta: dict):
         with self._lock:
             sv.chiesti.append({"quando": time.time(), "domanda": str(domanda or "")[:300],
+                               "versione": sv.versione, "lavoro": sv.lavoro,
                                "voce": str(risposta.get("voce") or "")[:400],
                                "dettagli": str(risposta.get("dettagli") or "")[:2000],
                                "correzione": bool(risposta.get("serve_correzione")),
@@ -2003,10 +2024,14 @@ class Sviluppi:
                     "subito con la stessa specifica, dai file già scritti, senza rileggerla. Se "
                     "dice cosa cambiare, "
                     "azione analisi con cambia = la modifica; se va corretto, sviluppo_correggi.")
-        dopo = (" Se un risultato è sbagliato o la persona chiede perché («perché?», «come mai "
-                "non trova…?»), sviluppo_chiedi con domanda = la domanda come detta: risponde "
-                "chi l'ha scritto; se va corretto («correggilo», «fallo sistemare»), "
-                "sviluppo_correggi con problema = cosa non va, come detto.")
+        # 12/10 sera (11:11): «Scegliere la prima porta mi sembra che non porti a nulla» è la
+        # segnalazione di un problema, non una domanda: prima «Se un risultato è sbagliato…
+        # sviluppo_chiedi» la mandava a chi l'ha scritto, che ridiceva una risposta vecchia
+        dopo = (" Se la persona chiede perché o come funziona («perché?», «come mai non "
+                "trova…?»), sviluppo_chiedi con domanda = la domanda come detta: risponde chi "
+                "l'ha scritto. Se dice che qualcosa non va o non succede («non porta a nulla», "
+                "«non si vede niente», «è sbagliato», «correggilo»), sviluppo_correggi con "
+                "problema = cosa non va, come detto.")
         if sv.fase == "collaudo":
             # 12/10 (caso vero dell'11/10 16:26: collaudo saltato e «Ho analizzato il codice e
             # tutto sembra in ordine» detto dal modello): la revisione la dice il tool
@@ -3137,6 +3162,10 @@ SISTEMA_CHIEDI = (
     "difetto del codice, se lo vedi, viene dopo e non è il motivo dell'arresto. "
     "Se chiede se è tutto fatto o se va bene, non dire che è tutto in ordine: di' cosa della "
     "specifica il codice fa e cosa non fa (c'è la riga «CONFRONTO CON LA RICHIESTA»). "
+    "Se non fa una domanda ma dice cosa ha visto che non va («scegliere la porta non porta a "
+    "nulla»), rispondi su quello: cosa fa il codice in quel caso; se non fa ciò che chiede la "
+    "specifica, serve_correzione = true. Rispondi alla domanda di adesso: non ripetere la "
+    "risposta a una domanda di prima. "
     "Rispondi in JSON: voce = una o due frasi semplici in italiano da dire ad alta voce (niente "
     "codice, nomi di file, simboli, indirizzi web); dettagli = la spiegazione per lo schermo "
     "(file, funzioni, la causa); serve_correzione = true se il codice va corretto; "

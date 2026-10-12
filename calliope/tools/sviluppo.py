@@ -1083,8 +1083,7 @@ def _collaudi_per_agente(svs, sv) -> str:
                      + f"{c.get('esito') or 'errore'}"
                      + (f" (la persona: {c['giudizio']})" if c.get("giudizio") else "")
                      for c in sv.collaudi[-5:])
-    diagnosi = next((q for q in reversed(sv.chiesti) if q.get("dettagli") or q.get("voce")),
-                    None)
+    diagnosi = svs.diagnosi(sv)        # solo della versione provata (12/10 sera)
     rete = svs.testo_traccia(sv)
     return (f" Collaudi della versione che la persona ha provato (dati → esito): {casi}."
             + (f" Diagnosi di chi l'ha scritto, alla domanda «{diagnosi['domanda']}»: "
@@ -1360,7 +1359,7 @@ def _va_chiesto(ctx, svs, sv, gia_chiesto: bool = False) -> bool:
     if any((not c.get("ok") and not c.get("anteprima")) or c.get("giudizio")
            for c in sv.collaudi[-5:]):
         return False
-    return not any(q.get("correzione") for q in sv.chiesti[-3:])
+    return not any(q.get("correzione") for q in svs.chiesti_ora(sv)[-3:])
 
 
 def _chiedi_cosa(ctx, sv, domanda: str, da: str) -> dict:
@@ -2289,6 +2288,15 @@ def _sviluppo_chiedi(ctx: ToolContext, domanda: str = "", **_altro) -> dict:
     svs.tocca(sv)
     tempo = float(getattr(ctx.cfg, "sviluppo_chiedi_s", 60.0) or 60.0)
     r, esito = chiedi_agente(svc, domanda, svs.testo_per_agente(sv), tempo)
+    if r is not None and _risposta_ripetuta(sv, domanda, r):
+        # La stessa risposta di una domanda diversa (12/10 sera, 11:11:59 e 12:06:03: «Il
+        # lavoro si è fermato perché il sistema ha rilevato che…» a «scegliere la prima porta
+        # non porta a nulla» e a «perché è bloccato?»): una volta di nuovo, senza le domande
+        # di prima nel contesto
+        note_rule(ctx, "sviluppo_chiedi_ripetuta")
+        r2, _ = chiedi_agente(svc, domanda, svs.testo_per_agente(sv, chiesti=False), tempo)
+        if r2 is not None:
+            r = r2
     if r is None:
         note_rule(ctx, "sviluppo_chiedi_guasto")
         getattr(svc, "log", print)(f"[SVILUPPO] {sv.id}: domanda all'agente: {esito}")
@@ -2347,6 +2355,26 @@ def _sviluppo_chiedi(ctx: ToolContext, domanda: str = "", **_altro) -> dict:
     frase = " ".join(p for p in parti if p)
     out["conferma"] = out["risposta_finale"] = frase
     return out
+
+
+MAX_CHIESTI_RIPETUTA = 5
+
+
+def _risposta_ripetuta(sv, domanda: str, r: dict) -> bool:
+    """La risposta dell'agente è (quasi) uguale a quella di una domanda diversa di prima."""
+    import difflib
+    from ..estensioni.servizio import _norm_testo
+    voce = _norm_testo(str(r.get("voce") or ""))
+    d = _norm_testo(domanda)
+    if len(voce) < 20:
+        return False
+    for q in sv.chiesti[-MAX_CHIESTI_RIPETUTA:]:
+        if _norm_testo(str(q.get("domanda") or "")) == d:
+            continue
+        prima = _norm_testo(str(q.get("voce") or ""))
+        if prima and difflib.SequenceMatcher(None, voce, prima).ratio() >= 0.9:
+            return True
+    return False
 
 
 # ─────────────────────────── sviluppo_correggi ───────────────────────────
@@ -2450,8 +2478,7 @@ def _sviluppo_correggi(ctx: ToolContext, problema: str = "", **_altro) -> dict:
                         else "") + f" → {c.get('esito') or 'errore'}"
                      + (f" (la persona: {c['giudizio']})" if c.get("giudizio") else "")
                      for c in falliti)
-    diagnosi = next((q for q in reversed(sv.chiesti) if q.get("dettagli") or q.get("voce")),
-                    None)
+    diagnosi = svs.diagnosi(sv)        # solo della versione provata (12/10 sera)
     # La traccia di rete dei collaudi (08/10): le richieste vere con l'esito, la causa che nel
     # giro della DGX l'agente non vedeva (nella sandbox non ha rete)
     rete = svs.testo_traccia(sv)
@@ -2594,9 +2621,10 @@ def sviluppo_specs(file_pc: bool = False, allegati: bool = False) -> list[ToolSp
                          "perché un collaudo dà quel risultato, come funziona, cosa fa in un "
                          "caso («perché non trova Cerro Maggiore?», «come mai?», «che fonte "
                          "usa?»). Risponde senza cambiare niente. domanda: come detta. Solo "
-                         "per DOMANDE sul codice: per chiudere, fermare o sospendere uno "
-                         "sviluppo («chiudi tutti gli sviluppi») c'è sviluppo_passo con "
-                         "l'azione."),
+                         "per DOMANDE sul codice: se la persona dice che qualcosa non va («non "
+                         "porta a nulla», «non si vede il mostro») è sviluppo_correggi; per "
+                         "chiudere, fermare o sospendere uno sviluppo («chiudi tutti gli "
+                         "sviluppi») c'è sviluppo_passo con l'azione."),
             parameters={"type": "object", "properties": {"domanda": {"type": "string"}},
                         "required": ["domanda"]},
             func=_sviluppo_chiedi, risk="lettura", levels=FAMILY, non_fidato=True,
