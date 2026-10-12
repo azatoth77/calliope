@@ -2294,3 +2294,85 @@ l'agente:
   un nome non dichiarato, o senza `ascolta` nel manifesto, è un errore che dice cosa correggere.
 - **Prove**: `prova_gioco_voce.py` (prova di fumo con i comandi: buono, gestore che lancia, fuori
   elenco, senza `ascolta`, contrario), `prova_agente_guida.py`.
+
+## Voce onesta, meno parole (12/10, ramo `voce-onesta`)
+
+Lavoro 2 dell'analisi del flusso del 12/10 (log veri della DGX del 06–12/10, punti 3, 4, 6, 7 e
+11 della classifica; M1 e M9 della revisione del codice). Per giochi, estensioni e programmi la
+voce riferisce l'**esito vero** dell'agente e del collaudo, con meno parole e meno domande. Le
+frasi le compone il codice (`risposta_finale`): il modello della voce non le riassume più.
+
+**Casi veri** (nomi di fantasia nelle prove):
+- 08/10, 15:11: l'esito della versione 3 era «Non ho trovato il meteo per Borgoverde Alto…» per
+  ogni città; la voce ha detto quattro volte «errore di collegamento alla rete» (l'errore della
+  versione 2) e la persona ha mandato l'agente a correggere un problema di rete che non c'era.
+- 08/10, revisione delle 15:29: «Prove: 16, 15 riuscite», con sette «Non ho trovato…» tra le
+  riuscite.
+- 09/10, 20:42: alla domanda «come scegli i nomi simili?» l'agente aveva scritto che la ricerca
+  mancava (`correzione: true`); la voce ha letto solo il messaggio e ha chiesto «Ti va bene o lo
+  faccio correggere?». La persona ha detto «mi va bene», e la mancanza l'ha scoperta da sola al
+  collaudo.
+- 11/10, 16:26: collaudo saltato, `sviluppo_passo avanti` chiamato (regola `sviluppo_revisione`),
+  e a voce «Ho analizzato il codice e tutto sembra in ordine… la versione è sicura». Il testo del
+  tool era già una frase pronta: dal solo estratto del registro **non si ricostruisce** perché
+  non sia stato detto quello (resta da guardare nel journal di un caso nuovo, con `parlato`).
+- Nei log, 56 risposte con la coda «Siamo ancora in fase di collaudo…» e annunci di 7–9 frasi.
+- Conferme: 18 frasi di sfida e 25 domande di conferma in una settimana di sviluppo. Le città
+  dette dalla persona negli `argomenti` del collaudo venivano marcate come date «dal lavoro di
+  un agente» (riprodotto con la politica per valore accesa: `argomenti` non era tra gli argomenti
+  dichiarati del tool e valeva bersaglio, quindi «dato», con la domanda ««» viene dal lavoro di
+  un agente»).
+
+**Cosa cambia:**
+1. **Il tipo di un collaudo** (`tools/sviluppo.tipo_collaudo`, salvato in `collaudo["tipo"]`):
+   `risposta`, `vuoto` («non trovato», da `argomenti_incerti.esito` e, per una frase che
+   *comincia* con «non ho trovato» senza dati accanto, `_solo_non_trovato`), `errore_dichiarato`
+   (un campo d'errore che l'estensione restituisce) ed `errore` (si è fermata). `ok` resta
+   com'era (falso per un errore, dichiarato o no): ricollaudo, correzione e confronto non
+   cambiano.
+2. **La frase del collaudo** (`frase_collaudo`, `_detto_estensione`) dice le parole
+   dell'estensione tra virgolette (il suo `da_dire`, o il suo errore, ripuliti con
+   `sviluppo.testo_detto`: una o due frasi, niente indirizzi né virgolette; un testo che parla
+   all'assistente non si dice). Un «non trovato» o un errore voluto **non è un difetto**: niente
+   «Lo faccio correggere?» d'ufficio («Se non è la risposta giusta, dimmelo e la faccio
+   correggere.»). Solo una prova che si è fermata chiede «Lo faccio correggere?», e dice la
+   causa dell'esecuzione («si è fermata con un errore: tempo scaduto…»). Lo stesso per più valori
+   nella stessa frase. Senza parole dell'estensione (un risultato senza `da_dire`) il modello
+   riassume come prima, con «mai una causa che i risultati non dicono». Regole
+   `sviluppo_collaudo_detto`, `sviluppo_collaudo_vuoto`, `sviluppo_collaudo_errore_dichiarato`.
+3. **Il conteggio** (`sviluppo.conto_collaudi`, nella revisione e, per tipo, sulla scheda, nella
+   vista e nel contesto dell'agente): «Prove: 16: 8 con una risposta, 7 «non trovato» e una
+   fermata con un errore.»; contano solo le prove della versione in revisione.
+4. **La revisione dice il collaudo saltato** («Il collaudo l'hai saltato: nessuna prova fatta.»;
+   per un gioco «…non l'hai visto in prova sullo schermo», regola
+   `sviluppo_revisione_senza_collaudo`). Nei dati del turno: com'è il codice, se è sicuro, perché
+   una prova non va e cosa manca si dicono **solo** con le parole dei tool, mai «tutto in ordine»;
+   al collaudo «saltiamo le prove» è `sviluppo_passo avanti` e la revisione la dice il tool.
+5. **sviluppo_chiedi** compone la frase: con `serve_correzione` prima «Chi l'ha scritta dice che
+   va corretto: …», poi la sua risposta e «Lo faccio correggere?»
+   (`sviluppo_chiedi_correzione_detta`); senza, «Chi l'ha scritta risponde: …».
+6. **Meno parole.** L'annuncio della consegna: pronto, non ancora attiva, **cosa doveva cambiare
+   in parole** (`sviluppo.frase_cambiamento`, dalla storia: la correzione, il «continua a
+   farli» o la modifica all'analisi), i test solo se non passano, cosa manca, il ricollaudo, la
+   domanda; niente «I test passano, 22 su 22» né la prova di fumo (la dice la revisione). La
+   revisione di un'estensione (`Estensioni.revisione`): permessi e chi la usa; analisi del codice
+   e test solo se c'è un problema; file e righe cambiati («561 righe in più») solo sulla scheda.
+   I dati del turno non chiedono più al modello di chiudere ogni risposta fuori tema ricordando
+   la fase (era la fonte della coda «Siamo ancora in fase di collaudo…»): la riga la aggiunge
+   Calliope, **una volta per fase** in 15 minuti (`Sviluppo.fuori_tema`, regola
+   `sviluppo_riga_fuori_tema_taciuta` quando la tace).
+7. **Meno conferme** (politica per valore, [sicurezza-politica](sicurezza-politica.md)): gli
+   `argomenti` del collaudo si giudicano dai loro valori (`valore.OGGETTO_VALORI`), e il nome
+   dell'estensione del proprio sviluppo aperto vale fidato per approva e rifiuta
+   (`SVILUPPO_NOMINATO`). La frase di sfida resta dove la vogliono le regole (approvazione e
+   attivazione, voce incerta); il controllo «c'è già l'estensione» prima della sfida c'era già
+   dal 08/10 (`_estensione_crea`).
+
+Non toccati (lavori paralleli o successivi): la proposta «Ho capito così», la specifica e i
+requisiti come fonte, le forme chiuse dei comandi del flusso, la domanda «Ti chiederò la frase
+di conferma: vuoi attivarla?» (B4).
+
+Prove: `prova_voce_onesta.py` (nuova, livello 1) e le prove dello sviluppo aggiornate alle frasi
+nuove (`prova_sviluppo`, `prova_sviluppo_v2`, `prova_revisione_onesta`, `prova_giro_halloween`).
+Da guardare sulla DGX: la coda della fase nelle risposte (deve sparire, salvo la riga di
+Calliope), e l'attrito della modalità sviluppo in `calliope stato --turni`.
