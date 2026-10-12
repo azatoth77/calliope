@@ -1986,8 +1986,17 @@ class Sviluppi:
                         "riparliamo dopo» → azione sospendi (l'agente finisce il suo lavoro). Se "
                         "non è chiaro quale delle due, chiedi «fermo anche il lavoro "
                         "dell'agente?».")
+            if lav is not None and getattr(lav, "stato", "") == "in_attesa":
+                # Fermo a una domanda per la persona (12/10): non è «non è andato»
+                dom = getattr(lav, "domanda", "") or ""
+                return (f"L'agente aspetta una risposta di chi parla: «{dom}» "
+                        "→ lavoro_rispondi con la risposta come detta; «fermalo» → sviluppo_passo "
+                        "con azione ferma.")
             fermato = sv.nota in ("annullato", "fermato")
+            da_parte = sv.nota == MESSO_DA_PARTE
             return (("Il lavoro dell'agente l'ha fermato chi parla" if fermato else
+                     "Il lavoro dell'agente era fermo e aspettava da troppo: l'ho messo da parte "
+                     "con i suoi file" if da_parte else
                      f"Il lavoro dell'agente non è andato ({sv.nota or 'si è fermato'})")
                     + ": nessun lavoro in corso. Se vuole rifarlo («sì», «rifallo», «riprova», "
                     "«riparti», «partiamo così com'è»), sviluppo_passo con azione rifai: riparte "
