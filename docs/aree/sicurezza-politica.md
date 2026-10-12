@@ -1356,3 +1356,35 @@ invariato, 0 errori.
   `gioco_prova_senza_ponte`), quindi niente dati, niente altri schermi, niente frasi dette,
   niente tool, anche se il manifesto li chiede. Non diventa attiva né un tool `est_`; la apre
   solo chi amministra; il documento sparisce se i file cambiano o la versione viene approvata.
+
+## Gli argomenti del collaudo e il nome del proprio sviluppo (12/10, ramo `voce-onesta`)
+
+Dai log veri della DGX del 06–12/10 (analisi del flusso dello sviluppo): 18 frasi di sfida e 25
+domande di conferma in una settimana di modalità sviluppo; cinque volte le città dette dalla
+persona per un collaudo erano «dal lavoro di un agente, non da te». Riprodotto a secco con la
+politica per valore accesa: «Prova con Valfiorita.» → `sviluppo_collauda {argomenti: {citta:
+"Valfiorita"}}` → **`valore_bersaglio_dato`**, con la domanda ««» viene dal lavoro di un
+agente…». `argomenti` (l'oggetto con un valore per input, dal 08/10 sera) non era tra gli
+argomenti dichiarati del tool: valeva bersaglio, e un oggetto non ha parole, quindi «dato».
+
+**Correzione** (vincoli di sicurezza non toccati):
+- `valore.ARGOMENTI["sviluppo_collauda"]["argomenti"] = contenuto`, giudicato sui suoi **valori**
+  (stringhe e numeri, non le chiavi: `OGGETTO_VALORI`, come `politica.detto_dopo_dato`); anche un
+  testo JSON. `_mostra` dice i valori di un oggetto nella domanda (non più ««»»).
+- `SVILUPPO_NOMINATO["estensione_gestisci"] = ("nome",)`: il nome dell'estensione dello sviluppo
+  **aperto** di chi parla vale bersaglio/fidato, **solo** per `approva` e `rifiuta`. Con la voce
+  riconosciuta lo copriva già `sviluppo_intento`; con un «sì» breve restava la domanda «… viene
+  dal lavoro di un agente» prima della sfida (S6 del 09/10, 21:00: due domande per la stessa
+  azione). L'approvazione chiede comunque la frase di sfida.
+
+Contrari (`prove/prova_voce_onesta.py`, parte 6): una città che sta solo nel dato dell'agente
+(`valore_contenuto_dato`, chiede con il valore detto), un valore in più preso dal dato dentro
+l'oggetto, `rimuovi` e `disattiva` con lo stesso nome, un'estensione che non è dello sviluppo,
+un'altra persona, uno sviluppo sospeso. `prova_politica`, `prova_valore`, `prova_attrito`
+invariate, 0 errori.
+
+**Attrito prima/dopo**: lo strumento (`calliope stato --turni`, `docs/ricerche/banchi/attrito/
+attrito.py`) legge il registro della DGX, che da qui non si legge: la misura va fatta dopo
+l'aggiornamento, confrontando i giorni di sviluppo (regole `valore_bersaglio_dato` su
+`sviluppo_collauda` ed `estensione_gestisci`: devono sparire per le città dette e per il proprio
+sviluppo; «ESEGUITE con un bersaglio dal dato» deve restare 0).

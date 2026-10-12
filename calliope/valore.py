@@ -126,11 +126,19 @@ ARGOMENTI: dict[str, dict[str, str]] = {
     # 08/10, modalità sviluppo (calliope/sviluppo.py): lo sviluppo è quello aperto di chi parla
     # (il bersaglio non è un argomento); quale sceglie tra i suoi sospesi
     "sviluppo_passo": {"azione": Z, "quale": B, "cambia": L},
-    "sviluppo_collauda": {"dati": C},
+    # 12/10: anche `argomenti` (l'oggetto con un valore per input, dal 08/10 sera), che non c'era
+    # e valeva bersaglio: un oggetto non ha parole → «dato», e «Prova con Bergamo» con
+    # argomenti = {"citta": "Bergamo"} chiedeva ««» viene dal lavoro di un agente, non da te»
+    # (casi veri della DGX: le città dette dalla persona). Si giudicano i suoi valori, le
+    # chiavi no (OGGETTO_VALORI), come politica.detto_dopo_dato
+    "sviluppo_collauda": {"dati": C, "argomenti": C},
     # 08/10 (versione 2): la domanda all'agente che l'ha scritto (sola lettura) e la correzione
     "sviluppo_chiedi": {"domanda": C},
     "sviluppo_correggi": {"problema": L},
 }
+
+# Gli argomenti oggetto che si giudicano dai loro valori (stringhe e numeri, non le chiavi)
+OGGETTO_VALORI: dict[str, tuple[str, ...]] = {"sviluppo_collauda": ("argomenti",)}
 
 # Gli elenchi a cui punta un indice: fidato se lo fa un tool interno (o è un file della
 # persona), dato se lo fa un tool con una fonte non fidata (provenienza.FONTI)
@@ -473,15 +481,25 @@ def etichetta(valore, tipo: str, f: Fonti) -> str:
 # un bersaglio fidato, come la città di casa (`da_config`). Solo questi argomenti, e solo se
 # il valore è l'id o parole del titolo di un suo sviluppo; un titolo di un altro, o che non è
 # di nessuno sviluppo, resta quello che era
-SVILUPPO_NOMINATO: dict[str, tuple[str, ...]] = {"sviluppo_passo": ("quale",)}
+# 12/10: anche `nome` di estensione_gestisci (S6 del 09/10, 21:00: all'attivazione «Meteocittà
+# viene dal lavoro di un agente, non da te», poi la frase di sfida: due domande per la stessa
+# azione). Con la voce riconosciuta lo copriva già `sviluppo_intento` in politica.controlla;
+# senza (un «sì» breve) la domanda in più restava. L'approvazione chiede comunque la sfida
+SVILUPPO_NOMINATO: dict[str, tuple[str, ...]] = {"sviluppo_passo": ("quale",),
+                                                 "estensione_gestisci": ("nome",)}
 
 
-def sviluppo_suo(name: str, k: str, valore, ctx) -> bool:
+def sviluppo_suo(name: str, k: str, valore, ctx, args: dict | None = None) -> bool:
     """`valore` (l'argomento `k` di `name`) nomina uno sviluppo aperto o sospeso di chi parla:
-    il suo id («S3») o parole tutte del suo titolo (o del nome della sua estensione)."""
+    il suo id («S3») o parole tutte del suo titolo (o del nome della sua estensione). Per
+    estensione_gestisci (12/10) solo approva e rifiuta, e solo l'estensione dello sviluppo
+    APERTO (non un sospeso, non le altre azioni: rimuovi, disattiva restano come prima)."""
     if k not in SVILUPPO_NOMINATO.get(name, ()) or ctx is None:
         return False
     if not isinstance(valore, str) or not valore.strip():
+        return False
+    gestisci = name == "estensione_gestisci"
+    if gestisci and pol._s(args or {}, "azione").lower() not in ("approva", "rifiuta"):
         return False
     try:
         from .sviluppo import chi, servizio
@@ -490,7 +508,9 @@ def sviluppo_suo(name: str, k: str, valore, ctx) -> bool:
             return False
         with svs._lock:
             suoi = [(s.id, f"{s.titolo} {s.estensione or ''}") for s in svs.sviluppi
-                    if s.persona == persona and s.stato in ("aperta", "sospesa")]
+                    if s.persona == persona and (s.stato == "aperta" if gestisci else
+                                                 s.stato in ("aperta", "sospesa"))
+                    and (s.estensione or not gestisci)]
     except Exception:  # noqa: BLE001 — nel dubbio resta l'etichetta di prima
         return False
     v = valore.strip().lower()
@@ -600,7 +620,11 @@ def ancorata(cl, name: str, args: dict, t) -> bool:
 
 
 def _mostra(valore) -> str:
-    return pol._corto(_testo(valore) or "", 80)
+    testo = _testo(valore)
+    if testo is None:
+        # un oggetto (gli argomenti del collaudo, 12/10): i suoi valori, non ««»»
+        testo = " ".join(pol._valori_foglia(valore))
+    return pol._corto(testo or "", 80)
 
 
 def decidi_valore(name: str, args: dict, cl, t, base, conferma_voce: bool = False,
@@ -694,11 +718,13 @@ def _matrice(name: str, args: dict, cl, t, base, conferma_voce: bool = False,
         # vale come contenuto, con l'etichetta delle sue parole
         if tipo in (AZIONE, SCELTA) and fuori_dai_valori(spec, k, v):
             tipo = CONTENUTO
+        if k in OGGETTO_VALORI.get(name, ()):
+            v = " ".join(pol._valori_foglia(v)) if pol._valori_foglia(v) else v
         e = etichetta(v, tipo, f)
         # senza tipi dichiarati: un argomento senza fonte vale come preso dal dato (§ 5.2)
         if tipi is None and e == MODELLO:
             e = DATO
-        if e in (DATO, MODELLO) and sviluppo_suo(name, k, v, ctx):
+        if e in (DATO, MODELLO) and sviluppo_suo(name, k, v, ctx, args):
             e = FIDATO
         etichette[k] = f"{tipo.partition(':')[0]}/{e}"
         if (tipo == BERSAGLIO or tipo.startswith(INDICE)) and e == DATO:

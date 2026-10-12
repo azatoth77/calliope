@@ -3485,8 +3485,13 @@ class Brain:
             if sv.titolo.lower() in basso or re.search(
                     r"svilupp|collaud|revision|analisi|estension|programm|agente", basso):
                 return None                  # il modello l'ha già ricordato con parole sue
+            riga = svs.riga_fuori_tema(sv)
+            if not riga:
+                # Già detta nella stessa fase da poco (12/10): una volta basta
+                self._rule("sviluppo_riga_fuori_tema_taciuta")
+                return None
             self._rule("sviluppo_riga_fuori_tema")
-            return svs.riga_fuori_tema(sv)
+            return riga
         except Exception as e:  # noqa: BLE001 — la riga in più non ferma la risposta
             print(f"   [SVILUPPO] riga in coda: {type(e).__name__}: {e}", flush=True)
             return None
