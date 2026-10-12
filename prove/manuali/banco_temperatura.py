@@ -290,7 +290,10 @@ class EstensioniFinte:
     archivio = SimpleNamespace(nomi=lambda: [])
 
     def candidata_da_lavoro(self, lav, sb, ris):
-        return {"nome": getattr(lav, "estensione", None) or "banco", "versione": 1}
+        # Con la «frase» che il servizio vero dà sempre (12/10: senza, KeyError in
+        # servizio.py e i lavori riusciti finivano «errore»)
+        nome = getattr(lav, "estensione", None) or "banco"
+        return {"nome": nome, "versione": 1, "frase": f"«{nome}» è pronta da provare."}
 
     def pronto(self):
         return False
@@ -329,7 +332,9 @@ def un_lavoro(svc, cfg, uscita: Path, nome: str, caso: dict, etichetta: str) -> 
     aspetta(svc, lav, cfg.agenti_tempo_max_min * 60 + 180)
     minuti = (time.time() - t0) / 60
     ris = lav.risultato or {}
-    cartella = Path(ris.get("cartella") or uscita)
+    # Senza la cartella del risultato non si prende quella del banco (12/10: copiava il banco
+    # dentro sé stesso fino a «troppi file»)
+    cartella = Path(ris["cartella"]) if ris.get("cartella") else None
     iso = svc.scegli_isolamento()
     k = [0]
 
@@ -337,7 +342,7 @@ def un_lavoro(svc, cfg, uscita: Path, nome: str, caso: dict, etichetta: str) -> 
         k[0] += 1
         return Sandbox(uscita / "verifica" / f"{etichetta}-{nome}-{lav.id}-{k[0]}", 30, 1024,
                        isolamento=iso, linguaggi=svc.isolamenti)
-    acc = accettazione(nuova, file_di(cartella), caso) if cartella.is_dir() else {
+    acc = accettazione(nuova, file_di(cartella), caso) if cartella and cartella.is_dir() else {
         "verde": False, "esito": None, "uscita": "nessuna cartella"}
     seg = segnali_giro(lav, cfg.agenti_max_passi)
     fatto = (ris.get("esito") == "fatto" or lav.stato == "fatto")
