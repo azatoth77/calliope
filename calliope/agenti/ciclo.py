@@ -79,12 +79,22 @@ def _migliaia(n: int) -> str:
 # o pochi token. Prima un lavoro arrivava al tetto a metà di una passata e finiva «fermato»
 # senza consegna né riassunto
 AVVISO_FINE = {
-    "codice": ("Attenzione: il lavoro sta per finire {cosa}. Non cominciare cose nuove: "
-               "sistema quello che hai, rifai esegui_test se hai cambiato il codice e chiama "
-               "consegna con un riassunto onesto di cosa funziona e cosa manca."),
-    "ricerca": ("Attenzione: il lavoro sta per finire {cosa}. Non fare altre ricerche: chiama "
-                "adesso consegna con la relazione su quello che hai trovato (quello che non hai "
-                "trovato dillo, non inventarlo)."),
+    # Senza numeri e senza «sta per finire» (12/10 sera, ricerca 2026-10-12-flusso-agente-fasi
+    # § 5.1: il budget come azione, non come conto alla rovescia). Con il conto alla rovescia
+    # l'agente ne ragionava e lo riferiva («il lavoro si è fermato perché stava per finire le sue
+    # passate», ridetto a voce da sviluppo_chiedi alle 11:11 e alle 12:06 come diagnosi)
+    "codice": ("Adesso chiudi: non cominciare cose nuove, sistema quello che hai, rifai "
+               "esegui_test se hai cambiato il codice e chiama consegna con un riassunto onesto "
+               "di cosa funziona e cosa manca."),
+    # Un lavoro di uno sviluppo: il tetto è una tappa, non la fine. Con «consegna» l'agente
+    # consegnava a metà o ragionava se consegnare (il gioco delle porte: tre lavori fermati per
+    # il ragionamento ripetuto o per «15 passate senza novità»)
+    "tappa": ("Adesso fai il passo concreto più utile (scrivi o correggi un file, esegui_test), "
+              "senza ragionare sul tempo o sulle passate: il lavoro continua da qui con i tuoi "
+              "file. Se è finito e i test passano, chiama consegna con ciò che funziona e cosa "
+              "manca; altrimenti non consegnare a metà e scrivi in una riga cosa resta da fare."),
+    "ricerca": ("Adesso chiudi: non fare altre ricerche, chiama consegna con la relazione su "
+                "quello che hai trovato (quello che non hai trovato dillo, non inventarlo)."),
 }
 
 
@@ -933,7 +943,10 @@ class Agente:
         else:
             return
         lav.avvisato = True
-        testo = AVVISO_FINE.get(tipo, AVVISO_FINE["codice"]).format(cosa=cosa)
+        if tipo == "codice" and getattr(lav, "tappe", False):
+            tipo = "tappa"
+        # Il perché resta nel log, non nel messaggio all'agente (niente conto alla rovescia)
+        testo = AVVISO_FINE.get(tipo, AVVISO_FINE["codice"])
         self.log(f"[AGENTI] {lav.id}: avviso di chiusura ({cosa})")
         lav.nota("spinta", motivo="vicino ai tetti del lavoro")
         if messages and messages[-1].get("role") == "user":

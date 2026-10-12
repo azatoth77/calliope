@@ -461,7 +461,7 @@ verifica("tetto dei passi: fermato e detto", item and item["esito"] == "limite"
 # 06/10: vicino al tetto l'agente riceve una volta l'avviso di chiudere; fermato, l'annuncio
 # dice anche come vanno i test (rifatti dal programma)
 _avvisi = [m for r in fake.richieste for m in r.get("messages", [])
-           if m.get("role") == "user" and "sta per finire" in str(m.get("content"))]
+           if m.get("role") == "user" and "Adesso chiudi" in str(m.get("content"))]
 verifica("tetto vicino: avviso di chiusura all'agente (una volta)",
          _avvisi and len({str(m["content"]) for m in _avvisi}) == 1, str(len(_avvisi)))
 verifica("tetto raggiunto: l'annuncio dice i test (1 su 2)",

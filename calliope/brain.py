@@ -143,6 +143,21 @@ ACTION_PROMISE = re.compile(
 TOOL_REQUEST = re.compile(r"\b(apri\w*|trova\w*|cerca\w*)\s+(\w+\s+){0,2}"
                           r"(file|documento|documenti|pdf|foto|foglio|lettera|lettere|"
                           r"tabella|tabelle)\b", re.I)
+# Una risposta che promette il passo dello sviluppo senza averlo fatto (12/10 sera, 12:20:
+# «faccio continuare l'agente… Ti avviso quando è pronto»): «faccio/lo faccio + continuare,
+# correggere, ripartire…», «procedo», «ti avviso quando», «ci lavora», «l'agente continua»
+SVILUPPO_PROMESSA = re.compile(
+    r"\b(?:(?:lo |la |li )?faccio\s+(?:continuare|correggere|ripartire|rifare|completare|"
+    r"proseguire|riprovare)|procedo|proseguo|continuo|riparto|avvio|attivo|apro|"
+    r"ti avviso|te lo dico quando|ci lavora|ci sto lavorando|l'agente (?:continua|riparte|"
+    r"lavora)|passo (?:alla|al|allo))\b", re.I)
+# La risposta a una domanda dello sviluppo senza tool (12/10 sera): la decide il modello, che
+# può anche rispondere a parole (una domanda, una cosa d'altro)
+SVILUPPO_NUDGE = ("Non hai chiamato nessun tool, ma c'è una domanda dello sviluppo in sospeso. Se "
+                  "chi parla ha scelto o acconsentito, chiama adesso il tool dell'azione in "
+                  "sospeso con l'azione scelta: la frase la dice il tool, non promettere niente "
+                  "a parole. Se invece ha chiesto altro o non ha scelto, rispondi di nuovo a "
+                  "parole, in breve.")
 PROMISE_NUDGE = ("Non hai chiamato nessun tool. Chiama adesso il tool giusto con gli "
                  "argomenti presi dalla domanda (bastano le parole dette), senza ripetere la "
                  "frase e senza chiedere altro.")
@@ -2107,7 +2122,8 @@ class Brain:
 
     def _turn(self, messages, schemas, hold_claims: bool = False, hold_request: bool = False,
               actions=(), hold_names: bool = False, hold_non_so: bool = False,
-              hold_rinuncia=None, hold_fallito: bool = False, hold_ripetuta=None):
+              hold_rinuncia=None, hold_fallito: bool = False, hold_ripetuta=None,
+              tieni_con_chiamate: bool = False):
         """Una passata: rilascia il testo pulito e restituisce (testo, chiamate, trattenuto,
         richiesta_trattenuta, nome_trattenuto).
 
@@ -2121,7 +2137,11 @@ class Brain:
         un documento, TOOL_REQUEST) tutto il testo della passata aspetta la fine: se arriva
         una chiamata si dice, altrimenti torna come `richiesta_trattenuta` e non si dice
         (scatterà la spinta). Costa latenza solo a queste richieste, e solo quando il modello
-        scrive una frase prima del tool."""
+        scrive una frase prima del tool.
+
+        `tieni_con_chiamate` (con `hold_request`, 12/10 sera, la modalità sviluppo): anche se
+        arriva una chiamata il testo non si dice qui, resta in `self._testo_tenuto`; lo dice (o
+        lo tace, se il tool ha la sua frase) chi chiama, dopo il tool."""
         # La guardia conosce tutti i tool (anche quelli fuori linea): una chiamata scritta
         # come testo non deve finire al TTS (la esegue _run_tool, che rifiuta le vietate).
         think = ThinkFilter()
@@ -2218,7 +2238,9 @@ class Brain:
                 yield hold.held
             held = ""
         if hold_request:
-            if calls:
+            if calls and tieni_con_chiamate:
+                self._testo_tenuto = "".join(waiting)
+            elif calls:
                 for piece in waiting:          # il tool c'è: la frase si dice
                     yield piece
             else:
@@ -3186,6 +3208,10 @@ class Brain:
             # Un testo proprio (la domanda dell'agente, a cui si risponde con un dato): per lo
             # stato del dialogo è una proposta di tipo «dato» (10/10)
             "su_misura": bool(offer.get("messaggio")),
+            # Gli argomenti come istruzioni («azione = completa se…; azione = avanti se…», una
+            # domanda con due strade): non è un sì/no, il blocco dello stato non li direbbe
+            # (12/10 sera, revisione delle 12:20)
+            "args_testo": isinstance(offer.get("argomenti"), str),
             # Nei turni dopo il primo (04/10): la domanda non è più alla fine dell'ultima risposta
             "messaggio_dopo": str(offer.get("messaggio") or "") or PENDING_LATER_MSG.format(
                 **fields),
@@ -3455,7 +3481,7 @@ class Brain:
         """La frase da aggiungere in coda alla risposta, o None (08/10, modalità sviluppo):
         - una volta al giorno, a chi amministra, gli sviluppi sospesi;
         - con uno sviluppo aperto, dopo una risposta che ha usato soltanto tool d'altro (l'ora,
-          il meteo, la casa) e non lo nomina: «Intanto restiamo sullo sviluppo di …».
+          il meteo, la casa) e non lo nomina: «Lo sviluppo di … resta aperto: …».
         Mai dopo una domanda: deve restare l'ultima cosa detta (l'azione in sospeso)."""
         if not user_text or not self._net("modalita_sviluppo"):
             return None
@@ -3896,7 +3922,19 @@ class Brain:
         # storia «Perfetto! Prossima: …» senza chiamare esercizi, 7 turni su 18)
         esercizi = (self._net("spinta_esercizi")
                     and getattr(self, "turn_pending_tool", None) == "esercizi")
-        requested = requested or esercizi
+        # Una domanda dello sviluppo in sospeso (12/10 sera, caso vero delle 12:20: a «Vuoi
+        # attivarla così com'è, o faccio continuare l'agente…?» «No, farlo continuare con quello
+        # che manca.» → «faccio continuare l'agente… Ti avviso quando è pronto», senza nessun
+        # tool, e non è successo niente). Il testo della passata aspetta la fine: senza tool non
+        # si dice e scatta la spinta (una volta); con il tool che ha la sua frase si tace (la
+        # voce onesta: alle 11:13 «…Procedo con la fase successiva.D'accordo: l'agente
+        # continua…», le due frasi attaccate). Rete «spinta_sviluppo»: accesa anche col 26B,
+        # che ha spenta spinta_promessa
+        sviluppo_sosp = (self._net("spinta_sviluppo") and str(
+            getattr(self, "turn_pending_tool", None) or "").startswith("sviluppo_"))
+        richiesta_file = requested
+        requested = requested or esercizi or sviluppo_sosp
+        self._testo_tenuto = ""
         # Una domanda sui comandi stessi («che comando hai per le luci?»): il nome di un tool
         # nella risposta è una spiegazione, non una chiamata mancata (ToolNameHold)
         explaining = bool(ASKS_ABOUT_TOOLS.search(user_text or ""))
@@ -3953,7 +3991,8 @@ class Brain:
                 hold_rinuncia=rinuncia_di if disp and not nudged and not self.last_tools
                 else None,
                 hold_fallito=self._solo_falliti(),
-                hold_ripetuta=precedente if not self.last_tools else None)
+                hold_ripetuta=precedente if not self.last_tools else None,
+                tieni_con_chiamate=sviluppo_sosp and not nudged and not self.last_tools)
             tail = []
             if held and self._held_kind == "ripetuta" and not calls:
                 # Uguale alla risposta di prima: non si dice né entra nella storia; la spinta,
@@ -4043,19 +4082,27 @@ class Brain:
                     self.history.append({"role": "assistant", "content": text})
                 tail = [{"role": "system", "content": PROMISE_NUDGE}]
                 continue
+            if (held_req and not held and sviluppo_sosp and not esercizi and not richiesta_file
+                    and not SVILUPPO_PROMESSA.search(held_req)):
+                # Una risposta a parole che non promette niente («siamo ancora all'analisi…»,
+                # una domanda d'altro): si dice com'è, senza spinta
+                yield held_req
+                held_req = ""
             if held_req and not held:
                 # Frase detta al posto del tool («Non ho trovato alcun PDF…», 01/10): non si
                 # dice e non entra nella storia; il modello riceve la spinta e riprova
                 nudged = True
-                self._rule("spinta_esercizi" if esercizi else "richiesta_trattenuta")
-                print(f"   [TOOL] {'esercizio' if esercizi else 'richiesta di un file'} senza "
+                self._rule("spinta_esercizi" if esercizi else "spinta_sviluppo"
+                           if sviluppo_sosp else "richiesta_trattenuta")
+                print(f"   [TOOL] {'esercizio' if esercizi else 'risposta allo sviluppo' if sviluppo_sosp else 'richiesta di un file'} senza "
                       f"tool, non dico: «{held_req[:80]}»", flush=True)
                 if esercizi:
                     from .esercizi.sessione import ESERCIZI_NUDGE
                 tail = [{"role": "system", "content": ESERCIZI_NUDGE if esercizi
-                         else PROMISE_NUDGE}]
+                         else SVILUPPO_NUDGE if sviluppo_sosp else PROMISE_NUDGE}]
                 continue
-            spoke = spoke or bool(text)
+            # Il testo tenuto per lo sviluppo non è ancora detto (lo dice o lo tace il tool)
+            spoke = spoke or (bool(text) and not self._testo_tenuto)
             if held and self._held_kind == "fallito" and not nudged_fallito:
                 # «Ho recuperato il dato» dopo soli tool falliti: non si dice, il modello
                 # rilegge gli errori (una volta; poi vale la regola di sempre, qui sotto)
@@ -4109,7 +4156,8 @@ class Brain:
                     # Promesse e richieste di file solo senza nessun tool (come prima): dopo
                     # una lettura riuscita («Ho trovato… Lo apro?») non si spinge
                     promised = promised and not self.last_tools
-                    requested_now = requested and not self.last_tools
+                    # (la risposta allo sviluppo ha la sua spinta, sopra: qui no)
+                    requested_now = (richiesta_file or esercizi) and not self.last_tools
                     # «Non posso creare un'estensione» con sviluppo_apri disponibile a chi
                     # parla (06/10, DGX: dopo un rifiuto rimasto nella storia): una spinta
                     # (politica.rinuncia); la frase, se poi il tool arriva, esce dalla storia
@@ -4227,6 +4275,18 @@ class Brain:
             finally:
                 self._set_ctx("attesa", None)
             announced = announced or bool(attese)
+            tenuto, self._testo_tenuto = self._testo_tenuto, ""
+            if tenuto.strip():
+                if finals and all(finals):
+                    # Il tool dello sviluppo ha la sua frase (voce onesta, 12/10 sera): il testo
+                    # del modello di prima non si dice, e non resta nella storia
+                    self._rule("sviluppo_testo_taciuto")
+                    print(f"   [TOOL] testo prima del tool con la sua frase, non lo dico: "
+                          f"«{tenuto.strip()[:80]}»", flush=True)
+                    assistant["content"] = ""
+                else:
+                    spoke = True
+                    yield tenuto
             # Il cambio d'argomento (§ 13): la mezza frase fissa su ciò che va da parte, detta
             # subito (copre anche la passata dopo)
             frase_arg = self.__dict__.pop("_da_dire_argomento", None)
@@ -4244,7 +4304,8 @@ class Brain:
                 said = " ".join(f for i, f in enumerate(finals)
                                 if f.strip() not in " ".join(finals[:i]))
                 self.history.append({"role": "assistant", "content": said})
-                yield self._marca(said, "esito", "risposta")
+                # Dopo un testo già detto, uno spazio (12/10 sera: «…successiva.D'accordo»)
+                yield (" " if spoke else "") + self._marca(said, "esito", "risposta")
                 return
 
         # Tetto dei giri raggiunto: un'ultima passata senza tool, così risponde comunque.

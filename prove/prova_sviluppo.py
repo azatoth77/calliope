@@ -587,14 +587,14 @@ def prova_brain(tmp: Path, iso):
              and "Niente sviluppi nuovi" in visti and "sviluppo_modalita" in b.last_rules,
              visti[-600:])
     verifica("fuori tema con un tool d'altro: la riga che ricorda dove eravamo, in coda",
-             detto.endswith("Intanto restiamo sullo sviluppo di «Meteo per città»: siamo al "
+             detto.endswith("Lo sviluppo di «Meteo per città» resta aperto: siamo al "
                             "collaudo.") and "sviluppo_riga_fuori_tema" in b.last_rules
              and b.history[-1]["content"].endswith("siamo al collaudo."), detto)
     b.backend.risposte = [chiamata("ora_attuale", {}),
                           [("text", "Sono le 10:00. Intanto il Meteo per città aspetta.")]]
     detto = risposta(b, "E adesso?")
     verifica("contrario: la risposta nomina già lo sviluppo → niente riga",
-             "Intanto restiamo" not in detto, detto)
+             "resta aperto:" not in detto, detto)
     b.backend.risposte = [chiamata("ora_attuale", {}), [("text", "Sono le 10. Vuoi altro?")]]
     detto = risposta(b, "Che ore sono?")
     verifica("contrario: finisce con una domanda → niente riga (resta l'ultima cosa detta)",
@@ -602,7 +602,7 @@ def prova_brain(tmp: Path, iso):
     b.backend.risposte = [chiamata("sviluppo_passo", {"azione": "stato"}), [("text", "Ok.")]]
     detto = risposta(b, "A che punto siamo?")
     verifica("contrario: un tool dello sviluppo → niente riga; lo stato detto",
-             "Intanto restiamo" not in detto and "siamo al collaudo" in detto, detto)
+             "resta aperto:" not in detto and "siamo al collaudo" in detto, detto)
     b.backend.risposte = [[("text", "Ciao!")]]
     detto = risposta(b, "Ciao")
     verifica("contrario: nessun tool → niente riga del codice (la scrive il modello)",

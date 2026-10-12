@@ -200,9 +200,10 @@ def in_parole(m: dict) -> list[str]:
     if not s:
         return []
     g = s["giocatori"]
-    chi = (f"da {g['min']} a {g['max']} giocatori" if g["min"] != g["max"]
-           else ("un giocatore" if g["max"] == 1 else f"{g['max']} giocatori"))
-    out = [f"è un gioco sullo schermo per {chi}"]
+    # 12/10 sera: «per da 2 a 4 giocatori» e «con 1 comandi» detti nella revisione
+    chi = (f", da {g['min']} a {g['max']} giocatori" if g["min"] != g["max"]
+           else (" per un giocatore" if g["max"] == 1 else f" per {g['max']} giocatori"))
+    out = [f"è un gioco sullo schermo{chi}"]
     if s["condivisa"]:
         out.append("si gioca anche tra schermi di stanze diverse")
     if s["chat"]:
@@ -215,7 +216,8 @@ def in_parole(m: dict) -> list[str]:
         out.append("dal gioco chiede: " + ", ".join(a.replace("_", " ") for a in s["azioni"]))
     a = s.get("ascolta")
     if a:
-        out.append("si gioca anche a voce, con " + str(len(a["comandi"])) + " comandi"
+        n = len(a["comandi"])
+        out.append("si gioca anche a voce, con " + ("un comando" if n == 1 else f"{n} comandi")
                    + (" e il nome di chi gioca" if a.get("giocatore") else ""))
     return out
 

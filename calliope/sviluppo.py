@@ -341,7 +341,7 @@ class Sviluppo:
     # Gli ingressi del primo lavoro che valgono per tutti i lavori dello sviluppo (A6): i
     # vincoli della persona, la fonte verificata, il file della persona {nome, percorso}
     ingressi: dict = field(default_factory=dict)
-    # La riga «Intanto restiamo sullo sviluppo…» detta dopo un fuori tema (12/10): {fase,
+    # La riga «Lo sviluppo di «…» resta aperto: …» detta dopo un fuori tema (12/10): {fase,
     # quando}; non si ripete nella stessa fase per FUORI_TEMA_S
     fuori_tema: dict = field(default_factory=dict)
     # ── comandi del flusso e ripresa (12/10, lavoro 3) ──
@@ -967,6 +967,7 @@ class Sviluppi:
             self._salva()
             return item
         if stato == "fatto":
+            prima = (sv.estensione, sv.versione, sv.cartella)
             with self._lock:
                 sv.giro = {}
                 sv.cartella = str(r.get("cartella") or sv.cartella or "")
@@ -989,8 +990,30 @@ class Sviluppi:
             # specifica, qui nel thread dei lavori (la voce non aspetta); l'annuncio e la
             # revisione lo dicono
             self.verifica_consegna(sv, lav)
-            self.passa(sv, "collaudo", f"lavoro {lav.id} finito")
+            uguale = getattr(lav, "correzione", False) and self.codice_uguale(sv, prima)
+            self.passa(sv, "collaudo", f"lavoro {lav.id} finito"
+                       + (": correzione senza cambi al codice" if uguale else ""))
             item["messaggio"] = self.frase_pronto(sv, lav, altro)
+            if uguale:
+                # Una correzione che consegna il codice di prima non è «fatto» (12/10 sera,
+                # ricerca 2026-10-12-flusso-agente-fasi: alle 08:46 gioco.js e logica.js
+                # identici, cambiato solo il manifesto, e la voce ha detto «è pronto»). L'esito
+                # onesto, e la domanda di rimandarlo all'agente con il problema di prima
+                self.log(f"[SVILUPPO] {sv.id}: la correzione {lav.id} non ha cambiato il codice")
+                problema = str(getattr(lav, "problema_correzione", "") or "").strip()
+                domanda = "Lo rimando all'agente?"
+                item["messaggio"] = (f"{sv.persona_nome or 'Dario'}, la correzione di "
+                                     f"«{sv.titolo}» è finita ma il codice è uguale a prima: "
+                                     "non è cambiato niente di quello che fa. " + domanda)
+                item["in_sospeso"] = {
+                    "domanda": domanda, "tool": "sviluppo_correggi",
+                    "cosa": f"rimandare la correzione di «{sv.titolo}» all'agente",
+                    "argomenti": {"problema": "la correzione di prima ha consegnato il codice "
+                                              "uguale a prima" + (f": {problema[:200]}"
+                                                                  if problema else "")}}
+                item["sviluppo"] = sv.id
+                self._manda_scheda(sv, getattr(lav, "on_scheda", None))
+                return item
             # Niente «Vuoi approvarla?» in sospeso: prima si prova; «Con cosa provo?» va al
             # collaudo
             item["in_sospeso"] = {"domanda": "Con cosa provo?", "tool": "sviluppo_collauda",
@@ -1038,6 +1061,33 @@ class Sviluppi:
                               "argomenti": "azione = rifai (sì, rifallo); se dice cosa cambiare, "
                                            "azione = analisi e cambia = la modifica come detta"}
         return item
+
+    # I file che non cambiano ciò che il codice fa: il manifesto, i test, gli esempi
+    _NON_CODICE = re.compile(r"(^|/)(manifesto\.json|CAPACITA\.md|calliope_estensione\.py)$|"
+                             r"(^|/)test_[^/]*\.py$|\.test\.js$|(^|/)esempi(_veri)?/")
+
+    def codice_uguale(self, sv: Sviluppo, prima: tuple) -> bool:
+        """La versione appena consegnata ha lo stesso codice di quella di prima (`prima` =
+        (estensione, versione, cartella) prima della consegna): i file di codice uguali, tolti
+        manifesto, test ed esempi. False se non si può dire (la prima versione, file mancanti)."""
+        est, n0, cart0 = prima
+        try:
+            if sv.tipo == "estensione":
+                arch = getattr(getattr(self.lavori, "estensioni", None), "archivio", None)
+                if (arch is None or not est or n0 is None or est != sv.estensione
+                        or sv.versione in (None, n0)):
+                    return False
+                a = file_di_codice(arch.cartella_versione(est, n0))
+                b = file_di_codice(arch.cartella_versione(sv.estensione, sv.versione))
+            else:
+                if not cart0 or not sv.cartella or cart0 == sv.cartella:
+                    return False
+                a, b = file_di_codice(cart0), file_di_codice(sv.cartella)
+        except Exception:  # noqa: BLE001 — nel dubbio, la consegna di sempre
+            return False
+        a = {k: v for k, v in a.items() if not self._NON_CODICE.search(k)}
+        b = {k: v for k, v in b.items() if not self._NON_CODICE.search(k)}
+        return bool(a) and a == b
 
     def _segna_giro(self, sv: Sviluppo, lav, perche: str):
         """L'ultimo giro fermo prima di consegnare (12/10, A5): la cartella con i file che
@@ -1746,7 +1796,23 @@ class Sviluppi:
             return f"Il lavoro l'ho fermato io: {nota}."
         return f"Calliope ha fermato il lavoro dell'agente: {nota}."
 
-    def testo_per_agente(self, sv: Sviluppo, massimo: int = 30_000) -> str:
+    @staticmethod
+    def chiesti_ora(sv: Sviluppo) -> list[dict]:
+        """Le domande fatte a chi l'ha scritto sulla versione di adesso (la stessa versione
+        dell'estensione; per un programma, che non ha versioni, lo stesso lavoro): quelle di
+        prima parlano di un altro codice (12/10 sera)."""
+        if sv.versione is not None:
+            return [q for q in sv.chiesti if q.get("versione") == sv.versione]
+        return [q for q in sv.chiesti if "versione" in q and q.get("lavoro") == sv.lavoro]
+
+    def diagnosi(self, sv: Sviluppo) -> dict | None:
+        """L'ultima risposta di chi l'ha scritto sulla versione di adesso, o None (per la
+        correzione e il lavoro dopo una modifica: una diagnosi vecchia portava fuori strada)."""
+        return next((q for q in reversed(self.chiesti_ora(sv))
+                     if q.get("dettagli") or q.get("voce")), None)
+
+    def testo_per_agente(self, sv: Sviluppo, massimo: int = 30_000,
+                         chiesti: bool = True) -> str:
         """Il contesto dello sviluppo per sviluppo_chiedi e sviluppo_correggi: specifica,
         collaudi con gli esiti, domande già fatte, test, diario e ultimi passi dell'agente, i
         file (troncati), le fonti del manifesto."""
@@ -1794,8 +1860,12 @@ class Sviluppi:
                     righe.append("  richieste di rete (dalla porta di Calliope):")
                     righe.append(_busta("\n".join("   " + r for r in tr[:6]),
                                         "richieste di rete del collaudo"))
-        for q in sv.chiesti[-3:]:
-            righe.append(f"Domanda già fatta: «{q.get('domanda')}» → {q.get('dettagli') or q.get('voce')}")
+        # Le domande già fatte su QUESTA versione (12/10 sera, 11:11 e 12:06: la risposta a una
+        # domanda di prima, su una versione di prima, era ridetta uguale a domande diverse)
+        for q in (self.chiesti_ora(sv)[-3:] if chiesti else []):
+            righe.append(f"Domanda già fatta su questa versione (non ripetere la sua risposta a "
+                         f"una domanda diversa): «{q.get('domanda')}» → "
+                         f"{q.get('dettagli') or q.get('voce')}")
         ctx = self.contesto(sv)
         for lv in (ctx.get("lavori") or [])[-2:]:
             # Il motivo anche con un riassunto (prima o l'uno o l'altro: il motivo spariva)
@@ -1846,6 +1916,7 @@ class Sviluppi:
     def chiesto(self, sv: Sviluppo, domanda: str, risposta: dict):
         with self._lock:
             sv.chiesti.append({"quando": time.time(), "domanda": str(domanda or "")[:300],
+                               "versione": sv.versione, "lavoro": sv.lavoro,
                                "voce": str(risposta.get("voce") or "")[:400],
                                "dettagli": str(risposta.get("dettagli") or "")[:2000],
                                "correzione": bool(risposta.get("serve_correzione")),
@@ -1911,7 +1982,15 @@ class Sviluppi:
         with self._lock:
             sv.fuori_tema = {"fase": sv.fase, "quando": ora}
         self._salva()
-        return f"Intanto restiamo sullo sviluppo {sv.di()}: siamo {ALLA.get(sv.fase, sv.fase)}."
+        # 12/10 sera: «Intanto restiamo sullo sviluppo di «…»: siamo allo sviluppo.» suonava male
+        if sv.fase == "sviluppo":
+            stato = ("l'agente ci sta lavorando" if self.lavoro_attivo(sv)
+                     else "il lavoro dell'agente è fermo")
+        elif sv.fase == "attivazione":
+            stato = "manca l'attivazione"
+        else:
+            stato = f"siamo {ALLA.get(sv.fase, sv.fase)}"
+        return f"Lo sviluppo {sv.di()} resta aperto: {stato}."
 
     def promemoria_giorno(self, persona) -> str | None:
         """Gli sviluppi sospesi di chi amministra, una volta al giorno (alla prima risposta del
@@ -2003,10 +2082,14 @@ class Sviluppi:
                     "subito con la stessa specifica, dai file già scritti, senza rileggerla. Se "
                     "dice cosa cambiare, "
                     "azione analisi con cambia = la modifica; se va corretto, sviluppo_correggi.")
-        dopo = (" Se un risultato è sbagliato o la persona chiede perché («perché?», «come mai "
-                "non trova…?»), sviluppo_chiedi con domanda = la domanda come detta: risponde "
-                "chi l'ha scritto; se va corretto («correggilo», «fallo sistemare»), "
-                "sviluppo_correggi con problema = cosa non va, come detto.")
+        # 12/10 sera (11:11): «Scegliere la prima porta mi sembra che non porti a nulla» è la
+        # segnalazione di un problema, non una domanda: prima «Se un risultato è sbagliato…
+        # sviluppo_chiedi» la mandava a chi l'ha scritto, che ridiceva una risposta vecchia
+        dopo = (" Se la persona chiede perché o come funziona («perché?», «come mai non "
+                "trova…?»), sviluppo_chiedi con domanda = la domanda come detta: risponde chi "
+                "l'ha scritto. Se dice che qualcosa non va o non succede («non porta a nulla», "
+                "«non si vede niente», «è sbagliato», «correggilo»), sviluppo_correggi con "
+                "problema = cosa non va, come detto.")
         if sv.fase == "collaudo":
             # 12/10 (caso vero dell'11/10 16:26: collaudo saltato e «Ho analizzato il codice e
             # tutto sembra in ordine» detto dal modello): la revisione la dice il tool
@@ -2970,17 +3053,81 @@ def altro_compito(compito: str, titolo: str, *riferimenti: str) -> bool:
 # «aggiungi i decimali»): non introduce un programma, uno script o un'estensione con l'articolo
 # indeterminativo. Forma della scelta del modello (ha messo un compito intero dove va una
 # modifica), con la sostituzione di altro_compito sul titolo: l'effetto è una domanda
+#
+# 12/10 sera (giro vero del gioco delle porte, 07:38 e 08:47): «gioc\w*» prendeva «un
+# giocatore» («…rimangono le stesse tra un giocatore e l'altro»): una modifica dello stesso
+# gioco diventava «è un'altra estensione», e al «sì» si apriva davvero uno sviluppo nuovo. Le
+# parole sono intere: gioco/giochi (non giocatore, giocare, giocata), programma/programmi (non
+# programmatore), script/scripts. E in uno sviluppo che è già un gioco «un gioco» senza «altro»,
+# «nuovo» o «secondo» descrive lo stesso gioco («deve diventare un gioco a squadre»)
 _COSA_NUOVA = re.compile(
-    r"(?<![a-zà-ù'’])(?:un['’]\s*|(?:un|uno|una)\s+)(?:(?:altr[oa]|nuov[oa]|second[oa])\s+)?"
-    r"(?:programm\w*|script\w*|estension[ei]|gioc\w*|app|applicazion[ei])(?![a-zà-ù])", re.I)
+    r"(?<![a-zà-ù'’])(?:un['’]\s*|(?:un|uno|una)\s+)(?P<q>(?:altr[oa]|nuov[oa]|second[oa])\s+)?"
+    r"(?P<cosa>programm(?:a|i|ino|ini)|scripts?|estension[ei]|gioc(?:o|hi)|app|"
+    r"applicazion[ei])(?![a-zà-ù])", re.I)
 
 
-def altro_compito_in_cambia(cambia: str, sv) -> bool:
+def cosa_nuova(cambia: str, gioco: bool = False) -> bool:
+    """`cambia` nomina una cosa nuova con l'articolo indeterminativo («un programma che…», «un
+    altro gioco…»). In uno sviluppo che è un gioco (`gioco`), «un gioco» vale solo con «altro»,
+    «nuovo» o «secondo»."""
+    for m in _COSA_NUOVA.finditer(str(cambia or "")):
+        if gioco and m.group("cosa").lower().startswith("gioc") and not m.group("q"):
+            continue
+        return True
+    return False
+
+
+def altro_compito_in_cambia(cambia: str, sv, gioco: bool | None = None) -> bool:
     """`cambia` (la modifica di sviluppo_passo analisi) è un altro compito: nomina una cosa
-    nuova («un programma che…») e sostituisce una parola piena del titolo dello sviluppo."""
+    nuova («un programma che…») e sostituisce una parola piena del titolo dello sviluppo.
+    `gioco`: lo sviluppo è un gioco (Sviluppi.e_gioco); None = il solo campo dello sviluppo."""
     testo = str(cambia or "")
-    return bool(_COSA_NUOVA.search(testo)) and altro_compito(
+    if gioco is None:
+        gioco = bool(getattr(sv, "gioco", False))
+    return cosa_nuova(testo, gioco) and altro_compito(
         testo, sv.titolo, sv.richiesta, sv.specifica or "")
+
+
+# Una modifica o una correzione che non dice niente di concreto (12/10 sera, giro vero del gioco
+# delle porte). 08:38: a «Vorrei modificare Halloween le porte magiche.» il modello ha chiamato
+# l'analisi con cambia = «modifica le regole o il funzionamento come desideri» (un riempitivo
+# inventato), il modello dell'agente l'ha preso per un difetto e la voce ha proposto una
+# correzione mai chiesta. 08:46: «Calliope va modificato Calliope.» (il primo pezzo di una frase
+# tagliata al nome) → sviluppo_correggi con problema «va modificato Calliope», e la correzione è
+# partita senza una domanda. Il criterio: tolte le parole vuote, le parole generiche delle
+# richieste (`_GENERICHE`), le parole del titolo dello sviluppo e quelle che dicono solo «cambia»
+# o «correggi» («modifica», «regole», «funzionamento», «come desideri», «non va», «sistemalo»),
+# non resta niente; un numero o «più»/«meno» sono già qualcosa di concreto. Correzione della
+# forma di una scelta già fatta dal modello (ha passato una modifica vuota), con un effetto
+# reversibile: la domanda «cosa vuoi cambiare?» (principio 10, regole
+# `sviluppo_modifica_riempitivo` e `sviluppo_correggi_vago`)
+_SOLO_CAMBIA = ("modific", "cambi", "regol", "funzion", "comport", "desider", "prefer",
+                "miglior", "megli", "aspett", "dettagl", "qualcos", "cose", "parte", "parti",
+                "gioc", "estension", "version", "piac", "secondo", "indicaz", "richiest", "logic",
+                "manier", "modo", "rivede", "rived", "gestir", "gestisc", "vorre", "vuole",
+                "vorrest", "desider", "vogli", "liber", "sistem", "aggiust", "sviluppo",
+                "programm", "applicaz", "andare", "lavor")
+_SOLO_CORREGGI = _SOLO_CAMBIA + ("corregg", "corrett", "sbagli", "niente", "nulla", "bene",
+                                 "male", "problem", "error", "rott", "difett", "guast", "sistem",
+                                 "aggiust", "ripar", "fixa", "fissa")
+_NUMERI_DETTI = frozenset("uno una due tre quattro cinque sei sette otto nove dieci undici dodici "
+                          "venti trenta cento mille più piu meno doppio metà".split())
+
+
+def senza_contenuto(testo: str, sv, correzione: bool = False) -> bool:
+    """La modifica (o la correzione, `correzione`) detta non dice niente di concreto: tolte le
+    parole vuote, generiche, del titolo e quelle che dicono solo «cambia» o «correggi», non
+    resta niente. False per un testo vuoto (lo gestisce chi chiama) e con un numero detto."""
+    t = str(testo or "").strip()
+    if not t:
+        return False
+    if re.search(r"\d", t) or any(w in _NUMERI_DETTI for w in _PAROLA.findall(t.lower())):
+        return False
+    titolo = parole_piene(getattr(sv, "titolo", "") or "")
+    solo = _SOLO_CORREGGI if correzione else _SOLO_CAMBIA
+    resto = [w for w in parole_piene(t) if not w.startswith(solo)
+             and not any(_simili(w, x) for x in titolo)]
+    return not resto
 
 
 def _altro_dello_sviluppo(a: dict, sv) -> bool:
@@ -3073,6 +3220,10 @@ SISTEMA_CHIEDI = (
     "difetto del codice, se lo vedi, viene dopo e non è il motivo dell'arresto. "
     "Se chiede se è tutto fatto o se va bene, non dire che è tutto in ordine: di' cosa della "
     "specifica il codice fa e cosa non fa (c'è la riga «CONFRONTO CON LA RICHIESTA»). "
+    "Se non fa una domanda ma dice cosa ha visto che non va («scegliere la porta non porta a "
+    "nulla»), rispondi su quello: cosa fa il codice in quel caso; se non fa ciò che chiede la "
+    "specifica, serve_correzione = true. Rispondi alla domanda di adesso: non ripetere la "
+    "risposta a una domanda di prima. "
     "Rispondi in JSON: voce = una o due frasi semplici in italiano da dire ad alta voce (niente "
     "codice, nomi di file, simboli, indirizzi web); dettagli = la spiegazione per lo schermo "
     "(file, funzioni, la causa); serve_correzione = true se il codice va corretto; "

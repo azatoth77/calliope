@@ -310,6 +310,15 @@ export async function fumo(file, opzioni = {}) {
     await respira();
     avanza(caso(3) === 0 ? 1200 : 150);
     await respira();
+    // Il disegno leggibile (12/10 sera, ricerca 2026-10-12-flusso-agente-fasi): un campo che la
+    // logica non dà («undefined», «NaN», «[object Object]») nel testo visibile è un errore, non
+    // solo un'eccezione. Il caso vero del 12/10 mostrava «Nessun punto!» (non lo prende), ma è la
+    // stessa classe: gioco.js che legge un campo nel posto sbagliato
+    const visibile = String(radice.textContent || "") + " " + String(radice._html || "");
+    const strano = visibile.match(/\bundefined\b|\bNaN\b|\[object Object\]/);
+    if (strano) {
+      nota("disegno", `dopo il tocco su ${tocchi[tocchi.length - 1] || "il gioco"} nel testo visibile c'è «${strano[0]}»: gioco.js mostra un campo che la logica non dà in quel posto (controlla la forma di ciò che restituisce logica.js)`);
+    }
     if (errori.length) break;
   }
   return errori;

@@ -172,9 +172,9 @@ def prova_flusso(tmp: Path):
     # riga del fuori tema: una volta per fase
     r1, r2 = svs.riga_fuori_tema(sv), svs.riga_fuori_tema(sv)
     verifica("la riga del fuori tema una volta per fase (5 turni per una luce, ogni volta la "
-             "riga)", r1.startswith("Intanto restiamo") and r2 == "", f"{r1!r} {r2!r}")
+             "riga)", r1.startswith("Lo sviluppo di «") and r2 == "", f"{r1!r} {r2!r}")
     sv.fase = "revisione"
-    verifica("…di nuovo quando la fase cambia", svs.riga_fuori_tema(sv).startswith("Intanto"))
+    verifica("…di nuovo quando la fase cambia", svs.riga_fuori_tema(sv).startswith("Lo sviluppo di «"))
     sv.fase = "collaudo"
     msg_turno = svs.dati_turno(sv)
     verifica("i dati del turno non chiedono più di chiudere ricordando la fase, e dicono che "

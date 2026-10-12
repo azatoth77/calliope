@@ -145,7 +145,10 @@ def _domanda_cambio(ctx, sv, riapri: dict | None) -> dict:
             "voce": getattr(sc, "identified_by", "voce") in ("voce", None)
             or bool(getattr(sc, "sfida_superata", False))}
         domanda = f"Vuoi che sospenda «{sv.titolo}» e apra «{nuovo}»?"
+        c = str(riapri.get("compito") or "")
         altro = ("un altro programma" if _tipo(riapri.get("tipo")) == "programma"
+                 else "un altro gioco" if gioco_sugli_schermi(c) or re.search(
+                     r"\b(?:altr|nuov|second)[oa]\s+gioc(?:o|hi)\b", c, re.I)
                  else "un'altra estensione")
         frase = (f"Adesso stiamo sviluppando «{sv.titolo}» e siamo {alla}: «{nuovo}» è "
                  f"{altro}, e ne seguo uno per volta; il primo lo riprendiamo quando vuoi. "
@@ -1080,8 +1083,7 @@ def _collaudi_per_agente(svs, sv) -> str:
                      + f"{c.get('esito') or 'errore'}"
                      + (f" (la persona: {c['giudizio']})" if c.get("giudizio") else "")
                      for c in sv.collaudi[-5:])
-    diagnosi = next((q for q in reversed(sv.chiesti) if q.get("dettagli") or q.get("voce")),
-                    None)
+    diagnosi = svs.diagnosi(sv)        # solo della versione provata (12/10 sera)
     rete = svs.testo_traccia(sv)
     return (f" Collaudi della versione che la persona ha provato (dati → esito): {casi}."
             + (f" Diagnosi di chi l'ha scritto, alla domanda «{diagnosi['domanda']}»: "
@@ -1224,7 +1226,7 @@ def _analisi(ctx, svs, sv, prof, cambia: str) -> dict:
         return _no(ctx, "Qui non ci sono agenti.")
     if cambia and sv.tipo in ("programma", "estensione"):
         from ..sviluppo import altro_compito_in_cambia
-        if altro_compito_in_cambia(cambia, sv):
+        if altro_compito_in_cambia(cambia, sv, svs.e_gioco(sv)):
             # Un altro compito non è una modifica dell'analisi (10/10, terzo giro della DGX:
             # con «…converte i gradi Celsius in Fahrenheit» all'analisi, «…converte i
             # chilometri in miglia» → analisi con cambia = il compito nuovo → «Ho capito così:
@@ -1234,6 +1236,17 @@ def _analisi(ctx, svs, sv, prof, cambia: str) -> dict:
             note_rule(ctx, "sviluppo_analisi_altro")
             return _domanda_cambio(ctx, sv, {"tipo": sv.tipo, "compito": cambia})
     note_rule(ctx, "sviluppo_analisi")
+    from ..sviluppo import senza_contenuto
+    if cambia and senza_contenuto(cambia, sv) and not _cosa_appena_chiesta(ctx, consuma=True):
+        # Una modifica che non dice cosa cambiare (12/10 sera, 08:38: «Vorrei modificare
+        # Halloween le porte magiche.» → cambia = «modifica le regole o il funzionamento come
+        # desideri», preso per un difetto: «Lo faccio correggere?»). La domanda, una volta: la
+        # risposta che segue passa al modello dell'agente anche se è breve
+        note_rule(ctx, "sviluppo_modifica_riempitivo")
+        note_rule(ctx, "sviluppo_modifica_vaga")
+        svs.tocca(sv)
+        _schermo(ctx, sv)
+        return _chiedi_cosa(ctx, sv, "Cosa vuoi cambiare, di preciso?", "analisi")
     if not cambia:
         # «Torniamo all'analisi» senza dire cosa (12/10, A4): niente si ferma né cambia fase
         # finché la modifica non c'è e non è confermata; il lavoro in corso continua, la
@@ -1346,11 +1359,13 @@ def _va_chiesto(ctx, svs, sv, gia_chiesto: bool = False) -> bool:
     if any((not c.get("ok") and not c.get("anteprima")) or c.get("giudizio")
            for c in sv.collaudi[-5:]):
         return False
-    return not any(q.get("correzione") for q in sv.chiesti[-3:])
+    return not any(q.get("correzione") for q in svs.chiesti_ora(sv)[-3:])
 
 
 def _chiedi_cosa(ctx, sv, domanda: str, da: str) -> dict:
     from ..sviluppo import chi
+    # La risposta che arriva adesso non si richiede (anche per «cambia», 12/10 sera)
+    _COSA_CHIESTA[str(chi(ctx))] = int(getattr(ctx, "turno", 0) or 0)
     if da == "correggi":
         # 12/10, caso vero (11/10 19:25): «non ci siamo, ci sono cose che non funzionano,
         # correggile» → all'agente il problema «il gioco non funziona correttamente»
@@ -1457,7 +1472,9 @@ def _gia_nella_richiesta(ctx, svs, sv, detto: str, esito: str) -> dict:
     note_rule(ctx, "sviluppo_modifica_gia")
     if esito == "difetto" and (sv.versione or sv.cartella or sv.estensione):
         domanda = "Lo faccio correggere?"
-        return _final(f"Questo la richiesta lo dice già: se non lo fa, è il codice da correggere. "
+        cosa = "il gioco" if svs.e_gioco(sv) else sv.cosa()
+        # 12/10 sera: prima «Questo la richiesta lo dice già: …» (sgrammaticato)
+        return _final(f"La richiesta lo dice già: se {cosa} non lo fa, va corretto il codice. "
                       f"{domanda}", ok=False, fatto=f"{NIENTE}: la richiesta non cambia",
                       in_sospeso={"domanda": domanda, "tool": "sviluppo_correggi",
                                   "cosa": f"far correggere «{sv.titolo}»",
@@ -1671,10 +1688,9 @@ def _revisione(ctx, svs, sv) -> dict:
                        "manca?")
             return _final(f"{detto} {domanda}", fatto="revisione detta: NON è ancora attiva",
                           _fidati=[str(sv.titolo or "")],
-                          in_sospeso={"domanda": domanda,
-                                      "cosa": f"attivare «{sv.titolo}» così com'è o completarla",
-                                      "tool": "sviluppo_passo",
-                                      "argomenti": ARGOMENTI_COMPLETA})
+                          in_sospeso=_sospeso_completa(
+                              domanda, f"attivare «{sv.titolo}» così com'è o completarla",
+                              "attivarla così com'è", tappa_dopo))
         # La domanda in fondo (09/10, caso vero della DGX delle 21:00: con «Vuoi attivarla? Ti
         # chiederò la frase di conferma.» la risposta non finiva con «?», l'azione in sospeso
         # non restava e «Sì, attivarla.» arrivava alla politica senza la proposta). Il titolo
@@ -1721,9 +1737,9 @@ def _revisione(ctx, svs, sv) -> dict:
         domanda = ("Lo chiudo così com'è, o passo alla tappa dopo?" if tappa_dopo else
                    "Lo chiudo così com'è, o faccio continuare l'agente con quello che manca?")
         return _final(f"{frase} {domanda}", fatto="revisione detta",
-                      in_sospeso={"domanda": domanda,
-                                  "cosa": f"chiudere «{sv.titolo}» così com'è o completarlo",
-                                  "tool": "sviluppo_passo", "argomenti": ARGOMENTI_COMPLETA})
+                      in_sospeso=_sospeso_completa(
+                          domanda, f"chiudere «{sv.titolo}» così com'è o completarlo",
+                          "chiuderlo così com'è", tappa_dopo))
     frase += " Va bene così?"
     return _final(frase, fatto="revisione detta",
                   in_sospeso={"domanda": "Va bene così?", "cosa": "chiudere lo sviluppo",
@@ -1734,6 +1750,30 @@ def _revisione(ctx, svs, sv) -> dict:
 ARGOMENTI_COMPLETA = ("azione = completa se vuole che l'agente faccia quello che manca "
                       "(«continua», «falli», «completalo», «sì, continua»); azione = avanti se "
                       "va bene così com'è («attivala così», «va bene così»)")
+
+
+# La domanda con due strade (12/10 sera, caso vero delle 12:20: a «Vuoi attivarla così com'è, o
+# faccio continuare l'agente con quello che manca?» la persona ha detto «No, farlo continuare con
+# quello che manca.»: nessun tool, e la voce ha promesso «Ti avviso quando è pronto»). Il
+# messaggio di sempre diceva «se acconsente chiama…, se rifiuta non farlo», e il blocco dello
+# stato la trattava come un sì/no senza gli argomenti: il «no» davanti alla seconda strada
+# sembrava un rifiuto. Un messaggio suo: le due strade, e il «no» che va alla prima
+SCELTA_COMPLETA_MSG = (
+    "Azione in sospeso: poco fa hai chiesto «{domanda}». È una scelta tra due strade, non un sì "
+    "o un no. Se chi parla vuole che l'agente continui con quello che manca{tappa} («continua», "
+    "«fallo continuare», «completalo», anche con un «no» davanti: «No, fallo continuare con "
+    "quello che manca» rifiuta la prima strada e sceglie la seconda), chiama subito "
+    "sviluppo_passo con azione = completa. Se vuole {prima} («va bene così», «attivala così»), "
+    "sviluppo_passo con azione = avanti. La frase la dice il tool: non promettere niente senza "
+    "chiamarlo. Se chiede altro, rispondi a quello.")
+
+
+def _sospeso_completa(domanda: str, cosa: str, prima: str, tappa_dopo: bool) -> dict:
+    return {"domanda": domanda, "cosa": cosa, "tool": "sviluppo_passo",
+            "argomenti": ARGOMENTI_COMPLETA,
+            "messaggio": SCELTA_COMPLETA_MSG.format(
+                domanda=domanda, prima=prima,
+                tappa=" (o passi alla tappa dopo)" if tappa_dopo else "")}
 
 
 def _test_della_versione(est, sv, rev) -> dict | None:
@@ -2271,6 +2311,15 @@ def _sviluppo_chiedi(ctx: ToolContext, domanda: str = "", **_altro) -> dict:
     svs.tocca(sv)
     tempo = float(getattr(ctx.cfg, "sviluppo_chiedi_s", 60.0) or 60.0)
     r, esito = chiedi_agente(svc, domanda, svs.testo_per_agente(sv), tempo)
+    if r is not None and _risposta_ripetuta(sv, domanda, r):
+        # La stessa risposta di una domanda diversa (12/10 sera, 11:11:59 e 12:06:03: «Il
+        # lavoro si è fermato perché il sistema ha rilevato che…» a «scegliere la prima porta
+        # non porta a nulla» e a «perché è bloccato?»): una volta di nuovo, senza le domande
+        # di prima nel contesto
+        note_rule(ctx, "sviluppo_chiedi_ripetuta")
+        r2, _ = chiedi_agente(svc, domanda, svs.testo_per_agente(sv, chiesti=False), tempo)
+        if r2 is not None:
+            r = r2
     if r is None:
         note_rule(ctx, "sviluppo_chiedi_guasto")
         getattr(svc, "log", print)(f"[SVILUPPO] {sv.id}: domanda all'agente: {esito}")
@@ -2331,6 +2380,64 @@ def _sviluppo_chiedi(ctx: ToolContext, domanda: str = "", **_altro) -> dict:
     return out
 
 
+MAX_CHIESTI_RIPETUTA = 5
+
+# Le correzioni di un gioco che non correggono (12/10 sera, 11:37 e 11:42: «non si vede nessun
+# mostro, nessun punto, vince V senza motivo», due correzioni finite «fatto» con i test verdi e
+# il gioco uguale; la seconda con lo stesso identico problema della prima). L'agente correggeva
+# logica.js e i suoi test (le regole), mentre ciò che la persona vede passa da gioco.js; e non
+# sapeva che la versione provata era già la correzione di prima
+VINCOLO_CORREZIONE_GIOCO = (
+    " È un GIOCO e il problema l'ha visto la persona sullo schermo: la causa può essere in "
+    "gioco.js (il disegno, i tocchi, cosa si mostra), non solo in logica.js. Segui il tocco "
+    "della persona fino a ciò che appare: che il tocco chiami la regola giusta e che il risultato "
+    "(cosa c'è dietro la porta, i punti, chi vince e perché) venga mostrato. Aggiungi in "
+    "logica.test.js un test che giochi le mosse dette dalla persona e controlli proprio quello "
+    "che lei dice che non va (punti assegnati, esito della mossa, vincitore): la prova di fumo "
+    "dice solo che il gioco parte.")
+
+
+def _detto_adesso(ctx, problema: str) -> str:
+    """Le parole della persona in questo turno, se dicono più del problema passato dal modello
+    (12/10 sera: la seconda correzione ha ricevuto lo stesso problema della prima, e «è sempre
+    esattamente uguale a prima» si perdeva)."""
+    from ..estensioni.servizio import _norm_testo
+    detto = re.sub(r"\s+", " ", str(getattr(ctx, "user_text", "") or "")).strip()
+    if len(detto) < 25 or _norm_testo(detto) in _norm_testo(problema):
+        return ""
+    return f" Le parole della persona adesso: «{detto[:500]}»."
+
+
+def _correzione_di_prima(svs, sv) -> str:
+    """La versione provata era già una correzione: lo si dice all'agente (12/10 sera)."""
+    from ..sviluppo import cambiamento_chiesto
+    c = cambiamento_chiesto(sv)
+    if not c.startswith("correggere: "):
+        return ""
+    return (f" ATTENZIONE: la versione che la persona ha appena provato era GIÀ una correzione "
+            f"(per: «{c.removeprefix('correggere: ')[:300]}»), e la persona dice che non va "
+            "ancora: la correzione di prima NON ha funzionato, anche se i suoi test passavano. "
+            "Non rifare la stessa modifica: trova perché ciò che la persona vede non è "
+            "cambiato.")
+
+
+def _risposta_ripetuta(sv, domanda: str, r: dict) -> bool:
+    """La risposta dell'agente è (quasi) uguale a quella di una domanda diversa di prima."""
+    import difflib
+    from ..estensioni.servizio import _norm_testo
+    voce = _norm_testo(str(r.get("voce") or ""))
+    d = _norm_testo(domanda)
+    if len(voce) < 20:
+        return False
+    for q in sv.chiesti[-MAX_CHIESTI_RIPETUTA:]:
+        if _norm_testo(str(q.get("domanda") or "")) == d:
+            continue
+        prima = _norm_testo(str(q.get("voce") or ""))
+        if prima and difflib.SequenceMatcher(None, voce, prima).ratio() >= 0.9:
+            return True
+    return False
+
+
 # ─────────────────────────── sviluppo_correggi ───────────────────────────
 
 def _sviluppo_correggi(ctx: ToolContext, problema: str = "", **_altro) -> dict:
@@ -2381,6 +2488,22 @@ def _sviluppo_correggi(ctx: ToolContext, problema: str = "", **_altro) -> dict:
     risposta = _cosa_appena_chiesta(ctx, consuma=True)
     si_alla_domanda = (getattr(ctx, "tool_in_sospeso", None) == "sviluppo_correggi"
                        and not risposta)
+    from ..sviluppo import senza_contenuto
+    if problema and not si_alla_domanda and not risposta and senza_contenuto(
+            problema, sv, correzione=True):
+        # Un problema che non descrive niente (12/10 sera, 08:46: «Calliope va modificato
+        # Calliope.», il primo pezzo di una frase tagliata al nome → problema «va modificato
+        # Calliope», e la correzione partiva senza una domanda). Con un collaudo fallito di
+        # questa versione l'agente ha da dove partire: il problema detto non aggiunge niente
+        note_rule(ctx, "sviluppo_correggi_vago")
+        falliti_ora = [c for c in sv.collaudi[-5:]
+                       if not c.get("ok") and not c.get("anteprima")
+                       and c.get("versione") in (None, sv.versione)]
+        if not falliti_ora:
+            return _chiedi_cosa(ctx, sv, "Cosa non va? Dimmi cosa hai visto o cosa deve fare "
+                                         "di diverso, così lo dico a chi l'ha scritto.",
+                                "correggi")
+        problema = ""
     if not problema and not si_alla_domanda and not risposta and _va_chiesto(ctx, svs, sv):
         return _chiedi_cosa(ctx, sv, "Cosa non va? Dimmi cosa hai visto o cosa deve fare di "
                                      "diverso, così lo dico a chi l'ha scritto.", "correggi")
@@ -2416,8 +2539,7 @@ def _sviluppo_correggi(ctx: ToolContext, problema: str = "", **_altro) -> dict:
                         else "") + f" → {c.get('esito') or 'errore'}"
                      + (f" (la persona: {c['giudizio']})" if c.get("giudizio") else "")
                      for c in falliti)
-    diagnosi = next((q for q in reversed(sv.chiesti) if q.get("dettagli") or q.get("voce")),
-                    None)
+    diagnosi = svs.diagnosi(sv)        # solo della versione provata (12/10 sera)
     # La traccia di rete dei collaudi (08/10): le richieste vere con l'esito, la causa che nel
     # giro della DGX l'agente non vedeva (nella sandbox non ha rete)
     rete = svs.testo_traccia(sv)
@@ -2433,6 +2555,9 @@ def _sviluppo_correggi(ctx: ToolContext, problema: str = "", **_altro) -> dict:
                   + (f" Da correggere: {diagnosi['cosa_correggere']}."
                      if diagnosi.get("cosa_correggere") else "") if diagnosi else "")
                + (f" Problema detto dalla persona: «{problema}»." if problema else "")
+               + _detto_adesso(ctx, problema)
+               + _correzione_di_prima(svs, sv)
+               + (VINCOLO_CORREZIONE_GIOCO if svs.e_gioco(sv) else "")
                + (f" {rete}" if rete else "")
                + " Trova la causa, correggi il codice, aggiungi un test con ogni caso che non "
                  "andava, rifai i test, poi consegna.")
@@ -2442,6 +2567,7 @@ def _sviluppo_correggi(ctx: ToolContext, problema: str = "", **_altro) -> dict:
     _con_esempi(svs, sv, lav)
     svs._metti_vincoli(sv, lav)
     lav.correzione = True
+    lav.problema_correzione = problema
     with svs._lock:
         sv.correzioni += 1
     svs.passa(sv, "sviluppo", "correzione" + (f": {problema[:80]}" if problema else ""))
@@ -2449,8 +2575,13 @@ def _sviluppo_correggi(ctx: ToolContext, problema: str = "", **_altro) -> dict:
     from . import agenti as ta
     out = ta._avvia(ctx, svc, lav)
     caso = falliti[-1].get("dati") if falliti else ""
-    frase = frasi_pronte.scegli("sviluppo.correzione",
-                                caso=(f" con «{caso}»" if caso else ""))   # catalogo (12/10)
+    # Un gioco si riprova guardandolo (12/10 sera: «rifacciamo la prova con «in prova sullo
+    # schermo»», il dato del collaudo di un gioco detto come un dato della prova)
+    if svs.e_gioco(sv) or (falliti and falliti[-1].get("anteprima")):
+        caso_detto = " sullo schermo"
+    else:
+        caso_detto = f" con «{caso}»" if caso else ""
+    frase = frasi_pronte.scegli("sviluppo.correzione", caso=caso_detto)   # catalogo (12/10)
     out["conferma"] = out["risposta_finale"] = frase
     _schermo(ctx, sv)
     return out
@@ -2560,9 +2691,10 @@ def sviluppo_specs(file_pc: bool = False, allegati: bool = False) -> list[ToolSp
                          "perché un collaudo dà quel risultato, come funziona, cosa fa in un "
                          "caso («perché non trova Cerro Maggiore?», «come mai?», «che fonte "
                          "usa?»). Risponde senza cambiare niente. domanda: come detta. Solo "
-                         "per DOMANDE sul codice: per chiudere, fermare o sospendere uno "
-                         "sviluppo («chiudi tutti gli sviluppi») c'è sviluppo_passo con "
-                         "l'azione."),
+                         "per DOMANDE sul codice: se la persona dice che qualcosa non va («non "
+                         "porta a nulla», «non si vede il mostro») è sviluppo_correggi; per "
+                         "chiudere, fermare o sospendere uno sviluppo («chiudi tutti gli "
+                         "sviluppi») c'è sviluppo_passo con l'azione."),
             parameters={"type": "object", "properties": {"domanda": {"type": "string"}},
                         "required": ["domanda"]},
             func=_sviluppo_chiedi, risk="lettura", levels=FAMILY, non_fidato=True,
