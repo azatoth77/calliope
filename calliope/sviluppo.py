@@ -2970,16 +2970,38 @@ def altro_compito(compito: str, titolo: str, *riferimenti: str) -> bool:
 # «aggiungi i decimali»): non introduce un programma, uno script o un'estensione con l'articolo
 # indeterminativo. Forma della scelta del modello (ha messo un compito intero dove va una
 # modifica), con la sostituzione di altro_compito sul titolo: l'effetto è una domanda
+#
+# 12/10 sera (giro vero del gioco delle porte, 07:38 e 08:47): «gioc\w*» prendeva «un
+# giocatore» («…rimangono le stesse tra un giocatore e l'altro»): una modifica dello stesso
+# gioco diventava «è un'altra estensione», e al «sì» si apriva davvero uno sviluppo nuovo. Le
+# parole sono intere: gioco/giochi (non giocatore, giocare, giocata), programma/programmi (non
+# programmatore), script/scripts. E in uno sviluppo che è già un gioco «un gioco» senza «altro»,
+# «nuovo» o «secondo» descrive lo stesso gioco («deve diventare un gioco a squadre»)
 _COSA_NUOVA = re.compile(
-    r"(?<![a-zà-ù'’])(?:un['’]\s*|(?:un|uno|una)\s+)(?:(?:altr[oa]|nuov[oa]|second[oa])\s+)?"
-    r"(?:programm\w*|script\w*|estension[ei]|gioc\w*|app|applicazion[ei])(?![a-zà-ù])", re.I)
+    r"(?<![a-zà-ù'’])(?:un['’]\s*|(?:un|uno|una)\s+)(?P<q>(?:altr[oa]|nuov[oa]|second[oa])\s+)?"
+    r"(?P<cosa>programm(?:a|i|ino|ini)|scripts?|estension[ei]|gioc(?:o|hi)|app|"
+    r"applicazion[ei])(?![a-zà-ù])", re.I)
 
 
-def altro_compito_in_cambia(cambia: str, sv) -> bool:
+def cosa_nuova(cambia: str, gioco: bool = False) -> bool:
+    """`cambia` nomina una cosa nuova con l'articolo indeterminativo («un programma che…», «un
+    altro gioco…»). In uno sviluppo che è un gioco (`gioco`), «un gioco» vale solo con «altro»,
+    «nuovo» o «secondo»."""
+    for m in _COSA_NUOVA.finditer(str(cambia or "")):
+        if gioco and m.group("cosa").lower().startswith("gioc") and not m.group("q"):
+            continue
+        return True
+    return False
+
+
+def altro_compito_in_cambia(cambia: str, sv, gioco: bool | None = None) -> bool:
     """`cambia` (la modifica di sviluppo_passo analisi) è un altro compito: nomina una cosa
-    nuova («un programma che…») e sostituisce una parola piena del titolo dello sviluppo."""
+    nuova («un programma che…») e sostituisce una parola piena del titolo dello sviluppo.
+    `gioco`: lo sviluppo è un gioco (Sviluppi.e_gioco); None = il solo campo dello sviluppo."""
     testo = str(cambia or "")
-    return bool(_COSA_NUOVA.search(testo)) and altro_compito(
+    if gioco is None:
+        gioco = bool(getattr(sv, "gioco", False))
+    return cosa_nuova(testo, gioco) and altro_compito(
         testo, sv.titolo, sv.richiesta, sv.specifica or "")
 
 

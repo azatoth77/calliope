@@ -145,7 +145,10 @@ def _domanda_cambio(ctx, sv, riapri: dict | None) -> dict:
             "voce": getattr(sc, "identified_by", "voce") in ("voce", None)
             or bool(getattr(sc, "sfida_superata", False))}
         domanda = f"Vuoi che sospenda «{sv.titolo}» e apra «{nuovo}»?"
+        c = str(riapri.get("compito") or "")
         altro = ("un altro programma" if _tipo(riapri.get("tipo")) == "programma"
+                 else "un altro gioco" if gioco_sugli_schermi(c) or re.search(
+                     r"\b(?:altr|nuov|second)[oa]\s+gioc(?:o|hi)\b", c, re.I)
                  else "un'altra estensione")
         frase = (f"Adesso stiamo sviluppando «{sv.titolo}» e siamo {alla}: «{nuovo}» è "
                  f"{altro}, e ne seguo uno per volta; il primo lo riprendiamo quando vuoi. "
@@ -1224,7 +1227,7 @@ def _analisi(ctx, svs, sv, prof, cambia: str) -> dict:
         return _no(ctx, "Qui non ci sono agenti.")
     if cambia and sv.tipo in ("programma", "estensione"):
         from ..sviluppo import altro_compito_in_cambia
-        if altro_compito_in_cambia(cambia, sv):
+        if altro_compito_in_cambia(cambia, sv, svs.e_gioco(sv)):
             # Un altro compito non è una modifica dell'analisi (10/10, terzo giro della DGX:
             # con «…converte i gradi Celsius in Fahrenheit» all'analisi, «…converte i
             # chilometri in miglia» → analisi con cambia = il compito nuovo → «Ho capito così:
