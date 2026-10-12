@@ -2738,16 +2738,30 @@ fantasia, `prova_giro_porte.py`). Un passo per punto, in `calliope/sviluppo.py` 
    passato; per un gioco `VINCOLO_CORREZIONE_GIOCO` (la causa può essere in `gioco.js`; un test in
    `logica.test.js` che giochi le mosse dette e controlli punti, esito e vincitore; la prova di
    fumo dice solo che parte). Niente della macchina a stati dei giochi.
+   **La causa vera** (ricerca [`2026-10-12-flusso-agente-fasi`](../ricerche/2026-10-12-flusso-agente-fasi.md),
+   i dodici lavori ricostruiti): `logica.js` restituiva l'esito annidato (`{ ...stato, risultato }`)
+   e `gioco.js` leggeva `risultato.emoji` e `risultato.punti` al primo livello; i test di
+   `logica.test.js` erano verdi e nessuno toccava `gioco.js`. Alle 08:46 la correzione aveva i file
+   identici, alle 11:37 una riga, alle 11:42 `gioco.js` riscritto con lo stesso errore. Due passi
+   piccoli in più: una correzione che consegna lo **stesso codice** (tolti manifesto, test ed
+   esempi) non è «pronto» ma «la correzione è finita ma il codice è uguale a prima… Lo rimando
+   all'agente?» (`Sviluppi.codice_uguale`); la **prova di fumo** dei giochi dopo ogni tocco segnala
+   «undefined», «NaN» o «[object Object]» nel testo visibile (non avrebbe preso il 12/10, che
+   mostrava «Nessun punto!», ma la stessa classe). I test di accettazione in un lavoro a sé e
+   l'API per toccare e leggere il disegno restano la proposta della ricerca, non fatti qui.
 8. **Agente che gira a vuoto sui giochi** (11:20 e 12:05 «ha ripetuto lo stesso ragionamento in 3
    passate», 12:17 «15 passate senza file né test nuovi»). Dai soli log della voce (la DGX non è
    stata toccata) la causa probabile è doppia. Primo, **l'avviso di chiusura** (`_avviso_fine` in
    `agenti/ciclo.py`, 06/10): a ogni giro di uno sviluppo, a due passate dal tetto, diceva «il
-   lavoro sta per finire: non cominciare cose nuove… chiama consegna con un riassunto onesto», ma
-   in uno sviluppo il tetto è una tappa. L'agente si ritrovava a decidere se consegnare a metà o
-   continuare (il ragionamento ripetuto) e scriveva «il lavoro si è fermato perché stava per finire
-   le passate», poi ridetto da `sviluppo_chiedi`. Ora, con `lav.tappe`, «questo giro sta per
-   finire: non è la fine del lavoro… non consegnare a metà e non fermarti a ragionarci: fai il
-   prossimo passo concreto e scrivi cosa resta da fare»; fuori dagli sviluppi l'avviso di sempre.
+   lavoro sta per finire le sue passate (ne restano 2): non cominciare cose nuove… chiama consegna
+   con un riassunto onesto», ma in uno sviluppo il tetto è una tappa. L'agente si ritrovava a
+   decidere se consegnare a metà o continuare (il ragionamento ripetuto) e scriveva «il lavoro si
+   è fermato perché stava per finire le passate», poi ridetto da `sviluppo_chiedi` come diagnosi
+   (falsa: la causa era il campo annidato). Conclusione: l'avviso contribuisce, come conto alla
+   rovescia. Ora è **un'azione senza numeri** (ricerca § 5.1, il budget come azione): «Adesso
+   chiudi: … chiama consegna…» e, in uno sviluppo, «Adesso fai il passo concreto più utile…
+   senza ragionare sul tempo o sulle passate… non consegnare a metà e scrivi cosa resta da fare»;
+   il perché (passate, token, tempo) resta nel log.
    Non misurato (serve qwen3.6 sulla DGX): da guardare nei prossimi giri quante tappe hanno
    «ragionamento ripetuto». Secondo, il compito stesso: richieste visive («l'animazione del
    mostro», «vedere i punti») con i test di `logica.js` già verdi e niente per vedere `gioco.js`

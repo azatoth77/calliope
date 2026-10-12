@@ -289,7 +289,12 @@ i giochi:
   se la versione provata era già una correzione, che quella non ha funzionato
   (`VINCOLO_CORREZIONE_GIOCO`, `_correzione_di_prima`);
 - l'avviso vicino al tetto del giro non dice più «il lavoro sta per finire, consegna»: in uno
-  sviluppo è la fine del giro, non del lavoro.
+  sviluppo è un'azione («il passo concreto più utile»), senza numeri;
+- una correzione che consegna lo stesso codice non è «pronto» («il codice è uguale a prima: lo
+  rimando all'agente?»), e la prova di fumo segnala «undefined», «NaN», «[object Object]» nel
+  testo visibile dopo un tocco (la causa vera del 12/10, l'esito annidato in `logica.js` letto al
+  primo livello da `gioco.js`, è nella ricerca
+  [`2026-10-12-flusso-agente-fasi`](../ricerche/2026-10-12-flusso-agente-fasi.md)).
 
 ### Prove
 
