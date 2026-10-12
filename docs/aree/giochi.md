@@ -268,6 +268,12 @@ progetto in [voce-e-regole](voce-e-regole.md)): mentre si gioca, alcune frasi br
 significato chiuso che non passa dal modello. La macchina a stati qui non si tocca: la regola
 sta nel ciclo come le altre forme chiuse, e la finestra è una finestra d'ascolto.
 
+**12/10, progetto**: la macchina a stati **del gioco** fornita da Calliope (fasi standard, comandi
+per fase con uno slot, istantanea, giudice di fase, palco fisso, prova di fumo per fasi; nessuna
+compatibilità con i giochi di oggi) è in
+[`2026-10-12-giochi-macchina-stati.md`](../ricerche/2026-10-12-giochi-macchina-stati.md), in
+attesa delle decisioni di chi amministra.
+
 ### Prove
 
 `prova_gioco_voce` (a secco, ~2 s: manifesto, server, ciclo con tutti i contrari, il tool,
