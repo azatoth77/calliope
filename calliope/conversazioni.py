@@ -3,10 +3,23 @@ L'archivio delle conversazioni (05/10/2026, fase 2 del progetto «Contesto di Ca
 docs/ricerche/2026-10-05-contesto-compressione.md).
 
 Ogni turno finito di una conversazione si salva qui, in `conversazioni.db` (accanto a
-memoria.db ma separato: i ricordi si tengono per sempre, le conversazioni
-`conversazioni_giorni` giorni). Così la compressione della storia e la fine di una
-conversazione non perdono niente, e `conversazione_cerca` ritrova «cosa ti avevo detto
-stamattina sul preventivo?».
+memoria.db ma separato: i ricordi si tengono per sempre, le conversazioni `turn_log_days`
+giorni). Così la compressione della storia e la fine di una conversazione non perdono niente, e
+`conversazione_cerca` ritrova «cosa ti avevo detto stamattina sul preventivo?».
+
+- **Conservazione** (12/10 sera, decisione 0028 T1, calliope/conserva.py): su disco solo le
+  conversazioni degli **adulti riconosciuti**, decise da `Conservazione.conversazioni_su_disco`
+  (cioè `conserva.decidi`, il solo posto che decide; qui `conserva`, una funzione persona →
+  sì/no/None). Quelle di minori, ospiti e profili tolti vanno nell'**archivio della sessione**
+  (`sessione`: lo stesso archivio in un SQLite in memoria, senza vettori), così ricerca,
+  «riprendi», la riga «l'ultima volta…» e la scheda «Conversazione» funzionano finché Calliope
+  non si riavvia, e poi non c'è più niente. Dentro la conversazione di un adulto i turni le cui
+  parole non restano (`conserva.testo_turno`: zona grigia, dubbio con un minore; il ciclo lo
+  segna nel `_turno` del messaggio) non vanno su disco, né nell'archivio né nella conversazione
+  in corso salvata (`correnti`). Tenuta: `turn_log_days` (60), la stessa del registro dei turni
+  (prima `conversazioni_giorni`, 30). La pulizia di ogni giorno toglie anche, con
+  `secure_delete`, le conversazioni rimaste su disco di chi non ne ha più il diritto (ospiti,
+  minori, profili tolti: niente migrazioni, Calliope non è in produzione).
 
 - **Tabelle**: `conversazioni` (chi, dove, quando, riassunto di chiusura), `turni` (domanda,
   risposta, azioni con l'esito e la frase detta; mai gli argomenti dei tool), `turni_fts`
@@ -17,11 +30,12 @@ stamattina sul preventivo?».
   piccolo: niente indice vettoriale), fusione dei due elenchi con RRF (k = 60). Senza modello
   di embedding (non scaricato, server giù) resta FTS5, e il registro delle capacità lo dice.
 - **Visibilità**: ognuno ritrova solo le proprie conversazioni (id del profilo). Quelle degli
-  ospiti si archiviano ma il modello non le recupera mai, né per loro né per altri: le vede
-  chi amministra, da terminale (`python -m calliope.conversazioni --elenco/--mostra`) e a voce
-  solo se riconosciuto dalla voce (tool con `ospiti=true`).
-- **Cancellazione**: per persona («dimentica le nostre conversazioni»), e dopo
-  `conversazioni_giorni` giorni (all'avvio e una volta al giorno). Dal 10/10 «dimentica» è vera
+  ospiti (dal 12/10 sera solo nell'archivio della sessione) il modello non le recupera mai, né
+  per loro né per altri: le vede chi amministra, a voce solo se riconosciuto dalla voce (tool
+  con `ospiti=true`), finché Calliope non si riavvia; da terminale non più (non sono su disco).
+- **Cancellazione**: per persona («dimentica le nostre conversazioni», anche nella sessione),
+  tutte (`svuota`, da `calliope conserva --svuota`), e dopo `turn_log_days` giorni (all'avvio
+  e una volta al giorno). Dal 10/10 «dimentica» è vera
   (§ 2.4 del progetto del registro degli eventi): `secure_delete`, l'indice FTS5 ricompattato,
   il checkpoint del WAL, anche la conversazione in corso salvata (`correnti`) e il registro
   degli eventi della persona (tabella `eventi`, calliope/eventi/registro.py).
@@ -179,9 +193,17 @@ class ModelloMancante(RuntimeError):
 
 # ─────────────────────────── l'archivio ───────────────────────────
 class ArchivioConversazioni:
-    def __init__(self, path, giorni: int = 30, embedder: Embedder | None = None, log=print,
-                 avvia: bool = True, inattivita_s: float = 600.0, cfg=None):
+    def __init__(self, path, giorni: int = 60, embedder: Embedder | None = None, log=print,
+                 avvia: bool = True, inattivita_s: float = 600.0, cfg=None,
+                 sessione: bool = True, conserva=None):
         self.path = str(path)
+        # In memoria (l'archivio della sessione, o le prove): niente su disco
+        self.in_memoria = self.path == ":memory:"
+        # Chi va su disco (12/10 sera, T1): persona → True / False / None («non so»: profili non
+        # letti), di solito Conservazione.conversazioni_su_disco (main.py). Prima del thread:
+        # la prima pulizia la usa già. None = nessuna conservazione collegata (prove): su disco
+        # le persone, mai gli ospiti
+        self.conserva = conserva
         # Calliope inattiva (nessun turno archiviato né ricerca) da `inattivita_s`: solo allora
         # i vettori caricano il modello di embedding (06/10)
         self.inattivita_s = float(inattivita_s)
@@ -224,6 +246,15 @@ class ArchivioConversazioni:
         # Il registro degli eventi su disco (calliope/eventi/registro.Disco), se c'è: «dimentica»
         # cancella anche lì
         self.eventi = None
+        # L'archivio della sessione (12/10 sera, T1): le conversazioni di minori e ospiti, solo
+        # in memoria, con gli stessi metodi (senza thread: le scritture sono subito, sotto il
+        # suo lock) e gli stessi avvisi agli schermi. Niente vettori: si cerca per parole
+        self.sessione: ArchivioConversazioni | None = None
+        if sessione and not self.in_memoria:
+            self.sessione = ArchivioConversazioni(":memory:", self.giorni, None, log=log,
+                                                  avvia=False, cfg=cfg, sessione=False)
+            self.sessione.su_turni = self.su_turni
+            self.sessione.su_dimentica = self.su_dimentica
         if avvia:
             self.avvia()
 
@@ -307,10 +338,57 @@ class ArchivioConversazioni:
         else:
             self.coda.put(f)
 
+    # ── su disco o nella sessione (12/10 sera, T1) ──
+    def su_disco(self, persona, ospite: bool = False) -> bool:
+        """Le conversazioni di `persona` vanno su disco? Mai gli ospiti; le persone secondo
+        `conserva` (None, «non so», vale no). Un archivio in memoria non ha un disco."""
+        if self.in_memoria or ospite or persona in (None, ""):
+            return False
+        f = self.conserva
+        if f is None:
+            return True
+        try:
+            return f(str(persona)) is True
+        except Exception:  # noqa: BLE001 — nel dubbio non su disco
+            return False
+
+    def _dove(self, persona, ospite: bool = False) -> "ArchivioConversazioni":
+        """L'archivio per `persona`: questo (su disco) o quello della sessione (in memoria)."""
+        if self.sessione is None or self.su_disco(persona, ospite):
+            return self
+        return self.sessione
+
+    def _di_conv(self, conv) -> "ArchivioConversazioni":
+        """L'archivio dove sono già i turni di `conv` (`archiviata_in`, scritto da archivia)."""
+        if self.sessione is not None and getattr(conv, "archiviata_in", None) == "sessione":
+            return self.sessione
+        return self
+
     # ── scrittura (dal thread della voce, eseguita dal worker) ──
     def archivia(self, conv, turni: list[dict], persona, nome, ospite: bool):
         """Aggiunge i turni finiti di `conv` (calliope.conversazione.turni); apre la riga della
-        conversazione la prima volta e ne scrive l'id in `conv.id_archivio`."""
+        conversazione la prima volta e ne scrive l'id in `conv.id_archivio`. Dal 12/10 sera
+        (T1) solo per gli adulti riconosciuti su disco, e senza i turni segnati
+        `non_conservare`; minori e ospiti nell'archivio della sessione (`_dove`)."""
+        if not turni:
+            return
+        if self.sessione is not None:
+            dove = self._dove(persona, ospite)
+            nome_dove = "sessione" if dove is not self else "disco"
+            if getattr(conv, "archiviata_in", None) not in (None, nome_dove):
+                # La stessa conversazione cambia archivio (una persona diventata minore, un
+                # profilo tolto): una riga nuova di là, gli id dei due archivi non si mescolano
+                conv.id_archivio = None
+            try:
+                conv.archiviata_in = nome_dove
+            except AttributeError:
+                pass
+            if dove is not self:
+                return dove.archivia(conv, turni, persona, nome, ospite)
+        elif not self.in_memoria and not self.su_disco(persona, ospite):
+            return                       # su disco senza una sessione: chi non va su disco, no
+        if not self.in_memoria:
+            turni = [t for t in turni if not t.get("non_conservare")]
         if not turni or not self.scrivibile:
             return
         self.segna_attivita()
@@ -318,6 +396,12 @@ class ArchivioConversazioni:
         def f():
             nuovi = []
             with self.lock:
+                if conv.id_archivio is not None and not self.db.execute(
+                        "SELECT 1 FROM conversazioni WHERE id = ?",
+                        (conv.id_archivio,)).fetchone():
+                    # La riga è stata tolta mentre la conversazione continuava (svuota, la
+                    # rotazione): una riga nuova, mai turni orfani
+                    conv.id_archivio = None
                 if conv.id_archivio is None:
                     cur = self.db.execute(
                         "INSERT INTO conversazioni (persona, nome, ospite, luogo, inizio) "
@@ -353,6 +437,9 @@ class ArchivioConversazioni:
         tenuta dell'archivio: per la scheda «Conversazione» di un suo schermo personale."""
         if not persona or n <= 0:
             return []
+        dove = self._dove(persona)
+        if dove is not self:
+            return dove.chat(persona, n)
         dal = time.time() - self.giorni * 86400 if self.giorni > 0 else 0.0
         with self.lock:
             righe = self.db.execute(
@@ -378,6 +465,9 @@ class ArchivioConversazioni:
 
     def chiudi(self, conv, motivo: str, riassunto: dict | None = None):
         """La conversazione è finita: fine, motivo e (se c'è) il riassunto di chiusura."""
+        dove = self._di_conv(conv)
+        if dove is not self:
+            return dove.chiudi(conv, motivo, riassunto)
         if not self.scrivibile:
             return
 
@@ -397,10 +487,32 @@ class ArchivioConversazioni:
         self._in_coda(f)
 
     def salva_corrente(self, conv):
-        """La conversazione in corso su disco (a ogni turno), nel thread dell'archivio."""
+        """La conversazione in corso su disco (a ogni turno), nel thread dell'archivio. Dal 12/10
+        sera (T1) solo quella di un adulto riconosciuto e senza i turni le cui parole non
+        restano; le altre non si salvano (dopo un riavvio si riparte da capo, come per il
+        registro degli eventi), e una riga di prima della stessa chiave si toglie."""
         if not self.scrivibile:
             return
-        stato = json.dumps(conv.esporta(), ensure_ascii=False)
+        owner = getattr(conv, "owner", None)
+        persona = owner if isinstance(owner, (str, int)) and not isinstance(owner, bool) else None
+        chiave0 = str(getattr(conv, "chiave", "") or "")
+        if persona is None and owner is not None and chiave0.startswith("persona:"):
+            persona = chiave0.split(":", 1)[1]      # owner non ancora deciso: la sua corsia
+        if not self.in_memoria and not self.su_disco(persona):
+            chiave = conv.chiave
+
+            def togli():
+                with self.lock:
+                    if self.db.execute("SELECT 1 FROM correnti WHERE chiave = ?",
+                                       (chiave,)).fetchone():
+                        self.db.execute("DELETE FROM correnti WHERE chiave = ?", (chiave,))
+                        self.db.commit()
+            self._in_coda(togli)
+            return
+        dati = conv.esporta()
+        if not self.in_memoria:
+            dati = senza_non_conservati(dati)
+        stato = json.dumps(dati, ensure_ascii=False)
 
         def f():
             with self.lock:
@@ -481,7 +593,11 @@ class ArchivioConversazioni:
         """I turni passati più vicini alla domanda. `persona`: l'id del profilo (solo le sue
         conversazioni, mai degli ospiti); `ospiti=True` (solo chi amministra): le
         conversazioni degli ospiti. Restituisce {"risultati": […], "modo": "ibrida" |
-        "parole"}."""
+        "parole"}. Dal 12/10 sera minori e ospiti cercano nell'archivio della sessione."""
+        altro = self._dove(None if ospiti else persona, ospiti)
+        if altro is not self:
+            return altro.cerca(domanda, persona, ospiti=ospiti, dal=dal, al=al, k=k,
+                               escludi_conv=escludi_conv, solo=solo)
         dove, args = ["c.ospite = ?"], [1 if ospiti else 0]
         if not ospiti:
             if not persona:
@@ -580,6 +696,10 @@ class ArchivioConversazioni:
         riassunto non fatto) le prime domande della persona."""
         if not persona:
             return {"conversazioni": [], "altre": 0}
+        altro = self._dove(persona)
+        if altro is not self:
+            return altro.recenti(persona, salta=salta, n=n, dal=dal, al=al,
+                                 escludi_conv=escludi_conv)
         dove, args = ["c.persona = ?", "c.ospite = 0"], [str(persona)]
         if escludi_conv is not None:
             dove.append("c.id IS NOT ?")
@@ -614,6 +734,9 @@ class ArchivioConversazioni:
         gli ospiti."""
         if not persona or entro_ore <= 0:
             return None
+        altro = self._dove(persona)
+        if altro is not self:
+            return altro.ultima(persona, luogo, entro_ore, ovunque=ovunque)
         dove = "" if ovunque else "AND luogo IS ? "
         with self.lock:
             row = self.db.execute(
@@ -626,8 +749,9 @@ class ArchivioConversazioni:
         return row[0], row[1]
 
     # ── cancellazione ──
-    def dimentica(self, persona: str) -> int:
-        """Cancella tutte le conversazioni di una persona. Restituisce quante.
+    def dimentica(self, persona: str, _avvisa: bool = True) -> int:
+        """Cancella tutte le conversazioni di una persona, anche nell'archivio della sessione
+        (12/10 sera). Restituisce quante.
 
         Dal 10/10 per davvero (§ 2.4 e § 10 del progetto del registro degli eventi): prima si
         aspettano i lavori in coda (un turno ancora da archiviare tornerebbe dopo la
@@ -675,13 +799,37 @@ class ArchivioConversazioni:
         else:
             with self.lock:
                 checkpoint(self.db)
+        n = len([i for i in ids if i is not None])
+        if self.sessione is not None:
+            n += self.sessione.dimentica(persona, _avvisa=False)
         # Anche dalla scheda «Conversazione» dei suoi schermi personali (08/10)
-        for g in list(self.su_dimentica):
+        for g in list(self.su_dimentica) if _avvisa else ():
             try:
                 g(str(persona))
             except Exception as e:  # noqa: BLE001
                 self.log(f"[CONVERSAZIONI] schermi non avvisati: {type(e).__name__}")
-        return len([i for i in ids if i is not None])
+        return n
+
+    def svuota(self) -> int:
+        """Tutte le conversazioni su disco, con le conversazioni in corso salvate (12/10 sera,
+        `calliope conserva --svuota` e `dati_conservati` azione svuota): `secure_delete`, indice
+        FTS5 ricompattato, checkpoint del WAL. L'archivio della sessione e il registro degli
+        eventi no (gli eventi li svuota la conservazione). Restituisce quante conversazioni."""
+        from .eventi.registro import cancella_sicuro, checkpoint
+        self.attendi(3.0)
+        with self.lock:
+            n = self.db.execute("SELECT COUNT(*) FROM conversazioni").fetchone()[0]
+            cancella_sicuro(self.db, "DELETE FROM turni_fts")
+            cancella_sicuro(self.db, "DELETE FROM turni")
+            cancella_sicuro(self.db, "DELETE FROM conversazioni")
+            cancella_sicuro(self.db, "DELETE FROM correnti")
+            try:
+                self.db.execute("INSERT INTO turni_fts(turni_fts) VALUES('optimize')")
+            except sqlite3.Error:
+                pass
+            self.db.commit()
+            checkpoint(self.db)
+        return int(n)
 
     def pulisci_wal(self):
         """Dopo i lavori in coda, il WAL ricopiato nel file e troncato (10/10: dopo «dimentica»
@@ -710,8 +858,15 @@ class ArchivioConversazioni:
                 f()
             except Exception as e:  # noqa: BLE001
                 self.log(f"[CONVERSAZIONI] pulizia: {type(e).__name__}: {e}")
-        if not self.scrivibile or self.giorni <= 0:
+        if not self.scrivibile:
             return
+        if self.giorni > 0:
+            self._scadute()
+            if self.sessione is not None:
+                self.sessione._scadute()
+        self.togli_non_conservate()
+
+    def _scadute(self):
         limite = time.time() - self.giorni * 86400
         with self.lock:
             ids = [r[0] for r in self.db.execute(
@@ -720,9 +875,70 @@ class ArchivioConversazioni:
                 self._togli(ids)
             self.db.execute("DELETE FROM correnti WHERE aggiornata < ?", (limite,))
             self.db.commit()
-        if ids:
+        if ids and not self.in_memoria:
             self.log(f"[CONVERSAZIONI] Tolte {len(ids)} conversazioni più vecchie di "
                      f"{self.giorni} giorni")
+
+    def togli_non_conservate(self) -> int:
+        """La rotazione della conservazione (12/10 sera, T1): via dal disco, con
+        `secure_delete`, le conversazioni (e le conversazioni in corso salvate) di chi non ne ha
+        il diritto: ospiti, minori, profili tolti. Quelle di prima del 12/10 alla prima pulizia
+        dopo l'aggiornamento. Con `conserva` che non sa dire (profili non letti) restano quelle
+        delle persone: si tolgono solo gli ospiti. Restituisce quante conversazioni."""
+        if self.in_memoria:
+            return 0
+        from .eventi.registro import checkpoint
+
+        def via(persona, ospite) -> bool:
+            if ospite or persona in (None, ""):
+                return True
+            f = self.conserva
+            if f is None:
+                return False
+            try:
+                return f(str(persona)) is False
+            except Exception:  # noqa: BLE001 — un profilo che non si legge: resta
+                return False
+
+        with self.lock:
+            ids = [cid for cid, persona, ospite in self.db.execute(
+                "SELECT id, persona, ospite FROM conversazioni") if via(persona, ospite)]
+            chiavi = []
+            for chiave, stato in self.db.execute("SELECT chiave, stato FROM correnti"):
+                chiave = str(chiave or "")
+                if chiave.startswith("persona:"):
+                    togli = via(chiave.split(":", 1)[1], False)
+                elif chiave.startswith("ospite:"):
+                    togli = True
+                else:                         # «casa» (prima del 06/10): chi la possedeva
+                    try:
+                        owner = (json.loads(stato) or {}).get("owner")
+                    except (ValueError, TypeError, AttributeError):
+                        owner = None
+                    togli = via(owner, False)
+                if togli:
+                    chiavi.append(chiave)
+            if not ids and not chiavi:
+                return 0
+            prima = self.db.execute("PRAGMA secure_delete").fetchone()
+            self.db.execute("PRAGMA secure_delete = ON")
+            try:
+                self._togli(ids)
+                for chiave in chiavi:
+                    self.db.execute("DELETE FROM correnti WHERE chiave = ?", (chiave,))
+                if ids:
+                    try:
+                        self.db.execute("INSERT INTO turni_fts(turni_fts) VALUES('optimize')")
+                    except sqlite3.Error:
+                        pass
+            finally:
+                if prima is not None and not prima[0]:
+                    self.db.execute("PRAGMA secure_delete = OFF")
+            self.db.commit()
+            checkpoint(self.db)
+        self.log(f"[CONVERSAZIONI] Tolte {len(ids)} conversazioni di ospiti, minori o profili "
+                 f"tolti (conservazione dei soli adulti)")
+        return len(ids)
 
     # ── terminale ──
     def elenco(self, ospiti: bool | None = None, limite: int = 50) -> list[dict]:
@@ -752,12 +968,45 @@ class ArchivioConversazioni:
                 "turni": [{"quando": t[0], "domanda": t[1], "risposta": t[2],
                            "azioni": json.loads(t[3] or "[]")} for t in turni]}
 
-    def conteggi(self) -> dict:
+    def conteggi(self, persona: str | None = None) -> dict:
+        """Quante conversazioni, turni e vettori in questo archivio (di tutti, o di una
+        persona: il riepilogo di `calliope conserva`)."""
+        dove, args = ("WHERE persona = ?", (str(persona),)) if persona else ("", ())
         with self.lock:
-            n_conv = self.db.execute("SELECT COUNT(*) FROM conversazioni").fetchone()[0]
+            n_conv = self.db.execute(f"SELECT COUNT(*) FROM conversazioni {dove}",
+                                     args).fetchone()[0]
             n_turni, n_vet = self.db.execute(
-                "SELECT COUNT(*), COUNT(vettore) FROM turni").fetchone()
+                f"SELECT COUNT(*), COUNT(vettore) FROM turni WHERE conv IN (SELECT id FROM "
+                f"conversazioni {dove})" if persona else
+                "SELECT COUNT(*), COUNT(vettore) FROM turni", args).fetchone()
         return {"conversazioni": n_conv, "turni": n_turni, "vettori": n_vet}
+
+
+def non_conservato(m) -> bool:
+    """Il messaggio dell'utente di un turno le cui parole non restano (12/10 sera: il ciclo
+    segna `conserva: False` nel suo `_turno`, dalla decisione di conserva.testo_turno)."""
+    return (isinstance(m, dict) and m.get("role") == "user"
+            and isinstance(m.get("_turno"), dict) and m["_turno"].get("conserva") is False)
+
+
+def senza_non_conservati(dati: dict) -> dict:
+    """La conversazione esportata (Conversazione.esporta) senza i turni le cui parole non
+    restano: il messaggio dell'utente e quelli dopo fino alla domanda seguente. `archiviati`
+    scende di quanti ne sono stati tolti prima di lui. Per la conversazione in corso salvata su
+    disco (`correnti`): dopo un riavvio quei turni non ci sono più."""
+    storia = dati.get("history")
+    if not isinstance(storia, list) or not any(non_conservato(m) for m in storia):
+        return dati
+    archiviati = int(dati.get("archiviati") or 0)
+    tenuti, via, tolti_prima = [], False, 0
+    for i, m in enumerate(storia):
+        if isinstance(m, dict) and m.get("role") == "user":
+            via = non_conservato(m)
+        if via:
+            tolti_prima += i < archiviati
+            continue
+        tenuti.append(m)
+    return {**dati, "history": tenuti, "archiviati": max(0, archiviati - tolti_prima)}
 
 
 def _riassunto_nudo(riassunto: str | None) -> str:
@@ -828,8 +1077,10 @@ def url_embedding(cfg) -> str:
     return "http://127.0.0.1:11434"
 
 
-def load_conversazioni(cfg, log=print, avvia: bool = True) -> ArchivioConversazioni | None:
-    """L'archivio, o None (spento o il file non si apre): Calliope parte uguale."""
+def load_conversazioni(cfg, log=print, avvia: bool = True,
+                       conserva=None) -> ArchivioConversazioni | None:
+    """L'archivio, o None (spento o il file non si apre): Calliope parte uguale. `conserva`
+    (12/10 sera): Conservazione.conversazioni_su_disco, chi va su disco."""
     from . import capacita
     if not getattr(cfg, "conversazioni_enabled", True):
         capacita.segnala("conversazioni", "da_configurare", "archivio delle conversazioni spento",
@@ -844,12 +1095,14 @@ def load_conversazioni(cfg, log=print, avvia: bool = True) -> ArchivioConversazi
         except Exception as e:  # noqa: BLE001
             log(f"[CONVERSAZIONI] Embedding non disponibili ({type(e).__name__}: {e})")
     try:
-        arch = ArchivioConversazioni(percorso_db(cfg), int(getattr(cfg, "conversazioni_giorni",
-                                                                   30)),
+        # La tenuta è quella della conservazione (12/10 sera, T1): `turn_log_days`, non un
+        # numero suo (prima `conversazioni_giorni`, 30)
+        arch = ArchivioConversazioni(percorso_db(cfg), int(getattr(cfg, "turn_log_days", 60)
+                                                           or 60),
                                      emb, log=log, avvia=avvia,
                                      inattivita_s=float(getattr(
                                          cfg, "conversazioni_vettori_inattivita_s", 600.0)),
-                                     cfg=cfg)
+                                     cfg=cfg, conserva=conserva)
     except Exception as e:  # noqa: BLE001
         capacita.segnala("conversazioni", "guasta",
                          f"il database non si apre ({type(e).__name__})",

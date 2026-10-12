@@ -29,8 +29,10 @@ Decisioni di Dario del 05/10:
   (`estensione_consentita`, di partenza nessuna).
 - **Privacy**: conversazioni archiviate dei minori < 14 visibili ai tutori, dai 14 solo gli
   avvisi di sicurezza (`conversazioni_visibili_ai_tutori`, GDPR art. 8 e d.lgs. 101/2018: 14
-  anni in Italia); niente dati sanitari o sensibili nei ricordi di un minore
-  (`ricordo_sensibile`).
+  anni in Italia; oggi la regola la usa il cassetto dei file); niente dati sanitari o sensibili
+  nei ricordi di un minore (`ricordo_sensibile`). Dal 12/10 (decisione 0028 T1,
+  calliope/conserva.py) le conversazioni di un minore non vanno su disco: restano
+  nell'archivio della sessione, in memoria, fino al riavvio.
 
 Le regole sul testo qui sono vincoli di sicurezza o di permesso (principio 10): ognuna scrive
 il suo nome nel registro dei turni e ha i casi contrari in prove/prova_minori.py.

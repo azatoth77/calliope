@@ -537,7 +537,14 @@ class Avvio:
         # Archivio delle conversazioni (05/10, calliope/conversazioni.py): i turni finiti, per
         # la compressione della storia e per conversazione_cerca
         from .conversazioni import load_conversazioni
-        conv_arch = self.conv_arch = load_conversazioni(cfg)
+        # Su disco solo le conversazioni degli adulti riconosciuti (12/10 sera, decisione 0028
+        # T1: la stessa decisione di turni ed eventi); minori e ospiti nell'archivio della
+        # sessione, in memoria. «Svuota» della conservazione svuota anche l'archivio
+        cons = s.conserva
+        conv_arch = self.conv_arch = load_conversazioni(
+            cfg, conserva=cons.conversazioni_su_disco if cons is not None else None)
+        if cons is not None:
+            cons.conversazioni = conv_arch
         if conv_arch is not None:
             atexit.register(conv_arch.close)
             if schermi is not None:

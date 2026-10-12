@@ -742,16 +742,17 @@ memoria:
 
 conversazioni:
   # Archivio delle conversazioni (05/10, calliope/conversazioni.py): ogni turno finito si
-  # salva in un file a parte (i ricordi restano per sempre, le conversazioni
-  # `conversazioni_giorni` giorni), così la compressione e la fine di una conversazione non
-  # perdono niente e conversazione_cerca ritrova «cosa ti avevo detto stamattina…».
-  # Ognuno ritrova solo le sue; quelle degli ospiti le vede solo chi amministra (terminale:
-  # python -m calliope.conversazioni). Anche la conversazione in corso, a ogni turno: un
-  # riavvio non la perde
+  # salva in un file a parte (i ricordi restano per sempre, le conversazioni `turn_log_days`
+  # giorni), così la compressione e la fine di una conversazione non perdono niente e
+  # conversazione_cerca ritrova «cosa ti avevo detto stamattina…». Ognuno ritrova solo le
+  # sue. Anche la conversazione in corso, a ogni turno: un riavvio non la perde. Dal 12/10
+  # (decisione 0028 T1, calliope/conserva.py) su disco solo quelle degli adulti riconosciuti,
+  # per gli stessi giorni del registro dei turni (prima `conversazioni_giorni`, 30): quelle di
+  # minori e ospiti restano in memoria fino al riavvio (gli ospiti le vede solo chi
+  # amministra, a voce)
   conversazioni_enabled: true
   # (variabile d'ambiente CALLIOPE_CONVERSAZIONI_DB, che vince su questo file)
   conversazioni_db: conversazioni.db
-  conversazioni_giorni: 30
   # Ricerca per significato: il modello di embedding sul server del modello (Ollama
   # /api/embed; con un indirizzo che finisce in /v1, /v1/embeddings). Vuoto = solo ricerca
   # per parole (FTS5). Scelto il 05/10 sul banco delle conversazioni (vedi il rapporto
@@ -1734,7 +1735,8 @@ registro:
   # La cartella è privata (fuori da git, permessi 700 su Linux) e tiene anche la voce
   # (variabile d'ambiente CALLIOPE_TURN_LOG, che vince su questo file)
   turn_log_dir: registro
-  # Dopo questi giorni turni e voce si cancellano (60 dal 12/10: prima 30)
+  # Dopo questi giorni turni, voce e archivio delle conversazioni si cancellano (60 dal 12/10:
+  # prima 30)
   turn_log_days: 60
   # La voce degli adulti riconosciuti sopra soglia, con il loro consenso detto a Calliope (chi
   # amministra: sì finché non dice no), in turn_log_dir/voce, in μ-law (~16 KB al secondo,

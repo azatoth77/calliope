@@ -578,11 +578,13 @@ def prova_pulizia_ripresa():
         reg2 = corsie.RegistroConversazioni(cfg_prova())
         n = reg2.riprendi(a, log=lambda *x, **k: None)
         c = reg2.di_persona("dario-id")
+        # Dal 12/10 sera (T1) la conversazione di un ospite non va su disco: dopo un riavvio
+        # non c'è (si riparte da capo)
         verifica("ripresa: la conversazione «casa» di prima va a Dario, quella dell'ospite "
-                 "al suo satellite, le vuote no",
-                 n == 2 and c is not None and len(c.history) == 2
+                 "non è su disco (12/10, T1), le vuote no",
+                 n == 1 and c is not None and len(c.history) == 2
                  and c.chiave == "persona:dario-id"
-                 and any(x.chiave == "ospite:sat:2" for x in reg2.tutte()), n)
+                 and not any(x.chiave == "ospite:sat:2" for x in reg2.tutte()), n)
         a.close()
 
 

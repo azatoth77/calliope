@@ -20,7 +20,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
   `dati_del_turno` su disco con nomi e lunghezze;
 - il tool `dati_conservati`: ospite, minore, scritto, zona grigia rifiutati; domanda e «sì»;
   revoca; «svuota» solo per chi amministra, con la domanda;
-- da terminale: `python -m calliope.conserva` (conteggi) e `--svuota --persona`.
+- da terminale: `python -m calliope.conserva` (conteggi) e `--svuota --persona`;
+- l'archivio delle conversazioni (12/10 sera): su disco solo l'adulto, minore, ospite e turno
+  incerto no (minore e ospite nella sessione in memoria), conversazione in corso salvata,
+  rotazione delle righe di prima, tenuta di `turn_log_days`, svuota e conteggi.
 
 Nomi di fantasia. Tutto in una cartella temporanea. ~1 s.
 """
@@ -406,6 +409,174 @@ try:
              and spec.classe.sola_lettura[1] == frozenset({"stato"})
              and "svuota" in spec.classe.distruttiva)
 
+    # ───────── l'archivio delle conversazioni (12/10 sera) ─────────
+    from calliope.ciclo import Ciclo
+    from calliope.conversazione import Conversazione, turni as turni_conv
+    from calliope.conversazioni import (ArchivioConversazioni, load_conversazioni,
+                                        senza_non_conservati)
+    verifica("decidi, conversazioni: adulto e chi amministra sì; minore e ospite no",
+             C.decidi(adulto, "conversazioni").ok and C.decidi(amm, "conversazioni").ok
+             and not C.decidi(minore, "conversazioni") and not C.decidi(None, "conversazioni"))
+    verifica("conversazioni_su_disco: adulto sì, minore no, profilo tolto no",
+             cons.conversazioni_su_disco("p-adu") is True
+             and cons.conversazioni_su_disco("p-min") is False
+             and cons.conversazioni_su_disco("p-tolto") is False)
+    verifica("conversazioni_su_disco: profili non letti → «non so» (None)",
+             C.Conservazione(cfg, Registro(), log=lambda m: None)
+             .conversazioni_su_disco("p-adu") is None)
+
+    arch = ArchivioConversazioni(tmp / "conv.db", giorni=cons.giorni, log=lambda m: None,
+                                 avvia=False, conserva=cons.conversazioni_su_disco)
+    cons.conversazioni = arch
+    nomi = {"p-adu": "Ginevra", "p-min": "Leo", "p-amm": "Primo"}
+
+    def archivia(chi, testo, meta=None, conv=None):
+        conv = conv or Conversazione(f"persona:{chi}" if chi else "ospite:studio")
+        conv.owner, conv.last_turn_at = chi, time.monotonic()
+        m = {"role": "user", "content": testo, **({"_turno": meta} if meta else {})}
+        msgs = [m, {"role": "assistant", "content": "Va bene."}]
+        conv.history += msgs
+        arch.archivia(conv, turni_conv(msgs), chi, nomi.get(chi), ospite=chi is None)
+        return conv
+
+    def su_disco():
+        return {(p, o) for p, o in arch.db.execute("SELECT persona, ospite FROM conversazioni")}
+
+    def parole_su_disco():
+        return " ".join(str(d) for (d,) in arch.db.execute("SELECT domanda FROM turni"))
+
+    ca = archivia("p-adu", "il mio libro preferito è il barone rampante")
+    cm = archivia("p-min", "domani ho la verifica di storia")
+    co = archivia(None, "sono un ospite e il mio cane si chiama Fido")
+    verifica("adulto: la conversazione su disco", ("p-adu", 0) in su_disco()
+             and "barone" in parole_su_disco(), str(su_disco()))
+    verifica("contrario: minore, niente su disco", ("p-min", 0) not in su_disco()
+             and "verifica" not in parole_su_disco())
+    verifica("contrario: ospite, niente su disco", not any(o for _p, o in su_disco())
+             and "Fido" not in parole_su_disco())
+    verifica("minore: la conversazione resta nella sessione (ricerca e scheda)",
+             arch.cerca("verifica di storia", "p-min")["risultati"]
+             and arch.chat("p-min") and cm.archiviata_in == "sessione"
+             and ca.archiviata_in == "disco")
+    verifica("ospite: nella sessione, la trova solo chi cerca quelle degli ospiti",
+             arch.cerca("cane Fido", None, ospiti=True)["risultati"]
+             and not arch.cerca("cane Fido", "p-adu")["risultati"])
+    # Il turno incerto: la decisione è quella del registro dei turni (testo_turno), il ciclo la
+    # scrive nel `_turno` del messaggio
+    finto = SimpleNamespace(s=SimpleNamespace(conserva=cons), _meta_turno={"luogo": "studio"})
+    Ciclo._segna_conserva(finto, turno("Ginevra", modo="conversazione"))
+    grigia = finto._meta_turno
+    finto._meta_turno = None
+    Ciclo._segna_conserva(finto, turno("Primo", livello="amministra",
+                                       voce={"incerta": ["Primo", "Leo"]}))
+    dubbio = finto._meta_turno
+    finto._meta_turno = {"luogo": "studio"}
+    Ciclo._segna_conserva(finto, turno("Ginevra"))
+    verifica("ciclo: zona grigia e dubbio con un minore segnati, l'adulto certo no",
+             grigia == {"luogo": "studio", "conserva": False} and dubbio == {"conserva": False}
+             and finto._meta_turno == {"luogo": "studio"}, f"{grigia} {dubbio}")
+    archivia("p-adu", "frase in zona grigia sul garage", meta=grigia, conv=ca)
+    archivia("p-adu", "e poi il cavaliere inesistente", conv=ca)
+    verifica("contrario: incerto, il turno non va su disco (l'adulto certo sì)",
+             "garage" not in parole_su_disco() and "cavaliere" in parole_su_disco()
+             and not arch.cerca("garage", "p-adu")["risultati"])
+    # La conversazione in corso salvata: solo dell'adulto, senza il turno incerto
+    ca.archiviati = len(ca.history)
+    for c in (ca, cm, co):
+        arch.salva_corrente(c)
+    salvata = arch.leggi_corrente("persona:p-adu")
+    verifica("conversazione in corso su disco: l'adulto senza il turno incerto",
+             salvata and len(salvata["history"]) == 4 and "garage" not in json.dumps(salvata)
+             and salvata["archiviati"] == 4, str(salvata)[:300])
+    verifica("contrario: la conversazione in corso di minore e ospite non va su disco",
+             arch.chiavi_correnti() == ["persona:p-adu"], str(arch.chiavi_correnti()))
+    verifica("senza_non_conservati: niente da togliere, lo stesso dizionario",
+             senza_non_conservati({"history": [{"role": "user", "content": "x"}]})
+             == {"history": [{"role": "user", "content": "x"}]})
+    # Le conversazioni di prima del 12/10 (minore, ospite, profilo tolto): via alla prima
+    # rotazione, con le conversazioni in corso salvate; l'adulto e chi amministra restano
+    vecchio = ArchivioConversazioni(tmp / "conv.db", log=lambda m: None, avvia=False,
+                                    sessione=False)
+    for chi in ("p-min", "p-tolto", "p-amm"):
+        cv = Conversazione(f"persona:{chi}")
+        cv.owner, cv.last_turn_at = chi, time.monotonic()
+        cv.history = [{"role": "user", "content": f"frase di prima di {chi}"}]
+        vecchio.archivia(cv, turni_conv(cv.history), chi, None, False)
+        vecchio.salva_corrente(cv)
+    vecchio.db.execute("INSERT INTO conversazioni (persona, nome, ospite, inizio) "
+                       "VALUES (NULL, NULL, 1, ?)", (time.time(),))
+    vecchio.db.execute("INSERT INTO correnti (chiave, stato, aggiornata) VALUES (?, ?, ?)",
+                       ("ospite:studio", "{}", time.time()))
+    vecchio.db.commit()
+    vecchio.close()
+    verifica("(prima) minore, ospite e profilo tolto erano su disco",
+             {("p-min", 0), ("p-tolto", 0), (None, 1)} <= su_disco(), str(su_disco()))
+    # Con i profili non letti la rotazione toglie solo gli ospiti
+    arch.conserva = lambda p: None
+    arch.togli_non_conservate()
+    verifica("profili non letti: via gli ospiti, le persone restano",
+             (None, 1) not in su_disco() and ("p-min", 0) in su_disco())
+    arch.conserva = cons.conversazioni_su_disco
+    n = arch.togli_non_conservate()
+    verifica("rotazione: via minore e profilo tolto, restano l'adulto e chi amministra",
+             n == 2 and su_disco() == {("p-adu", 0), ("p-amm", 0)}
+             and "di prima di p-min" not in parole_su_disco()
+             and set(arch.chiavi_correnti()) == {"persona:p-adu", "persona:p-amm"},
+             f"{n} {su_disco()} {arch.chiavi_correnti()}")
+    # La tenuta: quella della conservazione (turn_log_days), non un numero suo
+    cfg_a = Config()
+    cfg_a.conversazioni_db = str(tmp / "tenuta.db")
+    cfg_a.conversazioni_embedding = ""
+    a60 = load_conversazioni(cfg_a, log=lambda m: None, avvia=False,
+                             conserva=cons.conversazioni_su_disco)
+    verifica("tenuta: turn_log_days (60), niente conversazioni_giorni",
+             a60.giorni == cfg_a.turn_log_days == 60
+             and not hasattr(cfg_a, "conversazioni_giorni"))
+    a60.close()
+    for giorni_fa, testo in ((61, "conversazione di sessantuno giorni fa"),
+                             (59, "conversazione di cinquantanove giorni fa")):
+        cv = Conversazione("persona:p-adu")
+        cv.owner, cv.inizio = "p-adu", time.time() - giorni_fa * 86400
+        arch.archivia(cv, turni_conv([{"role": "user", "content": testo}],
+                                     quando=time.time() - giorni_fa * 86400),
+                      "p-adu", "Ginevra", False)
+        arch.chiudi(cv, "fine")
+        arch.db.execute("UPDATE conversazioni SET fine = ? WHERE id = ?",
+                        (time.time() - giorni_fa * 86400, cv.id_archivio))
+    arch.db.commit()
+    arch._pulizia()
+    verifica("scadenza: via la conversazione di 61 giorni fa, resta quella di 59",
+             "sessantuno" not in parole_su_disco() and "cinquantanove" in parole_su_disco())
+    st = cons.stato()
+    verifica("riepilogo: le conversazioni archiviate contate", st["conversazioni"] == 3
+             and st["conversazioni_turni"] >= 4
+             and "conversazioni archiviate" in C.testo_stato(st), str(st))
+    # Svuotare: una persona (anche nella sessione), poi tutto
+    r = cons.svuota("p-min", "Leo")
+    verifica("svuota una persona: anche la conversazione della sessione",
+             r["conversazioni"] == 1 and not arch.chat("p-min"), str(r))
+    r = cons.svuota("p-adu", "Ginevra")
+    verifica("svuota una persona: le sue conversazioni archiviate e quella in corso",
+             r["conversazioni"] == 2 and ("p-adu", 0) not in su_disco()
+             and arch.chiavi_correnti() == ["persona:p-amm"], str(r))
+    verifica("svuota una persona, contrario: quelle di chi amministra restano",
+             ("p-amm", 0) in su_disco())
+    r = cons.svuota()
+    verifica("svuota tutto: archivio vuoto, anche le conversazioni in corso",
+             r["conversazioni"] == 1 and arch.conteggi()["conversazioni"] == 0
+             and arch.chiavi_correnti() == [] and arch.db.execute(
+                 "SELECT COUNT(*) FROM turni_fts").fetchone()[0] == 0, str(r))
+    # Dopo lo svuotamento la conversazione che continua apre una riga nuova (niente orfani)
+    cx = Conversazione("persona:p-amm")
+    cx.id_archivio = 999
+    archivia("p-amm", "una conversazione con la riga tolta", conv=cx)
+    verifica("riga tolta mentre la conversazione continua: una riga nuova, niente orfani",
+             cx.id_archivio != 999 and arch.db.execute(
+                 "SELECT COUNT(*) FROM turni WHERE conv NOT IN (SELECT id FROM conversazioni)"
+             ).fetchone()[0] == 0)
+    cons.conversazioni = None
+    arch.close()
+
     # ───────── da terminale ─────────
     cart = tmp / "dati"
     cart.mkdir()
@@ -423,18 +594,35 @@ try:
                                              turn_log_days=60, conserva_voce=True,
                                              conserva_voce_mb=10), Registro(amm), lambda m: None)
         C._scrivi_privato(c2.voce_dir / "p-amm" / oggi / "1.wav", C.wav_mulaw(audio, sr))
+        a_t = ArchivioConversazioni(cart / "conversazioni.db", log=lambda m: None, avvia=False,
+                                    sessione=False)
+        cv = Conversazione("persona:p-amm")
+        cv.owner = "p-amm"
+        a_t.archivia(cv, turni_conv([{"role": "user", "content": "una frase di Primo"}]),
+                     "p-amm", "Primo", False)
+        a_t.close()
         import contextlib
         import io
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             rc = C.main(["--json"])
         d = json.loads(out.getvalue()[out.getvalue().index("{"):])
-        verifica("terminale: conteggi in JSON", rc == 0 and d["voce_file"] == 1, out.getvalue())
+        verifica("terminale: conteggi in JSON (anche le conversazioni archiviate)",
+                 rc == 0 and d["voce_file"] == 1 and d["conversazioni"] == 1, out.getvalue())
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = C.main([])
+        verifica("terminale: le conversazioni archiviate nel riepilogo e per persona",
+                 rc == 0 and "1 conversazioni archiviate" in out.getvalue()
+                 and "conversazioni archiviate 1" in out.getvalue(), out.getvalue())
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             rc = C.main(["--svuota", "--persona", "Primo"])
-        verifica("terminale: --svuota --persona", rc == 0 and not (c2.voce_dir / "p-amm").exists(),
-                 out.getvalue())
+        verifica("terminale: --svuota --persona (anche le conversazioni archiviate)",
+                 rc == 0 and not (c2.voce_dir / "p-amm").exists()
+                 and C.conta_archivio(SimpleNamespace(conversazioni_db=str(
+                     cart / "conversazioni.db")))["conversazioni"] == 0
+                 and "1 conversazioni archiviate" in out.getvalue(), out.getvalue())
         with contextlib.redirect_stdout(io.StringIO()):
             rc = C.main(["--svuota", "--persona", "Nessuno"])
         verifica("terminale, contrario: persona sconosciuta → 1", rc == 1)
