@@ -319,7 +319,9 @@ def _ha_testo(rec: dict) -> bool:
 # segnalazioni degli esercizi (risposta data e nota del ragazzo; anche queste dal 12/10 sera)
 TABELLE_MEMORIA = (("esercizi_tentativi", "persona", "giorno"),
                    ("richieste_tutori", "minore", "creata"),
-                   ("esercizi_segnalazioni", "persona", "quando"))
+                   ("esercizi_segnalazioni", "persona", "quando"),
+                   # Le preferenze degli esercizi (12/10): 60 giorni dall'ultimo cambio
+                   ("esercizi_preferenze", "persona", "aggiornato"))
 
 
 class Conservazione:

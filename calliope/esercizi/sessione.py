@@ -30,6 +30,7 @@ import collections
 import json
 import queue
 import random
+import re
 import secrets
 import threading
 import time
@@ -47,25 +48,111 @@ PRONTI = 3                        # esercizi d'italiano controllati in anticipo 
 # testo arriva subito prima della frase del ragazzo, dove il modello lo legge di sicuro
 ESERCIZI_MSG = ("Esercizi in corso, messaggio di sistema: hai appena chiesto «{domanda}». Se in "
                 "questa frase dà una risposta, chiama subito esercizi con azione=rispondi e "
-                "risposta come l'ha detta, senza dire tu se è giusta. Se chiede un indizio: "
-                "azione=aiuto; se vuole saltare: salta; se dice che l'esercizio è sbagliato: "
-                "segnala; se vuole ripetere la domanda: ripeti; se vuole smettere: fine. Anche "
+                "risposta con le sue parole esatte (mai il numero che ti aspetti), senza dire tu "
+                "se è giusta. Se chiede un indizio: azione=aiuto; se vuole saltare: salta; se "
+                "dice che l'esercizio è sbagliato: segnala; se vuole ripetere la domanda: ripeti; "
+                "una pausa: pausa; smettere: fine. Se vuole gli esercizi in un altro modo (più "
+                "giocosi, a punti, a tappe, più corti o più lunghi): azione=preferenze. Anche "
                 "una parola o un numero da soli («Sei.», «Tre quarti.», «Verbo.») sono una "
-                "risposta. Se parla d'altro, rispondi normalmente.")
+                "risposta. Le domande le fa solo il programma: non inventarne tu, nemmeno per "
+                "gioco. Se parla d'altro, rispondi normalmente.")
 # La spinta di Brain quando, con l'esercizio in sospeso, il modello risponde senza il tool
 # (rete `spinta_esercizi`): la risposta trattenuta non si dice
 ESERCIZI_NUDGE = ("Esercizi in corso: non hai chiamato esercizi. Se la frase del ragazzo è una "
                   "risposta all'esercizio, chiama adesso esercizi con azione=rispondi e la "
-                  "risposta come l'ha detta: la corregge il programma, non tu. Per un indizio "
-                  "azione=aiuto, per saltare salta, se dice che è sbagliato segnala, per smettere "
-                  "fine. Solo se parla d'altro rispondi normalmente, senza dire se l'esercizio è "
-                  "giusto.")
+                  "risposta con le sue parole esatte: la corregge il programma, non tu. Per un "
+                  "indizio azione=aiuto, per saltare salta, se dice che è sbagliato segnala, per "
+                  "una pausa pausa, per smettere fine; per cambiare il modo (più giocosi, a punti, "
+                  "a tappe, più corti) preferenze. Non inventare domande d'esercizio e non "
+                  "promettere di segnarti qualcosa: lo fa il programma. Solo se parla d'altro "
+                  "rispondi normalmente, senza dire se l'esercizio è giusto.")
+# Fine di un blocco (12/10): la proposta detta dal codice e il messaggio per la risposta
+PAUSA_DOMANDA = "Facciamo una pausa o cambiamo?"
+PAUSA_MSG = ("Esercizi, messaggio di sistema: hai chiesto se fare una pausa o cambiare. Se vuole "
+             "la pausa: esercizi azione=pausa; se vuole finire: fine; se vuole cambiare "
+             "argomento o materia: azione=inizia con quello che dice (senza argomento se non lo "
+             "dice); se vuole andare avanti con questi: azione=continua. Non fare tu domande "
+             "d'esercizio.")
+# Dopo la spinta il modello non chiama ancora il tool e promette di segnarsi una preferenza
+# («Ricevuto. Segno tutto», DGX del 12/10): non si dice, al suo posto questa
+PROMESSA_FRASE = ("Non l'ho ancora salvato. Dimmi come vuoi gli esercizi: più giocosi, a punti, a "
+                  "tappe, oppure blocchi più corti?")
+
+# Una domanda d'esercizio fatta dal modello (12/10: «quanto fa 125 più 87?», «45 più 38?»):
+# «quanto fa/viene/vale», «risolvi», «calcola», o due numeri con un'operazione, in una frase
+# che finisce con «?»
+_DOMANDA = re.compile(r"\bquant[oie]\s+(?:fa|fanno|viene|vengono|vale|valgono|resta|restano|"
+                      r"ne\s+restano|sono\s+in\s+tutto)\b|\brisolvi\b|\bcalcola\b"
+                      r"|\d+\s*(?:più|meno|per|diviso|x|×|\+|−|-|:)\s*\d+", re.I)
+_OPERAZIONE = re.compile(r"([a-zàèéìòù]+)\s+(?:più|meno|per|diviso)\s+([a-zàèéìòù]+)", re.I)
+# Una promessa di segnarsi qualcosa, senza tool («Segno tutto», «me lo segno», «terrò conto»)
+_PROMESSA = re.compile(r"(?<!non )\b(?:segno|me lo segno|me li segno|annoto|me lo annoto|"
+                       r"terrò (?:conto|a mente)|me lo ricorderò|lo ricorderò|ne terrò conto|"
+                       r"lo terrò presente)\b", re.I)
+
+
+def domanda_inventata(testo: str) -> bool:
+    """Il testo contiene una domanda d'esercizio (una frase con «?» che chiede un conto)?"""
+    from .numeri import parola_numero
+    for frase in re.split(r"(?<=[.!?…])\s+", str(testo or "")):
+        if "?" not in frase:
+            continue
+        if _DOMANDA.search(frase):
+            return True
+        for m in _OPERAZIONE.finditer(frase):
+            if parola_numero(m.group(1)) is not None and parola_numero(m.group(2)) is not None:
+                return True
+    return False
+
+
+def testo_del_modello(testo: str) -> str | None:
+    """Con gli esercizi aperti, cosa c'è di sbagliato nel testo detto senza il tool:
+    «domanda» (una domanda d'esercizio inventata), «promessa» (segnarsi qualcosa), None."""
+    if domanda_inventata(testo):
+        return "domanda"
+    if _PROMESSA.search(str(testo or "")):
+        return "promessa"
+    return None
+
+
+def _norm(t: str) -> str:
+    return " ".join(re.sub(r"[^\w]+", " ", str(t or "").casefold()).split())
+
+
+def aperta_di(tool_ctx) -> bool:
+    """Chi parla ha una sessione di esercizi aperta (anche in pausa)? Per Brain (rete
+    `spinta_esercizi` anche senza l'azione in sospeso)."""
+    try:
+        srv = servizio()
+        sc = getattr(tool_ctx, "speaker_ctx", None)
+        nome = getattr(sc, "current_speaker", None)
+        reg = getattr(tool_ctx, "speakers", None)
+        if srv is None or not nome or reg is None:
+            return False
+        prof = reg.get(nome)
+        return prof is not None and srv.sessione(prof.id) is not None
+    except Exception:  # noqa: BLE001 — la rete non deve fermare la risposta
+        return False
+
+
+def blocco_per(classe: Classe | None, cfg=None) -> int:
+    """Esercizi di un blocco prima di «Facciamo una pausa o cambiamo?» (12/10, decisione di
+    Dario): più corto per i piccoli, 5 in prima, seconda e terza elementare, 10 dopo."""
+    piccoli = int(getattr(cfg, "esercizi_blocco_piccoli", 5) or 5)
+    altri = int(getattr(cfg, "esercizi_blocco", 10) or 10)
+    if classe is not None and classe.scuola == "elementari" and classe.anno <= 3:
+        return piccoli
+    return altri
 ARGOMENTO_MSG = ("Esercizi, messaggio di sistema: hai chiesto quale argomento di {materia}. Se "
                  "risponde con un argomento, chiama esercizi con azione=inizia, "
                  "materia={materia} e argomento come l'ha detto{classe}.")
 
 BRAVO = {"f": ("Giusto!", "Esatto!", "Brava!", "Perfetto!"),
          "m": ("Giusto!", "Esatto!", "Bravo!", "Perfetto!")}
+# Il modo giocoso (12/10): complimenti e domande dette dal codice, mai dal modello
+BRAVO_GIOCO = {"f": ("Centro!", "Fantastico!", "Che campionessa!", "Grandiosa!"),
+               "m": ("Centro!", "Fantastico!", "Che campione!", "Grandioso!")}
+SFIDE = ("Sfida numero {n}:", "Ecco la sfida {n}:", "Via con la sfida {n}:")
 
 
 def conto_detto(fatti: int, giuste: int) -> str:
@@ -73,6 +160,11 @@ def conto_detto(fatti: int, giuste: int) -> str:
     es = "1 esercizio" if fatti == 1 else f"{fatti} esercizi"
     g = "nessuno giusto" if giuste == 0 else "1 giusto" if giuste == 1 else f"{giuste} giusti"
     return f"{es}, {g}"
+
+
+def _indizi(es: Esercizio) -> list[str]:
+    """Gli indizi non vuoti dell'esercizio."""
+    return [str(x).strip() for x in (es.suggerimenti or []) if str(x or "").strip()]
 
 
 def _o(prof) -> str:
@@ -102,6 +194,24 @@ class Sessione:
         self.avvisato = False              # avviso ai tutori per una spiegazione, una volta
         self.esito: dict = {}              # l'ultimo esito da mostrare sulla scheda
         self.cambio_livello = 0
+        # Blocchi, pausa, modo (12/10): contati dal codice, detti dalle sue frasi
+        self.blocco = 10                   # esercizi per blocco, poi «pausa o cambiamo?»
+        self.nel_blocco = 0
+        self.in_pausa = False
+        self.giocoso = False
+        self.punti_on = False
+        self.tappe_on = False
+        self.punti = 0
+        self.tappa = 1
+
+    def applica(self, pref: dict, cfg=None):
+        """Le preferenze salvate della persona (Registro.preferenze)."""
+        self.giocoso = bool(pref.get("giocoso"))
+        self.punti_on = bool(pref.get("punti")) or self.giocoso
+        self.tappe_on = bool(pref.get("tappe"))
+        b = pref.get("blocco")
+        self.blocco = (max(2, min(20, int(b))) if isinstance(b, int) and b > 0
+                       else blocco_per(self.classe, cfg))
 
     @property
     def scaduta(self) -> bool:
@@ -269,7 +379,55 @@ class Servizio:
 
     # ── frasi ──
     def _domanda(self, s: Sessione) -> str:
-        return s.es.voce if s.es else ""
+        if not s.es:
+            return ""
+        if s.giocoso:
+            v = s.es.voce
+            return f"{self.rng.choice(SFIDE).format(n=s.fatti + 1)} {v[:1].lower()}{v[1:]}"
+        return s.es.voce
+
+    def _pausa_out(self, s: Sessione, frase: str, regola: str | None = None) -> dict:
+        """La frase con la proposta «pausa o cambiamo?» in sospeso (PAUSA_MSG)."""
+        out = self._final(frase)
+        if frase.rstrip().endswith("?"):
+            out["in_sospeso"] = {"tool": "esercizi", "argomenti": {"azione": "continua"},
+                                 "domanda": "?", "cosa": "gli esercizi", "messaggio": PAUSA_MSG}
+        if regola:
+            out["regola"] = regola
+        self._scheda(s)
+        return out
+
+    def _ferma(self, s: Sessione) -> dict:
+        """Una risposta o un'azione mentre la sessione aspetta «pausa o cambiamo?»."""
+        return self._pausa_out(s, "Siamo in pausa: continuiamo o cambiamo?",
+                               "esercizi_in_pausa")
+
+    def _dopo(self, s: Sessione, frase: str, **extra) -> dict:
+        """Dopo un esercizio chiuso (giusto, spiegato, saltato): la prossima domanda o, a fine
+        blocco, la proposta del codice «Facciamo una pausa o cambiamo?» (12/10)."""
+        s.nel_blocco += 1
+        if s.nel_blocco >= max(1, s.blocco):
+            return self._fine_blocco(s, frase)
+        if self._prossimo(s) is None:
+            return self._chiudi(s, frase + " Per ora gli esercizi sono finiti.")
+        return self._risultato(s, f"{frase} Prossima: {self._domanda(s)}", **extra)
+
+    def _fine_blocco(self, s: Sessione, frase: str) -> dict:
+        s.nel_blocco = 0
+        conto = f" Siamo a {conto_detto(s.fatti, s.giuste)}."
+        if s.punti_on:
+            conto += f" Hai {s.punti} punt{'o' if s.punti == 1 else 'i'}."
+        tappe = int(getattr(self.cfg, "esercizi_tappe", 3) or 3)
+        if s.tappe_on:
+            if s.tappa >= tappe:
+                return self._chiudi(s, f"{frase} Hai superato anche l'ultima tappa: percorso "
+                                       f"finito!" + (f" Hai {s.punti} punti." if s.punti_on
+                                                     else ""))
+            conto = f" Tappa {s.tappa} di {tappe} superata!" + conto
+            s.tappa += 1
+        s.es, s.in_pausa = None, True
+        s.esito = {"testo": (frase + conto).strip(), "giusta": None}
+        return self._pausa_out(s, f"{frase}{conto} {PAUSA_DOMANDA}", "esercizi_fine_blocco")
 
     @staticmethod
     def _chiedi(s: Sessione) -> str:
@@ -301,7 +459,8 @@ class Servizio:
 
     # ── azioni ──
     def inizia(self, prof, fascia: str | None, eta: int | None, materia: str = "",
-               argomento: str = "", classe: str = "", mittente=None) -> dict:
+               argomento: str = "", classe: str = "", mittente=None, modo: str = "",
+               blocco: str = "") -> dict:
         # «logica» come argomento è la materia, non l'analisi logica (conversione di forma)
         if argomento and solo_materia(argomento) and not materia_da_testo(materia):
             materia, argomento = solo_materia(argomento), ""
@@ -334,6 +493,14 @@ class Servizio:
         livello = livello_per(arg, cl)
         s = Sessione(prof.id, prof.name, getattr(prof, "gender", None), mat, arg, cl, livello,
                      fascia, mittente)
+        try:
+            pref = self.registro.preferenze(prof.id)
+        except Exception:  # noqa: BLE001 — senza preferenze, i valori di sempre
+            pref = {}
+        if modo or blocco:
+            pref, _ = self._nuove_preferenze(pref, modo, blocco, cl)
+            self._salva_preferenze(prof.id, pref)
+        s.applica(pref, self.cfg)
         with self._lock:
             vecchia = self.sessioni.get(prof.id)
             self.sessioni[prof.id] = s
@@ -352,6 +519,11 @@ class Servizio:
         else:
             nota = ""
         inizio = f"Facciamo {nome_argomento(arg)}, livello da {cl.detta()}.{nota}"
+        if s.tappe_on:
+            inizio += (f" È un percorso a {int(getattr(self.cfg, 'esercizi_tappe', 3) or 3)} "
+                       f"tappe da {s.blocco} esercizi.")
+        elif s.punti_on:
+            inizio += " Giochiamo a punti: 2 al primo colpo, 1 dopo un aiuto o un errore."
         if fascia == "adolescenti" and not self._detto_oggi(prof.id):
             inizio += " Ti ricordo che i tuoi tutori vedono come vanno gli esercizi."
         s.esito = {"testo": "", "giusta": None}
@@ -362,13 +534,38 @@ class Servizio:
     def _detto_oggi(self, persona: str) -> bool:
         return bool(self.registro.tentativi(persona))
 
-    def rispondi(self, prof, risposta: str, canale: str = "voce") -> dict:
+    def rispondi(self, prof, risposta: str, canale: str = "voce", detto: str = "",
+                 ultima: str = "") -> dict:
+        """`detto`: la frase della persona (il modello deve passare un numero che si ricava da
+        lì); `ultima`: l'ultima cosa detta da Calliope (una domanda inventata dal modello non è
+        quella che il codice controlla). Vuoti (la scheda, le prove) = nessun controllo."""
         s = self.sessione(prof.id)
+        if s is not None and s.es is None and s.in_pausa:
+            return self._ferma(s)
         if s is None or s.es is None:
             return self._final("Non abbiamo esercizi aperti: vuoi cominciare? Dimmi la materia.",
                                ok=False, fatto="NIENTE: nessun esercizio aperto")
         s.ultimo = time.monotonic()
+        s.in_pausa = False
         es = s.es
+        if (canale == "voce" and ultima and domanda_inventata(ultima)
+                and _norm(es.voce) not in _norm(ultima)):
+            # La domanda l'ha fatta il modello, non il codice (DGX del 12/10: «45 più 38?»
+            # inventata, la risposta giusta 83 segnata sbagliata contro 55 più 49): non si
+            # giudica, si torna alla domanda vera. Non conta come tentativo
+            s.esito = {"testo": "", "giusta": None}
+            return self._risultato(s, "Quella domanda non l'ho preparata io, quindi non posso "
+                                      "correggerla. La domanda dell'esercizio è questa: "
+                                      + self._domanda(s), regola="esercizi_domanda_non_sua")
+        if canale == "voce" and detto and es.tipo in ("valore", "frazione_ridotta", "misura"):
+            from .numeri import leggi_valore, valore_detto
+            v = leggi_valore(risposta)
+            if v is not None and not valore_detto(v, detto):
+                # Il numero non si ricava da ciò che ha detto (DGX del 12/10: «Suttanto
+                # salida» passato come 76): il codice non giudica, chiede
+                s.esito = {"testo": "", "giusta": None}
+                return self._risultato(s, "Non ho capito il numero: me lo ripeti?",
+                                       regola="esercizi_numero_non_detto")
         e: Esito = controlla(es, risposta)
         if e.giusta is None:
             s.esito = {"testo": e.nota, "giusta": None}
@@ -387,19 +584,20 @@ class Servizio:
         primo = s.errori == 0 and s.aiuti == 0
         s.fila_giuste = s.fila_giuste + 1 if primo else 0
         s.fila_difficili = 0 if s.errori < 2 else s.fila_difficili + 1
-        bravo = self.rng.choice(BRAVO["f" if s.gender == "f" else "m"])
+        bravo = self.rng.choice((BRAVO_GIOCO if s.giocoso else BRAVO)
+                                ["f" if s.gender == "f" else "m"])
         frase = (e.nota if e.nota.startswith("Giusto") else bravo + (" " + e.nota if e.nota else ""))
+        if s.punti_on:
+            p = 2 if primo else 1
+            s.punti += p
+            frase += f" Più {p} punt{'i' if p > 1 else 'o'}: sei a {s.punti}."
         s.esito = {"testo": frase, "giusta": True}
         cambio = self._adatta(s)
-        if s.fatti % 10 == 0:
-            frase += f" Siamo a {conto_detto(s.fatti, s.giuste)}."
         if cambio > 0:
             frase += " Proviamo un po' più difficile."
         elif cambio < 0:
             frase += " Facciamone uno un po' più facile."
-        if self._prossimo(s) is None:
-            return self._chiudi(s, frase + " Per ora gli esercizi sono finiti.")
-        return self._risultato(s, f"{frase} Prossima: {self._domanda(s)}", giusta=True)
+        return self._dopo(s, frase, giusta=True)
 
     def _sbagliata(self, s: Sessione, prof, e: Esito, risposta: str, canale: str) -> dict:
         es = s.es
@@ -411,8 +609,10 @@ class Servizio:
             frase = "Non ancora." if e.conta else "Quasi."
             if e.nota:
                 frase += " " + e.nota
-            if s.aiuti < len(es.suggerimenti) and e.conta:
-                frase += " Un indizio: " + es.suggerimenti[s.aiuti]
+            # Mai «Un indizio:» senza l'indizio (DGX del 12/10, 16:17: la frase finiva lì)
+            sugg = _indizi(es)
+            if s.aiuti < len(sugg) and e.conta:
+                frase += " Un indizio: " + sugg[s.aiuti]
                 s.aiuti += 1
             s.esito = {"testo": frase, "giusta": False}
             return self._risultato(s, f"{frase} {self._riprova(s)}", giusta=False,
@@ -439,10 +639,7 @@ class Servizio:
                 frase += f" Lo dico anche {chi}, così ripassate insieme."
         s.esito = {"testo": "La soluzione: " + es.spiegazione, "giusta": False}
         self._adatta(s)
-        if self._prossimo(s) is None:
-            return self._chiudi(s, frase)
-        return self._risultato(s, f"{frase} Prossima: {self._domanda(s)}",
-                               soluzione_spiegata=True)
+        return self._dopo(s, frase, soluzione_spiegata=True)
 
     def _adatta(self, s: Sessione) -> int:
         if s.fila_giuste >= 3 and s.livello < 3:
@@ -458,14 +655,17 @@ class Servizio:
 
     def aiuto(self, prof) -> dict:
         s = self.sessione(prof.id)
+        if s is not None and s.es is None and s.in_pausa:
+            return self._ferma(s)
         if s is None or s.es is None:
             return self._final("Non abbiamo esercizi aperti.", ok=False, fatto="NIENTE")
         s.ultimo = time.monotonic()
         es = s.es
         self.registro.tentativo(s.persona, s.id, es, str(s.classe), "aiuto", "", s.aiuti + 1,
                                 None, "voce")
-        if s.aiuti < len(es.suggerimenti):
-            frase = "Un indizio: " + es.suggerimenti[s.aiuti]
+        sugg = _indizi(es)
+        if s.aiuti < len(sugg):
+            frase = "Un indizio: " + sugg[s.aiuti]
             s.aiuti += 1
         else:
             frase = "Gli indizi sono finiti: prova a rispondere, oppure dimmi «salta»."
@@ -474,6 +674,8 @@ class Servizio:
 
     def salta(self, prof, canale: str = "voce") -> dict:
         s = self.sessione(prof.id)
+        if s is not None and s.es is None and s.in_pausa:
+            return self._ferma(s)
         if s is None or s.es is None:
             return self._final("Non abbiamo esercizi aperti.", ok=False, fatto="NIENTE")
         s.ultimo = time.monotonic()
@@ -481,12 +683,12 @@ class Servizio:
                                 time.monotonic() - s.inizio_es, canale)
         s.fila_giuste = 0
         s.esito = {"testo": "Saltato.", "giusta": None}
-        if self._prossimo(s) is None:
-            return self._chiudi(s, "Va bene.")
-        return self._risultato(s, f"Va bene, saltiamo questo. Prossima: {self._domanda(s)}")
+        return self._dopo(s, "Va bene, saltiamo questo.")
 
     def ripeti(self, prof) -> dict:
         s = self.sessione(prof.id)
+        if s is not None and s.es is None and s.in_pausa:
+            return self._ferma(s)
         if s is None or s.es is None:
             return self._final("Non abbiamo esercizi aperti.", ok=False, fatto="NIENTE")
         s.ultimo = time.monotonic()
@@ -508,9 +710,110 @@ class Servizio:
                                 time.monotonic() - s.inizio_es, "voce")
         s.fatti += 1
         s.esito = {"testo": "La soluzione: " + es.spiegazione, "giusta": None}
-        if self._prossimo(s) is None:
-            return self._chiudi(s, es.spiegazione)
-        return self._risultato(s, f"{es.spiegazione} Prossima: {self._domanda(s)}")
+        return self._dopo(s, es.spiegazione)
+
+    # ── pausa, ripresa e preferenze (12/10) ──
+    def pausa(self, prof) -> dict:
+        """«Facciamo una pausa»: la sessione resta (fino a SCADENZA_S), l'esercizio in corso
+        anche; «continuiamo» riprende da lì."""
+        s = self.sessione(prof.id)
+        if s is None:
+            return self._final("Non stavamo facendo esercizi.", ok=False, fatto="NIENTE")
+        s.ultimo = time.monotonic()
+        s.in_pausa = True
+        conto = f" Finora {conto_detto(s.fatti, s.giuste)}." if s.fatti else ""
+        if s.punti_on and s.fatti:
+            conto += f" Hai {s.punti} punt{'o' if s.punti == 1 else 'i'}."
+        frase = f"Va bene, facciamo una pausa.{conto} Quando vuoi riprendere, dimmi «continuiamo»."
+        s.esito = {"testo": "In pausa.", "giusta": None}
+        self._scheda(s)
+        return self._final(frase, regola="esercizi_pausa")
+
+    def continua(self, prof) -> dict:
+        s = self.sessione(prof.id)
+        if s is None:
+            return self._final("Non abbiamo esercizi da riprendere: vuoi cominciare? Dimmi la "
+                               "materia.", ok=False, fatto="NIENTE: nessun esercizio aperto")
+        s.ultimo = time.monotonic()
+        s.in_pausa = False
+        if s.es is None and self._prossimo(s) is None:
+            return self._chiudi(s, "Per ora gli esercizi sono finiti.")
+        s.esito = {"testo": "", "giusta": None}
+        return self._risultato(s, f"Riprendiamo. {self._domanda(s)}", regola="esercizi_ripresa")
+
+    def _nuove_preferenze(self, pref: dict, modo: str, blocco: str,
+                          classe: Classe | None) -> tuple[dict, list[str]]:
+        """(preferenze nuove, parti dette). `modo`: giocoso, normale, punti, tappe;
+        `blocco`: un numero («3»), «più corti», «più lunghi»."""
+        pref = dict(pref or {})
+        parti = []
+        m = _norm(modo)
+        if "normal" in m or "seri" in m:
+            pref.update(giocoso=False, punti=False, tappe=False)
+            parti.append("come al solito, senza giochi")
+        if "gioc" in m:
+            pref.update(giocoso=True, punti=True)
+            parti.append("più giocosi, con i punti")
+        if "punt" in m and "gioc" not in m:
+            pref["punti"] = True
+            parti.append("a punti")
+        if "tapp" in m or "percors" in m:
+            pref["tappe"] = True
+            parti.append("a tappe")
+        b = _norm(blocco)
+        attuale = pref.get("blocco") if isinstance(pref.get("blocco"), int) else blocco_per(
+            classe, self.cfg)
+        from .numeri import leggi_valore
+        v = leggi_valore(b) if b else None
+        nuovo = None
+        if v is not None and v.denominator == 1 and v > 0:
+            nuovo = int(v)
+        elif "cort" in b or "men" in b or "poch" in b:
+            nuovo = max(2, attuale // 2)
+        elif "lung" in b or "di pi" in b or "tant" in b:
+            nuovo = attuale + 5
+        if nuovo is not None:
+            nuovo = max(2, min(20, nuovo))
+            pref["blocco"] = nuovo
+            parti.append(f"blocchi da {nuovo} esercizi")
+        return pref, parti
+
+    def _salva_preferenze(self, persona: str, pref: dict):
+        try:
+            self.registro.salva_preferenze(persona, pref)
+        except Exception as e:  # noqa: BLE001 — la preferenza vale comunque per la sessione
+            self.log(f"   [ESERCIZI] preferenze non salvate: {type(e).__name__}")
+
+    def preferenze(self, prof, modo: str = "", blocco: str = "") -> dict:
+        """«Rendili più giocosi», «facciamolo a punti», «a tappe», «blocchi più corti»: la
+        preferenza resta salvata per la persona (anche nelle conversazioni nuove) e vale subito
+        nella sessione aperta. La frase la dice il codice: mai «segno tutto» senza salvare."""
+        s = self.sessione(prof.id)
+        try:
+            prima = self.registro.preferenze(prof.id)
+        except Exception:  # noqa: BLE001
+            prima = {}
+        pref, parti = self._nuove_preferenze(prima, modo, blocco,
+                                             s.classe if s is not None else None)
+        if not parti:
+            return {"ok": False, "fatto": "NIENTE: nessuna preferenza cambiata",
+                    "errore": "manca come li vuole",
+                    "cosa_fare": "chiedi come vuole gli esercizi: più giocosi, a punti, a tappe, "
+                                 "blocchi più corti o più lunghi; poi richiama con modo o blocco"}
+        self._salva_preferenze(prof.id, pref)
+        frase = ("Va bene: d'ora in poi " + ", ".join(parti)
+                 + ". Me lo ricordo anche le prossime volte.")
+        if s is None:
+            return self._final(frase, regola="esercizi_preferenze")
+        s.ultimo = time.monotonic()
+        s.applica(pref, self.cfg)
+        s.nel_blocco = min(s.nel_blocco, max(0, s.blocco - 1))
+        if s.es is not None and not s.in_pausa:
+            return self._risultato(s, f"{frase} Torniamo a noi: {self._domanda(s)}",
+                                   regola="esercizi_preferenze")
+        self._scheda(s)
+        return self._final(frase + " Quando vuoi, dimmi «continuiamo».",
+                           regola="esercizi_preferenze")
 
     def fine(self, prof) -> dict:
         s = self.sessione(prof.id)
@@ -652,8 +955,13 @@ class Servizio:
         es = s.es
         dati = {"materia": s.materia, "argomento": nome_argomento(s.argomento),
                 "classe": s.classe.detta(), "livello": s.livello, "numero": s.fatti + 1,
-                "fatti": s.fatti, "giuste": s.giuste, "stato": "aperta" if s.aperta else "finita",
+                "fatti": s.fatti, "giuste": s.giuste,
+                "stato": ("finita" if not s.aperta else "pausa" if s.in_pausa else "aperta"),
                 "esito": dict(s.esito), "tentativi": s.errori, "massimo": self.massimo}
+        if s.punti_on:
+            dati["punti"] = s.punti
+        if s.tappe_on:
+            dati["tappa"] = s.tappa
         if es is not None and s.aperta:
             pub = es.pubblico()
             dati.update(domanda=pub["testo"], tipo_risposta=pub["tipo"], scelte=pub["scelte"],
@@ -687,6 +995,10 @@ class Servizio:
         if s is None:
             return {"errore": "Gli esercizi sono finiti: per ricominciare chiedilo a voce.",
                     "_stato": 409}
+        if azione in ("continua", "fine") and s.es is None and s.in_pausa:
+            out = self.continua(prof) if azione == "continua" else self.fine(prof)
+            s2 = self.sessione(prof.id) or s
+            return {"ok": True, "frase": out.get("risposta_finale", ""), "scheda": self.scheda(s2)}
         if s.es is None or str(dati.get("esercizio") or "") != s.es.firma:
             return {"errore": "Questo esercizio non c'è più: guarda quello nuovo.",
                     "_stato": 409, "scheda": self.scheda(s)}
@@ -711,10 +1023,11 @@ class Servizio:
     def stato(self, persona: str) -> dict | None:
         """Per il dato del turno (minori.dato_turno): materia, argomento e domanda in corso."""
         s = self.sessione(persona)
-        if s is None or s.es is None:
+        if s is None or (s.es is None and not s.in_pausa):
             return None
         return {"materia": s.materia, "argomento": nome_argomento(s.argomento),
-                "domanda": s.es.testo, "errori": s.errori, "massimo": self.massimo}
+                "domanda": s.es.testo if s.es is not None else "", "errori": s.errori,
+                "massimo": self.massimo, "pausa": s.in_pausa}
 
     def close(self):
         self.registro.close()

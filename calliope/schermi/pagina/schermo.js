@@ -1681,11 +1681,14 @@
   // l'esercizio di prima); se si stava scrivendo, il campo nuovo riprende il fuoco
   DISEGNA.esercizio = function (c, corpo) {
     // L'argomento è già nel titolo: qui la classe e il numero dell'esercizio
-    const dati = [c.classe].filter(Boolean).join(" · ");
+    // Punti e tappe (12/10) contati dal server, come le frasi
+    const dati = [c.classe, c.tappa ? "tappa " + c.tappa : "",
+      typeof c.punti === "number" ? c.punti + (c.punti === 1 ? " punto" : " punti") : ""]
+      .filter(Boolean).join(" · ");
     corpo.append(el("p", "sotto", dati + (c.stato === "aperta" && c.domanda ? " · esercizio " + c.numero : "")));
     const es = c.esito || {};
     if (c.stato !== "aperta" || !c.domanda) {
-      corpo.append(el("p", "esito-esercizio", es.testo || "Esercizi finiti."));
+      corpo.append(el("p", "esito-esercizio", es.testo || (c.stato === "pausa" ? "In pausa." : "Esercizi finiti.")));
       const f = c.fatti || 0, g = c.giuste || 0;
       corpo.append(el("p", "nota", (f === 1 ? "1 esercizio" : f + " esercizi") + ", "
         + (g === 0 ? "nessuno giusto" : g === 1 ? "1 giusto" : g + " giusti") + "."));

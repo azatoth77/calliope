@@ -646,6 +646,46 @@ RICERCA_NUDGE = ("Hai risposto di non avere altre informazioni senza cercare. Ch
                  "quello che trovi; se non trovi niente, dillo.")
 
 
+# «Te lo scrivo qui nella conversazione» detto a voce (12/10, DGX col 26B, dopo il rifiuto di
+# schermo_mostra): a chi parla non c'è nessuna conversazione scritta. La frase si toglie (rete
+# `scrivo_qui_a_voce`, solo quando la persona parla a voce, non quando scrive dallo schermo)
+SCRIVO_QUI = re.compile(r"\b(?:te\s+|ve\s+)?(?:l[oaie]\s+|l['’]\s*)?scriv\w*\s+(?:qui|qua)\b"
+                        r"|\bqui\s+(?:nella|in)\s+(?:conversazione|chat)\b", re.I)
+_FINE_FRASE = re.compile(r"[.!?…]+[\"»)\]]?\s+|\n+")
+
+
+class FraseTolta:
+    """Toglie dal testo detto le frasi intere che corrispondono a `rx`. Aspetta la fine di ogni
+    frase (il TTS la aspetterebbe comunque); le frasi tolte restano in `tolte`."""
+
+    def __init__(self, rx, active: bool):
+        self.rx, self.active = rx, active
+        self.buf = ""
+        self.tolte: list[str] = []
+
+    def feed(self, text: str) -> str:
+        if not self.active or not text:
+            return text
+        self.buf += text
+        out = ""
+        while True:
+            m = _FINE_FRASE.search(self.buf)
+            if not m:
+                return out
+            frase, self.buf = self.buf[:m.end()], self.buf[m.end():]
+            if self.rx.search(frase):
+                self.tolte.append(frase.strip())
+            else:
+                out += frase
+
+    def flush(self) -> str:
+        f, self.buf = self.buf, ""
+        if self.active and f.strip() and self.rx.search(f):
+            self.tolte.append(f.strip())
+            return ""
+        return f
+
+
 class ClaimHold:
     """Trattiene il primo pezzo della risposta, quello che il TTS direbbe per primo (frase
     di almeno 25 caratteri, come split_sentences), finché non si sa se dichiara un'azione
@@ -2150,6 +2190,9 @@ class Brain:
         # «Chi ti parla è Dario.» in testa alla risposta: il contesto del turno, non da dire
         echo = ContextEcho(getattr(self, "_who_name", None), self._net("eco_contesto"))
         guard = TextCallGuard(self.tools.all_schemas() if self._net("textcallguard") else [])
+        a_voce = getattr(getattr(getattr(self, "tool_ctx", None), "speaker_ctx", None),
+                         "identified_by", None) != "schermo"
+        qui = FraseTolta(SCRIVO_QUI, a_voce and self._net("scrivo_qui_a_voce"))
         hold = ClaimHold(hold_claims and self._net("spinta_dichiarata"), actions,
                          non_so=hold_non_so, rinuncia=hold_rinuncia, fallito=hold_fallito,
                          ripetuta=hold_ripetuta)
@@ -2171,8 +2214,8 @@ class Brain:
             if kind == "usage":
                 self._note_usage(payload)
                 continue
-            piece = names.feed(hold.feed(guard.feed(echo.feed(capito.feed(
-                think.feed(payload))))))
+            piece = names.feed(hold.feed(guard.feed(qui.feed(echo.feed(capito.feed(
+                think.feed(payload)))))))
             if capito.capito is not None:
                 # Prima delle chiamate di questa passata (arrivano a stream finito)
                 self._applica_capito(capito.capito)
@@ -2184,8 +2227,12 @@ class Brain:
                 else:
                     yield piece
         piece = names.feed(hold.feed(guard.feed(
-            echo.feed(capito.feed(think.flush()) + capito.flush()) + echo.flush())
-            + guard.flush()) + hold.flush())
+            qui.feed(echo.feed(capito.feed(think.flush()) + capito.flush()) + echo.flush())
+            + qui.flush()) + guard.flush()) + hold.flush())
+        if qui.tolte:
+            self._rule("scrivo_qui_tolto")
+            print(f"   [LLM] «scrivo qui» a chi parla a voce, non lo dico: "
+                  f"«{qui.tolte[0][:80]}»", flush=True)
         if capito.capito is not None:
             self._applica_capito(capito.capito)
         if capito.scartata:
@@ -3920,8 +3967,12 @@ class Brain:
         # Esercizi in corso (08/10, calliope/esercizi/): la frase del ragazzo la corregge il
         # programma. Il testo senza il tool non si dice: spinta, una volta (il 4B copiava dalla
         # storia «Perfetto! Prossima: …» senza chiamare esercizi, 7 turni su 18)
-        esercizi = (self._net("spinta_esercizi")
-                    and getattr(self, "turn_pending_tool", None) == "esercizi")
+        # Dal 12/10 anche con la sessione aperta senza l'azione in sospeso (in pausa, o dopo
+        # una risposta d'altro): il 26B inventava le domande e diceva «Segno tutto»
+        esercizi = self._net("spinta_esercizi") and (
+            getattr(self, "turn_pending_tool", None) == "esercizi"
+            or self._esercizi_aperti())
+        esercizi_visto = False      # il testo dopo la spinta degli esercizi, già guardato
         # Una domanda dello sviluppo in sospeso (12/10 sera, caso vero delle 12:20: a «Vuoi
         # attivarla così com'è, o faccio continuare l'agente…?» «No, farlo continuare con quello
         # che manca.» → «faccio continuare l'agente… Ti avviso quando è pronto», senza nessun
@@ -3984,7 +4035,8 @@ class Brain:
                 with_memory(system), schemas,
                 hold_claims=bool(schemas) and not self._acted(),
                 hold_request=(requested and not nudged and not self.last_tools)
-                or corr is not None,
+                or corr is not None
+                or (esercizi and nudged and not esercizi_visto and not self.last_tools),
                 actions=actions,
                 hold_names=bool(schemas) and not self.last_tools and not explaining,
                 hold_non_so=bool(archive_hold or ricerca_tool) and not self.last_tools,
@@ -4082,6 +4134,38 @@ class Brain:
                     self.history.append({"role": "assistant", "content": text})
                 tail = [{"role": "system", "content": PROMISE_NUDGE}]
                 continue
+            if held_req and not held and esercizi and nudged and not esercizi_visto:
+                # Dopo la spinta degli esercizi, ancora senza il tool (12/10, DGX col 26B): una
+                # domanda d'esercizio inventata non si dice, al suo posto la domanda vera del
+                # programma (esercizi ripeti, chiamato dal codice); la promessa di segnarsi una
+                # preferenza nemmeno. Il resto si dice com'è
+                esercizi_visto = True
+                from .esercizi.sessione import PROMESSA_FRASE, testo_del_modello
+                tipo = testo_del_modello(held_req)
+                if tipo == "domanda":
+                    self._rule("esercizi_domanda_inventata")
+                    print(f"   [TOOL] domanda d'esercizio inventata dal modello, non la dico: "
+                          f"«{held_req[:80]}»", flush=True)
+                    call = {"id": "call_esercizi_ripeti", "name": "esercizi",
+                            "arguments": {"azione": "ripeti"}}
+                    self.history.append({"role": "assistant", "content": "",
+                                         "tool_calls": [call]})
+                    content = self._run_tool(call, level)
+                    self.history.append({"role": "tool", "tool_call_id": call["id"],
+                                         "name": call["name"], "content": content})
+                    said = _final_text(content) or RIPETI_FRASE
+                    self.history.append({"role": "assistant", "content": said})
+                    yield self._marca(said, "esito", "risposta")
+                    return
+                if tipo == "promessa":
+                    self._rule("esercizi_promessa_taciuta")
+                    print(f"   [TOOL] promessa sugli esercizi senza tool, non la dico: "
+                          f"«{held_req[:80]}»", flush=True)
+                    self.history.append({"role": "assistant", "content": PROMESSA_FRASE})
+                    yield self._marca(PROMESSA_FRASE, "atto", "ripeti")
+                    return
+                yield held_req
+                held_req = ""
             if (held_req and not held and sviluppo_sosp and not esercizi and not richiesta_file
                     and not SVILUPPO_PROMESSA.search(held_req)):
                 # Una risposta a parole che non promette niente («siamo ancora all'analisi…»,
@@ -4330,6 +4414,14 @@ class Brain:
             text = RIPETI_FRASE
             yield self._marca(RIPETI_FRASE, "atto", "ripeti")
         self.history.append({"role": "assistant", "content": text})
+
+    def _esercizi_aperti(self) -> bool:
+        """Chi parla ha una sessione di esercizi aperta (calliope/esercizi/sessione.py)."""
+        try:
+            from .esercizi.sessione import aperta_di
+            return aperta_di(getattr(self, "tool_ctx", None))
+        except Exception:  # noqa: BLE001
+            return False
 
     def _marca(self, testo: str, autore: str, atto: str | None = None) -> str:
         """Una frase della risposta che non è contenuto del modello: la frase pronta di un tool

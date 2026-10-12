@@ -317,7 +317,7 @@ llm:
   # riferimento_casa, riferimento_agenda, conferma_al_posto_del_vuoto,
   # vuoto_seconda_passata, ricerca_promessa, citazione_tolta, nome_tool_parlato,
   # eco_contesto, spinta_archivio, spinta_rinuncia, spinta_esercizi, correzione_tool,
-  # ricerca_recente, risposta_ripetuta; "tutte"
+  # ricerca_recente, risposta_ripetuta, scrivo_qui_a_voce; "tutte"
   # le spegne tutte. Quelle di
   # «sicurezza» (permessi, politica…) non si spengono: un nome di sicurezza o sconosciuto si
   # segnala all'avvio. Quelle del profilo (llm_profilo) si aggiungono a queste.
@@ -700,6 +700,14 @@ minori:
   esercizi_pronti: 3
   # Esercizi a campione nel riepilogo per i tutori (da controllare al posto della revisione)
   esercizi_campione: 3
+  # Esercizi di un blocco prima della proposta «Facciamo una pausa o cambiamo?», detta dal
+  # codice (12/10, caso vero: tabelline senza pause finché la bambina non ha detto «basta,
+  # sono stanca»). Più corto per la primaria bassa (prima, seconda e terza elementare); chi
+  # vuole blocchi diversi lo dice a voce («blocchi più corti») e resta salvato per persona
+  esercizi_blocco_piccoli: 5
+  esercizi_blocco: 10
+  # Tappe del percorso «a tappe» (una tappa = un blocco), attivato a voce
+  esercizi_tappe: 3
   # Il modello guardiano (calliope/guardiano.py): giudica la domanda e ogni frase della
   # risposta prima della voce, solo per minori e ospiti. Su Ollama (lo stesso della voce se
   # guardiano_url è vuoto: llm_native_url). Scelta con prove/misura_guardiano.py (rapporto

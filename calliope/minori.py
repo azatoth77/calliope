@@ -516,10 +516,15 @@ def dato_turno(prof, cfg=None) -> str:
         st = srv.stato(getattr(prof, "id", "")) if srv is not None else None
     except Exception:  # noqa: BLE001 — il dato del turno non deve rompersi
         st = None
-    if st is not None:
+    if st is not None and st.get("pausa"):
+        parti.append(f"esercizi in pausa ({st['materia']}, {st['argomento']}): per riprendere "
+                     f"esercizi con azione=continua, per cambiare azione=inizia")
+    elif st is not None:
         parti.append(f"esercizi in corso ({st['materia']}, {st['argomento']}): domanda "
                      f"«{st['domanda']}» (ogni risposta che dice va passata a esercizi con "
-                     f"azione=rispondi; aiuto, salta, segnala, fine)")
+                     f"azione=rispondi e le sue parole esatte; aiuto, salta, segnala, pausa, "
+                     f"fine; preferenze per cambiare il modo; le domande le fa solo il "
+                     f"programma)")
     return "; ".join(parti)
 
 

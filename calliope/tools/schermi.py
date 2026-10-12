@@ -46,7 +46,9 @@ def _io(persona) -> bool:
 
 # «promemoria» e non «agenda»: con «agenda» il modello sceglieva timer per «fammi vedere i
 # miei promemoria sullo schermo» (prova del 02/10)
-COSE = ("ultima", "risposta", "lista", "timer", "promemoria", "documento", "casa", "niente")
+COSE = ("ultima", "risposta", "testo", "esercizio", "lista", "timer", "promemoria", "documento",
+        "casa", "niente")
+TESTO_MAX = 4000
 # I tool che toccano cose personali: la loro risposta, riletta sullo schermo, è personale
 _PERSONALI = {"promemoria_imposta", "appuntamento_aggiungi", "appuntamenti_elenca",
               "agenda_elenca", "ricorda", "dimentica", "documento_crea", "documento_modifica",
@@ -91,11 +93,40 @@ def _dove(nomi: list[str]) -> str:
 
 # ─────────────────────────── schermo_mostra ───────────────────────────
 
-def _scheda_per(ctx: ToolContext, cosa: str, lista: str, hub, sender):
+def _esercizio_aperto(ctx, prof):
+    """La scheda dell'esercizio in corso di chi parla (calliope/esercizi/), o None."""
+    if prof is None:
+        return None
+    try:
+        from ..esercizi import sessione as S
+        srv = S.servizio()
+        s = srv.sessione(prof.id) if srv is not None else None
+        return srv.scheda(s) if s is not None else None
+    except Exception:  # noqa: BLE001 — lo schermo non si ferma per gli esercizi
+        return None
+
+
+def _scheda_per(ctx: ToolContext, cosa: str, lista: str, hub, sender, testo: str = ""):
     """(scheda, frase d'errore): la scheda da mostrare per `cosa`, costruita dal codice."""
     prof = _person(ctx)
     if cosa == "niente":
         return schede.vuota(), ""
+    # Con gli esercizi aperti «scrivimelo sullo schermo» è l'esercizio di adesso (12/10, DGX:
+    # il problema non arrivava sullo schermo); la scheda è quella degli esercizi, personale
+    if cosa in ("esercizio", "ultima", "risposta"):
+        card = _esercizio_aperto(ctx, prof)
+        if card is not None:
+            note_rule(ctx, "schermo_esercizio")
+            return card, ""
+        if cosa == "esercizio":
+            return None, "Non abbiamo esercizi aperti da mostrare."
+    if cosa == "testo":
+        # Un testo scelto dal modello (12/10): un problema, una poesia, i passaggi di un conto.
+        # Visibilità come la risposta di prima (di casa per una persona riconosciuta)
+        t = str(testo or "").strip()[:TESTO_MAX]
+        if not t:
+            return None, "Dimmi cosa vuoi che scriva sullo schermo."
+        return schede.testo("Da leggere", t, schede.CASA if prof else schede.PUBBLICA), ""
     if cosa == "ultima":
         card = hub.ultima(sender)
         if card is not None:
@@ -219,7 +250,8 @@ def _proprio_grigio(ctx, sender, chi_titolo) -> bool:
     return appena_consegnato(ctx, titolo)
 
 
-def _schermo_mostra(ctx: ToolContext, cosa: str = "ultima", lista: str = "") -> dict:
+def _schermo_mostra(ctx: ToolContext, cosa: str = "ultima", lista: str = "",
+                    testo: str = "") -> dict:
     hub = getattr(ctx, "schermi", None)
     if hub is None:
         return _final("Gli schermi non sono attivi in questa installazione.", ok=False,
@@ -229,6 +261,11 @@ def _schermo_mostra(ctx: ToolContext, cosa: str = "ultima", lista: str = "") -> 
         cosa = "promemoria"
     if cosa not in COSE:
         cosa = "ultima"
+    if str(testo or "").strip() and cosa in ("ultima", "risposta"):
+        # Il testo c'è ma il modello ha lasciato «ultima»: è un testo da mostrare (forma di una
+        # scelta già fatta, principio 10)
+        note_rule(ctx, "schermo_testo_dedotto")
+        cosa = "testo"
     sender = hub.mittente(ctx)
     # Nella stessa risposta il risultato di un lavoro è già andato sullo schermo personale
     # (lavoro_risultato, 07/10): «risposta» o «ultima» lo rimandano in cima invece di coprirlo
@@ -245,7 +282,7 @@ def _schermo_mostra(ctx: ToolContext, cosa: str = "ultima", lista: str = "") -> 
     if cosa == "documento":
         card, why, chi_titolo = _documento(ctx, _person(ctx))
     else:
-        card, why = _scheda_per(ctx, cosa, str(lista or ""), hub, sender)
+        card, why = _scheda_per(ctx, cosa, str(lista or ""), hub, sender, str(testo or ""))
     if card is None:
         return _final(why, ok=False, fatto=NIENTE)
     if isinstance(card, dict) and _proprio_grigio(ctx, sender, chi_titolo):
@@ -658,14 +695,17 @@ def schermi_specs() -> list[ToolSpec]:
                          "«mostramelo sullo schermo», «fammelo vedere», «fammelo leggere», "
                          "«metti la lista sullo schermo», «togli dallo schermo», «chiudi il gioco». cosa: "
                          "ultima (quello di cui si parla adesso), risposta (il testo della "
-                         "tua ultima risposta), lista, timer, promemoria (i promemoria, gli "
+                         "tua ultima risposta), testo (un testo che scrivi tu in testo=: un "
+                         "problema, i passaggi di un conto, una poesia), esercizio (l'esercizio "
+                         "in corso), lista, timer, promemoria (i promemoria, gli "
                          "appuntamenti e l'agenda di chi parla: «mettimi sullo schermo i miei "
                          "appuntamenti»), documento (l'ultimo preparato), casa (luci e "
                          "temperature), niente (pulisci lo schermo, chiude anche un gioco). lista: il nome della "
                          "lista, se cosa=lista."),
             parameters={"type": "object",
                         "properties": {"cosa": {"type": "string", "enum": list(COSE)},
-                                       "lista": {"type": "string"}},
+                                       "lista": {"type": "string"},
+                                       "testo": {"type": "string"}},
                         "required": ["cosa"]},
             func=_schermo_mostra, risk="lettura", levels=ALL),
         ToolSpec(
