@@ -387,7 +387,7 @@ mappa:
       perche: In seconda arrivano gli schieramenti (moltiplicazione) e la ripartizione.
     elementari-3:
       inizio: {entro: 100, livello: 2, esempio: "24 matite tra 4 amici", generatore_dentro: true}
-      fine: {entro: 100, livello: 3, esempio: "3 quaderni da 2 euro, paga con 10", generatore_dentro: true}
+      fine: {entro: 100, livello: 3, esempio: "3 quaderni da 2 euro, paga con 10", generatore_dentro: false}
       obiettivi: [in2012.p.problemi, in2025.p5.problemi]
       perche: >-
         In terza i problemi con due domande e con le monete (testo 2012: decimali «con

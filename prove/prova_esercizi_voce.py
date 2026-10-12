@@ -3,8 +3,9 @@ Prova a secco delle correzioni agli esercizi dopo la prova vera del 12/10/2026 (
 bambina di terza e quarta elementare; qui solo nomi di fantasia). Niente modelli.
 
 - il numero si ricava dalla frase: «sedeci», «ventuno», «6 per 8, 48», «quattordici, ah no,
-  sedici» passano; «Suttanto salida» → 76, «Pantano a bit» → 79, «Prenta due» → ventidue no
-  (regola `esercizi_numero_non_detto`, nessun tentativo contato); «Bentanto» → 28 no;
+  sedici» passano; «Suttanto salida» → 76, «Pantano a bit» → 79, «Prenta due» → 22 e (dal 12/10
+  sera, niente approssimazioni) → 32 no (regola `esercizi_numero_non_detto`, nessun tentativo
+  contato, frase di `varianti.py`); «Bentanto» → 28 no;
 - le domande le fa solo il programma: una risposta a una domanda inventata dal modello non si
   giudica (`esercizi_domanda_non_sua`), con i contrari (la domanda del programma, una frase
   senza domanda); in Brain, dopo la spinta, la domanda inventata non si dice e al suo posto c'è
@@ -59,12 +60,14 @@ def verifica(nome, ok, dettaglio=""):
 print("── il numero si ricava dalla frase ──")
 for detto, valore in (("sedeci", 16), ("Sedeci.", 16), ("ventuno", 21), ("6 per 8, 48", 48),
                       ("quattordici, ah no, sedici", 16), ("Ottantatre.", 83), ("83", 83),
-                      ("trenta due", 32), ("Prenta due", 32), ("centoventi tre", 123),
+                      ("trenta due", 32), ("centoventi tre", 123),
+                      ("trecentosedeci", 316), ("ventiquatro", 24), ("diciasette", 17),
                       ("tre quarti", Fraction(3, 4)), ("meno tre", -3),
                       ("due virgola cinque metri al secondo", Fraction(5, 2)),
                       ("Fa 104.", 104), ("il risultato è quarantotto", 48)):
     verifica(f"passa: «{detto}» → {valore}", valore_detto(Fraction(valore), detto))
 for detto, valore in (("Suttanto salida", 76), ("Pantano a bit", 79), ("Prenta due", 22),
+                      ("Prenta due", 32), ("trenda", 30), ("sedecina", 16),
                       ("Bentanto", 28), ("otto per sei", 48), ("quattordici, ah no, sedici", 15),
                       ("sei", 16)):
     verifica(f"contrario: «{detto}» non dà {valore}", not valore_detto(Fraction(valore), detto))
@@ -77,6 +80,7 @@ TMP = Path(tempfile.mkdtemp(prefix="calliope-esercizi-voce-"))
 cfg = Config()
 cfg.memory_db = str(TMP / "memoria.db")
 cfg.esercizi_pronti = 0
+cfg.esercizi_punto_giorni = 0          # «a che punto siete» ha la sua prova (prova_esercizi_programma)
 OGGI = datetime.date.today()
 
 
@@ -179,8 +183,10 @@ storia = [("user", "facciamo le addizioni"), ("assistant", domanda)]
 prima = tentativi(TEO.id)
 out, ctx = chiama({"azione": "rispondi", "risposta": str(giusta)}, "Teo",
                   detto="Suttanto salida", storia=storia)
-verifica("«Suttanto salida» passato come il numero giusto: non giudicato, si chiede",
-         out["risposta_finale"] == "Non ho capito il numero: me lo ripeti?"
+from calliope.esercizi.varianti import CATALOGO as VARIANTI  # noqa: E402
+verifica("«Suttanto salida» passato come il numero giusto: non giudicato, si chiede di "
+         "ripetere scandendo",
+         out["risposta_finale"] in VARIANTI["numero.ripeti"]["normale"]
          and out.get("in_sospeso") and "giusta" not in out, out)
 verifica("regola esercizi_numero_non_detto nel registro dei turni",
          "esercizi_numero_non_detto" in ctx.regole, ctx.regole)

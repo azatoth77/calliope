@@ -1552,6 +1552,15 @@ class Config:
     esercizi_blocco: int = 10
     # Tappe del percorso «a tappe» (una tappa = un blocco), attivato a voce
     esercizi_tappe: int = 3
+    # «A che punto siete?» (12/10 sera, decisione di Dario: si chiede spesso, non una volta
+    # all'anno): a inizio sessione, per un minore, una domanda breve detta dal codice se
+    # l'informazione su quella materia manca o ha più di tanti giorni; a metà sessione al più
+    # una volta, se sbaglia molte risposte di fila o le fa tutte giuste al primo colpo. La
+    # risposta stringe o sposta il limite del programma dentro l'anno. 0 = mai chiedere
+    esercizi_punto_giorni: int = 14
+    # Domande di un'interrogazione simulata («interrogami sulle addizioni»): aperte dagli
+    # obiettivi dell'indice e conti corretti dal codice
+    esercizi_interroga_domande: int = 5
     # Il modello guardiano (calliope/guardiano.py): giudica la domanda e ogni frase della
     # risposta prima della voce, solo per minori e ospiti. Su Ollama (lo stesso della voce se
     # guardiano_url è vuoto: llm_native_url). Scelta con prove/misura_guardiano.py (rapporto
@@ -2629,7 +2638,8 @@ SEZIONI: dict[str, list[str]] = {
                "esercizi_enabled", "esercizi_verifica_modello", "esercizi_verifica_url",
                "esercizi_verifica_timeout_s", "esercizi_senza_secondo_parere",
                "esercizi_pronti", "esercizi_campione", "esercizi_blocco_piccoli",
-               "esercizi_blocco", "esercizi_tappe",
+               "esercizi_blocco", "esercizi_tappe", "esercizi_punto_giorni",
+               "esercizi_interroga_domande",
                "guardiano_enabled", "guardiano_modello", "guardiano_url",
                "guardiano_timeout_s", "guardiano_se_guasto", "guardiano_keep_alive",
                "guardiano_num_ctx", "guardiano_ospiti", "guardiano_pericolo",
@@ -2895,6 +2905,7 @@ LIMITI: dict[str, tuple[float, float]] = {
     "esercizi_verifica_timeout_s": (0.5, 300.0), "esercizi_pronti": (0, 50),
     "esercizi_campione": (0, 50), "esercizi_blocco_piccoli": (1, 50),
     "esercizi_blocco": (1, 50), "esercizi_tappe": (1, 20),
+    "esercizi_punto_giorni": (0, 365), "esercizi_interroga_domande": (2, 15),
     "suoni_volume": (0.0, 1.0),
     "vad_threshold": (0.0, 1.0), "wake_consecutive": (1, 50), "turn_log_days": (1, 3650),
     "conserva_voce_mb": (0, 1_000_000),

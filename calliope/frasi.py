@@ -513,6 +513,11 @@ class Frasi:
         t = tono if tono in TONI_FRASI else getattr(self._qui, "tono", None)
         return t if t in TONI_FRASI else self.tono_casa
 
+    def tono_turno(self) -> str:
+        """Il tono del turno in corso (di chi parla, o della casa): per le frasi dette dai tool
+        con le loro varianti (esercizi, 12/10 sera)."""
+        return self._tono(None)
+
     # ── la scelta ──
     def scegli(self, ident: str, *, persona=None, tono: str | None = None,
                base: str | None = None, **valori) -> str:

@@ -12,7 +12,12 @@ versionato (`persistenza.prepara_schema`, modulo «esercizi»):
 - `esercizi_preferenze` (12/10): come vuole gli esercizi ogni persona (blocchi più corti, modo
   giocoso, punti, tappe), così valgono anche in una conversazione nuova. Scadono come i
   tentativi (`conserva.TABELLE_MEMORIA`, 60 giorni dall'ultimo cambio) e si svuotano con la
-  persona.
+  persona;
+- `esercizi_punto` (12/10 sera): «a che punto siete» per persona e materia (argomento, entro,
+  con o senza cambio, detti dal codice dopo che il modello ha interpretato la risposta) e la
+  classe (materia «_classe», con l'anno scolastico), con la data: dopo
+  `esercizi_punto_giorni` (14) Calliope lo richiede. Stessa scadenza e stesso svuotamento delle
+  preferenze.
 
 Nel registro dei turni e negli avvisi vanno solo materia e argomento, mai le risposte.
 """
@@ -25,6 +30,11 @@ import random
 import threading
 
 from .modello import Esercizio
+
+
+# Gli esiti che chiudono un esercizio (le domande aperte delle interrogazioni, 12/10 sera:
+# parziale, non_giusta e da_guardare, cioè il modello non era sicuro del giudizio)
+FINALI = ("giusta", "spiegato", "saltato", "scartato", "parziale", "non_giusta", "da_guardare")
 
 
 class Registro:
@@ -55,7 +65,11 @@ class Registro:
         def v2(db):
             db.execute("CREATE TABLE IF NOT EXISTS esercizi_preferenze (persona TEXT PRIMARY "
                        "KEY, dati TEXT NOT NULL, aggiornato TEXT NOT NULL)")
-        self.scrivibile = prepara_schema(self.db, "esercizi", [v1, v2])
+        def v3(db):
+            db.execute("CREATE TABLE IF NOT EXISTS esercizi_punto (persona TEXT NOT NULL, "
+                       "materia TEXT NOT NULL, dati TEXT NOT NULL, aggiornato TEXT NOT NULL, "
+                       "PRIMARY KEY (persona, materia))")
+        self.scrivibile = prepara_schema(self.db, "esercizi", [v1, v2, v3])
 
     # ── preferenze per persona (12/10) ──
     def preferenze(self, persona: str) -> dict:
@@ -75,6 +89,31 @@ class Registro:
                 "aggiornato = excluded.aggiornato",
                 (persona, json.dumps(dati, ensure_ascii=False),
                  datetime.date.today().isoformat()))
+            self.db.commit()
+
+    # ── a che punto siete (12/10 sera) ──
+    def punto(self, persona: str, materia: str) -> dict | None:
+        """{"dati": {...}, "aggiornato": date} o None."""
+        with self._lock:
+            r = self.db.execute("SELECT dati, aggiornato FROM esercizi_punto WHERE persona = ? "
+                                "AND materia = ?", (persona, materia)).fetchone()
+        if not r:
+            return None
+        try:
+            return {"dati": dict(json.loads(r[0])),
+                    "aggiornato": datetime.date.fromisoformat(r[1][:10])}
+        except (TypeError, ValueError):
+            return None
+
+    def salva_punto(self, persona: str, materia: str, dati: dict,
+                    giorno: datetime.date | None = None):
+        with self._lock:
+            self.db.execute(
+                "INSERT INTO esercizi_punto (persona, materia, dati, aggiornato) VALUES "
+                "(?, ?, ?, ?) ON CONFLICT(persona, materia) DO UPDATE SET dati = excluded.dati, "
+                "aggiornato = excluded.aggiornato",
+                (persona, materia, json.dumps(dati, ensure_ascii=False),
+                 (giorno or datetime.date.today()).isoformat()))
             self.db.commit()
 
     # ── tentativi ──
@@ -211,7 +250,7 @@ class Registro:
                                                      "esito": None, "errori": 0, **x})
             if x["esito"] == "sbagliata":
                 e["errori"] += 1
-            if x["esito"] in ("giusta", "spiegato", "saltato", "scartato"):
+            if x["esito"] in FINALI:
                 e["esito"] = x["esito"]
         per_arg: dict[tuple, list] = {}
         for e in esercizi.values():
@@ -231,11 +270,14 @@ class Registro:
             giuste = sum(1 for e in lst if e["esito"] == "giusta")
             primo = sum(1 for e in lst if e["esito"] == "giusta" and not e["errori"])
             spiegati = sum(1 for e in lst if e["esito"] == "spiegato")
+            guardare = sum(1 for e in lst if e["esito"] == "da_guardare")
             s = f"{nome_argomento(arg)}: {giuste} giusti su {len(lst)}"
             if primo and primo != giuste:
                 s += f" ({primo} al primo colpo)"
             if spiegati:
                 s += f", {spiegati} spiegat{'o' if spiegati == 1 else 'i'} dopo i tentativi"
+            if guardare:
+                s += f", {guardare} da guardare tu"
             parti.append(s)
         n = sum(len(v) for v in per_arg.values())
         minuti = round(secondi / 60)
@@ -245,14 +287,22 @@ class Registro:
         if seg:
             frase += (f" Ha segnalato {len(seg)} esercizi" if len(seg) > 1 else
                       " Ha segnalato un esercizio") + " come sbagliati: li trovi sullo schermo."
+        da_guardare = [e for e in esercizi.values() if e["esito"] == "da_guardare"]
+        if da_guardare:
+            frase += (" Una risposta aperta è da guardare tu" if len(da_guardare) == 1 else
+                      f" {len(da_guardare)} risposte aperte sono da guardare tu") + (
+                ": non ero sicura del giudizio, le trovi sullo schermo.")
         rng = rng or random.Random()
-        visti = list(esercizi.values())
-        cam = rng.sample(visti, min(campione, len(visti)))
+        visti = [e for e in esercizi.values() if e["esito"] != "da_guardare"]
+        cam = da_guardare + rng.sample(visti, min(max(0, campione - len(da_guardare)),
+                                                  len(visti)))
         righe = [{"quando": x["quando"][11:16], "argomento": nome_argomento(x["argomento"]),
                   "domanda": x["domanda"], "attesa": x["attesa"], "data": x["data"],
                   "esito": x["esito"], "canale": x["canale"]} for x in t]
         return {"frase": frase, "righe": righe,
-                "campione": [{"domanda": c["domanda"], "attesa": c["attesa"]} for c in cam],
+                "campione": [{"domanda": c["domanda"], "attesa": c["attesa"],
+                              **({"data": c["data"], "da_guardare": True}
+                                 if c["esito"] == "da_guardare" else {})} for c in cam],
                 "segnalazioni": seg, "secondi": secondi, "risposte": len(risposte)}
 
     def close(self):

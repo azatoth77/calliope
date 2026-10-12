@@ -708,6 +708,15 @@ minori:
   esercizi_blocco: 10
   # Tappe del percorso «a tappe» (una tappa = un blocco), attivato a voce
   esercizi_tappe: 3
+  # «A che punto siete?» (12/10 sera, decisione di Dario: si chiede spesso, non una volta
+  # all'anno): a inizio sessione, per un minore, una domanda breve detta dal codice se
+  # l'informazione su quella materia manca o ha più di tanti giorni; a metà sessione al più
+  # una volta, se sbaglia molte risposte di fila o le fa tutte giuste al primo colpo. La
+  # risposta stringe o sposta il limite del programma dentro l'anno. 0 = mai chiedere
+  esercizi_punto_giorni: 14
+  # Domande di un'interrogazione simulata («interrogami sulle addizioni»): aperte dagli
+  # obiettivi dell'indice e conti corretti dal codice
+  esercizi_interroga_domande: 5
   # Il modello guardiano (calliope/guardiano.py): giudica la domanda e ogni frase della
   # risposta prima della voce, solo per minori e ospiti. Su Ollama (lo stesso della voce se
   # guardiano_url è vuoto: llm_native_url). Scelta con prove/misura_guardiano.py (rapporto

@@ -15,7 +15,7 @@ Dario le scelte prudenti dei cancelli (fondo del documento); da rimisurare tutto
 | Stadio | Libreria | Dove |
 |---|---|---|
 | Minori (fasce d'età, preset per fascia, permessi nel codice, orari, compiti, avvisi ai tutori; dal 05/10) | SQLite (stesso file della memoria: `minori_regole`, `avvisi_tutori`, `compiti_giorno`); guardiano Llama Guard 3 8B su Ollama + rilevatore di pericolo (gemma4 e4b, output strutturato) | `calliope/minori.py` → `fascia`, `preset`, `permesso` (da `ToolRegistry.call`), `dato_turno`, `fuori_orario`, `piu_protetto`, `Compiti`, `Avvisi`, `estensione_consentita`, `conversazioni_visibili_ai_tutori`; `calliope/guardiano.py` → `Guardiano`, `filtra` (in `main.py`), `correggi_storia`; tool `compiti_aiuto`, `minore_gestisci` (`calliope/tools/minori.py`); terminale `python -m calliope.minori`; banchi `prove/prova_minori_ollama.py`, `prove/misura_guardiano.py`; [`docs/ricerche/2026-10-05-minori.md`](../ricerche/2026-10-05-minori.md) |
-| Esercizi generati da Calliope (dal 08/10): matematica e italiano, a voce e sulla scheda, correzione nel codice, registro dei tentativi per i tutori | libreria standard; SQLite (stesso file della memoria: `esercizi_tentativi`, `esercizi_segnalazioni`, `esercizi_banco`); Wikizionario della biblioteca; secondo modello su Ollama | `calliope/esercizi/` → `matematica.genera`, `italiano.genera`, `numeri.leggi_valore`, `verifica.Wikizionario`, `verifica.SecondoParere`, `registro.Registro`, `sessione.Servizio`; tool `esercizi` (`calliope/tools/esercizi.py`); scheda `DISEGNA.esercizio` e `POST /api/esercizio`; rete `spinta_esercizi`; prove `prove/prova_esercizi.py`, `prove/prova_esercizi_pagina.py`, `prove/prova_esercizi_ollama.py`, `prove/prova_esercizi_voce.py`; indice del programma ministeriale `calliope/esercizi/programma/` (12/10, `prove/prova_programma.py`); [`docs/ricerche/2026-10-08-esercizi.md`](../ricerche/2026-10-08-esercizi.md) |
+| Esercizi generati da Calliope (dal 08/10): matematica e italiano, a voce e sulla scheda, correzione nel codice, registro dei tentativi per i tutori | libreria standard; SQLite (stesso file della memoria: `esercizi_tentativi`, `esercizi_segnalazioni`, `esercizi_banco`); Wikizionario della biblioteca; secondo modello su Ollama | `calliope/esercizi/` → `matematica.genera`, `italiano.genera`, `numeri.leggi_valore`, `verifica.Wikizionario`, `verifica.SecondoParere`, `registro.Registro`, `sessione.Servizio`; tool `esercizi` (`calliope/tools/esercizi.py`); scheda `DISEGNA.esercizio` e `POST /api/esercizio`; rete `spinta_esercizi`; prove `prove/prova_esercizi.py`, `prove/prova_esercizi_pagina.py`, `prove/prova_esercizi_ollama.py`, `prove/prova_esercizi_voce.py`; indice del programma ministeriale `calliope/esercizi/programma/` (12/10, `prove/prova_programma.py`); fase B dal 12/10 sera: `programma.limite`, `varianti.py`, `Registro.punto` (tabella esercizi_punto), interrogazioni (`programma/interrogazioni.yaml`, `verifica.SecondoParere.giudica`), prove `prove/prova_esercizi_programma.py` e `prove/prova_esercizi_programma_ollama.py`; [`docs/ricerche/2026-10-08-esercizi.md`](../ricerche/2026-10-08-esercizi.md) |
 | Materie calcolabili (dal 12/10): logica, fisica e chimica con lo schema della matematica; unità di misura dette per esteso e lette dalle risposte come le scrive Whisper | libreria standard | `calliope/esercizi/` → `logica.py`, `fisica.py`, `chimica.py`, `misure.py` (risposte con l'unità), `modello.livello_da_classe`; `calliope/unita.py` → `UNITA`, `leggi_misura`, `misura_detta`, `SIMBOLI_DETTI` (anche per `pronuncia.Pronuncia`); prove `prove/prova_materie.py`, `prove/prova_esercizi_ollama.py --materie logica,fisica,chimica` e `--scelta` |
 | Pericolo poco chiaro verificato in due cancelli prima dell'avviso (dal 09/10); in compagnia la voce del minore non è mai sicura | stesso rilevatore (gemma4 e4b, output strutturato) per gravità e verifica | `calliope/cancelli.py` → `Cancelli`, `Segnale`, `RASSICURA`, `rassicura`, `testo_avviso`, `percorso` (segnali su disco dal 10/10); `calliope/guardiano.py` → `Guardiano.gravita`, `Guardiano.verifica`; `calliope/ciclo.py` → `Ciclo._decidi_pericolo`, `Ciclo._secondo_cancello`; prove `prove/prova_minori_cancelli.py`, misura `prove/misura_cancelli.py` |
 
@@ -490,7 +490,8 @@ elementare. Cosa non andava e cosa cambia (prova a secco `prova_esercizi_voce`):
   nessun tentativo contato (regola `esercizi_numero_non_detto`). Passano «sedeci», «ventuno»,
   «6 per 8, 48», «quattordici, ah no, sedici»; non passano «Suttanto salida» → 76, «Prenta
   due» → 22 («prenta» è a una lettera da «trenta»: 32 passa). Dalla scheda (frase vuota) nessun
-  controllo.
+  controllo. *(Storico: dal 12/10 sera niente somiglianza di una lettera, «Prenta due» → 32 non
+  passa più; vedi la sezione dopo.)*
 - **Nessuna pausa.** Blocchi da `esercizi_blocco_piccoli` (5, fino alla terza elementare) e
   `esercizi_blocco` (10), poi la frase del codice «Facciamo una pausa o cambiamo?» con l'azione
   in sospeso; azioni `pausa` e `continua`; in pausa una risposta non si giudica.
@@ -534,4 +535,109 @@ solo dati: `calliope/esercizi/programma/` (`fonti.yaml`, `matematica.yaml`, `ita
 - **Fase B** (da fare): l'indice come limite di livello e di salita con la data dell'anno
   scolastico; le domande di Calliope quando mancano i dettagli (classe, a che punto sono,
   capitolo, foto della pagina), salvate per la persona; le interrogazioni come modalità degli
-  esercizi.
+  esercizi. *(Storico: fatta il 12/10 sera, sezione dopo.)*
+
+## Fase B dell'indice: limite stretto, numeri, «a che punto siete», interrogazioni (12/10 sera, ramo `esercizi-programma-b`)
+
+Decisioni di Dario del 12/10 sera dopo la rilettura del programma per classe. Prove a secco
+`prova_esercizi_programma` (livello 1, ~7 s) e, col modello, `prova_esercizi_programma_ollama`.
+
+**Limite stretto** (`programma.limite`, `programma.con_punto`, `sessione.Servizio._limite`).
+- Il livello iniziale e la salita automatica stanno dentro la voce della mappa per classe,
+  Indicazioni valide (`indicazioni_per`) e periodo dell'anno (inizio settembre–gennaio, fine
+  febbraio–giugno): la terza a ottobre fa addizioni di livello 2 **entro il 100** e non sale al
+  3 da sola (il 12/10 aveva 277 + 121 e 675 + 427); a marzo livello 3 entro il 999; la prima a
+  ottobre entro il 10 **senza riporto**. Livello più alto = livello della voce (o quello detto
+  con «a che punto siete», sempre dentro l'anno della classe).
+- I generatori hanno `entro` (il numero più grande, risultato compreso), `cambio` (False mai
+  riporto o prestito, True sempre, None come capita) e, per i problemi, `solo` (le operazioni
+  ammesse); `matematica.rispetta` ricontrolla l'esercizio finito e uno fuori limite non esce mai
+  (ValueError, come il ricalcolo). Ogni voce della mappa con un livello genera dentro il suo
+  limite (59 voci, nella prova). I problemi hanno modelli nuovi (insieme, gita, scaffali, il
+  regalo a due cifre) perché ogni operazione abbia il suo; il livello 3 dei problemi ora arriva
+  a 360, quindi la voce della terza a fine anno ha `generatore_dentro: false` (il limite lo tiene
+  entro il 100).
+- **Oltre** solo se la persona lo chiede: `oltre=true`, un `entro` più grande del limite («facciamo
+  quelle a tre cifre» → 999), `piu_difficile` quando è già al limite, o lo stesso argomento
+  chiesto di nuovo entro 10 minuti dal rifiuto (`esercizi_oltre_insiste`). Lo dice il codice
+  («È un passo oltre il programma di terza elementare: proviamo», con varianti; regola
+  `esercizi_oltre_programma`) e vale solo per quella sessione. `piu_facile` scende (e torna al
+  programma se era oltre).
+- **Nessun livello adatto** (livello 0 della mappa, o una classe prima del suo intervallo, anche
+  per logica, fisica e chimica senza mappa): «Nel programma di terza elementare non ci sono ancora
+  le frazioni, e non ho esercizi adatti. Facciamo le addizioni o le sottrazioni? Se vuoi provare
+  lo stesso, dimmelo.» (`esercizi_fuori_programma`), con gli argomenti della classe. Prima, fuori
+  intervallo, si partiva con «Di solito si fanno più avanti, ma proviamo». La proposta in sospeso
+  ha gli argomenti come istruzioni; se il modello richiama con la sola materia («sì, voglio
+  provarle lo stesso», 4B) il codice chiede «Vuoi provare le frazioni lo stesso, anche se sono
+  oltre il programma?» e al «sì» parte oltre (`esercizi_oltre_domanda`).
+- Restano senza limite: le classi dopo l'ultima della mappa (l'argomento è già dietro), le
+  superiori, gli argomenti senza mappa (logica, fisica, chimica: solo l'intervallo delle classi).
+
+**Numeri: niente approssimazioni** (`numeri.numeri_detti`, `numeri.FORME_PARLATE`). Tolta la
+somiglianza di una lettera: «Prenta due» non vale più 32. Restano le cifre, le parole di numero
+scritte giuste e cinque forme parlate chiuse (sedeci, diciasette, dicianove, quatordici, quatro),
+anche in fondo a un composto («trecentosedeci», «ventiquatro») e solo se ne esce un numero valido;
+contrari «trenda», «sedecina», «Bentanto». Quando il numero non si ricava (`esercizi_numero_non_detto`)
+o la risposta non ha un numero (`esercizi_numero_non_capito`) il codice chiede di **ripetere
+scandendo** con frasi sempre diverse (`calliope/esercizi/varianti.py`: varianti per tono, mai la
+stessa due volte di fila alla stessa persona; non nel catalogo di `frasi.py`, dove il modo «ombra»
+direbbe sempre la stessa); dal secondo non capito sullo stesso esercizio, con uno schermo
+personale collegato (`Schermi.personale_collegato`), «Se vuoi, scrivilo o toccalo sullo schermo»
+(`esercizi_numero_schermo`). Nessun tentativo contato.
+
+**A che punto siete** (tabella `esercizi_punto`, `esercizi_punto_giorni: 14`).
+- Per persona e materia: argomento, entro, con o senza cambio, la data; la classe (materia
+  `_classe`, con l'anno scolastico: l'anno dopo vale la classe dopo). Scade a 60 giorni e si
+  svuota con la persona (`conserva.TABELLE_MEMORIA`).
+- A inizio sessione, per un minore, in matematica e italiano, se l'informazione manca o ha più di
+  14 giorni: una domanda breve del codice («Siete ancora sulle addizioni col riporto entro il 20,
+  o siete andati avanti?», «A che punto siete in matematica? Per esempio, che operazioni state
+  facendo, e fino a che numero?»), in sospeso con l'azione `a_che_punto` (un «no» non la
+  rifiuta). A metà sessione, una volta: dopo 4 risposte sbagliate di fila («troppo difficili?») o
+  5 giuste al primo colpo al livello più alto («troppo facili?»).
+- La risposta la interpreta il modello (`esercizi azione=a_che_punto`, `argomento`, `entro`,
+  `riporto`, `classe`); il codice la mappa sull'indice e cambia subito il limite («Va bene, me lo
+  segno: addizioni col riporto entro il 20»). Se non si mappa: «Non riesco a collegarlo al
+  programma: se vuoi, fammi vedere una foto della pagina del libro o del compito», e si parte dal
+  programma. «Non lo so» (`continua`) parte dal programma. Il 4B passava la risposta come
+  `continua` con `entro`: con i dati del punto vale `a_che_punto` (azione dedotta). Un tutore lo
+  può dire per il ragazzo (`nome`), un adulto che non lo segue no.
+
+**Interrogazioni** (`esercizi azione=interroga`).
+- Dall'indice, per gli argomenti di Calliope: `esercizi_interroga_domande` (5) domande, di cui
+  fino a due aperte da `programma/interrogazioni.yaml` (domanda e criteri scritti da noi,
+  agganciati agli obiettivi ufficiali; controllati da `programma.controlla`) e il resto conti
+  corretti dal codice, con 2 tentativi; un problema solo con l'operazione chiesta (`solo`,
+  ricontrollato da `rispetta`: un'interrogazione sulle addizioni non ha sottrazioni né
+  moltiplicazioni).
+- Le aperte le giudica il modello con i criteri, con una sicurezza: il modello della voce
+  (`giudizio`, `sicurezza`) o, se non li passa, il codice con una chiamata a parte a output
+  strutturato (`SecondoParere.giudica`, regola `esercizi_aperta_giudice`). Solo «alta» conta; se no
+  «da guardare» (`esercizi_aperta_da_guardare`): nel riepilogo per i tutori («Una risposta aperta
+  è da guardare tu», con la risposta nel campione) e un avviso alla fine. Giudizio finale a
+  parole, senza voto («molto bene», «bene, qualcosa da ripassare», «da ripassare insieme»).
+- Dalla pagina del libro (una foto o un file nella conversazione, dato non fidato): le domande le
+  prepara il modello leggendola (`domande`, al più 8, una riga ciascuna) e il codice le fa una a
+  una. Senza pagina, per storia, scienze o «il capitolo 4» anche di un argomento noto, Calliope la
+  chiede («Per interrogarti mi serve la pagina del libro: mi fai una foto, o me la scrivi?»,
+  `esercizi_interroga_serve_pagina`) e non improvvisa.
+- Se il modello passa solo la materia e la frase nomina un argomento solo, vale quello
+  (`esercizi_argomento_dalla_frase`, anche per `inizia`; contrari: nessuno o due argomenti →
+  «Su che cosa?»).
+
+**Misura col 4B** (profilo ridotto da 8 GB, `gemma4:e4b-it-qat` sul portatile, 12/10 sera,
+`prova_esercizi_programma_ollama --giri 3`): **39/40 turni giusti** (inizio con la domanda,
+`a_che_punto`, risposta, `piu_difficile`, fuori programma e oltre, interroga, aperta giudicata
+giusta, fine, la pagina chiesta); l'unico errore è «interrogami sul capitolo 4 di storia» detto
+dal modello senza tool (chiede il testo, non improvvisa). Prima frase mediana 0,82 s, massima
+1,88 s; il giudice delle aperte aggiunge circa 0,6 s (1,5–1,9 s in quei turni). Prima delle
+correzioni della misura: 7/11 (il 4B chiamava `continua` al posto di `a_che_punto`, ometteva
+l'argomento di `interroga` e di `inizia`, non passava mai `giudizio` e `sicurezza`, e richiamato
+per il giudizio diceva cose di servizio alla bambina: per questo il giudice è del codice).
+
+**Restano**: il 26B sulla DGX da misurare con la stessa prova; le domande dalla pagina sono del
+modello (lunghezza e numero controllati, il contenuto no: per una pagina di testo si potrebbe
+controllare che le parole vengano dalla pagina); i criteri delle domande aperte e i periodi della
+mappa da rileggere con Dario; italiano: i tempi verbali e i complementi indiretti non si generano;
+geometria, misure e decimali non hanno generatori.

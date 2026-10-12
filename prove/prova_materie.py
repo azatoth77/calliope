@@ -350,6 +350,7 @@ TMP = Path(tempfile.mkdtemp(prefix="calliope-materie-"))
 cfg = Config()
 cfg.memory_db = str(TMP / "memoria.db")
 cfg.esercizi_pronti = 0
+cfg.esercizi_punto_giorni = 0          # «a che punto siete» ha la sua prova (prova_esercizi_programma)
 
 
 class Reg:
@@ -478,9 +479,16 @@ out, _ = chiama({"azione": "rispondi", "risposta": f"È {s.es.risposta}."}, "Luc
 verifica("vero o falso: giusta detta in una frase", out.get("giusta") is True, out)
 out, _ = chiama({"azione": "inizia", "materia": "chimica", "argomento": "bilanciamento"},
                 "Luca")
+# Dal 12/10 sera il limite è stretto: il bilanciamento a 12 anni (seconda media) è prima del
+# suo intervallo, si dice e si propone altro; si va solo se lo chiede (oltre=true)
+verifica("chimica, bilanciamento a 12 anni: fuori programma, non parte da solo",
+         "non ho esercizi adatti" in out["risposta_finale"]
+         and SRV.sessione(LUCA.id).argomento != "bilanciamento", out)
+out, _ = chiama({"azione": "inizia", "materia": "chimica", "argomento": "bilanciamento",
+                 "oltre": True}, "Luca")
 s = SRV.sessione(LUCA.id)
-verifica("chimica, bilanciamento (12 anni: livello più basso)", s is not None
-         and s.argomento == "bilanciamento" and s.livello == 1, out)
+verifica("chimica, bilanciamento chiesto lo stesso (12 anni: livello più basso)", s is not None
+         and s.argomento == "bilanciamento" and s.livello == 1 and s.oltre, out)
 verifica("bilanciamento: scheda con il campo dei numeri", ultima_scheda()["campo"] == "numero")
 out, _ = chiama({"azione": "rispondi", "risposta": in_lettere(int(s.es.risposta))}, "Luca")
 verifica("bilanciamento: coefficiente in lettere → giusta", out.get("giusta") is True, out)

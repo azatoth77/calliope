@@ -274,6 +274,7 @@ TMP = Path(tempfile.mkdtemp(prefix="calliope-esercizi-"))
 cfg = Config()
 cfg.memory_db = str(TMP / "memoria.db")
 cfg.esercizi_pronti = 0                 # niente lavoro in secondo piano nelle prove
+cfg.esercizi_punto_giorni = 0              # «a che punto siete» ha la sua prova (prova_esercizi_programma)
 
 
 class Reg:
@@ -449,8 +450,11 @@ liv = s.livello
 for _ in range(3):
     chiama({"azione": "rispondi", "risposta": frazione_scritta(SRV.sessione(BIANCA.id).es.risposta)},
            "Bianca")
-verifica("tre giuste al primo colpo → livello più alto",
-         SRV.sessione(BIANCA.id).livello == min(3, liv + 1), (liv, SRV.sessione(BIANCA.id).livello))
+# Dal 12/10 sera la salita sta dentro il limite del programma (frazioni in quarta: livello 1);
+# la salita oltre il limite e dentro il limite sono in prova_esercizi_programma
+verifica("tre giuste al primo colpo → livello più alto, mai oltre il programma",
+         SRV.sessione(BIANCA.id).livello == min(s.livello_max, liv + 1),
+         (liv, SRV.sessione(BIANCA.id).livello, s.livello_max))
 out, _ = chiama({"azione": "fine"}, "Bianca")
 verifica("fine: il conto della sessione", "Abbiamo finito" in out["risposta_finale"]
          and SRV.sessione(BIANCA.id) is None, out)
