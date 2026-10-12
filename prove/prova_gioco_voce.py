@@ -467,6 +467,13 @@ def prova_fumo(tmp: Path):
     verifica("comandiAttivi con un comando non dichiarato: la prova di fumo lo dice",
              not r["passano"] and "non dichiarati" in r["uscita"] and "quattro" in r["uscita"],
              r["uscita"][-400:])
+    # 12/10 sera: gioco.js che legge un campo che la logica non dà (il caso vero: l'esito annidato,
+    # «risultato.emoji» letto al primo livello) → «undefined» nel testo visibile
+    r = prova("campo", {'(p === stato.premio ? "★" : "—")':
+                        '(p === stato.premio ? "premio " + stato.premio.emoji : "—")'})
+    verifica("un campo che non c'è mostrato a schermo («undefined»): la prova di fumo lo dice",
+             not r["passano"] and "«undefined»" in r["uscita"]
+             and "forma di ciò che restituisce logica.js" in r["uscita"], r["uscita"][-400:])
     senza = json.loads(json.dumps(m))
     del senza["scheda"]["ascolta"]
     r = prova("senza_ascolta", manifesto=senza)

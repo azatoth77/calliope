@@ -967,6 +967,7 @@ class Sviluppi:
             self._salva()
             return item
         if stato == "fatto":
+            prima = (sv.estensione, sv.versione, sv.cartella)
             with self._lock:
                 sv.giro = {}
                 sv.cartella = str(r.get("cartella") or sv.cartella or "")
@@ -989,8 +990,30 @@ class Sviluppi:
             # specifica, qui nel thread dei lavori (la voce non aspetta); l'annuncio e la
             # revisione lo dicono
             self.verifica_consegna(sv, lav)
-            self.passa(sv, "collaudo", f"lavoro {lav.id} finito")
+            uguale = getattr(lav, "correzione", False) and self.codice_uguale(sv, prima)
+            self.passa(sv, "collaudo", f"lavoro {lav.id} finito"
+                       + (": correzione senza cambi al codice" if uguale else ""))
             item["messaggio"] = self.frase_pronto(sv, lav, altro)
+            if uguale:
+                # Una correzione che consegna il codice di prima non è «fatto» (12/10 sera,
+                # ricerca 2026-10-12-flusso-agente-fasi: alle 08:46 gioco.js e logica.js
+                # identici, cambiato solo il manifesto, e la voce ha detto «è pronto»). L'esito
+                # onesto, e la domanda di rimandarlo all'agente con il problema di prima
+                self.log(f"[SVILUPPO] {sv.id}: la correzione {lav.id} non ha cambiato il codice")
+                problema = str(getattr(lav, "problema_correzione", "") or "").strip()
+                domanda = "Lo rimando all'agente?"
+                item["messaggio"] = (f"{sv.persona_nome or 'Dario'}, la correzione di "
+                                     f"«{sv.titolo}» è finita ma il codice è uguale a prima: "
+                                     "non è cambiato niente di quello che fa. " + domanda)
+                item["in_sospeso"] = {
+                    "domanda": domanda, "tool": "sviluppo_correggi",
+                    "cosa": f"rimandare la correzione di «{sv.titolo}» all'agente",
+                    "argomenti": {"problema": "la correzione di prima ha consegnato il codice "
+                                              "uguale a prima" + (f": {problema[:200]}"
+                                                                  if problema else "")}}
+                item["sviluppo"] = sv.id
+                self._manda_scheda(sv, getattr(lav, "on_scheda", None))
+                return item
             # Niente «Vuoi approvarla?» in sospeso: prima si prova; «Con cosa provo?» va al
             # collaudo
             item["in_sospeso"] = {"domanda": "Con cosa provo?", "tool": "sviluppo_collauda",
@@ -1038,6 +1061,33 @@ class Sviluppi:
                               "argomenti": "azione = rifai (sì, rifallo); se dice cosa cambiare, "
                                            "azione = analisi e cambia = la modifica come detta"}
         return item
+
+    # I file che non cambiano ciò che il codice fa: il manifesto, i test, gli esempi
+    _NON_CODICE = re.compile(r"(^|/)(manifesto\.json|CAPACITA\.md|calliope_estensione\.py)$|"
+                             r"(^|/)test_[^/]*\.py$|\.test\.js$|(^|/)esempi(_veri)?/")
+
+    def codice_uguale(self, sv: Sviluppo, prima: tuple) -> bool:
+        """La versione appena consegnata ha lo stesso codice di quella di prima (`prima` =
+        (estensione, versione, cartella) prima della consegna): i file di codice uguali, tolti
+        manifesto, test ed esempi. False se non si può dire (la prima versione, file mancanti)."""
+        est, n0, cart0 = prima
+        try:
+            if sv.tipo == "estensione":
+                arch = getattr(getattr(self.lavori, "estensioni", None), "archivio", None)
+                if (arch is None or not est or n0 is None or est != sv.estensione
+                        or sv.versione in (None, n0)):
+                    return False
+                a = file_di_codice(arch.cartella_versione(est, n0))
+                b = file_di_codice(arch.cartella_versione(sv.estensione, sv.versione))
+            else:
+                if not cart0 or not sv.cartella or cart0 == sv.cartella:
+                    return False
+                a, b = file_di_codice(cart0), file_di_codice(sv.cartella)
+        except Exception:  # noqa: BLE001 — nel dubbio, la consegna di sempre
+            return False
+        a = {k: v for k, v in a.items() if not self._NON_CODICE.search(k)}
+        b = {k: v for k, v in b.items() if not self._NON_CODICE.search(k)}
+        return bool(a) and a == b
 
     def _segna_giro(self, sv: Sviluppo, lav, perche: str):
         """L'ultimo giro fermo prima di consegnare (12/10, A5): la cartella con i file che

@@ -2567,6 +2567,7 @@ def _sviluppo_correggi(ctx: ToolContext, problema: str = "", **_altro) -> dict:
     _con_esempi(svs, sv, lav)
     svs._metti_vincoli(sv, lav)
     lav.correzione = True
+    lav.problema_correzione = problema
     with svs._lock:
         sv.correzioni += 1
     svs.passa(sv, "sviluppo", "correzione" + (f": {problema[:80]}" if problema else ""))

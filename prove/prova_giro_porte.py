@@ -481,7 +481,13 @@ def prova_correzioni(tmp: Path):
              "mosse dette), niente «la correzione di prima»",
              primo.correzione and VINCOLO_CORREZIONE_GIOCO.strip() in primo.vincoli
              and "NON ha funzionato" not in primo.vincoli, primo.vincoli)
-    S.consegna(svc, est, sv)
+    item = S.consegna(svc, est, sv)
+    verifica("08:46: la correzione che consegna il codice uguale a prima non è «pronto»: "
+             "l'esito onesto e «Lo rimando all'agente?»",
+             "il codice è uguale a prima" in item["messaggio"]
+             and (item.get("in_sospeso") or {}).get("tool") == "sviluppo_correggi"
+             and "mostri" in str((item.get("in_sospeso") or {}).get("argomenti")),
+             item["messaggio"])
     detto = ("È sempre esattamente uguale a prima: quando un giocatore clicca su una porta non "
              "si vede nessun mostro e la partita finisce senza punti.")
     S.chiama(reg, ctx, "sviluppo_correggi", {"problema": problema}, 6, detto)
@@ -491,6 +497,18 @@ def prova_correzioni(tmp: Path):
              and "NON ha funzionato" in secondo.vincoli, secondo.vincoli)
     verifica("…con le parole dette adesso (il problema passato era lo stesso di prima)",
              "esattamente uguale a prima" in secondo.vincoli, secondo.vincoli)
+    # Contrario: una correzione che cambia il codice si annuncia come sempre
+    import prova_estensioni as P
+    import prova_sviluppo as SS
+    import prova_sviluppo_v2 as V
+    n = est.archivio.nuova_candidata(P.valida(SS.M2), {"estensione.py": (
+        V.CODICE_GEO + "# corretto" + chr(10)).encode()}, "Dario", {"eseguiti": 4, "falliti": 0},
+        {"rischi": [], "sintassi": []}, secondo.id, True)
+    item = svc.finisci(secondo, "fatto", estensione={"nome": "meteo_citta", "versione": n},
+                       test={"eseguiti": 4, "falliti": 0}, messaggio="ho corretto il gioco.")
+    verifica("contrario: la correzione che cambia il codice si annuncia come sempre",
+             "uguale a prima" not in item["messaggio"] and sv.fase == "collaudo",
+             item["messaggio"])
     from calliope.tools.sviluppo import _detto_adesso
     verifica("contrario: le parole uguali al problema non si ripetono",
              _detto_adesso(SimpleNamespace(user_text=problema), problema) == ""
@@ -518,16 +536,15 @@ def prova_avviso_giro():
     m = [{"role": "user", "content": "compito"}]
     Agente._avviso_fine(finto, Lav(True), m)
     testo = m[-1]["content"]
-    verifica("sviluppo: «questo giro sta per finire… non è la fine del lavoro», niente "
-             "«chiama consegna con un riassunto» a metà",
-             "non è la fine del lavoro" in testo and "le passate del giro" in testo
-             and "non consegnare a metà" in testo and "sta per finire le sue passate"
-             not in testo, testo)
+    verifica("sviluppo: un'azione («il passo concreto», «non consegnare a metà»), niente conto "
+             "alla rovescia né «sta per finire»",
+             "passo concreto" in testo and "non consegnare a metà" in testo
+             and "sta per finire" not in testo and "2" not in testo, testo)
     m = [{"role": "user", "content": "compito"}]
     Agente._avviso_fine(finto, Lav(False), m)
-    verifica("contrario: un lavoro fuori da uno sviluppo ha l'avviso di sempre",
-             "il lavoro sta per finire le sue passate" in m[-1]["content"]
-             and "chiama consegna" in m[-1]["content"], m[-1]["content"])
+    verifica("contrario: fuori da uno sviluppo «Adesso chiudi… chiama consegna», anche lì senza "
+             "numeri", "Adesso chiudi" in m[-1]["content"] and "chiama consegna" in m[-1]["content"]
+             and "sta per finire" not in m[-1]["content"], m[-1]["content"])
 
 
 def main():
