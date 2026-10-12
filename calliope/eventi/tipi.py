@@ -250,6 +250,30 @@ def sigillato(contenuto: str, riservato: bool, personale: bool,
                       ensure_ascii=False)
 
 
+# I campi con le parole di ogni tipo (12/10, calliope/conserva.py): in un turno le cui parole non
+# si conservano (dubbio con un minore, zona grigia, nel registro di un adulto) restano solo in
+# memoria (`_non_su_disco`), come il testo di un minore fermato dal guardiano
+CAMPI_TESTO: dict[str, tuple[str, ...]] = {
+    "detto_persona": ("testo",), "trascrizione_capita": ("prima", "dopo"),
+    "dato_in_ingresso": ("testo",), "foto_in_ingresso": ("testo",),
+    "allegato_in_ingresso": ("testo", "info"), "chiamata_tool": ("argomenti",),
+    "esito_tool": ("contenuto", "frase"), "detto_calliope": ("testo",),
+    "passata_modello": ("testo",), "proposta_aperta": ("argomenti", "domanda", "cosa"),
+    "compressione": ("riassunto",), "scheda_mandata": ("titolo",),
+    "argomento_nuovo": ("titolo",), "argomento_ripreso": ("titolo",),
+    "modulo_compilato": ("titolo",),
+}
+
+
+def senza_parole(tipo: str, dati: dict) -> dict:
+    """I dati con le parole del tipo segnate `_non_su_disco` (in memoria restano)."""
+    campi = [c for c in CAMPI_TESTO.get(tipo, ()) if c in dati]
+    if not campi:
+        return dati
+    prima = list(dati.get("_non_su_disco") or ())
+    return {**dati, "_non_su_disco": prima + [c for c in campi if c not in prima]}
+
+
 def per_disco(ev: Evento) -> dict:
     """I dati dell'evento come vanno su disco: senza ciò che non deve restarci. Puro."""
     if ev.vis == "mai":
@@ -272,7 +296,11 @@ def per_disco(ev: Evento) -> dict:
         testo = d.pop("testo", None)
         d["caratteri"] = len(testo or "")
     elif tipo == "dati_del_turno":
-        d["blocchi"] = [{"nome": b.get("nome"), "caratteri": len(b.get("testo") or "")}
+        # Il testo dei blocchi (ricordi, contesto) non c'è nemmeno in memoria (12/10): il nome e
+        # quanti caratteri; se un blocco ha il testo, su disco la sua lunghezza
+        d["blocchi"] = [{"nome": b.get("nome"),
+                         "caratteri": (len(b["testo"]) if isinstance(b.get("testo"), str)
+                                       else int(b.get("caratteri") or 0))}
                         for b in d.get("blocchi") or () if isinstance(b, dict)]
     elif tipo == "esito_tool":
         if d.get("riservato"):

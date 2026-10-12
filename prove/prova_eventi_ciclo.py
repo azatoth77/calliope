@@ -254,6 +254,14 @@ def prova_giro_sintetico():
     verifica("le frasi della persona proiettate sono quelle della storia",
              utenti_p == utenti_s, f"{utenti_p} {utenti_s}")
     verifica("nessuna fuga nella proiezione", proiezioni.fughe(reg.eventi(), msgs) == 0)
+    # I dati del turno davanti alla frase (12/10, per il banco della scelta dei tool): i nomi dei
+    # blocchi e la loro lunghezza, mai il testo; fuori dalla storia
+    dati = [e for e in reg.eventi() if e.tipo == "dati_del_turno"]
+    verifica("dati_del_turno: i blocchi del turno con nome e lunghezza, mai il testo",
+             dati and all(x.get("nome") and isinstance(x.get("caratteri"), int)
+                          and "testo" not in x for e in dati for x in e.dati["blocchi"])
+             and any(x["nome"] == "turno" for x in dati[0].dati["blocchi"]),
+             str([e.dati for e in dati][:2]))
     tot = {}
     for r in turni:
         for k, v in ((r.get("eventi_ombra") or {}).get("differenze") or {}).items():

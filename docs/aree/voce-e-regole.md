@@ -1388,7 +1388,9 @@ Con `eventi: spento` la conversazione in corso resta come prima.
 **Limiti dell'ombra** (scritti anche nel § 8 del progetto): chiamate, esiti e buste si ricopiano
 dalla storia (il confronto ne controlla solo la forma nei turni dopo); la posizione delle chiamate
 rispetto alle frasi non si sa (la proiezione mette le chiamate prima del testo, il confronto è per
-turno); `passata_modello`, `dati_del_turno` e `scheda_mandata` non si scrivono ancora; il pezzo
+turno); `passata_modello`, `dati_del_turno` e `scheda_mandata` non si scrivono ancora (storico:
+dal 12/10 `dati_del_turno` e `scheda_mandata` sì, vedi [contesto-conversazione](contesto-conversazione.md)
+§ «Conservazione dei dati»); il pezzo
 sentito di una frase interrotta non lo dice il satellite (`interrotta_persa`).
 
 Prove: `prova_eventi` (tipi, proiezioni pure, partizione, porte, due corsie, riassegnazione),
@@ -1689,3 +1691,17 @@ degli avvii; restavano tre buchi, tutti nel perimetro del principio 10:
 
 Profilo ridotto (8 GB): le tre regole non dipendono dal modello e valgono uguali. Misure col modello
 locale in [agenti-estensioni](agenti-estensioni.md).
+
+## Eventi dei soli adulti su disco, `dati_del_turno` e `scheda_mandata` (12/10, ramo `conserva-metrica`)
+
+Con la conservazione dei dati (decisione [0028](../decisioni/0028-decisioni-roadmap-12-10.md) T1,
+`calliope/conserva.py`) il registro degli eventi va su disco solo per le persone adulte e per la
+casa: i registri di minori, ospiti e voci incerte (`ospite:<corsia>`) restano in memoria, non si
+riprendono dopo un riavvio e quelli rimasti da prima li toglie la rotazione
+(`Disco.ruota(effimero=…)`). Nel registro di un adulto le parole di un turno incerto (dubbio con un
+minore, zona grigia) restano solo in memoria (`tipi.senza_parole`, `tipi.CAMPI_TESTO`).
+`eventi_giorni` passa da 7 a 60. Si scrivono ora `dati_del_turno` (i nomi dei blocchi davanti alla
+frase con la lunghezza, mai il testo) e `scheda_mandata` (tipo, chiave, titolo, schermi), per il
+banco della scelta dei tool; la proiezione li esclude come prima. `Disco.svuota` è il comando per
+svuotare (tutto o una persona), diverso da «dimentica»: non tocca l'archivio. Dettagli e misure in
+[contesto-conversazione](contesto-conversazione.md) § «Conservazione dei dati».

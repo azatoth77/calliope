@@ -21,7 +21,10 @@ il prossimo passo (registro delle capacità, calliope/capacita.py).
                                               decisione di oggi (calliope/stato_dialogo.py);
                                               una voce sola: parlato diverso dalla storia,
                                               domande non registrate e il registro degli
-                                              eventi in ombra (calliope/eventi/misura.py)
+                                              eventi in ombra (calliope/eventi/misura.py);
+                                              scelta dei tool: nomi inventati, correzioni,
+                                              ripieghi, richieste ripetute, con un avviso
+                                              (calliope/scelta_tool.py)
     python -m calliope.stato --eventi [--json]
                                               il registro degli eventi (10/10, in ombra:
                                               calliope/eventi/): MB per giorno, registri,
@@ -249,11 +252,15 @@ def main(argv=None) -> int:
         from .eventi import misura as misura_eventi
         voce_sola = misura_eventi.riassunto(turni)
         soglia_ms = float(getattr(cfg, "eventi_contesto_ms_avviso", 20.0) or 20.0)
+        # La scelta dei tool come metrica (12/10, calliope/scelta_tool.py)
+        from . import scelta_tool
+        scelta = scelta_tool.per_giorno(turni)
         if as_json:
             print(json.dumps({"giorni": dati, "soglia_s": getattr(cfg, "latenza_avviso_s", None),
                               "attrito": sicurezza, "attrito_soglia": soglia_a,
                               "argomenti": argomenti, "compagnia": comp,
-                              "dialogo": dialogo, "voce_sola": voce_sola},
+                              "dialogo": dialogo, "voce_sola": voce_sola,
+                              "scelta_tool": scelta},
                              ensure_ascii=False, indent=2))
         else:
             print(latenza.testo(dati, soglia))
@@ -267,6 +274,8 @@ def main(argv=None) -> int:
             print(stato_dialogo.testo(dialogo))
             print()
             print(misura_eventi.testo(voce_sola, soglia_ms))
+            print()
+            print(scelta_tool.testo(scelta))
         return 0
     if "--eventi" in argv:
         d = _eventi_disco(cfg)
@@ -337,6 +346,24 @@ def main(argv=None) -> int:
         if avviso:
             print()
             print(f"{avviso} Dettagli: --turni")
+        # La scelta dei tool oggi o ieri (12/10, calliope/scelta_tool.py)
+        try:
+            from . import scelta_tool
+            avviso = scelta_tool.avviso_recente(cfg)
+        except Exception:  # noqa: BLE001
+            avviso = None
+        if avviso:
+            print()
+            print(f"{avviso} Dettagli: --turni")
+        # Quanto è conservato per le misure (12/10, calliope/conserva.py): solo conteggi
+        try:
+            from .conserva import Conservazione, testo_stato as conserva_testo
+            riga = conserva_testo(Conservazione(cfg).stato())
+        except Exception:  # noqa: BLE001 — lo stato non cade per la conservazione
+            riga = None
+        if riga:
+            print()
+            print(riga + " (dettagli: python -m calliope.conserva)")
         # Il registro degli eventi (10/10): crescita e «dimentica» (§ 10 del progetto)
         try:
             from .eventi.registro import testo_stato

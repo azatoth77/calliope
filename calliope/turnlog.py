@@ -10,7 +10,11 @@ quanto scattano senza conservare altro.
 
 Privacy: degli ospiti (voce non riconosciuta) non si salva il testo, né la richiesta né
 la risposta; i file più vecchi di `keep_days` si cancellano all'avvio e poi una volta al
-giorno.
+giorno. Dal 12/10 (decisione 0028, T1, calliope/conserva.py) le parole restano solo per gli
+adulti riconosciuti, per `turn_log_days` (60) giorni: anche di minori e voci incerte (zona
+grigia, dubbio con un minore) restano solo i numeri. Lo decide `Conservazione.testo_turno`, il
+solo posto; il ciclo lo segna nel turno (`conserva`), e qui vale anche per le righe scritte da
+altri (cassetto, schermi, installazioni).
 """
 
 import datetime
@@ -22,8 +26,12 @@ from pathlib import Path
 class TurnLog:
     PREFIX = "turni-"
 
-    def __init__(self, folder: str | None, keep_days: int = 30, modello: dict | None = None):
+    def __init__(self, folder: str | None, keep_days: int = 60, modello: dict | None = None,
+                 conserva=None):
         self.folder = Path(folder) if folder else None
+        # La conservazione (12/10, calliope/conserva.Conservazione): chi tiene le parole. None
+        # (prove, `calliope stato`): solo la regola degli ospiti
+        self.conserva = conserva
         # Campi del modello della voce in ogni turno ({"profilo", "modello"}, 06/10): le regole
         # che scattano si contano per profilo (config.RETI, categoria «modello»)
         self.modello = {k: v for k, v in (modello or {}).items() if v}
@@ -48,6 +56,18 @@ class TurnLog:
 
     errori = 0                      # righe non scritte (disco pieno, permessi…)
 
+    def _senza_parole(self, rec: dict) -> bool:
+        """Le parole di questo turno non restano: ospite, segnato dal ciclo, o (righe scritte
+        da altri) la conservazione dice no."""
+        if rec.get("livello") == "ospite" or _segnato_no(rec):
+            return True
+        if self.conserva is not None and "conserva" not in rec:
+            try:
+                return not self.conserva.testo_turno(rec)
+            except Exception:  # noqa: BLE001 — nel dubbio senza parole
+                return True
+        return False
+
     def write(self, record: dict):
         """Aggiunge un turno. Per gli ospiti toglie i testi prima di scrivere. Non solleva
         mai (03/10, analisi di robustezza): con il disco pieno ogni turno sollevava OSError
@@ -71,28 +91,21 @@ class TurnLog:
         rec = dict(record)
         for k, v in self.modello.items():
             rec.setdefault(k, v)
-        if rec.get("livello") == "ospite":
-            for key in ("testo", "risposta"):
-                # Quante parole c'erano (07/10): «testo: null» di un ospite si confondeva con
-                # una frase vuota arrivata al modello, «risposta: null» con il silenzio
-                if isinstance(rec.get(key), str):
-                    rec.setdefault(f"{key}_parole", len(rec[key].split()))
-            # (anche quella mandata alla voce prima di un'interruzione, 08/10)
-            for key in ("testo", "richiesta", "risposta", "risposta_inviata"):
-                if rec.get(key) is not None:
-                    rec[key] = None
-            if rec.get("stt_corretta"):          # prima e dopo: le parole dell'ospite
-                rec["stt_corretta"] = {}
-            if rec.get("stt_capito"):            # B2: come sopra, resta solo l'esito
-                rec["stt_capito"] = {k: v for k, v in rec["stt_capito"].items()
-                                     if k not in ("prima", "dopo")}
-            rec["tool"] = [{k: v for k, v in ev.items() if k != "argomenti"}
-                           for ev in rec.get("tool") or []]
+        if self._senza_parole(rec):
+            # Ospiti (dal 01/10), e dal 12/10 minori e voci incerte: restano i numeri, le
+            # regole e i nomi dei tool; per testo e risposta quante parole c'erano (07/10)
+            from .conserva import togli_testo
+            togli_testo(rec)
         day = (rec.get("inizio") or datetime.datetime.now().isoformat())[:10]
         line = json.dumps(rec, ensure_ascii=False, default=str)
         with self._lock, open(self.folder / f"{self.PREFIX}{day}.jsonl", "a",
                               encoding="utf-8") as f:
             f.write(line + "\n")
+
+
+def _segnato_no(rec: dict) -> bool:
+    c = rec.get("conserva")
+    return isinstance(c, dict) and c.get("testo") is False
 
 
 def read_turns(folder: str, days: int | None = None) -> list[dict]:

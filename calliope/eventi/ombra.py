@@ -41,7 +41,7 @@ import weakref
 from . import misura, proiezioni
 from .registro import (Registri, porta_annuncio, porta_avviso_tutore, porta_coda,
                        porte_usate)
-from .tipi import e_annuncio, per_disco
+from .tipi import e_annuncio, per_disco, senza_parole
 
 SPENTO, OMBRA, ATTIVO = "spento", "ombra", "attivo"
 MODI = (SPENTO, OMBRA, ATTIVO)
@@ -582,7 +582,13 @@ class Ombra:
         testo = getattr(t, "text", None) if t is not None else None
         sat = getattr(getattr(self.c, "corsia", None), "nome", None)
 
+        # Le parole di questo turno non si conservano (12/10, calliope/conserva.py: dubbio con
+        # un minore, zona grigia): nel registro di un adulto restano solo in memoria
+        anonimo = isinstance(rec.get("conserva"), dict) and rec["conserva"].get("testo") is False
+
         def add(_tipo, **dati):
+            if anonimo:
+                dati = senza_parole(_tipo, dati)
             ev = reg.aggiungi(_tipo, turno, corsia=corsia, **dati)
             scritti.append(ev)
             return ev
@@ -725,6 +731,15 @@ class Ombra:
                                numeri=[n for n in u["_all"] if isinstance(n, int)],
                                info=[str(x) for x in u.get("_all_info") or ()]))
         brain = getattr(self.c, "brain", None)
+        # I dati del turno davanti alla frase (12/10, per il banco della scelta dei tool): quali
+        # blocchi c'erano (ora e chi parla, ricordi, riferimenti, sviluppo, proposta…) e quanto
+        # lunghi; mai il loro testo. Vis «turno»: la proiezione non li mette nella storia
+        blocchi = [b for b in getattr(brain, "last_dati_turno", None) or ()
+                   if isinstance(b, dict) and b.get("nome")]
+        if blocchi:
+            scritti.append(add("dati_del_turno", blocchi=[
+                {"nome": str(b["nome"]), "caratteri": int(b.get("caratteri") or 0)}
+                for b in blocchi]))
         # Gli argomenti decisi dal modello in questa risposta (§ 13): subito dopo la frase,
         # così il turno che ha cambiato argomento è del nuovo
         if self.attivo:
@@ -759,6 +774,12 @@ class Ombra:
                     non_fidato=bool(getattr(spec, "non_fidato", False)),
                     **({"fonte": f} if f else {}),
                     **({"vis": "registro"} if nome == STATO_TOOL else {})))
+        # Le schede mandate agli schermi in questa risposta (12/10): tipo, chiave, titolo e su
+        # quanti schermi; il contenuto resta nella cronologia degli schermi (vis «schermo»)
+        for sc in getattr(brain, "last_schede_mandate", None) or ():
+            if isinstance(sc, dict):
+                scritti.append(add("scheda_mandata", tipo=sc.get("tipo"), chiave=sc.get("chiave"),
+                                   titolo=sc.get("titolo"), schermi=sc.get("schermi")))
         # Il testo generato del turno (vis registro): serve al promemoria della parte non
         # detta se la risposta è stata interrotta (§ 11.4)
         generato = getattr(brain, "testo_generato", None) if self.attivo else None

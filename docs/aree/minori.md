@@ -317,3 +317,18 @@ Dallo stesso giro, documentato e non corretto (buco 2, passo 3 della macchina): 
 bene?» del cancello 1 non è una proposta, quindi la cortesia («grazie» → «Prego») risponde prima
 del cancello 2 e il segnale resta aperto fino al silenzio, e un «sì» del minore arriva al modello
 come consenso a una proposta fatta prima.
+
+## Nessuna conservazione per i minori (12/10, ramo `conserva-metrica`)
+
+Decisione [0028](../decisioni/0028-decisioni-roadmap-12-10.md) T1: turni, eventi e voce si tengono
+60 giorni per le misure, **mai** per i minori. Prima del 12/10 il registro dei turni teneva per 30
+giorni le parole dei minori (tolte solo per gli ospiti e per le frasi fermate dal guardiano) e il
+registro degli eventi le teneva 7 giorni. Ora (`calliope/conserva.py`, il solo posto che decide): nel
+registro dei turni di un minore restano solo i numeri (anche per la fascia nel campo `ascolto`, e
+per ogni frase con un dubbio tra un adulto e un minore: `incerta`, `minore_vicino`, il proprietario
+incerto); il registro degli eventi di un minore sta solo in memoria (mai su disco, non si riprende
+dopo un riavvio, le righe di prima le toglie la rotazione); la voce non si salva mai e un minore non
+può dare il consenso (`dati_conservati` lo rifiuta). Le parole dei minori nei file del registro dei
+turni di prima si tolgono una volta all'avvio. Restano come prima: gli avvisi ai tutori, i segnali
+dei cancelli (`cancelli.json`), le richieste e i compiti (memoria dei minori), l'archivio delle
+conversazioni (`conversazioni_giorni`, da decidere se allinearlo). Prova `prova_conserva`.

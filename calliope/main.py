@@ -266,6 +266,10 @@ class Avvio:
         cfg, s = self.cfg, self.s
         s.registry = SpeakerRegistry(cfg)
         self.speaker_ctx = SpeakerContext(s.registry)
+        # La conservazione dei dati (12/10, calliope/conserva.py, decisione 0028 T1): turni,
+        # eventi e voce dei soli adulti riconosciuti, per turn_log_days giorni; niente GPU
+        from .conserva import Conservazione
+        s.conserva = Conservazione(cfg, s.registry, log=lambda m: print(m, flush=True))
         # L'impronta si calcola in parallelo a Whisper: 25–50 ms che non pesano sulla risposta
         s.embed_pool = ThreadPoolExecutor(max_workers=1)
         # Persone registrate e voci da registrare di nuovo (es. dopo il passaggio dall'MFCC a
@@ -576,7 +580,9 @@ class Avvio:
                                  # File allegati dagli schermi (05/10, calliope/allegati.py)
                                  allegati=bool(getattr(cfg, "allegati_enabled", True)
                                                and schermi is not None),
-                                 cassetto=cassetto is not None)
+                                 cassetto=cassetto is not None,
+                                 # Consenso alla voce e «svuota» (12/10, calliope/conserva.py)
+                                 conserva=s.conserva is not None)
         # Foto (e file allegati) mandati senza domanda: aspettano la frase dopo della stessa
         # persona
         s.foto_attesa = InAttesa(getattr(cfg, "immagini_attesa_s", 120.0))
@@ -590,6 +596,7 @@ class Avvio:
                                     casa=s.casa, capacita=capacita.REGISTRO,
                                     installazioni=s.installazioni, schermi=schermi,
                                     lavori=lavori, ufficio=ufficio, archivio=self.archivio,
+                                    conserva=s.conserva,
                                     web=web, conversazioni=conv_arch, modalita=self.modalita,
                                     cassetto=cassetto)
 
@@ -610,13 +617,20 @@ class Avvio:
             try:
                 disco = Disco.da_archivio(conv_arch, log=log)
                 conv_arch.eventi = disco
-                giorni = int(getattr(cfg, "eventi_giorni", 7) or 0)
-                conv_arch.su_pulizia.append(lambda: disco.ruota(giorni))
+                giorni = int(getattr(cfg, "eventi_giorni", 60) or 0)
+                # (12/10) i registri di minori e ospiti rimasti su disco da prima: via
+                cons = s.conserva
+                effimero = ((lambda k: not cons.registro_su_disco(k)) if cons is not None
+                            else None)
+                conv_arch.su_pulizia.append(lambda: disco.ruota(giorni, effimero=effimero))
+                if cons is not None:
+                    cons.eventi = disco
             except Exception as e:  # noqa: BLE001 — senza disco gli eventi restano in memoria
                 print(f"[EVENTI] tabella degli eventi non pronta ({type(e).__name__}: {e}): "
                       f"solo in memoria", flush=True)
                 disco = None
-        s.eventi = Registri(disco, log=log)
+        s.eventi = Registri(disco, log=log, conserva=(s.conserva.registro_su_disco
+                                                      if s.conserva is not None else None))
         s.eventi.riprendi(float(getattr(cfg, "storia_inattiva_s", 0) or 0))
 
     def attiva_minori(self) -> bool:
@@ -862,7 +876,20 @@ class Avvio:
         # rami che finiscono con `continue` vengono registrati (vedi turnlog.py)
         # Profilo e modello in ogni turno (06/10, P6): le reti per modello si misurano da lì
         s.turns = TurnLog(cfg.turn_log_dir, cfg.turn_log_days,
-                          modello={"profilo": cfg.llm_profilo or None, "modello": cfg.llm_model})
+                          modello={"profilo": cfg.llm_profilo or None, "modello": cfg.llm_model},
+                          conserva=s.conserva)
+        if s.conserva is not None:
+            # Una volta: le parole di minori, ospiti e voci incerte scritte prima del 12/10; poi
+            # la rotazione della voce (giorni, consenso, tetto). In secondo piano: la voce no
+            s.conserva.turnlog = s.turns
+
+            def _prima_pulizia(c=s.conserva, lock=s.turns._lock):
+                try:
+                    c.ripulisci_registro(lock)
+                    c.ruota()
+                except Exception as e:  # noqa: BLE001 — la pulizia non ferma Calliope
+                    print(f"[CONSERVA] pulizia non riuscita: {type(e).__name__}", flush=True)
+            threading.Thread(target=_prima_pulizia, daemon=True, name="conserva").start()
         if s.schermi is not None:
             # I rifiuti dello scritto senza conversazione (thread del server, 05/10)
             s.schermi.registro_turni = s.turns.write

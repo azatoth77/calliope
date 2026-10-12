@@ -12,6 +12,8 @@ esista un venv, e non dipende dalla versione di Calliope che sta gestendo.
     calliope versioni | calliope stato [--dettagli|--json] | calliope extra NOME…
     calliope satellite --abbina CODICE --stanza STANZA | --elenco | --revoca X | --certificato
     calliope schermi [--abbina CODICE --stanza STANZA | --revoca X | --certificato --host IP]
+    calliope conserva [--json | --svuota [--persona NOME]]   i dati conservati per le misure
+                                               (calliope/conserva.py, 12/10)
     calliope avvia | ferma | riavvia [--attendi-lavori [MIN]] [--forza] | log | esegui [arg…]
     calliope motore whisper|vllm [argomenti]   gli script dei server dei modelli della
                                                versione in uso (setup/linux/motore/)
@@ -857,8 +859,9 @@ def main(argv=None) -> int:
     # Comandi che passano gli argomenti a Calliope così come sono (satellite: abbinamento e
     # certificato dei satelliti, calliope/satellite/__main__.py, nella cartella dei dati;
     # schermi: elenco, abbinamento e certificato per i telefoni, calliope/schermi/__main__.py)
+    # conserva (12/10): quanto è conservato per le misure e «svuota» (calliope/conserva.py)
     moduli = {"esegui": "calliope", "stato": "calliope.stato", "satellite": "calliope.satellite",
-              "schermi": "calliope.schermi"}
+              "schermi": "calliope.schermi", "conserva": "calliope.conserva"}
     if argv and argv[0] in moduli:
         g = Gestore(app)
         try:

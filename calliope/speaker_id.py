@@ -143,6 +143,13 @@ class UserProfile:
     impronta_data: str | None = None
     riconoscimento: float | None = None
     samples: list[np.ndarray] = field(default_factory=list)  # embedding dell'arruolamento
+    # La voce si conserva per le misure? (12/10, calliope/conserva.py, decisione 0028 T1): None
+    # = mai detto (sì solo per chi amministra), True = il «sì» detto a Calliope, False =
+    # revocato. Con il giorno della scelta. Una versione di prima non conosce il campo e lo perde
+    # riscrivendo il file: si torna a «mai detto» (niente voce per gli altri adulti; per chi
+    # amministra il sì di partenza, e un suo «no» va ridetto)
+    voce_conservata: bool | None = None
+    voce_conservata_il: str | None = None
     # Identificativo stabile: la memoria (memory.py) è legata a questo, non al nome,
     # così una rinomina non perde i ricordi
     id: str = field(default_factory=lambda: uuid.uuid4().hex)
@@ -183,6 +190,8 @@ class UserProfile:
             # Il vecchio campo, per una versione di Calliope di prima (calliope torna): un
             # minore con Vikidia resta almeno «giovane»
             "giovane": bool(self.fascia or self.nascita) and self.young,
+            "voce_conservata": self.voce_conservata,
+            "voce_conservata_il": self.voce_conservata_il,
         }
 
     @classmethod
@@ -199,7 +208,11 @@ class UserProfile:
                    impronta_data=d.get("impronta_data") if isinstance(d.get("impronta_data"),
                                                                       str) else None,
                    riconoscimento=(float(d["riconoscimento"]) if isinstance(
-                       d.get("riconoscimento"), (int, float)) else None))
+                       d.get("riconoscimento"), (int, float)) else None),
+                   voce_conservata=(d["voce_conservata"] if isinstance(
+                       d.get("voce_conservata"), bool) else None),
+                   voce_conservata_il=(d["voce_conservata_il"] if isinstance(
+                       d.get("voce_conservata_il"), str) else None))
         # Migrazione del 05/10: «giovane» senza data di nascita = fascia «ragazzi»
         if d.get("giovane") and not prof.nascita and not prof.fascia:
             prof.fascia = "ragazzi"

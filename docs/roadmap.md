@@ -79,8 +79,11 @@ comporta nella taglia ridotta da 8 GB (V7, E11).
 ### 0. Trasversali (decisione [0028](decisioni/0028-decisioni-roadmap-12-10.md))
 
 1. **Conservazione dei dati** (T1): turni e audio dei soli adulti in privato per 60 giorni, minori
-   e ospiti mai, un comando per svuotare tutto. *Quasi* · dipende da: dove e come si salva l'audio
-   (oggi solo per il debug), rotazione degli eventi oggi a 7 giorni.
+   e ospiti mai, un comando per svuotare tutto. **Fatta il 12/10** (ramo `conserva-metrica`,
+   `calliope/conserva.py`): eventi degli adulti 60 giorni, voce in μ-law con il consenso (chi
+   amministra sì finché non dice no), `calliope conserva --svuota [--persona]` e a voce per chi
+   amministra; nel profilo ridotto c'è uguale (niente GPU). Resta da decidere l'archivio delle
+   conversazioni di minori e ospiti ([contesto-conversazione](aree/contesto-conversazione.md)).
 2. **Piano unico della memoria della DGX** (T4): un budget scritto in `calliope stato --piano`
    prima di ogni modello nuovo. *Quasi* · dipende da: una misura della memoria libera in una
    giornata tipica.
@@ -137,7 +140,8 @@ voce raccontava male gli esiti, i comandi del flusso si perdevano.
    conversazione valgono come etichetta, il resto lo rivede l'agente a campione e chi amministra
    vede solo i casi dubbi) ([`ricerche/2026-10-10-scelta-dei-tool.md`](ricerche/2026-10-10-scelta-dei-tool.md)).
    *Pronta* (metrica), *da approfondire* (banco) · dipende da: la conservazione dei dati (0.1) e
-   un estrattore dei casi.
+   un estrattore dei casi. **Metrica fatta il 12/10** (`calliope/scelta_tool.py`, con gli eventi
+   `dati_del_turno` e `scheda_mandata` scritti per il banco); resta il banco.
 8. **Rinomina degli altri tool** (E7): la regola dei nomi dell'08/10 non è più vincolante, decide
    il banco; la rinomina aspetta i dati. *Da approfondire* · dipende da: il banco (2.7).
 9. **Modalità configurazione guidata dalla voce** e pannello con le azioni (E9): Primo/a è chi ha

@@ -20,6 +20,11 @@ progetto docs/ricerche/2026-10-10-registro-eventi.md).
   `secure_delete` e il checkpoint del WAL, e il registro in memoria svuotato (§ 2.6 f).
 - **Porte** (§ 2.5): ciò che attraversa i registri passa da una funzione `porta_*` con un nome,
   che scrive un evento nuovo nel registro di destinazione (mai una copia di eventi).
+- **Conservazione** (12/10, decisione 0028 T1, calliope/conserva.py): con `Registri(conserva=…)`
+  vanno su disco solo i registri delle persone adulte (e quello della casa); minori, ospiti e
+  voci incerte restano in memoria, per la conversazione, e un riavvio non li riprende. La
+  rotazione toglie quelli rimasti da prima (`Disco.ruota(effimero=…)`); `Disco.svuota` è il
+  comando per svuotare (tutto o una persona).
 
 Solo libreria standard e sqlite3.
 """
@@ -194,10 +199,13 @@ class Disco:
                 self.log(f"[EVENTI] eventi dell'ospite non cancellati: {type(e).__name__}")
         self._lavoro(f)
 
-    def ruota(self, giorni: float, ora: float | None = None) -> None:
+    def ruota(self, giorni: float, ora: float | None = None, effimero=None) -> None:
         """Dopo `giorni` gli eventi delle conversazioni chiuse si cancellano (l'archivio ne tiene
-        la forma dei turni, § 2.3); quelli di un segmento mai chiuso dopo il doppio."""
+        la forma dei turni, § 2.3); quelli di un segmento mai chiuso dopo il doppio. Con
+        `effimero(chiave)` (12/10) anche i registri che non devono stare su disco."""
         if giorni <= 0:
+            if effimero is not None:
+                self._togli_effimeri(effimero)
             return
         ora = time.time() if ora is None else ora
         limite = ora - giorni * 86400
@@ -218,6 +226,43 @@ class Disco:
             except Exception as e:  # noqa: BLE001
                 self.log(f"[EVENTI] rotazione non riuscita: {type(e).__name__}: {e}")
         self._lavoro(f)
+        if effimero is not None:
+            self._togli_effimeri(effimero)
+
+    def _togli_effimeri(self, effimero):
+        """I registri che non devono stare su disco (minori, ospiti: `effimero(chiave)`), scritti
+        da una versione di prima o prima che la persona fosse un minore: via tutte le righe."""
+        def f():
+            try:
+                with self.lock:
+                    chiavi = [r[0] for r in self.db.execute(
+                        "SELECT DISTINCT registro FROM eventi")]
+                    via = [k for k in chiavi if effimero(k)]
+                    for k in via:
+                        cancella_sicuro(self.db, "DELETE FROM eventi WHERE registro = ?", (k,))
+                    self.db.commit()
+                    if via:
+                        checkpoint(self.db)
+            except Exception as e:  # noqa: BLE001
+                self.log(f"[EVENTI] registri da non tenere non tolti: {type(e).__name__}")
+        self._lavoro(f)
+
+    def svuota(self, chiave: str | None = None) -> int:
+        """Il comando per svuotare (calliope/conserva.py): tutti gli eventi (chiave None) o
+        quelli di un registro, con `secure_delete` e il checkpoint del WAL. A differenza di
+        «dimentica» non tocca l'archivio delle conversazioni e non lascia la richiesta in
+        `eventi_dimenticati`. Sincrono; restituisce le righe tolte."""
+        with self._lock_lista:
+            self._da_scrivere = [e for e in self._da_scrivere
+                                 if chiave is not None and e.registro != chiave]
+        with self.lock:
+            if chiave is None:
+                n = cancella_sicuro(self.db, "DELETE FROM eventi")
+            else:
+                n = cancella_sicuro(self.db, "DELETE FROM eventi WHERE registro = ?", (chiave,))
+            self.db.commit()
+            checkpoint(self.db)
+        return n
 
 
 def cancella_sicuro(db, sql: str, parametri=()) -> int:
@@ -348,9 +393,12 @@ class Registri:
     """I registri del processo. Dà **un** registro per volta: nessuna lettura di più registri
     insieme (§ 2.1, § 11.2)."""
 
-    def __init__(self, disco: Disco | None = None, log=print):
+    def __init__(self, disco: Disco | None = None, log=print, conserva=None):
         self.disco = disco
         self.log = log
+        # (12/10) `conserva(chiave)` → True se il registro va su disco (Conservazione.
+        # registro_su_disco); None = tutti, come prima (prove)
+        self.conserva = conserva
         self._regs: dict[str, Registro] = {}
         self._lock = threading.Lock()
         self.troncati = 0
@@ -373,7 +421,13 @@ class Registri:
                         seq = self.disco.ultimo_seq(chiave)
                     except Exception:  # noqa: BLE001 — il disco non ferma la conversazione
                         seq = 0
-                r = self._regs[chiave] = Registro(chiave, self.disco, seq)
+                su_disco = True
+                if self.conserva is not None:
+                    try:
+                        su_disco = bool(self.conserva(chiave))
+                    except Exception:  # noqa: BLE001 — nel dubbio solo in memoria
+                        su_disco = False
+                r = self._regs[chiave] = Registro(chiave, self.disco if su_disco else None, seq)
             return r
 
     def esiste(self, chiave: str) -> bool:
@@ -407,6 +461,8 @@ class Registri:
             self.log(f"[EVENTI] registri non riletti: {type(e).__name__}: {e}")
             return out
         for chiave in chiavi:
+            if self.conserva is not None and not self._su_disco(chiave):
+                continue                       # minori e ospiti: mai ripresi dal disco
             try:
                 self._riprendi_uno(chiave, scadenza_s, ora, out)
             except Exception as e:  # noqa: BLE001 — un registro rovinato non ferma l'avvio
@@ -420,6 +476,12 @@ class Registri:
                                   if out["troncati"] else ""))
         self.disco.scrivi()
         return out
+
+    def _su_disco(self, chiave: str) -> bool:
+        try:
+            return bool(self.conserva(chiave))
+        except Exception:  # noqa: BLE001
+            return False
 
     def _riprendi_uno(self, chiave: str, scadenza_s: float, ora: float, out: dict):
         disco = self.disco

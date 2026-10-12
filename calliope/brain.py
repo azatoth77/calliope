@@ -39,7 +39,7 @@ from .sicurezza import instruction_fact
 from .testi import MESI as _MESI, NIENTE, SENTENCE_END as _SENTENCE_END
 from .tools import dialogo
 from .tools.argomento import AZIONI as ARGOMENTO_AZIONI, TOOL as ARGOMENTO_TOOL
-from .tools.registry import ToolRegistry
+from .tools.registry import NOMI_VECCHI, ToolRegistry
 from .tools.spec import ToolContext
 
 
@@ -3753,6 +3753,8 @@ class Brain:
             self._accogli_immagini()
             self._accogli_allegati()
         self.last_tools = []    # cosa è successo in questa risposta (per il registro dei turni)
+        # Le schede mandate agli schermi in questa risposta (12/10: l'evento scheda_mandata)
+        self.last_schede_mandate = []
         self.last_secrets = []  # valori da non scrivere nel registro (codici degli schermi)
         self.last_private = False  # un tool riservato (documenti di casa): risposta fuori dal registro
         if (self.tool_ctx is not None and hasattr(self.tool_ctx, "user_text")
@@ -3770,26 +3772,35 @@ class Brain:
         # (continuazione: il contesto va in fondo, dopo la risposta appena data)
         start = len(self.history) - 1 if user_text is not None else len(self.history)
         user_text = user_text or ""
+        # I nomi dei blocchi dei dati del turno (12/10: l'evento dati_del_turno, per il banco
+        # della scelta dei tool): solo nomi e lunghezze, mai il testo
+        nomi_blocchi: list[str] = []
+
+        def blocco(nome: str, msgs: list) -> list:
+            nomi_blocchi.extend([nome] * len(msgs))
+            return msgs
+
         # Ora, data e chi parla per primi, poi i ricordi (TURN_CONTEXT_MSG)
-        memory = self._turn_context() + self._memory_message()
+        memory = blocco("turno", self._turn_context()) + blocco("ricordi",
+                                                                self._memory_message())
         # Le foto della conversazione che il modello ha davanti (IMG_TURN_MSG)
         foto_msg = self._foto_turno(start if user_text else None)
         if foto_msg:
-            memory = memory + [{"role": "system", "content": foto_msg}]
+            memory = memory + blocco("foto", [{"role": "system", "content": foto_msg}])
             self._rule("foto_davanti")
         # Contesto del solo turno (es. i passaggi della biblioteca per «approfondisci»):
         # come i ricordi, subito prima della domanda e fuori dalla storia
         if context:
-            memory = memory + [{"role": "system", "content": context}]
+            memory = memory + blocco("contesto", [{"role": "system", "content": context}])
         # L'ultimo dispositivo della casa, per «accendila», «spegnilo» (REFERENCE_MSG)
         reference = self._take_reference()
         if reference:
-            memory = memory + [{"role": "system", "content": reference}]
+            memory = memory + blocco("riferimento_casa", [{"role": "system", "content": reference}])
             self._rule("riferimento_casa")
         # L'ultima voce dell'agenda, per «impostalo di un minuto», «spostalo» (AGENDA_MSG)
         agenda_ref = self._take_agenda_reference()
         if agenda_ref:
-            memory = memory + [{"role": "system", "content": agenda_ref}]
+            memory = memory + blocco("riferimento_agenda", [{"role": "system", "content": agenda_ref}])
             self._rule("riferimento_agenda")
         # Il lavoro dell'agente appena detto, per «fammene un PDF» (LAVORO_MSG)
         lavoro_ref = self._lavoro_turno() if user_text else None
@@ -3799,7 +3810,7 @@ class Brain:
             except AttributeError:
                 pass
         if lavoro_ref:
-            memory = memory + [{"role": "system", "content": lavoro_ref[0]}]
+            memory = memory + blocco("riferimento_lavoro", [{"role": "system", "content": lavoro_ref[0]}])
             self._rule("riferimento_lavoro")
         # Le ricerche nei turni prima, per «approfondiamo», «e il festival?», «torniamo alla
         # notizia di prima» (RICERCA_MSG)
@@ -3812,10 +3823,10 @@ class Brain:
                 # Precedenza scritta (analisi delle regole del 09/10, § 3.10): con
                 # un'estensione nominata nella frase vale quella, non la ricerca di prima
                 testo_ricerca += RICERCA_EST
-            memory = memory + [{"role": "system", "content": testo_ricerca}]
+            memory = memory + blocco("ricerca", [{"role": "system", "content": testo_ricerca}])
             self._rule(ricerca[2])
         if est_msg:
-            memory = memory + [{"role": "system", "content": est_msg}]
+            memory = memory + blocco("estensioni", [{"role": "system", "content": est_msg}])
             if "nomina" in est_msg:
                 self._rule("estensione_nominata")
             if "le estensioni che ci sono adesso" in est_msg:
@@ -3823,25 +3834,27 @@ class Brain:
         # Lo sviluppo aperto di chi parla, e la sua fase (SVILUPPO_MSG)
         sv_msg = self._sviluppo_turno(user_text) if user_text else None
         if sv_msg:
-            memory = memory + [{"role": "system", "content": sv_msg}]
+            memory = memory + blocco("sviluppo", [{"role": "system", "content": sv_msg}])
             self._rule("sviluppo_modalita")
         # Il blocco dello stato del registro degli eventi (10/10, passo 3): argomenti e
         # promemoria non parlati
         if user_text:
-            memory = memory + self._blocco_eventi()
+            memory = memory + blocco("stato_eventi", self._blocco_eventi())
         # Azione in sospeso: dopo i ricordi, l'ultima cosa prima della domanda. Messa prima
         # dei ricordi (o senza), il «sì» dopo «La apro?» veniva preso per un ringraziamento
         if pending:
-            memory = memory + [{"role": "system", "content": pending}]
+            memory = memory + blocco("proposta", [{"role": "system", "content": pending}])
         # I «no» della persona alle proposte di questa conversazione (09/10, RIFIUTO_MSG)
         rif_msg = self._rifiuti_msg() if user_text else None
         if rif_msg:
-            memory = memory + [{"role": "system", "content": rif_msg}]
+            memory = memory + blocco("rifiuti", [{"role": "system", "content": rif_msg}])
             self._rule("rifiuto_nei_dati")
         # Il «sì» di chi non ha la proposta (07/10, SOSPESO_ALTRUI_MSG)
         if getattr(self, "_altrui_msg", None):
-            memory = memory + [{"role": "system", "content": self._altrui_msg}]
+            memory = memory + blocco("proposta_altrui", [{"role": "system", "content": self._altrui_msg}])
             self._rule("sospeso_altrui_consenso")
+        self.last_dati_turno = [{"nome": n, "caratteri": len(str(m.get("content") or ""))}
+                                for n, m in zip(nomi_blocchi, memory)]
 
         tail: list[dict] = []    # spinta del solo giro successivo, in fondo (vedi sotto)
 
@@ -4735,6 +4748,12 @@ class Brain:
                 print(f"   [SCHERMI] {card.get('tipo')} → {', '.join(r['schermi'])}", flush=True)
             out.append({"tipo": card.get("tipo"), "visibilita": card.get("visibilita"),
                         "schermi": len(r.get("schermi") or ()), "motivo": r.get("motivo") or None})
+            mandate = self.__dict__.get("last_schede_mandate")
+            if isinstance(mandate, list):
+                titolo = card.get("titolo")
+                mandate.append({"tipo": card.get("tipo"), "chiave": card.get("chiave"),
+                                "titolo": str(titolo)[:120] if titolo else None,
+                                "schermi": len(r.get("schermi") or ())})
         return out
 
     def _nome_corretto(self, call: dict):
@@ -4757,6 +4776,7 @@ class Brain:
             call["arguments"] = argomenti_con_azione(conv[1], call.get("arguments"))
             print(f"   [TOOL] nome con l'azione: {nome} → {conv[0]}({call['arguments']})",
                   flush=True)
+            self._nome_inventato = nome
             self._rule("tool_nome_azione")
             return
         vicino = getattr(tools, "nome_vicino", None)
@@ -4764,10 +4784,14 @@ class Brain:
         if vero:
             print(f"   [TOOL] nome corretto: {nome} → {vero}", flush=True)
             call["name"] = vero
+            self._nome_inventato = nome
             self._rule("tool_nome_corretto")
 
     def _run_tool(self, call: dict, level: str) -> str:
         """Esegue un tool nativo e restituisce il risultato (JSON) al modello."""
+        # Il nome scritto dal modello, se non esisteva ed è stato corretto (12/10: la metrica
+        # della scelta dei tool, calliope/scelta_tool.py)
+        self._nome_inventato = None
         self._nome_corretto(call)
         args = call["arguments"] if isinstance(call["arguments"], dict) else {}
         if call["name"] == stato_dialogo.TOOL:
@@ -4944,7 +4968,15 @@ class Brain:
                                 # La decisione della politica per valore accanto a quella vera
                                 # (08/10, fase 3, in ombra): nomi ed etichette, nessun valore
                                 **({"politica_ombra": ombra} if ombra else {}),
+                                # Il nome inventato dal modello (12/10): corretto da Brain
+                                # (`nome_inventato`, quello scritto) o senza un tool vicino
+                                # (`sconosciuto`); per la metrica della scelta dei tool
+                                **({"nome_inventato": self._nome_inventato}
+                                   if getattr(self, "_nome_inventato", None) else {}),
+                                **({"sconosciuto": True} if spec is None
+                                   and call["name"] not in NOMI_VECCHI else {}),
                                 **corr})
+        self._nome_inventato = None
         # Il risultato di un tool non fidato (web, estensioni, archivio, agenti) entra nella
         # busta della sua fonte: la conversazione resta contaminata finché c'è (05/10)
         fonte = politica.fonte_di(call["name"], spec)

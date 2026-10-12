@@ -579,8 +579,10 @@ class Config:
     # modello). Si accende a mano nel file locale; per tornare indietro «ombra»
     eventi: str = "ombra"
     # Dopo questi giorni gli eventi di una conversazione chiusa si cancellano: resta la forma dei
-    # turni nell'archivio (§ 2.3). 0 = mai
-    eventi_giorni: int = 7
+    # turni nell'archivio (§ 2.3). 0 = mai. Dal 12/10 60 (decisione 0028, T1: si tengono per
+    # misurare, come i turni); solo quelli degli adulti: i registri di minori e ospiti non vanno
+    # mai su disco (calliope/conserva.py)
+    eventi_giorni: int = 60
     # Avviso in `calliope stato` se il registro cresce oltre questi MB al giorno (§ 10, punto 3)
     eventi_avviso_mb: float = 50.0
     # Avviso in `calliope stato --turni` se costruire la proiezione del contesto costa più di
@@ -1327,9 +1329,20 @@ class Config:
     # configurazione. La variabile d'ambiente CALLIOPE_HA_TOKEN vince sul file.
     segreti_file: str = "segreti.yaml"
     # Registro dei turni (JSONL, un file al giorno): base dell'auto-miglioramento.
-    # CALLIOPE_TURN_LOG="" lo spegne. Degli ospiti non si salva il testo.
+    # CALLIOPE_TURN_LOG="" lo spegne. Le parole restano solo per gli adulti riconosciuti: di
+    # ospiti, minori e voci incerte solo i numeri (12/10, decisione 0028, calliope/conserva.py).
+    # La cartella è privata (fuori da git, permessi 700 su Linux) e tiene anche la voce
     turn_log_dir: str | None = os.environ.get("CALLIOPE_TURN_LOG", "registro") or None
-    turn_log_days: int = 30               # dopo si cancellano
+    # Dopo questi giorni turni e voce si cancellano (60 dal 12/10: prima 30)
+    turn_log_days: int = 60
+    # La voce degli adulti riconosciuti sopra soglia, con il loro consenso detto a Calliope (chi
+    # amministra: sì finché non dice no), in turn_log_dir/voce, in μ-law (~16 KB al secondo,
+    # ~15 MB in una giornata piena della DGX). Per banco, regressione e taratura delle soglie;
+    # mai inviata, mai di minori e ospiti. false = mai la voce (le registrazioni che ci sono si
+    # cancellano alla rotazione del giorno dopo)
+    conserva_voce: bool = True
+    # Tetto della voce conservata, in MB: oltre, si tolgono i giorni più vecchi. 0 = nessun tetto
+    conserva_voce_mb: int = 2000
     # Latenza vera della voce (06/10, calliope/latenza.py): se la mediana della prima frase di
     # oggi o di ieri (dal registro dei turni, almeno 10 risposte) supera questi secondi, lo
     # dicono l'avvio e `calliope stato`; dettagli con `calliope stato --turni`. 0 = mai. Dal 02
@@ -2681,8 +2694,8 @@ SEZIONI: dict[str, list[str]] = {
             "web_searxng_pausa_controlli", "web_searxng_pausa_giorni",
             "web_searxng_min_motori", "web_searxng_stato", "web_searxng_registro"],
     "segreti": ["segreti_file"],
-    "registro": ["turn_log_dir", "turn_log_days", "latenza_avviso_s", "attrito_avviso",
-                 "debug_audio_dir"],
+    "registro": ["turn_log_dir", "turn_log_days", "conserva_voce", "conserva_voce_mb",
+                 "latenza_avviso_s", "attrito_avviso", "debug_audio_dir"],
     "rete": ["online"],
 }
 
@@ -2844,6 +2857,7 @@ LIMITI: dict[str, tuple[float, float]] = {
     "esercizi_campione": (0, 50),
     "suoni_volume": (0.0, 1.0),
     "vad_threshold": (0.0, 1.0), "wake_consecutive": (1, 50), "turn_log_days": (1, 3650),
+    "conserva_voce_mb": (0, 1_000_000),
     "latenza_avviso_s": (0.0, 60.0), "attrito_avviso": (0.0, 100.0),
     "llm_attesa_avvio_s": (0.0, 86_400.0), "azione_in_sospeso_s": (0.0, 3600.0),
     "intento_valido_s": (0.0, 3600.0),

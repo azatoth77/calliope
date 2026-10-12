@@ -794,8 +794,10 @@ conversazioni:
   # modello). Si accende a mano nel file locale; per tornare indietro «ombra»
   eventi: ombra
   # Dopo questi giorni gli eventi di una conversazione chiusa si cancellano: resta la forma dei
-  # turni nell'archivio (§ 2.3). 0 = mai
-  eventi_giorni: 7
+  # turni nell'archivio (§ 2.3). 0 = mai. Dal 12/10 60 (decisione 0028, T1: si tengono per
+  # misurare, come i turni); solo quelli degli adulti: i registri di minori e ospiti non vanno
+  # mai su disco (calliope/conserva.py)
+  eventi_giorni: 60
   # Avviso in `calliope stato` se il registro cresce oltre questi MB al giorno (§ 10, punto 3)
   eventi_avviso_mb: 50.0
   # Avviso in `calliope stato --turni` se costruire la proiezione del contesto costa più di
@@ -1715,11 +1717,21 @@ segreti:
 
 registro:
   # Registro dei turni (JSONL, un file al giorno): base dell'auto-miglioramento.
-  # CALLIOPE_TURN_LOG="" lo spegne. Degli ospiti non si salva il testo.
+  # CALLIOPE_TURN_LOG="" lo spegne. Le parole restano solo per gli adulti riconosciuti: di
+  # ospiti, minori e voci incerte solo i numeri (12/10, decisione 0028, calliope/conserva.py).
+  # La cartella è privata (fuori da git, permessi 700 su Linux) e tiene anche la voce
   # (variabile d'ambiente CALLIOPE_TURN_LOG, che vince su questo file)
   turn_log_dir: registro
-  # dopo si cancellano
-  turn_log_days: 30
+  # Dopo questi giorni turni e voce si cancellano (60 dal 12/10: prima 30)
+  turn_log_days: 60
+  # La voce degli adulti riconosciuti sopra soglia, con il loro consenso detto a Calliope (chi
+  # amministra: sì finché non dice no), in turn_log_dir/voce, in μ-law (~16 KB al secondo,
+  # ~15 MB in una giornata piena della DGX). Per banco, regressione e taratura delle soglie;
+  # mai inviata, mai di minori e ospiti. false = mai la voce (le registrazioni che ci sono si
+  # cancellano alla rotazione del giorno dopo)
+  conserva_voce: true
+  # Tetto della voce conservata, in MB: oltre, si tolgono i giorni più vecchi. 0 = nessun tetto
+  conserva_voce_mb: 2000
   # Latenza vera della voce (06/10, calliope/latenza.py): se la mediana della prima frase di
   # oggi o di ieri (dal registro dei turni, almeno 10 risposte) supera questi secondi, lo
   # dicono l'avvio e `calliope stato`; dettagli con `calliope stato --turni`. 0 = mai. Dal 02
