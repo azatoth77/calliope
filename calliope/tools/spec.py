@@ -94,6 +94,9 @@ class ToolContext:
     # schema o eccezione del tool), non il tool: niente dati, quindi niente busta dei dati non
     # fidati. Brain lo azzera prima di ogni chiamata e lo legge dopo
     errore_registro: bool = False
+    # La conservazione dei dati (12/10, calliope/conserva.Conservazione): il consenso alla voce
+    # e «svuota» (tool dati_conservati), o None
+    conserva: Any = None
     # Il gioco sullo schermo di chi parla che aspetta un comando a voce (11/10, la imposta il
     # ciclo per il turno, Giochi.ascolto): {partita, schermo, titolo, comandi, giocatore}, o
     # None. gioco_comando passa solo uno di questi comandi

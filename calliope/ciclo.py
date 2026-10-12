@@ -135,6 +135,9 @@ class Servizi:
     eventi: object = None
     cortesia: object = None
     turns: object = None                 # TurnLog
+    # La conservazione dei dati (12/10, calliope/conserva.py, decisione 0028 T1): chi tiene le
+    # parole e la voce; None = nessuna voce salvata e le parole come prima (prove)
+    conserva: object = None
     attiva_minori: object = None         # () → True se ha registrato i tool dei minori
     # Cambiano a voce (modalità, main.applica_modalita) o da un'installazione
     wake: object = None
@@ -541,7 +544,16 @@ class Ciclo:
     def _scrivi_turno(self, rec: dict):
         """Il turno nel registro dei turni, con prima il passo 0 e l'ombra del registro degli
         eventi (10/10, calliope/eventi/ombra.py): la voce ha già finito, il disco del registro
-        degli eventi va a lotti nel thread dell'archivio."""
+        degli eventi va a lotti nel thread dell'archivio. Prima di tutto la conservazione
+        (12/10, calliope/conserva.py): se le parole del turno restano (lo leggono l'ombra e il
+        registro dei turni) e la voce della frase, solo di un adulto riconosciuto che ha detto
+        sì. `self._turno` è il turno di questo `rec`."""
+        cons = getattr(self.s, "conserva", None)
+        if cons is not None and isinstance(rec, dict):
+            t = self._turno
+            audio = (getattr(t, "audio", None)
+                     if t is not None and getattr(t, "scritto", None) is None else None)
+            cons.al_turno(rec, audio, int(getattr(self.s.cfg, "sample_rate", 16000) or 16000))
         if self.ombra is not None:
             self.ombra.chiudi_turno(rec, self._turno)
         self.s.turns.write(rec)
@@ -1812,7 +1824,9 @@ class Ciclo:
         speaker_ctx.identified_by = "schermo" if prof else None
         t.speaker_name = prof.name if prof else None
         self.rec["voce"] = {"nome": t.speaker_name, "modo": "schermo" if prof else "ospite",
-                            "schermo": t.scritto.get("schermo")}
+                            "schermo": t.scritto.get("schermo"),
+                            # L'id del profilo (12/10): la conservazione e «svuota» per persona
+                            **({"id": prof.id} if prof else {})}
         speaker_ctx.aggiorna_conversazione(t.speaker_name, speaker_ctx.identified_by,
                                            True, None)
 
@@ -2108,7 +2122,8 @@ class Ciclo:
         # Azzerare a None evita che resti lo speaker del turno precedente.
         speaker_ctx.current_speaker = name
         secondo, sim2 = getattr(t, "voce_secondo", (None, None))
-        self.rec["voce"] = {"nome": name, "migliore": best, "punteggio": round(sim, 3),
+        self.rec["voce"] = {"nome": name, **({"id": self._persona_id(name)} if name else {}),
+                            "migliore": best, "punteggio": round(sim, 3),
                             "modo": ("continuita" if t.continuita else "proprietario"
                                      if t.proprietario else how),
                             "voce_s": round(t.voiced_s, 2), "aggiornata": adapted,

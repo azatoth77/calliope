@@ -2060,7 +2060,7 @@ def build_registry(biblioteca: bool = False, pc: dict | None = None,
                    web=None, conversazioni: bool = False,
                    immagini: dict | None = None,
                    minori_tool: bool = False, allegati: bool = False,
-                   cassetto: bool = False) -> ToolRegistry:
+                   cassetto: bool = False, conserva: bool = False) -> ToolRegistry:
     """Costruisce il registro dei tool nativi di Calliope.
 
     `biblioteca_cerca` si registra solo se la biblioteca c'è: un tool che risponde
@@ -2165,6 +2165,12 @@ def build_registry(biblioteca: bool = False, pc: dict | None = None,
     if minori_tool:
         from .minori import minori_specs
         for spec in minori_specs():
+            reg.register(spec)
+    if conserva:
+        # I dati conservati per le misure (12/10, calliope/conserva.py): consenso alla voce,
+        # revoca, stato e «svuota» di chi amministra
+        from .conserva import conserva_specs
+        for spec in conserva_specs():
             reg.register(spec)
     from .stato import stato_specs
     for spec in stato_specs(installa):
