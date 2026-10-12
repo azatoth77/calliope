@@ -8,7 +8,11 @@ versionato (`persistenza.prepara_schema`, modulo «esercizi»):
   anche per gli adolescenti, che lo sanno);
 - `esercizi_segnalazioni`: «secondo me è sbagliato» del ragazzo, con il ricontrollo;
 - `esercizi_banco`: gli esercizi d'italiano già controllati (Wikizionario e secondo modello),
-  per firma: buoni (si riusano) o scartati (non si propongono più).
+  per firma: buoni (si riusano) o scartati (non si propongono più);
+- `esercizi_preferenze` (12/10): come vuole gli esercizi ogni persona (blocchi più corti, modo
+  giocoso, punti, tappe), così valgono anche in una conversazione nuova. Scadono come i
+  tentativi (`conserva.TABELLE_MEMORIA`, 60 giorni dall'ultimo cambio) e si svuotano con la
+  persona.
 
 Nel registro dei turni e negli avvisi vanno solo materia e argomento, mai le risposte.
 """
@@ -48,7 +52,30 @@ class Registro:
                        "NOT NULL)")
             db.execute("CREATE INDEX IF NOT EXISTS esercizi_banco_al ON "
                        "esercizi_banco(argomento, livello, stato)")
-        self.scrivibile = prepara_schema(self.db, "esercizi", [v1])
+        def v2(db):
+            db.execute("CREATE TABLE IF NOT EXISTS esercizi_preferenze (persona TEXT PRIMARY "
+                       "KEY, dati TEXT NOT NULL, aggiornato TEXT NOT NULL)")
+        self.scrivibile = prepara_schema(self.db, "esercizi", [v1, v2])
+
+    # ── preferenze per persona (12/10) ──
+    def preferenze(self, persona: str) -> dict:
+        with self._lock:
+            r = self.db.execute("SELECT dati FROM esercizi_preferenze WHERE persona = ?",
+                                (persona,)).fetchone()
+        try:
+            return dict(json.loads(r[0])) if r else {}
+        except (TypeError, ValueError):
+            return {}
+
+    def salva_preferenze(self, persona: str, dati: dict):
+        with self._lock:
+            self.db.execute(
+                "INSERT INTO esercizi_preferenze (persona, dati, aggiornato) VALUES (?, ?, ?) "
+                "ON CONFLICT(persona) DO UPDATE SET dati = excluded.dati, "
+                "aggiornato = excluded.aggiornato",
+                (persona, json.dumps(dati, ensure_ascii=False),
+                 datetime.date.today().isoformat()))
+            self.db.commit()
 
     # ── tentativi ──
     def tentativo(self, persona: str, sessione: str, es: Esercizio, classe: str, esito: str,

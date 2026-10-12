@@ -15,7 +15,7 @@ Dario le scelte prudenti dei cancelli (fondo del documento); da rimisurare tutto
 | Stadio | Libreria | Dove |
 |---|---|---|
 | Minori (fasce d'età, preset per fascia, permessi nel codice, orari, compiti, avvisi ai tutori; dal 05/10) | SQLite (stesso file della memoria: `minori_regole`, `avvisi_tutori`, `compiti_giorno`); guardiano Llama Guard 3 8B su Ollama + rilevatore di pericolo (gemma4 e4b, output strutturato) | `calliope/minori.py` → `fascia`, `preset`, `permesso` (da `ToolRegistry.call`), `dato_turno`, `fuori_orario`, `piu_protetto`, `Compiti`, `Avvisi`, `estensione_consentita`, `conversazioni_visibili_ai_tutori`; `calliope/guardiano.py` → `Guardiano`, `filtra` (in `main.py`), `correggi_storia`; tool `compiti_aiuto`, `minore_gestisci` (`calliope/tools/minori.py`); terminale `python -m calliope.minori`; banchi `prove/prova_minori_ollama.py`, `prove/misura_guardiano.py`; [`docs/ricerche/2026-10-05-minori.md`](../ricerche/2026-10-05-minori.md) |
-| Esercizi generati da Calliope (dal 08/10): matematica e italiano, a voce e sulla scheda, correzione nel codice, registro dei tentativi per i tutori | libreria standard; SQLite (stesso file della memoria: `esercizi_tentativi`, `esercizi_segnalazioni`, `esercizi_banco`); Wikizionario della biblioteca; secondo modello su Ollama | `calliope/esercizi/` → `matematica.genera`, `italiano.genera`, `numeri.leggi_valore`, `verifica.Wikizionario`, `verifica.SecondoParere`, `registro.Registro`, `sessione.Servizio`; tool `esercizi` (`calliope/tools/esercizi.py`); scheda `DISEGNA.esercizio` e `POST /api/esercizio`; rete `spinta_esercizi`; prove `prove/prova_esercizi.py`, `prove/prova_esercizi_pagina.py`, `prove/prova_esercizi_ollama.py`; [`docs/ricerche/2026-10-08-esercizi.md`](../ricerche/2026-10-08-esercizi.md) |
+| Esercizi generati da Calliope (dal 08/10): matematica e italiano, a voce e sulla scheda, correzione nel codice, registro dei tentativi per i tutori | libreria standard; SQLite (stesso file della memoria: `esercizi_tentativi`, `esercizi_segnalazioni`, `esercizi_banco`); Wikizionario della biblioteca; secondo modello su Ollama | `calliope/esercizi/` → `matematica.genera`, `italiano.genera`, `numeri.leggi_valore`, `verifica.Wikizionario`, `verifica.SecondoParere`, `registro.Registro`, `sessione.Servizio`; tool `esercizi` (`calliope/tools/esercizi.py`); scheda `DISEGNA.esercizio` e `POST /api/esercizio`; rete `spinta_esercizi`; prove `prove/prova_esercizi.py`, `prove/prova_esercizi_pagina.py`, `prove/prova_esercizi_ollama.py`, `prove/prova_esercizi_voce.py`; indice del programma ministeriale `calliope/esercizi/programma/` (12/10, `prove/prova_programma.py`); [`docs/ricerche/2026-10-08-esercizi.md`](../ricerche/2026-10-08-esercizi.md) |
 | Materie calcolabili (dal 12/10): logica, fisica e chimica con lo schema della matematica; unità di misura dette per esteso e lette dalle risposte come le scrive Whisper | libreria standard | `calliope/esercizi/` → `logica.py`, `fisica.py`, `chimica.py`, `misure.py` (risposte con l'unità), `modello.livello_da_classe`; `calliope/unita.py` → `UNITA`, `leggi_misura`, `misura_detta`, `SIMBOLI_DETTI` (anche per `pronuncia.Pronuncia`); prove `prove/prova_materie.py`, `prove/prova_esercizi_ollama.py --materie logica,fisica,chimica` e `--scelta` |
 | Pericolo poco chiaro verificato in due cancelli prima dell'avviso (dal 09/10); in compagnia la voce del minore non è mai sicura | stesso rilevatore (gemma4 e4b, output strutturato) per gravità e verifica | `calliope/cancelli.py` → `Cancelli`, `Segnale`, `RASSICURA`, `rassicura`, `testo_avviso`, `percorso` (segnali su disco dal 10/10); `calliope/guardiano.py` → `Guardiano.gravita`, `Guardiano.verifica`; `calliope/ciclo.py` → `Ciclo._decidi_pericolo`, `Ciclo._secondo_cancello`; prove `prove/prova_minori_cancelli.py`, misura `prove/misura_cancelli.py` |
 
@@ -468,3 +468,70 @@ che segue `turn_log_days`, svuota per persona con il contrario (gli altri restan
 il file della memoria che non c'è. La prova usa sempre un file suo (`cfg.memory_db` nella cartella
 temporanea, `CALLIOPE_MEMORY_DB` per il terminale): «svuota tutto» non deve mai toccare la
 `memoria.db` di chi la lancia.
+
+## Esercizi dopo la prova vera e indice del programma (12/10 sera, ramo `esercizi-programma`)
+
+Prova di Dario del 12/10 pomeriggio sulla DGX (26B) con una bambina di terza e quarta
+elementare. Cosa non andava e cosa cambia (prova a secco `prova_esercizi_voce`):
+
+- **Domande inventate dal modello.** Dopo «rendili più giocosi» il 26B ha fatto da sé «125 + 87»
+  e «45 + 38»; la risposta giusta 83 è stata corretta contro la domanda in sospeso (55 + 49).
+  Ora: con una sessione aperta (anche in pausa, anche senza l'azione in sospeso) la rete
+  `spinta_esercizi` trattiene il testo senza tool; dopo la spinta una domanda d'esercizio
+  inventata non si dice e al suo posto c'è quella del programma (`esercizi ripeti`, regola
+  `esercizi_domanda_inventata`); una risposta data a una domanda che non è del programma non si
+  giudica (`esercizi_domanda_non_sua`: «Quella domanda non l'ho preparata io…»). Le richieste di
+  gioco passano dal tool (`azione=preferenze`).
+- **Numeri storpiati indovinati dal modello.** «Suttanto salida» → 76 e «Pantano a bit» → 79
+  segnati giusti perché il modello conosceva la domanda. Ora il numero passato a
+  `esercizi(rispondi)` deve ricavarsi dalla frase della persona (`numeri.valore_detto`: cifre e
+  parole, decina e unità separate, una lettera storpiata se la parola più vicina è una sola,
+  parole sotto le 5 lettere solo esatte); se no «Non ho capito il numero: me lo ripeti?»,
+  nessun tentativo contato (regola `esercizi_numero_non_detto`). Passano «sedeci», «ventuno»,
+  «6 per 8, 48», «quattordici, ah no, sedici»; non passano «Suttanto salida» → 76, «Prenta
+  due» → 22 («prenta» è a una lettera da «trenta»: 32 passa). Dalla scheda (frase vuota) nessun
+  controllo.
+- **Nessuna pausa.** Blocchi da `esercizi_blocco_piccoli` (5, fino alla terza elementare) e
+  `esercizi_blocco` (10), poi la frase del codice «Facciamo una pausa o cambiamo?» con l'azione
+  in sospeso; azioni `pausa` e `continua`; in pausa una risposta non si giudica.
+- **Punti, tappe e modo giocoso** contati e detti dal codice (2 punti al primo colpo, 1 dopo un
+  aiuto o un errore; `esercizi_tappe` tappe da un blocco; «Sfida numero…»), attivabili a voce.
+- **Preferenze promesse ma non salvate** («Ricevuto. Segno tutto» senza tool): ora
+  `esercizi azione=preferenze` (modo giocoso, punti, tappe, normale; blocchi più corti o più
+  lunghi) salva in `esercizi_preferenze` per persona: vale anche in una conversazione nuova,
+  scade a 60 giorni dall'ultimo cambio e si svuota con la persona (`conserva.TABELLE_MEMORIA`).
+  Dopo la spinta la promessa senza tool non si dice (`esercizi_promessa_taciuta`).
+- **Schermo.** `schermo_mostra` ha `cosa=testo` (un testo scelto dal modello, `testo=`) e
+  `cosa=esercizio`; con gli esercizi aperti «scrivimelo sullo schermo» mostra l'esercizio di
+  adesso. La rete `scrivo_qui_a_voce` toglie «te lo scrivo qui nella conversazione» a chi
+  parla a voce (non a chi scrive dallo schermo).
+- **Indizio vuoto** (16:17:32, «Non ancora. Un indizio:»): gli indizi vuoti si saltano, «Un
+  indizio:» si dice solo con un indizio.
+
+**Indice del programma ministeriale** (decisione di Dario del 12/10: esercizi e interrogazioni
+sulle Indicazioni nazionali ufficiali; dove non bastano Calliope chiede, non improvvisa). Fase A,
+solo dati: `calliope/esercizi/programma/` (`fonti.yaml`, `matematica.yaml`, `italiano.yaml`,
+`scienze.yaml`, lettura in `__init__.py`), prova `prova_programma`.
+
+- **Fonti** lette il 12/10: DM 221 del 09/12/2025 (GU n. 21 del 27/01/2026, allegato dal sito
+  della Gazzetta Ufficiale) e DM 254/2012 (PDF del Ministero). Le citazioni sono letterali,
+  confrontate una volta con il testo scaricato (54 su 54 trovate).
+- **Quali valgono** (`indicazioni_per`, DM 221/2025 art. 1 c. 2 e art. 5): le nuove dalle prime
+  del 2026/27; le classi già avviate restano sul 2012 fino alla fine del corso; storia in terza
+  primaria anticipata al 2027/28; il 2012 cessa nel 2028/29 per la media e nel 2030/31 per la
+  primaria. Nel 2026/27 la terza e la quarta elementare sono **sul 2012**.
+- **Testo ufficiale e interpolazione.** Le Indicazioni hanno solo i traguardi alla fine della
+  terza e della quinta primaria e della terza media. Il dettaglio per classe e per periodo
+  (inizio: settembre–gennaio, fine: febbraio–giugno) è un'interpolazione dalla prassi dei libri
+  (prima entro 20, seconda entro 100, terza entro 1000…), scritta come tale in `mappa` con il
+  perché.
+- **Cosa dice già dell'oggi** (da usare nella fase B): in terza a ottobre l'addizione è entro il
+  100 (ripasso), mentre il livello 2 arriva a 168 e il livello 3 a 1798 (675 + 427 del 12/10);
+  il generatore delle frazioni comincia con somme (3/7 + 2/7), che sono della quarta; l'analisi
+  logica in Calliope comincia in quarta ma il testo 2012 chiede soggetto e verbo già alla fine
+  della terza; massa molare, moli e bilanciamento non sono nel primo ciclo. `generatore_dentro`
+  di ogni voce numerica è rifatto sul generatore vero nella prova.
+- **Fase B** (da fare): l'indice come limite di livello e di salita con la data dell'anno
+  scolastico; le domande di Calliope quando mancano i dettagli (classe, a che punto sono,
+  capitolo, foto della pagina), salvate per la persona; le interrogazioni come modalità degli
+  esercizi.

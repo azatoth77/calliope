@@ -341,7 +341,7 @@ class Config:
     # riferimento_casa, riferimento_agenda, conferma_al_posto_del_vuoto,
     # vuoto_seconda_passata, ricerca_promessa, citazione_tolta, nome_tool_parlato,
     # eco_contesto, spinta_archivio, spinta_rinuncia, spinta_esercizi, correzione_tool,
-    # ricerca_recente, risposta_ripetuta; "tutte"
+    # ricerca_recente, risposta_ripetuta, scrivo_qui_a_voce; "tutte"
     # le spegne tutte. Quelle di
     # «sicurezza» (permessi, politica…) non si spengono: un nome di sicurezza o sconosciuto si
     # segnala all'avvio. Quelle del profilo (llm_profilo) si aggiungono a queste.
@@ -1544,6 +1544,14 @@ class Config:
     esercizi_pronti: int = 3
     # Esercizi a campione nel riepilogo per i tutori (da controllare al posto della revisione)
     esercizi_campione: int = 3
+    # Esercizi di un blocco prima della proposta «Facciamo una pausa o cambiamo?», detta dal
+    # codice (12/10, caso vero: tabelline senza pause finché la bambina non ha detto «basta,
+    # sono stanca»). Più corto per la primaria bassa (prima, seconda e terza elementare); chi
+    # vuole blocchi diversi lo dice a voce («blocchi più corti») e resta salvato per persona
+    esercizi_blocco_piccoli: int = 5
+    esercizi_blocco: int = 10
+    # Tappe del percorso «a tappe» (una tappa = un blocco), attivato a voce
+    esercizi_tappe: int = 3
     # Il modello guardiano (calliope/guardiano.py): giudica la domanda e ogni frase della
     # risposta prima della voce, solo per minori e ospiti. Su Ollama (lo stesso della voce se
     # guardiano_url è vuoto: llm_native_url). Scelta con prove/misura_guardiano.py (rapporto
@@ -2430,9 +2438,17 @@ RETI: dict[str, Rete] = {
         "senza tool alla revisione (12/10, 12:20), e il testo prima del tool si attaccava alla "
         "frase del tool (11:13)"),
     "spinta_esercizi": Rete(
-        "esercizio in sospeso e risposta senza il tool esercizi: trattenuta, spinta", MODELLO,
+        "esercizio in sospeso o sessione aperta e risposta senza il tool esercizi: trattenuta, "
+        "spinta; dopo la spinta una domanda d'esercizio inventata non si dice (al suo posto "
+        "quella del programma) né la promessa di segnarsi una preferenza", MODELLO,
         "il 4B copiava dalla storia «Perfetto! Prossima: …» correggendo da sé (08/10, 7 turni "
-        "d'italiano su 18): la correzione è del programma"),
+        "d'italiano su 18): la correzione è del programma; il 26B inventava le domande "
+        "(«quanto fa 125 più 87?») e diceva «Segno tutto» senza salvare (12/10, DGX)"),
+    "scrivo_qui_a_voce": Rete(
+        "«te lo scrivo qui nella conversazione» a una persona che parla a voce: la frase si "
+        "toglie", MODELLO,
+        "il 26B dopo il rifiuto di schermo_mostra (12/10, DGX): a voce non c'è nessuna "
+        "conversazione scritta"),
     "argomento_forse": Rete(
         "esito vuoto con un nome forse capito male: «forse intendeva X» o «ripetilo» nel "
         "risultato del tool (calliope/argomenti_incerti.py)", MODELLO,
@@ -2612,7 +2628,8 @@ SEZIONI: dict[str, list[str]] = {
                "minori_pericolo_finestra_s", "minori_avviso_privato_s",
                "esercizi_enabled", "esercizi_verifica_modello", "esercizi_verifica_url",
                "esercizi_verifica_timeout_s", "esercizi_senza_secondo_parere",
-               "esercizi_pronti", "esercizi_campione",
+               "esercizi_pronti", "esercizi_campione", "esercizi_blocco_piccoli",
+               "esercizi_blocco", "esercizi_tappe",
                "guardiano_enabled", "guardiano_modello", "guardiano_url",
                "guardiano_timeout_s", "guardiano_se_guasto", "guardiano_keep_alive",
                "guardiano_num_ctx", "guardiano_ospiti", "guardiano_pericolo",
@@ -2876,7 +2893,8 @@ LIMITI: dict[str, tuple[float, float]] = {
     "minori_pericolo_attesa_s": (0.0, 86_400.0), "minori_pericolo_finestra_s": (0.0, 604_800.0),
     "minori_avviso_privato_s": (0.0, 86_400.0),
     "esercizi_verifica_timeout_s": (0.5, 300.0), "esercizi_pronti": (0, 50),
-    "esercizi_campione": (0, 50),
+    "esercizi_campione": (0, 50), "esercizi_blocco_piccoli": (1, 50),
+    "esercizi_blocco": (1, 50), "esercizi_tappe": (1, 20),
     "suoni_volume": (0.0, 1.0),
     "vad_threshold": (0.0, 1.0), "wake_consecutive": (1, 50), "turn_log_days": (1, 3650),
     "conserva_voce_mb": (0, 1_000_000),

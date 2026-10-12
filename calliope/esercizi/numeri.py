@@ -300,6 +300,105 @@ def leggi_valore(testo) -> Fraction | None:
     return numeri[0][1]
 
 
+# ─────────────────────────── il numero detto davvero ───────────────────────────
+# Il 12/10 sulla DGX (26B) il modello passava a esercizi(rispondi) il numero che si aspettava,
+# non quello sentito: «Suttanto salida» → 76, «Pantano a bit» → 79, segnati giusti perché il
+# modello conosceva la domanda. Qui si guarda se il valore passato si ricava dalla frase della
+# persona (cifre o parole di numero, con storpiature piccole); se no il codice non giudica e
+# chiede di ripetere (regola `esercizi_numero_non_detto`). È una regola su ciò che il modello non
+# vede bene (la trascrizione), non sul significato (principio 10).
+
+# Tutti i numeri fino a 999 in lettere (con gli accenti tolti: «ventitre»), per il confronto
+# tollerante delle parole storpiate da Whisper
+_IN_LETTERE: dict[str, int] = {}
+
+
+def _lettere() -> dict[str, int]:
+    if not _IN_LETTERE:
+        for n in range(0, 1000):
+            _IN_LETTERE[in_lettere(n)] = n
+        _IN_LETTERE.update({"un": 1, "una": 1, "mille": 1000})
+    return _IN_LETTERE
+
+
+def _distanza(a: str, b: str, tetto: int = 2) -> int:
+    """Distanza di modifica (Levenshtein), fermata oltre `tetto`."""
+    if abs(len(a) - len(b)) > tetto:
+        return tetto + 1
+    prima = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        ora = [i] + [0] * len(b)
+        for j, cb in enumerate(b, 1):
+            ora[j] = min(prima[j] + 1, ora[j - 1] + 1, prima[j - 1] + (ca != cb))
+        if min(ora) > tetto:
+            return tetto + 1
+        prima = ora
+    return prima[-1]
+
+
+def parola_tollerante(w: str) -> int | None:
+    """Il numero di una parola, anche storpiata di una lettera («sedeci» → 16, «prenta» → 30),
+    se la parola più vicina è una sola. Parole corte (meno di 5 lettere) solo esatte: «sei»,
+    «tre», «fa» non si confondono."""
+    w = _semplice(w).strip("'")
+    n = parola_numero(w)
+    if n is not None:
+        return n
+    if len(w) < 5 or not w.isalpha():
+        return None
+    vicine = {v for k, v in _lettere().items() if abs(len(k) - len(w)) <= 1
+              and _distanza(w, k, 1) <= 1}
+    return vicine.pop() if len(vicine) == 1 else None
+
+
+def numeri_detti(testo) -> set[Fraction]:
+    """Tutti i valori che si possono leggere in una frase detta: i numeri in cifre, quelli in
+    lettere (anche separati: «trenta due» → 30, 2 e 32), con le storpiature di una lettera,
+    frazioni e decimali come in `leggi_valore`. Largo di proposito: serve a dire se un valore
+    *si ricava* dalla frase, non quale sia la risposta."""
+    t = prepara_cifre(_semplice(testo))
+    t = re.sub(r"(\d)\s*[x×]\s*(\d)", r"\1 per \2", t)
+    t = re.sub(r"\b(un|una)'", r"\1 ", t)
+    out: set[Fraction] = set()
+    for _, v, _ in _token_numeri(t):
+        out.add(v)
+        out.add(abs(v))
+    # Le parole, anche con le cifre nella stessa frase («6 per 8, quarantotto»)
+    solo_parole = re.sub(r"\d+(?:[.,]\d+)?", " ", t)
+    for _, v, _ in _token_numeri(solo_parole):
+        out.add(v)
+        out.add(abs(v))
+    # Parole storpiate, una per una, e le coppie decina + unità o centinaia + resto
+    parole = re.findall(r"[a-z']+", solo_parole)
+    valori = [parola_tollerante(w) for w in parole]
+    for i, v in enumerate(valori):
+        if v is None:
+            continue
+        out.add(Fraction(v))
+        if i + 1 < len(valori) and valori[i + 1] is not None:
+            u = valori[i + 1]
+            if v % 10 == 0 and v % 100 >= 20 and 0 < u < 10:        # «centoventi tre»
+                out.add(Fraction(v + u))
+            if v % 100 == 0 and v >= 100 and 0 < u < 100:            # «trecento dodici»
+                out.add(Fraction(v + u))
+            if v % 1000 == 0 and v >= 1000 and 0 < u < 1000:         # «mille duecento»
+                out.add(Fraction(v + u))
+    return out
+
+
+def valore_detto(valore, testo) -> bool:
+    """Il valore passato dal modello si ricava dalla frase della persona? Con una frase vuota
+    (la scheda, le prove senza frase) non si controlla: True."""
+    if not str(testo or "").strip():
+        return True
+    try:
+        v = Fraction(valore)
+    except (TypeError, ValueError):
+        return True
+    detti = numeri_detti(testo)
+    return v in detti or (v < 0 and -v in detti and "meno" in _semplice(testo))
+
+
 def leggi_frazione_scritta(testo) -> tuple[int, int] | None:
     """Numeratore e denominatore come detti (per «si può semplificare ancora»): «6/8» →
     (6, 8), «sei ottavi» → (6, 8); un intero → (n, 1); None se non c'è."""

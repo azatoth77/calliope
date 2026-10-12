@@ -17,8 +17,9 @@ from .. import minori as M
 from ..testi import FAMILY, NIENTE
 from .spec import ToolContext, ToolSpec, note_rule
 
-AZIONI = ["inizia", "rispondi", "aiuto", "salta", "ripeti", "segnala", "soluzione", "fine",
-          "argomenti", "riepilogo"]
+AZIONI = ["inizia", "rispondi", "aiuto", "salta", "ripeti", "segnala", "soluzione", "pausa",
+          "continua", "preferenze", "fine", "argomenti", "riepilogo"]
+MODI = ["giocoso", "punti", "tappe", "normale"]
 
 
 def _final(text: str, ok: bool = True, **extra) -> dict:
@@ -35,7 +36,7 @@ def _segue_qualcuno(prof, speakers) -> bool:
     return False
 
 
-def _azione(ctx, srv, prof, azione, materia, argomento, risposta) -> str:
+def _azione(ctx, srv, prof, azione, materia, argomento, risposta, modo="", blocco="") -> str:
     """L'azione chiamata. Senza azione (banco del 12/10, chimica: 11 chiamate su 17 con soli
     materia, argomento e risposta; il registro dei tool le lascia passare perché `azione`
     ha un valore predefinito) prima valeva «inizia», che a sessione aperta ricominciava da
@@ -55,6 +56,9 @@ def _azione(ctx, srv, prof, azione, materia, argomento, risposta) -> str:
     if str(risposta or "").strip():
         note_rule(ctx, "esercizi_azione_dedotta")
         return "rispondi"
+    if str(modo or "").strip() or str(blocco or "").strip():
+        note_rule(ctx, "esercizi_azione_dedotta")
+        return "preferenze"
     altro = argomento_da_testo(argomento) if str(argomento or "").strip() else None
     if altro is None or altro == s.argomento:
         note_rule(ctx, "esercizi_azione_dedotta")
@@ -63,7 +67,8 @@ def _azione(ctx, srv, prof, azione, materia, argomento, risposta) -> str:
 
 
 def _esercizi(ctx: ToolContext, azione: str = "", materia: str = "", argomento: str = "",
-              classe: str = "", risposta: str = "", nota: str = "", nome: str = "") -> dict:
+              classe: str = "", risposta: str = "", nota: str = "", nome: str = "",
+              modo: str = "", blocco: str = "") -> dict:
     from ..esercizi import classe_da_eta, classe_da_testo, elenco_materie, materia_da_testo
     from ..esercizi import sessione as S
     srv = S.servizio()
@@ -74,7 +79,7 @@ def _esercizi(ctx: ToolContext, azione: str = "", materia: str = "", argomento: 
     if prof is None:
         note_rule(ctx, "esercizi_ospite")
         return _final("Gli esercizi sono per i ragazzi di casa.", ok=False, fatto=NIENTE)
-    azione = _azione(ctx, srv, prof, azione, materia, argomento, risposta)
+    azione = _azione(ctx, srv, prof, azione, materia, argomento, risposta, modo, blocco)
     minore = M.e_minore(prof)
     if azione == "riepilogo":
         bersaglio = prof if (minore and not str(nome or "").strip()) else None
@@ -121,14 +126,24 @@ def _esercizi(ctx: ToolContext, azione: str = "", materia: str = "", argomento: 
             except Exception:  # noqa: BLE001
                 mitt = None
         note_rule(ctx, "esercizi_inizio")
-        return srv.inizia(prof, M.fascia(prof), M.eta(getattr(prof, "nascita", None)),
-                          str(materia or ""), str(argomento or ""), str(classe or ""), mitt)
+        out = srv.inizia(prof, M.fascia(prof), M.eta(getattr(prof, "nascita", None)),
+                         str(materia or ""), str(argomento or ""), str(classe or ""), mitt,
+                         modo=str(modo or ""), blocco=str(blocco or ""))
+        regola = out.pop("regola", None) if isinstance(out, dict) else None
+        if regola:
+            note_rule(ctx, regola)
+        return out
     if azione == "rispondi":
         if not str(risposta or "").strip():
             return {"ok": False, "errore": "manca la risposta",
                     "cosa_fare": "passa in risposta ciò che ha detto, così com'è"}
         note_rule(ctx, "esercizi_corretto_dal_codice")
-        out = srv.rispondi(prof, str(risposta), "voce")
+        # La frase della persona e l'ultima cosa detta da Calliope (12/10): il numero deve
+        # venire da ciò che ha detto, e la domanda deve essere quella del programma
+        detto = str(getattr(ctx, "user_text", "") or "")
+        ultima = next((c for r, c in reversed(getattr(ctx, "storia", None) or ())
+                       if r == "assistant"), "")
+        out = srv.rispondi(prof, str(risposta), "voce", detto=detto, ultima=ultima)
     elif azione == "aiuto":
         out = srv.aiuto(prof)
     elif azione == "salta":
@@ -144,6 +159,12 @@ def _esercizi(ctx: ToolContext, azione: str = "", materia: str = "", argomento: 
         if not libero:
             note_rule(ctx, "esercizi_soluzione_negata")
         out = srv.soluzione(prof, libero)
+    elif azione == "pausa":
+        out = srv.pausa(prof)
+    elif azione == "continua":
+        out = srv.continua(prof)
+    elif azione == "preferenze":
+        out = srv.preferenze(prof, str(modo or ""), str(blocco or ""))
     elif azione == "fine":
         out = srv.fine(prof)
     else:
@@ -167,7 +188,10 @@ def esercizi_spec() -> ToolSpec:
                      "elementare»). Durante gli "
                      "esercizi: rispondi con la risposta così come l'ha detta (la corregge il "
                      "programma, tu non dire se è giusta), aiuto, salta, ripeti, segnala («secondo "
-                     "me è sbagliato»), soluzione, fine. argomenti: cosa si può fare. riepilogo: "
+                     "me è sbagliato»), soluzione, pausa, continua (dopo una pausa), fine; "
+                     "preferenze con modo (giocoso, punti, tappe, normale) o blocco («3», «più "
+                     "corti») quando li vuole in un altro modo: resta salvato. Le domande le fa "
+                     "solo il programma. argomenti: cosa si può fare. riepilogo: "
                      "come sono andati (un adulto: nome del ragazzo). Non per i compiti portati "
                      "da scuola: quelli sono compiti_aiuto."),
         parameters={"type": "object", "properties": {
@@ -178,6 +202,10 @@ def esercizi_spec() -> ToolSpec:
                           "description": "con le sue parole, se lo dice: «densità», «analisi "
                                          "logica», «sequenze», «le moli»"},
             "classe": {"type": "string"}, "risposta": {"type": "string"},
-            "nota": {"type": "string"}, "nome": {"type": "string"}},
+            "nota": {"type": "string"}, "nome": {"type": "string"},
+            "modo": {"type": "string", "enum": MODI},
+            "blocco": {"type": "string",
+                       "description": "esercizi prima di una pausa: un numero, «più corti» o "
+                                      "«più lunghi»"}},
             "required": ["azione"]},
         func=_esercizi, risk="lettura", levels=FAMILY, classe="sicuro")
