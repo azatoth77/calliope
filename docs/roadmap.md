@@ -5,24 +5,45 @@
 In alto lo stato e i prossimi passi; poi le proposte delle analisi, ciò che resta da fare per
 area e, in fondo, la roadmap com'era, con le voci fatte segnate. Nessuna data promessa.*
 
-## Stato (09/10/2026)
+## Stato (12/10/2026)
 
-- **Congelamento finito l'08/10.** Dal 06/10 si facevano solo correzioni, misure e prove
-  finché la latenza vera non scendeva; dopo le correzioni del 06/10 la mediana dei turni veri
-  era 1,31 s (p90 3,33) su un campione piccolo e la prova end-to-end dava 1,94–2,03 s di
-  mediana per la prima voce sentita dal satellite
-  ([`../prove/manuali/e2e-dgx.md`](../prove/manuali/e2e-dgx.md)). L'obiettivo di 1,2 s resta
-  la metrica (`calliope stato --turni`), non più un blocco.
-- **Latenza accettata da Dario il 09/10** (mediana 1,42 s l'08/10 con molti tool, 1,28 s il
-  09/10, base 1,18 s): chiusa come lavoro; resta solo l'avviso come sentinella
-  ([contesto-conversazione](aree/contesto-conversazione.md)). Q1 è quindi chiusa.
-- Proposte delle due analisi del 06/10: P1–P11, Q2–Q11 fatte; aperte Q1, Q12–Q14 (sotto).
-- Trascrizione: confronto A / B / B2 / C chiuso il 07/10, si resta su A (correzione spenta);
-  C solo con un posto dedicato alla correzione ([`aree/stt-tts.md`](aree/stt-tts.md)).
+- **Le 41 domande del 12/10 hanno una risposta.** Tre revisioni di prontezza hanno letto la
+  roadmap voce per voce; le scelte che valgono per più aree sono nella decisione
+  [0028](decisioni/0028-decisioni-roadmap-12-10.md) (dati degli adulti per 60 giorni, piano unico
+  della memoria, taglia ridotta da 8 GB come vincolo, posizione della DGX che non conta, musica sì
+  e allarme senza data); le altre sono nella coda qui sotto, voce per voce.
+- **Registro degli eventi** in ombra sulla DGX dall'11/10 (passi 0–3 della decisione
+  [0027](decisioni/0027-conversazione-come-registro-di-eventi.md)); `eventi: attivo` si accende
+  solo con i criteri di E1. **Macchina a stati**, passo 1 in ombra dal 10/10.
+- **Latenza**: chiusa come lavoro il 09/10 (prima frase mediana 1,28 s), resta l'avviso di
+  `calliope stato --turni` come sentinella ([contesto-conversazione](aree/contesto-conversazione.md)).
+- **Politica per valore** accesa dal 09/10 sera; la fase 5 (giudice sui compiti) non si fa ora (S8).
+- Trascrizione: confronto A / B / B2 / C chiuso il 07/10, si resta su A (correzione spenta)
+  ([`aree/stt-tts.md`](aree/stt-tts.md)).
 
-### Fatto dal 07/10 al 09/10
+### Fatto dal 10/10 al 12/10
 
 Dettagli in [`../CHANGELOG.md`](../CHANGELOG.md) e nei documenti d'area.
+
+- **Stato del dialogo**: passo 0 (i dieci stati a rischio con una prova ciascuno), passo 1 della
+  macchina a stati in ombra (`proposta_rispondi`, corsia veloce dei «sì» e «no» detti per intero)
+  ([voce-e-regole](aree/voce-e-regole.md)).
+- **Registro degli eventi**, passi 0–3: un registro per persona, uscita unica verso la voce,
+  contesto dalla proiezione con `eventi: attivo` (acceso solo a mano)
+  ([contesto-conversazione](aree/contesto-conversazione.md)).
+- **Satelliti**: analisi del 10/10, i satelliti pronti parlano l'API di ESPHome e Calliope parlerà
+  loro direttamente (decisione [0026](decisioni/0026-satelliti-esphome-senza-home-assistant.md)).
+- **Forme chiuse storpiate da Whisper** («Annullahi», «Chiudin»…) riconosciute; frase al tetto di
+  120 s unita al seguito.
+- **Giochi**: modalità gioco a tutta la finestra con il pallino della voce e la variante collaudo;
+  comandi a voce dichiarati dal gioco, senza il modello e senza il nome mentre aspetta una mossa
+  ([giochi](aree/giochi.md)).
+- **Modalità sviluppo**: collaudo di un gioco in prova sullo schermo, agente guidato (ogni
+  controllo che boccia dice file, riga ed errore; scheletri per tipo), revisione onesta requisito
+  per requisito con le tappe per le richieste ricche, e il 12/10 la **voce onesta** (vedi sotto)
+  ([agenti-estensioni](aree/agenti-estensioni.md)).
+
+### Fatto dal 07/10 al 09/10 (storico)
 
 - **Sicurezza per valore**, fasi 1–3 (attrito misurato, memoria dell'intento attiva, matrice per
   valore ed effetto in ombra); un «no» chiude la proposta (09/10); fase 4 accesa e estensioni
@@ -45,74 +66,202 @@ Dettagli in [`../CHANGELOG.md`](../CHANGELOG.md) e nei documenti d'area.
   una voce sconosciuta, niente frase breve); F2 («rivolta a Calliope?») in ombra.
 - Casa: il dispositivo cercato per nome quando Home Assistant non lo trova ([casa](aree/casa.md)).
 
-## Prossimi passi
+## Prossimi passi (coda del 12/10)
 
-**In coda (decisi o in attesa di una lettura dei dati)**
+Coda ordinata secondo le risposte di chi amministra del 12/10. Per ogni voce: la sigla della
+domanda, il giudizio di prontezza delle revisioni del 12/10 (**pronta**: si può partire;
+**quasi**: manca un dato, una soglia o una scelta piccola; **da approfondire**: serve prima un
+progetto o una rilettura) e la dipendenza principale. Nessuna data promessa. Due regole valgono
+per tutte: prima di scrivere codice si rileggono le ricerche nate prima delle scelte di fondo
+(secondo fattore, musica, mappe, porta delle estensioni, immagini: T6); ogni voce dice come si
+comporta nella taglia ridotta da 8 GB (V7, E11).
 
-1. **Sicurezza per valore, fase 4**: *[accesa il 09/10 sera, ramo `valore-fase4`]*; resta da
-   guardare per qualche giorno l'ombra al contrario sulla DGX (esecuzioni con un bersaglio dal
-   dato a 0, attrito con la politica di prima), poi la fase 5 facoltativa (giudice sui compiti
-   E3) ([`ricerche/2026-10-07-sicurezza-per-valore.md`](ricerche/2026-10-07-sicurezza-per-valore.md)).
-2. **Frasi pronte meno monotone**, fasi 0–1 (campo `pronte` nel registro, catalogo con varianti
-   per tono e forma breve), in attesa del via
-   ([`ricerche/2026-10-08-frasi-pronte.md`](ricerche/2026-10-08-frasi-pronte.md)).
-3. **Rinomina degli altri tool** con la regola dei nomi dell'08/10 (nome singolare + verbo,
-   prefisso per famiglia; i nomi vecchi in `ToolRegistry.NOMI_VECCHI`).
-4. **Parole incerte**: tarare le soglie di F0 con qualche giorno di voce vera, poi decidere F2
-   (la parola da correggere sullo schermo personale) e F3 (dizionario delle correzioni)
-   ([`ricerche/2026-10-08-parole-incerte.md`](ricerche/2026-10-08-parole-incerte.md)).
-5. **Compagnia**: rileggere l'ombra del giudizio «rivolta a Calliope?» e decidere F2 (la finestra
-   d'ascolto decisa dal giudizio); osservare la falsa compagnia al telefono
-   ([`ricerche/2026-10-09-piu-persone.md`](ricerche/2026-10-09-piu-persone.md)).
-6. **Taratura della macchina**, fasi 3–6: prova breve, `taratura.json`, campi «auto»; il
-   profilo per il portatile da 8 GB.
-7. **Notizie dai feed RSS** (deciso il 10/10): i feed delle testate italiane scaricati ogni tanto
-   in un indice locale (FTS5, come la biblioteca), con la fonte detta; SearXNG resta il ripiego.
-   Nessuna chiave, nessuno scraping: Google News e Brave oggi bloccano le notizie di SearXNG.
-8. ~~**Storpiature delle forme chiuse**~~ *[fatto il 10/10, ramo `forme-storpiate`]* (giro del
-   10/10): «Annullahi», «Nulla è lavoro», «Chiudin», «Giudino», «Alla ora, ok» non arrivavano
-   alla corsia veloce. «Ricominciamo» storpiato (anche con il nome storpiato davanti) è la
-   conversazione nuova; le altre sono un dato del turno («potrebbe essere «sospendilo»»), e
-   «annulla» da solo vale «no» nella corsia veloce; un lavoro dell'agente che parte da una frase
-   breve senza le sue parole chiede conferma
-   ([voce-e-regole](aree/voce-e-regole.md), «Forme chiuse storpiate da Whisper»).
-9. **Satelliti ESPHome** (decisione [0026](decisioni/0026-satelliti-esphome-senza-home-assistant.md),
-   10/10): adattatore in Calliope provato con un dispositivo finto, poi il Voice PE in ufficio
-   ([`ricerche/2026-10-10-wyoming.md`](ricerche/2026-10-10-wyoming.md), piano a passi).
-10. **La scelta dei tool come metrica e un banco con le frasi vere** (proposta del 10/10): contatori
-    in `calliope stato --turni` (nomi inventati, correzioni, ripieghi, richieste ripetute), l'errore
-    che propone la chiamata completa, un banco di casi veri dal registro degli eventi su cui provare
-    nomi, descrizioni, tool per stato e modelli. Dopo il passo 4 del registro, prima del passo 2 della
-    macchina a stati ([`ricerche/2026-10-10-scelta-dei-tool.md`](ricerche/2026-10-10-scelta-dei-tool.md)).
+### 0. Trasversali (decisione [0028](decisioni/0028-decisioni-roadmap-12-10.md))
 
-**Funzionalità decise, senza date**
+1. **Conservazione dei dati** (T1): turni e audio dei soli adulti in privato per 60 giorni, minori
+   e ospiti mai, un comando per svuotare tutto. *Quasi* · dipende da: dove e come si salva l'audio
+   (oggi solo per il debug), rotazione degli eventi oggi a 7 giorni.
+2. **Piano unico della memoria della DGX** (T4): un budget scritto in `calliope stato --piano`
+   prima di ogni modello nuovo. *Quasi* · dipende da: una misura della memoria libera in una
+   giornata tipica.
+3. **Taglia ridotta da 8 GB** (V7, E11): da progettare davvero (prima era una riga «non
+   definita»): cosa c'è, cosa c'è in forma minore e cosa manca su un PC con 8 GB di VRAM, quali
+   modelli, reti e regole tarate per profilo. Assorbe le fasi 3–6 della taratura della macchina
+   (prova breve, `taratura.json`, campi «auto», adattamento) e le sei scelte aperte della
+   ricerca del 07/10. *Da approfondire* · dipende da: le misure del § 7.2 della
+   [taratura](ricerche/2026-10-07-taratura-macchina.md) (guardiano piccolo e Whisper sulla CPU).
 
-1. **Modulo studio per i ragazzi**: le altre materie (logica, analisi logica e grammaticale,
-   scienze…) e lo strumento di **simulazione d'interrogazione** con domande a tempo,
-   registrazione delle risposte e valutazione finale di contenuti ed esposizione. Base: esercizi
-   e compiti guidati ([`aree/minori.md`](aree/minori.md),
-   [`ricerche/2026-10-08-esercizi.md`](ricerche/2026-10-08-esercizi.md)).
-2. **Generazione di immagini in locale**: FLUX.2 [klein] 4B (Apache 2.0), con filtri e regole
-   per i minori ([`ricerche/2026-10-06-generazione-immagini.md`](ricerche/2026-10-06-generazione-immagini.md)).
-3. **Secondo fattore per chi amministra**: conferma dal telefono, chiave vocale
-   ([`ricerche/2026-10-06-secondo-fattore.md`](ricerche/2026-10-06-secondo-fattore.md)).
-4. **Pannello di amministrazione con le azioni** (oggi il cruscotto è in sola lettura): dal 10/10 è
-   la pagina della **modalità configurazione guidata dalla voce** (Primo/a configura permessi,
-   consenso, testi, tempi e tool per stato della macchina a stati, con base intoccabile, strato
-   dell'installazione, simulazione d'impatto, ripristino e un limite che si può solo stringere;
-   dopo la macchina a stati accesa;
-   [`ricerche/2026-10-10-macchina-stati.md`](ricerche/2026-10-10-macchina-stati.md) § 11).
-5. Poi: **interfono** tra satelliti, **conversazione di stanza** (più persone nella stessa
-   conversazione: la compagnia oggi le distingue, non le unisce), **mappe e luoghi**,
-   **satellite su Raspberry** (senza PC), **altre fonti italiane** nella biblioteca.
+### 1. Modalità sviluppo (lavori del 12/10)
 
-**In valutazione (non promesso)**: riscontro emotivo dalla voce durante le sessioni di studio
-([`ricerche/2026-10-07-emozioni-voce.md`](ricerche/2026-10-07-emozioni-voce.md)).
+Dall'analisi del 12/10 sui log veri e sul codice: le modifiche finivano male nella specifica, la
+voce raccontava male gli esiti, i comandi del flusso si perdevano.
 
-**Scartato**: Kolibri come base del modulo studio, perché il catalogo in italiano è quasi vuoto
-(sola matematica di Khan Academy) e i contenuti nuovi si creano solo con il servizio online di
-Kolibri Studio, contro il principio «niente cloud»
-([`ricerche/2026-10-07-kolibri.md`](ricerche/2026-10-07-kolibri.md)).
+1. **La specifica dai requisiti**: a ogni modifica la specifica si riscrive intera e i requisiti
+   si rifanno da lì, invece di accodare «Con questa modifica: …». *In corso.*
+2. ~~**Voce onesta**~~ *[fatta il 12/10]*: esito vero del collaudo e dell'agente, conteggio per
+   tipo, revisione dal testo del tool, meno parole e meno conferme
+   ([agenti-estensioni](aree/agenti-estensioni.md)).
+3. **Comandi del flusso e ripresa**: ferma, annulla, sospendi, chiudi, riprendi come forme chiuse
+   brevi e intere (principio 10, con i casi contrari delle storpiature viste); «chiudi tutti» con un
+   solo sì; «riprendi» su un lavoro fermo vale «rifallo così com'è» senza la seconda domanda.
+   *Pronta* · dipende da: la specifica dai requisiti (punto 1).
+4. **Macchina a stati dei giochi** fornita da Calliope: fasi fisse (preparazione, turno, esito,
+   fine) con una fase libera come scappatoia, pagine a schermo fisso ridisegnabili, comandi a voce
+   per fase anche con un parametro («porta tre», limitato al dominio dichiarato), l'agente che
+   scrive solo dati, logica pura e disegno. **Prima un progetto scritto.** *Da approfondire* ·
+   dipende da: il progetto (rigidità, una sola fonte dello stato, lo slot che allarga la regola
+   deterministica, compatibilità dei giochi già approvati).
+
+### 2. Registro degli eventi e dialogo (E1–E11)
+
+1. **Accendere `eventi: attivo`** (E1): dopo almeno 7 giorni d'ombra (non prima del 18/10) e almeno
+   200 turni, zero differenze nel parlato, e la guardia sui riletti scritta prima. *Quasi* ·
+   dipende da: i dati d'ombra sulla DGX e la guardia dei riletti.
+2. **«Dimentica» chiude anche la conversazione in corso** (E2). *Pronta* · dipende da: niente
+   (confermato il 12/10).
+3. **Passo 4 del registro: le domande come eventi** (E3), con `attivo` già acceso; 2–3 giorni
+   (circa 170 domande in 35 moduli). *Quasi* · dipende da: E1.
+4. **Spezzare `Brain._reply`** (E4, era Q14) subito dopo il passo 4, fermando per qualche giorno
+   gli altri lavori su `brain.py`. *Quasi* · dipende da: E3.
+5. **Macchina a stati, passo 2, in due** (E5): prima il consenso unico, poi la tabella dei permessi
+   ([0023](decisioni/0023-tabella-dichiarativa-dei-permessi.md)) generata da quelle di oggi, in sola
+   lettura e in ombra; una sola soglia: una settimana d'ombra senza esecuzioni che la politica di
+   oggi avrebbe fermato. Poi i passi 3, 5, 4, 7, 8. *Quasi* (consenso unico), *da approfondire*
+   (tabella) · dipende da: E1 ed E3.
+6. **Un «sì» breve per le azioni importanti** (E6): non si cambia ora; si misura in ombra e si
+   decide con i numeri. *Pronta* (la misura) · dipende da: niente.
+7. **La scelta dei tool come metrica e banco con le frasi vere**: la metrica in `calliope stato
+   --turni` subito; il banco con le etichette di E8 (le correzioni fatte da chi amministra nella
+   conversazione valgono come etichetta, il resto lo rivede l'agente a campione e chi amministra
+   vede solo i casi dubbi) ([`ricerche/2026-10-10-scelta-dei-tool.md`](ricerche/2026-10-10-scelta-dei-tool.md)).
+   *Pronta* (metrica), *da approfondire* (banco) · dipende da: la conservazione dei dati (0.1) e
+   un estrattore dei casi.
+8. **Rinomina degli altri tool** (E7): la regola dei nomi dell'08/10 non è più vincolante, decide
+   il banco; la rinomina aspetta i dati. *Da approfondire* · dipende da: il banco (2.7).
+9. **Modalità configurazione guidata dalla voce** e pannello con le azioni (E9): Primo/a è chi ha
+   installato Calliope; allargare un permesso richiede la conferma dal telefono, non la sola voce
+   ([`ricerche/2026-10-10-macchina-stati.md`](ricerche/2026-10-10-macchina-stati.md) § 11).
+   *Da approfondire* · dipende da: il secondo fattore (4.7) e la tabella dei permessi (2.5).
+10. **Ridurre la configurazione** (E10, era Q12): un inventario una tantum dei campi mai cambiati;
+    quali diventano costanti lo decide chi amministra, perché tocca la personalizzazione; nessuna
+    regola «un campo nuovo ne toglie uno». *Pronta* (l'inventario) · dipende da: la scelta di chi
+    amministra sull'elenco.
+11. **Reti mai scattate spente nel modello da 26B** (E11, era Q13), dal 20/10, con un rapporto degli
+    scatti per rete e per profilo prima di toccarle; le reti restano tarate per profilo e non si
+    spengono nella taglia ridotta. *Quasi* · dipende da: lo script del rapporto e la data.
+
+### 3. Voce, casa, notizie (V1–V11)
+
+1. **Satelliti ESPHome** (decisione [0026](decisioni/0026-satelliti-esphome-senza-home-assistant.md)):
+   il Voice PE non c'è ancora (V1): adattatore provato con un dispositivo finto; la prova vera quando
+   arriva, senza data. «Okay Nabu» va bene solo in ufficio e per la prova, finché non c'è il
+   firmware nostro (V2) ([`ricerche/2026-10-10-wyoming.md`](ricerche/2026-10-10-wyoming.md)).
+   *Pronta* (passi a secco) · dipende da: il dispositivo finto; il dispositivo vero per i passi 3–7.
+2. **Frasi pronte meno monotone**, fasi 0–1 (V3): le varianti le scrive un agente, chi amministra
+   ne rilegge un campione di 30 prima dell'accensione; obiettivo sotto 8 ripetizioni ogni 100
+   ([`ricerche/2026-10-08-frasi-pronte.md`](ricerche/2026-10-08-frasi-pronte.md)). *Pronta* ·
+   dipende da: niente (l'id della frase pronta passa dall'uscita unica).
+3. **Compagnia F2** (V5): si rilegge l'ombra; se regge, il giudizio «rivolta a Calliope?»
+   sostituisce il nome a ogni frase solo quando tutte le voci vicine sono riconosciute
+   ([`ricerche/2026-10-09-piu-persone.md`](ricerche/2026-10-09-piu-persone.md)). *Quasi* · dipende
+   da: la lettura dell'ombra.
+4. **Parole incerte F2** (V6): se la persona corregge una parola dopo che l'azione è già stata
+   fatta, Calliope propone di annullarla e rifarla con la parola giusta; F3 (dizionario delle
+   correzioni) dopo un mese di F1 e F2
+   ([`ricerche/2026-10-08-parole-incerte.md`](ricerche/2026-10-08-parole-incerte.md)). *Quasi*
+   (F2), *da approfondire* (F3) · dipende da: le soglie di F0 tarate sulla voce vera.
+5. **Notizie dai feed RSS** (V4): prima una ricerca breve con 10–15 feed veri (copertura contro
+   SearXNG, condizioni d'uso); poi lo scarico ogni 2 ore, solo se negli ultimi 7 giorni qualcuno
+   ha chiesto notizie (decisione [0024](decisioni/0024-niente-internet-se-non-serve.md)). *Da
+   approfondire* · dipende da: la ricerca.
+6. **Musica** (T2, V8): requisito confermato; Music Assistant in un container apposta, da mettere
+   dove serve con la posizione in configurazione; non aspetta la DGX in casa. *Da approfondire* ·
+   dipende da: la rilettura della [ricerca del 21/09](ricerche/2026-09-21-musica-e-hardware-audio.md)
+   (nata per un server Windows e i satelliti di Home Assistant) e chi suona sullo stesso
+   dispositivo della voce.
+7. **Interfono e conversazione di stanza** (V10): quando si vuole, con i satelliti che ci sono
+   (telefoni, tablet, PC), senza aspettare ESPHome; più persone nella stessa conversazione (la
+   compagnia oggi le distingue, non le unisce). *Da approfondire* · dipende da: un progetto su
+   privacy e permessi (chi chiama chi, ospiti, minori).
+8. **Mappe e luoghi** (V11): le coordinate di casa solo nel file locale e mai inviate fuori;
+   percorsi calcolati offline con la DGX come server (fasi 2–3 di
+   [`ricerche/2026-10-01-mappe-e-schermi.md`](ricerche/2026-10-01-mappe-e-schermi.md)). *Da
+   approfondire* · dipende da: la rilettura della ricerca, scritta per Windows (Valhalla ora ha i
+   wheel per Linux aarch64).
+9. **Satellite di stanza su Raspberry senza PC**: resta in roadmap come satellite di stanza (il
+   nostro satellite su un Raspberry a 64 bit, oppure `linux-voice-assistant` attraverso
+   l'adattatore ESPHome). *Da approfondire* · dipende da: l'adattatore ESPHome (3.1) e la scelta
+   dell'hardware audio.
+10. **Allarme** (T2, V9): senza data. Inserire a voce più avanti, disinserire mai; oggi sola lettura.
+
+### 4. Studio, immagini, sicurezza, estensioni (S1–S13)
+
+1. **Materie calcolabili** (S1): logica, fisica e chimica con i numeri, con lo stesso schema della
+   matematica ([`ricerche/2026-10-08-esercizi.md`](ricerche/2026-10-08-esercizi.md)). *Pronta* ·
+   dipende da: come si dicono a voce le unità di misura.
+2. **Grammatica oltre il pilota** con il secondo parere di un modello diverso da quello della voce,
+   il modello dell'agente (S2). *Quasi* · dipende da: il piano della memoria (0.2).
+3. **Storia e scienze** (S3): i testi solo dalla biblioteca (Vikidia e Wikibooks da scaricare) e
+   anche da **scansioni di libri**, che vanno salvate; mai testo libero del modello; domande
+   generate e controllate dal programma. *Da approfondire* · dipende da: le fonti nella biblioteca
+   e dove si salvano le scansioni (archivio dei documenti di casa).
+4. **Simulazione d'interrogazione** (S4): prima un progetto. Contenuti dati dal ragazzo o dal libro
+   fotografato; giudizio a parole senza voto numerico; l'audio non si salva. *Da approfondire* ·
+   dipende da: il progetto (anche un ascolto lungo senza nome, come nei giochi).
+5. **Riscontro emotivo dalla voce** (S5): rimandato a dopo l'interrogazione; resta tra le cose in
+   valutazione.
+6. **Immagini con FLUX.2 [klein] 4B** (S6): lo scarico di 40–80 GB e la misura solo quando il piano
+   della memoria libera circa 16 GB stabili
+   ([`ricerche/2026-10-06-generazione-immagini.md`](ricerche/2026-10-06-generazione-immagini.md)).
+   *Quasi* · dipende da: il piano della memoria (0.2).
+7. **Secondo fattore per chi amministra** (S7): si parte dalla conferma sul telefono per le azioni
+   importanti; la chiave vocale dopo
+   ([`ricerche/2026-10-06-secondo-fattore.md`](ricerche/2026-10-06-secondo-fattore.md)). *Quasi* ·
+   dipende da: il progetto riletto e aggiornato (classi d'effetto E0–E4, tool rinominati, punto
+   d'aggancio nella macchina a stati).
+8. **Estensioni a orario** (S9): girano a nome di chi le ha create, con i suoi permessi del
+   momento; il risultato va solo a lui; le pause dei minori valgono. *Quasi* · dipende da: un
+   progetto breve (dove va il risultato, di notte, arbitro della GPU).
+9. **Messaggi verso l'esterno dalle estensioni** (S10): nessuno per ora; più avanti solo notifiche
+   alla web app sul telefono di casa.
+10. **Node/JavaScript** come linguaggio dei programmi in diretta, sullo schema del C#. *Pronta* ·
+    dipende da: i limiti dell'immagine (npm senza rete).
+11. **Documenti degli agenti al satellite**: fatto in gran parte dal 07/10 (il risultato va al
+    portatile con «Lo apro?»); restano il telefono e più satelliti personali della stessa persona.
+    *Quasi*.
+12. **Isolamento vero della sandbox su Windows** (S12: resta): utente dedicato, AppContainer o
+    WSL2; serve alla taglia ridotta su un PC. *Da approfondire* · dipende da: la taglia ridotta
+    (0.3).
+13. **Revisione notturna che propone correzioni** (S13): dopo il banco dei casi veri, con
+    l'approvazione dal cruscotto (oggi in sola lettura); di notte la GPU della DGX non è libera, va
+    misurato quando. *Da approfondire* · dipende da: la conservazione dei dati (0.1) e il banco
+    (2.7).
+14. **Sicurezza per valore, fase 5** (S8, giudice sui compiti): non ora, nei registri veri gli
+    attacchi sono 0.
+
+**In valutazione (non promesso)**
+
+- Riscontro emotivo dalla voce durante le sessioni di studio, dopo l'interrogazione
+  ([`ricerche/2026-10-07-emozioni-voce.md`](ricerche/2026-10-07-emozioni-voce.md)).
+- **Un LLM nel cloud a scelta di chi installa** (proposta del 12/10), sotto la stessa impalcatura e
+  con l'obiettivo di tenere comunque tutto offline. Il backend compatibile OpenAI basterebbe a
+  collegarlo, ma servono analisi apposite prima di qualunque scelta: il principio 9 e la decisione
+  [0001](decisioni/0001-tutto-in-locale.md), la privacy dei dati che uscirebbero di casa, i minori,
+  i costi, cosa resta comunque locale.
+
+**Scartato**
+
+- Kolibri come base del modulo studio, perché il catalogo in italiano è quasi vuoto (sola
+  matematica di Khan Academy) e i contenuti nuovi si creano solo con il servizio online di Kolibri
+  Studio, contro il principio «niente cloud»
+  ([`ricerche/2026-10-07-kolibri.md`](ricerche/2026-10-07-kolibri.md)).
+- *12/10:* la **firma delle versioni delle estensioni** (S11): con la chiave sulla stessa DGX non
+  aggiunge niente all'impronta SHA-256 che c'è già.
+
+**Tolte dalla coda il 12/10** (superate; il testo com'era è nella storia di git): «sicurezza per
+valore, fase 4» (accesa il 09/10, la fase 5 è S8); «storpiature delle forme chiuse» (fatte il
+10/10); «taratura della macchina, fasi 3–6» e «il profilo per il portatile da 8 GB», confluite nella
+taglia ridotta (0.3); «i documenti degli agenti, oggi `LocalDelivery`» (falso dal 07/10, vedi 4.11).
 
 ## Subito: le proposte delle analisi del 06/10
 
@@ -142,7 +291,7 @@ parte, e le Q qui sotto le completano.
 
 | # | Proposta | Stato |
 |---|---|---|
-| Q1 | Un giorno d'uso vero sulla DGX con un elenco di casi | **aperta** |
+| Q1 | Un giorno d'uso vero sulla DGX con un elenco di casi | **aperta** *[storico: chiusa il 09/10 con la latenza accettata, vedi sopra]* |
 | Q2 | Sfida dopo una foto o un file | fatta (ramo `correzioni-q`) |
 | Q3 | Guardiano che non tace: rilevatore nel registro, guasto = guasto per i minori, schede trattenute | fatta (ramo `correzioni-q`) |
 | Q4 | Ollama della DGX: 4 modelli e posto per 3 (`OLLAMA_MAX_LOADED_MODELS=4` o embedding fuori) | fatta: embedding a Calliope inattiva (06/10), `OLLAMA_MAX_LOADED_MODELS=4` e `OLLAMA_NUM_PARALLEL=2` sulla DGX (verificato il 07/10) |
@@ -153,11 +302,13 @@ parte, e le Q qui sotto le completano.
 | Q9 | Voce per stanza con più satelliti nella stessa stanza | fatta (ramo `correzioni-q`) |
 | Q10 | «Esci» in una corsia di satellite: si addormenta e continua | fatta (ramo `correzioni-q`) |
 | Q11 | Tetto totale al riassunto della compressione | fatta (ramo `correzioni-q`) |
-| Q12 | Ridurre la configurazione (−50 campi) | **aperta** |
-| Q13 | Spegnere nel 26B le reti «modello» a zero scatti (dopo due settimane di registro) | **aperta** |
-| Q14 | Spezzare `Brain._reply` | **aperta** (da fare da sola, senza altri lavori su `brain.py`) |
+| Q12 | Ridurre la configurazione (−50 campi) | *12/10: diventa E10 (inventario una tantum, i campi da rendere costanti li sceglie chi amministra)* |
+| Q13 | Spegnere nel 26B le reti «modello» a zero scatti (dopo due settimane di registro) | *12/10: diventa E11 (dal 20/10, con il rapporto per rete e per profilo)* |
+| Q14 | Spezzare `Brain._reply` | *12/10: diventa E4 (subito dopo il passo 4 del registro, fermando per qualche giorno gli altri lavori su `brain.py`)* |
 
-## Resta da fare (controllato sul codice il 06/10)
+## Resta da fare (controllato sul codice il 06/10, ripulito il 12/10)
+
+Le voci passate nella coda del 12/10 stanno lassù; qui restano le altre.
 
 **Voce e audio**
 - Taratura fine del VAD; falsi risvegli in casa (TV, musica); voci di altri familiari e soglia
@@ -165,7 +316,6 @@ parte, e le Q qui sotto le completano.
 - Barge-in di livello B completo (DTLN, 4–6 giorni), vedi
   [`ricerche/2026-09-26-cancellazione-eco.md`](ricerche/2026-09-26-cancellazione-eco.md).
 - Modello acustico della wake word «computer» (addestramento pronto, da decidere).
-- Musica e allarme: requisiti della visione ancora senza codice; decidere la priorità.
 
 **Tool e regole**
 - Comandi più frequenti con regole prima dell'LLM («alza», «pausa», «blocca»); `pc_spegni` con
@@ -186,25 +336,22 @@ parte, e le Q qui sotto le completano.
 - Misure del lettore ZIM e dell'indice sullo Spark (`prove/arm/`).
 
 **Schermi, satelliti, telefono**
-- Fase 2 (mappe e luoghi) e 3 (percorsi) di
-  [`ricerche/2026-10-01-mappe-e-schermi.md`](ricerche/2026-10-01-mappe-e-schermi.md); dalla
-  fase 4: DuckDNS per gli schermi, la card di HA.
-- Satelliti di stanza senza PC.
+- Dalla fase 4 di [`ricerche/2026-10-01-mappe-e-schermi.md`](ricerche/2026-10-01-mappe-e-schermi.md):
+  DuckDNS per gli schermi, la card di HA (mappe e percorsi: 3.8; satelliti di stanza senza PC: 3.9).
 - Prove con un iPhone vero (audio, schermo acceso, auto) e su un PC Windows pulito.
 
 **Agenti ed estensioni**
-- Isolamento vero della sandbox su Windows (utente dedicato o WSL2).
-- I documenti prodotti dagli agenti consegnati al satellite (oggi `LocalDelivery`).
-- Estensioni: documenti, messaggi e file ai satelliti dalla porta; estensioni a orario; firma
-  delle versioni.
-- Node/JavaScript come linguaggio dei programmi in diretta (l'immagine per i test dei giochi c'è).
+- Estensioni: documenti e file ai satelliti dalla porta (i messaggi verso l'esterno: S10).
+- Sandbox su Windows, estensioni a orario, Node/JavaScript, documenti degli agenti al satellite:
+  nella coda del 12/10 (4.8, 4.10–4.12).
 
 **Auto-miglioramento** (vedi [`visione.md`](visione.md))
-- Set di regressione sulle registrazioni e revisione notturna che **propone** correzioni
-  misurate; segnale acustico per le ripetizioni (`revisione.py`).
+- Set di regressione sulle registrazioni (con i dati conservati per 60 giorni, 0.1) e segnale
+  acustico per le ripetizioni (`revisione.py`); la revisione notturna è S13 (4.13).
 
-**Migrazione a RTX Spark (Windows ARM)**
-- Modelli MoE più grandi e verifica di ogni dipendenza su Windows ARM.
+**Windows su ARM**
+- Verifica di ogni dipendenza su Windows ARM *[12/10: non serve più al server, che è la DGX
+  con Linux; resta per la taglia ridotta su un PC]*.
 
 ## Storico: la roadmap di CLAUDE.md al 06/10
 
@@ -279,7 +426,7 @@ parte, e le Q qui sotto le completano.
    lavoro e i file della persona all'agente (fatti il 03/10) da misurare con il modello vero;
    un isolamento vero della sandbox su Windows *[ancora aperto; dal 03/10 su Windows il codice dell'agente non si esegue]* (utente dedicato o
    WSL2: sulla DGX c'è il container dal 03/10);
-   l'esecutore remoto per consegnare i risultati sul PC di chi li ha chiesti. *[fatto il 03/10 per i lavori sui file della persona; i documenti degli agenti usano ancora `LocalDelivery`]*
+   l'esecutore remoto per consegnare i risultati sul PC di chi li ha chiesti. *[fatto il 03/10 per i lavori sui file della persona; i documenti degli agenti usano ancora `LocalDelivery`]* *[superato il 07/10: anche il risultato dei lavori va al portatile con «Lo apro?»]*
 6. **Auto-miglioramento** (vedi `docs/visione.md`): registro dei turni in JSONL,
    rilevamento delle frasi ripetute come segnale di errore di trascrizione, set di
    regressione sulle registrazioni, revisione notturna che **propone** correzioni
