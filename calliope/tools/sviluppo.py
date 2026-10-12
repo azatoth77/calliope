@@ -2399,6 +2399,22 @@ def _sviluppo_correggi(ctx: ToolContext, problema: str = "", **_altro) -> dict:
     risposta = _cosa_appena_chiesta(ctx, consuma=True)
     si_alla_domanda = (getattr(ctx, "tool_in_sospeso", None) == "sviluppo_correggi"
                        and not risposta)
+    from ..sviluppo import senza_contenuto
+    if problema and not si_alla_domanda and not risposta and senza_contenuto(
+            problema, sv, correzione=True):
+        # Un problema che non descrive niente (12/10 sera, 08:46: «Calliope va modificato
+        # Calliope.», il primo pezzo di una frase tagliata al nome → problema «va modificato
+        # Calliope», e la correzione partiva senza una domanda). Con un collaudo fallito di
+        # questa versione l'agente ha da dove partire: il problema detto non aggiunge niente
+        note_rule(ctx, "sviluppo_correggi_vago")
+        falliti_ora = [c for c in sv.collaudi[-5:]
+                       if not c.get("ok") and not c.get("anteprima")
+                       and c.get("versione") in (None, sv.versione)]
+        if not falliti_ora:
+            return _chiedi_cosa(ctx, sv, "Cosa non va? Dimmi cosa hai visto o cosa deve fare "
+                                         "di diverso, così lo dico a chi l'ha scritto.",
+                                "correggi")
+        problema = ""
     if not problema and not si_alla_domanda and not risposta and _va_chiesto(ctx, svs, sv):
         return _chiedi_cosa(ctx, sv, "Cosa non va? Dimmi cosa hai visto o cosa deve fare di "
                                      "diverso, così lo dico a chi l'ha scritto.", "correggi")

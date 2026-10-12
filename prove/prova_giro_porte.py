@@ -60,6 +60,8 @@ def ambiente_gioco(tmp: Path, agente):
 def al_collaudo(tmp: Path, agente):
     """Il gioco consegnato e al collaudo (versione candidata con la scheda)."""
     import prova_specifica_viva as S
+    from calliope.tools import sviluppo as ts
+    ts._COSA_CHIESTA.clear()          # le domande di un'altra prova (stessa persona «u1»)
     cfg, reg, ctx, est, svc, sv, out = ambiente_gioco(tmp, agente)
     lav = S.ultimo(svc)
     S.chiama(reg, ctx, "sviluppo_apri", {"proposta": lav.id, "tappe": False}, 2, "Sì.")
@@ -186,11 +188,56 @@ def prova_modifica_vaga(tmp: Path):
                            "codice. Lo faccio correggere?", detta(out))
 
 
+# ═══════════════════════════ 3. una correzione che non dice cosa ═══════════════════════════
+
+def prova_correzione_vaga(tmp: Path):
+    print("— 3. una correzione che non descrive niente → «Cosa non va?»")
+    from calliope.sviluppo import senza_contenuto
+    sv = SimpleNamespace(titolo="Halloween - Le Porte Magiche")
+    for c in ("va modificato Calliope", "non funziona", "correggilo", "c'è un problema",
+              "non va bene niente", "è rotto, sistemalo"):
+        verifica(f"«{c}» non descrive niente", senza_contenuto(c, sv, correzione=True), c)
+    for c in ("non si vedono i mostri dietro le porte",
+              "non vengono assegnati punti e vince uno senza motivo", "si blocca dopo tre turni",
+              "la porta scelta sparisce"):
+        verifica(f"contrario: «{c}» descrive il problema",
+                 not senza_contenuto(c, sv, correzione=True), c)
+
+    import prova_specifica_viva as S
+    agente = S.AgenteVivo(requisiti=REQ, stima="piccolo",
+                          modifiche=[{"tipo": "difetto", "operazioni": []}])
+    cfg, reg, ctx, est, svc, sv = al_collaudo(tmp / "corr_vaga", agente)
+    n = len(svc.lavori)
+    out = S.chiama(reg, ctx, "sviluppo_correggi", {"problema": "va modificato Calliope"}, 4,
+                   "Calliope va modificato Calliope.")
+    verifica("08:46: «va modificato Calliope» → «Cosa non va?», nessun lavoro parte",
+             detta(out).startswith("Cosa non va?") and len(svc.lavori) == n
+             and "sviluppo_correggi_vago" in ctx.regole and agente.quante("operazioni") == 0,
+             f"{ctx.regole} {detta(out)}")
+    ctx.tool_in_sospeso = "sviluppo_correggi"
+    import prova_estensioni as P
+    ctx.regole, ctx.user_text = [], "Non si vedono i mostri dietro le porte."
+    P.chiama(reg, ctx, "sviluppo_correggi", {"problema": "non si vedono i mostri dietro le "
+                                                         "porte"}, turno=5)
+    verifica("…la risposta descrive il problema: la correzione parte",
+             len(svc.lavori) == n + 1 and "sviluppo_correzione" in ctx.regole, str(ctx.regole))
+    # Contrario: il «sì» a «Lo faccio correggere?» con un problema breve non passa dal criterio
+    agente2 = S.AgenteVivo(requisiti=REQ, stima="piccolo")
+    cfg, reg, ctx, est, svc, sv = al_collaudo(tmp / "corr_si", agente2)
+    n = len(svc.lavori)
+    ctx.tool_in_sospeso, ctx.regole, ctx.user_text = "sviluppo_correggi", [], "Sì."
+    P.chiama(reg, ctx, "sviluppo_correggi", {"problema": "non funziona"}, turno=4)
+    verifica("contrario: il «sì» a «Lo faccio correggere?» è una correzione",
+             len(svc.lavori) == n + 1 and "sviluppo_correggi_vago" not in ctx.regole,
+             str(ctx.regole))
+
+
 def main():
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
         tmp = Path(d)
         prova_stesso_gioco(tmp)
         prova_modifica_vaga(tmp)
+        prova_correzione_vaga(tmp)
     print()
     print("Tutto bene." if not errori else f"{errori} errori.")
     return 1 if errori else 0
