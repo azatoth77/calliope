@@ -16,6 +16,11 @@ estensione 476 (prompt 4 562), programma Python 190, C# 168. Dall'11/10 sera il 
 anche i comandi a voce (`ascolta` e `quandoComando`, docs/aree/giochi.md): 231 caratteri, circa
 67 token in più (stima con il rapporto caratteri/token della misura sopra, 3,47; quella esatta
 si rifà sulla DGX), e la riga del contratto sui comandi a voce circa 177.
+
+Dal 12/10 sera (flusso dell'agente a fasi, parte 1) il gioco ha anche `gioco.test.js`, un test
+del disegno con `apriGioco` (agenti/fumo_js.mjs): il difetto vero del 12/10 (l'esito annidato
+letto al primo livello, sempre «Nessun punto!») stava lì, e i test della logica erano verdi.
+Circa 650 caratteri in più, ~190 token con lo stesso rapporto (da rimisurare sulla DGX).
 """
 
 GIOCO = """SCHELETRO DI PARTENZA (gioco): parti da qui e cambia solo quello che serve.
@@ -58,6 +63,18 @@ const { test } = require("node:test");
 const assert = require("node:assert");
 const { nuovaPartita } = require("./logica.js");
 test("partita nuova", () => assert.strictEqual(nuovaPartita(2).punti.length, 2));
+gioco.test.js — il gioco vero nel DOM finto; apriGioco e creaCaso ci sono già, senza require:
+const { test } = require("node:test");
+const assert = require("node:assert");
+test("si tocca Inizia e compare la mossa", async () => {
+  const g = await apriGioco({ giocatori: 1, seme: 1 });
+  await g.tocca("Inizia");
+  assert.match(g.testo(), /Mossa/);
+});
+Ciò che la persona deve VEDERE (punti, esito, vincitore) si prova in gioco.test.js: tocca \
+come lei (g.tocca("testo o #id"), g.comando("nome"), g.avanza(ms)) e leggi g.testo(). Il \
+caso con un seme: apriGioco({ seme }) e, nei test della logica, creaCaso(seme) passato alla \
+funzione al posto di Math.random.
 Ogni gestore di evento passa da sicuro(): un errore della logica (un dato mancante, una \
 scelta non valida) si mostra nel gioco e non esce dal gestore. La prova di fumo di \
 esegui_test carica logica.js e gioco.js come nel riquadro (document finto con <div \

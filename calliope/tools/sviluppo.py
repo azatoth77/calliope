@@ -2391,10 +2391,12 @@ VINCOLO_CORREZIONE_GIOCO = (
     " È un GIOCO e il problema l'ha visto la persona sullo schermo: la causa può essere in "
     "gioco.js (il disegno, i tocchi, cosa si mostra), non solo in logica.js. Segui il tocco "
     "della persona fino a ciò che appare: che il tocco chiami la regola giusta e che il risultato "
-    "(cosa c'è dietro la porta, i punti, chi vince e perché) venga mostrato. Aggiungi in "
-    "logica.test.js un test che giochi le mosse dette dalla persona e controlli proprio quello "
-    "che lei dice che non va (punti assegnati, esito della mossa, vincitore): la prova di fumo "
-    "dice solo che il gioco parte.")
+    "(cosa c'è dietro la porta, i punti, chi vince e perché) venga mostrato. Il test che "
+    "riproduce il problema va in gioco.test.js e guida il gioco vero: const g = await "
+    "apriGioco({ giocatori: 2, seme: 1 }); await g.tocca(\"testo del pulsante\"); poi controlla "
+    "con g.testo() proprio quello che la persona dice che non va (il mostro, i punti, il "
+    "vincitore). I test di logica.test.js non vedono gioco.js, e la prova di fumo dice solo "
+    "che il gioco parte.")
 
 
 # La correzione parte da un test che fallisce (12/10 sera, parte 1 del flusso a fasi; ricerca

@@ -21,6 +21,22 @@ for (const f of file.filter((x) => !x.endsWith(".test.js"))) {
   }
 }
 const prove = file.filter((x) => x.endsWith(".test.js"));
+// La scheda del manifesto: i file del gioco, per la prova di fumo e per apriGioco
+let scheda = null;
+try { scheda = JSON.parse(readFileSync("manifesto.json", "utf8")).scheda || null; } catch (e) { /* nessuno */ }
+const giochi = await import(new URL("./fumo_js.mjs", import.meta.url));
+const opzioniScheda = () => ({ massimo: ((scheda || {}).giocatori || {}).max || 1,
+                               comandi: ((scheda || {}).ascolta || {}).comandi || {},
+                               giocatore: !!((scheda || {}).ascolta || {}).giocatore });
+// Per i test (12/10 sera, nello stesso processo: isolation «none»): il gioco vero nel DOM finto
+// da guidare (apriGioco) e il caso con un seme fisso (creaCaso)
+globalThis.creaCaso = giochi.creaCaso;
+globalThis.apriGioco = async (opzioni = {}) => {
+  if (!scheda || !Array.isArray(scheda.file)) {
+    throw new Error("apriGioco: nel manifesto.json manca la «scheda» con i file del gioco");
+  }
+  return giochi.apriGioco(scheda.file, { ...opzioniScheda(), ...opzioni });
+};
 if (prove.length && !conto.errori) {
   const flusso = run({ files: prove, isolation: "none", concurrency: 1, timeout: 20000 });
   flusso.on("test:pass", (e) => {
@@ -50,16 +66,11 @@ if (prove.length && !conto.errori) {
 }
 // La prova di fumo della scheda (05/10, fumo_js.mjs): gli script del gioco con un DOM finto e
 // trecento tocchi a caso. Solo se c'è un manifesto con la «scheda»
-let scheda = null;
-try { scheda = JSON.parse(readFileSync("manifesto.json", "utf8")).scheda || null; } catch (e) { /* nessuno */ }
 if (scheda && Array.isArray(scheda.file) && !conto.errori && !senzaFumo) {
-  const { fumo } = await import(new URL("./fumo_js.mjs", import.meta.url));
   const presenti = scheda.file.filter((f) => file.includes(f));
   conto.eseguiti++;
   const errori = presenti.length === scheda.file.length
-    ? await fumo(presenti, { massimo: (scheda.giocatori || {}).max || 1,
-                             comandi: (scheda.ascolta || {}).comandi || {},
-                             giocatore: !!(scheda.ascolta || {}).giocatore })
+    ? await giochi.fumo(presenti, opzioniScheda())
     : ["i file della scheda non ci sono tutti: " + scheda.file.join(", ")];
   if (errori.length) {
     conto.falliti++;

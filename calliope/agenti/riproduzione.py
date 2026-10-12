@@ -151,8 +151,10 @@ def controlla(lav, sandbox, log=print) -> dict:
 def messaggio_agente(esito: dict, problema: str = "", gioco: bool = False) -> str:
     """Il rimando all'agente quando la correzione non riproduce il problema."""
     p = f" («{str(problema).strip()[:200]}»)" if str(problema or "").strip() else ""
-    come = (" Per un gioco il problema l'ha visto la persona sullo schermo: il test deve "
-            "arrivare a ciò che gioco.js mostra, non solo alla logica." if gioco else "")
+    come = (" Per un gioco il test va in gioco.test.js e tocca il gioco vero, perché il "
+            "problema l'ha visto la persona sullo schermo: const g = await apriGioco(); await "
+            "g.tocca(\"testo del pulsante\"); poi g.testo() per leggere cosa compare (non solo "
+            "logica.js)." if gioco else "")
     stato = esito.get("stato")
     if stato == "uguale":
         return ("La correzione non è valida: i file del codice sono uguali a quelli di prima, "
