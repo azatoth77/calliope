@@ -288,6 +288,18 @@ ESEGUI_CSHARP = _fn(
      "argomenti": {"type": "array", "items": {"type": "string"}},
      "input": {"type": "string"}})
 
+# Il JavaScript (12/10 sera, flusso a fasi § 5.1 passo 5): il 12/10 due giri a vuoto su quattro
+# erano debug a mente di logica.js («1 !== 2» con lo stato cambiato sul posto, «Cannot read
+# properties of undefined» in un test con il caso), che una stampa avrebbe chiuso. Solo con il
+# container di Node; gli stessi limiti dei test
+ESEGUI_JS = _fn(
+    "esegui_js", "Esegue un file .js della cartella con Node (tempo massimo, niente rete) e "
+    "restituisce l'uscita: per vedere cosa fa davvero un pezzo di codice (console.log di ciò "
+    "che restituisce una funzione di logica.js) invece di ragionarci a mente. Scrivi la prova "
+    "in un file prova_*.js (con require(\"./logica.js\")): non fa parte del gioco.",
+    {"percorso": {"type": "string"},
+     "argomenti": {"type": "array", "items": {"type": "string"}}}, ["percorso"])
+
 
 # Le pagine d'esempio per chi scrive un parser (05/10, solo per le estensioni): il codice nella
 # sandbox non ha rete, e senza la pagina vera l'agente non sapeva com'è fatta (04/10, DGX:
@@ -331,7 +343,8 @@ CHIEDI_PERMESSO = _fn(
     {"cosa": {"type": "string"}, "motivo": {"type": "string"}, "scope": {"type": "object"}},
     ["cosa", "motivo"])
 # Strumenti che vogliono il piano prima (scarica_esempio no: vedere la pagina serve a decidere)
-_DOPO_PIANO = {"scrivi_file", "modifica_file", "esegui_python", "esegui_test", "esegui_csharp"}
+_DOPO_PIANO = {"scrivi_file", "modifica_file", "esegui_python", "esegui_test", "esegui_csharp",
+               "esegui_js"}
 
 
 def _sensibile(atomo: tuple) -> bool:
@@ -433,8 +446,10 @@ def _vuoto_spinta(token: int) -> str:
 
 
 def strumenti_codice(linguaggi=()) -> list:
-    """Gli strumenti dell'agente di codice: con il C# disponibile anche esegui_csharp."""
-    return STRUMENTI_CODICE + ([ESEGUI_CSHARP] if "csharp" in linguaggi else [])
+    """Gli strumenti dell'agente di codice: con il C# disponibile anche esegui_csharp, con il
+    container di Node esegui_js (12/10 sera)."""
+    return (STRUMENTI_CODICE + ([ESEGUI_CSHARP] if "csharp" in linguaggi else [])
+            + ([ESEGUI_JS] if "javascript" in linguaggi else []))
 
 
 def sistema_codice(linguaggi=("python",)) -> str:
@@ -501,7 +516,9 @@ SISTEMA_CODICE = (
     "standard di Python (e openpyxl, python-docx se servono file Office). Prima guarda i "
     "file che ci sono, poi "
     "scrivi il codice con scrivi_file, scrivi i test (file test_*.py) e falli girare con "
-    "esegui_test; correggi finché passano. Nomi in inglese, commenti e messaggi in italiano. "
+    "esegui_test; correggi finché passano. Un test che dipende dal caso fissa il seme "
+    "(random.Random(seme) passato alla funzione): alla consegna i test si eseguono due volte e "
+    "devono dare lo stesso esito. Nomi in inglese, commenti e messaggi in italiano. "
     "Non chiedere conferme: fai il lavoro. Se manca un dato indispensabile chiama consegna "
     "con esito mancano_dati e una domanda breve e chiara: il lavoro si sospende, la domanda "
     "va a chi l'ha chiesto e la sua risposta ti arriva qui, poi continui. "
@@ -1165,6 +1182,11 @@ class Agente:
                     rimando = (self._test_falliti(lav, sandbox)
                                if rimandi < RIMANDI_MAX and self._resta_tempo(lav) else None)
                     if rimando is None:
+                        # Una correzione senza un test che prima falliva (12/10 sera)
+                        rip = self._riproduzione(lav, sandbox)
+                        if rip:
+                            messages.append({"role": "user", "content": rip})
+                            continue
                         consegna = {"riassunto": out["content"], "esito": "fatto"}
                         break
                     rimandi += 1
@@ -1258,6 +1280,15 @@ class Agente:
                             rimandi += 1
                             self.log(f"[AGENTI] {lav.id}: consegna con i test che falliscono, "
                                      f"torna all'agente ({rimandi}/{RIMANDI_MAX})")
+                    if rimando is None and str(args.get("esito") or "fatto") == "fatto":
+                        # Una correzione vale se un test che prima falliva adesso passa (12/10
+                        # sera, riproduzione.py): rimandata una volta sola
+                        rip = self._riproduzione(lav, sandbox)
+                        if rip:
+                            rimando = {"ok": False, "consegna": "rifiutata", "errore": rip,
+                                       "cosa_fare": "scrivi il test che riproduce il problema, "
+                                                    "correggi, rifai esegui_test e richiama "
+                                                    "consegna"}
                     if rimando is not None:
                         result = rimando
                         # L'errore da ricordare per le spinte (11/10)
@@ -1296,7 +1327,7 @@ class Agente:
                             fila.clear()
                         seg["ultimo_errore"] = ((ultimo_errore(result) or {
                             "test": "", "errore": firma, "dove": ""}) if firma else None)
-                    elif name in ("esegui_python", "esegui_csharp") and \
+                    elif name in ("esegui_python", "esegui_csharp", "esegui_js") and \
                             result.get("fallimenti"):
                         seg["ultimo_errore"] = ultimo_errore(result)
                 messages.append({"role": "tool", "tool_name": name,
@@ -1530,7 +1561,27 @@ class Agente:
             return None
         lav.passo = "controlla i test"
         r = sandbox.test()
+        # Due volte (12/10 sera, flusso a fasi § 5.1 passo 5): lo stesso codice deve dare lo
+        # stesso esito. Il 12/10 alle 07:39 un test con Math.random senza seme era 28 su 28 per
+        # l'agente e 27 su 28 al ricontrollo
+        r2 = sandbox.test()
         lav.nota("test", esito=r.get("esito"), passano=r.get("passano"))
+        from .diagnosi import conto_detto, instabili
+        nomi = instabili(r, r2)
+        if nomi is not None:
+            from ..sonde import nota as nota_regola
+            nota_regola(lav, "agente_test_instabili", self.log, ", ".join(nomi)[:120])
+            return {"ok": False, "consegna": "rifiutata", "esito_test": r.get("esito"),
+                    "uscita": str(r2.get("uscita") or "")[-1500:],
+                    "errore": (f"ho eseguito due volte gli stessi test senza cambiare niente e "
+                               f"l'esito è cambiato (prima {conto_detto(r)}, poi "
+                               f"{conto_detto(r2)}): {', '.join(nomi)} dipende dal caso o dal "
+                               "tempo. Un test deve dare sempre lo stesso esito: fissa il seme. "
+                               "In JavaScript passa alla logica la funzione del caso "
+                               "(nuovaPartita(n, caso = Math.random)) e nei test creaCaso(seme), "
+                               "che c'è già; per il gioco apriGioco({ seme }). In Python "
+                               "random.Random(seme) passato alla funzione. Poi rifai esegui_test "
+                               "e richiama consegna")}
         if r.get("passano"):
             return None
         return _con_fallimenti(
@@ -1539,6 +1590,34 @@ class Agente:
              "errore": "i test non passano: correggi il codice (o un test sbagliato), "
                        "rifai esegui_test, poi richiama consegna"},
             uscita=str(r.get("uscita") or ""))
+
+    def _riproduzione(self, lav: Lavoro, sandbox) -> str | None:
+        """La consegna «fatto» di una correzione (12/10 sera, riproduzione.py): un test nuovo o
+        cambiato deve fallire sulla versione di prima, e il codice deve essere cambiato. None
+        se la consegna va avanti; il messaggio che la rimanda all'agente, una volta sola e
+        solo se restano passate. L'esito resta in `lav.riproduzione` (la frase a voce)."""
+        if not getattr(lav, "correzione", False) or lav.tipo not in ("codice", "estensione"):
+            return None
+        from ..sonde import nota as nota_regola
+        from .riproduzione import NON_RIPRODOTTO, controlla, messaggio_agente
+        vecchio = getattr(lav, "riproduzione", None) or {}
+        lav.passo = "riprova i test nuovi sulla versione di prima"
+        esito = controlla(lav, sandbox, self.log)
+        esito["rimandi"] = int(vecchio.get("rimandi", 0) or 0)
+        lav.riproduzione = esito
+        lav.nota("riproduzione", stato=esito["stato"])
+        self.log(f"[AGENTI] {lav.id}: riproduzione della correzione: {esito['stato']}"
+                 + (f" ({esito.get('perche')})" if esito.get("perche") else "")
+                 + (f", test {', '.join(esito.get('test') or [])}" if esito.get("test") else ""))
+        if esito["stato"] not in NON_RIPRODOTTO:
+            return None
+        if esito["rimandi"] >= 1 or not self._resta_tempo(lav):
+            nota_regola(lav, "correzione_non_riprodotta", self.log, esito["stato"])
+            return None
+        esito["rimandi"] += 1
+        nota_regola(lav, "correzione_rimandata", self.log, esito["stato"])
+        return messaggio_agente(esito, getattr(lav, "problema_correzione", ""),
+                                bool(getattr(lav, "gioco", False)))
 
     def _modifica(self, lav: Lavoro, sandbox, args: dict) -> dict:
         """modifica_file (11/10): il testo vecchio, che deve comparire una volta sola, diventa
@@ -1599,6 +1678,10 @@ class Agente:
                                                               args.get("argomenti") or [],
                                                               None if inp in (None, "")
                                                               else str(inp))))
+            if name == "esegui_js":
+                lav.passo = "prova un pezzo di JavaScript"
+                return _con_fallimenti(dict(sandbox.esegui_js(args.get("percorso"),
+                                                              args.get("argomenti") or [])))
             if name == "scarica_esempio":
                 if self._sonde_ok(lav) is None:
                     # In una correzione si sonda, non si scarica (08/10 notte)

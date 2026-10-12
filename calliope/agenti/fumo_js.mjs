@@ -5,10 +5,36 @@
 // non lo vedono, perché girano senza il disegno (prima prova vera sulla DGX: il memory
 // dell'agente aveva «attesaRigira» mai dichiarata e nessun tocco funzionava).
 // Usato da test_js.mjs; restituisce l'elenco degli errori.
+//
+// Dal 12/10 sera (flusso dell'agente a fasi, parte 1; ricerca 2026-10-12-flusso-agente-fasi
+// § 5.1, passo 2) lo stesso ambiente serve anche ai test del disegno: apriGioco() carica il gioco
+// vero nel DOM finto e lo restituisce da guidare (tocca un elemento per testo o selettore, legge
+// il testo visibile, fa passare il tempo, manda un comando a voce). Il caso vero del 12/10:
+// logica.js restituiva l'esito annidato ({ ...stato, risultato }) e gioco.js lo leggeva al primo
+// livello: sempre «Nessun punto!», con i test della logica verdi. Un test che tocca una porta e
+// legge cosa compare lo prende alla prima versione. Il caso del gioco (Math.random) ha un seme
+// fisso, nella prova di fumo e in apriGioco (opzione «seme»): esiti ripetibili.
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
 
-export async function fumo(file, opzioni = {}) {
+// Un generatore con seme (mulberry32): lo stesso seme, la stessa sequenza
+export function creaCaso(seme = 1) {
+  let a = (Number(seme) >>> 0) || 1;
+  return () => {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// Le promesse rifiutate senza gestore vanno all'ambiente aperto per ultimo (un ascoltatore solo
+// per processo: con un ambiente per test Node avviserebbe di troppi ascoltatori)
+let notaCorrente = null;
+let ascolto = false;
+
+async function prepara(file, opzioni = {}) {
   // Le promesse del gioco (async, await calliope.leggi) si risolvono solo tornando al ciclo
   const respira = () => new Promise((ok) => setImmediate(ok));
   const errori = [];
@@ -219,9 +245,10 @@ export async function fumo(file, opzioni = {}) {
   // dice attivi adesso con comandiAttivi (all'inizio tutti); un nome non dichiarato è un errore
   const dichiarati = Object.keys(opzioni.comandi || {});
   let attivi = dichiarati.slice();
-  const avvio = { partita: "P1", giocatore: 1, giocatori: 1, massimo: opzioni.massimo || 1, condivisa: false, storia: [], lingua: "it",
+  const avvio = { partita: "P1", giocatore: 1, giocatori: opzioni.giocatori || 1, massimo: Math.max(opzioni.massimo || 1, opzioni.giocatori || 1), condivisa: false, storia: [], lingua: "it",
     ...(dichiarati.length ? { comandi: dichiarati.slice() } : {}) };
   const dati = {};
+  const detti = [];                // le frasi che il gioco fa dire a Calliope (calliope.di)
   const quando = (t) => (f) => { if (typeof f === "function") ascolti[t].push(f); };
   const calliope = Object.freeze({
     quandoPronto: (f) => { if (typeof f === "function") ascolti.avvio.push(f); },
@@ -236,7 +263,7 @@ export async function fumo(file, opzioni = {}) {
     },
     salva: (k, v) => { dati[k] = JSON.parse(JSON.stringify(v ?? null)); return Promise.resolve(null); },
     leggi: (k) => Promise.resolve(k in dati ? dati[k] : null),
-    manda: () => {}, chat: () => Promise.resolve(null), di: () => Promise.resolve(null),
+    manda: () => {}, chat: () => Promise.resolve(null), di: (t) => { detti.push(String(t ?? "")); return Promise.resolve(null); },
     azione: () => Promise.resolve(null), fine: () => {}, risorsa: () => "data:image/svg+xml;base64,PHN2Zy8+",
   });
   // ── finestra ──
@@ -258,14 +285,23 @@ export async function fumo(file, opzioni = {}) {
   g.window = g.self = g.globalThis = g;
   g.webkitAudioContext = g.AudioContext;
   const contesto = vm.createContext(g, { codeGeneration: { strings: false, wasm: false } });
-  process.on("unhandledRejection", (e) => nota("promessa", e));
+  // Il caso del gioco con un seme fisso (12/10 sera): la stessa partita a ogni esecuzione
+  vm.runInContext("Math", contesto).random = creaCaso(opzioni.seme ?? 12345);
+  notaCorrente = nota;
+  if (!ascolto) {
+    process.on("unhandledRejection", (e) => { if (notaCorrente) notaCorrente("promessa", e); });
+    ascolto = true;
+  }
+  const amb = { errori, nota, nodi, radice, doc, tocchi, descrivi, lancia, evento, avanza,
+                respira, ascolti, attivi: () => attivi, dati, detti, caricato: false };
   for (const f of file) {
     try { testi[base(f)] = readFileSync(f, "utf8"); } catch (e) { testi[base(f)] = ""; }
   }
   for (const f of file) {
     try { vm.runInContext(testi[base(f)], contesto, { filename: f, timeout: 2000 }); }
-    catch (e) { nota(`caricamento di ${base(f)}`, e, { file: base(f) }); return errori; }
+    catch (e) { nota(`caricamento di ${base(f)}`, e, { file: base(f) }); return amb; }
   }
+  amb.caricato = true;
   lancia(doc.documentElement, "DOMContentLoaded", evento("DOMContentLoaded", doc));
   lancia(doc.documentElement, "load", evento("load", doc));
   for (const f of ascolti.avvio) {
@@ -279,11 +315,26 @@ export async function fumo(file, opzioni = {}) {
       && !radice._html && !radice._testo) {
     nota("disegno", "dopo l'avvio nel riquadro non c'è niente (il gioco disegna dentro <div id=\"gioco\">, dopo calliope.quandoPronto?)");
   }
+  return amb;
+}
+
+// Il testo che si vede nel riquadro (con quello scritto con innerHTML, senza i tag)
+function visibile(amb) {
+  return (String(amb.radice.textContent || "") + " "
+    + String(amb.radice._html || "").replace(/<[^>]*>/g, " ")).replace(/\s+/g, " ").trim();
+}
+
+const TOCCHI = ["click", "pointerdown", "pointerup", "mousedown", "mouseup", "touchstart", "touchend"];
+
+export async function fumo(file, opzioni = {}) {
+  const amb = await prepara(file, opzioni);
+  const { errori, nota, nodi, radice, doc, tocchi, descrivi, lancia, evento, avanza, respira, ascolti } = amb;
+  if (!amb.caricato) return errori;
   // Tocchi a caso, con il tempo che scorre (seme fisso: ripetibile)
   let seme = 12345;
   const caso = (n) => { seme = (seme * 1103515245 + 12345) % 2147483648; return seme % n; };
-  const TOCCHI = ["click", "pointerdown", "pointerup", "mousedown", "mouseup", "touchstart", "touchend"];
   for (let i = 0; i < (opzioni.tocchi || 300); i++) {
+    const attivi = amb.attivi();
     const vivi = nodi.filter((n) => n.isConnected && TOCCHI.some((t) => (n._h[t] || []).length));
     if (!vivi.length && !(attivi.length && ascolti.comando.length)) break;
     if (!vivi.length) vivi.push(radice);
@@ -314,12 +365,118 @@ export async function fumo(file, opzioni = {}) {
     // logica non dà («undefined», «NaN», «[object Object]») nel testo visibile è un errore, non
     // solo un'eccezione. Il caso vero del 12/10 mostrava «Nessun punto!» (non lo prende), ma è la
     // stessa classe: gioco.js che legge un campo nel posto sbagliato
-    const visibile = String(radice.textContent || "") + " " + String(radice._html || "");
-    const strano = visibile.match(/\bundefined\b|\bNaN\b|\[object Object\]/);
+    const strano = visibile(amb).match(/\bundefined\b|\bNaN\b|\[object Object\]/);
     if (strano) {
       nota("disegno", `dopo il tocco su ${tocchi[tocchi.length - 1] || "il gioco"} nel testo visibile c'è «${strano[0]}»: gioco.js mostra un campo che la logica non dà in quel posto (controlla la forma di ciò che restituisce logica.js)`);
     }
     if (errori.length) break;
   }
   return errori;
+}
+
+// ── I test del disegno (12/10 sera, ricerca 2026-10-12-flusso-agente-fasi § 5.1, passo 2) ──
+// Il gioco vero (gli script di «scheda.file») nel DOM finto, da guidare in un test: nei test dei
+// giochi c'è apriGioco(opzioni) (test_js.mjs), che chiama questa con i file del manifesto.
+//   const g = await apriGioco({ giocatori: 2, seme: 7 });
+//   await g.tocca("Inizia");               // per testo visibile, o un selettore (#id, .classe)
+//   await g.tocca(".porta", 1);            // il secondo elemento che combacia
+//   await g.scrivi("input", "Ada");         // un campo di testo (input e change)
+//   await g.comando("tre");                // un comando a voce attivo (scheda.ascolta)
+//   await g.avanza(1000);                  // il tempo finto passa (animazioni, timer)
+//   g.testo()                              // il testo visibile nel riquadro, su una riga
+//   g.trova(".punti")                      // gli elementi (textContent, disabled, className…)
+//   g.detti, g.dati                        // le frasi fatte dire a Calliope, i dati salvati
+// Un'eccezione che esce da un gestore durante tocca/comando/avanza fa fallire il test con
+// file:riga, come nella prova di fumo. Un elemento disabilitato non riceve il tocco (come nel
+// browser).
+export async function apriGioco(file, opzioni = {}) {
+  const amb = await prepara(file, opzioni);
+  const { errori, nodi, radice, lancia, evento, avanza, respira, ascolti } = amb;
+  const fallisci = (dove, da) => {
+    if (errori.length > da) throw new Error(`${dove}: ${errori.slice(da).join(" | ")}`);
+  };
+  fallisci("all'avvio del gioco", 0);
+  const vivo = (n) => n && n.nodeType === 1 && n.isConnected && radice.contains(n);
+  const testoDi = (n) => String(n.textContent || n.value || n.getAttribute("aria-label")
+    || n.getAttribute("title") || "").replace(/\s+/g, " ").trim();
+  const gestori = (n, tipi) => {
+    for (let x = n; x; x = x.parentNode) if (tipi.some((t) => ((x._h || {})[t] || []).length)) return true;
+    return false;
+  };
+  function trova(cosa) {
+    if (cosa && typeof cosa === "object" && cosa.tagName) return vivo(cosa) ? [cosa] : [];
+    const s = String(cosa ?? "").trim();
+    if (!s) return [];
+    if (/^([#.][\w-]+|[a-z][a-z0-9-]*([#.][\w-]+)*)$/.test(s)) {
+      const r = radice.querySelectorAll(s).filter(vivo);
+      if (r.length) return r;
+    }
+    const tutti = nodi.filter(vivo);
+    let c = tutti.filter((n) => testoDi(n) === s);
+    if (!c.length) c = tutti.filter((n) => testoDi(n).includes(s));
+    // Il più interno (il testo di un pulsante è anche quello del suo contenitore)
+    return c.filter((n) => !c.some((m) => m !== n && n.contains(m)));
+  }
+  const DITO = ["pointerdown", "mousedown", "pointerup", "mouseup", "click"];
+  const TOCCO = ["touchstart", "touchend"];
+  async function passa(ms) {
+    await respira();
+    avanza(ms);
+    await respira();
+  }
+  const g = {
+    errori, detti: amb.detti, dati: amb.dati,
+    testo: () => visibile(amb),
+    trova,
+    async tocca(cosa, indice = 0) {
+      const tutti = trova(cosa);
+      const ascoltano = tutti.filter((n) => gestori(n, [...DITO, ...TOCCO]));
+      const n = (ascoltano.length ? ascoltano : tutti)[indice];
+      if (!n) {
+        throw new Error(`nessun elemento da toccare con «${cosa}»`
+          + (tutti.length ? ` (ce ne sono ${tutti.length})` : "")
+          + `: nel riquadro si legge «${visibile(amb).slice(0, 300)}»`);
+      }
+      if (n.disabled) return g;
+      const da = errori.length;
+      amb.tocchi.push(amb.descrivi(n));
+      const tipi = gestori(n, TOCCO) && !gestori(n, DITO) ? TOCCO : DITO;
+      for (const t of tipi) lancia(n, t, evento(t, n));
+      await passa(opzioni.passo ?? 50);
+      fallisci(`toccando «${cosa}»`, da);
+      return g;
+    },
+    async scrivi(cosa, testo, indice = 0) {
+      const n = trova(cosa)[indice];
+      if (!n) throw new Error(`nessun campo «${cosa}»: nel riquadro si legge «${visibile(amb).slice(0, 300)}»`);
+      const da = errori.length;
+      n.value = String(testo ?? "");
+      for (const t of ["input", "change"]) lancia(n, t, evento(t, n));
+      await passa(opzioni.passo ?? 50);
+      fallisci(`scrivendo in «${cosa}»`, da);
+      return g;
+    },
+    async comando(nome, giocatore = "") {
+      const attivi = amb.attivi();
+      if (!attivi.includes(String(nome))) {
+        throw new Error(`il comando «${nome}» adesso non è attivo (attivi: ${attivi.join(", ") || "nessuno"})`);
+      }
+      const da = errori.length;
+      const dati = Object.freeze({ comando: String(nome), ...(giocatore ? { giocatore: String(giocatore) } : {}) });
+      for (const f of [...ascolti.comando]) {
+        try { const r = f(dati); if (r && typeof r.catch === "function") r.catch((e) => amb.nota(`comando «${nome}» (promessa)`, e, { gestore: true })); }
+        catch (e) { amb.nota(`comando «${nome}»`, e, { gestore: true }); }
+      }
+      await passa(opzioni.passo ?? 50);
+      fallisci(`con il comando «${nome}»`, da);
+      return g;
+    },
+    async avanza(ms = 1000) {
+      const da = errori.length;
+      await passa(ms);
+      fallisci(`facendo passare ${ms} ms`, da);
+      return g;
+    },
+  };
+  return g;
 }

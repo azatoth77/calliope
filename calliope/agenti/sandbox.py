@@ -416,20 +416,37 @@ class Sandbox:
         args, stdin = self._argomenti(argomenti, stdin)
         return self._lancia("csharp", cart, args, stdin=stdin, flusso=flusso, isolamento=iso)
 
-    def test(self, rel=None) -> dict:
+    def esegui_js(self, rel, argomenti=(), stdin: str | None = None) -> dict:
+        """Un file .js della cartella con Node, nel container di Node (12/10 sera, esegui_js
+        dell'agente: provare un pezzo di logica invece di ragionarci a mente). Gli stessi
+        limiti dei test JavaScript: niente rete, disco in sola lettura salvo la cartella, tempo
+        e memoria; mai sull'host."""
+        iso = self.linguaggi.get("javascript")
+        if iso is None or not iso.pronto:
+            raise ErroreSandbox("il JavaScript qui non si esegue: manca il container di Node "
+                                "(calliope motore sandbox costruisci javascript)")
+        path = self.percorso(rel)
+        if path.suffix.lower() != ".js" or not path.is_file():
+            raise ErroreSandbox("si eseguono solo file .js della cartella del lavoro")
+        args, stdin = self._argomenti(argomenti, stdin)
+        return self._lancia("js", path.relative_to(self.root).as_posix(), args, stdin=stdin,
+                            isolamento=iso)
+
+    def test(self, rel=None, fumo: bool = True) -> dict:
         """I test della cartella: quelli Python (test_*.py) e, dal 05/10, quelli JavaScript
         (*.test.js, con la sintassi degli altri .js) nel container di Node. Con tutti e due i
-        conti si sommano."""
+        conti si sommano. `fumo` False: senza la prova di fumo dei giochi (12/10 sera, la
+        riproduzione di una correzione conta solo i test dell'agente, riproduzione.py)."""
         nomi = [p.relative_to(self.root).as_posix() for p in self._files()]
         js = file_test_js(nomi)
         if rel and str(rel).endswith(".js"):
             path = self.percorso(rel)
             if not path.is_file():
                 raise ErroreSandbox(f"il file di test «{rel}» non c'è")
-            return self.test_js([path.relative_to(self.root).as_posix()])
+            return self.test_js([path.relative_to(self.root).as_posix()], fumo=fumo)
         if not rel and js and not any(Path(n).name.startswith("test") and n.endswith(".py")
                                       or n.endswith("_test.py") for n in nomi):
-            return self.test_js()
+            return self.test_js(fumo=fumo)
         target = ""
         if rel:
             path = self.percorso(rel)
@@ -439,16 +456,17 @@ class Sandbox:
         r = self._lancia("test", target, [])
         if rel or not js:
             return r
-        j = self.test_js()
+        j = self.test_js(fumo=fumo)
         e = {k: int((r.get("esito") or {}).get(k, 0)) + int((j.get("esito") or {}).get(k, 0))
              for k in ("eseguiti", "falliti", "errori", "saltati")}
         return {**r, "esito": e, "passano": bool(r.get("passano") and j.get("passano")),
                 "uscita": (r.get("uscita") or "") + "\n— test JavaScript —\n"
                           + (j.get("uscita") or "")}
 
-    def test_js(self, files=None) -> dict:
+    def test_js(self, files=None, fumo: bool = True) -> dict:
         """I test JavaScript (05/10): node:test nel container di Node, mai sull'host. La
-        sintassi di tutti gli altri .js si controlla prima (senza eseguirli)."""
+        sintassi di tutti gli altri .js si controlla prima (senza eseguirli). `fumo` False:
+        senza la prova di fumo della scheda (primo argomento «--senza-fumo»)."""
         iso = self.linguaggi.get("javascript")
         if iso is None or not iso.pronto:
             vuoto = {"eseguiti": 0, "falliti": 0, "errori": 1, "saltati": 0}
@@ -460,7 +478,8 @@ class Sandbox:
         nomi = [p.relative_to(self.root).as_posix() for p in self._files()
                 if p.suffix.lower() == ".js"]
         tutti = sorted(set(nomi) | set(files or ()))
-        return self._lancia("test_js", "", tutti, isolamento=iso)
+        return self._lancia("test_js", "", ([] if fumo else ["--senza-fumo"]) + tutti,
+                            isolamento=iso)
 
     def termina(self):
         """Ferma l'esecuzione in corso (annullo del lavoro). Non aspetta: si chiama anche dal
@@ -511,7 +530,7 @@ class Sandbox:
         if docker:
             # Le cartelle dei pacchetti sono quelle dell'immagine: niente siti dall'host. Il
             # C# non ha la riga di configurazione: lo stdin è tutto del programma
-            conf = ("" if modo == "csharp" else nonce + "\n" if modo == "test_js" else
+            conf = ("" if modo in ("csharp", "js") else nonce + "\n" if modo == "test_js" else
                     json.dumps({"nonce": nonce, "siti": [], "leggibili": []}) + "\n")
             nome = "calliope-sandbox-" + secrets.token_hex(6)
             cmd = self._comando_docker(nome, modo, target, args, isolamento=iso)
@@ -636,7 +655,7 @@ class Sandbox:
         «csharp»: l'immagine del C# ed esegui_cs.sh al posto di _avvio.py (04/10)."""
         iso = isolamento or self.isolamento
         csharp = modo == "csharp"
-        node = modo == "test_js"
+        node = modo in ("test_js", "js")
         mem = max(64, self.memoria_mb)
         try:
             utente = f"{os.getuid()}:{os.getgid()}"
@@ -677,6 +696,9 @@ class Sandbox:
         cmd += [iso.immagine or "calliope-sandbox", "timeout", "-s", "KILL", str(dentro)]
         if csharp:
             return cmd + ["sh", _ESEGUI_CS_C, target, *args]
+        if modo == "js":
+            # Un file dell'agente (esegui_js, 12/10 sera): Node e basta, nella cartella
+            return cmd + ["node", f"{_LAVORO_C}/{target}", *args]
         if node:
             return cmd + ["node", _TEST_JS_C, *args]
         return cmd + ["python", "-I", "-B", "-u", "-X", "utf8", _AVVIO_C, _LAVORO_C, modo, target,

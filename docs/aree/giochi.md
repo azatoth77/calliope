@@ -296,14 +296,17 @@ i giochi:
   primo livello da `gioco.js`, è nella ricerca
   [`2026-10-12-flusso-agente-fasi`](../ricerche/2026-10-12-flusso-agente-fasi.md)).
 
+### Test del disegno (12/10 sera, flusso a fasi parte 1)
+
+Il difetto vero del 12/10 (l'esito annidato in `logica.js` letto al primo livello da `gioco.js`: niente mostro, sempre «Nessun punto!») passava la logica e la prova di fumo. Dal 12/10 sera i test del gioco possono guidare il gioco vero nel DOM finto: in `gioco.test.js` c'è `apriGioco({ giocatori, seme })` (`agenti/fumo_js.mjs`), che tocca per testo o selettore, manda i comandi a voce attivi, fa passare il tempo e legge il testo visibile (`g.testo()`). Lo scheletro del gioco lo mostra; una correzione di un gioco parte da un test in `gioco.test.js` che fallisce sulla versione di prima (sennò «non sono riuscita a riprodurre il problema: me lo descrivi in un altro modo?»). Il caso del gioco ha un seme fisso nella prova di fumo e in `apriGioco`; `creaCaso(seme)` per i test della logica; `esegui_js` per provare un pezzo di `logica.js` con `console.log`. Dettagli in [agenti-estensioni](agenti-estensioni.md), «Flusso dell'agente a fasi, parte 1».
+
 ### Prove
 
 `prova_gioco_voce` (a secco, ~2 s: manifesto, server, ciclo con tutti i contrari, il tool,
 chi gioca, la prova di fumo con i comandi), `prova_testo` (le forme e i contrari della regola),
 `prova_giochi_pagina` (Edge: la mossa arriva nel riquadro con il solo comando e il nome, il
 sottoinsieme a runtime, la pagina non passa nomi non validi né testo libero, ✕ chiude anche
-l'ascolto, i comandi nella partita di prova), `prova_agente_guida` (lo scheletro passa i suoi
-test). Il gioco delle prove è `prove/giochi/porte`.
+l'ascolto, i comandi nella partita di prova), `prova_agente_guida` (lo scheletro passa i suoi test, anche `gioco.test.js`), `prova_fasi_agente` (il difetto del 12/10 preso dal test del disegno, l'API di `apriGioco`, la riproduzione di una correzione di gioco). Il gioco delle prove è `prove/giochi/porte`.
 
 ### Da fare sulla DGX
 

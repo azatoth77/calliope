@@ -13,6 +13,7 @@
 | Il risultato di un lavoro finito a voce o sullo schermo (07/10) | il modello dell'agente per il riassunto per la voce (thinking spento, tempo massimo) | `calliope/agenti/risultato.py` → `trova`, `scegli`, `dal_disco`, `testo_intero`, `riassunto_voce`, `scheda`, `recenti`, `elenco_detto`, `chiave`, `converti` (dal 07/10: «fammene un PDF»); tool `lavoro_risultato` (era `risultato_lavoro`; `calliope/tools/agenti.py`), `agenti_risultato_s`; prove `prova_risultati.py`, `prova_risultati_ollama.py` |
 | Modalità sviluppo (08/10): un'estensione o un programma come iter a fasi | solo libreria standard; lo stato su disco accanto ai lavori (`sviluppi.json`) | `calliope/sviluppo.py` → `Sviluppi` (`corrente`, `apri`, `passa`, `proposto`, `avviato`, `lavoro_finito`, `estensione_approvata`, `dati_turno`, `promemoria_giorno`, `scheda`, `totali`, `riepilogo_lavoro`, `frase_pronto`), `passo_interno`, `estraneo`, `confronto` e `esempi_veri` (diagnosi dei collaudi, 08/10 notte); tool `sviluppo_apri`, `sviluppo_passo` (azioni in `AZIONI`), `sviluppo_collauda`, `sviluppo_chiedi`, `sviluppo_correggi` in `calliope/tools/sviluppo.py` (prima del 08/10 `sviluppo` e `sviluppo_prova`; `controlla_nuovo`, `apri_se_serve`); `Estensioni.prova_candidata`, `Estensioni.revisione`, `differenze` (`calliope/estensioni/servizio.py`); progetto [`docs/ricerche/2026-10-08-modalita-sviluppo.md`](../ricerche/2026-10-08-modalita-sviluppo.md); prove `prova_sviluppo.py`, `prova_sviluppo_v2.py`, `prova_sviluppo_giro3.py` … `prova_sviluppo_giro6.py`, `prova_diagnosi_collaudi.py`, `prova_scheda_sviluppo.py`, `prova_sviluppo_ollama.py`; dal 12/10 la specifica viva (`Sviluppi.aggiorna_requisiti`, `requisiti.chiedi_modifica`, `applica`, `specifica_da_requisiti`, `frase_cambi`; prova `prova_specifica_viva.py`) |
 | Sonde dell'agente e ricollaudo alla consegna (08/10 notte) | solo libreria standard; il container delle estensioni per il ricollaudo, `RetePubblica` per le sonde | `calliope/sonde.py` → `ricollaudo`, `casi_da_riprovare`, `sonda`, `sonde_ok`, `host_noti`, `concedi`, `vocabolario`, `Vocabolario`, `controlla_url`, `come_l_ha_letto`, `SONDA_RETE`; `Estensioni.prova_bozza` (`estensioni/servizio.py`), `restringi_per_sonda` (`estensioni/manifesto.py`), `Lavori._controlla_estensione` (`agenti/servizio.py`), `Agente._sonda_rete` (`agenti/ciclo.py`); nomi pubblici di casa in `calliope/web/rete.py` → `nomi_casa`; specifica in [`docs/ricerche/2026-10-08-sonde-agente.md`](../ricerche/2026-10-08-sonde-agente.md) § 9; prove `prova_sonde.py`, `prova_sonde_attacchi.py` |
+| La correzione da un test rosso, i test del disegno dei giochi, esegui_js, i test due volte (12/10 sera, flusso a fasi parte 1) | solo libreria standard; il container di Node dei test JavaScript | `calliope/agenti/riproduzione.py` → `controlla`, `messaggio_agente`, `NON_CODICE`; `Agente._riproduzione`, `_test_falliti` (due esecuzioni, `diagnosi.instabili`), `ESEGUI_JS` in `agenti/ciclo.py`; `Sandbox.esegui_js`, `Sandbox.test(fumo=False)`; apriGioco e creaCaso (JavaScript) in `agenti/fumo_js.mjs`, globali nei test da `agenti/test_js.mjs`; `VINCOLO_RIPRODUCI` in `tools/sviluppo.py`; banco `prove/manuali/banco_temperatura.py`; prova `prova_fasi_agente.py` |
 | Estensioni permanenti e guardrail (04/10) | container della sandbox (Docker) per ogni chiamata, JSON-RPC su stdin/stdout (cornice stdio di MCP, senza SDK), solo libreria standard | `calliope/guardrail.py` → `valuta_porta`, `SecondoParere`, `domanda` (la porta delle estensioni: sicura / pericolosa / vietata; i tool di Calliope li decide `politica.decidi` dal 06/10); `calliope/estensioni/` → `Estensioni` (`servizio.py`), `Porta` (`porta.py`), `Esecuzione` (`esecuzione.py`), `Archivio` (`archivio.py`: versioni, impronta), `valida` (`manifesto.py`), `analizza` (`analisi.py`), runtime `_ospite.py` (nel container: `calliope_estensione`), prompt dell'agente (`prompt.py`: `sistema_estensione`), contratto delle capacità (`contratto.py`: `testo`, `CAPACITA_IDS`, CAPACITA.md); rete solo pubblica `calliope/web/rete.py` → `RetePubblica` (registro `uscite.jsonl`, `riepilogo`), dati riservati nel traffico `calliope/web/riservati.py` → `Riservati`, `da_contesto`; piano e permessi dell'agente in `agenti/ciclo.py` (`PIANO`, `CHIEDI_PERMESSO`, `_piano`, `_fuori_piano`); tool `estensione_gestisci` (era `estensioni_gestisci`) in `calliope/tools/estensioni.py`, la creazione passa da `sviluppo_apri` dal 08/10 (prima `estensione_crea`); progetto in `docs/ricerche/2026-10-04-estensioni-e-guardrail.md` (§11–§14 dal 05/10) |
 
 ## Problemi noti
@@ -2788,3 +2789,133 @@ falle strane»), `prova_sviluppo` e `prova_voce_onesta` (la riga del fuori tema)
 **Da guardare sulla DGX** (26B e qwen3.6): `spinta_sviluppo` e `sviluppo_testo_taciuto` nel campo
 `regole`; la revisione con «no, continua»; quante tappe dei giochi finiscono per ragionamento
 ripetuto dopo l'avviso nuovo; se le correzioni dei giochi aggiungono il test sulle mosse.
+
+## Flusso dell'agente a fasi, parte 1 (12/10 sera, ramo `fasi-parte1`)
+
+Le proposte della ricerca [`2026-10-12-flusso-agente-fasi`](../ricerche/2026-10-12-flusso-agente-fasi.md)
+sono state accettate da Dario il 12/10. Questa è la parte 1: ciò che si controlla sugli
+artefatti e non chiede un lavoro in più all'agente. La parte 2 (l'analisi dell'agente in
+secondo piano con le domande, i test di accettazione da un lavoro separato in sola lettura per
+programmi ed estensioni, la revisione che dice «da guardare tu») è un lavoro a parte; qui
+niente la anticipa e niente le chiude la strada (sotto, «Per la parte 2»).
+
+1. **La correzione parte da un test che fallisce** (`calliope/agenti/riproduzione.py`,
+   `Agente._riproduzione`). I vincoli della correzione (`VINCOLO_RIPRODUCI` in
+   `tools/sviluppo.py`, al posto di «trova la causa, correggi, aggiungi un test con ogni caso
+   che non andava») chiedono PRIMA un test che riproduce il problema e lo vede fallire, poi la
+   correzione. Il codice lo controlla alla consegna «fatto» di un lavoro con `correzione`:
+   - i file del codice (tolti manifesto, contratto, runtime, test, esempi e i file di prova
+     `prova_*.js`/`.py`) devono essere **cambiati** rispetto a `lav.file_iniziali`, la versione
+     provata: altrimenti «uguale» (la regola del codice uguale del 12/10 sera, ora con lo stesso
+     criterio: `Sviluppi._NON_CODICE` è `riproduzione.NON_CODICE`);
+   - ci deve essere un file di test **nuovo o cambiato**: altrimenti «nessun_test»;
+   - quei soli test, sulla versione di prima (una sandbox accanto, `<sandbox>-prima`, stesso
+     isolamento e stesso container, come il ricollaudo; tolta subito dopo), devono **fallire**:
+     altrimenti «passa_prima». La prova di fumo dei giochi lì non gira
+     (`test_js.mjs --senza-fumo`, `Sandbox.test(fumo=False)`): conta solo un test scritto
+     dall'agente. Che passino sulla versione nuova lo dice già il controllo dei test.
+
+   Senza riproduzione la consegna torna all'agente **una volta** (regola
+   `correzione_rimandata`, con il messaggio di `riproduzione.messaggio_agente`: quale test,
+   «versione di PRIMA», il problema; per un gioco `gioco.test.js` con `apriGioco`); alla
+   seconda va avanti segnata (`correzione_non_riprodotta`, `lav.riproduzione`), e se non
+   restano passate non si rimanda. All'annuncio (`Sviluppi.lavoro_finito`) non è «pronto»:
+   «Dario, la correzione di «…» è finita, ma non sono riuscita a riprodurre il problema: me lo
+   descrivi in un altro modo?» (con il codice uguale: «…è finita ma il codice è uguale a prima,
+   e non sono riuscita…»), con `sviluppo_correggi` in sospeso: la risposta è il problema detto
+   di nuovo. Lo sviluppo resta al collaudo. Quando non si può dire («saltato»: nessun file di
+   partenza, solo C# senza esegui_test, il container di Node che manca) la consegna va come
+   prima, e con il codice uguale resta la domanda di prima («Lo rimando all'agente?»).
+2. **I test dei giochi toccano il comportamento visibile** (`apriGioco` in
+   `calliope/agenti/fumo_js.mjs`, globale nei test JavaScript da `test_js.mjs`). L'ambiente della
+   prova di fumo (DOM finto, `calliope` finto, tempo finto) è diventato `prepara()`; la prova di
+   fumo lo usa come prima, e `apriGioco({ giocatori, seme })` restituisce il gioco vero da
+   guidare: `tocca(testo o selettore, indice)` (pointer, mouse e click come un dito; un elemento
+   disabilitato non riceve il tocco), `scrivi`, `comando` (solo i comandi attivi), `avanza(ms)`,
+   `testo()` (il testo visibile, anche quello scritto con innerHTML, senza tag), `trova`,
+   `detti` (le frasi di `calliope.di`), `dati`. Un'eccezione che esce da un gestore fa fallire
+   il test con file:riga, come nella prova di fumo; un elemento che non c'è lo dice con il testo
+   che si legge. Lo scheletro del gioco ha `gioco.test.js` (circa 650 caratteri in più, stimati
+   ~190 token: da rimisurare sulla DGX), il prompt e il contratto lo dicono, e
+   `VINCOLO_CORREZIONE_GIOCO` chiede il test che riproduce in `gioco.test.js` con `apriGioco`.
+
+   **Il caso del 12/10** riscritto con nomi di fantasia (le porte di Borgofiore,
+   `prova_fasi_agente.py`): `logica.js` restituisce `{ ...stato, punti, turno, risultato }`,
+   `gioco.js` mostra `esito.emoji` e `esito.punti` al primo livello → niente mostro e «Nessun
+   punto!». La logica e la prova di fumo passano (nessun «undefined»: `textContent = undefined`
+   è vuoto), il test del disegno («tocco Inizia e Porta 1, leggo Fantasmino e +3 punti»)
+   fallisce; il gioco giusto lo passa. Una correzione che aggiunge solo un test di logica passa
+   anche sulla versione di prima («passa_prima», il caso delle 11:37).
+
+   **Per programmi ed estensioni** gli esempi dato → risultato dei requisiti come test non hanno
+   ancora una via: i requisiti (`requisiti.py`) non hanno esempi, e i collaudi falliti li
+   riprova già il ricollaudo. Si fa nella parte 2, così: il lavoro separato in sola lettura (il
+   «progettista dei test») riceve i requisiti numerati e il contratto del tipo, e scrive per ogni
+   requisito verificabile un esempio in forma chiusa (`{"requisito": 3, "dati": {...},
+   "atteso": {"risultato": 16.09, "tolleranza": 0.01}}`, o un testo che deve comparire in
+   `da_dire`, oppure «al collaudo»); il codice li trasforma in `test_accettazione.py` (con
+   `CalliopeFinta` per le estensioni, il programma eseguito con gli argomenti per i programmi),
+   li mette in sola lettura nella sandbox (`Sandbox.sola_lettura`), controlla che falliscano
+   sullo scheletro e alla consegna li riesegue. La riproduzione di questa parte 1 resta valida
+   anche lì: un test di accettazione nuovo di una correzione è un test nuovo.
+3. **Strumenti e semi** (§ 5.1, passo 5). L'avviso di fine giro senza numeri c'era già (12/10
+   sera). In più:
+   - **`esegui_js`** (`ESEGUI_JS`, `Sandbox.esegui_js`): un file `.js` della cartella con Node,
+     nel container dei test JavaScript, con gli stessi limiti (niente rete, disco in sola lettura
+     salvo la cartella, tempo, memoria; mai sull'host), offerto solo quando il container c'è. Il
+     prompt dice di scrivere la prova in `prova_*.js` con `console.log` invece di ragionare a
+     mente; quei file non sono codice per la riproduzione e non entrano nella versione
+     (`_solo_usati`). Il 12/10 due giri a vuoto su quattro erano debug a mente di `logica.js`;
+   - **il seme**: il `Math.random` del gioco nella prova di fumo e in `apriGioco` ha un seme fisso
+     (opzione `seme`), `creaCaso(seme)` è globale nei test JavaScript, i prompt dicono
+     `random.Random(seme)`, `creaCaso`, `apriGioco({ seme })`;
+   - **i test due volte al ricontrollo** (`Agente._test_falliti`, `diagnosi.instabili`): un
+     esito diverso senza che niente sia cambiato torna all'agente con i test, i due conti («prima
+     1 su 1 passano, poi 0 su 1») e «fissa il seme» (regola `agente_test_instabili`). Il 12/10
+     alle 07:39 un test con `Math.random` senza seme era 28 su 28 per l'agente e 27 su 28 al
+     ricontrollo. Costo: un'esecuzione dei test in più per consegna (Python ~0,2 s nel container,
+     un gioco con la prova di fumo ~1 s).
+
+   Le fasi come lavori distinti tenuti dal codice (analisi, piano dei test, sviluppo) sono la
+   parte 2: qui le fasi sono ancora capitoli dello stesso lavoro, ma ognuno con un artefatto che
+   il codice controlla (il test rosso prima, il test verde dopo, due esecuzioni uguali).
+4. **Banco della temperatura** (`prove/manuali/banco_temperatura.py`, non lanciato: va lanciato
+   sulla DGX quando è libera). Confronta **lavori interi** per ogni combinazione di temperatura
+   (0,4 di oggi contro 0,6 della scheda di Qwen3.6 per il codice) e presence_penalty (0 e 0,5),
+   solo in memoria, su tre casi veri con nomi di fantasia: la correzione delle porte di
+   Borgofiore (accettazione nascosta con `apriGioco`), il convertitore di distanze (estensione
+   nuova con «unità astronomiche», accettazione con `CalliopeFinta` e cinque esempi), il
+   programma «rinomina le foto per data» (c01 di `prova_lavori.py`). Misure: riusciti,
+   accettazione verde, passate, token, minuti, giri a vuoto (passate fermate e senza novità),
+   test dell'agente, riproduzione e regole. `--secco` controlla il banco senza modello: ogni
+   accettazione è rossa alla partenza e verde sulla soluzione di riferimento (fatto sul
+   portatile: tutto ok; il percorso dei lavori provato con un cliente finto sul caso del
+   programma). Il predefinito (`agenti_temperatura: 0.4`) si cambia solo se la tabella lo
+   giustifica.
+
+**Profilo ridotto da 8 GB.** Oggi lì l'agente non c'è (il codice dell'agente non si esegue su
+Windows senza container): niente cambia per la voce, niente modelli né memoria in più. Se un
+giorno ci sarà un agente piccolo o remoto: (1) la riproduzione è solo codice e sandbox (una
+sandbox in più per una correzione, secondi), e a un modello piccolo serve di più; (2)
+`apriGioco` e il seme sono Node, senza modelli; il test del disegno chiede al modello di
+scrivere un test in più, cosa che un modello piccolo fa peggio: il rimando unico e la frase
+«me lo descrivi in un altro modo?» tengono il costo limitato; (3) `esegui_js` aiuta di più un
+modello piccolo (meno ragionamento a mente); i test due volte costano un'esecuzione; (4) il
+banco si lancia anche con un altro modello (`--temperature`, `--presence`) e serve proprio a
+scegliere i valori per un modello diverso.
+
+**Prove:** `prova_fasi_agente.py` (nuova, livello 2, ~18 s: le tre parti con i contrari),
+`prova_agente_guida.py` (lo scheletro del gioco con `gioco.test.js` passa i suoi test).
+
+**Per la parte 2** (cosa trova pronto): `riproduzione.controlla` sa eseguire dei test su una
+versione qualunque in una sandbox accanto (per «ogni test di accettazione fallisce sullo
+scheletro» basta passare lo scheletro come `file_iniziali`); `Sandbox.sola_lettura` c'è già per
+i test del progettista; `apriGioco` è l'API per i test di accettazione dei giochi (con la
+macchina a stati dei giochi i selettori diventano stabili); `lav.riproduzione` e le regole sono
+nei segnali per la revisione onesta.
+
+**Da guardare sulla DGX:** quante correzioni arrivano «riprodotto» al primo giro e quante
+finiscono con «me lo descrivi in un altro modo?» (regole `correzione_rimandata`,
+`correzione_non_riprodotta` nel log dell'agente); se l'agente usa `esegui_js` e se i giri a vuoto
+dei giochi calano; `agente_test_instabili`; il banco della temperatura (comando nel suo
+docstring).

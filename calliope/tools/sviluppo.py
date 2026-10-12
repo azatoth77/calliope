@@ -2391,10 +2391,24 @@ VINCOLO_CORREZIONE_GIOCO = (
     " È un GIOCO e il problema l'ha visto la persona sullo schermo: la causa può essere in "
     "gioco.js (il disegno, i tocchi, cosa si mostra), non solo in logica.js. Segui il tocco "
     "della persona fino a ciò che appare: che il tocco chiami la regola giusta e che il risultato "
-    "(cosa c'è dietro la porta, i punti, chi vince e perché) venga mostrato. Aggiungi in "
-    "logica.test.js un test che giochi le mosse dette dalla persona e controlli proprio quello "
-    "che lei dice che non va (punti assegnati, esito della mossa, vincitore): la prova di fumo "
-    "dice solo che il gioco parte.")
+    "(cosa c'è dietro la porta, i punti, chi vince e perché) venga mostrato. Il test che "
+    "riproduce il problema va in gioco.test.js e guida il gioco vero: const g = await "
+    "apriGioco({ giocatori: 2, seme: 1 }); await g.tocca(\"testo del pulsante\"); poi controlla "
+    "con g.testo() proprio quello che la persona dice che non va (il mostro, i punti, il "
+    "vincitore). I test di logica.test.js non vedono gioco.js, e la prova di fumo dice solo "
+    "che il gioco parte.")
+
+
+# La correzione parte da un test che fallisce (12/10 sera, parte 1 del flusso a fasi; ricerca
+# 2026-10-12-flusso-agente-fasi § 5.1, passo 1). Prima «trova la causa, correggi, aggiungi un
+# test con ogni caso che non andava»: alle 11:37 e alle 11:42 il test non c'era e i test verdi
+# non riguardavano il difetto. Il codice lo controlla alla consegna (agenti/riproduzione.py)
+VINCOLO_RIPRODUCI = (
+    " PRIMA di toccare il codice scrivi un test che riproduce il problema segnalato ed "
+    "eseguilo con esegui_test: deve FALLIRE sul codice di adesso (se passa, non riproduce il "
+    "problema: cambialo). Poi trova la causa e correggi il codice finché quel test e gli altri "
+    "passano, e consegna. Alla consegna Calliope riesegue i tuoi test nuovi sulla versione di "
+    "prima: se lì passano, o se il codice non è cambiato, la correzione non vale.")
 
 
 def _detto_adesso(ctx, problema: str) -> str:
@@ -2559,8 +2573,7 @@ def _sviluppo_correggi(ctx: ToolContext, problema: str = "", **_altro) -> dict:
                + _correzione_di_prima(svs, sv)
                + (VINCOLO_CORREZIONE_GIOCO if svs.e_gioco(sv) else "")
                + (f" {rete}" if rete else "")
-               + " Trova la causa, correggi il codice, aggiungi un test con ogni caso che non "
-                 "andava, rifai i test, poi consegna.")
+               + VINCOLO_RIPRODUCI)
     lav = _lavoro_dello_sviluppo(ctx, svs, sv, prof, sv.specifica or sv.richiesta, vincoli)
     if isinstance(lav, dict):
         return lav

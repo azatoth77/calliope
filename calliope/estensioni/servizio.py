@@ -1418,7 +1418,9 @@ def _solo_usati(file: dict) -> dict:
                 if rel in py and rel not in tieni:
                     tieni.add(rel)
                     coda.append(rel)
-    return {k: v for k, v in file.items() if not k.endswith(".py") or k in tieni}
+    # Le prove di JavaScript dell'agente (esegui_js, 12/10 sera: prova_*.js) restano fuori
+    return {k: v for k, v in file.items() if (not k.endswith(".py") or k in tieni)
+            and not re.search(r"(^|/)prova_[^/]*\.js$", k)}
 
 
 def _norm_testo(s) -> str:

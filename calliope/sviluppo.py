@@ -991,9 +991,37 @@ class Sviluppi:
             # revisione lo dicono
             self.verifica_consegna(sv, lav)
             uguale = getattr(lav, "correzione", False) and self.codice_uguale(sv, prima)
+            # La correzione parte da un test che fallisce (12/10 sera, agenti/riproduzione.py):
+            # l'esito del controllo alla consegna, dopo l'unico rimando all'agente
+            from .agenti.riproduzione import NON_RIPRODOTTO
+            rip = (getattr(lav, "riproduzione", None) or {}) if getattr(
+                lav, "correzione", False) else {}
+            non_riprodotto = rip.get("stato") in NON_RIPRODOTTO
             self.passa(sv, "collaudo", f"lavoro {lav.id} finito"
-                       + (": correzione senza cambi al codice" if uguale else ""))
+                       + (": correzione senza cambi al codice" if uguale else
+                          ": correzione senza un test che riproduce il problema"
+                          if non_riprodotto else ""))
             item["messaggio"] = self.frase_pronto(sv, lav, altro)
+            if non_riprodotto:
+                # «Non sono riuscita a riprodurre il problema» (decisione del 12/10, domanda 3
+                # della ricerca 2026-10-12-flusso-agente-fasi): non è «pronto», e la risposta
+                # della persona è il problema detto in un altro modo, per una correzione nuova
+                self.log(f"[SVILUPPO] {sv.id}: la correzione {lav.id} non riproduce il problema "
+                         f"({rip.get('stato')})")
+                domanda = "Me lo descrivi in un altro modo?"
+                item["messaggio"] = (
+                    f"{sv.persona_nome or 'Dario'}, la correzione di «{sv.titolo}» è finita"
+                    + (" ma il codice è uguale a prima, e" if uguale or rip.get("stato")
+                       == "uguale" else ", ma") + " non sono riuscita a riprodurre il "
+                    "problema: me lo descrivi in un altro modo?")
+                item["in_sospeso"] = {
+                    "domanda": domanda, "tool": "sviluppo_correggi",
+                    "cosa": f"descrivere di nuovo il problema di «{sv.titolo}»",
+                    "argomenti": "problema = il problema come lo descrive adesso la persona, "
+                                 "con le sue parole (cosa fa, cosa vede, cosa si aspettava)"}
+                item["sviluppo"] = sv.id
+                self._manda_scheda(sv, getattr(lav, "on_scheda", None))
+                return item
             if uguale:
                 # Una correzione che consegna il codice di prima non è «fatto» (12/10 sera,
                 # ricerca 2026-10-12-flusso-agente-fasi: alle 08:46 gioco.js e logica.js
@@ -1062,9 +1090,9 @@ class Sviluppi:
                                            "azione = analisi e cambia = la modifica come detta"}
         return item
 
-    # I file che non cambiano ciò che il codice fa: il manifesto, i test, gli esempi
-    _NON_CODICE = re.compile(r"(^|/)(manifesto\.json|CAPACITA\.md|calliope_estensione\.py)$|"
-                             r"(^|/)test_[^/]*\.py$|\.test\.js$|(^|/)esempi(_veri)?/")
+    # I file che non cambiano ciò che il codice fa: il manifesto, i test, gli esempi (dal 12/10
+    # sera lo stesso criterio della riproduzione, agenti/riproduzione.py, con i file di prova)
+    from .agenti.riproduzione import NON_CODICE as _NON_CODICE
 
     def codice_uguale(self, sv: Sviluppo, prima: tuple) -> bool:
         """La versione appena consegnata ha lo stesso codice di quella di prima (`prima` =

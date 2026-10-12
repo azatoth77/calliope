@@ -356,7 +356,7 @@ def _estrai(testo: str, nomi: set) -> dict:
             cur = m.group(1)
             out[cur] = []
             continue
-        if cur and r.startswith(("Ogni gestore", "Un test che")):
+        if cur and r.startswith(("Ogni gestore", "Un test che", "Ciò che")):
             cur = None
             continue
         if cur:
@@ -379,14 +379,16 @@ def prova_scheletri(tmp: Path):
              and "(estensione)" not in pg)
     # Il gioco dall'11/10 sera mostra anche i comandi a voce (ascolta, quandoComando): ~215
     # caratteri in più, circa 60 token
-    verifica("corti: al più 2 300 caratteri il gioco, 1 600 l'estensione, 600 i programmi",
-             len(SCHELETRI["gioco"]) <= 2300 and len(SCHELETRI["estensione"]) <= 1600
+    # Dal 12/10 sera anche gioco.test.js con apriGioco (il test del disegno): ~650 caratteri
+    verifica("corti: al più 3 000 caratteri il gioco, 1 600 l'estensione, 600 i programmi",
+             len(SCHELETRI["gioco"]) <= 3000 and len(SCHELETRI["estensione"]) <= 1600
              and len(SCHELETRI["python"]) <= 600 and len(SCHELETRI["csharp"]) <= 600,
              str({k: len(v) for k, v in SCHELETRI.items()}))
-    g = _estrai(SCHELETRI["gioco"], {"logica.js", "gioco.js", "logica.test.js"})
+    g = _estrai(SCHELETRI["gioco"], {"logica.js", "gioco.js", "logica.test.js",
+                                     "gioco.test.js"})
     dich = lambda t: set(re.findall(r"^(?:const|let|var|function)\s+(\w+)", t, re.M))  # noqa: E731
     verifica("gioco: logica.js e gioco.js senza nomi dichiarati due volte",
-             len(g) == 3 and not dich(g["logica.js"]) & dich(g["gioco.js"]),
+             len(g) == 4 and not dich(g["logica.js"]) & dich(g["gioco.js"]),
              str(dich(g["logica.js"]) & dich(g["gioco.js"])))
     verifica("…i gestori passano da sicuro(), che cattura",
              "addEventListener(\"click\", sicuro(" in g["gioco.js"]
@@ -397,8 +399,9 @@ def prova_scheletri(tmp: Path):
             sb.scrivi(k, v)
         sb.scrivi("manifesto.json", json.dumps(MANIFESTO_GIOCO))
         r = sb.test()
-        verifica("…e passa i suoi test e la prova di fumo", r["passano"]
-                 and "ok prova di fumo" in r["uscita"], r["uscita"][-300:])
+        verifica("…e passa i suoi test (anche quello del disegno, con apriGioco) e la prova "
+                 "di fumo", r["passano"] and "ok prova di fumo" in r["uscita"]
+                 and "ok si tocca Inizia e compare la mossa" in r["uscita"], r["uscita"][-300:])
         from calliope.estensioni.prompt import controlla_consegna
         verifica("…e la consegna del gioco", controlla_consegna(sb) is None,
                  str(controlla_consegna(sb)))
