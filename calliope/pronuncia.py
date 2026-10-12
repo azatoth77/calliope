@@ -21,6 +21,14 @@ Vale solo per il testo che va al sintetizzatore (`tts.Speaker`): la storia del m
 registro dei turni e gli schermi vedono il testo com'è. La sintesi è sul server anche con i
 satelliti e il telefono, quindi la correzione vale anche lì.
 
+**Unità di misura** (12/10, `calliope/unita.py`): espeak legge i simboli lettera per lettera
+(«3 kg» → «tre kappagì», «2,5 m/s» → «… emme barra esse», «m/s²» → «… esse due», «°C» →
+«gradi ci»). Un simbolo **subito dopo un numero** («36 km/h», «9,8 m/s²», «1 kg») diventa il
+nome per esteso, accordato al numero («1 chilogrammo», «2,5 metri al secondo»):
+`unita.SIMBOLI_DETTI`, solo simboli che dopo una cifra non possono voler dire altro (niente
+«h», «s», «G» delle reti come «5G»); senza un numero davanti nulla cambia. «joule» lo legge
+«giòule»: nel lessico come «giùl».
+
 È una conversione di forma (principio 10): non cambia il significato e riguarda solo il suono.
 L'unico caso ambiguo è «file», che in italiano è anche il plurale di «fila»: resta «fìle»
 dopo un articolo o un aggettivo femminile («le file di sedie», «nelle prime file») e prima
@@ -59,6 +67,7 @@ LESSICO: dict[str, str] = {
     "docker": "dòker",
     "wikiquote": "uikikuòt",
     "duckdns": "dàk di ènne èsse",
+    "joule": "giùl",
 }
 
 # «file» = plurale di «fila»: articoli, preposizioni articolate e aggettivi femminili prima,
@@ -74,6 +83,27 @@ _FILA_DOPO = re.compile(
 _PARENTESI = re.compile(r"\[\[|\]\]")
 
 
+def _regex_simboli() -> re.Pattern:
+    from .unita import SIMBOLI_DETTI
+    alternative = "|".join(re.escape(k) for k in sorted(SIMBOLI_DETTI, key=len, reverse=True))
+    # Un numero (con la virgola o il punto decimale), uno spazio al più, il simbolo intero
+    return re.compile(rf"(?<![\w.,])(\d+(?:[.,]\d+)?)\s?({alternative})(?![\w/²³])")
+
+
+_SIMBOLI = _regex_simboli()
+
+
+def unita_dette(text: str) -> str:
+    """«36 km/h» → «36 chilometri all'ora», «1 kg» → «1 chilogrammo», «9,8 m/s²» → «9,8 metri
+    al secondo quadrato». Solo dopo un numero; il resto del testo non cambia."""
+    from .unita import SIMBOLI_DETTI
+
+    def sostituisci(m: re.Match) -> str:
+        singolare, plurale = SIMBOLI_DETTI[m.group(2)]
+        return f"{m.group(1)} {singolare if m.group(1) == '1' else plurale}"
+    return _SIMBOLI.sub(sostituisci, text)
+
+
 def _plurale_di_fila(text: str, start: int, end: int) -> bool:
     return bool(_FILA_PRIMA.search(text[max(0, start - 24):start])
                 or _FILA_DOPO.match(text[end:end + 40]))
@@ -85,8 +115,10 @@ class Pronuncia:
     grafia all'italiana («pòdcast») oppure i fonemi di espeak tra doppie quadre
     («[[pˈɔdkast]]»); un valore vuoto toglie una voce predefinita."""
 
-    def __init__(self, extra: dict[str, str] | None = None, attiva: bool = True):
+    def __init__(self, extra: dict[str, str] | None = None, attiva: bool = True,
+                 unita: bool = True):
         self.attiva = attiva
+        self.unita = unita
         voci: dict[str, str] = {}
         for chiavi, grafia in LESSICO.items():
             for k in chiavi.split("|"):
@@ -113,7 +145,11 @@ class Pronuncia:
     def applica(self, text: str, fonemi: bool = True) -> str:
         """Il testo da dare a Piper. `fonemi` False (Piper < 1.3, senza blocchi `[[ ]]`):
         le voci con i fonemi restano come sono scritte."""
-        if not self.attiva or self._re is None or not text:
+        if not self.attiva or not text:
+            return text
+        if self.unita:
+            text = unita_dette(text)
+        if self._re is None:
             return text
         text = _PARENTESI.sub("", text)
 
