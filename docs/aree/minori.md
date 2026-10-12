@@ -332,3 +332,7 @@ può dare il consenso (`dati_conservati` lo rifiuta). Le parole dei minori nei f
 turni di prima si tolgono una volta all'avvio. Restano come prima: gli avvisi ai tutori, i segnali
 dei cancelli (`cancelli.json`), le richieste e i compiti (memoria dei minori), l'archivio delle
 conversazioni (`conversazioni_giorni`, da decidere se allinearlo). Prova `prova_conserva`.
+*(Storico per l'archivio: dal 12/10 sera le conversazioni di un minore non vanno più su disco,
+restano nell'archivio della sessione in memoria fino al riavvio; quelle di prima le toglie la
+prima pulizia. Dettagli in [contesto-conversazione](contesto-conversazione.md), sezione
+«L'archivio delle conversazioni allineato alla conservazione».)*
