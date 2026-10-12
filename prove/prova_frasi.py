@@ -115,7 +115,7 @@ def lingua(ident, tono, breve, f):
     if breve and _SUPPONE.search(f):
         out.append("la forma breve suppone che nulla sia cambiato")
     if ident == "lavori.proposta":
-        carico = f.format(cosa="X", agente="sulla DGX", coda="", stima="S", dopo="",
+        carico = f.format(cosa="X", coda="", stima="S", dopo="",
                           carico="; prima devo caricare il modello, ci vuole un minuto in più")
         if F.re.search(r"in più,\s+che\b", carico):
             out.append("inciso staccato dall'agente dopo {carico}")
@@ -132,7 +132,7 @@ verifica("contrari: i difetti del campione del 12/10 si vedono", [lingua(*x) for
     ("sviluppo.stato", "formale", False, "Quanto a «{titolo}», {dove}."),
     ("sviluppo.stato", "normale", False, "Sviluppo di «{titolo}»: {dove}."),
     ("lavori.nessuno", "normale", True, "Ancora nessun lavoro in corso."),
-    ("lavori.proposta", "ironico", False, "{cosa}: lo affido all'agente {agente}{coda}{carico}, "
+    ("lavori.proposta", "ironico", False, "{cosa}: lo affido all'agente{coda}{carico}, "
      "che ha più pazienza di me. {stima}.{dopo} Procedo?"))],
     [["accordo col titolo"], ["preposizione davanti al titolo"],
      ["preposizione davanti al titolo"], ["la forma breve suppone che nulla sia cambiato"],
@@ -152,7 +152,7 @@ verifica("contrario: la stima di prima («te la faccio approvare») si vede",
          ["te"])
 fo = F.Frasi("attivo", breve_turni=3)
 fo.inizio_turno("anna", "formale")
-pe = dict(cosa="È una funzione nuova di Calliope", agente="sulla DGX", coda="", carico="",
+pe = dict(cosa="È una funzione nuova di Calliope", coda="", carico="",
           stima=STIME["estensione"], dopo=APPROVAZIONE)
 p1 = fo.scegli("lavori.proposta", **pe)
 fo.detta(p1)
@@ -176,7 +176,7 @@ OGGI = {
     ("lavori.proposta", (("cosa", "È un lavoro di programmazione"), ("agente", "sulla DGX"),
                          ("coda", ""), ("carico", ""), ("stima", "Ci vorranno alcuni minuti"),
                          ("dopo", ""))):
-        "È un lavoro di programmazione: lo affido all'agente sulla DGX. Ci vorranno alcuni "
+        "È un lavoro di programmazione: lo affido all'agente. Ci vorranno alcuni "
         "minuti e ti avviso quando ha finito. Procedo?",
     ("lavori.nessuno", ()): "Non ho lavori in corso.",
     ("lavori.nessuna_domanda", ()): "Non ho lavori che aspettano una risposta.",
@@ -240,7 +240,7 @@ x2 = fb.scegli("lavori.proposta", **OGGI_P)
 info2 = fb.detta(x2)
 verifica("attivo: la prima volta intera, con la stima", "Ci vorranno alcuni minuti" in x1, True)
 verifica("attivo: la seconda volta breve, con «Procedo?» in fondo e gli stessi fatti",
-         (info2[0]["breve"], x2.endswith("Procedo?"), "sulla DGX" in x2,
+         (info2[0]["breve"], x2.endswith("Procedo?"), "DGX" not in x2,
           x2.startswith("È un lavoro di programmazione")), (True, True, True, True))
 for _ in range(4):
     fb.inizio_turno("anna", "amichevole")

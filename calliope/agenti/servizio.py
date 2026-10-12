@@ -902,8 +902,8 @@ class Lavori:
                     + ". Quale mando all'agente? Lavora su una copia: l'originale non lo tocco.")
         if lav.file_utente is not None:
             stima = STIME[lav.tipo]
-            return (f"Mando una copia {lav.file_utente['detto_di']} all'agente "
-                    f"{self.imp.su_nome}: lavora sulla copia, e il risultato torna come file "
+            return (f"Mando una copia {lav.file_utente['detto_di']} all'agente: "
+                    f"lavora sulla copia, e il risultato torna come file "
                     f"nuovo; l'originale non lo tocco. {stima}. Procedo?")
         return self._proposta(lav)
 
@@ -926,7 +926,7 @@ class Lavori:
         prima = f"Ho capito così: {spec[:1].lower() + spec[1:]}. " if spec else ""
         # Dal catalogo delle frasi pronte (12/10, calliope/frasi.py): la base è questa frase, le
         # varianti per tono e la forma breve solo con `frasi_varianti: attivo`; «Procedo?» in fondo
-        return prima + frasi.scegli("lavori.proposta", cosa=cosa, agente=self.imp.su_nome,
+        return prima + frasi.scegli("lavori.proposta", cosa=cosa,
                                     coda=coda, carico=carico, stima=stima, dopo=dopo)
 
 

@@ -178,49 +178,49 @@ _v("lavori.in_coda", "avvio",
 
 # `{dopo}` (12/10 sera): per le estensioni « Prima di usarla andrà approvata.», impersonale, così
 # va bene col «tu» e col «lei» (prima la stima diceva «te la faccio approvare» anche nel formale)
-_P = "{cosa}: lo affido all'agente {agente}{coda}{carico}."
+_P = "{cosa}: lo affido all'agente{coda}{carico}."
 _v("lavori.proposta", "proposta",
    _P + " {stima} e ti avviso quando ha finito.{dopo} Procedo?",
-   fissi=("cosa", "agente", "coda", "carico", "dopo"), domanda="Procedo?",
-   esempio={"cosa": "È un lavoro di programmazione", "agente": "sulla DGX", "coda": "",
+   fissi=("cosa", "coda", "carico", "dopo"), domanda="Procedo?",
+   esempio={"cosa": "È un lavoro di programmazione", "coda": "",
             "carico": "", "stima": "Ci vorranno alcuni minuti", "dopo": ""},
    toni={
        "normale": (
            _P + " {stima} e ti avviso quando ha finito.{dopo} Procedo?",
-           "{cosa}: lo passo all'agente {agente}{coda}{carico}. {stima} e ti avviso quando ha "
+           "{cosa}: lo passo all'agente{coda}{carico}. {stima} e ti avviso quando ha "
            "finito.{dopo} Procedo?",
-           "{cosa}, quindi lo affido all'agente {agente}{coda}{carico}. {stima}; quando ha "
+           "{cosa}, quindi lo affido all'agente{coda}{carico}. {stima}; quando ha "
            "finito ti avviso.{dopo} Procedo?"),
        "formale": (
-           "{cosa}: lo affiderei all'agente {agente}{coda}{carico}. {stima} e la avviso quando "
+           "{cosa}: lo affiderei all'agente{coda}{carico}. {stima} e la avviso quando "
            "ha finito.{dopo} Procedo?",
-           "{cosa}: se è d'accordo, lo passo all'agente {agente}{coda}{carico}. {stima}, e la "
+           "{cosa}: se è d'accordo, lo passo all'agente{coda}{carico}. {stima}, e la "
            "informo al termine.{dopo} Procedo?"),
        "amichevole": (
-           "{cosa}: lo do all'agente {agente}{coda}{carico}. {stima} e ti avviso appena ha "
+           "{cosa}: lo do all'agente{coda}{carico}. {stima} e ti avviso appena ha "
            "finito.{dopo} Procedo?",
-           "{cosa}: ci pensa l'agente {agente}{coda}{carico}. {stima}, poi ti avviso io.{dopo} "
+           "{cosa}: ci pensa l'agente{coda}{carico}. {stima}, poi ti avviso io.{dopo} "
            "Procedo?"),
        # L'inciso prima di {coda}{carico}: dopo («; prima devo caricare il modello, ci vuole un
        # minuto in più, che ha più pazienza di me») non si legava più all'agente
        "ironico": (
-           "{cosa}: lo affido all'agente {agente}, che ha più pazienza di me{coda}{carico}. "
+           "{cosa}: lo affido all'agente, che ha più pazienza di me{coda}{carico}. "
            "{stima} e ti avviso quando ha finito.{dopo} Procedo?",
-           "{cosa}: pane per i denti dell'agente {agente}{coda}{carico}. {stima} e ti avviso "
+           "{cosa}: pane per i denti dell'agente{coda}{carico}. {stima} e ti avviso "
            "quando ha finito.{dopo} Procedo?"),
-       "essenziale": ("{cosa}: all'agente {agente}{coda}{carico}. {stima}.{dopo} Procedo?",),
+       "essenziale": ("{cosa}: all'agente{coda}{carico}. {stima}.{dopo} Procedo?",),
        "computer_di_bordo": (
-           "{cosa}. Assegnazione all'agente {agente}{coda}{carico}. {stima}.{dopo} Procedo?",),
+           "{cosa}. Assegnazione all'agente{coda}{carico}. {stima}.{dopo} Procedo?",),
    },
    breve={
-       "normale": ("{cosa}: anche questo all'agente {agente}{coda}{carico}.{dopo} Procedo?",),
-       "formale": ("{cosa}: come prima, lo affiderei all'agente {agente}{coda}{carico}.{dopo} "
+       "normale": ("{cosa}: anche questo all'agente{coda}{carico}.{dopo} Procedo?",),
+       "formale": ("{cosa}: come prima, lo affiderei all'agente{coda}{carico}.{dopo} "
                    "Procedo?",),
-       "amichevole": ("{cosa}: come prima, ci pensa l'agente {agente}{coda}{carico}.{dopo} "
+       "amichevole": ("{cosa}: come prima, ci pensa l'agente{coda}{carico}.{dopo} "
                       "Procedo?",),
-       "ironico": ("{cosa}: anche questo all'agente {agente}{coda}{carico}.{dopo} Procedo?",),
-       "essenziale": ("{cosa}: all'agente {agente}{coda}{carico}.{dopo} Procedo?",),
-       "computer_di_bordo": ("{cosa}. Agente {agente}{coda}{carico}.{dopo} Procedo?",),
+       "ironico": ("{cosa}: anche questo all'agente{coda}{carico}.{dopo} Procedo?",),
+       "essenziale": ("{cosa}: all'agente{coda}{carico}.{dopo} Procedo?",),
+       "computer_di_bordo": ("{cosa}. All'agente{coda}{carico}.{dopo} Procedo?",),
    })
 
 # Le forme brevi senza «ancora» (12/10 sera): «Ancora nessun lavoro in corso» sottintende che

@@ -153,7 +153,7 @@ class LavoriFinto:
         with self._lock:
             self._offerte[lav.persona or "?"] = {"lavoro": lav, "turno": turno,
                                                  "scade": time.monotonic() + 120}
-        return ("È un lavoro di programmazione: lo affido all'agente sulla DGX. Ci vorranno "
+        return ("È un lavoro di programmazione: lo affido all'agente. Ci vorranno "
                 "alcuni minuti e ti avviso quando ha finito. Procedo?")
 
     def avvia(self, lav):

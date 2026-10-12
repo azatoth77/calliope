@@ -64,7 +64,7 @@ FRASI = [
      "Modalità normale: torno a rispondere a «Calliope», senza i suoni di ascolto.",
      [["Calliope"], ["suon"]], False),
     ("proposta_lavoro", "proposta", "Scrivimi un programma che calcola il codice fiscale.",
-     "È un lavoro di programmazione: lo affido all'agente su questo computer. Ci vorranno "
+     "È un lavoro di programmazione: lo affido all'agente. Ci vorranno "
      "alcuni minuti e ti avviso quando ha finito. Procedo?",
      [["agente"], ["minut"]], True),
     ("correzione", "sviluppo", "Non funziona con Roma, fallo correggere.",
