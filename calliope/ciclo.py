@@ -2149,7 +2149,13 @@ class Ciclo:
         comp = t.compagnia
         if t.continuita:
             self.rule("voce_continuita")
-        adapted = how == "voce" and registry.adapt(name, emb, sim)
+        # In compagnia l'impronta non si aggiorna (12/10 sera, caso vero in auto: due turni da
+        # 16 s e 14 s con chi amministra e il ragazzo che parlavano insieme hanno spostato
+        # l'impronta del ragazzo). Anche in ombra: è il dato, non una decisione della voce
+        senza_adatta = how == "voce" and bool(comp or getattr(speaker_ctx, "compagnia", False))
+        if senza_adatta:
+            self.rule("impronta_compagnia")
+        adapted = how == "voce" and not senza_adatta and registry.adapt(name, emb, sim)
         # Punteggio sempre in console: serve a tarare soglia e impronta (docs/test-vocale.md)
         note = {"breve": " frase breve, vale la conversazione",
                 "conversazione": " confermata dalla conversazione"}.get(how, "")
@@ -2160,7 +2166,9 @@ class Ciclo:
                      else f" ({own:.2f})")
         print(f"   [VOCE] {name or 'non riconosciuta'} {sim:.3f}"
               f" (soglia {cfg.speaker_id_threshold:.2f}, voce {t.voiced_s:.1f} s){note}"
-              + (" · impronta aggiornata" if adapted else ""), flush=True)
+              + (" · impronta aggiornata" if adapted else "")
+              + (" · impronta non aggiornata: in compagnia" if senza_adatta else ""),
+              flush=True)
         # Riconosciuto → familiare, non riconosciuto → ospite (principio 9).
         # Azzerare a None evita che resti lo speaker del turno precedente.
         speaker_ctx.current_speaker = name

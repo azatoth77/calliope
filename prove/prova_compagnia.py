@@ -638,6 +638,47 @@ def prova_rivolta():
              == ("http://127.0.0.1:1", "m1"))
 
 
+def prova_impronta():
+    """12/10 sera, caso vero in auto: due turni lunghi (16 s e 14 s) in cui parlavano insieme
+    chi amministra e il ragazzo hanno aggiornato l'impronta del ragazzo. In compagnia l'impronta
+    non si aggiorna (regola `impronta_compagnia`); da soli come prima."""
+    import contextlib
+    import io
+    reg, sc, ciclo, regole = ciclo_finto()
+    prima = reg.users["Luca"].voiceprint.copy()
+    n, how, v, t = riconosci(ciclo, sc, frase(luca=0.72, carlo=0.2), 3.0)
+    verifica("contrario: da solo, il minore riconosciuto sopra la soglia → impronta aggiornata",
+             n == "Luca" and how == "voce" and v.get("aggiornata") is True
+             and not np.allclose(prima, reg.users["Luca"].voiceprint), json.dumps(v))
+    # Un'altra voce: compagnia; poi due frasi lunghe del minore sopra la soglia
+    riconosci(ciclo, sc, frase(carlo=0.10, amico=0.6), 2.0)
+    regole.clear()
+    prima = reg.users["Luca"].voiceprint.copy()
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        n, how, v, t = riconosci(ciclo, sc, frase(luca=0.72, carlo=0.45), 16.0)
+        riconosci(ciclo, sc, frase(luca=0.70, carlo=0.45), 14.0)
+    verifica("in compagnia: il minore riconosciuto, ma l'impronta non si aggiorna",
+             n == "Luca" and how == "voce" and sc.compagnia and v.get("aggiornata") is False
+             and np.allclose(prima, reg.users["Luca"].voiceprint), json.dumps(v))
+    verifica("in compagnia: regola e riga in console",
+             "impronta_compagnia" in regole
+             and "impronta non aggiornata: in compagnia" in out.getvalue(),
+             f"{regole} {out.getvalue()[-200:]!r}")
+    prima = reg.users["Carlo"].voiceprint.copy()
+    n, how, v, t = riconosci(ciclo, sc, frase(carlo=0.75, luca=0.2), 10.0)
+    verifica("in compagnia: nemmeno quella di chi amministra",
+             n == "Carlo" and v.get("aggiornata") is False
+             and np.allclose(prima, reg.users["Carlo"].voiceprint), json.dumps(v))
+    # Spenta la compagnia: come prima
+    reg, sc, ciclo, regole = ciclo_finto()
+    reg.cfg.compagnia_enabled = "spenta"
+    riconosci(ciclo, sc, frase(carlo=0.10, amico=0.6), 2.0)
+    n, how, v, t = riconosci(ciclo, sc, frase(luca=0.72, carlo=0.2), 3.0)
+    verifica("contrario: compagnia spenta → impronta aggiornata come prima",
+             v.get("aggiornata") is True and "impronta_compagnia" not in regole, json.dumps(v))
+
+
 if __name__ == "__main__":
     try:
         sys.stdout.reconfigure(encoding="utf-8")
@@ -646,7 +687,8 @@ if __name__ == "__main__":
     for nome, f in (("lo stato per corsia", prova_stato), ("stato --turni", prova_riassunto),
                     ("i due episodi veri", prova_episodi), ("gli effetti (F1)", prova_effetti),
                     ("la finestra d'ascolto", prova_finestra), ("i due cancelli", prova_cancelli),
-                    ("le azioni", prova_registry), ("rivolta a Calliope (F2)", prova_rivolta)):
+                    ("le azioni", prova_registry), ("rivolta a Calliope (F2)", prova_rivolta),
+                    ("l'impronta in compagnia", prova_impronta)):
         print(f"── {nome} ──", flush=True)
         f()
     print(f"\n{'TUTTO OK' if not errori else f'{errori} ERRORI'}")
