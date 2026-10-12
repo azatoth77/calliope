@@ -1258,28 +1258,12 @@ def _analisi(ctx, svs, sv, prof, cambia: str) -> dict:
         return _proponi_modifica(ctx, svs, sv, prof, cambia, m["cambi"], prima)
     if m["esito"] in ("difetto", "gia"):
         return _gia_nella_richiesta(ctx, svs, sv, cambia, m["esito"])
-    # Senza i requisiti (sviluppo_requisiti: false, o niente agente): come prima del 12/10
-    fermato = _ferma_per_analisi(ctx, svs, sv, prof)
-    svs.passa(sv, "analisi", cambia)
-    sv.lavoro, sv.nota = None, ""
-    svs.tocca(sv)
+    # Senza i requisiti (sviluppo_requisiti: false, o niente agente): la specifica con la
+    # modifica in coda, come prima del 12/10; il lavoro in corso si ferma comunque solo al «sì»
     base = (sv.specifica or sv.richiesta or "").strip().rstrip(".")
-    out = _nuovo_lavoro(ctx, svs, sv, prof, _con_modifica(base, cambia),
-                        f"Cambiamento chiesto dalla persona: «{cambia}».")
-    return _con_fermato(ctx, sv, out, fermato)
-
-
-def _ferma_per_analisi(ctx, svs, sv, prof) -> str:
-    """Il lavoro in corso (o fermo a una tappa) si ferma per tornare all'analisi: «Ho fermato
-    il lavoro dell'agente. » o ""."""
-    svc = getattr(ctx, "lavori", None)
-    lav = svs._lavoro(sv.lavoro)
-    if svc is not None and (svs.lavoro_attivo(sv) or (lav is not None
-                                                      and lav.stato == "in_attesa")):
-        res = svc.annulla(prof.id, tutti_di_tutti=True, quale=sv.lavoro)
-        if res.get("ok"):
-            return "Ho fermato il lavoro dell'agente. "
-    return ""
+    return _proponi_modifica(ctx, svs, sv, prof, cambia, None, prima,
+                             compito=_con_modifica(base, cambia),
+                             nota=f"Cambiamento chiesto dalla persona: «{cambia}».")
 
 
 def _con_fermato(ctx, sv, out, fermato: str):
@@ -1385,8 +1369,8 @@ def _chiedi_cosa(ctx, sv, domanda: str, da: str) -> dict:
                                            "dalla persona"})
 
 
-def _proponi_modifica(ctx, svs, sv, prof, detto: str, cambi: list,
-                      prima: dict | None = None) -> dict:
+def _proponi_modifica(ctx, svs, sv, prof, detto: str, cambi: list | None,
+                      prima: dict | None = None, compito: str = "", nota: str = "") -> dict:
     """I requisiti sono cambiati (12/10): si torna all'analisi e il lavoro nuovo (dai file della
     versione provata, se c'è) si propone dicendo solo cosa è cambiato («Ho cambiato due cose: …
     Va bene così, o la cambiamo?»).
@@ -1407,8 +1391,8 @@ def _proponi_modifica(ctx, svs, sv, prof, detto: str, cambi: list,
     svs.passa(sv, "analisi", "modifica: " + str(detto or "")[:120])
     sv.lavoro, sv.nota = None, ""
     svs.tocca(sv)
-    out = _nuovo_lavoro(ctx, svs, sv, prof, sv.specifica or sv.richiesta, cambiamento=cambi,
-                        parti_da=parti_da)
+    out = _nuovo_lavoro(ctx, svs, sv, prof, compito or sv.specifica or sv.richiesta, nota,
+                        cambiamento=cambi, parti_da=parti_da)
     rit = sv.ritorno or {}
     testa = ""
     if vivo:

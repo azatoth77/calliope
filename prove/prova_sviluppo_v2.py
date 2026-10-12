@@ -258,7 +258,8 @@ def prova_apertura(tmp, iso):
     out = P.chiama(reg, ctx, "sviluppo_passo", {"azione": "analisi",
                                                 "cambia": "anche l'umidità"}, turno=6)
     verifica("una proposta dopo, nello stesso sviluppo: la specifica letta, senza «Entriamo»",
-             detta(out).startswith("Ho capito così:") and "umidità" in detta(out)
+             "Ho capito così:" in detta(out) and "Entriamo" not in detta(out)
+             and "umidità" in detta(out)
              and detta(out).endswith("Va bene così, o la cambiamo?"), detta(out))
 
 

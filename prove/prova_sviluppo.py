@@ -471,12 +471,13 @@ def prova_analisi(tmp: Path, iso):
     ta._delega_lavoro(ctx, proposta=nuovo.id)
     verifica("il «sì» → di nuovo allo sviluppo con il lavoro nuovo",
              sv.fase == "sviluppo" and sv.lavoro == nuovo.id)
-    # Durante lo sviluppo: il lavoro in corso si ferma
+    # Durante lo sviluppo: dal 12/10 (lavoro 3, A4) il lavoro in corso si ferma solo al «sì»
     out = P.chiama(reg, ctx, "sviluppo_passo", {"azione": "analisi",
                                           "cambia": "solo le città italiane"}, turno=8)
-    verifica("dallo sviluppo: il lavoro in corso si ferma e lo dice",
-             nuovo.id in svc.annullati and detta(out).startswith("Ho fermato il lavoro")
-             and sv.fase == "analisi", detta(out))
+    verifica("dallo sviluppo: il lavoro in corso NON si ferma prima del «sì», e lo dice",
+             nuovo.id not in svc.annullati and nuovo.stato == "in_corso"
+             and detta(out).startswith("Il lavoro di prima intanto continua")
+             and sv.fase == "analisi" and sv.ritorno.get("lavoro") == nuovo.id, detta(out))
     # Senza dire cosa cambiare: la domanda
     out = P.chiama(reg, ctx, "sviluppo_passo", {"azione": "analisi"}, turno=9)
     verifica("«torniamo all'analisi» senza la modifica: «cosa vuoi cambiare?» in sospeso",
