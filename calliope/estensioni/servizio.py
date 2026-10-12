@@ -1219,9 +1219,14 @@ class Estensioni:
             diff_detto = f"Rispetto alla versione {prima_n}: {diff_detto}."
         approvabile = bool(ver.get("test_passano")) and not an.get("sintassi")
         di = re.sub(r"^l'", "dell'", re.sub(r"^la ", "della ", chi_e(m, n, vecchio)))
-        frase = (f"Revisione {di}. Permessi: {perm}. La può usare "
-                 f"{chi_la_usa(m)}. Analisi del codice: {in_parole(an)}. Test: {esito_test}."
-                 + (f" {diff_detto}" if diff_detto else " È la prima versione."))
+        # A voce in breve (12/10, principio 5: revisioni di 7–9 frasi nei log, con «561 righe in
+        # più»): permessi e chi la usa sempre; analisi del codice e test solo se c'è un problema;
+        # file e righe cambiati solo sulla scheda (cosa doveva cambiare lo dice l'annuncio)
+        problemi = bool(an.get("rischi") or an.get("sintassi"))
+        frase = (f"Revisione {di}. Permessi: {perm}; la può usare {chi_la_usa(m)}."
+                 + (f" Analisi del codice: {in_parole(an)}." if problemi else "")
+                 + ("" if ver.get("test_passano") and not an.get("sintassi")
+                    else f" Test: {esito_test}."))
         testo = "\n".join(
             [f"Versione {n}" + (f", al posto della {prima_n}" if prima_n else ", la prima"),
              "", f"- Cosa fa: {m.get('descrizione', '')}"]

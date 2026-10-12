@@ -278,18 +278,21 @@ def prova_collaudo_fallito(tmp, iso):
     ctx.regole = []
     out = P.chiama(reg, ctx, "sviluppo_collauda", {"dati": CITTA_FINTA}, turno=6)
     f = detta(out)
-    verifica("«prova con Pratofiorito Maggiore»: non va, la frase del codice e «Lo faccio "
-             "correggere?»",
-             f.startswith(f"La prova con «{CITTA_FINTA}» non è andata") and
-             f.endswith("Lo faccio correggere?") and "sviluppo_collaudo_fallito" in ctx.regole
-             and "Impossibile" not in f, f)
-    sosp = out.get("in_sospeso") or {}
-    verifica("…il «sì» va a sviluppo_correggi, con il caso", sosp.get("tool")
-             == "sviluppo_correggi" and CITTA_FINTA in sosp["argomenti"]["problema"], str(sosp))
+    # 12/10 (voce onesta): un errore che l'estensione restituisce apposta si dice con le sue
+    # parole, e non è un difetto da far correggere d'ufficio: niente «Lo faccio correggere?»
+    # (lo dice la persona, se è sbagliato). Prima: «non è andata: si è fermata con un errore»
+    verifica("«prova con Pratofiorito Maggiore»: l'errore dell'estensione detto con le sue "
+             "parole, senza «Lo faccio correggere?»",
+             f.startswith(f"La prova con «{CITTA_FINTA}» è girata") and
+             "«Impossibile cercare la città»" in f and "Lo faccio correggere?" not in f
+             and "sviluppo_collaudo_errore_dichiarato" in ctx.regole
+             and "sviluppo_collaudo_fallito" not in ctx.regole, f)
+    verifica("…nessuna domanda in sospeso verso sviluppo_correggi",
+             not out.get("in_sospeso"), str(out.get("in_sospeso")))
     verifica("…il collaudo è nello sviluppo come NON riuscito, con l'esito per l'agente",
              not sv.collaudi[-1]["ok"] and sv.collaudi[-1]["dati"] == CITTA_FINTA
              and "Impossibile" in sv.collaudi[-1]["esito"], str(sv.collaudi[-1]))
-    verifica("…e sulla scheda", "non riuscito" in svc.sviluppi.testo_scheda(sv))
+    verifica("…e sulla scheda", "con un errore dell'estensione" in svc.sviluppi.testo_scheda(sv))
     from calliope.tools.sviluppo import _fallito
     verifica("_fallito: errore dell'esecuzione, campo errore, ok false; contrari: risultato "
              "buono, «non trovata» a parole",
@@ -323,20 +326,27 @@ def prova_chiedi(tmp, iso):
     verifica("la domanda va al modello dell'agente con il contesto: specifica, collaudi con gli "
              "esiti, diario e passi, file, fonti",
              "Perché?" in testo and "città qualunque" in testo and CITTA_FINTA in testo
-             and "NON riuscito" in testo and "Impossibile cercare la città" in testo
+             and "con un errore dell'estensione" in testo and "Impossibile cercare la città" in testo
              and "Uso il geocoder" in testo and "--- file estensione.py ---" in testo
              and "citta.lower() not in GEO" in testo and "geocoding-api.open-meteo.com" in testo,
-             [k for k in ("Perché?", "città qualunque", CITTA_FINTA, "NON riuscito", "Impossibile cercare la città", "Uso il geocoder", "--- file estensione.py ---", "citta.lower() not in GEO", "geocoding-api.open-meteo.com") if k not in testo])
+             [k for k in ("Perché?", "città qualunque", CITTA_FINTA, "con un errore dell'estensione", "Impossibile cercare la città", "Uso il geocoder", "--- file estensione.py ---", "citta.lower() not in GEO", "geocoding-api.open-meteo.com") if k not in testo])
     verifica("…in sola lettura: niente strumenti, ragionamento spento, JSON; nessun lavoro nuovo",
              "tools" not in body and body.get("think") is False and body.get("format")
              and "SOLA LETTURA" in body["messages"][0]["content"]
              and len(svc.lavori) + len(svc.offerte) == lavori_prima)
-    verifica("la risposta: frase breve per la voce, correzione proposta, niente risposta_finale "
-             "(la dice il modello, in busta)",
+    # 12/10 (voce onesta, caso vero del 09/10 20:42): la frase la compone il codice, con la
+    # correzione detta PER PRIMA e le parole dell'agente (prima la riassumeva il modello, che ha
+    # letto solo il messaggio e chiesto «ti va bene?»)
+    f = str(out.get("risposta_finale") or "")
+    verifica("la risposta: correzione detta per prima con le parole dell'agente, poi la sua "
+             "risposta e «Lo faccio correggere?» (risposta_finale del codice)",
              out.get("ok") and "due parole" in out.get("risposta", "") and out.get(
-                 "serve_correzione") is True and "risposta_finale" not in out
+                 "serve_correzione") is True
+             and f.startswith("Chi l'ha scritta dice che va corretto")
+             and "due parole" in f and f.endswith("Lo faccio correggere?")
              and (out.get("in_sospeso") or {}).get("tool") == "sviluppo_correggi"
-             and "sviluppo_chiedi" in ctx.regole, json.dumps(out, ensure_ascii=False)[:300])
+             and "sviluppo_chiedi" in ctx.regole
+             and "sviluppo_chiedi_correzione_detta" in ctx.regole, f)
     spec = reg.get("sviluppo_chiedi")
     verifica("sviluppo_chiedi è non fidato con la fonte «agente», e annuncia l'attesa",
              spec.non_fidato and politica.fonte_di("sviluppo_chiedi", spec) == "agente"

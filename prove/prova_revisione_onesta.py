@@ -249,9 +249,10 @@ def prova_caso_vero(tmp: Path):
     verifica("l'annuncio dice subito cosa manca", "Attenzione: rispetto alla richiesta manca: "
              "musica cupa ma divertente. Le porte sono sempre 5. I punti non crescono." in msg,
              msg)
-    verifica("…e che la prova di fumo è un test di avvio, non delle regole",
-             "prova di fumo: dice solo che il gioco parte" in msg
-             and "non che le regole siano quelle chieste" in msg, msg)
+    # 12/10 (meno parole): l'annuncio non dice più i test che passano, quindi nemmeno la prova di
+    # fumo; la dice la revisione (sotto)
+    verifica("…e non dice «i test passano» (né la prova di fumo: la dice la revisione)",
+             "I test passano" not in msg and "prova di fumo" not in msg, msg)
 
     out = chiama(reg, ctx, "sviluppo_passo", {"azione": "avanti"}, 4, "Va bene, andiamo avanti.")
     f = detta(out)

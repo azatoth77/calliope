@@ -66,7 +66,8 @@ TOOL_SVILUPPO = frozenset({"sviluppo_passo", "sviluppo_collauda", "sviluppo_apri
 CONTESTI = "sviluppi"           # la cartella dei contesti conservati, accanto a sviluppi.json
 MAX_CHIESTI = 10
 MAX_LAVORI = 40
-CHIUSURA_TURNI = 3              # la conferma della chiusura vale per tanti turni
+FUORI_TEMA_S = 15 * 60          # la riga del fuori tema: una volta per fase in questo tempo
+CHIUSURA_TURNI = 3             # la conferma della chiusura vale per tanti turni
 # Al collaudo di un gioco (11/10): il «sì» lo apre in prova sullo schermo (sviluppo_collauda)
 DOMANDA_GIOCO = "Lo apro in prova?"
 # La proposta in analisi, e quella a tappe (11/10, calliope/requisiti.py)
@@ -143,6 +144,116 @@ ELENCO_VOCE = 4
 ELENCO_MODELLO = 8
 
 
+# ─────────────────────────── la voce onesta (12/10) ───────────────────────────
+# Casi veri della DGX (06–12/10, docs/aree/agenti-estensioni.md, «Voce onesta»): l'esito di una
+# versione era «Non ho trovato il meteo per…» e la voce ha detto quattro volte «errore di rete»;
+# il collaudo contava «16 prove, 15 riuscite» con sette «non trovato»; un collaudo fallito diceva
+# solo «si è fermata con un errore». Il tipo di un collaudo, dal risultato (non dalle parole del
+# modello della voce):
+# - «risposta»: l'estensione ha risposto con qualcosa;
+# - «vuoto»: è girata e non ha trovato niente («trovato»: false, risultati vuoti, «non trovato» a
+#   parole senza dati accanto: argomenti_incerti.esito);
+# - «errore_dichiarato»: è girata e ha restituito un suo errore (un campo d'errore);
+# - «errore»: si è fermata (eccezione, tempo, contenitore).
+TIPI_COLLAUDO = ("risposta", "vuoto", "errore_dichiarato", "errore")
+# Le parole della scheda per tipo
+NOMI_COLLAUDO = {"risposta": "con una risposta", "vuoto": "«non trovato»",
+                 "errore_dichiarato": "con un errore dell'estensione",
+                 "errore": "fermata con un errore"}
+# Un testo d'altri (estensione, agente) che parla all'assistente non si dice (come
+# requisiti.nota_detta, senza «attiv»: «non attiva la ricerca» è una risposta normale)
+_ORDINE_DETTO = re.compile(r"(?<![a-zà-ù])(calliope|approv\w*|istruzion\w*|ignora\w*|prompt|"
+                           r"assistente|tool|frase di conferma)(?![a-zà-ù])|\b[a-z]+_[a-z_]+\b",
+                           re.I)
+
+
+def tipo_collaudo(c: dict) -> str:
+    """Il tipo di un collaudo salvato; quelli senza tipo (prima del 12/10) dal solo «ok»."""
+    t = c.get("tipo")
+    if t in TIPI_COLLAUDO:
+        return t
+    return "risposta" if c.get("ok") else "errore"
+
+
+def conto_collaudi(collaudi: list) -> str:
+    """Le prove dette a voce, separando le risposte buone da ciò che è girato senza trovare
+    niente: «Prove: 16: 8 con una risposta, 7 «non trovato» e una fermata con un errore.»
+    (12/10, caso vero: «Prove: 16, 15 riuscite» con sette «non trovato»). "" senza prove."""
+    if not collaudi:
+        return ""
+    n = {t: 0 for t in TIPI_COLLAUDO}
+    for c in collaudi:
+        n[tipo_collaudo(c)] += 1
+    tot = len(collaudi)
+    if n["risposta"] == tot:
+        return ("Prova: una, con una risposta." if tot == 1
+                else f"Prove: {tot}, tutte con una risposta.")
+    parole = {"risposta": ("una con una risposta", "{} con una risposta"),
+              "vuoto": ("una «non trovato»", "{} «non trovato»"),
+              "errore_dichiarato": ("una con un errore dell'estensione",
+                                    "{} con un errore dell'estensione"),
+              "errore": ("una fermata con un errore", "{} fermate con un errore")}
+    parti = [(uno if n[t] == 1 else molti.format(n[t])) for t, (uno, molti) in parole.items()
+             if n[t]]
+    if tot == 1:
+        return "Prova: " + parti[0].removeprefix("una ") + "."
+    return f"Prove: {tot}: " + _e(parti) + "."
+
+
+def testo_detto(testo, massimo: int = 160, frasi: int = 2) -> str:
+    """Un testo d'altri (il risultato di un'estensione, la risposta dell'agente) da dire tra
+    virgolette: una o due frasi, niente markdown né indirizzi, niente virgolette dentro. "" se
+    parla all'assistente o nomina un tool (si dice che è sulla scheda)."""
+    from .agenti.risultato import per_voce
+    t = per_voce(str(testo or ""), frasi, massimo)
+    t = re.sub(r"[«»\"“”]", "", t).strip().rstrip(".").strip()
+    if not t or _ORDINE_DETTO.search(t):
+        return ""
+    return t
+
+
+def cambiamento_chiesto(sv: "Sviluppo") -> str:
+    """Cosa doveva cambiare l'agente in questo giro rispetto alla versione di prima, con le parole
+    della richiesta (la correzione, il «continua a farli», la modifica all'analisi), dalla storia
+    dello sviluppo: «correggere «il collaudo con Valfiorita si ferma»». "" alla prima versione o se
+    non si sa. 12/10: al posto di «561 righe in più»."""
+    storia = list(sv.storia or [])
+    i = len(storia) - 1
+    # la consegna di adesso (lo sviluppo è passato al collaudo)
+    while i >= 0 and storia[i].get("a") != "collaudo":
+        i -= 1
+    if i < 0:
+        return ""
+    i -= 1
+    trovato = ""
+    while i >= 0:
+        s = storia[i]
+        if s.get("a") == "collaudo":
+            return trovato             # c'era una versione di prima
+        p = str(s.get("perche") or "").strip()
+        if not trovato:
+            if s.get("a") == "sviluppo" and p.startswith("correzione: "):
+                trovato = "correggere: " + p.removeprefix("correzione: ")
+            elif s.get("a") == "sviluppo" and p.startswith("completa: "):
+                trovato = "aggiungere: " + p.removeprefix("completa: ")
+            elif s.get("a") == "analisi" and p and p != "torna all'analisi":
+                trovato = "cambiare: " + p
+        i -= 1
+    return ""                          # la prima versione: niente «rispetto a prima»
+
+
+def frase_cambiamento(sv: "Sviluppo") -> str:
+    """«Rispetto alla versione di prima, l'agente doveva correggere: …» o ""."""
+    c = cambiamento_chiesto(sv)
+    if not c:
+        return ""
+    verbo, _, cosa = c.partition(": ")
+    cosa = testo_detto(cosa, 120, 1)
+    if not cosa:
+        return ""
+    return f"Rispetto alla versione di prima, l'agente doveva {verbo}: {cosa}."
+
+
 def elenco(svs: list, voce, quanti: int = ELENCO_VOCE) -> str:
     """««a» (…), «b» (…) e altri 2»: i primi `quanti` per nome (`voce(sv)`), poi quanti
     restano."""
@@ -211,6 +322,9 @@ class Sviluppo:
     # L'ultimo confronto requisito per requisito con i file consegnati: {lavoro, versione,
     # quando, esito, voci: [{stato, nota}] allineate a `requisiti`, requisiti_da}
     verifica: dict = field(default_factory=dict)
+    # La riga «Intanto restiamo sullo sviluppo…» detta dopo un fuori tema (12/10): {fase,
+    # quando}; non si ripete nella stessa fase per FUORI_TEMA_S
+    fuori_tema: dict = field(default_factory=dict)
 
     def fasi(self) -> tuple[str, ...]:
         return FASI_PROGRAMMA if self.tipo == "programma" else FASI_ESTENSIONE
@@ -694,18 +808,18 @@ class Sviluppi:
             parti.append(f"ho sospeso «{altro.titolo}».")
         parti.append(f"il lavoro di «{sv.titolo}» è pronto: siamo al collaudo.")
         if sv.tipo == "estensione":
-            parti.append(f"La versione {sv.versione or 'nuova'} non è ancora attiva: prima la "
-                         "proviamo.")
+            parti.append(f"La versione {sv.versione or 'nuova'} non è ancora attiva.")
+        # Meno parole (12/10, annunci di 7–9 frasi nei log): cosa doveva cambiare in parole, i
+        # test solo se non passano (la prova di fumo di un gioco la dice la revisione)
+        cambio = frase_cambiamento(sv)
+        if cambio:
+            parti.append(cambio)
         t = r.get("test") or {}
         if isinstance(t, dict) and t.get("eseguiti"):
             n = int(t.get("eseguiti") or 0)
             ko = int(t.get("falliti") or 0) + int(t.get("errori") or 0)
-            parti.append(f"I test passano, {n} su {n}." if (r.get("test_passano") or not ko)
-                         else f"Attenzione: {ko} test su {max(n, ko)} non passano.")
-            if self.e_gioco(sv):
-                # La prova di fumo è un test di avvio, non delle regole (11/10)
-                from .requisiti import frase_fumo
-                parti.append(frase_fumo(t))
+            if ko and not r.get("test_passano"):
+                parti.append(f"Attenzione: {ko} test su {max(n, ko)} non passano.")
         # Cosa manca rispetto alla richiesta (11/10, revisione onesta): detto subito, in breve
         mancanza = self.mancanze_dette(sv)
         if mancanza:
@@ -719,8 +833,8 @@ class Sviluppi:
         if self.e_gioco(sv):
             # «Con cosa provo?» per un gioco non ha risposta (11/10, DGX delle 16:25: «Non lo
             # so, è un gioco, dovrei vederlo»): si propone di aprirlo in prova
-            parti.append("È un gioco: per provarlo lo apro sullo schermo da cui mi parli, in "
-                         f"prova, senza attivarlo. {DOMANDA_GIOCO}")
+            parti.append("È un gioco: si prova sullo schermo da cui mi parli, senza attivarlo. "
+                         f"{DOMANDA_GIOCO}")
         elif rc.get("vanno") and not rc.get("rimandata"):
             parti.append("Con cosa provo?")
         elif falliti and getattr(lav, "correzione", False):
@@ -1152,8 +1266,8 @@ class Sviluppi:
                              + (f" (argomenti passati all'estensione: {argomenti_detti(c)})"
                                 if c.get("argomenti") else "") + " → "
                              + ("aperto in prova sullo schermo (il giudizio è della "
-                                "persona)" if c.get("anteprima") else "riuscito" if c.get("ok")
-                                else "NON riuscito") + ": "
+                                "persona)" if c.get("anteprima")
+                                else NOMI_COLLAUDO[tipo_collaudo(c)]) + ": "
                              f"{c.get('esito') or ''}{giudizio}")
                 # Le richieste di rete vere del collaudo (08/10): la causa che, nel giro della
                 # DGX, l'agente non vedeva e indovinava
@@ -1266,6 +1380,16 @@ class Sviluppi:
         return out + (": " + "; ".join(parti) if parti else "")
 
     def riga_fuori_tema(self, sv: Sviluppo) -> str:
+        """La riga in coda dopo un fuori tema, o "" se è già stata detta nella stessa fase da
+        meno di FUORI_TEMA_S (12/10: nei log 56 risposte con la coda «Siamo ancora in fase di
+        collaudo…», e cinque turni di fila per una luce con la stessa riga)."""
+        ora = time.time()
+        ft = sv.fuori_tema or {}
+        if ft.get("fase") == sv.fase and ora - float(ft.get("quando") or 0) < FUORI_TEMA_S:
+            return ""
+        with self._lock:
+            sv.fuori_tema = {"fase": sv.fase, "quando": ora}
+        self._salva()
         return f"Intanto restiamo sullo sviluppo {sv.di()}: siamo {ALLA.get(sv.fase, sv.fase)}."
 
     def promemoria_giorno(self, persona) -> str | None:
@@ -1338,6 +1462,12 @@ class Sviluppi:
                 "non trova…?»), sviluppo_chiedi con domanda = la domanda come detta: risponde "
                 "chi l'ha scritto; se va corretto («correggilo», «fallo sistemare»), "
                 "sviluppo_correggi con problema = cosa non va, come detto.")
+        if sv.fase == "collaudo":
+            # 12/10 (caso vero dell'11/10 16:26: collaudo saltato e «Ho analizzato il codice e
+            # tutto sembra in ordine» detto dal modello): la revisione la dice il tool
+            dopo += (" Se vuole saltare le prove o passare alla revisione, sviluppo_passo con "
+                     "azione avanti: la revisione la dice il tool, anche che il collaudo è "
+                     "stato saltato; tu non dire com'è il codice.")
         if sv.fase == "collaudo" and self.da_completare(sv)[0]:
             # 11/10: alla consegna Calliope ha detto cosa manca rispetto alla richiesta
             dopo += (" All'annuncio hai detto cosa manca rispetto alla richiesta: se chi parla "
@@ -1469,7 +1599,7 @@ class Sviluppi:
                 righe.append(f"- {_ora(float(c.get('quando') or 0))}, «{dati}»"
                              + (f" ({argomenti_detti(c)})" if c.get("argomenti") else "") + ": "
                              + ("aperto in prova sullo schermo" if c.get("anteprima") else
-                                "riuscito" if c.get("ok") else "non riuscito")
+                                NOMI_COLLAUDO[tipo_collaudo(c)])
                              + (f" — {c['esito']}" if c.get("esito") else "")
                              + (f" (la persona: {c['giudizio']})" if c.get("giudizio") else ""))
         if sv.chiesti:
@@ -1553,6 +1683,7 @@ class Sviluppi:
         with self._lock:
             collaudi = [{"ora": float(c.get("quando") or 0), "dati": str(c.get("dati") or ""),
                          "ok": bool(c.get("ok")), "esito": str(c.get("esito") or ""),
+                         "tipo": tipo_collaudo(c),
                          "versione": c.get("versione"), "giudizio": str(c.get("giudizio") or "")}
                         for c in sv.collaudi[-MAX_COLLAUDI:]]
             chiesti = [{"ora": float(q.get("quando") or 0), "domanda": str(q.get("domanda") or ""),
@@ -1602,7 +1733,7 @@ class Sviluppi:
             self.log(f"[SVILUPPO] scheda non inviata: {type(e).__name__}: {e}")
 
     def collaudo(self, sv: Sviluppo, dati: str, ok: bool, esito: str, rete=None,
-                 argomenti: dict | None = None, anteprima: bool = False):
+                 argomenti: dict | None = None, anteprima: bool = False, tipo: str = ""):
         """Un collaudo fatto. `rete`: la traccia di rete dell'esecuzione (08/10,
         estensioni/porta.py: metodo, URL ripulito, esito, inizio della risposta o errore,
         durata), per l'agente in sviluppo_chiedi e sviluppo_correggi. `argomenti`: gli input
@@ -1611,6 +1742,8 @@ class Sviluppi:
         c = {"quando": time.time(), "dati": str(dati or "")[:120], "ok": bool(ok),
              "esito": re.sub(r"\s+", " ", str(esito or "")).strip()[:200],
              "versione": sv.versione}
+        # Il tipo (12/10): risposta, «non trovato», errore dell'estensione, fermata
+        c["tipo"] = tipo if tipo in TIPI_COLLAUDO else ("risposta" if ok else "errore")
         if anteprima:
             # Un gioco aperto in prova sullo schermo (11/10): l'ha visto la persona, il giudizio
             # è suo (non un «riuscito» del codice)
@@ -1709,9 +1842,13 @@ SVILUPPO_MSG = ("Modalità sviluppo aperta con chi parla (dati del turno, non ri
                 "→ sviluppo_chiedi con domanda = la domanda come detta (non calliope_stato né "
                 "richiesta_tutore). Lo stesso per ogni domanda su come funziona o come sceglie "
                 "il codice dello sviluppo, o sul perché di un risultato. Non dire di aver passato "
-                "o registrato una domanda senza averla fatta con il tool. Se chiede altro (l'ora, il meteo, la casa, le "
-                "liste…), rispondi come sempre con i tuoi tool e chiudi con una frase breve che "
-                "ricorda che siete {alla} di «{titolo}». Niente sviluppi nuovi (estensioni, "
+                "o registrato una domanda senza averla fatta con il tool. Com'è il codice, se "
+                "funziona, se è sicuro, perché una prova non va e cosa manca lo dici SOLO con le "
+                "parole dei tool (collaudo, revisione, sviluppo_chiedi): mai «tutto in ordine», "
+                "«sembra sicura», mai una causa (la rete, i nomi…) che il risultato non dice. Se "
+                "chiede altro (l'ora, il meteo, la casa, le liste…), rispondi come sempre con i "
+                "tuoi tool; non ricordare tu la fase né lo sviluppo («siamo ancora al "
+                "collaudo…»): se serve, lo aggiunge Calliope. Niente sviluppi nuovi (estensioni, "
                 "programmi, lavori dell'agente) finché questo è aperto. Per una pausa: "
                 "sviluppo_passo con azione sospendi (si riprende quando vuole; un lavoro "
                 "dell'agente in corso continua); per fermare il lavoro dell'agente («ferma», "
