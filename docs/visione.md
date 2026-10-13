@@ -162,6 +162,9 @@ lo si farà. Oggi Calliope legge lo stato e basta, nessun tool inserisce o disin
   degni di fiducia: nessuna registrazione continua in condizioni normali, stato sempre
   visibile, registro di quando e perché si è registrato, conservazione limitata,
   archivio protetto. Aspetti legali (ospiti, collaboratori domestici) da verificare.
+  *[13/10, decisione [0029](decisioni/0029-conversazione-di-stanza.md): vale per l'**audio**,
+  che non va mai su disco. In più: trascrizione continua solo con la modalità stanza accesa,
+  segnalata sugli schermi e fermabile a voce («Calliope, abbiamo ospiti» la ferma per 4 ore).]*
 - **I sensori di presenza servono anche tutti i giorni**: rispondere nella stanza in
   cui c'è qualcuno, far seguire la musica, ignorare la TV accesa in una stanza vuota.
 - **Non è un impianto certificato.** Va pensato come complemento di un allarme vero,

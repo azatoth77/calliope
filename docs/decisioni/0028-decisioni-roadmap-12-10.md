@@ -1,6 +1,8 @@
 # 0028. Decisioni sulla roadmap del 12/10: dati, memoria, profilo ridotto, posizione del server, musica e allarme
 
-- **Stato**: accettata (12/10/2026, risposte di chi amministra alle 41 domande sulla roadmap)
+- **Stato**: accettata (12/10/2026, risposte di chi amministra alle 41 domande sulla roadmap); il
+  punto 1 (T1) in parte superato il 13/10 per il solo testo della conversazione di stanza, vedi
+  [0029](0029-conversazione-di-stanza.md)
 - **Area**: trasversale; [capacita-installazioni](../aree/capacita-installazioni.md),
   [voce-e-regole](../aree/voce-e-regole.md), [contesto-conversazione](../aree/contesto-conversazione.md),
   [casa](../aree/casa.md), [satelliti](../aree/satelliti.md)
