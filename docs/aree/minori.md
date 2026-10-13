@@ -564,7 +564,12 @@ Decisioni di Dario del 12/10 sera dopo la rilettura del programma per classe. Pr
   chiesto di nuovo entro 10 minuti dal rifiuto (`esercizi_oltre_insiste`). Lo dice il codice
   («È un passo oltre il programma di terza elementare: proviamo», con varianti; regola
   `esercizi_oltre_programma`) e vale solo per quella sessione. `piu_facile` scende (e torna al
-  programma se era oltre).
+  programma se era oltre). *13/10*: oltre il programma l'apertura non dice più «livello da
+  <classe>» (caso vero della DGX col 26B: «Facciamo frazioni, livello da terza elementare. Questo
+  va un po' oltre il programma di terza elementare, ma proviamo.» si contraddiceva); ora «Facciamo
+  le frazioni. Questo va un po' oltre il programma…», e l'argomento ha l'articolo anche dentro il
+  programma («Facciamo le addizioni, livello da terza elementare.», `con_articolo`). Prova in
+  `prova_esercizi_programma`.
 - **Nessun livello adatto** (livello 0 della mappa, o una classe prima del suo intervallo, anche
   per logica, fisica e chimica senza mappa): «Nel programma di terza elementare non ci sono ancora
   le frazioni, e non ho esercizi adatti. Facciamo le addizioni o le sottrazioni? Se vuoi provare
@@ -701,4 +706,14 @@ Per gli adulti niente cambia; per gli ospiti anche le citazioni delle reti, che 
 sono «…». Restano con le parole: i comandi della casa (`[CASA] «accendi…»`, un comando a un
 dispositivo e non la conversazione) e le frasi fisse dette fuori da una risposta. Prova
 `prova_console_minori`.
+
+**13/10 (ramo `minori-piccoli`): in memoria gli argomenti veri.** Gli argomenti mascherati finivano
+anche in `Brain.last_tools`, che non è solo il registro: lo leggono il confronto in ombra della
+macchina a stati (`stato_dialogo._args_diretta`), il ciclo (le richieste ai tutori) e la prova col
+modello degli esercizi, che vedevano `{'azione': '…'}` al posto di `{'azione': 'piu_difficile'}`.
+Ora in memoria restano gli argomenti veri (come prima del 12/10; tool `riservato`, `segreti`, ospiti
+e testo scritto da uno schermo come prima) e il mascheramento vale solo per il terminale e per il
+registro dei turni: `brain.tools_per_registro` in `Ciclo._registra_risposta` (senza un minore la
+lista stessa). Il registro degli eventi non cambia: prende gli argomenti dalla chiamata del modello,
+non da `last_tools`. Prova `prova_console_minori` (in memoria i veri, scritti «…», contrari).
 

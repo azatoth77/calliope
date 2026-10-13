@@ -379,6 +379,16 @@ s = SRV.sessione(NINA.id)
 verifica("frazioni in terza chieste lo stesso: «un passo oltre il programma», livello 1",
          s is not None and s.oltre and s.livello == 1 and "oltre il programma di terza"
          in out["risposta_finale"] and "esercizi_oltre_programma" in ctx.regole, out)
+# Caso vero della DGX (13/10): «Facciamo frazioni, livello da terza elementare. Questo va un po'
+# oltre il programma di terza elementare…» si contraddiceva
+verifica("oltre il programma: niente «livello da terza», l'argomento con l'articolo",
+         "livello da" not in out["risposta_finale"]
+         and out["risposta_finale"].startswith("Facciamo le frazioni."), out["risposta_finale"])
+chiama({"azione": "fine"}, "Nina")
+out, _ = chiama({"azione": "inizia", "argomento": "addizioni"}, "Nina")
+verifica("contrario: dentro il programma «Facciamo le addizioni, livello da terza elementare.»",
+         out["risposta_finale"].startswith(
+             "Facciamo le addizioni, livello da terza elementare."), out["risposta_finale"])
 chiama({"azione": "fine"}, "Nina")
 
 SRV._rifiutati.clear()
