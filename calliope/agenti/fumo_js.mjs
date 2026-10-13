@@ -625,7 +625,8 @@ export async function apriGioco(file, opzioni = {}) {
       return JSON.parse(JSON.stringify(amb.motore.partita.istantanea()));
     },
     async comando(nome, giocatore = "") {
-      if (amb.motore && typeof giocatore === "number") {
+      if (amb.motore && giocatore !== "" && (typeof giocatore === "number"
+          || tuttiPiatti(opzioni.macchina, opzioni.minimo || 1, opzioni.massimo || 1).includes(`${nome}_${giocatore}`))) {
         nome = `${nome}_${giocatore}`;
         giocatore = "";
       }

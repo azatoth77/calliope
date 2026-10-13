@@ -550,6 +550,11 @@ LEGAMI = [
     ("calliope/agenti/sandbox.py", ["prova_gioco_macchina.py"]),
     ("calliope/gioco_voce.py", ["prova_gioco_macchina.py"]),
     ("prove/giochi/porte_fasi/", ["prova_gioco_macchina.py"]),
+    ("calliope/agenti/accettazione.py", ["prova_gioco_macchina.py"]),
+    ("calliope/agenti/servizio.py", ["prova_gioco_macchina.py"]),
+    ("calliope/agenti/scheletri.py", ["prova_gioco_macchina.py"]),
+    ("calliope/estensioni/contratto.py", ["prova_gioco_macchina.py", "prova_agente_guida.py"]),
+    ("calliope/estensioni/prompt.py", ["prova_giochi.py", "prova_agente_guida.py"]),
     # Revisione onesta e tappe (11/10)
     ("calliope/requisiti.py", ["prova_revisione_onesta.py"]),
     ("calliope/sviluppo.py", ["prova_revisione_onesta.py"]),

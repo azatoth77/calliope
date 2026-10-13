@@ -19,6 +19,13 @@ docs/ricerche/2026-10-12-giochi-macchina-stati.md, area docs/aree/giochi.md).
    mossa che lancia con file:riga, attivi fuori dal dominio.
 5. **apriGioco** con la macchina: tocchi sui pulsanti del motore, g.stato(), g.comando con il
    valore, l'esito che va avanti da solo dopo esito_s; g.stato() su un gioco senza macchina.
+6. **Gli esempi di accettazione dei giochi** (agenti/accettazione.py): la forma chiusa dal JSON
+   del modello (comandi, mosse, stato atteso; scartati: nessun comando del gioco, comando o
+   valore che non c'è, niente da controllare, punti della misura sbagliata, nomi di Calliope,
+   doppioni); `accettazione.test.js` scritto dal codice: verde sul gioco giusto, rosso solo il
+   requisito sbagliato (le porte che non spariscono), tutto rosso su un gioco senza quel
+   comando; nel servizio, in uno sviluppo di un gioco nuovo: il file in sola lettura, i vincoli
+   con i comandi, l'esito alla fine; contrari: un gioco fuori da uno sviluppo, una correzione.
 
     python prove/prova_gioco_macchina.py
 """
@@ -407,6 +414,139 @@ def prova_apri(tmp: Path):
              "solo per un gioco con «scheda.macchina»" in u, u[-300:])
 
 
+# ═══════════════════════════ 6. gli esempi di accettazione ═══════════════════════════
+
+REQUISITI_PORTE = [{"testo": "si gioca a turno"}, {"testo": "una porta aperta non si riapre"},
+                   {"testo": "finite le porte la partita finisce"}]
+ANALISI_PORTE = {
+    "contraddizioni": [], "scelte": [], "al_collaudo": [],
+    "comandi": [{"fase": "turno", "nome": "porta", "da": 1, "a": 6},
+                {"fase": "turno", "nome": "inizia"},
+                {"fase": "esito", "nome": "salta"},
+                {"fase": "turno", "nome": "mai_usato"}],
+    "esempi": [
+        {"requisito": 1, "giocatori": 2, "mosse": [{"comando": "porta", "valore": 1}],
+         "atteso": {"fase": "turno", "tocca": 2}},
+        {"requisito": 2, "giocatori": 1, "mosse": [{"comando": "porta", "valore": "2"}],
+         "atteso": {"non_attivi": [{"comando": "porta", "valore": 2}],
+                    "attivi": [{"comando": "porta", "valore": 1}]}},
+        {"requisito": 3, "giocatori": 1, "mosse": [{"comando": "porta", "valore": v}
+                                                   for v in (1, 2, 3)],
+         "atteso": {"fase": "fine"}},
+        {"requisito": 2, "giocatori": 1, "mosse": [{"comando": "porta", "valore": 2}],
+         "atteso": {"testo": "porta 2"}},
+        # da scartare
+        {"requisito": 1, "giocatori": 2, "mosse": [{"comando": "avanti"}], "atteso": {"tocca": 2}},
+        {"requisito": 1, "giocatori": 2, "mosse": [{"comando": "apri", "valore": 1}],
+         "atteso": {"tocca": 2}},
+        {"requisito": 1, "giocatori": 2, "mosse": [{"comando": "porta", "valore": 9}],
+         "atteso": {"tocca": 2}},
+        {"requisito": 1, "giocatori": 2, "mosse": [{"comando": "porta", "valore": 1}],
+         "atteso": {}},
+        {"requisito": 1, "giocatori": 2, "mosse": [{"comando": "porta", "valore": 1}],
+         "atteso": {"punti": [1, 2, 3]}},
+        {"requisito": 1, "giocatori": 2, "mosse": [{"comando": "porta", "valore": 1}],
+         "atteso": {"fase": "turno", "tocca": 2}},
+    ]}
+
+
+def prova_accettazione(tmp: Path):
+    sezione("6. gli esempi di accettazione dei giochi")
+    from calliope.agenti import accettazione as acc
+    an = acc.interpreta(ANALISI_PORTE, 3, False, True)
+    verifica("la forma chiusa: 4 esempi buoni su 10 (scartati: niente comando del gioco, "
+             "comando o valore che non c'è, niente da controllare, punti sbagliati, doppione)",
+             len(an["esempi"]) == 4 and [e["requisito"] for e in an["esempi"]] == [1, 2, 3, 2],
+             json.dumps(an["esempi"], ensure_ascii=False)[:500])
+    verifica("…il valore «2» in testo diventa il numero, i comandi tenuti sono quelli usati "
+             "(né «inizia» di Calliope, né la fase «esito», né quelli mai usati)",
+             an["esempi"][1]["mosse"] == [["porta", 2]] and list(an["comandi"]) == ["porta"]
+             and an["comandi"]["porta"]["valori"] == [1, 2, 3, 4, 5, 6], str(an["comandi"]))
+    v = acc.vincolo(an, True, gioco=True)
+    verifica("i vincoli per l'agente: il file in sola lettura e i comandi con fase e valori",
+             acc.FILE_GIOCO in v and "IN SOLA LETTURA" in v
+             and "«porta» (fase «turno», da 1 a 6)" in v, v)
+    sch = acc.schema(False, True)
+    verifica("lo schema chiuso per il modello ha comandi ed esempi",
+             {"comandi", "esempi"} <= set(sch["required"]))
+    if not shutil.which("node"):
+        print("SALTATA IN PARTE: node non c'è")
+        return
+    testo = acc.test_js(an)
+    L = logica()
+    casi = {
+        "giusto": (L, None),
+        "porte che non spariscono": (L.replace("turno: (d) => ({ porta: chiuse(d) }),",
+                                               "turno: (d) => ({ porta: true }),"), [2]),
+        "senza il comando «porta»": (None, [1, 2, 3]),
+    }
+    for nome, (codice, attesi) in casi.items():
+        if codice is None:
+            mac = copy.deepcopy(manifesto()["scheda"]["macchina"])
+            mac["fasi"]["turno"]["comandi"] = {"apri": mac["fasi"]["turno"]["comandi"]["porta"]}
+            sb = _gioco(tmp, "acc_" + nome.replace(" ", "_").replace("«", "").replace("»", "")[:14], L.replace("porta: chiuse(d)", "apri: chiuse(d)")
+                        .replace("      porta(d, { valore })", "      apri(d, { valore })"), mac)
+        else:
+            sb = _gioco(tmp, "acc_" + nome.replace(" ", "_").replace("«", "").replace("»", "")[:14], codice)
+        sb.scrivi(acc.FILE_GIOCO, testo)
+        r = sb.test(acc.FILE_GIOCO, fumo=False)
+        passano, rossi = acc.esito_js(r["uscita"])
+        if attesi is None:
+            verifica("accettazione.test.js sul gioco giusto: tutti verdi", passano and not rossi,
+                     r["uscita"][-600:])
+        else:
+            verifica(f"…{nome}: rossi i requisiti {attesi}", not passano and rossi == attesi
+                     and acc.rossi(r["uscita"]) == attesi, r["uscita"][-600:])
+    sb = _gioco(tmp, "acc_msg", casi["porte che non spariscono"][0])
+    sb.scrivi(acc.FILE_GIOCO, testo)
+    u = sb.test(acc.FILE_GIOCO, fumo=False)["uscita"]
+    verifica("…e il messaggio dice il requisito, le mosse e cosa non va",
+             "FALLITO R2 esempio 2: 1 giocatori, porta 2" in u
+             and "«porta 2» non deve valere più" in u, u[-500:])
+
+    sezione("6b. nel servizio: uno sviluppo di un gioco nuovo")
+    import prova_fasi_agente_2 as F2
+    from types import SimpleNamespace
+    sv = SimpleNamespace(requisiti=[dict(r) for r in REQUISITI_PORTE],
+                         richiesta="un gioco di porte a turno")
+    s, log = F2._servizio([ANALISI_PORTE], sviluppi=F2.SviluppiFinti(sv))
+    lav = F2._lavoro("G1")
+    sb = _gioco(tmp, "srv_gioco", L)
+    r = s.analisi(lav, sb, True)
+    a = lav.accettazione
+    verifica("gli esempi scritti in accettazione.test.js, in sola lettura",
+             r is None and a.get("stato") == "pronta" and a.get("esempi") == 4
+             and a.get("nome_file") == acc.FILE_GIOCO and acc.FILE_GIOCO in sb.sola_lettura
+             and (sb.root / acc.FILE_GIOCO).is_file(), str(a))
+    corpo = s.cliente.corpi[0]
+    verifica("…la passata ha lo schema dei giochi e la spiegazione della macchina",
+             "comandi" in corpo["format"]["properties"]
+             and "macchina a stati di Calliope" in corpo["messages"][0]["content"])
+    verifica("…i vincoli dicono i comandi", "«porta» (fase «turno», da 1 a 6)" in lav.vincoli,
+             lav.vincoli[-300:])
+    ris = {"esito": "fatto"}
+    s.esito(lav, sb, ris)
+    verifica("alla fine l'esito degli esempi nel risultato: verdi",
+             (ris.get("accettazione") or {}).get("passano") is True, str(ris))
+    sb.sola_lettura.discard("logica.js")
+    sb.scrivi("logica.js", casi["porte che non spariscono"][0])
+    ris = {"esito": "fatto"}
+    s.esito(lav, sb, ris)
+    verifica("…e con le porte che non spariscono: rosso il requisito 2",
+             ris["accettazione"]["passano"] is False and ris["accettazione"]["rossi"] == [2],
+             str(ris))
+    s, log = F2._servizio([ANALISI_PORTE])
+    lav = F2._lavoro("G2")
+    s.analisi(lav, _gioco(tmp, "srv_fuori", L), True)
+    verifica("contrario: un gioco fuori da uno sviluppo non fa la passata",
+             lav.accettazione == {"stato": "saltata"} and not s.cliente.corpi)
+    s, log = F2._servizio([ANALISI_PORTE], sviluppi=F2.SviluppiFinti(sv))
+    lav = F2._lavoro("G3", correzione=True, iniziali={"logica.js": L})
+    s.analisi(lav, _gioco(tmp, "srv_corr", L), True)
+    verifica("contrario: una correzione di un gioco non riscrive gli esempi",
+             lav.accettazione == {"stato": "saltata"} and not s.cliente.corpi)
+
+
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8")
     radice = Path(tempfile.mkdtemp(prefix="calliope-macchina-"))
@@ -416,6 +556,7 @@ if __name__ == "__main__":
         prova_nucleo(radice / "nucleo")
         prova_fumo(radice / "fumo")
         prova_apri(radice / "apri")
+        prova_accettazione(radice / "accettazione")
     finally:
         shutil.rmtree(radice, ignore_errors=True)
     print(f"\n{'TUTTO OK' if not errori else f'{errori} ERRORI'} "
