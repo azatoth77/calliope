@@ -8,7 +8,7 @@
 
 | Stadio | Libreria | Dove |
 |---|---|---|
-| Schermi (schede su PC, tablet, TV) | Starlette + uvicorn senza extra (puro Python) in un thread, SSE verso una pagina kiosk locale; abbinamento a codice in SQLite (stesso file della memoria) | `calliope/schermi/` → `Schermi` (`hub.py`: destinatari, visibilità, consegna), `ArchivioSchermi` (`archivio.py`), `schede.py`, `ServerSchermi` (`server.py`), `pagina/`, `load_schermi`; HTTPS in rete `tls.py`, ponte TLS del satellite `ponte.py`; schede degli esercizi (POST `/api/esercizio`, area [minori](minori.md)) e del cassetto (POST `/api/cassetto`, area [immagini-allegati](immagini-allegati.md)), dall'08/10; segno della compagnia `Schermi.voce(compagnia=…)` (09/10); tool in `calliope/tools/schermi.py`; terminale `python -m calliope.schermi` |
+| Schermi (schede su PC, tablet, TV) | Starlette + uvicorn senza extra (puro Python) in un thread, SSE verso una pagina kiosk locale; abbinamento a codice in SQLite (stesso file della memoria) | `calliope/schermi/` → `Schermi` (`hub.py`: destinatari, visibilità, consegna), `ArchivioSchermi` (`archivio.py`), `schede.py`, `ServerSchermi` (`server.py`), `pagina/`, `load_schermi`; HTTPS in rete `tls.py`, ponte TLS del satellite `ponte.py`; schede degli esercizi (POST `/api/esercizio`, area [minori](minori.md)) e del cassetto (POST `/api/cassetto`, area [immagini-allegati](immagini-allegati.md)), dall'08/10; segno della compagnia `Schermi.voce(compagnia=…)` (09/10); segno della stanza `Schermi.stanza_segno`, `stanza_per` (13/10); tool in `calliope/tools/schermi.py`; terminale `python -m calliope.schermi` |
 | Telefono (satellite nel browser, PWA, dal 03/10) | stessa porta degli schermi: WebSocket di uvicorn con `websockets` sans-I/O e lo stesso protocollo dei satelliti; nel browser onnxruntime-web 1.30 in WebAssembly (Silero VAD e wake word), AudioWorklet, Web Audio, Screen Wake Lock API; CA di casa con `openssl` | `calliope/schermi/telefono.py` → `rotte`, `PonteWs`, `stato`; «Prova il microfono» `telefono_diagnostica.py`; `calliope/schermi/pagina/telefono/` (`telefono.js`, `voce.js`, `microfono.js`, `schermo-acceso.js` (`SchermoAcceso`, `diagnosi`: schermo acceso, dal 04/10), `sw.js`, manifest; una vista sola col carosello delle schede, dal 04/10: `sincronizza`, `disponi`, `vaiA`, strati menu/modulo/scrivi e, dal 06/10, la scheda a schermo intero (`apriIntera`, `disegnaIntera`, `chiudiIntera`); schede da `schermo.js` con `data-carosello` ed eventi `calliope:*`); `ServerSatelliti.prendi` / `lascia` / `per_pc`; `tls.certificato_telefono`; terminale `python -m calliope.schermi --certificato` |
 | Scrivere invece di parlare (moduli e casella sugli schermi personali, dal 03/10) | POST `/api/scrivi` e `/api/modulo` del server degli schermi (sessione in un'intestazione, JSON, solo HTTPS in rete); controlli dei codici in Python e in JS (`schermo.js`, condiviso col telefono); dal 05/10 solo durante una conversazione a voce | `calliope/schermi/moduli.py` → `Moduli`, `Ingresso`, `controlla_campo`, `offri`, `completa`, `oscura`; `Ufficio.completa_modulo` / `rubrica_da_modulo`; `tools/spec.serve_la_voce`; ciclo in `main.py` (`scritto`); `calliope/schermi/conversazione.py` → `scrittura_consentita`, `Conversazioni`; `Schermi.scrittura_consentita` (il punto unico, anche per le foto) |
 | Cruscotto di chi amministra (fase 1, sola lettura, dal 06/10) | — (solo libreria standard: registro dei turni, SQLite in sola lettura, `indice.json` delle estensioni) | `calliope/schermi/cruscotto.py` → `Cruscotto` (`amministra`, `dati`), `LettoreTurni`, `versione_in_uso`, `tipo_errore`; GET `/api/cruscotto` (`server.py`); `Schermi.cruscotto`; scheda locale `cruscotto` in `schermo.js` (`apriCruscotto`, `impostaAmministra`), voce del menu del telefono; `latenza.leggi_file` |
@@ -764,3 +764,32 @@ condizione: le più lunghe sono Calliope che parte (6 s), il saluto (4 s) e la v
 di dire la risposta della rubrica (10 s) e il turno del modulo scritto a frase finita (5 s),
 cioè l'audio in tempo reale di Piper. È solo carico: con il portatile occupato il tempo cresce
 con l'avvio di Calliope e la sintesi; niente da correggere nel codice.
+
+## La stanza ascolta: segno, interruttore del telefono, cruscotto (13/10, ramo `stanza-passo-1`)
+
+Passo 1 della conversazione di stanza ([stt-tts](stt-tts.md), decisione
+[0029](../decisioni/0029-conversazione-di-stanza.md): «stato sempre visibile»).
+
+- **Schermi della stanza**: in alto, accanto allo stato del collegamento, «● Ascolto la stanza» o
+  «❚❚ Stanza in pausa: ospiti, fino alle 22:15» (`#stanza-segno`, evento SSE `stanza` e campo
+  `stanza` del benvenuto). Lo manda `Stanza` con `Schermi.stanza_segno(stanza, "sat:<id>", testo)`;
+  con più satelliti nella stessa stanza la pausa si vede prima dell'ascolto; si toglie quando il
+  satellite se ne va (non a una sua riconnessione).
+- **Telefono** (protocollo 3, `telefono.js`/`voce.js`): un secondo Silero VAD con la sua sessione
+  ONNX sugli stessi blocchi del microfono (`AscoltoStanza`), solo con la stanza accesa dal server,
+  **l'interruttore** «Ascolto la stanza» nel menu (**acceso di serie** anche sui dati mobili,
+  risposta 5 di chi amministra; `localStorage` `calliope.telefono.stanza`) e il microfono acceso;
+  mai mentre Calliope parla. La riga sotto lo stato dice «Ascolto la stanza», «Ascolto della stanza
+  spento su questo telefono» o la pausa con l'ora. L'interruttore compare solo se il server fa la
+  stanza per quel telefono. Banda misurata nel browser a secco: ~52 kB per secondo di parlato
+  (PCM 16 kHz non compresso, pre-roll e silenzio di chiusura compresi).
+- **Cruscotto di chi amministra**: sezione «Stanza (in ombra)» con **solo numeri** (per satellite:
+  ascolta o in pausa, righe in memoria, quante persone presenti; oggi: ore di parlato, coda p90,
+  banda; segmenti in coda), come il resto del cruscotto, che non mostra testi delle conversazioni.
+  Il «campione di righe riletto da chi amministra» del piano (§ 6, passo 1) **non** è nel cruscotto
+  per questo motivo: resta da decidere come darlo (un comando da terminale sulla DGX, o una scheda
+  personale di chi amministra con le righe degli adulti) prima del passo 2.
+
+Prove: `prove/prova_stanza.py` (il segno dal server) e `prove/prova_stanza_voce.py` (livello 3: il
+telefono nel browser vero con il microfono finto: righe senza byte ai comandi, segno, interruttore
+spento).

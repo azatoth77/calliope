@@ -8,7 +8,7 @@
 
 | Stadio | Libreria | Dove |
 |---|---|---|
-| Satelliti (microfono e casse in rete, Calliope sul server) | `websockets` (API sincrona), PCM 16 kHz, TLS con `ssl` della libreria standard e impronta fissata; sul satellite lo stesso `Listener` (VAD ONNX, wake word) e `tts.UscitaLocale` | `calliope/satellite/` → `ServerSatelliti`, `AscoltoRemoto`, `UscitaRemota` (`server.py`), `Collegamento` (`suonata`, `canale`, dal 06–07/10), `valida_evento`, `ServerSatelliti.insieme` e `per_pc` (tutti insieme dal 06/10), `Satellite`, `Riproduttore` (`client.py`), `protocollo.py`, `ArchivioSatelliti`, `load_satelliti`; inoltro TCP per il telefono di casa `Inoltro` (`inoltro.py`, dal 03/10); PC nuovo con un comando e aggiornamenti con ritorno indietro (dal 03/10): pagina `/satellite` e `/installa` (`web.py`), pacchetto da `uv.lock` (`pacchetto.py`: `Distributore`), `Aggiornatore` (`aggiorna.py`), `installazione/avvio.py` e `installazione/installa.ps1` (uv 0.12.22, Python 3.14.8); `audio_modo` in `Config`; terminale `python -m calliope.satellite`; avvio `avvia_satellite.py`, `setup/satellite/` |
+| Satelliti (microfono e casse in rete, Calliope sul server) | `websockets` (API sincrona), PCM 16 kHz, TLS con `ssl` della libreria standard e impronta fissata; sul satellite lo stesso `Listener` (VAD ONNX, wake word) e `tts.UscitaLocale` | `calliope/satellite/` → `ServerSatelliti`, `AscoltoRemoto`, `UscitaRemota` (`server.py`), `Collegamento` (`suonata`, `canale`, dal 06–07/10), `valida_evento`, `ServerSatelliti.insieme` e `per_pc` (tutti insieme dal 06/10), `Satellite`, `Riproduttore` (`client.py`), `protocollo.py`, `ArchivioSatelliti`, `load_satelliti`; inoltro TCP per il telefono di casa `Inoltro` (`inoltro.py`, dal 03/10); PC nuovo con un comando e aggiornamenti con ritorno indietro (dal 03/10): pagina `/satellite` e `/installa` (`web.py`), pacchetto da `uv.lock` (`pacchetto.py`: `Distributore`), `Aggiornatore` (`aggiorna.py`), `installazione/avvio.py` e `installazione/installa.ps1` (uv 0.12.22, Python 3.14.8); protocollo 3 con l'ascolto della stanza (dal 13/10, sotto) `protocollo.STANZA`, `satellite/stanza.py` (`AscoltoStanza`, `Segmentatore`), `Satellite._stanza`, `Collegamento.stanza_capace`, `ServerSatelliti.conversazione_stanza`; `audio_modo` in `Config`; terminale `python -m calliope.satellite`; avvio `avvia_satellite.py`, `setup/satellite/` |
 
 ## Problemi noti
 
@@ -174,3 +174,25 @@ ufficio. Wyoming scritto a mano costa ~100 righe e < 10 ms (`prove/misura_wyomin
 per offrire STT e TTS di Calliope alle pipeline di HA. *[Superata in parte la nota del 02/10 sopra:
 «niente Wyoming» resta vero per il nostro protocollo, ma l'adattatore per i satelliti di stanza
 sarà ESPHome, non Wyoming.]*
+
+## Protocollo 3: l'ascolto della stanza (13/10, ramo `stanza-passo-1`)
+
+Per il passo 1 della conversazione di stanza ([stt-tts](stt-tts.md), decisione
+[0029](../decisioni/0029-conversazione-di-stanza.md)) il protocollo passa alla **versione 3**; il server
+accetta ancora la 1 e la 2. Un satellite che sa ascoltare la stanza lo dice nel «ciao» (`stanza:
+true`); il server gli manda nel benvenuto, e poi col messaggio `stanza` quando cambia (pausa, ospiti,
+ripresa), lo stato `{attiva, motivo («spenta», «pausa», «ospiti»), fino (epoch), segmento_max_s}`.
+Se è attiva il satellite manda, **accanto** al flusso dei comandi che non cambia, ogni segmento di
+parlato chiuso dal suo VAD della stanza: `stanza_inizio` (id, `fa_s`), i pezzi `b"R"` + id + PCM 16 kHz
+e `stanza_fine` (id, `durata_s`, `parlato_ms`, `chiusura` «silenzio», «lunga», «voce», «spenta»;
+`ascolto`: l'id dell'ascolto dei comandi se la frase andava anche lì). Il server tiene i tempi con il
+suo orologio (`fa_s` e metà giro), non con quello del satellite.
+
+Compatibilità: un satellite nuovo davanti a un server con la 2 (chiusura 4426) scende **di una
+versione alla volta** (prima scendeva subito alla 1 e perdeva l'esecutore del PC); un satellite con
+la 2 non riceve `stanza` nel benvenuto e i suoi eventuali `b"R"` si ignorano (prova
+`prove/prova_stanza.py`). Con `stanza: spenta` sul server nessun satellite riceve lo stato e il
+rubinetto resta chiuso: niente VAD in più, niente banda. Sul satellite Python l'ascolto della stanza
+nasce la prima volta che il server lo accende (`Satellite._stanza`) e si chiude a connessione
+caduta. Il satellite da aggiornare per averlo: il portatile (`calliope aggiorna` sulla DGX, poi il
+satellite si aggiorna da solo) e il telefono (basta ricaricare la pagina).

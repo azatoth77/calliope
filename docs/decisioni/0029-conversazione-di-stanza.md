@@ -101,7 +101,14 @@ Il contesto delle scelte, nelle parole di chi amministra: la privacy dentro la f
   rilevatore di pericolo che non vale sulle frasi giudicate non rivolte anche col giudizio in ombra
   (`compagnia_pericolo_solo_rivolte`). Un interruttore per punto, accesi di serie; prova
   `prove/prova_compagnia_passo0.py`.
-- Passi 1–8 del piano, ognuno con il suo interruttore e la sua misura sulla DGX; la prima misura
+- **Passo 1, fatto il 13/10 sera** (ramo `stanza-passo-1`, `stanza: ombra` nel file locale, di serie
+  spenta): protocollo 3 con il flusso della stanza, VAD della stanza sul satellite Python e sul
+  telefono (interruttore acceso di serie), Whisper con la precedenza turno > recupero > stanza,
+  registro della stanza **in memoria** con le presenze per persona, segno sugli schermi,
+  `stanza_pausa` («abbiamo ospiti»: 4 ore), «dimentica»; niente al modello, solo misure
+  (`calliope stato --turni`, sezione «Stanza»). La tenuta su disco (`stanza_tenuta`) è del passo
+  dopo.
+- Passi 2–8 del piano, ognuno con il suo interruttore e la sua misura sulla DGX; la prima misura
   (passo 1) non cambia nulla di ciò che Calliope dice. Misure nuove: ritardo della coda della
   stanza, banda del telefono, **copertura all'interpellazione** (tutte le frasi dette prima della
   domanda nel contesto della risposta).
