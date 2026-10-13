@@ -431,6 +431,23 @@ minuti senza altre voci la compagnia si scioglie e tutto torna come per una pers
   necessario, mai meno;
 - **serve almeno una frase** di ~1 s per voce (`compagnia_voce_min_s`) prima che il gruppo si veda.
 
+### 3.5 ter Da una stanza all'altra (13/10, domanda di chi amministra)
+
+**La conversazione con Calliope resta per persona e segue chi parla** da un satellite all'altro, come
+oggi (`corsie.py`, `prova_corsie_satelliti`: «la conversazione segue la persona»); il passo 0 ha
+toccato solo la conversazione anonima del satellite. Il **registro della stanza** invece è del
+satellite. Perché «Calliope, cosa ne pensi di quello che dicevamo di là?» abbia risposta:
+
+- **contesto caldo che segue la persona**: per qualche minuto dopo un cambio di stanza (proposta
+  `stanza_seguito_s` = 10 minuti) il blocco caldo di chi interpella comprende anche la coda della
+  stanza **dove era presente prima** (le sue righe e quelle dette mentre c'era), in fondo e più
+  corta di quella della stanza attuale, con il nome della stanza;
+- **`stanza_cerca` nelle stanze dove la persona era presente**, nei tempi in cui c'era (`presenti`
+  con stanza e intervallo per persona, tenuti dal registro fin dal passo 1); le frasi di un minore
+  le cercano solo i tutori (risposta 2 della 0029), mai un altro minore o un ospite;
+- per la presenza conta la voce riconosciuta sopra soglia, come per «chi è presente» (§ 3.7): chi
+  è entrato in cucina e non ha parlato non vi risulta presente (limite del § 3.5 bis).
+
 ### 3.6 La conversazione di gruppo vista dal modello
 
 - **Una frase sola cambia**: il prompt di sistema dice che Calliope sente la conversazione della
