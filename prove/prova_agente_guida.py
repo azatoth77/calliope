@@ -482,6 +482,9 @@ def prova_test_di_partenza(tmp: Path):
     trovati = {}
     for nome, gioco in (("E1", False), ("G1", True)):
         sb = sandbox(tmp, f"servizio-{nome}")
+        # Come nel servizio: il contratto e il runtime già segnati in sola lettura (13/10: così
+        # la prima versione non scriveva il runtime, preso nel --secco del banco)
+        sb.sola_lettura |= {"CAPACITA.md", "calliope_estensione.py"}
         Lavori._prepara_cartella_estensione(SimpleNamespace(log=lambda *_: None),
                                             SimpleNamespace(id=nome, gioco=gioco), sb)
         trovati[nome] = sorted(f["percorso"] for f in sb.elenca())

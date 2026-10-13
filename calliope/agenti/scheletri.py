@@ -162,6 +162,9 @@ def prepara_estensione(sandbox, runtime: str | None = None) -> list[str]:
         if runtime is None:
             from ..estensioni.servizio import runtime_testo
             runtime = runtime_testo()
+        # Il servizio lo segna in sola lettura insieme al contratto, prima di qui: lo si
+        # scrive comunque (è il codice di Calliope, non dell'agente)
+        sandbox.sola_lettura.discard("calliope_estensione.py")
         sandbox.scrivi("calliope_estensione.py", runtime)
         scritti.append("calliope_estensione.py")
     sandbox.sola_lettura |= {"calliope_estensione.py"}
