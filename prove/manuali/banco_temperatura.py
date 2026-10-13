@@ -239,8 +239,10 @@ def accettazione(sandbox_nuova, file: dict, caso: dict) -> dict:
         except Exception:  # noqa: BLE001 — un nome non ammesso: si salta
             pass
     if caso["tipo"] == "estensione" and not caso.get("gioco"):
-        shutil.copy(RADICE / "calliope" / "estensioni" / "_ospite.py",
-                    sb.root / "calliope_estensione.py")
+        # Dal pacchetto importato, non accanto al file (13/10: il banco lanciato da una copia
+        # fuori dal repository, con PYTHONPATH sulla versione installata)
+        import calliope.estensioni as E
+        shutil.copy(Path(E.__file__).parent / "_ospite.py", sb.root / "calliope_estensione.py")
     for rel, testo in (caso.get("aiuto") or {}).items():
         sb.scrivi(rel, testo)
     nome, testo = caso["accettazione"]
