@@ -179,7 +179,7 @@ satelliti. Cronologia e primi test in [`docs/aree/cronologia.md`](docs/aree/cron
 Solo ciò che è ancora vero il 09/10; storia e misure nei documenti d'area.
 
 - **Latenza**: *accettata da Dario il 09/10* (prima frase mediana 1,42 s l'08/10 con molti tool, 1,28 s il 09/10, base senza tool 1,18 s; testo→voce 0,35 s, STT 0,18 s): niente più lavori dedicati, si guarda solo l'avviso di `calliope stato --turni`. Storia e misure in [contesto-conversazione](docs/aree/contesto-conversazione.md)
-- **Prove**: attese fisse di `prova_satellite`; `prova_cronologia_pagina` con «Scarica Markdown» salva il file nella cartella Download vera di chi la lancia (da correggere). [`prove/LEGGIMI.md`](prove/LEGGIMI.md)
+- **Prove**: attese fisse di `prova_satellite`. [`prove/LEGGIMI.md`](prove/LEGGIMI.md)
 - **whisper.cpp senza hotwords**: «Che ore sono» detto subito dopo il nome diventa «Chiori sono». [stt-tts](docs/aree/stt-tts.md)
 - **Voci di famiglia al telefono**: in auto la voce di chi amministra vale come quella di un minore (canale, non voci simili); dal 07/10 margine, chi amministra solo familiare col minore vicino e «chi parla?» solo per un'azione, dal 09/10 è compagnia vera (più sfide nella zona grigia); resta da registrare di nuovo per canale e ritarare. [stt-tts](docs/aree/stt-tts.md)
 - **Compagnia** (09/10): la falsa compagnia di una persona sola è misurata bassa ma il punto debole è il telefono, da osservare nell'uso; il giudizio «rivolta a Calliope?» (F2) è in ombra, da rileggere prima di accenderlo. **Parole incerte**: soglie di F0 da tarare sulla voce vera, F2–F3 da decidere. [stt-tts](docs/aree/stt-tts.md)

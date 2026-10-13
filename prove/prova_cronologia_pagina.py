@@ -33,11 +33,32 @@ import prova_cruscotto_pagina as PCP
 import prova_telefono_pagina as PTP
 
 TMP = Path(tempfile.mkdtemp(prefix="calliope-cronologia-pagina-"))
+# I file di «Scarica» in una cartella della prova, mai nei Download veri di chi la lancia (13/10)
+SCARICATI = TMP / "scaricati"
 ERRORI = []
 SALTATA = 77
 aspetta = PCP.aspetta
 tocca = PCP.tocca
 foto = PCP.foto
+
+
+def pagina(exe, url, profilo, opzioni=()):
+    """Una scheda del browser con i download nella cartella della prova (`SCARICATI/<profilo>`):
+    senza, «Scarica» salvava il file nella cartella Download vera di chi lancia la prova. La
+    cartella sta nelle preferenze del profilo temporaneo, scritte prima di avviare il browser
+    (`download.default_directory`): `Page.setDownloadBehavior` sulla scheda Edge lo ignora."""
+    cartella = SCARICATI / profilo
+    cartella.mkdir(parents=True, exist_ok=True)
+    pref = PTP.TMP / profilo / "Default" / "Preferences"
+    pref.parent.mkdir(parents=True, exist_ok=True)
+    pref.write_text(json.dumps({"download": {"default_directory": str(cartella),
+                                             "prompt_for_download": False,
+                                             "directory_upgrade": True},
+                                "savefile": {"default_directory": str(cartella)}}),
+                    encoding="utf-8")
+    p = PTP.Pagina(exe, url, profilo=profilo, opzioni=opzioni)
+    p.scaricati = cartella
+    return p
 
 
 def verifica(nome, ok, dettaglio=""):
@@ -142,7 +163,7 @@ def prova(exe, amb):
     hub._rinfresca()
     base = f"http://127.0.0.1:{amb.porta}/"
     pagine = []
-    studio = PTP.Pagina(exe, base + f"#t={t_studio}", profilo="profilo-cr-studio",
+    studio = pagina(exe, base + f"#t={t_studio}", profilo="profilo-cr-studio",
                         opzioni=("--window-size=1280,800",))
     pagine.append(studio)
     try:
@@ -184,7 +205,7 @@ def prova(exe, amb):
         _, t_camera = hub.archivio.crea_con_token("camera", proprietario="dario",
                                                   proprietario_nome="Dario")
         hub._rinfresca()
-        camera = PTP.Pagina(exe, base + f"#t={t_camera}", profilo="profilo-cr-camera",
+        camera = pagina(exe, base + f"#t={t_camera}", profilo="profilo-cr-camera",
                             opzioni=("--window-size=1280,800",))
         pagine.append(camera)
         verifica("uno schermo personale nuovo si collega", bool(collegata(camera)))
@@ -236,8 +257,14 @@ def prova(exe, amb):
         verifica("«Scarica» della trascrizione in Markdown", bool(ok),
                  camera.valuta("(document.querySelector('#principale .tipo-chat .esito-scarica')"
                                " || {}).textContent"))
+        def scaricato():
+            return [f for f in camera.scaricati.glob("*.md")
+                    if "Pisa" in f.read_text(encoding="utf-8", errors="replace")]
+        ok = aspetta(lambda: bool(scaricato()), 8)
+        verifica("…il file nella cartella dei download della prova, non nei Download veri",
+                 bool(ok), [f.name for f in camera.scaricati.iterdir()])
         # Lo schermo di stanza
-        cucina = PTP.Pagina(exe, base + f"#t={t_cucina}", profilo="profilo-cr-cucina",
+        cucina = pagina(exe, base + f"#t={t_cucina}", profilo="profilo-cr-cucina",
                             opzioni=("--window-size=1280,800",))
         pagine.append(cucina)
         collegata(cucina)
@@ -287,7 +314,7 @@ def telefono(exe, amb):
     _, token = amb.srv.archivio.crea_con_token("telefono-dario", proprietario="dario",
                                                proprietario_nome="Dario")
     amb.svs.sviluppi.clear()
-    p = PTP.Pagina(exe, f"http://127.0.0.1:{amb.porta}/telefono/", profilo="profilo-cr-tel",
+    p = pagina(exe, f"http://127.0.0.1:{amb.porta}/telefono/", profilo="profilo-cr-tel",
                    opzioni=("--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream",
                             "--window-size=390,844"))
     try:
