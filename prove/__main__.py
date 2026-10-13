@@ -191,6 +191,8 @@ A_SECCO = [
     ("prova_giochi.py", [], "giochi e schede interattive (05/10): manifesto con la scheda, documento e CSP del riquadro, approvazione dei giochi puri, partite su uno schermo e condivise, chat e frasi col guardiano, azioni della porta, banco d'attacco dei messaggi, tempo di gioco dei minori, richieste ai tutori, test JavaScript"),
     # ~3 s: i comandi a voce dei giochi (11/10), hub vero, ciclo finto, Node se c'è
     ("prova_gioco_voce.py", [], "comandi a voce dei giochi (11/10): scheda.ascolta nel manifesto, sottoinsieme a runtime e mai comandi nuovi, la mossa con il solo comando e il nome di chi gioca, chiuso e partita di prova; nel ciclo la regola gioco_comando con i contrari (frase più lunga, nessun gioco, altro satellite, comando non attivo, domanda in sospeso), la finestra senza nome solo per le forme dell'elenco e il suo tetto, contesto e gioco_comando per il modello, chi gioca solo con la voce riconosciuta; prova di fumo con i comandi"),
+    # ~4 s: la macchina a stati dei giochi (13/10), Node per il nucleo e la prova di fumo
+    ("prova_gioco_macchina.py", [], "macchina a stati dei giochi (13/10): scheda.macchina nel manifesto (comandi a voce piatti dagli slot, uguali in Python e nel motore, 14 contrari), documento del riquadro con il motore, il nucleo (preparazione, turni, esito, fine, ancora, tela; la forma dei risultati: esito annidato, dati mancanti, fuori da verso, attivi che allarga, vista), prova di fumo per fasi (senza uscita, mai raggiunta, mai attivo, non finisce, mossa che lancia, fuori dominio), apriGioco con g.stato() e i comandi con il valore"),
     # ~60 s: la pagina degli schermi in Edge o Chromium senza finestra (senza si salta)
     ("prova_giochi_pagina.py", [], "giochi nella pagina vera: il riquadro ostile non legge la pagina né il localStorage, niente rete né WebRTC, messaggi falsi rifiutati, cane da guardia (ciclo infinito, navigazione, inondazione), partita di tris tra due pagine, comandi a voce (la mossa nel riquadro, il sottoinsieme a runtime, niente fuori elenco, partita di prova)"),
     ("prova_contesto_agenti.py", [], "contesto degli agenti (05/10): finestra dal setup, tetti della passata e del ragionamento, risultati lunghi in .calliope, diario del lavoro alle soglie, domanda a metà lavoro"),
@@ -333,6 +335,7 @@ LIVELLO_2 = {
     "prova_sonde_attacchi.py",       # ~3 s (08/10 notte)
     "prova_giochi.py",               # 7 s
     "prova_gioco_voce.py",           # ~3 s (11/10, Node per la prova di fumo)
+    "prova_gioco_macchina.py",       # ~4 s (13/10, Node)
     "prova_agente_guida.py",         # ~10 s (11/10)
     "prova_fasi_agente.py",          # ~18 s (12/10 sera)
     "prova_fasi_agente_2.py",        # ~10 s (13/10)
@@ -538,6 +541,15 @@ LEGAMI = [
     ("calliope/tools/schermi.py", ["prova_gioco_voce.py"]),
     ("calliope/estensioni/servizio.py", ["prova_giro_halloween.py"]),
     ("calliope/valore.py", ["prova_giro_halloween.py"]),
+    # La macchina a stati dei giochi (13/10)
+    ("calliope/estensioni/macchina.py", ["prova_gioco_macchina.py", "prova_gioco_voce.py"]),
+    ("calliope/estensioni/motore_gioco.js", ["prova_gioco_macchina.py"]),
+    ("calliope/estensioni/scheda.py", ["prova_gioco_macchina.py"]),
+    ("calliope/agenti/fumo_js.mjs", ["prova_gioco_macchina.py"]),
+    ("calliope/agenti/test_js.mjs", ["prova_gioco_macchina.py"]),
+    ("calliope/agenti/sandbox.py", ["prova_gioco_macchina.py"]),
+    ("calliope/gioco_voce.py", ["prova_gioco_macchina.py"]),
+    ("prove/giochi/porte_fasi/", ["prova_gioco_macchina.py"]),
     # Revisione onesta e tappe (11/10)
     ("calliope/requisiti.py", ["prova_revisione_onesta.py"]),
     ("calliope/sviluppo.py", ["prova_revisione_onesta.py"]),

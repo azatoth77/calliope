@@ -88,10 +88,11 @@ def riservata(forma: str, nomi=("Calliope",)) -> str | None:
     return None
 
 
-def valida_elenco(comandi, nomi=("Calliope",)) -> dict[str, list[str]]:
+def valida_elenco(comandi, nomi=("Calliope",), massimo: int = MAX_COMANDI) -> dict[str, list[str]]:
     """L'elenco dei comandi di `scheda.ascolta.comandi`, validato: {id: [forme]} (le forme come
     scritte, già controllate). Accetta {id: [forme]} o [{"id", "forme"}]. Solleva
-    ElencoNonValido con un messaggio per chi scrive il manifesto."""
+    ElencoNonValido con un messaggio per chi scrive il manifesto. `massimo`: quanti comandi
+    (13/10: l'elenco piatto della macchina a stati, con gli slot espansi, arriva a 64)."""
     if isinstance(comandi, list):
         coppie = []
         for c in comandi:
@@ -103,8 +104,8 @@ def valida_elenco(comandi, nomi=("Calliope",)) -> dict[str, list[str]]:
     else:
         raise ElencoNonValido("«ascolta.comandi»: un oggetto {\"uno\": [\"uno\", \"la porta "
                               "uno\"], …}")
-    if not coppie or len(coppie) > MAX_COMANDI:
-        raise ElencoNonValido(f"«ascolta.comandi»: da 1 a {MAX_COMANDI} comandi")
+    if not coppie or len(coppie) > massimo:
+        raise ElencoNonValido(f"«ascolta.comandi»: da 1 a {massimo} comandi")
     out: dict[str, list[str]] = {}
     viste: dict[str, str] = {}
     for cid, forme in coppie:
