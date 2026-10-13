@@ -33,6 +33,7 @@ from .allegati import Allegati, Allegato
 from .conversazione import UNSET, Conversazione
 from .immagini import Album
 from .memory import HOUSE
+from .notizie import contesto as notizie_contesto
 from . import argomenti_incerti, luogo, politica, provenienza, stato_dialogo, storpiature, valore
 from .risposte import forma_chiusa
 from .sicurezza import instruction_fact
@@ -1133,6 +1134,9 @@ class CapitoHold:
 # Calliope ha detto.
 WEB_TOLTO = ("{\"ok\": true, \"nota\": \"risultati di internet già usati nella risposta qui "
              "sotto e poi tolti dalla conversazione: per altri dati cerca di nuovo\"}")
+# Le chiavi del JSON di un tool non fidato che portano dati (non solo un esito): i risultati di
+# web_cerca e delle estensioni, i fatti e la notizia del tool notizie (13/10)
+_CHIAVI_DATO = ('"risultati"', '"fatti"', '"notizia"')
 
 
 class TextCallGuard:
@@ -1737,6 +1741,12 @@ def _compatta_storia(history: list[dict]):
     for m in history[:users[-2]]:
         if m.get("role") != "tool" or len(m.get("content") or "") <= OLD_RESULT_CHARS:
             continue
+        if m.get("name") == notizie_contesto.TOOL:
+            # Le notizie dette (13/10): titoli e testate restano, in busta (decisione 7)
+            ridotto = notizie_contesto.riduci(m.get("content") or "")
+            if ridotto is not None:
+                m["content"] = ridotto
+                continue
         try:
             res = json.loads(m["content"])
         except (json.JSONDecodeError, TypeError):
@@ -3240,7 +3250,8 @@ class Brain:
             if m.get("role") != "tool" or m.get("content") == WEB_TOLTO:
                 continue
             spec = self.tools.get(m.get("name") or "")
-            if spec is not None and getattr(spec, "non_fidato", False):
+            if (spec is not None and getattr(spec, "non_fidato", False)
+                    and not getattr(spec, "resta_in_storia", False)):
                 m["content"] = WEB_TOLTO
 
     def rules_fired(self) -> list[str]:
@@ -3858,6 +3869,7 @@ class Brain:
                                                   archivio="archivio_cerca" in names,
                                                   ufficio="modello_compila" in names,
                                                   web="web_cerca" in names,
+                                                  notizie="notizie" in names,
                                                   estensioni=any(n.startswith("est_")
                                                                  for n in names),
                                                   meteo_casa="meteo_leggi" in names,
@@ -5133,7 +5145,7 @@ class Brain:
         self._set_ctx("politica_esito", None)
         self._ultima_decisione = (esito_pol.get("decisione") if isinstance(esito_pol, dict)
                                   else None)
-        if getattr(spec, "non_fidato", False) and '"risultati"' in result:
+        if getattr(spec, "non_fidato", False) and any(k in result for k in _CHIAVI_DATO):
             # Dato non fidato in questa risposta: solo letture fino alla fine (DOPO_DATO)
             self._letto_ora = politica.fonte_di(call["name"], spec) or "web"
         cards = []

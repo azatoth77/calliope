@@ -140,6 +140,14 @@ DEFINIZIONI: dict[str, Definizione] = {
                        ("SearXNG (web_searxng_url: calliope motore searxng avvia)",
                         "internet", "httpx"),
                        sa_fare="cercare su internet meteo, notizie, risultati, orari e prezzi"),
+    # Le notizie dai feed RSS delle testate (13/10, calliope/notizie/): scaricate in casa, la
+    # domanda non esce
+    "notizie": Definizione("le notizie dai giornali", "notizie dai giornali",
+                           ("internet per lo scarico dei feed (ogni 2 ore, se qualcuno chiede "
+                            "notizie)", "il file di notizie_db"),
+                           sa_fare="dirti le notizie del giorno dai giornali, anche di sport, "
+                                   "economia, tecnologia e della tua regione",
+                           ospite="le notizie del giorno"),
 }
 
 
@@ -169,7 +177,7 @@ AREE: dict[str, Area] = {
     "agenda": Area("l'agenda", "Con l'agenda", "Timer, promemoria, agenda e liste",
                    ("memoria",)),
     "ricerca": Area("le ricerche", "Per le ricerche", "Ricerche",
-                    ("biblioteca", "web", "conversazioni")),
+                    ("biblioteca", "web", "notizie", "conversazioni")),
     "documenti": Area("i documenti", "Con i documenti", "Documenti, ufficio e archivio",
                       ("documenti", "ufficio", "archivio")),
     "pc": Area("il computer", "Con il computer", "Il computer", ("pc",)),
@@ -382,6 +390,9 @@ def _da_tool(tools) -> dict[str, bool]:
     # La ricerca web (03/10) pure: senza, i prompt misurati prima restano uguali
     if "web_cerca" in names:
         extra["web"] = True
+    # Le notizie (13/10) pure
+    if "notizie" in names:
+        extra["notizie"] = True
     return {**{"memoria": "promemoria_imposta" in names,
             "biblioteca": "biblioteca_cerca" in names,
             "pc": any(n.startswith("pc_") for n in names),
@@ -423,6 +434,9 @@ def testo_prompt(registro: Registro | None = None, tools=()) -> str:
         # dice il tool); senza il tool è «non disponibile»
         if "web" in presenti:
             presenti["web"] = "web_cerca" in names
+        # Le notizie pure (13/10): con il tool ci sono (un feed giù lo dice il tool)
+        if "notizie" in presenti:
+            presenti["notizie"] = "notizie" in names
     else:
         presenti = _da_tool(names)
     attive = [DEFINIZIONI[n].breve for n, ok in presenti.items() if ok and n in DEFINIZIONI]
@@ -1593,6 +1607,53 @@ def check_web(cfg, servizio=None) -> dict:
     return _r("web", "attiva", "SearXNG risponde", "", **det)
 
 
+def check_notizie(cfg, servizio=None, errore: str = "") -> dict:
+    """Le notizie dai feed RSS (13/10, calliope/notizie/): spente, senza rete, o attive con
+    l'ultimo scarico e i feed fermi o guasti. Da terminale (senza servizio) solo la
+    configurazione: niente scarichi."""
+    if not getattr(cfg, "notizie_enabled", True):
+        return _r("notizie", "da_configurare", "spente (notizie_enabled)",
+                  "In calliope.locale.yaml, sezione notizie, metti notizie_enabled a true e "
+                  "riavviami.")
+    if not getattr(cfg, "online", True):
+        return _r("notizie", "da_configurare", "senza rete (online: false)",
+                  "Se c'è internet, in calliope.locale.yaml metti online a true e riavviami.")
+    from .notizie.feed import elenco, regione_di_casa, testate_spente
+    feeds = elenco(cfg)
+    det = {"feed": len(feeds), "regione": regione_di_casa(cfg) or "nessuna",
+           "spente": testate_spente(cfg), "livello": getattr(cfg, "notizie_livello", "ospite")}
+    if errore:
+        return _r("notizie", "guasta", f"indice non aperto ({errore[:80]})",
+                  "Controlla il file di notizie_db (permessi, spazio sul disco) e riavviami.",
+                  **det)
+    if not feeds:
+        return _r("notizie", "da_configurare", "nessun feed acceso",
+                  "In calliope.locale.yaml, sezione notizie, controlla notizie_feed e "
+                  "notizie_spente.", **det)
+    if servizio is None:
+        return _r("notizie", "attiva", "configurate, non ancora scaricate", "", **det)
+    st = servizio.stato()
+    det.update(voci=st["voci"], fermi=st["fermi"], guasti=st["guasti"],
+               scarico_periodico="acceso" if st["attivo"] else "in pausa")
+    if st["ultimo_ok"]:
+        import datetime as _dt
+        det["ultimo_scarico"] = _dt.datetime.fromtimestamp(st["ultimo_ok"]).strftime(
+            "%d/%m %H:%M")
+    if st["ultimo_scarico"] and not st["ultimo_ok"]:
+        return _r("notizie", "guasta", "nessun feed risponde (internet assente?)",
+                  "Controlla la connessione a internet; riprovo da sola al prossimo giro.",
+                  **det)
+    if st["guasti"] and len(st["guasti"]) * 2 >= max(1, st["feed"]):
+        return _r("notizie", "degradata", "metà dei feed non si legge: "
+                  + ", ".join(st["guasti"][:5]),
+                  "Controlla la connessione; un feed che ha cambiato indirizzo va corretto in "
+                  "notizie_feed.", **det)
+    motivo = f"{st['voci']} voci" if st["ultimo_ok"] else "non ancora scaricate"
+    if st["fermi"]:
+        motivo += "; feed fermi: " + ", ".join(st["fermi"][:5])
+    return _r("notizie", "attiva", motivo, "", **det)
+
+
 def check_conversazioni(cfg, arch=None, timeout: float = 1.5) -> dict:
     """L'archivio delle conversazioni (05/10, calliope/conversazioni.py): attivo con la ricerca
     per parole e per significato, o solo per parole se il modello di embedding manca. Da
@@ -1646,7 +1707,8 @@ CONTROLLI = {"llm": check_llm, "stt": check_stt, "voce": check_voce, "wake": che
              "biblioteca": check_biblioteca, "pc": check_pc, "documenti": check_documenti,
              "casa": check_casa, "schermi": check_schermi, "agenti": check_agenti,
              "archivio": check_archivio, "ufficio": check_ufficio,
-             "conversazioni": check_conversazioni, "web": check_web}
+             "conversazioni": check_conversazioni, "web": check_web,
+             "notizie": check_notizie}
 
 
 def controlla_una(cfg, nome: str) -> dict:

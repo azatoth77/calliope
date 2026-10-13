@@ -44,6 +44,14 @@ def _web_cerca(ctx: ToolContext, domanda: str = "", tipo: str = "web") -> dict:
         return {"ok": False, "errore": "ricerca su internet non disponibile",
                 "risposta_finale": "La ricerca su internet qui non è disponibile."}
     tipo = "notizie" if str(tipo or "").lower().startswith("notiz") else "web"
+    if tipo == "notizie" and getattr(ctx, "notizie", None) is not None:
+        # Dal 13/10 le notizie hanno il loro tool (calliope/tools/notizie.py) e web_cerca non
+        # ha più il tipo «notizie»: una chiamata rimasta nell'abitudine del modello (o nella
+        # storia) va alle notizie dei feed, con la domanda come tema (conversione della forma,
+        # regola `web_notizie_al_tool`)
+        from .notizie import _notizie
+        note_rule(ctx, "web_notizie_al_tool")
+        return _notizie(ctx, tema=str(domanda or ""))
     if not str(domanda or "").strip():
         if tipo == "web":
             # La domanda serve solo alla ricerca web (09/10): l'errore come quello dello
@@ -147,12 +155,26 @@ PARAMETRI = {"type": "object",
              "required": []}
 
 
-def web_spec(cfg=None) -> ToolSpec:
+# Con il tool notizie (13/10): niente tipo, la domanda è obbligatoria e le notizie vanno lì
+DESCRIZIONE_CON_NOTIZIE = (
+    "Cerca su internet ciò che cambia nel tempo o è di oggi: meteo e previsioni, risultati "
+    "sportivi, orari, prezzi, eventi, aperture; e le guide pratiche (come si fa), i consigli e "
+    "i prodotti. Per le notizie usa invece notizie. Per i fatti stabili (storia, geografia, "
+    "scienza, persone famose, opere, definizioni) usa invece biblioteca_cerca, se c'è. "
+    "domanda: breve, come per un motore di ricerca, con luogo e giorno («meteo Milano "
+    "domani», «risultato Inter ieri»), MAI con nomi delle persone di casa, indirizzi, numeri "
+    "di telefono o altri dati personali.")
+PARAMETRI_CON_NOTIZIE = {"type": "object", "properties": {"domanda": {"type": "string"}},
+                         "required": ["domanda"]}
+
+
+def web_spec(cfg=None, notizie: bool = False) -> ToolSpec:
+    """`notizie`: c'è il tool notizie (13/10), e web_cerca non ha più il tipo «notizie»."""
     livello = str(getattr(cfg, "web_livello", "familiare") or "familiare")
     return ToolSpec(
         name="web_cerca",
-        description=DESCRIZIONE,
-        parameters=PARAMETRI,
+        description=DESCRIZIONE_CON_NOTIZIE if notizie else DESCRIZIONE,
+        parameters=PARAMETRI_CON_NOTIZIE if notizie else PARAMETRI,
         func=_web_cerca, risk="lettura", levels=LIVELLI_DA.get(livello, LIVELLI_DA["familiare"]),
         requires_internet=True, segreti=("domanda",), non_fidato=True,
         # La ricerca costa ~1–2 s (SearXNG chiede a più motori): la frase copre l'attesa

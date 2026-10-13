@@ -60,7 +60,7 @@ TIPI: dict[str, Tipo] = dict([
        "per il rigioco e la diagnosi"),
     _t("chiamata_tool", "id nome argomenti passata origine", "modello"),
     _t("esito_tool", "id nome ok contenuto riservato personale non_fidato correggibile "
-                     "frase in_sospeso fonte", "modello",
+                     "frase in_sospeso fonte resta", "modello",
        "visibilità per tipo di tool decisa alla scrittura (§ 11.1): riservato, personale, "
        "non_fidato e la fonte della busta"),
     _t("detto_calliope", "testo autore atto frase canale satellite fonte dopo_chiamate",

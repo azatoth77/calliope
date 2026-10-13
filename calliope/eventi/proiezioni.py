@@ -129,6 +129,9 @@ class Forma:
     ora_di_allora: tuple = ()
     web_tolto: str = ""
     traccia_privata: str = TRACCIA_PRIVATA
+    # Le forme ridotte di alcuni tool nei turni vecchi (13/10, le notizie: titoli e testate in
+    # busta, calliope/notizie/contesto.py): ((nome, funzione(contenuto) → testo o None), …)
+    riduzioni: tuple = ()
 
 
 FORMA = Forma()
@@ -239,7 +242,7 @@ def turni(eventi, da: int | None = None) -> dict:
             cur["esiti"].append({"id": d.get("id"), "name": d.get("nome"),
                                  "content": str(d.get("contenuto") or ""),
                                  **{k: d.get(k) for k in ("riservato", "personale",
-                                                          "non_fidato", "fonte")}})
+                                                          "non_fidato", "fonte", "resta")}})
         elif tipo == "detto_calliope":
             cur["inviate"].append((int(d.get("frase") or 0), str(d.get("testo") or ""),
                                    d.get("atto"), d.get("autore"), d.get("canale"),
@@ -321,6 +324,12 @@ def _forma_esito(contenuto: str, nome, vecchio: bool, ora: bool, forma: Forma) -
                           ensure_ascii=False)
     if not vecchio or len(contenuto) <= forma.risultato_max:
         return contenuto
+    for nome_r, riduci in forma.riduzioni:
+        if nome == nome_r:
+            # Le notizie dette (13/10): titoli e testate restano, in busta (come Brain)
+            ridotto = riduci(contenuto)
+            if ridotto is not None:
+                return ridotto
     res = res if isinstance(res, dict) else {}
     ok = "errore" not in res and res.get("ok") is not False
     detta = ""
@@ -353,7 +362,7 @@ def _esito_reso(r: dict, vecchio: bool, ora: bool, forma: Forma, per_risposta: b
     proiettati sono chiusi): il testo dei siti tolto (`Brain._togli_non_fidati`), riservati e
     personali sigillati (`_seal_private`), poi la forma definitiva."""
     c = r["content"]
-    if r.get("non_fidato") and forma.web_tolto:
+    if r.get("non_fidato") and forma.web_tolto and not r.get("resta"):
         c = forma.web_tolto
     c = sigillato(c, bool(r.get("riservato")), bool(r.get("personale")), forma.traccia_privata)
     if per_risposta:

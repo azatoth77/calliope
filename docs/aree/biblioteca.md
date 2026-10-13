@@ -10,6 +10,7 @@
 |---|---|---|
 | Biblioteca offline | Wikipedia italiana in ZIM di Kiwix, letta in puro Python (solo libreria standard, solo CPU) con un indice SQLite FTS5 accanto; niente `libzim` dal 01/10 | `calliope/biblioteca.py` → `Biblioteca.cerca`, `load_biblioteca`; `calliope/zim.py` → `ZimFile`; `calliope/biblioteca_indice.py` → `costruisci`, `apri`, `stato_indice`; tool `biblioteca_cerca`; file in `biblioteca/` (`scarica.sh`), indici in `biblioteca/indici/` |
 | Ricerca su internet (facoltativa, solo con la rete) | SearXNG in un container di Calliope sulla DGX (`calliope-searxng`, 127.0.0.1:8004, niente log; `setup/linux/motore/searxng.sh`), httpx in POST; pagine con http.client e html.parser, senza SSRF | `calliope/web/` → `Web` (`servizio.py`), `Ripulitore` (`privacy.py`: niente dati personali nelle domande), `scarica`, `estrai_testo` (`pagina.py`), `load_web`; tool `web_cerca` in `calliope/tools/web.py`; `web_cerca` e `web_leggi` dell'agente in `calliope/agenti/ciclo.py`; solo letture dopo un risultato web: `politica.DOPO_DATO` (`politica.bloccata`) |
+| Notizie dai feed RSS (13/10) | feed delle testate scaricati in casa ogni 2 ore (solo se qualcuno chiede notizie), xml.etree, SQLite; la domanda non esce; SearXNG come ripiego | `calliope/notizie/` → `Notizie` (`servizio.py`), `elenco` (`feed.py`), `scarica`, `leggi` (`lettore.py`), `titolo_per_voce` (`pulizia.py`), `raggruppa` (`gruppi.py`), `riduci` (`contesto.py`); tool `notizie` in `calliope/tools/notizie.py` (sezione in fondo) |
 | SearXNG tenuto aggiornato (09/10) | ricerche di prova fisse in POST, registro delle immagini (Docker Hub) con tag e digest, docker tramite lo script | `calliope/web/motore.py` → `MotoreRicerca` (`controlla`, `aggiorna`, `passo`, `avvia_azione`), `giudica`, `almeno_come`, `tag_recenti`; `setup/linux/motore/searxng.sh` (`candidata`, `usa`, `pulisci-immagini`…); `calliope motore searxng controlla|aggiorna|novita|storia` |
 
 ## Problemi noti
@@ -395,3 +396,118 @@ marina/Marsala» **3/3 prima e 3/3 dopo** (il 4B ci arrivava già: il guasto del
 26B, da riguardare sulla DGX), prima frase mediana 2,9 s prima e 2,0 s dopo; «Quali sono le
 tecniche per fare la birra in casa?» → `web_cerca` **0/3 prima** (sempre `biblioteca_cerca` e una
 risposta a memoria) **e 3/3 dopo**.
+
+## Notizie dai feed RSS: il tool `notizie` (13/10, ramo `notizie-rss`)
+
+Dalle due ricerche [`2026-10-12-notizie-rss.md`](../ricerche/2026-10-12-notizie-rss.md) e
+[`2026-10-13-notizie-rss.md`](../ricerche/2026-10-13-notizie-rss.md) (§ 6, la proposta) e dalle
+**decisioni di Dario del 13/10**: si tengono le testate che chiudono il `robots.txt` agli agenti
+delle IA (ANSA, Rainews…); Il Post e Il Sole 24 Ore **spenti di serie**, accesi per nome nel
+locale; un tool nuovo `notizie` di sola lettura al posto del tipo «notizie» di `web_cerca`, con
+SearXNG come ripiego; feed regionale ANSA dalla città di casa; minori solo sport, tecnologia e
+Focus Junior; ospiti sì; le notizie le dice **il modello**, e ciò che ha detto **resta nel
+contesto**; lettore con la libreria standard; scarico in secondo piano ogni 2 ore.
+
+- **Pacchetto** `calliope/notizie/` (solo libreria standard, niente da verificare su ARM, nessuna
+  riga in `TERZE-PARTI.md`): `feed.py` (righe «testata | tema | indirizzo | opzioni», testate
+  spente e accese, regione ANSA dalla città: capoluoghi di provincia e qualche città grande, per
+  intero, «no» per nessuna; i 20 indirizzi regionali provati il 13/10), `lettore.py` (scarico con
+  i controlli delle pagine dell'agente, `Accept-Encoding: identity` e una risposta compressa
+  rifiutata, 2 MB al più, ETag e Last-Modified, User-Agent `Calliope/0.3 (lettore di feed
+  personale)`, certificato sempre verificato; lettura RSS 2.0 e Atom con `xml.etree` e i feed con
+  `<!ENTITY` rifiutati prima del parser; date RFC 822, ISO 8601 e in italiano, l'ora italiana
+  marcata GMT con `fuso=Europe/Rome` del feed, l'ora legale calcolata senza tzdata), `pulizia.py`,
+  `gruppi.py`, `servizio.py` (`Notizie`: indice SQLite `notizie_db`, scarico, fatti, stato),
+  `contesto.py` (la forma ridotta dei fatti nei turni vecchi). Tool in `calliope/tools/notizie.py`.
+- **Quando si scarica**: ogni `notizie_intervallo_min` (120) solo se qualcuno ha chiesto notizie
+  negli ultimi `notizie_attesa_giorni` (7); i feed `veloce` (Adnkronos, AGI: il primo cambia 20
+  voci in un'ora) ogni ora nei giorni in cui qualcuno le chiede; la prima richiesta dopo una
+  pausa (indice più vecchio dell'intervallo e mezz'ora) scarica subito, al più 4 s, con «Un
+  attimo, guardo i giornali» se ci vuole. Sei feed alla volta, il `robots.txt` di ogni sito letto
+  una volta al giorno (per `Calliope`; se non si legge, il feed resta permesso), un feed che
+  fallisce non ferma gli altri. Voci oltre `notizie_conserva_giorni` (7) cancellate a ogni scarico.
+- **Pulizia** (principio 10: conversioni della forma, ogni regola col suo nome sulla voce e nel
+  registro dei turni quando la voce è detta, casi contrari in `prova_notizie`):
+  `notizie_titolo_virgolette` (dritte, curve, apici come virgolette → «», mai l'apostrofo),
+  `notizie_titolo_agenzia` («++ … ++», «>ANSA-FOCUS/»), `notizie_titolo_marcatore` (VIDEO, LIVE…
+  in maiuscolo, solo in testa o in coda), `notizie_titolo_doppio` («… in diretta | il fatto»),
+  `notizie_titolo_troncato` (AGI: la prima frase del sommario), `notizie_sommario_coda`
+  (WordPress), `notizie_sommario_sigla` (la testata in testa, mai una città),
+  `notizie_non_notizia` (episodi, newsletter, «Puntata del…»; un link /video/ di Rainews resta).
+- **Fatti** (`gruppi.py`): coseno TF-IDF sulle radici (6 lettere) di titolo e 200 caratteri del
+  sommario, solo testate diverse entro 24 ore, soglia 0,30, e il tetto contro le catene (due
+  gruppi si uniscono solo se almeno metà delle coppie è simile almeno 0,20). Per «le notizie di
+  oggi» i fatti dei feed generali delle ultime 24 ore, ordinati per **testate generali** (una
+  notizia di calcio data da cinque testate sportive non apre più le notizie del giorno), poi per
+  testate in tutto e recenti; il titolo più corto del gruppo (almeno 25 caratteri), il sommario
+  più recente. Per un argomento le radici della biblioteca («scioperi» → «sciopero»), tutte le
+  parole (una meno da tre in su). I fatti già detti a quella persona in fondo (6 ore).
+- **Il tool** `notizie(tema?, fatto?)`: senza argomenti tre fatti numerati (titolo, testate,
+  quando a parole: «stamattina alle 9:40», «ieri sera», «sabato»; «di recente» senza data;
+  «vecchio» oltre 3 giorni), mai indirizzi; `tema` una sezione (sport, economia, tecnologia,
+  locale, ragazzi, allerta; altre parole per le sezioni: regola `notizie_sezione`) o le parole di
+  un argomento; vuoto, il tema dalla frase di chi parla come per `web_cerca`
+  (`notizie_tema_frase`); `fatto` = il numero detto («dimmi di più sulla seconda»), risolto
+  sull'ultimo elenco di **quella persona**: tutte le testate del fatto, ognuna con il suo sommario
+  (`notizie_seguito`). Regole nel registro: `notizie_feed`, `notizie_ripiego`, `notizie_seguito`,
+  `notizie_sezione`, `notizie_tema_frase`, `minore_notizie`, `web_notizie_al_tool` e le pulizie
+  delle voci dette. Il tema non va nel registro (`segreti`, come la domanda di `web_cerca`).
+- **Ripiego su SearXNG** (`notizie_ripiego`, categoria news come prima): meno di 2 voci
+  sull'argomento nelle ultime 72 ore, nessun fatto, indice più vecchio di 6 ore. Solo per chi può
+  usare `web_cerca` (`web_livello`) e mai per un minore; altrimenti si dice ciò che c'è con la sua
+  data, o che nei giornali scaricati non c'è niente.
+- **`web_cerca` senza il tipo «notizie»** quando c'è il tool `notizie` (schema con la sola
+  `domanda`, obbligatoria; la descrizione rimanda a `notizie`); una chiamata con il tipo rimasta
+  nell'abitudine del modello va alle notizie dei feed (`web_notizie_al_tool`). Senza il tool
+  (notizie spente) `web_cerca` resta com'era. Gli schemi passano da 77 a **78** (togliere il tipo
+  non toglie uno schema). Prompt: «Per le notizie (di oggi, di sport, di economia, della zona o
+  su un argomento) chiama notizie…», e le notizie escono dalla frase di `web_cerca` e da «Non puoi
+  sapere…»; senza il tool, il prompt di prima parola per parola.
+- **Capacità** «notizie dai giornali» (19 nel registro): spente, senza rete, configurate, attiva
+  con le voci, i feed fermi (età dell'ultima voce per tema: generali e sport 2 giorni, tecnologia
+  7, ragazzi e allerta 14) e guasti; «degradata» con metà dei feed che non si leggono, «guasta»
+  se nessuno risponde. Nell'area «le ricerche» di «cosa sai fare?».
+- **Feed di serie** (file d'esempio): ANSA ultima ora e top news, Rainews, Sky TG24 (fuso), AGI,
+  Adnkronos (generali); Gazzetta, ANSA sport, Corriere dello Sport; ANSA ed Adnkronos economia;
+  HDblog, Punto Informatico, ANSA tecnologia; Focus Junior (ragazzi); i due bollettini della
+  Protezione civile (allerta); Il Post e i due feed del Sole 24 Ore nell'elenco ma spenti.
+  **Per accenderli**, in `calliope.locale.yaml`, sezione `notizie`:
+  `notizie_accese: [Il Post, Il Sole 24 Ore]`. Una testata della città: `notizie_feed_extra`.
+- **Misure** (portatile, 13/10): sull'istantanea della ricerca (52 feed, 1 857 voci) lettura,
+  inserimento e gruppi in 0,62 s, ricarica dell'indice con i gruppi 0,39 s, una ricerca
+  0,6–0,8 ms; sui feed veri (21 di serie con Il Post, il Sole e la Lombardia) primo scarico
+  2,5 s, il secondo condizionato 1,1 s (Adnkronos una volta «certificato non valido», poi a posto;
+  il Sole 24 Ore 503 in quel momento). Col modello (`prova_notizie_ollama`, gemma4 e4b, 2 giri):
+  12/12, «dimmi di più sulla seconda» con `notizie` fatto 2, «e quale giornale lo dice?» dalle
+  testate rimaste nel contesto senza tool, un sommario con istruzioni 0 azioni; prima frase
+  mediana 1,45 s.
+
+**I fatti restano nel contesto** (decisione 7, il punto delicato). Il risultato di `notizie` è
+un dato non fidato come quello di `web_cerca`: busta della fonte «web» (avviso, contenuto dentro,
+`cosa_fare` e `nota` fuori), `politica.DOPO_DATO` (nella stessa risposta, dopo il risultato, solo
+letture; `notizie` è anche tra quelle), provenienza (la conversazione resta contaminata finché la
+busta c'è: la politica per valore chiede per un argomento preso dalle notizie). Ma **non esce
+dalla storia** a risposta finita: `ToolSpec.resta_in_storia` (Brain `_togli_non_fidati` lo salta;
+nelle proiezioni del registro degli eventi il campo `resta` di `esito_tool`). Il turno dopo ha il
+risultato intero (come ogni tool: `_compact_old_results` riduce solo i risultati dei turni prima
+del precedente); dal secondo turno dopo, invece della traccia generica «richiama il tool», la
+**forma ridotta** di `contesto.py`: numero, titolo, testate e quando di ogni fatto, sempre in
+busta (`nota`: «per i dettagli richiama notizie con fatto = il suo numero»). Su disco, nel
+registro degli eventi, il contenuto resta ridotto ai caratteri come per ogni non fidato: dopo un
+riavvio i fatti non ci sono più e il modello richiama il tool. Provato a secco in `prova_notizie`
+(§ 8: la seconda domanda arriva al modello con titoli, testate e sommari; due e quattro turni
+dopo la forma ridotta; le proiezioni uguali).
+
+**Minori** ([minori](minori.md)): solo i feed di sport, tecnologia e ragazzi; le notizie
+«generali» per loro sono quelle di questi temi, e un fatto dato anche dai generali ha solo le
+voci dei loro feed; il filtro dei contenuti per adulti (`minore_contenuto_adulto`); una sezione
+per adulti («economia») ha la frase pronta «Per te ho le notizie di sport, di tecnologia e
+quelle per ragazzi» (`minore_notizie`); niente ripiego su internet. Il preset «internet» non
+c'entra: la domanda non esce.
+
+**Da guardare sulla DGX**: la quota delle risposte dai feed (`notizie_feed` contro
+`notizie_ripiego` in `calliope stato --turni`), l'età della notizia più recente detta, i feed
+fermi nella capacità, la durata dello scarico nel log (`[NOTIZIE] scarico: …`). Restano dalla
+ricerca: la lettura senza modello (proposta § 6.4, non fatta: le dice il modello), la scheda con
+le immagini (no), i bollettini della Protezione civile detti solo con data e ora (il contenuto è
+nel PDF, che non si scarica).

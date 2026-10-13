@@ -717,3 +717,17 @@ registro dei turni: `brain.tools_per_registro` in `Ciclo._registra_risposta` (se
 lista stessa). Il registro degli eventi non cambia: prende gli argomenti dalla chiamata del modello,
 non da `last_tools`. Prova `prova_console_minori` (in memoria i veri, scritti «…», contrari).
 
+## Le notizie per i minori (13/10, ramo `notizie-rss`)
+
+Decisione di Dario del 13/10: i minori sentono le notizie solo di **sport, tecnologia e ragazzi**
+(Focus Junior). Il tool `notizie` ([biblioteca](biblioteca.md)) non è nel preset «internet» (la
+domanda non esce di casa: si leggono i feed scaricati), ma restringe da sé: «le notizie» per un
+minore sono i fatti dei feed di quei tre temi, e un fatto dato anche da un giornale generale ha
+solo le voci dei loro feed (titolo e sommario mai da un generale); una ricerca per argomento resta
+in quei feed; il filtro dei contenuti per adulti (`filtra_per_minore`, regola
+`minore_contenuto_adulto`) su titoli e sommari; una sezione per adulti («le notizie di economia»)
+ha la frase pronta «Per te ho le notizie di sport, di tecnologia e quelle per ragazzi: quali
+vuoi?» (regola `minore_notizie`); niente ripiego su SearXNG, anche con un preset che lascerebbe
+cercare. Il «dimmi di più» di un minore mostra solo le voci dei suoi temi. Focus Junior mescola
+notizie e promozioni per le scuole (ricerca del 13/10, § 6.7): da guardare nell'uso. A secco in
+`prova_notizie` (§ 7).

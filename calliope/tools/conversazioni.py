@@ -357,7 +357,9 @@ def _conversazione_cerca(ctx: ToolContext, domanda: str = "", quando: str = "",
 FONTI = {"web_cerca": "una ricerca su internet (web_cerca)",
          "biblioteca_cerca": "la biblioteca offline (biblioteca_cerca)",
          "archivio_cerca": "i documenti di casa (archivio_cerca)",
-         "pc_cerca_file": "i file del computer (pc_cerca_file)"}
+         "pc_cerca_file": "i file del computer (pc_cerca_file)",
+         # le notizie dei feed (13/10, calliope/notizie/)
+         "notizie": "le notizie dei giornali (notizie)"}
 FONTI_TIPO = {("web_cerca", "notizie"): "le notizie su internet (web_cerca con tipo «notizie»)"}
 # A pari pertinenza (punti della fusione almeno questa parte del migliore) vince il più recente
 PARI_PERTINENZA = 0.85

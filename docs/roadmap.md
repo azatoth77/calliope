@@ -209,6 +209,14 @@ voce raccontava male gli esiti, i comandi del flusso si perdevano.
    Ricerca fatta il 12/10 ([`ricerche/2026-10-12-notizie-rss.md`](ricerche/2026-10-12-notizie-rss.md)):
    15 risposte su 22 dall'indice (4 in parte), ricerca 0,04 ms, libreria standard, fonte dentro
    `web_cerca`. *Quasi* · dipende da: le 5 domande aperte della ricerca (testate, minori).
+   *(Storico, 13/10.)* Seguito di giorno il 13/10
+   ([`ricerche/2026-10-13-notizie-rss.md`](ricerche/2026-10-13-notizie-rss.md)), decisioni di Dario
+   dello stesso giorno e **fatto** sul ramo `notizie-rss`: tool `notizie` di sola lettura
+   (`calliope/notizie/`), fatti raggruppati senza modello, i fatti detti restano nel contesto in
+   busta, Il Post e Il Sole 24 Ore spenti di serie, regione dalla città di casa, minori solo sport,
+   tecnologia e ragazzi, SearXNG come ripiego ([biblioteca](aree/biblioteca.md)). *Fatto* · resta:
+   accendere le due testate nel locale della DGX se le si vuole, e guardare nell'uso la quota dai
+   feed contro il ripiego.
 6. **Musica** (T2, V8): requisito confermato; Music Assistant in un container apposta, da mettere
    dove serve con la posizione in configurazione; non aspetta la DGX in casa. *Da approfondire* ·
    dipende da: la rilettura della [ricerca del 21/09](ricerche/2026-09-21-musica-e-hardware-audio.md)

@@ -2057,7 +2057,7 @@ def build_registry(biblioteca: bool = False, pc: dict | None = None,
                    installa: bool = True, citazioni: bool = False,
                    schermi: bool = False, agenti: bool = False,
                    agenti_modelli=(), ufficio=(), archivio: bool = False,
-                   web=None, conversazioni: bool = False,
+                   web=None, conversazioni: bool = False, notizie=None,
                    immagini: dict | None = None,
                    minori_tool: bool = False, allegati: bool = False,
                    cassetto: bool = False, conserva: bool = False) -> ToolRegistry:
@@ -2093,6 +2093,8 @@ def build_registry(biblioteca: bool = False, pc: dict | None = None,
     con la cartella dei documenti di casa configurata.
     `web`: web_cerca (calliope/web/, 03/10), con SearXNG configurato e raggiungibile; il valore
     è la Config (per web_livello) o True per i livelli predefiniti.
+    `notizie`: il tool notizie (calliope/notizie/, 13/10), con le notizie accese e la rete; il
+    valore è la Config (per notizie_livello) o True. Con lui web_cerca non ha il tipo «notizie».
     `immagini`: i tool delle foto (calliope/tools/immagini.py, 05/10), {storia, pc,
     archivio}; None = le foto sono spente o il modello non le vede.
     `allegati`: i tool dei file allegati (calliope/tools/allegati.py, 05/10): allegato_leggi,
@@ -2109,7 +2111,10 @@ def build_registry(biblioteca: bool = False, pc: dict | None = None,
         reg.register(biblioteca_spec(citazioni))      # `citazioni`: c'è Wikiquote
     if web:
         from .web import web_spec
-        reg.register(web_spec(None if web is True else web))
+        reg.register(web_spec(None if web is True else web, notizie=bool(notizie)))
+    if notizie:
+        from .notizie import notizie_spec
+        reg.register(notizie_spec(None if notizie is True else notizie, web=bool(web)))
     if pc:
         from .pc import pc_specs
         for spec in pc_specs(pc, pc_ospite, documenti=bool(documenti), agenti=bool(agenti)):
