@@ -279,6 +279,19 @@ c_r.notizie_regione, c_r.casa_citta = "", "Borgoverde"
 verifica("contrario regione: città sconosciuta → nessun feed regionale",
          regione_di_casa(c_r) == "")
 
+# Quanti fatti nell'elenco (13/10: 5 di serie, dalla Config, tra 1 e 10)
+from types import SimpleNamespace  # noqa: E402
+from calliope.config import Config  # noqa: E402
+from calliope.tools.notizie import _fatti_max  # noqa: E402
+verifica("fatti nell'elenco: 5 di serie dalla Config",
+         _fatti_max(SimpleNamespace(cfg=Config())) == 5)
+verifica("fatti nell'elenco: notizie_fatti cambiato (7), e tenuto tra 1 e 10",
+         _fatti_max(SimpleNamespace(cfg=SimpleNamespace(notizie_fatti=7))) == 7
+         and _fatti_max(SimpleNamespace(cfg=SimpleNamespace(notizie_fatti=40))) == 10
+         and _fatti_max(SimpleNamespace(cfg=SimpleNamespace(notizie_fatti=0))) == 1)
+verifica("contrario fatti: valore illeggibile → 3",
+         _fatti_max(SimpleNamespace(cfg=SimpleNamespace(notizie_fatti="tanti"))) == 3)
+
 # ─────────────────────────── 5. scarico dal server finto ───────────────────────────
 
 
@@ -398,6 +411,7 @@ FEEDS = [Feed("Agenzia Lumen", "generale", srv.url("/lumen.xml")),
 orologio = [ADESSO]
 cfg = Config()
 cfg.notizie_intervallo_min = 120
+cfg.notizie_fatti = 3          # le prove del tool qui sotto sono scritte su 3 fatti per elenco
 svc = Notizie(cfg, FEEDS, ":memory:", log=lambda *a: None, orologio=lambda: orologio[0],
               scarica=scarica)
 verifica("scarico: senza richieste di notizie non si scarica (decisione del 12/10)",

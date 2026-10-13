@@ -1817,6 +1817,9 @@ notizie:
   notizie_attesa_giorni: 7.0
   notizie_conserva_giorni: 7.0
   notizie_db: notizie.db
+  # Quanti fatti per «che notizie ci sono?» (13/10, Dario: 5 invece di 3): fatti unici, ognuno
+  # con tutte le testate che lo riportano (i doppioni sono già raggruppati)
+  notizie_fatti: 5
 
 segreti:
   # File dei segreti, fuori da git: il token di Home Assistant sta sotto

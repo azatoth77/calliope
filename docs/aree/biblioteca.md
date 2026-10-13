@@ -511,3 +511,7 @@ fermi nella capacità, la durata dello scarico nel log (`[NOTIZIE] scarico: …`
 ricerca: la lettura senza modello (proposta § 6.4, non fatta: le dice il modello), la scheda con
 le immagini (no), i bollettini della Protezione civile detti solo con data e ora (il contenuto è
 nel PDF, che non si scarica).
+
+**13/10 sera — 5 fatti invece di 3.** Su richiesta di Dario l'elenco di «che notizie ci sono?» dà
+5 fatti unici (ognuno con tutte le testate che lo riportano: i doppioni sono già raggruppati),
+dalla Config `notizie_fatti` (5 di serie, tenuto tra 1 e 10). Prova in `prova_notizie`.

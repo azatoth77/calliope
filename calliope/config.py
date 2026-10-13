@@ -1757,6 +1757,9 @@ class Config:
     notizie_attesa_giorni: float = 7.0
     notizie_conserva_giorni: float = 7.0
     notizie_db: str = "notizie.db"
+    # Quanti fatti per «che notizie ci sono?» (13/10, Dario: 5 invece di 3): fatti unici, ognuno
+    # con tutte le testate che lo riportano (i doppioni sono già raggruppati)
+    notizie_fatti: int = 5
 
     # Rete (principio 5): se False, i tool con requires_internet spariscono dall'elenco
     online: bool = True
@@ -2847,7 +2850,7 @@ SEZIONI: dict[str, list[str]] = {
     "notizie": ["notizie_enabled", "notizie_feed", "notizie_spente", "notizie_accese",
                 "notizie_feed_extra", "notizie_regione", "notizie_livello",
                 "notizie_intervallo_min", "notizie_attesa_giorni", "notizie_conserva_giorni",
-                "notizie_db"],
+                "notizie_db", "notizie_fatti"],
     "segreti": ["segreti_file"],
     "registro": ["turn_log_dir", "turn_log_days", "conserva_voce", "conserva_voce_mb",
                  "latenza_avviso_s", "attrito_avviso", "debug_audio_dir"],

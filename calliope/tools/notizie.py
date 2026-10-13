@@ -65,7 +65,16 @@ SEZIONI = {
 }
 # Quante ore valgono per ogni sezione (le riviste e i bollettini corrono meno)
 ORE_SEZIONE = {"tecnologia": 72, "ragazzi": 7 * 24, "allerta": 48}
-FATTI_MAX = 3
+FATTI_MAX = 3      # ripiego se la Config non dice notizie_fatti
+
+
+def _fatti_max(svc) -> int:
+    """Quanti fatti nell'elenco: `notizie_fatti` della Config (dal 13/10, 5), da 1 a 10."""
+    try:
+        n = int(getattr(getattr(svc, "cfg", None), "notizie_fatti", FATTI_MAX))
+    except (TypeError, ValueError):
+        n = FATTI_MAX
+    return max(1, min(10, n))
 VOCI_SEGUITO = 5
 SOMMARIO_DETTO = 300
 _ORDINALI = {"prima": 1, "primo": 1, "seconda": 2, "secondo": 2, "terza": 3, "terzo": 3,
@@ -277,14 +286,14 @@ def _notizie(ctx: ToolContext, tema: str = "", fatto=None) -> dict:
     temi_ammessi = tuple(TEMI_MINORI) if minore else None
     recenti = None
     if sezione is not None and (sezione != "generale" or not minore):
-        fatti = svc.principali((sezione,), ORE_SEZIONE.get(sezione, ORE_OGGI), FATTI_MAX,
+        fatti = svc.principali((sezione,), ORE_SEZIONE.get(sezione, ORE_OGGI), _fatti_max(svc),
                                dette, solo_temi=minore)
         titolo = f"Notizie: {sezione}"
     elif chiave and sezione != "generale":
-        fatti, recenti = svc.cerca(tema, temi_ammessi, FATTI_MAX, dette)
+        fatti, recenti = svc.cerca(tema, temi_ammessi, _fatti_max(svc), dette)
         titolo = f"Notizie: {tema}"
     else:
-        fatti = svc.principali(temi_ammessi or ("generale",), ORE_OGGI, FATTI_MAX, dette,
+        fatti = svc.principali(temi_ammessi or ("generale",), ORE_OGGI, _fatti_max(svc), dette,
                                solo_temi=minore)
         titolo = "Le notizie di oggi"
     if minore:
