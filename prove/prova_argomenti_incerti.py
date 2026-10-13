@@ -423,6 +423,11 @@ P_PATELLO = [("Calliope", 0.3), ("prova", 0.97), ("con", 0.99), ("Patello", 0.22
 
 
 def prova_brain():
+    # Una risposta di riscaldamento su un Brain a parte (13/10): la prima risposta del processo
+    # paga import e cache, e con il carico dell'hook (prove pesanti in parallelo) la misura del
+    # turno 1 passava 0,4 s senza che il parallelo mancasse (0,42–0,44 s; da sola 0,27 s)
+    bw, _ = prepara_brain()
+    parla(bw, "Calliope, che ore sono?", testo("Sono le dieci."))
     b, eseguiti = prepara_brain()
     # Turno 1: il nome giusto, trovato → nel vocabolario
     t0 = time.perf_counter()

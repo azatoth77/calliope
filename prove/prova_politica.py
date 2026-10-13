@@ -366,6 +366,33 @@ def prova_coerenza():
               chi=ChiParla("Dario", "amministra", "voce"))
     verifica("coerenza nel Brain: il «sì» alla domanda descritta lo esegue",
              eseguiti == [("schermo_gestisci", scollega)], f"{eseguiti} {r}")
+    # 13/10: la domanda della politica finisce con la conseguenza («Intendi…? Così smette…»),
+    # non con il «?»: la proposta deve restare lo stesso, e il «sì» da solo la esegue (prima
+    # Brain la teneva solo con il «?» in fondo e il «sì» tornava alla stessa domanda)
+    b, eseguiti, _ = prepara(True)
+    b.tools.register(dataclasses.replace(
+        b.tools.get("schermo_gestisci") or ToolSpec(
+            name="schermo_gestisci", description="", parameters={}, func=None,
+            levels=frozenset({"amministra"})),
+        func=lambda ctx, **a: eseguiti.append(("schermo_gestisci", a)) or {"ok": True}))
+    r = turno(b, "volevo che ripristinassi lo schermo del mio satellite studio",
+              chiama("schermo_gestisci", scollega), chi=ChiParla("Dario", "amministra", "voce"))
+    verifica("coerenza nel Brain: la domanda con la conseguenza dopo il «?» resta in sospeso",
+             not eseguiti and r.startswith("Intendi scollegare") and not r.endswith("?")
+             and (b.pending or {}).get("tool") == "schermo_gestisci", f"{r} {b.pending}")
+    r = turno(b, "sì", chiama("schermo_gestisci", scollega),
+              chi=ChiParla("Dario", "amministra", "voce"))
+    verifica("coerenza nel Brain: il «sì» da solo la esegue (non la stessa domanda di nuovo)",
+             eseguiti == [("schermo_gestisci", scollega)], f"{eseguiti} {r}")
+    from calliope.brain import domanda_in_fondo
+    d = {"domanda": "Intendi farlo? Così non si torna indietro."}
+    verifica("domanda_in_fondo: «?» in fondo, la domanda intera del tool; contrari: altro "
+             "testo dopo, domanda senza «?», nessuna proposta",
+             domanda_in_fondo("Lo apro?", None)
+             and domanda_in_fondo("Ecco. Intendi farlo? Così non si torna indietro.", d)
+             and not domanda_in_fondo("Intendi farlo? Così non si torna indietro. Va bene.", d)
+             and not domanda_in_fondo("Fatto.", {"domanda": "Fatto."})
+             and not domanda_in_fondo("Ho finito.", None) and not domanda_in_fondo("", d))
     b, eseguiti, _ = prepara(True)
     b.tools.register(dataclasses.replace(
         b.tools.get("schermo_gestisci") or ToolSpec(

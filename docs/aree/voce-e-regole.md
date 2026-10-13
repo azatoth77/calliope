@@ -1375,7 +1375,9 @@ WAL). E, **solo con il registro acceso**, il ciclo a risposta finita chiude e sv
 conversazione in corso senza archiviarla (`Ciclo._conversazioni_dimenticate`,
 `Brain.dimentica_conversazione`): è l'unico cambiamento che si sente, voluto dal § 2.4 (prima la
 frase restava al modello, in `correnti` e, alla chiusura, tornava nell'archivio e nel riassunto).
-Con `eventi: spento` la conversazione in corso resta come prima.
+Con `eventi: spento` la conversazione in corso resta come prima. *(Storico: dal 13/10, E2 della
+roadmap, la conversazione in corso si chiude sempre, anche con `eventi: spento`; sezione «"Dimentica"
+chiude anche la conversazione in corso» di [contesto-conversazione](contesto-conversazione.md).)*
 
 **Come aggiungere un tipo di evento** (ricetta del § 10 del progetto):
 1. il tipo, i suoi campi e la visibilità predefinita in `calliope/eventi/tipi.py` (`TIPI`), e se

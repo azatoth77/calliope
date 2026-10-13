@@ -1089,3 +1089,51 @@ Prove a secco in `prova_conserva`: il riassunto su disco senza il turno incerto 
 non lo riceve, contrario senza turni incerti (la conversazione intera); il riassunto di prima
 segnato che non entra, contrario quello pulito; la conversazione in corso senza il riassunto
 segnato, contrario pulito; la compressione e la coda che segnano solo con il turno incerto.
+
+## «Dimentica» chiude anche la conversazione in corso (13/10, ramo `dimentica-conversazione`, E2)
+
+Il buco: «dimentica le nostre conversazioni» cancellava l'archivio della persona e (dal 10/10) il
+registro degli eventi, ma la conversazione in corso si chiudeva **solo con il registro degli
+eventi acceso** (`Ciclo._conversazioni_dimenticate` usciva subito con `eventi: spento`). Con il
+registro spento ciò che era appena stato detto restava al modello per la frase dopo, in
+`correnti` a ogni turno e, alla chiusura, tornava nell'archivio e nel riassunto. La scelta del
+10/10 («solo col registro acceso», § 11.1 del progetto, «da confermare con Dario») è stata
+confermata il 12/10 come E2 della roadmap: sempre.
+
+- **Il ciclo** (`Ciclo._conversazioni_dimenticate`, a risposta finita): la conversazione in cui
+  la persona ha detto «sì» si svuota e si chiude senza archiviarla né riassumerla
+  (`Brain.dimentica_conversazione`, come prima), anche con `eventi: spento`. Vale per la sua
+  (`persona:<id>`), per quella della casa e per quella anonima del satellite dove è finita una sua
+  frase breve (`ospite:<corsia>`, che non va mai su disco: si svuota anche il suo registro in
+  memoria). Con il registro acceso l'ombra dimentica come prima il registro della persona (e
+  quello della conversazione chiusa, se è un altro). Nel registro dei turni il campo
+  `conversazioni_dimenticate` (`in_corso`, o `archivio` se la conversazione del turno era di
+  un'altra chiave e non si è chiusa) accanto alla regola `conversazioni_dimenticate`; con il
+  registro acceso resta `eventi_ombra.dimentica`.
+- **A voce** (tool `conversazioni_dimentica`): la domanda dice anche quella di adesso, con la
+  domanda in fondo («I ricordi che mi hai chiesto di tenere restano. Cancello tutte le nostre
+  conversazioni, anche quella di adesso?»), e la conferma lo stesso («Fatto: ho cancellato le
+  nostre conversazioni, anche quella di adesso.»; senza archiviate: «…non c'erano conversazioni
+  archiviate, e quella di adesso l'ho dimenticata.»). La descrizione del tool per il modello lo dice.
+- **La domanda non in fondo** (trovato scrivendo la prova): Brain teneva la proposta di un tool
+  solo se la risposta finiva con «?». La domanda di prima («Cancello…? I ricordi… restano.») e
+  quella della politica per le azioni distruttive («Intendi cancellare tutte le nostre
+  conversazioni passate? Così non le ritrovo più…») finiscono con una nota: niente proposta, e il
+  «sì» da solo tornava alla stessa domanda della politica (`politica_azione_incoerente`) ogni volta.
+  Ora vale anche la domanda intera del tool in fondo alla risposta (`brain.domanda_in_fondo`:
+  forma di una scelta già fatta dal tool, principio 10, con i contrari in `prova_politica`).
+- **Minori e ospiti** (calliope/conserva.py): niente cambia. L'archivio della sessione (in memoria)
+  si cancella come prima con `ArchivioConversazioni.dimentica`, la conversazione in corso si
+  chiude allo stesso modo, e nulla va su disco. Restano fuori, come nel § 2.6 f del progetto (passo
+  5): il testo dei turni nel registro dei turni degli adulti (per quello c'è `dati_conservati`
+  `svuota` o `calliope conserva --svuota --persona`), la cronologia delle schede e gli avvisi ai
+  tutori.
+- **Profilo ridotto da 8 GB**: identico (niente modello né GPU).
+
+Prova a secco `prova_eventi_disco` (`prova_dimentica_ciclo`, con `eventi: spento` e `ombra`): il ciclo
+vero con Brain a copione, la frase di prova «zafferano viola 42», «dimentica le nostre
+conversazioni», la domanda, il «sì», la conferma, la conversazione chiusa e vuota, la frase dopo
+che il modello riceve senza la frase di prova, niente nei byte dell'archivio né nel registro degli
+eventi, regola e campo nel registro dei turni. Senza la correzione con `spento` 4 controlli su 7
+falliscono (e il campo anche con `ombra`). `prova_politica`: la domanda della politica con la
+conseguenza dopo il «?» resta in sospeso e il «sì» da solo la esegue (prima no).

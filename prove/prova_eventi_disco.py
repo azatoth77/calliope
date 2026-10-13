@@ -15,7 +15,9 @@ non scrive → gli eventi restano in memoria, gli errori si contano, la conversa
 (eventi, archivio delle conversazioni, conversazione salvata), un'altra «melograno blu 7»;
 «dimentica» → la frase di prova non c'è più nei byte di `conversazioni.db` né del WAL, quella
 dell'altra persona sì; il registro in memoria è vuoto; `calliope stato` conta 0 residui (e non 0
-se una riga resta); la conversazione in corso si chiude senza tornare nell'archivio.
+se una riga resta); la conversazione in corso si chiude senza tornare nell'archivio. Dal 13/10
+(E2) col ciclo vero, con `eventi: spento` e `ombra`: domanda, «sì», conferma che dice «anche quella
+di adesso», la frase dopo pulita per il modello, niente nell'archivio né nel registro.
 
 **Rotazione e ospiti** (§ 2.3, § 2.4): le conversazioni chiuse oltre `eventi_giorni` si
 cancellano, quelle mai chiuse oltre il doppio; gli eventi di un ospite alla chiusura della sua
@@ -338,11 +340,86 @@ def prova_sfida_su_disco():
         d.db.close()
 
 
+def prova_dimentica_ciclo(modo: str):
+    """E2 della roadmap (13/10): col ciclo vero, «dimentica le nostre conversazioni», il «sì» e
+    la frase dopo. La conversazione in corso si chiude senza archivio né riassunto **anche con
+    `eventi: spento`** (prima solo col registro acceso), la frase dopo parte pulita (il modello
+    non vede la frase di prova) e la conferma a voce dice che anche quella di adesso è
+    dimenticata."""
+    from calliope.tools.conversazioni import (DIMENTICA_DOMANDA, DIMENTICATE_FRASE,
+                                              conversazioni_specs)
+    print(f"— «dimentica» col ciclo vero, eventi: {modo}: anche la conversazione in corso")
+    tmp = tempfile.mkdtemp(prefix=f"eventi-dimentica-ciclo-{modo}-")
+    frase = "zafferano viola 42"
+    copione = [
+        [("text", "Me lo ricordo.")],
+        sb.chiama("conversazioni_dimentica"),
+        sb.chiama("conversazioni_dimentica"),
+        [("text", "Sono le dieci.")],
+    ]
+    b, c, voce, stt, turni, annunci, registri = pe.prepara(tmp, copione, modo=modo)
+    arch = ArchivioConversazioni(os.path.join(tmp, "archivio.db"), giorni=30, embedder=None,
+                                 log=lambda m: None, avvia=False)
+    if registri is not None:
+        arch.eventi = registri.disco             # come Disco.da_archivio: «dimentica» lo svuota
+    b.archivio_conv = arch
+    b.tool_ctx.conversazioni = arch
+    b.conv = Conversazione("persona:dario-id")    # come con le conversazioni per persona
+    b.conv.owner = "dario-id"
+    for spec in conversazioni_specs():
+        b.tools.register(spec)
+    c.speaker_ctx.current_speaker = "Dario"         # riconosciuto: il tool è dei familiari
+    sb.frase(b.tool_ctx.speaker_ctx, "Dario")
+    # Una conversazione di prima, già archiviata (si cancella come prima)
+    vecchia = Conversazione("persona:dario-id")
+    vecchia.owner = "dario-id"
+    vecchia.history = [{"role": "user", "content": "Parliamo di melograni."},
+                       {"role": "assistant", "content": "Va bene."}]
+    arch.archivia(vecchia, turni_archivio(vecchia.history), "dario-id", "Dario", False)
+    pe.giro(c, stt, f"Calliope, il codice del lucchetto è {frase}.")
+    pe.giro(c, stt, "Calliope, dimentica le nostre conversazioni.")
+    verifica(f"{modo}: prima la domanda, che dice anche quella di adesso",
+             DIMENTICA_DOMANDA in " ".join(voce.detto), str(voce.detto[-2:]))
+    pe.giro(c, stt, "Sì.")
+    verifica(f"{modo}: al «sì» la conferma dice che anche quella di adesso è dimenticata",
+             DIMENTICATE_FRASE in " ".join(voce.detto), str(voce.detto[-2:]))
+    verifica(f"{modo}: la conversazione in corso è chiusa e vuota (prima con eventi spento "
+             "restava)", not any(frase in str(m.get("content") or "") for m in b.history),
+             str(b.history)[:300])
+    pe.giro(c, stt, "Calliope, che ore sono?")
+    visti = b.backend.visti[-1]
+    verifica(f"{modo}: la frase dopo parte pulita (il modello non vede la frase di prova né "
+             "la richiesta di prima)",
+             not any(frase in str(m.get("content") or "") or "dimentica le nostre"
+                     in str(m.get("content") or "") for m in visti),
+             str([m.get("content") for m in visti if m.get("role") != "system"])[:400])
+    c._scrivi_turno(c.rec)
+    c.rec = None
+    arch.pulisci_wal()
+    verifica(f"{modo}: la frase di prova non è nei byte dell'archivio (conversazioni, "
+             "conversazione salvata, WAL)", not _byte(tmp, frase), str(_byte(tmp, frase)))
+    verifica(f"{modo}: la conversazione di prima è cancellata",
+             not _byte(tmp, "melograni"), str(_byte(tmp, "melograni")))
+    r = pe.riga(turni, "risposta", "Sì")
+    verifica(f"{modo}: la regola e il campo nel registro dei turni",
+             "conversazioni_dimenticate" in (r.get("regole") or ())
+             and r.get("conversazioni_dimenticate") == "in_corso", str(r)[:300])
+    if registri is not None:
+        ev = (registri.della_corsia("persona:dario-id").eventi()
+              + registri.della_corsia(b.conv.chiave).eventi())
+        verifica(f"{modo}: nel registro degli eventi la frase di prova non c'è più",
+                 not any(frase in str(e.dati) for e in ev), str([e.tipo for e in ev]))
+        registri.disco.db.close()
+    arch.close()
+
+
 def main():
     prova_rotazione()
     prova_sfida_su_disco()
     prova_riavvio()
     prova_dimentica()
+    for modo in ("spento", "ombra"):
+        prova_dimentica_ciclo(modo)
     print(f"\n{'Tutto bene' if not errori else f'{errori} errori'}")
     return 1 if errori else 0
 
