@@ -278,13 +278,14 @@ def _notizie(ctx: ToolContext, tema: str = "", fatto=None) -> dict:
     recenti = None
     if sezione is not None and (sezione != "generale" or not minore):
         fatti = svc.principali((sezione,), ORE_SEZIONE.get(sezione, ORE_OGGI), FATTI_MAX,
-                               dette)
+                               dette, solo_temi=minore)
         titolo = f"Notizie: {sezione}"
     elif chiave and sezione != "generale":
         fatti, recenti = svc.cerca(tema, temi_ammessi, FATTI_MAX, dette)
         titolo = f"Notizie: {tema}"
     else:
-        fatti = svc.principali(temi_ammessi or ("generale",), ORE_OGGI, FATTI_MAX, dette)
+        fatti = svc.principali(temi_ammessi or ("generale",), ORE_OGGI, FATTI_MAX, dette,
+                               solo_temi=minore)
         titolo = "Le notizie di oggi"
     if minore:
         from .. import minori

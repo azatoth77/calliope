@@ -478,16 +478,19 @@ class Notizie:
         return self.fresco()
 
     def principali(self, temi=("generale",), ore: float = ORE_OGGI, n: int = 3,
-                   gia_dette: set | None = None) -> list[Fatto]:
-        """I fatti più dati delle ultime `ore` dai feed di `temi`: prima quelli con più testate,
-        poi i più recenti; quelli già detti in fondo."""
+                   gia_dette: set | None = None, solo_temi: bool = False) -> list[Fatto]:
+        """I fatti più dati delle ultime `ore` dai feed di `temi`: prima quelli con più testate
+        di quei temi (le notizie del giorno le fanno i giornali generali, non lo sport), poi i
+        più recenti; quelli già detti in fondo. Le voci del fatto sono di tutte le testate che
+        l'hanno data, o solo dei feed di `temi` con `solo_temi` (un minore)."""
         adesso = self.orologio()
         with self._lock:
             gids = {self._gruppo.get(v.id, v.id) for v in self._voci
                     if v.tema in temi and adesso - v.t <= ore * 3600}
-            fatti = [self._fatto(g) for g in gids]
+            fatti = [self._fatto(g, temi=temi if solo_temi else None) for g in gids]
         fatti = [f for f in fatti if f.voci]
-        fatti.sort(key=lambda f: (-len(f.testate), -f.t))
+        fatti.sort(key=lambda f: (-len({v.testata for v in f.voci if v.tema in temi}),
+                                  -len(f.testate), -f.t))
         return _con_dette(fatti, gia_dette, n)
 
     def cerca(self, testo: str, temi=None, n: int = 3, gia_dette: set | None = None

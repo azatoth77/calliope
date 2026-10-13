@@ -373,7 +373,10 @@ srv.percorsi["/gazzetta.xml"] = (200, XML, rss("Gazzetta di Borgoverde", [
      "https://gb.esempio.it/app", rfc(ADESSO - 6 * H))]))
 srv.percorsi["/ragazzi.xml"] = (200, XML, rss("Lumen Ragazzi", [
     ("Come nascono le lanterne di carta", "Un laboratorio per costruire lanterne in classe.",
-     "https://lr.esempio.it/lanterne", rfc(ADESSO - 20 * H))]))
+     "https://lr.esempio.it/lanterne", rfc(ADESSO - 20 * H)),
+    ("Il festival delle lanterne apre a Borgoverde: tre giorni di musica",
+     "Tre giorni di musica e lanterne sul lungofiume, anche per le scuole.",
+     "https://lr.esempio.it/festival", rfc(ADESSO - 4 * H))]))
 srv.percorsi["/tech.xml"] = (200, XML, rss("Bit Lumen", [
     ("Un robot che ripara le strade", "Il robot tappa le buche da solo.",
      "https://bit.esempio.it/robot", rfc(ADESSO - 10 * H)),
@@ -478,8 +481,8 @@ fs, rec = svc.cerca("scioperi")
 verifica("ricerca: «scioperi» trova «sciopero» (radici), con le voci recenti contate",
          fs and fs[0].titolo.startswith("Sciopero") and rec == 1, str(rec))
 fs, rec = svc.cerca("lanterne", temi=("ragazzi",))
-verifica("ricerca per temi: solo il feed per ragazzi", len(fs) == 1
-         and fs[0].testate == ["Lumen Ragazzi"], str([f.testate for f in fs]))
+verifica("ricerca per temi: solo il feed per ragazzi", len(fs) == 2
+         and all(f.testate == ["Lumen Ragazzi"] for f in fs), str([f.testate for f in fs]))
 verifica("ricerca: niente → nessun fatto, zero recenti", svc.cerca("vulcano") == ([], 0))
 for t, atteso in [(ADESSO - 5 * M, "poco fa"), (ADESSO - 40 * M, "40 minuti fa"),
                   (ADESSO - 5 * H, "stamattina alle 10:00"),
@@ -655,6 +658,13 @@ testate_min = {t for f in res.get("fatti", []) for t in f["testate"]}
 verifica("minore: le notizie generali sono quelle dei temi dei ragazzi",
          res.get("ok") and testate_min <= {"Bit Lumen", "Lumen Ragazzi"}
          and "Agenzia Lumen" not in testate_min, str(res)[:300])
+fest = [f for f in res.get("fatti", []) if "festival" in f["titolo"].lower()]
+verifica("minore: un fatto dato anche dai generali ha solo le voci dei temi dei ragazzi",
+         fest and fest[0]["testate"] == ["Lumen Ragazzi"], str(fest))
+fest_a = [f for f in svc.principali(("generale",), n=10) if "festival" in f.titolo.lower()]
+verifica("contrario: per un adulto lo stesso fatto ha tutte le testate",
+         fest_a and set(fest_a[0].testate) == {"Agenzia Lumen", "Lumen Ragazzi"},
+         str(fest_a and fest_a[0].testate))
 verifica("minore: filtro dei contenuti per adulti (il gioco d'azzardo fuori)",
          not any("azzardo" in f["titolo"].lower() for f in res.get("fatti", []))
          and "minore_contenuto_adulto" in ctx.regole, str(ctx.regole))
