@@ -8,11 +8,14 @@
 
 **12/10.** Un gioco ha l'analisi della richiesta, con la sua lista di controllo (giocatori, regole, come si vince, voce); la versione nuova di un gioco chiesta senza `gioco=true` è un gioco (il tipo viene dalla scheda del manifesto); le modifiche, anche quelle dette al collaudo con «correggi» («metti sette porte»), cambiano i requisiti, e a voce si dice solo cosa è cambiato. Vedi «La specifica viva» in [agenti-estensioni](agenti-estensioni.md).
 
+**13/10.** Un gioco nuovo usa la **macchina a stati di Calliope**: dichiara fasi e comandi nel manifesto (`scheda.macchina`, comandi con uno slot «porta {n}») e scrive in logica.js solo la logica pura (`GIOCO`); preparazione, turni, punti, esito, fine con la classifica, disegno, pulsanti e voce sono del motore (`motore_gioco.js`), che gira nel riquadro e, lo stesso file, nella prova di fumo per fasi e nei test. Gli esempi di accettazione dei giochi (stato → mosse → stato atteso) li scrive il codice e l'agente non li può cambiare. Vedi «La macchina a stati di Calliope» in fondo.
+
 ## Moduli
 
 | Stadio | Libreria | Dove |
 |---|---|---|
 | Giochi e schede interattive delle estensioni (05/10) | JavaScript nel browser degli schermi in un `<iframe sandbox="allow-scripts">` (origine opaca, CSP senza rete, script con l'impronta), ponte `postMessage` controllato dalla pagina e dal server; test della logica con Node in un container (`Dockerfile.node`) | `calliope/estensioni/scheda.py` (sezione «scheda» del manifesto, gioco puro, `documento`, `RUNTIME_JS`, `analizza_js`); `calliope/schermi/giochi.py` → `Giochi` (partite, `GET /gioco/<gettone>`, `POST /api/gioco`), `AzioneGioco`; cane da guardia in `schermo.js`; `minori.TempoGioco`, `minori.Richieste`, tool `richiesta_tutore`; `calliope/agenti/test_js.mjs`, prova di fumo `calliope/agenti/fumo_js.mjs`; comandi a voce (11/10) `calliope/gioco_voce.py` (forme e regola `gioco_comando`), `Giochi.ascolto`, `Giochi.comando`, `Giochi.schermi_voce`, `Ciclo._comando_gioco`, tool `gioco_comando` in `tools/schermi.py`; rapporto [`docs/ricerche/2026-10-05-giochi.md`](../ricerche/2026-10-05-giochi.md) |
+| Macchina a stati dei giochi (13/10) | JavaScript senza dipendenze, lo stesso file nel riquadro e in Node | `calliope/estensioni/macchina.py` (validazione di `scheda.macchina`, comandi piatti `ascolta`, `in_parole`); `calliope/estensioni/motore_gioco.js` (CalliopeMotore.crea: il nucleo puro; CalliopeMotore.avvia: disegno, pulsanti, voce); `scheda.documento` (motore e avvio nel riquadro, `STILE_MOTORE`); `calliope/agenti/fumo_js.mjs` (esplora, tuttiPiatti, apriGioco con g.stato()); esempi di accettazione `agenti/accettazione.py` (`test_js`, `FILE_GIOCO`); progetto [`2026-10-12-giochi-macchina-stati.md`](../ricerche/2026-10-12-giochi-macchina-stati.md) |
 
 ## Problemi noti
 
@@ -268,7 +271,7 @@ progetto in [voce-e-regole](voce-e-regole.md)): mentre si gioca, alcune frasi br
 significato chiuso che non passa dal modello. La macchina a stati qui non si tocca: la regola
 sta nel ciclo come le altre forme chiuse, e la finestra è una finestra d'ascolto.
 
-**12/10, progetto**: la macchina a stati **del gioco** fornita da Calliope (fasi standard, comandi
+**12/10, progetto** (*storico: fatto in parte il 13/10, vedi «La macchina a stati di Calliope» in fondo*): la macchina a stati **del gioco** fornita da Calliope (fasi standard, comandi
 per fase con uno slot, istantanea, giudice di fase, palco fisso, prova di fumo per fasi; nessuna
 compatibilità con i giochi di oggi) è in
 [`2026-10-12-giochi-macchina-stati.md`](../ricerche/2026-10-12-giochi-macchina-stati.md), in
@@ -316,3 +319,106 @@ porta»), guardare che lo sviluppo aggiunga `ascolta` e `quandoComando`, aprirlo
 (i comandi arrivano anche lì), poi giocare dal satellite e dal telefono dicendo «la porta
 due», «tre», «ricomincia» senza il nome; misurare con `calliope stato --turni` la latenza
 delle mosse e quante frasi la finestra del gioco ignora.
+
+## La macchina a stati di Calliope (13/10, ramo `giochi-stati`)
+
+Punto 4 della modalità sviluppo nella [roadmap](../roadmap.md), sul progetto
+[`2026-10-12-giochi-macchina-stati.md`](../ricerche/2026-10-12-giochi-macchina-stati.md) con le
+risposte di chi amministra del 12/10 (nomi «Giocatore N», l'esito che va avanti da solo dopo circa
+4 s, niente Chromium nella sandbox, giochi vecchi tolti al passo 4). Il caso che la motiva è
+quello del 12/10: logica.js restituiva l'esito annidato e gioco.js lo leggeva al primo livello,
+con i test della logica e la prova di fumo verdi.
+
+**Com'è fatto un gioco nuovo.** Il manifesto dichiara la macchina; logica.js solo la logica pura:
+
+    "scheda": {"tipo": "gioco", "file": ["logica.js"], "giocatori": {"min": 1, "max": 4},
+      "macchina": {"inizio": "turno", "fasi": {"turno": {"verso": ["esito", "fine"],
+        "comandi": {"porta": {"forme": ["porta {n}", "la porta {n}", "{n}"],
+                              "n": {"da": 1, "a": 6}, "etichetta": "Porta {n}"}}}}}}
+
+    const GIOCO = {
+      nuovaPartita({ giocatori }) { … return dati; },
+      attivi: { turno: (dati, ctx) => ({ porta: [1, 3, 4] }) },     // restringe, mai allarga
+      mosse: { turno: { porta(dati, { valore, chi }) {
+        return { dati, punti: 1, esito: "Una zucca!", dopo: "turno" }; } } },
+      vista: { turno: (dati, ctx) => ({ titolo: "Quale porta apri?" }) },
+    };
+
+- **Il motore** (`calliope/estensioni/motore_gioco.js`) è **un solo scrittore** dello stato: le
+  fasi standard (preparazione con il numero dei giocatori, «esito» dopo una mossa che va avanti da
+  solo dopo `esito_s` secondi o con «avanti», «fine» con la classifica e «ancora»), i turni (il
+  turno passa all'uscita dall'esito; `ancora: true` lo tiene), i punti (un numero a chi ha mosso o
+  un elenco per tutti), l'istantanea (fase, a chi tocca, giocatori e punti, esito, comandi
+  attivi). Il nucleo (`CalliopeMotore.crea`) è puro e senza DOM; `CalliopeMotore.avvia` disegna la
+  pagina (titolo, testo, un pulsante per comando e valore, la fascia dei punti), manda a Calliope
+  i comandi a voce attivi a ogni fase (`calliope.comandiAttivi`) e riceve le mosse a voce
+  (`calliope.quandoComando`); un comando arrivato dopo un tocco che ha già cambiato la fase si
+  ignora.
+- **La forma dei risultati la controlla il motore** (punto a del compito): una mossa restituisce
+  solo `{ dati, punti, esito, fase, dopo, ancora }`. L'esito annidato del 12/10 diventa
+  «GIOCO.mosse.turno.porta (valore 1) restituisce campi che il motore non conosce: porte, dietro,
+  aperte, risultato. Una mossa restituisce { dati, … }: lo stato del gioco va tutto dentro
+  «dati»…»; così anche `dati` mancante, una fase fuori da `verso`, `attivi` che allarga ai comandi
+  o ai valori non dichiarati, `vista` con campi o tipi sbagliati (niente più «undefined» o
+  «[object Object]» sullo schermo: la vista dà solo testi, il disegno è del motore).
+- **Lo slot è un'abbreviazione di un elenco** (`macchina.ascolta`): «porta {n}» con n da 1 a 6
+  diventa i comandi a voce piatti `porta_1` … `porta_6`, ognuno con le sue forme intere, più gli
+  standard `giocatori_N` («2 giocatori», «siamo in 2»), `inizia`, `avanti`, `ancora` (e
+  `fine_partita` con una tela). La voce resta quella dell'11/10 (`gioco_voce.trova`, regola
+  `gioco_comando`, finestra senza nome): il principio 10 vale alla lettera, un insieme finito di
+  frasi brevi riconosciute per intero, e il server non cambia. Validazione: doppioni con le forme
+  di Calliope, forme riservate, {n} da solo solo con al più 12 valori, al più 64 comandi piatti
+  (`MAX_ATTIVI` del server). Il motore in JavaScript ricava gli stessi nomi (`tuttiPiatti`, la
+  prova lo confronta con Python). Con la macchina il manifesto non ha `ascolta`; chi approva
+  sente «si gioca a voce o toccando, con una fase e un comando».
+- **La tela** (la via libera per eccezione): una fase con `"pagina": "tela"` e
+  `GIOCO.tela[fase](area, dati, tela)`, da cui si esce con `tela.esci({ dati, punti, fase })`,
+  controllata come una mossa; «fine partita» vale sempre.
+- **Il riquadro** non cambia: `scheda.documento` mette runtime, motore, script del gioco e lo
+  script d'avvio, ognuno con la sua impronta nella CSP (`STILE_MOTORE` con le variabili del tema:
+  `--sfondo`, `--testo`, `--primario`, `--accento`, `--carattere`, `--raggio`). Un gioco senza
+  `macchina` resta com'era.
+- **La prova di fumo per fasi** (`fumo_js.mjs`, `esplora`, con lo stesso motore): visita in
+  ampiezza gli stati da ogni numero di giocatori, ogni comando attivo con ogni valore (al più 5000
+  stati), poi 20 partite a caso con il seme fisso fino alla fine entro 500 passi (300 in più se la
+  visita si è fermata al tetto), poi i tocchi a caso sui pulsanti del motore. Dice: mossa che
+  lancia (con `logica.js:riga`), forma sbagliata, fase senza uscita («nessun comando attivo
+  (strada: porta_2 → avanti → porta_3 → avanti)»), fase dichiarata e mai raggiunta, comando mai
+  attivo, partita che non finisce, valori fuori dal dominio. Il gioco delle prove in circa 85 ms
+  sul portatile.
+- **apriGioco** con la macchina: `g.tocca("2 giocatori")`, `g.tocca("Porta 1")`,
+  `g.comando("porta", 3)` (la stessa strada della voce), `g.avanza(4500)` (l'esito che va
+  avanti), `g.stato()` (l'istantanea).
+- **Gli esempi di accettazione** (punto b): in uno sviluppo di un gioco nuovo la passata del
+  progettista dei test (agenti/accettazione.py, la stessa delle estensioni) dichiara i comandi che
+  la macchina deve avere e gli esempi in forma chiusa (giocatori, mosse, stato atteso: fase, a chi
+  tocca, punti, comandi che valgono o non più, una parola sullo schermo). Il codice li valida e
+  scrive `accettazione.test.js` **in sola lettura**, che gioca la partita vera con il motore; i
+  vincoli dicono all'agente i comandi (««porta» (fase «turno», da 1 a 6)»); alla consegna l'esito
+  va nel risultato e sui requisiti come per le estensioni. Dettagli in
+  [agenti-estensioni](agenti-estensioni.md).
+- **L'agente** ha lo scheletro nuovo (manifesto con la macchina, `GIOCO`, i due test, niente
+  gioco.js: 2 923 caratteri, come prima) e il §5 del contratto riscritto (circa 1 100 caratteri in
+  più, ~320 token, da rimisurare sulla DGX); un gioco nuovo consegnato senza la macchina torna
+  all'agente. Una versione nuova di un gioco vecchio passa ancora (i giochi vecchi si tolgono al
+  passo 4 del progetto, il palco).
+
+**Profilo ridotto da 8 GB.** Motore, fasi, pulsanti e voce sono nel browser degli schermi e nel
+confronto delle forme: 0 VRAM. La prova di fumo per fasi e gli esempi girano in Node dove gira
+l'agente (oggi solo sulla DGX); la passata del progettista è la stessa delle estensioni.
+
+**Cosa resta del progetto** (e perché): il **palco fisso** 1280×720 e 720×1280 con i sei modelli
+di pagina e la misura «fuori dal palco» (passo 4: oggi `scelte`, `messaggio` e `tela` con un
+disegno semplice che va a capo; è il passo più grande e cambia l'aspetto, da provare sugli
+schermi veri), e con lui la **rimozione dei giochi vecchi** (decisione 9); l'**istantanea
+validata dal server** con i comandi numerati (passo 2 lato server: oggi il server vede solo i
+comandi attivi, come l'11/10); le **domande standard** («a chi tocca?», passo 5) e l'istantanea
+nei dati del turno; il **giudice di fase** (passo 6); «**gioco anch'io**» e i **nomi scritti**
+(oggi «Giocatore N»); la **ripresa dopo «Riapri»** (decisione 7); le **partite condivise** con il
+motore (rimandate dalla decisione 6); il caso «porte» del banco della temperatura è ancora un
+gioco del formato di prima (una correzione).
+
+**Da fare sulla DGX**: il giro vero di un gioco nuovo («Calliope, fammi un gioco delle porte per
+due giocatori, a voce con il numero della porta»): guardare nel log l'analisi prima del codice
+(esempi e comandi), che l'agente scriva la macchina e non gioca.js, la prova di fumo per fasi,
+gli esempi alla consegna; poi aprirlo in prova e giocarlo a voce («siamo in due», «porta tre»).

@@ -567,3 +567,18 @@ autorevole), la partita come attività della macchina a stati del dialogo.
 8. **Esito**: «avanti» a voce o al tocco, oppure anche da solo dopo qualche secondo (e quanti)?
 9. **I giochi già approvati**: si tolgono al passo 4 o restano chiedibili (senza voce né palco)
    finché non li si rifà?
+
+## Aggiornamento del 13/10: cosa è fatto
+
+Fatto sul ramo `giochi-stati` (dettagli in [giochi](../aree/giochi.md), «La macchina a stati di
+Calliope», e in [agenti-estensioni](../aree/agenti-estensioni.md)): del passo 1 lo slot come
+abbreviazione di un elenco, espanso **una volta all'approvazione** sul dominio dichiarato nei
+comandi a voce piatti (`porta_3`) e ristretto a runtime dal motore con `comandiAttivi`, invece
+che a ogni istantanea dal server (il server e la regola `gioco_comando` restano quelli
+dell'11/10); del passo 2 il motore, `scheda.macchina` validata e l'istantanea nel motore (non
+ancora mandata al server né numerata); il passo 3 (la prova di fumo per fasi); del passo 4 la
+tela e un disegno semplice per `scelte` e `messaggio` (non il palco fisso né i sei modelli); il
+passo 7 (scheletro, contratto, `CAPACITA_GIOCO`) e, in più, gli esempi di accettazione dei
+giochi (domanda 5 della ricerca sul flusso a fasi). Restano i passi 4 (palco, giochi vecchi
+tolti), 5, 6 e 8, il resto del 2 lato server e le scelte 1 (nomi), 7 (ripresa) e 6 (partite
+condivise) delle risposte del 12/10.
