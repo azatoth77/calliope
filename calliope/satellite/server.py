@@ -185,6 +185,8 @@ class Collegamento:
         # Riprese dopo la frase misurate dal satellite (07/10, calliope/pause.py): id
         # dell'ascolto → secondi dalla fine della voce. Solo le ultime
         self.riprese: dict[int, float] = {}
+        # Sa ascoltare la stanza (13/10, protocollo 3: `stanza: true` nel «ciao»)
+        self.stanza_capace = False
 
     @property
     def canale(self) -> str:
@@ -512,6 +514,8 @@ class ServerSatelliti:
         # Il pacchetto per i PC nuovi e per gli aggiornamenti dei satelliti installati
         # (pacchetto.py, web.py): si costruisce in un thread all'avvio
         self.distributore = None
+        # La conversazione di stanza (13/10, calliope/stanza/, passo 1 in ombra): None = spenta
+        self.conversazione_stanza = None
 
     # ── avvio ──
     def avvia(self) -> "ServerSatelliti":
@@ -1020,6 +1024,9 @@ class ServerSatelliti:
         presenti = d.get("wake_presenti")
         coll.wake_presenti = ({n for n in (P.nome_modello(x) for x in presenti[:40]) if n}
                               if isinstance(presenti, list) else None)
+        coll.stanza_capace = coll.versione >= 3 and d.get("stanza") is True
+        stanza = self.conversazione_stanza
+        stanza_qui = (stanza is not None and coll.stanza_capace and stanza.accesa_per(sat))
         if coll.versione >= 2:
             coll.esecutore = pulisci_esecutore(d.get("esecutore"))
             # Solo un satellite con il ruolo «pc», deciso da chi abbina, comanda il PC: un
@@ -1048,11 +1055,16 @@ class ServerSatelliti:
                         **self._campi_modalita(),
                         # La versione del satellite che il server distribuisce: un satellite
                         # installato che è indietro si aggiorna da solo (aggiorna.py)
-                        aggiornamento=self._annuncio()))
+                        aggiornamento=self._annuncio(),
+                        # La stanza (13/10, protocollo 3): accesa, in pausa o spenta
+                        **({"stanza": stanza.stato_per(sat)} if coll.stanza_capace
+                           and stanza is not None else {})))
         if d.get("primo") and self.saluto:
             pcm, rate = self.saluto
             ws.send(P.binario(P.SALUTO, rate, pcm))
         self._registra(coll)
+        if stanza_qui:
+            stanza.collegato(coll)
         ese = coll.esecutore
         self.log(f"   [SATELLITE] collegato: {sat['nome']} (stanza {sat['stanza']})"
                  + (f", giro {coll.ws.latency * 1000:.0f} ms" if coll.ws.latency else "")
@@ -1083,6 +1095,11 @@ class ServerSatelliti:
                     tipo, ident, pcm = P.apri_binario(bytes(msg))
                     if tipo == P.AUDIO:
                         self._evento(coll, "audio", {"id": ident, "pcm": pcm})
+                        if stanza_qui:
+                            stanza.voce_comando(coll)    # recupero all'interpellazione
+                    elif tipo == P.STANZA:
+                        if stanza_qui:
+                            stanza.pezzo(coll, ident, pcm)
                     elif tipo == P.VERIFICA:
                         self._evento(coll, "voce", {"id": ident, "pcm": pcm})
                     elif tipo == P.FILE_SU:
@@ -1091,6 +1108,10 @@ class ServerSatelliti:
                 m = P.leggi(msg)
                 t = m.get("tipo") if isinstance(m, dict) else None
                 try:
+                    if t in ("stanza_inizio", "stanza_fine"):
+                        if stanza_qui:
+                            (stanza.inizio if t == "stanza_inizio" else stanza.fine)(coll, m)
+                        continue
                     self._messaggio(coll, sat, t, m)
                 except (TypeError, ValueError, KeyError, AttributeError, OverflowError) as e:
                     # Un messaggio rotto si scarta: né la connessione né Calliope cadono
@@ -1099,6 +1120,8 @@ class ServerSatelliti:
         finally:
             coll.chiuso.set()
             coll.sveglia_attese()
+            if stanza_qui:
+                stanza.scollegato(coll)
             if self._attivo is coll or self.insieme:
                 self._evento(coll, "chiuso", {})
                 # Nessun saluto di chiusura dal satellite: la rete è caduta (VPN, Wi-Fi)

@@ -438,6 +438,19 @@ def _conversazioni_dimentica(ctx: ToolContext) -> dict:
         # riassumerla (Ciclo._conversazioni_dimenticate; dal 13/10, E2 della roadmap, sempre e
         # non solo con il registro degli eventi acceso): la frase lo dice
         ctx.conversazioni_dimenticate = persona
+        # La conversazione della stanza di questo satellite (13/10, decisione 0029 § 4 punto 5):
+        # anche quella si svuota, righe e presenze
+        stanza = getattr(ctx, "stanza", None)
+        if stanza is not None:
+            try:
+                from .stanza import satellite_del_turno
+                sat = satellite_del_turno(ctx)
+                if sat is not None:
+                    stanza.dimentica(sat)
+                    from .spec import note_rule
+                    note_rule(ctx, "stanza_dimenticata")
+            except Exception:  # noqa: BLE001 — la stanza non ferma «dimentica»
+                pass
         frase = (DIMENTICATE_FRASE if n else
                  "Fatto: non c'erano conversazioni archiviate, e quella di adesso l'ho "
                  "dimenticata.")

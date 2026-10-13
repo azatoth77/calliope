@@ -315,6 +315,7 @@
       // con la stessa identità (o lo stesso id) si sostituisce, mai un doppione
       (d.cronologia || []).forEach((c) => { assorbiFlusso(c); aggiungiCronologia(c, true); });
       mostraVoce(d.voce || null);       // null: questa pagina non mostra lo stato
+      mostraStanza(d.stanza || null);
       if (d.scrittura) applicaScrittura(d.scrittura);
       mostraContesto(d.contesto || null);
       // Uno sviluppo aperto nella cronologia (08/10): lo schermo torna nella sua vista
@@ -372,6 +373,7 @@
       if (gioca) entraModoGioco(c.partita, false);
     });
     es.addEventListener("voce", (ev) => { vivo(); mostraVoce(JSON.parse(ev.data)); });
+    es.addEventListener("stanza", (ev) => { vivo(); mostraStanza(JSON.parse(ev.data)); });
     es.addEventListener("scrittura", (ev) => { vivo(); applicaScrittura(JSON.parse(ev.data)); });
     es.addEventListener("contesto", (ev) => { vivo(); mostraContesto(JSON.parse(ev.data)); });
     es.addEventListener("gioco", (ev) => { vivo(); daServerGioco(JSON.parse(ev.data)); });
@@ -2038,6 +2040,32 @@
       } else if (lv && lv.errore) s.append(el("p", "cr-avviso", "Lavori: " + lv.errore));
       else s.append(el("p", "cr-tenue", "Agenti non configurati."));
     }
+
+    // La stanza (13/10, conversazione di stanza, passo 1 in ombra): solo numeri, mai parole
+    const sz = d.stanza;
+    if (sz) {
+      s = sezione(corpo, "Stanza (in ombra)");
+      if (!nonLetto(s, sz)) {
+        const sat = sz.satelliti || {};
+        const nomi = Object.keys(sat);
+        if (!nomi.length) s.append(el("p", "cr-tenue", "Nessun satellite ascolta la stanza adesso."));
+        nomi.forEach((n) => {
+          const x = sat[n] || {};
+          s.append(el("p", "", n + (x.stanza ? " (" + x.stanza + ")" : "") + ": "
+            + (x.pausa ? "in pausa" + (x.pausa.motivo === "ospiti" ? " per ospiti" : "") : "ascolta")
+            + " · righe in memoria " + (x.righe || 0) + " · presenti " + (x.presenti || 0)));
+        });
+        const o = sz.oggi || {};
+        Object.keys(o).forEach((n) => {
+          const x = o[n] || {};
+          s.append(el("p", "cr-tenue", "Oggi " + n + ": parlato " + x.ore_parlato + " h, coda p90 "
+            + (x.ritardo_p90_s === null || x.ritardo_p90_s === undefined ? "—" : x.ritardo_p90_s + " s")
+            + ", banda " + x.mb + " MB"));
+        });
+        if (sz.in_coda) s.append(el("p", "", "Segmenti in coda: " + sz.in_coda));
+        comando(s, "Dettagli da terminale: " + sz.comando);
+      }
+    }
   };
 
   // ─── scrivere invece di parlare (03/10, calliope/schermi/moduli.py) ───
@@ -3287,6 +3315,18 @@
       comp.hidden = !v.compagnia;
       comp.textContent = v.compagnia ? TESTO_COMPAGNIA : "";
     }
+  }
+
+  // ─── la stanza ascolta (13/10, conversazione di stanza) ───
+  // «Ascolto la stanza», «Stanza in pausa: ospiti, fino alle 22:15»: lo dice il server per la
+  // stanza di questo schermo. Sul telefono lo disegna la sua pagina (dal protocollo)
+  function mostraStanza(d) {
+    const box = $("stanza-segno");
+    if (!box || INCORPORATA) return;
+    const t = d && d.testo ? String(d.testo) : "";
+    box.hidden = !t;
+    box.textContent = t;
+    box.classList.toggle("pausa", /pausa/i.test(t));
   }
 
   // ─── orologio e conti alla rovescia ───

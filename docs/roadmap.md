@@ -233,12 +233,15 @@ voce raccontava male gli esiti, i comandi del flusso si perdevano.
    posteriori. Progetto [`ricerche/2026-10-13-conversazione-di-stanza.md`](ricerche/2026-10-13-conversazione-di-stanza.md),
    decisione [0029](decisioni/0029-conversazione-di-stanza.md) con le sei risposte di chi
    amministra. **Passo 0 fatto** il 13/10 (in compagnia niente azioni senza il nome,
-   conversazione anonima condivisa, rilevatore solo sulle frasi rivolte). *Pronta* per il passo 1
-   (stanza in ombra, sola trascrizione veloce: protocollo v3, VAD della stanza su satellite e
-   telefono, coda con priorità e recupero all'interpellazione, registro, interruttore sul telefono,
-   «abbiamo ospiti») · dipende da: la misura sulla DGX del passo 0 (azioni senza nome → 0, chiusure
-   `conversazione_altra_persona` sull'anonima → 0) e, per il passo 1, `stt_s` dei turni invariato
-   con la coda della stanza.
+   conversazione anonima condivisa, rilevatore solo sulle frasi rivolte). *[13/10 sera: **passo 1
+   fatto** (ramo `stanza-passo-1`), in ombra: protocollo 3, VAD della stanza su satellite Python e
+   telefono con l'interruttore, Whisper con la precedenza e il recupero all'interpellazione, registro
+   in memoria con le presenze per persona, segno sugli schermi, `stanza_pausa` e «abbiamo ospiti»,
+   «dimentica»; misure nella sezione «Stanza» di `calliope stato --turni`. Di serie spenta.]*
+   *Pronta* per il passo 2 (contesto caldo e «rivolta» con la stanza) · dipende da: la misura sulla
+   DGX del passo 1 (`stt_s` e prima frase con la stanza uguali a senza, coda p90 < 10 s, banda del
+   telefono in auto, copertura all'interpellazione), la misura del passo 0, e la scelta di come
+   chi amministra rilegge un campione di righe (il cruscotto non mostra testi).
 8. **Mappe e luoghi** (V11): le coordinate di casa solo nel file locale e mai inviate fuori;
    percorsi calcolati offline con la DGX come server (fasi 2–3 di
    [`ricerche/2026-10-01-mappe-e-schermi.md`](ricerche/2026-10-01-mappe-e-schermi.md)). *Da

@@ -17,6 +17,8 @@ un identificativo (intero senza segno, big-endian) e il PCM int16 mono:
                                         chiesto per un lavoro dell'agente (03/10)
     b"M" + 0 + byte del file            server → satellite: un classificatore della wake
                                         word che il satellite non ha (05/10, modalità)
+    b"R" + id segmento + PCM 16 kHz     satellite → server: il parlato della stanza (versione
+                                        3, 13/10, conversazione di stanza), mentre si parla
 
 Il satellite apre la connessione (nessuna porta in ascolto sul portatile) e si presenta con
 il token nel primo messaggio, dopo aver controllato l'impronta del certificato: così il token
@@ -59,14 +61,24 @@ import numpy as np
 # `frase_finita` può avere `pause_ms` (le pause dentro la frase), `parlato_ms` e `chiusura`
 # («silenzio», «lunga», «rilascio»); il satellite manda `ripresa` (id dell'ascolto, dopo_s) se
 # qualcuno ricomincia a parlare entro 2 s dalla fine della frase. Facoltativi nei due sensi.
-VERSIONE = 2
-VERSIONI = (1, 2)                      # quelle che il server accetta
+# Versione 3 (13/10, conversazione di stanza, passo 1: docs/ricerche/2026-10-13-conversazione-
+# di-stanza.md § 3.1): un satellite che sa ascoltare la stanza lo dice nel «ciao» (`stanza:
+# true`); il server gli manda nel benvenuto e nel messaggio `stanza` lo stato ({attiva, motivo,
+# fino, segmento_max_s}) e il satellite, se attiva, manda ogni segmento di parlato chiuso dal suo
+# VAD della stanza: `stanza_inizio` (id, fa_s), i pezzi b"R" e `stanza_fine` (id, durata_s,
+# parlato_ms, chiusura: «silenzio», «lunga», «voce» se è cominciata la voce di Calliope, «spenta»;
+# `ascolto`: l'id dell'ascolto dei comandi che mandava audio intanto, se c'era). Il flusso dei
+# comandi (b"A") non cambia. Il server accetta anche la 1 e la 2; davanti a un server vecchio il
+# satellite scende di una versione alla volta.
+VERSIONE = 3
+VERSIONI = (1, 2, 3)                   # quelle che il server accetta
 PERCORSO_AUDIO = "/satellite"          # connessione con il token
 PERCORSO_ABBINA = "/abbina"            # senza token: solo la richiesta di abbinamento
 
 AUDIO, VERIFICA, VOCE, SALUTO, FILE = b"A", b"V", b"T", b"S", b"F"
 FILE_SU = b"G"                         # satellite → server: un file per l'agente
 MODELLO = b"M"                         # server → satellite: un classificatore della wake word
+STANZA = b"R"                          # satellite → server: il parlato della stanza (versione 3)
 MODELLO_MAX = 4 * 1024 * 1024          # i classificatori sono ~0,9 MB; oltre non si mandano
 # Pezzi di un file verso il satellite: piccoli, perché tra un pezzo e l'altro passino le
 # frasi della voce (stessa connessione, un messaggio alla volta)

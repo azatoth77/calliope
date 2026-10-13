@@ -359,6 +359,10 @@ class Satellite:
                              and getattr(cfg, "satellite_aggiornamenti", True) else None)
         self.riavvio = False                      # uscire con 75: c'è una versione nuova
         self._ultimo_audio = 0.0                  # monotonic dell'ultimo audio mandato
+        self._ultimo_lid = None                   # l'ascolto di quell'audio (stanza: legame)
+        # L'ascolto della stanza (13/10, protocollo 3, satellite/stanza.py): nasce la prima
+        # volta che il server lo accende per questo satellite; spento non costa niente
+        self.stanza = None
 
     # ── credenziali ──
     def _leggi_cred(self) -> dict:
@@ -534,7 +538,8 @@ class Satellite:
                      if self.esecutore is not None and self.versione >= 2 else None)
         ws.send(P.testo(tipo="ciao", versione=self.versione, token=self.cred["token"],
                         primo=self.primo, nome=socket.gethostname(), esecutore=esecutore,
-                        modalita=True, wake_presenti=self._wake_presenti()))
+                        modalita=True, wake_presenti=self._wake_presenti(),
+                        stanza=self.versione >= 3))
         try:
             # Il server risponde quando Calliope ha finito di avviarsi (modelli, saluto)
             m = P.leggi(self._ricevi_o_versione(ws, timeout=180))
@@ -550,6 +555,7 @@ class Satellite:
                 setattr(self.cfg, k, v)
         self._wake_chiesti.clear()
         self._modalita(m, parametri=False)
+        self._stanza(m.get("stanza"))
         self.satellite = m.get("satellite") or {}
         sch = m.get("schermi") or {}
         if sch.get("porta"):
@@ -734,9 +740,14 @@ class Satellite:
         except ConnectionClosed as e:
             if (e.rcvd.code if e.rcvd is not None else None) == P.CHIUSO_VERSIONE:
                 if self.versione > 1:
-                    self.versione = 1
-                    self.log("[SATELLITE] Il server ha il protocollo vecchio: mi collego senza "
-                             "l'esecutore del PC (aggiorna Calliope sul server per averlo).")
+                    # Una versione alla volta (13/10, la 3): davanti a un server con la 2 si
+                    # perde solo l'ascolto della stanza, con la 1 anche l'esecutore del PC
+                    self.versione -= 1
+                    self.log("[SATELLITE] Il server ha il protocollo vecchio: mi collego con la "
+                             f"versione {self.versione}"
+                             + (" (senza l'ascolto della stanza)" if self.versione == 2 else
+                                " (senza l'esecutore del PC)")
+                             + ": aggiorna Calliope sul server per averla completa.")
                 else:
                     self.log("[SATELLITE] Server e satellite hanno versioni diverse del "
                              "protocollo: aggiorna il codice del satellite.")
@@ -768,6 +779,8 @@ class Satellite:
         self._wakeup.set()
         self._stop_veglia.set()
         self.player.svuota()
+        if self.stanza is not None:
+            self.stanza.imposta(None)             # senza server la stanza non ascolta
         if self.esecutore is not None:
             self.esecutore.azzera_consegne()
         if self._lavoro is not None:
@@ -803,6 +816,8 @@ class Satellite:
             self._esiti.put(m)
         elif t == "modalita":
             self._modalita(m)
+        elif t == "stanza":
+            self._stanza(m)
         elif t == "wake_file":
             if m.get("errore"):
                 self.log(f"[SATELLITE] Il server non manda il modello «{m.get('nome')}»: "
@@ -829,6 +844,22 @@ class Satellite:
                             errore="questo satellite non riceve documenti")
             else:
                 self.esecutore.file_inizio(m, self._manda)
+
+    # ── la stanza (13/10, protocollo 3, satellite/stanza.py) ──
+    def _stanza(self, stato):
+        """Lo stato della stanza dal server: accesa crea l'ascolto e apre il rubinetto sul
+        microfono; spenta (o assente) lo chiude."""
+        attiva = isinstance(stato, dict) and bool(stato.get("attiva"))
+        if self.stanza is None:
+            if not attiva:
+                return
+            from .stanza import AscoltoStanza
+            self.stanza = AscoltoStanza(
+                self.cfg, self._manda, self._manda_raw, self.player.occupato,
+                ultimo_comando=lambda: (self._ultimo_audio, self._ultimo_lid)
+                if self._ultimo_lid is not None else None, log=self.log)
+        self.stanza.imposta(stato if isinstance(stato, dict) else None)
+        self.listener.rubinetto = self.stanza.frame if attiva else None
 
     def _turno_finito(self, ident: int, dette: list[str]):
         self._manda(tipo="turno_finito", id=ident, dette=dette)
@@ -861,7 +892,7 @@ class Satellite:
 
         def on_audio(frames):
             pcm = P.a_pcm(frames)
-            self._ultimo_audio = time.monotonic()
+            self._ultimo_audio, self._ultimo_lid = time.monotonic(), lid
             if self._manda_raw(P.binario(P.AUDIO, lid, pcm)):
                 self.audio_inviato += len(pcm)
 

@@ -11,6 +11,7 @@
 | Cattura + VAD | sounddevice + Silero VAD (PyTorch, oppure il suo ONNX con onnxruntime senza torch: Linux) | `calliope/audio.py` → `Listener` (`listen`, `watch_for_name`, `measure_echo`); `calliope/vad.py` → `carica_vad`, `SileroOnnx`, `SileroTorch`; pause e fine del turno (dal 07/10, solo misura) `calliope/pause.py` → `MisuraPause`, `OsservaRipresa`, `inizio_ripresa`, `riassunto` (sotto); la frase al tetto e il suo seguito nello stesso turno (dal 10/10, sotto) `Listener._dopo_il_tetto`, `Ciclo._seguito_del_tetto`, `pause.TETTO_ATTESA_S` |
 | Chi parla | CAM++ (3D-Speaker) in ONNX con onnxruntime | `calliope/speaker_id.py` → `SpeakerEmbedder`, `SpeakerRegistry`, `SpeakerContext`; `arruola.py`; margine tra i profili e voce incerta tra un adulto e un minore (07/10) `Ciclo._confronta_voce`, `Ciclo._chiedi_chi_parla`, `SpeakerContext.incerta`; continuità delle frasi cortissime (08/10) `Ciclo._per_continuita`; il nome da solo dopo lo scatto acustico `ciclo.solo_nome_acustico`; più voci vicino allo stesso satellite (dal 09/10, sotto) `calliope/compagnia.py` → `Compagnia`, `modo`, `riassunto`, e il giudizio «rivolta a Calliope» `calliope/rivolta.py` → `Giudice`, `etichetta` |
 | Speech-to-Text | faster-whisper nel processo, oppure un server con l'API OpenAI (sulla DGX whisper.cpp con CUDA, servizio `calliope-whisper`; vLLM scartato) con ripiego su faster-whisper su CPU (modello di riserva dal catalogo, `whisper_riserva`) | `calliope/stt.py` → `Transcriber`, `ServerTranscriber`, `make_transcriber`, `modello_whisper`; server in `setup/linux/motore/whisper.sh`; correzione delle frasi incerte (spenta) `calliope/stt_correzione.py` → `Correttore`, `accettabile`, `min_utile`; a capo di whisper-server tolti `stt.unisci_righe`; parole incerte al modello (B, spenta) `stt_correzione.parole_incerte`, `Brain.STT_INCERTE_MSG`; frase capita trattenuta (B2, spenta) `Brain.CapitoHold`, `Brain._applica_capito`, `STT_RISCRIVI_MSG` (confronto A/B/B2/C in fondo); parole incerte negli argomenti dei tool (dal 08/10, F0 e F1, sotto) `calliope/argomenti_incerti.py` → `Ascolto`, `Misura`, `Vocabolario`, `allinea`, `esito`, `suggerimento`, `riassunto`, con le probabilità per parola `Transcriber.parole` e `ServerTranscriber.parole`; tempo massimo della richiesta in proporzione alla frase `ServerTranscriber.tempo_massimo` (10/10); frasi tipiche delle allucinazioni scartate per intero in `calliope/allucinazioni.py` (09/10) |
+| Conversazione di stanza, passo 1 in ombra (13/10, sotto) | Silero VAD in ONNX (un secondo VAD, suo), Whisper con la precedenza, CAM++ | sul satellite `calliope/satellite/stanza.py` → `Segmentatore`, `AscoltoStanza`, rubinetto `Listener.rubinetto`; sul server `calliope/stanza/` → `Stanza` (`ascolto.py`: `copertura`, `turno_testo`, `pausa`, `riprendi`, `dimentica`, `presenti`, `presenze`), `Copertura`, `Precedenza` (`coda.py`), `RegistroStanza` (`registro.py`), `Misure`, `riassunto` (`misure.py`), `load_stanza`; `STTCondiviso.transcribe(priorita=…, prompt=…)`; ganci `Ciclo._stanza_copertura`, `Ciclo._stanza_turno`; tool `stanza_pausa` (`calliope/tools/stanza.py`) |
 | Wake word acustica | classificatore addestrato in formato openWakeWord (ONNX) | `calliope/wakeword.py` → `WakeWordDetector`, `load_wake_detector`; usato da `Listener.listen(wake, awake_until)`. Modelli e addestramento in `wakeword/` |
 | Text-to-Speech | Piper (voce `it_IT-serena-high`) | `calliope/tts.py` → `Speaker` (2 thread: sintesi e riproduzione, `_pcm`; la prima frase lunga a pezzi `primo_pezzo`, `tts_spezza_prima`, `tts_primo_pezzo_min`, e i thread di onnxruntime `carica_voce`, `tts_thread`, dal 07/10; velocità e costo della voce misurati all'avvio e con l'uso `calliope/taratura_voce.py` → `Taratura` (file voce_taratura.json), `tts_thread` «auto»; dal 07/10 sera Piper anche sulla GPU con onnxruntime-gpu, `tts_dispositivo` auto/cpu/cuda, scelta secondo la macchina e ripiego sulla CPU (`_su_gpu`, `prova_dispositivo`): [contesto-conversazione](contesto-conversazione.md)); inglesismi detti all'inglese `calliope/pronuncia.py` → `Pronuncia`, `LESSICO` (`tts_pronuncia`, `tts_pronuncia_extra`) |
 
@@ -902,3 +903,66 @@ dopo il nome da solo, voce sconosciuta di mezzo, giudizio guasto, interruttori s
 senza il nome «metti un timer di cinque minuti» → «Dimmi pure «Calliope, …» e lo faccio.» e niente
 timer; «che ore sono?» senza il nome → risposta; nel journal nessun «conversazione chiusa: parla
 un'altra persona» tra i due, e `compagnia_anonima_continua` nelle regole.
+
+## La conversazione di stanza, passo 1: in ombra, sola trascrizione veloce (13/10, ramo `stanza-passo-1`)
+
+Il passo 1 del progetto [`2026-10-13-conversazione-di-stanza.md`](../ricerche/2026-10-13-conversazione-di-stanza.md)
+§ 6 (decisione [0029](../decisioni/0029-conversazione-di-stanza.md)): Calliope **ascolta e trascrive
+la stanza** vicino ai satelliti che lo sanno fare, sa chi ha detto cosa e chi è presente, e **non lo
+usa ancora**: niente arriva al modello, si misura soltanto. Di serie `stanza: spenta` (nessun flusso,
+niente caricato); si accende nel file locale con `stanza: ombra` e, se si vuole, `stanza_satelliti`
+(per nome; vuoto = tutti). La protezione del turno è la misura più importante: `stt_s` e prima frase
+non devono cambiare.
+
+- **Sul satellite** (Python e telefono, protocollo 3: [satelliti](satelliti.md)): un rubinetto
+  copia ogni frame del microfono (`Listener.rubinetto`, non blocca) verso un thread con **il suo**
+  Silero VAD (`AscoltoStanza`; sul telefono `AscoltoStanza` di `voce.js` con una sessione ONNX sua).
+  `Segmentatore`, uguale nei due linguaggi (la prova lo confronta con Node): segmenti chiusi dal
+  silenzio (`silence_ms`) o dal tetto corto `stanza_segmento_max_s` (20 s), nulla sotto
+  `min_speech_ms`, poi a gruppi di 8 frame (256 ms) mentre si parla. **Half-duplex** come i comandi:
+  con le casse occupate il segmento in corso si butta (chiusura «voce») e non se ne aprono altri
+  (il passo 5 lo cambierà). Un segmento sovrapposto all'audio dei comandi porta l'id di
+  quell'ascolto (`ascolto`).
+- **Sul server** (`calliope/stanza/`): `Stanza` riceve i segmenti (audio **solo in RAM**, buttato a
+  trascrizione fatta), li trascrive in una corsia veloce **senza il prompt col nome** (§ 5.4:
+  «Conversazione con Calliope.» farebbe inserire il nome; da misurare la WER) e attribuisce chi parla
+  con CAM++ con le regole di sempre (soglia e margine: «voce»; poco sotto: «grigia»; altrimenti
+  «ignoto»), mai verso l'alto (niente permessi, niente impronte aggiornate). Un segmento legato a un
+  turno non si trascrive: la riga la scrive il ciclo con il testo del turno, «rivolta: sì»
+  (`Ciclo._stanza_turno`). Le righe di un minore sono segnate (`minore`).
+- **Whisper con la precedenza** (`stanza/coda.py`, `Precedenza` dentro `corsie.STTCondiviso`, che
+  con la stanza accesa avvolge Whisper anche con una corsia sola): **turno > recupero > stanza >
+  lenta**. La stanza non comincia un segmento mentre qualcuno parla a Calliope (audio b"A" negli
+  ultimi 0,6 s) né mentre una frase di un turno aspetta Whisper; una trascrizione già in corso non si
+  interrompe (un segmento da 20 s costa ~0,6 s sulla GPU, la misura dirà).
+- **All'interpellazione si recupera prima** (§ 3.11): al primo audio dei comandi di un satellite, i
+  suoi segmenti detti prima passano davanti agli altri della stanza (dopo la frase del turno). A
+  frase trascritta il ciclo chiede la **copertura** (`Stanza.copertura`): le righe chiuse prima
+  dell'inizio della domanda negli ultimi 120 s, quante già pronte, e a turno scritto il tempo per
+  finirle; nel registro dei turni `stanza.copertura` = {`dette`, `pronte`, `recupero_ms`, `oltre`
+  (più di `stanza_recupero_max_s`, 1,5 s), `in_coda`}.
+- **Presenza per persona** (§ 3.5 ter, chiesto da chi amministra il 13/10): la voce sopra soglia su
+  un satellite apre o allunga la presenza lì; sentita su un altro, quella di prima si chiude (evento
+  `presenza` con inizio e fine nel registro della stanza) e si conta il cambio di stanza
+  (`cambio_stanza` nelle misure, con i secondi dall'ultima volta di là); dopo `stanza_presenza_s`
+  (600 s) senza sentirla si chiude da sola. `Stanza.presenze(persona)` dà gli intervalli (satellite,
+  inizio, fine) per i passi 2 e 4.
+- **Pausa e ospiti** (§ 3.10, risposta 6): tool `stanza_pausa` (azioni `ospiti`, `pausa`,
+  `riprendi`, `stato`). «Calliope, abbiamo ospiti» la può dire chiunque (spegne): la stanza di quel
+  satellite si ferma per `stanza_ospiti_ore` (4 h); «smetti di ascoltare la stanza (per mezz'ora)»
+  per i minuti detti o `stanza_pausa_min`; **riprendere solo un adulto riconosciuto dalla voce**
+  (mai un ospite, un minore, la zona grigia, lo scritto). Il satellite riceve subito il messaggio
+  `stanza`, gli schermi il segno ([schermi-telefono](schermi-telefono.md)). Classe «sicuro» nella
+  politica (il tool controlla da sé chi riaccende), effetto E1.
+- **«Dimentica»**: `conversazioni_dimentica`, al «sì», svuota anche il registro della stanza del
+  satellite da cui si parla e butta i suoi segmenti in coda (regola `stanza_dimenticata`).
+
+Registro e misure: [contesto-conversazione](contesto-conversazione.md). Prove: `prove/prova_stanza.py`
+(livello 1, server vero e satelliti finti, contrari: versione 2, satellite fuori elenco, stanza
+spenta) e `prove/prova_stanza_voce.py` (livello 3: satellite Python vero e telefono nel browser).
+Misure a secco (portatile): sulla riga di prova del satellite vero una frase di 1,9 s porta 70 kB
+di stanza; il telefono nel browser ~52 kB per secondo di parlato (voce del VAD, cioè ~180 MB per ora
+di parlato contando pre-roll e silenzio di chiusura: più dei 115 MB del conto del § 3.1, da rivedere
+sulla DGX con `calliope stato --turni`). **Da misurare sulla DGX**: `stt_s` e prima frase dei turni
+con e senza stanza (la sezione «Stanza» li mette accanto), ritardo della coda (p90 < 10 s), ore di
+parlato per satellite, recupero oltre 1,5 s, banda del telefono in auto.

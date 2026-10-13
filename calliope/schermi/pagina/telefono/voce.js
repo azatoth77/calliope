@@ -383,6 +383,118 @@ export class Ascolto {
   }
 }
 
+// ───────────────────────────── la stanza (13/10) ─────────────────────────────
+// Conversazione di stanza, passo 1 (calliope/satellite/stanza.py, la stessa logica): un secondo
+// VAD, suo, sugli stessi blocchi del microfono, taglia il parlato in segmenti chiusi dal silenzio
+// (silence_ms) o da un tetto corto (segmento_max_s, 20 s). Un segmento parte solo con almeno
+// min_speech_ms di voce, poi a gruppi di 8 blocchi mentre si parla. Half-duplex: mentre
+// Calliope parla il segmento in corso si butta (chiusura «voce»). `ultimoComando()` →
+// {t, id} dell'ultimo audio dei comandi (b"A"): il segmento che lo copre lo porta (`ascolto`).
+export class Segmentatore {
+  constructor(p, maxS, ultimoComando) {
+    this.p = p;
+    this.fms = FRAME / SR * 1000;
+    this.maxS = maxS || 20;
+    this.ultimoComando = ultimoComando || null;
+    this.n = 0;
+    this.pre = [];
+    this.segmenti = 0;
+    this.buttati = { corto: 0, voce: 0, spenta: 0 };
+    this._azzera();
+  }
+
+  _azzera() { this.parla = false; this.seg = []; this.voce = 0; this.silenzio = 0; this.sid = null; this.inviati = 0; this.t0 = 0; }
+
+  _chiudi(chiusura) {
+    const out = [];
+    if (this.sid !== null) {
+      if ((chiusura === "silenzio" || chiusura === "lunga") && this.inviati < this.seg.length) out.push(["audio", this.sid, this.seg.slice(this.inviati)]);
+      const u = this.ultimoComando ? this.ultimoComando() : null;
+      out.push(["fine", { id: this.sid, durata_s: Math.round(this.seg.length * this.fms) / 1000,
+        parlato_ms: Math.round(this.voce * this.fms), chiusura, ascolto: u && u.t >= this.t0 ? u.id : null }]);
+      if (chiusura === "silenzio" || chiusura === "lunga") this.segmenti++;
+      else this.buttati[chiusura] = (this.buttati[chiusura] || 0) + 1;
+    } else if (this.parla && (chiusura === "silenzio" || chiusura === "lunga")) this.buttati.corto++;
+    this._azzera();
+    return out;
+  }
+
+  ferma() { this.pre = []; return this._chiudi("spenta"); }
+
+  // ora: performance.now() in ms
+  passo(frame, prob, occupato, ora) {
+    const p = this.p;
+    if (occupato) { this.pre = []; return this.parla ? this._chiudi("voce") : []; }
+    const maxPre = Math.max(1, Math.round(p.preroll_ms / this.fms));
+    if (!this.parla) {
+      this.pre.push(frame);
+      if (this.pre.length > maxPre) this.pre.shift();
+      if (prob >= p.vad_threshold) {
+        this.parla = true; this.seg = this.pre.slice(); this.voce = 1; this.silenzio = 0;
+        this.t0 = ora - this.seg.length * this.fms; this.pre = [];
+      }
+      return [];
+    }
+    const out = [];
+    this.seg.push(frame);
+    if (prob >= p.vad_threshold) this.voce++;
+    this.silenzio = prob < p.vad_threshold - 0.15 ? this.silenzio + 1 : 0;
+    if (this.sid === null && this.voce * this.fms >= p.min_speech_ms) {
+      this.sid = ++this.n;
+      out.push(["inizio", { id: this.sid, fa_s: Math.round(ora - this.t0) / 1000 }]);
+      out.push(["audio", this.sid, this.seg.slice()]);
+      this.inviati = this.seg.length;
+    } else if (this.sid !== null && this.seg.length - this.inviati >= 8) {
+      out.push(["audio", this.sid, this.seg.slice(this.inviati)]);
+      this.inviati = this.seg.length;
+    }
+    if (this.silenzio * this.fms >= p.silence_ms) return out.concat(this._chiudi("silenzio"));
+    if (this.seg.length * this.fms >= this.maxS * 1000) return out.concat(this._chiudi("lunga"));
+    return out;
+  }
+}
+
+// Il giro della stanza nel browser: i blocchi arrivano con push() (non blocca), un ciclo li
+// passa al VAD uno alla volta; `manda(messaggio)` riceve i messaggi del Segmentatore.
+export class AscoltoStanza {
+  constructor(param, manda, occupato, ultimoComando) {
+    this.p = param;
+    this.manda = manda;
+    this.occupato = occupato;
+    this.vad = null;
+    this.seg = new Segmentatore(param, 20, ultimoComando);
+    this.coda = [];
+    this.attiva = false;
+    this.persi = 0;
+    this._gira = false;
+  }
+
+  imposta(attiva, maxS) {
+    if (maxS) this.seg.maxS = Number(maxS) || this.seg.maxS;
+    if (this.attiva && !attiva) { this.coda = []; for (const m of this.seg.ferma()) this.manda(m); }
+    this.attiva = !!attiva && !!this.vad;
+  }
+
+  push(frame) {
+    if (!this.attiva) return;
+    this.coda.push(frame);
+    if (this.coda.length > 400) { this.coda.shift(); this.persi++; }
+    if (!this._gira) this._giro();
+  }
+
+  async _giro() {
+    this._gira = true;
+    try {
+      while (this.coda.length && this.attiva) {
+        const f = this.coda.shift();
+        const prob = await this.vad.prob(f);
+        if (!this.attiva) break;
+        for (const m of this.seg.passo(f, prob, !!this.occupato(), performance.now())) this.manda(m);
+      }
+    } catch (e) { console.error(e); } finally { this._gira = false; }
+  }
+}
+
 // ───────────────────────────── riproduzione ─────────────────────────────
 export class Riproduttore {
   constructor(nome) {

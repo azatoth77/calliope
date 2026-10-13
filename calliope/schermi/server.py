@@ -268,6 +268,8 @@ def crea_app(hub: Schermi) -> Starlette:
                              "chat": chat,
                              # Stato della voce (o None: questa pagina non lo mostra)
                              "voce": hub.voce_per(conn),
+                             # La stanza ascolta? (13/10, conversazione di stanza)
+                             "stanza": hub.stanza_per(conn),
                              # Si può scrivere adesso? (05/10: solo in conversazione)
                              "scrittura": hub.stato_scrittura_per(conn),
                              # Uso del contesto dell'ultima risposta (schermi personali)

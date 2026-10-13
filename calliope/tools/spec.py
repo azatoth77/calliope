@@ -102,6 +102,9 @@ class ToolContext:
     # ciclo per il turno, Giochi.ascolto): {partita, schermo, titolo, comandi, giocatore}, o
     # None. gioco_comando passa solo uno di questi comandi
     gioco_turno: Any = None
+    # La conversazione di stanza (13/10, calliope/stanza/: Stanza), o None se spenta:
+    # stanza_pausa e «dimentica»
+    stanza: Any = None
 
 
 

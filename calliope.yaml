@@ -1249,6 +1249,37 @@ server_satelliti:
   # «Parla»)
   satelliti_insieme: true
 
+conversazione_stanza:
+  # ── conversazione di stanza (13/10, decisione 0029; docs/ricerche/2026-10-13-conversazione-
+  # di-stanza.md). Passo 1, «ombra»: i satelliti che lo sanno fare (protocollo 3: satellite
+  # Python aggiornato, telefono) mandano anche il parlato della stanza, chiuso dal loro VAD;
+  # Calliope lo trascrive a bassa precedenza (il turno passa sempre prima), sa chi ha detto
+  # cosa e chi è presente, e lo tiene **solo in memoria** (al più 24 h, si perde al riavvio);
+  # niente arriva al modello: si misura (`calliope stato --turni`, sezione «Stanza»). L'audio
+  # non va mai su disco. Sugli schermi della stanza «Ascolto la stanza»; si ferma a voce
+  # («Calliope, abbiamo ospiti»: 4 ore; tool stanza_pausa). «spenta» (di serie): nessun flusso,
+  # niente caricato. Si accende per satellite nel file locale
+  stanza: spenta
+  # I satelliti con la stanza accesa, per nome (`calliope satellite --elenco`); vuoto = tutti
+  stanza_satelliti: []
+  # Tetto di un segmento della stanza: un pezzo breve va meglio a Whisper e a chi parla (la
+  # frase dei comandi resta a max_utterance_s)
+  stanza_segmento_max_s: 20.0
+  # All'interpellazione i segmenti detti prima passano davanti: la misura dice quante volte
+  # finirli costa più di così dalla domanda (passo 2: oltre, la frase d'attesa)
+  stanza_recupero_max_s: 1.5
+  # Audio della stanza in coda oltre il quale i segmenti più vecchi si buttano (motivo
+  # «coda_piena»): con Whisper occupato a lungo la stanza non cresce senza fine
+  stanza_coda_max_s: 600.0
+  # Silenzio che chiude uno scambio (l'unità del riassunto e della corsia lenta, passi dopo)
+  stanza_scambio_pausa_s: 300.0
+  # Chi è presente: voce riconosciuta sopra soglia negli ultimi secondi (§ 3.7, § 3.5 ter)
+  stanza_presenza_s: 600.0
+  # «Calliope, abbiamo ospiti» ferma l'ascolto della stanza su quel satellite per queste ore
+  # (risposta 6 di chi amministra); «metti in pausa la stanza» senza durata: questi minuti
+  stanza_ospiti_ore: 4.0
+  stanza_pausa_min: 60.0
+
 satellite:
   # == Lato satellite (il portatile che fa da microfono, casse e schermo di
   # == Calliope sul server): python -m calliope.satellite o avvia_satellite.py.

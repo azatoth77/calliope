@@ -1,0 +1,212 @@
+"""
+Le misure della stanza (13/10, conversazione di stanza, passo 1: progetto § 6).
+
+**Solo numeri**, mai parole: un file al giorno `stanza-AAAA-MM-GG.jsonl` accanto al registro
+dei turni (`turn_log_dir`), con la stessa tenuta (`turn_log_days`). Una riga per fatto:
+
+    segmento      sat, canale, voce_s, durata_s, byte, esito («riga», «scartata», «legato»),
+                  motivo, attesa_s (dalla chiusura all'inizio di Whisper), ritardo_s (dalla
+                  chiusura alla riga pronta), stt_s, recupero (passato davanti a un turno)
+    buttato       sat, motivo («voce»: è cominciata la voce di Calliope, «spenta», «coda_piena»,
+                  «scollegato»), voce_s
+    presenza      persona (id del profilo), sat, durata_s
+    cambio_stanza persona, da, a, dopo_s (dall'ultima volta sentita nell'altra stanza)
+    pausa         sat, motivo, ore      ·  dimentica  sat, eventi
+
+Più, nel registro dei turni, `stanza.copertura` di ogni turno interpellato con la stanza accesa
+(`dette`, `pronte`, `recupero_ms`, `oltre`): la «copertura all'interpellazione» (§ 3.11).
+
+`riassunto` e `testo` fanno la sezione «Stanza» di `calliope stato --turni`: ore di parlato per
+satellite, ritardo della coda (p90 < 10 s), banda (MB per ora di parlato), scartate per motivo,
+presenze e cambi di stanza entro 10 minuti, copertura e `stt_s`/prima frase con e senza stanza.
+"""
+
+import datetime
+import json
+import threading
+from pathlib import Path
+
+PREFISSO = "stanza-"
+CAMBIO_ENTRO_S = 600.0
+RITARDO_P90_OBIETTIVO_S = 10.0
+
+
+class Misure:
+    def __init__(self, cartella: str | None, giorni: int = 60):
+        self.cartella = Path(cartella) if cartella else None
+        self.giorni = int(giorni or 60)
+        self._lock = threading.Lock()
+        self._pulito = None
+        self.errori = 0
+        self.memoria: list[dict] = []        # le ultime righe (cruscotto, prove)
+
+    def scrivi(self, tipo: str, **campi):
+        r = {"t": datetime.datetime.now().isoformat(timespec="milliseconds"), "tipo": tipo,
+             **campi}
+        with self._lock:
+            self.memoria.append(r)
+            del self.memoria[:-2000]
+        if self.cartella is None:
+            return
+        try:
+            with self._lock:
+                oggi = datetime.date.today()
+                if self._pulito != oggi:
+                    self.cartella.mkdir(parents=True, exist_ok=True)
+                    self._pota(oggi)
+                with open(self.cartella / f"{PREFISSO}{oggi.isoformat()}.jsonl", "a",
+                          encoding="utf-8") as f:
+                    f.write(json.dumps(r, ensure_ascii=False) + "\n")
+        except OSError as e:
+            self.errori += 1
+            if self.errori == 1 or self.errori % 100 == 0:
+                print(f"   [STANZA] misura non scritta ({type(e).__name__}: {e})", flush=True)
+
+    def _pota(self, oggi):
+        self._pulito = oggi
+        limite = oggi - datetime.timedelta(days=self.giorni)
+        for f in self.cartella.glob(f"{PREFISSO}*.jsonl"):
+            try:
+                if datetime.date.fromisoformat(f.stem[len(PREFISSO):]) < limite:
+                    f.unlink(missing_ok=True)
+            except ValueError:
+                continue
+
+
+def leggi(cartella: str | None, giorni: int | None = None) -> list[dict]:
+    if not cartella or not Path(cartella).is_dir():
+        return []
+    files = sorted(Path(cartella).glob(f"{PREFISSO}*.jsonl"))
+    if giorni is not None:
+        files = files[-giorni:]
+    out = []
+    for f in files:
+        for riga in f.read_text(encoding="utf-8").splitlines():
+            try:
+                out.append(json.loads(riga))
+            except ValueError:
+                continue
+    return out
+
+
+def _p(valori: list[float], q: float) -> float | None:
+    if not valori:
+        return None
+    v = sorted(valori)
+    return round(v[min(len(v) - 1, int(q * (len(v) - 1) + 0.5))], 3)
+
+
+def riassunto(righe: list[dict], turni: list[dict] | None = None) -> dict:
+    """Per giorno e satellite, più la copertura e i tempi dei turni con e senza la stanza."""
+    giorni: dict = {}
+    for r in righe:
+        g = giorni.setdefault(str(r.get("t", ""))[:10], {"satelliti": {}, "presenze": 0,
+                                                        "cambi_stanza": 0, "cambi_10min": 0,
+                                                        "pause": {}, "dimentica": 0})
+        tipo = r.get("tipo")
+        if tipo in ("segmento", "buttato"):
+            s = g["satelliti"].setdefault(str(r.get("sat") or "?"), {
+                "canale": r.get("canale"), "segmenti": 0, "voce_s": 0.0, "byte": 0,
+                "righe": 0, "legati": 0, "recuperati": 0, "scartate": {}, "buttati": {},
+                "_ritardi": []})
+            if tipo == "buttato":
+                m = str(r.get("motivo") or "?")
+                s["buttati"][m] = s["buttati"].get(m, 0) + 1
+                continue
+            s["segmenti"] += 1
+            s["voce_s"] += float(r.get("voce_s") or 0)
+            s["byte"] += int(r.get("byte") or 0)
+            esito = r.get("esito")
+            if esito == "riga":
+                s["righe"] += 1
+            elif esito == "legato":
+                s["legati"] += 1
+            else:
+                m = str(r.get("motivo") or "?")
+                s["scartate"][m] = s["scartate"].get(m, 0) + 1
+            if r.get("recupero"):
+                s["recuperati"] += 1
+            if r.get("ritardo_s") is not None and esito != "legato":
+                s["_ritardi"].append(float(r["ritardo_s"]))
+        elif tipo == "presenza":
+            g["presenze"] += 1
+        elif tipo == "cambio_stanza":
+            g["cambi_stanza"] += 1
+            if float(r.get("dopo_s") or 0) <= CAMBIO_ENTRO_S:
+                g["cambi_10min"] += 1
+        elif tipo == "pausa":
+            m = str(r.get("motivo") or "?")
+            g["pause"][m] = g["pause"].get(m, 0) + 1
+        elif tipo == "dimentica":
+            g["dimentica"] += 1
+    for g in giorni.values():
+        for s in g["satelliti"].values():
+            rit = s.pop("_ritardi")
+            s["ore_parlato"] = round(s["voce_s"] / 3600, 3)
+            s["voce_s"] = round(s["voce_s"], 1)
+            s["ritardo_p50_s"], s["ritardo_p90_s"] = _p(rit, 0.5), _p(rit, 0.9)
+            s["mb"] = round(s["byte"] / 2 ** 20, 2)
+            s["mb_ora"] = round(s["mb"] / (s["voce_s"] / 3600), 1) if s["voce_s"] > 60 else None
+    cop = {"turni": 0, "dette": 0, "pronte": 0, "complete": 0, "oltre": 0, "_rec": []}
+    tempi = {"con": {"stt": [], "prima": []}, "senza": {"stt": [], "prima": []}}
+    for t in turni or ():
+        st = t.get("stanza") if isinstance(t.get("stanza"), dict) else None
+        k = "con" if st is not None else "senza"
+        if t.get("stt_s") is not None and t.get("durata_s"):
+            tempi[k]["stt"].append(float(t["stt_s"]))
+        if t.get("prima_frase_s") is not None:
+            tempi[k]["prima"].append(float(t["prima_frase_s"]))
+        c = (st or {}).get("copertura")
+        if isinstance(c, dict):
+            cop["turni"] += 1
+            cop["dette"] += int(c.get("dette") or 0)
+            cop["pronte"] += int(c.get("pronte") or 0)
+            if c.get("dette") == c.get("pronte"):
+                cop["complete"] += 1
+            if c.get("oltre"):
+                cop["oltre"] += 1
+            if c.get("recupero_ms") is not None:
+                cop["_rec"].append(float(c["recupero_ms"]))
+    rec = cop.pop("_rec")
+    cop["recupero_p50_ms"], cop["recupero_p90_ms"] = _p(rec, 0.5), _p(rec, 0.9)
+    return {"giorni": giorni, "copertura": cop,
+            "tempi": {k: {"turni": len(v["stt"]), "stt_p50_s": _p(v["stt"], 0.5),
+                          "stt_p90_s": _p(v["stt"], 0.9), "prima_p50_s": _p(v["prima"], 0.5),
+                          "prima_p90_s": _p(v["prima"], 0.9)} for k, v in tempi.items()}}
+
+
+def testo(r: dict) -> str:
+    out = ["Stanza (conversazione di stanza, passo 1 in ombra: solo misure)"]
+    if not r.get("giorni") and not r["copertura"]["turni"]:
+        out.append("  nessuna misura (stanza spenta, o mai partita)")
+        return "\n".join(out)
+    for giorno in sorted(r.get("giorni", {})):
+        g = r["giorni"][giorno]
+        out.append(f"  {giorno}: presenze chiuse {g['presenze']}, cambi di stanza "
+                   f"{g['cambi_stanza']} (entro 10 min {g['cambi_10min']})"
+                   + (f", pause {g['pause']}" if g["pause"] else "")
+                   + (f", dimentica {g['dimentica']}" if g["dimentica"] else ""))
+        for nome, s in sorted(g["satelliti"].items()):
+            avviso = (" ⚠ oltre 10 s" if (s["ritardo_p90_s"] or 0) > RITARDO_P90_OBIETTIVO_S
+                      else "")
+            out.append(
+                f"    {nome} ({s['canale'] or '?'}): parlato {s['ore_parlato']:.2f} h in "
+                f"{s['segmenti']} segmenti, righe {s['righe']}, legati ai turni {s['legati']}, "
+                f"recuperati {s['recuperati']}; coda p50 {s['ritardo_p50_s']} s, p90 "
+                f"{s['ritardo_p90_s']} s{avviso}; banda {s['mb']} MB"
+                + (f" ({s['mb_ora']} MB/h di parlato)" if s["mb_ora"] else ""))
+            if s["scartate"] or s["buttati"]:
+                out.append(f"      scartate {s['scartate'] or '{}'}, buttate dal satellite "
+                           f"{s['buttati'] or '{}'}")
+    c = r["copertura"]
+    if c["turni"]:
+        out.append(f"  Copertura all'interpellazione: {c['turni']} turni, {c['pronte']}/"
+                   f"{c['dette']} righe già trascritte alla domanda, complete in "
+                   f"{c['complete']} turni; recupero p50 {c['recupero_p50_ms']} ms, p90 "
+                   f"{c['recupero_p90_ms']} ms; oltre 1,5 s: {c['oltre']}")
+    t = r["tempi"]
+    if t["con"]["turni"]:
+        out.append(f"  Turni con la stanza: stt p50 {t['con']['stt_p50_s']} s (senza "
+                   f"{t['senza']['stt_p50_s']} s), prima frase p50 {t['con']['prima_p50_s']} s "
+                   f"(senza {t['senza']['prima_p50_s']} s)")
+    return "\n".join(out)

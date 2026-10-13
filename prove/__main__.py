@@ -98,6 +98,8 @@ A_SECCO = [
     ("prova_minori_pericolo.py", [], "minore in pericolo con la frase spezzata (06/10, e2e): pezzi uniti per il guardiano, protezione senza barge-in con la sola voce e ripetuta se il nome la interrompe, avviso non ripetuto per lo stesso episodio, con i contrari"),
     ("prova_compagnia.py", [], "modalità compagnia (09/10): più voci vicino allo stesso satellite (profilo recente, gruppi tra ospiti, due profili) con i contrari (voce variabile, altro microfono, frasi brevi, finestra scaduta, altro satellite, stesso ospite, spenta), i due episodi veri della DGX in numeri, niente frase breve né continuità, voce non sicura per i due cancelli e l'avviso che lo dice, azioni con la voce nella frase, nome a ogni frase con una voce sconosciuta (il nome passa sempre), famiglia tutta riconosciuta, ombra senza effetti; giudizio «rivolta a Calliope» finto in ombra e acceso (silenzio, protezione sempre, guasto = rivolta, nessun tool, storia ripulita); calliope stato --turni; impronta non aggiornata in compagnia (12/10)"),
     ("prova_console_minori.py", [], "parole dei minori fuori dal terminale e dal journal (12/10 sera, decisione 0028 T1, conserva.console_riservata): «Tu: (una frase di un minore)» e la risposta «…» anche nel dubbio tra un adulto e un minore, nelle reti di Brain e negli argomenti dei tool solo i nomi; contrari adulto e ospite"),
+    ("prova_stanza.py", [], "passo 1 della conversazione di stanza (13/10, decisione 0029): segmentatore del satellite e del telefono (silenzio, tetto corto, min_speech_ms, voce di Calliope, legame col comando), Whisper con la precedenza turno > recupero > stanza, server vero con satelliti finti (protocollo 3, righe con chi parla e minore, niente doppio Whisper per il turno, niente segmenti mentre si parla a Calliope, recupero all'interpellazione, copertura), registro in memoria, presenze e cambi di stanza, pausa, ospiti e ripresa, «dimentica», misure senza parole, sezione di stato --turni; contrari: versione 2, satellite fuori elenco, stanza spenta"),
+    ("prova_stanza_voce.py", [], "conversazione di stanza in tempo reale (13/10, passo 1): satellite Python vero (rubinetto senza perdere frame dei comandi, riga senza il nome, segmento legato al turno, half-duplex, ospiti) e telefono nel browser vero (righe senza byte ai comandi, segno, interruttore, banda)"),
     ("prova_compagnia_passo0.py", [], "passo 0 della conversazione di stanza (13/10, decisione 0029, caso vero del 12/10 in auto): in compagnia senza il nome niente azioni (letture sì, il «sì» della stessa persona alla proposta sì, compagnia_azioni_col_nome), la conversazione anonima del satellite condivisa e non chiusa a ogni cambio di persona con chi ha detto cosa nei dati del turno (compagnia_anonima_continua), il rilevatore di pericolo che non vale sulle frasi giudicate non rivolte anche in ombra (pericolo_non_rivolta); contrari: una persona sola, col nome, voce sconosciuta di mezzo, conversazione di una persona, giudizio guasto, interruttori spenti"),
     ("prova_minori_cancelli.py", [], "minore forse in pericolo, giro a due cancelli (09/10, caso vero della DGX: adulto ospite preso per il ragazzo che saluta): acuto come prima, da verificare → rassicura e chiede, conferma o smentita della risposta, silenzio con avviso non urgente, due segnali ravvicinati (non dopo una smentita né con la voce incerta in compagnia, 12/10), voce incerta, giudizi guasti, avviso «sicurezza» non a voce vicino al minore, con i contrari"),
     ("prova_brain.py", [], "filtro del thinking, guardia, ciclo dei tool, storia, nota dichiarata due volte → frase onesta (12/10)"),
@@ -366,7 +368,7 @@ LIVELLO_3 = {
     "prova_corsie_satelliti.py", "prova_installa_satellite.py", "prova_cruscotto_pagina.py",
     "prova_scheda_intera.py", "prova_markdown_pagina.py", "prova_cassetto_pagina.py",
     "prova_esercizi_pagina.py", "prova_vista_sviluppo_pagina.py", "prova_cronologia_pagina.py",
-    "prova_compagnia_pagina.py", "prova_frase_lunga_voce.py",
+    "prova_compagnia_pagina.py", "prova_frase_lunga_voce.py", "prova_stanza_voce.py",
 }
 # Mai nel gruppo parallelo, anche quando una prova li sceglie nel livello 2: un browser, un
 # tempo reale o tanti processi, che sotto carico falliscono a caso. Tutto il livello 3 è
@@ -407,6 +409,10 @@ LEGAMI = [
     ("calliope/tools/ufficio.py", ["prova_scritto.py"]),
     ("calliope/tools/web.py", ["prova_web.py", "prova_estensioni_attacchi.py"]),
     ("calliope/tools/notizie.py", ["prova_notizie.py"]),
+    # La conversazione di stanza (13/10, passo 1): il tool, il pacchetto, il lato satellite
+    ("calliope/tools/stanza.py", ["prova_stanza.py"]),
+    ("calliope/stanza/", ["prova_stanza.py"]),
+    ("calliope/satellite/stanza.py", ["prova_stanza.py"]),
     ("calliope/notizie/", ["prova_notizie.py"]),
     ("calliope/tools/archivio.py", ["prova_archivio.py"]),
     ("calliope/tools/immagini.py", ["prova_immagini.py"]),

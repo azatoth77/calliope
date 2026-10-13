@@ -27,7 +27,11 @@ il prossimo passo (registro delle capacità, calliope/capacita.py).
                                               (calliope/scelta_tool.py); frasi pronte:
                                               ripetizioni ogni 100 risposte, pronte e
                                               modello, e la stima con le varianti in ombra
-                                              (calliope/frasi.py)
+                                              (calliope/frasi.py); stanza: ore di parlato
+                                              per satellite, ritardo della coda, banda,
+                                              scartate, presenze e cambi di stanza, copertura
+                                              all'interpellazione, stt e prima frase con e senza
+                                              stanza (calliope/stanza/misure.py, 13/10)
     python -m calliope.stato --eventi [--json]
                                               il registro degli eventi (10/10, in ombra:
                                               calliope/eventi/): MB per giorno, registri,
@@ -261,12 +265,16 @@ def main(argv=None) -> int:
         # Le frasi pronte ripetute (12/10, calliope/frasi.py, fase 0)
         from . import frasi
         pronte = frasi.riassunto(turni)
+        # La conversazione di stanza (13/10, calliope/stanza/misure.py, passo 1): solo numeri
+        from .stanza import misure as misure_stanza
+        stanza = misure_stanza.riassunto(misure_stanza.leggi(cfg.turn_log_dir, giorni), turni)
         if as_json:
             print(json.dumps({"giorni": dati, "soglia_s": getattr(cfg, "latenza_avviso_s", None),
                               "attrito": sicurezza, "attrito_soglia": soglia_a,
                               "argomenti": argomenti, "compagnia": comp,
                               "dialogo": dialogo, "voce_sola": voce_sola,
-                              "scelta_tool": scelta, "frasi_pronte": pronte},
+                              "scelta_tool": scelta, "frasi_pronte": pronte,
+                              "stanza": stanza},
                              ensure_ascii=False, indent=2))
         else:
             print(latenza.testo(dati, soglia))
@@ -284,6 +292,8 @@ def main(argv=None) -> int:
             print(scelta_tool.testo(scelta))
             print()
             print(frasi.testo(pronte))
+            print()
+            print(misure_stanza.testo(stanza))
         return 0
     if "--eventi" in argv:
         d = _eventi_disco(cfg)

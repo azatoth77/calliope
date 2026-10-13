@@ -11,6 +11,7 @@
 | Conversazione per persona, satelliti insieme (dal 06/10) | thread per satellite («corsie»), solo libreria standard | `calliope/corsie.py` → `Corsia`, `RegistroConversazioni` (`scegli`, `occupa`, `doppione`, `pulisci`, `riprendi`), `Varco` (`conversazioni_parallele`), `Smistatore`; il ciclo di ogni corsia `calliope/ciclo.py` → `Ciclo` (dal 06/10, P8), `Servizi`, `Turno`; `main.Corsie` (una corsia per satellite), `main.Avvio`; `ServerSatelliti.insieme`; rapporto [`docs/ricerche/2026-10-06-conversazione-persona.md`](../ricerche/2026-10-06-conversazione-persona.md) |
 | Finestra di contesto (dal 05/10) | — (Ollama `/api/show` e `/api/ps`, vLLM `/v1/models` e `/metrics`, nvidia-smi, /proc/meminfo) | `calliope/contesto.py` → `prepara`, `calcola`, `finestra` (il num_ctx di tutti), `testo_stato`; `llm_num_ctx: auto`, scelta in `contesto.json`; token veri in `Brain.last_context`; barra `Schermi.contesto`; misure `prove/misura_contesto.py` |
 | Conversazione, compressione e archivio delle conversazioni (dal 05/10) | SQLite in WAL con FTS5 (`conversazioni.db`), vettori da Ollama `/api/embed` sulla CPU (`qwen3-embedding:0.6b`) o `/v1/embeddings`, coseno in numpy, RRF | `calliope/conversazione.py` → `Conversazione` (Brain la espone con `history`, `pending`…, `brain.conv`), `turni`; `calliope/compressione.py` → `Compressore` (soglie 75/90 %, `avvia`, `comprimi_ora`, `applica`, `chiudi`), `RiassuntoreLLM` (agente o voce), `RiassuntoreTagli`, `crea_riassuntori`; `calliope/conversazioni.py` → `ArchivioConversazioni` (`archivia`, `cerca`, `ultima`, `dimentica`, conversazione corrente; dall'08/10 `recenti` per le domande cronologiche, `su_turni` e `chat` per la scheda «Conversazione»; dal 10/10 `pulisci_wal`, `su_pulizia` e «dimentica» vera), `Embedder`, `load_conversazioni`; il registro degli eventi accanto (`calliope/eventi/registro.py` → `Registri`, `Disco`, dal 10/10 in ombra: sezione «La storia come proiezione degli eventi»); tool `conversazione_cerca`, `conversazioni_dimentica` in `calliope/tools/conversazioni.py`; «ricominciamo» `wakeword.nuova_conversazione`; terminale `python -m calliope.conversazioni`; misure `prove/misura_conversazioni.py` |
+| Registro della stanza e misure (13/10, passo 1 in ombra, sotto) | solo libreria standard, in memoria | `calliope/stanza/registro.py` → `RegistroStanza` (`aggiungi`, `righe`, `svuota`, `conteggi`), `Evento.a_dict`; `calliope/stanza/misure.py` → `Misure`, `leggi`, `riassunto`, `testo` (sezione «Stanza» di `calliope stato --turni`); `Stanza.presenti`, `Stanza.presenze`, `Stanza.dimentica` |
 | Latenza come metrica, cache scaldata, modelli di Ollama (dal 06/10) | solo libreria standard (registro dei turni, Ollama `/api/ps`) | `calliope/latenza.py` → `giorno`, `per_giorno`, `testo`, `avviso`, `avviso_recente`, `scalda_ripresa`, `leggi_file` (`calliope stato --turni`); `Brain.scalda_conversazione`, `Brain._scalda_se_cambiato` (prefisso nuovo dopo un cambio di modalità, 07/10); `calliope/ollama_carico.py` → `residenti`, `limite`, `usati`, `avviso`, `puo_caricare`; la prima frase a pezzi e la taratura della voce (sezioni del 07/10 sotto) hanno il codice in `tts.py` e `taratura_voce.py`, area [stt-tts](stt-tts.md) |
 | Conservazione dei dati per le misure, scelta dei tool come metrica (dal 12/10) | solo libreria standard e numpy (voce in G.711 μ-law), SQLite della tabella `eventi` | `calliope/conserva.py` → `decidi` (il solo posto), `Conservazione` (`testo_turno`, `voce_turno`, `registro_su_disco`, `conversazioni_su_disco` (12/10 sera), `conta_conversazioni`, `al_turno`, `salva_voce`, `imposta_consenso`, `ruota`, `ripulisci_registro`, `svuota`, `stato`), `python -m calliope.conserva`; `calliope/tools/conserva.py` (`dati_conservati`); `calliope/scelta_tool.py` → `turno`, `giorno`, `per_giorno`, `testo`, `avviso`, `avviso_recente` (`calliope stato --turni`) |
 
@@ -1185,3 +1186,33 @@ Nella conversazione di stanza vera (passi 1–2) il contesto lo porterà il regi
 regola resta per le frasi incerte della corsia dei comandi. Con `eventi: attivo` la storia viene
 dalla proiezione e `_chi` non c'è: i dati del turno dicono allora solo che la conversazione è di
 gruppo (da guardare quando si accendono gli eventi).
+
+## Il registro della stanza in memoria e le sue misure (13/10, ramo `stanza-passo-1`)
+
+Passo 1 della conversazione di stanza (cattura e trascrizione in [stt-tts](stt-tts.md); decisione
+[0029](../decisioni/0029-conversazione-di-stanza.md)): il **terzo tipo di registro** accanto a quelli
+della 0027, `stanza:<id del satellite>`, del canale e non di una persona. `RegistroStanza`: in sola
+aggiunta, `seq` senza buchi, i tipi dello schema del § 3.3 (`scambio_aperto`/`scambio_chiuso` dopo
+`stanza_scambio_pausa_s`, `segmento` con il `turno` legato, `riga` con versione, testo, chi, nome,
+sicurezza, rivolta, minore, `riga_scartata` con il motivo, `presenza_inizio`/`presenza` con inizio e
+fine, `pausa`/`ripresa`; quelli dei passi dopo già nominati). La proiezione `righe()` prende l'ultima
+versione di ogni segmento e salta le scartate. **Solo in memoria**: al più 24 ore e 20 000 eventi,
+si perde al riavvio (decisione 0029 punto 8, il valore del repository); `Evento.a_dict` è già la riga
+della tabella `eventi` per quando `stanza_tenuta: {giorni: 60}` (l'installazione di chi amministra)
+la porterà su disco, nel passo dopo. **Niente nel contesto del modello** in questo passo; la
+conversazione con Calliope resta per persona e segue chi parla come prima (§ 3.5 ter).
+
+«Dimentica» (`conversazioni_dimentica`, al «sì») svuota anche il registro della stanza del satellite
+da cui si parla. `calliope conserva --svuota` **non** lo tocca: gira in un altro processo e la stanza
+è nella memoria del servizio (con la tenuta su disco dovrà farlo).
+
+**Misure** (`stanza/misure.py`): un file al giorno `stanza-AAAA-MM-GG.jsonl` in `turn_log_dir`, con la
+tenuta di `turn_log_days`, **solo numeri** (segmenti con parlato, byte, esito, motivo, attesa, ritardo,
+stt, recupero; segmenti buttati dal satellite o per la coda piena; presenze con la durata e l'id del
+profilo; cambi di stanza; pause; dimentica): mai parole né nomi. `calliope stato --turni` ha la sezione
+«Stanza»: per giorno e satellite ore di parlato, segmenti, righe, legati ai turni, recuperati, ritardo
+della coda p50 e p90 (avviso oltre 10 s), banda in MB e MB per ora di parlato, scartate e buttate per
+motivo; presenze chiuse e cambi di stanza (entro 10 minuti); la copertura all'interpellazione dai
+turni (`stanza.copertura`: righe pronte alla domanda, turni completi, recupero p50/p90, oltre 1,5 s);
+`stt_s` e prima frase dei turni **con e senza** la stanza, la misura che decide se il passo 1 è
+innocuo. Con `--json` lo stesso in `stanza`.
