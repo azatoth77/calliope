@@ -37,8 +37,9 @@ cancella: si segna come tale.
 | [0024](0024-niente-internet-se-non-serve.md) | Niente internet quando se ne può fare a meno: il meteo di casa | accettata, 09/10 |
 | [0025](0025-minori-due-cancelli.md) | Minori: un segnale di pericolo poco chiaro passa da due cancelli | accettata, 09/10 |
 | [0026](0026-satelliti-esphome-senza-home-assistant.md) | I satelliti parlano direttamente con Calliope (API di ESPHome), Home Assistant solo per la casa | accettata, 10/10 |
-| [0027](0027-conversazione-come-registro-di-eventi.md) | La conversazione come registro degli eventi: un registro per persona, il resto proiezioni | accettata, in corso (10/10) |
-| [0028](0028-decisioni-roadmap-12-10.md) | Decisioni sulla roadmap del 12/10: dati degli adulti per 60 giorni, piano unico della memoria, profilo ridotto da 8 GB come vincolo, posizione della DGX che non conta, musica sì e allarme senza data | accettata, 12/10 |
+| [0027](0027-conversazione-come-registro-di-eventi.md) | La conversazione come registro degli eventi: un registro per persona, il resto proiezioni | accettata, in corso (10/10); registro della stanza dalla 0029 |
+| [0028](0028-decisioni-roadmap-12-10.md) | Decisioni sulla roadmap del 12/10: dati degli adulti per 60 giorni, piano unico della memoria, profilo ridotto da 8 GB come vincolo, posizione della DGX che non conta, musica sì e allarme senza data | accettata, 12/10; T1 in parte superata il 13/10 (0029) |
+| [0029](0029-conversazione-di-stanza.md) | La conversazione di stanza: Calliope sempre in conversazione di gruppo (trascrizione continua, azioni solo col nome e la voce, recupero all'interpellazione, guardiano a posteriori, testo della stanza e ricerca dei tutori decisi per l'installazione, default prudenti) | accettata, 13/10; passo 0 fatto |
 
 Una decisione nuova prende il numero successivo e segue lo stesso formato; quando ne supera una
 vecchia, la vecchia cambia solo lo stato («superata il …, vedi NNNN»).

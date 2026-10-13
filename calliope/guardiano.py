@@ -681,10 +681,14 @@ class Esito:
     fermata: str | None = None                      # "vietato" | "pericolo" | "guasto"
     categorie: tuple = ()
     detto: list = field(default_factory=list)
+    # Il pericolo sulla domanda non vale: frase non rivolta a Calliope (13/10, filtra
+    # `pericolo_vale`). None = non deciso (nessun pericolo, o nessuna domanda)
+    pericolo_ignorato: bool | None = None
 
 
 def filtra(guardiano: Guardiano, frasi, domanda: str, minore: bool, esito: Esito,
-           categorie_attive: set | None = None, al_giudizio=None, al_pericolo=None):
+           categorie_attive: set | None = None, al_giudizio=None, al_pericolo=None,
+           pericolo_vale=None):
     """Le frasi della risposta (generatore di stringhe, già divise) che si possono dire.
 
     Generatore: la domanda si giudica subito in parallelo; ogni frase aspetta il proprio
@@ -699,7 +703,12 @@ def filtra(guardiano: Guardiano, frasi, domanda: str, minore: bool, esito: Esito
     (Brain.trattieni_schede).
 
     `al_pericolo(giudizio) -> frase`: chiamata con «pericolo» sulla domanda, sceglie la frase
-    da dire al posto della protezione (None o un errore = la protezione)."""
+    da dire al posto della protezione (None o un errore = la protezione).
+
+    `pericolo_vale(giudizio) -> bool` (13/10, passo 0 della conversazione di stanza): chiamata
+    una volta con «pericolo» sulla domanda; False = la frase non era rivolta a Calliope (una
+    chiacchiera in compagnia) e il pericolo sulla domanda non vale (`esito.pericolo_ignorato`):
+    si risponde come sempre, con il giudizio di ogni frase detta. Un errore vale True."""
     # La domanda si giudica mentre il modello comincia a rispondere (in_parallelo): nessuna
     # frase va alla voce prima del suo giudizio (domanda_ok)
     fut = guardiano.in_parallelo(domanda, None, categorie_attive)
@@ -719,6 +728,14 @@ def filtra(guardiano: Guardiano, frasi, domanda: str, minore: bool, esito: Esito
         g = esito.domanda
         stato = (PERICOLO if g.esito == PERICOLO else
                  GUASTO if blocca_se_guasto and g.guasto() else OK)
+        if stato == PERICOLO and pericolo_vale is not None:
+            if esito.pericolo_ignorato is None:
+                try:
+                    esito.pericolo_ignorato = not pericolo_vale(g)
+                except Exception:  # noqa: BLE001 — nel dubbio, il pericolo vale
+                    esito.pericolo_ignorato = False
+            if esito.pericolo_ignorato:
+                stato = OK
         if primo and al_giudizio is not None:
             try:
                 al_giudizio(stato == OK)

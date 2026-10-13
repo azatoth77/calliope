@@ -731,3 +731,32 @@ vuoi?» (regola `minore_notizie`); niente ripiego su SearXNG, anche con un prese
 cercare. Il «dimmi di più» di un minore mostra solo le voci dei suoi temi. Focus Junior mescola
 notizie e promozioni per le scuole (ricerca del 13/10, § 6.7): da guardare nell'uso. A secco in
 `prova_notizie` (§ 7).
+
+## Il rilevatore non giudica le chiacchiere (13/10, ramo `stanza-passo-0`)
+
+**Caso vero** (12/10 sera, in auto, nomi di fantasia): una frase breve e storpiata di Nicola dentro
+la finestra d'ascolto, detta a Carlo e non a Calliope, è stata «pericolo» per il rilevatore. Il
+12/10 sera sono stati corretti i due cancelli (`pericolo_dopo_smentita`,
+`pericolo_compagnia_cancello1`); la radice era un rilevatore che giudica una chiacchiera di un
+secondo, senza contesto. Chi amministra ha deciso il 13/10 (decisione
+[0029](../decisioni/0029-conversazione-di-stanza.md), risposta 4): **guardiano spento in diretta
+sulle chiacchiere**, acceso sulle frasi rivolte a Calliope; le chiacchiere si guarderanno a
+posteriori sulla trascrizione corretta (passo 6 della conversazione di stanza, solo avviso al
+tutore sullo schermo personale, mai «Va tutto bene?» al ragazzo).
+
+**Passo 0** (`Ciclo._pericolo_vale`, `guardiano.filtra(pericolo_vale=…)`, regola
+`pericolo_non_rivolta`, interruttore `compagnia_pericolo_solo_rivolte`): quando il rilevatore (o il
+guardiano) dice «pericolo» sulla domanda, il ciclo guarda il giudizio «rivolta a Calliope», che in
+compagnia parte già su ogni frase senza il nome (`Ciclo._avvia_rivolta`). Se dice di no, **anche
+con il giudizio in ombra**, il segnale non vale: niente protezione, niente cancelli, niente avviso;
+si risponde come sempre e il guardiano giudica ogni frase di Calliope. Nel registro dei turni solo
+`guardiano.pericolo_non_rivolta` con le categorie, e per il minore niente testo. Un giudizio guasto
+o scaduto vale «rivolta», cioè il pericolo vale. Senza giudizio (una persona sola, col nome, dopo il
+nome da solo, scritto) tutto come prima. Prova `prove/prova_compagnia_passo0.py` con i contrari.
+
+**Da sapere**: fino al passo 6 queste chiacchiere non hanno nessun giudizio; quante sono lo dice il
+conteggio di `pericolo_non_rivolta` nella sezione della compagnia di `calliope stato --turni`. Il
+giudizio «rivolta» resta in ombra per la risposta (le chiacchiere ricevono ancora una risposta
+finché non si accende), ma senza azioni (`compagnia_azioni_col_nome`). Il giudizio «rivolta» oggi
+vede solo gli scambi con Calliope (cieco sui brevi, § 2.4 del progetto): un «no» sbagliato su una
+frase davvero rivolta toglierebbe il rilevatore; i suoi «no» vanno riletti sui giorni veri.

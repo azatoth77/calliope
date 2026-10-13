@@ -439,6 +439,8 @@ _v("permesso.familiare", "permesso",
    "Mi dispiace, questo può chiederlo solo chi amministra Calliope.")
 _v("permesso.lavori", "permesso",
    "I lavori di programmazione li può affidare solo chi amministra: chiedi a chi amministra.")
+# 13/10, passo 0 della conversazione di stanza (tools/registry.COMPAGNIA_NOME)
+_v("permesso.compagnia_nome", "permesso", "Dimmi pure «{nome}, …» e lo faccio.")
 _v("ripiego.ripeti", "ripiego", "Non ci sono riuscita: puoi ripetere la richiesta?")
 _v("annuncio.collaudo", "annuncio", "il lavoro di «{titolo}» è pronto: siamo al collaudo.")
 

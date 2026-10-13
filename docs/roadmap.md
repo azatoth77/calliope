@@ -225,7 +225,20 @@ voce raccontava male gli esiti, i comandi del flusso si perdevano.
 7. **Interfono e conversazione di stanza** (V10): quando si vuole, con i satelliti che ci sono
    (telefoni, tablet, PC), senza aspettare ESPHome; più persone nella stessa conversazione (la
    compagnia oggi le distingue, non le unisce). *Da approfondire* · dipende da: un progetto su
-   privacy e permessi (chi chiama chi, ospiti, minori).
+   privacy e permessi (chi chiama chi, ospiti, minori). *[13/10: la conversazione di stanza ha la
+   sua voce, la 7-bis qui sotto; l'interfono (chiamare un'altra stanza) resta qui.]*
+7-bis. **Conversazione di stanza** (13/10): Calliope sempre in conversazione di gruppo vicino a un
+   satellite: trascrive tutto ciò che si dice (mai l'audio su disco), agisce solo col nome e la
+   voce, recupera le ultime frasi quando è interpellata, guarda le chiacchiere dei minori a
+   posteriori. Progetto [`ricerche/2026-10-13-conversazione-di-stanza.md`](ricerche/2026-10-13-conversazione-di-stanza.md),
+   decisione [0029](decisioni/0029-conversazione-di-stanza.md) con le sei risposte di chi
+   amministra. **Passo 0 fatto** il 13/10 (in compagnia niente azioni senza il nome,
+   conversazione anonima condivisa, rilevatore solo sulle frasi rivolte). *Pronta* per il passo 1
+   (stanza in ombra, sola trascrizione veloce: protocollo v3, VAD della stanza su satellite e
+   telefono, coda con priorità e recupero all'interpellazione, registro, interruttore sul telefono,
+   «abbiamo ospiti») · dipende da: la misura sulla DGX del passo 0 (azioni senza nome → 0, chiusure
+   `conversazione_altra_persona` sull'anonima → 0) e, per il passo 1, `stt_s` dei turni invariato
+   con la coda della stanza.
 8. **Mappe e luoghi** (V11): le coordinate di casa solo nel file locale e mai inviate fuori;
    percorsi calcolati offline con la DGX come server (fasi 2–3 di
    [`ricerche/2026-10-01-mappe-e-schermi.md`](ricerche/2026-10-01-mappe-e-schermi.md)). *Da

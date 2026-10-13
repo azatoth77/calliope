@@ -530,6 +530,15 @@ class SpeakerContext:
         # in questa frase (la zona grigia non basta: tools/registry.py) e per i minori la voce
         # vale «non sicura» nei due cancelli. Vale una frase (ciclo._chi_parla)
         self.compagnia: bool = False
+        # Con la compagnia: ci sono voci che nessun profilo riconosce (compagnia.stato
+        # «sconosciute»). Per la conversazione anonima condivisa (13/10, passo 0 della stanza,
+        # brain._check_conversation). Vale una frase
+        self.compagnia_sconosciute: bool = False
+        # La frase è stata presa nella finestra d'ascolto **senza il nome** (13/10, passo 0 della
+        # stanza): in compagnia niente azioni, solo letture (tools/registry.py, regola
+        # `compagnia_azioni_col_nome`). La frase dopo il nome da solo, lo scritto e il barge-in
+        # (che comincia col nome) valgono col nome. Vale una frase (ciclo._chi_parla)
+        self.senza_nome: bool = False
 
     def aggiorna_conversazione(self, name: str | None, how: str | None, in_session: bool,
                                score: float | None, altro_piu_vicino: bool = False):

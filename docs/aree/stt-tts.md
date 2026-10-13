@@ -866,3 +866,39 @@ Resta: l'impronta di Nicola sulla DGX è già stata spostata da quei due turni; 
 ripristinata dall'impronta dell'arruolamento) prima di ritarare: vedi il problema aperto «Voci di
 famiglia al telefono».
 
+
+## Passo 0 della conversazione di stanza: la compagnia con le voci tutte riconosciute (13/10, ramo `stanza-passo-0`)
+
+**Caso vero** (12/10 sera, in auto, telefono come satellite, Carlo e Nicola registrati: nomi di
+fantasia). Con due profili riconosciuti la compagnia c'era, ma il nome obbligatorio scatta solo con
+una voce sconosciuta: le chiacchiere negli 8 s dopo una risposta arrivavano al modello **con i
+tool**, la conversazione anonima del telefono si chiudeva a ogni passaggio tra i due, e una frase
+breve storpiata del ragazzo è stata presa dal rilevatore per un pericolo. È il passo 0 del progetto
+[`2026-10-13-conversazione-di-stanza.md`](../ricerche/2026-10-13-conversazione-di-stanza.md)
+(decisione [0029](../decisioni/0029-conversazione-di-stanza.md)), utile già senza la stanza. Tre
+punti, un interruttore ciascuno, accesi di serie:
+
+- **Azioni col nome** (`compagnia_azioni_col_nome`, regola omonima,
+  `tools/registry.senza_nome_in_compagnia`): in compagnia (`SpeakerContext.compagnia`) una frase
+  presa nella finestra d'ascolto **senza il nome** (`SpeakerContext.senza_nome`, scritto dal ciclo
+  nella fase del nome: non dopo il nome da solo, non per lo scritto né per il barge-in) può avere
+  risposte e letture (classe d'effetto E0, `valore.effetto`), mai un'azione: «Dimmi pure
+  «Calliope, …» e lo faccio.» («Computer» in modalità startrek; catalogo
+  `permesso.compagnia_nome`). Il «sì» della stessa persona alla proposta in sospeso passa
+  (`tool_in_sospeso` c'è solo se la domanda era per chi parla).
+- **Conversazione anonima condivisa** (`compagnia_anonima_condivisa`, regola
+  `compagnia_anonima_continua`): dettagli in [contesto-conversazione](contesto-conversazione.md).
+- **Rilevatore solo sulle frasi rivolte** (`compagnia_pericolo_solo_rivolte`, regola
+  `pericolo_non_rivolta`): dettagli in [minori](minori.md). Il giudizio «rivolta» resta in ombra:
+  qui conta il suo esito, non la sua modalità.
+
+`SpeakerContext.compagnia_sconosciute` dice per la frase se tra le voci ce n'è una che nessun
+profilo riconosce (serve alla conversazione condivisa). Le tre regole sono contate nella sezione
+della compagnia di `calliope stato --turni` (`compagnia.REGOLE`). Prova a secco
+`prove/prova_compagnia_passo0.py` (fallisce su cd49f11), con i contrari: una persona sola, col nome,
+dopo il nome da solo, voce sconosciuta di mezzo, giudizio guasto, interruttori spenti.
+
+**Da provare a voce** (in auto con il telefono, Carlo e Nicola): dopo una risposta, Nicola dice
+senza il nome «metti un timer di cinque minuti» → «Dimmi pure «Calliope, …» e lo faccio.» e niente
+timer; «che ore sono?» senza il nome → risposta; nel journal nessun «conversazione chiusa: parla
+un'altra persona» tra i due, e `compagnia_anonima_continua` nelle regole.

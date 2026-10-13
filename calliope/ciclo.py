@@ -1845,6 +1845,8 @@ class Ciclo:
         speaker_ctx.incerta = speaker_ctx.minore_vicino = None            # anche queste
         speaker_ctx.minore_incerto = None                                 # (09/10)
         speaker_ctx.compagnia = False                                     # e questa (09/10)
+        speaker_ctx.compagnia_sconosciute = False                         # e queste (13/10)
+        speaker_ctx.senza_nome = False
         if t.scritto is not None:
             self._chi_scrive(t)
         if t.emb_job is not None:
@@ -1943,6 +1945,9 @@ class Ciclo:
             t.compagnia = self._osserva_compagnia(t, emb)
         in_compagnia = self._compagnia_attiva()
         speaker_ctx.compagnia = in_compagnia
+        if in_compagnia:
+            st = self._stato_compagnia()
+            speaker_ctx.compagnia_sconosciute = bool(st and st.get("sconosciute"))
         if in_compagnia and corta and name is not None:
             print(f"   [VOCE] in compagnia: frase breve ({t.voiced_s:.1f} s), non vale "
                   f"{name}", flush=True)
@@ -2523,6 +2528,9 @@ class Ciclo:
         # Nella finestra d'ascolto senza il nome (09/10): in compagnia il modello giudica se
         # è rivolta a Calliope (calliope/rivolta.py)
         t.senza_nome = request is None
+        # Per le azioni in compagnia (13/10, passo 0 della stanza, tools/registry.py): la frase
+        # dopo il nome da solo vale col nome
+        self.speaker_ctx.senza_nome = bool(t.senza_nome and not t.dal_nome)
         if request == "":                            # ha detto solo "Calliope"
             return self._solo_il_nome(t)
         if listener.started_at > self.awake_until:   # svegliata ora: vale ciò che segue
@@ -3058,7 +3066,8 @@ class Ciclo:
                                        None if t.minore_turno else guardia.MODERATO,
                                        al_giudizio=brain.rilascia_schede if trattieni else None,
                                        al_pericolo=((lambda g: self._decidi_pericolo(t, g))
-                                                    if t.minore_turno else None))
+                                                    if t.minore_turno else None),
+                                       pericolo_vale=lambda g: self._pericolo_vale(t))
             if attivo:
                 frasi = self._solo_se_rivolta(t, frasi)
             for sentence in frasi:
@@ -3121,6 +3130,27 @@ class Ciclo:
                 fut.set_exception(e)
         threading.Thread(target=lavora, daemon=True, name="rivolta").start()
         return {"fut": fut, "modo": m, "esito": None}
+
+    def _pericolo_vale(self, t) -> bool:
+        """Regola `pericolo_non_rivolta` (13/10, passo 0 della conversazione di stanza,
+        decisione 0029; risposta 4 di chi amministra). Il rilevatore ha detto «pericolo» sulla
+        domanda: vale se la frase era rivolta a Calliope. In compagnia una frase senza il nome
+        ha il giudizio «rivolta» (anche in ombra): se dice di no, è una chiacchiera e non si
+        giudica in diretta (caso vero del 12/10 in auto: una frase breve e storpiata del
+        ragazzo dentro la finestra presa per un pericolo, poi Telefono Azzurro e 112 nell'auto).
+        Il guardiano sulle frasi di Calliope resta. Senza il giudizio (una persona sola, col
+        nome, giudizio spento) come prima; un giudizio guasto o scaduto vale «rivolta». Vincolo
+        sulla sicurezza deciso dall'audio e dal giudizio, non dal testo (principio 10);
+        `compagnia_pericolo_solo_rivolte: false` lo spegne."""
+        if not getattr(self.s.cfg, "compagnia_pericolo_solo_rivolte", True) or not t.rivolta:
+            return True
+        g = self._giudizio_rivolta(t)
+        if g is None or g.per_calliope is not False:
+            return True
+        self.rule("pericolo_non_rivolta")
+        print("   [GUARDIANO] segnale su una frase non rivolta a me (in compagnia): non vale, "
+              "rispondo come sempre", flush=True)
+        return False
 
     def _giudizio_rivolta(self, t, attesa_s: float | None = None):
         """L'esito del giudizio (aspettato al più `attesa_s`): un guasto o un ritardo vale
@@ -3415,6 +3445,12 @@ class Ciclo:
                             **({"fermata": esito_g.fermata,
                                 "categorie": list(esito_g.categorie)}
                                if esito_g.fermata else {})}
+        if esito_g.pericolo_ignorato:
+            # Una chiacchiera in compagnia (13/10, passo 0 della stanza): il segnale non vale,
+            # nel registro solo che c'è stato e le categorie, mai le parole
+            rec["guardiano"]["pericolo_non_rivolta"] = list(getattr(dom, "categorie", ()) or ())
+            if t.minore_turno:
+                rec["testo"] = rec["richiesta"] = None
         if esito_g.fermata:
             guardia.correggi_storia(brain, esito_g.detto)
             print(f"\n   [GUARDIANO] risposta fermata: {esito_g.fermata} "

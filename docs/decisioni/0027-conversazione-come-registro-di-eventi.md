@@ -1,6 +1,8 @@
 # 0027. La conversazione come registro degli eventi
 
-- **Stato**: **accettata** (10/10/2026, piano approvato da chi amministra), realizzazione in corso
+- **Stato**: **accettata** (10/10/2026, piano approvato da chi amministra), realizzazione in corso;
+  dal 13/10 un terzo tipo di registro, quello della stanza (`stanza:<corsia>`), vedi
+  [0029](0029-conversazione-di-stanza.md)
 - **Area**: [voce-e-regole](../aree/voce-e-regole.md), [contesto-conversazione](../aree/contesto-conversazione.md)
 
 ## Contesto

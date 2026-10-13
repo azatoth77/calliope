@@ -11,6 +11,12 @@ Nomi di fantasia: chi amministra è **Carlo**, il ragazzo di 14 anni **Nicola** 
 sezioni del 12/10 nei documenti d'area). Le misure dette «[stima]» sono conti su numeri che ci
 sono, non misure nuove; tutto ciò che è «da misurare» lo dice il piano del § 6.*
 
+*Aggiornato il 13/10 sera: chi amministra ha risposto alle sei domande del § 7 (decise, vincolanti
+per la sua installazione; i valori di serie del repository restano quelli prudenti), la decisione
+[0029](../decisioni/0029-conversazione-di-stanza.md) le raccoglie, e il **passo 0** del § 6 è
+fatto (ramo `stanza-passo-0`). Aggiunta la regola «all'interpellazione si recupera prima»
+(§ 3.11). Le parti superate restano, segnate come storiche.*
+
 ## In breve
 
 **Il problema.** Oggi Calliope sente solo ciò che le è rivolto: da addormentata l'audio non
@@ -46,7 +52,10 @@ chiacchiere: le guarda **dopo**, sulla trascrizione corretta e con lo scambio in
 5. **Permessi per frase** invariati: la stanza è un dato, mai un'autorità; senza il nome solo
    risposte e letture, le azioni vogliono il nome.
 6. Di serie **spenta**: si accende per satellite nel file locale; testo di stanza **solo in
-   memoria** (niente audio su disco, mai), minori e ospiti mai su disco come in 0028.
+   memoria** (niente audio su disco, mai), minori e ospiti mai su disco come in 0028. *Deciso il
+   13/10 (§ 7, decisione 0029): questi restano i valori del repository; nell'installazione di chi
+   amministra il testo della stanza va su disco per 60 giorni per tutta la famiglia, minori
+   compresi, e i tutori possono cercarlo.*
 
 ## 1. Il caso vero e le decisioni del 13/10
 
@@ -197,7 +206,13 @@ sulla DGX: prima frase dei minori 1,36–1,48 s contro 0,89 senza guardiano
 - **Telefono**: la stessa cosa in `voce.js` (un secondo VAD sui blocchi da 32 ms). Banda: PCM
   16 kHz = 256 kbit/s solo mentre qualcuno parla, cioè **~115 MB per ora di parlato**; in μ-law
   (8 bit, già in `conserva.mulaw`) la metà, ~58 MB [conto]. In VPN sui dati mobili conta: § 7,
-  domanda 5.
+  domanda 5. *Deciso il 13/10*: sul telefono un **interruttore** «ascolto la stanza», **acceso
+  di serie** (anche sui dati mobili), accanto al segno visibile; spento, il telefono non manda
+  `b"R"` e il flusso dei comandi resta com'è. La banda si misura al passo 1.
+- **Ogni frase si trascrive appena il VAD la chiude** (aggiunta del 13/10 sera): non serve
+  riconoscere «l'inizio di una conversazione» né aspettare che uno scambio finisca. Il segmento
+  chiuso dal silenzio va subito in coda; lo scambio (§ 3.3) è solo l'unità del riassunto, della
+  corsia lenta e del guardiano.
 
 **Server.** Un package `calliope/stanza/` (nomi proposti):
 
@@ -263,7 +278,10 @@ per `stanza_cerca`. **Dove**: in memoria di serie (un SQLite `:memory:` per sate
 l'archivio di sessione del 12/10); su disco solo se chi amministra lo decide, e allora nella
 tabella `eventi` di `conversazioni.db` con la chiave `stanza:` e la stessa rotazione, con le
 righe di minori e ospiti **senza testo** su disco (`tipi.senza_parole`, già usato per i turni
-incerti degli adulti). Vedi § 4 e domanda 1.
+incerti degli adulti). Vedi § 4 e domanda 1. *Deciso il 13/10*: questo resta il valore del
+repository; con `stanza_tenuta: {giorni: 60}` nel file locale (l'installazione di chi amministra)
+anche le righe dei minori vanno su disco col testo, con la stessa rotazione di 60 giorni; quelle
+degli ospiti mai (§ 3.10).
 
 ### 3.4 Pipeline veloce e lenta, e quando Calliope interviene
 
@@ -289,9 +307,24 @@ microfono ─┬─ wake word / finestra ─ b"A" ─ turno (oggi): STT → chi 
   da una richiesta col nome). Ogni altra azione chiede il nome: «Dimmi pure "Calliope, …" e lo
   faccio.» (frase pronta nuova in `frasi.py`). Una frase giudicata non rivolta non riceve
   risposta, non apre la finestra e **resta nella stanza** (oggi esce dal registro).
+  *Deciso il 13/10 (domanda 3)*: risposta solo se il giudizio «rivolta», con le righe della
+  stanza, dice sì; e **solo per rispondere**, nessuna azione senza il nome. Le letture servono a
+  rispondere e restano; il «sì» della stessa voce alla proposta resta (è la conferma di
+  un'azione chiesta col nome, e la proposta vale solo per la sua persona). *Fatto al passo 0
+  (13/10)* per la compagnia, anche senza la stanza: regola `compagnia_azioni_col_nome`
+  (`tools/registry.senza_nome_in_compagnia`), la frase in `tools/registry.COMPAGNIA_NOME` e nel
+  catalogo come `permesso.compagnia_nome`.
 - **Conversazione anonima che si chiude**: in stanza non si chiude più per `altra_persona` (il
   contesto lo porta la stanza); resta la chiusura per `storia_inattiva_s`. Regola nuova
-  `stanza_anonima_continua` nel registro dei turni.
+  `stanza_anonima_continua` nel registro dei turni. *Fatto al passo 0 (13/10) per la compagnia*
+  con il nome `compagnia_anonima_continua` (`Brain._anonima_condivisa`): verificato sul codice,
+  la chiusura del 12/10 era la conversazione anonima del satellite (`corsie.py:291`), in cui in
+  compagnia finiscono le frasi brevi (che valgono ospite) e la zona grigia; quelle delle persone
+  sono già una per persona e non si toccano. La forma scelta: in compagnia la conversazione
+  anonima è **condivisa** da chi è lì, ogni frase della persona porta in memoria chi l'ha detta
+  (`_chi`, mai nel testo) e i dati del turno lo dicono al modello («Conversazione di gruppo…
+  dalla più vecchia: Carlo, Luca…»); permessi per frase come sempre. Con una voce sconosciuta
+  di mezzo si chiude come prima (il caso della password del wifi del 03/10).
 
 ### 3.5 Il contesto caldo
 
@@ -304,6 +337,12 @@ Il modello, quando è interpellato, vede tre livelli:
 2. **Ultimi minuti alla lettera** (`stanza_caldo_min`, proposta 8 minuti, tetto
    `stanza_caldo_token` 2 500): le righe vive, etichettate.
 3. **Il resto** con `stanza_cerca` (§ 3.8).
+
+**Gli ultimi 30–60 s sempre alla lettera** (aggiunta di chi amministra, 13/10 sera): quando il
+tetto `stanza_caldo_token` accorcia gli ultimi minuti, o il riassunto è indietro, le righe degli
+ultimi `stanza_caldo_sempre_s` (proposta 45 s) restano comunque nel blocco, per intero e
+nell'ordine, comprese quelle appena recuperate all'interpellazione (§ 3.11). È la parte che
+«tu che ne pensi?» presuppone: si accorcia prima il resto.
 
 **Forma** (dati del turno, mai storia; con `eventi: attivo` un blocco `dati_del_turno` di nome
 `stanza`, su disco solo il nome e la lunghezza come oggi):
@@ -386,14 +425,19 @@ una chiacchierata fitta ne fa il doppio.]
   chi interpella), ma **non** nella ricerca a posteriori di un altro: `stanza_cerca` di un adulto
   salta le righe di un minore (proposta prudente: niente sorveglianza a posteriori del ragazzo;
   domanda 2). Ai tutori arriva solo ciò che arriva oggi: gli avvisi del guardiano, con
-  l'argomento e mai le parole.
+  l'argomento e mai le parole. *Superato il 13/10 (domanda 2, decisione 0029)*: i **tutori**
+  possono cercare a posteriori anche ciò che ha detto il ragazzo (`stanza_cerca` con il filtro
+  per tutore di `minori.py`, livello della voce riconosciuta); gli altri adulti e gli ospiti no.
+  Il motivo di chi amministra: dentro la famiglia i minori non hanno privacy verso i genitori, e
+  Calliope gira in casa. Gli avvisi del guardiano restano senza parole.
 
 ### 3.8 `stanza_cerca` e la frase d'attesa
 
 - **Tool** `stanza_cerca(domanda, quando?)`: FTS5 (e, se c'è, i vettori dell'archivio) sulle righe
   vive della stanza **del satellite da cui si parla** (e delle stanze legate in configurazione), nei
   limiti della tenuta. Livello: familiare (adulti riconosciuti dalla voce); ospiti no; minori solo
-  sulle proprie righe. Risultati in busta (`non_fidato`: è trascrizione). È l'estensione naturale di
+  sulle proprie righe (*deciso il 13/10, domanda 2*: anche i **tutori** possono cercare le righe
+  del ragazzo di cui sono tutori; gli altri adulti no). Risultati in busta (`non_fidato`: è trascrizione). È l'estensione naturale di
   `conversazione_cerca` (`conversazioni.py:590`): stesso ordinamento RRF, un filtro per la chiave
   `stanza:`.
 - **Attendere la corsia lenta**: se lo scambio richiesto ha righe ancora in versione 1 e la corsia
@@ -415,7 +459,13 @@ una chiacchierata fitta ne fa il doppio.]
 **In diretta**: resta com'è sulle frasi **rivolte a Calliope** (domanda di un minore o di un
 ospite, due cancelli). Sulle righe della stanza nessun giudizio in diretta. Effetto immediato: il
 caso del 12/10 (frase storpiata nelle chiacchiere) non arriva più al rilevatore, a meno che non sia
-stata rivolta a Calliope.
+stata rivolta a Calliope. *Fatto al passo 0 (13/10)* per la compagnia: una frase senza il nome
+giudicata non rivolta (anche col giudizio in ombra) non vale per il rilevatore di pericolo
+(regola `pericolo_non_rivolta`, `Ciclo._pericolo_vale`, `guardiano.filtra(pericolo_vale=…)`):
+si risponde come sempre, il guardiano giudica ogni frase di Calliope, nel registro dei turni
+restano le sole categorie (`guardiano.pericolo_non_rivolta`). Un giudizio guasto o scaduto vale
+«rivolta». Fino al passo 6 queste chiacchiere non hanno nessun giudizio: è la scelta di chi
+amministra (decisione 4), e il conteggio della regola dice quanto spesso succede.
 
 **A posteriori** (`stanza/guardia.py`), solo negli scambi in cui **un minore ha parlato** (righe
 attribuite a lui con la voce sopra soglia, o in zona grigia):
@@ -444,7 +494,9 @@ attribuite a lui con la voce sopra soglia, o in zona grigia):
     uguale) e niente protezione a voce: il momento è passato, il ragazzo può non esserci più, e
     dire 112 in una stanza a minuti di distanza spaventa senza aiutare. Se il minore è ancora lì
     e lo scambio è aperto, il cancello 1 di oggi («Va tutto bene?») **una volta**, solo con
-    `stanza_guardia_cancello: true` (proposta: spento, domanda 4);
+    `stanza_guardia_cancello: true` (proposta: spento, domanda 4); *deciso il 13/10*: **solo
+    l'avviso al tutore sullo schermo personale**, mai il «Va tutto bene?» al ragazzo: l'opzione
+    `stanza_guardia_cancello` non si scrive;
   - `dubbio` → nessun avviso: un contatore per minore e argomento; due dubbi dello stesso
     argomento in giorni diversi entro 7 giorni → **un** avviso non urgente nel riepilogo;
   - `niente` → nulla.
@@ -455,7 +507,9 @@ attribuite a lui con la voce sopra soglia, o in zona grigia):
   settimana sulle giornate vere, letti da chi amministra solo come categorie e ore.
 - **Conservazione**: le righe del minore non vanno su disco (0028); l'esito del guardiano sì, senza
   testo (come `cancelli.json` e gli avvisi). Il primo segnale a posteriori resta in memoria per il
-  secondo giudizio, come oggi.
+  secondo giudizio, come oggi. *Superato il 13/10 per l'installazione di chi amministra*: con
+  `stanza_tenuta: {giorni: 60}` le righe del minore sono su disco col testo, e il guardiano a
+  posteriori può rileggere lo scambio anche dopo un riavvio; l'avviso resta senza parole.
 
 ### 3.10 Ospiti (secondario)
 
@@ -464,7 +518,40 @@ nel blocco caldo e scadono con lo scambio (mai nella ricerca, mai su disco); il 
 schermo dice «ascolto la stanza · c'è qualcuno che non conosco». In più una **modalità ospiti**
 a voce («Calliope, abbiamo ospiti»: chiunque può dirla, perché spegne e non accende) che ferma
 l'ascolto della stanza su quel satellite per `stanza_ospiti_ore` (proposta 4 h) o finché un adulto
-riconosciuto non dice «Calliope, ascolta di nuovo la stanza». Domanda 6.
+riconosciuto non dice «Calliope, ascolta di nuovo la stanza». Domanda 6. *Deciso il 13/10*:
+**«Calliope, abbiamo ospiti» spegne l'ascolto della stanza per 4 ore** su quel satellite
+(`stanza_ospiti_ore: 4`); detto da chiunque (spegne, non accende), con il segno sullo schermo
+«stanza in pausa: ospiti, fino alle …». Per le voci sconosciute fuori dalla modalità ospiti
+resta la proposta prudente qui sopra (solo blocco caldo, mai ricerca né disco).
+
+### 3.11 All'interpellazione si recupera prima (aggiunta del 13/10 sera)
+
+Il timore di chi amministra: si parla tra persone e poi subito «Calliope, tu che ne pensi?», e le
+ultime frasi non sono ancora trascritte, perché la coda della stanza ha la priorità più bassa
+(obiettivo p90 < 10 s, passo 1). La regola:
+
+- **Le frasi in coda di quel satellite passano davanti a tutto** quando arriva un turno con il
+  nome (o nella finestra): prima anche della frase del turno stesso nella coda di whisper, si
+  trascrivono i segmenti della stanza di quel satellite ancora in attesa o in corso, perché la
+  risposta li deve vedere. I segmenti di altri satelliti restano dietro.
+- **Con un tetto**: `stanza_recupero_max_s` (proposta 1,5 s) dall'arrivo del turno. Se il
+  recupero finisce prima, la risposta parte con tutto il contesto e nessuna frase d'attesa; se
+  no, parte la frase d'attesa (`attesa.stanza`, § 3.8) e la risposta aspetta il recupero, al più
+  fino a `stanza_attesa_max_s`; oltre, risponde con ciò che c'è e il blocco caldo lo segna
+  («ultime frasi non ancora trascritte»).
+- **Gli ultimi 30–60 s sempre alla lettera** nel contesto caldo (§ 3.5), anche se il riassunto è
+  indietro.
+- Non serve riconoscere «l'inizio di una conversazione»: ogni frase si trascrive appena il VAD la
+  chiude (§ 3.1); il recupero riguarda solo ciò che è ancora in coda in quel momento.
+- **Misura nuova, «copertura all'interpellazione»**: per ogni turno interpellato in stanza, quante
+  delle righe della stanza dette (chiuse dal VAD) prima dell'inizio della frase del turno sono nel
+  contesto della risposta (obiettivo: **tutte**), con la prima frase invariata (+0,1 s al più, come
+  il passo 2) oppure con la frase d'attesa; nel registro dei turni `stanza.copertura`
+  (`dette`, `nel_contesto`, `recupero_ms`, `attesa`), solo numeri.
+
+Costo atteso [stima]: un segmento di 3–5 s su whisper.cpp turbo sulla GPU è ~0,1–0,2 s (dalla
+misura di 0,03 s di calcolo per secondo di voce, § 5.5); due o tre segmenti in coda stanno sotto
+il tetto. Il caso peggiore è un segmento lungo (20 s, il tetto del § 3.1) appena chiuso: ~0,6 s.
 
 ## 4. Conservazione e decisioni da aggiornare
 
@@ -482,7 +569,13 @@ aggiorna la 0027 e la visione:
    regressione. Ha la sua tenuta, `stanza_tenuta`, **di serie `memoria`** (fino al riavvio, al più
    24 h, poi si cancella); le alternative (`giorni: N` su disco per i soli adulti) le sceglie chi
    amministra nel file locale (domanda 1). `conserva.decidi` ha una cosa nuova, `stanza`: ospiti e
-   minori mai su disco; nel dubbio con un minore no.
+   minori mai su disco; nel dubbio con un minore no. *Deciso il 13/10 (domanda 1, decisione
+   0029)*: nel repository resta `memoria`; nell'installazione di chi amministra
+   `stanza_tenuta: {giorni: 60}` **per tutti, famiglia e minori compresi**, come gli altri dati
+   degli adulti (60 giorni, `calliope conserva --svuota` svuota anche la stanza). Per la cosa
+   `stanza` `conserva.decidi` dice allora sì anche per i minori (con la tenuta accesa nel file
+   locale), mai per gli ospiti né per le righe in modalità ospiti. Resta fuori dalle misure (T1):
+   il banco e la regressione non leggono la stanza.
 3. **Registro di stanza nella 0027**: un terzo tipo di registro (`stanza:<corsia>`, del canale come
    l'anonimo), con una porta sola verso le persone: il blocco caldo nei dati del turno (visibilità
    «turno»), mai copiato nel registro della persona.
@@ -599,14 +692,14 @@ nel documento d'area. In ordine di valore.
 
 | # | Passo | Misura sulla DGX (obiettivo) | Si spegne con |
 |---|---|---|---|
-| 0 | **Subito, senza stanza**: in compagnia anche con le voci tutte registrate le **azioni** senza il nome si fermano (`compagnia_azioni_col_nome`, la regola del § 3.4 sui tool di sola lettura), la conversazione anonima non si chiude per `altra_persona` in compagnia, la frase senza nome giudicata non rivolta in ombra non passa dal rilevatore (oggi in ombra ci passa) | risposte con un'azione a frasi senza nome in compagnia (→ 0); chiusure `conversazione_altra_persona` sull'anonima (→ 0); falsi del rilevatore in compagnia (letti da chi amministra) | `compagnia_azioni_col_nome: false` |
-| 1 | **Stanza in ombra, sola trascrizione veloce**: protocollo v3, rubinetto e VAD della stanza sul satellite Python e sul telefono, coda STT con priorità, registro in memoria, segno sullo schermo, `stanza_pausa`, «dimentica». Niente nel contesto | `stt_s` dei turni invariato; prima frase invariata; ore di parlato al giorno per satellite; coda della stanza (ritardo p90 < 10 s); banda del telefono; righe scartate per motivo; un campione di righe riletto da chi amministra dal cruscotto (solo adulti) | `stanza: spenta` |
-| 2 | **Contesto caldo e rivolta con la stanza**: blocco nei dati del turno, scaldamento, giudice «rivolta» con le righe della stanza, frase non rivolta che resta nella stanza | `cache.riletti` e prima frase con e senza blocco (+0,1 s al più); rivolta riletta da chi amministra su un giorno vero (obiettivo: ≥ 90 % giusti sui brevi); banco di fantasia «cosa ha detto…» col modello (≥ 8/10) | `stanza_contesto: false` |
+| 0 | **Subito, senza stanza**: in compagnia anche con le voci tutte registrate le **azioni** senza il nome si fermano (`compagnia_azioni_col_nome`, la regola del § 3.4 sui tool di sola lettura), la conversazione anonima non si chiude per `altra_persona` in compagnia, la frase senza nome giudicata non rivolta in ombra non passa dal rilevatore (oggi in ombra ci passa). **Fatto il 13/10** (ramo `stanza-passo-0`, `prove/prova_compagnia_passo0.py`): regole `compagnia_azioni_col_nome`, `compagnia_anonima_continua`, `pericolo_non_rivolta`, contate nella sezione della compagnia di `calliope stato --turni` | risposte con un'azione a frasi senza nome in compagnia (→ 0); chiusure `conversazione_altra_persona` sull'anonima (→ 0); falsi del rilevatore in compagnia (letti da chi amministra) | `compagnia_azioni_col_nome: false`, `compagnia_anonima_condivisa: false`, `compagnia_pericolo_solo_rivolte: false` (uno per punto) |
+| 1 | **Stanza in ombra, sola trascrizione veloce**: protocollo v3, rubinetto e VAD della stanza sul satellite Python e sul telefono (con l'interruttore sul telefono, acceso di serie), coda STT con priorità e **recupero all'interpellazione** (§ 3.11), registro in memoria (su disco con `stanza_tenuta`), segno sullo schermo, `stanza_pausa`, «abbiamo ospiti», «dimentica». Niente nel contesto | `stt_s` dei turni invariato; prima frase invariata; ore di parlato al giorno per satellite; coda della stanza (ritardo p90 < 10 s); **recupero all'interpellazione** (tempo, quante volte oltre 1,5 s); banda del telefono; righe scartate per motivo; un campione di righe riletto da chi amministra dal cruscotto | `stanza: spenta` |
+| 2 | **Contesto caldo e rivolta con la stanza**: blocco nei dati del turno (ultimi 30–60 s sempre alla lettera), scaldamento, giudice «rivolta» con le righe della stanza, frase non rivolta che resta nella stanza | `cache.riletti` e prima frase con e senza blocco (+0,1 s al più); **copertura all'interpellazione** (§ 3.11: tutte le righe dette prima della domanda nel contesto, con la prima frase invariata o la frase d'attesa); rivolta riletta da chi amministra su un giorno vero (obiettivo: ≥ 90 % giusti sui brevi); banco di fantasia «cosa ha detto…» e «tu che ne pensi?» subito dopo le chiacchiere, col modello (≥ 8/10) | `stanza_contesto: false` |
 | 3 | **Corsia lenta**: ritrascrizione, finestre CAM++ sullo scambio, TV, allucinazioni, riassunto progressivo | WER e attribuzione su un set di scambi registrati da adulti consenzienti in `privato/` (riferimento scritto a mano); blocchi misti spezzati; GPU e memoria nel piano | `stanza_lenta: false` |
 | 4 | **`stanza_cerca` e frase d'attesa** (`attesa.stanza` in `frasi.py`, varianti in ombra come le altre) | quota di turni con la frase d'attesa (< 10 %); tempo del tool (p90 < 3 s); banco «di cosa parlavamo…» | tool fuori dagli schemi con `stanza_cerca: false` |
 | 5 | **Ascolto durante la voce** con il filtro dell'eco (§ 5.3) | eco residua < 2 ogni 100 parole; parole recuperate; righe false 0; prima su telefono in auto e portatile, misura manuale | `stanza_durante_voce: false` |
-| 6 | **Guardiano a posteriori in ombra**, poi acceso | segnali per ora di chiacchiera con un minore, per livello; falsi letti come categorie; acceso solo con < 1 acuto falso a settimana | `stanza_guardia: spenta|ombra|attiva` |
-| 7 | **Ospiti**: segno della voce sconosciuta, modalità ospiti a voce | quante ore in modalità ospiti; frasi di sconosciuti nel blocco | `stanza_ospiti: …` |
+| 6 | **Guardiano a posteriori in ombra**, poi acceso (solo avviso al tutore sullo schermo personale, deciso il 13/10) | segnali per ora di chiacchiera con un minore, per livello; falsi letti come categorie; acceso solo con < 1 acuto falso a settimana | `stanza_guardia: spenta|ombra|attiva` |
+| 7 | **Ospiti**: segno della voce sconosciuta; «abbiamo ospiti» (al passo 1) | quante ore in modalità ospiti; frasi di sconosciuti nel blocco | `stanza_ospiti: …` |
 | 8 | **Contenuti con un minore presente** (§ 3.7) in ombra, poi accesi | quante risposte avrebbero cambiato preset o chiesto «lo dico ad alta voce?» | `stanza_pubblico: ombra|attiva` |
 
 Il passo 0 serve anche senza la stanza e chiude subito il difetto principale del 12/10. Il passo 1
@@ -623,22 +716,46 @@ contrari: una persona che ripete una parola di Calliope, «grazie» detto sopra 
 `prova_stanza_guardia` (filtri: TV, gioco, attribuzione non sicura, parola storpiata a p < 0,5,
 tetto giornaliero, mai a voce vicino al minore).
 
-## 7. Domande per chi amministra
+## 7. Domande per chi amministra — **decise il 13/10**
+
+Le risposte di chi amministra (13/10) sono **vincolanti per la sua installazione**; i valori di
+serie del repository restano quelli prudenti, e la stanza si accende nel file locale. Le raccoglie
+la decisione [0029](../decisioni/0029-conversazione-di-stanza.md). Il contesto delle scelte, detto
+da lui: dentro la famiglia la privacy è relativa (Calliope gira in casa, e i minori non hanno
+privacy verso i genitori); la DGX oggi è in ufficio ma è temporaneo, e si progetta come se fosse
+in casa; le azioni solo per ciò che è sicuramente rivolto a Calliope (nome e voce); il guardiano
+in diretta spento sulle chiacchiere, a posteriori sulla trascrizione corretta.
 
 1. **Tenuta del testo della stanza**: solo in memoria fino al riavvio, al più 24 h (proposta), o
    anche su disco per i soli adulti, e per quanti giorni?
+   **Deciso**: su disco **per tutti, famiglia e minori compresi, 60 giorni**, come gli altri dati
+   (`stanza_tenuta: {giorni: 60}` nel file locale; nel repository `memoria`). Ospiti mai (§ 3.10).
 2. **Le parole di un minore nella ricerca**: proposta che un adulto non possa cercare a posteriori
    cosa ha detto il ragazzo (solo il blocco degli ultimi minuti, che ha sentito anche lui), e che i
    tutori ricevano solo gli avvisi del guardiano. Va bene, o i tutori devono poter cercare?
+   **Deciso**: i **tutori possono cercare** a posteriori anche ciò che ha detto il ragazzo; gli
+   altri adulti no (§ 3.7, § 3.8).
 3. **Seguiti senza il nome in stanza**: risposta a voce solo se il giudizio «rivolta» (con la
    stanza) dice sì e solo con tool di sola lettura (proposta), oppure il nome sempre?
+   **Deciso**: risposta solo se il giudizio «rivolta», con le righe della stanza, dice sì, e
+   **solo per rispondere: nessuna azione** senza il nome (§ 3.4). In compagnia già fatto al passo
+   0 (`compagnia_azioni_col_nome`).
 4. **Guardiano a posteriori**: per un segnale acuto sentito nelle chiacchiere, avviso al tutore
    sullo schermo personale (proposta) e anche il «Va tutto bene?» al ragazzo se è ancora lì
    (proposta: no)?
+   **Deciso**: **solo l'avviso al tutore sullo schermo personale**, niente «Va tutto bene?» al
+   ragazzo (§ 3.9). In diretta, sulle chiacchiere, nessun giudizio (passo 0:
+   `pericolo_non_rivolta`).
 5. **Telefono in auto**: l'ascolto della stanza in VPN sui dati mobili costa ~60–115 MB per ora di
    parlato: sempre, solo in Wi-Fi, o con un interruttore sul telefono?
+   **Deciso**: un **interruttore sul telefono, acceso di serie** (§ 3.1).
 6. **Ospiti**: le loro frasi solo nel blocco caldo e mai altrove (proposta), più «Calliope, abbiamo
    ospiti» che spegne la stanza per 4 h; oppure non trascriverle affatto?
+   **Deciso**: **«Calliope, abbiamo ospiti» spegne l'ascolto della stanza per 4 ore** (§ 3.10).
+   Per le voci sconosciute fuori da quella modalità resta la proposta prudente.
+
+Aggiunta di chi amministra del 13/10 sera, non una domanda: **all'interpellazione si recupera
+prima** (§ 3.11), con la misura «copertura all'interpellazione» (§ 6, passi 1 e 2).
 
 ## Fonti
 
