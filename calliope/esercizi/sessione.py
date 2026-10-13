@@ -847,7 +847,13 @@ class Servizio:
             self.sessioni[prof.id] = s
         if vecchia is not None and vecchia.aperta and vecchia.es is not None:
             vecchia.aperta = False
-        inizio = f"Facciamo {nome_argomento(arg)}, livello da {cl.detta()}.{nota}"
+        if s.oltre:
+            # Oltre il programma niente «livello da <classe>» (13/10, caso vero della DGX:
+            # «Facciamo frazioni, livello da terza elementare. Questo va un po' oltre il
+            # programma di terza elementare…» si contraddiceva)
+            inizio = f"Facciamo {con_articolo(arg)}.{nota}"
+        else:
+            inizio = f"Facciamo {con_articolo(arg)}, livello da {cl.detta()}.{nota}"
         if s.tappe_on:
             inizio += (f" È un percorso a {int(getattr(self.cfg, 'esercizi_tappe', 3) or 3)} "
                        f"tappe da {s.blocco} esercizi.")

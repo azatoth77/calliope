@@ -564,7 +564,12 @@ Decisioni di Dario del 12/10 sera dopo la rilettura del programma per classe. Pr
   chiesto di nuovo entro 10 minuti dal rifiuto (`esercizi_oltre_insiste`). Lo dice il codice
   («È un passo oltre il programma di terza elementare: proviamo», con varianti; regola
   `esercizi_oltre_programma`) e vale solo per quella sessione. `piu_facile` scende (e torna al
-  programma se era oltre).
+  programma se era oltre). *13/10*: oltre il programma l'apertura non dice più «livello da
+  <classe>» (caso vero della DGX col 26B: «Facciamo frazioni, livello da terza elementare. Questo
+  va un po' oltre il programma di terza elementare, ma proviamo.» si contraddiceva); ora «Facciamo
+  le frazioni. Questo va un po' oltre il programma…», e l'argomento ha l'articolo anche dentro il
+  programma («Facciamo le addizioni, livello da terza elementare.», `con_articolo`). Prova in
+  `prova_esercizi_programma`.
 - **Nessun livello adatto** (livello 0 della mappa, o una classe prima del suo intervallo, anche
   per logica, fisica e chimica senza mappa): «Nel programma di terza elementare non ci sono ancora
   le frazioni, e non ho esercizi adatti. Facciamo le addizioni o le sottrazioni? Se vuoi provare
