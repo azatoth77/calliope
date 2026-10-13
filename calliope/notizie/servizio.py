@@ -49,6 +49,7 @@ VOCI_RIPIEGO = 2
 VECCHIO_S = 6 * 3600            # l'ultimo scarico riuscito più vecchio: ripiego
 PRIMA_ATTESA_S = 4.0            # al più tanto si aspetta lo scarico alla prima richiesta
 GIRO_S = 300.0                  # ogni quanto il thread guarda se è ora di scaricare
+RIPROVA_SUBITO_S = 300.0        # dopo uno scarico fallito, la domanda non lo riprova prima
 ROBOTS_S = 24 * 3600
 DETTE_S = 6 * 3600              # i fatti già detti a una persona valgono per tante ore
 # Un feed fermo (età dell'ultima voce), per tema: una testata sportiva ferma da giorni è rotta,
@@ -465,6 +466,11 @@ class Notizie:
         self.richiesta()
         if self.fresco():
             return True
+        if (self._scarico_fatto.is_set()
+                and self.orologio() - self.ultimo_scarico < RIPROVA_SUBITO_S):
+            # Uno scarico appena tentato e non riuscito (internet giù): niente attesa a ogni
+            # domanda, si risponde con ciò che c'è (con la sua data) o con il ripiego
+            return False
         if self._scarico_fatto.is_set():
             self._scarico_fatto.clear()        # prima del thread: l'attesa qui sotto lo vede
             threading.Thread(target=self.scarica_tutti, name="notizie-subito",

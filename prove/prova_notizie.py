@@ -462,6 +462,16 @@ verifica("prima richiesta dopo la pausa: scarico subito, poi l'indice è fresco"
 verifica("prima richiesta: la richiesta resta segnata (lo scarico periodico si accende)",
          svc2.attivo())
 svc2.close()
+# Senza internet: uno scarico fallito da poco non si ritenta a ogni domanda (niente attesa)
+svc3 = Notizie(cfg, [Feed("Assente", "generale", srv.url("/manca.xml"))], ":memory:",
+               log=lambda *a: None, orologio=lambda: orologio[0], scarica=scarica)
+svc3.prepara()
+n_rich = len(srv.richieste)
+t0 = time.perf_counter()
+verifica("senza feed raggiungibili: la domanda dopo non riprova subito lo scarico",
+         svc3.prepara() is False and len(srv.richieste) == n_rich
+         and time.perf_counter() - t0 < 0.2, f"{time.perf_counter() - t0:.2f} s")
+svc3.close()
 
 # ─────────────────────────── 6. fatti ───────────────────────────
 fatti = svc.principali(n=3)
