@@ -27,6 +27,22 @@ file né test nuovi), test dell'agente, accettazione verde, e per la correzione 
 riproduzione (agenti/riproduzione.py) e le regole scattate. Alla fine una tabella per
 combinazione e caso, e `riepilogo.json` nella cartella d'uscita.
 
+**Giri** (`--giri N`, 13/10; predefinito 1 = un lavoro solo, come prima). Con N > 1 lo stesso
+budget di un lavoro si divide in N giri uguali: `agenti_max_passi` (24) diventa
+round(24 / N) passate per giro (24 / 2 = 12; il banco stampa il conto e il totale), il tetto di
+tempo `--minuti` diventa minuti / N per giro, e con esso il tetto dei token (token al minuto
+per i minuti del giro; anche `agenti_max_token`, se acceso, diviso per N). Così un lavoro a
+giri ha lo stesso budget totale di passate, tempo e token di un lavoro con un giro solo, e il
+confronto misura solo l'effetto della ripartenza. Al tetto di un giro il lavoro si ferma alla
+**tappa** della modalità sviluppo (`lav.tappe`, `_tappa` in agenti/ciclo.py: il contesto
+resta, compattato, e i file vanno nella cartella) e il banco chiama da sé `Lavori.continua`
+senza nota («Hai un altro giro di lavoro… Riprendi da dove eri…»); all'ultimo giro le tappe
+si spengono e il tetto chiude il lavoro come oggi («limite»). Nessuna modifica a Calliope:
+`lav.tappe` è un attributo del lavoro, qui acceso dal banco. Misure in più per lavoro: giri
+fatti, passate per giro, l'accettazione nascosta rifatta a ogni tappa sui file del giro, il
+giro dell'accettazione verde e quello della consegna, e «sbloccato» (alla prima tappa
+accettazione rossa, poi consegna «fatto» o accettazione verde in un giro dopo).
+
 **Sulla DGX quando è libera** (nessun lavoro dell'agente in corso: usa lo stesso vLLM e il
 container della sandbox), dalla cartella dei dati, con l'interprete di Calliope. Non cambia la
 configurazione di nessuno (i valori si cambiano solo in memoria), i file restano nella cartella
@@ -35,11 +51,14 @@ d'uscita:
     cd ~/calliope && V=~/.local/share/calliope/versioni/$(cat ~/.local/share/calliope/attuale) \\
         && $V/.venv/bin/python $V/prove/manuali/banco_temperatura.py \\
            [--temperature 0.4,0.6] [--presence 0,0.5] [--ripetizioni 2] \\
-           [--casi porte,convertitore,programma] [--minuti 20] [--uscita ~/banco-temperatura]
+           [--casi porte,convertitore,programma] [--minuti 20] [--giri 1] \\
+           [--uscita ~/banco-temperatura]
 
 A secco (nessun modello, anche sul portatile: il docker finto e il Node della macchina), per
 controllare il banco stesso: ogni accettazione fallisce sul punto di partenza e passa sulla
-soluzione di riferimento.
+soluzione di riferimento; e i giri con un agente finto (prove/ollama_finto.py): il giro 1 si
+ferma alla tappa, il banco chiama continua e il giro 2 consegna; senza consegna l'ultimo giro
+chiude con «limite»; con un giro solo il tetto chiude come prima.
 
     python prove/manuali/banco_temperatura.py --secco
 
@@ -220,8 +239,10 @@ def accettazione(sandbox_nuova, file: dict, caso: dict) -> dict:
         except Exception:  # noqa: BLE001 — un nome non ammesso: si salta
             pass
     if caso["tipo"] == "estensione" and not caso.get("gioco"):
-        shutil.copy(RADICE / "calliope" / "estensioni" / "_ospite.py",
-                    sb.root / "calliope_estensione.py")
+        # Dal pacchetto importato, non accanto al file (13/10: il banco lanciato da una copia
+        # fuori dal repository, con PYTHONPATH sulla versione installata)
+        import calliope.estensioni as E
+        shutil.copy(Path(E.__file__).parent / "_ospite.py", sb.root / "calliope_estensione.py")
     for rel, testo in (caso.get("aiuto") or {}).items():
         sb.scrivi(rel, testo)
     nome, testo = caso["accettazione"]
@@ -277,10 +298,107 @@ def secco() -> int:
         errori += not ok
         print(f"{'ok ' if ok else 'ERR'} i vincoli della correzione delle porte: il test che "
               "riproduce in gioco.test.js, prima rosso")
+        errori += secco_giri(tmp / "giri")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("\n" + ("TUTTO OK" if not errori else f"{errori} ERRORI"))
     return 1 if errori else 0
+
+
+CASO_SOMMA = {"tipo": "codice", "gioco": False, "correzione": False, "estensione": None,
+              "compito": "Scrivi somma.py con somma(a, b) che restituisce la somma.",
+              "prima": {}, "accettazione": ("test_nascosto_banco.py",
+                                            "from somma import somma\n\n\n"
+                                            "def test_somma():\n    assert somma(2, 3) == 5\n")}
+
+
+def secco_giri(tmp: Path) -> int:
+    """I giri (13/10) con l'agente finto di prove/ollama_finto.py e il servizio vero: budget
+    diviso, tappa al tetto del giro 1, «continua» chiamato dal banco, consegna al giro 2;
+    senza consegna l'ultimo giro chiude con «limite»; con un giro solo il tetto chiude come
+    prima (nessuna tappa). Le misure dei giri nella riga."""
+    from calliope.agenti import Lavori, carica
+    from calliope.config import Config
+    from prove.ollama_finto import FakeOllama
+
+    def scrivi(c):
+        return {"tool_calls": [{"name": "scrivi_file", "arguments": {
+            "percorso": "somma.py", "contenuto": f"def somma(a, b):\n    return {c}\n"}}]}
+    consegna = {"tool_calls": [{"name": "consegna", "arguments": {
+        "riassunto": "Somma corretta.", "esito": "fatto"}}]}
+    errori = 0
+
+    def verifica(nome, ok, dettaglio=""):
+        nonlocal errori
+        errori += not ok
+        print(f"{'ok ' if ok else 'ERR'} giri: {nome}" + ("" if ok else f"  {dettaglio}"))
+    tmp.mkdir(parents=True, exist_ok=True)
+    fake = FakeOllama(modelli=("agente-finto",)).avvia()
+    svc = None
+    try:
+        def servizio(giri, minuti=20.0):
+            cfg = Config()
+            cfg.agenti_url = fake.url
+            cfg.agenti_modello = "agente-finto"
+            cfg.agenti_risultati = str(tmp / "risultati")
+            cfg.agenti_sandbox = str(tmp / "sandbox")
+            cfg.agenti_sandbox_motore = "processo"
+            cfg.agenti_modelli = str(tmp / "modelli")
+            cfg.llm_native_url = "http://127.0.0.1:9"
+            cfg.agenti_conferma = "mai"
+            cfg.agenti_max_passi = 6
+            b = dividi_budget(cfg, giri, minuti)
+            return cfg, b, Lavori(cfg, carica(cfg), log=lambda *a: None)
+
+        cfg, b, svc = servizio(2)
+        verifica("budget diviso: 6 passate in 2 giri = 3 per giro, 20 minuti = 10 per giro",
+                 b["passate_giro"] == 3 and b["passate_totali"] == 6
+                 and cfg.agenti_max_passi == 3 and cfg.agenti_tempo_max_min == 10.0
+                 and svc.agente.max_passi == 3 and svc.agente.tempo_max_s == 600, str(b))
+        c2 = SimpleNamespace(agenti_max_passi=24, agenti_max_token=0)
+        b2 = dividi_budget(c2, 5, 20)
+        verifica("arrotondato: 24 passate in 5 giri = 5 per giro (25 in tutto), 4 minuti",
+                 b2["passate_giro"] == 5 and b2["passate_totali"] == 25
+                 and c2.agenti_tempo_max_min == 4.0, str(b2))
+        # 1. Giro 1 al tetto (3 passate sbagliate) → tappa; giro 2: giusta e consegna
+        fake.copione = [scrivi("a - b"), scrivi("a * b"), scrivi("b - a"), scrivi("a + b"),
+                        consegna]
+        r = un_lavoro(svc, cfg, tmp, "somma", CASO_SOMMA, "secco g=2", giri=2)
+        pg = r["per_giro"]
+        verifica("giro 1 fermo alla tappa al tetto delle passate, accettazione rossa",
+                 len(pg) == 2 and pg[0]["esito"] == "tappa"
+                 and pg[0]["tipo_limite"] == "passate" and pg[0]["accettazione"] is False,
+                 str(pg))
+        verifica("il banco chiama continua: il giro 2 riparte dal contesto e consegna",
+                 r["esito"] == "fatto" and r["riuscito"] and r["giri"] == 2
+                 and r["passate_giri"] == [3, 2] and r["giro_consegna"] == 2
+                 and r["giro_accettazione"] == 2 and r["sbloccato"] is True
+                 and any("Hai un altro giro di lavoro" in str(m.get("content"))
+                         for q in fake.richieste for m in q.get("messages") or []),
+                 json.dumps({k: v for k, v in r.items() if k != "per_giro"},
+                            ensure_ascii=False, default=str)[:800])
+        # 2. Nessuna consegna: l'ultimo giro chiude il lavoro con «limite», non con una tappa
+        fake.copione = [scrivi("a - b")] * 8
+        r = un_lavoro(svc, cfg, tmp, "somma", CASO_SOMMA, "secco g=2", giri=2)
+        verifica("senza consegna: tappa al giro 1, l'ultimo giro chiude con «limite»",
+                 r["giri"] == 2 and r["per_giro"][0]["esito"] == "tappa"
+                 and r["esito"] == "limite" and r["giro_consegna"] is None
+                 and r["sbloccato"] is False and r["passate_giri"] == [3, 3],
+                 f"{r['esito']} {r['per_giro']}")
+        svc.close()
+        # 3. Contrario: un giro solo, il tetto chiude come prima (nessuna tappa)
+        cfg, b, svc = servizio(1)
+        fake.copione = [scrivi("a - b")] * 8
+        r = un_lavoro(svc, cfg, tmp, "somma", CASO_SOMMA, "secco", giri=1)
+        verifica("contrario: con un giro solo 6 passate e «limite», come prima",
+                 b["passate_giro"] == 6 and r["esito"] == "limite" and r["giri"] == 1
+                 and r["passate"] == 6 and r["sbloccato"] is None
+                 and colonna_giri([r]) == "-", f"{r['esito']} {r['per_giro']}")
+    finally:
+        if svc is not None:
+            svc.close()
+        fake.ferma()
+    return errori
 
 
 # ═══════════════════════════ sulla DGX ═══════════════════════════
@@ -315,7 +433,25 @@ def aspetta(svc, lav, limite_s: float):
     return None
 
 
-def un_lavoro(svc, cfg, uscita: Path, nome: str, caso: dict, etichetta: str) -> dict:
+def dividi_budget(cfg, giri: int, minuti: float) -> dict:
+    """Il budget di un lavoro diviso in `giri` giri uguali, solo in memoria (13/10): passate
+    arrotondate (24 / 2 = 12; 24 / 5 = 5, 25 in tutto: il conto lo stampa main), minuti / giri
+    per giro (il tetto dei token segue i minuti; agenti_max_token, se acceso, diviso anche
+    lui). Con giri = 1 tutto come prima."""
+    giri = max(1, int(giri))
+    passate = int(cfg.agenti_max_passi)
+    per_giro = max(1, int(passate / giri + 0.5))
+    cfg.agenti_max_passi = per_giro
+    cfg.agenti_tempo_max_min = float(minuti) / giri
+    if int(getattr(cfg, "agenti_max_token", 0) or 0) > 0:
+        cfg.agenti_max_token = max(1, int(cfg.agenti_max_token / giri + 0.5))
+    return {"giri": giri, "passate_lavoro": passate, "passate_giro": per_giro,
+            "passate_totali": per_giro * giri, "minuti_giro": round(float(minuti) / giri, 2),
+            "minuti_totali": float(minuti)}
+
+
+def un_lavoro(svc, cfg, uscita: Path, nome: str, caso: dict, etichetta: str,
+              giri: int = 1) -> dict:
     from calliope.agenti.ciclo import segnali_giro
     from calliope.agenti.sandbox import Sandbox
     lav = svc.nuovo(caso["tipo"], caso["compito"], "banco", "Ottavio", "amministra",
@@ -327,14 +463,9 @@ def un_lavoro(svc, cfg, uscita: Path, nome: str, caso: dict, etichetta: str) -> 
     if caso.get("correzione"):
         lav.correzione = True
         lav.problema_correzione = caso["problema"]
-    t0 = time.time()
-    svc.avvia(lav)
-    aspetta(svc, lav, cfg.agenti_tempo_max_min * 60 + 180)
-    minuti = (time.time() - t0) / 60
-    ris = lav.risultato or {}
-    # Senza la cartella del risultato non si prende quella del banco (12/10: copiava il banco
-    # dentro sé stesso fino a «troppi file»)
-    cartella = Path(ris["cartella"]) if ris.get("cartella") else None
+    # Con più giri (13/10) il tetto di un giro è una tappa, come in un lavoro della modalità
+    # sviluppo (sviluppo.py lo accende così); con un giro solo resta spento, come prima
+    lav.tappe = giri > 1
     iso = svc.scegli_isolamento()
     k = [0]
 
@@ -342,10 +473,44 @@ def un_lavoro(svc, cfg, uscita: Path, nome: str, caso: dict, etichetta: str) -> 
         k[0] += 1
         return Sandbox(uscita / "verifica" / f"{etichetta}-{nome}-{lav.id}-{k[0]}", 30, 1024,
                        isolamento=iso, linguaggi=svc.isolamenti)
+    t0 = time.time()
+    svc.avvia(lav)
+    per_giro = []
+    for g in range(1, max(1, giri) + 1):
+        tg, p0, k0 = time.time(), lav.passi, lav.token
+        aspetta(svc, lav, cfg.agenti_tempo_max_min * 60 + 180)
+        r = lav.risultato or {}
+        info = {"giro": g, "passate": lav.passi - p0, "token": lav.token - k0,
+                "minuti": round((time.time() - tg) / 60, 2), "esito": r.get("esito"),
+                "tipo_limite": r.get("tipo_limite"), "test_passano": r.get("test_passano")}
+        per_giro.append(info)
+        if not svc.in_tappa(lav):
+            break
+        # La tappa: l'accettazione nascosta sui file del giro, poi un giro nuovo senza nota
+        cart = Path(r["cartella"]) if r.get("cartella") else None
+        info["accettazione"] = bool(cart and cart.is_dir()
+                                    and accettazione(nuova, file_di(cart), caso)["verde"])
+        if g + 1 >= giri:
+            lav.tappe = False        # l'ultimo giro: il tetto chiude il lavoro come oggi
+        svc.continua(lav)
+    if svc.in_tappa(lav):            # non dovrebbe succedere: si chiude comunque
+        lav.annulla.set()
+    minuti = (time.time() - t0) / 60
+    ris = lav.risultato or {}
+    # Senza la cartella del risultato non si prende quella del banco (12/10: copiava il banco
+    # dentro sé stesso fino a «troppi file»)
+    cartella = Path(ris["cartella"]) if ris.get("cartella") else None
     acc = accettazione(nuova, file_di(cartella), caso) if cartella and cartella.is_dir() else {
         "verde": False, "esito": None, "uscita": "nessuna cartella"}
+    per_giro[-1]["accettazione"] = acc["verde"]
     seg = segnali_giro(lav, cfg.agenti_max_passi)
     fatto = (ris.get("esito") == "fatto" or lav.stato == "fatto")
+    giro_acc = next((x["giro"] for x in per_giro if x.get("accettazione")), None)
+    giro_consegna = per_giro[-1]["giro"] if fatto else None
+    sbloccato = None
+    if giri > 1:
+        sbloccato = bool(len(per_giro) > 1 and not per_giro[0].get("accettazione")
+                         and (fatto or acc["verde"]))
     riga = {"caso": nome, "variante": etichetta, "lavoro": lav.id, "stato": lav.stato,
             "esito": ris.get("esito"), "motivo": ris.get("motivo"),
             "riuscito": bool(fatto and acc["verde"]), "accettazione": acc["verde"],
@@ -355,23 +520,39 @@ def un_lavoro(svc, cfg, uscita: Path, nome: str, caso: dict, etichetta: str) -> 
             "a_vuoto": seg.get("a_vuoto", False), "test_agente": ris.get("test"),
             "riproduzione": (getattr(lav, "riproduzione", None) or {}).get("stato"),
             "regole": dict(((lav.segnali or {}).get("regole") or {})),
-            "cartella": str(cartella)}
+            "cartella": str(cartella),
+            "giri": len(per_giro), "giri_max": giri, "giro_accettazione": giro_acc,
+            "giro_consegna": giro_consegna, "sbloccato": sbloccato,
+            "passate_giri": [x["passate"] for x in per_giro], "per_giro": per_giro}
     if not acc["verde"]:
         riga["accettazione_uscita"] = acc["uscita"][-600:]
     return riga
 
 
+def colonna_giri(rr: list[dict]) -> str:
+    """Per un gruppo di lavori a giri (13/10): le accettazioni verdi per giro («g1+g2»: 2+3 =
+    due verdi al primo giro, tre al secondo) e gli sbloccati («s2»). «-» con un giro solo."""
+    n = max([int(r.get("giri_max") or 1) for r in rr] or [1])
+    if n <= 1:
+        return "-"
+    verdi = [sum(1 for r in rr if r.get("giro_accettazione") == g) for g in range(1, n + 1)]
+    return "+".join(map(str, verdi)) + f" s{sum(1 for r in rr if r.get('sbloccato'))}"
+
+
 def tabella(righe: list[dict]):
-    print("\nvariante                caso          riusciti  acc.  passate  token(med)  "
-          "giri a vuoto  minuti(med)")
+    print("\nvariante                    caso          riusciti  acc.  passate  token(med)  "
+          "giri a vuoto  minuti(med)  giri")
     chiavi = sorted({(r["variante"], r["caso"]) for r in righe})
     for v, c in chiavi:
         rr = [r for r in righe if r["variante"] == v and r["caso"] == c]
         med = lambda k: statistics.median([r[k] for r in rr]) if rr else 0  # noqa: E731
-        print(f"{v:<23} {c:<13} {sum(r['riuscito'] for r in rr)}/{len(rr):<7} "
+        print(f"{v:<27} {c:<13} {sum(r['riuscito'] for r in rr)}/{len(rr):<7} "
               f"{sum(r['accettazione'] for r in rr)}/{len(rr):<3} {med('passate'):>7} "
               f"{med('token'):>10} {sum(r['ripetizioni'] + (1 if r['a_vuoto'] else 0) for r in rr):>13} "
-              f"{med('minuti'):>11}")
+              f"{med('minuti'):>11}  {colonna_giri(rr)}")
+    if any(int(r.get("giri_max") or 1) > 1 for r in righe):
+        print("giri: accettazioni verdi per giro (giro 1 + giro 2 …) e sN = sbloccati dopo la "
+              "ripartenza")
     for v in sorted({r["variante"] for r in righe}):
         rr = [r for r in righe if r["variante"] == v]
         print(f"TOTALE {v}: {sum(r['riuscito'] for r in rr)}/{len(rr)} riusciti, "
@@ -391,16 +572,28 @@ def main(argv) -> int:
     ap.add_argument("--presence", default="0,0.5")
     ap.add_argument("--ripetizioni", type=int, default=2)
     ap.add_argument("--casi", default="porte,convertitore,programma")
-    ap.add_argument("--minuti", type=float, default=20.0, help="tetto di tempo per lavoro")
+    ap.add_argument("--minuti", type=float, default=20.0, help="tetto di tempo per lavoro "
+                    "(con --giri N diviso per N: lo stesso tempo in tutto)")
+    ap.add_argument("--giri", type=int, default=1, help="giri per lavoro: le passate e il "
+                    "tempo divisi in N giri uguali, con la tappa e «continua» tra un giro e "
+                    "l'altro (1 = come prima)")
     ap.add_argument("--uscita")
     args = ap.parse_args(argv)
     if args.secco:
         return secco()
+    if args.giri < 1:
+        ap.error("--giri vuole un numero da 1 in su")
     from calliope.agenti import Lavori, carica
     from calliope.config import load_config
     cfg = load_config()
     cfg.agenti_conferma = "mai"
-    cfg.agenti_tempo_max_min = args.minuti
+    # Prima di creare il servizio: l'agente legge passate e tempo da cfg quando nasce
+    budget = dividi_budget(cfg, args.giri, args.minuti)
+    if args.giri > 1:
+        print(f"Giri: {budget['passate_lavoro']} passate in {args.giri} giri = "
+              f"{budget['passate_giro']} per giro ({budget['passate_totali']} in tutto), "
+              f"{budget['minuti_giro']} minuti per giro ({budget['minuti_totali']:g} in tutto)",
+              flush=True)
     imp = carica(cfg)
     if imp is None:
         print("Nessun agente configurato in questa cartella (serve la configurazione di "
@@ -432,13 +625,15 @@ def main(argv) -> int:
         for rip in range(args.ripetizioni):
             for t in temperature:
                 for pp in presenze:
-                    etichetta = f"t={t:g} pp={pp:g}"
+                    etichetta = f"t={t:g} pp={pp:g}" + (f" g={args.giri}" if args.giri > 1
+                                                         else "")
                     # Solo in memoria: il servizio e l'agente leggono cfg a ogni passata
                     cfg.agenti_temperatura = t
                     cfg.agenti_presence_penalty = {k: pp for k in vecchie[1]}
                     for nome in scelti:
                         print(f"\n— {etichetta}, {nome}, ripetizione {rip + 1}", flush=True)
-                        r = un_lavoro(svc, cfg, uscita, nome, tutti[nome], etichetta)
+                        r = un_lavoro(svc, cfg, uscita, nome, tutti[nome], etichetta,
+                                      giri=args.giri)
                         righe.append(r)
                         print(f"{'ok ' if r['riuscito'] else 'NO '} {nome} {etichetta}: "
                               f"accettazione {'verde' if r['accettazione'] else 'rossa'}, "
@@ -446,7 +641,12 @@ def main(argv) -> int:
                               f"{r['minuti']} min, giri a vuoto {r['ripetizioni']}"
                               f"{' (a vuoto)' if r['a_vuoto'] else ''}, esito {r['esito']}"
                               + (f", riproduzione {r['riproduzione']}" if r["riproduzione"]
-                                 else ""), flush=True)
+                                 else "")
+                              + (f"; giri {r['giri']} (passate {r['passate_giri']}), "
+                                 f"accettazione verde al giro {r['giro_accettazione']}, "
+                                 f"consegna al giro {r['giro_consegna']}, "
+                                 f"sbloccato {r['sbloccato']}" if args.giri > 1 else ""),
+                              flush=True)
                         (uscita / "righe.json").write_text(json.dumps(
                             righe, ensure_ascii=False, indent=1), encoding="utf-8")
     finally:
@@ -455,7 +655,7 @@ def main(argv) -> int:
     tabella(righe)
     riepilogo = {"agente": imp.modello, "data": datetime.datetime.now().isoformat(
         timespec="seconds"), "temperature": temperature, "presence": presenze,
-        "ripetizioni": args.ripetizioni, "casi": scelti,
+        "ripetizioni": args.ripetizioni, "casi": scelti, "giri": args.giri, "budget": budget,
         "minuti": round((time.time() - t0) / 60, 1), "righe": righe}
     (uscita / "riepilogo.json").write_text(json.dumps(riepilogo, ensure_ascii=False, indent=1),
                                            encoding="utf-8")

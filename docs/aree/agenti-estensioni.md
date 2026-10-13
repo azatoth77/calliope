@@ -2919,3 +2919,27 @@ finiscono con «me lo descrivi in un altro modo?» (regole `correzione_rimandata
 `correzione_non_riprodotta` nel log dell'agente); se l'agente usa `esegui_js` e se i giri a vuoto
 dei giochi calano; `agente_test_instabili`; il banco della temperatura (comando nel suo
 docstring).
+
+## Il banco a giri: fermarsi e ripartire con lo stesso budget (13/10, ramo `banco-giri`)
+
+Domanda: un agente che si incaglia (test rossi, nessuna consegna) si sblocca se si ferma e
+riparte dal suo diario? `prove/manuali/banco_temperatura.py --giri N` (predefinito 1, il banco
+di prima invariato) divide il budget di un lavoro in N giri uguali, **solo in memoria**:
+`agenti_max_passi` diventa round(24 / N) passate per giro (24 / 2 = 12; il banco stampa il conto
+e il totale, 24 / 5 = 5 cioè 25), `--minuti` diventa minuti / N per giro e con lui il tetto dei
+token (token al minuto per i minuti del giro; `agenti_max_token`, se acceso, diviso per N).
+Scelta: **budget totale uguale** a quello di un lavoro con un giro, perché il confronto misuri
+la ripartenza e non un budget più grande. Al tetto di un giro il lavoro va alla **tappa** della
+modalità sviluppo (`lav.tappe = True`, lo stesso attributo che accende `sviluppo.py`; `_tappa`
+in `agenti/ciclo.py`) e il banco chiama da sé `Lavori.continua(lav)` senza nota; prima
+dell'ultimo giro spegne `lav.tappe`, e il tetto dell'ultimo giro chiude il lavoro come oggi
+(«limite»). **Nessuna modifica sotto `calliope/`.** Misure in più: giri fatti, passate per giro,
+accettazione nascosta rifatta a ogni tappa sui file del giro, giro dell'accettazione verde e
+della consegna, «sbloccato» (alla prima tappa accettazione rossa, poi consegna «fatto» o
+accettazione verde); colonna `giri` nella tabella («2+3 s1»: verdi al giro 1 e al giro 2,
+sbloccati) e in `riepilogo.json` (`giri`, `budget`, per riga `per_giro`). Nota: alla tappa
+l'avviso di fine giro è quello delle tappe («il lavoro continua da qui con i tuoi file»), non
+«chiudi»; all'ultimo giro quello di sempre. `--secco` ora prova anche i giri con l'agente finto
+(`prove/ollama_finto.py`) e il servizio vero: tappa al giro 1, `continua`, consegna al giro 2;
+senza consegna «limite» all'ultimo giro; con un giro solo nessuna tappa (portatile: tutto ok).
+Da lanciare sulla DGX (convertitore, t 0,6, presence 0 / 0,25 / 0,5, `--giri 2`).
