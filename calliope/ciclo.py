@@ -3261,7 +3261,10 @@ class Ciclo:
         brain, rec = self.brain, self.rec
         if t.non_rivolta:
             return self._registra_non_rivolta(t)
-        rec.update(risposta=" ".join(t.said), tool=brain.last_tools)
+        # Gli argomenti di un minore senza i valori (13/10: in memoria restano quelli veri)
+        from .brain import tools_per_registro
+        rec.update(risposta=" ".join(t.said),
+                   tool=tools_per_registro(getattr(brain, "last_tools", None)))
         # Lo stato del dialogo in ombra (10/10, calliope/stato_dialogo.py): interprete del
         # modello e corsia veloce accanto alla decisione di oggi, senza testo
         if getattr(brain, "last_dialogo_ombra", None):

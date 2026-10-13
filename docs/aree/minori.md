@@ -702,3 +702,13 @@ sono «…». Restano con le parole: i comandi della casa (`[CASA] «accendi…�
 dispositivo e non la conversazione) e le frasi fisse dette fuori da una risposta. Prova
 `prova_console_minori`.
 
+**13/10 (ramo `minori-piccoli`): in memoria gli argomenti veri.** Gli argomenti mascherati finivano
+anche in `Brain.last_tools`, che non è solo il registro: lo leggono il confronto in ombra della
+macchina a stati (`stato_dialogo._args_diretta`), il ciclo (le richieste ai tutori) e la prova col
+modello degli esercizi, che vedevano `{'azione': '…'}` al posto di `{'azione': 'piu_difficile'}`.
+Ora in memoria restano gli argomenti veri (come prima del 12/10; tool `riservato`, `segreti`, ospiti
+e testo scritto da uno schermo come prima) e il mascheramento vale solo per il terminale e per il
+registro dei turni: `brain.tools_per_registro` in `Ciclo._registra_risposta` (senza un minore la
+lista stessa). Il registro degli eventi non cambia: prende gli argomenti dalla chiamata del modello,
+non da `last_tools`. Prova `prova_console_minori` (in memoria i veri, scritti «…», contrari).
+

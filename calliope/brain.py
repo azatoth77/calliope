@@ -1527,6 +1527,27 @@ def _final_text(content: str) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
+# Gli argomenti di una chiamata di un minore come vanno nel registro dei turni (13/10): una
+# chiave di `last_tools` che resta in memoria e non va su disco (tools_per_registro)
+ARGOMENTI_REGISTRO = "_argomenti_registro"
+
+
+def tools_per_registro(tools) -> list[dict]:
+    """`Brain.last_tools` come va nel registro dei turni: per le chiamate di un minore gli
+    argomenti senza i valori («…», decisione 0028 T1) al posto di quelli veri, che restano in
+    memoria per la logica del turno (stato_dialogo, ciclo). Copie: `tools` non cambia. Senza
+    chiamate di un minore la lista stessa, come prima del 13/10."""
+    if not any(isinstance(t, dict) and ARGOMENTI_REGISTRO in t for t in tools or ()):
+        return tools
+    out = []
+    for t in tools or ():
+        if isinstance(t, dict) and ARGOMENTI_REGISTRO in t:
+            t = {**{k: v for k, v in t.items() if k != ARGOMENTI_REGISTRO},
+                 "argomenti": dict(t[ARGOMENTI_REGISTRO] or {})}
+        out.append(t)
+    return out
+
+
 # Contratto dei risultati dei tool, letto da Brain (03/10, analisi del comportamento): oggi
 # le forme sono tante ({ora, fuso}, {ok, conferma}, {errore}, {ok: false, fatto: "NIENTE…",
 # motivo}, da_dire solo per calcola…), e Brain decideva il successo con regole diverse in
@@ -5050,12 +5071,17 @@ class Brain:
         # Gli argomenti di un ospite non vanno nel terminale (sulla DGX: il journal), come nel
         # registro dei turni (03/10, analisi di sicurezza S9)
         quiet = private or level == "ospite"
+        # Ciò che va nel terminale e nel registro dei turni quando è diverso da ciò che resta in
+        # memoria in `last_tools` (13/10): per un minore
+        su_disco = None
         if level == "ospite":
             shown = {}
         elif self.console_riservata() == "minore":
-            # Un minore (12/10 sera, decisione 0028 T1): i nomi degli argomenti dati, senza i
-            # valori, come per i documenti di casa; il risultato «(riservato)»
-            shown = {k: "…" for k, v in args.items() if v not in (None, "")}
+            # Un minore (12/10 sera, decisione 0028 T1): nel terminale e nel registro dei turni
+            # i nomi degli argomenti dati, senza i valori, come per i documenti di casa; il
+            # risultato «(riservato)». In memoria (`last_tools`) gli argomenti veri, dal 13/10:
+            # li leggono il confronto in ombra della macchina a stati (stato_dialogo) e il ciclo
+            su_disco = {k: "…" for k, v in args.items() if v not in (None, "")}
             quiet = True
         if hidden:
             if not isinstance(getattr(self, "last_secrets", None), list):
@@ -5067,7 +5093,7 @@ class Brain:
         if scritta:
             from .schermi.moduli import oscura, oscura_tutto
             shown = oscura_tutto(shown)
-        print(f"   [TOOL] {call['name']}({shown})", flush=True)
+        print(f"   [TOOL] {call['name']}({shown if su_disco is None else su_disco})", flush=True)
         prima = getattr(self, "prima_del_tool", None)
         if callable(prima) and not prima():
             # La frase non era rivolta a Calliope (09/10): niente azione, la risposta si tace
@@ -5193,6 +5219,10 @@ class Brain:
                                    if getattr(self, "_nome_inventato", None) else {}),
                                 **({"sconosciuto": True} if spec is None
                                    and call["name"] not in NOMI_VECCHI else {}),
+                                # Gli argomenti per il registro dei turni (13/10, un minore):
+                                # li mette al posto di quelli veri tools_per_registro
+                                **({ARGOMENTI_REGISTRO: su_disco} if su_disco is not None
+                                   else {}),
                                 **corr})
         self._nome_inventato = None
         # Il risultato di un tool non fidato (web, estensioni, archivio, agenti) entra nella

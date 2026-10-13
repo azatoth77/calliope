@@ -17,7 +17,10 @@ nomi degli argomenti, le frasi del modello «…».
 - `Brain` con un backend finto: una dichiarazione trattenuta, una chiamata con un argomento di
   testo e il suo risultato, una risposta ripetuta; nessuna parola del minore in tutto l'output;
   contrario: con un adulto si vedono;
-- `conserva.console_riservata`: ospite, minore, dubbio, adulto.
+- `conserva.console_riservata`: ospite, minore, dubbio, adulto;
+- (13/10) in memoria, in `Brain.last_tools`, gli argomenti veri anche per un minore (li leggono
+  il confronto in ombra di stato_dialogo e il ciclo); nel registro dei turni (`Ciclo.
+  _registra_risposta`, `brain.tools_per_registro`) e nel terminale il solo nome.
 Niente audio, modelli né rete: ~1 s.
 """
 import contextlib
@@ -33,7 +36,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import prova_minori_cancelli as MC  # noqa: E402
 
 from calliope import conserva, corsie, minori  # noqa: E402
-from calliope.brain import Brain  # noqa: E402
+from calliope.brain import ARGOMENTI_REGISTRO, Brain, tools_per_registro  # noqa: E402
 from calliope.ciclo import Ciclo, Servizi, Turno  # noqa: E402
 from calliope.config import Config  # noqa: E402
 from calliope.cortesia import Cortesia  # noqa: E402
@@ -114,6 +117,33 @@ def prova_ciclo():
     out, _ = turno(None, f"Calliope, ho {SEGRETO}.", come=None)
     verifica("ospite: come prima", SEGRETO not in out and "(una frase di un ospite)" in out,
              out[-300:])
+    # Il registro dei turni (13/10): dalla lista in memoria di Brain, con gli argomenti veri,
+    # quelli di un minore senza valori; la lista in memoria non cambia
+    vero = {"nome": "esercizi", "argomenti": {"azione": "piu_difficile"}, "ok": True,
+            ARGOMENTI_REGISTRO: {"azione": "…"}}
+    adulto = {"nome": "ricorda", "argomenti": {"fatto": SEGRETO}, "ok": True}
+    cervello.last_tools = [vero, adulto]
+    t = Turno(text="Calliope, più difficile.", speaker_name="Tommaso",
+              prof_turno=persone.get("Tommaso"))
+    c.rec = {}
+
+    def registra():
+        try:
+            c._registra_risposta(t)
+        except AttributeError:
+            pass    # i controlli dopo (uscita, guardiano) vogliono un turno vero: qui non servono
+    cattura(registra)
+    scritti = c.rec.get("tool") or []
+    verifica("registro dei turni: gli argomenti di un minore senza valori",
+             len(scritti) == 2 and scritti[0].get("argomenti") == {"azione": "…"}
+             and ARGOMENTI_REGISTRO not in scritti[0], scritti)
+    verifica("registro dei turni: le altre chiamate come sono",
+             len(scritti) == 2 and scritti[1] == adulto, scritti)
+    verifica("registro dei turni: in memoria gli argomenti veri restano",
+             cervello.last_tools[0]["argomenti"] == {"azione": "piu_difficile"})
+    cervello.last_tools = [adulto]
+    verifica("contrario: senza un minore la lista stessa, come prima",
+             tools_per_registro(cervello.last_tools) is cervello.last_tools)
     minori.avvisi().close()
 
 
@@ -151,9 +181,23 @@ def prova_brain():
     verifica("Brain, minore: nessuna parola sua né del modello nel terminale",
              SEGRETO not in out and "[TOOL] ricorda(" in out, out[-400:])
     verifica("Brain, minore: gli argomenti con il solo nome", "'fatto': '…'" in out, out[-400:])
+    # 13/10: in memoria (`last_tools`, letto da stato_dialogo e dal ciclo) gli argomenti veri;
+    # nel registro dei turni il solo nome (tools_per_registro)
+    fatte = [x for x in b.last_tools if x.get("nome") == "ricorda"]
+    verifica("Brain, minore: in memoria gli argomenti veri",
+             bool(fatte) and fatte[0].get("argomenti") == {"fatto": SEGRETO},
+             fatte and fatte[0].get("argomenti"))
+    reg = [x for x in tools_per_registro(b.last_tools) if x.get("nome") == "ricorda"]
+    verifica("Brain, minore: per il registro dei turni il solo nome",
+             bool(reg) and reg[0].get("argomenti") == {"fatto": "…"}
+             and SEGRETO not in json.dumps(reg, ensure_ascii=False), reg)
     b = brain_per("Carlo", "amministra")
     out = cattura(lambda: "".join(b.stream_reply(f"Ricorda che ho {SEGRETO}.", "amministra")))
     verifica("contrario: Brain, adulto → si vedono come prima", SEGRETO in out, out[-300:])
+    fatte = [x for x in b.last_tools if x.get("nome") == "ricorda"]
+    verifica("contrario: Brain, adulto → nessun argomento a parte per il registro",
+             bool(fatte) and ARGOMENTI_REGISTRO not in fatte[0]
+             and fatte[0].get("argomenti") == {"fatto": SEGRETO})
 
 
 def prova_decisione():
