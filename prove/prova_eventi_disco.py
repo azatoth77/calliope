@@ -368,6 +368,8 @@ def prova_dimentica_ciclo(modo: str):
     b.conv.owner = "dario-id"
     for spec in conversazioni_specs():
         b.tools.register(spec)
+    # La barra del contesto sullo schermo (13/10): il prefisso misurato all'avvio
+    b.prefix_tokens = 3_000
     c.speaker_ctx.current_speaker = "Dario"         # riconosciuto: il tool è dei familiari
     sb.frase(b.tool_ctx.speaker_ctx, "Dario")
     # Una conversazione di prima, già archiviata (si cancella come prima)
@@ -404,6 +406,11 @@ def prova_dimentica_ciclo(modo: str):
     verifica(f"{modo}: la regola e il campo nel registro dei turni",
              "conversazioni_dimenticate" in (r.get("regole") or ())
              and r.get("conversazioni_dimenticate") == "in_corso", str(r)[:300])
+    dopo = r.get("contesto_dopo") or {}
+    verifica(f"{modo}: la barra del contesto torna al solo prefisso (prompt e tool), non l'uso "
+             "dell'ultima risposta con la storia di prima (quello che va allo schermo)",
+             dopo.get("token") == 3_000 and (dopo.get("finestra") or 0) > 3_000,
+             str(dopo))
     if registri is not None:
         ev = (registri.della_corsia("persona:dario-id").eventi()
               + registri.della_corsia(b.conv.chiave).eventi())

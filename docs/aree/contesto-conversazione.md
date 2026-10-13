@@ -1137,3 +1137,12 @@ che il modello riceve senza la frase di prova, niente nei byte dell'archivio né
 eventi, regola e campo nel registro dei turni. Senza la correzione con `spento` 4 controlli su 7
 falliscono (e il campo anche con `ombra`). `prova_politica`: la domanda della politica con la
 conseguenza dopo il «?» resta in sospeso e il «sì» da solo la esegue (prima no).
+
+**13/10 — la barra del contesto dopo «dimentica».** Dopo «dimentica le nostre conversazioni» (e
+dopo «ricominciamo da capo», `conversazione_nuova`) lo schermo personale mostrava ancora l'uso
+dell'ultima risposta, con tutta la storia appena cancellata: la barra si aggiorna solo a fine
+risposta. Ora, chiusa la conversazione, il ciclo manda subito l'uso vero della conversazione
+vuota: il solo prefisso (prompt di sistema e tool, `Brain.prefix_tokens`, misurato all'avvio)
+nella stessa finestra (`Ciclo._contesto_azzerato`); nel registro dei turni il campo
+`contesto_dopo`, in console «[CONTESTO] … (conversazione nuova)». Senza la misura del prefisso
+non si manda niente. Prova: `prova_eventi_disco.prova_dimentica_ciclo`.

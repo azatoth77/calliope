@@ -3663,7 +3663,41 @@ class Ciclo:
             self.rec["conversazione_nuova"] = True
         self.brain.end_conversation("nuova")
         self.last_question = None
+        self._contesto_azzerato()
         return True
+
+    def _contesto_azzerato(self):
+        """Dopo una conversazione chiusa a richiesta («dimentica», «ricominciamo»: 13/10) la
+        barra dello schermo mostrava ancora l'uso dell'ultima risposta, con tutta la storia di
+        prima. La conversazione nuova è vuota: occupa il solo prefisso (prompt di sistema e
+        tool, `Brain.prefix_tokens`, misurato all'avvio), nella stessa finestra. Senza la misura
+        del prefisso non si manda niente."""
+        # Tollerante a un Ciclo parziale delle prove (senza servizi né turno in corso)
+        servizi = getattr(self, "s", None)
+        brain, schermi = self.brain, getattr(servizi, "schermi", None)
+        prefisso = getattr(brain, "prefix_tokens", None)
+        rec = getattr(self, "rec", None)
+        ultimo = ((rec or {}).get("contesto") if rec is not None else None) \
+            or getattr(brain, "last_context", None) or {}
+        finestra = ultimo.get("finestra") if isinstance(ultimo, dict) else None
+        if not finestra:
+            try:
+                finestra = contesto.finestra(servizi.cfg)
+            except Exception:  # noqa: BLE001 — senza la finestra la barra resta com'è
+                finestra = None
+        uso_ctx = contesto.uso(prefisso, finestra)
+        if not uso_ctx:
+            return None
+        brain.last_context = uso_ctx
+        if rec is not None:
+            rec["contesto_dopo"] = dict(uso_ctx)
+        print(f"   {contesto.riga(uso_ctx)} (conversazione nuova)", flush=True)
+        if schermi is not None:
+            try:
+                schermi.contesto(schermi.mittente(self.tool_ctx), uso_ctx)
+            except Exception:  # noqa: BLE001 — la barra non deve fermare il turno
+                pass
+        return uso_ctx
 
     def _conversazioni_dimenticate(self):
         """«Dimentica le nostre conversazioni» (conversazioni_dimentica, al «sì»): l'archivio e il
@@ -3691,6 +3725,7 @@ class Ciclo:
             dimentica = getattr(self.brain, "dimentica_conversazione", None)
             if callable(dimentica):
                 dimentica()
+            self._contesto_azzerato()
         arch = getattr(self.tool_ctx, "conversazioni", None)
         if arch is not None and hasattr(arch, "pulisci_wal"):
             arch.pulisci_wal()
