@@ -3682,6 +3682,15 @@ class Brain:
         last = getattr(self, "last_turn_at", None)
         idle = float(getattr(self.cfg, "storia_inattiva_s", 0) or 0)
         reason = None
+        if owner is not _UNSET and owner != key and self._anonima_condivisa(owner, key):
+            # In compagnia (13/10, passo 0 della conversazione di stanza): la conversazione
+            # anonima del satellite resta, condivisa da chi è lì (regola
+            # `compagnia_anonima_continua`); chi ha detto cosa lo dicono i dati del turno
+            self._rule("compagnia_anonima_continua")
+            print("   [STORIA] in compagnia: parla un'altra persona, la conversazione di "
+                  "gruppo continua", flush=True)
+            self._c().condivisa = True
+            owner = key
         if owner is not _UNSET and owner != key:
             reason = "conversazione_altra_persona"
         elif idle > 0 and last is not None and time.monotonic() - last > idle:
@@ -3695,6 +3704,51 @@ class Brain:
                    else "troppo tempo dall'ultimo turno")
             print(f"   [STORIA] conversazione chiusa: {why}", flush=True)
         self.conv_owner = key
+
+    def _anonima_condivisa(self, owner, key) -> bool:
+        """La conversazione anonima del satellite non si chiude quando cambia chi parla (13/10,
+        passo 0 della conversazione di stanza, docs/ricerche/2026-10-13-conversazione-di-stanza.md
+        § 3.4; caso vero del 12/10 in auto: «conversazione chiusa: parla un'altra persona» a ogni
+        passaggio tra chi amministra e il ragazzo). Solo:
+          - la conversazione anonima di un satellite («ospite:<corsia>», voci incerte e frasi
+            brevi): quelle delle persone sono già una per persona (corsie.scegli);
+          - in compagnia (`speaker_ctx.compagnia`): più voci lì, e ciò che Calliope ha detto ad
+            alta voce l'hanno sentito tutte (i risultati riservati e personali sono già sigillati
+            a fine turno, _seal_private, o dalla proiezione degli eventi);
+          - tra due persone registrate, oppure senza voci sconosciute in compagnia (allora una
+            frase «ospite» è una delle persone di casa presenti, non riconosciuta per la frase
+            breve). Con una voce sconosciuta di mezzo resta la chiusura di prima: è il caso del
+            03/10, la password del wifi ripetuta a un ospite.
+        I permessi restano per frase (ToolRegistry.call), la proposta in sospeso vale solo per la
+        sua persona (_take_pending), le intenzioni per persona (valore.py). Vincolo sulla forma
+        della conversazione, non sul significato (principio 10); `compagnia_anonima_condivisa:
+        false` lo spegne."""
+        if not getattr(self.cfg, "compagnia_anonima_condivisa", True):
+            return False
+        sc = getattr(self.tool_ctx, "speaker_ctx", None)
+        if sc is None or not getattr(sc, "compagnia", False):
+            return False
+        chiave = str(getattr(self._c(), "chiave", "") or "")
+        if not chiave.startswith("ospite:"):
+            return False
+        if owner is not None and key is not None:
+            return True
+        return not getattr(sc, "compagnia_sconosciute", False)
+
+    def _nota_gruppo(self) -> str:
+        """Nei dati del turno, per la conversazione anonima condivisa in compagnia (13/10): chi
+        ha detto le frasi di prima, dalla più vecchia (le etichette `_chi` dei messaggi della
+        persona, scritte quando sono arrivati: i messaggi non cambiano, la cache resta). "" se
+        la conversazione non è condivisa."""
+        if not getattr(self._c(), "condivisa", False):
+            return ""
+        chi = [m.get("_chi") for m in self.history if m.get("role") == "user"]
+        chi = [c for c in chi if c][:-1] if chi else []
+        prima = ", ".join(chi[-12:]) if chi else ""
+        return ("Conversazione di gruppo vicino a questo satellite: le frasi di prima sono di più "
+                "persone presenti" + (f" (dalla più vecchia: {prima})" if prima else "")
+                + "; ciò che hai detto l'hanno sentito tutte; permessi e azioni sono di chi parla "
+                "adesso.")
 
     def _seal_private(self, start: int):
         """I risultati dei tool riservati (documenti di casa) e personali (promemoria,
@@ -3882,9 +3936,14 @@ class Brain:
                                     and (m.get("content") or "").strip()][-8:]
         if user_text is not None:
             # Provenienza della frase (05/10, calliope/provenienza.py): voce, breve, scritto…
-            self.history.append({"role": "user", "content": user_text,
-                                 "_prov": provenienza.persona(getattr(
-                                     self.tool_ctx, "speaker_ctx", None))})
+            msg_u = {"role": "user", "content": user_text,
+                     "_prov": provenienza.persona(getattr(self.tool_ctx, "speaker_ctx", None))}
+            if str(getattr(self._c(), "chiave", "") or "").startswith("ospite:"):
+                # Chi l'ha detta, nella conversazione anonima del satellite (13/10): per i
+                # dati del turno quando è condivisa in compagnia (_nota_gruppo). Mai nel testo
+                msg_u["_chi"] = (getattr(getattr(self.tool_ctx, "speaker_ctx", None),
+                                         "current_speaker", None) or "voce non riconosciuta")
+            self.history.append(msg_u)
             self._allega_dati()
             self._trim_history()
             if not Brain.eventi_attivo(self):
@@ -4629,6 +4688,10 @@ class Brain:
             who += " " + storpiata
             if "forma_storpiata" not in (getattr(self, "last_rules", None) or ()):
                 self._rule("forma_storpiata")
+        # La conversazione anonima condivisa in compagnia (13/10, passo 0 della stanza)
+        gruppo = self._nota_gruppo()
+        if gruppo:
+            who += " " + gruppo
         return [{"role": "system", "content": TURN_CONTEXT_MSG.format(
             ora=f"{now:%H:%M}", giorno=_GIORNI[now.weekday()],
             data=f"{now.day} {_MESI[now.month - 1]} {now.year}", chi=who)}]

@@ -101,6 +101,10 @@ class Conversazione:
         self.vivo_da: int | None = None
         self.finestra_da = None
         self.indice_argomenti: str | None = None
+        # La conversazione anonima di un satellite condivisa in compagnia (13/10, passo 0 della
+        # conversazione di stanza, Brain._anonima_condivisa): più persone presenti, ognuna con
+        # i suoi permessi per frase. Solo in memoria
+        self.condivisa = False
 
     # ── stato ──
     def vuota(self) -> bool:

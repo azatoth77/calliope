@@ -1479,6 +1479,22 @@ class Config:
     compagnia_rivolta: str = "ombra"
     compagnia_rivolta_modello: str = ""
     compagnia_rivolta_timeout_s: float = 2.0
+    # Passo 0 della conversazione di stanza (13/10, decisione 0029, caso vero del 12/10 in auto
+    # con le voci tutte riconosciute). In compagnia una frase senza il nome nella finestra
+    # d'ascolto riceve una risposta e le letture, mai un'azione: «Dimmi pure "Calliope, …" e lo
+    # faccio.» (regola `compagnia_azioni_col_nome`; il «sì» della stessa persona alla proposta
+    # in sospeso passa)
+    compagnia_azioni_col_nome: bool = True
+    # In compagnia, con le voci tutte riconosciute, la conversazione anonima del satellite (voci
+    # incerte, frasi brevi) non si chiude più quando cambia chi parla: è condivisa da chi è lì, le
+    # frasi della persona hanno il nome nei dati del turno, i permessi restano per frase (regola
+    # `compagnia_anonima_continua`). Con una voce sconosciuta di mezzo si chiude come prima
+    compagnia_anonima_condivisa: bool = True
+    # In compagnia una frase senza il nome giudicata «non rivolta a Calliope» (anche col giudizio
+    # in ombra) non passa dal rilevatore di pericolo: le chiacchiere non si giudicano in diretta
+    # (decisione 0029, risposta 4 di chi amministra; regola `pericolo_non_rivolta`). Il
+    # guardiano sulle frasi di Calliope resta. Un giudizio guasto o scaduto vale «rivolta»
+    compagnia_pericolo_solo_rivolte: bool = True
     speaker_enroll_phrases: int = 5      # frasi di arruolamento (con 5: Dario rifiutato 4 %)
     speaker_enroll_min_s: float = 1.5     # voce minima per una frase di arruolamento
     # Una registrazione della voce senza frasi valide per questo tempo si chiude da sola:
@@ -2652,7 +2668,9 @@ SEZIONI: dict[str, list[str]] = {
                   "compagnia_voce_min_s", "compagnia_soglia_gruppi", "compagnia_gruppi_min_s",
                   "compagnia_gruppo_lungo_s", "compagnia_nome_obbligatorio",
                   "compagnia_rivolta", "compagnia_rivolta_modello",
-                  "compagnia_rivolta_timeout_s", "speaker_enroll_phrases", "speaker_enroll_min_s", "speaker_enroll_timeout_s",
+                  "compagnia_rivolta_timeout_s", "compagnia_azioni_col_nome",
+                  "compagnia_anonima_condivisa", "compagnia_pericolo_solo_rivolte",
+                  "speaker_enroll_phrases", "speaker_enroll_min_s", "speaker_enroll_timeout_s",
                   "speaker_adapt_threshold",
                   "speaker_adapt_alpha", "speaker_adapt_max_drift"],
     "minori": ["minori_enabled", "minori_margine_ambiguo", "minori_margine_amministra",

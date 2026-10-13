@@ -27,6 +27,45 @@ REFUSAL = {
 # In compagnia (09/10, calliope/compagnia.py) un'azione vuole la voce riconosciuta nella frase
 COMPAGNIA_RIPETI = ("Ci sono altre voci qui vicino e non sono sicura di chi parla: ripetimelo "
                     "con una frase un po' più lunga, cominciando con il mio nome.")
+# In compagnia, senza il nome (13/10, passo 0 della conversazione di stanza): solo letture.
+# `{nome}` è il primo nome della wake word (Calliope, o «Computer» nella modalità startrek)
+COMPAGNIA_NOME = "Dimmi pure «{nome}, …» e lo faccio."
+
+
+def senza_nome_in_compagnia(spec, name: str, arguments: dict, ctx) -> dict | None:
+    """Regola `compagnia_azioni_col_nome` (13/10, passo 0 della conversazione di stanza,
+    docs/ricerche/2026-10-13-conversazione-di-stanza.md § 3.4; decisione 0029 punto 3). In
+    compagnia (`speaker_ctx.compagnia`, più voci vicino al satellite) una frase presa nella
+    finestra d'ascolto senza il nome può avere una risposta e delle letture (classe d'effetto E0,
+    valore.effetto: ora, meteo, ricerche, agenda letta), mai un'azione: il 12/10 in auto, con le
+    voci tutte riconosciute, le chiacchiere negli 8 s dopo una risposta arrivavano al modello con
+    i tool. Eccezione: il «sì» della stessa persona alla proposta in sospeso (la proposta è nata da
+    una richiesta sua; `tool_in_sospeso` c'è solo se la domanda era per chi parla). È un vincolo
+    di permesso su un'azione già scelta dal modello (principio 10). Si spegne con
+    `compagnia_azioni_col_nome: false`. None = si prosegue."""
+    sc = getattr(ctx, "speaker_ctx", None)
+    cfg = getattr(ctx, "cfg", None)
+    if (sc is None or not getattr(sc, "compagnia", False)
+            or not getattr(sc, "senza_nome", False)
+            or not getattr(cfg, "compagnia_azioni_col_nome", True)):
+        return None
+    from .. import valore
+    if valore.effetto(name, arguments, spec) == valore.E0:
+        return None
+    if name == getattr(ctx, "tool_in_sospeso", None):
+        return None
+    note_rule(ctx, "compagnia_azioni_col_nome")
+    nomi = list(getattr(cfg, "wake_names", None) or ())
+    nome = (str(nomi[0]).strip().capitalize() if nomi else "") or str(
+        getattr(cfg, "name", "") or "Calliope")
+    frase = COMPAGNIA_NOME.format(nome=nome)
+    print(f"   [TOOL] {name}: in compagnia senza il nome, niente azioni", flush=True)
+    return {"ok": False, "fatto": NIENTE,
+            "motivo": "in compagnia, senza il nome, posso solo rispondere o leggere",
+            "per_il_resto": "per le domande e le letture chiama i tool come sempre",
+            "conferma": frase, "risposta_finale": frase}
+
+
 # Una frase breve (meno di un secondo di voce) vale al più come familiare. Per chi amministra
 # con una frase che non basta, dal 04/10 la frase di sfida (conferme.chiedi_conferma), non più
 # «dimmelo con una frase un po' più lunga» del 03/10
@@ -285,6 +324,12 @@ class ToolRegistry:
         if fermo is not None:
             note_rule(ctx, "consenso_irriconoscibile")
             print(f"   [POLITICA] {name}: consenso_irriconoscibile", flush=True)
+            return json.dumps(fermo, ensure_ascii=False)
+        # In compagnia, una frase presa senza il nome nella finestra d'ascolto (13/10, passo 0
+        # della conversazione di stanza, decisione 0029): solo letture. Le azioni vogliono il
+        # nome, anche con le voci tutte riconosciute (caso vero del 12/10 in auto)
+        fermo = senza_nome_in_compagnia(spec, name, arguments or {}, ctx)
+        if fermo is not None:
             return json.dumps(fermo, ensure_ascii=False)
         # «Sì» breve di chi amministra al tool proposto, in una conversazione in cui la sua
         # voce era già stata riconosciuta e con l'impronta compatibile (conferme.py): per

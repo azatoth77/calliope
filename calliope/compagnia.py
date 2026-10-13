@@ -230,7 +230,9 @@ class Compagnia:
 # ─────────────────────────── calliope stato --turni ───────────────────────────
 
 REGOLE = ("voci_compagnia", "compagnia_nome", "compagnia_senza_breve",
-          "compagnia_voce_nella_frase", "pericolo_compagnia", "non_rivolta_ombra", "non_rivolta")
+          "compagnia_voce_nella_frase", "pericolo_compagnia", "non_rivolta_ombra", "non_rivolta",
+          # passo 0 della conversazione di stanza (13/10)
+          "compagnia_azioni_col_nome", "compagnia_anonima_continua", "pericolo_non_rivolta")
 
 
 def riassunto(turni: list[dict]) -> dict:
