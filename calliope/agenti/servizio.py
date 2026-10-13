@@ -1346,6 +1346,16 @@ class Lavori:
             self.log(f"[AGENTI] {lav.id}: nella cartella di partenza " + ", ".join(scritti))
 
     def _analisi_prima(self, lav: Lavoro, sb, gioco: bool) -> dict | None:
+        """`_analisi_prima_` senza eccezioni: un errore qui non ferma il lavoro."""
+        try:
+            return self._analisi_prima_(lav, sb, gioco)
+        except Exception as e:  # noqa: BLE001
+            self.log(f"[AGENTI] {lav.id}: analisi prima del codice non fatta: "
+                     f"{type(e).__name__}: {e}")
+            lav.accettazione = {"stato": "non_fatta", "perche": type(e).__name__}
+            return None
+
+    def _analisi_prima_(self, lav: Lavoro, sb, gioco: bool) -> dict | None:
         """L'analisi prima del codice (13/10, flusso a fasi parte 2, agenti/accettazione.py):
         una passata a sé del modello dell'agente. Per un'estensione scrive gli esempi di
         accettazione (test_accettazione.py in sola lettura); in un lavoro nuovo trova le

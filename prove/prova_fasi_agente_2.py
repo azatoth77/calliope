@@ -252,6 +252,7 @@ def _servizio(risposte, accesa=True, sviluppi=None):
     log = []
     s = SimpleNamespace(cfg=cfg, log=log.append, sviluppi=sviluppi, imp=SimpleNamespace(
         modello="agente-finto"), cliente=ClienteFinto(risposte), arbitro=None)
+    s._analisi_prima_ = lambda lav, sb, gioco: Lavori._analisi_prima_(s, lav, sb, gioco)
     s.analisi = lambda lav, sb, gioco=False: Lavori._analisi_prima(s, lav, sb, gioco)
     s.esito = lambda lav, sb, ris: Lavori._esito_accettazione(s, lav, sb, ris)
     return s, log
