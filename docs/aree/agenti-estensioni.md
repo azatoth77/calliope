@@ -14,6 +14,7 @@
 | Modalità sviluppo (08/10): un'estensione o un programma come iter a fasi | solo libreria standard; lo stato su disco accanto ai lavori (`sviluppi.json`) | `calliope/sviluppo.py` → `Sviluppi` (`corrente`, `apri`, `passa`, `proposto`, `avviato`, `lavoro_finito`, `estensione_approvata`, `dati_turno`, `promemoria_giorno`, `scheda`, `totali`, `riepilogo_lavoro`, `frase_pronto`), `passo_interno`, `estraneo`, `confronto` e `esempi_veri` (diagnosi dei collaudi, 08/10 notte); tool `sviluppo_apri`, `sviluppo_passo` (azioni in `AZIONI`), `sviluppo_collauda`, `sviluppo_chiedi`, `sviluppo_correggi` in `calliope/tools/sviluppo.py` (prima del 08/10 `sviluppo` e `sviluppo_prova`; `controlla_nuovo`, `apri_se_serve`); `Estensioni.prova_candidata`, `Estensioni.revisione`, `differenze` (`calliope/estensioni/servizio.py`); progetto [`docs/ricerche/2026-10-08-modalita-sviluppo.md`](../ricerche/2026-10-08-modalita-sviluppo.md); prove `prova_sviluppo.py`, `prova_sviluppo_v2.py`, `prova_sviluppo_giro3.py` … `prova_sviluppo_giro6.py`, `prova_diagnosi_collaudi.py`, `prova_scheda_sviluppo.py`, `prova_sviluppo_ollama.py`; dal 12/10 la specifica viva (`Sviluppi.aggiorna_requisiti`, `requisiti.chiedi_modifica`, `applica`, `specifica_da_requisiti`, `frase_cambi`; prova `prova_specifica_viva.py`) |
 | Sonde dell'agente e ricollaudo alla consegna (08/10 notte) | solo libreria standard; il container delle estensioni per il ricollaudo, `RetePubblica` per le sonde | `calliope/sonde.py` → `ricollaudo`, `casi_da_riprovare`, `sonda`, `sonde_ok`, `host_noti`, `concedi`, `vocabolario`, `Vocabolario`, `controlla_url`, `come_l_ha_letto`, `SONDA_RETE`; `Estensioni.prova_bozza` (`estensioni/servizio.py`), `restringi_per_sonda` (`estensioni/manifesto.py`), `Lavori._controlla_estensione` (`agenti/servizio.py`), `Agente._sonda_rete` (`agenti/ciclo.py`); nomi pubblici di casa in `calliope/web/rete.py` → `nomi_casa`; specifica in [`docs/ricerche/2026-10-08-sonde-agente.md`](../ricerche/2026-10-08-sonde-agente.md) § 9; prove `prova_sonde.py`, `prova_sonde_attacchi.py` |
 | La correzione da un test rosso, i test del disegno dei giochi, esegui_js, i test due volte (12/10 sera, flusso a fasi parte 1) | solo libreria standard; il container di Node dei test JavaScript | `calliope/agenti/riproduzione.py` → `controlla`, `messaggio_agente`, `NON_CODICE`; `Agente._riproduzione`, `_test_falliti` (due esecuzioni, `diagnosi.instabili`), `ESEGUI_JS` in `agenti/ciclo.py`; `Sandbox.esegui_js`, `Sandbox.test(fumo=False)`; apriGioco e creaCaso (JavaScript) in `agenti/fumo_js.mjs`, globali nei test da `agenti/test_js.mjs`; `VINCOLO_RIPRODUCI` in `tools/sviluppo.py`; banco `prove/manuali/banco_temperatura.py`; prova `prova_fasi_agente.py` |
+| L'analisi prima del codice, gli esempi di accettazione in sola lettura, «da guardare tu», la spinta a consegnare, i test di partenza delle estensioni (13/10, flusso a fasi parte 2) | solo libreria standard; il modello dell'agente in una passata a sé (`requisiti.chiama`) | `calliope/agenti/accettazione.py` → `analizza`, `interpreta`, `test_python`, `domanda`, `vincolo`; `Lavori._analisi_prima`, `_esito_accettazione`, `_prepara_cartella_estensione`; `scheletri.TEST_ESTENSIONE`, `prepara_estensione`; `SPINTA_CONSEGNA`, `AVVISO_FINE` («verde»), `nota_riscrittura` in `agenti/ciclo.py`; `Sviluppi.segna_accettazione`, `segna_provati`; `requisiti.esiti` (`da_guardare`); prova `prova_fasi_agente_2.py` |
 | Estensioni permanenti e guardrail (04/10) | container della sandbox (Docker) per ogni chiamata, JSON-RPC su stdin/stdout (cornice stdio di MCP, senza SDK), solo libreria standard | `calliope/guardrail.py` → `valuta_porta`, `SecondoParere`, `domanda` (la porta delle estensioni: sicura / pericolosa / vietata; i tool di Calliope li decide `politica.decidi` dal 06/10); `calliope/estensioni/` → `Estensioni` (`servizio.py`), `Porta` (`porta.py`), `Esecuzione` (`esecuzione.py`), `Archivio` (`archivio.py`: versioni, impronta), `valida` (`manifesto.py`), `analizza` (`analisi.py`), runtime `_ospite.py` (nel container: `calliope_estensione`), prompt dell'agente (`prompt.py`: `sistema_estensione`), contratto delle capacità (`contratto.py`: `testo`, `CAPACITA_IDS`, CAPACITA.md); rete solo pubblica `calliope/web/rete.py` → `RetePubblica` (registro `uscite.jsonl`, `riepilogo`), dati riservati nel traffico `calliope/web/riservati.py` → `Riservati`, `da_contesto`; piano e permessi dell'agente in `agenti/ciclo.py` (`PIANO`, `CHIEDI_PERMESSO`, `_piano`, `_fuori_piano`); tool `estensione_gestisci` (era `estensioni_gestisci`) in `calliope/tools/estensioni.py`, la creazione passa da `sviluppo_apri` dal 08/10 (prima `estensione_crea`); progetto in `docs/ricerche/2026-10-04-estensioni-e-guardrail.md` (§11–§14 dal 05/10) |
 
 ## Problemi noti
@@ -2891,7 +2892,8 @@ niente la anticipa e niente le chiude la strada (sotto, «Per la parte 2»).
    accettazione è rossa alla partenza e verde sulla soluzione di riferimento (fatto sul
    portatile: tutto ok; il percorso dei lavori provato con un cliente finto sul caso del
    programma). Il predefinito (`agenti_temperatura: 0.4`) si cambia solo se la tabella lo
-   giustifica.
+   giustifica. *(Storico: dal 13/10 è 0,6, il valore della scheda; il banco ha mostrato che
+   la temperatura non è la leva, sotto «parte 2».)*
 
 **Profilo ridotto da 8 GB.** Oggi lì l'agente non c'è (il codice dell'agente non si esegue su
 Windows senza container): niente cambia per la voce, niente modelli né memoria in più. Se un
@@ -2943,3 +2945,135 @@ l'avviso di fine giro è quello delle tappe («il lavoro continua da qui con i t
 (`prove/ollama_finto.py`) e il servizio vero: tappa al giro 1, `continua`, consegna al giro 2;
 senza consegna «limite» all'ultimo giro; con un giro solo nessuna tappa (portatile: tutto ok).
 Da lanciare sulla DGX (convertitore, t 0,6, presence 0 / 0,25 / 0,5, `--giri 2`).
+
+## Flusso dell'agente a fasi, parte 2, e il banco della temperatura (13/10, ramo `flusso-fasi-2`)
+
+**Le misure da cui parte** (banco della temperatura sulla DGX, 12–13/10, caso «convertitore»:
+estensione nuova, convertitore di distanze con «unità astronomiche»). A temperatura 0,6 con
+presence_penalty 0 / 0,25 / 0,5 riescono 3 / 0 / 4 lavori su 7: rumore, la leva non è il
+campionamento. Con `--giri 2` (12 + 12 passate) 0 su 7. Dentro i lavori: in 4 su 7 il codice era
+giusto (accettazione nascosta verde) già a metà e alla fine anche i test dell'agente passavano,
+ma l'agente **non ha chiamato consegna** nemmeno dopo l'avviso di chiusura, e il lavoro è finito
+«limite»; le passate se ne andavano a riscrivere file interi (passo 9 tutto `estensione.py`,
+passo 10 tutto `test_estensione.py`); in un lavoro 41 test su 41 in errore con `esegui() missing
+1 required positional argument: 'calliope'`; con presence 0,25 o 0,5 a volte il contrario,
+consegna «fatto» con l'accettazione rossa.
+
+**Una causa in più, trovata qui**: nel banco il convertitore partiva **senza il runtime**
+(`calliope_estensione.py`, con `CalliopeFinta`) nella cartella. Il flusso vero lo mette nei file
+di partenza (`tools/estensioni.py`, `tools/sviluppo.py`), il banco no, e il servizio lo segnava
+in sola lettura: l'agente non poteva né importarlo né scriverlo. Probabile origine dei test con
+la firma sbagliata (senza la Calliope finta, `esegui(dati)`). **Le misure del convertitore del
+12–13/10 vanno lette con questo limite**; dal 13/10 il servizio lo mette sempre.
+
+Un commit per passo:
+
+1. **Temperatura 0,6** (`agenti_temperatura`, prima 0,4): il valore della scheda di Qwen3.6 per il
+   codice con il ragionamento; il commento nella Config cita le misure. presence_penalty
+   invariata (0,5 per le estensioni).
+2. **I test di partenza delle estensioni** (`scheletri.TEST_ESTENSIONE`, `prepara_estensione`,
+   `Lavori._prepara_cartella_estensione`). Per un'estensione che non è un gioco, prima della prima
+   passata: il runtime in sola lettura se manca (anche quando il servizio l'ha già segnato: la
+   prima versione falliva lì, preso dal `--secco` del banco), e `test_estensione.py` se nella
+   cartella non c'è nessun test (una modifica tiene i suoi), modificabile: `chiama(dati,
+   risposte=…, negate=…)` passa a `esegui(dati, calliope)` la Calliope finta già pronta, un primo
+   test passa con qualunque estensione che risponde con una frase anche senza input, e il
+   commento «aggiungi qui i tuoi casi». Il prompt e lo scheletro dicono che c'è già e di
+   aggiungere i casi con `modifica_file`; l'esempio nei commenti è neutro (niente casi del
+   banco). Lo scheletro dell'estensione nel prompt resta sotto 1 600 caratteri (1 571). Gira
+   così com'è nella sandbox (docker finto della prova; sulla DGX da vedere nel banco).
+3. **Consegna quando i suoi test passano** (`agenti/ciclo.py`). Dopo il primo `esegui_test` tutto
+   verde (tutti i test, almeno uno eseguito) con i file che il lavoro chiede
+   (`_pronto_da_consegnare`: per un'estensione o un gioco `controlla_consegna` senza i nomi,
+   dopo il piano; per un programma un file di codice), **una volta per lavoro** la spinta
+   «I tuoi test passano: se il lavoro è finito chiama consegna ora; altrimenti scrivi in una riga
+   cosa manca e continua con il prossimo strumento.» (regola `agente_spinta_consegna`). L'avviso
+   di chiusura, se l'ultimo `esegui_test` era verde e da allora nessun file è cambiato
+   (`segnali["test_verde"]`), è `AVVISO_FINE["verde"]` («I tuoi test passano: chiama consegna
+   adesso…»), in uno sviluppo `verde_tappa` («se il lavoro è finito…»). **Mai consegna
+   d'ufficio**: senza consegna il lavoro finisce al tetto come prima.
+4. **Parte 2 del flusso a fasi** (ricerca [`2026-10-12-flusso-agente-fasi`](../ricerche/2026-10-12-flusso-agente-fasi.md)
+   § 5.1 passi 3 e 4, domande 1, 2 e 4). `calliope/agenti/accettazione.py`, `Lavori._analisi_prima`:
+   prima che l'agente scriva il codice, **una passata a sé** del modello dell'agente (contesto
+   nuovo, senza codice; lo schema chiuso e la temperatura 0 di `requisiti.chiama`, senza
+   ragionamento, al più `agenti_accettazione_s` = 90 s) legge i requisiti numerati dello sviluppo
+   (quelli che si possono fare), la specifica e le parole della persona (la richiesta di
+   partenza dello sviluppo, altrimenti la conversazione del lavoro), e compila:
+   - per un'**estensione**: gli input con i nomi, il campo del numero e da 3 a 8 **esempi dato →
+     risultato** in forma chiusa (`numero` con tolleranza, `contiene` una parola senza cifre,
+     `trovato`: false). Il **codice** li trasforma in `test_accettazione.py` (`test_python`:
+     `CalliopeFinta`, tolleranza almeno 0,01 o 0,2 %, testi senza maiuscole né accenti; un test
+     per esempio, `test_r<requisito>_<n>`), lo mette **in sola lettura** nella cartella, e i
+     vincoli dell'agente dicono il file, gli input, il campo e le scelte. Un esempio che non
+     controlla niente si scarta, quindi ognuno fallisce sullo scheletro (`{"da_dire": ""}`, lo
+     verifica la prova). Alla consegna si esegue con gli altri test (`_test_falliti`, i rimandi
+     di sempre); se uno è sbagliato l'agente lo dice nel riassunto, non lo cambia. Alla fine
+     del lavoro si esegue da solo (`_esito_accettazione`): `ris["accettazione"]` con esempi,
+     verdi o rossi e i requisiti rossi;
+   - in un **lavoro nuovo** (non una correzione né la modifica di una versione che c'è: lì la
+     specifica viva tiene già i requisiti senza contrasti) le **contraddizioni** tra requisiti o
+     tra requisiti e parole della persona, con **al più due domande** («Prima di cominciare: …?»):
+     il lavoro aspetta come per una domanda a metà lavoro (`_sospendi`, `lavoro_rispondi`); alla
+     risposta la passata si rifà con la risposta e senza altre domande, e i vincoli la dicono
+     all'agente. Una «domanda» che parla all'assistente non si dice (`_ORDINE` dei requisiti).
+     Senza contraddizioni il lavoro parte da sé (è il caso normale);
+   - le **scelte** fatte dove la richiesta non dice (all'agente, non a voce) e i requisiti **al
+     collaudo** (musica, aspetto, «per bambini»).
+
+   Per i **giochi** e i **programmi** niente esempi (il contratto del gioco arriva con la
+   macchina a stati; un programma non ha un'interfaccia fissa): la passata solo nel primo lavoro
+   di uno sviluppo, per le contraddizioni. Fuori da uno sviluppo un programma o un gioco non la
+   fanno. **Alla revisione** (`requisiti.esiti`, `frase_confronto`, `righe_scheda`): un requisito
+   al collaudo che il confronto dà per fatto è «da guardare tu», non contato tra i fatti; i
+   requisiti con gli esempi verdi sono «provati da un esempio», con uno rosso «però gli esempi
+   non passano per: …» (`Sviluppi.segna_accettazione`, `segna_provati`, per testo del
+   requisito). Esempio: «Ho confrontato il codice con quello che avevi chiesto, una cosa per
+   volta: le 2 che si possono provare ci sono. Sono provate tutte dagli esempi. Da guardare tu:
+   voce allegra.» Senza l'analisi le frasi sono quelle di prima. `agenti_accettazione: false`
+   spegne tutto. Nelle prove a copione del servizio dei lavori (`prova_sviluppo_v2`,
+   `prova_estensioni_piano`) l'analisi è spenta: il loro copione non la prevede.
+5. **`modifica_file` invece di riscrivere** (`nota_riscrittura`): lo strumento c'era già (11/10),
+   e la spinta dopo tre riscritture di fila dello stesso file lungo con lo stesso errore. Nel
+   banco le riscritture erano di file diversi, una per passata: ora il risultato di
+   `scrivi_file` su un file di almeno 20 righe cambiato al più per un quarto dice «Hai riscritto
+   X intero (N righe) per cambiarne K: per correggere un pezzo usa modifica_file…» (regola
+   `agente_riscrittura_piccola`). Nessuno strumento nuovo: lo strumento c'era, l'agente non ci
+   pensava.
+
+**Il banco** (`prove/manuali/banco_temperatura.py`): `--temperature` e `--presence` accettano
+`config` (i valori della Config, per presence quelli per tipo di lavoro); `--accettazione
+config|si|no`; le domande prima di cominciare le risponde il banco da sé («Decidi tu, con la
+scelta più comune.») e le conta; la riga ha `domande` e `analisi` (esempi dell'agente, verdi o
+rossi, secondi). Il `--secco` prova anche l'analisi con l'agente finto e il servizio vero
+(domanda, risposta, esempi nella cartella con il runtime e i test di partenza): tutto ok sul
+portatile. **Da rifare sulla DGX** dopo l'installazione (45 lavori, 3–15 minuti l'uno: da 3 a 8
+ore; per confrontare l'analisi, una seconda volta con `--accettazione no`):
+
+    cd ~/calliope && V=~/.local/share/calliope/versioni/$(cat ~/.local/share/calliope/attuale) \
+        && $V/.venv/bin/python $V/prove/manuali/banco_temperatura.py \
+           --casi convertitore,porte,programma --temperature 0.6 --presence config \
+           --ripetizioni 5 --uscita ~/banco-temperatura-13-10
+
+**Profilo ridotto da 8 GB.** Oggi lì l'agente non c'è: niente cambia per la voce. Se un giorno ci
+sarà un agente piccolo: la passata dell'analisi è una chiamata in più per lavoro, breve (JSON
+chiuso, nessun ragionamento) e fuori dal turno della voce; gli esempi scritti dal codice, i test
+di partenza, la spinta a consegnare e la nota per `modifica_file` servono di più a un modello
+piccolo, che tiene peggio le istruzioni lunghe; le domande sono al più due e solo nel primo
+lavoro.
+
+**Cosa resta della parte 2** (e perché): gli **esempi per i programmi** (un programma non ha
+un'interfaccia fissa: servirebbe dichiararla nell'analisi, nome del file e argomenti, e farla
+rispettare); i **test di accettazione dei giochi** dal progettista (aspettano la macchina a stati
+dei giochi, come dice la ricerca alla domanda 5: con `gioco.js` libero i selettori cambiano a ogni
+versione); la passata con il **ragionamento acceso** e il campionamento consigliato (oggi
+temperatura 0 senza ragionamento, come requisiti e confronto: con l'uscita vincolata dallo schema
+il rischio di loop è basso, ma per *trovare buchi* il ragionamento aiuterebbe; da misurare con le
+domande vere); la **revisione che legge la nota dell'agente** su un esempio che gli sembra
+sbagliato; il **confronto del compito di gemma con le parole della persona** c'è solo dentro la
+passata (le parole vanno alla passata, che può farne una contraddizione), non come controllo a sé.
+
+**Da guardare sulla DGX**: nel log dell'agente «analisi prima del codice» (secondi, esempi,
+domande), «esempi di accettazione tutti verdi / rossi», le regole `agente_spinta_consegna` e
+`agente_riscrittura_piccola`; quante domande prima di cominciare per sviluppo e se la risposta
+cambia qualcosa (HumanEvalComm: domande inutili peggiorano); quanti esempi dell'agente sono
+sbagliati (nel banco: accettazione nascosta verde ed esempi dell'agente rossi).

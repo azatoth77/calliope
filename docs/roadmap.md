@@ -120,10 +120,13 @@ voce raccontava male gli esiti, i comandi del flusso si perdevano.
    sera** (ramo `fasi-parte1`): la correzione che parte da un test rosso (rimandata una volta,
    poi «non sono riuscita a riprodurre il problema»), i giochi provati dal disegno nel DOM finto
    (`apriGioco`), `esegui_js`, i test due volte al ricontrollo (seme), il banco della temperatura
-   da lanciare sulla DGX ([agenti-estensioni](aree/agenti-estensioni.md)). **Parte 2** *pronta*:
-   l'analisi dell'agente in secondo piano con le domande sulle contraddizioni, i test di
-   accettazione da un lavoro separato in sola lettura per programmi ed estensioni (esempi dato →
-   risultato), la revisione che dice «da guardare tu» i requisiti non verificabili · ricerca
+   da lanciare sulla DGX ([agenti-estensioni](aree/agenti-estensioni.md)). **Parte 2 fatta il 13/10**
+   (ramo `flusso-fasi-2`) per le estensioni: l'analisi prima del codice in una passata a sé con al
+   più due domande sulle contraddizioni, gli esempi dato → risultato trasformati dal codice in
+   test di accettazione in sola lettura, la revisione che dice «da guardare tu»; in più la spinta
+   a consegnare con i test verdi, i test di partenza delle estensioni con la firma giusta,
+   temperatura 0,6. *Resta*: gli esempi per i programmi, i test di accettazione dei giochi (dopo
+   la macchina a stati), la passata con il ragionamento; il banco da rifare sulla DGX · ricerca
    [`2026-10-12-flusso-agente-fasi.md`](ricerche/2026-10-12-flusso-agente-fasi.md) (§ 5, § 6).
 
 ### 2. Registro degli eventi e dialogo (E1–E11)
