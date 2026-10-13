@@ -1026,7 +1026,7 @@ d = capacita.check_agenti(cfg_d)
 verifica("da terminale: configurata, collegamento non provato, passo con --prova",
          d["stato"] == "attiva" and "--prova" in d["prossimo_passo"], str(d))
 reg_n = capacita.controlla(cfg_d)
-verifica("18 capacità nel registro (con archivio, ufficio, conversazioni e ricerca web)", len(reg_n) == 18, str(len(reg_n)))
+verifica("19 capacità nel registro (con archivio, ufficio, conversazioni, ricerca web e notizie)", len(reg_n) == 19, str(len(reg_n)))
 txt = capacita.testo_prompt(None, [s["function"]["name"] for s in reg.all_schemas()])
 verifica("prompt: gli agenti tra quelle che funzionano quando il tool c'è",
          "agenti (lavori lunghi)" in txt.split("Non disponibili")[0], txt[:200])
