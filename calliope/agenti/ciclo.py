@@ -95,7 +95,20 @@ AVVISO_FINE = {
               "manca; altrimenti non consegnare a metà e scrivi in una riga cosa resta da fare."),
     "ricerca": ("Adesso chiudi: non fare altre ricerche, chiama consegna con la relazione su "
                 "quello che hai trovato (quello che non hai trovato dillo, non inventarlo)."),
+    # L'ultimo esegui_test era verde e da allora nessun file è cambiato (13/10, banco della
+    # temperatura sulla DGX: in 4 lavori su 7 codice giusto e test verdi, ma nessuna consegna
+    # nemmeno dopo l'avviso, e il lavoro è finito «limite» al tetto delle passate)
+    "verde": ("I tuoi test passano: chiama consegna adesso, con un riassunto onesto di cosa "
+              "funziona e cosa manca. Non riscrivere i file che funzionano."),
+    "verde_tappa": ("I tuoi test passano: se il lavoro è finito chiama consegna adesso; "
+                    "altrimenti fai il passo concreto più utile e scrivi in una riga cosa resta "
+                    "da fare. Non riscrivere i file che funzionano."),
 }
+
+# La spinta dopo il primo esegui_test tutto verde, con i file che il lavoro chiede (13/10,
+# stesso banco): una volta per lavoro; la consegna resta una scelta dell'agente
+SPINTA_CONSEGNA = ("I tuoi test passano: se il lavoro è finito chiama consegna ora; altrimenti "
+                   "scrivi in una riga cosa manca e continua con il prossimo strumento.")
 
 
 @dataclass
@@ -960,8 +973,15 @@ class Agente:
         else:
             return
         lav.avvisato = True
+        seg = getattr(lav, "segnali", None)
+        verde = (tipo == "codice" and isinstance(seg, dict)
+                 and seg.get("test_verde") is True)
         if tipo == "codice" and getattr(lav, "tappe", False):
             tipo = "tappa"
+        if verde:
+            # L'ultimo esegui_test era verde e niente è cambiato dopo (13/10): consegna
+            tipo = "verde_tappa" if tipo == "tappa" else "verde"
+            cosa += ", con i test verdi"
         # Il perché resta nel log, non nel messaggio all'agente (niente conto alla rovescia)
         testo = AVVISO_FINE.get(tipo, AVVISO_FINE["codice"])
         self.log(f"[AGENTI] {lav.id}: avviso di chiusura ({cosa})")
@@ -1304,6 +1324,7 @@ class Agente:
                 else:
                     result = self._strumento(lav, sandbox, name, args)
                     if name in ("scrivi_file", "modifica_file") and result.get("ok"):
+                        seg["test_verde"] = None        # i file sono cambiati dopo i test
                         scritti += 1
                         p = str(result.get("percorso") or args.get("percorso") or "?")
                         novita = novita or p not in seg["scritture"]
@@ -1327,6 +1348,11 @@ class Agente:
                             fila.clear()
                         seg["ultimo_errore"] = ((ultimo_errore(result) or {
                             "test": "", "errore": firma, "dove": ""}) if firma else None)
+                        # Tutto verde (13/10): per l'avviso di chiusura e la spinta a consegnare
+                        seg["test_verde"] = (result.get("passano") is True
+                                             and not args.get("percorso")
+                                             and int((result.get("esito") or {}).get(
+                                                 "eseguiti") or 0) > 0)
                     elif name in ("esegui_python", "esegui_csharp", "esegui_js") and \
                             result.get("fallimenti"):
                         seg["ultimo_errore"] = ultimo_errore(result)
@@ -1335,6 +1361,18 @@ class Agente:
                 lav.nota("esito", nome=name, esito=result)
             if not novita and consegna is None:
                 seg["senza_novita"] = int(seg.get("senza_novita", 0)) + 1
+            if (consegna is None and seg.get("test_verde") is True
+                    and not seg.get("spinta_consegna")
+                    and self._pronto_da_consegnare(lav, sandbox, piano, stato_piano)):
+                # I test passano e i file chiesti ci sono (13/10): una volta per lavoro la
+                # spinta a consegnare o a dire cosa manca; la consegna resta dell'agente
+                seg["spinta_consegna"] = True
+                from ..sonde import nota as nota_regola
+                nota_regola(lav, "agente_spinta_consegna")
+                self.log(f"[AGENTI] {lav.id}: i test passano, spinta a consegnare "
+                         "(regola agente_spinta_consegna)")
+                lav.nota("spinta", motivo="i test passano", regola="agente_spinta_consegna")
+                _aggiungi_spinta(messages, SPINTA_CONSEGNA)
             # Lo stesso file lungo riscritto per intero più volte di fila con lo stesso errore
             # (11/10, giro vero: gioco.js di 730 righe, nove volte): la spinta con l'ultimo
             # errore, e la fila riparte
@@ -1551,6 +1589,23 @@ class Agente:
         if lav.inizio and self.trascorso(lav) > self.tempo_max_s * 0.9:
             return False
         return True
+
+    @staticmethod
+    def _pronto_da_consegnare(lav: Lavoro, sandbox, piano: bool, stato_piano) -> bool:
+        """Il lavoro ha i file che la consegna chiede (13/10, la spinta a consegnare): per
+        un'estensione o un gioco il controllo della consegna senza i nomi (manifesto valido,
+        codice, test), dopo il piano; per un programma almeno un file di codice. Senza
+        effetti: niente ricollaudo né sonde."""
+        try:
+            if piano and stato_piano is None:
+                return False
+            if lav.tipo == "estensione":
+                from ..estensioni.prompt import controlla_consegna
+                return controlla_consegna(sandbox) is None
+            from .riproduzione import NON_CODICE
+            return any(not NON_CODICE.search(f["percorso"]) for f in sandbox.elenca())
+        except Exception:  # noqa: BLE001 — nel dubbio niente spinta
+            return False
 
     @staticmethod
     def _ha_test(sandbox) -> bool:
