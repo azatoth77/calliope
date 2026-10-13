@@ -1346,7 +1346,14 @@ agenti:
   # Thinking dell'agente: acceso per codice e documenti (i benchmark del codice sono tutti
   # con il ragionamento). None = non inviare il parametro
   agenti_think: true
-  agenti_temperatura: 0.4
+  # Temperatura dell'agente: 0,6 dal 13/10, il valore della scheda di Qwen3.6 per il codice
+  # con il ragionamento (prima 0,4, sotto il consigliato). Banco della temperatura sulla DGX
+  # (12–13/10, prove/manuali/banco_temperatura.py, convertitore, 7 lavori per riga): a 0,6
+  # con presence_penalty 0 / 0,25 / 0,5 riescono 3 / 0 / 4 lavori, cioè rumore: la leva non
+  # è il campionamento. Nei lavori falliti il codice era spesso giusto ma l'agente non
+  # consegnava, o i suoi test sbagliavano la firma di esegui (lì le correzioni sono nel
+  # ciclo e nello scheletro dei test, non qui). presence_penalty invariata, sotto
+  agenti_temperatura: 0.6
   # Tetti di un lavoro: passate del modello, token generati (ragionamento compreso, che si
   # conta anche a parte: token_ragionamento in lavoro.json), minuti. Il contesto qui non
   # conta: lo regge la finestra, comprimendo. Vicino a un tetto l'agente riceve una volta
