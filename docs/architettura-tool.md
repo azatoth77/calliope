@@ -52,6 +52,7 @@ calliope/                 # package: python -m calliope
 │   ├── conversazioni.py  # conversazione_cerca (anche cronologica, 08/10), conversazioni_dimentica, conversazione_nuova (09/10)
 │   ├── conserva.py       # dati_conservati: consenso alla voce, revoca, stato, svuota (12/10)
 │   ├── web.py            # web_cerca (SearXNG)
+│   ├── notizie.py        # notizie (feed RSS scaricati in casa, 13/10)
 │   ├── immagini.py, allegati.py  # immagine_guarda, immagine_archivia, pc_guarda; allegato_leggi, allegato_archivia, cassetto_gestisci
 │   ├── archivio.py, ufficio.py   # archivio_cerca/scadenze/somma; modello_compila, anagrafica_cerca/salva
 │   ├── minori.py, esercizi.py    # richiesta_tutore, compiti_aiuto, minore_gestisci; esercizi (08/10)
@@ -98,6 +99,7 @@ class ToolSpec:
     segreti: tuple[str, ...]  # argomenti mai scritti nei log (il codice di uno schermo)
     riservato: bool           # argomenti e risultato fuori dal registro (archivio di casa)
     non_fidato: bool          # il risultato è testo esterno (web_cerca)
+    resta_in_storia: bool     # ...ma resta nella storia in busta (notizie, 13/10)
     classe, fonte, chiave     # politica unica (05/10): classe del tool, fonte del dato, argomenti chiave
     prepara: Callable | None  # conversione di forma degli argomenti prima dei permessi (08/10)
     nomi: dict                # argomenti che nominano qualcosa → tipo (08/10, argomenti_incerti.py)
@@ -261,7 +263,8 @@ controllo nelle prove a secco), ma tocca tutti i tool e le prove con Ollama che 
 | `conversazione_cerca` | familiare | lettura | ciò che ci siamo detti nelle conversazioni passate di chi parla (archivio di 30 giorni, ricerca ibrida); con `cronologico` (08/10) le ultime conversazioni in ordine di tempo, «più indietro» continua; `ospiti` solo per chi amministra |
 | `conversazione_nuova` | ospite | azione (classe sicura) | chiude la conversazione di adesso e ne comincia una nuova quando la persona lo chiede con parole sue (09/10); `cosa` con la cosa nominata («il collaudo») non fa niente; la regola breve «ricominciamo» resta |
 | `conversazioni_dimentica` | familiare | azione | cancella dall'archivio le conversazioni di chi parla, dopo la conferma (i ricordi restano) |
-| `web_cerca` | da `web_livello` (predefinito familiare) | lettura, risultato non fidato | ciò che cambia nel tempo (meteo, notizie, orari) da SearXNG; nomi delle persone tolti dalla domanda |
+| `web_cerca` | da `web_livello` (predefinito familiare) | lettura, risultato non fidato | ciò che cambia nel tempo (meteo, orari, prezzi; le notizie solo senza il tool `notizie`) da SearXNG; nomi delle persone tolti dalla domanda |
+| `notizie` | da `notizie_livello` (predefinito ospite) | lettura, risultato non fidato che resta nella storia in busta | le notizie dai feed RSS scaricati in casa (13/10): fatti numerati, «dimmi di più» con `fatto`; minori solo sport, tecnologia e ragazzi; SearXNG come ripiego |
 | `immagine_guarda`, `immagine_archivia` | familiare | lettura; azione | rivedere una foto della conversazione; archiviarla tra i documenti di casa solo se chiesto |
 | `pc_guarda` | familiare | sensibile | una foto nuova dalla webcam o una schermata, su richiesta |
 | `allegato_leggi`, `allegato_archivia` | familiare | lettura; azione | una parte di un file allegato (anche dal cassetto dei giorni passati, 08/10); archiviarlo solo se chiesto |
