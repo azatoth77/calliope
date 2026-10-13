@@ -1506,7 +1506,10 @@ class Agente:
             except Exception:  # noqa: BLE001 — la bozza è un aiuto, non un obbligo
                 pass
         out["prossimo"] = ("scarica_esempio se legge un sito, poi scrivi_file (estensione.py, "
-                           "test_estensione.py, manifesto.json)")
+                           "manifesto.json)"
+                           + (" e i tuoi casi in test_estensione.py, che c'è già, con "
+                              "modifica_file" if "test_estensione.py" in nomi else
+                              " e test_estensione.py"))
         return out, None
 
     def _chiedi_permesso(self, lav: Lavoro, args: dict, stato_piano: dict | None):

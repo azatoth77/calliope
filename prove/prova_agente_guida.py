@@ -408,13 +408,21 @@ def prova_scheletri(tmp: Path):
     else:
         print("SALTATA IN PARTE: node non c'è")
     sb = sandbox(tmp, "scheletro-est")
-    shutil.copy(RADICE / "calliope" / "estensioni" / "_ospite.py",
-                sb.root / "calliope_estensione.py")
-    for k, v in _estrai(SCHELETRI["estensione"], {"estensione.py", "test_estensione.py"}).items():
-        sb.scrivi(k, v)
+    from calliope.agenti.scheletri import TEST_ESTENSIONE, prepara_estensione
+    # Dal 13/10 test_estensione.py di partenza è già nella cartella (prepara_estensione): lo
+    # scheletro nel prompt mostra solo i casi da aggiungere nella classe Prove
+    scritti = prepara_estensione(sb)
+    verifica("estensione: nella cartella il runtime (sola lettura) e test_estensione.py di "
+             "partenza", scritti == ["calliope_estensione.py", "test_estensione.py"]
+             and "calliope_estensione.py" in sb.sola_lettura
+             and "test_estensione.py" not in sb.sola_lettura, str(scritti))
+    parti = _estrai(SCHELETRI["estensione"], {"estensione.py", "test_estensione.py"})
+    sb.scrivi("estensione.py", parti["estensione.py"])
+    sb.scrivi("test_estensione.py", TEST_ESTENSIONE + parti["test_estensione.py"])
     r = sb.test()
-    verifica("estensione: i test dello scheletro passano", r["passano"]
-             and r["esito"]["eseguiti"] == 2, str(r["esito"]))
+    verifica("estensione: i test di partenza con i casi dello scheletro passano", r["passano"]
+             and r["esito"]["eseguiti"] == 3, str(r["esito"]) + r["uscita"][-400:])
+    prova_test_di_partenza(tmp)
     sb = sandbox(tmp, "scheletro-py")
     for k, v in _estrai(SCHELETRI["python"], {"programma.py", "test_programma.py"}).items():
         sb.scrivi(k, v)
@@ -422,6 +430,64 @@ def prova_scheletri(tmp: Path):
     e = sb.esegui("programma.py", [])
     verifica("programma Python: i test passano e gira senza argomenti", r["passano"]
              and "8" in e["uscita"], e["uscita"][:100])
+
+
+CONVERTITORE = '''METRI = {"metri": 1.0, "chilometri": 1000.0, "miglia": 1609.344}
+
+
+def esegui(dati, calliope):
+    da, a = str(dati.get("da") or "").lower(), str(dati.get("a") or "").lower()
+    if da not in METRI or a not in METRI:
+        return {"da_dire": "Non conosco questa unità.", "trovato": False}
+    r = float(dati.get("valore") or 0) * METRI[da] / METRI[a]
+    return {"da_dire": f"Sono {r:g} {a}.", "risultato": r}
+'''
+
+
+ROTTA_SENZA_INPUT = '''def esegui(dati, calliope):
+    return {"da_dire": f"Sono {dati['valore'] * 2}."}
+'''
+FIRMA_SBAGLIATA = '''def esegui(dati):
+    return {"da_dire": "ciao"}
+'''
+
+
+def prova_test_di_partenza(tmp: Path):
+    """Il test di partenza così com'è (13/10): passa con un'estensione che risponde, non con
+    una che si rompe senza input o ha la firma sbagliata; non sostituisce i test di una
+    modifica; il servizio lo mette nella cartella di un'estensione, non di un gioco."""
+    sezione("2b. test_estensione.py di partenza")
+    from calliope.agenti.scheletri import prepara_estensione
+    from calliope.agenti.servizio import Lavori
+    sb = sandbox(tmp, "partenza-conv")
+    prepara_estensione(sb)
+    sb.scrivi("estensione.py", CONVERTITORE)
+    r = sb.test()
+    verifica("così com'è, nella sandbox: passa con un convertitore che risponde",
+             r["passano"] and r["esito"]["eseguiti"] == 1, str(r["esito"]) + r["uscita"][-300:])
+    sb.scrivi("estensione.py", ROTTA_SENZA_INPUT)
+    r = sb.test()
+    verifica("contrario: fallisce con un'estensione che si rompe senza input (KeyError)",
+             not r["passano"] and "KeyError" in r["uscita"], r["uscita"][-300:])
+    sb.scrivi("estensione.py", FIRMA_SBAGLIATA)
+    r = sb.test()
+    verifica("contrario: la firma sbagliata si vede subito nel test di partenza",
+             not r["passano"] and "positional argument" in r["uscita"], r["uscita"][-300:])
+    sb = sandbox(tmp, "partenza-modifica")
+    sb.scrivi("test_meteo.py", "def test_x():" + chr(10) + "    assert True" + chr(10))
+    scritti = prepara_estensione(sb, runtime="# runtime finto" + chr(10))
+    verifica("contrario: una modifica con i suoi test non riceve test_estensione.py",
+             scritti == ["calliope_estensione.py"]
+             and not (sb.root / "test_estensione.py").exists(), str(scritti))
+    trovati = {}
+    for nome, gioco in (("E1", False), ("G1", True)):
+        sb = sandbox(tmp, f"servizio-{nome}")
+        Lavori._prepara_cartella_estensione(SimpleNamespace(log=lambda *_: None),
+                                            SimpleNamespace(id=nome, gioco=gioco), sb)
+        trovati[nome] = sorted(f["percorso"] for f in sb.elenca())
+    verifica("il servizio: un'estensione ha runtime e test di partenza, un gioco no",
+             trovati["E1"] == ["calliope_estensione.py", "test_estensione.py"]
+             and trovati["G1"] == [], str(trovati))
 
 
 # ═══════════════════════════ 3. spinta concreta ═══════════════════════════

@@ -1220,6 +1220,7 @@ class Lavori:
                         except Exception as e:  # noqa: BLE001 — resta il prompt
                             self.log(f"[AGENTI] {lav.id}: {contratto.FILE} non scritto: {e}")
                         sb.sola_lettura |= {contratto.FILE, "calliope_estensione.py"}
+                    self._prepara_cartella_estensione(lav, sb)
                     ris = self.agente.codice(
                         lav, sb, sistema=sistema_estensione(self.cfg, gioco=gioco),
                         controlla=self._controlla_estensione(lav, presi, atteso),
@@ -1318,6 +1319,22 @@ class Lavori:
                 self.esecuzioni.in_cima(es)       # la scheda del lavoro è appena andata in cima
         else:
             self._scheda_finale(lav)
+
+    def _prepara_cartella_estensione(self, lav: Lavoro, sb):
+        """Un'estensione che non è un gioco: il runtime e i test di partenza con la firma giusta
+        (13/10, banco della temperatura sulla DGX: 41 test su 41 in errore con «esegui()
+        missing 1 required positional argument: 'calliope'»; agenti/scheletri.py). Mai
+        un'eccezione: resta lo scheletro nel prompt."""
+        if getattr(lav, "gioco", False):
+            return
+        from .scheletri import prepara_estensione
+        try:
+            scritti = prepara_estensione(sb)
+        except Exception as e:  # noqa: BLE001
+            self.log(f"[AGENTI] {lav.id}: test di partenza non scritti: {e}")
+            return
+        if scritti:
+            self.log(f"[AGENTI] {lav.id}: nella cartella di partenza " + ", ".join(scritti))
 
     def _file_del_giro(self, lav: Lavoro, riuso=None):
         """Un lavoro della modalità sviluppo che riparte da un giro fermo (12/10, A4 e A5:
