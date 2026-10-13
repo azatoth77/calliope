@@ -427,6 +427,19 @@ def ultima_frase(text: str) -> str:
     return frasi[-1].strip() if frasi else ""
 
 
+def domanda_in_fondo(said: str, offer: dict | None) -> bool:
+    """La risposta finisce con la domanda di una proposta? Con il punto di domanda in fondo,
+    oppure con la domanda intera del tool che dopo il «?» dice la conseguenza o una nota
+    («Intendi cancellare le conversazioni? Così non le ritrovo più…», la domanda della
+    politica; 13/10: senza, la proposta non restava e il «sì» breve tornava alla stessa
+    domanda all'infinito). Forma di una scelta già fatta dal tool, non parole della persona."""
+    s = (said or "").strip()
+    if s.endswith("?"):
+        return True
+    d = str((offer or {}).get("domanda") or "").strip()
+    return "?" in d and bool(s) and s.endswith(d)
+
+
 def chiede_risposta(text: str) -> str | None:
     """«domanda» se il testo finisce con una domanda, «offerta» se l'ultima frase è
     un'offerta (OFFERTA), altrimenti None."""
@@ -2656,7 +2669,8 @@ class Brain:
         # tool, la proposta resta per il turno dopo
         last = self.history[-1] if self.history else {}
         said = (last.get("content") or "").strip() if last.get("role") == "assistant" else ""
-        if self._offer and said.endswith("?") and self._net("azione_in_sospeso"):
+        if (self._offer and domanda_in_fondo(said, self._offer)
+                and self._net("azione_in_sospeso")):
             self.set_pending(self._offer)
         self._ricorda_domanda_fidata(said)
         self._dialogo_fine()

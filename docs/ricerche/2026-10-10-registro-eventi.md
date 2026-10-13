@@ -657,7 +657,8 @@ da decidere.
    dimenticare torna su disco a ogni turno (`correnti`) e alla chiusura torna nell'archivio e nel
    riassunto. Scelta: la chiusura della conversazione in corso c'è **solo con il registro acceso**
    (`eventi: ombra`; con `spento` come prima), ed è l'unico cambiamento che si sente. **Da confermare
-   con Dario.** Restano fuori, per il passo 5: la cronologia delle schede per persona, gli avvisi ai
+   con Dario.** *(Confermato il 12/10 (E2 della roadmap); dal 13/10 la chiusura c'è sempre, anche
+   con `eventi: spento`.)* Restano fuori, per il passo 5: la cronologia delle schede per persona, gli avvisi ai
    tutori che nominano la persona e il testo nel registro dei turni (§ 2.6 f).
 2. **La riga troncata.** Su SQLite non c'è «un file troncato a metà riga»: c'è una riga con il JSON
    rovinato o un buco nei `seq`. Il rigioco si ferma lì (`eventi_troncati`); la riga rovinata resta

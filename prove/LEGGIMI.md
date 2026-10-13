@@ -93,9 +93,11 @@ che la pagina del telefono riproduce con Web Audio non esce più dalle casse o d
 vere del portatile (Web Audio gira lo stesso). Le prove con un satellite in Python usano casse
 finte (`apri_uscita`, `apri_flusso`).
 
-**Problemi aperti delle prove** (09/10): le attese fisse di `prova_satellite`;
-`prova_cronologia_pagina` con «Scarica Markdown» salva il file nella cartella Download vera di
-chi la lancia (il browser non ha una cartella di download temporanea: da correggere).
+**Problemi aperti delle prove** (09/10): le attese fisse di `prova_satellite`. *(Storico:
+`prova_cronologia_pagina` con «Scarica Markdown» salvava il file nella cartella Download vera di
+chi la lancia; dal 13/10 ogni profilo temporaneo ha la sua cartella di download nelle preferenze,
+`download.default_directory`, e la prova controlla il file lì. `Page.setDownloadBehavior` sulla
+scheda, che `prova_markdown_pagina` usa, in questa prova Edge lo ignorava.)*
 
 
 ## Le prove per area

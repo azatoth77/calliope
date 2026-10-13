@@ -135,7 +135,9 @@ voce raccontava male gli esiti, i comandi del flusso si perdevano.
    200 turni, zero differenze nel parlato, e la guardia sui riletti scritta prima. *Quasi* ·
    dipende da: i dati d'ombra sulla DGX e la guardia dei riletti.
 2. **«Dimentica» chiude anche la conversazione in corso** (E2). *Pronta* · dipende da: niente
-   (confermato il 12/10).
+   (confermato il 12/10). **Fatto il 13/10** (ramo `dimentica-conversazione`): sempre, anche con
+   `eventi: spento`, senza archivio né riassunto, e la domanda e la conferma lo dicono
+   ([contesto-conversazione](aree/contesto-conversazione.md)).
 3. **Passo 4 del registro: le domande come eventi** (E3), con `attivo` già acceso; 2–3 giorni
    (circa 170 domande in 35 moduli). *Quasi* · dipende da: E1.
 4. **Spezzare `Brain._reply`** (E4, era Q14) subito dopo il passo 4, fermando per qualche giorno

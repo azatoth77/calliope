@@ -643,7 +643,11 @@ Richiesta di Dario: la cronologia stava solo in memoria per schermo (`_storia`, 
   390×844): bolle «Tu» a destra e «Calliope» a sinistra, una barra di scorrimento sola nella
   scheda normale (la prima versione ne aveva due e non arrivava in fondo); sul telefono la
   scheda a schermo intero ora va in fondo all'apertura (anche il flusso dell'agente: prima lo
-  scorrimento si chiedeva con lo strato ancora nascosto).
+  scorrimento si chiedeva con lo strato ancora nascosto). Dal 13/10 «Scarica» salva nella
+  cartella di download del profilo temporaneo (preferenza `download.default_directory` scritta
+  prima di avviare Edge) e la prova controlla lì il file con la trascrizione: prima finiva nei
+  Download veri di chi lanciava la prova (e `Page.setDownloadBehavior` sulla scheda qui non
+  bastava).
 - Cache del service worker `calliope-telefono-pagina-v8` (era v7).
 - Da fare o da provare sul vero: molti lavori in diretta insieme (una scrittura su disco al più
   ogni 0,8 s per persona); «mostramelo» dopo un riavvio (oggi `Schermi.ultima` è solo in memoria).

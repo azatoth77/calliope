@@ -3667,21 +3667,27 @@ class Ciclo:
 
     def _conversazioni_dimenticate(self):
         """«Dimentica le nostre conversazioni» (conversazioni_dimentica, al «sì»): l'archivio e il
-        registro degli eventi su disco li ha già cancellati il tool. Con il registro degli
-        eventi acceso (10/10, § 2.4 del progetto) anche la conversazione in corso si chiude e si
-        svuota, senza archiviarla: il modello non la vede più, e niente torna su disco (prima
-        restava in memoria e in `correnti`, e alla chiusura tornava nell'archivio). Con
-        `eventi: spento` come prima."""
+        registro degli eventi su disco li ha già cancellati il tool. Anche la conversazione in
+        corso si chiude e si svuota, senza archiviarla né riassumerla: il modello non la vede
+        più, la frase dopo parte pulita e niente torna su disco (prima restava in memoria e in
+        `correnti`, e alla chiusura tornava nell'archivio e nel riassunto). Dal 10/10 (§ 2.4 del
+        progetto) solo con il registro degli eventi acceso; dal 13/10 (E2 della roadmap,
+        confermato il 12/10) sempre, anche con `eventi: spento`, come dice la frase del tool.
+        Si chiude la conversazione in cui la persona ha detto «sì»: la sua, quella della casa,
+        o quella anonima del satellite dove è finita una sua frase breve (zona grigia)."""
         persona = getattr(self.tool_ctx, "conversazioni_dimenticate", None)
         if not persona:
             return False
         self.tool_ctx.conversazioni_dimenticate = None
-        if self.ombra is None:
-            return False
         chiave = f"persona:{persona}"
-        self.ombra.dimentica(chiave)
         conv = getattr(self.brain, "conv", None)
-        if getattr(conv, "chiave", None) in (chiave, "casa"):
+        chiave_conv = str(getattr(conv, "chiave", None) or "")
+        chiusa = chiave_conv in (chiave, "casa") or chiave_conv.startswith("ospite:")
+        if self.ombra is not None:
+            self.ombra.dimentica(chiave)
+            if chiusa and chiave_conv != chiave:
+                self.ombra.dimentica(chiave_conv)
+        if chiusa:
             dimentica = getattr(self.brain, "dimentica_conversazione", None)
             if callable(dimentica):
                 dimentica()
@@ -3690,8 +3696,13 @@ class Ciclo:
             arch.pulisci_wal()
         self.rule("conversazioni_dimenticate")
         if self.rec is not None:
-            self.rec.setdefault("eventi_ombra", {})["dimentica"] = 1
-        print("   [STORIA] conversazioni dimenticate: anche quella in corso", flush=True)
+            self.rec["conversazioni_dimenticate"] = "in_corso" if chiusa else "archivio"
+            if self.ombra is not None:
+                self.rec.setdefault("eventi_ombra", {})["dimentica"] = 1
+        print("   [STORIA] conversazioni dimenticate: "
+              + ("anche quella in corso" if chiusa else
+                 f"quella in corso è di un'altra conversazione ({chiave_conv or '?'})"),
+              flush=True)
         self.last_question = None
         return True
 

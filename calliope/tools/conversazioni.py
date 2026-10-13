@@ -8,7 +8,8 @@ Tool dell'archivio delle conversazioni (05/10/2026, calliope/conversazioni.py).
   istruzioni; il tool è `riservato`: a risposta finita nella storia resta solo la frase
   detta, e niente va nel registro dei turni né nel terminale.
 - conversazioni_dimentica(): «dimentica le nostre conversazioni» cancella dall'archivio tutte
-  quelle di chi parla, dopo la domanda e il «sì» nella risposta dopo.
+  quelle di chi parla, dopo la domanda e il «sì» nella risposta dopo; dal 13/10 (E2) il ciclo
+  chiude anche quella in corso, senza archiviarla né riassumerla, e la frase lo dice.
 - conversazione_nuova() (09/10): «voglio che ricominciamo da capo» detto con parole sue chiude
   la conversazione di adesso come la regola della forma chiusa («ricominciamo»,
   wakeword.nuova_conversazione): archiviata, riassunto in secondo piano, Calliope resta in
@@ -407,6 +408,14 @@ def _utili(risultati: list[dict]) -> list[dict]:
     return out
 
 
+# «Dimentica le nostre conversazioni» (13/10, E2): anche quella di adesso, e lo si dice
+# (la domanda in fondo: prima della nota sui ricordi non diventava una proposta, Brain.
+# domanda_in_fondo)
+DIMENTICA_DOMANDA = ("I ricordi che mi hai chiesto di tenere restano. Cancello tutte le nostre "
+                     "conversazioni, anche quella di adesso?")
+DIMENTICATE_FRASE = "Fatto: ho cancellato le nostre conversazioni, anche quella di adesso."
+
+
 def _conversazioni_dimentica(ctx: ToolContext) -> dict:
     arch = getattr(ctx, "conversazioni", None)
     if arch is None:
@@ -423,18 +432,19 @@ def _conversazioni_dimentica(ctx: ToolContext) -> dict:
     if p is not None and 0 < turno - p <= 3:
         proposte.pop(persona, None)
         n = arch.dimentica(persona)
-        # La conversazione in corso: la chiude il ciclo a risposta finita (10/10, registro degli
-        # eventi: Ciclo._conversazioni_dimenticate)
+        # La conversazione in corso: la chiude il ciclo a risposta finita, senza archiviarla né
+        # riassumerla (Ciclo._conversazioni_dimenticate; dal 13/10, E2 della roadmap, sempre e
+        # non solo con il registro degli eventi acceso): la frase lo dice
         ctx.conversazioni_dimenticate = persona
-        frase = ("Fatto: ho cancellato le nostre conversazioni archiviate."
-                 if n else "Non c'erano conversazioni archiviate da cancellare.")
+        frase = (DIMENTICATE_FRASE if n else
+                 "Fatto: non c'erano conversazioni archiviate, e quella di adesso l'ho "
+                 "dimenticata.")
         return _final(frase, cancellate=n)
     proposte[persona] = turno
-    domanda = ("Cancello tutte le nostre conversazioni archiviate? I ricordi che mi hai chiesto "
-               "di tenere restano.")
+    domanda = DIMENTICA_DOMANDA
     return _final(domanda, ok=False,
                   in_sospeso={"domanda": domanda, "cosa": "cancellare le conversazioni "
-                                                       "archiviate", "tool":
+                                                       "archiviate e quella di adesso", "tool":
                               "conversazioni_dimentica", "argomenti": {}})
 
 
@@ -534,9 +544,9 @@ def conversazioni_specs() -> list[ToolSpec]:
             announce=("Fammi ricordare.", "Vediamo cosa ci eravamo detti.")),
         ToolSpec(
             name="conversazioni_dimentica",
-            description=("Cancella dall'archivio tutte le conversazioni passate di chi parla "
-                         "(«dimentica le nostre conversazioni»), dopo la sua conferma. Non "
-                         "tocca i ricordi salvati con ricorda."),
+            description=("Cancella dall'archivio tutte le conversazioni passate di chi parla, "
+                         "e anche quella di adesso («dimentica le nostre conversazioni»), "
+                         "dopo la sua conferma. Non tocca i ricordi salvati con ricorda."),
             parameters={"type": "object", "properties": {}, "required": []},
             func=_conversazioni_dimentica, risk="azione", levels=FAMILY),
     ]
