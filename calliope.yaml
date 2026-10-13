@@ -1476,6 +1476,17 @@ agenti:
   # risposta (lavoro_rispondi) con il suo contesto. Al più tante domande per lavoro; dopo
   # tanti minuti senza risposta si chiude da solo, e Calliope lo dice
   agenti_domande_max: 3
+  # Flusso a fasi, parte 2 (13/10, calliope/agenti/accettazione.py; ricerca
+  # 2026-10-12-flusso-agente-fasi § 5.1): prima che l'agente scriva il codice, una passata a
+  # sé del modello dell'agente (contesto nuovo, senza il codice) rilegge requisiti e parole
+  # della persona. Per un'estensione scrive gli esempi dato → risultato, che il codice
+  # trasforma in test_accettazione.py in sola lettura (l'agente non li cambia; alla consegna
+  # si eseguono con gli altri test); per un lavoro nuovo trova le contraddizioni e fa al
+  # più due domande (il lavoro aspetta la risposta, come le domande a metà lavoro); i
+  # requisiti che si giudicano solo guardando restano «da guardare tu» alla revisione.
+  # false = come prima. Secondi al più per la passata
+  agenti_accettazione: true
+  agenti_accettazione_s: 90.0
   agenti_attesa_risposta_min: 120.0
   # I file della persona dati all'agente (03/10, «correggi lo script backup.py»): solo
   # testo, codice, Word, Excel e PDF, al più tanti MB; del testo di un documento l'agente

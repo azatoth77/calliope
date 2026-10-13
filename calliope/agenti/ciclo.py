@@ -196,6 +196,9 @@ class Lavoro:
     # test che falliscono, passate senza file né test nuovi (nel giro)
     segnali: dict = field(default_factory=dict)
     nota_giro: str = ""               # la nota della persona per il giro dopo («cambia e continua»)
+    # L'analisi prima del codice (13/10, accettazione.py): {"stato": domanda | pronta |
+    # non_fatta | saltata, gli esempi, i requisiti al collaudo, le scelte, l'esito}
+    accettazione: dict = field(default_factory=dict)
 
     def __setattr__(self, nome, valore):
         if nome in _OSSERVATI:

@@ -1614,6 +1614,35 @@ class Sviluppi:
         self._salva()
         return v
 
+    def segna_accettazione(self, sv: Sviluppo, al_collaudo: list[str]):
+        """I requisiti che si giudicano solo guardando o ascoltando (13/10, l'analisi prima del
+        codice, agenti/accettazione.py): alla revisione «da guardare tu». Per testo: i
+        requisiti possono essere cambiati nel frattempo."""
+        testi = {str(t).lower() for t in al_collaudo or ()}
+        with self._lock:
+            for r in sv.requisiti:
+                if str(r.get("testo") or "").lower() in testi:
+                    r["al_collaudo"] = True
+                else:
+                    r.pop("al_collaudo", None)
+        self._salva()
+
+    def segna_provati(self, sv: Sviluppo, verdi: list[str], rossi: list[str]):
+        """L'esito degli esempi di accettazione per requisito (13/10): «provato» True con gli
+        esempi verdi, False con uno rosso; gli altri senza segno."""
+        v = {str(t).lower() for t in verdi or ()}
+        k = {str(t).lower() for t in rossi or ()}
+        with self._lock:
+            for r in sv.requisiti:
+                t = str(r.get("testo") or "").lower()
+                if t in k:
+                    r["provato"] = False
+                elif t in v:
+                    r["provato"] = True
+                else:
+                    r.pop("provato", None)
+        self._salva()
+
     def verifica_valida(self, sv: Sviluppo) -> bool:
         """C'è un confronto fatto per la versione consegnata di adesso?"""
         v = sv.verifica or {}
@@ -1636,7 +1665,8 @@ class Sviluppi:
         e = self.esiti(sv)
         if e is None or (not e["mancano"] and not e["parziali"]):
             return ""
-        t = rq.frase_confronto({**e, "fatti": [], "dopo": [], "limiti": []}, sv.tappa)
+        t = rq.frase_confronto({**e, "fatti": [], "dopo": [], "limiti": [], "da_guardare": []},
+                               sv.tappa)
         return "Attenzione: " + t[:1].lower() + t[1:]
 
     def da_completare(self, sv: Sviluppo) -> tuple[list[dict], bool]:

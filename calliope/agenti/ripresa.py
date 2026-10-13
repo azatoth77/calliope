@@ -93,7 +93,9 @@ def voce(lav, ora: float) -> dict:
          "passi0": int(getattr(lav, "passi0", 0) or 0),
          "token0": int(getattr(lav, "token0", 0) or 0),
          "attesa0": float(getattr(lav, "attesa0", 0) or 0),
-         "segnali": _json(getattr(lav, "segnali", None) or {})}
+         "segnali": _json(getattr(lav, "segnali", None) or {}),
+         # l'analisi prima del codice e gli esempi di accettazione (13/10)
+         "accettazione": _json(getattr(lav, "accettazione", None) or {})}
     if (getattr(lav, "risultato", None) or {}).get("esito") == "tappa":
         d["tappa"] = _json(lav.risultato)
     if lav.stato == "in_attesa":
@@ -164,6 +166,7 @@ def ricostruisci(riga: dict, Lavoro):
     lav.passi0, lav.token0 = int(riga.get("passi0") or 0), int(riga.get("token0") or 0)
     lav.attesa0 = float(riga.get("attesa0") or 0.0)
     lav.segnali = dict(riga.get("segnali") or {})
+    lav.accettazione = dict(riga.get("accettazione") or {})
     root = riga.get("sandbox")
     lav.sandbox_da = root if root and Path(root).is_dir() else None
     stato = str(riga["stato"])

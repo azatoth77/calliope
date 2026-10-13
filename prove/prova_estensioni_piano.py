@@ -333,6 +333,7 @@ def prova_servizio():
     cfg.agenti_risultati, cfg.agenti_sandbox = str(TMP / "risultati"), str(TMP / "sb_svc")
     cfg.agenti_sandbox_motore = "processo"
     cfg.llm_native_url = "http://127.0.0.1:9"
+    cfg.agenti_accettazione = False  # il copione non prevede l'analisi prima del codice (13/10: prova_fasi_agente_2)
     svc = Lavori(cfg, carica(cfg), log=lambda m: None)
     try:
         def visto(body):
