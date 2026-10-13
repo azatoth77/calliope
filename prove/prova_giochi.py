@@ -709,8 +709,13 @@ def prova_test_js(tmp: Path):
              not r["passano"] and "attesaRigira is not defined" in r["uscita"],
              r["uscita"][-200:])
     sb.scrivi("gioco.js", gioco)
-    verifica("consegna del gioco accettata", controlla_consegna(sb) is None,
-             str(controlla_consegna(sb)))
+    # Dal 13/10 un gioco NUOVO usa la macchina a stati (scheda.macchina): il tris con gioco.js
+    # libero passa solo come versione nuova di un gioco che c'era già (nome_atteso)
+    vecchio = m["nome"]
+    verifica("consegna del gioco accettata", controlla_consegna(sb, nome_atteso=vecchio) is None,
+             str(controlla_consegna(sb, nome_atteso=vecchio)))
+    verifica("un gioco nuovo senza la macchina a stati: rifiutato, con lo scheletro",
+             "macchina a stati" in str(controlla_consegna(sb)), str(controlla_consegna(sb)))
     sb.scrivi("logica.test.js", file["logica.test.js"].decode().replace('"X")', '"O")', 1))
     r = sb.test()
     verifica("un test sbagliato: non passano", not r["passano"] and r["esito"]["falliti"] == 1,
@@ -729,12 +734,12 @@ def prova_test_js(tmp: Path):
     (tmp / "sb2" / "logica.test.js").unlink()
     sb2.scrivi("manifesto.json", json.dumps(m))
     verifica("consegna senza test JavaScript: rifiutata",
-             "test" in str(controlla_consegna(sb2)))
+             "test" in str(controlla_consegna(sb2, nome_atteso=vecchio)))
     # Il difetto della seconda prova vera sulla DGX (05/10): gioco.js con require
     sb.scrivi("gioco.js", 'const { mossa } = require("./logica.js");\n'
               + file["gioco.js"].decode())
     sb.scrivi("manifesto.json", json.dumps(m))
-    errore = str(controlla_consegna(sb))
+    errore = str(controlla_consegna(sb, nome_atteso=vecchio))
     r = sb.test()
     verifica("gioco.js con require: consegna rifiutata e fumo con il consiglio",
              "require" in errore and "stesso spazio globale" in errore

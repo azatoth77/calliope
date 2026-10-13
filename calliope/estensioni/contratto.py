@@ -144,52 +144,71 @@ def classe_detta(azione: str) -> str:
 
 def scheda_testo(cfg=None) -> list[str]:
     """La scheda interattiva (05/10, scheda.py e schermi/giochi.py), generata dai valori del
-    codice: formato, interfaccia del riquadro, tetti, test, chi approva."""
+    codice: formato, interfaccia del riquadro, tetti, test, chi approva. Dal 13/10 un gioco
+    nuovo usa la macchina a stati di Calliope (estensioni/macchina.py, motore_gioco.js):
+    l'agente scrive solo la dichiarazione delle fasi e la logica pura."""
+    from . import macchina as mc
     from . import scheda as sc
     from ..schermi import giochi as gi
     c = lambda k, d: getattr(cfg, k, d) if cfg is not None else d  # noqa: E731
+    std = ", ".join(f"«{f}»" for n in ("inizia", "avanti", "ancora")
+                    for f in mc.COMANDI_STANDARD[n][0])
     return [
         "", "## 5. Scheda interattiva (giochi)",
         "Un gioco gira nel BROWSER degli schermi (PC, tablet, telefono), in un riquadro isolato "
         "(iframe sandbox, origine opaca): niente rete, niente localStorage, niente pagina "
-        "intorno. Non serve estensione.py: solo JavaScript.",
-        "- file: logica.js (le regole del gioco, funzioni pure senza DOM, in fondo `if (typeof "
-        "module !== \"undefined\") module.exports = {…};`), gioco.js (disegno e tocchi: DOM, "
-        "canvas o SVG dentro <div id=\"gioco\">, eventi con addEventListener), facoltativi "
-        "gioco.css e disegni .svg; i test logica.test.js con node:test e node:assert "
-        "(`const { … } = require(\"./logica.js\")`) e gioco.test.js, che guida il gioco vero "
-        "nel DOM finto con apriGioco (tocca, legge il testo visibile), che esegui_test fa "
-        "girare con Node, insieme a una prova di fumo: gli script della scheda con un DOM "
-        "finto e trecento "
-        "tocchi a caso (dichiara ogni variabile con let o const, \"use strict\" in cima). Nel "
-        "riquadro gli script si caricano uno dopo l'altro nello stesso spazio globale, come i "
-        "<script> del browser: gioco.js usa le funzioni di logica.js direttamente, senza "
-        "require né import (require solo nei test)",
-        "- manifesto: \"scheda\": {\"tipo\": \"gioco\", \"file\": [\"logica.js\", \"gioco.js\"], "
-        "\"stile\": \"gioco.css\", \"risorse\": [], \"giocatori\": {\"min\": 1, \"max\": 2}, "
-        "\"condivisa\": false, \"chat\": false, \"salva\": true, \"voce\": false, "
-        "\"azioni\": []}; cosa_fa per esempio {\"verbo\": \"propone\", \"oggetto\": \"una "
+        "intorno. Non serve estensione.py: solo JavaScript. Calliope dà la MACCHINA A STATI del "
+        "gioco: preparazione (quanti giocatori), turni, punti, esito di ogni mossa, fine con la "
+        "classifica e «ancora», il disegno della pagina, un pulsante per ogni comando e i "
+        "comandi a voce. Tu scrivi solo la dichiarazione delle fasi nel manifesto e la logica "
+        "pura in logica.js. Niente gioco.js, niente DOM, niente turni o punti fatti a mano.",
+        "- file: logica.js con `const GIOCO = {…}` e in fondo `if (typeof module !== "
+        "\"undefined\") module.exports = { GIOCO, … };`; facoltativi gioco.css (solo le "
+        "variabili del tema: --sfondo, --testo, --primario, --accento, --carattere, --raggio) e "
+        "disegni .svg; i test logica.test.js (node:test e node:assert, `const { GIOCO } = "
+        "require(\"./logica.js\")`) e gioco.test.js, che gioca la partita vera con la macchina "
+        "(apriGioco: g.tocca(\"Porta 1\"), g.comando(\"porta\", 3), g.avanza(ms), g.testo(), "
+        "g.stato() con fase, tocca, giocatori e punti, esito, comandi attivi). esegui_test li "
+        "fa girare con Node insieme alla prova di fumo per fasi: ogni fase con ogni comando e "
+        "ogni valore, partite intere fino alla fine",
+        "- manifesto: \"scheda\": {\"tipo\": \"gioco\", \"file\": [\"logica.js\"], \"stile\": "
+        "\"gioco.css\", \"risorse\": [], \"giocatori\": {\"min\": 1, \"max\": 4}, \"salva\": "
+        "false, \"voce\": false, \"azioni\": [], \"macchina\": {\"inizio\": \"turno\", "
+        "\"fasi\": {\"turno\": {\"pagina\": \"scelte\", \"turni\": true, \"verso\": [\"esito\", "
+        "\"fine\"], \"comandi\": {\"porta\": {\"forme\": [\"porta {n}\", \"la porta {n}\", "
+        "\"{n}\"], \"n\": {\"da\": 1, \"a\": 6}, \"etichetta\": \"Porta {n}\"}}}}, \"esito_s\": "
+        f"{mc.ESITO_S:g}}}}}; cosa_fa per esempio {{\"verbo\": \"propone\", \"oggetto\": \"una "
         "partita a tris sullo schermo\"}; input di solito nessuno",
-        "- nel riquadro c'è l'oggetto calliope: calliope.quandoPronto(f) (f riceve {giocatore, "
-        "giocatori, massimo, condivisa, storia}); calliope.salva(chiave, valore) e "
-        "calliope.leggi(chiave) → Promise (record e partite, chiave di lettere e cifre, valore "
-        f"JSON fino a {gi.MAX_SALVA // 1000} kB, {gi.MAX_DATI // 1_000_000} MB in tutto); "
-        "calliope.manda(dati) e calliope.quandoMessaggio(f) (con «condivisa»: le mosse agli "
-        "altri schermi della partita, f riceve {n, da, dati}); calliope.chat(testo) e "
-        "calliope.quandoChat(f) (con «chat»); calliope.di(testo) → Promise (con «voce»: "
-        f"una frase breve detta da Calliope, al più {c('giochi_frasi_minuto', 3)} al minuto, "
-        f"{gi.MAX_FRASE} caratteri); calliope.azione(nome, argomenti) → Promise (solo i metodi "
-        "della porta elencati in «azioni» e con lo scope in «permessi»); calliope.fine(esito); "
-        "calliope.risorsa(\"carta.svg\") → indirizzo data: del disegno; "
-        "calliope.quandoGiocatori(f), calliope.quandoFineTempo(f)",
-        "- comandi a voce, solo se la richiesta chiede di giocare a voce: nella scheda "
-        "\"ascolta\": {\"comandi\": {\"uno\": [\"uno\", \"la porta uno\"], \"ricomincia\": "
-        "[\"ricomincia\"]}, \"giocatore\": false}; al più 24 comandi, ognuno con 1–6 forme "
-        "brevi (1–5 parole) che vanno dette per intero (il nome davanti e i numeri in cifre o "
-        "in parole valgono già), non «basta», «stop», «esci»; calliope.quandoComando(f) (f "
-        "riceve {comando, giocatore}: giocatore solo con \"giocatore\": true, il nome di chi "
-        "è riconosciuto dalla voce) e calliope.comandiAttivi([nomi]) per dire quali valgono "
-        "adesso ([] nessuno). Il gioco si gioca anche con i tocchi",
+        f"- fasi: al più {mc.MAX_FASI} del gioco (nomi in minuscolo); preparazione, esito e fine "
+        "sono di Calliope e non si dichiarano. Per ogni fase: pagina (scelte: titolo, testo e "
+        "un pulsante per comando e valore; messaggio; tela, sotto), turni (true: dopo la mossa "
+        "tocca al giocatore dopo), verso (le fasi dove una mossa può portare; esito e fine "
+        f"valgono sempre), comandi (al più {mc.MAX_COMANDI_FASE}). Un comando: forme da dire "
+        "per intero (1–5 parole; il nome davanti e i numeri in cifre o in parole valgono già), "
+        "al più uno slot {n} per forma con \"n\": {\"da\": 1, \"a\": 6} (un numero, al più "
+        f"{mc.MAX_NUMERI}) o \"n\": {{\"valori\": {{\"rosso\": [\"rosso\"], \"blu\": [\"blu\", "
+        f"\"azzurro\"]}}}} (al più {mc.MAX_VALORI}); {{n}} da solo solo con al più "
+        f"{mc.MAX_SOLO_SLOT} valori; etichetta del pulsante. In tutto, con i valori, al più "
+        f"{mc.MAX_PIATTI} comandi a voce. Non si usano «basta», «stop», «esci» né le forme di "
+        f"Calliope ({std}, «N giocatori», «siamo in N»). L'esito va avanti da solo dopo "
+        "esito_s secondi (0: solo con «avanti» o il tocco)",
+        "- GIOCO: nuovaPartita({ giocatori, nomi }) → i dati della partita (un oggetto JSON); "
+        "mosse[fase][comando](dati, { valore, chi, giocatori, turno }) → { dati, punti, esito, "
+        "fase, dopo, ancora } e NIENT'ALTRO (dati: lo stato del gioco dopo la mossa; punti: un "
+        "numero a chi ha mosso o un elenco, uno per giocatore; esito: il testo da mostrare, poi "
+        "la fase «dopo»; fase: dove andare subito; ancora: true se lo stesso giocatore muove di nuovo); "
+        "attivi[fase](dati, ctx) → { comando: true | false | [valori] } (restringe, mai fuori dal "
+        "manifesto; senza: tutti); vista[fase](dati, ctx) → { titolo, sottotitolo, testo } "
+        "(solo testi: il disegno è della macchina). La partita finisce portando a \"fine\"; una "
+        "fase che non è la fine ha sempre almeno un comando attivo",
+        "- giochi in tempo reale o senza turni (memory a tempo, abilità, disegno): una fase con "
+        "\"pagina\": \"tela\" e GIOCO.tela[fase](area, dati, tela): disegni dentro area (DOM o "
+        "canvas, eventi con addEventListener) e ne esci con tela.esci({ dati, punti, fase: "
+        "\"fine\" }); «fine partita» vale sempre. Nella tela c'è l'oggetto calliope: "
+        "calliope.salva(chiave, valore) e calliope.leggi(chiave) → Promise (con «salva», "
+        f"valore JSON fino a {gi.MAX_SALVA // 1000} kB), calliope.di(testo) → Promise (con "
+        f"«voce»: al più {c('giochi_frasi_minuto', 3)} frasi al minuto, {gi.MAX_FRASE} "
+        "caratteri), calliope.risorsa(\"carta.svg\") → indirizzo data: del disegno",
         f"- tetti: un messaggio fino a {c('giochi_messaggio_max', 4096)} byte, "
         f"{c('giochi_messaggi_secondo', 10)} al secondo; se il riquadro non risponde per "
         f"{c('giochi_watchdog_s', 6.0):g} s (un ciclo infinito) si chiude; script "
@@ -198,12 +217,10 @@ def scheda_testo(cfg=None) -> list[str]:
         "XMLHttpRequest, WebSocket, WebRTC, Worker, eval e new Function, localStorage e "
         "cookie, window.open, location, top/parent/opener, postMessage diretto, onclick=\"…\" "
         "nell'HTML (usa addEventListener), iframe, script o link creati a mano",
-        "- con un bambino o un ospite nella partita i messaggi di calliope.manda portano solo "
-        "valori brevi senza spazi (mosse, coordinate): il testo libero va con calliope.chat",
         "- GIOCO PURO: «permessi» vuoti e «azioni» vuote (solo il riquadro, i dati suoi, la "
-        "voce, la partita condivisa): lo usano tutti, anche gli ospiti e sugli schermi di "
-        "stanza, e lo approva un adulto di casa. Con permessi o azioni lo approva solo chi "
-        "amministra: per un gioco chiedi il minimo",
+        "voce): lo usano tutti, anche gli ospiti e sugli schermi di stanza, e lo approva un "
+        "adulto di casa. Con permessi o azioni lo approva solo chi amministra: per un gioco "
+        "chiedi il minimo",
     ]
 
 

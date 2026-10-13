@@ -75,9 +75,12 @@ CAPACITA_GIOCO = (
     "telefono): grafica, animazioni, tocchi e clic, più giocatori sullo stesso schermo o tra "
     "schermi, turni, punti, record salvati; Calliope può dire frasi brevi durante il gioco; "
     "suoni e musica solo generati dal codice nel browser (Web Audio), senza file audio né "
-    "internet; comandi A VOCE brevi dichiarati dal gioco (al più 24, ognuno con forme fisse di "
-    "1-5 parole, numeri compresi: «tre», «la porta tre», «ricomincia»), che Calliope riconosce "
-    "e passa al gioco, anche senza il nome mentre il gioco aspetta una mossa.\nImpossibile "
+    "internet; il gioco è fatto di fasi (preparazione con il numero dei giocatori, turni, "
+    "esito di ogni mossa, fine con la classifica e «ancora», più le fasi del gioco) e ogni "
+    "fase ha i suoi comandi A VOCE brevi, anche con un numero o una scelta da un elenco "
+    "(«porta tre», «la porta 3», «rosso»; forme fisse di 1-5 parole), che Calliope riconosce "
+    "e passa al gioco, anche senza il nome mentre il gioco aspetta una mossa; ogni comando è "
+    "anche un pulsante.\nImpossibile "
     "oggi: frasi libere o lunghe a voce dentro il gioco (il gioco non sente il microfono: "
     "riceve solo i comandi che ha dichiarato); internet; i file del PC.")
 
