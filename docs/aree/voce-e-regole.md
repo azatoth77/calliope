@@ -1799,3 +1799,23 @@ ogni profilo (il prefisso in cache cambia una volta). Casi nuovi nel banco: `chi
 chi sei?» resta Calliope, mai «Sei Dario»), `chi_ospite` (nessun nome inventato), `chi_altro`
 («Chi era Mercurio?» non è chi parla). **Da rifare col 26B sulla DGX** (non provato:
 `python prove/prova_regressione.py 1 --solo ^chi` con il profilo della DGX).
+
+## Passo 0 della conversazione di stanza: tre regole nuove (13/10, ramo `stanza-passo-0`)
+
+Decisione [0029](../decisioni/0029-conversazione-di-stanza.md), dettagli in
+[stt-tts](stt-tts.md), [contesto-conversazione](contesto-conversazione.md) e [minori](minori.md).
+Nel campo `regole` del registro dei turni, contate nella sezione della compagnia di
+`calliope stato --turni`:
+
+- `compagnia_azioni_col_nome`: in compagnia una frase senza il nome nella finestra d'ascolto non
+  esegue azioni (vincolo di permesso su un'azione già scelta dal modello, principio 10); le
+  letture e il «sì» della stessa persona alla proposta passano. Interruttore omonimo.
+- `compagnia_anonima_continua`: la conversazione anonima del satellite non si chiude per
+  `conversazione_altra_persona` in compagnia (forma della conversazione, decisa dall'audio e dalla
+  voce). Interruttore `compagnia_anonima_condivisa`.
+- `pericolo_non_rivolta`: il segnale del rilevatore su una frase giudicata non rivolta a Calliope
+  non vale (sicurezza decisa da un giudizio sul canale, non da parole). Interruttore
+  `compagnia_pericolo_solo_rivolte`.
+
+Casi contrari in `prove/prova_compagnia_passo0.py` (non in `prova_testo.py`: nessuna delle tre
+guarda il testo della frase).

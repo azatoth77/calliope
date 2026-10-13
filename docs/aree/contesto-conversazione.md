@@ -1146,3 +1146,42 @@ vuota: il solo prefisso (prompt di sistema e tool, `Brain.prefix_tokens`, misura
 nella stessa finestra (`Ciclo._contesto_azzerato`); nel registro dei turni il campo
 `contesto_dopo`, in console «[CONTESTO] … (conversazione nuova)». Senza la misura del prefisso
 non si manda niente. Prova: `prova_eventi_disco.prova_dimentica_ciclo`.
+
+## La conversazione anonima condivisa in compagnia (13/10, ramo `stanza-passo-0`)
+
+**Verificato sul codice** il caso del 12/10 in auto («conversazione chiusa: parla un'altra persona»
+a ogni cambio di voce): le conversazioni delle persone sono già una per persona (`corsie.scegli`),
+ma in compagnia una frase breve vale ospite e la zona grigia va nella conversazione **anonima del
+satellite** (`ospite:<corsia>`, `corsie.py:291`); lì `Brain._check_conversation` vedeva Carlo,
+poi «ospite», poi Nicola, e chiudeva ogni volta (archiviata, riassunto in secondo piano, storia e
+proposta perse).
+
+**La forma scelta** (passo 0 della conversazione di stanza, decisione
+[0029](../decisioni/0029-conversazione-di-stanza.md); `Brain._anonima_condivisa`, regola
+`compagnia_anonima_continua`): in compagnia la conversazione anonima del satellite è **condivisa**
+da chi è lì e non si chiude quando cambia chi parla, se le due chiavi sono di persone registrate
+oppure se nella compagnia non ci sono voci sconosciute (allora «ospite» è una persona di casa con
+una frase troppo breve). Con una voce sconosciuta di mezzo, da o verso «ospite», si chiude come
+prima: è il caso del 03/10 (la password del wifi ripetuta a un ospite). Resta la chiusura per
+`storia_inattiva_s`. Ciò che resta nella storia è ciò che è stato detto ad alta voce davanti a
+tutti: i risultati riservati e personali sono sigillati a fine turno (`_seal_private`) o dalla
+proiezione degli eventi. Permessi per frase (`ToolRegistry.call`), proposta solo per la sua persona
+(`_take_pending`, regola `sospeso_altra_persona`), intenzioni per persona.
+
+**Chi ha detto cosa**: ogni messaggio della persona nella conversazione anonima porta `_chi` (il
+nome riconosciuto o «voce non riconosciuta»), solo in memoria e mai nel testo (i messaggi non
+cambiano: la cache del prefisso resta); quando la conversazione è condivisa
+(`Conversazione.condivisa`) i dati del turno lo dicono al modello: «Conversazione di gruppo vicino a
+questo satellite: le frasi di prima sono di più persone presenti (dalla più vecchia: Carlo,
+Nicola); ciò che hai detto l'hanno sentito tutte; permessi e azioni sono di chi parla adesso.»
+(`Brain._nota_gruppo`). La conservazione non cambia: i turni di un minore sono segnati
+`conserva: False` dal ciclo e non vanno su disco anche se la conversazione passa a un adulto
+(`senza_non_conservati`; `archivia` sceglie l'archivio per il proprietario del turno). Si spegne con
+`compagnia_anonima_condivisa: false`. Prova `prove/prova_compagnia_passo0.py` (con i contrari:
+senza compagnia, voce sconosciuta, conversazione di una persona, interruttore spento; il «sì» di
+Nicola non vale per la proposta di Carlo).
+
+Nella conversazione di stanza vera (passi 1–2) il contesto lo porterà il registro della stanza; la
+regola resta per le frasi incerte della corsia dei comandi. Con `eventi: attivo` la storia viene
+dalla proiezione e `_chi` non c'è: i dati del turno dicono allora solo che la conversazione è di
+gruppo (da guardare quando si accendono gli eventi).
