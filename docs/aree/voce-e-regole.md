@@ -332,7 +332,9 @@ misure di questo documento sono col 4B in locale: da rifare col 26B sulla DGX do
   - Banco di regressione (e4b, giri alternati con main nella stessa cartella): 83 e 82/87 main,
     81 e 82/87 ramo, prima frase 0,62 contro 0,65 s; `data_calcola` ammesso per «che giorno era
     ieri?» e «domani». «Calliope, chi sono?» → «Calliope.» sbaglia anche su main dopo le 20:30
-    (dipende dall'ora nel contesto del turno): da guardare a parte.
+    (dipende dall'ora nel contesto del turno): da guardare a parte. *(Storico: il 13/10 sbagliava
+    3/3 anche alle 15; la causa era la frase del prompt, sezione «"Chi sono?" → "Calliope."» in
+    fondo.)*
 - **Giro 5 della prova e2e** (06/10, voce di Piper di Andrea):
   - «Calliope, spegniti.» trascritto «spenniti» (2 giri su 6; con faster-whisper «speniti» 3 e
     «spenniti» 1 su 8 sintesi): `speniti` e `spenniti` sono forme di «spegniti» in
@@ -1766,3 +1768,34 @@ altra azione dichiarata (accesa, aperta, «te lo ricorderò», una nota insieme 
 il caso vero riscritto, nessuna variante che dichiari un'azione, contrari luce, nota con azione,
 promemoria).
 
+## «Chi sono?» → «Calliope.»: la frase del prompt (13/10, ramo `dimentica-conversazione`)
+
+Il caso aperto dal 04/10 («Calliope, chi sono?» → «Calliope.», visto «dopo le 20:30» e il 07/10
+tra i «casi fissi» del banco) **non dipende dall'ora** né da Ollama: il 13/10 alle 15 col 4B
+(`gemma4:e4b-it-qat`, Ollama 0.40.3 sul portatile) `prova_regressione --solo ^chi` dà «Calliope.»
+3 volte su 3, e anche «Chi sono?» di Bianca → «Io sono Calliope.» 3/3 (l'ospite lo stesso). Il
+tool `chi_parla` non c'entra (il nome è nei dati del turno, e il modello non lo chiama). La causa
+è nel prompt di sistema (`Config.system_prompt`): «Se ti chiedono chi sono, rispondi con il nome
+scritto nel messaggio subito prima della domanda». Due ambiguità: «chi sono» lo dice chi scrive il
+prompt (quindi Calliope stessa), e il nome «subito prima» di «chi sono?» è quello della wake word
+nella frase («**Calliope**, chi sono?»); con i ricordi, inoltre, il messaggio subito prima della
+domanda non è nemmeno il contesto del turno.
+
+Varianti provate (3 giri dei casi `chi*`, poi «Cosa sai fare?», con e4b):
+
+| Frase | casi «chi» | Effetto collaterale |
+|---|---|---|
+| quella di prima | 18/24 (chi 0/3, chi_bianca 0/3) | — |
+| «… rispondi con il nome dopo «persona:» nei dati del turno, non con il tuo» | 21/24 | ripete l'etichetta: «persona: Dario», «Persona: Calliope» |
+| «Se la persona chiede «chi sono?» o «sai chi sono?», … rispondi «Sei» e il suo nome …» | 24/24 | «Cosa sai fare?» → «Chi sono io, Calliope, e…» 3/3 (la citazione innesca) |
+| «Quando la persona ti chiede chi è lei stessa, vuole sapere il proprio nome, non il tuo: rispondi «Sei» e il suo nome, che hai nei dati del turno» | 33/36 | l'ospite risponde «Sono Calliope» 2/3 |
+| la stessa + «(o che è un ospite, se è così)» (**scelta**) | 48/48 con «Cosa sai fare?» | — |
+
+Banco intero (2 giri, scelta) 168/180 contro 83/90 di main (1 giro) nelle stesse condizioni; gli
+errori che restano sono quelli di sempre (l'ora dalla storia, «mostrami il documento», «Cosa sai
+fare?» e «Che giorno era ieri?» ballerini: ripetuti 4 volte, main 4/8 e il ramo 5/8 su quei due).
+Nessuna regola sul testo (principio 10): è il prompt, una frase al posto di un'altra, uguale per
+ogni profilo (il prefisso in cache cambia una volta). Casi nuovi nel banco: `chi_sei` («Calliope,
+chi sei?» resta Calliope, mai «Sei Dario»), `chi_ospite` (nessun nome inventato), `chi_altro`
+(«Chi era Mercurio?» non è chi parla). **Da rifare col 26B sulla DGX** (non provato:
+`python prove/prova_regressione.py 1 --solo ^chi` con il profilo della DGX).

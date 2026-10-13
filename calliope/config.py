@@ -2043,8 +2043,16 @@ class Config:
             # ti parla solo dopo aver chiamato chi_parla» lo contraddiceva
             # «chi ti parla è scritto nel messaggio…» finiva in testa alle risposte, come
             # «Chi ti parla è Dario.» (03/10, insieme a TURN_CONTEXT_MSG)
-            f"Se ti chiedono chi sono, rispondi con il nome scritto nel messaggio subito "
-            f"prima della domanda. "
+            # «Se ti chiedono chi sono, rispondi con il nome scritto nel messaggio subito prima
+            # della domanda» (fino al 13/10) era ambiguo: «chi sono» detto da chi scrive il
+            # prompt, e il nome subito prima di «chi sono?» è quello della wake word nella
+            # frase stessa («Calliope, chi sono?» → «Calliope.», «Chi sono?» → «Io sono
+            # Calliope.», 3/3 col 4B, a qualunque ora). Con questa: 24/24 sui casi «chi»; con
+            # «chi sono?» citato tra virgolette «Cosa sai fare?» cominciava «Chi sono io,
+            # Calliope…» (3/3), e con il nome dopo «persona:» lo ripeteva («persona: Dario»)
+            f"Quando la persona ti chiede chi è lei stessa, vuole sapere il proprio nome, "
+            f"non il tuo: rispondi «Sei» e il suo nome, che hai nei dati del turno (o che è "
+            f"un ospite, se è così). "
             f"{knowledge}"
             # «Ricordi tutto ciò che è stato detto» era falso: la storia si taglia (03/10)
             f"Ricordi gli ultimi scambi di questa conversazione. Se ti chiedono "

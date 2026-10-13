@@ -285,7 +285,19 @@ CASI = [
     # Caso vero del 03/10 07:52: Bianca appena registrata, nessun ricordo, riceveva «Chi sono?»
     ("chi_bianca", "Bianca", "familiare", "Chi sono?", CHI, ("rinomina_interlocutore",),
      lambda r: "Bianca" in r, None),
-    ("chi_garbato", "Dario", "amministra", "Calliope di Michisono.", ("chi_parla", None),
+    # Contrari della frase del prompt su «chi sono?» (13/10: «Calliope, chi sono?» → «Calliope.»
+    # e «Chi sono?» → «Io sono Calliope.» 3 volte su 3 con e4b, anche alle 15): «chi sei?» resta
+    # Calliope, l'ospite non riceve un nome, una domanda su un'altra persona non è chi parla
+    ("chi_sei", "Dario", "amministra", "Calliope, chi sei?", (None, "chi_parla"),
+     ("rinomina_interlocutore",),
+     lambda r: "Calliope" in r and not re.search(r"\bsei dario\b", r, re.I), None),
+    ("chi_ospite", None, "ospite", "Chi sono?", CHI, ("rinomina_interlocutore",),
+     lambda r: not re.search(r"\b(dario|bianca|calliope)\b", r, re.I), None),
+    ("chi_altro", "Dario", "amministra", "Chi era Mercurio?", (None, "biblioteca_cerca",
+                                                              "web_cerca"),
+     ("chi_parla", "rinomina_interlocutore"), lambda r: not re.search(r"\bdario\b", r, re.I),
+     None),
+    ("chi_garbato","Dario", "amministra", "Calliope di Michisono.", ("chi_parla", None),
      ("rinomina_interlocutore",), lambda r: not re.search(r"\bti chiamo\b", r, re.I), None),
     ("chi_garbato2", "Dario", "amministra", "Calliope e chiamo risonò.", ("chi_parla", None),
      ("rinomina_interlocutore",), lambda r: not re.search(r"\bti chiamo\b", r, re.I), None),
