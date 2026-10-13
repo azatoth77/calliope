@@ -1758,6 +1758,66 @@ web:
   web_searxng_stato: motore/searxng.json
   web_searxng_registro: https://hub.docker.com/v2/repositories/searxng/searxng/tags?page_size=50&ordering=last_updated
 
+notizie:
+  # Notizie dai feed RSS delle testate (13/10, calliope/notizie/, ricerche del 12 e 13/10 in
+  # docs/ricerche/2026-10-1[23]-notizie-rss.md): i feed si scaricano in casa e le notizie si
+  # leggono dal disco, senza mandare la domanda fuori (SearXNG resta il ripiego quando i feed
+  # non bastano). Tool `notizie`, di sola lettura; con online false non c'è
+  notizie_enabled: true
+  # I feed: «testata | tema | indirizzo», con in coda le opzioni «fuso=Europe/Rome» (la testata
+  # scrive l'ora italiana marcata GMT, come Sky TG24) e «veloce» (feed che cambia per intero in
+  # meno di 2 ore: si scarica ogni ora nei giorni in cui qualcuno chiede notizie). Temi:
+  # generale, sport, economia, tecnologia, ragazzi (i soli, con sport e tecnologia, che
+  # sentono i minori), allerta (bollettini della Protezione civile). La testata è il nome detto a
+  # voce («secondo l'ANSA»). Il feed regionale ANSA si aggiunge da solo (notizie_regione)
+  notizie_feed:
+  - ANSA | generale | https://www.ansa.it/sito/ansait_rss.xml
+  - ANSA | generale | https://www.ansa.it/sito/notizie/topnews/topnews_rss.xml
+  - Rainews | generale | https://www.rainews.it/rss/tutti
+  - Sky TG24 | generale | https://tg24.sky.it/rss/tg24.xml | fuso=Europe/Rome
+  - AGI | generale | https://www.agi.it/rss | veloce
+  - Adnkronos | generale | https://www.adnkronos.com/RSS_Ultimora.xml | veloce
+  - Il Post | generale | https://www.ilpost.it/feed
+  - Il Sole 24 Ore | generale | https://www.ilsole24ore.com/rss/italia.xml
+  - La Gazzetta dello Sport | sport | https://www.gazzetta.it/dynamic-feed/rss/section/last.xml
+  - ANSA | sport | https://www.ansa.it/sito/notizie/sport/sport_rss.xml
+  - Corriere dello Sport | sport | https://www.corrieredellosport.it/rss/calcio
+  - ANSA | economia | https://www.ansa.it/sito/notizie/economia/economia_rss.xml
+  - Adnkronos | economia | https://www.adnkronos.com/RSS_Economia.xml
+  - Il Sole 24 Ore | economia | https://www.ilsole24ore.com/rss/economia.xml
+  - HDblog | tecnologia | https://www.hdblog.it/feed/
+  - Punto Informatico | tecnologia | https://www.punto-informatico.it/feed/
+  - ANSA | tecnologia | https://www.ansa.it/canale_tecnologia/notizie/tecnologia_rss.xml
+  - Focus Junior | ragazzi | https://www.focusjunior.it/feed/
+  - Protezione civile | allerta | https://api.protezionecivile.it/default/dpcPortalGenerateRss?categoria=bollettino_vigilanza
+  - Protezione civile | allerta | https://api.protezionecivile.it/default/dpcPortalGenerateRss?categoria=bollettino_criticita
+  # Testate spente per nome, e accese per nome (un nome in notizie_accese vince su
+  # notizie_spente). Il Post e Il Sole 24 Ore sono spenti di serie: le loro condizioni vietano
+  # l'«elaborazione» dei contenuti o il loro uso per i sistemi di IA (ricerca del 13/10, § 2).
+  # Per accenderli, in calliope.locale.yaml, sezione notizie:
+  #   notizie_accese: [Il Post, Il Sole 24 Ore]
+  notizie_spente:
+  - Il Post
+  - Il Sole 24 Ore
+  notizie_accese: []
+  # Feed in più di questa casa (una testata della città), stessa forma di notizie_feed, in
+  # calliope.locale.yaml: così l'elenco di serie resta quello del file d'esempio
+  notizie_feed_extra: []
+  # Il feed regionale dell'ANSA: vuoto = la regione della città di casa (casa_citta, o quella
+  # detta a voce), «no» = nessuno, oppure il nome della regione («Lombardia»)
+  notizie_regione: ''
+  # Da che livello si possono chiedere: ospite, familiare o amministra. La domanda non esce
+  # di casa (solo lo scarico, uguale per tutti): di predefinito anche gli ospiti. Il ripiego su
+  # SearXNG vale solo per chi può usare web_cerca (web_livello)
+  notizie_livello: ospite
+  # Ogni quanti minuti si scaricano i feed, solo se qualcuno ha chiesto notizie negli ultimi
+  # notizie_attesa_giorni giorni (decisione 0024: niente internet quando non serve); dopo
+  # notizie_conserva_giorni le voci si cancellano. Il file è nella cartella dei dati
+  notizie_intervallo_min: 120.0
+  notizie_attesa_giorni: 7.0
+  notizie_conserva_giorni: 7.0
+  notizie_db: notizie.db
+
 segreti:
   # File dei segreti, fuori da git: il token di Home Assistant sta sotto
   # «home_assistant:» alla voce «token:». Relativo alla cartella del file di

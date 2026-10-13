@@ -178,7 +178,7 @@ capacita.CONTROLLI["pc"] = _orig
 # ── registro, riassunto, prompt ──
 reg = capacita.controlla(cfg)
 riass = reg.riassunto()
-verifica("riassunto compatto", riass.startswith("Capacità: ") and " attive su 18" in riass
+verifica("riassunto compatto", riass.startswith("Capacità: ") and " attive su 19" in riass
          and "non funziona: modello linguistico (Ollama non risponde)" in riass, riass)
 righe = reg.righe_avvio()
 verifica("righe dell'avvio: riassunto e passi", righe[0].startswith("[CAPACITÀ]")
@@ -362,7 +362,8 @@ verifica("macchina nuova: esce con 0 e JSON valido", p.returncode == 0 and data 
 verifica("macchina nuova: librerie assenti = mancante",
          all(stati.get(k) == "mancante" for k in ("llm", "stt", "voce", "audio", "biblioteca",
                                                   "documenti", "schermi")), str(stati))
-verifica("macchina nuova: 18 capacità (con archivio, ufficio, conversazioni e ricerca web), nessun crash", len(stati) == 18, str(stati))
+verifica("macchina nuova: 19 capacità (con archivio, ufficio, conversazioni, ricerca web e "
+         "notizie), nessun crash", len(stati) == 19, str(stati))
 p = subprocess.run([sys.executable, "-m", "calliope.stato"], cwd=vuota, env=env,
                    capture_output=True, text=True, encoding="utf-8")
 verifica("tabella da terminale", p.returncode == 0 and "CAPACITÀ" in p.stdout
