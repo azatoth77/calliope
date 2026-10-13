@@ -322,6 +322,12 @@ def _senza_conti_dei_test(testo: str) -> str:
     return "; ".join(p for p in pezzi if p and not _CONTI_TEST.search(p))
 
 
+# La frase in più di un'estensione chiusa al tetto con gli esempi di accettazione verdi (13/10
+# sera, Agente._consegna_al_tetto)
+AL_TETTO = ("L'agente non ha fatto in tempo a consegnare, ma gli esempi di accettazione "
+            "passano tutti: il lavoro l'ho chiuso io.")
+
+
 def frase_tappa(lav, titolo: str) -> str:
     """Il rapporto di una tappa (08/10, versione 2 della modalità sviluppo), senza il nome di
     chi l'ha chiesto: cosa è fatto, cosa blocca, i segnali di giro a vuoto, la scelta."""
@@ -1292,6 +1298,11 @@ class Lavori:
                    **{k: v for k, v in e.parziale.items() if v}}
             if self._sandbox is not None:
                 ris.update(self._parziale(lav, self._sandbox, dest))
+                # Gli esempi di accettazione rieseguiti anche qui, sui file del momento (13/10
+                # sera, banco della temperatura L7: senza, l'esito degli esempi restava vuoto e
+                # il banco diceva «rossi» con il codice ormai giusto)
+                if lav.tipo == "estensione":
+                    self._esito_accettazione(lav, self._sandbox, ris)
         except ErroreSandbox as e:
             lav.stato = "errore"
             self.log(f"[AGENTI] {lav.id}: {e}")
@@ -1459,17 +1470,14 @@ class Lavori:
         a = getattr(lav, "accettazione", None) or {}
         if a.get("stato") != "pronta" or not a.get("file") or ris.get("esito") == "tappa":
             return
-        nome_file = a.get("nome_file") or acc.FILE
         try:
-            r = sb.test(nome_file, fumo=False)
+            r = acc.esegui(sb, a)
         except Exception as e:  # noqa: BLE001
             self.log(f"[AGENTI] {lav.id}: esempi di accettazione non eseguiti: {e}")
             return
-        if nome_file.endswith(".js"):
-            # Un gioco (13/10): Node fa girare anche i test dell'agente; contano gli esempi
-            passano, _ = acc.esito_js(r.get("uscita"))
-            r = {**r, "passano": passano}
-        rossi = acc.rossi(r.get("uscita"))
+        if r is None:
+            return
+        rossi = r["rossi"]
         if not r.get("passano") and not rossi:
             # Un errore prima dei test (l'import di estensione.py): tutti rossi
             rossi = list(a.get("requisiti_provati") or [])
@@ -1694,6 +1702,8 @@ class Lavori:
                 "file_utente": (lav.input or {}).get("nome") or None,
                 "consegnati": r.get("consegnati"),
                 "test": r.get("test"), "file": r.get("file"), "motivo": r.get("motivo"),
+                # Chiuso dal codice al tetto con gli esempi verdi (13/10 sera): il tetto toccato
+                "consegna_al_tetto": r.get("consegna_al_tetto") or None,
                 "modello": self.imp.modello, "passi": lav.passi, "token": lav.token,
                 "token_letti": lav.prompt_token, "cedimenti": lav.cedimenti,
                 # 05/10: il ragionamento a parte, e il contesto (finestra, picco dei token
@@ -1764,6 +1774,9 @@ class Lavori:
         if r.get("esito") == "impossibile":
             return f"non sono {riuscita} a fare «{titolo}». {per_la_voce(r.get('riassunto'))}"
         if lav.tipo == "estensione" and r.get("estensione"):
+            if r.get("consegna_al_tetto"):
+                # Chiusa dal codice al tetto (13/10 sera): detto, in una frase
+                return (str(r["estensione"]["frase"]).rstrip() + " " + AL_TETTO).strip()
             return r["estensione"]["frase"]
         if lav.tipo in ("codice", "estensione"):
             sintesi = per_la_voce(r.get("riassunto"))
