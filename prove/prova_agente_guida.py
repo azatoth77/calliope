@@ -351,12 +351,12 @@ def prova_ospite_e_manifesto(tmp: Path):
 def _estrai(testo: str, nomi: set) -> dict:
     out, cur = {}, None
     for r in testo.split("\n"):
-        m = re.match(r"^([\w.]+\.(?:js|py))( —.*)?:$", r)
+        m = re.match(r"^([\w.]+\.(?:js|py|json))( —.*)?:$", r)
         if m and m.group(1) in nomi:
             cur = m.group(1)
             out[cur] = []
             continue
-        if cur and r.startswith(("Ogni gestore", "Un test che", "Ciò che")):
+        if cur and r.startswith(("Ogni gestore", "Un test che", "Ciò che", "Una mossa")):
             cur = None
             continue
         if cur:
@@ -384,24 +384,33 @@ def prova_scheletri(tmp: Path):
              len(SCHELETRI["gioco"]) <= 3000 and len(SCHELETRI["estensione"]) <= 1600
              and len(SCHELETRI["python"]) <= 600 and len(SCHELETRI["csharp"]) <= 600,
              str({k: len(v) for k, v in SCHELETRI.items()}))
-    g = _estrai(SCHELETRI["gioco"], {"logica.js", "gioco.js", "logica.test.js",
+    g = _estrai(SCHELETRI["gioco"], {"manifesto.json", "logica.js", "logica.test.js",
                                      "gioco.test.js"})
-    dich = lambda t: set(re.findall(r"^(?:const|let|var|function)\s+(\w+)", t, re.M))  # noqa: E731
-    verifica("gioco: logica.js e gioco.js senza nomi dichiarati due volte",
-             len(g) == 4 and not dich(g["logica.js"]) & dich(g["gioco.js"]),
-             str(dich(g["logica.js"]) & dich(g["gioco.js"])))
-    verifica("…i gestori passano da sicuro(), che cattura",
-             "addEventListener(\"click\", sicuro(" in g["gioco.js"]
-             and "catch (e)" in g["gioco.js"])
+    # Dal 13/10 la macchina a stati di Calliope: la scheda con «macchina», logica.js con GIOCO
+    # e niente gioco.js (niente DOM, niente gestori: il disegno è del motore)
+    from calliope.estensioni import scheda as sch
+    try:
+        scheda_gioco = sch.normalizza(json.loads(g.get("manifesto.json", "{}")), {})
+    except (ValueError, sch.SchedaNonValida) as e:
+        scheda_gioco = None
+        print("   ", e)
+    verifica("gioco: la scheda con la macchina a stati è valida, logica.js dichiara GIOCO, "
+             "niente gioco.js", len(g) == 4 and scheda_gioco is not None
+             and scheda_gioco.get("macchina") and "const GIOCO" in g["logica.js"]
+             and "gioco.js" not in scheda_gioco["file"] and "document" not in g["logica.js"],
+             str(sorted(g)))
     if shutil.which("node"):
         sb = sandbox(tmp, "scheletro-gioco")
         for k, v in g.items():
-            sb.scrivi(k, v)
-        sb.scrivi("manifesto.json", json.dumps(MANIFESTO_GIOCO))
+            if k != "manifesto.json":
+                sb.scrivi(k, v)
+        sb.scrivi("manifesto.json", json.dumps({**MANIFESTO_GIOCO,
+                                                "scheda": json.loads(g["manifesto.json"])}))
         r = sb.test()
-        verifica("…e passa i suoi test (anche quello del disegno, con apriGioco) e la prova "
-                 "di fumo", r["passano"] and "ok prova di fumo" in r["uscita"]
-                 and "ok si tocca Inizia e compare la mossa" in r["uscita"], r["uscita"][-300:])
+        verifica("…e passa i suoi test (anche quello della partita, con apriGioco) e la prova "
+                 "di fumo per fasi", r["passano"] and "ok prova di fumo" in r["uscita"]
+                 and "ok si apre una porta e poi tocca all'altro" in r["uscita"],
+                 r["uscita"][-300:])
         from calliope.estensioni.prompt import controlla_consegna
         verifica("…e la consegna del gioco", controlla_consegna(sb) is None,
                  str(controlla_consegna(sb)))

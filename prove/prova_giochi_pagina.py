@@ -394,6 +394,29 @@ def main() -> int:
         verifica("comandi a voce nella partita di prova: arrivano (il gioco cambia i suoi "
                  "comandi attivi), anche senza ponte", ok is not None and ok2 is not None
                  and a.giochi.partite[out["partita"]].prova, str(attivi()))
+
+        # ── la macchina a stati di Calliope (13/10, estensioni/motore_gioco.js) ──
+        # Il motore gira nel riquadro vero (sandbox, CSP con le impronte) e dice a Calliope i
+        # comandi di ogni fase: preparazione, turno con le porte chiuse, esito, di nuovo turno
+        clic(A, *centro(A, "article.modo-gioco .gioco-chiudi"))
+        aspetta(lambda: a.giochi.ascolto([sa]) is None, 5)
+        a.installa("porte_fasi")
+        out = a.chiama("est_porte_fasi", {"partita": "nuova"}, "Dario", schermo=schermi["A"])
+        pm = out.get("partita")
+        prep = ["giocatori_1", "giocatori_2", "giocatori_3", "giocatori_4", "inizia"]
+        ok = aspetta(lambda: attivi() == prep, 15)
+        verifica("macchina a stati: il motore parte nel riquadro e chiede quanti giocatori",
+                 pm and ok is not None, str(attivi()))
+        a.giochi.comando(pm, sa, "giocatori_2")
+        ok = aspetta(lambda: attivi() == ["porta_1", "porta_2", "porta_3", "porta_4"], 5)
+        verifica("macchina a stati: «siamo in due» → il turno con le quattro porte", ok is not None,
+                 str(attivi()))
+        a.giochi.comando(pm, sa, "porta_3")
+        ok = aspetta(lambda: attivi() == ["avanti"], 5)
+        ok2 = aspetta(lambda: attivi() == ["porta_1", "porta_2", "porta_4"], 8)
+        verifica("macchina a stati: la porta 3 → l'esito, che va avanti da solo; la porta 3 non "
+                 "vale più", ok is not None and ok2 is not None, str(attivi()))
+        clic(A, *centro(A, "article.modo-gioco .gioco-chiudi"))
     finally:
         for pg in pagine.values():
             pg.chiudi()

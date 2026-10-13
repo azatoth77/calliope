@@ -113,9 +113,16 @@ voce raccontava male gli esiti, i comandi del flusso si perdevano.
 4. **Macchina a stati dei giochi** fornita da Calliope: fasi fisse (preparazione, turno, esito,
    fine) con una fase libera come scappatoia, pagine a schermo fisso ridisegnabili, comandi a voce
    per fase anche con un parametro («porta tre», limitato al dominio dichiarato), l'agente che
-   scrive solo dati, logica pura e disegno. **Prima un progetto scritto.** *Da approfondire* ·
-   dipende da: il progetto (rigidità, una sola fonte dello stato, lo slot che allarga la regola
-   deterministica, compatibilità dei giochi già approvati).
+   scrive solo dati, logica pura e disegno. **Prima un progetto scritto** (fatto il 12/10:
+   [`2026-10-12-giochi-macchina-stati.md`](ricerche/2026-10-12-giochi-macchina-stati.md), con le
+   risposte di chi amministra). **In parte fatta il 13/10** (ramo `giochi-stati`): il motore nel
+   riquadro e nei test con le fasi standard, i turni, i punti e l'esito che va avanti da solo, la
+   forma delle mosse controllata (l'esito annidato del 12/10 non passa), lo slot come elenco di
+   comandi piatti, la tela, la prova di fumo per fasi, lo scheletro e il contratto nuovi, gli
+   esempi di accettazione dei giochi in sola lettura ([giochi](aree/giochi.md)). *Resta*: il palco
+   fisso con i sei modelli di pagina e la rimozione dei giochi vecchi (passo 4 del progetto),
+   l'istantanea validata dal server, le domande standard, il giudice di fase, «gioco anch'io» e i
+   nomi scritti, la ripresa dopo «Riapri»; il giro vero sulla DGX.
 5. **Flusso dell'agente a fasi** (proposte accettate da Dario il 12/10). **Parte 1 fatta il 12/10
    sera** (ramo `fasi-parte1`): la correzione che parte da un test rosso (rimandata una volta,
    poi «non sono riuscita a riprodurre il problema»), i giochi provati dal disegno nel DOM finto
@@ -125,8 +132,8 @@ voce raccontava male gli esiti, i comandi del flusso si perdevano.
    più due domande sulle contraddizioni, gli esempi dato → risultato trasformati dal codice in
    test di accettazione in sola lettura, la revisione che dice «da guardare tu»; in più la spinta
    a consegnare con i test verdi, i test di partenza delle estensioni con la firma giusta,
-   temperatura 0,6. *Resta*: gli esempi per i programmi, i test di accettazione dei giochi (dopo
-   la macchina a stati), la passata con il ragionamento; il banco da rifare sulla DGX · ricerca
+   temperatura 0,6. *Resta*: gli esempi per i programmi, la passata con il ragionamento (i test di
+   accettazione dei giochi sono fatti il 13/10 con la macchina a stati, punto 4); il banco da rifare sulla DGX · ricerca
    [`2026-10-12-flusso-agente-fasi.md`](ricerche/2026-10-12-flusso-agente-fasi.md) (§ 5, § 6).
 
 ### 2. Registro degli eventi e dialogo (E1–E11)

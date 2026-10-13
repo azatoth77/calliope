@@ -28,6 +28,13 @@ Il manifesto ha una sezione `scheda`:
                "ascolta": {          facoltativo (11/10): i comandi a voce del gioco
                    "comandi": {"uno": ["uno", "la porta uno"], "ricomincia": ["ricomincia"]},
                    "giocatore": false}   la mossa porta il nome di chi l'ha detta
+               "macchina": {…}       dal 13/10: la macchina a stati di Calliope (macchina.py)
+
+**La macchina a stati** (13/10, calliope/estensioni/macchina.py e motore_gioco.js): un gioco
+nuovo dichiara fasi e comandi in `macchina` e scrive in logica.js solo `GIOCO` (partita nuova,
+mosse, comandi attivi, vista); preparazione, turni, punti, esito, fine, disegno, pulsanti e voce
+sono del motore, che il documento del riquadro carica prima degli script del gioco. Con la
+macchina `ascolta` non si scrive: lo ricava Calliope dalle fasi (gli slot espansi).
 
 **Comandi a voce** (`ascolta`, 11/10, calliope/gioco_voce.py): un elenco breve e chiuso; una
 frase che corrisponde per intero a una forma di un comando attivo va dritta al gioco come mossa
@@ -84,7 +91,7 @@ def normalizza(s, permessi: dict | None = None) -> dict | None:
     if not isinstance(s, dict):
         raise SchedaNonValida("«scheda» deve essere un oggetto")
     noti = {"tipo", "file", "stile", "risorse", "giocatori", "condivisa", "chat", "salva",
-            "voce", "azioni", "ascolta"}
+            "voce", "azioni", "ascolta", "macchina"}
     altri = [k for k in s if k not in noti]
     if altri:
         raise SchedaNonValida(f"«scheda»: sconosciuto {', '.join(map(str, altri))} (solo "
@@ -136,12 +143,25 @@ def normalizza(s, permessi: dict | None = None) -> dict | None:
         if manca:
             raise SchedaNonValida(f"«scheda.azioni»: {', '.join(manca)} senza lo scope in "
                                   "«permessi» (vedi il contratto delle capacità)")
-    ascolta = _ascolta(s.get("ascolta"), azioni)
+    macchina = None
+    if s.get("macchina") not in (None, False, {}):
+        from . import macchina as mc
+        if s.get("ascolta") not in (None, False, {}, []):
+            raise SchedaNonValida("«scheda.ascolta» non va con «macchina»: i comandi a voce sono "
+                                  "quelli delle fasi, li ricava Calliope")
+        try:
+            macchina = mc.normalizza(s.get("macchina"), {"min": gmin, "max": gmax})
+            ascolta = mc.ascolta(macchina, {"min": gmin, "max": gmax})
+        except mc.MacchinaNonValida as e:
+            raise SchedaNonValida(str(e)) from None
+    else:
+        ascolta = _ascolta(s.get("ascolta"), azioni)
     return {"tipo": tipo, "file": list(file), "stile": stile, "risorse": sorted(set(risorse)),
             "giocatori": {"min": gmin, "max": gmax}, "condivisa": condivisa, "chat": chat,
             "salva": _bool(s.get("salva")) if "salva" in s else True,
             "voce": _bool(s.get("voce")), "azioni": azioni,
-            **({"ascolta": ascolta} if ascolta else {})}
+            **({"ascolta": ascolta} if ascolta else {}),
+            **({"macchina": macchina} if macchina else {})}
 
 
 def _ascolta(a, azioni) -> dict | None:
@@ -215,7 +235,10 @@ def in_parole(m: dict) -> list[str]:
     if s["azioni"]:
         out.append("dal gioco chiede: " + ", ".join(a.replace("_", " ") for a in s["azioni"]))
     a = s.get("ascolta")
-    if a:
+    if s.get("macchina"):
+        from .macchina import in_parole as macchina_in_parole
+        out.append(macchina_in_parole(s["macchina"]))
+    elif a:
         n = len(a["comandi"])
         out.append("si gioca anche a voce, con " + ("un comando" if n == 1 else f"{n} comandi")
                    + (" e il nome di chi gioca" if a.get("giocatore") else ""))
@@ -361,6 +384,47 @@ _STILE_BASE = ("html,body{margin:0;padding:0;height:100%;background:#fafafa;colo
                "#gioco{width:100%;min-height:100%;box-sizing:border-box;padding:2vmin}")
 
 
+# Lo stile del motore (13/10): il gioco lo cambia con le variabili nel suo .css (tema), senza
+# toccare la logica. Pulsanti grandi, testo che va a capo, niente che esca dalla larghezza
+STILE_MOTORE = (
+    ":root{--sfondo:#fafafa;--testo:#222;--primario:#3557c9;--accento:#f39a2e;"
+    "--carattere:system-ui,sans-serif;--raggio:12px}"
+    "html,body{background:var(--sfondo);color:var(--testo);font-family:var(--carattere)}"
+    ".motore{display:flex;flex-direction:column;align-items:center;gap:2vmin;"
+    "text-align:center;max-width:100%;overflow-wrap:anywhere}"
+    ".motore .titolo{font-size:min(7vmin,48px);margin:1vmin 0}"
+    ".motore .sottotitolo{font-size:min(4vmin,26px);margin:0;opacity:.8}"
+    ".motore .testo{font-size:min(5vmin,34px);margin:1vmin 0}"
+    ".motore .scelte{display:flex;flex-wrap:wrap;justify-content:center;gap:2vmin}"
+    ".motore .comando{font:inherit;font-size:min(5vmin,30px);min-width:44px;min-height:44px;"
+    "padding:1.5vmin 3vmin;border:0;border-radius:var(--raggio);background:var(--primario);"
+    "color:#fff;cursor:pointer}"
+    ".motore .punti{display:flex;flex-wrap:wrap;justify-content:center;gap:2vmin;"
+    "font-size:min(4vmin,24px)}"
+    ".motore .giocatore.tocca{font-weight:bold;border-bottom:4px solid var(--accento)}"
+    ".motore .classifica{list-style:none;padding:0;font-size:min(5vmin,30px)}"
+    ".motore .tela{width:100%;min-height:50vh}"
+    ".motore .errore-gioco{color:#a00;font-size:min(4vmin,22px)}")
+
+_MOTORE: str | None = None
+
+
+def motore_js() -> str:
+    """Il motore della macchina a stati (motore_gioco.js accanto a questo file)."""
+    global _MOTORE
+    if _MOTORE is None:
+        from pathlib import Path
+        _MOTORE = Path(__file__).with_name("motore_gioco.js").read_text(encoding="utf-8")
+    return _MOTORE
+
+
+def avvio_js(macchina: dict, giocatori: dict) -> str:
+    """Lo script dopo quelli del gioco: avvia il motore con la logica (GIOCO) e la macchina."""
+    dati = json.dumps({"macchina": macchina, "giocatori": giocatori}, ensure_ascii=False)
+    return ('CalliopeMotore.avvia(typeof GIOCO === "undefined" ? undefined : GIOCO, '
+            + _js_sicuro(dati) + ");")
+
+
 def _hash(testo: str) -> str:
     return "'sha256-" + base64.b64encode(hashlib.sha256(testo.encode("utf-8")).digest()).decode() + "'"
 
@@ -382,7 +446,14 @@ def documento(scheda: dict, file: dict[str, bytes]) -> tuple[str, str]:
     runtime = RUNTIME_JS.replace("__RISORSE__", json.dumps(risorse).replace("</", "<\\/"))
     script = [runtime] + [_js_sicuro(file.get(f, b"").decode("utf-8", "replace"))
                           for f in scheda["file"]]
-    css = _STILE_BASE + "\n" + (file.get(scheda["stile"], b"").decode("utf-8", "replace")
+    base = _STILE_BASE
+    if scheda.get("macchina"):
+        # La macchina a stati (13/10): il motore prima degli script del gioco, l'avvio dopo
+        # (GIOCO è una dichiarazione di logica.js nello stesso spazio globale)
+        script = ([runtime, _js_sicuro(motore_js())] + script[1:]
+                  + [avvio_js(scheda["macchina"], scheda["giocatori"])])
+        base = _STILE_BASE + STILE_MOTORE
+    css = base + "\n" + (file.get(scheda["stile"], b"").decode("utf-8", "replace")
                                 if scheda.get("stile") else "")
     css = css.replace("</", "<\\/")
     html = ("<!doctype html><html lang=\"it\"><head><meta charset=\"utf-8\">"

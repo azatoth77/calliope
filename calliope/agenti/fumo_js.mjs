@@ -14,8 +14,24 @@
 // livello: sempre «Nessun punto!», con i test della logica verdi. Un test che tocca una porta e
 // legge cosa compare lo prende alla prima versione. Il caso del gioco (Math.random) ha un seme
 // fisso, nella prova di fumo e in apriGioco (opzione «seme»): esiti ripetibili.
-import { readFileSync } from "node:fs";
+//
+// Dal 13/10 (macchina a stati dei giochi, calliope/estensioni/motore_gioco.js) un gioco con
+// «scheda.macchina» si carica con il motore davanti, come nel riquadro, e la prova di fumo è
+// **per fasi**: l'esploratore percorre la macchina dichiarata (ogni comando con ogni valore, da
+// ogni numero di giocatori), dice le fasi senza uscita e quelle mai raggiunte, i comandi mai
+// attivi, le mosse che lanciano o restituiscono una forma sbagliata, e gioca partite intere fino
+// alla fine; poi i tocchi a caso sui pulsanti del motore.
+import { existsSync, readFileSync } from "node:fs";
 import vm from "node:vm";
+
+// Il motore della macchina a stati: accanto a questo file nel container (/opt/calliope), in
+// calliope/estensioni nel repository
+const MOTORE = [new URL("./motore_gioco.js", import.meta.url), new URL("../estensioni/motore_gioco.js", import.meta.url)]
+  .find((u) => existsSync(u));
+export function testoMotore() {
+  if (!MOTORE) throw new Error("il motore dei giochi (motore_gioco.js) non c'è");
+  return readFileSync(MOTORE, "utf8");
+}
 
 // Un generatore con seme (mulberry32): lo stesso seme, la stessa sequenza
 export function creaCaso(seme = 1) {
@@ -97,7 +113,7 @@ async function prepara(file, opzioni = {}) {
     }
     let t = dove + (ctx.elemento ? ` su ${descrivi(ctx.elemento)}` : "")
       + (ctx.bersaglio && ctx.bersaglio !== ctx.elemento ? ` (toccato ${descrivi(ctx.bersaglio)})` : "")
-      + `: ${e && e.name ? e.name + ": " : ""}${msg.slice(0, 200)}`
+      + `: ${e && e.name ? e.name + ": " : ""}${msg.slice(0, e && e.name === "ErroreGioco" ? 420 : 200)}`
       + (fr.length ? ` [in ${fr.join(" ← ")}]` : "");
     if (ctx.gestore) {
       t += ". Un gestore di evento ha lanciato un'eccezione: ogni gestore deve catturare gli "
@@ -243,7 +259,8 @@ async function prepara(file, opzioni = {}) {
   const ascolti = { avvio: [], messaggio: [], chat: [], giocatori: [], pausa: [], fine_tempo: [], comando: [] };
   // I comandi a voce (11/10, «ascolta» nel manifesto): quelli dichiarati, e quelli che il gioco
   // dice attivi adesso con comandiAttivi (all'inizio tutti); un nome non dichiarato è un errore
-  const dichiarati = Object.keys(opzioni.comandi || {});
+  const dichiarati = opzioni.macchina ? tuttiPiatti(opzioni.macchina, opzioni.minimo || 1, opzioni.massimo || 1)
+    : Object.keys(opzioni.comandi || {});
   let attivi = dichiarati.slice();
   const avvio = { partita: "P1", giocatore: 1, giocatori: opzioni.giocatori || 1, massimo: Math.max(opzioni.massimo || 1, opzioni.giocatori || 1), condivisa: false, storia: [], lingua: "it",
     ...(dichiarati.length ? { comandi: dichiarati.slice() } : {}) };
@@ -293,13 +310,32 @@ async function prepara(file, opzioni = {}) {
     ascolto = true;
   }
   const amb = { errori, nota, nodi, radice, doc, tocchi, descrivi, lancia, evento, avanza,
-                respira, ascolti, attivi: () => attivi, dati, detti, caricato: false };
+                respira, ascolti, attivi: () => attivi, dati, detti, caricato: false,
+                motore: null, giocoLogica: undefined, contesto };
   for (const f of file) {
     try { testi[base(f)] = readFileSync(f, "utf8"); } catch (e) { testi[base(f)] = ""; }
+  }
+  // Con la macchina a stati (13/10): il motore prima degli script del gioco, l'avvio dopo, come
+  // nel riquadro (scheda.documento); gli errori del motore (una mossa che lancia, una forma
+  // sbagliata) arrivano qui invece che al riquadro
+  const macchina = opzioni.macchina || null;
+  if (macchina) {
+    g.__notaMotore = (e) => nota("motore", e);
+    try { vm.runInContext(testoMotore(), contesto, { filename: "motore_gioco.js", timeout: 2000 }); }
+    catch (e) { nota("caricamento del motore", e); return amb; }
   }
   for (const f of file) {
     try { vm.runInContext(testi[base(f)], contesto, { filename: f, timeout: 2000 }); }
     catch (e) { nota(`caricamento di ${base(f)}`, e, { file: base(f) }); return amb; }
+  }
+  if (macchina) {
+    const conf = JSON.stringify({ macchina, giocatori: { min: opzioni.minimo || 1, max: opzioni.massimo || 1 } });
+    try {
+      vm.runInContext(`CalliopeMotore.avvia(typeof GIOCO === "undefined" ? undefined : GIOCO, ${conf}, { errore: __notaMotore, titolo: ${JSON.stringify(opzioni.titolo || "")} });`,
+        contesto, { filename: "avvio", timeout: 2000 });
+      amb.motore = vm.runInContext("CalliopeMotore", contesto);
+      amb.giocoLogica = vm.runInContext("typeof GIOCO === 'undefined' ? undefined : GIOCO", contesto);
+    } catch (e) { nota("avvio del motore", e); return amb; }
   }
   amb.caricato = true;
   lancia(doc.documentElement, "DOMContentLoaded", evento("DOMContentLoaded", doc));
@@ -318,6 +354,29 @@ async function prepara(file, opzioni = {}) {
   return amb;
 }
 
+// Tutti i comandi a voce piatti di una macchina («porta_3», «giocatori_2», «avanti»…): quelli che
+// Calliope ricava dal manifesto (calliope/estensioni/macchina.py, ascolta)
+export function tuttiPiatti(m, gmin, gmax) {
+  const out = [];
+  if (gmin < gmax) for (let i = gmin; i <= gmax; i++) out.push(`giocatori_${i}`);
+  out.push("inizia", "avanti", "ancora");
+  const fasi = (m && m.fasi) || {};
+  if (Object.values(fasi).some((f) => (f || {}).pagina === "tela")) out.push("fine_partita");
+  for (const f of Object.values(fasi)) {
+    for (const [c, d0] of Object.entries((f || {}).comandi || {})) {
+      const d = Array.isArray(d0) ? {} : (d0 || {});
+      let valori = null;
+      if (d.n && d.n.valori) valori = Array.isArray(d.n.valori) ? d.n.valori : Object.keys(d.n.valori);
+      else if (d.n) { valori = []; for (let i = Number(d.n.da); i <= Number(d.n.a); i++) valori.push(i); }
+      for (const v of valori || [null]) {
+        const p = v === null ? c : `${c}_${v}`;
+        if (!out.includes(p)) out.push(p);
+      }
+    }
+  }
+  return out;
+}
+
 // Il testo che si vede nel riquadro (con quello scritto con innerHTML, senza i tag)
 function visibile(amb) {
   return (String(amb.radice.textContent || "") + " "
@@ -326,10 +385,113 @@ function visibile(amb) {
 
 const TOCCHI = ["click", "pointerdown", "pointerup", "mousedown", "mouseup", "touchstart", "touchend"];
 
+// ── La prova di fumo per fasi (13/10): l'esploratore della macchina dichiarata ──
+// Visita in ampiezza gli stati (fase, turno, punti, dati) da ogni numero di giocatori, con ogni
+// comando attivo e ogni valore (al più 5000 stati); poi 20 partite a caso (seme fisso) fino alla
+// fine entro 500 passi. Gli errori dicono fase, comando, la strada (gli ultimi passi) e, se
+// l'eccezione viene dalla logica, file:riga.
+export function esplora(amb, opzioni = {}) {
+  const { motore, giocoLogica } = amb;
+  const errori = amb.errori;
+  const nota = (dove, e) => amb.nota(dove, e);
+  let nu;
+  try {
+    nu = motore.crea(giocoLogica, opzioni.macchina, { min: opzioni.minimo || 1, max: opzioni.massimo || 1 });
+  } catch (e) { nota("macchina", e); return errori; }
+  const M = nu.M;
+  const strada = (s) => s.slice(-4).join(" → ");
+  const chiave = (S) => JSON.stringify([S.fase, S.tocca, S.giocatori.map((x) => x.punti), S.dati, S.dopo, S.passa, S.giocatori.length]);
+  const raggiunte = new Set();
+  const attiviVisti = new Set();
+  const visti = new Set();
+  const coda = [];
+  const coppie = (att) => {
+    const out = [];
+    for (const c of Object.keys(att)) {
+      if (att[c] === true) out.push([c, null]); else for (const v of att[c]) out.push([c, v]);
+    }
+    return out;
+  };
+  const partenze = [];
+  for (let n = M.gmin; n <= M.gmax; n++) partenze.push(M.gmin < M.gmax ? ["giocatori", n] : ["inizia", null]);
+  for (const [c, v] of partenze) {
+    try { coda.push({ S: nu.applica(nu.nuovo(), c, v), s: [nu.piatto(c, v)] }); }
+    catch (e) { nota(`all'inizio della partita (${nu.piatto(c, v)})`, e); }
+  }
+  let completa = true;
+  while (coda.length && !errori.length) {
+    if (visti.size >= (opzioni.stati || 5000)) { completa = false; break; }
+    const { S, s } = coda.shift();
+    const k = chiave(S);
+    if (visti.has(k)) continue;
+    visti.add(k);
+    raggiunte.add(S.fase);
+    let att;
+    try { att = nu.attivi(S); } catch (e) { nota(`fase «${S.fase}» (strada: ${strada(s)})`, e); continue; }
+    try { nu.vista(S); } catch (e) { nota(`vista della fase «${S.fase}» (strada: ${strada(s)})`, e); continue; }
+    const cs = coppie(att);
+    if (!cs.length && S.fase !== "fine") {
+      nota(`fase «${S.fase}» senza uscita`, `nessun comando attivo (strada: ${strada(s)}): ogni fase che non è la fine deve avere almeno un comando attivo (GIOCO.attivi.${S.fase})`);
+      continue;
+    }
+    for (const [c, v] of cs) {
+      attiviVisti.add(`${S.fase}.${c}`);
+      let S2;
+      try { S2 = nu.applica(S, c, v, {}); }
+      catch (e) { nota(`fase «${S.fase}», comando «${nu.piatto(c, v)}» (strada: ${strada(s)})`, e); break; }
+      if (!visti.has(chiave(S2))) coda.push({ S: S2, s: s.concat([nu.piatto(c, v)]) });
+    }
+  }
+  if (errori.length) return errori;
+  // Partite intere, a caso con il seme fisso del caso del gioco
+  const caso = vm.runInContext("Math", amb.contesto).random;
+  // Con la visita in ampiezza al tetto (troppi stati) le fasi e i comandi si cercano anche in
+  // molte più partite a caso, prima di dirli «mai raggiunti»
+  const partite = (opzioni.partite || 20) + (completa ? 0 : (opzioni.partite_in_piu || 300));
+  for (let i = 0; i < partite && !errori.length; i++) {
+    const [c0, v0] = partenze[i % partenze.length];
+    const s = [nu.piatto(c0, v0)];
+    let S;
+    try { S = nu.applica(nu.nuovo(), c0, v0); } catch (e) { nota("partita", e); break; }
+    let passi = 0;
+    while (S.fase !== "fine" && passi < 500) {
+      raggiunte.add(S.fase);
+      let cs;
+      try { cs = coppie(nu.attivi(S)); } catch (e) { nota(`partita ${i + 1}, fase «${S.fase}» (strada: ${strada(s)})`, e); break; }
+      if (!cs.length) break;
+      for (const [c] of cs) attiviVisti.add(`${S.fase}.${c}`);
+      const [c, v] = cs[Math.floor(caso() * cs.length)];
+      try { S = nu.applica(S, c, v, {}); } catch (e) { nota(`partita ${i + 1}, comando «${nu.piatto(c, v)}» (strada: ${strada(s)})`, e); break; }
+      s.push(nu.piatto(c, v));
+      passi++;
+    }
+    if (errori.length) break;
+    raggiunte.add(S.fase);
+    if (S.fase !== "fine") {
+      nota(`partita ${i + 1}`, `non arriva alla fine in 500 passi, ferma in «${S.fase}» (strada: ${strada(s)}): quando la partita è finita una mossa deve portare alla fine (fase o dopo: "fine")`);
+    }
+  }
+  if (errori.length) return errori;
+  for (const f of Object.keys(M.fasi).concat(["fine"])) {
+    if (!raggiunte.has(f)) nota(`fase «${f}»`, `dichiarata ma mai raggiunta: nessuna mossa ci porta (fase o dopo: "${f}", e «verso» nel manifesto)`);
+  }
+  for (const [f, d] of Object.entries(M.fasi)) {
+    for (const c of Object.keys(d.comandi)) {
+      if (raggiunte.has(f) && !attiviVisti.has(`${f}.${c}`)) nota(`comando «${f}.${c}»`, "dichiarato ma mai attivo (GIOCO.attivi lo esclude sempre)");
+    }
+  }
+  return errori;
+}
+
 export async function fumo(file, opzioni = {}) {
   const amb = await prepara(file, opzioni);
   const { errori, nota, nodi, radice, doc, tocchi, descrivi, lancia, evento, avanza, respira, ascolti } = amb;
   if (!amb.caricato) return errori;
+  if (opzioni.macchina) {
+    if (!amb.motore) return errori;
+    esplora(amb, opzioni);
+    if (errori.length) return errori;
+  }
   // Tocchi a caso, con il tempo che scorre (seme fisso: ripetibile)
   let seme = 12345;
   const caso = (n) => { seme = (seme * 1103515245 + 12345) % 2147483648; return seme % n; };
@@ -456,7 +618,18 @@ export async function apriGioco(file, opzioni = {}) {
       fallisci(`scrivendo in «${cosa}»`, da);
       return g;
     },
+    // Con la macchina a stati (13/10): l'istantanea della partita (fase, a chi tocca, punti,
+    // esito, comandi attivi), e i comandi con il valore: g.comando("porta", 3)
+    stato() {
+      if (!amb.motore || !amb.motore.partita) throw new Error("g.stato(): solo per un gioco con «scheda.macchina» nel manifesto");
+      return JSON.parse(JSON.stringify(amb.motore.partita.istantanea()));
+    },
     async comando(nome, giocatore = "") {
+      if (amb.motore && giocatore !== "" && (typeof giocatore === "number"
+          || tuttiPiatti(opzioni.macchina, opzioni.minimo || 1, opzioni.massimo || 1).includes(`${nome}_${giocatore}`))) {
+        nome = `${nome}_${giocatore}`;
+        giocatore = "";
+      }
       const attivi = amb.attivi();
       if (!attivi.includes(String(nome))) {
         throw new Error(`il comando «${nome}» adesso non è attivo (attivi: ${attivi.join(", ") || "nessuno"})`);

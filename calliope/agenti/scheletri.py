@@ -21,67 +21,72 @@ Dal 12/10 sera (flusso dell'agente a fasi, parte 1) il gioco ha anche `gioco.tes
 del disegno con `apriGioco` (agenti/fumo_js.mjs): il difetto vero del 12/10 (l'esito annidato
 letto al primo livello, sempre «Nessun punto!») stava lì, e i test della logica erano verdi.
 Circa 650 caratteri in più, ~190 token con lo stesso rapporto (da rimisurare sulla DGX).
+
+Dal 13/10 (macchina a stati dei giochi, estensioni/macchina.py e motore_gioco.js) lo scheletro del
+gioco è un altro: la scheda con «macchina» (una fase, un comando con lo slot «porta {n}»),
+logica.js con il solo GIOCO (partita nuova, attivi, mosse, vista), i due test; niente gioco.js,
+niente DOM, niente sicuro(): preparazione, turni, punti, esito, fine, disegno, pulsanti e voce
+sono del motore. 2 923 caratteri (prima 2 938), circa 840 token con lo stesso rapporto; il §5 del
+contratto cresce di circa 1 100 caratteri (~320 token): da rimisurare sulla DGX.
 """
 
-GIOCO = """SCHELETRO DI PARTENZA (gioco): parti da qui e cambia solo quello che serve.
-logica.js — regole pure, niente DOM:
+GIOCO = """SCHELETRO DI PARTENZA (gioco): parti da qui e cambia solo quello che serve. \
+Preparazione (quanti giocatori), turni, punti, esito della mossa, fine con la classifica e \
+«ancora», disegno, pulsanti e voce sono della macchina a stati di Calliope: NON scriverli. Ogni \
+comando è anche un pulsante. Niente gioco.js.
+manifesto.json — la sezione "scheda":
+{"tipo": "gioco", "file": ["logica.js"], "giocatori": {"min": 1, "max": 4},
+ "macchina": {"inizio": "turno", "fasi": {"turno": {"verso": ["esito", "fine"],
+  "comandi": {"porta": {"forme": ["porta {n}", "la porta {n}", "{n}"], "n": {"da": 1, "a": 6},
+                        "etichetta": "Porta {n}"}}}}}}
+logica.js — solo GIOCO, funzioni pure, niente DOM:
 "use strict";
-function nuovaPartita(nGiocatori) {
-  if (!(nGiocatori >= 1 && nGiocatori <= 4)) throw new Error("da 1 a 4 giocatori");
-  return { turno: 0, punti: new Array(nGiocatori).fill(0), finita: false };
+const GIOCO = {
+  nuovaPartita({ giocatori }) { return { porte: 2 + giocatori, aperte: [] }; },
+  attivi: { turno: (d) => ({ porta: chiuse(d) }) },
+  mosse: { turno: {
+    porta(d, { valore }) {
+      const aperte = d.aperte.concat([valore]);
+      return { dati: { ...d, aperte }, punti: 1, esito: `Porta ${valore} aperta!`,
+               dopo: aperte.length === d.porte ? "fine" : "turno" };
+    } } },
+  vista: { turno: (d) => ({ titolo: "Quale porta apri?" }) },
+};
+function chiuse(d) {
+  const c = [];
+  for (let p = 1; p <= d.porte; p++) if (!d.aperte.includes(p)) c.push(p);
+  return c;
 }
-function mossa(stato, scelta) { return { ...stato, turno: stato.turno + 1 }; }
-if (typeof module !== "undefined") module.exports = { nuovaPartita, mossa };
-gioco.js — stesso spazio globale di logica.js: usa nuovaPartita e mossa direttamente e NON \
-ridichiarare nomi che logica.js ha già (né const né function); niente require:
-"use strict";
-const radice = document.getElementById("gioco");
-let partita = null;
-function sicuro(f) {
-  return (ev) => { try { f(ev); } catch (e) { avviso(e.message); } };
-}
-function avviso(testo) { const p = document.createElement("p"); p.textContent = testo; \
-radice.appendChild(p); }
-function disegna() {
-  radice.replaceChildren();
-  const b = document.createElement("button");
-  b.textContent = partita ? "Mossa" : "Inizia";
-  b.addEventListener("click", sicuro(() => {
-    partita = partita ? mossa(partita, 0) : nuovaPartita(1);
-    disegna();
-  }));
-  radice.appendChild(b);
-}
-calliope.quandoPronto(() => disegna());
-// A voce, se la richiesta lo chiede: nella scheda "ascolta": {"comandi": {"mossa": \
-["mossa", "vai"]}}
-calliope.quandoComando(sicuro((m) => {
-  if (m.comando === "mossa" && partita) { partita = mossa(partita, 0); disegna(); }
-}));
+if (typeof module !== "undefined") module.exports = { GIOCO, chiuse };
 logica.test.js:
 const { test } = require("node:test");
 const assert = require("node:assert");
-const { nuovaPartita } = require("./logica.js");
-test("partita nuova", () => assert.strictEqual(nuovaPartita(2).punti.length, 2));
-gioco.test.js — il gioco vero nel DOM finto; apriGioco e creaCaso ci sono già, senza require:
+const { GIOCO } = require("./logica.js");
+test("una porta aperta dà un punto", () => {
+  const r = GIOCO.mosse.turno.porta(GIOCO.nuovaPartita({ giocatori: 1 }), { valore: 2 });
+  assert.deepStrictEqual(r.dati.aperte, [2]);
+  assert.strictEqual(r.punti, 1);
+});
+gioco.test.js — la partita vera con la macchina di Calliope; apriGioco e creaCaso ci sono già, \
+senza require:
 const { test } = require("node:test");
 const assert = require("node:assert");
-test("si tocca Inizia e compare la mossa", async () => {
-  const g = await apriGioco({ giocatori: 1, seme: 1 });
-  await g.tocca("Inizia");
-  assert.match(g.testo(), /Mossa/);
+test("si apre una porta e poi tocca all'altro", async () => {
+  const g = await apriGioco({ seme: 1 });
+  await g.tocca("2 giocatori");
+  await g.tocca("Porta 1");
+  assert.match(g.testo(), /Porta 1 aperta/);
+  await g.comando("avanti");
+  assert.strictEqual(g.stato().tocca, "Giocatore 2");
 });
-Ciò che la persona deve VEDERE (punti, esito, vincitore) si prova in gioco.test.js: tocca \
-come lei (g.tocca("testo o #id"), g.comando("nome"), g.avanza(ms)) e leggi g.testo(). Il \
-caso con un seme: apriGioco({ seme }) e, nei test della logica, creaCaso(seme) passato alla \
-funzione al posto di Math.random.
-Ogni gestore di evento passa da sicuro(): un errore della logica (un dato mancante, una \
-scelta non valida) si mostra nel gioco e non esce dal gestore. La prova di fumo di \
-esegui_test carica logica.js e gioco.js come nel riquadro (document finto con <div \
-id="gioco">, l'oggetto calliope, timer finti), chiama quandoPronto e tocca a caso ogni \
-elemento con un gestore, anche con i campi vuoti: un'eccezione che esce da un gestore la fa \
-fallire, e il messaggio dice file:riga, l'elemento toccato e i tocchi prima. Correggi quel \
-punto con modifica_file."""
+Una mossa restituisce SOLO { dati, punti, esito, fase, dopo, ancora }: tutto lo stato del gioco \
+dentro «dati», il testo da mostrare in «esito», e «dopo» (la fase dopo l'esito, di solito la \
+stessa o "fine"). attivi restringe (true, false o valori), mai fuori dal manifesto; vista dà \
+solo testi { titolo, sottotitolo, testo }. Ciò che la persona deve VEDERE si prova in \
+gioco.test.js: g.tocca("testo"), g.comando("porta", 3) (come la voce), g.avanza(ms), g.testo(), \
+g.stato() (fase, tocca, giocatori e punti, esito, comandi). La prova di fumo percorre ogni fase \
+con ogni comando e valore e gioca partite intere: un errore dice fase, comando, strada e \
+file:riga. Correggi quel punto con modifica_file."""
 
 ESTENSIONE = """SCHELETRO DI PARTENZA (estensione): parti da qui e cambia solo quello che serve.
 estensione.py:

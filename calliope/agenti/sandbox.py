@@ -100,6 +100,9 @@ _TEST_JS_C = "/opt/calliope/test_js.mjs"
 # La prova di fumo della scheda (05/10): DOM finto e tocchi a caso, importata da test_js.mjs
 _FUMO_JS = Path(__file__).with_name("fumo_js.mjs")
 _FUMO_JS_C = "/opt/calliope/fumo_js.mjs"
+# Il motore della macchina a stati dei giochi (13/10), caricato da fumo_js.mjs accanto a sé
+_MOTORE_JS = Path(__file__).resolve().parents[1] / "estensioni" / "motore_gioco.js"
+_MOTORE_JS_C = "/opt/calliope/motore_gioco.js"
 _DOCKERFILE_NODE = _DOCKERFILE.with_name("Dockerfile.node")
 
 
@@ -684,7 +687,8 @@ class Sandbox:
                "--mount", (f"type=bind,src={_ESEGUI_CS},dst={_ESEGUI_CS_C},readonly" if csharp
                            else f"type=bind,src={_TEST_JS},dst={_TEST_JS_C},readonly" if node
                            else f"type=bind,src={_AVVIO},dst={_AVVIO_C},readonly"),
-               *(["--mount", f"type=bind,src={_FUMO_JS},dst={_FUMO_JS_C},readonly"] if node
+               *(["--mount", f"type=bind,src={_FUMO_JS},dst={_FUMO_JS_C},readonly",
+                  "--mount", f"type=bind,src={_MOTORE_JS},dst={_MOTORE_JS_C},readonly"] if node
                  else []),
                "-w", _LAVORO_C]
         if csharp:

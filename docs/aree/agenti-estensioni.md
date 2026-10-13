@@ -3065,7 +3065,7 @@ lavoro.
 un'interfaccia fissa: servirebbe dichiararla nell'analisi, nome del file e argomenti, e farla
 rispettare); i **test di accettazione dei giochi** dal progettista (aspettano la macchina a stati
 dei giochi, come dice la ricerca alla domanda 5: con `gioco.js` libero i selettori cambiano a ogni
-versione); la passata con il **ragionamento acceso** e il campionamento consigliato (oggi
+versione; *fatti il 13/10, ramo `giochi-stati`: vedi sotto*); la passata con il **ragionamento acceso** e il campionamento consigliato (oggi
 temperatura 0 senza ragionamento, come requisiti e confronto: con l'uscita vincolata dallo schema
 il rischio di loop è basso, ma per *trovare buchi* il ragionamento aiuterebbe; da misurare con le
 domande vere); la **revisione che legge la nota dell'agente** su un esempio che gli sembra
@@ -3077,3 +3077,53 @@ domande), «esempi di accettazione tutti verdi / rossi», le regole `agente_spin
 `agente_riscrittura_piccola`; quante domande prima di cominciare per sviluppo e se la risposta
 cambia qualcosa (HumanEvalComm: domande inutili peggiorano); quanti esempi dell'agente sono
 sbagliati (nel banco: accettazione nascosta verde ed esempi dell'agente rossi).
+
+## I giochi con la macchina a stati: scheletro, contratto, esempi di accettazione (13/10, ramo `giochi-stati`)
+
+Il lato agente della macchina a stati dei giochi (motore, manifesto e prova di fumo per fasi in
+[giochi](giochi.md), «La macchina a stati di Calliope»).
+
+- **Lo scheletro del gioco** (`agenti/scheletri.py`) è un altro: la scheda con `macchina` (una
+  fase «turno», un comando «porta {n}» da 1 a 6), logica.js con il solo `GIOCO` (partita nuova,
+  `attivi`, `mosse`, `vista`), logica.test.js e gioco.test.js con `apriGioco`, `g.tocca("Porta
+  1")`, `g.comando("avanti")`, `g.stato().tocca`. Niente gioco.js, niente DOM, niente `sicuro()`:
+  le cause del caso dell'11/10 (costanti doppie tra due file, eccezioni dei gestori, la
+  preparazione con i nomi vuoti) non hanno più dove nascere. 2 923 caratteri (prima 2 938).
+- **Il §5 del contratto** (`contratto.scheda_testo`) descrive la macchina: fasi (al più 8, quelle
+  di Calliope non si dichiarano), comandi con lo slot e i loro tetti, la forma di una mossa «e
+  NIENT'ALTRO», `attivi` che restringe, `vista` solo testi, la tela; le forme di Calliope che il
+  gioco non può usare sono generate dal codice (`macchina.COMANDI_STANDARD`). Circa 4 970
+  caratteri (prima 3 870): ~320 token in più con il rapporto 3,47, da rimisurare con il
+  tokenizer di Qwen3.6 sulla DGX. Il prompt (`SISTEMA_ESTENSIONE`) e `requisiti.CAPACITA_GIOCO`
+  (fasi, comandi a voce per fase con un numero o una scelta, ogni comando anche un pulsante) lo
+  dicono.
+- **La consegna** (`prompt._controlla_gioco`): un gioco **nuovo** senza `macchina` torna
+  all'agente («un gioco nuovo usa la macchina a stati di Calliope…»); la versione nuova di un
+  gioco vecchio (nome atteso) passa ancora, finché i giochi vecchi non si tolgono.
+- **Gli esempi di accettazione dei giochi** (`agenti/accettazione.py`, la passata della parte 2):
+  in uno sviluppo di un gioco nuovo (non una correzione, non fuori da uno sviluppo) lo schema
+  della passata ha anche `comandi` (nome, fase, da/a o valori) ed `esempi` (requisito,
+  giocatori, mosse, atteso: fase, tocca, punti, attivi, non_attivi, testo); il prompt
+  (`SISTEMA_GIOCO`) spiega la macchina e dice di non controllare ciò che dipende dal caso. Il
+  codice scarta gli esempi senza un comando del gioco (passerebbero su un gioco che non ce l'ha),
+  con comandi o valori non dichiarati, senza niente da controllare, con i punti della misura
+  sbagliata, i doppioni, e i comandi con i nomi di Calliope o nelle fasi standard. Scrive
+  `accettazione.test.js` (`test_js`) in sola lettura: per ogni esempio apre il gioco con
+  `apriGioco`, sceglie i giocatori, fa le mosse (l'esito lo salta da sé), poi controlla lo stato
+  con `g.stato()` e il testo con `g.testo()`; il nome del test porta il requisito («R2 esempio 2:
+  1 giocatori, porta 2») e il messaggio dice cosa non va (««porta 2» non deve valere più»). I
+  vincoli dicono all'agente i comandi da avere (`comandi_detti`). Alla consegna
+  `_esito_accettazione` lo esegue senza la prova di fumo e, siccome Node fa girare anche i test
+  dell'agente, conta solo gli esempi (`esito_js`); `rossi` legge anche «FALLITO R3 esempio».
+
+Prove: `prova_gioco_macchina` (sezione 6: la forma chiusa con sei esempi scartati su dieci,
+verde sul gioco giusto, rosso solo il requisito 2 con le porte che non spariscono, tutto rosso
+senza il comando, il servizio in uno sviluppo e i contrari), `prova_agente_guida` (lo scheletro
+nuovo è valido e passa i suoi test e la prova di fumo per fasi), `prova_giochi` (la consegna di
+un gioco nuovo senza macchina rifiutata). Il banco della temperatura a secco passa com'era (il
+suo caso «porte» è una correzione di un gioco del formato di prima).
+
+**Da guardare sulla DGX** al primo gioco nuovo: «analisi prima del codice … N esempi di
+accettazione» con i comandi, se l'agente rispetta nomi e fasi dei comandi chiesti (un nome
+diverso fa rossi tutti gli esempi: è voluto, ma va visto se succede spesso), «esempi di
+accettazione tutti verdi / rossi» alla consegna.

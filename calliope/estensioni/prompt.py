@@ -81,16 +81,18 @@ SISTEMA_ESTENSIONE = (
     "servizio registrate nei collaudi: i test le usano e non le contraddicono (vedi i "
     "vincoli).\n"
     "SE È UN GIOCO (o una scheda da usare toccando lo schermo: memory, tris, quiz, "
-    "cruciverba…) non scrivi estensione.py né test_estensione.py: scrivi logica.js (le regole, "
-    "funzioni pure con module.exports in fondo), gioco.js (disegno e tocchi nel riquadro, con "
-    "l'oggetto calliope), logica.test.js (node:test e node:assert), gioco.test.js (il gioco "
-    "vero nel DOM finto con apriGioco: tocca come la persona e controlla cosa compare, punti, "
-    "esito e vincitore; vedi lo scheletro) e manifesto.json con la "
-    "sezione «scheda» del §5 del contratto; nel piano capacita_necessarie: [\"scheda\"] e "
-    "scope vuoto, così è un gioco puro. Il gioco deve funzionare toccando, su schermi da "
-    "telefono a TV (misure in percentuale o con flex), con scritte in italiano. Per vedere "
-    "cosa fa davvero un pezzo di JavaScript usa esegui_js su un file prova_*.js con "
-    "console.log, invece di ragionarci a mente.\n"
+    "cruciverba…) non scrivi estensione.py né test_estensione.py. Calliope dà la macchina a "
+    "stati del gioco (preparazione, turni, punti, esito, fine, disegno, pulsanti, voce): tu "
+    "scrivi manifesto.json con la sezione «scheda» e la sua «macchina» (le fasi e i comandi, "
+    "§5 del contratto), logica.js con GIOCO (solo le regole: funzioni pure, niente DOM, "
+    "module.exports in fondo), logica.test.js (node:test e node:assert) e gioco.test.js (la "
+    "partita vera con apriGioco: tocca i pulsanti come la persona e controlla con g.testo() e "
+    "g.stato() punti, esito e vincitore; vedi lo scheletro). Niente gioco.js. Nel piano "
+    "capacita_necessarie: [\"scheda\"] e scope vuoto, così è un gioco puro. Scritte in "
+    "italiano. Se nella cartella c'è accettazione.test.js, è in sola lettura: la "
+    "macchina deve avere i comandi che usa. Per vedere cosa fa davvero un pezzo di "
+    "JavaScript usa esegui_js su un file prova_*.js con console.log, invece di ragionarci a "
+    "mente.\n"
     "Fai girare i test con esegui_test e correggi finché passano. Un test che dipende dal caso "
     "fissa il seme (in Python random.Random(seme), nei giochi creaCaso(seme) e apriGioco({ "
     "seme })): alla consegna i test si eseguono due volte e devono dare lo stesso esito. Nomi "
@@ -122,6 +124,12 @@ def _controlla_gioco(m: dict, nomi: set, nomi_presi=(), nome_atteso: str | None 
     if not nome_atteso and m["nome"] in set(nomi_presi):
         return (f"il nome «{m['nome']}» è già di un'altra estensione: scegline uno nuovo che dica "
                 f"cosa fa questa")
+    if not nome_atteso and not s.get("macchina"):
+        # 13/10: un gioco nuovo usa la macchina a stati di Calliope (niente compatibilità con il
+        # formato di prima, gioco.js libero: resta solo per le versioni nuove dei giochi vecchi)
+        return ("un gioco nuovo usa la macchina a stati di Calliope: nel manifesto la scheda ha "
+                "«macchina» (fasi e comandi) e logica.js dichiara GIOCO, senza gioco.js; vedi "
+                "lo scheletro e il §5 del contratto")
     manca = [f for f in s["file"] + ([s["stile"]] if s["stile"] else []) + s["risorse"]
              if f not in nomi]
     if manca:

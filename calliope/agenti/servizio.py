@@ -1365,7 +1365,8 @@ class Lavori:
         from . import accettazione as acc
         stato = getattr(lav, "accettazione", None) or {}
         if stato.get("stato") == "pronta" and stato.get("file"):
-            sb.sola_lettura |= {acc.FILE}        # dopo un riavvio la sandbox è la stessa
+            # dopo un riavvio la sandbox è la stessa
+            sb.sola_lettura |= {stato.get("nome_file") or acc.FILE}
         if not getattr(self.cfg, "agenti_accettazione", True) or lav.tipo not in (
                 "codice", "estensione") or (stato and stato.get("stato") != "domanda"):
             return None
@@ -1416,19 +1417,23 @@ class Lavori:
                            f"«{risposta[0]}» e la persona ha risposto: «{risposta[1]}».").strip()
         lav.risposta = None
         scritto = False
-        if estensione and an["esempi"]:
+        # 13/10: per un gioco nuovo gli esempi in forma chiusa (comandi, mosse, stato atteso)
+        # giocati con la macchina a stati di Calliope (accettazione.test.js)
+        nome_file = acc.FILE_GIOCO if gioco else acc.FILE
+        if (estensione or gioco) and an["esempi"]:
             try:
-                sb.scrivi(acc.FILE, acc.test_python(an))
-                sb.sola_lettura |= {acc.FILE}
+                sb.scrivi(nome_file, acc.test_js(an) if gioco else acc.test_python(an))
+                sb.sola_lettura |= {nome_file}
                 scritto = True
             except Exception as e:  # noqa: BLE001 — senza esempi il lavoro parte comunque
-                self.log(f"[AGENTI] {lav.id}: {acc.FILE} non scritto: {e}")
-        v = acc.vincolo(an, scritto)
+                self.log(f"[AGENTI] {lav.id}: {nome_file} non scritto: {e}")
+        v = acc.vincolo(an, scritto, gioco)
         if v:
             lav.vincoli = ((lav.vincoli or "").rstrip() + " " + v).strip()
         def testi(numeri):
             return [requisiti[n - 1]["testo"] for n in numeri if 0 < n <= len(requisiti)]
-        lav.accettazione = {"stato": "pronta", "file": scritto, "esempi": len(an["esempi"]),
+        lav.accettazione = {"stato": "pronta", "file": scritto, "nome_file": nome_file,
+                            "esempi": len(an["esempi"]),
                             "requisiti_provati": acc.numeri_esempi(an) if scritto else [],
                             "testi_provati": testi(acc.numeri_esempi(an)) if scritto else [],
                             "al_collaudo": an["al_collaudo"],
@@ -1454,11 +1459,16 @@ class Lavori:
         a = getattr(lav, "accettazione", None) or {}
         if a.get("stato") != "pronta" or not a.get("file") or ris.get("esito") == "tappa":
             return
+        nome_file = a.get("nome_file") or acc.FILE
         try:
-            r = sb.test(acc.FILE)
+            r = sb.test(nome_file, fumo=False)
         except Exception as e:  # noqa: BLE001
             self.log(f"[AGENTI] {lav.id}: esempi di accettazione non eseguiti: {e}")
             return
+        if nome_file.endswith(".js"):
+            # Un gioco (13/10): Node fa girare anche i test dell'agente; contano gli esempi
+            passano, _ = acc.esito_js(r.get("uscita"))
+            r = {**r, "passano": passano}
         rossi = acc.rossi(r.get("uscita"))
         if not r.get("passano") and not rossi:
             # Un errore prima dei test (l'import di estensione.py): tutti rossi
