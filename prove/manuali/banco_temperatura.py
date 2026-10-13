@@ -62,6 +62,16 @@ chiude con «limite»; con un giro solo il tetto chiude come prima.
 
     python prove/manuali/banco_temperatura.py --secco
 
+**Valori della Config e analisi prima del codice** (13/10, flusso a fasi parte 2). In
+`--temperature` e `--presence` la parola `config` prende i valori della Config (per
+presence_penalty quelli per tipo di lavoro, `agenti_presence_penalty`): così il banco misura
+l'installazione com'è. `--accettazione config|si|no` (predefinito `config`) lascia, accende o
+spegne l'analisi prima del codice (`agenti_accettazione`, calliope/agenti/accettazione.py):
+le domande prima di cominciare le risponde il banco da sé («Decidi tu, con la scelta più
+comune.») e le conta; la riga ha `domande` e `analisi` (esempi di accettazione dell'agente,
+verdi o rossi, secondi della passata). Gli esempi dell'agente sono un'altra cosa
+dall'accettazione nascosta del banco, che resta il criterio di «riuscito».
+
 Durata: un lavoro dura 3–15 minuti; con i valori predefiniti 2 × 2 × 2 × 3 = 24 lavori, da 2 a
 4 ore. Per una prima idea: --ripetizioni 1 --casi porte,convertitore (8 lavori).
 """
@@ -299,6 +309,7 @@ def secco() -> int:
         print(f"{'ok ' if ok else 'ERR'} i vincoli della correzione delle porte: il test che "
               "riproduce in gioco.test.js, prima rosso")
         errori += secco_giri(tmp / "giri")
+        errori += secco_analisi(tmp / "analisi")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("\n" + ("TUTTO OK" if not errori else f"{errori} ERRORI"))
@@ -401,6 +412,70 @@ def secco_giri(tmp: Path) -> int:
     return errori
 
 
+def secco_analisi(tmp: Path) -> int:
+    """L'analisi prima del codice nel banco (13/10, flusso a fasi parte 2), con l'agente finto
+    e il servizio vero: la domanda prima di cominciare riceve la risposta del banco, la
+    passata dopo la risposta scrive gli esempi di accettazione nella cartella, la riga conta
+    le domande e l'analisi; «config» in --temperature e --presence."""
+    from calliope.agenti import Lavori, carica
+    from calliope.config import Config
+    from prove.ollama_finto import FakeOllama
+    errori = 0
+
+    def verifica(nome, ok, dettaglio=""):
+        nonlocal errori
+        errori += not ok
+        print(f"{'ok ' if ok else 'ERR'} analisi: {nome}" + ("" if ok else f"  {dettaglio}"))
+    t = valori("config,0.6", 0.4)
+    pp = valori("config", CONFIG)
+    verifica("«config» in --temperature e --presence", t == [0.4, 0.6] and pp == [CONFIG])
+    esempio = {"requisito": 1, "dati": {"valore": 1, "da": "miglia", "a": "metri"},
+               "numero": 1609.344, "tolleranza": None, "contiene": "", "trovato": None}
+    con_dubbio = {"contraddizioni": [{"requisiti": [1], "domanda": "Le miglia sono terrestri"}],
+                  "scelte": [], "al_collaudo": [], "input": [{"nome": "valore", "tipo": "number"}],
+                  "campo_numero": "risultato", "esempi": [esempio]}
+    senza = dict(con_dubbio, contraddizioni=[])
+    tmp.mkdir(parents=True, exist_ok=True)
+    fake = FakeOllama(modelli=("agente-finto",)).avvia()
+    svc = None
+    try:
+        cfg = Config()
+        cfg.agenti_url = fake.url
+        cfg.agenti_modello = "agente-finto"
+        cfg.agenti_risultati = str(tmp / "risultati")
+        cfg.agenti_sandbox = str(tmp / "sandbox")
+        cfg.agenti_sandbox_motore = "processo"
+        cfg.agenti_modelli = str(tmp / "modelli")
+        cfg.llm_native_url = "http://127.0.0.1:9"
+        cfg.agenti_conferma = "mai"
+        cfg.agenti_max_passi = 4
+        svc = Lavori(cfg, carica(cfg), log=lambda *a: None)
+        svc.estensioni = EstensioniFinte()
+        fake.copione = [{"content": json.dumps(con_dubbio)}, {"content": json.dumps(senza)},
+                        {"tool_calls": [{"name": "consegna", "arguments": {
+                            "riassunto": "Non lo faccio.", "esito": "impossibile"}}]}]
+        r = un_lavoro(svc, cfg, tmp, "convertitore", casi()["convertitore"], "secco")
+        verifica("la domanda prima di cominciare ha la risposta del banco, una volta",
+                 r["domande"] == ["Prima di cominciare: le miglia sono terrestri?"]
+                 and any(RISPOSTA_BANCO in json.dumps(q, ensure_ascii=False)
+                         for q in fake.richieste), str(r["domande"]))
+        verifica("…dopo la risposta l'analisi è pronta, con l'esempio; il lavoro finisce",
+                 r["analisi"].get("stato") == "pronta" and r["analisi"].get("esempi") == 1
+                 and r["esito"] == "impossibile", json.dumps(r["analisi"]) + str(r["esito"]))
+        sb = next((x for x in Path(cfg.agenti_sandbox).glob("*") if x.is_dir()), None)
+        verifica("…e test_accettazione.py era nella cartella dell'agente con il runtime e i "
+                 "test di partenza", sb is not None and all(
+                     (sb / n).is_file() for n in ("test_accettazione.py",
+                                                  "calliope_estensione.py",
+                                                  "test_estensione.py")),
+                 str(sorted(x.name for x in sb.iterdir())) if sb else "nessuna sandbox")
+    finally:
+        if svc is not None:
+            svc.close()
+        fake.ferma()
+    return errori
+
+
 # ═══════════════════════════ sulla DGX ═══════════════════════════
 
 class EstensioniFinte:
@@ -415,6 +490,10 @@ class EstensioniFinte:
 
     def pronto(self):
         return False
+
+
+# La risposta del banco a una domanda prima o durante il lavoro (13/10): lascia decidere
+RISPOSTA_BANCO = "Decidi tu, con la scelta più comune."
 
 
 def aspetta(svc, lav, limite_s: float):
@@ -476,10 +555,19 @@ def un_lavoro(svc, cfg, uscita: Path, nome: str, caso: dict, etichetta: str,
     t0 = time.time()
     svc.avvia(lav)
     per_giro = []
+    domande = []
     for g in range(1, max(1, giri) + 1):
         tg, p0, k0 = time.time(), lav.passi, lav.token
-        aspetta(svc, lav, cfg.agenti_tempo_max_min * 60 + 180)
-        r = lav.risultato or {}
+        while True:
+            aspetta(svc, lav, cfg.agenti_tempo_max_min * 60 + 180)
+            r = lav.risultato or {}
+            # Una domanda (13/10: l'analisi prima del codice, o l'agente a metà lavoro): il
+            # banco risponde da sé, come una persona che lascia decidere, e la conta
+            if lav.stato == "in_attesa" and r.get("esito") == "domanda" and len(domande) < 5:
+                domande.append(str(r.get("domanda") or ""))
+                svc.rispondi(lav, RISPOSTA_BANCO)
+                continue
+            break
         info = {"giro": g, "passate": lav.passi - p0, "token": lav.token - k0,
                 "minuti": round((time.time() - tg) / 60, 2), "esito": r.get("esito"),
                 "tipo_limite": r.get("tipo_limite"), "test_passano": r.get("test_passano")}
@@ -523,10 +611,30 @@ def un_lavoro(svc, cfg, uscita: Path, nome: str, caso: dict, etichetta: str,
             "cartella": str(cartella),
             "giri": len(per_giro), "giri_max": giri, "giro_accettazione": giro_acc,
             "giro_consegna": giro_consegna, "sbloccato": sbloccato,
-            "passate_giri": [x["passate"] for x in per_giro], "per_giro": per_giro}
+            "passate_giri": [x["passate"] for x in per_giro], "per_giro": per_giro,
+            # L'analisi prima del codice (13/10, flusso a fasi parte 2): le domande a cui il
+            # banco ha risposto, gli esempi di accettazione dell'agente e il loro esito
+            "domande": domande, "analisi": {k: v for k, v in (
+                getattr(lav, "accettazione", None) or {}).items()
+                if k in ("stato", "esempi", "passano", "rossi", "al_collaudo", "secondi",
+                         "perche")}}
     if not acc["verde"]:
         riga["accettazione_uscita"] = acc["uscita"][-600:]
     return riga
+
+
+# «config» in --presence: i valori della Config per tipo di lavoro (13/10)
+CONFIG = object()
+
+
+def valori(testo: str, config):
+    """I valori di --temperature o --presence: numeri, o «config» per quello della Config."""
+    out = []
+    for x in str(testo or "").split(","):
+        x = x.strip().lower()
+        if x:
+            out.append(config if x in ("config", "cfg") else float(x))
+    return out
 
 
 def colonna_giri(rr: list[dict]) -> str:
@@ -568,8 +676,13 @@ def main(argv) -> int:
     ap = argparse.ArgumentParser(description="Banco della temperatura dell'agente")
     ap.add_argument("--secco", action="store_true", help="solo il controllo del banco, senza "
                     "modello")
-    ap.add_argument("--temperature", default="0.4,0.6")
-    ap.add_argument("--presence", default="0,0.5")
+    ap.add_argument("--temperature", default="0.4,0.6", help="valori separati da virgole; "
+                    "«config» = quello della Config (agenti_temperatura)")
+    ap.add_argument("--presence", default="0,0.5", help="valori separati da virgole; «config» = "
+                    "quelli della Config per tipo di lavoro (agenti_presence_penalty)")
+    ap.add_argument("--accettazione", default="config", choices=("config", "si", "no"),
+                    help="l'analisi prima del codice con gli esempi di accettazione "
+                    "(agenti_accettazione, 13/10): come nella Config, accesa o spenta")
     ap.add_argument("--ripetizioni", type=int, default=2)
     ap.add_argument("--casi", default="porte,convertitore,programma")
     ap.add_argument("--minuti", type=float, default=20.0, help="tetto di tempo per lavoro "
@@ -613,11 +726,16 @@ def main(argv) -> int:
         return 1
     scelti = [c.strip() for c in args.casi.split(",") if c.strip()]
     tutti = casi()
-    temperature = [float(x) for x in args.temperature.split(",")]
-    presenze = [float(x) for x in args.presence.split(",")]
+    temperature = valori(args.temperature, cfg.agenti_temperatura)
+    presenze = valori(args.presence, CONFIG)
+    if args.accettazione != "config":
+        cfg.agenti_accettazione = args.accettazione == "si"
+    acc = "" if args.accettazione == "config" else f" acc={args.accettazione}"
     print(f"Banco della temperatura: agente {imp.modello}; temperature {temperature}, "
-          f"presence_penalty {presenze}, {args.ripetizioni} ripetizioni, casi {scelti}; "
-          f"risultati in {uscita}", flush=True)
+          f"presence_penalty {['config' if p is CONFIG else p for p in presenze]} "
+          f"(nella Config {cfg.agenti_presence_penalty}), analisi prima del codice "
+          f"{'accesa' if cfg.agenti_accettazione else 'spenta'}, {args.ripetizioni} "
+          f"ripetizioni, casi {scelti}; risultati in {uscita}", flush=True)
     righe = []
     t0 = time.time()
     vecchie = (cfg.agenti_temperatura, dict(cfg.agenti_presence_penalty))
@@ -625,11 +743,12 @@ def main(argv) -> int:
         for rip in range(args.ripetizioni):
             for t in temperature:
                 for pp in presenze:
-                    etichetta = f"t={t:g} pp={pp:g}" + (f" g={args.giri}" if args.giri > 1
-                                                         else "")
+                    etichetta = (f"t={t:g} pp={'cfg' if pp is CONFIG else f'{pp:g}'}"
+                                 + (f" g={args.giri}" if args.giri > 1 else "") + acc)
                     # Solo in memoria: il servizio e l'agente leggono cfg a ogni passata
                     cfg.agenti_temperatura = t
-                    cfg.agenti_presence_penalty = {k: pp for k in vecchie[1]}
+                    cfg.agenti_presence_penalty = (dict(vecchie[1]) if pp is CONFIG
+                                                   else {k: pp for k in vecchie[1]})
                     for nome in scelti:
                         print(f"\n— {etichetta}, {nome}, ripetizione {rip + 1}", flush=True)
                         r = un_lavoro(svc, cfg, uscita, nome, tutti[nome], etichetta,
@@ -642,6 +761,10 @@ def main(argv) -> int:
                               f"{' (a vuoto)' if r['a_vuoto'] else ''}, esito {r['esito']}"
                               + (f", riproduzione {r['riproduzione']}" if r["riproduzione"]
                                  else "")
+                              + (f", domande {len(r['domande'])}" if r["domande"] else "")
+                              + (f", esempi {r['analisi'].get('esempi')} "
+                                 f"{'verdi' if r['analisi'].get('passano') else 'rossi'}"
+                                 if r["analisi"].get("esempi") else "")
                               + (f"; giri {r['giri']} (passate {r['passate_giri']}), "
                                  f"accettazione verde al giro {r['giro_accettazione']}, "
                                  f"consegna al giro {r['giro_consegna']}, "
@@ -654,7 +777,9 @@ def main(argv) -> int:
         svc.close()
     tabella(righe)
     riepilogo = {"agente": imp.modello, "data": datetime.datetime.now().isoformat(
-        timespec="seconds"), "temperature": temperature, "presence": presenze,
+        timespec="seconds"), "temperature": temperature,
+        "presence": ["config" if p is CONFIG else p for p in presenze],
+        "presence_config": vecchie[1], "accettazione": bool(cfg.agenti_accettazione),
         "ripetizioni": args.ripetizioni, "casi": scelti, "giri": args.giri, "budget": budget,
         "minuti": round((time.time() - t0) / 60, 1), "righe": righe}
     (uscita / "riepilogo.json").write_text(json.dumps(riepilogo, ensure_ascii=False, indent=1),

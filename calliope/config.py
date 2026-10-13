@@ -1050,7 +1050,14 @@ class Config:
     # Thinking dell'agente: acceso per codice e documenti (i benchmark del codice sono tutti
     # con il ragionamento). None = non inviare il parametro
     agenti_think: bool | None = True
-    agenti_temperatura: float = 0.4
+    # Temperatura dell'agente: 0,6 dal 13/10, il valore della scheda di Qwen3.6 per il codice
+    # con il ragionamento (prima 0,4, sotto il consigliato). Banco della temperatura sulla DGX
+    # (12–13/10, prove/manuali/banco_temperatura.py, convertitore, 7 lavori per riga): a 0,6
+    # con presence_penalty 0 / 0,25 / 0,5 riescono 3 / 0 / 4 lavori, cioè rumore: la leva non
+    # è il campionamento. Nei lavori falliti il codice era spesso giusto ma l'agente non
+    # consegnava, o i suoi test sbagliavano la firma di esegui (lì le correzioni sono nel
+    # ciclo e nello scheletro dei test, non qui). presence_penalty invariata, sotto
+    agenti_temperatura: float = 0.6
     # Tetti di un lavoro: passate del modello, token generati (ragionamento compreso, che si
     # conta anche a parte: token_ragionamento in lavoro.json), minuti. Il contesto qui non
     # conta: lo regge la finestra, comprimendo. Vicino a un tetto l'agente riceve una volta
@@ -1274,6 +1281,17 @@ class Config:
     # tanti minuti senza risposta si chiude da solo, e Calliope lo dice
     agenti_domande_max: int = 3
     agenti_attesa_risposta_min: float = 120.0
+    # Flusso a fasi, parte 2 (13/10, calliope/agenti/accettazione.py; ricerca
+    # 2026-10-12-flusso-agente-fasi § 5.1): prima che l'agente scriva il codice, una passata a
+    # sé del modello dell'agente (contesto nuovo, senza il codice) rilegge requisiti e parole
+    # della persona. Per un'estensione scrive gli esempi dato → risultato, che il codice
+    # trasforma in test_accettazione.py in sola lettura (l'agente non li cambia; alla consegna
+    # si eseguono con gli altri test); per un lavoro nuovo trova le contraddizioni e fa al
+    # più due domande (il lavoro aspetta la risposta, come le domande a metà lavoro); i
+    # requisiti che si giudicano solo guardando restano «da guardare tu» alla revisione.
+    # false = come prima. Secondi al più per la passata
+    agenti_accettazione: bool = True
+    agenti_accettazione_s: float = 90.0
     # Lavori interrotti da un riavvio di Calliope (06/10, calliope/agenti/ripresa.py): chi li
     # aveva chiesti lo sente al primo silenzio («… Lo rifaccio?») se il lavoro era vivo meno
     # di tante ore fa; quelli più vecchi restano solo nell'elenco di lavoro_stato, per un giorno
@@ -2712,7 +2730,7 @@ SEZIONI: dict[str, list[str]] = {
                "agenti_modelli", "agenti_livello", "agenti_livello_codice", "agenti_conferma",
                "agenti_analisi", "agenti_analisi_s", "agenti_risultato_s",
                "agenti_precedenza_voce", "agenti_ripresa_s", "agenti_arbitro", "agenti_pausa_vllm",
-               "agenti_domande_max",
+               "agenti_domande_max", "agenti_accettazione", "agenti_accettazione_s",
                "agenti_attesa_risposta_min", "agenti_file_max_mb", "agenti_file_caratteri",
                "agenti_esempi_max", "agenti_esempio_kb", "agenti_interrotti_annuncio_h",
                "sviluppo_enabled", "sviluppo_sospendi_min", "sviluppo_promemoria",

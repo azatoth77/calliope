@@ -737,22 +737,30 @@ def confronta(svc, requisiti: list[dict], file: dict, tempo_s: float = 60.0, att
 
 def esiti(requisiti: list[dict], voci: list[dict] | None, tappa: int) -> dict:
     """Le liste per le frasi e la scheda: fatti, parziali (con la nota), mancanti della tappa di
-    adesso; dopo (le tappe successive non ancora fatte); limiti."""
-    fatti, parziali, mancano, dopo = [], [], [], []
+    adesso; dopo (le tappe successive non ancora fatte); limiti. Dal 13/10 (flusso a fasi,
+    parte 2) i requisiti segnati «al collaudo» dall'analisi prima del codice (musica, aspetto)
+    che il confronto dà per fatti vanno in «da_guardare»: li giudica la persona; e un fatto
+    porta «provato» (True: gli esempi di accettazione passano; False: uno è rosso)."""
+    fatti, parziali, mancano, dopo, da_guardare = [], [], [], [], []
     for i, r in enumerate(requisiti):
         if not r.get("si_puo", True):
             continue
         stato = (voci[i]["stato"] if voci and i < len(voci) else "")
         nota = (voci[i].get("nota") if voci and i < len(voci) else "") or ""
-        voce = {"testo": r["testo"], "nota": nota, "stato": stato, "i": i}
+        voce = {"testo": r["testo"], "nota": nota, "stato": stato, "i": i,
+                "provato": r.get("provato") if isinstance(r.get("provato"), bool) else None}
         if tappa > 0 and int(r.get("tappa") or 1) > tappa:
             if stato != "fatto":
                 dopo.append(voce)
             else:
                 fatti.append(voce)
             continue
+        if stato == "fatto" and r.get("al_collaudo"):
+            da_guardare.append(voce)
+            continue
         {"fatto": fatti, "parziale": parziali, "manca": mancano}.get(stato, mancano).append(voce)
     return {"fatti": fatti, "parziali": parziali, "mancano": mancano, "dopo": dopo,
+            "da_guardare": da_guardare,
             "limiti": [{"testo": r["testo"], "limite": r.get("limite") or ""}
                        for r in limiti(requisiti)]}
 
@@ -761,8 +769,15 @@ def frase_confronto(e: dict, n_tappa: int = 0) -> str:
     """La frase a voce del confronto (con un confronto fatto): «Rispetto alla richiesta
     mancano: comandi vocali, musica. Le porte sono sempre 5.»"""
     parti = []
+    guardare = [x["testo"] for x in e.get("da_guardare") or []]
     tutti = len(e["fatti"]) + len(e["parziali"]) + len(e["mancano"])
-    if not e["mancano"] and not e["parziali"]:
+    if not e["mancano"] and not e["parziali"] and guardare:
+        # 13/10: «4 ci sono, 2 da guardare tu» invece di «ci sono tutte»
+        if tutti:
+            parti.append("Ho confrontato il codice con quello che avevi chiesto, una cosa per "
+                         "volta: " + (f"le {tutti} che si possono provare ci sono."
+                                      if tutti > 1 else "quella che si può provare c'è."))
+    elif not e["mancano"] and not e["parziali"]:
         cosa = ("le cose della prima tappa" if n_tappa == 1 else
                 f"le {tutti} cose che avevi chiesto" if tutti > 1 else "quello che avevi chiesto")
         parti.append(f"Ho confrontato il codice con {cosa}, una per una: "
@@ -787,6 +802,17 @@ def frase_confronto(e: dict, n_tappa: int = 0) -> str:
         if e["fatti"]:
             parti.append(f"Le altre {len(e['fatti'])} ci sono." if len(e["fatti"]) > 1
                          else "L'altra c'è.")
+    provati = sum(1 for x in e["fatti"] if x.get("provato") is True)
+    rossi = [x["testo"] for x in e["fatti"] if x.get("provato") is False]
+    if provati:
+        parti.append(("Una è provata da un esempio." if provati == 1 else
+                      f"{provati} sono provate dagli esempi.") if provati < len(e["fatti"]) else
+                     ("È provata da un esempio." if provati == 1 else
+                      "Sono provate tutte dagli esempi."))
+    if rossi:
+        parti.append("Però gli esempi non passano per: " + elenco_voce(rossi) + ".")
+    if guardare:
+        parti.append("Da guardare tu: " + elenco_voce(guardare) + ".")
     if e["dopo"]:
         parti.append("Per la tappa dopo restano: "
                      + elenco_voce([x["testo"] for x in e["dopo"]]) + ".")
@@ -828,8 +854,14 @@ def righe_scheda(requisiti: list[dict], voci: list[dict] | None, tappa: int,
         dopo = tappa > 0 and int(r.get("tappa") or 1) > tappa
         if v is None:
             stato = "tappa dopo" if dopo else "da controllare"
+        elif v["stato"] == "fatto" and r.get("al_collaudo") and not dopo:
+            stato = "da guardare tu"
         else:
             stato = nomi.get(v["stato"], v["stato"]) + (" (tappa dopo)" if dopo else "")
+            if v["stato"] == "fatto" and r.get("provato") is True:
+                stato += " (provato da un esempio)"
+            elif v["stato"] == "fatto" and r.get("provato") is False:
+                stato += " (ma un esempio non passa)"
         righe.append(f"- {stato}: {r['testo']}"
                      + (f" ({r['dettaglio']})" if r.get("dettaglio") else "")
                      + (f" — {pulito(v['nota'], 160)}" if v and v.get("nota") else ""))

@@ -8,6 +8,15 @@ del 12/10 sul gioco «Halloween, le porte magiche» (cartelle di lavoro, consegn
 `.registro-agente.md`, turni della voce), copiati fuori dal repository perché contengono nomi veri.
 Qui si citano solo il codice del gioco e le frasi di chi amministra.*
 
+> **Stato (13/10).** Parte 1 fatta il 12/10 sera (§ 5.1 passi 1, 2 e 5: la correzione da un
+> test rosso, `apriGioco`, `esegui_js`, i semi). Parte 2 fatta il 13/10 per le estensioni
+> (§ 5.1 passi 3, 4 e 6 in parte): l'analisi prima del codice in una passata a sé, gli esempi
+> dato → risultato trasformati dal codice in test di accettazione in sola lettura, al più due
+> domande prima di cominciare, «da guardare tu» alla revisione; e la temperatura a 0,6
+> (domanda 6). Restano gli esempi per i programmi, i test di accettazione dei giochi (dopo
+> la macchina a stati) e la passata con il ragionamento acceso. Dettagli e misure in
+> [agenti-estensioni](../aree/agenti-estensioni.md), «Flusso dell'agente a fasi, parte 2».
+
 ## La richiesta
 
 Parole di chi amministra: «La logica con cui un LLM raggiunge un risultato dipende soprattutto dalla

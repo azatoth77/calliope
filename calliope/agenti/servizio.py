@@ -1220,11 +1220,21 @@ class Lavori:
                         except Exception as e:  # noqa: BLE001 — resta il prompt
                             self.log(f"[AGENTI] {lav.id}: {contratto.FILE} non scritto: {e}")
                         sb.sola_lettura |= {contratto.FILE, "calliope_estensione.py"}
+                    self._prepara_cartella_estensione(lav, sb)
+                    domanda = self._analisi_prima(lav, sb, gioco)
+                    if domanda is not None:
+                        self._sospendi(lav, domanda, dest)
+                        return
                     ris = self.agente.codice(
                         lav, sb, sistema=sistema_estensione(self.cfg, gioco=gioco),
                         controlla=self._controlla_estensione(lav, presi, atteso),
                         esempi=True, piano=True)
+                    self._esito_accettazione(lav, sb, ris)
                 else:
+                    domanda = self._analisi_prima(lav, sb, False)
+                    if domanda is not None:
+                        self._sospendi(lav, domanda, dest)
+                        return
                     ris = self.agente.codice(lav, sb)
                 lav.risposta = None
                 if ris.get("esito") == "tappa":
@@ -1318,6 +1328,159 @@ class Lavori:
                 self.esecuzioni.in_cima(es)       # la scheda del lavoro è appena andata in cima
         else:
             self._scheda_finale(lav)
+
+    def _prepara_cartella_estensione(self, lav: Lavoro, sb):
+        """Un'estensione che non è un gioco: il runtime e i test di partenza con la firma giusta
+        (13/10, banco della temperatura sulla DGX: 41 test su 41 in errore con «esegui()
+        missing 1 required positional argument: 'calliope'»; agenti/scheletri.py). Mai
+        un'eccezione: resta lo scheletro nel prompt."""
+        if getattr(lav, "gioco", False):
+            return
+        from .scheletri import prepara_estensione
+        try:
+            scritti = prepara_estensione(sb)
+        except Exception as e:  # noqa: BLE001
+            self.log(f"[AGENTI] {lav.id}: test di partenza non scritti: {e}")
+            return
+        if scritti:
+            self.log(f"[AGENTI] {lav.id}: nella cartella di partenza " + ", ".join(scritti))
+
+    def _analisi_prima(self, lav: Lavoro, sb, gioco: bool) -> dict | None:
+        """`_analisi_prima_` senza eccezioni: un errore qui non ferma il lavoro."""
+        try:
+            return self._analisi_prima_(lav, sb, gioco)
+        except Exception as e:  # noqa: BLE001
+            self.log(f"[AGENTI] {lav.id}: analisi prima del codice non fatta: "
+                     f"{type(e).__name__}: {e}")
+            lav.accettazione = {"stato": "non_fatta", "perche": type(e).__name__}
+            return None
+
+    def _analisi_prima_(self, lav: Lavoro, sb, gioco: bool) -> dict | None:
+        """L'analisi prima del codice (13/10, flusso a fasi parte 2, agenti/accettazione.py):
+        una passata a sé del modello dell'agente. Per un'estensione scrive gli esempi di
+        accettazione (test_accettazione.py in sola lettura); in un lavoro nuovo trova le
+        contraddizioni e restituisce la domanda da fare (il risultato «mancano_dati» per
+        `_sospendi`), al più una volta per lavoro. None: si comincia. Mai un'eccezione: se la
+        passata non riesce il lavoro parte come prima."""
+        from . import accettazione as acc
+        stato = getattr(lav, "accettazione", None) or {}
+        if stato.get("stato") == "pronta" and stato.get("file"):
+            sb.sola_lettura |= {acc.FILE}        # dopo un riavvio la sandbox è la stessa
+        if not getattr(self.cfg, "agenti_accettazione", True) or lav.tipo not in (
+                "codice", "estensione") or (stato and stato.get("stato") != "domanda"):
+            return None
+        estensione = lav.tipo == "estensione" and not gioco
+        svs = getattr(self, "sviluppi", None)
+        sv = None
+        if svs is not None:
+            try:
+                sv = svs.di_lavoro(lav.id, lav.persona, chiusi=True)
+            except Exception:  # noqa: BLE001
+                sv = None
+        # Un lavoro nuovo: niente codice di una versione di prima (una modifica o una
+        # correzione hanno già i requisiti senza contrasti della specifica viva)
+        from .riproduzione import codice as solo_codice
+        nuovo = (not getattr(lav, "correzione", False)
+                 and not solo_codice(dict(getattr(lav, "file_iniziali", None) or {})))
+        if not estensione and (sv is None or not nuovo):
+            lav.accettazione = {"stato": "saltata"}
+            return None
+        from ..requisiti import da_fare
+        requisiti = [dict(r) for r in da_fare(list(getattr(sv, "requisiti", None) or []))]
+        parole = str(getattr(sv, "richiesta", "") or "").strip() or lav.dati_testo()
+        risposta = None
+        if stato.get("stato") == "domanda":
+            risposta = (stato.get("domanda") or "", str(lav.risposta or "").strip())
+        chiedere = (nuovo and risposta is None and bool(lav.persona)
+                    and len(lav.domande) < int(getattr(self.cfg, "agenti_domande_max", 3)))
+        lav.passo = "rilegge la richiesta prima di cominciare"
+        t0 = time.monotonic()
+        an, esito = acc.analizza(self, lav.compito, requisiti, parole, estensione, gioco,
+                                 risposta, float(getattr(self.cfg, "agenti_accettazione_s",
+                                                         90.0)))
+        secondi = round(time.monotonic() - t0, 1)
+        if an is None:
+            self.log(f"[AGENTI] {lav.id}: analisi prima del codice non fatta ({esito}, "
+                     f"{secondi} s): parte come prima")
+            lav.accettazione = {"stato": "non_fatta", "perche": esito}
+            return None
+        if chiedere and an["contraddizioni"]:
+            d = acc.domanda(an)
+            self.log(f"[AGENTI] {lav.id}: analisi prima del codice: "
+                     f"{len(an['contraddizioni'])} domande ({secondi} s)")
+            lav.accettazione = {"stato": "domanda", "domanda": d,
+                                "contraddizioni": an["contraddizioni"]}
+            return {"esito": "mancano_dati", "domanda": d, "riassunto": d}
+        if risposta and risposta[1]:
+            lav.vincoli = ((lav.vincoli or "").rstrip() + f" Prima di cominciare ho chiesto "
+                           f"«{risposta[0]}» e la persona ha risposto: «{risposta[1]}».").strip()
+        lav.risposta = None
+        scritto = False
+        if estensione and an["esempi"]:
+            try:
+                sb.scrivi(acc.FILE, acc.test_python(an))
+                sb.sola_lettura |= {acc.FILE}
+                scritto = True
+            except Exception as e:  # noqa: BLE001 — senza esempi il lavoro parte comunque
+                self.log(f"[AGENTI] {lav.id}: {acc.FILE} non scritto: {e}")
+        v = acc.vincolo(an, scritto)
+        if v:
+            lav.vincoli = ((lav.vincoli or "").rstrip() + " " + v).strip()
+        def testi(numeri):
+            return [requisiti[n - 1]["testo"] for n in numeri if 0 < n <= len(requisiti)]
+        lav.accettazione = {"stato": "pronta", "file": scritto, "esempi": len(an["esempi"]),
+                            "requisiti_provati": acc.numeri_esempi(an) if scritto else [],
+                            "testi_provati": testi(acc.numeri_esempi(an)) if scritto else [],
+                            "al_collaudo": an["al_collaudo"],
+                            "testi_al_collaudo": testi(an["al_collaudo"]),
+                            "scelte": an["scelte"], "domande": 1 if risposta else 0,
+                            "secondi": secondi}
+        self.log(f"[AGENTI] {lav.id}: analisi prima del codice ({secondi} s): "
+                 f"{len(an['esempi'])} esempi di accettazione"
+                 + (f", al collaudo i requisiti {an['al_collaudo']}" if an["al_collaudo"]
+                    else "") + (f", {len(an['scelte'])} scelte" if an["scelte"] else ""))
+        if sv is not None and requisiti and svs is not None:
+            try:
+                svs.segna_accettazione(sv, lav.accettazione["testi_al_collaudo"])
+            except Exception as e:  # noqa: BLE001 — la revisione resta com'era
+                self.log(f"[AGENTI] {lav.id}: requisiti al collaudo non segnati: {e}")
+        return None
+
+    def _esito_accettazione(self, lav: Lavoro, sb, ris: dict):
+        """Alla fine del lavoro gli esempi di accettazione si eseguono da soli (13/10): l'esito
+        va nel risultato (`ris["accettazione"]`) e, in uno sviluppo, sui requisiti («provato
+        da un esempio» alla revisione). Mai un'eccezione."""
+        from . import accettazione as acc
+        a = getattr(lav, "accettazione", None) or {}
+        if a.get("stato") != "pronta" or not a.get("file") or ris.get("esito") == "tappa":
+            return
+        try:
+            r = sb.test(acc.FILE)
+        except Exception as e:  # noqa: BLE001
+            self.log(f"[AGENTI] {lav.id}: esempi di accettazione non eseguiti: {e}")
+            return
+        rossi = acc.rossi(r.get("uscita"))
+        if not r.get("passano") and not rossi:
+            # Un errore prima dei test (l'import di estensione.py): tutti rossi
+            rossi = list(a.get("requisiti_provati") or [])
+        a.update(passano=bool(r.get("passano")), esito=r.get("esito"), rossi=rossi)
+        lav.accettazione = a
+        ris["accettazione"] = {k: a.get(k) for k in ("esempi", "passano", "esito", "rossi",
+                                                     "al_collaudo")}
+        self.log(f"[AGENTI] {lav.id}: esempi di accettazione "
+                 + ("tutti verdi" if a["passano"] else
+                    f"rossi (requisiti {rossi or '?'})"))
+        svs = getattr(self, "sviluppi", None)
+        if svs is not None:
+            try:
+                sv = svs.di_lavoro(lav.id, lav.persona, chiusi=True)
+                if sv is not None:
+                    provati = a.get("requisiti_provati") or []
+                    testi = a.get("testi_provati") or []
+                    svs.segna_provati(sv, [x for n, x in zip(provati, testi) if n not in rossi],
+                                      [x for n, x in zip(provati, testi) if n in rossi])
+            except Exception as e:  # noqa: BLE001
+                self.log(f"[AGENTI] {lav.id}: requisiti provati non segnati: {e}")
 
     def _file_del_giro(self, lav: Lavoro, riuso=None):
         """Un lavoro della modalità sviluppo che riparte da un giro fermo (12/10, A4 e A5:

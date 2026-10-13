@@ -95,7 +95,20 @@ AVVISO_FINE = {
               "manca; altrimenti non consegnare a metà e scrivi in una riga cosa resta da fare."),
     "ricerca": ("Adesso chiudi: non fare altre ricerche, chiama consegna con la relazione su "
                 "quello che hai trovato (quello che non hai trovato dillo, non inventarlo)."),
+    # L'ultimo esegui_test era verde e da allora nessun file è cambiato (13/10, banco della
+    # temperatura sulla DGX: in 4 lavori su 7 codice giusto e test verdi, ma nessuna consegna
+    # nemmeno dopo l'avviso, e il lavoro è finito «limite» al tetto delle passate)
+    "verde": ("I tuoi test passano: chiama consegna adesso, con un riassunto onesto di cosa "
+              "funziona e cosa manca. Non riscrivere i file che funzionano."),
+    "verde_tappa": ("I tuoi test passano: se il lavoro è finito chiama consegna adesso; "
+                    "altrimenti fai il passo concreto più utile e scrivi in una riga cosa resta "
+                    "da fare. Non riscrivere i file che funzionano."),
 }
+
+# La spinta dopo il primo esegui_test tutto verde, con i file che il lavoro chiede (13/10,
+# stesso banco): una volta per lavoro; la consegna resta una scelta dell'agente
+SPINTA_CONSEGNA = ("I tuoi test passano: se il lavoro è finito chiama consegna ora; altrimenti "
+                   "scrivi in una riga cosa manca e continua con il prossimo strumento.")
 
 
 @dataclass
@@ -183,6 +196,9 @@ class Lavoro:
     # test che falliscono, passate senza file né test nuovi (nel giro)
     segnali: dict = field(default_factory=dict)
     nota_giro: str = ""               # la nota della persona per il giro dopo («cambia e continua»)
+    # L'analisi prima del codice (13/10, accettazione.py): {"stato": domanda | pronta |
+    # non_fatta | saltata, gli esempi, i requisiti al collaudo, le scelte, l'esito}
+    accettazione: dict = field(default_factory=dict)
 
     def __setattr__(self, nome, valore):
         if nome in _OSSERVATI:
@@ -391,6 +407,30 @@ RISCRITTURE_MAX = 3
 RISCRITTURA_RIGHE = 60
 # Le righe intorno a leggi_file con «riga»
 RIGHE_INTORNO = 25
+# Un file riscritto per intero per cambiarne poche righe (13/10, banco della temperatura: passo
+# 9 tutto estensione.py, passo 10 tutto test_estensione.py…): nel risultato di scrivi_file la
+# nota che modifica_file c'è. Solo file di almeno tante righe, cambiati al più per una quota
+RISCRITTURA_NOTA_RIGHE = 20
+RISCRITTURA_NOTA_QUOTA = 0.25
+
+
+def nota_riscrittura(prima: str | None, dopo: str, nome: str) -> str:
+    """La nota per scrivi_file quando un file lungo è stato riscritto intero cambiandone poche
+    righe; "" altrimenti (file nuovo, corto, cambiato molto, uguale)."""
+    if prima is None:
+        return ""
+    a, b = prima.splitlines(), dopo.splitlines()
+    if len(a) < RISCRITTURA_NOTA_RIGHE:
+        return ""
+    import difflib
+    cambiate = sum(max(i2 - i1, j2 - j1) for op, i1, i2, j1, j2 in
+                   difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes()
+                   if op != "equal")
+    if cambiate == 0 or cambiate > max(3, RISCRITTURA_NOTA_QUOTA * len(a)):
+        return ""
+    return (f"Hai riscritto {nome.rsplit('/', 1)[-1]} intero ({len(a)} righe) per cambiarne "
+            f"{cambiate}: per correggere un pezzo usa modifica_file (vecchio → nuovo), è più "
+            "veloce e il resto del file non si tocca.")
 
 
 def _con_fallimenti(r: dict, uscita: str | None = None) -> dict:
@@ -960,8 +1000,15 @@ class Agente:
         else:
             return
         lav.avvisato = True
+        seg = getattr(lav, "segnali", None)
+        verde = (tipo == "codice" and isinstance(seg, dict)
+                 and seg.get("test_verde") is True)
         if tipo == "codice" and getattr(lav, "tappe", False):
             tipo = "tappa"
+        if verde:
+            # L'ultimo esegui_test era verde e niente è cambiato dopo (13/10): consegna
+            tipo = "verde_tappa" if tipo == "tappa" else "verde"
+            cosa += ", con i test verdi"
         # Il perché resta nel log, non nel messaggio all'agente (niente conto alla rovescia)
         testo = AVVISO_FINE.get(tipo, AVVISO_FINE["codice"])
         self.log(f"[AGENTI] {lav.id}: avviso di chiusura ({cosa})")
@@ -1304,6 +1351,7 @@ class Agente:
                 else:
                     result = self._strumento(lav, sandbox, name, args)
                     if name in ("scrivi_file", "modifica_file") and result.get("ok"):
+                        seg["test_verde"] = None        # i file sono cambiati dopo i test
                         scritti += 1
                         p = str(result.get("percorso") or args.get("percorso") or "?")
                         novita = novita or p not in seg["scritture"]
@@ -1327,6 +1375,11 @@ class Agente:
                             fila.clear()
                         seg["ultimo_errore"] = ((ultimo_errore(result) or {
                             "test": "", "errore": firma, "dove": ""}) if firma else None)
+                        # Tutto verde (13/10): per l'avviso di chiusura e la spinta a consegnare
+                        seg["test_verde"] = (result.get("passano") is True
+                                             and not args.get("percorso")
+                                             and int((result.get("esito") or {}).get(
+                                                 "eseguiti") or 0) > 0)
                     elif name in ("esegui_python", "esegui_csharp", "esegui_js") and \
                             result.get("fallimenti"):
                         seg["ultimo_errore"] = ultimo_errore(result)
@@ -1335,6 +1388,18 @@ class Agente:
                 lav.nota("esito", nome=name, esito=result)
             if not novita and consegna is None:
                 seg["senza_novita"] = int(seg.get("senza_novita", 0)) + 1
+            if (consegna is None and seg.get("test_verde") is True
+                    and not seg.get("spinta_consegna")
+                    and self._pronto_da_consegnare(lav, sandbox, piano, stato_piano)):
+                # I test passano e i file chiesti ci sono (13/10): una volta per lavoro la
+                # spinta a consegnare o a dire cosa manca; la consegna resta dell'agente
+                seg["spinta_consegna"] = True
+                from ..sonde import nota as nota_regola
+                nota_regola(lav, "agente_spinta_consegna")
+                self.log(f"[AGENTI] {lav.id}: i test passano, spinta a consegnare "
+                         "(regola agente_spinta_consegna)")
+                lav.nota("spinta", motivo="i test passano", regola="agente_spinta_consegna")
+                _aggiungi_spinta(messages, SPINTA_CONSEGNA)
             # Lo stesso file lungo riscritto per intero più volte di fila con lo stesso errore
             # (11/10, giro vero: gioco.js di 730 righe, nove volte): la spinta con l'ultimo
             # errore, e la fila riparte
@@ -1506,7 +1571,10 @@ class Agente:
             except Exception:  # noqa: BLE001 — la bozza è un aiuto, non un obbligo
                 pass
         out["prossimo"] = ("scarica_esempio se legge un sito, poi scrivi_file (estensione.py, "
-                           "test_estensione.py, manifesto.json)")
+                           "manifesto.json)"
+                           + (" e i tuoi casi in test_estensione.py, che c'è già, con "
+                              "modifica_file" if "test_estensione.py" in nomi else
+                              " e test_estensione.py"))
         return out, None
 
     def _chiedi_permesso(self, lav: Lavoro, args: dict, stato_piano: dict | None):
@@ -1548,6 +1616,23 @@ class Agente:
         if lav.inizio and self.trascorso(lav) > self.tempo_max_s * 0.9:
             return False
         return True
+
+    @staticmethod
+    def _pronto_da_consegnare(lav: Lavoro, sandbox, piano: bool, stato_piano) -> bool:
+        """Il lavoro ha i file che la consegna chiede (13/10, la spinta a consegnare): per
+        un'estensione o un gioco il controllo della consegna senza i nomi (manifesto valido,
+        codice, test), dopo il piano; per un programma almeno un file di codice. Senza
+        effetti: niente ricollaudo né sonde."""
+        try:
+            if piano and stato_piano is None:
+                return False
+            if lav.tipo == "estensione":
+                from ..estensioni.prompt import controlla_consegna
+                return controlla_consegna(sandbox) is None
+            from .riproduzione import NON_CODICE
+            return any(not NON_CODICE.search(f["percorso"]) for f in sandbox.elenca())
+        except Exception:  # noqa: BLE001 — nel dubbio niente spinta
+            return False
 
     @staticmethod
     def _ha_test(sandbox) -> bool:
@@ -1660,10 +1745,21 @@ class Agente:
                 return self._leggi(lav, sandbox, args)
             if name == "scrivi_file":
                 lav.passo = f"scrive {args.get('percorso') or 'un file'}"
+                try:
+                    prima = sandbox.leggi(args.get("percorso"), max_caratteri=10**9)
+                except Exception:  # noqa: BLE001 — un file nuovo (o un percorso che non va)
+                    prima = None
                 r = sandbox.scrivi(args.get("percorso"), args.get("contenuto"))
                 if r.get("ok"):
                     lav.nota("file", nome=r.get("percorso") or str(args.get("percorso")),
                              testo=str(args.get("contenuto") or ""))
+                    nota = nota_riscrittura(prima, str(args.get("contenuto") or ""),
+                                            str(r.get("percorso") or args.get("percorso")))
+                    if nota:
+                        # 13/10: modifica_file c'è già; qui lo si ricorda nel risultato
+                        from ..sonde import nota as nota_regola
+                        nota_regola(lav, "agente_riscrittura_piccola")
+                        r["nota"] = nota
                 return r
             if name == "modifica_file":
                 return self._modifica(lav, sandbox, args)

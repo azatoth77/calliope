@@ -102,20 +102,76 @@ def esegui(dati, calliope):
     if not dati_sito.get("risultati"):
         return {"da_dire": f"Non ho trovato {citta}.", "trovato": False}
     return {"da_dire": f"A {citta} ci sono {dati_sito['risultati'][0]['gradi']} gradi."}
-test_estensione.py:
-import json, unittest
-from calliope_estensione import CalliopeFinta
-from estensione import esegui
-
-class Prove(unittest.TestCase):
+test_estensione.py — C'È GIÀ nella cartella: chiama(dati, risposte=…, negate=…) chiama \
+esegui(dati, calliope) con la Calliope finta già pronta, e un primo test. Non riscriverlo: \
+aggiungi i tuoi casi nella classe Prove con modifica_file, così:
     def test_trovata(self):
-        c = CalliopeFinta(risposte={"rete_leggi": {"stato": 200, "tipo": "application/json",
-                                    "testo": json.dumps({"risultati": [{"gradi": 18}]})}})
-        self.assertIn("18 gradi", esegui({"citta": "Borgo Alto"}, c)["da_dire"])
+        out = chiama({"citta": "Borgo Alto"}, risposte={"rete_leggi": {"stato": 200,
+                     "tipo": "application/json", "testo": json.dumps({"risultati": [{"gradi": 18}]})}})
+        self.assertIn("18 gradi", out["da_dire"])
     def test_rete_negata(self):
-        out = esegui({"citta": "Borgo Alto"}, CalliopeFinta(negate=["rete_leggi"]))
+        out = chiama({"citta": "Borgo Alto"}, negate=["rete_leggi"])
         self.assertIn("Non riesco", out["da_dire"])
 Un test che fallisce dice l'asserzione e file:riga: correggi quel punto con modifica_file."""
+
+# Il file di test di partenza di un'estensione (13/10, banco della temperatura sulla DGX: in un
+# lavoro 41 test su 41 in errore con «esegui() missing 1 required positional argument:
+# 'calliope'», e le passate spese a sistemare i test invece del codice). Va nella cartella del
+# lavoro prima della prima passata (`prepara_estensione`), modificabile: la firma giusta, la
+# Calliope finta pronta in `chiama` e un test che passa con qualunque estensione che risponde.
+# Gli esempi nei commenti sono neutri: niente casi del banco
+TEST_ESTENSIONE = '''"""I test dell'estensione (unittest). La firma è esegui(dati, calliope): «dati» è il
+dict degli input del manifesto, «calliope» la Calliope finta (CalliopeFinta), che risponde al
+posto di quella vera. Usa chiama(): la Calliope finta è già pronta."""
+import json  # noqa: F401 — per le risposte della rete nei test
+import unittest
+
+from calliope_estensione import CalliopeFinta, ErroreCalliope  # noqa: F401
+from estensione import esegui
+
+
+def chiama(dati, risposte=None, negate=()):
+    """esegui(dati, calliope) con una Calliope finta: risposte = {azione: risultato} (per
+    esempio {"rete_leggi": {"stato": 200, "tipo": "text/html", "testo": "..."}}), negate = le
+    azioni che alzano ErroreCalliope (per esempio ["rete_leggi"])."""
+    return esegui(dict(dati), CalliopeFinta(risposte=risposte or {}, negate=list(negate)))
+
+
+class Prove(unittest.TestCase):
+    def test_risponde_sempre_con_una_frase(self):
+        # Senza input l'estensione risponde con una frase (che cosa le serve), mai un'eccezione
+        out = chiama({})
+        self.assertIsInstance(out, dict)
+        self.assertTrue(str(out.get("da_dire") or "").strip())
+
+    # Aggiungi qui i tuoi casi, uno per cosa chiesta, con i valori veri e il risultato atteso:
+    # def test_un_caso(self):
+    #     out = chiama({"citta": "Borgo Alto"})
+    #     self.assertIn("Borgo Alto", out["da_dire"])
+'''
+
+
+def prepara_estensione(sandbox, runtime: str | None = None) -> list[str]:
+    """La cartella di un lavoro su un'estensione (non un gioco) prima della prima passata: il
+    runtime con CalliopeFinta, in sola lettura, se manca (13/10: il banco partiva senza, e
+    l'agente non poteva importare la Calliope finta), e `test_estensione.py` di partenza se
+    nella cartella non c'è nessun test (una modifica tiene i suoi). I file scritti."""
+    nomi = {f["percorso"] for f in sandbox.elenca()}
+    scritti = []
+    if "calliope_estensione.py" not in nomi:
+        if runtime is None:
+            from ..estensioni.servizio import runtime_testo
+            runtime = runtime_testo()
+        # Il servizio lo segna in sola lettura insieme al contratto, prima di qui: lo si
+        # scrive comunque (è il codice di Calliope, non dell'agente)
+        sandbox.sola_lettura.discard("calliope_estensione.py")
+        sandbox.scrivi("calliope_estensione.py", runtime)
+        scritti.append("calliope_estensione.py")
+    sandbox.sola_lettura |= {"calliope_estensione.py"}
+    if not any(n.rsplit("/", 1)[-1].startswith("test") and n.endswith(".py") for n in nomi):
+        sandbox.scrivi("test_estensione.py", TEST_ESTENSIONE)
+        scritti.append("test_estensione.py")
+    return scritti
 
 PROGRAMMA_PYTHON = """SCHELETRO DI PARTENZA (programma Python): parti da qui.
 programma.py:

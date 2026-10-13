@@ -572,6 +572,7 @@ def prova_tappe(tmp):
         cfg.agenti_modelli = str(tmp / "modelli")
         cfg.llm_native_url = "http://127.0.0.1:9"
         cfg.agenti_max_passi = 3
+        cfg.agenti_accettazione = False  # il copione non prevede l'analisi prima del codice (13/10: prova_fasi_agente_2)
         svc = Lavori(cfg, carica(cfg), log=lambda *a: None, formati=FORMATI)
         svs = svc.sviluppi = Sviluppi(cfg, tmp / "sandbox", svc)
 
