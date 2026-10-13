@@ -67,9 +67,16 @@ def hotwords_whisper(cfg) -> str | None:
 
 # Il prompt di Whisper si ricalcola a ogni frase (05/10): con la modalità cambiata a voce la
 # parola che sveglia cambia senza riavvio. Un valore assegnato (le prove) resta fisso
-_PROMPT = property(
-    lambda self: getattr(self, "_prompt_fisso", None) or prompt_whisper(self.cfg),
-    lambda self, v: setattr(self, "_prompt_fisso", v))
+# Dal 13/10 (conversazione di stanza) una frase può avere un altro prompt (`transcribe(audio,
+# prompt="")`: la stanza senza il nome, § 5.4 del progetto), valido solo per lei
+def _prompt_get(self):
+    altro = self.__dict__.get("_prompt_frase")
+    if altro is not None:
+        return altro
+    return getattr(self, "_prompt_fisso", None) or prompt_whisper(self.cfg)
+
+
+_PROMPT = property(_prompt_get, lambda self, v: setattr(self, "_prompt_fisso", v))
 
 
 class Transcriber:
@@ -124,7 +131,7 @@ class Transcriber:
         segments, _ = self.model.transcribe(audio, language=self.cfg.language,
                                             beam_size=self.cfg.whisper_beam_size,
                                             hotwords=hotwords_whisper(self.cfg),
-                                            initial_prompt=self.prompt,
+                                            initial_prompt=self.prompt or None,
                                             condition_on_previous_text=False)
         return " ".join(s.text.strip() for s in segments).strip()
 
@@ -177,7 +184,15 @@ class Transcriber:
                           "errore": self.error})
         return True
 
-    def transcribe(self, audio: np.ndarray) -> str:
+    def transcribe(self, audio: np.ndarray, prompt: str | None = None) -> str:
+        """La frase trascritta ("" se è rumore o un'allucinazione). `prompt`: un altro prompt
+        per questa frase sola ("" = nessuno; la stanza, 13/10)."""
+        if prompt is not None:
+            self._prompt_frase = prompt
+            try:
+                return self.transcribe(audio)
+            finally:
+                self._prompt_frase = None
         try:
             text = self._run(audio)
         except Exception as e:  # noqa: BLE001
@@ -201,6 +216,8 @@ class Transcriber:
         voce, «Calliope Conversazione con Calliope»: con il nome davanti (hotword) il
         confronto esatto non scattava e Calliope si è svegliata. Si confronta senza il
         nome e senza punteggiatura."""
+        if not self.prompt:
+            return False
         def bare(s: str) -> str:
             words = re.findall(r"\w+", s.lower())
             nomi = {n.lower() for n in getattr(self.cfg, "wake_names", [self.cfg.name])}
@@ -374,7 +391,12 @@ class ServerTranscriber(Transcriber):
             # Il server è caduto durante l'uso: caricare Whisper su CPU costa secondi, e
             # intanto Calliope lo dice (frase d'attesa, una volta sola)
             self._avvisa_ripiego()
-        return self._cpu_pronto()._run(audio)
+        cpu = self._cpu_pronto()
+        cpu._prompt_frase = self.__dict__.get("_prompt_frase")     # la stanza: senza prompt
+        try:
+            return cpu._run(audio)
+        finally:
+            cpu._prompt_frase = None
 
     def _ripiega_su_cpu(self, e: Exception) -> bool:
         return False          # il ripiego del server è già in _run

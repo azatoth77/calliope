@@ -222,6 +222,8 @@ class Schermi:
         # dorme). Prima vinceva chi scriveva per ultimo: una corsia che scartava una frase
         # riportava «dorme» mentre l'altra parlava. Sorgente None = il microfono che ascolta
         self._voce_src: dict = {}
+        # Il segno della stanza (13/10, conversazione di stanza): stanza → {sorgente: testo}
+        self._stanza_src: dict = {}
         self._voce_cond = threading.Condition(self._lock)
         self._voce_thread = None
         # Scrivere invece di parlare (03/10, moduli.py): i moduli aperti sugli schermi personali
@@ -797,6 +799,43 @@ class Schermi:
             pred = self._chiave_voce(None)
             if pred is not None and conn in self._conn_voce(pred):
                 return self._voce_effettiva(pred)
+            return None
+
+    # ── la stanza ascolta (13/10, conversazione di stanza, calliope/stanza/) ──
+    def _segno_stanza(self, chiave) -> dict | None:
+        testi = sorted(t for t in (self._stanza_src.get(chiave) or {}).values() if t)
+        # Con più satelliti nella stessa stanza: la pausa si vede prima dell'ascolto
+        testi.sort(key=lambda t: 0 if "pausa" in t else 1)
+        return {"testo": testi[0]} if testi else None
+
+    def stanza_segno(self, stanza: str, sorgente: str, testo: str | None) -> int:
+        """«Ascolto la stanza» (o «Stanza in pausa: ospiti, fino alle 22:15») sugli schermi della
+        stanza del satellite `sorgente`; None lo toglie. Non blocca; quante pagine l'hanno
+        ricevuto. Lo stato è sempre visibile (decisione 0029, visione)."""
+        with self._lock:
+            chiave = norm_stanza(stanza) if stanza else ""
+            for k in [k for k, src in self._stanza_src.items() if k != chiave and sorgente in src]:
+                del self._stanza_src[k][sorgente]
+            prima = self._segno_stanza(chiave)
+            if testo:
+                self._stanza_src.setdefault(chiave, {})[sorgente] = str(testo)
+            else:
+                (self._stanza_src.get(chiave) or {}).pop(sorgente, None)
+            dopo = self._segno_stanza(chiave)
+            if dopo == prima:
+                return 0
+            msg = json.dumps(dopo or {"testo": None}, ensure_ascii=False)
+            n = 0
+            for c in self._conn_voce(chiave):
+                n += c.consegna(("stanza", msg))
+            return n
+
+    def stanza_per(self, conn) -> dict | None:
+        """Il segno della stanza per una pagina che si (ri)collega."""
+        with self._lock:
+            for chiave in list(self._stanza_src):
+                if conn in self._conn_voce(chiave):
+                    return self._segno_stanza(chiave)
             return None
 
     # ── uso del contesto ──

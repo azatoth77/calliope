@@ -235,6 +235,9 @@ CLASSI: dict[str, Classe] = {
     # il meteo di casa dall'entità weather di Home Assistant (09/10): stati e previsioni di
     # HA, valori numerici e condizioni di un insieme chiuso
     "meteo_leggi": _c(S),
+    # 13/10, conversazione di stanza: ferma o riprende l'ascolto della stanza; «riprendi» lo
+    # controlla il tool (solo un adulto riconosciuto dalla voce)
+    "stanza_pausa": _c(S),
     "anagrafica_cerca": _c(S), "calliope_stato": _c(S), "installa_proponi": _c(S),
     "pc_stato": _c(S), "pc_cerca_file": _c(S),
     # le conversazioni passate di chi parla (calliope/conversazioni.py): parole sue e risposte

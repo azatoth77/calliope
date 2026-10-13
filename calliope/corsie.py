@@ -644,21 +644,32 @@ class STTCondiviso:
     corsia."""
 
     def __init__(self, stt):
+        from .stanza.coda import Precedenza
         self.__dict__["_stt"] = stt
-        self.__dict__["_lock"] = threading.Lock()
+        # Dal 13/10 (conversazione di stanza, stanza/coda.py) con la precedenza: la frase di un
+        # turno passa davanti ai segmenti della stanza che aspettano
+        self.__dict__["_lock"] = Precedenza()
         self.__dict__["_qui"] = threading.local()
 
-    def transcribe(self, audio, *a, **k):
-        with self._lock:
+    def transcribe(self, audio, *a, priorita: int = 0, prompt: str | None = None, **k):
+        """`priorita` (stanza/coda.py): TURNO di serie; `prompt`: un altro prompt di Whisper
+        per questa frase sola ("" = nessuno: la stanza, § 5.4 del progetto)."""
+        with self._lock.tieni(priorita):
+            if prompt is not None:
+                k["prompt"] = prompt
             testo = self._stt.transcribe(audio, *a, **k)
             self._qui.conf = getattr(self._stt, "ultima_confidenza", None)
             self._qui.scartata = getattr(self._stt, "ultima_scartata", None)
         return testo
 
+    def aspetta_turno(self) -> bool:
+        """Una frase di un turno aspetta Whisper (stanza/ascolto.py non ne comincia altre)."""
+        return self._lock.aspetta_turno()
+
     def parole(self, audio):
         """Le parole con la probabilità (calliope/argomenti_incerti.py), una richiesta alla
         volta come le trascrizioni."""
-        with self._lock:
+        with self._lock.tieni(0):
             return self._stt.parole(audio)
 
     @property

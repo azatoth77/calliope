@@ -62,6 +62,10 @@ class Listener:
         self.ripresa_avviso = None
         self._ripresa = None                 # pause.OsservaRipresa in corso
         self._ripresa_ultima = None          # l'ultima, per leggerne l'esito
+        # Il rubinetto della stanza (13/10, conversazione di stanza, calliope/satellite/stanza.py):
+        # una funzione che riceve una copia di ogni frame, sempre, anche mentre non si ascolta;
+        # non deve bloccare. None = niente stanza
+        self.rubinetto = None
         # Ultimi frame captati mentre non si ascolta: diventano il pre-roll iniziale.
         # Senza, chi parlava appena Calliope finiva perdeva l'attacco (test del 24/09:
         # voce a 100–160 ms dall'inizio invece di 240–290, «Equale rospaniac»).
@@ -103,6 +107,9 @@ class Listener:
         r = self._ripresa
         if r is not None:                # dopo la frase: qualcuno ricomincia? (pause.py)
             r.frame(frame)
+        rub = self.rubinetto
+        if rub is not None:              # l'ascolto della stanza (satellite/stanza.py)
+            rub(frame)
 
     # ── ripresa dopo la frase (07/10, solo misura) ──
     def _vad_per_ripresa(self):

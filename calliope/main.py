@@ -327,8 +327,23 @@ class Avvio:
         s.stt = make_transcriber(cfg)   # locale (faster-whisper) o server, vedi stt.py
         # Più corsie insieme: una trascrizione alla volta, la confidenza per corsia
         self.insieme = s.satelliti is not None and s.satelliti.insieme
-        if self.insieme:
+        # La conversazione di stanza (13/10, calliope/stanza/, passo 1 in ombra): None se
+        # spenta. Con la stanza Whisper è condiviso anche con una corsia sola (la precedenza:
+        # il turno passa davanti ai segmenti della stanza)
+        from .stanza import SPENTA as STANZA_SPENTA, modo as modo_stanza
+        stanza_accesa = s.satelliti is not None and modo_stanza(cfg) != STANZA_SPENTA
+        if self.insieme or stanza_accesa:
             s.stt = corsie.STTCondiviso(s.stt)
+        if stanza_accesa:
+            from .stanza import load_stanza
+            s.stanza = load_stanza(cfg, s.stt, registry=s.registry,
+                                   log=lambda m: print(m, flush=True))
+            s.satelliti.conversazione_stanza = s.stanza
+            s.stanza.server = s.satelliti
+            nomi = getattr(cfg, "stanza_satelliti", None) or []
+            print(f"[STANZA] Ascolto della stanza in ombra (solo misure, niente al modello) su "
+                  + (", ".join(map(str, nomi)) if nomi else "tutti i satelliti che lo sanno fare"),
+                  flush=True)
         # Correzione delle frasi incerte (05/10, prototipo spento: stt_correzione.py)
         if getattr(cfg, "stt_correzione", False):
             from . import stt_correzione
@@ -440,6 +455,8 @@ class Avvio:
             # Il telefono (web app /telefono) entra come satellite dal server degli schermi; e
             # «questo schermo è mio» a voce (schermo_gestisci, 03/10): il satellite da cui si parla
             schermi.satelliti = s.satelliti
+            if s.stanza is not None:
+                s.stanza.schermi = schermi      # il segno «Ascolto la stanza» (13/10)
         # Rispondi dove ti ho chiesto (04/10, calliope/rispondi.py): una frase scritta dal
         # telefono ha la risposta dal telefono (e scritta sul suo schermo), le schede vanno
         # prima allo schermo da cui arriva la richiesta, gli annunci al satellite che li aveva
@@ -614,7 +631,13 @@ class Avvio:
                                     conserva=s.conserva,
                                     web=web, notizie=s.notizie,
                                     conversazioni=conv_arch, modalita=self.modalita,
-                                    cassetto=cassetto)
+                                    cassetto=cassetto, stanza=s.stanza)
+        if s.stanza is not None:
+            # stanza_pausa (13/10): «abbiamo ospiti», «metti in pausa la stanza», «ascolta di
+            # nuovo la stanza», solo con la stanza accesa
+            from .tools.stanza import stanza_specs
+            for spec in stanza_specs():
+                s.tools.register(spec)
 
     def _registro_eventi(self, conv_arch):
         """Il registro degli eventi (10/10, calliope/eventi/, passi 0 e 1 in ombra): un registro

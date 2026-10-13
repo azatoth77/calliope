@@ -346,7 +346,32 @@ class Cruscotto:
                 "abbinamenti": self._parte(self._abbinamenti),
                 "regole": self._parte(self._regole, turni),
                 "errori": self._parte(self._errori, turni),
-                "attesa": self._parte(self._attesa)}
+                "attesa": self._parte(self._attesa),
+                "stanza": self._parte(self._stanza)}
+
+    def _stanza(self) -> dict | None:
+        """La conversazione di stanza (13/10, passo 1 in ombra): per satellite se ascolta o è in
+        pausa, quante righe sono in memoria e quante persone presenti, e i numeri di oggi
+        (stanza/misure.py). Mai parole né nomi di chi parla. None se è spenta."""
+        st = getattr(self.servizi, "stanza", None)
+        if st is None:
+            return None
+        sat = {n: {"stanza": v.get("stanza"), "pausa": v.get("pausa"), "righe": v.get("righe"),
+                   "presenti": len(v.get("presenti") or ())}
+               for n, v in st.stato().items()}
+        from ..stanza import misure
+        oggi = {}
+        mis = getattr(st, "misure", None)
+        if mis is not None:
+            import datetime
+            g = misure.riassunto([r for r in list(mis.memoria)
+                                  if str(r.get("t", ""))[:10] == datetime.date.today()
+                                  .isoformat()])["giorni"]
+            for v in g.values():
+                oggi = {n: {k: x[k] for k in ("ore_parlato", "ritardo_p90_s", "mb")}
+                        for n, x in v["satelliti"].items()}
+        return {"satelliti": sat, "oggi": oggi, "in_coda": st.in_coda(),
+                "comando": "calliope stato --turni"}
 
     def _capacita_attuali(self) -> dict:
         from .. import capacita

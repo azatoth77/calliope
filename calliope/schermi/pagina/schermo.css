@@ -373,6 +373,11 @@ pre.uscita-esecuzione .omessi, pre.uscita-esecuzione .vuoto { color: var(--tenue
 .voce-compagnia { grid-column: 1 / -1; font-size: 1.05rem; font-weight: 500; color: var(--tenue);
   margin-top: 0.15rem; }
 .voce-compagnia[hidden] { display: none; }
+/* La stanza ascolta (13/10, conversazione di stanza): sempre visibile in alto, discreto */
+.stanza-segno { font-size: 0.95rem; color: var(--tenue); margin-right: 1rem; white-space: nowrap; }
+.stanza-segno::before { content: "● "; color: var(--v-ascolta, #6fbf73); }
+.stanza-segno.pausa::before { content: "❚❚ "; color: var(--tenue); }
+.stanza-segno[hidden] { display: none; }
 
 /* Le forme: 3 elementi <i> dentro .forma, disegnati diversamente per ogni stato */
 .forma { position: relative; width: 2.6rem; height: 2.6rem; display: inline-flex;

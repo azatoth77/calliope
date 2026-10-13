@@ -477,6 +477,10 @@ def registro_completo():
     # meteo_leggi c'è solo con un'entità meteo esposta in HA (09/10, allinea_meteo)
     from calliope.tools.casa import meteo_spec
     reg.register(meteo_spec())
+    # stanza_pausa c'è solo con la stanza accesa (13/10, conversazione di stanza)
+    from calliope.tools.stanza import stanza_specs
+    for s in stanza_specs():
+        reg.register(s)
     return reg
 
 

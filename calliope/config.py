@@ -994,6 +994,35 @@ class Config:
     # false = come prima del 06/10: un satellite attivo alla volta (il telefono lo prende con
     # «Parla»)
     satelliti_insieme: bool = True
+    # ── conversazione di stanza (13/10, decisione 0029; docs/ricerche/2026-10-13-conversazione-
+    # di-stanza.md). Passo 1, «ombra»: i satelliti che lo sanno fare (protocollo 3: satellite
+    # Python aggiornato, telefono) mandano anche il parlato della stanza, chiuso dal loro VAD;
+    # Calliope lo trascrive a bassa precedenza (il turno passa sempre prima), sa chi ha detto
+    # cosa e chi è presente, e lo tiene **solo in memoria** (al più 24 h, si perde al riavvio);
+    # niente arriva al modello: si misura (`calliope stato --turni`, sezione «Stanza»). L'audio
+    # non va mai su disco. Sugli schermi della stanza «Ascolto la stanza»; si ferma a voce
+    # («Calliope, abbiamo ospiti»: 4 ore; tool stanza_pausa). «spenta» (di serie): nessun flusso,
+    # niente caricato. Si accende per satellite nel file locale
+    stanza: str = "spenta"
+    # I satelliti con la stanza accesa, per nome (`calliope satellite --elenco`); vuoto = tutti
+    stanza_satelliti: list[str] = field(default_factory=list)
+    # Tetto di un segmento della stanza: un pezzo breve va meglio a Whisper e a chi parla (la
+    # frase dei comandi resta a max_utterance_s)
+    stanza_segmento_max_s: float = 20.0
+    # All'interpellazione i segmenti detti prima passano davanti: la misura dice quante volte
+    # finirli costa più di così dalla domanda (passo 2: oltre, la frase d'attesa)
+    stanza_recupero_max_s: float = 1.5
+    # Audio della stanza in coda oltre il quale i segmenti più vecchi si buttano (motivo
+    # «coda_piena»): con Whisper occupato a lungo la stanza non cresce senza fine
+    stanza_coda_max_s: float = 600.0
+    # Silenzio che chiude uno scambio (l'unità del riassunto e della corsia lenta, passi dopo)
+    stanza_scambio_pausa_s: float = 300.0
+    # Chi è presente: voce riconosciuta sopra soglia negli ultimi secondi (§ 3.7, § 3.5 ter)
+    stanza_presenza_s: float = 600.0
+    # «Calliope, abbiamo ospiti» ferma l'ascolto della stanza su quel satellite per queste ore
+    # (risposta 6 di chi amministra); «metti in pausa la stanza» senza durata: questi minuti
+    stanza_ospiti_ore: float = 4.0
+    stanza_pausa_min: float = 60.0
     # Connessioni insieme attraverso l'inoltro (una pagina ne apre 2–6)
     satellite_inoltro_max: int = 32
     # Secondi senza un byte dopo i quali una connessione dell'inoltro si chiude
@@ -2814,6 +2843,9 @@ SEZIONI: dict[str, list[str]] = {
                          "satellite_tls_cert", "satellite_tls_chiave", "satellite_senza_tls",
                          "satellite_codice_min", "satellite_max_connessioni",
                          "satellite_installazione", "satelliti_insieme"],
+    "conversazione_stanza": ["stanza", "stanza_satelliti", "stanza_segmento_max_s", "stanza_recupero_max_s",
+               "stanza_coda_max_s", "stanza_scambio_pausa_s", "stanza_presenza_s",
+               "stanza_ospiti_ore", "stanza_pausa_min"],
     "satellite": ["satellite_server", "satellite_credenziali", "satellite_impronta",
                   "satellite_microfono", "satellite_casse", "satellite_webcam",
                   "satellite_schermo", "satellite_schermo_personale", "satellite_esecutore",
@@ -3010,6 +3042,9 @@ LOCAL_CONFIG_FILE = "calliope.locale.yaml"
 # fuori si segnala e resta quello di prima (il predefinito, o il file precedente).
 LIMITI: dict[str, tuple[float, float]] = {
     "llm_num_ctx": (512, 1_048_576), "llm_temperature": (0.0, 2.0),
+    "stanza_segmento_max_s": (2.0, 60.0), "stanza_recupero_max_s": (0.0, 30.0),
+    "stanza_coda_max_s": (10.0, 7200.0), "stanza_ospiti_ore": (0.1, 48.0),
+    "stanza_pausa_min": (1.0, 1440.0),
     "contesto_ripiego": (2048, 1_048_576), "contesto_rilettura_max_s": (0.1, 60.0),
     "contesto_conversazioni": (1, 64), "contesto_margine_gb": (0.0, 512.0),
     "max_history_turns": (0, 200), "max_tool_turns": (1, 20), "tool_correzioni_max": (0, 10),
@@ -3175,6 +3210,14 @@ def _frasi_varianti_valido(value):
     raise ValueError("serve «spento», «ombra» o «attivo»")
 
 
+def _stanza_valido(value):
+    """«spenta» o «ombra» (13/10, calliope/stanza/; «attiva» è dei passi dopo)."""
+    s = str(value or "").strip().lower()
+    if s in ("spenta", "ombra"):
+        return s
+    raise ValueError("serve «spenta» o «ombra»")
+
+
 def _tts_dispositivo_valido(value):
     """«auto», «cpu» o «cuda»."""
     s = str(value or "").strip().lower()
@@ -3188,7 +3231,8 @@ VALIDATORI = {"llm_keep_alive": keep_alive_valido, "llm_num_ctx": _num_ctx_valid
               "agenti_num_ctx": _num_ctx_agenti_valido,
               "contesto_riassuntore": _riassuntore_valido,
               "dialogo_interprete": _dialogo_interprete_valido,
-              "eventi": _eventi_valido, "frasi_varianti": _frasi_varianti_valido}
+              "eventi": _eventi_valido, "frasi_varianti": _frasi_varianti_valido,
+              "stanza": _stanza_valido}
 
 
 def fuori_limiti(key: str, value) -> tuple[float, float] | None:

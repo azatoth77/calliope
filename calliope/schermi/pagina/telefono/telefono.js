@@ -3,14 +3,16 @@
 // server degli schermi. Da addormentata l'audio non esce dal telefono finché la wake word
 // «Calliope», che gira qui, non scatta; con «Parla» la frase parte subito.
 // Tutto il testo che arriva dal server va in textContent: sono dati, mai HTML.
-import { Ascolto, FRAME, Riproduttore, SR, Vad, WakeWord, caricaOrt, misure, sessione } from "./voce.js";
+import { Ascolto, AscoltoStanza, FRAME, Riproduttore, SR, Vad, WakeWord, caricaOrt, misure, sessione } from "./voce.js";
 import { SchermoAcceso } from "./schermo-acceso.js";
 
-const VERSIONE = 2;
+// Versione 3 (13/10): l'ascolto della stanza (calliope/satellite/protocollo.py)
+const VERSIONE = 3;
 const CHIAVE_TOKEN = "calliope.telefono.token";
 const CHIAVE_NOME = "calliope.telefono.nome";
 const CHIAVE_MIC = "calliope.telefono.microfono";
 const CHIAVE_TIENI = "calliope.telefono.schermo_acceso";   // "0": lo schermo può spegnersi
+const CHIAVE_STANZA = "calliope.telefono.stanza";          // "0": la stanza non si ascolta da qui
 const ATTESE_MS = [1000, 2000, 5000, 10000, 15000];
 // Valori di riserva finché il server non manda i suoi (benvenuto: calliope.yaml del server)
 const PARAMETRI = {
@@ -47,10 +49,19 @@ const st = {
   tieni: leggi(CHIAVE_TIENI) !== "0",
   risposta: { turno: -1, testo: "", ora: 0 },   // l'ultima risposta di Calliope (prima del carosello)
   compagnia: "",         // «In compagnia: chiamami per nome» (09/10), dallo stato della voce
+  // La conversazione di stanza (13/10, decisione 0029): lo stato del server ({attiva, motivo,
+  // fino, segmento_max_s}, null se il server non la fa), l'interruttore di questo telefono
+  // (acceso di serie, risposta 5 di chi amministra), i byte mandati (la banda)
+  stanza: { server: null, voluta: leggi(CHIAVE_STANZA) !== "0", inviato: 0 },
+  ultimoA: 0, ultimoLid: null,          // l'ultimo audio dei comandi (legame con la stanza)
 };
 const param = Object.assign({}, PARAMETRI);
 const ascolto = new Ascolto(param);
 const player = new Riproduttore("Calliope");
+// L'ascolto della stanza (13/10): un secondo VAD sugli stessi blocchi, solo con la stanza accesa
+// dal server, l'interruttore acceso e il microfono acceso; mai mentre Calliope parla
+const stanza = new AscoltoStanza(param, mandaStanza, () => player.inCorso(),
+  () => (st.ultimoLid !== null ? { t: st.ultimoA, id: st.ultimoLid } : null));
 // La voce comincia a sentirsi (07/10): come `suona` del satellite in Python, per `prima_voce_s`
 player.onSuona = (id, uscita) => manda({ tipo: "suona", id, uscita_s: Math.round(uscita * 1000) / 1000 });
 let suoni = {};          // {inizio, fine}: {pcm (Uint8Array, int16), rate} dal benvenuto
@@ -135,7 +146,9 @@ function disegna() {
   const [cls] = voceLocale();
   const [gc, parola, dove] = statoVista(cls);
   // In compagnia con una voce sconosciuta (09/10): la riga piccola lo dice, sotto il resto
-  const sotto = st.compagnia && st.collegato ? (dove ? dove + " · " : "") + st.compagnia : dove;
+  let sotto = st.compagnia && st.collegato ? (dove ? dove + " · " : "") + st.compagnia : dove;
+  const ts = testoStanza();                // la stanza ascolta (13/10)
+  if (ts) sotto = sotto ? sotto + " · " + ts : ts;
   const v = $("tel-voce");
   if (v.className !== "voce " + gc) v.className = "voce " + gc;
   metti(v.querySelector(".voce-testo"), parola);
@@ -704,6 +717,59 @@ function mandaAudio(id, blocchi) {
   }
   ws.send(buf);
   st.inviato += n * 2;
+  st.ultimoA = performance.now();
+  st.ultimoLid = id;
+}
+
+// ───────────────────────────── la stanza (13/10) ─────────────────────────────
+function mandaStanza(m) {
+  if (m[0] === "inizio") { manda(Object.assign({ tipo: "stanza_inizio" }, m[1])); return; }
+  if (m[0] === "fine") { manda(Object.assign({ tipo: "stanza_fine" }, m[1])); return; }
+  const ws = st.ws;
+  const blocchi = m[2];
+  if (!ws || ws.readyState !== 1 || !blocchi.length) return;
+  const n = blocchi.reduce((a, b) => a + b.length, 0);
+  const buf = new ArrayBuffer(5 + n * 2);
+  const dv = new DataView(buf);
+  dv.setUint8(0, 82);                 // «R»
+  dv.setUint32(1, m[1] >>> 0, false);
+  let o = 5;
+  for (const b of blocchi) {
+    for (let i = 0; i < b.length; i++) {
+      dv.setInt16(o, Math.round(Math.max(-1, Math.min(1, b[i])) * 32767), true);
+      o += 2;
+    }
+  }
+  ws.send(buf);
+  st.stanza.inviato += n * 2;
+}
+
+function aggiornaStanza() {
+  const s = st.stanza.server;
+  stanza.imposta(!!(st.collegato && s && s.attiva && st.stanza.voluta && st.mic),
+    s && s.segmento_max_s);
+  const box = $("stanza-interruttore");
+  if (box) box.hidden = !(s && s.motivo !== "spenta");
+  attr($("stanza-tieni"), "aria-checked", st.stanza.voluta ? "true" : "false");
+}
+
+function impostaStanza(v) {
+  st.stanza.voluta = !!v;
+  scrivi(CHIAVE_STANZA, st.stanza.voluta ? null : "0");
+  aggiornaStanza();
+  disegna();
+}
+
+// Il segno sotto lo stato: la stanza ascolta (o è in pausa), sempre visibile
+function testoStanza() {
+  const s = st.stanza.server;
+  if (!st.collegato || !s || s.motivo === "spenta") return "";
+  if (!s.attiva) {
+    const fino = s.fino ? ", fino alle " + fmtOra.format(new Date(s.fino * 1000)) : "";
+    return (s.motivo === "ospiti" ? "Stanza in pausa: ospiti" : "Ascolto della stanza in pausa") + fino;
+  }
+  if (!st.stanza.voluta) return "Ascolto della stanza spento su questo telefono";
+  return st.mic ? "Ascolto la stanza" : "";
 }
 
 // L'audio di una frase verso il server: subito se si conosce già l'id dell'ascolto,
@@ -860,7 +926,7 @@ function connetti(ripresa) {
   st.sostituito = false;
   ws.onopen = () => {
     ws.send(JSON.stringify({ tipo: "ciao", versione: VERSIONE, token: st.token, primo: false,
-      nome: "telefono", esecutore: null, modalita: true }));
+      nome: "telefono", esecutore: null, modalita: true, stanza: true }));
   };
   ws.onmessage = (ev) => {
     if (ws !== st.ws) return;
@@ -903,6 +969,8 @@ function fineSessione() {
   // Connessione caduta: niente frasi a metà, niente ascolti in sospeso
   player.ferma(Infinity);
   fermaCorsa();
+  st.stanza.server = null;
+  aggiornaStanza();
   st.L = null;
   st.W = null;
   st.pensa = false;
@@ -920,6 +988,7 @@ function comando(m) {
   switch (m.tipo) {
     case "benvenuto": benvenuto(m); break;
     case "modalita": suModalita(m); break;
+    case "stanza": st.stanza.server = m; aggiornaStanza(); break;
     case "attivo":
       st.attivo = !!m.attivo;
       st.altro = m.altro || null;
@@ -997,6 +1066,8 @@ async function benvenuto(m) {
   metti($("luogo"), st.satellite.nome || "—");
   statoTel("ok", "collegata");
   manda({ tipo: "pronto", eco: null });
+  st.stanza.server = m.stanza || null;
+  aggiornaStanza();
   if (m.schermi) manda({ tipo: "schermo", token: (window.calliopeSchermo && window.calliopeSchermo.token()) || "" });
   preparaModelli();
   if (st.mic) manda({ tipo: "prendi" });
@@ -1046,6 +1117,8 @@ async function preparaModelli() {
     for (const u of urls) dati.push(await scaricaInCache(u, auth));
     pulisciCache([urlWasm, ...urls]);
     ascolto.vad = new Vad(await sessione(dati[0]));
+    stanza.vad = new Vad(await sessione(dati[0]));     // il VAD della stanza: suo (13/10)
+    aggiornaStanza();
     if (s.modelli && s.modelli.calliope && s.modelli.melspectrogram && s.modelli.embedding_model) {
       const clf = [await sessione(dati[3])];
       if (dati[4]) clf.push(await sessione(dati[4]));
@@ -1188,6 +1261,7 @@ function suMessaggioMic(ev) {
     const g = mic.diag;
     if (g && g.inizio && d.n >= g.inizio.n && (!g.fine || d.n < g.fine.n)) g.uscita.push(d.frame);
     ascolto.push(d.frame);
+    stanza.push(d.frame);
     return;
   }
   if (d.tipo === "conti") { mic.conti = d; controllaRitmo(); return; }
@@ -1279,6 +1353,7 @@ async function impostaMic(acceso) {
     if (!st.reg) chiudiMic();
     pianificaLascia();
   }
+  aggiornaStanza();
   disegna();
   disegnaSchermo();
 }
@@ -1720,6 +1795,9 @@ async function avvio() {
   $("microfono").addEventListener("click", () => impostaMicDaTocco(!st.mic));
   $("schermo-tieni").addEventListener("click", () => impostaTieni(!st.tieni));
   attr($("schermo-tieni"), "aria-checked", st.tieni ? "true" : "false");
+  const bs = $("stanza-tieni");
+  if (bs) bs.addEventListener("click", () => impostaStanza(!st.stanza.voluta));
+  aggiornaStanza();
   // Menu, modulo e casella per scrivere: strati sopra la vista (Esc li chiude)
   $("menu-apri").addEventListener("click", () => apriStrato("menu"));
   $("menu-chiudi").addEventListener("click", () => chiudiStrato("menu"));
@@ -1872,7 +1950,11 @@ window.calliopeTelefono = {
     inviato: st.inviato, voce: voceLocale()[0], ricevuti: player.byte,
     cpu: misure.inferenzaMs / Math.max(1, performance.now() - misure.dal),
     contesto: player.ctx ? player.ctx.state : null, rate: player.ctx ? player.ctx.sampleRate : null,
+    stanza: { server: st.stanza.server, voluta: st.stanza.voluta, attiva: stanza.attiva,
+      inviato: st.stanza.inviato, segmenti: stanza.seg.segmenti, buttati: stanza.seg.buttati,
+      persi: stanza.persi, segno: testoStanza() },
   }),
+  impostaStanza, stanzaAscolto: stanza,
   impostaMic, tocca, diagnostica, opzioniMic, mic,
   schermo, comando, opzioniCarosello, apriStrato, chiudiStrato, apriModulo, vaiA, apriIntera, chiudiIntera,
   carosello: () => ({ ordine: car.ordine.slice(), vista: car.vista, modulo: car.modulo, intera: car.intera }),

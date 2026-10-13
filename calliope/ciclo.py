@@ -133,6 +133,7 @@ class Servizi:
     foto_attesa: object = None           # immagini.InAttesa (foto e file senza domanda)
     cassetto: object = None              # cassetto.Cassetto: i file per persona (08/10)
     cancelli: object = None              # cancelli.Cancelli: i segnali da verificare (09/10)
+    stanza: object = None                # stanza.Stanza: la conversazione di stanza (13/10)
     cancelli_percorso: object = None     # dove si salvano (10/10, main.py); None = in memoria
     # Il registro degli eventi (10/10, calliope/eventi/): i registri per persona e anonimi per
     # satellite, condivisi dalle corsie; None = solo in memoria per corsia (prove)
@@ -583,6 +584,15 @@ class Ciclo:
         (12/10, calliope/conserva.py): se le parole del turno restano (lo leggono l'ombra e il
         registro dei turni) e la voce della frase, solo di un adulto riconosciuto che ha detto
         sì. `self._turno` è il turno di questo `rec`."""
+        if isinstance(rec, dict) and isinstance(rec.get("stanza"), dict):
+            # La copertura all'interpellazione (13/10, stanza/ascolto.Copertura): i numeri di
+            # adesso, a voce finita (il recupero ha avuto il tempo della risposta)
+            cop = rec["stanza"].get("copertura")
+            if hasattr(cop, "a_dict"):
+                try:
+                    rec["stanza"]["copertura"] = cop.a_dict()
+                except Exception:  # noqa: BLE001 — la misura non ferma il registro
+                    rec["stanza"].pop("copertura", None)
         cons = getattr(self.s, "conserva", None)
         if cons is not None and isinstance(rec, dict):
             t = self._turno
@@ -1662,7 +1672,59 @@ class Ciclo:
                 "deboli": len(conf_stt.deboli or conf_stt.incerte)}
         if s.correttore is not None:
             self._correggi_frase(t, conf_stt)
+        if t.scritto is None and getattr(s, "stanza", None) is not None:
+            self._stanza_copertura(t)
         return None
+
+    # ── la conversazione di stanza (13/10, calliope/stanza/, passo 1 in ombra) ──
+    def _stanza_dove(self):
+        """(id del satellite, id dell'ascolto) dell'ultima frase, o (None, None)."""
+        ult = getattr(self.listener, "_ultima", None)
+        if not ult:
+            return None, None
+        coll, lid = ult
+        sid = getattr(self.corsia, "satellite_id", None)
+        return (sid if sid is not None else coll.satellite.get("id")), lid
+
+    def _stanza_copertura(self, t):
+        """A frase del turno trascritta: quante righe della stanza dette prima sono già pronte
+        (la copertura all'interpellazione, § 3.11); i numeri finali li scrive _scrivi_turno.
+        Niente arriva al modello (passo 1)."""
+        try:
+            sat, _ = self._stanza_dove()
+            if sat is None:
+                return
+            cop = self.s.stanza.copertura(sat, self.listener.started_at)
+            if cop is not None and self.rec is not None:
+                self.rec["stanza"] = {"copertura": cop}
+        except Exception as e:  # noqa: BLE001 — la stanza non ferma la voce
+            print(f"   [STANZA] copertura: {type(e).__name__}: {e}", flush=True)
+
+    def _stanza_turno(self, t):
+        """La frase del turno entra nella stanza del suo satellite, «rivolta a Calliope», con
+        chi l'ha detta (la voce del turno): lega il segmento della stanza che la copre."""
+        st = getattr(self.s, "stanza", None)
+        if st is None or t.scritto is not None or not (t.text or "").strip():
+            return
+        try:
+            sat, lid = self._stanza_dove()
+            if sat is None:
+                return
+            voce = (self.rec or {}).get("voce") or {}
+            nome = voce.get("nome")
+            modo_voce = voce.get("modo")
+            prof = self.s.registry.get(nome) if nome else None
+            pid = getattr(prof, "id", None) or nome
+            sic = ("voce" if modo_voce == "voce" else "grigia" if nome else "nessuna")
+            chi = {"chi": f"persona:{pid}" if nome else "ignoto", "persona": pid, "nome": nome,
+                   "sicurezza": sic,
+                   "minore": bool(prof is not None and minori.e_minore(prof))}
+            fine = time.time() - (time.monotonic() - (self.listener.ended_at or
+                                                      time.monotonic()))
+            inizio = time.time() - (time.monotonic() - self.listener.started_at)
+            st.turno_testo(sat, lid, t.text, chi, inizio=inizio, fine=fine)
+        except Exception as e:  # noqa: BLE001 — la stanza non ferma la voce
+            print(f"   [STANZA] turno nella stanza: {type(e).__name__}: {e}", flush=True)
 
     # ── fase 3 bis: i comandi a voce di un gioco (11/10, calliope/gioco_voce.py) ──
     def _schermi_voce(self) -> list:
@@ -1854,6 +1916,8 @@ class Ciclo:
         self._segna_minore(t.speaker_name)
         self.rec.update(livello=speaker_ctx.current_level, testo=t.text,
                         stt_s=round(time.perf_counter() - t.t0, 2))
+        if getattr(self.s, "stanza", None) is not None:
+            self._stanza_turno(t)
         return None
 
     def _segna_minore(self, nome):
