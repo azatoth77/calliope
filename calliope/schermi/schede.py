@@ -280,6 +280,20 @@ def web(domanda: str, risultati: list) -> dict:
     return nuova("web", "Da internet", PUBBLICA, domanda=_taglia(domanda, 160), voci=voci)
 
 
+def notizie(domanda: str, voci: list[dict]) -> dict:
+    """Le notizie dei feed (13/10, calliope/notizie/): la scheda dei risultati web con il
+    titolo «Notizie», una voce per fatto (titolo, testate, sommario, quando, dominio del link).
+    Pubblica: titoli dei giornali, nessun dato di casa. Mostrata con textContent."""
+    from urllib.parse import urlsplit
+    out = []
+    for v in voci[:6]:
+        host = (urlsplit(str(v.get("url") or "")).hostname or "")
+        out.append({"titolo": _taglia(v.get("titolo"), 140), "sito": _taglia(v.get("sito"), 60),
+                    "dominio": _taglia(host.removeprefix("www."), 80),
+                    "testo": _taglia(v.get("testo"), 420), "data": _taglia(v.get("data"), 30)})
+    return nuova("web", "Notizie", PUBBLICA, domanda=_taglia(domanda, 160), voci=out)
+
+
 # ─────────────────────────── calcoli e testi ───────────────────────────
 
 def calcolo(espressione: str, risultato: str) -> dict:

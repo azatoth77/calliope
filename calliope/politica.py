@@ -252,6 +252,9 @@ CLASSI: dict[str, Classe] = {
     "argomento": _c(S),
     # ── letture di dati non fidati ──
     "web_cerca": _c(S, fonte="web"),
+    # le notizie dai feed delle testate (13/10, calliope/notizie/): testo dei giornali, come i
+    # siti di web_cerca; resta nella storia in busta (ToolSpec.resta_in_storia)
+    "notizie": _c(S, fonte="web"),
     "archivio_cerca": _c(S, fonte="archivio"), "archivio_scadenze": _c(S, fonte="archivio"),
     "archivio_somma": _c(S, fonte="archivio"),
     "lavoro_stato": _c(S, fonte="agente"),
@@ -1216,7 +1219,8 @@ def rinuncia(testo: str, richiesta: str, disponibili) -> str | None:
 # Dopo un dato non fidato letto in questa risposta (Turno.letto_ora) partono solo queste
 # letture: nessun dato personale da far uscire con una ricerca dopo (03/10, calliope/web/;
 # prima brain.DOPO_WEB). Le altre, anche chieste, si rifiutano con BLOCCO_DOPO_DATO
-DOPO_DATO = frozenset({"web_cerca", "biblioteca_cerca", "ora_attuale", "data_oggi", "calcola",
+DOPO_DATO = frozenset({"web_cerca", "notizie", "biblioteca_cerca", "ora_attuale", "data_oggi",
+                       "calcola",
                        "data_calcola", "schermo_mostra", "calliope_stato"})
 # Dopo un dato letto in questa risposta partono anche questi, se il valore dell'argomento
 # indicato è fatto solo di parole dette dalla persona in questa frase (08/10: due collaudi

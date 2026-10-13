@@ -66,9 +66,11 @@ def _forma_brain() -> proiezioni.Forma:
     """I numeri della forma dei turni chiusi di Brain di oggi (la proiezione non importa Brain)."""
     try:
         from .. import brain as b
+        from ..notizie import contesto as nc
         return proiezioni.Forma(risultato_max=int(b.OLD_RESULT_CHARS), traccia=b._OLD_TRACE,
                                 ora_di_allora=tuple(dict(b._OLD_TIME).items()),
-                                web_tolto=b.WEB_TOLTO, traccia_privata=b._PRIVATE_TRACE)
+                                web_tolto=b.WEB_TOLTO, traccia_privata=b._PRIVATE_TRACE,
+                                riduzioni=((nc.TOOL, nc.riduci),))
     except Exception:  # noqa: BLE001
         return proiezioni.FORMA
 
@@ -772,6 +774,8 @@ class Ombra:
                     riservato=bool(getattr(spec, "riservato", False)),
                     personale=nome in _personali(),
                     non_fidato=bool(getattr(spec, "non_fidato", False)),
+                    # Il non fidato che resta nella storia in busta (13/10, il tool notizie)
+                    **({"resta": True} if getattr(spec, "resta_in_storia", False) else {}),
                     **({"fonte": f} if f else {}),
                     **({"vis": "registro"} if nome == STATO_TOOL else {})))
         # Le schede mandate agli schermi in questa risposta (12/10): tipo, chiave, titolo e su

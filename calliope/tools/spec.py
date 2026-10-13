@@ -31,6 +31,7 @@ class ToolContext:
     archivio: Any = None  # Archivio (calliope/archivio/): i documenti di casa, o None
     ufficio: Any = None  # Ufficio (calliope/ufficio/): modelli, rubrica, fatture, o None
     web: Any = None      # Web (calliope/web/): la ricerca su internet con SearXNG, o None
+    notizie: Any = None  # Notizie (calliope/notizie/): i feed delle testate, o None
     estensioni: Any = None  # Estensioni (calliope/estensioni/): funzioni aggiunte, o None
     # ArchivioConversazioni (calliope/conversazioni.py): le conversazioni passate, o None
     conversazioni: Any = None
@@ -166,6 +167,10 @@ class ToolSpec:
     # possono esserci istruzioni per i modelli. Dopo un loro risultato Brain non esegue azioni
     # nella stessa risposta (politica.DOPO_DATO) e a risposta finita li toglie dalla storia
     non_fidato: bool = False
+    # Il risultato non fidato resta nella storia, in busta, anche a risposta finita (13/10, il
+    # tool notizie: «dimmi di più sulla seconda» ha bisogno dei fatti detti). Vale il resto di
+    # `non_fidato` (DOPO_DATO, provenienza); dai turni vecchi resta la forma ridotta
+    resta_in_storia: bool = False
     # Politica unica dei tool (05/10, calliope/politica.py): la classe del tool («sicuro»,
     # «azione», «pericoloso», «vietato») per quelli registrati a runtime (le estensioni); i tool
     # di Calliope la hanno nella tabella politica.CLASSI. Senza nessuna delle due vale

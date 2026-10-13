@@ -216,6 +216,8 @@ A_SECCO = [
     # con Edge o Chromium anche la pagina /telefono attraverso l'inoltro
     ("prova_inoltro.py", [], "inoltro del satellite per il telefono: reti ammesse, limiti, TLS da capo a capo, Host e Origin, impronta nuova al ponte"),
     ("prova_web.py", [], "ricerca su internet con SearXNG e siti finti: privacy, SSRF, testo non fidato, azioni bloccate, agente"),
+    # ~2 s: feed di fantasia su 127.0.0.1, SearXNG finto, Brain a secco
+    ("prova_notizie.py", [], "notizie dai feed RSS (13/10): lettore sicuro, date e fusi, pulizia dei titoli con i contrari, gruppi senza modello, scarico condizionato, fatti, tool, minori, ripiego, i fatti restano nel contesto"),
     # ~5 s: SearXNG, registro delle immagini e docker finti; lo script con bash di Git se c'è
     ("prova_searxng_aggiorna.py", [], "SearXNG tenuto aggiornato (09/10): prove e giudizio (degradata), registro delle immagini (mai latest), aggiornamento accanto con ritorno indietro, automatico solo a Calliope ferma e senza lavori, modo manuale, blocchi, capacità «degradata», Windows spento, cruscotto con gettoni a due tocchi solo per chi amministra, script con docker finto"),
     ("prova_lavori_criteri.py", [], "criteri del banco dei documenti: titoli, dati in lettere, numeri ricavati"),
@@ -402,6 +404,8 @@ LEGAMI = [
     ("CHANGELOG.md", ["prova_novita.py"]),
     ("calliope/tools/ufficio.py", ["prova_scritto.py"]),
     ("calliope/tools/web.py", ["prova_web.py", "prova_estensioni_attacchi.py"]),
+    ("calliope/tools/notizie.py", ["prova_notizie.py"]),
+    ("calliope/notizie/", ["prova_notizie.py"]),
     ("calliope/tools/archivio.py", ["prova_archivio.py"]),
     ("calliope/tools/immagini.py", ["prova_immagini.py"]),
     ("calliope/tools/allegati.py", ["prova_allegati.py", "prova_cassetto.py"]),

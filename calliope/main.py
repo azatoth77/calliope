@@ -525,6 +525,13 @@ class Avvio:
                     motore.avvisa = cr.avvisa
                 atexit.register(motore.ferma)
                 motore.avvia()
+        # Le notizie dai feed delle testate (13/10, calliope/notizie/): l'indice su disco e lo
+        # scarico ogni 2 ore, solo se qualcuno le chiede; il ripiego è la ricerca web qui sopra
+        from .notizie import load_notizie
+        s.notizie = load_notizie(cfg)
+        if s.notizie is not None:
+            atexit.register(s.notizie.close)
+            s.notizie.avvia()
 
     def inattivita_s(self) -> float:
         """Secondi dall'ultimo turno su qualunque corsia (dall'avvio, se non ce ne sono)."""
@@ -580,6 +587,7 @@ class Avvio:
                                  ufficio=tuple(ufficio.nomi_modelli()) if ufficio else (),
                                  archivio=self.archivio is not None,
                                  web=cfg if web is not None and web.pronta else None,
+                                 notizie=cfg if s.notizie is not None else None,
                                  conversazioni=conv_arch is not None,
                                  # Foto (05/10, calliope/immagini.py): pc_guarda,
                                  # immagine_archivia
@@ -604,7 +612,8 @@ class Avvio:
                                     installazioni=s.installazioni, schermi=schermi,
                                     lavori=lavori, ufficio=ufficio, archivio=self.archivio,
                                     conserva=s.conserva,
-                                    web=web, conversazioni=conv_arch, modalita=self.modalita,
+                                    web=web, notizie=s.notizie,
+                                    conversazioni=conv_arch, modalita=self.modalita,
                                     cassetto=cassetto)
 
     def _registro_eventi(self, conv_arch):

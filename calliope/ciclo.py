@@ -126,6 +126,7 @@ class Servizi:
     lavori: object = None
     compressore: object = None
     web: object = None
+    notizie: object = None               # notizie.Notizie: i feed delle testate (13/10)
     tools: object = None                 # ToolRegistry
     giochi: object = None
     guardiano: object = None
@@ -1110,7 +1111,7 @@ class Ciclo:
         # (il prompt lo nomina dal turno dopo), senza riavvio
         if s.web is not None and s.web.pronta and s.tools.get("web_cerca") is None:
             from .tools.web import web_spec
-            spec = web_spec(cfg)
+            spec = web_spec(cfg, notizie=s.tools.get("notizie") is not None)
             s.tools.register(spec)
             self.speaker.prepare(spec.announce)
             self.brain.rileggi_tool()
