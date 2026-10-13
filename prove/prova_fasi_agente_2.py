@@ -10,8 +10,8 @@ della temperatura sulla DGX del 12–13/10, caso del convertitore di distanze).
    - b. l'avviso di chiusura con l'ultimo esegui_test verde dice di consegnare; contrari: un
      file cambiato dopo il test verde (l'avviso di sempre), una tappa di uno sviluppo (la sua
      variante);
-   - c. la consegna resta dell'agente: senza consegna il lavoro finisce al tetto («limite»), mai
-     «fatto» d'ufficio.
+   - c. la consegna resta dell'agente: senza consegna (e senza esempi di accettazione) il lavoro
+     finisce al tetto («limite»), mai «fatto» d'ufficio.
 2. **L'analisi prima del codice** (calliope/agenti/accettazione.py, Lavori._analisi_prima):
    - a. gli esempi dato → risultato in forma chiusa (contrari: senza niente da controllare, un
      numero nel testo, doppioni, valori strani, input con nomi non validi); al più due domande,
@@ -29,6 +29,11 @@ della temperatura sulla DGX del 12–13/10, caso del convertitore di distanze).
 3. **modifica_file invece di riscrivere**: un file lungo riscritto intero per poche righe ha
    nel risultato di scrivi_file la nota che modifica_file c'è (regola
    agente_riscrittura_piccola); contrari: file nuovo, corto, cambiato molto, uguale.
+4. **Consegna al tetto** (13/10 sera, L7 del banco della temperatura): al tetto, con gli esempi
+   di accettazione e i test rieseguiti sui file del momento tutti verdi e il controllo della
+   consegna che passa, il lavoro si chiude «fatto» (regola agente_consegna_al_tetto, riassunto
+   del codice, frase a voce); contrari: esempi rossi, senza esempi, un test dell'agente rosso,
+   il controllo della consegna che non passa, la tappa.
 
     python prove/prova_fasi_agente_2.py
 """
@@ -516,6 +521,106 @@ def prova_riscrittura(tmp: Path):
              str(esiti[-2:])[:300])
 
 
+# ═══════════════════════════ 4. consegna al tetto ═══════════════════════════
+
+ROSSO = ("import unittest\n\n\nclass Mio(unittest.TestCase):\n"
+         "    def test_mio(self):\n        self.assertEqual(1, 2)\n")
+
+
+def _gira_tetto(tmp, nome, ultima, esempi=True, extra=None, tappe=False):
+    """Un'estensione con gli esempi di accettazione (test_accettazione.py in sola lettura):
+    l'agente finto scrive il convertitore sbagliato, esegue i test, e all'ultima passata scrive
+    `ultima` senza chiamare consegna (3 passate, la quarta è oltre il tetto)."""
+    from calliope.agenti import accettazione as acc
+    from calliope.agenti.ciclo import Lavoro
+    from calliope.agenti.scheletri import prepara_estensione
+    from calliope.estensioni.prompt import controlla_consegna
+    cli = G._Copione([[scrivi("estensione.py", SBAGLIATA)], [ESEGUI_TEST],
+                      [scrivi("estensione.py", ultima)]])
+    log = []
+    ag = G.agente(cli, log)
+    ag.max_passi = 3
+    sb = G.sandbox(tmp, nome)
+    prepara_estensione(sb)
+    sb.scrivi("manifesto.json", json.dumps(MANIFESTO))
+    for k, v in (extra or {}).items():
+        sb.scrivi(k, v)
+    lav = Lavoro(nome, "estensione", "Un convertitore di distanze")
+    lav.tappe = tappe
+    if esempi:
+        an = acc.interpreta(ANALISI, 3, True)
+        sb.scrivi(acc.FILE, acc.test_python(an))
+        sb.sola_lettura |= {acc.FILE}
+        lav.accettazione = {"stato": "pronta", "file": True, "nome_file": acc.FILE,
+                            "esempi": len(an["esempi"])}
+    try:
+        ris = ag.codice(lav, sb, controlla=lambda x: controlla_consegna(x))
+    except Exception as e:  # noqa: BLE001 — Limite: il tetto delle passate
+        ris = {"eccezione": type(e).__name__, "motivo": str(e)}
+    lav.copione = cli
+    return lav, ris, log
+
+
+def prova_consegna_al_tetto(tmp: Path):
+    sezione("4. al tetto gli esempi di accettazione e i test rieseguiti: verdi → consegnato")
+    lav, ris, log = _gira_tetto(tmp, "tetto-verde", GIUSTA)
+    regole = lav.segnali.get("regole") or {}
+    verifica("codice giusto all'ultima passata, nessuna consegna: «fatto» con la regola "
+             "agente_consegna_al_tetto e il tetto toccato", ris.get("esito") == "fatto"
+             and ris.get("consegna_al_tetto") == "passate" and ris.get("test_passano") is True
+             and regole.get("agente_consegna_al_tetto") == 1 and lav.passi == 3,
+             f"{ris} {regole}")
+    verifica("…il riassunto lo scrive il codice: esempi verdi e «chiuso al tetto»",
+             ris.get("riassunto") == "La funzione è scritta e passa tutti i 3 esempi di "
+             "accettazione e i suoi test. Chiuso al tetto: l'agente non ha fatto in tempo a "
+             "consegnare.", ris.get("riassunto"))
+    verifica("…la passata oltre il tetto non è mai partita (il modello ne ha viste 3)",
+             len(lav.copione.corpi) == 3 and any("agente_consegna_al_tetto" in x for x in log),
+             str(log[-3:]))
+    from calliope.agenti.ciclo import per_la_voce
+    verifica("…il riassunto si può dire (niente nomi di file)",
+             per_la_voce(ris.get("riassunto")) == ris.get("riassunto"))
+    lav, ris, log = _gira_tetto(tmp, "tetto-rosso", SBAGLIATA)
+    verifica("contrario: esempi rossi sui file finali, «limite» come prima",
+             ris.get("eccezione") == "Limite" and "passate" in ris.get("motivo", "")
+             and not (lav.segnali.get("regole") or {}).get("agente_consegna_al_tetto")
+             and any("esempi di accettazione rossi (requisiti [1])" in x for x in log),
+             f"{ris} {log[-2:]}")
+    lav, ris, log = _gira_tetto(tmp, "tetto-senza", GIUSTA, esempi=False)
+    verifica("contrario: senza esempi di accettazione (i test dell'agente da soli), «limite»",
+             ris.get("eccezione") == "Limite"
+             and any("senza esempi di accettazione" in x for x in log), f"{ris} {log[-2:]}")
+    lav, ris, log = _gira_tetto(tmp, "tetto-test-rossi", GIUSTA, extra={"test_mio.py": ROSSO})
+    verifica("contrario: esempi verdi ma un test dell'agente rosso, «limite»",
+             ris.get("eccezione") == "Limite"
+             and any("i test dell'agente non passano" in x for x in log), f"{ris} {log[-2:]}")
+    lav, ris, log = _gira_tetto(tmp, "tetto-tappa", GIUSTA, tappe=True)
+    verifica("contrario: un lavoro a tappe (non l'ultimo giro) si ferma alla tappa",
+             ris.get("esito") == "tappa"
+             and not (lav.segnali.get("regole") or {}).get("agente_consegna_al_tetto"),
+             str(ris)[:300])
+    lav, ris, log = _gira_tetto(tmp, "tetto-manifesto", GIUSTA,
+                                extra={"manifesto.json": "{}"})
+    verifica("contrario: il controllo della consegna non passa (manifesto non valido), "
+             "«limite»", ris.get("eccezione") == "Limite"
+             and any("al tetto niente consegna d'ufficio" in x for x in log), f"{ris} {log[-2:]}")
+    # La frase a voce di un'estensione chiusa al tetto
+    from types import SimpleNamespace
+    from calliope.agenti.ciclo import Lavoro
+    from calliope.agenti.servizio import AL_TETTO, Lavori
+    s = SimpleNamespace(female=True, in_tappa=Lavori.in_tappa)
+    lv = Lavoro("F1", "estensione", "x", titolo="Convertitore")
+    lv.stato = "fatto"
+    lv.risultato = {"esito": "fatto", "estensione": {"frase": "«Convertitore» è pronta da "
+                                                              "provare."},
+                    "consegna_al_tetto": "passate"}
+    f = Lavori.frase_finale(s, lv)
+    lv.risultato = dict(lv.risultato, consegna_al_tetto=None)
+    verifica("la frase a voce lo dice in una frase; contrario: una consegna normale no",
+             f == "«Convertitore» è pronta da provare. " + AL_TETTO
+             and Lavori.frase_finale(s, lv) == "«Convertitore» è pronta da provare.", f)
+
+
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8")
     radice = Path(tempfile.mkdtemp(prefix="calliope-fasi2-"))
@@ -528,6 +633,7 @@ if __name__ == "__main__":
         prova_servizio(radice / "servizio")
         prova_revisione(radice / "revisione")
         prova_riscrittura(radice / "riscrittura")
+        prova_consegna_al_tetto(radice / "tetto")
     finally:
         shutil.rmtree(radice, ignore_errors=True)
     print(f"\n{'TUTTO OK' if not errori else f'{errori} ERRORI'} "

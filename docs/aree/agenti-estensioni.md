@@ -2991,7 +2991,9 @@ Un commit per passo:
    di chiusura, se l'ultimo `esegui_test` era verde e da allora nessun file è cambiato
    (`segnali["test_verde"]`), è `AVVISO_FINE["verde"]` («I tuoi test passano: chiama consegna
    adesso…»), in uno sviluppo `verde_tappa` («se il lavoro è finito…»). **Mai consegna
-   d'ufficio**: senza consegna il lavoro finisce al tetto come prima.
+   d'ufficio**: senza consegna il lavoro finisce al tetto come prima. *(Storico: dal 13/10 sera,
+   con gli esempi di accettazione tutti verdi e i test verdi rieseguiti al tetto, il lavoro si
+   chiude come consegnato; senza esempi resta così. Vedi «Al tetto si rieseguono gli esempi».)*
 4. **Parte 2 del flusso a fasi** (ricerca [`2026-10-12-flusso-agente-fasi`](../ricerche/2026-10-12-flusso-agente-fasi.md)
    § 5.1 passi 3 e 4, domande 1, 2 e 4). `calliope/agenti/accettazione.py`, `Lavori._analisi_prima`:
    prima che l'agente scriva il codice, **una passata a sé** del modello dell'agente (contesto
@@ -3127,3 +3129,66 @@ suo caso «porte» è una correzione di un gioco del formato di prima).
 accettazione» con i comandi, se l'agente rispetta nomi e fasi dei comandi chiesti (un nome
 diverso fa rossi tutti gli esempi: è voluto, ma va visto se succede spesso), «esempi di
 accettazione tutti verdi / rossi» alla consegna.
+
+## Al tetto si rieseguono gli esempi: tutto verde è consegnato (13/10 sera, ramo `tetto-esempi`)
+
+**Il caso vero** (banco della temperatura sulla DGX, 13/10 sera, caso «convertitore», lavoro L7):
+l'agente ha sistemato il codice proprio all'ultima delle 24 passate, senza chiamare consegna, e
+il lavoro è finito «limite». Rieseguiti a mano sui file finali, i 7 esempi di accettazione in
+sola lettura (`test_accettazione.py`, scritti dall'analisi prima del codice) passavano tutti, e
+anche l'accettazione nascosta del banco era verde; il riepilogo del banco però diceva «esempi 7
+rossi»: al «limite» `_esito_accettazione` non girava, lo stato degli esempi restava vuoto e il
+banco lo stampava come rosso.
+
+**Cosa cambia** (`Agente._consegna_al_tetto` in `agenti/ciclo.py`). Al tetto di passate, tempo
+o token di un lavoro che **non va a tappe** (in uno sviluppo il tetto resta una tappa e decide la
+persona; nel banco a giri vale all'ultimo giro, quando le tappe si spengono), prima di chiudere
+«limite» il codice rifà, sui file del momento, quello che fa una consegna «fatto»:
+
+1. gli **esempi di accettazione** (`accettazione.esegui`, la stessa funzione della fine del
+   lavoro: `test_accettazione.py` o, per un gioco, `accettazione.test.js` contando solo gli
+   esempi) devono esserci ed essere **tutti verdi**, almeno uno eseguito;
+2. i **test dell'agente** con `_test_falliti`: due volte di fila, stesso esito (altrimenti
+   `agente_test_instabili`), tutti verdi;
+3. i file che la consegna chiede (`_pronto_da_consegnare`, dopo il piano), il **controllo della
+   consegna** (`controlla`: per un'estensione `controlla_consegna` e il **ricollaudo** con i casi
+   della persona), i permessi **fuori dal piano**; un ricollaudo che non va ferma la consegna
+   d'ufficio (una consegna normale senza più tempo invece va avanti e la frase lo dice);
+4. per una **correzione** la **riproduzione** (`_riproduzione`: un test che prima falliva e ora
+   passa); non riprodotta → «limite».
+
+Con tutto verde il lavoro si chiude **«fatto»** come una consegna normale (la candidata
+dell'estensione, `_esito_accettazione`, la revisione requisito per requisito in uno sviluppo),
+con il **riassunto scritto dal codice** («La funzione è scritta e passa tutti i 7 esempi di
+accettazione e i suoi test. Chiuso al tetto: l'agente non ha fatto in tempo a consegnare.»), il
+campo **`consegna_al_tetto`** (il tetto toccato: `passate`, `tempo` o `token`) nel risultato e in
+`lavoro.json`, la regola **`agente_consegna_al_tetto`** nei segnali del lavoro e nel log. La
+frase a voce di un'estensione aggiunge una frase (`AL_TETTO`: «L'agente non ha fatto in tempo a
+consegnare, ma gli esempi di accettazione passano tutti: il lavoro l'ho chiuso io.»). Se un
+controllo non passa, il log dice quale («al tetto niente consegna d'ufficio: …») e il lavoro
+finisce «limite» come prima. **Senza esempi di accettazione** (i programmi, le correzioni dei
+giochi, l'analisi spenta o non riuscita) mai: i test dell'agente da soli ereditano le sue
+ipotesi (è il motivo degli esempi, vedi sopra), e al «limite» l'annuncio dice già quanti ne
+passano.
+
+Anche al **«limite»** (`Lavori._esegui`, ramo `Limite`) gli esempi si rieseguono ora sui file del
+momento (`_esito_accettazione`): l'esito va nel risultato e, in uno sviluppo, sui requisiti.
+
+**Il banco** (`prove/manuali/banco_temperatura.py`): lo stato «esempi N verdi/rossi» della riga è
+`esempi_finali`, gli esempi rieseguiti dal banco sui file finali in una sandbox nuova (il file in
+sola lettura non va nella cartella del risultato: si prende dalla sandbox del lavoro), «non
+eseguiti» se non si può; la riga ha anche `consegna_al_tetto`. A secco (`--secco`) la consegna al
+tetto con il servizio vero e l'agente finto: il convertitore giusto all'ultima passata senza
+consegna → «fatto» con la regola, accettazione nascosta ed esempi verdi; contrario, quello
+sbagliato → «limite» ed esempi rossi. Prima della modifica lo stesso copione finiva «limite».
+
+Prove: `prova_fasi_agente_2` sezione 4 (verde → «fatto» senza la passata oltre il tetto, il
+riassunto dicibile; contrari: esempi rossi, senza esempi, un test dell'agente rosso con gli
+esempi verdi, il manifesto non valido, la tappa; la frase a voce e il suo contrario), il banco a
+secco.
+
+**Da proporre, non fatto**: per i programmi (niente esempi) al tetto con i test dell'agente verdi
+si potrebbe dire nell'annuncio «i suoi test passano, ma nessun esempio indipendente li conferma»
+e offrire «consegnalo così» a voce, invece di chiudere d'ufficio. **Da guardare sulla DGX** al
+prossimo banco: quanti lavori chiudono con `agente_consegna_al_tetto` e se la loro accettazione
+nascosta è sempre verde (deve esserlo: se no gli esempi sono troppo deboli).

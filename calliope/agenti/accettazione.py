@@ -582,3 +582,21 @@ def rossi(uscita: str) -> list[int]:
 
 def numeri_esempi(an: dict) -> list[int]:
     return sorted({e["requisito"] for e in an.get("esempi") or [] if e.get("requisito")})
+
+
+def esegui(sb, stato: dict) -> dict | None:
+    """Gli esempi di accettazione sui file di adesso (13/10 sera): {"passano", "esito",
+    "rossi", "uscita"}; None se il lavoro non li ha (analisi non pronta o file non scritto).
+    Per un gioco Node fa girare anche i test dell'agente: contano solo gli esempi. Lo usano la
+    fine del lavoro (servizio._esito_accettazione) e la consegna al tetto
+    (ciclo.Agente._consegna_al_tetto). Le eccezioni della sandbox passano a chi chiama."""
+    a = stato or {}
+    if a.get("stato") != "pronta" or not a.get("file"):
+        return None
+    nome_file = a.get("nome_file") or FILE
+    r = sb.test(nome_file, fumo=False)
+    passano = bool(r.get("passano"))
+    if nome_file.endswith(".js"):
+        passano, _ = esito_js(r.get("uscita"))
+    return {"passano": passano, "esito": r.get("esito"), "rossi": rossi(r.get("uscita")),
+            "uscita": str(r.get("uscita") or "")}

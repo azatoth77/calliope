@@ -58,7 +58,9 @@ A secco (nessun modello, anche sul portatile: il docker finto e il Node della ma
 controllare il banco stesso: ogni accettazione fallisce sul punto di partenza e passa sulla
 soluzione di riferimento; e i giri con un agente finto (prove/ollama_finto.py): il giro 1 si
 ferma alla tappa, il banco chiama continua e il giro 2 consegna; senza consegna l'ultimo giro
-chiude con «limite»; con un giro solo il tetto chiude come prima.
+chiude con «limite»; con un giro solo il tetto chiude come prima; la consegna al tetto con il
+servizio vero (13/10 sera): il codice giusto all'ultima passata, senza consegna, si chiude «fatto»
+con gli esempi verdi; il contrario «limite» con gli esempi rossi.
 
     python prove/manuali/banco_temperatura.py --secco
 
@@ -71,6 +73,13 @@ le domande prima di cominciare le risponde il banco da sé («Decidi tu, con la 
 comune.») e le conta; la riga ha `domande` e `analisi` (esempi di accettazione dell'agente,
 verdi o rossi, secondi della passata). Gli esempi dell'agente sono un'altra cosa
 dall'accettazione nascosta del banco, che resta il criterio di «riuscito».
+
+**Esempi rieseguiti alla fine** (13/10 sera, L7: l'agente ha sistemato il convertitore
+all'ultima delle 24 passate, il riepilogo diceva «esempi 7 rossi» e a mano passavano tutti).
+Lo stato «esempi» della riga (`esempi_finali`) è quello rieseguito dal banco sui file finali del
+lavoro, in una sandbox nuova, con il file degli esempi preso dalla sandbox del lavoro (è in sola
+lettura e non va nella cartella del risultato). La riga ha anche `consegna_al_tetto`: il tetto
+toccato quando Calliope ha chiuso il lavoro da sé con gli esempi verdi (agenti/ciclo.py).
 
 Durata: un lavoro dura 3–15 minuti; con i valori predefiniti 2 × 2 × 2 × 3 = 24 lavori, da 2 a
 4 ore. Per una prima idea: --ripetizioni 1 --casi porte,convertitore (8 lavori).
@@ -266,6 +275,42 @@ def accettazione(sandbox_nuova, file: dict, caso: dict) -> dict:
     return {"verde": verde, "esito": r.get("esito"), "uscita": u[-1500:]}
 
 
+def esempi_finali(sandbox_nuova, file: dict, caso: dict, stato: dict,
+                  sandbox_lavoro: Path | None) -> bool | None:
+    """Gli esempi di accettazione dell'agente (test_accettazione.py o accettazione.test.js,
+    scritti dall'analisi prima del codice) rieseguiti dal banco sui file finali del lavoro, in
+    una sandbox nuova (13/10 sera, L7 del banco: il riepilogo diceva «esempi 7 rossi» con lo
+    stato di prima della correzione all'ultima passata, e a mano passavano tutti). Il file degli
+    esempi è in sola lettura e non va nella cartella del risultato: si prende dalla sandbox del
+    lavoro. None se il lavoro non li ha."""
+    from calliope.agenti import accettazione as A
+    st = dict(stato or {})
+    nome = st.get("nome_file") or A.FILE
+    p = Path(sandbox_lavoro) / nome if sandbox_lavoro else None
+    if st.get("stato") != "pronta" or not st.get("file") or p is None or not p.is_file():
+        return None
+    sb = sandbox_nuova()
+    for rel, testo in {**file, nome: p.read_text(encoding="utf-8")}.items():
+        try:
+            sb.scrivi(rel, testo)
+        except Exception:  # noqa: BLE001 — un nome non ammesso: si salta
+            pass
+    if caso["tipo"] == "estensione" and not caso.get("gioco"):
+        import calliope.estensioni as E
+        shutil.copy(Path(E.__file__).parent / "_ospite.py", sb.root / "calliope_estensione.py")
+    r = A.esegui(sb, {**st, "nome_file": nome})
+    return bool(r and r["passano"])
+
+
+def detto_esempi(r: dict) -> str:
+    """«esempi 7 verdi» dalla riga: lo stato rieseguito alla fine, non l'ultimo dell'agente."""
+    n = (r.get("analisi") or {}).get("esempi")
+    if not n:
+        return ""
+    v = r.get("esempi_finali")
+    return f", esempi {n} " + ("verdi" if v else "rossi" if v is False else "non eseguiti")
+
+
 def file_di(cartella: Path) -> dict:
     out = {}
     for p in sorted(Path(cartella).rglob("*")):
@@ -310,6 +355,7 @@ def secco() -> int:
               "riproduce in gioco.test.js, prima rosso")
         errori += secco_giri(tmp / "giri")
         errori += secco_analisi(tmp / "analisi")
+        errori += secco_tetto(tmp / "tetto")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("\n" + ("TUTTO OK" if not errori else f"{errori} ERRORI"))
@@ -476,6 +522,95 @@ def secco_analisi(tmp: Path) -> int:
     return errori
 
 
+def secco_tetto(tmp: Path) -> int:
+    """La consegna al tetto (13/10 sera, L7 del banco) con l'agente finto e il servizio vero:
+    l'agente scrive il convertitore giusto all'ultima passata e non chiama consegna; al tetto
+    gli esempi di accettazione e i test si rieseguono, sono verdi e il lavoro si chiude
+    «fatto» (regola agente_consegna_al_tetto). Il riepilogo dice gli esempi rieseguiti alla
+    fine. Contrario: l'ultima passata scrive quello sbagliato, «limite» ed esempi rossi."""
+    from calliope.agenti import Lavori, carica
+    from calliope.config import Config
+    from prove.ollama_finto import FakeOllama
+    errori = 0
+
+    def verifica(nome, ok, dettaglio=""):
+        nonlocal errori
+        errori += not ok
+        print(f"{'ok ' if ok else 'ERR'} tetto: {nome}" + ("" if ok else f"  {dettaglio}"))
+
+    def chiama(*cc):
+        return {"tool_calls": [{"name": n, "arguments": a} for n, a in cc]}
+    analisi = {"contraddizioni": [], "scelte": [], "al_collaudo": [],
+               "input": [{"nome": "valore", "tipo": "number"}, {"nome": "da", "tipo": "string"},
+                         {"nome": "a", "tipo": "string"}], "campo_numero": "risultato",
+               "esempi": [{"requisito": 1, "dati": {"valore": 1, "da": "miglia", "a": "metri"},
+                           "numero": 1609.344, "tolleranza": 0.01, "contiene": "",
+                           "trovato": None}]}
+    manifesto = {"nome": "convertitore_distanze", "titolo": "Convertitore di distanze",
+                 "cosa_fa": {"verbo": "converte", "oggetto": "una distanza tra due unità"},
+                 "input": {"type": "object", "properties": {
+                     "valore": {"type": "number", "description": "il valore"},
+                     "da": {"type": "string", "description": "l'unità di partenza"},
+                     "a": {"type": "string", "description": "l'unità d'arrivo"}},
+                     "required": ["valore", "da", "a"]},
+                 "permessi": {}, "livello": "familiare",
+                 "limiti": {"tempo_s": 10, "memoria_mb": 256}}
+    sbagliata = RIFERIMENTO_CONVERTITORE.replace('"miglia": 1609.344', '"miglia": 1500.0')
+
+    def copione(ultima):
+        return [{"content": json.dumps(analisi)},
+                chiama(("piano", {"capacita_necessarie": [], "fattibile": True,
+                                  "motivo": "una conversione, senza rete", "scope": {}})),
+                chiama(("scrivi_file", {"percorso": "manifesto.json",
+                                        "contenuto": json.dumps(manifesto, ensure_ascii=False)}),
+                       ("scrivi_file", {"percorso": "estensione.py", "contenuto": sbagliata})),
+                chiama(("esegui_test", {})),
+                chiama(("scrivi_file", {"percorso": "estensione.py", "contenuto": ultima}))]
+    tmp.mkdir(parents=True, exist_ok=True)
+    fake = FakeOllama(modelli=("agente-finto",)).avvia()
+    svc = None
+    try:
+        cfg = Config()
+        cfg.agenti_url = fake.url
+        cfg.agenti_modello = "agente-finto"
+        cfg.agenti_risultati = str(tmp / "risultati")
+        cfg.agenti_sandbox = str(tmp / "sandbox")
+        cfg.agenti_sandbox_motore = "processo"
+        cfg.agenti_modelli = str(tmp / "modelli")
+        cfg.llm_native_url = "http://127.0.0.1:9"
+        cfg.agenti_conferma = "mai"
+        cfg.agenti_max_passi = 4
+        svc = Lavori(cfg, carica(cfg), log=lambda *a: None)
+        svc.estensioni = EstensioniFinte()
+        fake.copione = copione(RIFERIMENTO_CONVERTITORE)
+        r = un_lavoro(svc, cfg, tmp, "convertitore", casi()["convertitore"], "secco")
+        verifica("codice giusto all'ultima passata, nessuna consegna: al tetto «fatto» con la "
+                 "regola, accettazione nascosta verde",
+                 r["esito"] == "fatto" and r["consegna_al_tetto"] == "passate"
+                 and r["regole"].get("agente_consegna_al_tetto") == 1 and r["riuscito"]
+                 and r["passate"] == 4,
+                 json.dumps({k: r.get(k) for k in ("esito", "motivo", "consegna_al_tetto",
+                                                   "regole", "passate", "analisi")},
+                            ensure_ascii=False, default=str))
+        verifica("…il riepilogo dice gli esempi rieseguiti alla fine: verdi",
+                 r["esempi_finali"] is True and r["analisi"].get("passano") is True
+                 and detto_esempi(r) == ", esempi 1 verdi", f"{r['esempi_finali']} {r['analisi']}")
+        fake.copione = copione(sbagliata)
+        r = un_lavoro(svc, cfg, tmp, "convertitore", casi()["convertitore"], "secco")
+        verifica("contrario: l'ultima passata scrive quello sbagliato, «limite» ed esempi rossi",
+                 r["esito"] == "limite" and not r["consegna_al_tetto"]
+                 and "agente_consegna_al_tetto" not in r["regole"]
+                 and r["esempi_finali"] is False and r["analisi"].get("passano") is False
+                 and detto_esempi(r) == ", esempi 1 rossi",
+                 json.dumps({k: r.get(k) for k in ("esito", "esempi_finali", "analisi")},
+                            ensure_ascii=False, default=str))
+    finally:
+        if svc is not None:
+            svc.close()
+        fake.ferma()
+    return errori
+
+
 # ═══════════════════════════ sulla DGX ═══════════════════════════
 
 class EstensioniFinte:
@@ -591,6 +726,12 @@ def un_lavoro(svc, cfg, uscita: Path, nome: str, caso: dict, etichetta: str,
     acc = accettazione(nuova, file_di(cartella), caso) if cartella and cartella.is_dir() else {
         "verde": False, "esito": None, "uscita": "nessuna cartella"}
     per_giro[-1]["accettazione"] = acc["verde"]
+    # Gli esempi dell'agente rieseguiti dal banco sui file finali (13/10 sera)
+    from calliope.agenti.servizio import cartella_sandbox
+    sbl = sorted(cartella_sandbox(cfg).glob(f"{lav.id}-*"))
+    es_finali = (esempi_finali(nuova, file_di(cartella), caso, getattr(lav, "accettazione", None),
+                               sbl[-1] if sbl else None)
+                 if cartella and cartella.is_dir() else None)
     seg = segnali_giro(lav, cfg.agenti_max_passi)
     fatto = (ris.get("esito") == "fatto" or lav.stato == "fatto")
     giro_acc = next((x["giro"] for x in per_giro if x.get("accettazione")), None)
@@ -607,6 +748,9 @@ def un_lavoro(svc, cfg, uscita: Path, nome: str, caso: dict, etichetta: str,
             "ripetizioni": seg.get("ripetizioni", 0), "senza_novita": seg.get("senza_novita", 0),
             "a_vuoto": seg.get("a_vuoto", False), "test_agente": ris.get("test"),
             "riproduzione": (getattr(lav, "riproduzione", None) or {}).get("stato"),
+            # Chiuso dal codice al tetto con gli esempi verdi (13/10 sera, ciclo.py)
+            "consegna_al_tetto": ris.get("consegna_al_tetto"),
+            "esempi_finali": es_finali,
             "regole": dict(((lav.segnali or {}).get("regole") or {})),
             "cartella": str(cartella),
             "giri": len(per_giro), "giri_max": giri, "giro_accettazione": giro_acc,
@@ -762,9 +906,9 @@ def main(argv) -> int:
                               + (f", riproduzione {r['riproduzione']}" if r["riproduzione"]
                                  else "")
                               + (f", domande {len(r['domande'])}" if r["domande"] else "")
-                              + (f", esempi {r['analisi'].get('esempi')} "
-                                 f"{'verdi' if r['analisi'].get('passano') else 'rossi'}"
-                                 if r["analisi"].get("esempi") else "")
+                              + detto_esempi(r)
+                              + (f", consegna al tetto ({r['consegna_al_tetto']})"
+                                 if r.get("consegna_al_tetto") else "")
                               + (f"; giri {r['giri']} (passate {r['passate_giri']}), "
                                  f"accettazione verde al giro {r['giro_accettazione']}, "
                                  f"consegna al giro {r['giro_consegna']}, "
