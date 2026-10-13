@@ -288,7 +288,9 @@ CASI = [
     # Contrari della frase del prompt su «chi sono?» (13/10: «Calliope, chi sono?» → «Calliope.»
     # e «Chi sono?» → «Io sono Calliope.» 3 volte su 3 con e4b, anche alle 15): «chi sei?» resta
     # Calliope, l'ospite non riceve un nome, una domanda su un'altra persona non è chi parla
-    ("chi_sei", "Dario", "amministra", "Calliope, chi sei?", (None, "chi_parla"),
+    ("chi_sei", "Dario", "amministra", "Calliope, chi sei?",
+     # 13/10, DGX col 26B: calliope_stato(cosa=chi_sei) è lo strumento fatto apposta
+     (None, "chi_parla", "calliope_stato"),
      ("rinomina_interlocutore",),
      lambda r: "Calliope" in r and not re.search(r"\bsei dario\b", r, re.I), None),
     ("chi_ospite", None, "ospite", "Chi sono?", CHI, ("rinomina_interlocutore",),
