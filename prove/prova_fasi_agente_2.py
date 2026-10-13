@@ -26,6 +26,9 @@ della temperatura sulla DGX del 12–13/10, caso del convertitore di distanze).
    - d. alla revisione: requisiti numerati e parole della persona alla passata, «da guardare
      tu» per i requisiti al collaudo, «provato da un esempio» o l'esempio rosso; contrario:
      senza l'analisi la frase di prima.
+3. **modifica_file invece di riscrivere**: un file lungo riscritto intero per poche righe ha
+   nel risultato di scrivi_file la nota che modifica_file c'è (regola
+   agente_riscrittura_piccola); contrari: file nuovo, corto, cambiato molto, uguale.
 
     python prove/prova_fasi_agente_2.py
 """
@@ -483,6 +486,35 @@ def prova_revisione(tmp: Path):
                    "c'è. Da guardare tu: voce allegra.", f2)
 
 
+# ═══════════════════════════ 3. modifica_file invece di riscrivere ═══════════════════════════
+
+def prova_riscrittura(tmp: Path):
+    sezione("3. un file lungo riscritto intero per poche righe: la nota per modifica_file")
+    from calliope.agenti.ciclo import nota_riscrittura
+    lungo = "".join(f"riga_{i} = {i}\n" for i in range(40))
+    una = lungo.replace("riga_7 = 7", "riga_7 = 70")
+    n = nota_riscrittura(lungo, una, "cartella/estensione.py")
+    verifica("40 righe, una cambiata: la nota con il nome, le righe e modifica_file",
+             n.startswith("Hai riscritto estensione.py intero (40 righe) per cambiarne 1")
+             and "modifica_file" in n, n)
+    altro = "".join(f"x_{i} = {i}\n" for i in range(40))
+    verifica("contrari: file nuovo, corto, cambiato molto, uguale",
+             nota_riscrittura(None, una, "a.py") == ""
+             and nota_riscrittura("a = 1\n" * 5, "a = 2\n" * 5, "a.py") == ""
+             and nota_riscrittura(lungo, altro, "a.py") == ""
+             and nota_riscrittura(lungo, lungo, "a.py") == "")
+    test_lungo = TEST + "".join(f"# commento {i}\n" for i in range(30))
+    lav, ris, log, cli = _gira(tmp, "riscrive", [
+        [scrivi("programma.py", PROGRAMMA), scrivi("test_programma.py", test_lungo)],
+        [scrivi("test_programma.py", test_lungo.replace("commento 3\n", "commento tre\n"))],
+        [CONSEGNA]])
+    esiti = [m["content"] for m in lav.contesto["messages"] if m.get("role") == "tool"]
+    verifica("nel ciclo: la nota nel risultato di scrivi_file e la regola nei segnali",
+             any("Hai riscritto test_programma.py intero" in e for e in esiti)
+             and (lav.segnali.get("regole") or {}).get("agente_riscrittura_piccola") == 1,
+             str(esiti[-2:])[:300])
+
+
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8")
     radice = Path(tempfile.mkdtemp(prefix="calliope-fasi2-"))
@@ -494,6 +526,7 @@ if __name__ == "__main__":
         prova_test_accettazione(radice / "accettazione")
         prova_servizio(radice / "servizio")
         prova_revisione(radice / "revisione")
+        prova_riscrittura(radice / "riscrittura")
     finally:
         shutil.rmtree(radice, ignore_errors=True)
     print(f"\n{'TUTTO OK' if not errori else f'{errori} ERRORI'} "

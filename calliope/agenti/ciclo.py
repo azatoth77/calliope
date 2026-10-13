@@ -407,6 +407,30 @@ RISCRITTURE_MAX = 3
 RISCRITTURA_RIGHE = 60
 # Le righe intorno a leggi_file con «riga»
 RIGHE_INTORNO = 25
+# Un file riscritto per intero per cambiarne poche righe (13/10, banco della temperatura: passo
+# 9 tutto estensione.py, passo 10 tutto test_estensione.py…): nel risultato di scrivi_file la
+# nota che modifica_file c'è. Solo file di almeno tante righe, cambiati al più per una quota
+RISCRITTURA_NOTA_RIGHE = 20
+RISCRITTURA_NOTA_QUOTA = 0.25
+
+
+def nota_riscrittura(prima: str | None, dopo: str, nome: str) -> str:
+    """La nota per scrivi_file quando un file lungo è stato riscritto intero cambiandone poche
+    righe; "" altrimenti (file nuovo, corto, cambiato molto, uguale)."""
+    if prima is None:
+        return ""
+    a, b = prima.splitlines(), dopo.splitlines()
+    if len(a) < RISCRITTURA_NOTA_RIGHE:
+        return ""
+    import difflib
+    cambiate = sum(max(i2 - i1, j2 - j1) for op, i1, i2, j1, j2 in
+                   difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes()
+                   if op != "equal")
+    if cambiate == 0 or cambiate > max(3, RISCRITTURA_NOTA_QUOTA * len(a)):
+        return ""
+    return (f"Hai riscritto {nome.rsplit('/', 1)[-1]} intero ({len(a)} righe) per cambiarne "
+            f"{cambiate}: per correggere un pezzo usa modifica_file (vecchio → nuovo), è più "
+            "veloce e il resto del file non si tocca.")
 
 
 def _con_fallimenti(r: dict, uscita: str | None = None) -> dict:
@@ -1721,10 +1745,21 @@ class Agente:
                 return self._leggi(lav, sandbox, args)
             if name == "scrivi_file":
                 lav.passo = f"scrive {args.get('percorso') or 'un file'}"
+                try:
+                    prima = sandbox.leggi(args.get("percorso"), max_caratteri=10**9)
+                except Exception:  # noqa: BLE001 — un file nuovo (o un percorso che non va)
+                    prima = None
                 r = sandbox.scrivi(args.get("percorso"), args.get("contenuto"))
                 if r.get("ok"):
                     lav.nota("file", nome=r.get("percorso") or str(args.get("percorso")),
                              testo=str(args.get("contenuto") or ""))
+                    nota = nota_riscrittura(prima, str(args.get("contenuto") or ""),
+                                            str(r.get("percorso") or args.get("percorso")))
+                    if nota:
+                        # 13/10: modifica_file c'è già; qui lo si ricorda nel risultato
+                        from ..sonde import nota as nota_regola
+                        nota_regola(lav, "agente_riscrittura_piccola")
+                        r["nota"] = nota
                 return r
             if name == "modifica_file":
                 return self._modifica(lav, sandbox, args)
