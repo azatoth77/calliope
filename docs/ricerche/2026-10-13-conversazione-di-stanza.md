@@ -397,6 +397,40 @@ tetto `stanza_caldo_token` è il freno: oltre, si accorciano gli ultimi minuti, 
 qualcuno che parla, ~1,4 token a parola italiana: ~125 token al minuto, 8 minuti ≈ 1 000 token;
 una chiacchierata fitta ne fa il doppio.]
 
+### 3.5 bis Gruppo o no: come lo capisce Calliope (13/10, domanda di chi amministra)
+
+**Non c'è un interruttore «gruppo».** Con la stanza accesa il registro della stanza è sempre
+acceso su quel satellite: una persona sola è una stanza con una voce. Due cose distinte:
+
+- il **registro della stanza** (sempre): chi ha detto cosa, in ordine, è il contesto;
+- la **conversazione con Calliope** (di chi la chiama): la frase che interpella è di chi l'ha detta,
+  con i suoi permessi, la sua storia, il suo tono (§ 3.6).
+
+**Il gruppo lo decide la voce, non il testo**: è la compagnia di oggi (`compagnia.py`, dal 09/10),
+sulle impronte CAM++ delle frasi degli ultimi `compagnia_finestra_s` (5 minuti, solo in memoria). La
+stanza è «in gruppo» se:
+
+1. due **persone registrate diverse** riconosciute dalla voce (`due_profili`: chi amministra e il
+   ragazzo in auto);
+2. una persona registrata e una **voce che non conosce** (`profilo`: sotto 0,20 sul suo profilo);
+3. due **voci sconosciute** distinte (`gruppi`: due ospiti).
+
+In più il registro tiene **chi è presente** (`presenti`, § 3.7): le persone sentite negli ultimi
+`stanza_presenza_s` (proposta 10 minuti) e i gruppi senza profilo.
+
+**Cosa cambia in gruppo**: azioni solo col nome (passo 0, `compagnia_azioni_col_nome`); i contenuti
+detti ad alta voce seguono il più protetto dei presenti (§ 3.7); le cose riservate chiedono se dirle
+o mandarle sullo schermo; il giudizio «rivolta» vede le righe della stanza (§ 3.4). Da soli, dopo 5
+minuti senza altre voci la compagnia si scioglie e tutto torna come per una persona sola.
+
+**Limiti** (veri, da tenere a mente):
+
+- **chi tace non conta**: una persona presente che non parla non è nel gruppo. È il caso delicato per
+  le cose riservate dette ad alta voce, senza rimedio con il solo audio;
+- **la TV conta come persona** finché non c'è il filtro (§ 5.2): rende Calliope più prudente del
+  necessario, mai meno;
+- **serve almeno una frase** di ~1 s per voce (`compagnia_voce_min_s`) prima che il gruppo si veda.
+
 ### 3.6 La conversazione di gruppo vista dal modello
 
 - **Una frase sola cambia**: il prompt di sistema dice che Calliope sente la conversazione della
@@ -612,6 +646,34 @@ registrata, lunga e continua senza turni; nessun legame con le persone presenti;
 della casa); contenuto da trasmissione giudicato dalla corsia lenta. Righe segnate `tv`, una sola
 riga col tempo nel blocco caldo, fuori dalla ricerca. Oggi la TV crea compagnia ed è giusto: con la
 stanza crea anche righe, e la misura del passo 1 dice quante.
+
+**Come funzionerebbe il filtro (13/10, approfondimento).** Uno stato per stanza, «trasmissione in
+corso», con una fiducia, deciso da segnali a strati dal più economico al più costoso:
+
+1. **Home Assistant** (il più forte e gratis): un `media_player` della stanza del satellite in
+   `playing`/`on` (TV, Chromecast, casse). Basta a dire «c'è una trasmissione»; non dice quali righe
+   sono sue.
+2. **Classificatore audio** sul segmento: un modello piccolo di eventi sonori in ONNX (classi
+   «televisione», «musica», «applausi», «discorso amplificato»), solo `onnxruntime` che c'è già
+   (principio 4); gira sulla CPU della DGX sui segmenti della stanza, non sul turno. Da scegliere e
+   misurare (licenza, peso, verità sull'audio del telefono).
+3. **Le voci**: la trasmissione ha molte voci sconosciute che cambiano in fretta, frasi lunghe senza
+   pause di turno e nessuna risposta alle persone presenti (nessun legame di turno con le righe di
+   chi è registrato). Lo vede la corsia lenta sull'intero scambio con le finestre CAM++ (§ 3.2).
+4. **Il contenuto**, ultimo e solo nella corsia lenta: un giudizio del modello piccolo su una
+   finestra di righe («è una trasmissione — telegiornale, pubblicità, film — o persone in
+   stanza?»).
+
+**Effetti**: le righe giudicate `tv` escono dal blocco caldo e dalla ricerca e diventano una riga
+sola col tempo («[TV, 40 min]», al più con il genere: «telegiornale»); non contano per la compagnia
+**solo** se Home Assistant dice che la TV è accesa **e** le voci sono sconosciute (una voce
+registrata resta sempre una persona, un ospite che parla durante il film resta un ospite: nel
+dubbio la compagnia resta, che è la scelta prudente); il guardiano a posteriori non le guarda;
+le azioni non cambiano (già oggi vogliono nome e voce riconosciuta: un «Calliope, apri il cancello»
+detto dalla TV non apre niente). **Contrari da provare**: una persona che legge ad alta voce, una
+telefonata in vivavoce (voce sconosciuta lunga, ma con risposte), musica di sottofondo con persone
+che parlano. **Misura** (passo 3): su un set di registrazioni di adulti consenzienti con la TV
+accesa, righe TV prese come persone e persone prese come TV (obiettivo: la seconda vicina a 0).
 
 ### 5.3 Half-duplex: ascoltare la stanza anche mentre Calliope parla
 
