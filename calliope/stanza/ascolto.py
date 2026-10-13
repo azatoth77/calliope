@@ -344,8 +344,8 @@ class Stanza:
         """La frase di un turno (rivolta a Calliope) entra nella stanza di quel satellite, con
         il testo del turno: lega il segmento della stanza che la copre, se c'è. `chi`:
         {persona, nome, sicurezza («voce», «grigia», «nessuna»), minore}."""
-        if sat not in self._info:
-            return
+        if sat not in self._info or self._pausa_viva(sat) is not None:
+            return                             # in pausa (ospiti): nemmeno le frasi dei turni
         with self._cond:
             s = self._legati.pop((sat, ascolto), None) if ascolto is not None else None
         chi = chi or {}

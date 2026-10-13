@@ -452,6 +452,9 @@ def prova_server():
                  and abs(r["fino"] - time.time() - 4 * 3600) < 5)
         verifica("segno sugli schermi: «Stanza in pausa: ospiti, fino alle …»",
                  st.schermi.segni[-1][2].startswith("Stanza in pausa: ospiti, fino alle"))
+        n_ev = len(reg)
+        st.turno_testo(sat["id"], None, "Calliope, che tempo fa?", {"chi": "ignoto"})
+        verifica("in pausa nemmeno la frase di un turno entra nella stanza", len(reg) == n_ev)
         n = len(stt._stt.ordine)
         f.segmento(100, 0.1)
         time.sleep(0.3)
