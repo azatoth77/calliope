@@ -341,7 +341,8 @@ class Config:
     # riferimento_casa, riferimento_agenda, conferma_al_posto_del_vuoto,
     # vuoto_seconda_passata, ricerca_promessa, citazione_tolta, nome_tool_parlato,
     # eco_contesto, spinta_archivio, spinta_rinuncia, spinta_esercizi, correzione_tool,
-    # ricerca_recente, risposta_ripetuta, scrivo_qui_a_voce, spinta_stanza; "tutte"
+    # ricerca_recente, risposta_ripetuta, scrivo_qui_a_voce, spinta_stanza,
+    # ciclo_ripetuto; "tutte"
     # le spegne tutte. Quelle di
     # «sicurezza» (permessi, politica…) non si spengono: un nome di sicurezza o sconosciuto si
     # segnala all'avvio. Quelle del profilo (llm_profilo) si aggiungono a queste.
@@ -1083,6 +1084,22 @@ class Config:
     # insieme (la cache si rompe una volta sola) e il prefisso nuovo si scalda in secondo piano;
     # anche il taglio e la compressione della storia portano via le righe dei turni tolti
     stanza_storia_caratteri: int = 16000
+    # Il pezzo «in attesa» (14/10 notte, dopo la seconda prova in auto: prima frase mediana 2,31 s,
+    # rilettura 0,86 s, fino a 3700 caratteri di righe nuove fra un turno e l'altro): con la
+    # conversazione aperta e la voce ferma, ogni `stanza_attesa_ogni_s` Brain guarda le righe
+    # arrivate dopo l'ultimo turno; oltre `stanza_attesa_caratteri` le fissa in un pezzo (lo
+    # stesso testo che avrebbe il turno dopo, e da allora non cambia più) e lo mette nella cache
+    # del motore in secondo piano. Al turno dopo il pezzo va davanti a quello delle righe ancora
+    # più nuove, e la sua lettura è già fatta. false = le righe nuove si leggono tutte al turno
+    stanza_attesa: bool = True
+    stanza_attesa_caratteri: int = 600
+    stanza_attesa_ogni_s: float = 5.0
+    # Tetto delle righe del primo pezzo di una conversazione nuova (anche riaperta dopo
+    # `storia_inattiva_s`): nella prova del 14/10 sera 32 e 36 righe (6773 e 5476 caratteri,
+    # ~1800 token da leggere) entravano tutte insieme alla riapertura. Le più nuove, gli ultimi
+    # `stanza_caldo_sempre_s` sempre; la finestra si allarga fino all'inizio dell'ultimo scambio
+    # della stanza (al più 30 minuti), il resto lo trovano la ricerca anticipata e stanza_cerca
+    stanza_riapertura_caratteri: int = 3000
     # Passo 4 (14/10, calliope/stanza/cerca.py, tool stanza_cerca): ciò che il blocco caldo non
     # ha più o che si è detto in un'altra stanza («di cosa parlavamo in cucina prima?», «cosa
     # aveva detto Carlo della gita stamattina?»), cercato nel registro della stanza in memoria
@@ -2344,10 +2361,16 @@ class Config:
         # DGX il 26B chiamava stanza_cerca anche con la risposta già lì (30 turni su 30)
         # Dal 14/10 sera le righe stanno anche nella conversazione, prima delle domande
         # (`stanza_contesto_in_storia`): «che hai davanti» vale per tutte e due
-        room = ("per ciò che si è detto vicino ai dispositivi di casa rispondi dalle righe della "
-                "stanza che hai davanti, se ci sono; se lì non c'è (chi ha detto cosa, cosa "
-                "si era deciso, a che ora, di cosa si parlava in un'altra stanza) stanza_cerca, "
-                "prima di dire che non lo sai; " if stanza else "")
+        # Dal 14/10 notte (seconda prova in auto: «ti ricordi quando è la cresima di…?» → due volte
+        # archivio_cerca e poi conversazione_cerca, e la risposta era nella stanza, detta da
+        # Calliope stessa nove minuti prima): anche le sue risposte a chi era lì, e stanza_cerca
+        # prima dell'archivio e delle conversazioni
+        room = ("per ciò che si è detto vicino ai dispositivi di casa, anche le tue risposte a "
+                "chi era lì («ti ricordi quando è…?», «cosa avevamo detto di…?»), rispondi dalle "
+                "righe della stanza che hai davanti, se ci sono; se lì non c'è (chi ha detto cosa, "
+                "cosa si era deciso, a che ora, di cosa si parlava in un'altra stanza) "
+                "stanza_cerca, prima di archivio_cerca, di conversazione_cerca e di dire che non "
+                "lo sai; " if stanza else "")
         # Con la ricerca web: quando usarla, al posto di «non puoi sapere il meteo…»
         if web:
             limits = (limits.replace("non usi internet o file e ", "non usi file e ")
@@ -2919,6 +2942,12 @@ RETI: dict[str, Rete] = {
         "che è stato detto adesso (calliope/ripetizione.py)", MODELLO,
         "la stessa frase su Christopher Nolan detta due volte a due richieste diverse (26B, "
         "09/10, DGX)"),
+    "ciclo_ripetuto": Rete(
+        "risposta che gira in tondo (la stessa parola, lo stesso gruppo o la stessa frase di "
+        "fila oltre la soglia): lo stream si chiude, il ciclo non si dice, resta la parte sana o "
+        "la frase pronta (calliope/ciclo_ripetuto.py)", MODELLO,
+        "«Allora allora, allora... allora...» per centinaia di volte, letto dalla voce fino al "
+        "barge-in (26B, 14/10 sera, in auto)"),
     # ── sicurezza: sempre accese, per ogni modello ──
     "permessi": Rete(
         "livello di chi parla e preset dei minori, a ogni esecuzione (ToolRegistry.call)",
@@ -3142,7 +3171,8 @@ SEZIONI: dict[str, list[str]] = {
                "stanza_coda_max_s", "stanza_scambio_pausa_s", "stanza_presenza_s",
                "stanza_ospiti_ore", "stanza_pausa_min", "stanza_contesto", "stanza_caldo_min",
                "stanza_caldo_sempre_s", "stanza_caldo_caratteri", "stanza_contesto_in_storia",
-               "stanza_storia_caratteri", "stanza_cerca",
+               "stanza_storia_caratteri", "stanza_attesa", "stanza_attesa_caratteri",
+               "stanza_attesa_ogni_s", "stanza_riapertura_caratteri", "stanza_cerca",
                "stanza_cerca_righe", "stanza_cerca_caratteri", "stanza_cerca_attesa_max_s",
                "stanza_cerca_attesa_s", "stanza_cerca_anticipo",
                "stanza_cerca_anticipo_caratteri", "stanza_durante_voce", "stanza_tenuta", "stanza_tenuta_giorni",
@@ -3361,6 +3391,8 @@ LIMITI: dict[str, tuple[float, float]] = {
     "stanza_pausa_min": (1.0, 1440.0), "stanza_caldo_min": (0.5, 120.0),
     "stanza_caldo_sempre_s": (0.0, 600.0), "stanza_caldo_caratteri": (200, 100_000),
     "stanza_storia_caratteri": (1000, 200_000),
+    "stanza_attesa_caratteri": (0, 100_000), "stanza_attesa_ogni_s": (0.5, 600.0),
+    "stanza_riapertura_caratteri": (200, 100_000),
     "stanza_cerca_righe": (1, 200), "stanza_cerca_caratteri": (200, 20_000),
     "stanza_cerca_attesa_max_s": (0.0, 30.0), "stanza_cerca_attesa_s": (0.0, 30.0),
     "stanza_cerca_anticipo_caratteri": (0, 20_000),

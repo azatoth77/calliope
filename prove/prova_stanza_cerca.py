@@ -595,7 +595,10 @@ def prova_anticipo():
              "modello, fuori dalla busta, e niente parole sue",
              a is not None and "Nota di Calliope: Le parole di Nicola" in a.testo
              and "pallavolo" not in a.testo
-             and a.testo.rindex("Nota di Calliope") > a.testo.rindex("FINE DATO"),
+             # Dal 14/10 notte la riga di Carlo con «sabato» (una parola sola su due, e non il
+             # nome) non entra più: niente busta, o la nota dopo la busta
+             and ("FINE DATO" not in a.testo
+                  or a.testo.rindex("Nota di Calliope") > a.testo.rindex("FINE DATO")),
              getattr(a, "testo", None))
     a = tool_mod.anticipa(contesto(st, "Carlo"), "Calliope, cosa ha detto Nicola di sabato?",
                           None)

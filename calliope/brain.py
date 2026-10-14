@@ -649,6 +649,8 @@ NON_SO = re.compile(r"\bnon (?:ho (?:(?:nessuna |alcuna |altre |ulteriori |altri
 # `spinta_stanza`): sul banco il 4B chiamava stanza_cerca 4 volte su 12 quando serviva
 # («a che ora avevamo deciso di partire?» → «Non ho informazioni…»). Come per l'archivio la
 # ricerca la fa Brain, con la frase di chi parla, e il modello risponde con le righe davanti
+# Le ricerche che, vuote, fanno cercare nella stanza (stanza_dopo_ricerca_vuota, 14/10 notte)
+RICERCHE_ALTROVE = frozenset({"archivio_cerca", "conversazione_cerca"})
 STANZA_NOTA = ("Qui sopra c'è la ricerca nella conversazione sentita nelle stanze, fatta con la "
                "frase di chi parla. Se le righe rispondono alla domanda, rispondi da lì dicendo "
                "chi l'ha detto; se non c'entrano o non c'è niente, di' in breve che non lo sai.")
@@ -1507,18 +1509,26 @@ class OpenAIBackend:
         acc: dict = {}
         usage = None
         primo = ultimo = None        # tempi del primo e dell'ultimo pezzo (generazione)
-        for chunk in self.client.chat.completions.create(**kwargs):
-            if getattr(chunk, "usage", None) is not None:
-                usage = chunk.usage
-            if not chunk.choices or chunk.choices[0].delta is None:
-                continue
-            delta = chunk.choices[0].delta
-            if delta.content or delta.tool_calls:
-                ultimo = time.perf_counter()
-                primo = primo or ultimo
-            merge_tool_deltas(acc, delta.tool_calls or [])
-            if delta.content:
-                yield "text", delta.content
+        risposta = self.client.chat.completions.create(**kwargs)
+        try:
+            for chunk in risposta:
+                if getattr(chunk, "usage", None) is not None:
+                    usage = chunk.usage
+                if not chunk.choices or chunk.choices[0].delta is None:
+                    continue
+                delta = chunk.choices[0].delta
+                if delta.content or delta.tool_calls:
+                    ultimo = time.perf_counter()
+                    primo = primo or ultimo
+                merge_tool_deltas(acc, delta.tool_calls or [])
+                if delta.content:
+                    yield "text", delta.content
+        finally:
+            # Anche quando Brain chiude lo stream a metà (14/10, ciclo_ripetuto): la
+            # connessione si chiude e il server smette di generare
+            chiudi = getattr(risposta, "close", None)
+            if callable(chiudi):
+                chiudi()
         if acc:
             yield "calls", [{"id": acc[i]["id"], "name": acc[i]["name"],
                              "arguments": _loads_dict(acc[i]["arguments"])}
@@ -1745,6 +1755,16 @@ def make_backend(cfg: Config):
 
 
 # ─────────────────────────────── CERVELLO ───────────────────────────────
+def _segni(x) -> tuple:
+    """I numeri dei pezzi della stanza legati a una frase (il segno `_stanza`): un numero, o una
+    lista quando davanti alla frase ci sono anche i pezzi in attesa (14/10 notte)."""
+    if x is None:
+        return ()
+    if isinstance(x, (list, tuple)):
+        return tuple(x)
+    return (x,)
+
+
 def _compatta_storia(history: list[dict]):
     """Brain._compact_old_results su una lista di messaggi il cui ultimo messaggio dell'utente
     è la domanda del turno in corso (modifica i messaggi della lista: per scaldare una
@@ -2173,6 +2193,9 @@ class Brain:
             hist = hist[:-1]
             # Le righe della stanza dei turni (14/10 sera), dove le rileggerà il turno dopo
             hist = self._con_stanza(hist, conv)
+            # E i pezzi in attesa (14/10 notte): subito dopo la storia, come al turno dopo
+            hist += [{"role": "system", "content": q.testo}
+                     for q in list(getattr(conv, "stanza_attesa", None) or ())]
         system = self._system_messages()
         schemas = self.schemi()
         msgs = system + riassunto + hist
@@ -2297,6 +2320,11 @@ class Brain:
         self._held_kind = None
         self.mentions_tool("")                       # prepara _tool_re
         names = ToolNameHold(self._tool_re, hold_names and self._net("chiamata_in_mezzo"))
+        # La risposta che gira in tondo (14/10, calliope/ciclo_ripetuto.py): subito dopo il
+        # ragionamento, prima di tutte le altre reti; con un ciclo lo stream si chiude
+        from .ciclo_ripetuto import CicloRipetuto
+        ciclo = CicloRipetuto(self._net("ciclo_ripetuto"))
+        self._ciclo_fermato = None
         out, calls, waiting = [], [], []
         # Il testo generato di questa passata, anche se la risposta viene interrotta (passo 3: la
         # parte non detta nel promemoria del turno dopo, § 11.4)
@@ -2305,7 +2333,8 @@ class Brain:
             gen.append(out)
         if int(getattr(self, "_passata", 0) or 0) <= 1:
             self._misura_prefisso(messages)
-        for kind, payload in self.backend.stream(messages, schemas):
+        flusso = self.backend.stream(messages, schemas)
+        for kind, payload in flusso:
             if kind == "calls":
                 calls.extend(payload)
                 continue
@@ -2313,7 +2342,7 @@ class Brain:
                 self._note_usage(payload)
                 continue
             piece = names.feed(hold.feed(guard.feed(qui.feed(echo.feed(capito.feed(
-                think.feed(payload)))))))
+                ciclo.feed(think.feed(payload))))))))
             if capito.capito is not None:
                 # Prima delle chiamate di questa passata (arrivano a stream finito)
                 self._applica_capito(capito.capito)
@@ -2324,8 +2353,14 @@ class Brain:
                     waiting.append(piece)
                 else:
                     yield piece
+            if ciclo.fermata:
+                break
+        if ciclo.fermata:
+            # Chiude la richiesta: Ollama (e vLLM) smettono di generare quando il client chiude
+            flusso.close()
         piece = names.feed(hold.feed(guard.feed(
-            qui.feed(echo.feed(capito.feed(think.flush()) + capito.flush()) + echo.flush())
+            qui.feed(echo.feed(capito.feed(ciclo.feed(think.flush()) + ciclo.flush())
+                               + capito.flush()) + echo.flush())
             + qui.flush()) + guard.flush()) + hold.flush())
         if qui.tolte:
             self._rule("scrivo_qui_tolto")
@@ -2346,6 +2381,24 @@ class Brain:
             print(f"   [LLM] contesto ripetuto in testa, non lo dico: «{self.cita_in_console(echo.dropped, 60)}»",
                   flush=True)
             self._rule("eco_contesto")
+        if ciclo.fermata:
+            # Un ciclo degenerato: niente chiamate né testo trattenuto (non si sa più cosa
+            # volesse dire); si dice la parte sana e, se non è una frase compiuta, la frase
+            # pronta. Il ciclo non si dice e non entra nella storia
+            c = ciclo.ciclo or {}
+            self._rule("ciclo_ripetuto")
+            print(f"   [LLM] risposta in ciclo («{self.cita_in_console(c.get('unita', ''), 40)}» "
+                  f"{c.get('volte')} volte di fila): fermo il modello", flush=True)
+            fatto = "".join(out).strip()
+            if hold_request:
+                fatto = ""                 # la frase trattenuta non è stata detta: non si dice
+            extra = ""
+            if not (fatto and ciclo.compiuta() and not hold_request):
+                from . import frasi
+                extra = self._marca(frasi.scegli("scusa.incartata"), "atto", "incartata")
+                yield (" " if fatto else "") + extra
+            self._ciclo_fermato = c
+            return (f"{fatto} {extra}".strip(), [], "", "", "")
         if not calls and guard.call:
             print(f"   [TOOL] chiamata scritta come testo, eseguita: {guard.call['name']}",
                   flush=True)
@@ -2674,6 +2727,7 @@ class Brain:
         self._chiamate_risposta = {}
         self._fidate_risposta = []
         self.last_turn_at = time.monotonic()
+        self.__dict__["_in_risposta"] = True      # il pezzo in attesa non si prepara adesso
         start = len(self.history)
         # Frase di sfida in corso (04/10, conferme.py): se la frase la ripete, decide il codice
         sfida = self._sfida(user_text)
@@ -2708,6 +2762,7 @@ class Brain:
                 # macchina; il «sì» tradotto resta come la chiamata del tool vero)
                 self._togli_proposta_rispondi(start)
             self.last_turn_at = time.monotonic()
+            self.__dict__["_in_risposta"] = False
             self.salva_conversazione()
             self._dialogo_fine(interrotta=True)
         # Arrivati qui la risposta è finita (non interrotta): se chiude con la domanda del
@@ -3172,6 +3227,13 @@ class Brain:
         - un pezzo le cui righe non sono più nel registro della stanza («dimentica», la tenuta
           in memoria scaduta) se ne va;
         - in pausa per ospiti i pezzi di quel satellite non si mostrano (come il blocco)."""
+        with self._stanza_lock():
+            out = self._stanza_prepara_dentro(user_text, stanza_b, start)
+        if out[0] is not None and stanza_b is not None:
+            self._stanza_attesa_avvia()
+        return out
+
+    def _stanza_prepara_dentro(self, user_text, stanza_b, start: int):
         self._stanza_visibili = []
         self.last_stanza_storia = None
         from .stanza import contesto as stanza_ctx
@@ -3196,9 +3258,9 @@ class Brain:
             if len(tenuti) != len(pezzi):
                 pezzi[:] = tenuti
                 self._rule("stanza_storia_dimenticata")
-        ancore = {m.get("_stanza") for m in self.history[:start]
+        ancore = {n for m in self.history[:start]
                   if isinstance(m, dict) and m.get("role") == "user"
-                  and m.get("_stanza") is not None}
+                  for n in _segni(m.get("_stanza"))}
         orfani = [p for p in pezzi if p.n not in ancore]
         if orfani and not Brain.eventi_attivo(self):
             # Il loro turno è uscito dalla storia: le righe, se ancora nella finestra, possono
@@ -3216,40 +3278,231 @@ class Brain:
                 except Exception:  # noqa: BLE001
                     pass
         nuovi = []
-        if (user_text and stanza_b is not None and getattr(stanza_b, "sat", None) is not None
-                and start < len(self.history)
+        # I pezzi in attesa (14/10 notte, stanza_attesa_prepara): righe arrivate dopo l'ultimo
+        # turno, già fissate e scaldate; vanno davanti al pezzo di questo turno, legate alla sua
+        # frase. Quelli con righe non più nel registro («dimentica») se ne vanno; in pausa per
+        # ospiti aspettano
+        attesa = self._stanza_attesa_valide(conv, st)
+        if attesa and st is not None:
+            try:
+                if st.stato_pausa(attesa[0].sat) is not None:
+                    attesa = []
+            except Exception:  # noqa: BLE001
+                pass
+        if stanza_b is not None and getattr(stanza_b, "sat", None) is not None:
+            conv.stanza_sat = stanza_b.sat
+        if (user_text and start < len(self.history)
                 and self.history[start].get("role") == "user"):
-            # Le frasi di questa conversazione (domande e risposte) sono già nella storia
-            storia_norm = "\n".join(stanza_ctx._norm(m.get("content"))
-                                    for m in self.history
-                                    if isinstance(m, dict) and m.get("role") in (
-                                        "user", "assistant") and m.get("content"))
-            p = stanza_ctx.pezzo(stanza_b, conv.stanza_mandate, self.cfg, conv.stanza_n + 1,
-                                 primo=not pezzi, storia_norm=storia_norm)
+            p = None
+            if stanza_b is not None and getattr(stanza_b, "sat", None) is not None:
+                # Le frasi di questa conversazione (domande e risposte) sono già nella storia
+                primo = not pezzi and not attesa
+                p = stanza_ctx.pezzo(stanza_b, conv.stanza_mandate, self.cfg,
+                                     conv.stanza_n + 1, primo=primo,
+                                     storia_norm=self._storia_norm(),
+                                     riapertura=primo and not self._turni_prima(start),
+                                     oltre_seq=self._stanza_seq_max(conv, stanza_b.sat))
+            segni = [q.n for q in attesa]
             if p is not None:
                 conv.stanza_n = p.n
-                pezzi.append(p)
                 conv.stanza_mandate |= p.ids | p.segmenti
-                self.history[start]["_stanza"] = p.n
-                nuovi.append(p)
+                segni.append(p.n)
+            if segni:
+                pezzi.extend(attesa)
+                if p is not None:
+                    pezzi.append(p)
+                conv.stanza_attesa = [q for q in getattr(conv, "stanza_attesa", None) or ()
+                                      if q not in attesa]
+                self.history[start]["_stanza"] = segni[0] if len(segni) == 1 else segni
+                nuovi = attesa + ([p] if p is not None else [])
         storia = {p.n: p for p in pezzi if p.n in ancore and p.n not in nascosti}
         ora = [p for p in orfani if p.n not in nascosti] + nuovi
+        da_attesa = [q for q in nuovi if getattr(q, "in_attesa", False)]
+        nuovi_turno = [q for q in nuovi if not getattr(q, "in_attesa", False)]
         self._stanza_visibili = list(storia.values()) + ora
         if self._stanza_visibili or nuovi:
             self.last_stanza_storia = {
-                "nuove": sum(p.righe for p in nuovi),
-                "nuove_caratteri": sum(p.caratteri for p in nuovi),
+                "nuove": sum(p.righe for p in nuovi_turno),
+                "nuove_caratteri": sum(p.caratteri for p in nuovi_turno),
+                **({"attesa": sum(p.righe for p in da_attesa),
+                    "attesa_caratteri": sum(p.caratteri for p in da_attesa)}
+                   if da_attesa else {}),
                 "righe": sum(p.righe for p in self._stanza_visibili),
                 "caratteri": sum(p.caratteri for p in self._stanza_visibili),
                 "pezzi": len(self._stanza_visibili),
                 **({"nascosti": len(nascosti)} if nascosti else {}),
                 **({"fuori_posto": len(ora) - len(nuovi)} if len(ora) > len(nuovi) else {})}
             if nuovi:
-                print(f"   [STANZA] {nuovi[0].righe} righe nuove nella storia "
-                      f"({nuovi[0].caratteri} caratteri); in tutto "
+                gia = (f", più {sum(p.righe for p in da_attesa)} già in cache "
+                       f"({sum(p.caratteri for p in da_attesa)} caratteri)" if da_attesa else "")
+                print(f"   [STANZA] {sum(p.righe for p in nuovi_turno)} righe nuove nella storia "
+                      f"({sum(p.caratteri for p in nuovi_turno)} caratteri){gia}; in tutto "
                       f"{self.last_stanza_storia['righe']} righe in "
                       f"{len(self._stanza_visibili)} pezzi", flush=True)
         return [{"role": "system", "content": p.testo} for p in ora], storia
+
+    def _storia_norm(self, conv=None) -> str:
+        """I testi della storia normalizzati: le frasi della conversazione (domande e risposte)
+        non entrano nei pezzi della stanza (`stanza_ctx.gia_nella_storia`)."""
+        from .stanza import contesto as stanza_ctx
+        hist = (conv or self._c()).history
+        return "\n".join(stanza_ctx._norm(m.get("content")) for m in hist
+                         if isinstance(m, dict) and m.get("role") in ("user", "assistant")
+                         and m.get("content"))
+
+    @staticmethod
+    def _stanza_seq_max(conv, sat) -> int | None:
+        """Il numero d'arrivo più alto delle righe di `sat` già mandate in questa conversazione
+        (pezzi e pezzi in attesa), o None."""
+        xs = [int(getattr(q, "seq_max", 0) or 0)
+              for q in list(getattr(conv, "stanza", None) or ())
+              + list(getattr(conv, "stanza_attesa", None) or ()) if q.sat == sat]
+        return max(xs) if xs else None
+
+    def _turni_prima(self, start: int) -> bool:
+        """C'è almeno un turno prima di quello in corso in questa conversazione."""
+        return any(isinstance(m, dict) and m.get("role") == "user" for m in self.history[:start])
+
+    def _stanza_lock(self):
+        lk = self.__dict__.get("_lock_stanza")
+        if lk is None:
+            lk = self.__dict__.setdefault("_lock_stanza", threading.Lock())
+        return lk
+
+    def _stanza_attesa_valide(self, conv, st) -> list:
+        """I pezzi in attesa della conversazione con le righe ancora nel registro della stanza;
+        quelli senza («dimentica») se ne vanno, e le loro righe non sono più «mandate»."""
+        attesa = list(getattr(conv, "stanza_attesa", None) or ())
+        if not attesa or st is None:
+            return attesa
+        tenuti = []
+        for q in attesa:
+            try:
+                vivi = {(q.sat, x) for x in st.registro(q.sat).seq_vivi()}
+            except Exception:  # noqa: BLE001 — senza registro il pezzo resta
+                vivi = set(q.ids)
+            if q.ids & vivi:
+                tenuti.append(q)
+            else:
+                conv.stanza_mandate -= q.ids | q.segmenti
+        if len(tenuti) != len(attesa):
+            conv.stanza_attesa = tenuti
+            self._rule("stanza_storia_dimenticata")
+        return tenuti
+
+    # La quiete prima di fissare le righe in attesa: le righe finite negli ultimi secondi
+    # aspettano il turno (la frase della domanda, appena detta, non va in un pezzo in attesa)
+    ATTESA_QUIETE_S = 4.0
+
+    def stanza_attesa_prepara(self, ora: float | None = None) -> bool | None:
+        """Il pezzo «in attesa» (14/10 notte, `stanza_attesa`): con la conversazione aperta e la
+        voce ferma, le righe della stanza arrivate dopo l'ultimo turno, se sono almeno
+        `stanza_attesa_caratteri`, diventano un pezzo fissato (in `Conversazione.stanza_attesa`,
+        righe «mandate»), da scaldare in cache. Al turno dopo `_stanza_prepara` lo mette davanti
+        al pezzo del turno: è lo stesso testo e lo stesso posto, quindi la lettura è già fatta.
+        True: un pezzo nuovo; False: niente da fare adesso; None: niente da guardare
+        (conversazione chiusa o in scadenza, stanza spenta, eventi attivi). `ora` (epoch) per le
+        prove con l'orologio finto."""
+        from .stanza import contesto as stanza_ctx
+        cfg = self.cfg
+        if not getattr(cfg, "stanza_attesa", True) or not stanza_ctx.in_storia(cfg):
+            return None
+        if Brain.eventi_attivo(self):
+            return None        # la storia si rifà dalla proiezione: il segno non c'è
+        st = getattr(self.tool_ctx, "stanza", None)
+        conv = self._c()
+        sat = getattr(conv, "stanza_sat", None)
+        if st is None or sat is None or not conv.history:
+            return None
+        last = getattr(conv, "last_turn_at", None)
+        idle = float(getattr(cfg, "storia_inattiva_s", 0) or 0)
+        ogni = float(getattr(cfg, "stanza_attesa_ogni_s", 5.0) or 5.0)
+        if last is None or (idle > 0 and time.monotonic() - last > idle - ogni):
+            return None        # al turno dopo si chiuderà: un pezzo scaldato per niente
+        if self.__dict__.get("_in_risposta"):
+            return False
+        with self._stanza_lock():
+            try:
+                if st.stato_pausa(sat) is not None:
+                    return False
+            except Exception:  # noqa: BLE001
+                return False
+            ora = time.time() if ora is None else ora
+            blocco = stanza_ctx.costruisci(st, sat, cfg, ora)
+            if blocco is None:
+                return False
+            blocco.finestra = [r for r in blocco.finestra
+                               if float(r.get("fine") or r.get("t") or 0)
+                               <= ora - self.ATTESA_QUIETE_S]
+            attesa = list(getattr(conv, "stanza_attesa", None) or ())
+            q = stanza_ctx.pezzo(blocco, conv.stanza_mandate, cfg, conv.stanza_n + 1,
+                                 primo=not conv.stanza and not attesa,
+                                 storia_norm=self._storia_norm(conv),
+                                 riapertura=not conv.stanza and not attesa,
+                                 oltre_seq=self._stanza_seq_max(conv, sat))
+            if q is None or q.righe_caratteri < int(getattr(cfg, "stanza_attesa_caratteri", 600)
+                                                    or 0):
+                return False
+            q.in_attesa = True
+            conv.stanza_n = q.n
+            conv.stanza_attesa = attesa + [q]
+            conv.stanza_mandate |= q.ids | q.segmenti
+        return True
+
+    def _stanza_attesa_avvia(self):
+        """Il thread che guarda le righe in attesa di questa corsia (uno per Brain, parte al
+        primo turno con le righe della stanza nella storia, si ferma da solo dopo un quarto
+        d'ora senza niente da guardare)."""
+        # Solo nel servizio (main.py lo accende per ogni Brain): le prove chiamano
+        # stanza_attesa_prepara e stanza_attesa_scalda a mano, senza thread
+        if not getattr(self.cfg, "stanza_attesa", True) or not self.__dict__.get("attesa_thread"):
+            return
+        th = self.__dict__.get("_attesa_thread")
+        if th is not None and th.is_alive():
+            return
+        th = threading.Thread(target=self._stanza_attesa_ciclo, daemon=True,
+                              name="stanza-attesa")
+        self.__dict__["_attesa_thread"] = th
+        th.start()
+
+    def _stanza_attesa_ciclo(self):
+        vuoto = 0.0
+        while True:
+            ogni = float(getattr(self.cfg, "stanza_attesa_ogni_s", 5.0) or 5.0)
+            time.sleep(ogni)
+            try:
+                esito = self.stanza_attesa_prepara()
+            except Exception as e:  # noqa: BLE001 — la cache non ferma niente
+                print(f"   [STANZA] righe in attesa: {type(e).__name__}: {e}", flush=True)
+                esito = False
+            if esito is None:
+                vuoto += ogni
+                if vuoto > 900:
+                    return
+                continue
+            vuoto = 0.0
+            if esito:
+                self.stanza_attesa_scalda()
+
+    def stanza_attesa_scalda(self) -> dict | None:
+        """Il prefisso con i pezzi in attesa nella cache del motore (dal thread delle righe in
+        attesa; le prove la chiamano a mano). Non durante una risposta."""
+        conv = self._c()
+        attesa = list(getattr(conv, "stanza_attesa", None) or ())
+        if not attesa or self.__dict__.get("_in_risposta"):
+            return None
+        t0 = time.perf_counter()
+        try:
+            res = self.scalda_conversazione(conv)
+        except Exception as e:  # noqa: BLE001
+            print(f"   [STANZA] righe in attesa non scaldate: {type(e).__name__}: {e}",
+                  flush=True)
+            return None
+        conv.stanza_attesa_scaldate = getattr(conv, "stanza_attesa_scaldate", 0) + 1
+        print(f"   [LATENZA] righe della stanza in attesa: {attesa[-1].righe} righe "
+              f"({attesa[-1].caratteri} caratteri) in cache in "
+              f"{time.perf_counter() - t0:.2f} s", flush=True)
+        return res
 
     def _con_stanza(self, msgs: list[dict], conv=None) -> list[dict]:
         """`msgs` (la storia prima del turno in corso) con le righe della stanza dei turni prima,
@@ -3263,9 +3516,10 @@ class Brain:
             return list(msgs)
         out = []
         for m in msgs:
-            n = m.get("_stanza") if isinstance(m, dict) and m.get("role") == "user" else None
-            if n is not None and n in ancore:
-                out.append({"role": "system", "content": ancore[n].testo})
+            if isinstance(m, dict) and m.get("role") == "user":
+                for n in _segni(m.get("_stanza")):
+                    if n in ancore:
+                        out.append({"role": "system", "content": ancore[n].testo})
             out.append(m)
         return out
 
@@ -4390,6 +4644,13 @@ class Brain:
                        and self.tools.get("stanza_cerca") is not None
                        and self.tools.allowed("stanza_cerca", level)
                        and (ant is None or ant.tagliate > 0))
+        # Dopo una ricerca vuota nei documenti o nelle conversazioni passate (14/10 notte, caso
+        # vero in auto: «ti ricordi quando è la cresima di…?» → archivio_cerca due volte, poi
+        # conversazione_cerca, e la risposta era nella stanza): Brain cerca nella stanza con la
+        # frase di chi parla, una volta, prima della frase «non trovo»
+        stanza_vuoto = (bool(user_text) and self._net("spinta_stanza")
+                        and self.tools.get("stanza_cerca") is not None
+                        and self.tools.allowed("stanza_cerca", level))
         # «Non posso creare un'estensione» con il tool disponibile a chi parla (06/10):
         # la frase si trattiene e il modello riceve una spinta (politica.rinuncia)
         disp = ({n for n in politica.RINUNCE if self.tools.get(n) is not None
@@ -4440,6 +4701,11 @@ class Brain:
                 hold_ripetuta=precedente if not self.last_tools else None,
                 tieni_con_chiamate=sviluppo_sosp and not nudged and not self.last_tools)
             tail = []
+            if getattr(self, "_ciclo_fermato", None):
+                # La risposta girava in tondo (ciclo_ripetuto): finisce qui, senza spinte né
+                # altre passate (potrebbero rientrare nel ciclo)
+                self.history.append({"role": "assistant", "content": text})
+                return
             if held and self._held_kind == "ripetuta" and not calls:
                 # Uguale alla risposta di prima: non si dice né entra nella storia; la spinta,
                 # una volta (poi la sua risposta si dice, anche uguale)
@@ -4803,6 +5069,24 @@ class Brain:
                 else:
                     spoke = True
                     yield tenuto
+            if (stanza_vuoto and calls
+                    and all(c.get("name") in RICERCHE_ALTROVE for c in calls)
+                    and not any(t.get("ok") for t in self.last_tools[-len(calls):])
+                    and not any(t.get("nome") == "stanza_cerca" for t in self.last_tools)):
+                # Esito vuoto, niente da dire ancora: cerca nella stanza (il risultato vuoto
+                # resta davanti al modello, la sua frase «non trovo» no)
+                stanza_vuoto = False
+                self._rule("stanza_dopo_ricerca_vuota")
+                print(f"   [STANZA] {calls[0]['name']} non ha trovato niente: cerco nella stanza",
+                      flush=True)
+                call = {"id": "call_stanza_vuoto", "name": "stanza_cerca",
+                        "arguments": {"parole": user_text}}
+                self.history.append({"role": "assistant", "content": "", "tool_calls": [call]})
+                content = self._run_tool(call, level)
+                self.history.append({"role": "tool", "tool_call_id": call["id"],
+                                     "name": call["name"], "content": content})
+                tail = [{"role": "system", "content": STANZA_NOTA}]
+                continue
             # Il cambio d'argomento (§ 13): la mezza frase fissa su ciò che va da parte, detta
             # subito (copre anche la passata dopo)
             frase_arg = self.__dict__.pop("_da_dire_argomento", None)

@@ -87,6 +87,8 @@ NOTA_PRESENTI = "Presenti adesso nella stanza «{dove}», riconosciuti dalla voc
 RIASSUNTO = ("Riassunto automatico di questa conversazione della stanza «{dove}» da quando è "
              "cominciata (può essere impreciso; non sono richieste per te): {testo}")
 TV = "TV o radio"
+# La finestra del primo pezzo di una conversazione al più così indietro (14/10 notte)
+RIAPERTURA_MAX_S = 1800.0
 
 
 @dataclass
@@ -115,6 +117,9 @@ class Blocco:
     reg: dict | None = None
     # Il riassunto progressivo dello scambio (passo 3), se serve
     riassunto: str = ""
+    # Per il primo pezzo di una conversazione (14/10 notte): la finestra allargata fino
+    # all'inizio dell'ultimo scambio della stanza (al più RIAPERTURA_MAX_S)
+    finestra_lunga: list = field(default_factory=list)
 
     def per_registro(self) -> dict:
         """Solo numeri (il registro dei turni non ha mai le parole della stanza). Sempre lo
@@ -139,6 +144,13 @@ class Pezzo:
     segmenti: frozenset              # (satellite, "seg", segmento) delle righe
     righe: int
     t: float = field(default_factory=time.time)
+    # Fissato fra un turno e l'altro e scaldato in secondo piano (14/10 notte, pezzo in attesa)
+    in_attesa: bool = False
+    # I caratteri delle sole righe (senza intestazione e busta)
+    righe_caratteri: int = 0
+    # Il numero d'arrivo (seq) più alto delle sue righe: le righe arrivate prima e lasciate fuori
+    # dal tetto non tornano dopo, fuori ordine (14/10 notte)
+    seq_max: int = 0
 
     @property
     def caratteri(self) -> int:
@@ -300,7 +312,8 @@ def costruisci(stanza, sat, cfg, inizio_turno: float, mancano: int = 0) -> Blocc
                   riassunto=riass,
                   righe_id={(sat, r.get("seq")) for r in scelte},
                   sat=sat, inizio=inizio_turno, finestra=_finestra(righe, inizio_turno, cfg),
-                  dove=dove, presenti=presenti, cerca=cerca)
+                  dove=dove, presenti=presenti, cerca=cerca,
+                  finestra_lunga=_finestra_scambio(righe, inizio_turno, cfg))
 
 
 def _riassunto(stanza, sat, righe: list[dict], inizio_turno: float, cfg, tagliate: int) -> str:
@@ -330,6 +343,27 @@ def _finestra(righe: list[dict], inizio_turno: float, cfg) -> list[dict]:
     return [r for r in righe if float(r.get("fine") or r.get("t") or 0) >= inizio_turno - caldo]
 
 
+def _finestra_scambio(righe: list[dict], inizio_turno: float, cfg) -> list[dict]:
+    """La finestra del primo pezzo di una conversazione (14/10 notte): gli ultimi
+    `stanza_caldo_min` minuti o, se comincia prima, l'ultimo scambio della stanza (righe senza un
+    silenzio più lungo di `stanza_scambio_pausa_s` fra l'una e l'altra), al più
+    `RIAPERTURA_MAX_S` indietro. Caso vero del 14/10 sera: la risposta di Calliope con la data
+    della cresima era 9 minuti prima della domanda, appena fuori dagli 8 minuti."""
+    caldo = float(getattr(cfg, "stanza_caldo_min", 8.0) or 8.0) * 60
+    pausa = float(getattr(cfg, "stanza_scambio_pausa_s", 300.0) or 300.0)
+    dentro = [r for r in righe
+              if float(r.get("fine") or r.get("t") or 0) >= inizio_turno - RIAPERTURA_MAX_S]
+    da = inizio_turno - caldo
+    prec = inizio_turno
+    for r in reversed(dentro):
+        fine = float(r.get("fine") or r.get("t") or 0)
+        if prec - fine > pausa:
+            break
+        prec = float(r.get("inizio") or r.get("t") or fine)
+        da = min(da, prec)
+    return [r for r in dentro if float(r.get("fine") or r.get("t") or 0) >= da]
+
+
 def in_storia(cfg) -> bool:
     """Le righe della stanza nella storia in sola aggiunta (14/10 sera), o il blocco intero nei
     dati del turno a ogni turno (come il 14/10 mattina, per il confronto)."""
@@ -351,7 +385,8 @@ def gia_nella_storia(r: dict, storia_norm: str) -> bool:
 
 
 def pezzo(blocco: Blocco, mandate: set, cfg, n: int, primo: bool,
-          storia_norm: str = "") -> Pezzo | None:
+          storia_norm: str = "", riapertura: bool = False,
+          inizio: float | None = None, oltre_seq: int | None = None) -> Pezzo | None:
     """Le righe della finestra di `blocco` non ancora mandate in questa conversazione (`mandate`:
     (satellite, seq) e (satellite, "seg", segmento) già nella storia), scelte come il blocco
     (gli ultimi `stanza_caldo_sempre_s` sempre, il resto dalla più nuova finché sta nel tetto),
@@ -359,19 +394,32 @@ def pezzo(blocco: Blocco, mandate: set, cfg, n: int, primo: bool,
     domanda a Calliope e la sua risposta, già nella storia: `storia_norm`, i testi della storia
     normalizzati) non entrano. Una riga già mandata non si rimanda mai,
     nemmeno se cambia (la frase non più «rivolta», una revisione dello stesso segmento): il
-    testo nel prefisso non cambia."""
+    testo nel prefisso non cambia.
+
+    `riapertura` (14/10 notte): il primo pezzo di una conversazione nuova, con la finestra fino
+    all'inizio dell'ultimo scambio (`Blocco.finestra_lunga`) e il tetto
+    `stanza_riapertura_caratteri` (le più nuove; gli ultimi `stanza_caldo_sempre_s` sempre).
+    `inizio`: il momento della scelta, se non è l'inizio della frase del blocco (il pezzo in
+    attesa, fissato fra un turno e l'altro). `oltre_seq`: solo le righe arrivate dopo l'ultima
+    già mandata (quelle lasciate fuori dal tetto non tornano dopo, fuori ordine)."""
     sat = blocco.sat
-    nuove = [r for r in blocco.finestra
+    finestra = (blocco.finestra_lunga or blocco.finestra) if riapertura else blocco.finestra
+    nuove = [r for r in finestra
              if (sat, r.get("seq")) not in mandate
              and not (r.get("segmento") is not None
                       and (sat, "seg", r.get("segmento")) in mandate)
-             and not gia_nella_storia(r, storia_norm)]
+             and not gia_nella_storia(r, storia_norm)
+             and (oltre_seq is None or int(r.get("seq") or 0) > oltre_seq)]
     if not nuove:
         return None
+    caldo = float(getattr(cfg, "stanza_caldo_min", 8.0) or 8.0) * 60
+    tetto = int(getattr(cfg, "stanza_caldo_caratteri", 6000) or 6000)
+    if riapertura:
+        caldo = max(caldo, RIAPERTURA_MAX_S)
+        tetto = min(tetto, int(getattr(cfg, "stanza_riapertura_caratteri", 3000) or 3000))
     scelte, _, _ = scegli(
-        nuove, blocco.inizio, float(getattr(cfg, "stanza_caldo_min", 8.0) or 8.0) * 60,
-        float(getattr(cfg, "stanza_caldo_sempre_s", 45.0) or 0.0),
-        int(getattr(cfg, "stanza_caldo_caratteri", 6000) or 6000))
+        nuove, blocco.inizio if inizio is None else inizio, caldo,
+        float(getattr(cfg, "stanza_caldo_sempre_s", 45.0) or 0.0), tetto)
     if not scelte:
         return None
     dove = blocco.dove or "qui"
@@ -386,7 +434,8 @@ def pezzo(blocco: Blocco, mandate: set, cfg, n: int, primo: bool,
                  ids=frozenset((sat, r.get("seq")) for r in scelte),
                  segmenti=frozenset((sat, "seg", r.get("segmento")) for r in scelte
                                     if r.get("segmento") is not None),
-                 righe=len(scelte))
+                 righe=len(scelte), righe_caratteri=len("\n".join(righe_testo(scelte))),
+                 seq_max=max(int(r.get("seq") or 0) for r in scelte))
 
 
 def nota_turno(blocco: Blocco | None) -> str:

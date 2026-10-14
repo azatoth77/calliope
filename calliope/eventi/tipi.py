@@ -114,6 +114,8 @@ ATTI: dict[str, tuple[str, bool, str]] = {
     "ripeti": ("risposta", False, "1c"),
     # La frase onesta al posto di una nota dichiarata due volte senza tool (12/10 sera)
     "onesta": ("risposta", False, "1c"),
+    # La frase pronta dopo una risposta che girava in tondo (14/10 notte, ciclo_ripetuto)
+    "incartata": ("risposta", False, "1c"),
     "riga_sviluppo": ("risposta", False, "1f"),
     "sfida": ("risposta", False, "1g"),
     # La mezza frase fissa al cambio d'argomento (§ 13, passo 3): «Metto da parte lo sviluppo

@@ -1706,6 +1706,148 @@ ciò che si era detto in auto fermato come `uscita_istruzione` per «o comunicaz
 [sicurezza-politica](sicurezza-politica.md), sezione «Il resoconto della stanza non è
 un'istruzione».
 
+## Il pezzo «in attesa» e il tetto alla riapertura (14/10 notte, ramo `giro-auto-14-10`)
+
+**Caso vero** (seconda prova in auto del 14/10 sera, telefono come satellite, due persone, stanza
+accesa con le righe nella storia, ricerca e ricerca anticipata, tenuta, ascolto durante la voce,
+corsia lenta, guardia in ombra, conoscenti; gemma4 26b-a4b qat su Ollama). `calliope stato
+--turni`: **prima frase mediana 2,31 s** (p75 2,71, p90 4,24) contro ~1,2–1,3 s dei giorni prima;
+«base senza tool, guardiano e correzione» 2,00 s su 18; tool in 15 turni (2,71 s contro 1,77 s);
+**rilettura 0,86 s** di mediana, 18 turni oltre 1 s («cache del prefisso persa»); token riletti
+dal motore mediana **1965** (p90 4147), stimati dalla guardia della cache 1942 (p90 2749); una
+`cache_rotta`; con il blocco 2,33 s, senza 2,15 s (un turno solo senza righe); contesto 20 855
+token. Nel log: ogni riapertura della conversazione («conversazione chiusa: troppo tempo
+dall'ultimo turno») metteva **tutte insieme** le righe degli ultimi 8 minuti («36 righe nuove
+nella storia (5476 caratteri)», «32 righe… 6773 caratteri»), e fra un turno e l'altro, quando si
+chiacchierava, le righe nuove arrivavano a 3709 caratteri.
+
+**Le cause, dal registro e dal codice.**
+
+- **La cache non si perdeva**: riletti dal motore ≈ stimati (1965 contro 1942 di mediana). I token
+  riletti erano **contenuto nuovo** da leggere a ogni domanda: le righe della stanza arrivate dopo
+  il turno di prima (in sola aggiunta, ma lette tutte alla domanda), più il turno prima e i dati
+  del turno. «Cache del prefisso persa» in `calliope stato --turni` vuol dire solo «rilettura
+  oltre 1 s». Il p90 dei riletti oltre la stima (4147 contro 2749) sono i turni dopo una
+  riapertura (conversazione nuova) e quelli con un tool.
+- **Le riaperture**: dopo `storia_inattiva_s` (300 s) la conversazione si chiude e la prima
+  domanda di quella nuova leggeva le righe di tutta la finestra (fino a ~1900 token).
+- **Ogni pezzo ha la sua busta**: ~490 caratteri di busta (dato non fidato) più ~190 di
+  intestazione, ~190 token, anche per una riga sola («1 righe nuove nella storia (699
+  caratteri)»). Da decidere con la sicurezza: una busta breve per i pezzi dopo il primo della
+  conversazione (non fatto: cambia ciò che il modello legge come dato non fidato).
+- **La ricerca anticipata** (22 turni su 31, p50 982 caratteri, ~280 token, ~0,12 s) è nei dati
+  del turno: si rilegge a ogni turno. Si stringe con la terza correzione di questo giro (righe
+  con almeno due parole della domanda, o col nome proprio: sezione dopo).
+- Il resto della prima frase oltre la rilettura (2,31 − 0,86 s) è la generazione della prima frase
+  del 26B, i tool (15 turni su 38, una passata in più) e il lavoro intorno; da guardare sulla DGX
+  con le misure nuove se resta lontano dai giorni prima (contesa della GPU con Whisper della
+  stanza, CAM++, il giudizio «rivolta»: l'arbitro della memoria ha le classi per misurarla).
+
+**1. Il pezzo «in attesa»** (`stanza_attesa`, di serie acceso; `stanza_attesa_caratteri` 600,
+`stanza_attesa_ogni_s` 5). Un thread per corsia (`Brain._stanza_attesa_ciclo`, acceso solo nel
+servizio: `main.py` mette `attesa_thread` a ogni Brain) ogni 5 s guarda la conversazione: se è
+aperta (non oltre `storia_inattiva_s` meno un giro: si chiuderebbe, e il lavoro andrebbe
+perso), la voce è ferma (niente risposta in corso), la stanza non è in pausa e le righe arrivate
+dopo l'ultimo turno sono almeno 600 caratteri, le **fissa** in un pezzo (`stanza_attesa_prepara`:
+lo stesso `stanza/contesto.pezzo` del turno, righe «mandate» da quel momento, testo che non cambia
+più) e lo mette nella cache del motore (`stanza_attesa_scalda` → `scalda_conversazione`, che ora
+aggiunge i pezzi in attesa dopo la storia). Al turno dopo `_stanza_prepara` mette i pezzi in
+attesa **davanti** al pezzo delle righe ancora più nuove, legati alla frase del turno (il segno
+`_stanza` diventa una lista): stesso testo e stesso posto della richiesta scaldata, quindi il
+motore li trova in cache. Le righe finite negli ultimi 4 s aspettano il turno (la domanda appena
+detta, «→ Calliope», non finisce in un pezzo in attesa prima di entrare nella storia). Un pezzo
+in attesa con righe non più nel registro («dimentica») se ne va; in pausa per ospiti aspetta. Le
+righe lasciate fuori da un tetto non tornano dopo, fuori ordine (`Pezzo.seq_max`: si prendono solo
+righe arrivate dopo l'ultima mandata). Registro dei turni: `stanza.storia.attesa` e
+`attesa_caratteri` (righe trovate già in cache); console «[STANZA] 5 righe nuove nella storia…,
+più 19 già in cache…» e «[LATENZA] righe della stanza in attesa: … in cache in 0,46 s»;
+`calliope stato --turni`, riga «Righe della stanza nella storia», «righe già in cache (pezzo in
+attesa) in N turni».
+
+**2. Il tetto alla riapertura** (`stanza_riapertura_caratteri`, 3000). Il primo pezzo di una
+conversazione prende le righe più nuove entro 3000 caratteri (gli ultimi `stanza_caldo_sempre_s`
+sempre); la sua finestra però si **allarga** fino all'inizio dell'ultimo scambio della stanza (righe
+senza un silenzio oltre `stanza_scambio_pausa_s`, al più 30 minuti: `contesto._finestra_scambio`),
+così una conversazione corta e rada entra intera. Il resto lo trovano la ricerca anticipata e
+`stanza_cerca`. Non scaldato: alla riapertura la conversazione nuova non c'è ancora (si chiude solo
+alla domanda), resta da fare se le riaperture pesano ancora.
+
+**Misura a secco** (`python prove\prova_stanza_attesa.py --misura`: motore finto con la cache del
+prefisso di Ollama, a messaggi, riscaldamenti compresi; conversazione come quella dell'auto, 14
+turni con 0–36 righe fra l'uno e l'altro e due riaperture, orologio finto). Token riletti alla
+domanda: **p50 428 → 388**, **p90 1661 → 1414**, in tutto 9303 → 7778 (+4529 letti in secondo
+piano, a voce ferma); nei turni dopo molte chiacchiere 1044 → 461, 641 → 427, 615 → 369; le due
+riaperture 1665 → 1414 e 1634 → 1399. I turni senza righe nuove restano ~160 (turno prima, dati del
+turno, domanda).
+
+**Banco col modello vero** (`prove/manuali/banco_stanza_storia.py`, modo nuovo `attesa`). Sul
+portatile, gemma4 e4b, 6 turni, 30 righe fra un turno e l'altro (dal secondo turno): `senza` 0,56
+s, 149 token riletti, lettura 0,10 s; `storia` **0,98 s (+0,42)**, 874 token, 0,33 s; `attesa`
+**0,59 s (+0,03)**, **103 token**, 0,09 s (le 30 righe scaldate in 0,44–0,49 s in secondo
+piano). **Da misurare sulla DGX** col 26B:
+
+    cd ~/calliope && V=~/.local/share/calliope/versioni/$(cat ~/.local/share/calliope/attuale) \
+        && $V/.venv/bin/python $V/prove/manuali/banco_stanza_storia.py --turni 10 --giri 2 --righe 30 --modi senza,storia,attesa
+
+obiettivo `attesa` entro +0,1 s da `senza`; poi sul vero, alla prossima prova in auto, la riga
+«Righe della stanza nella storia» con le righe già in cache, la rilettura e la prima frase di
+`calliope stato --turni`.
+
+Prove: `prove/prova_stanza_attesa.py` (livello 1, ~2 s), `prova_stanza_storia` invariata.
+
+## «Ti ricordi…?»: storpiature, nome proprio, stanza prima dell'archivio (14/10 notte, ramo `giro-auto-14-10`)
+
+**Caso vero** (stessa prova in auto, ~21:06; qui con nomi di fantasia): il tutore chiede «tu
+ricordi quando è il compleanno della crisima di Marta» (Whisper scrive «crisima»). Il modello
+chiama due volte `archivio_cerca` (i documenti di casa) e poi `conversazione_cerca` (prima frase
+6,44 s) e non trova. L'informazione era nella stanza: le righe del tutore e del minore 10–11 minuti
+prima («crisima»/«cresima», «Marta») e soprattutto **la risposta di Calliope** con cresima, Marta e
+la data, nove minuti prima della domanda. Nel frattempo la conversazione si era chiusa per
+inattività e il primo pezzo della conversazione nuova copriva gli ultimi 8 minuti: la risposta era
+appena fuori. La ricerca anticipata, con «crisima» nella domanda e «cresima» nella riga, dava a
+quella riga una parola sola su tre (il nome), alla pari con altre righe più recenti.
+
+**(a) Storpiature e nome proprio** (`stanza/cerca.py`, `tools/stanza.py`):
+
+- `simile`: due parole **di almeno 6 lettere** a **una modifica** di distanza (una lettera cambiata,
+  tolta o aggiunta) e con **la stessa iniziale** valgono come la stessa parola; `rare` sono le parole
+  lunghe della domanda, `combacia` le radici che una riga contiene (comincia così, o è simile). Vale
+  per `stanza_cerca` e per la ricerca anticipata, sulle righe in memoria (la ricerca sul disco resta
+  per radice: lì una riga con la storpiatura arriva se ha un'altra parola della domanda). È una
+  conversione della forma (le storpiature di Whisper), non un significato (principio 10).
+  Contrari: «crisima»/«cristina» e «Rachele»/«Raffaele» (due modifiche), «crisima»/«brisima»
+  (iniziale), le parole corte («Marta»/«Marte», «gita»/«gite»: le trova la radice o niente).
+- **La ricerca anticipata più stretta**: con due o più parole utili nella domanda una riga ne deve
+  avere almeno due, oppure **un nome proprio** della domanda (`nomi_propri`: le parole con la
+  maiuscola non in testa a una frase, come le scrive Whisper, e i nomi delle persone di casa; mai
+  il nome di Calliope). «Quando è la festa di Halloween?» non porta più la riga che dice solo
+  «festa» (la seconda prova in auto: righe aggiunte in 22 turni su 31, ~280 token a turno);
+  «Marta» da solo basta. Nella prova di `stanza_cerca`, «cosa ha detto Nicola di sabato?» chiesto
+  da chi non è tutore non porta più la riga di Carlo con «sabato» (né il nome né due parole): resta
+  la nota «Le parole di Nicola le cerco solo per chi gli fa da genitore.».
+
+**(b) Prima la stanza.** Il prompt (con `stanza_cerca`): «per ciò che si è detto vicino ai
+dispositivi di casa, **anche le tue risposte a chi era lì** («ti ricordi quando è…?», «cosa avevamo
+detto di…?»), rispondi dalle righe della stanza che hai davanti…; se lì non c'è… stanza_cerca,
+**prima di archivio_cerca, di conversazione_cerca** e di dire che non lo sai». La descrizione di
+`stanza_cerca`: «Trova anche ciò che hai risposto tu a voce a chi era lì: per «ti ricordi…?» su una
+cosa detta in casa cerca qui prima che nei documenti o nelle conversazioni passate». E una rete:
+**dopo una ricerca vuota** di `archivio_cerca` o `conversazione_cerca` (tutte le chiamate della
+passata, nessuna riuscita), se chi parla può usare `stanza_cerca` e nella risposta non l'ha ancora
+usato, **Brain cerca nella stanza** con la frase di chi parla (come `spinta_stanza`, di cui segue la
+rete), una volta; la frase «Non trovo documenti…» non si dice e il modello risponde con le righe
+davanti (`STANZA_NOTA`). Regola `stanza_dopo_ricerca_vuota`. Decide su un esito di un tool, non sul
+testo della domanda.
+
+**(c) La riapertura** fino all'inizio dell'ultimo scambio, dentro `stanza_riapertura_caratteri`
+(sezione qui sopra): con le chiacchiere rade la risposta di nove minuti prima entra nel primo
+pezzo; con quelle fitte vince il tetto (le più nuove) e la trova la ricerca anticipata.
+
+Prove: `prove/prova_stanza_ricorda.py` (livello 1, ~1 s, nomi di fantasia, con i contrari);
+`prova_stanza_cerca` con la nota sul minore aggiornata. **Da guardare** sulla DGX: la regola
+`stanza_dopo_ricerca_vuota` e la «Ricerca anticipata» di `calliope stato --turni` (turni con righe
+aggiunte: devono calare), e se il 26B ora chiama `stanza_cerca` per i «ti ricordi…?».
+
 ## Avvisi ai tutori: data, origine, trascrizione e audio (14/10 sera, ramo `avvisi-data`)
 
 Due cose toccano il contesto e la conservazione (il dettaglio è in [minori](minori.md)):
