@@ -2540,6 +2540,9 @@ class Brain:
         # Una forma chiusa breve forse storpiata da Whisper (10/10, calliope/storpiature.py):
         # dal ciclo come attributo, vale una risposta sola; nei dati del turno (_turn_context)
         self._storpiata = self.__dict__.pop("storpiata_turno", None)
+        # Il blocco della conversazione di stanza (14/10, passo 2, calliope/stanza/contesto.py):
+        # dal ciclo come attributo, vale una risposta sola; nei dati del turno, in busta
+        self._stanza_turno = self.__dict__.pop("stanza_turno", None)
         self._ascolto = ascolto if ascolto is not None else turno_asc
         self.last_argomenti = []
         self._riscrivi_turno = bool(self._incerte_turno) and bool(
@@ -3995,6 +3998,13 @@ class Brain:
         # Ora, data e chi parla per primi, poi i ricordi (TURN_CONTEXT_MSG)
         memory = blocco("turno", self._turn_context()) + blocco("ricordi",
                                                                 self._memory_message())
+        # La conversazione della stanza (14/10, passo 2, calliope/stanza/contesto.py): per prima,
+        # subito dopo la storia (un domani lo scaldamento della cache la terrà in cache), in
+        # busta come dato non fidato (fonte «stanza»)
+        stanza_b = getattr(self, "_stanza_turno", None)
+        if user_text and stanza_b is not None and getattr(stanza_b, "testo", None):
+            memory = blocco("stanza", [{"role": "system", "content": stanza_b.testo}]) + memory
+            self._rule("stanza_contesto")
         # Le foto della conversazione che il modello ha davanti (IMG_TURN_MSG)
         foto_msg = self._foto_turno(start if user_text else None)
         if foto_msg:
@@ -5649,6 +5659,12 @@ class Brain:
         fonti = provenienza.fonti(hist)
         if getattr(self, "_in_vista", None):
             fonti.add("foto")
+        # Il blocco della stanza di questo turno (14/10, passo 2): è un dato non fidato anche se
+        # non entra nella storia, e le sue parole valgono «dal dato» per gli argomenti
+        stanza_b = getattr(self, "_stanza_turno", None)
+        if stanza_b is not None and getattr(stanza_b, "testo", None):
+            fonti.add("stanza")
+            esterni = esterni + [("stanza", str(getattr(stanza_b, "esterno", "") or ""))]
         # Un file nella conversazione vale anche se il suo messaggio è uscito dalla storia
         # (allegato_leggi lo rilegge)
         if getattr(self, "_allegati_in_vista", False):

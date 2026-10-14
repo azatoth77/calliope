@@ -107,8 +107,24 @@ def righe_contesto(history, massimo: int = 4,
     return list(reversed(out))
 
 
-def messaggi(contesto: list[tuple[str, str]], frase: str) -> list[dict]:
-    righe = [f"{chi}: {t}" for chi, t in contesto]
+# Con la conversazione di stanza (14/10, passo 2, `stanza_contesto`): le ultime righe sentite
+# vicino al satellite, con chi le ha dette, prima degli scambi con Calliope. Il prompt resta
+# lo stesso; senza righe i messaggi sono quelli di prima (il giudizio resta in ombra finché la
+# rilettura di chi amministra non dice ≥ 90 % giusti sui brevi)
+STANZA_TITOLO = ("Nella stanza, poco prima (trascrizione automatica, con chi parlava; «→ "
+                 "Calliope» = frase detta a lei):")
+CONVERSAZIONE_TITOLO = "Ultimi scambi con Calliope:"
+
+
+def messaggi(contesto: list[tuple[str, str]], frase: str,
+             stanza: list[tuple[str, str]] | None = None) -> list[dict]:
+    righe = []
+    if stanza:
+        righe.append(STANZA_TITOLO)
+        righe += [f"{chi}: {t}" for chi, t in stanza]
+        if contesto:
+            righe.append(CONVERSAZIONE_TITOLO)
+    righe += [f"{chi}: {t}" for chi, t in contesto]
     righe.append(f"Frase nuova: {frase.strip()[:400]}")
     return [{"role": "system", "content": PROMPT}, {"role": "user", "content": "\n".join(righe)}]
 
@@ -129,14 +145,14 @@ class Giudice:
         return self._sessione
 
     def giudica(self, contesto: list[tuple[str, str]], frase: str,
-                timeout: float | None = None) -> Giudizio:
+                timeout: float | None = None, stanza=None) -> Giudizio:
         t0 = time.perf_counter()
         timeout = float(timeout or getattr(self.cfg, "compagnia_rivolta_timeout_s", 2.0) or 2.0)
         try:
             if self._chiama is not None:
-                testo = self._chiama(messaggi(contesto, frase), timeout)
+                testo = self._chiama(messaggi(contesto, frase, stanza), timeout)
             else:
-                testo = self._ollama(messaggi(contesto, frase), timeout)
+                testo = self._ollama(messaggi(contesto, frase, stanza), timeout)
             per = json.loads(testo).get("per_calliope")
             if not isinstance(per, bool):
                 raise ValueError("risposta senza per_calliope")

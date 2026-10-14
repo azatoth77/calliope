@@ -38,8 +38,9 @@ import time
 import numpy as np
 
 from . import coda as coda_mod
-from .registro import (PAUSA, PRESENZA, PRESENZA_INIZIO, RIGA, RIGA_SCARTATA, RIPRESA,
-                       SCAMBIO_APERTO, SCAMBIO_CHIUSO, SEGMENTO, RegistroStanza)
+from .registro import (ANALISI, DETTO_CALLIOPE, PAUSA, PRESENZA, PRESENZA_INIZIO, RIGA,
+                       RIGA_SCARTATA, RIPRESA, SCAMBIO_APERTO, SCAMBIO_CHIUSO, SEGMENTO,
+                       RegistroStanza)
 
 SPENTA, OMBRA = "spenta", "ombra"
 COMANDO_S = 0.6               # audio dei comandi così recente: qualcuno sta parlando a Calliope
@@ -60,7 +61,7 @@ def _ora_breve(epoch: float) -> str:
 class Segmento:
     __slots__ = ("sat", "nome", "canale", "id", "pezzi", "byte", "inizio", "fine", "chiuso",
                  "voce_s", "durata_s", "ascolto", "stato", "fatto", "recupero", "riga",
-                 "scambio", "inizio_epoch", "fine_epoch")
+                 "scambio", "inizio_epoch", "fine_epoch", "esito")
 
     def __init__(self, sat, nome, canale, ident, inizio):
         self.sat, self.nome, self.canale, self.id = sat, nome, canale, ident
@@ -74,6 +75,7 @@ class Segmento:
         self.riga = None
         self.scambio = None
         self.inizio_epoch = self.fine_epoch = None
+        self.esito = None                      # «riga», o il motivo dello scarto
 
 
 class Copertura:
@@ -85,6 +87,33 @@ class Copertura:
         self.t0 = time.monotonic()
         self.dette = len(segmenti)
         self.pronte = sum(1 for s in segmenti if s.stato == "fatto")
+        # Passo 2 (14/10): quante sono finite nel blocco della stanza dei dati del turno, quante
+        # non avevano niente da dire (scartate), quanto si è aspettato il recupero
+        self.nel_contesto: int | None = None
+        self.scartate: int | None = None
+        self.attesa_ms: int | None = None
+
+    def mancano(self) -> int:
+        return sum(1 for s in self._seg if s.stato != "fatto")
+
+    def aspetta(self, fino: float) -> int:
+        """Prima del blocco della stanza (passo 2): aspetta che le righe dette prima della
+        domanda siano trascritte, al più fino all'istante `fino` (monotonic). I ms aspettati."""
+        t0 = time.monotonic()
+        with self._stanza._cond:
+            while any(s.stato != "fatto" for s in self._seg):
+                resto = fino - time.monotonic()
+                if resto <= 0:
+                    break
+                self._stanza._cond.wait(min(resto, 0.1))
+        self.attesa_ms = int((time.monotonic() - t0) * 1000)
+        return self.attesa_ms
+
+    def nel_blocco(self, segmenti: set):
+        """Le righe dette prima della domanda che il blocco contiene (per id del segmento)."""
+        self.nel_contesto = sum(1 for s in self._seg if s.id in segmenti)
+        self.scartate = sum(1 for s in self._seg if s.stato == "fatto"
+                            and s.esito not in (None, "riga"))
 
     def a_dict(self) -> dict:
         """Al momento di scrivere il turno: `recupero_ms` 0 se erano tutte pronte, il tempo per
@@ -100,6 +129,10 @@ class Copertura:
                "oltre": (rec is None or rec > self.tetto_s * 1000) if self.dette else False}
         if mancano:
             out["in_coda"] = len(mancano)
+        if self.nel_contesto is not None:
+            out["nel_contesto"] = self.nel_contesto
+            out["scartate"] = self.scartate or 0
+            out["attesa_ms"] = self.attesa_ms or 0
         return out
 
 
@@ -294,7 +327,7 @@ class Stanza:
                 break
             x = vecchi[0]
             self._coda.remove(x)
-            x.stato, x.fatto, x.pezzi = "fatto", time.monotonic(), []
+            x.stato, x.fatto, x.pezzi, x.esito = "fatto", time.monotonic(), [], "coda_piena"
             self._misura("buttato", sat=x.nome, canale=x.canale, motivo="coda_piena",
                          voce_s=round(x.voce_s, 2))
 
@@ -343,15 +376,16 @@ class Stanza:
                     inizio: float | None = None, fine: float | None = None):
         """La frase di un turno (rivolta a Calliope) entra nella stanza di quel satellite, con
         il testo del turno: lega il segmento della stanza che la copre, se c'è. `chi`:
-        {persona, nome, sicurezza («voce», «grigia», «nessuna»), minore}."""
+        {persona, nome, sicurezza («voce», «grigia», «nessuna»), minore}. Il `seq` della riga
+        (per `segna_rivolta`), o None."""
         if sat not in self._info or self._pausa_viva(sat) is not None:
-            return                             # in pausa (ospiti): nemmeno le frasi dei turni
+            return None                        # in pausa (ospiti): nemmeno le frasi dei turni
         with self._cond:
             s = self._legati.pop((sat, ascolto), None) if ascolto is not None else None
         chi = chi or {}
         t_ini = s.inizio_epoch if s is not None else inizio
         t_fin = s.fine_epoch if s is not None else fine
-        self.registro(sat).aggiungi(
+        e = self.registro(sat).aggiungi(
             RIGA, segmento=s.id if s is not None else None, versione=1,
             inizio=round(t_ini or time.time(), 3), fine=round(t_fin or time.time(), 3),
             testo=str(testo or ""), chi=chi.get("chi") or "ignoto", nome=chi.get("nome"),
@@ -359,6 +393,34 @@ class Stanza:
             minore=bool(chi.get("minore")))
         if chi.get("sicurezza") == "voce" and chi.get("persona"):
             self._sentita(chi["persona"], chi.get("nome"), sat, time.time())
+        return e.seq
+
+    def segna_rivolta(self, sat, seq, esito: str, giudizio=None):
+        """Passo 2 (14/10): la frase di un turno ignorata o non rivolta resta nella stanza, con
+        «rivolta: no» (un evento `analisi` che rimanda alla riga: in sola aggiunta). `giudizio`:
+        il giudizio «rivolta» in compagnia (True, False, None), per la rilettura."""
+        if seq is None or sat not in self._info:
+            return
+        reg = self.registro(sat)
+        if not any(e.seq == seq for e in reg.eventi(RIGA)):
+            return                             # dimenticata o uscita per la tenuta
+        reg.aggiungi(ANALISI, analisi="rivolta", riga=seq, esito=esito, giudizio=giudizio)
+
+    def detto(self, sat, testo: str, inizio: float | None = None, fine: float | None = None):
+        """Passo 2 (14/10): ciò che Calliope ha detto ad alta voce vicino al satellite (la
+        risposta di un turno), perché la stanza sappia anche le sue righe. Non in pausa."""
+        testo = " ".join(str(testo or "").split())
+        if not testo or sat not in self._info or self._pausa_viva(sat) is not None:
+            return
+        ora = time.time()
+        self.registro(sat).aggiungi(DETTO_CALLIOPE, testo=testo[:2000],
+                                    inizio=round(inizio or ora, 3), fine=round(fine or ora, 3))
+
+    def accesa_qui(self, sat) -> bool:
+        """La stanza ascolta adesso su questo satellite: accesa nel file e non in pausa."""
+        info = self._info.get(sat)
+        return (info is not None and self.accesa_per({"id": sat, "nome": info.get("nome")})
+                and self._pausa_viva(sat) is None)
 
     def dimentica(self, sat) -> int:
         """«Dimentica»: il registro della stanza del satellite si svuota e i suoi segmenti in
@@ -367,7 +429,7 @@ class Stanza:
             via = [s for s in self._coda if s.sat == sat]
             for s in via:
                 self._coda.remove(s)
-                s.stato, s.fatto, s.pezzi = "fatto", time.monotonic(), []
+                s.stato, s.fatto, s.pezzi, s.esito = "fatto", time.monotonic(), [], "dimentica"
             for k in [k for k in self._legati if k[0] == sat]:
                 self._legati.pop(k)
             self._scambio.pop(sat, None)
@@ -571,6 +633,7 @@ class Stanza:
             self._fatto(s, None, "allucinazione" if scartata else "vuota", attesa, stt_s)
             return
         chi = self._chi(audio, s.voce_s)
+        s.esito = "riga"
         self.registro(s.sat).aggiungi(
             RIGA, segmento=s.id, scambio=s.scambio, versione=1,
             inizio=round(s.inizio_epoch or time.time(), 3),
@@ -584,6 +647,7 @@ class Stanza:
     def _fatto(self, s: Segmento, testo, motivo, attesa: float, stt_s: float):
         ora = time.monotonic()
         if testo is None and motivo is not None:
+            s.esito = motivo
             self.registro(s.sat).aggiungi(RIGA_SCARTATA, segmento=s.id, motivo=motivo)
         with self._cond:
             s.stato, s.fatto = "fatto", ora

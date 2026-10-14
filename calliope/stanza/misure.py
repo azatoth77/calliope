@@ -14,7 +14,11 @@ dei turni (`turn_log_dir`), con la stessa tenuta (`turn_log_days`). Una riga per
     pausa         sat, motivo, ore      ·  dimentica  sat, eventi
 
 Più, nel registro dei turni, `stanza.copertura` di ogni turno interpellato con la stanza accesa
-(`dette`, `pronte`, `recupero_ms`, `oltre`): la «copertura all'interpellazione» (§ 3.11).
+(`dette`, `pronte`, `recupero_ms`, `oltre`): la «copertura all'interpellazione» (§ 3.11). Dal
+passo 2 (14/10, `stanza_contesto`) anche `nel_contesto` (quante delle righe dette prima della
+domanda sono nel blocco dei dati del turno), `scartate` (segmenti senza riga: vuoti,
+allucinazioni) e `attesa_ms` (il recupero aspettato prima della risposta), e `stanza.contesto`
+(`righe`, `sempre`, `tagliate`, `caratteri`, `mancano`): il blocco, in numeri.
 
 `riassunto` e `testo` fanno la sezione «Stanza» di `calliope stato --turni`: ore di parlato per
 satellite, ritardo della coda (p90 < 10 s), banda (MB per ora di parlato), scartate per motivo,
@@ -147,15 +151,38 @@ def riassunto(righe: list[dict], turni: list[dict] | None = None) -> dict:
             s["ritardo_p50_s"], s["ritardo_p90_s"] = _p(rit, 0.5), _p(rit, 0.9)
             s["mb"] = round(s["byte"] / 2 ** 20, 2)
             s["mb_ora"] = round(s["mb"] / (s["voce_s"] / 3600), 1) if s["voce_s"] > 60 else None
-    cop = {"turni": 0, "dette": 0, "pronte": 0, "complete": 0, "oltre": 0, "_rec": []}
-    tempi = {"con": {"stt": [], "prima": []}, "senza": {"stt": [], "prima": []}}
+    cop = {"turni": 0, "dette": 0, "pronte": 0, "complete": 0, "oltre": 0, "_rec": [],
+           "col_blocco": 0, "nel_contesto": 0, "scartate": 0, "tutte": 0, "_attese": []}
+    tempi = {k: {"stt": [], "prima": [], "riletti": []}
+             for k in ("con", "senza", "blocco", "senza_blocco")}
+    blocco = {"turni": 0, "vuoti": 0, "tagliati": 0, "mancano": 0, "_righe": [], "_car": []}
     for t in turni or ():
         st = t.get("stanza") if isinstance(t.get("stanza"), dict) else None
         k = "con" if st is not None else "senza"
-        if t.get("stt_s") is not None and t.get("durata_s"):
-            tempi[k]["stt"].append(float(t["stt_s"]))
-        if t.get("prima_frase_s") is not None:
-            tempi[k]["prima"].append(float(t["prima_frase_s"]))
+        ctx = (st or {}).get("contesto")
+        # Con e senza blocco (passo 2): fra i turni con la stanza accesa
+        kb = (("blocco" if int(ctx.get("righe") or 0) > 0 else "senza_blocco")
+              if isinstance(ctx, dict) else None)
+        riletti = (t.get("cache") or {}).get("riletti") if isinstance(t.get("cache"),
+                                                                       dict) else None
+        for chiave in (k, kb):
+            if chiave is None:
+                continue
+            if t.get("stt_s") is not None and t.get("durata_s"):
+                tempi[chiave]["stt"].append(float(t["stt_s"]))
+            if t.get("prima_frase_s") is not None:
+                tempi[chiave]["prima"].append(float(t["prima_frase_s"]))
+            if isinstance(riletti, (int, float)):
+                tempi[chiave]["riletti"].append(float(riletti))
+        if isinstance(ctx, dict):
+            if int(ctx.get("righe") or 0) > 0:
+                blocco["turni"] += 1
+                blocco["_righe"].append(float(ctx["righe"]))
+                blocco["_car"].append(float(ctx.get("caratteri") or 0))
+                blocco["tagliati"] += 1 if ctx.get("tagliate") else 0
+                blocco["mancano"] += 1 if ctx.get("mancano") else 0
+            else:
+                blocco["vuoti"] += 1
         c = (st or {}).get("copertura")
         if isinstance(c, dict):
             cop["turni"] += 1
@@ -167,16 +194,32 @@ def riassunto(righe: list[dict], turni: list[dict] | None = None) -> dict:
                 cop["oltre"] += 1
             if c.get("recupero_ms") is not None:
                 cop["_rec"].append(float(c["recupero_ms"]))
+            if c.get("nel_contesto") is not None:
+                # La copertura del passo 2: righe dette prima della domanda finite nel blocco
+                cop["col_blocco"] += 1
+                cop["nel_contesto"] += int(c.get("nel_contesto") or 0)
+                cop["scartate"] += int(c.get("scartate") or 0)
+                if int(c.get("nel_contesto") or 0) + int(c.get("scartate") or 0) >= int(
+                        c.get("dette") or 0):
+                    cop["tutte"] += 1
+                cop["_attese"].append(float(c.get("attesa_ms") or 0))
     rec = cop.pop("_rec")
+    attese = cop.pop("_attese")
     cop["recupero_p50_ms"], cop["recupero_p90_ms"] = _p(rec, 0.5), _p(rec, 0.9)
-    return {"giorni": giorni, "copertura": cop,
-            "tempi": {k: {"turni": len(v["stt"]), "stt_p50_s": _p(v["stt"], 0.5),
+    cop["attesa_p50_ms"], cop["attesa_p90_ms"] = _p(attese, 0.5), _p(attese, 0.9)
+    righe_b, car_b = blocco.pop("_righe"), blocco.pop("_car")
+    blocco["righe_p50"], blocco["caratteri_p50"] = _p(righe_b, 0.5), _p(car_b, 0.5)
+    blocco["caratteri_p90"] = _p(car_b, 0.9)
+    return {"giorni": giorni, "copertura": cop, "blocco": blocco,
+            "tempi": {k: {"turni": len(v["prima"]) or len(v["stt"]),
+                          "stt_p50_s": _p(v["stt"], 0.5),
                           "stt_p90_s": _p(v["stt"], 0.9), "prima_p50_s": _p(v["prima"], 0.5),
-                          "prima_p90_s": _p(v["prima"], 0.9)} for k, v in tempi.items()}}
+                          "prima_p90_s": _p(v["prima"], 0.9),
+                          "riletti_p50": _p(v["riletti"], 0.5)} for k, v in tempi.items()}}
 
 
 def testo(r: dict) -> str:
-    out = ["Stanza (conversazione di stanza, passo 1 in ombra: solo misure)"]
+    out = ["Stanza (conversazione di stanza: passo 1 in ombra, passo 2 con stanza_contesto)"]
     if not r.get("giorni") and not r["copertura"]["turni"]:
         out.append("  nessuna misura (stanza spenta, o mai partita)")
         return "\n".join(out)
@@ -204,9 +247,25 @@ def testo(r: dict) -> str:
                    f"{c['dette']} righe già trascritte alla domanda, complete in "
                    f"{c['complete']} turni; recupero p50 {c['recupero_p50_ms']} ms, p90 "
                    f"{c['recupero_p90_ms']} ms; oltre 1,5 s: {c['oltre']}")
+    if c.get("col_blocco"):
+        out.append(f"  Copertura nel contesto (passo 2): {c['nel_contesto']}/{c['dette']} righe "
+                   f"dette prima della domanda nel blocco (più {c['scartate']} senza testo), "
+                   f"tutte in {c['tutte']}/{c['col_blocco']} turni; recupero aspettato p50 "
+                   f"{c['attesa_p50_ms']} ms, p90 {c['attesa_p90_ms']} ms")
+    b = r.get("blocco") or {}
+    if b.get("turni") or b.get("vuoti"):
+        out.append(f"  Blocco della stanza nei dati del turno: {b['turni']} turni (senza righe "
+                   f"{b['vuoti']}), righe p50 {b['righe_p50']}, caratteri p50 "
+                   f"{b['caratteri_p50']} (p90 {b['caratteri_p90']}); accorciato dal tetto in "
+                   f"{b['tagliati']}, con righe non ancora trascritte in {b['mancano']}")
     t = r["tempi"]
     if t["con"]["turni"]:
         out.append(f"  Turni con la stanza: stt p50 {t['con']['stt_p50_s']} s (senza "
                    f"{t['senza']['stt_p50_s']} s), prima frase p50 {t['con']['prima_p50_s']} s "
                    f"(senza {t['senza']['prima_p50_s']} s)")
+    if t.get("blocco", {}).get("turni"):
+        tb, ts = t["blocco"], t["senza_blocco"]
+        out.append(f"  Con il blocco: prima frase p50 {tb['prima_p50_s']} s (senza blocco "
+                   f"{ts['prima_p50_s']} s), token riletti p50 {tb['riletti_p50']} (senza "
+                   f"{ts['riletti_p50']}); obiettivo +0,1 s al più")
     return "\n".join(out)
