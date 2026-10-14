@@ -109,6 +109,8 @@ A_SECCO = [
     ("prova_stanza_conoscenti.py", [], "conoscenti (14/10, decisione 0030, stanza_conoscenti): la regola conoscente_nome (vocativi, saluti, presentazioni, terza persona) con i contrari; gruppi in memoria delle voci sconosciute, il nome dal vocativo seguito dalla risposta e dalla presentazione, la proposta solo sullo schermo personale di chi amministra (mai di stanza né di un altro familiare), niente su disco prima del sì; il sì con nome diverso, cognome e nota, riconosciuto nelle righe dopo, su disco con la tenuta e cercato come la famiglia; livello ospite; omonimie (familiare e conoscente con lo stesso nome segnalati e mai fusi, doppione esatto rifiutato, «dimentica Marco» chiede quale); no che non ripropone, indizi discordi, terza persona, poca voce, voce di bambino con e senza lo stimatore, proposta che aspetta lo schermo; scadenza a 180 giorni, dimentica, conserva --svuota da un altro processo e dal processo; promozione a familiare e ritorno solo da chi amministra a voce con domanda e sì (minore con nascita e tutori; contrari: familiare, ospite, scritto, zona grigia, breve, chi amministra o minore da declassare, nome già in famiglia), le righe su disco che seguono; /api/conoscenti (404, 401, schermo di stanza e di un familiare 403, 410); misure senza nomi e stato --turni; contrari: spenti"),
     ("prova_stanza_guardia.py", [], "guardiano a posteriori della stanza (14/10, passo 6, decisione 0029 punto 4, stanza_guardia): con un giudice finto, le righe di un minore e quelle dette con lui presente, a blocchi col contesto, dopo l'attesa e a stanza quieta, mai Calliope, la TV né le frasi rivolte a Calliope; filtri (scherzo, gioco, TV → niente; zona grigia, parola incerta, righe fuori dal blocco, autolesionismo di un adulto → dubbio); ombra solo misure senza parole né nomi; attiva: avviso al tutore solo sullo schermo personale, senza parole, già «detto», col rimando a cercare, tetto al giorno, categoria non ripetuta, due dubbi in giorni diversi; carico (voce occupata, quiete, tetto all'ora, guasto riprovato); pausa per ospiti e «dimentica» (in coda e a metà giudizio); il giudice vero con un HTTP finto (stesse opzioni del rilevatore, prompt nella finestra); stato --turni e --guardia con --falso/--vero; contrari: spenta, nessun minore, solo adulti, minore in un'altra stanza"),
     ("prova_minori_cancelli.py", [], "minore forse in pericolo, giro a due cancelli (09/10, caso vero della DGX: adulto ospite preso per il ragazzo che saluta): acuto come prima, da verificare → rassicura e chiede, conferma o smentita della risposta, silenzio con avviso non urgente, due segnali ravvicinati (non dopo una smentita né con la voce incerta in compagnia, 12/10), voce incerta, giudizi guasti, avviso «sicurezza» non a voce vicino al minore, con i contrari"),
+    ("prova_avvisi_data.py", [], "avvisi ai tutori con la data e l'origine (14/10, caso vero: un avviso del 12/10 sera arrivato il 14/10 senza data e preso per nuovo): fresco senza data, vecchio con la data («ieri sera», «lunedì 12/10»), scheda sempre con la data, urgente oltre avvisi_urgente_ore detto «non più urgente», segnato falso non detto (guardiano e stato --avvisi --falso), minore vicino, altro adulto non tutore, il tutore che chiede ha nei dati del turno data, tipo, origine e stato, minore_gestisci avvisi, origine dei cancelli dopo un riavvio, database di prima"),
+    ("prova_avvisi_audio.py", [], "trascrizione e audio negli avvisi di pericolo al tutore (14/10 sera, decisione di Dario che cambia la 0029 punto 4): anello in memoria (minuti, MB, anello pieno, dimentica, WAV), turni (minore sì, adulto e scritto no), avviso acuto con trascrizione e audio nel cassetto del tutore, scheda «avviso» solo a lui, Scarica l'audio solo dal suo schermo (non altri, nemmeno chi amministra), voce senza parole, spento, senza trascrizione; stanza (minore, adulto con minore presente sì; adulto da solo, ospite, altra stanza no), guardiano attivo con il contesto breve, ombra senza disco con audio_s; scadenza, svuota (tutto, persona, terminale), dimentica della stanza e del tutore; avviso di prima ricostruito o «non c'è più»"),
     ("prova_brain.py", [], "filtro del thinking, guardia, ciclo dei tool, storia, nota dichiarata due volte → frase onesta (12/10)"),
     ("prova_tempi.py", [], "durate e orari detti a voce"),
     ("prova_stt_correzione.py", [], "correzione delle frasi incerte (05/10, spenta): confidenza da verbose_json, controllo con i contrari, correttore finto, privacy; parole incerte al modello e frase capita trattenuta (07/10)"),
@@ -432,6 +434,21 @@ LEGAMI = [
     # Passo 6 (14/10): il guardiano a posteriori usa il rilevatore e gli avvisi ai tutori
     ("calliope/guardiano.py", ["prova_stanza_guardia.py"]),
     ("calliope/minori.py", ["prova_stanza_guardia.py"]),
+    # Avvisi con la data e l'origine (14/10): minori, cancelli, ciclo, stato, tool dei minori
+    ("calliope/minori.py", ["prova_avvisi_data.py"]),
+    ("calliope/cancelli.py", ["prova_avvisi_data.py"]),
+    ("calliope/ciclo.py", ["prova_avvisi_data.py"]),
+    ("calliope/stato.py", ["prova_avvisi_data.py"]),
+    ("calliope/tools/minori.py", ["prova_avvisi_data.py"]),
+    # Trascrizione e audio degli avvisi di pericolo (14/10 sera)
+    ("calliope/avvisi_audio.py", ["prova_avvisi_audio.py"]),
+    ("calliope/minori.py", ["prova_avvisi_audio.py"]),
+    ("calliope/ciclo.py", ["prova_avvisi_audio.py"]),
+    ("calliope/cancelli.py", ["prova_avvisi_audio.py"]),
+    ("calliope/stanza/", ["prova_avvisi_audio.py"]),
+    ("calliope/cassetto.py", ["prova_avvisi_audio.py"]),
+    ("calliope/conserva.py", ["prova_avvisi_audio.py"]),
+    ("calliope/schermi/scarica.py", ["prova_avvisi_audio.py"]),
     # Passo 2 (14/10): il blocco nei dati del turno, il giudizio «rivolta» con la stanza
     ("calliope/rivolta.py", ["prova_stanza_contesto.py", "prova_compagnia_passo0.py"]),
     ("calliope/satellite/stanza.py", ["prova_stanza.py", "prova_stanza_eco.py"]),

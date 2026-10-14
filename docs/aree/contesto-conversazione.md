@@ -1654,6 +1654,27 @@ ciò che si era detto in auto fermato come `uscita_istruzione` per «o comunicaz
 [sicurezza-politica](sicurezza-politica.md), sezione «Il resoconto della stanza non è
 un'istruzione».
 
+## Avvisi ai tutori: data, origine, trascrizione e audio (14/10 sera, ramo `avvisi-data`)
+
+Due cose toccano il contesto e la conservazione (il dettaglio è in [minori](minori.md)):
+
+- **Dati del turno**: al tutore riconosciuto dalla voce (o dal suo schermo personale) il blocco
+  «avvisi» (`Brain._reply`, dopo i ricordi; `Avvisi.contesto`) porta gli avvisi consegnati o
+  nati nelle ultime `avvisi_contesto_ore` (48) ore, con data, tipo, origine, consegna e stato, e
+  «non inventare». Vuoto per tutti gli altri: costa qualche centinaio di caratteri solo nei
+  turni di un tutore con avvisi recenti. Caso vero del 14/10: senza, a «cos'era quell'avviso?»
+  il modello confermava a caso.
+- **Conservazione**: la decisione 0029 punto 4 è cambiata da chi amministra. La trascrizione
+  delle righe del segnale sta nella riga dell'avviso (`avvisi_tutori.trascrizione`, memoria.db)
+  e sulla scheda personale del tutore (quindi anche nella sua cronologia delle schede); l'audio
+  (`avvisi_audio`, di serie spento) è l'unica eccezione a «l'audio non va mai su disco»: un
+  anello in memoria con i soli segmenti di un minore (e del contesto breve con lui), su disco
+  solo i segmenti di un segnale, nel cassetto del tutore. Tutto scade dopo `avvisi_audio_giorni`
+  (30); `calliope conserva --svuota` (tutto o `--persona`, come tutore o come minore), «dimentica»
+  della stanza (quel satellite) e `conversazioni_dimentica` del tutore lo tolgono. Mai degli
+  ospiti, mai nel registro dei turni, nel log o nelle misure (in ombra solo `audio_s`, i secondi
+  che si sarebbero salvati).
+
 ## I conoscenti nella stanza: righe, tenuta, ricerca (14/10, ramo `stanza-conoscenti`)
 
 Decisione [0030](../decisioni/0030-conoscenti.md), dietro `stanza_conoscenti` (di serie spento;

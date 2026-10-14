@@ -579,26 +579,35 @@ class Guardia:
                 cat = "pericolo"
         return {"livello": liv, "categoria": cat if liv != NIENTE else None, "contesto": ctx,
                 "motivo": motivo, "minori": minori_, "modo": modo_,
-                "righe_segnate": len(segnate),
+                "righe_segnate": len(segnate), "_segnate": segnate,
                 "ora": (datetime.datetime.fromtimestamp(float(
                     (segnate or b.giudicate)[0].get("inizio") or b.giudicate[0]["t"]))
                     .strftime("%H:%M"))}
 
     def _esito(self, b: Blocco, res: dict, ms: float):
         d = self.decidi(b, res)
+        # L'id prima dell'avviso (14/10): è il riferimento dell'avviso, così `calliope stato
+        # --guardia --falso ID` ferma anche l'avviso non ancora visto
+        ident = self._nuovo_id()
         avviso = None
         if d["livello"] == ACUTO:
-            avviso = self._avviso_acuto(b, d)
+            avviso = self._avviso_acuto(b, d, ident)
         elif d["livello"] == DUBBIO:
-            avviso = self._dubbio(b, d)
-        ident = self._nuovo_id()
+            avviso = self._dubbio(b, d, ident)
+        # In ombra (14/10 sera, `avvisi_audio`): niente audio su disco, solo quanto se ne
+        # sarebbe salvato
+        audio_s = None
+        if avviso == "ombra" and getattr(self.cfg, "avvisi_audio", False):
+            from ..avvisi_audio import secondi
+            audio_s = secondi(self._pezzi(b, d))
         self._misura(esito="giudicato", id=ident, sat=b.nome_sat, minori=sorted(d["minori"]),
                      modo_minore=d["modo"], righe=len(b.giudicate),
                      contesto_righe=len(b.righe) - len(b.giudicate), parlato_s=b.parlato_s(),
                      ms=ms, modello=res["livello"], livello=d["livello"],
                      categoria=d["categoria"], contesto=d["contesto"], motivo=d["motivo"],
                      segnate=d["righe_segnate"], avviso=avviso, ora=d["ora"],
-                     attesa_s=round(time.monotonic() - b.creato, 1), modo=self.modo)
+                     attesa_s=round(time.monotonic() - b.creato, 1), modo=self.modo,
+                     **({"audio_s": audio_s} if audio_s is not None else {}))
         if d["livello"] != NIENTE:
             # Mai le parole né i nomi nel log: livello, categoria, stanza
             self.log(f"   [GUARDIA] {b.stanza_nome}: {d['livello']} ({d['categoria']}"
@@ -630,7 +639,7 @@ class Guardia:
                 return u
         return None
 
-    def _avviso_acuto(self, b: Blocco, d: dict) -> str | None:
+    def _avviso_acuto(self, b: Blocco, d: dict, ident: str = "") -> str | None:
         """Un acuto: per ogni minore, l'avviso (attiva) o ciò che sarebbe successo (ombra):
         «mandato», «ombra», «tetto» (già `stanza_guardia_avvisi_giorno` oggi), «ripetuto»
         (stessa categoria entro 24 ore). Il più significativo dei minori."""
@@ -656,13 +665,14 @@ class Guardia:
             arg = (ARGOMENTI_PARLA if d["modo"] == "parla" else ARGOMENTI_PRESENTE).get(
                 d["categoria"], ARGOMENTI_PARLA["pericolo"])
             testo = testo_avviso(nome or pid, b.stanza_nome, d["ora"], arg, d["modo"])
-            esiti.append("mandato" if self._manda(pid, testo, urgente=True) else "non_mandato")
+            esiti.append("mandato" if self._manda(pid, testo, urgente=True, b=b, ident=ident,
+                                                  d=d) else "non_mandato")
         for e in ("mandato", "non_mandato", "ombra", "tetto", "ripetuto"):
             if e in esiti:
                 return e
         return None
 
-    def _dubbio(self, b: Blocco, d: dict) -> str | None:
+    def _dubbio(self, b: Blocco, d: dict, ident: str = "") -> str | None:
         """Un dubbio: niente avviso, un conto per minore e categoria. Due dubbi della stessa
         categoria in giorni diversi entro DUBBI_GIORNI → un avviso non urgente (una volta ogni
         DUBBI_GIORNI)."""
@@ -685,17 +695,55 @@ class Guardia:
             arg = (ARGOMENTI_PARLA if d["modo"] == "parla" else ARGOMENTI_PRESENTE).get(
                 d["categoria"], ARGOMENTI_PARLA["pericolo"])
             testo = testo_dubbi(nome or pid, arg, d["modo"])
-            esito = "mandato" if self._manda(pid, testo, urgente=False) else "non_mandato"
+            esito = ("mandato" if self._manda(pid, testo, urgente=False, b=b, ident=ident,
+                                              d=d) else "non_mandato")
         return esito
 
-    def _manda(self, pid, testo: str, urgente: bool) -> bool:
+    def _trascrizione(self, b: Blocco, d: dict | None) -> list:
+        """Le righe del segnale con due righe di contesto prima e dopo (chi ha detto cosa), per
+        la scheda personale del tutore (14/10 sera). Mai nel log né nelle misure."""
+        segnate = list((d or {}).get("_segnate") or []) or list(b.giudicate)
+        seqs = {r["seq"] for r in segnate}
+        idx = [i for i, r in enumerate(b.righe) if r.get("seq") in seqs]
+        if not idx:
+            return []
+        out = []
+        for r in b.righe[max(0, min(idx) - 2):max(idx) + 3]:
+            t = float(r.get("inizio") or r.get("t") or 0)
+            out.append({"ora": datetime.datetime.fromtimestamp(t).strftime("%H:%M") if t else "",
+                        "chi": etichetta(r).replace(" → Calliope", " (a Calliope)"),
+                        "testo": " ".join(str(r.get("testo") or "").split()),
+                        "segnale": r.get("seq") in seqs})
+        return out
+
+    def _pezzi(self, b: Blocco, d: dict | None) -> list:
+        """L'audio delle righe del segnale (con `avvisi_audio_contesto_s` prima e dopo)
+        dall'anello in memoria; vuoto se è spento."""
+        from ..avvisi_audio import anello
+        an = anello()
+        segnate = list((d or {}).get("_segnate") or []) or list(b.giudicate)
+        if an is None or not segnate:
+            return []
+        ctx = float(self._cfg("avvisi_audio_contesto_s", 20.0))
+        da = min(float(r.get("inizio") or r.get("t") or 0) for r in segnate) - ctx
+        a = max(float(r.get("fine") or r.get("t") or 0) for r in segnate) + ctx
+        return an.prendi(luogo=f"stanza:{b.sat}", da=da, a=a)
+
+    def _manda(self, pid, testo: str, urgente: bool, b: Blocco | None = None,
+               ident: str = "", d: dict | None = None) -> bool:
+        from ..minori import origine_stanza
         av = self._avvisi_servizio()
         prof = self._prof(pid)
         if av is None or prof is None:
             return False
         try:
             return (av.solo_schermo(prof, "sicurezza_stanza", testo, urgente=urgente,
-                                    registry=self.registry) or 0) > 0
+                                    registry=self.registry,
+                                    origine=origine_stanza(b.stanza_nome if b else ""),
+                                    rif=f"guardia:{ident}" if ident else None,
+                                    trascrizione=self._trascrizione(b, d) if b else None,
+                                    pezzi=self._pezzi(b, d) if b else None,
+                                    luogo=f"stanza:{b.sat}" if b else None) or 0) > 0
         except Exception as e:  # noqa: BLE001
             self.log(f"   [GUARDIA] avviso non mandato: {type(e).__name__}")
             return False

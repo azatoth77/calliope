@@ -28,6 +28,7 @@ from pathlib import Path
 
 import numpy as np
 
+from . import avvisi_audio
 from . import cancelli as cancelli_mod
 from . import compagnia as compagnia_mod
 from . import conserva as conserva_mod
@@ -200,6 +201,9 @@ class Turno:
     protezione: str | None = None        # la frase di protezione detta in questo turno
     testo_guardia: str = ""              # la frase giudicata dal guardiano (solo in memoria)
     pericolo: dict | None = None         # il giro a due cancelli (09/10): livello e motivo
+    # Il primo segnale (cancelli.Segnale) di un secondo segnale ravvicinato (14/10): per la
+    # trascrizione dell'avviso al tutore, solo in memoria
+    pericolo_prima: object = None
     # Compagnia (09/10, calliope/compagnia.py): chi la voce ha riconosciuto sopra soglia (per la
     # memoria della corsia), la frase presa nella finestra aperta dal nome da solo, la frase
     # nella finestra senza il nome, il giudizio «rivolta a Calliope» (Future) e il suo esito
@@ -632,7 +636,7 @@ class Ciclo:
         return False
 
     def proteggi(self, prof, categorie, rec_, motivo: str = "acuto", voce_incerta=False,
-                 categorie_prima=None, compagnia=None):
+                 categorie_prima=None, compagnia=None, t=None, prima=None):
         """Un minore in pericolo (05/10, calliope/guardiano.py): avviso discreto e urgente ai
         tutori, solo l'argomento; nel registro dei turni niente frasi del minore. Dal 09/10
         (calliope/cancelli.py) l'avviso dice il livello («confermato»), perché (`motivo`:
@@ -653,12 +657,94 @@ class Ciclo:
             self.rule("pericolo_compagnia")
         # Lo stesso episodio non si avvisa due volte (prova e2e del 06/10: la frase di Sofia
         # spezzata in due turni mandava due avvisi uguali); un argomento diverso sì
+        tr, pezzi, luogo = self._materiale_avviso(prof, t, prima, motivo, voce_incerta)
         n = self._cancelli().avvisa(prof, categorie, cancelli_mod.CONFERMATO, motivo,
                                     bool(voce_incerta), urgente=True,
                                     categorie_prima=categorie_prima, registry=self.s.registry,
-                                    compagnia=bool(compagnia))
+                                    compagnia=bool(compagnia), origine=self._origine_avviso(),
+                                    trascrizione=tr, pezzi=pezzi, luogo=luogo)
         if n == -1:
             self.rule("avviso_pericolo_ripetuto")
+
+    def _scambio_prima(self, testo: str, chi: str) -> list:
+        """L'ultimo scambio di questa conversazione prima della frase del segnale (il contesto
+        della trascrizione dell'avviso): una domanda e una risposta, solo testo."""
+        storia = [m for m in list(getattr(self.brain, "history", None) or [])
+                  if isinstance(m, dict) and m.get("role") in ("user", "assistant")
+                  and isinstance(m.get("content"), str) and m["content"].strip()]
+        while storia and storia[-1]["role"] == "user" and storia[-1]["content"].strip() == testo:
+            storia.pop()
+        while storia and storia[-1]["role"] == "assistant" and len(storia) > 1 and \
+                storia[-2]["role"] == "assistant":
+            storia.pop()
+        out = []
+        for m in storia[-2:]:
+            out.append({"chi": chi if m["role"] == "user" else "Calliope",
+                        "testo": " ".join(m["content"].split())[:300]})
+        return out
+
+    def _materiale_avviso(self, prof, t, prima, motivo: str, voce_incerta) -> tuple:
+        """(trascrizione, pezzi d'audio, luogo) dell'avviso di pericolo di questo turno (14/10
+        sera): le frasi del segnale (il primo segnale e la domanda di Calliope, se c'erano) con
+        lo scambio di prima come contesto; l'audio dall'anello, se acceso. Solo per la scheda
+        personale del tutore (minori.Avvisi): mai nel registro né nel log."""
+        luogo = f"turno:{getattr(self.corsia, 'chiave', '')}"
+        if prof is None or t is None:
+            return None, None, luogo
+        chi = prof.name + ("?" if voce_incerta else "")
+        adesso = time.time()
+
+        def hhmm(x):
+            return datetime.datetime.fromtimestamp(x).strftime("%H:%M")
+        testo = (t.testo_guardia or t.text or "").strip()
+        righe, inizio = [], None
+        if prima is not None:
+            inizio = adesso - max(0.0, time.monotonic() - float(getattr(prima, "ora", 0.0)))
+            pt = str(getattr(prima, "testo", "") or "")
+            if pt and "la frase esatta non c'è più" not in pt:
+                righe.append({"ora": hhmm(inizio), "chi": chi, "testo": pt, "segnale": True})
+            if motivo == "secondo_cancello":
+                righe.append({"ora": hhmm(inizio), "chi": "Calliope",
+                              "testo": cancelli_mod.rassicura(prof)})
+        else:
+            righe += self._scambio_prima(testo, chi)
+        if testo:
+            righe.append({"ora": hhmm(adesso), "chi": chi, "testo": testo, "segnale": True})
+        pezzi = None
+        an = avvisi_audio.anello()
+        if an is not None and getattr(prof, "id", None):
+            ctx = float(getattr(self.s.cfg, "avvisi_audio_contesto_s", 20.0) or 0.0)
+            durata = (len(t.audio) / float(self.s.cfg.sample_rate)
+                      if getattr(t, "audio", None) is not None else 30.0)
+            da = (inizio if inizio is not None else adesso - durata) - ctx
+            pezzi = an.prendi(luogo=luogo, persona=prof.id, da=da)
+        return righe or None, pezzi, luogo
+
+    def _anello_turno(self, t):
+        """L'audio della frase di un minore nell'anello in memoria (14/10 sera, `avvisi_audio`):
+        serve solo se nasce un avviso di pericolo. Mai di un adulto, di un ospite, dello
+        scritto."""
+        an = avvisi_audio.anello()
+        if an is None or t.scritto is not None or getattr(t, "audio", None) is None:
+            return
+        prof = self.s.registry.get(t.speaker_name) if t.speaker_name else None
+        if prof is None or not getattr(prof, "id", None) or not minori.e_minore(prof):
+            return
+        try:
+            durata = len(t.audio) / float(self.s.cfg.sample_rate)
+            fine = time.time()
+            an.metti(f"turno:{getattr(self.corsia, 'chiave', '')}", prof.id, True,
+                     fine - durata, fine, t.audio, self.s.cfg.sample_rate)
+        except Exception as e:  # noqa: BLE001 — l'anello non ferma il turno
+            print(f"   [MINORI] audio non tenuto nell'anello: {type(e).__name__}", flush=True)
+
+    def _origine_avviso(self) -> str:
+        """Da dove viene un avviso nato da una frase di questo turno (14/10): parole semplici,
+        mai le parole del minore («da una frase detta a me al telefono»)."""
+        cors = self.corsia
+        return minori.origine_turno(getattr(cors, "nome", None), getattr(cors, "chiave", None),
+                                    scritto=getattr(self.speaker_ctx, "identified_by",
+                                                    None) == "schermo")
 
     def _cancelli(self):
         """I segnali da verificare, condivisi dalle corsie (creati alla prima occorrenza)."""
@@ -711,6 +797,7 @@ class Ciclo:
                 self.rule("pericolo_compagnia_cancello1")
                 prima = None
         if prima is not None:
+            t.pericolo_prima = prima
             if prima.aperto:
                 c.chiudi(prima, "conferma")
             info.update(motivo="secondo_segnale", categorie_prima=prima.categorie,
@@ -730,7 +817,8 @@ class Ciclo:
                               else "gravita_guasta")
             return guardia.PROTEZIONE
         c.apri(prof, t.testo_guardia or t.text, g.categorie, info["voce_incerta"],
-               self.corsia.chiave, compagnia=bool(info.get("compagnia")))
+               self.corsia.chiave, compagnia=bool(info.get("compagnia")),
+               origine=self._origine_avviso())
         info.update(livello=cancelli_mod.DA_VERIFICARE, motivo="dubbio", cancello=1)
         return cancelli_mod.rassicura(prof)
 
@@ -803,8 +891,8 @@ class Ciclo:
             minore = next((u for u in getattr(s.registry, "users", {}).values()
                            if getattr(u, "id", None) == seg.persona_id), None)
         self.rec["esito"] = "protezione"
-        self.proteggi(minore, seg.categorie, self.rec, motivo="secondo_cancello",
-                      voce_incerta=seg.voce_incerta,
+        self.proteggi(minore, seg.categorie, self.rec, motivo="secondo_cancello", t=t,
+                      prima=seg, voce_incerta=seg.voce_incerta,
                       compagnia=bool(getattr(seg, "compagnia", False)))
         u = self.uscita
         u.turno()
@@ -859,12 +947,24 @@ class Ciclo:
         lista = [a for a in lista if a not in rinviati]
         if lista:
             av.segna([a["id"] for a in lista])
+            # Gli avvisi di pericolo (14/10 sera): sulla sua scheda personale con quando, da
+            # dove e la trascrizione (tenuta, ricostruita o «non c'è più»); a voce mai le parole
+            for a in lista:
+                if a.get("tipo") in minori.TIPI_PERICOLO:
+                    av.scheda_di(prof, a)
         nuovi = [a for a in rinviati if a["id"] not in self._avvisi_accennati]
         if rinviati:
             # Il minore ha parlato qui da poco (09/10): potrebbe essere lì vicino. Una frase
             # neutra una volta; il testo è sullo schermo personale, a voce più tardi
             self.rule("avviso_sicurezza_rinviato")
             self._avvisi_accennati.update(a["id"] for a in rinviati)
+        if any(a.get("scaduto") for a in lista):
+            # Urgente ma rimasto da dire oltre avvisi_urgente_ore (14/10): non urgente, con la data
+            self.rule("avviso_urgente_scaduto")
+        if any(minori.quando_nato(a.get("creato"), av.adesso(),
+                                  float(getattr(cfg, "avvisi_data_dopo_min", 15.0) or 0))
+               for a in lista):
+            self.rule("avviso_con_data")
         if lista or nuovi:
             self.rule("avviso_tutore")
             u.turno()
@@ -873,6 +973,32 @@ class Ciclo:
                                       AVVISO_PRIVATO if nuovi else "") if x), "avviso_tutore")
             u.aspetta()
         self.richieste_al_tutore(prof)
+
+    def _avvisi_contesto(self, t) -> str | None:
+        """Gli avvisi consegnati di recente a chi parla, nei dati del turno (14/10, caso vero:
+        a «cos'era quell'avviso?» Calliope non sapeva niente e confermava a caso). Solo per chi
+        è riconosciuto dalla voce o scrive dal suo schermo personale, e solo i suoi (le righe
+        sono per tutore); gli avvisi «sicurezza» di un minore che ha parlato qui da poco restano
+        fuori (potrebbe essere vicino)."""
+        av = minori.avvisi()
+        if av is None or not t.speaker_name or getattr(
+                self.speaker_ctx, "identified_by", None) not in ("voce", "schermo"):
+            return None
+        prof = self.s.registry.get(t.speaker_name)
+        if prof is None or minori.e_minore(prof) or not getattr(prof, "id", None):
+            return None
+        privato = float(getattr(self.s.cfg, "minori_avviso_privato_s", 0.0) or 0.0)
+        ora = time.monotonic()
+        vicini = {m for m, quando in self._minori_sentiti.items()
+                  if privato > 0 and ora - quando < privato}
+        try:
+            testo = av.contesto(prof.id, self.s.registry, nascondi_minori=vicini)
+        except Exception as e:  # noqa: BLE001 — gli avvisi non fermano la risposta
+            print(f"   [MINORI] avvisi per il turno non letti: {type(e).__name__}", flush=True)
+            return None
+        if testo:
+            self.rule("avvisi_nel_turno")
+        return testo or None
 
     def richieste_al_tutore(self, prof):
         """Le richieste dei ragazzi in attesa (05/10, minori.Richieste): dopo la prima risposta
@@ -2001,6 +2127,7 @@ class Ciclo:
         if t.emb_job is not None:
             self._riconosci_voce(t)
         self._segna_minore(t.speaker_name)
+        self._anello_turno(t)
         self.rec.update(livello=speaker_ctx.current_level, testo=t.text,
                         stt_s=round(time.perf_counter() - t.t0, 2))
         if getattr(self.s, "stanza", None) is not None:
@@ -2942,7 +3069,7 @@ class Ciclo:
         g = s.guardiano.giudica_domanda(t.text) if s.guardiano is not None else None
         if g is not None and g.esito == guardia.PERICOLO:
             self.proteggi(t.prof_turno, g.categorie, self.rec, motivo="fuori_orario",
-                          voce_incerta=self._voce_incerta())
+                          voce_incerta=self._voce_incerta(), t=t)
             self.uscita.di(guardia.PROTEZIONE, "protezione")
         else:
             self.uscita.di(minori.frase_fuori_orario(t.prof_turno, orario), "fuori_orario")
@@ -3202,6 +3329,8 @@ class Ciclo:
             # che vale una risposta sola, come i due qui sopra
             if getattr(s, "stanza", None) is not None:
                 brain.stanza_turno = self._stanza_blocco(t)
+            # Gli avvisi consegnati di recente a chi parla (14/10): vale una risposta sola
+            brain.avvisi_turno = self._avvisi_contesto(t)
             contesto_turno = t.context
             if t.contesto_gioco:
                 contesto_turno = (contesto_turno + "\n" if contesto_turno else "") + t.contesto_gioco
@@ -3638,7 +3767,8 @@ class Ciclo:
                               motivo=p.get("motivo", "acuto"),
                               voce_incerta=p.get("voce_incerta", False),
                               categorie_prima=p.get("categorie_prima"),
-                              compagnia=p.get("compagnia", None))
+                              compagnia=p.get("compagnia", None), t=t,
+                              prima=t.pericolo_prima)
             else:
                 self.rule("guardiano_" + esito_g.fermata)
                 if t.minore_turno:

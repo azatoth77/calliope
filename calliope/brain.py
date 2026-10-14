@@ -2553,6 +2553,9 @@ class Brain:
         # Il blocco della conversazione di stanza (14/10, passo 2, calliope/stanza/contesto.py):
         # dal ciclo come attributo, vale una risposta sola; nei dati del turno, in busta
         self._stanza_turno = self.__dict__.pop("stanza_turno", None)
+        # Gli avvisi consegnati di recente al tutore che parla (14/10, minori.Avvisi.contesto):
+        # dal ciclo come attributo, vale una risposta sola; nei dati del turno
+        self._avvisi_turno = self.__dict__.pop("avvisi_turno", None)
         # Le righe della stanza davanti al modello in questa risposta (14/10 sera, _stanza_prepara)
         self._stanza_visibili, self._stanza_ancore, self.last_stanza_storia = [], {}, None
         self._ascolto = ascolto if ascolto is not None else turno_asc
@@ -4161,6 +4164,11 @@ class Brain:
         # Ora, data e chi parla per primi, poi i ricordi (TURN_CONTEXT_MSG)
         memory = blocco("turno", self._turn_context()) + blocco("ricordi",
                                                                 self._memory_message())
+        # Gli avvisi consegnati di recente al tutore (14/10): testi di Calliope, mai le parole
+        # del minore; dopo i ricordi
+        avvisi_b = getattr(self, "_avvisi_turno", None)
+        if user_text and avvisi_b:
+            memory = memory + blocco("avvisi", [{"role": "system", "content": str(avvisi_b)}])
         # La conversazione della stanza (14/10, passo 2, calliope/stanza/contesto.py), in busta
         # come dato non fidato (fonte «stanza»). Dal 14/10 sera (`stanza_contesto_in_storia`) le
         # righe stanno nella storia in sola aggiunta: le nuove di questo turno subito prima dei
