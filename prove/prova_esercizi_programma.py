@@ -49,6 +49,7 @@ from calliope.frasi import FRASI  # noqa: E402
 from calliope.speaker_id import SpeakerContext, UserProfile, name_key  # noqa: E402
 from calliope.tools.builtin import build_registry  # noqa: E402
 from calliope.tools.spec import ToolContext  # noqa: E402
+from prove.orologio import appena_acceso, fa  # noqa: E402
 
 errori = 0
 
@@ -365,10 +366,24 @@ chiama({"azione": "fine"}, "Nina")
 out, ctx = chiama({"azione": "inizia", "argomento": "frazioni"}, "Nina")
 verifica("contrario: dopo che ha insistito una volta, la richiesta nuova si rifiuta di nuovo",
          SRV.sessione(NINA.id) is None and "esercizi_fuori_programma" in ctx.regole, ctx.regole)
-SRV._rifiutati[NINA.id] = ("matematica", "frazioni", 0.0)
+# «Più di 10 minuti fa» è adesso meno RIFIUTO_S, non 0.0: nei primi 10 minuti dopo l'avvio del
+# computer time.monotonic() è sotto 600 e 0.0 era «poco fa» (caduta del 14/10 dopo un riavvio)
+SRV._rifiutati[NINA.id] = ("matematica", "frazioni", fa(SE.RIFIUTO_S + 1))
 out, ctx = chiama({"azione": "inizia", "argomento": "frazioni"}, "Nina")
 verifica("contrario: un rifiuto di più di 10 minuti fa non vale come insistere",
          SRV.sessione(NINA.id) is None and "esercizi_fuori_programma" in ctx.regole, ctx.regole)
+with appena_acceso(SE):
+    SRV._rifiutati[NINA.id] = ("matematica", "frazioni", SE.time.monotonic() - SE.RIFIUTO_S - 1)
+    _, ctx = chiama({"azione": "inizia", "argomento": "frazioni"}, "Nina")
+    vecchio = SRV.sessione(NINA.id) is None and "esercizi_fuori_programma" in ctx.regole
+    SRV._rifiutati.pop(NINA.id, None)
+    _, ctx = chiama({"azione": "inizia", "argomento": "frazioni"}, "Nina")   # rifiuto adesso
+    _, ctx2 = chiama({"azione": "inizia", "argomento": "frazioni"}, "Nina")  # insiste
+    verifica("computer acceso da 5 s: il rifiuto vecchio non vale, quello di adesso sì",
+             vecchio and "esercizi_oltre_insiste" in ctx2.regole
+             and SRV.sessione(NINA.id) is not None, (ctx.regole, ctx2.regole))
+    chiama({"azione": "fine"}, "Nina")
+    SRV._rifiutati.pop(NINA.id, None)
 out, ctx = chiama({"azione": "inizia", "argomento": "addizioni"}, "Nina")
 verifica("contrario: un argomento diverso dopo il rifiuto parte normale, senza oltre",
          SRV.sessione(NINA.id) is not None and not SRV.sessione(NINA.id).oltre, out)

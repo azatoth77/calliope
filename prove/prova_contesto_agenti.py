@@ -37,6 +37,8 @@ from calliope.agenti.sandbox import Isolamento, Sandbox  # noqa: E402
 from calliope.config import Config  # noqa: E402
 from calliope.contesto import calcola_agenti, token_cache_vllm  # noqa: E402
 from prove.ollama_finto import FakeOllama  # noqa: E402
+from prove.orologio import appena_acceso, fa  # noqa: E402
+from calliope.agenti import ciclo as ciclo_agenti  # noqa: E402
 
 try:
     sys.stdout.reconfigure(encoding="utf-8")
@@ -100,8 +102,19 @@ try:
     verifica("dal server finto (vLLM): 400 000 / 2 = 200 000 → il massimo del modello",
              ag.num_ctx() == 131072 and any("Contesto dell'agente" in x for x in log), log)
     fake.cache_token = 60_000
-    ag._finestra_t = 0.0
+    # La finestra vecchia è adesso meno FINESTRA_S, non 0.0: nei primi 10 minuti dopo l'avvio
+    # del computer time.monotonic() è sotto 600 e la finestra restava quella (14/10)
+    ag._finestra_t = fa(ag.FINESTRA_S + 1)
     verifica("cache più piccola, ricalcolata: 30 000 → 28 672", ag.num_ctx() == 28672)
+    with appena_acceso(ciclo_agenti):
+        fake.cache_token = 400_000
+        ag2 = Agente(Config(), imp, cli, Arbitro(False, 0), log=lambda m: None)
+        primo = ag2.num_ctx()                      # mai calcolata: si calcola anche a 5 s
+        fake.cache_token = 60_000
+        ag2._finestra_t = ciclo_agenti.time.monotonic() - ag2.FINESTRA_S - 1
+        verifica("computer acceso da 5 s: la finestra si calcola la prima volta e si rifà "
+                 "quando è vecchia", primo == 131072 and ag2.num_ctx() == 28672,
+                 (primo, ag2._finestra and ag2._finestra.finestra))
     # una passata vera sul server finto: thinking_token_budget e reasoning_tokens
     fake.copione = [{"content": "ok", "eval": 300, "prompt": 1000, "ragionamento": 250}]
     lav = Lavoro("p1", "altro", "prova")
