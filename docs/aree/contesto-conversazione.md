@@ -1699,6 +1699,30 @@ chi parla e il nome dedotto in [stt-tts](stt-tts.md)). Per quest'area:
   quel satellite.
 - **Promozione e ritorno** (`conoscente_livello`, solo chi amministra a voce): le righe su disco e
   in memoria passano da «conoscente:<id>» a «persona:<id>» (e al contrario) con
-  `Tenuta.rinomina`; le presenze del tipo di prima si tolgono.
+  `Tenuta.rinomina`; le presenze del tipo di prima si tolgono (*storica*: dal 14/10 sera passano
+  con lui, vedi sotto).
 
 Prova: `prove/prova_stanza_conoscenti.py`.
+
+### 14/10 sera: le presenze dei conoscenti e il loro turno (ramo `conoscenti-avvisi-2`)
+
+- **Presenze**: la voce di un conoscente riconosciuta sopra soglia (una riga della stanza o, da
+  adesso, un suo turno rivolto a Calliope: [stt-tts](stt-tts.md)) apre o allunga la sua presenza
+  come per la famiglia, con la chiave «conoscente:<id>» (`Stanza._chi_presenza`; mai la zona
+  grigia né una voce di nessuno). Vanno su disco con la tenuta (`Tenuta.presenza`, la stessa
+  decisione delle sue righe), la rotazione senza i conoscenti legati non le tocca (come le sue
+  righe), e «dimentica Marco», la scadenza e `--svuota` le tolgono in memoria e su disco.
+- **Blocco della stanza**: «presenti riconosciuti dalla voce: Carlo, Marco Rossi (conoscente)»
+  (`contesto._presenti`: un conoscente non si cerca mai fra i profili della famiglia, un omonimo
+  di casa non è lui).
+- **Ricerca**: un conoscente non cerca (resta ospite: `stanza_cerca` negata), ma la sua presenza
+  conta: alla **promozione** le presenze passano a lui (`Stanza._sposta_presenze`, `Tenuta.rinomina`
+  con `UPDATE OR IGNORE`), così da familiare trova ciò che si è detto dove c'era già da
+  conoscente; al **ritorno** tornano alla chiave del conoscente. Chi non c'era continua a non
+  trovarlo.
+- **Il suo turno**: la frase che rivolge a Calliope entra nella stanza come riga del conoscente
+  (nome, nota, «→ Calliope»), quindi nel blocco caldo e nella ricerca con le sue etichette; i dati
+  del turno dicono chi è («Marco Rossi (conoscente, collega di Carlo), … è un ospite»). Il turno
+  stesso non si conserva (nel registro dei turni solo `voce.conoscente: true`).
+
+Prova: `prove/prova_stanza_conoscenti.py` (`prova_turni_e_presenze`).

@@ -18,7 +18,8 @@ regressione non lo leggono.
   riconosciuta dalla voce;
 - dal 14/10 (decisione 0030, `stanza_conoscenti`) le righe di un **conoscente** confermato da
   chi amministra e riconosciuto dalla voce sopra soglia: `persona` «conoscente:<id>», con la
-  nota che lo distingue dagli omonimi; via quando lo si dimentica o scade;
+  nota che lo distingue dagli omonimi, e (14/10 sera, rifiniture) le sue presenze con la stessa
+  chiave; via quando lo si dimentica o scade;
 - **mai**: le voci non riconosciute (ospiti), la zona grigia (nel dubbio no), ciò che si dice in
   pausa («abbiamo ospiti»: in pausa la stanza non scrive niente, nemmeno in memoria), l'audio
   (non arriva mai qui), i profili tolti (la rotazione li cancella).
@@ -442,7 +443,8 @@ class Tenuta:
     def rinomina(self, vecchia, nuova, chi: str, nome: str | None = None) -> int:
         """Una persona che cambia tipo (14/10, conoscenti: promossa a familiare o tornata
         conoscente): le sue righe passano da `vecchia` a `nuova` («conoscente:<id>» o l'id del
-        profilo), con il nome; le presenze di prima si tolgono. Quante righe."""
+        profilo), con il nome; dal 14/10 sera (rifiniture) anche le sue presenze, così chi è
+        promosso cerca dove c'era già da conoscente. Quante righe."""
         v, n = str(vecchia), str(nuova)
 
         def f():
@@ -451,6 +453,9 @@ class Tenuta:
                     "UPDATE righe SET persona = ?, chi = ?, nome = coalesce(?, nome) WHERE "
                     "persona = ?", (n, chi, nome, v))
                 self.db.execute("UPDATE righe SET per_persona = ? WHERE per_persona = ?", (n, v))
+                # Un intervallo uguale già della persona nuova resta quello (indice unico)
+                self.db.execute("UPDATE OR IGNORE presenze SET persona = ? WHERE persona = ?",
+                                (n, v))
                 _cancella_sicuro(self.db, "DELETE FROM presenze WHERE persona = ?", (v,))
                 self.db.commit()
                 return cur.rowcount
@@ -491,8 +496,9 @@ class Tenuta:
                 out["senza_profilo"] = self._togli_dove(
                     f"(persona IS NOT NULL AND persona NOT IN ({segni}){salvo}) OR (per_persona "
                     f"IS NOT NULL AND per_persona NOT IN ({segni}))", (*ids, *ids))
-                _cancella_sicuro(self.db, f"DELETE FROM presenze WHERE persona NOT IN ({segni})",
-                                 tuple(ids))
+                # Le presenze dei conoscenti (14/10, rifiniture) come le loro righe
+                _cancella_sicuro(self.db, f"DELETE FROM presenze WHERE persona NOT IN ({segni})"
+                                          f"{salvo}", tuple(ids))
             if self.guardia_dal is not None:
                 self.db.execute("DELETE FROM guardia_giudicate WHERE t < ?", (limite,))
                 self.db.execute("DELETE FROM guardia_giochi WHERE fine < ?", (limite,))

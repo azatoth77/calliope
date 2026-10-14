@@ -44,8 +44,9 @@ no).
 **Il conoscente** (`conoscenti.json` accanto alla configurazione, scritto in modo atomico, senza
 copia `.bak`): id, nome, cognome, nota, impronta, quando è stato salvato e l'ultima volta che si
 è sentito. Livello **ospite** sempre: non è nel registro delle voci della famiglia
-(speakers.json), quindi nessun percorso di riconoscimento dei comandi lo vede; solo le righe
-della stanza lo nominano. Le sue righe vanno su disco con la tenuta della stanza (60 giorni) e si
+(speakers.json), quindi nessun percorso di riconoscimento dei comandi lo vede; lo nominano le
+righe della stanza e, dal 14/10 sera, i dati del turno quando parla a Calliope (un'etichetta,
+`SpeakerContext.conoscente`: chi parla resta None, ciclo._conoscente_turno). Le sue righe vanno su disco con la tenuta della stanza (60 giorni) e si
 cercano come quelle della famiglia (chi c'era). Si cancella dopo `conoscenti_scadenza_giorni`
 senza sentirlo, con «dimentica Marco» (tool `conoscenti`, solo chi amministra) e con
 `calliope conserva --svuota`; con lui le sue righe su disco.

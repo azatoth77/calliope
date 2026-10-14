@@ -192,6 +192,11 @@ def _presenti(stanza, sat) -> str:
         nome = p.get("nome")
         if not nome:
             continue
+        if str(p.get("persona") or "").startswith("conoscente:"):
+            # Un conoscente (14/10, rifiniture, decisione 0030): presente, ma non di casa. Mai
+            # cercato fra i profili della famiglia (un omonimo non è lui)
+            nomi.append(f"{nome} (conoscente)")
+            continue
         minore = False
         try:
             from ..minori import e_minore
