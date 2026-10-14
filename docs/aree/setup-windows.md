@@ -2,7 +2,9 @@
 
 *Installazione su Windows: Calliope completa, casa, biblioteca, schermi, agenti, satellite, telefono. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-**Stato al 09/10.** Dal 02/10 il target principale è la DGX Linux ([setup-dgx](setup-dgx.md)): su Windows oggi gira soprattutto il **satellite** (portatile e PC di casa, installazione con un comando), mentre Calliope completa sul portatile resta per lo sviluppo e le prove. I passi qui sotto valgono per tutte e due; il satellite nel dettaglio è in [satelliti](satelliti.md), il PC a voce in [pc](pc.md). Non provati sul vero: un PC Windows pulito come satellite e Windows su ARM.
+**Stato al 14/10.** Come al 09/10 (sotto); comandi, file e opzioni di questa pagina controllati sul codice il 14/10. Le misure e i comandi di `python -m calliope.stato` sono elencati in [capacita-installazioni](capacita-installazioni.md).
+
+*Stato al 09/10 (storico):* Dal 02/10 il target principale è la DGX Linux ([setup-dgx](setup-dgx.md)): su Windows oggi gira soprattutto il **satellite** (portatile e PC di casa, installazione con un comando), mentre Calliope completa sul portatile resta per lo sviluppo e le prove. I passi qui sotto valgono per tutte e due; il satellite nel dettaglio è in [satelliti](satelliti.md), il PC a voce in [pc](pc.md). Non provati sul vero: un PC Windows pulito come satellite e Windows su ARM.
 
 ## Setup (Windows)
 
@@ -134,7 +136,9 @@ dgx:
 
 Una volta a mano, con la VPN: `ssh dgx` (accetta l'impronta, verifica la chiave; con una
 passphrase, `ssh-add` e il servizio «OpenSSH Authentication Agent»); sulla DGX
-`~/calliope-motore/avvia.sh` (vLLM; con il motore «ollama» invece `ollama pull qwen3.6:35b`).
+`~/calliope-motore/avvia.sh` (vLLM; con il motore «ollama» invece `ollama pull qwen3.6:35b`)
+*[storico: dal 04/10 sulla DGX il container dell'agente si comanda con `calliope motore vllm agente
+avvia|rifai|ferma|stato|riprendi`, [setup-dgx](setup-dgx.md)]*.
 Poi:
 
 ```powershell
