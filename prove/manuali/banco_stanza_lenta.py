@@ -77,7 +77,7 @@ NON fa parte del runner. Quattro modi:
    `lento_nomi` («Parla Carlo.»), `lento_nomi_parole` (il nome e le parole di prima, come
    `Lenta.prompt`), `lento_prompt_turni` (il secondo servizio col prompt dei turni). Il secondo
    servizio: `--url-lento`, o `stanza_lenta_stt_url`, o la porta di
-   `setup/linux/motore/whisper-lento.sh` (8004). Stampa solo numeri: WER sul set e sui casi
+   `setup/linux/motore/whisper-lento.sh` (8005). Stampa solo numeri: WER sul set e sui casi
    diversi, casi vinti, persi e pari contro `turni`, tempo mediano. L'obiettivo per riaccendere
    la ritrascrizione (`stanza_lenta_ritrascrivi`): un `lento*` con la WER sotto `turni`. Senza il
    registro dei turni (il portatile) i soli casi diversi, con l'audio da `--audio DIR`.
@@ -734,7 +734,7 @@ def modo_conservati_audio(o, testa: dict, casi: list[dict]) -> int:
                if s.strip()]
     url_lento = (o["url_lento"] if isinstance(o.get("url_lento"), str) else
                  str(getattr(cfg, "stanza_lenta_stt_url", "") or "").strip()
-                 or "http://127.0.0.1:8004/v1")
+                 or "http://127.0.0.1:8005/v1")
     fun: dict = {}
     stt = None
     if any(s.startswith("turni") for s in chiesti):

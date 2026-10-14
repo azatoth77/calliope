@@ -1383,7 +1383,7 @@ quei segmenti. Il «no» di YAML (false) è accettato. Prova `prova_stanza_lenta
 lo stesso beam dei turni non conta, «no» vince sul Whisper suo).
 
 **Il secondo Whisper**, preparato e **non acceso** (`setup/linux/motore/whisper-lento.sh`, unità
-`calliope-whisper-lento`, porta 8004, `calliope motore whisper-lento …`): lo stesso
+`calliope-whisper-lento`, porta 8005 (8004 è di SearXNG), `calliope motore whisper-lento …`): lo stesso
 `whisper-server` compilato per i turni, con **large-v3 non turbo**. La scelta del modello, con la
 memoria della DGX del 14/10 (liberi ~21 GB su 119: vLLM 47,8, Ollama 26B 15, e4b 3,1, llama-guard
 5,3, Whisper turbo 2,1; FLUX a richiesta 13):

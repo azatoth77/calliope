@@ -192,9 +192,11 @@ def prova(tmp: Path):
        and "calliope-whisper-lento" not in (linux / "calliope.service").read_text(
            encoding="utf-8"),
        "whisper-lento: unità con i segnaposto, solo 127.0.0.1, calliope.service non la aspetta")
-    ok('PORTA="${PORTA:-8004}"' in sh and 'VARIANTE="${VARIANTE:-q5_0}"' in sh
+    ok('PORTA="${PORTA:-8005}"' in sh and 'VARIANTE="${VARIANTE:-q5_0}"' in sh
        and "ggml-large-v3-q5_0.bin" in sh and "sha256sum -c" in sh and "\n  compila)" not in sh,
-       "whisper-lento.sh: porta 8004, large-v3 q5_0 con checksum, nessuna compilazione sua")
+       "whisper-lento.sh: porta 8005 (la 8004 è di SearXNG), large-v3 q5_0 con checksum, nessuna compilazione sua")
+    ok(":-8004}" in (linux / "motore" / "searxng.sh").read_text(encoding="utf-8")
+       and ":-8004}" not in sh, "contrario: whisper-lento non usa la porta di SearXNG")
     try:
         g.motore(["inesistente"])
         ok(False, "calliope motore con uno script che non c'è va rifiutato")

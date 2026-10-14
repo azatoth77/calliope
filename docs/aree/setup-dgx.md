@@ -42,7 +42,7 @@ calliope motore whisper installa         # unità systemd, avvio; poi stt_motore
 calliope stato --installa whisper_riserva   # faster-whisper su CPU se il server cade
 
 # Facoltativo (14/10 sera): il secondo Whisper della corsia lenta della stanza, large-v3 q5_0,
-# servizio utente calliope-whisper-lento (porta 8004); lo stesso whisper-server compilato sopra
+# servizio utente calliope-whisper-lento (porta 8005); lo stesso whisper-server compilato sopra
 calliope motore whisper-lento scarica    # ggml-large-v3-q5_0.bin con SHA-256 (chiede)
 calliope motore whisper-lento installa   # unità systemd, avvio, memoria vera sulla GPU
 calliope motore whisper-lento stato|memoria|ferma|avvia|disinstalla
@@ -102,7 +102,7 @@ calliope motore whisper-lento stato|memoria|ferma|avvia|disinstalla
   stimati; `VARIANTE=f16` per large-v3 intero, ~3,9 GB). Residente: con la memoria libera del
   14/10 (~21 GB) resta il posto per FLUX (13 GB) con ~6 GB di margine. `calliope.service` **non**
   lo aspetta: se è giù la corsia lenta tiene il testo della corsia veloce. Calliope lo usa solo
-  con `stanza_lenta_stt_url: http://127.0.0.1:8004/v1` (sezione `conversazione_stanza` del
+  con `stanza_lenta_stt_url: http://127.0.0.1:8005/v1` (sezione `conversazione_stanza` del
   locale), e solo dopo che il banco ha detto che fa meglio del Whisper dei turni (perché: la
   misura vera in [stt-tts](stt-tts.md); `stanza_lenta_ritrascrivi: auto` allora riaccende la
   ritrascrizione). `calliope stato --piano`, riga «Stanza lenta», mostra la sua memoria vera
@@ -123,7 +123,7 @@ calliope motore whisper-lento stato|memoria|ferma|avvia|disinstalla
       --scelte privato/scelte-ritrascrizione-20261014.json --ritrascrivi --salva privato
   # 4a. se un «lento*» ha la WER sotto «turni»: nel calliope.locale.yaml
   #       conversazione_stanza:
-  #         stanza_lenta_stt_url: http://127.0.0.1:8004/v1
+  #         stanza_lenta_stt_url: http://127.0.0.1:8005/v1
   #         stanza_lenta_prompt: no      # solo se ha vinto lento_senza_prompt
   #     poi calliope riavvia
   # 4b. altrimenti: calliope motore whisper-lento disinstalla (e, per provare f16,

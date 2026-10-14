@@ -23,15 +23,15 @@
 # scarica chiede conferma; --si per non chiedere. Serve whisper-server già compilato
 # (`calliope motore whisper compila`). Calliope lo usa con, in ~/calliope/calliope.locale.yaml:
 #     conversazione_stanza:
-#       stanza_lenta_stt_url: http://127.0.0.1:8004/v1
+#       stanza_lenta_stt_url: http://127.0.0.1:8005/v1
 # (con `stanza_lenta_ritrascrivi: auto`, di serie, la ritrascrizione allora si riaccende).
 #
 # Valori cambiabili da ambiente: DIR (la cartella di whisper.sh, ~/calliope-motore/whispercpp),
-# PORTA (8004), BEAM (5), VARIANTE (q5_0 | f16).
+# PORTA (8005), BEAM (5), VARIANTE (q5_0 | f16).
 set -euo pipefail
 
 DIR="${DIR:-$HOME/calliope-motore/whispercpp}"
-PORTA="${PORTA:-8004}"
+PORTA="${PORTA:-8005}"
 BEAM="${BEAM:-5}"
 VARIANTE="${VARIANTE:-q5_0}"
 # Dal repository ufficiale ggerganov/whisper.cpp su Hugging Face, alla stessa revisione del
