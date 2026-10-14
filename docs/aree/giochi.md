@@ -696,3 +696,38 @@ turno intero del modello della voce con `gioco_comando`.
 - **Profilo da 8 GB**: sul modello della voce già in memoria, nessuna VRAM in più;
   `giochi_giudice: false` lo spegne. Sulla DGX sul rilevatore e4b (stima 0,2–0,35 s), da misurare
   con `calliope stato --turni` (esito `gioco_giudice`, `giudice_ms`).
+
+### «Gioco anch'io» e i nomi scritti (passo 4, nomi)
+
+Decisione 1 di chi amministra (12/10): «Giocatore N» subito, poi «gioco anch'io» con la voce
+riconosciuta o il nome scritto sullo schermo, detto da Calliope solo dopo i controlli; niente
+nome libero passato dal modello.
+
+- **«Gioco anch'io»** è un comando standard di Calliope della preparazione (`anchio`: «gioco
+  anch'io», «anch'io», «anche io», «ci sono anch'io»; pulsante «Gioco anch'io»), attivo finché
+  c'è posto. Prende un posto con il nome di chi l'ha detto se la voce è riconosciuta in quella
+  frase (con `macchina.giocatore`: true, come le mosse), altrimenti «Giocatore N»; la stessa voce
+  due volte non prende due posti. «Inizia» parte con quei giocatori (almeno `giocatori.min`),
+  «N giocatori» con i primi N; la preparazione mostra «Giocano: Ada, Giocatore 2». I nomi
+  restano ad «ancora» e arrivano alla logica in `nuovaPartita({ nomi })` e in `ctx.giocatori`.
+- **Un ospite** (o chi non è riconosciuto) si dà un nome a voce con la forma chiusa intera
+  «(gioco) anch'io, sono / mi chiamo <nome>» (regola `gioco_anchio_nome`,
+  `gioco_stato.anchio_nome`: una o due parole di sole lettere, non «pronto», «qui», «stanco»…);
+  il nome detto vale come uno scritto (sotto). Contrari in `prova_testo`.
+- **Il nome scritto**: chi gioca tocca il suo nome nella fascia dei punti (un pulsante, «Cambia
+  il nome: …») e lo scrive in un campo sopra la fascia (Invio o uscita dal campo confermano, Esc
+  annulla). Il motore accetta solo la forma chiusa (lettere, spazi e apostrofo, al più 20
+  caratteri e due parole) e un nome diverso dagli altri; se no un avviso sul palco e la partita
+  non cambia (non è un errore del gioco). Nell'istantanea il giocatore è segnato `scritto`.
+- **Cosa dice Calliope** (`Giochi._nomi_detti`): «Giocatore N» e i nomi che Calliope stessa ha
+  mandato dalla voce riconosciuta (`Partita.nomi_voce`) si dicono; ogni altro nome (scritto,
+  detto «sono Pippo», o un nome che il motore dichiara senza che Calliope l'abbia mandato: il
+  server non si fida del motore) è **testo del gioco**: si dice solo se passa i controlli delle
+  frasi dei giochi (`riferire.controlla_testo`; con un minore o un ospite nella partita il
+  guardiano, che se manca o è guasto per un minore blocca), mai in una partita di prova; se no
+  resta sullo schermo e a voce è «Giocatore N» (regola `gioco_nome_fermato`). Giudizio in cache
+  per partita. Con un nome scritto detto, l'istantanea nei dati del turno va in busta.
+- «Tocca ad Ada» con la d eufonica, sullo schermo e a voce.
+
+Prove: `prova_gioco_stato` (sezione 7: motore, server, ciclo), `prova_testo` (le forme di
+«anch'io, sono …» e i contrari), `prova_giochi_pagina` (la preparazione dice «gioco anch'io»).

@@ -383,7 +383,7 @@ async function prepara(file, opzioni = {}) {
 export function tuttiPiatti(m, gmin, gmax) {
   const out = [];
   if (gmin < gmax) for (let i = gmin; i <= gmax; i++) out.push(`giocatori_${i}`);
-  out.push("inizia", "avanti", "ancora");
+  out.push("inizia", "avanti", "ancora", "anchio");
   const fasi = (m && m.fasi) || {};
   if (Object.values(fasi).some((f) => (f || {}).pagina === "tela")) out.push("fine_partita");
   for (const f of Object.values(fasi)) {

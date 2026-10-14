@@ -804,6 +804,19 @@ for testo, atteso in [
         ("Chi vince lo scudetto?", None), ("Cosa posso dire a Bianca?", None),
         ("Come si gioca?", None), ("Calliope.", None), ("", None), ("Punti.", None)]:
     verifica(f"gioco_stato_detto «{testo}»", GS.domanda(testo), atteso)
+# «Gioco anch'io, sono Pippo» per intero (14/10, regola `gioco_anchio_nome`): il nome di una o
+# due parole di sole lettere; i contrari nel ciclo in prove/prova_gioco_stato.py
+for testo, atteso in [
+        ("Gioco anch'io, sono Pippo.", "Pippo"), ("Calliope, anch'io mi chiamo lina rosa", "Lina Rosa"),
+        ("Anche io sono Niccolò!", "Niccolò"), ("Ci sono anch'io, sono Bea.", "Bea"),
+        ("Gioco anch’io, sono Pippo", "Pippo"),
+        # contrari: senza nome, una frase più lunga, non un nome, cifre, troppe parole
+        ("Anch'io.", None), ("Gioco anch'io.", None), ("Sono Pippo.", None),
+        ("Anch'io sono pronto.", None), ("Anch'io sono qui.", None),
+        ("Anch'io sono Pippo e voglio vincere.", None), ("Anch'io, sono Pippo123.", None),
+        ("Gioco anch'io, sono il re dei giochi.", None), ("Pippo gioca anche lui.", None),
+        ("Anch'io sono stanco.", None), ("", None)]:
+    verifica(f"gioco_anchio_nome «{testo}»", GS.anchio_nome(testo), atteso)
 
 
 # ── comandi del flusso dello sviluppo (12/10, lavoro 3) ──

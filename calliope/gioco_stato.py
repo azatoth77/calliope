@@ -95,6 +95,11 @@ def _elenco(voci: list[str], congiunzione: str = "e") -> str:
     return ", ".join(voci[:-1]) + f" {congiunzione} " + voci[-1]
 
 
+def _a(nome: str) -> str:
+    """«a Bea», «ad Ada» (la d eufonica davanti alla a)."""
+    return ("ad " if str(nome)[:1].lower() == "a" else "a ") + str(nome)
+
+
 def nomi_detti(ist: dict) -> list[str]:
     """Come Calliope chiama i giocatori: il nome dell'istantanea se si può dire (`detto`, dal
     server: forma chiusa e controlli delle frasi dei giochi), altrimenti «Giocatore N»."""
@@ -190,7 +195,7 @@ def risposta(tipo: str, info: dict, chi: str | None = None) -> str:
             return "Adesso non tocca a nessuno in particolare."
         if fase == "esito":
             return f"Ha appena giocato {nomi[t]}."
-        return "Tocca a te." if io == t else f"Tocca a {nomi[t]}."
+        return "Tocca a te." if io == t else f"Tocca {_a(nomi[t])}."
     if tipo == "punti":
         if io is not None:
             return f"Hai {_punti(gs[io].get('punti') or 0)}."
@@ -235,15 +240,57 @@ def contesto(info: dict) -> tuple[str, bool]:
         if fase == "fine":
             parti.append("la partita è finita")
         elif len(gs) > 1 and t is not None and 0 <= t < len(nomi):
-            parti.append(("ha appena giocato " if fase == "esito" else "tocca a ") + nomi[t])
+            parti.append(f"ha appena giocato {nomi[t]}" if fase == "esito"
+                         else f"tocca {_a(nomi[t])}")
         parti.append("punti: " + ", ".join(f"{nomi[i]} {_numero(g.get('punti') or 0)}"
                                             for i, g in enumerate(gs)))
     voci = comandi_in_parole(ist.get("comandi") or [], info.get("macchina"))
     parti.append("comandi a voce adesso: " + ("; ".join(voci) if voci else "nessuno"))
     testo = ". ".join(p[:1].upper() + p[1:] if k else p for k, p in enumerate(parti)) + "."
-    scritti = any(g.get("scritto") for g in gs)
+    # Testi del gioco: i nomi scritti che Calliope dice (quelli fermati sono «Giocatore N»)
+    scritti = any(g.get("scritto") and g.get("detto", g.get("nome")) == g.get("nome")
+                  for g in gs)
     return testo, scritti
 
 
+# ─────────────────────────── «gioco anch'io, sono Pippo» ───────────────────────────
+# Un ospite (o chi non è riconosciuto dalla voce) si dà un nome nella preparazione: la forma
+# chiusa intera «(gioco) anch'io, sono / mi chiamo <nome>», con il nome di una o due parole di
+# sole lettere (regola `gioco_anchio_nome`, principio 10: forma chiusa e breve, per intero,
+# effetto reversibile, un nome sullo schermo). Il nome non è della voce riconosciuta: Calliope lo
+# dice solo dopo i controlli delle frasi dei giochi, come uno scritto (schermi/giochi.py)
+import re as _re  # noqa: E402
+
+_ANCHIO = _re.compile(r"^(?:gioco |ci sono )?anch(?:e io| io|io) (?:sono|mi chiamo|e sono|e mi "
+                      r"chiamo) ([a-zà-öø-ÿ']+(?: [a-zà-öø-ÿ']+)?)$")
+REGOLA_ANCHIO = "gioco_anchio_nome"
+
+
+def anchio_nome(testo: str, nomi=("Calliope",)) -> str | None:
+    """Il nome in «gioco anch'io, sono Pippo» detto per intero (il nome di Calliope davanti
+    non conta), con le iniziali maiuscole; None se la frase non è questa forma."""
+    t = str(testo or "").lower().replace("’", "'")
+    t = _re.sub(r"[^\wà-öø-ÿ' ]", " ", t)
+    t = _re.sub(r"\s+", " ", t).strip()
+    parole = t.split(" ")
+    if parole and gioco_voce.ha_il_nome(parole[0], nomi):
+        t = " ".join(parole[1:])
+    t = t.replace("anch' io", "anch io").replace("anch'io", "anch io")
+    m = _ANCHIO.match(t)
+    if not m:
+        return None
+    nome = " ".join(p[:1].upper() + p[1:] for p in m.group(1).split(" "))
+    if len(nome) > 20 or nome.lower().split(" ")[0] in _NON_NOMI:
+        return None
+    return nome
+
+
+# Le parole che dopo «anch'io sono» non sono un nome («anch'io sono pronto»)
+_NON_NOMI = {"io", "qui", "qua", "pronto", "pronta", "pronti", "stanco", "stanca", "contento",
+             "contenta", "d'accordo", "daccordo", "pure", "dentro", "in", "un", "una", "il", "la",
+             "lo", "le", "i", "gli", "di", "del", "della", "con", "per", "bravo", "brava",
+             "capace", "felice", "curioso", "curiosa", "anch'io"}
+
+
 __all__ = ["DOMANDE", "REGOLA", "domanda", "risposta", "contesto", "comandi_in_parole",
-           "nomi_detti", "forme_normalizzate"]
+           "nomi_detti", "forme_normalizzate", "anchio_nome", "REGOLA_ANCHIO"]

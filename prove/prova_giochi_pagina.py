@@ -338,8 +338,8 @@ def main() -> int:
                          and len(p.posti) == 2, 20) is not None)
         # la preparazione (due giocatori, «Inizia») a voce su tutte e due: poi la tela
         for nome in ("A", "B"):
-            aspetta(lambda n=nome: list((a.giochi.ascolto([schermi[n]["id"]]) or {}).get("comandi")
-                                        or {}) == ["inizia"], 10)
+            aspetta(lambda n=nome: "inizia" in list((a.giochi.ascolto([schermi[n]["id"]]) or {})
+                                                    .get("comandi") or {}), 10)
             a.giochi.comando(p.id, schermi[nome]["id"], "inizia")
         # La tela è disegnata quando il motore, dopo averla messa, dice a Calliope i comandi a
         # voce della fase nuova (senza «inizia»). Il numero del giocatore lo dà il «pronto» in
@@ -473,9 +473,9 @@ def main() -> int:
         a.installa("porte")
         out = a.chiama("est_porte", {"partita": "nuova"}, "Dario", schermo=schermi["A"])
         pv = out["partita"]
-        ok = aspetta(lambda: attivi_di(pv) == ["inizia"], 15)
+        ok = aspetta(lambda: attivi_di(pv) == ["anchio", "inizia"], 15)
         verifica("comandi a voce: il gioco pronto nella pagina ascolta i comandi della fase "
-                 "(la preparazione: «inizia»)", ok is not None
+                 "(la preparazione: «gioco anch'io» e «inizia»)", ok is not None
                  and (a.giochi.ascolto([sa]) or {}).get("partita") == pv, str(attivi_di(pv)))
         a.giochi.comando(pv, sa, "inizia")
         ok = aspetta(lambda: attivi_di(pv) == ["porta_1", "porta_2", "porta_3"], 8)
@@ -511,7 +511,7 @@ def main() -> int:
         out = a.giochi.avvia_prova(a.chi("Dario", schermo=schermi["A"]), "porte_prova", n_p,
                                    mv_p)
         pp = out["partita"]
-        ok = aspetta(lambda: attivi_di(pp) == ["inizia"], 15)
+        ok = aspetta(lambda: attivi_di(pp) == ["anchio", "inizia"], 15)
         a.giochi.comando(pp, sa, "inizia")
         ok2 = aspetta(lambda: attivi_di(pp) == ["porta_1", "porta_2", "porta_3"], 5)
         verifica("comandi a voce nella partita di prova: arrivano (il gioco cambia i suoi "
@@ -525,7 +525,7 @@ def main() -> int:
         a.installa("porte_fasi")
         out = a.chiama("est_porte_fasi", {"partita": "nuova"}, "Dario", schermo=schermi["A"])
         pm = out.get("partita")
-        prep = ["giocatori_1", "giocatori_2", "giocatori_3", "giocatori_4", "inizia"]
+        prep = ["giocatori_1", "giocatori_2", "giocatori_3", "giocatori_4", "anchio", "inizia"]
         ok = aspetta(lambda: attivi_di(pm) == prep, 15)
         verifica("macchina a stati: il motore parte nel riquadro e chiede quanti giocatori",
                  pm and ok is not None, str(attivi_di(pm)))

@@ -30,6 +30,14 @@ docs/ricerche/2026-10-12-giochi-macchina-stati.md; area docs/aree/giochi.md), a 
    gioco_giudice), «nessuno» → al modello della voce; contrari: senza il nome nella finestra
    del gioco il giudice non parte (`giochi_giudice_senza_nome` spento), con l'interruttore
    acceso sì; domanda in sospeso; giudice spento (`giochi_giudice: false`).
+7. **«Gioco anch'io» e i nomi scritti** (passo 4): nel motore «gioco anch'io» con il nome dalla
+   voce prende un posto (la stessa voce due volte no, senza nome «Giocatore N»), la partita
+   parte con quei nomi e li tiene ad «ancora»; il nome nella fascia dei punti si tocca e si
+   scrive (forma chiusa; cifre e doppioni rifiutati con un avviso, la partita non cambia).
+   Sul server il nome mandato da Calliope dalla voce si dice, quello scritto passa dai
+   controlli (con un minore nella partita il guardiano: fermato → «Giocatore N»), mai in una
+   partita di prova; nel ciclo «Gioco anch'io, sono Pippo» manda il nome detto, che vale come
+   uno scritto (regola gioco_anchio_nome), e con la voce riconosciuta il suo nome.
 
     python prove/prova_gioco_stato.py
 """
@@ -90,7 +98,7 @@ def prova_valida():
     fasi = mc.per_fase(m, g)
     verifica("i comandi che ogni fase può avere: preparazione, turno, esito, fine",
              fasi["preparazione"] == ["giocatori_1", "giocatori_2", "giocatori_3", "giocatori_4",
-                                      "inizia"]
+                                      "anchio", "inizia"]
              and fasi["turno"] == [f"porta_{i}" for i in range(1, 7)]
              and fasi["esito"] == ["avanti"] and fasi["fine"] == ["ancora"], str(fasi))
     verifica("da_piatto: «porta_3» → porta 3 nella fase turno; standard; sconosciuto",
@@ -537,6 +545,177 @@ def prova_giudice():
              GG.Giudice(None, chiama=lento).scegli("x", dict(info, comandi={})).guasto is None)
 
 
+# ═══════════════════════════ 7. «gioco anch'io» e i nomi scritti ═══════════════════════════
+
+def prova_nomi_motore(tmp: Path):
+    sezione("7. «gioco anch'io» e i nomi scritti nel motore")
+    if not shutil.which("node"):
+        print("SALTATA IN PARTE: node non c'è")
+        return
+    out = esegui(tmp / "nomi", "porte_fasi", """
+out.prep0 = g.calliope.istantanee().slice(-1)[0];
+await g.calliope.comando({ comando: "anchio", n: 0, giocatore: "Ada" });
+out.prep1 = g.calliope.istantanee().slice(-1)[0];
+out.testo1 = g.testo();
+await g.calliope.comando({ comando: "anchio", n: out.prep1.n, giocatore: "Ada" });
+await g.calliope.comando({ comando: "anchio", n: g.calliope.istantanee().slice(-1)[0].n });
+await g.tocca("Inizia");
+out.inizio = g.stato();
+out.ist = g.calliope.istantanee().slice(-1)[0];
+await g.tocca("Giocatore 2: 0");
+out.campo = g.trova(".scrivi-nome").length;
+await g.scrivi(".scrivi-nome", "Bea");
+out.dopo_nome = g.stato();
+out.ist_nome = g.calliope.istantanee().slice(-1)[0];
+await g.tocca("Bea: 0");
+await g.scrivi(".scrivi-nome", "Bea123");
+out.cifre = g.stato().giocatori.map((x) => x.nome);
+out.avviso = g.testo();
+await g.tocca("Bea: 0");
+await g.scrivi(".scrivi-nome", "ada");
+out.doppio = g.stato().giocatori.map((x) => x.nome);
+out.errori = g.errori.length;
+""")
+    if "_errore" in out:
+        verifica("il motore nel DOM finto", False, out["_errore"])
+        return
+    verifica("in preparazione «gioco anch'io» è attivo (e «inizia»)",
+             "anchio" in out["prep0"]["comandi"] and "inizia" in out["prep0"]["comandi"],
+             str(out["prep0"]))
+    verifica("«gioco anch'io» con il nome dalla voce: un posto per Ada, sullo schermo",
+             "Ada" in out["testo1"] and "Giocano: Ada" in out["testo1"], out["testo1"][:200])
+    nomi = [x["nome"] for x in out["inizio"]["giocatori"]]
+    verifica("la stessa voce due volte non prende due posti; senza nome «Giocatore 2»; «inizia» "
+             "parte con quei nomi", nomi == ["Ada", "Giocatore 2"], str(nomi))
+    verifica("il campo per scrivere il nome si apre toccando il nome nella fascia",
+             out["campo"] == 1)
+    nomi = [x["nome"] for x in out["dopo_nome"]["giocatori"]]
+    g2 = out["ist_nome"]["giocatori"][1]
+    verifica("il nome scritto: «Bea» nella partita e nell'istantanea per Calliope, segnato "
+             "«scritto»", nomi == ["Ada", "Bea"] and g2 == {"nome": "Bea", "punti": 0,
+                                                            "scritto": True}, f"{nomi} {g2}")
+    verifica("contrario: un nome con le cifre è rifiutato con un avviso, la partita non cambia",
+             out["cifre"] == ["Ada", "Bea"] and "solo lettere" in out["avviso"], out["avviso"][:200])
+    verifica("contrario: lo stesso nome di un altro giocatore è rifiutato",
+             out["doppio"] == ["Ada", "Bea"], str(out["doppio"]))
+    verifica("nessun errore del gioco (gli avvisi sui nomi non sono errori)", out["errori"] == 0)
+    m, g = macchina_di("porte_fasi")
+    v = mc.valida_istantanea(out["ist_nome"], m, g)
+    verifica("andata e ritorno: l'istantanea con il nome scritto passa la validazione",
+             v["giocatori"][1].get("scritto") is True)
+
+
+def prova_nomi_server(tmp: Path):
+    sezione("7. i nomi detti da Calliope: voce, scritti, minori, prova")
+    from calliope import gioco_stato as GS
+    a = Ambiente(tmp)
+    a.installa("porte")
+    A = a.abbina("A", "studio")
+    pid = a.chiama("est_porte", {}, "Dario", schermo=A)["partita"]
+    a.pagina(A, {"partita": pid, "tipo": "pronto"})
+    stato_msg(a, A, pid, buona(n=0, fase="preparazione", tocca=None, giocatori=[],
+                               comandi=["anchio", "inizia"]))
+    a.giochi.comando(pid, A["id"], "anchio", "Elena")
+    gs = [{"nome": "Elena", "punti": 0}, {"nome": "Pippo", "punti": 2, "scritto": True},
+          {"nome": "Giocatore 3", "punti": 0}]
+    m = valida(file_gioco("porte")[0])["scheda"]
+    gs1 = [gs[0]]
+    r = stato_msg(a, A, pid, {"n": 1, "fase": "turno", "tocca": 0, "turno": 1, "giocatori": gs1,
+                              "esito": None, "comandi": ["porta_1"]})
+    info = a.giochi.ascolto([A["id"]])
+    g0 = info["istantanea"]["giocatori"][0]
+    verifica("il nome mandato da Calliope dalla voce («gioco anch'io» di Elena) si dice, non è "
+             "scritto", r.get("ok") and g0["detto"] == "Elena" and not g0.get("scritto"), str(g0))
+    # Il gioco delle porte è per un giocatore: per gli altri casi la macchina a 3
+    a.giochi.partite[pid].scheda = dict(m, giocatori={"min": 1, "max": 3})
+    r = stato_msg(a, A, pid, {"n": 2, "fase": "turno", "tocca": 1, "turno": 1, "giocatori": gs,
+                              "esito": None, "comandi": ["porta_1"]})
+    info = a.giochi.ascolto([A["id"]])
+    gg = info["istantanea"]["giocatori"]
+    verifica("il nome scritto «Pippo» passa i controlli e si dice; «Giocatore 3» com'è",
+             r.get("ok") and gg[1]["detto"] == "Pippo" and gg[1]["scritto"] is True
+             and gg[2]["detto"] == "Giocatore 3", str(gg))
+    verifica("«a chi tocca?» con il nome scritto: «Tocca a Pippo.»; i dati del turno in busta",
+             GS.risposta("tocca", info) == "Tocca a Pippo." and GS.contesto(info)[1])
+    # Con un minore nella partita: il guardiano (qui assente: per un minore si blocca)
+    a.giochi.partite[pid].posti[A["id"]].minore = True
+    stato_msg(a, A, pid, {"n": 3, "fase": "turno", "tocca": 1, "turno": 1,
+                          "giocatori": [gs[0], {"nome": "Topolino", "punti": 0, "scritto": True}],
+                          "esito": None, "comandi": ["porta_1"]})
+    gg = a.giochi.ascolto([A["id"]])["istantanea"]["giocatori"]
+    verifica("con un minore nella partita il nome scritto passa dal guardiano: senza guardiano "
+             "non si dice («Giocatore 2»), sullo schermo resta",
+             gg[1]["detto"] == "Giocatore 2" and gg[1]["nome"] == "Topolino", str(gg))
+
+    class Guardiano:
+        def giudica(self, domanda, testo, att=None):
+            from types import SimpleNamespace
+            return SimpleNamespace(esito="ok" if testo == "Lilla" else "vietato")
+    a.giochi.guardiano = Guardiano()
+    stato_msg(a, A, pid, {"n": 4, "fase": "turno", "tocca": 1, "turno": 1,
+                          "giocatori": [gs[0], {"nome": "Lilla", "punti": 0, "scritto": True},
+                                        {"nome": "Brutto Nome", "punti": 0, "scritto": True}],
+                          "esito": None, "comandi": ["porta_1"]})
+    gg = a.giochi.ascolto([A["id"]])["istantanea"]["giocatori"]
+    verifica("…con il guardiano: «Lilla» sì, «Brutto Nome» fermato → «Giocatore 3»",
+             gg[1]["detto"] == "Lilla" and gg[2]["detto"] == "Giocatore 3", str(gg))
+    a.giochi.partite[pid].posti[A["id"]].minore = False
+    # In una partita di prova i nomi scritti non si dicono
+    mp, _ = file_gioco("porte")
+    pp = a.giochi.avvia_prova(a.chi("Dario", schermo=A), "porte", 1, valida(mp))["partita"]
+    a.pagina(A, {"partita": pp, "tipo": "pronto"})
+    stato_msg(a, A, pp, {"n": 1, "fase": "turno", "tocca": 0, "turno": 1,
+                         "giocatori": [{"nome": "Pippo", "punti": 0, "scritto": True}],
+                         "esito": None, "comandi": ["porta_1"]})
+    g0 = a.giochi.partite[pp].posti[A["id"]].istantanea["giocatori"][0]
+    verifica("partita di prova: il nome scritto non si dice («Giocatore 1»)",
+             g0["detto"] == "Giocatore 1", str(g0))
+    stato_msg(a, A, pid, {"n": 5, "fase": "turno", "tocca": 0, "turno": 1,
+                          "giocatori": [gs[0], {"nome": "Furbo", "punti": 0}],
+                          "esito": None, "comandi": ["porta_1"]})
+    gg = a.giochi.ascolto([A["id"]])["istantanea"]["giocatori"]
+    verifica("contrario: un nome non segnato «scritto» dal motore ma mai mandato da Calliope "
+             "vale come scritto (il server non si fida del motore)", gg[1].get("scritto") is True,
+             str(gg))
+
+
+def prova_nomi_ciclo(tmp: Path):
+    import prova_gioco_voce as PV
+    sezione("7. «gioco anch'io, sono Pippo» nel ciclo")
+    a = Ambiente(tmp)
+    a.installa("porte")
+    A = a.abbina("A", "studio")
+    sat = a.hub.satelliti = PV.Satelliti({7: PV.Coll(id=7, schermo_id=A["id"], stanza="studio")})
+    c, stt, voce, cervello, ascolto = PV.nuovo_ciclo(a, sat, 7, [])
+    a.cfg.giochi_ascolto_s = 60.0
+    pid = a.chiama("est_porte", {}, "Dario", schermo=A)["partita"]
+    a.pagina(A, {"partita": pid, "tipo": "pronto"})
+    stato_msg(a, A, pid, buona(n=0, fase="preparazione", tocca=None, giocatori=[],
+                               comandi=["anchio", "inizia"]))
+
+    def giro(frase):
+        c.awake_until = 0.0
+        stt.frasi.append(frase)
+        a.eventi.clear()
+        n = len(cervello.richieste)
+        c.giro()
+        return ([x[2]["dati"] for x in a.eventi if x[1] == "gioco"
+                 and x[2].get("tipo") == "comando"], cervello.richieste[n:])
+    mosse, chiesto = giro("Gioco anch'io, sono Pippo.")
+    verifica("«Gioco anch'io, sono Pippo.» senza il nome nella finestra: un posto con il nome "
+             "detto, senza il modello (regola gioco_anchio_nome)",
+             mosse == [{"comando": "anchio", "n": 0, "giocatore": "Pippo"}] and not chiesto
+             and "gioco_anchio_nome" in (c.rec.get("regole") or []), f"{mosse} {chiesto}")
+    verifica("…il nome detto non è della voce riconosciuta: Calliope lo dirà solo dopo i "
+             "controlli", "Pippo" not in a.giochi.partite[pid].nomi_voce)
+    mosse, chiesto = giro("Anch'io sono pronto.")
+    verifica("contrario: «Anch'io sono pronto.» non è un nome (ignorata nella finestra)",
+             not mosse and not chiesto)
+    mosse, chiesto = giro("Anch'io.")
+    verifica("«Anch'io.» da solo: il posto, senza nome (la voce qui non è riconosciuta)",
+             mosse == [{"comando": "anchio", "n": 0}], str(mosse))
+
+
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
     radice = Path(tempfile.mkdtemp(prefix="calliope-gioco-stato-"))
@@ -547,6 +726,9 @@ def main():
         prova_domande()
         prova_ciclo(radice / "ciclo")
         prova_giudice()
+        prova_nomi_motore(radice / "nomi")
+        prova_nomi_server(radice / "nomi_server")
+        prova_nomi_ciclo(radice / "nomi_ciclo")
     finally:
         from calliope import minori as M
         for s in ("regole", "avvisi", "gioco", "richieste"):

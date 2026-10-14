@@ -167,6 +167,12 @@ class Partita:
         self.frasi: deque = deque(maxlen=50)
         self.carte: dict[int, dict] = {}            # la scheda mandata a ogni schermo
         self.n = 0
+        # I nomi di chi gioca (14/10, passo 4 del progetto): quelli che Calliope stessa ha
+        # mandato al riquadro dalla voce riconosciuta («gioco anch'io», le mosse con
+        # «giocatore»), e il giudizio sugli altri (scritti sullo schermo o detti «sono Pippo»):
+        # Calliope li dice solo dopo i controlli delle frasi dei giochi
+        self.nomi_voce: set[str] = set()
+        self.nomi_ok: dict[str, bool] = {}
 
     @property
     def condivisa(self) -> bool:
@@ -686,12 +692,49 @@ class Giochi:
             if prima:
                 self.sveglia_voce()
             return {"errore": f"istantanea non valida: {e}", "_stato": 400}
+        self._nomi_detti(p, posto, ist)
         prima = self._attivi(p, posto)
         with self._lock:
             posto.istantanea, posto.ist_n = ist, ist["n"]
         if bool(prima) != bool(ist["comandi"]):
             self.sveglia_voce()
         return {"ok": True, "n": ist["n"]}
+
+    def _nomi_detti(self, p: Partita, posto: Posto, ist: dict):
+        """Come Calliope dice ogni giocatore (14/10, passo 4 del progetto, decisione 1 di chi
+        amministra): «Giocatore N» e i nomi che Calliope stessa ha mandato dalla voce
+        riconosciuta si dicono; gli altri (scritti sullo schermo, detti «gioco anch'io, sono
+        Pippo») sono testo del gioco: si dicono solo se passano i controlli delle frasi dei giochi
+        (riferire.controlla_testo; con un minore o un ospite nella partita il guardiano), mai in
+        una partita di prova; se no restano sullo schermo e a voce sono «Giocatore N». Segna
+        `detto` e `scritto` su ogni giocatore dell'istantanea."""
+        from ..estensioni import macchina as mc
+        for i, g in enumerate(ist["giocatori"]):
+            nome = g["nome"]
+            if g.get("fuori_forma") or mc.NOME_DEFAULT.match(nome) or nome in p.nomi_voce:
+                g["detto"] = nome
+                g.pop("scritto", None)
+                continue
+            g["scritto"] = True
+            g["detto"] = nome if self._nome_dicibile(p, nome) else f"Giocatore {i + 1}"
+
+    def _nome_dicibile(self, p: Partita, nome: str) -> bool:
+        if p.prova:
+            return False                     # una partita di prova non fa dire nomi scritti
+        ok = p.nomi_ok.get(nome)
+        if ok is not None:
+            return ok
+        from .. import riferire
+        _detto, regole = riferire.controlla_testo(nome, "estensione")
+        ok = not regole
+        if ok and p.protetta():
+            ok = self._guardiano(nome, domanda=False, minore=any(
+                x.minore for x in p.posti.values())) == "ok"
+        if len(p.nomi_ok) < 64:
+            p.nomi_ok[nome] = ok
+        if not ok:
+            self._registra(p, "nome_fermato", regola="gioco_nome_fermato")
+        return ok
 
     def _t_rifiutato(self, p: Partita, posto: Posto, dati) -> dict:
         """Il motore ha rifiutato un comando a voce: era stato riconosciuto su un'istantanea
@@ -865,10 +908,13 @@ class Giochi:
                         return True
         return False
 
-    def comando(self, partita: str, schermo, comando: str, giocatore: str | None = None) -> bool:
+    def comando(self, partita: str, schermo, comando: str, giocatore: str | None = None,
+                dalla_voce: bool = True) -> bool:
         """Manda una mossa a voce al riquadro della partita su quello schermo (evento «gioco»
         di tipo «comando»). Solo un comando attivo di quel gioco; il nome di chi gioca solo se
-        il manifesto lo chiede. True se mandata."""
+        il manifesto lo chiede. `dalla_voce`: il nome è di chi è riconosciuto dalla voce (si
+        dice senza altri controlli); False per un nome detto a parole («gioco anch'io, sono
+        Pippo»), che vale come uno scritto. True se mandata."""
         with self._lock:
             p = self.partite.get(str(partita or ""))
             posto = p.posti.get(schermo) if p is not None else None
@@ -882,6 +928,8 @@ class Giochi:
             dati = {"comando": comando, "n": posto.istantanea["n"]}
             if giocatore and a.get("giocatore"):
                 dati["giocatore"] = str(giocatore)[:40]
+                if dalla_voce and len(p.nomi_voce) < 64:
+                    p.nomi_voce.add(dati["giocatore"])
             posto.segno = time.monotonic()
             p.ultimo = time.time()
         self.hub.evento_a(posto.sid, "gioco", {"partita": p.id, "tipo": "comando", "dati": dati})

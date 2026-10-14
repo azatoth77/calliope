@@ -55,7 +55,7 @@ from calliope.tools.schermi import _gioco_comando, gioco_spec  # noqa: E402
 errori = 0
 T0 = time.perf_counter()
 # I comandi a voce del gioco delle porte (macchina.ascolta: quelli di Calliope, poi le porte)
-TUTTI = ["inizia", "avanti", "ancora", "porta_1", "porta_2", "porta_3"]
+TUTTI = ["inizia", "avanti", "ancora", "anchio", "porta_1", "porta_2", "porta_3"]
 # Il numero dell'istantanea per partita e schermo (14/10: il motore la manda dopo ogni mossa)
 _N: dict = {}
 

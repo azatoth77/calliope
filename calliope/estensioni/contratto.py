@@ -152,7 +152,7 @@ def scheda_testo(cfg=None) -> list[str]:
     from . import scheda as sc
     from ..schermi import giochi as gi
     c = lambda k, d: getattr(cfg, k, d) if cfg is not None else d  # noqa: E731
-    std = ", ".join(f"«{f}»" for n in ("inizia", "avanti", "ancora")
+    std = ", ".join(f"«{f}»" for n in ("inizia", "avanti", "ancora", "anchio")
                     for f in mc.COMANDI_STANDARD[n][0])
     return [
         "", "## 5. Scheda interattiva (giochi)",
@@ -201,8 +201,12 @@ def scheda_testo(cfg=None) -> list[str]:
         f"\"azzurro\"]}}}} (al più {mc.MAX_VALORI}); {{n}} da solo solo con al più "
         f"{mc.MAX_SOLO_SLOT} valori; etichetta del pulsante. In tutto, con i valori, al più "
         f"{mc.MAX_PIATTI} comandi a voce. Non si usano «basta», «stop», «esci» né le forme di "
-        f"Calliope ({std}, «N giocatori», «siamo in N»). L'esito va avanti da solo dopo "
-        "esito_s secondi (0: solo con «avanti» o il tocco)",
+        f"Calliope ({std}, «N giocatori», «siamo in N»), né le domande che Calliope "
+        "risponde da sé («a chi tocca?», «quanti punti ho?», «chi sta vincendo?», «cosa posso "
+        "dire?»). I nomi dei giocatori sono di Calliope («gioco anch'io» a voce, o scritti "
+        "toccando il nome nella fascia dei punti): arrivano in nuovaPartita({ nomi }) e in "
+        "ctx.giocatori. L'esito va avanti da solo dopo esito_s secondi (0: solo con «avanti» o "
+        "il tocco)",
         "- GIOCO: nuovaPartita({ giocatori, nomi }) → i dati della partita (un oggetto JSON); "
         "mosse[fase][comando](dati, { valore, chi, giocatori, turno }) → { dati, punti, esito, "
         "fase, dopo, ancora } e NIENT'ALTRO (dati: lo stato del gioco dopo la mossa; punti: un "

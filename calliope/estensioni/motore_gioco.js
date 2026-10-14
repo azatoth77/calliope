@@ -33,7 +33,15 @@
   var CHIAVI_MOSSA = ["dati", "punti", "esito", "fase", "dopo", "ancora"];
   var CHIAVI_VISTA = ["titolo", "sottotitolo", "testo", "caselle"];
   var CHIAVI_CASELLA = ["testo", "colore", "risorsa", "comando", "valore"];
-  var ETICHETTE = { inizia: "Inizia", avanti: "Avanti", ancora: "Ancora", fine_partita: "Fine partita" };
+  var ETICHETTE = { inizia: "Inizia", avanti: "Avanti", ancora: "Ancora", fine_partita: "Fine partita",
+                    anchio: "Gioco anch'io" };
+  // Il nome di chi gioca (14/10, passo 4 del progetto: «gioco anch'io» e i nomi scritti): la forma
+  // chiusa che Calliope può dire (lettere, spazi e apostrofo; al più 20 caratteri e due parole)
+  var NOME_CHIUSO = /^[A-Za-zÀ-ÖØ-öø-ÿ']+( [A-Za-zÀ-ÖØ-öø-ÿ']+)?$/;
+  function nomeChiuso(t) {
+    t = String(t === undefined || t === null ? "" : t).replace(/\s+/g, " ").trim();
+    return t && t.length <= 20 && NOME_CHIUSO.test(t) ? t : null;
+  }
   var MODELLI = ["titolo", "scelte", "griglia", "messaggio", "punteggi", "classifica", "tela"];
   // I colori di una casella: un nome di questo elenco o #rgb / #rrggbb
   var COLORI = { rosso: "#d93a3a", verde: "#2f9e44", blu: "#3557c9", giallo: "#f2c94c",
@@ -203,7 +211,7 @@
 
   // La fascia dei punti in fondo: «Nome: punti», chi tocca sottolineato. Restituisce il suo bordo alto
   function fascia(out, pag, x, w, basso) {
-    var voci = pag.giocatori.map(function (g, i) { return { testo: g.nome + ": " + g.punti, tocca: i === pag.tocca && pag.mostraTocca }; });
+    var voci = pag.giocatori.map(function (g, i) { return { testo: g.nome + ": " + g.punti, tocca: i === pag.tocca && pag.mostraTocca, i: i }; });
     var f, file;
     for (f = FASCIA.fMax; ; f -= 2) {
       file = [[]];
@@ -224,7 +232,7 @@
       var xx = x + (w - tot) / 2;
       fila.forEach(function (v) {
         metti(out, { tipo: "giocatore", testo: v.testo, tocca: v.tocca, scritta: true, x: xx, y: top + r * (FASCIA.riga + 6),
-                     w: v.w, h: FASCIA.riga, f: f });
+                     w: v.w, h: FASCIA.riga, f: f, indice: v.i });
         xx += v.w + FASCIA.spazio;
       });
     });
@@ -482,8 +490,9 @@
     if (!M.fasi[M.inizio]) throw errore("la macchina non ha la fase d'inizio «" + M.inizio + "»");
 
     function nuovo() {
+      // nomi: chi ha detto «gioco anch'io» nella preparazione (il nome dalla voce, o null)
       return { n: 0, fase: "preparazione", numero: M.gmin, giocatori: [], tocca: 0, turno: 0,
-               dati: null, esito: null, dopo: null, passa: false };
+               dati: null, esito: null, dopo: null, passa: false, nomi: [] };
     }
     function contesto(S) {
       var g = S.giocatori.map(function (x) { return { nome: x.nome, punti: x.punti }; });
@@ -503,6 +512,7 @@
           for (var i = M.gmin; i <= M.gmax; i++) v.push(i);
           out.giocatori = v;
         }
+        if ((S.nomi || []).length < M.gmax) out.anchio = true;
         out.inizia = true;
         return out;
       }
@@ -547,7 +557,7 @@
     // Il comando a voce piatto («porta_3») → [comando, valore]
     function daPiatto(nome) {
       var s = String(nome);
-      if (s === "inizia" || s === "avanti" || s === "ancora" || s === "fine_partita") return [s, null];
+      if (s === "inizia" || s === "avanti" || s === "ancora" || s === "fine_partita" || s === "anchio") return [s, null];
       var m = s.match(/^giocatori_(\d+)$/);
       if (m) return ["giocatori", Number(m[1])];
       for (var fn in M.fasi) {
@@ -569,15 +579,21 @@
       S.tocca = (S.tocca + 1) % S.giocatori.length;
       if (S.tocca === 0) S.turno++;
     }
-    function avviaPartita(S, numero) {
-      var nomi = [];
-      for (var i = 1; i <= numero; i++) nomi.push("Giocatore " + i);
+    // La partita nuova con `numero` giocatori; `prima`: i giocatori che c'erano (nome e se è
+    // scritto), dalla preparazione («gioco anch'io») o dalla partita di prima («ancora»)
+    function avviaPartita(S, numero, prima) {
+      var gs = [];
+      for (var i = 0; i < numero; i++) {
+        var p = (prima || [])[i];
+        gs.push(p && p.nome ? { nome: p.nome, punti: 0, scritto: !!p.scritto } : { nome: "Giocatore " + (i + 1), punti: 0, scritto: false });
+      }
+      var nomi = gs.map(function (g) { return g.nome; });
       var dati = GIOCO.nuovaPartita({ giocatori: numero, nomi: nomi.slice() });
       if (dati === undefined || dati === null || typeof dati !== "object") {
         throw errore("GIOCO.nuovaPartita restituisce " + tipo(dati) + ": deve restituire i dati della partita (un oggetto)");
       }
       S.numero = numero;
-      S.giocatori = nomi.map(function (n) { return { nome: n, punti: 0 }; });
+      S.giocatori = gs;
       S.tocca = 0; S.turno = 1; S.dati = copia(dati, "GIOCO.nuovaPartita");
       S.esito = null; S.dopo = null; S.passa = false;
       S.fase = M.inizio;
@@ -628,14 +644,28 @@
       }
       var S = copia(S0, "stato");
       S.n = S0.n + 1;
-      if (S0.fase === "preparazione") { avviaPartita(S, c === "giocatori" ? v : S0.numero); return S; }
+      if (S0.fase === "preparazione") {
+        var gia = (S0.nomi || []).map(function (x) { return { nome: x, scritto: false }; });
+        if (c === "anchio") {
+          // «gioco anch'io»: un posto in più, con il nome di chi l'ha detto se la voce è
+          // riconosciuta (lo manda Calliope), altrimenti «Giocatore N»; la stessa voce due volte
+          // non prende due posti
+          var nome = nomeChiuso(extra && extra.giocatore);
+          var stesso = nome && (S0.nomi || []).some(function (x) { return x && x.toLowerCase() === nome.toLowerCase(); });
+          if (!stesso) S.nomi = (S0.nomi || []).concat([nome]);
+          S.numero = Math.max(M.gmin, S.nomi.length);
+          return S;
+        }
+        avviaPartita(S, c === "giocatori" ? v : Math.max(S0.numero, gia.length), gia);
+        return S;
+      }
       if (S0.fase === "esito") {
         S.fase = S0.dopo || M.inizio;
         if (S0.passa) avanzaTurno(S);
         S.esito = null; S.dopo = null; S.passa = false;
         return S;
       }
-      if (S0.fase === "fine") { avviaPartita(S, S0.numero); return S; }
+      if (S0.fase === "fine") { avviaPartita(S, S0.numero, S0.giocatori); return S; }
       if (c === "fine_partita") { S.fase = "fine"; return S; }
       var fn = GIOCO.mosse && GIOCO.mosse[S0.fase] && GIOCO.mosse[S0.fase][c];
       var dove = "GIOCO.mosse." + S0.fase + "." + c + (v === null ? "" : " (valore " + JSON.stringify(v) + ")");
@@ -755,6 +785,29 @@
                turno: S.turno, giocatori: S.giocatori.map(function (g) { return { nome: g.nome, punti: g.punti }; }),
                esito: S.esito ? S.esito.testo : null, comandi: att };
     }
+    // Il nome scritto sullo schermo (14/10, passo 4 del progetto): chi gioca tocca il suo nome
+    // nella fascia dei punti e lo scrive. La forma chiusa (lettere, spazi e apostrofo, al più 20
+    // caratteri e due parole), diverso dagli altri; lo stato nuovo, o un errore per chi scrive
+    function rinomina(S0, i, testo) {
+      if (!S0.giocatori[i]) throw errore("nessun giocatore " + (i + 1));
+      var nome = nomeChiuso(testo);
+      if (!nome) {
+        var e = new Error("Un nome di una o due parole, solo lettere (al più 20).");
+        e.name = "NomeNonValido";
+        throw e;
+      }
+      var doppio = S0.giocatori.some(function (g, k) { return k !== i && String(g.nome).toLowerCase() === nome.toLowerCase(); });
+      if (doppio) {
+        var e2 = new Error("C'è già un giocatore che si chiama così.");
+        e2.name = "NomeNonValido";
+        throw e2;
+      }
+      var S = copia(S0, "stato");
+      S.n = S0.n + 1;
+      S.giocatori[i].nome = nome;
+      S.giocatori[i].scritto = true;
+      return S;
+    }
     // L'istantanea per Calliope (14/10, passo 2 del progetto): numerata, con a chi tocca come
     // posizione, i punti, l'esito (al più 160 caratteri: Calliope non lo dice, è del gioco) e i
     // comandi a voce piatti che valgono adesso. Il server la valida contro il manifesto e la
@@ -764,7 +817,11 @@
       if (!senzaComandi) { try { att = attivi(S); } catch (e) { att = {}; } }
       var conTurni = S.fase !== "preparazione" && S.giocatori.length > 0;
       return { n: S.n, fase: S.fase, tocca: conTurni ? S.tocca : null, turno: S.turno,
-               giocatori: S.giocatori.map(function (g) { return { nome: String(g.nome), punti: g.punti }; }),
+               giocatori: S.giocatori.map(function (g) {
+                 var x = { nome: String(g.nome), punti: g.punti };
+                 if (g.scritto) x.scritto = true;
+                 return x;
+               }),
                esito: S.esito && S.esito.testo ? String(S.esito.testo).slice(0, 160) : null,
                comandi: piatti(att) };
     }
@@ -793,7 +850,10 @@
       });
       if (S.fase === "preparazione") {
         if (!p.titolo) { p.titolo = titoloGioco || "Nuova partita"; p.fonti.titolo = titoloGioco ? "il titolo nel manifesto" : ""; }
-        if (!p.testo && M.gmin < M.gmax) p.testo = "Quanti giocatori?";
+        var gioca = (S.nomi || []).map(function (x, k) { return x || "Giocatore " + (k + 1); });
+        if (!p.testo && (M.gmin < M.gmax || gioca.length)) {
+          p.testo = (M.gmin < M.gmax ? "Quanti giocatori?" : "") + (gioca.length ? (M.gmin < M.gmax ? " " : "") + "Giocano: " + gioca.join(", ") : "");
+        }
       } else if (S.fase === "esito") {
         if (S.esito) {
           p.grande = S.esito.testo; p.fonti.grande = "«esito» della mossa";
@@ -803,7 +863,8 @@
         if (!p.titolo) p.titolo = "Partita finita";
         p.classifica = classifica(S).map(function (g) { return { nome: g.nome, punti: g.punti }; });
       } else if (!p.sottotitolo && p.mostraTocca) {
-        p.sottotitolo = "Tocca a " + S.giocatori[S.tocca].nome;
+        var chiTocca = String(S.giocatori[S.tocca].nome);
+        p.sottotitolo = (/^[aA]/.test(chiTocca) ? "Tocca ad " : "Tocca a ") + chiTocca;
       }
       if (modello === "messaggio" && S.fase !== "esito" && p.testo && !p.grande) {
         p.grande = p.testo; p.fonti.grande = p.fonti.testo; p.testo = ""; delete p.fonti.testo;
@@ -838,7 +899,7 @@
     }
     return { M: M, nuovo: nuovo, attivi: attivi, piatti: piatti, daPiatto: daPiatto, applica: applica, esciTela: esciTela,
              vista: vista, istantanea: istantanea, perCalliope: perCalliope, classifica: classifica, etichetta: etichetta,
-             pagina: pagina, contesto: contesto, piatto: piatto };
+             pagina: pagina, contesto: contesto, piatto: piatto, rinomina: rinomina };
   }
 
   // ═══════════════════ nel riquadro (e nel DOM finto della prova): disegno, pulsanti, voce ═══════════════════
@@ -893,7 +954,14 @@
         var c = b.comando, v = b.valore === undefined ? null : b.valore;
         n.addEventListener("click", function () { mossa(c, v, {}); });
       } else if (b.tipo === "titolo") n = el("h1", "titolo", b.testo);
-      else if (b.tipo === "giocatore") n = el("span", "giocatore" + (b.tocca ? " tocca" : ""), b.testo);
+      else if (b.tipo === "giocatore") {
+        // Il nome nella fascia dei punti: un tocco e si scrive il proprio (14/10, passo 4)
+        n = el("button", "giocatore nome" + (b.tocca ? " tocca" : ""), b.testo);
+        n.type = "button";
+        n.setAttribute("aria-label", "Cambia il nome: " + b.testo);
+        var ind = b.indice, box = b;
+        n.addEventListener("click", function () { scriviNome(ind, box); });
+      }
       else if (b.tipo === "fascia") n = el("div", "punti");
       else if (b.tipo === "riga") n = el("div", "riga" + (b.tocca ? " tocca" : "") + (b.primo ? " primo" : ""), b.testo);
       else if (b.tipo === "casella") n = el("div", "casella", b.testo || "");
@@ -929,6 +997,51 @@
       if (area) tela(area, imp.scatole.filter(function (b) { return b.tipo === "tela"; })[0]);
       misuraVera(pag);
       return pag.attivi;
+    }
+    // Il campo per scrivere il nome sopra la fascia (non è una scatola del palco: sparisce al
+    // prossimo disegno). Invio o uscita dal campo confermano, Esc annulla
+    function scriviNome(i, b) {
+      if (!palco || !S.giocatori[i]) return;
+      var vecchio = palco.querySelector ? palco.querySelector(".scrivi-nome") : null;
+      if (vecchio && vecchio.parentNode) vecchio.parentNode.removeChild(vecchio);
+      var campo = el("input", "scrivi-nome");
+      campo.type = "text";
+      campo.value = S.giocatori[i].nome;
+      try { campo.maxLength = 20; campo.setAttribute("maxlength", "20"); } catch (e) { /* niente */ }
+      campo.setAttribute("aria-label", "Il nome di chi gioca");
+      campo.setAttribute("autocomplete", "off");
+      var w = Math.max(360, b.w), x = Math.max(0, Math.min(imp.W - w, b.x - (w - b.w) / 2));
+      campo.style.cssText = "position:absolute!important;left:" + x + "px!important;top:" + Math.max(0, b.y - 12)
+        + "px!important;width:" + w + "px!important;height:" + (b.h + 24) + "px!important;font-size:30px!important;z-index:5";
+      var fatto = false, n0 = S.n;
+      function chiudi(conferma) {
+        if (fatto) return;
+        fatto = true;
+        if (campo.parentNode) campo.parentNode.removeChild(campo);
+        if (!conferma || S.n !== n0) return;
+        var S2;
+        try { S2 = nucleo.rinomina(S, i, campo.value); }
+        catch (e) {
+          if (e && e.name === "NomeNonValido") { avviso(e.message); return; }
+          mostraErrore(e); return;
+        }
+        aggiorna(S2);
+      }
+      campo.addEventListener("keydown", function (ev) {
+        if (ev.key === "Enter") { ev.preventDefault && ev.preventDefault(); chiudi(true); }
+        else if (ev.key === "Escape") chiudi(false);
+      });
+      campo.addEventListener("change", function () { chiudi(true); });
+      campo.addEventListener("blur", function () { chiudi(true); });
+      palco.appendChild(campo);
+      try { campo.focus(); campo.select(); } catch (e) { /* niente */ }
+    }
+    function avviso(t) {
+      if (!palco) return;
+      var a = el("p", "avviso-nome", t);
+      a.style.cssText = "position:absolute!important;left:0!important;right:0!important;top:0!important;font-size:28px!important;z-index:6";
+      palco.appendChild(a);
+      setTimeout(function () { if (a.parentNode) a.parentNode.removeChild(a); }, 3000);
     }
     function tela(area, b) {
       var fn = GIOCO.tela && GIOCO.tela[S.fase];

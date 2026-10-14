@@ -3406,3 +3406,19 @@ suoi test: un limite del modello, da scrivere.
         && $V/.venv/bin/python $V/prove/manuali/banco_temperatura.py \
            --casi porte,convertitore,programma --temperature 0.6 --presence config \
            --ripetizioni 5 --uscita ~/banchi/valori-$(date +%m%d-%H%M)
+
+## I giochi: i nomi e le domande di Calliope nel contratto (14/10 sera, ramo `giochi-passi-finali`)
+
+Con i passi finali della macchina a stati ([giochi](giochi.md), «Lo stato della partita») il §5
+del contratto (`contratto.scheda_testo`) dice all'agente due cose in più, perché non le scriva
+da sé né le copra con un comando: i nomi dei giocatori sono di Calliope («gioco anch'io» a voce,
+o scritti toccando il nome nella fascia dei punti; arrivano in `nuovaPartita({ nomi })` e in
+`ctx.giocatori`), e le domande «a chi tocca?», «quanti punti ho?», «chi sta vincendo?», «cosa
+posso dire?» le risponde Calliope dall'istantanea (il manifesto che le dichiara come forme è
+rifiutato: «è una domanda di Calliope sul gioco»). Fra le forme di Calliope da non usare c'è
+anche «gioco anch'io» (comando standard `anchio`); `accettazione.py` scarta un esempio con
+`anchio` come per gli altri nomi di Calliope. Il §5 passa da 6 409 a 6 777 caratteri (circa 105
+token in più con il rapporto 3,47; da rimisurare sulla DGX). Lo scheletro non cambia; il giudice di
+fase e l'istantanea non toccano l'agente (la prova di fumo riceve l'istantanea come il server,
+`fumo_js.mjs`).
+

@@ -73,10 +73,13 @@ COMANDI_STANDARD = {
     "avanti": (["avanti", "continua"], "Avanti"),
     "ancora": (["ancora", "un'altra partita", "ricomincia", "rigioca"], "Ancora"),
     "fine_partita": (["fine partita"], "Fine partita"),
+    # «Gioco anch'io» (14/10, passo 4 del progetto): un posto in più nella preparazione, con il
+    # nome di chi l'ha detto se la voce è riconosciuta (con «giocatore»: true nella macchina)
+    "anchio": (["gioco anch'io", "anch'io", "anche io", "gioco anche io", "ci sono anch'io"],
+               "Gioco anch'io"),
 }
-# I comandi standard della preparazione che vengono dopo (passo 4 del progetto, «gioco anch'io»):
-# vuoto finché non ci sono
-STANDARD_PREPARAZIONE: tuple[str, ...] = ()
+# I comandi standard della preparazione oltre al numero dei giocatori e a «inizia»
+STANDARD_PREPARAZIONE: tuple[str, ...] = ("anchio",)
 
 
 class MacchinaNonValida(ValueError):
@@ -261,7 +264,7 @@ def ascolta(m: dict, giocatori: dict) -> dict:
     for n in range(gmin, gmax + 1) if gmin < gmax else ():
         piatti[piatto("giocatori", n)] = (["un giocatore", "gioco da solo"] if n == 1
                                           else [f.replace(SLOT, str(n)) for f in forme])
-    for nome in ("inizia", "avanti", "ancora"):
+    for nome in ("inizia", "avanti", "ancora", "anchio"):
         piatti[nome] = list(COMANDI_STANDARD[nome][0])
     if any(f["pagina"] == "tela" for f in m["fasi"].values()):
         piatti["fine_partita"] = list(COMANDI_STANDARD["fine_partita"][0])
@@ -302,7 +305,7 @@ def per_fase(m: dict, giocatori: dict) -> dict[str, list[str]]:
     restringerli. {fase: [piatti]}."""
     gmin, gmax = int(giocatori.get("min", 1)), int(giocatori.get("max", 1))
     prep = [piatto("giocatori", n) for n in range(gmin, gmax + 1)] if gmin < gmax else []
-    out = {"preparazione": prep + ["inizia"] + list(STANDARD_PREPARAZIONE),
+    out = {"preparazione": prep + list(STANDARD_PREPARAZIONE) + ["inizia"],
            "esito": ["avanti"], "fine": ["ancora"]}
     for fnome, f in (m.get("fasi") or {}).items():
         lista = []
@@ -345,6 +348,7 @@ NOME_DEFAULT = re.compile(r"^Giocatore [1-9]$")
 # spazi e apostrofo, al più 20 caratteri, al più due parole
 NOME_CHIUSO = re.compile(r"^[A-Za-zÀ-ÖØ-öø-ÿ']+( [A-Za-zÀ-ÖØ-öø-ÿ']+)?$")
 CHIAVI_ISTANTANEA = {"n", "fase", "tocca", "turno", "giocatori", "esito", "comandi"}
+MAX_NOMI_PARTITA = 64          # nomi diversi giudicati per partita (controlli in cache)
 
 
 class IstantaneaNonValida(ValueError):
@@ -393,8 +397,10 @@ def valida_istantanea(ist, m: dict, giocatori: dict, ultimo_n: int = -1) -> dict
         no(f"«giocatori»: un elenco di al più {gmax}")
     puliti = []
     for i, g in enumerate(gs):
-        if not isinstance(g, dict) or set(g) - {"nome", "punti"}:
-            no("un giocatore è {nome, punti}")
+        if not isinstance(g, dict) or set(g) - {"nome", "punti", "scritto"}:
+            no("un giocatore è {nome, punti, scritto}")
+        if "scritto" in g and not isinstance(g["scritto"], bool):
+            no("«scritto» è vero o falso")
         p = g.get("punti", 0)
         if isinstance(p, bool) or not isinstance(p, (int, float)) or p != p \
                 or abs(p) > MAX_PUNTI:
@@ -403,7 +409,8 @@ def valida_istantanea(ist, m: dict, giocatori: dict, ultimo_n: int = -1) -> dict
         chiuso = nome_chiuso(nome)
         puliti.append({"nome": nome if chiuso else f"Giocatore {i + 1}",
                        "punti": int(p) if float(p).is_integer() else round(float(p), 2),
-                       **({} if chiuso else {"fuori_forma": True})})
+                       **({} if chiuso else {"fuori_forma": True}),
+                       **({"scritto": True} if g.get("scritto") else {})})
     tocca = ist.get("tocca")
     if tocca is not None and (not isinstance(tocca, int) or isinstance(tocca, bool)
                               or not (0 <= tocca < max(1, len(puliti)))):

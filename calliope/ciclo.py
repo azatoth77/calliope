@@ -2008,9 +2008,15 @@ class Ciclo:
             return None
         nomi = cfg.wake_names
         info = self._gioco_in_ascolto()          # adesso: i comandi possono essere cambiati
-        cid = domanda = None
+        cid = domanda = nome_detto = None
         if info is not None and not self.brain.has_pending():
             cid = gioco_voce.trova(t.text, info["comandi"], None, nomi)
+            if cid is None and "anchio" in info["comandi"]:
+                # «Gioco anch'io, sono Pippo» (14/10, regola gioco_anchio_nome): un posto con
+                # il nome detto, che vale come uno scritto (Calliope lo dice dopo i controlli)
+                nome_detto = gioco_stato.anchio_nome(t.text, nomi)
+                if nome_detto:
+                    cid = "anchio"
             if cid is None and info.get("istantanea"):
                 domanda = gioco_stato.domanda(t.text, nomi)
         rivolta = (not cfg.wake_word_enabled or t.in_session or t.finestra_gioco
@@ -2037,7 +2043,11 @@ class Ciclo:
             return _FINE
         if cid is not None and rivolta:
             giocatore = self._giocatore_dalla_voce(t) if info.get("giocatore") else None
-            if s.giochi.comando(info["partita"], info["schermo"], cid, giocatore):
+            if nome_detto:
+                giocatore = nome_detto
+                self.rule(gioco_stato.REGOLA_ANCHIO)
+            if s.giochi.comando(info["partita"], info["schermo"], cid, giocatore,
+                                dalla_voce=not nome_detto):
                 ms = round((time.perf_counter() - t.t0) * 1000)
                 print(f"Tu: (comando del gioco «{cid}»)  → mossa a «{info.get('titolo')}» "
                       f"[STT e mossa {ms} ms]" + (f"  ({giocatore})" if giocatore else ""),

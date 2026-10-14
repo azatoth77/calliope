@@ -196,7 +196,8 @@ def _comandi_gioco(d: dict) -> dict:
         if not isinstance(c, dict) or not _nome_ok(c.get("nome")) or not _nome_ok(c.get("fase")):
             continue
         nome, fase = c["nome"], c["fase"]
-        if nome in ("inizia", "avanti", "ancora", "giocatori", "fine_partita") or nome in out \
+        if nome in ("inizia", "avanti", "ancora", "giocatori", "fine_partita", "anchio") \
+                or nome in out \
                 or fase in FASI_STANDARD:
             continue
         valori = None
