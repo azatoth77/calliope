@@ -967,6 +967,27 @@ class Avvisi:
             self._scheda(t, minore, testo, urgente)
         return len(dest)
 
+    def solo_schermo(self, minore, tipo: str, testo: str, urgente: bool = False,
+                     registry=None) -> int:
+        """Un avviso ai tutori **solo sullo schermo personale** (14/10, il guardiano a
+        posteriori della stanza: decisione 0029 punto 4, mai a voce): resta nella tabella come
+        gli altri, ma già segnato come detto, così la frase del tutore non lo annuncia.
+        Restituisce quanti tutori."""
+        registry = registry or self.registry
+        dest = tutori(minore, registry)
+        ora = datetime.datetime.now().isoformat(timespec="seconds")
+        with self._lock:
+            for t in dest:
+                self.db.execute("INSERT INTO avvisi_tutori (tutore, minore, tipo, testo, "
+                                "urgente, creato, detto) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                                (t.id, minore.id, tipo, testo, int(urgente), ora, ora))
+            self.db.commit()
+        self.log(f"   [MINORI] avviso «{tipo}» per {minore.name} sullo schermo di "
+                 f"{', '.join(t.name for t in dest) or 'nessuno'}")
+        for t in dest:
+            self._scheda(t, minore, testo, urgente)
+        return len(dest)
+
     def _scheda(self, tutore, minore, testo: str, urgente: bool):
         hub = self.schermi
         if hub is None:

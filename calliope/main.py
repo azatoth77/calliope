@@ -251,6 +251,7 @@ class Avvio:
         self._estensioni_e_giochi()
         self._brain_e_compressione()
         self._corsia_locale()
+        self._guardia_stanza()
         self._modello_e_saluto()
         self._barge_in()
         self.modalita.ascoltatori.append(self.applica_modalita)
@@ -842,6 +843,32 @@ class Avvio:
             self.estensioni.on_cambio = lambda: self.brain.rileggi_tool()
         if self.s.installazioni is not None:
             self.s.installazioni.attivatori["biblioteca"] = self.activate_library
+
+    def _guardia_stanza(self):
+        """Il guardiano a posteriori della stanza (14/10, passo 6, calliope/stanza/guardia.py):
+        con `stanza_guardia: ombra|attiva` e la stanza accesa. Giudica solo con la voce ferma:
+        nessuna risposta del modello in corso (il varco), nessuna frase di un turno che aspetta
+        Whisper, nessuno che parla a Calliope da un satellite."""
+        s = self.s
+        if s.stanza is None:
+            return
+        from .stanza import load_guardia
+        varco, stt, st = self.varco, s.stt, s.stanza
+
+        def parla_qualcuno():
+            ora = time.monotonic()
+            return any(ora - t < 2.0 for t in list(getattr(st, "_comando", {}).values()))
+        occupato = [lambda: varco.attivi > 0, parla_qualcuno]
+        if callable(getattr(stt, "aspetta_turno", None)):
+            occupato.append(stt.aspetta_turno)
+        try:
+            s.guardia_stanza = load_guardia(self.cfg, st, s.guardiano, occupato,
+                                            log=lambda m: print(m, flush=True))
+        except Exception as e:  # noqa: BLE001 — Calliope parte lo stesso
+            print(f"[GUARDIA] non disponibile: {type(e).__name__}: {e}", flush=True)
+            s.guardia_stanza = None
+        if s.guardia_stanza is not None:
+            atexit.register(s.guardia_stanza.chiudi)
 
     def activate_library(self) -> bool:
         """Biblioteca appena scaricata: si apre, il tool compare e il prompt la nomina, senza

@@ -13,6 +13,7 @@
 | Conversazione, compressione e archivio delle conversazioni (dal 05/10) | SQLite in WAL con FTS5 (`conversazioni.db`), vettori da Ollama `/api/embed` sulla CPU (`qwen3-embedding:0.6b`) o `/v1/embeddings`, coseno in numpy, RRF | `calliope/conversazione.py` → `Conversazione` (Brain la espone con `history`, `pending`…, `brain.conv`), `turni`; `calliope/compressione.py` → `Compressore` (soglie 75/90 %, `avvia`, `comprimi_ora`, `applica`, `chiudi`), `RiassuntoreLLM` (agente o voce), `RiassuntoreTagli`, `crea_riassuntori`; `calliope/conversazioni.py` → `ArchivioConversazioni` (`archivia`, `cerca`, `ultima`, `dimentica`, conversazione corrente; dall'08/10 `recenti` per le domande cronologiche, `su_turni` e `chat` per la scheda «Conversazione»; dal 10/10 `pulisci_wal`, `su_pulizia` e «dimentica» vera), `Embedder`, `load_conversazioni`; il registro degli eventi accanto (`calliope/eventi/registro.py` → `Registri`, `Disco`, dal 10/10 in ombra: sezione «La storia come proiezione degli eventi»); tool `conversazione_cerca`, `conversazioni_dimentica` in `calliope/tools/conversazioni.py`; «ricominciamo» `wakeword.nuova_conversazione`; terminale `python -m calliope.conversazioni`; misure `prove/misura_conversazioni.py` |
 | Registro della stanza e misure (13/10, passo 1 in ombra, sotto) | solo libreria standard, in memoria | `calliope/stanza/registro.py` → `RegistroStanza` (`aggiungi`, `righe`, `svuota`, `conteggi`, dal 14/10 `su_evento`, `seq_vivi`), `Evento.a_dict`; `calliope/stanza/misure.py` → `Misure`, `leggi`, `riassunto`, `testo` (sezione «Stanza» di `calliope stato --turni`); `Stanza.presenti`, `Stanza.presenze`, `Stanza.dimentica` |
 | Tenuta su disco del testo della stanza (14/10, `stanza_tenuta`, sotto) | SQLite in WAL con FTS5 (`stanza.db`, `detail=full`) | `calliope/stanza/tenuta.py` → `Tenuta` (`evento`, `presenza`, `cerca`, `presenze`, `stanze`, `dimentica`, `svuota`, `ruota`, `conteggi`), `conta_file`, `svuota_file`, `testo_stato`; `calliope/stanza/__init__.load_tenuta`; `conserva.decidi(…, "stanza", …)`; `stanza/cerca._dal_disco`, `info_stanze` |
+| Guardiano a posteriori della stanza (14/10, passo 6, `stanza_guardia`, in ombra; sotto e in [minori](minori.md)) | solo libreria standard; il rilevatore di pericolo su Ollama | `calliope/stanza/guardia.py` → `Guardia` (`raccogli`, `giudica_uno`, `decidi`, `libera`), `GiudiceModello`, `riassunto`, `testo`, `elenco`; `calliope/stanza/__init__.py` → `load_guardia`; `Avvio._guardia_stanza` in `main.py`; `calliope stato --guardia` |
 | Latenza come metrica, cache scaldata, modelli di Ollama (dal 06/10) | solo libreria standard (registro dei turni, Ollama `/api/ps`) | `calliope/latenza.py` → `giorno`, `per_giorno`, `testo`, `avviso`, `avviso_recente`, `scalda_ripresa`, `leggi_file` (`calliope stato --turni`); `Brain.scalda_conversazione`, `Brain._scalda_se_cambiato` (prefisso nuovo dopo un cambio di modalità, 07/10); `calliope/ollama_carico.py` → `residenti`, `limite`, `usati`, `avviso`, `puo_caricare`; la prima frase a pezzi e la taratura della voce (sezioni del 07/10 sotto) hanno il codice in `tts.py` e `taratura_voce.py`, area [stt-tts](stt-tts.md) |
 | Conservazione dei dati per le misure, scelta dei tool come metrica (dal 12/10) | solo libreria standard e numpy (voce in G.711 μ-law), SQLite della tabella `eventi` | `calliope/conserva.py` → `decidi` (il solo posto), `Conservazione` (`testo_turno`, `voce_turno`, `registro_su_disco`, `conversazioni_su_disco` (12/10 sera), `conta_conversazioni`, `al_turno`, `salva_voce`, `imposta_consenso`, `ruota`, `ripulisci_registro`, `svuota`, `stato`), `python -m calliope.conserva`; `calliope/tools/conserva.py` (`dati_conservati`); `calliope/scelta_tool.py` → `turno`, `giorno`, `per_giorno`, `testo`, `avviso`, `avviso_recente` (`calliope stato --turni`) |
 
@@ -1525,3 +1526,28 @@ dati personali di `sicurezza.file_di_dati`: 600 su Linux; in `.gitignore`). `cal
 
 Prove: `prove/prova_stanza_tenuta.py` (livello 1, ~8 s; contrari: spenta, ospite, ignoto, zona
 grigia, pausa, scadenza, permessi da disco, svuota, dimentica, riavvio).
+
+## Il guardiano a posteriori sulle righe della stanza (14/10, ramo `stanza-guardia`)
+
+Passo 6 del progetto (§ 3.9, § 6 riga 6), dietro `stanza_guardia: spenta|ombra|attiva` (di serie
+spenta; i dettagli del giudizio e degli avvisi in [minori](minori.md)). Per quest'area conta come
+legge la stanza:
+
+- **Lettore del registro, mai scrittore**: un thread `stanza-guardia` legge `RegistroStanza.righe()`
+  di ogni satellite ogni `stanza_guardia_ogni_s` (60 s), tiene i `seq` già raccolti (quelli usciti
+  dal registro si dimenticano) e non scrive eventi nella stanza: gli esiti vanno solo nelle misure
+  (`stanza-*.jsonl`, tipo `guardia`, senza parole né nomi). Non tocca `stanza/ascolto.py`: usa
+  `presenze`, `stato_pausa`, `_info` e `_registri` come `stanza/cerca.py`.
+- **Righe assestate**: finite da `stanza_guardia_attesa_s` e con la stanza quieta da altrettanto (o
+  uno scambio lungo a pezzi di `stanza_guardia_blocco_max_s`); quando ci sarà la corsia lenta
+  (passo 3) qui si aspetteranno le righe di versione 2.
+- **Il contesto del blocco**: fino a 6 righe prima e 3 dopo, comprese le risposte di Calliope e le
+  frasi rivolte a lei (solo contesto), mai la TV; entro 3 600 caratteri.
+- **Mai davanti ai turni**: giudica solo con la voce ferma da `stanza_guardia_quiete_s` (il
+  `Varco` delle corsie senza risposte in corso, `STTCondiviso.aspetta_turno` falso, nessun audio dei
+  comandi da 2 s), al più `stanza_guardia_giudizi_ora` all'ora; il rilevatore ha le stesse opzioni
+  di quello in diretta (niente ricaricamenti del modello).
+- **Pausa e «dimentica»**: un satellite in pausa non si raccoglie né si giudica; un blocco con righe
+  non più nel registro (`seq_vivi`) si butta prima e dopo il giudizio.
+
+Prove: `prove/prova_stanza_guardia.py` (livello 2, ~1 s); banco `prove/manuali/banco_stanza_guardia.py`.

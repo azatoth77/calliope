@@ -1083,6 +1083,35 @@ class Config:
     stanza_tenuta_giorni: int = 60
     # Il file (relativo alla cartella della configurazione), con i permessi stretti dei dati
     stanza_tenuta_db: str = "stanza.db"
+    # Il guardiano a posteriori della stanza (14/10, passo 6, decisione 0029 punto 4,
+    # calliope/stanza/guardia.py): rilegge dopo, a blocchi e con le righe intorno, le chiacchiere
+    # in cui un minore parla o è presente, con il rilevatore di pericolo di oggi
+    # (guardiano_pericolo_modello) e un prompt per le conversazioni di famiglia (scherzi, giochi,
+    # TV). «ombra»: solo misure senza parole (`calliope stato --turni`, `calliope stato
+    # --guardia`); «attiva»: un segnale acuto dà solo un avviso al tutore sullo schermo
+    # personale, senza parole e mai a voce (da accendere dopo l'ombra, con meno di un acuto
+    # falso a settimana). Vale solo con la stanza accesa e i minori; «spenta» (di serie): nessun
+    # thread, nessun giudizio
+    stanza_guardia: str = "spenta"
+    # Righe finite da meno di così non si giudicano ancora (la trascrizione si assesta; dal
+    # passo 3 la corsia lenta la correggerà); un blocco parte quando la stanza tace da tanto
+    stanza_guardia_attesa_s: float = 120.0
+    # Uno scambio che non tace mai si giudica comunque a pezzi di al più questi secondi
+    stanza_guardia_blocco_max_s: float = 900.0
+    # Ogni quanto si guardano le righe nuove
+    stanza_guardia_ogni_s: float = 60.0
+    # Un giudizio parte solo con la voce ferma da così (nessuna risposta, nessuna frase che
+    # aspetta Whisper, nessuno che parla a Calliope): mai davanti ai turni
+    stanza_guardia_quiete_s: float = 5.0
+    # Tetto di giudizi all'ora; il resto aspetta in coda (al più 24 ore, poi si butta e si conta)
+    stanza_guardia_giudizi_ora: int = 30
+    # Il tempo massimo di un giudizio (in secondo piano: il modello può dover caricarsi)
+    stanza_guardia_timeout_s: float = 30.0
+    # «attiva»: avvisi urgenti al giorno per minore (la stessa categoria non si ripete entro
+    # 24 ore; due dubbi in giorni diversi entro 7 giorni danno un avviso non urgente)
+    stanza_guardia_avvisi_giorno: int = 1
+    # Una riga con una parola sotto questa probabilità (quando Whisper la dà) non fa un acuto
+    stanza_guardia_p: float = 0.5
     # Connessioni insieme attraverso l'inoltro (una pagina ne apre 2–6)
     satellite_inoltro_max: int = 32
     # Secondi senza un byte dopo i quali una connessione dell'inoltro si chiude
@@ -2924,7 +2953,11 @@ SEZIONI: dict[str, list[str]] = {
                "stanza_cerca_righe", "stanza_cerca_caratteri", "stanza_cerca_attesa_max_s",
                "stanza_cerca_attesa_s", "stanza_cerca_anticipo",
                "stanza_cerca_anticipo_caratteri", "stanza_tenuta", "stanza_tenuta_giorni",
-               "stanza_tenuta_db"],
+               "stanza_tenuta_db", "stanza_guardia", "stanza_guardia_attesa_s",
+               "stanza_guardia_blocco_max_s", "stanza_guardia_ogni_s",
+               "stanza_guardia_quiete_s", "stanza_guardia_giudizi_ora",
+               "stanza_guardia_timeout_s", "stanza_guardia_avvisi_giorno",
+               "stanza_guardia_p"],
     "satellite": ["satellite_server", "satellite_credenziali", "satellite_impronta",
                   "satellite_microfono", "satellite_casse", "satellite_webcam",
                   "satellite_schermo", "satellite_schermo_personale", "satellite_esecutore",
@@ -3129,6 +3162,10 @@ LIMITI: dict[str, tuple[float, float]] = {
     "stanza_cerca_attesa_max_s": (0.0, 30.0), "stanza_cerca_attesa_s": (0.0, 30.0),
     "stanza_cerca_anticipo_caratteri": (0, 20_000),
     "stanza_tenuta_giorni": (1, 3650),
+    "stanza_guardia_attesa_s": (0.0, 86400.0), "stanza_guardia_blocco_max_s": (60.0, 86400.0),
+    "stanza_guardia_ogni_s": (1.0, 3600.0), "stanza_guardia_quiete_s": (0.0, 600.0),
+    "stanza_guardia_giudizi_ora": (0, 3600), "stanza_guardia_timeout_s": (1.0, 600.0),
+    "stanza_guardia_avvisi_giorno": (0, 50), "stanza_guardia_p": (0.0, 1.0),
     "contesto_ripiego": (2048, 1_048_576), "contesto_rilettura_max_s": (0.1, 60.0),
     "contesto_conversazioni": (1, 64), "contesto_margine_gb": (0.0, 512.0),
     "max_history_turns": (0, 200), "max_tool_turns": (1, 20), "tool_correzioni_max": (0, 10),
@@ -3302,6 +3339,14 @@ def _stanza_valido(value):
     raise ValueError("serve «spenta» o «ombra»")
 
 
+def _stanza_guardia_valido(value):
+    """«spenta», «ombra» o «attiva» (14/10, calliope/stanza/guardia.py, passo 6)."""
+    s = str(value or "").strip().lower()
+    if s in ("spenta", "ombra", "attiva"):
+        return s
+    raise ValueError("serve «spenta», «ombra» o «attiva»")
+
+
 def _tts_dispositivo_valido(value):
     """«auto», «cpu» o «cuda»."""
     s = str(value or "").strip().lower()
@@ -3316,7 +3361,7 @@ VALIDATORI = {"llm_keep_alive": keep_alive_valido, "llm_num_ctx": _num_ctx_valid
               "contesto_riassuntore": _riassuntore_valido,
               "dialogo_interprete": _dialogo_interprete_valido,
               "eventi": _eventi_valido, "frasi_varianti": _frasi_varianti_valido,
-              "stanza": _stanza_valido}
+              "stanza": _stanza_valido, "stanza_guardia": _stanza_guardia_valido}
 
 
 def fuori_limiti(key: str, value) -> tuple[float, float] | None:

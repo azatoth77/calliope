@@ -1339,6 +1339,35 @@ conversazione_stanza:
   stanza_tenuta_giorni: 60
   # Il file (relativo alla cartella della configurazione), con i permessi stretti dei dati
   stanza_tenuta_db: stanza.db
+  # Il guardiano a posteriori della stanza (14/10, passo 6, decisione 0029 punto 4,
+  # calliope/stanza/guardia.py): rilegge dopo, a blocchi e con le righe intorno, le chiacchiere
+  # in cui un minore parla o è presente, con il rilevatore di pericolo di oggi
+  # (guardiano_pericolo_modello) e un prompt per le conversazioni di famiglia (scherzi, giochi,
+  # TV). «ombra»: solo misure senza parole (`calliope stato --turni`, `calliope stato
+  # --guardia`); «attiva»: un segnale acuto dà solo un avviso al tutore sullo schermo
+  # personale, senza parole e mai a voce (da accendere dopo l'ombra, con meno di un acuto
+  # falso a settimana). Vale solo con la stanza accesa e i minori; «spenta» (di serie): nessun
+  # thread, nessun giudizio
+  stanza_guardia: spenta
+  # Righe finite da meno di così non si giudicano ancora (la trascrizione si assesta; dal
+  # passo 3 la corsia lenta la correggerà); un blocco parte quando la stanza tace da tanto
+  stanza_guardia_attesa_s: 120.0
+  # Uno scambio che non tace mai si giudica comunque a pezzi di al più questi secondi
+  stanza_guardia_blocco_max_s: 900.0
+  # Ogni quanto si guardano le righe nuove
+  stanza_guardia_ogni_s: 60.0
+  # Un giudizio parte solo con la voce ferma da così (nessuna risposta, nessuna frase che
+  # aspetta Whisper, nessuno che parla a Calliope): mai davanti ai turni
+  stanza_guardia_quiete_s: 5.0
+  # Tetto di giudizi all'ora; il resto aspetta in coda (al più 24 ore, poi si butta e si conta)
+  stanza_guardia_giudizi_ora: 30
+  # Il tempo massimo di un giudizio (in secondo piano: il modello può dover caricarsi)
+  stanza_guardia_timeout_s: 30.0
+  # «attiva»: avvisi urgenti al giorno per minore (la stessa categoria non si ripete entro
+  # 24 ore; due dubbi in giorni diversi entro 7 giorni danno un avviso non urgente)
+  stanza_guardia_avvisi_giorno: 1
+  # Una riga con una parola sotto questa probabilità (quando Whisper la dà) non fa un acuto
+  stanza_guardia_p: 0.5
 
 satellite:
   # == Lato satellite (il portatile che fa da microfono, casse e schermo di

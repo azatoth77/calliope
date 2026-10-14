@@ -14,6 +14,9 @@ veloce, niente nel contesto del modello.
 - `tenuta` (14/10): il testo della stanza su disco per 60 giorni (`stanza_tenuta`, di serie
   spenta), cercato con gli stessi permessi, cancellato da «dimentica» e da
   `calliope conserva --svuota`.
+- `guardia` (passo 6, 14/10): il guardiano a posteriori sulle chiacchiere con un minore
+  (`stanza_guardia: spenta|ombra|attiva`, di serie spenta): in ombra solo misure, attiva solo
+  un avviso al tutore sullo schermo personale.
 
 Di serie spenta (`stanza: spenta`): non parte nessun thread, i satelliti non mandano niente.
 """
@@ -49,4 +52,29 @@ def load_tenuta(cfg, registry=None, log=print):
     return t
 
 
-__all__ = ["OMBRA", "SPENTA", "Stanza", "load_stanza", "load_tenuta", "modo"]
+def load_guardia(cfg, stanza, guardiano=None, occupato=(), log=print):
+    """Il guardiano a posteriori (passo 6, 14/10) con `stanza_guardia: ombra|attiva`, la
+    stanza accesa e i minori; altrimenti None (nessun thread). `guardiano`: quello della voce
+    (calliope/guardiano.py), per lo stesso client e le stesse opzioni del rilevatore; senza,
+    uno nuovo solo per il rilevatore. `occupato`: funzioni che dicono se la voce lavora."""
+    from . import guardia
+    if (stanza is None or guardia.modo(cfg) == guardia.SPENTA
+            or not getattr(cfg, "minori_enabled", True)):
+        return None
+    if guardiano is None:
+        from ..guardiano import Guardiano
+        guardiano = Guardiano(cfg, log=log)
+    if guardiano._pericolo_modello() is None:
+        log("[GUARDIA] guardiano a posteriori spento: nessun rilevatore di pericolo "
+            "(guardiano_pericolo)")
+        return None
+    g = guardia.Guardia(cfg, stanza, guardia.GiudiceModello(
+        guardiano, float(getattr(cfg, "stanza_guardia_timeout_s", 30.0) or 30.0)),
+        registry=stanza.registry, occupato=occupato, log=log)
+    log(f"[GUARDIA] Guardiano a posteriori della stanza: {guardia.modo(cfg)} ("
+        + ("solo misure, nessun avviso" if guardia.modo(cfg) == guardia.OMBRA else
+           "avviso al tutore sullo schermo personale, mai a voce") + ")")
+    return g
+
+
+__all__ = ["OMBRA", "SPENTA", "Stanza", "load_guardia", "load_stanza", "load_tenuta", "modo"]
