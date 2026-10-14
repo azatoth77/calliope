@@ -4013,6 +4013,23 @@ class Brain:
         if user_text and stanza_b is not None and getattr(stanza_b, "testo", None):
             memory = blocco("stanza", [{"role": "system", "content": stanza_b.testo}]) + memory
             self._rule("stanza_contesto")
+        # La ricerca anticipata nella stanza (14/10, `stanza_cerca_anticipo`, tools/stanza.py):
+        # le righe di prima trovate con le parole della frase, che il blocco caldo non ha, dopo
+        # il contesto del turno (il blocco caldo e il turno restano un prefisso stabile). Se
+        # bastano, una passata sola invece della chiamata a stanza_cerca e della risposta dopo
+        self._stanza_anticipo = None
+        if (user_text and self.tools.get("stanza_cerca") is not None
+                and self.tools.allowed("stanza_cerca", level)):
+            try:
+                from .tools.stanza import anticipa
+                self._stanza_anticipo = anticipa(self.tool_ctx, user_text, stanza_b)
+            except Exception as e:  # noqa: BLE001 — la ricerca anticipata non ferma la voce
+                print(f"   [STANZA] ricerca anticipata: {type(e).__name__}: {e}", flush=True)
+            ant = self._stanza_anticipo
+            if ant is not None and ant.testo:
+                memory = memory + blocco("stanza_anticipo",
+                                         [{"role": "system", "content": ant.testo}])
+                self._rule("stanza_anticipo")
         # Le foto della conversazione che il modello ha davanti (IMG_TURN_MSG)
         foto_msg = self._foto_turno(start if user_text else None)
         if foto_msg:
@@ -4151,9 +4168,14 @@ class Brain:
         ricerca_tool = ricerca[1] if ricerca else None
         # La conversazione della stanza (14/10, passo 4): un «non lo so» senza nessun tool, con
         # stanza_cerca disponibile a chi parla, fa cercare Brain lì (STANZA_NOTA), una volta
+        # Non dopo la ricerca anticipata (14/10): Brain cercherebbe di nuovo con la stessa
+        # frase e troverebbe le stesse righe (o niente): una passata sprecata. Solo se aveva
+        # lasciato fuori qualcosa per il tetto
+        ant = getattr(self, "_stanza_anticipo", None)
         stanza_hold = (bool(user_text) and self._net("spinta_stanza")
                        and self.tools.get("stanza_cerca") is not None
-                       and self.tools.allowed("stanza_cerca", level))
+                       and self.tools.allowed("stanza_cerca", level)
+                       and (ant is None or ant.tagliate > 0))
         # «Non posso creare un'estensione» con il tool disponibile a chi parla (06/10):
         # la frase si trattiene e il modello riceve una spinta (politica.rinuncia)
         disp = ({n for n in politica.RINUNCE if self.tools.get(n) is not None
@@ -4256,8 +4278,15 @@ class Brain:
                 self._rule("spinta_stanza")
                 print(f"   [STANZA] «non lo so» senza cercare nella stanza, cerco io: "
                       f"«{self.cita_in_console(held)}»", flush=True)
+                # Con la stanza nominata nella frase, la stanza (14/10: «di cosa parlavamo in
+                # cucina prima?» dava le ultime righe di tutte le stanze, la sala per prima)
+                from .tools.stanza import stanze_nominate
+                st_ = getattr(self.tool_ctx, "stanza", None)
+                nominate = stanze_nominate(st_, user_text) if st_ is not None else []
                 call = {"id": "call_stanza", "name": "stanza_cerca",
-                        "arguments": {"parole": user_text}}
+                        "arguments": {"parole": user_text,
+                                      **({"stanza": nominate[0]} if len(nominate) == 1
+                                         else {})}}
                 self.history.append({"role": "assistant", "content": "", "tool_calls": [call]})
                 content = self._run_tool(call, level)
                 self.history.append({"role": "tool", "tool_call_id": call["id"],
@@ -5702,6 +5731,11 @@ class Brain:
         if stanza_b is not None and getattr(stanza_b, "testo", None):
             fonti.add("stanza")
             esterni = esterni + [("stanza", str(getattr(stanza_b, "esterno", "") or ""))]
+        # Le righe della ricerca anticipata (14/10): lo stesso
+        ant = getattr(self, "_stanza_anticipo", None)
+        if ant is not None and getattr(ant, "righe", 0):
+            fonti.add("stanza")
+            esterni = esterni + [("stanza", str(getattr(ant, "esterno", "") or ""))]
         # Un file nella conversazione vale anche se il suo messaggio è uscito dalla storia
         # (allegato_leggi lo rilegge)
         if getattr(self, "_allegati_in_vista", False):

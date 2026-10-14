@@ -34,6 +34,11 @@ stanza **in memoria** (la tenuta del passo 1: al più 24 h, fino al riavvio).
 
 Misure (stanza/misure.py, mai parole né nomi): esito, ms, se c'è stata la frase d'attesa, righe
 e caratteri dati, quante stanze, quali filtri.
+
+Dal 14/10 sera: una riga trovata porta con sé il discorso intorno (lo scambio, `VICINE_RIGHE`);
+un `quando` che non è un periodo è una parola cercata (`periodo`); la stessa ricerca, senza
+attesa e senza le righe del blocco caldo, la fa Brain prima della risposta (la ricerca
+anticipata, tools/stanza.py `anticipa`).
 """
 
 from __future__ import annotations
@@ -48,11 +53,25 @@ from .contesto import etichetta
 
 # Prima della prima frase sentita di una persona in una stanza: vi era già (entrata in silenzio)
 MARGINE_PRIMA_S = 60.0
-# Una riga trovata porta con sé le vicine della stessa stanza entro questi secondi (il senso)
-VICINE_S = 90.0
+# Una riga trovata porta con sé il discorso intorno (14/10, banco della DGX: «a che ora avevamo
+# deciso di partire per la gita?» trovava «Sabato andiamo in gita…» ma non «partiamo alle nove
+# dalla piazza», detta quattro minuti dopo senza la parola «gita»): fino a VICINE_RIGHE righe
+# prima e dopo nello stesso scambio della stessa stanza (lo stesso `scambio` del registro, o
+# righe separate da meno di `stanza_scambio_pausa_s`), prima le più vicine
+VICINE_RIGHE = 4
 PERIODI = ("ultima_ora", "mattina", "pomeriggio", "sera", "notte", "oggi", "ieri")
 _FASCE = {"mattina": (6, 12), "pomeriggio": (12, 18), "sera": (18, 24), "notte": (0, 6),
           "oggi": (0, 24)}
+# Come il modello scrive i periodi (14/10): «stamattina», «ieri sera». Il resto («sabato», il
+# giorno della gita e non della conversazione) non è un periodo: diventa una parola cercata
+_SINONIMI = {"stamattina": "mattina", "stamani": "mattina", "mattino": "mattina",
+             "stasera": "sera", "stanotte": "notte", "oggi pomeriggio": "pomeriggio",
+             "questa mattina": "mattina", "questa sera": "sera", "questo pomeriggio":
+             "pomeriggio", "un'ora fa": "ultima_ora", "ultima ora": "ultima_ora",
+             "nell'ultima ora": "ultima_ora"}
+# Periodi che non restringono niente (il blocco caldo e la ricerca guardano già lì)
+_SENZA_LIMITE = frozenset(("", "prima", "poco fa", "adesso", "ora", "di recente", "recente",
+                           "recentemente", "tutto", "sempre", "qualsiasi", "nessuno"))
 # Parole che dicono la domanda, non l'argomento («cosa aveva detto Carlo della gita»)
 _VUOTE = frozenset("""
 a ad al alla alle allo agli ai anche avete aveva avevamo avevano avevi abbiamo ha hanno ho
@@ -63,7 +82,14 @@ poi prima qua quale quando quel quella quelle quello questa queste questo qui se
 sono sta stamattina stasera stavamo stavano su sua sue sui suo tra tu tua tue tuo un una
 uno voi parlato parlavamo parlavano parlavate parlare discorso discorsi conversazione detto
 ditto calliope stanza cucina sala salotto camera adesso ora poco fa mattina pomeriggio notte
+dove quanto quanti quanta quante deciso decidere decisione sai sapere sapete ricordi ricordo
+ricordare ricordate ore stato stata stati abbiamo avevo avete dirmi dimmi detto sentito
 """.split())
+# Desinenze tolte per la radice (14/10): «partire», «partiamo» e «partenza» danno «part»
+_DESINENZE = ("issimo", "issima", "mente", "zione", "zioni", "iamo", "iate", "ando", "endo",
+              "enza", "anza", "ante", "ente", "are", "ere", "ire", "ato", "ata", "ati", "ate",
+              "ito", "ita", "iti", "ite", "uto", "uta", "ava", "avo", "eva", "evo", "iva",
+              "ivo", "ono", "ano")
 
 
 def norm(testo: str) -> str:
@@ -76,7 +102,13 @@ def parole(testo: str) -> list[str]:
 
 
 def radice(w: str) -> str:
-    """Una radice grossolana per l'italiano: «gita» trova «gite», «panini» trova «panino»."""
+    """Una radice grossolana per l'italiano: «gita» trova «gite», «panini» trova «panino»,
+    «partenza» trova «partiamo» (una desinenza comune tolta, se resta una radice di almeno
+    quattro lettere). Al più cinque lettere: la riga trova chi comincia così."""
+    if len(w) >= 7:
+        for d in _DESINENZE:
+            if w.endswith(d) and len(w) - len(d) >= 4:
+                return w[:len(w) - len(d)][:5]
     if len(w) >= 6:
         return w[:5]
     if len(w) >= 4:
@@ -136,24 +168,50 @@ def _giorno(epoch: float, oggi: datetime.date) -> str:
     return d.strftime("%d/%m %H:%M")
 
 
+def periodo(quando: str | None) -> tuple[str | None, bool, str]:
+    """Il `quando` scritto dal modello: (fascia o «ultima_ora» o None, ieri?, parole). Un
+    periodo riconosciuto filtra; «prima», «poco fa» non restringono; tutto il resto («sabato»,
+    il giorno della gita e non della conversazione: banco della DGX del 14/10) torna come
+    parole da cercare, mai come filtro. Conversione della forma di una scelta del modello
+    (principio 10)."""
+    q = " ".join(norm(quando).replace("_", " ").split())
+    q = q.replace("’", "'")
+    if q in _SENZA_LIMITE:
+        return None, False, ""
+    if q.replace(" ", "_") in PERIODI:
+        q = q.replace(" ", "_")
+    q = _SINONIMI.get(q, q)
+    if q == "ieri":
+        return None, True, ""
+    if q.startswith("ieri "):
+        resto = _SINONIMI.get(q[5:], q[5:])
+        if resto in _FASCE and resto != "oggi":
+            return resto, True, ""
+    if q in _FASCE or q == "ultima_ora":
+        return q, False, ""
+    return None, False, str(quando or "").strip()
+
+
 def intervallo(quando: str | None, dalle: str | None, alle: str | None,
                adesso: float | None = None) -> tuple[float | None, float | None]:
     """(da, a) in epoch dal periodo detto e dagli orari «HH:MM» (oggi; un orario ancora da
     venire vale ieri). None = senza limite. Conversione della forma di una scelta del modello
-    (principio 10)."""
+    (principio 10). Un `quando` che non è un periodo non limita (vedi `periodo`)."""
     adesso = time.time() if adesso is None else adesso
     oggi = datetime.datetime.fromtimestamp(adesso)
     mezzanotte = oggi.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
     da = a = None
-    q = str(quando or "").strip().lower()
+    q, ieri, _ = periodo(quando)
     if q == "ultima_ora":
         da = adesso - 3600
-    elif q == "ieri":
+    elif ieri and q is None:
         da, a = mezzanotte - 86400, mezzanotte
     elif q in _FASCE:
         h0, h1 = _FASCE[q]
         da, a = mezzanotte + h0 * 3600, mezzanotte + h1 * 3600
-        if da > adesso:                      # «stasera» detto stamattina: quella di ieri
+        if ieri:
+            da, a = da - 86400, a - 86400
+        elif da > adesso:                    # «stasera» detto stamattina: quella di ieri
             da, a = da - 86400, a - 86400
     for nome, valore in (("dalle", dalle), ("alle", alle)):
         m = re.fullmatch(r"\s*(\d{1,2})(?:[:.](\d{2}))?\s*", str(valore or ""))
@@ -267,10 +325,34 @@ def _attendi(stanza, sats: set, cfg, attesa=None) -> tuple[int, int, bool]:
     return int((time.monotonic() - t0) * 1000), len(resto), detta
 
 
+def _scambi(candidate: list, cfg) -> list:
+    """Per ogni riga candidata il numero del suo scambio: stessa stanza, stesso `scambio` del
+    registro (se le due righe lo hanno) e meno di `stanza_scambio_pausa_s` di silenzio."""
+    pausa = float(getattr(cfg, "stanza_scambio_pausa_s", 300.0) or 300.0)
+    out, n, prima = [], 0, None
+    for sat, r in candidate:
+        if prima is not None:
+            ps, pr = prima
+            ini = float(r.get("inizio") or r.get("t") or 0)
+            fin = float(pr.get("fine") or pr.get("t") or 0)
+            if (ps != sat or ini - fin > pausa
+                    or (r.get("scambio") is not None and pr.get("scambio") is not None
+                        and r.get("scambio") != pr.get("scambio"))):
+                n += 1
+        out.append(n)
+        prima = (sat, r)
+    return out
+
+
 def cerca(stanza, cfg, chi: Chi, parole_cercate: str = "", persona: str = "",
           dove: str = "", quando: str = "", dalle: str = "", alle: str = "",
-          attesa=None, adesso: float | None = None) -> Esito:
-    """La ricerca, con i permessi già decisi per `chi` (vedi il modulo)."""
+          attesa=None, adesso: float | None = None, escludi_testo: str = "",
+          escludi=frozenset(), tetto_righe: int | None = None, tetto_car: int | None = None,
+          aspetta: bool = True) -> Esito:
+    """La ricerca, con i permessi già decisi per `chi` (vedi il modulo). `escludi_testo`: la
+    frase del turno (la sua riga nella stanza non si dà). `escludi`: le (stanza, seq) già nel
+    blocco caldo (la ricerca anticipata non le ripete). `aspetta=False`: niente attesa delle
+    righe in coda (la ricerca anticipata non fa aspettare la voce)."""
     adesso = time.time() if adesso is None else adesso
     # Le stanze: quella detta, o tutte quelle che il registro conosce
     if dove:
@@ -281,11 +363,21 @@ def cerca(stanza, cfg, chi: Chi, parole_cercate: str = "", persona: str = "",
         sats = list(stanza._info)
     if chi.sat is not None and (stanza.stato_pausa(chi.sat) or {}).get("motivo") == "ospiti":
         return Esito("pausa")
-    attesa_ms, mancano, detta = _attendi(stanza, set(sats), cfg, attesa)
+    attesa_ms, mancano, detta = (_attendi(stanza, set(sats), cfg, attesa) if aspetta
+                                 else (0, 0, False))
     da, a = intervallo(quando, dalle, alle, adesso)
     fin = finestre(stanza, chi, cfg, adesso)
-    radici = chiavi(parole_cercate)
+    # Un `quando` che non è un periodo («sabato») è una parola in più, non un filtro
+    _, _, in_piu = periodo(quando)
+    # Il nome della stanza cercata non è una parola dell'argomento («cosa si diceva in
+    # taverna?» con stanza=taverna: le righe non dicono «taverna»)
+    togli = set(parole(dove)) | {w for s in (sats if dove else ())
+                                 for w in parole(nome_stanza(stanza, s))}
+    radici = chiavi(" ".join(w for w in parole(f"{parole_cercate} {in_piu}") if w not in togli))
     pers = norm(persona).strip()
+    # La domanda stessa è già nella stanza (ciclo: turno_testo, «→ Calliope»): non è una
+    # risposta, e con le sue parole sarebbe sempre la prima trovata
+    domanda = " ".join(parole(escludi_testo)) if escludi_testo else ""
     candidate = []                             # (sat, riga) visibili e nel periodo
     for sat in list(stanza._info):
         for r in stanza.registro(sat).righe():
@@ -295,6 +387,8 @@ def cerca(stanza, cfg, chi: Chi, parole_cercate: str = "", persona: str = "",
             if (da is not None and t < da) or (a is not None and t > a):
                 continue
             if not visibile(r, sat, chi, fin):
+                continue
+            if domanda and r.get("rivolta") == "si" and " ".join(parole(r["testo"])) == domanda:
                 continue
             candidate.append((sat, r))
     dentro = set(sats)
@@ -312,6 +406,8 @@ def cerca(stanza, cfg, chi: Chi, parole_cercate: str = "", persona: str = "",
             p = punteggio(f"{r.get('testo') or ''} {nome}", radici) if radici else 0
             if radici and p == 0:
                 continue
+            if (sat, r["seq"]) in escludi:
+                continue                       # già nel blocco caldo (ricerca anticipata)
             out.append((p, sat, r))
         return out
     trovate = scegli(radici)
@@ -331,41 +427,44 @@ def cerca(stanza, cfg, chi: Chi, parole_cercate: str = "", persona: str = "",
         out.allargata = bool(trovate)
     if not trovate:
         return out
-    tetto_righe = int(getattr(cfg, "stanza_cerca_righe", 20) or 20)
-    tetto_car = int(getattr(cfg, "stanza_cerca_caratteri", 2400) or 2400)
+    tetto_righe = int(tetto_righe or getattr(cfg, "stanza_cerca_righe", 20) or 20)
+    tetto_car = int(tetto_car or getattr(cfg, "stanza_cerca_caratteri", 2400) or 2400)
     # Le più pertinenti, poi le più recenti
     trovate.sort(key=lambda x: (-x[0], -float(x[2].get("fine") or x[2].get("t") or 0)))
-    # Le vicine danno il senso («io porto i panini» dopo «chi porta da mangiare?»): la riga
-    # prima e quella dopo nella stessa stanza, entro VICINE_S, solo per una ricerca di parole
-    posto = {(sat, r["seq"]): i for i, (sat, r) in enumerate(candidate)}
+    oggi = datetime.date.fromtimestamp(adesso)
+
+    def testo_riga(r) -> str:
+        testo = " ".join(str(r.get("testo") or "").split())
+        return f"{_giorno(float(r.get('inizio') or r.get('t') or 0), oggi)} {etichetta(r)}: {testo}"
+    # L'ordine in cui le righe entrano nei tetti: prima le trovate; poi, per una ricerca di
+    # parole, il discorso intorno a ciascuna («partiamo alle nove dalla piazza» quattro minuti
+    # dopo «Sabato andiamo in gita»), dalla più vicina, dentro lo stesso scambio
+    ordine = [(sat, r) for _, sat, r in trovate]
+    if radici:
+        posto = {(sat, r["seq"]): i for i, (sat, r) in enumerate(candidate)}
+        scambio = _scambi(candidate, cfg)
+        for d in range(1, VICINE_RIGHE + 1):
+            for _, sat, r in trovate:
+                i = posto[(sat, r["seq"])]
+                for j in (i - d, i + d):
+                    if 0 <= j < len(candidate) and scambio[j] == scambio[i]:
+                        ordine.append(candidate[j])
     scelte: dict = {}
-    for _, sat, r in trovate:
+    usati = 0
+    for sat, r in ordine:
+        k = (sat, r["seq"])
+        if k in scelte or k in escludi:
+            continue
         if len(scelte) >= tetto_righe:
             break
-        scelte.setdefault((sat, r["seq"]), (sat, r))
-        if not radici:
-            continue
-        i = posto[(sat, r["seq"])]
-        t = float(r.get("fine") or r.get("t") or 0)
-        for j in (i - 1, i + 1):
-            if 0 <= j < len(candidate) and len(scelte) < tetto_righe:
-                s2, r2 = candidate[j]
-                if s2 == sat and abs(float(r2.get("fine") or r2.get("t") or 0) - t) <= VICINE_S:
-                    scelte.setdefault((s2, r2["seq"]), (s2, r2))
-    elenco = sorted(scelte.values(),
-                    key=lambda x: (float(x[1].get("inizio") or x[1].get("t") or 0), x[1]["seq"]))
-    oggi = datetime.date.fromtimestamp(adesso)
-    righe_txt, usati, prese = [], 0, []
-    for sat, r in reversed(elenco):             # dalla più nuova, finché sta nel tetto
-        testo = " ".join(str(r.get("testo") or "").split())
-        riga = f"{_giorno(float(r.get('inizio') or r.get('t') or 0), oggi)} {etichetta(r)}: {testo}"
-        if usati + len(riga) + 1 > tetto_car and prese:
-            break
+        riga = testo_riga(r)
+        if usati + len(riga) + 1 > tetto_car and scelte:
+            continue                           # non ci sta: magari una più corta sì
         usati += len(riga) + 1
-        prese.append((sat, r, riga))
-    prese.reverse()
-    date = {(sat, r["seq"]) for sat, r, _ in prese}
-    out.tagliate = sum(1 for _, sat, r in trovate if (sat, r["seq"]) not in date)
+        scelte[k] = (sat, r, riga)
+    prese = sorted(scelte.values(),
+                   key=lambda x: (float(x[1].get("inizio") or x[1].get("t") or 0), x[1]["seq"]))
+    out.tagliate = sum(1 for _, sat, r in trovate if (sat, r["seq"]) not in scelte)
     blocchi, ultimo = [], object()
     for sat, r, riga in prese:
         if sat != ultimo:

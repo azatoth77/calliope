@@ -1301,7 +1301,9 @@ filtri, attesa) e `calliope/tools/stanza.py` (il tool).
   `notte`, `oggi`, `ieri`; non un enum: sul banco il 4B scriveva `quando=sabato`, il giorno della
   gita, e un valore fuori elenco ora non filtra), `dalle`/`alle` (HH:MM, oggi; un orario ancora da
   venire vale ieri). Una riga trovata porta con sé la precedente e la seguente della stessa stanza
-  entro 90 s (il senso). Senza filtri: gli ultimi discorsi che chi chiede può vedere.
+  entro 90 s (il senso). Senza filtri: gli ultimi discorsi che chi chiede può vedere. *(Storico:
+  dal 14/10 sera il discorso intorno è lo scambio, e un `quando` fuori elenco diventa una parola:
+  sezione qui sotto.)*
 - **Ripieghi** (dal banco): una persona con parole che non ha detto («cosa ha detto Nicola della
   gita?», e Nicola ha detto «sabato non vengo») → le sue frasi, con la nota «giudica tu»; persona
   o stanza scelte male dal modello («a che ora avevamo deciso di partire?» → `persona` = chi parla,
@@ -1374,3 +1376,87 @@ tool sotto 1 ms (nessuna riga in coda nel banco), frase d'attesa 0/20, prima fra
 (con la seconda passata). **Da misurare sulla DGX**: il banco (`--giri 3`) e, sull'uso vero, la
 quota della frase d'attesa e il p90 del tool. Prove: `prove/prova_stanza_cerca.py` (livello 1, con
 i contrari).
+
+## `stanza_cerca` più veloce: la ricerca anticipata, il discorso intorno (14/10 sera, ramo `stanza-cerca-2`)
+
+Il banco sulla DGX col 26B (`gemma4:26b-a4b-it-qat` su Ollama, `--giri 3`) aveva dato **24/30**
+e la **prima frase mediana 3,36 s** (portatile col 4B 1,38 s; la voce senza stanza_cerca sta tra
+0,5 e 0,8 s), con `stanza_cerca` chiamato in 30 turni su 30. Tre problemi.
+
+**Da dove venivano i secondi.** Il banco ora stampa per ogni caso le passate del modello (token
+riletti dal motore, tempo di lettura, token generati, primo testo, quando arriva la chiamata) e il
+tempo dei tool. Sul portatile col 4B, prima della correzione: il tool dura 0–2 ms (nessuna riga
+in coda), la cache del prefisso regge (riletti 400–600 token, ~0,2 s), e il tempo è tutto nelle
+**passate in più**: con `spinta_stanza` la prima passata genera per intero un «Non ho
+informazioni…» (trattenuto, 0,5–0,7 s), poi Brain cerca e la seconda passata risponde; quando il
+modello chiama da sé, spesso prima `chi_parla` e poi `stanza_cerca` (**tre passate**, 2,0–2,2 s).
+Ogni passata del 4B costa 0,5–0,9 s; col 26B (74–79 token/s, più lento a leggere) di più. Una
+prova a secco della cache di Ollama 0.40 con un blocco diverso dopo il prompt di sistema (blocco
+lungo A, poi B): si rilegge il blocco nuovo più ~500 token prima (la finestra scorrevole del 4B:
+Ollama riprende da un punto più indietro), mai il prompt intero; con un blocco corto 0,2 s. Il
+prefisso non era il problema. **Da guardare sulla DGX** con il banco nuovo: se il 26B scrive una
+frase prima della chiamata, o chiama due tool.
+
+**1. La ricerca anticipata** (`stanza_cerca_anticipo`, di serie acceso con `stanza_cerca`;
+`tools/stanza.py` `anticipa`, Brain `_reply`). Prima della prima passata Brain cerca nel
+registro della stanza con le parole della frase (e la stanza nominata nella frase: «di cosa
+parlavamo in cucina?»), con **gli stessi permessi** del tool (`_chi_cerca`: solo persone di casa
+riconosciute, adulti dove c'erano, minori solo le proprie righe, tutori, mai le voci non
+riconosciute, niente con gli ospiti), **senza aspettare** le righe in coda e **senza le righe già
+nel blocco caldo** (`Blocco.righe_id`). Se trova qualcosa di nuovo, al più
+`stanza_cerca_anticipo_caratteri` (1000, ~250 token) e 8 righe vanno nei dati del turno (blocco
+`stanza_anticipo`, dopo il contesto del turno: il blocco caldo e il turno restano un prefisso
+stabile), in busta come dato non fidato (fonte `stanza`, per la politica il turno è contaminato
+come col blocco caldo), con «se rispondono, rispondi da qui senza chiamare stanza_cerca». È
+contesto del turno, non una regola (principio 10): decide il modello. Senza parole utili («che ore
+sono?») non parte; senza niente di nuovo (la risposta è nel blocco caldo, o non c'è) non aggiunge
+niente: **la domanda che il blocco copre non paga token**. Se la frase nomina un minore di cui chi
+parla non è tutore, una nota fuori dalla busta con la frase del tool («Le parole di Nicola le cerco
+solo per chi gli fa da genitore.»; un minore che nomina un altro: «Posso cercare solo le cose che
+hai detto tu.»): sul banco il 4B rispondeva con la riga di Bianca che nominava Nicola. Regola
+`stanza_anticipo` nel registro dei turni; misura `anticipo` in `stanza-AAAA-MM-GG.jsonl` (esito,
+ms, righe, caratteri, mai parole né nomi) e la riga «Ricerca anticipata» in `calliope stato
+--turni`. **`spinta_stanza` non scatta dopo una ricerca anticipata** (la stessa ricerca con la
+stessa frase: una passata sprecata), salvo righe lasciate fuori dal tetto; quando scatta, con la
+stanza nominata nella frase cerca lì.
+
+**2. Il discorso intorno** (`stanza/cerca.py`). «A che ora avevamo deciso di partire per la
+gita?» → 0/3 sulla DGX: la ricerca trovava «Sabato andiamo in gita…» con la sola riga prima e dopo
+entro 90 s, e «partiamo alle nove dalla piazza» (quattro minuti dopo, senza «gita») restava fuori.
+Ora una riga trovata porta con sé fino a 4 righe prima e dopo **dello stesso scambio** (lo stesso
+`scambio` del registro, o meno di `stanza_scambio_pausa_s` di silenzio), dalla più vicina, dentro
+i tetti: prima entrano tutte le trovate (le più pertinenti, poi le più recenti), poi il discorso
+intorno. La radice toglie una desinenza comune («partire», «partiamo», «partenza» → «part»), e le
+parole che dicono la domanda («dove», «deciso», «ricordi»…) non si cercano. La riga della domanda
+stessa (già nella stanza come «→ Calliope») non torna nei risultati, e il nome della stanza
+cercata non vale come parola dell'argomento.
+
+**3. `quando` che non è un periodo** («Calliope, dove si parte sabato per la gita?», Bianca dalla
+cucina, 2/3 «non lo so»). `periodo()` riconosce i periodi e i modi in cui il modello li scrive
+(«stamattina», «stasera», «ieri sera» → la sera di ieri); «prima», «poco fa» non limitano;
+**tutto il resto («sabato») diventa una parola cercata**, mai un filtro. Sul 4B il caso era in
+realtà il discorso intorno (il filtro non scattava già), e ora va anche senza la ricerca
+anticipata.
+
+**Prompt.** Il prompt di sistema dice prima «rispondi dalle righe della stanza nei dati del
+turno, se ci sono» e solo dopo stanza_cerca; il blocco caldo «Se la risposta è qui, rispondi da
+qui senza cercare»; la descrizione del tool «Non serve se la risposta è già nelle righe della
+stanza dei dati del turno» e «il giorno di cui si parlava va in parole».
+
+**Una corsa in meno** (`stanza/ascolto.py`): la presenza che scade (o che passa a un'altra
+stanza) entrava nell'elenco degli intervalli fuori dal lock, e una ricerca in quell'istante non la
+vedeva né aperta né chiusa; ora entra dentro il lock.
+
+**Misure a secco** (portatile, gemma4 e4b, banco nuovo con 12 casi: 6 «serve cercare», 3 «blocco
+basta» con la pizza e gli occhiali in sala, 3 contrari). Prima: 9/12, «serve cercare» prima frase
+mediana 1,35 s con 2 passate, contrari 2,3 passate. **Dopo: 24/24 su due giri**; «serve cercare»
+1 passata, prima frase mediana **0,62 s**, tool mai chiamato; «blocco basta» 0,61 s contro 0,54 s
+con stanza_cerca spento (**+0,06 s**, obiettivo +0,1); contrari 6/6 (1,7 passate: il 4B per il
+campeggio mai detto chiama ancora `chi_parla` e `stanza_cerca`). Con `--senza-anticipo` (solo il
+tool, prompt nuovo): 10/12, «serve cercare» 1,50 s con 2 passate, «dove si parte sabato» giusto
+col tool (`parole=gita, quando=sabato`). **Da misurare sulla DGX** col 26B: il banco (`--giri 3
+--confronto`, poi `--senza-anticipo` per il confronto), obiettivo ≥ 10/12 per giro, «blocco basta»
+entro +0,1 s, «serve cercare» ≤ ~1,5 s di mediana. Prove: `prove/prova_stanza_cerca.py` (livello
+1: il discorso intorno e i suoi contrari, i periodi, la ricerca anticipata con ospite, minore,
+tutore, blocco caldo, righe in coda, pausa, spento, una passata in Brain e niente spinta dopo).
+

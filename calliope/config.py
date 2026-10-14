@@ -1059,6 +1059,16 @@ class Config:
     # `stanza_cerca_attesa_s`
     stanza_cerca_attesa_max_s: float = 3.0
     stanza_cerca_attesa_s: float = 0.7
+    # La ricerca anticipata (14/10, banco della DGX col 26B: prima frase mediana 3,36 s con
+    # stanza_cerca, che chiamava il tool in ogni turno, una passata in più): prima della
+    # risposta Brain cerca con le parole della frase (e la stanza nominata) le righe di prima
+    # che il blocco caldo non ha, con gli stessi permessi del tool, e le mette nei dati del turno
+    # accanto al blocco, in busta: se bastano il modello risponde in una passata, altrimenti
+    # chiama stanza_cerca. Senza parole utili o senza niente di nuovo non aggiunge niente (la
+    # domanda che il blocco caldo copre non paga token). false = solo il tool, come il 14/10
+    stanza_cerca_anticipo: bool = True
+    # Tetto delle righe anticipate (~250 token: ~0,1 s di lettura in più del 26B)
+    stanza_cerca_anticipo_caratteri: int = 1000
     # Connessioni insieme attraverso l'inoltro (una pagina ne apre 2–6)
     satellite_inoltro_max: int = 32
     # Secondi senza un byte dopo i quali una connessione dell'inoltro si chiude
@@ -2103,10 +2113,12 @@ class Config:
         # La conversazione della stanza (14/10, passo 4, tool stanza_cerca): solo se il tool
         # c'è. Senza questa frase il 4B, sul banco, non lo chiamava quando la domanda non
         # nominava una stanza («a che ora avevamo deciso di partire?» → «non ho in memoria»)
-        room = ("per ciò che si è detto vicino ai dispositivi di casa e non è nella "
-                "conversazione con te né nei dati del turno (chi ha detto cosa, cosa si era "
-                "deciso, a che ora, di cosa si parlava in una stanza) stanza_cerca, prima di "
-                "dire che non lo sai; " if stanza else "")
+        # Dal 14/10 prima «rispondi dalle righe della stanza dei dati del turno»: sul banco della
+        # DGX il 26B chiamava stanza_cerca anche con la risposta già lì (30 turni su 30)
+        room = ("per ciò che si è detto vicino ai dispositivi di casa rispondi dalle righe della "
+                "stanza nei dati del turno, se ci sono; se lì non c'è (chi ha detto cosa, cosa "
+                "si era deciso, a che ora, di cosa si parlava in un'altra stanza) stanza_cerca, "
+                "prima di dire che non lo sai; " if stanza else "")
         # Con la ricerca web: quando usarla, al posto di «non puoi sapere il meteo…»
         if web:
             limits = (limits.replace("non usi internet o file e ", "non usi file e ")
@@ -2896,7 +2908,8 @@ SEZIONI: dict[str, list[str]] = {
                "stanza_ospiti_ore", "stanza_pausa_min", "stanza_contesto", "stanza_caldo_min",
                "stanza_caldo_sempre_s", "stanza_caldo_caratteri", "stanza_cerca",
                "stanza_cerca_righe", "stanza_cerca_caratteri", "stanza_cerca_attesa_max_s",
-               "stanza_cerca_attesa_s"],
+               "stanza_cerca_attesa_s", "stanza_cerca_anticipo",
+               "stanza_cerca_anticipo_caratteri"],
     "satellite": ["satellite_server", "satellite_credenziali", "satellite_impronta",
                   "satellite_microfono", "satellite_casse", "satellite_webcam",
                   "satellite_schermo", "satellite_schermo_personale", "satellite_esecutore",
@@ -3099,6 +3112,7 @@ LIMITI: dict[str, tuple[float, float]] = {
     "stanza_caldo_sempre_s": (0.0, 600.0), "stanza_caldo_caratteri": (200, 100_000),
     "stanza_cerca_righe": (1, 200), "stanza_cerca_caratteri": (200, 20_000),
     "stanza_cerca_attesa_max_s": (0.0, 30.0), "stanza_cerca_attesa_s": (0.0, 30.0),
+    "stanza_cerca_anticipo_caratteri": (0, 20_000),
     "contesto_ripiego": (2048, 1_048_576), "contesto_rilettura_max_s": (0.1, 60.0),
     "contesto_conversazioni": (1, 64), "contesto_margine_gb": (0.0, 512.0),
     "max_history_turns": (0, 200), "max_tool_turns": (1, 20), "tool_correzioni_max": (0, 10),

@@ -519,6 +519,9 @@ class Stanza:
             else:
                 if p is not None:
                     chiudi = p
+                    # Nell'elenco degli intervalli dentro il lock (14/10): fuori, una ricerca
+                    # in quell'istante non vedeva la presenza né aperta né chiusa
+                    self._intervalli.append((persona, p["sat"], p["inizio"], p["ultimo"]))
                     if p["sat"] != sat:
                         cambio = (p["sat"], t - p["ultimo"])
                 self._presenti[persona] = {"sat": sat, "nome": nome, "inizio": t, "ultimo": t}
@@ -535,7 +538,6 @@ class Stanza:
     def _chiudi_presenza(self, persona, p: dict):
         self.registro(p["sat"]).aggiungi(PRESENZA, persona=persona, nome=p.get("nome"),
                                          inizio=round(p["inizio"], 3), fine=round(p["ultimo"], 3))
-        self._intervalli.append((persona, p["sat"], p["inizio"], p["ultimo"]))
         nome = (self._info.get(p["sat"]) or {}).get("nome") or str(p["sat"])
         self._misura("presenza", persona=persona, sat=nome,
                      durata_s=round(p["ultimo"] - p["inizio"], 1))
@@ -566,8 +568,9 @@ class Stanza:
         with self._cond:
             vecchie = [(k, v) for k, v in self._presenti.items()
                        if ora - v["ultimo"] > presenza_s]
-            for k, _ in vecchie:
+            for k, v in vecchie:
                 self._presenti.pop(k)
+                self._intervalli.append((k, v["sat"], v["inizio"], v["ultimo"]))
             pause = [k for k, p in self._pause.items()
                      if p.get("fino") is not None and p["fino"] <= ora]
         for k, v in vecchie:
