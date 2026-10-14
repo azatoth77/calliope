@@ -698,6 +698,18 @@ minori:
   # parlato da meno di tanti secondi (potrebbe essere lì vicino): una frase neutra e il testo
   # resta sul suo schermo personale; a voce più tardi. 0 = sempre a voce (come prima)
   minori_avviso_privato_s: 600.0
+  # Quando è nato un avviso ai tutori (14/10, caso vero: un avviso «sicurezza» del 12/10 sera,
+  # rimasto da dire vicino al ragazzo, è arrivato il 14/10 mattina senza data ed è stato preso
+  # per un allarme nuovo). Minuti oltre i quali la voce dice quando è nato («ieri sera alle
+  # 19:02», «lunedì 12/10 alle 19:02»); la scheda lo dice sempre
+  avvisi_data_dopo_min: 15.0
+  # Ore dopo cui un avviso urgente rimasto da dire si dice come non urgente, con la data
+  # (il momento è passato: resta da sapere, non da correre). 0 = resta urgente
+  avvisi_urgente_ore: 12.0
+  # Ore in cui gli avvisi consegnati a un tutore (a voce o sullo schermo) restano nei dati
+  # del suo turno, così a «cos'erano quegli avvisi?» il modello ha data, tipo, origine e
+  # stato veri e non inventa. Più vecchi: minore_gestisci azione avvisi. 0 = mai nel turno
+  avvisi_contesto_ore: 48.0
   # Esercizi generati da Calliope (08/10, calliope/esercizi/, docs/ricerche/
   # 2026-10-08-esercizi.md): matematica e italiano per i ragazzi di casa, a voce e sulla
   # scheda, con la correzione nel codice e il registro dei tentativi per i tutori; dal 12/10

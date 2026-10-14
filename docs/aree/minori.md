@@ -845,3 +845,51 @@ DGX da misurare.
 nuove in memoria), il filtro della modalità gioco del satellite (oggi lo fa solo il contesto «gioco»
 del giudizio), le righe di versione 2 della corsia lenta (passo 3: oggi una riga riscritta si
 rigiudicherebbe), il riepilogo dei dubbi nel riepilogo del giorno.
+
+## Gli avvisi dicono quando sono nati e da dove (14/10, ramo `avvisi-data`)
+
+**Caso vero.** Un avviso «sicurezza» urgente per il ragazzo, nato il 12/10 alle 19:02 dal giro dei
+cancelli (un falso allarme, corretto nel codice il 13/10: il secondo segnale dopo una smentita),
+è rimasto da dire per due giorni, giustamente, perché il ragazzo parlava vicino al satellite
+(`minori_avviso_privato_s`). È arrivato a chi amministra il 14/10 alle 9:11, sullo schermo del
+telefono in auto, **senza data**: preso per un allarme nuovo nato dalla conversazione della
+stanza. Chiesto a Calliope, il modello non ne sapeva niente e ha confermato a caso.
+
+**Cosa cambia** (`calliope/minori.py` `Avvisi`, schema `avvisi_tutori` alla versione 2 con le
+colonne `origine`, `rif`, `come`, `falso`):
+
+- **Quando** (`quando_nato`): la voce dice quando è nato un avviso se ha più di
+  `avvisi_data_dopo_min` (15) minuti: «nato oggi alle 7:02», «nato ieri sera alle 19:02», «nato
+  lunedì 12/10 alle 19:02». La **scheda** lo dice sempre per intero (`quando_scheda`: la si può
+  guardare giorni dopo, anche dalla cronologia dello schermo).
+- **Da dove**, in parole semplici e mai con le parole del minore: «da una frase detta a me al
+  telefono», «… dal satellite cucina», «da una frase scritta a me sullo schermo» (`origine_turno`,
+  dal nome della corsia: cancelli, acuto, silenzio, fuori orario), «dalla rilettura della
+  conversazione in cucina» (`origine_stanza`, il guardiano a posteriori), «da una frase scritta
+  nella chat di un gioco». L'origine resta col segnale dei cancelli anche dopo un riavvio
+  (`cancelli.json`, sempre senza il testo).
+- **Urgente scaduto**: un avviso urgente rimasto da dire oltre `avvisi_urgente_ore` (12) si dice
+  «non più urgente», con la data, e passa dietro gli urgenti veri (regola
+  `avviso_urgente_scaduto`; `avviso_con_data` quando la voce dice una data). La frase neutra
+  vicino al minore resta com'era dal 09/10.
+- **Falso**: un avviso segnato falso non si consegna più (esce da `da_dire` con `come` «falso» e
+  una riga nel log). Due modi: `calliope stato --guardia --falso ID` (il riferimento dell'avviso
+  del guardiano è `guardia:<id del segnale>`) e, nuovo, `calliope stato --avvisi [--giorni N]
+  [--falso AV12]`, che elenca gli avvisi senza parole (id, quando, tipo, minore, tutore, origine,
+  consegna) e ferma tutte le righe dei tutori di quell'avviso. Per il caso vero sarebbe servito il
+  secondo: un avviso dei cancelli non ha un altro modo di essere smentito dopo che è partito.
+- **Calliope sa cosa ha consegnato**: al tutore riconosciuto dalla voce (o che scrive dal suo
+  schermo personale) i **dati del turno** portano gli avvisi consegnati (a voce o sullo schermo) o
+  nati nelle ultime `avvisi_contesto_ore` (48) ore: id, quando è nato, tipo, minore, origine, come e
+  quando è arrivato, urgente o falso, e il testo (che non ha mai le parole del minore), con
+  «usali solo se chiede degli avvisi, non inventare» (`Avvisi.contesto`, blocco «avvisi» di
+  `Brain._reply`, regola `avvisi_nel_turno`). Solo i propri (le righe sono per tutore: un altro
+  adulto non vede niente); un avviso «sicurezza» di un minore che ha parlato lì da poco resta
+  fuori, con una riga «riservato: è sul tuo schermo». Più indietro (30 giorni):
+  `minore_gestisci` azione `avvisi` (sola lettura dentro lo stesso tool, nessuno schema nuovo;
+  con la voce o dallo schermo, mai per un minore).
+
+**Prove**: `prove/prova_avvisi_data.py` (a secco, orologio fermo, con i contrari: avviso fresco
+senza data, vecchio con la data, minore vicino, altro adulto non tutore, voce non riconosciuta,
+il minore stesso, domanda del tutore → dati del turno con la data, falso, database di prima);
+`prova_stanza_guardia` controlla origine, riferimento e data dell'avviso del guardiano.

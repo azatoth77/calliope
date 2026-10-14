@@ -656,9 +656,17 @@ class Ciclo:
         n = self._cancelli().avvisa(prof, categorie, cancelli_mod.CONFERMATO, motivo,
                                     bool(voce_incerta), urgente=True,
                                     categorie_prima=categorie_prima, registry=self.s.registry,
-                                    compagnia=bool(compagnia))
+                                    compagnia=bool(compagnia), origine=self._origine_avviso())
         if n == -1:
             self.rule("avviso_pericolo_ripetuto")
+
+    def _origine_avviso(self) -> str:
+        """Da dove viene un avviso nato da una frase di questo turno (14/10): parole semplici,
+        mai le parole del minore («da una frase detta a me al telefono»)."""
+        cors = self.corsia
+        return minori.origine_turno(getattr(cors, "nome", None), getattr(cors, "chiave", None),
+                                    scritto=getattr(self.speaker_ctx, "identified_by",
+                                                    None) == "schermo")
 
     def _cancelli(self):
         """I segnali da verificare, condivisi dalle corsie (creati alla prima occorrenza)."""
@@ -730,7 +738,8 @@ class Ciclo:
                               else "gravita_guasta")
             return guardia.PROTEZIONE
         c.apri(prof, t.testo_guardia or t.text, g.categorie, info["voce_incerta"],
-               self.corsia.chiave, compagnia=bool(info.get("compagnia")))
+               self.corsia.chiave, compagnia=bool(info.get("compagnia")),
+               origine=self._origine_avviso())
         info.update(livello=cancelli_mod.DA_VERIFICARE, motivo="dubbio", cancello=1)
         return cancelli_mod.rassicura(prof)
 
@@ -865,6 +874,13 @@ class Ciclo:
             # neutra una volta; il testo è sullo schermo personale, a voce più tardi
             self.rule("avviso_sicurezza_rinviato")
             self._avvisi_accennati.update(a["id"] for a in rinviati)
+        if any(a.get("scaduto") for a in lista):
+            # Urgente ma rimasto da dire oltre avvisi_urgente_ore (14/10): non urgente, con la data
+            self.rule("avviso_urgente_scaduto")
+        if any(minori.quando_nato(a.get("creato"), av.adesso(),
+                                  float(getattr(cfg, "avvisi_data_dopo_min", 15.0) or 0))
+               for a in lista):
+            self.rule("avviso_con_data")
         if lista or nuovi:
             self.rule("avviso_tutore")
             u.turno()
@@ -873,6 +889,32 @@ class Ciclo:
                                       AVVISO_PRIVATO if nuovi else "") if x), "avviso_tutore")
             u.aspetta()
         self.richieste_al_tutore(prof)
+
+    def _avvisi_contesto(self, t) -> str | None:
+        """Gli avvisi consegnati di recente a chi parla, nei dati del turno (14/10, caso vero:
+        a «cos'era quell'avviso?» Calliope non sapeva niente e confermava a caso). Solo per chi
+        è riconosciuto dalla voce o scrive dal suo schermo personale, e solo i suoi (le righe
+        sono per tutore); gli avvisi «sicurezza» di un minore che ha parlato qui da poco restano
+        fuori (potrebbe essere vicino)."""
+        av = minori.avvisi()
+        if av is None or not t.speaker_name or getattr(
+                self.speaker_ctx, "identified_by", None) not in ("voce", "schermo"):
+            return None
+        prof = self.s.registry.get(t.speaker_name)
+        if prof is None or minori.e_minore(prof) or not getattr(prof, "id", None):
+            return None
+        privato = float(getattr(self.s.cfg, "minori_avviso_privato_s", 0.0) or 0.0)
+        ora = time.monotonic()
+        vicini = {m for m, quando in self._minori_sentiti.items()
+                  if privato > 0 and ora - quando < privato}
+        try:
+            testo = av.contesto(prof.id, self.s.registry, nascondi_minori=vicini)
+        except Exception as e:  # noqa: BLE001 — gli avvisi non fermano la risposta
+            print(f"   [MINORI] avvisi per il turno non letti: {type(e).__name__}", flush=True)
+            return None
+        if testo:
+            self.rule("avvisi_nel_turno")
+        return testo or None
 
     def richieste_al_tutore(self, prof):
         """Le richieste dei ragazzi in attesa (05/10, minori.Richieste): dopo la prima risposta
@@ -3202,6 +3244,8 @@ class Ciclo:
             # che vale una risposta sola, come i due qui sopra
             if getattr(s, "stanza", None) is not None:
                 brain.stanza_turno = self._stanza_blocco(t)
+            # Gli avvisi consegnati di recente a chi parla (14/10): vale una risposta sola
+            brain.avvisi_turno = self._avvisi_contesto(t)
             contesto_turno = t.context
             if t.contesto_gioco:
                 contesto_turno = (contesto_turno + "\n" if contesto_turno else "") + t.contesto_gioco

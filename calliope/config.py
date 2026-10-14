@@ -1695,6 +1695,18 @@ class Config:
     # parlato da meno di tanti secondi (potrebbe essere lì vicino): una frase neutra e il testo
     # resta sul suo schermo personale; a voce più tardi. 0 = sempre a voce (come prima)
     minori_avviso_privato_s: float = 600.0
+    # Quando è nato un avviso ai tutori (14/10, caso vero: un avviso «sicurezza» del 12/10 sera,
+    # rimasto da dire vicino al ragazzo, è arrivato il 14/10 mattina senza data ed è stato preso
+    # per un allarme nuovo). Minuti oltre i quali la voce dice quando è nato («ieri sera alle
+    # 19:02», «lunedì 12/10 alle 19:02»); la scheda lo dice sempre
+    avvisi_data_dopo_min: float = 15.0
+    # Ore dopo cui un avviso urgente rimasto da dire si dice come non urgente, con la data
+    # (il momento è passato: resta da sapere, non da correre). 0 = resta urgente
+    avvisi_urgente_ore: float = 12.0
+    # Ore in cui gli avvisi consegnati a un tutore (a voce o sullo schermo) restano nei dati
+    # del suo turno, così a «cos'erano quegli avvisi?» il modello ha data, tipo, origine e
+    # stato veri e non inventa. Più vecchi: minore_gestisci azione avvisi. 0 = mai nel turno
+    avvisi_contesto_ore: float = 48.0
     # Esercizi generati da Calliope (08/10, calliope/esercizi/, docs/ricerche/
     # 2026-10-08-esercizi.md): matematica e italiano per i ragazzi di casa, a voce e sulla
     # scheda, con la correzione nel codice e il registro dei tentativi per i tutori; dal 12/10
@@ -2907,6 +2919,7 @@ SEZIONI: dict[str, list[str]] = {
                "minori_avviso_ripetuto_s", "minori_pericolo_verifica",
                "minori_pericolo_attesa_s", "minori_pericolo_silenzio",
                "minori_pericolo_finestra_s", "minori_avviso_privato_s",
+               "avvisi_data_dopo_min", "avvisi_urgente_ore", "avvisi_contesto_ore",
                "esercizi_enabled", "esercizi_verifica_modello", "esercizi_verifica_url",
                "esercizi_verifica_timeout_s", "esercizi_senza_secondo_parere",
                "esercizi_pronti", "esercizi_campione", "esercizi_blocco_piccoli",
@@ -3204,6 +3217,8 @@ LIMITI: dict[str, tuple[float, float]] = {
     "compagnia_rivolta_timeout_s": (0.2, 30.0),
     "minori_pericolo_attesa_s": (0.0, 86_400.0), "minori_pericolo_finestra_s": (0.0, 604_800.0),
     "minori_avviso_privato_s": (0.0, 86_400.0),
+    "avvisi_data_dopo_min": (0.0, 1440.0), "avvisi_urgente_ore": (0.0, 720.0),
+    "avvisi_contesto_ore": (0.0, 720.0),
     "esercizi_verifica_timeout_s": (0.5, 300.0), "esercizi_pronti": (0, 50),
     "esercizi_campione": (0, 50), "esercizi_blocco_piccoli": (1, 50),
     "esercizi_blocco": (1, 50), "esercizi_tappe": (1, 20),

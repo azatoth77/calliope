@@ -586,12 +586,14 @@ class Guardia:
 
     def _esito(self, b: Blocco, res: dict, ms: float):
         d = self.decidi(b, res)
+        # L'id prima dell'avviso (14/10): è il riferimento dell'avviso, così `calliope stato
+        # --guardia --falso ID` ferma anche l'avviso non ancora visto
+        ident = self._nuovo_id()
         avviso = None
         if d["livello"] == ACUTO:
-            avviso = self._avviso_acuto(b, d)
+            avviso = self._avviso_acuto(b, d, ident)
         elif d["livello"] == DUBBIO:
-            avviso = self._dubbio(b, d)
-        ident = self._nuovo_id()
+            avviso = self._dubbio(b, d, ident)
         self._misura(esito="giudicato", id=ident, sat=b.nome_sat, minori=sorted(d["minori"]),
                      modo_minore=d["modo"], righe=len(b.giudicate),
                      contesto_righe=len(b.righe) - len(b.giudicate), parlato_s=b.parlato_s(),
@@ -630,7 +632,7 @@ class Guardia:
                 return u
         return None
 
-    def _avviso_acuto(self, b: Blocco, d: dict) -> str | None:
+    def _avviso_acuto(self, b: Blocco, d: dict, ident: str = "") -> str | None:
         """Un acuto: per ogni minore, l'avviso (attiva) o ciò che sarebbe successo (ombra):
         «mandato», «ombra», «tetto» (già `stanza_guardia_avvisi_giorno` oggi), «ripetuto»
         (stessa categoria entro 24 ore). Il più significativo dei minori."""
@@ -656,13 +658,14 @@ class Guardia:
             arg = (ARGOMENTI_PARLA if d["modo"] == "parla" else ARGOMENTI_PRESENTE).get(
                 d["categoria"], ARGOMENTI_PARLA["pericolo"])
             testo = testo_avviso(nome or pid, b.stanza_nome, d["ora"], arg, d["modo"])
-            esiti.append("mandato" if self._manda(pid, testo, urgente=True) else "non_mandato")
+            esiti.append("mandato" if self._manda(pid, testo, urgente=True, b=b, ident=ident)
+                         else "non_mandato")
         for e in ("mandato", "non_mandato", "ombra", "tetto", "ripetuto"):
             if e in esiti:
                 return e
         return None
 
-    def _dubbio(self, b: Blocco, d: dict) -> str | None:
+    def _dubbio(self, b: Blocco, d: dict, ident: str = "") -> str | None:
         """Un dubbio: niente avviso, un conto per minore e categoria. Due dubbi della stessa
         categoria in giorni diversi entro DUBBI_GIORNI → un avviso non urgente (una volta ogni
         DUBBI_GIORNI)."""
@@ -685,17 +688,22 @@ class Guardia:
             arg = (ARGOMENTI_PARLA if d["modo"] == "parla" else ARGOMENTI_PRESENTE).get(
                 d["categoria"], ARGOMENTI_PARLA["pericolo"])
             testo = testo_dubbi(nome or pid, arg, d["modo"])
-            esito = "mandato" if self._manda(pid, testo, urgente=False) else "non_mandato"
+            esito = ("mandato" if self._manda(pid, testo, urgente=False, b=b, ident=ident)
+                     else "non_mandato")
         return esito
 
-    def _manda(self, pid, testo: str, urgente: bool) -> bool:
+    def _manda(self, pid, testo: str, urgente: bool, b: Blocco | None = None,
+               ident: str = "") -> bool:
+        from ..minori import origine_stanza
         av = self._avvisi_servizio()
         prof = self._prof(pid)
         if av is None or prof is None:
             return False
         try:
             return (av.solo_schermo(prof, "sicurezza_stanza", testo, urgente=urgente,
-                                    registry=self.registry) or 0) > 0
+                                    registry=self.registry,
+                                    origine=origine_stanza(b.stanza_nome if b else ""),
+                                    rif=f"guardia:{ident}" if ident else None) or 0) > 0
         except Exception as e:  # noqa: BLE001
             self.log(f"   [GUARDIA] avviso non mandato: {type(e).__name__}")
             return False
