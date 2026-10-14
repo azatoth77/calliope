@@ -6,11 +6,16 @@ da `Ciclo._seguito_del_tetto` e la trascrizione con faster-whisper (GPU se c'è,
 
     python prove/prova_frase_lunga_voce.py
 
-- la dettatura arriva al tetto e i pezzi si uniscono in un turno solo, con tutta la voce;
+- la dettatura arriva al tetto e i pezzi si uniscono in un turno solo, con tutta la voce:
+  l'audio unito è, campione per campione, quello del microfono (contrario: un frame perso o
+  ripetuto sull'unione si vede);
 - il testo contiene intere le frasi intorno al primo taglio («…beccare più premi. Alla fine
   mostra una classifica…»: il 10/10 «…beccare più.» era già un turno nuovo) e la fine;
 - contrario: il primo pezzo da solo finisce a metà (come il 10/10);
 - Whisper trascrive l'audio unito oltre la sua finestra di 30 s: il tempo dell'STT stampato.
+La dettatura è sintetizzata senza il rumore di Piper (dal 14/10: sempre la stessa, 66,6 s) e il
+testo si confronta con una tolleranza sulle lettere (`contiene`): prima la prova cadeva circa
+una volta su sei per una parola storpiata da Whisper, a caso, più spesso nelle corse lunghe.
 Si salta (77) senza la voce di Piper o senza il modello di Whisper. ~20 s con la GPU.
 """
 import os
@@ -59,12 +64,18 @@ def verifica(nome, cond, info=""):
 
 def dettatura() -> np.ndarray:
     """Le frasi una dopo l'altra con pause di respiro (250–500 ms, sotto silence_ms)."""
-    from piper import PiperVoice
+    from piper import PiperVoice, SynthesisConfig
     v = PiperVoice.load(str(VOCE))
+    # Sintesi deterministica (14/10): con il rumore di serie di Piper (noise_scale,
+    # noise_w_scale) ogni corsa aveva un audio diverso, ~1 volta su 6 una parola sulla cucitura
+    # delle finestre di 30 s di Whisper usciva storpiata («cassifica», «un aperturono») o una
+    # pausa dopo una virgola durava più di silence_ms e chiudeva il secondo pezzo: la prova
+    # cadeva a caso, più spesso nelle corse lunghe. Senza rumore la dettatura è sempre la stessa
+    sintesi = SynthesisConfig(noise_scale=0.0, noise_w_scale=0.0)
     rng = np.random.default_rng(3)
     pezzi = []
     for f in FRASI:
-        pcm = b"".join(ch.audio_int16_bytes for ch in v.synthesize(f))
+        pcm = b"".join(ch.audio_int16_bytes for ch in v.synthesize(f, sintesi))
         x = np.frombuffer(pcm, np.int16).astype(np.float32) / 32768
         n = int(len(x) * 16000 / v.config.sample_rate)
         y = np.interp(np.linspace(0, len(x) - 1, n), np.arange(len(x)), x).astype(np.float32)
@@ -118,6 +129,55 @@ def parole(s: str) -> list[str]:
     return re.findall(r"\w+", s.lower())
 
 
+def contiene(testo: str, frase: str, soglia: float = 0.85) -> bool:
+    """La frase c'è nel testo (già passato da `parole`), al più con qualche lettera diversa:
+    la finestra di parole del testo più simile, confrontata lettera per lettera. Una parola
+    storpiata da Whisper resta sopra la soglia, una frase che manca o è tagliata a metà sotto
+    (casi in `prova_contiene`)."""
+    from difflib import SequenceMatcher
+    attese, viste = parole(frase), testo.split()
+    n = len(attese)
+    if not n or len(viste) < n:
+        return False
+    a = " ".join(attese)
+    return max(SequenceMatcher(None, a, " ".join(viste[i:i + n])).ratio()
+               for i in range(len(viste) - n + 1)) >= soglia
+
+
+def prova_contiene():
+    """La tolleranza di `contiene` sui casi veri delle corse del 11–14/10, con i contrari."""
+    casi = [("però attenzione queste porte non devono aumentare o diminuire troppo al massimo "
+             "un aperturono il gioco dura", FRASI[3], True),
+            ("alla fine mostra una cassifica con i nomi dei giocatori e il punteggio di "
+             "ciascuno", FRASI[5], True),
+            ("vince chi ha la fortuna di beccare più paemi", "la fortuna di beccare più premi",
+             True),
+            ("vince chi ha la fortuna di beccare più", FRASI[5], False),
+            ("di beccare più alla fine mostra una classifica", FRASI[5], False),
+            ("però attenzione queste porte non devono aumentare", FRASI[3], False),
+            ("quando finisce il quindicesimo turno", FRASI[-1], False)]
+    for testo, frase, atteso in casi:
+        verifica(f"contiene: «{testo[-40:]}» {'sì' if atteso else 'no'}",
+                 contiene(" ".join(parole(testo)), frase) is atteso)
+
+
+def contigua(audio: np.ndarray, sorgente: np.ndarray) -> bool:
+    """`audio` è una fetta intera di `sorgente`, a un multiplo del frame: niente campioni persi
+    né ripetuti dove i pezzi si uniscono. In testa può avere il silenzio del microfono prima
+    della dettatura (il pre-roll)."""
+    voce = np.flatnonzero(np.abs(audio) > 0.02)
+    if not len(voce):
+        return False
+    j = int(voce[0]) // 512 * 512            # primo frame con la voce
+    for k in range(0, len(sorgente) - 512, 512):
+        if np.array_equal(sorgente[k:k + 512], audio[j:j + 512]):
+            a = k - j
+            testa, audio = (audio[:-a], audio[-a:]) if a < 0 else (audio[:0], audio)
+            return (not np.any(testa)
+                    and np.array_equal(sorgente[max(a, 0):max(a, 0) + len(audio)], audio))
+    return False
+
+
 def main():
     if not VOCE.exists():
         print(f"salto: manca la voce {VOCE.name} (voices/)")
@@ -125,8 +185,9 @@ def main():
     from calliope.audio import Listener
     from calliope.ciclo import Ciclo
     from calliope.stt import Transcriber
+    prova_contiene()
     cfg = Config()
-    cfg.max_utterance_s = 30                 # il tetto di prima del 10/10: arriva due volte
+    cfg.max_utterance_s = 30                # il tetto di prima del 10/10: arriva due volte
     try:
         stt = Transcriber(cfg)
     except Exception as e:  # noqa: BLE001 — niente modello di Whisper qui
@@ -166,22 +227,31 @@ def main():
              None if unito is None else round(len(unito) / 16000, 2))
     if unito is None:
         return 1
+    verifica("i pezzi uniti sono l'audio del microfono, senza campioni persi né ripetuti",
+             contigua(unito, np.concatenate(FRAME_MIC)))
+    taglio = len(out["primo"])
+    verifica("contrario: un frame perso o ripetuto sull'unione si vede",
+             not contigua(np.concatenate([unito[:taglio], unito[taglio + 512:]]),
+                          np.concatenate(FRAME_MIC))
+             and not contigua(np.concatenate([unito[:taglio], unito[taglio - 512:]]),
+                              np.concatenate(FRAME_MIC)))
     t0 = time.perf_counter()
     testo = stt.transcribe(unito)
     dt = time.perf_counter() - t0
     print(f"   STT dell'audio unito ({len(unito) / 16000:.1f} s): {dt:.2f} s")
     p = " ".join(parole(testo))
     # Il primo taglio cade a 30 s, su «beccare più | premi» (il 10/10 «beccare più.» era già un
-    # turno a sé): la parola sull'unione può uscire storpiata («paemi»), la frase dopo c'è
-    import re
+    # turno a sé). Le frasi si cercano con una tolleranza sulle lettere (`contiene`, 14/10):
+    # Whisper storpia a volte una parola sulla cucitura delle sue finestre di 30 s («paemi»,
+    # «cassifica», «una per tu uno»), e non è il difetto che la prova cerca (una frase che
+    # manca). Che l'audio unito sia intero lo dice già, esatta, la verifica dei campioni sopra
     verifica("il testo ha le frasi intorno al primo taglio, intere",
-             "diminuire troppo" in p and "una per turno" in p
-             and re.search(r"beccare più \w+ alla fine mostra una classifica", p) is not None,
-             testo[150:650])
-    verifica("…e la fine della dettatura", "voglio cambiare qualcosa" in p, testo[-200:])
+             contiene(p, FRASI[3]) and contiene(p, "la fortuna di beccare più premi")
+             and contiene(p, FRASI[5]), testo[150:650])
+    verifica("…e la fine della dettatura", contiene(p, FRASI[-1]), testo[-200:])
     primo = " ".join(parole(stt.transcribe(out["primo"])))
     verifica("contrario: il primo pezzo da solo finisce a metà (come il 10/10)",
-             "voglio cambiare qualcosa" not in primo, primo[-120:])
+             not contiene(primo, FRASI[5]) and not contiene(primo, FRASI[-1]), primo[-120:])
     print(f"\n{'Tutto bene' if not errori else f'{errori} errori'}")
     return 1 if errori else 0
 
