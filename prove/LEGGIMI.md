@@ -105,9 +105,11 @@ agenti sullo stesso portatile; le cause e le misure):
   cadeva circa una volta su sei (Whisper storpiava una parola sulla cucitura delle sue finestre
   di 30 s: «cassifica», «un aperturono»; una volta su otto una pausa dopo una virgola chiudeva il
   secondo pezzo), `prova_stanza_voce` una volta su dieci («Calliope, che ore sono?» sotto la
-  soglia della wake word). Non era il carico. Ora la dettatura e la frase col nome sono
-  **senza rumore** (`SynthesisConfig(noise_scale=0, noise_w_scale=0)`, in `prova_satellite.
-  sintetizza(deterministica=True)`), e il testo di Whisper si confronta con una tolleranza sulle
+  soglia della wake word), `prova_telefono_audio` di rado (una sintesi così storpiata che Whisper
+  sbagliava «Calliope» e «Oggi» a tutte le frequenze: 6 parole su 9, sotto il 70 %, visto nel
+  secondo `--completo` della verifica del 14/10). Non era il carico. Ora la dettatura e la frase col nome sono
+  **senza rumore** (`SynthesisConfig(noise_scale=0, noise_w_scale=0)`, con
+  `sintetizza(deterministica=True)` di `prova_satellite` e di `prova_telefono_pagina`), e il testo di Whisper si confronta con una tolleranza sulle
   lettere (`contiene`), mentre l'unione dei pezzi si controlla esatta, campione per campione.
   Regola: una prova che non ripete la frase usa una sintesi deterministica; chi la ripete (come
   `prova_satellite`) usa le varianti con il rumore.
