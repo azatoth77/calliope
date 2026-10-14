@@ -749,7 +749,7 @@ function mandaStanza(m) {
 function aggiornaStanza() {
   const s = st.stanza.server;
   stanza.imposta(!!(st.collegato && s && s.attiva && st.stanza.voluta && st.mic),
-    s && s.segmento_max_s, !!(s && s.durante_voce === true));
+    s && s.segmento_max_s, !!(s && s.durante_voce === true), s);
   const box = $("stanza-interruttore");
   if (box) box.hidden = !(s && s.motivo !== "spenta");
   attr($("stanza-tieni"), "aria-checked", st.stanza.voluta ? "true" : "false");

@@ -70,7 +70,7 @@ class Segmento:
     __slots__ = ("sat", "nome", "canale", "id", "pezzi", "byte", "inizio", "fine", "chiuso",
                  "voce_s", "durata_s", "ascolto", "stato", "fatto", "recupero", "riga",
                  "scambio", "inizio_epoch", "fine_epoch", "esito", "durante", "dette",
-                 "detto_nuove")
+                 "detto_nuove", "chiusura")
 
     def __init__(self, sat, nome, canale, ident, inizio):
         self.sat, self.nome, self.canale, self.id = sat, nome, canale, ident
@@ -88,6 +88,7 @@ class Segmento:
         self.durante = None                    # passo 5: id delle frasi che suonavano
         self.dette = None                      # le frasi di Calliope di quell'intervallo
         self.detto_nuove = 0                   # le loro parole non ancora contate (misure)
+        self.chiusura = None                   # silenzio, pausa_breve (taglio morbido), lunga
 
 
 class Copertura:
@@ -193,7 +194,11 @@ class Stanza:
         if p is not None:
             return {"attiva": False, "motivo": p["motivo"], "fino": p["fino"],
                     "segmento_max_s": seg}
+        c = self.cfg
         return {"attiva": True, "motivo": None, "fino": None, "segmento_max_s": seg,
+                "taglio_zona_s": float(getattr(c, "stanza_taglio_zona_s", 4.0)),
+                "pausa_breve_ms": int(getattr(c, "stanza_pausa_breve_ms", 160) or 160),
+                "tetto_duro_s": float(getattr(c, "stanza_tetto_duro_s", 5.0)),
                 "durante_voce": self.durante_qui(satellite.get("id"))}
 
     # ── durante la voce (passo 5) ──
@@ -363,9 +368,14 @@ class Stanza:
             s.voce_s = s.durata_s = 0.0
         ora = time.monotonic()
         s.chiuso = ora
-        s.fine = ora - float(self.cfg.silence_ms) / 1000 - coll.ritardo()
+        s.chiusura = chiusura
+        # La fine del parlato: prima del silenzio che l'ha chiuso (o della micro-pausa)
+        coda_s = (float(self.cfg.silence_ms) / 1000 if chiusura == "silenzio" else
+                  float(getattr(self.cfg, "stanza_pausa_breve_ms", 160) or 0) / 1000
+                  if chiusura == "pausa_breve" else 0.0)
+        s.fine = ora - coda_s - coll.ritardo()
         s.fine_epoch = time.time() - (ora - s.fine)
-        if chiusura not in ("silenzio", "lunga"):
+        if chiusura not in ("silenzio", "pausa_breve", "lunga"):
             self._misura("buttato", sat=s.nome, canale=s.canale,
                          motivo=chiusura or "?", voce_s=round(s.voce_s, 2))
             return
@@ -407,7 +417,8 @@ class Stanza:
                      turno=s.ascolto, wake=s.ascolto is not None)
         if s.ascolto is not None:
             self._misura("segmento", sat=s.nome, canale=s.canale, voce_s=round(s.voce_s, 2),
-                         durata_s=round(s.durata_s, 2), byte=s.byte, esito="legato")
+                         durata_s=round(s.durata_s, 2), byte=s.byte, esito="legato",
+                         chiusura=s.chiusura)
 
     def _taglia_coda(self):
         """Con il lock: oltre `stanza_coda_max_s` di audio in coda si buttano i più vecchi (non
@@ -777,6 +788,7 @@ class Stanza:
                      esito="riga" if testo else "scartata", motivo=motivo,
                      attesa_s=round(attesa, 3), stt_s=round(stt_s, 3),
                      ritardo_s=round(ora - (s.chiuso or ora), 3), recupero=s.recupero,
+                     chiusura=s.chiusura,
                      **(eco or {}))
 
     def _chi(self, audio, voce_s: float) -> dict:

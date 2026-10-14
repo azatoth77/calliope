@@ -70,6 +70,11 @@ import numpy as np
 # `ascolto`: l'id dell'ascolto dei comandi che mandava audio intanto, se c'era). Il flusso dei
 # comandi (b"A") non cambia. Il server accetta anche la 1 e la 2; davanti a un server vecchio il
 # satellite scende di una versione alla volta.
+# Sempre nella versione 3, campi facoltativi nei due sensi (14/10): lo stato ha anche
+# `durante_voce` (passo 5: la stanza si ascolta mentre Calliope parla) e il taglio morbido al
+# tetto (`taglio_zona_s`, `pausa_breve_ms`, `tetto_duro_s`); `stanza_fine` può avere la chiusura
+# «pausa_breve» (micro-pausa vicino al tetto) e `durante_voce` (gli id delle frasi di Calliope
+# che suonavano, 0 per un segnale senza testo). Un satellite o un server di prima li ignora.
 VERSIONE = 3
 VERSIONI = (1, 2, 3)                   # quelle che il server accetta
 PERCORSO_AUDIO = "/satellite"          # connessione con il token

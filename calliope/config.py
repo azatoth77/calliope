@@ -1009,6 +1009,14 @@ class Config:
     # Tetto di un segmento della stanza: un pezzo breve va meglio a Whisper e a chi parla (la
     # frase dei comandi resta a max_utterance_s)
     stanza_segmento_max_s: float = 20.0
+    # Taglio morbido al tetto (14/10): negli ultimi `stanza_taglio_zona_s` prima del tetto il
+    # segmento si chiude alla prima micro-pausa (VAD sotto soglia per `stanza_pausa_breve_ms`,
+    # molto meno di silence_ms: chiusura «pausa_breve»), così il taglio non spezza una parola;
+    # senza pause si chiude comunque `stanza_tetto_duro_s` dopo il tetto (chiusura «lunga»). Il
+    # pezzo dopo riparte dal pre-roll, senza perdere parlato. 0 nella zona = taglio netto al tetto
+    stanza_taglio_zona_s: float = 4.0
+    stanza_pausa_breve_ms: int = 160
+    stanza_tetto_duro_s: float = 5.0
     # All'interpellazione i segmenti detti prima passano davanti: la misura dice quante volte
     # finirli costa più di così dalla domanda (passo 2: oltre, la frase d'attesa)
     stanza_recupero_max_s: float = 1.5
@@ -2912,7 +2920,8 @@ SEZIONI: dict[str, list[str]] = {
                          "satellite_tls_cert", "satellite_tls_chiave", "satellite_senza_tls",
                          "satellite_codice_min", "satellite_max_connessioni",
                          "satellite_installazione", "satelliti_insieme"],
-    "conversazione_stanza": ["stanza", "stanza_satelliti", "stanza_segmento_max_s", "stanza_recupero_max_s",
+    "conversazione_stanza": ["stanza", "stanza_satelliti", "stanza_segmento_max_s", "stanza_taglio_zona_s",
+                             "stanza_pausa_breve_ms", "stanza_tetto_duro_s", "stanza_recupero_max_s",
                "stanza_coda_max_s", "stanza_scambio_pausa_s", "stanza_presenza_s",
                "stanza_ospiti_ore", "stanza_pausa_min", "stanza_contesto", "stanza_caldo_min",
                "stanza_caldo_sempre_s", "stanza_caldo_caratteri", "stanza_cerca",
@@ -3115,7 +3124,8 @@ LOCAL_CONFIG_FILE = "calliope.locale.yaml"
 # fuori si segnala e resta quello di prima (il predefinito, o il file precedente).
 LIMITI: dict[str, tuple[float, float]] = {
     "llm_num_ctx": (512, 1_048_576), "llm_temperature": (0.0, 2.0),
-    "stanza_segmento_max_s": (2.0, 60.0), "stanza_recupero_max_s": (0.0, 30.0),
+    "stanza_segmento_max_s": (2.0, 60.0), "stanza_taglio_zona_s": (0.0, 30.0),
+    "stanza_pausa_breve_ms": (32, 1000), "stanza_tetto_duro_s": (0.0, 30.0), "stanza_recupero_max_s": (0.0, 30.0),
     "stanza_coda_max_s": (10.0, 7200.0), "stanza_ospiti_ore": (0.1, 48.0),
     "stanza_pausa_min": (1.0, 1440.0), "stanza_caldo_min": (0.5, 120.0),
     "stanza_caldo_sempre_s": (0.0, 600.0), "stanza_caldo_caratteri": (200, 100_000),

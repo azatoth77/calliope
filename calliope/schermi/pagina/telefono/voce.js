@@ -393,11 +393,18 @@ export class Ascolto {
 // Passo 5 (14/10): con `durante` (stanza_durante_voce dal server) il segmento continua mentre
 // Calliope parla e porta gli id delle frasi che suonavano (`durante_voce`, dal parametro `voce`
 // di passo): l'eco residua la toglie il server (calliope/stanza/eco.py).
+// Taglio morbido al tetto (14/10, come il satellite): negli ultimi zonaS secondi prima del
+// tetto il segmento si chiude alla prima micro-pausa (breveMs sotto soglia, «pausa_breve»),
+// senza pause duroS dopo il tetto («lunga»)
+const CHIUSE = ["silenzio", "pausa_breve", "lunga"];
 export class Segmentatore {
   constructor(p, maxS, ultimoComando) {
     this.p = p;
     this.fms = FRAME / SR * 1000;
     this.maxS = maxS || 20;
+    this.zonaS = p.stanza_taglio_zona_s !== undefined ? Number(p.stanza_taglio_zona_s) : 4;
+    this.breveMs = Number(p.stanza_pausa_breve_ms || 160);
+    this.duroS = p.stanza_tetto_duro_s !== undefined ? Number(p.stanza_tetto_duro_s) : 5;
     this.ultimoComando = ultimoComando || null;
     this.durante = false;
     this.n = 0;
@@ -407,20 +414,20 @@ export class Segmentatore {
     this._azzera();
   }
 
-  _azzera() { this.parla = false; this.seg = []; this.voce = 0; this.silenzio = 0; this.sid = null; this.inviati = 0; this.t0 = 0; this.voci = new Set(); }
+  _azzera() { this.parla = false; this.seg = []; this.voce = 0; this.silenzio = 0; this.breve = 0; this.sid = null; this.inviati = 0; this.t0 = 0; this.voci = new Set(); }
 
   _chiudi(chiusura) {
     const out = [];
     if (this.sid !== null) {
-      if ((chiusura === "silenzio" || chiusura === "lunga") && this.inviati < this.seg.length) out.push(["audio", this.sid, this.seg.slice(this.inviati)]);
+      if (CHIUSE.includes(chiusura) && this.inviati < this.seg.length) out.push(["audio", this.sid, this.seg.slice(this.inviati)]);
       const u = this.ultimoComando ? this.ultimoComando() : null;
       const fine = { id: this.sid, durata_s: Math.round(this.seg.length * this.fms) / 1000,
         parlato_ms: Math.round(this.voce * this.fms), chiusura, ascolto: u && u.t >= this.t0 ? u.id : null };
       if (this.voci.size) fine.durante_voce = [...this.voci].sort((a, b) => a - b);
       out.push(["fine", fine]);
-      if (chiusura === "silenzio" || chiusura === "lunga") this.segmenti++;
+      if (CHIUSE.includes(chiusura)) this.segmenti++;
       else this.buttati[chiusura] = (this.buttati[chiusura] || 0) + 1;
-    } else if (this.parla && (chiusura === "silenzio" || chiusura === "lunga")) this.buttati.corto++;
+    } else if (this.parla && CHIUSE.includes(chiusura)) this.buttati.corto++;
     this._azzera();
     return out;
   }
@@ -448,6 +455,7 @@ export class Segmentatore {
     this.seg.push(frame);
     if (prob >= p.vad_threshold) this.voce++;
     this.silenzio = prob < p.vad_threshold - 0.15 ? this.silenzio + 1 : 0;
+    this.breve = prob < p.vad_threshold ? this.breve + 1 : 0;
     if (this.sid === null && this.voce * this.fms >= p.min_speech_ms) {
       this.sid = ++this.n;
       out.push(["inizio", { id: this.sid, fa_s: Math.round(ora - this.t0) / 1000 }]);
@@ -457,8 +465,12 @@ export class Segmentatore {
       out.push(["audio", this.sid, this.seg.slice(this.inviati)]);
       this.inviati = this.seg.length;
     }
+    const lungoMs = this.seg.length * this.fms;
     if (this.silenzio * this.fms >= p.silence_ms) return out.concat(this._chiudi("silenzio"));
-    if (this.seg.length * this.fms >= this.maxS * 1000) return out.concat(this._chiudi("lunga"));
+    if (this.zonaS > 0 && lungoMs >= (this.maxS - this.zonaS) * 1000 && this.breve * this.fms >= this.breveMs) {
+      return out.concat(this._chiudi("pausa_breve"));
+    }
+    if (lungoMs >= (this.maxS + (this.zonaS > 0 ? this.duroS : 0)) * 1000) return out.concat(this._chiudi("lunga"));
     return out;
   }
 }
@@ -479,8 +491,13 @@ export class AscoltoStanza {
     this._gira = false;
   }
 
-  imposta(attiva, maxS, durante) {
+  imposta(attiva, maxS, durante, taglio) {
     if (maxS) this.seg.maxS = Number(maxS) || this.seg.maxS;
+    if (taglio) {
+      if (taglio.taglio_zona_s !== undefined && taglio.taglio_zona_s !== null) this.seg.zonaS = Number(taglio.taglio_zona_s);
+      if (taglio.pausa_breve_ms) this.seg.breveMs = Number(taglio.pausa_breve_ms);
+      if (taglio.tetto_duro_s !== undefined && taglio.tetto_duro_s !== null) this.seg.duroS = Number(taglio.tetto_duro_s);
+    }
     this.seg.durante = !!attiva && durante === true;
     if (this.attiva && !attiva) { this.coda = []; for (const m of this.seg.ferma()) this.manda(m); }
     this.attiva = !!attiva && !!this.vad;

@@ -90,13 +90,17 @@ def probs(*pezzi):
     return out
 
 
-def corri_seg(seq, occupato_da=None, ultimo=None, max_s=None):
+def corri_seg(seq, occupato_da=None, ultimo=None, max_s=None, zona=None, marca=False):
     cfg = Config()
     seg = Segmentatore(cfg, ultimo_comando=ultimo, max_s=max_s)
+    if zona is not None:
+        seg.zona_s = zona
     msg = []
     ora = 1000.0
     for i, p in enumerate(seq):
         fr = np.full(512, 0.01, np.float32)
+        if marca:
+            fr[0] = i                       # il numero del frame, per contare i persi
         occ = occupato_da is not None and i >= occupato_da
         msg += seg.passo(fr, p, occ, ora)
         ora += 0.032
@@ -121,10 +125,10 @@ def prova_segmentatore():
     fine = [x[1] for x in m if x[0] == "fine"]
     verifica("segmentatore: la voce di Calliope butta il segmento (half-duplex)",
              fine and fine[-1]["chiusura"] == "voce" and seg.buttati["voce"] == 1)
-    seg, m = corri_seg(probs((0.2, 0.0), (5.0, 0.9), (1.0, 0.0)), max_s=2.0)
+    seg, m = corri_seg(probs((0.2, 0.0), (5.0, 0.9), (1.0, 0.0)), max_s=2.0, zona=0)
     chiusure = [x[1]["chiusura"] for x in m if x[0] == "fine"]
-    verifica("segmentatore: il tetto corto taglia e riparte", chiusure[:2] == ["lunga", "lunga"]
-             and chiusure[-1] == "silenzio", str(chiusure))
+    verifica("segmentatore: zona 0, il tetto corto taglia netto e riparte",
+             chiusure[:2] == ["lunga", "lunga"] and chiusure[-1] == "silenzio", str(chiusure))
     seg, m = corri_seg(probs((0.2, 0.0), (1.5, 0.9), (1.0, 0.0)),
                        ultimo=lambda: (1000.5, 7))
     fine = [x[1] for x in m if x[0] == "fine"]
@@ -136,6 +140,60 @@ def prova_segmentatore():
     verifica("segmentatore: audio dei comandi di prima non lega (contrario)",
              fine and fine[0]["ascolto"] is None)
     return m
+
+
+# Il taglio morbido (14/10): tetto 10 s, zona 4 s (dai 6 s), micro-pausa 160 ms, duro +5 s
+def _voce_con_pause(pause):
+    """Parlato a 0,9 con micro-pause a 0,3 (secondo, durata) e 1 s di silenzio in fondo."""
+    out, t = [], 0.0
+    for a, d in sorted(pause):
+        out += probs((a - t, 0.9), (d, 0.3))
+        t = a + d
+    return out
+
+
+def _frame_mandati(m):
+    return sorted({int(round(float(f[0]))) for x in m if x[0] == "audio" for f in x[2]})
+
+
+def prova_taglio_morbido_seq():
+    """Una pausa breve prima della zona, una nella zona, poi parlato continuo fino al duro."""
+    return ([0.0] * 10 + _voce_con_pause([(3.0, 0.25), (7.0, 0.2)])
+            + probs((16.0, 0.9), (1.2, 0.0)))
+
+
+def prova_taglio_morbido():
+    seq = probs((0.3, 0.0), (17.0, 0.9), (1.0, 0.0))
+    _, m = corri_seg(seq, max_s=10.0, marca=True)
+    fine = [x[1] for x in m if x[0] == "fine"]
+    verifica("taglio morbido: parlato continuo senza pause → tetto duro a 15 s («lunga»)",
+             [f["chiusura"] for f in fine][:1] == ["lunga"]
+             and abs(fine[0]["durata_s"] - 15.0) < 0.1, str([(f["chiusura"], f["durata_s"])
+                                                            for f in fine]))
+    seq = [0.0] * 10 + _voce_con_pause([(3.0, 0.25)]) + probs((9.0, 0.9), (1.0, 0.0))
+    _, m = corri_seg(seq, max_s=10.0, marca=True)
+    fine = [x[1] for x in m if x[0] == "fine"]
+    verifica("taglio morbido: una pausa breve prima della zona non taglia",
+             len(fine) == 1 and fine[0]["durata_s"] > 12.0,
+             str([(f["chiusura"], f["durata_s"]) for f in fine]))
+    seq = ([0.0] * 10 + _voce_con_pause([(7.5, 0.25)]) + probs((6.0, 0.9), (1.5, 0.0)))
+    _, m = corri_seg(seq, max_s=10.0, marca=True)
+    fine = [x[1] for x in m if x[0] == "fine"]
+    voce = [i for i, p in enumerate(seq) if p >= 0.5]
+    mandati = set(_frame_mandati(m))
+    verifica("taglio morbido: la micro-pausa nella zona taglia lì («pausa_breve»), poi riparte",
+             len(fine) == 2 and fine[0]["chiusura"] == "pausa_breve"
+             and 7.5 < fine[0]["durata_s"] < 8.2, str([(f["chiusura"], f["durata_s"])
+                                                       for f in fine]))
+    verifica("taglio morbido: nessun frame di parlato perso fra i due pezzi",
+             set(voce) <= mandati, f"{len(set(voce) - mandati)} persi")
+    seq = [0.0] * 10 + _voce_con_pause([(7.5, 0.1)]) + probs((6.0, 0.9), (1.5, 0.0))
+    _, m = corri_seg(seq, max_s=10.0)
+    fine = [x[1] for x in m if x[0] == "fine"]
+    verifica("taglio morbido: un buco più corto della micro-pausa (96 ms) non taglia",
+             len(fine) == 1 and fine[0]["durata_s"] > 13.0,
+             str([(f["chiusura"], f["durata_s"]) for f in fine]))
+    return seq
 
 
 def prova_telefono_uguale():
@@ -163,13 +221,27 @@ for (const pr of seq) {{
   ora += 32;
 }}
 console.log(JSON.stringify(out));
+const out2 = []; const s2 = new Segmentatore(p, 10, null); let ora2 = 1000000;
+const seq2 = {json.dumps(prova_taglio_morbido_seq())};
+for (const pr of seq2) {{
+  for (const m of s2.passo(new Float32Array(512), pr, false, ora2)) {{
+    if (m[0] === "fine") out2.push([m[1].chiusura, m[1].durata_s]);
+  }}
+  ora2 += 32;
+}}
+console.log(JSON.stringify(out2));
 """
     r = subprocess.run([node, "--input-type=module", "-e", js], capture_output=True, text=True,
                        timeout=60)
     if r.returncode != 0:
         verifica("telefono: voce.js si carica in Node", False, r.stderr[-300:])
         return
-    out = json.loads(r.stdout.strip().splitlines()[-1])
+    out = json.loads(r.stdout.strip().splitlines()[-2])
+    out2 = json.loads(r.stdout.strip().splitlines()[-1])
+    _, py2 = corri_seg(prova_taglio_morbido_seq(), max_s=10.0)
+    b2 = [[x[1]["chiusura"], x[1]["durata_s"]] for x in py2 if x[0] == "fine"]
+    verifica("telefono: il taglio morbido di voce.js uguale al Python (pausa breve nella zona, "
+             "tetto duro)", out2 == b2 and any(c == "pausa_breve" for c, _ in b2), f"{out2} {b2}")
     a = [(x[0], x[1] if x[0] == "audio" else x[1].get("chiusura") or x[1].get("id"),
           x[2] if x[0] == "audio" else None) for x in out]
     b = [(x[0], x[1] if x[0] == "audio" else x[1].get("chiusura") or x[1].get("id"),
@@ -693,6 +765,7 @@ def main() -> int:
         pass
     try:
         prova_segmentatore()
+        prova_taglio_morbido()
         prova_telefono_uguale()
         prova_precedenza()
         prova_registro()

@@ -982,3 +982,29 @@ accende solo dopo la rilettura di chi amministra su un giorno vero (obiettivo �
 brevi). Una frase ignorata o non rivolta resta nella stanza con «rivolta: no» (evento `analisi`),
 dettagli e blocco nei dati del turno in [contesto-conversazione](contesto-conversazione.md).
 Prova: `prove/prova_stanza_contesto.py`.
+
+## Il taglio morbido dei segmenti della stanza (14/10, ramo `stanza-durante-voce`)
+
+Chiesto da Dario: il tetto `stanza_segmento_max_s` (20 s) chiudeva il segmento **di netto**
+(`_chiudi("lunga")`), anche a metà di una parola, e Whisper e CAM++ ricevevano due pezzi storpiati.
+Ora il tetto è morbido, uguale nel `Segmentatore` del satellite (`calliope/satellite/stanza.py`) e in
+quello del telefono (`voce.js`):
+
+- negli ultimi `stanza_taglio_zona_s` (4 s) prima del tetto il segmento si chiude alla **prima
+  micro-pausa**: VAD sotto soglia per `stanza_pausa_breve_ms` (160 ms, contro i 700 di
+  `silence_ms`), chiusura **«pausa_breve»**;
+- senza pause si chiude comunque `stanza_tetto_duro_s` (5 s) dopo il tetto, chiusura «lunga»;
+- il pezzo dopo riparte dal pre-roll (300 ms), quindi nessun frame di parlato si perde (la pausa
+  è già nel pezzo di prima); `stanza_taglio_zona_s: 0` torna al taglio netto di prima.
+
+Il server manda i tre valori nello stato della stanza (`taglio_zona_s`, `pausa_breve_ms`,
+`tetto_duro_s`, campi facoltativi del protocollo 3, [satelliti](satelliti.md)); accetta la chiusura
+«pausa_breve» come «silenzio» e «lunga», e stima la fine del parlato togliendo la micro-pausa (non
+più i 700 ms del silenzio anche per i tagli). Un segmento che finisce da sé dentro la zona si chiude
+anch'esso alla micro-pausa (prima dei 700 ms): conta come «pausa_breve». Nelle misure ogni segmento
+porta la sua `chiusura`, e la sezione «Stanza» di `calliope stato --turni` dice per satellite
+«chiusure: silenzio N, taglio morbido alla pausa breve N, tetto duro N».
+Prove in `prove/prova_stanza.py` (a secco, con Node per il telefono): parlato continuo → tetto duro a
+15 s; pausa breve prima della zona → nessun taglio; micro-pausa nella zona → taglio lì e nessun
+frame di parlato perso; buco di 96 ms → nessun taglio; voce.js uguale al Python; con la zona a 0 il
+taglio netto di prima.

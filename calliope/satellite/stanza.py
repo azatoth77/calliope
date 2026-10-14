@@ -6,7 +6,10 @@ Un **rubinetto** sui frame del microfono: il callback di `audio.Listener` ne cop
 qui (`frame`, non blocca), e un thread con **il suo** Silero VAD (lo stato del VAD non si
 condivide: `listen` lo azzera) taglia il parlato in segmenti chiusi dal silenzio (`silence_ms`,
 come i comandi) o da un tetto corto (`stanza_segmento_max_s`, 20 s: per Whisper e per chi parla
-è meglio un pezzo breve). Un segmento parte verso il server solo quando ha almeno
+è meglio un pezzo breve). Il tetto è **morbido** (14/10): negli ultimi `stanza_taglio_zona_s`
+prima del tetto il segmento si chiude alla prima micro-pausa (`stanza_pausa_breve_ms` sotto
+soglia, chiusura «pausa_breve»), e solo senza pause `stanza_tetto_duro_s` dopo il tetto
+(«lunga»): il taglio non spezza una parola, e il pezzo dopo riparte dal pre-roll. Un segmento parte verso il server solo quando ha almeno
 `min_speech_ms` di voce, e poi a pezzi mentre si parla (protocollo versione 3: `stanza_inizio`,
 b"R", `stanza_fine`), così all'interpellazione il server ha già quasi tutto.
 
@@ -35,6 +38,9 @@ from . import protocollo as P
 FRAME = 512
 PEZZO_FRAME = 8              # i b"R" a gruppi di 8 frame (256 ms): meno messaggi, poco ritardo
 CODA_S = 1.0                 # passo 5: la frase appena finita conta ancora (eco, riverbero)
+# Le chiusure di un segmento che si manda (le altre lo buttano): il silenzio, la micro-pausa
+# vicino al tetto (taglio morbido, 14/10) e il tetto duro
+CHIUSE = ("silenzio", "pausa_breve", "lunga")
 
 
 class Segmentatore:
@@ -47,6 +53,10 @@ class Segmentatore:
         self.cfg = cfg
         self.fms = FRAME / cfg.sample_rate * 1000
         self.max_s = float(max_s or getattr(cfg, "stanza_segmento_max_s", 20.0) or 20.0)
+        # Il taglio morbido (14/10): zona prima del tetto, micro-pausa, tetto duro oltre
+        self.zona_s = float(getattr(cfg, "stanza_taglio_zona_s", 4.0) or 0.0)
+        self.breve_ms = float(getattr(cfg, "stanza_pausa_breve_ms", 160) or 160)
+        self.duro_s = float(getattr(cfg, "stanza_tetto_duro_s", 5.0) or 0.0)
         # () → (monotonic dell'ultimo audio dei comandi mandato, id dell'ascolto) o None
         self.ultimo_comando = ultimo_comando
         self.durante = False                 # passo 5: si ascolta anche mentre Calliope parla
@@ -59,13 +69,14 @@ class Segmentatore:
 
     def _azzera(self):
         self.parla, self.seg, self.voce, self.silenzio = False, [], 0, 0
+        self.breve = 0                       # frame di fila sotto soglia (micro-pausa)
         self.sid, self.inviati, self.t0 = None, 0, 0.0
         self.voci: set = set()               # id delle frasi che suonavano durante il segmento
 
     def _chiudi(self, chiusura: str, ora: float) -> list:
         out = []
         if self.sid is not None:
-            if chiusura in ("silenzio", "lunga") and self.inviati < len(self.seg):
+            if chiusura in CHIUSE and self.inviati < len(self.seg):
                 out.append(("audio", self.sid, self.seg[self.inviati:]))
             ascolto = None
             u = self.ultimo_comando() if self.ultimo_comando is not None else None
@@ -77,11 +88,11 @@ class Segmentatore:
             if self.voci:
                 fine["durante_voce"] = sorted(self.voci)
             out.append(("fine", fine))
-            if chiusura in ("silenzio", "lunga"):
+            if chiusura in CHIUSE:
                 self.segmenti += 1
             else:
                 self.buttati[chiusura] = self.buttati.get(chiusura, 0) + 1
-        elif self.parla and chiusura in ("silenzio", "lunga"):
+        elif self.parla and chiusura in CHIUSE:
             self.buttati["corto"] += 1
         self._azzera()
         return out
@@ -114,6 +125,7 @@ class Segmentatore:
         if prob >= cfg.vad_threshold:
             self.voce += 1
         self.silenzio = self.silenzio + 1 if prob < cfg.vad_threshold - 0.15 else 0
+        self.breve = self.breve + 1 if prob < cfg.vad_threshold else 0
         if self.sid is None and self.voce * self.fms >= cfg.min_speech_ms:
             self.sid = next(self._ids)
             out.append(("inizio", {"id": self.sid, "fa_s": round(ora - self.t0, 3)}))
@@ -122,9 +134,13 @@ class Segmentatore:
         elif self.sid is not None and len(self.seg) - self.inviati >= PEZZO_FRAME:
             out.append(("audio", self.sid, self.seg[self.inviati:]))
             self.inviati = len(self.seg)
+        lungo_ms = len(self.seg) * self.fms
         if self.silenzio * self.fms >= cfg.silence_ms:
             out += self._chiudi("silenzio", ora)
-        elif len(self.seg) * self.fms >= self.max_s * 1000:
+        elif (self.zona_s > 0 and lungo_ms >= (self.max_s - self.zona_s) * 1000
+              and self.breve * self.fms >= self.breve_ms):
+            out += self._chiudi("pausa_breve", ora)
+        elif lungo_ms >= (self.max_s + (self.duro_s if self.zona_s > 0 else 0.0)) * 1000:
             out += self._chiudi("lunga", ora)
         return out
 
@@ -156,10 +172,14 @@ class AscoltoStanza:
         stato = stato if isinstance(stato, dict) else {}
         prima = self.attiva
         self.stato = stato
-        try:
-            self.seg.max_s = float(stato.get("segmento_max_s") or self.seg.max_s)
-        except (TypeError, ValueError):
-            pass
+        for chiave, attr in (("segmento_max_s", "max_s"), ("taglio_zona_s", "zona_s"),
+                             ("pausa_breve_ms", "breve_ms"), ("tetto_duro_s", "duro_s")):
+            try:
+                v = stato.get(chiave)
+                if v is not None:
+                    setattr(self.seg, attr, float(v))
+            except (TypeError, ValueError):
+                pass
         self.attiva = bool(stato.get("attiva"))
         durante = self.attiva and stato.get("durante_voce") is True
         if durante != self.seg.durante:

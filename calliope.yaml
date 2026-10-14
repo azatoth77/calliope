@@ -1265,6 +1265,14 @@ conversazione_stanza:
   # Tetto di un segmento della stanza: un pezzo breve va meglio a Whisper e a chi parla (la
   # frase dei comandi resta a max_utterance_s)
   stanza_segmento_max_s: 20.0
+  # Taglio morbido al tetto (14/10): negli ultimi `stanza_taglio_zona_s` prima del tetto il
+  # segmento si chiude alla prima micro-pausa (VAD sotto soglia per `stanza_pausa_breve_ms`,
+  # molto meno di silence_ms: chiusura «pausa_breve»), così il taglio non spezza una parola;
+  # senza pause si chiude comunque `stanza_tetto_duro_s` dopo il tetto (chiusura «lunga»). Il
+  # pezzo dopo riparte dal pre-roll, senza perdere parlato. 0 nella zona = taglio netto al tetto
+  stanza_taglio_zona_s: 4.0
+  stanza_pausa_breve_ms: 160
+  stanza_tetto_duro_s: 5.0
   # All'interpellazione i segmenti detti prima passano davanti: la misura dice quante volte
   # finirli costa più di così dalla domanda (passo 2: oltre, la frase d'attesa)
   stanza_recupero_max_s: 1.5

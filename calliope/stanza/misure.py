@@ -6,7 +6,9 @@ dei turni (`turn_log_dir`), con la stessa tenuta (`turn_log_days`). Una riga per
 
     segmento      sat, canale, voce_s, durata_s, byte, esito («riga», «scartata», «legato»),
                   motivo, attesa_s (dalla chiusura all'inizio di Whisper), ritardo_s (dalla
-                  chiusura alla riga pronta), stt_s, recupero (passato davanti a un turno);
+                  chiusura alla riga pronta), stt_s, recupero (passato davanti a un turno),
+                  chiusura (dal 14/10: «silenzio», «pausa_breve» = taglio morbido vicino al
+                  tetto, «lunga» = tetto duro senza pause);
                   dal passo 5 (14/10, `stanza_durante_voce`), per i segmenti detti durante la
                   voce di Calliope: durante, frasi (sue frasi confrontate), detto_nuove (loro
                   parole non ancora contate), parole (della riga trascritta), eco_tolte, residua
@@ -147,7 +149,7 @@ def riassunto(righe: list[dict], turni: list[dict] | None = None) -> dict:
             s = g["satelliti"].setdefault(str(r.get("sat") or "?"), {
                 "canale": r.get("canale"), "segmenti": 0, "voce_s": 0.0, "byte": 0,
                 "righe": 0, "legati": 0, "recuperati": 0, "scartate": {}, "buttati": {},
-                "_ritardi": [], "durante": {"segmenti": 0, "righe": 0, "eco": 0, "parole": 0,
+                "_ritardi": [], "chiusure": {}, "durante": {"segmenti": 0, "righe": 0, "eco": 0, "parole": 0,
                                             "tolte": 0, "recuperate": 0, "residua": 0,
                                             "detto": 0}})
             if tipo == "buttato":
@@ -155,6 +157,9 @@ def riassunto(righe: list[dict], turni: list[dict] | None = None) -> dict:
                 s["buttati"][m] = s["buttati"].get(m, 0) + 1
                 continue
             s["segmenti"] += 1
+            if r.get("chiusura"):
+                ch = str(r["chiusura"])
+                s["chiusure"][ch] = s["chiusure"].get(ch, 0) + 1
             s["voce_s"] += float(r.get("voce_s") or 0)
             s["byte"] += int(r.get("byte") or 0)
             esito = r.get("esito")
@@ -309,6 +314,11 @@ def testo(r: dict) -> str:
             if s["scartate"] or s["buttati"]:
                 out.append(f"      scartate {s['scartate'] or '{}'}, buttate dal satellite "
                            f"{s['buttati'] or '{}'}")
+            ch = s.get("chiusure") or {}
+            if ch.get("pausa_breve") or ch.get("lunga"):
+                out.append(f"      chiusure: silenzio {ch.get('silenzio', 0)}, taglio morbido "
+                           f"alla pausa breve {ch.get('pausa_breve', 0)}, tetto duro "
+                           f"{ch.get('lunga', 0)}")
             d = s.get("durante") or {}
             if d.get("segmenti"):
                 res = d.get("residua_100")
