@@ -27,8 +27,14 @@ audio oltre a ciò che serve al turno.
   14/10, decisione 0029 punto 5): solo con `stanza_tenuta` accesa, per `stanza_tenuta_giorni`;
   per tutta la famiglia, **minori compresi** (scelta di chi amministra), solo con la voce
   riconosciuta sopra soglia; mai gli ospiti né la zona grigia. Non è un dato per le misure.
-  Dal 14/10 (decisione 0030) anche i **conoscenti** confermati da chi amministra (categoria
-  «conoscente»: solo la stanza, mai turni, voce, eventi o conversazioni, come un ospite).
+  Dal 14/10 (decisione 0030) anche i **conoscenti** confermati da chi amministra.
+- **I conoscenti** (categoria «conoscente», 14/10 sera, decisione 0030 aggiornata da Dario):
+  per la conservazione valgono come un adulto della famiglia (turni con le parole, eventi,
+  archivio delle conversazioni per `turn_log_days`, la stanza; la voce solo con il consenso,
+  che un conoscente, di livello ospite, oggi non ha modo di dare), mentre i **permessi** restano
+  da ospite. Il profilo si cerca in `conoscenti` (o nel file `conoscenti_file`, da terminale e
+  con i conoscenti spenti); un conoscente tolto (dimenticato, scaduto, svuotato) si porta via
+  turni, eventi e conversazioni (`conoscente_tolto`); promosso a familiare (stesso id) li tiene.
 
 **Il consenso** è un dato della persona, nel suo profilo (speakers.json, `voce_conservata`):
 None = mai detto, True = «sì» detto una volta a Calliope (tool `dati_conservati`), False =
@@ -128,14 +134,14 @@ def decidi(prof, cosa: str, modo: str | None = None, dubbi=(), cfg=None) -> Deci
     """Il solo posto che decide se qualcosa di questa persona si conserva. Puro.
 
     `cosa`: «testo», «voce», «eventi», «conversazioni» o «stanza»; `modo`: come è stata decisa l'identità della frase;
-    `dubbi`: i segni del turno («incerta», «minore_vicino», «compagnia»…)."""
+    `dubbi`: i segni del turno («incerta», «minore_vicino», «compagnia»…).
+
+    Un conoscente (categoria «conoscente», 14/10 sera, decisione 0030 aggiornata) segue le
+    regole di un adulto: non è un minore (i bambini non si salvano come conoscenti) e la voce
+    vuole il suo consenso (`voce_conservata`, che un conoscente non ha: niente voce)."""
     if cosa not in COSE:
         raise ValueError(f"cosa sconosciuta: {cosa!r}")
     cat = categoria(prof)
-    if cat == "conoscente":
-        # Un conoscente (14/10, decisione 0030): le sue righe della stanza come quelle della
-        # famiglia (con la voce), nient'altro: per tutto il resto è un ospite
-        return Decisione(cosa == "stanza" and modo == "voce", cat)
     if cosa == "stanza":
         # Il testo della stanza (14/10, decisione 0029 punto 5, calliope/stanza/tenuta.py): con
         # la tenuta accesa (lo decide chi chiama) per tutta la famiglia, minori compresi, solo
@@ -170,6 +176,12 @@ def console_riservata(speaker_ctx, registry) -> str | None:
     (dal 12/10 sera: un minore riconosciuto, o la frase nel dubbio tra un adulto e un minore,
     come per il registro dei turni) → niente parole; None → come prima."""
     if speaker_ctx is None:
+        return None
+    k = getattr(speaker_ctx, "conoscente", None)
+    if (isinstance(k, dict) and k.get("id")
+            and not getattr(speaker_ctx, "current_speaker", None)):
+        # Un conoscente (14/10 sera, decisione 0030 aggiornata): come un adulto, il nome e le
+        # parole nel terminale (resta ospite per i permessi)
         return None
     if getattr(speaker_ctx, "current_level", None) == "ospite":
         return "ospite"
@@ -389,8 +401,11 @@ class Conservazione:
         # svuota e il riepilogo la conta; senza (il terminale), il file in `stanza_tenuta_db`
         self.stanza = None
         # I conoscenti (stanza/conoscenti.Conoscenti, 14/10), se ci sono: «svuota» di tutto li
-        # cancella; senza (il terminale), il file `conoscenti_file`
+        # cancella; senza (il terminale), il file `conoscenti_file`. Dal 14/10 sera sono anche
+        # profili della conservazione (`profilo`)
         self.conoscenti = None
+        self._conoscenti_file = (None, {})     # (firma, id → Conoscente) dal file
+        self._svuotando = False
         self._lock = threading.Lock()
         self._ruotata_il = None
         self.salvate = 0            # frasi salvate da quando è partita
@@ -407,19 +422,87 @@ class Conservazione:
             p = by_id(persona_id) if by_id else None
             if p is not None:
                 return p
+            # Un conoscente (14/10 sera): lo stesso id dopo una promozione è del familiare
+            k = self.conoscente(persona_id)
+            if k is not None:
+                return k
         if nome:
             get = getattr(reg, "get", None)
             return get(nome) if get else None
         return None
+
+    def conoscente(self, persona_id):
+        """Il conoscente con questo id (14/10 sera, decisione 0030 aggiornata), o None: dai
+        conoscenti di Calliope, o (terminale, conoscenti spenti) dal file in sola lettura."""
+        if not persona_id:
+            return None
+        con = self.conoscenti
+        try:
+            if con is not None:
+                return con.per_id(persona_id)
+            from .stanza import conoscenti as K
+            firma, dati = self._conoscenti_file
+            nuova = K.firma_file(self.cfg)
+            if nuova != firma:
+                dati = K.leggi_file(self.cfg) if nuova is not None else {}
+                self._conoscenti_file = (nuova, dati)
+            return dati.get(str(persona_id))
+        except Exception:  # noqa: BLE001 — un file che non si legge: nessun conoscente
+            return None
+
+    def _conoscenti_tutti(self) -> list:
+        con = self.conoscenti
+        try:
+            if con is not None:
+                return list(con.elenco())
+            self.conoscente("-")                    # rilegge il file se è cambiato
+            return list(self._conoscenti_file[1].values())
+        except Exception:  # noqa: BLE001
+            return []
+
+    def conoscenti_ids(self) -> list[str]:
+        """Gli id dei conoscenti salvati (14/10 sera): le loro conversazioni su disco le ritrova
+        chi amministra con `ospiti=true` (conversazioni.ArchivioConversazioni.cerca)."""
+        return [str(c.id) for c in self._conoscenti_tutti()]
+
+    def trova_conoscenti(self, chi: str) -> list:
+        """I conoscenti che rispondono a «Marco», «Marco Rossi», «Marco collega di Carlo»
+        (Conoscenti.trova, anche dal file): per svuotare i dati di uno di loro."""
+        from .stanza.conoscenti import trova_in
+        return trova_in(self._conoscenti_tutti(), chi)
+
+    def conoscente_tolto(self, persona_id):
+        """Un conoscente dimenticato, scaduto o svuotato (Conoscenti.su_tolto, 14/10 sera): via
+        anche i suoi turni con le parole, gli eventi e le conversazioni archiviate. Dentro uno
+        «svuota» di tutto non serve (si cancella già tutto)."""
+        if self._svuotando or not persona_id:
+            return None
+        try:
+            r = self.svuota(str(persona_id))
+            self.log(f"   [CONSERVA] conoscente tolto: parole tolte da {r['turni']} turni, "
+                     f"{r['conversazioni']} conversazioni, {r['eventi']} eventi")
+            return r
+        except Exception as e:  # noqa: BLE001 — la pulizia non ferma niente
+            self.log(f"   [CONSERVA] dati del conoscente non tolti: {type(e).__name__}")
+            return None
 
     # ── le decisioni (sempre da `decidi`) ──
     def testo_turno(self, rec: dict) -> Decisione:
         """Le parole di questo turno restano nel registro dei turni e negli eventi su disco?"""
         if not isinstance(rec, dict):
             return Decisione(False, "ospite")
+        v = rec.get("voce") if isinstance(rec.get("voce"), dict) else {}
+        if v.get("conoscente") and v.get("id") and not v.get("nome"):
+            # Un conoscente (14/10 sera, decisione 0030 aggiornata): livello ospite, ma per la
+            # conservazione vale come un adulto, se il suo profilo c'è ancora
+            if isinstance(rec.get("ascolto"), dict) and rec["ascolto"].get("fascia"):
+                return Decisione(False, "minore")
+            prof = self.conoscente(v.get("id"))
+            if prof is None:
+                return Decisione(False, "ospite")
+            return decidi(prof, "testo", v.get("modo"), dubbi_del_turno(rec), self.cfg)
         if rec.get("livello") == "ospite":
             return Decisione(False, "ospite")
-        v = rec.get("voce") if isinstance(rec.get("voce"), dict) else {}
         if not v.get("nome"):
             return Decisione(False, "ospite")
         if isinstance(rec.get("ascolto"), dict) and rec["ascolto"].get("fascia"):
@@ -443,6 +526,8 @@ class Conservazione:
             return d
         v = rec.get("voce") or {}
         prof = self.profilo(nome=v.get("nome"), persona_id=v.get("id"))
+        if prof is None:
+            return Decisione(False, "ospite")
         return decidi(prof, "voce", v.get("modo"), dubbi_del_turno(rec), self.cfg)
 
     def registro_su_disco(self, chiave: str) -> bool:
@@ -660,15 +745,22 @@ class Conservazione:
         `secure_delete`), nel registro dei turni le parole (di tutti: i file interi) e, dal 12/10
         sera, l'archivio delle conversazioni (anche le conversazioni in corso salvate) e i
         tentativi degli esercizi e le richieste ai tutori (TABELLE_MEMORIA)."""
+        # Le righe della stanza di un conoscente (14/10 sera) hanno la chiave «conoscente:<id>»
+        stanza_id = (f"conoscente:{persona_id}" if persona_id is not None
+                     and self.conoscente(persona_id) is not None else persona_id)
         out = {"voce": 0, "eventi": 0, "turni": 0, "conversazioni": 0,
                "esercizi_richieste": self._memoria(persona_id=persona_id,
                                                    tutto=persona_id is None),
-               "stanza": self._svuota_stanza(persona_id),
+               "stanza": self._svuota_stanza(stanza_id),
                "avvisi": self._svuota_avvisi(persona_id)}
         arch = self.conversazioni
         lock = getattr(self.turnlog, "_lock", None)
         if persona_id is None:
-            out["conoscenti"] = self._svuota_conoscenti()
+            self._svuotando = True
+            try:
+                out["conoscenti"] = self._svuota_conoscenti()
+            finally:
+                self._svuotando = False
             if self.voce_dir and self.voce_dir.exists():
                 out["voce"] = sum(1 for _ in self.voce_dir.rglob("*.wav"))
                 shutil.rmtree(self.voce_dir, ignore_errors=True)
@@ -907,9 +999,20 @@ def main(argv=None) -> int:
             nome = nome_arg("--persona")
             prof = reg.get(nome)
             if prof is None:
+                # Un conoscente (14/10 sera, decisione 0030 aggiornata): i suoi dati come quelli
+                # di un adulto; il profilo resta (si dimentica con «dimentica …» a voce)
+                kk = c.trova_conoscenti(nome)
+                if len(kk) > 1:
+                    print("Più conoscenti con quel nome: "
+                          + "; ".join(k.descrizione() for k in kk)
+                          + ". Aggiungi il cognome o la nota.")
+                    return 1
+                prof = kk[0] if kk else None
+            if prof is None:
                 print("Nessuna persona con quel nome.")
                 return 1
-            r = c.svuota(prof.id, nome)
+            r = c.svuota(prof.id, getattr(prof, "name", None) if categoria(prof) != "conoscente"
+                         else None)
             print(f"Dati conservati di {nome} cancellati: {r['voce']} registrazioni, "
                   f"{r['eventi']} eventi, parole tolte da {r['turni']} turni, "
                   f"{r['conversazioni']} conversazioni archiviate, "
@@ -943,6 +1046,10 @@ def main(argv=None) -> int:
             print(f"    {u.name}: {cat}, voce {stato_voce}, registrazioni "
                   f"{c.registrazioni(u.id)}, conversazioni archiviate {conv}"
                   + (f", righe della stanza {st['righe']}" if st else ""))
+        # I conoscenti (14/10 sera): conservati come gli adulti, la voce no (niente consenso)
+        for k in c._conoscenti_tutti():
+            conv = c.conta_conversazioni(k.id)["conversazioni"]
+            print(f"    {k.descrizione()}: conoscente, voce no, conversazioni archiviate {conv}")
     return 0
 
 

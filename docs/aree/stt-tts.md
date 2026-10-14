@@ -1151,11 +1151,23 @@ etichetta**:
   la tenuta, come le sue righe della stanza) e apre la sua presenza.
 - **Cosa non cambia**: `current_speaker` resta None, quindi livello **ospite**, nessuna azione di
   chi amministra, nessun dato della famiglia, nessuna ricerca nella stanza; `rec["voce"]["nome"]`
-  resta None (un omonimo di casa non viene mai cercato fra i profili). Nel **registro dei turni**
-  solo `voce.conoscente: true`, mai il nome né l'id: per la decisione 0030 un conoscente non ha
-  turni su disco (le parole del turno non si conservano, come per un ospite). In console «[VOCE]
-  è un conoscente: resta ospite», senza il nome.
+  resta None (un omonimo di casa non viene mai cercato fra i profili). *Storico (fino al 14/10
+  sera)*: nel registro dei turni solo `voce.conoscente: true`, mai il nome né l'id, e in console
+  «[VOCE] è un conoscente: resta ospite» senza il nome. Dal 14/10 sera (sotto) come un adulto.
 - **Contrari nella prova** (`prova_turni_e_presenze`): la voce netta di Carlo, Carlo nella zona
   grigia fuori e dentro la sua conversazione, il conoscente a meno del margine da Bianca, la
   frase breve, una voce di nessuno, l'etichetta che vale una frase sola, senza stanza, e una
   conoscente omonima di Bianca di casa (resta conoscente; la voce di Bianca resta Bianca).
+
+#### Più tardi, il 14/10 sera: conservato come un adulto (ramo `conoscenti-turni`)
+
+Decisione di Dario (0030 punto 9, dettagli in [contesto-conversazione](contesto-conversazione.md)):
+per la conservazione il conoscente vale come un adulto, i permessi restano da ospite. Per
+quest'area: nel registro dei turni `voce` ha `conoscente: true`, il suo `id`, `nome_conoscente` e
+il `modo`, con le parole; in console «[VOCE] Marco Rossi (conoscente): resta ospite». Una **frase
+breve** (sotto `speaker_min_voice_s`) non riconosce un conoscente, ma nella finestra d'ascolto e
+nella sua conversazione su quel satellite (`persona:<id>`) vale ancora lui
+(`ciclo._conoscente_breve`, regola sull'audio `conoscente_breve`, `modo: breve`, nei dati del
+turno «riconosciuto dalla conversazione»); la famiglia nella zona grigia vince anche qui. La riga
+della stanza di quella frase ha sicurezza «grigia» (non va su disco con la tenuta). Prova:
+`prove/prova_conoscenti_conserva.py`.

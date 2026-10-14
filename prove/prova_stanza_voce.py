@@ -254,7 +254,10 @@ def main() -> int:
         sys.stdout.reconfigure(encoding="utf-8")
     except (AttributeError, ValueError):
         pass
-    frasi = PS.sintetizza(["Che tempo fa domani a Milano?", "Calliope, che ore sono?"])
+    # Pronunce senza il rumore di Piper: la prova non ripete la frase se la wake word non
+    # scatta, e con il rumore «Calliope, che ore sono?» non la svegliava ~1 volta su 10 (14/10)
+    frasi = PS.sintetizza(["Che tempo fa domani a Milano?", "Calliope, che ore sono?"],
+                          deterministica=True)
     if frasi is None or not (RADICE / "wakeword" / "modelli" / "calliope.onnx").is_file():
         print("Voci di Piper o modelli della wake word assenti: prova saltata.")
         return 77

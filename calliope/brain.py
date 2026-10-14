@@ -426,8 +426,10 @@ def conoscente_detto(k: dict) -> str:
     """Chi parla quando è un conoscente (14/10, decisione 0030, rifiniture): «Marco Rossi
     (conoscente, collega di Carlo), riconosciuto dalla voce: non è della famiglia, è un ospite»."""
     nota = str(k.get("nota") or "").strip()
+    # Una frase breve nella sua conversazione (14/10 sera, ciclo._conoscente_breve)
+    come = "dalla conversazione" if k.get("modo") == "breve" else "dalla voce"
     return (f"{k.get('nome')} (conoscente" + (f", {nota}" if nota else "") + "), riconosciuto "
-            "dalla voce: non è della famiglia, è un ospite")
+            f"{come}: non è della famiglia, è un ospite")
 
 
 def ultima_frase(text: str) -> str:
@@ -2057,7 +2059,10 @@ class Brain:
         compressione pronta, e per una conversazione nuova la riga «l'ultima volta…»."""
         conv = self._c()
         sctx = getattr(getattr(self, "tool_ctx", None), "speaker_ctx", None)
-        conv.nome = getattr(sctx, "current_speaker", None) or conv.nome
+        k = getattr(sctx, "conoscente", None)
+        # Il nome di un conoscente (14/10 sera): nell'archivio e nel riassunto, come per gli adulti
+        conv.nome = (getattr(sctx, "current_speaker", None)
+                     or (k.get("nome") if isinstance(k, dict) else None) or conv.nome)
         luogo_fn = getattr(self, "luogo_fn", None)
         if luogo_fn is not None:
             try:
@@ -3847,10 +3852,17 @@ class Brain:
 
     def _speaker_key(self):
         """Chi parla adesso, per la conversazione: l'id del profilo (resta uguale dopo una
-        rinomina), il nome se il profilo non c'è, None per un ospite (non riconosciuto)."""
+        rinomina), il nome se il profilo non c'è, None per un ospite (non riconosciuto). Un
+        conoscente (14/10 sera, decisione 0030 aggiornata) ha la sua conversazione, come le
+        persone di casa: il suo id (lo stesso del profilo se viene promosso a familiare). I
+        permessi non passano da qui: restano da ospite (`current_level`)."""
         ctx = self.tool_ctx
-        name = getattr(getattr(ctx, "speaker_ctx", None), "current_speaker", None)
+        sc = getattr(ctx, "speaker_ctx", None)
+        name = getattr(sc, "current_speaker", None)
         if not name:
+            k = getattr(sc, "conoscente", None)
+            if isinstance(k, dict) and k.get("id"):
+                return str(k["id"])
             return None
         speakers = getattr(ctx, "speakers", None)
         try:

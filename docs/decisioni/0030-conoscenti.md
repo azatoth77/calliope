@@ -1,7 +1,9 @@
 # 0030. I conoscenti: voci sconosciute di adulti col nome dedotto dalla conversazione
 
 - **Stato**: accettata (14/10/2026, decisioni di chi amministra), fatta il 14/10 sul ramo
-  `stanza-conoscenti` dietro `stanza_conoscenti` (di serie spento)
+  `stanza-conoscenti` dietro `stanza_conoscenti` (di serie spento); **aggiornata il 14/10 sera**
+  (ramo `conoscenti-turni`): per la conservazione un conoscente vale come un adulto della
+  famiglia, non come un ospite (punto 9)
 - **Area**: [stt-tts](../aree/stt-tts.md), [contesto-conversazione](../aree/contesto-conversazione.md),
   [sicurezza-politica](../aree/sicurezza-politica.md); tool in [`architettura-tool.md`](../architettura-tool.md)
 
@@ -33,7 +35,8 @@ che queste voci diventino **conoscenti**, con il nome che Calliope ricava da com
    l'impronta della voce, in un file suo (`conoscenti.json`), **fuori** dal registro delle voci
    della famiglia (`speakers.json`): così nessun percorso di riconoscimento dei comandi lo vede e
    resta un **ospite** a ogni effetto (nessuna azione di chi amministra né dati della famiglia;
-   per la conservazione la categoria `conoscente` vale come un ospite, salvo la stanza).
+   *storico, 14/10: per la conservazione la categoria `conoscente` valeva come un ospite, salvo
+   la stanza; dal 14/10 sera vale come un adulto, punto 9*).
    Riconosciuto nelle volte dopo, col nome nelle righe della stanza; le sue frasi vanno su disco
    con la tenuta della stanza (60 giorni) e si cercano come quelle della famiglia (stessi
    permessi: chi c'era); le frasi delle voci ancora sconosciute restano solo in memoria.
@@ -70,6 +73,43 @@ che queste voci diventino **conoscenti**, con il nome che Calliope ricava da com
    gruppi, proposte (con omonimi), arrivate a uno schermo, conferme, rifiuti, discordi, voci di
    bambino, dimenticati, scaduti, promossi, tornati conoscenti. Mai nomi né parole.
 8. **Default prudente**: `stanza_conoscenti: false`; spento non parte niente (né gruppi né file).
+9. **Conservazione come un adulto, permessi da ospite** (decisione di Dario del 14/10 sera: «per
+   un conoscente si conservano il nome e le sue parole, non come un ospite»). Motivo: il
+   conoscente è una persona confermata da chi amministra, che torna in casa; trattarlo come un
+   ospite toglieva dalle misure e dalla memoria delle conversazioni proprio chi Calliope ha
+   imparato a riconoscere, mentre i suoi permessi non hanno bisogno di cambiare. Quindi:
+   - **turni**: nel registro dei turni `voce.conoscente: true` con il suo `id`, il nome
+     (`nome_conoscente`) e le parole, per `turn_log_days` (60) giorni come gli adulti; la frase
+     resta di livello ospite (`livello: ospite`, `voce.nome` vuoto);
+   - **conversazione e archivio**: una conversazione per conoscente (`persona:<id>`, la chiave è
+     il suo id: `Brain._speaker_key`), nell'archivio delle conversazioni **su disco** per 60
+     giorni, col suo nome; gli **eventi** su disco come per gli adulti. Una frase breve subito
+     dopo la sua, nella finestra d'ascolto e nella sua conversazione su quel satellite, vale
+     ancora lui (regola sull'audio `conoscente_breve`, come la frase breve di un familiare; la
+     famiglia nella zona grigia vince sempre): senza, un «sì» corto passava alla conversazione
+     anonima e perdeva la domanda;
+   - **voce registrata**: solo con il consenso, come per gli adulti (`conserva.consenso_voce`);
+     il consenso si dà col tool `dati_conservati`, che è dei familiari: un conoscente oggi non
+     può darlo, quindi la sua voce non si tiene. Promosso a familiare può dirlo; tornato
+     conoscente, la rotazione toglie la voce registrata;
+   - **terminale e journal**: il nome e le parole, come per gli adulti
+     (`conserva.console_riservata`);
+   - **chi ritrova le sue conversazioni**: per gli adulti oggi vale «ognuno solo le sue» e chi
+     amministra vede degli altri solo i conteggi e svuota; per gli ospiti chi amministra,
+     riconosciuto dalla voce, le ritrova con `ospiti=true`. La regola più vicina per un
+     conoscente, che non può usare il tool (è dei familiari): **lui no, chi amministra sì** con
+     `ospiti=true` e la voce, come per gli ospiti (che fino a oggi comprendevano lui), col suo
+     nome nei risultati; un familiare no;
+   - **cancellazione**: «dimentica Marco», la scadenza dei 6 mesi e `calliope conserva --svuota`
+     di tutto si portano via anche turni (le parole), conversazioni archiviate ed eventi
+     (`Conservazione.conoscente_tolto`, legato a `Conoscenti.su_tolto`); `--svuota --persona
+     Marco` (anche da terminale, dal file dei conoscenti) e `dati_conservati svuota` di Marco
+     cancellano i suoi dati (con le sue righe della stanza su disco) e lasciano il profilo, come
+     per un familiare;
+   - **promozione**: turni, conversazioni ed eventi seguono l'id, che resta lo stesso: promosso
+     sono suoi da familiare; tornato conoscente restano;
+   - **permessi invariati**: livello ospite (`current_speaker` vuoto), nessuna azione di chi
+     amministra, nessun dato della famiglia, nessuna ricerca nella stanza né nelle conversazioni.
 
 ## La regola sul testo
 
@@ -86,9 +126,12 @@ stanza non sono turni) hanno gli eventi della regola.
 - **[0029](0029-conversazione-di-stanza.md) punto 5** («ospiti mai su disco né nella ricerca»):
   resta vero per le voci **non confermate**; un conoscente confermato da chi amministra è un
   ospite per i permessi, ma le sue righe della stanza si tengono e si cercano come quelle della
-  famiglia. `conserva.decidi` ha una categoria nuova, `conoscente` (solo `stanza`).
-- **[0028](0028-decisioni-roadmap-12-10.md) T1**: invariata per turni, voce, eventi e
-  conversazioni (un conoscente non ne ha su disco).
+  famiglia. `conserva.decidi` ha una categoria nuova, `conoscente` (*storico, 14/10: solo
+  `stanza`; dal 14/10 sera le regole di un adulto, punto 9*).
+- **[0028](0028-decisioni-roadmap-12-10.md) T1** («dati dei soli adulti»): *storico, 14/10:
+  invariata (un conoscente non aveva turni, voce, eventi né conversazioni su disco)*. Dal 14/10
+  sera i conoscenti si aggiungono agli adulti riconosciuti per turni, eventi e conversazioni; la
+  voce resta legata al consenso.
 - **Livelli** ([`architettura-tool.md`](../architettura-tool.md) § 5): nessun livello nuovo; il
   conoscente è un **tipo** di profilo con il livello ospite, fuori dal registro delle voci.
 
@@ -113,7 +156,8 @@ stanza non sono turni) hanno gli eventi della regola.
   `calliope/tools/conoscenti.py` (`conoscenti`, `conoscente_livello`), `POST /api/conoscenti` e
   la scheda `conoscente` degli schermi; la stanza (`ascolto.py`) riconosce i conoscenti e passa
   le righe alla deduzione; la tenuta ha la colonna `nota` e sposta le righe al cambio di tipo.
-- Prova: `prove/prova_stanza_conoscenti.py` (a secco, impronte finte, con i contrari).
+- Prova: `prove/prova_stanza_conoscenti.py` (a secco, impronte finte, con i contrari); la
+  conservazione (punto 9) in `prove/prova_conoscenti_conserva.py`.
 - Rischi dichiarati: una voce clonata o una registrazione che si fa chiamare per nome produce al
   più una proposta, che chi amministra vede con il pezzo di trascrizione; il conoscente non ha
   permessi. Un gruppo può mescolare due voci simili (impronta sopra soglia): la proposta lo
@@ -126,7 +170,8 @@ stanza non sono turni) hanno gli eventi della regola.
 
 ## Fonti
 
-- Decisioni di chi amministra del 14/10 (tre punti, più le aggiunte su omonimie e promozione)
+- Decisioni di chi amministra del 14/10 (tre punti, più le aggiunte su omonimie e promozione) e
+  del 14/10 sera (conservazione come un adulto, punto 9)
 - [`2026-10-13-conversazione-di-stanza.md`](../ricerche/2026-10-13-conversazione-di-stanza.md)
   § 3.10 e § 6 (passo 7)
 - Decisioni [0008](0008-regole-deterministiche-solo-in-forma-chiusa.md),

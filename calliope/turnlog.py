@@ -14,7 +14,9 @@ giorno. Dal 12/10 (decisione 0028, T1, calliope/conserva.py) le parole restano s
 adulti riconosciuti, per `turn_log_days` (60) giorni: anche di minori e voci incerte (zona
 grigia, dubbio con un minore) restano solo i numeri. Lo decide `Conservazione.testo_turno`, il
 solo posto; il ciclo lo segna nel turno (`conserva`), e qui vale anche per le righe scritte da
-altri (cassetto, schermi, installazioni).
+altri (cassetto, schermi, installazioni). Dal 14/10 sera (decisione 0030 aggiornata) anche i
+turni di un **conoscente**: livello ospite, ma nel campo `voce` il suo id, il nome
+(`nome_conoscente`) e le parole, come un adulto.
 """
 
 import datetime
@@ -58,15 +60,21 @@ class TurnLog:
 
     def _senza_parole(self, rec: dict) -> bool:
         """Le parole di questo turno non restano: ospite, segnato dal ciclo, o (righe scritte
-        da altri) la conservazione dice no."""
-        if rec.get("livello") == "ospite" or _segnato_no(rec):
+        da altri) la conservazione dice no. Un conoscente (14/10 sera, decisione 0030
+        aggiornata) è di livello ospite ma le parole restano, se lo dice la conservazione."""
+        if _segnato_no(rec):
+            return True
+        v = rec.get("voce") if isinstance(rec.get("voce"), dict) else {}
+        conoscente = bool(v.get("conoscente") and v.get("id") and not v.get("nome"))
+        if rec.get("livello") == "ospite" and not conoscente:
             return True
         if self.conserva is not None and "conserva" not in rec:
             try:
                 return not self.conserva.testo_turno(rec)
             except Exception:  # noqa: BLE001 — nel dubbio senza parole
                 return True
-        return False
+        # Senza la conservazione (prove, `calliope stato`) un conoscente resta senza parole
+        return conoscente and self.conserva is None
 
     def write(self, record: dict):
         """Aggiunge un turno. Per gli ospiti toglie i testi prima di scrivere. Non solleva

@@ -997,6 +997,11 @@ Prove a secco: `prova_conserva` (decisioni, registro, voce, consenso, rotazione,
 tool, terminale, con i contrari minore, ospite, voce incerta, adulto senza consenso, revoca,
 svuotamento), `prova_scelta_tool`, `prova_eventi_ciclo` (i `dati_del_turno` sul giro sintetico).
 
+*14/10 sera*: ai «soli adulti riconosciuti» si aggiungono i **conoscenti** confermati da chi
+amministra (turni con le parole, eventi, conversazioni; la voce solo col consenso, che oggi non
+possono dare), con i permessi da ospite: decisione [0030](../decisioni/0030-conoscenti.md) punto
+9, dettagli in «I conoscenti nella stanza» qui sotto.
+
 ## L'archivio delle conversazioni allineato alla conservazione (12/10 sera, ramo `archivio-t1`)
 
 Decisione di Dario del 12/10 ([0028](../decisioni/0028-decisioni-roadmap-12-10.md), T1): l'archivio
@@ -1687,8 +1692,9 @@ chi parla e il nome dedotto in [stt-tts](stt-tts.md)). Per quest'area:
   nota distingue gli omonimi; il familiare omonimo resta «Marco».
 - **Tenuta su disco**: le righe di un conoscente confermato e riconosciuto dalla voce vanno in
   `stanza.db` con `persona` «conoscente:<id>» e la colonna nuova `nota` (migrazione 2);
-  `conserva.decidi` ha la categoria `conoscente` (solo `stanza` con la voce: mai turni, voce,
-  eventi, conversazioni). Le voci non confermate restano solo in memoria come prima. La rotazione
+  `conserva.decidi` ha la categoria `conoscente` (*storica*, 14/10: solo `stanza` con la voce, mai
+  turni, voce, eventi, conversazioni; dal 14/10 sera le regole di un adulto, vedi sotto). Le voci
+  non confermate restano solo in memoria come prima. La rotazione
   dei «profili tolti» toglie le righe dei conoscenti che non ci sono più solo con i conoscenti
   accesi (spenti, o all'avvio prima che si leghino, quelle righe aspettano la scadenza dei giorni).
 - **Ricerca**: le righe di un conoscente si cercano come quelle di un adulto di casa (chi c'era,
@@ -1725,6 +1731,53 @@ Prova: `prove/prova_stanza_conoscenti.py`.
 - **Il suo turno**: la frase che rivolge a Calliope entra nella stanza come riga del conoscente
   (nome, nota, «→ Calliope»), quindi nel blocco caldo e nella ricerca con le sue etichette; i dati
   del turno dicono chi è («Marco Rossi (conoscente, collega di Carlo), … è un ospite»). Il turno
-  stesso non si conserva (nel registro dei turni solo `voce.conoscente: true`).
+  stesso non si conserva (nel registro dei turni solo `voce.conoscente: true`) (*storica*: dal
+  14/10 sera si conserva, vedi sotto).
 
 Prova: `prove/prova_stanza_conoscenti.py` (`prova_turni_e_presenze`).
+
+### 14/10 sera: la conservazione di un conoscente come un adulto (ramo `conoscenti-turni`)
+
+Decisione di Dario (0030 punto 9): «per un conoscente si conservano il nome e le sue parole, non
+come un ospite». I permessi restano da ospite.
+
+- **Un solo posto decide** ancora: `conserva.decidi` tratta la categoria `conoscente` come un
+  adulto (non è mai un minore: i bambini non si salvano come conoscenti). Il profilo lo trova
+  `Conservazione.profilo` / `conoscente(id)` nei conoscenti di Calliope o, da terminale e con i
+  conoscenti spenti, nel file `conoscenti.json` in sola lettura (riletto quando cambia).
+- **Registro dei turni**: `ciclo._conoscente_turno` scrive in `voce` `conoscente: true`, il suo
+  `id`, `nome_conoscente` e il `modo`; `Conservazione.testo_turno` lo guarda prima della regola
+  «livello ospite» e `TurnLog._senza_parole` lascia le parole (senza la conservazione collegata,
+  nel dubbio no). Un ospite vero resta com'era: niente parole né nome.
+- **Conversazione**: una per conoscente, `persona:<id>` (`ciclo._conversazione_del_turno` passa il
+  suo id a `Corsia.turno`; `Brain._speaker_key` restituisce il suo id quando chi parla è vuoto e
+  la frase è sua), col nome in `conv.nome`. Così l'archivio la scrive **su disco**
+  (`conversazioni_su_disco`), gli **eventi** pure (`registro_su_disco`), e la pulizia di ogni
+  giorno non la toglie. Prima stava nella conversazione anonima del satellite, insieme agli
+  ospiti. Una **frase breve** nella finestra d'ascolto, nella sua conversazione su quel satellite,
+  vale ancora lui (`ciclo._conoscente_breve`, regola `conoscente_breve`, `modo: breve`): senza,
+  un «sì» corto cambiava conversazione e perdeva la domanda. Fuori dalla finestra, nella
+  conversazione anonima o con la famiglia nella zona grigia, la frase breve vale ospite.
+- **Voce registrata**: solo col consenso (`consenso_voce`), che un conoscente non può dare (il
+  tool `dati_conservati` è dei familiari): niente voce. Promosso, può dirlo; tornato conoscente,
+  la rotazione toglie le registrazioni.
+- **Terminale e journal**: il nome («[VOCE] Marco Rossi (conoscente): resta ospite») e le parole
+  (`console_riservata` restituisce None per un conoscente).
+- **Chi ritrova le sue conversazioni**: lui no (il tool è dei familiari); chi amministra,
+  riconosciuto dalla voce, con `ospiti=true` come per gli ospiti: `ArchivioConversazioni.cerca`
+  unisce gli ospiti della sessione e le conversazioni su disco dei conoscenti
+  (`conoscenti_ids`), con «chi: Marco Rossi, conoscente» nei risultati. Un familiare no.
+- **Cancellazione**: `Conservazione.conoscente_tolto`, legato a `Conoscenti.su_tolto` in
+  `main.py`, chiama `svuota(id)` quando un conoscente si dimentica, scade (180 giorni) o si svuota
+  da un altro processo: via le parole dei suoi turni, le conversazioni archiviate (anche quella in
+  corso salvata) e gli eventi. «Svuota» di tutto non lo ripete (`_svuotando`). `dati_conservati
+  svuota` e `calliope conserva --svuota --persona Marco` trovano anche i conoscenti (omonimi:
+  chiede il cognome), con le sue righe della stanza su disco («conoscente:<id>»), e lasciano il
+  profilo, come per un familiare; `calliope conserva` li elenca.
+- **Promozione e ritorno**: l'id resta lo stesso, quindi turni, conversazioni ed eventi restano
+  suoi in tutte e due le direzioni (nessun `su_tolto`).
+
+Prova: `prove/prova_conoscenti_conserva.py` (contrari: ospite vero, registro senza conservazione,
+id sconosciuto, frase breve fuori finestra, anonima o con la famiglia nella zona grigia, ricerca
+senza `ospiti`, da un familiare, dalla zona grigia o dal conoscente stesso; gli altri che restano
+dopo dimentica e svuota).

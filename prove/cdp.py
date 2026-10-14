@@ -15,6 +15,7 @@ Due cause d'instabilità tolte, comuni a tutte le prove con il browser:
 
 import json
 import subprocess
+import sys
 import time
 import urllib.request
 from pathlib import Path
@@ -43,9 +44,23 @@ class Browser:
             file_porta.unlink()             # quello di un avvio precedente con lo stesso profilo
         except OSError:
             pass
-        self.proc = subprocess.Popen(
-            [exe, *OPZIONI_BASE, f"--user-data-dir={profilo}", *opzioni, url],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        cmd = [exe, *OPZIONI_BASE, f"--user-data-dir={profilo}", *opzioni, url]
+        kw = dict(stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # Su Windows il browser nasce in un job object della prova (14/10): se la prova muore
+        # senza `chiudi()` (lanciata fuori dal runner e fermata da un tempo massimo, Ctrl+C,
+        # un'eccezione prima del `finally`) il job si chiude con lei e porta via Edge e i suoi
+        # figli. Prima restavano vivi: il 14/10 decine di processi msedge con i profili
+        # temporanei delle prove, e le prove dopo non vedevano partire Edge in tempo
+        self.job = None
+        if sys.platform == "win32":
+            try:
+                from calliope.agenti import winjob
+                self.job = winjob.JobObject()
+                self.proc = winjob.avvia_nel_job(cmd, self.job, **kw)
+            except Exception:  # noqa: BLE001 — senza job, come prima
+                self.job = None
+        if self.job is None:
+            self.proc = subprocess.Popen(cmd, **kw)
         self.porta: int | None = None
         self.ws_browser: str | None = None
         fine = time.monotonic() + attesa_s
@@ -83,6 +98,12 @@ class Browser:
         raise RuntimeError("DevTools non risponde (nessuna scheda)")
 
     def chiudi(self):
+        try:
+            self._chiudi_processi()
+        finally:
+            self._chiudi_job()             # ciò che resta del browser, se c'è ancora
+
+    def _chiudi_processi(self):
         proc = self.proc
         try:
             import psutil
@@ -131,6 +152,12 @@ class Browser:
             except Exception:  # noqa: BLE001
                 pass
         psutil.wait_procs(vivi, timeout=5)
+
+    def _chiudi_job(self):
+        if self.job is not None:
+            self.job.termina()
+            self.job.close()
+            self.job = None
 
 
 def _del_profilo(psutil, profilo: str) -> list:
