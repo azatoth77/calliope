@@ -3101,7 +3101,13 @@ Il lato agente della macchina a stati dei giochi (motore, manifesto e prova di f
   dicono.
 - **La consegna** (`prompt._controlla_gioco`): un gioco **nuovo** senza `macchina` torna
   all'agente («un gioco nuovo usa la macchina a stati di Calliope…»); la versione nuova di un
-  gioco vecchio (nome atteso) passa ancora, finché i giochi vecchi non si tolgono.
+  gioco vecchio (nome atteso) passa ancora, finché i giochi vecchi non si tolgono. *Storico dal
+  14/10 (il palco fisso, [giochi](giochi.md)): i giochi vecchi sono tolti, anche la versione
+  nuova di un gioco vecchio senza `macchina` torna all'agente (lo dice già `scheda.normalizza`).
+  Lo scheletro dichiara la pagina della fase e controlla `g.palco()` (3 347 caratteri), il §5
+  descrive palco, modelli di pagina e caselle (6 294 caratteri), il prompt dice di scegliere la
+  pagina; la prova di fumo misura il palco di ogni pagina e un difetto è un errore da
+  correggere come gli altri.*
 - **Gli esempi di accettazione dei giochi** (`agenti/accettazione.py`, la passata della parte 2):
   in uno sviluppo di un gioco nuovo (non una correzione, non fuori da uno sviluppo) lo schema
   della passata ha anche `comandi` (nome, fase, da/a o valori) ed `esempi` (requisito,
