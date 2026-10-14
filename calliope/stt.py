@@ -128,8 +128,10 @@ class Transcriber:
                               "errore": self.error})
 
     def _run(self, audio):
+        # Il beam di una frase sola (14/10: la corsia lenta della stanza, stanza_lenta_beam)
+        beam = self.__dict__.get("_beam_frase") or self.cfg.whisper_beam_size
         segments, _ = self.model.transcribe(audio, language=self.cfg.language,
-                                            beam_size=self.cfg.whisper_beam_size,
+                                            beam_size=beam,
                                             hotwords=hotwords_whisper(self.cfg),
                                             initial_prompt=self.prompt or None,
                                             condition_on_previous_text=False)
@@ -184,9 +186,17 @@ class Transcriber:
                           "errore": self.error})
         return True
 
-    def transcribe(self, audio: np.ndarray, prompt: str | None = None) -> str:
+    def transcribe(self, audio: np.ndarray, prompt: str | None = None,
+                   beam: int | None = None) -> str:
         """La frase trascritta ("" se è rumore o un'allucinazione). `prompt`: un altro prompt
-        per questa frase sola ("" = nessuno; la stanza, 13/10)."""
+        per questa frase sola ("" = nessuno; la stanza, 13/10). `beam`: un altro beam per questa
+        frase sola (14/10, la corsia lenta; il server lo ignora: lo fissa lui)."""
+        if beam is not None:
+            self._beam_frase = int(beam)
+            try:
+                return self.transcribe(audio, prompt=prompt)
+            finally:
+                self._beam_frase = None
         if prompt is not None:
             self._prompt_frase = prompt
             try:

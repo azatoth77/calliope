@@ -21,6 +21,10 @@ veloce, niente nel contesto del modello.
   nome dedotto dalla conversazione, la proposta a chi amministra sullo schermo personale, i
   conoscenti confermati (livello ospite) riconosciuti nelle righe (`stanza_conoscenti`, di serie
   spento).
+- `lenta` (passo 3, 14/10): la corsia lenta a DGX libera (ritrascrizione con più contesto, chi
+  parla sullo scambio, TV, allucinazioni, riassunto progressivo), righe di versione 2
+  (`stanza_lenta`, di serie spenta); `banco`: l'eccezione temporanea dell'audio su disco per il
+  banco del passo 3 (`stanza_audio_banco_giorni`, di serie 0).
 
 Di serie spenta (`stanza: spenta`): non parte nessun thread, i satelliti non mandano niente.
 """
@@ -100,4 +104,39 @@ def load_guardia(cfg, stanza, guardiano=None, occupato=(), log=print, gioco=None
     return g
 
 
-__all__ = ["OMBRA", "SPENTA", "Stanza", "load_guardia", "load_stanza", "load_tenuta", "modo"]
+def load_lenta(cfg, stanza, guardiano=None, occupato=(), log=print, media=None):
+    """La corsia lenta (passo 3, 14/10) con `stanza_lenta: true` e la stanza accesa; altrimenti
+    None (l'audio si butta a trascrizione fatta, come prima). `guardiano`: per il riassunto
+    progressivo col rilevatore già caricato (senza, nessun riassunto). `occupato`: funzioni che
+    dicono se la voce lavora. `media(sat)`: l'aggancio a Home Assistant per la TV (oggi None)."""
+    from . import lenta as L
+    if stanza is None or not L.acceso(cfg):
+        return None
+    riass = None
+    if guardiano is not None and int(getattr(cfg, "stanza_lenta_riassunto_righe", 6) or 0) > 0:
+        try:
+            if guardiano._pericolo_modello() is not None:
+                riass = L.riassuntore_guardiano(
+                    guardiano, timeout_s=float(getattr(cfg, "stanza_guardia_timeout_s", 30.0)
+                                               or 30.0))
+        except Exception:  # noqa: BLE001 — senza riassunto
+            riass = None
+    banco = None
+    from . import banco as B
+    if B.giorni(cfg) > 0:
+        banco = B.Banco(cfg, log=log)
+    le = L.Lenta(cfg, stanza, riassuntore=riass, occupato=occupato, banco=banco, media=media,
+                 log=log)
+    stanza.lenta = le
+    url = str(getattr(cfg, "stanza_lenta_stt_url", "") or "").strip()
+    log("[STANZA] Corsia lenta: ritrascrizione a DGX libera ("
+        + (f"Whisper suo su {url}" if url else "lo stesso Whisper, dopo turni e stanza")
+        + "), chi parla sullo scambio, TV, allucinazioni"
+        + (", riassunto progressivo" if riass else ", senza riassunto (nessun rilevatore)")
+        + (f"; audio del banco su disco per {B.giorni(cfg)} giorni (eccezione)" if banco
+           else ""))
+    return le
+
+
+__all__ = ["OMBRA", "SPENTA", "Stanza", "load_guardia", "load_lenta", "load_stanza",
+           "load_tenuta", "modo"]

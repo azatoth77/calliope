@@ -31,6 +31,14 @@ dei turni (`turn_log_dir`), con la stessa tenuta (`turn_log_days`). Una riga per
                   mandata (arrivata a uno schermo di chi amministra), conferma (nome_diverso,
                   cognome, nota, omonimo), rifiuto, discordi, minore, dimenticato, scaduto,
                   svuotati, promosso, declassato: mai nomi né parole
+    lenta         (passo 3, 14/10, `stanza_lenta`) sat, esito («uguale», «cambiata», «divisa»,
+                  «piu_voci», «tv», «allucinazione», «v2_vuota», «scaduto»: l'audio è uscito
+                  dalla RAM prima del passo, «dimenticato», «errore»), testo_cambiato,
+                  attribuzione (chi parla corretto), parti, motivo, tv (gli strati), stt_s
+                  (tempo di Whisper), cam_ms, finestre, voce_s, attesa_s (dalla fine del
+                  segmento), prompt
+    lenta_riassunto  esito («fatto», «guasto»), ms, righe, caratteri
+    banco         (eccezione del 14/10 sera, `stanza_audio_banco_giorni`) sat, salvato
 
 Più, nel registro dei turni, `stanza.copertura` di ogni turno interpellato con la stanza accesa
 (`dette`, `pronte`, `recupero_ms`, `oltre`): la «copertura all'interpellazione» (§ 3.11). Dal
@@ -133,7 +141,35 @@ def riassunto(righe: list[dict], turni: list[dict] | None = None) -> dict:
     cerca = {"chiamate": 0, "attese": 0, "esiti": {}, "_ms": []}
     anticipo = {"ricerche": 0, "trovate": 0, "_car": []}
     conoscenti: dict = {}
+    lenta = {"riviste": 0, "esiti": {}, "cambiate": 0, "attribuzioni": 0, "_stt": [],
+             "_attese": [], "stt_tot_s": 0.0, "cam_tot_s": 0.0, "riassunti": 0,
+             "riassunti_guasti": 0, "_riass_ms": [], "banco_salvati": 0, "banco_saltati": 0}
     for r in righe:
+        if r.get("tipo") == "lenta":
+            e = str(r.get("esito") or "?")
+            lenta["esiti"][e] = lenta["esiti"].get(e, 0) + 1
+            if e in ("scaduto", "dimenticato", "errore"):
+                continue
+            lenta["riviste"] += 1
+            lenta["cambiate"] += 1 if r.get("testo_cambiato") else 0
+            lenta["attribuzioni"] += 1 if r.get("attribuzione") else 0
+            if r.get("stt_s") is not None:
+                lenta["_stt"].append(float(r["stt_s"]))
+                lenta["stt_tot_s"] += float(r["stt_s"])
+            lenta["cam_tot_s"] += float(r.get("cam_ms") or 0) / 1000
+            if r.get("attesa_s") is not None:
+                lenta["_attese"].append(float(r["attesa_s"]))
+            continue
+        if r.get("tipo") == "lenta_riassunto":
+            if r.get("esito") == "fatto":
+                lenta["riassunti"] += 1
+                lenta["_riass_ms"].append(float(r.get("ms") or 0))
+            else:
+                lenta["riassunti_guasti"] += 1
+            continue
+        if r.get("tipo") == "banco":
+            lenta["banco_salvati" if r.get("salvato") else "banco_saltati"] += 1
+            continue
         if r.get("tipo") == "conoscenti":
             e = str(r.get("evento") or "?")
             conoscenti[e] = conoscenti.get(e, 0) + 1
@@ -308,8 +344,14 @@ def riassunto(righe: list[dict], turni: list[dict] | None = None) -> dict:
     blocco["storia"] = storia
     blocco["righe_p50"], blocco["caratteri_p50"] = _p(righe_b, 0.5), _p(car_b, 0.5)
     blocco["caratteri_p90"] = _p(car_b, 0.9)
+    st_l, att_l, rm_l = lenta.pop("_stt"), lenta.pop("_attese"), lenta.pop("_riass_ms")
+    lenta["stt_p50_s"], lenta["stt_p90_s"] = _p(st_l, 0.5), _p(st_l, 0.9)
+    lenta["attesa_p50_s"], lenta["attesa_p90_s"] = _p(att_l, 0.5), _p(att_l, 0.9)
+    lenta["riassunto_p50_ms"] = _p(rm_l, 0.5)
+    lenta["stt_tot_s"] = round(lenta["stt_tot_s"], 1)
+    lenta["cam_tot_s"] = round(lenta["cam_tot_s"], 1)
     return {"giorni": giorni, "copertura": cop, "blocco": blocco, "cerca": cerca,
-            "conoscenti": conoscenti,
+            "conoscenti": conoscenti, "lenta": lenta,
             "tempi": {k: {"turni": len(v["prima"]) or len(v["stt"]),
                           "stt_p50_s": _p(v["stt"], 0.5),
                           "stt_p90_s": _p(v["stt"], 0.9), "prima_p50_s": _p(v["prima"], 0.5),
@@ -319,14 +361,20 @@ def riassunto(righe: list[dict], turni: list[dict] | None = None) -> dict:
 
 def testo(r: dict) -> str:
     out = ["Stanza (conversazione di stanza: passo 1 in ombra, passo 2 con stanza_contesto, "
-           "passo 4 con stanza_cerca, passo 5 con stanza_durante_voce)"]
+           "passo 3 con stanza_lenta, passo 4 con stanza_cerca, passo 5 con stanza_durante_voce)"]
     if r.get("tenuta"):
         # La tenuta su disco (14/10, stanza/tenuta.py): solo numeri, mai parole né nomi
         from .tenuta import testo_stato
         out.append(testo_stato(r["tenuta"]))
+    if r.get("banco"):
+        from .banco import testo_stato as testo_banco
+        out.append(testo_banco(r["banco"]))
     kc = r.get("conoscenti") or {}
     if kc or r.get("conoscenti_salvati") is not None:
         out.append(testo_conoscenti(kc, r.get("conoscenti_salvati")))
+    le = r.get("lenta") or {}
+    if le.get("esiti") or le.get("riassunti") or le.get("riassunti_guasti"):
+        out.append(testo_lenta(le))
     if not r.get("giorni") and not r["copertura"]["turni"] and not (
             r.get("cerca") or {}).get("chiamate") and not (
             (r.get("cerca") or {}).get("anticipo") or {}).get("ricerche") and not (
@@ -419,6 +467,25 @@ def testo(r: dict) -> str:
                    f"{ts['prima_p50_s']} s), token riletti p50 {tb['riletti_p50']} (senza "
                    f"{ts['riletti_p50']}); obiettivo +0,1 s al più")
     return "\n".join(out)
+
+
+def testo_lenta(le: dict) -> str:
+    """La riga della corsia lenta (passo 3): solo numeri."""
+    es = le.get("esiti") or {}
+    g = lambda e: int(es.get(e, 0))  # noqa: E731
+    riv = int(le.get("riviste") or 0)
+    quota = f" ({round(100 * le['cambiate'] / riv)} %)" if riv else ""
+    return (f"  Corsia lenta (passo 3): {riv} segmenti rivisti, testo cambiato in "
+            f"{le['cambiate']}{quota}, chi parla corretto in {le['attribuzioni']} (divisi in due "
+            f"voci {g('divisa')}, più voci {g('piu_voci')}), uguali {g('uguale')}; TV "
+            f"{g('tv')}, allucinazioni {g('allucinazione')}, ritrascrizione vuota tenuta "
+            f"{g('v2_vuota')}; audio uscito dalla RAM prima del passo {g('scaduto')}; Whisper "
+            f"{le['stt_tot_s']} s in tutto (p50 {le['stt_p50_s']} s a segmento), CAM++ "
+            f"{le['cam_tot_s']} s; dalla fine del segmento p50 {le['attesa_p50_s']} s, p90 "
+            f"{le['attesa_p90_s']} s; riassunti {le['riassunti']} (guasti "
+            f"{le['riassunti_guasti']}, p50 {le['riassunto_p50_ms']} ms)"
+            + (f"; banco: salvati {le['banco_salvati']}, saltati {le['banco_saltati']}"
+               if le.get("banco_salvati") or le.get("banco_saltati") else ""))
 
 
 def testo_conoscenti(k: dict, salvati: int | None = None) -> str:

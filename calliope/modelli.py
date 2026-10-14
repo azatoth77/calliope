@@ -171,6 +171,10 @@ WHISPER = {
                             "[M] DGX 05–07/10: ~2,1 GB, 0,16–0,17 s di mediana"),
     "turbo-cpu": Trascrizione("large-v3-turbo", "faster-whisper", "cpu", 1.6, 5.0,
                               "[M] portatile: ~5 s a frase sulla CPU (ripiego visto)"),
+    # La corsia lenta della stanza (14/10, passo 3): un secondo whisper-server più lento e più
+    # accurato, solo con posto. [S] pesi ggml f16 ~3,1 GB più il calcolo; tempi da misurare
+    "cpp-lenta": Trascrizione("large-v3", "whisper.cpp", "gpu", 3.6, 0.6,
+                              "[S] stima dai pesi (ggml-large-v3 3,1 GB): da misurare sulla DGX"),
     "small-cpu": Trascrizione("small", "faster-whisper", "cpu", 1.0, 1.0,
                               "[D] da misurare con misura_stt.py; README di faster-whisper: "
                               "small int8 su i7-12700K 13 min di audio in 1 min 42 s [V]"),

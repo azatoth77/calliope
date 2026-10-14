@@ -33,7 +33,11 @@ una più in alto):
 8. **agente**: separato se c'è (vLLM) o se ci sta (≥ 25 GB e ≥ 250 GB/s), altrimenti il 26B
    della voce su un secondo posto, altrimenti remoto o niente;
 9. **Piper** sulla GPU solo con posto (le soglie di `taratura_voce`), **immagini** a richiesta
-   solo con 13 GB liberi, OCR, satelliti insieme.
+   solo con 13 GB liberi, OCR, satelliti insieme;
+10. **corsia lenta della stanza** (14/10, passo 3, solo con `stanza_lenta`): un secondo Whisper
+   più accurato (large-v3, whisper.cpp) solo se ci sta dopo tutto il resto e la macchina non è
+   della taglia ridotta (8 GB: decisione 0029 § 4 punto 7, «niente corsia lenta con un modello
+   più grande»); altrimenti lo stesso Whisper dei turni a DGX libera, senza memoria in più.
 
 Le velocità: misurate da noi su quella GPU quando ci sono (catalogo), altrimenti η × banda /
 byte letti a token (η 0,55, o quello che le misure danno per la macchina), al più 250 token/s.
@@ -88,6 +92,7 @@ class Funzioni:
     soglia_morbida: float = 0.75  # contesto_soglia_morbida (con la compressione)
     compressione: bool = True
     margine_gb: float = 0.5       # contesto_margine_gb
+    stanza_lenta: bool = False    # la corsia lenta della stanza (14/10, passo 3)
     oggi: dict = field(default_factory=dict)        # le scelte scritte oggi, per il confronto
     contesto: dict = field(default_factory=dict)    # contesto.json della voce, se c'è
 
@@ -523,6 +528,7 @@ def piano(inv: dict, funzioni: Funzioni | None = None) -> Piano:
     # 9. Piper, immagini, OCR, satelliti
     _piper(p, mc, f)
     _richiesta(p, mc, f, m_voce)
+    _lenta(p, mc, f, voce["con_whisper"])
     if mc.tipo == "cpu":
         p.decisioni.append(_decisione(5))
         p.avvisi.append("Sulla sola CPU la lettura del prompt costa secondi a ogni turno: questa "
@@ -648,6 +654,29 @@ def _richiesta(p: Piano, mc: _Macchina, f: Funzioni, m_voce: cat.Modello):
         p.non_sostenibili.append("agente locale")
 
 
+def _lenta(p: Piano, mc: _Macchina, f: Funzioni, whisper_gpu: bool):
+    """La corsia lenta della stanza (passo 3): ultima, non toglie memoria a niente."""
+    if not f.stanza_lenta:
+        return
+    w = cat.WHISPER["cpp-lenta"]
+    ridotta = mc.tipo == "dedicata" and mc.pool <= 8 * 1.12
+    if whisper_gpu and not ridotta and mc.ci_sta(w.memoria_gb):
+        mc.usati += w.memoria_gb
+        p.scelte.append(Scelta(
+            "stanza_lenta", f"{w.nome}, {w.motore} (secondo server)", "GPU", w.memoria_gb,
+            "solo a DGX libera; tempi da misurare", "ok",
+            "ci sta dopo tutto il resto: stanza_lenta_stt_url verso un secondo whisper-server",
+            _oggi(f, "stanza_lenta", "server"), w.fonte))
+        return
+    perche = ("taglia ridotta: niente modello più grande (0029 § 4.7)" if ridotta else
+              "Whisper sulla CPU" if not whisper_gpu else
+              f"un secondo Whisper ({_gb(w.memoria_gb)} GB) non ci sta")
+    p.scelte.append(Scelta("stanza_lenta", "lo stesso Whisper dei turni", "GPU" if whisper_gpu
+                           else "CPU", 0.0, "a DGX libera, con la precedenza più bassa",
+                           "ok" if whisper_gpu else "avviso", perche,
+                           _oggi(f, "stanza_lenta", "stesso")))
+
+
 def _decisione(n: int) -> dict:
     titolo, opzioni = DECISIONI[n]
     return {"numero": n, "titolo": titolo, "opzioni": opzioni}
@@ -713,6 +742,8 @@ def da_config(cfg, inv: dict | None = None) -> Funzioni:
         dgx = os.path.join(getattr(cfg, "config_dir", None) or ".", dgx)
     f.agente_remoto = bool(getattr(cfg, "agenti_url", None)) or os.path.exists(dgx)
     f.immagini = True
+    f.stanza_lenta = bool(getattr(cfg, "stanza_lenta", False)) and str(
+        getattr(cfg, "stanza", "spenta") or "spenta").lower() != "spenta"
     f.satelliti = max(1, int(getattr(cfg, "conversazioni_parallele", 1) or 1))
     f.rilettura_s = float(getattr(cfg, "contesto_rilettura_max_s", 4.0) or 4.0)
     f.soglia_morbida = float(getattr(cfg, "contesto_soglia_morbida", 0.75) or 0.75)
@@ -730,6 +761,9 @@ def da_config(cfg, inv: dict | None = None) -> Funzioni:
     else:
         oggi["whisper"] = (f"faster-whisper {getattr(cfg, 'whisper_model', '')} "
                            f"{getattr(cfg, 'whisper_device', '')}")
+    if f.stanza_lenta:
+        oggi["stanza_lenta"] = ("server" if str(getattr(cfg, "stanza_lenta_stt_url", "") or "")
+                                .strip() else "stesso")
     if oggi["piper"] == "auto":
         oggi.pop("piper")
     f.oggi = {k: v for k, v in oggi.items() if v}
@@ -749,7 +783,8 @@ def da_config(cfg, inv: dict | None = None) -> Funzioni:
 _SEGNO = {"ok": "✓", "avviso": "⚠", "no": "✗"}
 _NOMI = {"riserva": "Riserva", "voce": "Voce", "whisper": "Whisper", "guardiano": "Guardiano",
          "rilevatore": "Rilevatore", "embedding": "Embedding", "contesto": "Contesto",
-         "agente": "Agente", "piper": "Piper", "ocr": "OCR archivio", "immagini": "Immagini"}
+         "agente": "Agente", "piper": "Piper", "ocr": "OCR archivio", "immagini": "Immagini",
+         "stanza_lenta": "Stanza lenta"}
 
 
 def testo(p: Piano) -> str:
