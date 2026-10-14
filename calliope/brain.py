@@ -631,6 +631,13 @@ NON_SO = re.compile(r"\bnon (?:ho (?:(?:nessuna |alcuna |altre |ulteriori |altri
 # modello risponde con i risultati davanti. Sola lettura, sulle conversazioni di chi parla.
 # «Hai detto di non saperlo, ma…» in testa alla nota faceva cominciare la risposta con «Hai
 # detto di non sapere…» (banco del 05/10, 1 volta su 8)
+# «Non lo so» senza aver cercato nella conversazione della stanza (14/10, passo 4, rete
+# `spinta_stanza`): sul banco il 4B chiamava stanza_cerca 4 volte su 12 quando serviva
+# («a che ora avevamo deciso di partire?» → «Non ho informazioni…»). Come per l'archivio la
+# ricerca la fa Brain, con la frase di chi parla, e il modello risponde con le righe davanti
+STANZA_NOTA = ("Qui sopra c'è la ricerca nella conversazione sentita nelle stanze, fatta con la "
+               "frase di chi parla. Se le righe rispondono alla domanda, rispondi da lì dicendo "
+               "chi l'ha detto; se non c'entrano o non c'è niente, di' in breve che non lo sai.")
 ARCHIVIO_NOTA = ("La conversazione è stata accorciata: qui sopra c'è la ricerca nei suoi turni "
                  "archiviati. Rispondi alla domanda di chi parla con questi risultati; se non c'è "
                  "niente di pertinente, di' che non lo sai.")
@@ -3927,6 +3934,7 @@ class Brain:
                                                   ufficio="modello_compila" in names,
                                                   web="web_cerca" in names,
                                                   notizie="notizie" in names,
+                                                  stanza="stanza_cerca" in names,
                                                   estensioni=any(n.startswith("est_")
                                                                  for n in names),
                                                   meteo_casa="meteo_leggi" in names,
@@ -4141,6 +4149,11 @@ class Brain:
         # Dopo una ricerca nei turni prima: un «non ho altre informazioni» senza aver cercato
         # riceve la spinta a cercare di nuovo (RICERCA_NUDGE), una volta. Prima dell'archivio
         ricerca_tool = ricerca[1] if ricerca else None
+        # La conversazione della stanza (14/10, passo 4): un «non lo so» senza nessun tool, con
+        # stanza_cerca disponibile a chi parla, fa cercare Brain lì (STANZA_NOTA), una volta
+        stanza_hold = (bool(user_text) and self._net("spinta_stanza")
+                       and self.tools.get("stanza_cerca") is not None
+                       and self.tools.allowed("stanza_cerca", level))
         # «Non posso creare un'estensione» con il tool disponibile a chi parla (06/10):
         # la frase si trattiene e il modello riceve una spinta (politica.rinuncia)
         disp = ({n for n in politica.RINUNCE if self.tools.get(n) is not None
@@ -4183,7 +4196,8 @@ class Brain:
                 or (esercizi and nudged and not esercizi_visto and not self.last_tools),
                 actions=actions,
                 hold_names=bool(schemas) and not self.last_tools and not explaining,
-                hold_non_so=bool(archive_hold or ricerca_tool) and not self.last_tools,
+                hold_non_so=bool(archive_hold or ricerca_tool or stanza_hold)
+                and not self.last_tools,
                 hold_rinuncia=rinuncia_di if disp and not nudged and not self.last_tools
                 else None,
                 hold_fallito=self._solo_falliti(),
@@ -4234,6 +4248,21 @@ class Brain:
                 print(f"   [TOOL] «non ho altre informazioni» senza cercare con {tool}, non lo "
                       f"dico: «{self.cita_in_console(held)}»", flush=True)
                 tail = [{"role": "system", "content": RICERCA_NUDGE.format(tool=tool)}]
+                continue
+            if held and self._held_kind == "non_so" and stanza_hold:
+                # «Non ho informazioni…» senza aver cercato nella stanza: non si dice; Brain
+                # cerca con la frase di chi parla e il modello risponde con le righe davanti
+                stanza_hold = False
+                self._rule("spinta_stanza")
+                print(f"   [STANZA] «non lo so» senza cercare nella stanza, cerco io: "
+                      f"«{self.cita_in_console(held)}»", flush=True)
+                call = {"id": "call_stanza", "name": "stanza_cerca",
+                        "arguments": {"parole": user_text}}
+                self.history.append({"role": "assistant", "content": "", "tool_calls": [call]})
+                content = self._run_tool(call, level)
+                self.history.append({"role": "tool", "tool_call_id": call["id"],
+                                     "name": call["name"], "content": content})
+                tail = [{"role": "system", "content": STANZA_NOTA}]
                 continue
             if held and self._held_kind == "non_so":
                 # «Non ho informazioni su…» con la storia compressa: non si dice; Brain cerca

@@ -222,8 +222,17 @@ def _stanza_cerca(ctx: ToolContext, parole: str = "", persona: str = "", stanza:
         return fine({"ok": False, "fatto": NIENTE, "trovato": False,
                      "cosa_fare": COSA_FARE_NIENTE}, "niente", **campi)
     out = {"ok": True, "trovato": True, "cosa_fare": COSA_FARE, "risultati": es.testo}
+    note = []
+    if es.senza_parole:
+        note.append(f"le parole cercate non ci sono: queste sono tutte le frasi di {persona} "
+                    "che posso dirti, giudica tu se rispondono")
+    if es.allargata:
+        note.append("con la persona o la stanza indicate non c'era: queste righe vengono da "
+                    "tutte le stanze, giudica tu se rispondono")
     if es.mancano:
-        out["nota"] = "alcune frasi dette poco fa non sono ancora trascritte"
+        note.append("alcune frasi dette poco fa non sono ancora trascritte")
+    if note:
+        out["nota"] = "; ".join(note)
     return fine(out, "trovato", righe=len(es.righe), caratteri=len(es.testo),
                 stanze=len(es.stanze), tagliate=es.tagliate, **campi)
 
@@ -234,8 +243,9 @@ CERCA_PARAMETRI = {
         "parole": {"type": "string"},
         "persona": {"type": "string"},
         "stanza": {"type": "string"},
-        "quando": {"type": "string", "enum": ["ultima_ora", "mattina", "pomeriggio", "sera",
-                                              "notte", "oggi", "ieri"]},
+        # Non un enum (banco del 14/10: il 4B scriveva quando=sabato, il giorno della gita,
+        # e la chiamata tornava indietro): un valore fuori elenco non filtra
+        "quando": {"type": "string"},
         "dalle": {"type": "string"},
         "alle": {"type": "string"}},
     "required": []}
@@ -251,7 +261,8 @@ def cerca_spec() -> ToolSpec:
             "cucina prima?» → stanza=cucina; «cosa aveva detto Carlo della gita stamattina?» → "
             "persona=Carlo, parole=gita, quando=mattina. parole: l'argomento (vuoto: gli "
             "ultimi discorsi); persona: chi l'ha detto; stanza: dove; quando o dalle/alle "
-            "(HH:MM) per il momento. Non serve per le conversazioni con te (quelle sono in "
+            "(HH:MM) per il momento della conversazione (ultima_ora, mattina, pomeriggio, sera, "
+            "notte, oggi, ieri). Non serve per le conversazioni con te (quelle sono in "
             "conversazione_cerca)."),
         parameters=CERCA_PARAMETRI, func=_stanza_cerca, risk="lettura",
         levels=LIVELLI_DA["familiare"], non_fidato=True, riservato=True)

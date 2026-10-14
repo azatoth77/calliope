@@ -122,6 +122,8 @@ class Esito:
     mancano: int = 0                # righe ancora in coda dopo l'attesa
     attesa_detta: bool = False
     motivo: str = ""
+    senza_parole: bool = False      # con la persona: le parole non c'erano, le sue frasi
+    allargata: bool = False         # persona e stanza scelte non c'entravano: tutte le stanze
 
 
 def _giorno(epoch: float, oggi: datetime.date) -> str:
@@ -284,8 +286,8 @@ def cerca(stanza, cfg, chi: Chi, parole_cercate: str = "", persona: str = "",
     fin = finestre(stanza, chi, cfg, adesso)
     radici = chiavi(parole_cercate)
     pers = norm(persona).strip()
-    candidate = []                             # (sat, riga) visibili e nei filtri
-    for sat in sats:
+    candidate = []                             # (sat, riga) visibili e nel periodo
+    for sat in list(stanza._info):
         for r in stanza.registro(sat).righe():
             if not str(r.get("testo") or "").strip():
                 continue
@@ -295,17 +297,38 @@ def cerca(stanza, cfg, chi: Chi, parole_cercate: str = "", persona: str = "",
             if not visibile(r, sat, chi, fin):
                 continue
             candidate.append((sat, r))
-    trovate = []
-    for sat, r in candidate:
-        if pers:
-            nome = norm(r.get("nome") or ("calliope" if r.get("chi") == "calliope" else ""))
-            if not nome or (nome != pers and pers not in nome.split()):
+    dentro = set(sats)
+
+    def scegli(radici, filtri=True):
+        out = []
+        for sat, r in candidate:
+            if filtri and sat not in dentro:
                 continue
-        p = punteggio(r.get("testo"), radici) if radici else 0
-        if radici and p == 0:
-            continue
-        trovate.append((p, sat, r))
+            nome = norm(r.get("nome") or ("calliope" if r.get("chi") == "calliope" else ""))
+            if filtri and pers and (not nome or (nome != pers and pers not in nome.split())):
+                continue
+            # Il nome di chi parla conta come una parola della riga: «cosa ha detto Nicola?»
+            # cercato con la frase intera trova le righe di Nicola
+            p = punteggio(f"{r.get('testo') or ''} {nome}", radici) if radici else 0
+            if radici and p == 0:
+                continue
+            out.append((p, sat, r))
+        return out
+    trovate = scegli(radici)
     out = Esito("niente", attesa_ms=attesa_ms, mancano=mancano, attesa_detta=detta)
+    if not trovate and pers and radici and pers != norm(chi.nome):
+        # «Cosa ha detto Nicola della gita?» e Nicola non ha detto «gita» («sabato non vengo»):
+        # le sue frasi nel periodo, e il modello giudica
+        trovate = scegli([])
+        out.senza_parole = bool(trovate)
+        if trovate:
+            radici = []
+    if not trovate and radici and (dove or pers):
+        # La persona o la stanza scelte dal modello non c'entravano («a che ora avevamo deciso di
+        # partire?» → persona = chi parla, stanza = quella di adesso, e se n'era parlato in
+        # cucina): le stesse parole in tutte le stanze che chi chiede può vedere
+        trovate = scegli(radici, filtri=False)
+        out.allargata = bool(trovate)
     if not trovate:
         return out
     tetto_righe = int(getattr(cfg, "stanza_cerca_righe", 20) or 20)

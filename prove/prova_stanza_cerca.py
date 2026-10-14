@@ -234,6 +234,25 @@ def prova_filtri():
     verifica("le righe vicine danno il senso (prima e dopo, stessa stanza)",
              "Borgoverde" in r["risultati"] and "panini" in r["risultati"]
              and "partita" in r["risultati"], r["risultati"])
+    r = cerca(st, "Carlo", persona="Nicola", parole="lago di Borgoverde")
+    verifica("persona con parole che non ha detto: le sue frasi, con la nota (il modello "
+             "giudica)", r["trovato"] and "partita" in r["risultati"]
+             and "Borgoverde" not in r["risultati"] and "nota" in r, str(r))
+    r = cerca(st, "Carlo", parole="partire per la gita", persona="Carlo", stanza="sala")
+    verifica("persona e stanza scelte male («avevamo deciso…» → chi parla, la stanza di "
+             "adesso): le stesse parole nelle altre stanze, con la nota",
+             r["trovato"] and "partiamo" in r["risultati"] and "allargata" not in r
+             and "tutte le stanze" in r.get("nota", ""), str(r))
+    r = cerca(st, "Bianca", parole="idraulico", persona="Carlo")
+    verifica("contrario: i ripieghi restano dentro ciò che chi chiede può vedere (l'idraulico "
+             "in sala no)", "idraulico" not in r.get("risultati", "")
+             and "caldaia" not in r.get("risultati", ""), str(r))
+    r = cerca(st, "Carlo", parole="Calliope, cosa ha detto Nicola?")
+    verifica("il nome di chi parla conta come parola della riga (la frase intera trova le "
+             "righe di Nicola)", r["trovato"] and "partita" in r["risultati"])
+    r = cerca(st, "Carlo", parole="gita", quando="sabato")
+    verifica("contrario: un «quando» fuori elenco (il giorno della gita) non filtra",
+             r["trovato"] and "Borgoverde" in r["risultati"])
     # Intervalli: oggi, ieri, sera detta di mattina
     adesso = datetime.datetime(2026, 10, 14, 9, 30).timestamp()
     da, a = cerca_mod.intervallo("sera", "", "", adesso)
@@ -399,6 +418,43 @@ def prova_brain():
     verifica("Brain: a risposta finita le righe escono dalla storia",
              not any("Borgoverde" in str(m.get("content")) and m.get("role") == "tool"
                      for m in b.history), str([m for m in b.history if m.get("role") == "tool"]))
+
+    # Rete `spinta_stanza`: «non lo so» senza aver cercato → Brain cerca con la frase
+    def con_copione(copione, cfg=None, registro=reg, livello_chi="Carlo"):
+        b = Brain.__new__(Brain)
+        b.cfg, b.tools, b.history = cfg or st.cfg, registro, []
+        b.tool_ctx = contesto(st, livello_chi)
+        b.on_tool_start = None
+        b.backend = Backend(copione)
+        return b
+    b = con_copione([[("text", "Non ho informazioni su un orario per la gita.")],
+                     [("text", "Carlo ha detto di partire alle nove dalla piazza.")]])
+    r = "".join(b.stream_reply("Calliope, a che ora partiamo per la gita?", "amministra"))
+    secondo = b.backend.visti[1]
+    verifica("spinta_stanza: il «non lo so» non si dice, Brain cerca nella stanza con la frase "
+             "e il modello risponde con le righe davanti",
+             r.startswith("Carlo ha detto") and "Non ho informazioni" not in r
+             and "spinta_stanza" in b.last_rules and "fonte: stanza" in secondo
+             and "partiamo" in secondo, r)
+    cfg_spenta = cfg_base(llm_reti_spente=["spinta_stanza"])
+    b = con_copione([[("text", "Non ho informazioni su un orario per la gita.")]], cfg_spenta)
+    r = "".join(b.stream_reply("Calliope, a che ora partiamo per la gita?", "amministra"))
+    verifica("contrario: rete spenta → il «non lo so» si dice", "Non ho informazioni" in r
+             and "spinta_stanza" not in b.last_rules, r)
+    b = con_copione([[("text", "Non ho informazioni su un orario per la gita.")]],
+                    registro=build_registry())
+    r = "".join(b.stream_reply("Calliope, a che ora partiamo per la gita?", "amministra"))
+    verifica("contrario: senza il tool (stanza_cerca spento) nessuna spinta",
+             "Non ho informazioni" in r and "spinta_stanza" not in b.last_rules, r)
+    b = con_copione([[("text", "Non ho informazioni su un orario per la gita.")]],
+                    livello_chi="Ospite")
+    r = "".join(b.stream_reply("Calliope, a che ora partiamo per la gita?", "ospite"))
+    verifica("contrario: un ospite (il tool non è per lui) nessuna spinta",
+             "spinta_stanza" not in b.last_rules, r)
+    b = con_copione([[("text", "Sono le dieci e un quarto.")]])
+    r = "".join(b.stream_reply("Calliope, che ore sono?", "amministra"))
+    verifica("contrario: una risposta che non è un «non lo so» passa com'è",
+             r == "Sono le dieci e un quarto." and "spinta_stanza" not in b.last_rules, r)
     st.chiudi()
 
 

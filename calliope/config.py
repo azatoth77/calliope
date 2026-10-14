@@ -341,7 +341,7 @@ class Config:
     # riferimento_casa, riferimento_agenda, conferma_al_posto_del_vuoto,
     # vuoto_seconda_passata, ricerca_promessa, citazione_tolta, nome_tool_parlato,
     # eco_contesto, spinta_archivio, spinta_rinuncia, spinta_esercizi, correzione_tool,
-    # ricerca_recente, risposta_ripetuta, scrivo_qui_a_voce; "tutte"
+    # ricerca_recente, risposta_ripetuta, scrivo_qui_a_voce, spinta_stanza; "tutte"
     # le spegne tutte. Quelle di
     # «sicurezza» (permessi, politica…) non si spengono: un nome di sicurezza o sconosciuto si
     # segnala all'avvio. Quelle del profilo (llm_profilo) si aggiungono a queste.
@@ -1918,7 +1918,7 @@ class Config:
                    archivio: bool = False, ufficio: bool = False, web: bool = False,
                    estensioni: bool = False, meteo_casa: bool = False,
                    citta: str | None = None, citta_salva: bool = False,
-                   notizie: bool = False) -> str:
+                   notizie: bool = False, stanza: bool = False) -> str:
         """Prompt di sistema, senza il nome dell'interlocutore: lo dà il tool chi_parla.
 
         `biblioteca`: se il tool biblioteca_cerca c'è. Nominare un tool che non esiste è
@@ -2100,6 +2100,13 @@ class Config:
                    "garanzie, referti, documenti d'identità: cosa dicono, importi, numeri, "
                    "scadenze, «fino a quando è in garanzia…») archivio_cerca, per cosa scade "
                    "archivio_scadenze, per quanto si è speso archivio_somma; " if archivio else "")
+        # La conversazione della stanza (14/10, passo 4, tool stanza_cerca): solo se il tool
+        # c'è. Senza questa frase il 4B, sul banco, non lo chiamava quando la domanda non
+        # nominava una stanza («a che ora avevamo deciso di partire?» → «non ho in memoria»)
+        room = ("per ciò che si è detto vicino ai dispositivi di casa e non è nella "
+                "conversazione con te né nei dati del turno (chi ha detto cosa, cosa si era "
+                "deciso, a che ora, di cosa si parlava in una stanza) stanza_cerca, prima di "
+                "dire che non lo sai; " if stanza else "")
         # Con la ricerca web: quando usarla, al posto di «non puoi sapere il meteo…»
         if web:
             limits = (limits.replace("non usi internet o file e ", "non usi file e ")
@@ -2196,6 +2203,7 @@ class Config:
             f"{screens}"
             f"{jobs}"
             f"{archive}"
+            f"{room}"
             f"per le altre azioni usa il tool adatto. Per usare un "
             f"tool emetti sempre una chiamata di funzione vera, mai il suo nome scritto "
             f"nel testo, e non annunciarla; poi rispondi. "
@@ -2623,6 +2631,10 @@ RETI: dict[str, Rete] = {
     "spinta_archivio": Rete(
         "«non lo so» con la storia compressa: spinta a cercare nell'archivio", MODELLO,
         "il 4B non cercava mai nelle conversazioni passate dopo una compressione (05/10)"),
+    "spinta_stanza": Rete(
+        "«non lo so» senza tool con stanza_cerca disponibile: Brain cerca nella conversazione "
+        "della stanza con la frase di chi parla (14/10, passo 4)", MODELLO,
+        "il 4B chiamava stanza_cerca 4 volte su 12 quando serviva (banco del 14/10)"),
     "spinta_rinuncia": Rete(
         "«non posso creare un'estensione» con il tool disponibile: spinta", MODELLO,
         "il 26B dopo un rifiuto rimasto nella storia (06/10, DGX)"),
