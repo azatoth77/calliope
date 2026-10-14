@@ -1098,6 +1098,7 @@ def con_indice(argv: list[str]) -> int:
 
 
 RISORSE = ("voices/*.onnx", "voices/*.onnx.json", "models/speaker/*.onnx", "models/web/**/*",
+           "models/fine_turno/*.onnx",
            "wakeword/modelli/*.onnx", "biblioteca/*.zim", "biblioteca/*.sha256",
            "biblioteca/*.verificato", "biblioteca/indici/*.sqlite")
 

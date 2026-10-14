@@ -41,27 +41,27 @@ def verifica(nome, cond, info=""):
 def main():
     modello = RADICE / ft.MODELLO_PREDEFINITO
     if not modello.is_file():
-        print(f"SALTATA: manca il modello ({ft.MODELLO_PREDEFINITO}): python -m calliope.stato "
+        print(f"salto: manca il modello ({ft.MODELLO_PREDEFINITO}): python -m calliope.stato "
               f"--installa modello_fine_turno")
         return 77
     from calliope.vad import SileroOnnx, modello_onnx
     p = modello_onnx()
     if p is None:
-        print("SALTATA: manca Silero VAD in ONNX")
+        print("salto: manca Silero VAD in ONNX")
         return 77
     from prova_satellite import sintetizza
-    complete = ["Accendi la luce in cucina.", "Che ore sono?", "Metti il pane nella lista.",
-                "Spegni tutto e poi accendi la radio."]
+    complete = ["Accendi la luce in cucina.", "Calliope, che ore sono?",
+                "Metti il pane nella lista.", "Spegni tutto e poi accendi la radio."]
     sospese = [("Ricordami di comprare il latte, e poi,", "il pane."),
                ("Spegni tutto, poi,", "accendi la radio.")]
     misura = [("Accendi la luce in", "cucina."), ("Ricordami di comprare il latte e", "il pane."),
               ("Il numero è tre quattro sette,", "due nove uno."),
               ("Metti nella lista pane, latte,", "uova e biscotti."),
               ("Calliope,", "che ore sono?")]
-    testi = sorted(set(complete) | {t for c in sospese + misura for t in c})
+    testi = sorted(set(complete) | {t for c in sospese + misura for t in c} | {"Che ore sono?"})
     au = sintetizza(testi, deterministica=True)
     if au is None:
-        print("SALTATA: mancano le voci di Piper (voices/)")
+        print("salto: mancano le voci di Piper (voices/)")
         return 77
     rng = np.random.default_rng(0)
 
@@ -96,6 +96,9 @@ def main():
         ms.append(e.get("ms_max") or 0)
         verifica(f"completa «{t}»: «finito» sicuro, chiusura anticipata",
                  e["esito"] == "anticipo" and (e.get("p") or 0) >= 0.9, e)
+    e, sim = ombra(frase("Che ore sono?"))
+    verifica("contrario: «Che ore sono?» da sola (sotto 800 ms di voce) «finito» ma non chiusa "
+             "prima (parlato minimo)", e["esito"] == "come_prima" and (e.get("p") or 0) >= 0.9, e)
     for a, b in sospese:
         e, sim = ombra(frase(a, b))
         ms.append(e.get("ms_max") or 0)

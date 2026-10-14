@@ -320,6 +320,22 @@ voce raccontava male gli esiti, i comandi del flusso si perdevano.
    dell'hardware audio.
 10. **Allarme** (T2, V9): senza data. Inserire a voce più avanti, disinserire mai; oggi sola lettura.
 11. **Robot esapode** (14/10): in attesa del kit; niente lavoro né progetto finché non arriva.
+12. **System 1: decisori piccoli per le scelte che pesano sulla latenza** (14/10 sera, richiesta di
+    Dario; [`ricerche/2026-10-14-system1-fine-turno.md`](ricerche/2026-10-14-system1-fine-turno.md)).
+    Interfaccia comune in `calliope/system1/` (`decide → scelta, sicurezza`, `Sorvegliato`): si
+    decide da soli solo sopra una soglia alta, altrimenti decide chi decideva prima (la regola
+    fissa o il modello grande, «System 2»). **Primo caso fatto il 14/10, spento di serie: la fine
+    del turno** con Smart Turn v3.2 sull'audio (ombra sul server per ogni frase, attiva nel
+    `Listener`); resta lo script sulla voce conservata della DGX
+    (`prove/manuali/fine_turno_dgx.py`), una settimana d'ombra, poi «attiva» su un satellite e il
+    telefono con onnxruntime-web. Casi successivi, nell'ordine proposto: **comandi semplici con
+    FunctionGemma** (luci, ore, timer senza il modello grande; il grande quando il piccolo è
+    incerto o il comando è fuori dall'elenco chiuso), **preselezione dei tool** (i 5–10 probabili
+    tra i 78, misura già in `scelta_tool.py`), **giudizio «rivolta a Calliope?»** (oggi in ombra con
+    il modello della voce: il grande solo nella zona grigia), **primo filtro di pericolo** davanti
+    al guardiano dei minori (fa passare solo le frasi dubbie, mai «sicuro» da solo sotto soglia).
+    *Quasi* (fine del turno: misura) · dipende da: i numeri della DGX; per i casi successivi una
+    ricerca breve ciascuno.
 
 ### 4. Studio, immagini, sicurezza, estensioni (S1–S13)
 
