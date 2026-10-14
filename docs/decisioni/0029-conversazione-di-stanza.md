@@ -110,6 +110,10 @@ Il contesto delle scelte, nelle parole di chi amministra: la privacy dentro la f
   `stanza_pausa` («abbiamo ospiti»: 4 ore), «dimentica»; niente al modello, solo misure
   (`calliope stato --turni`, sezione «Stanza»). La tenuta su disco (`stanza_tenuta`) è del passo
   dopo.
+- **Tenuta su disco, fatta il 14/10** (ramo `stanza-tenuta`, `stanza_tenuta: true` nel file locale,
+  di serie spenta; `calliope/stanza/tenuta.py`, `prove/prova_stanza_tenuta.py`): punto 5 con un file
+  suo (`stanza.db`, FTS5), la ricerca su disco con gli stessi permessi, «dimentica» e
+  `calliope conserva --svuota` anche lì, il blocco caldo solo dalla memoria.
 - Passi 2–8 del piano, ognuno con il suo interruttore e la sua misura sulla DGX; la prima misura
   (passo 1) non cambia nulla di ciò che Calliope dice. Misure nuove: ritardo della coda della
   stanza, banda del telefono, **copertura all'interpellazione** (tutte le frasi dette prima della

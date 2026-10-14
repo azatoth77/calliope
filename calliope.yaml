@@ -1325,6 +1325,20 @@ conversazione_stanza:
   stanza_cerca_anticipo: true
   # Tetto delle righe anticipate (~250 token: ~0,1 s di lettura in più del 26B)
   stanza_cerca_anticipo_caratteri: 1000
+  # La tenuta su disco del testo della stanza (14/10, decisione 0029 punto 5, calliope/stanza/
+  # tenuta.py): le righe della stanza (testo, chi, stanza, tempi, rivolta, minore) e le
+  # presenze in un SQLite con FTS5 accanto alla configurazione, per `stanza_tenuta_giorni`;
+  # stanza_cerca cerca anche lì con gli stessi permessi (chi c'era, i tutori, un minore solo le
+  # sue). Per tutta la famiglia, minori compresi (scelta di chi amministra del 13–14/10); mai
+  # le voci non riconosciute né la zona grigia (nel dubbio no), mai ciò che si dice in pausa
+  # («abbiamo ospiti»), mai l'audio. «Dimentica» e `calliope conserva --svuota` cancellano
+  # anche qui; il blocco caldo dei dati del turno resta della sola memoria (dopo un riavvio
+  # non ripesca niente dal disco). false (di serie) = solo in memoria, al più 24 h, fino al
+  # riavvio. Si accende nel file locale
+  stanza_tenuta: false
+  stanza_tenuta_giorni: 60
+  # Il file (relativo alla cartella della configurazione), con i permessi stretti dei dati
+  stanza_tenuta_db: stanza.db
 
 satellite:
   # == Lato satellite (il portatile che fa da microfono, casse e schermo di

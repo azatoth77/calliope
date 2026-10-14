@@ -19,7 +19,9 @@ cucina prima?», «cosa aveva detto Carlo della gita stamattina?»). Chi vede co
 l'attesa delle righe in coda e la frase d'attesa sono in calliope/stanza/cerca.py. Il risultato
 è un dato non fidato (fonte «stanza», in busta) e riservato: né il terminale né il registro dei
 turni hanno le righe o la risposta, e a risposta finita esce dalla storia (il testo della
-stanza resta in memoria, decisione 0029 punto 8). Solo con `stanza_cerca: true`.
+stanza resta in memoria, decisione 0029 punto 8; dal 14/10 con `stanza_tenuta` anche su disco
+per 60 giorni, cercato con gli stessi permessi: calliope/stanza/tenuta.py). Solo con
+`stanza_cerca: true`.
 """
 
 import datetime
@@ -66,9 +68,9 @@ def _stanza_pausa(ctx: ToolContext, azione: str = "", minuti: float | None = Non
     if a == "stato":
         p = stanza.stato_pausa(sat)
         if p is None:
-            return _final("Sì, qui ascolto la conversazione della stanza, e la tengo solo in "
-                          "memoria. Per fermarmi dimmi «abbiamo ospiti» o «smetti di ascoltare "
-                          "la stanza».")
+            return _final("Sì, qui ascolto la conversazione della stanza, e la tengo "
+                          + _dove_tengo(stanza) + ". Per fermarmi dimmi «abbiamo ospiti» o "
+                          "«smetti di ascoltare la stanza».")
         return _final("Adesso non ascolto la stanza" + (f", fino alle {_ora(p['fino'])}."
                                                        if p.get("fino") else "."))
     if a == "ospiti":
@@ -106,6 +108,14 @@ def _stanza_pausa(ctx: ToolContext, azione: str = "", minuti: float | None = Non
         return _final("Va bene, ascolto di nuovo la conversazione della stanza.")
     return {"ok": False, "fatto": NIENTE, "motivo": f"azione «{a}» sconosciuta",
             "cosa_fare": "usa ospiti, pausa, riprendi o stato"}
+
+
+def _dove_tengo(stanza) -> str:
+    """Dove resta il testo della stanza (14/10): solo in memoria, o anche su disco."""
+    t = getattr(stanza, "tenuta", None)
+    if t is None:
+        return "solo in memoria"
+    return f"per {t.giorni} giorni, solo qui in casa; chi non conosco non lo tengo"
 
 
 # ── stanza_cerca (passo 4) ──
@@ -215,7 +225,8 @@ def _stanza_cerca(ctx: ToolContext, parole: str = "", persona: str = "", stanza:
         note_rule(ctx, "stanza_cerca_ospiti")
         return fine(_final(CON_OSPITI, ok=False), "pausa")
     if es.esito == "stanza_ignota":
-        nomi = list(dict.fromkeys(cerca_mod.nome_stanza(st, s) for s in list(st._info)))
+        info = cerca_mod.info_stanze(st)
+        nomi = list(dict.fromkeys(cerca_mod.nome_stanza(st, s, info) for s in list(info)))
         dove_si = ("in " + ", in ".join(nomi[:-1]) + " e in " + nomi[-1] if len(nomi) > 1
                    else f"in {nomi[0]}" if nomi else "in nessuna stanza")
         return fine(_final(STANZA_IGNOTA.format(dove=stanza, dove_si=dove_si), ok=False),
@@ -264,10 +275,10 @@ class Anticipo:
 def stanze_nominate(st, frase: str) -> list[str]:
     """I nomi delle stanze del registro detti nella frase, parola per parola («di cosa
     parlavamo in cucina?»). Solo il campo `stanza`, non il nome del satellite."""
-    from ..stanza.cerca import parole as parole_di
+    from ..stanza.cerca import info_stanze, parole as parole_di
     dette = set(parole_di(frase))
     out = []
-    for info in list(st._info.values()):
+    for info in list(info_stanze(st).values()):
         nome = str((info or {}).get("stanza") or "").strip()
         ws = parole_di(nome)
         if ws and all(w in dette for w in ws) and nome not in out:
@@ -387,15 +398,20 @@ def cerca_spec() -> ToolSpec:
 
 def stanza_specs(cfg=None) -> list[ToolSpec]:
     """stanza_pausa sempre (con la stanza accesa); stanza_cerca con `stanza_cerca: true`."""
-    return [_pausa_spec()] + ([cerca_spec()] if cfg is not None and acceso_cerca(cfg) else [])
+    return [_pausa_spec(cfg)] + ([cerca_spec()] if cfg is not None and acceso_cerca(cfg)
+                                 else [])
 
 
-def _pausa_spec() -> ToolSpec:
+def _pausa_spec(cfg=None) -> ToolSpec:
+    # Dal 14/10 con `stanza_tenuta` il testo resta anche su disco: la descrizione non dice più
+    # «solo in memoria»
+    dove = ("per qualche settimana" if cfg is not None and getattr(cfg, "stanza_tenuta", False)
+            else "solo in memoria")
     return ToolSpec(
         name="stanza_pausa",
         description=(
             "L'ascolto della conversazione della stanza su questo dispositivo (Calliope la "
-            "trascrive, solo in memoria). azione=ospiti quando dicono che ci sono ospiti "
+            f"trascrive e la tiene {dove}). azione=ospiti quando dicono che ci sono ospiti "
             "(«abbiamo ospiti», «sono arrivati degli amici»): smette per qualche ora. "
             "azione=pausa per «smetti di ascoltare la stanza», «non ascoltarci per mezz'ora» "
             "(minuti se li dice). azione=riprendi per «ascolta di nuovo la stanza». azione=stato "

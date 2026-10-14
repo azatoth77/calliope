@@ -8,7 +8,10 @@ delle righe ancora in coda e la frase d'attesa.
 Serve per ciò che il blocco caldo dei dati del turno (stanza/contesto.py) non ha più: le righe
 uscite dagli ultimi `stanza_caldo_min` minuti, o dette in un'altra stanza («di cosa parlavamo
 in cucina prima?», «cosa aveva detto Carlo della gita stamattina?»). Cerca nel registro della
-stanza **in memoria** (la tenuta del passo 1: al più 24 h, fino al riavvio).
+stanza **in memoria** (la tenuta del passo 1: al più 24 h, fino al riavvio) e, dal 14/10 con
+`stanza_tenuta`, anche **su disco** (stanza/tenuta.py, 60 giorni) con gli stessi permessi: le
+presenze di prima del riavvio vengono dal disco, i prefiltri (minore, tutori) li fa la query e
+il resto `visibile`, come per la memoria; le righe ancora in memoria non si ripetono.
 
 **Chi vede cosa** (decisione 0029; § 3.5 ter, § 3.7, § 3.8):
 
@@ -22,6 +25,8 @@ stanza **in memoria** (la tenuta del passo 1: al più 24 h, fino al riavvio).
   minore, che le vedono tutte (risposta 2 di chi amministra: dentro la famiglia i minori non
   hanno privacy verso i genitori);
 - un **minore** vede soltanto le proprie righe riconosciute dalla voce;
+- le proprie righe riconosciute dalla voce si vedono sempre (14/10: dopo un riavvio la presenza
+  aperta poteva non essere sul disco);
 - le righe di una **voce non riconosciuta** non si cercano mai (decisione 0029 punto 5: «ospiti
   mai nella ricerca»; restano solo nel blocco caldo);
 - nella stanza da cui si parla in **pausa per ospiti** non si cerca (si leggerebbe ad alta voce
@@ -262,17 +267,35 @@ def visibile(r: dict, sat, chi: Chi, fin: dict) -> bool:
         return pid == chi.pid and sic == "voce"
     if r.get("minore"):
         return pid is not None and pid in chi.tutore_di
+    if pid is not None and pid == chi.pid and sic == "voce":
+        return True                            # le proprie parole
     t = float(r.get("fine") or r.get("t") or 0)
     return _dentro(t, fin.get(sat, ()))
 
 
-def _sat_per_nome(stanza, nome: str) -> list:
+def info_stanze(stanza) -> dict:
+    """{sat: {nome, stanza}}: i satelliti che il registro conosce e, con la tenuta su disco
+    (14/10), quelli che hanno righe sul disco anche se adesso non sono collegati."""
+    out = {k: dict(v or {}) for k, v in list(stanza._info.items())}
+    t = getattr(stanza, "tenuta", None)
+    if t is not None:
+        try:
+            disco = t.stanze()
+        except Exception:  # noqa: BLE001 — senza il disco, quelle della memoria
+            disco = {}
+        chiave = getattr(stanza, "chiave_sat", lambda s: s)
+        for s, v in disco.items():
+            out.setdefault(chiave(s), {"nome": v.get("nome"), "stanza": v.get("stanza")})
+    return out
+
+
+def _sat_per_nome(stanza, nome: str, info: dict | None = None) -> list:
     n = norm(nome).strip()
     if not n:
         return []
     out = []
-    for sat, info in list(stanza._info.items()):
-        for v in (info.get("stanza"), info.get("nome")):
+    for sat, i in list((info if info is not None else stanza._info).items()):
+        for v in (i.get("stanza"), i.get("nome")):
             v = norm(v or "").strip()
             if v and (v == n or n in v.split() or v in n.split() or n in v):
                 out.append(sat)
@@ -280,9 +303,9 @@ def _sat_per_nome(stanza, nome: str) -> list:
     return out
 
 
-def nome_stanza(stanza, sat) -> str:
-    info = stanza._info.get(sat) or {}
-    return str(info.get("stanza") or info.get("nome") or sat)
+def nome_stanza(stanza, sat, info: dict | None = None) -> str:
+    i = (info if info is not None else stanza._info).get(sat) or {}
+    return str(i.get("stanza") or i.get("nome") or sat)
 
 
 def _attendi(stanza, sats: set, cfg, attesa=None) -> tuple[int, int, bool]:
@@ -354,13 +377,15 @@ def cerca(stanza, cfg, chi: Chi, parole_cercate: str = "", persona: str = "",
     blocco caldo (la ricerca anticipata non le ripete). `aspetta=False`: niente attesa delle
     righe in coda (la ricerca anticipata non fa aspettare la voce)."""
     adesso = time.time() if adesso is None else adesso
-    # Le stanze: quella detta, o tutte quelle che il registro conosce
+    tenuta = getattr(stanza, "tenuta", None)
+    info = info_stanze(stanza) if tenuta is not None else stanza._info
+    # Le stanze: quella detta, o tutte quelle che il registro conosce (e il disco, 14/10)
     if dove:
-        sats = _sat_per_nome(stanza, dove)
+        sats = _sat_per_nome(stanza, dove, info)
         if not sats:
             return Esito("stanza_ignota", motivo=dove)
     else:
-        sats = list(stanza._info)
+        sats = list(info)
     if chi.sat is not None and (stanza.stato_pausa(chi.sat) or {}).get("motivo") == "ospiti":
         return Esito("pausa")
     attesa_ms, mancano, detta = (_attendi(stanza, set(sats), cfg, attesa) if aspetta
@@ -372,25 +397,37 @@ def cerca(stanza, cfg, chi: Chi, parole_cercate: str = "", persona: str = "",
     # Il nome della stanza cercata non è una parola dell'argomento («cosa si diceva in
     # taverna?» con stanza=taverna: le righe non dicono «taverna»)
     togli = set(parole(dove)) | {w for s in (sats if dove else ())
-                                 for w in parole(nome_stanza(stanza, s))}
+                                 for w in parole(nome_stanza(stanza, s, info))}
     radici = chiavi(" ".join(w for w in parole(f"{parole_cercate} {in_piu}") if w not in togli))
     pers = norm(persona).strip()
     # La domanda stessa è già nella stanza (ciclo: turno_testo, «→ Calliope»): non è una
     # risposta, e con le sue parole sarebbe sempre la prima trovata
     domanda = " ".join(parole(escludi_testo)) if escludi_testo else ""
     candidate = []                             # (sat, riga) visibili e nel periodo
+
+    def ammessa(sat, r) -> bool:
+        if not str(r.get("testo") or "").strip():
+            return False
+        t = float(r.get("fine") or r.get("t") or 0)
+        if (da is not None and t < da) or (a is not None and t > a):
+            return False
+        if not visibile(r, sat, chi, fin):
+            return False
+        return not (domanda and r.get("rivolta") == "si"
+                    and " ".join(parole(r["testo"])) == domanda)
     for sat in list(stanza._info):
         for r in stanza.registro(sat).righe():
-            if not str(r.get("testo") or "").strip():
-                continue
-            t = float(r.get("fine") or r.get("t") or 0)
-            if (da is not None and t < da) or (a is not None and t > a):
-                continue
-            if not visibile(r, sat, chi, fin):
-                continue
-            if domanda and r.get("rivolta") == "si" and " ".join(parole(r["testo"])) == domanda:
-                continue
-            candidate.append((sat, r))
+            if ammessa(sat, r):
+                candidate.append((sat, r))
+    if tenuta is not None:
+        # Il disco (14/10): le stesse regole, senza le righe ancora in memoria
+        candidate += [(sat, r) for sat, r in _dal_disco(stanza, tenuta, chi, radici, sats, da,
+                                                         a, norm(persona).strip())
+                      if ammessa(sat, r)]
+        ordine_sat = {s: i for i, s in enumerate(info)}
+        candidate.sort(key=lambda x: (ordine_sat.get(x[0], len(ordine_sat)),
+                                      float(x[1].get("inizio") or x[1].get("t") or 0),
+                                      x[1]["seq"]))
     dentro = set(sats)
 
     def scegli(radici, filtri=True):
@@ -468,11 +505,34 @@ def cerca(stanza, cfg, chi: Chi, parole_cercate: str = "", persona: str = "",
     blocchi, ultimo = [], object()
     for sat, r, riga in prese:
         if sat != ultimo:
-            blocchi.append(f"In {nome_stanza(stanza, sat)}:")
+            blocchi.append(f"In {nome_stanza(stanza, sat, info)}:")
             ultimo = sat
         blocchi.append(riga)
     out.esito = "trovato"
     out.righe = [(sat, r) for sat, r, _ in prese]
     out.testo = "\n".join(blocchi)
-    out.stanze = list(dict.fromkeys(nome_stanza(stanza, sat) for sat, _, _ in prese))
+    out.stanze = list(dict.fromkeys(nome_stanza(stanza, sat, info) for sat, _, _ in prese))
     return out
+
+
+def _dal_disco(stanza, tenuta, chi: Chi, radici: list, sats: list, da, a, pers: str) -> list:
+    """Le righe candidate dal disco (stanza/tenuta.py) come (sat, riga), con i prefiltri dei
+    permessi nella query (un minore solo le sue, un adulto i minori solo da tutore), senza
+    quelle ancora nel registro in memoria di questo avvio. Le regole fini restano `visibile`."""
+    escludi = {str(s): r.seq_vivi() for s, r in list(getattr(stanza, "_registri", {}).items())
+               if hasattr(r, "seq_vivi")}
+    nomi = []
+    if pers:
+        try:
+            nomi = [n for n in tenuta.nomi()
+                    if norm(n).strip() == pers or pers in norm(n).split()]
+        except Exception:  # noqa: BLE001
+            nomi = []
+    try:
+        righe = tenuta.cerca(radici=radici, sats=sats, da=da, a=a, nomi=nomi,
+                             minore_pid=chi.pid if chi.minore else None,
+                             tutore_di=chi.tutore_di, recenti=not radici, escludi=escludi)
+    except Exception:  # noqa: BLE001 — il disco non ferma la ricerca in memoria
+        return []
+    chiave = getattr(stanza, "chiave_sat", lambda s: s)
+    return [(chiave(r["sat"]), r) for r in righe]

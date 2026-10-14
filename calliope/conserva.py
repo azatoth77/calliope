@@ -23,6 +23,10 @@ audio oltre a ciò che serve al turno.
   minori e ospiti stanno nell'archivio della sessione, in memoria. Dentro la conversazione di un
   adulto, i turni le cui parole non restano (`testo_turno`: zona grigia, dubbio con un minore)
   non vanno su disco. Stessi `turn_log_days` giorni.
+- `stanza` (il testo della conversazione di stanza su disco, calliope/stanza/tenuta.py, dal
+  14/10, decisione 0029 punto 5): solo con `stanza_tenuta` accesa, per `stanza_tenuta_giorni`;
+  per tutta la famiglia, **minori compresi** (scelta di chi amministra), solo con la voce
+  riconosciuta sopra soglia; mai gli ospiti né la zona grigia. Non è un dato per le misure.
 
 **Il consenso** è un dato della persona, nel suo profilo (speakers.json, `voce_conservata`):
 None = mai detto, True = «sì» detto una volta a Calliope (tool `dati_conservati`), False =
@@ -42,8 +46,9 @@ solo conteggi, mai testo né nomi. La conservazione non usa la GPU: nel profilo 
 c'è uguale.
 
     python -m calliope.conserva                  quanto è conservato (solo conteggi)
-    python -m calliope.conserva --svuota         tutto: voce, eventi, registro dei turni e
-                                                 archivio delle conversazioni
+    python -m calliope.conserva --svuota         tutto: voce, eventi, registro dei turni,
+                                                 archivio delle conversazioni e testo della
+                                                 stanza su disco
     python -m calliope.conserva --svuota --persona NOME
                                                  i dati di una persona
 
@@ -67,7 +72,7 @@ from pathlib import Path
 
 CARTELLA_VOCE = "voce"
 SEGNO_RIPULITO = ".conservazione-1"       # il registro dei turni di prima è già stato ripulito
-COSE = ("testo", "voce", "eventi", "conversazioni")
+COSE = ("testo", "voce", "eventi", "conversazioni", "stanza")
 # Come è stata decisa l'identità della frase (SpeakerContext.identified_by e i modi del ciclo):
 # con questi il testo resta. Fuori: la zona grigia («conversazione»), il proprietario incerto
 # con un minore («proprietario»), nessun modo
@@ -115,11 +120,18 @@ def consenso_voce(prof) -> bool:
 def decidi(prof, cosa: str, modo: str | None = None, dubbi=(), cfg=None) -> Decisione:
     """Il solo posto che decide se qualcosa di questa persona si conserva. Puro.
 
-    `cosa`: «testo», «voce», «eventi» o «conversazioni»; `modo`: come è stata decisa l'identità della frase;
+    `cosa`: «testo», «voce», «eventi», «conversazioni» o «stanza»; `modo`: come è stata decisa l'identità della frase;
     `dubbi`: i segni del turno («incerta», «minore_vicino», «compagnia»…)."""
     if cosa not in COSE:
         raise ValueError(f"cosa sconosciuta: {cosa!r}")
     cat = categoria(prof)
+    if cosa == "stanza":
+        # Il testo della stanza (14/10, decisione 0029 punto 5, calliope/stanza/tenuta.py): con
+        # la tenuta accesa (lo decide chi chiama) per tutta la famiglia, minori compresi, solo
+        # con la voce riconosciuta sopra soglia; mai gli ospiti, nel dubbio no
+        if cat == "ospite":
+            return Decisione(False, cat)
+        return Decisione(True, cat) if modo == "voce" else Decisione(False, "voce_incerta")
     if cat in ("ospite", "minore"):
         return Decisione(False, cat)
     if cosa in ("eventi", "conversazioni"):
@@ -362,6 +374,9 @@ class Conservazione:
         # «svuota» lo svuota e il riepilogo lo conta (main.py e il terminale)
         self.conversazioni = None
         self.turnlog = None         # TurnLog, se c'è (main.py)
+        # La tenuta su disco della stanza (stanza/tenuta.Tenuta, 14/10), se c'è: «svuota» la
+        # svuota e il riepilogo la conta; senza (il terminale), il file in `stanza_tenuta_db`
+        self.stanza = None
         self._lock = threading.Lock()
         self._ruotata_il = None
         self.salvate = 0            # frasi salvate da quando è partita
@@ -633,7 +648,8 @@ class Conservazione:
         tentativi degli esercizi e le richieste ai tutori (TABELLE_MEMORIA)."""
         out = {"voce": 0, "eventi": 0, "turni": 0, "conversazioni": 0,
                "esercizi_richieste": self._memoria(persona_id=persona_id,
-                                                   tutto=persona_id is None)}
+                                                   tutto=persona_id is None),
+               "stanza": self._svuota_stanza(persona_id)}
         arch = self.conversazioni
         lock = getattr(self.turnlog, "_lock", None)
         if persona_id is None:
@@ -660,6 +676,19 @@ class Conservazione:
         out["eventi"] = self._svuota_eventi(f"persona:{persona_id}")
         return out
 
+    def _svuota_stanza(self, persona_id) -> int:
+        """Il testo della stanza su disco (14/10): tutto, o le righe di una persona (con le
+        risposte di Calliope a lei). Dal processo di Calliope la sua tenuta; da terminale il
+        file (la memoria della stanza di Calliope resta fino al riavvio, al più 24 h)."""
+        try:
+            if self.stanza is not None:
+                return self.stanza.svuota(persona_id)
+            from .stanza.tenuta import svuota_file
+            return svuota_file(self.cfg, persona_id)
+        except Exception as e:  # noqa: BLE001 — la stanza non ferma lo svuotamento del resto
+            self.log(f"   [CONSERVA] testo della stanza non svuotato: {type(e).__name__}")
+            return 0
+
     def _svuota_eventi(self, chiave: str | None) -> int:
         disco = self.eventi
         if disco is None:
@@ -682,7 +711,22 @@ class Conservazione:
         if self.cartella and self.cartella.exists():
             out["turni_file"] = len(list(self.cartella.glob("turni-*.jsonl")))
         out.update(self.conta_conversazioni())
+        out["stanza"] = self.conta_stanza()
         return out
+
+    def conta_stanza(self, persona_id=None) -> dict | None:
+        """Il testo della stanza su disco (14/10): dalla tenuta aperta o dal file in sola
+        lettura; None con la tenuta spenta e senza file."""
+        try:
+            if self.stanza is not None:
+                d = self.stanza.conteggi(persona_id)
+                if persona_id is None:
+                    d["giorni_tenuta"], d["accesa"] = self.stanza.giorni, True
+                return d
+            from .stanza.tenuta import conta_file
+            return conta_file(self.cfg, persona_id)
+        except Exception:  # noqa: BLE001 — i conteggi non fermano niente
+            return None
 
     def conta_conversazioni(self, persona_id=None) -> dict:
         """Quante conversazioni (e turni) ci sono nell'archivio su disco, di tutti o di una
@@ -706,8 +750,11 @@ def testo_stato(d: dict | None) -> str | None:
             f"(tetto {d['voce_mb_tetto']:.0f})" if d.get("voce_accesa") else "voce spenta")
     conv = (f"; {d['conversazioni']} conversazioni archiviate ({d['conversazioni_turni']} "
             f"turni)" if "conversazioni" in d else "")
+    st = d.get("stanza")
+    stanza = (f"; stanza su disco {st['righe']} righe ({st['mb']:.1f} MB, "
+              f"{st.get('giorni_tenuta', 60)} giorni, famiglia e minori)" if st else "")
     return (f"Conservazione ({d['giorni']} giorni, soli adulti): {d['turni_file']} giorni di "
-            f"turni; {voce}{conv}")
+            f"turni; {voce}{conv}{stanza}")
 
 
 def conta_archivio(cfg, persona_id=None) -> dict:
@@ -810,13 +857,14 @@ def main(argv=None) -> int:
             print(f"Dati conservati di {nome} cancellati: {r['voce']} registrazioni, "
                   f"{r['eventi']} eventi, parole tolte da {r['turni']} turni, "
                   f"{r['conversazioni']} conversazioni archiviate, "
-                  f"{r['esercizi_richieste']} tra esercizi e richieste ai tutori.")
+                  f"{r['esercizi_richieste']} tra esercizi e richieste ai tutori, "
+                  f"{r['stanza']} righe della stanza.")
         else:
             r = c.svuota()
             print(f"Dati conservati cancellati: {r['voce']} registrazioni, {r['eventi']} eventi, "
                   f"{r['turni']} giorni del registro dei turni, {r['conversazioni']} "
                   f"conversazioni archiviate, {r['esercizi_richieste']} tra esercizi e "
-                  f"richieste ai tutori.")
+                  f"richieste ai tutori, {r['stanza']} righe della stanza.")
         if c.conversazioni is not None:
             c.conversazioni.close()
         return 0
@@ -833,8 +881,10 @@ def main(argv=None) -> int:
                 stato_voce = "sì" if consenso_voce(u) else (
                     "no" if u.voce_conservata is False else "non chiesto")
             conv = c.conta_conversazioni(u.id)["conversazioni"]
+            st = c.conta_stanza(u.id)
             print(f"    {u.name}: {cat}, voce {stato_voce}, registrazioni "
-                  f"{c.registrazioni(u.id)}, conversazioni archiviate {conv}")
+                  f"{c.registrazioni(u.id)}, conversazioni archiviate {conv}"
+                  + (f", righe della stanza {st['righe']}" if st else ""))
     return 0
 
 
