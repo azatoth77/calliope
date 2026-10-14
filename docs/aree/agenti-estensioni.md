@@ -3175,7 +3175,8 @@ controllo non passa, il log dice quale («al tetto niente consegna d'ufficio: �
 finisce «limite» come prima. **Senza esempi di accettazione** (i programmi, le correzioni dei
 giochi, l'analisi spenta o non riuscita) mai: i test dell'agente da soli ereditano le sue
 ipotesi (è il motivo degli esempi, vedi sopra), e al «limite» l'annuncio dice già quanti ne
-passano.
+passano. *(Storico dal 14/10: una correzione senza esempi, come quelle dei giochi, si chiude con
+il test che riproduce il problema al posto degli esempi; vedi «Il banco del 14/10» qui sotto.)*
 
 Anche al **«limite»** (`Lavori._esegui`, ramo `Limite`) gli esempi si rieseguono ora sui file del
 momento (`_esito_accettazione`): l'esito va nel risultato e, in uno sviluppo, sui requisiti.
@@ -3198,3 +3199,99 @@ si potrebbe dire nell'annuncio «i suoi test passano, ma nessun esempio indipend
 e offrire «consegnalo così» a voce, invece di chiudere d'ufficio. **Da guardare sulla DGX** al
 prossimo banco: quanti lavori chiudono con `agente_consegna_al_tetto` e se la loro accettazione
 nascosta è sempre verde (deve esserlo: se no gli esempi sono troppo deboli).
+
+## Il banco del 14/10: la riproduzione al tetto e i valori nominati (ramo `agente-tetto-2`)
+
+**Le misure** (banco della temperatura sulla DGX, 14/10 notte, qwen3.6 su vLLM, t 0,6,
+presence_penalty della Config, 5 ripetizioni × 3 casi, girato **prima** del palco fisso dei
+giochi): **11/15** (il 13/10 12/15). Programma 5/5, convertitore 4/5, porte 2/5. Nessun lavoro
+chiuso con `agente_consegna_al_tetto`. Lavoro per lavoro, i due problemi:
+
+- **Porte (correzione di un gioco), 3 «limite».** L1: 24 passate, 82 512 token, 5 passate a vuoto
+  (il ragionamento su `calliope.fase` della prova di fumo e su `gioco.js`), nessun `gioco.test.js`:
+  la riproduzione non c'era e l'accettazione nascosta era **rossa** («nessun elemento da toccare
+  con Porta 1»): «limite» giusto. L7: 24 passate, accettazione nascosta verde, ma i 3 test
+  dell'agente **rossi** sui file finali (il suo `gioco.test.js` usava `g.comando("porta", 1)` e il
+  motore diceva «"dopo" è la fase dopo l'esito»): «limite» giusto anche con la regola nuova. L10:
+  fermato alla 9ª passata da **tre passate a vuoto di fila** («Forse c'è un require che non ho
+  visto?»), con l'accettazione nascosta verde e i test dell'agente verdi: il controllo al tetto
+  non partiva perché quel `Limite` non era un tetto. In L1 e L7 il log diceva «al tetto niente
+  consegna d'ufficio: senza esempi di accettazione»: le correzioni dei giochi non hanno esempi
+  (l'analisi prima del codice salta le correzioni). **Perché le porte bruciano 24 passate**: le
+  frasi ripetute sono tutte sul formato di prima (`gioco.js` accanto alla macchina, `calliope.fase`
+  nella prova di fumo, il gestore del clic in `gioco.js`, `require`); 8–11 passate su 24 senza file
+  né test nuovi. Con il palco fisso `gioco.js` non c'è più e il caso del banco è riscritto
+  (`banco_temperatura.py --secco`: accettazione rossa alla partenza e verde sul riferimento, ok):
+  il prossimo banco dirà se i giri a vuoto calano.
+- **Convertitore, L2: un «fatto» falso.** 11 passate, consegna dell'agente, «esempi 7 verdi», ma
+  l'accettazione nascosta **rossa**: `conv(2, "Unità astronomiche", "chilometri")` → `KeyError:
+  'risultato'`. Il dizionario dell'estensione aveva «unità astronomica» (il singolare, scritto tra
+  virgolette nella richiesta) e non «unità astronomiche» (il plurale, nell'elenco delle unità):
+  l'estensione rispondeva «Non conosco l'unità». Gli esempi erano scritti dall'analisi in sola
+  lettura (non dall'agente) e il confronto non era lasco: semplicemente **nessun esempio usava il
+  plurale**. Il prompt chiedeva «un esempio con uno» dei valori di più parole, e uno bastava. Gli
+  altri quattro convertitori riconoscono tutte le unità elencate.
+
+**Cosa cambia.**
+
+1. **Al tetto, una correzione senza esempi vale con la riproduzione** (`Agente._consegna_al_tetto`
+   in `agenti/ciclo.py`). Il test che riproduce la segnalazione (`riproduzione.py`: nuovo o
+   cambiato, fallisce sulla versione di prima e passa ora) è un controllo indipendente dalle
+   ipotesi dell'agente sul difetto, come gli esempi lo sono sui requisiti. Per una correzione
+   (`lav.correzione`, codice o estensione, giochi compresi) senza esempi: i file chiesti, i test
+   dell'agente verdi due volte (per un gioco con la prova di fumo), il controllo della consegna e
+   il piano, il ricollaudo, e la riproduzione **«riprodotto»** (non basta «saltato»: senza
+   riproduzione eseguita nessun controllo indipendente). Con tutto verde il lavoro si chiude
+   «fatto» con `consegna_al_tetto_con: "riproduzione"` (nel risultato, in `lavoro.json`, nella
+   riga del banco), il riassunto del codice («Il gioco è corretto: il test che riproduce il
+   problema segnalato prima falliva e ora passa, e passano anche gli altri test. Chiuso al tetto:
+   l'agente non ha fatto in tempo a consegnare.») e la frase a voce `AL_TETTO_CORREZIONE` («…ma il
+   test del problema che mi hai segnalato adesso passa: il lavoro l'ho chiuso io.»). Una
+   correzione **con** gli esempi resta com'era (esempi verdi e riproduzione non «uguale»,
+   «nessun_test» o «passa_prima»). Senza esempi né correzione (i programmi) ancora mai.
+2. **Gli stessi controlli alla terza passata a vuoto di fila** (L10). Il `Limite` del giro a vuoto
+   ha ora il tipo `a_vuoto` e passa per `_consegna_al_tetto` come i tetti; in uno sviluppo (tappe)
+   no, come prima. Il riassunto dice «Chiuso da me: l'agente girava a vuoto senza consegnare.»;
+   senza i controlli verdi il motivo resta quello di prima.
+3. **I valori nominati dalla richiesta** (`agenti/accettazione.py`). Lo schema della passata ha,
+   per ogni input di testo, `valori`: tutti quelli che la richiesta nomina, al plurale e al
+   singolare se li scrive tutti e due. Il codice ne tiene solo quelli che compaiono **alla
+   lettera** nella richiesta (requisiti, specifica, parole della persona; senza maiuscole, accenti
+   e punteggiatura), al più 16 per input: un valore inventato dal modello non diventa un obbligo
+   per l'agente. Per ogni valore che nessun esempio usa già (in nessun esempio, anche quelli con
+   «trovato»: false: un valore che un esempio dà per sconosciuto non si controlla), un controllo
+   in più nel `test_accettazione.py` in sola lettura (al più 12): i dati del primo esempio che
+   controlla il numero, con quel valore al posto del suo, e l'estensione deve **riconoscerlo**
+   (una frase `da_dire`, niente «trovato»: false, il numero nel campo se l'esempio lo
+   controllava). Non si calcola un numero atteso (servirebbe un oracolo); il nome del test è
+   `test_r<requisito>_<n>` come gli esempi, e il messaggio dice valore e input («la richiesta
+   nomina «unità astronomiche» per «da»… l'estensione deve riconoscerlo (uscito «trovato»:
+   false)»). Fallisce sullo scheletro come gli esempi. I vincoli dell'agente elencano i valori da
+   riconoscere; il log dell'analisi dice «N valori nominati da riconoscere», `lav.accettazione`
+   ha `valori`. Rieseguito sui cinque `estensione.py` del banco del 14/10 con i valori della
+   richiesta del convertitore: **L2 rosso solo sul plurale** (il suo caso), gli altri quattro
+   verdi. Se il modello non elenca i valori, tutto resta come prima: da guardare al banco.
+
+**Prove.** `prova_fasi_agente_2` sezione 5 (la riproduzione al tetto: codice e gioco delle porte
+«fatto»; a vuoto «fatto»; contrari: nessun test nuovo, un test che passa anche prima, «saltato»,
+un test dell'agente rosso, non una correzione, a vuoto senza riproduzione, il gioco ancora rotto;
+la frase a voce) e 2e (i valori nominati: filtro alla lettera, i controlli, verde, rosso solo il
+plurale, tutto rosso sullo scheletro; contrari senza il testo e senza un esempio che riconosce);
+`banco_temperatura.py --secco` con le porte nel servizio vero e l'agente finto (corrette e con il
+test del disegno senza consegna → «fatto» con la riproduzione e l'accettazione nascosta verde;
+senza il test → «limite»): tutto ok sul portatile.
+
+**Profilo ridotto da 8 GB.** Niente cambia per la voce. Per un agente piccolo: la riproduzione è
+già una sandbox in più per correzione, i controlli dei valori sono test del codice senza modello
+(qualche millisecondo), e l'elenco dei valori allunga di poco il JSON della passata.
+
+**Da guardare sulla DGX** al prossimo banco (dopo l'installazione): quante porte chiudono con
+`consegna_al_tetto_con: riproduzione` (e se la loro accettazione nascosta è verde: deve
+esserlo), se i giri a vuoto delle porte calano con il palco fisso, nel log dell'analisi del
+convertitore «N valori nominati da riconoscere» (se 0, il modello non elenca i valori e il
+prompt va rivisto) e se un «fatto» con l'accettazione nascosta rossa si ripete.
+
+    cd ~/calliope && V=~/.local/share/calliope/versioni/$(cat ~/.local/share/calliope/attuale) \
+        && $V/.venv/bin/python $V/prove/manuali/banco_temperatura.py \
+           --casi porte,convertitore,programma --temperature 0.6 --presence config \
+           --ripetizioni 5 --uscita ~/banchi/tetto-$(date +%m%d-%H%M)
