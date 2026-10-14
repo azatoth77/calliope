@@ -7,7 +7,10 @@ veloce, niente nel contesto del modello.
 - `registro.RegistroStanza`: il registro della stanza di un satellite (in memoria);
 - `coda.Precedenza`: Whisper una richiesta alla volta, con la precedenza turno > recupero >
   stanza > lenta;
-- `misure`: i numeri (mai parole) per `calliope stato --turni`.
+- `misure`: i numeri (mai parole) per `calliope stato --turni`;
+- `contesto` (passo 2, 14/10): il blocco della stanza nei dati del turno (`stanza_contesto`);
+- `cerca` (passo 4, 14/10): la ricerca del tool `stanza_cerca`, con chi vede cosa e la frase
+  d'attesa (`stanza_cerca`).
 
 Di serie spenta (`stanza: spenta`): non parte nessun thread, i satelliti non mandano niente.
 """

@@ -1042,6 +1042,23 @@ class Config:
     # Tetto del blocco in caratteri (~4 caratteri per token: 6000 ≈ 1500 token, ~0,5 s di
     # rilettura col 26B sulla DGX senza cache): oltre si lasciano fuori le righe più vecchie
     stanza_caldo_caratteri: int = 6000
+    # Passo 4 (14/10, calliope/stanza/cerca.py, tool stanza_cerca): ciò che il blocco caldo non
+    # ha più o che si è detto in un'altra stanza («di cosa parlavamo in cucina prima?», «cosa
+    # aveva detto Carlo della gita stamattina?»), cercato nel registro della stanza in memoria
+    # per persona, stanza, momento e parole. Lo usano solo le persone di casa riconosciute;
+    # un adulto vede le stanze dove era presente, quando c'era, e le parole di un minore solo
+    # se ne è il tutore; un minore solo le sue; le voci non riconosciute mai. Il risultato è in
+    # busta (fonte «stanza») e riservato: né il terminale né il registro dei turni hanno le
+    # righe. Vale solo con la stanza accesa; false (di serie) = il tool non c'è
+    stanza_cerca: bool = False
+    # Tetti del risultato (righe e caratteri, ~600 token: sotto la quarantena dei dati lunghi)
+    stanza_cerca_righe: int = 20
+    stanza_cerca_caratteri: int = 2400
+    # Righe delle stanze cercate ancora in coda per Whisper: passano davanti e si aspettano al
+    # più così; la frase d'attesa («Un attimo, ripenso a cosa vi siete detti.») solo oltre
+    # `stanza_cerca_attesa_s`
+    stanza_cerca_attesa_max_s: float = 3.0
+    stanza_cerca_attesa_s: float = 0.7
     # Connessioni insieme attraverso l'inoltro (una pagina ne apre 2–6)
     satellite_inoltro_max: int = 32
     # Secondi senza un byte dopo i quali una connessione dell'inoltro si chiude
@@ -2865,7 +2882,9 @@ SEZIONI: dict[str, list[str]] = {
     "conversazione_stanza": ["stanza", "stanza_satelliti", "stanza_segmento_max_s", "stanza_recupero_max_s",
                "stanza_coda_max_s", "stanza_scambio_pausa_s", "stanza_presenza_s",
                "stanza_ospiti_ore", "stanza_pausa_min", "stanza_contesto", "stanza_caldo_min",
-               "stanza_caldo_sempre_s", "stanza_caldo_caratteri"],
+               "stanza_caldo_sempre_s", "stanza_caldo_caratteri", "stanza_cerca",
+               "stanza_cerca_righe", "stanza_cerca_caratteri", "stanza_cerca_attesa_max_s",
+               "stanza_cerca_attesa_s"],
     "satellite": ["satellite_server", "satellite_credenziali", "satellite_impronta",
                   "satellite_microfono", "satellite_casse", "satellite_webcam",
                   "satellite_schermo", "satellite_schermo_personale", "satellite_esecutore",
@@ -3066,6 +3085,8 @@ LIMITI: dict[str, tuple[float, float]] = {
     "stanza_coda_max_s": (10.0, 7200.0), "stanza_ospiti_ore": (0.1, 48.0),
     "stanza_pausa_min": (1.0, 1440.0), "stanza_caldo_min": (0.5, 120.0),
     "stanza_caldo_sempre_s": (0.0, 600.0), "stanza_caldo_caratteri": (200, 100_000),
+    "stanza_cerca_righe": (1, 200), "stanza_cerca_caratteri": (200, 20_000),
+    "stanza_cerca_attesa_max_s": (0.0, 30.0), "stanza_cerca_attesa_s": (0.0, 30.0),
     "contesto_ripiego": (2048, 1_048_576), "contesto_rilettura_max_s": (0.1, 60.0),
     "contesto_conversazioni": (1, 64), "contesto_margine_gb": (0.0, 512.0),
     "max_history_turns": (0, 200), "max_tool_turns": (1, 20), "tool_correzioni_max": (0, 10),

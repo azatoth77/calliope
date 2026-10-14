@@ -1298,6 +1298,23 @@ conversazione_stanza:
   # Tetto del blocco in caratteri (~4 caratteri per token: 6000 ≈ 1500 token, ~0,5 s di
   # rilettura col 26B sulla DGX senza cache): oltre si lasciano fuori le righe più vecchie
   stanza_caldo_caratteri: 6000
+  # Passo 4 (14/10, calliope/stanza/cerca.py, tool stanza_cerca): ciò che il blocco caldo non
+  # ha più o che si è detto in un'altra stanza («di cosa parlavamo in cucina prima?», «cosa
+  # aveva detto Carlo della gita stamattina?»), cercato nel registro della stanza in memoria
+  # per persona, stanza, momento e parole. Lo usano solo le persone di casa riconosciute;
+  # un adulto vede le stanze dove era presente, quando c'era, e le parole di un minore solo
+  # se ne è il tutore; un minore solo le sue; le voci non riconosciute mai. Il risultato è in
+  # busta (fonte «stanza») e riservato: né il terminale né il registro dei turni hanno le
+  # righe. Vale solo con la stanza accesa; false (di serie) = il tool non c'è
+  stanza_cerca: false
+  # Tetti del risultato (righe e caratteri, ~600 token: sotto la quarantena dei dati lunghi)
+  stanza_cerca_righe: 20
+  stanza_cerca_caratteri: 2400
+  # Righe delle stanze cercate ancora in coda per Whisper: passano davanti e si aspettano al
+  # più così; la frase d'attesa («Un attimo, ripenso a cosa vi siete detti.») solo oltre
+  # `stanza_cerca_attesa_s`
+  stanza_cerca_attesa_max_s: 3.0
+  stanza_cerca_attesa_s: 0.7
 
 satellite:
   # == Lato satellite (il portatile che fa da microfono, casse e schermo di

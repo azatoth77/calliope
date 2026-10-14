@@ -634,9 +634,10 @@ class Avvio:
                                     cassetto=cassetto, stanza=s.stanza)
         if s.stanza is not None:
             # stanza_pausa (13/10): «abbiamo ospiti», «metti in pausa la stanza», «ascolta di
-            # nuovo la stanza», solo con la stanza accesa
+            # nuovo la stanza», solo con la stanza accesa; stanza_cerca (14/10, passo 4) anche
+            # con `stanza_cerca: true`
             from .tools.stanza import stanza_specs
-            for spec in stanza_specs():
+            for spec in stanza_specs(cfg):
                 s.tools.register(spec)
 
     def _registro_eventi(self, conv_arch):

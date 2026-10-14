@@ -424,6 +424,25 @@ _v("onesta.non_salvato", "onesta",
        "ironico": ("Scusa, ho capito. Non ho salvato niente.",),
    })
 
+# La frase d'attesa della ricerca nella conversazione della stanza (14/10, passo 4,
+# tools/stanza.stanza_cerca): solo quando la ricerca aspetta righe ancora in coda oltre
+# `stanza_cerca_attesa_s`. Senza forma breve (è rara per costruzione: obiettivo < 10 % dei turni
+# in stanza, progetto § 3.8)
+_v("attesa.stanza", "attesa", "Un attimo, ripenso a cosa vi siete detti.", toni={
+    "normale": ("Un attimo, ripenso a cosa vi siete detti.", "Ci ripenso un momento.",
+                "Un momento, ricostruisco cosa si è detto."),
+    "formale": ("Un momento, ricostruisco la conversazione.",
+                "Un istante, ripercorro quanto si è detto.",
+                "Mi conceda un momento, ricostruisco la conversazione."),
+    "amichevole": ("Fammi ricordare un attimo.", "Un attimo, ripesco cosa vi siete detti.",
+                   "Aspetta, ci ripenso un secondo."),
+    "ironico": ("Un attimo, sfoglio i miei appunti.", "Fammi riavvolgere il nastro un momento.",
+                "Un momento, ripasso la cronaca della stanza."),
+    "essenziale": ("Controllo.", "Un attimo."),
+    "computer_di_bordo": ("Ricostruisco il registro della stanza.",
+                          "Consulto il registro della stanza."),
+})
+
 # ── solo misura: classi bloccate, parola per parola (§ 2 della ricerca) ──
 _v("politica.conferma", "politica", "C'è di mezzo {fonte}, quindi chiedo a te: vuoi che {cosa}?")
 _v("politica.non_chiesto", "politica", "Non me l'hai chiesto: vuoi che {cosa}?")

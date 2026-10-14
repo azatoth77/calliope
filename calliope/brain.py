@@ -4496,9 +4496,17 @@ class Brain:
             # richiesta di un lavoro, che a volte va oltre il secondo). Una volta per risposta
             attese = []
 
-            def attesa(frase, _on=on_tool_start):
+            def attesa(frase, atto=None, _on=on_tool_start):
+                # `atto`: l'atto della frase per l'uscita unica (14/10, stanza_cerca:
+                # «attesa_stanza»); senza, quello delle attese dei tool
                 if _on and frase and not attese:
                     attese.append(frase)
+                    if atto:
+                        try:
+                            _on(frase, atto)
+                            return
+                        except TypeError:     # un on_tool_start con la sola frase
+                            pass
                     _on(frase)
             self._set_ctx("attesa", attesa if on_tool_start and not (spoke or announced)
                           else None)
