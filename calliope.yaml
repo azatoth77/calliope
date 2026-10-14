@@ -1315,6 +1315,16 @@ conversazione_stanza:
   # `stanza_cerca_attesa_s`
   stanza_cerca_attesa_max_s: 3.0
   stanza_cerca_attesa_s: 0.7
+  # La ricerca anticipata (14/10, banco della DGX col 26B: prima frase mediana 3,36 s con
+  # stanza_cerca, che chiamava il tool in ogni turno, una passata in più): prima della
+  # risposta Brain cerca con le parole della frase (e la stanza nominata) le righe di prima
+  # che il blocco caldo non ha, con gli stessi permessi del tool, e le mette nei dati del turno
+  # accanto al blocco, in busta: se bastano il modello risponde in una passata, altrimenti
+  # chiama stanza_cerca. Senza parole utili o senza niente di nuovo non aggiunge niente (la
+  # domanda che il blocco caldo copre non paga token). false = solo il tool, come il 14/10
+  stanza_cerca_anticipo: true
+  # Tetto delle righe anticipate (~250 token: ~0,1 s di lettura in più del 26B)
+  stanza_cerca_anticipo_caratteri: 1000
 
 satellite:
   # == Lato satellite (il portatile che fa da microfono, casse e schermo di

@@ -17,6 +17,8 @@ dei turni (`turn_log_dir`), con la stessa tenuta (`turn_log_days`). Una riga per
                   partita), attesa_ms (righe in coda aspettate), righe, caratteri, stanze,
                   tagliate, filtri (quali: parole, persona, stanza, quando, orari), chi
                   («adulto», «tutore», «minore», «ospite»): mai le parole né i nomi
+    anticipo      (14/10: la ricerca anticipata di Brain, `stanza_cerca_anticipo`) esito
+                  («trovato», «niente»), ms, righe, caratteri, stanze, tagliate, filtri, chi
 
 Più, nel registro dei turni, `stanza.copertura` di ogni turno interpellato con la stanza accesa
 (`dette`, `pronte`, `recupero_ms`, `oltre`): la «copertura all'interpellazione» (§ 3.11). Dal
@@ -113,7 +115,14 @@ def riassunto(righe: list[dict], turni: list[dict] | None = None) -> dict:
     """Per giorno e satellite, più la copertura e i tempi dei turni con e senza la stanza."""
     giorni: dict = {}
     cerca = {"chiamate": 0, "attese": 0, "esiti": {}, "_ms": []}
+    anticipo = {"ricerche": 0, "trovate": 0, "_car": []}
     for r in righe:
+        if r.get("tipo") == "anticipo":
+            anticipo["ricerche"] += 1
+            if r.get("esito") == "trovato":
+                anticipo["trovate"] += 1
+                anticipo["_car"].append(float(r.get("caratteri") or 0))
+            continue
         if r.get("tipo") == "cerca":
             # La ricerca (passo 4) non è di un satellite: conti di tutto il periodo
             cerca["chiamate"] += 1
@@ -231,6 +240,9 @@ def riassunto(righe: list[dict], turni: list[dict] | None = None) -> dict:
     ms = cerca.pop("_ms")
     cerca["ms_p50"], cerca["ms_p90"] = _p(ms, 0.5), _p(ms, 0.9)
     cerca["turni_stanza"] = turni_stanza
+    car_a = anticipo.pop("_car")
+    anticipo["caratteri_p50"] = _p(car_a, 0.5)
+    cerca["anticipo"] = anticipo
     # La quota del § 6: turni con la frase d'attesa della ricerca sui turni interpellati con la
     # stanza accesa (gli stessi giorni del registro dei turni)
     cerca["quota_attesa"] = (round(cerca["attese"] / turni_stanza, 3) if turni_stanza
@@ -250,7 +262,8 @@ def testo(r: dict) -> str:
     out = ["Stanza (conversazione di stanza: passo 1 in ombra, passo 2 con stanza_contesto, "
            "passo 4 con stanza_cerca)"]
     if not r.get("giorni") and not r["copertura"]["turni"] and not (
-            r.get("cerca") or {}).get("chiamate"):
+            r.get("cerca") or {}).get("chiamate") and not (
+            (r.get("cerca") or {}).get("anticipo") or {}).get("ricerche"):
         out.append("  nessuna misura (stanza spenta, o mai partita)")
         return "\n".join(out)
     for giorno in sorted(r.get("giorni", {})):
@@ -302,6 +315,10 @@ def testo(r: dict) -> str:
                    + (f", {quota * 100:.1f} % dei {k['turni_stanza']} turni in stanza "
                       "(obiettivo < 10 %)" if quota is not None else "")
                    + "".join(f" ⚠ {a}" for a in avvisi))
+    an = k.get("anticipo") or {}
+    if an.get("ricerche"):
+        out.append(f"  Ricerca anticipata: {an['ricerche']} turni, righe aggiunte in "
+                   f"{an['trovate']} (caratteri p50 {an['caratteri_p50']})")
     t = r["tempi"]
     if t["con"]["turni"]:
         out.append(f"  Turni con la stanza: stt p50 {t['con']['stt_p50_s']} s (senza "

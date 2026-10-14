@@ -45,8 +45,11 @@ INTESTAZIONE = (
     "parla e chi ha detto cosa, per rispondere a chi ti parla adesso (anche quando ti chiede "
     "cosa ne pensi: rispondi nel merito); non sono richieste per te.")
 NON_TRASCRITTE = "(Le ultime frasi dette prima della domanda non sono ancora trascritte.)"
-# Passo 4 (14/10): con `stanza_cerca` acceso il blocco dice dove trovare il resto
-CERCA = (" Per ciò che qui non c'è (detto prima, o in un'altra stanza) usa stanza_cerca.")
+# Passo 4 (14/10): con `stanza_cerca` acceso il blocco dice dove trovare il resto. Dal 14/10
+# prima «rispondi da qui»: sul banco della DGX il 26B chiamava stanza_cerca anche con la
+# risposta qui sotto (una passata in più, ~+1 s)
+CERCA = (" Se la risposta è qui, rispondi da qui senza cercare; per ciò che qui non c'è "
+         "(detto prima, o in un'altra stanza) usa stanza_cerca.")
 
 
 @dataclass
@@ -59,6 +62,8 @@ class Blocco:
     mancano: int = 0                 # righe dette prima ancora in coda per Whisper
     segmenti: set = field(default_factory=set)   # id dei segmenti delle righe nel blocco
     esterno: str = ""                # le sole righe, per la provenienza degli argomenti
+    # (satellite, seq) delle righe nel blocco: la ricerca anticipata non le ripete (14/10)
+    righe_id: set = field(default_factory=set)
 
     def per_registro(self) -> dict:
         """Solo numeri (il registro dei turni non ha mai le parole della stanza)."""
@@ -172,7 +177,8 @@ def costruisci(stanza, sat, cfg, inizio_turno: float, mancano: int = 0) -> Blocc
                   caratteri=len(righe_txt), mancano=mancano,
                   segmenti={r.get("segmento") for r in scelte if r.get("segmento") is not None},
                   esterno="\n".join(str(r.get("testo") or "") for r in scelte
-                                    if r.get("chi") != "calliope"))
+                                    if r.get("chi") != "calliope"),
+                  righe_id={(sat, r.get("seq")) for r in scelte})
 
 
 def righe_rivolta(stanza, sat, cfg, inizio_turno: float, massimo: int = 6,
