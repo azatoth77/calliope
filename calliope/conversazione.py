@@ -105,6 +105,14 @@ class Conversazione:
         # conversazione di stanza, Brain._anonima_condivisa): più persone presenti, ognuna con
         # i suoi permessi per frase. Solo in memoria
         self.condivisa = False
+        # Le righe della conversazione di stanza mandate al modello (14/10 sera,
+        # stanza/contesto.Pezzo): un pezzo per turno, messo nella richiesta subito prima della
+        # frase di quel turno (che ha il segno `_stanza` col numero del pezzo). Solo in memoria:
+        # mai nella storia, mai su disco (esporta toglie il segno), mai nell'archivio. `mandate`:
+        # le righe (e i segmenti) già mandate, che non si rimandano; `n`: l'ultimo numero
+        self.stanza: list = []
+        self.stanza_mandate: set = set()
+        self.stanza_n = 0
 
     # ── stato ──
     def vuota(self) -> bool:
@@ -146,8 +154,10 @@ class Conversazione:
         # Passo 3 (`vivo_da`): solo la parte proiettata, già sigillata; il turno vivo va su
         # disco come eventi, a turno finito
         hist = self.history if self.vivo_da is None else self.history[:self.vivo_da]
-        storia = [{k: v for k, v in m.items() if k != "images"} if m.get("images") else m
-                  for m in hist]
+        # Né le foto né il segno delle righe della stanza (14/10 sera: le righe stanno solo in
+        # memoria, Conversazione.stanza)
+        storia = [{k: v for k, v in m.items() if k not in ("images", "_stanza")}
+                  if (m.get("images") or "_stanza" in m) else m for m in hist]
         return {"formato": FORMATO, "chiave": self.chiave, "history": storia,
                 "riassunto": self.riassunto, "owner": owner,
                 "owner_aperto": self.owner is UNSET, "nome": self.nome, "luogo": self.luogo,

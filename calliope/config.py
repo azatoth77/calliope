@@ -1042,6 +1042,19 @@ class Config:
     # Tetto del blocco in caratteri (~4 caratteri per token: 6000 ≈ 1500 token, ~0,5 s di
     # rilettura col 26B sulla DGX senza cache): oltre si lasciano fuori le righe più vecchie
     stanza_caldo_caratteri: int = 6000
+    # Le righe della stanza nella storia, in sola aggiunta (14/10 sera, dopo la prova in auto con
+    # il 26B: col blocco ricostruito a ogni turno la prima frase mediana era 2,81 s contro 1,3 s
+    # senza, ~3900 token riletti per turno). A ogni turno solo le righe non ancora mandate in
+    # questa conversazione entrano, in busta, subito prima della frase; nei turni dopo restano
+    # nello stesso posto, uguali, e la cache del prefisso le tiene. In memoria, mai su disco (la
+    # tenuta della stanza resta quella di stanza_tenuta). false = il blocco intero nei dati del
+    # turno a ogni turno, come il 14/10 mattina (per il confronto sul banco)
+    stanza_contesto_in_storia: bool = True
+    # Tetto delle righe della stanza nella storia di una conversazione, in caratteri (~4 per
+    # token: 16000 ≈ 4000 token). Oltre, a risposta finita, via le più vecchie fino a metà, tutte
+    # insieme (la cache si rompe una volta sola) e il prefisso nuovo si scalda in secondo piano;
+    # anche il taglio e la compressione della storia portano via le righe dei turni tolti
+    stanza_storia_caratteri: int = 16000
     # Passo 4 (14/10, calliope/stanza/cerca.py, tool stanza_cerca): ciò che il blocco caldo non
     # ha più o che si è detto in un'altra stanza («di cosa parlavamo in cucina prima?», «cosa
     # aveva detto Carlo della gita stamattina?»), cercato nel registro della stanza in memoria
@@ -2158,8 +2171,10 @@ class Config:
         # nominava una stanza («a che ora avevamo deciso di partire?» → «non ho in memoria»)
         # Dal 14/10 prima «rispondi dalle righe della stanza dei dati del turno»: sul banco della
         # DGX il 26B chiamava stanza_cerca anche con la risposta già lì (30 turni su 30)
+        # Dal 14/10 sera le righe stanno anche nella conversazione, prima delle domande
+        # (`stanza_contesto_in_storia`): «che hai davanti» vale per tutte e due
         room = ("per ciò che si è detto vicino ai dispositivi di casa rispondi dalle righe della "
-                "stanza nei dati del turno, se ci sono; se lì non c'è (chi ha detto cosa, cosa "
+                "stanza che hai davanti, se ci sono; se lì non c'è (chi ha detto cosa, cosa "
                 "si era deciso, a che ora, di cosa si parlava in un'altra stanza) stanza_cerca, "
                 "prima di dire che non lo sai; " if stanza else "")
         # Con la ricerca web: quando usarla, al posto di «non puoi sapere il meteo…»
@@ -2949,7 +2964,8 @@ SEZIONI: dict[str, list[str]] = {
     "conversazione_stanza": ["stanza", "stanza_satelliti", "stanza_segmento_max_s", "stanza_recupero_max_s",
                "stanza_coda_max_s", "stanza_scambio_pausa_s", "stanza_presenza_s",
                "stanza_ospiti_ore", "stanza_pausa_min", "stanza_contesto", "stanza_caldo_min",
-               "stanza_caldo_sempre_s", "stanza_caldo_caratteri", "stanza_cerca",
+               "stanza_caldo_sempre_s", "stanza_caldo_caratteri", "stanza_contesto_in_storia",
+               "stanza_storia_caratteri", "stanza_cerca",
                "stanza_cerca_righe", "stanza_cerca_caratteri", "stanza_cerca_attesa_max_s",
                "stanza_cerca_attesa_s", "stanza_cerca_anticipo",
                "stanza_cerca_anticipo_caratteri", "stanza_tenuta", "stanza_tenuta_giorni",
@@ -3158,6 +3174,7 @@ LIMITI: dict[str, tuple[float, float]] = {
     "stanza_coda_max_s": (10.0, 7200.0), "stanza_ospiti_ore": (0.1, 48.0),
     "stanza_pausa_min": (1.0, 1440.0), "stanza_caldo_min": (0.5, 120.0),
     "stanza_caldo_sempre_s": (0.0, 600.0), "stanza_caldo_caratteri": (200, 100_000),
+    "stanza_storia_caratteri": (1000, 200_000),
     "stanza_cerca_righe": (1, 200), "stanza_cerca_caratteri": (200, 20_000),
     "stanza_cerca_attesa_max_s": (0.0, 30.0), "stanza_cerca_attesa_s": (0.0, 30.0),
     "stanza_cerca_anticipo_caratteri": (0, 20_000),

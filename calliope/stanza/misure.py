@@ -25,7 +25,9 @@ Più, nel registro dei turni, `stanza.copertura` di ogni turno interpellato con 
 passo 2 (14/10, `stanza_contesto`) anche `nel_contesto` (quante delle righe dette prima della
 domanda sono nel blocco dei dati del turno), `scartate` (segmenti senza riga: vuoti,
 allucinazioni) e `attesa_ms` (il recupero aspettato prima della risposta), e `stanza.contesto`
-(`righe`, `sempre`, `tagliate`, `caratteri`, `mancano`): il blocco, in numeri.
+(`righe`, `sempre`, `tagliate`, `caratteri`, `mancano`): il blocco, in numeri. Dal 14/10 sera
+(`stanza_contesto_in_storia`) anche `stanza.storia` (`nuove`, `nuove_caratteri`, `righe`,
+`caratteri`, `pezzi`, `potati`, `nascosti`): le righe nuove del turno e quelle davanti al modello.
 
 `riassunto` e `testo` fanno la sezione «Stanza» di `calliope stato --turni`: ore di parlato per
 satellite, ritardo della coda (p90 < 10 s), banda (MB per ora di parlato), scartate per motivo,
@@ -184,6 +186,8 @@ def riassunto(righe: list[dict], turni: list[dict] | None = None) -> dict:
     tempi = {k: {"stt": [], "prima": [], "riletti": []}
              for k in ("con", "senza", "blocco", "senza_blocco")}
     blocco = {"turni": 0, "vuoti": 0, "tagliati": 0, "mancano": 0, "_righe": [], "_car": []}
+    # Le righe nella storia in sola aggiunta (14/10 sera)
+    storia = {"turni": 0, "potature": 0, "_nuove": [], "_nuove_car": [], "_car": []}
     turni_stanza = 0
     for t in turni or ():
         st = t.get("stanza") if isinstance(t.get("stanza"), dict) else None
@@ -213,6 +217,13 @@ def riassunto(righe: list[dict], turni: list[dict] | None = None) -> dict:
                 blocco["mancano"] += 1 if ctx.get("mancano") else 0
             else:
                 blocco["vuoti"] += 1
+        sto = (st or {}).get("storia")
+        if isinstance(sto, dict):
+            storia["turni"] += 1
+            storia["potature"] += 1 if sto.get("potati") else 0
+            storia["_nuove"].append(float(sto.get("nuove") or 0))
+            storia["_nuove_car"].append(float(sto.get("nuove_caratteri") or 0))
+            storia["_car"].append(float(sto.get("caratteri") or 0))
         c = (st or {}).get("copertura")
         if isinstance(c, dict):
             cop["turni"] += 1
@@ -248,6 +259,11 @@ def riassunto(righe: list[dict], turni: list[dict] | None = None) -> dict:
     cerca["quota_attesa"] = (round(cerca["attese"] / turni_stanza, 3) if turni_stanza
                              else None)
     righe_b, car_b = blocco.pop("_righe"), blocco.pop("_car")
+    nuove_s, nuove_car_s, car_s = (storia.pop("_nuove"), storia.pop("_nuove_car"),
+                                   storia.pop("_car"))
+    storia["nuove_p50"], storia["nuove_caratteri_p50"] = _p(nuove_s, 0.5), _p(nuove_car_s, 0.5)
+    storia["caratteri_p50"], storia["caratteri_p90"] = _p(car_s, 0.5), _p(car_s, 0.9)
+    blocco["storia"] = storia
     blocco["righe_p50"], blocco["caratteri_p50"] = _p(righe_b, 0.5), _p(car_b, 0.5)
     blocco["caratteri_p90"] = _p(car_b, 0.9)
     return {"giorni": giorni, "copertura": cop, "blocco": blocco, "cerca": cerca,
@@ -267,7 +283,8 @@ def testo(r: dict) -> str:
         out.append(testo_stato(r["tenuta"]))
     if not r.get("giorni") and not r["copertura"]["turni"] and not (
             r.get("cerca") or {}).get("chiamate") and not (
-            (r.get("cerca") or {}).get("anticipo") or {}).get("ricerche"):
+            (r.get("cerca") or {}).get("anticipo") or {}).get("ricerche") and not (
+            (r.get("blocco") or {}).get("storia") or {}).get("turni"):
         out.append("  nessuna misura (stanza spenta, o mai partita)")
         return "\n".join(out)
     for giorno in sorted(r.get("giorni", {})):
@@ -305,6 +322,12 @@ def testo(r: dict) -> str:
                    f"{b['vuoti']}), righe p50 {b['righe_p50']}, caratteri p50 "
                    f"{b['caratteri_p50']} (p90 {b['caratteri_p90']}); accorciato dal tetto in "
                    f"{b['tagliati']}, con righe non ancora trascritte in {b['mancano']}")
+    sto = b.get("storia") or {}
+    if sto.get("turni"):
+        out.append(f"  Righe della stanza nella storia (in sola aggiunta): {sto['turni']} turni, "
+                   f"nuove per turno p50 {sto['nuove_p50']} righe ({sto['nuove_caratteri_p50']} "
+                   f"caratteri), davanti al modello p50 {sto['caratteri_p50']} caratteri (p90 "
+                   f"{sto['caratteri_p90']}), potature {sto['potature']}")
     k = r.get("cerca") or {}
     if k.get("chiamate"):
         quota = k.get("quota_attesa")
