@@ -31,8 +31,7 @@ try {
 const giochi = await import(new URL("./fumo_js.mjs", import.meta.url));
 const opzioniScheda = () => ({ massimo: ((scheda || {}).giocatori || {}).max || 1,
                                minimo: ((scheda || {}).giocatori || {}).min || 1,
-                               comandi: ((scheda || {}).ascolta || {}).comandi || {},
-                               giocatore: !!((scheda || {}).ascolta || {}).giocatore,
+                               giocatore: !!((scheda || {}).macchina || {}).giocatore,
                                // la macchina a stati di Calliope (13/10, motore_gioco.js)
                                macchina: (scheda || {}).macchina || null, titolo });
 // Per i test (12/10 sera, nello stesso processo: isolation «none»): il gioco vero nel DOM finto
@@ -84,11 +83,13 @@ if (scheda && Array.isArray(scheda.file) && !conto.errori && !senzaFumo) {
     // Prima l'errore, poi come lavora la prova (11/10: l'agente credeva che nella prova
     // mancassero «calliope» o il contenitore, e che la prova fosse da cambiare)
     scrivi("FALLITO prova di fumo del gioco: " + errori.join(" | ") + " — la prova carica "
-      + "gli script di «scheda.file» come nel riquadro (document finto con <div id=\"gioco\">, "
-      + "l'oggetto calliope, timer finti), chiama quandoPronto e tocca a caso gli elementi con "
-      + "un gestore (con «ascolta» manda anche comandi a voce a caso tra quelli attivi; con «macchina» prima percorre "
-      + "le fasi con ogni comando e ogni valore e gioca partite intere fino alla fine); correggi il punto indicato, non riscrivere il file. Se l'errore è di un "
-      + "metodo del DOM che il finto non conosce, scrivilo in un modo più comune\n");
+      + "il motore della macchina e gli script di «scheda.file» come nel riquadro (document finto "
+      + "con <div id=\"gioco\">, l'oggetto calliope, timer finti), percorre le fasi con ogni comando "
+      + "e ogni valore, gioca partite intere fino alla fine, controlla che ogni pagina stia nel palco "
+      + "(1280×720 e 720×1280: niente fuori, niente sovrapposto, testo che ci sta) e poi tocca a caso "
+      + "i pulsanti e manda comandi a voce; correggi il punto indicato, non riscrivere il file. Se "
+      + "l'errore è di un metodo del DOM che il finto non conosce (in una tela), scrivilo in un modo "
+      + "più comune\n");
   } else {
     scrivi("ok prova di fumo del gioco\n");
   }

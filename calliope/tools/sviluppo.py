@@ -2386,17 +2386,20 @@ MAX_CHIESTI_RIPETUTA = 5
 # mostro, nessun punto, vince V senza motivo», due correzioni finite «fatto» con i test verdi e
 # il gioco uguale; la seconda con lo stesso identico problema della prima). L'agente correggeva
 # logica.js e i suoi test (le regole), mentre ciò che la persona vede passa da gioco.js; e non
-# sapeva che la versione provata era già la correzione di prima
+# sapeva che la versione provata era già la correzione di prima. Dal 14/10 il disegno è della
+# macchina a stati di Calliope (niente gioco.js): ciò che si vede viene da vista ed esito di
+# logica.js e dalla pagina scelta nel manifesto
 VINCOLO_CORREZIONE_GIOCO = (
-    " È un GIOCO e il problema l'ha visto la persona sullo schermo: la causa può essere in "
-    "gioco.js (il disegno, i tocchi, cosa si mostra), non solo in logica.js. Segui il tocco "
-    "della persona fino a ciò che appare: che il tocco chiami la regola giusta e che il risultato "
-    "(cosa c'è dietro la porta, i punti, chi vince e perché) venga mostrato. Il test che "
-    "riproduce il problema va in gioco.test.js e guida il gioco vero: const g = await "
-    "apriGioco({ giocatori: 2, seme: 1 }); await g.tocca(\"testo del pulsante\"); poi controlla "
-    "con g.testo() proprio quello che la persona dice che non va (il mostro, i punti, il "
-    "vincitore). I test di logica.test.js non vedono gioco.js, e la prova di fumo dice solo "
-    "che il gioco parte.")
+    " È un GIOCO e il problema l'ha visto la persona sullo schermo: la causa può essere in ciò "
+    "che si mostra (GIOCO.vista, l'«esito» delle mosse, la pagina e le etichette nel "
+    "manifesto) o in quali comandi valgono (GIOCO.attivi), non solo nelle regole. Segui il tocco "
+    "della persona fino a ciò che appare: che il pulsante chiami la mossa giusta e che il "
+    "risultato (cosa c'è dietro la porta, i punti, chi vince e perché) venga mostrato. Il test "
+    "che riproduce il problema va in gioco.test.js e guida il gioco vero: const g = await "
+    "apriGioco({ seme: 1 }); await g.tocca(\"2 giocatori\"); await g.tocca(\"testo del "
+    "pulsante\"); poi controlla con g.testo() e g.stato() proprio quello che la persona dice "
+    "che non va (il mostro, i punti, il vincitore), e con g.palco() se dice che qualcosa non "
+    "si vede o esce dallo schermo. I test di logica.test.js non vedono la pagina.")
 
 
 # La correzione parte da un test che fallisce (12/10 sera, parte 1 del flusso a fasi; ricerca

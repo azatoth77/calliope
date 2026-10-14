@@ -13,9 +13,10 @@ gioco delle porte del 12/10, qui con nomi di fantasia).
      modo?» con la correzione in sospeso; il codice uguale lo dice; contrario: riprodotto →
      come sempre.
 2. **I test toccano il comportamento visibile** (apriGioco in calliope/agenti/fumo_js.mjs):
-   - a. il difetto del 12/10 (l'esito annidato letto al primo livello): logica e prova di fumo
+   - a. il genere di difetto del 12/10 (là l'esito annidato letto al primo livello; dal 14/10,
+     con la macchina a stati, un esito che mostra la porta sbagliata): logica e prova di fumo
      verdi, il test del disegno rosso; contrario: il gioco giusto lo passa;
-   - b. l'API: un elemento che non c'è, un gestore che lancia (file:riga), un elemento
+   - b. l'API: un elemento che non c'è, una mossa che lancia (file:riga), un elemento
      disabilitato, il seme (stessa partita con lo stesso seme, creaCaso), un comando non
      attivo, nessuna scheda;
    - c. la riproduzione di una correzione di gioco: il test del disegno è rosso sulla versione
@@ -245,8 +246,12 @@ def prova_frase(tmp: Path):
 
 # ═══════════════════════════ 2. i test toccano il comportamento visibile ═══════════════════════════
 # Il difetto vero del 12/10 (11:05–12:06, sei versioni), con nomi di fantasia: logica.js
-# restituisce lo stato con l'esito annidato, gioco.js lo legge al primo livello. Niente mostro,
-# sempre «Nessun punto!», i test della logica verdi e la prova di fumo pure (nessun «undefined»)
+# restituiva lo stato con l'esito annidato, gioco.js lo leggeva al primo livello. Niente mostro,
+# sempre «Nessun punto!», i test della logica verdi e la prova di fumo pure (nessun «undefined»).
+# Dal 13/10 l'esito annidato lo ferma la macchina a stati (la forma delle mosse) e dal 14/10
+# gioco.js non c'è più: qui lo stesso genere di difetto nel formato di oggi, un esito che mostra
+# la porta sbagliata (i punti giusti, il mostro di un'altra porta), che la logica e la prova di
+# fumo non vedono e il test del disegno sì
 
 LOGICA_PORTE = """"use strict";
 const DIETRO = [
@@ -254,96 +259,66 @@ const DIETRO = [
   { tipo: "oggetto", nome: "Caramella", emoji: "🍬", punti: 0 },
   { tipo: "mostro", nome: "Pipistrello", emoji: "🦇", punti: 2 },
 ];
-function nuovaPartita(nGiocatori) {
-  if (!(nGiocatori >= 2 && nGiocatori <= 4)) throw new Error("da 2 a 4 giocatori");
-  return { turno: 0, punti: new Array(nGiocatori).fill(0), porte: DIETRO.map((d) => ({ ...d })) };
-}
-function apriPorta(stato, porta) {
-  const risultato = { ...stato.porte[porta] };
-  const punti = stato.punti.slice();
-  punti[stato.turno] += risultato.punti;
-  return { ...stato, punti, turno: (stato.turno + 1) % punti.length, risultato };
-}
-if (typeof module !== "undefined") module.exports = { nuovaPartita, apriPorta };
+const GIOCO = {
+  nuovaPartita() { return { aperte: [] }; },
+  attivi: { turno: (d) => ({ porta: [1, 2, 3].filter((p) => !d.aperte.includes(p)) }) },
+  mosse: {
+    turno: {
+      porta(d, { valore }) {
+        const punti = DIETRO[valore - 1].punti;
+        const visto = DIETRO[MOSTRA_ESITO];
+        const aperte = d.aperte.concat([valore]);
+        return { dati: { ...d, aperte }, punti,
+                 esito: visto.emoji + " " + visto.nome + ": " + (visto.punti > 0 ? "+" + visto.punti + " punti!" : "Nessun punto!"),
+                 dopo: aperte.length === 3 ? "fine" : "turno" };
+      },
+    },
+  },
+  vista: { turno: () => ({ titolo: "Quale porta apri?" }) },
+};
+if (typeof module !== "undefined") module.exports = { GIOCO, DIETRO };
 """
-GIOCO_PORTE = """"use strict";
-const radice = document.getElementById("gioco");
-let partita = null;
-function sicuro(f) {
-  return (ev) => { try { f(ev); } catch (e) { const p = document.createElement("p"); p.textContent = e.message; radice.appendChild(p); } };
-}
-function mostra(esito) {
-  const r = document.createElement("div");
-  r.className = "esito";
-  const e = document.createElement("span");
-  e.textContent = esito.emoji;
-  const n = document.createElement("span");
-  n.textContent = esito.nome;
-  const p = document.createElement("p");
-  p.textContent = esito.punti > 0 ? "+" + esito.punti + " punti!" : "Nessun punto!";
-  r.append(e, n, p);
-  radice.appendChild(r);
-}
-function disegna(esito) {
-  radice.replaceChildren();
-  if (!partita) {
-    const b = document.createElement("button");
-    b.textContent = "Inizia";
-    b.addEventListener("click", sicuro(() => { partita = nuovaPartita(2); disegna(); }));
-    radice.appendChild(b);
-    return;
-  }
-  const t = document.createElement("p");
-  t.textContent = "Tocca al giocatore " + (partita.turno + 1) + " · punti " + partita.punti.join(" a ");
-  radice.appendChild(t);
-  partita.porte.forEach((_, i) => {
-    const b = document.createElement("button");
-    b.className = "porta";
-    b.textContent = "Porta " + (i + 1);
-    b.addEventListener("click", sicuro(() => {
-      const nuovo = apriPorta(partita, i);
-      partita = nuovo;
-      disegna(MOSTRA_ESITO);
-    }));
-    radice.appendChild(b);
-  });
-  if (esito) mostra(esito);
-}
-calliope.quandoPronto(() => disegna());
-"""
-# Il collegamento rotto (12/10) e quello giusto
-GIOCO_ROTTO = GIOCO_PORTE.replace("MOSTRA_ESITO", "nuovo")
-GIOCO_GIUSTO = GIOCO_PORTE.replace("MOSTRA_ESITO", "nuovo.risultato")
+# Il collegamento rotto (la porta accanto) e quello giusto
+GIOCO_ROTTO = LOGICA_PORTE.replace("MOSTRA_ESITO", "valore % DIETRO.length")
+GIOCO_GIUSTO = LOGICA_PORTE.replace("MOSTRA_ESITO", "valore - 1")
 TEST_LOGICA_PORTE = """const { test } = require("node:test");
 const assert = require("node:assert");
-const { nuovaPartita, apriPorta } = require("./logica.js");
-test("la porta del fantasmino dà 3 punti al primo giocatore", () => {
-  const s = apriPorta(nuovaPartita(2), 0);
-  assert.strictEqual(s.risultato.punti, 3);
-  assert.deepStrictEqual(s.punti, [3, 0]);
+const { GIOCO } = require("./logica.js");
+test("la porta del fantasmino dà 3 punti a chi la apre", () => {
+  const r = GIOCO.mosse.turno.porta(GIOCO.nuovaPartita({ giocatori: 2 }), { valore: 1 });
+  assert.strictEqual(r.punti, 3);
+  assert.deepStrictEqual(r.dati.aperte, [1]);
 });
 """
 # Il test del disegno: tocca come la persona e legge cosa compare
 TEST_GIOCO_PORTE = """const { test } = require("node:test");
 const assert = require("node:assert");
 test("toccando la porta del fantasmino si vedono il mostro e i suoi punti", async () => {
-  const g = await apriGioco({ giocatori: 2, seme: 1 });
-  await g.tocca("Inizia");
+  const g = await apriGioco({ seme: 1 });
+  await g.tocca("2 giocatori");
   await g.tocca("Porta 1");
   assert.match(g.testo(), /Fantasmino/);
   assert.match(g.testo(), /\\+3 punti/);
-  assert.match(g.testo(), /punti 3 a 0/);
+  assert.strictEqual(g.stato().giocatori[0].punti, 3);
 });
 """
 MANIFESTO_PORTE = {"nome": "porte_borgofiore", "titolo": "Le porte di Borgofiore",
                    "cosa_fa": {"verbo": "propone", "oggetto": "un gioco di porte e mostri"},
-                   "permessi": {}, "scheda": {"tipo": "gioco", "file": ["logica.js", "gioco.js"],
-                                              "giocatori": {"min": 2, "max": 4}}}
+                   "permessi": {}, "scheda": {"tipo": "gioco", "file": ["logica.js"],
+                                              "giocatori": {"min": 2, "max": 4},
+                                              "macchina": {"inizio": "turno", "fasi": {"turno": {
+                                                  "pagina": "scelte", "verso": ["esito", "fine"],
+                                                  "comandi": {"porta": {
+                                                      "forme": ["porta {n}", "la porta {n}", "{n}"],
+                                                      "n": {"da": 1, "a": 3},
+                                                      "etichetta": "Porta {n}"}}}}}}}
 
 
 def _gioco(tmp: Path, nome: str, gioco: str, test_gioco: str | None = TEST_GIOCO_PORTE,
            extra: dict | None = None):
-    file = {"logica.js": LOGICA_PORTE, "gioco.js": gioco, "logica.test.js": TEST_LOGICA_PORTE,
+    """Un gioco delle porte nella sandbox: `gioco` è il suo logica.js (dal 14/10 l'unico
+    script: il disegno è della macchina a stati)."""
+    file = {"logica.js": gioco, "logica.test.js": TEST_LOGICA_PORTE,
             "manifesto.json": json.dumps(MANIFESTO_PORTE)}
     if test_gioco:
         file["gioco.test.js"] = test_gioco
@@ -378,16 +353,19 @@ def prova_disegno(tmp: Path):
                     'await g.tocca("Porta 9"); });',
                     lambda u: "nessun elemento da toccare con «Porta 9»" in u
                     and "Inizia" in u),
+        # dal 14/10 un'eccezione della logica la prende il motore: il tocco fallisce con il
+        # punto in logica.js
         "lancia": ('test("x", async () => { const g = await apriGioco(); '
-                   'await g.tocca("Inizia"); await g.tocca(".porta", 2); });',
-                   lambda u: "toccando «.porta»" in u and "porta rotta" in u
-                   and "gioco.js:" in u),
+                   'await g.tocca("Inizia"); await g.tocca("Porta 3"); });',
+                   lambda u: "toccando «Porta 3»" in u and "porta rotta" in u
+                   and "logica.js:" in u),
         "disabilitato": ('test("x", async () => { const g = await apriGioco(); '
                          'g.trova("Inizia")[0].disabled = true; await g.tocca("Inizia"); '
-                         'require("node:assert").doesNotMatch(g.testo(), /Tocca al giocatore/); });',
+                         'require("node:assert").doesNotMatch(g.testo(), /Quale porta/); });',
                          lambda u: "ok x" in u),
         "seme": ('test("x", async () => { const a = await apriGioco({ seme: 7 }); '
                  'const b = await apriGioco({ seme: 7 }); const c = await apriGioco({ seme: 8 }); '
+                 'for (const g of [a, b, c]) await g.tocca("Inizia"); '
                  'const assert = require("node:assert"); '
                  'assert.strictEqual(a.testo(), b.testo()); assert.notStrictEqual(a.testo(), '
                  'c.testo()); const r1 = creaCaso(3), r2 = creaCaso(3); '
@@ -395,14 +373,12 @@ def prova_disegno(tmp: Path):
                  lambda u: "ok x" in u),
     }
     gioco = GIOCO_GIUSTO.replace(
-        'b.textContent = "Inizia";',
-        'b.textContent = "Inizia"; const k = document.createElement("i"); '
-        'k.textContent = String(Math.random()); radice.appendChild(k);').replace(
-        "const nuovo = apriPorta(partita, i);",
-        'if (i === 2) throw new Error("porta rotta"); const nuovo = apriPorta(partita, i);')
-    # Il gestore che lancia senza sicuro(): un'eccezione che esce dal tocco
-    gioco = gioco.replace('b.addEventListener("click", sicuro(() => {\n      if (i === 2)',
-                          'b.addEventListener("click", (() => {\n      if (i === 2)')
+        "nuovaPartita() { return { aperte: [] }; },",
+        "nuovaPartita() { return { aperte: [], codice: Math.floor(Math.random() * 1e6) }; },").replace(
+        'vista: { turno: () => ({ titolo: "Quale porta apri?" }) },',
+        'vista: { turno: (d) => ({ titolo: "Quale porta apri?", testo: "Codice " + d.codice }) },').replace(
+        "const punti = DIETRO[valore - 1].punti;",
+        'if (valore === 3) throw new Error("porta rotta");\n        const punti = DIETRO[valore - 1].punti;')
     for nome, (corpo, controllo) in casi.items():
         sb = _gioco(tmp, "api_" + nome, gioco,
                     'const { test } = require("node:test");\n' + corpo + "\n")
@@ -411,9 +387,9 @@ def prova_disegno(tmp: Path):
         verifica(f"apriGioco: {nome}", controllo(u), u[-500:])
     sb = _gioco(tmp, "api_comando", GIOCO_GIUSTO,
                 'const { test } = require("node:test");\ntest("x", async () => { '
-                'const g = await apriGioco(); await g.comando("tre"); });\n')
+                'const g = await apriGioco(); await g.comando("porta", 3); });\n')
     u = sb.test(fumo=False)["uscita"]
-    verifica("apriGioco: un comando non attivo lo dice", "il comando «tre» adesso non è attivo"
+    verifica("apriGioco: un comando non attivo lo dice", "il comando «porta_3» adesso non è attivo"
              in u, u[-300:])
     sb = _sb(tmp, "api_senza_scheda", {"logica.js": LOGICA_PORTE, "x.test.js": (
         'const { test } = require("node:test");\ntest("x", async () => { await apriGioco(); });\n')})
@@ -422,7 +398,7 @@ def prova_disegno(tmp: Path):
 
     sezione("2c. la riproduzione di una correzione di gioco")
     from calliope.agenti.riproduzione import controlla
-    prima = {"logica.js": LOGICA_PORTE, "gioco.js": GIOCO_ROTTO,
+    prima = {"logica.js": GIOCO_ROTTO,
              "logica.test.js": TEST_LOGICA_PORTE, "manifesto.json": json.dumps(MANIFESTO_PORTE)}
     sb = _gioco(tmp, "rip_giusta", GIOCO_GIUSTO)
     e = controlla(_lav(prima=prima), sb, log=lambda *_: None)
@@ -430,7 +406,8 @@ def prova_disegno(tmp: Path):
              "riprodotto", e["stato"] == "riprodotto" and e["test"] == ["gioco.test.js"], str(e))
     test_logica2 = TEST_LOGICA_PORTE + (
         'test("la porta della caramella non dà punti", () => {\n'
-        '  assert.strictEqual(apriPorta(nuovaPartita(2), 1).risultato.punti, 0);\n});\n')
+        '  assert.strictEqual(GIOCO.mosse.turno.porta(GIOCO.nuovaPartita({ giocatori: 2 }), '
+        '{ valore: 2 }).punti, 0);\n});\n')
     sb = _gioco(tmp, "rip_logica", GIOCO_GIUSTO, None, {"logica.test.js": test_logica2})
     e = controlla(_lav(prima=prima), sb, log=lambda *_: None)
     verifica("contrario: un test nuovo solo sulla logica passa anche prima → passa_prima (il "
@@ -464,13 +441,13 @@ def prova_js_e_seme(tmp: Path):
         print("SALTATA IN PARTE: node non c'è")
     else:
         sb = _gioco(tmp, "js", GIOCO_ROTTO, None, {"prova_esito.js": (
-            'const { nuovaPartita, apriPorta } = require("./logica.js");\n'
-            'const s = apriPorta(nuovaPartita(2), 0);\n'
-            'console.log(Object.keys(s).join(","), s.emoji, s.risultato.nome);\n')})
+            'const { GIOCO } = require("./logica.js");\n'
+            'const r = GIOCO.mosse.turno.porta(GIOCO.nuovaPartita({ giocatori: 2 }), { valore: 1 });\n'
+            'console.log(Object.keys(r).join(","), r.punti, r.esito);\n')})
         r = sb.esegui_js("prova_esito.js")
-        verifica("la stampa mostra l'esito annidato (quello che il 12/10 si cercava a mente)",
-                 r.get("codice_uscita") == 0 and "risultato" in r["uscita"]
-                 and "undefined Fantasmino" in r["uscita"], str(r)[:300])
+        verifica("la stampa mostra l'esito sbagliato (quello che il 12/10 si cercava a mente)",
+                 r.get("codice_uscita") == 0 and "dati,punti,esito" in r["uscita"]
+                 and "3 🍬 Caramella" in r["uscita"], str(r)[:300])
         sb.scrivi("prova_rotta.js", "const x = nonDichiarata + 1;\n")
         r = sb.esegui_js("prova_rotta.js")
         verifica("…un errore esce con il codice e il messaggio", r.get("codice_uscita") != 0
@@ -488,7 +465,7 @@ def prova_js_e_seme(tmp: Path):
         res = next((json.loads(m["content"]) for m in lav.contesto["messages"]
                     if m.get("tool_name") == "esegui_js"), {})
         verifica("…nel ciclo dell'agente esegui_js restituisce l'uscita",
-                 "Fantasmino" in str(res.get("uscita")), str(res)[:200])
+                 "Caramella" in str(res.get("uscita")), str(res)[:200])
     sb = _sb(tmp, "senza_node", {"prova.js": "console.log(1)\n"})
     sb.linguaggi = {}
     try:

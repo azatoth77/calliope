@@ -4,9 +4,18 @@
   "cosa_fa": {"verbo": "propone", "oggetto": "una partita a tris sullo schermo"},
   "input": {"type": "object", "properties": {}, "required": []},
   "permessi": {},
-  "scheda": {"tipo": "gioco", "file": ["logica.js", "gioco.js"], "stile": "gioco.css",
+  "scheda": {"tipo": "gioco", "file": ["logica.js"],
              "giocatori": {"min": 1, "max": 2}, "condivisa": true, "chat": true,
-             "salva": true, "voce": true, "azioni": []},
+             "salva": true, "voce": true, "azioni": [],
+             "macchina": {
+               "inizio": "turno",
+               "fasi": {
+                 "turno": {"pagina": "griglia", "verso": ["esito", "fine"],
+                           "comandi": {"casella": {"forme": ["casella {n}", "{n}"],
+                                                   "n": {"da": 1, "a": 9},
+                                                   "etichetta": "Casella {n}"}}}
+               }
+             }},
   "livello": "familiare",
   "limiti": {"tempo_s": 5, "memoria_mb": 128}
 }

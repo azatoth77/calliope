@@ -13,7 +13,9 @@ calliope/schermi/giochi.py, rapporto docs/ricerche/2026-10-05-giochi.md).
   tutore, scritto), richieste in attesa ai tutori (creazione, doppioni, approvazione con la
   voce, no, scadenza con l'avviso);
 - i test JavaScript della logica con il docker finto (Node della macchina, se c'è);
-- server: /gioco/<gettone> con le intestazioni, /api/gioco con la sessione.
+- server: /gioco/<gettone> con le intestazioni, /api/gioco con la sessione;
+- dal 14/10 (il palco, giochi vecchi tolti): un gioco senza la macchina a stati non si approva,
+  uno già approvato non si apre e non ha documento; la diagnosi «palco» dal riquadro.
 
     python prove/prova_giochi.py
 """
@@ -184,10 +186,17 @@ class Ambiente:
         ctx.regole = []
         return json.loads(self.tools.call(tool, args, ctx, ctx.speaker_ctx.current_level))
 
-    def installa(self, cartella, approva=True, test_passano=True, sost=None, manifesto=None):
+    def installa(self, cartella, approva=True, test_passano=True, sost=None, manifesto=None,
+                 aggiungi=None, scheda=None):
+        """Un gioco delle prove nell'archivio. `aggiungi`: file in più ({nome: testo});
+        `scheda`: campi da cambiare nella scheda del manifesto (14/10: il tema)."""
         m, file = file_gioco(cartella, sost)
         if manifesto:
             m.update(manifesto)
+        if scheda:
+            m["scheda"] = {**m["scheda"], **scheda}
+        for k, v in (aggiungi or {}).items():
+            file[k] = v.encode("utf-8")
         mv = valida(m)
         an = {"sintassi": [], "rischi": SC.analizza_js(
             {k: v.decode() for k, v in file.items() if k.endswith(".js")})["rischi"]}
@@ -233,6 +242,17 @@ def prova_manifesto():
     for nome, s in casi.items():
         e = errore(**s)
         verifica(f"rifiutato: {nome}", e is not None, e or "")
+    # 14/10: niente più giochi del formato di prima (gioco.js libero, «ascolta» piatto)
+    mm = json.loads(json.dumps(m))
+    del mm["scheda"]["macchina"]
+    mm["scheda"]["file"] = ["logica.js", "gioco.js"]
+    try:
+        valida(mm)
+        e = None
+    except ManifestoNonValido as x:
+        e = str(x)
+    verifica("rifiutato: un gioco senza la macchina a stati (il formato di prima)",
+             e is not None and "macchina a stati di Calliope" in e, e or "")
     mm = json.loads(json.dumps(m))
     mm["permessi"] = {"legge": {"casa": True}}
     mm["scheda"]["azioni"] = ["casa_stato"]
@@ -243,7 +263,7 @@ def prova_manifesto():
 
     sezione("analisi del JavaScript")
     _, ostile = file_gioco("ostile")
-    an = SC.analizza_js({"gioco.js": ostile["gioco.js"].decode()})
+    an = SC.analizza_js({"logica.js": ostile["logica.js"].decode()})
     cose = {r["cosa"] for r in an["rischi"]}
     attese = {"fuori_riquadro", "archivio_browser", "rete", "webrtc", "navigazione",
               "messaggi_diretti", "elementi_attivi"}
@@ -252,7 +272,7 @@ def prova_manifesto():
     verifica("il tris non ne ha", not pulito["rischi"], str(pulito["rischi"][:2]))
 
     sezione("documento del riquadro e CSP")
-    html, csp = SC.documento(mv["scheda"], {**file, "gioco.js": file["gioco.js"]
+    html, csp = SC.documento(mv["scheda"], {**file, "logica.js": file["logica.js"]
                                            + b"\n// </script><script>alert(1)</script>"})
     verifica("CSP: sandbox, niente rete, niente frame",
              all(x in csp for x in ("sandbox allow-scripts", "default-src 'none'",
@@ -264,8 +284,12 @@ def prova_manifesto():
     script = re.findall(r"<script>(.*?)</script>", html, re.S)
     hash_ok = all(f"'sha256-{base64.b64encode(hashlib.sha256(s.encode()).digest()).decode()}'"
                   in csp for s in script)
-    verifica("solo gli script con l'impronta, runtime per primo",
-             hash_ok and len(script) == 3 and "Object.freeze(api)" in script[0])
+    verifica("solo gli script con l'impronta: runtime, motore, logica, avvio",
+             hash_ok and len(script) == 4 and "Object.freeze(api)" in script[0]
+             and "CalliopeMotore" in script[1] and script[3].startswith("CalliopeMotore.avvia("))
+    verifica("il canale del motore è nel runtime e non nell'oggetto calliope del gioco",
+             "__calliopeMotore" in script[0] and "delete G.__calliopeMotore" in script[1]
+             and "quandoComando: quando" not in script[0].split("Object.freeze(api)")[0])
     verifica("«</script>» nel codice non chiude il tag", "<\\/script><script>alert(1)" in html)
     verifica("niente unsafe-eval né unsafe-inline negli script",
              "unsafe-eval" not in csp and "script-src 'unsafe" not in csp)
@@ -352,6 +376,32 @@ def prova_partite(tmp: Path):
     out = a.chiama("est_tris", {"partita": "nuova"}, None, schermo=sogg)
     verifica("anche un ospite gioca sullo schermo di stanza", out.get("ok") is not False,
              out.get("risposta_finale"))
+    # La diagnosi del palco (14/10): il motore manda ciò che sullo schermo vero non ci sta
+    q = a.giochi.partite[out["partita"]]
+    a.pagina(sogg, {"partita": q.id, "tipo": "pronto"})
+    r = a.pagina(sogg, {"partita": q.id, "tipo": "palco", "difetti": []})
+    verifica("palco: «nessun difetto» resta sul posto", r.get("ok") and q.posti[sogg["id"]].palco == [])
+    r = a.pagina(sogg, {"partita": q.id, "tipo": "palco",
+                        "difetti": ["fuori dal palco sullo schermo: <button> «Porta 9»"]})
+    verifica("palco: un difetto resta sul posto e nel registro",
+             r.get("ok") and q.posti[sogg["id"]].palco == ["fuori dal palco sullo schermo: <button> «Porta 9»"])
+    r = a.pagina(sogg, {"partita": q.id, "tipo": "palco", "difetti": ["a", "b", "c", "d"]})
+    r2 = a.pagina(sogg, {"partita": q.id, "tipo": "palco", "difetti": [{"x": 1}]})
+    verifica("contrario: palco con troppe frasi o non testo: 400",
+             r.get("_stato") == 400 and r2.get("_stato") == 400)
+    # Un gioco del formato di prima (gioco.js libero) già approvato: non si apre più (14/10)
+    mvv, fv = file_gioco("tris")
+    mvv = valida(mvv)
+    mvv["nome"], mvv["titolo"] = "tris_vecchio", "Tris vecchio"
+    del mvv["scheda"]["macchina"]
+    nv = a.est.archivio.nuova_candidata(mvv, fv, "Dario", {"eseguiti": 1},
+                                        {"sintassi": [], "rischi": []}, "L1", True)
+    a.est.archivio.approva("tris_vecchio", nv, "Dario")
+    a.est.aggiorna_tool()
+    out = a.chiama("est_tris_vecchio", {}, "Dario", schermo=sogg)
+    verifica("contrario: un gioco vecchio già approvato non si apre, e lo dice",
+             out.get("ok") is False and "formato di prima" in out.get("risposta_finale", "")
+             and "gioco_formato_vecchio" in a.ctx.regole, out.get("risposta_finale"))
 
     sezione("partita condivisa tra due schermi")
     a.giochi.partite.clear()
@@ -700,30 +750,36 @@ def prova_test_js(tmp: Path):
              r["passano"] and r["esito"]["eseguiti"] == 5 and "ok prova di fumo" in r["uscita"],
              str(r["esito"]))
     # Il difetto vero del primo memory dell'agente sulla DGX (05/10): una variabile mai
-    # dichiarata usata a ogni tocco. I test della logica passavano; la prova di fumo no
-    gioco = file["gioco.js"].decode()
-    sb.scrivi("gioco.js", gioco.replace("if (stato.finita || stato.turno !== io",
-                                        "if (attesaRigira || stato.finita || stato.turno !== io"))
+    # dichiarata usata a ogni mossa. I test della logica passavano; la prova di fumo no (dal
+    # 14/10 la mossa è in logica.js: la prova di fumo per fasi la prova con ogni valore)
+    logica = file["logica.js"].decode()
+    sb.scrivi("logica.js", logica.replace("const celle = d.celle.slice();",
+                                          "if (attesaRigira) return { dati: d };\n"
+                                          "        const celle = d.celle.slice();"))
     r = sb.test()
-    verifica("prova di fumo: variabile mai dichiarata al tocco → fallisce",
-             not r["passano"] and "attesaRigira is not defined" in r["uscita"],
-             r["uscita"][-200:])
-    sb.scrivi("gioco.js", gioco)
-    # Dal 13/10 un gioco NUOVO usa la macchina a stati (scheda.macchina): il tris con gioco.js
-    # libero passa solo come versione nuova di un gioco che c'era già (nome_atteso)
+    verifica("prova di fumo: variabile mai dichiarata alla mossa → fallisce, con fase e comando",
+             not r["passano"] and "attesaRigira is not defined" in r["uscita"]
+             and "comando «casella_1»" in r["uscita"], r["uscita"][-300:])
+    sb.scrivi("logica.js", logica)
     vecchio = m["nome"]
-    verifica("consegna del gioco accettata", controlla_consegna(sb, nome_atteso=vecchio) is None,
+    verifica("consegna del gioco accettata", controlla_consegna(sb, nome_atteso=vecchio) is None
+             and controlla_consegna(sb) is None, str(controlla_consegna(sb, nome_atteso=vecchio)))
+    senza = json.loads(json.dumps(m))
+    del senza["scheda"]["macchina"]
+    sb.scrivi("manifesto.json", json.dumps(senza))
+    verifica("un gioco senza la macchina a stati (anche la versione nuova di un gioco vecchio): "
+             "rifiutato", "macchina a stati" in str(controlla_consegna(sb, nome_atteso=vecchio)),
              str(controlla_consegna(sb, nome_atteso=vecchio)))
-    verifica("un gioco nuovo senza la macchina a stati: rifiutato, con lo scheletro",
-             "macchina a stati" in str(controlla_consegna(sb)), str(controlla_consegna(sb)))
+    sb.scrivi("manifesto.json", json.dumps(m))
     sb.scrivi("logica.test.js", file["logica.test.js"].decode().replace('"X")', '"O")', 1))
     r = sb.test()
     verifica("un test sbagliato: non passano", not r["passano"] and r["esito"]["falliti"] == 1,
              str(r["esito"]))
-    sb.scrivi("gioco.js", "function ( {")
+    sb.scrivi("logica.js", "function ( {")
     r = sb.test()
-    verifica("errore di sintassi in gioco.js: non passano",
+    verifica("errore di sintassi in logica.js: non passano",
              not r["passano"] and "sintassi" in r["uscita"], r["uscita"][-160:])
+    sb.scrivi("logica.js", logica)
     sb2 = Sandbox(tmp / "sb2", 30, 256, isolamento=iso_py)
     for k, v in file.items():
         sb2.scrivi(k, v.decode())
@@ -735,13 +791,14 @@ def prova_test_js(tmp: Path):
     sb2.scrivi("manifesto.json", json.dumps(m))
     verifica("consegna senza test JavaScript: rifiutata",
              "test" in str(controlla_consegna(sb2, nome_atteso=vecchio)))
-    # Il difetto della seconda prova vera sulla DGX (05/10): gioco.js con require
-    sb.scrivi("gioco.js", 'const { mossa } = require("./logica.js");\n'
-              + file["gioco.js"].decode())
+    # Il difetto della seconda prova vera sulla DGX (05/10): require in uno script della scheda
+    # (allora gioco.js; dal 14/10 logica.js è l'unico script)
+    sb.scrivi("logica.js", 'const { regole } = require("./regole.js");\n' + logica)
+    sb.scrivi("logica.test.js", file["logica.test.js"].decode())
     sb.scrivi("manifesto.json", json.dumps(m))
     errore = str(controlla_consegna(sb, nome_atteso=vecchio))
     r = sb.test()
-    verifica("gioco.js con require: consegna rifiutata e fumo con il consiglio",
+    verifica("logica.js con require: consegna rifiutata e fumo con il consiglio",
              "require" in errore and "stesso spazio globale" in errore
              and not r["passano"] and "stesso spazio globale" in r["uscita"],
              errore[:100] + " | " + r["uscita"][-160:])

@@ -1,0 +1,34 @@
+{
+  "nome": "pagine",
+  "titolo": "Le pagine",
+  "cosa_fa": {"verbo": "mostra", "oggetto": "tutte le pagine dei giochi"},
+  "input": {"type": "object", "properties": {}, "required": []},
+  "permessi": {},
+  "scheda": {"tipo": "gioco", "file": ["logica.js"], "giocatori": {"min": 1, "max": 3},
+             "salva": false, "azioni": [],
+             "macchina": {
+               "inizio": "benvenuto",
+               "fasi": {
+                 "benvenuto": {"pagina": "titolo", "turni": false, "verso": ["domanda"],
+                               "comandi": {"parti": {"forme": ["parti", "si parte"]}}},
+                 "domanda": {"pagina": "scelte", "verso": ["esito", "tabellone"],
+                             "comandi": {"colore": {"forme": ["{n}", "il {n}"],
+                                                    "n": {"valori": {"rosso": ["rosso"],
+                                                                     "verde": ["verde"],
+                                                                     "blu": ["blu"]}},
+                                                    "etichetta": "{n}"}}},
+                 "tabellone": {"pagina": "griglia", "turni": false, "verso": ["annuncio"],
+                               "comandi": {"casella": {"forme": ["casella {n}"],
+                                                       "n": {"da": 1, "a": 12},
+                                                       "etichetta": "Casella {n}"}}},
+                 "annuncio": {"pagina": "messaggio", "turni": false, "verso": ["punti_parziali"],
+                              "comandi": {"prosegui": {"forme": ["prosegui"]}}},
+                 "punti_parziali": {"pagina": "punteggi", "turni": false, "verso": ["libera"],
+                                    "comandi": {"vediamo": {"forme": ["vediamo"],
+                                                            "etichetta": "Vediamo"}}},
+                 "libera": {"pagina": "tela", "turni": false, "verso": ["fine"]}
+               }
+             }},
+  "livello": "familiare",
+  "limiti": {"tempo_s": 5, "memoria_mb": 128}
+}

@@ -10,12 +10,15 @@
 
 **13/10.** Un gioco nuovo usa la **macchina a stati di Calliope**: dichiara fasi e comandi nel manifesto (`scheda.macchina`, comandi con uno slot «porta {n}») e scrive in logica.js solo la logica pura (`GIOCO`); preparazione, turni, punti, esito, fine con la classifica, disegno, pulsanti e voce sono del motore (`motore_gioco.js`), che gira nel riquadro e, lo stesso file, nella prova di fumo per fasi e nei test. Gli esempi di accettazione dei giochi (stato → mosse → stato atteso) li scrive il codice e l'agente non li può cambiare. Vedi «La macchina a stati di Calliope» in fondo.
 
+**14/10.** Ogni pagina si disegna su un **palco fisso** (1280×720, 720×1280 sul telefono in verticale) scalato alla finestra, con sei modelli di pagina più la tela; la prova di fumo **misura il palco** di ogni pagina e lo dice all'agente come un errore da correggere, e il motore misura anche lo schermo vero. La macchina a stati è l'**unico formato**: i giochi vecchi (gioco.js libero, `ascolta` piatto) non si approvano né si aprono più. Vedi «Il palco fisso» in fondo.
+
 ## Moduli
 
 | Stadio | Libreria | Dove |
 |---|---|---|
 | Giochi e schede interattive delle estensioni (05/10) | JavaScript nel browser degli schermi in un `<iframe sandbox="allow-scripts">` (origine opaca, CSP senza rete, script con l'impronta), ponte `postMessage` controllato dalla pagina e dal server; test della logica con Node in un container (`Dockerfile.node`) | `calliope/estensioni/scheda.py` (sezione «scheda» del manifesto, gioco puro, `documento`, `RUNTIME_JS`, `analizza_js`); `calliope/schermi/giochi.py` → `Giochi` (partite, `GET /gioco/<gettone>`, `POST /api/gioco`), `AzioneGioco`; cane da guardia in `schermo.js`; `minori.TempoGioco`, `minori.Richieste`, tool `richiesta_tutore`; `calliope/agenti/test_js.mjs`, prova di fumo `calliope/agenti/fumo_js.mjs`; comandi a voce (11/10) `calliope/gioco_voce.py` (forme e regola `gioco_comando`), `Giochi.ascolto`, `Giochi.comando`, `Giochi.schermi_voce`, `Ciclo._comando_gioco`, tool `gioco_comando` in `tools/schermi.py`; rapporto [`docs/ricerche/2026-10-05-giochi.md`](../ricerche/2026-10-05-giochi.md) |
 | Macchina a stati dei giochi (13/10) | JavaScript senza dipendenze, lo stesso file nel riquadro e in Node | `calliope/estensioni/macchina.py` (validazione di `scheda.macchina`, comandi piatti `ascolta`, `in_parole`); `calliope/estensioni/motore_gioco.js` (CalliopeMotore.crea: il nucleo puro; CalliopeMotore.avvia: disegno, pulsanti, voce); `scheda.documento` (motore e avvio nel riquadro, `STILE_MOTORE`); `calliope/agenti/fumo_js.mjs` (esplora, tuttiPiatti, apriGioco con g.stato()); esempi di accettazione `agenti/accettazione.py` (`test_js`, `FILE_GIOCO`); progetto [`2026-10-12-giochi-macchina-stati.md`](../ricerche/2026-10-12-giochi-macchina-stati.md) |
+| Palco fisso e modelli di pagina (14/10) | JavaScript senza dipendenze: l'impaginazione è una funzione pura, la stessa nel riquadro e in Node | `motore_gioco.js`: `impagina` (contenuto della pagina → scatole sul palco), `controllaPalco`, `difettiPalco`, il nucleo `pagina(S)`, la misura vera nel riquadro (`misuraVera` → canale `palco`); `macchina.PAGINE`; `scheda.RUNTIME_JS` (il canale riservato al motore), `STILE_MOTORE` (il palco, niente scroll); `calliope/agenti/fumo_js.mjs` (il palco nell'esploratore, `g.palco()`); `schermi/giochi.py` (`_t_palco`, `Posto.palco`); `prove/giochi/pagine` |
 
 ## Problemi noti
 
@@ -125,6 +128,13 @@ scheletri di partenza, spinta concreta»; per i giochi:
 - `modifica_file` e `leggi_file` con `riga` per correggere un punto senza riscrivere il file.
 
 ## I comandi a voce di un gioco (11/10 sera, ramo `gioco-voce`)
+
+*Storico in parte dal 14/10: l'elenco piatto `scheda.ascolta` scritto dall'agente,
+`calliope.quandoComando` e `calliope.comandiAttivi` non ci sono più (i giochi vecchi sono tolti);
+i comandi a voce li ricava Calliope dalla macchina a stati e li riceve il motore, da un canale
+riservato. Il riconoscimento, la regola `gioco_comando`, la finestra senza nome, chi parla e la
+sicurezza qui sotto valgono come prima; il nome di chi gioca si chiede con
+`macchina.giocatore`. Vedi «Il palco fisso» in fondo.*
 
 Richiesta approvata da Dario: un gioco può usare la voce come modalità di interazione. Prima un
 gioco poteva solo far parlare Calliope (`voce: true`, poche frasi al minuto), ma non sentiva
@@ -401,13 +411,15 @@ con i test della logica e la prova di fumo verdi.
   gioco.js: 2 923 caratteri, come prima) e il §5 del contratto riscritto (circa 1 100 caratteri in
   più, ~320 token, da rimisurare sulla DGX); un gioco nuovo consegnato senza la macchina torna
   all'agente. Una versione nuova di un gioco vecchio passa ancora (i giochi vecchi si tolgono al
-  passo 4 del progetto, il palco).
+  passo 4 del progetto, il palco). *Storico dal 14/10: anche la versione nuova di un gioco
+  vecchio torna all'agente; vedi «Il palco fisso».*
 
 **Profilo ridotto da 8 GB.** Motore, fasi, pulsanti e voce sono nel browser degli schermi e nel
 confronto delle forme: 0 VRAM. La prova di fumo per fasi e gli esempi girano in Node dove gira
 l'agente (oggi solo sulla DGX); la passata del progettista è la stessa delle estensioni.
 
-**Cosa resta del progetto** (e perché): il **palco fisso** 1280×720 e 720×1280 con i sei modelli
+**Cosa resta del progetto** (e perché; *storico dal 14/10: il palco e la rimozione dei giochi
+vecchi sono fatti, vedi «Il palco fisso» qui sotto*): il **palco fisso** 1280×720 e 720×1280 con i sei modelli
 di pagina e la misura «fuori dal palco» (passo 4: oggi `scelte`, `messaggio` e `tela` con un
 disegno semplice che va a capo; è il passo più grande e cambia l'aspetto, da provare sugli
 schermi veri), e con lui la **rimozione dei giochi vecchi** (decisione 9); l'**istantanea
@@ -422,3 +434,136 @@ gioco del formato di prima (una correzione).
 due giocatori, a voce con il numero della porta»): guardare nel log l'analisi prima del codice
 (esempi e comandi), che l'agente scriva la macchina e non gioca.js, la prova di fumo per fasi,
 gli esempi alla consegna; poi aprirlo in prova e giocarlo a voce («siamo in due», «porta tre»).
+*(dal 14/10 lo stesso giro guarda anche il palco: sotto, «Il palco fisso»)*
+
+## Il palco fisso (14/10, ramo `giochi-palco`)
+
+Passo 4 del progetto [`2026-10-12-giochi-macchina-stati.md`](../ricerche/2026-10-12-giochi-macchina-stati.md)
+(§ 5), richiesto esplicitamente da Dario il 14/10, con le risposte di chi amministra del 12/10
+(decisione 3: i modelli di Calliope nei due orientamenti; decisione 4: niente Chromium nella
+sandbox della DGX; decisione 9: i giochi vecchi si tolgono qui).
+
+**Il palco.** Ogni pagina del gioco si disegna su un palco di misura fissa: **1280×720** in
+orizzontale, **720×1280** in verticale (il telefono in piedi), scelto dal rapporto della finestra
+(più alta che larga → verticale) e scalato e centrato con `transform: scale(s)`,
+`s = min(larghezza / W, altezza / H)`. Mai scroll: il riquadro ha `overflow: hidden`. Cambiando
+orientamento (il telefono che si gira) la pagina si ridisegna; cambiando solo la misura si
+riscala. Sulla TV 1920×1080 la scala è 1,5; sul telefono 390×844 in verticale ~0,54, e per questo
+un pulsante è alto almeno 80 px sul palco (~44 px veri).
+
+**I modelli di pagina** (`macchina.PAGINE`; ogni fase dichiara il suo con `"pagina"`, il disegno
+è di Calliope, la vista della logica dà solo dati):
+
+| Modello | Cosa mostra | Usato da Calliope per |
+|---|---|---|
+| `titolo` | un titolo grande al centro, sottotitolo, testo; i pulsanti in fondo | la preparazione con un numero fisso di giocatori |
+| `scelte` | titolo, sottotitolo («Tocca a …»), testo, una griglia di pulsanti (uno per comando e valore, la disposizione con il corpo più grande), la fascia dei punti | la preparazione con il numero dei giocatori |
+| `griglia` | una scacchiera fino a 12×12 dalla vista (`caselle`: un elenco di righe uguali, ogni casella un testo o `{ testo, colore, risorsa, comando, valore }`); una casella con un comando attivo è il pulsante della mossa, gli altri comandi attivi vanno in fondo | — |
+| `messaggio` | un testo grande (l'esito, o il testo della vista), la riga dei punti presi, i pulsanti in fondo | l'esito di una mossa |
+| `punteggi` | una riga per giocatore con i punti, chi tocca evidenziato | — |
+| `classifica` | il podio (il primo più grande) e «Ancora» | la fine |
+| `tela` | un'area libera (`tela.larghezza` × `tela.altezza` px del palco) per il tempo reale; «Fine partita» in fondo | — |
+
+Testi: il titolo da 60 a 30 px in al più ~150 px d'altezza (230 in verticale), il testo da 38 a
+22, il messaggio grande da 84 a 36; il corpo si sceglie a passi di 2 px, il più grande che ci
+sta. I colori delle caselle sono un elenco chiuso di nomi o `#rrggbb`, le risorse un `.svg` di
+`scheda.risorse`. Il tema (`tema.css`) cambia solo le variabili (`--sfondo`, `--testo`,
+`--primario`, `--accento`, `--carattere`, `--raggio`, `--casella`, `--bordo`): posizione,
+misura e corpo di ogni scatola il motore li mette in linea con `!important`.
+
+**L'impaginazione è una funzione pura.** `CalliopeMotore.impagina(contenuto, orientamento)` →
+le scatole (tipo, posizione, misura, corpo, testo) in ordine di lettura; il nucleo dà il
+contenuto della pagina di adesso (`pagina(S)`: modello, testi con la loro fonte, pulsanti,
+caselle, giocatori). Lo stesso codice gira nel riquadro (che crea un elemento per scatola) e in
+Node: così la misura si fa **senza browser**, dove gira l'agente (decisione 4). La larghezza del
+testo è stimata per carattere, un po' più larga del vero (strette, larghe, maiuscole, cifre; il
+grassetto +8 %), così ciò che «sta» nel calcolo sta anche sullo schermo.
+
+**La misura «fuori dal palco»** (`controllaPalco`, `difettiPalco`): scatole fuori dal palco, scatole
+che si sovrappongono, testo che non ci sta neanche al corpo minimo, e le cause (troppi pulsanti
+per la pagina, una griglia con caselle sotto i 32 px, una tela schiacciata). Detti in parole per
+l'agente, prima la causa poi gli effetti raggruppati, al più tre per pagina:
+
+    40 pulsanti non ci stanno nella pagina «scelte» (orizzontale 1280×720): al più 28 di almeno
+    150×80 px. Restringi i comandi attivi (GIOCO.attivi), accorcia le etichette o usa la pagina
+    «griglia»
+    il titolo «Quale delle centoventi porte …» non ci sta nella pagina «scelte» (verticale
+    720×1280) neanche a 30 px (18 righe dove ne stanno 6): accorcialo, al più circa 202
+    caratteri (GIOCO.vista.domanda.titolo)
+
+- **Nella prova di fumo** (`fumo_js.mjs`, `esplora`): ogni pagina diversa raggiunta dalla visita
+  delle fasi e dalle partite a caso, nei due orientamenti, una volta sola. Un difetto è un
+  `FALLITO prova di fumo del gioco` con la fase e la strada («palco: fase «domanda» (strada:
+  giocatori_2 → parti): …. La pagina la disegna Calliope: cambia i testi, i comandi attivi o il
+  modello di pagina, non il disegno»): l'agente lo corregge come gli altri errori. Il gioco delle
+  prove passa test e prova di fumo in ~0,3 s sul portatile, Node compreso.
+- **Nei test** `g.palco()` dà i difetti della pagina di adesso (`[]` se ci sta); lo scheletro
+  lo mostra.
+- **Nel browser vero** il motore misura anche il disegno (dopo due fotogrammi:
+  `getBoundingClientRect` contro il palco, `scrollHeight`/`scrollWidth` contro la scatola con un
+  margine di 0,3 em per i caratteri che sporgono dalla riga) e lo manda a Calliope con il tipo
+  `palco` (al più tre frasi, solo quando cambia, anche `[]`). Il server lo tiene sul posto
+  (`Posto.palco`) e, se c'è un difetto nuovo, nel registro (regola `gioco_fuori_dal_palco`) e nel
+  log; vale anche in una partita di prova (è una diagnosi, come i comandi: `TIPI_PROVA`). Prende
+  ciò che il calcolo non prevede: un tema che allarga il testo, un carattere diverso, il disegno
+  dentro una tela. *Non ancora detto a voce al collaudo* (resta nel log e nel registro).
+
+**Giochi vecchi tolti** (decisione 9; Calliope non è in produzione, niente migrazioni):
+- `scheda.normalizza` vuole `macchina`: un gioco senza («un gioco si scrive con la macchina a
+  stati di Calliope…», `SENZA_MACCHINA`) non si approva, anche come versione nuova di un gioco
+  che c'era; `ascolta` nel manifesto è rifiutato («non c'è più»). Nella scheda normalizzata
+  `ascolta` resta, scritto da Calliope dalla macchina.
+- Un gioco del formato di prima già approvato (sulla DGX ce ne sono) non si apre più: «è un gioco
+  del formato di prima: va rifatto con lo sviluppo, chiedimelo come modifica» (regola
+  `gioco_formato_vecchio`), e `Giochi.documento` non lo compone.
+- Il runtime non dà più al gioco `calliope.quandoComando` né `calliope.comandiAttivi`: li mette
+  in un canale riservato (`__calliopeMotore`, con `palco`) che il motore prende e toglie prima
+  del codice del gioco. Non è un confine (il confine resta la pagina e il server), ma l'agente
+  non ha più due modi di fare la stessa cosa.
+- `macchina.giocatore: true` porta alla mossa il nome di chi è riconosciuto dalla voce
+  (`ctx.giocatore`, come l'`ascolta.giocatore` dell'11/10), con lo stesso divieto con
+  `rete_leggi`; chi approva sente «… e il nome di chi gioca».
+- I giochi delle prove rifatti: `porte` (la voce, con il nome), `tris` (la `griglia`, contro il
+  computer da solo), `ostile` (gli attacchi, in una `tela`), `segnali` (una `tela` condivisa tra
+  due schermi: le partite condivise del motore restano rimandate, decisione 6), `pagine` (tutti
+  i modelli).
+
+**Per l'agente.** Lo scheletro del gioco dichiara `"pagina": "scelte"`, una riga dice i modelli e
+il test del disegno controlla `g.palco()` (3 347 caratteri, prima 2 923: ~120 token in più); il
+§5 del contratto descrive il palco, i modelli, le caselle, il tema solo a variabili, la tela con
+la sua misura e `macchina.giocatore` (6 294 caratteri, prima 4 973: ~380 token); il prompt del
+gioco dice di scegliere la pagina per ogni fase. Il prompt intero del gioco passa da 22 902 a
+24 900 caratteri (~575 token con il rapporto 3,47 di Qwen3.6, da rimisurare sulla DGX). Il
+vincolo della correzione di un gioco non parla più di gioco.js ma di vista, esito, pagina e
+`g.palco()`; `CAPACITA_GIOCO` dice che ogni fase sta in una pagina senza scorrere.
+
+**Un difetto trovato strada facendo**: la prova di fumo sceglieva i tocchi a caso con un
+generatore lineare e `seme % n`, che con due elementi li alternava sempre (in una tela con «Fine
+partita» il pulsante della tela non si toccava mai due volte di fila); ora usa `creaCaso`.
+
+**Profilo ridotto da 8 GB.** Palco, modelli e misura sono nel browser degli schermi e in Node
+dove gira l'agente: 0 VRAM, niente di nuovo sulla GPU.
+
+**Prove.** `prova_gioco_palco` (a secco, ~3 s: l'impaginazione pura dei sette modelli nei due
+orientamenti, otto giocatori, tris e porte; i difetti messi apposta; la prova di fumo con il
+palco e i suoi contrari; `g.palco()`; la diagnosi in prova), `prova_giochi_pagina` (Edge: ogni
+modello misurato sullo schermo vero a 900×800 e a 390×844 senza difetti, un tema che allarga il
+titolo → «testo tagliato» a Calliope, un tocco vero sulla casella del tris nel punto che
+l'impaginazione pura calcola), e le prove dei giochi rifatte (`prova_giochi`, `prova_gioco_voce`,
+`prova_gioco_macchina`, `prova_agente_guida`, `prova_fasi_agente`, `prova_giro_porte`,
+`prova_giro_halloween`).
+
+**Cosa resta del progetto**: l'**istantanea validata dal server** con i comandi numerati (passo 2
+lato server); le **domande standard** («a chi tocca?», passo 5); il **giudice di fase** (passo 6);
+«**gioco anch'io**» e i **nomi scritti**; la **ripresa dopo «Riapri»**; le **partite condivise**
+con il motore; una tela che dichiara un solo orientamento e fa dire «Gira il telefono»
+(decisione 3, non fatto); la diagnosi del palco detta a voce al collaudo; la misura del disegno
+dentro una tela fuori dal browser (in Node il DOM finto non ha impaginazione); provare sugli
+schermi veri (TV, tablet, telefono) l'aspetto dei modelli.
+
+**Da fare sulla DGX** (dopo `calliope aggiorna`): i giochi già approvati del formato di prima non
+si aprono più: chiederli come modifica («Calliope, rifai il gioco di Halloween») e guardare il
+giro dell'agente; nel giro vero di un gioco nuovo guardare nel log se la prova di fumo dice
+qualcosa del palco e se l'agente lo corregge cambiando testi o pagina; aprirlo in prova sul
+telefono in piedi e girato, e guardare nel registro (`gioco_fuori_dal_palco`) se lo schermo vero
+ha trovato qualcosa che il calcolo non prevede.

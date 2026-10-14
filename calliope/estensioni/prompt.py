@@ -87,7 +87,10 @@ SISTEMA_ESTENSIONE = (
     "§5 del contratto), logica.js con GIOCO (solo le regole: funzioni pure, niente DOM, "
     "module.exports in fondo), logica.test.js (node:test e node:assert) e gioco.test.js (la "
     "partita vera con apriGioco: tocca i pulsanti come la persona e controlla con g.testo() e "
-    "g.stato() punti, esito e vincitore; vedi lo scheletro). Niente gioco.js. Nel piano "
+    "g.stato() punti, esito e vincitore; vedi lo scheletro). Niente gioco.js. Per ogni fase "
+    "scegli la pagina di Calliope che serve (scelte, griglia, messaggio, punteggi, titolo; la "
+    "tela solo per il tempo reale): la prova di fumo controlla che ogni pagina stia nello "
+    "schermo, e se un testo è lungo o i pulsanti sono troppi lo dice. Nel piano "
     "capacita_necessarie: [\"scheda\"] e scope vuoto, così è un gioco puro. Scritte in "
     "italiano. Se nella cartella c'è accettazione.test.js, è in sola lettura: la "
     "macchina deve avere i comandi che usa. Per vedere cosa fa davvero un pezzo di "
@@ -124,10 +127,10 @@ def _controlla_gioco(m: dict, nomi: set, nomi_presi=(), nome_atteso: str | None 
     if not nome_atteso and m["nome"] in set(nomi_presi):
         return (f"il nome «{m['nome']}» è già di un'altra estensione: scegline uno nuovo che dica "
                 f"cosa fa questa")
-    if not nome_atteso and not s.get("macchina"):
-        # 13/10: un gioco nuovo usa la macchina a stati di Calliope (niente compatibilità con il
-        # formato di prima, gioco.js libero: resta solo per le versioni nuove dei giochi vecchi)
-        return ("un gioco nuovo usa la macchina a stati di Calliope: nel manifesto la scheda ha "
+    if not s.get("macchina"):
+        # 13/10: un gioco usa la macchina a stati di Calliope; dal 14/10 anche la versione nuova
+        # di un gioco vecchio (il formato di prima, gioco.js libero, non c'è più: scheda.py)
+        return ("un gioco usa la macchina a stati di Calliope: nel manifesto la scheda ha "
                 "«macchina» (fasi e comandi) e logica.js dichiara GIOCO, senza gioco.js; vedi "
                 "lo scheletro e il §5 del contratto")
     manca = [f for f in s["file"] + ([s["stile"]] if s["stile"] else []) + s["risorse"]

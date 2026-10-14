@@ -200,7 +200,7 @@ def prova_collaudo_gioco(tmp: Path):
 
     # File cambiati dopo la consegna: niente prova, e il documento sparisce
     cart = a.est.archivio.cartella_versione("tris", n)
-    f_js = cart / "gioco.js"
+    f_js = cart / "logica.js"
     prima = f_js.read_bytes()
     try:
         os.chmod(f_js, 0o644)

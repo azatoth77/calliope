@@ -119,10 +119,14 @@ voce raccontava male gli esiti, i comandi del flusso si perdevano.
    riquadro e nei test con le fasi standard, i turni, i punti e l'esito che va avanti da solo, la
    forma delle mosse controllata (l'esito annidato del 12/10 non passa), lo slot come elenco di
    comandi piatti, la tela, la prova di fumo per fasi, lo scheletro e il contratto nuovi, gli
-   esempi di accettazione dei giochi in sola lettura ([giochi](aree/giochi.md)). *Resta*: il palco
-   fisso con i sei modelli di pagina e la rimozione dei giochi vecchi (passo 4 del progetto),
-   l'istantanea validata dal server, le domande standard, il giudice di fase, «gioco anch'io» e i
-   nomi scritti, la ripresa dopo «Riapri»; il giro vero sulla DGX.
+   esempi di accettazione dei giochi in sola lettura ([giochi](aree/giochi.md)). **Passo 4 fatto il
+   14/10** (ramo `giochi-palco`): il palco fisso 1280×720 e 720×1280 scalato alla finestra, i sei
+   modelli di pagina più la tela, l'impaginazione pura misurata dalla prova di fumo (fuori dal
+   palco, sovrapposti, testo tagliato: un errore da correggere per l'agente) e dal motore sullo
+   schermo vero, i giochi vecchi tolti, scheletro e contratto aggiornati. *Resta*: l'istantanea
+   validata dal server, le domande standard, il giudice di fase, «gioco anch'io» e i nomi
+   scritti, la ripresa dopo «Riapri», «Gira il telefono» per una tela; il giro vero sulla DGX
+   (anche per rifare i giochi già approvati, che del formato di prima non si aprono più).
 5. **Flusso dell'agente a fasi** (proposte accettate da Dario il 12/10). **Parte 1 fatta il 12/10
    sera** (ramo `fasi-parte1`): la correzione che parte da un test rosso (rimandata una volta,
    poi «non sono riuscita a riprodurre il problema»), i giochi provati dal disegno nel DOM finto

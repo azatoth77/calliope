@@ -28,17 +28,27 @@ logica.js con il solo GIOCO (partita nuova, attivi, mosse, vista), i due test; n
 niente DOM, niente sicuro(): preparazione, turni, punti, esito, fine, disegno, pulsanti e voce
 sono del motore. 2 923 caratteri (prima 2 938), circa 840 token con lo stesso rapporto; il §5 del
 contratto cresce di circa 1 100 caratteri (~320 token): da rimisurare sulla DGX.
+
+Dal 14/10 (passo 4, il palco fisso) la fase dichiara il modello di pagina («pagina»: scelte nello
+scheletro), una riga dice i modelli e il test del disegno controlla anche il palco (g.palco():
+[] se la pagina ci sta nei due orientamenti); la prova di fumo lo misura per ogni pagina. Misura
+dei caratteri: scheletro 3 347 (prima 2 923, ~120 token in più), §5 del contratto 6 294 (prima
+4 973, ~380 token), il prompt intero del gioco 24 900 (prima 22 902, ~575 token); stima con il
+rapporto 3,47 caratteri per token di Qwen3.6, da rimisurare sulla DGX.
 """
 
 GIOCO = """SCHELETRO DI PARTENZA (gioco): parti da qui e cambia solo quello che serve. \
 Preparazione (quanti giocatori), turni, punti, esito della mossa, fine con la classifica e \
-«ancora», disegno, pulsanti e voce sono della macchina a stati di Calliope: NON scriverli. Ogni \
-comando è anche un pulsante. Niente gioco.js.
+«ancora», il disegno della pagina, i pulsanti e la voce sono della macchina a stati di Calliope: \
+NON scriverli. Ogni comando è anche un pulsante. Niente gioco.js, niente DOM.
 manifesto.json — la sezione "scheda":
 {"tipo": "gioco", "file": ["logica.js"], "giocatori": {"min": 1, "max": 4},
- "macchina": {"inizio": "turno", "fasi": {"turno": {"verso": ["esito", "fine"],
+ "macchina": {"inizio": "turno", "fasi": {"turno": {"pagina": "scelte", "verso": ["esito", "fine"],
   "comandi": {"porta": {"forme": ["porta {n}", "la porta {n}", "{n}"], "n": {"da": 1, "a": 6},
                         "etichetta": "Porta {n}"}}}}}}
+Ogni fase sceglie una pagina di Calliope: scelte (un pulsante per comando e valore), griglia \
+(una scacchiera: vista dà «caselle»), messaggio, punteggi, titolo, classifica; tela solo per il \
+tempo reale.
 logica.js — solo GIOCO, funzioni pure, niente DOM:
 "use strict";
 const GIOCO = {
@@ -78,15 +88,17 @@ test("si apre una porta e poi tocca all'altro", async () => {
   assert.match(g.testo(), /Porta 1 aperta/);
   await g.comando("avanti");
   assert.strictEqual(g.stato().tocca, "Giocatore 2");
+  assert.deepStrictEqual(g.palco(), []);
 });
 Una mossa restituisce SOLO { dati, punti, esito, fase, dopo, ancora }: tutto lo stato del gioco \
 dentro «dati», il testo da mostrare in «esito», e «dopo» (la fase dopo l'esito, di solito la \
 stessa o "fine"). attivi restringe (true, false o valori), mai fuori dal manifesto; vista dà \
 solo testi { titolo, sottotitolo, testo }. Ciò che la persona deve VEDERE si prova in \
 gioco.test.js: g.tocca("testo"), g.comando("porta", 3) (come la voce), g.avanza(ms), g.testo(), \
-g.stato() (fase, tocca, giocatori e punti, esito, comandi). La prova di fumo percorre ogni fase \
-con ogni comando e valore e gioca partite intere: un errore dice fase, comando, strada e \
-file:riga. Correggi quel punto con modifica_file."""
+g.stato() (fase, tocca, giocatori e punti, esito, comandi), g.palco() (cosa non sta nella \
+pagina). La prova di fumo percorre ogni fase con ogni comando e valore, gioca partite intere e \
+misura ogni pagina sul palco (1280×720 e 720×1280: testi troppo lunghi, troppi pulsanti): un \
+errore dice fase, pagina, strada e file:riga. Correggi quel punto con modifica_file."""
 
 ESTENSIONE = """SCHELETRO DI PARTENZA (estensione): parti da qui e cambia solo quello che serve.
 estensione.py:

@@ -1,0 +1,13 @@
+{
+  "nome": "segnali",
+  "titolo": "Segnali",
+  "cosa_fa": {"verbo": "propone", "oggetto": "un gioco di segnali tra due schermi"},
+  "input": {"type": "object", "properties": {}, "required": []},
+  "permessi": {},
+  "scheda": {"tipo": "gioco", "file": ["logica.js"], "giocatori": {"min": 2, "max": 2},
+             "condivisa": true, "salva": false, "azioni": [],
+             "macchina": {"inizio": "gioco",
+                          "fasi": {"gioco": {"pagina": "tela", "turni": false, "verso": ["fine"]}}}},
+  "livello": "familiare",
+  "limiti": {"tempo_s": 5, "memoria_mb": 128}
+}

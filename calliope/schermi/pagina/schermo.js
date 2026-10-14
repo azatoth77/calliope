@@ -3399,6 +3399,8 @@
     pronto: [], pong: ["n"], salva: ["chiave", "valore"], leggi: ["chiave"], manda: ["dati"],
     chat: ["testo"], di: ["testo"], azione: ["nome", "argomenti"], fine: ["esito"],
     errore: ["testo"], comandi: ["attivi"],
+    // La diagnosi del palco (14/10, il motore dei giochi): al più tre frasi su ciò che esce
+    palco: ["difetti"],
   };
   // Una mossa a voce (11/10, «ascolta» nel manifesto) verso il riquadro: solo il nome del
   // comando e, al più, il nome di chi gioca (il server li ha già scelti dall'elenco)

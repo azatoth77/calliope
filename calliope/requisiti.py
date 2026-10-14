@@ -80,7 +80,9 @@ CAPACITA_GIOCO = (
     "fase ha i suoi comandi A VOCE brevi, anche con un numero o una scelta da un elenco "
     "(«porta tre», «la porta 3», «rosso»; forme fisse di 1-5 parole), che Calliope riconosce "
     "e passa al gioco, anche senza il nome mentre il gioco aspetta una mossa; ogni comando è "
-    "anche un pulsante.\nImpossibile "
+    "anche un pulsante; ogni fase si mostra in una pagina di Calliope che sta tutta nello "
+    "schermo senza scorrere (pulsanti, una scacchiera, un messaggio, i punteggi, la "
+    "classifica, o un'area libera per il tempo reale).\nImpossibile "
     "oggi: frasi libere o lunghe a voce dentro il gioco (il gioco non sente il microfono: "
     "riceve solo i comandi che ha dichiarato); internet; i file del PC.")
 

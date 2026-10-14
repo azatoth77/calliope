@@ -582,3 +582,14 @@ passo 7 (scheletro, contratto, `CAPACITA_GIOCO`) e, in più, gli esempi di accet
 giochi (domanda 5 della ricerca sul flusso a fasi). Restano i passi 4 (palco, giochi vecchi
 tolti), 5, 6 e 8, il resto del 2 lato server e le scelte 1 (nomi), 7 (ripresa) e 6 (partite
 condivise) delle risposte del 12/10.
+
+## Aggiornamento del 14/10: il palco
+
+Fatto sul ramo `giochi-palco` il passo 4 (dettagli in [giochi](../aree/giochi.md), «Il palco fisso»):
+il palco 1280×720 e 720×1280 scalato alla finestra, i sei modelli di pagina più la tela,
+l'impaginazione come funzione pura del motore (la stessa nel riquadro e in Node) che la prova di
+fumo misura per ogni pagina raggiunta nei due orientamenti, la misura vera nel browser (tipo
+«palco» a Calliope), i giochi vecchi tolti (decisione 9), scheletro e contratto aggiornati.
+Rispetto al § 5.4: la difesa 2 (la misura nel motore) c'è; la 3 (il browser nella sandbox) non
+serve per la misura del calcolo, che gira in Node, e resta scartata (decisione 4: così anche il
+passo 8). Restano i passi 2 (lato server), 5 e 6 e le scelte 1, 6 e 7.

@@ -47,10 +47,16 @@ REQ = [
 ]
 
 
-# La scheda di un gioco puro come la normalizza estensioni/scheda.py (per la revisione)
+# La scheda di un gioco puro come la normalizza estensioni/scheda.py (per la revisione); dal 14/10
+# sempre con la macchina a stati (i comandi a voce piatti vengono da lì)
+def _macchina(*comandi):
+    return {"inizio": "turno", "esito_s": 4.0, "fasi": {"turno": {
+        "pagina": "scelte", "turni": True, "verso": ["fine"],
+        "comandi": {c: {"forme": [c]} for c in comandi}}}}
+
+
 SCHEDA = {"titolo": TITOLO, "giocatori": {"min": 2, "max": 4}, "condivisa": False, "chat": False,
-          "salva": True, "voce": False, "azioni": [],
-          "ascolta": {"comandi": {"ricomincia": ["ricomincia"]}}}
+          "salva": True, "voce": False, "azioni": [], "macchina": _macchina("apri")}
 
 
 def ambiente_gioco(tmp: Path, agente):
@@ -438,15 +444,14 @@ def prova_testi(tmp: Path):
     f = detta(out)
     verifica("(a) la correzione di un gioco: «…la prova sullo schermo», mai «con «in prova "
              "sullo schermo»»", "sullo schermo" in f and "«in prova sullo schermo»" not in f, f)
-    s = dict(SCHEDA, ascolta={"comandi": {"ricomincia": ["ricomincia"]}})
-    p = in_parole({"scheda": s})
+    p = in_parole({"scheda": SCHEDA})
     verifica("(b) «è un gioco sullo schermo, da 2 a 4 giocatori» e «con un comando»",
              p[0] == "è un gioco sullo schermo, da 2 a 4 giocatori"
-             and "si gioca anche a voce, con un comando" in p, str(p))
+             and "si gioca a voce o toccando, con una fase e un comando" in p, str(p))
     p = in_parole({"scheda": dict(SCHEDA, giocatori={"min": 1, "max": 1},
-                                  ascolta={"comandi": {"a": ["a"], "b": ["b"]}})})
+                                  macchina=_macchina("apri", "chiudi"))})
     verifica("…un giocatore solo e due comandi", p[0] == "è un gioco sullo schermo per un "
-             "giocatore" and "si gioca anche a voce, con 2 comandi" in p, str(p))
+             "giocatore" and "si gioca a voce o toccando, con una fase e 2 comandi" in p, str(p))
     p = in_parole({"scheda": dict(SCHEDA, giocatori={"min": 2, "max": 2})})
     verifica("…2 giocatori", p[0] == "è un gioco sullo schermo per 2 giocatori", str(p))
     svs = svc.sviluppi
