@@ -471,7 +471,8 @@ def registro_completo():
                          casa=True, schermi=True, agenti=True, agenti_modelli=("preventivo",),
                          ufficio=("fattura",), archivio=True, web=True, conversazioni=True,
                          immagini={"storia": "descrizione", "pc": True, "archivio": True},
-                         minori_tool=True, allegati=True, notizie=True)
+                         minori_tool=True, allegati=True, notizie=True,
+                         cassetto=True, conserva=True)
     for s in estensioni_specs(crea=True):
         reg.register(s)
     # meteo_leggi c'è solo con un'entità meteo esposta in HA (09/10, allinea_meteo)

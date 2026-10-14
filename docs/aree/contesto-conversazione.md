@@ -1287,7 +1287,8 @@ satellite). `calliope/stanza/contesto.py`:
 
 **Non fatti**: lo scaldamento della cache (`Brain.scalda_conversazione` dopo le righe nuove: il
 blocco è già il primo dei dati del turno, così un prefisso scaldato lo terrebbe), la coda della
-stanza di prima per chi cambia stanza (`stanza_seguito_s`, § 3.5 ter), la frase d'attesa.
+stanza di prima per chi cambia stanza (`stanza_seguito_s`, § 3.5 ter), la frase d'attesa
+*[storico: la frase d'attesa `attesa.stanza` è fatta il 14/10 col passo 4, sotto]*.
 
 **Misure a secco** (portatile, gemma4 e4b, `prove/manuali/banco_stanza_contesto.py`, due giri):
 9/10 e 8/10 (obiettivo ≥ 8/10): «cosa ha detto Carlo prima?», «cosa preferiva Nicola?», «a che ora
