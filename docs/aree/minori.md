@@ -999,7 +999,10 @@ senza parole, arrivato giorni dopo, non si capisce.
   nasce un avviso di pericolo (cancelli: `sicurezza`; guardiano in `attiva`: `sicurezza_stanza`)
   i **soli segmenti del segnale** con `avvisi_audio_contesto_s` (20 s) prima e dopo vanno in un
   WAV μ-law nel **cassetto del tutore** (file 600, fuori da git; fonte `avviso`, scadenza propria
-  `avvisi_audio_giorni` 30, fuori dalla revisione del cassetto e da «ho eliminato…»). In **ombra**
+  `avvisi_audio_giorni` 30, fuori dalla revisione del cassetto e da «ho eliminato…»; *dal 14/10
+  sera in G.711 vero: prima il browser del tutore l'avrebbe sentito come rumore, i file di prima
+  si convertono con `calliope conserva --converti-audio`, area
+  [contesto-conversazione](contesto-conversazione.md), «Il G.711 vero»*). In **ombra**
   niente su disco: nelle misure della stanza `audio_s`, i secondi che si sarebbero salvati.
 - **Togliere**: scadenza (trascrizione dopo `avvisi_audio_giorni`, `pulisci_materiale`; l'audio
   scade nel cassetto), `calliope conserva --svuota` (tutto, o `--persona` come tutore o come
