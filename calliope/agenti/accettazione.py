@@ -27,6 +27,13 @@ non c'è ancora), legge i requisiti e le parole della persona e compila un JSON 
   per ognuno che nessun esempio usa già, scrive un controllo in più: i dati di un esempio con
   quel valore al posto del suo, e l'estensione deve riconoscerlo (una frase, niente «trovato»:
   false, il numero se l'esempio lo controllava). Fallisce sullo scheletro come gli esempi;
+- **gli esempi contro la richiesta** (14/10 sera, banco: rieseguiti sull'estensione di
+  riferimento, quattro convertitori su cinque avevano un esempio che una soluzione giusta non
+  passa): per un input con valori nominati un esempio con un valore che la richiesta non dice
+  («Km», «centimetri», confrontati al singolare e al plurale) vale solo per il dato sconosciuto;
+  il «calcolo» dell'esempio (un conto con soli numeri) lo rifà il codice e, se non torna con il
+  numero, l'esempio si toglie; con un altro controllo (il numero, «trovato»: false) «contiene»
+  perde le parole che ripetono i dati; con «trovato»: false niente numero;
 - **contraddizioni** tra requisiti, o tra i requisiti e le parole della persona (il 12/10
   «giocatori» è diventato «porte»), con al più **due domande** brevi: il lavoro aspetta la
   risposta come una domanda a metà lavoro (`mancano_dati`). Solo in un lavoro nuovo (non una
@@ -84,9 +91,10 @@ al_collaudo: i numeri dei requisiti che si giudicano solo guardando o ascoltando
 SISTEMA_ESEMPI = """
 input: gli input dell'estensione (il dict «dati» che riceve esegui), con nome (minuscole e _) e tipo (number, integer, string, boolean). Se la specifica li nomina usa quei nomi, esattamente. Per un input string, valori: TUTTI i valori che la richiesta nomina per quell'input, scritti come nella richiesta (se li scrive al plurale e al singolare, tutte e due le forme); lista vuota se non ne nomina.
 campo_numero: il nome del campo numerico del risultato, se l'estensione restituisce un numero (di solito «risultato»); altrimenti vuoto.
-esempi: da 3 a 8 esempi dato → risultato, almeno uno per ogni requisito che si controlla con un dato. Per ognuno: requisito (il numero), dati (gli input con valori veri, come li direbbe la persona), e cosa deve risultare:
+esempi: da 3 a 8 esempi dato → risultato, almeno uno per ogni requisito che si controlla con un dato. Per ognuno: requisito (il numero), dati (gli input con valori veri, come li direbbe la persona; per un input con dei valori nominati solo quelli, al singolare o al plurale: un valore che la richiesta non nomina solo nel caso del dato sconosciuto), e cosa deve risultare:
 - numero: il valore atteso nel campo numerico, calcolato con cura (se arrotondi metti la tolleranza); se non sei sicuro di un valore non usare quell'esempio;
-- contiene: una o due parole che la frase da_dire deve contenere (un nome detto dalla persona, «non»); mai numeri, mai frasi intere;
+- calcolo: lo stesso numero come conto con soli numeri e + - * / ( ), per esempio «10 * 1609.344 / 1000»: lo rifà il codice;
+- contiene: una o due parole che la frase da_dire deve contenere (un nome detto dalla persona, «non»); mai numeri, mai frasi intere; in un esempio con il numero non serve ripetere i valori dei dati;
 - trovato: false se il dato non esiste o non si capisce e l'estensione deve dire che non l'ha trovato; altrimenti null.
 Ogni esempio controlla almeno una cosa (numero, contiene o trovato false). Se la richiesta nomina valori di più parole o con l'accento metti un esempio con uno di quelli; metti anche un caso con un dato sconosciuto."""
 
@@ -134,6 +142,7 @@ def schema(estensione: bool, gioco: bool = False) -> dict:
                     "dati": {"type": "object"},
                     "numero": {"type": ["number", "null"]},
                     "tolleranza": {"type": ["number", "null"]},
+                    "calcolo": {"type": "string", "maxLength": 160},
                     "contiene": {"type": "string", "maxLength": 60},
                     "trovato": {"type": ["boolean", "null"]}},
                 "required": ["requisito", "dati"]}}})
@@ -298,6 +307,71 @@ def _valori(i: dict, testo: str) -> list[str]:
     return out
 
 
+def _radice(parola: str) -> str:
+    """La parola senza la vocale finale (e «ch», «gh» come «c», «g»): il singolare e il
+    plurale italiani si somigliano così («pollice» e «pollici», «astronomica» e
+    «astronomiche», «miglio» e «miglia»). Solo per confrontare valori, mai per capire."""
+    if len(parola) > 3 and parola[-1] in "aeiou":
+        parola = parola[:-1]
+    return parola[:-1] if parola.endswith(("ch", "gh")) else parola
+
+
+def _radici(testo) -> tuple:
+    return tuple(_radice(w) for w in _norm(testo).split())
+
+
+def _dentro(pezzo: tuple, tutto: tuple) -> bool:
+    n = len(pezzo)
+    return n > 0 and any(tutto[i:i + n] == pezzo for i in range(len(tutto) - n + 1))
+
+
+def _calcola(espressione) -> float | None:
+    """Il valore di un conto con soli numeri e + - * / ( ) (il «calcolo» di un esempio,
+    14/10 sera: il modello sbaglia più spesso il conto a mente che la formula), o None. Niente
+    eval: l'albero si visita a mano."""
+    import ast
+    import operator
+    t = str(espressione or "").strip().replace("×", "*").replace("÷", "/")
+    if not t or len(t) > 160 or not re.fullmatch(r"[\d\s.+\-*/()eE]+", t):
+        return None
+    op2 = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul,
+           ast.Div: operator.truediv}
+
+    def val(n):
+        if isinstance(n, ast.Constant) and isinstance(n.value, (int, float)) \
+                and not isinstance(n.value, bool):
+            return float(n.value)
+        if isinstance(n, ast.UnaryOp) and isinstance(n.op, (ast.USub, ast.UAdd)):
+            v = val(n.operand)
+            return -v if isinstance(n.op, ast.USub) else v
+        if isinstance(n, ast.BinOp) and type(n.op) in op2:
+            return op2[type(n.op)](val(n.left), val(n.right))
+        raise ValueError("non è un conto")
+    try:
+        v = val(ast.parse(t, mode="eval").body)
+    except (SyntaxError, ValueError, ZeroDivisionError, OverflowError, RecursionError):
+        return None
+    return v if math.isfinite(v) else None
+
+
+def _togli(contiene: str, frasi, parole) -> str:
+    """`contiene` senza le frasi (radici dei valori nominati) e senza le parole (radici dei
+    dati dell'esempio): ripetere nella frase i valori che la persona ha detto è uno stile, non
+    un requisito; il numero controlla già la conversione."""
+    ws = _norm(contiene).split()
+    rs = [_radice(w) for w in ws]
+    tieni = [True] * len(ws)
+    for f in frasi:
+        n = len(f)
+        for i in range(len(rs) - n + 1):
+            if n and tuple(rs[i:i + n]) == f:
+                tieni[i:i + n] = [False] * n
+    tieni = [t and rs[i] not in parole for i, t in enumerate(tieni)]
+    if all(tieni):
+        return contiene
+    return " ".join(w for w, t in zip(ws, tieni) if t)
+
+
 def _riconosciuti(out: dict) -> list[dict]:
     """Per ogni valore nominato che nessun esempio usa: i dati di un esempio (che non dice
     «trovato»: false) con quel valore al posto del suo. Un valore che un esempio dà per
@@ -374,6 +448,16 @@ def interpreta(dati, n_requisiti: int = 0, estensione: bool = True,
     campo = str(d.get("campo_numero") or "").strip().lower()
     out["campo_numero"] = campo if _NOME.match(campo) else ""
     chiavi = set()
+    # Gli esempi contro la richiesta (14/10 sera, banco: rieseguiti sull'estensione di
+    # riferimento, 4 convertitori su 5 avevano un esempio che una soluzione giusta non passa).
+    # Per un input con dei valori nominati, un valore che la richiesta non dice (né tra i
+    # valori né nel testo, al singolare o al plurale: «centimetri», «Km») va bene solo nel caso
+    # del dato sconosciuto. Le frasi dei valori nominati, per togliere da «contiene»
+    nominati = {i["nome"]: {_radici(v) for v in i["valori"]} for i in out["input"]
+                if i.get("valori")}
+    frasi = sorted({f for fs in nominati.values() for f in fs if f}, key=len, reverse=True)
+    detto = _radici(testo)
+    tolti = {"fuori": 0, "numero": 0, "contiene": 0}
     for e in d.get("esempi") or ():
         if not isinstance(e, dict) or not isinstance(e.get("dati"), dict):
             continue
@@ -389,6 +473,33 @@ def interpreta(dati, n_requisiti: int = 0, estensione: bool = True,
         if re.search(r"\d", contiene):
             contiene = ""                  # i numeri si controllano con «numero», non nel testo
         trovato = e.get("trovato") if isinstance(e.get("trovato"), bool) else None
+        if trovato is not False and any(
+                isinstance(v, str) and k in nominati and _radici(v) not in nominati[k]
+                and not _dentro(_radici(v), detto) for k, v in dati_e.items()):
+            tolti["fuori"] += 1
+            continue
+        # Il conto rifatto dal codice: se non torna con il numero l'esempio non si usa, come
+        # chiede il prompt quando non si è sicuri (nel banco 1 unità astronomica = 80 776,4
+        # miglia nautiche: mille volte meno)
+        calcolo = _calcola(e.get("calcolo"))
+        if calcolo is not None and trovato is not False:
+            if numero is None:
+                numero = calcolo
+            elif abs(numero - calcolo) > max(abs(tol or 0), 0.01, abs(calcolo) * 0.002):
+                tolti["numero"] += 1
+                continue
+        if trovato is False and numero is not None:
+            numero = None                  # un dato sconosciuto non ha un risultato
+            tolti["numero"] += 1
+        if contiene and (numero is not None or trovato is False):
+            # Con un altro controllo (il numero, «trovato»: false) le parole che ripetono i
+            # dati dell'esempio e i valori nominati non servono; da sole («Bologna») restano
+            parole = {_radice(w) for v in dati_e.values() if isinstance(v, str)
+                      for w in _norm(v).split()}
+            nuovo = _togli(contiene, frasi, parole)
+            if nuovo != contiene:
+                tolti["contiene"] += 1
+                contiene = nuovo
         if numero is None and not contiene and trovato is not False:
             continue
         chiave = json.dumps(dati_e, sort_keys=True, ensure_ascii=False)
@@ -406,6 +517,7 @@ def interpreta(dati, n_requisiti: int = 0, estensione: bool = True,
     if any(e["numero"] is not None for e in out["esempi"]) and not out["campo_numero"]:
         out["campo_numero"] = "risultato"
     out["riconosciuti"] = _riconosciuti(out)
+    out["tolti"] = tolti
     return out
 
 
@@ -442,8 +554,12 @@ def _prova(self, caso):
         self.assertLessEqual(abs(valore - atteso), tol,
                              f"{detto}: atteso {atteso:g} (± {tol:g}), uscito {valore:g}")
     if caso.get("contiene"):
-        self.assertIn(_norm(caso["contiene"]), _norm(out.get("da_dire")),
-                      f"{detto}: la frase deve contenere «{caso['contiene']}»")
+        # Le parole anche non vicine («chilometri metri» in «1 chilometro sono 1000 metri»)
+        frase = _norm(out.get("da_dire"))
+        if _norm(caso["contiene"]) not in frase:
+            for parola in _norm(caso["contiene"]).split():
+                self.assertIn(parola, frase,
+                              f"{detto}: la frase deve contenere «{caso['contiene']}»")
     if caso.get("trovato") is False:
         self.assertIs(out.get("trovato"), False, f"{detto}: deve dire «trovato»: false")
     elif caso.get("trovato") is True:
@@ -615,7 +731,12 @@ def vincolo(an: dict, file: bool, gioco: bool = False) -> str:
                if an.get("campo_numero") else "")
             + "".join(f" Valori nominati dalla richiesta per «{i['nome']}», da riconoscere "
                       f"tutti: {', '.join(i['valori'])}." for i in an.get("input") or []
-                      if i.get("valori")))
+                      if i.get("valori"))
+            # 14/10 sera, banco L8: l'elenco finiva nella descrizione dell'input (98
+            # caratteri, il manifesto non passava e il lavoro restava al tetto)
+            + (" Li riconosce il codice: nel manifesto la descrizione dell'input resta di poche "
+               "parole, senza l'elenco." if any(i.get("valori") for i in an.get("input") or [])
+               else ""))
     if an.get("scelte"):
         parti.append("Scelte già fatte dove la richiesta non dice: "
                      + "; ".join(an["scelte"]) + ".")
