@@ -326,6 +326,7 @@ in full duplex.
 | Cosa | Dove |
 |---|---|
 | Mappa dei moduli, principi, stato e problemi aperti | [`CLAUDE.md`](../CLAUDE.md) |
+| Diagrammi (06/10) | [`immagini/architettura.svg`](immagini/architettura.svg) (quello del README) e [`ricerche/2026-10-06-architettura.svg`](ricerche/2026-10-06-architettura.svg) (completo). *14/10: sono del 06/10 e non disegnano la conversazione di stanza e i conoscenti (`calliope/stanza/`), il registro degli eventi (`eventi/`), lo stato del dialogo (`stato_dialogo.py`), le notizie (`notizie/`), la conservazione (`conserva.py`) né l'audio degli avvisi (`avvisi_audio.py`): per queste parti valgono i § 2–5 e la tabella di `CLAUDE.md`.* |
 | Decisioni, una per file | [`docs/decisioni/`](decisioni/) |
 | Come lavoriamo, con esempi | [`docs/analisi.md`](analisi.md) |
 | Un documento per area, diari datati con misure e casi | [`docs/aree/`](aree/) |
