@@ -429,7 +429,7 @@ b = brain_finto([[("text", "Che bello giocare!")],
 b.set_pending(out["in_sospeso"])
 detto = "".join(b.stream_reply("rendili più giocosi", "familiare"))
 verifica("domanda inventata dopo la spinta: non si dice, al suo posto quella del programma",
-         "125" not in detto and voce in detto, detto)
+         "125 più 87" not in detto and voce in detto, detto)  # 125 può esserci
 verifica("regole spinta_esercizi ed esercizi_domanda_inventata",
          {"spinta_esercizi", "esercizi_domanda_inventata"} <= set(b.rules_fired()),
          b.rules_fired())

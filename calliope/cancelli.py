@@ -332,13 +332,44 @@ class Cancelli:
                 pass
         if not avvisa:
             return False
+        tr, pezzi, luogo = self.materiale(s)
         return self.avvisa(s.persona_id, s.categorie, DA_VERIFICARE, "silenzio",
                            s.voce_incerta, urgente=False, compagnia=s.compagnia,
-                           origine=s.origine) is not None
+                           origine=s.origine, trascrizione=tr, pezzi=pezzi,
+                           luogo=luogo) is not None
+
+    def materiale(self, s: Segnale) -> tuple:
+        """(trascrizione, pezzi d'audio, luogo) dell'avviso di un segnale rimasto senza
+        risposta (14/10 sera): la frase del primo segnale (solo se c'è ancora: dopo un riavvio
+        no) e la domanda di Calliope; l'audio dall'anello in memoria, se acceso."""
+        luogo = f"turno:{s.corsia}" if s.corsia else None
+        quando = self.ora() - max(0.0, self.orologio() - s.ora)
+        ora = datetime.datetime.fromtimestamp(quando).strftime("%H:%M")
+        chi = s.nome + ("?" if s.voce_incerta else "")
+        righe = []
+        if s.testo and "la frase esatta non c'è più" not in s.testo:
+            righe.append({"ora": ora, "chi": chi, "testo": s.testo, "segnale": True})
+            prof = None
+            av = self._avvisi if self._avvisi is not None else minori.avvisi()
+            reg = getattr(av, "registry", None)
+            for u in list(getattr(reg, "users", {}).values()) if reg is not None else []:
+                if getattr(u, "id", None) == s.persona_id:
+                    prof = u
+            righe.append({"ora": ora, "chi": "Calliope",
+                          "testo": rassicura(prof) if prof is not None else RASSICURA["bambini"]})
+        pezzi = None
+        from . import avvisi_audio
+        an = avvisi_audio.anello()
+        if an is not None and luogo:
+            ctx = float(getattr(self.cfg, "avvisi_audio_contesto_s", 20.0) or 0.0)
+            pezzi = an.prendi(luogo=luogo, persona=s.persona_id, da=quando - ctx - 30.0,
+                              a=quando + ctx)
+        return righe or None, pezzi, luogo
 
     def avvisa(self, minore, categorie, livello: str, motivo: str,
                voce_incerta: bool, urgente: bool = True, categorie_prima=None,
-               registry=None, compagnia: bool = False, origine: str = "") -> int | None:
+               registry=None, compagnia: bool = False, origine: str = "",
+               trascrizione=None, pezzi=None, luogo: str | None = None) -> int | None:
         """L'avviso ai tutori del minore (il profilo o il suo id; tipo «sicurezza»). Il numero
         di tutori, -1 se è lo stesso avviso ripetuto entro `minori_avviso_ripetuto_s`, None se
         non è partito."""
@@ -359,7 +390,8 @@ class Cancelli:
                             urgente=urgente, registry=reg,
                             non_ripetere_s=float(getattr(self.cfg, "minori_avviso_ripetuto_s",
                                                          0) or 0),
-                            origine=origine)
+                            origine=origine, trascrizione=trascrizione, pezzi=pezzi,
+                            luogo=luogo)
         except Exception as e:  # noqa: BLE001
             self.log(f"   [MINORI] avviso non mandato: {type(e).__name__}: {e}")
             return None

@@ -695,6 +695,21 @@ class Avvio:
         # Minori (05/10, calliope/minori.py): regole per persona, compiti, avvisi ai tutori
         # (stesso file della memoria)
         minori.prepara(cfg, schermi=s.schermi, registry=s.registry)
+        # Gli avvisi di pericolo (14/10 sera): l'audio nel cassetto del tutore, la trascrizione
+        # di un avviso di prima ricostruita dalla stanza o dalla conversazione del minore, e
+        # `calliope conserva --svuota` che li toglie
+        av = minori.avvisi()
+        if av is not None:
+            av.cassetto = getattr(s, "cassetto", None)
+
+            def ricostruisci(d, s=s, av=av):
+                m = minori._per_id(s.registry, d.get("minore"))
+                return minori.ricostruisci_trascrizione(
+                    d, stanza=getattr(s, "stanza", None),
+                    archivio=getattr(self, "conv_arch", None), nome=getattr(m, "name", None))
+            av.trascrizione_dopo = ricostruisci
+            if getattr(s, "conserva", None) is not None:
+                s.conserva.avvisi = av
         # I segnali dei cancelli dei minori su disco (10/10, calliope/cancelli.py): quelli aperti
         # prima del riavvio riprendono, quelli scaduti nel frattempo avvisano come un silenzio
         s.cancelli_percorso = cancelli_mod.percorso(cfg) if cfg.minori_enabled else None

@@ -893,3 +893,47 @@ colonne `origine`, `rif`, `come`, `falso`):
 senza data, vecchio con la data, minore vicino, altro adulto non tutore, voce non riconosciuta,
 il minore stesso, domanda del tutore → dati del turno con la data, falso, database di prima);
 `prova_stanza_guardia` controlla origine, riferimento e data dell'avviso del guardiano.
+
+### 14/10 sera: la trascrizione e l'audio nell'avviso di pericolo (decisione di chi amministra)
+
+Chi amministra (ed è tutore) ha cambiato la decisione 0029 punto 4 («avviso senza parole»):
+**quando un avviso di pericolo arriva al tutore deve contenere la trascrizione di ciò che ha detto
+il minore** (le righe del segnale con un po' di contesto, chi ha detto cosa) **e, per i soli
+avvisi di pericolo, il file audio di quelle frasi**. Il caso vero del mattino lo mostra: un avviso
+senza parole, arrivato giorni dopo, non si capisce.
+
+- **Dove**: solo sulla **scheda personale del tutore** (tipo `avviso`, `Avvisi.scheda_di`: hub con
+  `PERSONALE` e il tutore come mittente certo, mai altri schermi, mai un adulto non tutore). Il
+  testo dell'avviso, a voce e in cima alla scheda, resta senza parole; la trascrizione si apre
+  («Leggi cosa si è detto», le righe del segnale in evidenza) e l'audio si scarica («Scarica
+  l'audio», `schermi/scarica.py` formato `audio`, `solo_persona`: nemmeno chi amministra da un
+  suo schermo). La scheda si rimanda, con la stessa chiave, quando l'avviso si dice a voce.
+- **Trascrizione** (`avvisi_trascrizione`, di serie accesa; JSON in `avvisi_tutori.trascrizione`,
+  schema v3): dai cancelli il primo segnale, la domanda di Calliope e la risposta, o per un acuto
+  lo scambio di prima e la frase (`Ciclo._materiale_avviso`, `Cancelli.materiale` per il
+  silenzio); dal guardiano le righe del segnale con due righe prima e dopo
+  (`Guardia._trascrizione`). Mai nel registro dei turni, nel log o nelle misure.
+- **Audio** (`avvisi_audio`, **di serie spento**: si accende nel file locale;
+  `calliope/avvisi_audio.py`): oggi l'audio non va mai su disco. L'eccezione: in **memoria** un
+  anello (`avvisi_audio_anello_min` 30, `avvisi_audio_anello_mb` 16, μ-law) con i turni in cui
+  parla un minore (`Ciclo._anello_turno`) e i segmenti della stanza di un minore riconosciuto
+  (voce o zona grigia) o di un adulto di casa riconosciuto mentre un minore è presente su quel
+  satellite (`Stanza._anello`); mai voci non riconosciute (ospiti), mai Calliope. Solo quando
+  nasce un avviso di pericolo (cancelli: `sicurezza`; guardiano in `attiva`: `sicurezza_stanza`)
+  i **soli segmenti del segnale** con `avvisi_audio_contesto_s` (20 s) prima e dopo vanno in un
+  WAV μ-law nel **cassetto del tutore** (file 600, fuori da git; fonte `avviso`, scadenza propria
+  `avvisi_audio_giorni` 30, fuori dalla revisione del cassetto e da «ho eliminato…»). In **ombra**
+  niente su disco: nelle misure della stanza `audio_s`, i secondi che si sarebbero salvati.
+- **Togliere**: scadenza (trascrizione dopo `avvisi_audio_giorni`, `pulisci_materiale`; l'audio
+  scade nel cassetto), `calliope conserva --svuota` (tutto, o `--persona` come tutore o come
+  minore; anche da terminale, con il cassetto), «dimentica» della stanza (l'anello di quel
+  satellite e il materiale degli avvisi nati lì, `minori.dimentica_luogo`), `conversazioni_dimentica`
+  del tutore. L'avviso resta, senza parole.
+- **Avvisi di prima** (senza trascrizione): la scheda la ricostruisce se c'è ancora
+  (`minori.ricostruisci_trascrizione`: le righe del minore nella stanza in memoria o sul disco
+  della tenuta nell'ora prima, oppure i suoi turni nell'archivio delle conversazioni), con la nota
+  «Ricostruita…»; altrimenti «La trascrizione di quel momento non c'è più.».
+
+**Prove**: `prove/prova_avvisi_audio.py` (a secco, con i contrari: non tutore, altro schermo, chi
+amministra, schermo di stanza, ombra, ospite, adulto senza minori, altra stanza, scadenza, svuota,
+dimentica, anello pieno, spento). Sulla DGX: accendere `avvisi_audio: true` nel file locale.

@@ -1707,6 +1707,24 @@ class Config:
     # del suo turno, così a «cos'erano quegli avvisi?» il modello ha data, tipo, origine e
     # stato veri e non inventa. Più vecchi: minore_gestisci azione avvisi. 0 = mai nel turno
     avvisi_contesto_ore: float = 48.0
+    # Un avviso di pericolo al tutore (14/10 sera, decisione di Dario che cambia la 0029 punto
+    # 4) porta sulla sua scheda personale la trascrizione delle righe del segnale con un po' di
+    # contesto, chi ha detto cosa. Mai a voce, mai su altri schermi, mai a un adulto non tutore:
+    # il testo dell'avviso resta senza parole. false = come prima (solo l'argomento)
+    avvisi_trascrizione: bool = True
+    # E l'audio di quelle frasi (calliope/avvisi_audio.py): in memoria un anello con l'audio dei
+    # segmenti e dei turni in cui parla un minore (e, nella stanza, degli adulti di casa mentre
+    # un minore è presente); solo quando nasce un avviso di pericolo i segmenti del segnale, con
+    # un contesto breve, vanno in un file nel cassetto del tutore. In ombra niente su disco.
+    # Di serie spento: si accende nel file locale
+    avvisi_audio: bool = False
+    # Minuti e MB dell'anello in memoria (μ-law: 16 kB al secondo, 16 MB ≈ 17 minuti di voce)
+    avvisi_audio_anello_min: float = 30.0
+    avvisi_audio_anello_mb: float = 16.0
+    # Secondi di contesto prima e dopo le frasi del segnale
+    avvisi_audio_contesto_s: float = 20.0
+    # Giorni dopo cui l'audio (nel cassetto) e la trascrizione di un avviso si cancellano
+    avvisi_audio_giorni: float = 30.0
     # Esercizi generati da Calliope (08/10, calliope/esercizi/, docs/ricerche/
     # 2026-10-08-esercizi.md): matematica e italiano per i ragazzi di casa, a voce e sulla
     # scheda, con la correzione nel codice e il registro dei tentativi per i tutori; dal 12/10
@@ -2920,6 +2938,8 @@ SEZIONI: dict[str, list[str]] = {
                "minori_pericolo_attesa_s", "minori_pericolo_silenzio",
                "minori_pericolo_finestra_s", "minori_avviso_privato_s",
                "avvisi_data_dopo_min", "avvisi_urgente_ore", "avvisi_contesto_ore",
+               "avvisi_trascrizione", "avvisi_audio", "avvisi_audio_anello_min",
+               "avvisi_audio_anello_mb", "avvisi_audio_contesto_s", "avvisi_audio_giorni",
                "esercizi_enabled", "esercizi_verifica_modello", "esercizi_verifica_url",
                "esercizi_verifica_timeout_s", "esercizi_senza_secondo_parere",
                "esercizi_pronti", "esercizi_campione", "esercizi_blocco_piccoli",
@@ -3219,6 +3239,8 @@ LIMITI: dict[str, tuple[float, float]] = {
     "minori_avviso_privato_s": (0.0, 86_400.0),
     "avvisi_data_dopo_min": (0.0, 1440.0), "avvisi_urgente_ore": (0.0, 720.0),
     "avvisi_contesto_ore": (0.0, 720.0),
+    "avvisi_audio_anello_min": (0.0, 240.0), "avvisi_audio_anello_mb": (0.0, 512.0),
+    "avvisi_audio_contesto_s": (0.0, 300.0), "avvisi_audio_giorni": (0.0, 365.0),
     "esercizi_verifica_timeout_s": (0.5, 300.0), "esercizi_pronti": (0, 50),
     "esercizi_campione": (0, 50), "esercizi_blocco_piccoli": (1, 50),
     "esercizi_blocco": (1, 50), "esercizi_tappe": (1, 20),

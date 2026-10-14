@@ -323,11 +323,84 @@ def prepara(cfg, schermi=None, registry=None, log=print) -> dict:
     _SERVIZIO["cfg"] = cfg
     _SERVIZIO["regole"] = Regole(path)
     _SERVIZIO["avvisi"] = Avvisi(path, schermi=schermi, registry=registry, log=log, cfg=cfg)
+    # L'anello dell'audio per gli avvisi di pericolo (14/10 sera, `avvisi_audio`: di serie no)
+    from . import avvisi_audio
+    avvisi_audio.prepara(cfg)
     _SERVIZIO["compiti"] = Compiti(cfg)
     # Tempo di gioco e richieste ai tutori (05/10, giochi): stesso file
     _SERVIZIO["gioco"] = TempoGioco(path)
     _SERVIZIO["richieste"] = Richieste(path, cfg, registry=registry, log=log)
     return _SERVIZIO
+
+
+def ricostruisci_trascrizione(d: dict, stanza=None, archivio=None, nome: str | None = None,
+                              finestra_s: float = 3600.0, massimo: int = 8) -> list | None:
+    """La trascrizione di un avviso di prima (senza trascrizione tenuta: 14/10 sera), da ciò che
+    c'è ancora: per un avviso della stanza le righe del minore nell'ora prima dell'avviso (il
+    registro in memoria, poi la tenuta su disco); per un avviso di un turno i suoi turni con
+    Calliope in quei minuti (l'archivio delle conversazioni: i tutori le vedono a ogni età dal
+    14/10). None se non c'è più niente."""
+    c = _dt(d.get("creato"))
+    if c is None:
+        return None
+    fine = c.timestamp() + 60.0
+    inizio = fine - float(finestra_s)
+    pid = d.get("minore")
+
+    def hhmm(x):
+        try:
+            return datetime.datetime.fromtimestamp(float(x)).strftime("%H:%M")
+        except (TypeError, ValueError, OSError):
+            return ""
+    if d.get("tipo") == "sicurezza_stanza" and stanza is not None:
+        righe = []
+        for _sat, reg in list(getattr(stanza, "_registri", {}).items()):
+            try:
+                tutte = reg.righe()
+            except Exception:  # noqa: BLE001
+                continue
+            righe += [x for x in tutte if x.get("chi") == f"persona:{pid}"
+                      and inizio <= float(x.get("fine") or x.get("t") or 0) <= fine]
+        ten = getattr(stanza, "tenuta", None)
+        if not righe and ten is not None:
+            try:
+                righe = [x for x in ten.cerca(da=inizio, a=fine, minore_pid=pid)
+                         if x.get("chi") == f"persona:{pid}"]
+            except Exception:  # noqa: BLE001
+                righe = []
+        righe.sort(key=lambda x: float(x.get("inizio") or x.get("t") or 0))
+        out = [{"ora": hhmm(x.get("inizio") or x.get("t")), "chi": x.get("nome") or nome or "",
+                "testo": " ".join(str(x.get("testo") or "").split())} for x in righe[-massimo:]
+               if str(x.get("testo") or "").strip()]
+        return out or None
+    if archivio is not None and pid:
+        try:
+            turni = archivio.chat(pid, 80)
+        except Exception:  # noqa: BLE001
+            turni = []
+        vicini = [v for v in turni if inizio + finestra_s - 900.0 <= float(v.get("quando") or 0)
+                  <= fine]
+        out = []
+        for v in vicini[-(massimo // 2 or 1):]:
+            if str(v.get("domanda") or "").strip():
+                out.append({"ora": hhmm(v.get("quando")), "chi": nome or "",
+                            "testo": " ".join(str(v["domanda"]).split())})
+            if str(v.get("risposta") or "").strip():
+                out.append({"ora": hhmm(v.get("quando")), "chi": "Calliope",
+                            "testo": " ".join(str(v["risposta"]).split())[:300]})
+        return out or None
+    return None
+
+
+def dimentica_luogo(luogo: str) -> int:
+    """«Dimentica» di un luogo (14/10 sera, la stanza di un satellite): l'audio nell'anello
+    degli avvisi e trascrizione e audio degli avvisi nati lì. Quanti avvisi."""
+    from .avvisi_audio import anello
+    an = anello()
+    if an is not None:
+        an.togli(luogo=luogo)
+    av = avvisi()
+    return av.dimentica_materiale(luogo=luogo) if av is not None else 0
 
 
 def tempo_gioco() -> "TempoGioco | None":
@@ -904,6 +977,9 @@ class Compiti:
 
 # ─────────────────────────── avvisi ai tutori ───────────────────────────
 
+# Gli avvisi di pericolo: solo questi hanno trascrizione e audio sulla scheda del tutore (14/10)
+TIPI_PERICOLO = ("sicurezza", "sicurezza_stanza")
+
 _GIORNI_SETT = ("lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato", "domenica")
 
 
@@ -985,7 +1061,16 @@ class Avvisi:
     il guardiano l'id del segnale, così `--falso` lo ritrova), **come** è stato consegnato
     (`come`: voce, schermo, falso) e se è stato segnato **falso** (`falso`: non si consegna
     più). La voce e la scheda dicono quando è nato (`quando_nato`, `quando_scheda`); un avviso
-    urgente rimasto da dire oltre `avvisi_urgente_ore` si dice come non urgente, con la data."""
+    urgente rimasto da dire oltre `avvisi_urgente_ore` si dice come non urgente, con la data.
+
+    Dal 14/10 (decisione di Dario, cambia la 0029 punto 4) un avviso **di pericolo**
+    (`TIPI_PERICOLO`) porta sulla **scheda personale del tutore** la trascrizione delle righe
+    del segnale con un po' di contesto (`trascrizione`, con `avvisi_trascrizione`) e, con
+    `avvisi_audio`, l'audio di quelle frasi dal suo cassetto (`audio`, id del file; l'anello in
+    memoria è calliope/avvisi_audio.py). Il testo dell'avviso, a voce e nella scheda, resta
+    senza parole: la trascrizione e l'audio si aprono solo nella scheda. Scadono dopo
+    `avvisi_audio_giorni`; «dimentica» della stanza e `calliope conserva --svuota` li tolgono
+    (`dimentica_materiale`)."""
 
     def __init__(self, path: str, schermi=None, registry=None, log=print, cfg=None):
         from .persistenza import aggiungi_colonna, apri_db, prepara_schema
@@ -1014,7 +1099,18 @@ class Avvisi:
             for col in ("origine", "rif", "come", "falso"):
                 aggiungi_colonna(db, "avvisi_tutori", col, "TEXT")
             db.execute("CREATE INDEX IF NOT EXISTS avvisi_tutori_rif ON avvisi_tutori(rif)")
-        self.scrivibile = prepara_schema(self.db, "avvisi_tutori", [v1, v2])
+        def v3(db):
+            # 14/10 sera: la trascrizione (JSON), l'audio (id nel cassetto del tutore) e il luogo
+            # («stanza:<sat>», «turno:<corsia>»: «dimentica» della stanza li ritrova)
+            aggiungi_colonna(db, "avvisi_tutori", "trascrizione", "TEXT")
+            aggiungi_colonna(db, "avvisi_tutori", "audio", "INTEGER")
+            aggiungi_colonna(db, "avvisi_tutori", "luogo", "TEXT")
+        self.scrivibile = prepara_schema(self.db, "avvisi_tutori", [v1, v2, v3])
+        # Il cassetto dei file (per l'audio) e la trascrizione ricostruita di un avviso di prima
+        # (`trascrizione_dopo(d) -> list | None`): li imposta main.py
+        self.cassetto = None
+        self.trascrizione_dopo = None
+        self._pulito = 0.0
 
     def _cfg(self, nome: str, predefinito: float) -> float:
         cfg = self.cfg if self.cfg is not None else _SERVIZIO.get("cfg")
@@ -1029,7 +1125,8 @@ class Avvisi:
 
     def manda(self, minore, tipo: str, testo: str, urgente: bool = False,
               registry=None, non_ripetere_s: float = 0.0, origine: str = "",
-              rif: str | None = None) -> int:
+              rif: str | None = None, trascrizione: list | None = None, pezzi=None,
+              luogo: str | None = None) -> int:
         """Un avviso a tutti i tutori del minore. Restituisce quanti tutori, oppure -1 se
         `non_ripetere_s` > 0 e lo stesso avviso (stesso minore, tipo e testo, cioè lo stesso
         argomento) è partito da meno di tanti secondi: una frase spezzata in due turni, o la
@@ -1054,20 +1151,201 @@ class Avvisi:
                     self.log(f"   [MINORI] avviso «{tipo}» per {minore.name} già mandato da "
                              f"meno di {int(non_ripetere_s)} s: non lo ripeto")
                     return -1
+            tr = self._trascrizione_da_tenere(tipo, trascrizione)
             for t in dest:
                 self.db.execute("INSERT INTO avvisi_tutori (tutore, minore, tipo, testo, "
-                                "urgente, creato, origine, rif) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                                "urgente, creato, origine, rif, trascrizione, luogo) VALUES "
+                                "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                                 (t.id, minore.id, tipo, testo, int(urgente), ora,
-                                 origine or None, rif))
+                                 origine or None, rif, tr, luogo))
             self.db.commit()
         self.log(f"   [MINORI] avviso «{tipo}» per {minore.name} a "
                  f"{', '.join(t.name for t in dest) or 'nessuno'}")
-        for t in dest:
-            self._scheda(t, minore, testo, urgente, creato=ora, origine=origine)
+        self._dopo_l_inserimento(dest, minore, tipo, testo, urgente, ora, origine, rif, pezzi)
         return len(dest)
 
+    # ── trascrizione e audio (14/10 sera) ──
+    def _trascrizione_da_tenere(self, tipo: str, trascrizione) -> str | None:
+        if tipo not in TIPI_PERICOLO or not trascrizione:
+            return None
+        if not self._cfg("avvisi_trascrizione", 1.0):
+            return None
+        righe = []
+        for x in list(trascrizione)[:40]:
+            if not isinstance(x, dict) or not str(x.get("testo") or "").strip():
+                continue
+            righe.append({"ora": str(x.get("ora") or "")[:5], "chi": str(x.get("chi") or "")[:60],
+                          "testo": str(x.get("testo"))[:600], "segnale": bool(x.get("segnale"))})
+        return json.dumps(righe, ensure_ascii=False) if righe else None
+
+    def _audio_nel_cassetto(self, tutore, minore, tipo: str, ora: str, pezzi) -> int | None:
+        """I segmenti del segnale nel cassetto del tutore, con la loro scadenza: l'id, o None
+        (spento, nessun pezzo, niente cassetto, cassetto pieno)."""
+        if tipo not in TIPI_PERICOLO or not pezzi or self.cassetto is None:
+            return None
+        if not self._cfg("avvisi_audio", 0.0):
+            return None
+        from .avvisi_audio import wav
+        from .cassetto import CassettoPieno
+        c = _dt(ora) or self.adesso()
+        nome = f"Avviso {minore.name} {c:%Y-%m-%d %H.%M}.wav"
+        try:
+            return self.cassetto.metti(tutore.id, wav(pezzi), nome, "audio", fonte="avviso",
+                                       giorni=self._cfg("avvisi_audio_giorni", 30.0))
+        except CassettoPieno:
+            self.log(f"   [MINORI] audio dell'avviso non salvato: cassetto di {tutore.name} pieno")
+        except Exception as e:  # noqa: BLE001 — l'audio non ferma l'avviso
+            self.log(f"   [MINORI] audio dell'avviso non salvato: {type(e).__name__}")
+        return None
+
+    def _dopo_l_inserimento(self, dest, minore, tipo, testo, urgente, ora, origine, rif, pezzi):
+        """L'audio nel cassetto di ogni tutore (con `avvisi_audio`), poi la scheda."""
+        if pezzi and tipo in TIPI_PERICOLO and self._cfg("avvisi_audio", 0.0):
+            from .avvisi_audio import secondi
+            for t in dest:
+                fid = self._audio_nel_cassetto(t, minore, tipo, ora, pezzi)
+                if fid is not None:
+                    with self._lock:
+                        self.db.execute("UPDATE avvisi_tutori SET audio = ? WHERE rif = ? AND "
+                                        "tutore = ?", (int(fid), rif, t.id))
+                        self.db.commit()
+            self.log(f"   [MINORI] audio dell'avviso: {secondi(pezzi)} s nel cassetto dei tutori")
+        for t in dest:
+            d = self._per_rif(rif, t.id)
+            if d is not None and tipo in TIPI_PERICOLO:
+                self.scheda_di(t, d, minore)
+            else:
+                self._scheda(t, minore, testo, urgente, creato=ora, origine=origine)
+
+    def _per_rif(self, rif: str, tutore_id: str) -> dict | None:
+        with self._lock:
+            r = self.db.execute(f"SELECT {self._COLONNE} FROM avvisi_tutori WHERE rif = ? AND "
+                                "tutore = ? ORDER BY id DESC LIMIT 1", (rif, tutore_id)).fetchone()
+        return self._riga(r) if r else None
+
+    def materiale(self, d: dict) -> tuple[list | None, str]:
+        """(righe della trascrizione, nota) per la scheda di un avviso di pericolo: quella
+        tenuta, o ricostruita (`trascrizione_dopo`: la stanza e la conversazione del minore, per
+        un avviso di prima), o la nota che non c'è più."""
+        if not self._cfg("avvisi_trascrizione", 1.0):
+            return None, ""
+        if d.get("trascrizione"):
+            try:
+                return json.loads(d["trascrizione"]), ""
+            except ValueError:
+                pass
+        fn = self.trascrizione_dopo
+        if callable(fn):
+            try:
+                righe = fn(d)
+            except Exception as e:  # noqa: BLE001 — ricostruirla non ferma la scheda
+                self.log(f"   [MINORI] trascrizione dell'avviso non ricostruita: "
+                         f"{type(e).__name__}")
+                righe = None
+            if righe:
+                return righe, ("Ricostruita da ciò che ricordo di quel momento: può non essere "
+                               "completa.")
+        return None, "La trascrizione di quel momento non c'è più."
+
+    def scheda_di(self, tutore, d: dict, minore=None) -> bool:
+        """La scheda di un avviso di pericolo sullo schermo **personale** del tutore (mai altri
+        schermi): il testo senza parole, quando e da dove, e sotto la trascrizione e «Scarica
+        audio». Con la chiave dell'avviso: una seconda volta sostituisce la prima."""
+        hub = self.schermi
+        if hub is None:
+            return False
+        minore = minore or _per_id(self.registry, d["minore"])
+        nome = getattr(minore, "name", None) or d["minore"]
+        righe, nota = self.materiale(d)
+        extra: dict = {}
+        if righe:
+            extra["trascrizione"] = righe
+        if nota:
+            extra["nota"] = nota
+        fid, cas = d.get("audio"), self.cassetto
+        if fid and cas is not None and self._cfg("avvisi_audio", 0.0):
+            pid = getattr(tutore, "id", None)
+
+            def audio_fn(pid=pid, fid=fid):
+                r = cas.prendi(pid, fid)
+                return cas.byte(r) if r is not None else None
+            extra["scarica"] = ["audio"]
+            extra["_scarica"] = {"audio_fn": audio_fn, "solo_persona": True,
+                                 "titolo": f"Avviso {nome} {quando_scheda(d['creato'])}"}
+        try:
+            from .schermi import schede
+            from .schermi.hub import Mittente
+            card = schede.nuova("avviso", ("Importante: " if d.get("urgente") else "Avviso: ")
+                                + nome, schede.PERSONALE, durata_s=None,
+                                chiave=f"avviso:{d.get('rif') or d['id']}",
+                                testo=self.testo_scheda(d["testo"], d["creato"],
+                                                        d.get("origine") or ""),
+                                falso=bool(d.get("falso")), **extra)
+            hub.invia(card, Mittente(persona=tutore.id, nome=tutore.name, livello="familiare",
+                                     certo=True), forza=True)
+            return True
+        except Exception as e:  # noqa: BLE001 — lo schermo non deve fermare l'avviso
+            self.log(f"   [MINORI] scheda dell'avviso non mandata: {type(e).__name__}")
+            return False
+
+    def dimentica_materiale(self, luogo: str | None = None, tutore: str | None = None,
+                            minore: str | None = None, tutto: bool = False,
+                            prima_di: str | None = None) -> int:
+        """Toglie trascrizione e audio (anche il file nel cassetto) degli avvisi di un luogo
+        («dimentica» della stanza), di un tutore o di un minore, più vecchi di `prima_di` (la
+        scadenza), o di tutti (`calliope conserva --svuota`). L'avviso resta, senza parole.
+        Quante righe."""
+        filtri, arg = ["(trascrizione IS NOT NULL OR audio IS NOT NULL)"], []
+        if not tutto:
+            if luogo is not None:
+                filtri.append("luogo = ?")
+                arg.append(luogo)
+            if tutore is not None:
+                filtri.append("tutore = ?")
+                arg.append(tutore)
+            if minore is not None:
+                filtri.append("minore = ?")
+                arg.append(minore)
+            if prima_di is not None:
+                filtri.append("creato < ?")
+                arg.append(prima_di)
+            if len(filtri) == 1:
+                return 0
+        with self._lock:
+            rows = self.db.execute("SELECT id, tutore, audio FROM avvisi_tutori WHERE "
+                                   + " AND ".join(filtri), arg).fetchall()
+            if rows:
+                self.db.execute("PRAGMA secure_delete = ON")
+                self.db.executemany("UPDATE avvisi_tutori SET trascrizione = NULL, audio = NULL "
+                                    "WHERE id = ?", [(x[0],) for x in rows])
+                self.db.commit()
+        cas = self.cassetto
+        for _id, tut, fid in rows:
+            if fid and cas is not None:
+                try:
+                    f = cas.prendi(tut, fid)
+                    if f is not None:
+                        cas.elimina(tut, [f])
+                except Exception as e:  # noqa: BLE001
+                    self.log(f"   [MINORI] audio dell'avviso non tolto: {type(e).__name__}")
+        return len(rows)
+
+    def pulisci_materiale(self, forza: bool = False) -> int:
+        """La trascrizione degli avvisi oltre `avvisi_audio_giorni` (l'audio scade da sé nel
+        cassetto). Al più una volta all'ora, se non `forza`."""
+        if not forza and time.monotonic() - self._pulito < 3600.0:
+            return 0
+        self._pulito = time.monotonic()
+        giorni = self._cfg("avvisi_audio_giorni", 30.0)
+        if giorni <= 0:
+            return 0
+        limite = (self.adesso() - datetime.timedelta(days=giorni)).isoformat(timespec="seconds")
+        return self.dimentica_materiale(prima_di=limite)
+
     def solo_schermo(self, minore, tipo: str, testo: str, urgente: bool = False,
-                     registry=None, origine: str = "", rif: str | None = None) -> int:
+                     registry=None, origine: str = "", rif: str | None = None,
+                     trascrizione: list | None = None, pezzi=None,
+                     luogo: str | None = None) -> int:
         """Un avviso ai tutori **solo sullo schermo personale** (14/10, il guardiano a
         posteriori della stanza: decisione 0029 punto 4, mai a voce): resta nella tabella come
         gli altri, ma già segnato come detto (`come` «schermo»), così la frase del tutore non
@@ -1077,17 +1355,17 @@ class Avvisi:
         ora = self._ora()
         rif = rif or f"av:{minore.id}:{ora}:{tipo}"
         with self._lock:
+            tr = self._trascrizione_da_tenere(tipo, trascrizione)
             for t in dest:
                 self.db.execute("INSERT INTO avvisi_tutori (tutore, minore, tipo, testo, "
-                                "urgente, creato, detto, origine, rif, come) VALUES "
-                                "(?, ?, ?, ?, ?, ?, ?, ?, ?, 'schermo')",
+                                "urgente, creato, detto, origine, rif, come, trascrizione, "
+                                "luogo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'schermo', ?, ?)",
                                 (t.id, minore.id, tipo, testo, int(urgente), ora, ora,
-                                 origine or None, rif))
+                                 origine or None, rif, tr, luogo))
             self.db.commit()
         self.log(f"   [MINORI] avviso «{tipo}» per {minore.name} sullo schermo di "
                  f"{', '.join(t.name for t in dest) or 'nessuno'}")
-        for t in dest:
-            self._scheda(t, minore, testo, urgente, creato=ora, origine=origine)
+        self._dopo_l_inserimento(dest, minore, tipo, testo, urgente, ora, origine, rif, pezzi)
         return len(dest)
 
     @staticmethod
@@ -1124,12 +1402,14 @@ class Avvisi:
             self.db.commit()
         self._scheda(persona, persona, testo, False, creato=ora)
 
-    _COLONNE = "id, minore, tipo, testo, urgente, creato, origine, rif, detto, come, falso"
+    _COLONNE = ("id, minore, tipo, testo, urgente, creato, origine, rif, detto, come, falso, "
+                "trascrizione, audio, luogo")
 
     def _riga(self, r) -> dict:
         d = {"id": r[0], "minore": r[1], "tipo": r[2], "testo": r[3], "urgente": bool(r[4]),
              "creato": r[5], "origine": r[6] or "", "rif": r[7], "detto": r[8],
-             "come": r[9], "falso": r[10]}
+             "come": r[9], "falso": r[10], "trascrizione": r[11], "audio": r[12],
+             "luogo": r[13]}
         # Un avviso urgente rimasto da dire oltre `avvisi_urgente_ore` (14/10): non più urgente
         c = _dt(d["creato"])
         ore = self._cfg("avvisi_urgente_ore", 12.0)
@@ -1143,6 +1423,7 @@ class Avvisi:
         """Gli avvisi non ancora detti a questo tutore (i più urgenti prima; quelli urgenti
         rimasti da dire oltre `avvisi_urgente_ore` valgono non urgenti). Quelli segnati falsi
         non si dicono più: escono qui (`come` «falso»)."""
+        self.pulisci_materiale()
         with self._lock:
             rows = self.db.execute(f"SELECT {self._COLONNE} FROM avvisi_tutori WHERE tutore = ? "
                                    "AND detto IS NULL ORDER BY id", (tutore_id,)).fetchall()
@@ -1252,6 +1533,9 @@ class Avvisi:
         if d.get("origine"):
             pezzi.append(d["origine"])
         pezzi.append(dove + (f" {quando}" if quando else ""))
+        if d.get("trascrizione") or d.get("audio"):
+            pezzi.append("trascrizione" + (" e audio" if d.get("audio") else "")
+                         + " solo sulla sua scheda personale (mai a voce)")
         pezzi.append(stato)
         return "; ".join(pezzi) + f": «{d['testo']}»"
 
