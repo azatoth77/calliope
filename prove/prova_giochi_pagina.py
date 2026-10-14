@@ -489,7 +489,10 @@ def main() -> int:
 
         # ── il palco fisso (14/10, motore_gioco.js) ──
         # Il motore misura ogni pagina sullo schermo vero e lo dice a Calliope (tipo «palco»):
-        # [] = ci sta. Ogni modello di pagina del gioco «pagine», poi in verticale (telefono)
+        # [] = ci sta. Ogni modello di pagina del gioco «pagine», poi in verticale (telefono).
+        # Il cane da guardia stretto serviva sopra: qui, con la macchina carica (--completo), un
+        # «ping» lento non deve chiudere il gioco a metà
+        a.cfg.giochi_watchdog_s = 10.0
         a.installa("pagine")
         out = a.chiama("est_pagine", {"partita": "nuova"}, "Dario", schermo=schermi["A"])
         pg = a.giochi.partite[out["partita"]]
@@ -507,9 +510,12 @@ def main() -> int:
         verifica("palco: ogni modello di pagina misurato sullo schermo vero (900×800), nessun "
                  "difetto", ok is not None and all(x == [] for _, x in palchi)
                  and attivi_di(pg.id) == ["ancora"], str(palchi) + " " + str(attivi_di(pg.id)))
-        ok = cdp(A, "Emulation.setDeviceMetricsOverride",
-                 {"width": 390, "height": 844, "deviceScaleFactor": 1, "mobile": True})
-        time.sleep(1.0)
+        n0 = posto.palco_n
+        cdp(A, "Emulation.setDeviceMetricsOverride",
+            {"width": 390, "height": 844, "deviceScaleFactor": 1, "mobile": True})
+        # girato lo schermo il motore ridisegna in verticale e rimanda la misura
+        girato = aspetta(lambda: posto.palco_n > n0, 8)
+        r = riquadro(A) or [0, 0, 0, 0]
         a.giochi.comando(pg.id, sa, "ancora")
         verticale = []
         for c in giro[:-1]:
@@ -517,9 +523,10 @@ def main() -> int:
             a.giochi.comando(pg.id, sa, c)
             time.sleep(0.5)
             verticale.append((c, posto.palco))
-        r = riquadro(A) or [0, 0, 0, 0]
-        verifica("palco: a 390×844 (verticale, telefono) ogni pagina ci sta", r[3] > r[2]
-                 and all(x == [] for _, x in verticale), f"{r} {verticale}")
+        verifica("palco: a 390×844 (verticale, telefono) il motore ridisegna e rimisura, e ogni "
+                 "pagina ci sta", girato is not None and r[3] > r[2]
+                 and all(x == [] for _, x in verticale) and posto.palco == [],
+                 f"{r} {posto.palco_n - n0} misure {verticale}")
         cdp(A, "Emulation.clearDeviceMetricsOverride", {})
         time.sleep(0.8)
         clic(A, *centro(A, "article.modo-gioco .gioco-chiudi"))

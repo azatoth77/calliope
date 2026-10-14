@@ -126,6 +126,7 @@ class Posto:
         # La diagnosi del palco (14/10): i difetti misurati dal motore sullo schermo vero (al
         # più tre frasi; [] = la pagina ci sta), None finché non arriva
         self.palco: list[str] | None = None
+        self.palco_n = 0                    # quante misure sono arrivate
 
 
 class Partita:
@@ -678,6 +679,7 @@ class Giochi:
         difetti = [_pulisci(x, 300) for x in lista]
         nuovi = difetti and difetti != posto.palco
         posto.palco = difetti
+        posto.palco_n += 1
         if nuovi:
             self._registra(p, "palco", regola="gioco_fuori_dal_palco", difetti=difetti)
             self.log(f"[GIOCHI] «{p.titolo}»: il disegno non sta nel palco: {difetti[0]}")

@@ -898,7 +898,11 @@
     }
     function disegna() {
       var pag = nucleo.pagina(S);
+      var prima = orientamento;
       orientamento = orientamentoAdesso();
+      // girato lo schermo, la misura vera si rimanda anche se non cambia (Calliope sa che la
+      // pagina ci sta anche nell'altro orientamento)
+      if (prima !== null && prima !== orientamento) firmaPalco = null;
       imp = impagina(pag, orientamento);
       palco = el("div", "motore palco " + imp.orientamento + " fase-" + S.fase + " pagina-" + pag.modello);
       scala();
