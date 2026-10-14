@@ -6,9 +6,16 @@ dei turni (`turn_log_dir`), con la stessa tenuta (`turn_log_days`). Una riga per
 
     segmento      sat, canale, voce_s, durata_s, byte, esito («riga», «scartata», «legato»),
                   motivo, attesa_s (dalla chiusura all'inizio di Whisper), ritardo_s (dalla
-                  chiusura alla riga pronta), stt_s, recupero (passato davanti a un turno)
+                  chiusura alla riga pronta), stt_s, recupero (passato davanti a un turno),
+                  chiusura (dal 14/10: «silenzio», «pausa_breve» = taglio morbido vicino al
+                  tetto, «lunga» = tetto duro senza pause);
+                  dal passo 5 (14/10, `stanza_durante_voce`), per i segmenti detti durante la
+                  voce di Calliope: durante, frasi (sue frasi confrontate), detto_nuove (loro
+                  parole non ancora contate), parole (della riga trascritta), eco_tolte, residua
+                  (parole rimaste che combaciano con lei), regole; motivo «eco» se tutta eco
     buttato       sat, motivo («voce»: è cominciata la voce di Calliope, «spenta», «coda_piena»,
-                  «scollegato»), voce_s
+                  «scollegato», «eco_cancello»: detto durante la voce su un satellite con l'eco
+                  sul saluto oltre la soglia), voce_s
     presenza      persona (id del profilo), sat, durata_s
     cambio_stanza persona, da, a, dopo_s (dall'ultima volta sentita nell'altra stanza)
     pausa         sat, motivo, ore      ·  dimentica  sat, eventi
@@ -40,6 +47,8 @@ from pathlib import Path
 PREFISSO = "stanza-"
 CAMBIO_ENTRO_S = 600.0
 RITARDO_P90_OBIETTIVO_S = 10.0
+# Passo 5 (progetto § 6, riga 5): eco residua sotto 2 parole ogni 100 dette da Calliope
+ECO_RESIDUA_OBIETTIVO = 2.0
 # Passo 4 (progetto § 6, riga 4): la frase d'attesa in meno del 10 % dei turni in stanza, il
 # tool sotto i 3 s al p90
 ATTESA_QUOTA_OBIETTIVO = 0.10
@@ -140,12 +149,17 @@ def riassunto(righe: list[dict], turni: list[dict] | None = None) -> dict:
             s = g["satelliti"].setdefault(str(r.get("sat") or "?"), {
                 "canale": r.get("canale"), "segmenti": 0, "voce_s": 0.0, "byte": 0,
                 "righe": 0, "legati": 0, "recuperati": 0, "scartate": {}, "buttati": {},
-                "_ritardi": []})
+                "_ritardi": [], "chiusure": {}, "durante": {"segmenti": 0, "righe": 0, "eco": 0, "parole": 0,
+                                            "tolte": 0, "recuperate": 0, "residua": 0,
+                                            "detto": 0}})
             if tipo == "buttato":
                 m = str(r.get("motivo") or "?")
                 s["buttati"][m] = s["buttati"].get(m, 0) + 1
                 continue
             s["segmenti"] += 1
+            if r.get("chiusura"):
+                ch = str(r["chiusura"])
+                s["chiusure"][ch] = s["chiusure"].get(ch, 0) + 1
             s["voce_s"] += float(r.get("voce_s") or 0)
             s["byte"] += int(r.get("byte") or 0)
             esito = r.get("esito")
@@ -158,6 +172,19 @@ def riassunto(righe: list[dict], turni: list[dict] | None = None) -> dict:
                 s["scartate"][m] = s["scartate"].get(m, 0) + 1
             if r.get("recupero"):
                 s["recuperati"] += 1
+            if r.get("durante"):
+                d = s["durante"]
+                d["segmenti"] += 1
+                d["detto"] += int(r.get("detto_nuove") or 0)
+                d["parole"] += int(r.get("parole") or 0)
+                d["tolte"] += int(r.get("eco_tolte") or 0)
+                d["residua"] += int(r.get("residua") or 0)
+                if esito == "riga":
+                    d["righe"] += 1
+                    d["recuperate"] += max(0, int(r.get("parole") or 0)
+                                           - int(r.get("eco_tolte") or 0))
+                elif r.get("motivo") == "eco":
+                    d["eco"] += 1
             if r.get("ritardo_s") is not None and esito != "legato":
                 s["_ritardi"].append(float(r["ritardo_s"]))
         elif tipo == "presenza":
@@ -179,6 +206,9 @@ def riassunto(righe: list[dict], turni: list[dict] | None = None) -> dict:
             s["ritardo_p50_s"], s["ritardo_p90_s"] = _p(rit, 0.5), _p(rit, 0.9)
             s["mb"] = round(s["byte"] / 2 ** 20, 2)
             s["mb_ora"] = round(s["mb"] / (s["voce_s"] / 3600), 1) if s["voce_s"] > 60 else None
+            d = s["durante"]
+            d["residua_100"] = (round(100 * d["residua"] / d["detto"], 2) if d["detto"]
+                                else None)
     cop = {"turni": 0, "dette": 0, "pronte": 0, "complete": 0, "oltre": 0, "_rec": [],
            "col_blocco": 0, "nel_contesto": 0, "scartate": 0, "tutte": 0, "_attese": []}
     tempi = {k: {"stt": [], "prima": [], "riletti": []}
@@ -260,7 +290,7 @@ def riassunto(righe: list[dict], turni: list[dict] | None = None) -> dict:
 
 def testo(r: dict) -> str:
     out = ["Stanza (conversazione di stanza: passo 1 in ombra, passo 2 con stanza_contesto, "
-           "passo 4 con stanza_cerca)"]
+           "passo 4 con stanza_cerca, passo 5 con stanza_durante_voce)"]
     if r.get("tenuta"):
         # La tenuta su disco (14/10, stanza/tenuta.py): solo numeri, mai parole né nomi
         from .tenuta import testo_stato
@@ -288,6 +318,22 @@ def testo(r: dict) -> str:
             if s["scartate"] or s["buttati"]:
                 out.append(f"      scartate {s['scartate'] or '{}'}, buttate dal satellite "
                            f"{s['buttati'] or '{}'}")
+            ch = s.get("chiusure") or {}
+            if ch.get("pausa_breve") or ch.get("lunga"):
+                out.append(f"      chiusure: silenzio {ch.get('silenzio', 0)}, taglio morbido "
+                           f"alla pausa breve {ch.get('pausa_breve', 0)}, tetto duro "
+                           f"{ch.get('lunga', 0)}")
+            d = s.get("durante") or {}
+            if d.get("segmenti"):
+                res = d.get("residua_100")
+                avviso = (" ⚠ oltre 2" if res is not None and res >= ECO_RESIDUA_OBIETTIVO
+                          else "")
+                out.append(
+                    f"      durante la voce (passo 5): {d['segmenti']} segmenti, righe tenute "
+                    f"{d['righe']} (parole recuperate {d['recuperate']}), scartate per eco "
+                    f"{d['eco']}, parole di Calliope tolte {d['tolte']}; eco residua stimata "
+                    + (f"{res} ogni 100 parole dette ({d['residua']} su {d['detto']}, "
+                       f"obiettivo < 2){avviso}" if res is not None else "non misurata"))
     c = r["copertura"]
     if c["turni"]:
         out.append(f"  Copertura all'interpellazione: {c['turni']} turni, {c['pronte']}/"

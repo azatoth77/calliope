@@ -1265,6 +1265,14 @@ conversazione_stanza:
   # Tetto di un segmento della stanza: un pezzo breve va meglio a Whisper e a chi parla (la
   # frase dei comandi resta a max_utterance_s)
   stanza_segmento_max_s: 20.0
+  # Taglio morbido al tetto (14/10): negli ultimi `stanza_taglio_zona_s` prima del tetto il
+  # segmento si chiude alla prima micro-pausa (VAD sotto soglia per `stanza_pausa_breve_ms`,
+  # molto meno di silence_ms: chiusura «pausa_breve»), così il taglio non spezza una parola;
+  # senza pause si chiude comunque `stanza_tetto_duro_s` dopo il tetto (chiusura «lunga»). Il
+  # pezzo dopo riparte dal pre-roll, senza perdere parlato. 0 nella zona = taglio netto al tetto
+  stanza_taglio_zona_s: 4.0
+  stanza_pausa_breve_ms: 160
+  stanza_tetto_duro_s: 5.0
   # All'interpellazione i segmenti detti prima passano davanti: la misura dice quante volte
   # finirli costa più di così dalla domanda (passo 2: oltre, la frase d'attesa)
   stanza_recupero_max_s: 1.5
@@ -1325,6 +1333,15 @@ conversazione_stanza:
   stanza_cerca_anticipo: true
   # Tetto delle righe anticipate (~250 token: ~0,1 s di lettura in più del 26B)
   stanza_cerca_anticipo_caratteri: 1000
+  # Passo 5 (14/10, calliope/stanza/eco.py): la stanza ascolta anche mentre Calliope parla. I
+  # satelliti e il telefono mandano i segmenti detti durante la sua voce, segnati con le frasi
+  # che suonavano; il filtro dell'eco (regola eco_stanza) toglie dalla riga le parole che sono
+  # la sua voce (3 di fila, o il 60 % della riga, nel tempo della frase) e scarta la riga tutta
+  # eco. Solo per la stanza: i comandi restano half-duplex (principio 8), il barge-in non
+  # cambia. Un satellite con l'eco sul saluto oltre barge_in_echo_max (casse senza
+  # cancellazione) resta half-duplex anche per la stanza. Misure (eco residua, parole
+  # recuperate) in `calliope stato --turni`, sezione Stanza. false (di serie) = come prima
+  stanza_durante_voce: false
   # La tenuta su disco del testo della stanza (14/10, decisione 0029 punto 5, calliope/stanza/
   # tenuta.py): le righe della stanza (testo, chi, stanza, tempi, rivolta, minore) e le
   # presenze in un SQLite con FTS5 accanto alla configurazione, per `stanza_tenuta_giorni`;

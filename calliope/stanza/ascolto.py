@@ -28,6 +28,13 @@ modello** in questo passo: si misura (stanza/misure.py, `calliope stato --turni`
   tempo (ospiti: `stanza_ospiti_ore`, 4 h) o finché non si riprende; il satellite lo sa subito
   (messaggio `stanza`), gli schermi della stanza lo mostrano.
 - **«Dimentica»** svuota il registro della stanza del satellite e butta i segmenti in coda.
+- **Durante la voce** (14/10, passo 5, `stanza_durante_voce`): i segmenti detti mentre Calliope
+  parla arrivano segnati con le frasi che suonavano (`durante_voce`); le frasi (testo e durata)
+  sono quelle mandate al satellite (`Collegamento.frasi_voce`) e l'ora in cui hanno cominciato a
+  suonare (`suonate`). Alla trascrizione il filtro dell'eco (stanza/eco.py, regola `eco_stanza`)
+  toglie le parole che sono la sua voce; la riga tutta eco è scartata («eco»). Cancello per
+  satellite: con l'eco misurata sul saluto oltre `barge_in_echo_max` (casse senza cancellazione)
+  quel satellite resta half-duplex anche per la stanza.
 - **Tenuta su disco** (14/10, `stanza_tenuta`, stanza/tenuta.py): `tenuta` riceve gli eventi dei
   registri (righe e presenze che si possono tenere) e le presenze ancora aperte ogni minuto;
   `presenze` unisce quelle della memoria e del disco (i permessi della ricerca dopo un riavvio);
@@ -42,6 +49,7 @@ import time
 import numpy as np
 
 from . import coda as coda_mod
+from . import eco as eco_mod
 from .registro import (ANALISI, DETTO_CALLIOPE, PAUSA, PRESENZA, PRESENZA_INIZIO, RIGA,
                        RIGA_SCARTATA, RIPRESA, SCAMBIO_APERTO, SCAMBIO_CHIUSO, SEGMENTO,
                        RegistroStanza)
@@ -65,7 +73,8 @@ def _ora_breve(epoch: float) -> str:
 class Segmento:
     __slots__ = ("sat", "nome", "canale", "id", "pezzi", "byte", "inizio", "fine", "chiuso",
                  "voce_s", "durata_s", "ascolto", "stato", "fatto", "recupero", "riga",
-                 "scambio", "inizio_epoch", "fine_epoch", "esito")
+                 "scambio", "inizio_epoch", "fine_epoch", "esito", "durante", "dette",
+                 "detto_nuove", "chiusura")
 
     def __init__(self, sat, nome, canale, ident, inizio):
         self.sat, self.nome, self.canale, self.id = sat, nome, canale, ident
@@ -80,6 +89,10 @@ class Segmento:
         self.scambio = None
         self.inizio_epoch = self.fine_epoch = None
         self.esito = None                      # «riga», o il motivo dello scarto
+        self.durante = None                    # passo 5: id delle frasi che suonavano
+        self.dette = None                      # le frasi di Calliope di quell'intervallo
+        self.detto_nuove = 0                   # le loro parole non ancora contate (misure)
+        self.chiusura = None                   # silenzio, pausa_breve (taglio morbido), lunga
 
 
 class Copertura:
@@ -160,6 +173,7 @@ class Stanza:
         self._presenti: dict = {}              # persona → {sat, nome, inizio, ultimo}
         self._intervalli = collections.deque(maxlen=2000)   # (persona, sat, inizio, fine)
         self._n_scambi = 0
+        self._detto_contate: dict = {}         # sat → id delle frasi già contate (misure eco)
         # La tenuta su disco (stanza/tenuta.Tenuta, 14/10), None con `stanza_tenuta: false`
         self.tenuta = None
         self._presenze_scritte: dict = {}      # persona → (sat, inizio, ultimo) già sul disco
@@ -187,7 +201,74 @@ class Stanza:
         if p is not None:
             return {"attiva": False, "motivo": p["motivo"], "fino": p["fino"],
                     "segmento_max_s": seg}
-        return {"attiva": True, "motivo": None, "fino": None, "segmento_max_s": seg}
+        c = self.cfg
+        return {"attiva": True, "motivo": None, "fino": None, "segmento_max_s": seg,
+                "taglio_zona_s": float(getattr(c, "stanza_taglio_zona_s", 4.0)),
+                "pausa_breve_ms": int(getattr(c, "stanza_pausa_breve_ms", 160) or 160),
+                "tetto_duro_s": float(getattr(c, "stanza_tetto_duro_s", 5.0)),
+                "durante_voce": self.durante_qui(satellite.get("id"))}
+
+    # ── durante la voce (passo 5) ──
+    def _cancello(self, sat) -> bool:
+        """Il cancello per satellite (§ 5.3 c): l'eco misurata sul saluto oltre
+        `barge_in_echo_max` (casse senza cancellazione) chiude l'ascolto durante la voce. Un'eco
+        non misurata (niente saluto, telefono) lo lascia aperto: il filtro resta."""
+        coll = None
+        if self.server is not None:
+            try:
+                coll = self.server.per_id(sat)
+            except Exception:  # noqa: BLE001
+                coll = None
+        e = getattr(coll, "eco", None) if coll is not None else None
+        try:
+            return e is not None and float(e) > float(getattr(self.cfg, "barge_in_echo_max",
+                                                              0.05))
+        except (TypeError, ValueError):
+            return False
+
+    def durante_qui(self, sat) -> bool:
+        """La stanza di questo satellite ascolta anche mentre Calliope parla."""
+        return bool(getattr(self.cfg, "stanza_durante_voce", False)) and not self._cancello(sat)
+
+    def pronto(self, coll):
+        """Il satellite ha detto il saluto (l'eco è misurata): lo stato di nuovo, col
+        cancello dell'ascolto durante la voce."""
+        sat = coll.satellite.get("id")
+        if not getattr(self.cfg, "stanza_durante_voce", False) or sat not in self._info:
+            return
+        if self._cancello(sat):
+            self.log(f"   [STANZA] {coll.satellite.get('nome')}: eco sul saluto oltre "
+                     f"{self.cfg.barge_in_echo_max:.2f}, la stanza non ascolta mentre parlo")
+        self._annuncia(sat)
+
+    def _dette(self, coll, s: "Segmento") -> list:
+        """Le frasi di Calliope dell'intervallo del segmento: quelle che il satellite ha
+        segnato e quelle che, per l'ora in cui hanno cominciato a suonare, ci cadono dentro
+        (con la tolleranza e la coda dell'eco). Con il conto delle parole nuove per le misure."""
+        frasi = dict(getattr(coll, "frasi_voce", None) or {})
+        suonate = dict(getattr(coll, "suonate", None) or {})
+        ids = {i for i in (s.durante or ()) if i in frasi}
+        tol = eco_mod.TOLLERANZA_S
+        for fid, (_testo, dur) in frasi.items():
+            t0 = suonate.get(fid)
+            if t0 is None or s.fine is None:
+                continue
+            if t0 - tol <= s.fine and t0 + dur + eco_mod.CODA_S + tol >= s.inizio:
+                ids.add(fid)
+        ora_m, ora_e = time.monotonic(), time.time()
+        out = []
+        contate = self._detto_contate.setdefault(s.sat, set())
+        for fid in sorted(ids):
+            testo, dur = frasi[fid]
+            t0 = suonate.get(fid)
+            out.append(eco_mod.Detta(testo, None if t0 is None else ora_e - (ora_m - t0), dur))
+            if fid not in contate:
+                contate.add(fid)
+                s.detto_nuove += len(eco_mod.parole(testo))
+        if len(contate) > 600:
+            for k in sorted(contate)[:300]:
+                contate.discard(k)
+        return out
 
     def _pausa_viva(self, sat):
         p = self._pause.get(sat)
@@ -290,6 +371,10 @@ class Stanza:
         if s is None:
             return
         chiusura = str(m.get("chiusura") or "")
+        dv = m.get("durante_voce")
+        if isinstance(dv, list) and dv:
+            s.durante = sorted({int(x) for x in dv[:50]
+                                if isinstance(x, int) and not isinstance(x, bool)})
         try:
             s.voce_s = min(120.0, max(0.0, float(m.get("parlato_ms") or 0) / 1000))
             s.durata_s = min(120.0, max(0.0, float(m.get("durata_s") or 0)))
@@ -297,12 +382,29 @@ class Stanza:
             s.voce_s = s.durata_s = 0.0
         ora = time.monotonic()
         s.chiuso = ora
-        s.fine = ora - float(self.cfg.silence_ms) / 1000 - coll.ritardo()
+        s.chiusura = chiusura
+        # La fine del parlato: prima del silenzio che l'ha chiuso (o della micro-pausa)
+        coda_s = (float(self.cfg.silence_ms) / 1000 if chiusura == "silenzio" else
+                  float(getattr(self.cfg, "stanza_pausa_breve_ms", 160) or 0) / 1000
+                  if chiusura == "pausa_breve" else 0.0)
+        s.fine = ora - coda_s - coll.ritardo()
         s.fine_epoch = time.time() - (ora - s.fine)
-        if chiusura not in ("silenzio", "lunga"):
+        if chiusura not in ("silenzio", "pausa_breve", "lunga"):
             self._misura("buttato", sat=s.nome, canale=s.canale,
                          motivo=chiusura or "?", voce_s=round(s.voce_s, 2))
             return
+        if s.durante is not None and not self.durante_qui(sat):
+            # Detto durante la voce, ma qui la stanza non ascolta mentre Calliope parla (spento
+            # nel file o cancello dell'eco): come prima del passo 5, il segmento si butta
+            self._misura("buttato", sat=s.nome, canale=s.canale,
+                         motivo="eco_cancello" if self._cancello(sat) else "voce",
+                         voce_s=round(s.voce_s, 2))
+            return
+        if self.durante_qui(sat):
+            try:
+                s.dette = self._dette(coll, s) or None
+            except Exception:  # noqa: BLE001 — senza frasi il segmento resta com'è
+                s.dette = None
         asc = m.get("ascolto")
         if isinstance(asc, int) and not isinstance(asc, bool):
             s.ascolto = asc
@@ -325,11 +427,12 @@ class Stanza:
                 self._taglia_coda()
                 self._cond.notify_all()
         reg.aggiungi(SEGMENTO, scambio=s.scambio, segmento=s.id, inizio=round(s.inizio_epoch, 3),
-                     fine=round(s.fine_epoch, 3), voce_s=round(s.voce_s, 2), durante_voce=None,
+                     fine=round(s.fine_epoch, 3), voce_s=round(s.voce_s, 2), durante_voce=s.durante,
                      turno=s.ascolto, wake=s.ascolto is not None)
         if s.ascolto is not None:
             self._misura("segmento", sat=s.nome, canale=s.canale, voce_s=round(s.voce_s, 2),
-                         durata_s=round(s.durata_s, 2), byte=s.byte, esito="legato")
+                         durata_s=round(s.durata_s, 2), byte=s.byte, esito="legato",
+                         chiusura=s.chiusura)
 
     def _taglia_coda(self):
         """Con il lock: oltre `stanza_coda_max_s` di audio in coda si buttano i più vecchi (non
@@ -698,9 +801,20 @@ class Stanza:
         stt_s = time.monotonic() - t0
         scartata = getattr(self.stt, "ultima_scartata", None)
         testo = (testo or "").strip()
+        eco = self._eco_misure(s, None)
         if not testo:
-            self._fatto(s, None, "allucinazione" if scartata else "vuota", attesa, stt_s)
+            self._fatto(s, None, "allucinazione" if scartata else "vuota", attesa, stt_s, eco)
             return
+        tolte = 0
+        if s.dette:
+            # Il filtro dell'eco (passo 5, regola eco_stanza): le parole che sono la sua voce
+            e = eco_mod.filtra(testo, s.dette, s.inizio_epoch, s.fine_epoch,
+                               nomi=getattr(self.cfg, "wake_names", None) or ())
+            eco = self._eco_misure(s, e)
+            if e.tutta_eco:
+                self._fatto(s, None, "eco", attesa, stt_s, eco)
+                return
+            testo, tolte = e.testo, e.tolte
         chi = self._chi(audio, s.voce_s)
         s.esito = "riga"
         self.registro(s.sat).aggiungi(
@@ -708,12 +822,26 @@ class Stanza:
             inizio=round(s.inizio_epoch or time.time(), 3),
             fine=round(s.fine_epoch or time.time(), 3), testo=testo, chi=chi["chi"],
             nome=chi.get("nome"), sicurezza=chi["sicurezza"], p_min=None, rivolta="ignoto",
-            minore=chi.get("minore", False))
+            minore=chi.get("minore", False),
+            **({"durante_voce": True, "eco_tolte": tolte} if s.durante or s.dette else {}))
         if chi["sicurezza"] == "voce":
             self._sentita(chi["persona"], chi.get("nome"), s.sat, s.fine_epoch or time.time())
-        self._fatto(s, testo, None, attesa, stt_s)
+        self._fatto(s, testo, None, attesa, stt_s, eco)
 
-    def _fatto(self, s: Segmento, testo, motivo, attesa: float, stt_s: float):
+    @staticmethod
+    def _eco_misure(s: Segmento, e) -> dict:
+        """I numeri del filtro dell'eco per le misure (mai parole): solo per i segmenti detti
+        durante la voce o vicini a una sua frase."""
+        if not (s.durante or s.dette):
+            return {}
+        out = {"durante": True, "frasi": len(s.dette or ()), "detto_nuove": s.detto_nuove}
+        if e is not None:
+            out.update(parole=e.parole, eco_tolte=e.tolte, residua=e.residua,
+                       regole=list(e.regole))
+        return out
+
+    def _fatto(self, s: Segmento, testo, motivo, attesa: float, stt_s: float,
+               eco: dict | None = None):
         ora = time.monotonic()
         if testo is None and motivo is not None:
             s.esito = motivo
@@ -726,7 +854,9 @@ class Stanza:
                      durata_s=round(s.durata_s, 2), byte=s.byte,
                      esito="riga" if testo else "scartata", motivo=motivo,
                      attesa_s=round(attesa, 3), stt_s=round(stt_s, 3),
-                     ritardo_s=round(ora - (s.chiuso or ora), 3), recupero=s.recupero)
+                     ritardo_s=round(ora - (s.chiuso or ora), 3), recupero=s.recupero,
+                     chiusura=s.chiusura,
+                     **(eco or {}))
 
     def _chi(self, audio, voce_s: float) -> dict:
         """Chi parla nel segmento (CAM++), con le regole di sempre: sopra soglia e con il

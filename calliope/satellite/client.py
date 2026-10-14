@@ -101,6 +101,10 @@ class Riproduttore:
         self._now_text = ""
         self._name_until = 0.0
         self.in_corso = False                     # sta riproducendo una frase
+        # La frase che suona (o l'ultima) e quando è finita: la stanza segna i segmenti detti
+        # durante la voce (14/10, passo 5, satellite/stanza.py)
+        self._frase_id = None
+        self._frase_fine = 0.0
         self.interrotta_a = None                  # monotonic dell'ultima interruzione
         self.ultima_scrittura = 0.0               # monotonic della fine dell'ultima scrittura
         self.byte_riprodotti = 0
@@ -157,6 +161,17 @@ class Riproduttore:
         ora = time.monotonic()
         return (self.in_corso or not self.q.empty() or ora < self._pcm_fino + margine
                 or ora - self.ultima_scrittura < margine)
+
+    def voce_ora(self, coda_s: float = 1.0):
+        """L'id della frase che suona adesso o finita da meno di `coda_s` (l'eco dura un po'
+        dopo), 0 per un suono senza testo (saluto, segnale), None se le casse tacciono."""
+        ora = time.monotonic()
+        fid = self._frase_id
+        if fid is not None and (self.in_corso or ora < self._frase_fine + coda_s):
+            return fid
+        if ora < self._pcm_fino + coda_s:
+            return 0
+        return None
 
     def saying_name(self) -> bool:
         """Come Speaker.saying_name: la wake word va ignorata mentre dice il suo nome."""
@@ -229,6 +244,7 @@ class Riproduttore:
         mentions_name = dice_nome(self.cfg, f.testo)
         self._now_text = f.testo
         self.in_corso = True
+        self._frase_id = f.id
         step = int(f.rate * self.BLOCCO_S) * 2
         pos, intera = 0, False
         try:
@@ -266,6 +282,7 @@ class Riproduttore:
         finally:
             self.in_corso = False
             self._now_text = ""
+            self._frase_fine = time.monotonic() + self.out.latency
         if intera and f.testo:
             self.dette.append(f.testo)
         if mentions_name:
@@ -857,7 +874,8 @@ class Satellite:
             self.stanza = AscoltoStanza(
                 self.cfg, self._manda, self._manda_raw, self.player.occupato,
                 ultimo_comando=lambda: (self._ultimo_audio, self._ultimo_lid)
-                if self._ultimo_lid is not None else None, log=self.log)
+                if self._ultimo_lid is not None else None, log=self.log,
+                voce=self.player.voce_ora)
         self.stanza.imposta(stato if isinstance(stato, dict) else None)
         self.listener.rubinetto = self.stanza.frame if attiva else None
 
