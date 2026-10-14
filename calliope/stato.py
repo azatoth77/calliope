@@ -34,7 +34,10 @@ il prossimo passo (registro delle capacità, calliope/capacita.py).
                                               stanza (calliope/stanza/misure.py, 13/10);
                                               guardiano a posteriori della stanza: segnali
                                               per ora di chiacchiera con un minore, livelli,
-                                              acuti falsi a settimana (stanza/guardia.py)
+                                              acuti falsi a settimana (stanza/guardia.py);
+                                              fine del turno System 1: ms risparmiati, frasi
+                                              che avrebbe tagliato, attese più lunghe
+                                              (calliope/system1/fine_turno.py, 14/10)
     python -m calliope.stato --guardia [--giorni N] [--falso ID | --vero ID]
                                               i segnali del guardiano a posteriori (14/10):
                                               giorno, ora, stanza, minore, livello e
@@ -417,13 +420,16 @@ def main(argv=None) -> int:
         # Il guardiano a posteriori della stanza (14/10, passo 6): solo categorie e numeri
         from .stanza import guardia as guardia_stanza
         guardia_r = guardia_stanza.riassunto(misure_stanza.leggi(cfg.turn_log_dir, giorni))
+        # La fine del turno System 1 (14/10, calliope/system1/fine_turno.py): ombra e attiva
+        from .system1 import fine_turno as fine_turno_s1
+        fine_r = fine_turno_s1.riassunto(turni)
         if as_json:
             print(json.dumps({"giorni": dati, "soglia_s": getattr(cfg, "latenza_avviso_s", None),
                               "attrito": sicurezza, "attrito_soglia": soglia_a,
                               "argomenti": argomenti, "compagnia": comp,
                               "dialogo": dialogo, "voce_sola": voce_sola,
                               "scelta_tool": scelta, "frasi_pronte": pronte,
-                              "stanza": stanza,
+                              "stanza": stanza, "fine_turno": fine_r,
                               "guardia": {k: v for k, v in guardia_r.items()
                                           if k not in ("elenco", "letture")}},
                              ensure_ascii=False, indent=2))
@@ -447,6 +453,8 @@ def main(argv=None) -> int:
             print(misure_stanza.testo(stanza))
             print()
             print(guardia_stanza.testo(guardia_r, guardia_stanza.modo(cfg)))
+            print()
+            print(fine_turno_s1.testo(fine_r))
         return 0
     if "--guardia" in argv:
         return guardia_main(cfg, argv, as_json)

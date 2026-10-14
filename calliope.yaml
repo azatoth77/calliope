@@ -507,6 +507,27 @@ audio:
   # frase_tetto, calliope/pause.py). Whisper trascrive anche oltre i 30 s della sua finestra
   # (misure del 10/10 in docs/aree/stt-tts.md: 70 s in 1,9 s sulla GPU del portatile)
   max_utterance_s: 120
+  # La fine del turno decisa da un modello piccolo, System 1 (14/10, calliope/system1/
+  # fine_turno.py; ricerca docs/ricerche/2026-10-14-system1-fine-turno.md): Smart Turn v3.2
+  # (Pipecat, BSD-2, 8,7 MB) ascolta l'audio della frase a fine_turno_sonda_ms di silenzio e
+  # dice «finito» o «non finito». «spenta» (di serie): solo il silenzio fisso (silence_ms).
+  # «ombra»: il turno si chiude come sempre e, dopo, il server rigioca la frase e scrive cosa
+  # avrebbe deciso (ms risparmiati, frasi che avrebbe tagliato, attese più lunghe: `calliope
+  # stato --turni`). «attiva»: «finito» con sicurezza ≥ fine_turno_soglia chiude subito,
+  # «non finito» con sicurezza ≥ fine_turno_soglia_attesa aspetta fino a
+  # fine_turno_attesa_max_ms; incerto, lento, guasto o senza modello: silenzio fisso. Vale in
+  # locale e sul satellite in Python che ha il modello (il telefono resta al silenzio fisso).
+  # Il modello si scarica con: python -m calliope.stato --installa modello_fine_turno
+  fine_turno: spenta
+  # vuoto = models/fine_turno/smart-turn-v3.2-cpu.onnx
+  fine_turno_modello: null
+  fine_turno_sonda_ms: 250
+  fine_turno_soglia: 0.9
+  fine_turno_soglia_attesa: 0.8
+  fine_turno_attesa_max_ms: 1500
+  # Sotto questo parlato non si chiude mai prima (il nome da solo, «Calliope,», e la pausa
+  # prima della domanda)
+  fine_turno_min_parlato_ms: 800
   # Microfono e uscita di Calliope completa con l'audio di questo PC (audio_modo: locale).
   # Il satellite usa i suoi, nella sezione satellite (satellite_microfono, satellite_casse):
   # questi gli valgono solo da ripiego, con un avviso. None = predefinito.

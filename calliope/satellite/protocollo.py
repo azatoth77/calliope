@@ -119,7 +119,12 @@ CHIUSO_VERSIONE = 4426                 # protocollo diverso: va aggiornato un la
 PARAMETRI = ("name", "wake_word", "wake_anche_nome", "sample_rate", "vad_threshold", "silence_ms", "preroll_ms",
              "min_speech_ms", "max_utterance_s", "wake_threshold", "wake_consecutive",
              "barge_in_threshold", "barge_in_seed_s", "barge_in_voice_min_s",
-             "barge_in_echo_max")
+             "barge_in_echo_max",
+             # La fine del turno System 1 (14/10, calliope/system1/fine_turno.py): il modo e le
+             # soglie del server; un satellite vecchio le ignora (silenzio fisso)
+             "fine_turno", "fine_turno_sonda_ms", "fine_turno_soglia",
+             "fine_turno_soglia_attesa", "fine_turno_attesa_max_ms",
+             "fine_turno_min_parlato_ms")
 
 
 def testo(**campi) -> str:

@@ -126,6 +126,11 @@ def valida_evento(t: str, m: dict) -> dict | None:
         # facoltativi, un satellite vecchio non li manda
         from ..pause import campi_frase
         out.update(campi_frase(m.get("pause_ms"), m.get("parlato_ms"), m.get("chiusura")))
+        # La fine del turno System 1 (14/10, modo «attiva» sul satellite): solo numeri noti
+        from ..system1.fine_turno import campi_esito
+        ft = campi_esito(m.get("fine_turno"))
+        if ft:
+            out["fine_turno"] = ft
     elif t == "interruzione":
         out["motivo"] = str(m.get("motivo") or "")[:80]
     return out
@@ -1406,6 +1411,7 @@ class AscoltoRemoto:
         self.pause_ms: list[int] | None = None
         self.parlato_ms: int | None = None
         self.chiusura: str | None = None
+        self.fine_turno_esito: dict | None = None   # System 1 «attiva» sul satellite (14/10)
         self.canale: str | None = None
         self.satellite_nome: str | None = None
         self._ultima: tuple | None = None       # (collegamento, id) dell'ultima frase
@@ -1488,8 +1494,10 @@ class AscoltoRemoto:
                                        - coll.ritardo())
                     # La voce è finita il silenzio di chiusura del VAD prima dell'invio, più
                     # metà giro (stessa stima di started_at)
-                    self.ended_at = (time.monotonic() - self.cfg.silence_ms / 1000
-                                     - coll.ritardo())
+                    ft = d.get("fine_turno") if isinstance(d.get("fine_turno"), dict) else {}
+                    silenzio_ms = ft.get("silenzio_ms", self.cfg.silence_ms)
+                    self.ended_at = (time.monotonic() - silenzio_ms / 1000 - coll.ritardo())
+                    self.fine_turno_esito = ft or None
                     self.woke = bool(d.get("woke"))
                     self.wake_score = float(d.get("wake_score") or 0.0)
                     self.pause_ms = d.get("pause_ms")

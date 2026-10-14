@@ -139,6 +139,8 @@ class Servizi:
     stanza: object = None                # stanza.Stanza: la conversazione di stanza (13/10)
     guardia_stanza: object = None        # stanza.guardia.Guardia: a posteriori (14/10, passo 6)
     cancelli_percorso: object = None     # dove si salvano (10/10, main.py); None = in memoria
+    # La fine del turno System 1 in ombra (14/10, system1.fine_turno.OmbraFineTurno), o None
+    fine_turno: object = None
     # Il registro degli eventi (10/10, calliope/eventi/): i registri per persona e anonimi per
     # satellite, condivisi dalle corsie; None = solo in memoria per corsia (prove)
     eventi: object = None
@@ -314,6 +316,9 @@ class Ciclo:
         # della frase di prima (monotonic) e chi la diceva, per la ripresa al turno dopo
         self._fine_voce_prec: float | None = None
         self._voce_prec: str | None = None
+        # La fine del turno System 1 in ombra (14/10, calliope/system1/fine_turno.py): la
+        # simulazione della frase di questo turno, che gira intanto in un thread suo
+        self._fine_turno_job = None
         # L'ultima persona riconosciuta dalla voce (sopra soglia) su questo satellite e quando
         # (monotonic): per le frasi cortissime fuori dalla conversazione (08/10, continuità)
         self._voce_recente: tuple[str, float] | None = None
@@ -478,6 +483,9 @@ class Ciclo:
                 a[k] = list(v) if k == "pause_ms" else v
         if t.barged:
             a["seme"] = True                 # comincia con l'audio del barge-in
+        ft = getattr(L, "fine_turno_esito", None)
+        if isinstance(ft, dict):
+            a["fine_turno"] = dict(ft)       # System 1 «attiva» (14/10): com'è andata
         inizio, fine = getattr(L, "started_at", 0.0), getattr(L, "ended_at", 0.0)
         prec = self._fine_voce_prec
         if prec and inizio and not t.barged and 0 <= inizio - prec <= pause_mod.RIPRESA_S:
@@ -498,6 +506,14 @@ class Ciclo:
         if r is not None:
             a["ripresa_s"] = r
             a["taglio_probabile"] = True
+        # La fine del turno System 1 in ombra (14/10): cosa avrebbe deciso, con la ripresa
+        job, self._fine_turno_job = getattr(self, "_fine_turno_job", None), None
+        ft = getattr(self.s, "fine_turno", None)
+        if ft is not None and job is not None:
+            try:
+                ft.chiudi(a, job)
+            except Exception:  # noqa: BLE001 — una misura non ferma il registro
+                pass
         voce = rec.get("voce") if isinstance(rec.get("voce"), dict) else {}
         nome = voce.get("nome")
         if nome:
@@ -1709,6 +1725,11 @@ class Ciclo:
                 # l'ultimo è ancora chiuso dal tetto (seguiti finiti: frase tagliata)
                 self.rec["ascolto"]["tetto"] = tetto
                 self.rule("frase_tetto")
+            # La fine del turno System 1 in ombra (14/10, calliope/system1/fine_turno.py): la
+            # frase si rigioca in un thread suo mentre il turno va avanti; l'esito entra nel
+            # registro con la ripresa (_chiudi_ascolto). Niente cambia per la frase
+            ft = getattr(s, "fine_turno", None)
+            self._fine_turno_job = ft.valuta(audio) if ft is not None else None
         # Un turno della voce per ciò che si dirà prima della risposta del modello (uscite,
         # cortesia, registrazione della voce, «Sì?», la frase d'attesa di Whisper su CPU).
         # Il satellite scarta le frasi di un turno non oltre l'ultimo fermato: al turno 0 di

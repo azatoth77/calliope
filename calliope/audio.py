@@ -66,6 +66,11 @@ class Listener:
         # una funzione che riceve una copia di ogni frame, sempre, anche mentre non si ascolta;
         # non deve bloccare. None = niente stanza
         self.rubinetto = None
+        # La fine del turno decisa da un modello piccolo (14/10, System 1, modo «attiva»:
+        # calliope/system1/fine_turno.py → Anticipo, messo da `prepara_listener`): None = solo
+        # il silenzio fisso. `fine_turno_esito`: com'è andata l'ultima frase (solo numeri)
+        self.fine_turno = None
+        self.fine_turno_esito = None
         # Ultimi frame captati mentre non si ascolta: diventano il pre-roll iniziale.
         # Senza, chi parlava appena Calliope finiva perdeva l'attacco (test del 24/09:
         # voce a 100–160 ms dall'inizio invece di 240–290, «Equale rospaniac»).
@@ -294,6 +299,14 @@ class Listener:
         on_audio = getattr(self, "on_audio", None)
         on_wake = getattr(self, "on_wake", None)
         signaled, sent = False, 0
+        # System 1 (14/10, «attiva»): a fine_turno_sonda_ms di silenzio la frase va al
+        # decisore senza fermare l'ascolto; «chiudi» chiude subito, «aspetta» alza la soglia
+        # fino al tetto; senza risposta in tempo vale il silenzio fisso
+        ft = getattr(self, "fine_turno", None)
+        n_sonda = ft.politica.frame_sonda(frame_ms) if ft is not None else 0
+        if ft is not None:
+            ft.nuova_frase()
+        self.fine_turno_esito = None
 
         speech, silent, talking = [], 0, False
         self.woke, self.wake_score, streak = False, 0.0, 0
@@ -379,8 +392,21 @@ class Listener:
                     sent = len(speech)
                 silent = silent + 1 if prob < cfg.vad_threshold - 0.15 else 0
                 misura.frame(silent > 0)
+                soglia_ms, anticipa = cfg.silence_ms, False
+                if ft is not None:
+                    if not silent:
+                        ft.annulla()                 # la voce riprende: la sonda non vale
+                    else:
+                        if silent == n_sonda:
+                            # non aspetta: risponde un altro thread
+                            ft.sonda(speech, misura.parlato_ms(silent))
+                        v = ft.verdetto()
+                        if v == "chiudi":
+                            anticipa = True
+                        elif v == "aspetta":
+                            soglia_ms = max(soglia_ms, ft.politica.attesa_max_ms)
                 too_long = len(speech) * frame_ms >= cfg.max_utterance_s * 1000
-                if silent * frame_ms >= cfg.silence_ms or too_long:
+                if silent * frame_ms >= soglia_ms or anticipa or too_long:
                     long_enough = (len(speech) - silent) * frame_ms >= cfg.min_speech_ms
                     for_me = wake is None or self.started_at <= awake_until or self.woke
                     if long_enough and for_me:
@@ -388,8 +414,16 @@ class Listener:
                         # Solo misura (07/10): pause interne, parlato, come si è chiusa
                         self.pause_ms = list(misura.pause)
                         self.parlato_ms = misura.parlato_ms(silent)
-                        self.chiusura = ("silenzio" if silent * frame_ms >= cfg.silence_ms
-                                         else "lunga")
+                        if anticipa and silent * frame_ms < cfg.silence_ms:
+                            self.chiusura = "anticipata"     # System 1: «finito» sicuro
+                        else:
+                            self.chiusura = ("silenzio" if silent * frame_ms >= cfg.silence_ms
+                                             else "lunga")
+                        if ft is not None:
+                            ft.chiusa("attesa" if (self.chiusura == "silenzio"
+                                                   and soglia_ms > cfg.silence_ms)
+                                      else self.chiusura, int(silent * frame_ms))
+                            self.fine_turno_esito = ft.esito
                         if self.chiusura == "lunga":
                             self._dopo_il_tetto()
                         self._osserva_ripresa(frame_ms)
@@ -401,6 +435,8 @@ class Listener:
                         # Quasi-risveglio: solo il punteggio, per tarare la soglia
                         print(f"   (quasi risveglio: {self.wake_score:.2f})", flush=True)
                     # Rumore, oppure parlato non rivolto a Calliope: si butta
+                    if ft is not None:
+                        ft.nuova_frase()
                     talking, speech, silent = False, [], 0
                     misura = MisuraPause(frame_ms)
                     preroll.clear()

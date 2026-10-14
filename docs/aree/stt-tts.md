@@ -2,7 +2,7 @@
 
 *Cattura e VAD, wake word acustica, Whisper (portatile e DGX), Piper, cuffie, impronta vocale CAM++. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-**Stato al 14/10.** Come al 09/10 (sotto), più: le forme chiuse storpiate da whisper.cpp (10/10), Whistle misurato e non adottato (10/10), la frase lunga che al tetto di 120 s si unisce al seguito (10/10), l'impronta che non si aggiorna in compagnia (12/10); la **conversazione di stanza** dal satellite e dal telefono (13–14/10, decisione 0029, spenta di serie): passo 0 (compagnia con le voci tutte riconosciute), passo 1 (sola trascrizione veloce in ombra, protocollo 3), il giudizio «rivolta a Calliope?» con le righe della stanza (passo 2), il taglio morbido dei segmenti e l'ascolto durante la voce di Calliope col filtro dell'eco (passo 5, `stanza_durante_voce`); i conoscenti (decisione 0030, sezioni in fondo). Aperti come al 09/10.
+**Stato al 14/10.** Come al 09/10 (sotto), più: le forme chiuse storpiate da whisper.cpp (10/10), Whistle misurato e non adottato (10/10), la frase lunga che al tetto di 120 s si unisce al seguito (10/10), l'impronta che non si aggiorna in compagnia (12/10); la **conversazione di stanza** dal satellite e dal telefono (13–14/10, decisione 0029, spenta di serie): passo 0 (compagnia con le voci tutte riconosciute), passo 1 (sola trascrizione veloce in ombra, protocollo 3), il giudizio «rivolta a Calliope?» con le righe della stanza (passo 2), il taglio morbido dei segmenti e l'ascolto durante la voce di Calliope col filtro dell'eco (passo 5, `stanza_durante_voce`); i conoscenti (decisione 0030, sezioni in fondo); la **fine del turno System 1** (14/10 sera, Smart Turn sull'audio, spenta di serie, da misurare in ombra: sezione in fondo). Aperti come al 09/10.
 
 *Stato al 09/10 (storico): Whisper con whisper.cpp sulla DGX e senza correzione (variante A, scelta il 07/10), Piper con la prima frase a pezzi e sulla GPU secondo la macchina (07/10), CAM++ con il margine tra i profili e la continuità delle frasi cortissime (07–08/10), pause e fine del turno solo misurate (07/10), parole incerte negli argomenti dei tool (F0 e F1, 08/10), modalità compagnia accesa con il giudizio «rivolta a Calliope?» in ombra (09/10). Aperti: whisper.cpp senza hotwords («Chiori sono»), le voci di famiglia al telefono da registrare di nuovo per canale, le cuffie Bluetooth mute.*
 
@@ -10,7 +10,7 @@
 
 | Stadio | Libreria | Dove |
 |---|---|---|
-| Cattura + VAD | sounddevice + Silero VAD (PyTorch, oppure il suo ONNX con onnxruntime senza torch: Linux) | `calliope/audio.py` → `Listener` (`listen`, `watch_for_name`, `measure_echo`); `calliope/vad.py` → `carica_vad`, `SileroOnnx`, `SileroTorch`; pause e fine del turno (dal 07/10, solo misura) `calliope/pause.py` → `MisuraPause`, `OsservaRipresa`, `inizio_ripresa`, `riassunto` (sotto); la frase al tetto e il suo seguito nello stesso turno (dal 10/10, sotto) `Listener._dopo_il_tetto`, `Ciclo._seguito_del_tetto`, `pause.TETTO_ATTESA_S` |
+| Cattura + VAD | sounddevice + Silero VAD (PyTorch, oppure il suo ONNX con onnxruntime senza torch: Linux) | `calliope/audio.py` → `Listener` (`listen`, `watch_for_name`, `measure_echo`); `calliope/vad.py` → `carica_vad`, `SileroOnnx`, `SileroTorch`; pause e fine del turno (dal 07/10, solo misura) `calliope/pause.py` → `MisuraPause`, `OsservaRipresa`, `inizio_ripresa`, `riassunto` (sotto); la frase al tetto e il suo seguito nello stesso turno (dal 10/10, sotto) `Listener._dopo_il_tetto`, `Ciclo._seguito_del_tetto`, `pause.TETTO_ATTESA_S`; la fine del turno System 1 (dal 14/10, spenta di serie, sotto) `calliope/system1/` → `Decisione`, `Sorvegliato`, `fine_turno.SmartTurn`, `Politica`, `Anticipo` (attiva, nel `Listener`), `OmbraFineTurno` (ombra, sul server), `log_mel`, `simula`, `esito`, `riassunto` |
 | Chi parla | CAM++ (3D-Speaker) in ONNX con onnxruntime | `calliope/speaker_id.py` → `SpeakerEmbedder`, `SpeakerRegistry`, `SpeakerContext`; `arruola.py`; margine tra i profili e voce incerta tra un adulto e un minore (07/10) `Ciclo._confronta_voce`, `Ciclo._chiedi_chi_parla`, `SpeakerContext.incerta`; continuità delle frasi cortissime (08/10) `Ciclo._per_continuita`; il nome da solo dopo lo scatto acustico `ciclo.solo_nome_acustico`; più voci vicino allo stesso satellite (dal 09/10, sotto) `calliope/compagnia.py` → `Compagnia`, `modo`, `riassunto`, e il giudizio «rivolta a Calliope» `calliope/rivolta.py` → `Giudice`, `etichetta` |
 | Speech-to-Text | faster-whisper nel processo, oppure un server con l'API OpenAI (sulla DGX whisper.cpp con CUDA, servizio `calliope-whisper`; vLLM scartato) con ripiego su faster-whisper su CPU (modello di riserva dal catalogo, `whisper_riserva`) | `calliope/stt.py` → `Transcriber`, `ServerTranscriber`, `make_transcriber`, `modello_whisper`; server in `setup/linux/motore/whisper.sh`; correzione delle frasi incerte (spenta) `calliope/stt_correzione.py` → `Correttore`, `accettabile`, `min_utile`; a capo di whisper-server tolti `stt.unisci_righe`; parole incerte al modello (B, spenta) `stt_correzione.parole_incerte`, `Brain.STT_INCERTE_MSG`; frase capita trattenuta (B2, spenta) `Brain.CapitoHold`, `Brain._applica_capito`, `STT_RISCRIVI_MSG` (confronto A/B/B2/C in fondo); parole incerte negli argomenti dei tool (dal 08/10, F0 e F1, sotto) `calliope/argomenti_incerti.py` → `Ascolto`, `Misura`, `Vocabolario`, `allinea`, `esito`, `suggerimento`, `riassunto`, con le probabilità per parola `Transcriber.parole` e `ServerTranscriber.parole`; tempo massimo della richiesta in proporzione alla frase `ServerTranscriber.tempo_massimo` (10/10); frasi tipiche delle allucinazioni scartate per intero in `calliope/allucinazioni.py` (09/10) |
 | Conversazione di stanza, passo 1 in ombra (13/10, sotto) | Silero VAD in ONNX (un secondo VAD, suo), Whisper con la precedenza, CAM++ | sul satellite `calliope/satellite/stanza.py` → `Segmentatore`, `AscoltoStanza`, rubinetto `Listener.rubinetto`; sul server `calliope/stanza/` → `Stanza` (`ascolto.py`: `copertura`, `turno_testo`, `pausa`, `riprendi`, `dimentica`, `presenti`, `presenze`, `durante_qui`, `pronto`), filtro dell'eco del passo 5 `filtra`, `Detta` (`eco.py`), `Riproduttore.voce_ora`, `Collegamento.frasi_voce`, `Copertura`, `Precedenza` (`coda.py`), `RegistroStanza` (`registro.py`), `Misure`, `riassunto` (`misure.py`), `load_stanza`; `STTCondiviso.transcribe(priorita=…, prompt=…)`; ganci `Ciclo._stanza_copertura`, `Ciclo._stanza_turno`; tool `stanza_pausa` (`calliope/tools/stanza.py`) |
@@ -479,6 +479,9 @@ satellite e server veri con un client finto, `voce.js` con node).
    atteso ~400 ms sulla latenza sentita (`fine_parlato_s`), al costo di trascrizioni buttate (da
    contare nel registro); su whisper.cpp della DGX ~0,15–0,3 s a frase. Prima serve la fase 1:
    con le pause misurate si sa quante partenze si annullerebbero.
+
+*14/10 sera: la fine del turno decisa da un modello piccolo sull'audio (System 1, Smart Turn) è
+un'altra strada per lo stesso guadagno, senza trascrizioni buttate: sezione in fondo.*
 
 ## Parole incerte: chiedere e imparare le correzioni (08/10, analisi)
 
@@ -1201,3 +1204,58 @@ carico) e l'attacco della frase si perdeva. Ora la coda si apre prima e i rileva
 12 giri su 12 verdi con la CPU occupata. Vale anche per l'ascolto vero (satellite e locale): sul vero il
 difetto poteva far perdere la prima sillaba del nome quando la macchina era carica. Caso nuovo in
 `prove/prova_frase_lunga.py` (reset lento di 0,6 s), che cade col codice di prima.
+
+## La fine del turno System 1: Smart Turn sull'audio, in ombra (14/10 sera, ramo `system1-fine-turno`)
+
+Richiesta di Dario: modelli «System 1» piccoli e velocissimi per le scelte chiuse che pesano sulla
+latenza, con il modello grande quando il piccolo è incerto; primo caso la fine del turno. Ricerca e
+scelta in [`../ricerche/2026-10-14-system1-fine-turno.md`](../ricerche/2026-10-14-system1-fine-turno.md).
+
+**Scelta: Smart Turn v3.2 di Pipecat** (BSD-2, encoder di Whisper Tiny + classificatore, ONNX int8
+da 8,7 MB, 23 lingue con l'italiano: 94,5 % sul loro banco). Guarda gli ultimi 8 s di **audio** e
+dà la probabilità che il turno sia finito; niente trascrizione parziale (sulla DGX costerebbe
+~0,18 s, sul satellite non c'è Whisper). Il turn detector di LiveKit (testo, 396 MB) è escluso
+dalla licenza (solo dentro LiveKit Agents). Nessuna dipendenza nuova: onnxruntime c'è, il log-mel
+di Whisper è in numpy (uguale a quello di `transformers` e di faster-whisper). Si scarica dal
+catalogo: `python -m calliope.stato --installa modello_fine_turno` (`models/fine_turno/`, fuori
+da git, revisione fissa e SHA-256).
+
+**Tre modi** (`fine_turno`, sezione audio; di serie **spenta**):
+- **ombra**: il turno si chiude come sempre; il server rigioca ogni frase in un thread suo (VAD
+  suo, sonda a `fine_turno_sonda_ms` = 250 ms di ogni pausa) e scrive in `ascolto.fine_turno`,
+  solo numeri, cosa avrebbe deciso: «anticipo» con `risparmio_ms`, «taglio» (una pausa dentro la
+  frase presa per la fine), «anticipo_ripresa» («finito» ma la persona ha ripreso: dato di
+  `OsservaRipresa`), «taglio_evitato» e «attesa» con `costo_ms` (dove avrebbe aspettato di più),
+  «come_prima». Riga in `calliope stato --turni`. Vale per tutti i canali, telefono compreso.
+- **attiva**: nel `Listener` (in locale e sul satellite in Python che ha il modello; modo e soglie
+  arrivano dal server con PARAMETRI) a 250 ms di silenzio la frase va al decisore senza fermare
+  l'ascolto: «finito» con sicurezza ≥ `fine_turno_soglia` (0,9) chiude subito (chiusura
+  «anticipata», nuova in `pause.CHIUSURE`), «non finito» ≥ `fine_turno_soglia_attesa` (0,8)
+  aspetta fino a `fine_turno_attesa_max_ms` (1500 ms). Sotto `fine_turno_min_parlato_ms` (800 ms
+  di voce) mai prima: il nome da solo con la pausa prima della domanda esce «finito» (0,92 con
+  Piper). Costa l'anticipo sulle frasi brevi senza il nome («Che ore sono?» detta nella finestra
+  d'ascolto, ~0,7 s di voce): la griglia dello script della DGX prova 0, 800 e 1200 ms. Incerto, lento (risposta dopo il silenzio fisso), guasto (spento dopo 5 errori di fila)
+  o senza modello: silenzio fisso. Il satellite manda l'esito in `frase_finita.fine_turno`
+  (controllato). Il telefono resta al silenzio fisso (domani con onnxruntime-web).
+- Principio 10: non è una regola sul testo; decide sull'audio, che il modello della voce non vede,
+  solo **quando** la frase va a Whisper. Di serie il silenzio fisso; un anticipo sbagliato in
+  half-duplex perde il seguito, per questo soglia alta, parlato minimo e prima l'ombra.
+
+**Misure sul portatile (frasi di Piper deterministiche).** Frasi complete «finito» 0,98–0,99; pause
+di 400 ms dopo «e poi,» e «poi,» «non finito» (0,03 e 0,06). Le altre sospese («in», «e», un
+numero, un elenco) Piper le pronuncia come frasi finite e il modello le prende per finite (0,92–0,99):
+sono un limite della voce sintetica, non una misura del modello; la valutazione vera è sulla voce
+conservata. `Listener` in «attiva» a tempo reale: «Accendi la luce in cucina.» chiusa dopo **320
+ms** di silenzio invece di 700. Decisore: 31 ms con 2 thread di onnxruntime + 7 ms di log-mel sul
+portatile (50 ms con un thread), p50 25–58 ms secondo il carico.
+
+**Da fare (Dario).** Sulla DGX: il modello e lo script a secco sulle ~95 frasi conservate di chi
+amministra (`prove/manuali/fine_turno_dgx.py`, comando in testa: accordo, griglia di soglie e
+parlato minimo, ms del decisore, solo numeri); poi `fine_turno: ombra` nel file locale per almeno
+una settimana. Criteri proposti per «attiva» su un satellite: tagli sotto l'1 % a soglia 0,9,
+almeno metà delle frasi chiuse prima, decisore p90 sotto 100 ms sul satellite.
+
+Prove: `prove/prova_fine_turno.py` (livello 2, a secco: decisore finto, frase completa, sospesa
+con «e»/«in»/«poi», numeri dettati, elenco, ripresa dopo una pausa lunga, il nome da solo,
+decisore guasto o lento → silenzio fisso, Listener in «attiva», protocollo, catalogo, ciclo) e
+`prove/prova_fine_turno_voce.py` (livello 3: modello e Piper veri; si salta senza il modello).
