@@ -637,6 +637,7 @@ def prova_ciclo():
                                                      ended_at=ora - 0.5),
                             rec={"voce": {"nome": "Carlo", "modo": "voce"}}, _turno=None)
     finto._stanza_dove = lambda: Ciclo._stanza_dove(finto)
+    finto._stanza_esito = lambda t, rec: Ciclo._stanza_esito(finto, t, rec)   # passo 2
     t = SimpleNamespace(scritto=None, text="Calliope, accendi la luce")
     Ciclo._stanza_copertura(finto, t)
     Ciclo._stanza_turno(finto, t)

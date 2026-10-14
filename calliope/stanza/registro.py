@@ -20,7 +20,12 @@ Tipi (schema del § 3.3; quelli dei passi dopo sono già nominati):
     presenza        persona, nome, inizio, fine: un intervallo chiuso (§ 3.5 ter: da una stanza
                     all'altra, chi era presente dove e quando)
     pausa / ripresa motivo («pausa», «ospiti»), fino
-    detto_calliope, riassunto_stanza, analisi   (passi 2–6)
+    detto_calliope  testo, inizio, fine: ciò che Calliope ha detto ad alta voce lì (passo 2,
+                    14/10: la risposta di un turno; nella proiezione è una riga di «calliope»)
+    analisi         analisi, riga (seq), esito: dal passo 2 «rivolta» rivede il campo
+                    `rivolta` di una riga (la frase di un turno ignorata o giudicata non
+                    rivolta resta nella stanza con «no»)
+    riassunto_stanza  (passo 3)
 
 **Dove**: in memoria, al più `TENUTA_S` (24 h, decisione 0029 punto 8: «memoria» di serie) e al
 più `MAX_EVENTI`; si perde al riavvio. Su disco (`stanza_tenuta: {giorni: N}` nel file locale
@@ -39,8 +44,9 @@ SCAMBIO_APERTO, SCAMBIO_CHIUSO = "scambio_aperto", "scambio_chiuso"
 SEGMENTO, RIGA, RIGA_SCARTATA = "segmento", "riga", "riga_scartata"
 PRESENZA_INIZIO, PRESENZA = "presenza_inizio", "presenza"
 PAUSA, RIPRESA = "pausa", "ripresa"
+DETTO_CALLIOPE, ANALISI = "detto_calliope", "analisi"
 TIPI = (SCAMBIO_APERTO, SCAMBIO_CHIUSO, SEGMENTO, RIGA, RIGA_SCARTATA, PRESENZA_INIZIO,
-        PRESENZA, PAUSA, RIPRESA, "detto_calliope", "riassunto_stanza", "analisi")
+        PRESENZA, PAUSA, RIPRESA, DETTO_CALLIOPE, "riassunto_stanza", ANALISI)
 
 
 @dataclass
@@ -104,12 +110,20 @@ class RegistroStanza:
         with self._lock:
             ev = list(self._eventi)
         scartati = {e.dati.get("segmento") for e in ev if e.tipo == RIGA_SCARTATA}
+        rivolte = {e.dati.get("riga"): e.dati.get("esito") for e in ev
+                   if e.tipo == ANALISI and e.dati.get("analisi") == "rivolta"}
         ultime: dict = {}
         sciolte = []
         for e in ev:
+            if e.tipo == DETTO_CALLIOPE:
+                sciolte.append(dict(e.dati, seq=e.seq, t=e.t, chi="calliope", nome="Calliope",
+                                    sicurezza="voce", rivolta=None, minore=False))
+                continue
             if e.tipo != RIGA:
                 continue
             d = dict(e.dati, seq=e.seq, t=e.t)
+            if e.seq in rivolte:
+                d["rivolta"] = rivolte[e.seq]
             seg = d.get("segmento")
             if seg is None:
                 sciolte.append(d)

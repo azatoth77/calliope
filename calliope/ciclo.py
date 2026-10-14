@@ -207,6 +207,10 @@ class Turno:
     senza_nome: bool = False
     rivolta: object = None
     non_rivolta: bool = False
+    # La conversazione di stanza (14/10, passo 2): il `seq` della riga della frase nella stanza
+    # del satellite (per segnarla «non rivolta» se resta senza risposta)
+    stanza_seq: int | None = None
+    stanza_esito_fatto: bool = False
     compagnia: dict | None = None        # lo stato «in compagnia» dopo questa frase
     # I comandi a voce di un gioco (11/10, calliope/gioco_voce.py): il gioco aperto sullo
     # schermo di questo satellite che aspettava un comando quando si è aperto l'ascolto, e se
@@ -584,6 +588,8 @@ class Ciclo:
         (12/10, calliope/conserva.py): se le parole del turno restano (lo leggono l'ombra e il
         registro dei turni) e la voce della frase, solo di un adulto riconosciuto che ha detto
         sì. `self._turno` è il turno di questo `rec`."""
+        if isinstance(rec, dict) and getattr(self.s, "stanza", None) is not None:
+            self._stanza_esito(self._turno, rec)
         if isinstance(rec, dict) and isinstance(rec.get("stanza"), dict):
             # La copertura all'interpellazione (13/10, stanza/ascolto.Copertura): i numeri di
             # adesso, a voce finita (il recupero ha avuto il tempo della risposta)
@@ -1722,9 +1728,80 @@ class Ciclo:
             fine = time.time() - (time.monotonic() - (self.listener.ended_at or
                                                       time.monotonic()))
             inizio = time.time() - (time.monotonic() - self.listener.started_at)
-            st.turno_testo(sat, lid, t.text, chi, inizio=inizio, fine=fine)
+            t.stanza_seq = st.turno_testo(sat, lid, t.text, chi, inizio=inizio, fine=fine)
         except Exception as e:  # noqa: BLE001 — la stanza non ferma la voce
             print(f"   [STANZA] turno nella stanza: {type(e).__name__}: {e}", flush=True)
+
+    # ── passo 2 della stanza (14/10, calliope/stanza/contesto.py): blocco nei dati del turno ──
+    def _stanza_inizio_epoch(self) -> float:
+        """L'inizio della frase del turno, in epoch (le righe della stanza sono in epoch)."""
+        return time.time() - (time.monotonic() - self.listener.started_at)
+
+    def _stanza_blocco(self, t):
+        """Il blocco della stanza per la risposta (`stanza_contesto`), o None. Prima aspetta il
+        recupero delle righe dette prima della domanda e ancora in coda, al più
+        `stanza_recupero_max_s` dall'arrivo della frase (§ 3.11); poi la copertura dice quante
+        di quelle righe sono nel blocco. Nel registro dei turni solo numeri
+        (`stanza.contesto`, `stanza.copertura.nel_contesto`)."""
+        from .stanza import contesto as stanza_ctx
+        st = getattr(self.s, "stanza", None)
+        if st is None or t.scritto is not None or not stanza_ctx.acceso(self.s.cfg):
+            return None
+        try:
+            sat, _ = self._stanza_dove()
+            if sat is None or not st.accesa_qui(sat):
+                return None
+            info = self.rec.setdefault("stanza", {}) if self.rec is not None else {}
+            cop = info.get("copertura")
+            mancano = 0
+            if hasattr(cop, "aspetta"):
+                tetto = float(getattr(self.s.cfg, "stanza_recupero_max_s", 1.5) or 0.0)
+                cop.aspetta(cop.t0 + tetto)
+                mancano = cop.mancano()
+            b = stanza_ctx.costruisci(st, sat, self.s.cfg, self._stanza_inizio_epoch(),
+                                      mancano=mancano)
+            if hasattr(cop, "nel_blocco"):
+                cop.nel_blocco(b.segmenti if b is not None else set())
+            info["contesto"] = b.per_registro() if b is not None else {"righe": 0}
+            if b is not None:
+                print(f"   [STANZA] nel contesto {b.righe} righe della stanza ({b.caratteri} "
+                      f"caratteri" + (f", {b.tagliate} più vecchie fuori" if b.tagliate else "")
+                      + (f", {mancano} non ancora trascritte" if mancano else "") + ")",
+                      flush=True)
+            return b
+        except Exception as e:  # noqa: BLE001 — la stanza non ferma la voce
+            print(f"   [STANZA] blocco del contesto: {type(e).__name__}: {e}", flush=True)
+            return None
+
+    def _stanza_esito(self, t, rec: dict):
+        """A turno finito: la frase ignorata o non rivolta resta nella stanza con «rivolta: no»
+        (decisione 0029: niente azioni, ma il contesto sì); la risposta detta entra nella stanza
+        come riga di Calliope. Solo con `stanza_contesto`."""
+        st = getattr(self.s, "stanza", None)
+        if (st is None or t is None or t.scritto is not None
+                or not getattr(self.s.cfg, "stanza_contesto", False)
+                or getattr(t, "stanza_esito_fatto", False)):
+            return
+        t.stanza_esito_fatto = True              # una volta per turno (anche con gli annunci)
+        try:
+            sat, _ = self._stanza_dove()
+            if sat is None:
+                return
+            esito = rec.get("esito") if isinstance(rec, dict) else None
+            giudizio = (rec.get("rivolta") or {}).get("per_calliope") if isinstance(
+                rec.get("rivolta"), dict) else None
+            if t.stanza_seq is not None and (esito in ("ignorato", "non_rivolta")
+                                             or t.non_rivolta):
+                st.segna_rivolta(sat, t.stanza_seq, "no", giudizio)
+            elif t.stanza_seq is not None and giudizio is False:
+                # In ombra Calliope ha risposto: la riga resta «rivolta», il giudizio si annota
+                st.segna_rivolta(sat, t.stanza_seq, "si", giudizio)
+            detto = " ".join(t.said or ()).strip()
+            if detto and not t.non_rivolta and esito not in ("ignorato", "non_rivolta"):
+                st.detto(sat, detto)
+        except Exception as e:  # noqa: BLE001 — la stanza non ferma la voce
+            print(f"   [STANZA] esito del turno nella stanza: {type(e).__name__}: {e}",
+                  flush=True)
 
     # ── fase 3 bis: i comandi a voce di un gioco (11/10, calliope/gioco_voce.py) ──
     def _schermi_voce(self) -> list:
@@ -3111,6 +3188,10 @@ class Ciclo:
                                      if t.scritto is None else None)
             if brain.storpiata_turno:
                 self.rec["forma_storpiata"] = brain.storpiata_turno["forma"]
+            # La conversazione della stanza nei dati del turno (14/10, passo 2): un attributo
+            # che vale una risposta sola, come i due qui sopra
+            if getattr(s, "stanza", None) is not None:
+                brain.stanza_turno = self._stanza_blocco(t)
             contesto_turno = t.context
             if t.contesto_gioco:
                 contesto_turno = (contesto_turno + "\n" if contesto_turno else "") + t.contesto_gioco
@@ -3185,15 +3266,29 @@ class Ciclo:
         contesto_r = rivolta_mod.righe_contesto(
             getattr(self.brain, "history", None),
             persona=rivolta_mod.etichetta(getattr(prof, "name", None)))
+        # Con la conversazione di stanza nel contesto (14/10, passo 2): anche le ultime righe
+        # della stanza, con chi le ha dette (§ 2.4: sui blocchi brevi sbagliava senza)
+        stanza_r = self._stanza_righe_rivolta()
         fut = concurrent.futures.Future()
 
         def lavora():
             try:
-                fut.set_result(giudice.giudica(contesto_r, frase))
+                fut.set_result(giudice.giudica(contesto_r, frase, stanza=stanza_r))
             except Exception as e:  # noqa: BLE001
                 fut.set_exception(e)
         threading.Thread(target=lavora, daemon=True, name="rivolta").start()
-        return {"fut": fut, "modo": m, "esito": None}
+        return {"fut": fut, "modo": m, "esito": None, "stanza": len(stanza_r)}
+
+    def _stanza_righe_rivolta(self) -> list:
+        st = getattr(self.s, "stanza", None)
+        if st is None or not getattr(self.s.cfg, "stanza_contesto", False):
+            return []
+        try:
+            from .stanza import contesto as stanza_ctx
+            sat, _ = self._stanza_dove()
+            return stanza_ctx.righe_rivolta(st, sat, self.s.cfg, self._stanza_inizio_epoch())
+        except Exception:  # noqa: BLE001 — senza righe il giudizio è quello di prima
+            return []
 
     def _pericolo_vale(self, t) -> bool:
         """Regola `pericolo_non_rivolta` (13/10, passo 0 della conversazione di stanza,
@@ -3274,6 +3369,8 @@ class Ciclo:
         if g is None:
             return
         self.rec["rivolta"] = g.per_registro(r["modo"])
+        if r.get("stanza"):
+            self.rec["rivolta"]["stanza"] = r["stanza"]     # quante righe della stanza (passo 2)
         if g.per_calliope is False and r["modo"] == compagnia_mod.OMBRA:
             self.rule("non_rivolta_ombra")
             print(f"   [VOCE] (ombra) frase giudicata non rivolta a me ({g.ms:.0f} ms)",

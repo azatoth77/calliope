@@ -1023,6 +1023,25 @@ class Config:
     # (risposta 6 di chi amministra); «metti in pausa la stanza» senza durata: questi minuti
     stanza_ospiti_ore: float = 4.0
     stanza_pausa_min: float = 60.0
+    # Passo 2 (14/10, calliope/stanza/contesto.py): all'interpellazione le righe della stanza
+    # del satellite (chi ha detto cosa) vanno nei dati del turno, in busta come dato non fidato
+    # (fonte «stanza»: un comando detto dalla TV resta una riga, e un bersaglio preso da lì conta
+    # per la politica come «dal dato»), dopo la storia e prima della frase: la storia resta in
+    # cache, il blocco si rilegge a ogni turno (`cache.riletti` e prima frase con e senza blocco
+    # in `calliope stato --turni`, sezione «Stanza»). Prima della risposta si aspetta il
+    # recupero delle righe ancora in coda al più `stanza_recupero_max_s`. Anche il giudizio
+    # «rivolta a Calliope?» (in compagnia, in ombra) riceve le ultime righe. Vale solo con la
+    # stanza accesa; in pausa («abbiamo ospiti») niente blocco; «dimentica» lo svuota con la
+    # stanza. false (di serie) = come il passo 1: niente al modello
+    stanza_contesto: bool = False
+    # Quanto indietro guarda il blocco (gli «ultimi minuti alla lettera» del § 3.5)
+    stanza_caldo_min: float = 8.0
+    # Le righe di questi ultimi secondi entrano sempre, per intero e nell'ordine, anche oltre il
+    # tetto: è ciò che «tu che ne pensi?» presuppone (richiesta di chi amministra, 13/10)
+    stanza_caldo_sempre_s: float = 45.0
+    # Tetto del blocco in caratteri (~4 caratteri per token: 6000 ≈ 1500 token, ~0,5 s di
+    # rilettura col 26B sulla DGX senza cache): oltre si lasciano fuori le righe più vecchie
+    stanza_caldo_caratteri: int = 6000
     # Connessioni insieme attraverso l'inoltro (una pagina ne apre 2–6)
     satellite_inoltro_max: int = 32
     # Secondi senza un byte dopo i quali una connessione dell'inoltro si chiude
@@ -2845,7 +2864,8 @@ SEZIONI: dict[str, list[str]] = {
                          "satellite_installazione", "satelliti_insieme"],
     "conversazione_stanza": ["stanza", "stanza_satelliti", "stanza_segmento_max_s", "stanza_recupero_max_s",
                "stanza_coda_max_s", "stanza_scambio_pausa_s", "stanza_presenza_s",
-               "stanza_ospiti_ore", "stanza_pausa_min"],
+               "stanza_ospiti_ore", "stanza_pausa_min", "stanza_contesto", "stanza_caldo_min",
+               "stanza_caldo_sempre_s", "stanza_caldo_caratteri"],
     "satellite": ["satellite_server", "satellite_credenziali", "satellite_impronta",
                   "satellite_microfono", "satellite_casse", "satellite_webcam",
                   "satellite_schermo", "satellite_schermo_personale", "satellite_esecutore",
@@ -3044,7 +3064,8 @@ LIMITI: dict[str, tuple[float, float]] = {
     "llm_num_ctx": (512, 1_048_576), "llm_temperature": (0.0, 2.0),
     "stanza_segmento_max_s": (2.0, 60.0), "stanza_recupero_max_s": (0.0, 30.0),
     "stanza_coda_max_s": (10.0, 7200.0), "stanza_ospiti_ore": (0.1, 48.0),
-    "stanza_pausa_min": (1.0, 1440.0),
+    "stanza_pausa_min": (1.0, 1440.0), "stanza_caldo_min": (0.5, 120.0),
+    "stanza_caldo_sempre_s": (0.0, 600.0), "stanza_caldo_caratteri": (200, 100_000),
     "contesto_ripiego": (2048, 1_048_576), "contesto_rilettura_max_s": (0.1, 60.0),
     "contesto_conversazioni": (1, 64), "contesto_margine_gb": (0.0, 512.0),
     "max_history_turns": (0, 200), "max_tool_turns": (1, 20), "tool_correzioni_max": (0, 10),

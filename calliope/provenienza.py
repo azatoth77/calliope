@@ -54,6 +54,9 @@ FONTI = {
     "estensione": "il risultato di un'estensione",
     "archivio": "un documento dell'archivio",
     "agente": "il lavoro di un agente",
+    # La conversazione della stanza trascritta (14/10, passo 2, calliope/stanza/contesto.py):
+    # parole dette da altri vicino al satellite, anche dalla TV
+    "stanza": "la conversazione della stanza",
 }
 
 
@@ -81,7 +84,8 @@ def detta(fonte: str) -> str:
 _DA = {"web": "da una pagina internet", "pagina": "da una pagina scaricata",
        "foto": "da una foto", "allegato": "da un file allegato", "audio": "da un audio allegato",
        "estensione": "dal risultato di un'estensione", "archivio": "da un documento "
-       "dell'archivio", "agente": "dal lavoro di un agente"}
+       "dell'archivio", "agente": "dal lavoro di un agente",
+       "stanza": "dalla conversazione della stanza"}
 
 
 def da(fonte: str) -> str:
