@@ -967,7 +967,7 @@
   // ─── «Scarica» nella scheda del documento (07/10, calliope/schermi/scarica.py) ───
   // Il server dà un indirizzo di pochi minuti, solo a uno schermo personale a cui la scheda è
   // arrivata; il browser salva il file (sul telefono negli scaricamenti)
-  const NOMI_SCARICA = { md: "Markdown", pdf: "PDF", word: "Word", excel: "Excel" };
+  const NOMI_SCARICA = { md: "Markdown", pdf: "PDF", word: "Word", excel: "Excel", audio: "l'audio" };
   function pulsantiScarica(c) {
     const box = el("div", "scarica");
     (c.scarica || []).forEach((f) => {
@@ -1127,6 +1127,25 @@
     },
     testo(c, corpo) {
       corpo.append(el("div", "testo-lungo", c.testo || ""));
+    },
+    // Un avviso di pericolo per il tutore (14/10, minori.Avvisi.scheda_di): il testo senza
+    // parole con quando e da dove; la trascrizione e l'audio si aprono solo qui, a richiesta
+    avviso(c, corpo) {
+      corpo.append(el("div", "testo-lungo", c.testo || ""));
+      if (c.falso) corpo.append(el("p", "nota", "Segnato falso da chi amministra."));
+      if (Array.isArray(c.trascrizione) && c.trascrizione.length) {
+        const d = el("details", "trascrizione-avviso");
+        d.append(el("summary", "", "Leggi cosa si è detto"));
+        c.trascrizione.forEach((r) => {
+          const p = el("p", r.segnale ? "segnale" : "", "");
+          const chi = [r.ora, r.chi].filter(Boolean).join(" · ");
+          p.append(el("strong", "", chi + ": "), document.createTextNode(String(r.testo || "")));
+          d.append(p);
+        });
+        corpo.append(d);
+      }
+      if (c.nota) corpo.append(el("p", "nota", c.nota));
+      if (Array.isArray(c.scarica) && c.scarica.length) corpo.append(pulsantiScarica(c));
     },
     // La risposta a una frase scritta da qui (04/10): la domanda piccola sopra, poi il testo
     risposta(c, corpo) {

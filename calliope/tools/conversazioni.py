@@ -434,6 +434,14 @@ def _conversazioni_dimentica(ctx: ToolContext) -> dict:
     if p is not None and 0 < turno - p <= 3:
         proposte.pop(persona, None)
         n = arch.dimentica(persona)
+        # Trascrizione e audio degli avvisi di pericolo ricevuti da chi parla (14/10 sera)
+        try:
+            from .. import minori as _M
+            av = _M.avvisi()
+            if av is not None:
+                av.dimentica_materiale(tutore=str(persona))
+        except Exception:  # noqa: BLE001 — gli avvisi non fermano «dimentica»
+            pass
         # La conversazione in corso: la chiude il ciclo a risposta finita, senza archiviarla né
         # riassumerla (Ciclo._conversazioni_dimenticate; dal 13/10, E2 della roadmap, sempre e
         # non solo con il registro degli eventi acceso): la frase lo dice

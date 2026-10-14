@@ -40,6 +40,10 @@ il prossimo passo (registro delle capacità, calliope/capacita.py).
                                               giorno, ora, stanza, minore, livello e
                                               categoria, mai le parole; --falso e --vero li
                                               segnano per la misura degli acuti falsi
+    python -m calliope.stato --avvisi [--giorni N] [--falso ID]
+                                              gli avvisi ai tutori (14/10): quando sono
+                                              nati, tipo, minore, origine, consegna; --falso
+                                              ferma un avviso non ancora arrivato
     python -m calliope.stato --eventi [--json]
                                               il registro degli eventi (10/10, in ombra:
                                               calliope/eventi/): MB per giorno, registri,
@@ -215,6 +219,11 @@ def guardia_main(cfg, argv: list[str], as_json: bool) -> int:
             m.Misure(cfg.turn_log_dir, cfg.turn_log_days).scrivi("guardia_lettura",
                                                                  segnale=ident, esito=esito)
             print(f"Segnale {ident} segnato come {esito}.")
+            if esito == "falso":
+                # 14/10: l'avviso di quel segnale, se non è ancora arrivato, non arriva più
+                n = _avviso_falso(cfg, f"guardia:{ident}")
+                if n:
+                    print(f"Il suo avviso non si consegna più ({n} tutori).")
             return 0
     giorni = None
     if "--giorni" in argv:
@@ -236,6 +245,78 @@ def guardia_main(cfg, argv: list[str], as_json: bool) -> int:
     print(g.elenco(r, nomi))
     print()
     print(g.testo(r, g.modo(cfg)))
+    return 0
+
+
+def _avviso_falso(cfg, rif: str) -> int:
+    """Segna falso l'avviso con quel riferimento nel file della memoria (le righe di tutti i
+    tutori). Quante righe; 0 senza file o senza avviso."""
+    from pathlib import Path
+    db = str(getattr(cfg, "memory_db", "") or "")
+    if not db or not Path(db).exists():
+        return 0
+    from .minori import Avvisi
+    av = Avvisi(db, log=lambda m: None, cfg=cfg)
+    try:
+        return av.segna_falso(rif)
+    finally:
+        av.close()
+
+
+def avvisi_main(cfg, argv: list[str], as_json: bool) -> int:
+    """`--avvisi` (14/10): gli avvisi ai tutori degli ultimi giorni, con id, quando sono nati,
+    tipo, minore, origine, come e quando sono stati consegnati e se sono falsi; `--falso ID`
+    segna falso un avviso (tutte le righe dei tutori): se non è ancora arrivato non arriva più.
+    Il testo degli avvisi non ha mai le parole del minore."""
+    import datetime
+    from pathlib import Path
+    from .minori import Avvisi, _carica_profili
+    db = str(getattr(cfg, "memory_db", "") or "")
+    if not db or not Path(db).exists():
+        print("Nessun file della memoria: nessun avviso.")
+        return 0
+    av = Avvisi(db, log=lambda m: None, cfg=cfg)
+    try:
+        if "--falso" in argv:
+            i = argv.index("--falso")
+            d = av.leggi(argv[i + 1]) if i + 1 < len(argv) else None
+            if d is None:
+                print("--falso vuole l'id di un avviso (AV12: calliope stato --avvisi)")
+                return 1
+            n = av.segna_falso(d["rif"]) if d["rif"] else av.segna_falso_id(d["id"])
+            print(f"Avviso AV{d['id']} segnato falso ({n} righe): se non è ancora arrivato non "
+                  f"arriva più.")
+            return 0
+        giorni = 7
+        if "--giorni" in argv:
+            try:
+                giorni = max(1, int(argv[argv.index("--giorni") + 1]))
+            except (IndexError, ValueError):
+                print("--giorni vuole un numero")
+                return 1
+        righe = av.recenti(giorni)
+    finally:
+        av.close()
+    if as_json:
+        print(json.dumps(righe, ensure_ascii=False, indent=2, default=str))
+        return 0
+    nomi = {}
+    try:
+        nomi = {x.get("id"): x.get("name") for x in _carica_profili() if x.get("id")}
+    except Exception:  # noqa: BLE001 — senza i profili, gli id
+        pass
+    if not righe:
+        print(f"Nessun avviso ai tutori negli ultimi {giorni} giorni.")
+        return 0
+    print(f"Avvisi ai tutori negli ultimi {giorni} giorni (il più recente prima):")
+    for d in righe:
+        stato = ("FALSO" if d["falso"] else "da consegnare" if not d["detto"] else
+                 f"consegnato ({d['come'] or 'voce'}) {str(d['detto']).replace('T', ' ')[:16]}")
+        print(f"  AV{d['id']}  {str(d['creato']).replace('T', ' ')[:16]}  {d['tipo']:<16} "
+              f"{nomi.get(d['minore'], d['minore'])} -> {nomi.get(d['tutore'], d['tutore'])}"
+              f"{'  urgente' if d['urgente'] else ''}  {stato}"
+              + (f"  ({d['origine']})" if d["origine"] else ""))
+    print("Per segnarne uno falso: calliope stato --avvisi --falso AV12")
     return 0
 
 
@@ -366,6 +447,8 @@ def main(argv=None) -> int:
         return 0
     if "--guardia" in argv:
         return guardia_main(cfg, argv, as_json)
+    if "--avvisi" in argv:
+        return avvisi_main(cfg, argv, as_json)
     if "--eventi" in argv:
         d = _eventi_disco(cfg)
         if as_json:

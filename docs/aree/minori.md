@@ -845,3 +845,95 @@ DGX da misurare.
 nuove in memoria), il filtro della modalità gioco del satellite (oggi lo fa solo il contesto «gioco»
 del giudizio), le righe di versione 2 della corsia lenta (passo 3: oggi una riga riscritta si
 rigiudicherebbe), il riepilogo dei dubbi nel riepilogo del giorno.
+
+## Gli avvisi dicono quando sono nati e da dove (14/10, ramo `avvisi-data`)
+
+**Caso vero.** Un avviso «sicurezza» urgente per il ragazzo, nato il 12/10 alle 19:02 dal giro dei
+cancelli (un falso allarme, corretto nel codice il 13/10: il secondo segnale dopo una smentita),
+è rimasto da dire per due giorni, giustamente, perché il ragazzo parlava vicino al satellite
+(`minori_avviso_privato_s`). È arrivato a chi amministra il 14/10 alle 9:11, sullo schermo del
+telefono in auto, **senza data**: preso per un allarme nuovo nato dalla conversazione della
+stanza. Chiesto a Calliope, il modello non ne sapeva niente e ha confermato a caso.
+
+**Cosa cambia** (`calliope/minori.py` `Avvisi`, schema `avvisi_tutori` alla versione 2 con le
+colonne `origine`, `rif`, `come`, `falso`):
+
+- **Quando** (`quando_nato`): la voce dice quando è nato un avviso se ha più di
+  `avvisi_data_dopo_min` (15) minuti: «nato oggi alle 7:02», «nato ieri sera alle 19:02», «nato
+  lunedì 12/10 alle 19:02». La **scheda** lo dice sempre per intero (`quando_scheda`: la si può
+  guardare giorni dopo, anche dalla cronologia dello schermo).
+- **Da dove**, in parole semplici e mai con le parole del minore: «da una frase detta a me al
+  telefono», «… dal satellite cucina», «da una frase scritta a me sullo schermo» (`origine_turno`,
+  dal nome della corsia: cancelli, acuto, silenzio, fuori orario), «dalla rilettura della
+  conversazione in cucina» (`origine_stanza`, il guardiano a posteriori), «da una frase scritta
+  nella chat di un gioco». L'origine resta col segnale dei cancelli anche dopo un riavvio
+  (`cancelli.json`, sempre senza il testo).
+- **Urgente scaduto**: un avviso urgente rimasto da dire oltre `avvisi_urgente_ore` (12) si dice
+  «non più urgente», con la data, e passa dietro gli urgenti veri (regola
+  `avviso_urgente_scaduto`; `avviso_con_data` quando la voce dice una data). La frase neutra
+  vicino al minore resta com'era dal 09/10.
+- **Falso**: un avviso segnato falso non si consegna più (esce da `da_dire` con `come` «falso» e
+  una riga nel log). Due modi: `calliope stato --guardia --falso ID` (il riferimento dell'avviso
+  del guardiano è `guardia:<id del segnale>`) e, nuovo, `calliope stato --avvisi [--giorni N]
+  [--falso AV12]`, che elenca gli avvisi senza parole (id, quando, tipo, minore, tutore, origine,
+  consegna) e ferma tutte le righe dei tutori di quell'avviso. Per il caso vero sarebbe servito il
+  secondo: un avviso dei cancelli non ha un altro modo di essere smentito dopo che è partito.
+- **Calliope sa cosa ha consegnato**: al tutore riconosciuto dalla voce (o che scrive dal suo
+  schermo personale) i **dati del turno** portano gli avvisi consegnati (a voce o sullo schermo) o
+  nati nelle ultime `avvisi_contesto_ore` (48) ore: id, quando è nato, tipo, minore, origine, come e
+  quando è arrivato, urgente o falso, e il testo (che non ha mai le parole del minore), con
+  «usali solo se chiede degli avvisi, non inventare» (`Avvisi.contesto`, blocco «avvisi» di
+  `Brain._reply`, regola `avvisi_nel_turno`). Solo i propri (le righe sono per tutore: un altro
+  adulto non vede niente); un avviso «sicurezza» di un minore che ha parlato lì da poco resta
+  fuori, con una riga «riservato: è sul tuo schermo». Più indietro (30 giorni):
+  `minore_gestisci` azione `avvisi` (sola lettura dentro lo stesso tool, nessuno schema nuovo;
+  con la voce o dallo schermo, mai per un minore).
+
+**Prove**: `prove/prova_avvisi_data.py` (a secco, orologio fermo, con i contrari: avviso fresco
+senza data, vecchio con la data, minore vicino, altro adulto non tutore, voce non riconosciuta,
+il minore stesso, domanda del tutore → dati del turno con la data, falso, database di prima);
+`prova_stanza_guardia` controlla origine, riferimento e data dell'avviso del guardiano.
+
+### 14/10 sera: la trascrizione e l'audio nell'avviso di pericolo (decisione di chi amministra)
+
+Chi amministra (ed è tutore) ha cambiato la decisione 0029 punto 4 («avviso senza parole»):
+**quando un avviso di pericolo arriva al tutore deve contenere la trascrizione di ciò che ha detto
+il minore** (le righe del segnale con un po' di contesto, chi ha detto cosa) **e, per i soli
+avvisi di pericolo, il file audio di quelle frasi**. Il caso vero del mattino lo mostra: un avviso
+senza parole, arrivato giorni dopo, non si capisce.
+
+- **Dove**: solo sulla **scheda personale del tutore** (tipo `avviso`, `Avvisi.scheda_di`: hub con
+  `PERSONALE` e il tutore come mittente certo, mai altri schermi, mai un adulto non tutore). Il
+  testo dell'avviso, a voce e in cima alla scheda, resta senza parole; la trascrizione si apre
+  («Leggi cosa si è detto», le righe del segnale in evidenza) e l'audio si scarica («Scarica
+  l'audio», `schermi/scarica.py` formato `audio`, `solo_persona`: nemmeno chi amministra da un
+  suo schermo). La scheda si rimanda, con la stessa chiave, quando l'avviso si dice a voce.
+- **Trascrizione** (`avvisi_trascrizione`, di serie accesa; JSON in `avvisi_tutori.trascrizione`,
+  schema v3): dai cancelli il primo segnale, la domanda di Calliope e la risposta, o per un acuto
+  lo scambio di prima e la frase (`Ciclo._materiale_avviso`, `Cancelli.materiale` per il
+  silenzio); dal guardiano le righe del segnale con due righe prima e dopo
+  (`Guardia._trascrizione`). Mai nel registro dei turni, nel log o nelle misure.
+- **Audio** (`avvisi_audio`, **di serie spento**: si accende nel file locale;
+  `calliope/avvisi_audio.py`): oggi l'audio non va mai su disco. L'eccezione: in **memoria** un
+  anello (`avvisi_audio_anello_min` 30, `avvisi_audio_anello_mb` 16, μ-law) con i turni in cui
+  parla un minore (`Ciclo._anello_turno`) e i segmenti della stanza di un minore riconosciuto
+  (voce o zona grigia) o di un adulto di casa riconosciuto mentre un minore è presente su quel
+  satellite (`Stanza._anello`); mai voci non riconosciute (ospiti), mai Calliope. Solo quando
+  nasce un avviso di pericolo (cancelli: `sicurezza`; guardiano in `attiva`: `sicurezza_stanza`)
+  i **soli segmenti del segnale** con `avvisi_audio_contesto_s` (20 s) prima e dopo vanno in un
+  WAV μ-law nel **cassetto del tutore** (file 600, fuori da git; fonte `avviso`, scadenza propria
+  `avvisi_audio_giorni` 30, fuori dalla revisione del cassetto e da «ho eliminato…»). In **ombra**
+  niente su disco: nelle misure della stanza `audio_s`, i secondi che si sarebbero salvati.
+- **Togliere**: scadenza (trascrizione dopo `avvisi_audio_giorni`, `pulisci_materiale`; l'audio
+  scade nel cassetto), `calliope conserva --svuota` (tutto, o `--persona` come tutore o come
+  minore; anche da terminale, con il cassetto), «dimentica» della stanza (l'anello di quel
+  satellite e il materiale degli avvisi nati lì, `minori.dimentica_luogo`), `conversazioni_dimentica`
+  del tutore. L'avviso resta, senza parole.
+- **Avvisi di prima** (senza trascrizione): la scheda la ricostruisce se c'è ancora
+  (`minori.ricostruisci_trascrizione`: le righe del minore nella stanza in memoria o sul disco
+  della tenuta nell'ora prima, oppure i suoi turni nell'archivio delle conversazioni), con la nota
+  «Ricostruita…»; altrimenti «La trascrizione di quel momento non c'è più.».
+
+**Prove**: `prove/prova_avvisi_audio.py` (a secco, con i contrari: non tutore, altro schermo, chi
+amministra, schermo di stanza, ombra, ospite, adulto senza minori, altra stanza, scadenza, svuota,
+dimentica, anello pieno, spento). Sulla DGX: accendere `avvisi_audio: true` nel file locale.
