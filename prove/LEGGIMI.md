@@ -142,6 +142,20 @@ agenti sullo stesso portatile; le cause e le misure):
   prove del cane nessun gioco sano venga chiuso e, se cade, stampa il diario dei messaggi dei
   riquadri. Misure con 5 corsie in parallelo: prima 5 giri caduti su 25 (3 esiti, 2 risposte),
   dopo 25 su 25 verdi; la prova nuova con lo `schermo.js` di prima cade 11 volte su 15.
+- **`prova_stanza_voce`: frame persi all'inizio dell'ascolto, nel codice.** Le quattro cadute
+  («la frase arriva intera», «nessun frame perso», «segmento legato al turno», «1 in più» di
+  Whisper) erano una sola: «Calliope» non svegliava il satellite (punteggio massimo 0,01–0,15)
+  e la frase finiva nella stanza. La pronuncia senza rumore fa scattare la wake word in 40 casi
+  su 40 (5 allineamenti ai blocchi da 80 ms × 8 rumori): la voce non c'entrava. `Listener.listen`
+  azzerava la wake word (il suo reset fa ~2 s di riscaldamento sui modelli: ~50 ms, sotto carico
+  oltre i 300 ms del pre-roll) **prima** di aprire la coda dei frame, e la frase cominciata
+  intanto perdeva l'attacco. Ora la coda si apre prima e i rilevatori si azzerano dopo
+  (`calliope/audio.py`; caso nuovo in `prova_frase_lunga` con un reset di 0,6 s, che col codice di
+  prima perde frame). La prova inoltre parla solo quando il satellite ha ricevuto l'«ascolta» e
+  ha aperto la coda (`in_ascolto`), e se cade stampa il diario di satellite e server. Misure con
+  3 corsie e 20 processi di carico: prima 6 giri su 12 con la caduta, dopo 0 su 12 (con quel
+  carico Edge ci mette a volte più di 10 s a uscire dopo il kill: `cdp.Browser.chiudi` non lo
+  tratta più come un errore della prova, ci pensa il job object).
 
 **Problemi aperti delle prove** (14/10): le attese fisse di `prova_satellite`; la caduta rara di
 `prova_agenti` sul tunnel (sopra), da leggere con l'`errore` della diagnosi se torna. *(Storico:

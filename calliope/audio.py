@@ -297,9 +297,6 @@ class Listener:
 
         speech, silent, talking = [], 0, False
         self.woke, self.wake_score, streak = False, 0.0, 0
-        if wake is not None:
-            wake.reset()            # half-duplex: mentre Calliope parlava non l'ha sentita
-        self.model.reset_states()
         while not seed and not self.frames.empty():   # dopo un barge-in la coda è il seguito
             self.frames.get_nowait()
         # Il pre-roll parte dagli ultimi ~300 ms captati mentre Calliope parlava.
@@ -315,6 +312,14 @@ class Listener:
             self.started_at = time.monotonic() - len(seed) * frame_ms / 1000
             self.woke, self.wake_score = True, 1.0
         try:
+            # I rilevatori si azzerano DOPO aver aperto la coda (14/10): il reset della wake
+            # word fa ~2 s di riscaldamento sui modelli (~50 ms, sotto carico anche oltre il
+            # pre-roll di 300 ms), e prima i frame captati intanto restavano solo nei 300 ms
+            # del pre-roll: «Calliope» detto appena il satellite tornava in ascolto si perdeva
+            # (prova_stanza_voce sotto carico). Ora aspettano in coda e si recuperano subito
+            if wake is not None:
+                wake.reset()        # half-duplex: mentre Calliope parlava non l'ha sentita
+            self.model.reset_states()
             while True:
                 if wakeup is not None and wakeup.is_set() and not talking:
                     return None

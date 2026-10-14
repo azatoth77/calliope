@@ -133,7 +133,13 @@ class Browser:
                 pass
         if proc.poll() is None:
             proc.kill()
-            proc.wait(timeout=10)
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                # Con la macchina strapiena (14/10, 20 processi di carico con le prove) il
+                # processo ucciso può metterci più di 10 s a uscire: non è un errore della
+                # prova, ci pensano i figli qui sotto e il job object in chiudi()
+                pass
         if psutil is None:
             return
         # I figli visti prima della chiusura e ogni processo con questo profilo (anche quelli
