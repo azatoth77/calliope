@@ -165,6 +165,9 @@ lo si farà. Oggi Calliope legge lo stato e basta, nessun tool inserisce o disin
   *[13/10, decisione [0029](decisioni/0029-conversazione-di-stanza.md): vale per l'**audio**,
   che non va mai su disco. In più: trascrizione continua solo con la modalità stanza accesa,
   segnalata sugli schermi e fermabile a voce («Calliope, abbiamo ospiti» la ferma per 4 ore).]*
+  *[14/10, 0029 punto 4 aggiornato: un'eccezione per l'audio. Con `avvisi_audio` acceso, i soli
+  segmenti di un segnale di pericolo di un minore vanno su disco, nel cassetto del tutore, per
+  30 giorni; mai degli ospiti.]*
 - **I sensori di presenza servono anche tutti i giorni**: rispondere nella stanza in
   cui c'è qualcuno, far seguire la musica, ignorare la TV accesa in una stanza vuota.
 - **Non è un impianto certificato.** Va pensato come complemento di un allarme vero,
@@ -221,6 +224,10 @@ corregge da sola alla cieca.
   e registrazioni si cancellano dopo un numero di giorni stabilito in configurazione.
   Serve anche un comando per svuotarli. *[12/10, decisione [0028](decisioni/0028-decisioni-roadmap-12-10.md):
   turni e audio dei soli adulti per 60 giorni, in privato; di minori e ospiti mai.]*
+  *[14/10, decisioni [0029](decisioni/0029-conversazione-di-stanza.md) e
+  [0030](decisioni/0030-conoscenti.md): il **testo** della stanza, dove chi amministra accende la
+  tenuta, resta 60 giorni anche per i minori e per i conoscenti confermati da chi amministra; le
+  voci non confermate mai.]*
 - *[12/10: la «GPU libera di notte» non è vera sulla DGX, dove l'agente resta caricato; la
   revisione notturna viene dopo il banco dei casi veri e si approva dal cruscotto.]*
 - Più avanti, con qualche ora di dati: adattamento fine di Whisper sulle voci di casa,

@@ -1,6 +1,7 @@
 # Architettura di Calliope: com'è fatta e perché
 
-*Documento d'ingresso per chi arriva al progetto (10/10/2026). Spiega le scelte di fondo e rimanda,
+*Documento d'ingresso per chi arriva al progetto (10/10/2026, allineato il 14/10 con la
+conversazione di stanza e i conoscenti). Spiega le scelte di fondo e rimanda,
 per ogni parte, al documento d'area con le misure e i casi veri ([`docs/aree/`](aree/)), alle
 ricerche che hanno portato alle decisioni ([`docs/ricerche/`](ricerche/)) e al registro delle
 decisioni ([`docs/decisioni/`](decisioni/)). Il metodo di lavoro, dai casi veri all'accensione di una
@@ -27,7 +28,10 @@ funzione, è in [`docs/analisi.md`](analisi.md). In fondo, un riassunto in ingle
 Calliope è un'assistente vocale **in italiano** che gira **interamente su macchine di casa**. Una
 famiglia le parla da più stanze: lei riconosce chi parla, conversa, ricorda, consulta una biblioteca
 offline, comanda la casa e i PC, scrive documenti e, per i lavori lunghi, fa lavorare degli agenti in
-secondo piano. Risponde solo quando sente il suo nome (la wake word è «Calliope»).
+secondo piano. Risponde solo quando sente il suo nome (la wake word è «Calliope»). *[14/10: agisce
+solo col nome e la voce riconosciuta; dove la **conversazione di stanza** è accesa ascolta e
+trascrive anche ciò che le persone si dicono, per rispondere con cognizione quando la chiamano
+(§ 4).]*
 
 Quattro vincoli spiegano quasi tutte le scelte:
 
@@ -88,7 +92,13 @@ Il percorso, stadio per stadio (i moduli sono in `calliope/`; dettagli in
 - **Half-duplex con il barge-in sul nome**: mentre Calliope parla non si trascrive (sentirebbe sé
   stessa), ma la wake word resta accesa e «Calliope, basta» la interrompe; dove l'eco è già cancellata
   (cuffie, microfono del portatile) anche la voce di una persona registrata
-  ([0006](decisioni/0006-half-duplex-e-barge-in.md)).
+  ([0006](decisioni/0006-half-duplex-e-barge-in.md)). *[14/10: con `stanza_durante_voce` acceso la
+  sola trascrizione della stanza continua mentre Calliope parla, con un filtro della sua eco sul
+  testo; i comandi restano half-duplex.]*
+- **La stanza** (dal 13/10, spenta di serie): dove è accesa, satellite e telefono mandano anche il
+  parlato della stanza in un flusso a parte (protocollo 3); Whisper lo trascrive a bassa
+  precedenza, dopo i turni rivolti a Calliope ([stt-tts](aree/stt-tts.md),
+  [satelliti](aree/satelliti.md)).
 
 ## 3. Il cervello: Brain, tool e dati del turno
 
@@ -101,7 +111,9 @@ e [`architettura-tool.md`](architettura-tool.md)):
   della voce si sceglie con una riga, `llm_profilo`; oggi sulla DGX è gemma4 26B-A4B (MoE) su Ollama
   ([0002](decisioni/0002-llm-dietro-api-intercambiabile.md)).
 - **Prefisso fisso**: prompt di sistema e schemi dei tool sono identici byte per byte per ogni persona
-  e livello, così Ollama li tiene in cache. Il modello vede **tutti i tool** (72 sulla DGX); il
+  e livello, così Ollama li tiene in cache. Il modello vede **tutti i tool** (72 sulla DGX il 09/10;
+  75 con tutti i servizi, contati sul registro il 14/10, più quelli che dipendono dall'installazione:
+  minori, stanza, conoscenti, meteo); il
   permesso lo decide il codice a ogni esecuzione in `ToolRegistry.call`
   ([0009](decisioni/0009-tool-uguali-per-ogni-livello.md)).
 - **Dati del turno**: ciò che cambia (chi parla, ricordi, agenda, una proposta in sospeso, lo stato
@@ -129,9 +141,21 @@ Dettagli in [contesto-conversazione](aree/contesto-conversazione.md).
   tetto di tempo, poi tagli.
 - **Archivio delle conversazioni** (`conversazioni.py`): 30 giorni in SQLite con FTS5 e vettori,
   ricerca ibrida (17/18 contro 15/18 con le sole parole) e cronologica («di cosa parlavamo ieri?»).
+  *[Dal 12/10 ([0028](decisioni/0028-decisioni-roadmap-12-10.md)): su disco solo le conversazioni
+  degli adulti, per 60 giorni; minori e ospiti in memoria.]*
 - **Una conversazione per persona** (`corsie.py`): ogni satellite ha la sua corsia (un ciclo `Ciclo`
   in un thread); ogni persona riconosciuta ha la sua conversazione, che la segue da una stanza
-  all'altra. Ospiti e voci incerte hanno una conversazione anonima per satellite.
+  all'altra. Ospiti e voci incerte hanno una conversazione anonima per satellite (dal 13/10, in
+  compagnia, condivisa e non più chiusa a ogni cambio di voce).
+- **Conversazione di stanza** (`stanza/`, decisione [0029](decisioni/0029-conversazione-di-stanza.md),
+  13–14/10, ogni passo dietro un interruttore e spento di serie): un registro della stanza per
+  satellite, con chi ha parlato e chi era presente; quando la chiamano, le frasi della stanza
+  ancora in coda passano davanti e le ultime entrano nei dati del turno **in busta** (fonte
+  `stanza`, mai un'autorità) e nella storia in sola aggiunta, per la cache; `stanza_cerca` cerca
+  le frasi di prima o di un'altra stanza con i permessi per persona (chi c'era vede, i tutori anche
+  le parole dei figli, gli ospiti no). Il testo resta in memoria o, se chi amministra lo sceglie,
+  60 giorni su disco anche per i minori; l'audio mai. «Abbiamo ospiti» la ferma per 4 ore. Resta
+  da fare la corsia lenta (ritrascrizione, TV) ([contesto-conversazione](aree/contesto-conversazione.md)).
 - **Latenza**: la prima frase nei turni veri è 1,28 s di mediana (09/10), con una base senza tool di
   1,18 s; testo→voce 0,35 s, STT 0,18 s. Il 09/10 la latenza è stata dichiarata accettata.
 
@@ -172,12 +196,23 @@ fattore principale per chi amministra, e una voce clonata in tempo reale non si 
 **Minori.** Profili per fascia d'età, tutori, orari, compiti guidati. Il **guardiano** (Llama Guard 3)
 controlla le risposte; un **rilevatore di pericolo** guarda ciò che il minore dice. Un segnale poco
 chiaro passa da **due cancelli**: prima Calliope rassicura e chiede, poi avvisa il tutore solo se la
-risposta conferma ([0025](decisioni/0025-minori-due-cancelli.md)).
+risposta conferma ([0025](decisioni/0025-minori-due-cancelli.md)). *[13–14/10: il rilevatore guarda
+solo le frasi rivolte a Calliope; le chiacchiere della stanza con un minore le rilegge **dopo** un
+guardiano a posteriori, a blocchi e con lo scambio intero (in ombra), che avvisa solo il tutore
+sul suo schermo personale. Gli avvisi dicono quando e da dove sono nati e portano al tutore la
+trascrizione e, se acceso, l'audio delle sole frasi del segnale (0029 punto 4).]*
 
 **Compagnia.** Con più voci vicino a un satellite (impronte tenute 5 minuti solo in memoria): con una
 voce sconosciuta serve il nome a ogni frase, niente seguiti brevi, azioni solo con la voce
 riconosciuta nella frase. Il giudizio «la frase è rivolta a Calliope?» è in ombra
-([`2026-10-09-piu-persone.md`](ricerche/2026-10-09-piu-persone.md)).
+([`2026-10-09-piu-persone.md`](ricerche/2026-10-09-piu-persone.md)). Dal 13/10 in compagnia niente
+azioni senza il nome anche con le voci tutte riconosciute.
+
+**Conoscenti** ([0030](decisioni/0030-conoscenti.md), 14/10, spenti di serie). Le voci di adulti di
+fuori casa sentite nella stanza si raggruppano per impronta; dal modo in cui le chiamano Calliope
+deduce un nome e lo propone a chi amministra sul suo schermo. Un conoscente salvato ha il livello
+ospite e un profilo fuori dal registro delle voci di famiglia, così nessun punto che tratta «voce
+riconosciuta = familiare» gli dà di più; diventa di famiglia solo se chi amministra lo dice a voce.
 
 **Agenti ed estensioni.** Il codice gira solo in container senza rete; le estensioni parlano con
 Calliope da una porta stretta, si approvano con la sfida, e leggono internet solo attraverso
@@ -318,7 +353,11 @@ attachments, agents, extensions) enters in a provenance envelope; a single tool 
 argument provenance and action effect, with spoken confirmations and a challenge phrase. Long jobs go
 to a background agent (Qwen3.6 on vLLM) with a GPU arbiter that pauses it while someone speaks; agent
 code and extensions run in network-less Docker containers. New decisions run in shadow mode, logged in
-a JSONL turn log, before being switched on. Next step: a dialogue state machine where the model
+a JSONL turn log, before being switched on. Since 13–14/10 an optional room-conversation mode
+transcribes what people say to each other near a satellite (never audio on disk, actions only with
+the wake word), feeds recent lines to the model as enveloped data, lets people search them with
+per-person visibility, and lets an after-the-fact guardian alert a minor's guardian; unknown adult
+voices can become guest-level acquaintances once the admin confirms. Next step: a dialogue state machine where the model
 interprets replies through a structured tool and the machine validates, plus a declarative permission
 table. Decisions are recorded in [`docs/decisioni/`](decisioni/); the working method in
 [`docs/analisi.md`](analisi.md).
