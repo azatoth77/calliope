@@ -11,6 +11,9 @@ impronte finte (l'ampiezza dice chi parla):
 - ritrascrizione: la riga cambiata diventa versione 2 (la 1 resta nel registro), quella uguale
   ha l'evento «uguale», il prompt con i nomi dello scambio e le parole di prima (corto), la
   precedenza LENTA dentro `STTCondiviso` dopo il turno;
+- senza ritrascrizione (`stanza_lenta_ritrascrivi`, 14/10 sera): «auto» col whisper-server dei
+  turni no, con un Whisper suo o un beam che conta sì; con «no» il resto del passo sul testo
+  della corsia veloce, una versione 2 solo per un cambio vero;
 - chi parla: la zona grigia corretta dalla voce della persona nello scambio (mai verso l'alto:
   niente presenze), un blocco di due voci spezzato in due righe con i tempi, le voci che si
   alternano «più voci»;
@@ -173,6 +176,9 @@ def cfg_base(**k) -> Config:
     c.turn_log_dir = str(TMP / k.pop("registro", "registro"))
     c.speaker_min_voice_s = 0.5
     c.stanza_lenta_libera_s = 0.0
+    # Le prove della ritrascrizione la vogliono accesa: «auto» col Whisper finto (nessun
+    # Whisper suo, beam che non conta) la spegnerebbe (prova_senza_ritrascrizione)
+    c.stanza_lenta_ritrascrivi = "si"
     for a, v in k.items():
         setattr(c, a, v)
     return c
@@ -311,6 +317,95 @@ def prova_ritrascrizione():
              stt.chiamate[-1]["prompt"] == "x" and stt.chiamate[-1]["beam"] == 3)
     st.chiudi()
     return cfg
+
+
+# ─────────────────── 2b. senza ritrascrizione (14/10 sera) ───────────────────
+def prova_senza_ritrascrizione():
+    st0, _ = nuova(cfg_base())
+    finto = STTFinto()
+
+    def le(stt=None, **k):
+        return L.Lenta(cfg_base(**k), st0, stt=stt, avvia=False)
+
+    def con_device(dev):
+        x = STTFinto()
+        x.device = dev
+        st, _ = nuova(cfg_base(stanza_lenta_ritrascrivi="auto"), x)
+        return L.Lenta(cfg_base(stanza_lenta_ritrascrivi="auto"), st, avvia=False), st
+    l_srv, s1 = con_device("server")
+    l_gpu, s2 = con_device("cuda")
+    verifica("auto: whisper-server dei turni (ignora il beam) → niente ritrascrizione",
+             not l_srv.ritrascrive() and not l_srv.beam_effettivo())
+    verifica("auto: Whisper finto senza dispositivo → niente (nel dubbio il beam non conta)",
+             not le(stanza_lenta_ritrascrivi="auto").ritrascrive())
+    verifica("auto: faster-whisper nel processo con un beam più largo dei turni → sì",
+             l_gpu.ritrascrive() and l_gpu.beam_effettivo())
+    l_gpu.cfg.stanza_lenta_beam = 5
+    verifica("contrario: lo stesso beam dei turni (5) non conta → no", not l_gpu.ritrascrive())
+    verifica("auto: un Whisper suo (stanza_lenta_stt_url o passato) → sì",
+             le(stanza_lenta_ritrascrivi="auto",
+                stanza_lenta_stt_url="http://127.0.0.1:9").ritrascrive()
+             and le(finto, stanza_lenta_ritrascrivi="auto").ritrascrive())
+    verifica("«no» vince anche col Whisper suo; «si» anche senza",
+             not le(finto, stanza_lenta_ritrascrivi="no").ritrascrive()
+             and le(stanza_lenta_ritrascrivi="si").ritrascrive()
+             and not le(stanza_lenta_ritrascrivi=False).ritrascrive())
+    for x in (st0, s1, s2):
+        x.chiudi()
+    # Il passo senza ritrascrizione
+    cfg = cfg_base(stanza_lenta_ritrascrivi="no", stanza_lenta_prompt="si")
+    stt = STTFinto()
+    st, lenta = nuova(cfg, stt)
+    c = Coll(4, "veranda")
+    a = parla(st, c, 81, [(0.1, 2.0)], testi=("Porto la cana da pesca nova.",
+                                               "Porto la canna da pesca nuova."))
+    g = parla(st, c, 83, [(0.12, 2.0)], testi=("Va bene per tutti.",) * 2)
+    d = parla(st, c, 85, [(0.1, 4.0), (0.2, 4.0)],
+              testi=("Io porto le bibite. E io la torta di mele.", "altro testo"))
+    r = parla(st, c, 87, [(0.1, 2.0)], testi=("sì sì sì sì sì sì", "Sì."))
+    lenta.giro(tardi(cfg))
+    lente = [x for x in stt.chiamate if x["priorita"] == coda_mod.LENTA]
+    verifica("«no»: nessuna chiamata a Whisper con la precedenza LENTA", lente == [], str(lente))
+    ra = riga_di(st, 4, a)
+    verifica("«no»: il testo della corsia veloce resta (versione 1, evento «uguale»)",
+             len(ra) == 1 and ra[0]["versione"] == 1
+             and ra[0]["testo"] == "Porto la cana da pesca nova."
+             and any(e.dati.get("segmento") == a and e.dati.get("esito") == "uguale"
+                     for e in st.registro(4).eventi(LENTA)), str(ra))
+    rg = riga_di(st, 4, g)
+    verifica("«no»: chi parla corretto lo stesso (zona grigia → voce), testo uguale, v2",
+             len(rg) == 1 and rg[0]["versione"] == 2 and rg[0]["sicurezza"] == "voce"
+             and rg[0]["testo"] == "Va bene per tutti." and rg[0]["rivista"]["chi"]
+             and not rg[0]["rivista"]["testo"], str(rg))
+    rd = riga_di(st, 4, d)
+    verifica("«no»: due voci divise sul testo della corsia veloce",
+             len(rd) == 2 and [x["nome"] for x in rd] == ["Carlo", "Nicola"]
+             and rd[0]["testo"] == "Io porto le bibite." and not rd[0]["rivista"]["testo"],
+             str(rd))
+    scart = {x.dati.get("segmento"): x.dati for x in st.registro(4).eventi(RIGA_SCARTATA)}
+    verifica("«no»: la ripetizione della corsia veloce resta un'allucinazione (scartata)",
+             r not in {x.get("segmento") for x in st.registro(4).righe()}
+             and scart.get(r, {}).get("regola") == "ripetizione")
+    mis = [x for x in st.misure.memoria if x["tipo"] == "lenta"]
+    verifica("«no»: misure con ritrascritto false e senza tempo di Whisper",
+             mis and all(x.get("ritrascritto") is False and "stt_s" not in x for x in mis)
+             and not any(x.get("testo_cambiato") for x in mis), str(mis))
+    rr = misure_mod.riassunto(mis)
+    verifica("stato --turni: «senza ritrascrizione N»",
+             "senza ritrascrizione 4" in misure_mod.testo_lenta(rr["lenta"]),
+             misure_mod.testo_lenta(rr["lenta"]))
+    st.chiudi()
+    # La configurazione: «no» di YAML (false) diventa «no»
+    from calliope.config import VALIDATORI
+    v = VALIDATORI["stanza_lenta_ritrascrivi"]
+    ok = v(False) == "no" and v(True) == "si" and v("Sì") == "si" and v(" AUTO ") == "auto"
+    try:
+        v("forse")
+        ok = False
+    except ValueError:
+        pass
+    verifica("configurazione: auto di serie, «no» di YAML accettato, «forse» rifiutato",
+             ok and Config().stanza_lenta_ritrascrivi == "auto")
 
 
 # ─────────────────────────── 3. chi parla ───────────────────────────
@@ -754,6 +849,7 @@ def main() -> int:
     try:
         prova_spenta()
         prova_ritrascrizione()
+        prova_senza_ritrascrizione()
         prova_chi()
         prova_allucinazioni()
         prova_tv()

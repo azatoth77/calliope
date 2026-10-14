@@ -1502,6 +1502,14 @@ conversazione_stanza:
   stanza_lenta_stt_modello: ''
   # Beam della ritrascrizione con faster-whisper nel processo (il server lo fissa da sé)
   stanza_lenta_beam: 8
+  # La ritrascrizione del testo (14/10 sera): «auto» (di serie) solo se la corsia lenta ha un
+  # Whisper suo (stanza_lenta_stt_url) o un beam che conta (faster-whisper nel processo con
+  # stanza_lenta_beam più largo di whisper_beam_size); «si» sempre, «no» mai. Senza, la corsia
+  # lenta fa il resto (chi parla, TV, allucinazioni, riassunto) sul testo della corsia veloce.
+  # Misura vera del 14/10 sera (95 registrazioni conservate, riferimento scritto a mano): lo
+  # stesso whisper-server dei turni, che ignora il beam, senza il prompt dei turni sbagliava il
+  # 4,8 % delle parole contro il 3,0 % dell'originale
+  stanza_lenta_ritrascrivi: auto
   # Il prompt della ritrascrizione (i nomi di chi parla nello scambio e la coda delle parole
   # di prima): «auto» (di serie) solo con un Whisper suo (stanza_lenta_stt_url): sul banco
   # sintetico del 14/10 col turbo dei turni il prompt peggiorava la WER (10 dB: 18,9 → 21,9 %),
