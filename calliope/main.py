@@ -345,8 +345,12 @@ class Avvio:
             # conservazione la vedono
             if getattr(s, "conserva", None) is not None:
                 s.conserva.stanza = s.stanza.tenuta
-                # I conoscenti (14/10, decisione 0030): «svuota» di tutto li cancella
+                # I conoscenti (14/10, decisione 0030): «svuota» di tutto li cancella. Dal 14/10
+                # sera sono profili della conservazione (come gli adulti): un conoscente tolto
+                # (dimenticato, scaduto, svuotato) si porta via turni, eventi e conversazioni
                 s.conserva.conoscenti = s.stanza.conoscenti
+                if s.stanza.conoscenti is not None:
+                    s.stanza.conoscenti.su_tolto.append(s.conserva.conoscente_tolto)
             nomi = getattr(cfg, "stanza_satelliti", None) or []
             print(f"[STANZA] Ascolto della stanza in ombra (solo misure, niente al modello) su "
                   + (", ".join(map(str, nomi)) if nomi else "tutti i satelliti che lo sanno fare"),
@@ -581,6 +585,10 @@ class Avvio:
             cfg, conserva=cons.conversazioni_su_disco if cons is not None else None)
         if cons is not None:
             cons.conversazioni = conv_arch
+            if conv_arch is not None:
+                # Le conversazioni dei conoscenti (14/10 sera, decisione 0030 aggiornata): su
+                # disco come quelle degli adulti; chi amministra le ritrova con `ospiti=true`
+                conv_arch.conoscenti_ids = cons.conoscenti_ids
         if conv_arch is not None:
             atexit.register(conv_arch.close)
             if schermi is not None:

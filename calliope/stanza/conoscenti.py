@@ -47,15 +47,22 @@ copia `.bak`): id, nome, cognome, nota, impronta, quando è stato salvato e l'ul
 (speakers.json), quindi nessun percorso di riconoscimento dei comandi lo vede; lo nominano le
 righe della stanza e, dal 14/10 sera, i dati del turno quando parla a Calliope (un'etichetta,
 `SpeakerContext.conoscente`: chi parla resta None, ciclo._conoscente_turno). Le sue righe vanno su disco con la tenuta della stanza (60 giorni) e si
-cercano come quelle della famiglia (chi c'era). Si cancella dopo `conoscenti_scadenza_giorni`
-senza sentirlo, con «dimentica Marco» (tool `conoscenti`, solo chi amministra) e con
-`calliope conserva --svuota`; con lui le sue righe su disco.
+cercano come quelle della famiglia (chi c'era). **Conservazione** (14/10 sera, decisione di
+Dario): come un adulto della famiglia, non come un ospite: nel registro dei turni il suo id,
+il nome e le parole, la sua conversazione (una per conoscente, `persona:<id>`) nell'archivio su
+disco per `turn_log_days`, gli eventi; la voce solo con il consenso, che oggi non può dare
+(calliope/conserva.py). I permessi restano da ospite. Si cancella dopo
+`conoscenti_scadenza_giorni` senza sentirlo, con «dimentica Marco» (tool `conoscenti`, solo
+chi amministra) e con `calliope conserva --svuota`; con lui le sue righe su disco, e (con i
+`su_tolto` della conservazione) i suoi turni, eventi e conversazioni.
 
 **Promozione** (aggiunta del 14/10): solo chi amministra, a voce riconosciuta e con il sì alla
 domanda (tool `conoscente_livello`, pericoloso con la sfida), un conoscente diventa familiare:
 stesso id, impronta e nome; il profilo entra in speakers.json con i permessi e le regole dei
 familiari; se è un minore servono la data di nascita e i tutori. Al contrario un familiare (non
-chi amministra, non un minore) torna conoscente.
+chi amministra, non un minore) torna conoscente. Turni, eventi e conversazioni seguono l'id:
+promosso restano suoi da familiare, tornato conoscente restano (la voce registrata no: un
+conoscente non ha il consenso, e la rotazione la toglie).
 
 Misure senza parole né nomi (stanza/misure.py, tipo «conoscenti»).
 """
@@ -211,6 +218,45 @@ def svuota_file(cfg) -> int:
         n = 0
     p.unlink(missing_ok=True)
     return n
+
+
+def trova_in(elenco, chi: str) -> list:
+    """I conoscenti di `elenco` che rispondono a `chi` (Conoscenti.trova; anche per la
+    conservazione da terminale, dal file)."""
+    ws = [w for w in _parole(chi) if w not in ("il", "la", "lo", "di", "del", "della")]
+    if not ws:
+        return []
+    out = []
+    for c in elenco:
+        tutte = set(_parole(f"{c.nome} {c.cognome} {c.nota}"))
+        if _chiave(c.nome) == ws[0] and all(w in tutte for w in ws[1:]):
+            out.append(c)
+    return out
+
+
+def firma_file(cfg):
+    """(mtime, dimensione) del file dei conoscenti, o None se non c'è: per rileggerlo solo
+    quando cambia (conserva.Conservazione.conoscente)."""
+    try:
+        st = percorso(cfg).stat()
+        return (st.st_mtime_ns, st.st_size)
+    except OSError:
+        return None
+
+
+def leggi_file(cfg) -> dict:
+    """I conoscenti del file in sola lettura (id → Conoscente), senza aprire i conoscenti:
+    per la conservazione da terminale e con i conoscenti spenti (14/10 sera). File mancante o
+    rovinato: nessuno."""
+    p = percorso(cfg)
+    if not p.exists():
+        return {}
+    try:
+        d = json.loads(p.read_text(encoding="utf-8"))
+        return {str(x["id"]): Conoscente.da_dict(x) for x in d.get("conoscenti") or []
+                if isinstance(x, dict) and x.get("id")}
+    except Exception:  # noqa: BLE001 — rovinato: nessuno
+        return {}
 
 
 def conta_file(cfg) -> int | None:
@@ -439,15 +485,7 @@ class Conoscenti:
     def trova(self, chi: str) -> list[Conoscente]:
         """I conoscenti che rispondono a «Marco», «Marco Rossi», «Marco collega di Carlo»: tutte
         le parole dette stanno nel nome, nel cognome o nella nota. Più di uno: omonimi."""
-        ws = [w for w in _parole(chi) if w not in ("il", "la", "lo", "di", "del", "della")]
-        if not ws:
-            return []
-        out = []
-        for c in self.elenco():
-            tutte = set(_parole(f"{c.nome} {c.cognome} {c.nota}"))
-            if _chiave(c.nome) == ws[0] and all(w in tutte for w in ws[1:]):
-                out.append(c)
-        return out
+        return trova_in(self.elenco(), chi)
 
     def riconosci(self, emb, sim_famiglia: float | None = None, t: float | None = None
                   ) -> Conoscente | None:
