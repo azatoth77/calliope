@@ -155,3 +155,7 @@ opencode.json
 # l'archivio della storia di prima del taglio. Restano sul disco, mai in git: privato/LEGGIMI.md
 privato/
 voce_taratura.json
+
+# La fine del turno System 1 (14/10, calliope/system1/fine_turno.py): Smart Turn di Pipecat
+# (--installa modello_fine_turno, 8,7 MB)
+models/fine_turno/

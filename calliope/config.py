@@ -515,6 +515,26 @@ class Config:
     # frase_tetto, calliope/pause.py). Whisper trascrive anche oltre i 30 s della sua finestra
     # (misure del 10/10 in docs/aree/stt-tts.md: 70 s in 1,9 s sulla GPU del portatile)
     max_utterance_s: int = 120
+    # La fine del turno decisa da un modello piccolo, System 1 (14/10, calliope/system1/
+    # fine_turno.py; ricerca docs/ricerche/2026-10-14-system1-fine-turno.md): Smart Turn v3.2
+    # (Pipecat, BSD-2, 8,7 MB) ascolta l'audio della frase a fine_turno_sonda_ms di silenzio e
+    # dice «finito» o «non finito». «spenta» (di serie): solo il silenzio fisso (silence_ms).
+    # «ombra»: il turno si chiude come sempre e, dopo, il server rigioca la frase e scrive cosa
+    # avrebbe deciso (ms risparmiati, frasi che avrebbe tagliato, attese più lunghe: `calliope
+    # stato --turni`). «attiva»: «finito» con sicurezza ≥ fine_turno_soglia chiude subito,
+    # «non finito» con sicurezza ≥ fine_turno_soglia_attesa aspetta fino a
+    # fine_turno_attesa_max_ms; incerto, lento, guasto o senza modello: silenzio fisso. Vale in
+    # locale e sul satellite in Python che ha il modello (il telefono resta al silenzio fisso).
+    # Il modello si scarica con: python -m calliope.stato --installa modello_fine_turno
+    fine_turno: str = "spenta"
+    fine_turno_modello: str | None = None     # vuoto = models/fine_turno/smart-turn-v3.2-cpu.onnx
+    fine_turno_sonda_ms: int = 250
+    fine_turno_soglia: float = 0.9
+    fine_turno_soglia_attesa: float = 0.8
+    fine_turno_attesa_max_ms: int = 1500
+    # Sotto questo parlato non si chiude mai prima (il nome da solo, «Calliope,», e la pausa
+    # prima della domanda)
+    fine_turno_min_parlato_ms: int = 800
     # Microfono e uscita di Calliope completa con l'audio di questo PC (audio_modo: locale).
     # Il satellite usa i suoi, nella sezione satellite (satellite_microfono, satellite_casse):
     # questi gli valgono solo da ripiego, con un avviso. None = predefinito.
@@ -2955,7 +2975,9 @@ SEZIONI: dict[str, list[str]] = {
             "tts_pronuncia",
             "tts_pronuncia_extra"],
     "audio": ["sample_rate", "vad_threshold", "vad_motore", "vad_modello", "silence_ms", "preroll_ms", "min_speech_ms",
-              "max_utterance_s", "input_device", "output_device"],
+              "max_utterance_s", "fine_turno", "fine_turno_modello", "fine_turno_sonda_ms",
+              "fine_turno_soglia", "fine_turno_soglia_attesa", "fine_turno_attesa_max_ms",
+              "fine_turno_min_parlato_ms", "input_device", "output_device"],
     "chi_parla": ["speaker_id_enabled", "speaker_model", "speaker_threads",
                   "speaker_id_threshold", "speaker_id_session_margin", "speaker_id_margine",
                   "speaker_min_voice_s", "speaker_continuita_s", "speaker_continuita_soglia",
@@ -3302,6 +3324,9 @@ LIMITI: dict[str, tuple[float, float]] = {
     "tts_lead_s": (0.0, 5.0), "tts_tail_s": (0.0, 5.0), "tts_spezza_prima": (0, 10_000), "tts_thread": (0, 256),
     "tts_primo_pezzo_min": (1, 1000),
     "silence_ms": (100, 10_000), "max_utterance_s": (5, 600),
+    "fine_turno_sonda_ms": (64, 2000), "fine_turno_soglia": (0.5, 1.0),
+    "fine_turno_soglia_attesa": (0.5, 1.0), "fine_turno_attesa_max_ms": (300, 5000),
+    "fine_turno_min_parlato_ms": (0, 5000),
     "preroll_ms": (0, 5000), "memory_max_facts": (1, 10_000), "speaker_threads": (1, 64),
     "appuntamento_anticipo_min": (0, 10_080), "casa_timeout_s": (0.5, 300.0),
     "documenti_attesa_s": (0.0, 300.0),
@@ -3449,6 +3474,14 @@ def _stanza_guardia_valido(value):
     raise ValueError("serve «spenta», «ombra» o «attiva»")
 
 
+def _fine_turno_valido(value):
+    """«spenta», «ombra» o «attiva» (14/10, calliope/system1/fine_turno.py)."""
+    s = str(value or "").strip().lower()
+    if s in ("spenta", "ombra", "attiva"):
+        return s
+    raise ValueError("serve «spenta», «ombra» o «attiva»")
+
+
 def _tts_dispositivo_valido(value):
     """«auto», «cpu» o «cuda»."""
     s = str(value or "").strip().lower()
@@ -3463,7 +3496,8 @@ VALIDATORI = {"llm_keep_alive": keep_alive_valido, "llm_num_ctx": _num_ctx_valid
               "contesto_riassuntore": _riassuntore_valido,
               "dialogo_interprete": _dialogo_interprete_valido,
               "eventi": _eventi_valido, "frasi_varianti": _frasi_varianti_valido,
-              "stanza": _stanza_valido, "stanza_guardia": _stanza_guardia_valido}
+              "stanza": _stanza_valido, "stanza_guardia": _stanza_guardia_valido,
+              "fine_turno": _fine_turno_valido}
 
 
 def fuori_limiti(key: str, value) -> tuple[float, float] | None:
