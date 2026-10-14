@@ -1464,6 +1464,22 @@ class Config:
     # Senza mosse per tanto torna «dormo». 0 = il nome serve sempre (i comandi detti dopo il
     # nome vanno comunque al gioco)
     giochi_ascolto_s: float = 60.0
+    # Il giudice di fase dei giochi (14/10, passo 6 del progetto, calliope/gioco_giudice.py):
+    # una frase rivolta a Calliope che non è una forma chiusa del gioco aperto («apri la terza»)
+    # passa da una chiamata breve e separata al modello (il rilevatore sulla DGX, se no quello
+    # della voce, con lo stesso num_ctx), con l'uscita vincolata ai comandi attivi più
+    # «nessuno»: 21 giuste su 22 e 357 ms di mediana sul portatile (gemma4 e4b). Spento: il
+    # modello della voce con il tool gioco_comando, come l'11/10
+    giochi_giudice: bool = True
+    # Il giudice anche nella finestra del gioco senza il nome: spento (decisione 2 di chi
+    # amministra del 12/10: ogni frase della stanza diventerebbe una chiamata al modello e una
+    # chiacchiera una mossa; prima si misurano le frasi ignorate, gioco_finestra_ignorata)
+    giochi_giudice_senza_nome: bool = False
+    # Il modello del giudice (vuoto: quello del giudizio «rivolta», cioè il rilevatore di
+    # pericolo, altrimenti il modello della voce su Ollama) e il tempo massimo: oltre, la frase
+    # va al modello della voce come se avesse detto «nessuno»
+    giochi_giudice_modello: str = ""
+    giochi_giudice_timeout_s: float = 2.0
     # Archivio dei documenti di casa (calliope/archivio/, 03/10): bollette, ricevute, contratti,
     # polizze, garanzie, referti, documenti d'identità e manuali di una cartella, letti in
     # secondo piano (testo dei PDF, OCR con il modello visivo per scansioni e foto), schedati dal
@@ -3170,7 +3186,8 @@ SEZIONI: dict[str, list[str]] = {
                    "estensioni_parere_s", "estensioni_rete_max_minuto", "giochi_enabled",
                    "giochi_frasi_minuto", "giochi_messaggi_secondo", "giochi_messaggio_max",
                    "giochi_chat_minuto", "giochi_watchdog_s", "giochi_partita_ore",
-                   "giochi_ascolto_s"],
+                   "giochi_ascolto_s", "giochi_giudice", "giochi_giudice_senza_nome",
+                   "giochi_giudice_modello", "giochi_giudice_timeout_s"],
     "archivio": ["archivio_enabled", "archivio_cartella", "archivio_db",
                  "archivio_intervallo_min", "archivio_ocr", "archivio_url", "archivio_modello",
                  "archivio_ocr_modello", "archivio_intestatari", "archivio_max_pagine",
@@ -3358,6 +3375,7 @@ LIMITI: dict[str, tuple[float, float]] = {
     "max_history_turns": (0, 200), "max_tool_turns": (1, 20), "tool_correzioni_max": (0, 10),
     "tool_correzione_avviso_s": (0.0, 60.0), "followup_s": (0.0, 600.0), "wake_solo_nome_s": (0.0, 3.0),
     "giochi_ascolto_s": (0.0, 600.0),
+    "giochi_giudice_timeout_s": (0.2, 30.0),
     "sample_rate": (8000, 48000), "whisper_beam_size": (1, 20), "stt_timeout_s": (0.5, 600.0),
     "stt_correzione_soglia": (0.0, 1.01), "stt_correzione_timeout_s": (0.2, 30.0),
     "stt_argomenti_soglia_noto": (0.0, 1.0), "stt_argomenti_soglia_p": (0.0, 1.01),

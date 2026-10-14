@@ -785,6 +785,39 @@ for elenco, nome in [({"x": ["esci"]}, "un'uscita della voce"),
 verifica("elenco dei comandi: «ricomincia» si può (dentro il gioco vale per il gioco)",
          list(GV.valida_elenco({"ricomincia": ["ricomincia"]})), ["ricomincia"])
 
+# ── domande standard su un gioco (14/10, regola `gioco_stato_detto`, calliope/gioco_stato.py) ──
+# Solo la frase intera; i contrari nel ciclo (nessun gioco, altro satellite, domanda in sospeso,
+# finestra senza nome) sono in prove/prova_gioco_stato.py
+from calliope import gioco_stato as GS  # noqa: E402
+for testo, atteso in [
+        ("A chi tocca?", "tocca"), ("Calliope, a chi tocca?", "tocca"), ("a chi tocca", "tocca"),
+        ("Di chi è il turno?", "tocca"), ("Tocca a chi?", "tocca"), ("A chi tocca adesso?", "tocca"),
+        ("Quanti punti ho?", "punti"), ("Calliope, quanti punti abbiamo?", "punti"),
+        ("Il punteggio?", "punti"), ("Chi sta vincendo?", "vince"), ("Chi vince?", "vince"),
+        ("Come siamo messi?", "vince"), ("Chi ha vinto?", "vince"),
+        ("Cosa posso dire?", "comandi"), ("Che cosa posso dire?", "comandi"),
+        ("Quali sono i comandi?", "comandi"),
+        # contrari: dentro una frase più lunga, altre domande (al giudice o al modello)
+        ("A chi tocca adesso secondo te?", None), ("Tocca a te.", None), ("Tocca a Bianca.", None),
+        ("Quanti punti ha Bianca?", None), ("Chi sta perdendo?", None),
+        ("Quante porte restano?", None), ("Quanti punti ho fatto ieri a carte?", None),
+        ("Chi vince lo scudetto?", None), ("Cosa posso dire a Bianca?", None),
+        ("Come si gioca?", None), ("Calliope.", None), ("", None), ("Punti.", None)]:
+    verifica(f"gioco_stato_detto «{testo}»", GS.domanda(testo), atteso)
+# «Gioco anch'io, sono Pippo» per intero (14/10, regola `gioco_anchio_nome`): il nome di una o
+# due parole di sole lettere; i contrari nel ciclo in prove/prova_gioco_stato.py
+for testo, atteso in [
+        ("Gioco anch'io, sono Pippo.", "Pippo"), ("Calliope, anch'io mi chiamo lina rosa", "Lina Rosa"),
+        ("Anche io sono Niccolò!", "Niccolò"), ("Ci sono anch'io, sono Bea.", "Bea"),
+        ("Gioco anch’io, sono Pippo", "Pippo"),
+        # contrari: senza nome, una frase più lunga, non un nome, cifre, troppe parole
+        ("Anch'io.", None), ("Gioco anch'io.", None), ("Sono Pippo.", None),
+        ("Anch'io sono pronto.", None), ("Anch'io sono qui.", None),
+        ("Anch'io sono Pippo e voglio vincere.", None), ("Anch'io, sono Pippo123.", None),
+        ("Gioco anch'io, sono il re dei giochi.", None), ("Pippo gioca anche lui.", None),
+        ("Anch'io sono stanco.", None), ("", None)]:
+    verifica(f"gioco_anchio_nome «{testo}»", GS.anchio_nome(testo), atteso)
+
 
 # ── comandi del flusso dello sviluppo (12/10, lavoro 3) ──
 # «Chiudi tutti gli sviluppi» per intero (regola `sviluppo_chiudi_tutti_forma`, tools/sviluppo):

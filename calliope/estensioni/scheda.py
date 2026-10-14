@@ -307,7 +307,8 @@ RUNTIME_JS = r"""(function () {
     catch (e) { /* niente */ }
   });
   var n = 0, attese = {}, avvio = null, errori = 0;
-  var ascolti = { avvio: [], messaggio: [], chat: [], giocatori: [], pausa: [], fine_tempo: [], comando: [] };
+  var ascolti = { avvio: [], messaggio: [], chat: [], giocatori: [], pausa: [], fine_tempo: [], comando: [],
+                  partita: [], autorevole: [], specchio: [], nome: [] };
   function manda(tipo, dati) {
     var m = { calliope: 1, tipo: tipo, id: ++n };
     for (var k in (dati || {})) m[k] = dati[k];
@@ -356,15 +357,37 @@ RUNTIME_JS = r"""(function () {
   };
   Object.freeze(api);
   Object.defineProperty(window, "calliope", { value: api, writable: false, configurable: false });
-  // Il canale del motore della macchina a stati (14/10, motore_gioco.js): i comandi a voce che
-  // valgono adesso, le mosse a voce ({comando, giocatore?}) e la diagnosi del palco. Il motore,
-  // che viene subito dopo, lo prende e lo toglie: il codice del gioco non lo vede (il confine
-  // resta la pagina e il server, che ricontrollano tutto)
+  // Il canale del motore della macchina a stati (14/10, motore_gioco.js): l'istantanea della
+  // partita (fase, a chi tocca, punti, comandi a voce che valgono adesso, numerata) e lo stato
+  // per la ripresa dopo «Riapri», le mosse a voce ({comando, n, giocatore?}), i comandi
+  // rifiutati perché arrivati su un'istantanea vecchia e la diagnosi del palco. Il motore, che
+  // viene subito dopo, lo prende e lo toglie: il codice del gioco non lo vede (il confine resta
+  // la pagina e il server, che ricontrollano tutto)
   Object.defineProperty(window, "__calliopeMotore", { configurable: true, writable: false, value: Object.freeze({
-    comandiAttivi: function (nomi) {
-      manda("comandi", { attivi: Array.isArray(nomi) ? nomi.slice(0, 64).map(String) : [] });
+    stato: function (istantanea, ripresa) {
+      var d = { istantanea: istantanea };
+      if (ripresa !== undefined && ripresa !== null) d.ripresa = ripresa;
+      manda("stato", d);
+    },
+    rifiutato: function (x) {
+      x = x || {};
+      manda("rifiutato", { comando: String(x.comando || "").slice(0, 24), motivo: String(x.motivo || "").slice(0, 20),
+                           n: typeof x.n === "number" ? x.n : null });
     },
     quandoComando: quando("comando"),
+    // La partita condivisa con il motore (14/10): lo stato che uno specchio disegna, la partita
+    // passata a questo schermo, un nome scritto su uno specchio, e la mossa di uno specchio
+    quandoPartita: quando("partita"),
+    quandoAutorevole: quando("autorevole"),
+    quandoSpecchio: quando("specchio"),
+    quandoNome: quando("nome"),
+    mossa: function (x) {
+      x = x || {};
+      var d = {};
+      if (typeof x.comando === "string") { d.comando = x.comando.slice(0, 24); d.n = typeof x.n === "number" ? x.n : null; }
+      if (typeof x.rinomina === "number") { d.rinomina = x.rinomina; d.nome = String(x.nome || "").slice(0, 20); }
+      manda("mossa", d);
+    },
     palco: function (difetti) {
       manda("palco", { difetti: Array.isArray(difetti) ? difetti.slice(0, 3).map(function (x) { return String(x).slice(0, 300); }) : [] });
     }
@@ -403,6 +426,11 @@ STILE_MOTORE = (
     ".palco .casella img{max-width:100%;max-height:100%}"
     ".palco .punti{border-radius:var(--raggio);background:rgba(0,0,0,.05)}"
     ".palco .giocatore.tocca{font-weight:bold;border-bottom:4px solid var(--accento)}"
+    ".palco .giocatore.nome{border:0;background:none;color:var(--testo);cursor:pointer;"
+    "padding:0 18px}"
+    ".palco .scrivi-nome{box-sizing:border-box;border:3px solid var(--primario);"
+    "border-radius:var(--raggio);padding:0 12px;background:#fff;color:#222}"
+    ".palco .avviso-nome{background:#fff3f3;color:#a00;text-align:center;margin:0}"
     ".palco .riga{border-radius:var(--raggio);background:rgba(0,0,0,.05);padding:0 16px}"
     ".palco .riga.tocca{outline:4px solid var(--accento)}"
     ".palco .riga.primo{background:var(--accento);color:#fff}"

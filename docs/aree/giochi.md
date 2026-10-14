@@ -10,6 +10,14 @@
 
 **13/10.** Un gioco nuovo usa la **macchina a stati di Calliope**: dichiara fasi e comandi nel manifesto (`scheda.macchina`, comandi con uno slot «porta {n}») e scrive in logica.js solo la logica pura (`GIOCO`); preparazione, turni, punti, esito, fine con la classifica, disegno, pulsanti e voce sono del motore (`motore_gioco.js`), che gira nel riquadro e, lo stesso file, nella prova di fumo per fasi e nei test. Gli esempi di accettazione dei giochi (stato → mosse → stato atteso) li scrive il codice e l'agente non li può cambiare. Vedi «La macchina a stati di Calliope» in fondo.
 
+**14/10 sera.** Il progetto della macchina a stati è finito (tranne «Gira il telefono» per una
+tela e la prova del palco nel browser della DGX, scartata dalla decisione 4): Calliope tiene
+l'**istantanea validata** della partita e ogni comando a voce porta il suo numero; risponde da
+sé a «a chi tocca?», «quanti punti ho?», «chi sta vincendo?», «cosa posso dire?»; un **giudice di
+fase** capisce le mosse dette con altre parole («apri la terza»); «**gioco anch'io**» e i **nomi
+scritti** sostituiscono «Giocatore N»; dopo «**Riapri**» la partita riprende; le **partite
+condivise** tra schermi hanno un motore solo. Vedi «Lo stato della partita» in fondo.
+
 **14/10.** Ogni pagina si disegna su un **palco fisso** (1280×720, 720×1280 sul telefono in verticale) scalato alla finestra, con sei modelli di pagina più la tela; la prova di fumo **misura il palco** di ogni pagina e lo dice all'agente come un errore da correggere, e il motore misura anche lo schermo vero. La macchina a stati è l'**unico formato**: i giochi vecchi (gioco.js libero, `ascolta` piatto) non si approvano né si aprono più. Vedi «Il palco fisso» in fondo.
 
 ## Moduli
@@ -18,6 +26,7 @@
 |---|---|---|
 | Giochi e schede interattive delle estensioni (05/10) | JavaScript nel browser degli schermi in un `<iframe sandbox="allow-scripts">` (origine opaca, CSP senza rete, script con l'impronta), ponte `postMessage` controllato dalla pagina e dal server; test della logica con Node in un container (`Dockerfile.node`) | `calliope/estensioni/scheda.py` (sezione «scheda» del manifesto, gioco puro, `documento`, `RUNTIME_JS`, `analizza_js`); `calliope/schermi/giochi.py` → `Giochi` (partite, `GET /gioco/<gettone>`, `POST /api/gioco`), `AzioneGioco`; cane da guardia in `schermo.js`; `minori.TempoGioco`, `minori.Richieste`, tool `richiesta_tutore`; `calliope/agenti/test_js.mjs`, prova di fumo `calliope/agenti/fumo_js.mjs`; comandi a voce (11/10) `calliope/gioco_voce.py` (forme e regola `gioco_comando`), `Giochi.ascolto`, `Giochi.comando`, `Giochi.schermi_voce`, `Ciclo._comando_gioco`, tool `gioco_comando` in `tools/schermi.py`; rapporto [`docs/ricerche/2026-10-05-giochi.md`](../ricerche/2026-10-05-giochi.md) |
 | Macchina a stati dei giochi (13/10) | JavaScript senza dipendenze, lo stesso file nel riquadro e in Node | `calliope/estensioni/macchina.py` (validazione di `scheda.macchina`, comandi piatti `ascolta`, `in_parole`); `calliope/estensioni/motore_gioco.js` (CalliopeMotore.crea: il nucleo puro; CalliopeMotore.avvia: disegno, pulsanti, voce); `scheda.documento` (motore e avvio nel riquadro, `STILE_MOTORE`); `calliope/agenti/fumo_js.mjs` (esplora, tuttiPiatti, apriGioco con g.stato()); esempi di accettazione `agenti/accettazione.py` (`test_js`, `FILE_GIOCO`); progetto [`2026-10-12-giochi-macchina-stati.md`](../ricerche/2026-10-12-giochi-macchina-stati.md) |
+| Stato della partita, domande, giudice, nomi, ripresa, partite condivise (14/10 sera) | Python e JavaScript senza dipendenze; il giudice sul modello del giudizio «rivolta» (Ollama, uscita vincolata) | `estensioni/macchina.py` (`valida_istantanea`, `per_fase`, `da_piatto`, `nome_chiuso`); `schermi/giochi.py` (`_t_stato`, `_t_rifiutato`, `_t_mossa`, `_nomi_detti`, `Posto.istantanea`, `Posto.ripresa`, `Partita.tiene`, `motore_condiviso`); `calliope/gioco_stato.py` (domande standard, `anchio_nome`, la riga dei dati del turno); `calliope/gioco_giudice.py`; `Ciclo._comando_gioco`, `Ciclo._giudice_di_fase`; `motore_gioco.js` (`perCalliope`, `rinomina`, `riprendi`, autorevole e specchio); `scheda.RUNTIME_JS` (canale del motore); `schermo.js` (i tipi nuovi) |
 | Palco fisso e modelli di pagina (14/10) | JavaScript senza dipendenze: l'impaginazione è una funzione pura, la stessa nel riquadro e in Node | `motore_gioco.js`: `impagina` (contenuto della pagina → scatole sul palco), `controllaPalco`, `difettiPalco`, il nucleo `pagina(S)`, la misura vera nel riquadro (`misuraVera` → canale `palco`); `macchina.PAGINE`; `scheda.RUNTIME_JS` (il canale riservato al motore), `STILE_MOTORE` (il palco, niente scroll); `calliope/agenti/fumo_js.mjs` (il palco nell'esploratore, `g.palco()`); `schermi/giochi.py` (`_t_palco`, `Posto.palco`); `prove/giochi/pagine` |
 
 ## Problemi noti
@@ -422,7 +431,8 @@ confronto delle forme: 0 VRAM. La prova di fumo per fasi e gli esempi girano in 
 l'agente (oggi solo sulla DGX); la passata del progettista è la stessa delle estensioni.
 
 **Cosa resta del progetto** (e perché; *storico dal 14/10: il palco e la rimozione dei giochi
-vecchi sono fatti, vedi «Il palco fisso» qui sotto*): il **palco fisso** 1280×720 e 720×1280 con i sei modelli
+vecchi sono fatti, vedi «Il palco fisso» qui sotto; dal 14/10 sera anche il resto, vedi «Lo
+stato della partita» in fondo; il caso «porte» del banco era già stato riscritto con il palco*): il **palco fisso** 1280×720 e 720×1280 con i sei modelli
 di pagina e la misura «fuori dal palco» (passo 4: oggi `scelte`, `messaggio` e `tela` con un
 disegno semplice che va a capo; è il passo più grande e cambia l'aspetto, da provare sugli
 schermi veri), e con lui la **rimozione dei giochi vecchi** (decisione 9); l'**istantanea
@@ -556,7 +566,9 @@ l'impaginazione pura calcola), e le prove dei giochi rifatte (`prova_giochi`, `p
 `prova_gioco_macchina`, `prova_agente_guida`, `prova_fasi_agente`, `prova_giro_porte`,
 `prova_giro_halloween`).
 
-**Cosa resta del progetto**: l'**istantanea validata dal server** con i comandi numerati (passo 2
+**Cosa resta del progetto** (*storico dal 14/10 sera: istantanea, domande standard, giudice,
+nomi, ripresa e partite condivise sono fatti, vedi «Lo stato della partita» qui sotto*):
+l'**istantanea validata dal server** con i comandi numerati (passo 2
 lato server); le **domande standard** («a chi tocca?», passo 5); il **giudice di fase** (passo 6);
 «**gioco anch'io**» e i **nomi scritti**; la **ripresa dopo «Riapri»**; le **partite condivise**
 con il motore; una tela che dichiara un solo orientamento e fa dire «Gira il telefono»
@@ -570,3 +582,270 @@ giro dell'agente; nel giro vero di un gioco nuovo guardare nel log se la prova d
 qualcosa del palco e se l'agente lo corregge cambiando testi o pagina; aprirlo in prova sul
 telefono in piedi e girato, e guardare nel registro (`gioco_fuori_dal_palco`) se lo schermo vero
 ha trovato qualcosa che il calcolo non prevede.
+
+## Lo stato della partita (14/10 sera, ramo `giochi-passi-finali`)
+
+I passi che restavano del progetto
+[`2026-10-12-giochi-macchina-stati.md`](../ricerche/2026-10-12-giochi-macchina-stati.md), chiesti
+da Dario il 14/10 sera, con le risposte di chi amministra del 12/10 (decisione 1: «Giocatore N»,
+poi «gioco anch'io» con la voce o il nome scritto, detto da Calliope solo dopo i controlli;
+2: giudice senza il nome spento; 5: dopo una mossa capita dal giudice Calliope dice l'etichetta
+breve; 6: partite condivise rimandate; 7: ripresa dopo «Riapri» sì).
+
+### L'istantanea validata dal server (passo 2 lato server)
+
+Prima il server sapeva solo quali comandi a voce valevano (`comandi`, mandato dal motore); il
+resto della partita (fase, a chi tocca, punti) lo sapeva solo il riquadro.
+
+- **Il motore manda l'istantanea** dopo ogni disegno (all'avvio, dopo ogni mossa, dopo l'esito
+  che va avanti da solo, dopo «Riapri»), con il tipo `stato` al posto di `comandi`:
+  `{n, fase, tocca, turno, giocatori: [{nome, punti}], esito, comandi}` (`nucleo.perCalliope`;
+  `tocca` è la posizione, `comandi` i comandi a voce piatti attivi). `g.stato()` dei test resta
+  com'era (a chi tocca per nome, i comandi per comando e valore): è l'interfaccia dell'agente.
+- **Il server la valida** contro il manifesto approvato (`macchina.valida_istantanea`): `n` che
+  non cala (la stessa mandata di nuovo, per un ridisegno, passa), fase dichiarata o standard,
+  comandi solo tra quelli che quella fase può avere (`macchina.per_fase`: mai comandi nuovi né di
+  un'altra fase), al più `giocatori.max` giocatori, punti numeri limitati, `tocca` dentro i
+  giocatori, esito al più 160 caratteri, nessun campo in più. Un nome fuori dalla forma chiusa
+  (lettere, spazi, apostrofo, al più 20 caratteri e due parole) resta sullo schermo ma per
+  Calliope è «Giocatore N». La tiene sul posto (`Posto.istantanea`): i comandi a voce attivi
+  vengono **solo** da lì. Una non valida si scarta (regola `gioco_stato_non_valido`, nel
+  registro dell'estensione con il motivo) e il gioco non ascolta finché non ne arriva una buona;
+  dopo «pronto» (anche «Riapri») non ascolta finché il motore non manda la prima: il server non
+  deduce mai lo stato.
+- **Il comando a voce porta `n`**, il numero dell'istantanea su cui è stato riconosciuto. Il
+  motore lo rifiuta se nel frattempo la partita è andata avanti (un tocco arrivato prima,
+  l'esito che è passato da solo) o se il comando non vale più, e lo dice con `rifiutato`
+  (regola `gioco_comando_vecchio` o `gioco_comando_rifiutato`, nel registro): la partita non
+  cambia. Così lo stato del gioco e quello di Calliope non divergono per costruzione.
+- La pagina (schermo.js, anche sul telefono) passa `stato` (`istantanea`, `ripresa`) e
+  `rifiutato` (`comando`, `motivo`, `n`) e niente altro; `n` verso il riquadro solo se è un
+  intero. Il messaggio `stato` ha un tetto più alto (porta anche la ripresa, sotto). Valgono
+  anche in una partita di prova (`TIPI_PROVA`): sono un ingresso, non un ponte.
+- Il runtime del riquadro dà al motore `stato` e `rifiutato` sul canale riservato
+  (`__calliopeMotore`) al posto di `comandiAttivi`; il codice del gioco non li vede.
+
+Prove: `prova_gioco_stato` (a secco, ~1 s: la validazione con 21 istantanee cattive, il server,
+il motore nel DOM finto con il comando vecchio rifiutato e l'andata e ritorno di tutte le
+istantanee del motore nella validazione Python), `prova_gioco_voce` rifatta sull'istantanea.
+
+### Calliope sa a che punto è il gioco (passo 5)
+
+- **Le domande standard** (`calliope/gioco_stato.py`, regola `gioco_stato_detto` del ciclo):
+  «a chi tocca?», «di chi è il turno?», «quanti punti ho?», «il punteggio?», «chi sta
+  vincendo?», «come siamo messi?», «cosa posso dire?» e poche altre forme, riconosciute **per
+  intero** (il nome davanti, maiuscole e punteggiatura non contano), in ogni fase e anche nella
+  finestra del gioco senza il nome. È il caso ammesso dal principio 10: forma chiusa e breve,
+  per intero, effetto reversibile (una frase detta). La risposta la compone il codice
+  dall'istantanea validata: «Tocca a Giocatore 2.» (durante l'esito «Ha appena giocato …»),
+  «Hai 3 punti.» se la voce di chi chiede è riconosciuta in quella frase e ha il nome di un
+  giocatore, altrimenti i punti di tutti, «Sta vincendo Bianca, con 5 punti.» (pari, fine,
+  da solo), «Puoi dire: porta 1, 3 o 4, oppure ricomincia.» (i valori degli slot insieme). Nel
+  registro esito `gioco_stato`, la domanda e i millisecondi, **nessun testo**; l'atto della voce
+  è `gioco_stato` (fuori dalla storia). Niente modello: testo→voce ~0,35 s sulla DGX.
+- **Contrari** (`prova_testo`, `prova_gioco_stato`): dentro una frase più lunga («a chi tocca
+  adesso secondo te?», «quanti punti ha Bianca?») non vale (senza il nome nella finestra si
+  ignora, con il nome va al modello); senza un gioco aperto sullo schermo di quel satellite,
+  con il gioco di un altro satellite, con una domanda di Calliope in sospeso la frase va al
+  modello. Un gioco non può dichiarare una di queste forme come comando (manifesto rifiutato:
+  «è una domanda di Calliope sul gioco»).
+- **L'istantanea nei dati del turno** per le altre domande («chi sta perdendo?», «quante porte
+  restano?»): al posto della riga dei soli comandi, «Sullo schermo c'è il gioco «Le porte del
+  castello», fase turno. Tocca a Giocatore 2. Punti: Ada 3, Giocatore 2 5. Comandi a voce
+  adesso: porta 1, 3 o 4.» (circa 60 token), più la riga su `gioco_comando` se il tool c'è. Il
+  testo dell'esito della mossa **non** c'è mai (è del gioco: si mostra sullo schermo). Con un
+  nome scritto sullo schermo (testo del gioco, passo 4 qui sotto) la riga va **in busta**, fonte
+  `gioco` (`provenienza.FONTI`, dalla porta unica `Brain.dato_non_fidato`; regola
+  `gioco_stato_in_busta`).
+- **Profilo da 8 GB**: confronto delle forme e frase composta dal codice, 0 VRAM; la riga dei
+  dati del turno ~60 token.
+
+### Il giudice di fase (passo 6)
+
+Quando una frase **rivolta a Calliope** (con il nome, o nella finestra di sempre dopo una
+risposta) non è una forma chiusa del gioco aperto né una domanda standard («apri la terza»,
+«proviamo con la prima», «uno, no aspetta, la cinque»), il significato lo decide il modello
+(principio 10), ma con una **chiamata breve e separata** (`calliope/gioco_giudice.py`), non il
+turno intero del modello della voce con `gioco_comando`.
+
+- **Uscita vincolata**: lo schema JSON di Ollama (`format`) con un `enum` delle etichette dei
+  comandi attivi adesso (dall'istantanea validata) più «nessuno». Non può inventare un comando
+  né un valore fuori dominio. Vede solo il titolo, i comandi della fase e la frase: né la
+  conversazione né dati di casa.
+- **Il prompt lo scrive Calliope** dai comandi della macchina, nella forma B misurata dal
+  prototipo del 12/10: comandi con il loro significato (le forme dichiarate, per i comandi di
+  Calliope una frase fissa: «va avanti dopo l'esito della mossa»), i valori che adesso non
+  valgono («adesso non valgono 2»), l'ordinale («la prima = 1», «l'ultima» è il massimo del
+  dominio), «nessuno» in testa con i casi (domande, chiacchiere, un valore che non c'è, più
+  comandi insieme), esempi, «se la persona cambia idea vale l'ultima scelta». Mai l'agente.
+- **Modello**: quello del giudizio «rivolta» (`rivolta.dove`: il rilevatore e4b già residente
+  sulla DGX, altrimenti il modello della voce su Ollama, con lo stesso `num_ctx`: niente
+  ricaricamento, cache della voce intatta), o `giochi_giudice_modello`; `temperature` 0,
+  `think` spento, al più `giochi_giudice_timeout_s` (2 s). Un giudizio guasto o scaduto vale
+  «nessuno».
+- **Nel ciclo** (`Ciclo._giudice_di_fase`, dopo le forme chiuse e le domande standard): una
+  mossa capita parte come quella diretta (con il numero dell'istantanea e, con
+  `macchina.giocatore`, il nome di chi è riconosciuto dalla voce) e Calliope dice l'**etichetta
+  breve** («Porta 3.», decisione 5: è un'interpretazione delle parole, chi parla deve sentire
+  cosa ha capito; atto `gioco_mossa`). Registro: esito `gioco_giudice`, regola `gioco_giudice`,
+  `gioco: {comando, ms, giudice_ms}`, niente testo. Con «nessuno» la frase va al modello della
+  voce con l'istantanea nei dati del turno, e il giudizio resta nel registro
+  (`gioco_giudice: {comando: null, ms}`).
+- **Senza il nome** nella finestra del gioco il giudice resta **spento**
+  (`giochi_giudice_senza_nome: false`, decisione 2): lì valgono solo le forme chiuse e le
+  domande standard, il resto si ignora come prima. Da decidere dopo aver misurato sulla DGX
+  quante frasi la finestra ignora (`gioco_finestra_ignorata` in `calliope stato --turni`).
+- **`gioco_comando`** (il tool dell'11/10 per il modello della voce) si registra solo con il
+  giudice spento (`giochi_giudice: false`): stessa cosa, un turno intero e ~106 token di schema
+  in meno nel prompt della voce quando il giudice è acceso. La riga dei dati del turno lo nomina
+  solo se c'è.
+- **Misura** (`prove/prova_gioco_giudice_ollama.py`, portatile RTX 5070 Laptop, gemma4
+  e4b-it-qat, le 22 frasi del prototipo sulle porte da 1 a 5 con la 2 aperta, prompt scritto
+  dal codice): **21/22 in due giri**, nessuna mossa su «a chi tocca?» e «quanti punti ho?»,
+  **mediana 313–323 ms, p90 336–340 ms** (il prototipo con il prompt scritto a mano: 21/22, 357
+  ms). Sbagliata, come nel prototipo, «apri la tre e poi la quattro» → porta 4 («vale l'ultima»
+  batte «più comandi insieme»): reversibile, una mossa.
+- **Profilo da 8 GB**: sul modello della voce già in memoria, nessuna VRAM in più;
+  `giochi_giudice: false` lo spegne. Sulla DGX sul rilevatore e4b (stima 0,2–0,35 s), da misurare
+  con `calliope stato --turni` (esito `gioco_giudice`, `giudice_ms`).
+
+### «Gioco anch'io» e i nomi scritti (passo 4, nomi)
+
+Decisione 1 di chi amministra (12/10): «Giocatore N» subito, poi «gioco anch'io» con la voce
+riconosciuta o il nome scritto sullo schermo, detto da Calliope solo dopo i controlli; niente
+nome libero passato dal modello.
+
+- **«Gioco anch'io»** è un comando standard di Calliope della preparazione (`anchio`: «gioco
+  anch'io», «anch'io», «anche io», «ci sono anch'io»; pulsante «Gioco anch'io»), attivo finché
+  c'è posto. Prende un posto con il nome di chi l'ha detto se la voce è riconosciuta in quella
+  frase (con `macchina.giocatore`: true, come le mosse), altrimenti «Giocatore N»; la stessa voce
+  due volte non prende due posti. «Inizia» parte con quei giocatori (almeno `giocatori.min`),
+  «N giocatori» con i primi N; la preparazione mostra «Giocano: Ada, Giocatore 2». I nomi
+  restano ad «ancora» e arrivano alla logica in `nuovaPartita({ nomi })` e in `ctx.giocatori`.
+- **Un ospite** (o chi non è riconosciuto) si dà un nome a voce con la forma chiusa intera
+  «(gioco) anch'io, sono / mi chiamo <nome>» (regola `gioco_anchio_nome`,
+  `gioco_stato.anchio_nome`: una o due parole di sole lettere, non «pronto», «qui», «stanco»…);
+  il nome detto vale come uno scritto (sotto). Contrari in `prova_testo`.
+- **Il nome scritto**: chi gioca tocca il suo nome nella fascia dei punti (un pulsante, «Cambia
+  il nome: …») e lo scrive in un campo sopra la fascia (Invio o uscita dal campo confermano, Esc
+  annulla). Il motore accetta solo la forma chiusa (lettere, spazi e apostrofo, al più 20
+  caratteri e due parole) e un nome diverso dagli altri; se no un avviso sul palco e la partita
+  non cambia (non è un errore del gioco). Nell'istantanea il giocatore è segnato `scritto`.
+- **Cosa dice Calliope** (`Giochi._nomi_detti`): «Giocatore N» e i nomi che Calliope stessa ha
+  mandato dalla voce riconosciuta (`Partita.nomi_voce`) si dicono; ogni altro nome (scritto,
+  detto «sono Pippo», o un nome che il motore dichiara senza che Calliope l'abbia mandato: il
+  server non si fida del motore) è **testo del gioco**: si dice solo se passa i controlli delle
+  frasi dei giochi (`riferire.controlla_testo`; con un minore o un ospite nella partita il
+  guardiano, che se manca o è guasto per un minore blocca), mai in una partita di prova; se no
+  resta sullo schermo e a voce è «Giocatore N» (regola `gioco_nome_fermato`). Giudizio in cache
+  per partita. Con un nome scritto detto, l'istantanea nei dati del turno va in busta.
+- «Tocca ad Ada» con la d eufonica, sullo schermo e a voce.
+
+Prove: `prova_gioco_stato` (sezione 7: motore, server, ciclo), `prova_testo` (le forme di
+«anch'io, sono …» e i contrari), `prova_giochi_pagina` (la preparazione dice «gioco anch'io»).
+
+### La ripresa dopo «Riapri» (decisione 7)
+
+Prima «Riapri» (dopo ✕, Esc, «chiudi il gioco») o una pagina ricaricata facevano ripartire la
+partita da capo. Ora riparte **dall'ultima istantanea valida**:
+
+- Il motore manda con ogni istantanea anche lo **stato intero** della partita (`ripresa`: fase,
+  giocatori, punti, a chi tocca, i dati della logica), se sta in 16 000 caratteri (come `salva`;
+  oltre non si manda e quella partita non si riprende).
+- Il server lo tiene sul posto (`Posto.ripresa`) **solo** se accompagna un'istantanea valida, con
+  lo stesso numero e la stessa fase; un'istantanea non valida non lo cambia (resta l'ultima
+  buona), una valida senza ripresa lo toglie (mai una partita vecchia). Non lo legge: è opaco,
+  come i dati di `salva`, e torna solo al riquadro dello stesso posto (schermo) della stessa
+  partita.
+- Al «pronto» di un riquadro nuovo dello stesso posto l'avvio lo porta (`avvio.ripresa`); il
+  motore lo controlla (`nucleo.riprendi`: forma, fase dichiarata, giocatori e punti, dati,
+  comandi attivi e pagina calcolabili) e riparte da lì, con lo stesso numero (il server dopo
+  «pronto» accetta di nuovo da capo); se non va, partita nuova. Ripreso nell'esito, l'esito va
+  avanti da solo come prima. Una partita nuova (un'altra richiesta del gioco) parte da capo.
+- Profilo da 8 GB: niente (browser e server).
+
+Prove: `prova_gioco_stato` (sezione 8), `prova_gioco_stato_pagina` (Edge: ✕ e «Riapri» nella
+pagina vera, con il nome scritto e la porta già aperta).
+
+### Le partite condivise con il motore (decisione 6, rimandata e fatta qui)
+
+Prima, in una partita condivisa tra schermi (`scheda.condivisa`) ogni riquadro aveva il suo
+motore: due partite diverse (sorteggi, turni, punti), sincronizzate solo se il gioco lo faceva da
+sé con `manda` (com'è ancora la tela dei «segnali»). Il progetto (§ 2.4) diceva: «il primo posto
+sarebbe l'autorevole e gli altri riceverebbero istantanee e vista». Fatto così:
+
+- **Chi tiene la partita**: per una partita condivisa con la macchina **e senza tela**
+  (`Partita.motore_condiviso`), il primo riquadro che dice «pronto» è l'**autorevole**
+  (`Partita.autorevole`): il suo motore è l'unico che scrive lo stato e manda istantanee. Gli
+  altri schermi sono **specchi** (`avvio.ruolo`).
+- **Gli specchi disegnano lo stato**: a ogni istantanea valida dell'autorevole il server manda
+  lo stato intero (lo stesso della ripresa) agli altri schermi (evento «gioco» di tipo
+  `partita`), e il loro motore lo disegna (`nucleo.riprendi`, poi la pagina: la vista è una
+  funzione pura dei dati, quindi uguale). Uno specchio che si apre o riapre lo riceve all'avvio.
+  Uno specchio non manda istantanee (se ci prova: 403, regola `gioco_stato_non_autorevole`, e
+  torna specchio con l'evento `specchio`), non fa andare avanti l'esito da solo, non manda la
+  fine.
+- **Le mosse degli specchi**: un tocco su uno specchio diventa un messaggio `mossa` (comando
+  piatto e numero dell'istantanea su cui è stato toccato) che il server controlla contro
+  l'ultima istantanea valida dell'autorevole (solo comandi attivi, numero intero; regola
+  `gioco_mossa_rifiutata`) e manda al suo motore come un comando a voce: lo stesso controllo del
+  numero (una mossa vecchia è rifiutata). Un nome scritto su uno specchio va all'autorevole
+  (`mossa` con `rinomina` e `nome`, forma chiusa) che lo scrive.
+- **La voce**: un comando sentito dal satellite dello schermo di uno specchio vale con i comandi
+  dell'autorevole e la mossa va al suo motore (`Partita.tiene`); le domande standard leggono la
+  sua istantanea.
+- **Chi tiene la partita se ne va** (✕, cane da guardia, o la sua pagina tace da `VIVO_S` quando
+  uno specchio muove o si riapre): la partita passa a un altro schermo aperto (evento
+  `autorevole` con l'ultimo stato, regola `gioco_partita_passata`), che riparte da lì. Chi la
+  teneva, riaperto, è uno specchio.
+- **Protezioni** come per `manda`: con dati personali letti dalla partita lo stato non va agli
+  altri schermi (`gioco_dati_personali`); con un minore o un ospite nella partita non ci va se
+  un nome scritto non passa i controlli (`gioco_nome_fermato`). Il giudizio di un nome vale per
+  chi c'è nella partita: se arriva un minore o un ospite si rigiudica (una prova l'ha trovato).
+- **Pagina e runtime**: `mossa` dal riquadro (campi `comando`, `n`, `rinomina`, `nome`); verso il
+  riquadro `partita`, `autorevole`, `specchio` (lo stato, un oggetto entro il tetto di `stato`) e
+  `nome` (`i` intero, `nome` al più 20 caratteri); il canale riservato al motore ha
+  `quandoPartita`, `quandoAutorevole`, `quandoSpecchio`, `quandoNome` e `mossa` (il codice del
+  gioco non li vede). L'agente non scrive niente in più (una riga nel contratto: con
+  `"condivisa": true` la partita la tiene un motore solo).
+- **Cosa non fa** (da decidere se serve): chi è quale giocatore. I turni restano quelli del
+  motore (`tocca`), e ogni schermo può muovere quando tocca a qualcuno: va bene per giocare
+  insieme da due stanze, non impedisce a uno schermo di muovere per l'altro. Una tela condivisa
+  resta com'era (ogni schermo il suo motore, i messaggi con `manda`).
+
+Prove: `prova_gioco_stato` (sezione 9: due motori nel DOM finto, autorevole e specchio, e il
+server con i contrari), `prova_gioco_stato_pagina` (Edge, due pagine: tocchi veri sullo
+specchio, la stessa pagina sulle due).
+
+### Il caso «porte» del banco della temperatura
+
+Verificato il 14/10 sera: il caso «porte» di `prove/manuali/banco_temperatura.py` è già nel
+formato nuovo (la macchina a stati, niente `gioco.js`: riscritto con il palco fisso, vedi
+[agenti-estensioni](agenti-estensioni.md), «Il banco del 14/10»). `banco_temperatura.py --secco`:
+tutto ok (porte rosse alla partenza e verdi sul riferimento, i vincoli della correzione con il
+test che riproduce in `gioco.test.js`, il tetto con e senza la riproduzione). Niente da cambiare.
+
+### Cosa resta, e il giro sulla DGX
+
+**Resta del progetto**: «Gira il telefono» per una tela che dichiara un orientamento solo
+(decisione 3, non fatto); la diagnosi del palco detta a voce al collaudo; nelle partite
+condivise, chi è quale giocatore (oggi ogni schermo muove quando tocca a qualcuno); il giudice
+senza il nome (decisione 2: da decidere dopo la misura); la partita come attività della macchina
+a stati del dialogo (§ 4 del progetto, «in futuro»). La prova del palco nel browser della DGX
+(passo 8) resta scartata (decisione 4).
+
+**Da fare sulla DGX** (dopo `calliope aggiorna`; ricaricare la pagina degli schermi e del
+telefono, sono file statici):
+- il giro vero dell'agente su un gioco nuovo, a voce: «Calliope, fammi un gioco delle porte da 2
+  a 4 giocatori, a voce con il numero della porta» → guardare nel log l'analisi prima del codice
+  (comandi ed esempi), la macchina e la prova di fumo per fasi con il palco, gli esempi alla
+  consegna; poi «aprilo in prova» e giocarlo dal satellite e dal telefono: «gioco anch'io» (il
+  nome di chi parla), «Calliope, inizia», «porta tre», «Calliope, apri la terza» (il giudice:
+  «Porta 3.»), «a chi tocca?» e «quanti punti ho?» anche senza il nome, un nome scritto toccando
+  la fascia, ✕ e «Riapri» (riprende), e la stessa partita da due schermi (con `"condivisa":
+  true`: «Calliope, voglio giocarci anche dalla cucina»);
+- misurare con `calliope stato --turni`: esito `gioco_comando`, `gioco_stato`, `gioco_giudice`
+  (`giudice_ms` sul rilevatore e4b, stima 0,2–0,35 s), e quante frasi la finestra del gioco
+  ignora (`gioco_finestra_ignorata`) per decidere `giochi_giudice_senza_nome`;
+- nel registro dell'estensione: `gioco_stato_non_valido` (deve restare 0 con un gioco sano),
+  `gioco_comando_vecchio`, `gioco_nome_fermato`, `gioco_partita_passata`.

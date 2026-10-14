@@ -281,8 +281,9 @@ def prova_nucleo(tmp: Path):
     if not isinstance(p, dict):
         verifica("una partita intera", False, str(p))
         return
-    verifica("preparazione: il numero dei giocatori (1–4) e «inizia»",
-             p["prep"] == ["giocatori_1", "giocatori_2", "giocatori_3", "giocatori_4", "inizia"],
+    verifica("preparazione: il numero dei giocatori (1–4), «gioco anch'io» e «inizia»",
+             p["prep"] == ["giocatori_1", "giocatori_2", "giocatori_3", "giocatori_4", "anchio",
+                           "inizia"],
              str(p["prep"]))
     i = p["inizio"]
     verifica("«2 giocatori»: fase turno, tocca a Giocatore 1, quattro porte attive",

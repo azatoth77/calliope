@@ -26,8 +26,9 @@ Qui la validazione (all'approvazione e alla consegna) e l'elenco **piatto** dei 
 che ne viene: lo slot è un'abbreviazione di un elenco («porta {n}» con n da 1 a 6 sono i
 comandi `porta_1` … `porta_6`, ognuno con le sue forme intere), così il riconoscimento della voce
 resta quello dell'11/10 (gioco_voce.trova, principio 10 alla lettera: un insieme finito di frasi
-brevi riconosciute per intero) e il motore dice a runtime quali valgono adesso
-(`calliope.comandiAttivi`). Con la macchina il manifesto non ha `ascolta`: lo scrive Calliope.
+brevi riconosciute per intero) e il motore dice a runtime quali valgono adesso (dal 14/10
+nell'istantanea della partita, sotto). Con la macchina il manifesto non ha `ascolta`: lo scrive
+Calliope.
 
 Dal 14/10 (passo 4, il palco fisso) ogni fase sceglie uno dei modelli di pagina di Calliope
 (`PAGINE`: titolo, scelte, griglia, messaggio, punteggi, classifica, più la tela), disegnati dal
@@ -36,9 +37,10 @@ motore su un palco di 1280×720 o 720×1280; la prova di fumo misura che ogni pa
 scheda.normalizza). `"giocatore": true` porta alla mossa il nome di chi è riconosciuto dalla
 voce (`ctx.giocatore`), come l'`ascolta.giocatore` dell'11/10.
 
-Rimandati (passi del progetto non fatti qui): l'istantanea validata dal server con i comandi
-numerati, le domande standard («a chi tocca?»), il giudice di fase, «gioco anch'io» e i nomi
-scritti, la ripresa dopo «Riapri».
+Dal 14/10 (passo 2 lato server) il motore manda dopo ogni disegno l'**istantanea** numerata
+della partita (fase, a chi tocca, giocatori e punti, esito, comandi a voce attivi): qui
+`valida_istantanea` la controlla contro la macchina approvata (`per_fase`: i comandi che ogni
+fase può avere) e il server la tiene come stato della partita (schermi/giochi.py).
 """
 
 from __future__ import annotations
@@ -71,7 +73,13 @@ COMANDI_STANDARD = {
     "avanti": (["avanti", "continua"], "Avanti"),
     "ancora": (["ancora", "un'altra partita", "ricomincia", "rigioca"], "Ancora"),
     "fine_partita": (["fine partita"], "Fine partita"),
+    # «Gioco anch'io» (14/10, passo 4 del progetto): un posto in più nella preparazione, con il
+    # nome di chi l'ha detto se la voce è riconosciuta (con «giocatore»: true nella macchina)
+    "anchio": (["gioco anch'io", "anch'io", "anche io", "gioco anche io", "ci sono anch'io"],
+               "Gioco anch'io"),
 }
+# I comandi standard della preparazione oltre al numero dei giocatori e a «inizia»
+STANDARD_PREPARAZIONE: tuple[str, ...] = ("anchio",)
 
 
 class MacchinaNonValida(ValueError):
@@ -256,7 +264,7 @@ def ascolta(m: dict, giocatori: dict) -> dict:
     for n in range(gmin, gmax + 1) if gmin < gmax else ():
         piatti[piatto("giocatori", n)] = (["un giocatore", "gioco da solo"] if n == 1
                                           else [f.replace(SLOT, str(n)) for f in forme])
-    for nome in ("inizia", "avanti", "ancora"):
+    for nome in ("inizia", "avanti", "ancora", "anchio"):
         piatti[nome] = list(COMANDI_STANDARD[nome][0])
     if any(f["pagina"] == "tela" for f in m["fasi"].values()):
         piatti["fine_partita"] = list(COMANDI_STANDARD["fine_partita"][0])
@@ -275,11 +283,148 @@ def ascolta(m: dict, giocatori: dict) -> dict:
     if len(piatti) > MAX_PIATTI:
         _err("", f"troppi comandi a voce: {len(piatti)} con i valori degli slot (al più "
                  f"{MAX_PIATTI}); restringi i domini")
+    # Le domande standard di Calliope («a chi tocca?», «quanti punti ho?»: gioco_stato.py) valgono
+    # in ogni fase: un comando del gioco non le può coprire
+    from .. import gioco_stato
+    domande = gioco_stato.forme_normalizzate()
+    for cid, forme in piatti.items():
+        for f in forme:
+            if gioco_voce.normalizza(f) in domande:
+                _err("", f"«{f}» è una domanda di Calliope sul gioco (a chi tocca, i punti, chi "
+                         "vince, cosa si può dire): scegli un'altra forma")
     try:
         comandi = gioco_voce.valida_elenco(piatti, massimo=MAX_PIATTI)
     except gioco_voce.ElencoNonValido as e:
         _err("", f"i comandi a voce che ne vengono: {e}")
     return {"comandi": comandi, "giocatore": bool(m.get("giocatore"))}
+
+
+def per_fase(m: dict, giocatori: dict) -> dict[str, list[str]]:
+    """I comandi a voce piatti che possono valere in ogni fase (le standard comprese): il server
+    ci controlla l'istantanea del motore (passo 2 del progetto, 14/10), che può solo
+    restringerli. {fase: [piatti]}."""
+    gmin, gmax = int(giocatori.get("min", 1)), int(giocatori.get("max", 1))
+    prep = [piatto("giocatori", n) for n in range(gmin, gmax + 1)] if gmin < gmax else []
+    out = {"preparazione": prep + list(STANDARD_PREPARAZIONE) + ["inizia"],
+           "esito": ["avanti"], "fine": ["ancora"]}
+    for fnome, f in (m.get("fasi") or {}).items():
+        lista = []
+        for cnome, c in f["comandi"].items():
+            for v in (valori(c.get("n")) or [None]):
+                lista.append(piatto(cnome, v))
+        if f["pagina"] == "tela":
+            lista.append("fine_partita")
+        out[fnome] = lista
+    return out
+
+
+def da_piatto(m: dict, nome: str):
+    """Il comando a voce piatto → (comando, valore, fase del gioco o None). «porta_3» →
+    ("porta", 3, "turno"); None se non è della macchina."""
+    nome = str(nome or "")
+    if nome in ("inizia", "avanti", "ancora", "fine_partita") or nome in STANDARD_PREPARAZIONE:
+        return (nome, None, None)
+    if nome.startswith("giocatori_") and nome[10:].isdigit():
+        return ("giocatori", int(nome[10:]), None)
+    for fnome, f in (m.get("fasi") or {}).items():
+        for cnome, c in f["comandi"].items():
+            for v in (valori(c.get("n")) or [None]):
+                if piatto(cnome, v) == nome:
+                    return (cnome, v, fnome)
+    return None
+
+
+# ─────────────── l'istantanea della partita, validata dal server (passo 2, 14/10) ───────────────
+# Il motore nel riquadro è l'unico che scrive lo stato; dopo ogni mossa (e all'avvio, e dopo
+# «Riapri») manda a Calliope l'istantanea numerata. Il server la valida contro il manifesto
+# approvato e la tiene come stato della partita: i comandi a voce attivi, a chi tocca, i punti
+# (domande standard), il numero che accompagna ogni comando a voce (un comando su
+# un'istantanea vecchia il motore lo rifiuta). Una non valida si scarta e il gioco resta senza
+# comandi a voce finché non ne manda una buona (regola gioco_stato_non_valido)
+MAX_ESITO = 160
+MAX_PUNTI = 1_000_000_000
+NOME_DEFAULT = re.compile(r"^Giocatore [1-9]$")
+# Il nome scritto (o detto) di chi gioca, nella forma chiusa del § 2.2 del progetto: lettere,
+# spazi e apostrofo, al più 20 caratteri, al più due parole
+NOME_CHIUSO = re.compile(r"^[A-Za-zÀ-ÖØ-öø-ÿ']+( [A-Za-zÀ-ÖØ-öø-ÿ']+)?$")
+CHIAVI_ISTANTANEA = {"n", "fase", "tocca", "turno", "giocatori", "esito", "comandi"}
+MAX_NOMI_PARTITA = 64          # nomi diversi giudicati per partita (controlli in cache)
+
+
+class IstantaneaNonValida(ValueError):
+    pass
+
+
+def nome_chiuso(nome) -> bool:
+    """Il nome è nella forma chiusa (lettere, spazi, apostrofo; al più 20 caratteri e due
+    parole) o è quello di Calliope («Giocatore 3»)."""
+    return isinstance(nome, str) and len(nome) <= 20 and bool(
+        NOME_CHIUSO.match(nome) or NOME_DEFAULT.match(nome))
+
+
+def valida_istantanea(ist, m: dict, giocatori: dict, ultimo_n: int = -1) -> dict:
+    """L'istantanea mandata dal motore, controllata contro la macchina approvata: `n` che non
+    cala, fase dichiarata (o standard), comandi tra quelli che la fase può avere, giocatori al
+    più `max`, nomi nella forma chiusa (un nome fuori forma resta sullo schermo e qui diventa
+    «Giocatore N»), punti numeri limitati, `tocca` dentro i giocatori, esito al più 160
+    caratteri. Restituisce la copia pulita; solleva IstantaneaNonValida."""
+    def no(cosa):
+        raise IstantaneaNonValida(cosa)
+    if not isinstance(ist, dict):
+        no("non è un oggetto")
+    altri = set(ist) - CHIAVI_ISTANTANEA
+    if altri:
+        no(f"campi sconosciuti: {', '.join(sorted(map(str, altri)))[:80]}")
+    n = ist.get("n")
+    if not isinstance(n, int) or isinstance(n, bool) or not (0 <= n <= 10_000_000):
+        no("«n» non è un numero della partita")
+    if n < ultimo_n:
+        no(f"«n» cala ({n} dopo {ultimo_n})")
+    fase = ist.get("fase")
+    fasi = per_fase(m, giocatori)
+    if not isinstance(fase, str) or fase not in fasi:
+        no(f"fase «{str(fase)[:24]}» non dichiarata")
+    comandi = ist.get("comandi")
+    if not isinstance(comandi, list) or len(comandi) > MAX_PIATTI or any(
+            not isinstance(c, str) for c in comandi):
+        no("«comandi»: un elenco di nomi")
+    fuori = [c for c in comandi if c not in fasi[fase]]
+    if fuori:
+        no(f"comandi che la fase «{fase}» non ha: {', '.join(x[:24] for x in fuori[:5])}")
+    gs = ist.get("giocatori")
+    gmax = int(giocatori.get("max", 1))
+    if not isinstance(gs, list) or len(gs) > gmax:
+        no(f"«giocatori»: un elenco di al più {gmax}")
+    puliti = []
+    for i, g in enumerate(gs):
+        if not isinstance(g, dict) or set(g) - {"nome", "punti", "scritto"}:
+            no("un giocatore è {nome, punti, scritto}")
+        if "scritto" in g and not isinstance(g["scritto"], bool):
+            no("«scritto» è vero o falso")
+        p = g.get("punti", 0)
+        if isinstance(p, bool) or not isinstance(p, (int, float)) or p != p \
+                or abs(p) > MAX_PUNTI:
+            no("punti non validi")
+        nome = g.get("nome")
+        chiuso = nome_chiuso(nome)
+        puliti.append({"nome": nome if chiuso else f"Giocatore {i + 1}",
+                       "punti": int(p) if float(p).is_integer() else round(float(p), 2),
+                       **({} if chiuso else {"fuori_forma": True}),
+                       **({"scritto": True} if g.get("scritto") else {})})
+    tocca = ist.get("tocca")
+    if tocca is not None and (not isinstance(tocca, int) or isinstance(tocca, bool)
+                              or not (0 <= tocca < max(1, len(puliti)))):
+        no("«tocca» fuori dai giocatori")
+    if tocca is not None and not puliti:
+        tocca = None
+    turno = ist.get("turno", 0)
+    if not isinstance(turno, int) or isinstance(turno, bool) or not (0 <= turno <= 1_000_000):
+        no("«turno» non valido")
+    esito = ist.get("esito")
+    if esito is not None and (not isinstance(esito, str) or len(esito) > MAX_ESITO):
+        no(f"«esito»: un testo di al più {MAX_ESITO} caratteri")
+    return {"n": n, "fase": fase, "tocca": tocca, "turno": turno, "giocatori": puliti,
+            "esito": esito, "comandi": list(dict.fromkeys(comandi))}
 
 
 def in_parole(m: dict) -> str:

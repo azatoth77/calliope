@@ -3131,7 +3131,9 @@ verde sul gioco giusto, rosso solo il requisito 2 con le porte che non spariscon
 senza il comando, il servizio in uno sviluppo e i contrari), `prova_agente_guida` (lo scheletro
 nuovo è valido e passa i suoi test e la prova di fumo per fasi), `prova_giochi` (la consegna di
 un gioco nuovo senza macchina rifiutata). Il banco della temperatura a secco passa com'era (il
-suo caso «porte» è una correzione di un gioco del formato di prima).
+suo caso «porte» è una correzione di un gioco del formato di prima). *Storico dal 14/10: il caso
+«porte» è riscritto con la macchina a stati (il palco fisso); verificato il 14/10 sera con
+`--secco`.*
 
 **Da guardare sulla DGX** al primo gioco nuovo: «analisi prima del codice … N esempi di
 accettazione» con i comandi, se l'agente rispetta nomi e fasi dei comandi chiesti (un nome
@@ -3406,3 +3408,21 @@ suoi test: un limite del modello, da scrivere.
         && $V/.venv/bin/python $V/prove/manuali/banco_temperatura.py \
            --casi porte,convertitore,programma --temperature 0.6 --presence config \
            --ripetizioni 5 --uscita ~/banchi/valori-$(date +%m%d-%H%M)
+
+## I giochi: i nomi e le domande di Calliope nel contratto (14/10 sera, ramo `giochi-passi-finali`)
+
+Con i passi finali della macchina a stati ([giochi](giochi.md), «Lo stato della partita») il §5
+del contratto (`contratto.scheda_testo`) dice all'agente due cose in più, perché non le scriva
+da sé né le copra con un comando: i nomi dei giocatori sono di Calliope («gioco anch'io» a voce,
+o scritti toccando il nome nella fascia dei punti; arrivano in `nuovaPartita({ nomi })` e in
+`ctx.giocatori`), e le domande «a chi tocca?», «quanti punti ho?», «chi sta vincendo?», «cosa
+posso dire?» le risponde Calliope dall'istantanea (il manifesto che le dichiara come forme è
+rifiutato: «è una domanda di Calliope sul gioco»). Fra le forme di Calliope da non usare c'è
+anche «gioco anch'io» (comando standard `anchio`); `accettazione.py` scarta un esempio con
+`anchio` come per gli altri nomi di Calliope. Con le partite condivise (sotto) una riga in più: con `"condivisa": true` la partita la
+tiene un motore solo, gli altri schermi la vedono e mandano le mosse, niente da scrivere in
+più. Il §5 passa da 6 409 a 6 964 caratteri (circa 160 token in più con il rapporto 3,47; da
+rimisurare sulla DGX). Lo scheletro non cambia; il giudice di
+fase e l'istantanea non toccano l'agente (la prova di fumo riceve l'istantanea come il server,
+`fumo_js.mjs`).
+

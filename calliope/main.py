@@ -818,9 +818,11 @@ class Avvio:
             giochi.on_frase = self.due_event.set
             s.schermi.giochi = estensioni.giochi = giochi
             # I comandi a voce dei giochi detti con altre parole (11/10, gioco_comando): solo
-            # con i giochi accesi; il ciclo mette nel turno il gioco che aspetta un comando
-            from .tools.schermi import gioco_spec
-            s.tools.register(gioco_spec())
+            # con i giochi accesi e, dal 14/10, con il giudice di fase spento (il giudice fa la
+            # stessa cosa con una chiamata breve e l'uscita vincolata, calliope/gioco_giudice.py)
+            if not getattr(cfg, "giochi_giudice", True):
+                from .tools.schermi import gioco_spec
+                s.tools.register(gioco_spec())
 
     def _luogo_satellite(self):
         """La stanza del satellite per l'archivio delle conversazioni. stanza_corrente è la

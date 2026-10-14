@@ -30,13 +30,16 @@ partita che l'ha letto non manda più messaggi agli altri schermi (`gioco_dati_p
   versione è la candidata con l'impronta di quando è stata consegnata.
 
 - **Comandi a voce** (11/10, `scheda.ascolta`, calliope/gioco_voce.py; dal 14/10 ricavati dalla
-  macchina a stati, e a dirli è il motore nel riquadro): il riquadro dichiara
-  quali dei suoi comandi valgono adesso (`comandi`, solo un sottoinsieme di quelli del
-  manifesto); il ciclo della voce chiede `ascolto(schermi)` per il gioco aperto sullo schermo
-  del satellite che ascolta e manda la mossa con `comando` (evento SSE «gioco» di tipo
-  «comando», la pagina la passa al riquadro). Al gioco arrivano solo il nome del comando e, se
-  il manifesto lo chiede, il nome di chi è riconosciuto dalla voce. Valgono anche in una partita
-  di prova: sono un ingresso, come i tocchi, non un ponte verso Calliope.
+  macchina a stati, e a dirli è il motore nel riquadro): dal 14/10 il motore manda dopo ogni
+  disegno l'**istantanea** numerata della partita (`stato`: fase, a chi tocca, giocatori e
+  punti, esito, comandi a voce attivi), validata qui contro il manifesto (solo un sottoinsieme
+  dei comandi di quella fase) e tenuta come stato della partita (`Posto.istantanea`); il ciclo
+  della voce chiede `ascolto(schermi)` per il gioco aperto sullo schermo del satellite che
+  ascolta e manda la mossa con `comando` (evento SSE «gioco» di tipo «comando», con il numero
+  dell'istantanea: il motore rifiuta un comando vecchio e lo dice con `rifiutato`). Al gioco
+  arrivano solo il nome del comando, il numero e, se il manifesto lo chiede, il nome di chi è
+  riconosciuto dalla voce. Valgono anche in una partita di prova: sono un ingresso, come i
+  tocchi, non un ponte verso Calliope.
 """
 
 from __future__ import annotations
@@ -68,16 +71,21 @@ NOTE_GUASTO = {"non risponde": "Il gioco non rispondeva più: l'ho chiuso.",
                "messaggi non validi": "Il gioco mandava messaggi non validi: l'ho chiuso.",
                "non parte": "Il gioco non è partito: l'ho chiuso."}
 TIPI_PAGINA = ("pronto", "battito", "salva", "leggi", "manda", "chat", "di", "azione", "fine",
-               "errore", "guasto", "comandi", "chiuso", "palco")
+               "errore", "guasto", "stato", "rifiutato", "chiuso", "palco", "mossa")
 # Una partita di prova (11/10): il gioco gira e basta, senza ponte verso Calliope né dati. I
-# comandi a voce sì (`comandi` sceglie quali valgono, `chiuso` lo manda la pagina quando il
-# gioco si chiude): sono un ingresso, come i tocchi, e non portano niente fuori dal riquadro.
+# comandi a voce sì (`stato`, l'istantanea del motore, dice quali valgono; `rifiutato`, un
+# comando arrivato su un'istantanea vecchia; `chiuso` lo manda la pagina quando il gioco si
+# chiude): sono un ingresso, come i tocchi, e non portano niente fuori dal riquadro.
 # Anche `palco` (14/10): la diagnosi del motore su ciò che esce dal palco, per il collaudo
-TIPI_PROVA = ("pronto", "battito", "fine", "errore", "guasto", "comandi", "chiuso", "palco")
+TIPI_PROVA = ("pronto", "battito", "fine", "errore", "guasto", "stato", "rifiutato", "chiuso",
+              "palco")
 # Un riquadro di cui la pagina non dice niente da tanto (il battito arriva ogni 15 s mentre si
 # vede) non riceve comandi a voce: lo schermo è spento, la pagina è altrove o il gioco è nascosto
 VIVO_S = 40.0
 MAX_ATTIVI = 64
+# Il messaggio «stato» (14/10): l'istantanea più, per la ripresa dopo «Riapri», lo stato intero
+# del motore (opaco, al più come `salva`)
+MAX_RIPRESA = MAX_SALVA
 
 
 def candidata_intatta(est, nome: str, n) -> bool:
@@ -117,16 +125,32 @@ class Posto:
         self.messaggi: deque = deque(maxlen=200)     # istanti, per la frequenza
         self.chat: deque = deque(maxlen=50)
         # I comandi a voce (11/10): il riquadro è aperto (dopo «pronto», fino a «chiuso» o al
-        # cane da guardia), l'ultimo messaggio della pagina (time.time), i comandi che valgono
-        # adesso (None: tutti quelli del manifesto) e l'ultima mossa o apertura (monotonic)
+        # cane da guardia), l'ultimo messaggio della pagina (time.time) e l'ultima mossa o
+        # apertura (monotonic)
         self.aperto = False
         self.contatto = 0.0
-        self.attivi: list[str] | None = None
         self.segno = 0.0
+        # L'istantanea della partita (14/10, passo 2 del progetto): l'ultima valida mandata dal
+        # motore, controllata contro il manifesto (macchina.valida_istantanea). I comandi a voce
+        # attivi vengono solo da qui: senza un'istantanea valida il gioco non ascolta
+        self.istantanea: dict | None = None
+        self.ist_n = -1                     # il numero dell'ultima valida (non può calare)
+        self.scartate = 0                   # istantanee non valide (diagnosi)
+        self.rifiutati = 0                  # comandi a voce rifiutati dal motore (vecchi)
+        # La ripresa dopo «Riapri» (14/10, decisione 7): lo stato intero del motore mandato con
+        # l'ultima istantanea valida (opaco: il server lo conserva e lo restituisce allo stesso
+        # posto all'avvio di un riquadro nuovo, non lo legge), al più MAX_RIPRESA
+        self.ripresa: dict | None = None
         # La diagnosi del palco (14/10): i difetti misurati dal motore sullo schermo vero (al
         # più tre frasi; [] = la pagina ci sta), None finché non arriva
         self.palco: list[str] | None = None
         self.palco_n = 0                    # quante misure sono arrivate
+
+    @property
+    def attivi(self) -> list[str] | None:
+        """I comandi a voce dell'ultima istantanea valida, nell'ordine del motore (None senza
+        istantanea): per le prove e la diagnosi."""
+        return list(self.istantanea["comandi"]) if self.istantanea is not None else None
 
 
 class Partita:
@@ -147,6 +171,17 @@ class Partita:
         self.frasi: deque = deque(maxlen=50)
         self.carte: dict[int, dict] = {}            # la scheda mandata a ogni schermo
         self.n = 0
+        # I nomi di chi gioca (14/10, passo 4 del progetto): quelli che Calliope stessa ha
+        # mandato al riquadro dalla voce riconosciuta («gioco anch'io», le mosse con
+        # «giocatore»), e il giudizio sugli altri (scritti sullo schermo o detti «sono Pippo»):
+        # Calliope li dice solo dopo i controlli delle frasi dei giochi
+        self.nomi_voce: set[str] = set()
+        self.nomi_ok: dict[tuple, bool] = {}
+        # La partita condivisa con il motore (14/10, decisione 6 del 12/10, rimandata e fatta
+        # qui): il posto che tiene la partita (il suo motore è l'unico che scrive lo stato) e
+        # l'ultimo stato intero che ha mandato, che gli altri schermi («specchi») disegnano
+        self.autorevole: int | None = None
+        self.stato_condiviso: dict | None = None
 
     @property
     def condivisa(self) -> bool:
@@ -155,6 +190,28 @@ class Partita:
     @property
     def massimo(self) -> int:
         return int((self.scheda.get("giocatori") or {}).get("max", 1))
+
+    @property
+    def motore_condiviso(self) -> bool:
+        """Una partita condivisa tra schermi con la macchina a stati e senza tela: un solo motore
+        tiene la partita, gli altri schermi la disegnano e gli mandano le mosse. Con una tela
+        resta com'era (ogni riquadro il suo motore, i messaggi con `manda`)."""
+        m = self.macchina
+        return bool(self.condivisa and m is not None
+                    and not any(f.get("pagina") == "tela" for f in m["fasi"].values()))
+
+    def tiene(self, posto: "Posto") -> "Posto":
+        """Il posto il cui motore tiene la partita: quello autorevole in una partita condivisa
+        con il motore, altrimenti il posto stesso."""
+        if self.motore_condiviso and self.autorevole is not None:
+            return self.posti.get(self.autorevole) or posto
+        return posto
+
+    @property
+    def macchina(self) -> dict | None:
+        """La macchina a stati del manifesto approvato (scheda.macchina), o None."""
+        m = self.scheda.get("macchina")
+        return m if isinstance(m, dict) and m.get("fasi") else None
 
     @property
     def ascolta(self) -> dict | None:
@@ -420,7 +477,10 @@ class Giochi:
             grezzo = len(json.dumps(dati, ensure_ascii=False))
         except (TypeError, ValueError):
             return {"errore": "dati non validi", "_stato": 400}
-        if grezzo > self._c("giochi_messaggio_max", 4096) + 512:
+        tetto = self._c("giochi_messaggio_max", 4096) + 512
+        if tipo == "stato":
+            tetto += MAX_RIPRESA
+        if grezzo > tetto:
             self._registra(p, "messaggio_grande", regola="gioco_messaggio_grande")
             return {"errore": "messaggio troppo grande", "_stato": 413}
         p.ultimo = ora
@@ -433,11 +493,18 @@ class Giochi:
             return {"errore": "non riuscito", "_stato": 500}
 
     def _avvio(self, p: Partita, posto: Posto) -> dict:
-        a = p.ascolta
-        return {"partita": p.id, "giocatore": posto.giocatore,
-                "giocatori": len(p.posti), "massimo": p.massimo, "condivisa": p.condivisa,
-                "storia": list(p.storia)[-100:], "lingua": "it",
-                **({"comandi": list(a["comandi"])} if a else {})}
+        d = {"partita": p.id, "giocatore": posto.giocatore,
+             "giocatori": len(p.posti), "massimo": p.massimo, "condivisa": p.condivisa,
+             "storia": list(p.storia)[-100:], "lingua": "it"}
+        if p.motore_condiviso:
+            # Chi tiene la partita riparte dall'ultimo stato condiviso; uno specchio lo disegna
+            ruolo = "autorevole" if p.autorevole == posto.sid else "specchio"
+            d["ruolo"] = ruolo
+            if p.stato_condiviso is not None:
+                d["ripresa" if ruolo == "autorevole" else "stato"] = p.stato_condiviso
+        elif posto.ripresa is not None:
+            d["ripresa"] = posto.ripresa
+        return d
 
     def _t_pronto(self, p: Partita, posto: Posto, dati) -> dict:
         from .. import minori
@@ -453,9 +520,18 @@ class Giochi:
                 return {"ok": False, "fine_tempo": True,
                         "nota": "Per oggi il tempo dei giochi è finito."}
         posto.fermato = False
-        # Riquadro nuovo (anche «Riapri» o la pagina ricaricata): tutti i comandi valgono, e la
-        # finestra senza nome riparte da adesso
-        posto.aperto, posto.attivi, posto.segno = True, None, time.monotonic()
+        # Riquadro nuovo (anche «Riapri» o la pagina ricaricata): il motore riparte e manda la
+        # sua istantanea (fino ad allora niente comandi a voce: il server non deduce lo stato),
+        # e la finestra senza nome riparte da adesso
+        posto.aperto, posto.segno = True, time.monotonic()
+        posto.istantanea, posto.ist_n = None, -1
+        if p.motore_condiviso:
+            with self._lock:
+                t = p.posti.get(p.autorevole) if p.autorevole is not None else None
+                # chi la teneva non c'è più (chiuso, fermato, o la sua pagina tace da VIVO_S)
+                if (t is None or t is posto or not t.aperto or t.fermato
+                        or time.time() - t.contatto > VIVO_S):
+                    p.autorevole = posto.sid
         if p.ascolta:
             self.sveglia_voce()
         self._agli_altri(p, posto, "giocatori", {"giocatori": len(p.posti),
@@ -635,34 +711,183 @@ class Giochi:
         es = AzioneGioco(self, p, posto, nome, args, rif)
         return es.avvia()
 
-    def _t_comandi(self, p: Partita, posto: Posto, dati) -> dict:
-        """Il riquadro dice quali dei suoi comandi a voce valgono adesso (le porte ancora
-        chiuse, niente durante un'animazione): solo un sottoinsieme di quelli del manifesto,
-        mai comandi nuovi."""
-        a = p.ascolta
-        if a is None:
-            return {"errore": "questo gioco non ha comandi a voce", "_stato": 403}
-        lista = dati.get("attivi")
-        if not isinstance(lista, list) or len(lista) > MAX_ATTIVI:
-            return {"errore": "attivi: un elenco di nomi di comandi", "_stato": 400}
-        nomi = [x for x in lista if isinstance(x, str)]
-        fuori = [x[:24] for x in nomi if x not in a["comandi"]]
-        if fuori or len(nomi) != len(lista):
-            self._registra(p, "comandi_rifiutati", regola="gioco_comando_non_dichiarato",
-                           comandi=fuori[:5])
-            return {"errore": "comandi non dichiarati nel manifesto: "
-                              + ", ".join(fuori[:5] or ["(non testo)"]), "_stato": 400}
+    def _t_stato(self, p: Partita, posto: Posto, dati) -> dict:
+        """L'istantanea della partita dal motore (14/10, passo 2 del progetto): fase, a chi tocca,
+        giocatori e punti, esito, i comandi a voce che valgono adesso, numerata. Validata contro
+        il manifesto approvato (macchina.valida_istantanea): solo comandi che quella fase può
+        avere, mai nuovi; il numero non cala. Una non valida si scarta e il gioco resta senza
+        comandi a voce finché non ne manda una buona (regola gioco_stato_non_valido)."""
+        from ..estensioni import macchina as mc
+        m = p.macchina
+        if m is None or p.ascolta is None:
+            return {"errore": "questo gioco non ha la macchina a stati", "_stato": 403}
+        if p.motore_condiviso and p.autorevole != posto.sid:
+            # In una partita condivisa lo stato lo scrive un motore solo. Uno schermo che
+            # crede di tenerla (la sua pagina taceva e la partita è passata a un altro) torna
+            # specchio, con lo stato di adesso
+            self._registra(p, "stato_rifiutato", regola="gioco_stato_non_autorevole")
+            self.hub.evento_a(posto.sid, "gioco", {"partita": p.id, "tipo": "specchio",
+                                                   "dati": {"stato": p.stato_condiviso}})
+            return {"errore": "la partita la tiene un altro schermo", "_stato": 403}
+        try:
+            ist = mc.valida_istantanea(dati.get("istantanea"), m, p.scheda.get("giocatori")
+                                       or {}, posto.ist_n)
+        except mc.IstantaneaNonValida as e:
+            prima = bool(self._attivi(p, posto))
+            posto.istantanea = None
+            posto.scartate += 1
+            self._registra(p, "stato_scartato", regola="gioco_stato_non_valido",
+                           motivo=str(e)[:120])
+            if prima:
+                self.sveglia_voce()
+            return {"errore": f"istantanea non valida: {e}", "_stato": 400}
+        self._nomi_detti(p, posto, ist)
         prima = self._attivi(p, posto)
-        scelti = set(nomi)
-        posto.attivi = [c for c in a["comandi"] if c in scelti]
-        if bool(prima) != bool(posto.attivi):
+        ripresa = self._ripresa(dati.get("ripresa"), ist)
+        with self._lock:
+            posto.istantanea, posto.ist_n = ist, ist["n"]
+            # Solo quella che accompagna l'ultima istantanea valida (senza: niente ripresa, mai
+            # una partita vecchia)
+            posto.ripresa = ripresa
+            if p.motore_condiviso and ripresa is not None:
+                p.stato_condiviso = ripresa
+        if p.motore_condiviso and ripresa is not None:
+            self._agli_specchi(p, posto, ist, ripresa)
+        if bool(prima) != bool(ist["comandi"]):
             self.sveglia_voce()
-        return {"ok": True, "attivi": list(posto.attivi)}
+        return {"ok": True, "n": ist["n"]}
+
+    def _agli_specchi(self, p: Partita, posto: Posto, ist: dict, stato: dict):
+        """Lo stato della partita condivisa agli altri schermi, che lo disegnano. Come per
+        `manda`: niente se la partita ha letto dati personali; con un minore o un ospite nella
+        partita niente se un nome scritto non passa i controlli (resta sullo schermo di chi
+        tiene la partita)."""
+        if p.contaminazione:
+            self._registra(p, "bloccato", regola="gioco_dati_personali")
+            return
+        if p.protetta() and any(g.get("scritto") and g.get("detto") != g.get("nome")
+                                for g in ist["giocatori"]):
+            self._registra(p, "bloccato", regola="gioco_nome_fermato")
+            return
+        self._agli_altri(p, posto, "partita", {"stato": stato})
+
+    def _t_mossa(self, p: Partita, posto: Posto, dati) -> dict:
+        """Una mossa (un tocco) o un nome scritto su uno specchio di una partita condivisa con
+        il motore: va al motore che tiene la partita, che la controlla come un comando a voce
+        (con il numero dell'istantanea: una mossa vecchia la rifiuta). Qui solo i comandi
+        attivi dell'ultima istantanea valida, e un nome nella forma chiusa."""
+        from ..estensioni import macchina as mc
+        if not p.motore_condiviso or p.autorevole == posto.sid:
+            return {"errore": "qui le mosse le fa il gioco stesso", "_stato": 403}
+        t = p.posti.get(p.autorevole) if p.autorevole is not None else None
+        if t is not None and t.aperto and time.time() - t.contatto > VIVO_S:
+            # La pagina di chi teneva la partita tace (schermo spento): la prende un altro
+            self._passa_la_partita(p, t)
+            return {"errore": "la partita passa a un altro schermo: riprova", "_stato": 409}
+        ist = t.istantanea if t is not None and t.aperto and not t.fermato else None
+        if ist is None:
+            return {"errore": "la partita non è aperta su nessuno schermo", "_stato": 409}
+        if dati.get("rinomina") is not None:
+            i, nome = dati.get("rinomina"), dati.get("nome")
+            if (not isinstance(i, int) or isinstance(i, bool) or not 0 <= i < len(ist["giocatori"])
+                    or not mc.nome_chiuso(nome)):
+                return {"errore": "nome non valido", "_stato": 400}
+            self.hub.evento_a(t.sid, "gioco", {"partita": p.id, "tipo": "nome",
+                                               "dati": {"i": i, "nome": nome}})
+            return {"ok": True}
+        comando, n = dati.get("comando"), dati.get("n")
+        if (not isinstance(comando, str) or comando not in ist["comandi"]
+                or not isinstance(n, int) or isinstance(n, bool)):
+            self._registra(p, "mossa_rifiutata", regola="gioco_mossa_rifiutata",
+                           comando=str(comando)[:24])
+            return {"errore": "la mossa adesso non vale", "_stato": 400}
+        posto.segno = t.segno = time.monotonic()
+        self.hub.evento_a(t.sid, "gioco", {"partita": p.id, "tipo": "comando",
+                                           "dati": {"comando": comando, "n": n}})
+        return {"ok": True}
+
+    def _passa_la_partita(self, p: Partita, posto: Posto):
+        """Lo schermo che teneva la partita condivisa si è chiuso: la tiene un altro schermo
+        aperto, che riparte dall'ultimo stato (evento «autorevole»)."""
+        if not p.motore_condiviso or p.autorevole != posto.sid:
+            return
+        ora = time.time()
+        altri = [x for x in p.posti.values() if x is not posto and x.aperto and not x.fermato
+                 and ora - x.contatto <= VIVO_S]
+        p.autorevole = altri[0].sid if altri else None
+        if altri:
+            self._registra(p, "passa", regola="gioco_partita_passata")
+            self.hub.evento_a(altri[0].sid, "gioco", {"partita": p.id, "tipo": "autorevole",
+                                                      "dati": {"stato": p.stato_condiviso}})
+
+    @staticmethod
+    def _ripresa(r, ist: dict) -> dict | None:
+        """Lo stato per la ripresa, se è un oggetto JSON entro MAX_RIPRESA con lo stesso numero
+        e la stessa fase dell'istantanea che accompagna; altrimenti None."""
+        if not isinstance(r, dict) or r.get("n") != ist["n"] or r.get("fase") != ist["fase"]:
+            return None
+        try:
+            if len(json.dumps(r, ensure_ascii=False)) > MAX_RIPRESA:
+                return None
+        except (TypeError, ValueError):
+            return None
+        return r
+
+    def _nomi_detti(self, p: Partita, posto: Posto, ist: dict):
+        """Come Calliope dice ogni giocatore (14/10, passo 4 del progetto, decisione 1 di chi
+        amministra): «Giocatore N» e i nomi che Calliope stessa ha mandato dalla voce
+        riconosciuta si dicono; gli altri (scritti sullo schermo, detti «gioco anch'io, sono
+        Pippo») sono testo del gioco: si dicono solo se passano i controlli delle frasi dei giochi
+        (riferire.controlla_testo; con un minore o un ospite nella partita il guardiano), mai in
+        una partita di prova; se no restano sullo schermo e a voce sono «Giocatore N». Segna
+        `detto` e `scritto` su ogni giocatore dell'istantanea."""
+        from ..estensioni import macchina as mc
+        for i, g in enumerate(ist["giocatori"]):
+            nome = g["nome"]
+            if g.get("fuori_forma") or mc.NOME_DEFAULT.match(nome) or nome in p.nomi_voce:
+                g["detto"] = nome
+                g.pop("scritto", None)
+                continue
+            g["scritto"] = True
+            g["detto"] = nome if self._nome_dicibile(p, nome) else f"Giocatore {i + 1}"
+
+    def _nome_dicibile(self, p: Partita, nome: str) -> bool:
+        if p.prova:
+            return False                     # una partita di prova non fa dire nomi scritti
+        # Il giudizio vale per chi c'è nella partita: con un minore o un ospite arrivati dopo il
+        # nome si rigiudica (con il guardiano)
+        minore = any(x.minore for x in p.posti.values())
+        chiave = (nome, p.protetta(), minore)
+        ok = p.nomi_ok.get(chiave)
+        if ok is not None:
+            return ok
+        from .. import riferire
+        _detto, regole = riferire.controlla_testo(nome, "estensione")
+        ok = not regole
+        if ok and p.protetta():
+            ok = self._guardiano(nome, domanda=False, minore=minore) == "ok"
+        if len(p.nomi_ok) < 64:
+            p.nomi_ok[chiave] = ok
+        if not ok:
+            self._registra(p, "nome_fermato", regola="gioco_nome_fermato")
+        return ok
+
+    def _t_rifiutato(self, p: Partita, posto: Posto, dati) -> dict:
+        """Il motore ha rifiutato un comando a voce: era stato riconosciuto su un'istantanea
+        che nel frattempo è cambiata (un tocco arrivato prima), o non vale più. Solo per il
+        registro: lo stato resta quello del motore."""
+        posto.rifiutati += 1
+        motivo = str(dati.get("motivo") or "")[:20]
+        self._registra(p, "comando_rifiutato", regola="gioco_comando_vecchio"
+                       if motivo == "vecchio" else "gioco_comando_rifiutato",
+                       comando=str(dati.get("comando") or "")[:24], motivo=motivo)
+        return {"ok": True}
 
     def _t_chiuso(self, p: Partita, posto: Posto, dati) -> dict:
         """La pagina ha chiuso il gioco (✕, Esc, «chiudi il gioco»): niente più comandi a voce
         finché un riquadro nuovo non manda «pronto» («Riapri»)."""
         posto.aperto = False
+        self._passa_la_partita(p, posto)
         if p.ascolta:
             self.sveglia_voce()
         return {"ok": True}
@@ -709,6 +934,7 @@ class Giochi:
             self.hub.invia_a(posto.sid, chiusa)
         posto.fermato = True
         posto.aperto = False
+        self._passa_la_partita(p, posto)
         self._registra(p, "guasto", regola="gioco_chiuso_dal_controllo", motivo=motivo)
         self.log(f"[GIOCHI] «{p.titolo}» chiuso sullo schermo "
                  f"{self._nome_schermo(posto.sid)}: {motivo}")
@@ -717,10 +943,14 @@ class Giochi:
     # ── i comandi a voce (11/10, calliope/gioco_voce.py) ──
     @staticmethod
     def _attivi(p: Partita, posto: Posto) -> list[str]:
+        """I comandi a voce che valgono adesso: quelli dell'ultima istantanea valida (14/10),
+        nell'ordine del manifesto; nessuno senza istantanea."""
         a = p.ascolta
-        if a is None:
+        ist = p.tiene(posto).istantanea
+        if a is None or ist is None:
             return []
-        return list(a["comandi"]) if posto.attivi is None else list(posto.attivi)
+        scelti = set(ist["comandi"])
+        return [c for c in a["comandi"] if c in scelti]
 
     def aggiungi_sveglia(self, ev):
         """La sveglia di un ciclo della voce (Ciclo.__init__)."""
@@ -795,7 +1025,9 @@ class Giochi:
         return {"partita": p.id, "schermo": posto.sid, "titolo": p.titolo,
                 "comandi": {c: list(a["comandi"][c]) for c in attivi},
                 "giocatore": bool(a.get("giocatore")), "segno": posto.segno,
-                "prova": p.prova}
+                "prova": p.prova,
+                "istantanea": json.loads(json.dumps(p.tiene(posto).istantanea)),
+                "macchina": p.macchina}
 
     def in_corso(self, schermi) -> bool:
         """Un gioco è aperto e si vede adesso su uno di questi schermi (riquadro aperto da
@@ -815,10 +1047,13 @@ class Giochi:
                         return True
         return False
 
-    def comando(self, partita: str, schermo, comando: str, giocatore: str | None = None) -> bool:
+    def comando(self, partita: str, schermo, comando: str, giocatore: str | None = None,
+                dalla_voce: bool = True) -> bool:
         """Manda una mossa a voce al riquadro della partita su quello schermo (evento «gioco»
         di tipo «comando»). Solo un comando attivo di quel gioco; il nome di chi gioca solo se
-        il manifesto lo chiede. True se mandata."""
+        il manifesto lo chiede. `dalla_voce`: il nome è di chi è riconosciuto dalla voce (si
+        dice senza altri controlli); False per un nome detto a parole («gioco anch'io, sono
+        Pippo»), che vale come uno scritto. True se mandata."""
         with self._lock:
             p = self.partite.get(str(partita or ""))
             posto = p.posti.get(schermo) if p is not None else None
@@ -827,12 +1062,21 @@ class Giochi:
             a = p.ascolta
             if a is None or comando not in self._attivi(p, posto):
                 return False
-            dati = {"comando": comando}
+            # Il numero dell'istantanea su cui il comando è stato riconosciuto (14/10): se nel
+            # frattempo il motore ne ha fatta un'altra (un tocco arrivato prima), lo rifiuta. In
+            # una partita condivisa la mossa va al motore che la tiene, anche se l'ha sentita lo
+            # schermo di uno specchio
+            t = p.tiene(posto)
+            if t.istantanea is None or not t.aperto or t.fermato:
+                return False
+            dati = {"comando": comando, "n": t.istantanea["n"]}
             if giocatore and a.get("giocatore"):
                 dati["giocatore"] = str(giocatore)[:40]
-            posto.segno = time.monotonic()
+                if dalla_voce and len(p.nomi_voce) < 64:
+                    p.nomi_voce.add(dati["giocatore"])
+            posto.segno = t.segno = time.monotonic()
             p.ultimo = time.time()
-        self.hub.evento_a(posto.sid, "gioco", {"partita": p.id, "tipo": "comando", "dati": dati})
+        self.hub.evento_a(t.sid, "gioco", {"partita": p.id, "tipo": "comando", "dati": dati})
         return True
 
     # ── utilità ──

@@ -593,3 +593,36 @@ fumo misura per ogni pagina raggiunta nei due orientamenti, la misura vera nel b
 Rispetto al § 5.4: la difesa 2 (la misura nel motore) c'è; la 3 (il browser nella sandbox) non
 serve per la misura del calcolo, che gira in Node, e resta scartata (decisione 4: così anche il
 passo 8). Restano i passi 2 (lato server), 5 e 6 e le scelte 1, 6 e 7.
+
+## Aggiornamento del 14/10 sera: il progetto finito
+
+Fatto sul ramo `giochi-passi-finali` (dettagli in [giochi](../aree/giochi.md), «Lo stato della
+partita»), con le risposte di chi amministra del 12/10:
+- **Passo 2, lato server**: il motore manda dopo ogni disegno l'istantanea numerata (`stato` al
+  posto di `comandi`), il server la valida contro il manifesto (`macchina.valida_istantanea`) e
+  la tiene come stato della partita; i comandi a voce vengono solo da lì e portano il numero; il
+  motore rifiuta quelli vecchi (`rifiutato`). Rispetto al § 2.4: `tocca` è la posizione e i
+  comandi sono i nomi piatti (`porta_3`), non il dizionario `{porta: [1, 3, 4]}`; la stessa
+  istantanea rimandata (un ridisegno) passa, perché `n` non deve calare, non per forza crescere.
+- **Passo 5**: le domande standard (regola `gioco_stato_detto`, `calliope/gioco_stato.py`) e
+  l'istantanea nei dati del turno, in busta (fonte `gioco`) con un nome scritto.
+- **Passo 6**: il giudice di fase (`calliope/gioco_giudice.py`), con il prompt B scritto dal
+  codice dai comandi della macchina; misura sul portatile con gemma4 e4b sulle 22 frasi del
+  prototipo: 21/22 in due giri, mediana 313–323 ms (il prototipo: 21/22, 357 ms). Spento senza il
+  nome (decisione 2); `gioco_comando` solo con il giudice spento.
+- **Decisione 1**: «gioco anch'io» (comando standard `anchio`) con il nome dalla voce, «anch'io,
+  sono Pippo» per chi non è riconosciuto, i nomi scritti toccando la fascia dei punti; Calliope
+  dice i nomi scritti solo dopo i controlli (strada C del § 2.2; la D, il nome al modello, no).
+- **Decisione 7**: la ripresa dopo «Riapri» dall'ultima istantanea valida (lo stato intero, al
+  più 16 kB, opaco per il server).
+- **Decisione 6** (rimandata, fatta qui perché la strada del § 2.4 era realizzabile così com'è):
+  in una partita condivisa con la macchina e senza tela il primo riquadro pronto tiene la
+  partita, gli altri schermi sono specchi che disegnano il suo stato e gli mandano le mosse; se
+  chi la tiene se ne va, passa a un altro schermo. Non decide chi è quale giocatore.
+- Il caso «porte» del banco della temperatura era già nel formato nuovo (riscritto con il
+  palco): `--secco` ok.
+
+**Resta**: «Gira il telefono» (decisione 3), la diagnosi del palco a voce al collaudo, chi è quale
+giocatore nelle partite condivise, il giudice senza il nome (decisione 2, dopo la misura sulla
+DGX), la partita come attività della macchina a stati del dialogo; il passo 8 resta scartato
+(decisione 4). Il giro vero sulla DGX con l'agente.

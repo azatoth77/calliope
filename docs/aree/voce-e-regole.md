@@ -1662,6 +1662,16 @@ dentro la frase.
   forma del comando, perché è un'interpretazione. Schema ~106 token in più (stima).
 - Dettagli, sicurezza e giro da fare sulla DGX in [giochi](giochi.md), «I comandi a voce di un
   gioco».
+- **14/10 sera** ([giochi](giochi.md), «Lo stato della partita»): i comandi attivi vengono
+  dall'istantanea del motore validata dal server; due forme chiuse in più, con i loro contrari in
+  `prova_testo`: le **domande standard** sul gioco («a chi tocca?», «quanti punti ho?», «chi sta
+  vincendo?», «cosa posso dire?», regola `gioco_stato_detto`, risposta composta dal codice
+  dall'istantanea, anche senza il nome nella finestra del gioco) e **«anch'io, sono Pippo»** nella
+  preparazione (regola `gioco_anchio_nome`, un nome di una o due parole di sole lettere). Le
+  frasi rivolte a Calliope che non sono forme chiuse del gioco vanno al **giudice di fase**
+  (regola `gioco_giudice`: una chiamata breve con l'uscita vincolata ai comandi attivi; il
+  significato lo decide il modello); con il giudice acceso (predefinito) il tool `gioco_comando`
+  non c'è: uno schema in meno e ~106 token in meno nel prompt della voce.
 
 ## Comandi del flusso dello sviluppo: tre forme chiuse in più (12/10, ramo `flusso-ripresa`)
 

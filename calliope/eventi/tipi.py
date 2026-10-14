@@ -148,6 +148,10 @@ ATTI: dict[str, tuple[str, bool, str]] = {
     # stanza_cerca, passo 4: frase `attesa.stanza` di frasi.py)
     "attesa_stanza": ("voluto", False, "2"),
     "annuncio_gioco": ("voluto", True, "19"),
+    # Le domande standard su un gioco (14/10, gioco_stato.py: «a chi tocca?»), risposte dal
+    # codice con l'istantanea; e la mossa capita dal giudice di fase, detta con l'etichetta
+    "gioco_stato": ("fuori_storia", False, "22"),
+    "gioco_mossa": ("fuori_storia", False, "22"),
     "chiusura": ("voluto", False, "20"),
     "saluto_avvio": ("voluto", False, "21"),
     # I nomi del passo 1 (ricavati dalla pila), per il rigioco degli eventi già su disco

@@ -212,8 +212,11 @@ A_SECCO = [
     ("prova_gioco_macchina.py", [], "macchina a stati dei giochi (13/10): scheda.macchina nel manifesto (comandi a voce piatti dagli slot, uguali in Python e nel motore, 14 contrari), documento del riquadro con il motore, il nucleo (preparazione, turni, esito, fine, ancora, tela; la forma dei risultati: esito annidato, dati mancanti, fuori da verso, attivi che allarga, vista), prova di fumo per fasi (senza uscita, mai raggiunta, mai attivo, non finisce, mossa che lancia, fuori dominio), apriGioco con g.stato() e i comandi con il valore"),
     # ~3 s: il palco fisso dei giochi (14/10), Node per l'impaginazione e la prova di fumo
     ("prova_gioco_palco.py", [], "il palco fisso dei giochi (14/10): l'impaginazione pura del motore nei due orientamenti (1280×720 e 720×1280) per i sei modelli più la tela, otto giocatori, il tris e le porte, senza niente fuori, sovrapposto o tagliato; i difetti messi apposta detti per l'agente (troppi pulsanti, titolo lunghissimo con la fonte, testo di una casella, esito lungo, griglia 12×12 con troppo testo, tela schiacciata); la prova di fumo che misura il palco di ogni pagina raggiunta (contrari con la fase e la strada) e g.palco(); la diagnosi «palco» anche in prova"),
+    ("prova_gioco_stato.py", [], "lo stato della partita che Calliope conosce (14/10, passo 2 del progetto dei giochi): l'istantanea del motore validata dal server contro il manifesto (banco d'attacco di 21 istantanee cattive, nome fuori forma → «Giocatore N», n che non cala), i comandi a voce solo dall'ultima valida, il comando con il numero dell'istantanea, rifiutato nel registro, tetto del messaggio, partita di prova; il motore nel DOM finto: istantanea a ogni disegno, comando vecchio o non attivo rifiutato, andata e ritorno JS → Python; le domande standard (passo 5: «a chi tocca?», i punti, chi vince, cosa posso dire) risposte dal codice senza il modello, anche senza il nome nella finestra del gioco, mai l'esito, l'istantanea nei dati del turno (in busta con un nome scritto), un gioco non può dichiararle; contrari nel ciclo: frase più lunga, nessun gioco, domanda in sospeso, altro satellite; il giudice di fase (passo 6) con un modello finto: prompt scritto da Calliope (enum con «nessuno» in testa, valori che non valgono, ordinale), scelta vincolata (fuori elenco, JSON rotto, scaduto = nessuno), nel ciclo «Calliope, apri la terza» → mossa e «Porta 3.», «nessuno» al modello; contrari: senza il nome nella finestra (e con l'interruttore acceso), domanda in sospeso, giudice spento; «gioco anch'io» (passo 4) nel motore con il nome dalla voce o «Giocatore N», il nome scritto toccando la fascia (cifre e doppioni rifiutati), i nomi detti da Calliope (voce sì, scritti dopo i controlli, guardiano con un minore, mai in prova, il server non si fida del motore), «gioco anch'io, sono Pippo» nel ciclo; la ripresa dopo «Riapri» (decisione 7): lo stato intero con l'istantanea, tenuto solo se accompagna l'ultima valida (numero, fase, 16 000 caratteri), restituito all'avvio dello stesso posto, il motore che riparte da lì (anche dall'esito); contrari: ripresa rotta, partita nuova; la partita condivisa con il motore (decisione 6): autorevole e specchio nel DOM finto (le mosse e i nomi dello specchio, niente istantanee né esito da solo, «autorevole» e «specchio»), sul server il primo «pronto» la tiene, lo stato agli specchi, le loro mosse controllate e mandate a chi la tiene, la voce dello specchio, chiuso chi la tiene passa a un altro; contrari: dati personali, nome fermato con un minore, tela com'era"),
     # ~60 s: la pagina degli schermi in Edge o Chromium senza finestra (senza si salta)
     ("prova_giochi_pagina.py", [], "giochi nella pagina vera: il riquadro ostile non legge la pagina né il localStorage, niente rete né WebRTC, messaggi falsi rifiutati, cane da guardia (ciclo infinito, navigazione, inondazione), partita condivisa tra due pagine (dal 14/10 con la tela dei segnali), comandi a voce (la mossa nel motore con il nome, il sottoinsieme a runtime, niente fuori elenco, partita di prova), la macchina a stati nel riquadro vero (13/10: preparazione, turno, esito che va avanti da solo), il palco fisso nel browser vero (14/10: ogni modello misurato sullo schermo a 900×800 e a 390×844 in verticale senza difetti, un difetto messo apposta trovato, il tocco su una casella del tris)"),
+    # ~10 s: lo stato della partita nella pagina vera (14/10), Edge o Chromium (senza si salta)
+    ("prova_gioco_stato_pagina.py", [], "lo stato della partita nella pagina vera (14/10): l'istantanea dal riquadro al server, il comando con un numero vecchio rifiutato dal motore, «gioco anch'io» di Ada, il nome scritto con un tocco vero sulla fascia e la tastiera («Bea», detta da Calliope), ✕ e «Riapri» che riprendono dall'ultima istantanea, la partita condivisa con il motore su due pagine (tocchi veri sullo specchio, la stessa pagina sulle due)"),
     ("prova_contesto_agenti.py", [], "contesto degli agenti (05/10): finestra dal setup, tetti della passata e del ragionamento, risultati lunghi in .calliope, diario del lavoro alle soglie, domanda a metà lavoro"),
     ("prova_estensioni_piano.py", [], "contratto delle capacità, piano di fattibilità, chiedi_permesso, guardia contro il ragionamento a vuoto (agente finto)"),
     ("prova_estensioni_attacchi.py", [], "banco d'attacco delle estensioni: rete interna, indirizzi travestiti, rebinding, slowloris, dati esca, flussi, contaminazione, scarica_esempio"),
@@ -279,6 +282,7 @@ CON_OLLAMA = [
     ("prova_notizie_ollama.py", ["1"], "notizie a voce (13/10, feed di fantasia): «le notizie», «dimmi di più sulla seconda», la testata dai fatti nel contesto, tecnologia e meteo, iniezione in un sommario"),
     ("prova_ricerche_distanza_ollama.py", ["1"], "ricerche a distanza di turni (09/10, giro vero della DGX): «le ultime notizie» senza chiamate fermate, «prima mi parlavi di un festival» → quello di oggi dalla fonte giusta e non quello di ieri, contrario «ieri … Borgo Lieto», «quella cosa delle proteste» in una conversazione aperta; misure: nuova ricerca sulla stessa fonte, archivio non chiamato"),
     ("prova_ricerca_seguito_ollama.py", ["1"], "approfondire dopo una ricerca (09/10, caso vero della DGX: «Approfondiamo le condizioni [del re]» dopo le notizie, senza cercare): nuova ricerca mirata, contrari (chiacchierata, lista della spesa, internet spento); prima e dopo"),
+    ("prova_gioco_giudice_ollama.py", ["1"], "giudice di fase dei giochi (14/10, passo 6) sul modello del rilevatore: le 22 frasi del prototipo (le porte da 1 a 5 con la 2 aperta), almeno 20/22 giuste e nessuna mossa su «a chi tocca?» e «quanti punti ho?», tempo mediano"),
     ("prova_rivolta_ollama.py", ["1"], "giudizio «rivolta a Calliope» (09/10, F2 della compagnia) sul modello del rilevatore: 56 frasi di fantasia, almeno 25/27 rivolte e 26/29 non rivolte giuste, tempo mediano"),
     ("prova_brain_ollama.py", ["1"], "tool di base con il modello"),
     ("prova_rinomina_ollama.py", ["1"], "rinominare chi parla: mai al primo turno, solo dopo il «sì»"),
@@ -359,6 +363,7 @@ LIVELLO_2 = {
     "prova_gioco_voce.py",           # ~3 s (11/10, Node per la prova di fumo)
     "prova_gioco_macchina.py",       # ~4 s (13/10, Node)
     "prova_gioco_palco.py",          # ~3 s (14/10, Node)
+    "prova_gioco_stato.py",          # ~1 s (14/10, Node)
     "prova_agente_guida.py",         # ~10 s (11/10)
     "prova_fasi_agente.py",          # ~18 s (12/10 sera)
     "prova_fasi_agente_2.py",        # ~20 s (13/10)
@@ -387,7 +392,7 @@ LIVELLO_3 = {
     "prova_scheda_intera.py", "prova_markdown_pagina.py", "prova_cassetto_pagina.py",
     "prova_esercizi_pagina.py", "prova_vista_sviluppo_pagina.py", "prova_cronologia_pagina.py",
     "prova_compagnia_pagina.py", "prova_frase_lunga_voce.py", "prova_stanza_voce.py",
-    "prova_cdp_orfani.py", "prova_fine_turno_voce.py",
+    "prova_cdp_orfani.py", "prova_gioco_stato_pagina.py", "prova_fine_turno_voce.py",
 }
 # Mai nel gruppo parallelo, anche quando una prova li sceglie nel livello 2: un browser, un
 # tempo reale o tanti processi, che sotto carico falliscono a caso. Tutto il livello 3 è
@@ -747,6 +752,14 @@ LEGAMI = [
     ("calliope/schermi/pagina/telefono/", ["prova_pause.py", "prova_frase_lunga.py"]),
     ("pyproject.toml", ["prova_linux.py", "prova_gestore.py"]),
     ("uv.lock", ["prova_linux.py"]),
+    ('calliope/estensioni/macchina.py', ["prova_gioco_stato.py"]),
+    ('calliope/estensioni/motore_gioco.js', ["prova_gioco_stato.py"]),
+    ('calliope/schermi/giochi.py', ["prova_gioco_stato.py"]),
+    ('calliope/agenti/fumo_js.mjs', ["prova_gioco_stato.py"]),
+    ('calliope/estensioni/scheda.py', ["prova_gioco_stato.py"]),
+    ("calliope/gioco_stato.py", ["prova_gioco_stato.py", "prova_testo.py"]),
+    ("calliope/ciclo.py", ["prova_gioco_stato.py"]),
+    ("calliope/gioco_giudice.py", ["prova_gioco_stato.py"]),
 ]
 # Prove che il runner non lancia, con il perché (06/10, Q7): prova_runner controlla che ogni
 # prove/prova_*.py sia in A_SECCO, in CON_OLLAMA o qui. Una prova nuova dimenticata fallisce.
