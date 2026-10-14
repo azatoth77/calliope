@@ -7,7 +7,12 @@ sulla stessa conversazione:
 - `senza`: `stanza_contesto: false` (niente righe al modello: il riferimento);
 - `blocco`: `stanza_contesto_in_storia: false` (il blocco intero ricostruito a ogni turno nei dati
   del turno, come il 14/10 mattina);
-- `storia`: le righe nella storia in sola aggiunta (di serie dal 14/10 sera).
+- `storia`: le righe nella storia in sola aggiunta (di serie dal 14/10 sera), senza il pezzo in
+  attesa (`stanza_attesa: false`);
+- `attesa`: come `storia`, più il pezzo «in attesa» (14/10 notte, di serie): prima della domanda
+  le righe arrivate dopo il turno di prima si fissano e si scaldano in cache
+  (`Brain.stanza_attesa_prepara` e `stanza_attesa_scalda`, come fa il thread del servizio ogni
+  5 s), e il turno legge solo ciò che resta.
 
 Per turno: prima frase, token riletti dal motore (`prompt_eval_count` meno la parte in cache) e
 tempo di lettura; le mediane dal secondo turno (il primo legge il prefisso nuovo). Obiettivo del
@@ -23,6 +28,10 @@ Sulla DGX (il profilo della voce dal file locale, nella cartella dei dati):
 
     cd ~/calliope && V=~/.local/share/calliope/versioni/$(cat ~/.local/share/calliope/attuale) \\
         && $V/.venv/bin/python $V/prove/manuali/banco_stanza_storia.py --turni 10 --giri 2
+
+Come in auto il 14/10 sera (chiacchiere fitte fra un turno e l'altro), il confronto che conta:
+
+    ... banco_stanza_storia.py --turni 10 --giri 2 --righe 30 --modi senza,storia,attesa
 """
 
 import argparse
@@ -95,7 +104,8 @@ DOMANDE = ["Calliope, a cosa si riferiscono le notifiche?", "Calliope, che ore s
 
 def conversazione(cfg, modo: str, turni: int, righe_per_turno: int):
     cfg.stanza, cfg.stanza_contesto = "ombra", modo != "senza"
-    cfg.stanza_contesto_in_storia = modo == "storia"
+    cfg.stanza_contesto_in_storia = modo in ("storia", "attesa")
+    cfg.stanza_attesa = modo == "attesa"
     cfg.stanza_satelliti = []
     st = Stanza(cfg, STTFinto(), registry=Persone(), log=lambda m: None)
     st._info[1] = {"nome": "auto", "stanza": "auto", "canale": "satellite"}
@@ -117,6 +127,15 @@ def conversazione(cfg, modo: str, turni: int, righe_per_turno: int):
                 sicurezza="voce" if chi else "nessuna", p_min=None, rivolta="ignoto",
                 minore=False)
         inizio = base + righe_per_turno * 10 + 5
+        attesa_s = None
+        if modo == "attesa" and n > 0:
+            # Il thread del servizio: le righe arrivate si fissano e si scaldano prima della
+            # domanda (qui con l'orologio finto, a voce ferma)
+            b.last_turn_at = time.monotonic() - 60
+            t2 = time.perf_counter()
+            if b.stanza_attesa_prepara(ora=inizio - 1):
+                b.stanza_attesa_scalda()
+                attesa_s = round(time.perf_counter() - t2, 2)
         b.stanza_turno = ctx_mod.costruisci(st, 1, cfg, inizio)
         frase = DOMANDE[n % len(DOMANDE)]
         t1 = time.perf_counter()
@@ -128,12 +147,16 @@ def conversazione(cfg, modo: str, turni: int, righe_per_turno: int):
         risposta = re.sub(r"\s+", " ", "".join(parti)).strip()
         stt = getattr(b, "last_stanza_storia", None) or {}
         out.append({"turno": n + 1, "prima": primo, "riletti": getattr(b, "last_riletti", None),
+                    "scaldato_s": attesa_s,
                     "lettura": getattr(b, "last_lettura_s", None),
                     "nuove": stt.get("nuove"), "righe": stt.get("righe"),
                     "tool": [t.get("nome") for t in getattr(b, "last_tools", None) or ()]})
+        gia = (f" (più {stt.get('attesa')} in attesa, scaldate in {attesa_s} s)"
+               if stt.get("attesa") else "")
         print(f"  [{modo}] {n + 1:>2} prima frase "
               f"{'—' if primo is None else f'{primo:.2f} s'}, riletti {out[-1]['riletti']}, "
-              f"lettura {out[-1]['lettura']} s, righe nuove {stt.get('nuove', '—')}, nella "
+              f"lettura {out[-1]['lettura']} s, righe nuove {stt.get('nuove', '—')}"
+              f"{gia}, nella "
               f"storia {stt.get('righe', '—')}, tool {out[-1]['tool'] or '—'}: "
               f"«{frase}» → {risposta[:90]!r}", flush=True)
         th = getattr(b, "scalda_thread", None)
@@ -157,7 +180,7 @@ def main():
     ap.add_argument("--turni", type=int, default=10)
     ap.add_argument("--righe", type=int, default=12, help="righe nuove fra un turno e l'altro")
     ap.add_argument("--giri", type=int, default=1)
-    ap.add_argument("--modi", default="senza,blocco,storia")
+    ap.add_argument("--modi", default="senza,blocco,storia,attesa")
     a = ap.parse_args()
     cfg = load_config()
     print(f"modello: {cfg.llm_model} ({cfg.llm_backend}, profilo {cfg.llm_profilo})", flush=True)
@@ -175,7 +198,7 @@ def main():
         print(f"  {modo:>6}: prima frase {p} s{delta}; token riletti "
               f"{_med(m['riletti'] for m in ms)}; lettura {_med(m['lettura'] for m in ms)} s "
               f"({len(ms)} turni)")
-    print("Obiettivo: «storia» entro +0,1 s da «senza».")
+    print("Obiettivo: «storia» (e «attesa») entro +0,1 s da «senza».")
     return 0
 
 

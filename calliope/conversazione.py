@@ -113,6 +113,12 @@ class Conversazione:
         self.stanza: list = []
         self.stanza_mandate: set = set()
         self.stanza_n = 0
+        # I pezzi «in attesa» (14/10 notte, Brain.stanza_attesa_prepara): righe arrivate fra un
+        # turno e l'altro, già fissate e scaldate nella cache del motore; al turno dopo vanno
+        # davanti al pezzo del turno, legate alla sua frase. `stanza_sat`: il satellite delle
+        # righe della conversazione (quello dell'ultimo turno con la stanza)
+        self.stanza_attesa: list = []
+        self.stanza_sat = None
 
     # ── stato ──
     def vuota(self) -> bool:

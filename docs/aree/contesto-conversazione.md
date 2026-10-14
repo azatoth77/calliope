@@ -1706,6 +1706,95 @@ ciò che si era detto in auto fermato come `uscita_istruzione` per «o comunicaz
 [sicurezza-politica](sicurezza-politica.md), sezione «Il resoconto della stanza non è
 un'istruzione».
 
+## Il pezzo «in attesa» e il tetto alla riapertura (14/10 notte, ramo `giro-auto-14-10`)
+
+**Caso vero** (seconda prova in auto del 14/10 sera, telefono come satellite, due persone, stanza
+accesa con le righe nella storia, ricerca e ricerca anticipata, tenuta, ascolto durante la voce,
+corsia lenta, guardia in ombra, conoscenti; gemma4 26b-a4b qat su Ollama). `calliope stato
+--turni`: **prima frase mediana 2,31 s** (p75 2,71, p90 4,24) contro ~1,2–1,3 s dei giorni prima;
+«base senza tool, guardiano e correzione» 2,00 s su 18; tool in 15 turni (2,71 s contro 1,77 s);
+**rilettura 0,86 s** di mediana, 18 turni oltre 1 s («cache del prefisso persa»); token riletti
+dal motore mediana **1965** (p90 4147), stimati dalla guardia della cache 1942 (p90 2749); una
+`cache_rotta`; con il blocco 2,33 s, senza 2,15 s (un turno solo senza righe); contesto 20 855
+token. Nel log: ogni riapertura della conversazione («conversazione chiusa: troppo tempo
+dall'ultimo turno») metteva **tutte insieme** le righe degli ultimi 8 minuti («36 righe nuove
+nella storia (5476 caratteri)», «32 righe… 6773 caratteri»), e fra un turno e l'altro, quando si
+chiacchierava, le righe nuove arrivavano a 3709 caratteri.
+
+**Le cause, dal registro e dal codice.**
+
+- **La cache non si perdeva**: riletti dal motore ≈ stimati (1965 contro 1942 di mediana). I token
+  riletti erano **contenuto nuovo** da leggere a ogni domanda: le righe della stanza arrivate dopo
+  il turno di prima (in sola aggiunta, ma lette tutte alla domanda), più il turno prima e i dati
+  del turno. «Cache del prefisso persa» in `calliope stato --turni` vuol dire solo «rilettura
+  oltre 1 s». Il p90 dei riletti oltre la stima (4147 contro 2749) sono i turni dopo una
+  riapertura (conversazione nuova) e quelli con un tool.
+- **Le riaperture**: dopo `storia_inattiva_s` (300 s) la conversazione si chiude e la prima
+  domanda di quella nuova leggeva le righe di tutta la finestra (fino a ~1900 token).
+- **Ogni pezzo ha la sua busta**: ~490 caratteri di busta (dato non fidato) più ~190 di
+  intestazione, ~190 token, anche per una riga sola («1 righe nuove nella storia (699
+  caratteri)»). Da decidere con la sicurezza: una busta breve per i pezzi dopo il primo della
+  conversazione (non fatto: cambia ciò che il modello legge come dato non fidato).
+- **La ricerca anticipata** (22 turni su 31, p50 982 caratteri, ~280 token, ~0,12 s) è nei dati
+  del turno: si rilegge a ogni turno. Si stringe con la terza correzione di questo giro (righe
+  con almeno due parole della domanda, o col nome proprio: sezione dopo).
+- Il resto della prima frase oltre la rilettura (2,31 − 0,86 s) è la generazione della prima frase
+  del 26B, i tool (15 turni su 38, una passata in più) e il lavoro intorno; da guardare sulla DGX
+  con le misure nuove se resta lontano dai giorni prima (contesa della GPU con Whisper della
+  stanza, CAM++, il giudizio «rivolta»: l'arbitro della memoria ha le classi per misurarla).
+
+**1. Il pezzo «in attesa»** (`stanza_attesa`, di serie acceso; `stanza_attesa_caratteri` 600,
+`stanza_attesa_ogni_s` 5). Un thread per corsia (`Brain._stanza_attesa_ciclo`, acceso solo nel
+servizio: `main.py` mette `attesa_thread` a ogni Brain) ogni 5 s guarda la conversazione: se è
+aperta (non oltre `storia_inattiva_s` meno un giro: si chiuderebbe, e il lavoro andrebbe
+perso), la voce è ferma (niente risposta in corso), la stanza non è in pausa e le righe arrivate
+dopo l'ultimo turno sono almeno 600 caratteri, le **fissa** in un pezzo (`stanza_attesa_prepara`:
+lo stesso `stanza/contesto.pezzo` del turno, righe «mandate» da quel momento, testo che non cambia
+più) e lo mette nella cache del motore (`stanza_attesa_scalda` → `scalda_conversazione`, che ora
+aggiunge i pezzi in attesa dopo la storia). Al turno dopo `_stanza_prepara` mette i pezzi in
+attesa **davanti** al pezzo delle righe ancora più nuove, legati alla frase del turno (il segno
+`_stanza` diventa una lista): stesso testo e stesso posto della richiesta scaldata, quindi il
+motore li trova in cache. Le righe finite negli ultimi 4 s aspettano il turno (la domanda appena
+detta, «→ Calliope», non finisce in un pezzo in attesa prima di entrare nella storia). Un pezzo
+in attesa con righe non più nel registro («dimentica») se ne va; in pausa per ospiti aspetta. Le
+righe lasciate fuori da un tetto non tornano dopo, fuori ordine (`Pezzo.seq_max`: si prendono solo
+righe arrivate dopo l'ultima mandata). Registro dei turni: `stanza.storia.attesa` e
+`attesa_caratteri` (righe trovate già in cache); console «[STANZA] 5 righe nuove nella storia…,
+più 19 già in cache…» e «[LATENZA] righe della stanza in attesa: … in cache in 0,46 s»;
+`calliope stato --turni`, riga «Righe della stanza nella storia», «righe già in cache (pezzo in
+attesa) in N turni».
+
+**2. Il tetto alla riapertura** (`stanza_riapertura_caratteri`, 3000). Il primo pezzo di una
+conversazione prende le righe più nuove entro 3000 caratteri (gli ultimi `stanza_caldo_sempre_s`
+sempre); la sua finestra però si **allarga** fino all'inizio dell'ultimo scambio della stanza (righe
+senza un silenzio oltre `stanza_scambio_pausa_s`, al più 30 minuti: `contesto._finestra_scambio`),
+così una conversazione corta e rada entra intera. Il resto lo trovano la ricerca anticipata e
+`stanza_cerca`. Non scaldato: alla riapertura la conversazione nuova non c'è ancora (si chiude solo
+alla domanda), resta da fare se le riaperture pesano ancora.
+
+**Misura a secco** (`python prove\prova_stanza_attesa.py --misura`: motore finto con la cache del
+prefisso di Ollama, a messaggi, riscaldamenti compresi; conversazione come quella dell'auto, 14
+turni con 0–36 righe fra l'uno e l'altro e due riaperture, orologio finto). Token riletti alla
+domanda: **p50 428 → 388**, **p90 1661 → 1414**, in tutto 9303 → 7778 (+4529 letti in secondo
+piano, a voce ferma); nei turni dopo molte chiacchiere 1044 → 461, 641 → 427, 615 → 369; le due
+riaperture 1665 → 1414 e 1634 → 1399. I turni senza righe nuove restano ~160 (turno prima, dati del
+turno, domanda).
+
+**Banco col modello vero** (`prove/manuali/banco_stanza_storia.py`, modo nuovo `attesa`). Sul
+portatile, gemma4 e4b, 6 turni, 30 righe fra un turno e l'altro (dal secondo turno): `senza` 0,56
+s, 149 token riletti, lettura 0,10 s; `storia` **0,98 s (+0,42)**, 874 token, 0,33 s; `attesa`
+**0,59 s (+0,03)**, **103 token**, 0,09 s (le 30 righe scaldate in 0,44–0,49 s in secondo
+piano). **Da misurare sulla DGX** col 26B:
+
+    cd ~/calliope && V=~/.local/share/calliope/versioni/$(cat ~/.local/share/calliope/attuale) \
+        && $V/.venv/bin/python $V/prove/manuali/banco_stanza_storia.py --turni 10 --giri 2 --righe 30 --modi senza,storia,attesa
+
+obiettivo `attesa` entro +0,1 s da `senza`; poi sul vero, alla prossima prova in auto, la riga
+«Righe della stanza nella storia» con le righe già in cache, la rilettura e la prima frase di
+`calliope stato --turni`.
+
+Prove: `prove/prova_stanza_attesa.py` (livello 1, ~2 s), `prova_stanza_storia` invariata.
+
 ## Avvisi ai tutori: data, origine, trascrizione e audio (14/10 sera, ramo `avvisi-data`)
 
 Due cose toccano il contesto e la conservazione (il dettaglio è in [minori](minori.md)):

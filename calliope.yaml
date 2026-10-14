@@ -1371,6 +1371,22 @@ conversazione_stanza:
   # insieme (la cache si rompe una volta sola) e il prefisso nuovo si scalda in secondo piano;
   # anche il taglio e la compressione della storia portano via le righe dei turni tolti
   stanza_storia_caratteri: 16000
+  # Il pezzo «in attesa» (14/10 notte, dopo la seconda prova in auto: prima frase mediana 2,31 s,
+  # rilettura 0,86 s, fino a 3700 caratteri di righe nuove fra un turno e l'altro): con la
+  # conversazione aperta e la voce ferma, ogni `stanza_attesa_ogni_s` Brain guarda le righe
+  # arrivate dopo l'ultimo turno; oltre `stanza_attesa_caratteri` le fissa in un pezzo (lo
+  # stesso testo che avrebbe il turno dopo, e da allora non cambia più) e lo mette nella cache
+  # del motore in secondo piano. Al turno dopo il pezzo va davanti a quello delle righe ancora
+  # più nuove, e la sua lettura è già fatta. false = le righe nuove si leggono tutte al turno
+  stanza_attesa: true
+  stanza_attesa_caratteri: 600
+  stanza_attesa_ogni_s: 5.0
+  # Tetto delle righe del primo pezzo di una conversazione nuova (anche riaperta dopo
+  # `storia_inattiva_s`): nella prova del 14/10 sera 32 e 36 righe (6773 e 5476 caratteri,
+  # ~1800 token da leggere) entravano tutte insieme alla riapertura. Le più nuove, gli ultimi
+  # `stanza_caldo_sempre_s` sempre; la finestra si allarga fino all'inizio dell'ultimo scambio
+  # della stanza (al più 30 minuti), il resto lo trovano la ricerca anticipata e stanza_cerca
+  stanza_riapertura_caratteri: 3000
   # Passo 4 (14/10, calliope/stanza/cerca.py, tool stanza_cerca): ciò che il blocco caldo non
   # ha più o che si è detto in un'altra stanza («di cosa parlavamo in cucina prima?», «cosa
   # aveva detto Carlo della gita stamattina?»), cercato nel registro della stanza in memoria

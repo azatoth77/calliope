@@ -836,6 +836,7 @@ class Avvio:
     def _brain_e_compressione(self):
         cfg, s = self.cfg, self.s
         brain = self.brain = Brain(cfg, s.tools, self.tool_ctx)
+        brain.attesa_thread = True    # le righe della stanza in attesa (14/10 notte)
         # Conversazione come oggetto, archivio e compressione vicino al limite (05/10,
         # calliope/conversazione.py, calliope/compressione.py)
         brain.archivio_conv = self.conv_arch
@@ -1231,6 +1232,7 @@ class Corsie:
         for k in ("archivio_conv", "compressore", "luogo_fn", "prefix_tokens", "last_context"):
             setattr(b, k, getattr(brain, k, None))
         b.conversazioni, b.satellite = a.registro_conv, c.chiave
+        b.attesa_thread = True
         c.listener, c.speaker, c.speaker_ctx, c.brain, c.tool_ctx = lst, sp, sc, b, tc
         annunci = types.SimpleNamespace(**{n: smist.vista(n, c) for n in
                                            ("agenda", "documenti", "installazioni", "lavori",

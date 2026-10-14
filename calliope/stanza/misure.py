@@ -267,7 +267,9 @@ def riassunto(righe: list[dict], turni: list[dict] | None = None) -> dict:
              for k in ("con", "senza", "blocco", "senza_blocco")}
     blocco = {"turni": 0, "vuoti": 0, "tagliati": 0, "mancano": 0, "_righe": [], "_car": []}
     # Le righe nella storia in sola aggiunta (14/10 sera)
-    storia = {"turni": 0, "potature": 0, "_nuove": [], "_nuove_car": [], "_car": []}
+    storia = {"turni": 0, "potature": 0, "_nuove": [], "_nuove_car": [], "_car": [],
+              # Il pezzo in attesa (14/10 notte): turni che l'hanno trovato già in cache
+              "attesa_turni": 0, "attesa_righe": 0}
     turni_stanza = 0
     for t in turni or ():
         st = t.get("stanza") if isinstance(t.get("stanza"), dict) else None
@@ -304,6 +306,9 @@ def riassunto(righe: list[dict], turni: list[dict] | None = None) -> dict:
             storia["_nuove"].append(float(sto.get("nuove") or 0))
             storia["_nuove_car"].append(float(sto.get("nuove_caratteri") or 0))
             storia["_car"].append(float(sto.get("caratteri") or 0))
+            if sto.get("attesa"):
+                storia["attesa_turni"] += 1
+                storia["attesa_righe"] += int(sto.get("attesa") or 0)
         c = (st or {}).get("copertura")
         if isinstance(c, dict):
             cop["turni"] += 1
@@ -439,7 +444,9 @@ def testo(r: dict) -> str:
         out.append(f"  Righe della stanza nella storia (in sola aggiunta): {sto['turni']} turni, "
                    f"nuove per turno p50 {sto['nuove_p50']} righe ({sto['nuove_caratteri_p50']} "
                    f"caratteri), davanti al modello p50 {sto['caratteri_p50']} caratteri (p90 "
-                   f"{sto['caratteri_p90']}), potature {sto['potature']}")
+                   f"{sto['caratteri_p90']}), potature {sto['potature']}"
+                   + (f"; righe già in cache (pezzo in attesa) in {sto['attesa_turni']} turni, "
+                      f"{sto['attesa_righe']} righe" if sto.get("attesa_turni") else ""))
     k = r.get("cerca") or {}
     if k.get("chiamate"):
         quota = k.get("quota_attesa")
