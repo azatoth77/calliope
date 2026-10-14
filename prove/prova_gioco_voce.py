@@ -56,6 +56,27 @@ errori = 0
 T0 = time.perf_counter()
 # I comandi a voce del gioco delle porte (macchina.ascolta: quelli di Calliope, poi le porte)
 TUTTI = ["inizia", "avanti", "ancora", "porta_1", "porta_2", "porta_3"]
+# Il numero dell'istantanea per partita e schermo (14/10: il motore la manda dopo ogni mossa)
+_N: dict = {}
+
+
+def stato(a, S, pid, comandi, fase="turno", **altro):
+    """L'istantanea del motore come la manda il riquadro (14/10, passo 2): i comandi a voce
+    attivi vengono da qui. Il risultato della pagina."""
+    k = (pid, S["id"])
+    _N[k] = _N.get(k, 0) + 1
+    # (la frequenza dei messaggi della pagina non è ciò che si prova qui)
+    a.giochi.partite[pid].posti[S["id"]].messaggi.clear()
+    prep = fase == "preparazione"
+    ist = {"n": _N[k], "fase": fase, "tocca": None if prep else 0, "turno": 0 if prep else 1,
+           "giocatori": [] if prep else [{"nome": "Giocatore 1", "punti": 0}], "esito": None,
+           "comandi": list(comandi)}
+    ist.update(altro)
+    return a.pagina(S, {"partita": pid, "tipo": "stato", "istantanea": ist})
+
+
+def senza_n(d):
+    return {k: v for k, v in d.items() if k != "n"}
 
 
 def sezione(nome):
@@ -151,25 +172,29 @@ def prova_server(tmp: Path):
     pid = out.get("partita")
     verifica("prima di «pronto» nessun gioco ascolta", a.giochi.ascolto([A["id"]]) is None)
     r = a.pagina(A, {"partita": pid, "tipo": "pronto"})
-    verifica("«pronto»: l'avvio dice i comandi dichiarati, e la sveglia della voce suona",
-             r["avvio"].get("comandi") == TUTTI and ev.is_set(), str(r.get("avvio")))
+    verifica("«pronto»: il riquadro è aperto ma senza istantanea non ascolta ancora (il server "
+             "non deduce lo stato)", r.get("ok") and "comandi" not in r["avvio"]
+             and a.giochi.ascolto([A["id"]]) is None, str(r.get("avvio")))
+    r = stato(a, A, pid, ["inizia"], fase="preparazione")
     info = a.giochi.ascolto([A["id"]])
-    verifica("il gioco ascolta tutti i suoi comandi", info is not None
-             and list(info["comandi"]) == TUTTI
-             and info["giocatore"] is True and info["schermo"] == A["id"], str(info))
+    verifica("la prima istantanea (preparazione): ascolta «inizia», e la sveglia della voce suona",
+             r.get("ok") and info is not None and list(info["comandi"]) == ["inizia"]
+             and ev.is_set() and info["giocatore"] is True and info["schermo"] == A["id"]
+             and info["istantanea"]["fase"] == "preparazione", str(info))
     verifica("contrario: sullo schermo di un altro satellite niente",
              a.giochi.ascolto([B["id"]]) is None)
     ev.clear()
-    r = a.pagina(A, {"partita": pid, "tipo": "comandi", "attivi": ["porta_1", "porta_3"]})
-    verifica("il motore nel riquadro sceglie un sottoinsieme dei comandi dichiarati",
+    r = stato(a, A, pid, ["porta_1", "porta_3"])
+    verifica("il motore nel riquadro sceglie un sottoinsieme dei comandi della fase",
              r.get("ok") and list(a.giochi.ascolto([A["id"]])["comandi"])
              == ["porta_1", "porta_3"], str(r))
     for nome, attivi in (("un comando nuovo", ["porta_1", "porta_4"]), ("un numero", [1]),
-                         ("non un elenco", "porta_1"), ("troppi", ["porta_1"] * 65)):
-        r = a.pagina(A, {"partita": pid, "tipo": "comandi", "attivi": attivi})
-        verifica(f"rifiutato: {nome} (resta il sottoinsieme di prima)",
-                 r.get("_stato") == 400 and list(a.giochi.ascolto([A["id"]])["comandi"])
-                 == ["porta_1", "porta_3"], str(r))
+                         ("non un elenco", "porta_1"), ("troppi", ["porta_1"] * 65),
+                         ("un comando di un'altra fase", ["porta_1", "ancora"])):
+        r = stato(a, A, pid, attivi)
+        verifica(f"istantanea scartata: {nome} (e il gioco non ascolta finché non ne arriva una "
+                 "buona)", r.get("_stato") == 400 and a.giochi.ascolto([A["id"]]) is None, str(r))
+    stato(a, A, pid, ["porta_1", "porta_3"])
     a.eventi.clear()
     verifica("mossa: un comando non attivo non parte",
              a.giochi.comando(pid, A["id"], "porta_2") is False and not a.eventi)
@@ -177,20 +202,23 @@ def prova_server(tmp: Path):
              a.giochi.comando(pid, A["id"], "apri tutto") is False and not a.eventi)
     ok = a.giochi.comando(pid, A["id"], "porta_3", "Elena")
     e = [x for x in a.eventi if x[1] == "gioco"]
-    verifica("mossa: al riquadro solo il nome del comando e quello di chi gioca",
+    verifica("mossa: al riquadro solo il nome del comando, il numero dell'istantanea e chi gioca",
              ok and len(e) == 1 and e[0][0] == A["id"] and e[0][2] == {
                  "partita": pid, "tipo": "comando",
-                 "dati": {"comando": "porta_3", "giocatore": "Elena"}}, str(e))
-    r = a.pagina(A, {"partita": pid, "tipo": "comandi", "attivi": []})
+                 "dati": {"comando": "porta_3", "n": _N[(pid, A["id"])],
+                          "giocatore": "Elena"}}, str(e))
+    r = stato(a, A, pid, [])
     verifica("comandi attivi vuoti (un'animazione, la fine): non ascolta, e la sveglia suona",
              r.get("ok") and a.giochi.ascolto([A["id"]]) is None and ev.is_set())
-    a.pagina(A, {"partita": pid, "tipo": "comandi", "attivi": ["porta_1"]})
+    stato(a, A, pid, ["porta_1"])
     r = a.pagina(A, {"partita": pid, "tipo": "chiuso"})
     verifica("«chiuso» dalla pagina (✕, Esc, chiudi il gioco): non ascolta più",
              r.get("ok") and a.giochi.ascolto([A["id"]]) is None)
     a.pagina(A, {"partita": pid, "tipo": "pronto"})
-    verifica("«Riapri» (un pronto nuovo): di nuovo tutti i comandi",
-             len(a.giochi.ascolto([A["id"]])["comandi"]) == len(TUTTI))
+    _N[(pid, A["id"])] = 0                    # il motore riparte da capo
+    stato(a, A, pid, ["inizia"], fase="preparazione")
+    verifica("«Riapri» (un pronto nuovo, il motore da capo con n che riparte): ascolta di nuovo",
+             list(a.giochi.ascolto([A["id"]])["comandi"]) == ["inizia"])
     a.giochi.partite[pid].posti[A["id"]].contatto -= GI.VIVO_S + 1
     verifica("senza segni dalla pagina da oltre VIVO_S (schermo spento): non ascolta",
              a.giochi.ascolto([A["id"]]) is None)
@@ -206,24 +234,26 @@ def prova_server(tmp: Path):
                                    "scheda": m["scheda"]})
     out = a.chiama("est_porte_mute", {}, "Dario", schermo=A)
     a.pagina(A, {"partita": out["partita"], "tipo": "pronto"})
+    stato(a, A, out["partita"], ["porta_1"])
     a.eventi.clear()
     a.giochi.comando(out["partita"], A["id"], "porta_1", "Elena")
     e = [x for x in a.eventi if x[1] == "gioco"]
     verifica("senza «giocatore» nella macchina la mossa non porta nessun nome",
-             e and e[0][2]["dati"] == {"comando": "porta_1"}, str(e))
+             e and senza_n(e[0][2]["dati"]) == {"comando": "porta_1"}, str(e))
     # I comandi di un altro gioco (il tris ha le caselle, non le porte)
     out = a.chiama("est_tris", {}, "Dario", schermo=A)
     a.pagina(A, {"partita": out["partita"], "tipo": "pronto"})
-    r = a.pagina(A, {"partita": out["partita"], "tipo": "comandi", "attivi": ["porta_1"]})
-    verifica("contrario: un comando di un altro gioco è rifiutato (resta l'elenco del tris)",
-             r.get("_stato") == 400 and "casella_5" in a.giochi.ascolto([A["id"]])["comandi"],
-             str(r))
+    stato(a, A, out["partita"], ["casella_5"])
+    r = stato(a, A, out["partita"], ["porta_1"])
+    verifica("contrario: un comando di un altro gioco è rifiutato (l'istantanea è scartata)",
+             r.get("_stato") == 400
+             and a.giochi.partite[out["partita"]].posti[A["id"]].istantanea is None, str(r))
     # La partita di prova: i comandi arrivano (sono un ingresso), il ponte no
     mp, _ = file_gioco("porte")
     out = a.giochi.avvia_prova(a.chi("Dario", schermo=C), "porte", 1, valida(mp))
     pp = out["partita"]
     a.pagina(C, {"partita": pp, "tipo": "pronto"})
-    r = a.pagina(C, {"partita": pp, "tipo": "comandi", "attivi": ["porta_2"]})
+    r = stato(a, C, pp, ["porta_2"])
     a.eventi.clear()
     ok = a.giochi.comando(pp, C["id"], "porta_2", "Dario")
     rs = a.pagina(C, {"partita": pp, "tipo": "salva", "chiave": "x", "valore": 1})
@@ -306,6 +336,7 @@ def prova_ciclo(tmp: Path):
     out = a.chiama("est_porte", {}, "Dario", schermo=A)
     pid = out["partita"]
     a.pagina(A, {"partita": pid, "tipo": "pronto"})
+    stato(a, A, pid, ["porta_1", "porta_2", "porta_3"])
     verifica("il gioco apre i comandi: la sveglia del ciclo suona", c.sveglia_gioco.is_set())
     detto, chiesto, mosse = giro("La porta due.")
     fino = ascolto.chiamate[-1]
@@ -314,7 +345,7 @@ def prova_ciclo(tmp: Path):
              f"{fino - time.monotonic():.1f} s, {c.attesa_voce}")
     verifica("«La porta due.» senza il nome nella finestra del gioco: una mossa, senza il "
              "modello e senza parlare",
-             mosse == [{"partita": pid, "tipo": "comando", "dati": {"comando": "porta_2"}}]
+             [senza_n(m_["dati"]) for m_ in mosse] == [{"comando": "porta_2"}]
              and not chiesto and not detto and c.rec.get("esito") == "gioco_comando"
              and "gioco_comando" in c.rec.get("regole", []) and c.rec.get("testo") is None,
              f"{mosse} {chiesto} {detto} {c.rec}")
@@ -339,7 +370,7 @@ def prova_ciclo(tmp: Path):
     detto, chiesto, mosse = giro("Calliope, la porta 1!")
     verifica("con il nome davanti e i numeri in cifre: mossa",
              [m_["dati"]["comando"] for m_ in mosse] == ["porta_1"] and not chiesto)
-    a.pagina(A, {"partita": pid, "tipo": "comandi", "attivi": ["porta_3", "ancora"]})
+    stato(a, A, pid, ["porta_3"])
     detto, chiesto, mosse = giro("Due.")
     verifica("contrario: un comando non attivo senza il nome → ignorato, niente mossa",
              not mosse and not chiesto and c.rec.get("esito") == "ignorato")
@@ -351,6 +382,7 @@ def prova_ciclo(tmp: Path):
     verifica("contrario: con una domanda di Calliope in sospeso la frase va al modello",
              chiesto and not mosse)
     fine = list(cervello.fine)
+    stato(a, A, pid, ["ancora"], fase="fine")
     detto, chiesto, mosse = giro("Ricomincia.")
     verifica("«Ricomincia.» dentro il gioco: riavvia il gioco («ancora»), non la conversazione",
              [m_["dati"]["comando"] for m_ in mosse] == ["ancora"]
@@ -364,6 +396,7 @@ def prova_ciclo(tmp: Path):
     detto, chiesto, mosse = giro("Calliope, tre.", k8[:4])
     verifica("contrario: dal satellite della cucina «Calliope, tre.» va al modello, niente "
              "mossa sul gioco dello studio", chiesto and not mosse)
+    stato(a, A, pid, ["porta_3"])
     # Il tetto di tempo senza mosse: torna «dormo»
     a.cfg.giochi_ascolto_s = 0.3
     c.awake_until = 0.0
@@ -388,13 +421,15 @@ def prova_ciclo(tmp: Path):
 
     sezione("gioco_comando: il modello passa un comando detto in altro modo")
     a.pagina(A, {"partita": pid, "tipo": "pronto"})
+    _N[(pid, A["id"])] = 0
+    stato(a, A, pid, ["porta_1", "porta_2", "porta_3"])
     info = a.giochi.ascolto([A["id"]])
     sc = types.SimpleNamespace(current_speaker="Elena", identified_by="voce")
     ctx = types.SimpleNamespace(gioco_turno=info, schermi=a.hub, speaker_ctx=sc,
                                 cfg=a.cfg, regole=[])
     a.eventi.clear()
     r = _gioco_comando(ctx, comando="porta_3")
-    e = [x[2]["dati"] for x in a.eventi if x[1] == "gioco"]
+    e = [senza_n(x[2]["dati"]) for x in a.eventi if x[1] == "gioco"]
     verifica("«apri la terza» → porta_3: la mossa parte, la frase è la forma del comando",
              r.get("ok") and r.get("risposta_finale") == "Porta 3."
              and e == [{"comando": "porta_3", "giocatore": "Elena"}], f"{r} {e}")
@@ -409,7 +444,7 @@ def prova_ciclo(tmp: Path):
     sc.identified_by = "breve"
     a.eventi.clear()
     _gioco_comando(ctx, comando="due")
-    e = [x[2]["dati"] for x in a.eventi if x[1] == "gioco"]
+    e = [senza_n(x[2]["dati"]) for x in a.eventi if x[1] == "gioco"]
     verifica("il nome di chi gioca solo con la voce riconosciuta (non la frase breve)",
              e == [{"comando": "porta_2"}], str(e))
     r = _gioco_comando(types.SimpleNamespace(gioco_turno=None, schermi=a.hub, regole=[]),

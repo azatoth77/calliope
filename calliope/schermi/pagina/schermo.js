@@ -3489,7 +3489,11 @@
   const TIPI_DAL_RIQUADRO = {
     pronto: [], pong: ["n"], salva: ["chiave", "valore"], leggi: ["chiave"], manda: ["dati"],
     chat: ["testo"], di: ["testo"], azione: ["nome", "argomenti"], fine: ["esito"],
-    errore: ["testo"], comandi: ["attivi"],
+    errore: ["testo"],
+    // L'istantanea della partita (14/10, il motore dei giochi): fase, a chi tocca, punti,
+    // comandi a voce attivi, numerata; con lo stato per la ripresa dopo «Riapri». E i comandi a
+    // voce che il motore ha rifiutato perché arrivati su un'istantanea vecchia
+    stato: ["istantanea", "ripresa"], rifiutato: ["comando", "motivo", "n"],
     // La diagnosi del palco (14/10, il motore dei giochi): al più tre frasi su ciò che esce
     palco: ["difetti"],
   };
@@ -3498,6 +3502,7 @@
   const COMANDO_GIOCO = /^[a-z0-9][a-z0-9_]{0,23}$/;
   const CON_RISPOSTA = ["salva", "leggi", "chat", "di", "azione"];
   const GIOCO_MAX = 8192;            // caratteri di un messaggio (il server ha il suo tetto)
+  const GIOCO_MAX_STATO = 24576;     // «stato» porta anche la ripresa (al più 16 000 sul server)
   const GIOCO_AL_SECONDO = 25;       // oltre: il riquadro si chiude
   const BATTITO_MS = 15000;          // tempo di gioco (minori): un battito mentre si vede
   const STATO_GIOCHI = new WeakMap();
@@ -3806,7 +3811,8 @@
     let n = Infinity;
     try { n = JSON.stringify(m).length; } catch (e) { /* non serializzabile */ }
     if (!m || typeof m !== "object" || m.calliope !== 1 || typeof m.tipo !== "string"
-        || !Object.prototype.hasOwnProperty.call(TIPI_DAL_RIQUADRO, m.tipo) || n > GIOCO_MAX) {
+        || !Object.prototype.hasOwnProperty.call(TIPI_DAL_RIQUADRO, m.tipo)
+        || n > (m.tipo === "stato" ? GIOCO_MAX_STATO : GIOCO_MAX)) {
       if (++st.scartati > 20) chiudiGioco(f, "Il gioco mandava messaggi non validi: l'ho chiuso.", "messaggi non validi");
       return;
     }
@@ -3857,9 +3863,11 @@
       return;
     }
     if (d.tipo === "comando") {
-      // Una mossa a voce (11/10): solo un nome di comando e, al più, il nome di chi gioca
+      // Una mossa a voce (11/10): solo un nome di comando, il numero dell'istantanea su cui è
+      // stato riconosciuto (14/10) e, al più, il nome di chi gioca
       if (typeof x.comando !== "string" || !COMANDO_GIOCO.test(x.comando)) return;
       const dati = { comando: x.comando };
+      if (Number.isInteger(x.n) && x.n >= 0) dati.n = x.n;
       if (typeof x.giocatore === "string" && x.giocatore.length <= 40) dati.giocatore = x.giocatore;
       fs.forEach((f) => { if (!statoGioco(f).chiuso) versoRiquadro(f, { tipo: "comando", dati }); });
       return;

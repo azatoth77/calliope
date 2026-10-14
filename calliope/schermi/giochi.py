@@ -30,13 +30,16 @@ partita che l'ha letto non manda più messaggi agli altri schermi (`gioco_dati_p
   versione è la candidata con l'impronta di quando è stata consegnata.
 
 - **Comandi a voce** (11/10, `scheda.ascolta`, calliope/gioco_voce.py; dal 14/10 ricavati dalla
-  macchina a stati, e a dirli è il motore nel riquadro): il riquadro dichiara
-  quali dei suoi comandi valgono adesso (`comandi`, solo un sottoinsieme di quelli del
-  manifesto); il ciclo della voce chiede `ascolto(schermi)` per il gioco aperto sullo schermo
-  del satellite che ascolta e manda la mossa con `comando` (evento SSE «gioco» di tipo
-  «comando», la pagina la passa al riquadro). Al gioco arrivano solo il nome del comando e, se
-  il manifesto lo chiede, il nome di chi è riconosciuto dalla voce. Valgono anche in una partita
-  di prova: sono un ingresso, come i tocchi, non un ponte verso Calliope.
+  macchina a stati, e a dirli è il motore nel riquadro): dal 14/10 il motore manda dopo ogni
+  disegno l'**istantanea** numerata della partita (`stato`: fase, a chi tocca, giocatori e
+  punti, esito, comandi a voce attivi), validata qui contro il manifesto (solo un sottoinsieme
+  dei comandi di quella fase) e tenuta come stato della partita (`Posto.istantanea`); il ciclo
+  della voce chiede `ascolto(schermi)` per il gioco aperto sullo schermo del satellite che
+  ascolta e manda la mossa con `comando` (evento SSE «gioco» di tipo «comando», con il numero
+  dell'istantanea: il motore rifiuta un comando vecchio e lo dice con `rifiutato`). Al gioco
+  arrivano solo il nome del comando, il numero e, se il manifesto lo chiede, il nome di chi è
+  riconosciuto dalla voce. Valgono anche in una partita di prova: sono un ingresso, come i
+  tocchi, non un ponte verso Calliope.
 """
 
 from __future__ import annotations
@@ -68,16 +71,21 @@ NOTE_GUASTO = {"non risponde": "Il gioco non rispondeva più: l'ho chiuso.",
                "messaggi non validi": "Il gioco mandava messaggi non validi: l'ho chiuso.",
                "non parte": "Il gioco non è partito: l'ho chiuso."}
 TIPI_PAGINA = ("pronto", "battito", "salva", "leggi", "manda", "chat", "di", "azione", "fine",
-               "errore", "guasto", "comandi", "chiuso", "palco")
+               "errore", "guasto", "stato", "rifiutato", "chiuso", "palco")
 # Una partita di prova (11/10): il gioco gira e basta, senza ponte verso Calliope né dati. I
-# comandi a voce sì (`comandi` sceglie quali valgono, `chiuso` lo manda la pagina quando il
-# gioco si chiude): sono un ingresso, come i tocchi, e non portano niente fuori dal riquadro.
+# comandi a voce sì (`stato`, l'istantanea del motore, dice quali valgono; `rifiutato`, un
+# comando arrivato su un'istantanea vecchia; `chiuso` lo manda la pagina quando il gioco si
+# chiude): sono un ingresso, come i tocchi, e non portano niente fuori dal riquadro.
 # Anche `palco` (14/10): la diagnosi del motore su ciò che esce dal palco, per il collaudo
-TIPI_PROVA = ("pronto", "battito", "fine", "errore", "guasto", "comandi", "chiuso", "palco")
+TIPI_PROVA = ("pronto", "battito", "fine", "errore", "guasto", "stato", "rifiutato", "chiuso",
+              "palco")
 # Un riquadro di cui la pagina non dice niente da tanto (il battito arriva ogni 15 s mentre si
 # vede) non riceve comandi a voce: lo schermo è spento, la pagina è altrove o il gioco è nascosto
 VIVO_S = 40.0
 MAX_ATTIVI = 64
+# Il messaggio «stato» (14/10): l'istantanea più, per la ripresa dopo «Riapri», lo stato intero
+# del motore (opaco, al più come `salva`)
+MAX_RIPRESA = MAX_SALVA
 
 
 def candidata_intatta(est, nome: str, n) -> bool:
@@ -117,16 +125,28 @@ class Posto:
         self.messaggi: deque = deque(maxlen=200)     # istanti, per la frequenza
         self.chat: deque = deque(maxlen=50)
         # I comandi a voce (11/10): il riquadro è aperto (dopo «pronto», fino a «chiuso» o al
-        # cane da guardia), l'ultimo messaggio della pagina (time.time), i comandi che valgono
-        # adesso (None: tutti quelli del manifesto) e l'ultima mossa o apertura (monotonic)
+        # cane da guardia), l'ultimo messaggio della pagina (time.time) e l'ultima mossa o
+        # apertura (monotonic)
         self.aperto = False
         self.contatto = 0.0
-        self.attivi: list[str] | None = None
         self.segno = 0.0
+        # L'istantanea della partita (14/10, passo 2 del progetto): l'ultima valida mandata dal
+        # motore, controllata contro il manifesto (macchina.valida_istantanea). I comandi a voce
+        # attivi vengono solo da qui: senza un'istantanea valida il gioco non ascolta
+        self.istantanea: dict | None = None
+        self.ist_n = -1                     # il numero dell'ultima valida (non può calare)
+        self.scartate = 0                   # istantanee non valide (diagnosi)
+        self.rifiutati = 0                  # comandi a voce rifiutati dal motore (vecchi)
         # La diagnosi del palco (14/10): i difetti misurati dal motore sullo schermo vero (al
         # più tre frasi; [] = la pagina ci sta), None finché non arriva
         self.palco: list[str] | None = None
         self.palco_n = 0                    # quante misure sono arrivate
+
+    @property
+    def attivi(self) -> list[str] | None:
+        """I comandi a voce dell'ultima istantanea valida, nell'ordine del motore (None senza
+        istantanea): per le prove e la diagnosi."""
+        return list(self.istantanea["comandi"]) if self.istantanea is not None else None
 
 
 class Partita:
@@ -155,6 +175,12 @@ class Partita:
     @property
     def massimo(self) -> int:
         return int((self.scheda.get("giocatori") or {}).get("max", 1))
+
+    @property
+    def macchina(self) -> dict | None:
+        """La macchina a stati del manifesto approvato (scheda.macchina), o None."""
+        m = self.scheda.get("macchina")
+        return m if isinstance(m, dict) and m.get("fasi") else None
 
     @property
     def ascolta(self) -> dict | None:
@@ -420,7 +446,10 @@ class Giochi:
             grezzo = len(json.dumps(dati, ensure_ascii=False))
         except (TypeError, ValueError):
             return {"errore": "dati non validi", "_stato": 400}
-        if grezzo > self._c("giochi_messaggio_max", 4096) + 512:
+        tetto = self._c("giochi_messaggio_max", 4096) + 512
+        if tipo == "stato":
+            tetto += MAX_RIPRESA
+        if grezzo > tetto:
             self._registra(p, "messaggio_grande", regola="gioco_messaggio_grande")
             return {"errore": "messaggio troppo grande", "_stato": 413}
         p.ultimo = ora
@@ -433,11 +462,9 @@ class Giochi:
             return {"errore": "non riuscito", "_stato": 500}
 
     def _avvio(self, p: Partita, posto: Posto) -> dict:
-        a = p.ascolta
         return {"partita": p.id, "giocatore": posto.giocatore,
                 "giocatori": len(p.posti), "massimo": p.massimo, "condivisa": p.condivisa,
-                "storia": list(p.storia)[-100:], "lingua": "it",
-                **({"comandi": list(a["comandi"])} if a else {})}
+                "storia": list(p.storia)[-100:], "lingua": "it"}
 
     def _t_pronto(self, p: Partita, posto: Posto, dati) -> dict:
         from .. import minori
@@ -453,9 +480,11 @@ class Giochi:
                 return {"ok": False, "fine_tempo": True,
                         "nota": "Per oggi il tempo dei giochi è finito."}
         posto.fermato = False
-        # Riquadro nuovo (anche «Riapri» o la pagina ricaricata): tutti i comandi valgono, e la
-        # finestra senza nome riparte da adesso
-        posto.aperto, posto.attivi, posto.segno = True, None, time.monotonic()
+        # Riquadro nuovo (anche «Riapri» o la pagina ricaricata): il motore riparte e manda la
+        # sua istantanea (fino ad allora niente comandi a voce: il server non deduce lo stato),
+        # e la finestra senza nome riparte da adesso
+        posto.aperto, posto.segno = True, time.monotonic()
+        posto.istantanea, posto.ist_n = None, -1
         if p.ascolta:
             self.sveglia_voce()
         self._agli_altri(p, posto, "giocatori", {"giocatori": len(p.posti),
@@ -635,29 +664,45 @@ class Giochi:
         es = AzioneGioco(self, p, posto, nome, args, rif)
         return es.avvia()
 
-    def _t_comandi(self, p: Partita, posto: Posto, dati) -> dict:
-        """Il riquadro dice quali dei suoi comandi a voce valgono adesso (le porte ancora
-        chiuse, niente durante un'animazione): solo un sottoinsieme di quelli del manifesto,
-        mai comandi nuovi."""
-        a = p.ascolta
-        if a is None:
-            return {"errore": "questo gioco non ha comandi a voce", "_stato": 403}
-        lista = dati.get("attivi")
-        if not isinstance(lista, list) or len(lista) > MAX_ATTIVI:
-            return {"errore": "attivi: un elenco di nomi di comandi", "_stato": 400}
-        nomi = [x for x in lista if isinstance(x, str)]
-        fuori = [x[:24] for x in nomi if x not in a["comandi"]]
-        if fuori or len(nomi) != len(lista):
-            self._registra(p, "comandi_rifiutati", regola="gioco_comando_non_dichiarato",
-                           comandi=fuori[:5])
-            return {"errore": "comandi non dichiarati nel manifesto: "
-                              + ", ".join(fuori[:5] or ["(non testo)"]), "_stato": 400}
+    def _t_stato(self, p: Partita, posto: Posto, dati) -> dict:
+        """L'istantanea della partita dal motore (14/10, passo 2 del progetto): fase, a chi tocca,
+        giocatori e punti, esito, i comandi a voce che valgono adesso, numerata. Validata contro
+        il manifesto approvato (macchina.valida_istantanea): solo comandi che quella fase può
+        avere, mai nuovi; il numero non cala. Una non valida si scarta e il gioco resta senza
+        comandi a voce finché non ne manda una buona (regola gioco_stato_non_valido)."""
+        from ..estensioni import macchina as mc
+        m = p.macchina
+        if m is None or p.ascolta is None:
+            return {"errore": "questo gioco non ha la macchina a stati", "_stato": 403}
+        try:
+            ist = mc.valida_istantanea(dati.get("istantanea"), m, p.scheda.get("giocatori")
+                                       or {}, posto.ist_n)
+        except mc.IstantaneaNonValida as e:
+            prima = bool(self._attivi(p, posto))
+            posto.istantanea = None
+            posto.scartate += 1
+            self._registra(p, "stato_scartato", regola="gioco_stato_non_valido",
+                           motivo=str(e)[:120])
+            if prima:
+                self.sveglia_voce()
+            return {"errore": f"istantanea non valida: {e}", "_stato": 400}
         prima = self._attivi(p, posto)
-        scelti = set(nomi)
-        posto.attivi = [c for c in a["comandi"] if c in scelti]
-        if bool(prima) != bool(posto.attivi):
+        with self._lock:
+            posto.istantanea, posto.ist_n = ist, ist["n"]
+        if bool(prima) != bool(ist["comandi"]):
             self.sveglia_voce()
-        return {"ok": True, "attivi": list(posto.attivi)}
+        return {"ok": True, "n": ist["n"]}
+
+    def _t_rifiutato(self, p: Partita, posto: Posto, dati) -> dict:
+        """Il motore ha rifiutato un comando a voce: era stato riconosciuto su un'istantanea
+        che nel frattempo è cambiata (un tocco arrivato prima), o non vale più. Solo per il
+        registro: lo stato resta quello del motore."""
+        posto.rifiutati += 1
+        motivo = str(dati.get("motivo") or "")[:20]
+        self._registra(p, "comando_rifiutato", regola="gioco_comando_vecchio"
+                       if motivo == "vecchio" else "gioco_comando_rifiutato",
+                       comando=str(dati.get("comando") or "")[:24], motivo=motivo)
+        return {"ok": True}
 
     def _t_chiuso(self, p: Partita, posto: Posto, dati) -> dict:
         """La pagina ha chiuso il gioco (✕, Esc, «chiudi il gioco»): niente più comandi a voce
@@ -717,10 +762,14 @@ class Giochi:
     # ── i comandi a voce (11/10, calliope/gioco_voce.py) ──
     @staticmethod
     def _attivi(p: Partita, posto: Posto) -> list[str]:
+        """I comandi a voce che valgono adesso: quelli dell'ultima istantanea valida (14/10),
+        nell'ordine del manifesto; nessuno senza istantanea."""
         a = p.ascolta
-        if a is None:
+        ist = posto.istantanea
+        if a is None or ist is None:
             return []
-        return list(a["comandi"]) if posto.attivi is None else list(posto.attivi)
+        scelti = set(ist["comandi"])
+        return [c for c in a["comandi"] if c in scelti]
 
     def aggiungi_sveglia(self, ev):
         """La sveglia di un ciclo della voce (Ciclo.__init__)."""
@@ -795,7 +844,7 @@ class Giochi:
         return {"partita": p.id, "schermo": posto.sid, "titolo": p.titolo,
                 "comandi": {c: list(a["comandi"][c]) for c in attivi},
                 "giocatore": bool(a.get("giocatore")), "segno": posto.segno,
-                "prova": p.prova}
+                "prova": p.prova, "istantanea": json.loads(json.dumps(posto.istantanea))}
 
     def in_corso(self, schermi) -> bool:
         """Un gioco è aperto e si vede adesso su uno di questi schermi (riquadro aperto da
@@ -827,7 +876,9 @@ class Giochi:
             a = p.ascolta
             if a is None or comando not in self._attivi(p, posto):
                 return False
-            dati = {"comando": comando}
+            # Il numero dell'istantanea su cui il comando è stato riconosciuto (14/10): se nel
+            # frattempo il motore ne ha fatta un'altra (un tocco arrivato prima), lo rifiuta
+            dati = {"comando": comando, "n": posto.istantanea["n"]}
             if giocatore and a.get("giocatore"):
                 dati["giocatore"] = str(giocatore)[:40]
             posto.segno = time.monotonic()

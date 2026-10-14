@@ -304,13 +304,20 @@ async function prepara(file, opzioni = {}) {
   // Il canale riservato al motore, come nel riquadro (scheda.RUNTIME_JS): il motore lo prende e
   // lo toglie prima del codice del gioco
   const palchi = [];
+  const istantanee = [];           // le istantanee mandate a Calliope (14/10), le ultime
+  const rifiutati = [];
   g.__calliopeMotore = Object.freeze({
-    comandiAttivi: (nomi) => {
-      const l = Array.isArray(nomi) ? nomi.map(String) : [];
+    // L'istantanea (14/10, passo 2): i comandi a voce attivi sono i suoi; un nome non
+    // dichiarato è un errore (il server la scarterebbe)
+    stato: (ist) => {
+      const l = ist && Array.isArray(ist.comandi) ? ist.comandi.map(String) : [];
       const fuori = l.filter((x) => !dichiarati.includes(x));
-      if (fuori.length) nota("comandiAttivi", new Error(`comandi che la macchina del manifesto non ha: ${fuori.join(", ")}`));
+      if (fuori.length) nota("istantanea", new Error(`comandi che la macchina del manifesto non ha: ${fuori.join(", ")}`));
       else attivi = l;
+      istantanee.push(JSON.parse(JSON.stringify(ist)));
+      istantanee.splice(0, Math.max(0, istantanee.length - 50));
     },
+    rifiutato: (x) => { rifiutati.push(JSON.parse(JSON.stringify(x || {}))); },
     quandoComando: quando("comando"),
     palco: (d) => { palchi.push(d); },
   });
@@ -324,7 +331,7 @@ async function prepara(file, opzioni = {}) {
   }
   const amb = { errori, nota, nodi, radice, doc, tocchi, descrivi, lancia, evento, avanza,
                 respira, ascolti, attivi: () => attivi, dati, detti, caricato: false,
-                motore: null, giocoLogica: undefined, contesto, palchi };
+                motore: null, giocoLogica: undefined, contesto, palchi, istantanee, rifiutati };
   for (const f of file) {
     try { testi[base(f)] = readFileSync(f, "utf8"); } catch (e) { testi[base(f)] = ""; }
   }
@@ -716,5 +723,19 @@ export async function apriGioco(file, opzioni = {}) {
       return g;
     },
   };
+  // Per le prove di Calliope (14/10, non nel contratto dell'agente): le istantanee che il motore
+  // ha mandato a Calliope, i comandi che ha rifiutato, e un comando a voce come lo manda il
+  // server (con il numero dell'istantanea e il nome di chi gioca)
+  Object.defineProperty(g, "calliope", { enumerable: false, value: Object.freeze({
+    istantanee: () => JSON.parse(JSON.stringify(amb.istantanee)),
+    rifiutati: () => JSON.parse(JSON.stringify(amb.rifiutati)),
+    async comando(dati) {
+      for (const f of [...ascolti.comando]) {
+        try { f(Object.freeze({ ...dati })); } catch (e) { amb.nota("comando", e, { gestore: true }); }
+      }
+      await passa(opzioni.passo ?? 50);
+      return g;
+    },
+  }) });
   return g;
 }

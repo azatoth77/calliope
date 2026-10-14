@@ -209,6 +209,7 @@ A_SECCO = [
     ("prova_gioco_macchina.py", [], "macchina a stati dei giochi (13/10): scheda.macchina nel manifesto (comandi a voce piatti dagli slot, uguali in Python e nel motore, 14 contrari), documento del riquadro con il motore, il nucleo (preparazione, turni, esito, fine, ancora, tela; la forma dei risultati: esito annidato, dati mancanti, fuori da verso, attivi che allarga, vista), prova di fumo per fasi (senza uscita, mai raggiunta, mai attivo, non finisce, mossa che lancia, fuori dominio), apriGioco con g.stato() e i comandi con il valore"),
     # ~3 s: il palco fisso dei giochi (14/10), Node per l'impaginazione e la prova di fumo
     ("prova_gioco_palco.py", [], "il palco fisso dei giochi (14/10): l'impaginazione pura del motore nei due orientamenti (1280×720 e 720×1280) per i sei modelli più la tela, otto giocatori, il tris e le porte, senza niente fuori, sovrapposto o tagliato; i difetti messi apposta detti per l'agente (troppi pulsanti, titolo lunghissimo con la fonte, testo di una casella, esito lungo, griglia 12×12 con troppo testo, tela schiacciata); la prova di fumo che misura il palco di ogni pagina raggiunta (contrari con la fase e la strada) e g.palco(); la diagnosi «palco» anche in prova"),
+    ("prova_gioco_stato.py", [], "lo stato della partita che Calliope conosce (14/10, passo 2 del progetto dei giochi): l'istantanea del motore validata dal server contro il manifesto (banco d'attacco di 21 istantanee cattive, nome fuori forma → «Giocatore N», n che non cala), i comandi a voce solo dall'ultima valida, il comando con il numero dell'istantanea, rifiutato nel registro, tetto del messaggio, partita di prova; il motore nel DOM finto: istantanea a ogni disegno, comando vecchio o non attivo rifiutato, andata e ritorno JS → Python"),
     # ~60 s: la pagina degli schermi in Edge o Chromium senza finestra (senza si salta)
     ("prova_giochi_pagina.py", [], "giochi nella pagina vera: il riquadro ostile non legge la pagina né il localStorage, niente rete né WebRTC, messaggi falsi rifiutati, cane da guardia (ciclo infinito, navigazione, inondazione), partita condivisa tra due pagine (dal 14/10 con la tela dei segnali), comandi a voce (la mossa nel motore con il nome, il sottoinsieme a runtime, niente fuori elenco, partita di prova), la macchina a stati nel riquadro vero (13/10: preparazione, turno, esito che va avanti da solo), il palco fisso nel browser vero (14/10: ogni modello misurato sullo schermo a 900×800 e a 390×844 in verticale senza difetti, un difetto messo apposta trovato, il tocco su una casella del tris)"),
     ("prova_contesto_agenti.py", [], "contesto degli agenti (05/10): finestra dal setup, tetti della passata e del ragionamento, risultati lunghi in .calliope, diario del lavoro alle soglie, domanda a metà lavoro"),
@@ -356,6 +357,7 @@ LIVELLO_2 = {
     "prova_gioco_voce.py",           # ~3 s (11/10, Node per la prova di fumo)
     "prova_gioco_macchina.py",       # ~4 s (13/10, Node)
     "prova_gioco_palco.py",          # ~3 s (14/10, Node)
+    "prova_gioco_stato.py",          # ~1 s (14/10, Node)
     "prova_agente_guida.py",         # ~10 s (11/10)
     "prova_fasi_agente.py",          # ~18 s (12/10 sera)
     "prova_fasi_agente_2.py",        # ~20 s (13/10)
@@ -736,6 +738,11 @@ LEGAMI = [
     ("calliope/schermi/pagina/telefono/", ["prova_pause.py", "prova_frase_lunga.py"]),
     ("pyproject.toml", ["prova_linux.py", "prova_gestore.py"]),
     ("uv.lock", ["prova_linux.py"]),
+    ('calliope/estensioni/macchina.py', ["prova_gioco_stato.py"]),
+    ('calliope/estensioni/motore_gioco.js', ["prova_gioco_stato.py"]),
+    ('calliope/schermi/giochi.py', ["prova_gioco_stato.py"]),
+    ('calliope/agenti/fumo_js.mjs', ["prova_gioco_stato.py"]),
+    ('calliope/estensioni/scheda.py', ["prova_gioco_stato.py"]),
 ]
 # Prove che il runner non lancia, con il perché (06/10, Q7): prova_runner controlla che ogni
 # prove/prova_*.py sia in A_SECCO, in CON_OLLAMA o qui. Una prova nuova dimenticata fallisce.

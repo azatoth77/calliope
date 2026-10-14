@@ -356,13 +356,22 @@ RUNTIME_JS = r"""(function () {
   };
   Object.freeze(api);
   Object.defineProperty(window, "calliope", { value: api, writable: false, configurable: false });
-  // Il canale del motore della macchina a stati (14/10, motore_gioco.js): i comandi a voce che
-  // valgono adesso, le mosse a voce ({comando, giocatore?}) e la diagnosi del palco. Il motore,
-  // che viene subito dopo, lo prende e lo toglie: il codice del gioco non lo vede (il confine
-  // resta la pagina e il server, che ricontrollano tutto)
+  // Il canale del motore della macchina a stati (14/10, motore_gioco.js): l'istantanea della
+  // partita (fase, a chi tocca, punti, comandi a voce che valgono adesso, numerata) e lo stato
+  // per la ripresa dopo «Riapri», le mosse a voce ({comando, n, giocatore?}), i comandi
+  // rifiutati perché arrivati su un'istantanea vecchia e la diagnosi del palco. Il motore, che
+  // viene subito dopo, lo prende e lo toglie: il codice del gioco non lo vede (il confine resta
+  // la pagina e il server, che ricontrollano tutto)
   Object.defineProperty(window, "__calliopeMotore", { configurable: true, writable: false, value: Object.freeze({
-    comandiAttivi: function (nomi) {
-      manda("comandi", { attivi: Array.isArray(nomi) ? nomi.slice(0, 64).map(String) : [] });
+    stato: function (istantanea, ripresa) {
+      var d = { istantanea: istantanea };
+      if (ripresa !== undefined && ripresa !== null) d.ripresa = ripresa;
+      manda("stato", d);
+    },
+    rifiutato: function (x) {
+      x = x || {};
+      manda("rifiutato", { comando: String(x.comando || "").slice(0, 24), motivo: String(x.motivo || "").slice(0, 20),
+                           n: typeof x.n === "number" ? x.n : null });
     },
     quandoComando: quando("comando"),
     palco: function (difetti) {

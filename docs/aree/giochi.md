@@ -567,3 +567,49 @@ giro dell'agente; nel giro vero di un gioco nuovo guardare nel log se la prova d
 qualcosa del palco e se l'agente lo corregge cambiando testi o pagina; aprirlo in prova sul
 telefono in piedi e girato, e guardare nel registro (`gioco_fuori_dal_palco`) se lo schermo vero
 ha trovato qualcosa che il calcolo non prevede.
+
+## Lo stato della partita (14/10 sera, ramo `giochi-passi-finali`)
+
+I passi che restavano del progetto
+[`2026-10-12-giochi-macchina-stati.md`](../ricerche/2026-10-12-giochi-macchina-stati.md), chiesti
+da Dario il 14/10 sera, con le risposte di chi amministra del 12/10 (decisione 1: «Giocatore N»,
+poi «gioco anch'io» con la voce o il nome scritto, detto da Calliope solo dopo i controlli;
+2: giudice senza il nome spento; 5: dopo una mossa capita dal giudice Calliope dice l'etichetta
+breve; 6: partite condivise rimandate; 7: ripresa dopo «Riapri» sì).
+
+### L'istantanea validata dal server (passo 2 lato server)
+
+Prima il server sapeva solo quali comandi a voce valevano (`comandi`, mandato dal motore); il
+resto della partita (fase, a chi tocca, punti) lo sapeva solo il riquadro.
+
+- **Il motore manda l'istantanea** dopo ogni disegno (all'avvio, dopo ogni mossa, dopo l'esito
+  che va avanti da solo, dopo «Riapri»), con il tipo `stato` al posto di `comandi`:
+  `{n, fase, tocca, turno, giocatori: [{nome, punti}], esito, comandi}` (`nucleo.perCalliope`;
+  `tocca` è la posizione, `comandi` i comandi a voce piatti attivi). `g.stato()` dei test resta
+  com'era (a chi tocca per nome, i comandi per comando e valore): è l'interfaccia dell'agente.
+- **Il server la valida** contro il manifesto approvato (`macchina.valida_istantanea`): `n` che
+  non cala (la stessa mandata di nuovo, per un ridisegno, passa), fase dichiarata o standard,
+  comandi solo tra quelli che quella fase può avere (`macchina.per_fase`: mai comandi nuovi né di
+  un'altra fase), al più `giocatori.max` giocatori, punti numeri limitati, `tocca` dentro i
+  giocatori, esito al più 160 caratteri, nessun campo in più. Un nome fuori dalla forma chiusa
+  (lettere, spazi, apostrofo, al più 20 caratteri e due parole) resta sullo schermo ma per
+  Calliope è «Giocatore N». La tiene sul posto (`Posto.istantanea`): i comandi a voce attivi
+  vengono **solo** da lì. Una non valida si scarta (regola `gioco_stato_non_valido`, nel
+  registro dell'estensione con il motivo) e il gioco non ascolta finché non ne arriva una buona;
+  dopo «pronto» (anche «Riapri») non ascolta finché il motore non manda la prima: il server non
+  deduce mai lo stato.
+- **Il comando a voce porta `n`**, il numero dell'istantanea su cui è stato riconosciuto. Il
+  motore lo rifiuta se nel frattempo la partita è andata avanti (un tocco arrivato prima,
+  l'esito che è passato da solo) o se il comando non vale più, e lo dice con `rifiutato`
+  (regola `gioco_comando_vecchio` o `gioco_comando_rifiutato`, nel registro): la partita non
+  cambia. Così lo stato del gioco e quello di Calliope non divergono per costruzione.
+- La pagina (schermo.js, anche sul telefono) passa `stato` (`istantanea`, `ripresa`) e
+  `rifiutato` (`comando`, `motivo`, `n`) e niente altro; `n` verso il riquadro solo se è un
+  intero. Il messaggio `stato` ha un tetto più alto (porta anche la ripresa, sotto). Valgono
+  anche in una partita di prova (`TIPI_PROVA`): sono un ingresso, non un ponte.
+- Il runtime del riquadro dà al motore `stato` e `rifiutato` sul canale riservato
+  (`__calliopeMotore`) al posto di `comandiAttivi`; il codice del gioco non li vede.
+
+Prove: `prova_gioco_stato` (a secco, ~1 s: la validazione con 21 istantanee cattive, il server,
+il motore nel DOM finto con il comando vecchio rifiutato e l'andata e ritorno di tutte le
+istantanee del motore nella validazione Python), `prova_gioco_voce` rifatta sull'istantanea.

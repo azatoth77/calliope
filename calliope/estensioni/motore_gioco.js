@@ -755,6 +755,19 @@
                turno: S.turno, giocatori: S.giocatori.map(function (g) { return { nome: g.nome, punti: g.punti }; }),
                esito: S.esito ? S.esito.testo : null, comandi: att };
     }
+    // L'istantanea per Calliope (14/10, passo 2 del progetto): numerata, con a chi tocca come
+    // posizione, i punti, l'esito (al più 160 caratteri: Calliope non lo dice, è del gioco) e i
+    // comandi a voce piatti che valgono adesso. Il server la valida contro il manifesto e la
+    // tiene come stato della partita (calliope/estensioni/macchina.py, valida_istantanea)
+    function perCalliope(S, senzaComandi) {
+      var att = {};
+      if (!senzaComandi) { try { att = attivi(S); } catch (e) { att = {}; } }
+      var conTurni = S.fase !== "preparazione" && S.giocatori.length > 0;
+      return { n: S.n, fase: S.fase, tocca: conTurni ? S.tocca : null, turno: S.turno,
+               giocatori: S.giocatori.map(function (g) { return { nome: String(g.nome), punti: g.punti }; }),
+               esito: S.esito && S.esito.testo ? String(S.esito.testo).slice(0, 160) : null,
+               comandi: piatti(att) };
+    }
     // L'etichetta di un pulsante
     function etichetta(fase, c, v) {
       if (c === "giocatori") return v === 1 ? "1 giocatore" : v + " giocatori";
@@ -824,8 +837,8 @@
       return p;
     }
     return { M: M, nuovo: nuovo, attivi: attivi, piatti: piatti, daPiatto: daPiatto, applica: applica, esciTela: esciTela,
-             vista: vista, istantanea: istantanea, classifica: classifica, etichetta: etichetta, pagina: pagina,
-             contesto: contesto, piatto: piatto };
+             vista: vista, istantanea: istantanea, perCalliope: perCalliope, classifica: classifica, etichetta: etichetta,
+             pagina: pagina, contesto: contesto, piatto: piatto };
   }
 
   // ═══════════════════ nel riquadro (e nel DOM finto della prova): disegno, pulsanti, voce ═══════════════════
@@ -974,16 +987,19 @@
       try { f = parseFloat(G.getComputedStyle(n).fontSize) || 16; } catch (e) { /* niente */ }
       return Math.max(2, f * 0.3);
     }
-    function voce(att) {
-      try { if (CANALE) CANALE.comandiAttivi(nucleo.piatti(att)); } catch (e) { /* senza voce si gioca toccando */ }
+    // L'istantanea a Calliope dopo ogni disegno (14/10): i comandi a voce che valgono adesso,
+    // a chi tocca, i punti; con `muto` (un errore nel disegno) senza comandi
+    function voce(muto) {
+      if (!CANALE || typeof CANALE.stato !== "function") return;
+      try { CANALE.stato(nucleo.perCalliope(S, !!muto)); } catch (e) { /* senza voce si gioca toccando */ }
     }
     function aggiorna(S2) {
       S = S2;
       if (timerEsito) { clearTimeout(timerEsito); timerEsito = null; }
       var att;
       try { att = disegna(); }
-      catch (e) { radice.replaceChildren(el("div", "motore")); mostraErrore(e); voce({}); return; }
-      voce(att);
+      catch (e) { radice.replaceChildren(el("div", "motore")); mostraErrore(e); voce(true); return; }
+      voce(false);
       if (S.fase === "esito" && M().esito_s > 0) {
         var n = S.n;
         timerEsito = setTimeout(function () { if (S.n === n && S.fase === "esito") mossa("avanti", null, {}); }, M().esito_s * 1000);
@@ -999,15 +1015,21 @@
       aggiorna(S2);
       return true;
     }
+    function rifiuta(m, motivo) {
+      try { if (CANALE && typeof CANALE.rifiutato === "function") CANALE.rifiutato({ comando: m && m.comando, motivo: motivo, n: m && m.n }); }
+      catch (e) { /* niente */ }
+    }
     if (CANALE && typeof CANALE.quandoComando === "function") {
       CANALE.quandoComando(function (m) {
         var p = m && nucleo.daPiatto(m.comando);
-        if (!p) return;
-        // Un comando arrivato dopo un tocco che ha cambiato la fase («vecchio»): si ignora, come
-        // farebbe il server con un'istantanea vecchia
+        if (!p) { rifiuta(m, "sconosciuto"); return; }
+        // Un comando riconosciuto su un'istantanea che nel frattempo è cambiata (un tocco
+        // arrivato prima, l'esito che è andato avanti da solo): «vecchio», si rifiuta e si dice
+        // a Calliope (14/10, passo 2: ogni comando a voce porta il numero dell'istantanea)
+        if (typeof m.n === "number" && m.n !== S.n) { rifiuta(m, "vecchio"); return; }
         var att;
-        try { att = nucleo.piatti(nucleo.attivi(S)); } catch (e) { return; }
-        if (att.indexOf(String(m.comando)) < 0) return;
+        try { att = nucleo.piatti(nucleo.attivi(S)); } catch (e) { rifiuta(m, "non_attivo"); return; }
+        if (att.indexOf(String(m.comando)) < 0) { rifiuta(m, "non_attivo"); return; }
         mossa(p[0], p[1], { giocatore: m.giocatore || null });
       });
     }
