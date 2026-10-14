@@ -560,6 +560,12 @@ verifica("eco del contesto nuovo", eco("Bianca", ["persona: Bianca, riconosciuta
                                                  "Sono le 9."])[0], "Sono le 9.")
 verifica("eco dell'ospite", eco(None, ["persona: un ospite, non riconosciuto dalla voce. "
                                        "Ciao!"])[0], "Ciao!")
+verifica("eco del conoscente (14/10 sera)", eco(None, [
+    "persona: Marco Rossi (conoscente, collega di Carlo), riconosciuto dalla voce: non è della "
+    "famiglia, è un ospite. ", "Sono le 9."])[0], "Sono le 9.")
+verifica("eco del conoscente, contrario: una frase con «(conoscente)» non in testa resta",
+         eco(None, ["Ciao! persona: Marco (conoscente). Sono le 9."])[0],
+         "Ciao! persona: Marco (conoscente). Sono le 9.")
 # casi contrari: la frase da sola è la risposta a «chi sono?»; altri nomi, altre frasi, a metà
 for nome, pezzi in [("Dario", ["Chi ti parla è Dario."]),
                     ("Dario", ["Chi", " ha scritto la Divina Commedia? Dante."]),

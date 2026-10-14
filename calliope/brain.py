@@ -588,7 +588,11 @@ class ContextEcho:
                              + r"(?:\s*\([^)]{0,60}\))?\s*[.!:;]+\s*"
                              r"|\s*chi ti parla non è riconosciut[oa][^.!?]{0,60}[.!]+\s*"
                              r"|\s*persona:\s*(?:" + who + r"|un ospite)"
-                             r"(?:,\s*(?:non\s+)?riconosciut[oa][^.!?]{0,40})?\s*[.!;]+\s*",
+                             r"(?:,\s*(?:non\s+)?riconosciut[oa][^.!?]{0,40})?\s*[.!;]+\s*"
+                             # Un conoscente (14/10 sera, conoscente_detto): «persona: Marco
+                             # Rossi (conoscente, …), riconosciuto dalla voce: …, è un ospite.»
+                             r"|\s*persona:\s*[^.!?()]{1,60}\(conoscente[^)]{0,80}\)"
+                             r"[^.!?]{0,120}[.!;]+\s*",
                              re.I)
         self.done, self.buf, self.dropped = not active, "", ""
 
