@@ -17,6 +17,12 @@ non vede, e il suo effetto è solo togliere una riga della stanza o parte di ess
   parole che non combaciano (l'eco
   storpiata da Whisper: «domani torino c'è sole con 19 gradi» contro «Domani a Torino ci sarà il
   sole con diciannove gradi»);
+- una parola storpiata da Whisper vale come la sua se le somiglia abbastanza (almeno
+  `SIMILE_MIN` lettere e somiglianza ≥ `SIMILE`: «divario» vale «binario», «macchiare» non vale
+  «innaffiare»);
+- una riga fatta **solo del nome** (o della wake word) durante la sua voce è eco: Whisper senza
+  prompt lo inventa sulla sua voce (misura a secco del 14/10), e chi la chiama davvero passa
+  dal flusso dei comandi (barge-in), non dalla stanza;
 - conta solo una parola che combacia **nel tempo**: detta da Calliope (tempo stimato dentro la
   frase, in proporzione alla posizione) entro `TOLLERANZA_S` dall'intervallo del segmento. Chi
   ripete «Torino?» tre secondi dopo che lei l'ha detto non è eco;
@@ -43,6 +49,8 @@ FILA = 3                 # parole di fila uguali: eco
 QUOTA = 0.6              # parte della riga che combacia oltre la quale è eco tutta
 TOLLERANZA_S = 1.5       # ritardo dell'uscita, della rete e stima del tempo dentro la frase
 CODA_S = 1.0             # dopo la fine di una frase l'eco può durare ancora (riverbero, buffer)
+SIMILE = 0.7             # somiglianza (difflib) di una parola storpiata a una sua
+SIMILE_MIN = 6           # lettere minime perché una parola storpiata conti
 
 _PAROLA = re.compile(r"[^\W_]+", re.UNICODE)
 
@@ -117,16 +125,35 @@ def _tempi(dette: list[Detta]) -> list[tuple[str, float | None]]:
     return out
 
 
+def _storpiata(w: str, sue: set) -> str:
+    """La sua parola a cui `w` somiglia abbastanza (Whisper sull'eco), o `w`."""
+    if w in sue or len(w) < SIMILE_MIN:
+        return w
+    meglio, r_meglio = w, SIMILE
+    for x in sue:
+        if len(x) >= SIMILE_MIN and abs(len(x) - len(w)) <= 3:
+            r = difflib.SequenceMatcher(None, w, x).ratio()
+            if r >= r_meglio:
+                meglio, r_meglio = x, r
+    return meglio
+
+
 def filtra(testo: str, dette: list[Detta], inizio: float | None = None,
-           fine: float | None = None, tolleranza_s: float = TOLLERANZA_S) -> Esito:
+           fine: float | None = None, tolleranza_s: float = TOLLERANZA_S,
+           nomi=()) -> Esito:
     """La riga `testo` trascritta fra `inizio` e `fine` (epoch) contro le frasi `dette` da
-    Calliope in quell'intervallo: ciò che resta, e i numeri (mai parole) per le misure."""
+    Calliope in quell'intervallo: ciò che resta, e i numeri (mai parole) per le misure.
+    `nomi`: il nome e le wake word (una riga fatta solo di loro è eco)."""
     riga = parole(testo)
     lei = _tempi(dette)
     if not riga or not lei:
         return Esito(str(testo or "").strip(), len(riga), 0, 0, len(lei))
-    a = [w for w, _o in riga]
     b = [w for w, _t in lei]
+    nn = {_senza_accenti(str(n).lower()) for n in nomi or () if str(n).strip()}
+    if nn and all(w in nn for w, _o in riga):
+        return Esito("", len(riga), len(riga), 0, len(b), "eco", ["eco_stanza_nome"])
+    sue = set(b)
+    a = [_storpiata(w, sue) for w, _o in riga]
 
     def nel_tempo(j: int) -> bool:
         t = lei[j][1]

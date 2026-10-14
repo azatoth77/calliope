@@ -742,7 +742,8 @@ class Stanza:
         tolte = 0
         if s.dette:
             # Il filtro dell'eco (passo 5, regola eco_stanza): le parole che sono la sua voce
-            e = eco_mod.filtra(testo, s.dette, s.inizio_epoch, s.fine_epoch)
+            e = eco_mod.filtra(testo, s.dette, s.inizio_epoch, s.fine_epoch,
+                               nomi=getattr(self.cfg, "wake_names", None) or ())
             eco = self._eco_misure(s, e)
             if e.tutta_eco:
                 self._fatto(s, None, "eco", attesa, stt_s, eco)

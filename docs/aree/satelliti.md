@@ -196,3 +196,16 @@ rubinetto resta chiuso: niente VAD in più, niente banda. Sul satellite Python l
 nasce la prima volta che il server lo accende (`Satellite._stanza`) e si chiude a connessione
 caduta. Il satellite da aggiornare per averlo: il portatile (`calliope aggiorna` sulla DGX, poi il
 satellite si aggiorna da solo) e il telefono (basta ricaricare la pagina).
+
+**Campi in più, sempre nella versione 3 (14/10, ramo `stanza-durante-voce`)**, facoltativi nei
+due sensi (un satellite o un server di prima li ignora, niente cambio di versione):
+- nello stato della stanza `durante_voce` (passo 5, `stanza_durante_voce` e il cancello dell'eco
+  sul saluto: [stt-tts](stt-tts.md)) e il taglio morbido al tetto (`taglio_zona_s`,
+  `pausa_breve_ms`, `tetto_duro_s`). Dopo il «pronto» il server rimanda lo stato, perché solo
+  allora conosce l'eco misurata sul saluto;
+- in `stanza_fine` la chiusura «pausa_breve» (micro-pausa vicino al tetto) e `durante_voce`: gli id
+  delle frasi di Calliope che suonavano durante il segmento (gli stessi id del messaggio `frase`;
+  0 per un suono senza testo), compresa la frase finita da meno di 1 s (`Riproduttore.voce_ora`,
+  `voceOra` nella pagina del telefono). Il server tiene il testo e la durata delle ultime frasi
+  mandate (`Collegamento.frasi_voce`, da `UscitaRemota.invia`) e l'ora in cui hanno cominciato a
+  suonare (`suonate`, dal messaggio `suona`).

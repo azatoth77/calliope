@@ -97,6 +97,21 @@ def prova_filtro():
     e = E.filtra(PERSONA, [], 100, 103)
     verifica("nessuna frase di Calliope: la riga resta com'è", e.testo == PERSONA
              and e.detto == 0)
+    treno = [E.Detta("Il treno per Valfonda parte alle sette e quaranta dal binario tre.",
+                     100.0, 4.0)]
+    e = E.filtra("il treno per varicuna parte del 3.640 dal divario 3.", treno, 100, 104)
+    verifica("eco storpiata con parole simili («divario» per «binario»): tutta eco",
+             e.tutta_eco, f"{e}")
+    e = E.filtra("Il trono per Valfonda? Ma no, io prendo l'autobus domattina.", treno, 100, 104)
+    verifica("contrario: una persona sopra con parole sue lunghe resta (le simili non bastano)",
+             not e.tutta_eco and "autobus" in e.testo, f"{e}")
+    e = E.filtra("Calliope Calliope", d, 100.5, 102, nomi=["Calliope", "Computer"])
+    verifica("una riga fatta solo del nome durante la voce: eco (Whisper lo inventa)",
+             e.tutta_eco and e.regole == ["eco_stanza_nome"])
+    e = E.filtra("Calliope", [], 100.5, 102, nomi=["Calliope"])
+    verifica("contrario: il nome senza la sua voce resta", e.testo == "Calliope")
+    e = E.filtra("Calliope, che ore sono?", d, 100.5, 102, nomi=["Calliope"])
+    verifica("contrario: il nome con altre parole non è eco per il nome", not e.tutta_eco)
     w = [x for x, _ in E.parole("Perché c’è l'Università? 21 e 1000")]
     verifica("normalizzazione: accenti, apostrofi, cifre in lettere",
              w == ["perche", "c", "e", "l", "universita", "ventuno", "e", "mille"], str(w))

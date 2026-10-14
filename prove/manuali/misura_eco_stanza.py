@@ -294,7 +294,7 @@ def main() -> int:
                 segmenti[m["id"]] = {"pcm": [], "inizio": time.time() - float(m.get("fa_s") or 0)}
             elif tipo == "stanza_fine":
                 s = segmenti.pop(m["id"], None)
-                if s is not None and m.get("chiusura") in ("silenzio", "lunga"):
+                if s is not None and m.get("chiusura") in ("silenzio", "pausa_breve", "lunga"):
                     s.update(fine=time.time() - cfg.silence_ms / 1000, durante=m.get(
                         "durante_voce") or [], durata_s=m.get("durata_s"))
                     chiusi.append(s)
@@ -385,7 +385,8 @@ def main() -> int:
             continue
         grezze_righe += 1
         grezze_parole += len(E.parole(testo))
-        e = E.filtra(testo, dette, s["inizio"], s["fine"]) if dette else None
+        e = (E.filtra(testo, dette, s["inizio"], s["fine"], nomi=cfg.wake_names)
+             if dette else None)
         tenuto = testo if e is None else e.testo
         righe.append({"durante": bool(s["durante"]), "parole": len(E.parole(testo)),
                       "tolte": e.tolte if e else 0, "residua": e.residua if e else 0,

@@ -11,7 +11,7 @@
 | Cattura + VAD | sounddevice + Silero VAD (PyTorch, oppure il suo ONNX con onnxruntime senza torch: Linux) | `calliope/audio.py` → `Listener` (`listen`, `watch_for_name`, `measure_echo`); `calliope/vad.py` → `carica_vad`, `SileroOnnx`, `SileroTorch`; pause e fine del turno (dal 07/10, solo misura) `calliope/pause.py` → `MisuraPause`, `OsservaRipresa`, `inizio_ripresa`, `riassunto` (sotto); la frase al tetto e il suo seguito nello stesso turno (dal 10/10, sotto) `Listener._dopo_il_tetto`, `Ciclo._seguito_del_tetto`, `pause.TETTO_ATTESA_S` |
 | Chi parla | CAM++ (3D-Speaker) in ONNX con onnxruntime | `calliope/speaker_id.py` → `SpeakerEmbedder`, `SpeakerRegistry`, `SpeakerContext`; `arruola.py`; margine tra i profili e voce incerta tra un adulto e un minore (07/10) `Ciclo._confronta_voce`, `Ciclo._chiedi_chi_parla`, `SpeakerContext.incerta`; continuità delle frasi cortissime (08/10) `Ciclo._per_continuita`; il nome da solo dopo lo scatto acustico `ciclo.solo_nome_acustico`; più voci vicino allo stesso satellite (dal 09/10, sotto) `calliope/compagnia.py` → `Compagnia`, `modo`, `riassunto`, e il giudizio «rivolta a Calliope» `calliope/rivolta.py` → `Giudice`, `etichetta` |
 | Speech-to-Text | faster-whisper nel processo, oppure un server con l'API OpenAI (sulla DGX whisper.cpp con CUDA, servizio `calliope-whisper`; vLLM scartato) con ripiego su faster-whisper su CPU (modello di riserva dal catalogo, `whisper_riserva`) | `calliope/stt.py` → `Transcriber`, `ServerTranscriber`, `make_transcriber`, `modello_whisper`; server in `setup/linux/motore/whisper.sh`; correzione delle frasi incerte (spenta) `calliope/stt_correzione.py` → `Correttore`, `accettabile`, `min_utile`; a capo di whisper-server tolti `stt.unisci_righe`; parole incerte al modello (B, spenta) `stt_correzione.parole_incerte`, `Brain.STT_INCERTE_MSG`; frase capita trattenuta (B2, spenta) `Brain.CapitoHold`, `Brain._applica_capito`, `STT_RISCRIVI_MSG` (confronto A/B/B2/C in fondo); parole incerte negli argomenti dei tool (dal 08/10, F0 e F1, sotto) `calliope/argomenti_incerti.py` → `Ascolto`, `Misura`, `Vocabolario`, `allinea`, `esito`, `suggerimento`, `riassunto`, con le probabilità per parola `Transcriber.parole` e `ServerTranscriber.parole`; tempo massimo della richiesta in proporzione alla frase `ServerTranscriber.tempo_massimo` (10/10); frasi tipiche delle allucinazioni scartate per intero in `calliope/allucinazioni.py` (09/10) |
-| Conversazione di stanza, passo 1 in ombra (13/10, sotto) | Silero VAD in ONNX (un secondo VAD, suo), Whisper con la precedenza, CAM++ | sul satellite `calliope/satellite/stanza.py` → `Segmentatore`, `AscoltoStanza`, rubinetto `Listener.rubinetto`; sul server `calliope/stanza/` → `Stanza` (`ascolto.py`: `copertura`, `turno_testo`, `pausa`, `riprendi`, `dimentica`, `presenti`, `presenze`), `Copertura`, `Precedenza` (`coda.py`), `RegistroStanza` (`registro.py`), `Misure`, `riassunto` (`misure.py`), `load_stanza`; `STTCondiviso.transcribe(priorita=…, prompt=…)`; ganci `Ciclo._stanza_copertura`, `Ciclo._stanza_turno`; tool `stanza_pausa` (`calliope/tools/stanza.py`) |
+| Conversazione di stanza, passo 1 in ombra (13/10, sotto) | Silero VAD in ONNX (un secondo VAD, suo), Whisper con la precedenza, CAM++ | sul satellite `calliope/satellite/stanza.py` → `Segmentatore`, `AscoltoStanza`, rubinetto `Listener.rubinetto`; sul server `calliope/stanza/` → `Stanza` (`ascolto.py`: `copertura`, `turno_testo`, `pausa`, `riprendi`, `dimentica`, `presenti`, `presenze`, `durante_qui`, `pronto`), filtro dell'eco del passo 5 `filtra`, `Detta` (`eco.py`), `Riproduttore.voce_ora`, `Collegamento.frasi_voce`, `Copertura`, `Precedenza` (`coda.py`), `RegistroStanza` (`registro.py`), `Misure`, `riassunto` (`misure.py`), `load_stanza`; `STTCondiviso.transcribe(priorita=…, prompt=…)`; ganci `Ciclo._stanza_copertura`, `Ciclo._stanza_turno`; tool `stanza_pausa` (`calliope/tools/stanza.py`) |
 | Wake word acustica | classificatore addestrato in formato openWakeWord (ONNX) | `calliope/wakeword.py` → `WakeWordDetector`, `load_wake_detector`; usato da `Listener.listen(wake, awake_until)`. Modelli e addestramento in `wakeword/` |
 | Text-to-Speech | Piper (voce `it_IT-serena-high`) | `calliope/tts.py` → `Speaker` (2 thread: sintesi e riproduzione, `_pcm`; la prima frase lunga a pezzi `primo_pezzo`, `tts_spezza_prima`, `tts_primo_pezzo_min`, e i thread di onnxruntime `carica_voce`, `tts_thread`, dal 07/10; velocità e costo della voce misurati all'avvio e con l'uso `calliope/taratura_voce.py` → `Taratura` (file voce_taratura.json), `tts_thread` «auto»; dal 07/10 sera Piper anche sulla GPU con onnxruntime-gpu, `tts_dispositivo` auto/cpu/cuda, scelta secondo la macchina e ripiego sulla CPU (`_su_gpu`, `prova_dispositivo`): [contesto-conversazione](contesto-conversazione.md)); inglesismi detti all'inglese `calliope/pronuncia.py` → `Pronuncia`, `LESSICO` (`tts_pronuncia`, `tts_pronuncia_extra`) |
 
@@ -1008,3 +1008,77 @@ Prove in `prove/prova_stanza.py` (a secco, con Node per il telefono): parlato co
 15 s; pausa breve prima della zona → nessun taglio; micro-pausa nella zona → taglio lì e nessun
 frame di parlato perso; buco di 96 ms → nessun taglio; voce.js uguale al Python; con la zona a 0 il
 taglio netto di prima.
+
+## Passo 5 della stanza: ascolto durante la voce di Calliope, con il filtro dell'eco (14/10, ramo `stanza-durante-voce`)
+
+Il passo 5 del [progetto](../ricerche/2026-10-13-conversazione-di-stanza.md) (§ 5.3, decisione
+[0029](../decisioni/0029-conversazione-di-stanza.md)): fino a ieri, mentre Calliope parlava, il
+segmento della stanza in corso si buttava (chiusura «voce») e non se ne aprivano altri, e ciò che
+le persone dicevano sopra la sua voce era perso. Con **`stanza_durante_voce: true`** (di serie
+`false`, nel file locale) la stanza ascolta anche mentre lei parla. **Solo la stanza**: i comandi
+restano half-duplex (principio 8), la wake word acustica e il barge-in non cambiano, e un
+«Calliope, basta» detto sopra la voce è un segmento legato al turno, non trascritto due volte.
+
+- **Satellite e telefono**: il `Segmentatore` con `durante` acceso non butta il segmento quando le
+  casse suonano e porta in `stanza_fine` gli id delle frasi che suonavano (`durante_voce`), dalla
+  frase che il `Riproduttore` sta riproducendo o ha finito da meno di 1 s (l'eco dura un po' dopo;
+  0 per il saluto e i segnali). Il pre-roll con la sua voce non si svuota più. Spento, i messaggi
+  sono identici a prima ([satelliti](satelliti.md) per i campi del protocollo).
+- **Server** (`Stanza`): le frasi di quell'intervallo sono quelle segnate dal satellite più quelle
+  che, per l'ora del loro `suona` e la durata, cadono nel segmento (± 1,5 s, più la coda di 1 s): il
+  testo è esattamente quello mandato a Piper (`Collegamento.frasi_voce`).
+- **Filtro dell'eco** (`calliope/stanza/eco.py`, regola `eco_stanza`, ammessa dal principio 10: è
+  sulla trascrizione, che il modello non vede, e toglie soltanto). Le parole della riga e le sue,
+  normalizzate (minuscole, senza accenti, apostrofo come spazio, cifre in lettere: Piper dice
+  «diciannove», Whisper scrive «19»), si allineano in ordine con difflib: una fila di **3 parole**
+  uguali si toglie (`eco_stanza_fila`); se combacia almeno il **60 %** della riga è eco tutta
+  (`eco_stanza_quota`: l'eco storpiata); una parola storpiata conta come la sua se ha almeno 6
+  lettere e somiglia per almeno 0,7 («divario» per «binario»; «grazie» e «gradi» no); una riga fatta
+  **solo del nome** è eco (`eco_stanza_nome`: Whisper senza prompt lo inventa sulla sua voce, e chi
+  la chiama davvero passa dal flusso dei comandi). Conta solo una parola **nel tempo**: il suo
+  istante stimato in proporzione dentro la frase, entro 1,5 s dal segmento. Il resto resta come riga
+  di una persona, segnata `durante_voce` con le `eco_tolte`; la riga senza niente che resta è
+  scartata «eco». Contrari nella prova: una sua parola ripetuta dentro la frase di una persona,
+  «grazie» sopra la sua voce, «Torino?» ripetuto tre secondi dopo, la sua frase citata quando non la
+  diceva. Limite noto: una parola sola detta nello stesso istante in cui la dice lei è eco.
+- **Cancello per satellite** (§ 5.3 c): con l'eco misurata sul saluto oltre `barge_in_echo_max`
+  (0,05: casse senza cancellazione) quel satellite resta half-duplex anche per la stanza (stato
+  `durante_voce: false` mandato dopo il «pronto»; un segmento segnato si butta «eco_cancello»).
+  L'eco non misurata (niente saluto, il telefono) lo lascia aperto.
+- **CAM++ non decide** (segnale b del § 5.3, valutato senza dipendenze nuove). Misura a secco del
+  14/10 sulle 18 frasi di serena-high dei dati di `models/speaker/` con un'eco simulata (banda
+  250–3800 Hz, riverbero breve, saturazione, da −12 a −30 dB): similitudine dell'eco con la stessa
+  frase pulita p10 0,29, p50 0,38, max 0,60; contro il profilo medio della voce p50 0,34; 80
+  persone vere (MLS, VoxPopuli) contro il profilo p50 0,15, p90 0,27, max 0,32; una persona con
+  l'eco sotto di 6 dB fino a 0,56. Le due nuvole si sovrappongono: un taglio sull'impronta
+  butterebbe persone. Si rimisura con l'eco vera (`--campp` della misura manuale).
+- **Misure** (senza parole): ogni segmento detto durante la voce porta `durante`, le frasi
+  confrontate, le parole nuove dette da lei, le parole della riga, le tolte e la `residua` (parole
+  rimaste che combaciano con lei). In `calliope stato --turni`, sezione «Stanza», per satellite:
+  «durante la voce (passo 5): N segmenti, righe tenute (parole recuperate), scartate per eco,
+  parole di Calliope tolte; eco residua stimata X ogni 100 parole dette (obiettivo < 2)», con ⚠
+  oltre 2. La stima è per eccesso (conta anche chi ripete una sua parola); le **righe false** si
+  contano solo nella misura manuale (scenario «nessuno parla»).
+
+**Misura a secco del giro intero** (`prove/manuali/misura_eco_stanza.py --a-secco`, sul portatile:
+Riproduttore, VAD, Whisper large-v3-turbo vero e filtro; eco **simulata**, non una misura di
+cancellazione vera; 20 risposte del copione, 227 parole dette):
+
+| Eco simulata | Scenario | Senza filtro | Con il filtro | Righe false | Note |
+|---|---|---|---|---|---|
+| −35 e −40 dB | nessuno parla | 0 | 0 | 0 | il VAD della stanza non scatta sull'eco: nessun segmento |
+| −30 dB | nessuno parla (due giri) | 33,5 e 37,0 parole ogni 100 dette | 9,3 e 20,7 | 7 e 6 | tolte le righe di sola eco (4–6 per giro) e i tratti di 3 parole; restano l'eco storpiata oltre il riconoscibile («il preco che va in fondo…») e le parole inventate da Whisper sulla sua voce («Calliope», tolte dal giro col nome; «Grazie») |
+| −30 dB | una persona legge 100 parole sopra la voce | — | eco residua 0–0,4 | — | WER della lettura 0,03, uguale alla stessa lettura a Calliope muta (0,03): le parole della persona si recuperano tutte |
+| −30 dB | due persone chiacchierano | — | eco residua stimata 1,3 | — | le 6 frasi delle persone tenute intere, 2–3 righe di sola eco scartate; restano 2–3 «Grazie» inventati da Whisper e 2 frasi d'eco storpiata |
+
+Lettura: il filtro sul testo serve (dimezza o più l'eco che passa) ma **non basta da solo** quando
+l'eco residua è forte (−30 dB, il VAD scatta): l'obiettivo < 2 ogni 100 parole e 0 righe false si
+regge solo se la cancellazione vera tiene l'eco sotto la soglia del VAD, come nella simulazione a
+−35 dB. Le righe false che restano sono parole che Whisper inventa o storpia sull'eco: la misura
+vera dirà se servono il segnale CAM++ (b) o una soglia del VAD più alta durante la voce.
+
+**Da misurare sul vero** (passi in [`prove/manuali/misura-eco-stanza.md`](../../prove/manuali/misura-eco-stanza.md)):
+telefono in auto (motore acceso e spento, volume medio e alto) e in casa, portatile col microfono
+interno in MME, e il contrario delle casse esterne senza cancellazione (cancello chiuso). Si accende
+sulla DGX solo se l'eco residua resta sotto 2 ogni 100 parole e le righe false a 0. Prove:
+`prove/prova_stanza_eco.py` (livello 1, ~3 s).
