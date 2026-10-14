@@ -731,3 +731,26 @@ nome libero passato dal modello.
 
 Prove: `prova_gioco_stato` (sezione 7: motore, server, ciclo), `prova_testo` (le forme di
 «anch'io, sono …» e i contrari), `prova_giochi_pagina` (la preparazione dice «gioco anch'io»).
+
+### La ripresa dopo «Riapri» (decisione 7)
+
+Prima «Riapri» (dopo ✕, Esc, «chiudi il gioco») o una pagina ricaricata facevano ripartire la
+partita da capo. Ora riparte **dall'ultima istantanea valida**:
+
+- Il motore manda con ogni istantanea anche lo **stato intero** della partita (`ripresa`: fase,
+  giocatori, punti, a chi tocca, i dati della logica), se sta in 16 000 caratteri (come `salva`;
+  oltre non si manda e quella partita non si riprende).
+- Il server lo tiene sul posto (`Posto.ripresa`) **solo** se accompagna un'istantanea valida, con
+  lo stesso numero e la stessa fase; un'istantanea non valida non lo cambia (resta l'ultima
+  buona), una valida senza ripresa lo toglie (mai una partita vecchia). Non lo legge: è opaco,
+  come i dati di `salva`, e torna solo al riquadro dello stesso posto (schermo) della stessa
+  partita.
+- Al «pronto» di un riquadro nuovo dello stesso posto l'avvio lo porta (`avvio.ripresa`); il
+  motore lo controlla (`nucleo.riprendi`: forma, fase dichiarata, giocatori e punti, dati,
+  comandi attivi e pagina calcolabili) e riparte da lì, con lo stesso numero (il server dopo
+  «pronto» accetta di nuovo da capo); se non va, partita nuova. Ripreso nell'esito, l'esito va
+  avanti da solo come prima. Una partita nuova (un'altra richiesta del gioco) parte da capo.
+- Profilo da 8 GB: niente (browser e server).
+
+Prove: `prova_gioco_stato` (sezione 8), `prova_gioco_stato_pagina` (Edge: ✕ e «Riapri» nella
+pagina vera, con il nome scritto e la porta già aperta).

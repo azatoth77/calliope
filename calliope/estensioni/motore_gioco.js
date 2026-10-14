@@ -808,6 +808,27 @@
       S.giocatori[i].scritto = true;
       return S;
     }
+    // La ripresa dopo «Riapri» (14/10, decisione 7 di chi amministra): lo stato intero della
+    // partita che il motore ha mandato a Calliope con l'ultima istantanea valida, e che Calliope
+    // gli restituisce all'avvio di un riquadro nuovo. Si controlla prima di usarlo (la forma, la
+    // fase, i giocatori; comandi attivi e pagina calcolabili): se non va, partita nuova
+    function riprendi(R) {
+      if (!R || typeof R !== "object" || Array.isArray(R)) throw errore("ripresa: non è uno stato");
+      if (typeof R.n !== "number" || !(R.n >= 0) || Math.floor(R.n) !== R.n) throw errore("ripresa: «n»");
+      var standard = ["preparazione", "esito", "fine"];
+      if (typeof R.fase !== "string" || !(R.fase in M.fasi || standard.indexOf(R.fase) >= 0)) throw errore("ripresa: fase");
+      if (!Array.isArray(R.giocatori) || R.giocatori.length > Math.max(M.gmax, 1)) throw errore("ripresa: giocatori");
+      R.giocatori.forEach(function (g) {
+        if (!g || typeof g.nome !== "string" || typeof g.punti !== "number" || !isFinite(g.punti)) throw errore("ripresa: un giocatore");
+      });
+      if (R.fase !== "preparazione" && (!R.giocatori.length || typeof R.dati !== "object" || R.dati === null)) throw errore("ripresa: dati");
+      if (typeof R.tocca !== "number" || R.tocca < 0 || (R.giocatori.length && R.tocca >= R.giocatori.length)) throw errore("ripresa: tocca");
+      var S = copia(R, "ripresa");
+      if (!Array.isArray(S.nomi)) S.nomi = [];
+      attivi(S);
+      pagina(S);
+      return S;
+    }
     // L'istantanea per Calliope (14/10, passo 2 del progetto): numerata, con a chi tocca come
     // posizione, i punti, l'esito (al più 160 caratteri: Calliope non lo dice, è del gioco) e i
     // comandi a voce piatti che valgono adesso. Il server la valida contro il manifesto e la
@@ -899,7 +920,7 @@
     }
     return { M: M, nuovo: nuovo, attivi: attivi, piatti: piatti, daPiatto: daPiatto, applica: applica, esciTela: esciTela,
              vista: vista, istantanea: istantanea, perCalliope: perCalliope, classifica: classifica, etichetta: etichetta,
-             pagina: pagina, contesto: contesto, piatto: piatto, rinomina: rinomina };
+             pagina: pagina, contesto: contesto, piatto: piatto, rinomina: rinomina, riprendi: riprendi };
   }
 
   // ═══════════════════ nel riquadro (e nel DOM finto della prova): disegno, pulsanti, voce ═══════════════════
@@ -1102,9 +1123,16 @@
     }
     // L'istantanea a Calliope dopo ogni disegno (14/10): i comandi a voce che valgono adesso,
     // a chi tocca, i punti; con `muto` (un errore nel disegno) senza comandi
+    // Con l'istantanea va lo stato intero per la ripresa dopo «Riapri» (decisione 7), se sta in
+    // 16 000 caratteri (come `salva`): oltre, Calliope non può riprendere quella partita
+    var MAX_RIPRESA = 16000;
     function voce(muto) {
       if (!CANALE || typeof CANALE.stato !== "function") return;
-      try { CANALE.stato(nucleo.perCalliope(S, !!muto)); } catch (e) { /* senza voce si gioca toccando */ }
+      var r = null;
+      if (!muto) {
+        try { var t = JSON.stringify(S); if (t.length <= MAX_RIPRESA) r = JSON.parse(t); } catch (e) { r = null; }
+      }
+      try { CANALE.stato(nucleo.perCalliope(S, !!muto), r); } catch (e) { /* senza voce si gioca toccando */ }
     }
     function aggiorna(S2) {
       S = S2;
@@ -1165,8 +1193,17 @@
       },
     };
     G.CalliopeMotore.partita = partita;
-    if (cal && typeof cal.quandoPronto === "function") cal.quandoPronto(function () { aggiorna(S); });
-    else aggiorna(S);
+    if (cal && typeof cal.quandoPronto === "function") {
+      cal.quandoPronto(function (avvio) {
+        // «Riapri» o la pagina ricaricata: la partita riparte dall'ultima istantanea valida
+        var R = avvio && avvio.ripresa;
+        if (R) {
+          try { S = nucleo.riprendi(R); }
+          catch (e) { S = nucleo.nuovo(); if (typeof console !== "undefined") console.warn("ripresa non valida: " + e.message); }
+        }
+        aggiorna(S);
+      });
+    } else aggiorna(S);
     return partita;
   }
 

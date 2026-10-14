@@ -38,6 +38,12 @@ docs/ricerche/2026-10-12-giochi-macchina-stati.md; area docs/aree/giochi.md), a 
    controlli (con un minore nella partita il guardiano: fermato → «Giocatore N»), mai in una
    partita di prova; nel ciclo «Gioco anch'io, sono Pippo» manda il nome detto, che vale come
    uno scritto (regola gioco_anchio_nome), e con la voce riconosciuta il suo nome.
+8. **La ripresa dopo «Riapri»** (decisione 7): il motore manda con l'istantanea lo stato intero;
+   il server lo tiene solo se accompagna l'ultima istantanea valida (stesso numero e fase,
+   entro 16 000 caratteri; un'istantanea senza ripresa la toglie) e lo restituisce all'avvio di
+   un riquadro nuovo dello stesso posto; il motore riparte da lì (stesso numero, fase, giocatori
+   e punti, l'esito che va avanti da solo); contrari: una ripresa rotta o di un'altra fase →
+   partita nuova.
 
     python prove/prova_gioco_stato.py
 """
@@ -226,21 +232,21 @@ def node(tmp: Path, codice: str) -> tuple[int, str]:
     return r.returncode, (r.stdout or "") + (r.stderr or "")
 
 
-def apri_js(cartella: str, corpo: str) -> str:
+def apri_js(cartella: str, corpo: str, extra: dict | None = None) -> str:
     """Un programma Node che apre il gioco delle prove con apriGioco e stampa JSON."""
     m = json.loads((GIOCHI / cartella / "manifesto.json").read_text(encoding="utf-8"))
     sc = m["scheda"]
     file = [str(GIOCHI / cartella / f) for f in sc["file"]]
     opz = {"macchina": sc["macchina"], "minimo": sc["giocatori"]["min"],
            "massimo": sc["giocatori"]["max"], "giocatori": sc["giocatori"]["min"],
-           "titolo": m["titolo"], "seme": 7}
+           "titolo": m["titolo"], "seme": 7, **(extra or {})}
     return (f"import {{ apriGioco }} from {json.dumps(FUMO.as_uri())};\n"
             f"const g = await apriGioco({json.dumps(file)}, {json.dumps(opz)});\n"
             "const out = {};\n" + corpo + "\nconsole.log('JSON' + JSON.stringify(out));\n")
 
 
-def esegui(tmp: Path, cartella: str, corpo: str) -> dict:
-    rc, testo = node(tmp, apri_js(cartella, corpo))
+def esegui(tmp: Path, cartella: str, corpo: str, extra: dict | None = None) -> dict:
+    rc, testo = node(tmp, apri_js(cartella, corpo, extra))
     riga = next((x for x in testo.splitlines() if x.startswith("JSON")), None)
     if rc != 0 or riga is None:
         return {"_errore": testo[-800:]}
@@ -716,6 +722,99 @@ def prova_nomi_ciclo(tmp: Path):
              mosse == [{"comando": "anchio", "n": 0}], str(mosse))
 
 
+# ═══════════════════════════ 8. la ripresa dopo «Riapri» ═══════════════════════════
+
+def prova_ripresa_motore(tmp: Path):
+    sezione("8. la ripresa dopo «Riapri» nel motore")
+    if not shutil.which("node"):
+        print("SALTATA IN PARTE: node non c'è")
+        return
+    out = esegui(tmp / "prima", "porte_fasi", """
+await g.tocca("2 giocatori");
+await g.tocca("Porta 2");
+out.esito_ist = g.calliope.istantanee().slice(-1)[0];
+out.esito_rip = g.calliope.riprese().slice(-1)[0];
+await g.avanza(4500);
+out.ist = g.calliope.istantanee().slice(-1)[0];
+out.rip = g.calliope.riprese().slice(-1)[0];
+out.stato = g.stato();
+""")
+    if "_errore" in out:
+        verifica("il motore nel DOM finto", False, out["_errore"])
+        return
+    verifica("con l'istantanea il motore manda lo stato intero (stesso numero e fase)",
+             out["rip"] and out["rip"]["n"] == out["ist"]["n"]
+             and out["rip"]["fase"] == out["ist"]["fase"] == "turno", str(out["ist"]))
+    dopo = esegui(tmp / "dopo", "porte_fasi", """
+out.ist = g.calliope.istantanee()[0];
+out.stato = g.stato();
+await g.tocca("Porta 1");
+out.mossa = g.calliope.istantanee().slice(-1)[0];
+""", {"ripresa": out["rip"]})
+    verifica("«Riapri»: il riquadro nuovo riparte dall'ultima istantanea (stesso numero, fase, a "
+             "chi tocca, giocatori e punti, comandi)", dopo.get("ist") == out["ist"]
+             and dopo.get("stato") == out["stato"], f"{dopo.get('ist')} | {out['ist']}")
+    verifica("…e la partita continua da lì (la mossa dopo ha il numero dopo)",
+             dopo.get("mossa", {}).get("n") == out["ist"]["n"] + 1
+             and dopo["mossa"]["fase"] == "esito", str(dopo.get("mossa")))
+    es = esegui(tmp / "esito", "porte_fasi", """
+out.prima = g.calliope.istantanee()[0];
+await g.avanza(4500);
+out.dopo = g.calliope.istantanee().slice(-1)[0];
+""", {"ripresa": out["esito_rip"]})
+    verifica("ripresa nell'esito: riprende l'esito e poi va avanti da solo",
+             es.get("prima", {}).get("fase") == "esito" and es.get("dopo", {}).get("fase")
+             == "turno" and es["dopo"]["tocca"] == 1, f"{es.get('prima')} {es.get('dopo')}")
+    rotta = dict(out["rip"], fase="bonus")
+    r1 = esegui(tmp / "rotta", "porte_fasi", "out.ist = g.calliope.istantanee()[0];",
+                {"ripresa": rotta})
+    punti = dict(out["rip"], giocatori=[{"nome": "Ada", "punti": "tanti"}])
+    r2 = esegui(tmp / "punti", "porte_fasi", "out.ist = g.calliope.istantanee()[0];",
+                {"ripresa": punti})
+    verifica("contrario: una ripresa rotta (fase che non c'è, punti non numeri) → partita nuova",
+             r1.get("ist", {}).get("fase") == "preparazione" and r1["ist"]["n"] == 0
+             and r2.get("ist", {}).get("fase") == "preparazione",
+             f"{r1.get('ist')} {r2.get('ist')} {r1.get('_errore', '')[:200]}")
+
+
+def prova_ripresa_server(tmp: Path):
+    sezione("8. la ripresa sul server")
+    a = Ambiente(tmp)
+    a.installa("porte_fasi")
+    A = a.abbina("A", "studio")
+    pid = a.chiama("est_porte_fasi", {}, "Dario", schermo=A)["partita"]
+    a.pagina(A, {"partita": pid, "tipo": "pronto"})
+    posto = a.giochi.partite[pid].posti[A["id"]]
+
+    def manda(ist, ripresa):
+        posto.messaggi.clear()
+        return a.pagina(A, {"partita": pid, "tipo": "stato", "istantanea": ist,
+                            "ripresa": ripresa})
+    R = {"n": 3, "fase": "turno", "dati": {"porte": 4}, "giocatori": [{"nome": "Ada", "punti": 1}]}
+    manda(buona(), R)
+    verifica("la ripresa che accompagna un'istantanea valida si tiene", posto.ripresa == R)
+    r = a.pagina(A, {"partita": pid, "tipo": "pronto"})
+    verifica("«Riapri» (un pronto nuovo dello stesso posto): l'avvio la restituisce",
+             r["avvio"].get("ripresa") == R, str(r.get("avvio"))[:200])
+    manda(buona(n=4, comandi=["porta_9"]), dict(R, n=4))
+    verifica("un'istantanea non valida non cambia la ripresa (resta l'ultima valida)",
+             posto.ripresa == R)
+    manda(buona(n=5), dict(R, n=4))
+    verifica("contrario: una ripresa con un altro numero non si tiene", posto.ripresa is None)
+    manda(buona(n=6), dict(R, n=6, fase="esito"))
+    verifica("contrario: una ripresa con un'altra fase non si tiene", posto.ripresa is None)
+    manda(buona(n=7), dict(R, n=7, dati={"x": "y" * 16500}))
+    verifica("contrario: una ripresa oltre 16 000 caratteri non si tiene", posto.ripresa is None)
+    manda(buona(n=8), dict(R, n=8))
+    posto.messaggi.clear()
+    a.pagina(A, {"partita": pid, "tipo": "stato", "istantanea": buona(n=9)})
+    verifica("contrario: un'istantanea senza ripresa la toglie (mai una partita vecchia)",
+             posto.ripresa is None)
+    pid2 = a.chiama("est_porte_fasi", {"partita": "nuova"}, "Dario", schermo=A)["partita"]
+    r = a.pagina(A, {"partita": pid2, "tipo": "pronto"})
+    verifica("contrario: una partita nuova parte da capo", "ripresa" not in r["avvio"])
+
+
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
     radice = Path(tempfile.mkdtemp(prefix="calliope-gioco-stato-"))
@@ -729,6 +828,8 @@ def main():
         prova_nomi_motore(radice / "nomi")
         prova_nomi_server(radice / "nomi_server")
         prova_nomi_ciclo(radice / "nomi_ciclo")
+        prova_ripresa_motore(radice / "ripresa")
+        prova_ripresa_server(radice / "ripresa_server")
     finally:
         from calliope import minori as M
         for s in ("regole", "avvisi", "gioco", "richieste"):

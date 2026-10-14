@@ -137,6 +137,10 @@ class Posto:
         self.ist_n = -1                     # il numero dell'ultima valida (non può calare)
         self.scartate = 0                   # istantanee non valide (diagnosi)
         self.rifiutati = 0                  # comandi a voce rifiutati dal motore (vecchi)
+        # La ripresa dopo «Riapri» (14/10, decisione 7): lo stato intero del motore mandato con
+        # l'ultima istantanea valida (opaco: il server lo conserva e lo restituisce allo stesso
+        # posto all'avvio di un riquadro nuovo, non lo legge), al più MAX_RIPRESA
+        self.ripresa: dict | None = None
         # La diagnosi del palco (14/10): i difetti misurati dal motore sullo schermo vero (al
         # più tre frasi; [] = la pagina ci sta), None finché non arriva
         self.palco: list[str] | None = None
@@ -470,7 +474,8 @@ class Giochi:
     def _avvio(self, p: Partita, posto: Posto) -> dict:
         return {"partita": p.id, "giocatore": posto.giocatore,
                 "giocatori": len(p.posti), "massimo": p.massimo, "condivisa": p.condivisa,
-                "storia": list(p.storia)[-100:], "lingua": "it"}
+                "storia": list(p.storia)[-100:], "lingua": "it",
+                **({"ripresa": posto.ripresa} if posto.ripresa is not None else {})}
 
     def _t_pronto(self, p: Partita, posto: Posto, dati) -> dict:
         from .. import minori
@@ -694,11 +699,28 @@ class Giochi:
             return {"errore": f"istantanea non valida: {e}", "_stato": 400}
         self._nomi_detti(p, posto, ist)
         prima = self._attivi(p, posto)
+        ripresa = self._ripresa(dati.get("ripresa"), ist)
         with self._lock:
             posto.istantanea, posto.ist_n = ist, ist["n"]
+            # Solo quella che accompagna l'ultima istantanea valida (senza: niente ripresa, mai
+            # una partita vecchia)
+            posto.ripresa = ripresa
         if bool(prima) != bool(ist["comandi"]):
             self.sveglia_voce()
         return {"ok": True, "n": ist["n"]}
+
+    @staticmethod
+    def _ripresa(r, ist: dict) -> dict | None:
+        """Lo stato per la ripresa, se è un oggetto JSON entro MAX_RIPRESA con lo stesso numero
+        e la stessa fase dell'istantanea che accompagna; altrimenti None."""
+        if not isinstance(r, dict) or r.get("n") != ist["n"] or r.get("fase") != ist["fase"]:
+            return None
+        try:
+            if len(json.dumps(r, ensure_ascii=False)) > MAX_RIPRESA:
+                return None
+        except (TypeError, ValueError):
+            return None
+        return r
 
     def _nomi_detti(self, p: Partita, posto: Posto, ist: dict):
         """Come Calliope dice ogni giocatore (14/10, passo 4 del progetto, decisione 1 di chi

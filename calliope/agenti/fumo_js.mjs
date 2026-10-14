@@ -270,7 +270,8 @@ async function prepara(file, opzioni = {}) {
   const dichiarati = opzioni.macchina ? tuttiPiatti(opzioni.macchina, opzioni.minimo || 1, opzioni.massimo || 1) : [];
   let attivi = dichiarati.slice();
   const avvio = { partita: "P1", giocatore: 1, giocatori: opzioni.giocatori || 1, massimo: Math.max(opzioni.massimo || 1, opzioni.giocatori || 1), condivisa: false, storia: [], lingua: "it",
-    ...(dichiarati.length ? { comandi: dichiarati.slice() } : {}) };
+    // la ripresa dopo «Riapri» (14/10), per le prove di Calliope
+    ...(opzioni.ripresa ? { ripresa: opzioni.ripresa } : {}) };
   const dati = {};
   const detti = [];                // le frasi che il gioco fa dire a Calliope (calliope.di)
   const quando = (t) => (f) => { if (typeof f === "function") ascolti[t].push(f); };
@@ -305,11 +306,14 @@ async function prepara(file, opzioni = {}) {
   // lo toglie prima del codice del gioco
   const palchi = [];
   const istantanee = [];           // le istantanee mandate a Calliope (14/10), le ultime
+  const riprese = [];              // lo stato per la ripresa mandato con ognuna
   const rifiutati = [];
   g.__calliopeMotore = Object.freeze({
     // L'istantanea (14/10, passo 2): i comandi a voce attivi sono i suoi; un nome non
     // dichiarato è un errore (il server la scarterebbe)
-    stato: (ist) => {
+    stato: (ist, ripresa) => {
+      riprese.push(ripresa === undefined ? null : JSON.parse(JSON.stringify(ripresa)));
+      riprese.splice(0, Math.max(0, riprese.length - 50));
       const l = ist && Array.isArray(ist.comandi) ? ist.comandi.map(String) : [];
       const fuori = l.filter((x) => !dichiarati.includes(x));
       if (fuori.length) nota("istantanea", new Error(`comandi che la macchina del manifesto non ha: ${fuori.join(", ")}`));
@@ -331,7 +335,7 @@ async function prepara(file, opzioni = {}) {
   }
   const amb = { errori, nota, nodi, radice, doc, tocchi, descrivi, lancia, evento, avanza,
                 respira, ascolti, attivi: () => attivi, dati, detti, caricato: false,
-                motore: null, giocoLogica: undefined, contesto, palchi, istantanee, rifiutati };
+                motore: null, giocoLogica: undefined, contesto, palchi, istantanee, rifiutati, riprese };
   for (const f of file) {
     try { testi[base(f)] = readFileSync(f, "utf8"); } catch (e) { testi[base(f)] = ""; }
   }
@@ -729,6 +733,7 @@ export async function apriGioco(file, opzioni = {}) {
   Object.defineProperty(g, "calliope", { enumerable: false, value: Object.freeze({
     istantanee: () => JSON.parse(JSON.stringify(amb.istantanee)),
     rifiutati: () => JSON.parse(JSON.stringify(amb.rifiutati)),
+    riprese: () => JSON.parse(JSON.stringify(amb.riprese)),
     async comando(dati) {
       for (const f of [...ascolti.comando]) {
         try { f(Object.freeze({ ...dati })); } catch (e) { amb.nota("comando", e, { gestore: true }); }
