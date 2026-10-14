@@ -1551,3 +1551,31 @@ legge la stanza:
   non più nel registro (`seq_vivi`) si butta prima e dopo il giudizio.
 
 Prove: `prove/prova_stanza_guardia.py` (livello 2, ~1 s); banco `prove/manuali/banco_stanza_guardia.py`.
+
+## I conoscenti nella stanza: righe, tenuta, ricerca (14/10, ramo `stanza-conoscenti`)
+
+Decisione [0030](../decisioni/0030-conoscenti.md), dietro `stanza_conoscenti` (di serie spento;
+chi parla e il nome dedotto in [stt-tts](stt-tts.md)). Per quest'area:
+
+- **Etichetta**: nel blocco caldo e nei risultati di `stanza_cerca` una riga di un conoscente è
+  «Marco Rossi (collega di Carlo), conoscente» (`contesto.etichetta`): il nome è un'etichetta, la
+  nota distingue gli omonimi; il familiare omonimo resta «Marco».
+- **Tenuta su disco**: le righe di un conoscente confermato e riconosciuto dalla voce vanno in
+  `stanza.db` con `persona` «conoscente:<id>» e la colonna nuova `nota` (migrazione 2);
+  `conserva.decidi` ha la categoria `conoscente` (solo `stanza` con la voce: mai turni, voce,
+  eventi, conversazioni). Le voci non confermate restano solo in memoria come prima. La rotazione
+  dei «profili tolti» toglie le righe dei conoscenti che non ci sono più solo con i conoscenti
+  accesi (spenti, o all'avvio prima che si leghino, quelle righe aspettano la scadenza dei giorni).
+- **Ricerca**: le righe di un conoscente si cercano come quelle di un adulto di casa (chi c'era,
+  `visibile`); `persona` combacia anche con nome e cognome di seguito (`cerca.nome_combacia`:
+  «Marco Rossi»), e «Marco» trova tutti i Marco con le etichette che li distinguono.
+- **Cancellazione**: «dimentica Marco» (tool `conoscenti`), la scadenza dei 180 giorni e
+  `calliope conserva --svuota` (anche da un altro processo: Calliope rilegge il file sparito)
+  tolgono profilo, impronta e righe su disco (`Tenuta.svuota("conoscente:<id>")`); in memoria le
+  righe tornano «voce non riconosciuta». «Dimentica» della stanza toglie anche gli indizi presi da
+  quel satellite.
+- **Promozione e ritorno** (`conoscente_livello`, solo chi amministra a voce): le righe su disco e
+  in memoria passano da «conoscente:<id>» a «persona:<id>» (e al contrario) con
+  `Tenuta.rinomina`; le presenze del tipo di prima si tolgono.
+
+Prova: `prove/prova_stanza_conoscenti.py`.

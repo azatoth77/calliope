@@ -40,6 +40,7 @@ cancella: si segna come tale.
 | [0027](0027-conversazione-come-registro-di-eventi.md) | La conversazione come registro degli eventi: un registro per persona, il resto proiezioni | accettata, in corso (10/10); registro della stanza dalla 0029 |
 | [0028](0028-decisioni-roadmap-12-10.md) | Decisioni sulla roadmap del 12/10: dati degli adulti per 60 giorni, piano unico della memoria, profilo ridotto da 8 GB come vincolo, posizione della DGX che non conta, musica sì e allarme senza data | accettata, 12/10; T1 in parte superata il 13/10 (0029) |
 | [0029](0029-conversazione-di-stanza.md) | La conversazione di stanza: Calliope sempre in conversazione di gruppo (trascrizione continua, azioni solo col nome e la voce, recupero all'interpellazione, guardiano a posteriori, testo della stanza e ricerca dei tutori decisi per l'installazione, default prudenti) | accettata, 13/10; passo 0 fatto |
+| [0030](0030-conoscenti.md) | I conoscenti: voci sconosciute di adulti col nome dedotto dalla conversazione, salvati solo col sì di chi amministra sullo schermo personale (livello ospite, omonimi distinti dall'impronta, promozione a familiare solo da chi amministra a voce) | accettata, 14/10 |
 
 Una decisione nuova prende il numero successivo e segue lo stesso formato; quando ne supera una
 vecchia, la vecchia cambia solo lo stato («superata il …, vedi NNNN»).
