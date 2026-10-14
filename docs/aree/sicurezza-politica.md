@@ -2,7 +2,9 @@
 
 *Politica unica dei tool e provenienza, permessi, conferme e frase di sfida, analisi di sicurezza del 03/10. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-**Stato al 09/10.** Politica unica dei tool in `ToolRegistry.call` (classi, provenienza, dati non
+**Stato al 14/10.** Come al 09/10 (sotto), con: lo stato del dialogo in ombra (10/10: `proposta_rispondi` e il consenso del progetto confrontato con la politica, `dialogo_interprete: ombra`); la visibilità per evento col contesto dagli eventi (`eventi: attivo`, acceso a mano); i dati conservati per le misure con i loro permessi e il tool `dati_conservati` (12/10); le notizie come dato non fidato che resta nella storia in busta (13/10); il resoconto della stanza in busta, mai un'istruzione (14/10). Classe, livello e quando c'è di ogni tool: tabella in [`architettura-tool.md`](../architettura-tool.md). Il secondo fattore per chi amministra è ancora un progetto.
+
+*Stato al 09/10 (storico):* Politica unica dei tool in `ToolRegistry.call` (classi, provenienza, dati non
 fidati in busta, conferme e frase di sfida, controllo di ciò che dice). Sicurezza per valore:
 fase 2 (memoria dell'intento) attiva dall'08/10; fase 3 (provenienza per valore e classi
 d'effetto) in ombra l'08–09/10 e **accesa dal 09/10 sera** (fase 4, `politica_per_valore` vero
@@ -204,7 +206,7 @@ chiude la proposta. Il secondo fattore per chi amministra è ancora un progetto.
     `satellite_max_connessioni` (16) connessioni sulla porta dei satelliti, stretta di mano
     entro 3 s.
   - **Dati personali** (S9): il terminale (sulla DGX il journal) non stampa più le frasi
-    degli ospiti né le risposte con i dati dei tool riservati (`main.in_console`), né
+    degli ospiti né le risposte con i dati dei tool riservati (`main.in_console`; dal 06/10 `Ciclo.in_console` in `ciclo.py`), né
     argomenti e risultati dei tool di un ospite; `modello_compila`, `anagrafica_cerca` e
     `anagrafica_salva` sono riservati (fuori dal registro dei turni). Su Linux umask 077
     (`UMask=0077` nel servizio e `sicurezza.proteggi_dati` all'avvio, che porta a 600/700
@@ -683,7 +685,7 @@ Le voci qui sopra usano i nomi di prima: dal 08/10 `sviluppo` → `sviluppo_pass
 `sviluppo_prova` → `sviluppo_collauda`, `estensione_crea` → `sviluppo_apri` (anche i programmi,
 prima `delega_lavoro` di codice), `delega_lavoro` → `lavoro_affida`, `estensioni_gestisci` →
 `estensione_gestisci`, `lavori_esegui` → `programma_esegui`, `lavori_rispondi` →
-`lavoro_rispondi`. I nomi vecchi valgono ancora nel registro (`ToolRegistry.NOMI_VECCHI`, regola
+`lavoro_rispondi`. I nomi vecchi valgono ancora nel registro (`registry.NOMI_VECCHI`, regola
 `tool_nome_vecchio`) con tutti i controlli del nome nuovo.
 
 - **`sviluppo_apri`**: pericoloso, con `chiave` file e allegato (il file della persona lascia il

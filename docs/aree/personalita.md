@@ -2,7 +2,9 @@
 
 *Toni di voce, modalità startrek, suoni d'ascolto, wake word diversa dal nome. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-**Stato al 09/10.** Sei toni (della casa e per persona), modalità startrek accesa e spenta a
+**Stato al 14/10.** Come al 09/10 (sotto), più le frasi pronte con varianti per tono e forma breve (fasi 0–1 del 12/10): il catalogo c'è, la misura delle ripetizioni è nel registro dei turni (`calliope stato --turni`), le varianti sono **in ombra** (`frasi_varianti: ombra` di serie; `attivo` nel file locale dopo la rilettura del campione). Sezione «Frasi pronte: misura e catalogo» in fondo.
+
+*Stato al 09/10 (storico):* Sei toni (della casa e per persona), modalità startrek accesa e spenta a
 voce da chi amministra senza riavvio (il ritorno alla normale anche scritto), suoni d'ascolto
 sintetici; il modello acustico di «computer» c'è sul portatile e sulla DGX, non nel repository.
 Le frasi pronte del codice non seguono ancora il tono: l'analisi dell'08/10 (in fondo) propone

@@ -2,7 +2,9 @@
 
 *Installazione e aggiornamento sulla DGX Spark (Ubuntu 24.04 aarch64): uv, gestore `calliope`, systemd, motori. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-**Stato al 09/10.** Calliope gira sulla DGX dal 02/10 come servizio utente systemd, aggiornata con `calliope aggiorna` (ritorno automatico; dal 06/10 non interrompe in silenzio i lavori dell'agente). Voce su Ollama scelta con `llm_profilo`, Whisper con whisper.cpp, agente qwen3.6 su vLLM, SearXNG e sandbox Docker accanto. Dal 07/10 l'extra `voce-gpu` porta Piper sulla GPU (onnxruntime-gpu su aarch64). La prova end-to-end su un'istanza di prova c'è dal 06/10.
+**Stato al 14/10.** Come al 09/10 (sotto): nessun cambio al gestore né ai motori dopo il 09/10. Il gestore passa a Calliope anche `calliope stato …` (tutte le opzioni in [capacita-installazioni](capacita-installazioni.md)), `calliope conserva [--svuota [--persona …]] [--json]` (dati conservati per le misure, dal 12/10), `calliope satellite …` e `calliope schermi …` (abbinamenti e certificati) ed `calliope esegui` (Calliope in primo piano); `calliope prova-e2e` e `calliope motore …` hanno il loro ramo. Comandi controllati sul codice il 14/10.
+
+*Stato al 09/10 (storico):* Calliope gira sulla DGX dal 02/10 come servizio utente systemd, aggiornata con `calliope aggiorna` (ritorno automatico; dal 06/10 non interrompe in silenzio i lavori dell'agente). Voce su Ollama scelta con `llm_profilo`, Whisper con whisper.cpp, agente qwen3.6 su vLLM, SearXNG e sandbox Docker accanto. Dal 07/10 l'extra `voce-gpu` porta Piper sulla GPU (onnxruntime-gpu su aarch64). La prova end-to-end su un'istanza di prova c'è dal 06/10.
 
 ## Moduli
 
@@ -52,9 +54,12 @@ calliope stato --installa whisper_riserva   # faster-whisper su CPU se il server
   (`Type=notify`: Calliope manda READY=1 dopo il saluto, `main.notifica_systemd`; è il
   segnale che l'aggiornamento è riuscito). Aggiornamenti dall'`origin` del clone: il
   portatile fa `git push` in un repository bare sulla DGX. Solo commit, mai il working tree.
-- **pyproject.toml**: dipendenze di base + extra `documenti`, `casa`, `schermi`, `pc` (solo
-  Windows), `gpu` (DLL CUDA 12, solo Windows), `voce-gpu` (CUDA 13 e cuDNN per Piper sulla
-  GPU, solo Linux aarch64, dal 07/10), `prove`, `tutto`; `calliope =
+- **pyproject.toml**: dipendenze di base + extra `documenti`, `modelli` (docxtpl e
+  python-pptx, 03/10), `casa`, `schermi`, `pc` (solo Windows), `gpu` (DLL CUDA 12, solo
+  Windows), `voce-gpu` (CUDA 13 e cuDNN per Piper sulla GPU, solo Linux aarch64, dal 07/10),
+  `archivio` (pypdfium2, Pillow, python-docx), `prove`, `tutto`; `calliope installa` mette di
+  serie `documenti`, `modelli`, `casa`, `schermi` (`EXTRA_PREDEFINITI`), gli altri con
+  `calliope extra <nome>`; `calliope =
   calliope.__main__:cli`. `uv.lock` è universale (Windows e Linux): si rigenera con `uv lock`
   quando cambia pyproject.toml. Su Windows il venv con pip resta come prima.
 - **onnxruntime-gpu su Linux aarch64** (07/10 sera): al posto di onnxruntime (stessa versione,
@@ -154,8 +159,8 @@ prova: [`prove/manuali/e2e-dgx.md`](../../prove/manuali/e2e-dgx.md).
 `calliope motore searxng controlla | aggiorna | novita | storia` gira in Python
 (`calliope.web.motore`, dal gestore come `esegui`, nella cartella dei dati: stesso stato
 `motore/searxng.json` e stesso blocco di Calliope); le altre azioni restano dello script
-(`avvia`, `stato`, `prova`, `diagnosi` e le nuove `immagine`, `candidata`, `togli-candidata`,
-`usa`, `dimentica`, `pulisci-immagini`). Calliope chiama lo script con bash e docker (l'utente
+(`avvia`, `ferma`, `rimuovi`, `log`, `stato`, `prova`, `diagnosi` e le nuove `immagine`, `candidata`,
+`togli-candidata`, `usa`, `dimentica`, `pausa <motori…>`, `pulisci-immagini`). Calliope chiama lo script con bash e docker (l'utente
 è nel gruppo `docker`): la copia di prova `calliope-searxng-candidata` su 127.0.0.1:10004, il
 container vero rifatto con `usa`. L'immagine scelta sta in `~/calliope-motore/searxng/immagine`
 e vince su quella fissata nello script finché non è più vecchia. Niente sudo, nessun altro
