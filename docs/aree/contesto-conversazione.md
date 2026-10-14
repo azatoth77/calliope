@@ -1795,6 +1795,59 @@ obiettivo `attesa` entro +0,1 s da `senza`; poi sul vero, alla prossima prova in
 
 Prove: `prove/prova_stanza_attesa.py` (livello 1, ~2 s), `prova_stanza_storia` invariata.
 
+## «Ti ricordi…?»: storpiature, nome proprio, stanza prima dell'archivio (14/10 notte, ramo `giro-auto-14-10`)
+
+**Caso vero** (stessa prova in auto, ~21:06; qui con nomi di fantasia): il tutore chiede «tu
+ricordi quando è il compleanno della crisima di Marta» (Whisper scrive «crisima»). Il modello
+chiama due volte `archivio_cerca` (i documenti di casa) e poi `conversazione_cerca` (prima frase
+6,44 s) e non trova. L'informazione era nella stanza: le righe del tutore e del minore 10–11 minuti
+prima («crisima»/«cresima», «Marta») e soprattutto **la risposta di Calliope** con cresima, Marta e
+la data, nove minuti prima della domanda. Nel frattempo la conversazione si era chiusa per
+inattività e il primo pezzo della conversazione nuova copriva gli ultimi 8 minuti: la risposta era
+appena fuori. La ricerca anticipata, con «crisima» nella domanda e «cresima» nella riga, dava a
+quella riga una parola sola su tre (il nome), alla pari con altre righe più recenti.
+
+**(a) Storpiature e nome proprio** (`stanza/cerca.py`, `tools/stanza.py`):
+
+- `simile`: due parole **di almeno 6 lettere** a **una modifica** di distanza (una lettera cambiata,
+  tolta o aggiunta) e con **la stessa iniziale** valgono come la stessa parola; `rare` sono le parole
+  lunghe della domanda, `combacia` le radici che una riga contiene (comincia così, o è simile). Vale
+  per `stanza_cerca` e per la ricerca anticipata, sulle righe in memoria (la ricerca sul disco resta
+  per radice: lì una riga con la storpiatura arriva se ha un'altra parola della domanda). È una
+  conversione della forma (le storpiature di Whisper), non un significato (principio 10).
+  Contrari: «crisima»/«cristina» e «Rachele»/«Raffaele» (due modifiche), «crisima»/«brisima»
+  (iniziale), le parole corte («Marta»/«Marte», «gita»/«gite»: le trova la radice o niente).
+- **La ricerca anticipata più stretta**: con due o più parole utili nella domanda una riga ne deve
+  avere almeno due, oppure **un nome proprio** della domanda (`nomi_propri`: le parole con la
+  maiuscola non in testa a una frase, come le scrive Whisper, e i nomi delle persone di casa; mai
+  il nome di Calliope). «Quando è la festa di Halloween?» non porta più la riga che dice solo
+  «festa» (la seconda prova in auto: righe aggiunte in 22 turni su 31, ~280 token a turno);
+  «Marta» da solo basta. Nella prova di `stanza_cerca`, «cosa ha detto Nicola di sabato?» chiesto
+  da chi non è tutore non porta più la riga di Carlo con «sabato» (né il nome né due parole): resta
+  la nota «Le parole di Nicola le cerco solo per chi gli fa da genitore.».
+
+**(b) Prima la stanza.** Il prompt (con `stanza_cerca`): «per ciò che si è detto vicino ai
+dispositivi di casa, **anche le tue risposte a chi era lì** («ti ricordi quando è…?», «cosa avevamo
+detto di…?»), rispondi dalle righe della stanza che hai davanti…; se lì non c'è… stanza_cerca,
+**prima di archivio_cerca, di conversazione_cerca** e di dire che non lo sai». La descrizione di
+`stanza_cerca`: «Trova anche ciò che hai risposto tu a voce a chi era lì: per «ti ricordi…?» su una
+cosa detta in casa cerca qui prima che nei documenti o nelle conversazioni passate». E una rete:
+**dopo una ricerca vuota** di `archivio_cerca` o `conversazione_cerca` (tutte le chiamate della
+passata, nessuna riuscita), se chi parla può usare `stanza_cerca` e nella risposta non l'ha ancora
+usato, **Brain cerca nella stanza** con la frase di chi parla (come `spinta_stanza`, di cui segue la
+rete), una volta; la frase «Non trovo documenti…» non si dice e il modello risponde con le righe
+davanti (`STANZA_NOTA`). Regola `stanza_dopo_ricerca_vuota`. Decide su un esito di un tool, non sul
+testo della domanda.
+
+**(c) La riapertura** fino all'inizio dell'ultimo scambio, dentro `stanza_riapertura_caratteri`
+(sezione qui sopra): con le chiacchiere rade la risposta di nove minuti prima entra nel primo
+pezzo; con quelle fitte vince il tetto (le più nuove) e la trova la ricerca anticipata.
+
+Prove: `prove/prova_stanza_ricorda.py` (livello 1, ~1 s, nomi di fantasia, con i contrari);
+`prova_stanza_cerca` con la nota sul minore aggiornata. **Da guardare** sulla DGX: la regola
+`stanza_dopo_ricerca_vuota` e la «Ricerca anticipata» di `calliope stato --turni` (turni con righe
+aggiunte: devono calare), e se il 26B ora chiama `stanza_cerca` per i «ti ricordi…?».
+
 ## Avvisi ai tutori: data, origine, trascrizione e audio (14/10 sera, ramo `avvisi-data`)
 
 Due cose toccano il contesto e la conservazione (il dettaglio è in [minori](minori.md)):

@@ -2361,10 +2361,16 @@ class Config:
         # DGX il 26B chiamava stanza_cerca anche con la risposta già lì (30 turni su 30)
         # Dal 14/10 sera le righe stanno anche nella conversazione, prima delle domande
         # (`stanza_contesto_in_storia`): «che hai davanti» vale per tutte e due
-        room = ("per ciò che si è detto vicino ai dispositivi di casa rispondi dalle righe della "
-                "stanza che hai davanti, se ci sono; se lì non c'è (chi ha detto cosa, cosa "
-                "si era deciso, a che ora, di cosa si parlava in un'altra stanza) stanza_cerca, "
-                "prima di dire che non lo sai; " if stanza else "")
+        # Dal 14/10 notte (seconda prova in auto: «ti ricordi quando è la cresima di…?» → due volte
+        # archivio_cerca e poi conversazione_cerca, e la risposta era nella stanza, detta da
+        # Calliope stessa nove minuti prima): anche le sue risposte a chi era lì, e stanza_cerca
+        # prima dell'archivio e delle conversazioni
+        room = ("per ciò che si è detto vicino ai dispositivi di casa, anche le tue risposte a "
+                "chi era lì («ti ricordi quando è…?», «cosa avevamo detto di…?»), rispondi dalle "
+                "righe della stanza che hai davanti, se ci sono; se lì non c'è (chi ha detto cosa, "
+                "cosa si era deciso, a che ora, di cosa si parlava in un'altra stanza) "
+                "stanza_cerca, prima di archivio_cerca, di conversazione_cerca e di dire che non "
+                "lo sai; " if stanza else "")
         # Con la ricerca web: quando usarla, al posto di «non puoi sapere il meteo…»
         if web:
             limits = (limits.replace("non usi internet o file e ", "non usi file e ")

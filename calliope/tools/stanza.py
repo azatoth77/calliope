@@ -25,6 +25,7 @@ per 60 giorni, cercato con gli stessi permessi: calliope/stanza/tenuta.py). Solo
 """
 
 import datetime
+import re
 import time
 from dataclasses import dataclass
 
@@ -286,6 +287,26 @@ def stanze_nominate(st, frase: str) -> list[str]:
     return out
 
 
+_MAIUSCOLA = re.compile(r"(?<![.!?…]\s)(?<!^)\b([A-ZÀ-Ý][a-zà-ÿ']{2,})")
+
+
+def nomi_propri(ctx, frase: str) -> frozenset:
+    """Le radici dei nomi propri della frase: le parole con la maiuscola non in testa a una frase
+    (Whisper scrive così i nomi: «la cresima di Rachele») e i nomi delle persone di casa
+    registrate. Per la ricerca anticipata: una riga col nome basta anche da sola."""
+    from ..stanza.cerca import chiavi, parole as parole_di
+    nomi = [m.group(1) for m in _MAIUSCOLA.finditer(frase or "")]
+    reg = getattr(ctx, "speakers", None)
+    dette = set(parole_di(frase))
+    for prof in list(getattr(reg, "users", {}).values()):
+        nome = str(getattr(prof, "name", "") or "")
+        if nome and all(w in dette for w in parole_di(nome)):
+            nomi.append(nome)
+    wake = {w.lower() for w in (getattr(getattr(ctx, "cfg", None), "wake_names", None)
+                                or ["Calliope"])}
+    return frozenset(chiavi(" ".join(n for n in nomi if n.lower() not in wake)))
+
+
 def anticipa(ctx, frase: str, blocco=None) -> Anticipo | None:
     """La ricerca anticipata per la frase del turno: None se non parte (spenta, tool spento,
     stanza spenta, chi parla non può cercare, ospiti, nessuna parola utile); un Anticipo con
@@ -314,10 +335,14 @@ def anticipa(ctx, frase: str, blocco=None) -> Anticipo | None:
     tetto = int(getattr(cfg, "stanza_cerca_anticipo_caratteri", 1000) or 0)
     if tetto <= 0:
         return None
+    # Solo righe pertinenti (14/10 notte, seconda prova in auto: righe aggiunte in 22 turni su
+    # 31, ~280 token riletti a ogni turno anche per «quando è Halloween?»): con due o più parole
+    # utili nella domanda ne servono due nella riga, o un nome proprio («Rachele» basta)
+    propri = nomi_propri(ctx, frase)
     es = cerca_mod.cerca(st, cfg, chi, resto, "", stanze[0] if len(stanze) == 1 else "",
                          escludi_testo=frase, escludi=getattr(blocco, "righe_id", None)
                          or frozenset(), tetto_righe=ANTICIPO_RIGHE, tetto_car=tetto,
-                         aspetta=False)
+                         aspetta=False, minimo=2, propri=propri)
     misura = {"esito": es.esito, "ms": int((time.perf_counter() - t0) * 1000),
               "filtri": ["parole"] * bool(radici) + ["stanza"] * bool(stanze),
               "chi": "minore" if chi.minore else "tutore" if chi.tutore_di else "adulto"}
@@ -389,9 +414,11 @@ def cerca_spec() -> ToolSpec:
             "persona=Carlo, parole=gita, quando=mattina. parole: l'argomento (vuoto: gli "
             "ultimi discorsi); persona: chi l'ha detto; stanza: dove; quando o dalle/alle "
             "(HH:MM) per il momento della conversazione (ultima_ora, mattina, pomeriggio, sera, "
-            "notte, oggi, ieri; il giorno di cui si parlava, «sabato», va in parole). Non serve "
-            "se la risposta è già nelle righe della stanza che hai davanti, né per le "
-            "conversazioni con te (quelle sono in conversazione_cerca)."),
+            "notte, oggi, ieri; il giorno di cui si parlava, «sabato», va in parole). Trova "
+            "anche ciò che hai risposto tu a voce a chi era lì: per «ti ricordi…?» su una cosa "
+            "detta in casa cerca qui prima che nei documenti o nelle conversazioni passate. Non "
+            "serve se la risposta è già nelle righe della stanza che hai davanti; le "
+            "conversazioni passate con chi parla sono in conversazione_cerca."),
         parameters=CERCA_PARAMETRI, func=_stanza_cerca, risk="lettura",
         levels=LIVELLI_DA["familiare"], non_fidato=True, riservato=True)
 

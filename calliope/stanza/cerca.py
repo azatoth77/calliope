@@ -145,9 +145,49 @@ def nome_combacia(pers: str, nome: str) -> bool:
     return any(n[i:i + len(p)] == p for i in range(len(n) - len(p) + 1))
 
 
-def punteggio(testo: str, radici: list[str]) -> int:
-    ws = parole(testo)
-    return sum(1 for r in radici if any(w.startswith(r) for w in ws))
+def rare(domanda: str) -> dict[str, str]:
+    """{radice: parola} per le parole lunghe della domanda (almeno 6 lettere, non vuote): quelle
+    che Whisper storpia di una lettera e che si cercano anche simili (`simile`)."""
+    out = {}
+    for w in parole(domanda):
+        if len(w) >= 6 and w not in _VUOTE and not w.isdigit():
+            out.setdefault(radice(w), w)
+    return out
+
+
+def simile(a: str, b: str) -> bool:
+    """Due parole lunghe a una modifica di distanza (una lettera cambiata, tolta o aggiunta), con
+    la stessa iniziale: «crisima» e «cresima» (Whisper, caso vero del 14/10 sera), non «crisima» e
+    «cristina» (due) né «Rachele» e «Raffaele». Solo parole di almeno 6 lettere: le corte sono
+    troppe a una lettera di distanza."""
+    if a == b:
+        return True
+    if not a or not b or a[0] != b[0] or abs(len(a) - len(b)) > 1 or min(len(a), len(b)) < 6:
+        return False
+    if len(a) > len(b):
+        a, b = b, a
+    i = 0
+    while i < len(a) and a[i] == b[i]:
+        i += 1
+    if len(a) == len(b):
+        return a[i + 1:] == b[i + 1:]
+    return a[i:] == b[i + 1:]
+
+
+def combacia(radici: list[str], ws: list[str], simili: dict | None = None) -> set[str]:
+    """Le radici della domanda che una riga (le sue parole `ws`) contiene: comincia così, o
+    (dal 14/10 notte, `simili` = `rare(domanda)`) è simile alla parola lunga della domanda."""
+    out = set()
+    for r in radici:
+        if any(w.startswith(r) for w in ws):
+            out.add(r)
+        elif simili and r in simili and any(simile(w, simili[r]) for w in ws):
+            out.add(r)
+    return out
+
+
+def punteggio(testo: str, radici: list[str], simili: dict | None = None) -> int:
+    return len(combacia(radici, parole(testo), simili))
 
 
 @dataclass
@@ -384,11 +424,14 @@ def cerca(stanza, cfg, chi: Chi, parole_cercate: str = "", persona: str = "",
           dove: str = "", quando: str = "", dalle: str = "", alle: str = "",
           attesa=None, adesso: float | None = None, escludi_testo: str = "",
           escludi=frozenset(), tetto_righe: int | None = None, tetto_car: int | None = None,
-          aspetta: bool = True) -> Esito:
+          aspetta: bool = True, minimo: int = 1, propri=frozenset()) -> Esito:
     """La ricerca, con i permessi già decisi per `chi` (vedi il modulo). `escludi_testo`: la
     frase del turno (la sua riga nella stanza non si dà). `escludi`: le (stanza, seq) già nel
     blocco caldo (la ricerca anticipata non le ripete). `aspetta=False`: niente attesa delle
-    righe in coda (la ricerca anticipata non fa aspettare la voce)."""
+    righe in coda (la ricerca anticipata non fa aspettare la voce). `minimo` (la ricerca
+    anticipata, 14/10 notte): una riga vale se ha almeno tante radici della domanda, o una di
+    `propri` (i nomi propri detti nella domanda: «Rachele» basta da solo). Le parole lunghe della
+    domanda trovano anche le parole simili a una lettera (`simile`: le storpiature di Whisper)."""
     adesso = time.time() if adesso is None else adesso
     tenuta = getattr(stanza, "tenuta", None)
     info = info_stanze(stanza) if tenuta is not None else stanza._info
@@ -411,7 +454,9 @@ def cerca(stanza, cfg, chi: Chi, parole_cercate: str = "", persona: str = "",
     # taverna?» con stanza=taverna: le righe non dicono «taverna»)
     togli = set(parole(dove)) | {w for s in (sats if dove else ())
                                  for w in parole(nome_stanza(stanza, s, info))}
-    radici = chiavi(" ".join(w for w in parole(f"{parole_cercate} {in_piu}") if w not in togli))
+    testo_cercato = " ".join(w for w in parole(f"{parole_cercate} {in_piu}") if w not in togli)
+    radici = chiavi(testo_cercato)
+    simili = rare(testo_cercato)
     pers = norm(persona).strip()
     # La domanda stessa è già nella stanza (ciclo: turno_testo, «→ Calliope»): non è una
     # risposta, e con le sue parole sarebbe sempre la prima trovata
@@ -453,8 +498,12 @@ def cerca(stanza, cfg, chi: Chi, parole_cercate: str = "", persona: str = "",
                 continue
             # Il nome di chi parla conta come una parola della riga: «cosa ha detto Nicola?»
             # cercato con la frase intera trova le righe di Nicola
-            p = punteggio(f"{r.get('testo') or ''} {nome}", radici) if radici else 0
+            prese = (combacia(radici, parole(f"{r.get('testo') or ''} {nome}"), simili)
+                     if radici else set())
+            p = len(prese)
             if radici and p == 0:
+                continue
+            if radici and p < min(minimo, len(radici)) and not (prese & set(propri)):
                 continue
             if (sat, r["seq"]) in escludi:
                 continue                       # già nel blocco caldo (ricerca anticipata)

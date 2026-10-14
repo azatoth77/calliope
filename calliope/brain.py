@@ -649,6 +649,8 @@ NON_SO = re.compile(r"\bnon (?:ho (?:(?:nessuna |alcuna |altre |ulteriori |altri
 # `spinta_stanza`): sul banco il 4B chiamava stanza_cerca 4 volte su 12 quando serviva
 # («a che ora avevamo deciso di partire?» → «Non ho informazioni…»). Come per l'archivio la
 # ricerca la fa Brain, con la frase di chi parla, e il modello risponde con le righe davanti
+# Le ricerche che, vuote, fanno cercare nella stanza (stanza_dopo_ricerca_vuota, 14/10 notte)
+RICERCHE_ALTROVE = frozenset({"archivio_cerca", "conversazione_cerca"})
 STANZA_NOTA = ("Qui sopra c'è la ricerca nella conversazione sentita nelle stanze, fatta con la "
                "frase di chi parla. Se le righe rispondono alla domanda, rispondi da lì dicendo "
                "chi l'ha detto; se non c'entrano o non c'è niente, di' in breve che non lo sai.")
@@ -4642,6 +4644,13 @@ class Brain:
                        and self.tools.get("stanza_cerca") is not None
                        and self.tools.allowed("stanza_cerca", level)
                        and (ant is None or ant.tagliate > 0))
+        # Dopo una ricerca vuota nei documenti o nelle conversazioni passate (14/10 notte, caso
+        # vero in auto: «ti ricordi quando è la cresima di…?» → archivio_cerca due volte, poi
+        # conversazione_cerca, e la risposta era nella stanza): Brain cerca nella stanza con la
+        # frase di chi parla, una volta, prima della frase «non trovo»
+        stanza_vuoto = (bool(user_text) and self._net("spinta_stanza")
+                        and self.tools.get("stanza_cerca") is not None
+                        and self.tools.allowed("stanza_cerca", level))
         # «Non posso creare un'estensione» con il tool disponibile a chi parla (06/10):
         # la frase si trattiene e il modello riceve una spinta (politica.rinuncia)
         disp = ({n for n in politica.RINUNCE if self.tools.get(n) is not None
@@ -5060,6 +5069,24 @@ class Brain:
                 else:
                     spoke = True
                     yield tenuto
+            if (stanza_vuoto and calls
+                    and all(c.get("name") in RICERCHE_ALTROVE for c in calls)
+                    and not any(t.get("ok") for t in self.last_tools[-len(calls):])
+                    and not any(t.get("nome") == "stanza_cerca" for t in self.last_tools)):
+                # Esito vuoto, niente da dire ancora: cerca nella stanza (il risultato vuoto
+                # resta davanti al modello, la sua frase «non trovo» no)
+                stanza_vuoto = False
+                self._rule("stanza_dopo_ricerca_vuota")
+                print(f"   [STANZA] {calls[0]['name']} non ha trovato niente: cerco nella stanza",
+                      flush=True)
+                call = {"id": "call_stanza_vuoto", "name": "stanza_cerca",
+                        "arguments": {"parole": user_text}}
+                self.history.append({"role": "assistant", "content": "", "tool_calls": [call]})
+                content = self._run_tool(call, level)
+                self.history.append({"role": "tool", "tool_call_id": call["id"],
+                                     "name": call["name"], "content": content})
+                tail = [{"role": "system", "content": STANZA_NOTA}]
+                continue
             # Il cambio d'argomento (§ 13): la mezza frase fissa su ciò che va da parte, detta
             # subito (copre anche la passata dopo)
             frase_arg = self.__dict__.pop("_da_dire_argomento", None)
