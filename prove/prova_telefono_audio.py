@@ -300,7 +300,10 @@ def parte_browser(amb, tok):
     if exe is None:
         print("SALTATA IN PARTE: Nessun Edge né Chromium: parte nel browser saltata.")
         return
-    frasi = sintetizza([FRASE])
+    # Senza il rumore di Piper (14/10): con il rumore, una sintesi su qualche decina usciva
+    # così storpiata che Whisper sbagliava «Calliope» e «Oggi» a tutte le frequenze
+    # («Calio perché ore sono? Quaggia…», 6 parole su 9) e la prova cadeva a caso
+    frasi = sintetizza([FRASE], deterministica=True)
     if frasi is None:
         print("SALTATA IN PARTE: Nessuna voce di Piper in voices/: parte nel browser saltata.")
         return

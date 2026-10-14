@@ -26,6 +26,7 @@ import json
 import time
 from pathlib import Path
 
+from prove.orologio import fa  # noqa: E402
 from prove.ha_finto import TOKEN, FakeHA, _e, cartella_temporanea, disponibile, entita_casa
 
 manca = disponibile()
@@ -274,7 +275,7 @@ verifica("senza web, con l'entità meteo: «non puoi sapere» solo il resto",
          and "chiedilo a meteo_leggi" in p)
 p_prima = prompt(cfg, be)
 ha.entita["weather.forecast_casa"]["esposta"] = False          # chi amministra la nasconde
-be._caricato = 0
+be._caricato = fa(be.aggiorna_s + 1)   # vecchia (non 0: nei primi 5 minuti dopo l'avvio è adesso)
 be.entita()                                                    # ricarica in secondo piano
 for _ in range(50):
     if not be.meteo_esposte():

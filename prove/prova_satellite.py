@@ -189,13 +189,20 @@ class UscitaFinta:
 
 
 # ───────────────────────── voce di chi parla ─────────────────────────
-def sintetizza(testi: list[str]) -> dict[str, np.ndarray] | None:
-    """Le frasi di «chi parla», con una voce diversa da quella di Calliope, a 16 kHz."""
+def sintetizza(testi: list[str], deterministica: bool = False) -> dict[str, np.ndarray] | None:
+    """Le frasi di «chi parla», con una voce diversa da quella di Calliope, a 16 kHz.
+
+    Con `deterministica` la prima pronuncia è senza il rumore di Piper (noise_scale e
+    noise_w_scale a 0, 14/10): sempre la stessa, per le prove che non ripetono la frase. Con
+    il rumore di serie «Calliope, che ore sono?» non fa scattare la wake word circa 1 volta su
+    10 (misura del 14/10: 2 sintesi su 20 sotto la soglia per due blocchi di fila), e una
+    prova senza ripetizioni cade a caso (prova_stanza_voce, 14/10)."""
     path = RADICE / "voices" / "it_IT-riccardo-x_low.onnx"
     if not path.is_file():
         return None
-    from piper import PiperVoice
+    from piper import PiperVoice, SynthesisConfig
     voice = PiperVoice.load(str(path))
+    fissa = SynthesisConfig(noise_scale=0.0, noise_w_scale=0.0)
     out = {}
     for t in testi:
         # Tre pronunce diverse (Piper sceglie a caso durate e timbro): la prima è la frase,
@@ -203,8 +210,9 @@ def sintetizza(testi: list[str]) -> dict[str, np.ndarray] | None:
         # stessa identica pronuncia falliva tutte e 4 le volte (03/10, 1 giro su ~10 con
         # più prove insieme): una persona la ridirebbe in un altro modo
         VARIANTI[t] = []
-        for _ in range(3):
-            pcm = b"".join(ch.audio_int16_bytes for ch in voice.synthesize(t))
+        for i in range(3):
+            pcm = b"".join(ch.audio_int16_bytes for ch in voice.synthesize(
+                t, fissa if deterministica and i == 0 else None))
             x = np.frombuffer(pcm, np.int16).astype(np.float32) / 32768
             rate = voice.config.sample_rate
             n = int(len(x) * 16000 / rate)

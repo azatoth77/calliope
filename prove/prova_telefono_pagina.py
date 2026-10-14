@@ -218,19 +218,22 @@ class Pagina:
         self.browser.chiudi()
 
 
-def sintetizza(testi: list[str]) -> dict[str, np.ndarray] | None:
-    """Le frasi di «chi parla» con una voce di Piper, a 16 kHz (come prova_satellite)."""
+def sintetizza(testi: list[str], deterministica: bool = False) -> dict[str, np.ndarray] | None:
+    """Le frasi di «chi parla» con una voce di Piper, a 16 kHz (come prova_satellite). Con
+    `deterministica` senza il rumore di Piper (14/10): sempre lo stesso audio, per le prove che
+    controllano le parole di Whisper (prova_telefono_audio)."""
     for nome in VOCI:
         path = risorsa("voices", (nome, nome + ".json")) / nome
         if path.is_file():
             break
     else:
         return None
-    from piper import PiperVoice
+    from piper import PiperVoice, SynthesisConfig
     voice = PiperVoice.load(str(path))
+    fissa = SynthesisConfig(noise_scale=0.0, noise_w_scale=0.0) if deterministica else None
     out = {}
     for t in testi:
-        pcm = b"".join(ch.audio_int16_bytes for ch in voice.synthesize(t))
+        pcm = b"".join(ch.audio_int16_bytes for ch in voice.synthesize(t, fissa))
         x = np.frombuffer(pcm, np.int16).astype(np.float32) / 32768
         rate = voice.config.sample_rate
         n = int(len(x) * 16000 / rate)

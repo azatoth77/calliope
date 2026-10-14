@@ -860,6 +860,13 @@ verifica("«sì» nel turno dopo (frase breve): lavoro avviato", out.get("ok") a
          "Ci lavoro" in out["risposta_finale"] and svc_t.attivi(), out["risposta_finale"])
 aspetta(lambda: svc_t.corrente is not None, 3)
 out, dt = tool("lavoro_stato", {}, "Dario", "amministra", 32)
+if dt >= SUBITO_S:
+    # Sola lettura: una seconda misura distingue l'attesa vera (il lavoro dura ~2 s, la
+    # seconda chiamata aspetterebbe di nuovo) da un processo fermo un attimo sotto carico
+    # (14/10: 0,41 s e 5,2 s con due runner insieme, poi subito sotto i 50 ms)
+    out, dt2 = tool("lavoro_stato", {}, "Dario", "amministra", 32)
+    print(f"   lavoro_stato lento una volta ({dt * 1000:.0f} ms), di nuovo: {dt2 * 1000:.0f} ms")
+    dt = min(dt, dt2)
 verifica("lavoro_stato: a che punto è, senza aspettare", "Sto lavorando a «script che rinomina"
          in out["risposta_finale"] and dt < SUBITO_S, f"{dt * 1000:.1f} ms {out['risposta_finale']}")
 out, _ = tool("lavoro_annulla", {}, "Bianca", "familiare", 33)
