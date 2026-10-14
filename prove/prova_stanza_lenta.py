@@ -825,6 +825,52 @@ def prova_banco():
 
 
 # ─────────────────────────── 10. misure, stato, piano, configurazione ───────────────────────────
+def prova_banco_conservati():
+    """Il banco manuale delle registrazioni conservate (14/10 sera): le scelte dal .md e dal
+    JSON della pagina di revisione, il riferimento per caso, i casi vinti. Dati di fantasia."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "banco_stanza_lenta", Path(__file__).resolve().parent / "manuali" /
+        "banco_stanza_lenta.py")
+    B = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(B)
+    md = TMP / "ritrascrizione-conservati-20261014-1657.md"
+    md.write_text("# Registrazioni conservate\n\n"
+                  '<!-- banco: {"totale": 5, "uguali": 2, "parole_uguali": 8, "diversi": 3} -->'
+                  "\n\n## 1 · 2026-10-12 18:03:21 · 2,4 s · p-carlo/2026-10-12/180321-123.wav\n"
+                  "- originale: Che ore sono a Tokio\n- lenta: Che ore sono a Tokyo?\n"
+                  "- scelta: o\n- corretto: \n\n"
+                  "## 2 · 2026-10-12 18:05:00 · 1,1 s · p-carlo/2026-10-12/180500-001.wav\n"
+                  "- originale: Accendi la luce in cucina\n- lenta: Accendi la luce in cucina.\n"
+                  "- scelta: \n- corretto: \n\n"
+                  "## 3 · 2026-10-12 18:06:00 · 1,0 s · p-carlo/2026-10-12/180600-002.wav\n"
+                  "- originale: Spegni il forno\n- lenta: Spegni il fono\n- scelta: ?\n"
+                  "- corretto: \n", encoding="utf-8")
+    js = TMP / "scelte.json"
+    js.write_text(json.dumps([{"n": 2, "file": "p-carlo/2026-10-12/180500-001.wav",
+                               "scelta": "c", "corretto": "Accendi la luce nella cucina"},
+                              {"n": 3, "file": "p-carlo/2026-10-12/180600-002.wav",
+                               "scelta": "l", "corretto": ""}]), encoding="utf-8")
+    testa, casi = B.leggi_scelte(md)
+    verifica("banco conservati: il .md (n, file, testi, scelte; vuota = da fare, ? = fuori)",
+             testa.get("totale") == 5 and [c["n"] for c in casi] == [1, 2, 3]
+             and casi[0]["file"] == "p-carlo/2026-10-12/180321-123.wav"
+             and B.riferimento(casi[0]) == "Che ore sono a Tokio"
+             and B.riferimento(casi[1]) is None and B.riferimento(casi[2]) == "?", str(casi))
+    _, casi2 = B.leggi_scelte(md, js)
+    verifica("banco conservati: le scelte del JSON vincono sul .md (c col testo, l)",
+             B.riferimento(casi2[0]) == "Che ore sono a Tokio"
+             and B.riferimento(casi2[1]) == "Accendi la luce nella cucina"
+             and B.riferimento(casi2[2]) == "Spegni il fono", str(casi2))
+    verifica("banco conservati: casi vinti, persi e pari",
+             B.confronto([(0, 1), (2, 1), (1, 1), (0, 3)]) == {"vince_a": 2, "vince_b": 1,
+                                                                "pari": 1})
+    verifica("banco conservati: i sistemi da confrontare (turni, senza prompt, il secondo "
+             "servizio con e senza nomi)",
+             {"originale", "turni", "turni_senza_prompt", "lento_senza_prompt", "lento_nomi",
+              "lento_nomi_parole"} <= set(B.SISTEMI))
+
+
 def prova_misure_piano():
     cfg = cfg_base()
     righe = misure_mod.leggi(cfg.turn_log_dir)
@@ -929,6 +975,7 @@ def main() -> int:
         prova_guardia()
         prova_riassunto_carico()
         prova_banco()
+        prova_banco_conservati()
         prova_misure_piano()
     finally:
         shutil.rmtree(TMP, ignore_errors=True)

@@ -58,8 +58,29 @@ NON fa parte del runner. Quattro modi:
    sulla DGX), dopo che chi amministra ha segnato le scelte:
 
        python prove/manuali/banco_stanza_lenta.py --conservati privato/ritrascrizione-conservati-….md
+              [--scelte scelte-ritrascrizione-….json]
 
-   WER dell'originale e della lenta sul set intero (i casi uguali contano come giusti).
+   WER dell'originale e della lenta sul set intero (i casi uguali contano come giusti) e sui
+   soli casi diversi, casi vinti dall'una e dall'altra. Le scelte (o, l, c col testo, ?) dal
+   .md o dal JSON della pagina di revisione (`[{"n", "file", "scelta", "corretto"}]`, vince sul
+   .md). Misura vera del 14/10 sera: originale 3,0 %, lenta 4,8 %.
+
+   Con `--ritrascrivi` (sulla DGX, dalla cartella dei dati, col registro dei turni e la voce
+   conservata) ogni registrazione del giro (fino all'ora nel nome del file; il riferimento è la
+   scelta per i casi diversi e l'originale per quelli uguali) si ritrascrive con ciascun sistema:
+
+       … --conservati FILE.md --scelte FILE.json --ritrascrivi [--url-lento URL]
+              [--sistemi originale,turni,…] [--max N] [--persona ID] [--audio DIR] [--salva DIR]
+
+   `originale` (il testo del registro), `turni` (il Whisper dei turni col suo prompt),
+   `turni_senza_prompt` (la corsia lenta di prima sulla DGX), `lento_senza_prompt`,
+   `lento_nomi` («Parla Carlo.»), `lento_nomi_parole` (il nome e le parole di prima, come
+   `Lenta.prompt`), `lento_prompt_turni` (il secondo servizio col prompt dei turni). Il secondo
+   servizio: `--url-lento`, o `stanza_lenta_stt_url`, o la porta di
+   `setup/linux/motore/whisper-lento.sh` (8004). Stampa solo numeri: WER sul set e sui casi
+   diversi, casi vinti, persi e pari contro `turni`, tempo mediano. L'obiettivo per riaccendere
+   la ritrascrizione (`stanza_lenta_ritrascrivi`): un `lento*` con la WER sotto `turni`. Senza il
+   registro dei turni (il portatile) i soli casi diversi, con l'audio da `--audio DIR`.
 
 Misure (stampate, e in `--salva DIR/banco-stanza-lenta-AAAAMMGG-HHMM.json`, solo numeri): WER
 della corsia veloce e della lenta (parole normalizzate, cifre in lettere), attribuzione giusta
@@ -499,36 +520,314 @@ def modo_banco(o, cfg) -> int:
     return 0
 
 
-def modo_conservati(o) -> int:
-    testo = Path(o["conservati"]).read_text(encoding="utf-8")
+def leggi_scelte(md: Path, scelte: Path | None = None) -> tuple[dict, list[dict]]:
+    """(testa, casi) dal file di `ritrascrivi_conservati.py`: per ogni caso diverso n, file,
+    originale, lenta, scelta, corretto. Con `scelte` (il JSON scaricato dalla pagina di
+    revisione: [{"n", "file", "scelta", "corretto"}], 14/10 sera) le scelte vengono da lì (per
+    file, o per n se il file manca) e vincono su quelle scritte nel .md."""
+    testo = md.read_text(encoding="utf-8")
     m = re.search(r"<!-- banco: (\{.*?\}) -->", testo)
     testa = json.loads(m.group(1)) if m else {}
-    coppie_o, coppie_l, da_fare, non_capite = [], [], 0, 0
+    casi = []
     for blocco in re.split(r"\n## ", testo)[1:]:
-        campi = dict(re.findall(r"^- (originale|lenta|scelta|corretto):[ \t]*(.*)$", blocco, re.M))
-        s = (campi.get("scelta") or "").strip().lower()
-        if not s:
+        intest = blocco.splitlines()[0]
+        pezzi = [x.strip() for x in intest.split("·")]
+        campi = dict(re.findall(r"^- (originale|lenta|scelta|corretto):[ \t]*(.*)$", blocco,
+                                re.M))
+        try:
+            n = int(pezzi[0])
+        except (ValueError, IndexError):
+            n = len(casi) + 1
+        casi.append({"n": n, "file": pezzi[-1] if len(pezzi) >= 4 else "",
+                     "originale": campi.get("originale") or "", "lenta": campi.get("lenta") or "",
+                     "scelta": (campi.get("scelta") or "").strip(),
+                     "corretto": (campi.get("corretto") or "").strip()})
+    if scelte is not None:
+        js = json.loads(scelte.read_text(encoding="utf-8"))
+        if isinstance(js, dict):                     # {"scelte": […]} o {n: {…}}
+            js = js.get("scelte") or [dict(v, n=int(k)) for k, v in js.items()
+                                      if str(k).isdigit() and isinstance(v, dict)]
+        per_file = {str(x.get("file") or ""): x for x in js if x.get("file")}
+        per_n = {int(x["n"]): x for x in js if str(x.get("n", "")).isdigit()}
+        for c in casi:
+            x = per_file.get(c["file"]) or per_n.get(c["n"])
+            if x is not None:
+                c["scelta"] = str(x.get("scelta") or "").strip()
+                c["corretto"] = str(x.get("corretto") or "").strip()
+    return testa, casi
+
+
+def riferimento(caso: dict) -> str | None:
+    """La frase giusta del caso: «?» = non si capisce (fuori dal conto), None = da fare."""
+    s = (caso.get("scelta") or "").strip().lower()
+    if not s:
+        return None
+    if s.startswith("?"):
+        return "?"
+    giusta = {"o": caso.get("originale"), "l": caso.get("lenta")}.get(s[0], caso.get("corretto"))
+    return giusta or None
+
+
+def confronto(errori: list[tuple[int, int]]) -> dict:
+    """Per caso, gli errori di A e di B: quanti ne vince A, quanti B, quanti pari."""
+    return {"vince_a": sum(1 for a, b in errori if a < b),
+            "vince_b": sum(1 for a, b in errori if b < a),
+            "pari": sum(1 for a, b in errori if a == b)}
+
+
+def modo_conservati(o) -> int:
+    """WER dell'originale e della lenta dal file dei casi diversi (i casi uguali contano come
+    giusti): il conto del 14/10 sera, senza audio."""
+    sc = Path(o["scelte"]) if isinstance(o.get("scelte"), str) else None
+    testa, casi = leggi_scelte(Path(o["conservati"]), sc)
+    coppie_o, coppie_l, per_caso, da_fare, non_capite = [], [], [], 0, 0
+    for c in casi:
+        rif = riferimento(c)
+        if rif is None:
             da_fare += 1
             continue
-        if s.startswith("?"):
+        if rif == "?":
             non_capite += 1
             continue
-        giusta = {"o": campi.get("originale"), "l": campi.get("lenta")}.get(
-            s[0], campi.get("corretto"))
-        if not giusta:
-            da_fare += 1
-            continue
-        coppie_o.append((giusta, campi.get("originale") or ""))
-        coppie_l.append((giusta, campi.get("lenta") or ""))
+        coppie_o.append((rif, c["originale"]))
+        coppie_l.append((rif, c["lenta"]))
+        r = norm(rif)
+        per_caso.append((errori_parole(r, norm(c["originale"])),
+                         errori_parole(r, norm(c["lenta"]))))
     parole_uguali = int(testa.get("parole_uguali") or 0)
 
-    def wer(coppie):
+    def wer(coppie, piu=0):
         err = sum(errori_parole(norm(r), norm(i)) for r, i in coppie)
-        tot = sum(len(norm(r)) for r, _ in coppie) + parole_uguali
+        tot = sum(len(norm(r)) for r, _ in coppie) + piu
         return round(100 * err / tot, 2) if tot else None
+    v = confronto(per_caso)
     print(f"Casi segnati {len(coppie_o)} (da fare {da_fare}, non capiti {non_capite}); uguali "
-          f"{testa.get('uguali', '?')} ({parole_uguali} parole, contate come giuste)")
-    print(f"WER sul set: originale {wer(coppie_o)} %, corsia lenta {wer(coppie_l)} %")
+          f"{testa.get('uguali', '?')} ({parole_uguali} parole, contate come giuste)"
+          + (f"; scelte da {sc.name}" if sc else ""))
+    print(f"WER sul set: originale {wer(coppie_o, parole_uguali)} %, corsia lenta "
+          f"{wer(coppie_l, parole_uguali)} %")
+    print(f"Sui soli casi diversi: originale {wer(coppie_o)} %, corsia lenta {wer(coppie_l)} %; "
+          f"per caso vince l'originale {v['vince_a']}, la lenta {v['vince_b']}, pari {v['pari']}")
+    if o.get("ritrascrivi"):
+        return modo_conservati_audio(o, testa, casi)
+    return 0
+
+
+# I sistemi confrontati sulle registrazioni conservate (14/10 sera): il Whisper dei turni come
+# nei turni, quello dei turni senza prompt (la corsia lenta di prima sulla DGX: deve rifare il
+# 4,8 %), e il secondo servizio (whisper-lento.sh) senza prompt, col nome di chi parla, col nome
+# e le parole di prima (il prompt di Lenta.prompt), col prompt dei turni
+SISTEMI = ("originale", "turni", "turni_senza_prompt", "lento_senza_prompt", "lento_nomi",
+           "lento_nomi_parole", "lento_prompt_turni")
+
+
+def _post_whisper(url: str, modello: str, lingua: str):
+    import httpx
+
+    from calliope.stt import unisci_righe, wav_bytes
+    cli = httpx.Client(timeout=httpx.Timeout(60.0, connect=2.0))
+
+    def f(audio, prompt):
+        r = cli.post(url.rstrip("/") + "/audio/transcriptions",
+                     files={"file": ("frase.wav", wav_bytes(audio, SR), "audio/wav")},
+                     data={"model": modello, "language": lingua, "prompt": prompt,
+                           "temperature": "0", "response_format": "json"})
+        r.raise_for_status()
+        return unisci_righe(str(r.json().get("text") or "")).strip()
+    return f
+
+
+def _vivo(url: str) -> bool:
+    import urllib.request
+    radice = re.sub(r"/v1/?$", "", url.rstrip("/"))
+    try:
+        with urllib.request.urlopen(radice + "/", timeout=2) as r:  # noqa: S310 — 127.0.0.1
+            return r.status < 500
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def insieme_conservati(cfg, o, testa: dict, casi: list[dict]) -> tuple[list[dict], str]:
+    """Le registrazioni del file dei casi: tutte quelle del giro di ritrascrivi_conservati.py
+    (dal registro dei turni, fino all'ora nel nome del file), col riferimento: la scelta per i
+    casi diversi, l'originale per quelli uguali (le due trascrizioni d'accordo). Senza il
+    registro (il portatile) i soli casi diversi, con l'audio da `--audio DIR`."""
+    from calliope.conserva import CARTELLA_VOCE
+    per_file = {c["file"]: c for c in casi if c.get("file")}
+    voce_dir = Path(o["audio"]) if isinstance(o.get("audio"), str) else \
+        Path(cfg.turn_log_dir or "registro") / CARTELLA_VOCE
+    turni = []
+    try:
+        from calliope.latenza import leggi
+        turni = [r for r in leggi(str(Path(cfg.turn_log_dir or "registro")), None)
+                 if r.get("voce_file") and str(r.get("testo") or "").strip()
+                 and r.get("testo") != "(frase di conferma)"]
+    except Exception:  # noqa: BLE001
+        turni = []
+    m = re.search(r"(\d{8})-(\d{4})", Path(o["conservati"]).name)
+    if m and turni:
+        fino = datetime.datetime.strptime(m.group(1) + m.group(2), "%Y%m%d%H%M")
+        fino = fino.replace(second=59)
+
+        def prima_di(r):
+            try:
+                return datetime.datetime.fromisoformat(str(r.get("inizio"))[:19]) <= fino
+            except ValueError:
+                return False
+        turni = [r for r in turni if prima_di(r)]
+    chi = str(o.get("persona") or "").strip().lower()
+    if chi and turni:
+        turni = [r for r in turni if chi in (str((r.get("voce") or {}).get("id") or "").lower(),
+                                             str((r.get("voce") or {}).get("nome") or "").lower())]
+    turni.sort(key=lambda r: str(r.get("inizio") or ""))
+    out, ultimo = [], {}
+    if turni:
+        come = f"registro dei turni ({len(turni)} registrazioni con la voce)"
+        for r in turni:
+            v = r.get("voce") or {}
+            pid = str(v.get("id") or v.get("nome") or "?")
+            try:
+                quando = datetime.datetime.fromisoformat(str(r.get("inizio"))[:23])
+            except ValueError:
+                quando = None
+            prima = None
+            if quando is not None and pid in ultimo and \
+                    (quando - ultimo[pid][0]).total_seconds() < 300:
+                prima = ultimo[pid][1]
+            if quando is not None:
+                ultimo[pid] = (quando, str(r.get("testo")))
+            c = per_file.get(str(r["voce_file"]))
+            rif = riferimento(c) if c is not None else str(r.get("testo"))
+            out.append({"file": voce_dir / str(r["voce_file"]), "originale": str(r.get("testo")),
+                        "riferimento": rif, "nome": v.get("nome"), "prima": prima,
+                        "diverso": c is not None})
+    else:
+        come = "solo i casi diversi (nessun registro dei turni qui)"
+        for c in casi:
+            out.append({"file": voce_dir / c["file"], "originale": c["originale"],
+                        "riferimento": riferimento(c), "nome": None, "prima": None,
+                        "diverso": True})
+    tot = int(testa.get("totale") or 0)
+    if turni and tot and len(out) != tot:
+        come += f"; ATTENZIONE: il file dei casi ne contava {tot}"
+    return out, come
+
+
+def modo_conservati_audio(o, testa: dict, casi: list[dict]) -> int:
+    """`--conservati FILE.md --scelte FILE.json --ritrascrivi`: ogni registrazione ritrascritta
+    da ciascun sistema; WER sul set e casi vinti contro il Whisper dei turni. Solo numeri."""
+    import numpy as np
+
+    from calliope.config import load_config
+    from calliope.conserva import leggi_wav
+    from calliope.stt import prompt_whisper
+    cfg = load_config()
+    reg, come = insieme_conservati(cfg, o, testa, casi)
+    reg = [x for x in reg if x["riferimento"] not in (None, "?") and Path(x["file"]).exists()]
+    if o.get("max"):
+        reg = reg[:int(o["max"])]
+    if not reg:
+        print("Nessuna registrazione con riferimento e audio: salto.")
+        return SALTA
+    print(f"\nRitrascrizione di {len(reg)} registrazioni con riferimento ({come})")
+    chiesti = [s.strip() for s in str(o.get("sistemi") or ",".join(SISTEMI)).split(",")
+               if s.strip()]
+    url_lento = (o["url_lento"] if isinstance(o.get("url_lento"), str) else
+                 str(getattr(cfg, "stanza_lenta_stt_url", "") or "").strip()
+                 or "http://127.0.0.1:8004/v1")
+    fun: dict = {}
+    stt = None
+    if any(s.startswith("turni") for s in chiesti):
+        try:
+            from calliope.stt import make_transcriber
+            stt = make_transcriber(cfg)
+        except Exception as e:  # noqa: BLE001
+            print(f"Whisper dei turni non disponibile ({type(e).__name__}): niente «turni*»")
+    if stt is not None:
+        fun["turni"] = lambda a, x: stt.transcribe(a)
+        fun["turni_senza_prompt"] = lambda a, x: stt.transcribe(a, prompt="")
+    if any(s.startswith("lento") for s in chiesti):
+        if _vivo(url_lento):
+            mod = str(getattr(cfg, "stanza_lenta_stt_modello", "") or "") or cfg.stt_modello
+            lento = _post_whisper(url_lento, mod, cfg.language)
+            car = int(getattr(cfg, "stanza_lenta_prompt_caratteri", 160) or 0)
+
+            def nomi(x):
+                return f"Parla {str(x['nome']).split()[0]}." if x.get("nome") else ""
+
+            def nomi_parole(x):
+                coda = " ".join(str(x.get("prima") or "").split())[-car:] if car else ""
+                if coda and len(coda) == car and " " in coda:
+                    coda = coda.split(" ", 1)[1]
+                return " ".join(y for y in (nomi(x), coda) if y)
+            fun["lento_senza_prompt"] = lambda a, x: lento(a, "")
+            fun["lento_nomi"] = lambda a, x: lento(a, nomi(x))
+            fun["lento_nomi_parole"] = lambda a, x: lento(a, nomi_parole(x))
+            fun["lento_prompt_turni"] = lambda a, x: lento(a, prompt_whisper(cfg))
+            print(f"Secondo servizio su {url_lento}")
+        else:
+            print(f"Il secondo servizio non risponde su {url_lento}: niente «lento*» "
+                  "(calliope motore whisper-lento stato)")
+    sistemi = [s for s in chiesti if s == "originale" or s in fun]
+    ipotesi = {s: [] for s in sistemi}
+    tempi = {s: [] for s in sistemi}
+    pausa = float(o.get("pausa") or 0.2)
+    for i, x in enumerate(reg, 1):
+        audio, sr = leggi_wav(Path(x["file"]))
+        if sr != SR:
+            n = int(len(audio) * SR / sr)
+            audio = np.interp(np.linspace(0, len(audio) - 1, n), np.arange(len(audio)),
+                              audio).astype("float32")
+        for s in sistemi:
+            if s == "originale":
+                ipotesi[s].append(x["originale"])
+                continue
+            t0 = time.perf_counter()
+            try:
+                ipotesi[s].append(fun[s](audio, x) or "")
+            except Exception as e:  # noqa: BLE001
+                print(f"  {i}: {s} errore {type(e).__name__}")
+                ipotesi[s].append("")
+            tempi[s].append(time.perf_counter() - t0)
+            time.sleep(pausa)
+        if i % 10 == 0:
+            print(f"  {i}/{len(reg)}")
+    rif = [norm(x["riferimento"]) for x in reg]
+    tot = sum(len(r) for r in rif)
+    err = {s: [errori_parole(r, norm(h)) for r, h in zip(rif, ipotesi[s])] for s in sistemi}
+    base = "turni" if "turni" in err else "originale"
+    diversi = [k for k, x in enumerate(reg) if x["diverso"]]
+    tot_d = sum(len(rif[k]) for k in diversi)
+    risultati = {}
+    print(f"\n{len(reg)} registrazioni ({tot} parole di riferimento; casi diversi del file "
+          f"{len(diversi)}). Contro «{base}»: vinti / persi / pari per caso.")
+    print(f"{'sistema':22} {'WER':>7} {'WER diversi':>12} {'vinti':>6} {'persi':>6} "
+          f"{'pari':>5} {'p50 s':>6}")
+    for s in sistemi:
+        w = round(100 * sum(err[s]) / tot, 2) if tot else None
+        wd = round(100 * sum(err[s][k] for k in diversi) / tot_d, 2) if tot_d else None
+        v = confronto(list(zip(err[s], err[base])))
+        p50 = round(float(np.median(tempi[s])), 2) if tempi[s] else None
+        risultati[s] = {"wer": w, "wer_diversi": wd, "vinti": v["vince_a"], "persi": v["vince_b"],
+                        "pari": v["pari"], "p50_s": p50}
+        print(f"{s:22} {w if w is not None else '-':>7} {wd if wd is not None else '-':>12} "
+              f"{v['vince_a']:>6} {v['vince_b']:>6} {v['pari']:>5} "
+              f"{p50 if p50 is not None else '-':>6}")
+    if base in risultati:
+        meglio = [s for s in risultati if s.startswith("lento")
+                  and (risultati[s]["wer"] or 1e9) < (risultati[base]["wer"] or 0)]
+        print("\nObiettivo per riaccendere la ritrascrizione: WER sotto «" + base + "» ("
+              + str(risultati[base]["wer"]) + " %). "
+              + ("Lo passano: " + ", ".join(meglio) if meglio else "Nessun «lento» lo passa."))
+    if o.get("salva"):
+        d = Path(o["salva"])
+        d.mkdir(parents=True, exist_ok=True)
+        p = d / f"banco-conservati-{datetime.datetime.now():%Y%m%d-%H%M}.json"
+        p.write_text(json.dumps({"modo": "conservati", "registrazioni": len(reg),
+                                 "parole": tot, "diversi": len(diversi), "base": base,
+                                 "url_lento": url_lento, "sistemi": risultati},
+                                ensure_ascii=False, indent=1), encoding="utf-8")
+        print(f"Numeri in {p}")
     return 0
 
 

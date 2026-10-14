@@ -444,6 +444,7 @@ LEGAMI = [
     ("calliope/stt.py", ["prova_stanza_lenta.py"]),
     ("calliope/piano.py", ["prova_stanza_lenta.py"]),
     ("calliope/conserva.py", ["prova_stanza_lenta.py"]),
+    ("prove/manuali/banco_stanza_lenta.py", ["prova_stanza_lenta.py"]),
     # I conoscenti (14/10, decisione 0030): i tool, i tasti della proposta, la scheda
     ("calliope/tools/conoscenti.py", ["prova_stanza_conoscenti.py", "prova_politica.py"]),
     ("calliope/schermi/server.py", ["prova_stanza_conoscenti.py"]),
