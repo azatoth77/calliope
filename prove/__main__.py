@@ -157,6 +157,7 @@ A_SECCO = [
     # ~15 s: la pagina in Edge o Chromium senza finestra; senza browser si salta
     ("prova_schermi_satellite.py", [], "uno schermo per satellite: riusato ai ricollegamenti e dopo i riavvii, token rinnovato se perso, revoca a cascata, abbinamenti inattivi segnalati"),
     ("prova_schermi_pagina.py", [], "pagina degli schermi in un browser vero: si ricollega da sola dopo un riavvio"),
+    ("prova_cdp_orfani.py", [], "browser delle prove nel job object della prova (14/10): la prova che muore senza chiudi() non lascia processi msedge con il suo profilo, contrario senza job, chiudi() di sempre"),
     # ~10 s: server degli schermi vero su 127.0.0.1, ufficio con l'estrazione finta
     ("prova_scritto_conversazione.py", [], "scrivere solo durante una conversazione a voce: regola pura, voce che apre e rinnova, breve e scritto che non rinnovano, altra persona e ospite che chiudono, server con evento «scrittura», 403 senza_conversazione e regola nel registro, modulo chiuso a metà"),
     ("prova_scritto.py", [], "scrivere invece di parlare: controlli dei codici, moduli dei tool con il server vero, valori al tool senza il modello, permessi, canale, registro"),
@@ -378,6 +379,7 @@ LIVELLO_3 = {
     "prova_scheda_intera.py", "prova_markdown_pagina.py", "prova_cassetto_pagina.py",
     "prova_esercizi_pagina.py", "prova_vista_sviluppo_pagina.py", "prova_cronologia_pagina.py",
     "prova_compagnia_pagina.py", "prova_frase_lunga_voce.py", "prova_stanza_voce.py",
+    "prova_cdp_orfani.py",
 }
 # Mai nel gruppo parallelo, anche quando una prova li sceglie nel livello 2: un browser, un
 # tempo reale o tanti processi, che sotto carico falliscono a caso. Tutto il livello 3 è
