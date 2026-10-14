@@ -14,7 +14,7 @@
 | Chi parla | CAM++ (3D-Speaker) in ONNX con onnxruntime | `calliope/speaker_id.py` → `SpeakerEmbedder`, `SpeakerRegistry`, `SpeakerContext`; `arruola.py`; margine tra i profili e voce incerta tra un adulto e un minore (07/10) `Ciclo._confronta_voce`, `Ciclo._chiedi_chi_parla`, `SpeakerContext.incerta`; continuità delle frasi cortissime (08/10) `Ciclo._per_continuita`; il nome da solo dopo lo scatto acustico `ciclo.solo_nome_acustico`; più voci vicino allo stesso satellite (dal 09/10, sotto) `calliope/compagnia.py` → `Compagnia`, `modo`, `riassunto`, e il giudizio «rivolta a Calliope» `calliope/rivolta.py` → `Giudice`, `etichetta` |
 | Speech-to-Text | faster-whisper nel processo, oppure un server con l'API OpenAI (sulla DGX whisper.cpp con CUDA, servizio `calliope-whisper`; vLLM scartato) con ripiego su faster-whisper su CPU (modello di riserva dal catalogo, `whisper_riserva`) | `calliope/stt.py` → `Transcriber`, `ServerTranscriber`, `make_transcriber`, `modello_whisper`; server in `setup/linux/motore/whisper.sh`; correzione delle frasi incerte (spenta) `calliope/stt_correzione.py` → `Correttore`, `accettabile`, `min_utile`; a capo di whisper-server tolti `stt.unisci_righe`; parole incerte al modello (B, spenta) `stt_correzione.parole_incerte`, `Brain.STT_INCERTE_MSG`; frase capita trattenuta (B2, spenta) `Brain.CapitoHold`, `Brain._applica_capito`, `STT_RISCRIVI_MSG` (confronto A/B/B2/C in fondo); parole incerte negli argomenti dei tool (dal 08/10, F0 e F1, sotto) `calliope/argomenti_incerti.py` → `Ascolto`, `Misura`, `Vocabolario`, `allinea`, `esito`, `suggerimento`, `riassunto`, con le probabilità per parola `Transcriber.parole` e `ServerTranscriber.parole`; tempo massimo della richiesta in proporzione alla frase `ServerTranscriber.tempo_massimo` (10/10); frasi tipiche delle allucinazioni scartate per intero in `calliope/allucinazioni.py` (09/10) |
 | Conversazione di stanza, passo 1 in ombra (13/10, sotto) | Silero VAD in ONNX (un secondo VAD, suo), Whisper con la precedenza, CAM++ | sul satellite `calliope/satellite/stanza.py` → `Segmentatore`, `AscoltoStanza`, rubinetto `Listener.rubinetto`; sul server `calliope/stanza/` → `Stanza` (`ascolto.py`: `copertura`, `turno_testo`, `pausa`, `riprendi`, `dimentica`, `presenti`, `presenze`, `durante_qui`, `pronto`), filtro dell'eco del passo 5 `filtra`, `Detta` (`eco.py`), `Riproduttore.voce_ora`, `Collegamento.frasi_voce`, `Copertura`, `Precedenza` (`coda.py`), `RegistroStanza` (`registro.py`), `Misure`, `riassunto` (`misure.py`), `load_stanza`; `STTCondiviso.transcribe(priorita=…, prompt=…)`; ganci `Ciclo._stanza_copertura`, `Ciclo._stanza_turno`; tool `stanza_pausa` (`calliope/tools/stanza.py`) |
-| Corsia lenta della stanza (14/10 sera, passo 3, `stanza_lenta`, sotto) | Whisper con la precedenza LENTA (o un Whisper suo, `stanza_lenta_stt_url`), CAM++ a finestre, solo libreria standard | `calliope/stanza/lenta.py` → `Lenta` (`metti`, `dovuti`, `passo`, `giro`, `rivedi`, `prompt`, `finestre`, `pendente`), `allucinazione`, `dividi_testo`, `cambio_sostanziale`, `riassuntore_guardiano`; `calliope/stanza/banco.py` → `Banco` (eccezione dell'audio del banco); `Transcriber.transcribe(…, beam=)`; prova `prove/prova_stanza_lenta.py`, banco `prove/manuali/banco_stanza_lenta.py`, `prove/manuali/ritrascrivi_conservati.py` |
+| Corsia lenta della stanza (14/10 sera, passo 3, `stanza_lenta`, sotto; ritrascrizione solo con un Whisper suo o un beam che conta, `stanza_lenta_ritrascrivi`) | Whisper con la precedenza LENTA (o un Whisper suo, `stanza_lenta_stt_url`: `setup/linux/motore/whisper-lento.sh`, large-v3 q5_0), CAM++ a finestre, solo libreria standard | `calliope/stanza/lenta.py` → `Lenta` (`metti`, `dovuti`, `passo`, `giro`, `rivedi`, `prompt`, `finestre`, `pendente`), `allucinazione`, `dividi_testo`, `cambio_sostanziale`, `riassuntore_guardiano`; `calliope/stanza/banco.py` → `Banco` (eccezione dell'audio del banco); `Transcriber.transcribe(…, beam=)`; prova `prove/prova_stanza_lenta.py`, banco `prove/manuali/banco_stanza_lenta.py`, `prove/manuali/ritrascrivi_conservati.py` |
 | Conoscenti (decisione 0030, 14/10, sotto) | CAM++ (impronte delle voci non riconosciute) | `calliope/stanza/conoscenti.py` → `Conoscenti`, `Conoscente`, `Gruppo`, `Proposta`, `Indizio`, `nomi_in`, `accesa`; tool `conoscenti` e `conoscente_livello` (`calliope/tools/conoscenti.py`); turni rivolti a Calliope `Ciclo._conoscente_turno`, frase breve `Ciclo._conoscente_breve` |
 | Wake word acustica | classificatore addestrato in formato openWakeWord (ONNX) | `calliope/wakeword.py` → `WakeWordDetector`, `load_wake_detector`; usato da `Listener.listen(wake, awake_until)`. Modelli e addestramento in `wakeword/` |
 | Text-to-Speech | Piper (voce `it_IT-serena-high`) | `calliope/tts.py` → `Speaker` (2 thread: sintesi e riproduzione, `_pcm`; la prima frase lunga a pezzi `primo_pezzo`, `tts_spezza_prima`, `tts_primo_pezzo_min`, e i thread di onnxruntime `carica_voce`, `tts_thread`, dal 07/10; velocità e costo della voce misurati all'avvio e con l'uso `calliope/taratura_voce.py` → `Taratura` (file voce_taratura.json), `tts_thread` «auto»; dal 07/10 sera Piper anche sulla GPU con onnxruntime-gpu, `tts_dispositivo` auto/cpu/cuda, scelta secondo la macchina e ripiego sulla CPU (`_su_gpu`, `prova_dispositivo`): [contesto-conversazione](contesto-conversazione.md)); inglesismi detti all'inglese `calliope/pronuncia.py` → `Pronuncia`, `LESSICO` (`tts_pronuncia`, `tts_pronuncia_extra`) |
@@ -1337,10 +1337,78 @@ Nicola (riccardo) sopra soglia già dalla corsia veloce (voci di Piper maschili 
 peggiora sull'audio rumoroso; con un modello più accurato il prompt aiuta. Da qui `auto`. Il set è
 piccolo (196 parole senza la TV): i numeri veri li darà la DGX.
 
-**Sulla DGX** (da fare, comandi nel rapporto del ramo): `prove/manuali/ritrascrivi_conservati.py`
+**Sulla DGX** (da fare al 14/10 pomeriggio; *fatto la sera, misura qui sotto*): `prove/manuali/ritrascrivi_conservati.py`
 ritrascrive come la corsia lenta le registrazioni conservate (voce degli adulti col consenso, 95 di
 chi amministra al 14/10) e scrive in `privato/` i soli casi diversi da segnare (originale / lenta /
 scelta): è il primo riferimento vero per la WER (`banco_stanza_lenta.py --conservati`). Poi, con
 l'eccezione dell'audio del banco accesa per 7 giorni, `banco_stanza_lenta.py --banco` sui segmenti
 veri della stanza (riferimento scritto a mano in `riferimento.tsv`). Registrazioni dedicate di
 adulti che lo sanno, quando ci saranno: `--cartella privato/banco-stanza` (formato nel file).
+
+### La misura vera sulla DGX e la ritrascrizione solo se serve (14/10 sera, ramo `stanza-lenta-2`)
+
+**La misura** (14/10 sera, `ritrascrivi_conservati.py` sulla DGX, poi la revisione a mano di chi
+amministra): le **95 registrazioni conservate** di chi amministra, ritrascritte come faceva la
+corsia lenta accesa sulla DGX (lo stesso whisper-server dei turni, large-v3-turbo, che **ignora il
+beam**, e senza il prompt dei turni perché `stanza_lenta_prompt: auto` lo spegne col Whisper dei
+turni). 56 uguali, 39 diverse; per ognuna delle 39 chi amministra ha scelto l'originale, la lenta o
+ha scritto la frase giusta (il JSON delle scelte resta fuori dal repository, come i testi).
+
+| Conto | Whisper dei turni (originale) | Corsia lenta | Casi vinti |
+|---|---|---|---|
+| Set intero, 95 (le uguali giuste) | **3,0 %** | 4,8 % | — |
+| Le sole 39 diverse | **4,5 %** | 7,1 % | originale 24, lenta 12, pari 3 |
+
+(Il conto di `banco_stanza_lenta.py --conservati … --scelte …`, con la sua normalizzazione delle
+parole: 2,86 % contro 4,70 % sul set, 4,23 % contro 6,94 % sulle diverse, gli stessi 24/12/3.)
+
+**Lettura**: senza un Whisper diverso la ritrascrizione **peggiora** le righe: è lo stesso modello
+con meno contesto (niente «Conversazione con Calliope.»), e il beam più largo non arriva al server.
+Il banco sintetico del portatile (sopra) lo faceva vedere appena (faster-whisper rispetta il beam);
+il vero lo dice chiaro.
+
+**L'interruttore** `stanza_lenta_ritrascrivi: auto | si | no` (`calliope/stanza/lenta.py`,
+`Lenta.ritrascrive`, `whisper_proprio`, `beam_effettivo`): con **auto** (di serie) la
+ritrascrizione si fa solo se la corsia lenta ha un Whisper suo (`stanza_lenta_stt_url`) o un beam
+che conta (faster-whisper nel processo, `device` cuda o cpu, con `stanza_lenta_beam` più largo di
+`whisper_beam_size`; un server o un trascrittore che non dice il dispositivo: no). Senza
+ritrascrizione la corsia lenta fa tutto il resto sul **testo della corsia veloce**: chi parla sullo
+scambio (zona grigia corretta, blocchi con due voci spezzati sul testo v1, «più voci»), TV,
+allucinazioni (ripetizione e compressione sul testo v1), riassunto. Una **versione 2 nasce solo da
+un cambio vero** (attribuzione, TV, allucinazione); il resto è l'evento «uguale». Se il Whisper suo
+è giù, con `auto` il segmento resta col testo v1 (prima ripiegava su quello dei turni, cioè sul
+caso misurato peggiore); con `si` detto a mano ripiega come prima. Misure: `ritrascritto` (false
+senza), «senza ritrascrizione N» nella riga di `calliope stato --turni`, nessun tempo di Whisper per
+quei segmenti. Il «no» di YAML (false) è accettato. Prova `prova_stanza_lenta.py` (con i contrari:
+lo stesso beam dei turni non conta, «no» vince sul Whisper suo).
+
+**Il secondo Whisper**, preparato e **non acceso** (`setup/linux/motore/whisper-lento.sh`, unità
+`calliope-whisper-lento`, porta 8004, `calliope motore whisper-lento …`): lo stesso
+`whisper-server` compilato per i turni, con **large-v3 non turbo**. La scelta del modello, con la
+memoria della DGX del 14/10 (liberi ~21 GB su 119: vLLM 47,8, Ollama 26B 15, e4b 3,1, llama-guard
+5,3, Whisper turbo 2,1; FLUX a richiesta 13):
+
+| Variante | File | Memoria (stima) | Margine con FLUX acceso |
+|---|---|---|---|
+| **large-v3 q5_0** (scelta) | 1,08 GB | ~2,0 GB | ~6 GB |
+| large-v3 f16 | 3,1 GB | ~3,9 GB (README di whisper.cpp) | ~4 GB |
+| large-v3 q8_0 | — | — | non c'è nel repository ufficiale di whisper.cpp |
+
+La stima di q5_0: i pesi più il calcolo e le cache del beam (~0,9 GB: il turbo misura 2,1 GB con
+1,6 di pesi, ma ha 4 strati di decoder invece di 32). La quantizzazione q5_0 di Whisper large
+perde poco (da verificare sul banco qui sotto: se perde, `VARIANTE=f16`). **Residente** e non
+avviato e fermato a DGX libera: 2 GB non valgono un caricamento a ogni passo e una gara con FLUX
+per la stessa memoria; `whisper-lento.sh ferma` resta a mano se servisse. Il piano dei modelli
+(`calliope stato --piano`, riga «Stanza lenta») lo propone solo se resta il posto per FLUX, con la
+**memoria vera** del processo quando gira (nvidia-smi per processo, dal PID dell'unità:
+`macchina._whisper_lento`); senza posto e col whisper-server dei turni dice «senza
+ritrascrizione». Catalogo: `modelli.WHISPER["cpp-lenta"]` (e `cpp-lenta-f16`).
+
+**Il banco per decidere** (`banco_stanza_lenta.py --conservati FILE.md --scelte FILE.json
+--ritrascrivi`, sulla DGX): le 95 registrazioni (fino all'ora nel nome del file; riferimento la
+scelta per le 39 diverse, l'originale per le 56 uguali) ritrascritte da `turni` (col suo prompt),
+`turni_senza_prompt` (deve rifare la misura di sopra), `lento_senza_prompt`, `lento_nomi`,
+`lento_nomi_parole`, `lento_prompt_turni`; stampa solo numeri (WER sul set e sulle diverse, casi
+vinti/persi/pari contro `turni`, tempo mediano). **Obiettivo per riaccendere la ritrascrizione**:
+un `lento*` con la WER sotto quella di `turni`; allora `stanza_lenta_stt_url` nel locale (e, se
+vince senza prompt, `stanza_lenta_prompt: no`). Comandi in [setup-dgx](setup-dgx.md).

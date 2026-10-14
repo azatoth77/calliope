@@ -1868,3 +1868,29 @@ corsia lenta, dimentica e svuota). Banco: `prove/manuali/banco_stanza_lenta.py` 
 sezione `conversazione_stanza` del `calliope.locale.yaml`; per il banco anche
 `stanza_audio_banco_giorni: 7`. Prima conviene guardare il piano (`calliope stato --piano`, riga
 «Stanza lenta») e, se c'è posto, un secondo whisper-server più accurato su `stanza_lenta_stt_url`.
+
+**Ritrascrizione solo se serve** (14/10 sera, ramo `stanza-lenta-2`): sulla DGX, con lo stesso
+whisper-server dei turni, la ritrascrizione della corsia lenta sbagliava più dell'originale (95
+registrazioni conservate di chi amministra, riferimento scritto a mano: WER 4,8 % contro 3,0 %; sulle
+39 diverse 7,1 % contro 4,5 %, l'originale vince 24 casi, la lenta 12; numeri in
+[stt-tts](stt-tts.md)). Da qui **`stanza_lenta_ritrascrivi: auto | si | no`**: con `auto` (di
+serie) il testo si ritrascrive solo con un Whisper suo (`stanza_lenta_stt_url`) o un beam che
+conta (faster-whisper nel processo con un beam più largo dei turni). Per quest'area cambia che:
+
+- **senza ritrascrizione le versioni 2 nascono solo da un cambio vero**: chi parla (zona grigia
+  corretta, segmento spezzato fra due voci sul testo della corsia veloce, «più voci»), TV,
+  allucinazione (ripetizione o compressione sul testo v1: `riga_scartata` come prima). Una riga
+  col testo e chi parla uguali resta la v1 con l'evento `lenta` «uguale»: niente tenuta riscritta,
+  niente rigiudizio del guardiano, niente righe nuove per `stanza_cerca`;
+- `rivista.testo` è `false` in ogni v2 senza ritrascrizione (anche quelle TV e divise); la misura
+  `lenta` ha `ritrascritto: false` e niente tempo di Whisper, e `calliope stato --turni` dice
+  «senza ritrascrizione N»;
+- il Whisper suo giù: con `auto` il segmento resta col testo della corsia veloce (non si ripiega
+  più sul Whisper dei turni); con `si` scritto a mano sì, come prima;
+- il riassunto progressivo lavora sulle righe com'erano: il rilevatore non cambia.
+
+Il secondo Whisper (large-v3 q5_0, `setup/linux/motore/whisper-lento.sh`) è preparato e non
+acceso; il piano dei modelli lo propone solo lasciando il posto a FLUX ([setup-dgx](setup-dgx.md)).
+La ritrascrizione torna (`stanza_lenta_stt_url` nel locale) solo se il banco
+`banco_stanza_lenta.py --conservati … --ritrascrivi` dà al secondo servizio una WER sotto quella
+dei turni.
