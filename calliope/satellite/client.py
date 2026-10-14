@@ -571,6 +571,7 @@ class Satellite:
             if k in P.PARAMETRI:
                 setattr(self.cfg, k, v)
         self._wake_chiesti.clear()
+        self._fine_turno()
         self._modalita(m, parametri=False)
         self._stanza(m.get("stanza"))
         self.satellite = m.get("satellite") or {}
@@ -631,6 +632,18 @@ class Satellite:
         except OSError:
             return []
         return sorted(n for n in nomi if P.nome_modello(n) and n not in self.GENERICI)[:40]
+
+    def _fine_turno(self):
+        """La fine del turno System 1 (14/10): con «attiva» dal server e il modello qui
+        (fine_turno_modello, o models/fine_turno/), il Listener chiude prima le frasi finite;
+        altrimenti silenzio fisso. Non ferma mai la sessione."""
+        try:
+            from ..system1.fine_turno import prepara_listener
+            prepara_listener(self.listener, self.cfg, self.log)
+        except Exception as e:  # noqa: BLE001
+            self.listener.fine_turno = None
+            self.log(f"[SATELLITE] Fine del turno System 1 non disponibile ({e}): silenzio "
+                     f"fisso.")
 
     def _modalita(self, m: dict, parametri: bool = True):
         """Benvenuto o messaggio «modalita»: parametri (parole che svegliano), suoni e
@@ -942,7 +955,10 @@ class Satellite:
                     woke=bool(L.woke), wake_score=round(float(L.wake_score), 3),
                     campioni=len(audio), pause_ms=list(getattr(L, "pause_ms", []) or []),
                     parlato_ms=getattr(L, "parlato_ms", None),
-                    chiusura=getattr(L, "chiusura", None))
+                    chiusura=getattr(L, "chiusura", None),
+                    # System 1 «attiva» (14/10): com'è andata la fine del turno, solo numeri
+                    **({"fine_turno": L.fine_turno_esito}
+                       if getattr(L, "fine_turno_esito", None) else {}))
 
     def _veglia(self, m: dict):
         wid = m["id"]

@@ -42,7 +42,9 @@ SOGLIA_MAX_MS = 1300
 MIN_PAUSE_STIMA = 20      # sotto, la stima della soglia non è affidabile
 TAGLI_FREQUENTI = 0.05    # oltre questa quota di frasi tagliate le pause misurate sono
 #                           troncate dalla soglia in uso: la stima sale oltre la soglia
-CHIUSURE = ("silenzio", "lunga", "rilascio", "muta")
+# «anticipata» (14/10): chiusa prima del silenzio fisso dal decisore System 1 della fine del
+# turno, modo «attiva» (calliope/system1/fine_turno.py)
+CHIUSURE = ("silenzio", "lunga", "rilascio", "muta", "anticipata")
 # Frase chiusa dal tetto (`max_utterance_s`, chiusura «lunga») mentre la persona parla ancora
 # (10/10, regola `frase_tetto` in Ciclo._seguito_del_tetto: questo sì cambia il comportamento):
 # si ascolta subito di nuovo e il seguito si unisce allo stesso turno, senza dire niente. Se

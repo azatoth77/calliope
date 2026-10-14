@@ -325,6 +325,13 @@ class Avvio:
             s.wake = (RilevatoreRemoto() if cfg.wake_word_enabled and cfg.wake_mode == "modello"
                       else None)
             capacita.REGISTRO.da_dict(capacita.controlla_una(cfg, "wake"))
+        # La fine del turno System 1 (14/10, calliope/system1/fine_turno.py): l'ombra sul
+        # server per ogni frase (anche dei satelliti) e, in locale con «attiva», il Listener
+        # che chiude prima; spenta di serie, senza modello resta il silenzio fisso
+        from .system1.fine_turno import load_fine_turno, prepara_listener
+        s.fine_turno = load_fine_turno(cfg)
+        if s.satelliti is None and s.fine_turno is not None:
+            prepara_listener(self.listener, cfg, decisore=s.fine_turno.decisore.decisore)
         s.stt = make_transcriber(cfg)   # locale (faster-whisper) o server, vedi stt.py
         # Più corsie insieme: una trascrizione alla volta, la confidenza per corsia
         self.insieme = s.satelliti is not None and s.satelliti.insieme

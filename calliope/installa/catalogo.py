@@ -198,6 +198,13 @@ def whisper_locale(cfg) -> Path | None:
     return d if (d / "model.bin").is_file() and (d / "config.json").is_file() else None
 
 
+# La fine del turno System 1 (14/10, calliope/system1/fine_turno.py): Smart Turn v3.2 per CPU
+# di Pipecat (BSD-2), a una revisione fissa del repository su Hugging Face
+def _fine_turno():
+    from ..system1 import fine_turno as ft
+    return ft
+
+
 CAMPP = ("3dspeaker_speech_campplus_sv_zh_en_16k-common_advanced.onnx", 28281164,
          "aa3cfc16963a10586a9393f5035d6d6b57e98d358b347f80c2a30bf4f00ceba2")
 
@@ -287,6 +294,15 @@ def catalogo(cfg, origini: dict | None = None) -> dict[str, Azione]:
             origine="da Hugging Face, gli stessi file che usa faster-whisper", hosts=h_hf)
     web = Path(str(getattr(cfg, "telefono_web", "") or "models/web"))
     wake = Path(str(getattr(cfg, "wake_model", "") or "wakeword/modelli/calliope.onnx")).parent
+    ft = _fine_turno()
+    out["modello_fine_turno"] = Azione(
+        id="modello_fine_turno", titolo="il modello che capisce quando hai finito di parlare",
+        tipo="file", capacita="stt",
+        files=(FileCat(f"{o['hf']}/{ft.MODELLO_REPO}/resolve/{ft.MODELLO_REVISIONE}/"
+                       f"{ft.MODELLO_NOME}", str(ft.percorso_modello(cfg)), ft.MODELLO_BYTE,
+                       ft.MODELLO_SHA256),),
+        librerie=("onnxruntime",), attivazione="riavvio",
+        origine="da Hugging Face (Smart Turn di Pipecat)", hosts=h_hf)
     out["telefono"] = Azione(
         id="telefono", titolo="i file della web app del telefono", tipo="file",
         capacita="schermi",
@@ -331,6 +347,7 @@ DESCRIZIONI = {
     "whisper_riserva": "modello di Whisper per trascrivere su CPU se il server non risponde",
     "modello_llm": "il modello linguistico della configurazione",
     "telefono": "i file della web app del telefono (wake word e VAD nel browser)",
+    "modello_fine_turno": "modello che capisce quando hai finito di parlare (fine del turno)",
     "pulizia": "cancella i file vecchi della biblioteca dopo un aggiornamento",
 }
 
