@@ -91,9 +91,42 @@ porta di DevTools la sceglie il browser (`--remote-debugging-port=0`, letta da
 (prima restavano vivi crashpad e le utility di Edge). Dal 08/10 il browser parte sempre con `--mute-audio`: la voce
 che la pagina del telefono riproduce con Web Audio non esce più dalle casse o dalle cuffie
 vere del portatile (Web Audio gira lo stesso). Le prove con un satellite in Python usano casse
-finte (`apri_uscita`, `apri_flusso`).
+finte (`apri_uscita`, `apri_flusso`). Dal 14/10 `cdp.Browser` avvia il browser in un **job
+object della prova** (`calliope/agenti/winjob`, KILL_ON_JOB_CLOSE): una prova lanciata fuori
+dal runner e fermata da un tempo massimo o da Ctrl+C non lascia più 14–15 processi msedge con il
+suo profilo temporaneo (nel runner li chiudeva già il job della prova). `prova_cdp_orfani` lo
+prova, con il contrario senza job.
 
-**Problemi aperti delle prove** (09/10): le attese fisse di `prova_satellite`. *(Storico:
+**Prove instabili sotto carico: cosa si è trovato il 14/10** (cadute nei `--completo` con altri
+agenti sullo stesso portatile; le cause e le misure):
+
+- **La voce di Piper cambia a ogni corsa.** Piper sintetizza con un rumore (`noise_scale`,
+  `noise_w_scale`): con la stessa frase l'audio è diverso ogni volta. `prova_frase_lunga_voce`
+  cadeva circa una volta su sei (Whisper storpiava una parola sulla cucitura delle sue finestre
+  di 30 s: «cassifica», «un aperturono»; una volta su otto una pausa dopo una virgola chiudeva il
+  secondo pezzo), `prova_stanza_voce` una volta su dieci («Calliope, che ore sono?» sotto la
+  soglia della wake word). Non era il carico. Ora la dettatura e la frase col nome sono
+  **senza rumore** (`SynthesisConfig(noise_scale=0, noise_w_scale=0)`, in `prova_satellite.
+  sintetizza(deterministica=True)`), e il testo di Whisper si confronta con una tolleranza sulle
+  lettere (`contiene`), mentre l'unione dei pezzi si controlla esatta, campione per campione.
+  Regola: una prova che non ripete la frase usa una sintesi deterministica; chi la ripete (come
+  `prova_satellite`) usa le varianti con il rumore.
+- **`time.monotonic()` piccolo dopo l'avvio.** Scrivere 0.0 per «tanto tempo fa» vale solo
+  se il computer è acceso da più della soglia: `prova_esercizi_programma` (10 minuti),
+  `prova_contesto_agenti` (10 minuti) e `prova_meteo_casa` (5 minuti) cadevano nella prima suite
+  dopo un riavvio. Si scrive `prove.orologio.fa(secondi)`, e il contrario gira con
+  `appena_acceso(modulo)` (il `time` di quel modulo vede un computer acceso da 5 s). Il codice
+  era giusto: le sentinelle sono `None` o `-1e9`.
+- **`prova_agenti`**: la caduta del 14/10 («VPN accesa»: `ollama_giu` con il tunnel finto e 1 s
+  di tempo massimo) non si è ripetuta in ~110 giri sotto carico (prova intera con il runner che
+  gira altre 12 prove degli agenti, e il solo passo del tunnel 60 volte). Da allora la diagnosi
+  dice anche l'errore di httpx (`errore`: ConnectError, ReadTimeout…), così la prossima caduta
+  spiega sé stessa. `lavoro_stato` «senza aspettare» rifà la misura una volta se supera
+  `SUBITO_S` (sola lettura: un'attesa vera sul lavoro, che dura ~2 s, si ripeterebbe; un processo
+  fermo un attimo no; misurato 0,41 s e 5,2 s con due runner insieme).
+
+**Problemi aperti delle prove** (14/10): le attese fisse di `prova_satellite`; la caduta rara di
+`prova_agenti` sul tunnel (sopra), da leggere con l'`errore` della diagnosi se torna. *(Storico:
 `prova_cronologia_pagina` con «Scarica Markdown» salvava il file nella cartella Download vera di
 chi la lancia; dal 13/10 ogni profilo temporaneo ha la sua cartella di download nelle preferenze,
 `download.default_directory`, e la prova controlla il file lì. `Page.setDownloadBehavior` sulla

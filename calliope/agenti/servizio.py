@@ -532,7 +532,9 @@ class Lavori:
                 nomi = self.cliente.modelli(timeout=imp.timeout_s)
             except ErroreOllama as e:
                 motivo, passo = MOTIVI.get(e.codice, MOTIVI["ollama_errore"])
-                return self._diag(e.codice, "guasta", motivo, passo)
+                # L'errore di httpx (ConnectError, ReadTimeout…: mai host o porta), per chi
+                # legge la diagnosi: il 14/10 un «ollama_giu» di prova_agenti non diceva quale
+                return self._diag(e.codice, "guasta", motivo, passo, errore=str(e)[:80])
             mancanti = [m for m in dict.fromkeys([imp.modello, imp.modello_scrittore])
                         if not self.cliente.ha(nomi, m)]
             if mancanti:
