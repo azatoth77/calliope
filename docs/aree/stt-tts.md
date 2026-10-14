@@ -1190,3 +1190,14 @@ nella sua conversazione su quel satellite (`persona:<id>`) vale ancora lui
 turno «riconosciuto dalla conversazione»); la famiglia nella zona grigia vince anche qui. La riga
 della stanza di quella frase ha sicurezza «grigia» (non va su disco con la tenuta). Prova:
 `prove/prova_conoscenti_conserva.py`.
+
+## L'ascolto apre la coda prima di azzerare la wake word (14/10 sera, ramo `giochi-pagina-stabile`)
+
+Caso trovato dalle prove instabili (`prova_stanza_voce`, 6 giri su 12 caduti sotto carico): «Calliope»
+detto subito all'apertura dell'ascolto non svegliava il satellite (punteggio 0,01–0,15) e la frase finiva
+nella stanza. `Listener.listen` (`calliope/audio.py`) azzerava i rilevatori della wake word **prima** di
+aprire la coda dei frame; il reset riscalda i modelli (~50 ms a riposo, oltre i 300 ms del pre-roll sotto
+carico) e l'attacco della frase si perdeva. Ora la coda si apre prima e i rilevatori si azzerano dopo:
+12 giri su 12 verdi con la CPU occupata. Vale anche per l'ascolto vero (satellite e locale): sul vero il
+difetto poteva far perdere la prima sillaba del nome quando la macchina era carica. Caso nuovo in
+`prove/prova_frase_lunga.py` (reset lento di 0,6 s), che cade col codice di prima.

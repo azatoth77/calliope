@@ -3512,7 +3512,8 @@
   function statoGioco(f) {
     let st = STATO_GIOCHI.get(f);
     if (!st) {
-      st = { finestra: null, pronto: null, pong: 0, nPing: 0, ultimoPing: 0, inviati: [],
+      // attesa: quando è partito il primo «ping» ancora senza risposta (0: nessuno)
+      st = { finestra: null, pronto: null, pong: 0, nPing: 0, ultimoPing: 0, attesa: 0, inviati: [],
              scartati: 0, chiuso: false, nascita: Date.now(), battito: Date.now() };
       STATO_GIOCHI.set(f, st);
     }
@@ -3823,9 +3824,9 @@
       chiudiGioco(f, "Il gioco mandava troppi messaggi: l'ho chiuso.", "troppi messaggi");
       return;
     }
-    if (m.tipo === "pong") { st.pong = adesso; return; }
+    if (m.tipo === "pong") { st.pong = adesso; st.attesa = 0; return; }
     // «pronto» vale per la finestra che l'ha mandato (un riquadro spostato riparte da capo)
-    if (m.tipo === "pronto") { st.pronto = ev.source; st.pong = adesso; }
+    if (m.tipo === "pronto") { st.pronto = ev.source; st.pong = adesso; st.attesa = 0; }
     dalRiquadro(f, st, m);
   });
 
@@ -3906,12 +3907,19 @@
         if (adesso - st.nascita > Math.max(15000, lim * 2)) chiudiGioco(f, "Il gioco non è partito: l'ho chiuso.", "non parte");
         return;
       }
-      if (adesso - st.pong > lim) {
+      // Il limite conta dal primo «ping» rimasto senza risposta, non dall'ultimo «pong» (14/10):
+      // prima un gioco sano sembrava muto per tutto l'intervallo tra due ping (2 s, che con il
+      // giro da 1 s diventano 3 s quando il giro arriva un attimo prima dei 2000 ms), e con
+      // giochi_watchdog_s = 3 bastava un giro in ritardo di pochi ms per chiuderlo
+      // («non risponde» a caso nelle prove, anche senza carico); una pagina rallentata (scheda
+      // nascosta: un giro al minuto) chiudeva il gioco senza averlo nemmeno interrogato
+      if (st.attesa && adesso - st.attesa > lim) {
         chiudiGioco(f, "Il gioco non rispondeva più: l'ho chiuso.", "non risponde");
         return;
       }
       if (adesso - st.ultimoPing >= 2000) {
         st.ultimoPing = adesso;
+        if (!st.attesa) st.attesa = adesso;
         versoRiquadro(f, { tipo: "ping", n: ++st.nPing });
       }
       if (adesso - st.battito >= BATTITO_MS) {

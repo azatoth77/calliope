@@ -43,10 +43,15 @@ from prova_giochi import Ambiente  # noqa: E402
 from calliope.schermi.server import ServerSchermi  # noqa: E402
 
 ERRORI = []
+T0 = time.monotonic()
+# I messaggi dei riquadri arrivati al server (istante, tipo, gioco, schermo): stampati solo se
+# qualcosa non va, per capire una caduta sotto carico senza rifarla (14/10)
+DIARIO = []
 
 
 def verifica(nome, ok, dettaglio=""):
-    print(("ok  " if ok else "NO  ") + nome + (f"  {dettaglio}" if dettaglio else ""), flush=True)
+    print(f"[{time.monotonic() - T0:6.1f}] " + ("ok  " if ok else "NO  ") + nome
+          + (f"  {dettaglio}" if dettaglio else ""), flush=True)
     if not ok:
         ERRORI.append(nome)
 
@@ -83,9 +88,12 @@ class Cattivo:
         self.srv.shutdown()
 
 
-def cdp(pagina, metodo, parametri):
+def cdp(pagina, metodo, parametri, sessione=None):
     pagina.n += 1
-    pagina.ws.send(json.dumps({"id": pagina.n, "method": metodo, "params": parametri}))
+    m = {"id": pagina.n, "method": metodo, "params": parametri}
+    if sessione:
+        m["sessionId"] = sessione
+    pagina.ws.send(json.dumps(m))
     while True:
         m = json.loads(pagina.ws.recv(timeout=10))
         if m.get("id") == pagina.n:
@@ -108,6 +116,25 @@ def riquadro(pagina):
 def centro_riquadro(pagina):
     r = riquadro(pagina)
     return (r[0] + r[2] / 2, r[1] + r[3] / 2) if r else None
+
+
+def nel_riquadro(pagina, espressione):
+    """Il valore di un'espressione nel documento del riquadro del gioco, o None. Il riquadro
+    (sandbox senza allow-same-origin) gira in un processo suo, fuori dall'albero dei frame della
+    pagina: ci si attacca al suo bersaglio di DevTools (sessione «flatten») e si valuta lì."""
+    bers = (cdp(pagina, "Target.getTargets", {}).get("result") or {}).get("targetInfos") or []
+    bers = [t for t in bers if t.get("type") == "iframe" and "/gioco/" in str(t.get("url"))]
+    if not bers:
+        return None
+    s = (cdp(pagina, "Target.attachToTarget", {"targetId": bers[-1]["targetId"], "flatten": True})
+         .get("result") or {}).get("sessionId")
+    if not s:
+        return None
+    try:
+        r = cdp(pagina, "Runtime.evaluate", {"expression": espressione, "returnByValue": True}, s)
+        return ((r.get("result") or {}).get("result") or {}).get("value")
+    finally:
+        cdp(pagina, "Target.detachFromTarget", {"sessionId": s})
 
 
 RADICE = Path(__file__).resolve().parent.parent
@@ -231,6 +258,16 @@ def main() -> int:
     a.installa("tris")
     a.installa("segnali")
     a.installa("ostile", sost={"__CATTIVO__": cattivo.url})
+    for _n in ("_t_guasto", "_t_pronto", "_t_chiuso", "_t_comandi", "_t_manda"):
+        _v = getattr(a.giochi, _n, None)
+        if _v is None:
+            continue
+
+        def _avvolto(p_, posto_, d_, _v=_v, _n=_n):
+            DIARIO.append((round(time.monotonic() - T0, 1), _n[3:], p_.nome, posto_.sid,
+                           str(d_)[:60]))
+            return _v(p_, posto_, d_)
+        setattr(a.giochi, _n, _avvolto)
     srv = ServerSchermi(a.hub, "127.0.0.1", 0).avvia()
     base = f"http://127.0.0.1:{srv.port}"
     schermi, pagine = {}, {}
@@ -288,6 +325,9 @@ def main() -> int:
                      f" {out.get('risposta_finale')}")
         verifica("nemmeno navigando il server cattivo riceve qualcosa", not cattivo.richieste,
                  str(cattivo.richieste))
+        # Da qui nessun gioco sano va chiuso dal cane da guardia (ancora a 3 s fino al palco):
+        # il limite conta dal primo ping senza risposta (14/10, schermo.js), non dall'ultimo pong
+        guasti_prima = len(a.giochi.guasti)
 
         # ── partita condivisa tra due pagine (dal 14/10: la tela dei «segnali») ──
         out = a.chiama("est_segnali", {}, "Dario", schermo=schermi["A"])
@@ -301,21 +341,34 @@ def main() -> int:
             aspetta(lambda n=nome: list((a.giochi.ascolto([schermi[n]["id"]]) or {}).get("comandi")
                                         or {}) == ["inizia"], 10)
             a.giochi.comando(p.id, schermi[nome]["id"], "inizia")
-        time.sleep(0.8)
+        # La tela è disegnata quando il motore, dopo averla messa, dice a Calliope i comandi a
+        # voce della fase nuova (senza «inizia»). Il numero del giocatore lo dà il «pronto» in
+        # ordine d'arrivo: la prima pagina non è sempre il giocatore 1 (sotto carico il riquadro
+        # della seconda arriva a volte prima)
+        tele = aspetta(lambda: all("inizia" not in (p.posti[schermi[n]["id"]].attivi or ["inizia"])
+                                   for n in "AB"), 10)
+        g_a = p.posti[schermi["A"]["id"]].giocatore
+        g_b = p.posti[schermi["B"]["id"]].giocatore
         xy = centro_riquadro(A)
         if xy:
             clic(A, *xy)
         verifica("il tocco sulla prima pagina diventa un messaggio per tutti",
-                 aspetta(lambda: any((m.get("dati") or {}).get("segnale") == 1
-                                     for m in p.storia), 8) is not None, str(list(p.storia)))
-        time.sleep(0.5)
+                 tele is not None and aspetta(lambda: any(
+                     (m.get("dati") or {}).get("segnale") == 1 and m.get("da") == g_a
+                     for m in p.storia), 8) is not None, str(list(p.storia)))
+        # Il messaggio passa dal server alla seconda pagina (SSE) e al suo riquadro: si tocca
+        # quando la tela della seconda pagina dice di averlo ricevuto
+        ricevuto = aspetta(lambda: "segnale 1" in str(nel_riquadro(
+            B, "(document.querySelector('button.segnale') || {}).textContent")), 8)
         xy = centro_riquadro(B)
         if xy:
             clic(B, *xy)
         verifica("la seconda pagina l'ha ricevuto e risponde",
-                 aspetta(lambda: any((m.get("dati") or {}).get("visto") == 1
-                                     and m.get("da") == 2 for m in p.storia), 8) is not None,
-                 str(list(p.storia)))
+                 ricevuto is not None and aspetta(lambda: any(
+                     (m.get("dati") or {}).get("visto") == 1 and m.get("da") == g_b
+                     for m in p.storia), 8) is not None,
+                 f"ricevuto {ricevuto}, giocatori {g_a} {g_b}, {list(p.storia)}"
+                 f" guasti {list(a.giochi.guasti)}")
 
         # ── la modalità gioco (11/10) ──
         PRONTI = []
@@ -484,7 +537,8 @@ def main() -> int:
         ok = aspetta(lambda: attivi_di(pm) == ["avanti"], 5)
         ok2 = aspetta(lambda: attivi_di(pm) == ["porta_1", "porta_2", "porta_4"], 8)
         verifica("macchina a stati: la porta 3 → l'esito, che va avanti da solo; la porta 3 non "
-                 "vale più", ok is not None and ok2 is not None, str(attivi_di(pm)))
+                 "vale più", ok is not None and ok2 is not None, str(attivi_di(pm))
+                 + f" {ok} guasti {list(a.giochi.guasti)}")
         clic(A, *centro(A, "article.modo-gioco .gioco-chiudi"))
 
         # ── il palco fisso (14/10, motore_gioco.js) ──
@@ -557,6 +611,9 @@ def main() -> int:
                  "fa la mossa (la casella non vale più)", xy is not None and ok is not None
                  and "casella_1" in attivi_di(pt), f"{xy} {attivi_di(pt)}")
         clic(A, *centro(A, "article.modo-gioco .gioco-chiudi"))
+        dopo = list(a.giochi.guasti)[guasti_prima:]
+        verifica("nessun gioco sano chiuso dal cane da guardia dopo le sue prove", not dopo,
+                 str(dopo))
     finally:
         for pg in pagine.values():
             pg.chiudi()
@@ -570,6 +627,10 @@ def main() -> int:
         a.hub.archivio.close()
         shutil.rmtree(tmp, ignore_errors=True)
         shutil.rmtree(psp.TMP, ignore_errors=True)
+    if ERRORI:
+        print("DIARIO", {k: v["id"] for k, v in schermi.items()})
+        for r in DIARIO:
+            print("   ", r)
     print("\nTutto bene." if not ERRORI else f"\n{len(ERRORI)} prove non riuscite.")
     return 1 if ERRORI else 0
 

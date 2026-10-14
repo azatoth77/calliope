@@ -30,7 +30,10 @@
   fetch/WebRTC/Worker, `frame-src 'self'` sulla pagina madre); messaggi solo con `calliope.*`
   (salva, leggi, manda, chat, di, azione), ricontrollati dal server; cane da guardia (ping,
   troppi messaggi, navigazione; dopo un ciclo infinito la pagina si ricarica: Edge riusava il
-  processo bloccato). Gioco puro (niente permessi né azioni) → anche ospiti e schermi di
+  processo bloccato; dal 14/10 il limite `giochi_watchdog_s` conta dal primo ping rimasto
+  senza risposta e non più dall'ultimo pong, che con i ping ogni 2–3 s chiudeva a volte un
+  gioco sano, e una scheda nascosta, con un giro al minuto, senza averlo interrogato:
+  [prove instabili](../../prove/LEGGIMI.md)). Gioco puro (niente permessi né azioni) → anche ospiti e schermi di
   stanza, approvato da un familiare adulto con la voce; partita condivisa tra schermi (con un
   minore o un ospite valori brevi e chat dal guardiano). Minori: tempo di gioco al giorno per
   fascia (`minori_gioco_minuti`), tempo in più da un adulto (scritto chi), richieste in attesa
