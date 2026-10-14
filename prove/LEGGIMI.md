@@ -126,6 +126,22 @@ agenti sullo stesso portatile; le cause e le misure):
   spiega sé stessa. `lavoro_stato` «senza aspettare» rifà la misura una volta se supera
   `SUBITO_S` (sola lettura: un'attesa vera sul lavoro, che dura ~2 s, si ripeterebbe; un processo
   fermo un attimo no; misurato 0,41 s e 5,2 s con due runner insieme).
+- **`prova_giochi_pagina`: due cause, una nel codice.** (1) «la porta 3 → l'esito, che va avanti
+  da solo» restava su `['avanti']`: il timer dell'esito del motore era giusto, il gioco l'aveva
+  **chiuso il cane da guardia** di `schermo.js` («non risponde»). Il limite contava dall'ultimo
+  «pong», ma i ping partono ogni 2 s con un giro da 1 s, cioè fino a 3 s: con il limite di 3 s
+  della prova (stretto per le prove del cane) bastava un giro in ritardo di pochi millisecondi
+  per chiudere un gioco sano, anche senza carico. Ora il limite conta dal primo ping rimasto
+  senza risposta ([giochi](../docs/aree/giochi.md)). (2) «la seconda pagina l'ha ricevuto e
+  risponde» aspettava `da == 2`, ma il numero del giocatore lo dà il «pronto» in ordine
+  d'arrivo e sotto carico la seconda pagina arriva a volte prima; le attese fisse (0,8 e 0,5 s)
+  prima dei tocchi sono ora attese di una condizione: la tela disegnata (il motore manda i
+  comandi della fase nuova) e il segnale ricevuto dentro il riquadro della seconda pagina,
+  letto con DevTools (`nel_riquadro`: il riquadro sandbox è un processo a sé, fuori
+  dall'albero dei frame, ci si attacca al suo bersaglio). La prova controlla anche che dopo le
+  prove del cane nessun gioco sano venga chiuso e, se cade, stampa il diario dei messaggi dei
+  riquadri. Misure con 5 corsie in parallelo: prima 5 giri caduti su 25 (3 esiti, 2 risposte),
+  dopo 25 su 25 verdi; la prova nuova con lo `schermo.js` di prima cade 11 volte su 15.
 
 **Problemi aperti delle prove** (14/10): le attese fisse di `prova_satellite`; la caduta rara di
 `prova_agenti` sul tunnel (sopra), da leggere con l'`errore` della diagnosi se torna. *(Storico:
