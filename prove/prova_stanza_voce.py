@@ -41,6 +41,13 @@ TMP = Path(tempfile.mkdtemp(prefix="calliope-stanza-voce-"))
 errori = 0
 fatte = 0
 MISURE = {}
+T0 = time.monotonic()
+# I messaggi del satellite e del server e i passi della prova: stampati solo se qualcosa non va
+LOG = []
+
+
+def diario(m):
+    LOG.append(f"[{time.monotonic() - T0:6.2f}] {m}")
 
 
 def verifica(nome, ok, dettaglio=""):
@@ -71,6 +78,14 @@ def stanza_per(cfg, srv):
     return st, stt._stt
 
 
+def in_ascolto(sat, n_traccia):
+    """Il satellite ha ricevuto l'«ascolta» nuovo (dopo la voce numero `n_traccia` della sua
+    traccia) e il suo microfono ha aperto la coda. Prima di parlare si aspetta questo (14/10):
+    sotto carico l'«ascolta» poteva arrivare dopo l'inizio della frase."""
+    nuovi = list(sat.traccia)[n_traccia:]
+    return any(k == "ascolta" for _, k, _ in nuovi) and sat.listener.active
+
+
 def ascolta(lst, wake=True):
     r = {}
 
@@ -89,14 +104,14 @@ def parte_satellite(frasi):
     from calliope.satellite.server import AscoltoRemoto, ServerSatelliti, UscitaRemota
     cfg = PS.cfg_prova(TMP, stanza="ombra", audio_modo="satellite")
     arch = ArchivioSatelliti(cfg.memory_db)
-    srv = ServerSatelliti(cfg, arch, log=lambda m: None).avvia()
+    srv = ServerSatelliti(cfg, arch, log=lambda m: diario("srv " + str(m))).avvia()
     srv.avviato.set()
     st, stt = stanza_per(cfg, srv)
     url = f"ws://127.0.0.1:{srv.port}"
     scena, casse = PS.Scena(), PS.Casse()
     cfg_s = PS.cfg_prova(TMP, satellite_server=url, satellite_credenziali=str(TMP / "s.json"))
     sat = Satellite(cfg_s, sorgente=lambda **kw: PS.MicFinto(scena, **kw),
-                    apri_uscita=casse.flusso, log=lambda m: None)
+                    apri_uscita=casse.flusso, log=lambda m: diario("sat " + str(m)))
     threading.Thread(target=sat.esegui, daemon=True).start()
     try:
         PS.aspetta(lambda: sat.codice is not None, 8)
@@ -108,7 +123,9 @@ def parte_satellite(frasi):
         sid = srv.attivo.satellite["id"]
         lst = AscoltoRemoto(srv, cfg)
         # 1. senza il nome, addormentata
+        n_tr = len(sat.traccia)
         r = ascolta(lst)
+        PS.aspetta(lambda: in_ascolto(sat, n_tr), 10)
         coll = srv.attivo
         prima_a = coll.ricevuti
         ev = scena.di(np.concatenate([frasi["Che tempo fa domani a Milano?"],
@@ -121,13 +138,18 @@ def parte_satellite(frasi):
                  f"righe {len(reg.righe())}, audio comandi {sat.audio_inviato}")
         MISURE["byte_stanza_frase"] = sat.stanza.inviato
         r["sveglia"].set()
-        PS.aspetta(lambda: r.get("fine"), 5)
+        diario(f"passo 1 finito: {PS.aspetta(lambda: r.get('fine'), 5)}")
         # 2. con il nome
         n_stt = len(stt.durate)
+        n_tr = len(sat.traccia)
         r = ascolta(lst)
+        diario(f"passo 2: satellite in ascolto {PS.aspetta(lambda: in_ascolto(sat, n_tr), 10)}")
         x = frasi["Calliope, che ore sono?"]
         scena.di(np.concatenate([x, np.zeros(16000, np.float32)]))
         PS.aspetta(lambda: r.get("fine"), 15)
+        diario(f"passo 2: fine {r.get('fine')}, woke {r.get('woke')}, punteggio della wake word "
+               f"{getattr(sat.listener, 'wake_score', None)}, traccia "
+               f"{[(round(t_ - T0, 2), k, i) for t_, k, i in list(sat.traccia)[-6:]]}")
         a = r.get("audio")
         verifica("con il nome: la frase arriva intera ai comandi (nessun frame perso)",
                  a is not None and r.get("woke") and len(a) >= len(x) * 0.95,
@@ -267,6 +289,10 @@ def main() -> int:
     finally:
         shutil.rmtree(TMP, ignore_errors=True)
     print("\nMisure: " + json.dumps(MISURE, ensure_ascii=False))
+    if errori:
+        print("DIARIO")
+        for x in LOG:
+            print("   ", x[:300])
     if not fatte:
         return 77
     print("\nTutto bene." if not errori else f"\n{errori} prove non riuscite.")

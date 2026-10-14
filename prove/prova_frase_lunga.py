@@ -182,6 +182,31 @@ def prova_listener():
         th.join(10)
         verifica("contrario: frase chiusa dal silenzio, nessuna preparazione del seguito",
                  L.chiusura == "silenzio" and not chiamato, (L.chiusura, chiamato))
+        L._dopo_il_tetto = orig
+
+        # Il reset della wake word lento (14/10, prova_stanza_voce sotto carico: ~50 ms, sotto
+        # carico oltre i 300 ms del pre-roll): la voce che comincia appena si chiama listen()
+        # aspetta in coda, nessun frame si perde. Prima la coda si apriva dopo il reset e
+        # restavano solo gli ultimi 300 ms
+        class WakeLenta:
+            def reset(self):
+                time.sleep(0.6)
+
+            def process(self, frame):
+                return 0.0
+        L._recent.clear()
+        out.pop("a", None)
+        th = threading.Thread(target=lambda: out.setdefault("a", L.listen(WakeLenta())),
+                              daemon=True)
+        th.start()
+        for i in range(1, 21):              # 0,64 s: sotto il tetto di 1 s
+            MIC.put(voce(i))
+        for _ in range(15):
+            MIC.put(np.zeros(512, np.float32))
+        th.join(10)
+        n = numeri(out["a"]) if out.get("a") is not None else None
+        verifica("reset lento della wake word: la frase detta subito arriva intera",
+                 n == list(range(1, 21)), n)
     finally:
         L.stream.abort()
 
