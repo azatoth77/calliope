@@ -104,6 +104,7 @@ A_SECCO = [
     ("prova_compagnia_passo0.py", [], "passo 0 della conversazione di stanza (13/10, decisione 0029, caso vero del 12/10 in auto): in compagnia senza il nome niente azioni (letture sì, il «sì» della stessa persona alla proposta sì, compagnia_azioni_col_nome), la conversazione anonima del satellite condivisa e non chiusa a ogni cambio di persona con chi ha detto cosa nei dati del turno (compagnia_anonima_continua), il rilevatore di pericolo che non vale sulle frasi giudicate non rivolte anche in ombra (pericolo_non_rivolta); contrari: una persona sola, col nome, voce sconosciuta di mezzo, conversazione di una persona, giudizio guasto, interruttori spenti"),
     ("prova_stanza_contesto.py", [], "passo 2 della conversazione di stanza (14/10, decisione 0029): il blocco della stanza nei dati del turno (righe in ordine con chi le ha dette, zona grigia, voce sconosciuta, rivolte a Calliope, righe di Calliope, in busta con la fonte stanza, senza la frase del turno; ultimi 45 s sempre anche oltre il tetto, il resto dalla più nuova senza buchi, niente oltre i minuti), la copertura all'interpellazione (recupero aspettato al più il tetto, nel_contesto, scartate, nota delle righe non trascritte), Brain (dopo la storia e prima della frase, mai nella storia, solo nome e lunghezza, la politica lo vede come dato: un bersaglio dalla stanza chiede, uno detto si esegue), il ciclo (numeri nel registro dei turni, la frase ignorata resta nella stanza con rivolta no, la risposta come riga di Calliope una volta), il giudizio rivolta con le righe della stanza, la sezione Stanza di stato --turni con e senza blocco; contrari: spento, in pausa, nessuna riga, dimentica, satellite fuori elenco, frase scritta"),
     ("prova_stanza_cerca.py", [], "passo 4 della conversazione di stanza (14/10, decisione 0029): il tool stanza_cerca (chi vede cosa: un adulto dove era presente e gli ultimi minuti della stanza da cui parla, le parole del minore solo i tutori, un minore solo le sue, voci non riconosciute mai; filtri per parole con la radice, persona, stanza, quando e orari, righe vicine, tetti), l'attesa delle righe in coda con la frase d'attesa attesa.stanza solo oltre la soglia, ripieghi per persona e stanza, il discorso intorno (lo scambio), quando che non è un periodo come parola, la ricerca anticipata di Brain con gli stessi permessi (una passata, niente spinta dopo), Brain (in busta con la fonte stanza, riservato, fuori dalla storia, niente azioni dopo, rete spinta_stanza con i contrari), misure senza parole e la riga di stato --turni, configurazione e schemi; contrari: spento, ospite, zona grigia, minore che cerca un adulto, adulto non tutore che cerca il minore, pausa per ospiti, stanza sbagliata, niente trovato, dimentica, periodo sbagliato, attesa sotto soglia o senza righe in coda"),
+    ("prova_stanza_tenuta.py", [], "tenuta su disco del testo della stanza (14/10, decisione 0029 punto 5, stanza_tenuta): su disco le righe delle persone di casa riconosciute dalla voce, minori compresi, le risposte di Calliope a loro, le presenze; mai voci non riconosciute, zona grigia, pausa per ospiti, audio; dopo un riavvio il blocco caldo vuoto e la ricerca dal disco con gli stessi permessi (chi c'era dalle presenze sul disco, tutori, minore solo le sue, ospite e zona grigia no), niente doppioni con la memoria, scadenza a 60 giorni e profili tolti, «dimentica» del satellite, svuota di tutto, di una persona e da terminale, indice FTS5 pulito, conteggi in stato --turni, calliope conserva e dati_conservati; tempi su 180 000 righe (p90 sotto i 3 s); contrari: spenta"),
     ("prova_minori_cancelli.py", [], "minore forse in pericolo, giro a due cancelli (09/10, caso vero della DGX: adulto ospite preso per il ragazzo che saluta): acuto come prima, da verificare → rassicura e chiede, conferma o smentita della risposta, silenzio con avviso non urgente, due segnali ravvicinati (non dopo una smentita né con la voce incerta in compagnia, 12/10), voce incerta, giudizi guasti, avviso «sicurezza» non a voce vicino al minore, con i contrari"),
     ("prova_brain.py", [], "filtro del thinking, guardia, ciclo dei tool, storia, nota dichiarata due volte → frase onesta (12/10)"),
     ("prova_tempi.py", [], "durate e orari detti a voce"),
@@ -416,9 +417,11 @@ LEGAMI = [
     ("calliope/tools/web.py", ["prova_web.py", "prova_estensioni_attacchi.py"]),
     ("calliope/tools/notizie.py", ["prova_notizie.py"]),
     # La conversazione di stanza (13/10, passo 1): il tool, il pacchetto, il lato satellite
-    ("calliope/tools/stanza.py", ["prova_stanza.py", "prova_stanza_cerca.py"]),
+    ("calliope/tools/stanza.py", ["prova_stanza.py", "prova_stanza_cerca.py",
+                                  "prova_stanza_tenuta.py"]),
     ("calliope/stanza/", ["prova_stanza.py", "prova_stanza_contesto.py",
-                          "prova_stanza_cerca.py", "prova_stanza_eco.py"]),
+                          "prova_stanza_cerca.py", "prova_stanza_eco.py",
+                          "prova_stanza_tenuta.py"]),
     # Passo 2 (14/10): il blocco nei dati del turno, il giudizio «rivolta» con la stanza
     ("calliope/rivolta.py", ["prova_stanza_contesto.py", "prova_compagnia_passo0.py"]),
     ("calliope/satellite/stanza.py", ["prova_stanza.py", "prova_stanza_eco.py"]),
@@ -675,8 +678,8 @@ LEGAMI = [
     ("calliope/turnlog.py", ["prova_robustezza.py"]),
     # La conservazione dei dati e la metrica della scelta dei tool (12/10): livello 1; qui i
     # tool d'area
-    ("calliope/tools/conserva.py", ["prova_conserva.py"]),
-    ("calliope/conserva.py", ["prova_conserva.py"]),
+    ("calliope/tools/conserva.py", ["prova_conserva.py", "prova_stanza_tenuta.py"]),
+    ("calliope/conserva.py", ["prova_conserva.py", "prova_stanza_tenuta.py"]),
     ("calliope/scelta_tool.py", ["prova_scelta_tool.py"]),
     ("calliope/zim.py", ["prova_zim.py", "prova_biblioteca.py"]),
     ("calliope/biblioteca", ["prova_biblioteca_indice.py", "prova_biblioteca.py"]),

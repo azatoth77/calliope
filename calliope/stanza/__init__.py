@@ -10,7 +10,10 @@ veloce, niente nel contesto del modello.
 - `misure`: i numeri (mai parole) per `calliope stato --turni`;
 - `contesto` (passo 2, 14/10): il blocco della stanza nei dati del turno (`stanza_contesto`);
 - `cerca` (passo 4, 14/10): la ricerca del tool `stanza_cerca`, con chi vede cosa e la frase
-  d'attesa (`stanza_cerca`).
+  d'attesa (`stanza_cerca`);
+- `tenuta` (14/10): il testo della stanza su disco per 60 giorni (`stanza_tenuta`, di serie
+  spenta), cercato con gli stessi permessi, cancellato da «dimentica» e da
+  `calliope conserva --svuota`.
 
 Di serie spenta (`stanza: spenta`): non parte nessun thread, i satelliti non mandano niente.
 """
@@ -24,7 +27,26 @@ def load_stanza(cfg, stt, registry=None, log=print):
         return None
     from .misure import Misure
     mis = Misure(getattr(cfg, "turn_log_dir", None), int(getattr(cfg, "turn_log_days", 60) or 60))
-    return Stanza(cfg, stt, registry=registry, misure=mis, log=log)
+    st = Stanza(cfg, stt, registry=registry, misure=mis, log=log)
+    st.tenuta = load_tenuta(cfg, registry, log)
+    return st
 
 
-__all__ = ["OMBRA", "SPENTA", "Stanza", "load_stanza", "modo"]
+def load_tenuta(cfg, registry=None, log=print):
+    """La tenuta su disco (14/10) con `stanza_tenuta: true`, altrimenti None. Un file che non
+    si apre lascia la stanza in memoria, come prima, e lo dice."""
+    from . import tenuta
+    if not tenuta.accesa(cfg):
+        return None
+    try:
+        t = tenuta.Tenuta(tenuta.percorso_db(cfg), int(getattr(cfg, "stanza_tenuta_giorni", 60)
+                                                       or 60), registry=registry, log=log)
+    except Exception as e:  # noqa: BLE001
+        log(f"[STANZA] tenuta su disco non pronta ({type(e).__name__}: {e}): solo in memoria")
+        return None
+    log(f"[STANZA] Testo della stanza anche su disco per {t.giorni} giorni (famiglia e minori; "
+        f"mai ospiti né zona grigia)")
+    return t
+
+
+__all__ = ["OMBRA", "SPENTA", "Stanza", "load_stanza", "load_tenuta", "modo"]

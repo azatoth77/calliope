@@ -143,6 +143,10 @@ def file_di_dati(cfg) -> list[str]:
     if conv:
         conv = qui(conv)
         out += [conv, conv + "-wal", conv + "-shm", conv + "-journal"]
+    stanza = getattr(cfg, "stanza_tenuta_db", None)     # 14/10: il testo della stanza su disco
+    if stanza:
+        stanza = qui(stanza)
+        out += [stanza, stanza + "-wal", stanza + "-shm", stanza + "-journal"]
     out += [qui("speakers.json"), qui(getattr(cfg, "segreti_file", "segreti.yaml")),
             qui(getattr(cfg, "agenti_config_file", "dgx.yaml")), qui("calliope.locale.yaml"),
             qui("satellite.json"), qui(getattr(cfg, "turn_log_dir", None) or ""),

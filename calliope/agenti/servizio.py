@@ -326,6 +326,9 @@ def _senza_conti_dei_test(testo: str) -> str:
 # sera, Agente._consegna_al_tetto)
 AL_TETTO = ("L'agente non ha fatto in tempo a consegnare, ma gli esempi di accettazione "
             "passano tutti: il lavoro l'ho chiuso io.")
+# …e quella di una correzione senza esempi chiusa con il test che riproduce il problema (14/10)
+AL_TETTO_CORREZIONE = ("L'agente non ha fatto in tempo a consegnare, ma il test del problema "
+                       "che mi hai segnalato adesso passa: il lavoro l'ho chiuso io.")
 
 
 def frase_tappa(lav, titolo: str) -> str:
@@ -1445,6 +1448,8 @@ class Lavori:
             return [requisiti[n - 1]["testo"] for n in numeri if 0 < n <= len(requisiti)]
         lav.accettazione = {"stato": "pronta", "file": scritto, "nome_file": nome_file,
                             "esempi": len(an["esempi"]),
+                            # I valori nominati controllati in più (14/10)
+                            "valori": len(an.get("riconosciuti") or []),
                             "requisiti_provati": acc.numeri_esempi(an) if scritto else [],
                             "testi_provati": testi(acc.numeri_esempi(an)) if scritto else [],
                             "al_collaudo": an["al_collaudo"],
@@ -1453,6 +1458,8 @@ class Lavori:
                             "secondi": secondi}
         self.log(f"[AGENTI] {lav.id}: analisi prima del codice ({secondi} s): "
                  f"{len(an['esempi'])} esempi di accettazione"
+                 + (f", {len(an['riconosciuti'])} valori nominati da riconoscere"
+                    if an.get("riconosciuti") else "")
                  + (f", al collaudo i requisiti {an['al_collaudo']}" if an["al_collaudo"]
                     else "") + (f", {len(an['scelte'])} scelte" if an["scelte"] else ""))
         if sv is not None and requisiti and svs is not None:
@@ -1704,6 +1711,8 @@ class Lavori:
                 "test": r.get("test"), "file": r.get("file"), "motivo": r.get("motivo"),
                 # Chiuso dal codice al tetto con gli esempi verdi (13/10 sera): il tetto toccato
                 "consegna_al_tetto": r.get("consegna_al_tetto") or None,
+                # …con gli esempi o, per una correzione senza esempi, la riproduzione (14/10)
+                "consegna_al_tetto_con": r.get("consegna_al_tetto_con") or None,
                 "modello": self.imp.modello, "passi": lav.passi, "token": lav.token,
                 "token_letti": lav.prompt_token, "cedimenti": lav.cedimenti,
                 # 05/10: il ragionamento a parte, e il contesto (finestra, picco dei token
@@ -1776,7 +1785,9 @@ class Lavori:
         if lav.tipo == "estensione" and r.get("estensione"):
             if r.get("consegna_al_tetto"):
                 # Chiusa dal codice al tetto (13/10 sera): detto, in una frase
-                return (str(r["estensione"]["frase"]).rstrip() + " " + AL_TETTO).strip()
+                al_tetto = (AL_TETTO_CORREZIONE if r.get("consegna_al_tetto_con")
+                            == "riproduzione" else AL_TETTO)
+                return (str(r["estensione"]["frase"]).rstrip() + " " + al_tetto).strip()
             return r["estensione"]["frase"]
         if lav.tipo in ("codice", "estensione"):
             sintesi = per_la_voce(r.get("riassunto"))

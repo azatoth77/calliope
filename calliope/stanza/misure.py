@@ -291,6 +291,10 @@ def riassunto(righe: list[dict], turni: list[dict] | None = None) -> dict:
 def testo(r: dict) -> str:
     out = ["Stanza (conversazione di stanza: passo 1 in ombra, passo 2 con stanza_contesto, "
            "passo 4 con stanza_cerca, passo 5 con stanza_durante_voce)"]
+    if r.get("tenuta"):
+        # La tenuta su disco (14/10, stanza/tenuta.py): solo numeri, mai parole né nomi
+        from .tenuta import testo_stato
+        out.append(testo_stato(r["tenuta"]))
     if not r.get("giorni") and not r["copertura"]["turni"] and not (
             r.get("cerca") or {}).get("chiamate") and not (
             (r.get("cerca") or {}).get("anticipo") or {}).get("ricerche"):

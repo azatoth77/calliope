@@ -340,6 +340,10 @@ class Avvio:
                                    log=lambda m: print(m, flush=True))
             s.satelliti.conversazione_stanza = s.stanza
             s.stanza.server = s.satelliti
+            # La tenuta su disco (14/10, `stanza_tenuta`): «svuota» e i conteggi della
+            # conservazione la vedono
+            if getattr(s, "conserva", None) is not None:
+                s.conserva.stanza = s.stanza.tenuta
             nomi = getattr(cfg, "stanza_satelliti", None) or []
             print(f"[STANZA] Ascolto della stanza in ombra (solo misure, niente al modello) su "
                   + (", ".join(map(str, nomi)) if nomi else "tutti i satelliti che lo sanno fare"),

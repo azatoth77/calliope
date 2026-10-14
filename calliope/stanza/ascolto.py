@@ -35,6 +35,10 @@ modello** in questo passo: si misura (stanza/misure.py, `calliope stato --turni`
   toglie le parole che sono la sua voce; la riga tutta eco è scartata («eco»). Cancello per
   satellite: con l'eco misurata sul saluto oltre `barge_in_echo_max` (casse senza cancellazione)
   quel satellite resta half-duplex anche per la stanza.
+- **Tenuta su disco** (14/10, `stanza_tenuta`, stanza/tenuta.py): `tenuta` riceve gli eventi dei
+  registri (righe e presenze che si possono tenere) e le presenze ancora aperte ogni minuto;
+  `presenze` unisce quelle della memoria e del disco (i permessi della ricerca dopo un riavvio);
+  «dimentica» cancella anche il disco del satellite.
 """
 
 import collections
@@ -170,6 +174,9 @@ class Stanza:
         self._intervalli = collections.deque(maxlen=2000)   # (persona, sat, inizio, fine)
         self._n_scambi = 0
         self._detto_contate: dict = {}         # sat → id delle frasi già contate (misure eco)
+        # La tenuta su disco (stanza/tenuta.Tenuta, 14/10), None con `stanza_tenuta: false`
+        self.tenuta = None
+        self._presenze_scritte: dict = {}      # persona → (sat, inizio, ultimo) già sul disco
         self._fermo = threading.Event()
         self._thread = threading.Thread(target=self._lavora, name="stanza-veloce", daemon=True)
         self._thread.start()
@@ -275,7 +282,14 @@ class Stanza:
             if r is None:
                 nome = (self._info.get(sat) or {}).get("nome") or str(sat)
                 r = self._registri[sat] = RegistroStanza(f"stanza:{sat}", nome)
+                r.su_evento = lambda e, sat=sat: self._su_disco(sat, e)
             return r
+
+    def _su_disco(self, sat, e):
+        """Un evento del registro di `sat` alla tenuta su disco (che decide cosa tenere)."""
+        t = self.tenuta
+        if t is not None:
+            t.evento(sat, self._info.get(sat), e)
 
     # ── dal server dei satelliti (thread della connessione) ──
     def collegato(self, coll):
@@ -509,15 +523,21 @@ class Stanza:
             return                             # dimenticata o uscita per la tenuta
         reg.aggiungi(ANALISI, analisi="rivolta", riga=seq, esito=esito, giudizio=giudizio)
 
-    def detto(self, sat, testo: str, inizio: float | None = None, fine: float | None = None):
+    def detto(self, sat, testo: str, inizio: float | None = None, fine: float | None = None,
+              per: dict | None = None):
         """Passo 2 (14/10): ciò che Calliope ha detto ad alta voce vicino al satellite (la
-        risposta di un turno), perché la stanza sappia anche le sue righe. Non in pausa."""
+        risposta di un turno), perché la stanza sappia anche le sue righe. Non in pausa. `per`:
+        a chi rispondeva ({persona, sicurezza}): su disco solo per una persona di casa
+        riconosciuta dalla voce (stanza/tenuta.py)."""
         testo = " ".join(str(testo or "").split())
         if not testo or sat not in self._info or self._pausa_viva(sat) is not None:
             return
         ora = time.time()
+        extra = ({"per": {"persona": per.get("persona"), "sicurezza": per.get("sicurezza")}}
+                 if isinstance(per, dict) else {})
         self.registro(sat).aggiungi(DETTO_CALLIOPE, testo=testo[:2000],
-                                    inizio=round(inizio or ora, 3), fine=round(fine or ora, 3))
+                                    inizio=round(inizio or ora, 3), fine=round(fine or ora, 3),
+                                    **extra)
 
     def accesa_qui(self, sat) -> bool:
         """La stanza ascolta adesso su questo satellite: accesa nel file e non in pausa."""
@@ -537,8 +557,18 @@ class Stanza:
                 self._legati.pop(k)
             self._scambio.pop(sat, None)
         n = self.registro(sat).svuota()
+        # Anche il disco del satellite (14/10, stanza_tenuta): righe e presenze di ogni giorno
+        su_disco = 0
+        if self.tenuta is not None:
+            try:
+                su_disco = self.tenuta.dimentica(sat)
+            except Exception as e:  # noqa: BLE001
+                self.log(f"   [STANZA] disco della stanza non cancellato: {type(e).__name__}")
+            with self._cond:
+                for k in [k for k, v in self._presenze_scritte.items() if v[0] == sat]:
+                    self._presenze_scritte.pop(k)
         nome = (self._info.get(sat) or {}).get("nome") or str(sat)
-        self._misura("dimentica", sat=nome, eventi=n)
+        self._misura("dimentica", sat=nome, eventi=n, disco=su_disco)
         self.log(f"   [STANZA] {nome}: registro della stanza svuotato ({n} eventi)")
         return n
 
@@ -657,13 +687,31 @@ class Stanza:
 
     def presenze(self, persona) -> list[tuple]:
         """Gli intervalli (satellite, inizio, fine) in cui la persona era presente, compreso
-        quello aperto: per «quello che dicevamo di là» (passo 2 e 4)."""
+        quello aperto: per «quello che dicevamo di là» (passo 2 e 4). Con la tenuta (14/10)
+        anche quelli sul disco, di prima del riavvio (il satellite come chiave della memoria
+        se lo è ancora)."""
         with self._cond:
             out = [(s, a, b) for p, s, a, b in self._intervalli if p == persona]
             v = self._presenti.get(persona)
             if v is not None:
                 out.append((v["sat"], v["inizio"], v["ultimo"]))
+        if self.tenuta is not None:
+            try:
+                disco = self.tenuta.presenze(persona)
+            except Exception:  # noqa: BLE001 — senza il disco, quelle della memoria
+                disco = []
+            visti = {(str(s), round(a, 1)) for s, a, _ in out}
+            for s, a, b in disco:
+                if (s, round(a, 1)) not in visti:
+                    out.append((self.chiave_sat(s), a, b))
         return out
+
+    def chiave_sat(self, s):
+        """Il satellite di una riga del disco (testo) come chiave della memoria, se c'è."""
+        for k in list(self._info):
+            if str(k) == str(s):
+                return k
+        return s
 
     def _scadenze(self):
         presenza_s = float(getattr(self.cfg, "stanza_presenza_s", 600.0) or 600.0)
@@ -678,10 +726,28 @@ class Stanza:
                      if p.get("fino") is not None and p["fino"] <= ora]
         for k, v in vecchie:
             self._chiudi_presenza(k, v)
+        self._presenze_su_disco()
         for sat in pause:
             self.riprendi(sat)
         for r in list(self._registri.values()):
             r.pota()
+
+    def _presenze_su_disco(self, sempre: bool = False):
+        """Con la tenuta: le presenze ancora aperte sul disco, al più ogni PRESENZA_OGNI_S (un
+        riavvio o un'interruzione non perdono chi c'era; la chiusura la scrive l'evento)."""
+        t = self.tenuta
+        if t is None:
+            return
+        from .tenuta import PRESENZA_OGNI_S
+        with self._cond:
+            aperte = [(k, v["sat"], v["inizio"], v["ultimo"]) for k, v in self._presenti.items()]
+        for persona, sat, ini, ult in aperte:
+            prima = self._presenze_scritte.get(persona)
+            if (not sempre and prima is not None and prima[:2] == (sat, ini)
+                    and ult - prima[2] < PRESENZA_OGNI_S):
+                continue
+            self._presenze_scritte[persona] = (sat, ini, ult)
+            t.presenza(persona, sat, ini, ult)
 
     # ── la corsia veloce ──
     def _scegli(self) -> Segmento | None:
@@ -855,3 +921,9 @@ class Stanza:
         self._fermo.set()
         with self._cond:
             self._cond.notify_all()
+        if self.tenuta is not None:
+            try:
+                self._presenze_su_disco(sempre=True)
+                self.tenuta.chiudi()
+            except Exception:  # noqa: BLE001
+                pass

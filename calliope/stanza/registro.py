@@ -28,8 +28,10 @@ Tipi (schema del § 3.3; quelli dei passi dopo sono già nominati):
     riassunto_stanza  (passo 3)
 
 **Dove**: in memoria, al più `TENUTA_S` (24 h, decisione 0029 punto 8: «memoria» di serie) e al
-più `MAX_EVENTI`; si perde al riavvio. Su disco (`stanza_tenuta: {giorni: N}` nel file locale
-di chi amministra) nel passo dopo: `Evento.a_dict` è già la riga della tabella `eventi`.
+più `MAX_EVENTI`; si perde al riavvio. Su disco (dal 14/10, `stanza_tenuta: true` nel file
+locale di chi amministra, stanza/tenuta.py) anche le righe e le presenze che si possono tenere:
+ogni evento aggiunto passa a `su_evento` (fuori dal lock), che le mette in coda alla tenuta. Il
+registro in memoria non si riempie mai dal disco (il blocco caldo dopo un riavvio è vuoto).
 """
 
 import itertools
@@ -72,6 +74,8 @@ class RegistroStanza:
         self._seq = itertools.count(1)
         self._lock = threading.Lock()
         self.tolti = 0                        # eventi usciti per la tenuta o il tetto
+        # Chi vuole ogni evento aggiunto (la tenuta su disco, 14/10): funzione(Evento)
+        self.su_evento = None
 
     def aggiungi(self, tipo: str, t: float | None = None, **dati) -> Evento:
         if tipo not in TIPI:
@@ -80,7 +84,18 @@ class RegistroStanza:
             e = Evento(next(self._seq), time.time() if t is None else float(t), tipo, dati)
             self._eventi.append(e)
             self._pota()
-            return e
+        f = self.su_evento
+        if f is not None:
+            try:
+                f(e)
+            except Exception:  # noqa: BLE001 — il disco non ferma il registro
+                pass
+        return e
+
+    def seq_vivi(self) -> set:
+        """I `seq` degli eventi ancora in memoria (la ricerca su disco non li ripete)."""
+        with self._lock:
+            return {e.seq for e in self._eventi}
 
     def _pota(self):
         limite = time.time() - self.tenuta_s

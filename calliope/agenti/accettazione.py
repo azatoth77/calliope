@@ -19,6 +19,14 @@ non c'è ancora), legge i requisiti e le parole della persona e compila un JSON 
   (`Agente._test_falliti`), e l'agente che lo trova sbagliato lo dice nella consegna, non lo
   cambia. Ogni esempio controlla almeno una cosa che uno scheletro vuoto (`{"da_dire": ""}`)
   non fa: per costruzione fallisce sullo scheletro (lo verifica anche la prova);
+- **i valori nominati** (14/10, banco della temperatura L2: «fatto» con 7 esempi verdi e
+  l'accettazione nascosta rossa, perché nessun esempio usava «unità astronomiche» al plurale,
+  che la richiesta elencava e l'estensione non riconosceva): per ogni input di testo i valori
+  che la richiesta nomina (`valori`). Il codice tiene solo quelli che compaiono **alla lettera**
+  nella richiesta (requisiti, specifica, parole della persona: senza maiuscole né accenti) e,
+  per ognuno che nessun esempio usa già, scrive un controllo in più: i dati di un esempio con
+  quel valore al posto del suo, e l'estensione deve riconoscerlo (una frase, niente «trovato»:
+  false, il numero se l'esempio lo controllava). Fallisce sullo scheletro come gli esempi;
 - **contraddizioni** tra requisiti, o tra i requisiti e le parole della persona (il 12/10
   «giocatori» è diventato «porte»), con al più **due domande** brevi: il lavoro aspetta la
   risposta come una domanda a metà lavoro (`mancano_dati`). Solo in un lavoro nuovo (non una
@@ -62,6 +70,8 @@ FASI_STANDARD = ("preparazione", "esito", "fine")
 MAX_DOMANDE = 2
 MAX_SCELTE = 3
 MAX_INPUT = 6
+MAX_VALORI = 16            # i valori nominati per un input di testo
+MAX_RICONOSCIUTI = 12      # i controlli «il valore nominato si riconosce» in tutto
 TIPI = ("number", "integer", "string", "boolean")
 _NOME = re.compile(r"^[a-z][a-z0-9_]{0,30}$")
 
@@ -72,7 +82,7 @@ scelte: le cose che la richiesta non dice e che decideresti da solo, una frase b
 al_collaudo: i numeri dei requisiti che si giudicano solo guardando o ascoltando (suoni, aspetto, «adatto ai bambini», «bello»): nessun test li prova.{estensione}"""
 
 SISTEMA_ESEMPI = """
-input: gli input dell'estensione (il dict «dati» che riceve esegui), con nome (minuscole e _) e tipo (number, integer, string, boolean). Se la specifica li nomina usa quei nomi, esattamente.
+input: gli input dell'estensione (il dict «dati» che riceve esegui), con nome (minuscole e _) e tipo (number, integer, string, boolean). Se la specifica li nomina usa quei nomi, esattamente. Per un input string, valori: TUTTI i valori che la richiesta nomina per quell'input, scritti come nella richiesta (se li scrive al plurale e al singolare, tutte e due le forme); lista vuota se non ne nomina.
 campo_numero: il nome del campo numerico del risultato, se l'estensione restituisce un numero (di solito «risultato»); altrimenti vuoto.
 esempi: da 3 a 8 esempi dato → risultato, almeno uno per ogni requisito che si controlla con un dato. Per ognuno: requisito (il numero), dati (gli input con valori veri, come li direbbe la persona), e cosa deve risultare:
 - numero: il valore atteso nel campo numerico, calcolato con cura (se arrotondi metti la tolleranza); se non sei sicuro di un valore non usare quell'esempio;
@@ -113,7 +123,9 @@ def schema(estensione: bool, gioco: bool = False) -> dict:
             "input": {"type": "array", "maxItems": MAX_INPUT, "items": {
                 "type": "object", "properties": {
                     "nome": {"type": "string", "maxLength": 31},
-                    "tipo": {"type": "string", "enum": list(TIPI)}},
+                    "tipo": {"type": "string", "enum": list(TIPI)},
+                    "valori": {"type": "array", "maxItems": MAX_VALORI,
+                               "items": {"type": "string", "maxLength": 40}}},
                 "required": ["nome", "tipo"]}},
             "campo_numero": {"type": "string", "maxLength": 31},
             "esempi": {"type": "array", "maxItems": MAX_ESEMPI, "items": {
@@ -261,11 +273,61 @@ def _esempi_gioco(d: dict, comandi: dict, n_requisiti: int) -> list[dict]:
     return out
 
 
+def _norm(testo) -> str:
+    """Minuscole, senza accenti né punteggiatura, spazi semplici: per i valori nominati."""
+    import unicodedata
+    t = unicodedata.normalize("NFD", str(testo or "").lower())
+    t = "".join(c for c in t if not unicodedata.combining(c))
+    return " ".join(re.sub(r"[^\w]+", " ", t).split())
+
+
+def _valori(i: dict, testo: str) -> list[str]:
+    """I valori nominati di un input di testo che compaiono alla lettera nella richiesta."""
+    if i.get("tipo") != "string" or not isinstance(i.get("valori"), list) or not testo:
+        return []
+    detto, out, visti = f" {_norm(testo)} ", [], set()
+    for v in i["valori"][:MAX_VALORI]:
+        if not isinstance(v, str):
+            continue
+        v = re.sub(r"\s+", " ", v).strip(" .,;:«»\"'")
+        n = _norm(v)
+        if not n or len(v) > 40 or n in visti or f" {n} " not in detto:
+            continue                       # un valore che la richiesta non dice: fuori
+        visti.add(n)
+        out.append(v)
+    return out
+
+
+def _riconosciuti(out: dict) -> list[dict]:
+    """Per ogni valore nominato che nessun esempio usa: i dati di un esempio (che non dice
+    «trovato»: false) con quel valore al posto del suo. Un valore che un esempio dà per
+    sconosciuto non si controlla (lo decide l'esempio)."""
+    controlli = []
+    for i in out["input"]:
+        nome = i["nome"]
+        usati = {_norm(e["dati"].get(nome)) for e in out["esempi"] if nome in e["dati"]}
+        base = [e for e in out["esempi"] if nome in e["dati"] and e["trovato"] is not False]
+        base.sort(key=lambda e: e["numero"] is None)        # prima chi controlla il numero
+        if not base:
+            continue
+        for v in i.get("valori") or ():
+            if _norm(v) in usati:
+                continue
+            b = base[0]
+            controlli.append({"requisito": b["requisito"], "input": nome, "valore": v,
+                              "dati": {**b["dati"], nome: v},
+                              "numero": b["numero"] is not None})
+            if len(controlli) >= MAX_RICONOSCIUTI:
+                return controlli
+    return controlli
+
+
 def interpreta(dati, n_requisiti: int = 0, estensione: bool = True,
-               gioco: bool = False) -> dict:
+               gioco: bool = False, testo: str = "") -> dict:
     """L'analisi validata dal JSON del modello: forme chiuse, testi puliti, tetti. Un esempio
     senza niente da controllare (né numero, né parola, né «trovato»: false) si scarta: non
-    fallirebbe sullo scheletro."""
+    fallirebbe sullo scheletro. `testo`: la richiesta (requisiti, specifica, parole della
+    persona), per tenere solo i valori nominati che ci sono davvero (14/10)."""
     from ..requisiti import _ORDINE, pulito
     d = dati if isinstance(dati, dict) else {}
 
@@ -288,7 +350,7 @@ def interpreta(dati, n_requisiti: int = 0, estensione: bool = True,
                           if isinstance(x, str)) if s][:MAX_SCELTE]
     out = {"contraddizioni": contr, "scelte": scelte,
            "al_collaudo": numeri(d.get("al_collaudo")), "input": [], "campo_numero": "",
-           "esempi": []}
+           "esempi": [], "riconosciuti": []}
     if not estensione and gioco:
         comandi = _comandi_gioco(d)
         out["esempi"] = _esempi_gioco(d, comandi, n_requisiti)
@@ -305,7 +367,9 @@ def interpreta(dati, n_requisiti: int = 0, estensione: bool = True,
             nome = i["nome"].strip().lower()
             if _NOME.match(nome) and nome not in visti and i.get("tipo") in TIPI:
                 visti.add(nome)
-                out["input"].append({"nome": nome, "tipo": i["tipo"]})
+                valori = _valori(i, testo)
+                out["input"].append({"nome": nome, "tipo": i["tipo"],
+                                     **({"valori": valori} if valori else {})})
     out["input"] = out["input"][:MAX_INPUT]
     campo = str(d.get("campo_numero") or "").strip().lower()
     out["campo_numero"] = campo if _NOME.match(campo) else ""
@@ -341,6 +405,7 @@ def interpreta(dati, n_requisiti: int = 0, estensione: bool = True,
             break
     if any(e["numero"] is not None for e in out["esempi"]) and not out["campo_numero"]:
         out["campo_numero"] = "risultato"
+    out["riconosciuti"] = _riconosciuti(out)
     return out
 
 
@@ -385,6 +450,21 @@ def _prova(self, caso):
         self.assertIsNot(out.get("trovato"), False, f"{detto}: qui il dato c'è")
 
 
+def _riconosce(self, caso):
+    dati = caso["dati"]
+    detto = (f"R{caso['requisito']}: la richiesta nomina «{caso['valore']}» per "
+             f"«{caso['input']}»; con i dati {json.dumps(dati, ensure_ascii=False)}")
+    out = esegui(dict(dati), CalliopeFinta())
+    self.assertIsInstance(out, dict, f"{detto}: esegui deve restituire un dict")
+    self.assertTrue(str(out.get("da_dire") or "").strip(), f"{detto}: manca la frase da_dire")
+    self.assertIsNot(out.get("trovato"), False,
+                     f"{detto}: l'estensione deve riconoscerlo (uscito «trovato»: false)")
+    if caso.get("numero"):
+        valore = out.get(CAMPO)
+        self.assertTrue(isinstance(valore, (int, float)) and not isinstance(valore, bool),
+                        f"{detto}: manca il numero nel campo «{CAMPO}» (uscito {valore!r})")
+
+
 class Accettazione(unittest.TestCase):
     pass
 
@@ -393,13 +473,20 @@ for _i, _caso in enumerate(ESEMPI, 1):
     def _t(self, _caso=_caso):
         _prova(self, _caso)
     setattr(Accettazione, f"test_r{_caso['requisito']}_{_i}", _t)
+
+for _i, _caso in enumerate(RICONOSCIUTI, len(ESEMPI) + 1):
+    def _t(self, _caso=_caso):
+        _riconosce(self, _caso)
+    setattr(Accettazione, f"test_r{_caso['requisito']}_{_i}", _t)
 '''
 
 
 def test_python(an: dict) -> str:
     """Il file test_accettazione.py dagli esempi (scritto dal codice, non dal modello)."""
     esempi = json.dumps(an.get("esempi") or [], ensure_ascii=False, indent=1)
+    riconosciuti = json.dumps(an.get("riconosciuti") or [], ensure_ascii=False, indent=1)
     return (TESTA + f"ESEMPI = json.loads({esempi!r})\n"
+            + f"RICONOSCIUTI = json.loads({riconosciuti!r})\n"
             + f"CAMPO = {str(an.get('campo_numero') or 'risultato')!r}\n" + CORPO)
 
 
@@ -525,7 +612,10 @@ def vincolo(an: dict, file: bool, gioco: bool = False) -> str:
             "sbagliato dillo nel riassunto della consegna."
             + (f" Input del manifesto, con questi nomi: {ins}." if ins else "")
             + (f" Il numero del risultato va nel campo «{an['campo_numero']}»."
-               if an.get("campo_numero") else ""))
+               if an.get("campo_numero") else "")
+            + "".join(f" Valori nominati dalla richiesta per «{i['nome']}», da riconoscere "
+                      f"tutti: {', '.join(i['valori'])}." for i in an.get("input") or []
+                      if i.get("valori")))
     if an.get("scelte"):
         parti.append("Scelte già fatte dove la richiesta non dice: "
                      + "; ".join(an["scelte"]) + ".")
@@ -569,7 +659,9 @@ def analizza(svc, compito: str, requisiti: list[dict], parole: str = "",
                          num_predict=2000)
     if dati is None:
         return None, esito
-    return interpreta(dati, len(requisiti), estensione, esempi_gioco), esito
+    testo = " ".join([str(compito or ""), str(parole or "")]
+                     + [f"{r.get('testo') or ''} {r.get('dettaglio') or ''}" for r in requisiti])
+    return interpreta(dati, len(requisiti), estensione, esempi_gioco, testo), esito
 
 
 def rossi(uscita: str) -> list[int]:
@@ -581,7 +673,8 @@ def rossi(uscita: str) -> list[int]:
 
 
 def numeri_esempi(an: dict) -> list[int]:
-    return sorted({e["requisito"] for e in an.get("esempi") or [] if e.get("requisito")})
+    return sorted({e["requisito"] for e in (an.get("esempi") or [])
+                   + (an.get("riconosciuti") or []) if e.get("requisito")})
 
 
 def esegui(sb, stato: dict) -> dict | None:

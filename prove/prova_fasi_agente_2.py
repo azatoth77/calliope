@@ -25,7 +25,12 @@ della temperatura sulla DGX del 12–13/10, caso del convertitore di distanze).
      sviluppo, modello guasto, agenti_accettazione spento;
    - d. alla revisione: requisiti numerati e parole della persona alla passata, «da guardare
      tu» per i requisiti al collaudo, «provato da un esempio» o l'esempio rosso; contrario:
-     senza l'analisi la frase di prima.
+     senza l'analisi la frase di prima;
+   - e. (14/10, banco L2) i valori che la richiesta nomina per un input di testo, tenuti solo
+     se ci sono alla lettera: per ognuno che nessun esempio usa un controllo «si riconosce»
+     sui dati di un esempio; verde con l'estensione che li riconosce tutti, rosso solo il
+     plurale non riconosciuto (il caso di L2), tutto rosso sullo scheletro; contrari: senza il
+     testo della richiesta, senza un esempio che riconosce.
 3. **modifica_file invece di riscrivere**: un file lungo riscritto intero per poche righe ha
    nel risultato di scrivi_file la nota che modifica_file c'è (regola
    agente_riscrittura_piccola); contrari: file nuovo, corto, cambiato molto, uguale.
@@ -34,6 +39,12 @@ della temperatura sulla DGX del 12–13/10, caso del convertitore di distanze).
    consegna che passa, il lavoro si chiude «fatto» (regola agente_consegna_al_tetto, riassunto
    del codice, frase a voce); contrari: esempi rossi, senza esempi, un test dell'agente rosso,
    il controllo della consegna che non passa, la tappa.
+5. **Correzione senza esempi al tetto** (14/10, banco delle porte): il test che riproduce il
+   problema (riproduzione.py) vale come esempio: riprodotto, i test e la prova di fumo verdi →
+   «fatto» (`consegna_al_tetto_con` «riproduzione», riassunto e frase a voce); anche alla terza
+   passata a vuoto di fila; contrari: nessun test nuovo, un test che passa anche prima, la
+   riproduzione «saltata», un test dell'agente rosso, un lavoro che non è una correzione, a
+   vuoto senza riproduzione, il gioco ancora rotto.
 
     python prove/prova_fasi_agente_2.py
 """
@@ -324,6 +335,107 @@ def prova_test_accettazione(tmp: Path):
              "quello uscito", not s["passano"] and acc.rossi(s["uscita"]) == [1]
              and s["esito"]["falliti"] == 1 and "atteso 16.09" in s["uscita"]
              and "uscito 15" in s["uscita"], s["uscita"][-600:])
+
+
+# I valori nominati (14/10, banco L2: «fatto» con gli esempi verdi e l'accettazione nascosta
+# rossa sul plurale «unità astronomiche» che la richiesta elencava)
+RICHIESTA_VALORI = ("Un convertitore di distanze tra metri, chilometri, miglia e unità "
+                    "astronomiche, anche al singolare («unità astronomica»); un'unità che non "
+                    "conosce, come i furlong, la dice.")
+ANALISI_VALORI = {
+    "contraddizioni": [], "scelte": [], "al_collaudo": [], "campo_numero": "risultato",
+    "input": [{"nome": "valore", "tipo": "number", "valori": ["10"]},
+              {"nome": "da", "tipo": "string",
+               "valori": ["metri", "chilometri", "miglia", "unità astronomiche",
+                          "Unità astronomica", "furlong", "parsec", "leghe marine"]},
+              {"nome": "a", "tipo": "string", "valori": ["metri", "chilometri", "anni luce"]}],
+    "esempi": [
+        {"requisito": 1, "dati": {"valore": 10, "da": "miglia", "a": "chilometri"},
+         "numero": 16.0934, "tolleranza": 0.01, "contiene": "", "trovato": None},
+        {"requisito": 1, "dati": {"valore": 1, "da": "unità astronomica", "a": "chilometri"},
+         "numero": 149597870.7, "tolleranza": 1, "contiene": "", "trovato": None},
+        {"requisito": 2, "dati": {"valore": 3, "da": "furlong", "a": "metri"},
+         "numero": None, "tolleranza": None, "contiene": "non", "trovato": False}]}
+CONVERTITORE_NORM = '''import unicodedata
+
+METRI = {"metri": 1.0, "chilometri": 1000.0, "miglia": 1609.344,
+         "unita astronomica": 149597870700.0, "unita astronomiche": 149597870700.0}
+
+
+def _n(s):
+    t = unicodedata.normalize("NFD", str(s or "").lower())
+    return " ".join("".join(c for c in t if not unicodedata.combining(c)).split())
+
+
+def esegui(dati, calliope):
+    da, a = _n(dati.get("da")), _n(dati.get("a"))
+    if da not in METRI or a not in METRI:
+        return {"da_dire": "Non conosco questa unità.", "trovato": False}
+    r = float(dati.get("valore") or 0) * METRI[da] / METRI[a]
+    return {"da_dire": f"Sono {r:g} {a}.", "risultato": r}
+'''
+# Il genere di L2: il singolare sì, il plurale che la richiesta elenca no
+SENZA_PLURALE = CONVERTITORE_NORM.replace(', "unita astronomiche": 149597870700.0', "")
+
+
+def prova_valori_nominati(tmp: Path):
+    sezione("2e. i valori nominati dalla richiesta: ognuno si riconosce")
+    from calliope.agenti import accettazione as acc
+    from calliope.agenti.scheletri import prepara_estensione
+    an = acc.interpreta(ANALISI_VALORI, 3, True, testo=RICHIESTA_VALORI)
+    da = next(i for i in an["input"] if i["nome"] == "da")
+    verifica("tenuti solo i valori che la richiesta dice alla lettera (non «parsec», «leghe "
+             "marine», «anni luce»), senza doppioni per maiuscole e accenti; niente valori per "
+             "un input numerico", da.get("valori") == ["metri", "chilometri", "miglia",
+                                                       "unità astronomiche",
+                                                       "Unità astronomica", "furlong"]
+             and [i.get("valori") for i in an["input"] if i["nome"] == "a"] == [["metri",
+                                                                                 "chilometri"]]
+             and "valori" not in an["input"][0], json.dumps(an["input"], ensure_ascii=False))
+    ric = [(c["input"], c["valore"]) for c in an["riconosciuti"]]
+    verifica("un controllo per ogni valore che nessun esempio usa (non «miglia», «unità "
+             "astronomica», «furlong» dato per sconosciuto; per «a» «chilometri» e «metri» ci "
+             "sono già), sui dati dell'esempio con il numero",
+             ric == [("da", "metri"), ("da", "chilometri"), ("da", "unità astronomiche")]
+             and an["riconosciuti"][2]["dati"] == {"valore": 10, "da": "unità astronomiche",
+                                                   "a": "chilometri"}
+             and all(c["numero"] for c in an["riconosciuti"]), str(an["riconosciuti"]))
+    testo = acc.test_python(an)
+    esiti = {}
+    for nome, codice in (("norm", CONVERTITORE_NORM), ("senza_plurale", SENZA_PLURALE),
+                         ("vuota", SCHELETRO_VUOTO)):
+        sb = G.sandbox(tmp, f"val-{nome}")
+        prepara_estensione(sb)
+        sb.scrivi("estensione.py", codice)
+        sb.scrivi(acc.FILE, testo)
+        esiti[nome] = sb.test(acc.FILE)
+    g, p, v = esiti["norm"], esiti["senza_plurale"], esiti["vuota"]
+    verifica("l'estensione che riconosce tutti i valori nominati passa (3 esempi e 3 controlli)",
+             g["passano"] and g["esito"]["eseguiti"] == 6, str(g["esito"]) + g["uscita"][-400:])
+    verifica("il caso di L2 (il plurale elencato e non riconosciuto): rosso solo il suo "
+             "controllo, che dice valore e input", not p["passano"]
+             and p["esito"]["falliti"] + p["esito"]["errori"] == 1
+             and "«unità astronomiche» per «da»" in p["uscita"]
+             and "trovato" in p["uscita"] and acc.rossi(p["uscita"]) == [1], p["uscita"][-700:])
+    verifica("sullo scheletro vuoto falliscono anche i controlli dei valori",
+             not v["passano"] and v["esito"]["falliti"] + v["esito"]["errori"] == 6,
+             str(v["esito"]))
+    an0 = acc.interpreta(ANALISI_VALORI, 3, True)
+    verifica("contrario: senza il testo della richiesta nessun valore e nessun controllo (come "
+             "prima)", an0["riconosciuti"] == [] and all("valori" not in i for i in an0["input"])
+             and len(an0["esempi"]) == 3, str(an0["input"]))
+    sz = dict(ANALISI_VALORI, esempi=[ANALISI_VALORI["esempi"][2]])
+    an1 = acc.interpreta(sz, 3, True, testo=RICHIESTA_VALORI)
+    verifica("contrario: senza un esempio che riconosce (solo «trovato»: false) nessun controllo",
+             an1["riconosciuti"] == [], str(an1["riconosciuti"]))
+    v = acc.vincolo(an, True)
+    verifica("i vincoli dicono all'agente i valori da riconoscere",
+             "Valori nominati dalla richiesta per «da», da riconoscere tutti: metri, chilometri, "
+             "miglia, unità astronomiche, Unità astronomica, furlong." in v, v)
+    sch = acc.schema(True)["properties"]["input"]["items"]["properties"]
+    verifica("lo schema della passata ha i valori per input; il prompt chiede tutti quelli "
+             "nominati, al plurale e al singolare", "valori" in sch
+             and "TUTTI i valori che la richiesta nomina" in acc.SISTEMA_ESEMPI)
 
 
 def prova_servizio(tmp: Path):
@@ -621,6 +733,136 @@ def prova_consegna_al_tetto(tmp: Path):
              and Lavori.frase_finale(s, lv) == "«Convertitore» è pronta da provare.", f)
 
 
+# ═══════════════════ 5. correzione senza esempi: la riproduzione al tetto ═══════════════════
+
+def _gira_correzione(tmp, nome, passate, prima=None, max_passi=3, gioco=False, correzione=True):
+    """Una correzione (codice, o un gioco delle porte con `gioco`) senza esempi di
+    accettazione: l'agente finto recita `passate` e non chiama consegna."""
+    import prova_fasi_agente as F
+    from calliope.agenti.ciclo import Lavoro
+    from calliope.estensioni.prompt import controlla_consegna
+    cli = G._Copione(passate)
+    log = []
+    ag = G.agente(cli, log)
+    ag.max_passi = max_passi
+    if gioco:
+        if prima is None:
+            prima = {"logica.js": F.GIOCO_ROTTO, "logica.test.js": F.TEST_LOGICA_PORTE,
+                     "manifesto.json": json.dumps(F.MANIFESTO_PORTE)}
+        lav = Lavoro(nome, "estensione", "Il gioco delle porte di Borgofiore")
+        lav.gioco = True
+    else:
+        lav = Lavoro(nome, "codice", "una funzione che somma")
+    partenza = F.PRIMA if prima is None else prima
+    lav.correzione = correzione
+    lav.problema_correzione = "il risultato non è quello giusto"
+    lav.file_iniziali = dict(partenza)
+    sb = G.sandbox(tmp, nome)
+    for k, v in (partenza or F.PRIMA).items():
+        sb.scrivi(k, v)
+    try:
+        ris = ag.codice(lav, sb, controlla=(lambda x: controlla_consegna(x)) if gioco else None)
+    except Exception as e:  # noqa: BLE001 — Limite: il tetto o il giro a vuoto
+        ris = {"eccezione": type(e).__name__, "motivo": str(e)}
+    return lav, ris, log
+
+
+def prova_correzione_al_tetto(tmp: Path):
+    sezione("5. correzione senza esempi: al tetto la riproduzione vale come esempio")
+    import prova_fasi_agente as F
+    giusta = [scrivi("calcola.py", F.CALCOLA_GIUSTO)]
+    rosso = [scrivi("test_calcola.py", F.TEST_ROSSO)]
+    lav, ris, log = _gira_correzione(tmp, "rip-verde", [giusta, rosso, [ESEGUI_TEST]])
+    regole = lav.segnali.get("regole") or {}
+    verifica("il codice corretto e il test che riproduce, nessuna consegna: al tetto «fatto» con "
+             "la riproduzione", ris.get("esito") == "fatto"
+             and ris.get("consegna_al_tetto") == "passate"
+             and ris.get("consegna_al_tetto_con") == "riproduzione"
+             and lav.riproduzione.get("stato") == "riprodotto"
+             and regole.get("agente_consegna_al_tetto") == 1, f"{ris} {regole} {log[-3:]}")
+    from calliope.agenti.ciclo import per_la_voce
+    verifica("…il riassunto lo scrive il codice e si può dire",
+             ris.get("riassunto") == "La correzione è fatta: il test che riproduce il problema "
+             "segnalato prima falliva e ora passa, e passano anche gli altri test. Chiuso al "
+             "tetto: l'agente non ha fatto in tempo a consegnare."
+             and per_la_voce(ris.get("riassunto")) == ris.get("riassunto"), ris.get("riassunto"))
+    lav, ris, log = _gira_correzione(tmp, "rip-senza-test",
+                                     [giusta, [ESEGUI_TEST], [LEGGI]])
+    verifica("contrario: la riproduzione mai riuscita (nessun test nuovo), «limite»",
+             ris.get("eccezione") == "Limite"
+             and any("correzione non riprodotta (nessun_test)" in x for x in log)
+             and not (lav.segnali.get("regole") or {}).get("agente_consegna_al_tetto"),
+             f"{ris} {log[-2:]}")
+    lav, ris, log = _gira_correzione(tmp, "rip-passa-prima",
+                                     [giusta, [scrivi("test_calcola.py", F.TEST_VERDE)],
+                                      [ESEGUI_TEST]])
+    verifica("contrario: un test nuovo che passa anche sulla versione di prima, «limite»",
+             ris.get("eccezione") == "Limite"
+             and any("correzione non riprodotta (passa_prima)" in x for x in log),
+             f"{ris} {log[-2:]}")
+    lav, ris, log = _gira_correzione(tmp, "rip-saltata", [giusta, rosso, [ESEGUI_TEST]],
+                                     prima={})
+    verifica("contrario: la riproduzione che non si può fare («saltato»), «limite»",
+             ris.get("eccezione") == "Limite"
+             and any("correzione non riprodotta (saltato)" in x for x in log),
+             f"{ris} {log[-2:]}")
+    cinque = "def somma(a, b):\n    return 5\n"
+    uno = F.TEST_ROSSO + "\n    def test_uno(self):\n        self.assertEqual(somma(1, 0), 1)\n"
+    lav, ris, log = _gira_correzione(tmp, "rip-test-rossi",
+                                     [[scrivi("calcola.py", cinque)],
+                                      [scrivi("test_calcola.py", uno)], [ESEGUI_TEST]])
+    verifica("contrario: un test dell'agente rosso (il codice ancora sbagliato), «limite»",
+             ris.get("eccezione") == "Limite"
+             and any("i test dell'agente non passano" in x for x in log), f"{ris} {log[-2:]}")
+    lav, ris, log = _gira_correzione(tmp, "rip-non-correzione", [giusta, rosso, [ESEGUI_TEST]],
+                                     correzione=False)
+    verifica("contrario: un lavoro che non è una correzione e senza esempi, «limite»",
+             ris.get("eccezione") == "Limite"
+             and any("senza esempi di accettazione" in x for x in log), f"{ris} {log[-2:]}")
+    # La terza passata a vuoto di fila (banco del 14/10, L10): gli stessi controlli
+    lav, ris, log = _gira_correzione(tmp, "rip-a-vuoto", [giusta, rosso, [ESEGUI_TEST],
+                                                          "ripete", "ripete", "ripete"],
+                                     max_passi=12)
+    verifica("tre passate a vuoto di fila dopo la correzione giusta: «fatto» (a_vuoto) con la "
+             "riproduzione", ris.get("esito") == "fatto"
+             and ris.get("consegna_al_tetto") == "a_vuoto"
+             and "girava a vuoto" in str(ris.get("riassunto")), f"{ris} {log[-3:]}")
+    lav, ris, log = _gira_correzione(tmp, "rip-a-vuoto-no", [giusta, [ESEGUI_TEST],
+                                                             "ripete", "ripete", "ripete"],
+                                     max_passi=12)
+    verifica("contrario: a vuoto senza il test che riproduce, «limite» con il motivo di prima",
+             ris.get("eccezione") == "Limite" and "stesso ragionamento" in ris.get("motivo", "")
+             and any("correzione non riprodotta" in x for x in log), f"{ris} {log[-2:]}")
+    # La frase a voce di un gioco chiuso con la riproduzione
+    from types import SimpleNamespace
+    from calliope.agenti.ciclo import Lavoro
+    from calliope.agenti.servizio import AL_TETTO_CORREZIONE, Lavori
+    s = SimpleNamespace(female=True, in_tappa=Lavori.in_tappa)
+    lv = Lavoro("F2", "estensione", "x", titolo="Le porte")
+    lv.stato = "fatto"
+    lv.risultato = {"esito": "fatto", "estensione": {"frase": "«Le porte» è pronta da provare."},
+                    "consegna_al_tetto": "passate", "consegna_al_tetto_con": "riproduzione"}
+    f = Lavori.frase_finale(s, lv)
+    verifica("la frase a voce dice il test del problema, non gli esempi",
+             f == "«Le porte» è pronta da provare. " + AL_TETTO_CORREZIONE, f)
+    if not shutil.which("node"):
+        print("SALTATA IN PARTE: node non c'è (il gioco delle porte)")
+        return
+    lav, ris, log = _gira_correzione(tmp, "rip-porte", [
+        [scrivi("logica.js", F.GIOCO_GIUSTO)], [scrivi("gioco.test.js", F.TEST_GIOCO_PORTE)],
+        [ESEGUI_TEST]], gioco=True)
+    verifica("il gioco delle porte corretto con il test del disegno, senza consegna: «fatto» "
+             "con la riproduzione (prova di fumo compresa)", ris.get("esito") == "fatto"
+             and ris.get("consegna_al_tetto_con") == "riproduzione"
+             and str(ris.get("riassunto")).startswith("Il gioco è corretto:"),
+             f"{ris} {log[-3:]}")
+    lav, ris, log = _gira_correzione(tmp, "rip-porte-rotte", [
+        [scrivi("gioco.test.js", F.TEST_GIOCO_PORTE)], [ESEGUI_TEST], [LEGGI]], gioco=True)
+    verifica("contrario: il test del disegno scritto ma il gioco ancora rotto, «limite»",
+             ris.get("eccezione") == "Limite"
+             and any("al tetto niente consegna d'ufficio" in x for x in log), f"{ris} {log[-2:]}")
+
+
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8")
     radice = Path(tempfile.mkdtemp(prefix="calliope-fasi2-"))
@@ -630,10 +872,12 @@ if __name__ == "__main__":
         prova_niente_ufficio(radice / "ufficio")
         prova_interpreta()
         prova_test_accettazione(radice / "accettazione")
+        prova_valori_nominati(radice / "valori")
         prova_servizio(radice / "servizio")
         prova_revisione(radice / "revisione")
         prova_riscrittura(radice / "riscrittura")
         prova_consegna_al_tetto(radice / "tetto")
+        prova_correzione_al_tetto(radice / "correzione")
     finally:
         shutil.rmtree(radice, ignore_errors=True)
     print(f"\n{'TUTTO OK' if not errori else f'{errori} ERRORI'} "
