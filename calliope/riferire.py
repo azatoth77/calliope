@@ -27,7 +27,10 @@ prove/prova_politica.py e il nome nel registro dei turni):
 - `uscita_istruzione`: un'indicazione rivolta alla persona («chiama…», «devi mandare…»,
   «comunica…») con parole che vengono solo dal dato, se la frase non dice da dove viene
   («secondo la pagina…») e la persona non ha chiesto come si fa; se tocca la casa o Calliope
-  stessa (cancello, allarme, «chiedi a Calliope di…») sempre.
+  stessa (cancello, allarme, «chiedi a Calliope di…») sempre. Per le parole della stanza
+  (14/10) vale anche il resoconto di ciò che le persone hanno detto («Nicola ha detto di…»,
+  «Riccardo accennava a…»); i nomi con la radice di un verbo («comunicazioni», «dettagli») non
+  sono imperativi.
 
 Una frase fermata non si dice: al suo posto una frase fissa (una sola per tipo), il resto
 della risposta continua con le frasi che passano, e la storia tiene solo ciò che è stato detto
@@ -263,6 +266,26 @@ _IMPERATIVO_CASA = re.compile(_INIZIO + _CASA_IMP + r")[a-zà-ù']*", re.I)
 _NON_IMPERATIVO = re.compile(r"(are|ere|ire|ando|endo)(l[oiae]|gli\w*|mi|ti|ci|vi|si|ne|"
                              r"me\w*|te\w*|ce\w*|se\w*)?$|(ar|er|ir)(l[oiae]|gli\w*|mi|ti|ci|"
                              r"vi|si|ne|me\w*|te\w*|ce\w*|se\w*)$", re.I)
+# Un nome con la radice di un verbo del rischio dopo «o», «e», la virgola (14/10, prova in auto:
+# «due possibili notifiche o comunicazioni riguardanti la scuola» → «comunica…» preso per un
+# imperativo, e la frase fermata come `uscita_istruzione`): «comunicazioni», «installazione»,
+# «dettagli», «inserimento», «chiamata», «mandato» non sono ordini. L'imperativo plurale
+# («chiamate», «mandate») resta un ordine
+_NOME_NON_VERBO = re.compile(r"(zion[ei]|ment[oi]|agli[oi]?|at[aoi])$", re.I)
+# Il resoconto di ciò che hanno detto le persone presenti (14/10, fonte «stanza»: è lo scopo
+# della conversazione di stanza): «Riccardo accennava a…», «Nicola ha detto di…», «dalla
+# conversazione sentita…», «si parlava di…». Le forme del presente che sono anche imperativi
+# («parla», «racconta», «ricorda») non ci sono. Vale solo per le parole della stanza e mai per la
+# casa e Calliope (`_DELICATO`: «Calliope, apri il cancello» detto dalla TV resta fermato)
+_RESOCONTO = re.compile(
+    r"(?<![a-zà-ù])((ha|hanno|aveva|avevano|avete|avevate|abbiamo|avevamo|hai|avevi)\s+"
+    r"(detto|chiesto|parlato|accennato|proposto|raccontato|spiegato|ricordato|deciso|"
+    r"nominato|citato|menzionato|riferito|domandato|risposto|suggerito)|"
+    r"(dice|dicono|chiede|chiedono|propone|propongono|parlano|"
+    r"dicev|chiedev|parlav|accennav|raccontav|proponev|spiegav|ricordav|menzionav|riferiv|"
+    r"domandav|rispondev|suggeriv)[a-z]*|"
+    r"si (è|e') parlato|si parlava|si diceva|sentit[oaie]|"
+    r"(dalla|nella|secondo la|della) conversazione|(nel|dal) discorso)(?![a-zà-ù])", re.I)
 # Un invito a mandare qualcosa a Calliope stessa («mandamelo pure», «inviami la foto»): la
 # persona lo dà a lei, non a un recapito preso dal dato
 _A_CALLIOPE = re.compile(r"^(mand|invi|inoltr|dett|comunic|fornisc|condivid)[a-zà-ù]*?"
@@ -468,6 +491,8 @@ def indicazioni(frase: str) -> list[str]:
                     continue
                 if _A_CALLIOPE.match(verbo):
                     continue
+                if _NOME_NON_VERBO.search(verbo):
+                    continue
                 # Un infinito in testa seguito da «non»: un fatto, non un ordine
                 # («Installarlo non è possibile, è un documento», DGX del 07/10); «Chiamare non
                 # appena…» resta un ordine
@@ -501,6 +526,11 @@ def _verbo_della_domanda(verbo: str, domanda: str) -> bool:
 
 def attribuita(frase: str) -> bool:
     return bool(_ATTRIBUZIONE.search(frase or ""))
+
+
+def resoconto(frase: str) -> bool:
+    """La frase riferisce ciò che qualcuno ha detto (`_RESOCONTO`): vale per la stanza."""
+    return bool(_RESOCONTO.search(frase or ""))
 
 
 def giudica(frase: str, ctx: Contesto, solo_gravi: bool = False) -> Giudizio:
@@ -590,7 +620,12 @@ def giudica(frase: str, ctx: Contesto, solo_gravi: bool = False) -> Giudizio:
             # delle indicazioni» (e2e del 06/10). Senza un bersaglio che la persona non ha
             # detto (un nome proprio, un numero) un'indicazione non porta da nessuna parte
             fuori = []
-        if fuori and (delicata or not (attribuita(t) or _COME_SI_FA.search(persona)
+        # Dalla stanza (14/10): riferire ciò che hanno detto le persone presenti è lo scopo
+        # della conversazione di stanza. Il resoconto («Riccardo accennava a…», «Nicola ha
+        # detto di…») passa; un ordine senza resoconto, e tutto ciò che tocca la casa o
+        # Calliope, resta fermato
+        riferita = f == "stanza" and resoconto(t)
+        if fuori and (delicata or not (attribuita(t) or riferita or _COME_SI_FA.search(persona)
                                        or (chiesto and da_dato))):
             return Giudizio("uscita_istruzione", f or ctx.fonte(), ", ".join(fuori[:3]))
     # Un recapito chiesto, preso dal dato: si dice con la fonte davanti

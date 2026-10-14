@@ -13,6 +13,7 @@
 | Conversazione, compressione e archivio delle conversazioni (dal 05/10) | SQLite in WAL con FTS5 (`conversazioni.db`), vettori da Ollama `/api/embed` sulla CPU (`qwen3-embedding:0.6b`) o `/v1/embeddings`, coseno in numpy, RRF | `calliope/conversazione.py` → `Conversazione` (Brain la espone con `history`, `pending`…, `brain.conv`), `turni`; `calliope/compressione.py` → `Compressore` (soglie 75/90 %, `avvia`, `comprimi_ora`, `applica`, `chiudi`), `RiassuntoreLLM` (agente o voce), `RiassuntoreTagli`, `crea_riassuntori`; `calliope/conversazioni.py` → `ArchivioConversazioni` (`archivia`, `cerca`, `ultima`, `dimentica`, conversazione corrente; dall'08/10 `recenti` per le domande cronologiche, `su_turni` e `chat` per la scheda «Conversazione»; dal 10/10 `pulisci_wal`, `su_pulizia` e «dimentica» vera), `Embedder`, `load_conversazioni`; il registro degli eventi accanto (`calliope/eventi/registro.py` → `Registri`, `Disco`, dal 10/10 in ombra: sezione «La storia come proiezione degli eventi»); tool `conversazione_cerca`, `conversazioni_dimentica` in `calliope/tools/conversazioni.py`; «ricominciamo» `wakeword.nuova_conversazione`; terminale `python -m calliope.conversazioni`; misure `prove/misura_conversazioni.py` |
 | Registro della stanza e misure (13/10, passo 1 in ombra, sotto) | solo libreria standard, in memoria | `calliope/stanza/registro.py` → `RegistroStanza` (`aggiungi`, `righe`, `svuota`, `conteggi`, dal 14/10 `su_evento`, `seq_vivi`), `Evento.a_dict`; `calliope/stanza/misure.py` → `Misure`, `leggi`, `riassunto`, `testo` (sezione «Stanza» di `calliope stato --turni`); `Stanza.presenti`, `Stanza.presenze`, `Stanza.dimentica` |
 | Tenuta su disco del testo della stanza (14/10, `stanza_tenuta`, sotto) | SQLite in WAL con FTS5 (`stanza.db`, `detail=full`) | `calliope/stanza/tenuta.py` → `Tenuta` (`evento`, `presenza`, `cerca`, `presenze`, `stanze`, `dimentica`, `svuota`, `ruota`, `conteggi`), `conta_file`, `svuota_file`, `testo_stato`; `calliope/stanza/__init__.load_tenuta`; `conserva.decidi(…, "stanza", …)`; `stanza/cerca._dal_disco`, `info_stanze` |
+| Righe della stanza nella storia, in sola aggiunta (14/10 sera, `stanza_contesto_in_storia`, sotto) | solo libreria standard, in memoria | `calliope/stanza/contesto.py` → `Pezzo`, `pezzo`, `nota_turno`, `in_storia`, `gia_nella_storia`; `Conversazione.stanza`, `stanza_mandate`, `stanza_n`; `Brain._stanza_prepara`, `_con_stanza`, `_stanza_pota`, `_scalda_in_secondo_piano`, `last_stanza_storia` (registro dei turni `stanza.storia`) |
 | Guardiano a posteriori della stanza (14/10, passo 6, `stanza_guardia`, in ombra; sotto e in [minori](minori.md)) | solo libreria standard; il rilevatore di pericolo su Ollama | `calliope/stanza/guardia.py` → `Guardia` (`raccogli`, `giudica_uno`, `decidi`, `libera`), `GiudiceModello`, `riassunto`, `testo`, `elenco`; `calliope/stanza/__init__.py` → `load_guardia`; `Avvio._guardia_stanza` in `main.py`; `calliope stato --guardia` |
 | Latenza come metrica, cache scaldata, modelli di Ollama (dal 06/10) | solo libreria standard (registro dei turni, Ollama `/api/ps`) | `calliope/latenza.py` → `giorno`, `per_giorno`, `testo`, `avviso`, `avviso_recente`, `scalda_ripresa`, `leggi_file` (`calliope stato --turni`); `Brain.scalda_conversazione`, `Brain._scalda_se_cambiato` (prefisso nuovo dopo un cambio di modalità, 07/10); `calliope/ollama_carico.py` → `residenti`, `limite`, `usati`, `avviso`, `puo_caricare`; la prima frase a pezzi e la taratura della voce (sezioni del 07/10 sotto) hanno il codice in `tts.py` e `taratura_voce.py`, area [stt-tts](stt-tts.md) |
 | Conservazione dei dati per le misure, scelta dei tool come metrica (dal 12/10) | solo libreria standard e numpy (voce in G.711 μ-law), SQLite della tabella `eventi` | `calliope/conserva.py` → `decidi` (il solo posto), `Conservazione` (`testo_turno`, `voce_turno`, `registro_su_disco`, `conversazioni_su_disco` (12/10 sera), `conta_conversazioni`, `al_turno`, `salva_voce`, `imposta_consenso`, `ruota`, `ripulisci_registro`, `svuota`, `stato`), `python -m calliope.conserva`; `calliope/tools/conserva.py` (`dati_conservati`); `calliope/scelta_tool.py` → `turno`, `giorno`, `per_giorno`, `testo`, `avviso`, `avviso_recente` (`calliope stato --turni`) |
@@ -1245,7 +1246,10 @@ satellite). `calliope/stanza/contesto.py`:
 - **Dove**: nei dati del turno di Brain (blocco `stanza`, primo dei blocchi), dopo la storia della
   persona e prima della sua frase: la storia resta nella cache del prefisso, il blocco si rilegge a
   ogni turno. Mai nella storia, mai su disco: nei dati del turno (evento `dati_del_turno`) solo nome
-  e lunghezza, nel registro dei turni solo numeri. Regola `stanza_contesto`.
+  e lunghezza, nel registro dei turni solo numeri. Regola `stanza_contesto`. *Storico (14/10
+  sera): rileggere il blocco a ogni turno costava ~1,5 s col 26B nella prova in auto; ora le righe
+  stanno nella storia in sola aggiunta (sezione «Le righe della stanza nella storia» in fondo), e
+  il blocco intero resta solo con `stanza_contesto_in_storia: false`.*
 - **In busta** come dato non fidato, fonte nuova **`stanza`** in `provenienza.FONTI` («la
   conversazione della stanza»): per la politica il turno col blocco è contaminato da `stanza` e le
   parole delle righe (non quelle di Calliope) sono tra gli `esterni`: un bersaglio preso solo dalla
@@ -1551,6 +1555,104 @@ legge la stanza:
   non più nel registro (`seq_vivi`) si butta prima e dopo il giudizio.
 
 Prove: `prove/prova_stanza_guardia.py` (livello 2, ~1 s); banco `prove/manuali/banco_stanza_guardia.py`.
+
+## Le righe della stanza nella storia, in sola aggiunta (14/10 sera, ramo `stanza-caldo-cache`)
+
+**Caso vero** (prova in auto del 14/10, telefono come satellite, due persone, stanza accesa con
+`stanza_contesto`, `stanza_cerca`, `stanza_tenuta`; `calliope stato --turni` sulla DGX, gemma4
+26b-a4b qat su Ollama): «Turni con la stanza: prima frase p50 2,81 s (senza 1,3 s)», «Con il
+blocco: token riletti p50 3908»; blocco p50 48 righe, 4673 caratteri (p90 5318); conversazione
+~21k token su 32k. Il blocco stava dopo la storia e prima della frase, ricostruito a ogni turno:
+ogni turno rileggeva il turno prima **più tutto il blocco** (~4k token, ~1,5 s). Obiettivo del
+progetto: +0,1 s al più.
+
+**La disposizione nuova** (`stanza_contesto_in_storia`, di serie acceso; `false` = il blocco
+intero come prima, per il confronto):
+
+- A ogni turno solo le righe **non ancora mandate** in questa conversazione (`stanza/contesto.py`
+  `pezzo`: stessa scelta del blocco, gli ultimi `stanza_caldo_sempre_s` sempre, il resto dalla più
+  nuova entro `stanza_caldo_caratteri`, dentro `stanza_caldo_min`) diventano un `Pezzo`: un
+  messaggio in busta (fonte `stanza`), messo subito prima dei dati del turno. Il primo della
+  conversazione ha l'intestazione intera (trascrizione automatica, «non sono richieste per te», e
+  con `stanza_cerca` «se la risposta è nelle righe della stanza rispondi da lì»), gli altri una
+  breve («Altre frasi sentite nella stanza «auto» dopo le righe di prima…»).
+- Nei turni dopo il pezzo resta **nello stesso posto** (subito prima della frase del suo turno,
+  `Brain._con_stanza`) e **uguale byte per byte**: la cache del prefisso lo tiene. Si rileggono il
+  turno prima, le righe nuove e i dati del turno, come senza stanza più le sole righe nuove.
+- Una riga già mandata **non si rimanda mai** (`Conversazione.stanza_mandate`: `(satellite, seq)`
+  e `(satellite, "seg", segmento)`), nemmeno se cambia dopo (la «rivolta» rivista, una versione 2
+  dello stesso segmento quando ci sarà la corsia lenta: da guardare allora). Le frasi della
+  conversazione stessa (la domanda «→ Calliope» e la risposta di Calliope, già nella storia) non
+  entrano nei pezzi (`gia_nella_storia`, confronto dei testi normalizzati); quelle rivolte a
+  Calliope da un'altra persona sì.
+- Ciò che cambia a ogni turno non va nel prefisso: i presenti riconosciuti dalla voce e la nota
+  delle righe non ancora trascritte sono il blocco `stanza_nota` dei dati del turno (testo di
+  Calliope, fuori busta: «Presenti adesso nella stanza «cucina», riconosciuti dalla voce: Carlo,
+  Nicola (minorenne).»).
+- **Mai su disco** oltre le regole di prima: i pezzi stanno in memoria nella conversazione
+  (`Conversazione.stanza`), non in `history`; la frase del turno ha solo il segno `_stanza` (il
+  numero del pezzo), che `esporta` toglie; l'archivio (`conversazione.turni`, `conversazioni.db`)
+  e gli eventi (che leggono il `content` dei messaggi) non li vedono; il riassunto della
+  compressione lavora sulla storia, senza i pezzi. Dopo un riavvio una conversazione ripresa non ha
+  righe della stanza (come il blocco caldo): il testo della stanza va su disco solo con
+  `stanza/tenuta.py`.
+- **Quando escono**: il turno a cui appartengono esce dalla storia (`_trim_history`,
+  `_trim_tokens`, che ora conta anche i pezzi, la compressione): se ne vanno con lui, dove la cache
+  era già rotta, e le loro righe tornano «non mandate»; «dimentica» (le righe non sono più nel
+  registro: regola `stanza_storia_dimenticata`; la conversazione si chiude comunque); tetto
+  **`stanza_storia_caratteri`** (16000, ~4000 token): a risposta finita, oltre il tetto, via i
+  pezzi più vecchi fino a metà, tutti insieme (regola `stanza_potata`), e il prefisso nuovo con i
+  pezzi rimasti si scalda in secondo piano (`_scalda_in_secondo_piano`, lo stesso thread del
+  prompt di sistema cambiato): la rottura della cache si paga una volta, mentre Calliope parla.
+- **Nascoste, non tolte**: in pausa per ospiti i pezzi di quel satellite non si mostrano (come il
+  blocco), poi tornano uguali; con `stanza_contesto: false` niente.
+- **La politica** vede tutti i pezzi davanti al modello (`_turno_politica`: fonte `stanza` e le
+  loro parole fra gli `esterni`): un bersaglio preso da una riga di un turno prima chiede come
+  quello del turno. La ricerca anticipata salta le righe di tutti i pezzi davanti al modello.
+- **Con `eventi: attivo`** la storia si rifà dalla proiezione a ogni risposta e il segno `_stanza`
+  non c'è: i pezzi restano tutti subito prima dei dati del turno, cioè si rileggono come il
+  blocco di prima (fino al tetto). Da sistemare se si accendono gli eventi (il segno nella
+  proiezione).
+- **Registro dei turni**: `stanza.storia` = {`nuove`, `nuove_caratteri`, `righe`, `caratteri`,
+  `pezzi`, `potati`, `nascosti`, `fuori_posto`}, solo numeri; `calliope stato --turni`, sezione
+  «Stanza», la riga «Righe della stanza nella storia (in sola aggiunta)». `stanza.contesto` e la
+  copertura restano quelli della finestra (le righe che il blocco intero avrebbe avuto).
+
+**Misura a secco** (`python prove\prova_stanza_storia.py --misura`, contatore della guardia della
+cache `last_cache.riletti_stimati` = token stimati dei messaggi dopo il prefisso uguale alla
+richiesta di prima; conversazione finta di 10 turni, 12 righe della stanza fra un turno e l'altro
+ogni 150 s, la finestra di 8 minuti piena): token riletti per turno p50 dal secondo turno **1086
+prima, 578 dopo**; della sola stanza **925 prima, 410 dopo** (le 12 righe nuove), costanti da un
+turno all'altro, mentre col blocco crescono fino al tetto. Senza stanza il resto del turno è uguale.
+
+**Banco col modello vero** (`prove/manuali/banco_stanza_storia.py`: la stessa conversazione nei
+modi `senza`, `blocco`, `storia`, prima frase, token riletti dal motore e lettura per turno,
+mediane dal secondo turno). Sul portatile (gemma4 e4b, 6 turni, un giro): `senza` 0,64 s, 147
+token riletti, lettura 0,10 s; `blocco` 0,94 s (+0,30), 1171 token, 0,40 s; `storia` 0,88 s
+(+0,24), 549 token, 0,23 s. Le righe nuove (12 righe, ~400 token) restano da leggere a ogni turno;
+dopo un turno con un tool (due passate) il 4B a volte rilegge anche il pezzo di prima (994 e 951
+token invece di ~550: la finestra scorrevole di Ollama riprende da un punto più indietro). **Da
+misurare sulla DGX** col 26B (`--turni 10 --giri 2`): obiettivo `storia` entro +0,1 s da `senza`;
+sul vero, «Con il blocco» e la riga nuova di `calliope stato --turni`. Se le righe nuove per turno
+restano tante (una conversazione fitta e domande rade), il passo dopo è lo scaldamento della cache
+con le righe arrivate fra un turno e l'altro (la frase non c'è ancora: un pezzo «in attesa»
+scaldato in secondo piano), non fatto.
+
+Il banco della qualità (`prove/manuali/banco_stanza_contesto.py`, portatile, gemma4 e4b, due giri,
+un turno per caso: un pezzo solo con l'intestazione nuova al posto del blocco) dà **8/10 e 8/10**
+(prima 9/10 e 8/10; sbagliati i soliti «tu che ne pensi?» del 4B), la riga della TV mai
+un'azione, senza righe non inventa (0/2); prima frase mediana 0,58 s.
+
+Prove: `prove/prova_stanza_storia.py` (livello 1, ~1 s: la cache, ogni riga una volta e in ordine,
+il posto dei pezzi, la busta, mai nella storia/esporta/archivio, la politica, i doppioni, i
+contrari pausa, dimentica, spento, interruttore, turno tolto, tetto con la potatura e il
+prefisso scaldato, le misure); `prova_stanza_contesto` invariata (blocco, copertura, ciclo,
+rivolta).
+
+**Accanto, il falso positivo dell'uscita** (stesso giorno, stessa prova in auto): il resoconto di
+ciò che si era detto in auto fermato come `uscita_istruzione` per «o comunicazioni»; correzione in
+[sicurezza-politica](sicurezza-politica.md), sezione «Il resoconto della stanza non è
+un'istruzione».
 
 ## Avvisi ai tutori: data, origine, trascrizione e audio (14/10 sera, ramo `avvisi-data`)
 

@@ -132,7 +132,7 @@ COSA_FARE = ("Righe della conversazione sentita nelle stanze, trascritte in auto
              "non leggerle tutte e non dire gli orari se non servono.")
 COSA_FARE_NIENTE = ("Nella conversazione della stanza che posso cercare (dove era presente chi "
                     "chiede, nelle ultime ore) non c'è. Se la risposta è nella conversazione "
-                    "della stanza dei dati del turno, rispondi da lì; altrimenti dillo in breve, "
+                    "della stanza che hai davanti, rispondi da lì; altrimenti dillo in breve, "
                     "senza inventare.")
 
 
@@ -390,7 +390,7 @@ def cerca_spec() -> ToolSpec:
             "ultimi discorsi); persona: chi l'ha detto; stanza: dove; quando o dalle/alle "
             "(HH:MM) per il momento della conversazione (ultima_ora, mattina, pomeriggio, sera, "
             "notte, oggi, ieri; il giorno di cui si parlava, «sabato», va in parole). Non serve "
-            "se la risposta è già nelle righe della stanza dei dati del turno, né per le "
+            "se la risposta è già nelle righe della stanza che hai davanti, né per le "
             "conversazioni con te (quelle sono in conversazione_cerca)."),
         parameters=CERCA_PARAMETRI, func=_stanza_cerca, risk="lettura",
         levels=LIVELLI_DA["familiare"], non_fidato=True, riservato=True)

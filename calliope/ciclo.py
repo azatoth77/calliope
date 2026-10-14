@@ -3863,6 +3863,14 @@ class Ciclo:
                 cache["fughe"] = p["fughe"]
         if cache:
             self.rec["cache"] = cache
+        # Le righe della stanza nella storia (14/10 sera, `stanza_contesto_in_storia`): quante
+        # nuove in questo turno e quante davanti al modello, solo numeri
+        st_s = getattr(brain, "last_stanza_storia", None)
+        if isinstance(st_s, dict) and st_s:
+            info = self.rec.get("stanza")
+            if not isinstance(info, dict):
+                info = self.rec["stanza"] = {}
+            info["storia"] = dict(st_s)
         # Velocità di generazione del turno (08/10, fase 0 della taratura): tutte le passate
         gen = getattr(brain, "last_generazione", None)
         if isinstance(gen, dict) and gen.get("token") and gen.get("ns"):

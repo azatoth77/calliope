@@ -1336,6 +1336,19 @@ conversazione_stanza:
   # Tetto del blocco in caratteri (~4 caratteri per token: 6000 ≈ 1500 token, ~0,5 s di
   # rilettura col 26B sulla DGX senza cache): oltre si lasciano fuori le righe più vecchie
   stanza_caldo_caratteri: 6000
+  # Le righe della stanza nella storia, in sola aggiunta (14/10 sera, dopo la prova in auto con
+  # il 26B: col blocco ricostruito a ogni turno la prima frase mediana era 2,81 s contro 1,3 s
+  # senza, ~3900 token riletti per turno). A ogni turno solo le righe non ancora mandate in
+  # questa conversazione entrano, in busta, subito prima della frase; nei turni dopo restano
+  # nello stesso posto, uguali, e la cache del prefisso le tiene. In memoria, mai su disco (la
+  # tenuta della stanza resta quella di stanza_tenuta). false = il blocco intero nei dati del
+  # turno a ogni turno, come il 14/10 mattina (per il confronto sul banco)
+  stanza_contesto_in_storia: true
+  # Tetto delle righe della stanza nella storia di una conversazione, in caratteri (~4 per
+  # token: 16000 ≈ 4000 token). Oltre, a risposta finita, via le più vecchie fino a metà, tutte
+  # insieme (la cache si rompe una volta sola) e il prefisso nuovo si scalda in secondo piano;
+  # anche il taglio e la compressione della storia portano via le righe dei turni tolti
+  stanza_storia_caratteri: 16000
   # Passo 4 (14/10, calliope/stanza/cerca.py, tool stanza_cerca): ciò che il blocco caldo non
   # ha più o che si è detto in un'altra stanza («di cosa parlavamo in cucina prima?», «cosa
   # aveva detto Carlo della gita stamattina?»), cercato nel registro della stanza in memoria
