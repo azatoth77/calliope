@@ -280,6 +280,15 @@ def ascolta(m: dict, giocatori: dict) -> dict:
     if len(piatti) > MAX_PIATTI:
         _err("", f"troppi comandi a voce: {len(piatti)} con i valori degli slot (al più "
                  f"{MAX_PIATTI}); restringi i domini")
+    # Le domande standard di Calliope («a chi tocca?», «quanti punti ho?»: gioco_stato.py) valgono
+    # in ogni fase: un comando del gioco non le può coprire
+    from .. import gioco_stato
+    domande = gioco_stato.forme_normalizzate()
+    for cid, forme in piatti.items():
+        for f in forme:
+            if gioco_voce.normalizza(f) in domande:
+                _err("", f"«{f}» è una domanda di Calliope sul gioco (a chi tocca, i punti, chi "
+                         "vince, cosa si può dire): scegli un'altra forma")
     try:
         comandi = gioco_voce.valida_elenco(piatti, massimo=MAX_PIATTI)
     except gioco_voce.ElencoNonValido as e:

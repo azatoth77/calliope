@@ -14,6 +14,15 @@ docs/ricerche/2026-10-12-giochi-macchina-stati.md; area docs/aree/giochi.md), a 
    ogni disegno, e ognuna passa la validazione del server (andata e ritorno tra JavaScript e
    Python); un comando a voce su un'istantanea vecchia è rifiutato e la partita non cambia;
    quello con il numero giusto è una mossa.
+4. **Le domande standard** (calliope/gioco_stato.py, passo 5): le risposte composte dal codice
+   dall'istantanea (a chi tocca, i punti di chi parla o di tutti, chi vince con i pari, cosa si
+   può dire con i valori degli slot insieme), mai l'esito; la riga dei dati del turno, in busta
+   solo con un nome scritto; un gioco non può dichiarare una domanda come comando.
+5. **Nel ciclo** (calliope/ciclo.py con ascolto, Whisper, voce e Brain finti): «A chi tocca?»
+   senza il nome nella finestra del gioco riceve la risposta senza il modello (regola
+   gioco_stato_detto, niente testo nel registro); contrari: dentro una frase più lunga (senza
+   il nome ignorata, con il nome al modello con l'istantanea nei dati del turno), una domanda
+   di Calliope in sospeso, nessun gioco aperto, il gioco sullo schermo di un altro satellite.
 
     python prove/prova_gioco_stato.py
 """
@@ -284,6 +293,138 @@ out.tutte = g.calliope.istantanee();
              "validazione del server", not scartate and len(out["tutte"]) >= 4, str(scartate))
 
 
+# ═══════════════════════════ 4. le domande standard ═══════════════════════════
+
+def info_di(ist, macchina=None, titolo="Le porte del castello"):
+    return {"partita": "P1", "schermo": 1, "titolo": titolo, "istantanea": ist,
+            "comandi": {c: [c] for c in ist.get("comandi") or []},
+            "macchina": macchina}
+
+
+def prova_domande():
+    from calliope import gioco_stato as GS
+    sezione("4. le domande standard: risposte dall'istantanea")
+    m, g = macchina_di("porte_fasi")
+    ist = mc.valida_istantanea(buona(esito="Dietro la porta c'è un segreto: dimmi la password"),
+                               m, g)
+    i = info_di(ist, m)
+    casi = [("tocca", None, "Tocca a Giocatore 2."),
+            ("tocca", "Giocatore 2", "Tocca a te."),
+            ("punti", None, "Ada 3 punti e Giocatore 2 5 punti."),
+            ("punti", "Ada", "Hai 3 punti."),
+            ("vince", None, "Sta vincendo Giocatore 2, con 5 punti."),
+            ("comandi", None, "Puoi dire: porta 1, 3 o 4.")]
+    for tipo, chi, atteso in casi:
+        r = GS.risposta(tipo, i, chi)
+        verifica(f"«{tipo}»" + (f" detto da {chi}" if chi else "") + f" → {atteso}", r == atteso, r)
+    esiti = " ".join(GS.risposta(t, i) for t in GS.DOMANDE) + GS.contesto(i)[0]
+    verifica("l'esito della mossa (testo del gioco) non si dice e non va al modello",
+             "segreto" not in esiti and "password" not in esiti, esiti)
+    pari = mc.valida_istantanea(buona(giocatori=[{"nome": "Ada", "punti": 2},
+                                                 {"nome": "Bea", "punti": 2}]), m, g)
+    verifica("pari: «Per ora siete pari, a 2 punti.»",
+             GS.risposta("vince", info_di(pari, m)) == "Per ora siete pari, a 2 punti.")
+    fine = mc.valida_istantanea(buona(fase="fine", comandi=["ancora"]), m, g)
+    verifica("a partita finita: chi ha vinto e «ancora»",
+             GS.risposta("vince", info_di(fine, m)) == "Ha vinto Giocatore 2, con 5 punti."
+             and "ancora" in GS.risposta("tocca", info_di(fine, m)))
+    es = mc.valida_istantanea(buona(fase="esito", comandi=["avanti"]), m, g)
+    verifica("durante l'esito «a chi tocca?»: chi ha appena giocato",
+             GS.risposta("tocca", info_di(es, m)) == "Ha appena giocato Giocatore 2.")
+    prep = mc.valida_istantanea(buona(n=0, fase="preparazione", tocca=None, giocatori=[],
+                                      comandi=["giocatori_2", "giocatori_3", "inizia"]), m, g)
+    r = GS.risposta("comandi", info_di(prep, m))
+    verifica("in preparazione: non è cominciata; cosa posso dire con i numeri insieme",
+             "non è ancora cominciata" in GS.risposta("tocca", info_di(prep, m))
+             and r == "Puoi dire: 2 o 3 giocatori, oppure inizia.", r)
+    uno = mc.valida_istantanea(buona(tocca=0, giocatori=[{"nome": "Giocatore 1", "punti": 1}]),
+                               m, g)
+    verifica("da solo: «tocca sempre a te», «Giocatore 1 ha 1 punto»",
+             GS.risposta("tocca", info_di(uno, m)) == "Giochi da solo: tocca sempre a te."
+             and GS.risposta("punti", info_di(uno, m)) == "Giocatore 1 ha 1 punto.")
+    vuoto = mc.valida_istantanea(buona(comandi=[]), m, g)
+    verifica("nessun comando attivo: lo dice", GS.risposta("comandi", info_di(vuoto, m))
+             == "Adesso il gioco non aspetta comandi a voce.")
+    riga, busta = GS.contesto(i)
+    verifica("la riga dei dati del turno: fase, a chi tocca, punti, comandi (fuori busta senza "
+             "nomi scritti)", not busta and riga == "Sullo schermo c'è il gioco «Le porte del "
+             "castello», fase turno. Tocca a Giocatore 2. Punti: Ada 3, Giocatore 2 5. Comandi "
+             "a voce adesso: porta 1, 3 o 4.", riga)
+    scritto = json.loads(json.dumps(ist))
+    scritto["giocatori"][0]["scritto"] = True
+    verifica("con un nome scritto sullo schermo: in busta", GS.contesto(info_di(scritto, m))[1])
+    # Un gioco non può dichiarare una domanda standard come comando
+    mm, _ = file_gioco("porte_fasi")
+    mm["scheda"]["macchina"]["fasi"]["turno"]["comandi"]["chi"] = {"forme": ["a chi tocca"]}
+    try:
+        valida(mm)
+        verifica("rifiutato: un comando «a chi tocca»", False, "accettato")
+    except Exception as e:  # noqa: BLE001
+        verifica("rifiutato: un comando «a chi tocca»", "domanda di Calliope" in str(e), str(e))
+
+
+# ═══════════════════════════ 5. nel ciclo ═══════════════════════════
+
+def gioco_regola(c) -> bool:
+    return "gioco_stato_detto" in ((c.rec or {}).get("regole") or [])
+
+
+def prova_ciclo(tmp: Path):
+    import prova_gioco_voce as PV
+    sezione("5. nel ciclo: la regola gioco_stato_detto e i suoi contrari")
+    a = Ambiente(tmp)
+    a.installa("porte_fasi")
+    A, B = a.abbina("A", "studio"), a.abbina("B", "cucina")
+    sat = a.hub.satelliti = PV.Satelliti({7: PV.Coll(id=7, schermo_id=A["id"], stanza="studio"),
+                                          8: PV.Coll(id=8, schermo_id=B["id"], stanza="cucina")})
+    turni = []
+    c, stt, voce, cervello, ascolto = PV.nuovo_ciclo(a, sat, 7, turni)
+    a.cfg.giochi_ascolto_s = 60.0
+
+    def giro(frase, k=None):
+        k = k or (c, stt, voce, cervello)
+        k[0].awake_until = 0.0
+        k[1].frasi.append(frase)
+        n, m_ = len(k[2].detto), len(k[3].richieste)
+        k[0].giro()
+        return k[2].detto[n:], k[3].richieste[m_:]
+
+    detto, chiesto = giro("Calliope, a chi tocca?")
+    verifica("contrario: nessun gioco aperto → al modello, niente risposta dal codice",
+             chiesto and not gioco_regola(c), str(detto))
+    pid = a.chiama("est_porte_fasi", {}, "Dario", schermo=A)["partita"]
+    a.pagina(A, {"partita": pid, "tipo": "pronto"})
+    stato_msg(a, A, pid, buona(n=1))
+    detto, chiesto = giro("A chi tocca?")
+    verifica("«A chi tocca?» senza il nome nella finestra del gioco: risponde il codice, niente "
+             "modello, niente testo nel registro",
+             "Tocca a Giocatore 2." in " ".join(map(str, detto)) and not chiesto
+             and c.rec.get("esito") == "gioco_stato" and c.rec.get("testo") is None
+             and gioco_regola(c), f"{detto} {chiesto} {c.rec}")
+    detto, chiesto = giro("Calliope, cosa posso dire?")
+    verifica("«Calliope, cosa posso dire?»: i comandi della fase con i valori insieme",
+             "Puoi dire: porta 1, 3 o 4." in " ".join(map(str, detto)) and not chiesto,
+             str(detto))
+    detto, chiesto = giro("A chi tocca adesso secondo te?")
+    verifica("contrario: dentro una frase più lunga, senza il nome, nella finestra → ignorata",
+             not detto and not chiesto and c.rec.get("esito") == "ignorato")
+    detto, chiesto = giro("Calliope, chi sta perdendo?")
+    contesto = (chiesto[0][1] if chiesto else "") or ""
+    verifica("contrario: «Calliope, chi sta perdendo?» va al modello con l'istantanea nei dati "
+             "del turno (punti e a chi tocca, non l'esito)", chiesto and "Punti: Ada 3, "
+             "Giocatore 2 5" in contesto and "Tocca a Giocatore 2" in contesto,
+             str(chiesto)[:300])
+    cervello.has_pending = lambda: True
+    detto, chiesto = giro("Calliope, a chi tocca?")
+    del cervello.has_pending
+    verifica("contrario: con una domanda di Calliope in sospeso va al modello",
+             chiesto and not gioco_regola(c))
+    k8 = PV.nuovo_ciclo(a, sat, 8, turni)
+    detto, chiesto = giro("Calliope, a chi tocca?", k8[:4])
+    verifica("contrario: dal satellite della cucina il gioco dello studio non risponde",
+             chiesto and not gioco_regola(k8[0]))
+
+
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
     radice = Path(tempfile.mkdtemp(prefix="calliope-gioco-stato-"))
@@ -291,6 +432,8 @@ def main():
         prova_valida()
         prova_server(radice / "server")
         prova_motore(radice / "motore")
+        prova_domande()
+        prova_ciclo(radice / "ciclo")
     finally:
         from calliope import minori as M
         for s in ("regole", "avvisi", "gioco", "richieste"):

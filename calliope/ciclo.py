@@ -41,6 +41,7 @@ from . import allegati as allegati_mod
 from . import frasi
 from .cortesia import Cortesia
 from . import gioco_voce
+from . import gioco_stato
 from .cassetto import CassettoPieno
 from .agenda import announcement
 from .compressione import FRASE_DURA
@@ -2006,12 +2007,33 @@ class Ciclo:
             return None
         nomi = cfg.wake_names
         info = self._gioco_in_ascolto()          # adesso: i comandi possono essere cambiati
-        cid = None
+        cid = domanda = None
         if info is not None and not self.brain.has_pending():
             cid = gioco_voce.trova(t.text, info["comandi"], None, nomi)
+            if cid is None and info.get("istantanea"):
+                domanda = gioco_stato.domanda(t.text, nomi)
         rivolta = (not cfg.wake_word_enabled or t.in_session or t.finestra_gioco
                    or bool(getattr(listener, "woke", False))
                    or gioco_voce.ha_il_nome(t.text, nomi))
+        if domanda is not None and rivolta:
+            # Regola `gioco_stato_detto` (14/10, passo 5 del progetto): «a chi tocca?», «quanti
+            # punti ho?», «chi sta vincendo?», «cosa posso dire?» per intero, anche nella
+            # finestra del gioco senza il nome. La risposta la compone il codice
+            # dall'istantanea validata del motore: niente modello
+            chi = self._giocatore_dalla_voce(t) if domanda in ("punti", "tocca") else None
+            frase = gioco_stato.risposta(domanda, info, chi)
+            ms = round((time.perf_counter() - t.t0) * 1000)
+            print(f"Tu: (domanda sul gioco «{domanda}»)", flush=True)
+            print(f"{cfg.name}: {frase}  [STT e risposta {ms} ms]", flush=True)
+            self.rule(gioco_stato.REGOLA)
+            self.rec.update(esito="gioco_stato", testo=None, risposta=frase,
+                            stt_s=round(time.perf_counter() - t.t0, 2),
+                            gioco={"partita": info["partita"], "domanda": domanda, "ms": ms,
+                                   **({"prova": True} if info.get("prova") else {})})
+            u = self.uscita
+            u.di(frase, "gioco_stato")
+            u.aspetta()
+            return _FINE
         if cid is not None and rivolta:
             giocatore = self._giocatore_dalla_voce(t) if info.get("giocatore") else None
             if s.giochi.comando(info["partita"], info["schermo"], cid, giocatore):
@@ -2041,14 +2063,32 @@ class Ciclo:
                 self.tool_ctx.gioco_turno = info
             except AttributeError:
                 pass
-            nomi_c = ", ".join(f"{c} («{f[0]}»)" if f and gioco_voce.normalizza(f[0], nomi)
-                               != gioco_voce.normalizza(c, nomi) else c
-                               for c, f in list(info["comandi"].items())[:24])
-            t.contesto_gioco = (
-                f"Sullo schermo c'è il gioco «{str(info.get('titolo') or '')[:60]}», che aspetta "
-                f"un comando a voce tra: {nomi_c}. Se la frase chiede uno di questi con altre "
-                "parole, passalo al gioco con gioco_comando; altrimenti rispondi come sempre.")
+            t.contesto_gioco = self._contesto_gioco(info)
         return None
+
+    def _contesto_gioco(self, info: dict) -> str:
+        """L'istantanea del gioco aperto nei dati del turno (14/10, passo 5): fase, a chi tocca,
+        punti e comandi a voce, per le domande che non sono forme chiuse («chi sta perdendo?»).
+        Con un nome scritto sullo schermo (testo del gioco) la riga va in busta, fonte «gioco»
+        (la porta unica dei dati non fidati, Brain.dato_non_fidato). L'esito della mossa non
+        c'è mai: è del gioco. Poi, se c'è il tool, come passare un comando detto in altro modo."""
+        riga, scritti = gioco_stato.contesto(info)
+        if scritti:
+            porta = getattr(self.brain, "dato_non_fidato", None)
+            riga = (porta("gioco", riga, "la partita sullo schermo") if callable(porta)
+                    else provenienza.racchiudi("gioco", riga, "la partita sullo schermo"))
+            self.rule("gioco_stato_in_busta")
+        if info.get("comandi") and self._ha_tool("gioco_comando"):
+            riga += ("\nSe la frase chiede uno dei comandi a voce del gioco con altre parole, "
+                     "passalo al gioco con gioco_comando; altrimenti rispondi come sempre.")
+        return riga
+
+    def _ha_tool(self, nome: str) -> bool:
+        tools = getattr(self.brain, "tools", None)
+        try:
+            return tools is None or tools.get(nome) is not None
+        except Exception:  # noqa: BLE001
+            return True
 
     def _giocatore_dalla_voce(self, t) -> str | None:
         """Il nome di chi ha detto la mossa, solo se la voce è riconosciuta in questa frase

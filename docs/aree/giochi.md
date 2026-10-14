@@ -613,3 +613,34 @@ resto della partita (fase, a chi tocca, punti) lo sapeva solo il riquadro.
 Prove: `prova_gioco_stato` (a secco, ~1 s: la validazione con 21 istantanee cattive, il server,
 il motore nel DOM finto con il comando vecchio rifiutato e l'andata e ritorno di tutte le
 istantanee del motore nella validazione Python), `prova_gioco_voce` rifatta sull'istantanea.
+
+### Calliope sa a che punto è il gioco (passo 5)
+
+- **Le domande standard** (`calliope/gioco_stato.py`, regola `gioco_stato_detto` del ciclo):
+  «a chi tocca?», «di chi è il turno?», «quanti punti ho?», «il punteggio?», «chi sta
+  vincendo?», «come siamo messi?», «cosa posso dire?» e poche altre forme, riconosciute **per
+  intero** (il nome davanti, maiuscole e punteggiatura non contano), in ogni fase e anche nella
+  finestra del gioco senza il nome. È il caso ammesso dal principio 10: forma chiusa e breve,
+  per intero, effetto reversibile (una frase detta). La risposta la compone il codice
+  dall'istantanea validata: «Tocca a Giocatore 2.» (durante l'esito «Ha appena giocato …»),
+  «Hai 3 punti.» se la voce di chi chiede è riconosciuta in quella frase e ha il nome di un
+  giocatore, altrimenti i punti di tutti, «Sta vincendo Bianca, con 5 punti.» (pari, fine,
+  da solo), «Puoi dire: porta 1, 3 o 4, oppure ricomincia.» (i valori degli slot insieme). Nel
+  registro esito `gioco_stato`, la domanda e i millisecondi, **nessun testo**; l'atto della voce
+  è `gioco_stato` (fuori dalla storia). Niente modello: testo→voce ~0,35 s sulla DGX.
+- **Contrari** (`prova_testo`, `prova_gioco_stato`): dentro una frase più lunga («a chi tocca
+  adesso secondo te?», «quanti punti ha Bianca?») non vale (senza il nome nella finestra si
+  ignora, con il nome va al modello); senza un gioco aperto sullo schermo di quel satellite,
+  con il gioco di un altro satellite, con una domanda di Calliope in sospeso la frase va al
+  modello. Un gioco non può dichiarare una di queste forme come comando (manifesto rifiutato:
+  «è una domanda di Calliope sul gioco»).
+- **L'istantanea nei dati del turno** per le altre domande («chi sta perdendo?», «quante porte
+  restano?»): al posto della riga dei soli comandi, «Sullo schermo c'è il gioco «Le porte del
+  castello», fase turno. Tocca a Giocatore 2. Punti: Ada 3, Giocatore 2 5. Comandi a voce
+  adesso: porta 1, 3 o 4.» (circa 60 token), più la riga su `gioco_comando` se il tool c'è. Il
+  testo dell'esito della mossa **non** c'è mai (è del gioco: si mostra sullo schermo). Con un
+  nome scritto sullo schermo (testo del gioco, passo 4 qui sotto) la riga va **in busta**, fonte
+  `gioco` (`provenienza.FONTI`, dalla porta unica `Brain.dato_non_fidato`; regola
+  `gioco_stato_in_busta`).
+- **Profilo da 8 GB**: confronto delle forme e frase composta dal codice, 0 VRAM; la riga dei
+  dati del turno ~60 token.

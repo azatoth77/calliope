@@ -844,7 +844,8 @@ class Giochi:
         return {"partita": p.id, "schermo": posto.sid, "titolo": p.titolo,
                 "comandi": {c: list(a["comandi"][c]) for c in attivi},
                 "giocatore": bool(a.get("giocatore")), "segno": posto.segno,
-                "prova": p.prova, "istantanea": json.loads(json.dumps(posto.istantanea))}
+                "prova": p.prova, "istantanea": json.loads(json.dumps(posto.istantanea)),
+                "macchina": p.macchina}
 
     def in_corso(self, schermi) -> bool:
         """Un gioco è aperto e si vede adesso su uno di questi schermi (riquadro aperto da
