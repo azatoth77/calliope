@@ -1166,6 +1166,62 @@ class Config:
     # dal disco fino a tante ore indietro (dopo un fermo lungo non si rileggono giorni; quelle
     # più vecchie si contano soltanto). 0 = nessuna ripresa
     stanza_guardia_ripresa_h: float = 24.0
+    # Passo 3, la corsia lenta (14/10, calliope/stanza/lenta.py, progetto § 3.2, § 3.4, § 5.2,
+    # § 5.4): quando la DGX è libera (nessun turno, nessuna frase che aspetta Whisper, coda della
+    # stanza vuota, nessuno che parla a Calliope; mai davanti ai turni né alla corsia veloce) i
+    # segmenti della stanza si ritrascrivono con più contesto (i nomi dei presenti e le righe di
+    # prima dello scambio nel prompt di Whisper, un altro Whisper più lento se c'è), chi parla si
+    # rivede con le finestre CAM++ sull'intero scambio (i blocchi con due voci si spezzano), si
+    # segnano le allucinazioni tipiche e la TV (strati senza Home Assistant: voce sconosciuta
+    # lunga senza turni, nessuno di casa presente, frase già sentita), e si aggiorna il riassunto
+    # progressivo della stanza. Le righe corrette sono la versione 2 nel registro (in sola
+    # aggiunta: la 1 resta), la tenuta su disco si aggiorna, le righe già nella storia del modello
+    # non si riscrivono. L'audio dei segmenti resta in RAM per `stanza_audio_min` (mai su disco).
+    # false (di serie) = come prima: l'audio si butta a trascrizione fatta
+    stanza_lenta: bool = False
+    # Minuti di audio della stanza tenuti in RAM per satellite per la corsia lenta (~1,9 MB al
+    # minuto di parlato in PCM 16 bit); oltre, i segmenti più vecchi non si rivedono più
+    stanza_audio_min: float = 15.0
+    # Un segmento si rivede quando lo scambio tace da `stanza_lenta_quiete_s`, o comunque dopo
+    # `stanza_lenta_ogni_s` dalla sua fine (uno scambio che non finisce mai)
+    stanza_lenta_quiete_s: float = 30.0
+    stanza_lenta_ogni_s: float = 120.0
+    # La DGX ferma da così prima di un passo (come stanza_guardia_quiete_s)
+    stanza_lenta_libera_s: float = 5.0
+    # Un secondo Whisper per la corsia lenta (API compatibile OpenAI, es. whisper.cpp con
+    # large-v3 non turbo): vuoto = lo stesso Whisper dei turni, con la precedenza più bassa.
+    # Mettilo solo se il piano dei modelli dice che ci sta (`calliope stato --piano`)
+    stanza_lenta_stt_url: str = ""
+    stanza_lenta_stt_modello: str = ""
+    # Beam della ritrascrizione con faster-whisper nel processo (il server lo fissa da sé)
+    stanza_lenta_beam: int = 8
+    # Il prompt della ritrascrizione (i nomi di chi parla nello scambio e la coda delle parole
+    # di prima): «auto» (di serie) solo con un Whisper suo (stanza_lenta_stt_url): sul banco
+    # sintetico del 14/10 col turbo dei turni il prompt peggiorava la WER (10 dB: 18,9 → 21,9 %),
+    # con large-v3 la migliorava (18,4 → 16,8 %); «si» sempre, «no» mai
+    stanza_lenta_prompt: str = "auto"
+    # Caratteri delle righe di prima dello scambio nel prompt di Whisper (oltre ai nomi dei
+    # presenti). 0 = solo i nomi. Corto: un prompt lungo si ricopia sull'audio incerto
+    stanza_lenta_prompt_caratteri: int = 160
+    # Finestre CAM++ (secondi) con sovrapposizione a metà, e il parlato minimo di una parte per
+    # spezzare un segmento in due righe
+    stanza_lenta_finestra_s: float = 1.5
+    stanza_lenta_parte_min_s: float = 2.0
+    # Somiglianza minima di una finestra al profilo (o alla voce della persona nello scambio)
+    # per dirla sua: una finestra corta somiglia meno di una frase intera
+    stanza_lenta_soglia_finestra: float = 0.40
+    # Il riassunto progressivo della stanza (col rilevatore già caricato, a DGX libera): ogni
+    # tante righe nuove di uno scambio. 0 = nessun riassunto
+    stanza_lenta_riassunto_righe: int = 6
+    # Eccezione temporanea per il banco del passo 3 (14/10 sera, decisione 0029, eccezione
+    # «audio del banco»): per tanti giorni dalla prima accensione l'audio dei segmenti della
+    # stanza in cui **tutte** le voci sono persone di casa riconosciute dalla voce (adulti e
+    # minori della famiglia, autorizzati dal tutore per il banco; mai ospiti, conoscenti, zona
+    # grigia, voci sconosciute, mai in pausa) va su disco in `<turn_log_dir>/stanza_banco/`
+    # (file 600), con le trascrizioni v1 e v2, per misurare WER e attribuzione. Vuole
+    # `stanza_lenta`. Alla scadenza smette da sé; i file restano per `turn_log_days` e li
+    # cancellano «dimentica» e `calliope conserva --svuota`. 0 (di serie) = mai
+    stanza_audio_banco_giorni: int = 0
     # I conoscenti (14/10, decisione 0030, calliope/stanza/conoscenti.py): le voci che nessun
     # profilo riconosce si raggruppano in memoria per somiglianza dell'impronta; dal contesto
     # (vocativi e saluti seguiti dal parlato di quella voce, presentazioni, più indizi concordi;
@@ -3088,7 +3144,12 @@ SEZIONI: dict[str, list[str]] = {
                "stanza_guardia_timeout_s", "stanza_guardia_avvisi_giorno",
                "stanza_guardia_p", "stanza_conoscenti", "conoscenti_scadenza_giorni",
                "conoscenti_soglia", "conoscenti_min_voce_s", "conoscenti_file",
-               "stanza_guardia_ripresa_h"],
+               "stanza_guardia_ripresa_h", "stanza_lenta", "stanza_audio_min",
+               "stanza_lenta_quiete_s", "stanza_lenta_ogni_s", "stanza_lenta_libera_s",
+               "stanza_lenta_stt_url", "stanza_lenta_stt_modello", "stanza_lenta_beam",
+               "stanza_lenta_prompt", "stanza_lenta_prompt_caratteri", "stanza_lenta_finestra_s",
+               "stanza_lenta_parte_min_s", "stanza_lenta_soglia_finestra",
+               "stanza_lenta_riassunto_righe", "stanza_audio_banco_giorni"],
     "satellite": ["satellite_server", "satellite_credenziali", "satellite_impronta",
                   "satellite_microfono", "satellite_casse", "satellite_webcam",
                   "satellite_schermo", "satellite_schermo_personale", "satellite_esecutore",
@@ -3303,6 +3364,12 @@ LIMITI: dict[str, tuple[float, float]] = {
     "stanza_guardia_giudizi_ora": (0, 3600), "stanza_guardia_timeout_s": (1.0, 600.0),
     "stanza_guardia_avvisi_giorno": (0, 50), "stanza_guardia_p": (0.0, 1.0),
     "stanza_guardia_ripresa_h": (0.0, 24.0 * 60),
+    "stanza_audio_min": (0.0, 240.0), "stanza_lenta_quiete_s": (0.0, 3600.0),
+    "stanza_lenta_ogni_s": (5.0, 86400.0), "stanza_lenta_libera_s": (0.0, 600.0),
+    "stanza_lenta_beam": (1, 20), "stanza_lenta_prompt_caratteri": (0, 600),
+    "stanza_lenta_finestra_s": (0.5, 5.0), "stanza_lenta_parte_min_s": (0.5, 30.0),
+    "stanza_lenta_soglia_finestra": (0.0, 1.0), "stanza_lenta_riassunto_righe": (0, 500),
+    "stanza_audio_banco_giorni": (0, 30),
     "contesto_ripiego": (2048, 1_048_576), "contesto_rilettura_max_s": (0.1, 60.0),
     "contesto_conversazioni": (1, 64), "contesto_margine_gb": (0.0, 512.0),
     "max_history_turns": (0, 200), "max_tool_turns": (1, 20), "tool_correzioni_max": (0, 10),

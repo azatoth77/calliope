@@ -6,8 +6,15 @@ docs/ricerche/2026-10-13-conversazione-di-stanza.md § 3.9 e § 6 riga 6; decisi
 Il guardiano in diretta resta com'è sulle frasi **rivolte a Calliope** (domanda di un minore o
 di un ospite, due cancelli); sulle chiacchiere della stanza nessun giudizio in diretta (passo 0,
 `pericolo_non_rivolta`). Qui si guarda **dopo**: quando la trascrizione si è assestata (le righe
-finite da `stanza_guardia_attesa_s`; dal passo 3 sarà quella corretta dalla corsia lenta), a
-blocchi, con le righe intorno, e solo dove **un minore parla o è presente**.
+finite da `stanza_guardia_attesa_s`; dal passo 3, con `stanza_lenta`, quella corretta dalla corsia
+lenta), a blocchi, con le righe intorno, e solo dove **un minore parla o è presente**.
+
+- **La corsia lenta** (passo 3, 14/10, stanza/lenta.py): una riga il cui segmento aspetta ancora
+  la corsia lenta non è assestata (si aspetta la versione 2, al più `stanza_guardia_blocco_max_s`
+  dalla fine). Una riga già raccolta che diventa versione 2 **non si rigiudica** per questo: solo
+  se il testo cambia in modo sostanziale (somiglianza delle parole sotto 0,8) o se chi parla
+  passa da o verso un minore (`lenta.cambio_sostanziale`); altrimenti si segna vista (e, con la
+  tenuta, nel diario: dopo un riavvio non torna). Misura `guardia` con esito «versione».
 
 - **Quali righe**: quelle di un minore (voce sopra soglia o zona grigia) e quelle dette mentre un
   minore era presente vicino a quel satellite (le presenze del § 3.5 ter, più
@@ -292,6 +299,9 @@ class Guardia:
         self._lock = threading.Lock()
         self._coda: collections.deque = collections.deque()
         self._visti: dict = {}                 # sat → set dei seq già raccolti
+        # Passo 3 (14/10): sat → {segmento: {testo, minore}} delle righe raccolte, per decidere
+        # se la versione 2 di una riga già vista si rigiudica
+        self._segmenti: dict = {}
         self._fatti: collections.deque = collections.deque()   # monotonic dei giudizi
         self._voce = False
         self._libera_da = 0.0
@@ -460,9 +470,20 @@ class Guardia:
             # Le righe uscite (dimenticate, sostituite, oltre la tenuta) non tornano: via
             visti.intersection_update({r["seq"] for r in righe})
             nuove = [r for r in righe if r["seq"] not in visti]
+            nuove = self._versioni(sat, nuove, visti)
             if not nuove:
                 continue
-            assestate = [r for r in nuove if float(r.get("fine") or r["t"]) <= ora - attesa]
+            lenta = getattr(self.stanza, "lenta", None)
+
+            def assestata(r):
+                fine = float(r.get("fine") or r["t"])
+                if fine > ora - attesa:
+                    return False
+                seg = r.get("segmento")
+                # Il segmento aspetta la corsia lenta: la versione 2, al più `ogni` secondi
+                return not (lenta is not None and seg is not None and fine > ora - ogni
+                            and lenta.pendente(sat, seg))
+            assestate = [r for r in nuove if assestata(r)]
             if not assestate:
                 continue
             ultima = max(float(r.get("fine") or r["t"]) for r in righe)
@@ -470,10 +491,49 @@ class Guardia:
             vecchia = min(float(r.get("fine") or r["t"]) for r in assestate) <= ora - ogni
             if not (quieta or vecchia or len(assestate) >= BLOCCO_RIGHE * 2):
                 continue                      # lo scambio continua: si aspetta che si chiuda
+            segs = self._segmenti.setdefault(sat, {})
             for r in assestate:
                 visti.add(r["seq"])
+                seg = r.get("segmento")
+                if seg is None:
+                    continue
+                if seg in segs and int(r.get("versione") or 1) >= 2:
+                    # Una versione 2 con un cambio sostanziale (passata da `_versioni`)
+                    self._misura(esito="versione", sat=str(sat), rigiudicata=True)
+                segs[seg] = {"testo": r.get("testo"), "minore": r.get("minore")}
+            while len(segs) > 5000:
+                segs.pop(next(iter(segs)))
             nuovi += self._blocchi(sat, righe, assestate, minori_)
         return nuovi
+
+    def _versioni(self, sat, nuove: list, visti: set) -> list:
+        """Le righe di versione 2 (passo 3) di segmenti già raccolti: si rigiudicano solo con un
+        cambio sostanziale; le altre si segnano viste (e nel diario). Le righe da guardare."""
+        segs = self._segmenti.get(sat) or {}
+        if not segs:
+            return nuove
+        from .lenta import cambio_sostanziale
+        out, saltate = [], []
+        for r in nuove:
+            seg = r.get("segmento")
+            if int(r.get("versione") or 1) < 2 or seg not in segs:
+                out.append(r)
+                continue
+            if cambio_sostanziale(segs[seg], r):
+                out.append(r)                  # si rigiudica (la misura alla raccolta)
+            else:
+                visti.add(r["seq"])
+                saltate.append(r)
+        if saltate:
+            self._misura(esito="versione", sat=str(sat), rigiudicata=False, righe=len(saltate))
+            avvio = getattr(self.tenuta, "avvio", None)
+            if avvio:
+                try:
+                    self.tenuta.segna_giudicate([(avvio, str(sat), r["seq"]) for r in saltate],
+                                                "versione")
+                except Exception:  # noqa: BLE001
+                    pass
+        return out
 
     def _da_giudicare(self, r: dict, presenze: list) -> tuple[bool, dict]:
         """La riga si giudica? E i minori presenti in quel momento."""

@@ -905,6 +905,16 @@ class Avvio:
         occupato = [lambda: varco.attivi > 0, parla_qualcuno]
         if callable(getattr(stt, "aspetta_turno", None)):
             occupato.append(stt.aspetta_turno)
+        # La corsia lenta (14/10, passo 3, calliope/stanza/lenta.py): con `stanza_lenta`, a DGX
+        # libera come il guardiano a posteriori (stesse funzioni `occupato`)
+        try:
+            from .stanza import load_lenta
+            le = load_lenta(self.cfg, st, s.guardiano, occupato,
+                            log=lambda m: print(m, flush=True))
+            if le is not None:
+                atexit.register(le.chiudi)
+        except Exception as e:  # noqa: BLE001 — Calliope parte lo stesso
+            print(f"[STANZA] corsia lenta non disponibile: {type(e).__name__}: {e}", flush=True)
         giochi = getattr(s, "giochi", None)
 
         def gioco(sat) -> bool:

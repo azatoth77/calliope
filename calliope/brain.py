@@ -5951,6 +5951,10 @@ class Brain:
         if visibili:
             fonti.add("stanza")
             esterni = esterni + [("stanza", "\n".join(p.esterno for p in visibili))]
+            # Il riassunto della stanza nella nota del turno (passo 3, 14/10): anche lui un dato
+            riass = str(getattr(stanza_b, "riassunto", "") or "") if stanza_b is not None else ""
+            if riass:
+                esterni = esterni + [("stanza", riass)]
         elif stanza_b is not None and getattr(stanza_b, "testo", None):
             fonti.add("stanza")
             esterni = esterni + [("stanza", str(getattr(stanza_b, "esterno", "") or ""))]

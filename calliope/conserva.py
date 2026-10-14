@@ -752,6 +752,7 @@ class Conservazione:
                "esercizi_richieste": self._memoria(persona_id=persona_id,
                                                    tutto=persona_id is None),
                "stanza": self._svuota_stanza(stanza_id),
+               "stanza_banco": self._svuota_banco(persona_id),
                "avvisi": self._svuota_avvisi(persona_id)}
         arch = self.conversazioni
         lock = getattr(self.turnlog, "_lock", None)
@@ -810,6 +811,17 @@ class Conservazione:
                 if av.cassetto is not None:
                     av.cassetto.close()
                 av.close()
+
+    def _svuota_banco(self, persona_id) -> int:
+        """L'audio della stanza per il banco del passo 3 (eccezione del 14/10 sera,
+        calliope/stanza/banco.py): tutto (con il segno dell'accensione), o i segmenti con la
+        voce della persona. Funziona anche da un altro processo (sono file)."""
+        try:
+            from .stanza.banco import svuota
+            return svuota(self.cfg, persona_id)
+        except Exception as e:  # noqa: BLE001 — il banco non ferma lo svuotamento del resto
+            self.log(f"   [CONSERVA] audio del banco non svuotato: {type(e).__name__}")
+            return 0
 
     def _svuota_stanza(self, persona_id) -> int:
         """Il testo della stanza su disco (14/10): tutto, o le righe di una persona (con le
@@ -1018,14 +1030,17 @@ def main(argv=None) -> int:
                   f"{r['conversazioni']} conversazioni archiviate, "
                   f"{r['esercizi_richieste']} tra esercizi e richieste ai tutori, "
                   f"{r['stanza']} righe della stanza, {r['avvisi']} trascrizioni e audio di "
-                  f"avvisi.")
+                  f"avvisi" + (f", {r['stanza_banco']} segmenti audio del banco della stanza"
+                               if r.get("stanza_banco") else "") + ".")
         else:
             r = c.svuota()
             print(f"Dati conservati cancellati: {r['voce']} registrazioni, {r['eventi']} eventi, "
                   f"{r['turni']} giorni del registro dei turni, {r['conversazioni']} "
                   f"conversazioni archiviate, {r['esercizi_richieste']} tra esercizi e "
                   f"richieste ai tutori, {r['stanza']} righe della stanza, {r['avvisi']} "
-                  f"trascrizioni e audio di avvisi, {r.get('conoscenti', 0)} conoscenti.")
+                  f"trascrizioni e audio di avvisi, {r.get('conoscenti', 0)} conoscenti"
+                  + (f", {r['stanza_banco']} segmenti audio del banco della stanza"
+                     if r.get("stanza_banco") else "") + ".")
         if c.conversazioni is not None:
             c.conversazioni.close()
         return 0

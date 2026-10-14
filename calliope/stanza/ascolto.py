@@ -45,6 +45,10 @@ modello** in questo passo: si misura (stanza/misure.py, `calliope stato --turni`
   deduzione del nome (vocativi, presentazioni), che propone a chi amministra. Dal 14/10 sera
   (rifiniture) un conoscente riconosciuto ha anche la sua presenza («conoscente:<id>»), e la frase
   che rivolge a Calliope entra come sua riga (ciclo._conoscente_turno).
+- **Corsia lenta** (14/10, passo 3, `stanza_lenta`, stanza/lenta.py): con la corsia lenta accesa
+  l'audio del segmento trascritto non si butta subito: resta in RAM (al più `stanza_audio_min`)
+  finché la corsia lenta non l'ha rivisto a DGX libera (versione 2 delle righe, chi parla sullo
+  scambio, TV, allucinazioni, riassunto).
 """
 
 import collections
@@ -185,6 +189,8 @@ class Stanza:
         self._presenze_scritte: dict = {}      # persona → (sat, inizio, ultimo) già sul disco
         # I conoscenti (stanza/conoscenti.Conoscenti, 14/10), None con `stanza_conoscenti: false`
         self.conoscenti = None
+        # La corsia lenta (stanza/lenta.Lenta, 14/10, passo 3), None con `stanza_lenta: false`
+        self.lenta = None
         self._fermo = threading.Event()
         self._thread = threading.Thread(target=self._lavora, name="stanza-veloce", daemon=True)
         self._thread.start()
@@ -416,6 +422,8 @@ class Stanza:
         asc = m.get("ascolto")
         if isinstance(asc, int) and not isinstance(asc, bool):
             s.ascolto = asc
+        if self.lenta is not None:
+            self.lenta.sentito(sat, s.fine_epoch)    # lo scambio non tace (passo 3)
         self._apri_scambio(s)
         reg = self.registro(sat)
         with self._cond:
@@ -513,6 +521,7 @@ class Stanza:
         extra = {"nota": chi.get("nota") or ""} if chi.get("conoscente") else {}
         e = self.registro(sat).aggiungi(
             RIGA, segmento=s.id if s is not None else None, versione=1,
+            **({"scambio": s.scambio} if s is not None and s.scambio is not None else {}),
             inizio=round(t_ini or time.time(), 3), fine=round(t_fin or time.time(), 3),
             testo=str(testo or ""), chi=chi.get("chi") or "ignoto", nome=chi.get("nome"),
             sicurezza=chi.get("sicurezza") or "nessuna", p_min=None, rivolta="si",
@@ -581,6 +590,15 @@ class Stanza:
                 self._legati.pop(k)
             self._scambio.pop(sat, None)
         n = self.registro(sat).svuota()
+        banco = 0
+        if self.lenta is not None:
+            # L'audio in RAM della corsia lenta e quello del banco su disco (passo 3)
+            self.lenta.dimentica(sat)
+            if self.lenta.banco is not None:
+                try:
+                    banco = self.lenta.banco.dimentica(sat)
+                except Exception as e:  # noqa: BLE001
+                    self.log(f"   [STANZA] audio del banco non cancellato: {type(e).__name__}")
         if self.conoscenti is not None:
             self.conoscenti.dimentica_sat(sat)
         # Anche il disco del satellite (14/10, stanza_tenuta): righe e presenze di ogni giorno
@@ -600,7 +618,8 @@ class Stanza:
         except Exception as e:  # noqa: BLE001
             self.log(f"   [STANZA] audio degli avvisi non tolto: {type(e).__name__}")
         nome = (self._info.get(sat) or {}).get("nome") or str(sat)
-        self._misura("dimentica", sat=nome, eventi=n, disco=su_disco)
+        self._misura("dimentica", sat=nome, eventi=n, disco=su_disco,
+                     **({"banco": banco} if banco else {}))
         self.log(f"   [STANZA] {nome}: registro della stanza svuotato ({n} eventi)")
         return n
 
@@ -920,6 +939,12 @@ class Stanza:
         # deduzione dei nomi dei conoscenti
         self._anello(s, chi, getattr(e_riga, "seq", None), audio)
         self._osserva(s.sat, e_riga)
+        if self.lenta is not None:
+            # La corsia lenta (passo 3): l'audio resta in RAM finché non è rivisto
+            try:
+                self.lenta.metti(s, audio, e_riga.seq)
+            except Exception as ex:  # noqa: BLE001 — la corsia lenta non ferma la veloce
+                self.log(f"   [STANZA] corsia lenta: segmento non tenuto ({type(ex).__name__})")
         self._fatto(s, testo, None, attesa, stt_s, eco)
 
     def _anello(self, s: "Segmento", chi: dict, seq, audio):
@@ -1077,6 +1102,8 @@ class Stanza:
 
     def chiudi(self):
         self._fermo.set()
+        if self.lenta is not None:
+            self.lenta.chiudi()
         with self._cond:
             self._cond.notify_all()
         if self.tenuta is not None:

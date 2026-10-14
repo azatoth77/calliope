@@ -415,6 +415,9 @@ def main(argv=None) -> int:
             # I conoscenti salvati (14/10, decisione 0030): quanti, dal file
             from .stanza.conoscenti import conta_file as conta_conoscenti
             stanza["conoscenti_salvati"] = conta_conoscenti(cfg)
+            # L'audio del banco del passo 3 (eccezione del 14/10 sera): acceso, scaduto, file
+            from .stanza.banco import stato_file as banco_file
+            stanza["banco"] = banco_file(cfg)
         except Exception:  # noqa: BLE001 — i conteggi non fermano lo stato
             stanza["tenuta"] = None
         # Il guardiano a posteriori della stanza (14/10, passo 6): solo categorie e numeri

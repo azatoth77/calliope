@@ -17,6 +17,7 @@
 | Tenuta su disco del testo della stanza (14/10, `stanza_tenuta`, sotto) | SQLite in WAL con FTS5 (`stanza.db`, `detail=full`) | `calliope/stanza/tenuta.py` → `Tenuta` (`evento`, `presenza`, `cerca`, `presenze`, `stanze`, `dimentica`, `svuota`, `ruota`, `conteggi`), `conta_file`, `svuota_file`, `testo_stato`; `calliope/stanza/__init__.load_tenuta`; `conserva.decidi(…, "stanza", …)`; `stanza/cerca._dal_disco`, `info_stanze` |
 | Righe della stanza nella storia, in sola aggiunta (14/10 sera, `stanza_contesto_in_storia`, sotto) | solo libreria standard, in memoria | `calliope/stanza/contesto.py` → `Pezzo`, `pezzo`, `nota_turno`, `in_storia`, `gia_nella_storia`; `Conversazione.stanza`, `stanza_mandate`, `stanza_n`; `Brain._stanza_prepara`, `_con_stanza`, `_stanza_pota`, `_scalda_in_secondo_piano`, `last_stanza_storia` (registro dei turni `stanza.storia`) |
 | Guardiano a posteriori della stanza (14/10, passo 6, `stanza_guardia`, in ombra; sotto e in [minori](minori.md)) | solo libreria standard; il rilevatore di pericolo su Ollama | `calliope/stanza/guardia.py` → `Guardia` (`raccogli`, `giudica_uno`, `decidi`, `libera`; dal 14/10 sera `_riprendi_disco`, `osserva_giochi`, `gioco_in`), `GiudiceModello`, `GIOCO`, `riassunto`, `testo`, `elenco`; `calliope/stanza/tenuta.py` → diario della guardia (`righe_guardia`, `segna_giudicate`, `segna_gioco`, `giochi`); `calliope/schermi/giochi.py` → `Giochi.in_corso`; `calliope/stanza/__init__.py` → `load_guardia`; `Avvio._guardia_stanza` in `main.py`; `calliope stato --guardia` |
+| Corsia lenta: righe di versione 2, riassunto progressivo (14/10 sera, passo 3, `stanza_lenta`, sotto) | solo libreria standard, in memoria; il rilevatore per il riassunto | `calliope/stanza/lenta.py` → `Lenta`; `calliope/stanza/registro.py` → `righe` (parti della v2), `rivisti`, `riassunto`; `calliope/stanza/contesto.py` → `righe_testo` (TV in una riga), `_riassunto`; `calliope/stanza/tenuta.py` (v2 al posto della v1); `calliope/stanza/guardia.py` → `_versioni`; `calliope/stanza/banco.py` (audio del banco, eccezione); prova `prove/prova_stanza_lenta.py` |
 | Latenza come metrica, cache scaldata, modelli di Ollama (dal 06/10) | solo libreria standard (registro dei turni, Ollama `/api/ps`) | `calliope/latenza.py` → `giorno`, `per_giorno`, `testo`, `avviso`, `avviso_recente`, `scalda_ripresa`, `leggi_file` (`calliope stato --turni`); `Brain.scalda_conversazione`, `Brain._scalda_se_cambiato` (prefisso nuovo dopo un cambio di modalità, 07/10); `calliope/ollama_carico.py` → `residenti`, `limite`, `usati`, `avviso`, `puo_caricare`; la prima frase a pezzi e la taratura della voce (sezioni del 07/10 sotto) hanno il codice in `tts.py` e `taratura_voce.py`, area [stt-tts](stt-tts.md) |
 | Conservazione dei dati per le misure, scelta dei tool come metrica (dal 12/10) | solo libreria standard e numpy (voce in G.711 μ-law), SQLite della tabella `eventi` | `calliope/conserva.py` → `decidi` (il solo posto), `Conservazione` (`testo_turno`, `voce_turno`, `registro_su_disco`, `conversazioni_su_disco` (12/10 sera), `conta_conversazioni`, `al_turno`, `salva_voce`, `imposta_consenso`, `ruota`, `ripulisci_registro`, `svuota`, `stato`), `python -m calliope.conserva`; `calliope/tools/conserva.py` (`dati_conservati`); `calliope/scelta_tool.py` → `turno`, `giorno`, `per_giorno`, `testo`, `avviso`, `avviso_recente` (`calliope stato --turni`) |
 
@@ -1782,3 +1783,88 @@ Prova: `prove/prova_conoscenti_conserva.py` (contrari: ospite vero, registro sen
 id sconosciuto, frase breve fuori finestra, anonima o con la famiglia nella zona grigia, ricerca
 senza `ospiti`, da un familiare, dalla zona grigia o dal conoscente stesso; gli altri che restano
 dopo dimentica e svuota).
+
+## La corsia lenta: righe di versione 2, riassunto progressivo, conseguenze (14/10 sera, ramo `stanza-passo-3`)
+
+Passo 3 del [progetto](../ricerche/2026-10-13-conversazione-di-stanza.md) (§ 3.2, § 3.3, § 3.5,
+§ 5.2, § 5.4, § 6 riga 3; decisione [0029](../decisioni/0029-conversazione-di-stanza.md)), dietro
+**`stanza_lenta`** (di serie `false`: l'audio si butta a trascrizione fatta, come prima).
+`calliope/stanza/lenta.py`; il lato audio (ritrascrizione, CAM++, TV, allucinazioni, misure del
+banco) è in [stt-tts](stt-tts.md). Per quest'area contano il registro, la tenuta, la storia del
+modello, la ricerca, il guardiano e il riassunto.
+
+- **Quando**: a DGX libera, come il guardiano a posteriori (`main._guardia_stanza` le dà le stesse
+  funzioni `occupato`: nessuna risposta del modello in corso, nessuna frase che aspetta Whisper,
+  nessuno che parla a Calliope da un satellite) più la coda della corsia veloce vuota, da
+  `stanza_lenta_libera_s` (5 s). Un segmento si rivede quando lo scambio tace da
+  `stanza_lenta_quiete_s` (30 s) o comunque dopo `stanza_lenta_ogni_s` (120 s) dalla sua fine;
+  mai in pausa (ospiti). L'audio resta in RAM al più `stanza_audio_min` (15 min) per satellite;
+  quello uscito prima del passo si conta («scaduto»).
+- **Il registro** (`stanza/registro.py`): una riga corretta è un evento `riga` di **versione 2**
+  con `sostituisce` (il seq della v1), `rivista` (`testo`, `chi`) e, se il segmento è stato
+  spezzato fra due voci, `parte` 0, 1…; la v1 resta (sola aggiunta). La proiezione `righe()` prende
+  la versione più alta di ogni segmento **con tutte le sue parti**. Un segmento rivisto e non
+  cambiato ha un evento `lenta` («uguale», o «v2_vuota»: la ritrascrizione vuota di una riga lunga
+  non la butta); una riga scartata dalla corsia lenta è `riga_scartata` con `lenta: true`
+  («allucinazione»); `chi` può essere «tv» o «piu_voci». `rivisti()` dice quali segmenti ha già
+  visto; `riassunto()` l'ultimo riassunto.
+- **La tenuta su disco** (`stanza/tenuta.py`): la v2 sostituisce la v1 dello stesso segmento (si
+  tolgono le versioni **più basse**, non le parti della stessa versione: un segmento spezzato ha
+  tutte e due le righe su disco); una v2 che non si tiene (diventata TV, «più voci», una voce non
+  riconosciuta) toglie la v1 che c'era. Le righe di un segmento scartato come allucinazione si
+  tolgono come prima.
+- **La storia del modello non si riscrive** (`stanza/contesto.py`, `pezzo`): una riga già mandata
+  in un pezzo (per seq o per segmento) non torna nemmeno in versione 2, il prefisso resta in cache;
+  le righe non ancora mandate entrano già corrette. Nel blocco e nei pezzi le righe TV di fila sono
+  **una riga sola col tempo** («18:53 [TV o radio, 40 s]», `righe_testo`), mai le parole, e non
+  contano per la provenienza (`_esterno`); «più voci (Carlo, Nicola?)» è l'etichetta di una riga
+  con le voci che si alternano.
+- **`stanza_cerca`** legge la proiezione: trova la versione migliore; le righe TV (sicurezza
+  «nessuna») e «più voci» non sono mai nella ricerca, come le voci non riconosciute.
+- **Il guardiano a posteriori** (`stanza/guardia.py`, decisione scritta qui): una riga il cui
+  segmento aspetta la corsia lenta non è assestata (si aspetta la v2, al più
+  `stanza_guardia_blocco_max_s` dalla fine); **una riga già raccolta che diventa v2 non si
+  rigiudica per questo**, solo con un **cambio sostanziale** (`lenta.cambio_sostanziale`:
+  somiglianza delle parole sotto 0,8, o chi parla che passa da o verso un minore; un segmento
+  spezzato in due voci di solito lo è). Le v2 non rigiudicate si segnano viste e, con la tenuta,
+  nel diario (esito «versione»: dopo un riavvio non tornano). Misura `guardia` con esito
+  «versione» e `rigiudicata`.
+- **Il riassunto progressivo per stanza** (§ 3.5): ogni `stanza_lenta_riassunto_righe` (6) righe
+  nuove di uno scambio, dopo un passo, col **rilevatore già caricato** (`Guardiano.chiedi_json`,
+  stesso modello e opzioni del guardiano a posteriori: niente si ricarica; senza rilevatore niente
+  riassunto): un evento `riassunto_stanza` (scambio, `fino`, testo ≤ 1200 caratteri, presenti),
+  solo in memoria. Entra nel contesto **solo** quando lo scambio in corso è cominciato prima della
+  finestra degli ultimi minuti (o il tetto ha tagliato righe): col blocco intero dopo
+  l'intestazione, con le righe nella storia nella **nota del turno** (cambia: fuori dal prefisso),
+  sempre **in busta** (fonte `stanza`: è fatto dalle righe, che sono dati), e le sue parole contano
+  per la provenienza degli argomenti (Brain le aggiunge agli `esterni`).
+- **Mai verso l'alto**: un'attribuzione rivista non apre presenze, non cambia permessi né impronte.
+
+**Misure** (`stanza-*.jsonl`, tipi `lenta`, `lenta_riassunto`, `banco`; la riga «Corsia lenta» della
+sezione «Stanza» di `calliope stato --turni`): segmenti rivisti, testo cambiato (quota),
+attribuzioni corrette (divisi, «più voci»), uguali, TV, allucinazioni, ritrascrizioni vuote tenute,
+audio uscito dalla RAM prima del passo, tempo di Whisper (totale e p50 a segmento) e di CAM++,
+attesa dalla fine del segmento (p50, p90), riassunti (fatti, guasti, ms). Solo numeri.
+
+**L'audio del banco** (eccezione temporanea del 14/10 sera, decisione 0029, `calliope/stanza/banco.py`,
+`stanza_audio_banco_giorni`, di serie 0): per N giorni dalla prima accensione l'audio dei segmenti
+di sole voci di casa riconosciute (adulti e minori della famiglia; mai ospiti, conoscenti, zona
+grigia anche corretta dalla lenta, voci sconosciute, segmenti misti, TV, pausa) va in
+`<turn_log_dir>/stanza_banco/<satellite>/<giorno>/` in μ-law con un `.json` (tempi, v1, v2,
+persone, esito della corsia lenta), file 600; vuole `stanza_lenta`. Alla scadenza smette e lo dice
+(log e `calliope stato --turni`: «Audio della stanza per il banco … accesa fino al … / SCADUTA»);
+i file restano al più `turn_log_days`; «dimentica» toglie quelli del satellite, `calliope conserva
+--svuota` tutto (anche il segno dell'accensione) e `--persona` i segmenti con la sua voce
+(`Conservazione._svuota_banco`, anche da terminale).
+
+Prove: `prove/prova_stanza_lenta.py` (livello 1, ~5 s; contrari: spenta, uguale, lunga vuota,
+telefonata in vivavoce, ospite con la famiglia, persona di casa che legge, Home Assistant spento,
+riga già mandata, v2 quasi uguale, scambio tutto nella finestra, DGX occupata, pausa, dimentica,
+RAM piena; il banco con ospite, zona grigia, conoscente, misto, pausa, scaduto, spento, senza
+corsia lenta, dimentica e svuota). Banco: `prove/manuali/banco_stanza_lenta.py` (misure in
+[stt-tts](stt-tts.md)).
+
+**Accendere** (installazione di chi amministra, dopo la misura sulla DGX): `stanza_lenta: true` nella
+sezione `conversazione_stanza` del `calliope.locale.yaml`; per il banco anche
+`stanza_audio_banco_giorni: 7`. Prima conviene guardare il piano (`calliope stato --piano`, riga
+«Stanza lenta») e, se c'è posto, un secondo whisper-server più accurato su `stanza_lenta_stt_url`.
