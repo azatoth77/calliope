@@ -11,6 +11,9 @@ impronte finte (l'ampiezza dice chi parla):
 - ritrascrizione: la riga cambiata diventa versione 2 (la 1 resta nel registro), quella uguale
   ha l'evento «uguale», il prompt con i nomi dello scambio e le parole di prima (corto), la
   precedenza LENTA dentro `STTCondiviso` dopo il turno;
+- senza ritrascrizione (`stanza_lenta_ritrascrivi`, 14/10 sera): «auto» col whisper-server dei
+  turni no, con un Whisper suo o un beam che conta sì; con «no» il resto del passo sul testo
+  della corsia veloce, una versione 2 solo per un cambio vero;
 - chi parla: la zona grigia corretta dalla voce della persona nello scambio (mai verso l'alto:
   niente presenze), un blocco di due voci spezzato in due righe con i tempi, le voci che si
   alternano «più voci»;
@@ -173,6 +176,9 @@ def cfg_base(**k) -> Config:
     c.turn_log_dir = str(TMP / k.pop("registro", "registro"))
     c.speaker_min_voice_s = 0.5
     c.stanza_lenta_libera_s = 0.0
+    # Le prove della ritrascrizione la vogliono accesa: «auto» col Whisper finto (nessun
+    # Whisper suo, beam che non conta) la spegnerebbe (prova_senza_ritrascrizione)
+    c.stanza_lenta_ritrascrivi = "si"
     for a, v in k.items():
         setattr(c, a, v)
     return c
@@ -311,6 +317,115 @@ def prova_ritrascrizione():
              stt.chiamate[-1]["prompt"] == "x" and stt.chiamate[-1]["beam"] == 3)
     st.chiudi()
     return cfg
+
+
+# ─────────────────── 2b. senza ritrascrizione (14/10 sera) ───────────────────
+def prova_senza_ritrascrizione():
+    st0, _ = nuova(cfg_base())
+    finto = STTFinto()
+
+    def le(stt=None, **k):
+        return L.Lenta(cfg_base(**k), st0, stt=stt, avvia=False)
+
+    def con_device(dev):
+        x = STTFinto()
+        x.device = dev
+        st, _ = nuova(cfg_base(stanza_lenta_ritrascrivi="auto"), x)
+        return L.Lenta(cfg_base(stanza_lenta_ritrascrivi="auto"), st, avvia=False), st
+    l_srv, s1 = con_device("server")
+    l_gpu, s2 = con_device("cuda")
+    verifica("auto: whisper-server dei turni (ignora il beam) → niente ritrascrizione",
+             not l_srv.ritrascrive() and not l_srv.beam_effettivo())
+    verifica("auto: Whisper finto senza dispositivo → niente (nel dubbio il beam non conta)",
+             not le(stanza_lenta_ritrascrivi="auto").ritrascrive())
+    verifica("auto: faster-whisper nel processo con un beam più largo dei turni → sì",
+             l_gpu.ritrascrive() and l_gpu.beam_effettivo())
+    l_gpu.cfg.stanza_lenta_beam = 5
+    verifica("contrario: lo stesso beam dei turni (5) non conta → no", not l_gpu.ritrascrive())
+    verifica("auto: un Whisper suo (stanza_lenta_stt_url o passato) → sì",
+             le(stanza_lenta_ritrascrivi="auto",
+                stanza_lenta_stt_url="http://127.0.0.1:9").ritrascrive()
+             and le(finto, stanza_lenta_ritrascrivi="auto").ritrascrive())
+    verifica("«no» vince anche col Whisper suo; «si» anche senza",
+             not le(finto, stanza_lenta_ritrascrivi="no").ritrascrive()
+             and le(stanza_lenta_ritrascrivi="si").ritrascrive()
+             and not le(stanza_lenta_ritrascrivi=False).ritrascrive())
+    for x in (st0, s1, s2):
+        x.chiudi()
+    # Il passo senza ritrascrizione
+    cfg = cfg_base(stanza_lenta_ritrascrivi="no", stanza_lenta_prompt="si")
+    stt = STTFinto()
+    st, lenta = nuova(cfg, stt)
+    c = Coll(4, "veranda")
+    a = parla(st, c, 81, [(0.1, 2.0)], testi=("Porto la cana da pesca nova.",
+                                               "Porto la canna da pesca nuova."))
+    g = parla(st, c, 83, [(0.12, 2.0)], testi=("Va bene per tutti.",) * 2)
+    d = parla(st, c, 85, [(0.1, 4.0), (0.2, 4.0)],
+              testi=("Io porto le bibite. E io la torta di mele.", "altro testo"))
+    r = parla(st, c, 87, [(0.1, 2.0)], testi=("sì sì sì sì sì sì", "Sì."))
+    lenta.giro(tardi(cfg))
+    lente = [x for x in stt.chiamate if x["priorita"] == coda_mod.LENTA]
+    verifica("«no»: nessuna chiamata a Whisper con la precedenza LENTA", lente == [], str(lente))
+    ra = riga_di(st, 4, a)
+    verifica("«no»: il testo della corsia veloce resta (versione 1, evento «uguale»)",
+             len(ra) == 1 and ra[0]["versione"] == 1
+             and ra[0]["testo"] == "Porto la cana da pesca nova."
+             and any(e.dati.get("segmento") == a and e.dati.get("esito") == "uguale"
+                     for e in st.registro(4).eventi(LENTA)), str(ra))
+    rg = riga_di(st, 4, g)
+    verifica("«no»: chi parla corretto lo stesso (zona grigia → voce), testo uguale, v2",
+             len(rg) == 1 and rg[0]["versione"] == 2 and rg[0]["sicurezza"] == "voce"
+             and rg[0]["testo"] == "Va bene per tutti." and rg[0]["rivista"]["chi"]
+             and not rg[0]["rivista"]["testo"], str(rg))
+    rd = riga_di(st, 4, d)
+    verifica("«no»: due voci divise sul testo della corsia veloce",
+             len(rd) == 2 and [x["nome"] for x in rd] == ["Carlo", "Nicola"]
+             and rd[0]["testo"] == "Io porto le bibite." and not rd[0]["rivista"]["testo"],
+             str(rd))
+    scart = {x.dati.get("segmento"): x.dati for x in st.registro(4).eventi(RIGA_SCARTATA)}
+    verifica("«no»: la ripetizione della corsia veloce resta un'allucinazione (scartata)",
+             r not in {x.get("segmento") for x in st.registro(4).righe()}
+             and scart.get(r, {}).get("regola") == "ripetizione")
+    mis = [x for x in st.misure.memoria if x["tipo"] == "lenta"]
+    verifica("«no»: misure con ritrascritto false e senza tempo di Whisper",
+             mis and all(x.get("ritrascritto") is False and "stt_s" not in x for x in mis)
+             and not any(x.get("testo_cambiato") for x in mis), str(mis))
+    rr = misure_mod.riassunto(mis)
+    verifica("stato --turni: «senza ritrascrizione N»",
+             "senza ritrascrizione 4" in misure_mod.testo_lenta(rr["lenta"]),
+             misure_mod.testo_lenta(rr["lenta"]))
+    st.chiudi()
+    # Il Whisper suo giù: con «auto» nessun ripiego su quello dei turni, con «si» sì
+    for modo, atteso in (("auto", 0), ("si", 1)):
+        cfg = cfg_base(stanza_lenta_ritrascrivi=modo, stanza_lenta_stt_url="http://127.0.0.1:9")
+        stt = STTFinto()
+        st, lenta = nuova(cfg, stt)
+
+        def giu(*a, **k):
+            raise ConnectionError("giù")
+        lenta._post_lento = giu
+        c = Coll(4, "veranda")
+        x = parla(st, c, 91, [(0.1, 2.0)], testi=("Porto la cana.", "Porto la canna."))
+        lenta.giro(tardi(cfg))
+        lente = [y for y in stt.chiamate if y["priorita"] == coda_mod.LENTA]
+        rx = riga_di(st, 4, x)
+        verifica(f"Whisper suo giù, «{modo}»: "
+                 + ("tiene il testo della corsia veloce, nessun ripiego" if not atteso else
+                    "ripiega su quello dei turni come prima"),
+                 len(lente) == atteso and rx and rx[0]["testo"] == (
+                     "Porto la cana." if not atteso else "Porto la canna."), str(rx))
+        st.chiudi()
+    # La configurazione: «no» di YAML (false) diventa «no»
+    from calliope.config import VALIDATORI
+    v = VALIDATORI["stanza_lenta_ritrascrivi"]
+    ok = v(False) == "no" and v(True) == "si" and v("Sì") == "si" and v(" AUTO ") == "auto"
+    try:
+        v("forse")
+        ok = False
+    except ValueError:
+        pass
+    verifica("configurazione: auto di serie, «no» di YAML accettato, «forse» rifiutato",
+             ok and Config().stanza_lenta_ritrascrivi == "auto")
 
 
 # ─────────────────────────── 3. chi parla ───────────────────────────
@@ -710,6 +825,52 @@ def prova_banco():
 
 
 # ─────────────────────────── 10. misure, stato, piano, configurazione ───────────────────────────
+def prova_banco_conservati():
+    """Il banco manuale delle registrazioni conservate (14/10 sera): le scelte dal .md e dal
+    JSON della pagina di revisione, il riferimento per caso, i casi vinti. Dati di fantasia."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "banco_stanza_lenta", Path(__file__).resolve().parent / "manuali" /
+        "banco_stanza_lenta.py")
+    B = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(B)
+    md = TMP / "ritrascrizione-conservati-20261014-1657.md"
+    md.write_text("# Registrazioni conservate\n\n"
+                  '<!-- banco: {"totale": 5, "uguali": 2, "parole_uguali": 8, "diversi": 3} -->'
+                  "\n\n## 1 · 2026-10-12 18:03:21 · 2,4 s · p-carlo/2026-10-12/180321-123.wav\n"
+                  "- originale: Che ore sono a Tokio\n- lenta: Che ore sono a Tokyo?\n"
+                  "- scelta: o\n- corretto: \n\n"
+                  "## 2 · 2026-10-12 18:05:00 · 1,1 s · p-carlo/2026-10-12/180500-001.wav\n"
+                  "- originale: Accendi la luce in cucina\n- lenta: Accendi la luce in cucina.\n"
+                  "- scelta: \n- corretto: \n\n"
+                  "## 3 · 2026-10-12 18:06:00 · 1,0 s · p-carlo/2026-10-12/180600-002.wav\n"
+                  "- originale: Spegni il forno\n- lenta: Spegni il fono\n- scelta: ?\n"
+                  "- corretto: \n", encoding="utf-8")
+    js = TMP / "scelte.json"
+    js.write_text(json.dumps([{"n": 2, "file": "p-carlo/2026-10-12/180500-001.wav",
+                               "scelta": "c", "corretto": "Accendi la luce nella cucina"},
+                              {"n": 3, "file": "p-carlo/2026-10-12/180600-002.wav",
+                               "scelta": "l", "corretto": ""}]), encoding="utf-8")
+    testa, casi = B.leggi_scelte(md)
+    verifica("banco conservati: il .md (n, file, testi, scelte; vuota = da fare, ? = fuori)",
+             testa.get("totale") == 5 and [c["n"] for c in casi] == [1, 2, 3]
+             and casi[0]["file"] == "p-carlo/2026-10-12/180321-123.wav"
+             and B.riferimento(casi[0]) == "Che ore sono a Tokio"
+             and B.riferimento(casi[1]) is None and B.riferimento(casi[2]) == "?", str(casi))
+    _, casi2 = B.leggi_scelte(md, js)
+    verifica("banco conservati: le scelte del JSON vincono sul .md (c col testo, l)",
+             B.riferimento(casi2[0]) == "Che ore sono a Tokio"
+             and B.riferimento(casi2[1]) == "Accendi la luce nella cucina"
+             and B.riferimento(casi2[2]) == "Spegni il fono", str(casi2))
+    verifica("banco conservati: casi vinti, persi e pari",
+             B.confronto([(0, 1), (2, 1), (1, 1), (0, 3)]) == {"vince_a": 2, "vince_b": 1,
+                                                                "pari": 1})
+    verifica("banco conservati: i sistemi da confrontare (turni, senza prompt, il secondo "
+             "servizio con e senza nomi)",
+             {"originale", "turni", "turni_senza_prompt", "lento_senza_prompt", "lento_nomi",
+              "lento_nomi_parole"} <= set(B.SISTEMI))
+
+
 def prova_misure_piano():
     cfg = cfg_base()
     righe = misure_mod.leggi(cfg.turn_log_dir)
@@ -735,9 +896,61 @@ def prova_misure_piano():
              and s8.memoria_gb == 0, str(s8))
     verifica("piano: spenta, nessuna scelta", P.piano(inv, P.Funzioni()).scelta(
         "stanza_lenta") is None)
+    # 14/10 sera: large-v3 q5_0, il posto per FLUX, la memoria vera, «senza ritrascrizione»
+    verifica("piano: il secondo server è large-v3 q5_0 (~2 GB stimati) e lascia il posto a FLUX",
+             s.scelta.startswith("large-v3 q5_0") and s.memoria_gb == 2.0
+             and "immagini" in s.motivo, str(s))
+    inv_v = dict(inv, motori={"whisper_lento": {"locale": True, "attivo": True, "gb": 1.73}})
+    sv = P.piano(inv_v, P.Funzioni(stanza_lenta=True)).scelta("stanza_lenta")
+    verifica("piano: col servizio acceso la memoria vera del processo ([M])",
+             sv.memoria_gb == 1.73 and sv.fonte.startswith("[M]") and "misurata" in sv.stima,
+             str(sv))
+    inv24 = dict(inv, ram_gb=24, gpu=dict(inv["gpu"], memoria_gb=24.0))
+    p24 = P.piano(inv24, P.Funzioni(stanza_lenta=True))
+    s24 = p24.scelta("stanza_lenta")
+    verifica("piano: whisper-server dei turni e niente posto con FLUX → senza ritrascrizione",
+             "whisper.cpp" in p24.scelta("whisper").scelta
+             and s24.scelta == "senza ritrascrizione" and s24.memoria_gb == 0, str(s24))
+    oggi = P._lenta_oggi
+    verifica("piano, oggi: server con l'URL, senza ritrascrizione col whisper-server, stesso "
+             "con faster-whisper e beam più largo; «no» vince",
+             oggi(SimpleNamespace(stanza_lenta_stt_url="http://127.0.0.1:8004/v1")) == "server"
+             and oggi(SimpleNamespace(stt_motore="server")) == "senza ritrascrizione"
+             and oggi(SimpleNamespace(stt_motore="locale")) == "stesso"
+             and oggi(SimpleNamespace(stt_motore="locale", stanza_lenta_beam=5))
+             == "senza ritrascrizione"
+             and oggi(SimpleNamespace(stt_motore="server", stanza_lenta_ritrascrivi="si"))
+             == "stesso"
+             and oggi(SimpleNamespace(stanza_lenta_stt_url="http://x:1/v1",
+                                      stanza_lenta_ritrascrivi="no")) == "senza ritrascrizione")
+    # L'inventario: il secondo server e la sua memoria vera
+    from calliope import macchina as M
+
+    class Sonda:
+        os = "linux"
+
+        def __init__(self, vivo=True, pid="4242"):
+            self.vivo, self.pid = vivo, pid
+
+        def get(self, url, timeout=1.5):
+            return "ok" if self.vivo and ":8004/" in url else None
+
+        def comando(self, argv, timeout=5):
+            if argv[0] == "systemctl":
+                return self.pid + "\n"
+            return "111, 2100\n" + self.pid + ", 1650\n"
+    w = M._whisper_lento(Sonda(), SimpleNamespace(stanza_lenta_stt_url=""))
+    verifica("inventario: il server sulla porta di whisper-lento.sh, memoria dal suo PID",
+             w == {"locale": True, "attivo": True, "gb": round(1650 * 1048576 / 1e9, 2),
+                   "configurato": False}, str(w))
+    verifica("inventario: niente server e niente URL → niente; URL ma giù → attivo false",
+             M._whisper_lento(Sonda(vivo=False), SimpleNamespace(stanza_lenta_stt_url=""))
+             is None
+             and M._whisper_lento(Sonda(vivo=False), SimpleNamespace(
+                 stanza_lenta_stt_url="http://127.0.0.1:8004/v1"))["attivo"] is False)
     c = Config()
     verifica("configurazione: corsia lenta spenta e banco a 0 di serie",
-             c.stanza_lenta is False and c.stanza_audio_banco_giorni == 0
+             c.stanza_lenta is False and c.stanza_lenta_ritrascrivi == "auto" and c.stanza_audio_banco_giorni == 0
              and c.stanza_lenta_stt_url == "")
     from calliope.config import SEZIONI
     sez = next((k for k, v in SEZIONI.items() if "stanza_lenta" in v), None)
@@ -754,6 +967,7 @@ def main() -> int:
     try:
         prova_spenta()
         prova_ritrascrizione()
+        prova_senza_ritrascrizione()
         prova_chi()
         prova_allucinazioni()
         prova_tv()
@@ -761,6 +975,7 @@ def main() -> int:
         prova_guardia()
         prova_riassunto_carico()
         prova_banco()
+        prova_banco_conservati()
         prova_misure_piano()
     finally:
         shutil.rmtree(TMP, ignore_errors=True)

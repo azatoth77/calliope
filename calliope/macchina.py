@@ -390,6 +390,38 @@ def _vllm(s: Sonde, url: str) -> dict | None:
             "cache_token": cache, "gpu_memory_utilization": utilizzo}
 
 
+UNITA_WHISPER_LENTO = "calliope-whisper-lento"
+WHISPER_LENTO_PORTA = 8004          # setup/linux/motore/whisper-lento.sh
+
+
+def _whisper_lento(s: Sonde, cfg) -> dict | None:
+    """Il secondo whisper-server della corsia lenta (14/10 sera): risponde? e la sua memoria
+    vera sulla GPU (nvidia-smi per processo, col PID dell'unità systemd utente). Si guarda
+    `stanza_lenta_stt_url` o, se manca, la porta di whisper-lento.sh. None se non c'è niente."""
+    url = str(getattr(cfg, "stanza_lenta_stt_url", "") or "").strip()
+    radice = re.sub(r"/v1/?$", "", url.rstrip("/")) if url else \
+        f"http://127.0.0.1:{WHISPER_LENTO_PORTA}"
+    if not _locale(radice):
+        return {"locale": False, "attivo": None, "gb": None, "configurato": True}
+    attivo = s.get(radice + "/") is not None
+    if not attivo and not url:
+        return None
+    gb = None
+    if attivo and s.os == "linux":
+        pid = (s.comando(["systemctl", "--user", "show", UNITA_WHISPER_LENTO,
+                          "--property=MainPID", "--value"], timeout=2) or "").strip()
+        app = s.comando(["nvidia-smi", "--query-compute-apps=pid,used_memory",
+                         "--format=csv,noheader,nounits"]) or ""
+        for riga in app.splitlines():
+            v = [x.strip() for x in riga.split(",")]
+            if pid and pid != "0" and len(v) >= 2 and v[0] == pid:
+                try:
+                    gb = round(float(v[1]) * 1048576 / _GB, 2)
+                except ValueError:
+                    gb = None
+    return {"locale": True, "attivo": attivo, "gb": gb, "configurato": bool(url)}
+
+
 def _locale(url: str | None) -> bool:
     host = str(url or "").split("://", 1)[-1].split("/", 1)[0].rsplit(":", 1)[0].strip("[]")
     return host in ("127.0.0.1", "localhost", "::1")
@@ -463,6 +495,9 @@ def inventario(cfg=None, sonde: Sonde | None = None) -> dict:
         motori["whisper_server"] = {"locale": _locale(radice),
                                     "attivo": s.get(radice + "/") is not None
                                     if _locale(radice) else None}
+    lento = _whisper_lento(s, cfg)
+    if lento is not None:
+        motori["whisper_lento"] = lento
     motori.update(s.librerie())
     inv["motori"] = motori
     for m in (motori["ollama"] or {}).get("caricati", []):

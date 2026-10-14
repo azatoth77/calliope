@@ -1195,6 +1195,14 @@ class Config:
     stanza_lenta_stt_modello: str = ""
     # Beam della ritrascrizione con faster-whisper nel processo (il server lo fissa da sé)
     stanza_lenta_beam: int = 8
+    # La ritrascrizione del testo (14/10 sera): «auto» (di serie) solo se la corsia lenta ha un
+    # Whisper suo (stanza_lenta_stt_url) o un beam che conta (faster-whisper nel processo con
+    # stanza_lenta_beam più largo di whisper_beam_size); «si» sempre, «no» mai. Senza, la corsia
+    # lenta fa il resto (chi parla, TV, allucinazioni, riassunto) sul testo della corsia veloce.
+    # Misura vera del 14/10 sera (95 registrazioni conservate, riferimento scritto a mano): lo
+    # stesso whisper-server dei turni, che ignora il beam, senza il prompt dei turni sbagliava il
+    # 4,8 % delle parole contro il 3,0 % dell'originale
+    stanza_lenta_ritrascrivi: str | bool = "auto"
     # Il prompt della ritrascrizione (i nomi di chi parla nello scambio e la coda delle parole
     # di prima): «auto» (di serie) solo con un Whisper suo (stanza_lenta_stt_url): sul banco
     # sintetico del 14/10 col turbo dei turni il prompt peggiorava la WER (10 dB: 18,9 → 21,9 %),
@@ -3147,7 +3155,7 @@ SEZIONI: dict[str, list[str]] = {
                "stanza_guardia_ripresa_h", "stanza_lenta", "stanza_audio_min",
                "stanza_lenta_quiete_s", "stanza_lenta_ogni_s", "stanza_lenta_libera_s",
                "stanza_lenta_stt_url", "stanza_lenta_stt_modello", "stanza_lenta_beam",
-               "stanza_lenta_prompt", "stanza_lenta_prompt_caratteri", "stanza_lenta_finestra_s",
+               "stanza_lenta_ritrascrivi", "stanza_lenta_prompt", "stanza_lenta_prompt_caratteri", "stanza_lenta_finestra_s",
                "stanza_lenta_parte_min_s", "stanza_lenta_soglia_finestra",
                "stanza_lenta_riassunto_righe", "stanza_audio_banco_giorni"],
     "satellite": ["satellite_server", "satellite_credenziali", "satellite_impronta",
@@ -3559,6 +3567,19 @@ def _stanza_guardia_valido(value):
     raise ValueError("serve «spenta», «ombra» o «attiva»")
 
 
+def _si_no_auto_valido(value):
+    """«auto», «si» o «no» (anche true/false: YAML legge «no» come false)."""
+    if value is True:
+        return "si"
+    if value is False:
+        return "no"
+    s = str(value or "").strip().lower()
+    s = {"sì": "si", "true": "si", "false": "no"}.get(s, s)
+    if s in ("auto", "si", "no"):
+        return s
+    raise ValueError("serve «auto», «si» o «no»")
+
+
 def _fine_turno_valido(value):
     """«spenta», «ombra» o «attiva» (14/10, calliope/system1/fine_turno.py)."""
     s = str(value or "").strip().lower()
@@ -3582,7 +3603,8 @@ VALIDATORI = {"llm_keep_alive": keep_alive_valido, "llm_num_ctx": _num_ctx_valid
               "dialogo_interprete": _dialogo_interprete_valido,
               "eventi": _eventi_valido, "frasi_varianti": _frasi_varianti_valido,
               "stanza": _stanza_valido, "stanza_guardia": _stanza_guardia_valido,
-              "fine_turno": _fine_turno_valido}
+              "fine_turno": _fine_turno_valido,
+              "stanza_lenta_ritrascrivi": _si_no_auto_valido}
 
 
 def fuori_limiti(key: str, value) -> tuple[float, float] | None:

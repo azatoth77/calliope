@@ -10,7 +10,7 @@
 
 | Stadio | Libreria | Dove |
 |---|---|---|
-| Installazione e aggiornamento (Linux, DGX) | uv (lock universale), git, systemd utente; gestore in sola libreria standard | `pyproject.toml`, `uv.lock`; `setup/linux/` → `gestore.py` (comando `calliope`: `installa`, `aggiorna`, `torna`…), `installa.sh`, `calliope.service`, `calliope.locale.esempio.yaml`, `motore/vllm.sh` (voce e agente su vLLM; Whisper su vLLM provato e scartato il 02/10), `motore/whisper.sh` e `motore/calliope-whisper.service` (whisper.cpp), `motore/sandbox.sh`, `motore/searxng.sh`, `motore/gemma4_template.py` |
+| Installazione e aggiornamento (Linux, DGX) | uv (lock universale), git, systemd utente; gestore in sola libreria standard | `pyproject.toml`, `uv.lock`; `setup/linux/` → `gestore.py` (comando `calliope`: `installa`, `aggiorna`, `torna`…), `installa.sh`, `calliope.service`, `calliope.locale.esempio.yaml`, `motore/vllm.sh` (voce e agente su vLLM; Whisper su vLLM provato e scartato il 02/10), `motore/whisper.sh` e `motore/calliope-whisper.service` (whisper.cpp), `motore/whisper-lento.sh` e `motore/calliope-whisper-lento.service` (il secondo Whisper della corsia lenta della stanza, dal 14/10 sera, facoltativo), `motore/sandbox.sh`, `motore/searxng.sh`, `motore/gemma4_template.py` |
 | Prova end-to-end su un'istanza di prova (06/10) | solo libreria standard; satelliti veri con microfono e casse finti | `prove/e2e/` → `lancia.py`, `istanza.py`, `satelliti.py`, `copioni.py`, `verifica.py`; manuale [`prove/manuali/e2e-dgx.md`](../../prove/manuali/e2e-dgx.md) |
 
 ## Setup (DGX Linux)
@@ -40,6 +40,12 @@ calliope motore whisper compila          # sorgente al commit fissato, build CUD
 calliope motore whisper scarica          # ggml-large-v3-turbo.bin con SHA-256 (chiede)
 calliope motore whisper installa         # unità systemd, avvio; poi stt_motore/stt_url
 calliope stato --installa whisper_riserva   # faster-whisper su CPU se il server cade
+
+# Facoltativo (14/10 sera): il secondo Whisper della corsia lenta della stanza, large-v3 q5_0,
+# servizio utente calliope-whisper-lento (porta 8004); lo stesso whisper-server compilato sopra
+calliope motore whisper-lento scarica    # ggml-large-v3-q5_0.bin con SHA-256 (chiede)
+calliope motore whisper-lento installa   # unità systemd, avvio, memoria vera sulla GPU
+calliope motore whisper-lento stato|memoria|ferma|avvia|disinstalla
 ```
 
 - **Codice e dati separati**: il codice in `~/.local/share/calliope/versioni/<data>-<commit>/`
@@ -89,6 +95,40 @@ calliope stato --installa whisper_riserva   # faster-whisper su CPU se il server
   `models/whisper/large-v3-turbo/` (`whisper_cartella`), installato dal catalogo
   (`whisper_riserva`, 1,6 GB con SHA-256; `installa.sh` lo chiede): senza, il primo guasto
   lo farebbe scaricare con la voce ferma, e il registro delle capacità lo dice.
+- **Il secondo Whisper della corsia lenta** (14/10 sera, facoltativo, **preparato e non
+  acceso**): `setup/linux/motore/whisper-lento.sh` e l'unità `calliope-whisper-lento`
+  (127.0.0.1:8004, `-bs 5`, nessun prompt fisso, `-t 2`, `Nice=10`), lo stesso `whisper-server`
+  di `whisper.sh` (nessuna compilazione nuova) con **large-v3 q5_0** (1,08 GB di file, ~2 GB
+  stimati; `VARIANTE=f16` per large-v3 intero, ~3,9 GB). Residente: con la memoria libera del
+  14/10 (~21 GB) resta il posto per FLUX (13 GB) con ~6 GB di margine. `calliope.service` **non**
+  lo aspetta: se è giù la corsia lenta tiene il testo della corsia veloce. Calliope lo usa solo
+  con `stanza_lenta_stt_url: http://127.0.0.1:8004/v1` (sezione `conversazione_stanza` del
+  locale), e solo dopo che il banco ha detto che fa meglio del Whisper dei turni (perché: la
+  misura vera in [stt-tts](stt-tts.md); `stanza_lenta_ritrascrivi: auto` allora riaccende la
+  ritrascrizione). `calliope stato --piano`, riga «Stanza lenta», mostra la sua memoria vera
+  (nvidia-smi per processo) quando gira. I passi, dal portatile e sulla DGX:
+
+  ```bash
+  # 1. dopo l'unione: calliope aggiorna (sulla DGX), poi
+  calliope motore whisper-lento scarica --si && calliope motore whisper-lento installa
+  calliope motore whisper-lento memoria          # la memoria vera del processo
+  calliope stato --piano                          # riga «Stanza lenta»: deve dire ✓
+  # 2. le scelte della revisione sulla DGX (dal portatile, scp di OpenSSH di Windows; il .md
+  #    è già in ~/calliope/privato/, dove lo ha scritto ritrascrivi_conservati.py)
+  scp "$env:USERPROFILE\Downloads\scelte-ritrascrizione-20261014.json" DevLabDGX:calliope/privato/   # PowerShell
+  # 3. il banco sulle 95 registrazioni (sulla DGX, dalla cartella dei dati): solo numeri
+  V=~/.local/share/calliope/versioni/$(cat ~/.local/share/calliope/attuale)
+  cd ~/calliope && $V/.venv/bin/python $V/prove/manuali/banco_stanza_lenta.py \
+      --conservati privato/ritrascrizione-conservati-20261014-1657.md \
+      --scelte privato/scelte-ritrascrizione-20261014.json --ritrascrivi --salva privato
+  # 4a. se un «lento*» ha la WER sotto «turni»: nel calliope.locale.yaml
+  #       conversazione_stanza:
+  #         stanza_lenta_stt_url: http://127.0.0.1:8004/v1
+  #         stanza_lenta_prompt: no      # solo se ha vinto lento_senza_prompt
+  #     poi calliope riavvia
+  # 4b. altrimenti: calliope motore whisper-lento disinstalla (e, per provare f16,
+  #     VARIANTE=f16 calliope motore whisper-lento scarica / installa, poi di nuovo il banco)
+  ```
 - **Voce**: `llm_profilo` in `calliope.locale.yaml` (03/10): `gemma4-e4b-ollama` (l'Ollama
   della DGX, il predefinito dell'esempio), `gemma4-26b-ollama` (stesso Ollama, modello
   `gemma4:26b-a4b-it-qat`) o `gemma4-26b-vllm` (Gemma 4 26B-A4B NVFP4,

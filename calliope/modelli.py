@@ -172,9 +172,17 @@ WHISPER = {
     "turbo-cpu": Trascrizione("large-v3-turbo", "faster-whisper", "cpu", 1.6, 5.0,
                               "[M] portatile: ~5 s a frase sulla CPU (ripiego visto)"),
     # La corsia lenta della stanza (14/10, passo 3): un secondo whisper-server più lento e più
-    # accurato, solo con posto. [S] pesi ggml f16 ~3,1 GB più il calcolo; tempi da misurare
-    "cpp-lenta": Trascrizione("large-v3", "whisper.cpp", "gpu", 3.6, 0.6,
-                              "[S] stima dai pesi (ggml-large-v3 3,1 GB): da misurare sulla DGX"),
+    # accurato, solo con posto (setup/linux/motore/whisper-lento.sh). Scelta del 14/10 sera:
+    # large-v3 q5_0 residente (f16 solo se il banco dice che q5_0 perde qualità). [S] pesi
+    # 1,08 GB più calcolo e cache del beam ~0,9 GB (il turbo: 1,6 GB di pesi, 2,1 misurati, ma
+    # col decoder di 4 strati invece di 32); la memoria vera la legge `calliope stato --piano`
+    # quando il servizio gira
+    "cpp-lenta": Trascrizione("large-v3 q5_0", "whisper.cpp", "gpu", 2.0, 0.6,
+                              "[S] pesi ggml-large-v3-q5_0 1,08 GB + calcolo: da misurare "
+                              "(whisper-lento.sh memoria)"),
+    "cpp-lenta-f16": Trascrizione("large-v3", "whisper.cpp", "gpu", 3.9, 0.6,
+                                  "[S] pesi ggml-large-v3 3,1 GB + calcolo (README di "
+                                  "whisper.cpp: ~3,9 GB): da misurare"),
     "small-cpu": Trascrizione("small", "faster-whisper", "cpu", 1.0, 1.0,
                               "[D] da misurare con misura_stt.py; README di faster-whisper: "
                               "small int8 su i7-12700K 13 min di audio in 1 min 42 s [V]"),

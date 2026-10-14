@@ -129,9 +129,13 @@ def load_lenta(cfg, stanza, guardiano=None, occupato=(), log=print, media=None):
                  log=log)
     stanza.lenta = le
     url = str(getattr(cfg, "stanza_lenta_stt_url", "") or "").strip()
-    log("[STANZA] Corsia lenta: ritrascrizione a DGX libera ("
-        + (f"Whisper suo su {url}" if url else "lo stesso Whisper, dopo turni e stanza")
-        + "), chi parla sullo scambio, TV, allucinazioni"
+    rit = ("ritrascrizione a DGX libera ("
+           + (f"Whisper suo su {url}" if url else "lo stesso Whisper, dopo turni e stanza")
+           + ")" if le.ritrascrive() else
+           "senza ritrascrizione (stanza_lenta_ritrascrivi: nessun Whisper suo né beam che "
+           "conti)")
+    log("[STANZA] Corsia lenta a DGX libera: " + rit + ", chi parla sullo scambio, TV, "
+        "allucinazioni"
         + (", riassunto progressivo" if riass else ", senza riassunto (nessun rilevatore)")
         + (f"; audio del banco su disco per {B.giorni(cfg)} giorni (eccezione)" if banco
            else ""))

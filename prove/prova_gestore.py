@@ -184,6 +184,17 @@ def prova(tmp: Path):
     ok("Wants=calliope-whisper.service" in u and "After=calliope-whisper.service" in u,
        "unità: aspetta il server di trascrizione (Wants/After calliope-whisper), anche dopo "
        "un aggiornamento che la riscrive")
+    # Il secondo Whisper della corsia lenta (14/10 sera): facoltativo, Calliope non lo aspetta
+    linux = Path(__file__).resolve().parent.parent / "setup" / "linux"
+    ul = (linux / "motore" / "calliope-whisper-lento.service").read_text(encoding="utf-8")
+    sh = (linux / "motore" / "whisper-lento.sh").read_text(encoding="utf-8")
+    ok(all(x in ul for x in ("@DIR@", "@PORTA@", "@MODELLO@", "@BEAM@", "127.0.0.1"))
+       and "calliope-whisper-lento" not in (linux / "calliope.service").read_text(
+           encoding="utf-8"),
+       "whisper-lento: unità con i segnaposto, solo 127.0.0.1, calliope.service non la aspetta")
+    ok('PORTA="${PORTA:-8004}"' in sh and 'VARIANTE="${VARIANTE:-q5_0}"' in sh
+       and "ggml-large-v3-q5_0.bin" in sh and "sha256sum -c" in sh and "\n  compila)" not in sh,
+       "whisper-lento.sh: porta 8004, large-v3 q5_0 con checksum, nessuna compilazione sua")
     try:
         g.motore(["inesistente"])
         ok(False, "calliope motore con uno script che non c'è va rifiutato")

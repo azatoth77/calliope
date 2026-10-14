@@ -36,7 +36,7 @@ dei turni (`turn_log_dir`), con la stessa tenuta (`turn_log_days`). Una riga per
                   dalla RAM prima del passo, «dimenticato», «errore»), testo_cambiato,
                   attribuzione (chi parla corretto), parti, motivo, tv (gli strati), stt_s
                   (tempo di Whisper), cam_ms, finestre, voce_s, attesa_s (dalla fine del
-                  segmento), prompt
+                  segmento), prompt, ritrascritto (false: senza ritrascrizione, 14/10 sera)
     lenta_riassunto  esito («fatto», «guasto»), ms, righe, caratteri
     banco         (eccezione del 14/10 sera, `stanza_audio_banco_giorni`) sat, salvato
 
@@ -143,7 +143,8 @@ def riassunto(righe: list[dict], turni: list[dict] | None = None) -> dict:
     conoscenti: dict = {}
     lenta = {"riviste": 0, "esiti": {}, "cambiate": 0, "attribuzioni": 0, "_stt": [],
              "_attese": [], "stt_tot_s": 0.0, "cam_tot_s": 0.0, "riassunti": 0,
-             "riassunti_guasti": 0, "_riass_ms": [], "banco_salvati": 0, "banco_saltati": 0}
+             "riassunti_guasti": 0, "_riass_ms": [], "banco_salvati": 0, "banco_saltati": 0,
+             "senza_ritrascrizione": 0}
     for r in righe:
         if r.get("tipo") == "lenta":
             e = str(r.get("esito") or "?")
@@ -151,6 +152,7 @@ def riassunto(righe: list[dict], turni: list[dict] | None = None) -> dict:
             if e in ("scaduto", "dimenticato", "errore"):
                 continue
             lenta["riviste"] += 1
+            lenta["senza_ritrascrizione"] += 1 if r.get("ritrascritto") is False else 0
             lenta["cambiate"] += 1 if r.get("testo_cambiato") else 0
             lenta["attribuzioni"] += 1 if r.get("attribuzione") else 0
             if r.get("stt_s") is not None:
@@ -479,7 +481,10 @@ def testo_lenta(le: dict) -> str:
             f"{le['cambiate']}{quota}, chi parla corretto in {le['attribuzioni']} (divisi in due "
             f"voci {g('divisa')}, più voci {g('piu_voci')}), uguali {g('uguale')}; TV "
             f"{g('tv')}, allucinazioni {g('allucinazione')}, ritrascrizione vuota tenuta "
-            f"{g('v2_vuota')}; audio uscito dalla RAM prima del passo {g('scaduto')}; Whisper "
+            f"{g('v2_vuota')}"
+            + (f", senza ritrascrizione {le['senza_ritrascrizione']}"
+               if le.get("senza_ritrascrizione") else "")
+            + f"; audio uscito dalla RAM prima del passo {g('scaduto')}; Whisper "
             f"{le['stt_tot_s']} s in tutto (p50 {le['stt_p50_s']} s a segmento), CAM++ "
             f"{le['cam_tot_s']} s; dalla fine del segmento p50 {le['attesa_p50_s']} s, p90 "
             f"{le['attesa_p90_s']} s; riassunti {le['riassunti']} (guasti "

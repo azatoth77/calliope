@@ -17,6 +17,13 @@ gli stessi segmenti si rivedono:
    audio: un turno che arriva aspetta al più quello). Con `stanza_lenta_stt_url` un secondo Whisper
    più lento (large-v3 non turbo), se il piano dei modelli dice che ci sta; con faster-whisper nel
    processo il beam `stanza_lenta_beam`.
+   **Solo se serve** (`stanza_lenta_ritrascrivi`, 14/10 sera): con «auto» (di serie) la
+   ritrascrizione si fa solo con un Whisper suo o con un beam che conta (faster-whisper nel
+   processo, beam più largo dei turni). Misura vera sulle registrazioni conservate di chi
+   amministra (95, riferimento scritto a mano): lo stesso whisper-server dei turni senza il loro
+   prompt sbagliava il 4,8 % delle parole contro il 3,0 % dell'originale. Senza ritrascrizione
+   i punti 2–5 lavorano sul testo della corsia veloce, e una versione 2 nasce solo da un cambio
+   vero (chi parla, TV, allucinazione).
 2. **Chi parla sullo scambio** (§ 3.2, § 5.1): finestre CAM++ da `stanza_lenta_finestra_s` con
    sovrapposizione a metà, confrontate con i profili **e** con la voce di ciascuno in questo
    scambio (la media delle sue frasi riconosciute: stesso canale, stessa stanza); un segmento con
@@ -187,6 +194,10 @@ def dividi_testo(testo: str, frazioni: list[float]) -> list[str]:
     return out
 
 
+class WhisperLentoGiu(Exception):
+    """Il Whisper suo della corsia lenta (`stanza_lenta_stt_url`) non risponde."""
+
+
 @dataclass
 class Audio:
     """Un segmento della stanza in attesa della corsia lenta (solo in RAM)."""
@@ -228,6 +239,7 @@ class Lenta:
         self._ultimo: dict = {}              # sat → epoch dell'ultimo segmento chiuso
         self._sentite: dict = {}             # testo normalizzato → epoch (voci non riconosciute)
         self._libera_da = 0.0
+        self._giu_detto = -1e9               # l'ultimo avviso del Whisper suo giù
         self.rivisti = 0
         self._fermo = threading.Event()
         self._thread = None
@@ -417,12 +429,25 @@ class Lenta:
     # ── un segmento ──
     def _rivedi_uno(self, a: Audio, v1: dict, righe: list[dict]) -> dict:
         audio = a.audio()
-        prompt = self.prompt(a, righe)
-        t0 = time.perf_counter()
-        testo, scartata, conf = self._trascrivi(audio, prompt)
-        stt_s = time.perf_counter() - t0
+        rit = self.ritrascrive()
+        if rit:
+            prompt = self.prompt(a, righe)
+            t0 = time.perf_counter()
+            try:
+                testo, scartata, conf = self._trascrivi(audio, prompt)
+            except WhisperLentoGiu:
+                rit = False                          # il suo Whisper è giù: niente ripiego
+            stt_s = time.perf_counter() - t0
+        if not rit:
+            # Senza ritrascrizione (`stanza_lenta_ritrascrivi`, 14/10 sera): il testo della
+            # corsia veloce, e il resto del passo (chi parla, TV, allucinazioni, riassunto) su
+            # quello. Una versione 2 nasce solo da un cambio vero
+            prompt, testo, scartata, conf = "", str(v1.get("testo") or "").strip(), None, None
+            stt_s = None
         ris = {"stt_s": stt_s, "esito": None, "righe": [], "prompt": bool(prompt),
-               "finestre": 0, "ignote": 0, "cam_ms": 0.0}
+               "finestre": 0, "ignote": 0, "cam_ms": 0.0, "ritrascritto": rit}
+        if not rit:
+            ris["testo_cambiato"] = False
         motivo = scartata or (allucinazione(testo) if testo else None)
         if motivo is None and conf is not None:
             try:
@@ -430,6 +455,9 @@ class Lenta:
                     motivo = "confidenza"
             except (AttributeError, TypeError, ValueError):
                 pass
+        if motivo is None and not testo and not rit:
+            ris["esito"] = "uguale"                  # niente da rivedere sul testo
+            return ris
         if motivo is not None or not testo:
             corta = len(norm_parole(v1.get("testo"))) <= CORTA_PAROLE
             if motivo is not None or corta:
@@ -517,6 +545,39 @@ class Lenta:
                 coda = coda.split(" ", 1)[1]         # niente mezza parola all'inizio
         return " ".join(x for x in (testa, coda) if x)
 
+    def ritrascrive(self) -> bool:
+        """`stanza_lenta_ritrascrivi` (14/10 sera): «si», «no», o «auto» = solo se la corsia
+        lenta ha un Whisper suo (passato qui o `stanza_lenta_stt_url`) o un beam che conta
+        davvero. Misura vera del 14/10 sera sulle registrazioni conservate: lo stesso
+        whisper-server dei turni (che ignora il beam) senza il prompt dei turni sbagliava più
+        dell'originale (WER 4,8 % contro 3,0 %): ritrascrivere con lui peggiorava le righe."""
+        v = self._f("stanza_lenta_ritrascrivi", "auto")
+        if v is True:
+            return True
+        if v is False:
+            return False
+        v = str(v or "auto").strip().lower()
+        if v in ("si", "sì", "true", "1"):
+            return True
+        if v in ("no", "false", "0"):
+            return False
+        return self.whisper_proprio() or self.beam_effettivo()
+
+    def whisper_proprio(self) -> bool:
+        return self.stt_proprio or bool(str(self._f("stanza_lenta_stt_url", "") or "").strip())
+
+    def beam_effettivo(self) -> bool:
+        """Il beam della corsia lenta cambia qualcosa: faster-whisper nel processo (un server lo
+        fissa da sé e lo ignora) con `stanza_lenta_beam` più largo di `whisper_beam_size`."""
+        dev = str(getattr(self.stt, "device", "") or "").lower()
+        if dev not in ("cuda", "cpu"):
+            return False                              # server, o non si sa: non conta
+        try:
+            return int(self._f("stanza_lenta_beam", 8)) > int(
+                self._f("whisper_beam_size", 5) or 5)
+        except (TypeError, ValueError):
+            return False
+
     def prompt_acceso(self) -> bool:
         """`stanza_lenta_prompt`: «si», «no», o «auto» = solo con un Whisper suo (banco del
         14/10: col turbo dei turni il prompt peggiorava, con large-v3 migliorava)."""
@@ -525,7 +586,7 @@ class Lenta:
             return True
         if v in ("no", "false", "0"):
             return False
-        return self.stt_proprio or bool(str(self._f("stanza_lenta_stt_url", "") or "").strip())
+        return self.whisper_proprio()
 
     def _trascrivi(self, audio: np.ndarray, prompt: str):
         """(testo, famiglia dell'allucinazione o None, confidenza o None)."""
@@ -533,9 +594,21 @@ class Lenta:
         if url:
             try:
                 return self._post_lento(url, audio, prompt), None, None
-            except Exception as e:  # noqa: BLE001 — giù: lo stesso Whisper dei turni
-                self.log(f"   [STANZA] Whisper della corsia lenta non risponde "
-                         f"({type(e).__name__}): uso quello dei turni")
+            except Exception as e:  # noqa: BLE001
+                # Giù: con «auto» il segmento resta col testo della corsia veloce (lo stesso
+                # Whisper dei turni senza il loro prompt peggiorava le righe, 14/10 sera); con
+                # «si» detto a mano, quello dei turni come prima
+                forzato = str(self._f("stanza_lenta_ritrascrivi", "auto")).strip().lower() in (
+                    "si", "sì", "true", "1")
+                ora = time.monotonic()
+                if ora - self._giu_detto >= 600:
+                    self._giu_detto = ora
+                    self.log(f"   [STANZA] Whisper della corsia lenta non risponde "
+                             f"({type(e).__name__}): "
+                             + ("uso quello dei turni" if forzato else
+                                "tengo il testo della corsia veloce"))
+                if not forzato:
+                    raise WhisperLentoGiu() from e
         stt = self.stt
         try:
             testo = stt.transcribe(audio, priorita=coda_mod.LENTA, prompt=prompt,
@@ -868,7 +941,8 @@ class Lenta:
                                         fine=round(a.fine, 3), testo=testo, chi="tv", nome=None,
                                         persona=None, sicurezza="nessuna", minore=False,
                                         tv=ris["tv"], voce_s=round(a.voce_s, 1),
-                                        rivista={"testo": True, "chi": True}))
+                                        rivista={"testo": bool(ris.get("ritrascritto",
+                                                                        True)), "chi": True}))
         elif esito in ("uguale", "v2_vuota"):
             reg.aggiungi(LENTA, segmento=a.segmento, esito=esito)
         else:
@@ -886,12 +960,14 @@ class Lenta:
                              "chi": bool(ris.get("chi_cambiato", True))}))
         attr = esito in ("divisa", "piu_voci") or (esito == "cambiata"
                                                     and ris.get("chi_cambiato"))
+        rit = bool(ris.get("ritrascritto", True))
         self._misura("lenta", sat=self._nome(sat), esito=esito,
                      testo_cambiato=bool(ris.get("testo_cambiato")) if esito == "cambiata"
-                     else esito in ("divisa", "piu_voci", "tv"),
+                     else rit and esito in ("divisa", "piu_voci", "tv"),
+                     ritrascritto=rit,
                      attribuzione=bool(attr), parti=len(ris["righe"]) if esito == "divisa" else 0,
                      motivo=ris.get("motivo"), tv=ris.get("tv"),
-                     stt_s=round(ris["stt_s"], 3), cam_ms=ris.get("cam_ms"),
+                     stt_s=None if ris["stt_s"] is None else round(ris["stt_s"], 3), cam_ms=ris.get("cam_ms"),
                      finestre=ris.get("finestre", 0), voce_s=round(a.voce_s, 2),
                      attesa_s=round(time.time() - a.fine, 1), prompt=ris.get("prompt"))
         # L'eccezione del banco (14/10 sera): l'audio su disco solo con voci tutte di casa
