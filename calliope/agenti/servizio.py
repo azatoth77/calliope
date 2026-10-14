@@ -1448,6 +1448,8 @@ class Lavori:
             return [requisiti[n - 1]["testo"] for n in numeri if 0 < n <= len(requisiti)]
         lav.accettazione = {"stato": "pronta", "file": scritto, "nome_file": nome_file,
                             "esempi": len(an["esempi"]),
+                            # I valori nominati controllati in più (14/10)
+                            "valori": len(an.get("riconosciuti") or []),
                             "requisiti_provati": acc.numeri_esempi(an) if scritto else [],
                             "testi_provati": testi(acc.numeri_esempi(an)) if scritto else [],
                             "al_collaudo": an["al_collaudo"],
@@ -1456,6 +1458,8 @@ class Lavori:
                             "secondi": secondi}
         self.log(f"[AGENTI] {lav.id}: analisi prima del codice ({secondi} s): "
                  f"{len(an['esempi'])} esempi di accettazione"
+                 + (f", {len(an['riconosciuti'])} valori nominati da riconoscere"
+                    if an.get("riconosciuti") else "")
                  + (f", al collaudo i requisiti {an['al_collaudo']}" if an["al_collaudo"]
                     else "") + (f", {len(an['scelte'])} scelte" if an["scelte"] else ""))
         if sv is not None and requisiti and svs is not None:

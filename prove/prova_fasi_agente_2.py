@@ -25,7 +25,12 @@ della temperatura sulla DGX del 12–13/10, caso del convertitore di distanze).
      sviluppo, modello guasto, agenti_accettazione spento;
    - d. alla revisione: requisiti numerati e parole della persona alla passata, «da guardare
      tu» per i requisiti al collaudo, «provato da un esempio» o l'esempio rosso; contrario:
-     senza l'analisi la frase di prima.
+     senza l'analisi la frase di prima;
+   - e. (14/10, banco L2) i valori che la richiesta nomina per un input di testo, tenuti solo
+     se ci sono alla lettera: per ognuno che nessun esempio usa un controllo «si riconosce»
+     sui dati di un esempio; verde con l'estensione che li riconosce tutti, rosso solo il
+     plurale non riconosciuto (il caso di L2), tutto rosso sullo scheletro; contrari: senza il
+     testo della richiesta, senza un esempio che riconosce.
 3. **modifica_file invece di riscrivere**: un file lungo riscritto intero per poche righe ha
    nel risultato di scrivi_file la nota che modifica_file c'è (regola
    agente_riscrittura_piccola); contrari: file nuovo, corto, cambiato molto, uguale.
@@ -330,6 +335,107 @@ def prova_test_accettazione(tmp: Path):
              "quello uscito", not s["passano"] and acc.rossi(s["uscita"]) == [1]
              and s["esito"]["falliti"] == 1 and "atteso 16.09" in s["uscita"]
              and "uscito 15" in s["uscita"], s["uscita"][-600:])
+
+
+# I valori nominati (14/10, banco L2: «fatto» con gli esempi verdi e l'accettazione nascosta
+# rossa sul plurale «unità astronomiche» che la richiesta elencava)
+RICHIESTA_VALORI = ("Un convertitore di distanze tra metri, chilometri, miglia e unità "
+                    "astronomiche, anche al singolare («unità astronomica»); un'unità che non "
+                    "conosce, come i furlong, la dice.")
+ANALISI_VALORI = {
+    "contraddizioni": [], "scelte": [], "al_collaudo": [], "campo_numero": "risultato",
+    "input": [{"nome": "valore", "tipo": "number", "valori": ["10"]},
+              {"nome": "da", "tipo": "string",
+               "valori": ["metri", "chilometri", "miglia", "unità astronomiche",
+                          "Unità astronomica", "furlong", "parsec", "leghe marine"]},
+              {"nome": "a", "tipo": "string", "valori": ["metri", "chilometri", "anni luce"]}],
+    "esempi": [
+        {"requisito": 1, "dati": {"valore": 10, "da": "miglia", "a": "chilometri"},
+         "numero": 16.0934, "tolleranza": 0.01, "contiene": "", "trovato": None},
+        {"requisito": 1, "dati": {"valore": 1, "da": "unità astronomica", "a": "chilometri"},
+         "numero": 149597870.7, "tolleranza": 1, "contiene": "", "trovato": None},
+        {"requisito": 2, "dati": {"valore": 3, "da": "furlong", "a": "metri"},
+         "numero": None, "tolleranza": None, "contiene": "non", "trovato": False}]}
+CONVERTITORE_NORM = '''import unicodedata
+
+METRI = {"metri": 1.0, "chilometri": 1000.0, "miglia": 1609.344,
+         "unita astronomica": 149597870700.0, "unita astronomiche": 149597870700.0}
+
+
+def _n(s):
+    t = unicodedata.normalize("NFD", str(s or "").lower())
+    return " ".join("".join(c for c in t if not unicodedata.combining(c)).split())
+
+
+def esegui(dati, calliope):
+    da, a = _n(dati.get("da")), _n(dati.get("a"))
+    if da not in METRI or a not in METRI:
+        return {"da_dire": "Non conosco questa unità.", "trovato": False}
+    r = float(dati.get("valore") or 0) * METRI[da] / METRI[a]
+    return {"da_dire": f"Sono {r:g} {a}.", "risultato": r}
+'''
+# Il genere di L2: il singolare sì, il plurale che la richiesta elenca no
+SENZA_PLURALE = CONVERTITORE_NORM.replace(', "unita astronomiche": 149597870700.0', "")
+
+
+def prova_valori_nominati(tmp: Path):
+    sezione("2e. i valori nominati dalla richiesta: ognuno si riconosce")
+    from calliope.agenti import accettazione as acc
+    from calliope.agenti.scheletri import prepara_estensione
+    an = acc.interpreta(ANALISI_VALORI, 3, True, testo=RICHIESTA_VALORI)
+    da = next(i for i in an["input"] if i["nome"] == "da")
+    verifica("tenuti solo i valori che la richiesta dice alla lettera (non «parsec», «leghe "
+             "marine», «anni luce»), senza doppioni per maiuscole e accenti; niente valori per "
+             "un input numerico", da.get("valori") == ["metri", "chilometri", "miglia",
+                                                       "unità astronomiche",
+                                                       "Unità astronomica", "furlong"]
+             and [i.get("valori") for i in an["input"] if i["nome"] == "a"] == [["metri",
+                                                                                 "chilometri"]]
+             and "valori" not in an["input"][0], json.dumps(an["input"], ensure_ascii=False))
+    ric = [(c["input"], c["valore"]) for c in an["riconosciuti"]]
+    verifica("un controllo per ogni valore che nessun esempio usa (non «miglia», «unità "
+             "astronomica», «furlong» dato per sconosciuto; per «a» «chilometri» e «metri» ci "
+             "sono già), sui dati dell'esempio con il numero",
+             ric == [("da", "metri"), ("da", "chilometri"), ("da", "unità astronomiche")]
+             and an["riconosciuti"][2]["dati"] == {"valore": 10, "da": "unità astronomiche",
+                                                   "a": "chilometri"}
+             and all(c["numero"] for c in an["riconosciuti"]), str(an["riconosciuti"]))
+    testo = acc.test_python(an)
+    esiti = {}
+    for nome, codice in (("norm", CONVERTITORE_NORM), ("senza_plurale", SENZA_PLURALE),
+                         ("vuota", SCHELETRO_VUOTO)):
+        sb = G.sandbox(tmp, f"val-{nome}")
+        prepara_estensione(sb)
+        sb.scrivi("estensione.py", codice)
+        sb.scrivi(acc.FILE, testo)
+        esiti[nome] = sb.test(acc.FILE)
+    g, p, v = esiti["norm"], esiti["senza_plurale"], esiti["vuota"]
+    verifica("l'estensione che riconosce tutti i valori nominati passa (3 esempi e 3 controlli)",
+             g["passano"] and g["esito"]["eseguiti"] == 6, str(g["esito"]) + g["uscita"][-400:])
+    verifica("il caso di L2 (il plurale elencato e non riconosciuto): rosso solo il suo "
+             "controllo, che dice valore e input", not p["passano"]
+             and p["esito"]["falliti"] + p["esito"]["errori"] == 1
+             and "«unità astronomiche» per «da»" in p["uscita"]
+             and "trovato" in p["uscita"] and acc.rossi(p["uscita"]) == [1], p["uscita"][-700:])
+    verifica("sullo scheletro vuoto falliscono anche i controlli dei valori",
+             not v["passano"] and v["esito"]["falliti"] + v["esito"]["errori"] == 6,
+             str(v["esito"]))
+    an0 = acc.interpreta(ANALISI_VALORI, 3, True)
+    verifica("contrario: senza il testo della richiesta nessun valore e nessun controllo (come "
+             "prima)", an0["riconosciuti"] == [] and all("valori" not in i for i in an0["input"])
+             and len(an0["esempi"]) == 3, str(an0["input"]))
+    sz = dict(ANALISI_VALORI, esempi=[ANALISI_VALORI["esempi"][2]])
+    an1 = acc.interpreta(sz, 3, True, testo=RICHIESTA_VALORI)
+    verifica("contrario: senza un esempio che riconosce (solo «trovato»: false) nessun controllo",
+             an1["riconosciuti"] == [], str(an1["riconosciuti"]))
+    v = acc.vincolo(an, True)
+    verifica("i vincoli dicono all'agente i valori da riconoscere",
+             "Valori nominati dalla richiesta per «da», da riconoscere tutti: metri, chilometri, "
+             "miglia, unità astronomiche, Unità astronomica, furlong." in v, v)
+    sch = acc.schema(True)["properties"]["input"]["items"]["properties"]
+    verifica("lo schema della passata ha i valori per input; il prompt chiede tutti quelli "
+             "nominati, al plurale e al singolare", "valori" in sch
+             and "TUTTI i valori che la richiesta nomina" in acc.SISTEMA_ESEMPI)
 
 
 def prova_servizio(tmp: Path):
@@ -766,6 +872,7 @@ if __name__ == "__main__":
         prova_niente_ufficio(radice / "ufficio")
         prova_interpreta()
         prova_test_accettazione(radice / "accettazione")
+        prova_valori_nominati(radice / "valori")
         prova_servizio(radice / "servizio")
         prova_revisione(radice / "revisione")
         prova_riscrittura(radice / "riscrittura")
