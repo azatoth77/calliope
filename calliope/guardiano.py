@@ -622,6 +622,45 @@ class Guardiano:
             return Giudizio(GUASTO, ms=ms, grezzo=testo.strip()[:40])
         return Giudizio(trovati[0].lower(), (), ms, testo.strip()[:40])
 
+    def chiedi_json(self, prompt: str, schema: dict, num_predict: int = 80,
+                    timeout: float | None = None) -> tuple[dict | None, float]:
+        """Una domanda al modello del rilevatore con un output strutturato qualunque (14/10:
+        il guardiano a posteriori della stanza, calliope/stanza/guardia.py). Stesse opzioni del
+        rilevatore (num_ctx e keep_alive: un valore diverso farebbe ricaricare il modello).
+        Restituisce (il JSON, i ms), oppure (None, ms) se il modello non c'è, sbaglia o
+        scade."""
+        import json as _json
+        dove = self._pericolo_modello()
+        if dove is None:
+            return None, 0.0
+        url, modello = dove
+        cfg = self.cfg
+        stesso = self.condivide_voce()
+        try:
+            from .config import keep_alive_valido
+            from .contesto import finestra
+            num_ctx = finestra(cfg) if stesso else int(getattr(cfg, "guardiano_num_ctx", 2048))
+            keep = (keep_alive_valido(getattr(cfg, "llm_keep_alive", "-1m")) if stesso
+                    else getattr(cfg, "guardiano_keep_alive", "-1m"))
+        except Exception:  # noqa: BLE001
+            num_ctx, keep = int(getattr(cfg, "llm_num_ctx", 16384) or 16384), "-1m"
+        body = {"model": modello, "stream": False, "think": False, "keep_alive": keep,
+                "messages": [{"role": "user", "content": prompt}], "format": schema,
+                "options": {"temperature": 0, "num_predict": int(num_predict),
+                            "num_ctx": num_ctx}}
+        t0 = time.perf_counter()
+        try:
+            r = self._http().post(url + "/api/chat", json=body, timeout=timeout or self.timeout_s)
+            if r.status_code != 200:
+                raise RuntimeError(f"HTTP {r.status_code}")
+            testo = ((r.json().get("message") or {}).get("content") or "")
+            js = _json.loads(testo)
+        except Exception as e:  # noqa: BLE001
+            # Non tocca gli errori del guardiano in diretta (lo stato della voce)
+            self.ultimo_errore_json = type(e).__name__
+            return None, round((time.perf_counter() - t0) * 1000, 1)
+        return (js if isinstance(js, dict) else None), round((time.perf_counter() - t0) * 1000, 1)
+
     def gravita(self, frase: str, timeout: float | None = None) -> Giudizio:
         """Primo cancello (09/10, calliope/cancelli.py): il segnale di pericolo di un minore è
         ACUTO (esplicito) o DUBBIO (manca il contesto)? Esito ACUTO, DUBBIO o GUASTO (chi lo

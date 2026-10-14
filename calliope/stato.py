@@ -31,7 +31,15 @@ il prossimo passo (registro delle capacità, calliope/capacita.py).
                                               per satellite, ritardo della coda, banda,
                                               scartate, presenze e cambi di stanza, copertura
                                               all'interpellazione, stt e prima frase con e senza
-                                              stanza (calliope/stanza/misure.py, 13/10)
+                                              stanza (calliope/stanza/misure.py, 13/10);
+                                              guardiano a posteriori della stanza: segnali
+                                              per ora di chiacchiera con un minore, livelli,
+                                              acuti falsi a settimana (stanza/guardia.py)
+    python -m calliope.stato --guardia [--giorni N] [--falso ID | --vero ID]
+                                              i segnali del guardiano a posteriori (14/10):
+                                              giorno, ora, stanza, minore, livello e
+                                              categoria, mai le parole; --falso e --vero li
+                                              segnano per la misura degli acuti falsi
     python -m calliope.stato --eventi [--json]
                                               il registro degli eventi (10/10, in ombra:
                                               calliope/eventi/): MB per giorno, registri,
@@ -183,6 +191,54 @@ def _log(cfg, azione: str, res: dict, t0: float):
         pass
 
 
+def guardia_main(cfg, argv: list[str], as_json: bool) -> int:
+    """`--guardia` (14/10, passo 6 della conversazione di stanza): i segnali del guardiano a
+    posteriori per la lettura di chi amministra, senza parole; `--falso ID` / `--vero ID` li
+    segnano (una riga `guardia_lettura` nelle misure della stanza)."""
+    from .stanza import guardia as g
+    from .stanza import misure as m
+    for flag, esito in (("--falso", "falso"), ("--vero", "vero")):
+        if flag in argv:
+            i = argv.index(flag)
+            try:
+                ident = argv[i + 1]
+            except IndexError:
+                print(f"{flag} vuole l'id del segnale (calliope stato --guardia)")
+                return 1
+            r = g.riassunto(m.leggi(cfg.turn_log_dir))
+            if not any(str(s.get("id")) == ident for s in r["elenco"]):
+                print(f"Nessun segnale con id {ident}.")
+                return 1
+            if not cfg.turn_log_dir:
+                print("Nessuna cartella del registro dei turni (turn_log_dir).")
+                return 1
+            m.Misure(cfg.turn_log_dir, cfg.turn_log_days).scrivi("guardia_lettura",
+                                                                 segnale=ident, esito=esito)
+            print(f"Segnale {ident} segnato come {esito}.")
+            return 0
+    giorni = None
+    if "--giorni" in argv:
+        try:
+            giorni = max(1, int(argv[argv.index("--giorni") + 1]))
+        except (IndexError, ValueError):
+            print("--giorni vuole un numero")
+            return 1
+    r = g.riassunto(m.leggi(cfg.turn_log_dir, giorni))
+    if as_json:
+        print(json.dumps(r, ensure_ascii=False, indent=2, default=str))
+        return 0
+    nomi = {}
+    try:
+        from .minori import _carica_profili
+        nomi = {d.get("id"): d.get("name") for d in _carica_profili() if d.get("id")}
+    except Exception:  # noqa: BLE001 — senza i profili, gli id
+        pass
+    print(g.elenco(r, nomi))
+    print()
+    print(g.testo(r, g.modo(cfg)))
+    return 0
+
+
 def piano_main(cfg, argv: list[str], as_json: bool) -> int:
     """`--piano`: inventario della macchina, piano proposto, nessuna applicazione (08/10)."""
     from . import macchina, piano
@@ -274,13 +330,18 @@ def main(argv=None) -> int:
             stanza["tenuta"] = conta_file(cfg)
         except Exception:  # noqa: BLE001 — i conteggi non fermano lo stato
             stanza["tenuta"] = None
+        # Il guardiano a posteriori della stanza (14/10, passo 6): solo categorie e numeri
+        from .stanza import guardia as guardia_stanza
+        guardia_r = guardia_stanza.riassunto(misure_stanza.leggi(cfg.turn_log_dir, giorni))
         if as_json:
             print(json.dumps({"giorni": dati, "soglia_s": getattr(cfg, "latenza_avviso_s", None),
                               "attrito": sicurezza, "attrito_soglia": soglia_a,
                               "argomenti": argomenti, "compagnia": comp,
                               "dialogo": dialogo, "voce_sola": voce_sola,
                               "scelta_tool": scelta, "frasi_pronte": pronte,
-                              "stanza": stanza},
+                              "stanza": stanza,
+                              "guardia": {k: v for k, v in guardia_r.items()
+                                          if k not in ("elenco", "letture")}},
                              ensure_ascii=False, indent=2))
         else:
             print(latenza.testo(dati, soglia))
@@ -300,7 +361,11 @@ def main(argv=None) -> int:
             print(frasi.testo(pronte))
             print()
             print(misure_stanza.testo(stanza))
+            print()
+            print(guardia_stanza.testo(guardia_r, guardia_stanza.modo(cfg)))
         return 0
+    if "--guardia" in argv:
+        return guardia_main(cfg, argv, as_json)
     if "--eventi" in argv:
         d = _eventi_disco(cfg)
         if as_json:

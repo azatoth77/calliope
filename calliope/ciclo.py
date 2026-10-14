@@ -134,6 +134,7 @@ class Servizi:
     cassetto: object = None              # cassetto.Cassetto: i file per persona (08/10)
     cancelli: object = None              # cancelli.Cancelli: i segnali da verificare (09/10)
     stanza: object = None                # stanza.Stanza: la conversazione di stanza (13/10)
+    guardia_stanza: object = None        # stanza.guardia.Guardia: a posteriori (14/10, passo 6)
     cancelli_percorso: object = None     # dove si salvano (10/10, main.py); None = in memoria
     # Il registro degli eventi (10/10, calliope/eventi/): i registri per persona e anonimi per
     # satellite, condivisi dalle corsie; None = solo in memoria per corsia (prove)
