@@ -1039,3 +1039,16 @@ pulsante che non scaricava niente (o non lo aveva). Ora:
 Prova: `prove/prova_avvisi_audio.py`, `prova_scheda_dopo_riavvio` (cronologia su disco riletta da
 una seconda istanza; contrari: altro schermo personale, schermo di stanza, non più tutore anche
 con il gettone già dato, destinatario non tutore, file di un altro, scaduto, tolto).
+
+### 14/10 sera: il guardiano a posteriori e la corsia lenta (ramo `stanza-passo-3`)
+
+Con la corsia lenta accesa (`stanza_lenta`, passo 3: [contesto-conversazione](contesto-conversazione.md))
+il guardiano a posteriori giudica la trascrizione corretta: una riga il cui segmento aspetta la
+corsia lenta non è ancora assestata (al più `stanza_guardia_blocco_max_s`). Una riga già giudicata
+che diventa versione 2 **non si rigiudica** solo per questo: sì con un cambio sostanziale del testo
+(somiglianza delle parole sotto 0,8) o di chi parla da o verso un minore (`lenta.cambio_sostanziale`);
+le altre si segnano nel diario come «versione». Le righe TV della corsia lenta non si giudicano mai
+(come prima). L'audio dei minori della famiglia può andare su disco **solo** con l'eccezione
+temporanea del banco (decisione [0029](../decisioni/0029-conversazione-di-stanza.md), autorizzata dal
+tutore per quel banco, di serie spenta). Prova: `prove/prova_stanza_lenta.py`.
+

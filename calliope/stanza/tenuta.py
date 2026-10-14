@@ -305,10 +305,12 @@ class Tenuta:
             seg = d.get("segmento")
             if not self._tieni(pid, d.get("sicurezza")) or not str(d.get("testo") or "").strip():
                 self.saltate += 1
-                if seg is not None:
+                if seg is not None and int(d.get("versione") or 1) >= 2:
                     # Una versione nuova dello stesso segmento che non si tiene (passo 3: chi
-                    # parla rivisto in «ignoto»): quella di prima non resta
-                    self._lavoro(lambda: self._togli_segmento(s, seg))
+                    # parla rivisto in «ignoto», la TV): quella di prima non resta (le parti
+                    # della stessa versione già scritte sì)
+                    v = int(d.get("versione") or 1)
+                    self._lavoro(lambda: self._togli_segmento(s, seg, sotto=v))
                 return
             riga = {"sat": s, "stanza": info.get("stanza"), "satellite": info.get("nome"),
                     "seq": e.seq, "segmento": seg, "scambio": d.get("scambio"),
@@ -362,7 +364,9 @@ class Tenuta:
     def _scrivi(self, r: dict):
         with self.lock:
             if r["segmento"] is not None:
-                self._togli_dove("avvio = ? AND sat = ? AND segmento = ? AND versione <= ?",
+                # La versione di prima dello stesso segmento (passo 3: la corsia lenta); le
+                # altre parti della stessa versione (un segmento spezzato fra due voci) restano
+                self._togli_dove("avvio = ? AND sat = ? AND segmento = ? AND versione < ?",
                                  (self.avvio, r["sat"], r["segmento"], r["versione"]))
             self._togli_dove("avvio = ? AND sat = ? AND seq = ?", (self.avvio, r["sat"], r["seq"]))
             cur = self.db.execute(
@@ -388,9 +392,14 @@ class Tenuta:
                             (esito, self.avvio, sat, int(seq)))
             self.db.commit()
 
-    def _togli_segmento(self, sat: str, seg):
+    def _togli_segmento(self, sat: str, seg, sotto: int | None = None):
+        """Le righe del segmento (scartato), o solo quelle di versione sotto `sotto`."""
         with self.lock:
-            self._togli_dove("avvio = ? AND sat = ? AND segmento = ?", (self.avvio, sat, seg))
+            if sotto is None:
+                self._togli_dove("avvio = ? AND sat = ? AND segmento = ?", (self.avvio, sat, seg))
+            else:
+                self._togli_dove("avvio = ? AND sat = ? AND segmento = ? AND versione < ?",
+                                 (self.avvio, sat, seg, int(sotto)))
             self.db.commit()
 
     def _togli_dove(self, dove: str, args=()) -> int:
