@@ -1638,6 +1638,11 @@ restano tante (una conversazione fitta e domande rade), il passo dopo è lo scal
 con le righe arrivate fra un turno e l'altro (la frase non c'è ancora: un pezzo «in attesa»
 scaldato in secondo piano), non fatto.
 
+Il banco della qualità (`prove/manuali/banco_stanza_contesto.py`, portatile, gemma4 e4b, due giri,
+un turno per caso: un pezzo solo con l'intestazione nuova al posto del blocco) dà **8/10 e 8/10**
+(prima 9/10 e 8/10; sbagliati i soliti «tu che ne pensi?» del 4B), la riga della TV mai
+un'azione, senza righe non inventa (0/2); prima frase mediana 0,58 s.
+
 Prove: `prove/prova_stanza_storia.py` (livello 1, ~1 s: la cache, ogni riga una volta e in ordine,
 il posto dei pezzi, la busta, mai nella storia/esporta/archivio, la politica, i doppioni, i
 contrari pausa, dimentica, spento, interruttore, turno tolto, tetto con la potatura e il
