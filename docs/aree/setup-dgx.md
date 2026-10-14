@@ -2,7 +2,7 @@
 
 *Installazione e aggiornamento sulla DGX Spark (Ubuntu 24.04 aarch64): uv, gestore `calliope`, systemd, motori. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-**Stato al 14/10.** Come al 09/10 (sotto): nessun cambio al gestore né ai motori dopo il 09/10. Il gestore passa a Calliope anche `calliope stato …` (tutte le opzioni in [capacita-installazioni](capacita-installazioni.md)), `calliope conserva [--svuota [--persona …]] [--json]` (dati conservati per le misure, dal 12/10), `calliope satellite …` e `calliope schermi …` (abbinamenti e certificati) ed `calliope esegui` (Calliope in primo piano); `calliope prova-e2e` e `calliope motore …` hanno il loro ramo. Comandi controllati sul codice il 14/10.
+**Stato al 14/10.** Come al 09/10 (sotto): nessun cambio al gestore né ai motori dopo il 09/10. Dal 14/10 sera lo script di misura per l'arbitro della memoria (sotto, da lanciare). Il gestore passa a Calliope anche `calliope stato …` (tutte le opzioni in [capacita-installazioni](capacita-installazioni.md)), `calliope conserva [--svuota [--persona …]] [--json]` (dati conservati per le misure, dal 12/10), `calliope satellite …` e `calliope schermi …` (abbinamenti e certificati) ed `calliope esegui` (Calliope in primo piano); `calliope prova-e2e` e `calliope motore …` hanno il loro ramo. Comandi controllati sul codice il 14/10.
 
 *Stato al 09/10 (storico):* Calliope gira sulla DGX dal 02/10 come servizio utente systemd, aggiornata con `calliope aggiorna` (ritorno automatico; dal 06/10 non interrompe in silenzio i lavori dell'agente). Voce su Ollama scelta con `llm_profilo`, Whisper con whisper.cpp, agente qwen3.6 su vLLM, SearXNG e sandbox Docker accanto. Dal 07/10 l'extra `voce-gpu` porta Piper sulla GPU (onnxruntime-gpu su aarch64). La prova end-to-end su un'istanza di prova c'è dal 06/10.
 
@@ -153,6 +153,36 @@ prova: [`prove/manuali/e2e-dgx.md`](../../prove/manuali/e2e-dgx.md).
     ritorno automatico, torna), dati in `~/calliope` fuori dal codice, VAD senza torch,
     Whisper su un server con ripiego su CPU, voce su Ollama o vLLM. Provato a secco su
     Windows (`prova_linux.py`, `prova_gestore.py`): **la DGX vera non è stata toccata**. *[Storico (02/10): dalla sera del 02/10 Calliope gira sulla DGX come servizio; vedi «Setup (DGX Linux)» qui sopra.]*
+
+## Misure per l'arbitro della memoria (14/10 sera, ramo `arbitro-memoria`)
+
+Progetto in [`ricerche/2026-10-14-arbitro-memoria.md`](../ricerche/2026-10-14-arbitro-memoria.md),
+conto in sola lettura con `calliope stato --memoria` ([capacita-installazioni](capacita-installazioni.md)).
+Lo script `prove/manuali/misura_memoria_dgx.py` **non è ancora stato lanciato**: va sulla DGX, nella
+cartella dei dati, con il servizio acceso e Calliope inattiva (controlla da sé il journal come il
+deploy: nessun turno da 10 minuti, nessun lavoro dell'agente; si ferma se un turno arriva a metà).
+Stampa solo numeri.
+
+```bash
+cd ~/calliope && V=~/.local/share/calliope/versioni/$(cat ~/.local/share/calliope/attuale)
+P="$V/.venv/bin/python $V/prove/manuali/misura_memoria_dgx.py"
+$P stato                                  # memoria adesso, /api/ps, vLLM, RSS
+$P ollama --json ~/misura-ollama.json     # embedding: freddo, caldo, memoria vera contro /api/ps
+$P ollama --modelli gemma4:e4b-it-qat,llama-guard3:8b --anche-tempo-reale   # con conferma
+$P whisper                                # secondo Whisper suo sulla porta 8091 (large-v3 se c'è)
+$P voce --durante whisper                 # prima frase e STT con un caricamento in parallelo
+$P voce --durante embedding
+# solo dopo il container dell'agente con --enable-sleep-mode (passo 4, oggi assente: esce con 77)
+$P vllm-sonno --livello 1 --conferma calliope-vllm
+$P vllm-sonno --livello 2 --conferma calliope-vllm
+```
+
+I modelli di Ollama tornano com'erano con lo stesso `num_ctx` (letto da `/api/ps`) e `keep_alive`;
+il whisper-server della misura è suo (porta 8091), mai `calliope-whisper`. Il sonno di vLLM tocca il
+container `calliope-vllm`: parte solo con `--conferma calliope-vllm` e un «sì» da tastiera, senza
+richieste in corso (/metrics), senza pausa, senza lavori; la sveglia è garantita su errore, Ctrl+C e
+SIGTERM, e se non riesce lo script stampa i comandi a mano (`/wake_up`, `reload_weights`, poi
+`vllm.sh agente rifai`). Il primo turno vero dopo `voce` può rileggere il prefisso una volta.
 
 ## SearXNG tenuto aggiornato (09/10, ramo `searxng-aggiornamento`)
 

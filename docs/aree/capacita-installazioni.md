@@ -4,7 +4,7 @@
 
 **Stato al 14/10.** Diciannove capacità nel registro (`capacita.DEFINIZIONI`: llm, stt, voce, wake, chi_parla, audio, satellite, memoria, biblioteca, pc, documenti, casa, schermi, agenti, archivio, ufficio, conversazioni, web e, dal 13/10, notizie). Il resto come al 09/10 (sotto): piano dei modelli in sola lettura, fasi 3–6 della taratura da fare, installazioni con internet vero non provate.
 
-**`calliope stato` al 14/10** (`calliope/stato.py`; sulla DGX `calliope stato …`, su Windows `python -m calliope.stato …`): senza opzioni la tabella delle capacità con finestra di contesto, costo della voce e avvisi di latenza e attrito (`--dettagli`, `--json`); `--catalogo` e `--installa <azione>` (installazioni); `--piano [--json] [--inventario FILE]` (piano dei modelli); `--turni [--giorni N] [--json]` (latenza, attrito della politica, argomenti incerti, compagnia, stato del dialogo, voce sola, scelta dei tool, frasi pronte, stanza e guardia della stanza; con `--pause` le pause e la fine del turno); `--eventi` (il registro degli eventi su disco); `--guardia [--falso ID | --vero ID]` (i segnali del guardiano della stanza, senza parole, 14/10); `--avvisi [--giorni N] [--falso ID]` (gli avvisi ai tutori, 14/10). La conservazione ha un comando suo: `calliope conserva [--json]`, `calliope conserva --svuota [--persona …]` e, una tantum dal 14/10 sera, `calliope conserva --converti-audio` (i WAV μ-law di prima nel G.711 vero, rilanciabile; [contesto-conversazione](contesto-conversazione.md), «Il G.711 vero») (`calliope/conserva.py`).
+**`calliope stato` al 14/10** (`calliope/stato.py`; sulla DGX `calliope stato …`, su Windows `python -m calliope.stato …`): senza opzioni la tabella delle capacità con finestra di contesto, costo della voce e avvisi di latenza e attrito (`--dettagli`, `--json`); `--catalogo` e `--installa <azione>` (installazioni); `--piano [--json] [--inventario FILE]` (piano dei modelli); `--turni [--giorni N] [--json]` (latenza, attrito della politica, argomenti incerti, compagnia, stato del dialogo, voce sola, scelta dei tool, frasi pronte, stanza e guardia della stanza; con `--pause` le pause e la fine del turno); `--eventi` (il registro degli eventi su disco); `--guardia [--falso ID | --vero ID]` (i segnali del guardiano della stanza, senza parole, 14/10); `--avvisi [--giorni N] [--falso ID]` (gli avvisi ai tutori, 14/10); `--memoria [--json] [--inventario FILE]` (il conto della memoria adesso con le classi e cosa farebbe l'arbitro, 14/10 sera, sola lettura). La conservazione ha un comando suo: `calliope conserva [--json]`, `calliope conserva --svuota [--persona …]` e, una tantum dal 14/10 sera, `calliope conserva --converti-audio` (i WAV μ-law di prima nel G.711 vero, rilanciabile; [contesto-conversazione](contesto-conversazione.md), «Il G.711 vero») (`calliope/conserva.py`).
 
 *Stato al 09/10 (storico):* Diciotto capacità nel registro (`capacita.DEFINIZIONI`), a voce con `calliope_stato` (`cosa`: sa_fare, manca, macchina) e da terminale; installazioni a voce dal catalogo (fonti della biblioteca, voci, CAM++, modello di Ollama, Whisper di riserva, file del telefono). Dal 08/10 il **piano dei modelli** per la macchina, in sola lettura (`calliope stato --piano`): le fasi 3–6 della taratura (applicare il piano) restano da fare. Installazioni con internet vero ancora non provate.
 
@@ -14,6 +14,7 @@
 |---|---|---|
 | Registro delle capacità | — (controlli rapidi in sola lettura) | `calliope/capacita.py` → `Registro`, `REGISTRO`, `segnala`, `controlla`, `testo_prompt`; terminale `calliope/stato.py` (`python -m calliope.stato`); tool `calliope_stato` in `calliope/tools/stato.py` (con `cosa=macchina` la macchina e i modelli: `calliope/macchina.py`; dal 09/10 le aree `capacita.AREE`/`aree`, `cosa=novita` e `cosa=chi_sei`: `calliope/novita.py`) |
 | Piano dei modelli per la macchina, in sola lettura (dal 08/10) | — (nvidia-smi, /proc/meminfo, registro di Windows, Ollama `/api/version` `/api/tags` `/api/ps`, vLLM `/v1/models` `/version` `/metrics`, `systemctl show` in sola lettura) | `calliope/macchina.py` → `inventario`, `Sonde`; catalogo `calliope/modelli.py` → `MODELLI`, `GPU`, `WHISPER`, `VERSIONE`; regole `calliope/piano.py` → `piano`, `da_config`, `testo`, `Funzioni`; terminale `python -m calliope.stato --piano [--json] [--inventario FILE]`; prova `prove/prova_piano.py` |
+| Conto della memoria e classi delle attività, in sola lettura (dal 14/10, passo 1 dell'arbitro della memoria) | — (lo stesso inventario; RSS del servizio da `systemctl --user show` e /proc) | `calliope/arbitro_memoria.py` → `conto`, `proposta`, `scaricabili`, `da_config`, `Occupante`, `Conto`, `MARGINE_LIBERO_GB`; terminale `python -m calliope.stato --memoria [--json] [--inventario FILE]`; prova `prove/prova_arbitro_memoria.py`; misure sulla DGX `prove/manuali/misura_memoria_dgx.py` |
 | Installazioni dal catalogo | httpx (Range, checksum), API `/api/pull` di Ollama | `calliope/installa/` → `catalogo` (`catalogo.py`), `scarica_file` (`scarica.py`), `Installazioni` (`servizio.py`); tool `installa_proponi`, `installa_avvia`, `installa_gestisci` in `calliope/tools/stato.py`; anche `whisper_riserva` e `telefono` nel catalogo (vedi [setup-dgx](setup-dgx.md), [schermi-telefono](schermi-telefono.md)) |
 
 ## Problemi noti
@@ -213,6 +214,40 @@ Resta (fasi 3–6 della ricerca): la prova breve con `size_vram` e la generazion
 `taratura.json`, i campi «auto», il catalogo per ruolo, `calliope_stato(cosa=piano)`, gli
 installatori. Da misurare prima (§7.2): η su più modelli, il rapporto vero/pulita dai nuovi
 `generazione_tps`, Whisper e guardiano 1B sulla CPU.
+
+## Arbitro della memoria, passo 1: conto e classi in sola lettura (14/10 sera)
+
+Ramo `arbitro-memoria`, richiesta di Dario del 14/10: un arbitro unico delle attività e della
+memoria sulla DGX, dove i modelli di sfondo si possono scaricare e ricaricare ma il turno di voce
+non paga mai. Progetto, politiche, come scaricare ogni modello (Ollama `keep_alive`, unità systemd,
+modalità sonno di vLLM 0.29) e passi in
+[`ricerche/2026-10-14-arbitro-memoria.md`](../ricerche/2026-10-14-arbitro-memoria.md). **Niente
+cambia nel comportamento.**
+
+- **Classi**: tempo reale (voce, Whisper dei turni, guardiano e rilevatore, il processo con Piper,
+  CAM++, VAD: mai scaricati), vicino (oggi nessun modello a sé; lo scrittore dell'ufficio usa
+  l'agente), sfondo (agente su vLLM, embedding), a richiesta (immagini, secondo Whisper della corsia
+  lenta, futuri); i modelli di altri sullo stesso Ollama sono «fuori» (contati, mai toccati).
+- **Conto** (`arbitro_memoria.conto`, funzione pura sull'inventario del piano): memoria libera vera
+  (MemAvailable sulla memoria unificata, nvidia-smi su una GPU dedicata), Ollama da `/api/ps` più il
+  buffer del piano (0,35 GB: `/api/ps` sottostima, il fattore vero lo dà la misura), vLLM =
+  `gpu_memory_utilization` × pool, whisper-server dal catalogo, il processo dall'RSS del servizio più
+  Piper sulla GPU; «altri» = usata − Calliope; margine da non toccare 8 GB sulla memoria unificata
+  (0,5 su una GPU dedicata).
+- **Proposta in ombra** (`proposta`, `scaricabili`): per ogni a richiesta non caricato, ci sta (liberi
+  − margine) oppure chi scaricherebbe, nell'ordine sfondo (il meno usato prima) → a richiesta fermi
+  → vicini, mai il tempo reale; l'agente solo dal passo 4 (sonno di vLLM misurato).
+- `calliope stato --memoria` (sola lettura; con `--inventario FILE` una macchina salvata).
+- **Misure** da fare sulla DGX con `prove/manuali/misura_memoria_dgx.py` (comandi in
+  [setup-dgx](setup-dgx.md)): caricamento a freddo e a caldo, memoria vera contro `/api/ps`, secondo
+  Whisper suo, effetto sulla prima frase con un caricamento in parallelo, sonno di vLLM come comando
+  separato con conferma.
+
+Con i numeri di Dario (119 GiB, 97 usati, ~21 disponibili; vLLM 47,8, 26B 15, guardiano 5,3, e4b
+3,1, whisper 2,1) Calliope tiene ~75–78 GiB, gli altri ~19–22; FLUX (13) e il secondo Whisper (3,6)
+ci starebbero ciascuno, non insieme. Prova a secco `prove/prova_arbitro_memoria.py` (DGX finta,
+portatile, solo CPU; contrari: mai il tempo reale, mai un modello non di Calliope, memoria non
+letta).
 
 ## «Cosa sai fare?» per aree, novità e «chi sei?» (09/10)
 
