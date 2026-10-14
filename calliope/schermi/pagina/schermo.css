@@ -893,3 +893,12 @@ body.in-vista-sviluppo #cronologia { display: none; }     /* «Vista normale» r
    barra sola); a schermo intero ha l'altezza del flusso dell'agente */
 .scheda-chat:not(.intera) > .corpo { display: flex; flex-direction: column; overflow: hidden; }
 .scheda-chat:not(.intera) .conv-chat { flex: 1; height: auto; min-height: 8rem; }
+
+/* Una voce nuova da salvare come conoscente (14/10): il pezzo di trascrizione e il modulo */
+.estratto-conoscente { margin: 0 0 0.3rem; padding-left: 0.8rem; border-left: 3px solid var(--bordo); color: var(--testo); overflow-wrap: anywhere; }
+.modulo-conoscente { margin-top: 0.8rem; }
+/* La trascrizione di un avviso di pericolo (14/10): si apre a richiesta, le righe del segnale in evidenza */
+.trascrizione-avviso { margin-top: 1rem; font-size: 1.3rem; line-height: 1.5; max-width: 50rem; }
+.trascrizione-avviso summary { cursor: pointer; font-weight: 600; }
+.trascrizione-avviso p { margin: 0.4rem 0; }
+.trascrizione-avviso p.segnale { border-left: 0.3rem solid currentColor; padding-left: 0.6rem; }

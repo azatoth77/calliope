@@ -26,6 +26,7 @@
     risposta: "Risposta", foto: "Foto", allegato: "File", gioco: "Gioco",
     cruscotto: "Cruscotto", cassetto: "Cassetto", esercizio: "Esercizi",
     esercizi_riepilogo: "Esercizi", sviluppo: "Sviluppo", chat: "Conversazione",
+    conoscente: "Voce nuova",
   };
   // Il programma di un lavoro mentre gira (04/10, calliope/agenti/esecuzione.py)
   const STATI_ESECUZIONE = {
@@ -967,7 +968,7 @@
   // ─── «Scarica» nella scheda del documento (07/10, calliope/schermi/scarica.py) ───
   // Il server dà un indirizzo di pochi minuti, solo a uno schermo personale a cui la scheda è
   // arrivata; il browser salva il file (sul telefono negli scaricamenti)
-  const NOMI_SCARICA = { md: "Markdown", pdf: "PDF", word: "Word", excel: "Excel" };
+  const NOMI_SCARICA = { md: "Markdown", pdf: "PDF", word: "Word", excel: "Excel", audio: "l'audio" };
   function pulsantiScarica(c) {
     const box = el("div", "scarica");
     (c.scarica || []).forEach((f) => {
@@ -1128,6 +1129,25 @@
     testo(c, corpo) {
       corpo.append(el("div", "testo-lungo", c.testo || ""));
     },
+    // Un avviso di pericolo per il tutore (14/10, minori.Avvisi.scheda_di): il testo senza
+    // parole con quando e da dove; la trascrizione e l'audio si aprono solo qui, a richiesta
+    avviso(c, corpo) {
+      corpo.append(el("div", "testo-lungo", c.testo || ""));
+      if (c.falso) corpo.append(el("p", "nota", "Segnato falso da chi amministra."));
+      if (Array.isArray(c.trascrizione) && c.trascrizione.length) {
+        const d = el("details", "trascrizione-avviso");
+        d.append(el("summary", "", "Leggi cosa si è detto"));
+        c.trascrizione.forEach((r) => {
+          const p = el("p", r.segnale ? "segnale" : "", "");
+          const chi = [r.ora, r.chi].filter(Boolean).join(" · ");
+          p.append(el("strong", "", chi + ": "), document.createTextNode(String(r.testo || "")));
+          d.append(p);
+        });
+        corpo.append(d);
+      }
+      if (c.nota) corpo.append(el("p", "nota", c.nota));
+      if (Array.isArray(c.scarica) && c.scarica.length) corpo.append(pulsantiScarica(c));
+    },
     // La risposta a una frase scritta da qui (04/10): la domanda piccola sopra, poi il testo
     risposta(c, corpo) {
       if (c.domanda) corpo.append(el("div", "domanda-scritta", c.domanda));
@@ -1274,6 +1294,77 @@
         method: "POST", cache: "no-store",
         headers: { "Content-Type": "application/json", "X-Calliope-Sessione": S.sessione },
         body: JSON.stringify({ azione: b.dataset.cassetto, id: ids }),
+      });
+      let d = {};
+      try { d = await r.json(); } catch (e) { /* niente */ }
+      dire(r.status === 200 ? (d.frase || "Fatto.") : (d.errore || ("Non ci sono riuscita (" + r.status + ").")));
+    } catch (e) {
+      dire("Calliope non risponde: riprova.");
+    } finally {
+      b.disabled = false;
+    }
+  });
+
+  // ─── Una voce nuova da salvare come conoscente (14/10, calliope/stanza/conoscenti.py) ───
+  // Solo sugli schermi personali di chi amministra: la domanda, un pezzo breve di trascrizione,
+  // gli avvisi (omonimi, età), il nome proposto (si può cambiare), cognome e nota facoltativi;
+  // Sì e No vanno a /api/conoscenti, la scheda aggiornata arriva dal server (stessa chiave).
+  // Tutto come testo
+  DISEGNA.conoscente = function (c, corpo, s) {
+    s.classList.add("scheda-conoscente");
+    corpo.append(el("p", "domanda-modulo", c.domanda || ""));
+    (Array.isArray(c.estratto) ? c.estratto : []).forEach((r) => {
+      corpo.append(el("p", "estratto-conoscente", r));
+    });
+    (Array.isArray(c.avvisi) ? c.avvisi : []).forEach((a) => {
+      corpo.append(el("p", "nota", a));
+    });
+    if (!c.aperta) return;
+    const f = el("div", "modulo modulo-conoscente");
+    f.dataset.proposta = String(c.proposta || "");
+    [["nome", "Nome", c.nome || ""], ["cognome", "Cognome (se lo sai)", ""],
+     ["nota", "Una nota per distinguerlo (es. collega di…)", ""]].forEach(([k, et, v]) => {
+      const campo = el("div", "campo-modulo");
+      const id = "conoscente-" + (c.proposta || "") + "-" + k;
+      const l = el("label", "", et);
+      l.htmlFor = id;
+      const i = el("input");
+      i.id = id;
+      i.name = k;
+      i.maxLength = k === "nota" ? 80 : 40;
+      i.autocomplete = "off";
+      i.value = v;
+      campo.append(l, i);
+      f.append(campo);
+    });
+    const p = el("div", "cassetto-tutti");
+    const si = el("button", "invia-modulo", "Sì, salvalo");
+    si.type = "button";
+    si.dataset.conoscente = "si";
+    const no = el("button", "piccolo-bottone", "No");
+    no.type = "button";
+    no.dataset.conoscente = "no";
+    p.append(si, no, el("span", "esito-cassetto esito-conoscente", ""));
+    f.append(p);
+    corpo.append(f);
+  };
+  document.addEventListener("click", async (ev) => {
+    const b = ev.target.closest && ev.target.closest("button[data-conoscente]");
+    if (!b || b.disabled) return;
+    const f = b.closest(".modulo-conoscente");
+    if (!f) return;
+    const esito = f.querySelector(".esito-conoscente");
+    const dire = (t) => { if (esito) esito.textContent = t; };
+    if (!S.sessione) { dire("Non collegato: riprova tra poco."); return; }
+    const val = (k) => { const i = f.querySelector("input[name=" + k + "]"); return i ? i.value.trim() : ""; };
+    b.disabled = true;
+    dire("…");
+    try {
+      const r = await fetch("/api/conoscenti", {
+        method: "POST", cache: "no-store",
+        headers: { "Content-Type": "application/json", "X-Calliope-Sessione": S.sessione },
+        body: JSON.stringify({ azione: b.dataset.conoscente, proposta: f.dataset.proposta,
+          nome: val("nome"), cognome: val("cognome"), nota: val("nota") }),
       });
       let d = {};
       try { d = await r.json(); } catch (e) { /* niente */ }

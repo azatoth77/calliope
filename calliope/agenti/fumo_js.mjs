@@ -690,7 +690,14 @@ export async function apriGioco(file, opzioni = {}) {
       }
       const attivi = amb.attivi();
       if (!attivi.includes(String(nome))) {
-        throw new Error(`il comando «${nome}» adesso non è attivo (attivi: ${attivi.join(", ") || "nessuno"})`);
+        // La fase di adesso (14/10 sera, banco delle porte L7 e L10: l'agente credeva che dopo
+        // «2 giocatori» servisse «avanti», riscriveva la macchina e girava a vuoto)
+        let fase = "";
+        try { fase = amb.motore && amb.motore.partita ? amb.motore.partita.istantanea().fase : ""; } catch (e) { fase = ""; }
+        const perche = String(nome) === "avanti" && fase && fase !== "esito"
+          ? ": «avanti» vale solo nella fase «esito», dopo una mossa con un esito; dopo la scelta dei giocatori la partita è già nella fase d'inizio della macchina"
+          : "";
+        throw new Error(`il comando «${nome}» adesso non è attivo (${fase ? `fase «${fase}», ` : ""}attivi: ${attivi.join(", ") || "nessuno"})${perche}`);
       }
       const da = errori.length;
       const dati = Object.freeze({ comando: String(nome), ...(giocatore ? { giocatore: String(giocatore) } : {}) });

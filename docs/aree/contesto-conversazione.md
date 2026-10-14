@@ -14,7 +14,7 @@
 | Registro della stanza e misure (13/10, passo 1 in ombra, sotto) | solo libreria standard, in memoria | `calliope/stanza/registro.py` → `RegistroStanza` (`aggiungi`, `righe`, `svuota`, `conteggi`, dal 14/10 `su_evento`, `seq_vivi`), `Evento.a_dict`; `calliope/stanza/misure.py` → `Misure`, `leggi`, `riassunto`, `testo` (sezione «Stanza» di `calliope stato --turni`); `Stanza.presenti`, `Stanza.presenze`, `Stanza.dimentica` |
 | Tenuta su disco del testo della stanza (14/10, `stanza_tenuta`, sotto) | SQLite in WAL con FTS5 (`stanza.db`, `detail=full`) | `calliope/stanza/tenuta.py` → `Tenuta` (`evento`, `presenza`, `cerca`, `presenze`, `stanze`, `dimentica`, `svuota`, `ruota`, `conteggi`), `conta_file`, `svuota_file`, `testo_stato`; `calliope/stanza/__init__.load_tenuta`; `conserva.decidi(…, "stanza", …)`; `stanza/cerca._dal_disco`, `info_stanze` |
 | Righe della stanza nella storia, in sola aggiunta (14/10 sera, `stanza_contesto_in_storia`, sotto) | solo libreria standard, in memoria | `calliope/stanza/contesto.py` → `Pezzo`, `pezzo`, `nota_turno`, `in_storia`, `gia_nella_storia`; `Conversazione.stanza`, `stanza_mandate`, `stanza_n`; `Brain._stanza_prepara`, `_con_stanza`, `_stanza_pota`, `_scalda_in_secondo_piano`, `last_stanza_storia` (registro dei turni `stanza.storia`) |
-| Guardiano a posteriori della stanza (14/10, passo 6, `stanza_guardia`, in ombra; sotto e in [minori](minori.md)) | solo libreria standard; il rilevatore di pericolo su Ollama | `calliope/stanza/guardia.py` → `Guardia` (`raccogli`, `giudica_uno`, `decidi`, `libera`), `GiudiceModello`, `riassunto`, `testo`, `elenco`; `calliope/stanza/__init__.py` → `load_guardia`; `Avvio._guardia_stanza` in `main.py`; `calliope stato --guardia` |
+| Guardiano a posteriori della stanza (14/10, passo 6, `stanza_guardia`, in ombra; sotto e in [minori](minori.md)) | solo libreria standard; il rilevatore di pericolo su Ollama | `calliope/stanza/guardia.py` → `Guardia` (`raccogli`, `giudica_uno`, `decidi`, `libera`; dal 14/10 sera `_riprendi_disco`, `osserva_giochi`, `gioco_in`), `GiudiceModello`, `GIOCO`, `riassunto`, `testo`, `elenco`; `calliope/stanza/tenuta.py` → diario della guardia (`righe_guardia`, `segna_giudicate`, `segna_gioco`, `giochi`); `calliope/schermi/giochi.py` → `Giochi.in_corso`; `calliope/stanza/__init__.py` → `load_guardia`; `Avvio._guardia_stanza` in `main.py`; `calliope stato --guardia` |
 | Latenza come metrica, cache scaldata, modelli di Ollama (dal 06/10) | solo libreria standard (registro dei turni, Ollama `/api/ps`) | `calliope/latenza.py` → `giorno`, `per_giorno`, `testo`, `avviso`, `avviso_recente`, `scalda_ripresa`, `leggi_file` (`calliope stato --turni`); `Brain.scalda_conversazione`, `Brain._scalda_se_cambiato` (prefisso nuovo dopo un cambio di modalità, 07/10); `calliope/ollama_carico.py` → `residenti`, `limite`, `usati`, `avviso`, `puo_caricare`; la prima frase a pezzi e la taratura della voce (sezioni del 07/10 sotto) hanno il codice in `tts.py` e `taratura_voce.py`, area [stt-tts](stt-tts.md) |
 | Conservazione dei dati per le misure, scelta dei tool come metrica (dal 12/10) | solo libreria standard e numpy (voce in G.711 μ-law), SQLite della tabella `eventi` | `calliope/conserva.py` → `decidi` (il solo posto), `Conservazione` (`testo_turno`, `voce_turno`, `registro_su_disco`, `conversazioni_su_disco` (12/10 sera), `conta_conversazioni`, `al_turno`, `salva_voce`, `imposta_consenso`, `ruota`, `ripulisci_registro`, `svuota`, `stato`), `python -m calliope.conserva`; `calliope/tools/conserva.py` (`dati_conservati`); `calliope/scelta_tool.py` → `turno`, `giorno`, `per_giorno`, `testo`, `avviso`, `avviso_recente` (`calliope stato --turni`) |
 
@@ -1653,3 +1653,52 @@ rivolta).
 ciò che si era detto in auto fermato come `uscita_istruzione` per «o comunicazioni»; correzione in
 [sicurezza-politica](sicurezza-politica.md), sezione «Il resoconto della stanza non è
 un'istruzione».
+
+## Avvisi ai tutori: data, origine, trascrizione e audio (14/10 sera, ramo `avvisi-data`)
+
+Due cose toccano il contesto e la conservazione (il dettaglio è in [minori](minori.md)):
+
+- **Dati del turno**: al tutore riconosciuto dalla voce (o dal suo schermo personale) il blocco
+  «avvisi» (`Brain._reply`, dopo i ricordi; `Avvisi.contesto`) porta gli avvisi consegnati o
+  nati nelle ultime `avvisi_contesto_ore` (48) ore, con data, tipo, origine, consegna e stato, e
+  «non inventare». Vuoto per tutti gli altri: costa qualche centinaio di caratteri solo nei
+  turni di un tutore con avvisi recenti. Caso vero del 14/10: senza, a «cos'era quell'avviso?»
+  il modello confermava a caso.
+- **Conservazione**: la decisione 0029 punto 4 è cambiata da chi amministra. La trascrizione
+  delle righe del segnale sta nella riga dell'avviso (`avvisi_tutori.trascrizione`, memoria.db)
+  e sulla scheda personale del tutore (quindi anche nella sua cronologia delle schede); l'audio
+  (`avvisi_audio`, di serie spento) è l'unica eccezione a «l'audio non va mai su disco»: un
+  anello in memoria con i soli segmenti di un minore (e del contesto breve con lui), su disco
+  solo i segmenti di un segnale, nel cassetto del tutore. Tutto scade dopo `avvisi_audio_giorni`
+  (30); `calliope conserva --svuota` (tutto o `--persona`, come tutore o come minore), «dimentica»
+  della stanza (quel satellite) e `conversazioni_dimentica` del tutore lo tolgono. Mai degli
+  ospiti, mai nel registro dei turni, nel log o nelle misure (in ombra solo `audio_s`, i secondi
+  che si sarebbero salvati).
+
+## I conoscenti nella stanza: righe, tenuta, ricerca (14/10, ramo `stanza-conoscenti`)
+
+Decisione [0030](../decisioni/0030-conoscenti.md), dietro `stanza_conoscenti` (di serie spento;
+chi parla e il nome dedotto in [stt-tts](stt-tts.md)). Per quest'area:
+
+- **Etichetta**: nel blocco caldo e nei risultati di `stanza_cerca` una riga di un conoscente è
+  «Marco Rossi (collega di Carlo), conoscente» (`contesto.etichetta`): il nome è un'etichetta, la
+  nota distingue gli omonimi; il familiare omonimo resta «Marco».
+- **Tenuta su disco**: le righe di un conoscente confermato e riconosciuto dalla voce vanno in
+  `stanza.db` con `persona` «conoscente:<id>» e la colonna nuova `nota` (migrazione 2);
+  `conserva.decidi` ha la categoria `conoscente` (solo `stanza` con la voce: mai turni, voce,
+  eventi, conversazioni). Le voci non confermate restano solo in memoria come prima. La rotazione
+  dei «profili tolti» toglie le righe dei conoscenti che non ci sono più solo con i conoscenti
+  accesi (spenti, o all'avvio prima che si leghino, quelle righe aspettano la scadenza dei giorni).
+- **Ricerca**: le righe di un conoscente si cercano come quelle di un adulto di casa (chi c'era,
+  `visibile`); `persona` combacia anche con nome e cognome di seguito (`cerca.nome_combacia`:
+  «Marco Rossi»), e «Marco» trova tutti i Marco con le etichette che li distinguono.
+- **Cancellazione**: «dimentica Marco» (tool `conoscenti`), la scadenza dei 180 giorni e
+  `calliope conserva --svuota` (anche da un altro processo: Calliope rilegge il file sparito)
+  tolgono profilo, impronta e righe su disco (`Tenuta.svuota("conoscente:<id>")`); in memoria le
+  righe tornano «voce non riconosciuta». «Dimentica» della stanza toglie anche gli indizi presi da
+  quel satellite.
+- **Promozione e ritorno** (`conoscente_livello`, solo chi amministra a voce): le righe su disco e
+  in memoria passano da «conoscente:<id>» a «persona:<id>» (e al contrario) con
+  `Tenuta.rinomina`; le presenze del tipo di prima si tolgono.
+
+Prova: `prove/prova_stanza_conoscenti.py`.

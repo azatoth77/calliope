@@ -345,6 +345,8 @@ class Avvio:
             # conservazione la vedono
             if getattr(s, "conserva", None) is not None:
                 s.conserva.stanza = s.stanza.tenuta
+                # I conoscenti (14/10, decisione 0030): «svuota» di tutto li cancella
+                s.conserva.conoscenti = s.stanza.conoscenti
             nomi = getattr(cfg, "stanza_satelliti", None) or []
             print(f"[STANZA] Ascolto della stanza in ombra (solo misure, niente al modello) su "
                   + (", ".join(map(str, nomi)) if nomi else "tutti i satelliti che lo sanno fare"),
@@ -462,6 +464,11 @@ class Avvio:
             schermi.satelliti = s.satelliti
             if s.stanza is not None:
                 s.stanza.schermi = schermi      # il segno «Ascolto la stanza» (13/10)
+                if s.stanza.conoscenti is not None:
+                    # Le proposte dei conoscenti agli schermi personali di chi amministra, e i
+                    # loro tasti (POST /api/conoscenti) (14/10, decisione 0030)
+                    s.stanza.conoscenti.schermi = schermi
+                    schermi.conoscenti = s.stanza.conoscenti
         # Rispondi dove ti ho chiesto (04/10, calliope/rispondi.py): una frase scritta dal
         # telefono ha la risposta dal telefono (e scritta sul suo schermo), le schede vanno
         # prima allo schermo da cui arriva la richiesta, gli annunci al satellite che li aveva
@@ -644,6 +651,11 @@ class Avvio:
             from .tools.stanza import stanza_specs
             for spec in stanza_specs(cfg):
                 s.tools.register(spec)
+            if s.stanza.conoscenti is not None:
+                # conoscenti e conoscente_livello (14/10, decisione 0030): solo chi amministra
+                from .tools.conoscenti import conoscenti_specs
+                for spec in conoscenti_specs():
+                    s.tools.register(spec)
 
     def _registro_eventi(self, conv_arch):
         """Il registro degli eventi (10/10, calliope/eventi/, passi 0 e 1 in ombra): un registro
@@ -695,6 +707,21 @@ class Avvio:
         # Minori (05/10, calliope/minori.py): regole per persona, compiti, avvisi ai tutori
         # (stesso file della memoria)
         minori.prepara(cfg, schermi=s.schermi, registry=s.registry)
+        # Gli avvisi di pericolo (14/10 sera): l'audio nel cassetto del tutore, la trascrizione
+        # di un avviso di prima ricostruita dalla stanza o dalla conversazione del minore, e
+        # `calliope conserva --svuota` che li toglie
+        av = minori.avvisi()
+        if av is not None:
+            av.cassetto = getattr(s, "cassetto", None)
+
+            def ricostruisci(d, s=s, av=av):
+                m = minori._per_id(s.registry, d.get("minore"))
+                return minori.ricostruisci_trascrizione(
+                    d, stanza=getattr(s, "stanza", None),
+                    archivio=getattr(self, "conv_arch", None), nome=getattr(m, "name", None))
+            av.trascrizione_dopo = ricostruisci
+            if getattr(s, "conserva", None) is not None:
+                s.conserva.avvisi = av
         # I segnali dei cancelli dei minori su disco (10/10, calliope/cancelli.py): quelli aperti
         # prima del riavvio riprendono, quelli scaduti nel frattempo avvisano come un silenzio
         s.cancelli_percorso = cancelli_mod.percorso(cfg) if cfg.minori_enabled else None
@@ -861,9 +888,18 @@ class Avvio:
         occupato = [lambda: varco.attivi > 0, parla_qualcuno]
         if callable(getattr(stt, "aspetta_turno", None)):
             occupato.append(stt.aspetta_turno)
+        giochi = getattr(s, "giochi", None)
+
+        def gioco(sat) -> bool:
+            # La modalità gioco (14/10 sera): un gioco aperto sullo schermo del satellite (il
+            # suo, o quelli della sua stanza); un satellite non collegato non ha giochi
+            srv = getattr(st, "server", None)
+            coll = srv.per_id(sat) if srv is not None else None
+            return coll is not None and giochi.in_corso(giochi.schermi_voce(coll))
         try:
             s.guardia_stanza = load_guardia(self.cfg, st, s.guardiano, occupato,
-                                            log=lambda m: print(m, flush=True))
+                                            log=lambda m: print(m, flush=True),
+                                            gioco=gioco if giochi is not None else None)
         except Exception as e:  # noqa: BLE001 — Calliope parte lo stesso
             print(f"[GUARDIA] non disponibile: {type(e).__name__}: {e}", flush=True)
             s.guardia_stanza = None

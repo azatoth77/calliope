@@ -16,6 +16,9 @@ regressione non lo leggono.
   stanza e satellite, inizio e fine, «rivolta», minore;
 - le righe di Calliope (ciò che ha detto ad alta voce lì) solo in risposta a una persona di casa
   riconosciuta dalla voce;
+- dal 14/10 (decisione 0030, `stanza_conoscenti`) le righe di un **conoscente** confermato da
+  chi amministra e riconosciuto dalla voce sopra soglia: `persona` «conoscente:<id>», con la
+  nota che lo distingue dagli omonimi; via quando lo si dimentica o scade;
 - **mai**: le voci non riconosciute (ospiti), la zona grigia (nel dubbio no), ciò che si dice in
   pausa («abbiamo ospiti»: in pausa la stanza non scrive niente, nemmeno in memoria), l'audio
   (non arriva mai qui), i profili tolti (la rotazione li cancella).
@@ -35,6 +38,11 @@ conversazioni (10/10, «dimentica» vera).
 ricerca è sincrona, con FTS5 (`detail=full`, trappola nota; prefissi indicizzati per le radici
 di stanza/cerca.py): sul banco a secco del 14/10, 60 giorni di righe (~180 000) si cercano in
 pochi millisecondi (prove/prova_stanza_tenuta.py stampa la misura).
+
+**Il diario della guardia** (14/10 sera, stanza/guardia.py): nello stesso file, come modulo di
+schema a sé (`stanza_guardia`), quali righe il guardiano a posteriori ha già giudicato (avvio,
+satellite, seq, esito: mai parole) e quando sullo schermo di un satellite era aperto un gioco;
+dopo un riavvio la guardia riprende da qui le righe non ancora giudicate.
 
 Solo libreria standard (sqlite3 con FTS5, già usato dall'archivio e dalla biblioteca).
 """
@@ -98,10 +106,40 @@ def _v1(db):
     """)
 
 
-MIGRAZIONI = [_v1]
+def _v2(db):
+    # I conoscenti (14/10, decisione 0030): la nota che distingue due omonimi («collega di
+    # Dario»), accanto al nome
+    db.execute("ALTER TABLE righe ADD COLUMN nota TEXT")
+
+
+MIGRAZIONI = [_v1, _v2]
+
+
+def _g1(db):
+    """Il diario del guardiano a posteriori (14/10, stanza/guardia.py), un modulo a sé nello
+    stesso file (una versione di prima lo ignora, il file non passa in sola lettura): quali
+    righe sono già state giudicate (avvio, satellite, seq, esito, istante: mai parole) e quando
+    sullo schermo di un satellite era aperto un gioco. `dal`: da quando c'è il diario (le righe
+    di prima le aveva già guardate la guardia in memoria: non si riprendono)."""
+    db.executescript("""
+        CREATE TABLE IF NOT EXISTS guardia_giudicate (
+            avvio TEXT NOT NULL, sat TEXT NOT NULL, seq INTEGER NOT NULL, esito TEXT,
+            t REAL NOT NULL, PRIMARY KEY (avvio, sat, seq));
+        CREATE INDEX IF NOT EXISTS guardia_giudicate_t ON guardia_giudicate(t);
+        CREATE TABLE IF NOT EXISTS guardia_giochi (
+            sat TEXT NOT NULL, inizio REAL NOT NULL, fine REAL NOT NULL,
+            PRIMARY KEY (sat, inizio));
+        CREATE TABLE IF NOT EXISTS guardia_meta (chiave TEXT PRIMARY KEY, valore REAL);
+    """)
+    db.execute("INSERT OR IGNORE INTO guardia_meta(chiave, valore) VALUES ('dal', ?)",
+               (time.time(),))
+
+
+MODULO_GUARDIA = "stanza_guardia"
+MIGRAZIONI_GUARDIA = [_g1]
 _COLONNE = ("id", "avvio", "sat", "stanza", "satellite", "seq", "segmento", "scambio",
             "versione", "inizio", "fine", "testo", "chi", "persona", "nome", "sicurezza",
-            "rivolta", "minore", "per_persona")
+            "rivolta", "minore", "per_persona", "nota")
 _SELEZIONE = ", ".join(f"r.{c}" for c in _COLONNE)
 
 
@@ -147,10 +185,25 @@ class Tenuta:
             pass
         self.lock = threading.Lock()
         self.scrivibile = prepara_schema(self.db, MODULO, MIGRAZIONI, "conversazioni")
+        # Il diario della guardia (14/10): None se non si prepara (la guardia non riprende
+        # niente dal disco, come prima)
+        self.guardia_dal = None
+        if self.scrivibile:
+            try:
+                from ..persistenza import migra
+                migra(self.db, MODULO_GUARDIA, MIGRAZIONI_GUARDIA)
+                row = self.db.execute("SELECT valore FROM guardia_meta WHERE chiave = "
+                                      "'dal'").fetchone()
+                self.guardia_dal = float(row[0]) if row else None
+            except Exception as e:  # noqa: BLE001
+                self.log(f"   [STANZA] diario della guardia non pronto: {type(e).__name__}")
         self.coda: queue.Queue = queue.Queue()
         self._fermo = threading.Event()
         self._thread = None
         self._ultima_rotazione = 0.0
+        # I conoscenti (stanza/conoscenti.Conoscenti, 14/10): le loro righe si tengono finché
+        # il profilo c'è
+        self.conoscenti = None
         self.scritte = 0              # righe scritte da quando è partita
         self.saltate = 0              # righe non scritte (ospiti, zona grigia, profilo tolto)
         self.errori = 0
@@ -225,6 +278,11 @@ class Tenuta:
         if sicurezza != "voce" or not persona:
             return False
         from ..conserva import decidi
+        if str(persona).startswith("conoscente:"):
+            # Un conoscente (14/10): solo se il profilo c'è (confermato da chi amministra)
+            con = self.conoscenti
+            prof = con.per_id(persona) if con is not None else None
+            return bool(prof is not None and decidi(prof, "stanza", "voce"))
         reg = self.registry
         if reg is None or not getattr(reg, "users", None):
             # Senza profili letti (prove senza registro): la voce riconosciuta basta
@@ -241,7 +299,8 @@ class Tenuta:
         info = info or {}
         if e.tipo == RIGA:
             chi = str(d.get("chi") or "")
-            pid = chi[len("persona:"):] if chi.startswith("persona:") else None
+            pid = (chi[len("persona:"):] if chi.startswith("persona:")
+                   else chi if chi.startswith("conoscente:") else None)
             seg = d.get("segmento")
             if not self._tieni(pid, d.get("sicurezza")) or not str(d.get("testo") or "").strip():
                 self.saltate += 1
@@ -256,7 +315,8 @@ class Tenuta:
                     "inizio": float(d.get("inizio") or e.t), "fine": float(d.get("fine") or e.t),
                     "testo": str(d.get("testo")), "chi": chi, "persona": pid,
                     "nome": d.get("nome"), "sicurezza": "voce", "rivolta": d.get("rivolta"),
-                    "minore": 1 if d.get("minore") else 0, "per_persona": None}
+                    "minore": 1 if d.get("minore") else 0, "per_persona": None,
+                    "nota": d.get("nota") or None}
             self._lavoro(lambda: self._scrivi(riga))
         elif e.tipo == DETTO_CALLIOPE:
             per = d.get("per") if isinstance(d.get("per"), dict) else {}
@@ -269,7 +329,7 @@ class Tenuta:
                     "inizio": float(d.get("inizio") or e.t), "fine": float(d.get("fine") or e.t),
                     "testo": str(d.get("testo")), "chi": "calliope", "persona": None,
                     "nome": "Calliope", "sicurezza": "voce", "rivolta": None, "minore": 0,
-                    "per_persona": str(pid)}
+                    "per_persona": str(pid), "nota": None}
             self._lavoro(lambda: self._scrivi(riga))
         elif e.tipo == ANALISI and d.get("analisi") == "rivolta":
             seq, esito = d.get("riga"), d.get("esito")
@@ -307,11 +367,12 @@ class Tenuta:
             cur = self.db.execute(
                 "INSERT INTO righe(avvio, sat, stanza, satellite, seq, segmento, "
                 "scambio, versione, inizio, fine, testo, chi, persona, nome, sicurezza, rivolta, "
-                "minore, per_persona) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
-                "?)", (self.avvio, r["sat"], r["stanza"], r["satellite"], r["seq"],
-                       r["segmento"], r["scambio"], r["versione"], r["inizio"], r["fine"],
-                       r["testo"], r["chi"], r["persona"], r["nome"], r["sicurezza"],
-                       r["rivolta"], r["minore"], r["per_persona"]))
+                "minore, per_persona, nota) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
+                "?, ?, ?, ?)", (self.avvio, r["sat"], r["stanza"], r["satellite"], r["seq"],
+                                r["segmento"], r["scambio"], r["versione"], r["inizio"],
+                                r["fine"], r["testo"], r["chi"], r["persona"], r["nome"],
+                                r["sicurezza"], r["rivolta"], r["minore"], r["per_persona"],
+                                r.get("nota")))
             rid = cur.lastrowid
             self.db.execute("INSERT INTO righe_fts(rowid, testo) VALUES (?, ?)",
                             (rid, r["testo"]))
@@ -378,6 +439,23 @@ class Tenuta:
                 return n
         return int(self._lavoro(f, aspetta=True) or 0)
 
+    def rinomina(self, vecchia, nuova, chi: str, nome: str | None = None) -> int:
+        """Una persona che cambia tipo (14/10, conoscenti: promossa a familiare o tornata
+        conoscente): le sue righe passano da `vecchia` a `nuova` («conoscente:<id>» o l'id del
+        profilo), con il nome; le presenze di prima si tolgono. Quante righe."""
+        v, n = str(vecchia), str(nuova)
+
+        def f():
+            with self.lock:
+                cur = self.db.execute(
+                    "UPDATE righe SET persona = ?, chi = ?, nome = coalesce(?, nome) WHERE "
+                    "persona = ?", (n, chi, nome, v))
+                self.db.execute("UPDATE righe SET per_persona = ? WHERE per_persona = ?", (n, v))
+                _cancella_sicuro(self.db, "DELETE FROM presenze WHERE persona = ?", (v,))
+                self.db.commit()
+                return cur.rowcount
+        return int(self._lavoro(f, aspetta=True) or 0)
+
     def _ruota_se_serve(self):
         if time.time() - self._ultima_rotazione >= GIORNO_S:
             try:
@@ -397,16 +475,27 @@ class Tenuta:
         if reg is not None and getattr(reg, "users", None):
             ids = [str(getattr(p, "id", None) or getattr(p, "name", ""))
                    for p in list(reg.users.values())]
+            # I conoscenti salvati (14/10): le loro righe restano finché il profilo c'è
+            con = self.conoscenti
+            if con is not None:
+                ids += [f"conoscente:{c.id}" for c in con.elenco()]
         with self.lock:
             out["vecchie"] = self._togli_dove("fine < ?", (limite,))
             _cancella_sicuro(self.db, "DELETE FROM presenze WHERE fine < ?", (limite,))
             if ids:
                 segni = ", ".join("?" * len(ids))
+                # Senza i conoscenti legati (spenti, o non ancora all'avvio) le loro righe non
+                # si toccano qui: le toglie la scadenza dei giorni o il loro «dimentica»
+                salvo = ("" if self.conoscenti is not None
+                         else " AND persona NOT LIKE 'conoscente:%'")
                 out["senza_profilo"] = self._togli_dove(
-                    f"(persona IS NOT NULL AND persona NOT IN ({segni})) OR (per_persona IS NOT "
-                    f"NULL AND per_persona NOT IN ({segni}))", (*ids, *ids))
+                    f"(persona IS NOT NULL AND persona NOT IN ({segni}){salvo}) OR (per_persona "
+                    f"IS NOT NULL AND per_persona NOT IN ({segni}))", (*ids, *ids))
                 _cancella_sicuro(self.db, f"DELETE FROM presenze WHERE persona NOT IN ({segni})",
                                  tuple(ids))
+            if self.guardia_dal is not None:
+                self.db.execute("DELETE FROM guardia_giudicate WHERE t < ?", (limite,))
+                self.db.execute("DELETE FROM guardia_giochi WHERE fine < ?", (limite,))
             if out["vecchie"] or out["senza_profilo"]:
                 self._compatta()
             else:
@@ -531,6 +620,91 @@ class Tenuta:
                 continue                       # ancora in memoria: la dà il registro
             righe.append(d)
         return righe
+
+    # ── il diario della guardia (stanza/guardia.py, 14/10) ──
+    def righe_guardia(self, da: float) -> list[dict]:
+        """Le righe degli avvii di prima (quelle di questo avvio le dà il registro in memoria)
+        finite da `da` in poi, per satellite e inizio, con `_giudicata` (già nel diario) e
+        `_id` (la riga del disco). Vuoto senza diario."""
+        if self.guardia_dal is None:
+            return []
+        with self.lock:
+            rows = self.db.execute(
+                f"SELECT {_SELEZIONE}, EXISTS(SELECT 1 FROM guardia_giudicate g WHERE "
+                f"g.avvio = r.avvio AND g.sat = r.sat AND g.seq = r.seq) FROM righe r WHERE "
+                f"r.avvio != ? AND r.fine >= ? ORDER BY r.sat, r.inizio, r.id",
+                (self.avvio, float(da))).fetchall()
+        out = []
+        for row in rows:
+            d = self._riga(row[:-1])
+            d["_id"] = int(row[0])
+            d["_giudicata"] = bool(row[-1])
+            out.append(d)
+        return out
+
+    def vive(self, ids) -> set:
+        """Quali di queste righe del disco ci sono ancora («dimentica», svuota, rotazione)."""
+        ids = [int(i) for i in ids]
+        if not ids:
+            return set()
+        with self.lock:
+            return {int(r[0]) for r in self.db.execute(
+                f"SELECT id FROM righe WHERE id IN ({', '.join('?' * len(ids))})", ids)}
+
+    def non_giudicate_minori(self, da: float, a: float) -> int:
+        """Quante righe di un minore degli avvii di prima, finite tra `da` e `a`, non sono nel
+        diario (oltre il limite della ripresa: non si giudicano più, si contano)."""
+        if self.guardia_dal is None or a <= da:
+            return 0
+        with self.lock:
+            return int(self.db.execute(
+                "SELECT COUNT(*) FROM righe r WHERE r.avvio != ? AND r.minore = 1 AND r.fine >= ? "
+                "AND r.fine < ? AND NOT EXISTS (SELECT 1 FROM guardia_giudicate g WHERE "
+                "g.avvio = r.avvio AND g.sat = r.sat AND g.seq = r.seq)",
+                (self.avvio, float(da), float(a))).fetchone()[0])
+
+    def segna_giudicate(self, chiavi, esito: str) -> None:
+        """Le righe (avvio, sat, seq) giudicate o buttate per sempre: dopo un riavvio non si
+        riprendono. In coda al thread, dopo le scritture delle righe."""
+        if self.guardia_dal is None:
+            return
+        ora = time.time()
+        valori = [(str(a), str(s), int(q), str(esito), ora) for a, s, q in chiavi]
+        if not valori:
+            return
+
+        def f():
+            with self.lock:
+                self.db.executemany(
+                    "INSERT INTO guardia_giudicate(avvio, sat, seq, esito, t) VALUES (?, ?, ?, "
+                    "?, ?) ON CONFLICT(avvio, sat, seq) DO UPDATE SET esito = excluded.esito, "
+                    "t = excluded.t", valori)
+                self.db.commit()
+        self._lavoro(f)
+
+    def segna_gioco(self, sat, inizio: float, fine: float) -> None:
+        """Un gioco aperto sullo schermo di `sat` da `inizio` a `fine` (nuovo o allungato)."""
+        if self.guardia_dal is None:
+            return
+        s, a, b = str(sat), round(float(inizio), 3), round(float(fine), 3)
+
+        def f():
+            with self.lock:
+                self.db.execute(
+                    "INSERT INTO guardia_giochi(sat, inizio, fine) VALUES (?, ?, ?) ON "
+                    "CONFLICT(sat, inizio) DO UPDATE SET fine = max(fine, excluded.fine)",
+                    (s, a, b))
+                self.db.commit()
+        self._lavoro(f)
+
+    def giochi(self, da: float = 0.0) -> list[tuple]:
+        """(sat come testo, inizio, fine) dei giochi aperti finiti da `da` in poi."""
+        if self.guardia_dal is None:
+            return []
+        with self.lock:
+            return [(r[0], float(r[1]), float(r[2])) for r in self.db.execute(
+                "SELECT sat, inizio, fine FROM guardia_giochi WHERE fine >= ? ORDER BY inizio",
+                (float(da),))]
 
     # ── quanto c'è (solo numeri) ──
     def conteggi(self, persona=None) -> dict:

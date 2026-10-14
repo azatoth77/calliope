@@ -437,6 +437,39 @@ def nota_riscrittura(prima: str | None, dopo: str, nome: str) -> str:
             "veloce e il resto del file non si tocca.")
 
 
+def manifesto_non_valido(sandbox) -> str | None:
+    """Il motivo per cui manifesto.json non passerebbe il controllo della consegna
+    (estensioni/manifesto.valida, lo stesso di controlla_consegna), o None (anche senza
+    manifesto: quello lo dice la consegna)."""
+    try:
+        if "manifesto.json" not in {f["percorso"] for f in sandbox.elenca()}:
+            return None
+        from ..estensioni.manifesto import valida
+        valida(json.loads(sandbox.leggi("manifesto.json", 50_000)))
+    except ValueError as e:                # anche ManifestoNonValido e il JSON rotto
+        return str(e)[:400]
+    except Exception:  # noqa: BLE001 — nel dubbio lo dice la consegna
+        return None
+    return None
+
+
+def _con_manifesto(r: dict, sandbox) -> dict:
+    """esegui_test di un'estensione o di un gioco con il manifesto che la consegna rifiuterebbe
+    (14/10 sera, banco: L8 con 30 test verdi e la descrizione di «da» di 98 caratteri, L7 e
+    L10 con la fase «esito» o «preparazione» dichiarata; l'agente lo scopriva solo chiamando
+    consegna, alla fine delle passate, e al tetto «mancano i file che la consegna chiede»):
+    un fallimento in più, in testa, come un test rosso. «Tutto verde» vuol dire consegnabile."""
+    errore = manifesto_non_valido(sandbox)
+    if not errore or not isinstance(r, dict):
+        return r
+    esito = dict(r.get("esito") or {})
+    esito["eseguiti"] = int(esito.get("eseguiti") or 0) + 1
+    esito["falliti"] = int(esito.get("falliti") or 0) + 1
+    return {**r, "esito": esito, "passano": False,
+            "uscita": (f"FALLITO manifesto.json: {errore} (è il controllo della consegna: "
+                       "correggi il manifesto, non i test)\n" + str(r.get("uscita") or ""))}
+
+
 def _con_fallimenti(r: dict, uscita: str | None = None) -> dict:
     """Il risultato di un controllo con, prima dell'uscita, i fallimenti in breve (11/10,
     diagnosi.py): quale test, l'errore e file:riga. Niente se è andato tutto bene."""
@@ -1370,6 +1403,15 @@ class Agente:
                                                       "lavoro: aspetta la risposta"}
                 else:
                     result = self._strumento(lav, sandbox, name, args)
+                    if name in ("scrivi_file", "modifica_file") and result.get("ok") \
+                            and lav.tipo == "estensione" and str(
+                                result.get("percorso") or args.get("percorso") or ""
+                            ).lstrip("./") == "manifesto.json":
+                        # Il controllo della consegna subito (14/10 sera, banco L8)
+                        errore_m = manifesto_non_valido(sandbox)
+                        if errore_m:
+                            result = {**result, "avviso": f"manifesto.json così la consegna lo "
+                                                          f"rifiuta: {errore_m}. Correggilo ora."}
                     if name in ("scrivi_file", "modifica_file") and result.get("ok"):
                         seg["test_verde"] = None        # i file sono cambiati dopo i test
                         scritti += 1
@@ -1911,6 +1953,8 @@ class Agente:
             if name == "esegui_test":
                 lav.passo = "prova il codice con i test"
                 r = sandbox.test(args.get("percorso") or None)
+                if lav.tipo == "estensione" and not args.get("percorso"):
+                    r = _con_manifesto(r, sandbox)
                 lav.nota("test", esito=r.get("esito"), passano=r.get("passano"))
                 lav.passo = frase_test(r.get("esito"))
                 # L'uscita intera: se è lunga va nel file .calliope, qui resta la coda. Prima

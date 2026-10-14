@@ -160,6 +160,21 @@ class RegistroStanza:
             self._eventi.clear()
             return n
 
+    def riscrivi_chi(self, vecchio: str, nuovo: dict) -> int:
+        """Le righe in memoria di `vecchio` («conoscente:<id>», «persona:<id>») con i campi
+        `nuovo` (14/10, conoscenti: un conoscente dimenticato diventa «ignoto», uno promosso
+        «persona:<id>»). È la sola eccezione alla sola aggiunta: «dimentica» vera, come
+        `svuota`. Quante righe."""
+        n = 0
+        with self._lock:
+            for e in self._eventi:
+                if e.tipo == RIGA and e.dati.get("chi") == vecchio:
+                    e.dati.update(nuovo)
+                    if nuovo.get("chi") == "ignoto":
+                        e.dati.pop("nota", None)
+                    n += 1
+        return n
+
     def conteggi(self) -> dict:
         with self._lock:
             ev = list(self._eventi)

@@ -27,6 +27,8 @@ audio oltre a ciò che serve al turno.
   14/10, decisione 0029 punto 5): solo con `stanza_tenuta` accesa, per `stanza_tenuta_giorni`;
   per tutta la famiglia, **minori compresi** (scelta di chi amministra), solo con la voce
   riconosciuta sopra soglia; mai gli ospiti né la zona grigia. Non è un dato per le misure.
+  Dal 14/10 (decisione 0030) anche i **conoscenti** confermati da chi amministra (categoria
+  «conoscente»: solo la stanza, mai turni, voce, eventi o conversazioni, come un ospite).
 
 **Il consenso** è un dato della persona, nel suo profilo (speakers.json, `voce_conservata`):
 None = mai detto, True = «sì» detto una volta a Calliope (tool `dati_conservati`), False =
@@ -47,8 +49,10 @@ c'è uguale.
 
     python -m calliope.conserva                  quanto è conservato (solo conteggi)
     python -m calliope.conserva --svuota         tutto: voce, eventi, registro dei turni,
-                                                 archivio delle conversazioni e testo della
-                                                 stanza su disco
+                                                 archivio delle conversazioni, testo della
+                                                 stanza su disco, trascrizione e audio degli
+                                                 avvisi di pericolo (14/10) e conoscenti
+                                                 (impronte e profili)
     python -m calliope.conserva --svuota --persona NOME
                                                  i dati di una persona
 
@@ -97,9 +101,12 @@ class Decisione:
 
 
 def categoria(prof) -> str:
-    """«ospite» (nessun profilo), «minore», «amministra» o «adulto»."""
+    """«ospite» (nessun profilo), «conoscente» (14/10, stanza/conoscenti.py: livello ospite),
+    «minore», «amministra» o «adulto»."""
     if prof is None:
         return "ospite"
+    if getattr(prof, "tipo", None) == "conoscente":
+        return "conoscente"
     from . import minori
     try:
         if minori.e_minore(prof):
@@ -125,6 +132,10 @@ def decidi(prof, cosa: str, modo: str | None = None, dubbi=(), cfg=None) -> Deci
     if cosa not in COSE:
         raise ValueError(f"cosa sconosciuta: {cosa!r}")
     cat = categoria(prof)
+    if cat == "conoscente":
+        # Un conoscente (14/10, decisione 0030): le sue righe della stanza come quelle della
+        # famiglia (con la voce), nient'altro: per tutto il resto è un ospite
+        return Decisione(cosa == "stanza" and modo == "voce", cat)
     if cosa == "stanza":
         # Il testo della stanza (14/10, decisione 0029 punto 5, calliope/stanza/tenuta.py): con
         # la tenuta accesa (lo decide chi chiama) per tutta la famiglia, minori compresi, solo
@@ -377,6 +388,9 @@ class Conservazione:
         # La tenuta su disco della stanza (stanza/tenuta.Tenuta, 14/10), se c'è: «svuota» la
         # svuota e il riepilogo la conta; senza (il terminale), il file in `stanza_tenuta_db`
         self.stanza = None
+        # I conoscenti (stanza/conoscenti.Conoscenti, 14/10), se ci sono: «svuota» di tutto li
+        # cancella; senza (il terminale), il file `conoscenti_file`
+        self.conoscenti = None
         self._lock = threading.Lock()
         self._ruotata_il = None
         self.salvate = 0            # frasi salvate da quando è partita
@@ -649,10 +663,12 @@ class Conservazione:
         out = {"voce": 0, "eventi": 0, "turni": 0, "conversazioni": 0,
                "esercizi_richieste": self._memoria(persona_id=persona_id,
                                                    tutto=persona_id is None),
-               "stanza": self._svuota_stanza(persona_id)}
+               "stanza": self._svuota_stanza(persona_id),
+               "avvisi": self._svuota_avvisi(persona_id)}
         arch = self.conversazioni
         lock = getattr(self.turnlog, "_lock", None)
         if persona_id is None:
+            out["conoscenti"] = self._svuota_conoscenti()
             if self.voce_dir and self.voce_dir.exists():
                 out["voce"] = sum(1 for _ in self.voce_dir.rglob("*.wav"))
                 shutil.rmtree(self.voce_dir, ignore_errors=True)
@@ -676,6 +692,33 @@ class Conservazione:
         out["eventi"] = self._svuota_eventi(f"persona:{persona_id}")
         return out
 
+    def _svuota_avvisi(self, persona_id) -> int:
+        """Trascrizione e audio degli avvisi di pericolo (14/10 sera, minori.Avvisi): tutti, o
+        quelli di una persona (come tutore o come minore). L'avviso resta, senza parole. Dal
+        processo di Calliope i suoi avvisi; da terminale il file della memoria e il cassetto."""
+        av, chiudi = getattr(self, "avvisi", None), False
+        try:
+            if av is None:
+                db = str(getattr(self.cfg, "memory_db", "") or "")
+                if not db or not Path(db).exists():
+                    return 0
+                from .cassetto import load_cassetto
+                from .minori import Avvisi
+                av, chiudi = Avvisi(db, log=lambda m: None, cfg=self.cfg), True
+                av.cassetto = load_cassetto(self.cfg, log=lambda m: None)
+            if persona_id is None:
+                return av.dimentica_materiale(tutto=True)
+            return (av.dimentica_materiale(tutore=str(persona_id))
+                    + av.dimentica_materiale(minore=str(persona_id)))
+        except Exception as e:  # noqa: BLE001 — gli avvisi non fermano lo svuotamento
+            self.log(f"   [CONSERVA] materiale degli avvisi non svuotato: {type(e).__name__}")
+            return 0
+        finally:
+            if chiudi and av is not None:
+                if av.cassetto is not None:
+                    av.cassetto.close()
+                av.close()
+
     def _svuota_stanza(self, persona_id) -> int:
         """Il testo della stanza su disco (14/10): tutto, o le righe di una persona (con le
         risposte di Calliope a lei). Dal processo di Calliope la sua tenuta; da terminale il
@@ -687,6 +730,19 @@ class Conservazione:
             return svuota_file(self.cfg, persona_id)
         except Exception as e:  # noqa: BLE001 — la stanza non ferma lo svuotamento del resto
             self.log(f"   [CONSERVA] testo della stanza non svuotato: {type(e).__name__}")
+            return 0
+
+    def _svuota_conoscenti(self) -> int:
+        """I conoscenti (14/10): impronte e profili, con le loro righe della stanza (già tolte
+        con la stanza intera). Dal processo di Calliope i suoi; da terminale il file (Calliope se
+        ne accorge alla lettura dopo)."""
+        try:
+            if self.conoscenti is not None:
+                return self.conoscenti.svuota()
+            from .stanza.conoscenti import svuota_file
+            return svuota_file(self.cfg)
+        except Exception as e:  # noqa: BLE001 — i conoscenti non fermano lo svuotamento
+            self.log(f"   [CONSERVA] conoscenti non svuotati: {type(e).__name__}")
             return 0
 
     def _svuota_eventi(self, chiave: str | None) -> int:
@@ -858,13 +914,15 @@ def main(argv=None) -> int:
                   f"{r['eventi']} eventi, parole tolte da {r['turni']} turni, "
                   f"{r['conversazioni']} conversazioni archiviate, "
                   f"{r['esercizi_richieste']} tra esercizi e richieste ai tutori, "
-                  f"{r['stanza']} righe della stanza.")
+                  f"{r['stanza']} righe della stanza, {r['avvisi']} trascrizioni e audio di "
+                  f"avvisi.")
         else:
             r = c.svuota()
             print(f"Dati conservati cancellati: {r['voce']} registrazioni, {r['eventi']} eventi, "
                   f"{r['turni']} giorni del registro dei turni, {r['conversazioni']} "
                   f"conversazioni archiviate, {r['esercizi_richieste']} tra esercizi e "
-                  f"richieste ai tutori, {r['stanza']} righe della stanza.")
+                  f"richieste ai tutori, {r['stanza']} righe della stanza, {r['avvisi']} "
+                  f"trascrizioni e audio di avvisi, {r.get('conoscenti', 0)} conoscenti.")
         if c.conversazioni is not None:
             c.conversazioni.close()
         return 0

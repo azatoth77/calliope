@@ -698,6 +698,36 @@ minori:
   # parlato da meno di tanti secondi (potrebbe essere lì vicino): una frase neutra e il testo
   # resta sul suo schermo personale; a voce più tardi. 0 = sempre a voce (come prima)
   minori_avviso_privato_s: 600.0
+  # Quando è nato un avviso ai tutori (14/10, caso vero: un avviso «sicurezza» del 12/10 sera,
+  # rimasto da dire vicino al ragazzo, è arrivato il 14/10 mattina senza data ed è stato preso
+  # per un allarme nuovo). Minuti oltre i quali la voce dice quando è nato («ieri sera alle
+  # 19:02», «lunedì 12/10 alle 19:02»); la scheda lo dice sempre
+  avvisi_data_dopo_min: 15.0
+  # Ore dopo cui un avviso urgente rimasto da dire si dice come non urgente, con la data
+  # (il momento è passato: resta da sapere, non da correre). 0 = resta urgente
+  avvisi_urgente_ore: 12.0
+  # Ore in cui gli avvisi consegnati a un tutore (a voce o sullo schermo) restano nei dati
+  # del suo turno, così a «cos'erano quegli avvisi?» il modello ha data, tipo, origine e
+  # stato veri e non inventa. Più vecchi: minore_gestisci azione avvisi. 0 = mai nel turno
+  avvisi_contesto_ore: 48.0
+  # Un avviso di pericolo al tutore (14/10 sera, decisione di Dario che cambia la 0029 punto
+  # 4) porta sulla sua scheda personale la trascrizione delle righe del segnale con un po' di
+  # contesto, chi ha detto cosa. Mai a voce, mai su altri schermi, mai a un adulto non tutore:
+  # il testo dell'avviso resta senza parole. false = come prima (solo l'argomento)
+  avvisi_trascrizione: true
+  # E l'audio di quelle frasi (calliope/avvisi_audio.py): in memoria un anello con l'audio dei
+  # segmenti e dei turni in cui parla un minore (e, nella stanza, degli adulti di casa mentre
+  # un minore è presente); solo quando nasce un avviso di pericolo i segmenti del segnale, con
+  # un contesto breve, vanno in un file nel cassetto del tutore. In ombra niente su disco.
+  # Di serie spento: si accende nel file locale
+  avvisi_audio: false
+  # Minuti e MB dell'anello in memoria (μ-law: 16 kB al secondo, 16 MB ≈ 17 minuti di voce)
+  avvisi_audio_anello_min: 30.0
+  avvisi_audio_anello_mb: 16.0
+  # Secondi di contesto prima e dopo le frasi del segnale
+  avvisi_audio_contesto_s: 20.0
+  # Giorni dopo cui l'audio (nel cassetto) e la trascrizione di un avviso si cancellano
+  avvisi_audio_giorni: 30.0
   # Esercizi generati da Calliope (08/10, calliope/esercizi/, docs/ricerche/
   # 2026-10-08-esercizi.md): matematica e italiano per i ragazzi di casa, a voce e sulla
   # scheda, con la correzione nel codice e il registro dei tentativi per i tutori; dal 12/10
@@ -1398,6 +1428,30 @@ conversazione_stanza:
   stanza_guardia_avvisi_giorno: 1
   # Una riga con una parola sotto questa probabilità (quando Whisper la dà) non fa un acuto
   stanza_guardia_p: 0.5
+  # I conoscenti (14/10, decisione 0030, calliope/stanza/conoscenti.py): le voci che nessun
+  # profilo riconosce si raggruppano in memoria per somiglianza dell'impronta; dal contesto
+  # (vocativi e saluti seguiti dal parlato di quella voce, presentazioni, più indizi concordi;
+  # regola conoscente_nome) Calliope deduce il nome e lo propone a chi amministra **solo sullo
+  # schermo personale** (mai a voce): «Ho sentito una voce nuova che chiamate Marco: la salvo
+  # come conoscente?», con Sì, No, un nome diverso, cognome e nota (gli omonimi restano
+  # profili separati). Senza il sì niente va su disco. Il conoscente ha i permessi di un
+  # ospite, è riconosciuto col nome nelle righe della stanza, le sue righe vanno su disco con
+  # la tenuta e si cercano come quelle della famiglia (chi c'era). Solo con la stanza accesa;
+  # false (di serie) = niente gruppi né proposte
+  stanza_conoscenti: false
+  # Un conoscente non sentito da tanto si dimentica (impronta, profilo e righe)
+  conoscenti_scadenza_giorni: 180
+  # Punti per proporre un nome (vocativo con la risposta 1, presentazione 2, nome detto di sé
+  # in terza persona −1), da almeno due righe e con il secondo nome sotto la metà
+  conoscenti_soglia: 3
+  # Voce del gruppo (secondi di parlato, almeno tre segmenti) per un'impronta buona
+  conoscenti_min_voce_s: 6.0
+  # Il file dei conoscenti (relativo alla cartella della configurazione)
+  conoscenti_file: conoscenti.json
+  # Con `stanza_tenuta`: dopo un riavvio le righe di prima non ancora giudicate si riprendono
+  # dal disco fino a tante ore indietro (dopo un fermo lungo non si rileggono giorni; quelle
+  # più vecchie si contano soltanto). 0 = nessuna ripresa
+  stanza_guardia_ripresa_h: 24.0
 
 satellite:
   # == Lato satellite (il portatile che fa da microfono, casse e schermo di

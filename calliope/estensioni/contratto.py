@@ -171,9 +171,10 @@ def scheda_testo(cfg=None) -> list[str]:
         "--casella, --bordo; posizioni e misure le mette Calliope) e disegni .svg; i test "
         "logica.test.js (node:test e node:assert, `const { GIOCO } = require(\"./logica.js\")`) "
         "e gioco.test.js, che gioca la partita vera con la macchina (apriGioco: "
-        "g.tocca(\"Porta 1\"), g.comando(\"porta\", 3), g.avanza(ms), g.testo(), g.stato() con "
-        "fase, tocca, giocatori e punti, esito, comandi attivi; g.palco() → [] se la pagina di "
-        "adesso sta nel palco). esegui_test li fa girare con Node insieme alla prova di fumo per "
+        "g.tocca(\"Porta 1\"), g.comando(\"porta\", 3), g.avanza(ms), g.testo(), g.stato() → "
+        "{ fase, tocca (il nome), giocatori: [{ nome, punti }], esito, comandi }; g.palco() → [] "
+        "se la pagina di adesso sta nel palco; dopo g.tocca(\"2 giocatori\") si è già nella fase "
+        "d'inizio, e «avanti» vale solo nella fase «esito»). esegui_test li fa girare con Node insieme alla prova di fumo per "
         "fasi: ogni fase con ogni comando e ogni valore, partite intere fino alla fine, e ogni "
         "pagina misurata sul palco nei due orientamenti (niente fuori, niente sovrapposto, testo "
         "che ci sta)",

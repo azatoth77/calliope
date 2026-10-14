@@ -797,6 +797,24 @@ class Giochi:
                 "giocatore": bool(a.get("giocatore")), "segno": posto.segno,
                 "prova": p.prova}
 
+    def in_corso(self, schermi) -> bool:
+        """Un gioco è aperto e si vede adesso su uno di questi schermi (riquadro aperto da
+        «pronto» a «chiuso», non fermato, la pagina viva da al più VIVO_S), con o senza comandi
+        a voce, anche una partita di prova. Per il guardiano a posteriori della stanza (14/10,
+        stanza/guardia.py): le righe dette mentre si gioca si giudicano col contesto «gioco»
+        dichiarato."""
+        ids = {x for x in (schermi or []) if x is not None}
+        if not ids:
+            return False
+        ora = time.time()
+        with self._lock:
+            for p in self.partite.values():
+                for sid, posto in p.posti.items():
+                    if (sid in ids and posto.aperto and not posto.fermato
+                            and ora - posto.contatto <= VIVO_S):
+                        return True
+        return False
+
     def comando(self, partita: str, schermo, comando: str, giocatore: str | None = None) -> bool:
         """Manda una mossa a voce al riquadro della partita su quello schermo (evento «gioco»
         di tipo «comando»). Solo un comando attivo di quel gioco; il nome di chi gioca solo se
@@ -861,7 +879,7 @@ class Giochi:
         try:
             av.manda(prof, "sicurezza", f"{prof.name} ha scritto nella chat di un gioco una cosa "
                                         f"che mi preoccupa. Parlagli appena puoi, con calma.",
-                     urgente=True)
+                     urgente=True, origine="da una frase scritta nella chat di un gioco")
         except Exception:  # noqa: BLE001
             pass
 

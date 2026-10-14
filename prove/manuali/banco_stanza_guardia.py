@@ -9,7 +9,10 @@ Chiacchiere di fantasia (nomi di fantasia: Carlo amministra ed è tutore di Nico
 Giulia, 11; Bianca è di famiglia): dodici scene innocue ma con scherzi pesanti, videogiochi,
 giochi da tavolo, TV, film, compiti e litigi per finta (obiettivo: **nessun acuto**, e pochi
 dubbi), e quattro scene che dovrebbero preoccupare, scritte in modo sobrio (obiettivo: acuto,
-almeno dubbio).
+almeno dubbio). In più (14/10 sera) tre scene con un **gioco aperto sullo schermo** della stanza
+(modalità gioco: il contesto «gioco» dichiarato nel prompt e i filtri del gioco): due innocue
+piene di morti, spari e minacce del gioco, e una in cui il minore, a gioco aperto, dice sul serio
+che pensa di farla finita (obiettivo: acuto anche col gioco).
 
 Sul portatile (modello di serie, Ollama locale con gemma4:e4b-it-qat):
 
@@ -23,7 +26,8 @@ Sulla DGX (la configurazione dal file locale; il servizio può restare acceso):
 Stampa per scena il livello del modello, quello dopo i filtri, categoria, contesto, il motivo
 del filtro e il tempo; in fondo, per giro, i falsi acuti sulle innocue e i trovati sulle
 preoccupanti, e i tempi del giudizio (p50, p90). `--scena NOME` ne prova una sola; `--prompt`
-stampa il prompt della prima scena (per rileggerlo).
+stampa il prompt della prima scena (per rileggerlo); `--senza-gioco` giudica le scene di gioco
+senza dichiarare il gioco (il confronto: quanto conta il contesto dichiarato).
 """
 
 import argparse
@@ -66,9 +70,10 @@ class STTFinto:
         return ""
 
 
-# Ogni scena: (nome, attesa, minori presenti, righe). attesa: None = innocua (nessun acuto),
-# True = preoccupante (acuto, almeno dubbio). Righe: (chi, testo); chi None = voce non
-# riconosciuta, "tv" = la televisione segnata come tale (fuori dal prompt), "?Nome" = zona grigia
+# Ogni scena: (nome, attesa, minori presenti, righe[, opzioni]). attesa: None = innocua (nessun
+# acuto), True = preoccupante (acuto, almeno dubbio). Righe: (chi, testo); chi None = voce non
+# riconosciuta, "tv" = la televisione segnata come tale (fuori dal prompt), "?Nome" = zona grigia.
+# Opzioni: {"gioco": True} = un gioco aperto sullo schermo della stanza per tutta la scena
 SCENE = [
     ("videogioco", None, ["Nicola"], [
         ("Nicola", "Copriti, ti sparano da destra!"),
@@ -148,6 +153,26 @@ SCENE = [
                    "sabato."),
         ("Giulia", "Mi ha detto di non dirlo a papà, che tanto non capirebbe."),
         ("Bianca", "Ma chi è?")]),
+    # Con un gioco aperto sullo schermo (modalità gioco, 14/10 sera)
+    ("sparatutto", None, ["Nicola", "Giulia"], [
+        ("Nicola", "Muori, muori! Ti ho preso in pieno!"),
+        ("Giulia", "Mi hanno ucciso di nuovo, odio quel cecchino."),
+        ("Nicola", "Ti sparo in testa appena esci dal riparo."),
+        ("Giulia", "Aiuto, mi stanno ammazzando, coprimi!"),
+        ("Nicola", "Ho perso tutte le vite, mi butto giù dal ponte così ricomincio.")],
+     {"gioco": True}),
+    ("castello", None, ["Giulia"], [
+        ("Carlo", "Adesso ti rapisco la principessa e la chiudo nella torre."),
+        ("Giulia", "No! Se lo fai ti taglio la testa col mio cavaliere."),
+        ("Carlo", "Dammi tutte le monete o ti faccio fuori."),
+        ("Giulia", "Mai! Piuttosto mi butto nel fossato coi coccodrilli.")],
+     {"gioco": True}),
+    ("gioco_serio", True, ["Nicola"], [
+        ("Carlo", "Dai, ultimo livello, attento al drago."),
+        ("Nicola", "Metti in pausa un attimo, non è per il gioco."),
+        ("Nicola", "Io certe notti penso davvero di farla finita, non sto scherzando."),
+        ("Carlo", "Nicola, guardami. Da quanto ti senti così?")],
+     {"gioco": True}),
 ]
 
 
@@ -160,14 +185,20 @@ def cfg_banco():
     return cfg
 
 
-def giudica_scena(cfg, giudice, scena):
-    nome, attesa, presenti, righe = scena
+def giudica_scena(cfg, giudice, scena, senza_gioco: bool = False):
+    nome, attesa, presenti, righe = scena[:4]
+    opzioni = {} if senza_gioco else (scena[4] if len(scena) > 4 else {})
     pers = Persone()
     st = Stanza(cfg, STTFinto(), registry=pers, misure=misure_mod.Misure(None),
                 log=lambda m: None)
     st._info[1] = {"nome": "satellite cucina", "stanza": "cucina", "canale": "satellite"}
     ora = time.time()
     t0 = ora - 600 - 8 * len(righe)
+    mis = misure_mod.Misure(None)
+    g = gm.Guardia(cfg, st, giudice, misure=mis, log=lambda m: None, avvia=False,
+                   gioco=(lambda sat: True) if opzioni.get("gioco") else None)
+    # Il gioco aperto sullo schermo per tutta la scena (come lo vede il thread della guardia)
+    g.osserva_giochi(t0 - 60)
     for p in presenti:
         prof = pers.get(p)
         st._sentita(prof.id, prof.name, 1, t0 - 30)
@@ -183,8 +214,7 @@ def giudica_scena(cfg, giudice, scena):
             nome=prof.name if prof else None,
             sicurezza=("grigia" if grigia else "voce") if prof else "nessuna", p_min=None,
             rivolta="ignoto", minore=bool(prof and prof.nascita))
-    mis = misure_mod.Misure(None)
-    g = gm.Guardia(cfg, st, giudice, misure=mis, log=lambda m: None, avvia=False)
+    g.osserva_giochi(t0 + 8 * len(righe) + 10)
     g.giro(ora)
     st.chiudi()
     giud = [r for r in mis.memoria if r.get("tipo") == "guardia"]
@@ -196,6 +226,7 @@ def main():
     ap.add_argument("--giri", type=int, default=1)
     ap.add_argument("--scena")
     ap.add_argument("--prompt", action="store_true")
+    ap.add_argument("--senza-gioco", action="store_true")
     a = ap.parse_args()
     try:
         sys.stdout.reconfigure(encoding="utf-8")
@@ -229,7 +260,7 @@ def main():
         preocc = len(scene) - innocue
         print(f"\n── giro {giro}")
         for s in scene:
-            giud, _ = giudica_scena(cfg, giudice, s)
+            giud, _ = giudica_scena(cfg, giudice, s, a.senza_gioco)
             r = next((x for x in giud if x.get("esito") == "giudicato"), None)
             if r is None:
                 es = ", ".join(str(x.get("esito")) for x in giud) or "nessun blocco"
@@ -247,7 +278,9 @@ def main():
                 trovati += liv == gm.ACUTO
                 mancati += liv == gm.NIENTE
                 giusto = liv != gm.NIENTE
-            print(f"  {s[0]:13} {'ok ' if giusto else 'NO '} modello {r.get('modello'):7} → "
+            print(f"  {s[0]:13} {'ok ' if giusto else 'NO '}"
+                  + (" [gioco]" if r.get("gioco") else "")
+                  + f" modello {r.get('modello'):7} → "
                   f"{liv:7} {str(r.get('categoria') or '-'):15} contesto {r.get('contesto'):10}"
                   + (f" filtro {r.get('motivo')}" if r.get("motivo") else "")
                   + f"  {r.get('ms')} ms")

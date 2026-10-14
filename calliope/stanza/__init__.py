@@ -17,6 +17,10 @@ veloce, niente nel contesto del modello.
 - `guardia` (passo 6, 14/10): il guardiano a posteriori sulle chiacchiere con un minore
   (`stanza_guardia: spenta|ombra|attiva`, di serie spenta): in ombra solo misure, attiva solo
   un avviso al tutore sullo schermo personale.
+- `conoscenti` (14/10, decisione 0030): le voci sconosciute di adulti in gruppi in memoria, il
+  nome dedotto dalla conversazione, la proposta a chi amministra sullo schermo personale, i
+  conoscenti confermati (livello ospite) riconosciuti nelle righe (`stanza_conoscenti`, di serie
+  spento).
 
 Di serie spenta (`stanza: spenta`): non parte nessun thread, i satelliti non mandano niente.
 """
@@ -32,7 +36,25 @@ def load_stanza(cfg, stt, registry=None, log=print):
     mis = Misure(getattr(cfg, "turn_log_dir", None), int(getattr(cfg, "turn_log_days", 60) or 60))
     st = Stanza(cfg, stt, registry=registry, misure=mis, log=log)
     st.tenuta = load_tenuta(cfg, registry, log)
+    st.conoscenti = load_conoscenti_stanza(cfg, st, registry, mis, log)
     return st
+
+
+def load_conoscenti_stanza(cfg, st, registry=None, misure=None, log=print):
+    """I conoscenti (14/10) con `stanza_conoscenti: true`, legati alla stanza e alla tenuta:
+    un conoscente tolto si toglie anche dalle righe, una promozione le sposta."""
+    from .conoscenti import load_conoscenti
+    con = load_conoscenti(cfg, registry, misure, log)
+    if con is None:
+        return None
+    con.su_tolto.append(st.conoscente_tolto)
+    con.su_livello.append(st.cambio_livello)
+    if st.tenuta is not None:
+        st.tenuta.conoscenti = con
+    # I nomi delle stanze e dei satelliti non sono nomi di persona
+    for v in (getattr(cfg, "stanza_satelliti", None) or []):
+        con.esclusi.add(str(v))
+    return con
 
 
 def load_tenuta(cfg, registry=None, log=print):
@@ -52,11 +74,12 @@ def load_tenuta(cfg, registry=None, log=print):
     return t
 
 
-def load_guardia(cfg, stanza, guardiano=None, occupato=(), log=print):
+def load_guardia(cfg, stanza, guardiano=None, occupato=(), log=print, gioco=None):
     """Il guardiano a posteriori (passo 6, 14/10) con `stanza_guardia: ombra|attiva`, la
     stanza accesa e i minori; altrimenti None (nessun thread). `guardiano`: quello della voce
     (calliope/guardiano.py), per lo stesso client e le stesse opzioni del rilevatore; senza,
-    uno nuovo solo per il rilevatore. `occupato`: funzioni che dicono se la voce lavora."""
+    uno nuovo solo per il rilevatore. `occupato`: funzioni che dicono se la voce lavora.
+    `gioco(sat)`: un gioco è aperto adesso sullo schermo del satellite (modalità gioco)."""
     from . import guardia
     if (stanza is None or guardia.modo(cfg) == guardia.SPENTA
             or not getattr(cfg, "minori_enabled", True)):
@@ -70,7 +93,7 @@ def load_guardia(cfg, stanza, guardiano=None, occupato=(), log=print):
         return None
     g = guardia.Guardia(cfg, stanza, guardia.GiudiceModello(
         guardiano, float(getattr(cfg, "stanza_guardia_timeout_s", 30.0) or 30.0)),
-        registry=stanza.registry, occupato=occupato, log=log)
+        registry=stanza.registry, occupato=occupato, log=log, gioco=gioco)
     log(f"[GUARDIA] Guardiano a posteriori della stanza: {guardia.modo(cfg)} ("
         + ("solo misure, nessun avviso" if guardia.modo(cfg) == guardia.OMBRA else
            "avviso al tutore sullo schermo personale, mai a voce") + ")")

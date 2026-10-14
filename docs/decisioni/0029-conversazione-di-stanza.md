@@ -40,6 +40,17 @@ e il 13/10 ha risposto alle sue sei domande.
    sulle altre guarda **dopo**, sulla trascrizione corretta e con lo scambio intero. Un segnale
    acuto dà **solo un avviso al tutore sullo schermo personale**, senza parole, mai un «Va tutto
    bene?» al ragazzo.
+   **Cambiato il 14/10 sera da chi amministra** (ed è tutore): un avviso di pericolo al tutore
+   (questo e quelli dei cancelli dei turni) porta **sulla sua scheda personale** la trascrizione
+   delle righe del segnale con un po' di contesto, chi ha detto cosa, e, con `avvisi_audio`, il
+   file audio di quelle frasi. Il motivo: un avviso «senza parole» arrivato giorni dopo è stato
+   preso per un allarme nuovo, e il tutore non aveva modo di capire che cosa fosse successo. Il
+   testo dell'avviso (a voce e in cima alla scheda) resta senza parole; trascrizione e audio solo
+   sullo schermo personale del tutore, mai a voce, mai su altri schermi, mai a un adulto non
+   tutore. L'audio è l'unica eccezione a «l'audio non va mai su disco»: un anello **in memoria**
+   con i soli segmenti in cui parla un minore (e il contesto breve degli adulti di casa con lui),
+   e su disco, nel cassetto del tutore, solo i segmenti di un segnale quando nasce un avviso,
+   per `avvisi_audio_giorni` (30). Mai degli ospiti; in ombra niente su disco.
 5. **Tenuta del testo della stanza**: nell'installazione di chi amministra **su disco per 60
    giorni per tutti, famiglia e minori compresi**; i **tutori possono cercare** a posteriori anche
    ciò che ha detto il ragazzo, gli altri adulti no. Ospiti mai su disco né nella ricerca.
@@ -119,6 +130,10 @@ Il contesto delle scelte, nelle parole di chi amministra: la privacy dentro la f
   con il rilevatore di oggi a posteriori sulle chiacchiere con un minore; in ombra solo misure
   senza parole (`calliope stato --guardia`), «attiva» solo l'avviso al tutore sullo schermo
   personale, da accendere con meno di un acuto falso a settimana.
+- **Trascrizione e audio negli avvisi, 14/10 sera** (ramo `avvisi-data`, `avvisi_trascrizione`
+  di serie accesa, `avvisi_audio` di serie spento; `calliope/avvisi_audio.py`,
+  `prove/prova_avvisi_audio.py`): il punto 4 cambiato come sopra; `calliope conserva --svuota`,
+  «dimentica» della stanza e la scadenza tolgono trascrizione e audio, l'avviso resta.
 - Passi 2–8 del piano, ognuno con il suo interruttore e la sua misura sulla DGX; la prima misura
   (passo 1) non cambia nulla di ciò che Calliope dice. Misure nuove: ritardo della coda della
   stanza, banda del telefono, **copertura all'interpellazione** (tutte le frasi dette prima della

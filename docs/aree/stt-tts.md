@@ -1082,3 +1082,46 @@ telefono in auto (motore acceso e spento, volume medio e alto) e in casa, portat
 interno in MME, e il contrario delle casse esterne senza cancellazione (cancello chiuso). Si accende
 sulla DGX solo se l'eco residua resta sotto 2 ogni 100 parole e le righe false a 0. Prove:
 `prove/prova_stanza_eco.py` (livello 1, ~3 s).
+
+## I conoscenti: voci sconosciute di adulti col nome dedotto (14/10, ramo `stanza-conoscenti`)
+
+Decisione [0030](../decisioni/0030-conoscenti.md) (passo 7 del
+[progetto](../ricerche/2026-10-13-conversazione-di-stanza.md), § 3.10), dietro
+**`stanza_conoscenti: true`** (di serie `false`, nel file locale; vale solo con la stanza accesa).
+Codice in `calliope/stanza/conoscenti.py`; per quest'area conta come cambia **chi parla** nelle
+righe della stanza (`Stanza._chi`):
+
+- **Ordine**: prima la famiglia come sempre (sopra soglia e con il margine → «persona:<id>»); poi,
+  se la voce non è della famiglia sopra soglia, i **conoscenti** salvati (`conoscenti.json`):
+  sopra `speaker_id_threshold` e con `speaker_id_margine` sia dal secondo conoscente sia dal
+  familiare più vicino → riga «conoscente:<id>» con `nome` («Marco Rossi»), `nota` («collega di
+  Carlo») e sicurezza «voce». Un conoscente **non è in `speakers.json`**: i comandi
+  (`SpeakerContext`, compagnia, conferme) non lo vedono mai, resta ospite.
+- **Gruppi in memoria**: una voce di nessuno («nessuna», con almeno `speaker_min_voice_s`) entra nel
+  gruppo più somigliante (centro = media normalizzata delle ultime 30 impronte, sopra
+  `speaker_id_threshold`) o ne apre uno; la riga ha `gruppo` (solo in memoria). Al più 60 gruppi,
+  via dopo 24 h senza sentirli; la zona grigia non fa gruppi (potrebbe essere di famiglia).
+- **Il nome** (regola `conoscente_nome`, forme chiuse, effetto solo una proposta): un vocativo o un
+  saluto («Ciao Marco!», «Marco, tu che dici?», «…, Marco?») vale 1 punto per il gruppo della
+  **prima riga di un'altra voce** dopo, entro 15 s (se risponde il familiare con quel nome non conta
+  per nessuno); «sono Marco», «mi chiamo Marco» detti dal gruppo valgono 2; il nome detto dal gruppo
+  in terza persona −1; la terza persona degli altri niente. Proposta con almeno
+  `conoscenti_soglia` (3) punti da due righe, il secondo nome sotto la metà (indizi discordi:
+  niente, misura «discordi»), e almeno tre segmenti e `conoscenti_min_voce_s` (6 s) di voce.
+- **La proposta** va solo agli schermi personali di chi amministra (scheda `conoscente`, fuori
+  dalla cronologia su disco), con un pezzo di trascrizione (le due righe del vocativo, o la
+  presentazione) e gli avvisi: omonimo di un familiare («In famiglia c'è già Bianca…»), di un
+  conoscente («un altro Marco, non Marco Rossi?»), età non stimata. Senza uno schermo collegato
+  aspetta e si riprova ogni 5 s. Sì (nome, cognome, nota) → il conoscente con l'impronta del
+  centro del gruppo; No → il gruppo e l'impronta fra le rifiutate (in memoria: un gruppo nuovo
+  della stessa voce nasce già rifiutato).
+- **Età**: un gruppo che uno stimatore giudica di un bambino (due voti e la maggioranza) non si
+  propone mai; lo stimatore non c'è ancora (`Conoscenti.eta = None`) e la proposta lo dice.
+- **Sentito** e **scadenza**: l'ultima volta che si è sentito si salva al più una volta all'ora; dopo
+  `conoscenti_scadenza_giorni` (180) il conoscente si dimentica con le sue righe (le righe in
+  memoria tornano «ignoto», `RegistroStanza.riscrivi_chi`).
+
+Misura a secco (impronte finte): la prova copre la logica, non la somiglianza vera delle voci.
+**Da misurare sulla DGX** prima di accenderlo: quanti gruppi per ospite vero (una voce spezzata in
+due gruppi divide gli indizi), quante proposte confermate, quante voci simili finite nello stesso
+gruppo. Prova: `prove/prova_stanza_conoscenti.py` (livello 1, ~3 s).
