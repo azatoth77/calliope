@@ -217,7 +217,11 @@ def piper_16k(nome_voce: str, testo: str):
     cache = piper_16k.__dict__.setdefault("voci", {})
     v = cache.get(nome_voce)
     if v is None:
-        v = cache[nome_voce] = PiperVoice.load(str(RADICE / "voices" / f"{nome_voce}.onnx"))
+        # Le voci nel repository (portatile) o nella cartella dei dati (DGX: ~/calliope/voices)
+        f = next((d / "voices" / f"{nome_voce}.onnx" for d in (RADICE, Path.cwd())
+                  if (d / "voices" / f"{nome_voce}.onnx").exists()),
+                 RADICE / "voices" / f"{nome_voce}.onnx")
+        v = cache[nome_voce] = PiperVoice.load(str(f))
     x = np.frombuffer(b"".join(c.audio_int16_bytes for c in v.synthesize(testo)),
                       "<i2").astype(np.float32) / 32768
     r = v.config.sample_rate
