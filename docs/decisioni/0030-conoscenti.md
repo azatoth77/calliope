@@ -119,8 +119,10 @@ stanza non sono turni) hanno gli eventi della regola.
   permessi. Un gruppo può mescolare due voci simili (impronta sopra soglia): la proposta lo
   mostrerebbe con un nome solo, e il conoscente salvato riconoscerebbe entrambe come «Marco»; da
   misurare sulla DGX (conferme e rifiuti) prima di accenderlo.
-- Da fare: lo stimatore dell'età della voce (oggi nessun modello); il nome del conoscente nei
-  turni rivolti a Calliope (oggi solo nelle righe della stanza); le presenze dei conoscenti.
+- Da fare: lo stimatore dell'età della voce (oggi nessun modello). Fatti il 14/10 sera (ramo
+  `conoscenti-avvisi-2`): il nome del conoscente nei turni rivolti a Calliope (solo un'etichetta,
+  livello ospite, la famiglia vince sempre) e le presenze dei conoscenti (memoria e disco, nel
+  blocco della stanza, spostate alla promozione).
 
 ## Fonti
 

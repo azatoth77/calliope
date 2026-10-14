@@ -1852,6 +1852,13 @@ class Ciclo:
             chi = {"chi": f"persona:{pid}" if nome else "ignoto", "persona": pid, "nome": nome,
                    "sicurezza": sic,
                    "minore": bool(prof is not None and minori.e_minore(prof))}
+            k = getattr(getattr(self, "speaker_ctx", None), "conoscente", None)
+            if not nome and isinstance(k, dict) and k.get("id"):
+                # Un conoscente (14/10, rifiniture): la riga col suo nome e la nota, come nella
+                # stanza (livello ospite: nessuna `persona` di casa)
+                chi = {"chi": f"conoscente:{k['id']}", "conoscente": k["id"],
+                       "nome": k.get("nome"), "nota": k.get("nota") or "", "sicurezza": "voce",
+                       "minore": False}
             fine = time.time() - (time.monotonic() - (self.listener.ended_at or
                                                       time.monotonic()))
             inizio = time.time() - (time.monotonic() - self.listener.started_at)
@@ -2122,6 +2129,7 @@ class Ciclo:
         speaker_ctx.compagnia = False                                     # e questa (09/10)
         speaker_ctx.compagnia_sconosciute = False                         # e queste (13/10)
         speaker_ctx.senza_nome = False
+        speaker_ctx.conoscente = None                                     # (14/10)
         if t.scritto is not None:
             self._chi_scrive(t)
         if t.emb_job is not None:
@@ -2479,6 +2487,8 @@ class Ciclo:
                                if how == "breve" and own is not None else {}),
                             # Più voci qui (09/10): solo numeri, mai le impronte
                             **({"compagnia": comp} if comp else {})}
+        if name is None:
+            self._conoscente_turno(t, emb, sim)
         if name:
             t.speaker_name = name
             # Se l'utente ha una voce preferita, usala
@@ -2486,6 +2496,38 @@ class Ciclo:
             if prof and prof.preferred_voice and \
                     self.speaker._current_voice_path != prof.preferred_voice:
                 self.speaker.change_voice(prof.preferred_voice)
+
+    def _conoscente_turno(self, t, emb, sim_famiglia: float):
+        """Un conoscente che parla a Calliope (14/10, decisione 0030, rifiniture): la frase non
+        vale nessun profilo della famiglia e la voce è di un conoscente salvato (sopra soglia,
+        con il margine dal secondo conoscente e dal profilo della famiglia più vicino:
+        `Conoscenti.riconosci`). Solo un'etichetta (`speaker_ctx.conoscente`) per i dati del
+        turno e la riga della stanza: chi parla resta None, il livello ospite, nessun dato
+        della famiglia. La famiglia vince sempre: niente conoscente con una frase breve (sotto
+        `speaker_min_voice_s` l'impronta non decide) né con un profilo della famiglia nella
+        zona grigia (anche se fuori conversazione la frase vale ospite). Riguarda l'audio, non
+        il testo (principio 10). Nel registro dei turni solo `voce.conoscente: true`: un
+        conoscente non ha turni su disco (conserva, categoria «conoscente»)."""
+        cfg = self.s.cfg
+        con = getattr(getattr(self.s, "stanza", None), "conoscenti", None)
+        if con is None or emb is None or t.voiced_s < cfg.speaker_min_voice_s:
+            return None
+        grigia = float(cfg.speaker_id_threshold) - float(cfg.speaker_id_session_margin)
+        if sim_famiglia is not None and float(sim_famiglia) >= grigia:
+            return None
+        try:
+            k = con.riconosci(emb, sim_famiglia=sim_famiglia)
+        except Exception as e:  # noqa: BLE001 — i conoscenti non fermano la voce
+            print(f"   [VOCE] conoscenti: {type(e).__name__}: {e}", flush=True)
+            return None
+        if k is None:
+            return None
+        self.speaker_ctx.conoscente = {"id": k.id, "nome": k.nome_pieno(), "nota": k.nota}
+        if isinstance(self.rec.get("voce"), dict):
+            self.rec["voce"]["conoscente"] = True
+        # Il nome no (come le misure dei conoscenti): basta sapere che non è un ospite qualsiasi
+        print("   [VOCE] è un conoscente: resta ospite", flush=True)
+        return k
 
     # ── fase 5: la conversazione del turno ──
     def _persona_id(self, nome):

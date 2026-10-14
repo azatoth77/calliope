@@ -539,6 +539,11 @@ class SpeakerContext:
         # `compagnia_azioni_col_nome`). La frase dopo il nome da solo, lo scritto e il barge-in
         # (che comincia col nome) valgono col nome. Vale una frase (ciclo._chi_parla)
         self.senza_nome: bool = False
+        # Il conoscente che parla (14/10, decisione 0030, rifiniture; ciclo._conoscente_turno):
+        # {id, nome, nota} quando nessun profilo della famiglia vale per la frase e la voce è di
+        # un conoscente salvato. Solo un'etichetta per i dati del turno e la stanza: chi parla
+        # resta None (`current_speaker`), quindi il livello resta ospite. Vale una frase
+        self.conoscente: dict | None = None
 
     def aggiorna_conversazione(self, name: str | None, how: str | None, in_session: bool,
                                score: float | None, altro_piu_vicino: bool = False):

@@ -1125,3 +1125,35 @@ Misura a secco (impronte finte): la prova copre la logica, non la somiglianza ve
 **Da misurare sulla DGX** prima di accenderlo: quanti gruppi per ospite vero (una voce spezzata in
 due gruppi divide gli indizi), quante proposte confermate, quante voci simili finite nello stesso
 gruppo. Prova: `prove/prova_stanza_conoscenti.py` (livello 1, ~3 s).
+
+### 14/10 sera: il conoscente anche nei turni rivolti a Calliope (ramo `conoscenti-avvisi-2`)
+
+Fino a qui il conoscente era riconosciuto solo nelle righe della stanza: quando parlava a Calliope
+(turno col nome) era «un ospite, non riconosciuto dalla voce». Ora `Ciclo._conoscente_turno`
+(chiamata da `_riconosci_voce`) riconosce la sua impronta anche nel turno, **solo come
+etichetta**:
+
+- **Quando**: la frase non vale nessun profilo della famiglia (né per la voce, né per la frase
+  breve, la zona grigia nella conversazione, la continuità o il profilo più protetto), ha almeno
+  `speaker_min_voice_s` di voce, il profilo della famiglia più vicino è **sotto la zona grigia**
+  (`speaker_id_threshold − speaker_id_session_margin`: anche fuori conversazione, dove la frase
+  vale comunque ospite, un familiare nella zona grigia vince sul conoscente) e
+  `Conoscenti.riconosci` lo trova sopra soglia con `speaker_id_margine` dal secondo conoscente e
+  dal familiare più vicino. Più stretta della stanza (`Stanza._chi`, dove la zona grigia di un
+  familiare cede a un conoscente netto): qui la frase decide chi parla a Calliope.
+- **Cosa cambia**: `SpeakerContext.conoscente` = {id, nome, nota} per una frase (azzerato in
+  `_chi_parla`); nei dati del turno «persona: Marco Rossi (conoscente, collega di Carlo),
+  riconosciuto dalla voce: non è della famiglia, è un ospite.» (`brain.conoscente_detto`), e
+  nella conversazione anonima condivisa `_chi` «Marco Rossi (conoscente)»; la frase del turno
+  entra nella stanza come riga «conoscente:<id>» con il nome, la nota e «→ Calliope» (su disco con
+  la tenuta, come le sue righe della stanza) e apre la sua presenza.
+- **Cosa non cambia**: `current_speaker` resta None, quindi livello **ospite**, nessuna azione di
+  chi amministra, nessun dato della famiglia, nessuna ricerca nella stanza; `rec["voce"]["nome"]`
+  resta None (un omonimo di casa non viene mai cercato fra i profili). Nel **registro dei turni**
+  solo `voce.conoscente: true`, mai il nome né l'id: per la decisione 0030 un conoscente non ha
+  turni su disco (le parole del turno non si conservano, come per un ospite). In console «[VOCE]
+  è un conoscente: resta ospite», senza il nome.
+- **Contrari nella prova** (`prova_turni_e_presenze`): la voce netta di Carlo, Carlo nella zona
+  grigia fuori e dentro la sua conversazione, il conoscente a meno del margine da Bianca, la
+  frase breve, una voce di nessuno, l'etichetta che vale una frase sola, senza stanza, e una
+  conoscente omonima di Bianca di casa (resta conoscente; la voce di Bianca resta Bianca).

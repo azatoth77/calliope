@@ -42,7 +42,9 @@ modello** in questo passo: si misura (stanza/misure.py, `calliope stato --turni`
 - **Conoscenti** (14/10, decisione 0030, `stanza_conoscenti`, stanza/conoscenti.py): le voci che
   nessun profilo della famiglia riconosce si riconoscono fra i conoscenti salvati (la riga ha il
   loro nome, «conoscente:<id>»), oppure entrano in un gruppo in memoria; ogni riga passa alla
-  deduzione del nome (vocativi, presentazioni), che propone a chi amministra.
+  deduzione del nome (vocativi, presentazioni), che propone a chi amministra. Dal 14/10 sera
+  (rifiniture) un conoscente riconosciuto ha anche la sua presenza («conoscente:<id>»), e la frase
+  che rivolge a Calliope entra come sua riga (ciclo._conoscente_turno).
 """
 
 import collections
@@ -508,16 +510,31 @@ class Stanza:
         chi = chi or {}
         t_ini = s.inizio_epoch if s is not None else inizio
         t_fin = s.fine_epoch if s is not None else fine
+        extra = {"nota": chi.get("nota") or ""} if chi.get("conoscente") else {}
         e = self.registro(sat).aggiungi(
             RIGA, segmento=s.id if s is not None else None, versione=1,
             inizio=round(t_ini or time.time(), 3), fine=round(t_fin or time.time(), 3),
             testo=str(testo or ""), chi=chi.get("chi") or "ignoto", nome=chi.get("nome"),
             sicurezza=chi.get("sicurezza") or "nessuna", p_min=None, rivolta="si",
-            minore=bool(chi.get("minore")))
-        if chi.get("sicurezza") == "voce" and chi.get("persona"):
-            self._sentita(chi["persona"], chi.get("nome"), sat, time.time())
+            minore=bool(chi.get("minore")), **extra)
+        chiave = self._chi_presenza(chi)
+        if chiave is not None:
+            self._sentita(chiave, chi.get("nome"), sat, time.time())
         self._osserva(sat, e)
         return e.seq
+
+    @staticmethod
+    def _chi_presenza(chi: dict) -> str | None:
+        """La chiave della presenza di chi parla, o None: l'id di una persona di casa o, dal
+        14/10 (rifiniture, decisione 0030), «conoscente:<id>» di un conoscente, solo con la
+        voce riconosciuta sopra soglia (mai la zona grigia, mai una voce non riconosciuta)."""
+        if chi.get("sicurezza") != "voce":
+            return None
+        if chi.get("persona"):
+            return str(chi["persona"])
+        if chi.get("conoscente"):
+            return f"conoscente:{chi['conoscente']}"
+        return None
 
     def segna_rivolta(self, sat, seq, esito: str, giudizio=None):
         """Passo 2 (14/10): la frase di un turno ignorata o non rivolta resta nella stanza, con
@@ -594,6 +611,8 @@ class Stanza:
         chiave = f"conoscente:{cid}"
         for r in list(self._registri.values()):
             r.riscrivi_chi(chiave, {"chi": "ignoto", "nome": None, "sicurezza": "nessuna"})
+        # Le sue presenze in memoria (14/10, rifiniture): su disco le toglie `svuota`
+        self._sposta_presenze(chiave, None)
         if self.tenuta is not None:
             try:
                 self.tenuta.svuota(chiave)
@@ -610,11 +629,29 @@ class Stanza:
             campi["persona"] = nuovo
         for r in list(self._registri.values()):
             r.riscrivi_chi(chi_v, campi)
+        # Le presenze passano con lui (14/10, rifiniture): la chiave della presenza è proprio
+        # «conoscente:<id>» o l'id del profilo. Promosso, cerca dove c'era già da conoscente
+        self._sposta_presenze(vecchio, nuovo, nome)
         if self.tenuta is not None:
             try:
                 self.tenuta.rinomina(vecchio, nuovo, chi_n, nome)
             except Exception as e:  # noqa: BLE001
                 self.log(f"   [STANZA] righe non spostate: {type(e).__name__}")
+
+    def _sposta_presenze(self, vecchia: str, nuova: str | None, nome: str | None = None):
+        """Le presenze in memoria di `vecchia` passano a `nuova` (None: si tolgono)."""
+        vecchia = str(vecchia)
+        with self._cond:
+            p = self._presenti.pop(vecchia, None)
+            if p is not None and nuova is not None and str(nuova) not in self._presenti:
+                self._presenti[str(nuova)] = dict(p, nome=nome or p.get("nome"))
+            tenuti = [(nuova if x[0] == vecchia else x[0], *x[1:]) for x in self._intervalli
+                      if x[0] != vecchia or nuova is not None]
+            self._intervalli.clear()
+            self._intervalli.extend(tenuti)
+            scritta = self._presenze_scritte.pop(vecchia, None)
+            if scritta is not None and nuova is not None:
+                self._presenze_scritte.setdefault(str(nuova), scritta)
 
     # ── pausa e ospiti (tool stanza_pausa) ──
     def pausa(self, sat, motivo: str = "pausa", minuti: float | None = None) -> dict:
@@ -875,8 +912,10 @@ class Stanza:
             nome=chi.get("nome"), sicurezza=chi["sicurezza"], p_min=None, rivolta="ignoto",
             minore=chi.get("minore", False), **extra,
             **({"durante_voce": True, "eco_tolte": tolte} if s.durante or s.dette else {}))
-        if chi["sicurezza"] == "voce" and chi.get("persona"):
-            self._sentita(chi["persona"], chi.get("nome"), s.sat, s.fine_epoch or time.time())
+        chiave = self._chi_presenza(chi)
+        if chiave is not None:
+            # Anche un conoscente (14/10, rifiniture): la sua presenza conta per «chi c'era»
+            self._sentita(chiave, chi.get("nome"), s.sat, s.fine_epoch or time.time())
         # L'anello degli avvisi (solo persone di casa: un conoscente non ha `persona`) e la
         # deduzione dei nomi dei conoscenti
         self._anello(s, chi, getattr(e_riga, "seq", None), audio)

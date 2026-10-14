@@ -571,12 +571,117 @@ def prova_avviso_di_prima():
              "trascrizione" not in hub.schede[-1][1] and "nota" not in hub.schede[-1][1])
 
 
+# ─────────────────────────── 5. «Scarica l'audio» dopo un riavvio ───────────────────────────
+def prova_scheda_dopo_riavvio():
+    """14/10, rifiniture: la scheda dell'avviso porta solo l'id del file del cassetto
+    (`_scarica.avviso_audio`), la cronologia degli schermi la salva, e dopo un riavvio il
+    pulsante torna; al clic i permessi si rifanno (tutore destinatario, schermo personale, file
+    attivo); un file scaduto o tolto → niente pulsante e la nota."""
+    from calliope.schermi.cronologia import AUDIO_SCADUTO, CronologiaSchede, rivedi
+    cart = os.path.join(CARTELLA, "riavvio")
+    os.makedirs(cart, exist_ok=True)
+    cfg = PSG.cfg_base(registro="aa5", avvisi_audio=True)
+    voci = PSG.Voci()
+    hub = Hub()
+    db = os.path.join(cart, "memoria.db")
+    av = minori.Avvisi(db, schermi=hub, registry=voci, log=lambda m: None, cfg=cfg)
+    av.cassetto = Cassetto(db, os.path.join(cart, "cassetto"), log=lambda m: None)
+    cas = av.cassetto
+    ora = datetime.datetime.fromtimestamp(PSG.ORA - 600).isoformat(timespec="seconds")
+
+    def avviso(audio_di="carlo-id", tutore="carlo-id"):
+        fid = cas.metti(audio_di, b"RIFF" + b"\0" * 64, "Avviso.wav", "audio", fonte="avviso",
+                        giorni=30)
+        av.db.execute("INSERT INTO avvisi_tutori (tutore, minore, tipo, testo, urgente, creato, "
+                      "audio) VALUES (?, 'nicola-id', 'sicurezza_stanza', 'Da verificare.', 1, "
+                      "?, ?)", (tutore, ora, fid))
+        av.db.commit()
+        return fid
+    fid = avviso()
+    d = [x for x in av.da_dire("carlo-id", segna=False) if x.get("audio") == fid][0]
+    av.scheda_di(voci.get("Carlo"), d)
+    scheda = hub.schede[-1][1]
+    src = scheda.get("_scarica") or {}
+    verifica("la scheda porta solo l'id del file del cassetto (niente funzioni, percorsi, "
+             "gettoni)", src.get("avviso_audio") == fid and scheda.get("scarica") == ["audio"]
+             and not any(callable(v) for v in src.values())
+             and set(src) == {"avviso_audio", "solo_persona", "titolo"}, str(src))
+    # La cronologia su disco, poi un «riavvio»: un'altra cronologia sulla stessa cartella
+    cart_cr = os.path.join(cart, "schede")
+    cr = CronologiaSchede(cart_cr, scrivi_subito=True, log=lambda m: None)
+    cr.aggiungi("carlo-id", scheda)
+    testo_file = open(os.path.join(cart_cr, "carlo-id.json"), encoding="utf-8").read()
+    verifica("nel file della cronologia l'id del file, mai il percorso del cassetto né una "
+             "funzione", f'"avviso_audio": {fid}' in testo_file and "cassetto" not in testo_file
+             and "function" not in testo_file and ".dat" not in testo_file)
+    cr2 = CronologiaSchede(cart_cr, scrivi_subito=True, log=lambda m: None)
+    finto = types.SimpleNamespace(cronologia=cr2, avvisi=av)
+    ripresa = [rivedi(finto, v, "carlo-id") for v in cr2.ultime("carlo-id")]
+    c = ripresa[-1] if ripresa else {}
+    verifica("dopo il riavvio la scheda ha ancora «Scarica l'audio»",
+             c.get("scarica") == ["audio"] and (c.get("_scarica") or {}).get("avviso_audio")
+             == fid, str(c))
+    sc = Scaricamenti(cfg)
+    sc.avvisi = av
+    sc.registra(7, c, "carlo-id")
+    g = sc.gettone({"id": 7, "proprietario": "carlo-id"}, c["chiave"], "audio")
+    nome, tipo, byte = sc.prendi(g["url"].rsplit("/", 1)[1])
+    verifica("e lo scarico dal suo schermo dà il file", tipo == "audio/wav"
+             and byte[:4] == b"RIFF", nome)
+    sc.registra(8, c, "carlo-id")
+    try:
+        sc.gettone({"id": 8, "proprietario": "bianca-id"}, c["chiave"], "audio",
+                   amministra=True)
+        rif = None
+    except Rifiuto as e:
+        rif = e.stato
+    verifica("contrario: lo schermo personale di un'altra persona no (403)", rif == 403)
+    try:
+        sc.gettone({"id": 7, "proprietario": None}, c["chiave"], "audio")
+        rif = None
+    except Rifiuto as e:
+        rif = e.stato
+    verifica("contrario: uno schermo di stanza no (403)", rif == 403)
+    # I permessi rifatti al clic: chi non è più tutore, un id del file di un altro
+    verifica("contrario: un id del cassetto di un'altra persona non si scarica",
+             av.audio_per("carlo-id", cas.metti("bianca-id", b"RIFFx", "x.wav", "audio")) is None)
+    fid_b = avviso(audio_di="bianca-id", tutore="bianca-id")
+    verifica("contrario: un adulto destinatario ma non tutore del minore, no",
+             av.audio_per("bianca-id", fid_b) is None and not av.audio_c_e("bianca-id", fid_b))
+    nicola = voci.get("Nicola")
+    tutori = list(nicola.tutori)
+    nicola.tutori = ["bianca-id"]
+    g = sc.gettone({"id": 7, "proprietario": "carlo-id"}, c["chiave"], "audio")
+    try:
+        sc.prendi(g["url"].rsplit("/", 1)[1])
+        rif = None
+    except Rifiuto as e:
+        rif = e.stato
+    verifica("contrario: Carlo non più tutore → al clic 404, anche con il gettone", rif == 404)
+    nicola.tutori = tutori
+    # Il file scaduto (anche prima della pulizia del cassetto) o tolto: la scheda lo dice
+    vero = cas.ora
+    cas.ora = lambda: vero() + 31 * 86400
+    c2 = rivedi(finto, cr2.ultime("carlo-id")[-1], "carlo-id")
+    cas.ora = vero
+    verifica("file scaduto: niente pulsante, la nota «non c'è più»", "scarica" not in c2
+             and "_scarica" not in c2 and AUDIO_SCADUTO in c2.get("nota", ""), str(c2))
+    av.dimentica_materiale(tutore="carlo-id")
+    c3 = rivedi(finto, cr2.ultime("carlo-id")[-1], "carlo-id")
+    verifica("audio tolto («dimentica»): lo stesso", "scarica" not in c3
+             and AUDIO_SCADUTO in c3.get("nota", ""), str(c3))
+    verifica("contrario: una scheda d'avviso senza audio resta com'è",
+             rivedi(finto, {"scheda": {"tipo": "avviso", "testo": "x"}}, "carlo-id")
+             == {"tipo": "avviso", "testo": "x"})
+
+
 def main():
     try:
         sys.stdout.reconfigure(encoding="utf-8")
     except (AttributeError, ValueError):
         pass
-    for f in (prova_anello, prova_turni, prova_stanza, prova_avviso_di_prima):
+    for f in (prova_anello, prova_turni, prova_stanza, prova_avviso_di_prima,
+              prova_scheda_dopo_riavvio):
         print(f"── {f.__name__}", flush=True)
         try:
             f()

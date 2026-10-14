@@ -20,7 +20,13 @@ ortogonali, una per voce), Whisper finto, schermi finti.
 - promozione a familiare e ritorno: solo chi amministra a voce, con la domanda e il sì; minore con
   nascita e tutori; contrari: familiare, ospite, scritto, zona grigia, chi amministra o un minore
   da declassare, nome già in famiglia; le righe su disco seguono il cambio;
-- misure senza nomi né parole e la riga di `calliope stato --turni`; configurazione.
+- misure senza nomi né parole e la riga di `calliope stato --turni`; configurazione;
+- (14/10 sera, rifiniture) il conoscente che parla a Calliope: chi parla «Marco Rossi
+  (conoscente)» nei dati del turno e nella riga della stanza, livello ospite, nel registro dei
+  turni solo `conoscente: true`; la famiglia vince sempre (voce netta, zona grigia, a parità,
+  frase breve, omonima) e senza stanza niente cambia; le presenze dei conoscenti (memoria, disco,
+  blocco della stanza «… (conoscente)»), che passano con lui alla promozione (e cerca dove
+  c'era già) e al ritorno, e spariscono quando lo si dimentica.
 
 Nomi di fantasia: Carlo amministra ed è tutore di Nicola (14 anni), Bianca è di famiglia; gli
 ospiti sono Marco, un altro Marco, una seconda Bianca. ~3 s.
@@ -746,6 +752,218 @@ def prova_stato_e_spento():
              "stanza_conoscenti: false" in y and "conoscenti_scadenza_giorni: 180" in y)
 
 
+# ─────────────────────────── 9. turni rivolti a Calliope e presenze (rifiniture) ─────────────
+class Job:
+    def __init__(self, e):
+        self.e = e
+
+    def result(self):
+        return self.e
+
+
+def miscela(pesi: dict) -> np.ndarray:
+    """Un'impronta con i punteggi voluti contro le voci date ({indice: punteggio}); il resto
+    su una voce che nessuno ha (23)."""
+    v = np.zeros(DIM, dtype=np.float32)
+    for i, p in pesi.items():
+        v[i] = p
+    v[23] = np.sqrt(max(0.0, 1.0 - float(v @ v)))
+    return v
+
+
+def ciclo_per(sc: "Scena | None", cfg, voci):
+    from calliope.ciclo import Ciclo, Servizi
+    from calliope.speaker_id import SpeakerContext
+    voci.cfg = cfg
+    voci.adapt = lambda *a: False          # l'impronta non si aggiorna nelle prove
+    sctx = SpeakerContext(voci)
+    corsia = SimpleNamespace(satellite_id=1, conv=None, nome="satellite cucina", chiave="sat:1")
+    ciclo = Ciclo(Servizi(cfg, registry=voci, stanza=sc.st if sc is not None else None),
+                  corsia, None, SimpleNamespace(_current_voice_path=None), sctx, None, None,
+                  None, None, None)
+    ciclo.listener = SimpleNamespace(_ultima=(SimpleNamespace(satellite={"id": 1}), None),
+                                     started_at=time.monotonic() - 2.5,
+                                     ended_at=time.monotonic() - 0.3)
+    ciclo.rule = lambda r: None
+    return ciclo, sctx
+
+
+def turno(ciclo, sctx, emb, testo="Calliope, che ore sono?", voce_s=2.5, prev=None,
+          in_session=False):
+    from calliope.ciclo import Turno
+    sctx.current_speaker = prev
+    t = Turno(voiced_s=voce_s, in_session=in_session, emb_job=Job(emb), prev_how=None)
+    t.text = testo
+    ciclo.rec = {}
+    ciclo._chi_parla(t)
+    return t
+
+
+def nota_turno(cfg, voci, sctx) -> str:
+    from calliope.brain import Brain
+    b = Brain.__new__(Brain)
+    b.cfg, b.last_rules = cfg, []
+    b.tool_ctx = ToolContext(cfg=cfg, speakers=voci, speaker_ctx=sctx, speaker=None)
+    return b._turn_context()[0]["content"]
+
+
+def prova_turni_e_presenze():
+    cfg = cfg_base(conoscenti_file=os.path.join(CARTELLA, "turni.json"),
+                   stanza_tenuta_db=os.path.join(CARTELLA, "turni.db"))
+    sc = Scena(cfg)
+    con, hub, voci, st = sc.con, sc.hub, sc.voci, sc.st
+    marco_presentato(sc)
+    con.risposta(scheda_a(hub, 1)[-1]["proposta"], "si", "carlo-id", "Marco", "Rossi",
+                 "collega di Carlo")
+    c = con.elenco()[0]
+    chiave = f"conoscente:{c.id}"
+    # Marco in cucina, riconosciuto come conoscente; poi Carlo dice il codice del cancello
+    r = sc.di(MARCO, "Eccomi, ho portato le pizze.")
+    verifica("nella stanza la riga del conoscente apre la sua presenza",
+             r["chi"] == chiave and any(p["persona"] == chiave for p in st.presenti(1)))
+    sc.di(CARLO, "Il codice del cancello nuovo è quattro cinque uno due.")
+    ciclo, sctx = ciclo_per(sc, cfg, voci)
+    # 1. Il conoscente parla a Calliope (turno col nome)
+    t = turno(ciclo, sctx, voce(MARCO, 0.03, seme=1))
+    rec = ciclo.rec
+    verifica("turno: la voce del conoscente → chi parla «Marco Rossi», conoscente",
+             sctx.conoscente == {"id": c.id, "nome": "Marco Rossi", "nota": "collega di Carlo"},
+             str(sctx.conoscente))
+    verifica("…ma resta un ospite: nessun chi parla, livello ospite, nessun nome di casa",
+             sctx.current_speaker is None and sctx.current_level == "ospite"
+             and t.speaker_name is None and rec.get("livello") == "ospite"
+             and rec["voce"]["nome"] is None)
+    verifica("nel registro dei turni solo «conoscente: true» (mai il nome: niente turni su "
+             "disco per un conoscente)", rec["voce"].get("conoscente") is True
+             and "Marco" not in json.dumps(rec, ensure_ascii=False))
+    cons = conserva_mod.Conservazione(cfg, voci, log=lambda m: None)
+    verifica("le parole del suo turno non restano (come un ospite)",
+             not cons.testo_turno(dict(rec, testo="Calliope, che ore sono?")))
+    nota = nota_turno(cfg, voci, sctx)
+    verifica("dati del turno: «persona: Marco Rossi (conoscente, collega di Carlo)… è un "
+             "ospite»", "persona: Marco Rossi (conoscente, collega di Carlo), riconosciuto "
+             "dalla voce: non è della famiglia, è un ospite." in nota, nota[:300])
+    r = st.registro(1).righe()[-1]
+    verifica("la frase del turno nella stanza col suo nome, la nota e «→ Calliope»",
+             r["chi"] == chiave and r["nome"] == "Marco Rossi" and r["sicurezza"] == "voce"
+             and r.get("nota") == "collega di Carlo" and r["rivolta"] == "si"
+             and ctx_mod.etichetta(r) == "Marco Rossi (collega di Carlo), conoscente → Calliope",
+             str(r))
+    ctx_g = ToolContext(cfg=cfg, speakers=voci, speaker_ctx=sctx, speaker=None, stanza=st)
+    ctx_g.attesa, ctx_g.turno = None, 1
+    rc = tool_stanza._stanza_cerca(ctx_g, parole="gita")
+    verifica("permessi invariati: il conoscente non può cercare nella stanza (ospite)",
+             not rc.get("ok", True) and not rc.get("trovato"), str(rc))
+    # 2. La famiglia vince sempre
+    turno(ciclo, sctx, voce(CARLO, 0.03, seme=2))
+    verifica("contrario: la voce di Carlo resta Carlo (amministra), nessun conoscente",
+             sctx.current_speaker == "Carlo" and sctx.conoscente is None
+             and sctx.current_level == "amministra")
+    turno(ciclo, sctx, miscela({CARLO: 0.44, MARCO: 0.85}))
+    verifica("contrario: Carlo nella zona grigia (0,44) e Marco a 0,85 fuori conversazione → "
+             "ospite senza nome (la famiglia nella zona grigia vince sul conoscente)",
+             sctx.current_speaker is None and sctx.conoscente is None)
+    turno(ciclo, sctx, miscela({CARLO: 0.44, MARCO: 0.85}), prev="Carlo", in_session=True)
+    verifica("contrario: la stessa frase nella conversazione di Carlo → Carlo (familiare)",
+             sctx.current_speaker == "Carlo" and sctx.conoscente is None
+             and sctx.current_level == "familiare")
+    turno(ciclo, sctx, miscela({BIANCA: 0.33, MARCO: 0.38}))
+    verifica("contrario: Marco a meno del margine da Bianca (0,38 contro 0,33) → nessuno",
+             sctx.current_speaker is None and sctx.conoscente is None)
+    turno(ciclo, sctx, voce(MARCO, 0.03, seme=3), voce_s=0.6)
+    verifica("contrario: frase breve (0,6 s) → nessun conoscente", sctx.conoscente is None)
+    turno(ciclo, sctx, voce(15, 0.03, seme=4))
+    verifica("contrario: una voce di nessuno → ospite senza nome",
+             sctx.conoscente is None and sctx.current_speaker is None)
+    t = turno(ciclo, sctx, voce(MARCO, 0.03, seme=5))
+    sctx_vecchio = sctx.conoscente
+    t2 = turno(ciclo, sctx, voce(BIANCA, 0.03, seme=6))
+    verifica("contrario: il conoscente vale una frase sola (poi Bianca, senza etichetta)",
+             sctx_vecchio is not None and sctx.conoscente is None
+             and sctx.current_speaker == "Bianca")
+    ciclo2, sctx2 = ciclo_per(None, cfg, voci)
+    turno(ciclo2, sctx2, voce(MARCO, 0.03, seme=7))
+    verifica("contrario: senza la stanza (né i conoscenti) → ospite come prima",
+             sctx2.conoscente is None and "conoscente" not in ciclo2.rec["voce"])
+    verifica("contrario: un ospite resta «un ospite, non riconosciuto dalla voce»",
+             "persona: un ospite, non riconosciuto dalla voce." in nota_turno(cfg, voci, sctx2))
+    # 3. Le presenze: anche il conoscente conta per «chi c'era»
+    pres = {p["persona"]: p["nome"] for p in st.presenti(1)}
+    verifica("presenze: il conoscente presente in cucina dopo il suo turno",
+             pres.get(chiave) == "Marco Rossi", str(pres))
+    blocco = ctx_mod._presenti(st, 1)
+    verifica("il blocco della stanza: «presenti: … Marco Rossi (conoscente)»",
+             "Marco Rossi (conoscente)" in blocco and "Carlo" in blocco, blocco)
+    prima = sorted(p["persona"] for p in st.presenti(1))
+    sc.di(15, "Io vado, ciao.")
+    r = next(x for x in st.registro(1).righe() if x.get("testo") == "Io vado, ciao.")
+    verifica("contrario: una voce di nessuno non ha presenza",
+             r["chi"] == "ignoto" and sorted(p["persona"] for p in st.presenti(1)) == prima,
+             f"{r}")
+    st._presenze_su_disco(sempre=True)
+    st.tenuta.attendi()
+    db = sqlite3.connect(cfg.stanza_tenuta_db)
+    n = db.execute("SELECT COUNT(*) FROM presenze WHERE persona = ?", (chiave,)).fetchone()[0]
+    db.close()
+    verifica("le presenze del conoscente anche su disco (tenuta)", n >= 1)
+    st.tenuta.conoscenti = None
+    st.tenuta.ruota()
+    st.tenuta.conoscenti = con
+    db = sqlite3.connect(cfg.stanza_tenuta_db)
+    n = db.execute("SELECT COUNT(*) FROM presenze WHERE persona = ?", (chiave,)).fetchone()[0]
+    db.close()
+    verifica("contrario: la rotazione senza i conoscenti legati non tocca le sue presenze", n >= 1)
+    chi_z = cerca_mod.Chi(pid="zoe-id", nome="Zoe", sat=None)
+    es = cerca_mod.cerca(st, cfg, chi_z, "cancello", adesso=sc.t + 3 * 86400)
+    verifica("contrario: un adulto che non c'era non trova il codice", es.esito == "niente")
+    # La promozione: le sue presenze passano con lui, e cerca dove c'era già
+    con.promuovi(c.id)
+    st.tenuta.attendi()
+    db = sqlite3.connect(cfg.stanza_tenuta_db)
+    pp = dict(db.execute("SELECT persona, COUNT(*) FROM presenze WHERE persona IN (?, ?) "
+                         "GROUP BY persona", (chiave, c.id)).fetchall())
+    db.close()
+    verifica("promosso: le presenze passano a lui (memoria e disco)",
+             pp.get(c.id, 0) >= 1 and chiave not in pp
+             and any(p[0] == st.chiave_sat(1) for p in st.presenze(c.id))
+             and not st.presenze(chiave), str(pp))
+    es = cerca_mod.cerca(st, cfg, cerca_mod.Chi(pid=c.id, nome="Marco Rossi", sat=None),
+                         "cancello", adesso=sc.t + 3 * 86400)
+    verifica("promosso: trova il codice detto in cucina mentre c'era da conoscente",
+             es.esito == "trovato" and "cancello" in es.testo, es.esito)
+    con.declassa(voci.users["Marco Rossi"])
+    verifica("tornato conoscente: le presenze tornano alla chiave del conoscente",
+             st.presenze(chiave) and not [p for p in st.presenze(c.id)])
+    # Dimenticato: via anche le presenze (memoria e disco)
+    con.dimentica(c.id)
+    st.tenuta.attendi()
+    db = sqlite3.connect(cfg.stanza_tenuta_db)
+    n = db.execute("SELECT COUNT(*) FROM presenze WHERE persona LIKE 'conoscente:%'"
+                   ).fetchone()[0]
+    db.close()
+    verifica("dimenticato: le sue presenze via, in memoria e su disco",
+             n == 0 and not st.presenze(chiave)
+             and chiave not in [p["persona"] for p in st.presenti(1)])
+    # Omonimia: una conoscente che si chiama come Bianca di casa non diventa mai lei
+    marco_presentato(sc, BIANCA2, "Bianca")
+    con.risposta(scheda_a(hub, 1)[-1]["proposta"], "si", "carlo-id", "Bianca", "Verdi")
+    turno(ciclo, sctx, voce(BIANCA2, 0.03, seme=8), testo="Calliope, cosa c'è in agenda?")
+    nota = nota_turno(cfg, voci, sctx)
+    verifica("omonimia: la voce della conoscente Bianca Verdi → conoscente, mai Bianca di casa",
+             sctx.conoscente and sctx.conoscente["nome"] == "Bianca Verdi"
+             and sctx.current_speaker is None and sctx.current_level == "ospite"
+             and "persona: Bianca Verdi (conoscente)" in nota
+             and "persona: Bianca," not in nota, nota[:200])
+    r = st.registro(1).righe()[-1]
+    verifica("omonimia: nella stanza la riga è della conoscente, non di bianca-id",
+             r["chi"].startswith("conoscente:") and r.get("persona") is None
+             and ctx_mod._presenti(st, 1).count("Bianca Verdi (conoscente)") == 1)
+    turno(ciclo, sctx, voce(BIANCA, 0.03, seme=9))
+    verifica("omonimia, contrario: la voce di Bianca di casa resta Bianca (familiare)",
+             sctx.current_speaker == "Bianca" and sctx.conoscente is None)
+    sc.chiudi()
+
+
 def main():
     try:
         sys.stdout.reconfigure(encoding="utf-8")
@@ -759,6 +977,7 @@ def main():
     prova_livello()
     prova_server()
     prova_stato_e_spento()
+    prova_turni_e_presenze()
     print(f"\n{'TUTTO OK' if not errori else f'{errori} ERRORI'}")
     return 1 if errori else 0
 

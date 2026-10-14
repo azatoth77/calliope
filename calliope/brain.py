@@ -422,6 +422,14 @@ NON_TROVO = re.compile(r"\bnon (?:so|trovo|ho trovato|riesco a trovare|risulta|c
                        r"c'è nulla)\b", re.I)
 
 
+def conoscente_detto(k: dict) -> str:
+    """Chi parla quando è un conoscente (14/10, decisione 0030, rifiniture): «Marco Rossi
+    (conoscente, collega di Carlo), riconosciuto dalla voce: non è della famiglia, è un ospite»."""
+    nota = str(k.get("nota") or "").strip()
+    return (f"{k.get('nome')} (conoscente" + (f", {nota}" if nota else "") + "), riconosciuto "
+            "dalla voce: non è della famiglia, è un ospite")
+
+
 def ultima_frase(text: str) -> str:
     """L'ultima frase di un testo (per la domanda o l'offerta finale)."""
     frasi = [f for f in re.split(r"(?<=[.!?…])\s+", (text or "").strip()) if f.strip()]
@@ -580,7 +588,11 @@ class ContextEcho:
                              + r"(?:\s*\([^)]{0,60}\))?\s*[.!:;]+\s*"
                              r"|\s*chi ti parla non è riconosciut[oa][^.!?]{0,60}[.!]+\s*"
                              r"|\s*persona:\s*(?:" + who + r"|un ospite)"
-                             r"(?:,\s*(?:non\s+)?riconosciut[oa][^.!?]{0,40})?\s*[.!;]+\s*",
+                             r"(?:,\s*(?:non\s+)?riconosciut[oa][^.!?]{0,40})?\s*[.!;]+\s*"
+                             # Un conoscente (14/10 sera, conoscente_detto): «persona: Marco
+                             # Rossi (conoscente, …), riconosciuto dalla voce: …, è un ospite.»
+                             r"|\s*persona:\s*[^.!?()]{1,60}\(conoscente[^)]{0,80}\)"
+                             r"[^.!?]{0,120}[.!;]+\s*",
                              re.I)
         self.done, self.buf, self.dropped = not active, "", ""
 
@@ -4122,8 +4134,12 @@ class Brain:
             if str(getattr(self._c(), "chiave", "") or "").startswith("ospite:"):
                 # Chi l'ha detta, nella conversazione anonima del satellite (13/10): per i
                 # dati del turno quando è condivisa in compagnia (_nota_gruppo). Mai nel testo
-                msg_u["_chi"] = (getattr(getattr(self.tool_ctx, "speaker_ctx", None),
-                                         "current_speaker", None) or "voce non riconosciuta")
+                sc_u = getattr(self.tool_ctx, "speaker_ctx", None)
+                k_u = getattr(sc_u, "conoscente", None)
+                msg_u["_chi"] = (getattr(sc_u, "current_speaker", None)
+                                 or (f"{k_u['nome']} (conoscente)"
+                                     if isinstance(k_u, dict) and k_u.get("nome") else None)
+                                 or "voce non riconosciuta")
             self.history.append(msg_u)
             self._allega_dati()
             self._trim_history()
@@ -4940,6 +4956,10 @@ class Brain:
             # come dato su chi parla (come il tono); i permessi li controlla il codice
             young = self._minor_note(name)
             who += "".join(f"; {x}" for x in (tone, young) if x) + "."
+        elif isinstance(getattr(sctx, "conoscente", None), dict) and sctx.conoscente.get("nome"):
+            # Un conoscente (14/10, decisione 0030, rifiniture): il nome come dato su chi parla,
+            # ma resta un ospite (i permessi li decide il codice, non questa riga)
+            who = f"persona: {conoscente_detto(sctx.conoscente)}."
         else:
             who = "persona: un ospite, non riconosciuto dalla voce."
         # Le parole incerte della trascrizione (stt_incerte_al_modello): dopo chi parla, prima
