@@ -1507,18 +1507,26 @@ class OpenAIBackend:
         acc: dict = {}
         usage = None
         primo = ultimo = None        # tempi del primo e dell'ultimo pezzo (generazione)
-        for chunk in self.client.chat.completions.create(**kwargs):
-            if getattr(chunk, "usage", None) is not None:
-                usage = chunk.usage
-            if not chunk.choices or chunk.choices[0].delta is None:
-                continue
-            delta = chunk.choices[0].delta
-            if delta.content or delta.tool_calls:
-                ultimo = time.perf_counter()
-                primo = primo or ultimo
-            merge_tool_deltas(acc, delta.tool_calls or [])
-            if delta.content:
-                yield "text", delta.content
+        risposta = self.client.chat.completions.create(**kwargs)
+        try:
+            for chunk in risposta:
+                if getattr(chunk, "usage", None) is not None:
+                    usage = chunk.usage
+                if not chunk.choices or chunk.choices[0].delta is None:
+                    continue
+                delta = chunk.choices[0].delta
+                if delta.content or delta.tool_calls:
+                    ultimo = time.perf_counter()
+                    primo = primo or ultimo
+                merge_tool_deltas(acc, delta.tool_calls or [])
+                if delta.content:
+                    yield "text", delta.content
+        finally:
+            # Anche quando Brain chiude lo stream a metà (14/10, ciclo_ripetuto): la
+            # connessione si chiude e il server smette di generare
+            chiudi = getattr(risposta, "close", None)
+            if callable(chiudi):
+                chiudi()
         if acc:
             yield "calls", [{"id": acc[i]["id"], "name": acc[i]["name"],
                              "arguments": _loads_dict(acc[i]["arguments"])}
@@ -2297,6 +2305,11 @@ class Brain:
         self._held_kind = None
         self.mentions_tool("")                       # prepara _tool_re
         names = ToolNameHold(self._tool_re, hold_names and self._net("chiamata_in_mezzo"))
+        # La risposta che gira in tondo (14/10, calliope/ciclo_ripetuto.py): subito dopo il
+        # ragionamento, prima di tutte le altre reti; con un ciclo lo stream si chiude
+        from .ciclo_ripetuto import CicloRipetuto
+        ciclo = CicloRipetuto(self._net("ciclo_ripetuto"))
+        self._ciclo_fermato = None
         out, calls, waiting = [], [], []
         # Il testo generato di questa passata, anche se la risposta viene interrotta (passo 3: la
         # parte non detta nel promemoria del turno dopo, § 11.4)
@@ -2305,7 +2318,8 @@ class Brain:
             gen.append(out)
         if int(getattr(self, "_passata", 0) or 0) <= 1:
             self._misura_prefisso(messages)
-        for kind, payload in self.backend.stream(messages, schemas):
+        flusso = self.backend.stream(messages, schemas)
+        for kind, payload in flusso:
             if kind == "calls":
                 calls.extend(payload)
                 continue
@@ -2313,7 +2327,7 @@ class Brain:
                 self._note_usage(payload)
                 continue
             piece = names.feed(hold.feed(guard.feed(qui.feed(echo.feed(capito.feed(
-                think.feed(payload)))))))
+                ciclo.feed(think.feed(payload))))))))
             if capito.capito is not None:
                 # Prima delle chiamate di questa passata (arrivano a stream finito)
                 self._applica_capito(capito.capito)
@@ -2324,8 +2338,14 @@ class Brain:
                     waiting.append(piece)
                 else:
                     yield piece
+            if ciclo.fermata:
+                break
+        if ciclo.fermata:
+            # Chiude la richiesta: Ollama (e vLLM) smettono di generare quando il client chiude
+            flusso.close()
         piece = names.feed(hold.feed(guard.feed(
-            qui.feed(echo.feed(capito.feed(think.flush()) + capito.flush()) + echo.flush())
+            qui.feed(echo.feed(capito.feed(ciclo.feed(think.flush()) + ciclo.flush())
+                               + capito.flush()) + echo.flush())
             + qui.flush()) + guard.flush()) + hold.flush())
         if qui.tolte:
             self._rule("scrivo_qui_tolto")
@@ -2346,6 +2366,24 @@ class Brain:
             print(f"   [LLM] contesto ripetuto in testa, non lo dico: «{self.cita_in_console(echo.dropped, 60)}»",
                   flush=True)
             self._rule("eco_contesto")
+        if ciclo.fermata:
+            # Un ciclo degenerato: niente chiamate né testo trattenuto (non si sa più cosa
+            # volesse dire); si dice la parte sana e, se non è una frase compiuta, la frase
+            # pronta. Il ciclo non si dice e non entra nella storia
+            c = ciclo.ciclo or {}
+            self._rule("ciclo_ripetuto")
+            print(f"   [LLM] risposta in ciclo («{self.cita_in_console(c.get('unita', ''), 40)}» "
+                  f"{c.get('volte')} volte di fila): fermo il modello", flush=True)
+            fatto = "".join(out).strip()
+            if hold_request:
+                fatto = ""                 # la frase trattenuta non è stata detta: non si dice
+            extra = ""
+            if not (fatto and ciclo.compiuta() and not hold_request):
+                from . import frasi
+                extra = self._marca(frasi.scegli("scusa.incartata"), "atto", "incartata")
+                yield (" " if fatto else "") + extra
+            self._ciclo_fermato = c
+            return (f"{fatto} {extra}".strip(), [], "", "", "")
         if not calls and guard.call:
             print(f"   [TOOL] chiamata scritta come testo, eseguita: {guard.call['name']}",
                   flush=True)
@@ -4440,6 +4478,11 @@ class Brain:
                 hold_ripetuta=precedente if not self.last_tools else None,
                 tieni_con_chiamate=sviluppo_sosp and not nudged and not self.last_tools)
             tail = []
+            if getattr(self, "_ciclo_fermato", None):
+                # La risposta girava in tondo (ciclo_ripetuto): finisce qui, senza spinte né
+                # altre passate (potrebbero rientrare nel ciclo)
+                self.history.append({"role": "assistant", "content": text})
+                return
             if held and self._held_kind == "ripetuta" and not calls:
                 # Uguale alla risposta di prima: non si dice né entra nella storia; la spinta,
                 # una volta (poi la sua risposta si dice, anche uguale)

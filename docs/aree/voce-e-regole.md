@@ -1848,3 +1848,62 @@ Nel campo `regole` del registro dei turni, contate nella sezione della compagnia
 
 Casi contrari in `prove/prova_compagnia_passo0.py` (non in `prova_testo.py`: nessuna delle tre
 guarda il testo della frase).
+
+## La risposta che gira in tondo: la rete `ciclo_ripetuto` (14/10 notte, ramo `giro-auto-14-10`)
+
+**Caso vero** (seconda prova in auto del 14/10 sera, telefono come satellite, due persone, stanza
+accesa; gemma4 26b-a4b qat su Ollama, temperatura 0.3). Dopo una spiegazione lunga di chi parlava
+(9 s: cosa vuol dire «troppo aura» nello slang dei ragazzi) il modello ha risposto «Grazie per
+l'aggiornamento, ora ho capito! Allora allora, allora... allora... allora...» per centinaia di
+ripetizioni, e la voce le ha lette finché chi parlava non l'ha interrotta col nome (barge-in). Nel
+turno dopo il modello stesso se n'è scusato. Un ciclo degenerato della generazione: non una scelta
+del modello ma un guasto della forma della sua uscita.
+
+**La rete** (`calliope/ciclo_ripetuto.py`, `CicloRipetuto`; rete del modello `ciclo_ripetuto` in
+`config.RETI`, accesa per ogni profilo, si spegne con `llm_reti_spente`). In `Brain._turn`, subito
+dopo il filtro del ragionamento e prima di tutte le altre reti, guarda le parole mentre arrivano
+(minuscole, senza punteggiatura: «allora... allora,» sono la stessa parola) e cerca una **sequenza
+periodica in coda**: la stessa parola, lo stesso gruppo di parole o la stessa frase, una copia dopo
+l'altra. Le soglie, contando la prima copia: una parola **10** volte di fila (le cifre e i numeri a
+parole **16**: un IBAN dettato ha «zero» sette volte), due o tre parole **6**, quattro parole o più
+(una frase intera) **4**.
+
+- Quando la coda comincia a ripetersi, quel pezzo **aspetta** (non va alla voce) finché non si sa
+  se è un ciclo; se la ripetizione si interrompe sotto la soglia, passa tutto com'era. Fuori dalle
+  ripetizioni il filtro tiene indietro una parola sola (la prima copia di una parola ripetuta non
+  deve essere già detta quando arriva la seconda); una frase che finisce col suo segno passa
+  subito. Costo misurato: ~3 µs a token.
+- Oltre la soglia **lo stream si chiude** (`flusso.close()`: Ollama e vLLM smettono di generare
+  quando il client chiude; il backend OpenAI ora chiude la risposta anche a metà), il ciclo **non
+  si dice e non entra nella storia**, e la risposta finisce lì, senza spinte né altre passate (che
+  potrebbero rientrare nel ciclo). Resta la parte sana: se finisce con una frase compiuta basta
+  quella (nel caso vero: «Grazie per l'aggiornamento, ora ho capito!»); altrimenti, o se il testo
+  della passata era trattenuto, la frase pronta **`scusa.incartata`** (`calliope/frasi.py`, con le
+  varianti per tono: «Scusa, mi sono incartata: ripetimelo, per favore.»; senza domanda in fondo,
+  così il formale ha il suo «me lo ripeta»), marcata per l'uscita unica come atto `incartata`.
+- Regola **`ciclo_ripetuto`** nel registro dei turni; in console «[LLM] risposta in ciclo
+  («…» 10 volte di fila): fermo il modello» (le parole citate passano da `cita_in_console`).
+
+È una correzione della forma dell'uscita del modello (principio 10): non decide nessun
+significato. **Contrari** (`prove/prova_ciclo_ripetuto.py`, livello 1): «no no no», «sì sì», «molto,
+molto, molto», numeri e IBAN dettati, «Fra Martino» («dormi tu? dormi tu?»), «tanti auguri a te»,
+«ripeti tre volte: oggi è una bella giornata», elenchi con la stessa forma («un chilo di mele, un
+chilo di pere…»), «la la la» di una canzone, «bene bene bene»: passano uguali, parola per parola.
+Con Brain e un motore finto che genera all'infinito: stream chiuso dopo meno di 60 token, una
+passata sola, la storia con la sola parte sana; la prima frase di una risposta normale esce prima
+che il modello finisca (latenza invariata).
+
+**Le opzioni di campionamento**, misurate (portatile, gemma4 e4b su Ollama 0.40.4, temperatura
+0.3, seme fisso, «scrivi "allora" 60 volte»: una ripetizione chiesta, cioè un contrario): senza
+opzioni e con `repeat_penalty` 1.0 56 «allora» (uguali: il valore di serie non penalizza);
+`repeat_penalty` 1.5 31; 3.0 2 (parole spezzate: «allor a ora alla orra»); `presence_penalty` 1.5
+46; `frequency_penalty` 1.5 8 («allor a ll ora»). Le penalità agiscono su gemma4 col motore nuovo
+di Ollama, ma rompono proprio le ripetizioni legittime (e i numeri dettati); il ciclo vero non si
+riproduce a comando. **Nessuna opzione nel profilo**: basta la rete.
+
+**Perché è successo**: non riproducibile sul portatile (il 26B non ci sta). Gli ingredienti del
+turno: ~20 000 token di contesto (prompt, 78 tool, storia), le righe della stanza nella storia
+(fino a 32 righe in un turno), una frase di 9 s su una parola nuova, temperatura bassa (0.3, che
+rende i cicli più probabili una volta cominciati). Nessuno da solo è una causa dimostrata; la rete
+vale per ogni causa. Da guardare nel registro dei turni della DGX: la regola `ciclo_ripetuto` (quante
+volte, con che contesto).

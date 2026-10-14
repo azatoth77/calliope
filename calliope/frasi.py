@@ -443,6 +443,25 @@ _v("attesa.stanza", "attesa", "Un attimo, ripenso a cosa vi siete detti.", toni=
                           "Consulto il registro della stanza."),
 })
 
+# La risposta del modello girava in tondo e Brain l'ha fermata (14/10, calliope/ciclo_ripetuto.py,
+# caso vero in auto: «Allora allora, allora... allora...» per centinaia di volte). Solo quando la
+# parte sana non è una frase compiuta. Senza domanda in fondo: il «puoi ripetere?» non va nel
+# formale, e la frase deve finire allo stesso modo in ogni tono (prova_frasi)
+_v("scusa.incartata", "scusa", "Scusa, mi sono incartata: ripetimelo, per favore.", toni={
+    "normale": ("Scusa, mi sono incartata: ripetimelo, per favore.",
+                "Scusa, mi sono inceppata. Dimmelo di nuovo, per favore.",
+                "Mi sono incartata, scusa: ripetimelo, per favore."),
+    "formale": ("Mi scusi, mi sono incartata: me lo ripeta, per favore.",
+                "Mi perdoni, mi sono inceppata. Me lo ripeta, per cortesia."),
+    "amichevole": ("Ops, mi sono incartata! Ripetimelo, per favore.",
+                   "Scusami, mi sono ingarbugliata: dimmelo di nuovo, per favore."),
+    "ironico": ("Mi sono incartata come un disco rotto, scusa: ripetimelo, per favore.",
+                "Scusa, mi si sono annodate le parole. Ripetimelo, per favore."),
+    "essenziale": ("Scusa, mi sono incartata. Ripeti, per favore.",),
+    "computer_di_bordo": ("Risposta interrotta per anomalia. Ripetere la richiesta.",
+                          "Errore di generazione. Ripetere, prego."),
+})
+
 # ── solo misura: classi bloccate, parola per parola (§ 2 della ricerca) ──
 _v("politica.conferma", "politica", "C'è di mezzo {fonte}, quindi chiedo a te: vuoi che {cosa}?")
 _v("politica.non_chiesto", "politica", "Non me l'hai chiesto: vuoi che {cosa}?")

@@ -341,7 +341,8 @@ class Config:
     # riferimento_casa, riferimento_agenda, conferma_al_posto_del_vuoto,
     # vuoto_seconda_passata, ricerca_promessa, citazione_tolta, nome_tool_parlato,
     # eco_contesto, spinta_archivio, spinta_rinuncia, spinta_esercizi, correzione_tool,
-    # ricerca_recente, risposta_ripetuta, scrivo_qui_a_voce, spinta_stanza; "tutte"
+    # ricerca_recente, risposta_ripetuta, scrivo_qui_a_voce, spinta_stanza,
+    # ciclo_ripetuto; "tutte"
     # le spegne tutte. Quelle di
     # «sicurezza» (permessi, politica…) non si spengono: un nome di sicurezza o sconosciuto si
     # segnala all'avvio. Quelle del profilo (llm_profilo) si aggiungono a queste.
@@ -2919,6 +2920,12 @@ RETI: dict[str, Rete] = {
         "che è stato detto adesso (calliope/ripetizione.py)", MODELLO,
         "la stessa frase su Christopher Nolan detta due volte a due richieste diverse (26B, "
         "09/10, DGX)"),
+    "ciclo_ripetuto": Rete(
+        "risposta che gira in tondo (la stessa parola, lo stesso gruppo o la stessa frase di "
+        "fila oltre la soglia): lo stream si chiude, il ciclo non si dice, resta la parte sana o "
+        "la frase pronta (calliope/ciclo_ripetuto.py)", MODELLO,
+        "«Allora allora, allora... allora...» per centinaia di volte, letto dalla voce fino al "
+        "barge-in (26B, 14/10 sera, in auto)"),
     # ── sicurezza: sempre accese, per ogni modello ──
     "permessi": Rete(
         "livello di chi parla e preset dei minori, a ogni esecuzione (ToolRegistry.call)",
