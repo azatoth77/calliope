@@ -1080,6 +1080,24 @@ regge solo se la cancellazione vera tiene l'eco sotto la soglia del VAD, come ne
 −35 dB. Le righe false che restano sono parole che Whisper inventa o storpia sull'eco: la misura
 vera dirà se servono il segnale CAM++ (b) o una soglia del VAD più alta durante la voce.
 
+**Misura vera sul portatile (14/10 sera, satellite «studio»: microfono interno in MME con la
+cancellazione dell'eco di Windows, casse interne; `prove/manuali/misura_eco_stanza.py`, numeri in
+`privato/eco-stanza`)**: 20 frasi di Calliope, 227 parole, ~88 s per prova.
+
+| Prova | Volume | Segmenti durante la voce | Righe false | Eco residua /100 | Lettura (WER) |
+|---|---|---|---|---|---|
+| muto | 50 % | 1 (una parola) | 1 | 0,44 | — |
+| muto | 80 % | 0 | 0 | 0,0 | — |
+| lettura sopra la voce | 80 % | 3 | — | 2,2 (stima per eccesso) | 0,10 su 100 parole lette |
+| lettura, Calliope muta | — | — | — | 0,44 (coincidenze col copione) | 0,37 (riferimento rovinato: lettura iniziata prima che lo script ascoltasse) |
+
+Lettura: sul portatile la cancellazione di Windows tiene l'eco sotto la soglia del VAD (il caso
+«−35 dB» della simulazione): all'80 % nessun segmento nasce, a metà volume una sola parola. La
+stima dell'eco nella lettura conta anche le parole della persona che coincidono col copione (0,44
+anche a Calliope muta), quindi l'eco vera è sotto 2. Una persona che legge sopra la voce è
+trascritta con WER 0,10. CAM++ (segnale b): similitudine dei segmenti con le frasi di Calliope
+p50 0,12, max 0,22, quindi qui non serve. Non misurata la chiacchiera a due (una persona sola).
+
 **Da misurare sul vero** (passi in [`prove/manuali/misura-eco-stanza.md`](../../prove/manuali/misura-eco-stanza.md)):
 telefono in auto (motore acceso e spento, volume medio e alto) e in casa, portatile col microfono
 interno in MME, e il contrario delle casse esterne senza cancellazione (cancello chiuso). Si accende
