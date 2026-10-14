@@ -1069,6 +1069,15 @@ class Config:
     stanza_cerca_anticipo: bool = True
     # Tetto delle righe anticipate (~250 token: ~0,1 s di lettura in più del 26B)
     stanza_cerca_anticipo_caratteri: int = 1000
+    # Passo 5 (14/10, calliope/stanza/eco.py): la stanza ascolta anche mentre Calliope parla. I
+    # satelliti e il telefono mandano i segmenti detti durante la sua voce, segnati con le frasi
+    # che suonavano; il filtro dell'eco (regola eco_stanza) toglie dalla riga le parole che sono
+    # la sua voce (3 di fila, o il 60 % della riga, nel tempo della frase) e scarta la riga tutta
+    # eco. Solo per la stanza: i comandi restano half-duplex (principio 8), il barge-in non
+    # cambia. Un satellite con l'eco sul saluto oltre barge_in_echo_max (casse senza
+    # cancellazione) resta half-duplex anche per la stanza. Misure (eco residua, parole
+    # recuperate) in `calliope stato --turni`, sezione Stanza. false (di serie) = come prima
+    stanza_durante_voce: bool = False
     # Connessioni insieme attraverso l'inoltro (una pagina ne apre 2–6)
     satellite_inoltro_max: int = 32
     # Secondi senza un byte dopo i quali una connessione dell'inoltro si chiude
@@ -2909,7 +2918,7 @@ SEZIONI: dict[str, list[str]] = {
                "stanza_caldo_sempre_s", "stanza_caldo_caratteri", "stanza_cerca",
                "stanza_cerca_righe", "stanza_cerca_caratteri", "stanza_cerca_attesa_max_s",
                "stanza_cerca_attesa_s", "stanza_cerca_anticipo",
-               "stanza_cerca_anticipo_caratteri"],
+               "stanza_cerca_anticipo_caratteri", "stanza_durante_voce"],
     "satellite": ["satellite_server", "satellite_credenziali", "satellite_impronta",
                   "satellite_microfono", "satellite_casse", "satellite_webcam",
                   "satellite_schermo", "satellite_schermo_personale", "satellite_esecutore",

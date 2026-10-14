@@ -59,9 +59,11 @@ const param = Object.assign({}, PARAMETRI);
 const ascolto = new Ascolto(param);
 const player = new Riproduttore("Calliope");
 // L'ascolto della stanza (13/10): un secondo VAD sugli stessi blocchi, solo con la stanza accesa
-// dal server, l'interruttore acceso e il microfono acceso; mai mentre Calliope parla
+// dal server, l'interruttore acceso e il microfono acceso; mentre Calliope parla solo con
+// `durante_voce` dal server (passo 5, 14/10: i segmenti portano le frasi che suonavano)
 const stanza = new AscoltoStanza(param, mandaStanza, () => player.inCorso(),
-  () => (st.ultimoLid !== null ? { t: st.ultimoA, id: st.ultimoLid } : null));
+  () => (st.ultimoLid !== null ? { t: st.ultimoA, id: st.ultimoLid } : null),
+  () => player.voceOra(1.0));
 // La voce comincia a sentirsi (07/10): come `suona` del satellite in Python, per `prima_voce_s`
 player.onSuona = (id, uscita) => manda({ tipo: "suona", id, uscita_s: Math.round(uscita * 1000) / 1000 });
 let suoni = {};          // {inizio, fine}: {pcm (Uint8Array, int16), rate} dal benvenuto
@@ -747,7 +749,7 @@ function mandaStanza(m) {
 function aggiornaStanza() {
   const s = st.stanza.server;
   stanza.imposta(!!(st.collegato && s && s.attiva && st.stanza.voluta && st.mic),
-    s && s.segmento_max_s);
+    s && s.segmento_max_s, !!(s && s.durante_voce === true));
   const box = $("stanza-interruttore");
   if (box) box.hidden = !(s && s.motivo !== "spenta");
   attr($("stanza-tieni"), "aria-checked", st.stanza.voluta ? "true" : "false");

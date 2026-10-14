@@ -390,12 +390,16 @@ export class Ascolto {
 // min_speech_ms di voce, poi a gruppi di 8 blocchi mentre si parla. Half-duplex: mentre
 // Calliope parla il segmento in corso si butta (chiusura «voce»). `ultimoComando()` →
 // {t, id} dell'ultimo audio dei comandi (b"A"): il segmento che lo copre lo porta (`ascolto`).
+// Passo 5 (14/10): con `durante` (stanza_durante_voce dal server) il segmento continua mentre
+// Calliope parla e porta gli id delle frasi che suonavano (`durante_voce`, dal parametro `voce`
+// di passo): l'eco residua la toglie il server (calliope/stanza/eco.py).
 export class Segmentatore {
   constructor(p, maxS, ultimoComando) {
     this.p = p;
     this.fms = FRAME / SR * 1000;
     this.maxS = maxS || 20;
     this.ultimoComando = ultimoComando || null;
+    this.durante = false;
     this.n = 0;
     this.pre = [];
     this.segmenti = 0;
@@ -403,15 +407,17 @@ export class Segmentatore {
     this._azzera();
   }
 
-  _azzera() { this.parla = false; this.seg = []; this.voce = 0; this.silenzio = 0; this.sid = null; this.inviati = 0; this.t0 = 0; }
+  _azzera() { this.parla = false; this.seg = []; this.voce = 0; this.silenzio = 0; this.sid = null; this.inviati = 0; this.t0 = 0; this.voci = new Set(); }
 
   _chiudi(chiusura) {
     const out = [];
     if (this.sid !== null) {
       if ((chiusura === "silenzio" || chiusura === "lunga") && this.inviati < this.seg.length) out.push(["audio", this.sid, this.seg.slice(this.inviati)]);
       const u = this.ultimoComando ? this.ultimoComando() : null;
-      out.push(["fine", { id: this.sid, durata_s: Math.round(this.seg.length * this.fms) / 1000,
-        parlato_ms: Math.round(this.voce * this.fms), chiusura, ascolto: u && u.t >= this.t0 ? u.id : null }]);
+      const fine = { id: this.sid, durata_s: Math.round(this.seg.length * this.fms) / 1000,
+        parlato_ms: Math.round(this.voce * this.fms), chiusura, ascolto: u && u.t >= this.t0 ? u.id : null };
+      if (this.voci.size) fine.durante_voce = [...this.voci].sort((a, b) => a - b);
+      out.push(["fine", fine]);
       if (chiusura === "silenzio" || chiusura === "lunga") this.segmenti++;
       else this.buttati[chiusura] = (this.buttati[chiusura] || 0) + 1;
     } else if (this.parla && (chiusura === "silenzio" || chiusura === "lunga")) this.buttati.corto++;
@@ -421,10 +427,11 @@ export class Segmentatore {
 
   ferma() { this.pre = []; return this._chiudi("spenta"); }
 
-  // ora: performance.now() in ms
-  passo(frame, prob, occupato, ora) {
+  // ora: performance.now() in ms; voce: id della frase che suona (o appena finita), o null
+  passo(frame, prob, occupato, ora, voce) {
     const p = this.p;
-    if (occupato) { this.pre = []; return this.parla ? this._chiudi("voce") : []; }
+    if (occupato && !this.durante) { this.pre = []; return this.parla ? this._chiudi("voce") : []; }
+    const conta = this.durante && voce !== null && voce !== undefined;
     const maxPre = Math.max(1, Math.round(p.preroll_ms / this.fms));
     if (!this.parla) {
       this.pre.push(frame);
@@ -432,10 +439,12 @@ export class Segmentatore {
       if (prob >= p.vad_threshold) {
         this.parla = true; this.seg = this.pre.slice(); this.voce = 1; this.silenzio = 0;
         this.t0 = ora - this.seg.length * this.fms; this.pre = [];
+        if (conta) this.voci.add(voce);
       }
       return [];
     }
     const out = [];
+    if (conta) this.voci.add(voce);
     this.seg.push(frame);
     if (prob >= p.vad_threshold) this.voce++;
     this.silenzio = prob < p.vad_threshold - 0.15 ? this.silenzio + 1 : 0;
@@ -457,10 +466,11 @@ export class Segmentatore {
 // Il giro della stanza nel browser: i blocchi arrivano con push() (non blocca), un ciclo li
 // passa al VAD uno alla volta; `manda(messaggio)` riceve i messaggi del Segmentatore.
 export class AscoltoStanza {
-  constructor(param, manda, occupato, ultimoComando) {
+  constructor(param, manda, occupato, ultimoComando, voce) {
     this.p = param;
     this.manda = manda;
     this.occupato = occupato;
+    this.voce = voce || null;      // () → id della frase che suona o appena finita (passo 5)
     this.vad = null;
     this.seg = new Segmentatore(param, 20, ultimoComando);
     this.coda = [];
@@ -469,8 +479,9 @@ export class AscoltoStanza {
     this._gira = false;
   }
 
-  imposta(attiva, maxS) {
+  imposta(attiva, maxS, durante) {
     if (maxS) this.seg.maxS = Number(maxS) || this.seg.maxS;
+    this.seg.durante = !!attiva && durante === true;
     if (this.attiva && !attiva) { this.coda = []; for (const m of this.seg.ferma()) this.manda(m); }
     this.attiva = !!attiva && !!this.vad;
   }
@@ -489,7 +500,8 @@ export class AscoltoStanza {
         const f = this.coda.shift();
         const prob = await this.vad.prob(f);
         if (!this.attiva) break;
-        for (const m of this.seg.passo(f, prob, !!this.occupato(), performance.now())) this.manda(m);
+        const voce = this.seg.durante && this.voce ? this.voce() : null;
+        for (const m of this.seg.passo(f, prob, !!this.occupato(), performance.now(), voce)) this.manda(m);
       }
     } catch (e) { console.error(e); } finally { this._gira = false; }
   }
@@ -590,6 +602,18 @@ export class Riproduttore {
   }
 
   inCorso() { return !!this.ctx && this.prossimo > this.ctx.currentTime; }
+
+  // Passo 5 della stanza (14/10): l'id della frase che suona adesso, o finita da meno di codaS
+  // secondi (l'eco dura un po' dopo); null se tace. Come Riproduttore.voce_ora del satellite
+  voceOra(codaS) {
+    if (!this.ctx) return null;
+    const ora = this.ctx.currentTime, coda = codaS === undefined ? 1.0 : codaS;
+    let id = null;
+    for (const f of this.ordine) {
+      if (f.inizio !== null && !f.interrotta && f.inizio <= ora + 0.05 && ora <= f.fine + coda) id = f.id;
+    }
+    return id;
+  }
 
   // Un segnale breve (inizio o fine ascolto), subito, fuori dalle frasi del turno
   segnale(byte, rate) {

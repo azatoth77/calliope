@@ -167,6 +167,10 @@ class Collegamento:
         # ritardo della sua uscita audio): la latenza che si sente (06/10). Un satellite
         # vecchio non lo dice: resta vuoto
         self.suonate: dict[int, float] = {}
+        # Le frasi mandate (14/10, stanza passo 5): id → (testo, durata in secondi). Il filtro
+        # dell'eco della stanza confronta i segmenti detti durante la voce con queste (lo
+        # stesso id che il satellite mette in `durante_voce`); solo le ultime
+        self.frasi_voce: dict[int, tuple[str, float]] = {}
         # Gli eventi di questo satellite per la sua corsia (tutti insieme, 06/10)
         self.eventi: queue.Queue = queue.Queue()
         self.inviati = 0                        # byte mandati (misure)
@@ -450,6 +454,13 @@ class Collegamento:
             for k in sorted(self.suonate)[:250]:
                 self.suonate.pop(k, None)
         self.suonate[ident] = time.monotonic() + uscita_s
+
+    def frase_mandata(self, ident: int, testo: str, durata_s: float):
+        """Una frase di Calliope mandata al satellite (per il filtro dell'eco della stanza)."""
+        if len(self.frasi_voce) > 300:
+            for k in sorted(self.frasi_voce)[:150]:
+                self.frasi_voce.pop(k, None)
+        self.frasi_voce[ident] = (str(testo or "")[:2000], float(durata_s or 0.0))
 
     def turno_finito(self, ident: int, dette: list[str]):
         with self._turni_cond:
@@ -1142,6 +1153,14 @@ class ServerSatelliti:
             eco = ("non misurata" if coll.eco is None
                    else f"{coll.eco * 100:.0f} % dei frame")
             self.log(f"   [SATELLITE] {sat['nome']} pronto (eco sul saluto: {eco})")
+            # La stanza (14/10, passo 5): l'eco misurata sul saluto decide se il satellite
+            # ascolta la stanza anche mentre Calliope parla (cancello per satellite)
+            st = self.conversazione_stanza
+            if st is not None and coll.stanza_capace and hasattr(st, "pronto"):
+                try:
+                    st.pronto(coll)
+                except Exception:  # noqa: BLE001 — la stanza non ferma il satellite
+                    pass
         elif t == "turno_finito":
             dette = m.get("dette")
             coll.turno_finito(_intero(m.get("id")) or 0,
@@ -1560,6 +1579,9 @@ class UscitaRemota:
                 self._prime.pop(min(self._prime), None)
             self._prime[turno] = (coll, fid)
         coll.invia(tipo="frase", turno=turno, id=fid, testo=testo, rate=rate, byte=len(audio))
+        mandata = getattr(coll, "frase_mandata", None)     # la stanza (passo 5): il filtro dell'eco
+        if mandata is not None:
+            mandata(fid, testo, len(audio) / 2 / max(1, rate))
         # A pezzi: il satellite comincia a riprodurre al primo, anche se la connessione è in
         # partenza lenta (TCP dopo una pausa riparte con una finestra piccola)
         step = int(rate * P.PEZZO_VOCE_S) * 2

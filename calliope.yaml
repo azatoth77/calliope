@@ -1325,6 +1325,15 @@ conversazione_stanza:
   stanza_cerca_anticipo: true
   # Tetto delle righe anticipate (~250 token: ~0,1 s di lettura in più del 26B)
   stanza_cerca_anticipo_caratteri: 1000
+  # Passo 5 (14/10, calliope/stanza/eco.py): la stanza ascolta anche mentre Calliope parla. I
+  # satelliti e il telefono mandano i segmenti detti durante la sua voce, segnati con le frasi
+  # che suonavano; il filtro dell'eco (regola eco_stanza) toglie dalla riga le parole che sono
+  # la sua voce (3 di fila, o il 60 % della riga, nel tempo della frase) e scarta la riga tutta
+  # eco. Solo per la stanza: i comandi restano half-duplex (principio 8), il barge-in non
+  # cambia. Un satellite con l'eco sul saluto oltre barge_in_echo_max (casse senza
+  # cancellazione) resta half-duplex anche per la stanza. Misure (eco residua, parole
+  # recuperate) in `calliope stato --turni`, sezione Stanza. false (di serie) = come prima
+  stanza_durante_voce: false
 
 satellite:
   # == Lato satellite (il portatile che fa da microfono, casse e schermo di
