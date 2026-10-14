@@ -2,6 +2,9 @@
 
 - **Stato**: accettata (13/10/2026, risposte di chi amministra alle sei domande del progetto),
   realizzazione a passi; **passo 0 fatto** il 13/10, la stanza vera (passi 1–8) da fare
+  *[storico: al 14/10 sera fatti i passi 0–2 e 4–6, con la tenuta su disco e i conoscenti
+  ([0030](0030-conoscenti.md)), ognuno col suo interruttore, spenti di serie; restano il passo 3
+  (corsia lenta, con il filtro della TV), il resto del passo 7 e il passo 8; vedi «Conseguenze»]*
 - **Area**: [stt-tts](../aree/stt-tts.md), [contesto-conversazione](../aree/contesto-conversazione.md),
   [voce-e-regole](../aree/voce-e-regole.md), [minori](../aree/minori.md),
   [satelliti](../aree/satelliti.md), [schermi-telefono](../aree/schermi-telefono.md)
@@ -134,7 +137,23 @@ Il contesto delle scelte, nelle parole di chi amministra: la privacy dentro la f
   di serie accesa, `avvisi_audio` di serie spento; `calliope/avvisi_audio.py`,
   `prove/prova_avvisi_audio.py`): il punto 4 cambiato come sopra; `calliope conserva --svuota`,
   «dimentica» della stanza e la scadenza tolgono trascrizione e audio, l'avviso resta.
-- Passi 2–8 del piano, ognuno con il suo interruttore e la sua misura sulla DGX; la prima misura
+- **Passo 2, fatto il 14/10** (ramo `stanza-passo-2`, `stanza_contesto`, di serie spento;
+  `calliope/stanza/contesto.py`): le righe della stanza nei dati del turno in busta (fonte
+  `stanza`, ultimi 45 s sempre alla lettera), la copertura all'interpellazione, il giudizio
+  «rivolta» con le righe (in ombra). Il 14/10 sera (ramo `stanza-caldo-cache`,
+  `stanza_contesto_in_storia`) le righe entrano nella storia in sola aggiunta, per la cache del
+  prefisso.
+- **Passo 4, fatto il 14/10** (ramo `stanza-passo-4`, poi `stanza-cerca-2`; `stanza_cerca`, di
+  serie spento): il tool `stanza_cerca` con i permessi del punto 5, la frase d'attesa e la ricerca
+  anticipata con le parole della frase.
+- **Passo 5, fatto il 14/10** (ramo `stanza-durante-voce`, `stanza_durante_voce`, di serie
+  spento): la stanza si ascolta anche mentre Calliope parla, con il filtro dell'eco sul testo;
+  solo la trascrizione della stanza, i comandi restano half-duplex. Si accende solo dopo la
+  misura vera (`prove/manuali/misura-eco-stanza.md`).
+- **Passo 6, ripresa e gioco, 14/10 sera** (ramo `stanza-guardia-2`): il guardiano riprende dal
+  disco le righe non giudicate dopo un riavvio e giudica col gioco aperto dichiarato.
+- *[Storico al 14/10: dei passi 2–8 qui sotto restano il 3, il 7 oltre i conoscenti e l'8.]*
+  Passi 2–8 del piano, ognuno con il suo interruttore e la sua misura sulla DGX; la prima misura
   (passo 1) non cambia nulla di ciò che Calliope dice. Misure nuove: ritardo della coda della
   stanza, banda del telefono, **copertura all'interpellazione** (tutte le frasi dette prima della
   domanda nel contesto della risposta).
