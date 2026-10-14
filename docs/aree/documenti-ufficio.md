@@ -2,7 +2,9 @@
 
 *Documenti Word/Excel/PDF a voce, ufficio (modelli, rubrica, fatture, DDT), archivio dei documenti di casa. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-*Stato al 09/10: documenti, ufficio e archivio invariati nella sostanza dalla pubblicazione; dal 07/10 i testi dell'agente si consegnano in Markdown (sezione sotto) e il file offerto dopo una modifica ha il suo nome vero. Il contatto cercato in rubrica (`anagrafica_cerca`) rientra dall'08/10 nella misura delle parole incerte ([stt-tts](stt-tts.md)).*
+**Stato al 14/10.** Come al 09/10 (sotto), più `documento_leggi` (09/10 sera, sezione in fondo): rilegge un documento preparato da Calliope per chi parla; nessun altro cambio a documenti, ufficio e archivio dopo il 09/10; nomi, campi e tool di questa pagina controllati sul codice il 14/10.
+
+*Stato al 09/10 (storico): documenti, ufficio e archivio invariati nella sostanza dalla pubblicazione; dal 07/10 i testi dell'agente si consegnano in Markdown (sezione sotto) e il file offerto dopo una modifica ha il suo nome vero. Il contatto cercato in rubrica (`anagrafica_cerca`) rientra dall'08/10 nella misura delle parole incerte ([stt-tts](stt-tts.md)).*
 
 ## Moduli
 

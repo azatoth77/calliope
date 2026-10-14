@@ -2,7 +2,9 @@
 
 *Foto in ingresso, webcam e schermata del PC, allegati di qualsiasi tipo. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-*Stato al 09/10: foto e allegati come dal 05/10, con la guardia nella politica dal 06/10; dall'08/10 ogni file di una persona riconosciuta resta 7 giorni nel suo cassetto (sezione sotto), anche per il tutore dai pulsanti della scheda. Resta aperto «cosa vedi sul mio schermo?» con una foto nella conversazione («Non me l'hai chiesto»); il modello vero sul cassetto non è ancora misurato.*
+**Stato al 14/10.** Come al 09/10 (sotto), con due cambi del 14/10 nel cassetto: un tutore vede i file del figlio a ogni età (prima solo sotto i 14 anni, `minori.conversazioni_visibili_ai_tutori`), e l'audio di un avviso di pericolo (`avvisi_audio`, di serie spento) entra nel cassetto del tutore con la fonte «da un avviso di pericolo» e una scadenza sua (`avvisi_audio_giorni`, 30), fuori dalla revisione del cassetto ([minori](minori.md)).
+
+*Stato al 09/10 (storico): foto e allegati come dal 05/10, con la guardia nella politica dal 06/10; dall'08/10 ogni file di una persona riconosciuta resta 7 giorni nel suo cassetto (sezione sotto), anche per il tutore dai pulsanti della scheda. Resta aperto «cosa vedi sul mio schermo?» con una foto nella conversazione («Non me l'hai chiesto»); il modello vero sul cassetto non è ancora misurato.*
 
 ## Moduli
 

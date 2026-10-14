@@ -2,7 +2,9 @@
 
 *Ciclo principale, modello della voce, tool calling, reti e spinte di Brain, regole deterministiche sul testo, azione in sospeso, robustezza. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-**Stato al 09/10.** Sulla DGX la voce è gemma4 26B su Ollama (`llm_profilo`), 72 schemi di tool
+**Stato al 14/10.** Sulla DGX la voce è gemma4 26B su Ollama (`llm_profilo`). In un'installazione con tutti i servizi il modello vede **75 schemi** uguali per ogni livello (contati sul registro il 14/10; tabella completa con classe e «quando c'è» in [`architettura-tool.md`](../architettura-tool.md)). Dal 10/10: lo **stato del dialogo** in ombra (`proposta_rispondi`, corsia veloce, `dialogo_interprete: ombra`), il **registro degli eventi** (passi 0–2 in ombra e uscita unica verso la voce; passo 3 con `eventi: attivo`, acceso a mano, e il tool `argomento`), le forme chiuse storpiate da Whisper (`calliope/storpiature.py`); dall'11/10 i comandi a voce dei giochi (`gioco_comando`); dal 13/10 il tool `notizie` e il passo 0 della conversazione di stanza (in compagnia niente azioni senza il nome). Molte misure di questo documento sono col 4B in locale: da rifare col 26B sulla DGX dove è scritto.
+
+*Stato al 09/10 (storico):* Sulla DGX la voce è gemma4 26B su Ollama (`llm_profilo`), 72 schemi di tool
 uguali per ogni livello, con i nomi nuovi dei lavori e dello sviluppo dall'08/10 (i vecchi valgono
 ancora nel registro, regola `tool_nome_vecchio`). Le reti di Brain e le regole sul testo seguono il
 principio 10; le ultime entrate: «forse intendevi…» dopo un esito vuoto (08/10), il «no» che chiude

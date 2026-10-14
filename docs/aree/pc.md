@@ -2,7 +2,9 @@
 
 *Volume, musica, luminosità, app, file sul portatile; esecutore locale e remoto. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-**Stato al 09/10.** Otto tool `pc_*` in `calliope/tools/pc.py` (volume, media, luminosità, stato, app, blocco, ricerca e apertura di file); `pc_guarda` (webcam e schermo) è nell'area [immagini-allegati](immagini-allegati.md). Con Calliope sulla DGX comandano il portatile collegato come satellite (esecutore remoto, usato davvero dal 07/10: casi del registro qui sotto); con più satelliti vale quello della corsia che chiede, se ha l'esecutore ([satelliti](satelliti.md)). Dal 07/10 l'elenco dei file in sospeso ha le date e «l'ultimo» è il più recente.
+**Stato al 14/10.** Come al 09/10 (sotto): nessun cambio al codice del PC dopo il 09/10 (`calliope/pc/`, `tools/pc.py`); nomi, campi e tool di questa pagina controllati sul codice il 14/10.
+
+*Stato al 09/10 (storico):* Otto tool `pc_*` in `calliope/tools/pc.py` (volume, media, luminosità, stato, app, blocco, ricerca e apertura di file); `pc_guarda` (webcam e schermo) è nell'area [immagini-allegati](immagini-allegati.md). Con Calliope sulla DGX comandano il portatile collegato come satellite (esecutore remoto, usato davvero dal 07/10: casi del registro qui sotto); con più satelliti vale quello della corsia che chiede, se ha l'esecutore ([satelliti](satelliti.md)). Dal 07/10 l'elenco dei file in sospeso ha le date e «l'ultimo» è il più recente.
 
 ## Moduli
 

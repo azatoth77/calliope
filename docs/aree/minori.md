@@ -2,7 +2,9 @@
 
 *Fasce d'età, preset, guardiano, compiti, avvisi ai tutori. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-**Stato al 09/10.** Profili dei minori con fasce, preset e tutori; guardiano (Llama Guard 3) su
+**Stato al 14/10.** Come al 09/10 (sotto), più: nessuna conservazione per i minori (12/10: le loro parole né nel registro dei turni né nel journal, esercizi e richieste che scadono con la conservazione); l'indice del programma ministeriale per gli esercizi (12/10 sera); le notizie solo di sport, tecnologia e ragazzi (13/10); il rilevatore solo sulle frasi rivolte a Calliope (13/10); dal 14/10 i tutori vedono conversazioni e cassetto del figlio a ogni età, il **guardiano a posteriori della stanza** (`stanza_guardia`, spento di serie; in ombra solo misure, `calliope stato --guardia`), gli avvisi con data e origine (`calliope stato --avvisi`, azione `avvisi` di `minore_gestisci`), la trascrizione (`avvisi_trascrizione`, accesa) e l'audio (`avvisi_audio`, spento) sulla scheda del tutore. Da confermare con Dario le scelte prudenti dei cancelli; da rimisurare sulla DGX col 26B.
+
+*Stato al 09/10 (storico):* Profili dei minori con fasce, preset e tutori; guardiano (Llama Guard 3) su
 domanda e frasi, rilevatore di pericolo sulla domanda; compiti guidati; esercizi di matematica e italiano
 generati da Calliope (pilota dall'08/10), dal 12/10 anche logica, fisica e chimica con le unità di
 misura; dal 09/10 un pericolo poco chiaro passa da due cancelli

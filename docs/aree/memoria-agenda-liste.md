@@ -2,7 +2,9 @@
 
 *Memoria per persona e della casa, timer, promemoria, appuntamenti, liste, `calcola`, `data_calcola`. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-**Stato al 09/10.** Memoria per persona e della casa, timer, promemoria, appuntamenti e liste
+**Stato al 14/10.** Come al 09/10 (sotto): nessun cambio a memoria, agenda, liste e tempi dopo il 09/10; nomi, campi e tool di questa pagina controllati sul codice il 14/10.
+
+*Stato al 09/10 (storico):* Memoria per persona e della casa, timer, promemoria, appuntamenti e liste
 in SQLite, con conti e date fatti dal programma (`calcola`, `data_calcola`); età e compleanni
 dai profili (07/10); un ricordo si cancella solo se chiesto ed è recuperabile per 5 minuti; il
 cambio di una voce già messa e non chiesto passa dalla politica. Nessun cambiamento ai moduli

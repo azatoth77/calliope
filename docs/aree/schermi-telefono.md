@@ -2,7 +2,9 @@
 
 *Schede sugli schermi, abbinamento, visibilità, scrivere invece di parlare, telefono come satellite (PWA), rispondi dove ti ho chiesto. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-*Stato al 09/10: schermi e telefono come dal 06/10 (scheda a schermo intero, cruscotto in sola lettura), più il lettore Markdown e «Scarica» (07/10), la scheda degli esercizi e del cassetto, la vista dello sviluppo con il flusso dell'agente e la cronologia delle schede per persona con la scheda «Conversazione» (08/10), il segno della compagnia (09/10). Restano da provare sul vero l'iPhone (audio, schermo acceso, auto) e lo scaricamento dalla PWA.*
+**Stato al 14/10.** Come al 09/10 (sotto), più: la **modalità gioco** a tutta la finestra con il pallino della voce e la variante «collaudo» (11/10), il palco fisso dei giochi (14/10, [giochi](giochi.md)); la **stanza** sugli schermi (13/10): il segno «Ascolto la stanza» o la pausa, l'interruttore «Ascolto la stanza» del telefono (acceso di serie), la sezione «Stanza (in ombra)» del cruscotto con soli numeri; dal 14/10 la scheda «avviso» del tutore con «Leggi cosa si è detto» e «Scarica l'audio», solo sul suo schermo personale ([minori](minori.md)). Restano da provare sul vero l'iPhone e lo scaricamento dalla PWA.
+
+*Stato al 09/10 (storico): schermi e telefono come dal 06/10 (scheda a schermo intero, cruscotto in sola lettura), più il lettore Markdown e «Scarica» (07/10), la scheda degli esercizi e del cassetto, la vista dello sviluppo con il flusso dell'agente e la cronologia delle schede per persona con la scheda «Conversazione» (08/10), il segno della compagnia (09/10). Restano da provare sul vero l'iPhone (audio, schermo acceso, auto) e lo scaricamento dalla PWA.*
 
 ## Moduli
 

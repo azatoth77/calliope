@@ -2,7 +2,9 @@
 
 *Comandi e letture della casa via Home Assistant, regole, errori di HA in italiano. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-**Stato al 09/10.** Collegata all'HA vero (un Raspberry Pi) dal 01/10; ogni comando passa dalla
+**Stato al 14/10.** Come al 09/10 (sotto): nessun cambio al codice della casa dopo il 09/10 (`calliope/casa/`, `tools/casa.py`, `luogo.py`); nomi, campi e tool di questa pagina controllati sul codice il 14/10.
+
+*Stato al 09/10 (storico):* Collegata all'HA vero (un Raspberry Pi) dal 01/10; ogni comando passa dalla
 verifica a secco di HA, dalle regole di Calliope e poi dall'esecuzione; le letture vengono dagli
 stati delle entità esposte. Dall'08/10, quando HA non trova il dispositivo nella stanza detta,
 Calliope lo cerca tra le esposte per nome (`casa/nomi.py`, sezione in fondo). Gli argomenti di
