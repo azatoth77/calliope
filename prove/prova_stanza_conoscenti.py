@@ -23,7 +23,8 @@ ortogonali, una per voce), Whisper finto, schermi finti.
 - misure senza nomi né parole e la riga di `calliope stato --turni`; configurazione;
 - (14/10 sera, rifiniture) il conoscente che parla a Calliope: chi parla «Marco Rossi
   (conoscente)» nei dati del turno e nella riga della stanza, livello ospite, nel registro dei
-  turni solo `conoscente: true`; la famiglia vince sempre (voce netta, zona grigia, a parità,
+  turni `conoscente: true` con id e nome e le parole (dal 14/10 sera, decisione 0030
+  aggiornata: il resto in prova_conoscenti_conserva.py); la famiglia vince sempre (voce netta, zona grigia, a parità,
   frase breve, omonima) e senza stanza niente cambia; le presenze dei conoscenti (memoria, disco,
   blocco della stanza «… (conoscente)»), che passano con lui alla promozione (e cerca dove
   c'era già) e al ritorno, e spariscono quando lo si dimentica.
@@ -516,12 +517,16 @@ def prova_permessi_e_scadenza():
     c = con.elenco()[0]
     verifica("permessi: un conoscente è della categoria «conoscente» (livello ospite)",
              conserva_mod.categoria(c) == "conoscente")
-    verifica("permessi: per la conservazione solo la stanza con la voce, mai turni, voce, "
-             "eventi, conversazioni",
+    # Dal 14/10 sera (decisione 0030 aggiornata): per la conservazione come un adulto (turni,
+    # eventi, conversazioni, la stanza con la voce); la voce registrata no (niente consenso)
+    verifica("conservazione: come un adulto (testo, eventi, conversazioni, stanza con la "
+             "voce), la voce registrata no",
              conserva_mod.decidi(c, "stanza", "voce").ok
              and not conserva_mod.decidi(c, "stanza", "grigia").ok
-             and not any(conserva_mod.decidi(c, k, "voce").ok
-                         for k in ("testo", "voce", "eventi", "conversazioni")))
+             and all(conserva_mod.decidi(c, k, "voce").ok
+                     for k in ("testo", "eventi", "conversazioni"))
+             and not conserva_mod.decidi(c, "voce", "voce").ok
+             and conserva_mod.decidi(c, "voce", "voce").motivo == "senza_consenso")
     verifica("permessi: non è nel registro delle voci della famiglia (nessun comando lo vede)",
              all(p.id != c.id for p in sc.voci.users.values()))
     sc.di(MARCO, "Domani porto il vino.")
@@ -827,18 +832,21 @@ def prova_turni_e_presenze():
     t = turno(ciclo, sctx, voce(MARCO, 0.03, seme=1))
     rec = ciclo.rec
     verifica("turno: la voce del conoscente → chi parla «Marco Rossi», conoscente",
-             sctx.conoscente == {"id": c.id, "nome": "Marco Rossi", "nota": "collega di Carlo"},
+             sctx.conoscente == {"id": c.id, "nome": "Marco Rossi", "nota": "collega di Carlo",
+                                 "modo": "voce"},
              str(sctx.conoscente))
     verifica("…ma resta un ospite: nessun chi parla, livello ospite, nessun nome di casa",
              sctx.current_speaker is None and sctx.current_level == "ospite"
              and t.speaker_name is None and rec.get("livello") == "ospite"
              and rec["voce"]["nome"] is None)
-    verifica("nel registro dei turni solo «conoscente: true» (mai il nome: niente turni su "
-             "disco per un conoscente)", rec["voce"].get("conoscente") is True
-             and "Marco" not in json.dumps(rec, ensure_ascii=False))
+    # Dal 14/10 sera (decisione 0030 aggiornata): il suo id e il nome, e le parole restano
+    verifica("nel registro dei turni conoscente: true con il suo id e il nome",
+             rec["voce"].get("conoscente") is True and rec["voce"].get("id") == c.id
+             and rec["voce"].get("nome_conoscente") == "Marco Rossi"
+             and rec["voce"].get("modo") == "voce", json.dumps(rec["voce"]))
     cons = conserva_mod.Conservazione(cfg, voci, log=lambda m: None)
-    verifica("le parole del suo turno non restano (come un ospite)",
-             not cons.testo_turno(dict(rec, testo="Calliope, che ore sono?")))
+    verifica("le parole del suo turno restano (come un adulto, dal file dei conoscenti)",
+             bool(cons.testo_turno(dict(rec, testo="Calliope, che ore sono?"))))
     nota = nota_turno(cfg, voci, sctx)
     verifica("dati del turno: «persona: Marco Rossi (conoscente, collega di Carlo)… è un "
              "ospite»", "persona: Marco Rossi (conoscente, collega di Carlo), riconosciuto "

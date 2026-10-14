@@ -141,11 +141,23 @@ def _dati_conservati(ctx: ToolContext, azione: str = "", persona: str = "") -> d
         vero = trova(nome) if callable(trova) else None
         bersaglio = speakers.get(vero or nome) if speakers is not None else None
         if bersaglio is None:
+            # Un conoscente (14/10 sera, decisione 0030 aggiornata): i suoi dati conservati
+            # come quelli di un adulto (il profilo resta: «dimentica» col tool conoscenti)
+            trova_k = getattr(cons, "trova_conoscenti", None)
+            kk = trova_k(nome) if callable(trova_k) else []
+            if len(kk) > 1:
+                return _final(f"Conosco più di un {nome}: "
+                              + ", ".join(k.descrizione() for k in kk[:3])
+                              + ". Dimmi il cognome o chi è.", ok=False)
+            bersaglio = kk[0] if kk else None
+        if bersaglio is None:
             return _final(f"Non conosco nessuno che si chiami {nome}.", ok=False)
     chiave = f"svuota:{getattr(bersaglio, 'id', '*')}"
     di_chi = f"di {bersaglio.name}" if bersaglio else "di tutti"
     if _proposta(cons, chiave, turno):
-        r = (cons.svuota(bersaglio.id, bersaglio.name) if bersaglio else cons.svuota())
+        nome_b = (None if C.categoria(bersaglio) == "conoscente" else bersaglio.name) \
+            if bersaglio else None
+        r = (cons.svuota(bersaglio.id, nome_b) if bersaglio else cons.svuota())
         note_rule(ctx, "conservati_svuotati")
         return _final(f"Fatto: ho cancellato i dati conservati {di_chi}.", **r)
     domanda = (f"Cancello i dati conservati {di_chi}: testi dei turni, conversazioni "

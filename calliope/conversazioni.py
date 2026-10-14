@@ -33,6 +33,11 @@ giorni). Così la compressione della storia e la fine di una conversazione non p
   ospiti (dal 12/10 sera solo nell'archivio della sessione) il modello non le recupera mai, né
   per loro né per altri: le vede chi amministra, a voce solo se riconosciuto dalla voce (tool
   con `ospiti=true`), finché Calliope non si riavvia; da terminale non più (non sono su disco).
+  I **conoscenti** (14/10 sera, decisione 0030 aggiornata): le loro conversazioni vanno su
+  disco come quelle degli adulti (una per conoscente, il suo id in `persona`, il nome in
+  `nome`); lui non le ritrova (è un ospite: il tool è dei familiari), chi amministra sì, con
+  `ospiti=true` come per gli ospiti (`conoscenti_ids`). Si cancellano con «dimentica …», la
+  scadenza del conoscente e `calliope conserva --svuota`; promosso a familiare restano sue.
 - **Cancellazione**: per persona («dimentica le nostre conversazioni», anche nella sessione),
   tutte (`svuota`, da `calliope conserva --svuota`), e dopo `turn_log_days` giorni (all'avvio
   e una volta al giorno). Dal 10/10 «dimentica» è vera
@@ -243,6 +248,10 @@ class ArchivioConversazioni:
         # Lavori in più della pulizia di ogni giorno (10/10: la rotazione del registro degli
         # eventi), dal thread dell'archivio
         self.su_pulizia: list = []
+        # Gli id dei conoscenti (14/10 sera, decisione 0030 aggiornata; di solito
+        # Conservazione.conoscenti_ids): le loro conversazioni sono su disco come quelle degli
+        # adulti, e chi amministra le ritrova con `ospiti=true` insieme a quelle degli ospiti
+        self.conoscenti_ids = None
         # Il registro degli eventi su disco (calliope/eventi/registro.Disco), se c'è: «dimentica»
         # cancella anche lì
         self.eventi = None
@@ -589,16 +598,39 @@ class ArchivioConversazioni:
     # ── ricerca ──
     def cerca(self, domanda: str, persona: str | None, *, ospiti: bool = False,
               dal: float | None = None, al: float | None = None, k: int = 4,
-              escludi_conv=None, solo: str | None = None) -> dict:
+              escludi_conv=None, solo: str | None = None, _conoscenti=None) -> dict:
         """I turni passati più vicini alla domanda. `persona`: l'id del profilo (solo le sue
         conversazioni, mai degli ospiti); `ospiti=True` (solo chi amministra): le
-        conversazioni degli ospiti. Restituisce {"risultati": […], "modo": "ibrida" |
+        conversazioni degli ospiti e, dal 14/10 sera, quelle dei conoscenti (su disco, segnate
+        `conoscente` con il nome). Restituisce {"risultati": […], "modo": "ibrida" |
         "parole"}. Dal 12/10 sera minori e ospiti cercano nell'archivio della sessione."""
-        altro = self._dove(None if ospiti else persona, ospiti)
-        if altro is not self:
-            return altro.cerca(domanda, persona, ospiti=ospiti, dal=dal, al=al, k=k,
-                               escludi_conv=escludi_conv, solo=solo)
-        dove, args = ["c.ospite = ?"], [1 if ospiti else 0]
+        if ospiti and _conoscenti is None and not self.in_memoria:
+            # Gli ospiti (nella sessione) e i conoscenti (qui), uniti per punteggio
+            r = self.cerca(domanda, persona, ospiti=True, dal=dal, al=al, k=k,
+                           escludi_conv=escludi_conv, solo=solo, _conoscenti=())
+            try:
+                ids = [str(x) for x in (self.conoscenti_ids() if callable(self.conoscenti_ids)
+                                        else ()) if x]
+            except Exception:  # noqa: BLE001 — senza i conoscenti restano gli ospiti
+                ids = []
+            if not ids:
+                return r
+            r2 = self.cerca(domanda, None, ospiti=True, dal=dal, al=al, k=k,
+                            escludi_conv=escludi_conv, solo=solo, _conoscenti=tuple(ids))
+            for x in r2["risultati"]:
+                x["conoscente"] = True
+            tutti = sorted(r["risultati"] + r2["risultati"], key=lambda x: -x["punti"])[:k]
+            modo = "ibrida" if "ibrida" in (r["modo"], r2["modo"]) else r["modo"]
+            return {"risultati": tutti, "modo": modo}
+        if _conoscenti:
+            dove = ["c.ospite = 0", f"c.persona IN ({','.join('?' * len(_conoscenti))})"]
+            args = list(_conoscenti)
+        else:
+            altro = self._dove(None if ospiti else persona, ospiti)
+            if altro is not self:
+                return altro.cerca(domanda, persona, ospiti=ospiti, dal=dal, al=al, k=k,
+                                   escludi_conv=escludi_conv, solo=solo, _conoscenti=())
+            dove, args = ["c.ospite = ?"], [1 if ospiti else 0]
         if not ospiti:
             if not persona:
                 return {"risultati": [], "modo": "nessuno"}

@@ -17,7 +17,9 @@ Tool dell'archivio delle conversazioni (05/10/2026, calliope/conversazioni.py).
 
 Permessi nel codice: familiari e chi amministra, riconosciuti; ognuno ritrova solo le sue.
 Le conversazioni degli ospiti il modello non le recupera mai, né per loro né per altri:
-`ospiti=true` vale solo per chi amministra riconosciuto dalla voce in quella frase.
+`ospiti=true` vale solo per chi amministra riconosciuto dalla voce in quella frase. Dal 14/10
+sera con `ospiti=true` anche quelle dei conoscenti (su disco, col nome: decisione 0030); il
+conoscente stesso non le ritrova (è un ospite).
 """
 import datetime
 import re
@@ -111,6 +113,9 @@ def _voce_turno(x: dict, ospiti: bool, adesso: float, in_corso=None) -> dict:
     """Un turno ritrovato nell'archivio, per il modello: quando, le frasi tra virgolette, ciò
     che è stato fatto, la fonte (09/10) e se è della conversazione in corso."""
     voce = {"quando": quando_detto(x["quando"], adesso),
+            # Un conoscente (14/10 sera, solo con `ospiti`): chi è, col nome
+            **({"chi": f"{x['nome']}, conoscente"} if x.get("conoscente") and x.get("nome")
+               else {}),
             "detto_da_" + ("ospite" if ospiti else "te"): f"«{x['domanda']}»"
             if x["domanda"] else "",
             "risposta_di_calliope": f"«{x['risposta'][:600]}»" if x["risposta"] else ""}
