@@ -27,7 +27,6 @@ Solo libreria standard e numpy (già una dipendenza di base): nessuna libreria n
 from __future__ import annotations
 
 import collections
-import struct
 import threading
 import time
 from dataclasses import dataclass
@@ -129,16 +128,11 @@ def secondi(pezzi) -> float:
 
 def wav(pezzi, pausa_s: float = 0.4) -> bytes:
     """Un WAV μ-law (formato 7, come calliope/conserva.py) con i pezzi uno dopo l'altro e una
-    breve pausa tra l'uno e l'altro."""
-    from .conserva import mulaw
+    breve pausa tra l'uno e l'altro. Dal 14/10 sera G.711 vero, col segno del formato
+    (`conserva.wav_da_byte`): il tutore lo ascolta nel browser, che prima sentiva rumore."""
+    from .conserva import mulaw, wav_da_byte
     silenzio = mulaw([0.0]) * int(SR * max(0.0, pausa_s))     # μ-law dello zero
-    dati = silenzio.join(p.dati for p in pezzi or ())
-    n = len(dati)
-    fmt = struct.pack("<HHIIHHH", 7, 1, SR, SR, 1, 8, 0)
-    pad = b"\x00" if n % 2 else b""
-    corpo = (b"WAVE" + b"fmt " + struct.pack("<I", len(fmt)) + fmt
-             + b"fact" + struct.pack("<II", 4, n) + b"data" + struct.pack("<I", n) + dati + pad)
-    return b"RIFF" + struct.pack("<I", len(corpo)) + corpo
+    return wav_da_byte(silenzio.join(p.dati for p in pezzi or ()), SR)
 
 
 # Il servizio del processo (main.py, con `avvisi_audio` acceso); None = spento

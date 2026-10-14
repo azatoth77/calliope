@@ -47,7 +47,9 @@ niente librerie native nuove). Una frase di 3 s pesa ~48 KB; con le giornate ver
 (dall'08 al 09/10: 1 300 s di parlato al giorno, ~75 % riconosciuto dalla voce) sono ~15 MB al
 giorno, ~0,9 GB in 60 giorni. Tetto `conserva_voce_mb`: oltre, si tolgono i giorni più vecchi.
 Cartella: `<turn_log_dir>/voce/<id della persona>/<AAAA-MM-GG>/<ora>.wav`, file 600 e
-cartelle 700 su Linux.
+cartelle 700 su Linux. Fino al 14/10 sera la codifica non era G.711 (i lettori standard
+sentivano rumore): i file nuovi portano un segno nel WAV, `leggi_wav` legge anche i vecchi e
+`--converti-audio` li riscrive.
 
 **Privacy**: niente esce mai da qui (nessun invio, nessun tool che legga la cartella); nei log
 solo conteggi, mai testo né nomi. La conservazione non usa la GPU: nel profilo ridotto da 8 GB
@@ -61,6 +63,9 @@ c'è uguale.
                                                  (impronte e profili)
     python -m calliope.conserva --svuota --persona NOME
                                                  i dati di una persona
+    python -m calliope.conserva --converti-audio una tantum (14/10 sera): riscrive nel G.711
+                                                 vero i WAV μ-law di prima (voce, banco della
+                                                 stanza, audio degli avvisi); rilanciabile
 
 Il consenso alla voce si dà e si revoca solo a voce, a Calliope (tool `dati_conservati`): da
 terminale si legge e si svuota, non si cambia una scelta che è della persona.
@@ -233,61 +238,280 @@ def togli_testo(rec: dict) -> dict:
 
 
 # ─────────────────────────── la voce in μ-law ───────────────────────────
+# G.711 μ-law vero (14/10 sera). Fino al 14/10 `mulaw` quantizzava in modo lineare la curva
+# continua di μ-law su 0..255 e complementava il risultato: Calliope si rileggeva giusto, ma ogni
+# lettore standard (ffmpeg, sox, libsndfile, il browser) sentiva un'onda capovolta e storta
+# (SNR -4 dB su un tono). Ora i segmenti e la mantissa di G.711 (come il g711.c di riferimento,
+# a 16 bit con BIAS 0x84 e tetto 32635), con numpy. I file nuovi portano un segno (un chunk
+# LIST/INFO con ISFT «Calliope G.711»), quelli di prima no: `leggi_wav` legge tutti e due e
+# `python -m calliope.conserva --converti-audio` riscrive i vecchi una volta per tutte.
 _MU = 255.0
+_BIAS = 0x84
+_TETTO = 32635
+SEGNO_G711 = b"Calliope G.711"
+_TABELLA = None
+
+
+def _tabella():
+    """I 256 valori a 16 bit della decodifica G.711 (calcolati una volta)."""
+    global _TABELLA
+    if _TABELLA is None:
+        import numpy as np
+        u = (~np.arange(256, dtype=np.int32)) & 0xFF
+        t = (((u & 0x0F) << 3) + _BIAS) << ((u & 0x70) >> 4)
+        _TABELLA = np.where(u & 0x80, _BIAS - t, t - _BIAS).astype(np.float32) / 32768.0
+    return _TABELLA
 
 
 def mulaw(audio) -> bytes:
-    """float32 in [-1, 1] → byte G.711 μ-law (formato dei file WAV 7). Vettoriale."""
+    """float32 in [-1, 1] (o int16) → byte G.711 μ-law (formato dei file WAV 7). Vettoriale."""
     import numpy as np
-    x = np.clip(np.asarray(audio, dtype=np.float32), -1.0, 1.0)
-    y = np.sign(x) * np.log1p(_MU * np.abs(x)) / np.log1p(_MU)
-    # Il byte di G.711 è il complemento del valore quantizzato (segno nel bit alto)
-    q = np.round((y + 1.0) / 2.0 * 255.0).astype(np.int16)
-    q = np.clip(q, 0, 255).astype(np.uint8)
-    return (~q).astype(np.uint8).tobytes()
+    a = np.asarray(audio)
+    if a.dtype == np.int16:
+        x = a.astype(np.int32)
+    else:
+        x = np.round(np.clip(a.astype(np.float32), -1.0, 1.0) * 32768.0).astype(np.int32)
+        x = np.clip(x, -32768, 32767)
+    x = x.reshape(-1)
+    neg = x < 0
+    mag = np.minimum(np.abs(x), _TETTO) + _BIAS            # 132..32767
+    seg = np.clip(np.frexp(mag.astype(np.float64))[1] - 8, 0, 7)
+    mant = (mag >> (seg + 3)) & 0x0F
+    u = (seg << 4) | mant
+    return np.where(neg, 0x7F ^ u, 0xFF ^ u).astype(np.uint8).tobytes()
 
 
 def da_mulaw(dati: bytes):
-    """Byte μ-law → float32 in [-1, 1]."""
+    """Byte G.711 μ-law → float32 in [-1, 1]."""
+    import numpy as np
+    return _tabella()[np.frombuffer(dati, dtype=np.uint8)]
+
+
+def da_mulaw_vecchio(dati: bytes):
+    """Byte del formato di prima del 14/10 sera (curva continua quantizzata in modo lineare,
+    complementata) → float32: per leggere e convertire i file senza il segno."""
     import numpy as np
     q = (~np.frombuffer(dati, dtype=np.uint8)).astype(np.float32)
     y = q / 255.0 * 2.0 - 1.0
     return (np.sign(y) * (np.power(1.0 + _MU, np.abs(y)) - 1.0) / _MU).astype(np.float32)
 
 
-def wav_mulaw(audio, sr: int) -> bytes:
-    """Un file WAV μ-law intero (RIFF, fmt con il formato 7, fact, data)."""
-    dati = mulaw(audio)
+def _chunk_segno() -> bytes:
+    """LIST/INFO con ISFT: il segno del formato G.711 vero, ignorato dai lettori standard."""
+    testo = SEGNO_G711 + b"\x00"
+    if len(testo) % 2:
+        testo += b"\x00"
+    info = b"INFO" + b"ISFT" + struct.pack("<I", len(testo)) + testo
+    return b"LIST" + struct.pack("<I", len(info)) + info
+
+
+def wav_da_byte(dati: bytes, sr: int) -> bytes:
+    """Un file WAV μ-law intero da byte G.711 già codificati (RIFF, fmt con il formato 7,
+    fact, LIST con il segno, data)."""
     n = len(dati)
     fmt = struct.pack("<HHIIHHH", 7, 1, int(sr), int(sr), 1, 8, 0)
     pad = b"\x00" if n % 2 else b""
     corpo = (b"WAVE" + b"fmt " + struct.pack("<I", len(fmt)) + fmt
-             + b"fact" + struct.pack("<II", 4, n) + b"data" + struct.pack("<I", n) + dati + pad)
+             + b"fact" + struct.pack("<II", 4, n) + _chunk_segno()
+             + b"data" + struct.pack("<I", n) + dati + pad)
     return b"RIFF" + struct.pack("<I", len(corpo)) + corpo
 
 
-def leggi_wav(path) -> tuple:
-    """(audio float32, frequenza) da un WAV μ-law o PCM a 16 bit (per il banco e le prove)."""
-    import numpy as np
-    b = Path(path).read_bytes()
+def wav_mulaw(audio, sr: int) -> bytes:
+    """Un file WAV μ-law intero dall'audio (float32 in [-1, 1] o int16)."""
+    return wav_da_byte(mulaw(audio), sr)
+
+
+def _pezzi_wav(b: bytes) -> dict:
+    """I chunk di un WAV: fmt (formato, frequenza), dati, e se porta il segno G.711."""
     if b[:4] != b"RIFF" or b[8:12] != b"WAVE":
         raise ValueError("non è un WAV")
-    i, fmt, sr, dati = 12, None, 16000, None
+    i, out = 12, {"fmt": None, "sr": 16000, "dati": None, "segno": False}
     while i + 8 <= len(b):
         nome, lung = b[i:i + 4], struct.unpack("<I", b[i + 4:i + 8])[0]
         pezzo = b[i + 8:i + 8 + lung]
-        if nome == b"fmt ":
-            fmt, _ch, sr = struct.unpack("<HHI", pezzo[:8])
+        if nome == b"fmt " and len(pezzo) >= 8:
+            out["fmt"], _ch, out["sr"] = struct.unpack("<HHI", pezzo[:8])
         elif nome == b"data":
-            dati = pezzo
+            out["dati"] = pezzo
+        elif nome == b"LIST" and pezzo[:4] == b"INFO" and SEGNO_G711 in pezzo:
+            out["segno"] = True
         i += 8 + lung + (lung % 2)
+    return out
+
+
+def formato_wav(b: bytes) -> str:
+    """«g711» (μ-law vero, col segno), «vecchio» (μ-law senza il segno: scritto da Calliope
+    prima del 14/10 sera), «pcm16» o «altro». Basta l'intestazione (il segno sta prima dei
+    dati)."""
+    try:
+        w = _pezzi_wav(b)
+    except (ValueError, struct.error):
+        return "altro"
+    if w["fmt"] == 7:
+        return "g711" if w["segno"] else "vecchio"
+    return "pcm16" if w["fmt"] == 1 else "altro"
+
+
+def leggi_wav(path) -> tuple:
+    """(audio float32, frequenza) da un WAV μ-law o PCM a 16 bit (per il banco e le prove).
+    Un μ-law senza il segno è un file di Calliope di prima del 14/10 sera: si legge con la
+    decodifica di allora (per un μ-law di fuori, senza segno, il risultato sarebbe storto:
+    `leggi_wav` è per i file di Calliope)."""
+    import numpy as np
+    w = _pezzi_wav(Path(path).read_bytes())
+    dati, fmt, sr = w["dati"], w["fmt"], w["sr"]
     if dati is None:
         raise ValueError("WAV senza dati")
     if fmt == 7:
-        return da_mulaw(dati), sr
+        return (da_mulaw(dati) if w["segno"] else da_mulaw_vecchio(dati)), sr
     if fmt == 1:
         return np.frombuffer(dati, dtype="<i2").astype(np.float32) / 32768.0, sr
     raise ValueError(f"formato WAV {fmt} non letto")
+
+
+# ── la conversione una tantum dei file di prima (14/10 sera) ──
+TEMPORANEO_CONV = ".conv.tmp"
+
+
+def converti_file(path: Path) -> tuple[str, int]:
+    """Riscrive un WAV del formato di prima nel G.711 vero, al suo posto: (esito, byte nuovi).
+    Esiti: «convertito», «nuovo» (già G.711 col segno: non si tocca), «altro» (non è un μ-law
+    di Calliope: non si tocca), «sparito» (tolto nel frattempo, per esempio dalla rotazione).
+    Atomico (file temporaneo accanto e `os.replace`): un'interruzione lascia il file vecchio
+    intero, e rilanciare lo converte. Tiene i permessi (600) e la data del file."""
+    path = Path(path)
+    try:
+        b = path.read_bytes()
+        st = path.stat()
+    except FileNotFoundError:
+        return "sparito", 0
+    f = formato_wav(b)
+    if f != "vecchio":
+        return ("nuovo" if f == "g711" else "altro"), 0
+    w = _pezzi_wav(b)
+    if w["dati"] is None:
+        return "altro", 0
+    nuovo = wav_da_byte(mulaw(da_mulaw_vecchio(w["dati"])), w["sr"])
+    tmp = path.with_name(path.name + TEMPORANEO_CONV)
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_BINARY", 0),
+                 0o600)
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(nuovo)
+            fh.flush()
+            os.fsync(fh.fileno())
+        if os.name != "nt":
+            os.chmod(tmp, st.st_mode & 0o777)
+        os.utime(tmp, ns=(st.st_atime_ns, st.st_mtime_ns))
+        if not path.exists():               # tolto mentre lo riscrivevo: non lo si ricrea
+            tmp.unlink(missing_ok=True)
+            return "sparito", 0
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        raise
+    return "convertito", len(nuovo)
+
+
+def converti_audio(cfg, log=print) -> dict:
+    """`calliope conserva --converti-audio`: i WAV μ-law scritti da Calliope prima del 14/10
+    sera (voce conservata, audio del banco della stanza, audio degli avvisi nei cassetti dei
+    tutori) riscritti nel G.711 vero. Idempotente: i file già nuovi e quelli d'altro formato non
+    si toccano; i temporanei lasciati da un giro interrotto si tolgono. Solo conteggi."""
+    out = {"convertiti": 0, "voce": 0, "banco": 0, "avvisi": 0, "gia_nuovi": 0, "altri": 0,
+           "spariti": 0, "errori": 0, "temporanei": 0}
+
+    def uno(p: Path, area: str):
+        try:
+            esito, _n = converti_file(p)
+        except Exception as e:  # noqa: BLE001 — un file storto non ferma gli altri
+            out["errori"] += 1
+            log(f"   [CONSERVA] un file non convertito: {type(e).__name__}")
+            return None
+        if esito == "convertito":
+            out["convertiti"] += 1
+            out[area] += 1
+        else:
+            out[{"nuovo": "gia_nuovi", "altro": "altri", "sparito": "spariti"}[esito]] += 1
+        return esito
+
+    def temporanei(base: Path):
+        for t in base.rglob("*" + TEMPORANEO_CONV):
+            try:
+                t.unlink()
+                out["temporanei"] += 1
+            except OSError:
+                pass
+
+    d = getattr(cfg, "turn_log_dir", None)
+    if d:
+        from .stanza.banco import CARTELLA as CARTELLA_BANCO
+        for sotto, area in ((CARTELLA_VOCE, "voce"), (CARTELLA_BANCO, "banco")):
+            base = Path(d) / sotto
+            if not base.exists():
+                continue
+            temporanei(base)
+            for p in sorted(base.rglob("*.wav")):
+                uno(p, area)
+    _converti_avvisi(cfg, uno, temporanei, out, log)
+    return out
+
+
+def _converti_avvisi(cfg, uno, temporanei, out, log):
+    """L'audio degli avvisi di pericolo nei cassetti dei tutori (righe `fonte = 'avviso'`,
+    categoria audio): solo quelle, mai gli altri file del cassetto (un audio mandato da una
+    persona resta com'è). La dimensione nella riga si aggiorna (il segno aggiunge pochi byte)."""
+    import sqlite3
+    db = str(getattr(cfg, "memory_db", "") or "")
+    if not db or not Path(db).exists():
+        return
+    base = (Path(getattr(cfg, "cassetto_cartella", "") or "")
+            if getattr(cfg, "cassetto_cartella", "") else Path(db).resolve().parent / "cassetto")
+    try:
+        con = sqlite3.connect(db, timeout=10)
+    except sqlite3.Error:
+        return
+    try:
+        if con.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' "
+                       "AND name = 'cassetto_file'").fetchone() is None:
+            return
+        from .cassetto import _cartella_persona
+        righe = con.execute("SELECT id, persona, file FROM cassetto_file WHERE fonte = 'avviso' "
+                            "AND categoria = 'audio' AND stato = 'attivo'").fetchall()
+        if righe and base.exists():
+            temporanei(base)
+        for fid, persona, nome in righe:
+            p = base / _cartella_persona(persona) / nome
+            if uno(p, "avvisi") == "convertito":
+                try:
+                    with con:
+                        con.execute("UPDATE cassetto_file SET dimensione = ? WHERE id = ?",
+                                    (p.stat().st_size, fid))
+                except (OSError, sqlite3.Error) as e:
+                    log(f"   [CONSERVA] dimensione di un avviso non aggiornata: "
+                        f"{type(e).__name__}")
+    except sqlite3.Error as e:
+        log(f"   [CONSERVA] cassetto non letto: {type(e).__name__}")
+    finally:
+        con.close()
+
+
+def testo_conversione(r: dict) -> str:
+    conv = r["convertiti"]
+    righe = [f"Audio riscritto nel G.711 vero: {conv} file"
+             + (f" ({r['voce']} della voce conservata, {r['banco']} del banco della stanza, "
+                f"{r['avvisi']} degli avvisi)" if conv else "") + "."]
+    righe.append(f"Già nel formato vero: {r['gia_nuovi']}; d'altro formato, non toccati: "
+                 f"{r['altri']}; tolti durante il giro: {r['spariti']}; errori: {r['errori']}.")
+    if r["temporanei"]:
+        righe.append(f"Temporanei di un giro interrotto tolti: {r['temporanei']}.")
+    if r["errori"]:
+        righe.append("Rilancia il comando: i file già convertiti non si toccano.")
+    return "\n".join(righe)
 
 
 def _segreto(rec: dict) -> bool:
@@ -978,6 +1202,11 @@ def main(argv=None) -> int:
         return 0
     from .config import load_config
     cfg = load_config()
+    if "--converti-audio" in argv:
+        # Una tantum (14/10 sera): i WAV μ-law di prima nel G.711 vero; si può rilanciare
+        r = converti_audio(cfg)
+        print(testo_conversione(r))
+        return 1 if r["errori"] else 0
     reg = _profili(cfg)
     c = Conservazione(cfg, reg)
     try:

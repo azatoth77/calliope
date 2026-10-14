@@ -19,7 +19,7 @@
 | Guardiano a posteriori della stanza (14/10, passo 6, `stanza_guardia`, in ombra; sotto e in [minori](minori.md)) | solo libreria standard; il rilevatore di pericolo su Ollama | `calliope/stanza/guardia.py` → `Guardia` (`raccogli`, `giudica_uno`, `decidi`, `libera`; dal 14/10 sera `_riprendi_disco`, `osserva_giochi`, `gioco_in`), `GiudiceModello`, `GIOCO`, `riassunto`, `testo`, `elenco`; `calliope/stanza/tenuta.py` → diario della guardia (`righe_guardia`, `segna_giudicate`, `segna_gioco`, `giochi`); `calliope/schermi/giochi.py` → `Giochi.in_corso`; `calliope/stanza/__init__.py` → `load_guardia`; `Avvio._guardia_stanza` in `main.py`; `calliope stato --guardia` |
 | Corsia lenta: righe di versione 2, riassunto progressivo (14/10 sera, passo 3, `stanza_lenta`, sotto) | solo libreria standard, in memoria; il rilevatore per il riassunto | `calliope/stanza/lenta.py` → `Lenta`; `calliope/stanza/registro.py` → `righe` (parti della v2), `rivisti`, `riassunto`; `calliope/stanza/contesto.py` → `righe_testo` (TV in una riga), `_riassunto`; `calliope/stanza/tenuta.py` (v2 al posto della v1); `calliope/stanza/guardia.py` → `_versioni`; `calliope/stanza/banco.py` (audio del banco, eccezione); prova `prove/prova_stanza_lenta.py` |
 | Latenza come metrica, cache scaldata, modelli di Ollama (dal 06/10) | solo libreria standard (registro dei turni, Ollama `/api/ps`) | `calliope/latenza.py` → `giorno`, `per_giorno`, `testo`, `avviso`, `avviso_recente`, `scalda_ripresa`, `leggi_file` (`calliope stato --turni`); `Brain.scalda_conversazione`, `Brain._scalda_se_cambiato` (prefisso nuovo dopo un cambio di modalità, 07/10); `calliope/ollama_carico.py` → `residenti`, `limite`, `usati`, `avviso`, `puo_caricare`; la prima frase a pezzi e la taratura della voce (sezioni del 07/10 sotto) hanno il codice in `tts.py` e `taratura_voce.py`, area [stt-tts](stt-tts.md) |
-| Conservazione dei dati per le misure, scelta dei tool come metrica (dal 12/10) | solo libreria standard e numpy (voce in G.711 μ-law), SQLite della tabella `eventi` | `calliope/conserva.py` → `decidi` (il solo posto), `Conservazione` (`testo_turno`, `voce_turno`, `registro_su_disco`, `conversazioni_su_disco` (12/10 sera), `conta_conversazioni`, `al_turno`, `salva_voce`, `imposta_consenso`, `ruota`, `ripulisci_registro`, `svuota`, `stato`), `python -m calliope.conserva`; `calliope/tools/conserva.py` (`dati_conservati`); `calliope/scelta_tool.py` → `turno`, `giorno`, `per_giorno`, `testo`, `avviso`, `avviso_recente` (`calliope stato --turni`) |
+| Conservazione dei dati per le misure, scelta dei tool come metrica (dal 12/10) | solo libreria standard e numpy (voce in G.711 μ-law), SQLite della tabella `eventi` | `calliope/conserva.py` → `decidi` (il solo posto), `Conservazione` (`testo_turno`, `voce_turno`, `registro_su_disco`, `conversazioni_su_disco` (12/10 sera), `conta_conversazioni`, `al_turno`, `salva_voce`, `imposta_consenso`, `ruota`, `ripulisci_registro`, `svuota`, `stato`), `mulaw`, `da_mulaw`, `wav_mulaw`, `formato_wav`, `leggi_wav`, `converti_audio` (G.711 vero e conversione dei file di prima, 14/10 sera), `python -m calliope.conserva`; `calliope/tools/conserva.py` (`dati_conservati`); `calliope/scelta_tool.py` → `turno`, `giorno`, `per_giorno`, `testo`, `avviso`, `avviso_recente` (`calliope stato --turni`) |
 
 ## Problemi noti
 
@@ -944,7 +944,9 @@ conversazione, degli ospiti), voce mai (solo `CALLIOPE_DEBUG_AUDIO`).
 - **Voce**: G.711 μ-law, 8 bit a 16 kHz (WAV con il formato 7, letto da ffmpeg e sox;
   `conserva.leggi_wav` per il banco), codificata con numpy: niente librerie native nuove
   (principio 4; `audioop` non c'è più da Python 3.13). Metà della PCM a 16 bit, errore
-  quadratico < 0,01 su un tono di prova. **Quanto pesa**: dal registro dei turni della DGX (copie
+  quadratico < 0,01 su un tono di prova. *(Storico, 14/10 sera: «letto da ffmpeg e sox» non era
+  vero. La codifica non era G.711 ma la curva continua quantizzata in modo lineare e
+  complementata: si rileggeva solo con `leggi_wav`. Sotto, «Il G.711 vero».)* **Quanto pesa**: dal registro dei turni della DGX (copie
   locali del 24/09–10/10) le giornate piene dell'08–09/10 hanno ~1 300 s di parlato, ~75 % con la
   voce riconosciuta sopra soglia: ~15 MB al giorno, ~0,9 GB in 60 giorni (una giornata media,
   ~600 s, ~7 MB). Tetto `conserva_voce_mb: 2000`: oltre, la rotazione toglie i giorni più vecchi.
@@ -1002,6 +1004,47 @@ svuotamento), `prova_scelta_tool`, `prova_eventi_ciclo` (i `dati_del_turno` sul 
 amministra (turni con le parole, eventi, conversazioni; la voce solo col consenso, che oggi non
 possono dare), con i permessi da ospite: decisione [0030](../decisioni/0030-conoscenti.md) punto
 9, dettagli in «I conoscenti nella stanza» qui sotto.
+
+### Il G.711 vero (14/10 sera, ramo `registrazioni-mulaw`)
+
+Il difetto, trovato il 14/10 sera: `conserva.mulaw` non era G.711. Quantizzava in modo lineare la
+curva continua di μ-law (`log1p(255·|x|)/log1p(255)`) su 0..255 e complementava il byte, mentre
+il WAV dichiarava il formato 7 (G.711 μ-law). Calliope si rileggeva giusto con il suo
+decodificatore; ogni lettore standard (ffmpeg, sox, libsndfile, il browser del tutore per l'audio
+di un avviso) sentiva un'onda capovolta e storta: su un tono, SNR **−4,3 dB** con libsndfile.
+Toccava la voce conservata (`<dati>/registro/voce/…`, ~95 file sulla DGX), l'audio del banco
+della stanza (`stanza_banco/`) e l'audio degli avvisi nel cassetto del tutore
+(`avvisi_audio.wav`, che aveva una copia sua dello scrittore).
+
+- **Codec**: `mulaw` e `da_mulaw` sono ora il G.711 del g711.c classico (16 bit, BIAS 0x84,
+  tetto 32635, segmento dall'esponente di `frexp`, mantissa a 4 bit), vettoriali con numpy, e la
+  decodifica è una tabella di 256 valori. Prova: codifica identica a un codificatore di
+  riferimento scritto nella prova su tutti i 65 536 valori a 16 bit; decodifica identica alla
+  formula del G.711 su tutti i 256 byte; libsndfile legge i file nuovi **bit per bit uguali** a
+  `da_mulaw`; SNR 36,9 dB su un tono, 37,5 dB sulla voce di Piper (`voices/campioni`).
+- **Il segno del formato**: i file nuovi portano un chunk `LIST`/`INFO` con `ISFT` «Calliope
+  G.711», prima di `data` (i lettori standard lo ignorano; basta l'intestazione per
+  riconoscerlo). `formato_wav` dice `g711`, `vecchio` (μ-law senza segno: scritto da Calliope
+  prima), `pcm16` o `altro`; `leggi_wav` legge il nuovo con il G.711 e il vecchio con la
+  decodifica di allora (`da_mulaw_vecchio`). Limite noto: un μ-law **di fuori** senza il segno
+  `leggi_wav` lo leggerebbe come vecchio; `leggi_wav` è per i file di Calliope. Lo scrittore è
+  uno solo (`wav_da_byte`), anche per gli avvisi.
+- **Conversione una tantum**: `calliope conserva --converti-audio` (su Windows `python -m
+  calliope.conserva --converti-audio`) riscrive i file vecchi della voce, del banco della stanza
+  e, nel cassetto, le sole righe `fonte = 'avviso'` audio (un audio mandato da una persona non si
+  tocca, anche se fosse μ-law; la dimensione della riga si aggiorna). Un file alla volta: file
+  temporaneo accanto (`.conv.tmp`, 600) con fsync, permessi e data del file di prima, poi
+  `os.replace`. Un'interruzione lascia il file vecchio intero; i temporanei di un giro crollato
+  si tolgono al rilancio; i file già nuovi, i PCM e i rotti non si toccano: si può rilanciare
+  quante volte si vuole. La riconversione passa per il float (vecchio → onda → G.711): una seconda
+  quantizzazione: sul tono di prova SNR 34,7 dB rispetto all'onda originale (38,0 dB il vecchio
+riletto da Calliope, 36,9 dB il G.711 diretto). Esce
+  con i soli conteggi (quanti per area, già nuovi, d'altro formato, spariti, errori; 1 se ci sono
+  errori). Con Calliope accesa va bene: Calliope aggiornata scrive già il formato nuovo e la
+  rotazione che toglie un file nel frattempo dà «sparito».
+
+Prove a secco: `prova_mulaw` (livello 1, ~1 s), con i contrari: il formato di prima storto per un
+lettore standard, i file da non toccare, il rilancio identico, l'interruzione a metà.
 
 ## L'archivio delle conversazioni allineato alla conservazione (12/10 sera, ramo `archivio-t1`)
 
