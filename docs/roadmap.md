@@ -165,6 +165,11 @@ voce raccontava male gli esiti, i comandi del flusso si perdevano.
    validata dal server, le domande standard, il giudice di fase, «gioco anch'io» e i nomi
    scritti, la ripresa dopo «Riapri», «Gira il telefono» per una tela; il giro vero sulla DGX
    (anche per rifare i giochi già approvati, che del formato di prima non si aprono più).
+   *[14/10 sera, ramo `giochi-passi-finali`: fatti l'istantanea validata dal server, le domande
+   standard, il giudice di fase, «gioco anch'io» e i nomi scritti, la ripresa dopo «Riapri» e le
+   partite condivise con il motore ([giochi](aree/giochi.md), «Lo stato della partita»). Restano
+   «Gira il telefono» per una tela, chi è quale giocatore nelle partite condivise, il giudice
+   senza il nome dopo la misura, e il giro vero sulla DGX.]*
    *[14/10: restano anche le partite condivise tra più schermi con la macchina a stati.]*
 5. **Flusso dell'agente a fasi** (proposte accettate da Dario il 12/10). **Parte 1 fatta il 12/10
    sera** (ramo `fasi-parte1`): la correzione che parte da un test rosso (rimandata una volta,

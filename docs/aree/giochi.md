@@ -10,6 +10,14 @@
 
 **13/10.** Un gioco nuovo usa la **macchina a stati di Calliope**: dichiara fasi e comandi nel manifesto (`scheda.macchina`, comandi con uno slot «porta {n}») e scrive in logica.js solo la logica pura (`GIOCO`); preparazione, turni, punti, esito, fine con la classifica, disegno, pulsanti e voce sono del motore (`motore_gioco.js`), che gira nel riquadro e, lo stesso file, nella prova di fumo per fasi e nei test. Gli esempi di accettazione dei giochi (stato → mosse → stato atteso) li scrive il codice e l'agente non li può cambiare. Vedi «La macchina a stati di Calliope» in fondo.
 
+**14/10 sera.** Il progetto della macchina a stati è finito (tranne «Gira il telefono» per una
+tela e la prova del palco nel browser della DGX, scartata dalla decisione 4): Calliope tiene
+l'**istantanea validata** della partita e ogni comando a voce porta il suo numero; risponde da
+sé a «a chi tocca?», «quanti punti ho?», «chi sta vincendo?», «cosa posso dire?»; un **giudice di
+fase** capisce le mosse dette con altre parole («apri la terza»); «**gioco anch'io**» e i **nomi
+scritti** sostituiscono «Giocatore N»; dopo «**Riapri**» la partita riprende; le **partite
+condivise** tra schermi hanno un motore solo. Vedi «Lo stato della partita» in fondo.
+
 **14/10.** Ogni pagina si disegna su un **palco fisso** (1280×720, 720×1280 sul telefono in verticale) scalato alla finestra, con sei modelli di pagina più la tela; la prova di fumo **misura il palco** di ogni pagina e lo dice all'agente come un errore da correggere, e il motore misura anche lo schermo vero. La macchina a stati è l'**unico formato**: i giochi vecchi (gioco.js libero, `ascolta` piatto) non si approvano né si aprono più. Vedi «Il palco fisso» in fondo.
 
 ## Moduli
@@ -18,6 +26,7 @@
 |---|---|---|
 | Giochi e schede interattive delle estensioni (05/10) | JavaScript nel browser degli schermi in un `<iframe sandbox="allow-scripts">` (origine opaca, CSP senza rete, script con l'impronta), ponte `postMessage` controllato dalla pagina e dal server; test della logica con Node in un container (`Dockerfile.node`) | `calliope/estensioni/scheda.py` (sezione «scheda» del manifesto, gioco puro, `documento`, `RUNTIME_JS`, `analizza_js`); `calliope/schermi/giochi.py` → `Giochi` (partite, `GET /gioco/<gettone>`, `POST /api/gioco`), `AzioneGioco`; cane da guardia in `schermo.js`; `minori.TempoGioco`, `minori.Richieste`, tool `richiesta_tutore`; `calliope/agenti/test_js.mjs`, prova di fumo `calliope/agenti/fumo_js.mjs`; comandi a voce (11/10) `calliope/gioco_voce.py` (forme e regola `gioco_comando`), `Giochi.ascolto`, `Giochi.comando`, `Giochi.schermi_voce`, `Ciclo._comando_gioco`, tool `gioco_comando` in `tools/schermi.py`; rapporto [`docs/ricerche/2026-10-05-giochi.md`](../ricerche/2026-10-05-giochi.md) |
 | Macchina a stati dei giochi (13/10) | JavaScript senza dipendenze, lo stesso file nel riquadro e in Node | `calliope/estensioni/macchina.py` (validazione di `scheda.macchina`, comandi piatti `ascolta`, `in_parole`); `calliope/estensioni/motore_gioco.js` (CalliopeMotore.crea: il nucleo puro; CalliopeMotore.avvia: disegno, pulsanti, voce); `scheda.documento` (motore e avvio nel riquadro, `STILE_MOTORE`); `calliope/agenti/fumo_js.mjs` (esplora, tuttiPiatti, apriGioco con g.stato()); esempi di accettazione `agenti/accettazione.py` (`test_js`, `FILE_GIOCO`); progetto [`2026-10-12-giochi-macchina-stati.md`](../ricerche/2026-10-12-giochi-macchina-stati.md) |
+| Stato della partita, domande, giudice, nomi, ripresa, partite condivise (14/10 sera) | Python e JavaScript senza dipendenze; il giudice sul modello del giudizio «rivolta» (Ollama, uscita vincolata) | `estensioni/macchina.py` (`valida_istantanea`, `per_fase`, `da_piatto`, `nome_chiuso`); `schermi/giochi.py` (`_t_stato`, `_t_rifiutato`, `_t_mossa`, `_nomi_detti`, `Posto.istantanea`, `Posto.ripresa`, `Partita.tiene`, `motore_condiviso`); `calliope/gioco_stato.py` (domande standard, `anchio_nome`, la riga dei dati del turno); `calliope/gioco_giudice.py`; `Ciclo._comando_gioco`, `Ciclo._giudice_di_fase`; `motore_gioco.js` (`perCalliope`, `rinomina`, `riprendi`, autorevole e specchio); `scheda.RUNTIME_JS` (canale del motore); `schermo.js` (i tipi nuovi) |
 | Palco fisso e modelli di pagina (14/10) | JavaScript senza dipendenze: l'impaginazione è una funzione pura, la stessa nel riquadro e in Node | `motore_gioco.js`: `impagina` (contenuto della pagina → scatole sul palco), `controllaPalco`, `difettiPalco`, il nucleo `pagina(S)`, la misura vera nel riquadro (`misuraVera` → canale `palco`); `macchina.PAGINE`; `scheda.RUNTIME_JS` (il canale riservato al motore), `STILE_MOTORE` (il palco, niente scroll); `calliope/agenti/fumo_js.mjs` (il palco nell'esploratore, `g.palco()`); `schermi/giochi.py` (`_t_palco`, `Posto.palco`); `prove/giochi/pagine` |
 
 ## Problemi noti
@@ -422,7 +431,8 @@ confronto delle forme: 0 VRAM. La prova di fumo per fasi e gli esempi girano in 
 l'agente (oggi solo sulla DGX); la passata del progettista è la stessa delle estensioni.
 
 **Cosa resta del progetto** (e perché; *storico dal 14/10: il palco e la rimozione dei giochi
-vecchi sono fatti, vedi «Il palco fisso» qui sotto*): il **palco fisso** 1280×720 e 720×1280 con i sei modelli
+vecchi sono fatti, vedi «Il palco fisso» qui sotto; dal 14/10 sera anche il resto, vedi «Lo
+stato della partita» in fondo; il caso «porte» del banco era già stato riscritto con il palco*): il **palco fisso** 1280×720 e 720×1280 con i sei modelli
 di pagina e la misura «fuori dal palco» (passo 4: oggi `scelte`, `messaggio` e `tela` con un
 disegno semplice che va a capo; è il passo più grande e cambia l'aspetto, da provare sugli
 schermi veri), e con lui la **rimozione dei giochi vecchi** (decisione 9); l'**istantanea
@@ -556,7 +566,9 @@ l'impaginazione pura calcola), e le prove dei giochi rifatte (`prova_giochi`, `p
 `prova_gioco_macchina`, `prova_agente_guida`, `prova_fasi_agente`, `prova_giro_porte`,
 `prova_giro_halloween`).
 
-**Cosa resta del progetto**: l'**istantanea validata dal server** con i comandi numerati (passo 2
+**Cosa resta del progetto** (*storico dal 14/10 sera: istantanea, domande standard, giudice,
+nomi, ripresa e partite condivise sono fatti, vedi «Lo stato della partita» qui sotto*):
+l'**istantanea validata dal server** con i comandi numerati (passo 2
 lato server); le **domande standard** («a chi tocca?», passo 5); il **giudice di fase** (passo 6);
 «**gioco anch'io**» e i **nomi scritti**; la **ripresa dopo «Riapri»**; le **partite condivise**
 con il motore; una tela che dichiara un solo orientamento e fa dire «Gira il telefono»
@@ -804,3 +816,36 @@ sarebbe l'autorevole e gli altri riceverebbero istantanee e vista». Fatto così
 Prove: `prova_gioco_stato` (sezione 9: due motori nel DOM finto, autorevole e specchio, e il
 server con i contrari), `prova_gioco_stato_pagina` (Edge, due pagine: tocchi veri sullo
 specchio, la stessa pagina sulle due).
+
+### Il caso «porte» del banco della temperatura
+
+Verificato il 14/10 sera: il caso «porte» di `prove/manuali/banco_temperatura.py` è già nel
+formato nuovo (la macchina a stati, niente `gioco.js`: riscritto con il palco fisso, vedi
+[agenti-estensioni](agenti-estensioni.md), «Il banco del 14/10»). `banco_temperatura.py --secco`:
+tutto ok (porte rosse alla partenza e verdi sul riferimento, i vincoli della correzione con il
+test che riproduce in `gioco.test.js`, il tetto con e senza la riproduzione). Niente da cambiare.
+
+### Cosa resta, e il giro sulla DGX
+
+**Resta del progetto**: «Gira il telefono» per una tela che dichiara un orientamento solo
+(decisione 3, non fatto); la diagnosi del palco detta a voce al collaudo; nelle partite
+condivise, chi è quale giocatore (oggi ogni schermo muove quando tocca a qualcuno); il giudice
+senza il nome (decisione 2: da decidere dopo la misura); la partita come attività della macchina
+a stati del dialogo (§ 4 del progetto, «in futuro»). La prova del palco nel browser della DGX
+(passo 8) resta scartata (decisione 4).
+
+**Da fare sulla DGX** (dopo `calliope aggiorna`; ricaricare la pagina degli schermi e del
+telefono, sono file statici):
+- il giro vero dell'agente su un gioco nuovo, a voce: «Calliope, fammi un gioco delle porte da 2
+  a 4 giocatori, a voce con il numero della porta» → guardare nel log l'analisi prima del codice
+  (comandi ed esempi), la macchina e la prova di fumo per fasi con il palco, gli esempi alla
+  consegna; poi «aprilo in prova» e giocarlo dal satellite e dal telefono: «gioco anch'io» (il
+  nome di chi parla), «Calliope, inizia», «porta tre», «Calliope, apri la terza» (il giudice:
+  «Porta 3.»), «a chi tocca?» e «quanti punti ho?» anche senza il nome, un nome scritto toccando
+  la fascia, ✕ e «Riapri» (riprende), e la stessa partita da due schermi (con `"condivisa":
+  true`: «Calliope, voglio giocarci anche dalla cucina»);
+- misurare con `calliope stato --turni`: esito `gioco_comando`, `gioco_stato`, `gioco_giudice`
+  (`giudice_ms` sul rilevatore e4b, stima 0,2–0,35 s), e quante frasi la finestra del gioco
+  ignora (`gioco_finestra_ignorata`) per decidere `giochi_giudice_senza_nome`;
+- nel registro dell'estensione: `gioco_stato_non_valido` (deve restare 0 con un gioco sano),
+  `gioco_comando_vecchio`, `gioco_nome_fermato`, `gioco_partita_passata`.

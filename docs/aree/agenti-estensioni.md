@@ -3131,7 +3131,9 @@ verde sul gioco giusto, rosso solo il requisito 2 con le porte che non spariscon
 senza il comando, il servizio in uno sviluppo e i contrari), `prova_agente_guida` (lo scheletro
 nuovo è valido e passa i suoi test e la prova di fumo per fasi), `prova_giochi` (la consegna di
 un gioco nuovo senza macchina rifiutata). Il banco della temperatura a secco passa com'era (il
-suo caso «porte» è una correzione di un gioco del formato di prima).
+suo caso «porte» è una correzione di un gioco del formato di prima). *Storico dal 14/10: il caso
+«porte» è riscritto con la macchina a stati (il palco fisso); verificato il 14/10 sera con
+`--secco`.*
 
 **Da guardare sulla DGX** al primo gioco nuovo: «analisi prima del codice … N esempi di
 accettazione» con i comandi, se l'agente rispetta nomi e fasi dei comandi chiesti (un nome
