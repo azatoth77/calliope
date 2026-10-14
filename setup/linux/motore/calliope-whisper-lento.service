@@ -1,0 +1,29 @@
+# Unità systemd **utente** del secondo server di trascrizione, quello della corsia lenta della
+# stanza (14/10/2026 sera, calliope/stanza/lenta.py): whisper.cpp con CUDA e large-v3 (non
+# turbo), quantizzato q5_0 di serie. La installa `setup/linux/motore/whisper-lento.sh installa`
+# in ~/.config/systemd/user/calliope-whisper-lento.service, sostituendo @DIR@, @PORTA@,
+# @MODELLO@ e @BEAM@: non va copiata a mano.
+#
+# Facoltativa: calliope.service NON la aspetta (né Wants= né After=). Se è giù, la corsia lenta
+# con `stanza_lenta_ritrascrivi: auto` non ritrascrive (tiene il testo della corsia veloce) e
+# fa il resto; il Whisper dei turni non si tocca.
+#
+# Solo su 127.0.0.1: Calliope è sulla stessa macchina
+# (stanza_lenta_stt_url: http://127.0.0.1:@PORTA@/v1). Nessun prompt fisso: Calliope manda il
+# suo (i nomi dello scambio) a ogni richiesta. -t 2: la corsia lenta lavora solo a DGX libera.
+
+[Unit]
+Description=Calliope: trascrizione della corsia lenta (whisper.cpp, @MODELLO@) su 127.0.0.1:@PORTA@
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+[Service]
+WorkingDirectory=@DIR@
+ExecStart=@DIR@/src/build/bin/whisper-server -m modelli/@MODELLO@ --host 127.0.0.1 --port @PORTA@ -l it -bs @BEAM@ --inference-path /v1/audio/transcriptions -t 2
+Restart=on-failure
+RestartSec=5
+# Dopo il Whisper dei turni, se mai la CPU fosse contesa
+Nice=10
+
+[Install]
+WantedBy=default.target

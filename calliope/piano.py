@@ -35,9 +35,12 @@ una più in alto):
 9. **Piper** sulla GPU solo con posto (le soglie di `taratura_voce`), **immagini** a richiesta
    solo con 13 GB liberi, OCR, satelliti insieme;
 10. **corsia lenta della stanza** (14/10, passo 3, solo con `stanza_lenta`): un secondo Whisper
-   più accurato (large-v3, whisper.cpp) solo se ci sta dopo tutto il resto e la macchina non è
-   della taglia ridotta (8 GB: decisione 0029 § 4 punto 7, «niente corsia lenta con un modello
-   più grande»); altrimenti lo stesso Whisper dei turni a DGX libera, senza memoria in più.
+   più accurato (large-v3 q5_0, whisper.cpp, dal 14/10 sera) solo se ci sta dopo tutto il resto
+   **lasciando il posto a FLUX** e la macchina non è della taglia ridotta (8 GB: decisione 0029
+   § 4 punto 7, «niente corsia lenta con un modello più grande»), con la memoria vera del
+   processo quando gira; altrimenti lo stesso Whisper dei turni a DGX libera se è
+   faster-whisper (il beam conta), o «senza ritrascrizione» se è un whisper-server (misura vera
+   del 14/10 sera: ritrascrivere col server dei turni peggiorava), senza memoria in più.
 
 Le velocità: misurate da noi su quella GPU quando ci sono (catalogo), altrimenti η × banda /
 byte letti a token (η 0,55, o quello che le misure danno per la macchina), al più 250 token/s.
@@ -227,6 +230,9 @@ class _Macchina:
             di_calliope += (v.get("gpu_memory_utilization") or 0) * self.pool
         if (self.motori.get("whisper_server") or {}).get("attivo"):
             di_calliope += cat.WHISPER["cpp-gpu"].memoria_gb
+        lento = self.motori.get("whisper_lento") or {}
+        if lento.get("attivo"):
+            di_calliope += float(lento.get("gb") or cat.WHISPER["cpp-lenta"].memoria_gb)
         return float(libera), max(0.0, self.pool - float(libera) - di_calliope)
 
     @property
@@ -655,26 +661,77 @@ def _richiesta(p: Piano, mc: _Macchina, f: Funzioni, m_voce: cat.Modello):
 
 
 def _lenta(p: Piano, mc: _Macchina, f: Funzioni, whisper_gpu: bool):
-    """La corsia lenta della stanza (passo 3): ultima, non toglie memoria a niente."""
+    """La corsia lenta della stanza (passo 3): ultima, non toglie memoria a niente e lascia il
+    posto a FLUX a richiesta. La memoria è quella vera del secondo server quando gira
+    (`macchina.inventario`, nvidia-smi per processo), altrimenti la stima del catalogo."""
     if not f.stanza_lenta:
         return
     w = cat.WHISPER["cpp-lenta"]
+    vero = (mc.motori.get("whisper_lento") or {})
+    gb = float(vero.get("gb") or w.memoria_gb)
+    fonte = (f"[M] adesso: {_gb(gb)} GB del processo (nvidia-smi)" if vero.get("gb")
+             else w.fonte)
     ridotta = mc.tipo == "dedicata" and mc.pool <= 8 * 1.12
-    if whisper_gpu and not ridotta and mc.ci_sta(w.memoria_gb):
-        mc.usati += w.memoria_gb
+    flux = cat.IMMAGINI_GB if f.immagini and mc.tipo != "cpu" else 0.0
+    if whisper_gpu and not ridotta and mc.ci_sta(gb + flux):
+        mc.usati += gb
+        gia = bool(vero.get("attivo"))
+        adesso = gia or mc.liberi_adesso >= gb + flux
         p.scelte.append(Scelta(
-            "stanza_lenta", f"{w.nome}, {w.motore} (secondo server)", "GPU", w.memoria_gb,
-            "solo a DGX libera; tempi da misurare", "ok",
-            "ci sta dopo tutto il resto: stanza_lenta_stt_url verso un secondo whisper-server",
-            _oggi(f, "stanza_lenta", "server"), w.fonte))
+            "stanza_lenta", f"{w.nome}, {w.motore} (secondo server)", "GPU", round(gb, 2),
+            ("residente, memoria misurata adesso" if vero.get("gb") else
+             "residente, memoria stimata") + "; lavora solo a DGX libera",
+            "ok" if adesso else "avviso",
+            "ci sta dopo tutto il resto"
+            + (f" e resta il posto per le immagini ({_gb(flux)} GB)" if flux else "")
+            + ("" if gia else ": calliope motore whisper-lento installa, poi "
+               "stanza_lenta_stt_url")
+            + ("" if adesso else f"; adesso, con gli altri programmi accesi, restano "
+               f"{_gb(max(0.0, mc.liberi_adesso))} GB: non adesso"),
+            _oggi(f, "stanza_lenta", "server"), fonte))
         return
+    # Senza secondo server: con faster-whisper nel processo il beam della corsia lenta conta
+    # (si ritrascrive), con un whisper-server no (stanza_lenta_ritrascrivi «auto»: senza
+    # ritrascrizione, misura vera del 14/10 sera)
+    sw = p.scelta("whisper")
+    server = sw is not None and "whisper.cpp" in (sw.scelta or "")
     perche = ("taglia ridotta: niente modello più grande (0029 § 4.7)" if ridotta else
               "Whisper sulla CPU" if not whisper_gpu else
-              f"un secondo Whisper ({_gb(w.memoria_gb)} GB) non ci sta")
+              f"un secondo Whisper ({_gb(gb)} GB) non ci sta"
+              + (f" lasciando il posto alle immagini ({_gb(flux)} GB)" if flux else ""))
+    if server:
+        p.scelte.append(Scelta(
+            "stanza_lenta", "senza ritrascrizione", "GPU" if whisper_gpu else "CPU", 0.0,
+            "chi parla, TV, allucinazioni e riassunto sul testo della corsia veloce", "ok",
+            perche + "; il whisper-server dei turni ignora il beam e ritrascrivere peggiorava "
+            "(4,8 % contro 3,0 %)", _oggi(f, "stanza_lenta", "senza ritrascrizione")))
+        return
     p.scelte.append(Scelta("stanza_lenta", "lo stesso Whisper dei turni", "GPU" if whisper_gpu
                            else "CPU", 0.0, "a DGX libera, con la precedenza più bassa",
                            "ok" if whisper_gpu else "avviso", perche,
                            _oggi(f, "stanza_lenta", "stesso")))
+
+
+def _lenta_oggi(cfg) -> str:
+    """Come lavora oggi la corsia lenta: «server» (un Whisper suo), «stesso» (ritrascrive col
+    Whisper dei turni) o «senza ritrascrizione» (`stanza_lenta_ritrascrivi`, come in
+    stanza/lenta.Lenta.ritrascrive)."""
+    url = bool(str(getattr(cfg, "stanza_lenta_stt_url", "") or "").strip())
+    v = getattr(cfg, "stanza_lenta_ritrascrivi", "auto")
+    v = ("si" if v else "no") if isinstance(v, bool) else str(v or "auto").strip().lower()
+    if v in ("no", "false"):
+        return "senza ritrascrizione"
+    if url:
+        return "server"
+    if v in ("si", "sì", "true"):
+        return "stesso"
+    locale = str(getattr(cfg, "stt_motore", "locale") or "locale").lower() != "server"
+    try:
+        beam = int(getattr(cfg, "stanza_lenta_beam", 8)) > int(
+            getattr(cfg, "whisper_beam_size", 5) or 5)
+    except (TypeError, ValueError):
+        beam = False
+    return "stesso" if locale and beam else "senza ritrascrizione"
 
 
 def _decisione(n: int) -> dict:
@@ -762,8 +819,7 @@ def da_config(cfg, inv: dict | None = None) -> Funzioni:
         oggi["whisper"] = (f"faster-whisper {getattr(cfg, 'whisper_model', '')} "
                            f"{getattr(cfg, 'whisper_device', '')}")
     if f.stanza_lenta:
-        oggi["stanza_lenta"] = ("server" if str(getattr(cfg, "stanza_lenta_stt_url", "") or "")
-                                .strip() else "stesso")
+        oggi["stanza_lenta"] = _lenta_oggi(cfg)
     if oggi["piper"] == "auto":
         oggi.pop("piper")
     f.oggi = {k: v for k, v in oggi.items() if v}

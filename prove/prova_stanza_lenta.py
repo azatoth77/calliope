@@ -395,6 +395,26 @@ def prova_senza_ritrascrizione():
              "senza ritrascrizione 4" in misure_mod.testo_lenta(rr["lenta"]),
              misure_mod.testo_lenta(rr["lenta"]))
     st.chiudi()
+    # Il Whisper suo giù: con «auto» nessun ripiego su quello dei turni, con «si» sì
+    for modo, atteso in (("auto", 0), ("si", 1)):
+        cfg = cfg_base(stanza_lenta_ritrascrivi=modo, stanza_lenta_stt_url="http://127.0.0.1:9")
+        stt = STTFinto()
+        st, lenta = nuova(cfg, stt)
+
+        def giu(*a, **k):
+            raise ConnectionError("giù")
+        lenta._post_lento = giu
+        c = Coll(4, "veranda")
+        x = parla(st, c, 91, [(0.1, 2.0)], testi=("Porto la cana.", "Porto la canna."))
+        lenta.giro(tardi(cfg))
+        lente = [y for y in stt.chiamate if y["priorita"] == coda_mod.LENTA]
+        rx = riga_di(st, 4, x)
+        verifica(f"Whisper suo giù, «{modo}»: "
+                 + ("tiene il testo della corsia veloce, nessun ripiego" if not atteso else
+                    "ripiega su quello dei turni come prima"),
+                 len(lente) == atteso and rx and rx[0]["testo"] == (
+                     "Porto la cana." if not atteso else "Porto la canna."), str(rx))
+        st.chiudi()
     # La configurazione: «no» di YAML (false) diventa «no»
     from calliope.config import VALIDATORI
     v = VALIDATORI["stanza_lenta_ritrascrivi"]
@@ -830,9 +850,61 @@ def prova_misure_piano():
              and s8.memoria_gb == 0, str(s8))
     verifica("piano: spenta, nessuna scelta", P.piano(inv, P.Funzioni()).scelta(
         "stanza_lenta") is None)
+    # 14/10 sera: large-v3 q5_0, il posto per FLUX, la memoria vera, «senza ritrascrizione»
+    verifica("piano: il secondo server è large-v3 q5_0 (~2 GB stimati) e lascia il posto a FLUX",
+             s.scelta.startswith("large-v3 q5_0") and s.memoria_gb == 2.0
+             and "immagini" in s.motivo, str(s))
+    inv_v = dict(inv, motori={"whisper_lento": {"locale": True, "attivo": True, "gb": 1.73}})
+    sv = P.piano(inv_v, P.Funzioni(stanza_lenta=True)).scelta("stanza_lenta")
+    verifica("piano: col servizio acceso la memoria vera del processo ([M])",
+             sv.memoria_gb == 1.73 and sv.fonte.startswith("[M]") and "misurata" in sv.stima,
+             str(sv))
+    inv24 = dict(inv, ram_gb=24, gpu=dict(inv["gpu"], memoria_gb=24.0))
+    p24 = P.piano(inv24, P.Funzioni(stanza_lenta=True))
+    s24 = p24.scelta("stanza_lenta")
+    verifica("piano: whisper-server dei turni e niente posto con FLUX → senza ritrascrizione",
+             "whisper.cpp" in p24.scelta("whisper").scelta
+             and s24.scelta == "senza ritrascrizione" and s24.memoria_gb == 0, str(s24))
+    oggi = P._lenta_oggi
+    verifica("piano, oggi: server con l'URL, senza ritrascrizione col whisper-server, stesso "
+             "con faster-whisper e beam più largo; «no» vince",
+             oggi(SimpleNamespace(stanza_lenta_stt_url="http://127.0.0.1:8004/v1")) == "server"
+             and oggi(SimpleNamespace(stt_motore="server")) == "senza ritrascrizione"
+             and oggi(SimpleNamespace(stt_motore="locale")) == "stesso"
+             and oggi(SimpleNamespace(stt_motore="locale", stanza_lenta_beam=5))
+             == "senza ritrascrizione"
+             and oggi(SimpleNamespace(stt_motore="server", stanza_lenta_ritrascrivi="si"))
+             == "stesso"
+             and oggi(SimpleNamespace(stanza_lenta_stt_url="http://x:1/v1",
+                                      stanza_lenta_ritrascrivi="no")) == "senza ritrascrizione")
+    # L'inventario: il secondo server e la sua memoria vera
+    from calliope import macchina as M
+
+    class Sonda:
+        os = "linux"
+
+        def __init__(self, vivo=True, pid="4242"):
+            self.vivo, self.pid = vivo, pid
+
+        def get(self, url, timeout=1.5):
+            return "ok" if self.vivo and ":8004/" in url else None
+
+        def comando(self, argv, timeout=5):
+            if argv[0] == "systemctl":
+                return self.pid + "\n"
+            return "111, 2100\n" + self.pid + ", 1650\n"
+    w = M._whisper_lento(Sonda(), SimpleNamespace(stanza_lenta_stt_url=""))
+    verifica("inventario: il server sulla porta di whisper-lento.sh, memoria dal suo PID",
+             w == {"locale": True, "attivo": True, "gb": round(1650 * 1048576 / 1e9, 2),
+                   "configurato": False}, str(w))
+    verifica("inventario: niente server e niente URL → niente; URL ma giù → attivo false",
+             M._whisper_lento(Sonda(vivo=False), SimpleNamespace(stanza_lenta_stt_url=""))
+             is None
+             and M._whisper_lento(Sonda(vivo=False), SimpleNamespace(
+                 stanza_lenta_stt_url="http://127.0.0.1:8004/v1"))["attivo"] is False)
     c = Config()
     verifica("configurazione: corsia lenta spenta e banco a 0 di serie",
-             c.stanza_lenta is False and c.stanza_audio_banco_giorni == 0
+             c.stanza_lenta is False and c.stanza_lenta_ritrascrivi == "auto" and c.stanza_audio_banco_giorni == 0
              and c.stanza_lenta_stt_url == "")
     from calliope.config import SEZIONI
     sez = next((k for k, v in SEZIONI.items() if "stanza_lenta" in v), None)

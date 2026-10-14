@@ -194,6 +194,10 @@ def dividi_testo(testo: str, frazioni: list[float]) -> list[str]:
     return out
 
 
+class WhisperLentoGiu(Exception):
+    """Il Whisper suo della corsia lenta (`stanza_lenta_stt_url`) non risponde."""
+
+
 @dataclass
 class Audio:
     """Un segmento della stanza in attesa della corsia lenta (solo in RAM)."""
@@ -235,6 +239,7 @@ class Lenta:
         self._ultimo: dict = {}              # sat → epoch dell'ultimo segmento chiuso
         self._sentite: dict = {}             # testo normalizzato → epoch (voci non riconosciute)
         self._libera_da = 0.0
+        self._giu_detto = -1e9               # l'ultimo avviso del Whisper suo giù
         self.rivisti = 0
         self._fermo = threading.Event()
         self._thread = None
@@ -428,9 +433,12 @@ class Lenta:
         if rit:
             prompt = self.prompt(a, righe)
             t0 = time.perf_counter()
-            testo, scartata, conf = self._trascrivi(audio, prompt)
+            try:
+                testo, scartata, conf = self._trascrivi(audio, prompt)
+            except WhisperLentoGiu:
+                rit = False                          # il suo Whisper è giù: niente ripiego
             stt_s = time.perf_counter() - t0
-        else:
+        if not rit:
             # Senza ritrascrizione (`stanza_lenta_ritrascrivi`, 14/10 sera): il testo della
             # corsia veloce, e il resto del passo (chi parla, TV, allucinazioni, riassunto) su
             # quello. Una versione 2 nasce solo da un cambio vero
@@ -586,9 +594,21 @@ class Lenta:
         if url:
             try:
                 return self._post_lento(url, audio, prompt), None, None
-            except Exception as e:  # noqa: BLE001 — giù: lo stesso Whisper dei turni
-                self.log(f"   [STANZA] Whisper della corsia lenta non risponde "
-                         f"({type(e).__name__}): uso quello dei turni")
+            except Exception as e:  # noqa: BLE001
+                # Giù: con «auto» il segmento resta col testo della corsia veloce (lo stesso
+                # Whisper dei turni senza il loro prompt peggiorava le righe, 14/10 sera); con
+                # «si» detto a mano, quello dei turni come prima
+                forzato = str(self._f("stanza_lenta_ritrascrivi", "auto")).strip().lower() in (
+                    "si", "sì", "true", "1")
+                ora = time.monotonic()
+                if ora - self._giu_detto >= 600:
+                    self._giu_detto = ora
+                    self.log(f"   [STANZA] Whisper della corsia lenta non risponde "
+                             f"({type(e).__name__}): "
+                             + ("uso quello dei turni" if forzato else
+                                "tengo il testo della corsia veloce"))
+                if not forzato:
+                    raise WhisperLentoGiu() from e
         stt = self.stt
         try:
             testo = stt.transcribe(audio, priorita=coda_mod.LENTA, prompt=prompt,
