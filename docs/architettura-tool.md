@@ -9,7 +9,7 @@ tutti i servizi il modello vede **75 schemi** uguali per ogni livello; si aggiun
 (entità meteo in Home Assistant), `immagine_guarda` (`immagini_storia: descrizione`), i quattro tool
 dei minori (un minore in casa), `stanza_pausa` e `stanza_cerca` (stanza accesa), `conoscenti` e
 `conoscente_livello` (`stanza_conoscenti`); `argomento` prende il posto di `conversazione_nuova` con
-`eventi: attivo`. Nomi nuovi dall'08/10, i vecchi validi in `ToolRegistry.NOMI_VECCHI`.
+`eventi: attivo`. Nomi nuovi dall'08/10, i vecchi validi in `registry.NOMI_VECCHI`.
 (Storico: «72 schemi» il 09/10, «78» fino al 13/10.)*
 
 ## 1. Due famiglie: nativi e MCP
