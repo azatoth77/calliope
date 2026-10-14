@@ -157,6 +157,9 @@ def main():
     a = ap.parse_args()
     cfg = load_config()
     cfg.stanza, cfg.stanza_contesto = "ombra", True
+    # Il satellite finto della scena è «cucina»: l'elenco del file locale (sulla DGX i
+    # satelliti veri) lo escluderebbe e il blocco non ci sarebbe mai
+    cfg.stanza_satelliti = []
     print(f"modello: {cfg.llm_model} ({cfg.llm_backend}, profilo {cfg.llm_profilo})", flush=True)
     giusti = tot = 0
     tempi = {"blocco": [], "senza": []}
