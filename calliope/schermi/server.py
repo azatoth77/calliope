@@ -697,7 +697,7 @@ def crea_app(hub: Schermi) -> Starlette:
             # Dario) di un figlio di cui è tutore, solo in una conversazione verificata dalla
             # voce (Schermi.scrittura_consentita: riconosciuto dalla voce sopra soglia, non zona
             # grigia né frase breve né scritto) e con la regola d'età della visibilità
-            # (conversazioni_visibili_ai_tutori: sotto i 14 anni)
+            # (conversazioni_visibili_ai_tutori: ogni minore, dal 14/10)
             padroni = {cas.proprietario(i) for i in ids} - {None}
             if len(padroni) > 1:
                 return {"ok": False, "errore": "file di persone diverse", "_stato": 409}

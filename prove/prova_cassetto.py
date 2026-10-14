@@ -15,8 +15,8 @@ Dario del 07/10, docs/aree/immagini-allegati.md):
   una frase («…li trovi sullo schermo», o a voce con la domanda), una volta al giorno;
 - tieni (cartella personale dell'archivio, estensione del tipo vero, archivio svegliato; uno
   zip no; un minore no), elimina, tieni ancora 7 giorni; tetto per persona;
-- ospite, zona grigia, frase breve: niente cassetto; minore e tutore (sotto i 14 anni sì, dai
-  14 no, un adulto qualsiasi no);
+- ospite, zona grigia, frase breve: niente cassetto; minore e tutore (a ogni età dal 14/10,
+  un adulto qualsiasi no);
 - ritrovamento dopo un riavvio («il file di ieri», l'id, le parole del nome, la foto che torna
   nell'album), contenuto ancora in busta («DATO NON FIDATO (fonte: allegato)») con Brain;
 - politica: cassetto_gestisci è un'azione, «elimina» distruttiva (serve il verbo nella frase);
@@ -333,7 +333,7 @@ def prova_tool():
     verifica("tutore: vede il cassetto della figlia di 10 anni",
              r.get("ok") and "Napoleone" in r.get("contenuto", ""), r)
     r = call(ctx, "allegato_leggi", {"cassetto": "tutti", "di": "Carlo"})
-    verifica("tutore: dai 14 anni no (come le conversazioni)", not r.get("ok"), r)
+    verifica("tutore: anche dai 14 anni (14/10, come le conversazioni)", r.get("ok"), r)
     r = call(ctx_per(cas, chi="Teodora"), "allegato_leggi", {"cassetto": "tutti", "di": "Bianca"})
     verifica("un adulto che non è tutore: no", not r.get("ok"), r)
     r = call(ctx_per(cas, chi="Bianca"), "allegato_leggi", {"cassetto": "tutti", "di": "Dario"})
@@ -647,8 +647,8 @@ def prova_tutore_pagina():
                  r.status_code == 200 and [p.parent.name for p in tenuti] == ["Dario"]
                  and cas.prendi("bianca", b1) is None, (r.text, tenuti))
         r = post(dario, {"azione": "elimina", "id": [c1]})
-        verifica("tutore verificato, ragazzo di 15 anni: 403, file intatto",
-                 r.status_code == 403 and cas.prendi("carlo", c1) is not None, r.text)
+        verifica("tutore verificato, ragazzo di 15 anni: anche lui (14/10, ogni età)",
+                 r.status_code == 200 and cas.prendi("carlo", c1) is None, r.text)
         r = post(dario, {"azione": "elimina", "id": [d1, b2]})
         verifica("file di persone diverse insieme: 409, niente toccato",
                  r.status_code == 409 and cas.prendi("dario", d1) is not None

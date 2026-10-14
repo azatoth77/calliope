@@ -27,9 +27,10 @@ Decisioni di Dario del 05/10:
   l'argomento, mai le frasi del minore.
 - **Estensioni**: per un minore solo quelle abilitate dal tutore per lui
   (`estensione_consentita`, di partenza nessuna).
-- **Privacy**: conversazioni archiviate dei minori < 14 visibili ai tutori, dai 14 solo gli
-  avvisi di sicurezza (`conversazioni_visibili_ai_tutori`, GDPR art. 8 e d.lgs. 101/2018: 14
-  anni in Italia; oggi la regola la usa il cassetto dei file); niente dati sanitari o sensibili
+- **Privacy**: conversazioni archiviate dei minori visibili ai tutori a ogni età
+  (`conversazioni_visibili_ai_tutori`; fino al 14/10 solo sotto i 14 anni, art. 8 GDPR: chi
+  amministra l'ha allineata alla conversazione di stanza, decisione 0029; la usa anche il
+  cassetto dei file); niente dati sanitari o sensibili
   nei ricordi di un minore (`ricordo_sensibile`). Dal 12/10 (decisione 0028 T1,
   calliope/conserva.py) le conversazioni di un minore non vanno su disco: restano
   nell'archivio della sessione, in memoria, fino al riavvio.
@@ -55,8 +56,9 @@ from .testi import MESI, NIENTE
 FASCE = (("piccoli", 0, 6), ("bambini", 7, 10), ("ragazzi", 11, 13), ("adolescenti", 14, 17))
 NOMI_FASCE = tuple(f[0] for f in FASCE)
 _ORDINE = {"piccoli": 0, "bambini": 1, "ragazzi": 2, "adolescenti": 3}
-# Età (anni compiuti) dalla quale un minore decide da sé chi vede le sue conversazioni: art. 8
-# del GDPR, 14 anni in Italia (d.lgs. 101/2018, art. 2-quinquies)
+# Età del consenso digitale: art. 8 del GDPR, 14 anni in Italia (d.lgs. 101/2018, art.
+# 2-quinquies). Storico: fino al 14/10 dava la soglia della visibilità delle conversazioni
+# ai tutori, tolta per decisione di chi amministra (0029)
 ETA_CONSENSO = 14
 
 
@@ -410,16 +412,11 @@ def e_tutore(chi, minore) -> bool:
 
 
 def conversazioni_visibili_ai_tutori(prof, oggi: datetime.date | None = None) -> bool:
-    """Le conversazioni archiviate di questo profilo si possono mostrare ai tutori? Sì per i
-    minori sotto i 14 anni; dai 14 solo gli avvisi di sicurezza (art. 8 GDPR). Per la fase 2
-    del contesto (archivio delle conversazioni, ramo contesto-2)."""
-    f = fascia(prof, oggi)
-    if f is None:
-        return False
-    anni = eta(getattr(prof, "nascita", None), oggi)
-    if anni is None:
-        return _ORDINE[f] < _ORDINE["adolescenti"]
-    return anni < ETA_CONSENSO
+    """Le conversazioni archiviate (e il cassetto) di questo profilo si possono mostrare ai
+    tutori? Sì per ogni minore, a ogni età: deciso il 14/10 da chi amministra, come per la
+    conversazione di stanza (decisione 0029). Fino al 14/10 solo sotto i 14 anni (art. 8
+    GDPR), dai 14 solo gli avvisi di sicurezza."""
+    return fascia(prof, oggi) is not None
 
 
 def estensione_consentita(prof, estensione: str, oggi: datetime.date | None = None) -> bool:

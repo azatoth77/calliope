@@ -86,8 +86,8 @@ tenuto»). La vita nella conversazione non cambia: il cassetto serve a ritrovarl
   riconosciuta in quella frase o lo scritto dello schermo personale: **mai la zona grigia** né la
   frase breve («Per i tuoi file devo riconoscere bene la tua voce…»). Ognuno vede solo il suo.
   **Minori**: un tutore vede e gestisce il cassetto del figlio con `di`, con la stessa regola
-  delle conversazioni archiviate (`minori.conversazioni_visibili_ai_tutori`: sotto i 14 anni sì,
-  dai 14 no); un minore non può «Tieni» (i documenti di casa sono dell'ufficio, come
+  delle conversazioni archiviate (`minori.conversazioni_visibili_ai_tutori`: dal 14/10 a ogni
+  età; prima sotto i 14 anni sì, dai 14 no); un minore non può «Tieni» (i documenti di casa sono dell'ufficio, come
   `allegato_archivia`), può eliminare o tenere ancora.
 - **Cosa si salva**: i byte originali dei file (il tipo vero l'ha già deciso `prepara`), il JPEG
   già ridotto e senza EXIF delle foto (niente posizione), la trascrizione degli audio (fatta al
@@ -162,8 +162,8 @@ della scheda sul **proprio** schermo personale (la scheda «I file di …» che 
 - i file della richiesta sono tutti di una persona (altrimenti 409) e `Cassetto.proprietario` li
   attribuisce al figlio dal database, mai dalla pagina;
 - chi tocca è il proprietario dello schermo, è **tutore** del ragazzo (`minori.e_tutore`) e il
-  ragazzo ha **meno di 14 anni** (`conversazioni_visibili_ai_tutori`, la stessa regola della
-  visibilità); altrimenti 403 «Questi file non sono tuoi.»;
+  ragazzo è minore (`conversazioni_visibili_ai_tutori`, la stessa regola della visibilità;
+  fino al 14/10 solo sotto i 14 anni); altrimenti 403 «Questi file non sono tuoi.»;
 - c'è una **conversazione verificata dalla voce** del tutore in corso
   (`Schermi.scrittura_consentita`: riconosciuto dalla voce sopra soglia; la zona grigia, la frase
   breve e lo scritto non la aprono né la rinnovano; «esci» o un'altra voce la chiudono);

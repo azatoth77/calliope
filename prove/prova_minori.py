@@ -18,7 +18,7 @@ docs/ricerche/2026-10-05-minori.md): niente modelli, niente Ollama.
 - guardiano che non tace (Q3, 06/10): rilevatore guasto, scaduto o spento, guardiano guasto
   sulla domanda, schede trattenute fino al giudizio per i minori, guasti in `stato --turni`;
 - registrazione di un familiare: data di nascita chiesta, frase di sfida, dati del profilo;
-- privacy: conversazioni visibili ai tutori sotto i 14 anni, estensioni e dati verso internet.
+- privacy: conversazioni visibili ai tutori a ogni età (dal 14/10), estensioni e dati verso internet.
 """
 
 import datetime
@@ -795,8 +795,9 @@ verifica("tutore sconosciuto: errore", "non è tra le persone registrate" in out
 # ─────────────────────────── privacy ───────────────────────────
 print("── privacy ──")
 verifica("conversazioni di Bianca (9) visibili ai tutori", M.conversazioni_visibili_ai_tutori(BIANCA))
-verifica("di Sara (16) no, solo gli avvisi", not M.conversazioni_visibili_ai_tutori(SARA))
-verifica("compie 14 anni oggi: no", not M.conversazioni_visibili_ai_tutori(
+verifica("di Sara (16) anche (14/10: ogni età, decisione 0029)",
+         M.conversazioni_visibili_ai_tutori(SARA))
+verifica("compie 14 anni oggi: anche", M.conversazioni_visibili_ai_tutori(
     profilo("T", 14, giorni=0)))
 verifica("contrario: Dario no (non è minore)", not M.conversazioni_visibili_ai_tutori(DARIO))
 verifica("tutore: Elena di Bianca sì, di Sara no", M.e_tutore(ELENA, BIANCA) and not M.e_tutore(ELENA, SARA))

@@ -152,7 +152,7 @@ amministra. Il minore va registrato di nuovo per canale quando c'è (stt-tts).
   minore restano 7 giorni nel suo cassetto come quelli degli adulti; un tutore li vede e li
   gestisce (`allegato_leggi`/`cassetto_gestisci` con `di`) con la regola delle conversazioni
   archiviate (sotto i 14 anni). Il minore non può «Tieni» (archivio dei documenti di casa).
-- **Cassetto, tutore dai pulsanti** (08/10): il tutore opera sui file del figlio sotto i 14 anni
+- **Cassetto, tutore dai pulsanti** (08/10): il tutore opera sui file del figlio sotto i 14 anni (dal 14/10 a ogni età, vedi sotto)
   anche dai pulsanti della scheda sul proprio schermo, solo in una conversazione verificata dalla
   voce; «Tieni» li mette nella cartella del tutore ([immagini-allegati](immagini-allegati.md)).
 
@@ -760,3 +760,15 @@ giudizio «rivolta» resta in ombra per la risposta (le chiacchiere ricevono anc
 finché non si accende), ma senza azioni (`compagnia_azioni_col_nome`). Il giudizio «rivolta» oggi
 vede solo gli scambi con Calliope (cieco sui brevi, § 2.4 del progetto): un «no» sbagliato su una
 frase davvero rivolta toglierebbe il rilevatore; i suoi «no» vanno riletti sui giorni veri.
+
+### 14/10: i tutori vedono le conversazioni e il cassetto del figlio a ogni età
+
+Chi amministra ha confermato per la conversazione di stanza (decisione 0029) che i tutori cercano
+le parole del figlio **a ogni età**, e ha chiesto di allineare l'archivio: da oggi
+`minori.conversazioni_visibili_ai_tutori` vale per ogni minore, senza la soglia dei 14 anni
+(art. 8 GDPR) usata finora. La stessa funzione decide il cassetto dei file (tool `allegato_leggi`
+con `di` e pulsanti della scheda sullo schermo del tutore), che quindi si allinea anch'esso.
+Restano i cancelli di prima: solo un tutore del ragazzo, riconosciuto dalla voce in una
+conversazione verificata (o dal proprio schermo personale), mai un altro adulto. Le frasi «sotto i
+14 anni» più sopra sono storiche. Prove: `prova_minori` (privacy) e `prova_cassetto`.
+

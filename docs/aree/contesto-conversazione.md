@@ -1051,7 +1051,7 @@ ma lette da chi amministra con `python -m calliope.conversazioni --ospiti`).
 la cronologia delle schede per persona (`schede/<persona>.json`, schede personali con l'identità
 certa, anche dei minori, mai degli ospiti: 7 giorni, al più 40 schede e 4 MB per persona); il
 cassetto dei file (foto, file, audio di chi è riconosciuto, anche dei minori, visibili ai tutori
-sotto i 14 anni, mai degli ospiti: 7 giorni, 500 MB per persona); i ricordi (`memoria.db`,
+sotto i 14 anni, dal 14/10 a ogni età, mai degli ospiti: 7 giorni, 500 MB per persona); i ricordi (`memoria.db`,
 `facts`, anche dei minori, per sempre, al più 50 per persona; degli ospiti niente); gli esercizi
 (`esercizi_tentativi`: domanda, risposta attesa e risposta del ragazzo fino a 60 caratteri, senza
 scadenza: è il dettaglio dei tutori); le richieste ai tutori (`richieste_tutori.oggetto`, senza
@@ -1322,8 +1322,9 @@ filtri, attesa) e `calliope/tools/stanza.py` (il tool).
   una **voce non riconosciuta** non si cercano mai («ospiti mai nella ricerca», 0029 punto 5).
   Nella stanza da cui si parla **in pausa per ospiti** la ricerca non parte (si leggerebbe davanti
   a loro); ciò che si dice in pausa non è registrato, quindi non c'è. «Dimentica» svuota anche lei.
-  Nota: per le conversazioni archiviate i tutori vedono quelle dei minori sotto i 14 anni
-  (`minori.conversazioni_visibili_ai_tutori`); per la stanza la 0029 non mette limiti d'età.
+  Nota (storica, allineata il 14/10): per le conversazioni archiviate i tutori vedevano quelle dei
+  minori sotto i 14 anni; da allora `minori.conversazioni_visibili_ai_tutori` vale a ogni età,
+  come la stanza (decisione 0029).
 - **Il risultato** è un dato non fidato in busta, fonte `stanza` (classe «sicuro» con
   `fonte="stanza"` in `politica.CLASSI`; `non_fidato`): dopo, nella stessa risposta, solo le
   letture di `DOPO_DATO` («Calliope, cancella i promemoria» detto in cucina resta una riga). È
