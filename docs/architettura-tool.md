@@ -52,6 +52,7 @@ calliope/                 # package: python -m calliope
 │   ├── conversazioni.py  # conversazione_cerca (anche cronologica, 08/10), conversazioni_dimentica, conversazione_nuova (09/10)
 │   ├── conserva.py       # dati_conservati: consenso alla voce, revoca, stato, svuota (12/10)
 │   ├── stanza.py         # stanza_pausa: ospiti, pausa, riprendi, stato (13/10, solo con la stanza accesa); stanza_cerca (14/10, passo 4, con `stanza_cerca`)
+│   ├── conoscenti.py     # conoscenti (elenco, dimentica) e conoscente_livello (promuovi, declassa): 14/10, decisione 0030, con `stanza_conoscenti`
 │   ├── web.py            # web_cerca (SearXNG)
 │   ├── notizie.py        # notizie (feed RSS scaricati in casa, 13/10)
 │   ├── immagini.py, allegati.py  # immagine_guarda, immagine_archivia, pc_guarda; allegato_leggi, allegato_archivia, cassetto_gestisci
@@ -146,6 +147,13 @@ Principio 9 della visione: ospite → familiare → chi amministra.
 | `ospite` | voce non riconosciuta (default) | sola lettura |
 | `familiare` | voce riconosciuta | voce, azioni a basso rischio |
 | `amministra` | `Primo`/`Prima` (il primo utente) | tutto |
+
+Dal 14/10 (decisione [0030](decisioni/0030-conoscenti.md)) c'è un **tipo** di profilo in più,
+non un livello: il **conoscente**, una voce di fuori casa salvata da chi amministra (nome, cognome,
+nota, impronta) in `conoscenti.json`, **fuori** da `speakers.json`. Nessun percorso dei comandi lo
+riconosce: a ogni effetto è un **ospite**; solo le righe della stanza hanno il suo nome, e la
+conservazione (categoria `conoscente`) tiene e cerca solo quelle. Diventa familiare solo con
+`conoscente_livello` detto da chi amministra.
 
 Fino al 02/10 i tool vietati non venivano mostrati al modello. Dal 03/10 il modello li vede
 tutti (prefisso unico, vedi §4) e **il permesso lo decide solo il codice**, a ogni
@@ -250,6 +258,8 @@ controllo nelle prove a secco), ma tocca tutti i tool e le prove con Ollama che 
 | `schede_pulisci` | familiare (il codice vuole la voce riconosciuta: mai la zona grigia) | azione | «pulisci le mie schede» (08/10): la cronologia delle schede di chi parla, su disco e sui suoi schermi personali; solo le sue, senza conferma (documenti, lavori e file restano); lo sviluppo aperto resta. Anche il tasto «Pulisci» della pagina (`POST /api/schede`) |
 | `stanza_pausa` | ospite (`ospiti`, `pausa`, `stato`: spengono o leggono); `riprendi` solo un adulto riconosciuto dalla voce (non zona grigia, non un minore, non scritto) | azione (classe «sicuro», effetto E1) | l'ascolto della conversazione della stanza sul satellite da cui si parla (13/10, passo 1, `calliope/stanza/`): «abbiamo ospiti» lo ferma per `stanza_ospiti_ore` (4 h), «smetti di ascoltare la stanza» per i minuti detti o `stanza_pausa_min`, «ascolta di nuovo la stanza». Si registra solo con `stanza: ombra` (main.py) |
 | `stanza_cerca` | familiare (il codice vuole una persona di casa riconosciuta, dalla voce o dal suo schermo personale: mai la zona grigia) | lettura (classe «sicuro» con la fonte `stanza`; non fidato e riservato) | ciò che si è detto vicino ai satelliti e il blocco caldo non ha più (14/10, passo 4, `calliope/stanza/cerca.py`): «di cosa parlavamo in cucina prima?», «cosa aveva detto Carlo della gita?». Argomenti facoltativi `parole`, `persona`, `stanza`, `quando`, `dalle`/`alle`. Un adulto vede le stanze dove era presente (e gli ultimi minuti di quella da cui parla), le parole di un minore solo i suoi tutori, un minore solo le sue, le voci non riconosciute mai; in pausa per ospiti non cerca. Le righe ancora in coda si aspettano al più `stanza_cerca_attesa_max_s`, con la frase `attesa.stanza` oltre `stanza_cerca_attesa_s`. Risultato in busta, fuori dalla storia a risposta finita, mai nel registro. Rete `spinta_stanza`: un «non lo so» senza tool fa cercare Brain con la frase. Si registra solo con la stanza accesa e `stanza_cerca: true` |
+| `conoscenti` | amministra (il codice vuole la voce sopra soglia o il «sì» breve compatibile; mai lo scritto né la zona grigia) | azione (`elenco` lettura; `dimentica` distruttiva, effetto E3) | i conoscenti (14/10, decisione 0030, `calliope/stanza/conoscenti.py`): `elenco` («chi conosci?», con le voci nuove che aspettano una risposta sullo schermo), `dimentica` («dimentica Marco»: impronta, profilo e righe della stanza su disco, dopo la domanda e il «sì»; con più omonimi chiede quale dicendo cognome e nota). Si registra solo con la stanza accesa e `stanza_conoscenti: true` |
+| `conoscente_livello` | amministra (come sopra) | pericoloso (chiesto nel turno, sfida con dati di mezzo, effetto E4) | chi è di famiglia (14/10, decisione 0030): `promuovi` un conoscente a familiare (stesso id e impronta, in `speakers.json` con i permessi dei familiari; un minore vuole `nascita` e `tutori` adulti; poi la proposta di rifare la voce), `declassa` un familiare a conoscente (mai chi amministra né un minore, mai chi parla), con la domanda e il «sì». Stessa registrazione di `conoscenti` |
 | `dati_conservati` | familiare (consenso e revoca della propria voce; `svuota` solo chi amministra, con la voce) | azione (`stato` lettura) | i dati tenuti 60 giorni per le misure (12/10, `calliope/conserva.py`): `consenso_voce` con la voce sopra soglia, la domanda e il «sì» (mai scritto né zona grigia né un minore), `revoca_voce` subito con le registrazioni cancellate, `stato` (cosa tengo di te), `svuota` di tutti o di una persona con la domanda. Si registra con la conservazione (`build_registry(conserva=True)`) |
 | `lavoro_affida` | familiare | azione | affida a un agente in secondo piano un lavoro lungo il cui risultato è un file complesso: `tipo` documento (anche da un `modello`), ricerca, altro; `compito` con i dati detti. Dal 08/10 senza il codice: un tipo codice passa da sé a `sviluppo_apri` (regola `lavoro_codice_sviluppo`). I lavori costosi chiudono con «Procedo?» e partono solo con `proposta` = l'id, nella risposta dopo, della stessa persona; `risposta_finale` (fino al 08/10 `delega_lavoro`) |
 | `lavoro_stato` | familiare | lettura | a che punto sono i lavori (passo dell'agente, coda, una tappa, ultimo finito) (era `lavori_stato`) |

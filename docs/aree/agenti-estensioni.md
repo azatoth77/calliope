@@ -3295,3 +3295,112 @@ prompt va rivisto) e se un «fatto» con l'accettazione nascosta rossa si ripete
         && $V/.venv/bin/python $V/prove/manuali/banco_temperatura.py \
            --casi porte,convertitore,programma --temperature 0.6 --presence config \
            --ripetizioni 5 --uscita ~/banchi/tetto-$(date +%m%d-%H%M)
+
+## Il banco del 14/10 sera: gli esempi contro la richiesta, il manifesto subito, «avanti» (ramo `agente-valori`)
+
+**Le misure** (banco della temperatura sulla DGX, 14/10 mattina dopo `agente-tetto-2` e il palco
+fisso, qwen3.6 su vLLM, t 0,6, presence_penalty della Config, 5 × 3): di nuovo **11/15**, ma
+con un altro quadro. Programma 5/5, convertitore 3/5, porte 3/5; **nessun falso «fatto»**
+(mai l'accettazione nascosta rossa con esito «fatto»); porte chiuse «fatto» con la riproduzione
+3/5 (L1, L4, L13: l'agente ha consegnato da sé); token in tutto da 317 000 a 228 000. Nessun
+lavoro chiuso con `agente_consegna_al_tetto`: nei quattro «limite» (L2, L7, L8, L10) il log dice
+«al tetto niente consegna d'ufficio: **mancano i file che la consegna chiede**».
+
+**Perché, lavoro per lavoro** (rieseguito sul portatile sui file finali e sull'estensione di
+riferimento del banco, `RIFERIMENTO_CONVERTITORE`, che passa l'accettazione nascosta):
+
+- **I valori nominati non erano il problema.** In tutti e cinque i convertitori i valori tenuti
+  (11–12) sono unità vere della richiesta, e i loro controlli sono verdi sia sul riferimento sia
+  sui file finali di L2 e L8.
+- **L8** (esempi 7 verdi, 30 test verdi, accettazione nascosta verde, «limite» a 24 passate): il
+  manifesto non passava il controllo della consegna. La descrizione dell'input «da» era «unità
+  di partenza (metri, chilometri, miglia, piedi, pollici, miglia nautiche, unità astronomiche)»,
+  **98 caratteri** (al più 80): l'elenco dei valori nominati, che i vincoli dicevano «da
+  riconoscere tutti», finiva nel manifesto. L'agente lo ha saputo solo chiamando consegna
+  all'ultima passata; prima, con i test verdi, nemmeno la spinta a consegnare (il manifesto non
+  valido la ferma senza dirlo). Al tetto la consegna d'ufficio chiede gli stessi file: no.
+  **L2**: la stessa cosa (la descrizione con «:», «unità di partenza: metri, chilometri, miglia,
+  ecc.»), e in più un esempio rosso.
+- **Gli esempi stessi, scritti dalla passata dell'analisi**, rieseguiti sul riferimento: rossi
+  in L2, L5, L8, L14 di questo banco e in L5, L11, L14 di quello del mattino. Quattro generi:
+  un'unità che la richiesta non nomina con un risultato («5 METRI in Km» → 0,005; «pollici in
+  centimetri» → 2,54); «contiene» che chiede di ripetere i dati («chilometri metri», vicine e in
+  quest'ordine: «1 chilometri equivalgono a 1000.0 metri» non lo contiene; «astronomica»); un
+  numero insieme a «trovato»: false; e un **conto sbagliato** (L2: 1 unità astronomica =
+  80 776,4 miglia nautiche, mille volte meno; il riferimento dà 80 776 388). Sull'ultimo
+  l'agente di L2 ha passato le ultime passate: la sua estensione era giusta.
+- **Porte L7 e L10** (accettazione rossa): l'agente scriveva i suoi test del disegno con
+  `g.comando("avanti")` subito dopo «2 giocatori» (la macchina è già nella fase d'inizio: «il
+  comando «avanti» adesso non è attivo (attivi: porta_1…)»), in L7 `stato.punti["Giocatore 1"]`
+  (è `giocatori[0].punti`); poi ha «corretto» la macchina invece dei test: `dopo: "esito"` e la
+  fase «esito» dichiarata nel manifesto (L7), una fase «preparazione» sua con il comando
+  «giocatore» e le porte in un altro ordine (L10). I due manifesti non passano il controllo
+  della consegna, ma `esegui_test` non lo diceva. Con la logica giusta del riferimento i test
+  dell'agente di L7 e L10 restano rossi: il gioco l'aveva rotto lui, cercando di far tornare
+  test sbagliati. **In parte un limite del modello** (il contratto diceva già che esito e
+  preparazione non si dichiarano), **in parte nostro**: il contratto non diceva com'è
+  `g.stato()` né che dopo la scelta dei giocatori non serve «avanti», e l'errore non diceva la
+  fase.
+
+**Cosa cambia.**
+
+1. **Gli esempi contro la richiesta** (`agenti/accettazione.py`, `interpreta`). Il criterio: una
+   soluzione giusta e minima della richiesta deve passarli tutti.
+   - Per un input con valori nominati, un esempio con un valore che la richiesta non dice (né
+     tra i valori né nel testo, confrontati al singolare e al plurale con `_radice`: «pollice»
+     va, «centimetri» e «Km» no) si toglie, salvo il caso del dato sconosciuto («trovato»:
+     false).
+   - Lo schema ha `calcolo` per ogni esempio: lo stesso numero come conto con soli numeri,
+     + − × ÷ e parentesi («149597870.7 / 1.852»). Lo rifà il codice (`_calcola`: l'albero
+     visitato a mano, niente eval, niente nomi né potenze): senza numero vale il calcolo; se non
+     tornano (oltre la tolleranza del test) l'esempio si toglie, come il prompt chiede quando
+     non si è sicuri. Il conto a mente si sbaglia più della formula.
+   - Con un altro controllo (il numero o «trovato»: false) «contiene» perde le parole che
+     ripetono i dati dell'esempio e i valori nominati (ripeterli è uno stile, il numero
+     controlla già); come unico controllo la parola resta («Bologna»). Con «trovato»: false il
+     numero si toglie (un dato sconosciuto non ha risultato).
+   - Nel test le parole di «contiene» valgono anche non vicine.
+   - Il log dell'analisi dice quanti esempi, numeri e parole ha tolto (`tolti` anche in
+     `lav.accettazione`); i vincoli aggiungono che l'elenco dei valori non va nella descrizione
+     del manifesto.
+
+   Rieseguito sui dieci convertitori dei due banchi del 14/10 (analisi ricostruite dai
+   `test_accettazione.py`): il **riferimento passa tutto** in nove su dieci (il decimo è il
+   conto sbagliato di L2, che senza il `calcolo` nel JSON di allora non si riconosce: con il
+   prompt nuovo il modello scrive il conto e il codice lo rifà); i file finali di L8 e degli
+   altri verdi; **il falso «fatto» del mattino (L2, il plurale «unità astronomiche») resta
+   rosso** sui suoi due controlli, come la sua accettazione nascosta.
+2. **Il manifesto subito** (`agenti/ciclo.py`, `manifesto_non_valido`, `_con_manifesto`). In un
+   lavoro di estensione o di gioco, scrivere o modificare `manifesto.json` con un manifesto che
+   la consegna rifiuterebbe (lo stesso `manifesto.valida`) aggiunge al risultato «manifesto.json
+   così la consegna lo rifiuta: … Correggilo ora.»; e `esegui_test` di tutti i test conta un
+   fallimento in più, in testa («FALLITO manifesto.json: … è il controllo della consegna:
+   correggi il manifesto, non i test»): «tutto verde» vuol dire consegnabile, quindi niente
+   spinta a consegnare né avviso «verde» con un manifesto che non passa. Cambia solo ciò che
+   vede l'agente: la consegna, il tetto e la riproduzione fanno i loro controlli come prima.
+3. **«avanti» e `g.stato()` nei giochi.** In `apriGioco` (`agenti/fumo_js.mjs`) un comando che
+   non vale dice la fase («fase «turno», attivi: …») e, per «avanti» fuori dall'esito, perché:
+   «vale solo nella fase «esito»…; dopo la scelta dei giocatori la partita è già nella fase
+   d'inizio della macchina». Il contratto (`estensioni/contratto.py`) dice la forma di
+   `g.stato()` (`{ fase, tocca, giocatori: [{ nome, punti }], esito, comandi }`) e la stessa
+   regola di «avanti».
+
+**Prove.** `prova_fasi_agente_2` sezione 6 (a: gli esempi veri del banco e i contrari, il
+riferimento verde, il plurale rosso, lo scheletro rosso, il calcolo; b: il manifesto lungo detto
+scrivendolo e in `esegui_test`, contrari valido e assente; c: «avanti» dopo i giocatori e
+nell'esito, il contratto); `banco_temperatura.py --secco` tutto ok.
+
+**Profilo ridotto da 8 GB.** Niente per la voce. Per un agente piccolo il JSON dell'analisi ha
+un campo breve in più per esempio, e il controllo del manifesto è del codice, senza modello.
+
+**Da guardare sulla DGX** al prossimo banco: nel log dell'analisi i «tolti» (se il modello
+scrive il `calcolo` e quanti esempi cadono); se i convertitori con i test verdi consegnano
+(nessun «mancano i file che la consegna chiede» con l'accettazione nascosta verde); se nelle
+porte spariscono «avanti» dopo i giocatori e le fasi di Calliope dichiarate. Se le porte restano
+2/5 rosse con test dell'agente sbagliati, è il modello che corregge il gioco per far tornare i
+suoi test: un limite del modello, da scrivere.
+
+    cd ~/calliope && V=~/.local/share/calliope/versioni/$(cat ~/.local/share/calliope/attuale) \
+        && $V/.venv/bin/python $V/prove/manuali/banco_temperatura.py \
+           --casi porte,convertitore,programma --temperature 0.6 --presence config \
+           --ripetizioni 5 --uscita ~/banchi/valori-$(date +%m%d-%H%M)

@@ -1428,6 +1428,26 @@ conversazione_stanza:
   stanza_guardia_avvisi_giorno: 1
   # Una riga con una parola sotto questa probabilità (quando Whisper la dà) non fa un acuto
   stanza_guardia_p: 0.5
+  # I conoscenti (14/10, decisione 0030, calliope/stanza/conoscenti.py): le voci che nessun
+  # profilo riconosce si raggruppano in memoria per somiglianza dell'impronta; dal contesto
+  # (vocativi e saluti seguiti dal parlato di quella voce, presentazioni, più indizi concordi;
+  # regola conoscente_nome) Calliope deduce il nome e lo propone a chi amministra **solo sullo
+  # schermo personale** (mai a voce): «Ho sentito una voce nuova che chiamate Marco: la salvo
+  # come conoscente?», con Sì, No, un nome diverso, cognome e nota (gli omonimi restano
+  # profili separati). Senza il sì niente va su disco. Il conoscente ha i permessi di un
+  # ospite, è riconosciuto col nome nelle righe della stanza, le sue righe vanno su disco con
+  # la tenuta e si cercano come quelle della famiglia (chi c'era). Solo con la stanza accesa;
+  # false (di serie) = niente gruppi né proposte
+  stanza_conoscenti: false
+  # Un conoscente non sentito da tanto si dimentica (impronta, profilo e righe)
+  conoscenti_scadenza_giorni: 180
+  # Punti per proporre un nome (vocativo con la risposta 1, presentazione 2, nome detto di sé
+  # in terza persona −1), da almeno due righe e con il secondo nome sotto la metà
+  conoscenti_soglia: 3
+  # Voce del gruppo (secondi di parlato, almeno tre segmenti) per un'impronta buona
+  conoscenti_min_voce_s: 6.0
+  # Il file dei conoscenti (relativo alla cartella della configurazione)
+  conoscenti_file: conoscenti.json
   # Con `stanza_tenuta`: dopo un riavvio le righe di prima non ancora giudicate si riprendono
   # dal disco fino a tante ore indietro (dopo un fermo lungo non si rileggono giorni; quelle
   # più vecchie si contano soltanto). 0 = nessuna ripresa

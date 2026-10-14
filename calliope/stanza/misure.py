@@ -26,6 +26,11 @@ dei turni (`turn_log_dir`), con la stessa tenuta (`turn_log_days`). Una riga per
                   («adulto», «tutore», «minore», «ospite»): mai le parole né i nomi
     anticipo      (14/10: la ricerca anticipata di Brain, `stanza_cerca_anticipo`) esito
                   («trovato», «niente»), ms, righe, caratteri, stanze, tagliate, filtri, chi
+    conoscenti    (14/10, decisione 0030, `stanza_conoscenti`) evento: gruppo_nuovo (una voce
+                  sconosciuta nuova), proposta (con omonimo_famiglia, omonimo_conoscente, eta),
+                  mandata (arrivata a uno schermo di chi amministra), conferma (nome_diverso,
+                  cognome, nota, omonimo), rifiuto, discordi, minore, dimenticato, scaduto,
+                  svuotati, promosso, declassato: mai nomi né parole
 
 Più, nel registro dei turni, `stanza.copertura` di ogni turno interpellato con la stanza accesa
 (`dette`, `pronte`, `recupero_ms`, `oltre`): la «copertura all'interpellazione» (§ 3.11). Dal
@@ -127,7 +132,14 @@ def riassunto(righe: list[dict], turni: list[dict] | None = None) -> dict:
     giorni: dict = {}
     cerca = {"chiamate": 0, "attese": 0, "esiti": {}, "_ms": []}
     anticipo = {"ricerche": 0, "trovate": 0, "_car": []}
+    conoscenti: dict = {}
     for r in righe:
+        if r.get("tipo") == "conoscenti":
+            e = str(r.get("evento") or "?")
+            conoscenti[e] = conoscenti.get(e, 0) + 1
+            if e == "proposta" and (r.get("omonimo_famiglia") or r.get("omonimo_conoscente")):
+                conoscenti["proposte_omonimi"] = conoscenti.get("proposte_omonimi", 0) + 1
+            continue
         if r.get("tipo") == "anticipo":
             anticipo["ricerche"] += 1
             if r.get("esito") == "trovato":
@@ -297,6 +309,7 @@ def riassunto(righe: list[dict], turni: list[dict] | None = None) -> dict:
     blocco["righe_p50"], blocco["caratteri_p50"] = _p(righe_b, 0.5), _p(car_b, 0.5)
     blocco["caratteri_p90"] = _p(car_b, 0.9)
     return {"giorni": giorni, "copertura": cop, "blocco": blocco, "cerca": cerca,
+            "conoscenti": conoscenti,
             "tempi": {k: {"turni": len(v["prima"]) or len(v["stt"]),
                           "stt_p50_s": _p(v["stt"], 0.5),
                           "stt_p90_s": _p(v["stt"], 0.9), "prima_p50_s": _p(v["prima"], 0.5),
@@ -311,6 +324,9 @@ def testo(r: dict) -> str:
         # La tenuta su disco (14/10, stanza/tenuta.py): solo numeri, mai parole né nomi
         from .tenuta import testo_stato
         out.append(testo_stato(r["tenuta"]))
+    kc = r.get("conoscenti") or {}
+    if kc or r.get("conoscenti_salvati") is not None:
+        out.append(testo_conoscenti(kc, r.get("conoscenti_salvati")))
     if not r.get("giorni") and not r["copertura"]["turni"] and not (
             r.get("cerca") or {}).get("chiamate") and not (
             (r.get("cerca") or {}).get("anticipo") or {}).get("ricerche") and not (
@@ -403,3 +419,17 @@ def testo(r: dict) -> str:
                    f"{ts['prima_p50_s']} s), token riletti p50 {tb['riletti_p50']} (senza "
                    f"{ts['riletti_p50']}); obiettivo +0,1 s al più")
     return "\n".join(out)
+
+
+def testo_conoscenti(k: dict, salvati: int | None = None) -> str:
+    """La riga dei conoscenti (14/10, decisione 0030): solo conteggi."""
+    g = lambda e: int(k.get(e, 0))  # noqa: E731
+    proposte = g("proposta")
+    risposte = g("conferma") + g("rifiuto")
+    quota = f", confermate {round(100 * g('conferma') / risposte)} %" if risposte else ""
+    return (f"  Conoscenti: {'?' if salvati is None else salvati} salvati; voci sconosciute "
+            f"nuove {g('gruppo_nuovo')}, proposte {proposte} (con omonimi "
+            f"{g('proposte_omonimi')}, arrivate a uno schermo {g('mandata')}), conferme "
+            f"{g('conferma')}, rifiuti {g('rifiuto')}{quota}; indizi discordi {g('discordi')}, "
+            f"voci di bambino {g('minore')}; dimenticati {g('dimenticato')}, scaduti "
+            f"{g('scaduto')}, promossi {g('promosso')}, tornati conoscenti {g('declassato')}")

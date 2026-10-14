@@ -952,6 +952,60 @@ def prova_giochi_in_corso():
     verifica("contrario: chiuso («chiuso», ✕) → no", not gi.in_corso([5]))
 
 
+# ─────────────────────────── 10. schemi di stanza.db delle versioni di prima ───────────────────
+def prova_schemi():
+    """stanza.db scritto da ciascuna versione di prima si apre con questa: la tenuta del 14/10
+    (stanza_tenuta 1), il ramo della guardia (stanza_tenuta 1 + stanza_guardia 1), i conoscenti
+    (stanza_tenuta 2, colonna `nota`). Le righe di prima restano e la ripresa le legge."""
+    import sqlite3
+    from calliope.persistenza import versione_schema
+    from calliope.stanza import tenuta as tm
+
+    def crea(nome, tenuta_v, guardia_v):
+        pth = os.path.join(CARTELLA, f"schema-{nome}.db")
+        db = sqlite3.connect(pth)
+        tm._v1(db)
+        if tenuta_v >= 2:
+            tm._v2(db)
+        if guardia_v >= 1:
+            tm._g1(db)
+            db.execute("UPDATE guardia_meta SET valore = ? WHERE chiave = 'dal'",
+                       (ORA - 100 * 3600,))
+        db.execute("CREATE TABLE IF NOT EXISTS meta_schema (modulo TEXT PRIMARY KEY, "
+                   "versione INTEGER NOT NULL)")
+        db.execute("INSERT INTO meta_schema VALUES (?, ?)", (tm.MODULO, tenuta_v))
+        if guardia_v:
+            db.execute("INSERT INTO meta_schema VALUES (?, ?)", (tm.MODULO_GUARDIA, guardia_v))
+        db.execute("INSERT INTO righe(avvio, sat, stanza, satellite, seq, inizio, fine, testo, "
+                   "chi, persona, nome, sicurezza, minore) VALUES ('vecchio', '1', 'cucina', "
+                   "'satellite cucina', 1, ?, ?, 'Il mister mi picchia quando sbaglio.', "
+                   "'persona:nicola-id', 'nicola-id', 'Nicola', 'voce', 1)",
+                   (ORA - 3003, ORA - 3000))
+        db.commit()
+        db.close()
+        return pth
+
+    for nome, tv, gv in (("tenuta-1", 1, 0), ("guardia", 1, 1), ("conoscenti", 2, 0)):
+        pth = crea(nome, tv, gv)
+        t = tm.Tenuta(pth, 60, registry=Voci(), log=lambda m: None, avvia=False)
+        colonne = [c[1] for c in t.db.execute("PRAGMA table_info(righe)")]
+        ok = (t.scrivibile and versione_schema(t.db, tm.MODULO) == len(tm.MIGRAZIONI)
+              and versione_schema(t.db, tm.MODULO_GUARDIA) == len(tm.MIGRAZIONI_GUARDIA)
+              and "nota" in colonne and t.guardia_dal is not None)
+        if gv == 0:
+            # Il diario nasce adesso: per leggere la riga di prima si sposta indietro `dal`
+            t.db.execute("UPDATE guardia_meta SET valore = ? WHERE chiave = 'dal'",
+                         (ORA - 100 * 3600,))
+            t.guardia_dal = ORA - 100 * 3600
+        righe = t.righe_guardia(ORA - 24 * 3600)
+        verifica(f"stanza.db della versione «{nome}» (stanza_tenuta {tv}, stanza_guardia {gv}) "
+                 "si apre: schemi all'ultima versione, `nota` e diario, la riga di prima letta",
+                 ok and len(righe) == 1 and righe[0]["nota"] is None
+                 and righe[0]["_giudicata"] is False,
+                 f"{colonne} {righe}")
+        t.chiudi()
+
+
 def main():
     try:
         sys.stdout.reconfigure(encoding="utf-8")
@@ -959,7 +1013,7 @@ def main():
         pass
     for f in (prova_spenta, prova_righe, prova_carico, prova_filtri, prova_attiva,
               prova_pausa_dimentica, prova_giudice_modello, prova_stato, prova_formatta,
-              prova_ripresa, prova_gioco, prova_giochi_in_corso):
+              prova_ripresa, prova_gioco, prova_giochi_in_corso, prova_schemi):
         print(f"── {f.__name__}", flush=True)
         try:
             f()

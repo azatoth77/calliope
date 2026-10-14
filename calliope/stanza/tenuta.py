@@ -16,6 +16,9 @@ regressione non lo leggono.
   stanza e satellite, inizio e fine, «rivolta», minore;
 - le righe di Calliope (ciò che ha detto ad alta voce lì) solo in risposta a una persona di casa
   riconosciuta dalla voce;
+- dal 14/10 (decisione 0030, `stanza_conoscenti`) le righe di un **conoscente** confermato da
+  chi amministra e riconosciuto dalla voce sopra soglia: `persona` «conoscente:<id>», con la
+  nota che lo distingue dagli omonimi; via quando lo si dimentica o scade;
 - **mai**: le voci non riconosciute (ospiti), la zona grigia (nel dubbio no), ciò che si dice in
   pausa («abbiamo ospiti»: in pausa la stanza non scrive niente, nemmeno in memoria), l'audio
   (non arriva mai qui), i profili tolti (la rotazione li cancella).
@@ -103,7 +106,13 @@ def _v1(db):
     """)
 
 
-MIGRAZIONI = [_v1]
+def _v2(db):
+    # I conoscenti (14/10, decisione 0030): la nota che distingue due omonimi («collega di
+    # Dario»), accanto al nome
+    db.execute("ALTER TABLE righe ADD COLUMN nota TEXT")
+
+
+MIGRAZIONI = [_v1, _v2]
 
 
 def _g1(db):
@@ -130,7 +139,7 @@ MODULO_GUARDIA = "stanza_guardia"
 MIGRAZIONI_GUARDIA = [_g1]
 _COLONNE = ("id", "avvio", "sat", "stanza", "satellite", "seq", "segmento", "scambio",
             "versione", "inizio", "fine", "testo", "chi", "persona", "nome", "sicurezza",
-            "rivolta", "minore", "per_persona")
+            "rivolta", "minore", "per_persona", "nota")
 _SELEZIONE = ", ".join(f"r.{c}" for c in _COLONNE)
 
 
@@ -192,6 +201,9 @@ class Tenuta:
         self._fermo = threading.Event()
         self._thread = None
         self._ultima_rotazione = 0.0
+        # I conoscenti (stanza/conoscenti.Conoscenti, 14/10): le loro righe si tengono finché
+        # il profilo c'è
+        self.conoscenti = None
         self.scritte = 0              # righe scritte da quando è partita
         self.saltate = 0              # righe non scritte (ospiti, zona grigia, profilo tolto)
         self.errori = 0
@@ -266,6 +278,11 @@ class Tenuta:
         if sicurezza != "voce" or not persona:
             return False
         from ..conserva import decidi
+        if str(persona).startswith("conoscente:"):
+            # Un conoscente (14/10): solo se il profilo c'è (confermato da chi amministra)
+            con = self.conoscenti
+            prof = con.per_id(persona) if con is not None else None
+            return bool(prof is not None and decidi(prof, "stanza", "voce"))
         reg = self.registry
         if reg is None or not getattr(reg, "users", None):
             # Senza profili letti (prove senza registro): la voce riconosciuta basta
@@ -282,7 +299,8 @@ class Tenuta:
         info = info or {}
         if e.tipo == RIGA:
             chi = str(d.get("chi") or "")
-            pid = chi[len("persona:"):] if chi.startswith("persona:") else None
+            pid = (chi[len("persona:"):] if chi.startswith("persona:")
+                   else chi if chi.startswith("conoscente:") else None)
             seg = d.get("segmento")
             if not self._tieni(pid, d.get("sicurezza")) or not str(d.get("testo") or "").strip():
                 self.saltate += 1
@@ -297,7 +315,8 @@ class Tenuta:
                     "inizio": float(d.get("inizio") or e.t), "fine": float(d.get("fine") or e.t),
                     "testo": str(d.get("testo")), "chi": chi, "persona": pid,
                     "nome": d.get("nome"), "sicurezza": "voce", "rivolta": d.get("rivolta"),
-                    "minore": 1 if d.get("minore") else 0, "per_persona": None}
+                    "minore": 1 if d.get("minore") else 0, "per_persona": None,
+                    "nota": d.get("nota") or None}
             self._lavoro(lambda: self._scrivi(riga))
         elif e.tipo == DETTO_CALLIOPE:
             per = d.get("per") if isinstance(d.get("per"), dict) else {}
@@ -310,7 +329,7 @@ class Tenuta:
                     "inizio": float(d.get("inizio") or e.t), "fine": float(d.get("fine") or e.t),
                     "testo": str(d.get("testo")), "chi": "calliope", "persona": None,
                     "nome": "Calliope", "sicurezza": "voce", "rivolta": None, "minore": 0,
-                    "per_persona": str(pid)}
+                    "per_persona": str(pid), "nota": None}
             self._lavoro(lambda: self._scrivi(riga))
         elif e.tipo == ANALISI and d.get("analisi") == "rivolta":
             seq, esito = d.get("riga"), d.get("esito")
@@ -348,11 +367,12 @@ class Tenuta:
             cur = self.db.execute(
                 "INSERT INTO righe(avvio, sat, stanza, satellite, seq, segmento, "
                 "scambio, versione, inizio, fine, testo, chi, persona, nome, sicurezza, rivolta, "
-                "minore, per_persona) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
-                "?)", (self.avvio, r["sat"], r["stanza"], r["satellite"], r["seq"],
-                       r["segmento"], r["scambio"], r["versione"], r["inizio"], r["fine"],
-                       r["testo"], r["chi"], r["persona"], r["nome"], r["sicurezza"],
-                       r["rivolta"], r["minore"], r["per_persona"]))
+                "minore, per_persona, nota) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
+                "?, ?, ?, ?)", (self.avvio, r["sat"], r["stanza"], r["satellite"], r["seq"],
+                                r["segmento"], r["scambio"], r["versione"], r["inizio"],
+                                r["fine"], r["testo"], r["chi"], r["persona"], r["nome"],
+                                r["sicurezza"], r["rivolta"], r["minore"], r["per_persona"],
+                                r.get("nota")))
             rid = cur.lastrowid
             self.db.execute("INSERT INTO righe_fts(rowid, testo) VALUES (?, ?)",
                             (rid, r["testo"]))
@@ -419,6 +439,23 @@ class Tenuta:
                 return n
         return int(self._lavoro(f, aspetta=True) or 0)
 
+    def rinomina(self, vecchia, nuova, chi: str, nome: str | None = None) -> int:
+        """Una persona che cambia tipo (14/10, conoscenti: promossa a familiare o tornata
+        conoscente): le sue righe passano da `vecchia` a `nuova` («conoscente:<id>» o l'id del
+        profilo), con il nome; le presenze di prima si tolgono. Quante righe."""
+        v, n = str(vecchia), str(nuova)
+
+        def f():
+            with self.lock:
+                cur = self.db.execute(
+                    "UPDATE righe SET persona = ?, chi = ?, nome = coalesce(?, nome) WHERE "
+                    "persona = ?", (n, chi, nome, v))
+                self.db.execute("UPDATE righe SET per_persona = ? WHERE per_persona = ?", (n, v))
+                _cancella_sicuro(self.db, "DELETE FROM presenze WHERE persona = ?", (v,))
+                self.db.commit()
+                return cur.rowcount
+        return int(self._lavoro(f, aspetta=True) or 0)
+
     def _ruota_se_serve(self):
         if time.time() - self._ultima_rotazione >= GIORNO_S:
             try:
@@ -438,14 +475,22 @@ class Tenuta:
         if reg is not None and getattr(reg, "users", None):
             ids = [str(getattr(p, "id", None) or getattr(p, "name", ""))
                    for p in list(reg.users.values())]
+            # I conoscenti salvati (14/10): le loro righe restano finché il profilo c'è
+            con = self.conoscenti
+            if con is not None:
+                ids += [f"conoscente:{c.id}" for c in con.elenco()]
         with self.lock:
             out["vecchie"] = self._togli_dove("fine < ?", (limite,))
             _cancella_sicuro(self.db, "DELETE FROM presenze WHERE fine < ?", (limite,))
             if ids:
                 segni = ", ".join("?" * len(ids))
+                # Senza i conoscenti legati (spenti, o non ancora all'avvio) le loro righe non
+                # si toccano qui: le toglie la scadenza dei giorni o il loro «dimentica»
+                salvo = ("" if self.conoscenti is not None
+                         else " AND persona NOT LIKE 'conoscente:%'")
                 out["senza_profilo"] = self._togli_dove(
-                    f"(persona IS NOT NULL AND persona NOT IN ({segni})) OR (per_persona IS NOT "
-                    f"NULL AND per_persona NOT IN ({segni}))", (*ids, *ids))
+                    f"(persona IS NOT NULL AND persona NOT IN ({segni}){salvo}) OR (per_persona "
+                    f"IS NOT NULL AND per_persona NOT IN ({segni}))", (*ids, *ids))
                 _cancella_sicuro(self.db, f"DELETE FROM presenze WHERE persona NOT IN ({segni})",
                                  tuple(ids))
             if self.guardia_dal is not None:

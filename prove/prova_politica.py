@@ -482,6 +482,10 @@ def registro_completo():
     from calliope.tools.stanza import stanza_specs
     for s in stanza_specs(type("Cfg", (), {"stanza_cerca": True})()):
         reg.register(s)
+    # conoscenti e conoscente_livello (14/10) solo con stanza_conoscenti
+    from calliope.tools.conoscenti import conoscenti_specs
+    for s in conoscenti_specs():
+        reg.register(s)
     return reg
 
 

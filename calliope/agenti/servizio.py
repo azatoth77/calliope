@@ -1450,6 +1450,8 @@ class Lavori:
                             "esempi": len(an["esempi"]),
                             # I valori nominati controllati in più (14/10)
                             "valori": len(an.get("riconosciuti") or []),
+                            # Gli esempi tolti o cambiati contro la richiesta (14/10 sera)
+                            "tolti": dict(an.get("tolti") or {}),
                             "requisiti_provati": acc.numeri_esempi(an) if scritto else [],
                             "testi_provati": testi(acc.numeri_esempi(an)) if scritto else [],
                             "al_collaudo": an["al_collaudo"],
@@ -1460,6 +1462,11 @@ class Lavori:
                  f"{len(an['esempi'])} esempi di accettazione"
                  + (f", {len(an['riconosciuti'])} valori nominati da riconoscere"
                     if an.get("riconosciuti") else "")
+                 + "".join(f", {n} {cosa}" for k, cosa in (
+                     ("fuori", "esempi tolti con un valore che la richiesta non nomina"),
+                     ("numero", "numeri che non tornano (col conto o con «trovato»: false)"),
+                     ("contiene", "parole tolte che ripetono i dati"))
+                     for n in [(an.get("tolti") or {}).get(k)] if n)
                  + (f", al collaudo i requisiti {an['al_collaudo']}" if an["al_collaudo"]
                     else "") + (f", {len(an['scelte'])} scelte" if an["scelte"] else ""))
         if sv is not None and requisiti and svs is not None:
