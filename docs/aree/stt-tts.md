@@ -966,3 +966,19 @@ di parlato contando pre-roll e silenzio di chiusura: più dei 115 MB del conto d
 sulla DGX con `calliope stato --turni`). **Da misurare sulla DGX**: `stt_s` e prima frase dei turni
 con e senza stanza (la sezione «Stanza» li mette accanto), ritardo della coda (p90 < 10 s), ore di
 parlato per satellite, recupero oltre 1,5 s, banda del telefono in auto.
+
+## Il giudizio «rivolta a Calliope?» con le righe della stanza (14/10, ramo `stanza-passo-2`)
+
+Passo 2 della conversazione di stanza (§ 2.4 e § 3.4 del
+[progetto](../ricerche/2026-10-13-conversazione-di-stanza.md)): il giudizio sbagliava sui blocchi
+brevi perché vedeva solo gli scambi **con Calliope**. Con `stanza_contesto: true` il ciclo gli
+passa anche le ultime righe della stanza del satellite (al più 6 negli ultimi 120 s, con chi le ha
+dette, «→ Calliope» per quelle dette a lei, senza la frase del turno: `stanza/contesto.righe_rivolta`),
+sotto «Nella stanza, poco prima (trascrizione automatica, con chi parlava…)» e prima di «Ultimi
+scambi con Calliope:» (`rivolta.messaggi(contesto, frase, stanza)`). Il prompt è lo stesso e senza
+righe i messaggi sono quelli di prima (contrario nella prova). **Resta in ombra**
+(`compagnia_rivolta`): nel registro dei turni `rivolta.stanza` dice quante righe ha visto; si
+accende solo dopo la rilettura di chi amministra su un giorno vero (obiettivo ≥ 90 % giusti sui
+brevi). Una frase ignorata o non rivolta resta nella stanza con «rivolta: no» (evento `analisi`),
+dettagli e blocco nei dati del turno in [contesto-conversazione](contesto-conversazione.md).
+Prova: `prove/prova_stanza_contesto.py`.
