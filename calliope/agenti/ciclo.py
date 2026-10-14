@@ -22,7 +22,9 @@ anche a parte: per tipo `agenti_token_minuto` × `agenti_tempo_max_min`, al più
 `agenti_max_token`; 06/10) e `agenti_tempo_max_min` minuti. Vicino a un tetto l'agente riceve
 una volta l'avviso di chiudere (`AVVISO_FINE`); un lavoro fermato dal tetto si chiude con il
 motivo, i file e l'esito dei test (`Limite.parziale`); dal 13/10 sera, con gli esempi di
-accettazione e i test rieseguiti tutti verdi, come consegnato (`_consegna_al_tetto`). Per passata
+accettazione e i test rieseguiti tutti verdi, come consegnato (`_consegna_al_tetto`; dal 14/10
+una correzione senza esempi con il test che riproduce il problema, e anche alla terza passata a
+vuoto di fila). Per passata
 `agenti_token_passata` token e `agenti_ragionamento_passata` di ragionamento (05/10). Il
 contesto non è un tetto: la finestra viene dal setup (`agenti_num_ctx: auto`) e la tiene
 contesto_lavoro.py (risultati lunghi nei file, diario del lavoro). A ogni passata l'arbitro può fermare l'agente per la voce
@@ -63,7 +65,8 @@ class Limite(Exception):
     """Finiti i passi, i token o il tempo del lavoro. `parziale`: quello che il ciclo sa del
     lavoro fatto (il servizio lo aggiunge al risultato). `tipo` (08/10, versione 2 della
     modalità sviluppo): «passate», «token» o «tempo» per i tetti di un giro, che in uno
-    sviluppo diventano tappe; vuoto per gli altri (ragionamento a vuoto, strumenti non usati)."""
+    sviluppo diventano tappe; «a_vuoto» (14/10) per tre passate di fila con il ragionamento
+    ripetuto; vuoto per gli altri (strumenti non usati)."""
 
     def __init__(self, motivo: str = "", parziale: dict | None = None, tipo: str = ""):
         super().__init__(motivo)
@@ -1201,9 +1204,17 @@ class Agente:
                 # terza passata fermata di fila il lavoro si chiude con il motivo
                 giri_vuoti += 1
                 if giri_vuoti >= RIPETIZIONI_MAX:
-                    raise Limite("ha ripetuto lo stesso ragionamento in "
-                                 f"{giri_vuoti} passate di fila senza decidere",
-                                 {"riassunto": _fatto_finora(gc, messages)})
+                    e = Limite("ha ripetuto lo stesso ragionamento in "
+                               f"{giri_vuoti} passate di fila senza decidere", tipo="a_vuoto")
+                    # Anche qui, come al tetto (14/10, banco L10: le porte corrette e i test
+                    # verdi, poi tre passate a vuoto di fila): i controlli di una consegna
+                    chiusura = self._consegna_al_tetto(lav, sandbox, e, controlla, piano,
+                                                       stato_piano)
+                    if chiusura is not None:
+                        consegna = chiusura
+                        break
+                    raise Limite(str(e), {"riassunto": _fatto_finora(gc, messages)},
+                                 tipo="a_vuoto")
                 _spinta_ripetizioni(messages, out["giro_a_vuoto"], seg.get("ultimo_errore"))
                 continue
             giri_vuoti = 0
@@ -1454,7 +1465,8 @@ class Agente:
                 if isinstance(consegna.get("argomenti_esempio"), list) else [],
                 "test": (test or {}).get("esito"), "test_passano": (test or {}).get("passano"),
                 "test_uscita": (test or {}).get("uscita", "")[-3000:],
-                **({"consegna_al_tetto": consegna["_al_tetto"]}
+                **({"consegna_al_tetto": consegna["_al_tetto"],
+                    "consegna_al_tetto_con": consegna.get("_al_tetto_con") or "esempi"}
                    if consegna.get("_al_tetto") else {}),
                 **({"piano": stato_piano} if piano else {})}
 
@@ -1462,35 +1474,47 @@ class Agente:
     def _consegna_al_tetto(self, lav: Lavoro, sandbox, e: Limite, controlla, piano: bool,
                            stato_piano) -> dict | None:
         """Al tetto di passate, tempo o token di un lavoro che non va a tappe (o all'ultimo
-        giro), prima di chiuderlo «limite»: con gli esempi di accettazione (scritti dall'analisi
-        prima del codice, in sola lettura) tutti verdi sui file del momento, i test dell'agente
-        verdi due volte di fila e gli stessi controlli di una consegna «fatto» (i file chiesti,
-        il controllo della consegna con il ricollaudo, il piano), il lavoro si chiude come
-        consegnato, con il riassunto scritto dal codice e la regola agente_consegna_al_tetto;
-        una correzione anche con il test che riproduce il problema (riproduzione.py). None: si
-        chiude «limite» come prima. Senza esempi indipendenti (i programmi, le correzioni dei
-        giochi) mai: i test dell'agente da soli ereditano le sue ipotesi. Mai un'eccezione."""
-        if getattr(lav, "tappe", False) or e.tipo not in ("passate", "tempo", "token"):
+        giro), e dal 14/10 alla terza passata a vuoto di fila (`a_vuoto`), prima di chiuderlo
+        «limite»: con gli esempi di accettazione (scritti dall'analisi prima del codice, in sola
+        lettura) tutti verdi sui file del momento, i test dell'agente verdi due volte di fila e
+        gli stessi controlli di una consegna «fatto» (i file chiesti, il controllo della
+        consegna con il ricollaudo, il piano), il lavoro si chiude come consegnato, con il
+        riassunto scritto dal codice e la regola agente_consegna_al_tetto; una correzione anche
+        con il test che riproduce il problema (riproduzione.py). Una **correzione senza esempi**
+        (le correzioni dei giochi, 14/10: banco delle porte) vale con la sola riproduzione al
+        posto degli esempi: un test nuovo che fallisce sulla versione di prima e passa ora è il
+        controllo indipendente dalle ipotesi dell'agente sul difetto segnalato; deve essere
+        «riprodotto», mai «saltato». None: si chiude «limite» come prima. Senza esempi né
+        riproduzione (i programmi, l'analisi spenta) mai: i test dell'agente da soli ereditano
+        le sue ipotesi. Mai un'eccezione."""
+        if getattr(lav, "tappe", False) or e.tipo not in ("passate", "tempo", "token",
+                                                           "a_vuoto"):
             return None
         a = getattr(lav, "accettazione", None) or {}
+        correzione = bool(getattr(lav, "correzione", False)) and lav.tipo in ("codice",
+                                                                               "estensione")
 
         def no(perche: str):
             self.log(f"[AGENTI] {lav.id}: al tetto niente consegna d'ufficio: {perche}")
             return None
-        if a.get("stato") != "pronta" or not a.get("file"):
+        con_esempi = a.get("stato") == "pronta" and bool(a.get("file"))
+        if not con_esempi and not correzione:
             return no("senza esempi di accettazione")
         try:
             if not self._pronto_da_consegnare(lav, sandbox, piano, stato_piano):
                 return no("mancano i file che la consegna chiede")
-            from . import accettazione as acc
-            lav.passo = "riprova gli esempi di accettazione"
-            es = acc.esegui(sandbox, a)
-            n = int(((es or {}).get("esito") or {}).get("eseguiti") or 0)
-            if not es or not es["passano"] or (n <= 0 and not a.get("nome_file", "")
-                                               .endswith(".js")):
-                return no("esempi di accettazione rossi"
-                          + (f" (requisiti {es['rossi']})" if es and es.get("rossi") else ""))
-            # I test dell'agente come alla consegna: due volte, stesso esito, tutti verdi
+            if con_esempi:
+                from . import accettazione as acc
+                lav.passo = "riprova gli esempi di accettazione"
+                es = acc.esegui(sandbox, a)
+                n = int(((es or {}).get("esito") or {}).get("eseguiti") or 0)
+                if not es or not es["passano"] or (n <= 0 and not a.get("nome_file", "")
+                                                   .endswith(".js")):
+                    return no("esempi di accettazione rossi"
+                              + (f" (requisiti {es['rossi']})" if es and es.get("rossi")
+                                 else ""))
+            # I test dell'agente come alla consegna: due volte, stesso esito, tutti verdi (per
+            # un gioco con la prova di fumo)
             if self._test_falliti(lav, sandbox) is not None:
                 return no("i test dell'agente non passano")
             errore = controlla(sandbox) if controlla is not None else None
@@ -1503,31 +1527,47 @@ class Agente:
             if (getattr(lav, "ricollaudo", None) or {}).get("vanno") is False:
                 return no("il ricollaudo con i casi della persona non va")
             # Una correzione (riproduzione.py) vale se un test che prima falliva adesso passa:
-            # la consegna normale senza tempo la accetta lo stesso, d'ufficio no
-            if getattr(lav, "correzione", False) and lav.tipo in ("codice", "estensione"):
+            # la consegna normale senza tempo la accetta lo stesso, d'ufficio no. Senza esempi
+            # la riproduzione è il solo controllo indipendente: deve esserci davvero
+            if correzione:
                 from .riproduzione import NON_RIPRODOTTO
                 self._riproduzione(lav, sandbox)
                 stato = (getattr(lav, "riproduzione", None) or {}).get("stato")
-                if stato in NON_RIPRODOTTO:
-                    return no(f"correzione non riprodotta ({stato})")
+                if stato in NON_RIPRODOTTO or (not con_esempi and stato != "riprodotto"):
+                    return no(f"correzione non riprodotta ({stato or '?'})")
         except Exception as ex:  # noqa: BLE001 — nel dubbio «limite», come prima
             return no(f"controllo non riuscito ({type(ex).__name__}: {ex})")
         from ..sonde import nota as nota_regola
         nota_regola(lav, "agente_consegna_al_tetto", self.log, e.tipo)
-        self.log(f"[AGENTI] {lav.id}: al tetto ({e}) gli esempi di accettazione passano tutti "
-                 "e anche i test: lo chiudo come consegnato (regola agente_consegna_al_tetto)")
-        lav.nota("flusso", tipo="esito", testo="al limite del lavoro gli esempi passano tutti: "
-                                               "l'ho chiuso come consegnato")
+        con = "esempi" if con_esempi else "riproduzione"
+        self.log(f"[AGENTI] {lav.id}: al tetto ({e}) "
+                 + ("gli esempi di accettazione passano tutti" if con_esempi else
+                    "il test che riproduce il problema ora passa")
+                 + " e anche i test: lo chiudo come consegnato (regola agente_consegna_al_tetto)")
+        lav.nota("flusso", tipo="esito", testo=(
+            "al limite del lavoro " + ("gli esempi passano tutti" if con_esempi else
+                                       "il test del problema segnalato passa")
+            + ": l'ho chiuso come consegnato"))
         quanti = int(a.get("esempi") or 0)
         cosa = "La funzione è scritta" if lav.tipo == "estensione" else "Il lavoro è fatto"
         if getattr(lav, "gioco", False):
             cosa = "Il gioco è scritto"
-        return {"esito": "fatto", "_al_tetto": e.tipo,
-                "riassunto": (f"{cosa} e passa tutti " + (f"i {quanti} esempi di accettazione"
-                                                          if quanti > 1 else
-                                                          "gli esempi di accettazione")
-                              + " e i suoi test. Chiuso al tetto: l'agente non ha fatto in "
-                                "tempo a consegnare.")}
+        if con_esempi:
+            detto = (f"{cosa} e passa tutti " + (f"i {quanti} esempi di accettazione"
+                                                 if quanti > 1 else
+                                                 "gli esempi di accettazione")
+                     + " e i suoi test.")
+        else:
+            cosa = ("Il gioco è corretto" if getattr(lav, "gioco", False) else
+                    "La funzione è corretta" if lav.tipo == "estensione" else
+                    "La correzione è fatta")
+            detto = (f"{cosa}: il test che riproduce il problema segnalato prima falliva e ora "
+                     "passa, e passano anche gli altri test.")
+        fine = ("Chiuso al tetto: l'agente non ha fatto in tempo a consegnare."
+                if e.tipo != "a_vuoto" else
+                "Chiuso da me: l'agente girava a vuoto senza consegnare.")
+        return {"esito": "fatto", "_al_tetto": e.tipo, "_al_tetto_con": con,
+                "riassunto": f"{detto} {fine}"}
 
     # ── tappe (08/10, versione 2 della modalità sviluppo) ──
     def _tappa(self, lav: Lavoro, sandbox, gc, messages: list, e: Limite, spinte: int,

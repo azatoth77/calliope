@@ -61,7 +61,9 @@ soluzione di riferimento; e i giri con un agente finto (prove/ollama_finto.py): 
 ferma alla tappa, il banco chiama continua e il giro 2 consegna; senza consegna l'ultimo giro
 chiude con «limite»; con un giro solo il tetto chiude come prima; la consegna al tetto con il
 servizio vero (13/10 sera): il codice giusto all'ultima passata, senza consegna, si chiude «fatto»
-con gli esempi verdi; il contrario «limite» con gli esempi rossi.
+con gli esempi verdi; il contrario «limite» con gli esempi rossi; dal 14/10 le porte corrette
+con il test del disegno senza consegna, «fatto» con la riproduzione al posto degli esempi, e il
+contrario senza il test «limite».
 
     python prove/manuali/banco_temperatura.py --secco
 
@@ -604,6 +606,50 @@ def secco_tetto(tmp: Path) -> int:
                  and detto_esempi(r) == ", esempi 1 rossi",
                  json.dumps({k: r.get(k) for k in ("esito", "esempi_finali", "analisi")},
                             ensure_ascii=False, default=str))
+        # Le porte (14/10, banco L7 e L10): una correzione di un gioco non ha esempi, al tetto
+        # vale il test che riproduce il problema. L'agente corregge logica.js e scrive il test
+        # del disegno, poi non consegna
+        if not shutil.which("node"):
+            print("SALTATO tetto: le porte (node non c'è)")
+            return errori
+        F = _porte()
+        # Node nella sandbox: il docker finto delle prove (la sandbox «processo» esegue solo
+        # Python), come nella verifica a secco dell'accettazione
+        import prova_agente_guida as G
+        modello = G.sandbox(tmp, "isolamento-finto")
+
+        def finto():
+            svc.isolamento, svc.isolamenti = modello.isolamento, dict(modello.linguaggi)
+            return svc.isolamento
+        svc.scegli_isolamento = finto
+
+        def porte(con_test):
+            return [chiama(("piano", {"capacita_necessarie": [], "fattibile": True,
+                                      "motivo": "una correzione del gioco", "scope": {}})),
+                    chiama(("scrivi_file", {"percorso": "logica.js",
+                                            "contenuto": F.GIOCO_GIUSTO})),
+                    chiama(("scrivi_file", {"percorso": "gioco.test.js",
+                                            "contenuto": F.TEST_GIOCO_PORTE})
+                           if con_test else ("leggi_file", {"percorso": "logica.js"})),
+                    chiama(("esegui_test", {}))]
+        fake.copione = porte(True)
+        r = un_lavoro(svc, cfg, tmp, "porte", casi()["porte"], "secco")
+        verifica("le porte corrette e il test del disegno, nessuna consegna: al tetto «fatto» "
+                 "con la riproduzione, accettazione nascosta verde",
+                 r["esito"] == "fatto" and r["consegna_al_tetto"] == "passate"
+                 and r["consegna_al_tetto_con"] == "riproduzione"
+                 and r["riproduzione"] == "riprodotto" and r["riuscito"],
+                 json.dumps({k: r.get(k) for k in ("esito", "motivo", "consegna_al_tetto",
+                                                   "consegna_al_tetto_con", "riproduzione",
+                                                   "accettazione", "regole")},
+                            ensure_ascii=False, default=str))
+        fake.copione = porte(False)
+        r = un_lavoro(svc, cfg, tmp, "porte", casi()["porte"], "secco")
+        verifica("contrario: le porte corrette senza il test che riproduce, «limite» (anche con "
+                 "l'accettazione nascosta verde)",
+                 r["esito"] == "limite" and not r["consegna_al_tetto"] and r["accettazione"],
+                 json.dumps({k: r.get(k) for k in ("esito", "riproduzione", "accettazione")},
+                            ensure_ascii=False, default=str))
     finally:
         if svc is not None:
             svc.close()
@@ -750,6 +796,8 @@ def un_lavoro(svc, cfg, uscita: Path, nome: str, caso: dict, etichetta: str,
             "riproduzione": (getattr(lav, "riproduzione", None) or {}).get("stato"),
             # Chiuso dal codice al tetto con gli esempi verdi (13/10 sera, ciclo.py)
             "consegna_al_tetto": ris.get("consegna_al_tetto"),
+            # …con gli esempi o con la riproduzione di una correzione senza esempi (14/10)
+            "consegna_al_tetto_con": ris.get("consegna_al_tetto_con"),
             "esempi_finali": es_finali,
             "regole": dict(((lav.segnali or {}).get("regole") or {})),
             "cartella": str(cartella),
@@ -907,7 +955,8 @@ def main(argv) -> int:
                                  else "")
                               + (f", domande {len(r['domande'])}" if r["domande"] else "")
                               + detto_esempi(r)
-                              + (f", consegna al tetto ({r['consegna_al_tetto']})"
+                              + (f", consegna al tetto ({r['consegna_al_tetto']}, con "
+                                 f"{r.get('consegna_al_tetto_con') or 'esempi'})"
                                  if r.get("consegna_al_tetto") else "")
                               + (f"; giri {r['giri']} (passate {r['passate_giri']}), "
                                  f"accettazione verde al giro {r['giro_accettazione']}, "
