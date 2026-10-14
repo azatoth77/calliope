@@ -647,3 +647,52 @@ istantanee del motore nella validazione Python), `prova_gioco_voce` rifatta sull
   `gioco_stato_in_busta`).
 - **Profilo da 8 GB**: confronto delle forme e frase composta dal codice, 0 VRAM; la riga dei
   dati del turno ~60 token.
+
+### Il giudice di fase (passo 6)
+
+Quando una frase **rivolta a Calliope** (con il nome, o nella finestra di sempre dopo una
+risposta) non è una forma chiusa del gioco aperto né una domanda standard («apri la terza»,
+«proviamo con la prima», «uno, no aspetta, la cinque»), il significato lo decide il modello
+(principio 10), ma con una **chiamata breve e separata** (`calliope/gioco_giudice.py`), non il
+turno intero del modello della voce con `gioco_comando`.
+
+- **Uscita vincolata**: lo schema JSON di Ollama (`format`) con un `enum` delle etichette dei
+  comandi attivi adesso (dall'istantanea validata) più «nessuno». Non può inventare un comando
+  né un valore fuori dominio. Vede solo il titolo, i comandi della fase e la frase: né la
+  conversazione né dati di casa.
+- **Il prompt lo scrive Calliope** dai comandi della macchina, nella forma B misurata dal
+  prototipo del 12/10: comandi con il loro significato (le forme dichiarate, per i comandi di
+  Calliope una frase fissa: «va avanti dopo l'esito della mossa»), i valori che adesso non
+  valgono («adesso non valgono 2»), l'ordinale («la prima = 1», «l'ultima» è il massimo del
+  dominio), «nessuno» in testa con i casi (domande, chiacchiere, un valore che non c'è, più
+  comandi insieme), esempi, «se la persona cambia idea vale l'ultima scelta». Mai l'agente.
+- **Modello**: quello del giudizio «rivolta» (`rivolta.dove`: il rilevatore e4b già residente
+  sulla DGX, altrimenti il modello della voce su Ollama, con lo stesso `num_ctx`: niente
+  ricaricamento, cache della voce intatta), o `giochi_giudice_modello`; `temperature` 0,
+  `think` spento, al più `giochi_giudice_timeout_s` (2 s). Un giudizio guasto o scaduto vale
+  «nessuno».
+- **Nel ciclo** (`Ciclo._giudice_di_fase`, dopo le forme chiuse e le domande standard): una
+  mossa capita parte come quella diretta (con il numero dell'istantanea e, con
+  `macchina.giocatore`, il nome di chi è riconosciuto dalla voce) e Calliope dice l'**etichetta
+  breve** («Porta 3.», decisione 5: è un'interpretazione delle parole, chi parla deve sentire
+  cosa ha capito; atto `gioco_mossa`). Registro: esito `gioco_giudice`, regola `gioco_giudice`,
+  `gioco: {comando, ms, giudice_ms}`, niente testo. Con «nessuno» la frase va al modello della
+  voce con l'istantanea nei dati del turno, e il giudizio resta nel registro
+  (`gioco_giudice: {comando: null, ms}`).
+- **Senza il nome** nella finestra del gioco il giudice resta **spento**
+  (`giochi_giudice_senza_nome: false`, decisione 2): lì valgono solo le forme chiuse e le
+  domande standard, il resto si ignora come prima. Da decidere dopo aver misurato sulla DGX
+  quante frasi la finestra ignora (`gioco_finestra_ignorata` in `calliope stato --turni`).
+- **`gioco_comando`** (il tool dell'11/10 per il modello della voce) si registra solo con il
+  giudice spento (`giochi_giudice: false`): stessa cosa, un turno intero e ~106 token di schema
+  in meno nel prompt della voce quando il giudice è acceso. La riga dei dati del turno lo nomina
+  solo se c'è.
+- **Misura** (`prove/prova_gioco_giudice_ollama.py`, portatile RTX 5070 Laptop, gemma4
+  e4b-it-qat, le 22 frasi del prototipo sulle porte da 1 a 5 con la 2 aperta, prompt scritto
+  dal codice): **21/22 in due giri**, nessuna mossa su «a chi tocca?» e «quanti punti ho?»,
+  **mediana 313–323 ms, p90 336–340 ms** (il prototipo con il prompt scritto a mano: 21/22, 357
+  ms). Sbagliata, come nel prototipo, «apri la tre e poi la quattro» → porta 4 («vale l'ultima»
+  batte «più comandi insieme»): reversibile, una mossa.
+- **Profilo da 8 GB**: sul modello della voce già in memoria, nessuna VRAM in più;
+  `giochi_giudice: false` lo spegne. Sulla DGX sul rilevatore e4b (stima 0,2–0,35 s), da misurare
+  con `calliope stato --turni` (esito `gioco_giudice`, `giudice_ms`).

@@ -288,6 +288,9 @@ def nuovo_ciclo(a, sat, satellite_id, turni):
     cfg.barge_in_enabled = False
     cfg.debug_audio_dir = None
     cfg.uscita_controllo = False
+    # Qui la strada dell'11/10 (il modello della voce con gioco_comando): il giudice di fase
+    # (14/10) ha le sue prove in prova_gioco_stato.py
+    cfg.giochi_giudice = False
     stt, voce, chi, cervello, persone = Whisper(), Voce(), ChiParla(), Cervello(), Persone()
     chi.current_speaker = "Dario"
     instr = types.SimpleNamespace(dopo_turno=lambda x: x, inizio_voce=lambda: None,

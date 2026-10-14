@@ -42,6 +42,7 @@ from . import frasi
 from .cortesia import Cortesia
 from . import gioco_voce
 from . import gioco_stato
+from . import gioco_giudice
 from .cassetto import CassettoPieno
 from .agenda import announcement
 from .compressione import FRASE_DURA
@@ -2048,6 +2049,14 @@ class Ciclo:
                                        **({"giocatore": True} if giocatore else {}),
                                        **({"prova": True} if info.get("prova") else {})})
                 return _FINE
+        if (cid is None and domanda is None and info is not None and info.get("comandi")
+                and not self.brain.has_pending() and rivolta
+                and getattr(cfg, "giochi_giudice", True)
+                and (not t.finestra_gioco or getattr(listener, "woke", False)
+                     or gioco_voce.ha_il_nome(t.text, nomi)
+                     or getattr(cfg, "giochi_giudice_senza_nome", False))):
+            if self._giudice_di_fase(t, info):
+                return _FINE
         if (t.finestra_gioco and not getattr(listener, "woke", False)
                 and find_wake_word(t.text, nomi, 0.5) is None):
             # Senza il nome nella finestra del gioco: solo le forme dell'elenco. Il resto non
@@ -2065,6 +2074,44 @@ class Ciclo:
                 pass
             t.contesto_gioco = self._contesto_gioco(info)
         return None
+
+    def _giudice_di_fase(self, t, info: dict) -> bool:
+        """Il giudice di fase (14/10, passo 6 del progetto, calliope/gioco_giudice.py): una
+        frase rivolta a Calliope che non è una forma chiusa del gioco («apri la terza») passa da
+        una chiamata breve e separata al modello, con l'uscita vincolata ai comandi attivi più
+        «nessuno». Una mossa capita si dice con l'etichetta breve («Porta 3.», decisione 5): è
+        un'interpretazione delle parole. True se la mossa è partita; con «nessuno» (o un
+        guasto) la frase va avanti verso il modello della voce."""
+        s, cfg = self.s, self.s.cfg
+        g = getattr(self, "giudice_gioco", None)
+        if g is None:
+            g = self.giudice_gioco = gioco_giudice.Giudice(cfg)
+        scelta = g.scegli(t.text, info)
+        if self.rec is not None:
+            self.rec["gioco_giudice"] = scelta.per_registro()
+        if scelta.comando is None:
+            print(f"   [GIOCO] giudice di fase: nessun comando ({scelta.ms:.0f} ms"
+                  + (f", {scelta.guasto}" if scelta.guasto else "") + ")", flush=True)
+            return False
+        giocatore = self._giocatore_dalla_voce(t) if info.get("giocatore") else None
+        if not s.giochi.comando(info["partita"], info["schermo"], scelta.comando, giocatore):
+            return False
+        frase = gioco_giudice.frase_detta(scelta.etichetta)
+        ms = round((time.perf_counter() - t.t0) * 1000)
+        print(f"Tu: {self.in_console(t.text)}  → mossa a «{info.get('titolo')}» dal giudice di "
+              f"fase: «{scelta.comando}» [{scelta.ms:.0f} ms]", flush=True)
+        print(f"{cfg.name}: {frase}", flush=True)
+        self.rule(gioco_giudice.REGOLA)
+        self.rec.update(esito="gioco_giudice", testo=None, risposta=frase,
+                        stt_s=round(time.perf_counter() - t.t0, 2),
+                        gioco={"partita": info["partita"], "comando": scelta.comando, "ms": ms,
+                               "giudice_ms": round(scelta.ms),
+                               **({"giocatore": True} if giocatore else {}),
+                               **({"prova": True} if info.get("prova") else {})})
+        u = self.uscita
+        u.di(frase, "gioco_mossa")
+        u.aspetta()
+        return True
 
     def _contesto_gioco(self, info: dict) -> str:
         """L'istantanea del gioco aperto nei dati del turno (14/10, passo 5): fase, a chi tocca,

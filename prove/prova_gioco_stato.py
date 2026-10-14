@@ -23,6 +23,13 @@ docs/ricerche/2026-10-12-giochi-macchina-stati.md; area docs/aree/giochi.md), a 
    gioco_stato_detto, niente testo nel registro); contrari: dentro una frase più lunga (senza
    il nome ignorata, con il nome al modello con l'istantanea nei dati del turno), una domanda
    di Calliope in sospeso, nessun gioco aperto, il gioco sullo schermo di un altro satellite.
+6. **Il giudice di fase** (calliope/gioco_giudice.py, passo 6) con un modello finto: il prompt
+   scritto da Calliope dai comandi attivi (enum con «nessuno» in testa, i valori che adesso non
+   valgono, l'ordinale), la scelta vincolata (fuori elenco, guasto e «nessuno» non muovono); nel
+   ciclo «Calliope, apri la terza» → mossa con l'etichetta detta («Porta 3.», regola
+   gioco_giudice), «nessuno» → al modello della voce; contrari: senza il nome nella finestra
+   del gioco il giudice non parte (`giochi_giudice_senza_nome` spento), con l'interruttore
+   acceso sì; domanda in sospeso; giudice spento (`giochi_giudice: false`).
 
     python prove/prova_gioco_stato.py
 """
@@ -380,6 +387,9 @@ def prova_ciclo(tmp: Path):
     turni = []
     c, stt, voce, cervello, ascolto = PV.nuovo_ciclo(a, sat, 7, turni)
     a.cfg.giochi_ascolto_s = 60.0
+    a.cfg.giochi_giudice = True
+    giudicate = []
+    c.giudice_gioco = GiudiceFinto(a.cfg, giudicate)
 
     def giro(frase, k=None):
         k = k or (c, stt, voce, cervello)
@@ -424,6 +434,108 @@ def prova_ciclo(tmp: Path):
     verifica("contrario: dal satellite della cucina il gioco dello studio non risponde",
              chiesto and not gioco_regola(k8[0]))
 
+    sezione("6. il giudice di fase nel ciclo (modello finto)")
+    a.cfg.giochi_giudice = True              # (nuovo_ciclo lo spegne per le prove dell'11/10)
+    giudicate.clear()
+    a.eventi.clear()
+    detto, chiesto = giro("Calliope, apri la terza.")
+    mosse = [x[2]["dati"] for x in a.eventi if x[1] == "gioco" and x[2].get("tipo") == "comando"]
+    verifica("«Calliope, apri la terza.» → il giudice sceglie porta 3: la mossa parte con il "
+             "numero dell'istantanea, Calliope dice l'etichetta breve, niente modello della voce",
+             giudicate == ["Calliope, apri la terza."] and mosse == [{"comando": "porta_3", "n": 1}]
+             and "Porta 3." in " ".join(map(str, detto)) and not chiesto
+             and c.rec.get("esito") == "gioco_giudice"
+             and "gioco_giudice" in (c.rec.get("regole") or [])
+             and c.rec["gioco"]["comando"] == "porta_3" and c.rec.get("testo") is None,
+             f"{giudicate} {mosse} {detto} {chiesto} {c.rec}")
+    giudicate.clear()
+    detto, chiesto = giro("Calliope, che bello questo gioco.")
+    verifica("«nessuno» dal giudice: la frase va al modello della voce, il giudizio nel registro",
+             giudicate and chiesto and c.rec.get("gioco_giudice", {}).get("comando") is None,
+             str(c.rec.get("gioco_giudice")))
+    giudicate.clear()
+    detto, chiesto = giro("Apri la terza.")
+    verifica("contrario: senza il nome nella finestra del gioco il giudice non parte (spento "
+             "senza nome): la frase si ignora", not giudicate and not chiesto
+             and c.rec.get("esito") == "ignorato")
+    a.cfg.giochi_giudice_senza_nome = True
+    detto, chiesto = giro("Apri la terza.")
+    a.cfg.giochi_giudice_senza_nome = False
+    verifica("…con giochi_giudice_senza_nome acceso il giudice parte anche senza il nome",
+             giudicate == ["Apri la terza."] and c.rec.get("esito") == "gioco_giudice")
+    giudicate.clear()
+    cervello.has_pending = lambda: True
+    detto, chiesto = giro("Calliope, apri la terza.")
+    del cervello.has_pending
+    verifica("contrario: con una domanda di Calliope in sospeso niente giudice (al modello)",
+             not giudicate and chiesto)
+    a.cfg.giochi_giudice = False
+    detto, chiesto = giro("Calliope, apri la terza.")
+    a.cfg.giochi_giudice = True
+    verifica("contrario: con il giudice spento la frase va al modello della voce",
+             not giudicate and chiesto)
+
+
+class GiudiceFinto:
+    """Il giudice di fase con il modello finto: «apri la terza» → porta 3, il resto nessuno.
+    Usa il Giudice vero (prompt, schema, vincolo), solo la chiamata al modello è finta."""
+
+    def __init__(self, cfg, giudicate):
+        from calliope.gioco_giudice import Giudice
+        self.giudicate = giudicate
+        self.vero = Giudice(cfg, chiama=self._chiama)
+
+    def _chiama(self, msgs, schema, timeout):
+        frase = msgs[-1]["content"].lower()
+        enum = schema["properties"]["scelta"]["enum"]
+        s = "porta 3" if "terza" in frase and "porta 3" in enum else "nessuno"
+        return json.dumps({"scelta": s})
+
+    def scegli(self, frase, info, timeout=None):
+        self.giudicate.append(frase)
+        return self.vero.scegli(frase, info, timeout)
+
+
+def prova_giudice():
+    from calliope import gioco_giudice as GG
+    sezione("6. il giudice di fase: prompt e scelta vincolata")
+    m, g = macchina_di("porte_fasi")
+    a = valida(file_gioco("porte_fasi")[0])["scheda"]["ascolta"]["comandi"]
+    info = {"titolo": "Le porte del castello", "macchina": m,
+            "comandi": {c: a[c] for c in ("porta_1", "porta_3", "porta_4")},
+            "istantanea": mc.valida_istantanea(buona(), m, g)}
+    sistema, scelte = GG.prompt(info)
+    verifica("le scelte: «nessuno» in testa, poi i comandi attivi come si dicono",
+             scelte == ["nessuno", "porta 1", "porta 3", "porta 4"], str(scelte))
+    verifica("il prompt dice il significato, i valori che adesso non valgono, l'ordinale, gli "
+             "esempi e «vale l'ultima scelta»",
+             "adesso non valgono 2, 5, 6" in sistema and "«l'ultima» è il 6" in sistema
+             and "vale l'ultima scelta" in sistema and "«che tempo fa?» → nessuno" in sistema
+             and "«Le porte del castello»" in sistema, sistema)
+    info2 = dict(info, comandi={"avanti": ["avanti", "continua"]})
+    s2, e2 = GG.prompt(info2)
+    verifica("nell'esito: «avanti» con il suo significato", e2 == ["nessuno", "avanti"]
+             and "va avanti dopo l'esito" in s2, s2)
+    for nome, risposta, atteso, guasto in [
+            ("una mossa", '{"scelta": "porta 3"}', "porta_3", None),
+            ("nessuno", '{"scelta": "nessuno"}', None, None),
+            ("fuori elenco (non può, ma se succede)", '{"scelta": "porta 9"}', None, "fuori elenco"),
+            ("JSON rotto", "porta 3", None, "JSONDecodeError"),
+            ("senza scelta", '{"x": 1}', None, "ValueError")]:
+        gg = GG.Giudice(None, chiama=lambda msgs, schema, t, r=risposta: r)
+        sc = gg.scegli("apri la terza", info)
+        verifica(f"scelta: {nome} → {atteso}", sc.comando == atteso and sc.guasto == guasto,
+                 f"{sc}")
+
+    def lento(msgs, schema, t):
+        raise TimeoutError("scaduto")
+    sc = GG.Giudice(None, chiama=lento).scegli("apri la terza", info)
+    verifica("un giudice scaduto vale «nessuno» (la frase va al modello)",
+             sc.comando is None and sc.guasto == "TimeoutError")
+    verifica("l'etichetta detta: «Porta 3.»", GG.frase_detta("porta 3") == "Porta 3.")
+    verifica("contrario: senza comandi attivi il giudice non chiama il modello",
+             GG.Giudice(None, chiama=lento).scegli("x", dict(info, comandi={})).guasto is None)
+
 
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
@@ -434,6 +546,7 @@ def main():
         prova_motore(radice / "motore")
         prova_domande()
         prova_ciclo(radice / "ciclo")
+        prova_giudice()
     finally:
         from calliope import minori as M
         for s in ("regole", "avvisi", "gioco", "richieste"):
