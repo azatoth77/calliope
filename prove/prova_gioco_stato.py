@@ -44,6 +44,14 @@ docs/ricerche/2026-10-12-giochi-macchina-stati.md; area docs/aree/giochi.md), a 
    un riquadro nuovo dello stesso posto; il motore riparte da lì (stesso numero, fase, giocatori
    e punti, l'esito che va avanti da solo); contrari: una ripresa rotta o di un'altra fase →
    partita nuova.
+9. **La partita condivisa con il motore** (decisione 6, fatta qui): due motori nel DOM finto,
+   quello che tiene la partita e uno «specchio» che disegna lo stato che arriva e manda le
+   mosse (tocchi e nomi) senza scriverlo, non manda istantanee né fa andare avanti l'esito da
+   solo, e prende la partita con «autorevole». Sul server: il primo «pronto» tiene la partita,
+   lo specchio riceve lo stato, le sue istantanee sono rifiutate, le sue mosse e i suoi nomi
+   vanno al motore che la tiene (controllati), la voce sentita dallo specchio va lì, chiuso chi
+   la tiene passa a un altro schermo; contrari: dati personali letti, un nome scritto fermato
+   con un minore, un gioco con una tela (com'era).
 
     python prove/prova_gioco_stato.py
 """
@@ -815,6 +823,192 @@ def prova_ripresa_server(tmp: Path):
     verifica("contrario: una partita nuova parte da capo", "ripresa" not in r["avvio"])
 
 
+# ═══════════════════════════ 9. la partita condivisa con il motore ═══════════════════════════
+
+def prova_condivisa_motore(tmp: Path):
+    sezione("9. la partita condivisa: il motore che la tiene e uno specchio (Node)")
+    if not shutil.which("node"):
+        print("SALTATA IN PARTE: node non c'è")
+        return
+    m = json.loads((GIOCHI / "porte_fasi" / "manifesto.json").read_text(encoding="utf-8"))
+    sc = m["scheda"]
+    file = [str(GIOCHI / "porte_fasi" / f) for f in sc["file"]]
+    opz = {"macchina": sc["macchina"], "minimo": sc["giocatori"]["min"],
+           "massimo": sc["giocatori"]["max"], "titolo": m["titolo"], "seme": 7}
+    codice = (f"import {{ apriGioco }} from {json.dumps(FUMO.as_uri())};\n"
+              f"const F = {json.dumps(file)}; const O = {json.dumps(opz)};\n" + """
+const gA = await apriGioco(F, O);
+const gB = await apriGioco(F, { ...O, ruolo: "specchio" });
+const out = {};
+async function inoltra() { await gB.calliope.evento("partita", { stato: gA.calliope.riprese().slice(-1)[0] }); }
+async function mosse(da) { for (const m of gB.calliope.mosse().slice(da)) await gA.calliope.comando(m); }
+await inoltra();
+await gB.tocca("2 giocatori");
+out.mossaB = gB.calliope.mosse();
+out.faseB_subito = gB.stato().fase;
+await mosse(0);
+await inoltra();
+out.A = gA.stato(); out.B = gB.stato();
+await gB.tocca("Porta 3");
+await mosse(1);
+await inoltra();
+out.A2 = gA.stato(); out.B2 = gB.stato();
+await gB.avanza(4500);
+out.B_esito_dopo = gB.stato().fase;
+await gA.avanza(4500);
+await inoltra();
+out.B3 = gB.stato();
+out.istB = gB.calliope.istantanee().length;
+await gB.tocca(".giocatore", 0);
+await gB.scrivi(".scrivi-nome", "Bea");
+out.nomeB = gB.calliope.mosse().slice(-1)[0];
+out.nomeB_stato = gB.stato().giocatori[0].nome;
+await gA.calliope.evento("nome", { i: out.nomeB.rinomina, nome: out.nomeB.nome });
+await inoltra();
+out.B4 = gB.stato().giocatori.map((x) => x.nome);
+await gB.calliope.evento("autorevole", { stato: gA.calliope.riprese().slice(-1)[0] });
+out.istB_dopo = gB.calliope.istantanee().slice(-1)[0];
+await gB.tocca("Porta 1");
+out.B5 = gB.stato();
+await gA.calliope.evento("specchio", { stato: gB.calliope.riprese().slice(-1)[0] });
+const nA = gA.calliope.istantanee().length;
+await gA.tocca("Avanti");
+out.A_specchio = { mosse: gA.calliope.mosse(), ist: gA.calliope.istantanee().length - nA, fase: gA.stato().fase };
+out.errori = gA.errori.length + gB.errori.length;
+console.log("JSON" + JSON.stringify(out));
+""")
+    rc, testo = node(tmp / "condivisa", codice)
+    riga = next((x for x in testo.splitlines() if x.startswith("JSON")), None)
+    if rc != 0 or riga is None:
+        verifica("due motori nel DOM finto", False, testo[-800:])
+        return
+    out = json.loads(riga[4:])
+    verifica("lo specchio non scrive lo stato: il tocco «2 giocatori» diventa una mossa per chi "
+             "tiene la partita", out["mossaB"] == [{"comando": "giocatori_2", "n": 0}]
+             and out["faseB_subito"] == "preparazione", str(out["mossaB"]))
+    verifica("la mossa applicata da chi tiene la partita: lo specchio disegna lo stesso stato",
+             out["A"] == out["B"] and out["A"]["fase"] == "turno"
+             and len(out["A"]["giocatori"]) == 2, f"{out['A']} | {out['B']}")
+    verifica("«Porta 3» toccata sullo specchio: l'esito uguale sui due schermi",
+             out["A2"] == out["B2"] and out["A2"]["fase"] == "esito", str(out["B2"]))
+    verifica("lo specchio non fa andare avanti l'esito da solo (lo fa chi tiene la partita)",
+             out["B_esito_dopo"] == "esito" and out["B3"]["fase"] == "turno"
+             and out["B3"]["tocca"] == "Giocatore 2", str(out["B3"]))
+    verifica("lo specchio non manda istantanee a Calliope", out["istB"] == 0)
+    verifica("un nome scritto sullo specchio va a chi tiene la partita, che lo scrive",
+             out["nomeB"] == {"rinomina": 0, "nome": "Bea"} and out["nomeB_stato"] == "Giocatore 1"
+             and out["B4"][0] == "Bea", f"{out['nomeB']} {out['B4']}")
+    verifica("«autorevole»: lo specchio prende la partita dall'ultimo stato e la scrive lui",
+             out["istB_dopo"] and out["istB_dopo"]["giocatori"][0]["nome"] == "Bea"
+             and out["B5"]["fase"] == "esito", f"{out['istB_dopo']} {out['B5']}")
+    verifica("«specchio»: lo schermo che credeva di tenerla torna specchio (le sue mosse vanno "
+             "a chi la tiene, niente istantanee)", out["A_specchio"]["ist"] == 0
+             and out["A_specchio"]["mosse"][-1:] and out["A_specchio"]["mosse"][-1]["comando"]
+             == "avanti" and out["A_specchio"]["fase"] == "esito", str(out["A_specchio"]))
+    verifica("nessun errore nei due motori", out["errori"] == 0)
+
+
+def prova_condivisa_server(tmp: Path):
+    sezione("9. la partita condivisa sul server")
+    a = Ambiente(tmp)
+    a.installa("porte_fasi", scheda={"condivisa": True})
+    a.installa("segnali")
+    A, B = a.abbina("A", "studio"), a.abbina("B", "cucina")
+    pid = a.chiama("est_porte_fasi", {}, "Dario", schermo=A)["partita"]
+    pid2 = a.chiama("est_porte_fasi", {}, "Elena", schermo=B)["partita"]
+    p = a.giochi.partite[pid]
+    verifica("il secondo schermo si unisce alla stessa partita (condivisa, con il motore)",
+             pid2 == pid and p.motore_condiviso and len(p.posti) == 2)
+    ra = a.pagina(A, {"partita": pid, "tipo": "pronto"})
+    rb = a.pagina(B, {"partita": pid, "tipo": "pronto"})
+    verifica("il primo «pronto» tiene la partita, il secondo è uno specchio",
+             ra["avvio"].get("ruolo") == "autorevole" and rb["avvio"].get("ruolo") == "specchio"
+             and p.autorevole == A["id"], f"{ra['avvio'].get('ruolo')} {rb['avvio'].get('ruolo')}")
+    R = {"n": 3, "fase": "turno", "dati": {"porte": 4}, "giocatori": []}
+    a.eventi.clear()
+    p.posti[A["id"]].messaggi.clear()
+    r = a.pagina(A, {"partita": pid, "tipo": "stato", "istantanea": buona(), "ripresa": R})
+    e = [x for x in a.eventi if x[1] == "gioco"]
+    verifica("l'istantanea di chi tiene la partita: lo stato va allo specchio («partita»)",
+             r.get("ok") and e == [(B["id"], "gioco", {"partita": pid, "tipo": "partita",
+                                                       "dati": {"stato": R}})], str(e))
+    a.eventi.clear()
+    r = stato_msg(a, B, pid, buona(n=4))
+    e = [x for x in a.eventi if x[1] == "gioco"]
+    verifica("contrario: l'istantanea di uno specchio è rifiutata, e lo schermo torna specchio "
+             "con lo stato di adesso", r.get("_stato") == 403 and e == [(B["id"], "gioco", {
+                 "partita": pid, "tipo": "specchio", "dati": {"stato": R}})], f"{r} {e}")
+    rb = a.pagina(B, {"partita": pid, "tipo": "pronto"})
+    verifica("uno specchio che riapre riceve l'ultimo stato", rb["avvio"].get("stato") == R
+             and rb["avvio"].get("ruolo") == "specchio")
+    info = a.giochi.ascolto([B["id"]]) or {}
+    a.eventi.clear()
+    ok = a.giochi.comando(pid, B["id"], "porta_3")
+    e = [x for x in a.eventi if x[1] == "gioco"]
+    verifica("la voce sentita dallo schermo dello specchio: i comandi di chi tiene la partita, "
+             "e la mossa va al suo motore", info.get("istantanea", {}).get("n") == 3 and ok
+             and e == [(A["id"], "gioco", {"partita": pid, "tipo": "comando",
+                                           "dati": {"comando": "porta_3", "n": 3}})], str(e))
+    a.eventi.clear()
+    p.posti[B["id"]].messaggi.clear()
+    r = a.pagina(B, {"partita": pid, "tipo": "mossa", "comando": "porta_4", "n": 3})
+    e = [x for x in a.eventi if x[1] == "gioco"]
+    verifica("il tocco sullo specchio: la mossa va al motore che tiene la partita",
+             r.get("ok") and e == [(A["id"], "gioco", {"partita": pid, "tipo": "comando",
+                                                       "dati": {"comando": "porta_4", "n": 3}})],
+             str(e))
+    for nome, d in (("un comando non attivo", {"comando": "porta_2", "n": 3}),
+                    ("un comando inventato", {"comando": "apri_tutto", "n": 3}),
+                    ("senza numero", {"comando": "porta_1"}),
+                    ("un nome fuori forma", {"rinomina": 0, "nome": "Bea 2"}),
+                    ("un giocatore che non c'è", {"rinomina": 9, "nome": "Bea"})):
+        p.posti[B["id"]].messaggi.clear()
+        r = a.pagina(B, {"partita": pid, "tipo": "mossa", **d})
+        verifica(f"contrario: la mossa dello specchio con {nome} è rifiutata",
+                 r.get("_stato") == 400, str(r))
+    a.eventi.clear()
+    p.posti[B["id"]].messaggi.clear()
+    r = a.pagina(B, {"partita": pid, "tipo": "mossa", "rinomina": 1, "nome": "Bea"})
+    e = [x for x in a.eventi if x[1] == "gioco"]
+    verifica("il nome scritto sullo specchio va al motore che tiene la partita",
+             r.get("ok") and e and e[0][0] == A["id"] and e[0][2]["tipo"] == "nome"
+             and e[0][2]["dati"] == {"i": 1, "nome": "Bea"}, str(e))
+    p.posti[A["id"]].messaggi.clear()
+    r = a.pagina(A, {"partita": pid, "tipo": "mossa", "comando": "porta_1", "n": 3})
+    verifica("contrario: chi tiene la partita non manda «mossa» (le fa il gioco stesso)",
+             r.get("_stato") == 403)
+    a.eventi.clear()
+    a.pagina(A, {"partita": pid, "tipo": "chiuso"})
+    e = [x for x in a.eventi if x[1] == "gioco"]
+    verifica("chiuso lo schermo che la teneva, la partita passa allo specchio con l'ultimo stato",
+             p.autorevole == B["id"] and e == [(B["id"], "gioco", {
+                 "partita": pid, "tipo": "autorevole", "dati": {"stato": R}})], str(e))
+    r = stato_msg(a, B, pid, buona(n=5))
+    ra = a.pagina(A, {"partita": pid, "tipo": "pronto"})
+    verifica("…ora le istantanee di B valgono, e A riaperto è uno specchio",
+             r.get("ok") and ra["avvio"].get("ruolo") == "specchio", f"{r} {ra['avvio']}")
+    # Contrari: dati personali letti, un nome scritto fermato con un minore
+    p.contaminazione = {"agenda"}
+    a.eventi.clear()
+    p.posti[B["id"]].messaggi.clear()
+    a.pagina(B, {"partita": pid, "tipo": "stato", "istantanea": buona(n=6), "ripresa": dict(R, n=6)})
+    verifica("contrario: una partita che ha letto dati personali non manda lo stato agli altri",
+             not [x for x in a.eventi if x[1] == "gioco"])
+    p.contaminazione = set()
+    p.posti[A["id"]].minore = True
+    a.eventi.clear()
+    p.posti[B["id"]].messaggi.clear()
+    ist = buona(n=7, giocatori=[{"nome": "Ada", "punti": 0, "scritto": True},
+                                {"nome": "Giocatore 2", "punti": 0}])
+    a.pagina(B, {"partita": pid, "tipo": "stato", "istantanea": ist, "ripresa": dict(R, n=7)})
+    verifica("contrario: con un minore nella partita un nome scritto fermato non va agli altri "
+             "schermi", not [x for x in a.eventi if x[1] == "gioco"])
+    p.posti[A["id"]].minore = False
+    ps = a.chiama("est_segnali", {}, "Dario", schermo=A)["partita"]
+    verifica("contrario: un gioco condiviso con una tela resta com'era (ogni schermo il suo "
+             "motore, i messaggi con «manda»)", not a.giochi.partite[ps].motore_condiviso)
+
+
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
     radice = Path(tempfile.mkdtemp(prefix="calliope-gioco-stato-"))
@@ -830,6 +1024,8 @@ def main():
         prova_nomi_ciclo(radice / "nomi_ciclo")
         prova_ripresa_motore(radice / "ripresa")
         prova_ripresa_server(radice / "ripresa_server")
+        prova_condivisa_motore(radice / "condivisa")
+        prova_condivisa_server(radice / "condivisa_server")
     finally:
         from calliope import minori as M
         for s in ("regole", "avvisi", "gioco", "richieste"):

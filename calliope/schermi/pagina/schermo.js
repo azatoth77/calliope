@@ -3494,6 +3494,9 @@
     // comandi a voce attivi, numerata; con lo stato per la ripresa dopo «Riapri». E i comandi a
     // voce che il motore ha rifiutato perché arrivati su un'istantanea vecchia
     stato: ["istantanea", "ripresa"], rifiutato: ["comando", "motivo", "n"],
+    // Una mossa o un nome da uno «specchio» di una partita condivisa con il motore (14/10): al
+    // server, che la manda al motore che tiene la partita
+    mossa: ["comando", "n", "rinomina", "nome"],
     // La diagnosi del palco (14/10, il motore dei giochi): al più tre frasi su ciò che esce
     palco: ["difetti"],
   };
@@ -3871,6 +3874,22 @@
       if (Number.isInteger(x.n) && x.n >= 0) dati.n = x.n;
       if (typeof x.giocatore === "string" && x.giocatore.length <= 40) dati.giocatore = x.giocatore;
       fs.forEach((f) => { if (!statoGioco(f).chiuso) versoRiquadro(f, { tipo: "comando", dati }); });
+      return;
+    }
+    if (d.tipo === "partita" || d.tipo === "autorevole" || d.tipo === "specchio") {
+      // Lo stato della partita condivisa con il motore (14/10): uno specchio lo disegna,
+      // «autorevole» passa la partita a questo schermo. Solo un oggetto, entro il tetto
+      let n = Infinity;
+      try { n = JSON.stringify(x.stato === undefined ? null : x.stato).length; } catch (e) { /* no */ }
+      if (n > GIOCO_MAX_STATO || (x.stato !== null && x.stato !== undefined
+          && (typeof x.stato !== "object" || Array.isArray(x.stato)))) return;
+      fs.forEach((f) => { if (!statoGioco(f).chiuso) versoRiquadro(f, { tipo: d.tipo, dati: { stato: x.stato || null } }); });
+      return;
+    }
+    if (d.tipo === "nome") {
+      // Un nome scritto su uno specchio, per il motore che tiene la partita (14/10)
+      if (!Number.isInteger(x.i) || x.i < 0 || typeof x.nome !== "string" || x.nome.length > 20) return;
+      fs.forEach((f) => { if (!statoGioco(f).chiuso) versoRiquadro(f, { tipo: "nome", dati: { i: x.i, nome: x.nome } }); });
       return;
     }
     if (d.tipo === "risposta") {

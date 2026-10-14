@@ -3417,8 +3417,10 @@ o scritti toccando il nome nella fascia dei punti; arrivano in `nuovaPartita({ n
 posso dire?» le risponde Calliope dall'istantanea (il manifesto che le dichiara come forme è
 rifiutato: «è una domanda di Calliope sul gioco»). Fra le forme di Calliope da non usare c'è
 anche «gioco anch'io» (comando standard `anchio`); `accettazione.py` scarta un esempio con
-`anchio` come per gli altri nomi di Calliope. Il §5 passa da 6 409 a 6 777 caratteri (circa 105
-token in più con il rapporto 3,47; da rimisurare sulla DGX). Lo scheletro non cambia; il giudice di
+`anchio` come per gli altri nomi di Calliope. Con le partite condivise (sotto) una riga in più: con `"condivisa": true` la partita la
+tiene un motore solo, gli altri schermi la vedono e mandano le mosse, niente da scrivere in
+più. Il §5 passa da 6 409 a 6 964 caratteri (circa 160 token in più con il rapporto 3,47; da
+rimisurare sulla DGX). Lo scheletro non cambia; il giudice di
 fase e l'istantanea non toccano l'agente (la prova di fumo riceve l'istantanea come il server,
 `fumo_js.mjs`).
 

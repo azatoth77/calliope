@@ -307,7 +307,8 @@ RUNTIME_JS = r"""(function () {
     catch (e) { /* niente */ }
   });
   var n = 0, attese = {}, avvio = null, errori = 0;
-  var ascolti = { avvio: [], messaggio: [], chat: [], giocatori: [], pausa: [], fine_tempo: [], comando: [] };
+  var ascolti = { avvio: [], messaggio: [], chat: [], giocatori: [], pausa: [], fine_tempo: [], comando: [],
+                  partita: [], autorevole: [], specchio: [], nome: [] };
   function manda(tipo, dati) {
     var m = { calliope: 1, tipo: tipo, id: ++n };
     for (var k in (dati || {})) m[k] = dati[k];
@@ -374,6 +375,19 @@ RUNTIME_JS = r"""(function () {
                            n: typeof x.n === "number" ? x.n : null });
     },
     quandoComando: quando("comando"),
+    // La partita condivisa con il motore (14/10): lo stato che uno specchio disegna, la partita
+    // passata a questo schermo, un nome scritto su uno specchio, e la mossa di uno specchio
+    quandoPartita: quando("partita"),
+    quandoAutorevole: quando("autorevole"),
+    quandoSpecchio: quando("specchio"),
+    quandoNome: quando("nome"),
+    mossa: function (x) {
+      x = x || {};
+      var d = {};
+      if (typeof x.comando === "string") { d.comando = x.comando.slice(0, 24); d.n = typeof x.n === "number" ? x.n : null; }
+      if (typeof x.rinomina === "number") { d.rinomina = x.rinomina; d.nome = String(x.nome || "").slice(0, 20); }
+      manda("mossa", d);
+    },
     palco: function (difetti) {
       manda("palco", { difetti: Array.isArray(difetti) ? difetti.slice(0, 3).map(function (x) { return String(x).slice(0, 300); }) : [] });
     }

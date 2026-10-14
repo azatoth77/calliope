@@ -71,7 +71,7 @@ NOTE_GUASTO = {"non risponde": "Il gioco non rispondeva più: l'ho chiuso.",
                "messaggi non validi": "Il gioco mandava messaggi non validi: l'ho chiuso.",
                "non parte": "Il gioco non è partito: l'ho chiuso."}
 TIPI_PAGINA = ("pronto", "battito", "salva", "leggi", "manda", "chat", "di", "azione", "fine",
-               "errore", "guasto", "stato", "rifiutato", "chiuso", "palco")
+               "errore", "guasto", "stato", "rifiutato", "chiuso", "palco", "mossa")
 # Una partita di prova (11/10): il gioco gira e basta, senza ponte verso Calliope né dati. I
 # comandi a voce sì (`stato`, l'istantanea del motore, dice quali valgono; `rifiutato`, un
 # comando arrivato su un'istantanea vecchia; `chiuso` lo manda la pagina quando il gioco si
@@ -176,7 +176,12 @@ class Partita:
         # «giocatore»), e il giudizio sugli altri (scritti sullo schermo o detti «sono Pippo»):
         # Calliope li dice solo dopo i controlli delle frasi dei giochi
         self.nomi_voce: set[str] = set()
-        self.nomi_ok: dict[str, bool] = {}
+        self.nomi_ok: dict[tuple, bool] = {}
+        # La partita condivisa con il motore (14/10, decisione 6 del 12/10, rimandata e fatta
+        # qui): il posto che tiene la partita (il suo motore è l'unico che scrive lo stato) e
+        # l'ultimo stato intero che ha mandato, che gli altri schermi («specchi») disegnano
+        self.autorevole: int | None = None
+        self.stato_condiviso: dict | None = None
 
     @property
     def condivisa(self) -> bool:
@@ -185,6 +190,22 @@ class Partita:
     @property
     def massimo(self) -> int:
         return int((self.scheda.get("giocatori") or {}).get("max", 1))
+
+    @property
+    def motore_condiviso(self) -> bool:
+        """Una partita condivisa tra schermi con la macchina a stati e senza tela: un solo motore
+        tiene la partita, gli altri schermi la disegnano e gli mandano le mosse. Con una tela
+        resta com'era (ogni riquadro il suo motore, i messaggi con `manda`)."""
+        m = self.macchina
+        return bool(self.condivisa and m is not None
+                    and not any(f.get("pagina") == "tela" for f in m["fasi"].values()))
+
+    def tiene(self, posto: "Posto") -> "Posto":
+        """Il posto il cui motore tiene la partita: quello autorevole in una partita condivisa
+        con il motore, altrimenti il posto stesso."""
+        if self.motore_condiviso and self.autorevole is not None:
+            return self.posti.get(self.autorevole) or posto
+        return posto
 
     @property
     def macchina(self) -> dict | None:
@@ -472,10 +493,18 @@ class Giochi:
             return {"errore": "non riuscito", "_stato": 500}
 
     def _avvio(self, p: Partita, posto: Posto) -> dict:
-        return {"partita": p.id, "giocatore": posto.giocatore,
-                "giocatori": len(p.posti), "massimo": p.massimo, "condivisa": p.condivisa,
-                "storia": list(p.storia)[-100:], "lingua": "it",
-                **({"ripresa": posto.ripresa} if posto.ripresa is not None else {})}
+        d = {"partita": p.id, "giocatore": posto.giocatore,
+             "giocatori": len(p.posti), "massimo": p.massimo, "condivisa": p.condivisa,
+             "storia": list(p.storia)[-100:], "lingua": "it"}
+        if p.motore_condiviso:
+            # Chi tiene la partita riparte dall'ultimo stato condiviso; uno specchio lo disegna
+            ruolo = "autorevole" if p.autorevole == posto.sid else "specchio"
+            d["ruolo"] = ruolo
+            if p.stato_condiviso is not None:
+                d["ripresa" if ruolo == "autorevole" else "stato"] = p.stato_condiviso
+        elif posto.ripresa is not None:
+            d["ripresa"] = posto.ripresa
+        return d
 
     def _t_pronto(self, p: Partita, posto: Posto, dati) -> dict:
         from .. import minori
@@ -496,6 +525,13 @@ class Giochi:
         # e la finestra senza nome riparte da adesso
         posto.aperto, posto.segno = True, time.monotonic()
         posto.istantanea, posto.ist_n = None, -1
+        if p.motore_condiviso:
+            with self._lock:
+                t = p.posti.get(p.autorevole) if p.autorevole is not None else None
+                # chi la teneva non c'è più (chiuso, fermato, o la sua pagina tace da VIVO_S)
+                if (t is None or t is posto or not t.aperto or t.fermato
+                        or time.time() - t.contatto > VIVO_S):
+                    p.autorevole = posto.sid
         if p.ascolta:
             self.sveglia_voce()
         self._agli_altri(p, posto, "giocatori", {"giocatori": len(p.posti),
@@ -685,6 +721,14 @@ class Giochi:
         m = p.macchina
         if m is None or p.ascolta is None:
             return {"errore": "questo gioco non ha la macchina a stati", "_stato": 403}
+        if p.motore_condiviso and p.autorevole != posto.sid:
+            # In una partita condivisa lo stato lo scrive un motore solo. Uno schermo che
+            # crede di tenerla (la sua pagina taceva e la partita è passata a un altro) torna
+            # specchio, con lo stato di adesso
+            self._registra(p, "stato_rifiutato", regola="gioco_stato_non_autorevole")
+            self.hub.evento_a(posto.sid, "gioco", {"partita": p.id, "tipo": "specchio",
+                                                   "dati": {"stato": p.stato_condiviso}})
+            return {"errore": "la partita la tiene un altro schermo", "_stato": 403}
         try:
             ist = mc.valida_istantanea(dati.get("istantanea"), m, p.scheda.get("giocatori")
                                        or {}, posto.ist_n)
@@ -705,9 +749,76 @@ class Giochi:
             # Solo quella che accompagna l'ultima istantanea valida (senza: niente ripresa, mai
             # una partita vecchia)
             posto.ripresa = ripresa
+            if p.motore_condiviso and ripresa is not None:
+                p.stato_condiviso = ripresa
+        if p.motore_condiviso and ripresa is not None:
+            self._agli_specchi(p, posto, ist, ripresa)
         if bool(prima) != bool(ist["comandi"]):
             self.sveglia_voce()
         return {"ok": True, "n": ist["n"]}
+
+    def _agli_specchi(self, p: Partita, posto: Posto, ist: dict, stato: dict):
+        """Lo stato della partita condivisa agli altri schermi, che lo disegnano. Come per
+        `manda`: niente se la partita ha letto dati personali; con un minore o un ospite nella
+        partita niente se un nome scritto non passa i controlli (resta sullo schermo di chi
+        tiene la partita)."""
+        if p.contaminazione:
+            self._registra(p, "bloccato", regola="gioco_dati_personali")
+            return
+        if p.protetta() and any(g.get("scritto") and g.get("detto") != g.get("nome")
+                                for g in ist["giocatori"]):
+            self._registra(p, "bloccato", regola="gioco_nome_fermato")
+            return
+        self._agli_altri(p, posto, "partita", {"stato": stato})
+
+    def _t_mossa(self, p: Partita, posto: Posto, dati) -> dict:
+        """Una mossa (un tocco) o un nome scritto su uno specchio di una partita condivisa con
+        il motore: va al motore che tiene la partita, che la controlla come un comando a voce
+        (con il numero dell'istantanea: una mossa vecchia la rifiuta). Qui solo i comandi
+        attivi dell'ultima istantanea valida, e un nome nella forma chiusa."""
+        from ..estensioni import macchina as mc
+        if not p.motore_condiviso or p.autorevole == posto.sid:
+            return {"errore": "qui le mosse le fa il gioco stesso", "_stato": 403}
+        t = p.posti.get(p.autorevole) if p.autorevole is not None else None
+        if t is not None and t.aperto and time.time() - t.contatto > VIVO_S:
+            # La pagina di chi teneva la partita tace (schermo spento): la prende un altro
+            self._passa_la_partita(p, t)
+            return {"errore": "la partita passa a un altro schermo: riprova", "_stato": 409}
+        ist = t.istantanea if t is not None and t.aperto and not t.fermato else None
+        if ist is None:
+            return {"errore": "la partita non è aperta su nessuno schermo", "_stato": 409}
+        if dati.get("rinomina") is not None:
+            i, nome = dati.get("rinomina"), dati.get("nome")
+            if (not isinstance(i, int) or isinstance(i, bool) or not 0 <= i < len(ist["giocatori"])
+                    or not mc.nome_chiuso(nome)):
+                return {"errore": "nome non valido", "_stato": 400}
+            self.hub.evento_a(t.sid, "gioco", {"partita": p.id, "tipo": "nome",
+                                               "dati": {"i": i, "nome": nome}})
+            return {"ok": True}
+        comando, n = dati.get("comando"), dati.get("n")
+        if (not isinstance(comando, str) or comando not in ist["comandi"]
+                or not isinstance(n, int) or isinstance(n, bool)):
+            self._registra(p, "mossa_rifiutata", regola="gioco_mossa_rifiutata",
+                           comando=str(comando)[:24])
+            return {"errore": "la mossa adesso non vale", "_stato": 400}
+        posto.segno = t.segno = time.monotonic()
+        self.hub.evento_a(t.sid, "gioco", {"partita": p.id, "tipo": "comando",
+                                           "dati": {"comando": comando, "n": n}})
+        return {"ok": True}
+
+    def _passa_la_partita(self, p: Partita, posto: Posto):
+        """Lo schermo che teneva la partita condivisa si è chiuso: la tiene un altro schermo
+        aperto, che riparte dall'ultimo stato (evento «autorevole»)."""
+        if not p.motore_condiviso or p.autorevole != posto.sid:
+            return
+        ora = time.time()
+        altri = [x for x in p.posti.values() if x is not posto and x.aperto and not x.fermato
+                 and ora - x.contatto <= VIVO_S]
+        p.autorevole = altri[0].sid if altri else None
+        if altri:
+            self._registra(p, "passa", regola="gioco_partita_passata")
+            self.hub.evento_a(altri[0].sid, "gioco", {"partita": p.id, "tipo": "autorevole",
+                                                      "dati": {"stato": p.stato_condiviso}})
 
     @staticmethod
     def _ripresa(r, ist: dict) -> dict | None:
@@ -743,17 +854,20 @@ class Giochi:
     def _nome_dicibile(self, p: Partita, nome: str) -> bool:
         if p.prova:
             return False                     # una partita di prova non fa dire nomi scritti
-        ok = p.nomi_ok.get(nome)
+        # Il giudizio vale per chi c'è nella partita: con un minore o un ospite arrivati dopo il
+        # nome si rigiudica (con il guardiano)
+        minore = any(x.minore for x in p.posti.values())
+        chiave = (nome, p.protetta(), minore)
+        ok = p.nomi_ok.get(chiave)
         if ok is not None:
             return ok
         from .. import riferire
         _detto, regole = riferire.controlla_testo(nome, "estensione")
         ok = not regole
         if ok and p.protetta():
-            ok = self._guardiano(nome, domanda=False, minore=any(
-                x.minore for x in p.posti.values())) == "ok"
+            ok = self._guardiano(nome, domanda=False, minore=minore) == "ok"
         if len(p.nomi_ok) < 64:
-            p.nomi_ok[nome] = ok
+            p.nomi_ok[chiave] = ok
         if not ok:
             self._registra(p, "nome_fermato", regola="gioco_nome_fermato")
         return ok
@@ -773,6 +887,7 @@ class Giochi:
         """La pagina ha chiuso il gioco (✕, Esc, «chiudi il gioco»): niente più comandi a voce
         finché un riquadro nuovo non manda «pronto» («Riapri»)."""
         posto.aperto = False
+        self._passa_la_partita(p, posto)
         if p.ascolta:
             self.sveglia_voce()
         return {"ok": True}
@@ -819,6 +934,7 @@ class Giochi:
             self.hub.invia_a(posto.sid, chiusa)
         posto.fermato = True
         posto.aperto = False
+        self._passa_la_partita(p, posto)
         self._registra(p, "guasto", regola="gioco_chiuso_dal_controllo", motivo=motivo)
         self.log(f"[GIOCHI] «{p.titolo}» chiuso sullo schermo "
                  f"{self._nome_schermo(posto.sid)}: {motivo}")
@@ -830,7 +946,7 @@ class Giochi:
         """I comandi a voce che valgono adesso: quelli dell'ultima istantanea valida (14/10),
         nell'ordine del manifesto; nessuno senza istantanea."""
         a = p.ascolta
-        ist = posto.istantanea
+        ist = p.tiene(posto).istantanea
         if a is None or ist is None:
             return []
         scelti = set(ist["comandi"])
@@ -909,7 +1025,8 @@ class Giochi:
         return {"partita": p.id, "schermo": posto.sid, "titolo": p.titolo,
                 "comandi": {c: list(a["comandi"][c]) for c in attivi},
                 "giocatore": bool(a.get("giocatore")), "segno": posto.segno,
-                "prova": p.prova, "istantanea": json.loads(json.dumps(posto.istantanea)),
+                "prova": p.prova,
+                "istantanea": json.loads(json.dumps(p.tiene(posto).istantanea)),
                 "macchina": p.macchina}
 
     def in_corso(self, schermi) -> bool:
@@ -946,15 +1063,20 @@ class Giochi:
             if a is None or comando not in self._attivi(p, posto):
                 return False
             # Il numero dell'istantanea su cui il comando è stato riconosciuto (14/10): se nel
-            # frattempo il motore ne ha fatta un'altra (un tocco arrivato prima), lo rifiuta
-            dati = {"comando": comando, "n": posto.istantanea["n"]}
+            # frattempo il motore ne ha fatta un'altra (un tocco arrivato prima), lo rifiuta. In
+            # una partita condivisa la mossa va al motore che la tiene, anche se l'ha sentita lo
+            # schermo di uno specchio
+            t = p.tiene(posto)
+            if t.istantanea is None or not t.aperto or t.fermato:
+                return False
+            dati = {"comando": comando, "n": t.istantanea["n"]}
             if giocatore and a.get("giocatore"):
                 dati["giocatore"] = str(giocatore)[:40]
                 if dalla_voce and len(p.nomi_voce) < 64:
                     p.nomi_voce.add(dati["giocatore"])
-            posto.segno = time.monotonic()
+            posto.segno = t.segno = time.monotonic()
             p.ultimo = time.time()
-        self.hub.evento_a(posto.sid, "gioco", {"partita": p.id, "tipo": "comando", "dati": dati})
+        self.hub.evento_a(t.sid, "gioco", {"partita": p.id, "tipo": "comando", "dati": dati})
         return True
 
     # ── utilità ──

@@ -206,7 +206,9 @@ def scheda_testo(cfg=None) -> list[str]:
         "dire?»). I nomi dei giocatori sono di Calliope («gioco anch'io» a voce, o scritti "
         "toccando il nome nella fascia dei punti): arrivano in nuovaPartita({ nomi }) e in "
         "ctx.giocatori. L'esito va avanti da solo dopo esito_s secondi (0: solo con «avanti» o "
-        "il tocco)",
+        "il tocco). Con \"condivisa\": true nella scheda la stessa partita si gioca da più "
+        "schermi di casa: la tiene un motore solo, gli altri schermi la vedono e mandano le "
+        "mosse (niente da scrivere in più)",
         "- GIOCO: nuovaPartita({ giocatori, nomi }) → i dati della partita (un oggetto JSON); "
         "mosse[fase][comando](dati, { valore, chi, giocatori, turno }) → { dati, punti, esito, "
         "fase, dopo, ancora } e NIENT'ALTRO (dati: lo stato del gioco dopo la mossa; punti: un "

@@ -932,6 +932,10 @@
     var finto = !!opzioni.finto;
     var segnala = opzioni.errore || function (e) { setTimeout(function () { throw e; }, 0); };
     var nucleo, S, timerEsito = null, ultimoErrore = "", orientamento = null, palco = null, imp = null;
+    // La partita condivisa con il motore (14/10): «autorevole» (questo motore tiene la partita:
+    // il solo caso fuori da una partita condivisa) o «specchio» (disegna lo stato che arriva e
+    // manda le mosse a chi la tiene)
+    var ruolo = "autorevole";
     var firmaPalco = null;
     function el(tag, classe, testo) {
       var n = doc.createElement(tag);
@@ -1046,6 +1050,11 @@
           if (e && e.name === "NomeNonValido") { avviso(e.message); return; }
           mostraErrore(e); return;
         }
+        if (ruolo === "specchio") {
+          // il nome lo scrive il motore che tiene la partita
+          try { if (CANALE && typeof CANALE.mossa === "function") CANALE.mossa({ rinomina: i, nome: S2.giocatori[i].nome }); } catch (e) { /* niente */ }
+          return;
+        }
         aggiorna(S2);
       }
       campo.addEventListener("keydown", function (ev) {
@@ -1127,7 +1136,7 @@
     // 16 000 caratteri (come `salva`): oltre, Calliope non può riprendere quella partita
     var MAX_RIPRESA = 16000;
     function voce(muto) {
-      if (!CANALE || typeof CANALE.stato !== "function") return;
+      if (!CANALE || typeof CANALE.stato !== "function" || ruolo !== "autorevole") return;
       var r = null;
       if (!muto) {
         try { var t = JSON.stringify(S); if (t.length <= MAX_RIPRESA) r = JSON.parse(t); } catch (e) { r = null; }
@@ -1141,15 +1150,24 @@
       try { att = disegna(); }
       catch (e) { radice.replaceChildren(el("div", "motore")); mostraErrore(e); voce(true); return; }
       voce(false);
+      if (ruolo !== "autorevole") return;
       if (S.fase === "esito" && M().esito_s > 0) {
         var n = S.n;
         timerEsito = setTimeout(function () { if (S.n === n && S.fase === "esito") mossa("avanti", null, {}); }, M().esito_s * 1000);
       }
-      if (S.fase === "fine" && cal && typeof cal.fine === "function") {
+      if (S.fase === "fine" && cal && typeof cal.fine === "function" && ruolo === "autorevole") {
         try { cal.fine({ classifica: nucleo.classifica(S).map(function (g) { return { nome: g.nome, punti: g.punti }; }) }); } catch (e) { /* niente */ }
       }
     }
     function mossa(c, v, extra) {
+      if (ruolo === "specchio") {
+        // Uno specchio non scrive lo stato: manda la mossa al motore che tiene la partita
+        var flat = nucleo.piatto(c, v), att = [];
+        try { att = nucleo.piatti(nucleo.attivi(S)); } catch (e) { att = []; }
+        if (att.indexOf(flat) < 0) return false;
+        try { if (CANALE && typeof CANALE.mossa === "function") CANALE.mossa({ comando: flat, n: S.n }); } catch (e) { /* niente */ }
+        return true;
+      }
       var S2;
       try { S2 = nucleo.applica(S, c, v, extra || {}); }
       catch (e) { mostraErrore(e); return false; }
@@ -1193,8 +1211,46 @@
       },
     };
     G.CalliopeMotore.partita = partita;
+    if (CANALE && typeof CANALE.quandoPartita === "function") {
+      // Uno specchio disegna lo stato che manda il motore che tiene la partita
+      CANALE.quandoPartita(function (d) {
+        if (ruolo !== "specchio" || !d || !d.stato) return;
+        var S2;
+        try { S2 = nucleo.riprendi(d.stato); } catch (e) { return; }
+        aggiorna(S2);
+      });
+      // La partita passa a questo schermo (chi la teneva si è chiuso): riparte dall'ultimo stato
+      CANALE.quandoAutorevole(function (d) {
+        ruolo = "autorevole";
+        if (d && d.stato) { try { S = nucleo.riprendi(d.stato); } catch (e) { /* resta com'è */ } }
+        aggiorna(S);
+      });
+      // La partita la tiene un altro schermo (questa pagina taceva): si torna specchio
+      if (typeof CANALE.quandoSpecchio === "function") {
+        CANALE.quandoSpecchio(function (d) {
+          ruolo = "specchio";
+          if (timerEsito) { clearTimeout(timerEsito); timerEsito = null; }
+          if (d && d.stato) { try { S = nucleo.riprendi(d.stato); } catch (e) { /* resta com'è */ } }
+          aggiorna(S);
+        });
+      }
+      // Un nome scritto su uno specchio
+      CANALE.quandoNome(function (d) {
+        if (ruolo !== "autorevole" || !d) return;
+        var S2;
+        try { S2 = nucleo.rinomina(S, d.i, d.nome); } catch (e) { return; }
+        aggiorna(S2);
+      });
+    }
     if (cal && typeof cal.quandoPronto === "function") {
       cal.quandoPronto(function (avvio) {
+        if (avvio && avvio.ruolo === "specchio") {
+          // Uno schermo che si unisce a una partita condivisa: disegna lo stato di chi la tiene
+          ruolo = "specchio";
+          if (avvio.stato) { try { S = nucleo.riprendi(avvio.stato); } catch (e) { /* la preparazione */ } }
+          aggiorna(S);
+          return;
+        }
         // «Riapri» o la pagina ricaricata: la partita riparte dall'ultima istantanea valida
         var R = avvio && avvio.ripresa;
         if (R) {

@@ -10,6 +10,10 @@ schermi servita da Calliope, il gioco delle porte nel riquadro vero (sandbox, CS
    tastiera e Invio: nell'istantanea «Bea», scritto, e Calliope lo dice («Tocca a Bea.»).
 4. **La ripresa dopo «Riapri»**: ✕ e «Riapri», il riquadro nuovo riparte dall'ultima istantanea
    (stesso numero, «Bea» con i suoi punti, le porte già aperte chiuse).
+5. **La partita condivisa con il motore** su due pagine: una tiene la partita (il primo
+   riquadro pronto), l'altra (uno specchio) disegna lo stesso stato; un tocco vero sullo
+   specchio («2 giocatori», poi «Porta 1») è una mossa del motore che la tiene, e le due pagine
+   mostrano la stessa pagina.
 
     python prove/prova_gioco_stato_pagina.py
 """
@@ -61,9 +65,10 @@ def main() -> int:
     tmp = Path(tempfile.mkdtemp(prefix="calliope-gioco-stato-pagina-"))
     a = Ambiente(tmp)
     a.installa("porte")
+    a.installa("porte_fasi", scheda={"condivisa": True})
     srv = ServerSchermi(a.hub, "127.0.0.1", 0).avvia()
     base = f"http://127.0.0.1:{srv.port}"
-    pg = None
+    pg = pg2 = None
     try:
         r = a.hub.archivio.nuova_richiesta()
         sa = a.hub.abbina(r["codice"], "soggiorno", None, None)["schermo"]
@@ -146,9 +151,52 @@ def main() -> int:
         testo = PG.nel_riquadro(pg, "document.getElementById('gioco').innerText") or ""
         verifica("4. sullo schermo: «Bea» nella fascia e niente «Porta 1»",
                  "Bea" in testo and "Porta 1" not in testo, testo[:200])
+        PG.clic(pg, *PG.centro(pg, "article.modo-gioco .gioco-chiudi"))
+        # 5. la partita condivisa con il motore su due pagine
+        r2 = a.hub.archivio.nuova_richiesta()
+        sb = a.hub.abbina(r2["codice"], "cucina", None, None)["schermo"]
+        pg2 = psp.Pagina(exe, f"{base}/#t={r2['richiesta']}", opzioni=["--window-size=900,800"],
+                         profilo="prof-stato-2")
+        PG.aspetta(lambda: len(a.hub.collegati()) == 2, 25)
+        pc = a.chiama("est_porte_fasi", {"partita": "nuova"}, "Dario", schermo=sa)["partita"]
+        a.chiama("est_porte_fasi", {}, "Elena", schermo=sb)
+        p = a.giochi.partite[pc]
+        ok = PG.aspetta(lambda: len(p.posti) == 2 and all(x.aperto for x in p.posti.values())
+                        and p.autorevole is not None
+                        and p.posti[p.autorevole].istantanea is not None, 25)
+        # La tiene il primo riquadro che dice «pronto» (qui l'una o l'altra pagina)
+        tiene = p.posti.get(p.autorevole)
+        pagine = {sa["id"]: pg, sb["id"]: pg2}
+        specchio = pagine.get(next((k for k in p.posti if k != p.autorevole), None))
+        verifica("5. due pagine nella stessa partita: una la tiene, l'altra è uno specchio",
+                 ok is not None and p.motore_condiviso and specchio is not None,
+                 f"{p.autorevole} {[(k, x.aperto) for k, x in p.posti.items()]}")
+        PG.aspetta(lambda: nel_palco(specchio, '.palco button[data-comando="giocatori"]'
+                                               '[data-valore="2"]'), 10)
+        xy = nel_palco(specchio, '.palco button[data-comando="giocatori"][data-valore="2"]')
+        if xy:
+            PG.clic(specchio, *xy)
+        ok = PG.aspetta(lambda: (tiene.istantanea or {}).get("fase") == "turno", 10)
+        verifica("5. «2 giocatori» toccato sullo specchio: la partita la cambia il motore che la "
+                 "tiene", ok is not None and len(tiene.istantanea["giocatori"]) == 2,
+                 str(tiene.istantanea))
+        PG.aspetta(lambda: nel_palco(specchio, '.palco button[data-comando="porta"]'
+                                               '[data-valore="1"]'), 10)
+        xy = nel_palco(specchio, '.palco button[data-comando="porta"][data-valore="1"]')
+        if xy:
+            PG.clic(specchio, *xy)
+        ok = PG.aspetta(lambda: (tiene.istantanea or {}).get("fase") == "esito", 10)
+        uguale = PG.aspetta(lambda: (PG.nel_riquadro(pg, "document.getElementById('gioco')"
+                                                    ".innerText") or "1")
+                            == (PG.nel_riquadro(pg2, "document.getElementById('gioco')"
+                                                ".innerText") or "2"), 10)
+        testo = PG.nel_riquadro(specchio, "document.getElementById('gioco').innerText") or ""
+        verifica("5. «Porta 1» toccata sullo specchio: l'esito sulle due pagine, uguale",
+                 ok is not None and uguale is not None and "porta 1" in testo.lower(), testo[:200])
     finally:
-        if pg is not None:
-            pg.chiudi()
+        for x in (pg, pg2):
+            if x is not None:
+                x.chiudi()
         srv.ferma()
     print("\nTutto bene." if not ERRORI else f"\n{ERRORI} prove non riuscite.")
     return 1 if ERRORI else 0

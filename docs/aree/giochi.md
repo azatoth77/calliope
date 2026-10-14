@@ -754,3 +754,53 @@ partita da capo. Ora riparte **dall'ultima istantanea valida**:
 
 Prove: `prova_gioco_stato` (sezione 8), `prova_gioco_stato_pagina` (Edge: ✕ e «Riapri» nella
 pagina vera, con il nome scritto e la porta già aperta).
+
+### Le partite condivise con il motore (decisione 6, rimandata e fatta qui)
+
+Prima, in una partita condivisa tra schermi (`scheda.condivisa`) ogni riquadro aveva il suo
+motore: due partite diverse (sorteggi, turni, punti), sincronizzate solo se il gioco lo faceva da
+sé con `manda` (com'è ancora la tela dei «segnali»). Il progetto (§ 2.4) diceva: «il primo posto
+sarebbe l'autorevole e gli altri riceverebbero istantanee e vista». Fatto così:
+
+- **Chi tiene la partita**: per una partita condivisa con la macchina **e senza tela**
+  (`Partita.motore_condiviso`), il primo riquadro che dice «pronto» è l'**autorevole**
+  (`Partita.autorevole`): il suo motore è l'unico che scrive lo stato e manda istantanee. Gli
+  altri schermi sono **specchi** (`avvio.ruolo`).
+- **Gli specchi disegnano lo stato**: a ogni istantanea valida dell'autorevole il server manda
+  lo stato intero (lo stesso della ripresa) agli altri schermi (evento «gioco» di tipo
+  `partita`), e il loro motore lo disegna (`nucleo.riprendi`, poi la pagina: la vista è una
+  funzione pura dei dati, quindi uguale). Uno specchio che si apre o riapre lo riceve all'avvio.
+  Uno specchio non manda istantanee (se ci prova: 403, regola `gioco_stato_non_autorevole`, e
+  torna specchio con l'evento `specchio`), non fa andare avanti l'esito da solo, non manda la
+  fine.
+- **Le mosse degli specchi**: un tocco su uno specchio diventa un messaggio `mossa` (comando
+  piatto e numero dell'istantanea su cui è stato toccato) che il server controlla contro
+  l'ultima istantanea valida dell'autorevole (solo comandi attivi, numero intero; regola
+  `gioco_mossa_rifiutata`) e manda al suo motore come un comando a voce: lo stesso controllo del
+  numero (una mossa vecchia è rifiutata). Un nome scritto su uno specchio va all'autorevole
+  (`mossa` con `rinomina` e `nome`, forma chiusa) che lo scrive.
+- **La voce**: un comando sentito dal satellite dello schermo di uno specchio vale con i comandi
+  dell'autorevole e la mossa va al suo motore (`Partita.tiene`); le domande standard leggono la
+  sua istantanea.
+- **Chi tiene la partita se ne va** (✕, cane da guardia, o la sua pagina tace da `VIVO_S` quando
+  uno specchio muove o si riapre): la partita passa a un altro schermo aperto (evento
+  `autorevole` con l'ultimo stato, regola `gioco_partita_passata`), che riparte da lì. Chi la
+  teneva, riaperto, è uno specchio.
+- **Protezioni** come per `manda`: con dati personali letti dalla partita lo stato non va agli
+  altri schermi (`gioco_dati_personali`); con un minore o un ospite nella partita non ci va se
+  un nome scritto non passa i controlli (`gioco_nome_fermato`). Il giudizio di un nome vale per
+  chi c'è nella partita: se arriva un minore o un ospite si rigiudica (una prova l'ha trovato).
+- **Pagina e runtime**: `mossa` dal riquadro (campi `comando`, `n`, `rinomina`, `nome`); verso il
+  riquadro `partita`, `autorevole`, `specchio` (lo stato, un oggetto entro il tetto di `stato`) e
+  `nome` (`i` intero, `nome` al più 20 caratteri); il canale riservato al motore ha
+  `quandoPartita`, `quandoAutorevole`, `quandoSpecchio`, `quandoNome` e `mossa` (il codice del
+  gioco non li vede). L'agente non scrive niente in più (una riga nel contratto: con
+  `"condivisa": true` la partita la tiene un motore solo).
+- **Cosa non fa** (da decidere se serve): chi è quale giocatore. I turni restano quelli del
+  motore (`tocca`), e ogni schermo può muovere quando tocca a qualcuno: va bene per giocare
+  insieme da due stanze, non impedisce a uno schermo di muovere per l'altro. Una tela condivisa
+  resta com'era (ogni schermo il suo motore, i messaggi con `manda`).
+
+Prove: `prova_gioco_stato` (sezione 9: due motori nel DOM finto, autorevole e specchio, e il
+server con i contrari), `prova_gioco_stato_pagina` (Edge, due pagine: tocchi veri sullo
+specchio, la stessa pagina sulle due).
