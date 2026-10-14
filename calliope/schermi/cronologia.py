@@ -25,7 +25,10 @@ ogni scheda contro lo stato vero: un modulo chiuso, un timer finito si saltano; 
 di un lavoro che non lavora più diventa la scheda finale («interrotto», «finito»), senza il
 flusso; gli esercizi chiusi diventano il loro riepilogo; uno sviluppo si ricostruisce da
 `Sviluppi` (la vista dello sviluppo torna subito dopo un riavvio); il cassetto tiene solo i
-file che ci sono ancora; un programma che girava prima di un riavvio è fermato.
+file che ci sono ancora; un programma che girava prima di un riavvio è fermato; un avviso di
+pericolo al tutore (14/10, rifiniture) tiene «Scarica l'audio» se il file del cassetto c'è ancora
+(la sorgente salvata è solo il suo id, mai un percorso, una funzione o un gettone), altrimenti la
+scheda dice che è scaduto.
 
 Solo libreria standard.
 """
@@ -332,6 +335,38 @@ def lavoro_finale(c: dict, stato) -> dict:
     return out
 
 
+AUDIO_SCADUTO = "L'audio di questo avviso non c'è più: è scaduto o è stato tolto."
+
+
+def avviso_rivisto(c: dict, persona: str, avvisi=None) -> dict:
+    """La scheda di un avviso di pericolo ripresa dalla cronologia (14/10, rifiniture): la
+    sorgente di «Scarica l'audio» è solo l'id del file del cassetto (`_scarica.avviso_audio`),
+    e il pulsante resta solo se il file c'è ancora per questa persona (minori.Avvisi.audio_c_e:
+    destinatario, tutore, file attivo); se no, niente pulsante e la nota che lo dice. Al clic i
+    permessi si rifanno comunque (schermi/scarica.py)."""
+    src = c.get("_scarica") if isinstance(c.get("_scarica"), dict) else None
+    if "audio" not in (c.get("scarica") or ()) and not (src and "avviso_audio" in src):
+        return c
+    fid = src.get("avviso_audio") if src else None
+    if avvisi is None:
+        try:
+            from .. import minori
+            avvisi = minori.avvisi()
+        except Exception:  # noqa: BLE001
+            avvisi = None
+    ok = bool(fid and avvisi is not None and avvisi.audio_c_e(persona, fid))
+    if ok:
+        return c
+    c.pop("_scarica", None)
+    c["scarica"] = [f for f in c.get("scarica") or () if f != "audio"]
+    if not c["scarica"]:
+        c.pop("scarica")
+    nota = str(c.get("nota") or "")
+    if AUDIO_SCADUTO not in nota:
+        c["nota"] = f"{nota} {AUDIO_SCADUTO}".strip()
+    return c
+
+
 def rivedi(hub, voce: dict, persona: str) -> dict | None:
     """La scheda salvata come va rimandata adesso, o None se non ha più senso."""
     c = dict(voce.get("scheda") or {})
@@ -395,6 +430,8 @@ def rivedi(hub, voce: dict, persona: str) -> dict | None:
     if tipo == "esecuzione" and c.get("stato") == "in_corso" and vecchia:
         c.update(stato="fermato", dal=None)
         return c
+    if tipo == "avviso":
+        return avviso_rivisto(c, persona, getattr(hub, "avvisi", None))
     if tipo == "cassetto":
         cas = getattr(hub, "cassetto", None)
         voci = [v for v in c.get("voci") or () if isinstance(v, dict)]

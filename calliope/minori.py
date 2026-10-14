@@ -1247,6 +1247,49 @@ class Avvisi:
                                "completa.")
         return None, "La trascrizione di quel momento non c'è più."
 
+    def _audio_riga(self, persona, fid):
+        """(riga del cassetto) dell'audio `fid` per `persona`, con i permessi controllati
+        adesso, o None: un avviso di cui `persona` è il destinatario ha proprio quel file
+        (`avvisi_tutori.audio`, che `dimentica_materiale` azzera), `persona` è ancora un tutore
+        del minore e il file è ancora attivo nel suo cassetto (non scaduto né tolto)."""
+        cas = self.cassetto
+        try:
+            fid = int(str(fid).strip().lstrip("Cc"))
+        except (TypeError, ValueError):
+            return None
+        if cas is None or not persona:
+            return None
+        with self._lock:
+            righe = self.db.execute("SELECT minore FROM avvisi_tutori WHERE tutore = ? AND "
+                                    "audio = ?", (str(persona), fid)).fetchall()
+        if not righe:
+            return None
+        chi = _per_id(self.registry, str(persona))
+        if chi is None or not any(e_tutore(chi, _per_id(self.registry, r[0])) for r in righe):
+            return None
+        r = cas.prendi(str(persona), fid)
+        if r is not None and float(r.get("scade") or 0) <= float(cas.ora()):
+            return None                 # scaduto, anche se la pulizia del cassetto non è passata
+        return r
+
+    def audio_c_e(self, persona, fid) -> bool:
+        """L'audio dell'avviso si può ancora scaricare da `persona` (la ripresa della scheda
+        dalla cronologia: se no, la scheda dice che è scaduto)."""
+        try:
+            return self._audio_riga(persona, fid) is not None
+        except Exception:  # noqa: BLE001 — nel dubbio no
+            return False
+
+    def audio_per(self, persona, fid) -> bytes | None:
+        """I byte dell'audio di un avviso al momento dello scarico (schermi/scarica.py): solo
+        per il tutore destinatario, con tutti i controlli rifatti adesso (`_audio_riga`)."""
+        try:
+            r = self._audio_riga(persona, fid)
+            return self.cassetto.byte(r) if r is not None else None
+        except Exception as e:  # noqa: BLE001 — un file illeggibile: «non c'è più»
+            self.log(f"   [MINORI] audio dell'avviso non letto: {type(e).__name__}")
+            return None
+
     def scheda_di(self, tutore, d: dict, minore=None) -> bool:
         """La scheda di un avviso di pericolo sullo schermo **personale** del tutore (mai altri
         schermi): il testo senza parole, quando e da dove, e sotto la trascrizione e «Scarica
@@ -1264,13 +1307,11 @@ class Avvisi:
             extra["nota"] = nota
         fid, cas = d.get("audio"), self.cassetto
         if fid and cas is not None and self._cfg("avvisi_audio", 0.0):
-            pid = getattr(tutore, "id", None)
-
-            def audio_fn(pid=pid, fid=fid):
-                r = cas.prendi(pid, fid)
-                return cas.byte(r) if r is not None else None
+            # Solo l'id del file del cassetto (14/10, rifiniture): niente funzioni, percorsi o
+            # gettoni nella scheda, così la cronologia degli schermi la salva e dopo un riavvio
+            # il pulsante torna. Al clic `audio_per` rifà ogni controllo (schermi/scarica.py)
             extra["scarica"] = ["audio"]
-            extra["_scarica"] = {"audio_fn": audio_fn, "solo_persona": True,
+            extra["_scarica"] = {"avviso_audio": int(fid), "solo_persona": True,
                                  "titolo": f"Avviso {nome} {quando_scheda(d['creato'])}"}
         try:
             from .schermi import schede

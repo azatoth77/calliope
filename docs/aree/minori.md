@@ -1011,3 +1011,28 @@ senza parole, arrivato giorni dopo, non si capisce.
 **Prove**: `prove/prova_avvisi_audio.py` (a secco, con i contrari: non tutore, altro schermo, chi
 amministra, schermo di stanza, ombra, ospite, adulto senza minori, altra stanza, scadenza, svuota,
 dimentica, anello pieno, spento). Sulla DGX: accendere `avvisi_audio: true` nel file locale.
+
+### 14/10 sera: «Scarica l'audio» anche dopo un riavvio (ramo `conoscenti-avvisi-2`)
+
+Fino a qui la scheda dell'avviso portava nella sorgente di «Scarica» (`_scarica`) una funzione
+che leggeva il file dal cassetto: in memoria funzionava, ma la cronologia delle schede su disco
+(`schermi/cronologia.py`) la scriveva come testo, e dopo un riavvio la scheda ripresa aveva il
+pulsante che non scaricava niente (o non lo aveva). Ora:
+
+- la scheda porta **solo l'id del file del cassetto** (`_scarica.avviso_audio`, con `solo_persona`
+  e il titolo): niente percorso assoluto, niente funzione, niente gettone riusabile. Resta una
+  chiave privata (mai alle pagine); la cronologia del tutore la salva come le altre sorgenti;
+- **al clic** (`schermi/scarica.py`, `audio_avviso`) i permessi si rifanno con la persona dello
+  schermo che ha chiesto il gettone (schermo **personale**, `solo_persona`: il suo proprietario
+  deve essere il tutore della scheda, nemmeno chi amministra da un suo schermo), e
+  `Avvisi.audio_per` controlla di nuovo che quel file sia l'audio di un avviso **destinato a lui**
+  (`avvisi_tutori.audio`, che «dimentica» e `--svuota` azzerano), che lui sia **ancora tutore** del
+  minore e che il file sia **attivo e non scaduto** nel suo cassetto (anche prima che passi la
+  pulizia del cassetto). Un id di un altro file, o di un altro cassetto, non scarica niente;
+- **alla ripresa** dalla cronologia (`cronologia.avviso_rivisto`) il pulsante resta solo se il
+  file c'è ancora per quel tutore (`Avvisi.audio_c_e`); se è scaduto o tolto, la scheda perde
+  «Scarica l'audio» e dice «L'audio di questo avviso non c'è più: è scaduto o è stato tolto.».
+
+Prova: `prove/prova_avvisi_audio.py`, `prova_scheda_dopo_riavvio` (cronologia su disco riletta da
+una seconda istanza; contrari: altro schermo personale, schermo di stanza, non più tutore anche
+con il gettone già dato, destinatario non tutore, file di un altro, scaduto, tolto).

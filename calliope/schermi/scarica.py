@@ -54,20 +54,34 @@ class Rifiuto(Exception):
         self.frase = frase
 
 
-def converti(sorgente: dict, formato: str, font=None) -> bytes:
-    """I byte del file: dal Markdown (a_blocchi per PDF e Word) o dal documento a blocchi."""
+def audio_avviso(sorgente: dict, persona, avvisi=None) -> bytes:
+    """L'audio di un avviso (14/10; dal 14/10 sera, rifiniture, la scheda porta solo l'id del
+    file del cassetto, `avviso_audio`, e sopravvive a un riavvio nella cronologia): letto al
+    clic per `persona`, il proprietario dello schermo personale che ha chiesto il gettone, con i
+    permessi rifatti adesso (minori.Avvisi.audio_per: destinatario dell'avviso, ancora tutore,
+    file attivo nel suo cassetto). Rifiuto 404 se non c'è più."""
+    if avvisi is None:
+        from .. import minori
+        avvisi = minori.avvisi()
+    fid = sorgente.get("avviso_audio")
+    dati = avvisi.audio_per(persona, fid) if avvisi is not None and persona and fid else None
+    if not dati:
+        raise Rifiuto(404, "l'audio non c'è più: è scaduto o è stato tolto")
+    return bytes(dati)
+
+
+def converti(sorgente: dict, formato: str, font=None, persona=None, avvisi=None) -> bytes:
+    """I byte del file: dal Markdown (a_blocchi per PDF e Word) o dal documento a blocchi.
+    `persona`: chi scarica (il proprietario dello schermo), per l'audio di un avviso."""
     from ..documenti import markdown as md
     from ..documenti.render import available_formats, render
     if formato not in FORMATI:
         raise Rifiuto(400, "formato non ammesso")
-    if formato == "audio" or callable(sorgente.get("audio_fn")):
+    if formato == "audio" or "avviso_audio" in sorgente:
         # L'audio di un avviso (14/10): solo da una scheda che ce l'ha, letto al clic dal cassetto
-        if formato != "audio" or not callable(sorgente.get("audio_fn")):
+        if formato != "audio" or not sorgente.get("avviso_audio"):
             raise Rifiuto(400, "formato non disponibile per questo documento")
-        dati = sorgente["audio_fn"]()
-        if not dati:
-            raise Rifiuto(404, "l'audio non c'è più")
-        return bytes(dati)
+        return audio_avviso(sorgente, persona, avvisi)
     if callable(sorgente.get("markdown_fn")):
         # La trascrizione della conversazione (08/10, hub.registra_chat): fatta adesso
         # dall'archivio, così il file ha anche i turni arrivati dopo la scheda
@@ -124,6 +138,9 @@ class Scaricamenti:
         self._voci: OrderedDict = OrderedDict()      # (sid, chiave) → voce
         self._gettoni: OrderedDict = OrderedDict()   # gettone → dati
         self._richieste: dict[int, list[float]] = {}
+        # Gli avvisi dei tutori (minori.Avvisi) per l'audio di un avviso; None = quelli del
+        # servizio (minori.avvisi()). Le prove ne passano uno loro
+        self.avvisi = None
 
     @property
     def durata_s(self) -> float:
@@ -176,6 +193,7 @@ class Scaricamenti:
             self._richieste[sid] = fatti + [ora]
             g = secrets.token_urlsafe(24)
             self._gettoni[g] = {"sid": sid, "sorgente": v["sorgente"], "formato": formato,
+                                "persona": proprietario,
                                 "nome": nome_file(v["titolo"], formato), "usi": 0,
                                 "scade": ora + self.durata_s, "dati": None,
                                 "lock": threading.Lock()}
@@ -199,5 +217,6 @@ class Scaricamenti:
         with g["lock"]:
             if g["dati"] is None:
                 g["dati"] = converti(g["sorgente"], g["formato"],
-                                     getattr(self.cfg, "documenti_font", None))
+                                     getattr(self.cfg, "documenti_font", None),
+                                     persona=g.get("persona"), avvisi=self.avvisi)
         return g["nome"], FORMATI[g["formato"]][1], g["dati"]
