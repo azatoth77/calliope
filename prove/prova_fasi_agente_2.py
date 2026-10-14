@@ -45,6 +45,17 @@ della temperatura sulla DGX del 12–13/10, caso del convertitore di distanze).
    passata a vuoto di fila; contrari: nessun test nuovo, un test che passa anche prima, la
    riproduzione «saltata», un test dell'agente rosso, un lavoro che non è una correzione, a
    vuoto senza riproduzione, il gioco ancora rotto.
+6. **Il banco del 14/10 sera**: a. gli esempi contro la richiesta (con l'estensione di
+   riferimento del banco i convertitori avevano esempi impossibili): tolto l'esempio con un
+   valore che la richiesta non nomina («Km») e quello con il conto che non torna con il suo
+   «calcolo»; tolte da «contiene» le parole che ripetono i dati quando c'è un altro controllo;
+   niente numero con «trovato»: false; il numero dal calcolo; le parole di «contiene» anche non
+   vicine; il riferimento verde, il falso «fatto» del plurale ancora rosso, lo scheletro rosso;
+   contrari: la parola come solo controllo, senza il testo della richiesta, il calcolo con nomi
+   o potenze. b. il manifesto che la consegna rifiuterebbe (L8: descrizione di 98 caratteri)
+   detto scrivendolo e come test rosso di esegui_test; contrari: valido, assente. c. il gioco:
+   «avanti» dopo la scelta dei giocatori dice la fase e perché (porte L7, L10), il contratto
+   dice com'è g.stato(); contrario: «avanti» nell'esito vale.
 
     python prove/prova_fasi_agente_2.py
 """
@@ -863,6 +874,225 @@ def prova_correzione_al_tetto(tmp: Path):
              and any("al tetto niente consegna d'ufficio" in x for x in log), f"{ris} {log[-2:]}")
 
 
+# ═══════════════════════ 6. il banco del 14/10 sera: esempi, manifesto, macchina ═══════════════
+
+RICHIESTA_BANCO = (
+    "Un'estensione «Convertitore di distanze»: converte un valore tra unità di lunghezza: "
+    "metri, chilometri, miglia, miglia nautiche, piedi, pollici e unità astronomiche, con i nomi "
+    "in italiano anche al singolare («miglio nautico», «unità astronomica»). Se un'unità non la "
+    "conosce, «trovato»: false e da_dire lo dice.")
+TUTTE = ["metri", "chilometri", "miglia", "miglia nautiche", "piedi", "pollici",
+         "unità astronomiche", "miglio nautico", "unità astronomica"]
+# Gli esempi veri del banco (L2, L8, L14 del 14/10): con l'estensione di riferimento, giusta per
+# l'accettazione nascosta, i primi sei fallivano
+ANALISI_BANCO = {
+    "contraddizioni": [], "scelte": [], "al_collaudo": [], "campo_numero": "risultato",
+    "input": [{"nome": "valore", "tipo": "number"},
+              {"nome": "da", "tipo": "string", "valori": TUTTE},
+              {"nome": "a", "tipo": "string", "valori": TUTTE}],
+    "esempi": [
+        # le parole che ripetono i dati, in un esempio con il numero
+        {"requisito": 1, "dati": {"valore": 1, "da": "chilometri", "a": "metri"},
+         "numero": 1000, "contiene": "chilometri metri"},
+        # una unità nota ripetuta in un esempio del dato sconosciuto
+        {"requisito": 1, "dati": {"valore": 1, "da": "pollice", "a": "centimetri"},
+         "contiene": "pollice", "trovato": False},
+        # il conto sbagliato di mille volte, con il calcolo giusto
+        {"requisito": 1, "dati": {"valore": 1, "da": "Unità Astronomica", "a": "Miglia Nautiche"},
+         "numero": 80776.3842, "calcolo": "149597870.7 / 1.852",
+         "contiene": "Unità Astronomica Miglia Nautiche"},
+        # un'unità che la richiesta non nomina, con un risultato
+        {"requisito": 1, "dati": {"valore": 5, "da": "METRI", "a": "Km"}, "numero": 0.005},
+        # un numero e «trovato»: false insieme
+        {"requisito": 1, "dati": {"valore": 1, "da": "pollici", "a": "centimetri"},
+         "numero": 2.54, "trovato": False},
+        # il nome del dato sconosciuto nella frase
+        {"requisito": 1, "dati": {"valore": 5, "da": "metri", "a": "furlong"},
+         "contiene": "furlong", "trovato": False},
+        # contrari: il numero dal calcolo; il conto che torna; la parola da sola resta
+        {"requisito": 1, "dati": {"valore": 10, "da": "miglia", "a": "chilometri"},
+         "calcolo": "10 * 1609.344 / 1000"},
+        {"requisito": 1, "dati": {"valore": 1, "da": "miglio nautico", "a": "metri"},
+         "numero": 1852, "calcolo": "1.852 * 1000"}]}
+RIFERIMENTO_BANCO = '''import unicodedata
+
+METRI = {"metro": 1.0, "metri": 1.0, "chilometro": 1000.0, "chilometri": 1000.0,
+         "miglio": 1609.344, "miglia": 1609.344, "miglio nautico": 1852.0,
+         "miglia nautiche": 1852.0, "piede": 0.3048, "piedi": 0.3048, "pollice": 0.0254,
+         "pollici": 0.0254, "unita astronomica": 149597870700.0,
+         "unita astronomiche": 149597870700.0}
+
+
+def _norm(s):
+    t = unicodedata.normalize("NFD", str(s or "").lower().strip())
+    return " ".join("".join(c for c in t if not unicodedata.combining(c)).split())
+
+
+def esegui(dati, calliope):
+    da, a = _norm(dati.get("da")), _norm(dati.get("a"))
+    if da not in METRI or a not in METRI:
+        return {"da_dire": "Non conosco questa unità.", "trovato": False}
+    r = float(dati.get("valore") or 0) * METRI[da] / METRI[a]
+    return {"da_dire": f"Sono {round(r, 4):g} {a}.".replace(".", ",", 1), "risultato": r}
+'''
+# Il falso «fatto» del banco del 14/10 mattina (L2): il plurale elencato e non riconosciuto
+SENZA_PLURALE_BANCO = RIFERIMENTO_BANCO.replace(',\n         "unita astronomiche": 149597870700.0',
+                                                "")
+
+
+def prova_esempi_contro_richiesta(tmp: Path):
+    sezione("6a. gli esempi contro la richiesta (banco del 14/10 sera)")
+    from calliope.agenti import accettazione as acc
+    from calliope.agenti.scheletri import prepara_estensione
+    an = acc.interpreta(ANALISI_BANCO, 1, True, testo=RICHIESTA_BANCO)
+    es = {json.dumps(e["dati"], ensure_ascii=False): e for e in an["esempi"]}
+
+    def di(da, a):
+        return next((e for e in an["esempi"] if e["dati"]["da"] == da and e["dati"]["a"] == a),
+                    None)
+    verifica("un'unità che la richiesta non nomina («Km») con un risultato: esempio tolto; il "
+             "conto che non torna (mille volte): esempio tolto", di("METRI", "Km") is None
+             and di("Unità Astronomica", "Miglia Nautiche") is None
+             and an["tolti"]["fuori"] == 1, json.dumps(list(es), ensure_ascii=False))
+    e1 = di("chilometri", "metri")
+    verifica("in un esempio con il numero le parole che ripetono i dati si tolgono, il numero "
+             "resta", e1 and e1["numero"] == 1000 and e1["contiene"] == "", str(e1))
+    e2, e5 = di("pollice", "centimetri"), di("pollici", "centimetri")
+    verifica("nel dato sconosciuto («centimetri» va bene: trovato false) l'unità nota ripetuta "
+             "si toglie, e un numero insieme a «trovato»: false pure",
+             e2 and e2["contiene"] == "" and e2["trovato"] is False
+             and e5 and e5["numero"] is None and e5["trovato"] is False, f"{e2} {e5}")
+    e6 = di("metri", "furlong")
+    verifica("il nome del dato sconosciuto nella frase non si chiede, «trovato»: false resta",
+             e6 and e6["contiene"] == "" and e6["trovato"] is False, str(e6))
+    e7, e8 = di("miglia", "chilometri"), di("miglio nautico", "metri")
+    verifica("contrari: senza numero vale il calcolo; il conto che torna lascia il numero",
+             e7 and abs(e7["numero"] - 16.09344) < 1e-9 and e8 and e8["numero"] == 1852,
+             f"{e7} {e8}")
+    verifica("il calcolo: solo numeri e + - * / ( ); niente nomi né potenze",
+             acc._calcola("(2 + 3) * 4 / 8") == 2.5 and acc._calcola("1.5e3 - 500") == 1000
+             and acc._calcola("__import__('os')") is None and acc._calcola("2**10") is None
+             and acc._calcola("1 / 0") is None and acc._calcola("") is None)
+    da_sola = dict(ANALISI_BANCO, esempi=[{"requisito": 1, "contiene": "nautiche",
+                                           "dati": {"valore": 1, "da": "miglia nautiche",
+                                                    "a": "metri"}}])
+    an_s = acc.interpreta(da_sola, 1, True, testo=RICHIESTA_BANCO)
+    verifica("contrario: una parola come solo controllo resta (è il punto dell'esempio)",
+             [e["contiene"] for e in an_s["esempi"]] == ["nautiche"], str(an_s["esempi"]))
+    an0 = acc.interpreta(ANALISI_BANCO, 1, True)
+    verifica("contrario: senza il testo della richiesta nessun valore nominato, «Km» resta",
+             any(e["dati"]["a"] == "Km" for e in an0["esempi"]), str(an0["esempi"]))
+    testo = acc.test_python(an)
+    esiti = {}
+    for nome, codice in (("rif", RIFERIMENTO_BANCO), ("plurale", SENZA_PLURALE_BANCO),
+                         ("vuota", SCHELETRO_VUOTO)):
+        sb = G.sandbox(tmp, f"banco-{nome}")
+        prepara_estensione(sb)
+        sb.scrivi("estensione.py", codice)
+        sb.scrivi(acc.FILE, testo)
+        esiti[nome] = sb.test(acc.FILE)
+    r, p, v = esiti["rif"], esiti["plurale"], esiti["vuota"]
+    verifica("l'estensione di riferimento del banco passa tutti gli esempi e i valori nominati",
+             r["passano"] and r["esito"]["eseguiti"] > 6, str(r["esito"]) + r["uscita"][-600:])
+    verifica("il falso «fatto» del 14/10 mattina resta rosso: solo i controlli del plurale "
+             "«unità astronomiche»", not p["passano"] and "«unità astronomiche»" in p["uscita"]
+             and p["esito"]["falliti"] + p["esito"]["errori"] == 2, p["uscita"][-700:])
+    verifica("sullo scheletro vuoto tutto rosso",
+             not v["passano"] and v["esito"]["falliti"] + v["esito"]["errori"]
+             == v["esito"]["eseguiti"], str(v["esito"]))
+    # Le parole di «contiene» anche non vicine
+    an_c = acc.interpreta({"contraddizioni": [], "scelte": [], "al_collaudo": [],
+                           "input": [{"nome": "da", "tipo": "string"}], "campo_numero": "",
+                           "esempi": [{"requisito": 1, "dati": {"da": "x"},
+                                       "contiene": "chilometri metri"}]}, 1, True)
+    t_c = acc.test_python(an_c)
+    out = {}
+    for nome, frase in (("lontane", "Da chilometri a metri, fatto."), ("manca", "Sono metri.")):
+        sb = G.sandbox(tmp, f"contiene-{nome}")
+        prepara_estensione(sb)
+        sb.scrivi("estensione.py", f"def esegui(dati, calliope):\n    return {{\"da_dire\": "
+                                   f"{frase!r}}}\n")
+        sb.scrivi(acc.FILE, t_c)
+        out[nome] = sb.test(acc.FILE)
+    verifica("«contiene» con due parole: valgono anche non vicine; contrario: una che manca",
+             out["lontane"]["passano"] and not out["manca"]["passano"]
+             and "chilometri metri" in out["manca"]["uscita"], out["manca"]["uscita"][-300:])
+    v = acc.vincolo(an, True)
+    verifica("i vincoli dicono che l'elenco dei valori non va nella descrizione del manifesto",
+             "senza l'elenco" in v and "calcolo" in acc.SISTEMA_ESEMPI, v)
+
+
+MANIFESTO_LUNGO = dict(MANIFESTO, input={"type": "object", "properties": {"a": {
+    "type": "number", "description": "il primo numero (metri, chilometri, miglia, piedi, "
+                                     "pollici, miglia nautiche, unità astronomiche)"}},
+    "required": ["a"]})
+
+
+def prova_manifesto_subito(tmp: Path):
+    sezione("6b. il manifesto che la consegna rifiuterebbe, detto subito")
+    from calliope.agenti.ciclo import SPINTA_CONSEGNA, _con_manifesto, manifesto_non_valido
+    est_test = ("import unittest\n\n\nclass P(unittest.TestCase):\n"
+                "    def test_x(self):\n        self.assertTrue(True)\n")
+    sb = G.sandbox(tmp, "man-lungo")
+    sb.scrivi("manifesto.json", json.dumps(MANIFESTO_LUNGO, ensure_ascii=False))
+    base = {"esito": {"eseguiti": 2, "falliti": 0, "errori": 0, "saltati": 0},
+            "passano": True, "uscita": "ok"}
+    r = _con_manifesto(dict(base), sb)
+    verifica("esegui_test con la descrizione di 98 caratteri (L8): un fallimento in più, in testa",
+             r["passano"] is False and r["esito"]["falliti"] == 1 and r["esito"]["eseguiti"] == 3
+             and r["uscita"].startswith("FALLITO manifesto.json:") and "troppo lunga" in r["uscita"],
+             str(r))
+    sb2 = G.sandbox(tmp, "man-ok")
+    sb2.scrivi("manifesto.json", json.dumps(MANIFESTO))
+    sb3 = G.sandbox(tmp, "man-assente")
+    verifica("contrari: il manifesto valido e nessun manifesto non cambiano niente",
+             _con_manifesto(dict(base), sb2) == base and _con_manifesto(dict(base), sb3) == base
+             and manifesto_non_valido(sb3) is None)
+    lav, ris, log, cli = _gira(tmp, "man-ciclo", [
+        [scrivi("estensione.py", "def esegui(dati, calliope):\n    return {}\n"),
+         scrivi("test_estensione.py", est_test),
+         scrivi("manifesto.json", json.dumps(MANIFESTO_LUNGO, ensure_ascii=False))],
+        [ESEGUI_TEST], [LEGGI]], tipo="estensione", max_passi=3)
+    tutto = json.dumps(cli.corpi[-1], ensure_ascii=False)
+    verifica("nel lavoro: scrivendo il manifesto l'avviso, e esegui_test rosso sul manifesto "
+             "(niente spinta a consegnare)", "la consegna lo rifiuta" in tutto
+             and "manifesto.json" in tutto and "troppo lunga" in tutto
+             and not any(SPINTA_CONSEGNA in x for x in _utenti(lav)), tutto[-800:])
+
+
+def prova_macchina_avanti(tmp: Path):
+    sezione("6c. il gioco: «avanti» dopo la scelta dei giocatori (porte L7 e L10)")
+    from calliope.estensioni import contratto
+    import prova_fasi_agente as F
+    testo = json.dumps(contratto.__dict__.get("SCHEDA") or "", ensure_ascii=False)
+    src = Path(contratto.__file__).read_text(encoding="utf-8")
+    verifica("il contratto dice com'è g.stato() e che dopo «2 giocatori» non serve «avanti»",
+             "giocatori: [{ nome, punti }]" in src and "«avanti» vale solo nella fase «esito»"
+             in src, testo[:80])
+    if not shutil.which("node"):
+        print("SALTATA IN PARTE: node non c'è")
+        return
+    prova = """const { test } = require("node:test");
+test("avanti dopo i giocatori", async () => {
+  const g = await apriGioco({ seme: 1 });
+  await g.tocca("2 giocatori");
+  await g.comando("avanti");
+});
+test("avanti dopo la porta", async () => {
+  const g = await apriGioco({ seme: 1 });
+  await g.tocca("2 giocatori");
+  await g.tocca("Porta 1");
+  await g.comando("avanti");
+});
+"""
+    sb = F._gioco(tmp, "avanti", F.GIOCO_GIUSTO, prova)
+    u = sb.test()["uscita"]
+    verifica("il comando che non vale dice la fase e perché «avanti» no; contrario: dopo una "
+             "porta, nell'esito, «avanti» vale",
+             "FALLITO avanti dopo i giocatori" in u and "fase «turno»" in u
+             and "vale solo nella fase «esito»" in u and "ok avanti dopo la porta" in u, u[-700:])
+
+
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8")
     radice = Path(tempfile.mkdtemp(prefix="calliope-fasi2-"))
@@ -878,6 +1108,9 @@ if __name__ == "__main__":
         prova_riscrittura(radice / "riscrittura")
         prova_consegna_al_tetto(radice / "tetto")
         prova_correzione_al_tetto(radice / "correzione")
+        prova_esempi_contro_richiesta(radice / "banco")
+        prova_manifesto_subito(radice / "manifesto")
+        prova_macchina_avanti(radice / "avanti")
     finally:
         shutil.rmtree(radice, ignore_errors=True)
     print(f"\n{'TUTTO OK' if not errori else f'{errori} ERRORI'} "
