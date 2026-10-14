@@ -43,6 +43,8 @@ e il 13/10 ha risposto alle sue sei domande.
 5. **Tenuta del testo della stanza**: nell'installazione di chi amministra **su disco per 60
    giorni per tutti, famiglia e minori compresi**; i **tutori possono cercare** a posteriori anche
    ciò che ha detto il ragazzo, gli altri adulti no. Ospiti mai su disco né nella ricerca.
+   Confermato il 14/10 da chi amministra: per la stanza **a ogni età del minore**, senza la
+   soglia dei 14 anni che vale per l'archivio delle conversazioni.
 6. **Ospiti**: «Calliope, abbiamo ospiti» (detto da chiunque: spegne, non accende) ferma l'ascolto
    della stanza su quel satellite per **4 ore**.
 7. **Telefono**: un interruttore «ascolto la stanza» sul telefono, **acceso di serie** anche sui
