@@ -861,9 +861,18 @@ class Avvio:
         occupato = [lambda: varco.attivi > 0, parla_qualcuno]
         if callable(getattr(stt, "aspetta_turno", None)):
             occupato.append(stt.aspetta_turno)
+        giochi = getattr(s, "giochi", None)
+
+        def gioco(sat) -> bool:
+            # La modalità gioco (14/10 sera): un gioco aperto sullo schermo del satellite (il
+            # suo, o quelli della sua stanza); un satellite non collegato non ha giochi
+            srv = getattr(st, "server", None)
+            coll = srv.per_id(sat) if srv is not None else None
+            return coll is not None and giochi.in_corso(giochi.schermi_voce(coll))
         try:
             s.guardia_stanza = load_guardia(self.cfg, st, s.guardiano, occupato,
-                                            log=lambda m: print(m, flush=True))
+                                            log=lambda m: print(m, flush=True),
+                                            gioco=gioco if giochi is not None else None)
         except Exception as e:  # noqa: BLE001 — Calliope parte lo stesso
             print(f"[GUARDIA] non disponibile: {type(e).__name__}: {e}", flush=True)
             s.guardia_stanza = None

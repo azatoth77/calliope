@@ -21,7 +21,13 @@ Con un giudice finto (niente modello):
   «dimentica»: blocchi in coda buttati, e un giudizio in corso buttato;
 - il giudice vero (`GiudiceModello`, `Guardiano.chiedi_json`) con un client HTTP finto: stesso
   modello e stesse opzioni del rilevatore, il prompt nella finestra di 2048 token;
-- `calliope stato --turni` (sezione) e `calliope stato --guardia` (elenco, --falso/--vero).
+- `calliope stato --turni` (sezione) e `calliope stato --guardia` (elenco, --falso/--vero);
+- (14/10 sera) la ripresa dal disco dopo un riavvio, con `stanza.db` vero e tre «avvii»: le righe
+  non giudicate si riprendono, le giudicate (diario) no; contrari: dimenticate, oltre il limite,
+  non assestate, pausa, prima del diario, ripresa spenta, senza tenuta;
+- (14/10 sera) la modalità gioco: il gioco dichiarato nel prompt, la minaccia di un altro in
+  gioco → dubbio, l'autolesionismo serio del minore resta acuto; contrari: gioco chiuso, in
+  un'altra stanza, senza giochi; i periodi sul diario dopo un riavvio; `Giochi.in_corso`.
 
 Contrari: spenta (nessun thread, nessun giudizio), nessun minore, solo adulti, minore in un'altra
 stanza, TV, scherzi e videogiochi, pausa, dimentica, tetto, voce occupata, righe troppo recenti.
@@ -118,7 +124,9 @@ class Giudice:
     """Il giudice finto: decide dalle parole delle righe da giudicare, come farebbe il modello
     (i casi), e ricorda che cosa ha visto."""
 
-    REGOLE = (("mi picchia", "ACUTO", "abuso", "serio"),
+    REGOLE = (("sei morto", "ACUTO", "pericolo", "serio"),       # il modello che sbaglia
+              ("mi butto giù", "ACUTO", "autolesionismo", "non_chiaro"),
+              ("mi picchia", "ACUTO", "abuso", "serio"),
               ("se lo dici alla mamma", "ACUTO", "abuso", "serio"),
               ("non voglio più mangiare", "ACUTO", "autolesionismo", "serio"),
               ("voglio morire", "ACUTO", "autolesionismo", "serio"),
@@ -158,9 +166,9 @@ class AvvisiFinti:
         return 1
 
 
-def guardia(cfg, st, giudice=None, avvisi=None, occupato=()):
+def guardia(cfg, st, giudice=None, avvisi=None, occupato=(), gioco=None):
     return gm.Guardia(cfg, st, giudice or Giudice(), avvisi=avvisi, occupato=occupato,
-                      log=LOG.append, avvia=False)
+                      log=LOG.append, avvia=False, gioco=gioco)
 
 
 def misure_guardia(cfg) -> list:
@@ -642,13 +650,305 @@ def prova_formatta():
                                                          for x in t.splitlines()))
 
 
+# ─────────────────────────── 8. ripresa dal disco dopo un riavvio ───────────────────────────
+def _tenuta(path):
+    from calliope.stanza.tenuta import Tenuta
+    return Tenuta(path, 60, registry=Voci(), log=lambda m: None, avvia=False)
+
+
+def _avvio(cfg, path):
+    """Un «processo»: la stanza con la tenuta su `path` (un avvio nuovo a ogni chiamata)."""
+    st = stanza_nuova(cfg)
+    st.tenuta = _tenuta(path)
+    return st
+
+
+def _testi(giud) -> list:
+    return [r.get("testo") for b in giud.visti for r in b.giudicate]
+
+
+def prova_ripresa():
+    cfg = cfg_base(registro="r8", stanza_tenuta=True)
+    path = os.path.join(CARTELLA, "stanza-r8.db")
+    # Primo avvio: il diario c'è da 100 ore (le righe di prima del diario non si riprendono)
+    st = _avvio(cfg, path)
+    t = st.tenuta
+    verifica("il diario della guardia si prepara con la tenuta (modulo a sé nello stesso file)",
+             t.guardia_dal is not None)
+    t.db.execute("UPDATE guardia_meta SET valore = ? WHERE chiave = 'dal'", (ORA - 100 * 3600,))
+    t.guardia_dal = ORA - 100 * 3600
+    # Due righe giudicate prima del riavvio (una di 30 ore fa): il diario le segna
+    riga(st, 1, "Ieri sera il mister mi picchia ancora, uffa.", ORA - 30 * 3600, "Nicola")
+    riga(st, 1, "Il mister mi picchia quando sbaglio.", ORA - 5000, "Nicola")
+    g = guardia(cfg, st)
+    g._ripresa = False                     # il primo avvio non ha niente di prima
+    g.giro(ORA - 4000)
+    giudicate_prima = _testi(g.giudice)
+    # Poi altre righe che non fanno in tempo a essere giudicate prima del riavvio
+    st._sentita("nicola-id", "Nicola", 1, ORA - 3005)
+    riga(st, 1, "Non voglio più mangiare, mi vedo grassa.", ORA - 3000, "Nicola")
+    riga(st, 1, "Andiamo a cena, dai.", ORA - 2990, "Carlo")
+    st._sentita("nicola-id", "Nicola", 2, ORA - 2800)
+    riga(st, 2, "Sparisco per sempre e nessuno mi trova.", ORA - 2700, "Nicola")
+    st.dimentica(2)                        # «dimentica» in sala: via anche dal disco
+    g.raccogli(ORA - 2500)                 # in coda, mai giudicate: il processo si ferma
+    verifica("prima del riavvio: righe giudicate e una in coda",
+             len(giudicate_prima) == 2 and g.in_coda() == 1, f"{giudicate_prima} {g.in_coda()}")
+    st.chiudi()
+    # Secondo avvio: stessa cartella, avvio nuovo
+    st2 = _avvio(cfg, path)
+    verifica("un riavvio è un avvio nuovo della tenuta", st2.tenuta.avvio != t.avvio)
+    g2 = guardia(cfg, st2)
+    n = g2.giro(ORA)
+    testi = _testi(g2.giudice)
+    verifica("dopo il riavvio: ripresa dal disco solo la riga in coda (la cena di un adulto "
+             "con il minore presente compresa), non le giudicate",
+             testi == ["Non voglio più mangiare, mi vedo grassa.", "Andiamo a cena, dai."]
+             and n == 1, f"n={n} {testi}")
+    b = g2.giudice.visti[0] if g2.giudice.visti else None
+    verifica("il blocco ripreso è del disco, col nome del satellite e la stanza",
+             b is not None and b.disco and b.stanza_nome == "cucina")
+    verifica("contrario: la riga dimenticata (sala) non si riprende",
+             not any("Sparisco" in x for x in testi))
+    verifica("contrario: la riga di 30 ore fa, già giudicata, non si riprende",
+             not any("Ieri sera" in x for x in testi))
+    mis = misure_guardia(cfg)
+    rip = [r for r in mis if r.get("esito") == "ripresa"]
+    gd = [r for r in mis if r.get("esito") == "giudicato" and r.get("disco")]
+    verifica("misura della ripresa: blocchi, righe e quelle di un minore oltre il limite "
+             "(contate, non giudicate)",
+             rip and rip[-1].get("blocchi") == 1 and rip[-1].get("righe") == 2
+             and rip[-1].get("oltre_limite") == 0 and gd and gd[-1].get("livello") == "acuto",
+             str(rip[-1:]))
+    verifica("nel diario solo avvio, satellite, seq, esito e istante (mai parole)",
+             [c[1] for c in st2.tenuta.db.execute("PRAGMA table_info(guardia_giudicate)")]
+             == ["avvio", "sat", "seq", "esito", "t"])
+    st2.chiudi()
+    # Terzo avvio: niente da riprendere (già giudicate)
+    st3 = _avvio(cfg, path)
+    g3 = guardia(cfg, st3)
+    verifica("contrario: un altro riavvio non rigiudica niente (già nel diario)",
+             g3.giro(ORA + 10) == 0 and not g3.giudice.visti)
+    st3.chiudi()
+    # La riga oltre il limite contata: una riga di un minore non giudicata di 30 ore fa
+    cfg_b = cfg_base(registro="r8b", stanza_tenuta=True)
+    path_b = os.path.join(CARTELLA, "stanza-r8b.db")
+    st = _avvio(cfg_b, path_b)
+    st.tenuta.db.execute("UPDATE guardia_meta SET valore = ? WHERE chiave = 'dal'",
+                         (ORA - 100 * 3600,))
+    st.tenuta.guardia_dal = ORA - 100 * 3600
+    riga(st, 1, "Il mister mi picchia quando sbaglio.", ORA - 30 * 3600, "Nicola")
+    riga(st, 1, "Non voglio più mangiare, mi vedo grassa.", ORA - 20 * 3600, "Nicola")
+    st.chiudi()
+    st = _avvio(cfg_b, path_b)
+    g = guardia(cfg_b, st)
+    g.giro(ORA)
+    rip = [r for r in misure_guardia(cfg_b) if r.get("esito") == "ripresa"]
+    verifica("dopo un fermo lungo: ripresa solo entro il limite, la più vecchia contata",
+             _testi(g.giudice) == ["Non voglio più mangiare, mi vedo grassa."]
+             and rip and rip[-1].get("oltre_limite") == 1, f"{_testi(g.giudice)} {rip}")
+    r = gm.riassunto(misure_mod.leggi(cfg_b.turn_log_dir))
+    tt = gm.testo(r, "ombra")
+    verifica("la sezione di calliope stato dice i ripresi e quelli oltre il limite",
+             "ripresi dal disco dopo un riavvio 1" in tt and "oltre il limite della ripresa 1"
+             in tt, tt)
+    st.chiudi()
+    # Contrari: ripresa spenta (0 ore), righe non ancora assestate, satellite in pausa,
+    # dimentica dopo la ripresa con il blocco in coda, righe di prima del diario
+    for nome_c, ore in (("r8c", 0.0), ("r8d", 24.0)):
+        c = cfg_base(registro=nome_c, stanza_tenuta=True, stanza_guardia_ripresa_h=ore)
+        pth = os.path.join(CARTELLA, f"stanza-{nome_c}.db")
+        st = _avvio(c, pth)
+        st.tenuta.db.execute("UPDATE guardia_meta SET valore = ? WHERE chiave = 'dal'",
+                             (ORA - 100 * 3600,))
+        st.tenuta.guardia_dal = ORA - 100 * 3600
+        riga(st, 1, "Il mister mi picchia quando sbaglio.", ORA - 200, "Nicola")
+        riga(st, 1, "Non voglio più mangiare, mi vedo grassa.", ORA - 60, "Nicola")
+        st.chiudi()
+        st = _avvio(c, pth)
+        g = guardia(c, st)
+        if ore == 0:
+            verifica("contrario: stanza_guardia_ripresa_h 0 → niente dal disco",
+                     g.giro(ORA) == 0 and not g.giudice.visti)
+        else:
+            verifica("contrario: righe di prima non ancora assestate → si aspetta",
+                     g.giro(ORA) == 0 and g._ripresa)
+            st.pausa(1, "ospiti", 60)
+            verifica("contrario: il satellite in pausa (ospiti) → non si riprende",
+                     g.giro(ORA + 200) == 0 and g._ripresa and not g.giudice.visti)
+            st.riprendi(1)
+            g.raccogli(ORA + 200)
+            verifica("alla ripresa dell'ascolto si riprende", g.in_coda() == 1 and not g._ripresa)
+            st.dimentica(1)
+            g.giro(ORA + 200)
+            es = [r.get("esito") for r in misure_guardia(c)]
+            verifica("contrario: «dimentica» col blocco del disco in coda → buttato",
+                     not g.giudice.visti and "dimenticato" in es, str(es))
+        st.chiudi()
+    c = cfg_base(registro="r8e", stanza_tenuta=True)
+    pth = os.path.join(CARTELLA, "stanza-r8e.db")
+    st = _avvio(c, pth)
+    riga(st, 1, "Il mister mi picchia quando sbaglio.", ORA - 3000, "Nicola")
+    st.tenuta.db.execute("UPDATE guardia_meta SET valore = ? WHERE chiave = 'dal'", (ORA - 10,))
+    st.chiudi()
+    st = _avvio(c, pth)
+    g = guardia(c, st)
+    verifica("contrario: righe di prima del diario (la guardia in memoria le aveva già) → "
+             "non si riprendono", g.giro(ORA) == 0 and not g.giudice.visti)
+    st.chiudi()
+    c = cfg_base(registro="r8f")
+    st = stanza_nuova(c)
+    g = guardia(c, st)
+    g.giro(ORA)
+    verifica("contrario: senza la tenuta nessuna ripresa e nessun diario",
+             not g._ripresa and st.tenuta is None)
+    st.chiudi()
+
+
+# ─────────────────────────── 9. modalità gioco ───────────────────────────
+def prova_gioco():
+    cfg = cfg_base(registro="r9")
+    st = stanza_nuova(cfg)
+    aperto = {1: False, 2: False}
+    g = guardia(cfg, st, gioco=lambda sat: aperto.get(sat, False))
+    st._sentita("nicola-id", "Nicola", 1, ORA - 3000)
+    aperto[1] = True
+    g.osserva_giochi(ORA - 2000)
+    g.osserva_giochi(ORA - 1500)
+    aperto[1] = False
+    g.osserva_giochi(ORA - 1490)
+    verifica("il periodo di gioco: dall'apertura all'ultima volta aperto",
+             g._giochi.get("1") == [(ORA - 2000, ORA - 1500)], str(g._giochi))
+    # Durante il gioco: una minaccia di un altro (il modello sbaglia: acuto serio)
+    st._sentita("nicola-id", "Nicola", 1, ORA - 1950)
+    riga(st, 1, "Ti ammazzo, sei morto!", ORA - 1900, None)
+    g.giro(ORA)
+    b = g.giudice.visti[-1] if g.giudice.visti else None
+    m = [r for r in misure_guardia(cfg) if r.get("esito") == "giudicato"][-1:]
+    m = m[0] if m else {}
+    verifica("gioco aperto: il prompt dichiara il gioco",
+             b is not None and b.gioco and gm.GIOCO.strip() in gm.prompt(b))
+    verifica("gioco aperto: la minaccia di un altro (acuto serio dal modello) → dubbio "
+             "(gioco_dichiarato), nessun avviso",
+             m.get("livello") == "dubbio" and m.get("motivo") == "gioco_dichiarato"
+             and m.get("gioco") is True and m.get("avviso") is None, str(m))
+    # Durante il gioco: la frase grave detta sul serio dal minore resta acuta
+    aperto[1] = True
+    g.osserva_giochi(ORA - 1000)
+    riga(st, 1, "Basta, non è per il gioco: a volte voglio morire davvero.", ORA - 990,
+         "Nicola")
+    g.osserva_giochi(ORA - 900)
+    g.giro(ORA)
+    m = [r for r in misure_guardia(cfg) if r.get("esito") == "giudicato"][-1]
+    verifica("gioco aperto: autolesionismo detto sul serio dal minore → resta acuto",
+             m.get("livello") == "acuto" and m.get("categoria") == "autolesionismo"
+             and m.get("gioco") is True, str(m))
+    # Durante il gioco: un acuto non chiaro del minore → dubbio; un dubbio non chiaro → niente
+    riga(st, 1, "Mi butto giù dal ponte, tanto ho tre vite.", ORA - 600, "Nicola")
+    g.osserva_giochi(ORA - 580)
+    g.giro(ORA)
+    m = [r for r in misure_guardia(cfg) if r.get("esito") == "giudicato"][-1]
+    verifica("gioco aperto: acuto non chiaro → dubbio (gioco_dichiarato)",
+             m.get("livello") == "dubbio" and m.get("motivo") == "gioco_dichiarato", str(m))
+    riga(st, 1, "Adesso voglio sparire dietro il muro, così non mi trovano.", ORA - 300,
+         "Nicola")
+    g.osserva_giochi(ORA - 280)
+    g.giro(ORA)
+    m = [r for r in misure_guardia(cfg) if r.get("esito") == "giudicato"][-1]
+    verifica("gioco aperto: dubbio non chiaro → niente (gioco_dichiarato)",
+             m.get("livello") == "niente" and m.get("motivo") == "gioco_dichiarato", str(m))
+    # Contrari: la stessa minaccia a gioco chiuso è acuta (presente); il gioco di un'altra
+    # stanza non conta; senza la funzione dei giochi nessun gioco
+    aperto[1] = False
+    g.osserva_giochi(ORA - 250)
+    st._sentita("nicola-id", "Nicola", 1, ORA - 160)
+    riga(st, 1, "Se lo dici alla mamma, sei morto.", ORA - 150, None)
+    g.giro(ORA + 200)
+    m = [r for r in misure_guardia(cfg) if r.get("esito") == "giudicato"][-1]
+    b = g.giudice.visti[-1]
+    verifica("contrario: gioco chiuso (oltre il margine) → la minaccia resta acuta (presente) "
+             "e il prompt non parla di giochi",
+             m.get("livello") == "acuto" and m.get("modo_minore") == "presente"
+             and not m.get("gioco") and not b.gioco and "videogioco" not in gm.prompt(b), str(m))
+    cfg2 = cfg_base(registro="r9b")
+    st2 = stanza_nuova(cfg2)
+    st2._sentita("nicola-id", "Nicola", 1, ORA - 3000)
+    g2 = guardia(cfg2, st2, gioco=lambda sat: sat == 2)
+    g2.osserva_giochi(ORA - 2000)
+    g2.osserva_giochi(ORA - 1000)
+    st2._sentita("nicola-id", "Nicola", 1, ORA - 1510)
+    riga(st2, 1, "Ti ammazzo, sei morto!", ORA - 1500, None)
+    g2.giro(ORA)
+    m = [r for r in misure_guardia(cfg2) if r.get("esito") == "giudicato"][-1]
+    verifica("contrario: il gioco aperto in sala non vale per la cucina → acuto",
+             m.get("livello") == "acuto" and not m.get("gioco"), str(m))
+    g3 = guardia(cfg_base(registro="r9c"), st2)
+    g3.osserva_giochi(ORA)
+    verifica("contrario: senza la funzione dei giochi nessun periodo",
+             not g3._aperti and not g3._giochi)
+    # I periodi di gioco sul diario: dopo un riavvio la riga ripresa sa del gioco
+    c = cfg_base(registro="r9d", stanza_tenuta=True)
+    pth = os.path.join(CARTELLA, "stanza-r9d.db")
+    st = _avvio(c, pth)
+    st.tenuta.db.execute("UPDATE guardia_meta SET valore = ? WHERE chiave = 'dal'",
+                         (ORA - 100 * 3600,))
+    st.tenuta.guardia_dal = ORA - 100 * 3600
+    st._sentita("nicola-id", "Nicola", 1, ORA - 3000)
+    gioca = [True]
+    g = guardia(c, st, gioco=lambda sat: gioca[0] and sat == 1)
+    g.osserva_giochi(ORA - 2000)
+    st._sentita("nicola-id", "Nicola", 1, ORA - 1910)
+    riga(st, 1, "Ti ammazzo, sei morto!", ORA - 1900, "Carlo")
+    g.osserva_giochi(ORA - 1800)
+    st.chiudi()                            # il riavvio con il gioco ancora aperto
+    st = _avvio(c, pth)
+    gg = st.tenuta.giochi(0)
+    verifica("il periodo di gioco è sul diario (solo satellite e tempi), allungato",
+             len(gg) == 1 and gg[0][0] == "1" and abs(gg[0][1] - (ORA - 2000)) < 0.01
+             and abs(gg[0][2] - (ORA - 1800)) < 0.01, str(gg))
+    g = guardia(c, st)
+    g.giro(ORA)
+    m = [r for r in misure_guardia(c) if r.get("esito") == "giudicato"][-1:]
+    m = m[0] if m else {}
+    verifica("dopo il riavvio la riga ripresa dal disco si giudica col gioco dichiarato",
+             m.get("disco") is True and m.get("gioco") is True
+             and m.get("livello") == "dubbio", str(m))
+    st.chiudi()
+    for s in (st2,):
+        s.chiudi()
+
+
+def prova_giochi_in_corso():
+    from types import SimpleNamespace
+    from calliope.schermi.giochi import Giochi, Partita, Posto, VIVO_S
+    gi = Giochi(Config(), hub=None)
+    mitt = SimpleNamespace(persona="nicola-id", nome="Nicola", livello="familiare")
+    p = Partita("labirinto", 1, {"titolo": "Labirinto", "scheda": {}}, mitt)
+    posto = Posto(5, mitt, True)
+    p.posti[5] = posto
+    gi.partite[p.id] = p
+    verifica("contrario: riquadro non ancora pronto → nessun gioco in corso",
+             not gi.in_corso([5]))
+    posto.aperto, posto.contatto = True, time.time()
+    verifica("riquadro aperto e vivo sullo schermo → gioco in corso", gi.in_corso([5]))
+    verifica("contrario: un altro schermo → no; nessuno schermo → no",
+             not gi.in_corso([6]) and not gi.in_corso([]))
+    posto.contatto = time.time() - VIVO_S - 5
+    verifica("contrario: la pagina tace da oltre VIVO_S → no", not gi.in_corso([5]))
+    posto.contatto, posto.fermato = time.time(), True
+    verifica("contrario: fermato (tempo dei giochi finito) → no", not gi.in_corso([5]))
+    posto.fermato, posto.aperto = False, False
+    verifica("contrario: chiuso («chiuso», ✕) → no", not gi.in_corso([5]))
+
+
 def main():
     try:
         sys.stdout.reconfigure(encoding="utf-8")
     except (AttributeError, ValueError):
         pass
     for f in (prova_spenta, prova_righe, prova_carico, prova_filtri, prova_attiva,
-              prova_pausa_dimentica, prova_giudice_modello, prova_stato, prova_formatta):
+              prova_pausa_dimentica, prova_giudice_modello, prova_stato, prova_formatta,
+              prova_ripresa, prova_gioco, prova_giochi_in_corso):
         print(f"── {f.__name__}", flush=True)
         try:
             f()

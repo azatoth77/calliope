@@ -52,11 +52,12 @@ def load_tenuta(cfg, registry=None, log=print):
     return t
 
 
-def load_guardia(cfg, stanza, guardiano=None, occupato=(), log=print):
+def load_guardia(cfg, stanza, guardiano=None, occupato=(), log=print, gioco=None):
     """Il guardiano a posteriori (passo 6, 14/10) con `stanza_guardia: ombra|attiva`, la
     stanza accesa e i minori; altrimenti None (nessun thread). `guardiano`: quello della voce
     (calliope/guardiano.py), per lo stesso client e le stesse opzioni del rilevatore; senza,
-    uno nuovo solo per il rilevatore. `occupato`: funzioni che dicono se la voce lavora."""
+    uno nuovo solo per il rilevatore. `occupato`: funzioni che dicono se la voce lavora.
+    `gioco(sat)`: un gioco è aperto adesso sullo schermo del satellite (modalità gioco)."""
     from . import guardia
     if (stanza is None or guardia.modo(cfg) == guardia.SPENTA
             or not getattr(cfg, "minori_enabled", True)):
@@ -70,7 +71,7 @@ def load_guardia(cfg, stanza, guardiano=None, occupato=(), log=print):
         return None
     g = guardia.Guardia(cfg, stanza, guardia.GiudiceModello(
         guardiano, float(getattr(cfg, "stanza_guardia_timeout_s", 30.0) or 30.0)),
-        registry=stanza.registry, occupato=occupato, log=log)
+        registry=stanza.registry, occupato=occupato, log=log, gioco=gioco)
     log(f"[GUARDIA] Guardiano a posteriori della stanza: {guardia.modo(cfg)} ("
         + ("solo misure, nessun avviso" if guardia.modo(cfg) == guardia.OMBRA else
            "avviso al tutore sullo schermo personale, mai a voce") + ")")

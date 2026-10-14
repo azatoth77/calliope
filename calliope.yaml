@@ -1398,6 +1398,10 @@ conversazione_stanza:
   stanza_guardia_avvisi_giorno: 1
   # Una riga con una parola sotto questa probabilità (quando Whisper la dà) non fa un acuto
   stanza_guardia_p: 0.5
+  # Con `stanza_tenuta`: dopo un riavvio le righe di prima non ancora giudicate si riprendono
+  # dal disco fino a tante ore indietro (dopo un fermo lungo non si rileggono giorni; quelle
+  # più vecchie si contano soltanto). 0 = nessuna ripresa
+  stanza_guardia_ripresa_h: 24.0
 
 satellite:
   # == Lato satellite (il portatile che fa da microfono, casse e schermo di
