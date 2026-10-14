@@ -59,7 +59,7 @@ flowchart LR
 
 | Stadio | Moduli | Note |
 |---|---|---|
-| Ingresso | `calliope/satellite/` (`ServerSatelliti`, client), `calliope/schermi/` (Starlette, SSE, PWA del telefono) | WSS, PCM 16 kHz; da addormentata nessun audio lascia il dispositivo |
+| Ingresso | `calliope/satellite/` (`ServerSatelliti`, client), `calliope/schermi/` (Starlette, SSE, PWA del telefono) | WSS, PCM 16 kHz; da addormentata nessun audio lascia il dispositivo, salvo la conversazione di stanza dove è accesa (protocollo 3, a bassa precedenza) |
 | VAD e wake word | `vad.py` (Silero ONNX), `wakeword.py` (classificatore formato openWakeWord) | ripiego testuale se manca il modello acustico |
 | STT | `stt.py` | faster-whisper nel processo o whisper.cpp come server (API OpenAI), ripiego su CPU |
 | Chi parla | `speaker_id.py` (CAM++ ONNX, fbank in numpy) | soglia 0,48; sotto ~1 s di voce vale la conversazione, o la persona riconosciuta da poco sullo stesso satellite (08/10), al più familiare; sul telefono di una persona una frase incerta col minore resta sua, con la prudenza per il minore (09/10) |
@@ -178,14 +178,17 @@ Calliope vera, satelliti e voci finte; **dal vero** = usata a voce.
 |---|---|---|---|
 | Primo avvio | chi parla per primo diventa «Primo/Prima» e amministra; nome e voce registrati con frasi guidate | dal vero | [stt-tts](docs/aree/stt-tts.md) |
 | Persone e livelli | ospite, familiare, amministra; tool uguali per tutti, permessi in `ToolRegistry.call`; registrazione a voce di familiari e minori | dal vero, e2e | [sicurezza-politica](docs/aree/sicurezza-politica.md) |
-| Più persone vicino a un satellite | «modalità compagnia» dalle impronte delle voci tenute 5 minuti solo in memoria: con una voce sconosciuta serve il nome a ogni frase (e lo schermo lo dice), niente frase breve né continuità, azioni solo con la voce riconosciuta nella frase, per i minori voce non sicura nei due cancelli; giudizio «la frase è rivolta a me?» in ombra (09/10) | a secco, modello locale | [stt-tts](docs/aree/stt-tts.md) |
+| Più persone vicino a un satellite | «modalità compagnia» dalle impronte delle voci tenute 5 minuti solo in memoria: con una voce sconosciuta serve il nome a ogni frase (e lo schermo lo dice), niente frase breve né continuità, azioni solo con la voce riconosciuta nella frase, per i minori voce non sicura nei due cancelli; giudizio «la frase è rivolta a me?» in ombra (09/10); dal 13/10 in compagnia niente azioni senza il nome anche con le voci tutte riconosciute, una conversazione anonima condivisa, il rilevatore di pericolo solo sulle frasi rivolte a Calliope | a secco, modello locale | [stt-tts](docs/aree/stt-tts.md) |
+| Conversazione di stanza | vicino a un satellite o a un telefono dove è accesa, Calliope trascrive anche ciò che le persone si dicono tra loro (chi ha detto cosa, chi era presente), per rispondere con cognizione quando la chiamano: le ultime frasi nel contesto, «di cosa parlavamo in cucina prima?» con `stanza_cerca` (chi c'era vede, i tutori anche le parole dei figli, gli ospiti no), ascolto anche mentre lei parla con il filtro della sua eco. Agisce solo col nome e la voce riconosciuta; l'audio non va su disco; il testo resta in memoria o, se chi amministra lo sceglie, 60 giorni su disco; «Calliope, abbiamo ospiti» la ferma per 4 ore; un guardiano rilegge a posteriori le chiacchiere con un minore e avvisa solo il tutore sullo schermo. Ogni passo ha il suo interruttore, tutto spento di serie (13–14/10, decisione [0029](docs/decisioni/0029-conversazione-di-stanza.md)) | a secco, dal vero in parte (in auto col telefono) | [contesto-conversazione](docs/aree/contesto-conversazione.md), [stt-tts](docs/aree/stt-tts.md) |
+| Conoscenti | le voci di adulti di fuori casa sentite nella stanza si raggruppano per impronta; dal modo in cui le chiamano («Marco, passami…») Calliope deduce un nome e lo propone sullo schermo di chi amministra, che dice sì o no e aggiunge cognome o nota; un conoscente ha i permessi di un ospite, «dimentica Marco» lo toglie, diventa di famiglia solo se chi amministra lo dice a voce (14/10, decisione [0030](docs/decisioni/0030-conoscenti.md), spento di serie) | a secco | [stt-tts](docs/aree/stt-tts.md) |
 | Dialogo tra tool e modelli | gli argomenti di ogni tool controllati contro lo schema prima della chiamata; errori in parole per il modello (quale argomento, valori ammessi, esempio, cosa fare), mai tracce Python; dopo un errore correggibile il modello richiama il tool invece di dire «riprovo», con una frase d'attesa se ci vuole; stessa forma per gli strumenti dell'agente (09/10) | a secco, modello locale | [voce-e-regole](docs/aree/voce-e-regole.md) |
 | Conferme e sfida | «Procedo?» per le azioni pericolose; frase di sfida (parole scelte sul momento) quando la voce non basta; memoria dell'intento (la richiesta ripetuta vale come sì, un «no» chiude la proposta e il tool rifiutato non si ripropone); attrito misurato; sicurezza per valore (provenienza di ogni argomento × effetto dell'azione) accesa dal 09/10, con la politica di prima in ombra | a secco, e2e, dal vero | [sicurezza-politica](docs/aree/sicurezza-politica.md) |
-| Minori | fasce d'età con preset, tutori, guardiano, rilevatore di pericolo con avviso, compiti guidati, orari, tempo di gioco, richieste ai tutori; esercizi generati al momento (matematica e italiano) e corretti dal programma (08/10); segnali di pericolo poco chiari a due cancelli, prima si rassicura e si chiede, poi l'avviso (09/10) | a secco, e2e | [minori](docs/aree/minori.md) |
+| Minori | fasce d'età con preset, tutori, guardiano, rilevatore di pericolo con avviso, compiti guidati, orari, tempo di gioco, richieste ai tutori; esercizi generati al momento e corretti dal programma: matematica e italiano (08/10), logica, fisica e chimica con le unità di misura (12/10), entro il programma ministeriale della classe e del periodo, con «a che punto siete» e le interrogazioni (12/10); segnali di pericolo poco chiari a due cancelli, prima si rassicura e si chiede, poi l'avviso (09/10); gli avvisi ai tutori dicono quando e dove sono nati e portano sulla scheda personale del tutore la trascrizione e, se acceso, l'audio delle sole frasi del segnale (14/10) | a secco, e2e, dal vero in parte | [minori](docs/aree/minori.md) |
 | Memoria | per persona e della casa; i «fatti» che sono ordini si rifiutano | dal vero | [memoria-agenda-liste](docs/aree/memoria-agenda-liste.md) |
 | Agenda e liste | timer, promemoria, appuntamenti (durate e orari convertiti dal programma), liste senza doppioni | dal vero | [memoria-agenda-liste](docs/aree/memoria-agenda-liste.md) |
-| Conversazioni | una per persona tra i satelliti; compressione con riassunto; archivio di 30 giorni con ricerca ibrida e cronologica («di cosa stavamo parlando?», «più indietro», 08/10); scheda «Conversazione» con la trascrizione sugli schermi personali, in diretta e scaricabile (08/10) | a secco, dal vero | [contesto-conversazione](docs/aree/contesto-conversazione.md) |
+| Conversazioni | una per persona tra i satelliti; compressione con riassunto; archivio (su disco solo degli adulti, 60 giorni, dal 12/10) con ricerca ibrida e cronologica («di cosa stavamo parlando?», «più indietro», 08/10); scheda «Conversazione» con la trascrizione sugli schermi personali, in diretta e scaricabile (08/10) | a secco, dal vero | [contesto-conversazione](docs/aree/contesto-conversazione.md) |
 | Biblioteca | Wikipedia italiana, Vikidia, Wikizionario, Wikiquote (Kiwix ZIM in puro Python + FTS5), fonte citata | dal vero | [biblioteca](docs/aree/biblioteca.md) |
+| Notizie | le notizie del giorno dai feed RSS delle testate italiane, scaricati in casa ogni 2 ore solo se qualcuno le chiede; i fatti raggruppati tra le testate, quelli detti restano nella conversazione per le domande dopo; la regione dalla città di casa; ai minori solo sport, tecnologia e ragazzi (13/10) | a secco, modello locale | [biblioteca](docs/aree/biblioteca.md) |
 | Ricerca web | SearXNG locale facoltativo; dati personali tolti dalle domande; testo dei siti non fidato; risultati in italiano per primi (09/10); motori che non rispondono messi in pausa dal controllo quotidiano, e le ricerche della conversazione con la loro fonte per tornarci (09/10 sera) | dal vero | [biblioteca](docs/aree/biblioteca.md) |
 | Casa | Home Assistant: comandi tramite l'agente di HA con verifica a secco; serrature, allarmi, cancelli, valvole, riavvii solo in lettura; se HA non trova il dispositivo, Calliope lo cerca tra le entità esposte per nome, alias e area e riprova col nome esatto (08/10); il meteo di casa dall'entità meteo di HA, se è esposta (09/10) | dal vero | [casa](docs/aree/casa.md) |
 | PC | volume, musica, luminosità, app da catalogo, file (gli script non si eseguono), webcam e schermo su richiesta; anche tramite il satellite | dal vero | [pc](docs/aree/pc.md) |
@@ -195,7 +198,7 @@ Calliope vera, satelliti e voci finte; **dal vero** = usata a voce.
 | Foto e allegati | foto, PDF, Office, testo, audio, zip; tipo dai byte; sempre dato non fidato; cassetto dei file per persona (7 giorni, revisione dal carosello, il tutore sui file del figlio) | a secco, dal vero | [immagini-allegati](docs/aree/immagini-allegati.md) |
 | Agenti | lavori lunghi a un modello grande; codice Python e C# in sandbox Docker con test; programmi in diretta sulla scheda; domande a metà lavoro; file della persona; lavori che sopravvivono ai riavvii; testo dell'agente in diretta come una chat in sola lettura | dal vero | [agenti-estensioni](docs/aree/agenti-estensioni.md) |
 | Estensioni | scritte dall'agente, approvate con la sfida; container per chiamata, porta stretta verso i tool, scope e flussi di rete. **Modalità sviluppo** (08/10): analisi, sviluppo e test, collaudo della versione candidata con dati detti (traccia di rete per l'agente, confronto automatico tra collaudi riusciti e falliti, risposte vere del servizio come esempi per i test, URL non codificati rifiutati, doppia codifica segnalata), un collaudo per ogni valore detto insieme, domande a chi l'ha scritta, correzioni dalla versione provata, lavoro dell'agente fermato o rifatto a voce, revisione, attivazione con la sfida; tappe ai limiti di ogni giro, giro a vuoto nel ragionamento dell'agente fermato con una spinta; versioni, rinomina, disattivazione a voce; eliminazione definitiva di una disattivata (09/10: un'attiva prima si disattiva, la domanda dice quale); un'estensione che legge soltanto (rete in GET, niente scritture né dati di casa) è una lettura come la ricerca web (09/10) | dal vero | [agenti-estensioni](docs/aree/agenti-estensioni.md) |
-| Giochi | schede interattive in un iframe isolato; partite tra schermi; gioco puro approvabile da un adulto | a secco | [giochi](docs/aree/giochi.md) |
+| Giochi | schede interattive in un iframe isolato, scritte dall'agente a voce; a tutta la finestra con il pallino della voce e i comandi a voce del gioco senza dire il nome (11/10); fasi, turni, punti ed esito tenuti dalla macchina a stati di Calliope, l'agente scrive solo la logica (13/10); palco fisso 1280×720 o 720×1280 scalato alla finestra, con sei modelli di pagina e la tela, e la misura di ciò che esce dal palco (14/10); partite tra schermi; gioco puro approvabile da un adulto | a secco, dal vero in parte | [giochi](docs/aree/giochi.md) |
 | Satelliti | installazione con un comando, aggiornamento con ritorno indietro, più satelliti insieme, esecutore del PC | dal vero (PC pulito non provato) | [satelliti](docs/aree/satelliti.md) |
 | Telefono | PWA: VAD e wake word nel browser, carosello, schede a schermo intero, schermo acceso | dal vero in parte (auto no) | [schermi-telefono](docs/aree/schermi-telefono.md) |
 | Schermi | kiosk abbinati a voce, schede dei tool, visibilità per persona, moduli, cruscotto di chi amministra; testi dell'agente in Markdown con «Scarica»; vista dello sviluppo (fasi, due colonne, collaudi, comandi innocui a tocco) e schermo intero (08/10); le schede personali salvate per persona (7 giorni) e ritrovate da uno schermo nuovo o dopo un riavvio, «pulisci le mie schede» | dal vero | [schermi-telefono](docs/aree/schermi-telefono.md) |
@@ -229,6 +232,15 @@ Andrea: (scritto) E quanto costava il latte?          [«1,29», dalla stessa fo
 Andrea: (allegato con istruzioni nascoste)             [nessuna azione «perché lo dice il file»]
 Andrea: Calliope, scrivi un programma in Python che legge due numeri…  [lavoro_affida, «Procedo?»]
 Andrea: Sì, procedi.  …  Calliope, eseguilo con 3 e 5. [programma eseguito nella sandbox, in diretta]
+```
+
+Con la conversazione di stanza accesa (esempio illustrativo, non dai copioni):
+
+```text
+Giulia (in cucina, ad Andrea): Domani la gita parte alle nove dal piazzale.   [solo una riga della stanza]
+Andrea: Calliope, a che ora ha detto Giulia che parte la gita?   [dalle righe della stanza: «alle nove»]
+Andrea (più tardi, in studio): Calliope, di cosa parlavamo in cucina?   [stanza_cerca]
+Andrea: Calliope, abbiamo ospiti.                      [stanza_pausa: niente ascolto per 4 ore]
 ```
 
 ## Schermate
@@ -361,28 +373,31 @@ Finestra di contesto scelta dal setup: 20 480 (PC) e 24 576 (DGX), prima frase i
 ## Roadmap
 
 Il congelamento delle funzionalità nuove (dal 06/10, per la latenza) è stato tolto l'08/10.
-In coda, dopo una lettura dei dati:
+Fatti il 13–14/10: la conversazione di stanza (tranne la corsia lenta), i conoscenti, le notizie
+dai feed RSS, la macchina a stati e il palco fisso dei giochi, gli avvisi ai tutori con la
+trascrizione. In coda (dettagli e prontezza di ogni voce in [`docs/roadmap.md`](docs/roadmap.md)):
 
-1. **Stato del dialogo come macchina a stati**: passo 0 fatto il 10/10, poi l'interprete in ombra,
-   il consenso unico e una tabella dichiarativa dei permessi
-   ([0022](docs/decisioni/0022-macchina-a-stati-del-dialogo.md),
-   [0023](docs/decisioni/0023-tabella-dichiarativa-dei-permessi.md)). La sicurezza per valore è
-   accesa dal 09/10.
-2. **Frasi pronte dei tool meno monotone** (varianti per tono, forma breve), in attesa del via.
-3. **Nomi dei tool**: la regola dell'08/10 (nome singolare + verbo) anche per gli altri tool.
-4. **Parole incerte e compagnia**: tarare le soglie sulla voce vera; decidere la correzione sullo
-   schermo, il dizionario delle correzioni e il giudizio «rivolta a me?» oggi in ombra.
-5. **Notizie dai feed RSS** delle testate italiane in un indice locale, SearXNG come ripiego.
-6. **Satelliti ESPHome** (Home Assistant Voice PE) che parlano direttamente con Calliope
-   ([0026](docs/decisioni/0026-satelliti-esphome-senza-home-assistant.md)).
+1. **Conversazione di stanza**: la corsia lenta (ritrascrizione, chi parla sull'intero scambio) e
+   il filtro della TV; accendere il guardiano a posteriori dopo l'ombra e l'ascolto durante la
+   voce dopo la misura dell'eco.
+2. **Registro degli eventi e macchina a stati del dialogo**: il registro come fonte del contesto
+   (non prima del 18/10), poi il consenso unico e una tabella dichiarativa dei permessi
+   ([0027](docs/decisioni/0027-conversazione-come-registro-di-eventi.md),
+   [0022](docs/decisioni/0022-macchina-a-stati-del-dialogo.md),
+   [0023](docs/decisioni/0023-tabella-dichiarativa-dei-permessi.md)).
+3. **Giochi**: domande standard, ripresa dopo la chiusura, «gioco anch'io», partite condivise.
+4. **Compagnia e parole incerte**: il giudizio «rivolta a me?» (oggi in ombra) da rileggere e
+   accendere; soglie tarate sulla voce vera.
+5. **Satelliti ESPHome** (Home Assistant Voice PE) che parlano direttamente con Calliope
+   ([0026](docs/decisioni/0026-satelliti-esphome-senza-home-assistant.md)), quando arrivano.
+6. **Secondo fattore** per chi amministra (conferma dal telefono, poi chiave vocale).
 
-Funzionalità decise, senza date: **modulo studio** (le altre materie e la simulazione
-d'interrogazione con domande a tempo e valutazione di contenuti ed esposizione; gli esercizi di
-matematica e italiano ci sono dall'08/10), **immagini generate in locale** (FLUX.2 [klein] 4B, con
-filtri e regole per i minori), **secondo fattore** per chi amministra (conferma dal telefono,
-chiave vocale), **pannello di amministrazione** con le azioni; poi interfono tra satelliti,
-conversazione di stanza, mappe e luoghi, satellite su Raspberry, altre fonti italiane nella
-biblioteca.
+Funzionalità decise, senza date: **musica** (Music Assistant in un container), **modulo studio**
+(storia e scienze dalla biblioteca, grammatica con un secondo parere), **immagini generate in
+locale** (FLUX.2 [klein] 4B, con filtri e regole per i minori), **pannello di amministrazione**
+con le azioni, **profilo ridotto** per un PC da 8 GB; poi interfono tra satelliti, mappe e luoghi,
+satellite su Raspberry, altre fonti italiane nella biblioteca, l'allarme. Un robot esapode
+aspetta il kit.
 
 In valutazione: riscontro emotivo dalla voce nello studio. Scartato: Kolibri (catalogo italiano
 quasi vuoto, contenuti creati solo con un servizio online). Dettagli: [`docs/roadmap.md`](docs/roadmap.md).
@@ -390,6 +405,11 @@ quasi vuoto, contenuti creati solo con un servizio online). Dettagli: [`docs/roa
 ## Sicurezza e privacy
 
 - Nessun cloud: modelli, trascrizioni, memoria e registri restano locali.
+- Dati conservati: turni, eventi e voce dei soli adulti per 60 giorni, minori e ospiti mai, un
+  comando per svuotare tutto (`calliope conserva --svuota`). La conversazione di stanza è spenta
+  di serie: dove la si accende, il suo stato si vede sugli schermi, l'audio non va su disco
+  (l'unica eccezione: le frasi di un segnale di pericolo, nel cassetto del tutore, se acceso) e
+  il testo resta in memoria o per 60 giorni, come sceglie chi amministra; ospiti mai.
 - Dati non fidati (web, foto, allegati, Home Assistant, agenti, estensioni, OCR) entrano solo
   in una busta con la provenienza; con loro di mezzo un'azione parte solo se chiesta, una
   pericolosa solo con la conferma a voce.
@@ -459,7 +479,7 @@ Whisper (faster-whisper in process, or whisper.cpp CUDA server; CPU fallback) �
 recognition (guest / family / admin, minors with guardians) → one loop per satellite and one
 conversation per person → context builder with a cache-stable prefix, automatic context
 window, compression and a searchable conversation archive (FTS5 + embeddings) → local LLM
-(Gemma 4 e4b or 26B-A4B on Ollama or vLLM, chosen by `llm_profilo`) with ~70 tools → a single
+(Gemma 4 e4b or 26B-A4B on Ollama or vLLM, chosen by `llm_profilo`) with ~75 tools → a single
 policy in `ToolRegistry.call` (level, age, data provenance, spoken confirmation, challenge
 phrase) → output checks (`riferire`, Llama Guard 3 for minors and guests) → Piper TTS, sentence
 by sentence. Five security boundaries: network, actions, agent code sandbox (Docker, no
@@ -502,17 +522,26 @@ voices are near the same satellite (name required in every sentence with an unkn
 «is it addressed to me?» judgement in shadow mode); Piper on the GPU when available; a read-only model plan from a hardware inventory; sandboxed games on screens; satellites with
 one-command install and self-update with rollback; phone PWA; kiosk screens and an admin
 dashboard; per-person card history and a live conversation transcript on personal screens; personalities and a Star Trek mode; capability registry and catalogue installs;
-turn log with latency statistics; tiered tests and an end-to-end test.
+turn log with latency statistics; tiered tests and an end-to-end test. Since 13–14/10: a
+**room conversation** mode (off by default; per-satellite continuous transcription of what people
+say to each other, never audio on disk, actions only with the wake word and a recognised voice,
+recent room lines in the turn context, `stanza_cerca` to search them with per-person visibility,
+optional 60-day text retention, listening while Calliope speaks with an echo filter, an
+after-the-fact guardian for minors that only alerts the guardian on their own screen);
+**acquaintances** (unknown adult voices grouped by voiceprint, a name inferred from the
+conversation, saved only when the admin confirms on screen, guest level); **news** from Italian
+RSS feeds fetched at home; games driven by a state machine on a fixed 1280×720 / 720×1280 stage;
+guardian alerts with date, origin, transcript and optional audio of the signal.
 
-**Roadmap.** The feature freeze (for latency) was lifted on 08/10. Queued: the dialogue state
-machine (step 0 done on 10/10; model interpreter in shadow mode, single consent, a declarative
-permission table; the value-based tool policy is on since 09/10), news from Italian RSS feeds in a
-local index, ESPHome satellites (Home Assistant Voice PE) talking directly to Calliope, less
-repetitive canned tool phrases,
-renaming the remaining tools, tuning the uncertain-word and company-mode thresholds on real
-voices. Decided: the rest of the study module (more subjects, oral exam simulation), local image
-generation (FLUX.2 [klein] 4B), a second factor for admins, an admin panel with actions; then
-intercom, room conversations, maps, Raspberry satellites. A
+**Roadmap.** The feature freeze (for latency) was lifted on 08/10. Queued: the room
+conversation's slow lane (re-transcription, speaker attribution over the whole exchange) and TV
+filtering, switching on the room guardian after shadow mode and listening-while-speaking after an
+echo measurement; the event log as the context source (not before 18/10) and the dialogue state
+machine (single consent, a declarative permission table); game templates, resume and shared
+matches; ESPHome satellites (Home Assistant Voice PE) talking directly to Calliope; a second factor
+for admins. Decided: music (Music Assistant), the rest of the study module, local image generation
+(FLUX.2 [klein] 4B), an admin panel with actions, a reduced 8 GB profile; then intercom, maps,
+Raspberry satellites, the alarm. A
 speech-to-text correction study (07/10) kept Whisper output uncorrected. Contributions: open an
 issue first ([`CONTRIBUTING.md`](CONTRIBUTING.md)).
 
