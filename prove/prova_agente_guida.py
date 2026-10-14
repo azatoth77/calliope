@@ -5,7 +5,8 @@ DGX, 45 minuti a vuoto).
 1. Ogni controllo dice dove e perché (calliope/agenti/diagnosi.py):
    - prova di fumo con un gestore che lancia: elemento toccato, file:riga dello script della
      scheda, la frase «un gestore di evento ha lanciato un'eccezione…», i tocchi prima;
-     dichiarazioni doppie tra logica.js e gioco.js con le due righe;
+     dichiarazioni doppie tra due script della scheda con le due righe (dal 14/10 i gestori
+     dell'agente ci sono solo in una tela: logica.js e tela.js);
    - test JavaScript falliti con il file:riga del test;
    - test Python falliti: l'asserzione con i valori e file:riga (anche il file dell'estensione
      chiamato dal test), un import che si rompe, un programma che si ferma; C#: errore di
@@ -79,7 +80,9 @@ def agente(cliente=None, log=None):
 
 
 # Il caso vero (11/10): logica.js alza l'errore con i campi vuoti, il gestore di «Inizia» in
-# gioco.js non lo cattura. Il primo tocco va, l'errore arriva al terzo
+# gioco.js non lo cattura. Il primo tocco va, l'errore arriva al terzo. Dal 14/10 il gioco si
+# scrive con la macchina a stati e i gestori dell'agente ci sono solo in una TELA (la via libera):
+# lo stesso caso con il pulsante «Apri» disegnato dalla tela in tela.js
 LOGICA = """"use strict";
 function creaStato(nomi) {
   if (!Array.isArray(nomi) || nomi.length < 1 || nomi.length > 4) {
@@ -90,7 +93,6 @@ function creaStato(nomi) {
 if (typeof module !== "undefined") module.exports = { creaStato };
 """
 GIOCO = """"use strict";
-const radice = document.getElementById("gioco");
 let stato = null;
 let tocchi = 0;
 function avvia() {
@@ -98,13 +100,18 @@ function avvia() {
   const nomi = tocchi < 3 ? ["Ottavio"] : [];
   stato = creaStato(nomi);
 }
-calliope.quandoPronto(() => {
-  const b = document.createElement("button");
-  b.id = "inizia";
-  b.textContent = "Inizia";
-  b.addEventListener("click", () => avvia());
-  radice.appendChild(b);
-});
+const GIOCO = {
+  nuovaPartita() { return {}; },
+  tela: {
+    gioco(area) {
+      const b = document.createElement("button");
+      b.id = "apri";
+      b.textContent = "Apri";
+      b.addEventListener("click", () => avvia());
+      area.appendChild(b);
+    },
+  },
+};
 """
 TEST_JS = """const { test } = require("node:test");
 const assert = require("node:assert");
@@ -116,8 +123,11 @@ test("turno sbagliato", () => {
 """
 MANIFESTO_GIOCO = {"nome": "porte_halloween", "titolo": "Apri le porte",
                    "cosa_fa": {"verbo": "propone", "oggetto": "un gioco di porte"},
-                   "permessi": {}, "scheda": {"tipo": "gioco", "file": ["logica.js", "gioco.js"],
-                                              "giocatori": {"min": 1, "max": 4}}}
+                   "permessi": {}, "scheda": {"tipo": "gioco", "file": ["logica.js", "tela.js"],
+                                              "giocatori": {"min": 1, "max": 1},
+                                              "macchina": {"inizio": "gioco", "fasi": {
+                                                  "gioco": {"pagina": "tela",
+                                                            "verso": ["fine"]}}}}}
 
 
 # ═══════════════════════════ 1. dove e perché ═══════════════════════════
@@ -129,7 +139,7 @@ def prova_fumo(tmp: Path):
         return
     sb = sandbox(tmp, "fumo")
     sb.scrivi("logica.js", LOGICA)
-    sb.scrivi("gioco.js", GIOCO)
+    sb.scrivi("tela.js", GIOCO)
     sb.scrivi("logica.test.js", TEST_JS.replace("turno, 1)", "turno, 0)"))
     sb.scrivi("manifesto.json", json.dumps(MANIFESTO_GIOCO))
     r = sb.test()
@@ -137,15 +147,15 @@ def prova_fumo(tmp: Path):
     verifica("i test passano, la prova di fumo no", not r["passano"]
              and r["esito"]["falliti"] == 1 and "FALLITO prova di fumo" in u, str(r["esito"]))
     verifica("…dice l'elemento toccato (tag, id, testo)",
-             '<button id="inizia"> «Inizia»' in u, u[-600:])
+             '<button id="apri"> «Apri»' in u, u[-600:])
     verifica("…file e riga dello script della scheda, dalla logica al gestore",
-             re.search(r"\[in logica\.js:4 \(creaStato\) ← gioco\.js:8 \(avvia\)", u) is not None,
+             re.search(r"\[in logica\.js:4 \(creaStato\) ← tela\.js:7 \(avvia\)", u) is not None,
              u[-600:])
     verifica("…la frase esplicita sul gestore",
              "un gestore di evento ha lanciato un'eccezione: ogni gestore deve catturare gli "
              "errori della logica" in u.lower())
-    verifica("…gli ultimi tocchi prima dell'errore", "Tocchi prima: <button id=\"inizia\">" in u,
-             u[-400:])
+    verifica("…gli ultimi tocchi prima dell'errore", "Tocchi prima: " in u
+             and "<button id=\"apri\">" in u.split("Tocchi prima: ", 1)[-1], u[-400:])
     verifica("…e come lavora la prova (calliope e il contenitore ci sono)",
              "l'oggetto calliope" in u and "<div id=\"gioco\">" in u)
     from calliope.agenti.ciclo import Lavoro
@@ -156,31 +166,31 @@ def prova_fumo(tmp: Path):
     verifica("esegui_test: «fallimenti» prima dell'uscita, con il punto e l'elemento",
              list(res).index("fallimenti") < list(res).index("uscita")
              and "prova di fumo del gioco" in f and "logica.js:4" in f
-             and "<button id=\"inizia\">" in f and len(f) <= diagnosi.MAX_TESTO, f)
+             and "<button id=\"apri\">" in f and len(f) <= diagnosi.MAX_TESTO, f)
     from calliope.agenti.avanzamento import esito_breve
     e = esito_breve("esegui_test", res)
     verifica("il registro del lavoro conserva l'errore, non solo «0 test su 1 passano»",
              "passano" in e and "Devi inserire da 1 a 4 giocatori" in e and "logica.js:4" in e, e)
 
-    sezione("1b. dichiarazioni doppie tra logica.js e gioco.js, test JS con la riga")
-    sb.scrivi("gioco.js", '"use strict";\n\nconst TIPI_SORPRESA = [];\n' + GIOCO.split("\n", 1)[1])
+    sezione("1b. dichiarazioni doppie tra logica.js e tela.js, test JS con la riga")
+    sb.scrivi("tela.js", '"use strict";\n\nconst TIPI_SORPRESA = [];\n' + GIOCO.split("\n", 1)[1])
     sb.scrivi("logica.js", LOGICA.replace('"use strict";\n',
                                           '"use strict";\nconst TIPI_SORPRESA = [1];\n'))
     sb.scrivi("logica.test.js", TEST_JS)
     r = sb.test()
     u = r["uscita"]
     verifica("SyntaxError con le due righe delle dichiarazioni (Node dice solo la riga 1)",
-             "Identifier 'TIPI_SORPRESA' has already been declared [in gioco.js:3]" in u
-             and "è dichiarato in logica.js:2 e gioco.js:3" in u, u[-500:])
+             "Identifier 'TIPI_SORPRESA' has already been declared [in tela.js:3]" in u
+             and "è dichiarato in logica.js:2 e tela.js:3" in u, u[-500:])
     verifica("il test JS fallito dice l'asserzione e la riga del test",
              re.search(r"FALLITO turno sbagliato: .*0 !== 1.*\[in logica\.test\.js:6\]", u, re.S)
              is not None, u[:400])
     fall = diagnosi.fallimenti(u)
     verifica("diagnosi: due fallimenti, ognuno con il suo punto",
              len(fall) == 2 and {f["dove"].split(" ")[0] for f in fall}
-             == {"logica.test.js:6", "gioco.js:3"}, str(fall))
-    sb.scrivi("gioco.js", GIOCO.replace("() => avvia()", "() => { try { avvia(); } catch (e) "
-                                                         "{ radice.append(e.message); } }"))
+             == {"logica.test.js:6", "tela.js:3"}, str(fall))
+    sb.scrivi("tela.js", GIOCO.replace("() => avvia()", "() => { try { avvia(); } catch (e) "
+                                                        "{ area.append(e.message); } }"))
     sb.scrivi("logica.js", LOGICA)
     sb.scrivi("logica.test.js", TEST_JS.replace("turno, 1)", "turno, 0)"))
     r = sb.test()
@@ -356,7 +366,8 @@ def _estrai(testo: str, nomi: set) -> dict:
             cur = m.group(1)
             out[cur] = []
             continue
-        if cur and r.startswith(("Ogni gestore", "Un test che", "Ciò che", "Una mossa")):
+        if cur and r.startswith(("Ogni gestore", "Un test che", "Ciò che", "Una mossa",
+                                 "Ogni fase")):
             cur = None
             continue
         if cur:
@@ -379,9 +390,10 @@ def prova_scheletri(tmp: Path):
              and "(estensione)" not in pg)
     # Il gioco dall'11/10 sera mostra anche i comandi a voce (ascolta, quandoComando): ~215
     # caratteri in più, circa 60 token
-    # Dal 12/10 sera anche gioco.test.js con apriGioco (il test del disegno): ~650 caratteri
-    verifica("corti: al più 3 000 caratteri il gioco, 1 600 l'estensione, 600 i programmi",
-             len(SCHELETRI["gioco"]) <= 3000 and len(SCHELETRI["estensione"]) <= 1600
+    # Dal 12/10 sera anche gioco.test.js con apriGioco (il test del disegno): ~650 caratteri.
+    # Dal 14/10 (il palco) la pagina della fase, i modelli e g.palco(): ~420 caratteri
+    verifica("corti: al più 3 400 caratteri il gioco, 1 600 l'estensione, 600 i programmi",
+             len(SCHELETRI["gioco"]) <= 3400 and len(SCHELETRI["estensione"]) <= 1600
              and len(SCHELETRI["python"]) <= 600 and len(SCHELETRI["csharp"]) <= 600,
              str({k: len(v) for k, v in SCHELETRI.items()}))
     g = _estrai(SCHELETRI["gioco"], {"manifesto.json", "logica.js", "logica.test.js",

@@ -193,11 +193,13 @@ A_SECCO = [
     # ~5 s: hub degli schermi vero, server su 127.0.0.1, docker finto con il Node della macchina
     ("prova_giochi.py", [], "giochi e schede interattive (05/10): manifesto con la scheda, documento e CSP del riquadro, approvazione dei giochi puri, partite su uno schermo e condivise, chat e frasi col guardiano, azioni della porta, banco d'attacco dei messaggi, tempo di gioco dei minori, richieste ai tutori, test JavaScript"),
     # ~3 s: i comandi a voce dei giochi (11/10), hub vero, ciclo finto, Node se c'è
-    ("prova_gioco_voce.py", [], "comandi a voce dei giochi (11/10): scheda.ascolta nel manifesto, sottoinsieme a runtime e mai comandi nuovi, la mossa con il solo comando e il nome di chi gioca, chiuso e partita di prova; nel ciclo la regola gioco_comando con i contrari (frase più lunga, nessun gioco, altro satellite, comando non attivo, domanda in sospeso), la finestra senza nome solo per le forme dell'elenco e il suo tetto, contesto e gioco_comando per il modello, chi gioca solo con la voce riconosciuta; prova di fumo con i comandi"),
+    ("prova_gioco_voce.py", [], "comandi a voce dei giochi (11/10; dal 14/10 dalla macchina a stati, niente più ascolta piatto): i comandi delle fasi nel manifesto, sottoinsieme a runtime e mai comandi nuovi, la mossa con il solo comando e il nome di chi gioca, chiuso e partita di prova; nel ciclo la regola gioco_comando con i contrari (frase più lunga, nessun gioco, altro satellite, comando non attivo, domanda in sospeso), la finestra senza nome solo per le forme dell'elenco e il suo tetto, contesto e gioco_comando per il modello, chi gioca solo con la voce riconosciuta; prova di fumo con i comandi"),
     # ~4 s: la macchina a stati dei giochi (13/10), Node per il nucleo e la prova di fumo
     ("prova_gioco_macchina.py", [], "macchina a stati dei giochi (13/10): scheda.macchina nel manifesto (comandi a voce piatti dagli slot, uguali in Python e nel motore, 14 contrari), documento del riquadro con il motore, il nucleo (preparazione, turni, esito, fine, ancora, tela; la forma dei risultati: esito annidato, dati mancanti, fuori da verso, attivi che allarga, vista), prova di fumo per fasi (senza uscita, mai raggiunta, mai attivo, non finisce, mossa che lancia, fuori dominio), apriGioco con g.stato() e i comandi con il valore"),
+    # ~3 s: il palco fisso dei giochi (14/10), Node per l'impaginazione e la prova di fumo
+    ("prova_gioco_palco.py", [], "il palco fisso dei giochi (14/10): l'impaginazione pura del motore nei due orientamenti (1280×720 e 720×1280) per i sei modelli più la tela, otto giocatori, il tris e le porte, senza niente fuori, sovrapposto o tagliato; i difetti messi apposta detti per l'agente (troppi pulsanti, titolo lunghissimo con la fonte, testo di una casella, esito lungo, griglia 12×12 con troppo testo, tela schiacciata); la prova di fumo che misura il palco di ogni pagina raggiunta (contrari con la fase e la strada) e g.palco(); la diagnosi «palco» anche in prova"),
     # ~60 s: la pagina degli schermi in Edge o Chromium senza finestra (senza si salta)
-    ("prova_giochi_pagina.py", [], "giochi nella pagina vera: il riquadro ostile non legge la pagina né il localStorage, niente rete né WebRTC, messaggi falsi rifiutati, cane da guardia (ciclo infinito, navigazione, inondazione), partita di tris tra due pagine, comandi a voce (la mossa nel riquadro, il sottoinsieme a runtime, niente fuori elenco, partita di prova), la macchina a stati nel riquadro vero (13/10: preparazione, turno, esito che va avanti da solo)"),
+    ("prova_giochi_pagina.py", [], "giochi nella pagina vera: il riquadro ostile non legge la pagina né il localStorage, niente rete né WebRTC, messaggi falsi rifiutati, cane da guardia (ciclo infinito, navigazione, inondazione), partita condivisa tra due pagine (dal 14/10 con la tela dei segnali), comandi a voce (la mossa nel motore con il nome, il sottoinsieme a runtime, niente fuori elenco, partita di prova), la macchina a stati nel riquadro vero (13/10: preparazione, turno, esito che va avanti da solo), il palco fisso nel browser vero (14/10: ogni modello misurato sullo schermo a 900×800 e a 390×844 in verticale senza difetti, un difetto messo apposta trovato, il tocco su una casella del tris)"),
     ("prova_contesto_agenti.py", [], "contesto degli agenti (05/10): finestra dal setup, tetti della passata e del ragionamento, risultati lunghi in .calliope, diario del lavoro alle soglie, domanda a metà lavoro"),
     ("prova_estensioni_piano.py", [], "contratto delle capacità, piano di fattibilità, chiedi_permesso, guardia contro il ragionamento a vuoto (agente finto)"),
     ("prova_estensioni_attacchi.py", [], "banco d'attacco delle estensioni: rete interna, indirizzi travestiti, rebinding, slowloris, dati esca, flussi, contaminazione, scarica_esempio"),
@@ -342,6 +344,7 @@ LIVELLO_2 = {
     "prova_giochi.py",               # 7 s
     "prova_gioco_voce.py",           # ~3 s (11/10, Node per la prova di fumo)
     "prova_gioco_macchina.py",       # ~4 s (13/10, Node)
+    "prova_gioco_palco.py",          # ~3 s (14/10, Node)
     "prova_agente_guida.py",         # ~10 s (11/10)
     "prova_fasi_agente.py",          # ~18 s (12/10 sera)
     "prova_fasi_agente_2.py",        # ~20 s (13/10)
@@ -562,6 +565,17 @@ LEGAMI = [
     ("calliope/agenti/sandbox.py", ["prova_gioco_macchina.py"]),
     ("calliope/gioco_voce.py", ["prova_gioco_macchina.py"]),
     ("prove/giochi/porte_fasi/", ["prova_gioco_macchina.py"]),
+    # Il palco fisso e i giochi vecchi tolti (14/10)
+    ("calliope/estensioni/motore_gioco.js", ["prova_gioco_palco.py", "prova_gioco_voce.py",
+                                             "prova_giochi.py"]),
+    ("calliope/estensioni/macchina.py", ["prova_gioco_palco.py", "prova_giochi.py"]),
+    ("calliope/estensioni/scheda.py", ["prova_gioco_palco.py", "prova_giochi.py"]),
+    ("calliope/agenti/fumo_js.mjs", ["prova_gioco_palco.py", "prova_agente_guida.py",
+                                     "prova_fasi_agente.py"]),
+    ("calliope/agenti/test_js.mjs", ["prova_gioco_palco.py"]),
+    ("calliope/schermi/giochi.py", ["prova_gioco_palco.py", "prova_giochi.py"]),
+    ("prove/giochi/", ["prova_giochi.py", "prova_gioco_voce.py", "prova_gioco_macchina.py",
+                       "prova_gioco_palco.py"]),
     ("calliope/agenti/accettazione.py", ["prova_gioco_macchina.py"]),
     ("calliope/agenti/servizio.py", ["prova_gioco_macchina.py"]),
     ("calliope/agenti/scheletri.py", ["prova_gioco_macchina.py"]),

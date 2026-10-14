@@ -21,6 +21,13 @@
 // ogni numero di giocatori), dice le fasi senza uscita e quelle mai raggiunte, i comandi mai
 // attivi, le mosse che lanciano o restituiscono una forma sbagliata, e gioca partite intere fino
 // alla fine; poi i tocchi a caso sui pulsanti del motore.
+//
+// Dal 14/10 (passo 4, il palco fisso) la prova di fumo misura anche il PALCO: per ogni pagina che
+// la macchina raggiunge, nei due orientamenti (1280×720 e 720×1280), ciò che esce dal palco, ciò
+// che si sovrappone e il testo che non ci sta neanche al corpo minimo (l'impaginazione è una
+// funzione pura del motore, la stessa del riquadro: CalliopeMotore.impagina e controllaPalco).
+// Un difetto è un errore della prova, con la fase, la pagina e la strada. Ed è l'unico formato:
+// un gioco senza «scheda.macchina» (gioco.js libero, «ascolta» piatto) non passa.
 import { existsSync, readFileSync } from "node:fs";
 import vm from "node:vm";
 
@@ -60,7 +67,7 @@ async function prepara(file, opzioni = {}) {
   const CONSIGLI = [
     [/already been declared|require is not defined|Cannot use import|import statement|module is not defined/,
      " (nel riquadro gli script di «scheda.file» si caricano uno dopo l'altro nello stesso spazio "
-     + "globale, come i <script> del browser: in gioco.js usa direttamente le funzioni di "
+     + "globale, come i <script> del browser: negli altri file usa direttamente le funzioni di "
      + "logica.js, senza require, import né const { … } = …; require serve solo nei test)"],
     [/is not defined/, " (dichiara la variabile con let o const prima di usarla)"],
   ];
@@ -109,11 +116,12 @@ async function prepara(file, opzioni = {}) {
       // Node dice la riga 1 dello script: le righe vere sono quelle delle dichiarazioni
       const d = dichiarato(doppio[1]);
       fr = d.filter((x) => ctx.file && x.startsWith(ctx.file + ":"));
-      if (d.length) consiglio = ` («${doppio[1]}» è dichiarato in ${d.join(" e ")}: tienilo in un file solo, o cambia nome in gioco.js)` + consiglio;
+      if (d.length) consiglio = ` («${doppio[1]}» è dichiarato in ${d.join(" e ")}: tienilo in un file solo, o cambia nome nell'altro)` + consiglio;
     }
+    const lungo = e && e.name === "ErrorePalco" ? 900 : e && e.name === "ErroreGioco" ? 420 : 200;
     let t = dove + (ctx.elemento ? ` su ${descrivi(ctx.elemento)}` : "")
       + (ctx.bersaglio && ctx.bersaglio !== ctx.elemento ? ` (toccato ${descrivi(ctx.bersaglio)})` : "")
-      + `: ${e && e.name ? e.name + ": " : ""}${msg.slice(0, e && e.name === "ErroreGioco" ? 420 : 200)}`
+      + `: ${e && e.name && e.name !== "ErrorePalco" ? e.name + ": " : ""}${msg.slice(0, lungo)}`
       + (fr.length ? ` [in ${fr.join(" ← ")}]` : "");
     if (ctx.gestore) {
       t += ". Un gestore di evento ha lanciato un'eccezione: ogni gestore deve catturare gli "
@@ -257,10 +265,9 @@ async function prepara(file, opzioni = {}) {
   radice.id = "gioco";
   // ── calliope finto ──
   const ascolti = { avvio: [], messaggio: [], chat: [], giocatori: [], pausa: [], fine_tempo: [], comando: [] };
-  // I comandi a voce (11/10, «ascolta» nel manifesto): quelli dichiarati, e quelli che il gioco
-  // dice attivi adesso con comandiAttivi (all'inizio tutti); un nome non dichiarato è un errore
-  const dichiarati = opzioni.macchina ? tuttiPiatti(opzioni.macchina, opzioni.minimo || 1, opzioni.massimo || 1)
-    : Object.keys(opzioni.comandi || {});
+  // I comandi a voce: quelli che Calliope ricava dalla macchina, e quelli che il motore dice
+  // attivi adesso (all'inizio tutti); un nome non dichiarato è un errore
+  const dichiarati = opzioni.macchina ? tuttiPiatti(opzioni.macchina, opzioni.minimo || 1, opzioni.massimo || 1) : [];
   let attivi = dichiarati.slice();
   const avvio = { partita: "P1", giocatore: 1, giocatori: opzioni.giocatori || 1, massimo: Math.max(opzioni.massimo || 1, opzioni.giocatori || 1), condivisa: false, storia: [], lingua: "it",
     ...(dichiarati.length ? { comandi: dichiarati.slice() } : {}) };
@@ -270,14 +277,7 @@ async function prepara(file, opzioni = {}) {
   const calliope = Object.freeze({
     quandoPronto: (f) => { if (typeof f === "function") ascolti.avvio.push(f); },
     quandoMessaggio: quando("messaggio"), quandoChat: quando("chat"), quandoGiocatori: quando("giocatori"),
-    quandoPausa: quando("pausa"), quandoFineTempo: quando("fine_tempo"), quandoComando: quando("comando"),
-    comandiAttivi: (nomi) => {
-      const l = Array.isArray(nomi) ? nomi.map(String) : [];
-      const fuori = l.filter((x) => !dichiarati.includes(x));
-      if (fuori.length && !dichiarati.length) nota("comandiAttivi", new Error("il manifesto non ha «ascolta.comandi»: dichiara lì i comandi a voce (scheda.ascolta), o togli comandiAttivi"));
-      else if (fuori.length) nota("comandiAttivi", new Error(`comandi non dichiarati in «ascolta.comandi» del manifesto: ${fuori.join(", ")} (solo un sottoinsieme di ${dichiarati.join(", ")})`));
-      else attivi = l;
-    },
+    quandoPausa: quando("pausa"), quandoFineTempo: quando("fine_tempo"),
     salva: (k, v) => { dati[k] = JSON.parse(JSON.stringify(v ?? null)); return Promise.resolve(null); },
     leggi: (k) => Promise.resolve(k in dati ? dati[k] : null),
     manda: () => {}, chat: () => Promise.resolve(null), di: (t) => { detti.push(String(t ?? "")); return Promise.resolve(null); },
@@ -301,6 +301,19 @@ async function prepara(file, opzioni = {}) {
   });
   g.window = g.self = g.globalThis = g;
   g.webkitAudioContext = g.AudioContext;
+  // Il canale riservato al motore, come nel riquadro (scheda.RUNTIME_JS): il motore lo prende e
+  // lo toglie prima del codice del gioco
+  const palchi = [];
+  g.__calliopeMotore = Object.freeze({
+    comandiAttivi: (nomi) => {
+      const l = Array.isArray(nomi) ? nomi.map(String) : [];
+      const fuori = l.filter((x) => !dichiarati.includes(x));
+      if (fuori.length) nota("comandiAttivi", new Error(`comandi che la macchina del manifesto non ha: ${fuori.join(", ")}`));
+      else attivi = l;
+    },
+    quandoComando: quando("comando"),
+    palco: (d) => { palchi.push(d); },
+  });
   const contesto = vm.createContext(g, { codeGeneration: { strings: false, wasm: false } });
   // Il caso del gioco con un seme fisso (12/10 sera): la stessa partita a ogni esecuzione
   vm.runInContext("Math", contesto).random = creaCaso(opzioni.seme ?? 12345);
@@ -311,27 +324,31 @@ async function prepara(file, opzioni = {}) {
   }
   const amb = { errori, nota, nodi, radice, doc, tocchi, descrivi, lancia, evento, avanza,
                 respira, ascolti, attivi: () => attivi, dati, detti, caricato: false,
-                motore: null, giocoLogica: undefined, contesto };
+                motore: null, giocoLogica: undefined, contesto, palchi };
   for (const f of file) {
     try { testi[base(f)] = readFileSync(f, "utf8"); } catch (e) { testi[base(f)] = ""; }
   }
-  // Con la macchina a stati (13/10): il motore prima degli script del gioco, l'avvio dopo, come
-  // nel riquadro (scheda.documento); gli errori del motore (una mossa che lancia, una forma
-  // sbagliata) arrivano qui invece che al riquadro
+  // La macchina a stati (13/10): il motore prima degli script del gioco, l'avvio dopo, come nel
+  // riquadro (scheda.documento); gli errori del motore (una mossa che lancia, una forma
+  // sbagliata) arrivano qui invece che al riquadro. Dal 14/10 un gioco senza macchina non c'è più
   const macchina = opzioni.macchina || null;
-  if (macchina) {
-    g.__notaMotore = (e) => nota("motore", e);
-    try { vm.runInContext(testoMotore(), contesto, { filename: "motore_gioco.js", timeout: 2000 }); }
-    catch (e) { nota("caricamento del motore", e); return amb; }
+  if (!macchina) {
+    nota("manifesto", new Error("nel manifesto manca «scheda.macchina»: un gioco si scrive con la "
+      + "macchina a stati di Calliope (le fasi e i comandi nel manifesto, const GIOCO = {…} in "
+      + "logica.js; niente gioco.js né «ascolta»: il disegno, i pulsanti e la voce sono di Calliope)"));
+    return amb;
   }
+  g.__notaMotore = (e) => nota("motore", e);
+  try { vm.runInContext(testoMotore(), contesto, { filename: "motore_gioco.js", timeout: 2000 }); }
+  catch (e) { nota("caricamento del motore", e); return amb; }
   for (const f of file) {
     try { vm.runInContext(testi[base(f)], contesto, { filename: f, timeout: 2000 }); }
     catch (e) { nota(`caricamento di ${base(f)}`, e, { file: base(f) }); return amb; }
   }
-  if (macchina) {
+  {
     const conf = JSON.stringify({ macchina, giocatori: { min: opzioni.minimo || 1, max: opzioni.massimo || 1 } });
     try {
-      vm.runInContext(`CalliopeMotore.avvia(typeof GIOCO === "undefined" ? undefined : GIOCO, ${conf}, { errore: __notaMotore, titolo: ${JSON.stringify(opzioni.titolo || "")} });`,
+      vm.runInContext(`CalliopeMotore.avvia(typeof GIOCO === "undefined" ? undefined : GIOCO, ${conf}, { errore: __notaMotore, titolo: ${JSON.stringify(opzioni.titolo || "")}, finto: true });`,
         contesto, { filename: "avvio", timeout: 2000 });
       amb.motore = vm.runInContext("CalliopeMotore", contesto);
       amb.giocoLogica = vm.runInContext("typeof GIOCO === 'undefined' ? undefined : GIOCO", contesto);
@@ -377,10 +394,17 @@ export function tuttiPiatti(m, gmin, gmax) {
   return out;
 }
 
-// Il testo che si vede nel riquadro (con quello scritto con innerHTML, senza i tag)
+// Il testo che si vede nel riquadro (con quello scritto con innerHTML, senza i tag). Un elemento
+// per pezzo, separati da uno spazio (dal 14/10 le scatole del palco sono elementi fratelli:
+// «Porta 1» e «Porta 2» non diventano «Porta 1Porta 2»)
+function testoNodo(n) {
+  if (!n) return "";
+  const figli = n.childNodes || [];
+  return [String(n._testo || ""), String(n._html || "").replace(/<[^>]*>/g, " ")]
+    .concat(figli.map(testoNodo)).join(" ");
+}
 function visibile(amb) {
-  return (String(amb.radice.textContent || "") + " "
-    + String(amb.radice._html || "").replace(/<[^>]*>/g, " ")).replace(/\s+/g, " ").trim();
+  return testoNodo(amb.radice).replace(/\s+/g, " ").trim();
 }
 
 const TOCCHI = ["click", "pointerdown", "pointerup", "mousedown", "mouseup", "touchstart", "touchend"];
@@ -396,10 +420,32 @@ export function esplora(amb, opzioni = {}) {
   const nota = (dove, e) => amb.nota(dove, e);
   let nu;
   try {
-    nu = motore.crea(giocoLogica, opzioni.macchina, { min: opzioni.minimo || 1, max: opzioni.massimo || 1 });
+    nu = motore.crea(giocoLogica, opzioni.macchina, { min: opzioni.minimo || 1, max: opzioni.massimo || 1 },
+                     { titolo: opzioni.titolo || "" });
   } catch (e) { nota("macchina", e); return errori; }
   const M = nu.M;
-  const strada = (s) => s.slice(-4).join(" → ");
+  const strada = (s) => s.slice(-4).join(" → ") || "all'inizio";
+  // Il palco (14/10): ogni pagina diversa, nei due orientamenti, una volta sola. Il primo
+  // difetto ferma la prova (correggi quel punto), con la fase, la pagina e la strada
+  const pagineViste = new Set();
+  const palco = (S, s) => {
+    let pag;
+    try { pag = nu.pagina(S); } catch (e) { nota(`pagina della fase «${S.fase}» (strada: ${strada(s)})`, e); return false; }
+    const k = JSON.stringify(pag);
+    if (pagineViste.has(k)) return true;
+    pagineViste.add(k);
+    for (const O of ["orizzontale", "verticale"]) {
+      const d = motore.difettiPalco(pag, O);
+      if (d.length) {
+        const e = new Error(d.join("; ") + ". La pagina la disegna Calliope: cambia i testi, i comandi attivi o il modello di pagina, non il disegno");
+        e.name = "ErrorePalco";
+        nota(`palco: fase «${S.fase}» (strada: ${strada(s)})`, e);
+        return false;
+      }
+    }
+    return true;
+  };
+  if (!palco(nu.nuovo(), [])) return errori;
   const chiave = (S) => JSON.stringify([S.fase, S.tocca, S.giocatori.map((x) => x.punti), S.dati, S.dopo, S.passa, S.giocatori.length]);
   const raggiunte = new Set();
   const attiviVisti = new Set();
@@ -429,6 +475,7 @@ export function esplora(amb, opzioni = {}) {
     let att;
     try { att = nu.attivi(S); } catch (e) { nota(`fase «${S.fase}» (strada: ${strada(s)})`, e); continue; }
     try { nu.vista(S); } catch (e) { nota(`vista della fase «${S.fase}» (strada: ${strada(s)})`, e); continue; }
+    if (!palco(S, s)) break;
     const cs = coppie(att);
     if (!cs.length && S.fase !== "fine") {
       nota(`fase «${S.fase}» senza uscita`, `nessun comando attivo (strada: ${strada(s)}): ogni fase che non è la fine deve avere almeno un comando attivo (GIOCO.attivi.${S.fase})`);
@@ -460,6 +507,7 @@ export function esplora(amb, opzioni = {}) {
       try { cs = coppie(nu.attivi(S)); } catch (e) { nota(`partita ${i + 1}, fase «${S.fase}» (strada: ${strada(s)})`, e); break; }
       if (!cs.length) break;
       for (const [c] of cs) attiviVisti.add(`${S.fase}.${c}`);
+      if (!palco(S, s)) break;
       const [c, v] = cs[Math.floor(caso() * cs.length)];
       try { S = nu.applica(S, c, v, {}); } catch (e) { nota(`partita ${i + 1}, comando «${nu.piatto(c, v)}» (strada: ${strada(s)})`, e); break; }
       s.push(nu.piatto(c, v));
@@ -493,8 +541,10 @@ export async function fumo(file, opzioni = {}) {
     if (errori.length) return errori;
   }
   // Tocchi a caso, con il tempo che scorre (seme fisso: ripetibile)
-  let seme = 12345;
-  const caso = (n) => { seme = (seme * 1103515245 + 12345) % 2147483648; return seme % n; };
+  // (14/10: prima un generatore lineare con «seme % n», che con due elementi li alternava
+  // sempre: con una tela e «Fine partita» il pulsante della tela non si toccava due volte)
+  const casuale = creaCaso(12345);
+  const caso = (n) => Math.floor(casuale() * n);
   for (let i = 0; i < (opzioni.tocchi || 300); i++) {
     const attivi = amb.attivi();
     const vivi = nodi.filter((n) => n.isConnected && TOCCHI.some((t) => (n._h[t] || []).length));
@@ -529,7 +579,7 @@ export async function fumo(file, opzioni = {}) {
     // stessa classe: gioco.js che legge un campo nel posto sbagliato
     const strano = visibile(amb).match(/\bundefined\b|\bNaN\b|\[object Object\]/);
     if (strano) {
-      nota("disegno", `dopo il tocco su ${tocchi[tocchi.length - 1] || "il gioco"} nel testo visibile c'è «${strano[0]}»: gioco.js mostra un campo che la logica non dà in quel posto (controlla la forma di ciò che restituisce logica.js)`);
+      nota("disegno", `dopo il tocco su ${tocchi[tocchi.length - 1] || "il gioco"} nel testo visibile c'è «${strano[0]}»: la pagina mostra un campo che la logica non dà (controlla i testi di GIOCO.vista e l'«esito» delle mosse in logica.js: la forma di ciò che restituisce logica.js)`);
     }
     if (errori.length) break;
   }
@@ -543,9 +593,10 @@ export async function fumo(file, opzioni = {}) {
 //   await g.tocca("Inizia");               // per testo visibile, o un selettore (#id, .classe)
 //   await g.tocca(".porta", 1);            // il secondo elemento che combacia
 //   await g.scrivi("input", "Ada");         // un campo di testo (input e change)
-//   await g.comando("tre");                // un comando a voce attivo (scheda.ascolta)
+//   await g.comando("porta", 3);           // un comando a voce attivo, con il valore dello slot
 //   await g.avanza(1000);                  // il tempo finto passa (animazioni, timer)
 //   g.testo()                              // il testo visibile nel riquadro, su una riga
+//   g.stato(), g.palco()                   // l'istantanea della partita; i difetti del palco
 //   g.trova(".punti")                      // gli elementi (textContent, disabled, className…)
 //   g.detti, g.dati                        // le frasi fatte dire a Calliope, i dati salvati
 // Un'eccezione che esce da un gestore durante tocca/comando/avanza fa fallire il test con
@@ -623,6 +674,13 @@ export async function apriGioco(file, opzioni = {}) {
     stato() {
       if (!amb.motore || !amb.motore.partita) throw new Error("g.stato(): solo per un gioco con «scheda.macchina» nel manifesto");
       return JSON.parse(JSON.stringify(amb.motore.partita.istantanea()));
+    },
+    // Il palco (14/10): i difetti della pagina di adesso nei due orientamenti ([] = ci sta)
+    palco() {
+      if (!amb.motore || !amb.motore.partita) throw new Error("g.palco(): solo per un gioco con «scheda.macchina» nel manifesto");
+      // (un elenco di questo contesto: quello del riquadro finto ha un altro Array, e
+      // assert.deepStrictEqual(g.palco(), []) fallirebbe)
+      return JSON.parse(JSON.stringify(amb.motore.partita.palco()));
     },
     async comando(nome, giocatore = "") {
       if (amb.motore && giocatore !== "" && (typeof giocatore === "number"

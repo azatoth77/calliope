@@ -9,7 +9,7 @@ docs/ricerche/2026-10-12-giochi-macchina-stati.md, area docs/aree/giochi.md).
    senza «n» e «n» senza {n}, {n} da solo con troppi valori, una forma uguale a una standard o
    riservata («basta»), troppi comandi, una pagina sconosciuta, una fase senza comandi, esito_s.
 2. **Il documento del riquadro**: runtime, motore, logica, avvio in quest'ordine, ognuno con la
-   sua impronta nella CSP; un gioco senza macchina resta com'era.
+   sua impronta nella CSP; dal 14/10 un gioco senza macchina non si approva e non ha documento.
 3. **Il nucleo** (motore_gioco.js, in Node): preparazione, turni, esito con il turno che passa
    all'uscita, punti, fine con la classifica e «ancora», comandi non attivi rifiutati; la forma
    dei risultati: l'esito annidato del 12/10 (campi sconosciuti), «dati» mancante, una fase
@@ -127,8 +127,8 @@ def prova_manifesto(tmp: Path):
 
     T = lambda sc: sc["macchina"]["fasi"]["turno"]  # noqa: E731
     P = lambda sc: T(sc)["comandi"]["porta"]  # noqa: E731
-    rifiutata("«ascolta» insieme alla macchina",
-              lambda sc: sc.update(ascolta={"comandi": {"uno": ["uno"]}}), "non va con «macchina»")
+    rifiutata("«ascolta» insieme alla macchina (dal 14/10 non c'è più)",
+              lambda sc: sc.update(ascolta={"comandi": {"uno": ["uno"]}}), "non c'è più")
     rifiutata("una fase di Calliope dichiarata dal gioco",
               lambda sc: sc["macchina"]["fasi"].update(esito={"comandi": {"x": ["x"]}}),
               "è una fase di Calliope")
@@ -157,7 +157,7 @@ def prova_manifesto(tmp: Path):
                   casella={"forme": ["casella {n}"], "n": {"da": 1, "a": 60}}),
               "troppi comandi a voce")
     rifiutata("una pagina sconosciuta", lambda sc: T(sc).update(pagina="podio"),
-              "una tra scelte, messaggio, tela")
+              "una tra titolo, scelte, griglia, messaggio, punteggi, classifica, tela")
     rifiutata("una fase senza comandi (non tela)",
               lambda sc: sc["macchina"]["fasi"].update(bonus={"verso": ["turno"]}),
               "almeno un comando")
@@ -188,11 +188,24 @@ def prova_documento():
     verifica("ogni script con la sua impronta nella CSP", csp.count("'sha256-") == 4)
     verifica("«</script» dentro la macchina non chiude il tag",
              html.count("</script>") == 4 and "<\\/script> {n}" in html)
-    verifica("lo stile del motore c'è", ".motore .comando" in html)
-    vecchio = scheda.normalizza({"tipo": "gioco", "file": ["logica.js", "gioco.js"]}, {})
-    html2, csp2 = scheda.documento(vecchio, {"logica.js": b"var a=1;", "gioco.js": b"var b=2;"})
-    verifica("contrario: un gioco senza macchina resta com'era (niente motore)",
-             "CalliopeMotore" not in html2 and csp2.count("'sha256-") == 3)
+    verifica("lo stile del motore e del palco c'è, senza scroll",
+             ".palco .comando" in html and "overflow:hidden" in html and "overflow:auto" not in html)
+    # 14/10: i giochi vecchi (gioco.js libero) non si approvano e non hanno documento
+    try:
+        scheda.normalizza({"tipo": "gioco", "file": ["logica.js", "gioco.js"]}, {})
+        rif = ""
+    except scheda.SchedaNonValida as e:
+        rif = str(e)
+    verifica("contrario: un gioco senza macchina non si approva più (14/10)",
+             "macchina a stati di Calliope" in rif, rif)
+    try:
+        scheda.documento({"tipo": "gioco", "file": ["gioco.js"], "giocatori": {"min": 1, "max": 1},
+                          "risorse": [], "stile": ""}, {"gioco.js": b"var b=2;"})
+        doc = "fatto"
+    except scheda.SchedaNonValida:
+        doc = "rifiutato"
+    verifica("contrario: …né un documento del riquadro (un gioco vecchio già approvato)",
+             doc == "rifiutato", doc)
 
 
 # ═══════════════════════════ 3. il nucleo ═══════════════════════════
@@ -410,8 +423,8 @@ def prova_apri(tmp: Path):
                  "x.test.js": corpo}.items():
         sb.scrivi(k, v)
     u = sb.test(fumo=False)["uscita"]
-    verifica("contrario: g.stato() su un gioco senza macchina lo dice",
-             "solo per un gioco con «scheda.macchina»" in u, u[-300:])
+    verifica("contrario: apriGioco su un gioco senza macchina lo dice (14/10: il formato di prima "
+             "non c'è più)", "manca «scheda.macchina»" in u and "niente gioco.js" in u, u[-300:])
 
 
 # ═══════════════════════════ 6. gli esempi di accettazione ═══════════════════════════

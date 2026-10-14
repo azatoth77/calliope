@@ -1,25 +1,22 @@
 const test = require("node:test");
 const assert = require("node:assert");
-const { nuovaPartita, vincitore, mossa, mossaComputer } = require("./logica.js");
+const { GIOCO, vincitore, mossaComputer } = require("./logica.js");
 
 test("tre in riga vince", () => {
   assert.strictEqual(vincitore(["X", "X", "X", "", "", "", "", "", ""]), "X");
 });
 
-test("cella occupata non cambia niente", () => {
-  const s = mossa(nuovaPartita(), 4);
-  assert.strictEqual(mossa(s, 4), s);
+test("in due la casella va a chi tocca, poi il segno cambia", () => {
+  const r = GIOCO.mosse.turno.casella(GIOCO.nuovaPartita({ giocatori: 2 }), { valore: 5 });
+  assert.strictEqual(r.dati.celle[4], "X");
+  assert.strictEqual(r.dati.segno, "O");
 });
 
 test("il computer blocca", () => {
-  let s = nuovaPartita();
-  s = mossa(s, 0); s = mossa(s, 4); s = mossa(s, 1);
-  assert.strictEqual(mossaComputer(s), 2);
+  assert.strictEqual(mossaComputer(["X", "X", "", "", "O", "", "", "", ""], "O"), 2);
 });
 
-test("pareggio", () => {
-  let s = nuovaPartita();
-  for (const i of [0, 1, 2, 4, 3, 5, 7, 6, 8]) s = mossa(s, i);
-  assert.ok(s.finita);
-  assert.strictEqual(s.vincitore, "");
+test("da solo il computer risponde subito", () => {
+  const r = GIOCO.mosse.turno.casella(GIOCO.nuovaPartita({ giocatori: 1 }), { valore: 1 });
+  assert.strictEqual(r.dati.celle.filter(Boolean).length, 2);
 });

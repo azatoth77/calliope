@@ -29,7 +29,8 @@ partita che l'ha letto non manda più messaggi agli altri schermi (`gioco_dati_p
   `chat`, `di` né `azione`. Un posto solo, nessuno si unisce; il documento c'è finché quella
   versione è la candidata con l'impronta di quando è stata consegnata.
 
-- **Comandi a voce** (11/10, `scheda.ascolta`, calliope/gioco_voce.py): il riquadro dichiara
+- **Comandi a voce** (11/10, `scheda.ascolta`, calliope/gioco_voce.py; dal 14/10 ricavati dalla
+  macchina a stati, e a dirli è il motore nel riquadro): il riquadro dichiara
   quali dei suoi comandi valgono adesso (`comandi`, solo un sottoinsieme di quelli del
   manifesto); il ciclo della voce chiede `ascolto(schermi)` per il gioco aperto sullo schermo
   del satellite che ascolta e manda la mossa con `comando` (evento SSE «gioco» di tipo
@@ -67,11 +68,12 @@ NOTE_GUASTO = {"non risponde": "Il gioco non rispondeva più: l'ho chiuso.",
                "messaggi non validi": "Il gioco mandava messaggi non validi: l'ho chiuso.",
                "non parte": "Il gioco non è partito: l'ho chiuso."}
 TIPI_PAGINA = ("pronto", "battito", "salva", "leggi", "manda", "chat", "di", "azione", "fine",
-               "errore", "guasto", "comandi", "chiuso")
+               "errore", "guasto", "comandi", "chiuso", "palco")
 # Una partita di prova (11/10): il gioco gira e basta, senza ponte verso Calliope né dati. I
 # comandi a voce sì (`comandi` sceglie quali valgono, `chiuso` lo manda la pagina quando il
-# gioco si chiude): sono un ingresso, come i tocchi, e non portano niente fuori dal riquadro
-TIPI_PROVA = ("pronto", "battito", "fine", "errore", "guasto", "comandi", "chiuso")
+# gioco si chiude): sono un ingresso, come i tocchi, e non portano niente fuori dal riquadro.
+# Anche `palco` (14/10): la diagnosi del motore su ciò che esce dal palco, per il collaudo
+TIPI_PROVA = ("pronto", "battito", "fine", "errore", "guasto", "comandi", "chiuso", "palco")
 # Un riquadro di cui la pagina non dice niente da tanto (il battito arriva ogni 15 s mentre si
 # vede) non riceve comandi a voce: lo schermo è spento, la pagina è altrove o il gioco è nascosto
 VIVO_S = 40.0
@@ -121,6 +123,9 @@ class Posto:
         self.contatto = 0.0
         self.attivi: list[str] | None = None
         self.segno = 0.0
+        # La diagnosi del palco (14/10): i difetti misurati dal motore sullo schermo vero (al
+        # più tre frasi; [] = la pagina ci sta), None finché non arriva
+        self.palco: list[str] | None = None
 
 
 class Partita:
@@ -197,7 +202,7 @@ class Giochi:
         pagina lo mostra nella modalità gioco con la cornice arancio e «PROVA» (contratto in
         docs/aree/giochi.md; chi apre la versione non attiva è lo sviluppo, non questo)."""
         from .. import minori
-        from ..estensioni.scheda import e_gioco_puro
+        from ..estensioni.scheda import e_gioco_puro, ha_macchina
         if not getattr(self.cfg, "giochi_enabled", True):
             return _rifiuto(ctx, "I giochi sugli schermi sono spenti.", "gioco_spento")
         self.pulisci()
@@ -221,6 +226,11 @@ class Giochi:
                     except Exception:  # noqa: BLE001
                         pass
                 return out
+        if not ha_macchina(m):
+            # 14/10 (passo 4, decisione 9 del 12/10): un gioco del formato di prima, con
+            # gioco.js libero, non si apre più: si rifà con la macchina a stati
+            return _rifiuto(ctx, f"«{titolo}» è un gioco del formato di prima: va rifatto con lo "
+                                 "sviluppo, chiedimelo come modifica.", "gioco_formato_vecchio")
         mitt = self.hub.mittente(ctx)
         puro = e_gioco_puro(m)
         perm = m.get("permessi") or {}
@@ -289,10 +299,14 @@ class Giochi:
         parla, o il primo della stanza), con `"prova": true` nella scheda. Solo per chi vive in
         casa (la chiede chi amministra, nella modalità sviluppo); una prova per gioco alla
         volta. Il risultato per la voce."""
+        from ..estensioni.scheda import ha_macchina
         if not getattr(self.cfg, "giochi_enabled", True):
             return _rifiuto(ctx, "I giochi sugli schermi sono spenti.", "gioco_spento")
         self.pulisci()
         titolo = m.get("titolo", nome)
+        if not ha_macchina(m):
+            return _rifiuto(ctx, f"«{titolo}» è un gioco del formato di prima: va rifatto con la "
+                                 "macchina a stati.", "gioco_formato_vecchio")
         mitt = self.hub.mittente(ctx)
         stanza = mitt.stanza or self.hub.stanza_predefinita or None
         dest, motivo = destinatari(schede.CASA, mitt, self.hub.abbinati(), stanza)
@@ -344,7 +358,7 @@ class Giochi:
     def documento(self, gettone: str) -> tuple[str, str] | None:
         """(HTML, CSP) del riquadro della partita, dai file della versione approvata (impronta
         ricontrollata). None: gettone sconosciuto, partita finita o file cambiati."""
-        from ..estensioni.scheda import documento
+        from ..estensioni.scheda import SchedaNonValida, documento
         with self._lock:
             pid = self._per_gettone.get(str(gettone or ""))
             p = self.partite.get(pid) if pid else None
@@ -364,7 +378,10 @@ class Giochi:
         chiave = (p.nome, p.versione, p.prova)
         d = self._documenti.get(chiave)
         if d is None:
-            d = documento(p.scheda, est.file_versione(p.nome, p.versione))
+            try:
+                d = documento(p.scheda, est.file_versione(p.nome, p.versione), p.titolo)
+            except SchedaNonValida:
+                return None                       # un gioco del formato di prima (14/10)
             self._documenti = {chiave: d}             # una versione per volta in memoria
         return d
 
@@ -647,6 +664,23 @@ class Giochi:
         posto.aperto = False
         if p.ascolta:
             self.sveglia_voce()
+        return {"ok": True}
+
+    def _t_palco(self, p: Partita, posto: Posto, dati) -> dict:
+        """La diagnosi del palco (14/10, motore_gioco.js): ciò che sullo schermo vero esce dal
+        palco o ha il testo tagliato, misurato dal motore dopo il disegno. Al più tre frasi
+        brevi; [] = la pagina ci sta. Resta sul posto (per il collaudo e le prove) e, se ci sono
+        difetti nuovi, nel registro e nel log. Non porta dati fuori dal riquadro: è una diagnosi."""
+        lista = dati.get("difetti")
+        if not isinstance(lista, list) or len(lista) > 3 or any(not isinstance(x, str)
+                                                                for x in lista):
+            return {"errore": "difetti: un elenco di al più tre frasi", "_stato": 400}
+        difetti = [_pulisci(x, 300) for x in lista]
+        nuovi = difetti and difetti != posto.palco
+        posto.palco = difetti
+        if nuovi:
+            self._registra(p, "palco", regola="gioco_fuori_dal_palco", difetti=difetti)
+            self.log(f"[GIOCHI] «{p.titolo}»: il disegno non sta nel palco: {difetti[0]}")
         return {"ok": True}
 
     def _t_fine(self, p: Partita, posto: Posto, dati) -> dict:

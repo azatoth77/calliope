@@ -29,10 +29,16 @@ resta quello dell'11/10 (gioco_voce.trova, principio 10 alla lettera: un insieme
 brevi riconosciute per intero) e il motore dice a runtime quali valgono adesso
 (`calliope.comandiAttivi`). Con la macchina il manifesto non ha `ascolta`: lo scrive Calliope.
 
-Rimandati (passi del progetto non fatti qui): il palco fisso e i sei modelli di pagina (oggi
-`scelte`, `messaggio`, `tela`), l'istantanea validata dal server con i comandi numerati, le
-domande standard («a chi tocca?»), il giudice di fase, «gioco anch'io» e i nomi scritti, la
-ripresa dopo «Riapri».
+Dal 14/10 (passo 4, il palco fisso) ogni fase sceglie uno dei modelli di pagina di Calliope
+(`PAGINE`: titolo, scelte, griglia, messaggio, punteggi, classifica, più la tela), disegnati dal
+motore su un palco di 1280×720 o 720×1280; la prova di fumo misura che ogni pagina ci stia. Dal
+14/10 è anche l'unico modo di scrivere un gioco (niente più `gioco.js` né `ascolta` piatto:
+scheda.normalizza). `"giocatore": true` porta alla mossa il nome di chi è riconosciuto dalla
+voce (`ctx.giocatore`), come l'`ascolta.giocatore` dell'11/10.
+
+Rimandati (passi del progetto non fatti qui): l'istantanea validata dal server con i comandi
+numerati, le domande standard («a chi tocca?»), il giudice di fase, «gioco anch'io» e i nomi
+scritti, la ripresa dopo «Riapri».
 """
 
 from __future__ import annotations
@@ -43,7 +49,8 @@ from .. import gioco_voce
 
 # Le fasi di Calliope: il gioco non le dichiara (le può nominare in «verso»)
 STANDARD = ("preparazione", "esito", "fine")
-PAGINE = ("scelte", "messaggio", "tela")
+# I modelli di pagina del motore (motore_gioco.js, impagina): il disegno è di Calliope
+PAGINE = ("titolo", "scelte", "griglia", "messaggio", "punteggi", "classifica", "tela")
 MAX_FASI = 8
 MAX_COMANDI_FASE = 8
 MAX_VALORI = 24          # un elenco chiuso di valori
@@ -168,9 +175,10 @@ def normalizza(m, giocatori: dict) -> dict:
     il manifesto."""
     if not isinstance(m, dict):
         _err("", "un oggetto {\"inizio\": \"turno\", \"fasi\": {…}}")
-    altri = [k for k in m if k not in ("inizio", "fasi", "esito_s")]
+    altri = [k for k in m if k not in ("inizio", "fasi", "esito_s", "giocatore")]
     if altri:
-        _err("", f"sconosciuto {', '.join(map(str, altri))} (solo inizio, fasi, esito_s)")
+        _err("", f"sconosciuto {', '.join(map(str, altri))} (solo inizio, fasi, esito_s, "
+                 "giocatore)")
     fasi = m.get("fasi")
     if not isinstance(fasi, dict) or not fasi or len(fasi) > MAX_FASI:
         _err(".fasi", f"da 1 a {MAX_FASI} fasi del gioco (preparazione, esito e fine sono di "
@@ -219,7 +227,8 @@ def normalizza(m, giocatori: dict) -> dict:
         _err(".esito_s", "secondi (0 = solo con «avanti»)")
     if not (0 <= esito_s <= 30):
         _err(".esito_s", "da 0 a 30 secondi (0 = solo con «avanti»)")
-    out = {"inizio": inizio, "fasi": out_fasi, "esito_s": esito_s}
+    out = {"inizio": inizio, "fasi": out_fasi, "esito_s": esito_s,
+           **({"giocatore": True} if _bool(m.get("giocatore"), False) else {})}
     ascolta(out, giocatori)            # i doppioni e i tetti della voce, già qui
     return out
 
@@ -270,7 +279,7 @@ def ascolta(m: dict, giocatori: dict) -> dict:
         comandi = gioco_voce.valida_elenco(piatti, massimo=MAX_PIATTI)
     except gioco_voce.ElencoNonValido as e:
         _err("", f"i comandi a voce che ne vengono: {e}")
-    return {"comandi": comandi, "giocatore": False}
+    return {"comandi": comandi, "giocatore": bool(m.get("giocatore"))}
 
 
 def in_parole(m: dict) -> str:
@@ -281,4 +290,5 @@ def in_parole(m: dict) -> str:
     return ("si gioca a voce o toccando, con " + ("una fase" if len(fasi) == 1
                                                  else f"{len(fasi)} fasi")
             + " e " + ("un comando" if n == 1 else f"{n} comandi")
-            + (", con una parte in tempo reale" if tela else ""))
+            + (", con una parte in tempo reale" if tela else "")
+            + (" e il nome di chi gioca" if m.get("giocatore") else ""))

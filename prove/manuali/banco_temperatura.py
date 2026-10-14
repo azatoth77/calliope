@@ -9,11 +9,12 @@ passata, prove/manuali/misura_presence_penalty.py). Qui si confrontano **lavori 
 una passata: per ogni combinazione di temperatura e presence_penalty, tre casi veri riscritti
 con nomi di fantasia, ripetuti:
 
-1. **porte** (gioco, correzione): il gioco delle porte di Borgofiore con il difetto vero del
-   12/10 (logica.js restituisce l'esito annidato, gioco.js lo legge al primo livello: niente
-   mostro, sempre «Nessun punto!»), e la segnalazione della persona. Accettazione: un test
-   nascosto che apre il gioco nel DOM finto (apriGioco), tocca «Inizia» e la prima porta e
-   legge «Fantasmino» e «+3 punti».
+1. **porte** (gioco, correzione): il gioco delle porte di Borgofiore con il genere di difetto
+   del 12/10 (allora logica.js restituiva l'esito annidato e gioco.js lo leggeva al primo
+   livello; dal 14/10, con la macchina a stati e senza gioco.js, l'esito mostra il mostro della
+   porta accanto), e la segnalazione della persona. Accettazione: un test nascosto che apre il
+   gioco nel DOM finto (apriGioco), tocca «2 giocatori» e la prima porta e legge «Fantasmino» e
+   «+3 punti».
 2. **convertitore** (estensione nuova): un convertitore di distanze con un valore di due parole
    con l'accento («unità astronomiche»). Accettazione: test nascosto con CalliopeFinta, cinque
    esempi dato → risultato (10 miglia in chilometri, un miglio nautico in metri, due unità
@@ -109,20 +110,19 @@ def _porte():
     return F
 
 
-PROBLEMA_PORTE = ("toccando una porta non si vede nessun mostro e non si prendono punti: "
-                  "esce sempre «Nessun punto!»")
-COMPITO_PORTE = ("Il gioco «Le porte di Borgofiore» per 2 giocatori: si tocca Inizia, poi a "
-                 "turno ogni giocatore tocca una porta; dietro c'è un mostro che vale dei punti "
+PROBLEMA_PORTE = ("toccando la prima porta si vede la caramella e «Nessun punto!», ma i punti "
+                  "salgono di tre: il mostro che si vede non è quello della porta")
+COMPITO_PORTE = ("Il gioco «Le porte di Borgofiore» da 2 a 4 giocatori: si sceglie in quanti, "
+                 "poi a turno ogni giocatore tocca una porta; dietro c'è un mostro che vale dei punti "
                  "(il Fantasmino 3, il Pipistrello 2) o una caramella che non ne vale. Dopo ogni "
                  "porta si vede cosa c'era dietro, con il nome, e i punti presi («+3 punti!» o "
                  "«Nessun punto!»), e il punteggio dei giocatori.")
 ACCETTAZIONE_PORTE = """const { test } = require("node:test");
 const assert = require("node:assert");
 test("ACC porte: toccando la prima porta si vedono il mostro e i suoi punti", async () => {
-  const g = await apriGioco({ giocatori: 2, seme: 3 });
-  await g.tocca("Inizia");
-  const porte = g.trova(".porta");
-  if (porte.length) await g.tocca(porte[0]); else await g.tocca("Porta 1");
+  const g = await apriGioco({ seme: 3 });
+  await g.tocca("2 giocatori");
+  await g.tocca("Porta 1");
   assert.match(g.testo(), /Fantasmino/);
   assert.match(g.testo(), /\\+\\s*3 punti/);
 });
@@ -213,7 +213,7 @@ def casi():
     import prova_lavori as PL
     F = _porte()
     c01 = next(c for c in PL.CODICE if c[0] == "c01")
-    prima = {"logica.js": F.LOGICA_PORTE, "gioco.js": F.GIOCO_ROTTO,
+    prima = {"logica.js": F.GIOCO_ROTTO,
              "logica.test.js": F.TEST_LOGICA_PORTE,
              "manifesto.json": json.dumps(F.MANIFESTO_PORTE, ensure_ascii=False, indent=1)}
     return {
@@ -221,7 +221,7 @@ def casi():
                   "estensione": F.MANIFESTO_PORTE["nome"], "compito": COMPITO_PORTE,
                   "problema": PROBLEMA_PORTE, "prima": prima,
                   "accettazione": ("accettazione_banco.test.js", ACCETTAZIONE_PORTE),
-                  "riferimento": {**prima, "gioco.js": F.GIOCO_GIUSTO}},
+                  "riferimento": {**prima, "logica.js": F.GIOCO_GIUSTO}},
         "convertitore": {"tipo": "estensione", "gioco": False, "correzione": False,
                          "estensione": None, "compito": COMPITO_CONVERTITORE, "prima": {},
                          "accettazione": ("test_accettazione_banco.py",

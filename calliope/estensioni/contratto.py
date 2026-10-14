@@ -146,7 +146,8 @@ def scheda_testo(cfg=None) -> list[str]:
     """La scheda interattiva (05/10, scheda.py e schermi/giochi.py), generata dai valori del
     codice: formato, interfaccia del riquadro, tetti, test, chi approva. Dal 13/10 un gioco
     nuovo usa la macchina a stati di Calliope (estensioni/macchina.py, motore_gioco.js):
-    l'agente scrive solo la dichiarazione delle fasi e la logica pura."""
+    l'agente scrive solo la dichiarazione delle fasi e la logica pura. Dal 14/10 (il palco
+    fisso) sceglie per ogni fase un modello di pagina, e la prova di fumo misura il palco."""
     from . import macchina as mc
     from . import scheda as sc
     from ..schermi import giochi as gi
@@ -159,20 +160,25 @@ def scheda_testo(cfg=None) -> list[str]:
         "(iframe sandbox, origine opaca): niente rete, niente localStorage, niente pagina "
         "intorno. Non serve estensione.py: solo JavaScript. Calliope dà la MACCHINA A STATI del "
         "gioco: preparazione (quanti giocatori), turni, punti, esito di ogni mossa, fine con la "
-        "classifica e «ancora», il disegno della pagina, un pulsante per ogni comando e i "
-        "comandi a voce. Tu scrivi solo la dichiarazione delle fasi nel manifesto e la logica "
-        "pura in logica.js. Niente gioco.js, niente DOM, niente turni o punti fatti a mano.",
+        "classifica e «ancora», il disegno della pagina su un palco fisso (1280×720, e 720×1280 "
+        "sul telefono in verticale, scalato alla finestra, mai scroll), un pulsante per ogni "
+        "comando e i comandi a voce. Tu scrivi solo la dichiarazione delle fasi nel manifesto e "
+        "la logica pura in logica.js. Niente gioco.js, niente DOM, niente CSS di posizioni o "
+        "misure, niente turni o punti fatti a mano.",
         "- file: logica.js con `const GIOCO = {…}` e in fondo `if (typeof module !== "
-        "\"undefined\") module.exports = { GIOCO, … };`; facoltativi gioco.css (solo le "
-        "variabili del tema: --sfondo, --testo, --primario, --accento, --carattere, --raggio) e "
-        "disegni .svg; i test logica.test.js (node:test e node:assert, `const { GIOCO } = "
-        "require(\"./logica.js\")`) e gioco.test.js, che gioca la partita vera con la macchina "
-        "(apriGioco: g.tocca(\"Porta 1\"), g.comando(\"porta\", 3), g.avanza(ms), g.testo(), "
-        "g.stato() con fase, tocca, giocatori e punti, esito, comandi attivi). esegui_test li "
-        "fa girare con Node insieme alla prova di fumo per fasi: ogni fase con ogni comando e "
-        "ogni valore, partite intere fino alla fine",
+        "\"undefined\") module.exports = { GIOCO, … };`; facoltativi tema.css (solo le "
+        "variabili del tema: --sfondo, --testo, --primario, --accento, --carattere, --raggio, "
+        "--casella, --bordo; posizioni e misure le mette Calliope) e disegni .svg; i test "
+        "logica.test.js (node:test e node:assert, `const { GIOCO } = require(\"./logica.js\")`) "
+        "e gioco.test.js, che gioca la partita vera con la macchina (apriGioco: "
+        "g.tocca(\"Porta 1\"), g.comando(\"porta\", 3), g.avanza(ms), g.testo(), g.stato() con "
+        "fase, tocca, giocatori e punti, esito, comandi attivi; g.palco() → [] se la pagina di "
+        "adesso sta nel palco). esegui_test li fa girare con Node insieme alla prova di fumo per "
+        "fasi: ogni fase con ogni comando e ogni valore, partite intere fino alla fine, e ogni "
+        "pagina misurata sul palco nei due orientamenti (niente fuori, niente sovrapposto, testo "
+        "che ci sta)",
         "- manifesto: \"scheda\": {\"tipo\": \"gioco\", \"file\": [\"logica.js\"], \"stile\": "
-        "\"gioco.css\", \"risorse\": [], \"giocatori\": {\"min\": 1, \"max\": 4}, \"salva\": "
+        "\"tema.css\", \"risorse\": [], \"giocatori\": {\"min\": 1, \"max\": 4}, \"salva\": "
         "false, \"voce\": false, \"azioni\": [], \"macchina\": {\"inizio\": \"turno\", "
         "\"fasi\": {\"turno\": {\"pagina\": \"scelte\", \"turni\": true, \"verso\": [\"esito\", "
         "\"fine\"], \"comandi\": {\"porta\": {\"forme\": [\"porta {n}\", \"la porta {n}\", "
@@ -180,10 +186,14 @@ def scheda_testo(cfg=None) -> list[str]:
         f"{mc.ESITO_S:g}}}}}; cosa_fa per esempio {{\"verbo\": \"propone\", \"oggetto\": \"una "
         "partita a tris sullo schermo\"}; input di solito nessuno",
         f"- fasi: al più {mc.MAX_FASI} del gioco (nomi in minuscolo); preparazione, esito e fine "
-        "sono di Calliope e non si dichiarano. Per ogni fase: pagina (scelte: titolo, testo e "
-        "un pulsante per comando e valore; messaggio; tela, sotto), turni (true: dopo la mossa "
+        "sono di Calliope e non si dichiarano. Per ogni fase: pagina, turni (true: dopo la mossa "
         "tocca al giocatore dopo), verso (le fasi dove una mossa può portare; esito e fine "
-        f"valgono sempre), comandi (al più {mc.MAX_COMANDI_FASE}). Un comando: forme da dire "
+        f"valgono sempre), comandi (al più {mc.MAX_COMANDI_FASE}). Le pagine sono di Calliope "
+        "(scegli quella che serve, il disegno lo fa lei): scelte (titolo, testo e un pulsante "
+        "per comando e valore, quanti ne stanno: una ventina in orizzontale); griglia (una "
+        "scacchiera fino a 12×12: vista dà «caselle»); messaggio (un testo grande e i pulsanti "
+        "in fondo); punteggi (i giocatori con i punti); titolo (un titolo grande e un "
+        "pulsante); classifica; tela (sotto). Un comando: forme da dire "
         "per intero (1–5 parole; il nome davanti e i numeri in cifre o in parole valgono già), "
         "al più uno slot {n} per forma con \"n\": {\"da\": 1, \"a\": 6} (un numero, al più "
         f"{mc.MAX_NUMERI}) o \"n\": {{\"valori\": {{\"rosso\": [\"rosso\"], \"blu\": [\"blu\", "
@@ -199,12 +209,20 @@ def scheda_testo(cfg=None) -> list[str]:
         "la fase «dopo»; fase: dove andare subito; ancora: true se lo stesso giocatore muove di nuovo); "
         "attivi[fase](dati, ctx) → { comando: true | false | [valori] } (restringe, mai fuori dal "
         "manifesto; senza: tutti); vista[fase](dati, ctx) → { titolo, sottotitolo, testo } "
-        "(solo testi: il disegno è della macchina). La partita finisce portando a \"fine\"; una "
-        "fase che non è la fine ha sempre almeno un comando attivo",
+        "(solo testi brevi: il titolo sta in due righe, il testo in tre; il disegno è della "
+        "macchina) e, nella pagina griglia, «caselle»: un elenco di righe uguali, ogni casella "
+        "un testo o { testo, colore, risorsa, comando, valore } (colore: rosso, verde, blu, "
+        "giallo, arancio, viola, azzurro, rosa, marrone, grigio, nero, bianco o #rrggbb; "
+        "risorsa: un .svg di «risorse»; con comando e valore attivi la casella è il pulsante "
+        "della mossa, gli altri comandi attivi vanno in fondo). La partita finisce portando a "
+        "\"fine\"; una fase che non è la fine ha sempre almeno un comando attivo. Con "
+        "\"giocatore\": true nella macchina la mossa riceve anche giocatore (il nome di chi l'ha "
+        "detta, se la voce è riconosciuta; spesso manca: il gioco va anche senza)",
         "- giochi in tempo reale o senza turni (memory a tempo, abilità, disegno): una fase con "
         "\"pagina\": \"tela\" e GIOCO.tela[fase](area, dati, tela): disegni dentro area (DOM o "
-        "canvas, eventi con addEventListener) e ne esci con tela.esci({ dati, punti, fase: "
-        "\"fine\" }); «fine partita» vale sempre. Nella tela c'è l'oggetto calliope: "
+        "canvas, eventi con addEventListener; misura tela.larghezza × tela.altezza px del "
+        "palco, niente fuori) e ne esci con tela.esci({ dati, punti, fase: \"fine\" }); «fine "
+        "partita» vale sempre. Nella tela c'è l'oggetto calliope: "
         "calliope.salva(chiave, valore) e calliope.leggi(chiave) → Promise (con «salva», "
         f"valore JSON fino a {gi.MAX_SALVA // 1000} kB), calliope.di(testo) → Promise (con "
         f"«voce»: al più {c('giochi_frasi_minuto', 3)} frasi al minuto, {gi.MAX_FRASE} "

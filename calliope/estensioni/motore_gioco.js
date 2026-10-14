@@ -18,12 +18,37 @@
 // campi sconosciuti è un errore detto con fase e comando: il caso del 12/10 dell'esito annidato
 // non passa), disegna la pagina, fa di ogni comando un pulsante e dice a Calliope quali comandi a
 // voce valgono adesso.
+//
+// Dal 14/10 (passo 4 del progetto, il palco fisso): ogni pagina si disegna su un PALCO di misura
+// fissa, 1280×720 in orizzontale e 720×1280 in verticale (telefono), scalato e centrato nella
+// finestra, mai scroll. I modelli di pagina sono sei più la tela: titolo, scelte, griglia,
+// messaggio, punteggi, classifica (e tela, la via libera). L'impaginazione è una funzione PURA
+// (impagina: contenuto della pagina → scatole con posizione, misura e corpo del testo), uguale nel
+// riquadro e in Node: così la prova di fumo misura, per ogni pagina che la macchina raggiunge e in
+// entrambi gli orientamenti, ciò che esce dal palco, ciò che si sovrappone e il testo che non ci
+// sta neanche al corpo minimo (controllaPalco). Nel browser il motore misura anche il disegno vero
+// (getBoundingClientRect, scrollHeight) e lo manda a Calliope come diagnosi («palco»).
 (function (G) {
   "use strict";
-  var STANDARD = { preparazione: 1, esito: 1, fine: 1 };
   var CHIAVI_MOSSA = ["dati", "punti", "esito", "fase", "dopo", "ancora"];
-  var CHIAVI_VISTA = ["titolo", "sottotitolo", "testo"];
+  var CHIAVI_VISTA = ["titolo", "sottotitolo", "testo", "caselle"];
+  var CHIAVI_CASELLA = ["testo", "colore", "risorsa", "comando", "valore"];
   var ETICHETTE = { inizia: "Inizia", avanti: "Avanti", ancora: "Ancora", fine_partita: "Fine partita" };
+  var MODELLI = ["titolo", "scelte", "griglia", "messaggio", "punteggi", "classifica", "tela"];
+  // I colori di una casella: un nome di questo elenco o #rgb / #rrggbb
+  var COLORI = { rosso: "#d93a3a", verde: "#2f9e44", blu: "#3557c9", giallo: "#f2c94c",
+                 arancio: "#f39a2e", viola: "#8e44ad", azzurro: "#4aa3df", rosa: "#e87fb0",
+                 marrone: "#8b5a2b", grigio: "#9e9e9e", nero: "#222222", bianco: "#ffffff" };
+  var COLORE_HEX = /^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/;
+  var RISORSA = /^[a-z0-9_\-]{1,30}(\/[a-z0-9_\-]{1,30})?\.svg$/;
+  var MAX_LATO = 12;            // una griglia al più 12×12
+
+  // Il canale riservato al motore (scheda.RUNTIME_JS): i comandi a voce attivi, le mosse a voce,
+  // la diagnosi del palco. Il runtime lo mette prima del motore, il motore lo prende e lo toglie:
+  // il codice del gioco, che viene dopo, non lo vede (non è un confine: tutto ciò che esce dal
+  // riquadro lo ricontrollano la pagina e il server)
+  var CANALE = null;
+  try { CANALE = G.__calliopeMotore || null; delete G.__calliopeMotore; } catch (e) { /* niente */ }
 
   function errore(testo) { var e = new Error(testo); e.name = "ErroreGioco"; return e; }
   function copia(x, dove) {
@@ -35,7 +60,385 @@
     return x === null ? "null" : Array.isArray(x) ? "un elenco" : typeof x === "object" ? "un oggetto"
       : typeof x === "string" ? "un testo" : typeof x === "number" ? "un numero" : String(typeof x);
   }
+  function corto(t, n) { t = String(t).replace(/\s+/g, " ").trim(); n = n || 30; return t.length > n ? t.slice(0, n - 1) + "…" : t; }
 
+  // ═══════════════════════════ il palco: impaginazione pura ═══════════════════════════
+  var PALCHI = { orizzontale: { W: 1280, H: 720 }, verticale: { W: 720, H: 1280 } };
+  var BORDO = 32, SPAZIO = 16, RIGA = 1.2;
+  // [corpo massimo, corpo minimo, altezza massima] dei testi, per orientamento
+  var TESTI = {
+    orizzontale: { titolo: [60, 30, 150], sottotitolo: [34, 22, 82], testo: [38, 22, 138],
+                   grande: [84, 36, 330], extra: [36, 24, 90], titolone: [96, 44, 270] },
+    verticale: { titolo: [60, 30, 230], sottotitolo: [36, 22, 130], testo: [40, 22, 300],
+                 grande: [84, 36, 560], extra: [38, 24, 140], titolone: [96, 44, 430] },
+  };
+  // La fascia dei pulsanti in fondo alle pagine con pochi comandi (titolo, messaggio, punteggi,
+  // classifica, tela, i comandi fuori dalle caselle di una griglia)
+  var FONDO = { orizzontale: 104, verticale: 196 };
+  // Un pulsante: almeno 150×80 sul palco (sul telefono in verticale, scala ~0,54, ~44 px veri)
+  var PULSANTE = { hMin: 80, hMax: 128, wMin: 150, wMax: 460, fMax: 40, fMin: 22, dentro: 18 };
+  var FASCIA = { riga: 52, fMax: 28, fMin: 20, spazio: 10, dentro: 18, righe: 3 };
+  // Una casella della griglia: almeno 32 px sul palco (una scacchiera 12×12 ci sta con il solo
+  // titolo; con più testo la misura dice di accorciarlo o di usare meno caselle)
+  var CASELLA = { min: 32, spazio: 8 };
+
+  // La larghezza stimata di un testo (system-ui; un po' più larga del vero, così ciò che «sta»
+  // qui sta anche sullo schermo: la misura vera del browser fa il resto)
+  var STRETTE = " .,;:!'|il1Ijtf()[]«»\"-";
+  function peso(c) {
+    if (STRETTE.indexOf(c) >= 0) return 0.34;
+    if (c === "r") return 0.42;
+    if ("mwMW@".indexOf(c) >= 0) return 0.92;
+    if (c >= "0" && c <= "9") return 0.6;
+    if (c >= "A" && c <= "Z") return 0.7;
+    return c.charCodeAt(0) < 0x250 ? 0.58 : 1.05;
+  }
+  function larghezza(t, f) {
+    var w = 0, cs = Array.from(String(t));
+    for (var i = 0; i < cs.length; i++) w += peso(cs[i]);
+    return w * f;
+  }
+  // Le righe di un testo a corpo f in una larghezza w (a capo tra le parole; una parola più
+  // larga della riga va a capo dentro, come overflow-wrap: anywhere). k: 1,08 per il grassetto
+  function righe(t, f, w, k) {
+    var n = 0;
+    String(t).split("\n").forEach(function (par) {
+      var parole = par.split(/\s+/).filter(Boolean);
+      if (!parole.length) { n++; return; }
+      var r = 1, usata = 0, sp = larghezza(" ", f) * k;
+      parole.forEach(function (p) {
+        var lp = larghezza(p, f) * k;
+        if (lp > w) {
+          if (usata > 0) { r++; usata = 0; }
+          var pezzi = Math.ceil(lp / w);
+          r += pezzi - 1;
+          usata = lp - (pezzi - 1) * w;
+          return;
+        }
+        if (usata === 0) usata = lp;
+        else if (usata + sp + lp <= w) usata += sp + lp;
+        else { r++; usata = lp; }
+      });
+      n += r;
+    });
+    return n;
+  }
+  // Il corpo più grande (a passi di 2 px, da fMax a fMin) a cui il testo sta in w × hMax
+  function adatta(t, w, hMax, fMax, fMin, k, righeMax) {
+    k = k || 1;
+    fMax = Math.max(fMin, Math.floor(fMax));
+    for (var f = fMax; ; f = Math.max(fMin, f - 2)) {
+      var n = righe(t, f, w, k);
+      if (n * f * RIGA <= hMax + 0.5 && (!righeMax || n <= righeMax)) return { f: f, n: n, h: Math.ceil(n * f * RIGA), ok: true };
+      if (f === fMin) break;
+    }
+    var n2 = righe(t, fMin, w, k);
+    var max = Math.max(1, Math.floor(hMax / (fMin * RIGA)));
+    if (righeMax) max = Math.min(max, righeMax);
+    return { f: fMin, n: n2, h: Math.ceil(n2 * fMin * RIGA), ok: false, max: max,
+             caratteri: Math.max(1, Math.floor(max * w / (fMin * 0.6 * k))) };
+  }
+  function tondo(b) { b.x = Math.round(b.x); b.y = Math.round(b.y); b.w = Math.round(b.w); b.h = Math.round(b.h); return b; }
+  function metti(out, b) { out.scatole.push(tondo(b)); return b; }
+
+  function scatolaTesto(out, tipoS, testo, x, y, w, mis, k, fonte) {
+    var a = adatta(testo, w, mis[2], mis[0], mis[1], k);
+    var b = { tipo: tipoS, testo: testo, x: x, y: y, w: w, h: a.ok ? a.h : mis[2], f: a.f, scritta: true };
+    if (fonte) b.fonte = fonte;
+    if (!a.ok) b.tagliato = { righe: a.n, max: a.max, fMin: mis[1], caratteri: a.caratteri };
+    return metti(out, b);
+  }
+
+  // I pulsanti in una zona: la disposizione (colonne × righe) con il corpo più grande che fa
+  // stare ogni etichetta; se non ce n'è una con pulsanti di almeno 150×80, la più fitta, che esce
+  // dalla zona (e la misura lo dice: «troppi»)
+  function corpoPulsanti(lista, w, h, fMax) {
+    for (var f = Math.max(PULSANTE.fMin, Math.floor(fMax)); ; f = Math.max(PULSANTE.fMin, f - 2)) {
+      var ok = true;
+      for (var i = 0; i < lista.length && ok; i++) {
+        var n = righe(lista[i].etichetta, f, w, 1);
+        if (n > 2 || n * f * RIGA > h) ok = false;
+      }
+      if (ok) return f;
+      if (f === PULSANTE.fMin) return null;
+    }
+  }
+  function pulsanti(out, lista, x, y, w, h) {
+    var n = lista.length, P = PULSANTE, meglio = null;
+    if (!n) return;
+    for (var col = 1; col <= n; col++) {
+      var rr = Math.ceil(n / col);
+      var bw = Math.min(P.wMax, (w - (col - 1) * SPAZIO) / col);
+      var bh = Math.min(P.hMax, (h - (rr - 1) * SPAZIO) / rr);
+      if (bw < P.wMin) break;
+      if (bh < P.hMin) continue;
+      var f = corpoPulsanti(lista, bw - 2 * P.dentro, bh - 12, Math.min(P.fMax, bh * 0.45));
+      if (f === null) continue;
+      // il corpo più grande; a parità, meno righe (una fila di porte), poi i pulsanti più grandi
+      var voto = f * 1e6 - rr * 1e3 + bw * bh / 1e3;
+      if (!meglio || voto > meglio.voto) meglio = { col: col, rr: rr, bw: bw, bh: bh, f: f, voto: voto };
+    }
+    if (!meglio) {
+      var cmax = Math.max(1, Math.floor((w + SPAZIO) / (P.wMin + SPAZIO)));
+      var rmax = Math.max(0, Math.floor((h + SPAZIO) / (P.hMin + SPAZIO)));
+      var c2 = Math.min(cmax, n);
+      meglio = { col: c2, rr: Math.ceil(n / c2), bw: Math.min(P.wMax, (w - (c2 - 1) * SPAZIO) / c2), bh: P.hMin, f: P.fMin };
+      if (cmax * rmax < n) out.note.push({ tipo: "troppi", n: n, max: cmax * rmax });
+    }
+    var gh = meglio.rr * meglio.bh + (meglio.rr - 1) * SPAZIO;
+    var y0 = gh <= h ? y + (h - gh) / 2 : y;
+    for (var i = 0; i < n; i++) {
+      var r = Math.floor(i / meglio.col), c = i % meglio.col;
+      var inRiga = Math.min(meglio.col, n - r * meglio.col);
+      var rw = inRiga * meglio.bw + (inRiga - 1) * SPAZIO;
+      var p = lista[i];
+      var a = adatta(p.etichetta, meglio.bw - 2 * P.dentro, meglio.bh - 12, meglio.f, P.fMin, 1, 2);
+      var b = { tipo: "pulsante", testo: p.etichetta, comando: p.c, valore: p.v, scritta: true,
+                x: x + (w - rw) / 2 + c * (meglio.bw + SPAZIO), y: y0 + r * (meglio.bh + SPAZIO),
+                w: meglio.bw, h: meglio.bh, f: a.f, fonte: p.fonte };
+      if (!a.ok) b.tagliato = { righe: a.n, max: a.max, fMin: P.fMin, caratteri: a.caratteri };
+      metti(out, b);
+    }
+  }
+
+  // La fascia dei punti in fondo: «Nome: punti», chi tocca sottolineato. Restituisce il suo bordo alto
+  function fascia(out, pag, x, w, basso) {
+    var voci = pag.giocatori.map(function (g, i) { return { testo: g.nome + ": " + g.punti, tocca: i === pag.tocca && pag.mostraTocca }; });
+    var f, file;
+    for (f = FASCIA.fMax; ; f -= 2) {
+      file = [[]];
+      var usata = 0;
+      voci.forEach(function (v) {
+        v.w = Math.min(w, larghezza(v.testo, f) * 1.08 + 2 * FASCIA.dentro);
+        if (usata > 0 && usata + FASCIA.spazio + v.w > w) { file.push([]); usata = 0; }
+        usata += (usata > 0 ? FASCIA.spazio : 0) + v.w;
+        file[file.length - 1].push(v);
+      });
+      if (file.length <= FASCIA.righe || f <= FASCIA.fMin) break;
+    }
+    var h = file.length * FASCIA.riga + (file.length - 1) * 6;
+    var top = basso - h;
+    metti(out, { tipo: "fascia", sfondo: true, x: x, y: top, w: w, h: h });
+    file.forEach(function (fila, r) {
+      var tot = fila.reduce(function (s, v) { return s + v.w; }, 0) + (fila.length - 1) * FASCIA.spazio;
+      var xx = x + (w - tot) / 2;
+      fila.forEach(function (v) {
+        metti(out, { tipo: "giocatore", testo: v.testo, tocca: v.tocca, scritta: true, x: xx, y: top + r * (FASCIA.riga + 6),
+                     w: v.w, h: FASCIA.riga, f: f });
+        xx += v.w + FASCIA.spazio;
+      });
+    });
+    return top;
+  }
+
+  function griglia(out, pag, x, y, w, h) {
+    var cs = pag.caselle, R = cs.length, C = cs[0].length, g = CASELLA.spazio;
+    var lato = Math.floor(Math.min((w - (C - 1) * g) / C, (h - (R - 1) * g) / R));
+    if (lato < CASELLA.min) {
+      out.note.push({ tipo: "caselle", R: R, C: C, lato: lato,
+                      maxR: Math.max(1, Math.floor((h + g) / (CASELLA.min + g))),
+                      maxC: Math.max(1, Math.floor((w + g) / (CASELLA.min + g))) });
+      lato = CASELLA.min;
+    }
+    var gw = C * lato + (C - 1) * g, gh = R * lato + (R - 1) * g;
+    var x0 = x + (w - gw) / 2, y0 = gh <= h ? y + (h - gh) / 2 : y;
+    cs.forEach(function (riga, r) {
+      riga.forEach(function (k, c) {
+        var b = { tipo: "casella", r: r, c: c, x: x0 + c * (lato + g), y: y0 + r * (lato + g), w: lato, h: lato };
+        if (k.testo) {
+          var a = adatta(k.testo, lato - 10, lato - 10, Math.min(96, lato * 0.6), 14, 1);
+          b.testo = k.testo; b.f = a.f; b.scritta = true;
+          b.fonte = "GIOCO.vista." + pag.fase + ".caselle";
+          if (!a.ok) b.tagliato = { righe: a.n, max: a.max, fMin: 14, caratteri: a.caratteri };
+        }
+        if (k.colore) b.colore = k.colore;
+        if (k.risorsa) b.risorsa = k.risorsa;
+        if (k.pulsante) { b.comando = k.comando; b.valore = k.valore; b.etichetta = k.etichetta; }
+        metti(out, b);
+      });
+    });
+  }
+
+  // Le righe dei giocatori (punteggi) o della classifica, in una zona
+  function righeGiocatori(out, voci, x, y, w, h, tipoS) {
+    var n = voci.length;
+    if (!n) return;
+    var g = 8, primo = tipoS === "classifica" ? 1.3 : 1;
+    var unita = (h - (n - 1) * g) / (n - 1 + primo);
+    var rh = Math.min(84, unita);
+    if (rh < 48) { out.note.push({ tipo: "righe", n: n }); rh = 48; }
+    var tot = rh * (n - 1 + primo) + (n - 1) * g;
+    var yy = tot <= h ? y + (h - tot) / 2 : y;
+    var larga = Math.min(w, 900);
+    voci.forEach(function (v, i) {
+      var hh = i === 0 ? rh * primo : rh;
+      var a = adatta(v.testo, larga - 32, hh - 8, Math.min(i === 0 && primo > 1 ? 52 : 40, hh * 0.55), 20, 1.08, 1);
+      var b = { tipo: "riga", testo: v.testo, tocca: !!v.tocca, primo: i === 0 && primo > 1, scritta: true,
+                x: x + (w - larga) / 2, y: yy, w: larga, h: hh, f: a.f };
+      if (!a.ok) b.tagliato = { righe: a.n, max: a.max, fMin: 20, caratteri: a.caratteri };
+      metti(out, b);
+      yy += hh + g;
+    });
+  }
+
+  // Il contenuto di una pagina (dal nucleo: pagina(S)) → le scatole sul palco, in ordine di
+  // lettura (dall'alto, da sinistra: così le legge chi usa un lettore di schermo, e il testo
+  // visibile dei test esce nell'ordine in cui si vede)
+  function impagina(pag, orientamento) {
+    var out = componi(pag, orientamento);
+    out.scatole = out.scatole.map(function (b, i) { return [b, i]; })
+      .sort(function (a, b) { return a[0].y - b[0].y || a[0].x - b[0].x || a[1] - b[1]; })
+      .map(function (x) { return x[0]; });
+    return out;
+  }
+  function componi(pag, orientamento) {
+    var O = orientamento === "verticale" ? "verticale" : "orizzontale";
+    var W = PALCHI[O].W, H = PALCHI[O].H, D = TESTI[O], F = FONDO[O];
+    var out = { orientamento: O, W: W, H: H, modello: pag.modello, fase: pag.fase, scatole: [], note: [] };
+    var x = BORDO, w = W - 2 * BORDO, y = BORDO, basso = H - BORDO;
+    var mod = pag.modello;
+    if (pag.fascia && pag.giocatori && pag.giocatori.length) basso = fascia(out, pag, x, w, basso) - SPAZIO;
+    var fonti = pag.fonti || {};
+    // i pulsanti in fondo (le pagine con pochi comandi)
+    var inFondo = mod !== "scelte" && pag.pulsanti.length > 0;
+    if (inFondo) {
+      pulsanti(out, pag.pulsanti, x, basso - F, w, F);
+      basso -= F + SPAZIO;
+    }
+    if (mod === "titolo") {
+      // il titolo grande al centro, sotto il sottotitolo e il testo
+      var pezzi = [];
+      if (pag.titolo) pezzi.push(["titolo", pag.titolo, D.titolone, 1.08]);
+      if (pag.sottotitolo) pezzi.push(["sottotitolo", pag.sottotitolo, D.sottotitolo, 1]);
+      if (pag.testo) pezzi.push(["testo", pag.testo, D.testo, 1]);
+      var alto = pezzi.reduce(function (s, p) {
+        var a = adatta(p[1], w, p[2][2], p[2][0], p[2][1], p[3]);
+        return s + (a.ok ? a.h : p[2][2]) + SPAZIO;
+      }, -SPAZIO);
+      var yy = Math.max(y, y + (basso - y - alto) / 2);
+      pezzi.forEach(function (p) {
+        var b = scatolaTesto(out, p[0], p[1], x, yy, w, p[2], p[3], fonti[p[0]]);
+        yy = b.y + b.h + SPAZIO;
+      });
+      return out;
+    }
+    // la testata: titolo, sottotitolo, testo
+    [["titolo", D.titolo, 1.08], ["sottotitolo", D.sottotitolo, 1], ["testo", D.testo, 1]].forEach(function (t) {
+      if (!pag[t[0]]) return;
+      var b = scatolaTesto(out, t[0], pag[t[0]], x, y, w, t[1], t[2], fonti[t[0]]);
+      y = b.y + b.h + SPAZIO;
+    });
+    var h = basso - y;
+    if (mod === "scelte") pulsanti(out, pag.pulsanti, x, y, w, h);
+    else if (mod === "griglia") griglia(out, pag, x, y, w, h);
+    else if (mod === "messaggio") {
+      var parti = [];
+      if (pag.grande) parti.push(["grande", pag.grande, D.grande, 1.08]);
+      if (pag.extra) parti.push(["extra", pag.extra, D.extra, 1]);
+      var tot = parti.reduce(function (s, p) {
+        var a = adatta(p[1], w, p[2][2], p[2][0], p[2][1], p[3]);
+        return s + (a.ok ? a.h : p[2][2]) + SPAZIO;
+      }, -SPAZIO);
+      var y2 = Math.max(y, y + (h - tot) / 2);
+      parti.forEach(function (p) {
+        var b = scatolaTesto(out, p[0], p[1], x, y2, w, p[2], p[3], fonti[p[0]]);
+        y2 = b.y + b.h + SPAZIO;
+      });
+    } else if (mod === "punteggi") {
+      righeGiocatori(out, pag.giocatori.map(function (g, i) {
+        return { testo: g.nome + ": " + g.punti + (g.punti === 1 ? " punto" : " punti"), tocca: i === pag.tocca && pag.mostraTocca };
+      }), x, y, w, h, "punteggi");
+    } else if (mod === "classifica") {
+      righeGiocatori(out, (pag.classifica || []).map(function (g, i) {
+        return { testo: (i + 1) + ". " + g.nome + ": " + g.punti + (g.punti === 1 ? " punto" : " punti") };
+      }), x, y, w, h, "classifica");
+    } else if (mod === "tela") {
+      metti(out, { tipo: "tela", x: x, y: y, w: w, h: Math.max(0, h) });
+      if (h < 200) out.note.push({ tipo: "tela_piccola", h: Math.round(h) });
+    }
+    return out;
+  }
+
+  // ── la misura: ciò che esce dal palco, ciò che si sovrappone, il testo che non ci sta ──
+  function nomeScatola(b) {
+    var nomi = { titolo: "il titolo", sottotitolo: "il sottotitolo", testo: "il testo", grande: "il messaggio",
+                 extra: "la riga dei punti", pulsante: "il pulsante", casella: "la casella", giocatore: "il nome nella fascia",
+                 riga: "la riga", tela: "la tela", fascia: "la fascia dei punti" };
+    var t = b.testo ? " «" + corto(b.testo) + "»" : (b.etichetta ? " «" + corto(b.etichetta) + "»" : "");
+    return (nomi[b.tipo] || b.tipo) + t + (b.tipo === "casella" ? " (riga " + (b.r + 1) + ", colonna " + (b.c + 1) + ")" : "");
+  }
+  function controllaPalco(imp) {
+    var d = [];
+    imp.note.forEach(function (n) { d.push(n); });
+    imp.scatole.forEach(function (b) {
+      var lati = {};
+      if (b.x < -0.5) lati["a sinistra"] = Math.round(-b.x);
+      if (b.y < -0.5) lati["in alto"] = Math.round(-b.y);
+      if (b.x + b.w > imp.W + 0.5) lati["a destra"] = Math.round(b.x + b.w - imp.W);
+      if (b.y + b.h > imp.H + 0.5) lati["in basso"] = Math.round(b.y + b.h - imp.H);
+      if (Object.keys(lati).length) d.push({ tipo: "fuori", b: b, lati: lati });
+      if (b.tagliato) d.push({ tipo: "tagliato", b: b });
+    });
+    // sovrapposti (le scatole di sfondo, come la fascia, contengono altre scatole: non contano)
+    var l = imp.scatole.filter(function (b) { return !b.sfondo && b.w > 0 && b.h > 0; })
+      .slice().sort(function (a, b) { return a.y - b.y; });
+    for (var i = 0; i < l.length; i++) {
+      for (var j = i + 1; j < l.length && l[j].y < l[i].y + l[i].h - 1; j++) {
+        var a = l[i], b = l[j];
+        var dx = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+        var dy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+        if (dx > 1 && dy > 1) d.push({ tipo: "sovrapposti", a: a, b: b });
+      }
+    }
+    return d;
+  }
+  // I difetti in parole, per l'agente: cosa, dove e cosa fare. Prima le cause (troppi pulsanti,
+  // griglia troppo grande, testo che non ci sta), poi gli effetti raggruppati per tipo di
+  // scatola («il pulsante «Porta 29» e altri 11 escono dal palco in basso, fino a 48 px»)
+  function difettiInParole(imp, d) {
+    var out = [];
+    var dove = "nella pagina «" + imp.modello + "» (" + imp.orientamento + " " + imp.W + "×" + imp.H + ")";
+    function aggiungi(t) { if (t && out.indexOf(t) < 0) out.push(t); }
+    d.forEach(function (x) {
+      if (x.tipo === "troppi") aggiungi(x.n + " pulsanti non ci stanno " + dove + ": al più " + x.max + " di almeno " + PULSANTE.wMin + "×" + PULSANTE.hMin + " px. Restringi i comandi attivi (GIOCO.attivi), accorcia le etichette o usa la pagina «griglia»");
+      else if (x.tipo === "caselle") aggiungi("la griglia " + x.R + "×" + x.C + " non ci sta " + dove + ": le caselle verrebbero di " + x.lato + " px (al più " + x.maxR + " righe e " + x.maxC + " colonne da " + CASELLA.min + " px). Usa meno righe o colonne");
+      else if (x.tipo === "righe") aggiungi(x.n + " righe non ci stanno " + dove);
+      else if (x.tipo === "tela_piccola") aggiungi("la tela resta alta solo " + x.h + " px " + dove + ": accorcia titolo e testo della fase");
+    });
+    d.forEach(function (x) {
+      if (x.tipo !== "tagliato") return;
+      aggiungi(nomeScatola(x.b) + " non ci sta " + dove + " neanche a " + x.b.tagliato.fMin + " px ("
+        + x.b.tagliato.righe + " righe dove ne stanno " + x.b.tagliato.max + "): accorcialo, al più circa " + x.b.tagliato.caratteri + " caratteri"
+        + (x.b.fonte ? " (" + x.b.fonte + ")" : ""));
+    });
+    var gruppi = {}, ordine = [];
+    d.forEach(function (x) {
+      var k = x.tipo === "fuori" ? "fuori:" + x.b.tipo : x.tipo === "sovrapposti" ? "sopra:" + x.a.tipo + ":" + x.b.tipo : null;
+      if (!k) return;
+      if (!gruppi[k]) { gruppi[k] = { primo: x, n: 0, lati: {} }; ordine.push(k); }
+      gruppi[k].n++;
+      if (x.lati) Object.keys(x.lati).forEach(function (l) { gruppi[k].lati[l] = Math.max(gruppi[k].lati[l] || 0, x.lati[l]); });
+    });
+    ordine.forEach(function (k) {
+      var g = gruppi[k], x = g.primo, altri = g.n > 1 ? (g.n === 2 ? " e un altro" : " e altri " + (g.n - 1)) : "";
+      if (x.tipo === "fuori") {
+        aggiungi(nomeScatola(x.b) + altri + (g.n > 1 ? " escono" : " esce") + " dal palco " + Object.keys(g.lati).map(function (l) {
+          return l + (g.n > 1 ? " fino a " : " di ") + g.lati[l] + " px";
+        }).join(" e ") + " " + dove);
+      } else {
+        aggiungi(nomeScatola(x.a) + " si sovrappone " + nomeScatola(x.b).replace(/^il /, "al ").replace(/^la /, "alla ")
+          + (g.n > 1 ? " (e altre " + (g.n - 1) + " scatole così)" : "") + " " + dove);
+      }
+    });
+    // Una causa sola fa uscire molte scatole: si dicono le prime
+    return out.slice(0, 3);
+  }
+  function difettiPalco(pag, orientamento) {
+    var imp = impagina(pag, orientamento);
+    return difettiInParole(imp, controllaPalco(imp));
+  }
+
+  // ═══════════════════════════ la macchina ═══════════════════════════
   // La macchina come la scrive il manifesto (o come la dà macchina.py, uguale ma pulita)
   function normalizza(M, giocatori) {
     M = M || {};
@@ -59,7 +462,8 @@
         }
         comandi[c] = { forme: (d.forme || []).slice(), etichetta: d.etichetta || "", valori: valori, sinonimi: sinonimi };
       });
-      out.fasi[nome] = { pagina: f.pagina || "scelte", turni: f.turni !== false, verso: (f.verso || []).slice(), comandi: comandi };
+      var pagina = MODELLI.indexOf(f.pagina) >= 0 ? f.pagina : "scelte";
+      out.fasi[nome] = { pagina: pagina, turni: f.turni !== false, verso: (f.verso || []).slice(), comandi: comandi };
     });
     if (!out.inizio) out.inizio = Object.keys(out.fasi)[0];
     return out;
@@ -69,11 +473,12 @@
 
   // ── il nucleo: funzioni pure sullo stato (S), senza DOM. Lo usano il riquadro e la prova di
   // fumo per fasi (l'esploratore di fumo_js.mjs) ──
-  function crea(GIOCO, Mgrezza, giocatori) {
+  function crea(GIOCO, Mgrezza, giocatori, opzioni) {
     if (!GIOCO || typeof GIOCO !== "object" || typeof GIOCO.nuovaPartita !== "function") {
       throw errore("logica.js deve dichiarare const GIOCO = { nuovaPartita(…), mosse: { fase: { comando(…) } }, … } (la macchina a stati di Calliope)");
     }
     var M = normalizza(Mgrezza, giocatori);
+    var titoloGioco = String((opzioni && opzioni.titolo) || "");
     if (!M.fasi[M.inizio]) throw errore("la macchina non ha la fase d'inizio «" + M.inizio + "»");
 
     function nuovo() {
@@ -269,21 +674,73 @@
       S.fase = meta;
       return S;
     }
+    // Una casella della griglia, controllata: {testo, colore, risorsa, comando, valore}
+    function casella(fase, k, r, c) {
+      var dove = "GIOCO.vista." + fase + ".caselle[" + r + "][" + c + "]";
+      if (k === null || k === undefined || k === "") return {};
+      if (typeof k === "string" || typeof k === "number") return { testo: String(k) };
+      if (typeof k !== "object" || Array.isArray(k)) throw errore(dove + " è " + tipo(k) + ": un testo o un oggetto { testo, colore, risorsa, comando, valore }");
+      var altri = Object.keys(k).filter(function (x) { return CHIAVI_CASELLA.indexOf(x) < 0; });
+      if (altri.length) throw errore(dove + ": campi che il motore non conosce: " + altri.join(", ") + " (solo testo, colore, risorsa, comando, valore)");
+      var out = {};
+      if (k.testo !== undefined && k.testo !== null && k.testo !== "") {
+        if (typeof k.testo !== "string" && typeof k.testo !== "number") throw errore(dove + ".testo è " + tipo(k.testo) + ": un testo");
+        out.testo = String(k.testo);
+      }
+      if (k.colore) {
+        var col = String(k.colore).toLowerCase();
+        if (COLORI[col]) out.colore = COLORI[col];
+        else if (COLORE_HEX.test(col)) out.colore = col;
+        else throw errore(dove + ".colore «" + corto(k.colore, 20) + "»: un nome (" + Object.keys(COLORI).join(", ") + ") o #rrggbb");
+      }
+      if (k.risorsa) {
+        if (typeof k.risorsa !== "string" || !RISORSA.test(k.risorsa)) throw errore(dove + ".risorsa «" + corto(k.risorsa, 30) + "»: il nome di un disegno .svg di «scheda.risorse»");
+        out.risorsa = k.risorsa;
+      }
+      if (k.comando !== undefined && k.comando !== null) {
+        var d = comando(fase, k.comando);
+        if (!d) throw errore(dove + ".comando «" + corto(k.comando, 20) + "»: non è un comando della fase «" + fase + "» nel manifesto");
+        var v = k.valore === undefined ? null : k.valore;
+        if (d.valori && d.valori.indexOf(v) < 0) throw errore(dove + ".valore " + JSON.stringify(v) + ": fuori da quelli dichiarati per «" + k.comando + "» (" + JSON.stringify(d.valori.slice(0, 12)) + ")");
+        if (!d.valori && v !== null) throw errore(dove + ": il comando «" + k.comando + "» non ha valori (togli «valore»)");
+        out.comando = k.comando; out.valore = v;
+      }
+      return out;
+    }
     function vista(S) {
       var fn = GIOCO.vista && GIOCO.vista[S.fase];
-      if (typeof fn !== "function") return {};
+      var f = M.fasi[S.fase];
+      var griglia = !!(f && f.pagina === "griglia");
+      if (typeof fn !== "function") {
+        if (griglia) throw errore("manca GIOCO.vista." + S.fase + "(dati, ctx) con «caselle»: la fase ha la pagina «griglia»");
+        return {};
+      }
       var v = fn(copia(S.dati, "vista"), contesto(S));
-      if (v === undefined || v === null) return {};
-      if (typeof v !== "object" || Array.isArray(v)) throw errore("GIOCO.vista." + S.fase + " restituisce " + tipo(v) + ": un oggetto { titolo, sottotitolo, testo }");
+      if (v === undefined || v === null) v = {};
+      if (typeof v !== "object" || Array.isArray(v)) throw errore("GIOCO.vista." + S.fase + " restituisce " + tipo(v) + ": un oggetto { titolo, sottotitolo, testo" + (griglia ? ", caselle" : "") + " }");
       var altri = Object.keys(v).filter(function (k) { return CHIAVI_VISTA.indexOf(k) < 0; });
-      if (altri.length) throw errore("GIOCO.vista." + S.fase + " restituisce campi che il motore non conosce: " + altri.join(", ") + " (solo titolo, sottotitolo, testo: il disegno è del motore)");
+      if (altri.length) throw errore("GIOCO.vista." + S.fase + " restituisce campi che il motore non conosce: " + altri.join(", ") + " (solo titolo, sottotitolo, testo" + (griglia ? ", caselle" : "") + ": il disegno è del motore)");
       var out = {};
-      CHIAVI_VISTA.forEach(function (k) {
+      ["titolo", "sottotitolo", "testo"].forEach(function (k) {
         if (v[k] === undefined || v[k] === null) return;
         if (typeof v[k] !== "string" && typeof v[k] !== "number") throw errore("GIOCO.vista." + S.fase + "." + k + " è " + tipo(v[k]) + ": un testo");
         if (typeof v[k] === "number" && !isFinite(v[k])) throw errore("GIOCO.vista." + S.fase + "." + k + " è " + v[k]);
         out[k] = String(v[k]);
       });
+      if (v.caselle !== undefined && v.caselle !== null && !griglia) {
+        throw errore("GIOCO.vista." + S.fase + ".caselle: solo in una fase con la pagina «griglia» (la fase «" + S.fase + "» ha «" + (f ? f.pagina : S.fase) + "»)");
+      }
+      if (griglia) {
+        var cs = v.caselle;
+        if (!Array.isArray(cs) || !cs.length || cs.length > MAX_LATO || !cs.every(Array.isArray)) {
+          throw errore("GIOCO.vista." + S.fase + ".caselle: un elenco di righe, ognuna un elenco di caselle (da 1×1 a " + MAX_LATO + "×" + MAX_LATO + "), per esempio [[\"X\", \"\", \"O\"], …]");
+        }
+        var C = cs[0].length;
+        if (!C || C > MAX_LATO || !cs.every(function (r) { return r.length === C; })) {
+          throw errore("GIOCO.vista." + S.fase + ".caselle: tutte le righe con lo stesso numero di caselle, da 1 a " + MAX_LATO + " (ne ha " + cs.map(function (r) { return r.length; }).join(", ") + ")");
+        }
+        out.caselle = cs.map(function (r, i) { return r.map(function (k, j) { return casella(S.fase, k, i, j); }); });
+      }
       return out;
     }
     function classifica(S) {
@@ -308,19 +765,79 @@
       var t = base.indexOf("{n}") >= 0 ? base.replace("{n}", testoV) : (v === null ? base : base + " " + testoV);
       return t.charAt(0).toUpperCase() + t.slice(1);
     }
+    // Il contenuto della pagina di adesso: modello, testi, pulsanti, caselle, giocatori. Lo
+    // disegna il riquadro e lo misura la prova di fumo (impagina, controllaPalco)
+    function pagina(S) {
+      var att = attivi(S), v = vista(S), f = M.fasi[S.fase];
+      var modello = S.fase === "preparazione" ? (M.gmin < M.gmax ? "scelte" : "titolo")
+        : S.fase === "esito" ? "messaggio" : S.fase === "fine" ? "classifica" : f.pagina;
+      var p = { fase: S.fase, modello: modello, titolo: "", sottotitolo: "", testo: "", grande: "", extra: "",
+                pulsanti: [], caselle: null, giocatori: S.giocatori.map(function (g) { return { nome: g.nome, punti: g.punti }; }),
+                tocca: S.tocca, mostraTocca: S.giocatori.length > 1 && !!(f && f.turni), fascia: false, classifica: null,
+                fonti: {}, attivi: att };
+      ["titolo", "sottotitolo", "testo"].forEach(function (k) {
+        if (v[k]) { p[k] = v[k]; p.fonti[k] = "GIOCO.vista." + S.fase + "." + k; }
+      });
+      if (S.fase === "preparazione") {
+        if (!p.titolo) { p.titolo = titoloGioco || "Nuova partita"; p.fonti.titolo = titoloGioco ? "il titolo nel manifesto" : ""; }
+        if (!p.testo && M.gmin < M.gmax) p.testo = "Quanti giocatori?";
+      } else if (S.fase === "esito") {
+        if (S.esito) {
+          p.grande = S.esito.testo; p.fonti.grande = "«esito» della mossa";
+          if (S.esito.punti) p.extra = (S.esito.punti > 0 ? "+" : "") + S.esito.punti + (Math.abs(S.esito.punti) === 1 ? " punto" : " punti") + (S.giocatori.length > 1 && S.esito.chi ? " a " + S.esito.chi : "");
+        }
+      } else if (S.fase === "fine") {
+        if (!p.titolo) p.titolo = "Partita finita";
+        p.classifica = classifica(S).map(function (g) { return { nome: g.nome, punti: g.punti }; });
+      } else if (!p.sottotitolo && p.mostraTocca) {
+        p.sottotitolo = "Tocca a " + S.giocatori[S.tocca].nome;
+      }
+      if (modello === "messaggio" && S.fase !== "esito" && p.testo && !p.grande) {
+        p.grande = p.testo; p.fonti.grande = p.fonti.testo; p.testo = ""; delete p.fonti.testo;
+      }
+      p.fascia = S.fase !== "preparazione" && ["scelte", "griglia", "messaggio", "tela"].indexOf(modello) >= 0;
+      // i pulsanti: un comando attivo per valore; in una griglia quelli che una casella mostra
+      // diventano la casella stessa
+      var nelleCaselle = {};
+      if (v.caselle) {
+        p.caselle = v.caselle.map(function (r) {
+          return r.map(function (k) {
+            var x = { testo: k.testo || "", colore: k.colore || "", risorsa: k.risorsa || "" };
+            if (k.comando !== undefined) {
+              nelleCaselle[piatto(k.comando, k.valore)] = true;
+              if (attivo(att, k.comando, k.valore)) {
+                x.pulsante = true; x.comando = k.comando; x.valore = k.valore;
+                x.etichetta = etichetta(S.fase, k.comando, k.valore);
+              }
+            }
+            return x;
+          });
+        });
+      }
+      Object.keys(att).forEach(function (c) {
+        (att[c] === true ? [null] : att[c]).forEach(function (x) {
+          if (nelleCaselle[piatto(c, x)]) return;
+          p.pulsanti.push({ c: c, v: x, etichetta: etichetta(S.fase, c, x),
+                            fonte: comando(S.fase, c) ? "l'etichetta del comando «" + c + "» nel manifesto" : "" });
+        });
+      });
+      return p;
+    }
     return { M: M, nuovo: nuovo, attivi: attivi, piatti: piatti, daPiatto: daPiatto, applica: applica, esciTela: esciTela,
-             vista: vista, istantanea: istantanea, classifica: classifica, etichetta: etichetta,
+             vista: vista, istantanea: istantanea, classifica: classifica, etichetta: etichetta, pagina: pagina,
              contesto: contesto, piatto: piatto };
   }
 
-  // ── nel riquadro (e nel DOM finto della prova): disegno, pulsanti, voce ──
+  // ═══════════════════ nel riquadro (e nel DOM finto della prova): disegno, pulsanti, voce ═══════════════════
   function avvia(GIOCO, conf, opzioni) {
     opzioni = opzioni || {};
     var doc = G.document;
     var radice = doc.getElementById("gioco");
     var cal = G.calliope;
+    var finto = !!opzioni.finto;
     var segnala = opzioni.errore || function (e) { setTimeout(function () { throw e; }, 0); };
-    var nucleo, S, timerEsito = null, ultimoErrore = "";
+    var nucleo, S, timerEsito = null, ultimoErrore = "", orientamento = null, palco = null, imp = null;
+    var firmaPalco = null;
     function el(tag, classe, testo) {
       var n = doc.createElement(tag);
       if (classe) n.className = classe;
@@ -333,68 +850,76 @@
       radice.appendChild(p);
       segnala(e);
     }
-    try { nucleo = crea(GIOCO, conf && conf.macchina, conf && conf.giocatori); }
+    try { nucleo = crea(GIOCO, conf && conf.macchina, conf && conf.giocatori, { titolo: opzioni.titolo || (conf && conf.titolo) || "" }); }
     catch (e) { radice.replaceChildren(el("div", "motore")); mostraErrore(e); return null; }
     S = nucleo.nuovo();
-    function pulsante(c, v) {
-      var b = el("button", "comando", nucleo.etichetta(S.fase, c, v));
-      b.type = "button";
-      b.dataset.comando = c;
-      if (v !== null && v !== undefined) b.dataset.valore = String(v);
-      b.addEventListener("click", function () { mossa(c, v === undefined ? null : v, {}); });
-      return b;
+    function M() { return nucleo.M; }
+    function finestra() { return [Number(G.innerWidth) || 0, Number(G.innerHeight) || 0]; }
+    function orientamentoAdesso() { var f = finestra(); return f[1] > f[0] ? "verticale" : "orizzontale"; }
+    function scala() {
+      if (!palco || !imp) return;
+      var f = finestra();
+      var s = f[0] && f[1] ? Math.min(f[0] / imp.W, f[1] / imp.H) : 1;
+      palco.style.cssText = "width:" + imp.W + "px!important;height:" + imp.H + "px!important;"
+        + "transform:translate(-50%,-50%) scale(" + s.toFixed(4) + ")!important";
     }
-    function punti(box) {
-      if (!S.giocatori.length) return;
-      var p = el("div", "punti");
-      S.giocatori.forEach(function (g, i) {
-        var s = el("span", "giocatore" + (i === S.tocca && S.fase !== "fine" && S.giocatori.length > 1 ? " tocca" : ""), g.nome + ": " + g.punti);
-        p.appendChild(s);
-      });
-      box.appendChild(p);
+    function stile(n, b) {
+      var css = "left:" + b.x + "px!important;top:" + b.y + "px!important;width:" + b.w + "px!important;height:" + b.h + "px!important";
+      if (b.f) css += ";font-size:" + b.f + "px!important";
+      if (b.colore) css += ";background:" + b.colore + "!important";
+      n.style.cssText = css;
+    }
+    function elemento(b) {
+      var n;
+      if (b.tipo === "pulsante" || (b.tipo === "casella" && b.comando !== undefined)) {
+        n = el("button", b.tipo === "casella" ? "casella comando" : "comando", b.testo || "");
+        n.type = "button";
+        n.dataset.comando = b.comando;
+        if (b.valore !== null && b.valore !== undefined) n.dataset.valore = String(b.valore);
+        n.setAttribute("aria-label", b.etichetta || b.testo || "");
+        var c = b.comando, v = b.valore === undefined ? null : b.valore;
+        n.addEventListener("click", function () { mossa(c, v, {}); });
+      } else if (b.tipo === "titolo") n = el("h1", "titolo", b.testo);
+      else if (b.tipo === "giocatore") n = el("span", "giocatore" + (b.tocca ? " tocca" : ""), b.testo);
+      else if (b.tipo === "fascia") n = el("div", "punti");
+      else if (b.tipo === "riga") n = el("div", "riga" + (b.tocca ? " tocca" : "") + (b.primo ? " primo" : ""), b.testo);
+      else if (b.tipo === "casella") n = el("div", "casella", b.testo || "");
+      else if (b.tipo === "tela") n = el("div", "tela");
+      else n = el("p", b.tipo, b.testo);
+      if (b.risorsa) {
+        var src = null;
+        try { src = cal && typeof cal.risorsa === "function" ? cal.risorsa(b.risorsa) : null; } catch (e) { src = null; }
+        if (src) { var im = el("img", "risorsa"); im.alt = ""; im.src = src; n.appendChild(im); }
+      }
+      n.dataset.scatola = b.tipo;
+      if (b.scritta) n.dataset.scritta = "1";
+      stile(n, b);
+      return n;
     }
     function disegna() {
-      var box = el("div", "motore fase-" + S.fase);
-      var att = nucleo.attivi(S);
-      var v = nucleo.vista(S);
-      var titolo = v.titolo;
-      if (S.fase === "preparazione") titolo = titolo || opzioni.titolo || "Nuova partita";
-      if (S.fase === "esito" && !titolo && S.esito) titolo = S.esito.testo;
-      if (S.fase === "fine") titolo = titolo || "Partita finita";
-      if (titolo) box.appendChild(el("h1", "titolo", titolo));
-      if (v.sottotitolo) box.appendChild(el("p", "sottotitolo", v.sottotitolo));
-      else if (S.giocatori.length > 1 && M().fasi[S.fase] && M().fasi[S.fase].turni) box.appendChild(el("p", "sottotitolo", "Tocca a " + S.giocatori[S.tocca].nome));
-      if (S.fase === "preparazione" && !v.testo && M().gmin < M().gmax) box.appendChild(el("p", "testo", "Quanti giocatori?"));
-      if (S.fase === "esito" && S.esito && S.esito.punti) box.appendChild(el("p", "testo", (S.esito.punti > 0 ? "+" : "") + S.esito.punti + (Math.abs(S.esito.punti) === 1 ? " punto" : " punti") + (S.giocatori.length > 1 ? " a " + S.esito.chi : "")));
-      if (v.testo) box.appendChild(el("p", "testo", v.testo));
-      if (S.fase === "fine") {
-        var ol = el("ol", "classifica");
-        nucleo.classifica(S).forEach(function (g, i) { ol.appendChild(el("li", i === 0 ? "primo" : "", g.nome + ": " + g.punti + (g.punti === 1 ? " punto" : " punti"))); });
-        box.appendChild(ol);
-      }
-      var f = M().fasi[S.fase];
-      if (f && f.pagina === "tela") {
-        var area = el("div", "tela");
-        box.appendChild(area);
-        tela(area);
-      }
-      var scelte = el("div", "scelte");
-      Object.keys(att).forEach(function (c) {
-        if (att[c] === true) scelte.appendChild(pulsante(c, null));
-        else att[c].forEach(function (x) { scelte.appendChild(pulsante(c, x)); });
+      var pag = nucleo.pagina(S);
+      orientamento = orientamentoAdesso();
+      imp = impagina(pag, orientamento);
+      palco = el("div", "motore palco " + imp.orientamento + " fase-" + S.fase + " pagina-" + pag.modello);
+      scala();
+      var area = null;
+      imp.scatole.forEach(function (b) {
+        var n = elemento(b);
+        if (b.tipo === "tela") area = n;
+        palco.appendChild(n);
       });
-      box.appendChild(scelte);
-      if (S.fase !== "preparazione") punti(box);
-      radice.replaceChildren(box);
-      return att;
+      radice.replaceChildren(palco);
+      if (area) tela(area, imp.scatole.filter(function (b) { return b.tipo === "tela"; })[0]);
+      misuraVera(pag);
+      return pag.attivi;
     }
-    function M() { return nucleo.M; }
-    function tela(area) {
+    function tela(area, b) {
       var fn = GIOCO.tela && GIOCO.tela[S.fase];
       if (typeof fn !== "function") { mostraErrore(errore("manca GIOCO.tela." + S.fase + "(area, dati, tela): la fase ha la pagina «tela»")); return; }
       var fase = S.fase, n = S.n;
       fn(area, JSON.parse(JSON.stringify(S.dati)), {
         giocatori: nucleo.contesto(S).giocatori,
+        larghezza: b ? b.w : 0, altezza: b ? b.h : 0,
         esci: function (ris) {
           if (S.fase !== fase || S.n !== n) return false;
           var S2;
@@ -404,8 +929,49 @@
         },
       });
     }
+    // La misura vera (nel browser): dopo il disegno, ciò che esce dal palco o ha il testo
+    // tagliato sullo schermo di adesso; a Calliope solo quando cambia (anche «nessun difetto»)
+    function misuraVera(pag) {
+      if (finto || !CANALE || typeof CANALE.palco !== "function") return;
+      var p0 = palco, imp0 = imp;
+      var dopo = G.requestAnimationFrame ? function (f) { G.requestAnimationFrame(function () { G.requestAnimationFrame(f); }); }
+        : function (f) { setTimeout(f, 50); };
+      dopo(function () {
+        if (p0 !== palco || !p0.isConnected) return;
+        var d = [];
+        try {
+          difettiInParole(imp0, controllaPalco(imp0)).forEach(function (t) { d.push(t); });
+          var pr = p0.getBoundingClientRect(), s = pr.width / imp0.W;
+          if (!(s > 0)) return;
+          var figli = p0.children;
+          for (var i = 0; i < figli.length && d.length < 3; i++) {
+            var n = figli[i];
+            if (!n.dataset || !n.dataset.scatola) continue;
+            var r = n.getBoundingClientRect();
+            var desc = "<" + n.tagName.toLowerCase() + " class=\"" + corto(n.className, 30) + "\">" + (n.textContent ? " «" + corto(n.textContent) + "»" : "");
+            if ((r.left - pr.left) / s < -1 || (r.top - pr.top) / s < -1 || (r.right - pr.left) / s > imp0.W + 1 || (r.bottom - pr.top) / s > imp0.H + 1) {
+              d.push("fuori dal palco sullo schermo: " + desc);
+            } else if ((n.dataset.scritta || n.dataset.scatola === "tela") && (n.scrollHeight > n.clientHeight + tolleranza(n) || n.scrollWidth > n.clientWidth + tolleranza(n))) {
+              d.push((n.dataset.scatola === "tela" ? "il disegno della tela esce dalla tela" : "testo tagliato sullo schermo") + ": " + desc);
+            }
+          }
+        } catch (e) { return; }
+        var firma = JSON.stringify(d);
+        if (firma === firmaPalco) return;
+        firmaPalco = firma;
+        try { CANALE.palco(d.slice(0, 3)); } catch (e) { /* niente */ }
+      });
+    }
+    // Il margine della misura vera: con line-height 1,2 i caratteri (ascendenti e discendenti
+    // del carattere di sistema, ~1,33 em) sporgono un poco dalla riga e lo scroll li conta; una
+    // riga in più o una parola che esce sono molto di più
+    function tolleranza(n) {
+      var f = 16;
+      try { f = parseFloat(G.getComputedStyle(n).fontSize) || 16; } catch (e) { /* niente */ }
+      return Math.max(2, f * 0.3);
+    }
     function voce(att) {
-      try { cal.comandiAttivi(nucleo.piatti(att)); } catch (e) { /* senza voce si gioca toccando */ }
+      try { if (CANALE) CANALE.comandiAttivi(nucleo.piatti(att)); } catch (e) { /* senza voce si gioca toccando */ }
     }
     function aggiorna(S2) {
       S = S2;
@@ -429,8 +995,8 @@
       aggiorna(S2);
       return true;
     }
-    if (cal && typeof cal.quandoComando === "function") {
-      cal.quandoComando(function (m) {
+    if (CANALE && typeof CANALE.quandoComando === "function") {
+      CANALE.quandoComando(function (m) {
         var p = m && nucleo.daPiatto(m.comando);
         if (!p) return;
         // Un comando arrivato dopo un tocco che ha cambiato la fase («vecchio»): si ignora, come
@@ -441,10 +1007,23 @@
         mossa(p[0], p[1], { giocatore: m.giocatore || null });
       });
     }
+    // La finestra che cambia: la scala sempre, il disegno se cambia l'orientamento
+    if (typeof G.addEventListener === "function") {
+      G.addEventListener("resize", function () {
+        if (!palco) return;
+        if (orientamentoAdesso() !== orientamento) aggiorna(S); else scala();
+      });
+    }
     var partita = {
       istantanea: function () { return nucleo.istantanea(S); },
       mossa: function (c, v) { return mossa(c, v === undefined ? null : v, {}); },
       errore: function () { return ultimoErrore; },
+      // I difetti del palco della pagina di adesso, nei due orientamenti
+      palco: function () {
+        var pag = nucleo.pagina(S), out = [];
+        ["orizzontale", "verticale"].forEach(function (O) { difettiPalco(pag, O).forEach(function (t) { out.push(t); }); });
+        return out;
+      },
     };
     G.CalliopeMotore.partita = partita;
     if (cal && typeof cal.quandoPronto === "function") cal.quandoPronto(function () { aggiorna(S); });
@@ -452,6 +1031,8 @@
     return partita;
   }
 
-  var api = { crea: crea, avvia: avvia, normalizza: normalizza, piatto: piatto, partita: null };
+  var api = { crea: crea, avvia: avvia, normalizza: normalizza, piatto: piatto, partita: null,
+              impagina: impagina, controllaPalco: controllaPalco, difettiPalco: difettiPalco,
+              difettiInParole: difettiInParole, PALCHI: PALCHI, MODELLI: MODELLI };
   Object.defineProperty(G, "CalliopeMotore", { value: api, writable: false, configurable: false });
 })(typeof window !== "undefined" ? window : globalThis);

@@ -1,5 +1,7 @@
 // Un gioco OSTILE per le prove (prove/prova_giochi_pagina.py): prova a uscire dal riquadro e
-// salva quello che gli è riuscito in «esiti». Il modo lo legge da «modo» (lo scrive la prova)
+// salva quello che gli è riuscito in «esiti». Il modo lo legge da «modo» (lo scrive la prova).
+// Dal 14/10 è un gioco della macchina a stati con una tela (la via libera): il codice qui sotto
+// gira nel riquadro come prima, prima ancora che il motore disegni
 "use strict";
 (function () {
   const CATTIVO = "__CATTIVO__";          // l'indirizzo del server «cattivo» delle prove
@@ -20,6 +22,8 @@
     prova("session_storage", () => window.sessionStorage.length);
     prova("cookie", () => document.cookie = "x=1");
     prova("fetch_globale", () => typeof fetch === "function" ? fetch("/api/salute") && "chiamata" : (() => { throw new Error("assente"); })());
+    // Il canale riservato al motore (14/10): il motore l'ha già preso e tolto
+    prova("canale_motore", () => { if (!window.__calliopeMotore) throw new Error("assente"); return "presente"; });
     // Un fetch preso da un riquadro figlio (about:blank): la CSP lo ferma comunque
     await provaAsync("fetch_figlio", async () => {
       const f = document.createElement("iframe");
@@ -63,3 +67,10 @@
     if (modo === "attacchi") await attacchi();
   });
 })();
+
+const GIOCO = {
+  nuovaPartita() { return {}; },
+  tela: {
+    gioco(area) { area.textContent = "Prova dei confini del riquadro"; },
+  },
+};

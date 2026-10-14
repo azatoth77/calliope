@@ -1,21 +1,39 @@
-// Apri le porte (prove dei comandi a voce, 11/10): tre porte, una nasconde il premio
+// Apri le porte (prove dei comandi a voce, 11/10; dal 14/10 con la macchina a stati di Calliope):
+// tre porte, una nasconde il premio. Si gioca a voce («la porta due», «tre») o toccando; il nome
+// di chi gioca arriva alla mossa («giocatore»: true nella macchina). Le mosse ricevute (comando e
+// giocatore) le salva per le prove, le ultime venti
 "use strict";
-const PORTE = ["uno", "due", "tre"];
+const ricevute = [];
 
-function nuovaPartita(premio) {
-  return { aperte: [], premio: PORTE.includes(premio) ? premio : "tre", finita: false };
+const GIOCO = {
+  nuovaPartita() { return { aperte: [], premio: 3 }; },
+  attivi: {
+    turno: (d) => ({ porta: chiuse(d) }),
+  },
+  mosse: {
+    turno: {
+      porta(d, { valore, giocatore }) {
+        registra(valore, giocatore);
+        const aperte = d.aperte.concat([valore]);
+        if (valore !== d.premio) return { dati: { ...d, aperte } };
+        return { dati: { ...d, aperte }, punti: 1, esito: "Trovato!", dopo: "fine" };
+      },
+    },
+  },
+  vista: {
+    turno: () => ({ titolo: "Quale porta apri?" }),
+  },
+};
+
+function chiuse(d) {
+  return [1, 2, 3].filter((p) => !d.aperte.includes(p));
 }
 
-function apri(stato, porta) {
-  if (stato.finita || !PORTE.includes(porta) || stato.aperte.includes(porta)) return stato;
-  const aperte = stato.aperte.concat([porta]);
-  return { ...stato, aperte, finita: porta === stato.premio };
+function registra(valore, giocatore) {
+  if (typeof calliope === "undefined" || !calliope || typeof calliope.salva !== "function") return;
+  ricevute.push({ comando: "porta_" + valore, giocatore: giocatore || null });
+  ricevute.splice(0, Math.max(0, ricevute.length - 20));
+  calliope.salva("mosse", ricevute).catch(() => {});
 }
 
-// I comandi che valgono adesso: le porte ancora chiuse e «ricomincia»
-function comandiAdesso(stato) {
-  if (stato.finita) return ["ricomincia"];
-  return PORTE.filter((p) => !stato.aperte.includes(p)).concat(["ricomincia"]);
-}
-
-if (typeof module !== "undefined") module.exports = { nuovaPartita, apri, comandiAdesso, PORTE };
+if (typeof module !== "undefined") module.exports = { GIOCO, chiuse };
