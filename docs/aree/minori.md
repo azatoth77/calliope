@@ -18,6 +18,7 @@ Dario le scelte prudenti dei cancelli (fondo del documento); da rimisurare tutto
 | Esercizi generati da Calliope (dal 08/10): matematica e italiano, a voce e sulla scheda, correzione nel codice, registro dei tentativi per i tutori | libreria standard; SQLite (stesso file della memoria: `esercizi_tentativi`, `esercizi_segnalazioni`, `esercizi_banco`); Wikizionario della biblioteca; secondo modello su Ollama | `calliope/esercizi/` → `matematica.genera`, `italiano.genera`, `numeri.leggi_valore`, `verifica.Wikizionario`, `verifica.SecondoParere`, `registro.Registro`, `sessione.Servizio`; tool `esercizi` (`calliope/tools/esercizi.py`); scheda `DISEGNA.esercizio` e `POST /api/esercizio`; rete `spinta_esercizi`; prove `prove/prova_esercizi.py`, `prove/prova_esercizi_pagina.py`, `prove/prova_esercizi_ollama.py`, `prove/prova_esercizi_voce.py`; indice del programma ministeriale `calliope/esercizi/programma/` (12/10, `prove/prova_programma.py`); fase B dal 12/10 sera: `programma.limite`, `varianti.py`, `Registro.punto` (tabella esercizi_punto), interrogazioni (`programma/interrogazioni.yaml`, `verifica.SecondoParere.giudica`), prove `prove/prova_esercizi_programma.py` e `prove/prova_esercizi_programma_ollama.py`; [`docs/ricerche/2026-10-08-esercizi.md`](../ricerche/2026-10-08-esercizi.md) |
 | Materie calcolabili (dal 12/10): logica, fisica e chimica con lo schema della matematica; unità di misura dette per esteso e lette dalle risposte come le scrive Whisper | libreria standard | `calliope/esercizi/` → `logica.py`, `fisica.py`, `chimica.py`, `misure.py` (risposte con l'unità), `modello.livello_da_classe`; `calliope/unita.py` → `UNITA`, `leggi_misura`, `misura_detta`, `SIMBOLI_DETTI` (anche per `pronuncia.Pronuncia`); prove `prove/prova_materie.py`, `prove/prova_esercizi_ollama.py --materie logica,fisica,chimica` e `--scelta` |
 | Pericolo poco chiaro verificato in due cancelli prima dell'avviso (dal 09/10); in compagnia la voce del minore non è mai sicura | stesso rilevatore (gemma4 e4b, output strutturato) per gravità e verifica | `calliope/cancelli.py` → `Cancelli`, `Segnale`, `RASSICURA`, `rassicura`, `testo_avviso`, `percorso` (segnali su disco dal 10/10); `calliope/guardiano.py` → `Guardiano.gravita`, `Guardiano.verifica`; `calliope/ciclo.py` → `Ciclo._decidi_pericolo`, `Ciclo._secondo_cancello`; prove `prove/prova_minori_cancelli.py`, misura `prove/misura_cancelli.py` |
+| Guardiano a posteriori della stanza (dal 14/10, passo 6 della conversazione di stanza, in ombra): le chiacchiere con un minore che parla o è presente, rilette dopo a blocchi | stesso rilevatore (gemma4 e4b, output strutturato con livello, categoria, contesto e righe) | `calliope/stanza/guardia.py` → `Guardia`, `GiudiceModello`, `PROMPT`, `riassunto`, `elenco`; `calliope/guardiano.py` → `Guardiano.chiedi_json`; `calliope/minori.py` → `Avvisi.solo_schermo`; `calliope stato --guardia`; prova `prove/prova_stanza_guardia.py`, banco `prove/manuali/banco_stanza_guardia.py` |
 
 ## Problemi noti
 
@@ -772,3 +773,75 @@ Restano i cancelli di prima: solo un tutore del ragazzo, riconosciuto dalla voce
 conversazione verificata (o dal proprio schermo personale), mai un altro adulto. Le frasi «sotto i
 14 anni» più sopra sono storiche. Prove: `prova_minori` (privacy) e `prova_cassetto`.
 
+## Il guardiano a posteriori della stanza (14/10, ramo `stanza-guardia`, in ombra)
+
+Passo 6 della conversazione di stanza (progetto
+[`2026-10-13-conversazione-di-stanza.md`](../ricerche/2026-10-13-conversazione-di-stanza.md) § 3.9,
+decisione [0029](../decisioni/0029-conversazione-di-stanza.md) punto 4). Interruttore
+`stanza_guardia: spenta | ombra | attiva`, **di serie spenta**; vale solo con la stanza accesa e i
+minori. In diretta non cambia niente: il guardiano resta sulle frasi rivolte a Calliope e la regola
+`pericolo_non_rivolta` del passo 0 resta. Le chiacchiere si guardano **dopo**, come ha chiesto chi
+amministra («non live, dopo che la trascrizione è stata analizzata e corretta»).
+
+**Come** (`calliope/stanza/guardia.py`, thread `stanza-guardia`):
+
+- **Quali righe**: quelle di un minore (voce sopra soglia o zona grigia) e quelle dette mentre un
+  minore era presente vicino a quel satellite (le presenze del § 3.5 ter allungate di
+  `stanza_presenza_s`). Calliope, le frasi rivolte a Calliope (già giudicate in diretta) e la TV
+  stanno solo come contesto (la TV nemmeno quello). Solo adulti, o il minore in un'altra stanza:
+  niente.
+- **Quando**: righe finite da `stanza_guardia_attesa_s` (120 s) e stanza quieta da altrettanto, o
+  uno scambio che non tace da `stanza_guardia_blocco_max_s` (15 min). Fino al passo 3 la
+  trascrizione è quella veloce (versione 1): l'attesa è il posto dove si inserirà la corsia lenta.
+- **Il giudizio**: a blocchi di al più 10 righe con 6 di contesto prima e 3 dopo, nel prompt
+  `guardia.PROMPT` (conversazione di famiglia: scherzi, litigi per finta, videogiochi, giochi da
+  tavolo, TV, compiti, esagerazioni sono NIENTE), al rilevatore di oggi con
+  `Guardiano.chiedi_json`: stesso modello, stesso Ollama, stessi `num_ctx` e `keep_alive` (niente
+  ricaricamenti), `think: false`, output strutturato {livello, categoria, contesto, righe}. Le righe
+  stanno entro 3 600 caratteri (la finestra del rilevatore è di 2 048 token): esce prima il contesto
+  più lontano.
+- **Filtri dopo il giudizio**: contesto scherzo, gioco o TV → niente; un acuto resta acuto solo con
+  le righe del segnale nel blocco, la categoria, una riga del minore con la voce sopra soglia (o una
+  minaccia di altri con il minore presente per la voce), le parole sopra `stanza_guardia_p` (quando
+  Whisper darà la probabilità); zona grigia, parola incerta, righe fuori, autolesionismo detto da un
+  adulto → dubbio.
+- **Ombra**: nessun avviso. Nelle misure della stanza (`stanza-*.jsonl`, tipo `guardia`) livello
+  del modello e finale, categoria, contesto, filtro, ore di chiacchiera, tempo e cosa sarebbe
+  successo (`avviso: ombra|tetto|ripetuto`); il minore per id, **mai parole né nomi**, nemmeno nel
+  log (solo «[GUARDIA] cucina: acuto (abuso)»).
+- **Attiva**: un acuto → `Avvisi.solo_schermo`: la scheda personale del tutore (forzata) e la riga
+  in `avvisi_tutori` già segnata come detta, così la voce non lo annuncia mai. Testo senza le
+  parole: «Da verificare, sentito nella conversazione in cucina verso le 17:40: Nicola ha parlato
+  di qualcuno che potrebbe fargli del male. Non era rivolto a me e non ho detto niente a nessuno. Se
+  vuoi leggere cosa si è detto, chiedimi «cosa ha detto Nicola in cucina verso le 17:40?»» (il
+  tutore legge le parole con `stanza_cerca`). Al più `stanza_guardia_avvisi_giorno` (1) al giorno
+  per minore, la stessa categoria non si ripete entro 24 ore; due dubbi della stessa categoria in
+  giorni diversi entro 7 giorni danno **un** avviso non urgente. Questi conti si riprendono dal file
+  delle misure dopo un riavvio.
+- **Carico**: un giudizio parte solo con la voce ferma da `stanza_guardia_quiete_s` (5 s): nessuna
+  risposta del modello in corso (il varco delle corsie), nessuna frase di un turno che aspetta
+  Whisper, nessun audio dei comandi da 2 s. Al più `stanza_guardia_giudizi_ora` (30) giudizi
+  all'ora; il resto aspetta in coda al più 24 ore. Un giudizio guasto si riprova tre volte.
+- **Pausa e «dimentica»**: in pausa per ospiti quel satellite non si raccoglie né si giudica (i
+  blocchi di prima aspettano la ripresa); un blocco con righe dimenticate si butta prima del
+  giudizio e anche a giudizio finito (nessun avviso).
+
+**Lettura di chi amministra**: `calliope stato --turni` ha la sezione «Guardiano a posteriori» (per
+giorno blocchi, ore, livelli, categorie, contesti, filtri, avvisi; segnali per ora di chiacchiera
+con un minore; acuti letti e falsi a settimana); `calliope stato --guardia` elenca i segnali con id,
+giorno, ora, stanza, minore, livello e categoria, e `--falso ID` / `--vero ID` li segnano. Si accende
+(`stanza_guardia: attiva` nel file locale) solo con **meno di un acuto falso a settimana** sulle
+giornate vere.
+
+**Misure.** A secco `prove/prova_stanza_guardia.py` (giudice finto, con i contrari: spenta, nessun
+minore, solo adulti, minore in un'altra stanza, TV, scherzi e videogiochi, pausa, dimentica, tetto,
+voce occupata). Banco col modello `prove/manuali/banco_stanza_guardia.py` (16 scene di fantasia:
+12 innocue con scherzi pesanti, videogiochi, Lupus, una scommessa, un film, il telegiornale, un
+segreto per una sorpresa; 4 preoccupanti scritte in modo sobrio): **sul portatile** (gemma4 e4b,
+14/10) acuti falsi 0/12, dubbi 0, preoccupanti 4/4 acute; giudizio p50 0,96 s, p90 1,23 s. Sulla
+DGX da misurare.
+
+**Non fatto**: la rilettura dopo un riavvio dal disco (`stanza_tenuta`: il giro riparte dalle righe
+nuove in memoria), il filtro della modalità gioco del satellite (oggi lo fa solo il contesto «gioco»
+del giudizio), le righe di versione 2 della corsia lenta (passo 3: oggi una riga riscritta si
+rigiudicherebbe), il riepilogo dei dubbi nel riepilogo del giorno.
