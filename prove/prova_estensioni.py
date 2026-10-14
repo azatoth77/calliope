@@ -287,7 +287,9 @@ def prova_guardrail():
     sezione("politica: tool di Calliope che vogliono una richiesta («azione non chiesta»)")
     attesi = {"casa_comando", "pc_volume", "pc_media", "pc_luminosita", "pc_apri_app",
               "pc_blocca", "pc_apri_file", "installa_avvia", "registra_utente",
-              "schermo_gestisci"}
+              "schermo_gestisci",
+              # 14/10, decisione 0030: chi è di famiglia si cambia come registra_utente
+              "conoscente_livello"}
     chieste = {n for n, c in politica.CLASSI.items() if c.chiesta}
     verifica("le azioni sul mondo vogliono una richiesta", chieste == attesi,
              str(chieste ^ attesi))
