@@ -47,8 +47,9 @@ c'è uguale.
 
     python -m calliope.conserva                  quanto è conservato (solo conteggi)
     python -m calliope.conserva --svuota         tutto: voce, eventi, registro dei turni,
-                                                 archivio delle conversazioni e testo della
-                                                 stanza su disco
+                                                 archivio delle conversazioni, testo della
+                                                 stanza su disco, trascrizione e audio degli
+                                                 avvisi di pericolo (14/10)
     python -m calliope.conserva --svuota --persona NOME
                                                  i dati di una persona
 
@@ -649,7 +650,8 @@ class Conservazione:
         out = {"voce": 0, "eventi": 0, "turni": 0, "conversazioni": 0,
                "esercizi_richieste": self._memoria(persona_id=persona_id,
                                                    tutto=persona_id is None),
-               "stanza": self._svuota_stanza(persona_id)}
+               "stanza": self._svuota_stanza(persona_id),
+               "avvisi": self._svuota_avvisi(persona_id)}
         arch = self.conversazioni
         lock = getattr(self.turnlog, "_lock", None)
         if persona_id is None:
@@ -675,6 +677,33 @@ class Conservazione:
             out["conversazioni"] = arch.dimentica(str(persona_id))
         out["eventi"] = self._svuota_eventi(f"persona:{persona_id}")
         return out
+
+    def _svuota_avvisi(self, persona_id) -> int:
+        """Trascrizione e audio degli avvisi di pericolo (14/10 sera, minori.Avvisi): tutti, o
+        quelli di una persona (come tutore o come minore). L'avviso resta, senza parole. Dal
+        processo di Calliope i suoi avvisi; da terminale il file della memoria e il cassetto."""
+        av, chiudi = getattr(self, "avvisi", None), False
+        try:
+            if av is None:
+                db = str(getattr(self.cfg, "memory_db", "") or "")
+                if not db or not Path(db).exists():
+                    return 0
+                from .cassetto import load_cassetto
+                from .minori import Avvisi
+                av, chiudi = Avvisi(db, log=lambda m: None, cfg=self.cfg), True
+                av.cassetto = load_cassetto(self.cfg, log=lambda m: None)
+            if persona_id is None:
+                return av.dimentica_materiale(tutto=True)
+            return (av.dimentica_materiale(tutore=str(persona_id))
+                    + av.dimentica_materiale(minore=str(persona_id)))
+        except Exception as e:  # noqa: BLE001 — gli avvisi non fermano lo svuotamento
+            self.log(f"   [CONSERVA] materiale degli avvisi non svuotato: {type(e).__name__}")
+            return 0
+        finally:
+            if chiudi and av is not None:
+                if av.cassetto is not None:
+                    av.cassetto.close()
+                av.close()
 
     def _svuota_stanza(self, persona_id) -> int:
         """Il testo della stanza su disco (14/10): tutto, o le righe di una persona (con le
@@ -858,13 +887,15 @@ def main(argv=None) -> int:
                   f"{r['eventi']} eventi, parole tolte da {r['turni']} turni, "
                   f"{r['conversazioni']} conversazioni archiviate, "
                   f"{r['esercizi_richieste']} tra esercizi e richieste ai tutori, "
-                  f"{r['stanza']} righe della stanza.")
+                  f"{r['stanza']} righe della stanza, {r['avvisi']} trascrizioni e audio di "
+                  f"avvisi.")
         else:
             r = c.svuota()
             print(f"Dati conservati cancellati: {r['voce']} registrazioni, {r['eventi']} eventi, "
                   f"{r['turni']} giorni del registro dei turni, {r['conversazioni']} "
                   f"conversazioni archiviate, {r['esercizi_richieste']} tra esercizi e "
-                  f"richieste ai tutori, {r['stanza']} righe della stanza.")
+                  f"richieste ai tutori, {r['stanza']} righe della stanza, {r['avvisi']} "
+                  f"trascrizioni e audio di avvisi.")
         if c.conversazioni is not None:
             c.conversazioni.close()
         return 0

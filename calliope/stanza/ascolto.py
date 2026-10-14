@@ -567,6 +567,12 @@ class Stanza:
             with self._cond:
                 for k in [k for k, v in self._presenze_scritte.items() if v[0] == sat]:
                     self._presenze_scritte.pop(k)
+        # L'audio nell'anello degli avvisi e il materiale degli avvisi nati qui (14/10 sera)
+        try:
+            from ..minori import dimentica_luogo
+            dimentica_luogo(f"stanza:{sat}")
+        except Exception as e:  # noqa: BLE001
+            self.log(f"   [STANZA] audio degli avvisi non tolto: {type(e).__name__}")
         nome = (self._info.get(sat) or {}).get("nome") or str(sat)
         self._misura("dimentica", sat=nome, eventi=n, disco=su_disco)
         self.log(f"   [STANZA] {nome}: registro della stanza svuotato ({n} eventi)")
@@ -817,7 +823,7 @@ class Stanza:
             testo, tolte = e.testo, e.tolte
         chi = self._chi(audio, s.voce_s)
         s.esito = "riga"
-        self.registro(s.sat).aggiungi(
+        e_riga = self.registro(s.sat).aggiungi(
             RIGA, segmento=s.id, scambio=s.scambio, versione=1,
             inizio=round(s.inizio_epoch or time.time(), 3),
             fine=round(s.fine_epoch or time.time(), 3), testo=testo, chi=chi["chi"],
@@ -826,7 +832,44 @@ class Stanza:
             **({"durante_voce": True, "eco_tolte": tolte} if s.durante or s.dette else {}))
         if chi["sicurezza"] == "voce":
             self._sentita(chi["persona"], chi.get("nome"), s.sat, s.fine_epoch or time.time())
+        self._anello(s, chi, getattr(e_riga, "seq", None), audio)
         self._fatto(s, testo, None, attesa, stt_s, eco)
+
+    def _anello(self, s: "Segmento", chi: dict, seq, audio):
+        """L'audio del segmento nell'anello degli avvisi (14/10 sera, `avvisi_audio`, solo in
+        memoria): di un minore riconosciuto (voce o zona grigia), o di un adulto di casa
+        riconosciuto mentre un minore è presente su questo satellite (il contesto breve). Mai
+        una voce non riconosciuta (potrebbe essere un ospite), mai Calliope."""
+        from ..avvisi_audio import anello
+        an = anello()
+        if an is None or chi.get("sicurezza") not in ("voce", "grigia") or not chi.get("persona"):
+            return
+        if not chi.get("minore"):
+            dopo = float(getattr(self.cfg, "stanza_presenza_s", 600.0) or 600.0)
+            ora = s.fine_epoch or time.time()
+            with self._cond:
+                presenti = [p for pid, p in self._presenti.items()
+                            if p.get("sat") == s.sat and ora - float(p.get("ultimo") or 0) < dopo
+                            and self._e_minore(pid)]
+            if not presenti:
+                return
+        try:
+            an.metti(f"stanza:{s.sat}", chi["persona"], bool(chi.get("minore")),
+                     s.inizio_epoch or time.time(), s.fine_epoch or time.time(), audio,
+                     int(getattr(self.cfg, "sample_rate", 16000)), chiave=seq)
+        except Exception as e:  # noqa: BLE001 — l'anello non ferma la stanza
+            self.log(f"   [STANZA] audio non tenuto nell'anello: {type(e).__name__}")
+
+    def _e_minore(self, pid) -> bool:
+        reg = self.registry
+        for u in list(getattr(reg, "users", {}).values()) if reg is not None else []:
+            if getattr(u, "id", None) == pid:
+                try:
+                    from ..minori import e_minore
+                    return bool(e_minore(u))
+                except Exception:  # noqa: BLE001
+                    return False
+        return False
 
     @staticmethod
     def _eco_misure(s: Segmento, e) -> dict:

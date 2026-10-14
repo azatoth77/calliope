@@ -879,7 +879,7 @@ class Giochi:
         try:
             av.manda(prof, "sicurezza", f"{prof.name} ha scritto nella chat di un gioco una cosa "
                                         f"che mi preoccupa. Parlagli appena puoi, con calma.",
-                     urgente=True)
+                     urgente=True, origine="da una frase scritta nella chat di un gioco")
         except Exception:  # noqa: BLE001
             pass
 

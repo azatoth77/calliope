@@ -34,6 +34,8 @@ FORMATI = {
     "pdf": ("pdf", "application/pdf"),
     "word": ("docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
     "excel": ("xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+    # L'audio di un avviso di pericolo (14/10, minori.Avvisi.scheda_di): dal cassetto del tutore
+    "audio": ("wav", "audio/wav"),
 }
 MAX_VOCI = 64            # schede scaricabili ricordate (le più recenti)
 MAX_GETTONI = 64
@@ -58,6 +60,14 @@ def converti(sorgente: dict, formato: str, font=None) -> bytes:
     from ..documenti.render import available_formats, render
     if formato not in FORMATI:
         raise Rifiuto(400, "formato non ammesso")
+    if formato == "audio" or callable(sorgente.get("audio_fn")):
+        # L'audio di un avviso (14/10): solo da una scheda che ce l'ha, letto al clic dal cassetto
+        if formato != "audio" or not callable(sorgente.get("audio_fn")):
+            raise Rifiuto(400, "formato non disponibile per questo documento")
+        dati = sorgente["audio_fn"]()
+        if not dati:
+            raise Rifiuto(404, "l'audio non c'è più")
+        return bytes(dati)
     if callable(sorgente.get("markdown_fn")):
         # La trascrizione della conversazione (08/10, hub.registra_chat): fatta adesso
         # dall'archivio, così il file ha anche i turni arrivati dopo la scheda
@@ -129,6 +139,7 @@ class Scaricamenti:
             self._voci.pop((sid, chiave), None)
             self._voci[(sid, chiave)] = {"sorgente": sorgente, "persona": persona,
                                          "formati": tuple(scheda.get("scarica") or ()),
+                                         "solo_persona": bool(sorgente.get("solo_persona")),
                                          "titolo": str(sorgente.get("titolo") or
                                                        scheda.get("titolo") or "Documento")}
             while len(self._voci) > MAX_VOCI:
@@ -151,7 +162,8 @@ class Scaricamenti:
         if v is None:
             raise Rifiuto(404, "questo documento non è più scaricabile da qui: chiedimelo di "
                                "nuovo")
-        if v["persona"] != proprietario and not amministra:
+        if v["persona"] != proprietario and (not amministra or v.get("solo_persona")):
+            # L'audio di un avviso (14/10) solo al suo tutore: chi amministra non passa
             raise Rifiuto(403, "il documento è di un'altra persona")
         if v["formati"] and formato not in v["formati"]:
             raise Rifiuto(400, "formato non disponibile per questo documento")

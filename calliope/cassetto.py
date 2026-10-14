@@ -70,7 +70,8 @@ SIGLE = {"immagine": "FOTO", "pdf": "PDF", "word": "DOC", "excel": "XLS", "power
          "video": "VIDEO", "zip": "ZIP", "compresso": "ZIP", "office_vecchio": "DOC",
          "binario": "FILE"}
 FONTI = {"telefono": "dal telefono", "schermo": "dallo schermo", "webcam": "dalla webcam",
-         "screenshot": "dallo schermo del computer", "file": "da un file"}
+         "screenshot": "dallo schermo del computer", "file": "da un file",
+         "avviso": "da un avviso di pericolo"}
 
 GIORNI_SETTIMANA = ["lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato",
                     "domenica"]
@@ -294,9 +295,10 @@ class Cassetto:
 
     def metti(self, persona: str, dati: bytes, nome: str, categoria: str,
               fonte: str = "", larghezza: int | None = None, altezza: int | None = None,
-              testo: str | None = None) -> int | None:
+              testo: str | None = None, giorni: float | None = None) -> int | None:
         """Il file nel cassetto della persona: l'id, o None se non entra (niente persona,
-        niente byte, un programma). Solleva CassettoPieno oltre il tetto."""
+        niente byte, un programma). Solleva CassettoPieno oltre il tetto. `giorni`: una
+        scadenza sua (14/10: l'audio di un avviso di pericolo, `avvisi_audio_giorni`)."""
         if not persona or not dati or categoria in NON_IN_CASSETTO:
             return None
         n = len(dati)
@@ -317,7 +319,8 @@ class Cassetto:
                         "arrivato, scade, fonte, larghezza, altezza, testo) "
                         "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                         (persona, str(nome or "file")[:120], categoria, n, nome_file, ora,
-                         ora + self.giorni * GIORNO_S, fonte or "", larghezza, altezza, testo))
+                         ora + (self.giorni if giorni is None else max(0.01, float(giorni)))
+                         * GIORNO_S, fonte or "", larghezza, altezza, testo))
             except sqlite3.Error:
                 (cart / nome_file).unlink(missing_ok=True)
                 raise
@@ -543,7 +546,9 @@ class Cassetto:
         with self._lock:
             scaduti = [dict(r) for r in self._db.execute(
                 "SELECT * FROM cassetto_file WHERE stato = 'attivo' AND scade <= ?", (ora,))]
-        self._chiudi(scaduti, "scaduto", detto=0)
+        self._chiudi([r for r in scaduti if r.get("fonte") != "avviso"], "scaduto", detto=0)
+        # L'audio di un avviso di pericolo (14/10) scade in silenzio: non è un file della persona
+        self._chiudi([r for r in scaduti if r.get("fonte") == "avviso"], "scaduto", detto=1)
         per: dict[str, list] = {}
         for r in scaduti:
             per.setdefault(r["persona"], []).append(r)
@@ -594,7 +599,8 @@ class Cassetto:
             r = self._db.execute("SELECT giorno FROM cassetto_revisione WHERE persona = ?",
                                  (persona,)).fetchone()
         revisione = not r or r[0] != oggi
-        scadenza = self.elenco(persona, self.avviso_giorni * GIORNO_S) if revisione else []
+        scadenza = [r for r in self.elenco(persona, self.avviso_giorni * GIORNO_S)
+                    if r.get("fonte") != "avviso"] if revisione else []
         return {"eliminati": int(n), "in_scadenza": scadenza, "revisione": revisione}
 
     def segna_detto(self, persona: str, revisione: bool = True):

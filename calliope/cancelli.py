@@ -139,6 +139,9 @@ class Segnale:
     compagnia: bool = False                      # altre voci vicino al satellite (09/10)
     esito: str | None = None                     # "smentita" | "conferma" | "silenzio"
     timer: object = None
+    # Da dove viene, in parole semplici (14/10, per l'avviso: «da una frase detta a me al
+    # telefono»), mai le parole del minore
+    origine: str = ""
 
 
 class Cancelli:
@@ -176,12 +179,13 @@ class Cancelli:
         self.segnali = [s for s in self.segnali if s.aperto or ora - s.ora <= keep]
 
     def apri(self, prof, testo: str, categorie, voce_incerta: bool, corsia,
-             compagnia: bool = False) -> Segnale:
+             compagnia: bool = False, origine: str = "") -> Segnale:
         """Cancello 1 superato con un segnale da verificare: resta aperto fino alla risposta o
         a `minori_pericolo_attesa_s` (poi `scaduto`)."""
         ora = self.orologio()
         s = Segnale(prof.id, prof.name, str(testo or ""), tuple(categorie or ()),
-                    bool(voce_incerta), corsia, ora, compagnia=bool(compagnia))
+                    bool(voce_incerta), corsia, ora, compagnia=bool(compagnia),
+                    origine=str(origine or ""))
         with self._lock:
             self._pulisci(ora)
             self.segnali.append(s)
@@ -206,7 +210,8 @@ class Cancelli:
             righe = [{"persona_id": s.persona_id, "nome": s.nome,
                       "categorie": list(s.categorie), "voce_incerta": s.voce_incerta,
                       "corsia": s.corsia, "compagnia": s.compagnia, "aperto": s.aperto,
-                      "esito": s.esito, "quando": round(ora_w - (ora_m - s.ora), 3)}
+                      "esito": s.esito, "quando": round(ora_w - (ora_m - s.ora), 3),
+                      **({"origine": s.origine} if s.origine else {})}
                      for s in self.segnali]
         try:
             scrivi_json(self.percorso, {"formato": FORMATO, "segnali": righe})
@@ -236,7 +241,7 @@ class Cancelli:
                                                  argomento=argomento(cat)),
                             cat, bool(d.get("voce_incerta")), d.get("corsia"), ora_m - eta,
                             aperto=bool(d.get("aperto")), compagnia=bool(d.get("compagnia")),
-                            esito=d.get("esito"))
+                            esito=d.get("esito"), origine=str(d.get("origine") or ""))
             except (KeyError, TypeError, ValueError):
                 continue
             presi.append(s)
@@ -327,12 +332,44 @@ class Cancelli:
                 pass
         if not avvisa:
             return False
+        tr, pezzi, luogo = self.materiale(s)
         return self.avvisa(s.persona_id, s.categorie, DA_VERIFICARE, "silenzio",
-                           s.voce_incerta, urgente=False, compagnia=s.compagnia) is not None
+                           s.voce_incerta, urgente=False, compagnia=s.compagnia,
+                           origine=s.origine, trascrizione=tr, pezzi=pezzi,
+                           luogo=luogo) is not None
+
+    def materiale(self, s: Segnale) -> tuple:
+        """(trascrizione, pezzi d'audio, luogo) dell'avviso di un segnale rimasto senza
+        risposta (14/10 sera): la frase del primo segnale (solo se c'è ancora: dopo un riavvio
+        no) e la domanda di Calliope; l'audio dall'anello in memoria, se acceso."""
+        luogo = f"turno:{s.corsia}" if s.corsia else None
+        quando = self.ora() - max(0.0, self.orologio() - s.ora)
+        ora = datetime.datetime.fromtimestamp(quando).strftime("%H:%M")
+        chi = s.nome + ("?" if s.voce_incerta else "")
+        righe = []
+        if s.testo and "la frase esatta non c'è più" not in s.testo:
+            righe.append({"ora": ora, "chi": chi, "testo": s.testo, "segnale": True})
+            prof = None
+            av = self._avvisi if self._avvisi is not None else minori.avvisi()
+            reg = getattr(av, "registry", None)
+            for u in list(getattr(reg, "users", {}).values()) if reg is not None else []:
+                if getattr(u, "id", None) == s.persona_id:
+                    prof = u
+            righe.append({"ora": ora, "chi": "Calliope",
+                          "testo": rassicura(prof) if prof is not None else RASSICURA["bambini"]})
+        pezzi = None
+        from . import avvisi_audio
+        an = avvisi_audio.anello()
+        if an is not None and luogo:
+            ctx = float(getattr(self.cfg, "avvisi_audio_contesto_s", 20.0) or 0.0)
+            pezzi = an.prendi(luogo=luogo, persona=s.persona_id, da=quando - ctx - 30.0,
+                              a=quando + ctx)
+        return righe or None, pezzi, luogo
 
     def avvisa(self, minore, categorie, livello: str, motivo: str,
                voce_incerta: bool, urgente: bool = True, categorie_prima=None,
-               registry=None, compagnia: bool = False) -> int | None:
+               registry=None, compagnia: bool = False, origine: str = "",
+               trascrizione=None, pezzi=None, luogo: str | None = None) -> int | None:
         """L'avviso ai tutori del minore (il profilo o il suo id; tipo «sicurezza»). Il numero
         di tutori, -1 se è lo stesso avviso ripetuto entro `minori_avviso_ripetuto_s`, None se
         non è partito."""
@@ -352,7 +389,9 @@ class Cancelli:
                                          categorie_prima, compagnia),
                             urgente=urgente, registry=reg,
                             non_ripetere_s=float(getattr(self.cfg, "minori_avviso_ripetuto_s",
-                                                         0) or 0))
+                                                         0) or 0),
+                            origine=origine, trascrizione=trascrizione, pezzi=pezzi,
+                            luogo=luogo)
         except Exception as e:  # noqa: BLE001
             self.log(f"   [MINORI] avviso non mandato: {type(e).__name__}: {e}")
             return None

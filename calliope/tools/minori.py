@@ -213,7 +213,7 @@ def calcola_in_compiti(ctx, espressione: str) -> dict | None:
 
 AZIONI = ["stato", "imposta", "orari", "abilita_estensione", "togli_estensione", "autorizza",
           "nascita", "tutori", "riepilogo_compiti", "tempo_extra", "richieste",
-          "approva_richiesta", "nega_richiesta"]
+          "approva_richiesta", "nega_richiesta", "avvisi"]
 
 
 def _minuti(valore, predefinito: int = 30) -> int | None:
@@ -240,6 +240,41 @@ def _voce_sicura(ctx) -> bool:
     sc = getattr(ctx, "speaker_ctx", None)
     return getattr(sc, "identified_by", None) == "voce" or bool(getattr(sc, "sfida_superata",
                                                                        False))
+
+
+def _avvisi_consegnati(ctx, chi, nome: str) -> dict:
+    """«Cos'erano quegli avvisi?» (14/10, caso vero: un avviso del 12/10 arrivato il 14/10
+    senza data, e Calliope non ne sapeva niente): gli avvisi già consegnati a chi parla negli
+    ultimi 30 giorni, con quando sono nati, tipo, origine, come sono arrivati e se sono stati
+    segnati falsi. Sola lettura; solo i propri (le righe degli avvisi sono per tutore), solo con
+    la voce riconosciuta o dal proprio schermo personale."""
+    av = M.avvisi()
+    if av is None:
+        return _final("Gli avvisi ai tutori qui non ci sono.", ok=False, fatto=NIENTE)
+    if chi is None or M.e_minore(chi):
+        return _final("Gli avvisi sono per i tutori.", ok=False, fatto=NIENTE)
+    sc = getattr(ctx, "speaker_ctx", None)
+    if getattr(sc, "identified_by", None) not in ("voce", "schermo"):
+        note_rule(ctx, "minore_avvisi_voce")
+        return _final("Per leggerti gli avvisi devo riconoscere la tua voce: chiedimelo con una "
+                      "frase un po' più lunga.", ok=False, fatto=NIENTE)
+    speakers = getattr(ctx, "speakers", None)
+    minore = None
+    if str(nome or "").strip() and speakers is not None:
+        t = speakers.find(nome)
+        minore = speakers.get(t) if t else None
+    righe = av.consegnati(chi.id, ore=30 * 24.0,
+                          minore=getattr(minore, "id", None) if minore is not None else None)
+    note_rule(ctx, "minore_avvisi_letti")
+    if not righe:
+        return _final("Negli ultimi 30 giorni non ti ho consegnato avvisi"
+                      + (f" su {minore.name}." if minore is not None else "."))
+    nomi = {getattr(u, "id", None): u.name
+            for u in getattr(speakers, "users", {}).values()} if speakers is not None else {}
+    return {"ok": True, "fatto": "letto",
+            "avvisi": [av.descrivi(d, nomi.get(d["minore"])) for d in righe[:6]],
+            "cosa_fare": ("rispondi con questi dati veri: quando è nato, da dove, cosa diceva, "
+                          "se era urgente o segnato falso; non inventare niente che qui non c'è")}
 
 
 def _richieste(ctx, chi, azione: str, nome: str, valore: str) -> dict:
@@ -355,6 +390,8 @@ def _minore_gestisci(ctx: ToolContext, nome: str = "", azione: str = "stato",
     azione = str(azione or "stato").strip().lower()
     if azione in ("richieste", "approva_richiesta", "nega_richiesta"):
         return _richieste(ctx, chi, azione, str(nome or ""), str(valore or ""))
+    if azione == "avvisi":
+        return _avvisi_consegnati(ctx, chi, str(nome or ""))
     trovato = speakers.find(nome) if (speakers is not None and str(nome or "").strip()) else None
     minore = speakers.get(trovato) if trovato else (chi if chi is not None and M.e_minore(chi)
                                                     else None)
@@ -564,7 +601,8 @@ def minori_specs() -> list[ToolSpec]:
                          "o togli_estensione; autorizza (valore «agenti 60»: per un'ora); "
                          "tempo_extra (oggi può giocare di più: valore «30»); richieste, "
                          "approva_richiesta o nega_richiesta (valore «R3»); nascita; tutori; "
-                         "riepilogo_compiti. nome: di chi."),
+                         "riepilogo_compiti; avvisi («cos'era quell'avviso?»: quelli che ti ho "
+                         "consegnato, con data e origine). nome: di chi."),
             parameters={"type": "object", "properties": {
                 "nome": {"type": "string"},
                 "azione": {"type": "string", "enum": AZIONI},

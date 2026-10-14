@@ -161,8 +161,10 @@ class AvvisiFinti:
     def __init__(self):
         self.mandati: list = []
 
-    def solo_schermo(self, minore, tipo, testo, urgente=False, registry=None):
+    def solo_schermo(self, minore, tipo, testo, urgente=False, registry=None, **extra):
+        # Dal 14/10 anche l'origine e il riferimento (l'id del segnale) dell'avviso
         self.mandati.append((minore.id, tipo, testo, urgente))
+        self.extra = extra
         return 1
 
 
@@ -427,6 +429,15 @@ def prova_attiva():
              righe_db and righe_db[0][5] is not None and av.da_dire("carlo-id") == [])
     verifica("la scheda personale del tutore, forzata", len(hub.schede) == 1
              and hub.schede[0][1].persona == "carlo-id" and hub.schede[0][2] is True)
+    # 14/10 (ramo avvisi-data): l'origine, il riferimento al segnale e la data sulla scheda
+    rr = av.db.execute("SELECT origine, rif, come FROM avvisi_tutori").fetchone()
+    ident = m.get("id")
+    verifica("l'avviso ha l'origine (rilettura in cucina), il riferimento al segnale e «schermo»",
+             rr == ("dalla rilettura della conversazione in cucina", f"guardia:{ident}",
+                    "schermo"), f"{rr} {ident}")
+    verifica("la scheda dice quando è nato e da dove",
+             "dalla rilettura della conversazione in cucina." in hub.schede[0][0].get("testo", ""),
+             hub.schede[0][0].get("testo"))
     verifica("senza le parole del minore, con dove, quando, l'argomento e il rimando a cercare",
              "picchia" not in testo and "mister" not in testo and "in cucina verso le" in testo
              and "Nicola ha parlato di qualcuno che potrebbe fargli del male" in testo
