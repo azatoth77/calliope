@@ -259,7 +259,7 @@ def prova_spenta():
 
 # ─────────────────────────── 2. ritrascrizione ───────────────────────────
 def prova_ritrascrizione():
-    cfg = cfg_base(stanza_lenta_prompt_caratteri=40)
+    cfg = cfg_base(stanza_lenta_prompt_caratteri=40, stanza_lenta_prompt="si")
     stt = STTFinto()
     st, le = nuova(cfg, stt)
     c = Coll(1, "cucina")
@@ -293,6 +293,14 @@ def prova_ritrascrizione():
     verifica("il prompt dice chi parla nello scambio e le parole di prima, corto",
              p2.startswith("Parlano Carlo e Nicola.") and "lago" in p2
              and len(p2) <= len("Parlano Carlo e Nicola.") + 41, p2)
+    le_auto = L.Lenta(cfg_base(), st, log=LOG.append, avvia=False)
+    verifica("prompt «auto»: spento con lo stesso Whisper dei turni, acceso con uno suo",
+             not le_auto.prompt_acceso()
+             and L.Lenta(cfg_base(), st, stt=stt, avvia=False).prompt_acceso()
+             and L.Lenta(cfg_base(stanza_lenta_stt_url="http://127.0.0.1:9"), st,
+                         avvia=False).prompt_acceso()
+             and not L.Lenta(cfg_base(stanza_lenta_prompt="no"), st, stt=stt,
+                             avvia=False).prompt_acceso())
     verifica("i segmenti rivisti non tornano", le.giro(tardi(cfg)) == 0
              and st.registro(1).rivisti() >= {s1, s2})
     # STTCondiviso: la precedenza vera
@@ -319,7 +327,8 @@ def prova_chi():
     verifica("la corsia veloce: Carlo debole in zona grigia", g["sicurezza"] == "grigia"
              and g["nome"] == "Carlo", str(g))
     s2 = parla(st, c, 35, [(0.1, 4.0), (0.2, 4.0)],
-               testi=("Io porto le bibite e io la torta di mele.", "PARTI"))
+               testi=("Io porto le bibite e io la torta di mele.",
+                        "Io porto le bibite. E io la torta di mele."))
     s3 = parla(st, c, 37, [(0.1, 3.0), (0.2, 3.0), (0.1, 3.0), (0.2, 3.0)],
                testi=("Sì no sì no.", "Sì no sì no ma dai."))
     prima = len(sentite)
@@ -478,7 +487,7 @@ def prova_conseguenze():
     verifica("stanza_cerca trova la versione 2", es.esito == "trovato"
              and "alle sette" in es.testo and "alle sei" not in es.testo, es.testo)
     # La TV toglie dal disco la riga di prima; un segmento spezzato tiene tutte e due le parti
-    s4 = parla(st, c, 107, [(0.1, 4.0), (0.2, 4.0)], testi=("Io e io.", "PARTI"))
+    s4 = parla(st, c, 107, [(0.1, 4.0), (0.2, 4.0)], testi=("Io e io.", "Io porto il vino. E io il pane."))
     st.tenuta.attendi()
     le.giro(tardi(cfg))
     st.tenuta.attendi()
@@ -647,7 +656,7 @@ def prova_banco():
     s_n = parla(st, c, 163, [(0.2, 2.0)], testi=("Ciao papà.",) * 2)
     s_o = parla(st, c, 165, [(0.35, 2.0)], testi=("Buonasera.",) * 2)
     s_g = parla(st, c, 167, [(0.12, 1.5)], testi=("Eh già.",) * 2)
-    s_m = parla(st, c, 169, [(0.1, 4.0), (0.35, 4.0)], testi=("Io e lui.", "PARTI"))
+    s_m = parla(st, c, 169, [(0.1, 4.0), (0.35, 4.0)], testi=("Io e lui.", "Ciao a tutti. Buonasera."))
     le.giro(tardi(cfg))
     d = banco_mod.cartella(cfg)
     wav = sorted(d.rglob("*.wav"))

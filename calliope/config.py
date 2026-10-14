@@ -1175,6 +1175,11 @@ class Config:
     stanza_lenta_stt_modello: str = ""
     # Beam della ritrascrizione con faster-whisper nel processo (il server lo fissa da sé)
     stanza_lenta_beam: int = 8
+    # Il prompt della ritrascrizione (i nomi di chi parla nello scambio e la coda delle parole
+    # di prima): «auto» (di serie) solo con un Whisper suo (stanza_lenta_stt_url): sul banco
+    # sintetico del 14/10 col turbo dei turni il prompt peggiorava la WER (10 dB: 18,9 → 21,9 %),
+    # con large-v3 la migliorava (18,4 → 16,8 %); «si» sempre, «no» mai
+    stanza_lenta_prompt: str = "auto"
     # Caratteri delle righe di prima dello scambio nel prompt di Whisper (oltre ai nomi dei
     # presenti). 0 = solo i nomi. Corto: un prompt lungo si ricopia sull'audio incerto
     stanza_lenta_prompt_caratteri: int = 160
@@ -3104,7 +3109,7 @@ SEZIONI: dict[str, list[str]] = {
                "stanza_guardia_ripresa_h", "stanza_lenta", "stanza_audio_min",
                "stanza_lenta_quiete_s", "stanza_lenta_ogni_s", "stanza_lenta_libera_s",
                "stanza_lenta_stt_url", "stanza_lenta_stt_modello", "stanza_lenta_beam",
-               "stanza_lenta_prompt_caratteri", "stanza_lenta_finestra_s",
+               "stanza_lenta_prompt", "stanza_lenta_prompt_caratteri", "stanza_lenta_finestra_s",
                "stanza_lenta_parte_min_s", "stanza_lenta_soglia_finestra",
                "stanza_lenta_riassunto_righe", "stanza_audio_banco_giorni"],
     "satellite": ["satellite_server", "satellite_credenziali", "satellite_impronta",

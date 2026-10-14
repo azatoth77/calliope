@@ -10,7 +10,9 @@ gli stessi segmenti si rivedono:
 
 1. **Ritrascrizione con più contesto**: il prompt di Whisper dice chi parla nello scambio («Parlano
    Carlo e Nicola.») e le ultime parole dette prima nello stesso scambio (al più
-   `stanza_lenta_prompt_caratteri`: un prompt lungo si ricopia sull'audio incerto, trappola nota);
+   `stanza_lenta_prompt_caratteri`: un prompt lungo si ricopia sull'audio incerto, trappola nota),
+   di serie solo con un Whisper suo (`stanza_lenta_prompt: auto`: sul banco sintetico il prompt
+   peggiorava il turbo e migliorava large-v3);
    la precedenza è `LENTA` (dopo turno, recupero e stanza), un segmento alla volta (≤ 20 s di
    audio: un turno che arriva aspetta al più quello). Con `stanza_lenta_stt_url` un secondo Whisper
    più lento (large-v3 non turbo), se il piano dei modelli dice che ci sta; con faster-whisper nel
@@ -18,8 +20,9 @@ gli stessi segmenti si rivedono:
 2. **Chi parla sullo scambio** (§ 3.2, § 5.1): finestre CAM++ da `stanza_lenta_finestra_s` con
    sovrapposizione a metà, confrontate con i profili **e** con la voce di ciascuno in questo
    scambio (la media delle sue frasi riconosciute: stesso canale, stessa stanza); un segmento con
-   due voci per almeno `stanza_lenta_parte_min_s` ciascuna si **spezza** in due righe (ogni parte
-   ritrascritta da sola, con chi e i tempi); se le voci si alternano troppo, una riga «più voci
+   due voci per almeno `stanza_lenta_parte_min_s` ciascuna si **spezza** in due righe (il testo
+   della ritrascrizione intera diviso in proporzione al tempo, al confine di frase più vicino; chi
+   e i tempi per parte); se le voci si alternano troppo, una riga «più voci
    (Carlo, Nicola?)». L'attribuzione della riga intera si rivede con le voci dello scambio. **Mai
    verso l'alto**: niente permessi, niente impronte, niente presenze da qui.
 3. **Allucinazioni** (§ 5.4, regola `allucinazione_lenta`, sulla trascrizione che il modello non
@@ -154,6 +157,36 @@ def allucinazione(testo: str) -> str | None:
     return None
 
 
+def dividi_testo(testo: str, frazioni: list[float]) -> list[str]:
+    """Il testo in len(frazioni)+1 pezzi, ai punti in proporzione (0–1) della durata, misurati
+    sui caratteri; ogni taglio va al confine di frase (punteggiatura) entro tre parole, se c'è,
+    altrimenti alla parola più vicina. Nessuna parola persa né ripetuta."""
+    parole = str(testo or "").split()
+    if not parole:
+        return [""] * (len(frazioni) + 1)
+    lung = [len(w) + 1 for w in parole]
+    tot = float(sum(lung))
+    cum, acc = [], 0
+    for x in lung:
+        acc += x
+        cum.append(acc / tot)                  # fine della parola i, in frazione
+    tagli, prec = [], 0
+    for f in frazioni:
+        i = min(range(len(parole)), key=lambda k: abs(cum[k] - f)) + 1   # taglio dopo i
+        vicini = [k for k in range(max(prec + 1, i - 3), min(len(parole), i + 3) + 1)
+                  if k <= len(parole) - 1 and parole[k - 1][-1:] in ".?!;,:"]
+        if vicini:
+            i = min(vicini, key=lambda k: abs(k - i))
+        i = max(prec + 1, min(i, len(parole) - 1)) if len(parole) > 1 else 1
+        tagli.append(i)
+        prec = i
+    out, da = [], 0
+    for t in tagli + [len(parole)]:
+        out.append(" ".join(parole[da:t]))
+        da = t
+    return out
+
+
 @dataclass
 class Audio:
     """Un segmento della stanza in attesa della corsia lenta (solo in RAM)."""
@@ -182,6 +215,8 @@ class Lenta:
                  misure=None, banco=None, media=None, log=print, avvia: bool = True):
         self.cfg, self.stanza, self.log = cfg, stanza, log
         self.stt = stt if stt is not None else getattr(stanza, "stt", None)
+        # Un Whisper suo (passato qui, o `stanza_lenta_stt_url`): il prompt «auto» si accende
+        self.stt_proprio = stt is not None
         self.registry = registry if registry is not None else getattr(stanza, "registry", None)
         self.riassuntore = riassuntore
         self.occupato = list(occupato)
@@ -408,14 +443,16 @@ class Lenta:
         parti, ignote, nfin = self._parti(a, audio, righe)
         ris["finestre"], ris["ignote"] = nfin, ignote
         if len(parti) > 1:
+            # Il testo del segmento intero diviso fra le voci in proporzione al tempo, al
+            # confine di frase più vicino: ritrascrivere le parti da sole perdeva o ripeteva le
+            # parole ai tagli (banco sintetico del 14/10)
+            durata = len(audio) / SR
+            pezzi = dividi_testo(testo, [p["da"] / durata for p in parti[1:]])
             out = []
-            for p in parti:
-                pa = audio[int(p["da"] * SR):int(p["a"] * SR)]
-                t2 = time.perf_counter()
-                tp, sp, _ = self._trascrivi(pa, prompt)
-                ris["stt_s"] += time.perf_counter() - t2
-                if not tp or sp or allucinazione(tp):
+            for p, tp in zip(parti, pezzi):
+                if not tp.strip():
                     continue
+                pa = audio[int(p["da"] * SR):int(p["a"] * SR)]
                 chi = self._chi_audio(pa, a, righe) if p.get("chi") is None else p["chi"]
                 out.append(dict(chi, testo=tp, inizio=round(a.inizio + p["da"], 3),
                                 fine=round(min(a.fine, a.inizio + p["a"]), 3)))
@@ -424,7 +461,10 @@ class Lenta:
                 ris["righe"] = out
                 ris["cam_ms"] = round((time.perf_counter() - t1) * 1000, 1)
                 return ris
-        elif parti and parti[0].get("piu_voci"):
+            nomi = [p["voce"] for p in parti if p["voce"] != "?"]
+            parti = [{"piu_voci": True, "nomi": list(dict.fromkeys(nomi)),
+                      "minore": any(self._minore(self._profilo(n)) for n in nomi)}]
+        if parti and parti[0].get("piu_voci"):
             ris["esito"] = "piu_voci"
             nomi = parti[0]["nomi"]
             ris["righe"] = [{"chi": "piu_voci", "nome": ", ".join(nomi) + "?" if nomi else None,
@@ -446,6 +486,8 @@ class Lenta:
     def prompt(self, a: Audio, righe: list[dict]) -> str:
         """Il prompt di Whisper per il segmento: i nomi di chi parla nello scambio (righe con la
         voce riconosciuta o in zona grigia, e i presenti) e la coda delle parole dette prima."""
+        if not self.prompt_acceso():
+            return ""
         nomi = []
         for r in righe:
             if (r.get("scambio") == a.scambio and r.get("nome") and r.get("chi") != "calliope"
@@ -474,6 +516,16 @@ class Lenta:
             if coda and " " in coda and len(coda) == car:
                 coda = coda.split(" ", 1)[1]         # niente mezza parola all'inizio
         return " ".join(x for x in (testa, coda) if x)
+
+    def prompt_acceso(self) -> bool:
+        """`stanza_lenta_prompt`: «si», «no», o «auto» = solo con un Whisper suo (banco del
+        14/10: col turbo dei turni il prompt peggiorava, con large-v3 migliorava)."""
+        v = str(self._f("stanza_lenta_prompt", "auto") or "auto").strip().lower()
+        if v in ("si", "sì", "true", "1"):
+            return True
+        if v in ("no", "false", "0"):
+            return False
+        return self.stt_proprio or bool(str(self._f("stanza_lenta_stt_url", "") or "").strip())
 
     def _trascrivi(self, audio: np.ndarray, prompt: str):
         """(testo, famiglia dell'allucinazione o None, confidenza o None)."""

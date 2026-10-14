@@ -5,6 +5,9 @@
   *[storico: al 14/10 sera fatti i passi 0–2 e 4–6, con la tenuta su disco e i conoscenti
   ([0030](0030-conoscenti.md)), ognuno col suo interruttore, spenti di serie; restano il passo 3
   (corsia lenta, con il filtro della TV), il resto del passo 7 e il passo 8; vedi «Conseguenze»]*
+  *[storico: il 14/10 sera fatto anche il passo 3 (corsia lenta, `stanza_lenta`, spenta di
+  serie), con l'**eccezione temporanea** dell'audio del banco (sezione qui sotto); restano il
+  resto del passo 7 e il passo 8]*
 - **Area**: [stt-tts](../aree/stt-tts.md), [contesto-conversazione](../aree/contesto-conversazione.md),
   [voce-e-regole](../aree/voce-e-regole.md), [minori](../aree/minori.md),
   [satelliti](../aree/satelliti.md), [schermi-telefono](../aree/schermi-telefono.md)
@@ -29,7 +32,9 @@ e il 13/10 ha risposto alle sue sei domande.
    rispondere con cognizione quando Calliope è interpellata. Ogni frase si trascrive appena il VAD
    la chiude, in una corsia a bassa priorità; in secondo piano si ritrascrive, si riattribuisce chi
    parla sull'intero scambio, si segnano TV e radio e si scartano le allucinazioni. **L'audio non
-   va mai su disco**: resta in RAM al più `stanza_audio_min` per la corsia lenta.
+   va mai su disco**: resta in RAM al più `stanza_audio_min` per la corsia lenta. *[14/10 sera:
+   salvo l'eccezione temporanea e dichiarata del banco del passo 3, sezione «Eccezione: l'audio
+   del banco».]*
 2. **Azioni solo per ciò che è sicuramente rivolto a Calliope**: il nome e la voce riconosciuta
    con i permessi, come oggi. Senza il nome si risponde soltanto (e si legge per rispondere),
    solo se il giudizio «rivolta», con le righe della stanza, dice sì. Il «sì» della stessa voce a
@@ -71,6 +76,34 @@ e il 13/10 ha risposto alle sue sei domande.
 Il contesto delle scelte, nelle parole di chi amministra: la privacy dentro la famiglia è relativa
 (Calliope gira in casa; i minori non hanno privacy verso i genitori); la DGX oggi è in ufficio, ma
 è temporaneo e si progetta come se fosse in casa ([0028](0028-decisioni-roadmap-12-10.md) punto 4).
+
+## Eccezione: l'audio del banco (14/10 sera, temporanea)
+
+Decisa da chi amministra il 14/10 sera, per misurare la corsia lenta (passo 3) sulla voce vera: il
+progetto chiede WER e attribuzione «su un set di scambi registrati da adulti consenzienti», e un
+set registrato apposta non c'è ancora.
+
+- **Cosa**: con `stanza_audio_banco_giorni: N` nel file locale (di serie **0 = mai**; chi
+  amministra: 7) e la corsia lenta accesa (`stanza_lenta`), l'audio dei segmenti della stanza va
+  su disco con le trascrizioni della corsia veloce (v1) e della lenta (v2), in
+  `<turn_log_dir>/stanza_banco/` (file 600, cartelle 700, fuori da git), per il banco
+  `prove/manuali/banco_stanza_lenta.py --banco` (il riferimento lo scrive a mano chi
+  amministra).
+- **Solo quando tutte le voci del segmento sono persone di casa riconosciute dalla voce sopra
+  soglia**, in tutte e due le versioni della riga, e nessuna finestra CAM++ del segmento è di una
+  voce non riconosciuta: adulti di casa e **minori della famiglia**, che chi amministra, loro
+  tutore, autorizza esplicitamente per questo banco. **Mai** ospiti, conoscenti, zona grigia
+  (anche se la corsia lenta la corregge), voci sconosciute, «più voci», TV; mai in pausa
+  («abbiamo ospiti»).
+- **Scadenza**: N giorni dalla prima accensione (il segno `acceso.json` nella cartella); poi
+  smette da sé e lo dice nel log e in `calliope stato --turni`. I file restano per il banco al più
+  `turn_log_days` (rotazione per giorno). Per ricominciare serve una scelta nuova: svuotare la
+  cartella e riaccendere.
+- **Cancellazione**: «dimentica» toglie i file del satellite; `calliope conserva --svuota` tutto
+  (anche il segno dell'accensione), `--persona` i segmenti con la sua voce.
+- **Perché un'eccezione e non una regola nuova**: il punto 1 («l'audio non va mai su disco») resta
+  il valore della stanza; questa è una misura a tempo, con un fine solo (il riferimento per la
+  WER), dichiarata nel file locale come la tenuta dei minori.
 
 ## Cosa cambia nelle decisioni di prima
 
@@ -152,7 +185,15 @@ Il contesto delle scelte, nelle parole di chi amministra: la privacy dentro la f
   misura vera (`prove/manuali/misura-eco-stanza.md`).
 - **Passo 6, ripresa e gioco, 14/10 sera** (ramo `stanza-guardia-2`): il guardiano riprende dal
   disco le righe non giudicate dopo un riavvio e giudica col gioco aperto dichiarato.
+- **Passo 3, fatto il 14/10 sera** (ramo `stanza-passo-3`, `stanza_lenta`, di serie spento;
+  `calliope/stanza/lenta.py`, `prove/prova_stanza_lenta.py`, banco
+  `prove/manuali/banco_stanza_lenta.py`): a DGX libera la ritrascrizione (con un Whisper suo se il
+  piano lo consente), chi parla sullo scambio con le finestre CAM++ (blocchi con due voci
+  spezzati), la TV a strati senza Home Assistant, le allucinazioni, il riassunto progressivo;
+  righe di versione 2 in sola aggiunta, la storia del modello non riscritta, il guardiano che
+  rigiudica solo un cambio sostanziale. Con l'eccezione temporanea dell'audio del banco (sopra).
 - *[Storico al 14/10: dei passi 2–8 qui sotto restano il 3, il 7 oltre i conoscenti e l'8.]*
+  *[Storico al 14/10 sera: il 3 è fatto.]*
   Passi 2–8 del piano, ognuno con il suo interruttore e la sua misura sulla DGX; la prima misura
   (passo 1) non cambia nulla di ciò che Calliope dice. Misure nuove: ritardo della coda della
   stanza, banda del telefono, **copertura all'interpellazione** (tutte le frasi dette prima della

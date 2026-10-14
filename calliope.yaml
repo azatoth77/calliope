@@ -1481,6 +1481,11 @@ conversazione_stanza:
   stanza_lenta_stt_modello: ''
   # Beam della ritrascrizione con faster-whisper nel processo (il server lo fissa da sé)
   stanza_lenta_beam: 8
+  # Il prompt della ritrascrizione (i nomi di chi parla nello scambio e la coda delle parole
+  # di prima): «auto» (di serie) solo con un Whisper suo (stanza_lenta_stt_url): sul banco
+  # sintetico del 14/10 col turbo dei turni il prompt peggiorava la WER (10 dB: 18,9 → 21,9 %),
+  # con large-v3 la migliorava (18,4 → 16,8 %); «si» sempre, «no» mai
+  stanza_lenta_prompt: auto
   # Caratteri delle righe di prima dello scambio nel prompt di Whisper (oltre ai nomi dei
   # presenti). 0 = solo i nomi. Corto: un prompt lungo si ricopia sull'audio incerto
   stanza_lenta_prompt_caratteri: 160
