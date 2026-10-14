@@ -62,6 +62,13 @@ il prossimo passo (registro delle capacità, calliope/capacita.py).
                                               agente, Piper, con stime e motivi; non applica
                                               niente. --inventario: una macchina salvata (JSON
                                               di --piano --json) invece di questa
+    python -m calliope.stato --memoria [--json] [--inventario FILE]
+                                              il conto della memoria adesso (14/10, sola
+                                              lettura, calliope/arbitro_memoria.py): chi la
+                                              tiene, di che classe (tempo reale, vicino,
+                                              sfondo, a richiesta), cosa farebbe l'arbitro
+                                              per caricare un modello a richiesta; non
+                                              scarica né carica niente
     python -m calliope.stato --installa <azione>
                                               proposta, conferma da tastiera, scaricamento
                                               con avanzamento (stesso codice della voce)
@@ -346,6 +353,32 @@ def piano_main(cfg, argv: list[str], as_json: bool) -> int:
     return 0
 
 
+def memoria_main(cfg, argv: list[str], as_json: bool) -> int:
+    """`--memoria`: il conto della memoria e le classi delle attività, in sola lettura (14/10,
+    passo 1 dell'arbitro della memoria)."""
+    from . import arbitro_memoria as am, macchina
+    uso = am.da_config(cfg)
+    if "--inventario" in argv:
+        i = argv.index("--inventario")
+        try:
+            with open(argv[i + 1], encoding="utf-8") as fh:
+                inv = json.load(fh)
+            inv = inv.get("inventario", inv)
+        except (IndexError, OSError, ValueError) as e:
+            print(f"--inventario vuole un file JSON leggibile ({e})")
+            return 1
+    else:
+        inv = macchina.inventario(cfg)
+        uso.processo_gb = am.processo_servizio_gb()
+    c = am.conto(inv, uso)
+    if as_json:
+        print(json.dumps({"inventario": inv, "memoria": c.as_json()}, ensure_ascii=False,
+                         indent=2, default=str))
+    else:
+        print(am.testo(c))
+    return 0
+
+
 def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     try:
@@ -476,6 +509,8 @@ def main(argv=None) -> int:
         return 0
     if "--piano" in argv:
         return piano_main(cfg, argv, as_json)
+    if "--memoria" in argv:
+        return memoria_main(cfg, argv, as_json)
     if "--installa" in argv:
         i = argv.index("--installa")
         if i + 1 >= len(argv):

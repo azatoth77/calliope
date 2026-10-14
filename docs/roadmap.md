@@ -131,6 +131,14 @@ comporta nella taglia ridotta da 8 GB (V7, E11).
    (prova breve, `taratura.json`, campi «auto», adattamento) e le sei scelte aperte della
    ricerca del 07/10. *Da approfondire* · dipende da: le misure del § 7.2 della
    [taratura](ricerche/2026-10-07-taratura-macchina.md) (guardiano piccolo e Whisper sulla CPU).
+4. **Arbitro unico delle attività e della memoria** (richiesta del 14/10, completa 0.2): classi
+   (tempo reale, vicino, sfondo, a richiesta), conto sulla memoria vera, una sola «voce ferma», coda
+   dei caricamenti con precedenza e tetti; gli sfondi si scaricano e ricaricano, il turno di voce non
+   paga mai ([`ricerche/2026-10-14-arbitro-memoria.md`](ricerche/2026-10-14-arbitro-memoria.md)).
+   **Passo 1 fatto il 14/10** (ramo `arbitro-memoria`): `calliope stato --memoria` in sola lettura e
+   lo script di misura per la DGX. Poi: 2 arbitro in ombra nel registro; 3 secondo Whisper e FLUX a
+   richiesta (sblocca 4.6); 4 sonno di vLLM dopo le misure. Nel profilo ridotto: stesse classi, niente
+   da scaricare. *Quasi* · dipende da: le misure sulla DGX (`prove/manuali/misura_memoria_dgx.py`).
 
 ### 1. Modalità sviluppo (lavori del 12/10)
 
