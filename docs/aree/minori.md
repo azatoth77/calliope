@@ -18,7 +18,7 @@ Dario le scelte prudenti dei cancelli (fondo del documento); da rimisurare tutto
 | Esercizi generati da Calliope (dal 08/10): matematica e italiano, a voce e sulla scheda, correzione nel codice, registro dei tentativi per i tutori | libreria standard; SQLite (stesso file della memoria: `esercizi_tentativi`, `esercizi_segnalazioni`, `esercizi_banco`); Wikizionario della biblioteca; secondo modello su Ollama | `calliope/esercizi/` → `matematica.genera`, `italiano.genera`, `numeri.leggi_valore`, `verifica.Wikizionario`, `verifica.SecondoParere`, `registro.Registro`, `sessione.Servizio`; tool `esercizi` (`calliope/tools/esercizi.py`); scheda `DISEGNA.esercizio` e `POST /api/esercizio`; rete `spinta_esercizi`; prove `prove/prova_esercizi.py`, `prove/prova_esercizi_pagina.py`, `prove/prova_esercizi_ollama.py`, `prove/prova_esercizi_voce.py`; indice del programma ministeriale `calliope/esercizi/programma/` (12/10, `prove/prova_programma.py`); fase B dal 12/10 sera: `programma.limite`, `varianti.py`, `Registro.punto` (tabella esercizi_punto), interrogazioni (`programma/interrogazioni.yaml`, `verifica.SecondoParere.giudica`), prove `prove/prova_esercizi_programma.py` e `prove/prova_esercizi_programma_ollama.py`; [`docs/ricerche/2026-10-08-esercizi.md`](../ricerche/2026-10-08-esercizi.md) |
 | Materie calcolabili (dal 12/10): logica, fisica e chimica con lo schema della matematica; unità di misura dette per esteso e lette dalle risposte come le scrive Whisper | libreria standard | `calliope/esercizi/` → `logica.py`, `fisica.py`, `chimica.py`, `misure.py` (risposte con l'unità), `modello.livello_da_classe`; `calliope/unita.py` → `UNITA`, `leggi_misura`, `misura_detta`, `SIMBOLI_DETTI` (anche per `pronuncia.Pronuncia`); prove `prove/prova_materie.py`, `prove/prova_esercizi_ollama.py --materie logica,fisica,chimica` e `--scelta` |
 | Pericolo poco chiaro verificato in due cancelli prima dell'avviso (dal 09/10); in compagnia la voce del minore non è mai sicura | stesso rilevatore (gemma4 e4b, output strutturato) per gravità e verifica | `calliope/cancelli.py` → `Cancelli`, `Segnale`, `RASSICURA`, `rassicura`, `testo_avviso`, `percorso` (segnali su disco dal 10/10); `calliope/guardiano.py` → `Guardiano.gravita`, `Guardiano.verifica`; `calliope/ciclo.py` → `Ciclo._decidi_pericolo`, `Ciclo._secondo_cancello`; prove `prove/prova_minori_cancelli.py`, misura `prove/misura_cancelli.py` |
-| Guardiano a posteriori della stanza (dal 14/10, passo 6 della conversazione di stanza, in ombra): le chiacchiere con un minore che parla o è presente, rilette dopo a blocchi | stesso rilevatore (gemma4 e4b, output strutturato con livello, categoria, contesto e righe) | `calliope/stanza/guardia.py` → `Guardia`, `GiudiceModello`, `PROMPT`, `riassunto`, `elenco`; `calliope/guardiano.py` → `Guardiano.chiedi_json`; `calliope/minori.py` → `Avvisi.solo_schermo`; `calliope stato --guardia`; prova `prove/prova_stanza_guardia.py`, banco `prove/manuali/banco_stanza_guardia.py` |
+| Guardiano a posteriori della stanza (dal 14/10, passo 6 della conversazione di stanza, in ombra): le chiacchiere con un minore che parla o è presente, rilette dopo a blocchi; dal 14/10 sera riprese dal disco dopo un riavvio e giudicate col gioco aperto dichiarato | stesso rilevatore (gemma4 e4b, output strutturato con livello, categoria, contesto e righe) | `calliope/stanza/guardia.py` → `Guardia`, `GiudiceModello`, `PROMPT`, `GIOCO`; `calliope/stanza/tenuta.py` → diario della guardia; `calliope/schermi/giochi.py` → `Giochi.in_corso`; `riassunto`, `elenco`; `calliope/guardiano.py` → `Guardiano.chiedi_json`; `calliope/minori.py` → `Avvisi.solo_schermo`; `calliope stato --guardia`; prova `prove/prova_stanza_guardia.py`, banco `prove/manuali/banco_stanza_guardia.py` |
 
 ## Problemi noti
 
@@ -841,10 +841,84 @@ segreto per una sorpresa; 4 preoccupanti scritte in modo sobrio): **sul portatil
 14/10) acuti falsi 0/12, dubbi 0, preoccupanti 4/4 acute; giudizio p50 0,96 s, p90 1,23 s. Sulla
 DGX da misurare.
 
-**Non fatto**: la rilettura dopo un riavvio dal disco (`stanza_tenuta`: il giro riparte dalle righe
-nuove in memoria), il filtro della modalità gioco del satellite (oggi lo fa solo il contesto «gioco»
-del giudizio), le righe di versione 2 della corsia lenta (passo 3: oggi una riga riscritta si
-rigiudicherebbe), il riepilogo dei dubbi nel riepilogo del giorno.
+**Non fatto**: ~~la rilettura dopo un riavvio dal disco (`stanza_tenuta`: il giro riparte dalle
+righe nuove in memoria), il filtro della modalità gioco del satellite (oggi lo fa solo il contesto
+«gioco» del giudizio)~~ (fatti la sera del 14/10, sezione qui sotto), le righe di versione 2 della
+corsia lenta (passo 3: oggi una riga riscritta si rigiudicherebbe), il riepilogo dei dubbi nel
+riepilogo del giorno.
+
+## Il guardiano a posteriori dopo un riavvio e con un gioco aperto (14/10 sera, ramo `stanza-guardia-2`)
+
+Le due cose lasciate aperte dal passo 6, chieste da chi amministra.
+
+**Ripresa dal disco dopo un riavvio** (vale solo con `stanza_tenuta: true`). Prima un riavvio
+(`calliope aggiorna`, un guasto) perdeva i blocchi in coda e le righe non ancora assestate: il giro
+ripartiva dalle righe nuove in memoria.
+
+- **Il diario della guardia** sta in `stanza.db`, come modulo di schema a sé (`stanza_guardia`,
+  `tenuta.MIGRAZIONI_GUARDIA`: una versione di prima lo ignora e il file non passa in sola lettura
+  con `calliope torna`): `guardia_giudicate` (avvio, satellite, seq, esito, istante: **mai parole**)
+  per le righe giudicate o buttate per sempre (guasto dopo tre tentativi, scadute in coda);
+  `guardia_giochi` (satellite, inizio, fine) per i periodi di gioco; `guardia_meta.dal`, da quando
+  c'è il diario. La rotazione della tenuta lo pulisce con le righe (60 giorni).
+- **Al primo giro dopo l'avvio** (`Guardia._riprendi_disco`): le righe degli avvii di prima, finite
+  da al più `stanza_guardia_ripresa_h` (di serie **24 ore**; 0 = nessuna ripresa) e non prima di
+  `dal` (prima del diario le aveva già viste la guardia in memoria: niente doppioni la prima volta),
+  non nel diario, diventano blocchi con **le stesse regole** (quali righe, presenze dal disco,
+  attesa: se una riga non è ancora assestata si riprova al giro dopo; quiete e tetto all'ora; un
+  satellite in pausa si riprende alla ripresa). Le righe già giudicate restano come contesto
+  intorno. Un blocco del disco si butta se una sua riga non c'è più («dimentica» toglie anche il
+  disco), prima e dopo il giudizio, come in memoria.
+- **Oltre il limite**: le righe di un minore più vecchie non si giudicano; si contano nella misura
+  `ripresa` (`oltre_limite`), che dice anche righe e blocchi ripresi; la sezione di
+  `calliope stato --turni` le mostra per giorno («ripresi dal disco dopo un riavvio», «righe di un
+  minore oltre il limite della ripresa»).
+- **Cosa non si riprende**: ciò che il disco non tiene (zona grigia, voci non riconosciute, frasi in
+  pausa: decisione della tenuta), e le righe di questo avvio (le dà il registro in memoria). Le
+  misure di un giudizio ripreso hanno `disco: true`; i conti degli avvisi si riprendevano già dal
+  file delle misure.
+
+**Modalità gioco.** Mentre sullo schermo del satellite (il suo, o quelli della sua stanza che non
+sono di un altro satellite: `Giochi.schermi_voce`) è aperto un gioco, le righe si giudicano col
+contesto «gioco» **dichiarato**, non solo dedotto dalle parole.
+
+- **Quando un gioco è aperto**: `Giochi.in_corso(schermi)` (riquadro aperto da «pronto» a «chiuso»,
+  non fermato, la pagina viva da al più `VIVO_S` = 40 s; anche una partita di prova, con o senza
+  comandi a voce). Il thread della guardia lo chiede per ogni satellite a ogni giro (2 s,
+  `osserva_giochi`) e tiene i periodi per satellite (in memoria 48 ore e, con la tenuta, nel diario,
+  così valgono per le righe riprese dopo un riavvio). Una riga è «di gioco» se tocca un periodo con
+  30 s di margine (`GIOCO_MARGINE_S`). Collegato in `Avvio._guardia_stanza` (main.py); senza giochi
+  (`giochi_enabled: false`) niente cambia.
+- **Nel prompt**: con una riga di gioco nel blocco, `guardia.GIOCO` dice al modello che sullo
+  schermo della stanza era aperto un videogioco: uccidere, morire, sparare, minacciare, catturare,
+  cadere, perdere le vite detti del gioco sono NIENTE con contesto gioco; resta un segnale solo ciò
+  che è detto sul serio della vita vera. Il posto delle righe si accorcia di altrettanto (il prompt
+  resta nella finestra di 2 048 token).
+- **Dopo il giudizio** (`Guardia.decidi`, con le righe del segnale di gioco): contesto gioco,
+  scherzo, TV → niente come prima; in gioco un acuto non «serio» → **dubbio**, un dubbio non serio →
+  **niente**; un acuto serio detto da altri (la minaccia di un compagno di gioco, «ti ammazzo, sei
+  morto!» con il minore presente) → **dubbio**. Resta **acuto** solo ciò che il minore dice sul
+  serio con la voce sopra soglia (motivo nelle misure: `gioco_dichiarato`). La scelta: il grave
+  vero detto a gioco aperto (l'autolesionismo detto sul serio, una confidenza su un adulto vero o su
+  qualcuno conosciuto nel gioco) è del minore stesso; le minacce degli altri sono quasi sempre del
+  gioco, e diventano un dubbio, che conta per i due dubbi in giorni diversi.
+- **Misure**: `gioco: true` nei giudizi di gioco; la sezione di `calliope stato --turni` conta i
+  blocchi «col gioco aperto».
+
+**Misure.** A secco `prove/prova_stanza_guardia.py` (sezioni 8 e 9, ~2 s in tutto): tre «avvii» su
+uno `stanza.db` vero (righe in coda riprese, già giudicate no, un terzo avvio non rigiudica; contrari:
+dimenticate, oltre il limite contate, non assestate, pausa, prima del diario, ripresa spenta, senza
+tenuta) e la modalità gioco (dichiarato nel prompt; minaccia di altri → dubbio, autolesionismo serio
+del minore acuto, non chiaro → dubbio o niente; contrari: gioco chiuso, in un'altra stanza, senza
+giochi; periodi sul diario dopo un riavvio; `Giochi.in_corso`). Banco col modello
+`prove/manuali/banco_stanza_guardia.py`, tre scene di gioco in più (uno sparatutto tra fratelli,
+il castello col papà pieno di rapimenti e minacce, e il minore che a gioco aperto dice sul serio di
+pensare di farla finita): **sul portatile** (gemma4 e4b, 14/10 sera, 2 giri) acuti falsi 0/14,
+dubbi 0, preoccupanti 5/5 acute (anche quella a gioco aperto, contesto serio); p50 1,18 s, p90
+2,10 s (portatile carico di altri agenti). Con `--senza-gioco` (le stesse scene senza dichiarare il
+gioco) il modello dice **acuto** sullo sparatutto e **dubbio** sul castello, salvati solo dal
+contesto «gioco» dedotto: con il gioco dichiarato il modello stesso dice niente. Sulla DGX da
+misurare.
 
 ## Gli avvisi dicono quando sono nati e da dove (14/10, ramo `avvisi-data`)
 

@@ -1142,6 +1142,10 @@ class Config:
     stanza_guardia_avvisi_giorno: int = 1
     # Una riga con una parola sotto questa probabilità (quando Whisper la dà) non fa un acuto
     stanza_guardia_p: float = 0.5
+    # Con `stanza_tenuta`: dopo un riavvio le righe di prima non ancora giudicate si riprendono
+    # dal disco fino a tante ore indietro (dopo un fermo lungo non si rileggono giorni; quelle
+    # più vecchie si contano soltanto). 0 = nessuna ripresa
+    stanza_guardia_ripresa_h: float = 24.0
     # I conoscenti (14/10, decisione 0030, calliope/stanza/conoscenti.py): le voci che nessun
     # profilo riconosce si raggruppano in memoria per somiglianza dell'impronta; dal contesto
     # (vocativi e saluti seguiti dal parlato di quella voce, presentazioni, più indizi concordi;
@@ -3045,7 +3049,8 @@ SEZIONI: dict[str, list[str]] = {
                "stanza_guardia_quiete_s", "stanza_guardia_giudizi_ora",
                "stanza_guardia_timeout_s", "stanza_guardia_avvisi_giorno",
                "stanza_guardia_p", "stanza_conoscenti", "conoscenti_scadenza_giorni",
-               "conoscenti_soglia", "conoscenti_min_voce_s", "conoscenti_file"],
+               "conoscenti_soglia", "conoscenti_min_voce_s", "conoscenti_file",
+               "stanza_guardia_ripresa_h"],
     "satellite": ["satellite_server", "satellite_credenziali", "satellite_impronta",
                   "satellite_microfono", "satellite_casse", "satellite_webcam",
                   "satellite_schermo", "satellite_schermo_personale", "satellite_esecutore",
@@ -3258,6 +3263,7 @@ LIMITI: dict[str, tuple[float, float]] = {
     "stanza_guardia_ogni_s": (1.0, 3600.0), "stanza_guardia_quiete_s": (0.0, 600.0),
     "stanza_guardia_giudizi_ora": (0, 3600), "stanza_guardia_timeout_s": (1.0, 600.0),
     "stanza_guardia_avvisi_giorno": (0, 50), "stanza_guardia_p": (0.0, 1.0),
+    "stanza_guardia_ripresa_h": (0.0, 24.0 * 60),
     "contesto_ripiego": (2048, 1_048_576), "contesto_rilettura_max_s": (0.1, 60.0),
     "contesto_conversazioni": (1, 64), "contesto_margine_gb": (0.0, 512.0),
     "max_history_turns": (0, 200), "max_tool_turns": (1, 20), "tool_correzioni_max": (0, 10),

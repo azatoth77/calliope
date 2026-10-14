@@ -1448,6 +1448,10 @@ conversazione_stanza:
   conoscenti_min_voce_s: 6.0
   # Il file dei conoscenti (relativo alla cartella della configurazione)
   conoscenti_file: conoscenti.json
+  # Con `stanza_tenuta`: dopo un riavvio le righe di prima non ancora giudicate si riprendono
+  # dal disco fino a tante ore indietro (dopo un fermo lungo non si rileggono giorni; quelle
+  # più vecchie si contano soltanto). 0 = nessuna ripresa
+  stanza_guardia_ripresa_h: 24.0
 
 satellite:
   # == Lato satellite (il portatile che fa da microfono, casse e schermo di
