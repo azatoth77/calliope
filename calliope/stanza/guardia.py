@@ -494,9 +494,13 @@ class Guardia:
             segs = self._segmenti.setdefault(sat, {})
             for r in assestate:
                 visti.add(r["seq"])
-                if r.get("segmento") is not None:
-                    segs.setdefault(r["segmento"], {"testo": r.get("testo"),
-                                                    "minore": r.get("minore")})
+                seg = r.get("segmento")
+                if seg is None:
+                    continue
+                if seg in segs and int(r.get("versione") or 1) >= 2:
+                    # Una versione 2 con un cambio sostanziale (passata da `_versioni`)
+                    self._misura(esito="versione", sat=str(sat), rigiudicata=True)
+                segs[seg] = {"testo": r.get("testo"), "minore": r.get("minore")}
             while len(segs) > 5000:
                 segs.pop(next(iter(segs)))
             nuovi += self._blocchi(sat, righe, assestate, minori_)
@@ -516,9 +520,7 @@ class Guardia:
                 out.append(r)
                 continue
             if cambio_sostanziale(segs[seg], r):
-                segs[seg] = {"testo": r.get("testo"), "minore": r.get("minore")}
-                out.append(r)
-                self._misura(esito="versione", sat=str(sat), rigiudicata=True)
+                out.append(r)                  # si rigiudica (la misura alla raccolta)
             else:
                 visti.add(r["seq"])
                 saltate.append(r)
