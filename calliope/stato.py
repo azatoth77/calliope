@@ -268,6 +268,12 @@ def main(argv=None) -> int:
         # La conversazione di stanza (13/10, calliope/stanza/misure.py, passo 1): solo numeri
         from .stanza import misure as misure_stanza
         stanza = misure_stanza.riassunto(misure_stanza.leggi(cfg.turn_log_dir, giorni), turni)
+        # La tenuta su disco (14/10, calliope/stanza/tenuta.py): righe, persone e MB dal file
+        try:
+            from .stanza.tenuta import conta_file
+            stanza["tenuta"] = conta_file(cfg)
+        except Exception:  # noqa: BLE001 — i conteggi non fermano lo stato
+            stanza["tenuta"] = None
         if as_json:
             print(json.dumps({"giorni": dati, "soglia_s": getattr(cfg, "latenza_avviso_s", None),
                               "attrito": sicurezza, "attrito_soglia": soglia_a,

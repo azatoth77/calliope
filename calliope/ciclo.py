@@ -1798,7 +1798,16 @@ class Ciclo:
                 st.segna_rivolta(sat, t.stanza_seq, "si", giudizio)
             detto = " ".join(t.said or ()).strip()
             if detto and not t.non_rivolta and esito not in ("ignorato", "non_rivolta"):
-                st.detto(sat, detto)
+                # A chi rispondeva (14/10, tenuta su disco): solo per una persona di casa
+                # riconosciuta dalla voce la risposta va anche sul disco della stanza
+                voce = (rec.get("voce") or {}) if isinstance(rec, dict) else {}
+                nome = voce.get("nome")
+                reg = getattr(self.s, "registry", None)
+                prof = reg.get(nome) if (nome and reg is not None) else None
+                per = {"persona": getattr(prof, "id", None) or nome,
+                       "sicurezza": ("voce" if voce.get("modo") == "voce" and nome
+                                     else "grigia" if nome else "nessuna")}
+                st.detto(sat, detto, per=per)
         except Exception as e:  # noqa: BLE001 — la stanza non ferma la voce
             print(f"   [STANZA] esito del turno nella stanza: {type(e).__name__}: {e}",
                   flush=True)

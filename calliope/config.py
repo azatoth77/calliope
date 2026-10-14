@@ -1069,6 +1069,20 @@ class Config:
     stanza_cerca_anticipo: bool = True
     # Tetto delle righe anticipate (~250 token: ~0,1 s di lettura in più del 26B)
     stanza_cerca_anticipo_caratteri: int = 1000
+    # La tenuta su disco del testo della stanza (14/10, decisione 0029 punto 5, calliope/stanza/
+    # tenuta.py): le righe della stanza (testo, chi, stanza, tempi, rivolta, minore) e le
+    # presenze in un SQLite con FTS5 accanto alla configurazione, per `stanza_tenuta_giorni`;
+    # stanza_cerca cerca anche lì con gli stessi permessi (chi c'era, i tutori, un minore solo le
+    # sue). Per tutta la famiglia, minori compresi (scelta di chi amministra del 13–14/10); mai
+    # le voci non riconosciute né la zona grigia (nel dubbio no), mai ciò che si dice in pausa
+    # («abbiamo ospiti»), mai l'audio. «Dimentica» e `calliope conserva --svuota` cancellano
+    # anche qui; il blocco caldo dei dati del turno resta della sola memoria (dopo un riavvio
+    # non ripesca niente dal disco). false (di serie) = solo in memoria, al più 24 h, fino al
+    # riavvio. Si accende nel file locale
+    stanza_tenuta: bool = False
+    stanza_tenuta_giorni: int = 60
+    # Il file (relativo alla cartella della configurazione), con i permessi stretti dei dati
+    stanza_tenuta_db: str = "stanza.db"
     # Connessioni insieme attraverso l'inoltro (una pagina ne apre 2–6)
     satellite_inoltro_max: int = 32
     # Secondi senza un byte dopo i quali una connessione dell'inoltro si chiude
@@ -2909,7 +2923,8 @@ SEZIONI: dict[str, list[str]] = {
                "stanza_caldo_sempre_s", "stanza_caldo_caratteri", "stanza_cerca",
                "stanza_cerca_righe", "stanza_cerca_caratteri", "stanza_cerca_attesa_max_s",
                "stanza_cerca_attesa_s", "stanza_cerca_anticipo",
-               "stanza_cerca_anticipo_caratteri"],
+               "stanza_cerca_anticipo_caratteri", "stanza_tenuta", "stanza_tenuta_giorni",
+               "stanza_tenuta_db"],
     "satellite": ["satellite_server", "satellite_credenziali", "satellite_impronta",
                   "satellite_microfono", "satellite_casse", "satellite_webcam",
                   "satellite_schermo", "satellite_schermo_personale", "satellite_esecutore",
@@ -3113,6 +3128,7 @@ LIMITI: dict[str, tuple[float, float]] = {
     "stanza_cerca_righe": (1, 200), "stanza_cerca_caratteri": (200, 20_000),
     "stanza_cerca_attesa_max_s": (0.0, 30.0), "stanza_cerca_attesa_s": (0.0, 30.0),
     "stanza_cerca_anticipo_caratteri": (0, 20_000),
+    "stanza_tenuta_giorni": (1, 3650),
     "contesto_ripiego": (2048, 1_048_576), "contesto_rilettura_max_s": (0.1, 60.0),
     "contesto_conversazioni": (1, 64), "contesto_margine_gb": (0.0, 512.0),
     "max_history_turns": (0, 200), "max_tool_turns": (1, 20), "tool_correzioni_max": (0, 10),

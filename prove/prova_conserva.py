@@ -93,9 +93,14 @@ try:
     # ───────── decidi ─────────
     verifica("adulto dalla voce: testo sì", C.decidi(adulto, "testo", "voce").ok)
     verifica("adulto, frase breve: testo sì", C.decidi(adulto, "testo", "breve").ok)
-    verifica("contrario: minore, mai (testo, voce, eventi)",
-             not any(C.decidi(minore, c, "voce") for c in C.COSE)
+    verifica("contrario: minore, mai (testo, voce, eventi, conversazioni)",
+             not any(C.decidi(minore, c, "voce") for c in C.COSE if c != "stanza")
              and C.decidi(minore, "voce", "voce").motivo == "minore")
+    # Il testo della stanza (14/10, decisione 0029 punto 5): con la tenuta accesa anche i minori
+    # riconosciuti dalla voce (prove/prova_stanza_tenuta.py)
+    verifica("la stanza sì anche per il minore con la voce, no nella zona grigia",
+             C.decidi(minore, "stanza", "voce").ok
+             and not C.decidi(minore, "stanza", "conversazione"))
     verifica("contrario: ospite, mai", not any(C.decidi(None, c, "voce") for c in C.COSE))
     verifica("contrario: dubbio con un minore (incerta, minore_vicino): testo no",
              not C.decidi(amm, "testo", "voce", {"incerta"})

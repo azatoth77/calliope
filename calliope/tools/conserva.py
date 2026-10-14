@@ -8,7 +8,8 @@ dati_conservati(azione, persona):
   poi il «sì» nella risposta dopo (come conversazioni_dimentica).
 - `revoca_voce`: «non tenere più la mia voce». Subito, senza domanda (è la direzione sicura), e
   le registrazioni che c'erano si cancellano. Basta essere riconosciuti (anche una frase breve).
-- `stato`: cosa tengo di te, e per quanto (solo conteggi).
+- `stato`: cosa tengo di te, e per quanto (solo conteggi). Dal 14/10 con `stanza_tenuta` anche
+  le righe della conversazione di stanza su disco (per tutta la famiglia, minori compresi).
 - `svuota`: solo chi amministra, con la voce: tutto, o i dati di una persona (`persona`), dopo
   la domanda e il «sì». Dal 12/10 sera anche l'archivio delle conversazioni.
 
@@ -74,14 +75,22 @@ def _dati_conservati(ctx: ToolContext, azione: str = "", persona: str = "") -> d
     giorni = _giorni(cons)
 
     if azione == "stato":
+        stanza = _stanza(cons, prof)
         if cat == "minore":
+            if stanza is not None:
+                return _final(f"Di te tengo solo quello che dici vicino ai dispositivi di casa, "
+                              f"per {stanza[1]} giorni ({stanza[0]} frasi), e lo possono "
+                              "cercare i tuoi genitori; la tua voce no.", righe_stanza=stanza[0])
             return _final("Di te non conservo niente: né le parole né la voce.")
         n = cons.registrazioni(prof.id)
         voce = (f"la tua voce sì, {n} registrazioni" if C.consenso_voce(prof)
                 and getattr(ctx.cfg, "conserva_voce", True)
                 else "la tua voce no")
+        extra = ({"righe_stanza": stanza[0]} if stanza is not None else {})
+        in_stanza = (f"; per {stanza[1]} giorni anche le tue frasi nella stanza, {stanza[0]}"
+                     if stanza is not None else "")
         return _final(f"Tengo per {giorni} giorni, solo qui, i testi delle nostre conversazioni "
-                      f"per migliorare; {voce}.", registrazioni=n)
+                      f"per migliorare{in_stanza}; {voce}.", registrazioni=n, **extra)
 
     if azione == "revoca_voce":
         if come not in ("voce", "breve", "continuita"):
@@ -140,13 +149,27 @@ def _dati_conservati(ctx: ToolContext, azione: str = "", persona: str = "") -> d
         note_rule(ctx, "conservati_svuotati")
         return _final(f"Fatto: ho cancellato i dati conservati {di_chi}.", **r)
     domanda = (f"Cancello i dati conservati {di_chi}: testi dei turni, conversazioni "
-               "archiviate, eventi, registrazioni della voce, esercizi e richieste ai tutori? "
-               "I ricordi restano.")
+               "archiviate, eventi, registrazioni della voce, esercizi e richieste ai tutori"
+               + (", conversazione della stanza" if _stanza(cons, None) is not None else "")
+               + "? I ricordi restano.")
     return _final(domanda, ok=False,
                   in_sospeso={"domanda": domanda, "cosa": f"cancellare i dati conservati {di_chi}",
                               "tool": "dati_conservati",
                               "argomenti": {"azione": "svuota",
                                             **({"persona": bersaglio.name} if bersaglio else {})}})
+
+
+def _stanza(cons, prof):
+    """(righe, giorni) del testo della stanza su disco di questa persona (di tutti con None), o
+    None con la tenuta spenta (14/10, calliope/stanza/tenuta.py)."""
+    t = getattr(cons, "stanza", None)
+    if t is None:
+        return None
+    try:
+        n = t.conteggi(getattr(prof, "id", None) if prof is not None else None)["righe"]
+    except Exception:  # noqa: BLE001
+        return None
+    return int(n), int(getattr(t, "giorni", 60) or 60)
 
 
 def _classe():
