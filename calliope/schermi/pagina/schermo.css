@@ -893,3 +893,7 @@ body.in-vista-sviluppo #cronologia { display: none; }     /* «Vista normale» r
    barra sola); a schermo intero ha l'altezza del flusso dell'agente */
 .scheda-chat:not(.intera) > .corpo { display: flex; flex-direction: column; overflow: hidden; }
 .scheda-chat:not(.intera) .conv-chat { flex: 1; height: auto; min-height: 8rem; }
+
+/* Una voce nuova da salvare come conoscente (14/10): il pezzo di trascrizione e il modulo */
+.estratto-conoscente { margin: 0 0 0.3rem; padding-left: 0.8rem; border-left: 3px solid var(--bordo); color: var(--testo); overflow-wrap: anywhere; }
+.modulo-conoscente { margin-top: 0.8rem; }

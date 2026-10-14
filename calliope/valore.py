@@ -108,6 +108,9 @@ ARGOMENTI: dict[str, dict[str, str]] = {
     "stanza_pausa": {"azione": Z, "minuti": S},
     # 12/10, i dati conservati per le misure: l'azione scelta in un enum, la persona da svuotare
     "dati_conservati": {"azione": Z, "persona": B},
+    # 14/10, i conoscenti (decisione 0030): chi è il conoscente (o il familiare) di cui si parla
+    "conoscenti": {"azione": Z, "chi": B},
+    "conoscente_livello": {"azione": Z, "chi": B, "nascita": C, "tutori": B},
     "richiesta_tutore": {"cosa": Z, "nome": B, "minuti": S},
     "minore_gestisci": {"nome": B, "azione": Z, "valore": C},
     "installa_avvia": {"azione": B},
@@ -227,6 +230,8 @@ EFFETTI: dict[str, object] = {
     "modello_compila": E2, "richiesta_tutore": E2, "lavoro_rispondi": E2,
     "lavoro_annulla": E2, "pc_guarda": E2, "schede_pulisci": E2, "dati_conservati": E3,
     "stanza_pausa": E1,
+    # 14/10: dimenticare un conoscente non si disfa; cambiare chi è di famiglia è fiducia
+    "conoscenti": E3, "conoscente_livello": E4,
     # E3: esce di casa, esegue codice o non si disfa
     "programma_esegui": E3, "installa_avvia": E3, "installa_gestisci": E3, "pc_apri_app": E3,
     "estensione_gestisci": E3, "conversazioni_dimentica": E3,

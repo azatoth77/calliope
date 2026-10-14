@@ -78,7 +78,11 @@ def etichetta(r: dict) -> str:
     if r.get("chi") == "calliope":
         return "Calliope"
     nome, sic = r.get("nome"), r.get("sicurezza")
-    if nome and sic == "voce":
+    if nome and sic == "voce" and str(r.get("chi") or "").startswith("conoscente:"):
+        # Un conoscente (14/10, decisione 0030): il nome è un'etichetta, la nota distingue
+        # gli omonimi («Marco Rossi (collega di Carlo), conoscente»)
+        base = str(nome) + (f" ({r['nota']})" if r.get("nota") else "") + ", conoscente"
+    elif nome and sic == "voce":
         base = str(nome)
     elif nome and sic == "grigia":
         base = f"{nome}?"

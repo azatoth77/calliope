@@ -27,6 +27,9 @@ il resto `visibile`, come per la memoria; le righe ancora in memoria non si ripe
 - un **minore** vede soltanto le proprie righe riconosciute dalla voce;
 - le proprie righe riconosciute dalla voce si vedono sempre (14/10: dopo un riavvio la presenza
   aperta poteva non essere sul disco);
+- le righe di un **conoscente** (14/10, decisione 0030: confermato da chi amministra) si
+  cercano come quelle di un adulto di casa: chi c'era; il nome con il cognome («cosa ha detto
+  Marco Rossi?») distingue gli omonimi, e la nota è nell'etichetta;
 - le righe di una **voce non riconosciuta** non si cercano mai (decisione 0029 punto 5: «ospiti
   mai nella ricerca»; restano solo nel blocco caldo);
 - nella stanza da cui si parla in **pausa per ospiti** non si cerca (si leggerebbe ad alta voce
@@ -130,6 +133,16 @@ def chiavi(domanda: str) -> list[str]:
         if r not in out:
             out.append(r)
     return out
+
+
+def nome_combacia(pers: str, nome: str) -> bool:
+    """La persona cercata è il nome della riga: uguale, una sua parola («Carlo»), o dal 14/10
+    (conoscenti, decisione 0030) le sue parole di seguito («Marco Rossi» nel nome «Marco
+    Rossi»). `pers` e `nome` già normalizzati."""
+    p, n = pers.split(), nome.split()
+    if not p or not n:
+        return False
+    return any(n[i:i + len(p)] == p for i in range(len(n) - len(p) + 1))
 
 
 def punteggio(testo: str, radici: list[str]) -> int:
@@ -436,7 +449,7 @@ def cerca(stanza, cfg, chi: Chi, parole_cercate: str = "", persona: str = "",
             if filtri and sat not in dentro:
                 continue
             nome = norm(r.get("nome") or ("calliope" if r.get("chi") == "calliope" else ""))
-            if filtri and pers and (not nome or (nome != pers and pers not in nome.split())):
+            if filtri and pers and (not nome or not nome_combacia(pers, nome)):
                 continue
             # Il nome di chi parla conta come una parola della riga: «cosa ha detto Nicola?»
             # cercato con la frase intera trova le righe di Nicola
@@ -524,8 +537,7 @@ def _dal_disco(stanza, tenuta, chi: Chi, radici: list, sats: list, da, a, pers: 
     nomi = []
     if pers:
         try:
-            nomi = [n for n in tenuta.nomi()
-                    if norm(n).strip() == pers or pers in norm(n).split()]
+            nomi = [n for n in tenuta.nomi() if nome_combacia(pers, " ".join(parole(n)))]
         except Exception:  # noqa: BLE001
             nomi = []
     try:

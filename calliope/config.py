@@ -1129,6 +1129,26 @@ class Config:
     stanza_guardia_avvisi_giorno: int = 1
     # Una riga con una parola sotto questa probabilità (quando Whisper la dà) non fa un acuto
     stanza_guardia_p: float = 0.5
+    # I conoscenti (14/10, decisione 0030, calliope/stanza/conoscenti.py): le voci che nessun
+    # profilo riconosce si raggruppano in memoria per somiglianza dell'impronta; dal contesto
+    # (vocativi e saluti seguiti dal parlato di quella voce, presentazioni, più indizi concordi;
+    # regola conoscente_nome) Calliope deduce il nome e lo propone a chi amministra **solo sullo
+    # schermo personale** (mai a voce): «Ho sentito una voce nuova che chiamate Marco: la salvo
+    # come conoscente?», con Sì, No, un nome diverso, cognome e nota (gli omonimi restano
+    # profili separati). Senza il sì niente va su disco. Il conoscente ha i permessi di un
+    # ospite, è riconosciuto col nome nelle righe della stanza, le sue righe vanno su disco con
+    # la tenuta e si cercano come quelle della famiglia (chi c'era). Solo con la stanza accesa;
+    # false (di serie) = niente gruppi né proposte
+    stanza_conoscenti: bool = False
+    # Un conoscente non sentito da tanto si dimentica (impronta, profilo e righe)
+    conoscenti_scadenza_giorni: int = 180
+    # Punti per proporre un nome (vocativo con la risposta 1, presentazione 2, nome detto di sé
+    # in terza persona −1), da almeno due righe e con il secondo nome sotto la metà
+    conoscenti_soglia: int = 3
+    # Voce del gruppo (secondi di parlato, almeno tre segmenti) per un'impronta buona
+    conoscenti_min_voce_s: float = 6.0
+    # Il file dei conoscenti (relativo alla cartella della configurazione)
+    conoscenti_file: str = "conoscenti.json"
     # Connessioni insieme attraverso l'inoltro (una pagina ne apre 2–6)
     satellite_inoltro_max: int = 32
     # Secondi senza un byte dopo i quali una connessione dell'inoltro si chiude
@@ -2975,7 +2995,8 @@ SEZIONI: dict[str, list[str]] = {
                "stanza_guardia_blocco_max_s", "stanza_guardia_ogni_s",
                "stanza_guardia_quiete_s", "stanza_guardia_giudizi_ora",
                "stanza_guardia_timeout_s", "stanza_guardia_avvisi_giorno",
-               "stanza_guardia_p"],
+               "stanza_guardia_p", "stanza_conoscenti", "conoscenti_scadenza_giorni",
+               "conoscenti_soglia", "conoscenti_min_voce_s", "conoscenti_file"],
     "satellite": ["satellite_server", "satellite_credenziali", "satellite_impronta",
                   "satellite_microfono", "satellite_casse", "satellite_webcam",
                   "satellite_schermo", "satellite_schermo_personale", "satellite_esecutore",
@@ -3181,6 +3202,8 @@ LIMITI: dict[str, tuple[float, float]] = {
     "stanza_cerca_attesa_max_s": (0.0, 30.0), "stanza_cerca_attesa_s": (0.0, 30.0),
     "stanza_cerca_anticipo_caratteri": (0, 20_000),
     "stanza_tenuta_giorni": (1, 3650),
+    "conoscenti_scadenza_giorni": (1, 3650), "conoscenti_soglia": (1, 50),
+    "conoscenti_min_voce_s": (0.0, 600.0),
     "stanza_guardia_attesa_s": (0.0, 86400.0), "stanza_guardia_blocco_max_s": (60.0, 86400.0),
     "stanza_guardia_ogni_s": (1.0, 3600.0), "stanza_guardia_quiete_s": (0.0, 600.0),
     "stanza_guardia_giudizi_ora": (0, 3600), "stanza_guardia_timeout_s": (1.0, 600.0),

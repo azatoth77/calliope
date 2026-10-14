@@ -45,7 +45,9 @@ FORMATO = 1
 # Una scheda salvata (JSON) al più: oltre si salva senza la sorgente di «Scarica», poi niente
 MAX_SCHEDA = 512_000
 # Mai su disco
-NON_SALVATE = frozenset({"vuota", "gioco", "cruscotto", "chat"})
+# La proposta di un conoscente (14/10, decisione 0030): ha le parole di un ospite e vive con il
+# gruppo in memoria; senza il sì di chi amministra niente va su disco
+NON_SALVATE = frozenset({"vuota", "gioco", "cruscotto", "chat", "conoscente"})
 # Chiavi legate all'oggetto in memoria (id() di una foto, di un file, di una frase scritta):
 # dopo un riavvio lo stesso numero è un'altra cosa, quindi valgono solo nello stesso avvio
 EFFIMERE = ("foto:", "allegato:", "risposta:")
