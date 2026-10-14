@@ -258,6 +258,8 @@ class Schermi:
         # Il cassetto dei file per persona (08/10, calliope/cassetto.py), da main.py: None =
         # /api/cassetto risponde 404
         self.cassetto = None
+        # I conoscenti (calliope/stanza/conoscenti.py, 14/10): i tasti delle proposte
+        self.conoscenti = None
         # La cronologia delle schede per persona, su disco (08/10, cronologia.py): la imposta
         # load_schermi. None = solo la cronologia in memoria per schermo, come prima
         self.cronologia = None

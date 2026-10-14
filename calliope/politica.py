@@ -366,6 +366,20 @@ CLASSI: dict[str, Classe] = {
                                       lambda a: "cancellare tutte le nostre conversazioni "
                                                 "passate",
                                       "Così non le ritrovo più, e non si possono recuperare.")}),
+    # i conoscenti (14/10, decisione 0030, calliope/tools/conoscenti.py): «elenco» legge,
+    # «dimentica» cancella voce e frasi (il tool chiede anche il suo sì); cambiare chi è di
+    # famiglia è un cambio di livello, come registra_utente: chiesto e con la sfida
+    "conoscenti": _c(A, sola_lettura=("azione", frozenset({"elenco"})),
+                     cosa=lambda a: f"dimentichi {_s(a, 'chi', 'un conoscente')}",
+                     verbi=r"dimentic|cancell|elimin|togl|scord|conoscent",
+                     distruttiva={"dimentica": (
+                         lambda a: f"dimenticare {_s(a, 'chi', 'un conoscente')}",
+                         "Così la sua voce e le sue frasi non si recuperano.")}),
+    "conoscente_livello": _c(P, chiave=("chi",), chiesta=True, sfida=True,
+                             verbi=r"famigli|familiar|conoscent|promuov|togl|diventa|non è più",
+                             cosa=lambda a: (f"renda {_s(a, 'chi', 'un conoscente')} di famiglia"
+                                             if _s(a, "azione") == "promuovi" else
+                                             f"tolga {_s(a, 'chi', 'qualcuno')} dalla famiglia")),
     "minore_gestisci": _c(P, sfida=True, chiave=("valore",),
                           sola_lettura=("azione", frozenset({"stato", "riepilogo_compiti",
                                                              "richieste"})),

@@ -51,6 +51,10 @@ Indirizzi:
                                  calliope/cassetto.py), solo da uno schermo personale e solo
                                  sui file del suo proprietario, o di un figlio sotto i 14
                                  anni per un tutore verificato dalla voce
+  POST /api/conoscenti           «X-Calliope-Sessione», {azione: si|no, proposta, nome?,
+                                 cognome?, nota?}: i tasti della proposta di un conoscente
+                                 (14/10, decisione 0030, calliope/stanza/conoscenti.py), solo
+                                 da uno schermo personale il cui proprietario amministra
   POST /api/schede               «X-Calliope-Sessione», {azione: pulisci}: «Pulisci le mie
                                  schede» (08/10, cronologia.py), solo da uno schermo personale
                                  e solo per le schede del suo proprietario
@@ -745,6 +749,51 @@ def crea_app(hub: Schermi) -> Starlette:
             return _json({"errore": "non ci sono riuscita"}, 500)
         return _json(out, int(out.pop("_stato", 200 if out.get("ok") else 409)))
 
+    # ── i conoscenti (14/10, decisione 0030, calliope/stanza/conoscenti.py) ──
+    async def conoscenti_api(request: Request):
+        """I tasti della proposta (Sì, con il nome proposto o uno diverso, cognome e nota; No):
+        sessione in un'intestazione e corpo JSON, solo in HTTPS fuori da questo computer, solo
+        da uno schermo personale il cui proprietario amministra (letto adesso). La proposta è
+        arrivata solo lì; un sì crea un profilo da ospite, mai un familiare (per quello serve la
+        voce: conoscente_livello)."""
+        con = getattr(hub, "conoscenti", None)
+        if con is None:
+            return _json({"errore": "conoscenti spenti"}, 404)
+        client = request.client.host if request.client else ""
+        if request.url.scheme != "https" and client not in ("127.0.0.1", "::1"):
+            return _json({"errore": "solo in HTTPS"}, 403)
+        sess = request.headers.get("x-calliope-sessione", "")
+        with lock:
+            sid = sessioni.get(sess) if sess else None
+        schermo = next((s for s in hub.abbinati() if s["id"] == sid), None) if sid else None
+        if schermo is None:
+            return _json({"errore": "sessione non valida"}, 401)
+        persona = str(schermo.get("proprietario") or "")
+        if not persona or persona not in con.admin_ids():
+            return _json({"errore": "solo dallo schermo personale di chi amministra"}, 403)
+        ora = time.monotonic()
+        with lock:
+            fatti = [t for t in pulsanti.get(-10_000 - schermo["id"], []) if ora - t < 60.0]
+            if len(fatti) >= 20:
+                pulsanti[-10_000 - schermo["id"]] = fatti
+                return _json({"errore": "troppi tocchi: aspetta un momento"}, 429)
+            pulsanti[-10_000 - schermo["id"]] = fatti + [ora]
+        dati, errore = await corpo_json(request, 2048)
+        if errore is not None:
+            return errore
+        if not isinstance(dati, dict):
+            return _json({"errore": "dati non validi"}, 400)
+        campi = {k: str(dati.get(k) or "")[:120] for k in ("proposta", "azione", "nome",
+                                                            "cognome", "nota")}
+        try:
+            out = await asyncio.to_thread(con.risposta, campi["proposta"], campi["azione"],
+                                          persona, campi["nome"], campi["cognome"],
+                                          campi["nota"])
+        except Exception as e:  # noqa: BLE001
+            hub.log(f"[CONOSCENTI] tasto non riuscito: {type(e).__name__}")
+            return _json({"errore": "non ci sono riuscita"}, 500)
+        return _json(out, int(out.pop("_stato", 200 if out.get("ok") else 409)))
+
     # ── «Pulisci le mie schede» (08/10, cronologia.py) ──
     async def schede_api(request: Request):
         """Il tasto della pagina: la cronologia delle schede del proprietario dello schermo, su
@@ -872,6 +921,7 @@ def crea_app(hub: Schermi) -> Starlette:
         Route("/api/scarica", scarica_gettone, methods=["POST"]),
         Route("/scarica/{gettone}", scarica_file),
         Route("/api/cassetto", cassetto, methods=["POST"]),
+        Route("/api/conoscenti", conoscenti_api, methods=["POST"]),
         Route("/api/schede", schede_api, methods=["POST"]),
         Route("/gioco/{gettone}", gioco_documento),
         Route("/api/gioco", gioco_api, methods=["POST"]),

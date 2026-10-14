@@ -39,6 +39,10 @@ modello** in questo passo: si misura (stanza/misure.py, `calliope stato --turni`
   registri (righe e presenze che si possono tenere) e le presenze ancora aperte ogni minuto;
   `presenze` unisce quelle della memoria e del disco (i permessi della ricerca dopo un riavvio);
   «dimentica» cancella anche il disco del satellite.
+- **Conoscenti** (14/10, decisione 0030, `stanza_conoscenti`, stanza/conoscenti.py): le voci che
+  nessun profilo della famiglia riconosce si riconoscono fra i conoscenti salvati (la riga ha il
+  loro nome, «conoscente:<id>»), oppure entrano in un gruppo in memoria; ogni riga passa alla
+  deduzione del nome (vocativi, presentazioni), che propone a chi amministra.
 """
 
 import collections
@@ -177,6 +181,8 @@ class Stanza:
         # La tenuta su disco (stanza/tenuta.Tenuta, 14/10), None con `stanza_tenuta: false`
         self.tenuta = None
         self._presenze_scritte: dict = {}      # persona → (sat, inizio, ultimo) già sul disco
+        # I conoscenti (stanza/conoscenti.Conoscenti, 14/10), None con `stanza_conoscenti: false`
+        self.conoscenti = None
         self._fermo = threading.Event()
         self._thread = threading.Thread(target=self._lavora, name="stanza-veloce", daemon=True)
         self._thread.start()
@@ -510,6 +516,7 @@ class Stanza:
             minore=bool(chi.get("minore")))
         if chi.get("sicurezza") == "voce" and chi.get("persona"):
             self._sentita(chi["persona"], chi.get("nome"), sat, time.time())
+        self._osserva(sat, e)
         return e.seq
 
     def segna_rivolta(self, sat, seq, esito: str, giudizio=None):
@@ -557,6 +564,8 @@ class Stanza:
                 self._legati.pop(k)
             self._scambio.pop(sat, None)
         n = self.registro(sat).svuota()
+        if self.conoscenti is not None:
+            self.conoscenti.dimentica_sat(sat)
         # Anche il disco del satellite (14/10, stanza_tenuta): righe e presenze di ogni giorno
         su_disco = 0
         if self.tenuta is not None:
@@ -577,6 +586,35 @@ class Stanza:
         self._misura("dimentica", sat=nome, eventi=n, disco=su_disco)
         self.log(f"   [STANZA] {nome}: registro della stanza svuotato ({n} eventi)")
         return n
+
+    # ── conoscenti (14/10, decisione 0030) ──
+    def conoscente_tolto(self, cid):
+        """Un conoscente dimenticato, scaduto o svuotato: le sue righe in memoria tornano di una
+        voce non riconosciuta, quelle su disco si cancellano."""
+        chiave = f"conoscente:{cid}"
+        for r in list(self._registri.values()):
+            r.riscrivi_chi(chiave, {"chi": "ignoto", "nome": None, "sicurezza": "nessuna"})
+        if self.tenuta is not None:
+            try:
+                self.tenuta.svuota(chiave)
+            except Exception as e:  # noqa: BLE001
+                self.log(f"   [STANZA] righe del conoscente non cancellate: {type(e).__name__}")
+
+    def cambio_livello(self, vecchio: str, nuovo: str, nome: str):
+        """Promozione (conoscente → familiare) o ritorno: le righe in memoria e su disco
+        passano da `vecchio` a `nuovo` («conoscente:<id>» o l'id del profilo)."""
+        chi_v = vecchio if vecchio.startswith("conoscente:") else f"persona:{vecchio}"
+        chi_n = nuovo if nuovo.startswith("conoscente:") else f"persona:{nuovo}"
+        campi = {"chi": chi_n, "nome": nome}
+        if not chi_n.startswith("conoscente:"):
+            campi["persona"] = nuovo
+        for r in list(self._registri.values()):
+            r.riscrivi_chi(chi_v, campi)
+        if self.tenuta is not None:
+            try:
+                self.tenuta.rinomina(vecchio, nuovo, chi_n, nome)
+            except Exception as e:  # noqa: BLE001
+                self.log(f"   [STANZA] righe non spostate: {type(e).__name__}")
 
     # ── pausa e ospiti (tool stanza_pausa) ──
     def pausa(self, sat, motivo: str = "pausa", minuti: float | None = None) -> dict:
@@ -737,6 +775,8 @@ class Stanza:
             self.riprendi(sat)
         for r in list(self._registri.values()):
             r.pota()
+        if self.conoscenti is not None:
+            self.conoscenti.ogni_tanto()
 
     def _presenze_su_disco(self, sempre: bool = False):
         """Con la tenuta: le presenze ancora aperte sul disco, al più ogni PRESENZA_OGNI_S (un
@@ -821,18 +861,26 @@ class Stanza:
                 self._fatto(s, None, "eco", attesa, stt_s, eco)
                 return
             testo, tolte = e.testo, e.tolte
-        chi = self._chi(audio, s.voce_s)
+        chi = self._chi(audio, s.voce_s, s.fine_epoch)
         s.esito = "riga"
+        extra = {}
+        if chi.get("gruppo") is not None:
+            extra["gruppo"] = chi["gruppo"]            # solo in memoria (conoscenti)
+        if chi.get("conoscente"):
+            extra["nota"] = chi.get("nota") or ""
         e_riga = self.registro(s.sat).aggiungi(
             RIGA, segmento=s.id, scambio=s.scambio, versione=1,
             inizio=round(s.inizio_epoch or time.time(), 3),
             fine=round(s.fine_epoch or time.time(), 3), testo=testo, chi=chi["chi"],
             nome=chi.get("nome"), sicurezza=chi["sicurezza"], p_min=None, rivolta="ignoto",
-            minore=chi.get("minore", False),
+            minore=chi.get("minore", False), **extra,
             **({"durante_voce": True, "eco_tolte": tolte} if s.durante or s.dette else {}))
-        if chi["sicurezza"] == "voce":
+        if chi["sicurezza"] == "voce" and chi.get("persona"):
             self._sentita(chi["persona"], chi.get("nome"), s.sat, s.fine_epoch or time.time())
+        # L'anello degli avvisi (solo persone di casa: un conoscente non ha `persona`) e la
+        # deduzione dei nomi dei conoscenti
         self._anello(s, chi, getattr(e_riga, "seq", None), audio)
+        self._osserva(s.sat, e_riga)
         self._fatto(s, testo, None, attesa, stt_s, eco)
 
     def _anello(self, s: "Segmento", chi: dict, seq, audio):
@@ -901,10 +949,12 @@ class Stanza:
                      chiusura=s.chiusura,
                      **(eco or {}))
 
-    def _chi(self, audio, voce_s: float) -> dict:
+    def _chi(self, audio, voce_s: float, t: float | None = None) -> dict:
         """Chi parla nel segmento (CAM++), con le regole di sempre: sopra soglia e con il
         margine dal secondo profilo «voce»; poco sotto «grigia»; altrimenti «nessuna». Mai
-        verso l'alto: non cambia permessi né impronte."""
+        verso l'alto: non cambia permessi né impronte. Con i conoscenti (14/10, decisione 0030)
+        una voce non della famiglia sopra soglia è il conoscente («conoscente:<id>», livello
+        ospite), e una voce di nessuno entra in un gruppo in memoria (`gruppo`)."""
         reg, cfg = self.registry, self.cfg
         nessuno = {"chi": "ignoto", "nome": None, "sicurezza": "nessuna"}
         if reg is None or voce_s < float(getattr(cfg, "speaker_min_voice_s", 1.0) or 1.0):
@@ -914,26 +964,52 @@ class Stanza:
             classifica = list(reg.classifica(emb))
         except Exception:  # noqa: BLE001 — senza impronta, «ignoto»
             return nessuno
-        if not classifica or classifica[0][1] <= 0:
-            return nessuno
-        nome, sim = classifica[0]
-        sim2 = classifica[1][1] if len(classifica) > 1 else None
-        thr = float(cfg.speaker_id_threshold)
-        netta = sim2 is None or sim - sim2 >= float(getattr(cfg, "speaker_id_margine", 0.0))
-        prof = reg.get(nome)
-        pid = getattr(prof, "id", None) or nome
+        out = nessuno
+        sim = None
+        if classifica and classifica[0][1] > 0:
+            nome, sim = classifica[0]
+            sim2 = classifica[1][1] if len(classifica) > 1 else None
+            thr = float(cfg.speaker_id_threshold)
+            netta = sim2 is None or sim - sim2 >= float(getattr(cfg, "speaker_id_margine", 0.0))
+            prof = reg.get(nome)
+            pid = getattr(prof, "id", None) or nome
+            try:
+                from ..minori import e_minore
+                minore = bool(prof is not None and e_minore(prof))
+            except Exception:  # noqa: BLE001
+                minore = False
+            if sim >= thr and netta:
+                return {"chi": f"persona:{pid}", "persona": pid, "nome": nome,
+                        "sicurezza": "voce", "minore": minore}
+            if sim >= thr - float(getattr(cfg, "speaker_id_session_margin", 0.08)):
+                out = {"chi": f"persona:{pid}", "persona": pid, "nome": nome,
+                       "sicurezza": "grigia", "minore": minore}
+        con = self.conoscenti
+        if con is None:
+            return out
         try:
-            from ..minori import e_minore
-            minore = bool(prof is not None and e_minore(prof))
-        except Exception:  # noqa: BLE001
-            minore = False
-        if sim >= thr and netta:
-            return {"chi": f"persona:{pid}", "persona": pid, "nome": nome, "sicurezza": "voce",
-                    "minore": minore}
-        if sim >= thr - float(getattr(cfg, "speaker_id_session_margin", 0.08)):
-            return {"chi": f"persona:{pid}", "persona": pid, "nome": nome,
-                    "sicurezza": "grigia", "minore": minore}
-        return nessuno
+            k = con.riconosci(emb, sim_famiglia=sim, t=t)
+            if k is not None:
+                return {"chi": f"conoscente:{k.id}", "conoscente": k.id,
+                        "nome": k.nome_pieno(), "nota": k.nota, "sicurezza": "voce",
+                        "minore": False}
+            if out["sicurezza"] == "nessuna":
+                g = con.assegna(emb, voce_s, t)
+                if g is not None:
+                    out = dict(out, gruppo=g)
+        except Exception as e:  # noqa: BLE001 — i conoscenti non fermano la stanza
+            self.log(f"   [STANZA] conoscenti: {type(e).__name__}: {e}")
+        return out
+
+    def _osserva(self, sat, e):
+        """La riga appena scritta alla deduzione dei nomi dei conoscenti."""
+        con = self.conoscenti
+        if con is None or e is None:
+            return
+        try:
+            con.osserva(sat, dict(e.dati, seq=e.seq, t=e.t))
+        except Exception as ex:  # noqa: BLE001
+            self.log(f"   [STANZA] conoscenti: {type(ex).__name__}: {ex}")
 
     def _misura(self, tipo: str, **campi):
         if self.misure is not None:

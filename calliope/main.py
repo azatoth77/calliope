@@ -345,6 +345,8 @@ class Avvio:
             # conservazione la vedono
             if getattr(s, "conserva", None) is not None:
                 s.conserva.stanza = s.stanza.tenuta
+                # I conoscenti (14/10, decisione 0030): «svuota» di tutto li cancella
+                s.conserva.conoscenti = s.stanza.conoscenti
             nomi = getattr(cfg, "stanza_satelliti", None) or []
             print(f"[STANZA] Ascolto della stanza in ombra (solo misure, niente al modello) su "
                   + (", ".join(map(str, nomi)) if nomi else "tutti i satelliti che lo sanno fare"),
@@ -462,6 +464,11 @@ class Avvio:
             schermi.satelliti = s.satelliti
             if s.stanza is not None:
                 s.stanza.schermi = schermi      # il segno «Ascolto la stanza» (13/10)
+                if s.stanza.conoscenti is not None:
+                    # Le proposte dei conoscenti agli schermi personali di chi amministra, e i
+                    # loro tasti (POST /api/conoscenti) (14/10, decisione 0030)
+                    s.stanza.conoscenti.schermi = schermi
+                    schermi.conoscenti = s.stanza.conoscenti
         # Rispondi dove ti ho chiesto (04/10, calliope/rispondi.py): una frase scritta dal
         # telefono ha la risposta dal telefono (e scritta sul suo schermo), le schede vanno
         # prima allo schermo da cui arriva la richiesta, gli annunci al satellite che li aveva
@@ -644,6 +651,11 @@ class Avvio:
             from .tools.stanza import stanza_specs
             for spec in stanza_specs(cfg):
                 s.tools.register(spec)
+            if s.stanza.conoscenti is not None:
+                # conoscenti e conoscente_livello (14/10, decisione 0030): solo chi amministra
+                from .tools.conoscenti import conoscenti_specs
+                for spec in conoscenti_specs():
+                    s.tools.register(spec)
 
     def _registro_eventi(self, conv_arch):
         """Il registro degli eventi (10/10, calliope/eventi/, passi 0 e 1 in ombra): un registro
