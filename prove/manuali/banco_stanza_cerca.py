@@ -119,7 +119,7 @@ CASI = [
     ("Carlo", 1, "Calliope, quando passa l'idraulico?", r"gioved", (), True),
     ("Carlo", 2, "Calliope, dove ho lasciato gli occhiali?", r"tavolino|salotto", (), False),
     ("Carlo", 2, "Calliope, da chi prendiamo la pizza stasera?", r"gino", (), False),
-    ("Carlo", 2, "Calliope, a che ora ordino la pizza?", r"otto|\b8\b", (), False),
+    ("Carlo", 2, "Calliope, a che ora ordino la pizza?", r"otto|\b8\b|\b20\b", (), False),
     # Contrari
     ("Bianca", 1, "Calliope, cosa aveva detto Carlo dell'idraulico?", NIENTE,
      ("gioved", "perde"), None),
