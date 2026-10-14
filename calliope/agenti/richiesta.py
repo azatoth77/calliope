@@ -89,6 +89,7 @@ NON_FUNZIONI = frozenset({
     "elenca_voci", "chi_parla", "minore_gestisci", "richiesta_tutore", "dimentica",
     "conversazioni_dimentica", "calliope_stato", "schermo_gestisci", "cambia_voce",
     "schede_pulisci", "gioco_comando", "dati_conservati", "stanza_pausa",
+    "stanza_cerca",
 })
 ATTESA = "Un attimo, guardo bene cosa mi chiedi."
 ATTESA_DOPO_S = 1.2           # la frase d'attesa solo se l'analisi va oltre

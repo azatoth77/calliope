@@ -224,8 +224,10 @@ for f in radice.rglob("*.py"):
         nome = nome.value if isinstance(nome, ast.Constant) else ""
         # pc_cerca_file: basta il tipo o il periodo («i PDF della settimana scorsa»);
         # web_cerca (09/10): la domanda serve solo a tipo «web», e lì la chiede la funzione
-        # con lo stesso errore (prova_dialogo_tool.py)
-        if not nome.endswith("_cerca") or nome in ("pc_cerca_file", "web_cerca"):
+        # con lo stesso errore (prova_dialogo_tool.py); stanza_cerca (14/10): senza filtri
+        # sono gli ultimi discorsi sentiti dove era chi chiede («di cosa parlavamo?»)
+        if not nome.endswith("_cerca") or nome in ("pc_cerca_file", "web_cerca",
+                                                   "stanza_cerca"):
             continue
         par = kw.get("parameters")
         req = None

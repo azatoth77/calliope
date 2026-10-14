@@ -144,6 +144,9 @@ ATTI: dict[str, tuple[str, bool, str]] = {
     "attesa_contesto": ("voluto", False, "2"),
     "attesa_biblioteca": ("voluto", False, "2"),
     "attesa_stt": ("voluto", False, "2"),
+    # La ricerca nella conversazione della stanza che aspetta le righe in coda (14/10,
+    # stanza_cerca, passo 4: frase `attesa.stanza` di frasi.py)
+    "attesa_stanza": ("voluto", False, "2"),
     "annuncio_gioco": ("voluto", True, "19"),
     "chiusura": ("voluto", False, "20"),
     "saluto_avvio": ("voluto", False, "21"),

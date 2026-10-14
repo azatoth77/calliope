@@ -12,6 +12,11 @@ dei turni (`turn_log_dir`), con la stessa tenuta (`turn_log_days`). Una riga per
     presenza      persona (id del profilo), sat, durata_s
     cambio_stanza persona, da, a, dopo_s (dall'ultima volta sentita nell'altra stanza)
     pausa         sat, motivo, ore      ·  dimentica  sat, eventi
+    cerca         (passo 4, 14/10: tool stanza_cerca) esito («trovato», «niente», «negato»,
+                  «pausa», «stanza_ignota»), ms (tempo del tool), attesa (la frase d'attesa è
+                  partita), attesa_ms (righe in coda aspettate), righe, caratteri, stanze,
+                  tagliate, filtri (quali: parole, persona, stanza, quando, orari), chi
+                  («adulto», «tutore», «minore», «ospite»): mai le parole né i nomi
 
 Più, nel registro dei turni, `stanza.copertura` di ogni turno interpellato con la stanza accesa
 (`dette`, `pronte`, `recupero_ms`, `oltre`): la «copertura all'interpellazione» (§ 3.11). Dal
@@ -33,6 +38,10 @@ from pathlib import Path
 PREFISSO = "stanza-"
 CAMBIO_ENTRO_S = 600.0
 RITARDO_P90_OBIETTIVO_S = 10.0
+# Passo 4 (progetto § 6, riga 4): la frase d'attesa in meno del 10 % dei turni in stanza, il
+# tool sotto i 3 s al p90
+ATTESA_QUOTA_OBIETTIVO = 0.10
+CERCA_P90_OBIETTIVO_MS = 3000
 
 
 class Misure:
@@ -103,7 +112,17 @@ def _p(valori: list[float], q: float) -> float | None:
 def riassunto(righe: list[dict], turni: list[dict] | None = None) -> dict:
     """Per giorno e satellite, più la copertura e i tempi dei turni con e senza la stanza."""
     giorni: dict = {}
+    cerca = {"chiamate": 0, "attese": 0, "esiti": {}, "_ms": []}
     for r in righe:
+        if r.get("tipo") == "cerca":
+            # La ricerca (passo 4) non è di un satellite: conti di tutto il periodo
+            cerca["chiamate"] += 1
+            cerca["attese"] += 1 if r.get("attesa") else 0
+            e = str(r.get("esito") or "?")
+            cerca["esiti"][e] = cerca["esiti"].get(e, 0) + 1
+            if r.get("ms") is not None:
+                cerca["_ms"].append(float(r["ms"]))
+            continue
         g = giorni.setdefault(str(r.get("t", ""))[:10], {"satelliti": {}, "presenze": 0,
                                                         "cambi_stanza": 0, "cambi_10min": 0,
                                                         "pause": {}, "dimentica": 0})
@@ -156,8 +175,10 @@ def riassunto(righe: list[dict], turni: list[dict] | None = None) -> dict:
     tempi = {k: {"stt": [], "prima": [], "riletti": []}
              for k in ("con", "senza", "blocco", "senza_blocco")}
     blocco = {"turni": 0, "vuoti": 0, "tagliati": 0, "mancano": 0, "_righe": [], "_car": []}
+    turni_stanza = 0
     for t in turni or ():
         st = t.get("stanza") if isinstance(t.get("stanza"), dict) else None
+        turni_stanza += st is not None
         k = "con" if st is not None else "senza"
         ctx = (st or {}).get("contesto")
         # Con e senza blocco (passo 2): fra i turni con la stanza accesa
@@ -207,10 +228,17 @@ def riassunto(righe: list[dict], turni: list[dict] | None = None) -> dict:
     attese = cop.pop("_attese")
     cop["recupero_p50_ms"], cop["recupero_p90_ms"] = _p(rec, 0.5), _p(rec, 0.9)
     cop["attesa_p50_ms"], cop["attesa_p90_ms"] = _p(attese, 0.5), _p(attese, 0.9)
+    ms = cerca.pop("_ms")
+    cerca["ms_p50"], cerca["ms_p90"] = _p(ms, 0.5), _p(ms, 0.9)
+    cerca["turni_stanza"] = turni_stanza
+    # La quota del § 6: turni con la frase d'attesa della ricerca sui turni interpellati con la
+    # stanza accesa (gli stessi giorni del registro dei turni)
+    cerca["quota_attesa"] = (round(cerca["attese"] / turni_stanza, 3) if turni_stanza
+                             else None)
     righe_b, car_b = blocco.pop("_righe"), blocco.pop("_car")
     blocco["righe_p50"], blocco["caratteri_p50"] = _p(righe_b, 0.5), _p(car_b, 0.5)
     blocco["caratteri_p90"] = _p(car_b, 0.9)
-    return {"giorni": giorni, "copertura": cop, "blocco": blocco,
+    return {"giorni": giorni, "copertura": cop, "blocco": blocco, "cerca": cerca,
             "tempi": {k: {"turni": len(v["prima"]) or len(v["stt"]),
                           "stt_p50_s": _p(v["stt"], 0.5),
                           "stt_p90_s": _p(v["stt"], 0.9), "prima_p50_s": _p(v["prima"], 0.5),
@@ -219,8 +247,10 @@ def riassunto(righe: list[dict], turni: list[dict] | None = None) -> dict:
 
 
 def testo(r: dict) -> str:
-    out = ["Stanza (conversazione di stanza: passo 1 in ombra, passo 2 con stanza_contesto)"]
-    if not r.get("giorni") and not r["copertura"]["turni"]:
+    out = ["Stanza (conversazione di stanza: passo 1 in ombra, passo 2 con stanza_contesto, "
+           "passo 4 con stanza_cerca)"]
+    if not r.get("giorni") and not r["copertura"]["turni"] and not (
+            r.get("cerca") or {}).get("chiamate"):
         out.append("  nessuna misura (stanza spenta, o mai partita)")
         return "\n".join(out)
     for giorno in sorted(r.get("giorni", {})):
@@ -258,6 +288,20 @@ def testo(r: dict) -> str:
                    f"{b['vuoti']}), righe p50 {b['righe_p50']}, caratteri p50 "
                    f"{b['caratteri_p50']} (p90 {b['caratteri_p90']}); accorciato dal tetto in "
                    f"{b['tagliati']}, con righe non ancora trascritte in {b['mancano']}")
+    k = r.get("cerca") or {}
+    if k.get("chiamate"):
+        quota = k.get("quota_attesa")
+        avvisi = []
+        if quota is not None and quota >= ATTESA_QUOTA_OBIETTIVO:
+            avvisi.append("frase d'attesa oltre il 10 %: il blocco caldo è troppo corto?")
+        if (k.get("ms_p90") or 0) > CERCA_P90_OBIETTIVO_MS:
+            avvisi.append("tool oltre 3 s al p90")
+        out.append(f"  stanza_cerca (passo 4): {k['chiamate']} ricerche, esiti {k['esiti']}; "
+                   f"tempo p50 {k['ms_p50']} ms, p90 {k['ms_p90']} ms; frase d'attesa "
+                   f"{k['attese']} volte"
+                   + (f", {quota * 100:.1f} % dei {k['turni_stanza']} turni in stanza "
+                      "(obiettivo < 10 %)" if quota is not None else "")
+                   + "".join(f" ⚠ {a}" for a in avvisi))
     t = r["tempi"]
     if t["con"]["turni"]:
         out.append(f"  Turni con la stanza: stt p50 {t['con']['stt_p50_s']} s (senza "

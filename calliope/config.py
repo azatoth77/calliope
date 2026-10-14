@@ -341,7 +341,7 @@ class Config:
     # riferimento_casa, riferimento_agenda, conferma_al_posto_del_vuoto,
     # vuoto_seconda_passata, ricerca_promessa, citazione_tolta, nome_tool_parlato,
     # eco_contesto, spinta_archivio, spinta_rinuncia, spinta_esercizi, correzione_tool,
-    # ricerca_recente, risposta_ripetuta, scrivo_qui_a_voce; "tutte"
+    # ricerca_recente, risposta_ripetuta, scrivo_qui_a_voce, spinta_stanza; "tutte"
     # le spegne tutte. Quelle di
     # «sicurezza» (permessi, politica…) non si spengono: un nome di sicurezza o sconosciuto si
     # segnala all'avvio. Quelle del profilo (llm_profilo) si aggiungono a queste.
@@ -1042,6 +1042,23 @@ class Config:
     # Tetto del blocco in caratteri (~4 caratteri per token: 6000 ≈ 1500 token, ~0,5 s di
     # rilettura col 26B sulla DGX senza cache): oltre si lasciano fuori le righe più vecchie
     stanza_caldo_caratteri: int = 6000
+    # Passo 4 (14/10, calliope/stanza/cerca.py, tool stanza_cerca): ciò che il blocco caldo non
+    # ha più o che si è detto in un'altra stanza («di cosa parlavamo in cucina prima?», «cosa
+    # aveva detto Carlo della gita stamattina?»), cercato nel registro della stanza in memoria
+    # per persona, stanza, momento e parole. Lo usano solo le persone di casa riconosciute;
+    # un adulto vede le stanze dove era presente, quando c'era, e le parole di un minore solo
+    # se ne è il tutore; un minore solo le sue; le voci non riconosciute mai. Il risultato è in
+    # busta (fonte «stanza») e riservato: né il terminale né il registro dei turni hanno le
+    # righe. Vale solo con la stanza accesa; false (di serie) = il tool non c'è
+    stanza_cerca: bool = False
+    # Tetti del risultato (righe e caratteri, ~600 token: sotto la quarantena dei dati lunghi)
+    stanza_cerca_righe: int = 20
+    stanza_cerca_caratteri: int = 2400
+    # Righe delle stanze cercate ancora in coda per Whisper: passano davanti e si aspettano al
+    # più così; la frase d'attesa («Un attimo, ripenso a cosa vi siete detti.») solo oltre
+    # `stanza_cerca_attesa_s`
+    stanza_cerca_attesa_max_s: float = 3.0
+    stanza_cerca_attesa_s: float = 0.7
     # Connessioni insieme attraverso l'inoltro (una pagina ne apre 2–6)
     satellite_inoltro_max: int = 32
     # Secondi senza un byte dopo i quali una connessione dell'inoltro si chiude
@@ -1901,7 +1918,7 @@ class Config:
                    archivio: bool = False, ufficio: bool = False, web: bool = False,
                    estensioni: bool = False, meteo_casa: bool = False,
                    citta: str | None = None, citta_salva: bool = False,
-                   notizie: bool = False) -> str:
+                   notizie: bool = False, stanza: bool = False) -> str:
         """Prompt di sistema, senza il nome dell'interlocutore: lo dà il tool chi_parla.
 
         `biblioteca`: se il tool biblioteca_cerca c'è. Nominare un tool che non esiste è
@@ -2083,6 +2100,13 @@ class Config:
                    "garanzie, referti, documenti d'identità: cosa dicono, importi, numeri, "
                    "scadenze, «fino a quando è in garanzia…») archivio_cerca, per cosa scade "
                    "archivio_scadenze, per quanto si è speso archivio_somma; " if archivio else "")
+        # La conversazione della stanza (14/10, passo 4, tool stanza_cerca): solo se il tool
+        # c'è. Senza questa frase il 4B, sul banco, non lo chiamava quando la domanda non
+        # nominava una stanza («a che ora avevamo deciso di partire?» → «non ho in memoria»)
+        room = ("per ciò che si è detto vicino ai dispositivi di casa e non è nella "
+                "conversazione con te né nei dati del turno (chi ha detto cosa, cosa si era "
+                "deciso, a che ora, di cosa si parlava in una stanza) stanza_cerca, prima di "
+                "dire che non lo sai; " if stanza else "")
         # Con la ricerca web: quando usarla, al posto di «non puoi sapere il meteo…»
         if web:
             limits = (limits.replace("non usi internet o file e ", "non usi file e ")
@@ -2179,6 +2203,7 @@ class Config:
             f"{screens}"
             f"{jobs}"
             f"{archive}"
+            f"{room}"
             f"per le altre azioni usa il tool adatto. Per usare un "
             f"tool emetti sempre una chiamata di funzione vera, mai il suo nome scritto "
             f"nel testo, e non annunciarla; poi rispondi. "
@@ -2606,6 +2631,10 @@ RETI: dict[str, Rete] = {
     "spinta_archivio": Rete(
         "«non lo so» con la storia compressa: spinta a cercare nell'archivio", MODELLO,
         "il 4B non cercava mai nelle conversazioni passate dopo una compressione (05/10)"),
+    "spinta_stanza": Rete(
+        "«non lo so» senza tool con stanza_cerca disponibile: Brain cerca nella conversazione "
+        "della stanza con la frase di chi parla (14/10, passo 4)", MODELLO,
+        "il 4B chiamava stanza_cerca 4 volte su 12 quando serviva (banco del 14/10)"),
     "spinta_rinuncia": Rete(
         "«non posso creare un'estensione» con il tool disponibile: spinta", MODELLO,
         "il 26B dopo un rifiuto rimasto nella storia (06/10, DGX)"),
@@ -2865,7 +2894,9 @@ SEZIONI: dict[str, list[str]] = {
     "conversazione_stanza": ["stanza", "stanza_satelliti", "stanza_segmento_max_s", "stanza_recupero_max_s",
                "stanza_coda_max_s", "stanza_scambio_pausa_s", "stanza_presenza_s",
                "stanza_ospiti_ore", "stanza_pausa_min", "stanza_contesto", "stanza_caldo_min",
-               "stanza_caldo_sempre_s", "stanza_caldo_caratteri"],
+               "stanza_caldo_sempre_s", "stanza_caldo_caratteri", "stanza_cerca",
+               "stanza_cerca_righe", "stanza_cerca_caratteri", "stanza_cerca_attesa_max_s",
+               "stanza_cerca_attesa_s"],
     "satellite": ["satellite_server", "satellite_credenziali", "satellite_impronta",
                   "satellite_microfono", "satellite_casse", "satellite_webcam",
                   "satellite_schermo", "satellite_schermo_personale", "satellite_esecutore",
@@ -3066,6 +3097,8 @@ LIMITI: dict[str, tuple[float, float]] = {
     "stanza_coda_max_s": (10.0, 7200.0), "stanza_ospiti_ore": (0.1, 48.0),
     "stanza_pausa_min": (1.0, 1440.0), "stanza_caldo_min": (0.5, 120.0),
     "stanza_caldo_sempre_s": (0.0, 600.0), "stanza_caldo_caratteri": (200, 100_000),
+    "stanza_cerca_righe": (1, 200), "stanza_cerca_caratteri": (200, 20_000),
+    "stanza_cerca_attesa_max_s": (0.0, 30.0), "stanza_cerca_attesa_s": (0.0, 30.0),
     "contesto_ripiego": (2048, 1_048_576), "contesto_rilettura_max_s": (0.1, 60.0),
     "contesto_conversazioni": (1, 64), "contesto_margine_gb": (0.0, 512.0),
     "max_history_turns": (0, 200), "max_tool_turns": (1, 20), "tool_correzioni_max": (0, 10),

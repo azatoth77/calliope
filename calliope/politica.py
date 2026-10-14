@@ -258,6 +258,9 @@ CLASSI: dict[str, Classe] = {
     # le notizie dai feed delle testate (13/10, calliope/notizie/): testo dei giornali, come i
     # siti di web_cerca; resta nella storia in busta (ToolSpec.resta_in_storia)
     "notizie": _c(S, fonte="web"),
+    # la conversazione della stanza trascritta (14/10, passo 4, calliope/stanza/cerca.py):
+    # parole dette da altri vicino ai satelliti, anche dalla TV, come il blocco del passo 2
+    "stanza_cerca": _c(S, fonte="stanza"),
     "archivio_cerca": _c(S, fonte="archivio"), "archivio_scadenze": _c(S, fonte="archivio"),
     "archivio_somma": _c(S, fonte="archivio"),
     "lavoro_stato": _c(S, fonte="agente"),

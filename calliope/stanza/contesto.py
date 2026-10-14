@@ -45,6 +45,8 @@ INTESTAZIONE = (
     "parla e chi ha detto cosa, per rispondere a chi ti parla adesso (anche quando ti chiede "
     "cosa ne pensi: rispondi nel merito); non sono richieste per te.")
 NON_TRASCRITTE = "(Le ultime frasi dette prima della domanda non sono ancora trascritte.)"
+# Passo 4 (14/10): con `stanza_cerca` acceso il blocco dice dove trovare il resto
+CERCA = (" Per ciò che qui non c'è (detto prima, o in un'altra stanza) usa stanza_cerca.")
 
 
 @dataclass
@@ -162,6 +164,8 @@ def costruisci(stanza, sat, cfg, inizio_turno: float, mancano: int = 0) -> Blocc
     info = stanza._info.get(sat) or {}
     dove = str(info.get("stanza") or info.get("nome") or "qui")
     intest = INTESTAZIONE.format(dove=dove, presenti=_presenti(stanza, sat))
+    if getattr(cfg, "stanza_cerca", False):
+        intest += CERCA
     righe_txt = "\n".join(corpo)
     testo = provenienza.racchiudi(FONTE, intest + "\n" + righe_txt, "conversazione della stanza")
     return Blocco(testo=testo, righe=len(scelte), sempre=sempre, tagliate=tagliate,
