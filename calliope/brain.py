@@ -762,11 +762,14 @@ class ClaimHold:
     compressione (NON_SO); `kind` dice quale dei due ("claim" o "non_so")."""
 
     def __init__(self, active: bool, actions=(), non_so: bool = False, rinuncia=None,
-                 fallito: bool = False, ripetuta: str | None = None):
+                 fallito: bool = False, ripetuta: str | None = None,
+                 ripetuta_soglia: float | None = None):
         self.claims = active
         # La risposta precedente (09/10, calliope/ripetizione.py): una risposta che la ripete
-        # uguale si trattiene allo stesso modo, kind "ripetuta"
+        # uguale si trattiene allo stesso modo, kind "ripetuta"; con la domanda insistita
+        # (15/10) anche quasi uguale (`ripetuta_soglia`)
         self.ripetuta = ripetuta
+        self.ripetuta_soglia = ripetuta_soglia
         self.fallito = fallito          # i tool di questa risposta sono tutti falliti
         self.non_so = non_so
         # «Non posso creare un'estensione» con il tool disponibile (06/10, politica.rinuncia):
@@ -781,8 +784,9 @@ class ClaimHold:
 
     def _match(self, text: str, intera: bool = False) -> bool:
         if self.ripetuta:
-            from .ripetizione import inizia_come, ripete
-            if (ripete if intera else inizia_come)(text, self.ripetuta):
+            from .ripetizione import SOGLIA, inizia_come, ripete
+            if (ripete if intera else inizia_come)(text, self.ripetuta,
+                                                   self.ripetuta_soglia or SOGLIA):
                 self.kind = "ripetuta"
                 return True
         if self.claims and is_claim(text, self.actions):
@@ -2284,7 +2288,7 @@ class Brain:
     def _turn(self, messages, schemas, hold_claims: bool = False, hold_request: bool = False,
               actions=(), hold_names: bool = False, hold_non_so: bool = False,
               hold_rinuncia=None, hold_fallito: bool = False, hold_ripetuta=None,
-              tieni_con_chiamate: bool = False):
+              tieni_con_chiamate: bool = False, hold_ripetuta_soglia: float | None = None):
         """Una passata: rilascia il testo pulito e restituisce (testo, chiamate, trattenuto,
         richiesta_trattenuta, nome_trattenuto).
 
@@ -2316,7 +2320,7 @@ class Brain:
         qui = FraseTolta(SCRIVO_QUI, a_voce and self._net("scrivo_qui_a_voce"))
         hold = ClaimHold(hold_claims and self._net("spinta_dichiarata"), actions,
                          non_so=hold_non_so, rinuncia=hold_rinuncia, fallito=hold_fallito,
-                         ripetuta=hold_ripetuta)
+                         ripetuta=hold_ripetuta, ripetuta_soglia=hold_ripetuta_soglia)
         self._held_kind = None
         self.mentions_tool("")                       # prepara _tool_re
         names = ToolNameHold(self._tool_re, hold_names and self._net("chiamata_in_mezzo"))
@@ -4547,6 +4551,17 @@ class Brain:
         if sv_msg:
             memory = memory + blocco("sviluppo", [{"role": "system", "content": sv_msg}])
             self._rule("sviluppo_modalita")
+        # La domanda che riprende quella di prima dopo una risposta lunga (15/10, rete
+        # domanda_insistita, calliope/ripetizione.py; caso vero in auto: «Ma quali sono questi
+        # risultati? Lo hai capito?» → la stessa risposta di prima): una frase condizionale nei
+        # dati del turno, il modello decide se è un'insistenza
+        insistita = None
+        if user_text and self._net("domanda_insistita"):
+            from .ripetizione import INSISTE_MSG, insiste
+            insistita = insiste(self.history[:start], user_text)
+            if insistita:
+                memory = memory + blocco("insistenza", [{"role": "system", "content": INSISTE_MSG}])
+                self._rule("domanda_insistita")
         # Il blocco dello stato del registro degli eventi (10/10, passo 3): argomenti e
         # promemoria non parlati
         if user_text:
@@ -4592,9 +4607,12 @@ class Brain:
                                                  for f in self._remembered_facts()]
         spoke = announced = nudged = retried_empty = nudged_fallito = False
         # La risposta di prima (09/10, rete risposta_ripetuta): una uguale si trattiene, una volta
-        from .ripetizione import RIPETUTA_NUDGE, risposta_precedente
+        from .ripetizione import (RIPETUTA_NUDGE, RIPETUTA_NUDGE_INSISTE, SOGLIA_INSISTE,
+                                  risposta_precedente)
         precedente = (risposta_precedente(self.history[:start], user_text)
                       if user_text and self._net("risposta_ripetuta") else None)
+        # Con la domanda insistita la spinta non dice «una cosa nuova» (15/10)
+        nudge_ripetuta = RIPETUTA_NUDGE_INSISTE if insistita else RIPETUTA_NUDGE
         claim_at = None          # risposta già detta che dichiarava un'azione senza tool
         # La domanda chiede un file o un documento e c'è il PC per cercarlo: se il modello
         # risponde con testo senza tool scatta la spinta, quindi quel testo non va detto prima
@@ -4699,6 +4717,7 @@ class Brain:
                 else None,
                 hold_fallito=self._solo_falliti(),
                 hold_ripetuta=precedente if not self.last_tools else None,
+                hold_ripetuta_soglia=SOGLIA_INSISTE if insistita else None,
                 tieni_con_chiamate=sviluppo_sosp and not nudged and not self.last_tools)
             tail = []
             if getattr(self, "_ciclo_fermato", None):
@@ -4713,7 +4732,7 @@ class Brain:
                 self._rule("spinta_ripetuta")
                 print(f"   [LLM] risposta uguale alla precedente, non la dico: «{self.cita_in_console(held)}»",
                       flush=True)
-                tail = [{"role": "system", "content": RIPETUTA_NUDGE}]
+                tail = [{"role": "system", "content": nudge_ripetuta}]
                 continue
             if corr is not None and held_req and not held and not calls:
                 if held_req.rstrip().endswith("?") and correzioni > 1:

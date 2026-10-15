@@ -318,7 +318,7 @@ llm:
   # vuoto_seconda_passata, ricerca_promessa, citazione_tolta, nome_tool_parlato,
   # eco_contesto, spinta_archivio, spinta_rinuncia, spinta_esercizi, correzione_tool,
   # ricerca_recente, risposta_ripetuta, scrivo_qui_a_voce, spinta_stanza,
-  # ciclo_ripetuto; "tutte"
+  # ciclo_ripetuto, domanda_insistita; "tutte"
   # le spegne tutte. Quelle di
   # «sicurezza» (permessi, politica…) non si spengono: un nome di sicurezza o sconosciuto si
   # segnala all'avvio. Quelle del profilo (llm_profilo) si aggiungono a queste.
