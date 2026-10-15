@@ -35,8 +35,11 @@ class TurnLog:
         # (prove, `calliope stato`): solo la regola degli ospiti
         self.conserva = conserva
         # Campi del modello della voce in ogni turno ({"profilo", "modello"}, 06/10): le regole
-        # che scattano si contano per profilo (config.RETI, categoria «modello»)
-        self.modello = {k: v for k, v in (modello or {}).items() if v}
+        # che scattano si contano per profilo (config.RETI, categoria «modello»). Dal 15/10 anche
+        # `reti_spente` (llm_reti_spente, profilo e locale insieme), scritta anche vuota: il
+        # rapporto degli scatti (calliope/reti_scatti.py) sa così se una rete era accesa
+        self.modello = {k: v for k, v in (modello or {}).items()
+                        if v is not None and v != ""}
         self.keep_days = keep_days
         self._lock = threading.Lock()
         self._pulito_il = None                  # il giorno dell'ultima pulizia

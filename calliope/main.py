@@ -1067,9 +1067,11 @@ class Avvio:
             self._saluto_ed_eco()
         # Registro dei turni: ogni turno si scrive all'inizio del giro dopo, così anche i
         # rami che finiscono con `continue` vengono registrati (vedi turnlog.py)
-        # Profilo e modello in ogni turno (06/10, P6): le reti per modello si misurano da lì
+        # Profilo e modello in ogni turno (06/10, P6): le reti per modello si misurano da lì;
+        # dal 15/10 anche le reti spente (calliope/reti_scatti.py, `calliope stato --reti`)
         s.turns = TurnLog(cfg.turn_log_dir, cfg.turn_log_days,
-                          modello={"profilo": cfg.llm_profilo or None, "modello": cfg.llm_model},
+                          modello={"profilo": cfg.llm_profilo or None, "modello": cfg.llm_model,
+                                   "reti_spente": list(cfg.llm_reti_spente or ())},
                           conserva=s.conserva)
         if s.conserva is not None:
             # Una volta: le parole di minori, ospiti e voci incerte scritte prima del 12/10; poi

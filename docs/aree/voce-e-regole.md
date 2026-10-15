@@ -2031,3 +2031,91 @@ avrebbe fatto diventare il nome del profilo.
   `ruolo|rinomina` in 3 giri, `rinomina_ruolo` 12 volte, «chiamami Davide» → «sì» rinomina
   ancora. Gli errori che restano su `chi` («Calliope di Michisono» → `biblioteca_cerca`) sono
   noti e fuori da questo ramo.
+
+## Gli scatti delle reti per rete e per profilo: `calliope stato --reti` (15/10, ramo `reti-scatti`)
+
+Roadmap 2.11 (E11), decisione [0028](../decisioni/0028-decisioni-roadmap-12-10.md) § 3: dal 20/10
+le reti del modello mai scattate si potranno spegnere nel profilo del 26B, mai in quello ridotto.
+Prima serve il rapporto. **Nessuna rete è stata spenta**: decide Dario col rapporto.
+
+- **Il comando**: `calliope stato --reti [--giorni N] [--json]` (`calliope/reti_scatti.py`).
+  Sola lettura del registro dei turni, nessun modello. Sta in `calliope stato` come
+  `--turni` e `--guardia`, e non in uno script di `prove/manuali/`, per due motivi: deve girare
+  sulla DGX con la configurazione installata (profilo in uso e locale), e serve anche dopo il
+  20/10, ogni volta che si cambia modello.
+- **Cosa conta**, per ogni profilo (campo `profilo` del turno) e ogni rete «modello» di
+  `config.RETI`:
+  - **scatti**: i turni con almeno una regola della rete (sotto, l'inventario);
+  - **osservati**: le risposte del modello (`esito: risposta`) con la rete accesa, dal giorno in
+    cui la rete è entrata nel codice (`NEL_CODICE_DAL`, da `git log -S`). È un massimo:
+    l'installazione sulla DGX può essere arrivata dopo;
+  - **ultima** volta, e lo **stato**: scattata, MAI SCATTATA (con «pochi turni» sotto 200
+    risposte osservate), spenta, nessun turno;
+  - **esito dopo lo scatto**. «Dubbio» se il turno finisce con un ripiego (`scelta_tool`), se
+    i giri di correzione si esauriscono (`correzione_tool`), o se la stessa persona entro 90 s
+    ripete la frase (somiglianza ≥ 0,6) o interrompe la risposta. Altrimenti «bene». Senza le
+    parole (minori, ospiti) la ripetizione non si vede: quei «bene» si contano a parte. Si
+    contano anche il tool riuscito nello stesso turno dopo lo scatto e l'aiuto usato al turno
+    dopo (`argomento_forse_usato`);
+  - in testa, le reti spente **adesso**: dal profilo in uso e in più nel locale.
+- **Accesa o spenta in un turno**: dal 15/10 il turno scrive `reti_spente` (profilo e locale
+  insieme, anche vuota: `TurnLog` ora tiene le liste vuote). Nei turni di prima si deduce dal
+  profilo (`PROFILI_LLM`): le aggiunte del locale non si vedono, e il rapporto dice in quante
+  risposte vale la deduzione.
+- **Limite**: «osservata» vuol dire «accesa», non «la sua condizione c'era». `spinta_esercizi`
+  conta tutte le risposte, anche senza esercizi in corso. Per una rete legata a una funzione
+  rara, zero scatti su molte risposte dice poco. Va letto insieme al banco di regressione (il
+  03/10 col 26B: stesso risultato con e senza spinte).
+
+**Inventario** al 15/10. Una rete non scrive il suo nome: scrive le regole dei suoi casi.
+`REGOLE_RETE` in `reti_scatti.py`; la prova controlla che ogni regola sia scritta nel codice.
+Profili (`PROFILI_LLM`): `gemma4-e4b-ollama` e `qwen3.6-35b-vllm` le tengono tutte accese;
+`gemma4-26b-ollama` (la DGX) e `gemma4-26b-vllm` spengono `spinta_promessa`,
+`spinta_richiesta` e `ricerca_promessa`. Tutte le altre sono accese in ogni profilo.
+
+| Rete | Regole nel registro | Dove | Nel codice dal |
+|---|---|---|---|
+| `textcallguard` | `textcallguard` | brain.py, TextCallGuard | ≤ 06/10 |
+| `chiamata_in_mezzo` | `chiamata_in_mezzo`, `spinta_nome_tool`, `nome_tool_ripetuto` | brain.py, ToolNameHold | ≤ 06/10 |
+| `spinta_promessa` | `spinta_promessa` | brain.py, ACTION_PROMISE (spenta nel 26B) | ≤ 06/10 |
+| `spinta_richiesta` | `spinta_richiesta`, `richiesta_trattenuta` | brain.py, TOOL_REQUEST (spenta nel 26B) | ≤ 06/10 |
+| `spinta_dichiarata` | `spinta_dichiarata`, `dichiarata_taciuta`, `dichiarata_onesta`, `dichiarata_tool_fallito` | brain.py, ClaimHold, ACTION_CLAIM | ≤ 06/10 |
+| `riferimento_casa` | `riferimento_casa` | brain.py, REFERENCE_MSG | ≤ 06/10 |
+| `riferimento_agenda` | `riferimento_agenda` | brain.py, AGENDA_MSG | ≤ 06/10 |
+| `riferimento_lavoro` | `riferimento_lavoro` | brain.py, LAVORO_MSG | 07/10 |
+| `estensione_nominata` | `estensione_nominata`, `estensioni_elenco_turno` | brain.py, EST_NOMINATA_MSG | 08/10 |
+| `modalita_sviluppo` | `sviluppo_modalita`, `sviluppo_riga_fuori_tema`, `sviluppo_promemoria_giorno` | brain.py, SVILUPPO_MSG e la riga in coda | 08/10 |
+| `conferma_al_posto_del_vuoto` | `conferma_al_posto_del_vuoto`, `vuoto_ripiego` | brain.py, risposta vuota | ≤ 06/10 |
+| `vuoto_seconda_passata` | `vuoto_seconda_passata` | brain.py, EMPTY_NUDGE | ≤ 06/10 |
+| `ricerca_promessa` | `ricerca_promessa` | ciclo.py, SEARCH_PROMISE (spenta nel 26B) | ≤ 06/10 |
+| `citazione_tolta` | `citazione_tolta` | ciclo.py, strip_false_citation | ≤ 06/10 |
+| `nome_tool_parlato` | `nome_tool_parlato`, `annuncio_tool_taciuto` | ciclo.py, speak_tool_names | ≤ 06/10 |
+| `eco_contesto` | `eco_contesto` | brain.py, ContextEcho | ≤ 06/10 |
+| `spinta_archivio` | `spinta_archivio` | brain.py, ARCHIVIO_NOTA | ≤ 06/10 |
+| `spinta_stanza` | `spinta_stanza`, `stanza_dopo_ricerca_vuota` | brain.py, STANZA_NOTA | 14/10 |
+| `spinta_rinuncia` | `spinta_rinuncia` | brain.py, RINUNCIA_NUDGE | ≤ 06/10 |
+| `spinta_sviluppo` | `spinta_sviluppo`, `sviluppo_testo_taciuto` | brain.py, SVILUPPO_NUDGE | 12/10 |
+| `spinta_esercizi` | `spinta_esercizi`, `esercizi_domanda_inventata`, `esercizi_promessa_taciuta` | brain.py, ESERCIZI_NUDGE | 08/10 |
+| `scrivo_qui_a_voce` | `scrivo_qui_tolto` | brain.py, FraseTolta(SCRIVO_QUI) | 12/10 |
+| `argomento_forse` | `argomento_forse` (aiuto usato: `argomento_forse_usato`) | brain.py, argomenti_incerti.py | 08/10 |
+| `correzione_tool` | `correzione_tool`, `correzione_avviso` (esito cattivo: `correzioni_esaurite`) | brain.py, CORREZIONE_NUDGE | 09/10 |
+| `ricerca_recente` | `ricerca_recente`, `ricerca_elenco`, `ricerca_recente_spenta`, `spinta_ricerca` | brain.py, RICERCA_MSG e RICERCA_NUDGE | 09/10 |
+| `risposta_ripetuta` | `spinta_ripetuta` | brain.py, ripetizione.py | 09/10 |
+| `domanda_insistita` | `domanda_insistita` | brain.py, ripetizione.py (INSISTE_MSG) | 15/10 |
+| `ciclo_ripetuto` | `ciclo_ripetuto` | ciclo_ripetuto.py | 14/10 |
+
+Le reti di **sicurezza** (`permessi`, `politica`, `conferme`, `riferire`, `azione_in_sospeso`,
+`web_tolto`) non si spengono e il rapporto non le conta.
+
+Le regole fuori dall'inventario sono di proposito: `dichiarata_ricordo` (la rete guarda e lascia
+passare), `riferimento_agenda_finito` e `sviluppo_riga_fuori_tema_taciuta` (non aggiungono
+niente al turno). Non sono scatti.
+
+Prova a secco: `prove/prova_reti_scatti.py` (livello 1, legata a brain, ciclo, config,
+turnlog e stato). **Da lanciare sulla DGX** dopo l'installazione:
+
+    calliope stato --reti
+    calliope stato --reti --giorni 7 --json > ~/reti-scatti.json
+
+Fino al 15/10 i turni non hanno `reti_spente`: la prima lettura deduce dal profilo. Se qualcosa
+era spento nel locale, il rapporto lo dice in testa.
