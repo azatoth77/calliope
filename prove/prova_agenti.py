@@ -84,6 +84,31 @@ def porta_libera() -> int:
     return p
 
 
+def porta_tunnel() -> int:
+    """La porta locale del tunnel, scelta **fuori dalle porte effimere** (15/10). Con
+    `porta_libera()` era una porta effimera presa all'inizio e rilasciata: il tunnel la riapre e
+    la chiude più volte in ~50 s, e nel frattempo un altro processo (le altre prove del
+    `--completo`, un altro runner) poteva riceverla da bind(0) o per una connessione in uscita.
+    Le cadute del 14/10 erano questo: «porta locale occupata» al --prova, e «VPN accesa» (e già
+    «ssh muto») con `ollama_giu` / ConnectTimeout: la sonda del tunnel trovava in ascolto un
+    processo d'altri, che poi spariva. Le porte effimere di Windows partono da 49152, quelle di
+    Linux da 32768: qui 20000–31999, a caso, e libere (Hyper-V ne riserva alcune: si salta)."""
+    import random
+    for _ in range(200):
+        p = random.randrange(20000, 32000)
+        s = socket.socket()
+        try:
+            if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+            s.bind(("127.0.0.1", p))
+            return p
+        except OSError:
+            continue
+        finally:
+            s.close()
+    return porta_libera()
+
+
 def aspetta(cond, s=10.0):
     t0 = time.monotonic()
     while time.monotonic() - t0 < s:
@@ -216,7 +241,7 @@ os.environ["SSH_FINTO_DESTINO"] = str(fake.porta)
 os.environ["SSH_FINTO_LOG"] = str(TMP / "ssh_argv.jsonl")
 exe = ssh_eseguibile()
 verifica("ssh trovato nel PATH è quello finto", bool(exe) and Path(exe).parent == bin_dir, exe)
-LP = porta_libera()
+LP = porta_tunnel()
 messaggi = []
 
 
@@ -374,6 +399,34 @@ if sys.platform == "win32":
     job.close()
     verifica("job object da solo (senza audit hook): un secondo processo non parte",
              "NEGATO" in out and "PARTITO" not in out, out.strip())
+    # 15/10: prima di terminare, la priorità del processo «sotto il normale» sale (sotto
+    # carico un processo a bassa priorità ci metteva 4–9 s a morire)
+    import ctypes
+    job = winjob.JobObject(una_sola=True, memoria_mb=512)
+    p = winjob.avvia_nel_job([exe_base, "-I", "-c", "while True: pass"], job,
+                             creationflags=winjob.CREATE_NO_WINDOW
+                             | winjob.BELOW_NORMAL_PRIORITY_CLASS)
+    k32 = ctypes.WinDLL("kernel32")
+    k32.GetPriorityClass.argtypes = (ctypes.c_void_p,)
+    prima, viste, k32_vero = k32.GetPriorityClass(int(p._handle)), [], winjob._k32
+
+    class K32Spia:
+        def __getattr__(self, nome):
+            return getattr(k32_vero, nome)
+
+        def TerminateJobObject(self, h, c):  # noqa: N802
+            viste.append(k32.GetPriorityClass(int(p._handle)))
+            return k32_vero.TerminateJobObject(h, c)
+    winjob._k32 = K32Spia()
+    try:
+        job.termina()
+    finally:
+        winjob._k32 = k32_vero
+    p.wait(timeout=10)
+    job.close()
+    verifica("termina: la priorità sale prima di fermare il processo (sotto il normale → alta)",
+             prima == winjob.BELOW_NORMAL_PRIORITY_CLASS and viste == [winjob.HIGH_PRIORITY_CLASS],
+             f"{prima:#x} → {[hex(v) for v in viste]}")
 
 # ═══════════════════════════ 4. agente con l'Ollama finto ═══════════════════════════
 sezione("agente (Ollama finto)")
@@ -960,6 +1013,10 @@ item = fine(svc_d, 10)
 verifica("ssh muto: errore «la DGX non risponde»", item and item["stato"] == "errore"
          and "non risponde" in item["messaggio"], str(item and item["messaggio"]))
 os.environ["SSH_FINTO_MODO"] = "ok"
+# Il tempo massimo di 1 s serve ai casi di errore qui sopra; per aprire il tunnel (cmd.exe e un
+# Python nuovo) e rispondere attraverso l'inoltro, sotto carico ne servono di più (14/10 09:10:
+# «timeout», la DGX non risponde)
+svc_d.imp.timeout_s = svc_d.tunnel.timeout_s = 5.0
 d = svc_d.verifica()
 verifica("VPN accesa: il tunnel si apre e l'agente risponde", d["codice"] == "ok"
          and svc_d.tunnel.aperto(), str(d))
@@ -1042,7 +1099,7 @@ verifica("prompt: gli agenti tra quelle che funzionano quando il tool c'è",
 sezione("python -m calliope.agenti --prova")
 dgx.write_text(f"dgx:\n  ssh_alias: dgx-finto\n  collegamento: tunnel\n  porta_remota: 11434\n"
                f"  porta_locale: {LP}\n  agente_modello: {MODELLO}\n"
-               f"  timeout_collegamento_s: 2\n", encoding="utf-8")
+               f"  timeout_collegamento_s: 5\n", encoding="utf-8")   # 2 s: stretto sotto carico
 
 
 def prova_cmd(modo):
