@@ -208,8 +208,16 @@ voce raccontava male gli esiti, i comandi del flusso si perdevano.
 ### 2. Registro degli eventi e dialogo (E1–E11)
 
 1. **Accendere `eventi: attivo`** (E1): dopo almeno 7 giorni d'ombra (non prima del 18/10) e almeno
-   200 turni, zero differenze nel parlato, e la guardia sui riletti scritta prima. *Quasi* ·
-   dipende da: i dati d'ombra sulla DGX e la guardia dei riletti.
+   200 turni con il campo `eventi_ombra.proiezione_diversa` (il passo 0 misurato sulla proiezione,
+   senza i motivi dichiarati `capito` e `canale_scritto`), che deve valere **0 in tutti** (riga
+   «criterio di E1 … in 0 turni su N» di `calliope stato --turni`), con `fughe` ed `errori` 0.
+   *(15/10, issue #11: il criterio di prima, «zero differenze nel parlato», in ombra non si poteva
+   ottenere: `parlato.diverso` misura la storia di Brain e `eventi_ombra.differenze` le differenze
+   fra la proiezione e quella storia, tutti e due diversi da zero per costruzione;
+   [voce-e-regole](aree/voce-e-regole.md).)* **Guardia dei riletti fatta il 15/10**: avviso in
+   `calliope stato --turni` e in `calliope stato` se con `attivo` la mediana dei token riletti di un
+   giorno supera di metà quella dei giorni d'ombra. I turni col campo si contano da quando il codice
+   è sulla DGX. *Quasi* · dipende da: i dati d'ombra sulla DGX.
 2. **«Dimentica» chiude anche la conversazione in corso** (E2). *Pronta* · dipende da: niente
    (confermato il 12/10). **Fatto il 13/10** (ramo `dimentica-conversazione`): sempre, anche con
    `eventi: spento`, senza archivio né riassunto, e la domanda e la conferma lo dicono

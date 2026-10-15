@@ -338,8 +338,17 @@ class Ombra:
         della_conv = bool(pezzi) or esito in ESITI_PERSONA or esito in ESITI_CHIUSURA
         if reg is not None and della_conv:
             ombra = self._scrivi_e_confronta(reg, conv, rec, t, pezzi, info, turni_s)
+        # Il criterio di E1 (15/10, issue #11): il passo 0 sulla proiezione, misurabile già in
+        # ombra (sulla storia di Brain non va a zero per costruzione); con attivo è `parlato`
+        proiettato = (self._parlato_attivo(pezzi, info)
+                      if self.attivo or ombra is not None else None)
         if self.attivo:
-            parlato = self._parlato_attivo(pezzi, info)
+            parlato = proiettato
+        if ombra is not None and proiettato and "sentite" in proiettato:
+            diversa, motivi_p = misura.proiezione_diversa(proiettato)
+            ombra["proiezione_diversa"] = diversa
+            if motivi_p:
+                ombra["proiezione_motivi"] = motivi_p
         if rec is None:
             self._riporta(parlato, ombra)
             return
