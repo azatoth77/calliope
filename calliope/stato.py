@@ -37,7 +37,11 @@ il prossimo passo (registro delle capacità, calliope/capacita.py).
                                               acuti falsi a settimana (stanza/guardia.py);
                                               fine del turno System 1: ms risparmiati, frasi
                                               che avrebbe tagliato, attese più lunghe
-                                              (calliope/system1/fine_turno.py, 14/10)
+                                              (calliope/system1/fine_turno.py, 14/10);
+                                              preselezione dei tool System 1 in ombra:
+                                              «nucleo» o «tutti», richiamo sui turni con
+                                              tool, schemi risparmiati
+                                              (calliope/system1/preselezione.py, 15/10)
     python -m calliope.stato --guardia [--giorni N] [--falso ID | --vero ID]
                                               i segnali del guardiano a posteriori (14/10):
                                               giorno, ora, stanza, minore, livello e
@@ -460,6 +464,10 @@ def main(argv=None) -> int:
         # La scelta dei tool come metrica (12/10, calliope/scelta_tool.py)
         from . import scelta_tool
         scelta = scelta_tool.per_giorno(turni)
+        # La preselezione dei tool System 1 in ombra (15/10, calliope/system1/preselezione.py):
+        # richiamo sui turni con tool e schemi risparmiati
+        from .system1 import preselezione as preselezione_s1
+        presel = preselezione_s1.riassunto(turni)
         # Le frasi pronte ripetute (12/10, calliope/frasi.py, fase 0)
         from . import frasi
         pronte = frasi.riassunto(turni)
@@ -489,7 +497,8 @@ def main(argv=None) -> int:
                               "attrito": sicurezza, "attrito_soglia": soglia_a,
                               "argomenti": argomenti, "compagnia": comp,
                               "dialogo": dialogo, "voce_sola": voce_sola,
-                              "scelta_tool": scelta, "frasi_pronte": pronte,
+                              "scelta_tool": scelta, "preselezione": presel,
+                              "frasi_pronte": pronte,
                               "stanza": stanza, "fine_turno": fine_r,
                               "guardia": {k: v for k, v in guardia_r.items()
                                           if k not in ("elenco", "letture")}},
@@ -508,6 +517,8 @@ def main(argv=None) -> int:
             print(misura_eventi.testo(voce_sola, soglia_ms))
             print()
             print(scelta_tool.testo(scelta))
+            print()
+            print(preselezione_s1.testo(presel))
             print()
             print(frasi.testo(pronte))
             print()

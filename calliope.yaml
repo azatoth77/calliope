@@ -324,6 +324,27 @@ llm:
   # segnala all'avvio. Quelle del profilo (llm_profilo) si aggiungono a queste.
   # Vuoto = tutte accese (o quelle del profilo).
   llm_reti_spente: []
+  # La preselezione dei tool, System 1 (15/10, calliope/system1/preselezione.py; progetto e
+  # misure in docs/ricerche/2026-10-15-preselezione-tool.md): un decisore piccolo sceglie fra
+  # due insiemi stabili di schemi, «nucleo» (i tool di tutti i giorni) o «tutti», e nel dubbio
+  # «tutti». «spenta» (di serie): niente. «ombra»: il modello vede sempre tutti i tool come
+  # oggi; intanto, in un thread suo, il decisore sceglie e il registro dei turni scrive
+  # l'insieme accanto ai tool usati davvero (`calliope stato --turni`: richiamo e schemi
+  # risparmiati). Spenta di serie perché solo misura: non c'è ancora un modo «attiva», che
+  # va deciso dopo le misure (un elenco che cambia rompe la cache del prefisso di Ollama:
+  # i tool stanno in testa al prompt)
+  preselezione_tool: spenta
+  # Come confronta la frase con i tool: «parole» (n-grammi, nessun modello, < 5 ms; il
+  # migliore sul banco del 15/10) o «embedding» (il modello di embedding di Ollama sulla CPU:
+  # tiene un modello residente in più, da contare in ollama_max_modelli)
+  preselezione_codifica: parole
+  # vuoto = conversazioni_embedding
+  preselezione_embedding: ''
+  # I tool del «nucleo»; vuoto = quelli di serie (preselezione.NUCLEO)
+  preselezione_nucleo: []
+  # «tutti» se un tool fuori dal nucleo arriva entro questo margine di somiglianza dal
+  # migliore del nucleo (0,10: nessun tool mancato sul banco del 15/10, uno a 0,05)
+  preselezione_margine: 0.1
 
 stt:
   # Speech-to-Text — faster-whisper
