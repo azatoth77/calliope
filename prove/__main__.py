@@ -156,7 +156,7 @@ A_SECCO = [
     ("prova_capacita.py", [], "registro delle capacità: stati, riassunto, prompt, calliope_stato, macchina nuova"),
     ("prova_novita.py", [], "chi è Calliope e cosa c'è di nuovo (09/10, caso vero della DGX): CHANGELOG finto (tabella, sezioni, intervalli, «(notte)»), gestore finto (versione installata, storia, versione di prima), voci per periodo e dall'ultimo aggiornamento, frase breve senza host né percorsi, scheda personale con «Scarica»; «chi sei?» con fatti veri; «cosa sai fare?» per aree e il dettaglio con area; contrari"),
     ("prova_piano.py", [], "taratura della macchina, fasi 1–2 (08/10): inventario con sonde finte (portatile, DGX unificata, senza GPU, registro, GPU fuori catalogo, modello in parte sulla CPU), catalogo con fonti, piano su macchine finte (solo CPU, 8, 16, 24, 32 GB, DGX di oggi ritrovata, Windows su ARM) con i contrari, calliope stato --piano in sola lettura"),
-    ("prova_arbitro_memoria.py", [], "arbitro della memoria, passo 1 (14/10): conto della memoria e classi delle attività in sola lettura sulla DGX finta (tempo reale, sfondo, a richiesta, «fuori»), proposta in ombra (sfondo dal meno usato, agente solo dal passo 4), contrari: mai il tempo reale né un modello non di Calliope, memoria non letta; portatile e solo CPU; da_config; calliope stato --memoria senza chiamate esterne"),
+    ("prova_arbitro_memoria.py", [], "arbitro della memoria, passo 1 (14/10): conto della memoria e classi delle attività in sola lettura sulla DGX finta (tempo reale, sfondo, a richiesta, «fuori»), proposta in ombra (sfondo dal meno usato, agente solo dal passo 4), contrari: mai il tempo reale né un modello non di Calliope, memoria non letta; portatile e solo CPU; da_config; calliope stato --memoria senza chiamate esterne; passo 2 (15/10): quiete() unica, confronto in ombra con guardia, corsia lenta, embedding e agente senza cambiare le decisioni, l'arbitro in ombra (coda per precedenza a voce ferma, un caricamento alla volta, buttate, proposta con la memoria vera, a richiesta ogni minuto, tempo reale mai), registro e calliope stato --memoria --storia con il criterio"),
     ("prova_installa.py", [], "installazioni con un server HTTP finto: catalogo, permessi, offerta, ripresa"),
     ("prova_schermi.py", [], "schermi: server e SSE veri, abbinamento, visibilità, schede dei tool, log"),
     # ~3 s: server degli schermi vero, registro dei turni finto (anche grande: 28 000 turni)
@@ -767,6 +767,16 @@ LEGAMI = [
     ("calliope/gioco_stato.py", ["prova_gioco_stato.py", "prova_testo.py"]),
     ("calliope/ciclo.py", ["prova_gioco_stato.py"]),
     ("calliope/gioco_giudice.py", ["prova_gioco_stato.py"]),
+    # L'arbitro della memoria in ombra (15/10, passo 2): i quattro posti con la «voce ferma» e
+    # le richieste di carico, il registro, calliope stato --memoria --storia
+    ("calliope/arbitro_ombra.py", ["prova_arbitro_memoria.py"]),
+    ("calliope/stanza/guardia.py", ["prova_arbitro_memoria.py"]),
+    ("calliope/stanza/lenta.py", ["prova_arbitro_memoria.py"]),
+    ("calliope/stanza/misure.py", ["prova_arbitro_memoria.py"]),
+    ("calliope/conversazioni.py", ["prova_arbitro_memoria.py"]),
+    ("calliope/agenti/servizio.py", ["prova_arbitro_memoria.py"]),
+    ("calliope/stato.py", ["prova_arbitro_memoria.py"]),
+    ("calliope/main.py", ["prova_arbitro_memoria.py"]),
 ]
 # Prove che il runner non lancia, con il perché (06/10, Q7): prova_runner controlla che ogni
 # prove/prova_*.py sia in A_SECCO, in CON_OLLAMA o qui. Una prova nuova dimenticata fallisce.

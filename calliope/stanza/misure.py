@@ -71,9 +71,12 @@ CERCA_P90_OBIETTIVO_MS = 3000
 
 
 class Misure:
-    def __init__(self, cartella: str | None, giorni: int = 60):
+    def __init__(self, cartella: str | None, giorni: int = 60, prefisso: str = PREFISSO):
         self.cartella = Path(cartella) if cartella else None
         self.giorni = int(giorni or 60)
+        # Lo stesso scrittore per altri registri di soli numeri (15/10: l'arbitro della memoria
+        # in ombra, `arbitro-AAAA-MM-GG.jsonl`)
+        self.prefisso = prefisso
         self._lock = threading.Lock()
         self._pulito = None
         self.errori = 0
@@ -93,7 +96,7 @@ class Misure:
                 if self._pulito != oggi:
                     self.cartella.mkdir(parents=True, exist_ok=True)
                     self._pota(oggi)
-                with open(self.cartella / f"{PREFISSO}{oggi.isoformat()}.jsonl", "a",
+                with open(self.cartella / f"{self.prefisso}{oggi.isoformat()}.jsonl", "a",
                           encoding="utf-8") as f:
                     f.write(json.dumps(r, ensure_ascii=False) + "\n")
         except OSError as e:
@@ -104,18 +107,19 @@ class Misure:
     def _pota(self, oggi):
         self._pulito = oggi
         limite = oggi - datetime.timedelta(days=self.giorni)
-        for f in self.cartella.glob(f"{PREFISSO}*.jsonl"):
+        for f in self.cartella.glob(f"{self.prefisso}*.jsonl"):
             try:
-                if datetime.date.fromisoformat(f.stem[len(PREFISSO):]) < limite:
+                if datetime.date.fromisoformat(f.stem[len(self.prefisso):]) < limite:
                     f.unlink(missing_ok=True)
             except ValueError:
                 continue
 
 
-def leggi(cartella: str | None, giorni: int | None = None) -> list[dict]:
+def leggi(cartella: str | None, giorni: int | None = None,
+          prefisso: str = PREFISSO) -> list[dict]:
     if not cartella or not Path(cartella).is_dir():
         return []
-    files = sorted(Path(cartella).glob(f"{PREFISSO}*.jsonl"))
+    files = sorted(Path(cartella).glob(f"{prefisso}*.jsonl"))
     if giorni is not None:
         files = files[-giorni:]
     out = []

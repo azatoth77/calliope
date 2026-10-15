@@ -240,6 +240,11 @@ class Lenta:
         self._sentite: dict = {}             # testo normalizzato → epoch (voci non riconosciute)
         self._libera_da = 0.0
         self._giu_detto = -1e9               # l'ultimo avviso del Whisper suo giù
+        # L'arbitro della memoria in ombra (15/10, calliope/arbitro_ombra.py): `ombra_quiete`
+        # confronta `libera` con quiete() senza cambiarla, `su_carico` dice che un passo
+        # comincia. None: spento
+        self.ombra_quiete = None
+        self.su_carico = None
         self.rivisti = 0
         self._fermo = threading.Event()
         self._thread = None
@@ -318,10 +323,15 @@ class Lenta:
             occ = occ or (callable(asp) and bool(asp()))
         except Exception:  # noqa: BLE001
             occ = True
+        libera_s = float(self._f("stanza_lenta_libera_s", 5.0))
         if occ:
             self._libera_da = ora
-            return False
-        return ora - self._libera_da >= float(self._f("stanza_lenta_libera_s", 5.0))
+            libera = False
+        else:
+            libera = ora - self._libera_da >= libera_s
+        if self.ombra_quiete is not None:
+            self.ombra_quiete("corsia_lenta", libera, libera_s)
+        return libera
 
     # ── il thread ──
     def _lavora(self):
@@ -362,6 +372,8 @@ class Lenta:
             return False
         sat, scambio = dov[0].sat, dov[0].scambio
         batch = [a for a in dov if a.sat == sat and a.scambio == scambio]
+        if self.su_carico is not None:
+            self.su_carico("corsia_lenta", segmenti=len(batch))
         self.rivedi(sat, scambio, batch, controlla=self.libera)
         return True
 

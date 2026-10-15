@@ -2194,6 +2194,15 @@ registro:
   # dettagli con `calliope stato --turni`. Il 07/10 erano 15,8, 28 su 41 falsi positivi
   # (docs/ricerche/2026-10-07-sicurezza-per-valore.md). Obiettivo ≤ 2; 0 = solo le ripetute
   attrito_avviso: 3.0
+  # L'arbitro della memoria (15/10, passo 2: docs/ricerche/2026-10-14-arbitro-memoria.md,
+  # calliope/arbitro_ombra.py). «ombra»: un thread leggero registra, a ogni richiesta di carico
+  # (embedding, corsia lenta, guardiano a posteriori, lavori dell'agente) e a ogni minuto, cosa
+  # avrebbe messo in coda, quando l'avrebbe fatto partire, chi avrebbe scaricato e la memoria
+  # vera; e conta quando la «voce ferma» di guardia, corsia lenta, embedding e agente diverge
+  # dalla definizione unica quiete(). Non carica e non scarica niente, non cambia nessuna
+  # decisione: serve a una settimana di registro prima del passo 3 (`calliope stato --memoria
+  # --storia`). «spento» (di serie): nessun thread, nessuna riga
+  arbitro_memoria: spento
   # Diagnostica: CALLIOPE_DEBUG_AUDIO registra ogni frase captata (WAV + trascrizione).
   # (variabile d'ambiente CALLIOPE_DEBUG_AUDIO, che vince su questo file)
   debug_audio_dir: null

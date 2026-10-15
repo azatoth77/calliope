@@ -69,6 +69,14 @@ il prossimo passo (registro delle capacità, calliope/capacita.py).
                                               sfondo, a richiesta), cosa farebbe l'arbitro
                                               per caricare un modello a richiesta; non
                                               scarica né carica niente
+    python -m calliope.stato --memoria --storia [--giorni N] [--json]
+                                              il registro dell'arbitro in ombra (15/10, passo
+                                              2, calliope/arbitro_ombra.py): per giorno la
+                                              memoria libera minima vera, i minuti in cui un
+                                              modello a richiesta non ci sarebbe stato,
+                                              «avrebbe scaricato il tempo reale» (deve essere
+                                              0), le divergenze di quiete() e il criterio per
+                                              il passo 3
     python -m calliope.stato --installa <azione>
                                               proposta, conferma da tastiera, scaricamento
                                               con avanzamento (stesso codice della voce)
@@ -357,6 +365,23 @@ def memoria_main(cfg, argv: list[str], as_json: bool) -> int:
     """`--memoria`: il conto della memoria e le classi delle attività, in sola lettura (14/10,
     passo 1 dell'arbitro della memoria)."""
     from . import arbitro_memoria as am, macchina
+    if "--storia" in argv:
+        from . import arbitro_ombra as AO
+        giorni = None
+        if "--giorni" in argv:
+            i = argv.index("--giorni")
+            try:
+                giorni = max(1, int(argv[i + 1]))
+            except (IndexError, ValueError):
+                print("--giorni vuole un numero")
+                return 1
+        st = AO.storia(AO.leggi(cfg.turn_log_dir, giorni))
+        if as_json:
+            print(json.dumps({"modo": AO.modo(cfg), "storia": st, "criterio": AO.criterio(st)},
+                             ensure_ascii=False, indent=2))
+        else:
+            print(AO.testo_storia(st, AO.modo(cfg)))
+        return 0
     uso = am.da_config(cfg)
     if "--inventario" in argv:
         i = argv.index("--inventario")

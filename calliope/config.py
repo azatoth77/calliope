@@ -1675,6 +1675,15 @@ class Config:
     # dettagli con `calliope stato --turni`. Il 07/10 erano 15,8, 28 su 41 falsi positivi
     # (docs/ricerche/2026-10-07-sicurezza-per-valore.md). Obiettivo ≤ 2; 0 = solo le ripetute
     attrito_avviso: float = 3.0
+    # L'arbitro della memoria (15/10, passo 2: docs/ricerche/2026-10-14-arbitro-memoria.md,
+    # calliope/arbitro_ombra.py). «ombra»: un thread leggero registra, a ogni richiesta di carico
+    # (embedding, corsia lenta, guardiano a posteriori, lavori dell'agente) e a ogni minuto, cosa
+    # avrebbe messo in coda, quando l'avrebbe fatto partire, chi avrebbe scaricato e la memoria
+    # vera; e conta quando la «voce ferma» di guardia, corsia lenta, embedding e agente diverge
+    # dalla definizione unica quiete(). Non carica e non scarica niente, non cambia nessuna
+    # decisione: serve a una settimana di registro prima del passo 3 (`calliope stato --memoria
+    # --storia`). «spento» (di serie): nessun thread, nessuna riga
+    arbitro_memoria: str = "spento"
     # Diagnostica: CALLIOPE_DEBUG_AUDIO registra ogni frase captata (WAV + trascrizione).
     debug_audio_dir: str | None = os.environ.get("CALLIOPE_DEBUG_AUDIO") or None
 
@@ -3246,7 +3255,7 @@ SEZIONI: dict[str, list[str]] = {
                 "notizie_db", "notizie_fatti"],
     "segreti": ["segreti_file"],
     "registro": ["turn_log_dir", "turn_log_days", "conserva_voce", "conserva_voce_mb",
-                 "latenza_avviso_s", "attrito_avviso", "debug_audio_dir"],
+                 "latenza_avviso_s", "attrito_avviso", "arbitro_memoria", "debug_audio_dir"],
     "rete": ["online"],
 }
 
@@ -3599,6 +3608,14 @@ def _stanza_guardia_valido(value):
     raise ValueError("serve «spenta», «ombra» o «attiva»")
 
 
+def _arbitro_memoria_valido(value):
+    """«spento» o «ombra» (15/10, calliope/arbitro_ombra.py, passo 2)."""
+    s = str(value or "").strip().lower()
+    if s in ("spento", "ombra"):
+        return s
+    raise ValueError("serve «spento» o «ombra»")
+
+
 def _si_no_auto_valido(value):
     """«auto», «si» o «no» (anche true/false: YAML legge «no» come false)."""
     if value is True:
@@ -3636,7 +3653,8 @@ VALIDATORI = {"llm_keep_alive": keep_alive_valido, "llm_num_ctx": _num_ctx_valid
               "eventi": _eventi_valido, "frasi_varianti": _frasi_varianti_valido,
               "stanza": _stanza_valido, "stanza_guardia": _stanza_guardia_valido,
               "fine_turno": _fine_turno_valido,
-              "stanza_lenta_ritrascrivi": _si_no_auto_valido}
+              "stanza_lenta_ritrascrivi": _si_no_auto_valido,
+              "arbitro_memoria": _arbitro_memoria_valido}
 
 
 def fuori_limiti(key: str, value) -> tuple[float, float] | None:
