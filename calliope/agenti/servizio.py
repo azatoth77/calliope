@@ -459,6 +459,8 @@ class Lavori:
         # Stessa GPU della voce (stesso Ollama, o vLLM sulla stessa macchina: 04/10)
         self.stessa_gpu = stessa_gpu(cfg, imp)
         condiviso = self.stessa_gpu and getattr(cfg, "agenti_precedenza_voce", True)
+        # L'arbitro della memoria in ombra (15/10): `su_carico(chi)` quando un lavoro parte
+        self.su_carico = None
         self.arbitro = Arbitro(condiviso, float(getattr(cfg, "agenti_ripresa_s", 3.0)),
                                pausa=pausa_server(cfg, imp, log) if condiviso else None,
                                log=log)
@@ -1153,6 +1155,9 @@ class Lavori:
                 lav.stato, lav.fine = "annullato", time.time()
                 continue
             self.corrente = lav
+            if self.su_carico is not None:
+                # L'arbitro della memoria in ombra (15/10, calliope/arbitro_ombra.py)
+                self.su_carico("agente")
             try:
                 self._esegui(lav)
             except Exception as e:  # noqa: BLE001 — un lavoro rotto non ferma la coda

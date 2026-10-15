@@ -252,6 +252,11 @@ class ArchivioConversazioni:
         # Conservazione.conoscenti_ids): le loro conversazioni sono su disco come quelle degli
         # adulti, e chi amministra le ritrova con `ospiti=true` insieme a quelle degli ospiti
         self.conoscenti_ids = None
+        # L'arbitro della memoria in ombra (15/10, calliope/arbitro_ombra.py): `ombra_quiete`
+        # confronta `inattiva` con quiete(), `su_carico(chi)` dice che un lotto di vettori o la
+        # domanda di una ricerca sta per chiedere il modello degli embedding. None: spento
+        self.ombra_quiete = None
+        self.su_carico = None
         # Il registro degli eventi su disco (calliope/eventi/registro.Disco), se c'è: «dimentica»
         # cancella anche lì
         self.eventi = None
@@ -330,7 +335,11 @@ class ArchivioConversazioni:
         self.ultima_attivita = time.monotonic()
 
     def inattiva(self) -> bool:
-        return time.monotonic() - self.ultima_attivita >= self.inattivita_s
+        risp = time.monotonic() - self.ultima_attivita >= self.inattivita_s
+        if self.ombra_quiete is not None:
+            # L'arbitro della memoria in ombra (15/10): accanto a quiete(), senza cambiarla
+            self.ombra_quiete("embedding", risp, self.inattivita_s)
+        return risp
 
     def _ollama(self):
         """(url, modello) se gli embedding sono su un Ollama (con il suo limite di modelli
@@ -562,6 +571,7 @@ class ArchivioConversazioni:
             extra = {"keep_alive": 0}
             if self.inattiva():
                 lotto = max(lotto, 64)
+        detto = False
         while self.coda.empty() and not self._fermo.is_set():
             if o is not None and not self.inattiva():
                 from . import ollama_carico as OC
@@ -575,6 +585,9 @@ class ArchivioConversazioni:
                     (emb.modello, lotto)).fetchall()
             if not righe:
                 return
+            if o is not None and self.su_carico is not None and not detto:
+                detto = True
+                self.su_carico("embedding", turni=len(righe))
             testi = [testo_turno({"domanda": d, "risposta": r,
                                   "azioni": json.loads(a or "[]")})[:2000]
                      for _, d, r, a in righe]
@@ -674,6 +687,8 @@ class ArchivioConversazioni:
                 self.ricerche_per_parole += 1
         if (self.embedder is not None and domanda.strip() and solo != "parole"
                 and vettori_ok):
+            if o is not None and self.su_carico is not None:
+                self.su_carico("embedding_ricerca")
             try:
                 import numpy as np
                 qv = self.embedder.vettori([domanda], domanda=True,

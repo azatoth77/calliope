@@ -429,6 +429,16 @@ class Arbitro:
         with self._cv:
             return self._occupata()
 
+    def occupata_ora(self) -> bool:
+        """Come `in_pausa`, ma senza toccare lo stato (la tenuta massima non libera niente):
+        per l'arbitro della memoria in ombra (15/10), che la legge ogni secondo."""
+        if not self.condiviso:
+            return False
+        with self._cv:
+            now = time.monotonic()
+            return ((self._attiva and now - self._dal <= self.tenuta_max_s)
+                    or now < self._fino)
+
     def deve_cedere(self, url: str | None = None) -> bool:
         """Lo stream di `url` (None: quello del server dell'agente) deve chiudersi? No se la
         pausa del server lo congela."""

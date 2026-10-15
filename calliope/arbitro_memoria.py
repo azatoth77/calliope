@@ -54,7 +54,17 @@ BUFFER_OLLAMA_GB = 0.35
 STIME_CARICO_S = {"whisper_lento": "~2–5 s [S]", "immagini": "5–15 s dal disco [S, ricerca 06/10]",
                   "agente": "~1 min a container rifatto con la cache di compilazione [M 04/10]; "
                             "sonno: da misurare",
-                  "embedding": "<1 s [S]"}
+                  "embedding": "1,5 s [M DGX 14/10]"}
+# Le misure vere sulla DGX del 14/10 (prove/manuali/misura_memoria_dgx.py, memoria unificata):
+# qwen3-embedding da caricato tiene ~6,7 GB di MemAvailable (non gli 0,6 di /api/ps: il
+# contesto e i buffer sulla CPU), whisper-server dei turni ne rende 2,6 quando si ferma (il
+# catalogo diceva 2,1); vLLM prenota 0,4 × 128,4 = 51,4 GB, cioè il conto di sempre in GB
+# (i 47,8 della ricerca erano GiB). Valgono solo sulla memoria unificata: sul portatile
+# l'embedding è sulla CPU e non tocca la VRAM
+MISURE_UNIFICATA_GB = {"embedding": 6.7, "whisper": 2.6}
+# Quanto chiederebbe un modello a richiesta (in ombra, passo 2): il secondo Whisper (large-v3,
+# pesi ggml 3,1 GB + calcolo, ricerca § 3.1) e FLUX.2 [klein] 4B (ricerca del 06/10)
+A_RICHIESTA_GB = {"whisper_lento": 3.6, "immagini": cat.IMMAGINI_GB}
 
 
 @dataclass
@@ -243,11 +253,19 @@ def conto(inv: dict, uso: Uso | None = None) -> Conto:
             ps = float(m["gb_gpu"])             # sulla GPU dedicata conta solo la parte lì
         cat_m = cat.MODELLI.get(modello) or cat.MODELLI.get(k.removesuffix(":latest"))
         stima = (ps + BUFFER_OLLAMA_GB) if ps else             (round(cat_m.pesi_gb + BUFFER_OLLAMA_GB, 2) if cat_m else 0.0)
+        tenuto = round(ps + BUFFER_OLLAMA_GB, 2) if ps else 0.0
+        misura = MISURE_UNIFICATA_GB.get(ruolo) if tipo == "unificata" else None
+        if misura:
+            # La misura vera della DGX vince sulla sottostima di /api/ps (15/10)
+            stima = max(stima, misura)
+            tenuto = max(tenuto, misura) if ps else 0.0
         c.occupanti.append(Occupante(
             ruolo, modello, classe, "ollama",
-            gb=round(ps + BUFFER_OLLAMA_GB, 2) if ps else 0.0, gb_pieno=round(stima, 2),
+            gb=tenuto, gb_pieno=round(stima, 2),
             caricato=m is not None if o else None,
-            fonte=("/api/ps + buffer (sottostima: da misurare)" if m is not None else
+            fonte=(("misura della DGX 14/10" if misura else
+                    "/api/ps + buffer (sottostima: da misurare)") if m is not None else
+                   "misura della DGX 14/10" if misura else
                    "catalogo" if cat_m else "—") + (f", contesto {m.get('contesto')}"
                                                     if m is not None and m.get("contesto")
                                                     else ""),
@@ -269,12 +287,16 @@ def conto(inv: dict, uso: Uso | None = None) -> Conto:
     # Nel processo: c'è se il processo di Calliope gira (misurato), altrimenti non si sa
     attivo = ws.get("attivo") if u.whisper == "server" else (
         True if u.processo_gb is not None else None)
+    gbw, fontew = w.memoria_gb, f"catalogo: {w.fonte}"
+    if u.whisper == "server" and tipo == "unificata":
+        gbw = max(gbw, MISURE_UNIFICATA_GB["whisper"])
+        fontew = "misura della DGX 14/10 (memoria resa alla fermata)"
     c.occupanti.append(Occupante(
         "whisper", f"{w.nome}, {w.motore}" + (" (servizio calliope-whisper)"
                                                if u.whisper == "server" else " (nel processo)"),
         TEMPO_REALE, "whisper.cpp" if u.whisper == "server" else "processo",
-        gb=w.memoria_gb if attivo else 0.0, gb_pieno=w.memoria_gb, caricato=attivo,
-        fonte=f"catalogo: {w.fonte}", scarica="mai", ricarica="systemctl --user start "
+        gb=gbw if attivo else 0.0, gb_pieno=gbw, caricato=attivo,
+        fonte=fontew, scarica="mai", ricarica="systemctl --user start "
         "calliope-whisper" if u.whisper == "server" else "con Calliope", dal_passo=0))
     if u.guardiano:
         da_ollama("guardiano", u.guardiano, TEMPO_REALE, "mai (minori e ospiti)",
@@ -416,6 +438,102 @@ def proposta(c: Conto, gb: float, per: str = "", passo: int = 99) -> Proposta:
     if not p.ci_sta:
         p.note = "non ci sta neanche scaricando tutto lo sfondo: niente (mai il tempo reale)"
     return p
+
+
+def tempo_reale_toccato(c: Conto, p: Proposta) -> list[str]:
+    """I ruoli del tempo reale (o non di Calliope) che la proposta scaricherebbe: deve essere
+    sempre vuoto (§ 4.1). È il controllo del criterio del passo 2, non una regola nuova."""
+    vietati = {o.ruolo for o in c.occupanti if o.classe in (TEMPO_REALE, "fuori")}
+    return [r for r in p.scaricherebbe if r in vietati]
+
+
+# ─────────────────────────── una sola «voce ferma» (passo 2) ───────────────────────────
+class Quiete:
+    """La definizione unica di «voce ferma» (§ 4.4 della ricerca, passo 2 dell'arbitro, 15/10):
+    nessuno che parla a Calliope (il VAD della corsia locale, `voce_occupata`/`voce_libera`, e
+    un satellite che ha appena mandato un comando), nessuna risposta del modello in corso (il
+    varco delle corsie), nessuna frase di un turno che aspetta Whisper, la coda della stanza
+    vuota. `quiete(secondi)`: tutto questo è vero adesso **e** da almeno `secondi`.
+
+    I segnali sono funzioni senza argomenti (True = occupata) messe da main.py: si chiamano a
+    ogni `quiete()` e a ogni `campiona()` (il thread dell'arbitro in ombra, ogni secondo), che
+    tengono l'ultimo momento in cui qualcosa era occupato. Costo: qualche lettura di attributi e
+    un lock breve, niente rete né programmi: si può chiamare anche dai thread dei lavori.
+
+    In ombra (passo 2) nessuno decide con questa funzione: guardia, corsia lenta, embedding e
+    arbitro dell'agente decidono come prima e l'arbitro in ombra conta quando le risposte
+    divergono (`calliope stato --memoria --storia`)."""
+
+    def __init__(self, orologio=None):
+        import threading
+        import time
+        self._ora = orologio or time.monotonic
+        self._lock = threading.Lock()
+        self.segnali: list[tuple[str, object]] = []
+        self._voce = False
+        self._ultimo_occupato = self._ora()     # all'avvio: si conta come appena occupata
+        self.ultimo_motivo = "avvio"
+
+    # ── il VAD (come l'arbitro dell'agente e la compressione) ──
+    def voce_occupata(self, *a, **k):
+        with self._lock:
+            self._voce = True
+            self._ultimo_occupato = self._ora()
+            self.ultimo_motivo = "voce"
+
+    def voce_libera(self, *a, **k):
+        with self._lock:
+            if self._voce:
+                self._ultimo_occupato = self._ora()
+            self._voce = False
+
+    def segna(self, motivo: str = "turno"):
+        """Un fatto della voce senza durata (un turno appena finito): conta come occupata."""
+        with self._lock:
+            self._ultimo_occupato = self._ora()
+            self.ultimo_motivo = motivo
+
+    def occupata(self) -> str:
+        """Il motivo per cui la voce è occupata adesso ("" se libera). Nel dubbio occupata."""
+        if self._voce:
+            return "voce"
+        for nome, f in list(self.segnali):
+            try:
+                if f():
+                    return nome
+            except Exception:  # noqa: BLE001 — come guardia e corsia lenta: nel dubbio occupata
+                return nome
+        return ""
+
+    def campiona(self) -> str:
+        motivo = self.occupata()
+        if motivo:
+            with self._lock:
+                self._ultimo_occupato = self._ora()
+                self.ultimo_motivo = motivo
+        return motivo
+
+    def ferma_da(self) -> float:
+        """Secondi di voce ferma adesso (0 se occupata)."""
+        if self.campiona():
+            return 0.0
+        with self._lock:
+            return max(0.0, self._ora() - self._ultimo_occupato)
+
+    def __call__(self, secondi: float = 0.0) -> bool:
+        if self.campiona():
+            return False
+        with self._lock:
+            return self._ora() - self._ultimo_occupato >= float(secondi or 0.0)
+
+
+# La «voce ferma» del processo: main.py le dà i segnali con l'arbitro in ombra acceso
+QUIETE = Quiete()
+
+
+def quiete(secondi: float = 0.0) -> bool:
+    """La voce è ferma da almeno `secondi`? (la definizione unica, § 4.4)"""
+    return QUIETE(secondi)
 
 
 # ─────────────────────────── testo per il terminale ───────────────────────────

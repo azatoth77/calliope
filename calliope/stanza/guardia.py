@@ -326,6 +326,11 @@ class Guardia:
         # La ripresa dal disco (14/10 sera): da fare al primo giro, per i satelliti non in pausa
         self._ripresa = True
         self._ripresa_fatti: set = set()
+        # L'arbitro della memoria in ombra (15/10, calliope/arbitro_ombra.py): `ombra_quiete`
+        # mette la decisione di `libera` accanto a quiete() (non la cambia), `su_carico` dice
+        # che un giudizio comincia. None: spento
+        self.ombra_quiete = None
+        self.su_carico = None
         self._riprendi_misure()
         self._fermo = threading.Event()
         self._thread = None
@@ -363,10 +368,15 @@ class Guardia:
                 occ = occ or bool(f())
             except Exception:  # noqa: BLE001 — nel dubbio è occupata
                 occ = True
+        quiete_s = float(self._cfg("stanza_guardia_quiete_s", 5.0))
         if occ:
             self._libera_da = ora
-            return False
-        return ora - self._libera_da >= float(self._cfg("stanza_guardia_quiete_s", 5.0))
+            libera = False
+        else:
+            libera = ora - self._libera_da >= quiete_s
+        if self.ombra_quiete is not None:
+            self.ombra_quiete("guardia", libera, quiete_s)
+        return libera
 
     def _sotto_tetto(self) -> bool:
         tetto = int(self._cfg("stanza_guardia_giudizi_ora", 30))
@@ -743,6 +753,8 @@ class Guardia:
             return True
         self._fatti.append(time.monotonic())
         self.giudizi += 1
+        if self.su_carico is not None:
+            self.su_carico("guardia", righe=len(b.giudicate))
         t0 = time.perf_counter()
         try:
             res = self.giudice(b)

@@ -7,6 +7,8 @@ sola lettura, `calliope stato --memoria`) e lo script di misura
 i numeri «[D]» sono di Dario (14/10), quelli «[M]» misure nostre di prima, «[S]» stime da
 verificare con lo script, «[V]» documentazione verificata.*
 
+*Aggiornamento del 15/10: il **passo 2** è fatto, in ombra (`calliope/arbitro_ombra.py`, `arbitro_memoria: ombra`, `calliope stato --memoria --storia`): § 4.4 e § 7 qui sotto. Le misure vere della DGX del 14/10 sono nel conto (§ 3.1).*
+
 ## 0. In breve
 
 - **Il problema.** Sulla DGX la memoria unificata è una sola (119 GiB): oggi ne sono usati 97 e ne
@@ -62,12 +64,12 @@ stesse opzioni (stanza/lenta.py, riassunti): è sfondo per il calcolo, tempo rea
 
 | Chi | Classe | GiB | Come si legge |
 |---|---|---|---|
-| vLLM agente (Qwen3.6-35B NVFP4, `gpu_memory_utilization` 0,4) | sfondo | 47,8 | prenotata all'avvio: 0,4 × 119,5 |
+| vLLM agente (Qwen3.6-35B NVFP4, `gpu_memory_utilization` 0,4) | sfondo | 47,8 *[GiB; misurati il 14/10 51,4 GB = 0,4 × 128,4 GB, lo stesso numero]* | prenotata all'avvio: 0,4 × 119,5 |
 | gemma4 26B (voce) | tempo reale | 15 | `/api/ps` (sottostima) |
 | llama-guard3 8B | tempo reale | 5,3 | `/api/ps` |
 | gemma4 e4b (rilevatore) | tempo reale | 3,1 | `/api/ps` |
-| qwen3-embedding 0,6B (CPU) | sfondo | 0,6 quando c'è | `/api/ps`; sulla CPU, ma la memoria è la stessa |
-| whisper-server turbo | tempo reale | 2,1 | [M 05–07/10] |
+| qwen3-embedding 0,6B (CPU) | sfondo | 0,6 quando c'è *[storico: misurato il 14/10 ~6,7 GB di MemAvailable da caricato, caricamento 1,5 s]* | `/api/ps`; sulla CPU, ma la memoria è la stessa |
+| whisper-server turbo | tempo reale | 2,1 *[15/10: rende 2,6 GB quando si ferma, misura del 14/10]* | [M 05–07/10] |
 | Piper sulla GPU, CAM++, VAD, processo | tempo reale | ~1,5 + RSS | [M 07/10] per Piper; il processo da misurare |
 | **Calliope** | | **~75–78** | |
 | sistema, cache dei file non recuperabile, altri container (open-webui, database, CRM…) | — | ~19–22 | il resto: 97 usati − Calliope |
@@ -144,7 +146,9 @@ Calliope, nessuna risposta in corso, nessuna frase che aspetta Whisper, la coda 
 Oggi le stesse condizioni sono scritte in tre posti (`stanza/guardia.libera`, `stanza/lenta.libera`,
 `conversazioni.inattiva`) più l'arbitro dell'agente (`voce_occupata`/`voce_libera`). Il passo 2 le
 riunisce in una funzione dell'arbitro (`quiete(secondi)`) che gli altri chiamano; finché è in ombra
-non cambia niente. Un caricamento già cominciato **non si interrompe** (Ollama e whisper-server non
+non cambia niente.
+
+*15/10, passo 2 fatto: `arbitro_memoria.quiete(secondi)` c'è (VAD della voce, risposta in corso, frase che aspetta Whisper, comando da un satellite, coda della stanza). **Riunire le quattro definizioni senza cambiare il comportamento non si può**: guardia e corsia lenta guardano varco, satellite e Whisper (la lenta anche la coda della stanza) da 5 s, `conversazioni.inattiva` solo i turni archiviati e le ricerche da 10 minuti (senza VAD), l'arbitro dell'agente solo il VAD e la risposta più `agenti_ripresa_s`. Restano come sono; l'ombra mette ogni loro decisione accanto a `quiete()` e conta le divergenze nelle due direzioni (`calliope stato --memoria --storia`). Quali passare a `quiete()` si decide dopo la settimana di registro.* Un caricamento già cominciato **non si interrompe** (Ollama e whisper-server non
 lo permettono): per questo si comincia solo con la voce ferma, e un caricamento lungo (il livello 2 di
 vLLM) solo se nessun turno è arrivato negli ultimi minuti.
 
@@ -225,7 +229,7 @@ vLLM si decide solo dopo le misure (passo 4).
 
 1. **Conto e misure** (questo, 14/10): classi, conto in sola lettura (`calliope stato --memoria`), script di
    misura. Nessun comportamento cambiato.
-2. **Arbitro in ombra**: un thread che a ogni richiesta di carico (embedding, corsia lenta, guardiano a
+2. **Arbitro in ombra** (**fatto il 15/10**, ramo `arbitro-memoria-2`: `calliope/arbitro_ombra.py`, `arbitro_memoria: ombra` di serie spento; la funzione unica c'è ma i quattro posti decidono come prima e si confrontano, § 4.4): un thread che a ogni richiesta di carico (embedding, corsia lenta, guardiano a
    posteriori, lavori dell'agente) e a ogni minuto scrive nel registro cosa **avrebbe** messo in coda,
    quando l'avrebbe fatto partire e chi avrebbe scaricato; la funzione unica `quiete()`; in
    `calliope stato --memoria --storia` la memoria libera minima del giorno e quante volte un a richiesta

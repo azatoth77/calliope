@@ -138,6 +138,7 @@ class Servizi:
     cancelli: object = None              # cancelli.Cancelli: i segnali da verificare (09/10)
     stanza: object = None                # stanza.Stanza: la conversazione di stanza (13/10)
     guardia_stanza: object = None        # stanza.guardia.Guardia: a posteriori (14/10, passo 6)
+    arbitro_ombra: object = None         # arbitro_ombra.Ombra: l'arbitro della memoria (15/10)
     cancelli_percorso: object = None     # dove si salvano (10/10, main.py); None = in memoria
     # La fine del turno System 1 in ombra (14/10, system1.fine_turno.OmbraFineTurno), o None
     fine_turno: object = None

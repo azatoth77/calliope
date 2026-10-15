@@ -252,6 +252,7 @@ class Avvio:
         self._brain_e_compressione()
         self._corsia_locale()
         self._guardia_stanza()
+        self._arbitro_memoria()
         self._modello_e_saluto()
         self._barge_in()
         self.modalita.ascoltatori.append(self.applica_modalita)
@@ -933,6 +934,57 @@ class Avvio:
             s.guardia_stanza = None
         if s.guardia_stanza is not None:
             atexit.register(s.guardia_stanza.chiudi)
+
+    def _arbitro_memoria(self):
+        """L'arbitro della memoria in ombra (15/10, passo 2, calliope/arbitro_ombra.py): con
+        `arbitro_memoria: ombra` la «voce ferma» unica (arbitro_memoria.QUIETE) riceve i segnali
+        di tutti, chi chiede un carico lo dice all'ombra, e i quattro posti che decidono da sé
+        quando la voce è ferma mettono la loro risposta accanto a quella di quiete(). Nessuna
+        decisione cambia; niente caricamenti né scaricamenti."""
+        from . import arbitro_memoria as am
+        from . import arbitro_ombra as AO
+        s, cfg = self.s, self.cfg
+        if AO.modo(cfg) != AO.OMBRA:
+            return
+        q = am.QUIETE
+        varco, stt, st = self.varco, s.stt, s.stanza
+        segnali = [("risposta", lambda: varco.attivi > 0)]
+        if callable(getattr(stt, "aspetta_turno", None)):
+            segnali.append(("whisper", stt.aspetta_turno))
+        if st is not None:
+            def satellite():
+                ora = time.monotonic()
+                return any(ora - t < 2.0 for t in list(getattr(st, "_comando", {}).values()))
+            segnali += [("satellite", satellite), ("stanza", lambda: st.in_coda() > 0)]
+        q.segnali = segnali
+        # Il VAD: con più corsie la voce è ferma solo quando nessuna la tiene (come l'arbitro
+        # dell'agente); i satelliti li prendono da `parlato` (_ciclo_locale, dopo di qui)
+        occupa, libera = q.voce_occupata, q.voce_libera
+        if self.insieme:
+            occupa, libera = corsie.condivisa(occupa, libera)
+        listener = self.listener
+        prima_inizio, prima_fine = listener.on_speech_start, listener.on_speech_end
+
+        def inizio_parlato():
+            occupa()
+            if prima_inizio is not None:
+                prima_inizio()
+
+        def fine_parlato():
+            libera()
+            if prima_fine is not None:
+                prima_fine()
+        listener.on_speech_start, listener.on_speech_end = inizio_parlato, fine_parlato
+        ombra = s.arbitro_ombra = AO.load_ombra(cfg, log=lambda m: print(m, flush=True))
+        atexit.register(ombra.chiudi)
+        guardia_st = getattr(s, "guardia_stanza", None)
+        lenta = getattr(st, "lenta", None) if st is not None else None
+        for x in (guardia_st, lenta, self.conv_arch):
+            if x is not None:
+                x.ombra_quiete, x.su_carico = ombra.confronta, ombra.richiesta
+        if s.lavori is not None:
+            s.lavori.su_carico = ombra.richiesta
+            ombra.arbitro_agente = s.lavori.arbitro
 
     def activate_library(self) -> bool:
         """Biblioteca appena scaricata: si apre, il tool compare e il prompt la nomina, senza
