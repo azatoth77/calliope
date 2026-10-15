@@ -234,6 +234,9 @@ def togli_testo(rec: dict) -> dict:
         rec["tool"] = [{k: v for k, v in ev.items() if k != "argomenti"}
                        for ev in rec["tool"] if isinstance(ev, dict)]
     rec.pop("approfondimento", None)
+    if isinstance(rec.get("dopo_tool"), dict) and "frase" in rec["dopo_tool"]:
+        # La frase del codice dopo un tool (15/10, system1/dopo_tool.py): parole
+        rec["dopo_tool"] = {k: v for k, v in rec["dopo_tool"].items() if k != "frase"}
     return rec
 
 
@@ -586,7 +589,8 @@ def ripulisci_turni(cartella, tieni, lock=None) -> dict:
 def _ha_testo(rec: dict) -> bool:
     return any(isinstance(rec.get(k), str) and rec.get(k) for k in CAMPI_TESTO) or bool(
         rec.get("stt_corretta")) or any(isinstance(ev, dict) and ev.get("argomenti")
-                                        for ev in rec.get("tool") or ())
+                                        for ev in rec.get("tool") or ()) or (
+        isinstance(rec.get("dopo_tool"), dict) and bool(rec["dopo_tool"].get("frase")))
 
 
 # Le tabelle di memoria.db con il testo dei ragazzi che scadono con la stessa tenuta (12/10

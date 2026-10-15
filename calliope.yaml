@@ -345,6 +345,20 @@ llm:
   # «tutti» se un tool fuori dal nucleo arriva entro questo margine di somiglianza dal
   # migliore del nucleo (0,10: nessun tool mancato sul banco del 15/10, uno a 0,05)
   preselezione_margine: 0.1
+  # La frase dopo il tool, System 1 (15/10, calliope/system1/dopo_tool.py; roadmap 3.12):
+  # sulla DGX un turno con un tool ha la prima frase ~0,9 s dopo uno senza (2,71 contro 1,77 s
+  # il 14/10), quasi tutta la seconda passata del modello che rimette in parole il risultato.
+  # Per gli esiti semplici e chiusi (timer, promemoria, liste, volume, ora, data, calcoli) la
+  # frase pronta del tool basta; nel dubbio (più tool, errore, dati da riassumere, un minore,
+  # testo del modello, una domanda o più frasi della persona…) decide il modello come oggi.
+  # «spento» (di serie): niente. «ombra»: si fa comunque la seconda passata, e il registro dei
+  # turni scrive la frase del codice, il tempo risparmiabile e se il modello ha detto la stessa
+  # cosa (`calliope stato --turni`). «attivo»: niente seconda passata per i casi coperti
+  # (regola `dopo_tool_codice`). Spento di serie finché l'ombra della DGX non dice quante
+  # frasi del codice sarebbero state diverse da quelle del modello
+  system1_dopo_tool: spento
+  # Le parole della frase della persona oltre cui decide il modello (forse chiede altro)
+  system1_dopo_tool_parole_max: 16
 
 stt:
   # Speech-to-Text — faster-whisper
