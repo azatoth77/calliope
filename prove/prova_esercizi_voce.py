@@ -27,6 +27,7 @@ bambina di terza e quarta elementare; qui solo nomi di fantasia). Niente modelli
 
 import datetime
 import json
+import re
 import sqlite3
 import sys
 import tempfile
@@ -429,7 +430,8 @@ b = brain_finto([[("text", "Che bello giocare!")],
 b.set_pending(out["in_sospeso"])
 detto = "".join(b.stream_reply("rendili più giocosi", "familiare"))
 verifica("domanda inventata dopo la spinta: non si dice, al suo posto quella del programma",
-         "125 più 87" not in detto and voce in detto, detto)  # 125 può esserci
+         not re.search(r"(?<!\d)125 più 87(?!\d)", detto) and voce in detto,
+         (detto, voce))
 verifica("regole spinta_esercizi ed esercizi_domanda_inventata",
          {"spinta_esercizi", "esercizi_domanda_inventata"} <= set(b.rules_fired()),
          b.rules_fired())
@@ -447,9 +449,11 @@ verifica("contrario: una frase d'altro dopo la spinta si dice",
 b = brain_finto([[("text", "Allora, quanto fa 2 più 2?")],
                  [("text", "Facciamo così: quanto fa 3 più 3?")]], "Teo")
 detto = "".join(b.stream_reply("dai, un altro", "familiare"))
+# I numeri della domanda vera sono a caso: «Quanto fa 443 più 353?» contiene «3 più 3» (caduta
+# di una volta su ~45, 14–15/10: la prova, non il codice, né il carico). Il numero intero
 verifica("sessione aperta senza l'azione in sospeso: spinta e domanda vera",
-         "spinta_esercizi" in b.rules_fired() and voce in detto and "3 più 3" not in detto,
-         detto)
+         "spinta_esercizi" in b.rules_fired() and voce in detto
+         and not re.search(r"(?<!\d)3 più 3(?!\d)", detto), (detto, voce))
 chiama({"azione": "fine"}, "Teo")
 
 testo = "Certo! Te lo scrivo qui nella conversazione. Un negozio ha 150 scatole."

@@ -1026,6 +1026,33 @@ def prova_chiamata_in_mezzo():
     pezzi = list(b.stream_reply("Che ore sono?", "amministra"))
     verifica("senza nomi di tool: le frasi escono appena finite", pezzi,
              ["Adesso sono le dieci in punto. ", "Ti serve altro?"])
+    # 15/10: un nome senza «_» («ricorda», «calcola») scritto come chiamata in mezzo alla
+    # frase («Ricorda che a Dario piace la pizza», 03/10): TextCallGuard guarda solo la testa
+    b = brain_finto([[("text", "Certo! ricorda(fatto=\"A Dario piace la pizza\")")],
+                     [("text", "Ho salvato che a Dario piace la pizza.")]])
+    import json as _json
+    chiamate = []
+    b.tools.call = lambda nome, args, *a, **k: (chiamate.append((nome, args)), _json.dumps(
+        {"ok": True, "ora": "A Dario piace la pizza."}))[1]
+    detto = "".join(b.stream_reply("Ricorda che a Dario piace la pizza.", "amministra"))
+    verifica("«ricorda(…)» in mezzo alla frase: eseguito, la chiamata non si dice",
+             (detto, chiamate, b.last_rules[:1]),
+             ("Certo! Ho salvato che a Dario piace la pizza.",
+              [("ricorda", {"fatto": "A Dario piace la pizza"})], ["chiamata_in_mezzo"]))
+    b = brain_finto([[("text", "Faccio il conto: calcola{espressione: 12*12}")],
+                     [("text", "Fa 144.")]])
+    detto = "".join(b.stream_reply("Quanto fa 12 per 12?", "amministra"))
+    verifica("«calcola{…}» in mezzo alla frase: eseguito",
+             (detto, [t["nome"] for t in b.last_tools], b.last_rules[:1]),
+             ("Fa 144.", ["calcola"], ["chiamata_in_mezzo"]))
+    # contrari: le stesse parole nel parlato restano frasi (anche con una parentesi staccata)
+    for frase in ("Ricorda di comprare il pane, domani.", "Calcola tu: fa 144.",
+                  "Ricorda (se vuoi) di chiamare la mamma.",
+                  "Dimentica pure quello che ti ho detto, non importa."):
+        b = brain_finto([[("text", frase)]])
+        detto = "".join(b.stream_reply("Dimmi qualcosa.", "amministra"))
+        verifica(f"contrario: «{frase}» si dice, nessun tool",
+                 (detto, b.last_tools, b.last_rules), (frase, [], []))
 
 
 def prova_sospeso_per_persona():

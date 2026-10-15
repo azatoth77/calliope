@@ -20,7 +20,10 @@ ciò che riceve con il WAV d'origine (correlazione, durata, ritmo); anche con il
 microfono forzato a 22 050 Hz (il caso iOS: contesto a una frequenza diversa dalla traccia),
 che la pagina deve rifare alla frequenza della traccia. Con le correzioni del browser accese e
 spente (misura). Con faster-whisper e il modello «small» in cache, la frase ricevuta si
-trascrive giusta (e, per confronto, quella accelerata come su iOS no).
+trascrive giusta; con `--misure`, per confronto, anche quella accelerata e rallentata come su
+iOS (non si verifica: è una misura, e costava fino a 2 minuti, vedi sotto).
+
+    python prove\prova_telefono_audio.py [--secco] [--misure]
 """
 
 import json
@@ -314,9 +317,13 @@ def parte_browser(amb, tok):
     if mod is not None:
         t = trascrivi(mod, f16, "it")
         MISURE["whisper_originale"] = t
-        # Per confronto, la stessa frase come la riceveva Calliope dal telefono se l'hardware
-        # va a 24 kHz sotto un contesto a 48 kHz (ritmo ×2), senza lingua come whisper.cpp -l
-        # auto e con -l it
+    # Per confronto, la stessa frase come la riceveva Calliope dal telefono se l'hardware va a
+    # 24 kHz sotto un contesto a 48 kHz (ritmo ×2), senza lingua come whisper.cpp -l auto e con
+    # -l it. Solo con --misure (15/10): non si verifica niente, e sull'audio accelerato con -l it
+    # Whisper ripete frasi fino alla fine della finestra; con il portatile carico (20 processi
+    # pieni) quella sola trascrizione durava 122 s, la prova intera 290 s contro i 300 del runner
+    # (le cadute «tempo scaduto» del 13/10 e del 14/10 mattina); senza carico 91 s in tutto
+    if mod is not None and "--misure" in sys.argv:
         veloce = D.ricampiona(f16, 16000, 8000)
         MISURE["whisper_accelerata_x2_auto"] = trascrivi(mod, veloce)
         MISURE["whisper_accelerata_x2_it"] = trascrivi(mod, veloce, "it")
@@ -374,8 +381,13 @@ def parte_browser(amb, tok):
                     "rms_db": mis.get("rms_uscita_db"), "tono": mis.get("tono_hz"),
                     "ricostruito": pm.get("ricostruito"), "problemi": D.problemi(mis, amb.cfg)}
                 senza = mis["etichetta"] == "senza correzioni"
+                # Il ritmo (audio del contesto contro l'orologio) guarda i guasti del telefono,
+                # ×1,5 e ×2. Con il portatile carico il microfono finto di Chromium a 44,1 kHz
+                # perde audio (14/10: ritmo 0,923 e 0,942, cioè 7,4 s in 8 s veri, mentre i
+                # 16 kHz tornavano col contesto al centesimo): la catena di Calliope si controlla
+                # esatta (16 kHz contro contesto), l'orologio con 0,15
                 verifica(f"{nome}, {mis['etichetta']}: durata giusta (16 kHz contro orologio)",
-                         abs(dur - mis["durata_contesto_s"]) < 0.1 and abs(mis["ritmo"] - 1) < 0.05,
+                         abs(dur - mis["durata_contesto_s"]) < 0.1 and abs(mis["ritmo"] - 1) < 0.15,
                          f"{dur:.2f} s a 16 kHz, {mis['durata_contesto_s']} s di contesto, "
                          f"{mis['durata_vera_s']} s veri")
                 # Senza correzioni il segnale deve essere quello del file; con le correzioni

@@ -27,6 +27,7 @@ CREATE_SUSPENDED = 0x00000004
 CREATE_NO_WINDOW = 0x08000000
 CREATE_NEW_PROCESS_GROUP = 0x00000200
 BELOW_NORMAL_PRIORITY_CLASS = 0x00004000
+HIGH_PRIORITY_CLASS = 0x00000080
 
 _JOB_OBJECT_LIMIT_ACTIVE_PROCESS = 0x00000008
 _JOB_OBJECT_LIMIT_PROCESS_MEMORY = 0x00000100
@@ -107,6 +108,8 @@ if sys.platform == "win32":
     _k32.AssignProcessToJobObject.argtypes = (wintypes.HANDLE, wintypes.HANDLE)
     _k32.TerminateJobObject.restype = wintypes.BOOL
     _k32.TerminateJobObject.argtypes = (wintypes.HANDLE, wintypes.UINT)
+    _k32.SetPriorityClass.restype = wintypes.BOOL
+    _k32.SetPriorityClass.argtypes = (wintypes.HANDLE, wintypes.DWORD)
     _k32.CloseHandle.restype = wintypes.BOOL
     _k32.CloseHandle.argtypes = (wintypes.HANDLE,)
     _ntdll = ctypes.WinDLL("ntdll")
@@ -123,6 +126,7 @@ class JobObject:
         if not disponibile():
             raise OSError("i job object ci sono solo su Windows")
         self.handle = _k32.CreateJobObjectW(None, None)
+        self._processi: list[subprocess.Popen] = []
         if not self.handle:
             raise ctypes.WinError(ctypes.get_last_error())
         info = _EXTENDED_LIMIT()
@@ -151,9 +155,20 @@ class JobObject:
         handle = int(proc._handle)      # noqa: SLF001 — l'handle del processo di Popen
         if not _k32.AssignProcessToJobObject(self.handle, handle):
             raise ctypes.WinError(ctypes.get_last_error())
+        self._processi.append(proc)
 
     def termina(self, codice: int = 1):
+        """Ferma tutti i processi del job. Prima porta a priorità alta quelli assegnati qui
+        (15/10): per uscire un processo deve ancora girare, e la sandbox parte «sotto il
+        normale». Con il portatile carico (30 processi pieni su 24 core) un `while True`
+        fermato dal tempo massimo usciva dopo 4–9 s (con la priorità alzata prima: 0,02 s), e
+        oltre i 5 s di `proc.wait` della sandbox: «tempo massimo: processo fermato» di
+        prova_agenti cadeva sotto carico (8,5 e 9,6 s il 14/10). Il limite di priorità del job
+        (JOB_OBJECT_LIMIT_PRIORITY_CLASS) non bastava: 2,6–5 s come prima."""
         if self.handle:
+            for proc in self._processi:
+                if proc.poll() is None:
+                    _k32.SetPriorityClass(int(proc._handle), HIGH_PRIORITY_CLASS)  # noqa: SLF001
             _k32.TerminateJobObject(self.handle, codice)
 
     def close(self):

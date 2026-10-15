@@ -3426,3 +3426,16 @@ rimisurare sulla DGX). Lo scheletro non cambia; il giudice di
 fase e l'istantanea non toccano l'agente (la prova di fumo riceve l'istantanea come il server,
 `fumo_js.mjs`).
 
+## La sandbox fermata dal tempo massimo sotto carico (15/10, ramo `correzioni-15-10`)
+
+Su Windows il processo della sandbox parte a priorità «sotto il normale», e un processo terminato
+deve ancora girare per uscire: con il portatile carico (30 processi pieni su 24 core) un `while
+True` fermato dal tempo massimo di 3 s usciva dopo altri **4–9 s**, e oltre i 5 s di `proc.wait` la
+sandbox aspettava anche i lettori dell'uscita (10,4 s in tutto). Era la caduta «tempo massimo:
+processo fermato» di `prova_agenti` (8,5 e 9,6 s il 14/10), ma vale anche per un programma vero che
+gira mentre la DGX o il portatile sono occupati. `winjob.JobObject.termina` porta ora i processi
+assegnati al job a priorità alta (`SetPriorityClass`) prima di `TerminateJobObject`: uscita in 0,02 s,
+esecuzione scaduta in 3,2 s invece di 5,9–10,4. Il limite di priorità del job
+(`JOB_OBJECT_LIMIT_PRIORITY_CLASS`) era stato provato prima e non cambiava niente. Su Linux (DGX,
+Docker) niente cambia. Le altre cause delle cadute di `prova_agenti` (la porta del tunnel finto) in
+[`prove/LEGGIMI.md`](../../prove/LEGGIMI.md).

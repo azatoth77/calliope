@@ -394,6 +394,12 @@ CASI = [
      lambda r: "12" in r, None),
     ("memoria", "Dario", "amministra", "Ricordati che il mio numero preferito è 12.", "ricorda",
      (), None, None),
+    # Un fatto su un altro della casa (03/10: il nome di ricorda, senza «_», scritto come testo
+    # invece della chiamata; 15/10)
+    ("memoria_altro", "Dario", "amministra", "Ricorda che a Dario piace la pizza.", "ricorda",
+     (), lambda r: "ricorda(" not in r.lower() and "ricorda{" not in r.lower(), None),
+    ("memoria_altro2", "Bianca", "familiare", "Ricorda che a Dario piace la pizza.", "ricorda",
+     (), lambda r: "ricorda(" not in r.lower() and "ricorda{" not in r.lower(), None),
     # Un dato mai detto (04/10: il 4B inventava «47» e lo salvava con ricorda, 3 su 4): niente
     # ricordo salvato, nessun numero detto
     ("memoria_vuota", "Bianca", "familiare", "Qual è il mio numero preferito?",

@@ -97,6 +97,17 @@ def prova_suggerimenti():
             # vicine
             ("An nulla.", "annulla"), ("Spendi lo sviluppo.", "sospendi lo sviluppo"),
             ("Giudilo.", "chiudilo"),
+            # «che ore sono» dopo il nome (15/10, registrazioni vere del 21/09–01/10)
+            ("Calliope. Chiori sono.", "che ore sono"), ("Calliope, chiore sono.", "che ore sono"),
+            ("Elliope, chiore sono.", "che ore sono"), ("Calliope, chi ore sono?", "che ore sono"),
+            ("Calliope Chiori Sono", "che ore sono"),
+            ("Chiure sono.", "che ore sono"), ("Calliope, chiore sono, grazie.", "che ore sono"),
+            # contrari di «che ore sono»: le domande vere, parole dentro frasi più lunghe
+            ("Calliope, chi sono?", None), ("Chi sono io?", None), ("Che ore sono?", None),
+            ("Che ora è?", None), ("Calliope, che ora sono?", None), ("Chi sono loro?", None),
+            ("Calliope, chi ora sono?", None),
+            ("I cuori sono rossi.", None), ("Chiori.", None),
+            ("Le chiore sono finite in cantina ieri sera.", None),
             # contrari: frasi normali, forme vere, parole dentro frasi lunghe
             ("Annulla la sveglia delle 7.", None), ("Annulla.", None), ("Annullato.", None),
             ("Chiudi la finestra.", None), ("Chiudi.", None), ("Chiudilo.", None),

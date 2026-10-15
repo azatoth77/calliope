@@ -640,8 +640,48 @@ def prova_foto_con_allegati_e_politica():
              "webcam" in politica._cosa(politica.classe_di("pc_guarda"), {"cosa": "webcam"}))
 
 
+def prova_spinta_pc():
+    """15/10: con una foto già nella conversazione, una frase che nomina lo schermo o la webcam
+    riceve la spinta IMG_PC_MSG (regola `foto_spinta_pc`; e4b chiamava pc_guarda 0/5 e 0/3, con
+    la spinta 5/5 e 5/5). Contrari: nessuna foto, nessun pc_guarda, la foto appena arrivata (lì
+    vale IMG_TURN_MSG), una frase che non nomina né schermo né webcam."""
+    from calliope.brain import IMG_PC_MSG
+
+    def spinta(frasi, **reg):
+        b = brain([[("text", "Uno scontrino.")], [("text", "x")]], **reg)
+        for testo, imm in frasi:
+            "".join(b.stream_reply(testo, "familiare", **({"immagini": imm} if imm else {})))
+        req = b.backend.visti[-1]
+        righe = [x["content"] for x in req if x["role"] == "system"
+                 and "pc_guarda con cosa=" in x["content"]]
+        return righe, b.rules_fired()
+    pc = {"pc": {"portatile": PCFinto()}, "immagini": {"storia": "messaggio", "pc": True}}
+    righe, regole = spinta([("Cosa c'è qui?", [foto()]), ("Cosa vedi sul mio schermo?", None)],
+                           **pc)
+    verifica("foto di prima e «cosa vedi sul mio schermo?»: la spinta per lo schermo",
+             righe == [IMG_PC_MSG.format(cosa="dello schermo del computer", arg="schermo")]
+             and "foto_spinta_pc" in regole, (righe, regole))
+    righe, _ = spinta([("Cosa c'è qui?", [foto()]), ("Guarda con la webcam.", None)], **pc)
+    verifica("foto di prima e «guarda con la webcam»: la spinta per la webcam",
+             len(righe) == 1 and "cosa=webcam" in righe[0], righe)
+    for nome, frasi, reg in [
+            ("senza foto", [("Ciao.", None), ("Cosa vedi sul mio schermo?", None)], pc),
+            ("senza pc_guarda", [("Cosa c'è qui?", [foto()]), ("Cosa vedi sul mio schermo?", None)],
+             {}),
+            ("foto appena arrivata (vale IMG_TURN_MSG)",
+             [("Ciao.", None), ("Cosa vedi sul mio schermo?", [foto()])], pc),
+            ("frase senza schermo né webcam",
+             [("Cosa c'è qui?", [foto()]), ("Quanto costano le uova?", None)], pc),
+            ("«schermidore» non è uno schermo",
+             [("Cosa c'è qui?", [foto()]), ("Chi è lo schermidore nella foto?", None)], pc)]:
+        righe, regole = spinta(frasi, **reg)
+        verifica(f"contrario, {nome}: nessuna spinta", not righe and "foto_spinta_pc" not in regole,
+                 (righe, regole))
+
+
 if __name__ == "__main__":
     prova_prepara()
+    prova_spinta_pc()
     prova_album()
     prova_brain()
     prova_foto_con_allegati_e_politica()

@@ -1303,6 +1303,24 @@ IMG_TURN_MSG = ("Foto davanti a te: {foto}, appena mandata dalla persona, nel su
                 "La vedi già: per guardarla non serve nessun tool, e «cosa vedi?», «cosa "
                 "c'è?», «leggimi» parlano di lei. pc_guarda solo se la persona chiede la "
                 "webcam o lo schermo del computer.")
+# Lo schermo o la webcam con una foto già nella conversazione (15/10, problema aperto dal 06/10:
+# «Non me l'hai chiesto»). La politica lascia passare pc_guarda (prova_politica.prova_pc_guarda,
+# dal 06/10); è il modello a non chiamarlo: e4b, dopo una foto, a «cosa vedi sul mio schermo?»
+# 0/5 («Non vedo nulla sullo schermo perché non mi hai mostrato nulla», «…non mi hai indicato di
+# guardare lo schermo») e a «guarda con la webcam: cosa vedi?» 0/3, senza foto 3/3; la stessa
+# richiesta senza «vedi» («cosa c'è sullo schermo del computer?») 3/3. «Vedi» con un'immagine
+# davanti fa parlare della foto. Una spinta (principio 10): solo se la frase nomina lo schermo
+# o la webcam, c'è una foto nella conversazione e pc_guarda c'è; decide sempre il modello
+# («lo schermo del telefono è rotto…» resta senza tool). Con la spinta: 5/5 schermo, 5/5 webcam,
+# 5/5 senza pc_guarda sul telefono e sulle uova. Detta al condizionale («Se la persona chiede di
+# guardare…») tornava 0/3 («Non vedo nulla sullo schermo perché non mi hai chiesto di
+# guardarlo»): resta affermativa, e il modello decide. Regola `foto_spinta_pc`
+IMG_PC_MSG = ("La persona parla {cosa}: non è nessuna delle foto di questa conversazione, e non "
+              "lo vedi finché non chiami pc_guarda con cosa={arg}. Se è questo che chiede, "
+              "chiamalo adesso.")
+_IMG_PC_WEBCAM = re.compile(r"(?<![a-zà-ù])(webcam|telecamer[ae])(?![a-zà-ù])", re.I)
+_IMG_PC_SCHERMO = re.compile(r"(?<![a-zà-ù])(scherm[oi]|schermat[ae]|screenshot)(?![a-zà-ù])",
+                             re.I)
 IMG_DESCRIBE = ("Descrivi in una frase breve (al massimo 25 parole) cosa mostra la {foto}, con "
                 "i dati principali se è un documento. Solo la frase.")
 
@@ -4499,6 +4517,12 @@ class Brain:
         if foto_msg:
             memory = memory + blocco("foto", [{"role": "system", "content": foto_msg}])
             self._rule("foto_davanti")
+        else:
+            # Lo schermo o la webcam con una foto di prima (15/10, IMG_PC_MSG): una spinta
+            pc_msg = self._foto_pc(user_text)
+            if pc_msg:
+                memory = memory + blocco("foto", [{"role": "system", "content": pc_msg}])
+                self._rule("foto_spinta_pc")
         # Contesto del solo turno (es. i passaggi della biblioteca per «approfondisci»):
         # come i ricordi, subito prima della domanda e fuori dalla storia
         if context:
@@ -5221,8 +5245,9 @@ class Brain:
     def mentions_tool(self, sentence: str) -> bool:
         """True se la frase nomina un tool («Chiamerò ora_attuale per sapere l'ora»).
 
-        È un annuncio, non una chiamata: il TTS non deve leggerlo. Solo i nomi con «_»:
-        «calcola», «ricorda», «dimentica» sono anche parole normali.
+        È un annuncio, non una chiamata: il TTS non deve leggerlo. I nomi con «_» sempre;
+        «calcola», «ricorda», «dimentica» sono anche parole normali, quindi solo nella forma
+        di una chiamata, col nome attaccato a «(» o «{» («Certo! ricorda(fatto="…")»).
         """
         # Un tool registrato o tolto (web pronto, biblioteca, estensioni) cambia la versione
         # del registro: ogni Brain (uno per satellite, 06/10) rilegge i nomi da solo
@@ -5230,10 +5255,21 @@ class Brain:
         if (getattr(self, "_tool_re", None) is None
                 or versione != getattr(self, "_tool_re_v", versione)):
             self._tool_re_v = versione
-            names = [s["function"]["name"] for s in self.tools.all_schemas()
-                     if "_" in s["function"]["name"]]
-            self._tool_re = re.compile(r"\b(" + "|".join(map(re.escape, names)) + r")\b",
-                                       re.I) if names else re.compile(r"(?!)")
+            tutti = [s["function"]["name"] for s in self.tools.all_schemas()]
+            names = [n for n in tutti if "_" in n]
+            # 15/10: «Ricorda che a Dario piace la pizza» (03/10) finiva col nome di ricorda
+            # scritto come testo; TextCallGuard lo prende solo in testa alla risposta, e
+            # dentro la frase il TTS leggeva «ricorda(fatto=…)» e niente si salvava. Una
+            # parola italiana seguita da «(» o «{» non si dice mai: è una chiamata
+            parole = [n for n in tutti if "_" not in n]
+            alt = []
+            if names:
+                alt.append(r"(?:" + "|".join(map(re.escape, names)) + r")\b")
+            if parole:
+                # attaccato, senza spazio: «ricorda (se vuoi) di…» resta una frase
+                alt.append(r"(?:" + "|".join(map(re.escape, parole)) + r")(?=[({])")
+            self._tool_re = (re.compile(r"\b(" + "|".join(alt) + r")", re.I) if alt
+                             else re.compile(r"(?!)"))
         return bool(self._tool_re.search(sentence))
 
     def _turn_context(self) -> list[dict]:
@@ -6324,6 +6360,19 @@ class Brain:
         if not imgs:
             return ""
         return IMG_TURN_MSG.format(foto=", ".join(i.etichetta() for i in imgs))
+
+    def _foto_pc(self, user_text: str | None) -> str:
+        """IMG_PC_MSG se la frase nomina lo schermo o la webcam, c'è una foto nella
+        conversazione e pc_guarda è registrato; "" altrimenti (15/10)."""
+        album = getattr(self, "album", None)
+        if (not user_text or album is None or not len(album) or self.tools is None
+                or self.tools.get("pc_guarda") is None):
+            return ""
+        if _IMG_PC_WEBCAM.search(user_text):
+            return IMG_PC_MSG.format(cosa="della webcam", arg="webcam")
+        if _IMG_PC_SCHERMO.search(user_text):
+            return IMG_PC_MSG.format(cosa="dello schermo del computer", arg="schermo")
+        return ""
 
     def _image_mode(self) -> str:
         return str(getattr(self.cfg, "immagini_storia", "messaggio") or "messaggio")

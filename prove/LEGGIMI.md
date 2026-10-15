@@ -157,8 +157,47 @@ agenti sullo stesso portatile; le cause e le misure):
   carico Edge ci mette a volte più di 10 s a uscire dopo il kill: `cdp.Browser.chiudi` non lo
   tratta più come un errore della prova, ci pensa il job object).
 
-**Problemi aperti delle prove** (14/10): le attese fisse di `prova_satellite`; la caduta rara di
-`prova_agenti` sul tunnel (sopra), da leggere con l'`errore` della diagnosi se torna. *(Storico:
+**Prove instabili sotto carico: le cause trovate il 15/10** (ramo `correzioni-15-10`). Misure con
+`carico.py` (fuori dal repository): la prova lanciata dal runner in più corsie insieme, con 12–20
+processi Python pieni su 24 core e, per il tunnel, 32 thread che aprono e chiudono porte effimere in
+ascolto (come le altre prove di un `--completo`).
+
+- **`prova_agenti`, il tunnel: la porta, non la VPN.** `LP` era una porta effimera presa all'inizio
+  con `bind(0)` e rilasciata: il tunnel la riapre e la chiude più volte in ~50 s, e intanto un altro
+  processo poteva riceverla. La sonda del tunnel trovava in ascolto il processo d'altri («ok»), che poi
+  spariva: `ollama_giu` con **ConnectTimeout** (su Windows una porta chiusa di 127.0.0.1 non rifiuta
+  subito, ritenta: col tempo massimo di 1 s è un timeout), già nel passo «ssh muto» e poi in «VPN
+  accesa» (14/10 04:36, 11:00, 18:27), e «porta locale occupata» al `--prova` (08/10, 14/10 10:17).
+  Ora la porta è a caso tra 20000 e 31999, **fuori dalle effimere** (Windows da 49152, Linux da
+  32768: `porta_tunnel`), e i passi che devono riuscire hanno 5 s invece di 1–2 (14/10 09:10:
+  «timeout», ssh finto ancora in partenza). Con le porte che girano: prima **3 su 5** (le stesse
+  cadute), dopo **10 su 10**.
+- **`prova_agenti`, «tempo massimo: processo fermato» (8,5 e 9,6 s il 14/10): nel codice.** La
+  sandbox parte a priorità «sotto il normale», e per uscire un processo deve ancora girare: con 30
+  processi pieni un `while True` fermato a 3 s moriva dopo altri **4–9 s** (e oltre i 5 s di
+  `proc.wait` la sandbox aspettava anche i lettori: 10,4 s). `winjob.JobObject.termina` porta ora i
+  processi del job a priorità alta prima di `TerminateJobObject`: 0,02 s, esecuzione scaduta in
+  **3,2 s** invece di 5,9–10,4 (il limite di priorità del job non bastava). Caso nuovo in
+  `prova_agenti` (la priorità vista al momento di terminare).
+- **`prova_telefono_audio`, «tempo scaduto: più di 300 s» (13/10, 14/10 09:44 e 09:52).** Tre
+  trascrizioni «per confronto» (la frase accelerata ×2 e rallentata, come su iOS) non verificavano
+  niente, e sull'audio accelerato con `-l it` Whisper ripete fino alla fine della finestra: con 20
+  processi di carico quella sola trascrizione durava **122 s**, la prova 290 s. Ora solo con
+  `--misure`: 290 → **172 s** con lo stesso carico, 182–230 → 116–126 s con tre corsie e 16 processi
+  (6 su 6 verdi prima e dopo). «Durata giusta» (14/10 14:54 e 15:02): il microfono finto a 44,1 kHz
+  di Chromium perde audio sotto carico (ritmo 0,923 e 0,942) mentre la catena di Calliope (16 kHz
+  contro contesto) torna al centesimo: l'orologio ora con 0,15 (i guasti cercati sono ×1,5 e ×2).
+- **`prova_esercizi_voce` (7 cadute del 14/10): la prova, né il codice né il carico.** «Quanto fa
+  443 più 353?» contiene «3 più 3», e la verifica «la domanda inventata (3 più 3) non si dice»
+  cercava il pezzo di testo: con i numeri a caso cadeva una volta su ~45 (3 su 130 nelle misure di
+  prima). Ora il numero intero (`(?<!\d)3 più 3(?!\d)`, lo stesso per «125 più 87»): **90 su 90**
+  con sei corsie e 16 processi.
+- Non ripetute nelle misure: «la delega risponde subito» oltre i 150 ms (14/10 mattina, 315 e 352
+  ms) e `lavoro_stato` (già rimisurato dal 14/10).
+
+**Problemi aperti delle prove** (15/10): le attese fisse di `prova_satellite`. *(Storico, 14/10:
+«la caduta rara di `prova_agenti` sul tunnel, da leggere con l'`errore` della diagnosi se torna»:
+trovata il 15/10, sopra.)* *(Storico:
 `prova_cronologia_pagina` con «Scarica Markdown» salvava il file nella cartella Download vera di
 chi la lancia; dal 13/10 ogni profilo temporaneo ha la sua cartella di download nelle preferenze,
 `download.default_directory`, e la prova controlla il file lì. `Page.setDownloadBehavior` sulla
