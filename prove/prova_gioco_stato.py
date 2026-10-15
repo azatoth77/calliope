@@ -110,11 +110,12 @@ def prova_valida():
     v = mc.valida_istantanea(buona(), m, g)
     verifica("l'istantanea buona passa pulita", v == buona(), str(v))
     fasi = mc.per_fase(m, g)
-    verifica("i comandi che ogni fase può avere: preparazione, turno, esito, fine",
+    verifica("i comandi che ogni fase può avere: preparazione, turno, esito, fine (dal 15/10 "
+             "«gioco anch'io» anche a partita cominciata)",
              fasi["preparazione"] == ["giocatori_1", "giocatori_2", "giocatori_3", "giocatori_4",
                                       "anchio", "inizia"]
-             and fasi["turno"] == [f"porta_{i}" for i in range(1, 7)]
-             and fasi["esito"] == ["avanti"] and fasi["fine"] == ["ancora"], str(fasi))
+             and fasi["turno"] == [f"porta_{i}" for i in range(1, 7)] + ["anchio"]
+             and fasi["esito"] == ["avanti"] and fasi["fine"] == ["ancora", "anchio"], str(fasi))
     verifica("da_piatto: «porta_3» → porta 3 nella fase turno; standard; sconosciuto",
              mc.da_piatto(m, "porta_3") == ("porta", 3, "turno")
              and mc.da_piatto(m, "giocatori_2") == ("giocatori", 2, None)
@@ -295,7 +296,7 @@ out.tutte = g.calliope.istantanee();
     verifica("dopo «2 giocatori»: fase turno, tocca al primo, due giocatori, le porte",
              d["fase"] == "turno" and d["tocca"] == 0 and len(d["giocatori"]) == 2
              and d["giocatori"][0] == {"nome": "Giocatore 1", "punti": 0}
-             and d["comandi"] == ["porta_1", "porta_2", "porta_3", "porta_4"], str(d))
+             and d["comandi"] == ["porta_1", "porta_2", "porta_3", "porta_4", "anchio"], str(d))
     verifica("un comando su un'istantanea vecchia: rifiutato («vecchio») e la partita non cambia",
              out["rifiutati"] == [{"comando": "porta_2", "motivo": "vecchio", "n": d["n"] - 1}]
              and out["fase_dopo_vecchio"] == "turno", str(out["rifiutati"]))
@@ -948,14 +949,14 @@ def prova_condivisa_server(tmp: Path):
     verifica("la voce sentita dallo schermo dello specchio: i comandi di chi tiene la partita, "
              "e la mossa va al suo motore", info.get("istantanea", {}).get("n") == 3 and ok
              and e == [(A["id"], "gioco", {"partita": pid, "tipo": "comando",
-                                           "dati": {"comando": "porta_3", "n": 3}})], str(e))
+                                           "dati": {"comando": "porta_3", "n": 3, "schermo": 2}})], str(e))
     a.eventi.clear()
     p.posti[B["id"]].messaggi.clear()
     r = a.pagina(B, {"partita": pid, "tipo": "mossa", "comando": "porta_4", "n": 3})
     e = [x for x in a.eventi if x[1] == "gioco"]
     verifica("il tocco sullo specchio: la mossa va al motore che tiene la partita",
              r.get("ok") and e == [(A["id"], "gioco", {"partita": pid, "tipo": "comando",
-                                                       "dati": {"comando": "porta_4", "n": 3}})],
+                                                       "dati": {"comando": "porta_4", "n": 3, "schermo": 2}})],
              str(e))
     for nome, d in (("un comando non attivo", {"comando": "porta_2", "n": 3}),
                     ("un comando inventato", {"comando": "apri_tutto", "n": 3}),

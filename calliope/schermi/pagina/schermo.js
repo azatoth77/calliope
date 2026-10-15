@@ -3499,9 +3499,12 @@
     mossa: ["comando", "n", "rinomina", "nome"],
     // La diagnosi del palco (14/10, il motore dei giochi): al più tre frasi su ciò che esce
     palco: ["difetti"],
+    // «Gira il telefono» (15/10): la tela del gioco vuole l'altro orientamento
+    gira: ["orientamento"],
   };
   // Una mossa a voce (11/10, «ascolta» nel manifesto) verso il riquadro: solo il nome del
-  // comando e, al più, il nome di chi gioca (il server li ha già scelti dall'elenco)
+  // comando e, al più, il nome di chi gioca (il server li ha già scelti dall'elenco); dal 15/10
+  // anche il numero dello schermo e il segno della voce
   const COMANDO_GIOCO = /^[a-z0-9][a-z0-9_]{0,23}$/;
   const CON_RISPOSTA = ["salva", "leggi", "chat", "di", "azione"];
   const GIOCO_MAX = 8192;            // caratteri di un messaggio (il server ha il suo tetto)
@@ -3833,6 +3836,10 @@
     dalRiquadro(f, st, m);
   });
 
+  function alDito() {
+    try { return !!(window.matchMedia && matchMedia("(pointer: coarse)").matches); } catch (e) { return false; }
+  }
+
   async function dalRiquadro(f, st, m) {
     // Solo i campi noti per tipo: nient'altro arriva al server
     const dati = { tipo: m.tipo, id: Number.isInteger(m.id) ? m.id : null };
@@ -3842,7 +3849,9 @@
     const d = r.dati || {};
     if (m.tipo === "pronto") {
       if (d.fine_tempo) { chiudiGioco(f, d.nota || "Per oggi il tempo dei giochi è finito."); return; }
-      if (d.avvio) versoRiquadro(f, { tipo: "avvio", dati: d.avvio });
+      // «tocco»: questa pagina è su un telefono o un tablet (15/10, «Gira il telefono»: il
+      // riquadro, in un processo suo, non sempre lo sa da sé)
+      if (d.avvio) versoRiquadro(f, { tipo: "avvio", dati: { ...d.avvio, tocco: alDito() } });
       return;
     }
     if (dati.id !== null && CON_RISPOSTA.includes(m.tipo)) {
@@ -3873,6 +3882,10 @@
       const dati = { comando: x.comando };
       if (Number.isInteger(x.n) && x.n >= 0) dati.n = x.n;
       if (typeof x.giocatore === "string" && x.giocatore.length <= 40) dati.giocatore = x.giocatore;
+      // Chi è quale giocatore (15/10): il numero dello schermo da cui arriva la mossa e la voce
+      // riconosciuta, un segno opaco («v1»)
+      if (Number.isInteger(x.schermo) && x.schermo >= 1 && x.schermo <= 99) dati.schermo = x.schermo;
+      if (typeof x.voce === "string" && /^v[1-9][0-9]?$/.test(x.voce)) dati.voce = x.voce;
       fs.forEach((f) => { if (!statoGioco(f).chiuso) versoRiquadro(f, { tipo: "comando", dati }); });
       return;
     }

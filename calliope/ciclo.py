@@ -1446,7 +1446,7 @@ class Ciclo:
                                 "esito": "gioco", "gioco": {"partita": item.get("partita"),
                                                             "titolo": item.get("titolo")},
                                 "risposta": None if item.get("minore") else msg,
-                                "regole": ["gioco_frase"]})
+                                "regole": [item.get("regola") or "gioco_frase"]})
             print(f"\n   [GIOCHI] «{item.get('titolo')}»: "
                   f"{'(frase di un gioco di un minore)' if item.get('minore') else msg}",
                   flush=True)
@@ -2063,7 +2063,8 @@ class Ciclo:
             # punti ho?», «chi sta vincendo?», «cosa posso dire?» per intero, anche nella
             # finestra del gioco senza il nome. La risposta la compone il codice
             # dall'istantanea validata del motore: niente modello
-            chi = self._giocatore_dalla_voce(t) if domanda in ("punti", "tocca") else None
+            chi = (self._giocatore_dalla_voce(t) if domanda in ("punti", "tocca", "io")
+                   else None)
             frase = gioco_stato.risposta(domanda, info, chi)
             ms = round((time.perf_counter() - t.t0) * 1000)
             print(f"Tu: (domanda sul gioco «{domanda}»)", flush=True)
@@ -2078,10 +2079,15 @@ class Ciclo:
             u.aspetta()
             return _FINE
         if cid is not None and rivolta:
-            giocatore = self._giocatore_dalla_voce(t) if info.get("giocatore") else None
+            # Chi parla (15/10, chi è quale giocatore): la voce riconosciuta serve anche senza
+            # il nome nel manifesto, in un gioco per più giocatori (al gioco va solo un segno)
+            giocatore = (self._giocatore_dalla_voce(t)
+                         if info.get("giocatore") or (info.get("massimo") or 1) > 1 else None)
             if nome_detto:
                 giocatore = nome_detto
                 self.rule(gioco_stato.REGOLA_ANCHIO)
+            elif self._turno_altrui(t, info, cid, giocatore):
+                return _FINE
             if s.giochi.comando(info["partita"], info["schermo"], cid, giocatore,
                                 dalla_voce=not nome_detto):
                 ms = round((time.perf_counter() - t.t0) * 1000)
@@ -2139,7 +2145,10 @@ class Ciclo:
             print(f"   [GIOCO] giudice di fase: nessun comando ({scelta.ms:.0f} ms"
                   + (f", {scelta.guasto}" if scelta.guasto else "") + ")", flush=True)
             return False
-        giocatore = self._giocatore_dalla_voce(t) if info.get("giocatore") else None
+        giocatore = (self._giocatore_dalla_voce(t)
+                     if info.get("giocatore") or (info.get("massimo") or 1) > 1 else None)
+        if self._turno_altrui(t, info, scelta.comando, giocatore):
+            return True
         if not s.giochi.comando(info["partita"], info["schermo"], scelta.comando, giocatore):
             return False
         frase = gioco_giudice.frase_detta(scelta.etichetta)
@@ -2156,6 +2165,31 @@ class Ciclo:
                                **({"prova": True} if info.get("prova") else {})})
         u = self.uscita
         u.di(frase, "gioco_mossa")
+        u.aspetta()
+        return True
+
+    def _turno_altrui(self, t, info: dict, comando: str, chi: str | None) -> bool:
+        """Chi è quale giocatore (15/10): una mossa a voce che non vale per chi l'ha detta (la
+        voce di un altro giocatore, o lo schermo di un altro giocatore) non va al gioco, e
+        Calliope dice a chi tocca («Tocca ad Ada.»; regola `gioco_turno_altrui`: un vincolo
+        sullo stato della partita, non sul testo). True se l'ha detto."""
+        try:
+            frase = self.s.giochi.turno_altrui(info["partita"], info["schermo"], comando, chi)
+        except Exception:  # noqa: BLE001 — un gioco non ferma la voce
+            frase = None
+        if not frase:
+            return False
+        cfg = self.s.cfg
+        ms = round((time.perf_counter() - t.t0) * 1000)
+        print(f"Tu: (comando del gioco «{comando}» per un altro giocatore)", flush=True)
+        print(f"{cfg.name}: {frase}", flush=True)
+        self.rule("gioco_turno_altrui")
+        self.rec.update(esito="gioco_turno_altrui", testo=None, risposta=frase,
+                        stt_s=round(time.perf_counter() - t.t0, 2),
+                        gioco={"partita": info["partita"], "comando": comando, "ms": ms,
+                               **({"prova": True} if info.get("prova") else {})})
+        u = self.uscita
+        u.di(frase, "gioco_stato")
         u.aspetta()
         return True
 

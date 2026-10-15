@@ -179,6 +179,14 @@ voce raccontava male gli esiti, i comandi del flusso si perdevano.
    «Gira il telefono» per una tela, chi è quale giocatore nelle partite condivise, il giudice
    senza il nome dopo la misura, e il giro vero sulla DGX.]*
    *[14/10: restano anche le partite condivise tra più schermi con la macchina a stati.]*
+   *[15/10, ramo `giochi-giocatori`: fatti **chi è quale giocatore** («gioco anch'io» lega un
+   giocatore allo schermo e alla voce riconosciuta, un segno opaco; in una fase a turni la mossa
+   vale solo per chi è di turno, e Calliope dice «Tocca ad Ada.»; «che giocatore sono?»; chi
+   entra a metà gioca subito con `GIOCO.entra`, se no dalla prossima partita) e **«Gira il
+   telefono»** (una tela con un orientamento solo: la fascia sul telefono girato e la frase
+   detta una volta, senza fermare il gioco) ([giochi](aree/giochi.md), «Chi è quale
+   giocatore»). Restano il giudice senza il nome dopo la misura, la diagnosi del palco a voce al
+   collaudo e il giro vero sulla DGX.]*
 5. **Flusso dell'agente a fasi** (proposte accettate da Dario il 12/10). **Parte 1 fatta il 12/10
    sera** (ramo `fasi-parte1`): la correzione che parte da un test rosso (rimandata una volta,
    poi «non sono riuscita a riprodurre il problema»), i giochi provati dal disegno nel DOM finto

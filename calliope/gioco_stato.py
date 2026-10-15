@@ -42,6 +42,9 @@ DOMANDE: dict[str, tuple[str, ...]] = {
     "comandi": ("cosa posso dire", "che cosa posso dire", "cosa si può dire",
                 "che cosa si può dire", "cosa posso fare", "che cosa posso fare",
                 "quali sono i comandi", "che comandi ci sono", "quali comandi ci sono"),
+    # Chi è quale giocatore (15/10): ogni persona sa quale giocatore è
+    "io": ("che giocatore sono", "che giocatore sono io", "quale giocatore sono",
+           "quale giocatore sono io", "chi sono nel gioco", "io chi sono nel gioco"),
 }
 REGOLA = "gioco_stato_detto"
 
@@ -110,10 +113,17 @@ def nomi_detti(ist: dict) -> list[str]:
     return out
 
 
-def _chi_e(ist: dict, chi: str | None) -> int | None:
-    """La posizione del giocatore che ha il nome di chi parla (riconosciuto dalla voce), o None."""
+def _chi_e(ist: dict, chi: str | None, voci: dict | None = None) -> int | None:
+    """La posizione del giocatore di chi parla (riconosciuto dalla voce): quello legato alla sua
+    voce (15/10, il segno che Calliope gli ha dato nella partita), o quello con il suo nome;
+    None."""
     if not chi:
         return None
+    v = (voci or {}).get(chi)
+    if v:
+        for i, g in enumerate(ist.get("giocatori") or []):
+            if g.get("voce") == v:
+                return i
     k = gioco_voce.normalizza(chi)
     for i, g in enumerate(ist.get("giocatori") or []):
         if gioco_voce.normalizza(str(g.get("nome") or "")) == k:
@@ -183,7 +193,9 @@ def risposta(tipo: str, info: dict, chi: str | None = None) -> str:
         return f"Puoi dire: {', '.join(voci[:-1])}, oppure {voci[-1]}."
     if fase == "preparazione" or not gs:
         return "La partita non è ancora cominciata: prima si sceglie quanti giocano."
-    io = _chi_e(ist, chi)
+    io = _chi_e(ist, chi, info.get("voci"))
+    if tipo == "io":
+        return _chi_sono(ist, info, io, nomi)
     if tipo == "tocca":
         if fase == "fine":
             return "La partita è finita." + (" Per giocarne un'altra di' «ancora»."
@@ -195,7 +207,7 @@ def risposta(tipo: str, info: dict, chi: str | None = None) -> str:
             return "Adesso non tocca a nessuno in particolare."
         if fase == "esito":
             return f"Ha appena giocato {nomi[t]}."
-        return "Tocca a te." if io == t else f"Tocca {_a(nomi[t])}."
+        return "Tocca a te." if io == t else f"Tocca {_a(nomi[t])}{_dove(gs[t], info)}."
     if tipo == "punti":
         if io is not None:
             return f"Hai {_punti(gs[io].get('punti') or 0)}."
@@ -218,6 +230,31 @@ def risposta(tipo: str, info: dict, chi: str | None = None) -> str:
         verbo = "Ha vinto" if finita else "Sta vincendo"
         return f"{verbo} {pari[0]}, con {_punti(primo)}."
     return ""
+
+
+def _dove(g: dict, info: dict) -> str:
+    """«, sullo schermo «Cucina»» se il giocatore gioca da un altro schermo della partita."""
+    sch, qui = g.get("schermo"), info.get("posto")
+    if not sch or not qui or sch == qui:
+        return ""
+    nome = (info.get("schermi") or {}).get(sch) or ""
+    return f", sullo schermo «{nome}»" if nome else ", sull'altro schermo"
+
+
+def _chi_sono(ist: dict, info: dict, io: int | None, nomi: list[str]) -> str:
+    """«Che giocatore sono?» (15/10): dalla voce riconosciuta, altrimenti dallo schermo."""
+    if io is not None:
+        return f"Sei {nomi[io]}."
+    qui = info.get("posto")
+    miei = [nomi[i] for i, g in enumerate(ist.get("giocatori") or [])
+            if qui and g.get("schermo") == qui]
+    if len(miei) == 1:
+        return f"Su questo schermo gioca {miei[0]}."
+    if miei:
+        return f"Su questo schermo giocano {_elenco(miei)}."
+    if "anchio" in (ist.get("comandi") or []):
+        return "Non ti riconosco tra i giocatori: per entrare di' «gioco anch'io»."
+    return "Non ti riconosco tra i giocatori."
 
 
 # ─────────────────────────── i dati del turno ───────────────────────────

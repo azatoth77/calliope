@@ -530,12 +530,14 @@ def main() -> int:
         verifica("macchina a stati: il motore parte nel riquadro e chiede quanti giocatori",
                  pm and ok is not None, str(attivi_di(pm)))
         a.giochi.comando(pm, sa, "giocatori_2")
-        ok = aspetta(lambda: attivi_di(pm) == ["porta_1", "porta_2", "porta_3", "porta_4"], 5)
+        # (dal 15/10 anche «gioco anch'io» a voce: c'è posto per altri due)
+        ok = aspetta(lambda: attivi_di(pm) == ["porta_1", "porta_2", "porta_3", "porta_4",
+                                               "anchio"], 5)
         verifica("macchina a stati: «siamo in due» → il turno con le quattro porte", ok is not None,
                  str(attivi_di(pm)))
         a.giochi.comando(pm, sa, "porta_3")
         ok = aspetta(lambda: attivi_di(pm) == ["avanti"], 5)
-        ok2 = aspetta(lambda: attivi_di(pm) == ["porta_1", "porta_2", "porta_4"], 8)
+        ok2 = aspetta(lambda: attivi_di(pm) == ["porta_1", "porta_2", "porta_4", "anchio"], 8)
         verifica("macchina a stati: la porta 3 → l'esito, che va avanti da solo; la porta 3 non "
                  "vale più", ok is not None and ok2 is not None, str(attivi_di(pm))
                  + f" {ok} guasti {list(a.giochi.guasti)}")
@@ -563,7 +565,8 @@ def main() -> int:
             palchi.append((c, posto.palco))
         verifica("palco: ogni modello di pagina misurato sullo schermo vero (900×800), nessun "
                  "difetto", ok is not None and all(x == [] for _, x in palchi)
-                 and attivi_di(pg.id) == ["ancora"], str(palchi) + " " + str(attivi_di(pg.id)))
+                 and attivi_di(pg.id) == ["ancora", "anchio"],
+                 str(palchi) + " " + str(attivi_di(pg.id)))
         n0 = posto.palco_n
         cdp(A, "Emulation.setDeviceMetricsOverride",
             {"width": 390, "height": 844, "deviceScaleFactor": 1, "mobile": True})

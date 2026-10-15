@@ -622,7 +622,23 @@ partita»), con le risposte di chi amministra del 12/10:
 - Il caso «porte» del banco della temperatura era già nel formato nuovo (riscritto con il
   palco): `--secco` ok.
 
-**Resta**: «Gira il telefono» (decisione 3), la diagnosi del palco a voce al collaudo, chi è quale
+**Resta** (*storico dal 15/10: «Gira il telefono» e chi è quale giocatore sono fatti, vedi
+sotto*): «Gira il telefono» (decisione 3), la diagnosi del palco a voce al collaudo, chi è quale
 giocatore nelle partite condivise, il giudice senza il nome (decisione 2, dopo la misura sulla
 DGX), la partita come attività della macchina a stati del dialogo; il passo 8 resta scartato
 (decisione 4). Il giro vero sulla DGX con l'agente.
+
+## Aggiornamento del 15/10: chi è quale giocatore, «Gira il telefono»
+
+Fatto sul ramo `giochi-giocatori` (dettagli in [giochi](../aree/giochi.md), «Chi è quale
+giocatore»). Rispetto al § 2.2 e al § 2.4: il nome resta quello di prima (voce riconosciuta, «gioco
+anch'io, sono Pippo», scritto), ma «gioco anch'io» lega anche il giocatore allo **schermo** (il
+numero del posto, messo dal server per le mosse che arrivano da un altro schermo) e alla **voce**
+(un segno opaco per partita: il riquadro non riceve il nome se il manifesto non lo chiede). Il
+motore resta il solo scrittore e decide chi muove in una fase a turni; il server fa lo stesso
+controllo sull'istantanea per far dire a Calliope «Tocca ad Ada.». «Gioco anch'io» a partita
+cominciata: solo a voce, subito con `GIOCO.entra`, altrimenti dalla prossima partita. Rispetto al §
+5.1 (decisione 3): `"orientamento"` solo su una tela, il palco dichiarato sempre, la fascia «Gira il
+telefono» sul telefono girato e la frase detta una volta, senza blocco. **Resta**: la diagnosi del
+palco a voce al collaudo, il giudice senza il nome (decisione 2, dopo la misura), la partita come
+attività della macchina a stati del dialogo, il giro vero sulla DGX.

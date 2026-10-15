@@ -662,6 +662,14 @@ def _gioco_comando(ctx, comando: str = "", **_) -> dict:
     sc = getattr(ctx, "speaker_ctx", None)
     giocatore = (getattr(sc, "current_speaker", None)
                  if getattr(sc, "identified_by", None) == "voce" else None)
+    # Chi è quale giocatore (15/10): la mossa di chi non è di turno non parte
+    turno = getattr(giochi, "turno_altrui", None)
+    altrui = turno(info.get("partita"), info.get("schermo"), cid, giocatore) if callable(turno) \
+        else None
+    if altrui:
+        note_rule(ctx, "gioco_turno_altrui")
+        return {"ok": False, "fatto": "NIENTE: tocca a un altro giocatore", "conferma": altrui,
+                "risposta_finale": altrui}
     if not giochi.comando(info.get("partita"), info.get("schermo"), cid, giocatore):
         return {"ok": False, "fatto": "NIENTE: il gioco non aspetta più quel comando",
                 "errore": "il gioco è chiuso o quel comando non vale adesso"}

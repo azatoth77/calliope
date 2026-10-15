@@ -71,14 +71,19 @@ NOTE_GUASTO = {"non risponde": "Il gioco non rispondeva più: l'ho chiuso.",
                "messaggi non validi": "Il gioco mandava messaggi non validi: l'ho chiuso.",
                "non parte": "Il gioco non è partito: l'ho chiuso."}
 TIPI_PAGINA = ("pronto", "battito", "salva", "leggi", "manda", "chat", "di", "azione", "fine",
-               "errore", "guasto", "stato", "rifiutato", "chiuso", "palco", "mossa")
+               "errore", "guasto", "stato", "rifiutato", "chiuso", "palco", "mossa", "gira")
 # Una partita di prova (11/10): il gioco gira e basta, senza ponte verso Calliope né dati. I
 # comandi a voce sì (`stato`, l'istantanea del motore, dice quali valgono; `rifiutato`, un
 # comando arrivato su un'istantanea vecchia; `chiuso` lo manda la pagina quando il gioco si
 # chiude): sono un ingresso, come i tocchi, e non portano niente fuori dal riquadro.
 # Anche `palco` (14/10): la diagnosi del motore su ciò che esce dal palco, per il collaudo
+# E `gira` (15/10): la tela vuole l'altro orientamento, e Calliope lo dice con una frase sua
 TIPI_PROVA = ("pronto", "battito", "fine", "errore", "guasto", "stato", "rifiutato", "chiuso",
-              "palco")
+              "palco", "gira")
+# «Gira il telefono» (15/10, decisione 3 del 12/10): detto a voce una volta per schermo
+FRASE_GIRA = {"orizzontale": "Per questo gioco gira il telefono in orizzontale.",
+              "verticale": "Per questo gioco tieni il telefono in verticale."}
+MAX_VOCI = 64                          # persone riconosciute in una partita (i segni «v1»…)
 # Un riquadro di cui la pagina non dice niente da tanto (il battito arriva ogni 15 s mentre si
 # vede) non riceve comandi a voce: lo schermo è spento, la pagina è altrove o il gioco è nascosto
 VIVO_S = 40.0
@@ -145,6 +150,8 @@ class Posto:
         # più tre frasi; [] = la pagina ci sta), None finché non arriva
         self.palco: list[str] | None = None
         self.palco_n = 0                    # quante misure sono arrivate
+        # «Gira il telefono» (15/10): già detto a voce per questo schermo
+        self.gira_detto = False
 
     @property
     def attivi(self) -> list[str] | None:
@@ -182,6 +189,20 @@ class Partita:
         # l'ultimo stato intero che ha mandato, che gli altri schermi («specchi») disegnano
         self.autorevole: int | None = None
         self.stato_condiviso: dict | None = None
+        # Chi è quale giocatore (15/10): un segno opaco per ogni persona riconosciuta dalla voce
+        # in questa partita («v1», «v2»…). Il motore lega il segno al giocatore con «gioco
+        # anch'io»; il riquadro non sa chi è (il nome lo riceve solo se il manifesto lo chiede)
+        self.voci: dict[str, str] = {}
+
+    def voce_di(self, nome: str | None, crea: bool = True) -> str | None:
+        """Il segno della voce di una persona riconosciuta in questa partita (None senza nome,
+        o oltre MAX_VOCI)."""
+        if not nome:
+            return None
+        v = self.voci.get(nome)
+        if v is None and crea and len(self.voci) < MAX_VOCI:
+            v = self.voci[nome] = f"v{len(self.voci) + 1}"
+        return v
 
     @property
     def condivisa(self) -> bool:
@@ -741,6 +762,11 @@ class Giochi:
             if prima:
                 self.sveglia_voce()
             return {"errore": f"istantanea non valida: {e}", "_stato": 400}
+        # Un segno di voce che Calliope non ha dato in questa partita non lega nessuno
+        noti = set(p.voci.values())
+        for g in ist["giocatori"]:
+            if g.get("voce") is not None and g["voce"] not in noti:
+                g.pop("voce")
         self._nomi_detti(p, posto, ist)
         prima = self._attivi(p, posto)
         ripresa = self._ripresa(dati.get("ripresa"), ist)
@@ -802,8 +828,12 @@ class Giochi:
                            comando=str(comando)[:24])
             return {"errore": "la mossa adesso non vale", "_stato": 400}
         posto.segno = t.segno = time.monotonic()
-        self.hub.evento_a(t.sid, "gioco", {"partita": p.id, "tipo": "comando",
-                                           "dati": {"comando": comando, "n": n}})
+        # Il numero di questo schermo (15/10, chi è quale giocatore): lo mette il server, non lo
+        # specchio. Il motore che tiene la partita lo usa per «gioco anch'io» e per i turni
+        dati_m = {"comando": comando, "n": n}
+        if posto.giocatore:
+            dati_m["schermo"] = posto.giocatore
+        self.hub.evento_a(t.sid, "gioco", {"partita": p.id, "tipo": "comando", "dati": dati_m})
         return {"ok": True}
 
     def _passa_la_partita(self, p: Partita, posto: Posto):
@@ -909,6 +939,28 @@ class Giochi:
             self._registra(p, "palco", regola="gioco_fuori_dal_palco", difetti=difetti)
             self.log(f"[GIOCHI] «{p.titolo}»: il disegno non sta nel palco: {difetti[0]}")
         return {"ok": True}
+
+    def _t_gira(self, p: Partita, posto: Posto, dati) -> dict:
+        """«Gira il telefono» (15/10, decisione 3 del 12/10): la tela del gioco ha un orientamento
+        solo e il telefono è girato dall'altra parte. Lo schermo lo dice già (una fascia sopra il
+        gioco, che non si ferma); qui Calliope lo dice a voce, una volta per schermo e partita,
+        con una frase sua (niente testo del gioco), anche in una partita di prova."""
+        o = dati.get("orientamento")
+        if o not in FRASE_GIRA:
+            return {"errore": "orientamento: orizzontale o verticale", "_stato": 400}
+        if posto.gira_detto:
+            return {"ok": True, "detto": False}
+        posto.gira_detto = True
+        self._registra(p, "gira", regola="gioco_gira_telefono", orientamento=o)
+        self.frasi.put({"messaggio": FRASE_GIRA[o], "partita": p.id, "titolo": p.titolo,
+                        "persona": posto.persona, "minore": False, "schermo": posto.sid,
+                        "regola": "gioco_gira_telefono"})
+        if self.on_frase is not None:
+            try:
+                self.on_frase()
+            except Exception:  # noqa: BLE001
+                pass
+        return {"ok": True, "detto": True}
 
     def _t_fine(self, p: Partita, posto: Posto, dati) -> dict:
         self._registra(p, "fine", giocatore=posto.giocatore)
@@ -1027,7 +1079,53 @@ class Giochi:
                 "giocatore": bool(a.get("giocatore")), "segno": posto.segno,
                 "prova": p.prova,
                 "istantanea": json.loads(json.dumps(p.tiene(posto).istantanea)),
-                "macchina": p.macchina}
+                "macchina": p.macchina,
+                # Chi è quale giocatore (15/10): quanti possono giocare, il numero di questo
+                # schermo, i nomi degli altri schermi della partita e i segni delle voci (per
+                # «tocca a te» e «quanti punti ho?»: restano dentro Calliope)
+                "massimo": p.massimo, "posto": posto.giocatore,
+                "schermi": {x.giocatore: (self.hub.schermo(x.sid) or {}).get("nome") or ""
+                            for x in p.posti.values() if x.giocatore},
+                "voci": dict(p.voci)}
+
+    def turno_altrui(self, partita: str, schermo, comando: str,
+                     persona: str | None = None) -> str | None:
+        """Chi è quale giocatore (15/10): la frase da dire se il comando a voce non vale per chi
+        l'ha detto («Tocca ad Ada.», «Tocca ad Ada, sullo schermo della cucina.», «Sei già nella
+        partita: sei Ada.»), None se vale. Lo stesso criterio del motore (macchina.chi_muove)
+        sull'ultima istantanea valida: la voce di un altro giocatore, o lo schermo di un altro
+        giocatore quando la voce non è riconosciuta. Il motore lo ricontrolla comunque."""
+        from .. import gioco_stato
+        from ..estensioni import macchina as mc
+        with self._lock:
+            p = self.partite.get(str(partita or ""))
+            posto = p.posti.get(schermo) if p is not None else None
+            if p is None or posto is None or p.macchina is None:
+                return None
+            t = p.tiene(posto)
+            ist = t.istantanea
+            if ist is None:
+                return None
+            voce = p.voce_di(persona, crea=False)
+            ok, motivo, i = mc.chi_muove(ist, p.macchina, comando, posto.giocatore, voce)
+            if ok or i is None:
+                return None
+            nomi = gioco_stato.nomi_detti(ist)
+            nome = nomi[i] if 0 <= i < len(nomi) else f"Giocatore {i + 1}"
+            altro = None
+            sch = (ist["giocatori"][i] or {}).get("schermo")
+            if motivo != "gia" and sch and sch != posto.giocatore:
+                altro = next((x for x in p.posti.values() if x.giocatore == sch), False)
+        # il nome dello schermo dall'hub, fuori dal lock dei giochi
+        dove = ""
+        if altro is not None:
+            n_s = (self.hub.schermo(altro.sid) or {}).get("nome") if altro else None
+            dove = f", sullo schermo {self._di(n_s)}" if n_s else ", sull'altro schermo"
+        self._registra(p, "turno_altrui", regola="gioco_turno_altrui", motivo=motivo,
+                       comando=str(comando)[:24])
+        if motivo == "gia":
+            return f"Sei già nella partita: sei {nome}."
+        return f"Tocca {gioco_stato._a(nome)}{dove}."
 
     def in_corso(self, schermi) -> bool:
         """Un gioco è aperto e si vede adesso su uno di questi schermi (riquadro aperto da
@@ -1074,6 +1172,15 @@ class Giochi:
                 dati["giocatore"] = str(giocatore)[:40]
                 if dalla_voce and len(p.nomi_voce) < 64:
                     p.nomi_voce.add(dati["giocatore"])
+            # Chi è quale giocatore (15/10): il segno della voce riconosciuta (mai il nome, se il
+            # manifesto non lo chiede) in un gioco per più giocatori, e, in una partita tra più
+            # schermi, il numero dello schermo che l'ha sentita
+            if giocatore and dalla_voce and p.massimo > 1:
+                v = p.voce_di(str(giocatore)[:40])
+                if v:
+                    dati["voce"] = v
+            if p.motore_condiviso and posto.giocatore:
+                dati["schermo"] = posto.giocatore
             posto.segno = t.segno = time.monotonic()
             p.ultimo = time.time()
         self.hub.evento_a(t.sid, "gioco", {"partita": p.id, "tipo": "comando", "dati": dati})
