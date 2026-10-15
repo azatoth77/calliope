@@ -59,6 +59,9 @@ class ToolContext:
     # riscritture della casa…): Brain le azzera a ogni risposta e le passa al registro dei
     # turni. Vedi note_rule.
     regole: list = field(default_factory=list)
+    # Il «sì» breve per le azioni importanti, in ombra (15/10, calliope/si_breve.py): le righe
+    # delle chiamate eseguite in questa risposta, lette dal ciclo per il registro dei turni
+    si_breve: list = field(default_factory=list)
     # Le foto della conversazione (05/10, calliope/immagini.py: Album di Brain, che lo imposta
     # a ogni risposta) e i numeri di quelle da far vedere al modello in questo turno: un tool
     # che cattura (pc_guarda) o rimanda una foto (immagine_guarda) ne aggiunge il numero

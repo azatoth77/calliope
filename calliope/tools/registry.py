@@ -413,6 +413,9 @@ class ToolRegistry:
         fermo = politica.controlla(spec, name, arguments or {}, ctx)
         if fermo is not None:
             return json.dumps(fermo, ensure_ascii=False)
+        # Il «sì» breve per le azioni importanti (15/10, roadmap 2.6): solo la misura, in ombra
+        from .. import si_breve
+        si_breve.annota(spec, name, arguments, ctx, breve)
         prima = (getattr(sc, "identified_by", None), getattr(sc, "from_session", False))
         if breve:
             sc.identified_by, sc.from_session = "voce", False   # solo durante questa chiamata

@@ -216,7 +216,13 @@ voce raccontava male gli esiti, i comandi del flusso si perdevano.
    oggi avrebbe fermato. Poi i passi 3, 5, 4, 7, 8. *Quasi* (consenso unico), *da approfondire*
    (tabella) · dipende da: E1 ed E3.
 6. **Un «sì» breve per le azioni importanti** (E6): non si cambia ora; si misura in ombra e si
-   decide con i numeri. *Pronta* (la misura) · dipende da: niente.
+   decide con i numeri. *Pronta* (la misura) · dipende da: niente. **Misura fatta il 15/10** (ramo
+   `si-breve-ombra`, `calliope/si_breve.py`, senza effetto e senza interruttore): per ogni azione
+   importante o conferma eseguita, nel registro dei turni il modo (voce, «sì» breve compatibile,
+   «sì» breve, zona grigia, sfida, scritto) e i rischi (compagnia, voci sconosciute, voce
+   incerta, senza il nome); in `calliope stato --turni` le conferme per modo, il tempo mediano
+   di una sfida vera e il costo dell'alternativa. Resta: leggere i numeri della DGX dopo una o
+   due settimane e decidere ([sicurezza-politica](aree/sicurezza-politica.md)).
 7. **La scelta dei tool come metrica e banco con le frasi vere**: la metrica in `calliope stato
    --turni` subito; il banco con le etichette di E8 (le correzioni fatte da chi amministra nella
    conversazione valgono come etichetta, il resto lo rivede l'agente a campione e chi amministra
