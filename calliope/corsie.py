@@ -660,6 +660,7 @@ class STTCondiviso:
             testo = self._stt.transcribe(audio, *a, **k)
             self._qui.conf = getattr(self._stt, "ultima_confidenza", None)
             self._qui.scartata = getattr(self._stt, "ultima_scartata", None)
+            self._qui.sigle = list(getattr(self._stt, "ultime_sigle", None) or [])
         return testo
 
     def aspetta_turno(self) -> bool:
@@ -680,6 +681,11 @@ class STTCondiviso:
     def ultima_scartata(self):
         """La famiglia dell'allucinazione scartata nell'ultima frase di questa corsia (09/10)."""
         return getattr(self._qui, "scartata", None)
+
+    @property
+    def ultime_sigle(self):
+        """Le sigle riscritte nell'ultima frase di questa corsia (15/10, calliope/sigle.py)."""
+        return getattr(self._qui, "sigle", [])
 
     def __getattr__(self, nome):
         return getattr(self._stt, nome)

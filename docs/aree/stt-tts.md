@@ -1594,6 +1594,31 @@ locale** in `privato/` (fuori da git, file 600: voci vere) con ~20 blocchi: audi
 segmenti di allora e del blocco, «meglio allora / meglio il blocco / uguali», una nota e «Scarica
 le scelte». Prova a secco `prova_stanza_lenta_blocchi.py`.
 
-**Da fare**: lanciare lo script sulla DGX, scegliere `stanza_lenta_blocchi_pausa_s` sulle pause vere,
+**Da fare** *[storico, 15/10 mattina: fatto il 15/10, sotto]*: lanciare lo script sulla DGX, scegliere `stanza_lenta_blocchi_pausa_s` sulle pause vere,
 rivedere la pagina; con le scelte in mano, `stanza_lenta_blocchi: ombra` nel locale per misurare
 sulla corsia vera, poi `attivo`.
+
+### La prima revisione (15/10)
+
+Sull'audio del banco (51 segmenti, ~4 minuti, due sere in auto col telefono): pause fra segmenti
+consecutivi della stessa voce p50 0,93 s, p90 3,14 s, massimo 8,1 s; con 5, 8 e 15 s i blocchi sono
+gli stessi (9), con 3 s se ne spezzano 3: **pausa lunga 8 s**, da ricalcolare con più dati. Whisper
+p50 0,29 s a blocco. Dei 9 blocchi 7 hanno il testo cambiato; la revisione di chi amministra:
+**meglio il blocco 5, meglio allora 2**, uguali 2. Le due perdite: una parola chiave storpiata in
+modo diverso alla fine del blocco (il nome di una festa, che i segmenti da soli avevano più vicino)
+e la persona dei verbi cambiata («può» → «puoi») col contesto più lungo. In due blocchi «vinti»
+parlavano due persone: erano già date alla stessa voce dalla corsia veloce (le voci di famiglia al
+telefono), il blocco eredita l'errore e non lo crea; lo migliorano le impronte per satellite. Una
+sigla storpiata («PG-16» per PEGI 16) ha portato a `calliope/sigle.py` (sotto). Sulla DGX
+`stanza_lenta_blocchi: ombra` con pausa 8 s dal 15/10; si resta in ombra fino a un'altra revisione
+con più blocchi (7 cambiati sono pochi), poi `attivo`.
+
+## Sigle storpiate riscritte nella trascrizione (15/10)
+
+Whisper scrive «PG-16» per «PEGI 16» (la fascia d'età dei videogiochi): il prompt non si allunga e
+sulla DGX le hotwords non passano, quindi la sigla si riscrive dopo la trascrizione
+(`calliope/sigle.py`, `correggi_sigle`), nel trascrittore (turni e stanza) e nella corsia lenta col
+Whisper suo. Solo la forma chiusa sigla + fascia vera (3, 7, 12, 16, 18): «PG», «PEGI», «P.G.»,
+«Pegi», «Peghi», «Peggi» → «PEGI N»; restano come sono «PG-13» dei film, «PG» da sola, «Peggy»,
+«peggio», «pg» minuscola, un numero più lungo o con i decimali. Nel registro dei turni la regola
+`sigla_trascrizione` con le forme cambiate (`sigle`). Casi e contrari in `prove/prova_testo.py`.

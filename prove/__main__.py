@@ -519,6 +519,7 @@ LEGAMI = [
     ("calliope/tools/conversazioni.py", ["prova_conversazioni.py"]),
     ("calliope/ripetizione.py", ["prova_conversazioni.py", "prova_stanza_storpiata.py"]),
     ("calliope/allucinazioni.py", ["prova_testo.py"]),
+    ("calliope/sigle.py", ["prova_testo.py"]),
     ("calliope/casa/", ["prova_casa_ha.py", "prova_meteo_casa.py"]),
     ("calliope/capacita.py", ["prova_capacita.py", "prova_novita.py"]),
     ("calliope/stato.py", ["prova_capacita.py", "prova_piano.py"]),

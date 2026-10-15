@@ -87,6 +87,7 @@ class Transcriber:
     # La famiglia dell'ultima frase scartata come allucinazione (calliope/allucinazioni.py,
     # 09/10), o None: il ciclo la scrive nel registro dei turni (regola allucinazione_whisper)
     ultima_scartata = None
+    ultime_sigle: list = []
 
     def __init__(self, cfg: Config, solo_cpu: bool = False):
         from faster_whisper import WhisperModel
@@ -218,7 +219,11 @@ class Transcriber:
                                        or [self.cfg.name]))
         self.ultima_scartata = famiglia
         if famiglia is not None or self._is_prompt_echo(text):
+            self.ultime_sigle = []
             return ""
+        # Sigle storpiate riscritte (15/10, calliope/sigle.py: «PG-16» → «PEGI 16»)
+        from .sigle import correggi_sigle
+        text, self.ultime_sigle = correggi_sigle(text)
         return text
 
     def _is_prompt_echo(self, text: str) -> bool:

@@ -1820,6 +1820,11 @@ class Ciclo:
                   flush=True)
             self.rec["allucinazione"] = scartata
             self.rule("allucinazione_whisper")
+        sigle = getattr(s.stt, "ultime_sigle", None) if t.scritto is None else None
+        if sigle:
+            # Una sigla storpiata riscritta nella trascrizione (15/10, calliope/sigle.py)
+            self.rec["sigle"] = list(sigle)
+            self.rule("sigla_trascrizione")
         if t.scritto is None and isinstance(self.rec.get("ascolto"), dict):
             # «aspetta», «non ho finito»… in testa alla frase: solo un segnale nel registro
             # (07/10, pause.py), nessun effetto sul turno

@@ -263,6 +263,25 @@ _t._run = lambda audio: "Ho fatto un corso gratuito di yoga."
 verifica("trascrittore: contrario, la frase vera passa",
          (_t.transcribe(None), _t.ultima_scartata), ("Ho fatto un corso gratuito di yoga.", None))
 
+# Sigle storpiate riscritte (15/10, calliope/sigle.py, regola `sigla_trascrizione`): il caso
+# vero «PG-16» in auto e le fasce PEGI vere; contrari: «PG-13» dei film, «PG» da sola, «Peggy»,
+# «peggio», un numero più lungo, un decimale
+from calliope.sigle import correggi_sigle  # noqa: E402
+for testo, atteso in [
+        ("È un gioco PG-16, non va bene.", "È un gioco PEGI 16, non va bene."),
+        ("pg-16", "pg-16"),
+        ("PG 18 e PG-3", "PEGI 18 e PEGI 3"), ("P.G. 12", "PEGI 12"), ("Pegi16", "PEGI 16"),
+        ("peghi 7", "PEGI 7"), ("PEGGI 12", "PEGI 12"), ("pegi 16", "PEGI 16"),
+        ("PEGI 16", "PEGI 16"),
+        ("Il film è PG-13.", "Il film è PG-13."), ("Un film PG.", "Un film PG."),
+        ("Peggy 16 anni", "Peggy 16 anni"), ("peggio 12 volte", "peggio 12 volte"),
+        ("PG 160", "PG 160"), ("PG 16,5", "PG 16,5"), ("UPG 16", "UPG 16")]:
+    verifica(f"sigla «{testo}»", correggi_sigle(testo)[0], atteso)
+verifica("sigla: le forme cambiate per il registro", correggi_sigle("PG-16 e PEGI 18")[1], ["PG-16"])
+_t._run = lambda audio: "Ha il bollino PG-16."
+verifica("trascrittore: la sigla riscritta e detta al registro",
+         (_t.transcribe(None), _t.ultime_sigle), ("Ha il bollino PEGI 16.", ["PG-16"]))
+
 # ── pulizia per la voce e frasi ──
 verifica("niente markdown né emoji", clean_for_speech("**Ciao** 😀 a _tutti_"), "Ciao a tutti")
 verifica("maiuscola dentro una parola", clean_for_speech("il museI"), "il musei")

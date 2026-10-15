@@ -760,7 +760,8 @@ class Lenta:
         testo = unisci_righe(str(r.json().get("text") or "")).strip()
         if famiglia(testo, getattr(cfg, "wake_names", None) or [cfg.name]):
             return ""
-        return testo
+        from ..sigle import correggi_sigle
+        return correggi_sigle(testo)[0]
 
     # ── chi parla ──
     def _profilo(self, nome):
