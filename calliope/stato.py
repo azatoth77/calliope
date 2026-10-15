@@ -42,6 +42,12 @@ il prossimo passo (registro delle capacità, calliope/capacita.py).
                                               «nucleo» o «tutti», richiamo sui turni con
                                               tool, schemi risparmiati
                                               (calliope/system1/preselezione.py, 15/10)
+    python -m calliope.stato --reti [--giorni N] [--json]
+                                              le reti del modello per profilo (15/10, E11,
+                                              calliope/reti_scatti.py): scatti, risposte
+                                              osservate con la rete accesa, ultima volta,
+                                              esito dopo lo scatto, le MAI SCATTATE e quelle
+                                              spente dal profilo o nel locale; sola lettura
     python -m calliope.stato --guardia [--giorni N] [--falso ID | --vero ID]
                                               i segnali del guardiano a posteriori (14/10):
                                               giorno, ora, stanza, minore, livello e
@@ -215,6 +221,25 @@ def _log(cfg, azione: str, res: dict, t0: float):
                               "codice": res.get("codice"), "byte": res.get("byte", 0)}})
     except Exception:  # noqa: BLE001 — il registro non deve fermare l'installazione
         pass
+
+
+def reti_main(cfg, argv: list[str], as_json: bool) -> int:
+    """`--reti` (15/10, roadmap 2.11, E11): gli scatti delle reti del modello per rete e per
+    profilo, dal registro dei turni, prima di spegnerne qualcuna nel 26B. Sola lettura."""
+    giorni = None
+    if "--giorni" in argv:
+        try:
+            giorni = max(1, int(argv[argv.index("--giorni") + 1]))
+        except (IndexError, ValueError):
+            print("--giorni vuole un numero")
+            return 1
+    from . import latenza, reti_scatti
+    r = reti_scatti.riassunto(latenza.leggi(cfg.turn_log_dir, giorni), cfg)
+    if as_json:
+        print(json.dumps(r, ensure_ascii=False, indent=2, default=str))
+    else:
+        print(reti_scatti.testo(r))
+    return 0
 
 
 def guardia_main(cfg, argv: list[str], as_json: bool) -> int:
@@ -535,6 +560,8 @@ def main(argv=None) -> int:
             print()
             print(fine_turno_s1.testo(fine_r))
         return 0
+    if "--reti" in argv:
+        return reti_main(cfg, argv, as_json)
     if "--guardia" in argv:
         return guardia_main(cfg, argv, as_json)
     if "--avvisi" in argv:

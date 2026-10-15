@@ -236,7 +236,9 @@ voce raccontava male gli esiti, i comandi del flusso si perdevano.
     amministra sull'elenco.
 11. **Reti mai scattate spente nel modello da 26B** (E11, era Q13), dal 20/10, con un rapporto degli
     scatti per rete e per profilo prima di toccarle; le reti restano tarate per profilo e non si
-    spengono nella taglia ridotta. *Quasi* · dipende da: lo script del rapporto e la data.
+    spengono nella taglia ridotta. *Quasi* · dipende da: la data e la scelta di chi amministra.
+    *15/10: il rapporto c'è, `calliope stato --reti` (ramo `reti-scatti`, inventario in
+    [voce-e-regole](aree/voce-e-regole.md)); nessuna rete spenta.*
 
 ### 3. Voce, casa, notizie (V1–V11)
 
