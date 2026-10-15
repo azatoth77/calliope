@@ -113,3 +113,4 @@ misure, sono nei documenti d'area ([`docs/aree/`](docs/aree/)) e nelle ricerche
 | 15/10 | Il «sì» breve per le azioni importanti misurato in ombra (E6, `calliope/si_breve.py`): modo della conferma, rischi, sfide e costo dell'alternativa in `calliope stato --turni` |
 | 15/10 | Frase dopo il tool System 1 (`system1_dopo_tool`, spenta di serie): per gli esiti chiusi di un tool solo la frase pronta senza la seconda passata del modello; in ombra il confronto e il tempo risparmiabile; preselezione dei tool spenta sulla DGX (misura senza vantaggio) |
 | 15/10 | Giochi: chi è quale giocatore («gioco anch'io» lega posto e voce, la mossa di chi non è di turno rifiutata senza il modello, «che giocatore sono?», entrare a metà) e «Gira il telefono» per una tela orientata (fascia sullo schermo, a voce una volta) |
+| 15/10 | Secondo Whisper nel conto della memoria: porta 8005 da un posto solo (la 8004 è di SearXNG) e 2,0 GB della variante q5_0 (#2, PR #92) |
