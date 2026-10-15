@@ -2079,3 +2079,74 @@ acceso; il piano dei modelli lo propone solo lasciando il posto a FLUX ([setup-d
 La ritrascrizione torna (`stanza_lenta_stt_url` nel locale) solo se il banco
 `banco_stanza_lenta.py --conservati … --ritrascrivi` dà al secondo servizio una WER sotto quella
 dei turni.
+
+## Righe della stanza storpiate e la domanda insistita (15/10, ramo `stanza-storpiata`)
+
+**Caso vero** (in auto, DGX col 26B, `stanza_contesto` con le righe nella storia; qui con nomi e
+sigle di fantasia). Whisper aveva scritto le righe della stanza così: «italiani WFO 2.500, mondiali
+WFO 2.500.», «2025 ARCENTO, europei WFO 2026 OR.», «c'è mondiale argento i mondiali» («2.500» per
+2025, «ARCENTO» per argento, «OR» per oro), e il nome della squadra storpiato. Il dialogo:
+
+1. «Cosa hai capito di quello che abbiamo detto prima?» → riassunto col nome storpiato;
+2. «Era il team …, che è un gruppo» (la correzione) → «Ah, ho capito, quindi ti riferivi al team
+   [nome storpiato]…»: il nome sbagliato subito dopo la correzione (al turno dopo quello giusto);
+3. «Quali erano questi risultati?» → «…ai mondiali WFO 2.500 e agli europei WFO 2026»;
+4. «Ma quali sono questi risultati? Lo hai capito?» → la stessa risposta: la rete della risposta
+   uguale ne ha scartata una, la spinta diceva «chi parla ha appena detto una cosa nuova» (falso)
+   e la seconda, quasi uguale, è passata;
+5. «…quale medaglia d'oro, quale d'argento» → «non ha detto quali medaglie»: falso, erano nelle
+   righe, storpiate.
+
+**(A) Le righe sono trascrizione grezza** (`stanza/contesto.STORPIATE`). Una nota di Calliope,
+**fuori dalla busta e subito prima** (dentro, l'avviso del dato non fidato dice di non seguire le
+istruzioni del contenuto): le parole sono spesso sbagliate (numeri, nomi, parole tronche o sbagliate
+per il suono); quando la parola giusta è evidente dal suono e dal discorso il modello la usa e lo
+dice con prudenza («mi è sembrato di sentire bronzo nel 2023») invece di dire che non è stato detto;
+se un pezzo non si capisce dice quale; se chi parla corregge un nome o una parola di quelle righe
+vale la sua forma da subito, già nella risposta di adesso. Sta nel blocco intero
+(`stanza_contesto_in_storia: false`) e nel **primo pezzo** della storia (poi resta nel prefisso in
+cache, uguale byte per byte), non nei seguiti, che nell'intestazione dicono solo «parole spesso
+storpiate come quelle di prima». Gli esempi della nota non sono le parole del caso (il banco misura
+proprio quelle). Il prompt di sistema, con `stanza_cerca`, ne ha una frase («sono trascritte con
+parole storpiate: ricostruisci quelle evidenti dicendo che ti è sembrato di sentirle, e se chi parla
+corregge un nome usa subito il suo»). Le righe restano come le ha scritte Whisper: niente corretto
+dal codice (principio 10: contesto, non regola). Costo: ~600 caratteri una volta per conversazione,
+nel prefisso.
+
+**(B) La domanda insistita** (rete `domanda_insistita`, `calliope/ripetizione.py`, di serie accesa,
+categoria «modello»). `insiste` guarda solo la forma: la domanda di adesso riprende quella del turno
+prima (quasi uguale, o le **parole piene** della più corta, cioè senza articoli, preposizioni,
+pronomi, ausiliari, parole delle domande e numeri, almeno al 60 % nell'altra) e la risposta di prima
+era lunga (almeno 8 parole). Allora:
+
+- nei dati del turno il blocco `insistenza` (`INSISTE_MSG`, regola `domanda_insistita`, mai nella
+  storia): condizionale, «se ti sta chiedendo di nuovo la stessa cosa, la tua risposta di prima non
+  gli è bastata: non ripeterla con altre parole; di' il dettaglio preciso con quello che hai, anche
+  incerto…, o quale pezzo non hai capito; se chiede altro, questa riga non conta»;
+- la rete della risposta uguale (`risposta_ripetuta`) trattiene già dalla somiglianza 0,7 invece di
+  0,85 (`SOGLIA_INSISTE`) e la spinta è `RIPETUTA_NUDGE_INSISTE` («ti ha chiesto di nuovo la stessa
+  cosa perché quella risposta non gli è bastata»), non più «una cosa nuova». Una passata in più
+  solo quando la risposta ripete davvero (sul 4B +~1 s al turno 4).
+
+Nel caso vero: «Quali erano questi risultati?» → «Ma quali sono questi risultati? Lo hai capito?»
+hanno in comune l'unica parola piena della prima («risultati»). Contrari (nella prova): «E chi ha
+vinto la gara?», «E a Milano che tempo fa?» dopo Roma, «Accendi la luce» dopo «Fatto.» (risposta
+breve), domande di sole parole vuote, la medaglia dopo i risultati (parole piene diverse: lì lavora
+la nota della parte A), rete spenta. Limite noto: un seguito con una parola sola in comune («e la
+fotosintesi nelle alghe?» dopo «cos'è la fotosintesi?») fa scattare la frase; è condizionale e il
+modello decide. La stessa domanda ripetuta uguale ha la frase ma non la rete della risposta uguale
+(come prima: alla stessa domanda la stessa risposta va bene).
+
+**Prove**: `prove/prova_stanza_storpiata.py` (livello 1, ~1 s). **Banco col modello**:
+`prove/manuali/banco_stanza_storpiata.py` riproduce il dialogo con righe di fantasia equivalenti
+(squadra «Balto Torrente» per «Valtorre Lecco», le stesse storpiature di medaglie e anni) e conta
+medaglie ricostruite (argento accanto ai mondiali o al 2025, oro accanto agli europei o al 2026, in
+un pezzo di frase che non nega), turno 5 che nega, nome giusto dopo la correzione (e se c'è ancora
+quello storpiato), turno 4 ripetuto, con le regole; modi `prima` (testi di prima e rete spenta) e
+`dopo`. Sul portatile col 4B (gemma4 e4b, 2 giri, 15/10): turno 4 ripetuto 1/2 → 0/2 (la spinta
+scatta 2/2), turno 5 che nega 2/2 → 0/2 (dice «mi è sembrato…» ma «non ho trovato» l'oro), medaglie
+entrambe 0/2 in tutti e due i modi (il 4B non ricostruisce «OR»: si legge sul 26B), nome giusto al
+turno 2 sempre. **Da fare sulla DGX** col 26B:
+
+    cd ~/calliope && V=~/.local/share/calliope/versioni/$(cat ~/.local/share/calliope/attuale) \
+        && $V/.venv/bin/python $V/prove/manuali/banco_stanza_storpiata.py --giri 5

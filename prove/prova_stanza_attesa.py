@@ -305,9 +305,12 @@ def prova_misura(stampa: bool):
              not any(d["domanda_in_attesa"] for d in dopo))
     # Riapertura: il tetto
     riap = [d for d in dopo if d["riapertura"]]
+    # Dal 15/10 il primo pezzo ha anche la nota sulle storpiature, fuori dalla busta
+    nota = len(ctx_mod.STORPIATE) + 1
     verifica("riapertura: il primo pezzo della conversazione nuova sta nel tetto di "
-             "stanza_riapertura_caratteri (con l'intestazione e le righe degli ultimi 45 s)",
-             all(d["nuove_car"] + d["attesa_car"] <= 3000 + 1200 for d in riap)
+             "stanza_riapertura_caratteri (con l'intestazione, la nota sulle storpiature e le "
+             "righe degli ultimi 45 s)",
+             all(d["nuove_car"] + d["attesa_car"] <= 3000 + 1200 + nota for d in riap)
              and all(p["nuove_car"] > 3000 for p in prima if p["riapertura"]),
              f"dopo {[d['nuove_car'] for d in riap]}, prima "
              f"{[p['nuove_car'] for p in prima if p['riapertura']]}")

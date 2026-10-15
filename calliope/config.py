@@ -342,7 +342,7 @@ class Config:
     # vuoto_seconda_passata, ricerca_promessa, citazione_tolta, nome_tool_parlato,
     # eco_contesto, spinta_archivio, spinta_rinuncia, spinta_esercizi, correzione_tool,
     # ricerca_recente, risposta_ripetuta, scrivo_qui_a_voce, spinta_stanza,
-    # ciclo_ripetuto; "tutte"
+    # ciclo_ripetuto, domanda_insistita; "tutte"
     # le spegne tutte. Quelle di
     # «sicurezza» (permessi, politica…) non si spengono: un nome di sicurezza o sconosciuto si
     # segnala all'avvio. Quelle del profilo (llm_profilo) si aggiungono a queste.
@@ -2394,10 +2394,15 @@ class Config:
         # archivio_cerca e poi conversazione_cerca, e la risposta era nella stanza, detta da
         # Calliope stessa nove minuti prima): anche le sue risposte a chi era lì, e stanza_cerca
         # prima dell'archivio e delle conversazioni
+        # Dal 15/10 (caso vero in auto: medaglie scritte «ARCENTO» e «OR» → «non ha detto quali
+        # medaglie»): le righe sono trascrizione grezza, si ricostruisce con prudenza; la
+        # correzione di chi parla vale sopra la riga (il testo lungo è nel blocco, STORPIATE)
         room = ("per ciò che si è detto vicino ai dispositivi di casa, anche le tue risposte a "
                 "chi era lì («ti ricordi quando è…?», «cosa avevamo detto di…?»), rispondi dalle "
-                "righe della stanza che hai davanti, se ci sono; se lì non c'è (chi ha detto cosa, "
-                "cosa si era deciso, a che ora, di cosa si parlava in un'altra stanza) "
+                "righe della stanza che hai davanti, se ci sono (sono trascritte con parole "
+                "storpiate: ricostruisci quelle evidenti dicendo che ti è sembrato di sentirle, e "
+                "se chi parla corregge un nome usa subito il suo); se lì non c'è (chi ha detto "
+                "cosa, cosa si era deciso, a che ora, di cosa si parlava in un'altra stanza) "
                 "stanza_cerca, prima di archivio_cerca, di conversazione_cerca e di dire che non "
                 "lo sai; " if stanza else "")
         # Con la ricerca web: quando usarla, al posto di «non puoi sapere il meteo…»
@@ -2971,6 +2976,13 @@ RETI: dict[str, Rete] = {
         "che è stato detto adesso (calliope/ripetizione.py)", MODELLO,
         "la stessa frase su Christopher Nolan detta due volte a due richieste diverse (26B, "
         "09/10, DGX)"),
+    "domanda_insistita": Rete(
+        "domanda che riprende le parole piene di quella di prima dopo una risposta lunga: nei "
+        "dati del turno la frase condizionale «non ripeterla, di' il dettaglio preciso, anche "
+        "incerto, o quale pezzo non hai capito» (INSISTE_MSG) e, se la risposta è uguale, la "
+        "spinta senza «una cosa nuova» (calliope/ripetizione.py)", MODELLO,
+        "«Ma quali sono questi risultati? Lo hai capito?» → la stessa risposta su «mondiali WMO "
+        "2.500», due volte (26B, 15/10, in auto)"),
     "ciclo_ripetuto": Rete(
         "risposta che gira in tondo (la stessa parola, lo stesso gruppo o la stessa frase di "
         "fila oltre la soglia): lo stream si chiude, il ciclo non si dice, resta la parte sana o "
