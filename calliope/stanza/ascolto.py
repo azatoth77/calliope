@@ -329,6 +329,11 @@ class Stanza:
                 altro = None
         # Una riconnessione dello stesso satellite: il segno resta (è già quello nuovo)
         self._segno(sat, via=altro is None or altro is coll)
+        if self.lenta is not None and (altro is None or altro is coll):
+            try:
+                self.lenta.scollegato(sat)       # il blocco aperto si chiude (15/10)
+            except Exception:  # noqa: BLE001
+                pass
 
     def voce_comando(self, coll):
         """Un pezzo di audio dei comandi (b"A"): qualcuno sta parlando a Calliope da questo

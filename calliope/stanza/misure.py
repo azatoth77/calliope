@@ -38,7 +38,14 @@ dei turni (`turn_log_dir`), con la stessa tenuta (`turn_log_days`). Una riga per
                   (tempo di Whisper), cam_ms, finestre, voce_s, attesa_s (dalla fine del
                   segmento), prompt, ritrascritto (false: senza ritrascrizione, 14/10 sera)
     lenta_riassunto  esito («fatto», «guasto»), ms, righe, caratteri
-    banco         (eccezione del 14/10 sera, `stanza_audio_banco_giorni`) sat, salvato
+    lenta_blocco  (15/10, `stanza_lenta_blocchi`) sat, modo, esito («uguale», «cambiato»,
+                  «non_distribuibile», «allucinazione», «singolo»: un segmento da solo,
+                  «scaduto»: uscito dalla RAM prima del passo, «dimenticato», «errore»),
+                  chiusura (altra_voce, pausa_lunga, tetto, attesa, pausa, scollegato, buco),
+                  segmenti, durata_s, pausa_max_s (la pausa più lunga dentro il blocco),
+                  stt_s, attesa_s (dalla fine del blocco), somiglianza, testo_cambiato,
+                  applicato, righe (versioni nuove scritte), motivo
+    banco        (eccezione del 14/10 sera, `stanza_audio_banco_giorni`) sat, salvato
 
 Più, nel registro dei turni, `stanza.copertura` di ogni turno interpellato con la stanza accesa
 (`dette`, `pronte`, `recupero_ms`, `oltre`): la «copertura all'interpellazione» (§ 3.11). Dal
@@ -149,7 +156,30 @@ def riassunto(righe: list[dict], turni: list[dict] | None = None) -> dict:
              "_attese": [], "stt_tot_s": 0.0, "cam_tot_s": 0.0, "riassunti": 0,
              "riassunti_guasti": 0, "_riass_ms": [], "banco_salvati": 0, "banco_saltati": 0,
              "senza_ritrascrizione": 0}
+    blocchi = {"n": 0, "singoli": 0, "esiti": {}, "chiusure": {}, "cambiati": 0,
+               "applicati": 0, "righe": 0, "_seg": [], "_dur": [], "_stt": [], "_att": [],
+               "_pausa": []}
     for r in righe:
+        if r.get("tipo") == "lenta_blocco":
+            e = str(r.get("esito") or "?")
+            blocchi["esiti"][e] = blocchi["esiti"].get(e, 0) + 1
+            if r.get("chiusura"):
+                c = str(r["chiusura"])
+                blocchi["chiusure"][c] = blocchi["chiusure"].get(c, 0) + 1
+            if e == "singolo":
+                blocchi["singoli"] += 1
+                continue
+            if e in ("scaduto", "dimenticato", "errore"):
+                continue
+            blocchi["n"] += 1
+            blocchi["cambiati"] += 1 if r.get("testo_cambiato") else 0
+            blocchi["applicati"] += 1 if r.get("applicato") else 0
+            blocchi["righe"] += int(r.get("righe") or 0)
+            for k, campo in (("_seg", "segmenti"), ("_dur", "durata_s"), ("_stt", "stt_s"),
+                             ("_att", "attesa_s"), ("_pausa", "pausa_max_s")):
+                if r.get(campo) is not None:
+                    blocchi[k].append(float(r[campo]))
+            continue
         if r.get("tipo") == "lenta":
             e = str(r.get("esito") or "?")
             lenta["esiti"][e] = lenta["esiti"].get(e, 0) + 1
@@ -361,6 +391,16 @@ def riassunto(righe: list[dict], turni: list[dict] | None = None) -> dict:
     lenta["riassunto_p50_ms"] = _p(rm_l, 0.5)
     lenta["stt_tot_s"] = round(lenta["stt_tot_s"], 1)
     lenta["cam_tot_s"] = round(lenta["cam_tot_s"], 1)
+    sg, du, sb, ab, pb = (blocchi.pop("_seg"), blocchi.pop("_dur"), blocchi.pop("_stt"),
+                          blocchi.pop("_att"), blocchi.pop("_pausa"))
+    blocchi["segmenti_media"] = round(sum(sg) / len(sg), 2) if sg else None
+    blocchi["segmenti_max"] = int(max(sg)) if sg else None
+    blocchi["durata_p50_s"], blocchi["durata_p90_s"] = _p(du, 0.5), _p(du, 0.9)
+    blocchi["stt_p50_s"], blocchi["stt_tot_s"] = _p(sb, 0.5), round(sum(sb), 1)
+    blocchi["attesa_p50_s"], blocchi["attesa_p90_s"] = _p(ab, 0.5), _p(ab, 0.9)
+    blocchi["pausa_p50_s"], blocchi["pausa_p90_s"] = _p(pb, 0.5), _p(pb, 0.9)
+    blocchi["pausa_max_s"] = round(max(pb), 2) if pb else None
+    lenta["blocchi"] = blocchi
     return {"giorni": giorni, "copertura": cop, "blocco": blocco, "cerca": cerca,
             "conoscenti": conoscenti, "lenta": lenta,
             "tempi": {k: {"turni": len(v["prima"]) or len(v["stt"]),
@@ -386,6 +426,8 @@ def testo(r: dict) -> str:
     le = r.get("lenta") or {}
     if le.get("esiti") or le.get("riassunti") or le.get("riassunti_guasti"):
         out.append(testo_lenta(le))
+    if (le.get("blocchi") or {}).get("esiti"):
+        out.append(testo_blocchi(le["blocchi"]))
     if not r.get("giorni") and not r["copertura"]["turni"] and not (
             r.get("cerca") or {}).get("chiamate") and not (
             (r.get("cerca") or {}).get("anticipo") or {}).get("ricerche") and not (
@@ -502,6 +544,27 @@ def testo_lenta(le: dict) -> str:
             f"{le['riassunti_guasti']}, p50 {le['riassunto_p50_ms']} ms)"
             + (f"; banco: salvati {le['banco_salvati']}, saltati {le['banco_saltati']}"
                if le.get("banco_salvati") or le.get("banco_saltati") else ""))
+
+
+def testo_blocchi(b: dict) -> str:
+    """La riga dei blocchi della corsia lenta (15/10, `stanza_lenta_blocchi`): solo numeri."""
+    es = b.get("esiti") or {}
+    g = lambda e: int(es.get(e, 0))  # noqa: E731
+    n = int(b.get("n") or 0)
+    quota = f" ({round(100 * b['cambiati'] / n)} %)" if n else ""
+    chiusure = ", ".join(f"{k} {v}" for k, v in sorted((b.get("chiusure") or {}).items(),
+                                                         key=lambda x: -x[1]))
+    return (f"  Blocchi della corsia lenta: {n} ritrascritti (segmenti per blocco media "
+            f"{b['segmenti_media']}, al più {b['segmenti_max']}; segmenti da soli "
+            f"{b['singoli']}), durata p50 {b['durata_p50_s']} s, p90 {b['durata_p90_s']} s; "
+            f"testo cambiato in {b['cambiati']}{quota}, applicati {b['applicati']} "
+            f"({b['righe']} righe nuove), uguali {g('uguale')}, non distribuibili "
+            f"{g('non_distribuibile')}, allucinazioni {g('allucinazione')}; Whisper "
+            f"{b['stt_tot_s']} s in tutto (p50 {b['stt_p50_s']} s a blocco); dalla fine del "
+            f"blocco p50 {b['attesa_p50_s']} s, p90 {b['attesa_p90_s']} s; pausa più lunga "
+            f"dentro un blocco p50 {b['pausa_p50_s']} s, p90 {b['pausa_p90_s']} s, al più "
+            f"{b['pausa_max_s']} s; chiusure: {chiusure or 'nessuna'}; uscito dalla RAM prima "
+            f"del passo {g('scaduto')}")
 
 
 def testo_conoscenti(k: dict, salvati: int | None = None) -> str:

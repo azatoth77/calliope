@@ -1523,3 +1523,77 @@ pericolosi minore → chi amministra 0 → 0. Con margine 0,10, voce minima 1,0 
 molto (4–7). Le frasi rifiutate vere non hanno audio (169 nel registro: 56 al telefono). Acceso
 `ombra` sulla DGX per raccogliere le frasi sicure dell'uso; `attivo` solo se al telefono nasce
 anche l'impronta di chi amministra e «col minore vicino» non sale.
+
+## La ritrascrizione a blocchi della corsia lenta (15/10, ramo `lenta-blocchi`)
+
+**Il caso** (15/10 mattina, DGX, whisper-server dei turni con large-v3-turbo): una frase di un
+ragazzo in auto spezzata dalla stanza in **tre segmenti** (5,5, 4,5 e 2,9 s, pause sotto il
+secondo), trascritti «italiani WMO 2.500, mondiali WMO 2.500.» / «2025 ARCENTO, europei WMO 2026
+OR.» / «c'è mondiale argento i mondiali». Ritrascritti uno per uno: uguali. Con le righe di prima
+come prompt: peggio («25/100»). **I tre uniti** (0,3 s di silenzio fra uno e l'altro), **senza
+prompt**: «Italiani WMO 2025 argento, mondiali WMO 2025 argento, europei WMO 2026 euro. C'è mondiale
+argento, i mondiali.», identico in tre giri; uniti col prompt: peggio. Lo stesso Whisper che segmento
+per segmento peggiorava le righe (sopra, WER 4,8 % contro 3,0 %) le migliora se sente la frase
+intera: il guaio era il taglio, non il modello.
+
+**La regola** (`calliope/stanza/lenta.py`, `Blocco`, `_al_blocco`, `passo_blocco`,
+`rivedi_blocco`; decisa con Dario il 15/10): dopo la revisione di ogni segmento (chi parla, TV,
+allucinazioni: come prima), i segmenti **consecutivi della stessa voce sullo stesso satellite**
+stanno in un blocco. La stessa voce: la stessa persona di casa (voce o zona grigia, dalla riga
+rivista), lo stesso conoscente, la stessa voce sconosciuta (lo stesso gruppo della corsia veloce,
+o impronte CAM++ sopra `speaker_id_threshold`). Il blocco si chiude quando:
+
+- parla **un'altra voce**: un'altra persona, Calliope (la sua risposta è una riga in mezzo), una
+  riga qualunque fra i due segmenti (anche di un turno che non passa dalla corsia lenta), un
+  segmento TV, «più voci», spezzato fra due voci, allucinazione o non rivisto (errore);
+- c'è una **pausa lunga** della stessa persona: `stanza_lenta_blocchi_pausa_s` (8 s di serie,
+  **provvisorio**: si sceglie sui dati del banco, sotto; 0 = solo il cambio di voce). Un silenzio
+  più corto non chiude niente: la pausa più lunga dentro ogni blocco va nelle misure, per vedere se
+  si uniscono frasi lontane;
+- si arriva al **tetto** `stanza_lenta_blocchi_max_s` (25 s di audio unito, sotto i 30 s della
+  finestra di Whisper): si spezza al confine di segmento e il seguito apre un blocco nuovo;
+- il **satellite si scollega** (dopo i segmenti detti prima che aspettano ancora la revisione), la
+  **stanza va in pausa** (il blocco non si ritrascrive finché dura), «dimentica» (si butta);
+- nessun seguito per `stanza_lenta_blocchi_attesa_s` (600 s; con la pausa lunga accesa scatta
+  prima quella).
+
+Un blocco chiuso di **almeno due segmenti** si ritrascrive **senza prompt**, col Whisper dei turni
+(temperatura 0 nel server) e la **precedenza LENTA** (`stanza/coda.py`): solo a DGX libera, dopo i
+segmenti da rivedere, e un turno che arriva passa davanti a un blocco che aspetta; un blocco già
+cominciato occupa Whisper al più per ~25 s di audio (~0,3–0,5 s sulla GPU della DGX, stima dal
+turbo: da misurare con `calliope stato --turni`). Un segmento da solo non si ritrascrive (misura
+«singolo»): era il caso misurato peggiore.
+
+**`stanza_lenta_blocchi: spento | ombra | attivo`** (spento di serie): in **ombra** si ritrascrive e
+si misura, il testo va solo nel banco della stanza (`<ora>-blocco-<id>.json` accanto ai segmenti,
+con le righe di allora e la ridistribuzione; solo voci di casa, mai in pausa) e le righe usate dal
+modello restano quelle di prima; in **attivo** il testo del blocco diventa una versione nuova dei
+segmenti (in [contesto-conversazione](contesto-conversazione.md) come si scrive nel registro).
+
+**Memoria**: l'audio dei segmenti resta in RAM come prima (al più `stanza_audio_min`, 15 min per
+satellite, ~1,9 MB al minuto); dopo la revisione del segmento, quello di un **blocco aperto** resta
+fino alla chiusura: al più il tetto, 25 s, cioè **~0,8 MB per satellite** in PCM 16 bit. I blocchi
+chiusi che aspettano la DGX libera escono dopo `stanza_audio_min` dalla fine (misura «scaduto»).
+Niente audio in più su disco: il banco tiene già i segmenti.
+
+**Misure** (`stanza-*.jsonl`, tipo `lenta_blocco`, senza parole; riga «Blocchi della corsia lenta»
+di `calliope stato --turni`): blocchi ritrascritti, segmenti per blocco (media, massimo) e segmenti
+da soli, durata (p50, p90), testo cambiato (quota), applicati e righe nuove, uguali, non
+distribuibili, allucinazioni, tempo di Whisper (in tutto e p50 a blocco), attesa dalla fine del
+blocco (p50, p90), pausa più lunga dentro un blocco (p50, p90, massimo), chiusure per motivo, usciti
+dalla RAM.
+
+**Il banco per decidere** (`prove/manuali/blocchi_stanza.py`, sulla DGX, sull'audio del banco della
+stanza): ricostruisce i blocchi dai segmenti salvati (il banco tiene solo le voci di casa: una voce
+non salvata in mezzo si vede dal buco nella numerazione dei segmenti del satellite, che chiude il
+blocco; `--ignora-buchi` no), stampa la **distribuzione delle pause** fra segmenti consecutivi della
+stessa persona e **quanti blocchi cambiano con 3, 5, 8 e 15 s** (`--solo-pause` si ferma lì), poi
+ritrascrive i blocchi col Whisper dei turni e, per quelli spezzati dal tetto, prova la **ripresa**
+(il pezzo dopo con davanti l'ultimo segmento del pezzo prima, da sentire). Scrive una **pagina HTML
+locale** in `privato/` (fuori da git, file 600: voci vere) con ~20 blocchi: audio unito, testo dei
+segmenti di allora e del blocco, «meglio allora / meglio il blocco / uguali», una nota e «Scarica
+le scelte». Prova a secco `prova_stanza_lenta_blocchi.py`.
+
+**Da fare**: lanciare lo script sulla DGX, scegliere `stanza_lenta_blocchi_pausa_s` sulle pause vere,
+rivedere la pagina; con le scelte in mano, `stanza_lenta_blocchi: ombra` nel locale per misurare
+sulla corsia vera, poi `attivo`.

@@ -17,7 +17,8 @@ zona grigia, voci sconosciute, «più voci», TV; mai in pausa («abbiamo ospiti
 - **Dove**: `<turn_log_dir>/stanza_banco/<satellite>/<AAAA-MM-GG>/<ora>-<segmento>.wav` (μ-law
   16 kHz come la voce conservata, `conserva.wav_mulaw`) e accanto `.json` (satellite, stanza,
   tempi, v1, v2, persone, finestre: niente altro), file 600 e cartelle 700; `acceso.json` dice da
-  quando vale l'eccezione.
+  quando vale l'eccezione. Dal 15/10 (`stanza_lenta_blocchi`) anche `<ora>-blocco-<id>.json`, il
+  testo di un blocco di segmenti ritrascritto insieme (niente audio in più).
 - **Scadenza**: dopo N giorni dalla prima accensione smette da sé (lo dice nel log una volta e in
   `calliope stato --turni`); per ricominciare si cancella la cartella (`calliope conserva
   --svuota`). I file restano per `turn_log_days` (la rotazione a ogni giorno nuovo).
@@ -175,6 +176,37 @@ class Banco:
             return salta("errore")
         self.salvati += 1
         self._ruota_se_serve()
+        return rel
+
+    def salva_blocco(self, sat, info: dict | None, blocco: dict, righe: list[dict], testo: str,
+                     pezzi: list[str], in_pausa: bool = False,
+                     ora: float | None = None) -> str | None:
+        """Il testo di un blocco ritrascritto (15/10, `stanza_lenta_blocchi`): un `.json` accanto
+        ai segmenti (`<ora>-blocco-<id>.json`, niente audio: quello è nei file dei segmenti) con
+        le righe di allora, il testo del blocco e la sua ridistribuzione. Con le stesse regole dei
+        segmenti: solo voci di casa riconosciute, mai in pausa. Il percorso relativo, o None."""
+        if not self.attivo(ora) or in_pausa:
+            return None
+        ok, _ = self.ammesso(righe, 0)
+        if not ok:
+            return None
+        from ..conserva import _scrivi_privato
+        ini = float(blocco.get("inizio") or time.time())
+        quando = datetime.datetime.fromtimestamp(ini)
+        rel = (f"{_nome_file(sat)}/{quando.date().isoformat()}/"
+               f"{quando.strftime('%H%M%S')}-blocco-{_nome_file(blocco.get('blocco'))}")
+        persone = sorted({str(r.get("persona") or str(r.get("chi"))[len("persona:"):])
+                          for r in righe})
+        meta = dict(blocco, sat=str(sat), stanza=(info or {}).get("stanza"),
+                    satellite=(info or {}).get("nome"), persone=persone, tipo="blocco",
+                    allora=[_pulita(r) for r in righe], testo_blocco=testo,
+                    pezzi=list(pezzi or []))
+        try:
+            _scrivi_privato(self.dir / (rel + ".json"),
+                            json.dumps(meta, ensure_ascii=False, indent=1).encode("utf-8"))
+        except OSError as e:
+            self.log(f"   [STANZA] blocco del banco non salvato: {type(e).__name__}")
+            return None
         return rel
 
     # ── cancellare ──

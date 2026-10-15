@@ -1258,6 +1258,29 @@ class Config:
     # Il riassunto progressivo della stanza (col rilevatore già caricato, a DGX libera): ogni
     # tante righe nuove di uno scambio. 0 = nessun riassunto
     stanza_lenta_riassunto_righe: int = 6
+    # La ritrascrizione a blocchi (15/10, calliope/stanza/lenta.py): i segmenti consecutivi della
+    # stessa persona sullo stesso satellite, dopo la revisione segmento per segmento, si
+    # uniscono (0,3 s di silenzio fra uno e l'altro) e si ritrascrivono insieme col Whisper dei
+    # turni, senza prompt, con la precedenza LENTA. Il blocco si chiude quando parla un'altra voce
+    # (un'altra persona, Calliope, una voce sconosciuta diversa), dopo una pausa lunga della
+    # stessa persona (`stanza_lenta_blocchi_pausa_s`), al tetto di durata (si spezza a un confine
+    # di segmento), in pausa della stanza o se aspetta troppo. Misura del 15/10 sulla DGX (frase
+    # di un ragazzo spezzata in tre segmenti di 5,5, 4,5 e 2,9 s): uno per uno «italiani WMO
+    # 2.500, mondiali WMO 2.500.» / «2025 ARCENTO…», uniti «Italiani WMO 2025 argento, mondiali
+    # WMO 2025 argento, europei WMO 2026 euro…», uguale in 3 giri; col prompt peggio.
+    # «spento» (di serie) = come prima; «ombra» = ritrascrive e misura (il testo solo nel banco),
+    # le righe restano quelle di prima; «attivo» = il testo del blocco, ridistribuito sui
+    # segmenti, è una versione nuova delle righe (contesto, ricerca, tenuta)
+    stanza_lenta_blocchi: str = "spento"
+    # Il tetto di un blocco in secondi di audio (Whisper lavora a finestre di 30 s)
+    stanza_lenta_blocchi_max_s: float = 25.0
+    # Una pausa così lunga (secondi) fra due segmenti della stessa persona chiude il blocco; 0 =
+    # solo il cambio di voce. Valore provvisorio: si sceglie sulla distribuzione delle pause del
+    # banco (prove/manuali/blocchi_stanza.py stampa quanti blocchi cambiano con 3, 5, 8, 15 s)
+    stanza_lenta_blocchi_pausa_s: float = 8.0
+    # Un blocco aperto si chiude comunque dopo tanto dalla fine del suo ultimo segmento (l'audio
+    # resta in RAM fino ad allora: al più `stanza_lenta_blocchi_max_s` per satellite, ~0,8 MB)
+    stanza_lenta_blocchi_attesa_s: float = 600.0
     # Eccezione temporanea per il banco del passo 3 (14/10 sera, decisione 0029, eccezione
     # «audio del banco»): per tanti giorni dalla prima accensione l'audio dei segmenti della
     # stanza in cui **tutte** le voci sono persone di casa riconosciute dalla voce (adulti e
@@ -3257,7 +3280,9 @@ SEZIONI: dict[str, list[str]] = {
                "stanza_lenta_stt_url", "stanza_lenta_stt_modello", "stanza_lenta_beam",
                "stanza_lenta_ritrascrivi", "stanza_lenta_prompt", "stanza_lenta_prompt_caratteri", "stanza_lenta_finestra_s",
                "stanza_lenta_parte_min_s", "stanza_lenta_soglia_finestra",
-               "stanza_lenta_riassunto_righe", "stanza_audio_banco_giorni"],
+               "stanza_lenta_riassunto_righe", "stanza_lenta_blocchi",
+               "stanza_lenta_blocchi_max_s", "stanza_lenta_blocchi_pausa_s",
+               "stanza_lenta_blocchi_attesa_s", "stanza_audio_banco_giorni"],
     "satellite": ["satellite_server", "satellite_credenziali", "satellite_impronta",
                   "satellite_microfono", "satellite_casse", "satellite_webcam",
                   "satellite_schermo", "satellite_schermo_personale", "satellite_esecutore",
@@ -3479,6 +3504,8 @@ LIMITI: dict[str, tuple[float, float]] = {
     "stanza_lenta_beam": (1, 20), "stanza_lenta_prompt_caratteri": (0, 600),
     "stanza_lenta_finestra_s": (0.5, 5.0), "stanza_lenta_parte_min_s": (0.5, 30.0),
     "stanza_lenta_soglia_finestra": (0.0, 1.0), "stanza_lenta_riassunto_righe": (0, 500),
+    "stanza_lenta_blocchi_max_s": (5.0, 29.0), "stanza_lenta_blocchi_pausa_s": (0.0, 3600.0),
+    "stanza_lenta_blocchi_attesa_s": (10.0, 14400.0),
     "stanza_audio_banco_giorni": (0, 30),
     "contesto_ripiego": (2048, 1_048_576), "contesto_rilettura_max_s": (0.1, 60.0),
     "contesto_conversazioni": (1, 64), "contesto_margine_gb": (0.0, 512.0),
@@ -3669,6 +3696,17 @@ def _stanza_guardia_valido(value):
     raise ValueError("serve «spenta», «ombra» o «attiva»")
 
 
+def _blocchi_valido(value):
+    """«spento», «ombra» o «attivo» (15/10, la ritrascrizione a blocchi della corsia lenta);
+    il «no» di YAML (false) è «spento»."""
+    if value is False or value is None:
+        return "spento"
+    s = str(value).strip().lower()
+    if s in ("spento", "ombra", "attivo"):
+        return s
+    raise ValueError("serve «spento», «ombra» o «attivo»")
+
+
 def _arbitro_memoria_valido(value):
     """«spento» o «ombra» (15/10, calliope/arbitro_ombra.py, passo 2)."""
     s = str(value or "").strip().lower()
@@ -3733,6 +3771,7 @@ VALIDATORI = {"llm_keep_alive": keep_alive_valido, "llm_num_ctx": _num_ctx_valid
                "preselezione_tool": _preselezione_valido,
                "preselezione_codifica": _preselezione_codifica_valida,
                "stanza_lenta_ritrascrivi": _si_no_auto_valido,
+               "stanza_lenta_blocchi": _blocchi_valido,
                "arbitro_memoria": _arbitro_memoria_valido}
 
 

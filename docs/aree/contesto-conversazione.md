@@ -2159,3 +2159,32 @@ era nel prefisso già letto); turno 4 ripetuto prima 2/5, dopo 3/5, con `domanda
 c'è quasi sempre. Il limite è la trascrizione: una parola tronca come «OR» il modello non la
 ricostruisce; da guardare la ritrascrizione del solo segmento (l'audio del banco c'è) e la rete
 `domanda_insistita`, che costa senza effetto misurato.
+
+## La ritrascrizione a blocchi: versioni nuove ridistribuite sui segmenti (15/10, ramo `lenta-blocchi`)
+
+La corsia lenta unisce i segmenti consecutivi della stessa voce e li ritrascrive insieme
+(`stanza_lenta_blocchi`; regola, misura del caso vero e chiusure in [stt-tts](stt-tts.md)). Come il
+testo del blocco entra nel registro della stanza, con `stanza_lenta_blocchi: attivo`:
+
+- **ridistribuito sui segmenti**, non una riga sola: il testo si divide in proporzione al tempo di
+  ogni segmento nell'audio unito, al confine di frase più vicino (`dividi_testo`, la stessa della
+  divisione fra due voci: nessuna parola persa né ripetuta), e ogni segmento il cui testo cambia
+  riceve una **versione nuova** in sola aggiunta: la 2 sopra la 1, la 3 sopra una 2 (la zona grigia
+  corretta, per esempio), con `sostituisce`, `rivista` («testo») e `blocco` (`id` = il primo
+  segmento, `parte`, `segmenti`). Chi parla e gli altri campi restano quelli della riga di prima. Un
+  pezzo uguale alla riga di prima non scrive niente.
+- **Perché così**: registro, proiezione (`righe`: l'ultima versione di ogni segmento), tenuta su
+  disco (per segmento e versione: la nuova sostituisce la vecchia), `stanza_cerca`, contesto (le
+  righe già mandate al modello non si rimandano, per segmento) e guardiano a posteriori (rigiudica
+  solo un cambio sostanziale) sono già tutti per segmento: una riga sola per più segmenti avrebbe
+  chiesto di nascondere le altre in ognuno di loro. Il prezzo: un confine di frase può spostare
+  una parola nel segmento accanto (nel caso di prova «barca nuova.» passa nel primo), e la riga
+  unita si legge uguale.
+- **Quando non si scrive**: meno parole che segmenti (`non_distribuibile`), allucinazione (famiglie
+  di Whisper, ripetizione, compressione), testo uguale, stanza in pausa, segmento dimenticato o
+  scartato nel frattempo. In **ombra** mai: il testo va nel banco e i numeri nelle misure.
+- **Il guardiano** aspetta i segmenti di un blocco aperto o in coda (`Lenta.pendente`, solo in
+  attivo), al più `stanza_guardia_blocco_max_s` come per la versione 2.
+
+Prova a secco `prova_stanza_lenta_blocchi.py` (righe ridistribuite, versione 3 sopra la 2, tenuta,
+ricerca, contrari).

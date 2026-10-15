@@ -484,7 +484,9 @@ def stampa(m: dict):
 def modo_banco(o, cfg) -> int:
     base = Path(o["banco"] if isinstance(o.get("banco"), str) else
                 Path(cfg.turn_log_dir or "registro") / "stanza_banco")
-    metas = sorted(p for p in base.rglob("*.json") if p.name != "acceso.json")
+    # Senza i testi dei blocchi (15/10, `<ora>-blocco-<id>.json`: niente audio loro)
+    metas = sorted(p for p in base.rglob("*.json")
+                   if p.name != "acceso.json" and "-blocco-" not in p.name)
     if not metas:
         print(f"Nessun segmento in {base}.")
         return SALTA
