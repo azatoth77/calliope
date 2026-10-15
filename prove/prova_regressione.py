@@ -259,7 +259,7 @@ ORA, DATA, CHI = ("ora_attuale", None), ("data_oggi", "data_calcola", None), ("c
 
 # Un ruolo dato come nome nella risposta: «Vuoi che ti chiami Amministratore?», «ti chiamo il
 # padrone di casa» (15/10)
-RUOLO_COME_NOME = re.compile(r"\bchiam\w*\s+(?:l'|il |la )?(?:amministrat|chi amministra|"
+RUOLO_COME_NOME = re.compile(r"\bchiam\w*\s+(?:l'|il |la )?(?:amministr|chi amministra|"
                              r"padron|propriet|mamm|pap[aà]\b)", re.I)
 
 # (sessione, chi, livello, frase, atteso, vietati, controllo(risposta) o None, storia iniziale)

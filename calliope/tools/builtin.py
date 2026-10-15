@@ -208,9 +208,10 @@ def _rinomina_interlocutore(ctx: ToolContext, nome: str) -> dict:
     if ruolo:
         note_rule(ctx, "rinomina_ruolo")
         return {"ok": False, "fatto": NIENTE,
-                "errore": (f"«{new}» è un ruolo o una parentela, non un nome: il nome non "
-                           f"cambia. Se la persona voleva dire chi è, la riconosco dalla voce: "
-                           f"è {old}. Se vuole essere chiamata in un altro modo, chiedile il "
+                # Senza «riconosco dalla voce»: il 26B lo ripeteva tale e quale (eco del
+                # contesto nella regressione del 15/10)
+                "errore": (f"«{new}» è un ruolo o una parentela, non un nome: il nome resta "
+                           f"{old}. Se vuole essere chiamata in un altro modo, chiedile il "
                            f"suo nome.")}
     if new == old:
         return {"ok": True, "nome": new, "conferma": f"Ti chiamo già {new}."}

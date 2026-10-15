@@ -489,6 +489,7 @@ for nome, atteso in [
         ("Il papà", "papa"), ("Mamma Di Bianca", "mamma"), ("Nonna", "nonna"),
         ("Figlio", "figlio"), ("Ospite", "ospite"), ("Utente", "utente"), ("Capo", "capo"),
         ("Capofamiglia", "capofamiglia"), ("la mia mamma", "mamma"),
+        ("Amministra", "amministra"), ("Amministro", "amministro"),
         # contrari: nomi veri, anche se cominciano come un ruolo o lo contengono
         ("Mamo", None), ("Capotondi", None), ("Admira", None), ("Nonnis", None),
         ("Dario", None), ("Maria Rosa", None), ("Zio Gino", None), ("Ospitaletti", None),

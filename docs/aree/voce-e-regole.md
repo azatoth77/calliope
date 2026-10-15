@@ -2023,3 +2023,11 @@ avrebbe fatto diventare il nome del profilo.
 - Casi e contrari a secco in `prova_testo` (la funzione e `risposta_al_nome`) e `prova_tool`
   (il tool: sei ruoli rifiutati senza proposta, anche nella risposta dopo, la regola nel
   registro, «Mamo» proposto).
+- **Col 26B sulla DGX** (15/10 sera, il comando sopra): al primo giro 51/54, e un caso segnato
+  «ok» era sbagliato: «Scusa, io sono chi amministra» → `nome="Amministra"` (il verbo), proposto
+  come nome; aggiunte le forme del verbo («amministra», «amministro»…) all'elenco e `amministr`
+  a `RUOLO_COME_NOME`. Poi due «eco del contesto»: il modello ripeteva «ti ho riconosciuto dalla
+  voce» dall'esito del tool, che non lo dice più («il nome resta …»). Dopo: **21/21** su
+  `ruolo|rinomina` in 3 giri, `rinomina_ruolo` 12 volte, «chiamami Davide» → «sì» rinomina
+  ancora. Gli errori che restano su `chi` («Calliope di Michisono» → `biblioteca_cerca`) sono
+  noti e fuori da questo ramo.

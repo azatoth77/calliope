@@ -53,6 +53,8 @@ RUOLI_NON_NOME = frozenset({
     "administrator", "sysadmin", "colui che amministra", "colei che amministra",
     "quello che amministra", "quella che amministra",
     "che amministro", "che amministra", "amministrazione",
+    # Il verbo preso come nome (15/10, 26B: «io sono chi amministra» → nome="Amministra")
+    "amministra", "amministro", "amministrare", "amministrante",
     "quello che comanda", "quella che comanda", "chi comanda",
     "padrone", "padrona", "proprietario", "proprietaria", "capofamiglia", "capo famiglia",
     "capo", "capa", "boss", "titolare", "responsabile", "gestore", "gestrice",
