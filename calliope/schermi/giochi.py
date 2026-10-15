@@ -1112,12 +1112,15 @@ class Giochi:
                 return None
             nomi = gioco_stato.nomi_detti(ist)
             nome = nomi[i] if 0 <= i < len(nomi) else f"Giocatore {i + 1}"
-            dove = ""
+            altro = None
             sch = (ist["giocatori"][i] or {}).get("schermo")
             if motivo != "gia" and sch and sch != posto.giocatore:
-                altro = next((x for x in p.posti.values() if x.giocatore == sch), None)
-                n_s = (self.hub.schermo(altro.sid) or {}).get("nome") if altro else None
-                dove = f", sullo schermo {self._di(n_s)}" if n_s else ", sull'altro schermo"
+                altro = next((x for x in p.posti.values() if x.giocatore == sch), False)
+        # il nome dello schermo dall'hub, fuori dal lock dei giochi
+        dove = ""
+        if altro is not None:
+            n_s = (self.hub.schermo(altro.sid) or {}).get("nome") if altro else None
+            dove = f", sullo schermo {self._di(n_s)}" if n_s else ", sull'altro schermo"
         self._registra(p, "turno_altrui", regola="gioco_turno_altrui", motivo=motivo,
                        comando=str(comando)[:24])
         if motivo == "gia":
