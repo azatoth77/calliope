@@ -21,6 +21,7 @@ from collections import deque
 import numpy as np
 
 from .config import Config
+from .testi import ruolo_non_nome
 
 # ─────────────────────────── RILEVATORE ACUSTICO ───────────────────────────
 # Rilevatore della wake word «Calliope» — solo numpy + onnxruntime.
@@ -560,6 +561,10 @@ def risposta_al_nome(text: str, name="Calliope") -> tuple[str, str | None]:
         # fame»)
         ok = len(parole) == 1 or (len(parole) == 2 and parole[1][:1].isupper())
     if not ok:
+        return "altro", None
+    # «Sono la mamma», «Amministratore»: un ruolo o una parentela non sono un nome (15/10,
+    # testi.ruolo_non_nome); la frase va al modello
+    if ruolo_non_nome(resto):
         return "altro", None
     return "nome", " ".join(p[:1].upper() + p[1:] for p in parole)
 

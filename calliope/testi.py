@@ -40,3 +40,46 @@ def iban_ok(iban: str) -> bool:
         return False
     n = "".join(str(int(ch, 36)) for ch in iban[4:] + iban[:4])
     return int(n) % 97 == 1
+
+
+# Un ruolo, un titolo o una parentela non sono un nome (15/10, regressione col 26B sulla DGX):
+# «Scusa, io sono chi amministra» → rinomina_interlocutore(nome="Amministratore"). Elenco
+# chiuso, confrontato con l'argomento **per intero** (principio 10: mai una parola dentro il
+# nome), senza accenti e maiuscole, togliendo articoli e possessivi davanti («la mia mamma») e
+# un complemento con «di» dopo («padrone di casa», «mamma di Bianca»). «Mamo», «Capotondi»,
+# «Admira» restano nomi. Usato da rinomina_interlocutore e da wakeword.risposta_al_nome.
+RUOLI_NON_NOME = frozenset({
+    "amministratore", "amministratrice", "amministratori", "chi amministra", "admin",
+    "administrator", "sysadmin", "colui che amministra", "colei che amministra",
+    "quello che amministra", "quella che amministra",
+    "che amministro", "che amministra", "amministrazione",
+    "quello che comanda", "quella che comanda", "chi comanda",
+    "padrone", "padrona", "proprietario", "proprietaria", "capofamiglia", "capo famiglia",
+    "capo", "capa", "boss", "titolare", "responsabile", "gestore", "gestrice",
+    "mamma", "mammina", "madre", "papa", "papi", "babbo", "padre", "genitore", "genitori",
+    "nonno", "nonna", "nonnino", "nonnina", "figlio", "figlia", "fratello", "sorella",
+    "marito", "moglie", "zio", "zia", "cugino", "cugina", "nipote", "suocero", "suocera",
+    "compagno", "compagna", "fidanzato", "fidanzata", "tutore", "tutrice",
+    "bambino", "bambina", "ragazzo", "ragazza",
+    "ospite", "ospiti", "utente", "user", "guest", "familiare", "persona", "visitatore",
+    "visitatrice", "signore", "signora", "signorina", "signor",
+})
+_RUOLO_TESTA = re.compile(
+    r"^(?:(?:il|lo|la|l|i|gli|le|un|uno|una|mio|mia|miei|mie|tuo|tua|suo|sua|nostro|nostra|"
+    r"vostro|vostra|io|sono|solo|semplicemente)\s+)+")
+_RUOLO_CODA = re.compile(r"\s+(?:di|del|dello|della|dei|degli|delle|d)\s+.*$")
+
+
+def ruolo_non_nome(nome: str) -> str | None:
+    """Il ruolo o la parentela se `nome`, per intero, non è un nome ma uno di
+    RUOLI_NON_NOME («Amministratore», «La Mamma», «Padrone Di Casa»); altrimenti None."""
+    import unicodedata
+    t = unicodedata.normalize("NFKD", str(nome or "")).encode("ascii", "ignore").decode()
+    t = re.sub(r"[^a-z]+", " ", t.casefold()).strip()
+    if not t:
+        return None
+    t = _RUOLO_TESTA.sub("", t)
+    for forma in (t, _RUOLO_CODA.sub("", t)):
+        if forma in RUOLI_NON_NOME:
+            return forma
+    return None

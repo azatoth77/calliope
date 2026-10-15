@@ -169,6 +169,25 @@ r = rinomina("primo", 10)
 verifica("rinomina: il nome di un'altra persona registrata è rifiutato",
          r.get("ok") is False and "Primo" in ctx_r.speakers.users
          and ctx_r.speakers.users["Primo"].id == "primo-id", str(r))
+# Un ruolo o una parentela non sono un nome (15/10, 26B sulla DGX: «Scusa, io sono chi
+# amministra» → nome="Amministratore"): niente proposta, l'esito lo dice al modello
+ctx_r.regole = []
+for ruolo in ("Amministratore", "chi amministra", "Il Padrone Di Casa", "la mamma", "Papà",
+              "Ospite"):
+    r = rinomina(ruolo, 11)
+    verifica(f"rinomina: «{ruolo}» è un ruolo, non un nome",
+             r.get("ok") is False and "ruolo" in r.get("errore", "") and "Davide" in r["errore"]
+             and not r.get("in_sospeso") and "Davide" in ctx_r.speakers.users, str(r))
+r = rinomina("Amministratore", 12)
+verifica("rinomina: il ruolo anche nella risposta dopo non rinomina",
+         r.get("ok") is False and ctx_r.speaker_ctx.current_speaker == "Davide", str(r))
+verifica("rinomina: regola rinomina_ruolo nel registro",
+         ctx_r.regole == ["rinomina_ruolo"] * 7, str(ctx_r.regole))
+ctx_r.regole = []
+r = rinomina("Mamo", 13)
+verifica("rinomina: «Mamo» è un nome (contrario), si propone",
+         r.get("risposta_finale") == "Vuoi che ti chiami Mamo d'ora in poi?"
+         and ctx_r.regole == ["rinomina_conferma"], f"{r} {ctx_r.regole}")
 verifica("calcola 17*6", chiama("calcola", {"espressione": "17*6"}).get("risultato") == "102")
 # Conti con le date (05/10 sera, DGX: calcola('2026-07-04-1977-07-04') → errore, poi
 # 2026−1977): data_calcola con le date come dette, la data di oggi la sa il programma
