@@ -152,7 +152,7 @@ class Ombra:
         self.buttate = 0
         self.richieste_viste = 0
         # L'arbitro dell'agente (agenti/arbitro.py): la sua «voce libera» si confronta qui, dal
-        # thread (in_pausa è un flag sotto il suo lock)
+        # thread (occupata_ora: un flag sotto il suo lock, senza effetti)
         self.arbitro_agente = None
         self._fermo = threading.Event()
         self._thread = None
@@ -216,9 +216,12 @@ class Ombra:
         ora = self._ora() if ora is None else ora
         self.quiete.campiona()
         arb = self.arbitro_agente
-        if arb is not None and getattr(arb, "condiviso", False):
+        if arb is not None and getattr(arb, "condiviso", False) and callable(
+                getattr(arb, "occupata_ora", None)):
             try:
-                self.confronta("agente", not arb.in_pausa(),
+                # Senza effetti: in_pausa() libera la voce oltre la tenuta massima, e
+                # chiamarlo da qui cambierebbe il conto dei turni dell'arbitro
+                self.confronta("agente", not arb.occupata_ora(),
                                float(getattr(arb, "ripresa_s", 3.0) or 0.0))
             except Exception:  # noqa: BLE001
                 pass

@@ -505,6 +505,13 @@ orl2.t += 100
 om.passo()
 verifica("arbitro dell'agente: occupato per lui, fermo per quiete → divergenza contata",
          om.divergenze()["agente"]["vecchia_no"] == 1, om.divergenze())
+arb2 = Arbitro(True, 3.0, tenuta_max_s=0.0)
+arb2.voce_occupata()
+time.sleep(0.01)
+turni_prima = arb2.turni
+verifica("occupata_ora: oltre la tenuta massima dice libera senza toccare lo stato "
+         "(in_pausa lo cambierebbe)", arb2.occupata_ora() is False and arb2._attiva
+         and arb2.turni == turni_prima)
 arb.voce_libera(ripresa_s=0)
 time.sleep(0.01)
 om.passo()

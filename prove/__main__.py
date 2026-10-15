@@ -775,6 +775,7 @@ LEGAMI = [
     ("calliope/stanza/misure.py", ["prova_arbitro_memoria.py"]),
     ("calliope/conversazioni.py", ["prova_arbitro_memoria.py"]),
     ("calliope/agenti/servizio.py", ["prova_arbitro_memoria.py"]),
+    ("calliope/agenti/arbitro.py", ["prova_arbitro_memoria.py"]),
     ("calliope/stato.py", ["prova_arbitro_memoria.py"]),
     ("calliope/main.py", ["prova_arbitro_memoria.py"]),
 ]

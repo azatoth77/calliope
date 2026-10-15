@@ -271,7 +271,7 @@ si registra soltanto cosa l'arbitro avrebbe fatto.
   `Ombra.confronta(fonte, vecchia, secondi)` mette accanto `quiete(secondi)` e conta gli episodi di
   divergenza nelle due direzioni (`vecchia_si`: libera solo per la vecchia; `vecchia_no`: solo per
   quiete) e i secondi. L'agente si confronta dal thread dell'ombra, ogni secondo
-  (`Arbitro.in_pausa`). Dopo la settimana si decide quali definizioni passare a `quiete()`.
+  (`Arbitro.occupata_ora`, una lettura senza effetti: `in_pausa` libererebbe la voce oltre la tenuta massima). Dopo la settimana si decide quali definizioni passare a `quiete()`.
 - **L'arbitro in ombra** (`calliope/arbitro_ombra.py`, `Ombra`): chi chiede un carico chiama
   `richiesta(chi)`, che è solo un `append` (la domanda di una ricerca arriva dal turno): lotti di
   vettori (`embedding`, sfondo), domanda di una ricerca (`embedding_ricerca`, vicino), un passo
