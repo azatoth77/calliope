@@ -217,7 +217,10 @@ voce raccontava male gli esiti, i comandi del flusso si perdevano.
    [voce-e-regole](aree/voce-e-regole.md).)* **Guardia dei riletti fatta il 15/10**: avviso in
    `calliope stato --turni` e in `calliope stato` se con `attivo` la mediana dei token riletti di un
    giorno supera di metà quella dei giorni d'ombra. I turni col campo si contano da quando il codice
-   è sulla DGX. *Quasi* · dipende da: i dati d'ombra sulla DGX.
+   è sulla DGX. Con la stanza (issue #12, 15/10): la proiezione porta i segni `_stanza` e `_chi`,
+   i token della stanza riletti con `attivo` sono quelli di `ombra` e la conversazione di gruppo ha
+   i nomi ([contesto-conversazione](aree/contesto-conversazione.md)). *Quasi* · dipende da: i dati
+   d'ombra sulla DGX.
 2. **«Dimentica» chiude anche la conversazione in corso** (E2). *Pronta* · dipende da: niente
    (confermato il 12/10). **Fatto il 13/10** (ramo `dimentica-conversazione`): sempre, anche con
    `eventi: spento`, senza archivio né riassunto, e la domanda e la conferma lo dicono

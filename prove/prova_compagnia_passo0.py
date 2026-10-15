@@ -11,7 +11,9 @@ minore (le impronte di prova_voci_famiglia).
 - (b) La conversazione anonima del satellite non si chiude a ogni cambio di persona in compagnia
   (regola `compagnia_anonima_continua`), con chi ha detto cosa nei dati del turno; contrari: una
   persona sola, una voce sconosciuta di mezzo (il caso della password del wifi del 03/10), la
-  conversazione di una persona, interruttore spento.
+  conversazione di una persona, interruttore spento. Con `eventi: attivo` (15/10, issue #12: la
+  storia rifatta dalla proiezione a ogni risposta) i nomi arrivano dagli eventi delle frasi;
+  contrario: senza il nome nell'evento resta solo «conversazione di gruppo».
 - (c) Il rilevatore di pericolo non vale sulle frasi giudicate non rivolte a Calliope, anche col
   giudizio in ombra (regola `pericolo_non_rivolta`); contrari: frase rivolta, giudizio guasto,
   una persona sola (nessun giudizio), interruttore spento; il guardiano sulle frasi resta.
@@ -272,6 +274,53 @@ def prova_anonima():
     verifica("conversazione nuova: non condivisa", b.conv.condivisa is False)
 
 
+def prova_anonima_attivo():
+    """Con `eventi: attivo` (15/10, issue #12) la storia si rifà dalla proiezione a ogni risposta:
+    chi ha detto cosa deve arrivare dall'evento della frase (`detto_persona.chi`)."""
+    from calliope.eventi import ombra as ombra_mod
+    from calliope.eventi.tipi import senza_parole
+    from prova_eventi_attivo import GiroAttivo
+
+    def conversazione():
+        b, chi = brain_anonimo()
+        g = GiroAttivo(b)
+        g.turno("Hai preso il caricabatterie?", "familiare")
+        chi.current_speaker = "Luca"
+        g.turno("Sì, è nello zaino.", "familiare")
+        chi.current_speaker = "Carlo"
+        g.turno("Allora possiamo partire.", "familiare")
+        dati = " ".join(m.get("content") or "" for m in b.backend.visti[-1]
+                        if m.get("role") == "system")
+        return b, g, dati
+    b, g, dati = conversazione()
+    vivo = b.conv.vivo_da
+    verifica("attivo: la storia è la proiezione degli eventi, con chi ha detto ogni frase",
+             b.proiettore is g.ombra and vivo >= 4
+             and all("_seq" in m for m in b.history[:vivo])
+             and [m.get("_chi") for m in b.history if m["role"] == "user"]
+             == ["Carlo", "Luca", "Carlo"], str([(m["role"], m.get("_chi")) for m in b.history]))
+    verifica("attivo: nei dati del turno in compagnia i nomi (dalla più vecchia: Carlo, Luca)",
+             "Conversazione di gruppo" in dati and "dalla più vecchia: Carlo, Luca" in dati,
+             dati[-300:])
+    reg = g.registri.della_corsia(b.conv.chiave)
+    dette = [e for e in reg.eventi() if e.tipo == "detto_persona"]
+    verifica("attivo: il nome nell'evento della frase, fuori dal testo",
+             [e.dati.get("chi") for e in dette] == ["Carlo", "Luca", "Carlo"]
+             and all(not e.dati["testo"].startswith(("Carlo", "Luca")) for e in dette))
+    verifica("…in un turno da non conservare il nome resta in memoria con le parole",
+             senza_parole("detto_persona", {"testo": "Sì.", "chi": "Luca"})["_non_su_disco"]
+             == ["testo", "chi"])
+    # Contrario: senza il nome nell'evento (com'era fino al 14/10) solo «di gruppo»
+    vecchio = ombra_mod.Ombra._segni_persona
+    ombra_mod.Ombra._segni_persona = lambda self, conv: {}
+    try:
+        _, _, dati2 = conversazione()
+    finally:
+        ombra_mod.Ombra._segni_persona = vecchio
+    verifica("contrario: senza il nome nell'evento i dati del turno non dicono chi",
+             "Conversazione di gruppo" in dati2 and "dalla più vecchia" not in dati2, dati2[-300:])
+
+
 # ─────────────────────────── (c) il rilevatore e le chiacchiere ───────────────────────────
 
 class GuardianoFinto:
@@ -376,6 +425,7 @@ if __name__ == "__main__":
     for nome, f in (("(a) azioni col nome", prova_azioni),
                     ("(a) il segno dal ciclo", prova_senza_nome_dal_ciclo),
                     ("(b) la conversazione anonima condivisa", prova_anonima),
+                    ("(b) …con eventi: attivo", prova_anonima_attivo),
                     ("(c) il rilevatore e le chiacchiere", prova_pericolo)):
         print(f"── {nome} ──", flush=True)
         f()

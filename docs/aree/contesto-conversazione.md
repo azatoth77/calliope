@@ -1237,9 +1237,10 @@ senza compagnia, voce sconosciuta, conversazione di una persona, interruttore sp
 Nicola non vale per la proposta di Carlo).
 
 Nella conversazione di stanza vera (passi 1–2) il contesto lo porterà il registro della stanza; la
-regola resta per le frasi incerte della corsia dei comandi. Con `eventi: attivo` la storia viene
-dalla proiezione e `_chi` non c'è: i dati del turno dicono allora solo che la conversazione è di
-gruppo (da guardare quando si accendono gli eventi).
+regola resta per le frasi incerte della corsia dei comandi. *(Storico fino al 15/10: con `eventi:
+attivo` la storia viene dalla proiezione e `_chi` non c'era, i dati del turno dicevano solo che la
+conversazione è di gruppo. Dal 15/10 il nome viene dall'evento della frase: sezione «I segni della
+frase nella proiezione» in fondo, issue #12.)*
 
 ## Il registro della stanza in memoria e le sue misure (13/10, ramo `stanza-passo-1`)
 
@@ -1661,10 +1662,11 @@ intero come prima, per il confronto):
 - **La politica** vede tutti i pezzi davanti al modello (`_turno_politica`: fonte `stanza` e le
   loro parole fra gli `esterni`): un bersaglio preso da una riga di un turno prima chiede come
   quello del turno. La ricerca anticipata salta le righe di tutti i pezzi davanti al modello.
-- **Con `eventi: attivo`** la storia si rifà dalla proiezione a ogni risposta e il segno `_stanza`
-  non c'è: i pezzi restano tutti subito prima dei dati del turno, cioè si rileggono come il
-  blocco di prima (fino al tetto). Da sistemare se si accendono gli eventi (il segno nella
-  proiezione).
+- **Con `eventi: attivo`** *(storico fino al 15/10: la storia si rifà dalla proiezione a ogni
+  risposta e il segno `_stanza` non c'era: i pezzi restavano tutti subito prima dei dati del
+  turno, cioè si rileggevano come il blocco di prima, fino al tetto)*. Dal 15/10 il segno viene
+  dall'evento della frase e i token della stanza riletti sono gli stessi che con `ombra`
+  (sezione «I segni della frase nella proiezione» in fondo, issue #12).
 - **Registro dei turni**: `stanza.storia` = {`nuove`, `nuove_caratteri`, `righe`, `caratteri`,
   `pezzi`, `potati`, `nascosti`, `fuori_posto`}, solo numeri; `calliope stato --turni`, sezione
   «Stanza», la riga «Righe della stanza nella storia (in sola aggiunta)». `stanza.contesto` e la
@@ -2188,3 +2190,41 @@ testo del blocco entra nel registro della stanza, con `stanza_lenta_blocchi: att
 
 Prova a secco `prova_stanza_lenta_blocchi.py` (righe ridistribuite, versione 3 sopra la 2, tenuta,
 ricerca, contrari).
+## I segni della frase nella proiezione: `_stanza` e `_chi` con `eventi: attivo` (15/10, issue #12, ramo `issue-11-12-eventi-attivo`)
+
+**Il difetto** (scritto il 13–14/10 nelle sezioni della conversazione anonima e delle righe della
+stanza nella storia). Con `eventi: attivo` la storia di Brain si rifà dalla proiezione a ogni
+risposta (`Brain.dalla_proiezione`), e la proiezione rendeva il messaggio della persona senza i due
+segni che Brain ci mette sopra: `_stanza` (i pezzi della stanza legati alla frase) e `_chi` (chi
+l'ha detta nella conversazione anonima del satellite). Senza `_stanza` ogni pezzo era «orfano»: tutti
+stavano subito prima dei dati del turno e si rileggevano a ogni turno come il blocco intero; senza
+`_chi` la conversazione di gruppo perdeva chi aveva detto cosa («Conversazione di gruppo…» senza i
+nomi).
+
+**La correzione.** `detto_persona` ha due campi nuovi, `chi` e `stanza` (`eventi/tipi.py`): con
+`attivo` l'ombra li copia dal messaggio della persona del turno vivo (`Ombra._segni_persona`) quando
+scrive l'evento; la proiezione li rende come `_chi` e `_stanza` sul messaggio della persona solo per
+Brain (`messaggi(…, seq=True)`: i backend tolgono le chiavi che cominciano con «_», l'archivio non
+li vede). Il numero del pezzo resta **solo in memoria** (`_non_su_disco`: i pezzi stanno in
+`Conversazione.stanza` e dopo un riavvio non ci sono, come prima); il nome segue le parole del turno
+(in un turno da non conservare resta in memoria con loro, `CAMPI_TESTO`), e gli eventi degli ospiti
+come sempre non restano oltre la loro conversazione. In `Brain._stanza_prepara_dentro` i pezzi orfani
+se ne vanno anche con `attivo`, come in ombra: orfani sono ormai solo quelli dei turni usciti dalla
+storia (taglio, compressione, turno escluso, argomento messo da parte), e le loro righe, se ancora
+nella finestra, possono tornare in un pezzo nuovo. `proiezioni.py` resta sotto le 600 righe (599).
+
+**Misura a secco** (`python prove\prova_stanza_storia.py --misura`, la stessa conversazione finta di
+10 turni con 12 righe fra un turno e l'altro, token stimati riletti per turno, tutto / della sola
+stanza, p50 dal secondo turno): `ombra` 585 / 419, `attivo` **585 / 419**, turno per turno uguali
+per la stanza (420, 419, 415, 416, 419, 420, 419, 415, 416); col codice di prima, con `attivo`, la
+stanza cresceva da 1063 a 4402 token riletti al decimo turno (tutto 1233 → 4575, 9 pezzi su 10
+fuori posto). Senza il segno nell'evento e con gli orfani tolti (il contrario della prova) ~1110.
+
+**Chi ha detto cosa** (`prova_compagnia_passo0`, caso nuovo): Carlo, Luca, Carlo nella conversazione
+anonima del telefono con `attivo`: la storia è la proiezione (con `_seq`) e porta `_chi` per ogni
+frase, i dati del turno dicono «dalla più vecchia: Carlo, Luca» come in ombra; contrario: senza il
+nome nell'evento solo «Conversazione di gruppo».
+
+Prove: `prova_stanza_storia` (sezione 1b, con `eventi: attivo` attraverso il giro di
+`prova_eventi_attivo.GiroAttivo`, e il contrario), `prova_compagnia_passo0` (sezione «…con eventi:
+attivo»), `prova_eventi_attivo` invariata.

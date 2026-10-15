@@ -631,14 +631,20 @@ class Ombra:
                               campi=list(rec.get("campi") or ()))
             elif isinstance(testo, str):
                 fermato = (rec.get("testo") is None and esito not in ("non_rivolta",))                     or bool(riservato(testo))
+                # Con attivo la storia si rifà dalla proiezione (15/10, issue #12): i segni che
+                # Brain mette sul messaggio della persona (chi l'ha detta nella conversazione
+                # anonima, i pezzi della stanza legati alla frase) vanno nell'evento. I pezzi
+                # stanno solo in memoria (`Conversazione.stanza`): il loro numero non su disco
+                segni = self._segni_persona(conv) if self.attivo else {}
+                nsd = (["testo"] if fermato else []) + (["stanza"] if "stanza" in segni else [])
                 persona = add(
                     "detto_persona", testo=testo, canale=canale,
                     come=getattr(sc, "identified_by", None),
                     satellite=sat, sfida=bool(getattr(getattr(self.c, "brain", None),
                                                       "last_sfida", False)
                                               and esito == "risposta"),
-                    brain=esito == "risposta",
-                    **({"_non_su_disco": ["testo"]} if fermato else {}))
+                    brain=esito == "risposta", **segni,
+                    **({"_non_su_disco": nsd} if nsd else {}))
             if persona is not None:
                 st["frase"] = 0
                 if esito == "non_rivolta":
@@ -694,6 +700,24 @@ class Ombra:
         if i is None:
             return None
         return vivi[i], vivi[i + 1:]
+
+    def _segni_persona(self, conv) -> dict:
+        """Passo 3: i segni del messaggio della persona del turno vivo che la proiezione deve
+        rendere (15/10, issue #12): `_chi` → `chi`, `_stanza` → `stanza` (numero o elenco)."""
+        vivo = self._turno_vivo(conv)
+        if vivo is None:
+            return {}
+        u = vivo[0]
+        out: dict = {}
+        if isinstance(u.get("_chi"), str) and u["_chi"]:
+            out["chi"] = u["_chi"]
+        s = u.get("_stanza")
+        if isinstance(s, int) and not isinstance(s, bool):
+            out["stanza"] = s
+        elif isinstance(s, (list, tuple)) and s and all(
+                isinstance(x, int) and not isinstance(x, bool) for x in s):
+            out["stanza"] = list(s)
+        return out
 
     def _dalla_storia(self, reg, conv, persona, info, turni_s, add) -> list:
         """Il messaggio nuovo della persona nella storia: lo si riconosce (per il confronto),
