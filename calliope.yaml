@@ -679,6 +679,30 @@ chi_parla:
   speaker_adapt_threshold: 0.58
   speaker_adapt_alpha: 0.1
   speaker_adapt_max_drift: 0.9
+  # Impronte della voce per satellite (15/10, calliope/impronte_satellite.py): per ogni persona
+  # (famiglia, minori compresi, e conoscenti) e satellite un'impronta in più, imparata solo
+  # dalle frasi sicure su quel satellite (e una per tipo di canale, il ripiego per un
+  # satellite nuovo); il punteggio è il massimo fra l'impronta di sempre e quella del
+  # satellite, la soglia non cambia. Caso vero del 15/10 in auto: chi amministra a 0,44 e 0,40
+  # (ospite) con sei frasi sue a 0,60–0,76 negli stessi minuti, l'impronta ferma dalla deriva.
+  # «spento» (di serie); «ombra»: si imparano e si salvano, nel registro dei turni il
+  # punteggio nuovo e cosa avrebbe deciso, la decisione resta quella di oggi; «attivo»
+  speaker_impronte_satellite: spento
+  # Frasi sicure prima che nasca l'impronta del satellite (la media di queste, mai la prima)
+  speaker_impronte_seme_frasi: 3
+  # Frase sicura: voce di almeno tanti secondi, punteggio almeno `speaker_adapt_threshold` e
+  # almeno questo margine sul secondo profilo (più largo di `speaker_id_margine`: impara solo
+  # da frasi nette); mai zona grigia, frase breve, compagnia, voce incerta o minore vicino
+  speaker_impronte_min_voce_s: 1.5
+  speaker_impronte_margine: 0.15
+  # Media mobile dell'aggiornamento e deriva massima: coseno minimo con l'impronta
+  # dell'arruolamento (più largo di `speaker_adapt_max_drift`: il canale sposta l'impronta) e
+  # con il seme del satellite (non scivola piano piano verso un'altra voce)
+  speaker_impronte_alpha: 0.1
+  speaker_impronte_deriva_arruolamento: 0.7
+  speaker_impronte_deriva_seme: 0.85
+  # Satelliti diversi ricordati per persona (i più vecchi escono)
+  speaker_impronte_max: 12
 
 minori:
   # Minori (05/10, calliope/minori.py, docs/ricerche/2026-10-05-minori.md): profili con la

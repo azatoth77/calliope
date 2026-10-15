@@ -16,6 +16,7 @@ dati_conservati(azione, persona):
 Per chi amministra la voce si tiene finché non dice di no; per gli altri adulti solo dopo il
 loro «sì»; per i minori mai. Il dubbio lo scioglie calliope.conserva.decidi.
 """
+from .. import impronte_satellite as _imp_sat
 from .spec import ToolContext, ToolSpec, note_rule
 from ..testi import FAMILY, NIENTE
 
@@ -163,6 +164,8 @@ def _dati_conservati(ctx: ToolContext, azione: str = "", persona: str = "") -> d
     domanda = (f"Cancello i dati conservati {di_chi}: testi dei turni, conversazioni "
                "archiviate, eventi, registrazioni della voce, esercizi e richieste ai tutori"
                + (", conversazione della stanza" if _stanza(cons, None) is not None else "")
+               + (", impronte della voce imparate sui satelliti"
+                  if _imp_sat.modo(getattr(cons, "cfg", None)) != _imp_sat.SPENTO else "")
                + "? I ricordi restano.")
     return _final(domanda, ok=False,
                   in_sospeso={"domanda": domanda, "cosa": f"cancellare i dati conservati {di_chi}",

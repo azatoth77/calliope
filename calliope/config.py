@@ -1823,6 +1823,30 @@ class Config:
     speaker_adapt_threshold: float = 0.58
     speaker_adapt_alpha: float = 0.1
     speaker_adapt_max_drift: float = 0.90
+    # Impronte della voce per satellite (15/10, calliope/impronte_satellite.py): per ogni persona
+    # (famiglia, minori compresi, e conoscenti) e satellite un'impronta in più, imparata solo
+    # dalle frasi sicure su quel satellite (e una per tipo di canale, il ripiego per un
+    # satellite nuovo); il punteggio è il massimo fra l'impronta di sempre e quella del
+    # satellite, la soglia non cambia. Caso vero del 15/10 in auto: chi amministra a 0,44 e 0,40
+    # (ospite) con sei frasi sue a 0,60–0,76 negli stessi minuti, l'impronta ferma dalla deriva.
+    # «spento» (di serie); «ombra»: si imparano e si salvano, nel registro dei turni il
+    # punteggio nuovo e cosa avrebbe deciso, la decisione resta quella di oggi; «attivo»
+    speaker_impronte_satellite: str = "spento"
+    # Frasi sicure prima che nasca l'impronta del satellite (la media di queste, mai la prima)
+    speaker_impronte_seme_frasi: int = 3
+    # Frase sicura: voce di almeno tanti secondi, punteggio almeno `speaker_adapt_threshold` e
+    # almeno questo margine sul secondo profilo (più largo di `speaker_id_margine`: impara solo
+    # da frasi nette); mai zona grigia, frase breve, compagnia, voce incerta o minore vicino
+    speaker_impronte_min_voce_s: float = 1.5
+    speaker_impronte_margine: float = 0.15
+    # Media mobile dell'aggiornamento e deriva massima: coseno minimo con l'impronta
+    # dell'arruolamento (più largo di `speaker_adapt_max_drift`: il canale sposta l'impronta) e
+    # con il seme del satellite (non scivola piano piano verso un'altra voce)
+    speaker_impronte_alpha: float = 0.1
+    speaker_impronte_deriva_arruolamento: float = 0.70
+    speaker_impronte_deriva_seme: float = 0.85
+    # Satelliti diversi ricordati per persona (i più vecchi escono)
+    speaker_impronte_max: int = 12
 
     # Minori (05/10, calliope/minori.py, docs/ricerche/2026-10-05-minori.md): profili con la
     # data di nascita e i tutori, fasce d'età (piccoli < 7, bambini 7–10, ragazzi 11–13,
@@ -3142,7 +3166,11 @@ SEZIONI: dict[str, list[str]] = {
                   "compagnia_anonima_condivisa", "compagnia_pericolo_solo_rivolte",
                   "speaker_enroll_phrases", "speaker_enroll_min_s", "speaker_enroll_timeout_s",
                   "speaker_adapt_threshold",
-                  "speaker_adapt_alpha", "speaker_adapt_max_drift"],
+                  "speaker_adapt_alpha", "speaker_adapt_max_drift",
+                  "speaker_impronte_satellite", "speaker_impronte_seme_frasi",
+                  "speaker_impronte_min_voce_s", "speaker_impronte_margine",
+                  "speaker_impronte_alpha", "speaker_impronte_deriva_arruolamento",
+                  "speaker_impronte_deriva_seme", "speaker_impronte_max"],
     "minori": ["minori_enabled", "minori_margine_ambiguo", "minori_margine_amministra",
                "minori_compiti_tentativi",
                "minori_impronta_mesi", "minori_gioco_minuti", "minori_richieste_giorni",

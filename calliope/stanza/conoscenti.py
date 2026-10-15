@@ -82,6 +82,8 @@ from pathlib import Path
 
 import numpy as np
 
+from .. import impronte_satellite as _imp_sat
+
 GIORNO_S = 86400.0
 GRUPPI_MAX = 60
 GRUPPO_EMB_MAX = 30
@@ -281,6 +283,9 @@ class Conoscente:
     ultimo: float = 0.0              # epoch dell'ultima volta sentito
     confermato_da: str | None = None
     tipo: str = "conoscente"         # per conserva.categoria: mai un familiare
+    # Impronte per satellite (15/10, calliope/impronte_satellite.py): come per la famiglia,
+    # imparate solo dalle frasi sicure; seguono la persona (promozione e ritorno)
+    impronte_satellite: dict = field(default_factory=dict)
 
     @property
     def name(self) -> str:           # come UserProfile, per chi stampa un nome
@@ -298,7 +303,9 @@ class Conoscente:
                 "impronta": (self.impronta.tolist() if self.impronta is not None else None),
                 "modello": self.modello, "creato": self.creato,
                 "ultimo": round(float(self.ultimo or 0), 1),
-                "confermato_da": self.confermato_da}
+                "confermato_da": self.confermato_da,
+                **({"impronte_satellite": _imp_sat.scrivi(self.impronte_satellite)}
+                   if _imp_sat.scrivi(self.impronte_satellite) else {})}
 
     @classmethod
     def da_dict(cls, d: dict) -> "Conoscente":
@@ -308,7 +315,8 @@ class Conoscente:
                    impronta=(np.asarray(imp, dtype=np.float32) if imp else None),
                    modello=d.get("modello"), creato=str(d.get("creato") or ""),
                    ultimo=float(d.get("ultimo") or 0.0),
-                   confermato_da=d.get("confermato_da"))
+                   confermato_da=d.get("confermato_da"),
+                   impronte_satellite=_imp_sat.leggi(d.get("impronte_satellite")))
 
 
 @dataclass
@@ -487,18 +495,26 @@ class Conoscenti:
         le parole dette stanno nel nome, nel cognome o nella nota. Più di uno: omonimi."""
         return trova_in(self.elenco(), chi)
 
-    def riconosci(self, emb, sim_famiglia: float | None = None, t: float | None = None
-                  ) -> Conoscente | None:
-        """Il conoscente di questa impronta: sopra soglia, con il margine dal secondo e dal
-        profilo della famiglia più vicino. Lo segna «sentito»."""
+    def classifica(self, emb, chiavi=None) -> list[tuple[float, Conoscente]]:
+        """[(punteggio, conoscente)] dal più somigliante; con `chiavi` (15/10, impronte per
+        satellite) il massimo fra l'impronta salvata e quella del satellite."""
         if emb is None:
-            return None
+            return []
         with self._lock:
             self._sincronizza()
             mod = self._modello()
-            cl = sorted(((float(np.dot(emb, c.impronta)), c) for c in self._conoscenti.values()
-                         if c.impronta is not None and (mod is None or c.modello in (None, mod))),
-                        key=lambda x: -x[0])
+            cl = [((_imp_sat.punteggio(emb, c.impronta, c.impronte_satellite, chiavi)[0]
+                    if chiavi else float(np.dot(emb, c.impronta))), c)
+                  for c in self._conoscenti.values()
+                  if c.impronta is not None and (mod is None or c.modello in (None, mod))]
+        return sorted(cl, key=lambda x: -x[0])
+
+    def riconosci(self, emb, sim_famiglia: float | None = None, t: float | None = None,
+                  chiavi=None, segna: bool = True) -> Conoscente | None:
+        """Il conoscente di questa impronta: sopra soglia, con il margine dal secondo e dal
+        profilo della famiglia più vicino. Lo segna «sentito» (se `segna`). Con `chiavi` anche
+        le impronte del satellite (`speaker_impronte_satellite: attivo`)."""
+        cl = self.classifica(emb, chiavi)
         if not cl:
             return None
         sim, c = cl[0]
@@ -509,8 +525,46 @@ class Conoscenti:
             return None
         if sim_famiglia is not None and sim - float(sim_famiglia) < mar:
             return None
-        self.sentito(c.id, t)
+        if segna:
+            self.sentito(c.id, t)
         return c
+
+    def impara_satellite(self, cid, emb, chiavi, sim_famiglia: float | None = None,
+                         voce_s: float = 0.0, chiavi_decisione=None) -> list[str]:
+        """Una frase di un conoscente riconosciuto entra nelle sue impronte del satellite, solo
+        se è sicura (impronte_satellite.sicura: sopra `speaker_adapt_threshold`, margine
+        `speaker_impronte_margine` sul secondo conoscente e sulla famiglia, voce lunga). Il
+        ciclo lo chiama fuori dalla compagnia. `chiavi_decisione`: le chiavi con cui si è
+        deciso (None in ombra: l'impronta salvata soltanto)."""
+        cl = self.classifica(emb, chiavi_decisione)
+        if not cl or cl[0][1].id != str(cid):
+            return []
+        sim, c = cl[0]
+        altri = [x[0] for x in cl[1:2]] + ([float(sim_famiglia)] if sim_famiglia is not None
+                                           else [])
+        sim2 = max(altri) if altri else None
+        if not _imp_sat.sicura(self.cfg, "voce", sim, sim2, voce_s):
+            return []
+        with self._lock:
+            cambiate = _imp_sat.impara(c.impronte_satellite, emb, chiavi, c.impronta, self.cfg)
+            if cambiate:
+                self.salva()
+        return cambiate
+
+    def svuota_impronte_satellite(self, cid=None) -> int:
+        """Via le impronte per satellite di un conoscente (o di tutti); l'impronta salvata
+        resta."""
+        n = 0
+        with self._lock:
+            self._sincronizza(sempre=True)
+            for c in self._conoscenti.values():
+                if cid is not None and c.id != str(cid):
+                    continue
+                n += len(c.impronte_satellite)
+                c.impronte_satellite = {}
+            if n:
+                self.salva()
+        return n
 
     def sentito(self, cid, t: float | None = None):
         with self._lock:
@@ -920,6 +974,8 @@ class Conoscenti:
                                nascita=nascita or None, tutori=[str(t) for t in tutori or ()])
             prof.id = c.id
             prof.impronta_data = datetime.date.today().isoformat()
+            # Le impronte per satellite seguono la persona (15/10)
+            prof.impronte_satellite = dict(c.impronte_satellite or {})
             reg.users[nome] = prof
             if hasattr(reg, "save"):
                 reg.save()
@@ -955,6 +1011,7 @@ class Conoscenti:
                            np.asarray(prof.voiceprint, dtype=np.float32).copy(),
                            getattr(prof, "model", None) or self._modello(),
                            datetime.date.today().isoformat(), time.time())
+            c.impronte_satellite = dict(getattr(prof, "impronte_satellite", None) or {})
             reg.users.pop(prof.name, None)
             if hasattr(reg, "save"):
                 reg.save()

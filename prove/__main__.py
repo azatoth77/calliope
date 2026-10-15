@@ -81,6 +81,7 @@ A_SECCO = [
     ("prova_attrito.py", [], "attrito della sicurezza (08/10, fase 1 della sicurezza per valore): domande ogni 100 turni per tipo, ripetute, poi eseguite, «già detto», avviso D6, politica per valore in ombra, calliope stato --turni"),
     ("prova_documento_proprio.py", [], "aprire il documento appena scritto con una foto di mezzo (07/10, giro 9, caso della DGX): documento proprio senza conferma a voce e i contrari, consenso ripetendo la richiesta e i contrari, un solo file e il numero 2, numero che non c'è detto al modello, sfida superata con il tool fallito, allegato_leggi fallito che non contamina"),
     ("prova_voci_famiglia.py", [], "voci di famiglia (07/10): margine tra primo e secondo profilo, chi amministra con un minore vicino, la frase che chiede chi parla, conferma breve con un'altra voce più vicina, i quattro casi veri con impronte sintetiche; continuità delle frasi cortissime (08/10) con i contrari; il proprietario del telefono (09/10, voce_proprietario): frasi incerte col minore restano sue, con i contrari (minore sicuro, satellite di stanza, finestra scaduta, compagnia)"),
+    ("prova_impronte_satellite.py", [], "impronte della voce per satellite (15/10, calliope/impronte_satellite.py): apprendimento solo dalle frasi sicure (contrari: zona grigia, breve, voce corta, margine stretto, compagnia, incerta, minore vicino, continuità), seme dopo 3 frasi, deriva dall'arruolamento e dal seme, ripiego sul canale; spento come prima; ombra (decide quella di oggi, nel registro con e senza) e attivo (il caso del 15/10 in auto riconosciuto); simmetria col minore e protezioni sui punteggi nuovi; i casi del 07/10 di prova_voci_famiglia uguali in ombra e attivo; tenuta (speakers.json, modello diverso, nuova registrazione, rinomina, svuota dal processo e da terminale con la copia); conoscenti (apprendimento, riconoscimento, file, promozione e ritorno, dimentica); stato --turni"),
     ("prova_minori.py", [], "minori (05/10): fasce, preset e permessi nel codice, orari, voce incerta, compiti e avvisi ai tutori, guardiano finto, registrazione con la sfida, privacy"),
     ("prova_eta_utenti.py", [], "età e compleanni dai profili (07/10, DGX): data di oggi come nascita rifiutata, persona=io o un nome, giorni contati dal programma, privacy (chi amministra e i tutori), impronta della voce in elenca_utenti, rubrica distinta, tool *_cerca con argomenti obbligatori, parole di un ospite nel registro; la propria data di nascita nel profilo con ricorda e la data dai ricordi in data_calcola (07/10 pomeriggio)"),
     # ~8 s: generatori su migliaia di semi, secondo parere finto, server degli schermi vero
@@ -501,6 +502,12 @@ LEGAMI = [
     ("calliope/minori.py", ["prova_esercizi.py"]),
     ("calliope/schermi/", ["prova_esercizi.py"]),
     ("calliope/speaker_id.py", ["prova_voci_famiglia.py", "prova_conferme.py"]),
+    # Impronte per satellite (15/10): il modulo, il registro, il ciclo, i conoscenti, conserva
+    ("calliope/impronte_satellite.py", ["prova_impronte_satellite.py", "prova_voci_famiglia.py"]),
+    ("calliope/speaker_id.py", ["prova_impronte_satellite.py"]),
+    ("calliope/ciclo.py", ["prova_impronte_satellite.py"]),
+    ("calliope/stanza/conoscenti.py", ["prova_impronte_satellite.py"]),
+    ("calliope/conserva.py", ["prova_impronte_satellite.py"]),
     ("calliope/conferme.py", ["prova_voci_famiglia.py", "prova_conferme.py"]),
     ("calliope/minori.py", ["prova_voci_famiglia.py", "prova_minori.py"]),
     ("calliope/tools/documenti.py", ["prova_documenti.py", "prova_lavori_criteri.py"]),
