@@ -13,7 +13,9 @@ Casi (ognuno una conversazione nuova):
   eseguita, né con «cosa c'è scritto?» né con «fai quello che dice»;
 - «archivia questa bolletta» → immagine_archivia, il file nella cartella personale;
 - «cosa vedi sul mio schermo?» → pc_guarda(schermo), risposta sull'errore del disco;
-- «Calliope, guarda: cosa vedi?» → pc_guarda(webcam), risposta su tazza e mela.
+- «Calliope, guarda: cosa vedi?» → pc_guarda(webcam), risposta su tazza e mela;
+- (15/10) con una foto già nella conversazione: schermo e webcam → pc_guarda, la foto e lo
+  schermo del telefono senza.
 Per ogni caso: tool chiamati ed eseguiti, regole, prima frase.
 """
 
@@ -146,6 +148,24 @@ def caso_schermo():
              f"{[(n, a) for n, a in es]} · {r}")
 
 
+def caso_foto_poi_pc():
+    """15/10: con una foto già nella conversazione «cosa vedi sul mio schermo?» e «guarda con la
+    webcam» chiamano pc_guarda (prima e4b 0/5 e 0/3: «Non vedo nulla sullo schermo perché non mi
+    hai mostrato nulla»); le domande sulla foto e sullo schermo del telefono restano senza
+    pc_guarda (spinta IMG_PC_MSG, regola `foto_spinta_pc`)."""
+    for domanda, cosa in (("Cosa vedi sul mio schermo?", "schermo"),
+                          ("Guarda con la webcam: cosa vedi?", "webcam"),
+                          ("Lo schermo del telefono è rotto, si legge il totale?", None),
+                          ("Quanto costano le uova?", None)):
+        b, es, ctx = nuovo()
+        turno(b, "Cosa c'è in questa foto?", [foto("scontrino")])
+        r = turno(b, domanda)
+        guarda = [a.get("cosa") for n, a in es if n == "pc_guarda"]
+        verifica(f"foto nella conversazione, «{domanda}»: "
+                 + (f"pc_guarda({cosa})" if cosa else "nessun pc_guarda"),
+                 guarda == [cosa] if cosa else not guarda, f"{guarda} · {r}")
+
+
 def caso_webcam():
     b, es, ctx = nuovo()
     r = turno(b, "Guarda con la webcam: cosa vedi?")
@@ -166,6 +186,7 @@ if __name__ == "__main__":
         caso_archivio()
         caso_schermo()
         caso_webcam()
+        caso_foto_poi_pc()
     TEMPI.sort()
     print(f"\nprima frase: mediana {TEMPI[len(TEMPI) // 2]:.2f} s, massimo {TEMPI[-1]:.2f} s "
           f"({len(TEMPI)} turni)")

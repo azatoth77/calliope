@@ -2,9 +2,9 @@
 
 *Foto in ingresso, webcam e schermata del PC, allegati di qualsiasi tipo. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-**Stato al 14/10.** Come al 09/10 (sotto), con due cambi del 14/10 nel cassetto: un tutore vede i file del figlio a ogni età (prima solo sotto i 14 anni, `minori.conversazioni_visibili_ai_tutori`), e l'audio di un avviso di pericolo (`avvisi_audio`, di serie spento) entra nel cassetto del tutore con la fonte «da un avviso di pericolo» e una scadenza sua (`avvisi_audio_giorni`, 30), fuori dalla revisione del cassetto ([minori](minori.md)).
+**Stato al 15/10.** Schermo e webcam chiesti con una foto di prima nella conversazione: una spinta nel turno (sezione sotto). Al 14/10: come al 09/10 (sotto), con due cambi del 14/10 nel cassetto: un tutore vede i file del figlio a ogni età (prima solo sotto i 14 anni, `minori.conversazioni_visibili_ai_tutori`), e l'audio di un avviso di pericolo (`avvisi_audio`, di serie spento) entra nel cassetto del tutore con la fonte «da un avviso di pericolo» e una scadenza sua (`avvisi_audio_giorni`, 30), fuori dalla revisione del cassetto ([minori](minori.md)).
 
-*Stato al 09/10 (storico): foto e allegati come dal 05/10, con la guardia nella politica dal 06/10; dall'08/10 ogni file di una persona riconosciuta resta 7 giorni nel suo cassetto (sezione sotto), anche per il tutore dai pulsanti della scheda. Resta aperto «cosa vedi sul mio schermo?» con una foto nella conversazione («Non me l'hai chiesto»); il modello vero sul cassetto non è ancora misurato.*
+*Stato al 09/10 (storico): foto e allegati come dal 05/10, con la guardia nella politica dal 06/10; dall'08/10 ogni file di una persona riconosciuta resta 7 giorni nel suo cassetto (sezione sotto), anche per il tutore dai pulsanti della scheda. Resta aperto «cosa vedi sul mio schermo?» con una foto nella conversazione («Non me l'hai chiesto», chiuso il 15/10: sezione «Schermo e webcam con una foto di prima»); il modello vero sul cassetto non è ancora misurato.*
 
 ## Moduli
 
@@ -45,6 +45,9 @@
   resta `pc_guarda` 5/5 (con il contesto in ogni turno scendeva a 2/6: solo all'arrivo);
   `prova_immagini_ollama` 18/18. Resta: la politica chiede «Non me l'hai chiesto» anche a
   «cosa vedi sul mio schermo?» con una foto nella conversazione (già prima). Il 26B da provare.
+  *Storico al 15/10: la politica lo lascia passare dal 06/10 (`prova_politica.prova_pc_guarda`);
+  il «Non me l'hai chiesto» restato era del modello, che non chiamava pc_guarda. Sezione
+  «Schermo e webcam con una foto di prima» qui sotto.*
 
 - **Allegati di qualsiasi tipo** (05/10, [`docs/ricerche/2026-10-05-allegati.md`](../ricerche/2026-10-05-allegati.md),
   prove `prova_allegati*.py`): «Foto» diventa «Allega» (foto o file, scegli, trascina, incolla),
@@ -71,6 +74,32 @@
   traccia `_fonte`; un file lungo (> `quarantena_token`) in quarantena all'arrivo (`_quarantena_allegati`); tool in
   `politica.CLASSI`. Banco Ollama dopo il merge: 26 casi ostili, 0 azioni, 0 cambi (anche con la guardia spenta:
   `immagine_conferma` e il «sì» con dati nuovi sono superflui, `immagine_delega` no).
+
+## Schermo e webcam con una foto di prima (15/10, ramo `correzioni-15-10`)
+
+Problema aperto dal 06/10: con una foto nella conversazione «cosa vedi sul mio schermo?» riceveva
+«Non me l'hai chiesto». **Causa**: non la politica (la politica di prima e quella per valore
+eseguono `pc_guarda` con la foto di mezzo: `valore_esegue`, rifatto con un modello finto e con
+`politica_per_valore` acceso e spento), ma il modello. gemma4 e4b in locale, dopo «Cosa c'è in
+questa foto?» con uno scontrino: «cosa vedi sul mio schermo?» **0/5** pc_guarda («Non vedo nulla
+sullo schermo perché non mi hai mostrato nulla», «…non mi hai indicato di guardare lo schermo»),
+«guarda con la webcam: cosa vedi?» **0/3**; senza la foto 3/3 e 3/3, e con la foto «cosa c'è sullo
+schermo del computer?» 3/3. Con un'immagine davanti, «vedi» fa parlare della foto. Cambiare
+l'etichetta della foto («non è lo schermo del computer né la webcam») o una riga generale in ogni
+turno con una foto: 0/4 e 0/5.
+
+**Rimedio**: una spinta (principio 10) nel contesto del turno, `brain.IMG_PC_MSG`, solo se la
+frase nomina lo schermo o la webcam (parole intere: «schermo», «schermi», «schermata»,
+«screenshot», «webcam», «telecamera»), c'è una foto nella conversazione (non appena arrivata: lì
+vale `IMG_TURN_MSG`) e `pc_guarda` è registrato: «La persona parla dello schermo del computer: non
+è nessuna delle foto di questa conversazione, e non lo vedi finché non chiami pc_guarda con
+cosa=schermo. Se è questo che chiede, chiamalo adesso.» Regola `foto_spinta_pc`. Decide il modello:
+la politica e il tool (voce riconosciuta, proprietario) restano come sono. e4b: schermo **5/5**,
+webcam **5/5**, «lo schermo del telefono è rotto, si legge il totale?» e «quanto costano le uova?»
+senza pc_guarda 5/5 e 5/5; `prova_immagini_ollama` intera 2 giri: 34/34 (prima frase mediana 1,31 s). La stessa riga
+al condizionale («Se la persona chiede di guardare…») tornava 0/3 («…perché non mi hai chiesto di
+guardarlo»). Prove: `prova_immagini.prova_spinta_pc` (a secco, con i contrari) e
+`prova_immagini_ollama.caso_foto_poi_pc`. Il 26B della DGX da riprovare nell'uso.
 
 ## Il cassetto dei file per persona (08/10)
 
