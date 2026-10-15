@@ -36,6 +36,7 @@ from .memory import HOUSE
 from .notizie import contesto as notizie_contesto
 from . import argomenti_incerti, luogo, politica, provenienza, stato_dialogo, storpiature, valore
 from .risposte import forma_chiusa
+from .system1 import dopo_tool as dopo_tool_s1
 from .sicurezza import instruction_fact
 from .testi import MESI as _MESI, NIENTE, SENTENCE_END as _SENTENCE_END
 from .tools import dialogo
@@ -2683,6 +2684,9 @@ class Brain:
         # di prima, per sapere se la chiusura della conversazione l'ha persa; il cancello dei
         # minori da cui è passata la frase (lo segna il ciclo)
         self.last_dialogo_ombra, self._dialogo = None, None
+        # La frase dopo il tool, System 1 (15/10, calliope/system1/dopo_tool.py): l'esito per il
+        # registro dei turni e, in ombra, la misura della seconda passata
+        self.last_dopo_tool, self._dopo_tool_misura = None, None
         self._passata, self._offerte_risposta = 0, 0
         dmodo = stato_dialogo.modo(self.cfg)
         cancello = self.__dict__.pop("dialogo_cancello", None)
@@ -2793,6 +2797,7 @@ class Brain:
             self.__dict__["_in_risposta"] = False
             self.salva_conversazione()
             self._dialogo_fine(interrotta=True)
+            self._dopo_tool_chiudi()
         # Arrivati qui la risposta è finita (non interrotta): se chiude con la domanda del
         # tool, la proposta resta per il turno dopo
         last = self.history[-1] if self.history else {}
@@ -4733,7 +4738,7 @@ class Brain:
                     announced = True
                     self._rule("correzione_avviso")
             self._passata = getattr(self, "_passata", 0) + 1
-            text, calls, held, held_req, named = yield from self._turn(
+            text, calls, held, held_req, named = yield from self._cronometra(self._turn(
                 with_memory(system), schemas,
                 hold_claims=bool(schemas) and not self._acted(),
                 hold_request=(requested and not nudged and not self.last_tools)
@@ -4748,7 +4753,7 @@ class Brain:
                 hold_fallito=self._solo_falliti(),
                 hold_ripetuta=precedente if not self.last_tools else None,
                 hold_ripetuta_soglia=SOGLIA_INSISTE if insistita else None,
-                tieni_con_chiamate=sviluppo_sosp and not nudged and not self.last_tools)
+                tieni_con_chiamate=sviluppo_sosp and not nudged and not self.last_tools))
             tail = []
             if getattr(self, "_ciclo_fermato", None):
                 # La risposta girava in tondo (ciclo_ripetuto): finisce qui, senza spinte né
@@ -5097,12 +5102,14 @@ class Brain:
                     _on(frase)
             self._set_ctx("attesa", attesa if on_tool_start and not (spoke or announced)
                           else None)
+            contenuti = []          # i risultati di questa passata (la frase dopo il tool)
             try:
                 for call in calls:
                     content = self._run_tool(call, level)
                     self.history.append({"role": "tool", "tool_call_id": call["id"],
                                          "name": call["name"], "content": content})
                     finals.append(_final_text(content))
+                    contenuti.append(content)
             finally:
                 self._set_ctx("attesa", None)
             announced = announced or bool(attese)
@@ -5153,9 +5160,55 @@ class Brain:
                 said = " ".join(f for i, f in enumerate(finals)
                                 if f.strip() not in " ".join(finals[:i]))
                 self.history.append({"role": "assistant", "content": said})
+                if self._passata == 1 and dopo_tool_s1.modo(self.cfg) != dopo_tool_s1.SPENTO:
+                    # Già senza seconda passata (casa_comando, documenti): per la misura
+                    self.last_dopo_tool = {"modo": dopo_tool_s1.modo(self.cfg),
+                                           "esito": "gia_pronta", "tool": calls[0]["name"]}
                 # Dopo un testo già detto, uno spazio (12/10 sera: «…successiva.D'accordo»)
                 yield (" " if spoke else "") + self._marca(said, "esito", "risposta")
                 return
+            # La frase dopo il tool, System 1 (15/10, calliope/system1/dopo_tool.py): per un
+            # esito semplice e chiuso la frase pronta del tool, senza la seconda passata
+            # («attivo»), oppure solo la misura («ombra»). Nel dubbio il modello, come prima
+            if self._passata == 1 and dopo_tool_s1.modo(self.cfg) != dopo_tool_s1.SPENTO:
+                dubbi = [n for n, c in (
+                    ("continuazione", not user_text), ("proposta", pending),
+                    ("proposta_altrui", getattr(self, "_altrui_msg", None)),
+                    ("spinta", nudged), ("correzione", correzioni),
+                    ("contesto", context), ("foto", getattr(self, "_nuove_immagini", None)),
+                    ("insistenza", insistita), ("esercizi", esercizi),
+                    ("sviluppo", sviluppo_sosp), ("richiesta_file", richiesta_file),
+                    ("argomento", frase_arg), ("offerta", self._offer),
+                    ("riservato", getattr(self, "last_private", False)),
+                    ("dato_non_fidato", getattr(self, "_letto_ora", "")),
+                    ("detto", spoke)) if c]
+                scelta = self._dopo_tool_decidi(user_text, calls, contenuti,
+                                                (text or "") + tenuto, dubbi)
+                modo_dt = dopo_tool_s1.modo(self.cfg)
+                if scelta is not None and scelta.scelta == dopo_tool_s1.CODICE \
+                        and scelta.sicurezza >= dopo_tool_s1.SOGLIA:
+                    reg = {"modo": modo_dt, "esito": dopo_tool_s1.CODICE,
+                           "perche": scelta.perche, "tool": scelta.tool,
+                           "ms": round(scelta.ms, 2)}
+                    if level != "ospite" and self.console_riservata() is None:
+                        reg["frase"] = scelta.frase
+                    self.last_dopo_tool = reg
+                    if modo_dt == dopo_tool_s1.ATTIVO:
+                        self._rule("dopo_tool_codice")
+                        print(f"   [SYSTEM1] {scelta.tool}: la frase del tool, senza la seconda "
+                              f"passata", flush=True)
+                        self.history.append({"role": "assistant", "content": scelta.frase})
+                        yield self._marca(scelta.frase, "esito", "risposta")
+                        return
+                    # Ombra: la seconda passata si fa, e si cronometra (_cronometra)
+                    self._dopo_tool_misura = {"frase": scelta.frase}
+                elif scelta is not None:
+                    self.last_dopo_tool = {"modo": modo_dt, "esito": dopo_tool_s1.MODELLO,
+                                           "perche": scelta.perche,
+                                           **({"tool": scelta.tool} if scelta.tool else {}),
+                                           "ms": round(scelta.ms, 2)}
+                else:
+                    self.last_dopo_tool = {"modo": modo_dt, "esito": "in_ritardo"}
 
         # Tetto dei giri raggiunto: un'ultima passata senza tool, così risponde comunque.
         # Dopo i giri di correzione finiti, con l'errore davanti (CORREZIONE_ESAURITA)
@@ -5168,7 +5221,7 @@ class Brain:
         tail = []
         messages = with_memory(system + [{"role": "system", "content": fine}])
         self._passata = getattr(self, "_passata", 0) + 1
-        text, _, _, _, _ = yield from self._turn(messages, [])
+        text, _, _, _, _ = yield from self._cronometra(self._turn(messages, []))
         if not _parlabile(text):
             # Una chiamata scritta come testo (trattenuta) o niente: meglio una frase vera del
             # silenzio. Anche la sola punteggiatura (10/10, quarto giro: dopo i giri di
@@ -5179,6 +5232,83 @@ class Brain:
             text = RIPETI_FRASE
             yield self._marca(RIPETI_FRASE, "atto", "ripeti")
         self.history.append({"role": "assistant", "content": text})
+
+    # ── la frase dopo il tool, System 1 (15/10, calliope/system1/dopo_tool.py) ──
+    def _dopo_tool_decidi(self, user_text: str, calls: list, contenuti: list, detto: str,
+                          dubbi: list):
+        """Chiede al decisore (in un thread suo, `Sorvegliato`) se la frase pronta del tool
+        basta. None se è lento, guasto o spento (allora il modello, come prima)."""
+        sorv = self.__dict__.get("_s1_dopo_tool")
+        if sorv is None:
+            sorv = self.__dict__["_s1_dopo_tool"] = dopo_tool_s1.crea(self.cfg)
+        risultati = []
+        for c in contenuti:
+            try:
+                r = json.loads(c or "{}")
+            except (json.JSONDecodeError, TypeError):
+                r = None
+            risultati.append(r if isinstance(r, dict) else None)
+        try:
+            from . import frasi
+            tono = frasi.FRASI.tono_turno()
+        except Exception:  # noqa: BLE001
+            tono = ""
+        e = dopo_tool_s1.Esito(
+            testo=user_text or "", chiamate=tuple(c.get("name") or "" for c in calls),
+            risultati=tuple(risultati), detto_prima=detto or "",
+            minore=self.console_riservata() == "minore", tono=tono, dubbi=tuple(dubbi))
+        return sorv.chiedi(e, dopo_tool_s1.ATTESA_S)
+
+    def _cronometra(self, passata):
+        """Una passata del modello; in ombra, dopo una frase del codice calcolata, la prima
+        passata dopo il tool si cronometra: primo testo, prima frase (fine frase come la divide la
+        voce) e fine, con il testo e le chiamate (la seconda passata che «attivo» risparmierebbe)."""
+        m = self.__dict__.get("_dopo_tool_misura")
+        if not isinstance(m, dict) or "t0" in m:
+            return (yield from passata)
+        m["t0"] = t0 = time.perf_counter()
+        acc = ""
+        try:
+            while True:
+                try:
+                    pezzo = next(passata)
+                except StopIteration as fine:
+                    m["passata_ms"] = round((time.perf_counter() - t0) * 1000)
+                    m.setdefault("prima_frase_ms", m["passata_ms"])
+                    val = fine.value
+                    if isinstance(val, tuple) and val:
+                        m["testo"] = str(val[0] or "")
+                        m["altro_tool"] = bool(len(val) > 1 and val[1])
+                    return val
+                if isinstance(pezzo, str) and pezzo.strip():
+                    ora = round((time.perf_counter() - t0) * 1000)
+                    m.setdefault("primo_ms", ora)
+                    acc += pezzo
+                    if "prima_frase_ms" not in m and dopo_tool_s1.FINE_FRASE.search(acc):
+                        m["prima_frase_ms"] = ora
+                yield pezzo
+        finally:
+            # Interrotta (la voce chiude lo stream): chiude anche la passata, cioè la richiesta
+            # al modello, come farebbe `yield from`
+            passata.close()
+
+    def _dopo_tool_chiudi(self):
+        """Fine della risposta: in ombra, la frase del codice confrontata con quella del modello
+        nel registro dei turni (`dopo_tool`), senza il testo del modello."""
+        m, self._dopo_tool_misura = self.__dict__.get("_dopo_tool_misura"), None
+        reg = self.__dict__.get("last_dopo_tool")
+        if not isinstance(m, dict) or not isinstance(reg, dict):
+            return
+        if "passata_ms" not in m:
+            reg["interrotta"] = True
+            return
+        for k in ("prima_frase_ms", "primo_ms", "passata_ms"):
+            if k in m:
+                reg[k] = m[k]
+        testo = m.get("testo") or ""
+        reg.update(dopo_tool_s1.sostanza(m.get("frase") or "", testo))
+        reg["domanda"] = "?" in testo
+        reg["altro_tool"] = bool(m.get("altro_tool"))
 
     def _esercizi_aperti(self) -> bool:
         """Chi parla ha una sessione di esercizi aperta (calliope/esercizi/sessione.py)."""

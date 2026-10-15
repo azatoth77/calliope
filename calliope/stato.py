@@ -43,7 +43,11 @@ il prossimo passo (registro delle capacità, calliope/capacita.py).
                                               preselezione dei tool System 1 in ombra:
                                               «nucleo» o «tutti», richiamo sui turni con
                                               tool, schemi risparmiati
-                                              (calliope/system1/preselezione.py, 15/10)
+                                              (calliope/system1/preselezione.py, 15/10);
+                                              frase dopo il tool System 1: codice o
+                                              modello, seconda passata risparmiabile e
+                                              frasi uguali nella sostanza in ombra
+                                              (calliope/system1/dopo_tool.py, 15/10)
     python -m calliope.stato --reti [--giorni N] [--json]
                                               le reti del modello per profilo (15/10, E11,
                                               calliope/reti_scatti.py): scatti, risposte
@@ -502,6 +506,10 @@ def main(argv=None) -> int:
         # richiamo sui turni con tool e schemi risparmiati
         from .system1 import preselezione as preselezione_s1
         presel = preselezione_s1.riassunto(turni)
+        # La frase dopo il tool System 1 (15/10, calliope/system1/dopo_tool.py): codice o
+        # modello, e in ombra la seconda passata risparmiabile
+        from .system1 import dopo_tool as dopo_tool_s1
+        dopo_tool_r = dopo_tool_s1.riassunto(turni)
         # Le frasi pronte ripetute (12/10, calliope/frasi.py, fase 0)
         from . import frasi
         pronte = frasi.riassunto(turni)
@@ -534,6 +542,7 @@ def main(argv=None) -> int:
                               "dialogo": dialogo, "voce_sola": voce_sola,
                               "scelta_tool": scelta, "preselezione": presel,
                               "si_breve": si_r,
+                              "dopo_tool": dopo_tool_r,
                               "frasi_pronte": pronte,
                               "stanza": stanza, "fine_turno": fine_r,
                               "guardia": {k: v for k, v in guardia_r.items()
@@ -559,6 +568,8 @@ def main(argv=None) -> int:
             print(scelta_tool.testo(scelta))
             print()
             print(preselezione_s1.testo(presel))
+            print()
+            print(dopo_tool_s1.testo(dopo_tool_r))
             print()
             print(frasi.testo(pronte))
             print()

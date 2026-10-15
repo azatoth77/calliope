@@ -22,6 +22,7 @@ di fila si spegne da solo fino al riavvio. Il primo decisore è la fine del turn
 from __future__ import annotations
 
 import concurrent.futures as cf
+import dataclasses
 import threading
 import time
 from dataclasses import dataclass
@@ -84,7 +85,8 @@ class Sorvegliato:
             self._guasti_di_fila = 0
             self.risposte += 1
         if not d.ms:
-            d = Decisione(d.scelta, d.sicurezza, (time.perf_counter() - t0) * 1000, d.prob)
+            # `replace` tiene i campi in più di una sottoclasse (dopo_tool.Scelta, 15/10)
+            d = dataclasses.replace(d, ms=(time.perf_counter() - t0) * 1000)
         return d
 
     def avvia(self, dati) -> cf.Future | None:

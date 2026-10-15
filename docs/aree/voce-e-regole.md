@@ -2119,3 +2119,86 @@ turnlog e stato). **Da lanciare sulla DGX** dopo l'installazione:
 
 Fino al 15/10 i turni non hanno `reti_spente`: la prima lettura deduce dal profilo. Se qualcosa
 era spento nel locale, il rapporto lo dice in testa.
+
+## La frase dopo il tool, System 1 (15/10, ramo `system1-dopo-tool`)
+
+**Il problema** (roadmap 3.12; § 7 della ricerca
+[`2026-10-15-preselezione-tool.md`](../ricerche/2026-10-15-preselezione-tool.md)): sulla DGX
+(gemma4 26B su Ollama) un turno con un tool ha la prima frase a ~2,71 s contro ~1,77 s di un turno
+senza tool (14/10). La differenza è quasi tutta la **seconda passata**, in cui il modello rimette in
+parole il risultato del tool. Per gli esiti semplici e chiusi la frase c'è già: il tool la scrive
+nel risultato (`conferma` di timer, promemoria, appuntamenti, liste, volume, media, luminosità;
+`da_dire` di ora, data, conti con le date e calcoli), ed è quella che Brain dice dal 27/09 al posto
+di una risposta vuota (`conferma_al_posto_del_vuoto`). `casa_comando` e i documenti hanno già la
+loro `risposta_finale` e non fanno la seconda passata da settimane: nel registro sono «gia_pronta».
+
+**Il decisore** (`calliope/system1/dopo_tool.py`, `DopoTool.decide(Esito) -> Scelta`, stessa
+interfaccia della fine del turno e della preselezione, chiesto attraverso `Sorvegliato` con 50 ms
+al più: lento, guasto o spento → il modello). Sceglie «codice» solo se, nella **prima** passata
+con tool:
+
+- c'è **una** chiamata, a un tool dell'elenco chiuso `COPERTI`, riuscita, con la sua frase (al più
+  220 caratteri) e senza niente da spiegare (`cosa_fare`, `cosa_dire`, una domanda in sospeso, un
+  nome incerto);
+- il modello non ha detto né tenuto testo prima del tool; chi parla non è un minore; il tono del
+  turno è normale, amichevole o essenziale (il formale vuole il «lei», l'ironico e il computer di
+  bordo il loro stile);
+- la frase della persona è **una** frase, di al più `system1_dopo_tool_parole_max` (16) parole, e
+  senza punto di domanda se il tool è un'azione («Che ore sono?» va bene, «Metti un timer, quanto
+  manca a cena?» no);
+- nessun dubbio di struttura di Brain: proposta aperta (anche di un altro), spinte, giri di
+  correzione, contesto del turno, foto con la frase, domanda insistita, esercizi, sviluppo, una
+  richiesta di file, cambio d'argomento, offerta del tool, risultato riservato, dato non fidato
+  letto, continuazione.
+
+Fuori dall'elenco, di proposito: le letture con dati da riassumere (`lista_leggi`, `agenda_elenca`,
+`appuntamenti_elenca`, `casa_stato`, meteo, ricerche), la memoria (`ricorda`, `dimentica`: il modello
+sceglie cosa dire del fatto), voci e toni. Per `calcola` il `da_dire` è il solo numero: la frase è
+«Fa 102.».
+
+**Principio 10.** Il tool e i suoi argomenti li ha scelti il modello; il decisore converte un esito
+già deciso nella frase scritta dal tool (correzione della forma), e ogni dubbio rimanda a ciò che
+succedeva prima. I controlli sulla frase della persona guardano solo la forma (quante frasi, quante
+parole, il punto di domanda) e possono soltanto mandare al modello. In «attivo» la regola
+**`dopo_tool_codice`** va nel registro dei turni. Il rischio che resta: «metti un timer e accendi la
+luce» con **una** sola chiamata, se il modello avrebbe chiamato il secondo tool nella seconda
+passata; di solito le chiama insieme (e allora sono due tool: il modello), e l'ombra lo misura
+(`altro_tool`).
+
+**Modi** (`system1_dopo_tool`, sezione `llm`, **spento** di serie):
+
+- «ombra»: la frase si calcola e la seconda passata si fa comunque, cronometrata (`Brain._cronometra`:
+  primo testo, **prima frase** con la fine frase come la divide la voce, fine passata). Nel registro
+  dei turni il campo `dopo_tool`: `esito` (codice, modello, gia_pronta, in_ritardo), `perche`, `tool`,
+  `frase` (solo degli adulti: tolta con le parole dei minori e degli ospiti, `conserva.togli_testo`),
+  `ms` del decisore, `prima_frase_ms` (il tempo che «attivo» risparmierebbe), `passata_ms`, il
+  confronto con la frase del modello nella sostanza (`uguale`, `numeri`, `copertura`: tutti i numeri,
+  in cifre o in parole fino a 99, e metà delle parole piene), `domanda` (il modello ha chiesto
+  qualcosa) e `altro_tool` (ha chiamato un altro tool dopo). Una risposta interrotta è `interrotta` e
+  la richiesta al modello si chiude come prima.
+- «attivo»: niente seconda passata per i casi coperti; la frase del tool va alla voce marcata `esito`
+  per l'uscita unica ed entra nella storia come messaggio dell'assistente (utente, chiamata,
+  risultato, frase: come per la `risposta_finale`).
+- `calliope stato --turni`: la riga «Frase dopo il tool (System 1)» con i coperti per tool, i perché
+  del modello, le uguali e le diverse, la seconda passata risparmiabile (p50, p90, in tutto) e due
+  avvisi: oltre il 5 % di frasi diverse (con almeno 20 confronti) e ogni `altro_tool`.
+
+Streaming: in «ombra» la seconda passata va alla voce frase per frase come prima (la prova lo
+controlla); in «attivo» la frase del tool è una sola ed esce subito dopo il tool.
+
+**Prove**: `prove/prova_dopo_tool.py` (livello 1, ~1 s): casi e contrari del decisore col loro perché,
+la sostanza, Brain con un motore finto in «spento», «attivo» e «ombra» con i contrari in Brain (due
+tool, testo prima del tool, minore, tono formale, contesto, tool fallito, lista letta, decisore
+guasto), `casa_comando` già pronta, streaming e interruzione, configurazione, ciclo, conservazione,
+riassunto e lo script della DGX a secco. Correzione comune: `Sorvegliato` teneva solo i campi di
+`Decisione` quando il decisore non scriveva i suoi ms (ora `dataclasses.replace`).
+
+**Da lanciare sulla DGX** (sola lettura, senza modello, anche con Calliope accesa):
+`prove/manuali/dopo_tool_dgx.py [--giorni 14]`, comando in testa al file. Rigioca il decisore sui
+turni conservati: quanti turni con tool sarebbero coperti (stima per eccesso: il registro non ha il
+risultato del tool, il testo del modello prima del tool né il tono), i perché degli altri, la prima
+frase mediana per gruppo e il risparmio stimato (prima frase del turno coperto meno la mediana dei
+turni senza tool dello stesso giorno). Poi `system1_dopo_tool: ombra` nel file locale per qualche
+giorno; **criteri proposti per «attivo»**: almeno 50 confronti, diverse nella sostanza sotto il 5 %
+(rilette a mano dal registro: la misura della sostanza è un'approssimazione), `altro_tool` 0, e un
+risparmio p50 di almeno 0,5 s.

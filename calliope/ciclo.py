@@ -3979,6 +3979,14 @@ class Ciclo:
                 pre.chiudi(rec, job)
             except Exception:  # noqa: BLE001 — una misura non ferma il registro
                 pass
+        # La frase dopo il tool, System 1 (15/10, calliope/system1/dopo_tool.py): codice o
+        # modello, perché, e in ombra il tempo della seconda passata e il confronto
+        if isinstance(getattr(brain, "last_dopo_tool", None), dict):
+            dt = dict(brain.last_dopo_tool)
+            if "frase" in dt:
+                dt["frase"] = (oscura(brain.redact(dt["frase"])) if t.scritto is not None
+                               else brain.redact(dt["frase"]))
+            rec["dopo_tool"] = dt
         # Lo stato del dialogo in ombra (10/10, calliope/stato_dialogo.py): interprete del
         # modello e corsia veloce accanto alla decisione di oggi, senza testo
         if getattr(brain, "last_dialogo_ombra", None):

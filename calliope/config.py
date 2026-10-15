@@ -368,6 +368,20 @@ class Config:
     # «tutti» se un tool fuori dal nucleo arriva entro questo margine di somiglianza dal
     # migliore del nucleo (0,10: nessun tool mancato sul banco del 15/10, uno a 0,05)
     preselezione_margine: float = 0.10
+    # La frase dopo il tool, System 1 (15/10, calliope/system1/dopo_tool.py; roadmap 3.12):
+    # sulla DGX un turno con un tool ha la prima frase ~0,9 s dopo uno senza (2,71 contro 1,77 s
+    # il 14/10), quasi tutta la seconda passata del modello che rimette in parole il risultato.
+    # Per gli esiti semplici e chiusi (timer, promemoria, liste, volume, ora, data, calcoli) la
+    # frase pronta del tool basta; nel dubbio (più tool, errore, dati da riassumere, un minore,
+    # testo del modello, una domanda o più frasi della persona…) decide il modello come oggi.
+    # «spento» (di serie): niente. «ombra»: si fa comunque la seconda passata, e il registro dei
+    # turni scrive la frase del codice, il tempo risparmiabile e se il modello ha detto la stessa
+    # cosa (`calliope stato --turni`). «attivo»: niente seconda passata per i casi coperti
+    # (regola `dopo_tool_codice`). Spento di serie finché l'ombra della DGX non dice quante
+    # frasi del codice sarebbero state diverse da quelle del modello
+    system1_dopo_tool: str = "spento"
+    # Le parole della frase della persona oltre cui decide il modello (forse chiede altro)
+    system1_dopo_tool_parole_max: int = 16
 
     # Speech-to-Text — faster-whisper
     # ~1,2 GiB di VRAM reali nel processo, contesto CUDA compreso (misura del 24/09);
@@ -3161,7 +3175,8 @@ SEZIONI: dict[str, list[str]] = {
             "uscita_controllo",
             "storia_inattiva_s",
             "llm_reti_spente", "preselezione_tool", "preselezione_codifica",
-            "preselezione_embedding", "preselezione_nucleo", "preselezione_margine"],
+            "preselezione_embedding", "preselezione_nucleo", "preselezione_margine",
+            "system1_dopo_tool", "system1_dopo_tool_parole_max"],
     "stt": ["whisper_model", "whisper_cartella", "whisper_beam_size", "whisper_hotwords", "whisper_device",
             "whisper_compute_type", "language", "stt_motore", "stt_url", "stt_modello",
             "stt_timeout_s", "stt_correzione", "stt_correzione_soglia", "stt_correzione_motore",
@@ -3549,6 +3564,7 @@ LIMITI: dict[str, tuple[float, float]] = {
     "fine_turno_sonda_ms": (64, 2000), "fine_turno_soglia": (0.5, 1.0),
     "fine_turno_soglia_attesa": (0.5, 1.0), "fine_turno_attesa_max_ms": (300, 5000),
     "fine_turno_min_parlato_ms": (0, 5000), "preselezione_margine": (-0.5, 1.0),
+    "system1_dopo_tool_parole_max": (1, 200),
     "preroll_ms": (0, 5000), "memory_max_facts": (1, 10_000), "speaker_threads": (1, 64),
     "appuntamento_anticipo_min": (0, 10_080), "casa_timeout_s": (0.5, 300.0),
     "documenti_attesa_s": (0.0, 300.0),
@@ -3744,6 +3760,14 @@ def _preselezione_codifica_valida(value):
     raise ValueError("serve «parole» o «embedding»")
 
 
+def _dopo_tool_valido(value):
+    """«spento», «ombra» o «attivo» (15/10, calliope/system1/dopo_tool.py)."""
+    s = str(value or "").strip().lower()
+    if s in ("spento", "ombra", "attivo"):
+        return s
+    raise ValueError("serve «spento», «ombra» o «attivo»")
+
+
 def _fine_turno_valido(value):
     """«spenta», «ombra» o «attiva» (14/10, calliope/system1/fine_turno.py)."""
     s = str(value or "").strip().lower()
@@ -3770,6 +3794,7 @@ VALIDATORI = {"llm_keep_alive": keep_alive_valido, "llm_num_ctx": _num_ctx_valid
               "fine_turno": _fine_turno_valido,
                "preselezione_tool": _preselezione_valido,
                "preselezione_codifica": _preselezione_codifica_valida,
+               "system1_dopo_tool": _dopo_tool_valido,
                "stanza_lenta_ritrascrivi": _si_no_auto_valido,
                "stanza_lenta_blocchi": _blocchi_valido,
                "arbitro_memoria": _arbitro_memoria_valido}
