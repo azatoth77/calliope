@@ -51,7 +51,7 @@ import os
 import statistics
 from dataclasses import asdict, dataclass, field
 
-from . import modelli as cat
+from . import macchina, modelli as cat
 
 # Riserva del sistema (§4.3) [D]
 RISERVA_DEDICATA = {"windows": 0.8, "linux": 0.3}
@@ -685,7 +685,7 @@ def _lenta(p: Piano, mc: _Macchina, f: Funzioni, whisper_gpu: bool):
             "ci sta dopo tutto il resto"
             + (f" e resta il posto per le immagini ({_gb(flux)} GB)" if flux else "")
             + ("" if gia else ": calliope motore whisper-lento installa, poi "
-               "stanza_lenta_stt_url")
+               "stanza_lenta_stt_url: " + macchina.whisper_lento_url())
             + ("" if adesso else f"; adesso, con gli altri programmi accesi, restano "
                f"{_gb(max(0.0, mc.liberi_adesso))} GB: non adesso"),
             _oggi(f, "stanza_lenta", "server"), fonte))

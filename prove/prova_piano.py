@@ -136,12 +136,13 @@ HTTP_DGX = {
 }
 cfg_dgx = Config()
 cfg_dgx.stt_motore, cfg_dgx.stt_url = "server", "http://127.0.0.1:8003/v1"
+SERVIZIO_DGX = ("Environment=OLLAMA_HOST=0.0.0.0 OLLAMA_NUM_PARALLEL=2 "
+                "OLLAMA_MAX_LOADED_MODELS=4\n")
 s = SondeFinte("linux", "aarch64", base={"modello": "DGX Spark", "core": 20,
                                          "sistema": "Ubuntu 24.04",
                                          "gpu": [("NVIDIA GB10", None)]},
                smi="NVIDIA GB10, [N/A], [N/A], 580.178.04\n", meminfo=MEMINFO_DGX,
-               http=HTTP_DGX, servizio="Environment=OLLAMA_HOST=0.0.0.0 OLLAMA_NUM_PARALLEL=2 "
-                                       "OLLAMA_MAX_LOADED_MODELS=4\n",
+               http=HTTP_DGX, servizio=SERVIZIO_DGX,
                librerie={"onnxruntime_cuda": True, "ctranslate2_cuda": 0})
 inv_dgx = macchina.inventario(cfg_dgx, s)
 g = inv_dgx["gpu"]
@@ -162,6 +163,38 @@ verifica("DGX: server di Whisper locale che risponde, CUDA per onnxruntime sì e
          and inv_dgx["motori"]["onnxruntime_cuda"] is True
          and inv_dgx["motori"]["ctranslate2_cuda"] == 0, inv_dgx["motori"])
 verifica("DGX: nessun avviso", inv_dgx["avvisi"] == [], inv_dgx["avvisi"])
+
+
+# Il secondo Whisper della corsia lenta (issue #2, 15/10): la porta di serie è quella di
+# whisper-lento.sh (8005), non la 8004 di SearXNG
+def inv_lento(http_in_piu, cfg=None):
+    return macchina.inventario(cfg or cfg_dgx, SondeFinte(
+        "linux", "aarch64", base={"modello": "DGX Spark", "core": 20, "sistema": "Ubuntu 24.04",
+                                  "gpu": [("NVIDIA GB10", None)]},
+        smi="NVIDIA GB10, [N/A], [N/A], 580.178.04\n", meminfo=MEMINFO_DGX,
+        http={**HTTP_DGX, **http_in_piu}, servizio=SERVIZIO_DGX,
+        librerie={"onnxruntime_cuda": True, "ctranslate2_cuda": 0}))
+
+
+SEARXNG = "<!DOCTYPE html><html><head><title>SearXNG</title></head></html>"
+PAGINA_WHISPER = "<html><head><title>Whisper.cpp Server</title></head></html>"
+inv_sx = inv_lento({"8004/": SEARXNG})
+verifica("SearXNG sulla 8004 e il secondo Whisper spento: l'inventario non lo vede",
+         "whisper_lento" not in inv_sx["motori"], inv_sx["motori"].get("whisper_lento"))
+inv_wl = inv_lento({"8004/": SEARXNG, "8005/": PAGINA_WHISPER})
+verifica("secondo Whisper acceso sulla 8005 (porta di whisper-lento.sh): attivo",
+         (inv_wl["motori"].get("whisper_lento") or {}).get("attivo") is True
+         and macchina.WHISPER_LENTO_PORTA == 8005, inv_wl["motori"].get("whisper_lento"))
+verifica("contrario: un altro servizio sulla porta di serie non è un Whisper acceso",
+         "whisper_lento" not in inv_lento({"8005/": SEARXNG})["motori"])
+cfg_url = copy.deepcopy(cfg_dgx)
+cfg_url.stanza_lenta_stt_url = "http://127.0.0.1:8007/v1"
+w_url = inv_lento({"8005/": PAGINA_WHISPER, "8007/": "ok"}, cfg_url)["motori"]
+verifica("stanza_lenta_stt_url vince sulla porta di serie (e lì non si chiede la pagina)",
+         (w_url.get("whisper_lento") or {}).get("attivo") is True
+         and w_url["whisper_lento"]["configurato"] is True
+         and macchina.whisper_lento_url(cfg_url) == "http://127.0.0.1:8007/v1"
+         and macchina.whisper_lento_url(Config()) == "http://127.0.0.1:8005/v1", w_url)
 
 s = SondeFinte("linux", "x86_64", base={"core": 16, "sistema": "Debian 13", "gpu": []},
                smi=None, meminfo="MemTotal: 32000000 kB\nMemAvailable: 20000000 kB\n")
@@ -327,6 +360,19 @@ p2 = piano.piano(inv_dgx, f2)
 fin = int(scelte(p2)["contesto"].scelta.split()[0].replace(".", ""))
 verifica("DGX senza contesto.json: finestra stimata dal tempo tra 24 e 28k", 24576 <= fin
          <= 28672, fin)
+# --piano col secondo Whisper (issue #2): SearXNG sulla 8004 non lo fa contare come acceso
+f_l = copy.deepcopy(f_dgx)
+f_l.stanza_lenta = True
+p_base, p_sx, p_wl = (piano.piano(i, f_l) for i in (inv_dgx, inv_sx, inv_wl))
+l_base, l_sx, l_wl = (scelte(x).get("stanza_lenta") for x in (p_base, p_sx, p_wl))
+verifica("--piano: SearXNG sulla 8004 e il secondo Whisper spento → non contato (né fra i "
+         "programmi di Calliope né «già acceso»: dice ancora di installarlo, sulla 8005)",
+         l_sx is not None and "whisper-lento installa" in l_sx.motivo
+         and "127.0.0.1:8005/v1" in l_sx.motivo and l_sx.motivo == l_base.motivo
+         and p_sx.liberi_gb == p_base.liberi_gb and p_sx.avvisi == p_base.avvisi,
+         (l_sx, p_sx.liberi_gb, p_base.liberi_gb))
+verifica("--piano: acceso sulla 8005 → contato come già acceso (niente «installa»)",
+         l_wl is not None and "installa" not in l_wl.motivo, l_wl)
 
 # Windows su ARM con memoria unificata (RTX Spark): niente vLLM, agente su Ollama
 p = piano.piano(finta("NVIDIA RTX Spark", ram=128.0, os_="windows", arch="aarch64",

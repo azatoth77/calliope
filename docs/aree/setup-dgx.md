@@ -97,7 +97,7 @@ calliope motore whisper-lento stato|memoria|ferma|avvia|disinstalla
   lo farebbe scaricare con la voce ferma, e il registro delle capacità lo dice.
 - **Il secondo Whisper della corsia lenta** (14/10 sera, facoltativo, **preparato e non
   acceso**): `setup/linux/motore/whisper-lento.sh` e l'unità `calliope-whisper-lento`
-  (127.0.0.1:8004, `-bs 5`, nessun prompt fisso, `-t 2`, `Nice=10`), lo stesso `whisper-server`
+  (127.0.0.1:8005, `-bs 5`, nessun prompt fisso, `-t 2`, `Nice=10`), lo stesso `whisper-server`
   di `whisper.sh` (nessuna compilazione nuova) con **large-v3 q5_0** (1,08 GB di file, ~2 GB
   stimati; `VARIANTE=f16` per large-v3 intero, ~3,9 GB). Residente: con la memoria libera del
   14/10 (~21 GB) resta il posto per FLUX (13 GB) con ~6 GB di margine. `calliope.service` **non**

@@ -1284,7 +1284,7 @@ riassunto: [contesto-conversazione](contesto-conversazione.md). Qui l'audio.
   oppure **un Whisper suo** (`stanza_lenta_stt_url`, `stanza_lenta_stt_modello`: per esempio un
   secondo whisper-server con large-v3 non turbo), che il piano propone solo se ci sta dopo tutto il
   resto e la macchina non è della taglia ridotta (`calliope stato --piano`, riga «Stanza lenta»:
-  sulla DGX «large-v3, whisper.cpp (secondo server)» ~3,6 GB stimati; a 8 GB «lo stesso Whisper
+  sulla DGX «large-v3, whisper.cpp (secondo server)» ~3,6 GB stimati *[storico: dal 14/10 sera la variante q5_0, ~2,0 GB]*; a 8 GB «lo stesso Whisper
   dei turni»). Il **prompt** con i nomi di chi parla nello scambio («Parlano Carlo e Nicola.») e la
   coda delle parole di prima (`stanza_lenta_prompt_caratteri`, 160) si accende di serie solo con
   un Whisper suo (`stanza_lenta_prompt: auto`): vedi le misure sotto.

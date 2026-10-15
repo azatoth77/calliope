@@ -37,7 +37,7 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
-from calliope import arbitro_memoria as am  # noqa: E402
+from calliope import arbitro_memoria as am, modelli as cat  # noqa: E402
 from calliope.config import Config  # noqa: E402
 
 errori = 0
@@ -208,7 +208,7 @@ cfg.minori_enabled = True
 cfg.guardiano_pericolo_modello = cfg.llm_model
 verifica("da_config: rilevatore uguale alla voce → nessun modello in più",
          am.da_config(cfg).rilevatore == "" and am.da_config(cfg).guardiano)
-cfg.stanza, cfg.stanza_lenta, cfg.stanza_lenta_stt_url = "ombra", True, "http://127.0.0.1:8004/v1"
+cfg.stanza, cfg.stanza_lenta, cfg.stanza_lenta_stt_url = "ombra", True, "http://127.0.0.1:8005/v1"
 u = am.da_config(cfg)
 cl = am.conto(dgx(), u)
 verifica("corsia lenta con un Whisper suo: secondo Whisper a richiesta, non sondato, niente "
@@ -382,15 +382,17 @@ p0 = righe("partita")
 verifica("a voce ferma da 6 s la coda in ombra la fa partire, con l'attesa",
          len(p0) == 1 and p0[0]["chi"] == "embedding" and p0[0]["attesa_s"] >= 6, p0)
 # Precedenza e un caricamento alla volta
-cfg2.stanza_lenta_stt_url = "http://127.0.0.1:8004/v1"
+cfg2.stanza_lenta_stt_url = "http://127.0.0.1:8005/v1"
 orl2.t += 10
 q2.voce_occupata()
 om.richiesta("guardia", righe=3)
 om.richiesta("corsia_lenta", segmenti=2)
 om.passo()
 rl = righe("richiesta")[-1]
-verifica("corsia lenta col Whisper suo: a richiesta, 3,6 GB", rl["chi"] == "corsia_lenta"
-         and rl["classe"] == am.A_RICHIESTA and rl["gb"] == 3.6, rl)
+verifica("corsia lenta col Whisper suo: a richiesta, 2,0 GB (large-v3 q5_0 di whisper-lento.sh, "
+         "non i 3,6 della variante f16: issue #2)", rl["chi"] == "corsia_lenta"
+         and rl["classe"] == am.A_RICHIESTA and rl["gb"] == 2.0
+         and am.A_RICHIESTA_GB["whisper_lento"] == cat.WHISPER["cpp-lenta"].memoria_gb, rl)
 q2.voce_libera()
 orl2.t += 6
 om.passo()
@@ -419,13 +421,14 @@ q2.voce_libera()
 mb = righe("minuto")[-1]
 verifica("il minuto conta le richieste per chi e le buttate",
          mb["richieste"].get("agente") == 1 and mb["buttate"] == 1, mb)
-# Poca memoria: solo scaricando (l'agente, dal passo 4) e non possibile (senza vLLM)
-macchina_finta["libera"] = 10.0
+# Poca memoria: solo scaricando (l'agente, dal passo 4) e non possibile (senza vLLM). 9 GB:
+# 9 − 8 di margine = 1 GB, meno dei 2,0 del secondo Whisper (con 10 ci starebbe giusto)
+macchina_finta["libera"] = 9.0
 orl2.t += 61
 om._inv = None
 om.passo()
 m1 = righe("minuto")[-1]
-verifica("10 GB liberi: secondo Whisper solo scaricando l'agente, immagini idem; mai il tempo "
+verifica("9 GB liberi: secondo Whisper solo scaricando l'agente, immagini idem; mai il tempo "
          "reale", m1["a_richiesta"]["whisper_lento"]["ci_sta"]
          and m1["a_richiesta"]["whisper_lento"]["scaricherebbe"] == ["agente"]
          and m1["a_richiesta"]["immagini"]["scaricherebbe"] == ["agente"]
@@ -442,9 +445,9 @@ q2.voce_occupata()
 om.richiesta("corsia_lenta")
 om.passo()
 rr = righe("richiesta")[-1]
-verifica("richiesta del secondo Whisper con 10 GB liberi e niente da scaricare (10 − 8 = 2 < "
-         "3,6): rifiuto in ombra, mai il tempo reale", rr["ci_sta"] is False
-         and rr["mancano_gb"] > 1 and rr["tempo_reale"] == []
+verifica("richiesta del secondo Whisper con 9 GB liberi e niente da scaricare (9 − 8 = 1 < "
+         "2,0): rifiuto in ombra, mai il tempo reale", rr["ci_sta"] is False
+         and rr["mancano_gb"] >= 0.99 and rr["tempo_reale"] == []
          and rr["partirebbe"] == "rifiutata" and om._coda == [], rr)
 q2.voce_libera()
 macchina_finta.update(libera=22.5, vllm=True)
@@ -531,8 +534,8 @@ oggi = datetime.date.today().isoformat()
 verifica("registro arbitro-AAAA-MM-GG.jsonl scritto e riletto",
          (TMP2 / f"arbitro-{oggi}.jsonl").exists() and oggi in st and st[oggi]["minuti"] >= 4,
          list(TMP2.iterdir()))
-verifica("storia di oggi: libera minima 10 GB, immagini non possibili, rifiuti, partite, buttate",
-         st[oggi]["libera_min_gb"] == 10.0 and st[oggi]["non_possibile"].get("immagini", 0) >= 1
+verifica("storia di oggi: libera minima 9 GB, immagini non possibili, rifiuti, partite, buttate",
+         st[oggi]["libera_min_gb"] == 9.0 and st[oggi]["non_possibile"].get("immagini", 0) >= 1
          and st[oggi]["solo_scaricando"].get("whisper_lento", 0) >= 1 and st[oggi]["rifiuti"] >= 1
          and st[oggi]["partite"] >= 3 and st[oggi]["buttate"] == 1
          and st[oggi]["tempo_reale"] == 0, st[oggi])

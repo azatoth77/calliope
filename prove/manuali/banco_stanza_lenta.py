@@ -734,9 +734,9 @@ def modo_conservati_audio(o, testa: dict, casi: list[dict]) -> int:
     print(f"\nRitrascrizione di {len(reg)} registrazioni con riferimento ({come})")
     chiesti = [s.strip() for s in str(o.get("sistemi") or ",".join(SISTEMI)).split(",")
                if s.strip()]
+    from calliope.macchina import whisper_lento_url
     url_lento = (o["url_lento"] if isinstance(o.get("url_lento"), str) else
-                 str(getattr(cfg, "stanza_lenta_stt_url", "") or "").strip()
-                 or "http://127.0.0.1:8005/v1")
+                 whisper_lento_url(cfg))
     fun: dict = {}
     stt = None
     if any(s.startswith("turni") for s in chiesti):

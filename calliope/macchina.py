@@ -391,19 +391,33 @@ def _vllm(s: Sonde, url: str) -> dict | None:
 
 
 UNITA_WHISPER_LENTO = "calliope-whisper-lento"
-WHISPER_LENTO_PORTA = 8004          # setup/linux/motore/whisper-lento.sh
+# La porta di serie del secondo Whisper: l'unico posto nel codice, uguale a PORTA="${PORTA:-8005}"
+# di setup/linux/motore/whisper-lento.sh (prova_gestore controlla che coincidano). La 8004 è di
+# SearXNG (searxng.sh): fino al 15/10 qui c'era 8004, e `calliope stato --piano` contava come
+# acceso un secondo Whisper che non c'era (issue #2)
+WHISPER_LENTO_PORTA = 8005
+
+
+def whisper_lento_url(cfg=None) -> str:
+    """L'indirizzo (con /v1) del secondo Whisper: `stanza_lenta_stt_url` se c'è, altrimenti la
+    porta di serie di whisper-lento.sh su 127.0.0.1."""
+    url = str(getattr(cfg, "stanza_lenta_stt_url", "") or "").strip()
+    return url or f"http://127.0.0.1:{WHISPER_LENTO_PORTA}/v1"
 
 
 def _whisper_lento(s: Sonde, cfg) -> dict | None:
     """Il secondo whisper-server della corsia lenta (14/10 sera): risponde? e la sua memoria
     vera sulla GPU (nvidia-smi per processo, col PID dell'unità systemd utente). Si guarda
-    `stanza_lenta_stt_url` o, se manca, la porta di whisper-lento.sh. None se non c'è niente."""
+    `stanza_lenta_stt_url` o, se manca, la porta di whisper-lento.sh. None se non c'è niente.
+    Sulla porta di serie, che nessuno ha dichiarato, conta solo una risposta di whisper-server
+    (la sua pagina di prova dice «Whisper.cpp Server»): un altro servizio lì non è un Whisper
+    acceso."""
     url = str(getattr(cfg, "stanza_lenta_stt_url", "") or "").strip()
-    radice = re.sub(r"/v1/?$", "", url.rstrip("/")) if url else \
-        f"http://127.0.0.1:{WHISPER_LENTO_PORTA}"
+    radice = re.sub(r"/v1/?$", "", whisper_lento_url(cfg).rstrip("/"))
     if not _locale(radice):
         return {"locale": False, "attivo": None, "gb": None, "configurato": True}
-    attivo = s.get(radice + "/") is not None
+    corpo = s.get(radice + "/")
+    attivo = corpo is not None and (bool(url) or "whisper" in corpo.lower())
     if not attivo and not url:
         return None
     gb = None

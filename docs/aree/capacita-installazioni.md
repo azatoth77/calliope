@@ -275,7 +275,7 @@ si registra soltanto cosa l'arbitro avrebbe fatto.
 - **L'arbitro in ombra** (`calliope/arbitro_ombra.py`, `Ombra`): chi chiede un carico chiama
   `richiesta(chi)`, che è solo un `append` (la domanda di una ricerca arriva dal turno): lotti di
   vettori (`embedding`, sfondo), domanda di una ricerca (`embedding_ricerca`, vicino), un passo
-  della corsia lenta (`corsia_lenta`: sfondo, a richiesta con 3,6 GB se ha un Whisper suo), un
+  della corsia lenta (`corsia_lenta`: sfondo, a richiesta con 3,6 GB se ha un Whisper suo *[storico: 2,0 GB dal 15/10, sotto]*), un
   giudizio del guardiano a posteriori (`guardia`, sfondo) e un lavoro dell'agente (`agente`,
   sfondo). Il thread (ogni secondo) scrive classe, memoria da caricare (l'embedding non caricato
   6,7 GB; 0 per chi usa modelli già caricati o prenotati; 0 sul portatile, dove l'embedding è sulla
@@ -286,7 +286,7 @@ si registra soltanto cosa l'arbitro avrebbe fatto.
   chi aspetta oltre `ATTESA_MAX_S` (sfondo 1 ora, a richiesta 2 minuti).
 - **Ogni minuto**: MemAvailable (nvidia-smi su una GPU dedicata, al più ogni 5 s), `/api/ps` (al
   più ogni 10 s), l'inventario intero ogni 15 minuti (~5 s sul portatile, nel thread), il conto e
-  per secondo Whisper (3,6 GB) e FLUX (13 GB) se ci starebbero, solo scaricando, o per niente; quante
+  per secondo Whisper (3,6 GB *[storico: 2,0 dal 15/10]*) e FLUX (13 GB) se ci starebbero, solo scaricando, o per niente; quante
   volte una proposta avrebbe scaricato il tempo reale (deve essere 0); le divergenze del minuto.
 - **Registro** `arbitro-AAAA-MM-GG.jsonl` in `turn_log_dir`, tenuta `turn_log_days`, solo numeri
   (lo scrive `stanza.misure.Misure`, che dal 15/10 ha il prefisso come parametro).
@@ -303,6 +303,43 @@ si registra soltanto cosa l'arbitro avrebbe fatto.
 Si accende con `arbitro_memoria: ombra` in `calliope.locale.yaml` (sezione `registro`) e un
 riavvio; si spegne togliendo la riga. Prova a secco `prove/prova_arbitro_memoria.py` (sezioni 6 e 7:
 quiete, confronto con i quattro posti, coda, minuto, registro, storia e criterio).
+
+## Secondo Whisper: porta e memoria giuste nel conto (15/10, issue #2)
+
+Due incongruenze fra il codice e `setup/linux/motore/whisper-lento.sh`, trovate rileggendo:
+
+- **La porta.** `macchina.WHISPER_LENTO_PORTA` era 8004, cioè SearXNG (`searxng.sh`); lo script e
+  l'unità usano la 8005. Senza `stanza_lenta_stt_url` l'inventario sondava la 8004: sulla DGX, con
+  SearXNG acceso e il secondo Whisper mai installato, `calliope stato --piano` lo contava come
+  acceso (nessun «installa» nella riga «Stanza lenta», ~2 GB fra i programmi di Calliope). Ora la
+  porta sta in un posto solo, `macchina.WHISPER_LENTO_PORTA = 8005`, e `macchina.whisper_lento_url(cfg)`
+  dà `stanza_lenta_stt_url` se c'è, altrimenti `http://127.0.0.1:8005/v1`; la usano l'inventario,
+  il suggerimento del piano («poi stanza_lenta_stt_url: http://127.0.0.1:8005/v1») e il banco
+  `prove/manuali/banco_stanza_lenta.py`. `prova_gestore` controlla che la costante sia uguale a
+  `PORTA="${PORTA:-…}"` dello script. In più, sulla porta di serie (che nessuno ha dichiarato)
+  conta solo una risposta di whisper-server (la sua pagina di prova dice «Whisper.cpp Server»): un
+  altro servizio lì non è un Whisper acceso. Con `stanza_lenta_stt_url` dichiarato si fida come
+  prima. Altri posti con la porta sbagliata: `setup-dgx.md` (l'unità «127.0.0.1:8004») ed
+  `elenco.md` (`prova_gestore` «porta 8004»), corretti; le altre 8004 sono di SearXNG.
+- **La memoria.** `arbitro_memoria.A_RICHIESTA_GB["whisper_lento"]` era 3,6 GB, la stima di
+  large-v3 **f16** della ricerca dell'arbitro (§ 3.1: pesi 3,1 GB + calcolo); whisper-lento.sh
+  scarica di serie la **q5_0** (scelta del 14/10 sera). Ora il numero viene dal catalogo, lo stesso
+  del piano: `modelli.WHISPER["cpp-lenta"].memoria_gb` = **2,0 GB** [S]. Il perché del numero:
+  pesi `ggml-large-v3-q5_0.bin` 1 081 140 203 byte (1,08 GB, dimensione dichiarata da Hugging Face e
+  scritta nello script), più la cache incrociata dei 32 strati del decoder (1500 × 1280 × K e V ×
+  2 byte × 32 ≈ 0,25 GB), più la cache del beam 5 e il calcolo (il turbo misura 2,1 GB con 1,62 di
+  pesi: ~0,5 GB oltre i pesi con 4 strati di decoder). Da confermare con
+  `calliope motore whisper-lento memoria` quando sarà installato: sulla memoria unificata il
+  whisper-server dei turni rende 2,6 GB di MemAvailable contro i 2,1 di nvidia-smi
+  (`MISURE_UNIFICATA_GB`), e il secondo potrebbe fare lo stesso (~2,5 GB). Con `VARIANTE=f16` il
+  catalogo ha `cpp-lenta-f16` (3,9 GB): il conto dell'arbitro oggi non la distingue.
+
+Prove: `prova_piano` (SearXNG sulla 8004 e secondo Whisper spento → non visto e non contato da
+`--piano`; acceso sulla 8005 → «già acceso»; un altro servizio sulla 8005 non conta;
+`stanza_lenta_stt_url` vince), `prova_arbitro_memoria` (la corsia lenta chiede 2,0 GB; lo scenario
+«solo scaricando» passa da 10 a 9 GB liberi, perché con 10 − 8 di margine 2,0 GB ci starebbero
+giusti), `prova_gestore` (porta uguale allo script, conto della q5_0 fra i pesi e i pesi + 1,5 GB).
+La DGX non è stata toccata.
 
 ## «Cosa sai fare?» per aree, novità e «chi sei?» (09/10)
 

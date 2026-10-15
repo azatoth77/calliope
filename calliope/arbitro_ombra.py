@@ -15,7 +15,7 @@ farlo: **nessun caricamento né scaricamento vero**, nessun lavoro rallentato o 
   alla volta quando `quiete(QUIETE_CARICO_S)`, la più importante prima (tempo reale > vicino > a
   richiesta > sfondo), e butta quella che aspetta oltre `ATTESA_MAX_S` (§ 4.3).
 - **A ogni minuto**: la memoria vera, il conto, e per ogni modello a richiesta (secondo Whisper
-  ~3,6 GB, FLUX 13 GB) se adesso ci starebbe, solo scaricando qualcuno, o per niente; e quante
+  q5_0 ~2 GB, FLUX 13 GB) se adesso ci starebbe, solo scaricando qualcuno, o per niente; e quante
   volte una proposta **avrebbe scaricato il tempo reale** (deve restare 0: è il criterio).
 - **La voce ferma**: guardia, corsia lenta, embedding e arbitro dell'agente decidono come prima;
   a ogni loro decisione `confronta(fonte, vecchia, secondi)` la mette accanto a quella della
