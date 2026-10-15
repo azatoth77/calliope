@@ -5245,8 +5245,9 @@ class Brain:
     def mentions_tool(self, sentence: str) -> bool:
         """True se la frase nomina un tool («Chiamerò ora_attuale per sapere l'ora»).
 
-        È un annuncio, non una chiamata: il TTS non deve leggerlo. Solo i nomi con «_»:
-        «calcola», «ricorda», «dimentica» sono anche parole normali.
+        È un annuncio, non una chiamata: il TTS non deve leggerlo. I nomi con «_» sempre;
+        «calcola», «ricorda», «dimentica» sono anche parole normali, quindi solo nella forma
+        di una chiamata, col nome attaccato a «(» o «{» («Certo! ricorda(fatto="…")»).
         """
         # Un tool registrato o tolto (web pronto, biblioteca, estensioni) cambia la versione
         # del registro: ogni Brain (uno per satellite, 06/10) rilegge i nomi da solo
@@ -5254,10 +5255,21 @@ class Brain:
         if (getattr(self, "_tool_re", None) is None
                 or versione != getattr(self, "_tool_re_v", versione)):
             self._tool_re_v = versione
-            names = [s["function"]["name"] for s in self.tools.all_schemas()
-                     if "_" in s["function"]["name"]]
-            self._tool_re = re.compile(r"\b(" + "|".join(map(re.escape, names)) + r")\b",
-                                       re.I) if names else re.compile(r"(?!)")
+            tutti = [s["function"]["name"] for s in self.tools.all_schemas()]
+            names = [n for n in tutti if "_" in n]
+            # 15/10: «Ricorda che a Dario piace la pizza» (03/10) finiva col nome di ricorda
+            # scritto come testo; TextCallGuard lo prende solo in testa alla risposta, e
+            # dentro la frase il TTS leggeva «ricorda(fatto=…)» e niente si salvava. Una
+            # parola italiana seguita da «(» o «{» non si dice mai: è una chiamata
+            parole = [n for n in tutti if "_" not in n]
+            alt = []
+            if names:
+                alt.append(r"(?:" + "|".join(map(re.escape, names)) + r")\b")
+            if parole:
+                # attaccato, senza spazio: «ricorda (se vuoi) di…» resta una frase
+                alt.append(r"(?:" + "|".join(map(re.escape, parole)) + r")(?=[({])")
+            self._tool_re = (re.compile(r"\b(" + "|".join(alt) + r")", re.I) if alt
+                             else re.compile(r"(?!)"))
         return bool(self._tool_re.search(sentence))
 
     def _turn_context(self) -> list[dict]:

@@ -288,6 +288,22 @@ misure di questo documento sono col 4B in locale: da rifare col 26B sulla DGX do
     127/134 (casi nuovi: «Chi sono?» di Bianca, «Che comando hai per le luci?»).
   - Da guardare: «Ricorda che a Dario piace la pizza» (il nome di `ricorda` senza «_» scritto
     come testo) resta.
+    *Storico al 15/10 (ramo `correzioni-15-10`)*: è il modello, non lo schema. gemma4 e4b in
+    locale scrive come testo **la maggior parte delle chiamate**, non solo `ricorda` (banco di
+    regressione, 1 giro: 34 chiamate scritte su ~65, `ricorda(fatto="…", per_tutti=false)`,
+    `casa_comando(comando="…")`, `timer_imposta(…)`), e TextCallGuard le esegue quando sono **in
+    testa** alla risposta: «Ricorda che a Dario piace la pizza.» (casi nuovi `memoria_altro` e
+    `memoria_altro2` del banco, da Dario e da Bianca) 10/10 salvato in 5 giri, 5/6 in altri 3. Il buco era nel codice:
+    `ricorda`, `calcola`, `dimentica` non hanno «_», e `ToolNameHold` (la chiamata in mezzo alla
+    frase) cercava solo i nomi con «_»: «Certo! ricorda(fatto="…")» si leggeva ad alta voce e
+    non salvava niente. Dal 15/10 `Brain.mentions_tool` prende anche i nomi senza «_» **attaccati**
+    a «(» o «{» (una parola italiana non è mai seguita così; «Ricorda (se vuoi) di…» e «Ricorda di
+    comprare il pane» restano frasi): la chiamata in mezzo si esegue (`chiamata_in_mezzo`), prove
+    in `prova_brain.prova_chiamata_in_mezzo`. Resta del modello quella su 6:
+    «Ricordo che a Dario piace la pizza.» senza tool, che la rete delle azioni dichiarate non
+    prende («ricordo che» è anche un ricordo vero). Da riprovare col 26B sulla DGX, con i
+    ricordi fuori tema e le correzioni del 04/10: `python prove\prova_regressione.py 2 --url
+    http://127.0.0.1:11440` con il tunnel verso l'Ollama della DGX (o `--solo memoria`).
   - **Corretti il 04/10** (ramo `difetti-voce`, gemma4 e4b locale, banco di regressione 2 giri
     con 3 casi nuovi: 160/174 → 166/174, prima frase mediana 0,59 → 0,63 s nel rumore):
     risposta vuota dopo **sole letture** (`data_oggi`, `ora_attuale`…) → una seconda passata
