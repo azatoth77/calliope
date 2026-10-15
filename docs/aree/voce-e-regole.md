@@ -2017,7 +2017,9 @@ avrebbe fatto diventare il nome del profilo.
   che `ACTION_CLAIM` non prende («ti chiamo …»): da guardare se si vede col 26B. La regola serve
   al 26B, che il tool lo chiama. Casi nuovi nel banco `ruolo0`–`ruolo4` (errore una risposta che
   dà il ruolo come nome, `RUOLO_COME_NOME`); **da rifare col 26B sulla DGX**:
-  `python prove/prova_regressione.py 3 --solo "^(ruolo|rinomina|chi)" --url <Ollama della DGX>`.
+  con il tunnel verso l'Ollama della DGX (porta 11440 sul portatile) e
+  `CALLIOPE_LLM_PROFILO=gemma4-26b-ollama`,
+  `python prove\prova_regressione.py 3 --solo "^(ruolo|rinomina|chi)" --url http://127.0.0.1:11440`.
 - Casi e contrari a secco in `prova_testo` (la funzione e `risposta_al_nome`) e `prova_tool`
   (il tool: sei ruoli rifiutati senza proposta, anche nella risposta dopo, la regola nel
   registro, «Mamo» proposto).
