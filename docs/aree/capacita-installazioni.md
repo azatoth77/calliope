@@ -4,7 +4,7 @@
 
 **Stato al 14/10.** Diciannove capacità nel registro (`capacita.DEFINIZIONI`: llm, stt, voce, wake, chi_parla, audio, satellite, memoria, biblioteca, pc, documenti, casa, schermi, agenti, archivio, ufficio, conversazioni, web e, dal 13/10, notizie). Il resto come al 09/10 (sotto): piano dei modelli in sola lettura, fasi 3–6 della taratura da fare, installazioni con internet vero non provate.
 
-**`calliope stato` al 14/10** (`calliope/stato.py`; sulla DGX `calliope stato …`, su Windows `python -m calliope.stato …`): senza opzioni la tabella delle capacità con finestra di contesto, costo della voce e avvisi di latenza e attrito (`--dettagli`, `--json`); `--catalogo` e `--installa <azione>` (installazioni); `--piano [--json] [--inventario FILE]` (piano dei modelli); `--turni [--giorni N] [--json]` (latenza, attrito della politica, argomenti incerti, compagnia, stato del dialogo, voce sola, scelta dei tool, frasi pronte, stanza e guardia della stanza; con `--pause` le pause e la fine del turno); `--eventi` (il registro degli eventi su disco); `--guardia [--falso ID | --vero ID]` (i segnali del guardiano della stanza, senza parole, 14/10); `--avvisi [--giorni N] [--falso ID]` (gli avvisi ai tutori, 14/10); `--memoria [--json] [--inventario FILE]` (il conto della memoria adesso con le classi e cosa farebbe l'arbitro, 14/10 sera, sola lettura). La conservazione ha un comando suo: `calliope conserva [--json]`, `calliope conserva --svuota [--persona …]` e, una tantum dal 14/10 sera, `calliope conserva --converti-audio` (i WAV μ-law di prima nel G.711 vero, rilanciabile; [contesto-conversazione](contesto-conversazione.md), «Il G.711 vero») (`calliope/conserva.py`).
+**`calliope stato` al 14/10** (`calliope/stato.py`; sulla DGX `calliope stato …`, su Windows `python -m calliope.stato …`): senza opzioni la tabella delle capacità con finestra di contesto, costo della voce e avvisi di latenza e attrito (`--dettagli`, `--json`); `--catalogo` e `--installa <azione>` (installazioni); `--piano [--json] [--inventario FILE]` (piano dei modelli); `--turni [--giorni N] [--json]` (latenza, attrito della politica, argomenti incerti, compagnia, stato del dialogo, voce sola, scelta dei tool, frasi pronte, stanza e guardia della stanza; con `--pause` le pause e la fine del turno); `--eventi` (il registro degli eventi su disco); `--guardia [--falso ID | --vero ID]` (i segnali del guardiano della stanza, senza parole, 14/10); `--avvisi [--giorni N] [--falso ID]` (gli avvisi ai tutori, 14/10); `--memoria [--json] [--inventario FILE]` (il conto della memoria adesso con le classi e cosa farebbe l'arbitro, 14/10 sera, sola lettura); `--memoria --storia [--giorni N]` (il registro dell'arbitro in ombra per giorno e il criterio per il passo 3, 15/10). La conservazione ha un comando suo: `calliope conserva [--json]`, `calliope conserva --svuota [--persona …]` e, una tantum dal 14/10 sera, `calliope conserva --converti-audio` (i WAV μ-law di prima nel G.711 vero, rilanciabile; [contesto-conversazione](contesto-conversazione.md), «Il G.711 vero») (`calliope/conserva.py`).
 
 *Stato al 09/10 (storico):* Diciotto capacità nel registro (`capacita.DEFINIZIONI`), a voce con `calliope_stato` (`cosa`: sa_fare, manca, macchina) e da terminale; installazioni a voce dal catalogo (fonti della biblioteca, voci, CAM++, modello di Ollama, Whisper di riserva, file del telefono). Dal 08/10 il **piano dei modelli** per la macchina, in sola lettura (`calliope stato --piano`): le fasi 3–6 della taratura (applicare il piano) restano da fare. Installazioni con internet vero ancora non provate.
 
@@ -14,7 +14,7 @@
 |---|---|---|
 | Registro delle capacità | — (controlli rapidi in sola lettura) | `calliope/capacita.py` → `Registro`, `REGISTRO`, `segnala`, `controlla`, `testo_prompt`; terminale `calliope/stato.py` (`python -m calliope.stato`); tool `calliope_stato` in `calliope/tools/stato.py` (con `cosa=macchina` la macchina e i modelli: `calliope/macchina.py`; dal 09/10 le aree `capacita.AREE`/`aree`, `cosa=novita` e `cosa=chi_sei`: `calliope/novita.py`) |
 | Piano dei modelli per la macchina, in sola lettura (dal 08/10) | — (nvidia-smi, /proc/meminfo, registro di Windows, Ollama `/api/version` `/api/tags` `/api/ps`, vLLM `/v1/models` `/version` `/metrics`, `systemctl show` in sola lettura) | `calliope/macchina.py` → `inventario`, `Sonde`; catalogo `calliope/modelli.py` → `MODELLI`, `GPU`, `WHISPER`, `VERSIONE`; regole `calliope/piano.py` → `piano`, `da_config`, `testo`, `Funzioni`; terminale `python -m calliope.stato --piano [--json] [--inventario FILE]`; prova `prove/prova_piano.py` |
-| Conto della memoria e classi delle attività, in sola lettura (dal 14/10, passo 1 dell'arbitro della memoria) | — (lo stesso inventario; RSS del servizio da `systemctl --user show` e /proc) | `calliope/arbitro_memoria.py` → `conto`, `proposta`, `scaricabili`, `da_config`, `Occupante`, `Conto`, `MARGINE_LIBERO_GB`; terminale `python -m calliope.stato --memoria [--json] [--inventario FILE]`; prova `prove/prova_arbitro_memoria.py`; misure sulla DGX `prove/manuali/misura_memoria_dgx.py` |
+| Conto della memoria e classi delle attività, in sola lettura (dal 14/10, passo 1 dell'arbitro della memoria) | — (lo stesso inventario; RSS del servizio da `systemctl --user show` e /proc) | `calliope/arbitro_memoria.py` → `conto`, `proposta`, `scaricabili`, `da_config`, `Occupante`, `Conto`, `MARGINE_LIBERO_GB`, `MISURE_UNIFICATA_GB`; dal 15/10 (passo 2, in ombra) `Quiete`, `QUIETE`, `quiete`, `tempo_reale_toccato` e `calliope/arbitro_ombra.py` → `Ombra` (`richiesta`, `confronta`, `minuto`), `storia`, `criterio`, `load_ombra` (`arbitro_memoria: ombra`); terminale `python -m calliope.stato --memoria [--json] [--inventario FILE]` e `--memoria --storia`; prova `prove/prova_arbitro_memoria.py`; misure sulla DGX `prove/manuali/misura_memoria_dgx.py` |
 | Installazioni dal catalogo | httpx (Range, checksum), API `/api/pull` di Ollama | `calliope/installa/` → `catalogo` (`catalogo.py`), `scarica_file` (`scarica.py`), `Installazioni` (`servizio.py`); tool `installa_proponi`, `installa_avvia`, `installa_gestisci` in `calliope/tools/stato.py`; anche `whisper_riserva` e `telefono` nel catalogo (vedi [setup-dgx](setup-dgx.md), [schermi-telefono](schermi-telefono.md)) |
 
 ## Problemi noti
@@ -244,10 +244,65 @@ cambia nel comportamento.**
   separato con conferma.
 
 Con i numeri di Dario (119 GiB, 97 usati, ~21 disponibili; vLLM 47,8, 26B 15, guardiano 5,3, e4b
-3,1, whisper 2,1) Calliope tiene ~75–78 GiB, gli altri ~19–22; FLUX (13) e il secondo Whisper (3,6)
+3,1, whisper 2,1; *[15/10: misurati embedding 6,7 GB e whisper 2,6, sotto]*) Calliope tiene ~75–78 GiB, gli altri ~19–22; FLUX (13) e il secondo Whisper (3,6)
 ci starebbero ciascuno, non insieme. Prova a secco `prove/prova_arbitro_memoria.py` (DGX finta,
 portatile, solo CPU; contrari: mai il tempo reale, mai un modello non di Calliope, memoria non
 letta).
+
+## Arbitro della memoria, passo 2: in ombra (15/10)
+
+Ramo `arbitro-memoria-2` (§ 4.3, § 4.4 e § 7 punto 2 della
+[ricerca](../ricerche/2026-10-14-arbitro-memoria.md)). **Nessun caricamento né scaricamento vero,
+nessuna decisione cambiata**: con `arbitro_memoria: ombra` (di serie `spento`, sezione `registro`)
+si registra soltanto cosa l'arbitro avrebbe fatto.
+
+- **Una sola «voce ferma»** (`arbitro_memoria.Quiete`, `QUIETE`, `quiete(secondi)`): nessuno che
+  parla a Calliope (il VAD della corsia locale e dei satelliti, come l'arbitro dell'agente; un
+  comando da un satellite negli ultimi 2 s), nessuna risposta in corso (il varco), nessuna frase di
+  un turno che aspetta Whisper, la coda della stanza vuota; vero adesso e da almeno `secondi`. I
+  segnali li dà `main.Avvio._arbitro_memoria`; un segnale guasto vale «occupata».
+- **Riunire le quattro definizioni senza cambiare il comportamento non si può**, e non si è fatto:
+  guardia (`stanza/guardia.libera`: varco, comando da satellite, Whisper, 5 s), corsia lenta
+  (`stanza/lenta.libera`: le stesse più la coda della stanza, 5 s), embedding
+  (`conversazioni.inattiva`: 10 minuti dall'ultimo turno archiviato o dall'ultima ricerca, senza
+  VAD) e arbitro dell'agente (`agenti/arbitro`: il VAD e la risposta, più `agenti_ripresa_s` dopo, e
+  nessun'altra condizione) guardano cose diverse; una funzione unica cambierebbe almeno guardia,
+  embedding e agente. Restano come sono e l'ombra le **confronta**: a ogni loro decisione
+  `Ombra.confronta(fonte, vecchia, secondi)` mette accanto `quiete(secondi)` e conta gli episodi di
+  divergenza nelle due direzioni (`vecchia_si`: libera solo per la vecchia; `vecchia_no`: solo per
+  quiete) e i secondi. L'agente si confronta dal thread dell'ombra, ogni secondo
+  (`Arbitro.in_pausa`). Dopo la settimana si decide quali definizioni passare a `quiete()`.
+- **L'arbitro in ombra** (`calliope/arbitro_ombra.py`, `Ombra`): chi chiede un carico chiama
+  `richiesta(chi)`, che è solo un `append` (la domanda di una ricerca arriva dal turno): lotti di
+  vettori (`embedding`, sfondo), domanda di una ricerca (`embedding_ricerca`, vicino), un passo
+  della corsia lenta (`corsia_lenta`: sfondo, a richiesta con 3,6 GB se ha un Whisper suo), un
+  giudizio del guardiano a posteriori (`guardia`, sfondo) e un lavoro dell'agente (`agente`,
+  sfondo). Il thread (ogni secondo) scrive classe, memoria da caricare (l'embedding non caricato
+  6,7 GB; 0 per chi usa modelli già caricati o prenotati; 0 sul portatile, dove l'embedding è sulla
+  CPU), la proposta (`proposta` al passo 4: chi scaricherebbe, quanto manca, i ruoli del tempo reale
+  toccati) e se partirebbe subito, in coda o mai («rifiutata»: non ci sta neanche scaricando lo
+  sfondo). La coda in ombra fa partire una richiesta alla volta a voce ferma da 5 s
+  (`QUIETE_CARICO_S`), la più importante prima, aspetta un caricamento in corso (`CARICO_S`) e butta
+  chi aspetta oltre `ATTESA_MAX_S` (sfondo 1 ora, a richiesta 2 minuti).
+- **Ogni minuto**: MemAvailable (nvidia-smi su una GPU dedicata, al più ogni 5 s), `/api/ps` (al
+  più ogni 10 s), l'inventario intero ogni 15 minuti (~5 s sul portatile, nel thread), il conto e
+  per secondo Whisper (3,6 GB) e FLUX (13 GB) se ci starebbero, solo scaricando, o per niente; quante
+  volte una proposta avrebbe scaricato il tempo reale (deve essere 0); le divergenze del minuto.
+- **Registro** `arbitro-AAAA-MM-GG.jsonl` in `turn_log_dir`, tenuta `turn_log_days`, solo numeri
+  (lo scrive `stanza.misure.Misure`, che dal 15/10 ha il prefisso come parametro).
+- **`calliope stato --memoria --storia [--giorni N] [--json]`**: per giorno libera minima vera e
+  margine, minuti in cui un a richiesta non ci sarebbe stato (e solo scaricando), «avrebbe
+  scaricato il tempo reale» con l'avviso se non è 0, divergenze di `quiete()`, richieste, partite,
+  attesa massima, buttate, rifiuti; e il **criterio per il passo 3**: 7 giorni di registro senza
+  scaricare il tempo reale e con la minima sopra il margine.
+- **Misure del 14/10 nel conto** (`MISURE_UNIFICATA_GB`, solo memoria unificata): qwen3-embedding
+  da caricato ~6,7 GB (non 0,6: `/api/ps` sottostima di 10 volte), caricamento 1,5 s; whisper-server
+  dei turni rende 2,6 GB alla fermata (catalogo 2,1); vLLM 51,4 GB = 0,4 × 128,4 GB, cioè il conto
+  di sempre in GB (i 47,8 della ricerca erano GiB).
+
+Si accende con `arbitro_memoria: ombra` in `calliope.locale.yaml` (sezione `registro`) e un
+riavvio; si spegne togliendo la riga. Prova a secco `prove/prova_arbitro_memoria.py` (sezioni 6 e 7:
+quiete, confronto con i quattro posti, coda, minuto, registro, storia e criterio).
 
 ## «Cosa sai fare?» per aree, novità e «chi sei?» (09/10)
 
