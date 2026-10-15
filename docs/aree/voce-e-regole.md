@@ -1907,3 +1907,51 @@ turno: ~20 000 token di contesto (prompt, 78 tool, storia), le righe della stanz
 rende i cicli più probabili una volta cominciati). Nessuno da solo è una causa dimostrata; la rete
 vale per ogni causa. Da guardare nel registro dei turni della DGX: la regola `ciclo_ripetuto` (quante
 volte, con che contesto).
+
+## La preselezione dei tool, System 1 in ombra (15/10, ramo `system1-preselezione`)
+
+**Richiesta** (Dario, 14/10): modelli «System 1» veloci per le scelte che pesano sulla latenza.
+Dopo la fine del turno, il secondo caso è **quali tool servono a questa frase**. Il progetto,
+le opzioni e le misure sono nella ricerca
+[`2026-10-15-preselezione-tool.md`](../ricerche/2026-10-15-preselezione-tool.md); il codice è
+`calliope/system1/preselezione.py`.
+
+- **Il vincolo**:
+  - gemma4 in Ollama ha i tool in testa al prompt: cambiare l'insieme azzera la cache del
+    prefisso (sonda del 15/10 sul portatile: 6 tool al posto di 85 → in cache 0);
+  - tornare all'insieme di prima l'ha ritrovata in cache (8193 token su 8195), quindi due
+    insiemi stabili possono tenere ciascuno la sua;
+  - con 85 schemi il server lavorava ~1,3 s fuori dal modello a cache calda, contro ~0,1 s con
+    un prompt corto: da verificare sulla DGX.
+  - Il divario dei turni con tool (2,71 contro 1,77 s il 14/10) viene dalla seconda passata,
+    non dagli schemi.
+- **Cosa decide**: «nucleo» (28 tool di tutti i giorni) o «tutti», e nel dubbio «tutti».
+  - Confronta la frase (con quella di prima) coi prototipi presi dagli schemi: il nome, la prima
+    frase della descrizione e gli esempi tra «…». La codifica di serie è a n-grammi, sola
+    libreria standard, 1,5–2 ms.
+  - Va a «tutti» anche con un tool fuori dal nucleo usato nella conversazione o nominato nei
+    dati del turno o nella proposta, e con una foto o un file.
+  - Niente regole sulle parole (principio 10): è una somiglianza statistica sui testi degli
+    schemi.
+- **In ombra** (`preselezione_tool: ombra`, spenta di serie):
+  - il modello vede sempre tutti i tool;
+  - il decisore gira nel suo thread mentre il modello risponde (0,3 ms nel thread del ciclo);
+  - il registro dei turni scrive `preselezione`: insieme, perché, schemi, `mancati` (tool usati
+    fuori dall'insieme), la variante «nucleo + i 8 più vicini», ms; solo nomi di tool e numeri;
+  - `calliope stato --turni`, sotto la scelta dei tool, dice il richiamo, la quota a «nucleo»,
+    gli schemi risparmiati e i cambi d'insieme; avvisa sotto il 99 %.
+- **Banco a secco** (`prove/banco_preselezione.py`, 148 frasi con tutti gli 85 tool veri, 14
+  senza tool, 12 seguiti):
+  - col margine di serie 0,10 il richiamo è 100 %, con 46 frasi su 148 a «nucleo» (54 % di
+    quelle che il nucleo risolve) e 57 schemi in meno su 85;
+  - a margine 0,05 si perde «Cosa sta suonando?» (`pc_stato`), a 0 quattro tool;
+  - gli embedding (bge-m3, qwen3-embedding 0.6B) fanno peggio su questo banco e costano
+    75–180 ms sulla CPU del portatile carico.
+  - **Riserva**: il banco l'ho scritto conoscendo le descrizioni. Il margine va confermato sui
+    turni veri.
+- **Da lanciare sulla DGX**: `prove/manuali/preselezione_dgx.py`, comandi in testa al file.
+  - `--registro`: il richiamo sui turni veri, senza modello;
+  - `--latenza`, a Calliope inattiva: «tutti» contro «nucleo» col 26B, cache calda, cambio e
+    ritorno, e il lavoro del server fuori dal modello.
+  - I criteri proposti per un modo «attiva» sono nella ricerca, § 6. Se il risparmio a cache
+    calda non c'è, la preselezione resta una misura.
