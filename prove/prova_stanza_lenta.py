@@ -936,7 +936,8 @@ def prova_misure_piano():
             # SearXNG sulla 8004 risponde sempre (issue #2: la porta di prima era la sua)
             if ":8004/" in url:
                 return "<html><title>SearXNG</title></html>"
-            return "<html><title>Whisper.cpp Server</title></html>" if self.vivo and                 f":{M.WHISPER_LENTO_PORTA}/" in url else None
+            return ("<html><title>Whisper.cpp Server</title></html>"
+                    if self.vivo and f":{M.WHISPER_LENTO_PORTA}/" in url else None)
 
         def comando(self, argv, timeout=5):
             if argv[0] == "systemctl":

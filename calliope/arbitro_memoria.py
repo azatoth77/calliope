@@ -68,7 +68,8 @@ MISURE_UNIFICATA_GB = {"embedding": 6.7, "whisper": 2.6}
 # 1,08 GB (1 081 140 203 byte, Hugging Face) + la cache incrociata dei 32 strati del decoder
 # (1500 × 1280 × K,V × f16 ≈ 0,25 GB) + quella del beam 5 e il calcolo (il turbo: 2,1 GB
 # misurati con 1,62 di pesi). Fino al 15/10 qui c'erano 3,6 GB, la variante f16 (pesi 3,1 GB),
-# che whisper-lento.sh usa solo con VARIANTE=f16 (issue #2)
+# che whisper-lento.sh usa solo con VARIANTE=f16 (issue #2). Con VARIANTE=f16 questo conto
+# sottostima di ~1,9 GB: chi la sceglie aggiorni il catalogo (modelli.WHISPER["cpp-lenta"])
 A_RICHIESTA_GB = {"whisper_lento": cat.WHISPER["cpp-lenta"].memoria_gb,
                   "immagini": cat.IMMAGINI_GB}
 
