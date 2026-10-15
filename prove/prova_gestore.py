@@ -16,6 +16,7 @@ systemd vero, niente uv vero.
 import importlib.util
 import json
 import os
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -197,6 +198,21 @@ def prova(tmp: Path):
        "whisper-lento.sh: porta 8005 (la 8004 è di SearXNG), large-v3 q5_0 con checksum, nessuna compilazione sua")
     ok(":-8004}" in (linux / "motore" / "searxng.sh").read_text(encoding="utf-8")
        and ":-8004}" not in sh, "contrario: whisper-lento non usa la porta di SearXNG")
+    # Issue #2 (15/10): la porta che sonda `calliope stato --piano` è quella dello script, e
+    # il conto della memoria è della variante q5_0 che lo script scarica di serie
+    sys.path.insert(0, str(RADICE))
+    from calliope import arbitro_memoria, macchina as mc_, modelli as cat_
+    porta_sh = re.search(r'PORTA="\$\{PORTA:-(\d+)\}"', sh)
+    byte_q5 = re.search(r'q5_0\)\s*\n\s*MODELLO="[^"]+"\s*\n\s*MODELLO_SHA="[^"]+"\s*\n'
+                        r'\s*MODELLO_BYTE=(\d+)', sh)
+    ok(porta_sh is not None and int(porta_sh.group(1)) == mc_.WHISPER_LENTO_PORTA
+       and mc_.whisper_lento_url() == f"http://127.0.0.1:{porta_sh.group(1)}/v1",
+       "macchina.WHISPER_LENTO_PORTA uguale alla porta di whisper-lento.sh")
+    gb_q5 = int(byte_q5.group(1)) / 1e9 if byte_q5 else 0.0
+    ok(byte_q5 is not None and arbitro_memoria.A_RICHIESTA_GB["whisper_lento"]
+       == cat_.WHISPER["cpp-lenta"].memoria_gb and gb_q5 < cat_.WHISPER["cpp-lenta"].memoria_gb
+       < gb_q5 + 1.5 and arbitro_memoria.A_RICHIESTA_GB["whisper_lento"] < 3.1,
+       f"arbitro: il secondo Whisper conta la variante q5_0 ({gb_q5:.2f} GB di pesi), non f16")
     try:
         g.motore(["inesistente"])
         ok(False, "calliope motore con uno script che non c'è va rifiutato")

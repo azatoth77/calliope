@@ -62,9 +62,16 @@ STIME_CARICO_S = {"whisper_lento": "~2–5 s [S]", "immagini": "5–15 s dal dis
 # (i 47,8 della ricerca erano GiB). Valgono solo sulla memoria unificata: sul portatile
 # l'embedding è sulla CPU e non tocca la VRAM
 MISURE_UNIFICATA_GB = {"embedding": 6.7, "whisper": 2.6}
-# Quanto chiederebbe un modello a richiesta (in ombra, passo 2): il secondo Whisper (large-v3,
-# pesi ggml 3,1 GB + calcolo, ricerca § 3.1) e FLUX.2 [klein] 4B (ricerca del 06/10)
-A_RICHIESTA_GB = {"whisper_lento": 3.6, "immagini": cat.IMMAGINI_GB}
+# Quanto chiederebbe un modello a richiesta (in ombra, passo 2): il secondo Whisper e FLUX.2
+# [klein] 4B (ricerca del 06/10). Il secondo Whisper è la variante q5_0 di whisper-lento.sh
+# (scelta del 14/10 sera), dal catalogo come il piano: ~2,0 GB [S] = pesi ggml-large-v3-q5_0
+# 1,08 GB (1 081 140 203 byte, Hugging Face) + la cache incrociata dei 32 strati del decoder
+# (1500 × 1280 × K,V × f16 ≈ 0,25 GB) + quella del beam 5 e il calcolo (il turbo: 2,1 GB
+# misurati con 1,62 di pesi). Fino al 15/10 qui c'erano 3,6 GB, la variante f16 (pesi 3,1 GB),
+# che whisper-lento.sh usa solo con VARIANTE=f16 (issue #2). Con VARIANTE=f16 questo conto
+# sottostima di ~1,9 GB: chi la sceglie aggiorni il catalogo (modelli.WHISPER["cpp-lenta"])
+A_RICHIESTA_GB = {"whisper_lento": cat.WHISPER["cpp-lenta"].memoria_gb,
+                  "immagini": cat.IMMAGINI_GB}
 
 
 @dataclass

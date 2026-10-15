@@ -914,7 +914,7 @@ def prova_misure_piano():
     oggi = P._lenta_oggi
     verifica("piano, oggi: server con l'URL, senza ritrascrizione col whisper-server, stesso "
              "con faster-whisper e beam più largo; «no» vince",
-             oggi(SimpleNamespace(stanza_lenta_stt_url="http://127.0.0.1:8004/v1")) == "server"
+             oggi(SimpleNamespace(stanza_lenta_stt_url="http://127.0.0.1:8005/v1")) == "server"
              and oggi(SimpleNamespace(stt_motore="server")) == "senza ritrascrizione"
              and oggi(SimpleNamespace(stt_motore="locale")) == "stesso"
              and oggi(SimpleNamespace(stt_motore="locale", stanza_lenta_beam=5))
@@ -933,7 +933,11 @@ def prova_misure_piano():
             self.vivo, self.pid = vivo, pid
 
         def get(self, url, timeout=1.5):
-            return "ok" if self.vivo and ":8004/" in url else None
+            # SearXNG sulla 8004 risponde sempre (issue #2: la porta di prima era la sua)
+            if ":8004/" in url:
+                return "<html><title>SearXNG</title></html>"
+            return ("<html><title>Whisper.cpp Server</title></html>"
+                    if self.vivo and f":{M.WHISPER_LENTO_PORTA}/" in url else None)
 
         def comando(self, argv, timeout=5):
             if argv[0] == "systemctl":
@@ -947,7 +951,9 @@ def prova_misure_piano():
              M._whisper_lento(Sonda(vivo=False), SimpleNamespace(stanza_lenta_stt_url=""))
              is None
              and M._whisper_lento(Sonda(vivo=False), SimpleNamespace(
-                 stanza_lenta_stt_url="http://127.0.0.1:8004/v1"))["attivo"] is False)
+                 stanza_lenta_stt_url="http://127.0.0.1:8005/v1"))["attivo"] is False)
+    verifica("inventario: la porta di serie è quella di whisper-lento.sh (8005), non SearXNG",
+             M.WHISPER_LENTO_PORTA == 8005)
     c = Config()
     verifica("configurazione: corsia lenta spenta e banco a 0 di serie",
              c.stanza_lenta is False and c.stanza_lenta_ritrascrivi == "auto" and c.stanza_audio_banco_giorni == 0
