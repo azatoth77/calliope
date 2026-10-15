@@ -23,6 +23,8 @@ from pathlib import Path
 
 import numpy as np
 
+from . import impronte_satellite as _imp_sat
+
 
 # ──────────────────────────── STIMA GENERE ────────────────────────────
 
@@ -150,6 +152,10 @@ class UserProfile:
     # amministra il sì di partenza, e un suo «no» va ridetto)
     voce_conservata: bool | None = None
     voce_conservata_il: str | None = None
+    # Impronte per satellite (15/10, calliope/impronte_satellite.py): chiave («sat:<nome>»,
+    # «canale:<tipo>») → Impronta, imparate solo dalle frasi sicure su quel satellite. Accanto
+    # all'impronta di partenza, che resta; una nuova registrazione della voce le toglie
+    impronte_satellite: dict = field(default_factory=dict)
     # Identificativo stabile: la memoria (memory.py) è legata a questo, non al nome,
     # così una rinomina non perde i ricordi
     id: str = field(default_factory=lambda: uuid.uuid4().hex)
@@ -192,6 +198,8 @@ class UserProfile:
             "giovane": bool(self.fascia or self.nascita) and self.young,
             "voce_conservata": self.voce_conservata,
             "voce_conservata_il": self.voce_conservata_il,
+            **({"impronte_satellite": _imp_sat.scrivi(self.impronte_satellite)}
+               if _imp_sat.scrivi(self.impronte_satellite) else {}),
         }
 
     @classmethod
@@ -218,10 +226,12 @@ class UserProfile:
             prof.fascia = "ragazzi"
         if d.get("id"):
             prof.id = d["id"]
+        prof.impronte_satellite = _imp_sat.leggi(d.get("impronte_satellite"))
         if prof.model != model:
             # Impronta di un altro modello (es. il vecchio MFCC): non confrontabile.
             # Nome, admin, genere e voce restano; la voce va riarruolata.
             prof.voiceprint = prof.initial_voiceprint = None
+            prof.impronte_satellite = {}
             prof.model = model
         return prof
 
@@ -396,12 +406,68 @@ class SpeakerRegistry:
             return None, 0.0
         return classifica[0]
 
-    def classifica(self, emb: np.ndarray) -> list[tuple[str, float]]:
+    def classifica(self, emb: np.ndarray, chiavi=None) -> list[tuple[str, float]]:
         """Tutti i profili con un'impronta e il loro punteggio, dal più somigliante (07/10):
-        il secondo serve al margine (`speaker_id_margine`) e al registro dei turni."""
-        out = [(name, float(np.dot(emb, prof.voiceprint)))
-               for name, prof in self.users.items() if prof.voiceprint is not None]
+        il secondo serve al margine (`speaker_id_margine`) e al registro dei turni. Con `chiavi`
+        (15/10, impronte per satellite) il punteggio di ognuno è il massimo fra l'impronta di
+        partenza e quella del satellite (o del canale) da cui arriva la frase."""
+        return [(n, s) for n, s, _f in self.classifica_fonti(emb, chiavi)]
+
+    def classifica_fonti(self, emb: np.ndarray, chiavi=None) -> list[tuple[str, float, str]]:
+        """Come `classifica`, con la fonte del punteggio («base», «sat:…», «canale:…»)."""
+        out = []
+        for name, prof in list(self.users.items()):
+            if prof.voiceprint is None:
+                continue
+            if chiavi:
+                s, f = _imp_sat.punteggio(emb, prof.voiceprint, prof.impronte_satellite, chiavi)
+            else:
+                s, f = float(np.dot(emb, prof.voiceprint)), "base"
+            out.append((name, s, f))
         return sorted(out, key=lambda x: -x[1])
+
+    def punteggio(self, name: str | None, emb: np.ndarray, chiavi=None) -> float | None:
+        """Il punteggio di una persona per questa frase (con `chiavi`, anche l'impronta del
+        satellite); None senza impronta."""
+        prof = self.users.get(name) if name else None
+        if prof is None or prof.voiceprint is None or emb is None:
+            return None
+        if chiavi:
+            return _imp_sat.punteggio(emb, prof.voiceprint, prof.impronte_satellite, chiavi)[0]
+        return float(np.dot(emb, prof.voiceprint))
+
+    def impara_satellite(self, name: str, emb: np.ndarray, chiavi) -> list[str]:
+        """Una frase sicura (impronte_satellite.sicura, lo decide il ciclo) entra nelle impronte
+        del satellite e del canale di questa persona. Le chiavi cambiate."""
+        prof = self.users.get(name)
+        if prof is None or prof.voiceprint is None or not chiavi:
+            return []
+        ini = prof.initial_voiceprint if prof.initial_voiceprint is not None else prof.voiceprint
+        # Sotto il lock dei salvataggi: le corsie dei satelliti imparano in parallelo, e un
+        # salvataggio non deve leggere il dizionario mentre cambia
+        import contextlib
+        with getattr(self, "_lock", None) or contextlib.nullcontext():
+            cambiate = _imp_sat.impara(prof.impronte_satellite, emb, chiavi, ini, self.cfg)
+        if cambiate:
+            self._da_salvare = True
+            if time.monotonic() - self._salvato >= self.SALVA_OGNI_S:
+                self.save()
+        return cambiate
+
+    def svuota_impronte_satellite(self, persona_id: str | None = None) -> int:
+        """Via le impronte per satellite di una persona (per id) o di tutti; l'impronta di
+        partenza resta. Quante ne ha tolte (con quelle in attesa del seme)."""
+        n = 0
+        for prof in list(self.users.values()):
+            if persona_id is not None and getattr(prof, "id", None) != persona_id:
+                continue
+            n += len(prof.impronte_satellite)
+            prof.impronte_satellite = {}
+        if n:
+            # Due volte: la copia .bak è la versione di prima, e non deve tenerle
+            self.save()
+            self.save()
+        return n
 
     def identify(self, audio: np.ndarray, sample_rate: int = 16000,
                  threshold: float | None = None) -> tuple[str | None, float]:
@@ -418,6 +484,9 @@ class SpeakerRegistry:
         vp = normalize(np.mean(np.stack(embeddings), axis=0))
         prof = self.users.get(name) or UserProfile(name=name)
         prof.voiceprint, prof.initial_voiceprint = vp, vp.copy()
+        # Una voce registrata di nuovo (un minore cresciuto, un microfono nuovo): le impronte per
+        # satellite imparate dalla voce di prima non valgono più
+        prof.impronte_satellite = {}
         import datetime as _dt
         prof.impronta_data = _dt.date.today().isoformat()
         prof.riconoscimento = None

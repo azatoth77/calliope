@@ -917,7 +917,7 @@ class Stanza:
                 self._fatto(s, None, "eco", attesa, stt_s, eco)
                 return
             testo, tolte = e.testo, e.tolte
-        chi = self._chi(audio, s.voce_s, s.fine_epoch)
+        chi = self._chi(audio, s.voce_s, s.fine_epoch, s.nome, s.canale)
         s.esito = "riga"
         extra = {}
         if chi.get("gruppo") is not None:
@@ -1013,19 +1013,25 @@ class Stanza:
                      chiusura=s.chiusura,
                      **(eco or {}))
 
-    def _chi(self, audio, voce_s: float, t: float | None = None) -> dict:
+    def _chi(self, audio, voce_s: float, t: float | None = None, sat_nome=None,
+             canale=None) -> dict:
         """Chi parla nel segmento (CAM++), con le regole di sempre: sopra soglia e con il
         margine dal secondo profilo «voce»; poco sotto «grigia»; altrimenti «nessuna». Mai
         verso l'alto: non cambia permessi né impronte. Con i conoscenti (14/10, decisione 0030)
         una voce non della famiglia sopra soglia è il conoscente («conoscente:<id>», livello
-        ospite), e una voce di nessuno entra in un gruppo in memoria (`gruppo`)."""
+        ospite), e una voce di nessuno entra in un gruppo in memoria (`gruppo`). Con
+        `speaker_impronte_satellite: attivo` (15/10) i punteggi usano anche le impronte del
+        satellite del segmento (in sola lettura: la stanza non le insegna)."""
         reg, cfg = self.registry, self.cfg
+        from .. import impronte_satellite as imp_sat
+        chiavi = (imp_sat.chiavi(sat_nome, canale)
+                  if imp_sat.modo(cfg) == imp_sat.ATTIVO and sat_nome else None)
         nessuno = {"chi": "ignoto", "nome": None, "sicurezza": "nessuna"}
         if reg is None or voce_s < float(getattr(cfg, "speaker_min_voice_s", 1.0) or 1.0):
             return nessuno
         try:
             emb = reg.embed(audio, cfg.sample_rate)
-            classifica = list(reg.classifica(emb))
+            classifica = list(reg.classifica(emb, chiavi) if chiavi else reg.classifica(emb))
         except Exception:  # noqa: BLE001 — senza impronta, «ignoto»
             return nessuno
         out = nessuno
@@ -1052,7 +1058,8 @@ class Stanza:
         if con is None:
             return out
         try:
-            k = con.riconosci(emb, sim_famiglia=sim, t=t)
+            k = con.riconosci(emb, sim_famiglia=sim, t=t,
+                              **({"chiavi": chiavi} if chiavi else {}))
             if k is not None:
                 return {"chi": f"conoscente:{k.id}", "conoscente": k.id,
                         "nome": k.nome_pieno(), "nota": k.nota, "sicurezza": "voce",

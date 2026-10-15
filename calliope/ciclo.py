@@ -36,6 +36,7 @@ from . import contesto, corsie, minori
 from . import rivolta as rivolta_mod
 from . import pause as pause_mod
 from . import guardiano as guardia
+from . import impronte_satellite as impronte_mod
 from . import provenienza, riferire, stato_dialogo, storpiature
 from . import allegati as allegati_mod
 from . import frasi
@@ -189,6 +190,9 @@ class Turno:
     voce_secondo: tuple = (None, None)   # il secondo profilo e il suo punteggio (07/10)
     continuita: bool = False             # chi parla vale per continuità (08/10, _per_continuita)
     proprietario: bool = False           # incerta con un minore, resta del proprietario (09/10)
+    # Le chiavi delle impronte per satellite di questa frase (15/10, impronte_satellite.chiavi),
+    # None con `speaker_impronte_satellite: spento` o una frase scritta
+    chiavi_impronte: tuple | None = None
     speaker_name: str | None = None
     prof_turno: object = None            # profilo di chi parla (minori, orari)
     context: str | None = None           # contesto del turno (biblioteca, foto non viste)
@@ -2291,19 +2295,44 @@ class Ciclo:
         speaker_ctx.aggiorna_conversazione(t.speaker_name, speaker_ctx.identified_by,
                                            True, None)
 
-    def _classifica(self, emb) -> list:
+    def _classifica(self, emb, chiavi=None) -> list:
         """[(nome, punteggio)] dal più somigliante; con un registro che sa solo il migliore
-        (prove a secco), solo quello."""
+        (prove a secco), solo quello. Con `chiavi` (15/10) anche le impronte del satellite."""
         reg = self.s.registry
         if hasattr(reg, "classifica") and emb is not None:
+            if chiavi:
+                try:
+                    return list(reg.classifica(emb, chiavi))
+                except TypeError:            # un registro finto senza le impronte per satellite
+                    pass
             return list(reg.classifica(emb))
         best, sim = reg.best_match(emb=emb)
         return [(best, sim)] if best is not None else []
 
-    def _confronta_voce(self, t, emb):
-        """(nome, come, punteggio, migliore) per l'impronta della frase."""
+    def _chiavi_impronte(self, t) -> tuple | None:
+        """Le chiavi delle impronte per satellite della frase (15/10): il satellite per nome e il
+        suo tipo di canale; l'audio di questo computer è «locale». None se spente o scritta."""
+        if impronte_mod.modo(self.s.cfg) == impronte_mod.SPENTO or t.scritto is not None:
+            return None
+        L = self.listener
+        if bool(getattr(L, "remoto", False)):
+            return impronte_mod.chiavi(getattr(L, "satellite_nome", None),
+                                       getattr(L, "canale", None) or "satellite")
+        return impronte_mod.chiavi("locale", "locale")
+
+    def _confronta_voce(self, t, emb, chiavi=None, ombra: bool = False):
+        """(nome, come, punteggio, migliore) per l'impronta della frase.
+
+        `chiavi` (15/10, impronte per satellite): i punteggi sono il massimo fra l'impronta di
+        partenza e quella del satellite, e le regole di sempre (margine, zona grigia, profilo più
+        protetto, minore vicino) valgono su quelli. `ombra`: la decisione che si sarebbe presa,
+        senza righe in console, regole né memoria della compagnia (chi chiama rimette a posto lo
+        stato di chi parla: `_decisione_alternativa`)."""
         s, cfg, speaker_ctx = self.s, self.s.cfg, self.speaker_ctx
-        classifica = self._classifica(emb)
+        say = (lambda *a, **k: None) if ombra else print
+        rule = (lambda *a, **k: None) if ombra else self.rule
+        classifica = self._classifica(emb, chiavi)
+        punteggi = dict(classifica) if chiavi else None
         best, sim = classifica[0] if classifica and classifica[0][1] > 0 else (None, 0.0)
         secondo, sim2 = classifica[1] if len(classifica) > 1 else (None, None)
         t.voce_secondo = (secondo, sim2)
@@ -2350,7 +2379,7 @@ class Ciclo:
         # Mai il contrario: la compagnia non rende nessuno un adulto
         corta = t.voiced_s < cfg.speaker_min_voice_s
         t.nome_voce = best if sim >= thr and netta and not corta else None
-        if t.emb_job is not None:
+        if t.emb_job is not None and not ombra:
             # La frase stessa entra nella memoria della corsia prima della decisione: la voce
             # che rivela la compagnia vale già per questa frase
             t.compagnia = self._osserva_compagnia(t, emb)
@@ -2360,27 +2389,28 @@ class Ciclo:
             st = self._stato_compagnia()
             speaker_ctx.compagnia_sconosciute = bool(st and st.get("sconosciute"))
         if in_compagnia and corta and name is not None:
-            print(f"   [VOCE] in compagnia: frase breve ({t.voiced_s:.1f} s), non vale "
-                  f"{name}", flush=True)
-            self.rule("compagnia_senza_breve")
+            say(f"   [VOCE] in compagnia: frase breve ({t.voiced_s:.1f} s), non vale "
+                f"{name}", flush=True)
+            rule("compagnia_senza_breve")
             name, how, t.continuita = None, None, False
             speaker_ctx.from_session = False
         speaker_ctx.identified_by = how
         # Voce incerta tra un minore e un altro profilo (05/10, minori.piu_protetto): vale
         # il profilo più protetto, mai un adulto
         if not netta and sim >= thr and how != "breve":
-            self.rule("voce_margine")
+            rule("voce_margine")
         protetto = minori.piu_protetto(s.registry, emb, name,
-                                       "breve" if in_compagnia and corta else how, sim, cfg)
+                                       "breve" if in_compagnia and corta else how, sim, cfg,
+                                       **({"punteggi": punteggi} if punteggi is not None else {}))
         proprietario = (self._proprietario_continua(best, sim, in_compagnia)
                         if protetto is not None and protetto != name else None)
         if proprietario is not None:
             # Sul satellite personale di chi è stato riconosciuto da poco: la frase resta sua e
             # della sua conversazione; il minore resta per la prudenza (minore_incerto)
-            print(f"   [VOCE] incerta tra {proprietario} e {protetto} sul satellite di "
-                  f"{proprietario}, riconosciuto da poco: resta {proprietario} (al più "
-                  f"familiare, prudenza per {protetto})", flush=True)
-            self.rule("voce_proprietario")
+            say(f"   [VOCE] incerta tra {proprietario} e {protetto} sul satellite di "
+                f"{proprietario}, riconosciuto da poco: resta {proprietario} (al più "
+                f"familiare, prudenza per {protetto})", flush=True)
+            rule("voce_proprietario")
             speaker_ctx.incerta = (proprietario, protetto)
             speaker_ctx.minore_incerto = protetto
             name, how = proprietario, "conversazione"
@@ -2388,9 +2418,9 @@ class Ciclo:
             speaker_ctx.identified_by = how
             t.continuita, t.proprietario = False, True
         elif protetto is not None and protetto != name:
-            print(f"   [VOCE] incerta tra {name or 'ospite'} e {protetto}: vale {protetto} "
-                  f"(il profilo più protetto)", flush=True)
-            self.rule("minore_piu_protetto")
+            say(f"   [VOCE] incerta tra {name or 'ospite'} e {protetto}: vale {protetto} "
+                f"(il profilo più protetto)", flush=True)
+            rule("minore_piu_protetto")
             # L'adulto tra cui si è incerti: chi era stato scelto, o il migliore se adulto.
             # Se serve una sua azione, la frase chiede chi parla (registry, brain._sfida)
             adulto = name or (best if best != protetto else secondo)
@@ -2405,9 +2435,9 @@ class Ciclo:
             if vicino is not None:
                 # Il verso pericoloso: chi amministra con un minore a meno di
                 # `minori_margine_amministra`. Resta lui, ma al più familiare
-                print(f"   [VOCE] {name}, ma {vicino} è vicino: niente permessi di chi "
-                      f"amministra in questa frase", flush=True)
-                self.rule("amministra_minore_vicino")
+                say(f"   [VOCE] {name}, ma {vicino} è vicino: niente permessi di chi "
+                    f"amministra in questa frase", flush=True)
+                rule("amministra_minore_vicino")
                 speaker_ctx.minore_vicino = vicino
                 how = "conversazione"
                 speaker_ctx.from_session = True
@@ -2548,20 +2578,98 @@ class Ciclo:
                 return n
         return None
 
+    # ── impronte per satellite (15/10, calliope/impronte_satellite.py) ──
+    _CAMPI_SC = ("from_session", "identified_by", "incerta", "minore_vicino", "minore_incerto",
+                 "compagnia", "compagnia_sconosciute")
+    _CAMPI_T = ("voce_secondo", "continuita", "proprietario", "nome_voce", "compagnia")
+
+    def _decisione_alternativa(self, t, emb, chiavi) -> dict | None:
+        """La decisione che si sarebbe presa con (ombra) o senza (attivo) le impronte del
+        satellite, con le stesse regole e senza toccare niente: lo stato di chi parla e del turno
+        si rimette com'era. None se qualcosa va storto (la misura non ferma la voce)."""
+        sc = self.speaker_ctx
+        prima_sc = {k: getattr(sc, k, None) for k in self._CAMPI_SC}
+        prima_t = {k: getattr(t, k) for k in self._CAMPI_T}
+        try:
+            t.continuita = t.proprietario = False
+            name, how, sim, best = self._confronta_voce(t, emb, chiavi, ombra=True)
+            return self._descrivi_decisione(t, emb, name, how, sim, best, chiavi)
+        except Exception as e:  # noqa: BLE001
+            print(f"   [VOCE] impronte per satellite: {type(e).__name__}: {e}", flush=True)
+            return None
+        finally:
+            for k, v in prima_sc.items():
+                setattr(sc, k, v)
+            for k, v in prima_t.items():
+                setattr(t, k, v)
+
+    def _descrivi_decisione(self, t, emb, name, how, sim, best, chiavi) -> dict:
+        """Una decisione per il registro dei turni: chi, come, punteggio, da quale impronta, e se
+        è un minore o chi amministra (per gli scambi nei due versi)."""
+        reg = self.s.registry
+        d = {"nome": name,
+             "come": ("continuita" if t.continuita else "proprietario" if t.proprietario
+                      else how),
+             "punteggio": round(float(sim), 3)}
+        if best is not None and best != name:
+            d["migliore"] = best
+        prof = reg.get(name) if name else None
+        if prof is not None and minori.e_minore(prof):
+            d["minore"] = True
+        if prof is not None and getattr(prof, "admin", False):
+            d["amministra"] = True
+        if chiavi and name and hasattr(reg, "classifica_fonti"):
+            f = next((f for n, _s, f in reg.classifica_fonti(emb, chiavi) if n == name), "base")
+            d["fonte"] = "base" if f == "base" else f.split(":", 1)[0]
+        return d
+
+    def _impara_impronte(self, t, emb, name, how, sim, best, in_compagnia) -> list:
+        """Una frase sicura insegna l'impronta del satellite di chi parla (in ombra e attivo,
+        famiglia e minori allo stesso modo): impronte_satellite.sicura sulla decisione presa."""
+        ch, reg, sc = t.chiavi_impronte, self.s.registry, self.speaker_ctx
+        if not ch or not name or name != best or not hasattr(reg, "impara_satellite"):
+            return []
+        if not impronte_mod.sicura(self.s.cfg, how, sim, t.voce_secondo[1], t.voiced_s,
+                                   compagnia=bool(in_compagnia),
+                                   incerta=bool(getattr(sc, "incerta", None)
+                                                or getattr(sc, "minore_incerto", None)),
+                                   minore_vicino=bool(getattr(sc, "minore_vicino", None)),
+                                   continuita=bool(t.continuita or t.proprietario)):
+            return []
+        try:
+            return list(reg.impara_satellite(name, emb, ch))
+        except Exception as e:  # noqa: BLE001 — l'impronta del satellite non ferma la voce
+            print(f"   [VOCE] impronta del satellite non aggiornata: {type(e).__name__}",
+                  flush=True)
+            return []
+
     def _riconosci_voce(self, t):
         cfg, registry, speaker_ctx = self.s.cfg, self.s.registry, self.speaker_ctx
         emb = t.emb_job.result()
-        name, how, sim, best = self._confronta_voce(t, emb)
+        # Impronte per satellite (15/10): in «attivo» decidono i punteggi con l'impronta del
+        # satellite; in «ombra» decide quella di sempre e l'altra decisione va nel registro
+        t.chiavi_impronte = ch = self._chiavi_impronte(t)
+        attivo = ch is not None and impronte_mod.modo(cfg) == impronte_mod.ATTIVO
+        name, how, sim, best = self._confronta_voce(t, emb, ch if attivo else None)
+        alt = self._decisione_alternativa(t, emb, None if attivo else ch) if ch else None
         if how == "voce" and name and minori.e_minore(registry.get(name)):
             # Media mobile del riconoscimento: il promemoria di rifare l'impronta
             p_m = registry.get(name)
-            p_m.riconoscimento = (sim if p_m.riconoscimento is None
-                                  else 0.9 * p_m.riconoscimento + 0.1 * sim)
+            # Con l'impronta di sempre (15/10): quella del satellite non nasconde che va rifatta
+            s_m = (float(np.dot(emb, p_m.voiceprint))
+                   if attivo and getattr(p_m, "voiceprint", None) is not None else sim)
+            p_m.riconoscimento = (s_m if p_m.riconoscimento is None
+                                  else 0.9 * p_m.riconoscimento + 0.1 * s_m)
             registry._da_salvare = True
         # Punteggio contro il profilo di chi vale in questa frase (per la frase breve:
         # chi parlava), per la conferma breve di chi amministra (calliope/conferme.py)
         vp = getattr(registry.get(name), "voiceprint", None) if name else None
         own = float(np.dot(emb, vp)) if vp is not None else None
+        # L'impronta di sempre si aggiorna col suo punteggio, non con quello del satellite: con
+        # le impronte attive una frase riconosciuta solo dal telefono non la sposta (15/10)
+        sim_adatta = own if attivo and own is not None else sim
+        if attivo and own is not None and hasattr(registry, "punteggio"):
+            own = registry.punteggio(name, emb, ch)
         # Un altro profilo somiglia a questa frase almeno quanto chi vale: la frase breve non
         # conferma un'azione di chi amministra (07/10)
         altro = bool(own is not None and best is not None and best != name and sim >= own)
@@ -2576,7 +2684,11 @@ class Ciclo:
         senza_adatta = how == "voce" and bool(comp or getattr(speaker_ctx, "compagnia", False))
         if senza_adatta:
             self.rule("impronta_compagnia")
-        adapted = how == "voce" and not senza_adatta and registry.adapt(name, emb, sim)
+        adapted = (how == "voce" and not senza_adatta
+                   and registry.adapt(name, emb, sim_adatta))
+        imparate = (self._impara_impronte(t, emb, name, how, sim, best,
+                                          comp or getattr(speaker_ctx, "compagnia", False))
+                    if ch else [])
         # Punteggio sempre in console: serve a tarare soglia e impronta (docs/test-vocale.md)
         note = {"breve": " frase breve, vale la conversazione",
                 "conversazione": " confermata dalla conversazione"}.get(how, "")
@@ -2588,6 +2700,7 @@ class Ciclo:
         print(f"   [VOCE] {name or 'non riconosciuta'} {sim:.3f}"
               f" (soglia {cfg.speaker_id_threshold:.2f}, voce {t.voiced_s:.1f} s){note}"
               + (" · impronta aggiornata" if adapted else "")
+              + (" · impronta del satellite aggiornata" if imparate else "")
               + (" · impronta non aggiornata: in compagnia" if senza_adatta else ""),
               flush=True)
         # Riconosciuto → familiare, non riconosciuto → ospite (principio 9).
@@ -2612,8 +2725,16 @@ class Ciclo:
                                if how == "breve" and own is not None else {}),
                             # Più voci qui (09/10): solo numeri, mai le impronte
                             **({"compagnia": comp} if comp else {})}
+        if alt is not None:
+            # Con e senza le impronte del satellite (15/10): solo punteggi e decisioni
+            reale = self._descrivi_decisione(t, emb, name, how, sim, best,
+                                             ch if attivo else None)
+            self.rec["voce"]["impronte_satellite"] = {
+                "modo": impronte_mod.modo(cfg),
+                "con": reale if attivo else alt, "senza": alt if attivo else reale,
+                **({"imparata": imparate} if imparate else {})}
         if name is None:
-            self._conoscente_turno(t, emb, sim)
+            self._conoscente_turno(t, emb, sim, alt)
         if name:
             t.speaker_name = name
             # Se l'utente ha una voce preferita, usala
@@ -2622,7 +2743,7 @@ class Ciclo:
                     self.speaker._current_voice_path != prof.preferred_voice:
                 self.speaker.change_voice(prof.preferred_voice)
 
-    def _conoscente_turno(self, t, emb, sim_famiglia: float):
+    def _conoscente_turno(self, t, emb, sim_famiglia: float, alt: dict | None = None):
         """Un conoscente che parla a Calliope (14/10, decisione 0030, rifiniture): la frase non
         vale nessun profilo della famiglia e la voce è di un conoscente salvato (sopra soglia,
         con il margine dal secondo conoscente e dal profilo della famiglia più vicino:
@@ -2650,14 +2771,19 @@ class Ciclo:
         if sim_famiglia is not None and float(sim_famiglia) >= grigia:
             return None
         modo = "voce"
+        # Impronte per satellite (15/10): anche per i conoscenti, con le stesse regole
+        ch = t.chiavi_impronte
+        attivo = bool(ch) and impronte_mod.modo(cfg) == impronte_mod.ATTIVO
         try:
             if t.voiced_s < cfg.speaker_min_voice_s:
                 k, modo = self._conoscente_breve(t, con), "breve"
             else:
-                k = con.riconosci(emb, sim_famiglia=sim_famiglia)
+                k = con.riconosci(emb, sim_famiglia=sim_famiglia,
+                                  **({"chiavi": ch} if attivo else {}))
         except Exception as e:  # noqa: BLE001 — i conoscenti non fermano la voce
             print(f"   [VOCE] conoscenti: {type(e).__name__}: {e}", flush=True)
             return None
+        self._conoscente_impronte(t, emb, k, modo, sim_famiglia, alt, attivo)
         if k is None:
             return None
         self.speaker_ctx.conoscente = {"id": k.id, "nome": k.nome_pieno(), "nota": k.nota,
@@ -2672,6 +2798,40 @@ class Ciclo:
               + (", frase breve: vale la conversazione" if modo == "breve" else "")
               + "): resta ospite", flush=True)
         return k
+
+    def _conoscente_impronte(self, t, emb, k, modo, sim_famiglia, alt, attivo):
+        """I conoscenti e le impronte per satellite (15/10): la frase sicura di un conoscente
+        riconosciuto insegna la sua impronta del satellite (mai in compagnia), e nel blocco del
+        registro dei turni il conoscente della decisione con e senza le impronte."""
+        ch, con = t.chiavi_impronte, getattr(getattr(self.s, "stanza", None), "conoscenti", None)
+        if not ch or con is None:
+            return
+        sc = self.speaker_ctx
+        try:
+            if (k is not None and modo == "voce"
+                    and not (t.compagnia or getattr(sc, "compagnia", False))):
+                con.impara_satellite(k.id, emb, ch, sim_famiglia, t.voiced_s,
+                                     chiavi_decisione=ch if attivo else None)
+            b = (self.rec.get("voce") or {}).get("impronte_satellite")
+            if not isinstance(b, dict):
+                return
+            reale = b["con"] if attivo else b["senza"]
+            altra = b["senza"] if attivo else b["con"]
+            if k is not None:
+                reale["conoscente"] = k.id
+            if (alt is not None and alt.get("nome") is None
+                    and t.voiced_s >= self.s.cfg.speaker_min_voice_s):
+                grigia = (float(self.s.cfg.speaker_id_threshold)
+                          - float(self.s.cfg.speaker_id_session_margin))
+                sf = alt.get("punteggio")
+                if sf is None or float(sf) < grigia:
+                    k2 = con.riconosci(emb, sim_famiglia=sf, segna=False,
+                                       **({} if attivo else {"chiavi": ch}))
+                    if k2 is not None:
+                        altra["conoscente"] = k2.id
+        except Exception as e:  # noqa: BLE001 — la misura non ferma la voce
+            print(f"   [VOCE] conoscenti e impronte del satellite: {type(e).__name__}",
+                  flush=True)
 
     def _conoscente_breve(self, t, con):
         """La frase breve di un conoscente (14/10 sera): il conoscente della conversazione di

@@ -453,6 +453,10 @@ def main(argv=None) -> int:
         # Più voci vicino a un satellite (09/10, calliope/compagnia.py)
         from . import compagnia
         comp = compagnia.riassunto(turni)
+        # Le impronte per satellite (15/10, calliope/impronte_satellite.py): con e senza, per
+        # satellite (ombra o attivo)
+        from . import impronte_satellite
+        impronte_r = impronte_satellite.riassunto(turni)
         # Lo stato del dialogo in ombra (10/10, calliope/stato_dialogo.py): il modello chiama
         # proposta_rispondi? accordo con la decisione di oggi
         from . import stato_dialogo
@@ -496,6 +500,7 @@ def main(argv=None) -> int:
             print(json.dumps({"giorni": dati, "soglia_s": getattr(cfg, "latenza_avviso_s", None),
                               "attrito": sicurezza, "attrito_soglia": soglia_a,
                               "argomenti": argomenti, "compagnia": comp,
+                              "impronte_satellite": impronte_r,
                               "dialogo": dialogo, "voce_sola": voce_sola,
                               "scelta_tool": scelta, "preselezione": presel,
                               "frasi_pronte": pronte,
@@ -511,6 +516,8 @@ def main(argv=None) -> int:
             print(argomenti_incerti.testo(argomenti))
             print()
             print(compagnia.testo(comp))
+            print()
+            print(impronte_satellite.testo(impronte_r))
             print()
             print(stato_dialogo.testo(dialogo))
             print()

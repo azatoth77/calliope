@@ -977,7 +977,10 @@ class Conservazione:
                                                    tutto=persona_id is None),
                "stanza": self._svuota_stanza(stanza_id),
                "stanza_banco": self._svuota_banco(persona_id),
-               "avvisi": self._svuota_avvisi(persona_id)}
+               "avvisi": self._svuota_avvisi(persona_id),
+               # Le impronte per satellite (15/10): imparate dall'uso, si tolgono con i dati
+               # conservati; l'impronta della registrazione resta
+               "impronte_satellite": self._svuota_impronte(persona_id)}
         arch = self.conversazioni
         lock = getattr(self.turnlog, "_lock", None)
         if persona_id is None:
@@ -1008,6 +1011,30 @@ class Conservazione:
             out["conversazioni"] = arch.dimentica(str(persona_id))
         out["eventi"] = self._svuota_eventi(f"persona:{persona_id}")
         return out
+
+    def _svuota_impronte(self, persona_id) -> int:
+        """Le impronte per satellite (15/10, calliope/impronte_satellite.py) di una persona o di
+        tutti: dal processo di Calliope il registro delle voci e i conoscenti; da terminale i
+        file (speakers.json e i conoscenti, con le copie)."""
+        n = 0
+        try:
+            f = getattr(self.registry, "svuota_impronte_satellite", None)
+            if callable(f):
+                n += int(f(persona_id) or 0)
+            else:
+                from .impronte_satellite import svuota_file
+                from .speaker_id import SpeakerRegistry
+                n += svuota_file(SpeakerRegistry.PATH, persona_id)
+            con = self.conoscenti
+            if con is not None and hasattr(con, "svuota_impronte_satellite"):
+                n += int(con.svuota_impronte_satellite(persona_id) or 0)
+            else:
+                from .impronte_satellite import svuota_file
+                from .stanza.conoscenti import percorso
+                n += svuota_file(percorso(self.cfg), persona_id)
+        except Exception as e:  # noqa: BLE001 — le impronte non fermano lo svuotamento
+            self.log(f"   [CONSERVA] impronte per satellite non tolte: {type(e).__name__}")
+        return n
 
     def _svuota_avvisi(self, persona_id) -> int:
         """Trascrizione e audio degli avvisi di pericolo (14/10 sera, minori.Avvisi): tutti, o
@@ -1260,7 +1287,9 @@ def main(argv=None) -> int:
                   f"{r['esercizi_richieste']} tra esercizi e richieste ai tutori, "
                   f"{r['stanza']} righe della stanza, {r['avvisi']} trascrizioni e audio di "
                   f"avvisi" + (f", {r['stanza_banco']} segmenti audio del banco della stanza"
-                               if r.get("stanza_banco") else "") + ".")
+                               if r.get("stanza_banco") else "")
+                  + (f", {r['impronte_satellite']} impronte per satellite"
+                     if r.get("impronte_satellite") else "") + ".")
         else:
             r = c.svuota()
             print(f"Dati conservati cancellati: {r['voce']} registrazioni, {r['eventi']} eventi, "
@@ -1269,7 +1298,9 @@ def main(argv=None) -> int:
                   f"richieste ai tutori, {r['stanza']} righe della stanza, {r['avvisi']} "
                   f"trascrizioni e audio di avvisi, {r.get('conoscenti', 0)} conoscenti"
                   + (f", {r['stanza_banco']} segmenti audio del banco della stanza"
-                     if r.get("stanza_banco") else "") + ".")
+                     if r.get("stanza_banco") else "")
+                  + (f", {r['impronte_satellite']} impronte per satellite"
+                     if r.get("impronte_satellite") else "") + ".")
         if c.conversazioni is not None:
             c.conversazioni.close()
         return 0

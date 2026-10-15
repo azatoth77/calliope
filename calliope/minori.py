@@ -840,7 +840,7 @@ def filtra_per_minore(ctx, elementi: list, testi) -> list:
 # ─────────────────────────── voce incerta ───────────────────────────
 
 def piu_protetto(registry, emb, nome: str | None, come: str | None, punteggio: float,
-                 cfg) -> str | None:
+                 cfg, punteggi: dict | None = None) -> str | None:
     """Il minore che deve valere per questa frase, se la voce è incerta tra lui e un altro
     profilo (o non riconosciuta ma vicina a lui); None se la decisione di main.py resta.
 
@@ -849,7 +849,10 @@ def piu_protetto(registry, emb, nome: str | None, come: str | None, punteggio: f
       riconosciuto, a meno di `minori_margine_ambiguo` dal migliore: vale il minore (tra più
       minori, il più protetto);
     - una frase breve (vale chi parlava) cambia solo se un minore supera la soglia piena.
-    Mai il contrario: una voce incerta non diventa mai un adulto."""
+    Mai il contrario: una voce incerta non diventa mai un adulto.
+
+    `punteggi` (15/10, impronte per satellite attive): nome → punteggio già calcolato con le
+    impronte del satellite; le stesse regole valgono sui punteggi nuovi."""
     if registry is None or emb is None or not getattr(cfg, "minori_enabled", True):
         return None
     import numpy as np
@@ -864,7 +867,8 @@ def piu_protetto(registry, emb, nome: str | None, come: str | None, punteggio: f
         vp = getattr(p, "voiceprint", None)
         if vp is None or not e_minore(p):
             continue
-        s = float(np.dot(emb, vp))
+        s = (float(punteggi[n]) if punteggi is not None and n in punteggi
+             else float(np.dot(emb, vp)))
         candidati.append((n, p, s))
     if not candidati:
         return None
