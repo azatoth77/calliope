@@ -348,6 +348,26 @@ class Config:
     # segnala all'avvio. Quelle del profilo (llm_profilo) si aggiungono a queste.
     # Vuoto = tutte accese (o quelle del profilo).
     llm_reti_spente: list[str] = field(default_factory=list)
+    # La preselezione dei tool, System 1 (15/10, calliope/system1/preselezione.py; progetto e
+    # misure in docs/ricerche/2026-10-15-preselezione-tool.md): un decisore piccolo sceglie fra
+    # due insiemi stabili di schemi, «nucleo» (i tool di tutti i giorni) o «tutti», e nel dubbio
+    # «tutti». «spenta» (di serie): niente. «ombra»: il modello vede sempre tutti i tool come
+    # oggi; intanto, in un thread suo, il decisore sceglie e il registro dei turni scrive
+    # l'insieme accanto ai tool usati davvero (`calliope stato --turni`: richiamo e schemi
+    # risparmiati). Spenta di serie perché solo misura: non c'è ancora un modo «attiva», che
+    # va deciso dopo le misure (un elenco che cambia rompe la cache del prefisso di Ollama:
+    # i tool stanno in testa al prompt)
+    preselezione_tool: str = "spenta"
+    # Come confronta la frase con i tool: «parole» (n-grammi, nessun modello, < 5 ms; il
+    # migliore sul banco del 15/10) o «embedding» (il modello di embedding di Ollama sulla CPU:
+    # tiene un modello residente in più, da contare in ollama_max_modelli)
+    preselezione_codifica: str = "parole"
+    preselezione_embedding: str = ""      # vuoto = conversazioni_embedding
+    # I tool del «nucleo»; vuoto = quelli di serie (preselezione.NUCLEO)
+    preselezione_nucleo: list[str] = field(default_factory=list)
+    # «tutti» se un tool fuori dal nucleo arriva entro questo margine di somiglianza dal
+    # migliore del nucleo (0,10: nessun tool mancato sul banco del 15/10, uno a 0,05)
+    preselezione_margine: float = 0.10
 
     # Speech-to-Text — faster-whisper
     # ~1,2 GiB di VRAM reali nel processo, contesto CUDA compreso (misura del 24/09);
@@ -3072,7 +3092,8 @@ SEZIONI: dict[str, list[str]] = {
             "intento_valido_s", "politica_per_valore", "dialogo_interprete",
             "uscita_controllo",
             "storia_inattiva_s",
-            "llm_reti_spente"],
+            "llm_reti_spente", "preselezione_tool", "preselezione_codifica",
+            "preselezione_embedding", "preselezione_nucleo", "preselezione_margine"],
     "stt": ["whisper_model", "whisper_cartella", "whisper_beam_size", "whisper_hotwords", "whisper_device",
             "whisper_compute_type", "language", "stt_motore", "stt_url", "stt_modello",
             "stt_timeout_s", "stt_correzione", "stt_correzione_soglia", "stt_correzione_motore",
@@ -3451,7 +3472,7 @@ LIMITI: dict[str, tuple[float, float]] = {
     "silence_ms": (100, 10_000), "max_utterance_s": (5, 600),
     "fine_turno_sonda_ms": (64, 2000), "fine_turno_soglia": (0.5, 1.0),
     "fine_turno_soglia_attesa": (0.5, 1.0), "fine_turno_attesa_max_ms": (300, 5000),
-    "fine_turno_min_parlato_ms": (0, 5000),
+    "fine_turno_min_parlato_ms": (0, 5000), "preselezione_margine": (-0.5, 1.0),
     "preroll_ms": (0, 5000), "memory_max_facts": (1, 10_000), "speaker_threads": (1, 64),
     "appuntamento_anticipo_min": (0, 10_080), "casa_timeout_s": (0.5, 300.0),
     "documenti_attesa_s": (0.0, 300.0),
@@ -3612,6 +3633,22 @@ def _si_no_auto_valido(value):
     raise ValueError("serve «auto», «si» o «no»")
 
 
+def _preselezione_valido(value):
+    """«spenta» o «ombra» (15/10, calliope/system1/preselezione.py)."""
+    s = str(value or "").strip().lower()
+    if s in ("spenta", "ombra"):
+        return s
+    raise ValueError("serve «spenta» o «ombra»")
+
+
+def _preselezione_codifica_valida(value):
+    """«parole» o «embedding» (15/10, calliope/system1/preselezione.py)."""
+    s = str(value or "").strip().lower()
+    if s in ("parole", "embedding"):
+        return s
+    raise ValueError("serve «parole» o «embedding»")
+
+
 def _fine_turno_valido(value):
     """«spenta», «ombra» o «attiva» (14/10, calliope/system1/fine_turno.py)."""
     s = str(value or "").strip().lower()
@@ -3636,6 +3673,8 @@ VALIDATORI = {"llm_keep_alive": keep_alive_valido, "llm_num_ctx": _num_ctx_valid
               "eventi": _eventi_valido, "frasi_varianti": _frasi_varianti_valido,
               "stanza": _stanza_valido, "stanza_guardia": _stanza_guardia_valido,
               "fine_turno": _fine_turno_valido,
+              "preselezione_tool": _preselezione_valido,
+              "preselezione_codifica": _preselezione_codifica_valida,
               "stanza_lenta_ritrascrivi": _si_no_auto_valido}
 
 

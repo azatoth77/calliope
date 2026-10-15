@@ -128,6 +128,7 @@ A_SECCO = [
     ("prova_pause.py", [], "pause e fine del turno (07/10, solo misura): pause interne e parlato da Listener, satellite e telefono (voce.js con node), ripresa dopo la frase con i contrari (casse, risposta, oltre 2 s), «aspetta»/«non ho finito» con i contrari, campo «ascolto» del registro, frase_finita e «ripresa» nel protocollo (satellite vecchio), riassunto e soglia stimata in `calliope stato --turni --pause`"),
     ("prova_fine_turno.py", [], "fine del turno System 1 (14/10, Smart Turn in ombra e attiva): Sorvegliato (lento, occupato, guasto → spento), log-mel di Whisper in numpy uguale a faster-whisper e a transformers, ombra con un decisore finto (frase completa, sospesa con «e»/«in»/«poi», numeri dettati, elenco, ripresa dopo una pausa lunga, il nome da solo, decisore guasto o lento → come prima), Listener in «attiva» (chiusura anticipata, attesa lunga che non taglia, incerto, guasto, lento → silenzio fisso), configurazione, catalogo, protocollo del satellite, ciclo e riga di `calliope stato --turni`"),
     ("prova_fine_turno_voce.py", [], "fine del turno System 1 con il modello vero (14/10, livello 3): Smart Turn v3.2, Silero in ONNX e frasi di Piper deterministiche; frasi complete «finito», pause dopo «e poi,» e «poi,» «non finito», Listener in «attiva» a tempo reale che chiude prima dei 700 ms; stampa le frasi sospese che Piper fa sembrare finite e i ms del decisore"),
+    ("prova_preselezione.py", [], "preselezione dei tool System 1 in ombra (15/10): prototipi dagli schemi (nome, prima frase, esempi tra «…»), codifica a n-grammi, il banco di 148 frasi coi tool veri (richiamo 100 % col margine di serie, frasi a «nucleo», contrario col margine 0, decisore sotto 30 ms), segnali di struttura (tool recente, tool nei dati o nella proposta, foto → tutti) e i contrari, l'ombra con un Brain finto (registro con insieme, mancati e variante dei più vicini, niente testo, guasto → errore, lento → in ritardo, schemi del modello invariati), configurazione, ciclo, riassunto e riga di `calliope stato --turni`"),
     ("prova_eventi.py", [], "registro degli eventi a secco (10/10, passo 1 in ombra): ogni tipo proiettato o escluso, controlli e disco (sfida, dati non fidati, riservati, «mai»), proiezioni pure (import, tetto di righe, determinismo anche dopo il rigioco), partizione (adulto, minore e ospite su due satelliti), due corsie della stessa persona, riassegnazione, porte (AST, annuncio, avviso al tutore, coda)"),
     ("prova_eventi_ciclo.py", [], "registro degli eventi sul ciclo della voce (10/10, passi 0–2): contatori del passo 0 e confronto dell'ombra su un giro sintetico (interruzione, stop, cortesia, timer, frase filtrata, «Lo apro?», domanda con il testo dopo, «Sì?»), garanzia detto = proiezione, niente disco prima della prima frase, eventi: spento come prima; passo 2: autore e atto all'invio (frase pronta, ripiego, contenuto), chiamate fra le frasi nella proiezione, risposta scritta dagli eventi, ogni atto classificato, nessuna frase fuori turno"),
     ("prova_eventi_disco.py", [], "registro degli eventi su disco (10/10): riavvio con rigioco, proposta persa, riga rovinata (eventi_troncati), disco in sola lettura o che non scrive; «dimentica» vera (byte di conversazioni.db e del WAL, residui in calliope stato, conversazione in corso chiusa, dal 13/10 col ciclo vero anche con eventi spento); rotazione, ospiti cancellati alla chiusura, sfida e segreti mai su disco"),
@@ -385,6 +386,7 @@ LIVELLO_2 = {
     "prova_pause.py",                # 9 s (07/10)
     "prova_frase_lunga.py",          # ~6 s (10/10)
     "prova_fine_turno.py",           # ~3 s (14/10)
+    "prova_preselezione.py",         # ~4 s (15/10)
     "prova_esercizi.py",             # 8 s (08/10)
     "prova_materie.py",              # ~9 s (12/10)
     "prova_searxng_aggiorna.py",     # 5 s (09/10)
@@ -753,7 +755,13 @@ LEGAMI = [
     ("calliope/ciclo.py", ["prova_pause.py", "prova_frase_lunga.py", "prova_fine_turno.py"]),
     ("calliope/stato.py", ["prova_pause.py", "prova_fine_turno.py"]),
     ("calliope/satellite/", ["prova_pause.py", "prova_frase_lunga.py", "prova_fine_turno.py"]),
-    ("calliope/system1/", ["prova_fine_turno.py"]),
+    ("calliope/system1/", ["prova_fine_turno.py", "prova_preselezione.py"]),
+    # La preselezione dei tool (15/10): le descrizioni dei tool sono i suoi prototipi
+    ("calliope/tools/", ["prova_preselezione.py"]),
+    ("calliope/ciclo.py", ["prova_preselezione.py"]),
+    ("calliope/stato.py", ["prova_preselezione.py"]),
+    ("calliope/main.py", ["prova_preselezione.py"]),
+    ("prove/banco_preselezione.py", ["prova_preselezione.py"]),
     ("calliope/installa/catalogo.py", ["prova_fine_turno.py"]),
     ("calliope/schermi/telefono.py", ["prova_pause.py"]),
     ("calliope/schermi/pagina/telefono/", ["prova_pause.py", "prova_frase_lunga.py"]),
