@@ -1325,6 +1325,12 @@ IMG_PC_MSG = ("La persona parla {cosa}: non è nessuna delle foto di questa conv
 _IMG_PC_WEBCAM = re.compile(r"(?<![a-zà-ù])(webcam|telecamer[ae])(?![a-zà-ù])", re.I)
 _IMG_PC_SCHERMO = re.compile(r"(?<![a-zà-ù])(scherm[oi]|schermat[ae]|screenshot)(?![a-zà-ù])",
                              re.I)
+# Lo schermo di un altro oggetto (15/10, banco col 26B sulla DGX: «Lo schermo del telefono è
+# rotto, si legge il totale?» con la spinta chiamava pc_guarda, 0/1; e4b 5/5): niente spinta
+_IMG_PC_ALTRO = re.compile(r"(?<![a-zà-ù])scherm[oi]\s+(?:del|dello|della|di|dell')\s*(?:mio\s+|tuo\s+|suo\s+)?"
+                           r"(?:telefon\w*|cellular\w*|smartphone|iphone|tablet|ipad|tv|"
+                           r"televisor\w*|orologio|macchin\w*|auto|registratore|cassa|bilancia)",
+                           re.I)
 IMG_DESCRIBE = ("Descrivi in una frase breve (al massimo 25 parole) cosa mostra la {foto}, con "
                 "i dati principali se è un documento. Solo la frase.")
 
@@ -6389,7 +6395,7 @@ class Brain:
             return ""
         if _IMG_PC_WEBCAM.search(user_text):
             return IMG_PC_MSG.format(cosa="della webcam", arg="webcam")
-        if _IMG_PC_SCHERMO.search(user_text):
+        if _IMG_PC_SCHERMO.search(user_text) and not _IMG_PC_ALTRO.search(user_text):
             return IMG_PC_MSG.format(cosa="dello schermo del computer", arg="schermo")
         return ""
 

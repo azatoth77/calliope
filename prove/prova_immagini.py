@@ -672,6 +672,11 @@ def prova_spinta_pc():
              [("Ciao.", None), ("Cosa vedi sul mio schermo?", [foto()])], pc),
             ("frase senza schermo né webcam",
              [("Cosa c'è qui?", [foto()]), ("Quanto costano le uova?", None)], pc),
+            ("lo schermo del telefono (banco del 26B, 15/10)",
+             [("Cosa c'è qui?", [foto()]),
+              ("Lo schermo del telefono è rotto, si legge il totale?", None)], pc),
+            ("lo schermo della TV",
+             [("Cosa c'è qui?", [foto()]), ("Sullo schermo della tv c'era questo?", None)], pc),
             ("«schermidore» non è uno schermo",
              [("Cosa c'è qui?", [foto()]), ("Chi è lo schermidore nella foto?", None)], pc)]:
         righe, regole = spinta(frasi, **reg)

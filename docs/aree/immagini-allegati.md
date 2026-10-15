@@ -99,7 +99,9 @@ webcam **5/5**, «lo schermo del telefono è rotto, si legge il totale?» e «qu
 senza pc_guarda 5/5 e 5/5; `prova_immagini_ollama` intera 2 giri: 34/34 (prima frase mediana 1,31 s). La stessa riga
 al condizionale («Se la persona chiede di guardare…») tornava 0/3 («…perché non mi hai chiesto di
 guardarlo»). Prove: `prova_immagini.prova_spinta_pc` (a secco, con i contrari) e
-`prova_immagini_ollama.caso_foto_poi_pc`. Il 26B della DGX da riprovare nell'uso.
+`prova_immagini_ollama.caso_foto_poi_pc`. *Il 26B della DGX da riprovare nell'uso (storico, 15/10).*
+
+**26B sulla DGX (15/10)**: `prova_immagini_ollama` 1 giro, 16/17: schermo e webcam con la foto davanti ok, ma «lo schermo del telefono è rotto, si legge il totale?» con la spinta chiamava pc_guarda (la spinta dice «parla dello schermo del computer»). La spinta ora non scatta quando lo schermo è di un altro oggetto nominato («schermo del telefono», «della TV», del tablet, della cassa…: `_IMG_PC_ALTRO`); contrari in `prova_spinta_pc`.
 
 ## Il cassetto dei file per persona (08/10)
 
