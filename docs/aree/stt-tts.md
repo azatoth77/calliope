@@ -1512,3 +1512,14 @@ non hanno audio (la voce di un ospite non si conserva: contate a parte dal regis
 è semplificata (senza zona grigia né continuità), l'impronta di partenza è quella di oggi. Poi:
 `speaker_impronte_satellite: ombra` nel locale, qualche giorno di `calliope stato --turni`, e
 attivo solo con «minore → chi amministra» a 0.
+
+**Prima misura sulla DGX (15/10, `misura_impronte_satellite.py`, 156 frasi con l'audio: 106
+conservate e 50 del banco della stanza, 2 persone)**: sul satellite dello studio l'impronta di chi
+amministra nasce e vince quasi sempre (73 frasi su 78), margine sul secondo mediana 0,459 → 0,556,
+p05 0,301 → 0,415. Sul telefono l'impronta di chi amministra **non vince mai** (0 frasi su 60:
+poche frasi sicure, molte in compagnia o con il minore vicino), quella del minore sì (5–8 su 18):
+così «chi amministra col minore vicino» sale da 3 a 7 (verso prudente, al più familiare), scambi
+pericolosi minore → chi amministra 0 → 0. Con margine 0,10, voce minima 1,0 s e seme 2 non cambia
+molto (4–7). Le frasi rifiutate vere non hanno audio (169 nel registro: 56 al telefono). Acceso
+`ombra` sulla DGX per raccogliere le frasi sicure dell'uso; `attivo` solo se al telefono nasce
+anche l'impronta di chi amministra e «col minore vicino» non sale.
