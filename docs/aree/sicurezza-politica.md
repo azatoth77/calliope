@@ -2,7 +2,7 @@
 
 *Politica unica dei tool e provenienza, permessi, conferme e frase di sfida, analisi di sicurezza del 03/10. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-**Stato al 14/10.** Come al 09/10 (sotto), con: lo stato del dialogo in ombra (10/10: `proposta_rispondi` e il consenso del progetto confrontato con la politica, `dialogo_interprete: ombra`); la visibilità per evento col contesto dagli eventi (`eventi: attivo`, acceso a mano); i dati conservati per le misure con i loro permessi e il tool `dati_conservati` (12/10); le notizie come dato non fidato che resta nella storia in busta (13/10); il resoconto della stanza in busta, mai un'istruzione (14/10). Classe, livello e quando c'è di ogni tool: tabella in [`architettura-tool.md`](../architettura-tool.md). Il secondo fattore per chi amministra è ancora un progetto.
+**Stato al 15/10.** Come al 09/10 (sotto), con: lo stato del dialogo in ombra (10/10: `proposta_rispondi` e il consenso del progetto confrontato con la politica, `dialogo_interprete: ombra`); la visibilità per evento col contesto dagli eventi (`eventi: attivo`, acceso a mano); i dati conservati per le misure con i loro permessi e il tool `dati_conservati` (12/10); le notizie come dato non fidato che resta nella storia in busta (13/10); il resoconto della stanza in busta, mai un'istruzione (14/10); il «sì» breve per le azioni importanti misurato in ombra, senza effetto (15/10, `calliope/si_breve.py`, roadmap 2.6). Classe, livello e quando c'è di ogni tool: tabella in [`architettura-tool.md`](../architettura-tool.md). Il secondo fattore per chi amministra è ancora un progetto.
 
 *Stato al 09/10 (storico):* Politica unica dei tool in `ToolRegistry.call` (classi, provenienza, dati non
 fidati in busta, conferme e frase di sfida, controllo di ciò che dice). Sicurezza per valore:
@@ -18,7 +18,7 @@ chiude la proposta. Il secondo fattore per chi amministra è ancora un progetto.
 
 | Stadio | Libreria | Dove |
 |---|---|---|
-| Conferme delle azioni (proposta valida 3 turni, «sì» breve di chi amministra, frase di sfida) | difflib sulla trascrizione, impronta CAM++ | `calliope/conferme.py` → `proposta_valida`, `admin_confermato`, `serve_conferma`, `Sfida`, `confronta`; `SpeakerContext.aggiorna_conversazione`; `Brain._sfida`; misure `prove/misura_conferma_breve.py`, `prove/misura_sfida.py` |
+| Conferme delle azioni (proposta valida 3 turni, «sì» breve di chi amministra, frase di sfida) | difflib sulla trascrizione, impronta CAM++ | `calliope/conferme.py` → `proposta_valida`, `admin_confermato`, `serve_conferma`, `Sfida`, `confronta`; `SpeakerContext.aggiorna_conversazione`; `Brain._sfida`; misure `prove/misura_conferma_breve.py`, `prove/misura_sfida.py`; «sì» breve per le azioni importanti in ombra (15/10) `calliope/si_breve.py` → `misura`, `riassunto`, prova `prove/prova_si_breve.py` |
 | Sicurezza per valore (08/10: attrito come metrica, memoria dell'intento, provenienza per valore e classi d'effetto in ombra; accesa dal 09/10) | — (regole nel codice) | `calliope/attrito.py` → `giorno`, `avviso`, `avviso_recente` (da `calliope stato --turni` e dall'avvio); `calliope/valore.py` → `ARGOMENTI`, `EFFETTI`, `effetto`, `Intenzione`, `intento_aperto`, `aggiorna`, `etichetta`, `distintive`, `fuori_dai_valori`, `decidi_valore`, `ombra`; letture che mandano fuori gli argomenti `politica.Classe.esce`, `_lettura_che_esce` (09/10); `calliope/politica.py` → `VERBI_AZIONE`, `chiesto_con_verbi`, `consenso_turno`; prove `prove/prova_valore.py`, `prove/prova_attrito.py`; progetto [`docs/ricerche/2026-10-07-sicurezza-per-valore.md`](../ricerche/2026-10-07-sicurezza-per-valore.md) |
 | Politica unica dei tool e provenienza (05/10: dati non fidati in busta, classi dei tool, conferma a voce con dati di mezzo) | — (regole nel codice) | `calliope/politica.py` → `CLASSI`, `classe_di`, `decidi`, `controlla` e `incoerente` (da `ToolRegistry.call`), `Turno`, `consenso`, `coerente`; `calliope/provenienza.py` → `racchiudi`, `racchiudi_risultato`, `fonti`, `marca`, `FONTI`; porta unica `Brain.dato_non_fidato` / `allega_non_fidato`; `calliope/quarantena.py`; ciò che dice con dati di mezzo `calliope/riferire.py` → `giudica`, `filtra`, `controlla_testo` (da `main.py`, 06/10); banco `prove/prova_politica.py`; rapporto [`docs/ricerche/2026-10-05-politica-sicurezza.md`](../ricerche/2026-10-05-politica-sicurezza.md) |
 | Consenso e rifiuto nelle risposte alle proposte (07–09/10: forme chiuse, richiesta ripetuta, «no» in testa, «sì, però…»); storpiature nella provenienza (08/10) | — (regole nel codice) | `calliope/politica.py` → `consenso_chiuso`, `richiesta_ripetuta`, `accettata`, `bersaglio_assente`, `rinuncia`, `rifiuto`, `domanda_si_no`, `consenso_avversativo`; `Brain._rifiuto_proposta`; `calliope/valore.py` → `chiude`, `chiave_intento`; `calliope/provenienza.py` → `vicina`, `tutto_detto`; `calliope/riferire.py` → `indicazioni`, `FRASI_PROPRIE`; prove `prove/prova_testo.py`, `prove/prova_intento_no.py` |
@@ -1509,3 +1509,45 @@ il numero a pagamento riferito) e 8 contrari (il caso vero con nomi di fantasia,
 «ha detto di chiamare», «ha detto a Nicola: chiama…», «ti ha chiesto di mandare», «si parlava
 di», i nomi «o comunicazioni», «e dettagli», anche da una pagina). Prima della correzione il caso
 vero e «Bianca ha detto a Nicola: chiama la nonna…» davano `uscita_istruzione`.
+
+## Il «sì» breve per le azioni importanti, misurato in ombra (15/10, ramo `si-breve-ombra`)
+
+La voce 2.6 della roadmap (E6, revisione del 12/10): per un'azione importante basta un «sì»
+breve, o serve sempre la frase intera riconosciuta o la frase di sfida? **Non si cambia ora**: si
+misura e si decide con i numeri. Oggi il «sì» breve di chi amministra conferma il tool proposto
+con l'impronta compatibile (`conferme.admin_confermato`, `speaker_conferma_breve_soglia` 0,40), il
+«sì» breve di un familiare conferma le azioni del suo livello, la zona grigia e la compagnia
+portano alla sfida o al rifiuto; nell'analisi del 10/10 (`ricerche/2026-10-10-macchina-stati.md`
+§ 2.2) 54 risposte su 106 alle proposte arrivavano «familiare/breve» e la sfida passava 14 volte
+su 16, costando un turno.
+
+**Cosa si misura** (`calliope/si_breve.py`, nessun effetto sul comportamento, nessun
+interruttore: sono solo campi del registro). In `ToolRegistry.call`, dopo permessi e politica e
+subito prima di eseguire, per ogni chiamata che è un'**azione importante** (classe d'effetto
+E3–E4, `Classe.sfida`, tool pericoloso o senza classe) o la **conferma** di una proposta
+(`politica.consenso_turno`, la conferma breve, la sfida superata) una riga nel campo `si_breve`
+del turno: `tool`, `effetto`, `importante`, `sfida_classe`, `solo_amministra`, `conferma`,
+`modo` (`voce`, `breve_compatibile`, `breve`, `zona_grigia`, `sfida`, `scritto`, `nessuno`),
+`parole` (quante, mai quali), `forma_chiusa` (la frase è tutta un consenso), `rischi`
+(`compagnia`, `voci_sconosciute`, `incerta`, `senza_nome`) e il `punteggio` dell'impronta. Le
+chiamate rifiutate non hanno righe (la domanda la conta già l'attrito). Il ciclo le scrive con la
+risposta (`ToolContext.si_breve`, solo quelle della risposta in corso); senza testo, quindi
+restano anche per minori e ospiti come gli altri numeri.
+
+**In `calliope stato --turni`** (anche `--json`, chiave `si_breve`), dopo l'attrito: azioni
+importanti eseguite, conferme, conferme di azioni importanti per modo; quante «senza frase
+intera» (sì breve compatibile, sì breve, zona grigia), quante solo «sì», quante con un rischio e
+quale, per tool; sfide chieste e superate per azioni importanti, col **tempo mediano di una
+sfida** vera (dall'inizio della frase che la riceve, regola `sfida_voce`, all'inizio della
+risposta, `sfida_risposta`, stesso satellite, entro 120 s); il **costo dell'alternativa** «il sì
+breve non basta per le azioni importanti»: una domanda in più per ogni conferma senza frase
+intera, per il tempo mediano della sfida (senza sfide misurate il tempo non si stima).
+
+**La TV** non ha ancora un filtro suo: la misura la vede solo come `voci_sconosciute` in
+compagnia. Da guardare dopo una o due settimane d'uso sulla DGX: se i «sì» brevi con un rischio
+sono zero o quasi e il costo è alto, resta com'è; se arrivano «sì» brevi su E4 o con voci
+sconosciute, si valuta la sfida per quelle sole. Prova `prove/prova_si_breve.py` (livello 2):
+il caso vero del 04/10 («Sì, procedi pure.», 0,515) come `breve_compatibile`, il «sì» di un
+familiare a un'azione E3, la sfida superata anche passando da Brain, la richiesta nuova con la
+voce; contrari: E1 chiesta, lettura, chiamata rifiutata o mandata alla sfida, righe di un'altra
+risposta, misura che si rompe (il tool parte lo stesso).

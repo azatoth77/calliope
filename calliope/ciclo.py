@@ -3983,6 +3983,12 @@ class Ciclo:
         # modello e corsia veloce accanto alla decisione di oggi, senza testo
         if getattr(brain, "last_dialogo_ombra", None):
             rec["dialogo_ombra"] = brain.last_dialogo_ombra
+        # Il «sì» breve per le azioni importanti, in ombra (15/10, calliope/si_breve.py): come
+        # si è confermata ogni azione importante, solo nomi e numeri
+        from . import si_breve
+        righe_si = si_breve.del_turno(getattr(brain, "tool_ctx", None))
+        if righe_si:
+            rec[si_breve.CAMPO] = righe_si
         if t.files:
             # Di nuovo dopo la risposta: il numero del file lo dà la conversazione (Brain)
             rec["allegati"] = [a.per_registro() for a in t.files]

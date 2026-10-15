@@ -10,7 +10,9 @@ il prossimo passo (registro delle capacità, calliope/capacita.py).
                                               latenza vera della voce per giorno (prima frase,
                                               mediana e p90) con le cause, dal registro dei
                                               turni (calliope/latenza.py); attrito della
-                                              sicurezza per giorno (calliope/attrito.py);
+                                              sicurezza per giorno (calliope/attrito.py); il
+                                              «sì» breve per le azioni importanti, in ombra
+                                              (calliope/si_breve.py);
                                               argomenti che nominano qualcosa: probabilità di
                                               Whisper, nomi noti vicini, esiti vuoti
                                               (calliope/argomenti_incerti.py); compagnia: frasi
@@ -493,6 +495,9 @@ def main(argv=None) -> int:
         # La scelta dei tool come metrica (12/10, calliope/scelta_tool.py)
         from . import scelta_tool
         scelta = scelta_tool.per_giorno(turni)
+        # Il «sì» breve per le azioni importanti, in ombra (15/10, calliope/si_breve.py)
+        from . import si_breve
+        si_r = si_breve.riassunto(turni)
         # La preselezione dei tool System 1 in ombra (15/10, calliope/system1/preselezione.py):
         # richiamo sui turni con tool e schemi risparmiati
         from .system1 import preselezione as preselezione_s1
@@ -528,6 +533,7 @@ def main(argv=None) -> int:
                               "impronte_satellite": impronte_r,
                               "dialogo": dialogo, "voce_sola": voce_sola,
                               "scelta_tool": scelta, "preselezione": presel,
+                              "si_breve": si_r,
                               "frasi_pronte": pronte,
                               "stanza": stanza, "fine_turno": fine_r,
                               "guardia": {k: v for k, v in guardia_r.items()
@@ -537,6 +543,8 @@ def main(argv=None) -> int:
             print(latenza.testo(dati, soglia))
             print()
             print(attrito.testo(sicurezza, soglia_a))
+            print()
+            print(si_breve.testo(si_r))
             print()
             print(argomenti_incerti.testo(argomenti))
             print()
