@@ -73,6 +73,31 @@ resta, la proiezione prende la 2; un segmento non cambiato ha un evento `lenta` 
   `cambio_sostanziale`);
 - `stanza_cerca` legge la proiezione: la versione migliore.
 
+**Ritrascrizione a blocchi** (15/10, `stanza_lenta_blocchi`: «spento» di serie, «ombra»,
+«attivo»). Ritrascrivere un segmento alla volta col Whisper dei turni non aiutava (sopra), ma una
+frase spezzata dalla stanza in più segmenti ritrascritta **intera** sì (misura del 15/10 sulla
+DGX: tre segmenti di 5,5, 4,5 e 2,9 s di un ragazzo in auto, «italiani WMO 2.500, mondiali WMO
+2.500.» / «2025 ARCENTO, europei WMO 2026 OR.» uno per uno, «Italiani WMO 2025 argento, mondiali
+WMO 2025 argento, europei WMO 2026 euro.» uniti con 0,3 s di silenzio, uguale in tre giri; col
+prompt peggio). Dopo la revisione di ogni segmento (sopra), i segmenti consecutivi della **stessa
+voce** sullo stesso satellite (la stessa persona di casa o lo stesso conoscente dalla riga
+rivista, la stessa voce sconosciuta dall'impronta o dal gruppo) formano un blocco. Il blocco si
+chiude quando parla un'altra voce (un'altra persona, Calliope, una riga qualunque in mezzo, una
+riga TV o «più voci» o spezzata), dopo una pausa lunga della stessa persona
+(`stanza_lenta_blocchi_pausa_s`; 0 = mai), al tetto `stanza_lenta_blocchi_max_s` (25 s, sotto
+i 30 s della finestra di Whisper: si spezza al confine di segmento e il seguito apre un blocco
+nuovo), quando il satellite si scollega o la stanza va in pausa, e comunque dopo
+`stanza_lenta_blocchi_attesa_s` senza seguito. Un blocco chiuso di almeno due segmenti si
+ritrascrive **senza prompt**, col Whisper dei turni e la precedenza LENTA (il turno passa sempre
+davanti; un blocco occupa Whisper al più per ~25 s di audio), a DGX libera come il resto.
+In «ombra» il testo va solo nel banco (stanza/banco.py, accanto ai segmenti) e nelle misure
+(senza parole); in «attivo» il testo del blocco si **ridistribuisce** sui segmenti (in
+proporzione al tempo, al confine di frase più vicino: `dividi_testo`) e ogni segmento il cui
+testo cambia riceve una versione nuova (2 o 3) in sola aggiunta, col campo `blocco` (id, parte,
+segmenti): così registro, tenuta, ricerca, contesto e guardiano restano per segmento e prendono
+l'ultima versione come già fanno. L'audio di un blocco aperto resta in RAM (al più il tetto per
+satellite, ~0,8 MB in PCM 16 bit), quello dei blocchi chiusi al più `stanza_audio_min`.
+
 **Audio**: solo in RAM, al più `stanza_audio_min` minuti per satellite, buttato dopo il passo
 (decisione 0029 punto 1), salvo l'eccezione temporanea del banco (stanza/banco.py).
 
@@ -120,6 +145,10 @@ ENERGIA_MIN = 0.3               # una finestra sotto questa frazione dell'energi
 RIASSUNTO_MAX_CAR = 1200
 RIASSUNTO_RIGHE_MAX = 60
 SOMIGLIANZA_SOSTANZIALE = 0.8
+# Blocchi (15/10)
+SILENZIO_BLOCCO_S = 0.3         # fra un segmento e l'altro nell'audio unito (misura del 15/10)
+BLOCCO_MIN_SEGMENTI = 2
+SPENTO, OMBRA, ATTIVO = "spento", "ombra", "attivo"
 
 
 def acceso(cfg) -> bool:
@@ -221,6 +250,46 @@ class Audio:
         return np.frombuffer(self.pcm, dtype="<i2").astype(np.float32) / 32768.0
 
 
+@dataclass
+class Blocco:
+    """I segmenti consecutivi di una voce su un satellite, da ritrascrivere insieme (15/10)."""
+    sat: object
+    chiave: str                       # «persona:<id>», «conoscente:<id>», «gruppo:<g>», «ignoto»
+    pezzi: list = field(default_factory=list)       # Audio, in ordine
+    chiusura: str | None = None       # altra_voce, pausa_lunga, tetto, attesa, pausa, scollegato
+    chiuso: float = 0.0               # monotonic della chiusura
+
+    @property
+    def id(self):
+        return self.pezzi[0].segmento if self.pezzi else None
+
+    def durata_s(self, piu: float = 0.0) -> float:
+        n = len(self.pezzi)
+        return (sum(a.durata_s for a in self.pezzi) + max(0, n - 1) * SILENZIO_BLOCCO_S
+                + (piu + SILENZIO_BLOCCO_S if piu else 0.0))
+
+    def pause(self) -> list[float]:
+        p = self.pezzi
+        return [max(0.0, p[i + 1].inizio - p[i].fine) for i in range(len(p) - 1)]
+
+    def audio(self) -> tuple[np.ndarray, list[float]]:
+        """L'audio unito (0,3 s di silenzio fra i segmenti) e l'inizio di ogni segmento in
+        frazione della durata."""
+        sil = np.zeros(int(SILENZIO_BLOCCO_S * SR), np.float32)
+        parti, inizi, t = [], [], 0
+        for i, a in enumerate(self.pezzi):
+            if i:
+                parti.append(sil)
+                t += len(sil)
+            inizi.append(t)
+            x = a.audio()
+            parti.append(x)
+            t += len(x)
+        tot = max(1, t)
+        audio = np.concatenate(parti) if parti else np.zeros(0, np.float32)
+        return audio, [i / tot for i in inizi]
+
+
 class Lenta:
     def __init__(self, cfg, stanza, stt=None, registry=None, riassuntore=None, occupato=(),
                  misure=None, banco=None, media=None, log=print, avvia: bool = True):
@@ -246,6 +315,10 @@ class Lenta:
         self.ombra_quiete = None
         self.su_carico = None
         self.rivisti = 0
+        # I blocchi (15/10): quello aperto per satellite e quelli chiusi da ritrascrivere
+        self._aperti: dict = {}
+        self._chiusi: list = []
+        self._scollegati: dict = {}          # sat → epoch: il blocco si chiude dopo i pendenti
         self._fermo = threading.Event()
         self._thread = None
         if avvia:
@@ -287,24 +360,54 @@ class Lenta:
                     if tot > tetto or ora - a.fine > tetto:
                         tot -= a.durata_s
                         via.append(an.pop(k))
+            # I blocchi chiusi che aspettano la DGX libera da troppo (15/10): come l'audio sopra
+            vecchi = [b for b in self._chiusi if ora - b.pezzi[-1].fine > tetto]
+            self._chiusi = [b for b in self._chiusi if b not in vecchi]
         for a in via:
             self._misura("lenta", sat=self._nome(a.sat), esito="scaduto",
                          voce_s=round(a.voce_s, 2))
+        for b in vecchi:
+            self._misura("lenta_blocco", sat=self._nome(b.sat), esito="scaduto",
+                         segmenti=len(b.pezzi), chiusura=b.chiusura)
 
     def pendente(self, sat, segmento) -> bool:
-        """Il segmento aspetta ancora la corsia lenta (il guardiano a posteriori lo aspetta)."""
+        """Il segmento aspetta ancora la corsia lenta (il guardiano a posteriori lo aspetta):
+        con i blocchi attivi anche finché il suo blocco non è ritrascritto."""
         with self._lock:
-            return segmento in self._anello.get(sat, {})
+            if segmento in self._anello.get(sat, {}):
+                return True
+            if self.blocchi_modo() != ATTIVO:
+                return False
+            bb = [b for b in self._chiusi if b.sat == sat]
+            if sat in self._aperti:
+                bb.append(self._aperti[sat])
+            return any(a.segmento == segmento for b in bb for a in b.pezzi)
 
     def dimentica(self, sat) -> int:
         with self._lock:
             n = len(self._anello.pop(sat, {}) or {})
             self._ultimo.pop(sat, None)
+            self._aperti.pop(sat, None)
+            self._scollegati.pop(sat, None)
+            self._chiusi = [b for b in self._chiusi if b.sat != sat]
         return n
+
+    def scollegato(self, sat):
+        """Il satellite si è scollegato: il suo blocco aperto si chiude (15/10), dopo i segmenti
+        detti prima che aspettano ancora la revisione."""
+        with self._lock:
+            self._scollegati[sat] = time.time()
+        self._pota_blocchi()
 
     def in_attesa(self) -> int:
         with self._lock:
             return sum(len(a) for a in self._anello.values())
+
+    def blocchi_in_attesa(self) -> int:
+        """Segmenti tenuti in RAM per i blocchi (aperti e chiusi)."""
+        with self._lock:
+            return (sum(len(b.pezzi) for b in self._aperti.values())
+                    + sum(len(b.pezzi) for b in self._chiusi))
 
     # ── la DGX libera ──
     def libera(self) -> bool:
@@ -369,7 +472,7 @@ class Lenta:
         libera (le prove: `giro`). False se non c'era niente."""
         dov = self.dovuti(ora)
         if not dov:
-            return False
+            return self.passo_blocco(ora)          # i blocchi dopo i segmenti (15/10)
         sat, scambio = dov[0].sat, dov[0].scambio
         batch = [a for a in dov if a.sat == sat and a.scambio == scambio]
         if self.su_carico is not None:
@@ -383,6 +486,8 @@ class Lenta:
         while True:
             dov = self.dovuti(ora)
             if not dov:
+                while self.passo_blocco(ora):
+                    pass
                 return n
             sat, scambio = dov[0].sat, dov[0].scambio
             batch = [a for a in dov if a.sat == sat and a.scambio == scambio]
@@ -413,6 +518,7 @@ class Lenta:
                 self.log(f"   [STANZA] corsia lenta, segmento non rivisto: {type(e).__name__}")
                 self._togli(a)
                 self._misura("lenta", sat=self._nome(sat), esito="errore")
+                self._chiudi_blocco(sat, "buco")   # un segmento perso: il blocco non lo salta
                 continue
             fatti.append((a, v1, ris))
         if not fatti:
@@ -423,8 +529,13 @@ class Lenta:
             # e le voci dello scambio servono a tutti i segmenti del passo
             self._togli(a)
             if self.stanza._pausa_viva(sat) is not None or a.seq not in reg.seq_vivi():
+                self._chiudi_blocco(sat, "pausa")
                 continue                           # pausa o «dimentica» durante il passo
             self._scrivi(reg, a, v1, ris)
+            try:
+                self._al_blocco(reg, a, ris)
+            except Exception as e:  # noqa: BLE001 — i blocchi non fermano la corsia
+                self.log(f"   [STANZA] blocco della corsia lenta: {type(e).__name__}")
         self.rivisti += len(fatti)
         try:
             self._riassumi(sat, scambio)
@@ -999,6 +1110,260 @@ class Lenta:
             if b.attivo():
                 self._misura("banco", sat=self._nome(sat), salvato=bool(f))
 
+    # ── i blocchi (15/10) ──
+    def blocchi_modo(self) -> str:
+        """`stanza_lenta_blocchi`: «spento», «ombra» o «attivo» (un valore strano: spento)."""
+        v = self._f("stanza_lenta_blocchi", SPENTO)
+        if v is False:
+            return SPENTO
+        v = str(v or SPENTO).strip().lower()
+        return v if v in (OMBRA, ATTIVO) else SPENTO
+
+    @staticmethod
+    def _chiave(mie: list[dict], ris: dict) -> str | None:
+        """La voce del segmento appena rivisto per i blocchi, o None (non entra in un blocco e
+        chiude quello aperto): una riga sola con testo, di una persona o di un conoscente, o di
+        una voce sconosciuta (col suo gruppo se la corsia veloce l'ha raggruppata)."""
+        if ris.get("esito") in ("allucinazione", "tv", "divisa", "piu_voci") or len(mie) != 1:
+            return None
+        r = mie[0]
+        chi = str(r.get("chi") or "")
+        if not str(r.get("testo") or "").strip():
+            return None
+        if chi.startswith("conoscente:") or (chi.startswith("persona:")
+                                             and r.get("sicurezza") in ("voce", "grigia")):
+            return chi
+        if chi == "ignoto" or chi.startswith("persona:"):
+            g = r.get("gruppo")
+            return f"gruppo:{g}" if g is not None else "ignoto"
+        return None                                  # tv, più voci, calliope, altro
+
+    def _stessa_voce(self, b: Blocco, chiave: str, a: Audio) -> bool:
+        if chiave != b.chiave:
+            return False
+        if chiave != "ignoto":
+            return True
+        # Due voci sconosciute: la stessa se le impronte dei segmenti si somigliano come quelle
+        # di una persona riconosciuta (speaker_id_threshold)
+        if self.registry is None:
+            return False
+        try:
+            u = b.pezzi[-1]
+            if u.emb is None:
+                u.emb = self._emb(u.audio())
+            if a.emb is None:
+                a.emb = self._emb(a.audio())
+            return float(np.dot(u.emb, a.emb)) >= float(self.cfg.speaker_id_threshold)
+        except Exception:  # noqa: BLE001 — nel dubbio due voci
+            return False
+
+    def _al_blocco(self, reg, a: Audio, ris: dict):
+        """Il segmento appena rivisto (e scritto) entra nel blocco aperto del suo satellite, o
+        lo chiude e ne apre un altro."""
+        if self.blocchi_modo() == SPENTO:
+            return
+        sat = a.sat
+        righe = reg.righe()
+        mie = [r for r in righe if r.get("segmento") == a.segmento]
+        chiave = self._chiave(mie, ris)
+        if chiave is None:
+            self._chiudi_blocco(sat, "altra_voce")
+            return
+        with self._lock:
+            b = self._aperti.get(sat)
+        if b is not None:
+            u = b.pezzi[-1]
+            nel = {x.segmento for x in b.pezzi} | {a.segmento}
+            pausa_s = float(self._f("stanza_lenta_blocchi_pausa_s", 0.0) or 0.0)
+            motivo = None
+            with self._lock:
+                via = self._scollegati.get(sat)
+            if via is not None and a.inizio > via:
+                with self._lock:
+                    self._scollegati.pop(sat, None)
+                motivo = "scollegato"                 # detto dopo una riconnessione
+            elif not self._stessa_voce(b, chiave, a):
+                motivo = "altra_voce"
+            elif any(r.get("segmento") not in nel
+                     and u.inizio < float(r.get("inizio") or r.get("t") or 0) < a.inizio
+                     for r in righe):
+                motivo = "altra_voce"                # qualcun altro (o Calliope) in mezzo
+            elif pausa_s > 0 and a.inizio - u.fine > pausa_s:
+                motivo = "pausa_lunga"
+            elif b.durata_s(a.durata_s) > float(self._f("stanza_lenta_blocchi_max_s", 25.0)):
+                motivo = "tetto"                      # si spezza al confine di segmento
+            if motivo is not None:
+                self._chiudi_blocco(sat, motivo)
+                b = None
+        if b is None:
+            b = Blocco(sat, chiave)
+            with self._lock:
+                self._aperti[sat] = b
+        b.pezzi.append(a)
+
+    def _chiudi_blocco(self, sat, motivo: str):
+        with self._lock:
+            b = self._aperti.pop(sat, None)
+        if b is None or not b.pezzi:
+            return
+        b.chiusura, b.chiuso = motivo, time.monotonic()
+        if len(b.pezzi) < BLOCCO_MIN_SEGMENTI:
+            # Un segmento solo: niente da unire (la misura conta i segmenti per blocco)
+            self._misura("lenta_blocco", sat=self._nome(sat), esito="singolo", segmenti=1,
+                         chiusura=motivo)
+            return
+        with self._lock:
+            self._chiusi.append(b)
+
+    def _pota_blocchi(self, ora: float | None = None):
+        """Chiude i blocchi aperti che non possono più crescere: la stanza in pausa, una pausa
+        lunga senza seguito (nessun segmento dello stesso satellite in arrivo o in attesa della
+        corsia lenta), l'attesa massima."""
+        ora = time.time() if ora is None else ora
+        if self.blocchi_modo() == SPENTO:
+            with self._lock:
+                self._aperti.clear()
+                self._chiusi.clear()
+            return
+        pausa_s = float(self._f("stanza_lenta_blocchi_pausa_s", 0.0) or 0.0)
+        attesa_s = float(self._f("stanza_lenta_blocchi_attesa_s", 600.0))
+        with self._lock:
+            aperti = list(self._aperti.items())
+        for sat, b in aperti:
+            if self.stanza._pausa_viva(sat) is not None:
+                self._chiudi_blocco(sat, "pausa")
+                continue
+            u = b.pezzi[-1]
+            with self._lock:
+                dopo = any(x.inizio > u.inizio for x in self._anello.get(sat, {}).values())
+            if dopo:
+                continue                             # il seguito aspetta la sua revisione
+            with self._lock:
+                via = self._scollegati.pop(sat, None)
+            if via is not None:
+                self._chiudi_blocco(sat, "scollegato")
+                continue
+            quiete = ora - max(u.fine, float(self._ultimo.get(sat, 0.0)))
+            if pausa_s > 0 and quiete >= pausa_s:
+                self._chiudi_blocco(sat, "pausa_lunga")
+            elif ora - u.fine >= attesa_s:
+                self._chiudi_blocco(sat, "attesa")
+        with self._lock:
+            for s in [s for s in self._scollegati
+                      if s not in self._aperti and not self._anello.get(s)]:
+                self._scollegati.pop(s, None)
+
+    def passo_blocco(self, ora: float | None = None) -> bool:
+        """Un blocco chiuso ritrascritto (a DGX libera, dopo i segmenti). False se nessuno."""
+        if self.blocchi_modo() == SPENTO:
+            return False
+        self._pota_blocchi(ora)
+        with self._lock:
+            chiusi = list(self._chiusi)
+        b = next((x for x in chiusi if self.stanza._pausa_viva(x.sat) is None), None)
+        if b is None:
+            return False
+        with self._lock:
+            if b in self._chiusi:
+                self._chiusi.remove(b)
+        if self.su_carico is not None:
+            self.su_carico("corsia_lenta", segmenti=len(b.pezzi))
+        try:
+            self.rivedi_blocco(b)
+        except Exception as e:  # noqa: BLE001 — un blocco non ferma la corsia
+            self.log(f"   [STANZA] blocco non ritrascritto: {type(e).__name__}")
+            self._misura("lenta_blocco", sat=self._nome(b.sat), esito="errore",
+                         segmenti=len(b.pezzi))
+        return True
+
+    def _trascrivi_blocco(self, audio: np.ndarray) -> tuple[str, str | None]:
+        """Il blocco col Whisper dei turni, **senza prompt**, con la precedenza LENTA (misura del
+        15/10: col prompt delle righe di prima peggiorava)."""
+        stt = self.stt
+        try:
+            testo = stt.transcribe(audio, priorita=coda_mod.LENTA, prompt="")
+        except TypeError:
+            testo = stt.transcribe(audio, prompt="")
+        return (testo or "").strip(), getattr(stt, "ultima_scartata", None)
+
+    def rivedi_blocco(self, b: Blocco) -> str:
+        """Ritrascrive il blocco e (in «attivo») scrive la versione nuova dei segmenti il cui
+        testo cambia. L'esito: uguale, cambiato, non_distribuibile, allucinazione,
+        dimenticato."""
+        sat = b.sat
+        reg = self.stanza.registro(sat)
+        righe = reg.righe()
+        per_seg: dict = {}
+        for r in righe:
+            if r.get("segmento") is not None:
+                per_seg.setdefault(r["segmento"], []).append(r)
+        attuali = []
+        for a in b.pezzi:
+            rr = per_seg.get(a.segmento) or []
+            if len(rr) != 1:                          # dimenticato o scartato nel frattempo
+                self._misura("lenta_blocco", sat=self._nome(sat), esito="dimenticato",
+                             segmenti=len(b.pezzi), chiusura=b.chiusura)
+                return "dimenticato"
+            attuali.append(rr[0])
+        audio, inizi = b.audio()
+        t0 = time.perf_counter()
+        testo, scartata = self._trascrivi_blocco(audio)
+        stt_s = time.perf_counter() - t0
+        prima = " ".join(str(r.get("testo") or "").strip() for r in attuali).strip()
+        motivo = scartata or (allucinazione(testo) if testo else "vuota")
+        pezzi = dividi_testo(testo, inizi[1:]) if motivo is None else []
+        cambiato = motivo is None and norm_parole(testo) != norm_parole(prima)
+        if motivo is not None:
+            esito = "allucinazione"
+        elif not cambiato:
+            esito = "uguale"
+        elif any(not p.strip() for p in pezzi):
+            esito = "non_distribuibile"               # meno parole che segmenti: niente
+        else:
+            esito = "cambiato"
+        modo = self.blocchi_modo()
+        scritte = 0
+        if esito == "cambiato" and modo == ATTIVO and self.stanza._pausa_viva(sat) is None:
+            vivi = reg.seq_vivi()
+            for i, (a, r, tp) in enumerate(zip(b.pezzi, attuali, pezzi)):
+                if r["seq"] not in vivi or norm_parole(tp) == norm_parole(r.get("testo")):
+                    continue
+                campi = {k: r.get(k) for k in ("chi", "nome", "persona", "sicurezza", "minore",
+                                               "nota", "gruppo", "rivolta", "durante_voce",
+                                               "scambio")
+                         if r.get(k) is not None or k in ("nome", "persona")}
+                campi.setdefault("sicurezza", "nessuna")
+                campi.setdefault("minore", False)
+                reg.aggiungi(RIGA, segmento=a.segmento, versione=int(r.get("versione") or 1) + 1,
+                             sostituisce=r["seq"], p_min=None, **campi,
+                             inizio=round(float(r.get("inizio") or a.inizio), 3),
+                             fine=round(float(r.get("fine") or a.fine), 3), testo=tp,
+                             rivista={"testo": True, "chi": False},
+                             blocco={"id": b.id, "parte": i, "segmenti": len(b.pezzi)})
+                scritte += 1
+        pause = b.pause()
+        self._misura("lenta_blocco", sat=self._nome(sat), modo=modo, esito=esito,
+                     chiusura=b.chiusura, segmenti=len(b.pezzi),
+                     durata_s=round(len(audio) / SR, 2),
+                     pausa_max_s=round(max(pause), 2) if pause else 0.0,
+                     stt_s=round(stt_s, 3), attesa_s=round(time.time() - b.pezzi[-1].fine, 1),
+                     somiglianza=round(somiglianza(prima, testo), 3) if motivo is None else None,
+                     testo_cambiato=esito in ("cambiato", "non_distribuibile"),
+                     applicato=scritte > 0, righe=scritte, motivo=motivo)
+        bc = self.banco
+        if bc is not None and motivo is None:
+            try:
+                bc.salva_blocco(sat, (self.stanza._info.get(sat) or {}), {
+                    "blocco": b.id, "segmenti": [a.segmento for a in b.pezzi],
+                    "inizio": b.pezzi[0].inizio, "fine": b.pezzi[-1].fine,
+                    "durata_s": round(len(audio) / SR, 2),
+                    "pause_s": [round(x, 2) for x in pause], "chiusura": b.chiusura,
+                    "esito": esito, "modo": modo, "applicato": scritte > 0},
+                    attuali, testo, pezzi, in_pausa=self.stanza._pausa_viva(sat) is not None)
+            except Exception as e:  # noqa: BLE001 — il banco non ferma la corsia
+                self.log(f"   [STANZA] blocco nel banco: {type(e).__name__}")
+        return esito
+
     # ── riassunto progressivo ──
     def _riassumi(self, sat, scambio):
         n = int(self._f("stanza_lenta_riassunto_righe", 6) or 0)
@@ -1072,5 +1437,5 @@ def riassuntore_guardiano(guardiano, stanza_nome=lambda: "qui", timeout_s: float
     return f
 
 
-__all__ = ["Audio", "Lenta", "acceso", "allucinazione", "cambio_sostanziale",
+__all__ = ["Audio", "Blocco", "Lenta", "acceso", "allucinazione", "cambio_sostanziale",
            "riassuntore_guardiano", "somiglianza"]
