@@ -208,7 +208,10 @@ def scheda_testo(cfg=None) -> list[str]:
         "ctx.giocatori. L'esito va avanti da solo dopo esito_s secondi (0: solo con «avanti» o "
         "il tocco). Con \"condivisa\": true nella scheda la stessa partita si gioca da più "
         "schermi di casa: la tiene un motore solo, gli altri schermi la vedono e mandano le "
-        "mosse (niente da scrivere in più)",
+        "mosse, e chi è quale giocatore (schermo e voce) lo decide Calliope (niente da scrivere "
+        "in più). Chi dice «gioco anch'io» a partita cominciata entra dalla prossima partita; "
+        "con GIOCO.entra(dati, ctx) → i dati con il giocatore nuovo (ctx.nuovo è la sua "
+        "posizione) entra subito",
         "- GIOCO: nuovaPartita({ giocatori, nomi }) → i dati della partita (un oggetto JSON); "
         "mosse[fase][comando](dati, { valore, chi, giocatori, turno }) → { dati, punti, esito, "
         "fase, dopo, ancora } e NIENT'ALTRO (dati: lo stato del gioco dopo la mossa; punti: un "
@@ -229,7 +232,9 @@ def scheda_testo(cfg=None) -> list[str]:
         "\"pagina\": \"tela\" e GIOCO.tela[fase](area, dati, tela): disegni dentro area (DOM o "
         "canvas, eventi con addEventListener; misura tela.larghezza × tela.altezza px del "
         "palco, niente fuori) e ne esci con tela.esci({ dati, punti, fase: \"fine\" }); «fine "
-        "partita» vale sempre. Nella tela c'è l'oggetto calliope: "
+        "partita» vale sempre. Una tela che vuole un orientamento solo lo dichiara nella fase "
+        "(\"orientamento\": \"orizzontale\" o \"verticale\"): sul telefono girato "
+        "dall'altra parte Calliope dice di girarlo. Nella tela c'è l'oggetto calliope: "
         "calliope.salva(chiave, valore) e calliope.leggi(chiave) → Promise (con «salva», "
         f"valore JSON fino a {gi.MAX_SALVA // 1000} kB), calliope.di(testo) → Promise (con "
         f"«voce»: al più {c('giochi_frasi_minuto', 3)} frasi al minuto, {gi.MAX_FRASE} "

@@ -471,7 +471,11 @@
         comandi[c] = { forme: (d.forme || []).slice(), etichetta: d.etichetta || "", valori: valori, sinonimi: sinonimi };
       });
       var pagina = MODELLI.indexOf(f.pagina) >= 0 ? f.pagina : "scelte";
-      out.fasi[nome] = { pagina: pagina, turni: f.turni !== false, verso: (f.verso || []).slice(), comandi: comandi };
+      // Una tela può dichiarare un orientamento solo (15/10, «Gira il telefono»): il palco è
+      // sempre quello, e sul telefono girato dall'altra parte lo schermo lo dice
+      var orient = pagina === "tela" && PALCHI[f.orientamento] ? f.orientamento : null;
+      out.fasi[nome] = { pagina: pagina, turni: f.turni !== false, verso: (f.verso || []).slice(), comandi: comandi,
+                         orientamento: orient };
     });
     if (!out.inizio) out.inizio = Object.keys(out.fasi)[0];
     return out;
@@ -490,9 +494,66 @@
     if (!M.fasi[M.inizio]) throw errore("la macchina non ha la fase d'inizio «" + M.inizio + "»");
 
     function nuovo() {
-      // nomi: chi ha detto «gioco anch'io» nella preparazione (il nome dalla voce, o null)
+      // iscritti: chi ha detto «gioco anch'io» nella preparazione, con il nome dalla voce (o
+      // null), lo schermo da cui l'ha detto o toccato e la sua voce (15/10, chi è quale
+      // giocatore); entrano: chi l'ha detto a partita cominciata e gioca dalla prossima
       return { n: 0, fase: "preparazione", numero: M.gmin, giocatori: [], tocca: 0, turno: 0,
-               dati: null, esito: null, dopo: null, passa: false, nomi: [] };
+               dati: null, esito: null, dopo: null, passa: false, iscritti: [], entrano: [] };
+    }
+    // ── chi è quale giocatore (15/10) ──
+    // Un giocatore può essere legato a uno SCHERMO (il numero del posto della partita: lo dà
+    // Calliope all'avvio del riquadro, e lo aggiunge il server alle mosse che arrivano da un altro
+    // schermo) e a una VOCE (un segno opaco, «v1», che Calliope dà a ogni persona riconosciuta
+    // dalla voce nella partita: il riquadro non sa chi è). Il legame nasce con «gioco anch'io»
+    // (detto o toccato). Una mossa del gioco in una fase a turni vale solo per chi è di turno:
+    // dalla sua voce, o dal suo schermo; una voce di un altro giocatore o un altro schermo no.
+    // Senza legami (nessun «gioco anch'io») chiunque muove quando tocca a qualcuno, come prima
+    var COMANDI_CALLIOPE = { inizia: 1, avanti: 1, ancora: 1, fine_partita: 1, anchio: 1, giocatori: 1 };
+    function legame(x) {
+      var o = {};
+      var s = x && x.schermo, v = x && x.voce;
+      if (typeof s === "number" && s >= 1 && s <= 99 && Math.floor(s) === s) o.schermo = s;
+      if (typeof v === "string" && /^v[1-9][0-9]?$/.test(v)) o.voce = v;
+      return o;
+    }
+    function nomeDi(S, i) { var g = S.giocatori[i]; return g ? String(g.nome) : ""; }
+    function aChi(nome) { return (/^[aA]/.test(nome) ? "ad " : "a ") + nome; }
+    // {ok, motivo, da, testo}: se il comando `c` mandato da `extra` ({schermo, voce}) vale per
+    // chi lo manda, e quale giocatore muove (da: la posizione, o null se non si sa)
+    function chiMuove(S, c, extra) {
+      var e = legame(extra);
+      var gs = S.giocatori || [];
+      var perVoce = -1, perSchermo = [];
+      gs.forEach(function (g, i) {
+        if (e.voce && g.voce === e.voce) perVoce = i;
+        if (e.schermo && g.schermo === e.schermo) perSchermo.push(i);
+      });
+      if (c === "anchio") {
+        var giaPrep = e.voce && (S.iscritti || []).concat(S.entrano || []).some(function (x) { return x && x.voce === e.voce; });
+        if (S.fase !== "preparazione" && (perVoce >= 0 || giaPrep)) {
+          return { ok: false, motivo: "gia", da: perVoce, testo: perVoce >= 0 ? "Sei già nella partita: sei " + nomeDi(S, perVoce) + "." : "Sei già nella partita." };
+        }
+        return { ok: true, da: null };
+      }
+      var f = M.fasi[S.fase];
+      if (COMANDI_CALLIOPE[c] || !f) return { ok: true, da: null };
+      var unoSolo = perSchermo.length === 1 ? perSchermo[0] : null;
+      if (!f.turni || gs.length <= 1) return { ok: true, da: perVoce >= 0 ? perVoce : unoSolo };
+      var t = S.tocca, g = gs[t] || {};
+      if (perVoce >= 0 && perVoce !== t) {
+        return { ok: false, motivo: "turno", da: perVoce, testo: "Tocca " + aChi(nomeDi(S, t)) + "." };
+      }
+      if (perVoce === t) return { ok: true, da: t };
+      if (g.schermo && e.schermo && g.schermo !== e.schermo) {
+        return { ok: false, motivo: "schermo", da: unoSolo, testo: "Tocca " + aChi(nomeDi(S, t)) + ", sull'altro schermo." };
+      }
+      return { ok: true, da: t };
+    }
+    function nonTua(r) {
+      var e = new Error(r.testo || "Adesso non tocca a te.");
+      e.name = "MossaNonTua";
+      e.motivo = r.motivo;
+      return e;
     }
     function contesto(S) {
       var g = S.giocatori.map(function (x) { return { nome: x.nome, punti: x.punti }; });
@@ -512,12 +573,16 @@
           for (var i = M.gmin; i <= M.gmax; i++) v.push(i);
           out.giocatori = v;
         }
-        if ((S.nomi || []).length < M.gmax) out.anchio = true;
+        if ((S.iscritti || []).length < M.gmax) out.anchio = true;
         out.inizia = true;
         return out;
       }
       if (S.fase === "esito") return { avanti: true };
-      if (S.fase === "fine") return { ancora: true };
+      if (S.fase === "fine") {
+        var fin = { ancora: true };
+        if (postoLibero(S)) fin.anchio = true;
+        return fin;
+      }
       var f = M.fasi[S.fase];
       if (!f) throw errore("fase «" + S.fase + "» non dichiarata nella macchina");
       var scelti = null;
@@ -544,7 +609,14 @@
         if (nuovi.length) throw errore("GIOCO.attivi." + S.fase + ": comandi che la fase non dichiara: " + nuovi.join(", ") + " (dichiarali nel manifesto, scheda.macchina.fasi." + S.fase + ".comandi)");
       }
       if (f.pagina === "tela") out.fine_partita = true;
+      // «Gioco anch'io» a partita cominciata (15/10): solo a voce (nessun pulsante: la pagina
+      // del gioco non cambia), non in una tela (il tempo reale)
+      else if (postoLibero(S)) out.anchio = true;
       return out;
+    }
+    // C'è posto per chi entra a partita cominciata (contando chi aspetta la prossima)
+    function postoLibero(S) {
+      return M.gmax > 1 && (S.giocatori || []).length + (S.entrano || []).length < M.gmax;
     }
     function piatti(att) {
       var out = [];
@@ -585,7 +657,11 @@
       var gs = [];
       for (var i = 0; i < numero; i++) {
         var p = (prima || [])[i];
-        gs.push(p && p.nome ? { nome: p.nome, punti: 0, scritto: !!p.scritto } : { nome: "Giocatore " + (i + 1), punti: 0, scritto: false });
+        var g = p && p.nome ? { nome: p.nome, punti: 0, scritto: !!p.scritto } : { nome: "Giocatore " + (i + 1), punti: 0, scritto: false };
+        var l = legame(p);
+        if (l.schermo) g.schermo = l.schermo;
+        if (l.voce) g.voce = l.voce;
+        gs.push(g);
       }
       var nomi = gs.map(function (g) { return g.nome; });
       var dati = GIOCO.nuovaPartita({ giocatori: numero, nomi: nomi.slice() });
@@ -597,6 +673,7 @@
       S.tocca = 0; S.turno = 1; S.dati = copia(dati, "GIOCO.nuovaPartita");
       S.esito = null; S.dopo = null; S.passa = false;
       S.fase = M.inizio;
+      S.entrano = [];
     }
     function verso(fase) {
       var f = M.fasi[fase];
@@ -642,21 +719,53 @@
       if (!attivo(att, c, v)) {
         throw errore("il comando «" + piatto(c, v) + "» adesso non vale (fase «" + S0.fase + "», attivi: " + (piatti(att).join(", ") || "nessuno") + ")");
       }
+      // Chi è quale giocatore (15/10): la mossa vale per chi la manda? (una mossa del gioco in una
+      // fase a turni solo per chi è di turno; «gioco anch'io» non due volte dalla stessa voce)
+      var chi = chiMuove(S0, c, extra);
+      if (!chi.ok) throw nonTua(chi);
       var S = copia(S0, "stato");
       S.n = S0.n + 1;
+      var nome = nomeChiuso(extra && extra.giocatore);
+      var nuovoPosto = legame(extra);
+      nuovoPosto.nome = nome;
       if (S0.fase === "preparazione") {
-        var gia = (S0.nomi || []).map(function (x) { return { nome: x, scritto: false }; });
+        var gia = (S0.iscritti || []).map(function (x) { var o = legame(x); o.nome = x && x.nome || null; o.scritto = false; return o; });
         if (c === "anchio") {
           // «gioco anch'io»: un posto in più, con il nome di chi l'ha detto se la voce è
-          // riconosciuta (lo manda Calliope), altrimenti «Giocatore N»; la stessa voce due volte
+          // riconosciuta (lo manda Calliope), altrimenti «Giocatore N», legato allo schermo e
+          // alla voce di chi l'ha detto o toccato; la stessa voce (o lo stesso nome) due volte
           // non prende due posti
-          var nome = nomeChiuso(extra && extra.giocatore);
-          var stesso = nome && (S0.nomi || []).some(function (x) { return x && x.toLowerCase() === nome.toLowerCase(); });
-          if (!stesso) S.nomi = (S0.nomi || []).concat([nome]);
-          S.numero = Math.max(M.gmin, S.nomi.length);
+          var stesso = (S0.iscritti || []).some(function (x) {
+            return x && (nome && x.nome && x.nome.toLowerCase() === nome.toLowerCase() || nuovoPosto.voce && x.voce === nuovoPosto.voce);
+          });
+          if (!stesso) S.iscritti = (S0.iscritti || []).concat([nuovoPosto]);
+          S.numero = Math.max(M.gmin, S.iscritti.length);
           return S;
         }
         avviaPartita(S, c === "giocatori" ? v : Math.max(S0.numero, gia.length), gia);
+        return S;
+      }
+      if (c === "anchio") {
+        // A partita cominciata (15/10, «una persona che entra a metà»): con GIOCO.entra il nuovo
+        // giocatore entra adesso, a zero punti, e gioca quando arriva il suo turno; senza, entra
+        // dalla prossima partita («ancora»), perché la logica ha già preparato i dati per chi
+        // c'era
+        if (S0.fase !== "fine" && typeof GIOCO.entra === "function") {
+          var gnuovo = { nome: nome || "Giocatore " + (S0.giocatori.length + 1), punti: 0, scritto: false };
+          if (nuovoPosto.schermo) gnuovo.schermo = nuovoPosto.schermo;
+          if (nuovoPosto.voce) gnuovo.voce = nuovoPosto.voce;
+          S.giocatori = S0.giocatori.concat([gnuovo]);
+          S.numero = S.giocatori.length;
+          var cx = contesto(S);
+          cx.nuovo = S.giocatori.length - 1;
+          var d2 = GIOCO.entra(copia(S0.dati, "dati"), cx);
+          if (d2 === undefined || d2 === null || typeof d2 !== "object" || Array.isArray(d2)) {
+            throw errore("GIOCO.entra restituisce " + tipo(d2) + ": deve restituire i dati della partita con il giocatore nuovo (un oggetto)");
+          }
+          S.dati = copia(d2, "GIOCO.entra");
+          return S;
+        }
+        S.entrano = (S0.entrano || []).concat([nuovoPosto]);
         return S;
       }
       if (S0.fase === "esito") {
@@ -665,7 +774,11 @@
         S.esito = null; S.dopo = null; S.passa = false;
         return S;
       }
-      if (S0.fase === "fine") { avviaPartita(S, S0.numero, S0.giocatori); return S; }
+      if (S0.fase === "fine") {
+        var poi = S0.giocatori.concat(S0.entrano || []).slice(0, M.gmax);
+        avviaPartita(S, Math.min(M.gmax, S0.numero + (S0.entrano || []).length), poi);
+        return S;
+      }
       if (c === "fine_partita") { S.fase = "fine"; return S; }
       var fn = GIOCO.mosse && GIOCO.mosse[S0.fase] && GIOCO.mosse[S0.fase][c];
       var dove = "GIOCO.mosse." + S0.fase + "." + c + (v === null ? "" : " (valore " + JSON.stringify(v) + ")");
@@ -673,8 +786,12 @@
       var ctx = contesto(S0);
       ctx.valore = v;
       ctx.giocatore = extra && extra.giocatore || null;
+      // In una fase senza turni muove chiunque: «chi» e i punti sono di chi ha mosso, se si sa
+      // (la sua voce, o il suo schermo con un giocatore solo)
+      var daChi = !M.fasi[S0.fase].turni && chi.da !== null && chi.da !== undefined && S0.giocatori[chi.da] ? chi.da : null;
+      if (daChi !== null) ctx.chi = S0.giocatori[daChi].nome;
       var ris = fn(copia(S0.dati, "dati"), ctx);
-      return risultato(S0, S, ris, dove);
+      return risultato(S0, S, ris, dove, daChi);
     }
     // L'uscita da una fase «tela» (il gioco libero): come il risultato di una mossa
     function esciTela(S0, ris) {
@@ -684,13 +801,14 @@
       S.n = S0.n + 1;
       return risultato(S0, S, ris, "tela.esci nella fase «" + S0.fase + "»");
     }
-    function risultato(S0, S, ris, dove) {
-      var chi = S0.giocatori[S0.tocca] ? S0.giocatori[S0.tocca].nome : null;
+    function risultato(S0, S, ris, dove, daChi) {
+      var chiPos = daChi !== null && daChi !== undefined ? daChi : S0.tocca;
+      var chi = S0.giocatori[chiPos] ? S0.giocatori[chiPos].nome : null;
       controlla(ris, dove, S0);
       S.dati = copia(ris.dati, dove + ", dati");
       var guadagno = 0;
       if (Array.isArray(ris.punti)) ris.punti.forEach(function (p, i) { S.giocatori[i].punti += p; });
-      else if (typeof ris.punti === "number" && S.giocatori[S0.tocca]) { S.giocatori[S0.tocca].punti += ris.punti; guadagno = ris.punti; }
+      else if (typeof ris.punti === "number" && S.giocatori[chiPos]) { S.giocatori[chiPos].punti += ris.punti; guadagno = ris.punti; }
       var meta = ris.fase || (ris.esito ? "esito" : S0.fase);
       var passa = M.fasi[S0.fase].turni && !ris.ancora && S.giocatori.length > 1;
       if (meta === "esito") {
@@ -781,6 +899,9 @@
     function istantanea(S) {
       var att = {};
       try { att = attivi(S); } catch (e) { att = {}; }
+      // «gioco anch'io» a partita cominciata è di Calliope (solo a voce): i test del gioco non
+      // lo vedono
+      if (S.fase !== "preparazione") delete att.anchio;
       return { n: S.n, fase: S.fase, tocca: S.giocatori[S.tocca] ? S.giocatori[S.tocca].nome : null,
                turno: S.turno, giocatori: S.giocatori.map(function (g) { return { nome: g.nome, punti: g.punti }; }),
                esito: S.esito ? S.esito.testo : null, comandi: att };
@@ -824,7 +945,18 @@
       if (R.fase !== "preparazione" && (!R.giocatori.length || typeof R.dati !== "object" || R.dati === null)) throw errore("ripresa: dati");
       if (typeof R.tocca !== "number" || R.tocca < 0 || (R.giocatori.length && R.tocca >= R.giocatori.length)) throw errore("ripresa: tocca");
       var S = copia(R, "ripresa");
-      if (!Array.isArray(S.nomi)) S.nomi = [];
+      // gli iscritti e chi entra dalla prossima partita: solo nome e legami (15/10)
+      ["iscritti", "entrano"].forEach(function (k) {
+        S[k] = (Array.isArray(S[k]) ? S[k] : []).slice(0, M.gmax).map(function (x) {
+          var o = legame(x); o.nome = nomeChiuso(x && x.nome); return o;
+        });
+      });
+      S.giocatori = S.giocatori.map(function (g) {
+        var o = { nome: g.nome, punti: g.punti, scritto: !!g.scritto }, l = legame(g);
+        if (l.schermo) o.schermo = l.schermo;
+        if (l.voce) o.voce = l.voce;
+        return o;
+      });
       attivi(S);
       pagina(S);
       return S;
@@ -841,6 +973,9 @@
                giocatori: S.giocatori.map(function (g) {
                  var x = { nome: String(g.nome), punti: g.punti };
                  if (g.scritto) x.scritto = true;
+                 // chi è quale giocatore (15/10): lo schermo e la voce (un segno opaco) legati
+                 if (g.schermo) x.schermo = g.schermo;
+                 if (g.voce) x.voce = g.voce;
                  return x;
                }),
                esito: S.esito && S.esito.testo ? String(S.esito.testo).slice(0, 160) : null,
@@ -871,7 +1006,7 @@
       });
       if (S.fase === "preparazione") {
         if (!p.titolo) { p.titolo = titoloGioco || "Nuova partita"; p.fonti.titolo = titoloGioco ? "il titolo nel manifesto" : ""; }
-        var gioca = (S.nomi || []).map(function (x, k) { return x || "Giocatore " + (k + 1); });
+        var gioca = (S.iscritti || []).map(function (x, k) { return x && x.nome || "Giocatore " + (k + 1); });
         if (!p.testo && (M.gmin < M.gmax || gioca.length)) {
           p.testo = (M.gmin < M.gmax ? "Quanti giocatori?" : "") + (gioca.length ? (M.gmin < M.gmax ? " " : "") + "Giocano: " + gioca.join(", ") : "");
         }
@@ -909,7 +1044,12 @@
           });
         });
       }
-      Object.keys(att).forEach(function (c) {
+      // «gioco anch'io» a partita cominciata è solo a voce: la pagina del gioco non cambia
+      var conPulsante = Object.keys(att).filter(function (c) { return c !== "anchio" || S.fase === "preparazione"; });
+      // una tela con un orientamento solo (15/10): il palco è sempre quello
+      p.orientamento = f && f.pagina === "tela" && f.orientamento && S.fase !== "preparazione"
+        && S.fase !== "esito" && S.fase !== "fine" ? f.orientamento : null;
+      conPulsante.forEach(function (c) {
         (att[c] === true ? [null] : att[c]).forEach(function (x) {
           if (nelleCaselle[piatto(c, x)]) return;
           p.pulsanti.push({ c: c, v: x, etichetta: etichetta(S.fase, c, x),
@@ -920,7 +1060,8 @@
     }
     return { M: M, nuovo: nuovo, attivi: attivi, piatti: piatti, daPiatto: daPiatto, applica: applica, esciTela: esciTela,
              vista: vista, istantanea: istantanea, perCalliope: perCalliope, classifica: classifica, etichetta: etichetta,
-             pagina: pagina, contesto: contesto, piatto: piatto, rinomina: rinomina, riprendi: riprendi };
+             pagina: pagina, contesto: contesto, piatto: piatto, rinomina: rinomina, riprendi: riprendi,
+             chiMuove: chiMuove };
   }
 
   // ═══════════════════ nel riquadro (e nel DOM finto della prova): disegno, pulsanti, voce ═══════════════════
@@ -937,6 +1078,9 @@
     // manda le mosse a chi la tiene)
     var ruolo = "autorevole";
     var firmaPalco = null;
+    // Il numero del posto di questo schermo nella partita (15/10, chi è quale giocatore: lo dà
+    // Calliope all'avvio); «Gira il telefono» detto a Calliope una volta per riquadro
+    var mioPosto = null, giraDetto = false, avvioTocco = false;
     function el(tag, classe, testo) {
       var n = doc.createElement(tag);
       if (classe) n.className = classe;
@@ -977,11 +1121,12 @@
         if (b.valore !== null && b.valore !== undefined) n.dataset.valore = String(b.valore);
         n.setAttribute("aria-label", b.etichetta || b.testo || "");
         var c = b.comando, v = b.valore === undefined ? null : b.valore;
-        n.addEventListener("click", function () { mossa(c, v, {}); });
+        n.addEventListener("click", function () { mossa(c, v, { schermo: mioPosto }); });
       } else if (b.tipo === "titolo") n = el("h1", "titolo", b.testo);
       else if (b.tipo === "giocatore") {
-        // Il nome nella fascia dei punti: un tocco e si scrive il proprio (14/10, passo 4)
-        n = el("button", "giocatore nome" + (b.tocca ? " tocca" : ""), b.testo);
+        // Il nome nella fascia dei punti: un tocco e si scrive il proprio (14/10, passo 4).
+        // «mio»: il giocatore di questo schermo, quando i giocatori sono su più schermi (15/10)
+        n = el("button", "giocatore nome" + (b.tocca ? " tocca" : "") + (mio(b.indice) ? " mio" : ""), b.testo);
         n.type = "button";
         n.setAttribute("aria-label", "Cambia il nome: " + b.testo);
         var ind = b.indice, box = b;
@@ -1002,6 +1147,16 @@
       stile(n, b);
       return n;
     }
+    function mio(i) {
+      var gs = S.giocatori || [];
+      if (!mioPosto || !gs[i] || gs[i].schermo !== mioPosto) return false;
+      return gs.some(function (g) { return g.schermo && g.schermo !== mioPosto; });
+    }
+    // Un telefono o un tablet: lo dice la pagina degli schermi all'avvio, o il riquadro stesso
+    function alTocco() {
+      if (avvioTocco) return true;
+      try { return !!(G.matchMedia && G.matchMedia("(pointer: coarse)").matches); } catch (e) { return false; }
+    }
     function disegna() {
       var pag = nucleo.pagina(S);
       var prima = orientamento;
@@ -1009,7 +1164,9 @@
       // girato lo schermo, la misura vera si rimanda anche se non cambia (Calliope sa che la
       // pagina ci sta anche nell'altro orientamento)
       if (prima !== null && prima !== orientamento) firmaPalco = null;
-      imp = impagina(pag, orientamento);
+      // Una tela con un orientamento solo (15/10): il palco è quello dichiarato, anche se la
+      // finestra è girata dall'altra parte (il gioco non si ferma: è solo più piccolo)
+      imp = impagina(pag, pag.orientamento || orientamento);
       palco = el("div", "motore palco " + imp.orientamento + " fase-" + S.fase + " pagina-" + pag.modello);
       scala();
       var area = null;
@@ -1019,9 +1176,24 @@
         palco.appendChild(n);
       });
       radice.replaceChildren(palco);
+      gira(pag.orientamento && pag.orientamento !== orientamento ? pag.orientamento : null);
       if (area) tela(area, imp.scatole.filter(function (b) { return b.tipo === "tela"; })[0]);
       misuraVera(pag);
       return pag.attivi;
+    }
+    // «Gira il telefono» (15/10, decisione 3 del 12/10): sul telefono (o un tablet) girato
+    // dall'altra parte rispetto alla tela, una fascia in alto lo dice, sopra il gioco ma senza
+    // prendere i tocchi; a Calliope lo si dice una volta per riquadro (lo dice a voce una volta
+    // per schermo). Su un PC o una TV la finestra non si gira: niente fascia
+    function gira(o) {
+      if (!o || !alTocco()) return;
+      var f = el("div", "gira-telefono", "Gira il telefono " + (o === "orizzontale" ? "in orizzontale" : "in verticale"));
+      f.setAttribute("role", "status");
+      radice.appendChild(f);
+      if (!giraDetto && CANALE && typeof CANALE.gira === "function") {
+        giraDetto = true;
+        try { CANALE.gira(o); } catch (e) { /* niente */ }
+      }
     }
     // Il campo per scrivere il nome sopra la fascia (non è una scatola del palco: sparisce al
     // prossimo disegno). Invio o uscita dal campo confermano, Esc annulla
@@ -1161,17 +1333,27 @@
     }
     function mossa(c, v, extra) {
       if (ruolo === "specchio") {
-        // Uno specchio non scrive lo stato: manda la mossa al motore che tiene la partita
+        // Uno specchio non scrive lo stato: manda la mossa al motore che tiene la partita (il
+        // server ci aggiunge il numero di questo schermo). Una mossa del giocatore di un altro
+        // schermo non parte: lo dice un avviso (15/10)
         var flat = nucleo.piatto(c, v), att = [];
         try { att = nucleo.piatti(nucleo.attivi(S)); } catch (e) { att = []; }
         if (att.indexOf(flat) < 0) return false;
+        var r = nucleo.chiMuove(S, c, extra);
+        if (!r.ok) { avviso(r.testo || "Adesso non tocca a te."); return false; }
         try { if (CANALE && typeof CANALE.mossa === "function") CANALE.mossa({ comando: flat, n: S.n }); } catch (e) { /* niente */ }
         return true;
       }
-      var S2;
+      var S2, aspettano = (S.entrano || []).length;
       try { S2 = nucleo.applica(S, c, v, extra || {}); }
-      catch (e) { mostraErrore(e); return false; }
+      catch (e) {
+        // Non è il turno di chi ha toccato (15/10): un avviso sul palco, non un errore del gioco
+        if (e && e.name === "MossaNonTua") { avviso(e.message); return false; }
+        mostraErrore(e); return false;
+      }
       aggiorna(S2);
+      // «gioco anch'io» a partita cominciata, in un gioco che non sa far entrare nessuno a metà
+      if ((S.entrano || []).length > aspettano) avviso("Si gioca in più dalla prossima partita.");
       return true;
     }
     function rifiuta(m, motivo) {
@@ -1189,7 +1371,13 @@
         var att;
         try { att = nucleo.piatti(nucleo.attivi(S)); } catch (e) { rifiuta(m, "non_attivo"); return; }
         if (att.indexOf(String(m.comando)) < 0) { rifiuta(m, "non_attivo"); return; }
-        mossa(p[0], p[1], { giocatore: m.giocatore || null });
+        // Chi l'ha mandata (15/10): lo schermo da cui arriva (se non è questo, lo dice il
+        // server) e la voce riconosciuta (un segno opaco). Una mossa per il giocatore di un
+        // altro schermo o di un'altra voce si rifiuta e si dice a Calliope
+        var extra = { giocatore: m.giocatore || null, schermo: m.schermo || mioPosto, voce: m.voce || null };
+        var r = nucleo.chiMuove(S, p[0], extra);
+        if (!r.ok) { rifiuta(m, r.motivo); return; }
+        mossa(p[0], p[1], extra);
       });
     }
     // La finestra che cambia: la scala sempre, il disegno se cambia l'orientamento
@@ -1206,7 +1394,7 @@
       // I difetti del palco della pagina di adesso, nei due orientamenti
       palco: function () {
         var pag = nucleo.pagina(S), out = [];
-        ["orizzontale", "verticale"].forEach(function (O) { difettiPalco(pag, O).forEach(function (t) { out.push(t); }); });
+        (pag.orientamento ? [pag.orientamento] : ["orizzontale", "verticale"]).forEach(function (O) { difettiPalco(pag, O).forEach(function (t) { out.push(t); }); });
         return out;
       },
     };
@@ -1244,6 +1432,10 @@
     }
     if (cal && typeof cal.quandoPronto === "function") {
       cal.quandoPronto(function (avvio) {
+        // il numero dello schermo conta solo in una partita tra più schermi
+        var k = avvio && avvio.condivisa ? avvio.giocatore : null;
+        mioPosto = typeof k === "number" && k >= 1 && k <= 99 && Math.floor(k) === k ? k : null;
+        avvioTocco = !!(avvio && avvio.tocco === true);
         if (avvio && avvio.ruolo === "specchio") {
           // Uno schermo che si unisce a una partita condivisa: disegna lo stato di chi la tiene
           ruolo = "specchio";

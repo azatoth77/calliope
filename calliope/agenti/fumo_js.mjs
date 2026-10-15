@@ -270,7 +270,7 @@ async function prepara(file, opzioni = {}) {
   // attivi adesso (all'inizio tutti); un nome non dichiarato è un errore
   const dichiarati = opzioni.macchina ? tuttiPiatti(opzioni.macchina, opzioni.minimo || 1, opzioni.massimo || 1) : [];
   let attivi = dichiarati.slice();
-  const avvio = { partita: "P1", giocatore: 1, giocatori: opzioni.giocatori || 1, massimo: Math.max(opzioni.massimo || 1, opzioni.giocatori || 1), condivisa: false, storia: [], lingua: "it",
+  const avvio = { partita: "P1", giocatore: opzioni.posto || 1, giocatori: opzioni.giocatori || 1, massimo: Math.max(opzioni.massimo || 1, opzioni.giocatori || 1), condivisa: !!opzioni.condivisa, storia: [], lingua: "it",
     // la ripresa dopo «Riapri» e la partita condivisa con il motore (14/10), per le prove di
     // Calliope
     ...(opzioni.ripresa ? { ripresa: opzioni.ripresa } : {}),
@@ -295,9 +295,10 @@ async function prepara(file, opzioni = {}) {
     setInterval: (f, ms) => metti(f, ms, true), clearInterval: (id) => timer.delete(id),
     requestAnimationFrame: (f) => metti(f, 16, false), cancelAnimationFrame: (id) => timer.delete(id),
     queueMicrotask, structuredClone,
-    performance: { now: () => adesso }, innerWidth: 1024, innerHeight: 768, devicePixelRatio: 1,
+    performance: { now: () => adesso }, innerWidth: (opzioni.finestra || [])[0] || 1024, innerHeight: (opzioni.finestra || [])[1] || 768, devicePixelRatio: 1,
     navigator: { language: "it-IT", userAgent: "fumo", maxTouchPoints: 5 }, location: { href: "about:srcdoc", hash: "" },
-    getComputedStyle: () => ({ getPropertyValue: () => "" }), matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }),
+    getComputedStyle: () => ({ getPropertyValue: () => "" }), // un telefono o un tablet (15/10, «Gira il telefono»): con opzioni.tocco il puntatore è il dito
+    matchMedia: (q) => ({ matches: !!opzioni.tocco && /pointer:\s*coarse/.test(String(q)), addEventListener() {}, removeEventListener() {} }),
     addEventListener: (t, f) => finestra.addEventListener(t, f), removeEventListener() {},
     Image: function () { return new Nodo("img"); }, Audio: function () { return { play: () => Promise.resolve(), pause() {}, load() {}, addEventListener() {} }; },
     AudioContext: function () { return new Proxy({ currentTime: 0, sampleRate: 48000, destination: {}, state: "running", resume: () => Promise.resolve() }, { get: (o, k) => (k in o ? o[k] : () => new Proxy({ connect() {}, disconnect() {}, start() {}, stop() {}, frequency: { value: 0, setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {} }, gain: { value: 1, setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {} } }, { get: (x, kk) => (kk in x ? x[kk] : () => {}) })) }); },
@@ -312,6 +313,7 @@ async function prepara(file, opzioni = {}) {
   const riprese = [];              // lo stato per la ripresa mandato con ognuna
   const mosse = [];                // le mosse di uno specchio (partita condivisa)
   const rifiutati = [];
+  const gire = [];                 // «Gira il telefono» detto a Calliope (15/10)
   g.__calliopeMotore = Object.freeze({
     // L'istantanea (14/10, passo 2): i comandi a voce attivi sono i suoi; un nome non
     // dichiarato è un errore (il server la scarterebbe)
@@ -331,6 +333,7 @@ async function prepara(file, opzioni = {}) {
     quandoNome: quando("nome"),
     mossa: (x) => { mosse.push(JSON.parse(JSON.stringify(x || {}))); },
     palco: (d) => { palchi.push(d); },
+    gira: (o) => { gire.push(String(o)); },
   });
   const contesto = vm.createContext(g, { codeGeneration: { strings: false, wasm: false } });
   // Il caso del gioco con un seme fisso (12/10 sera): la stessa partita a ogni esecuzione
@@ -342,7 +345,7 @@ async function prepara(file, opzioni = {}) {
   }
   const amb = { errori, nota, nodi, radice, doc, tocchi, descrivi, lancia, evento, avanza,
                 respira, ascolti, attivi: () => attivi, dati, detti, caricato: false,
-                motore: null, giocoLogica: undefined, contesto, palchi, istantanee, rifiutati, riprese, mosse };
+                motore: null, giocoLogica: undefined, contesto, palchi, istantanee, rifiutati, riprese, mosse, gire, finestra, g };
   for (const f of file) {
     try { testi[base(f)] = readFileSync(f, "utf8"); } catch (e) { testi[base(f)] = ""; }
   }
@@ -452,7 +455,8 @@ export function esplora(amb, opzioni = {}) {
     const k = JSON.stringify(pag);
     if (pagineViste.has(k)) return true;
     pagineViste.add(k);
-    for (const O of ["orizzontale", "verticale"]) {
+    // una tela con un orientamento solo (15/10) si misura solo in quello
+    for (const O of (pag.orientamento ? [pag.orientamento] : ["orizzontale", "verticale"])) {
       const d = motore.difettiPalco(pag, O);
       if (d.length) {
         const e = new Error(d.join("; ") + ". La pagina la disegna Calliope: cambia i testi, i comandi attivi o il modello di pagina, non il disegno");
@@ -742,6 +746,16 @@ export async function apriGioco(file, opzioni = {}) {
     rifiutati: () => JSON.parse(JSON.stringify(amb.rifiutati)),
     riprese: () => JSON.parse(JSON.stringify(amb.riprese)),
     mosse: () => JSON.parse(JSON.stringify(amb.mosse)),
+    // «Gira il telefono» (15/10): gli orientamenti detti a Calliope, e la finestra che cambia
+    gire: () => amb.gire.slice(),
+    async finestra(w, h) {
+      amb.g.innerWidth = w; amb.g.innerHeight = h;
+      for (const f of [...(amb.finestra._h.resize || [])]) {
+        try { f(evento("resize", amb.doc)); } catch (e) { amb.nota("resize", e, { gestore: true }); }
+      }
+      await passa(opzioni.passo ?? 50);
+      return g;
+    },
     // un evento dal server sul canale del motore («partita», «autorevole», «nome»)
     async evento(tipo, dati) {
       for (const f of [...(ascolti[tipo] || [])]) {

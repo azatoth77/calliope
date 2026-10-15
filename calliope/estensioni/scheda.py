@@ -390,7 +390,9 @@ RUNTIME_JS = r"""(function () {
     },
     palco: function (difetti) {
       manda("palco", { difetti: Array.isArray(difetti) ? difetti.slice(0, 3).map(function (x) { return String(x).slice(0, 300); }) : [] });
-    }
+    },
+    // «Gira il telefono» (15/10): la tela vuole l'altro orientamento; Calliope lo dice una volta
+    gira: function (o) { manda("gira", { orientamento: o === "verticale" ? "verticale" : "orizzontale" }); }
   }) });
   manda("pronto", {});
 })();
@@ -428,6 +430,7 @@ STILE_MOTORE = (
     ".palco .giocatore.tocca{font-weight:bold;border-bottom:4px solid var(--accento)}"
     ".palco .giocatore.nome{border:0;background:none;color:var(--testo);cursor:pointer;"
     "padding:0 18px}"
+    ".palco .giocatore.mio{outline:3px dashed var(--primario);outline-offset:-3px}"
     ".palco .scrivi-nome{box-sizing:border-box;border:3px solid var(--primario);"
     "border-radius:var(--raggio);padding:0 12px;background:#fff;color:#222}"
     ".palco .avviso-nome{background:#fff3f3;color:#a00;text-align:center;margin:0}"
@@ -435,6 +438,9 @@ STILE_MOTORE = (
     ".palco .riga.tocca{outline:4px solid var(--accento)}"
     ".palco .riga.primo{background:var(--accento);color:#fff}"
     ".palco .tela{display:block;text-align:start}"
+    ".gira-telefono{position:fixed;left:0;right:0;top:0;margin:0;padding:10px 12px;"
+    "background:var(--accento);color:#fff;font-size:22px;font-weight:bold;text-align:center;"
+    "pointer-events:none;z-index:9}"
     ".errore-gioco{position:fixed;left:0;right:0;bottom:0;margin:0;padding:8px 12px;"
     "background:#fff3f3;color:#a00;font-size:18px;z-index:10}")
 

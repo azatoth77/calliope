@@ -816,7 +816,12 @@ for testo, atteso in [
         ("Come siamo messi?", "vince"), ("Chi ha vinto?", "vince"),
         ("Cosa posso dire?", "comandi"), ("Che cosa posso dire?", "comandi"),
         ("Quali sono i comandi?", "comandi"),
+        # chi è quale giocatore (15/10)
+        ("Che giocatore sono?", "io"), ("Calliope, quale giocatore sono io?", "io"),
+        ("Chi sono nel gioco?", "io"),
         # contrari: dentro una frase più lunga, altre domande (al giudice o al modello)
+        ("Chi sono?", None), ("Che giocatore sono stato ieri?", None),
+        ("Quale giocatore sono io secondo te?", None),
         ("A chi tocca adesso secondo te?", None), ("Tocca a te.", None), ("Tocca a Bianca.", None),
         ("Quanti punti ha Bianca?", None), ("Chi sta perdendo?", None),
         ("Quante porte restano?", None), ("Quanti punti ho fatto ieri a carte?", None),

@@ -53,6 +53,7 @@ from .. import gioco_voce
 STANDARD = ("preparazione", "esito", "fine")
 # I modelli di pagina del motore (motore_gioco.js, impagina): il disegno è di Calliope
 PAGINE = ("titolo", "scelte", "griglia", "messaggio", "punteggi", "classifica", "tela")
+ORIENTAMENTI = ("orizzontale", "verticale")
 MAX_FASI = 8
 MAX_COMANDI_FASE = 8
 MAX_VALORI = 24          # un elenco chiuso di valori
@@ -200,10 +201,10 @@ def normalizza(m, giocatori: dict) -> dict:
                           "«verso»)")
         if not isinstance(f, dict):
             _err(f".fasi.{nome}", "un oggetto {\"pagina\", \"turni\", \"verso\", \"comandi\"}")
-        altri = [k for k in f if k not in ("pagina", "turni", "verso", "comandi")]
+        altri = [k for k in f if k not in ("pagina", "turni", "verso", "comandi", "orientamento")]
         if altri:
             _err(f".fasi.{nome}", f"sconosciuto {', '.join(map(str, altri))} (solo pagina, "
-                                  "turni, verso, comandi)")
+                                  "turni, verso, comandi, orientamento)")
         pagina = str(f.get("pagina") or "scelte").strip().lower()
         if pagina not in PAGINE:
             _err(f".fasi.{nome}.pagina", f"una tra {', '.join(PAGINE)}")
@@ -215,10 +216,21 @@ def normalizza(m, giocatori: dict) -> dict:
         comandi = f.get("comandi") or {}
         if not isinstance(comandi, dict) or len(comandi) > MAX_COMANDI_FASE:
             _err(f".fasi.{nome}.comandi", f"al più {MAX_COMANDI_FASE} comandi")
+        # Una tela può dichiarare un orientamento solo (15/10, decisione 3 del 12/10): il palco
+        # è sempre quello, e sul telefono girato dall'altra parte lo schermo dice «Gira il
+        # telefono» (e Calliope una volta a voce). Le pagine di Calliope stanno in tutti e due
+        orient = f.get("orientamento")
+        if orient is not None:
+            if pagina != "tela":
+                _err(f".fasi.{nome}.orientamento", "solo una fase con la pagina «tela» (le altre "
+                                                   "pagine Calliope le disegna in tutti e due)")
+            if orient not in ORIENTAMENTI:
+                _err(f".fasi.{nome}.orientamento", f"uno tra {', '.join(ORIENTAMENTI)}")
         out_fasi[nome] = {"pagina": pagina, "turni": _bool(f.get("turni"), True),
                           "verso": [str(v) for v in verso],
                           "comandi": {k: _comando(f".fasi.{nome}.comandi", k, v)
-                                      for k, v in comandi.items()}}
+                                      for k, v in comandi.items()},
+                          **({"orientamento": orient} if orient else {})}
         if not out_fasi[nome]["comandi"] and pagina != "tela":
             _err(f".fasi.{nome}.comandi", "almeno un comando (una fase senza comandi non ha "
                                           "uscita; per un gioco libero c'è la pagina «tela»)")
@@ -305,8 +317,11 @@ def per_fase(m: dict, giocatori: dict) -> dict[str, list[str]]:
     restringerli. {fase: [piatti]}."""
     gmin, gmax = int(giocatori.get("min", 1)), int(giocatori.get("max", 1))
     prep = [piatto("giocatori", n) for n in range(gmin, gmax + 1)] if gmin < gmax else []
+    # «Gioco anch'io» a partita cominciata (15/10): nelle fasi del gioco (non in una tela) e
+    # nella fine, con più di un giocatore
+    entra = ["anchio"] if gmax > 1 else []
     out = {"preparazione": prep + list(STANDARD_PREPARAZIONE) + ["inizia"],
-           "esito": ["avanti"], "fine": ["ancora"]}
+           "esito": ["avanti"], "fine": ["ancora"] + entra}
     for fnome, f in (m.get("fasi") or {}).items():
         lista = []
         for cnome, c in f["comandi"].items():
@@ -314,6 +329,8 @@ def per_fase(m: dict, giocatori: dict) -> dict[str, list[str]]:
                 lista.append(piatto(cnome, v))
         if f["pagina"] == "tela":
             lista.append("fine_partita")
+        else:
+            lista += entra
         out[fnome] = lista
     return out
 
@@ -348,6 +365,11 @@ NOME_DEFAULT = re.compile(r"^Giocatore [1-9]$")
 # spazi e apostrofo, al più 20 caratteri, al più due parole
 NOME_CHIUSO = re.compile(r"^[A-Za-zÀ-ÖØ-öø-ÿ']+( [A-Za-zÀ-ÖØ-öø-ÿ']+)?$")
 CHIAVI_ISTANTANEA = {"n", "fase", "tocca", "turno", "giocatori", "esito", "comandi"}
+# Chi è quale giocatore (15/10): lo schermo (il numero del posto nella partita) e la voce (un
+# segno opaco che Calliope dà a ogni persona riconosciuta nella partita) legati a un giocatore
+CHIAVI_GIOCATORE = {"nome", "punti", "scritto", "schermo", "voce"}
+VOCE = re.compile(r"^v[1-9][0-9]?$")
+MAX_SCHERMO = 99
 MAX_NOMI_PARTITA = 64          # nomi diversi giudicati per partita (controlli in cache)
 
 
@@ -397,8 +419,14 @@ def valida_istantanea(ist, m: dict, giocatori: dict, ultimo_n: int = -1) -> dict
         no(f"«giocatori»: un elenco di al più {gmax}")
     puliti = []
     for i, g in enumerate(gs):
-        if not isinstance(g, dict) or set(g) - {"nome", "punti", "scritto"}:
-            no("un giocatore è {nome, punti, scritto}")
+        if not isinstance(g, dict) or set(g) - CHIAVI_GIOCATORE:
+            no("un giocatore è {nome, punti, scritto, schermo, voce}")
+        sch, vo = g.get("schermo"), g.get("voce")
+        if sch is not None and (not isinstance(sch, int) or isinstance(sch, bool)
+                                or not 1 <= sch <= MAX_SCHERMO):
+            no("«schermo» di un giocatore: il numero di un posto")
+        if vo is not None and (not isinstance(vo, str) or not VOCE.match(vo)):
+            no("«voce» di un giocatore: un segno «v1»")
         if "scritto" in g and not isinstance(g["scritto"], bool):
             no("«scritto» è vero o falso")
         p = g.get("punti", 0)
@@ -410,7 +438,9 @@ def valida_istantanea(ist, m: dict, giocatori: dict, ultimo_n: int = -1) -> dict
         puliti.append({"nome": nome if chiuso else f"Giocatore {i + 1}",
                        "punti": int(p) if float(p).is_integer() else round(float(p), 2),
                        **({} if chiuso else {"fuori_forma": True}),
-                       **({"scritto": True} if g.get("scritto") else {})})
+                       **({"scritto": True} if g.get("scritto") else {}),
+                       **({"schermo": sch} if sch is not None else {}),
+                       **({"voce": vo} if vo is not None else {})})
     tocca = ist.get("tocca")
     if tocca is not None and (not isinstance(tocca, int) or isinstance(tocca, bool)
                               or not (0 <= tocca < max(1, len(puliti)))):
@@ -425,6 +455,46 @@ def valida_istantanea(ist, m: dict, giocatori: dict, ultimo_n: int = -1) -> dict
         no(f"«esito»: un testo di al più {MAX_ESITO} caratteri")
     return {"n": n, "fase": fase, "tocca": tocca, "turno": turno, "giocatori": puliti,
             "esito": esito, "comandi": list(dict.fromkeys(comandi))}
+
+
+# ─────────────── chi è quale giocatore (15/10) ───────────────
+# Lo stesso criterio del motore (motore_gioco.js, chiMuove), sull'istantanea validata: il server
+# lo usa per dire a voce «Tocca ad Ada» invece di mandare al gioco una mossa che il motore
+# rifiuterebbe. Il motore resta il solo che decide (ricontrolla tutto)
+_DI_CALLIOPE = {"inizia", "avanti", "ancora", "fine_partita", "anchio"}
+
+
+def chi_muove(ist: dict, m: dict, comando: str, schermo: int | None = None,
+              voce: str | None = None) -> tuple[bool, str | None, int | None]:
+    """(vale, motivo, posizione del giocatore in questione) per un comando a voce piatto detto
+    dallo schermo `schermo` (il numero del posto) con la voce `voce` (il segno, o None se non è
+    riconosciuta). Motivi: «turno» (la voce è di un altro giocatore: la posizione è di chi è di
+    turno), «schermo» (chi è di turno gioca da un altro schermo), «gia» («gioco anch'io» da chi
+    gioca già: la sua posizione)."""
+    gs = ist.get("giocatori") or []
+    per_voce = next((i for i, g in enumerate(gs) if voce and g.get("voce") == voce), None)
+    if comando == "anchio":
+        if ist.get("fase") != "preparazione" and per_voce is not None:
+            return False, "gia", per_voce
+        return True, None, None
+    d = da_piatto(m or {}, comando)
+    fase = ist.get("fase")
+    f = (m.get("fasi") or {}).get(fase) if m else None
+    if d is None or d[0] in _DI_CALLIOPE or d[0] == "giocatori" or f is None:
+        return True, None, None
+    if not f.get("turni", True) or len(gs) <= 1:
+        return True, None, per_voce
+    t = ist.get("tocca")
+    if t is None or not 0 <= t < len(gs):
+        return True, None, None
+    if per_voce is not None and per_voce != t:
+        return False, "turno", t
+    if per_voce == t:
+        return True, None, t
+    s_t = gs[t].get("schermo")
+    if s_t and schermo and s_t != schermo:
+        return False, "schermo", t
+    return True, None, t
 
 
 def in_parole(m: dict) -> str:
