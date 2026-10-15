@@ -56,6 +56,14 @@ FORME = (
     # «Spendilo.» (07:14:44), «Spendilo pure.» (07:21:06): è anche una parola vera, quindi solo
     # il dato del turno
     ("sospendilo", re.compile(r"(?:so )?spendi(?: ?l[oa])?" + _OGGETTO)),
+    # «Che ore sono» detto subito dopo il nome (15/10, problema aperto dal 02/10: whisper.cpp
+    # non ha le hotwords): «Calliope. Chiori sono.», «Calliope, chiore sono.», «Elliope, chiore
+    # sono.», «Calliope, chi ore sono?», «Chiure sono.» (registrazioni vere del 21/09–01/10). Il
+    # modello rispondeva sulla parola o su chi parla («Sei Dario.»: e4b 0/8); con il dato del
+    # turno dice l'ora 8/8 (l'ora è già nei dati del turno). Non «chi sono», «chi sono io»,
+    # «cuori», e non «chi ora sono?» (anche quello visto, 3 volte): lì il dato non cambiava
+    # niente (0/4, «Sei Dario.»), e «chi» resta una domanda su chi parla
+    ("che ore sono", re.compile(r"(?:chi ?or[ei]|chiur[ei]|kior[ei]|che ori) sono")),
 )
 _VERBO = {"annulla": "annulla", "chiudilo": "chiudi", "sospendilo": "sospendi"}
 # Le forme vere: nessun suggerimento

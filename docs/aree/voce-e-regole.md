@@ -1269,7 +1269,9 @@ vede; sempre la frase intera, mai una parola dentro una frase):
    lavoro», con il lavoro, lo sviluppo, il programma, tutto), «chiudilo» (chiudin, chiudino,
    giudino, giudilo…; non le forme vere né «giudice», «giudizio»), «sospendilo» (spendilo, spendila,
    spendi, con lo sviluppo; non «spendi tutto»), e il nome storpiato davanti a una forma chiusa
-   («Alla ora, ok», «Luipe. Stop.» → «Calliope, ok/stop»). Al più 4 parole, tolti il nome, «anzi»,
+   («Alla ora, ok», «Luipe. Stop.» → «Calliope, ok/stop»); dal 15/10 «che ore sono» («Chiori
+   sono», «chiore sono», «chi ore sono», «Chiure sono»: [stt-tts](stt-tts.md), sezione «Chiori
+   sono»; e4b 0/8 → 8/8). Al più 4 parole, tolti il nome, «anzi»,
    «no», «niente» e i riempitivi in testa. Non decide niente: «Spendilo» è anche una parola vera.
    Nella **corsia veloce** (`risposte.forma_chiusa`, in ombra) solo «annulla» senza oggetto vale
    «no» (a una proposta: la chiude, si richiede).

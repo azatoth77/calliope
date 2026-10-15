@@ -4,7 +4,7 @@
 
 **Stato al 14/10.** Come al 09/10 (sotto), più: le forme chiuse storpiate da whisper.cpp (10/10), Whistle misurato e non adottato (10/10), la frase lunga che al tetto di 120 s si unisce al seguito (10/10), l'impronta che non si aggiorna in compagnia (12/10); la **conversazione di stanza** dal satellite e dal telefono (13–14/10, decisione 0029, spenta di serie): passo 0 (compagnia con le voci tutte riconosciute), passo 1 (sola trascrizione veloce in ombra, protocollo 3), il giudizio «rivolta a Calliope?» con le righe della stanza (passo 2), il taglio morbido dei segmenti e l'ascolto durante la voce di Calliope col filtro dell'eco (passo 5, `stanza_durante_voce`); i conoscenti (decisione 0030, sezioni in fondo); la **fine del turno System 1** (14/10 sera, Smart Turn sull'audio, spenta di serie, da misurare in ombra: sezione in fondo). Aperti come al 09/10.
 
-*Stato al 09/10 (storico): Whisper con whisper.cpp sulla DGX e senza correzione (variante A, scelta il 07/10), Piper con la prima frase a pezzi e sulla GPU secondo la macchina (07/10), CAM++ con il margine tra i profili e la continuità delle frasi cortissime (07–08/10), pause e fine del turno solo misurate (07/10), parole incerte negli argomenti dei tool (F0 e F1, 08/10), modalità compagnia accesa con il giudizio «rivolta a Calliope?» in ombra (09/10). Aperti: whisper.cpp senza hotwords («Chiori sono»), le voci di famiglia al telefono da registrare di nuovo per canale, le cuffie Bluetooth mute.*
+*Stato al 09/10 (storico): Whisper con whisper.cpp sulla DGX e senza correzione (variante A, scelta il 07/10), Piper con la prima frase a pezzi e sulla GPU secondo la macchina (07/10), CAM++ con il margine tra i profili e la continuità delle frasi cortissime (07–08/10), pause e fine del turno solo misurate (07/10), parole incerte negli argomenti dei tool (F0 e F1, 08/10), modalità compagnia accesa con il giudizio «rivolta a Calliope?» in ombra (09/10). Aperti: whisper.cpp senza hotwords («Chiori sono», *storico: dal 15/10 un dato del turno, sezione in fondo*), le voci di famiglia al telefono da registrare di nuovo per canale, le cuffie Bluetooth mute.*
 
 ## Moduli
 
@@ -760,7 +760,7 @@ ricominciava.», «Calliope ricominciavo.», «E lì appena ricominciamo.», «D
 (`wakeword.prefisso_nome`). Le regole e le misure (5 «ricominciamo» storpiati e 12 dati del turno
 su 1299 frasi vere, nessun falso) sono in [voce-e-regole](voce-e-regole.md), «Forme chiuse
 storpiate da Whisper». Il rimedio alla radice resta un'hotword o un prompt per whisper.cpp
-(problema aperto «Chiori sono»).
+(problema aperto «Chiori sono»; *storico al 15/10*: «Chiori sono» è diventato una forma del dato del turno, sezione in fondo).
 
 ## Whistle (Cactus Compute) misurato sulla voce vera (10/10, ramo `misura-whistle`)
 
@@ -1412,3 +1412,25 @@ scelta per le 39 diverse, l'originale per le 56 uguali) ritrascritte da `turni` 
 vinti/persi/pari contro `turni`, tempo mediano). **Obiettivo per riaccendere la ritrascrizione**:
 un `lento*` con la WER sotto quella di `turni`; allora `stanza_lenta_stt_url` nel locale (e, se
 vince senza prompt, `stanza_lenta_prompt: no`). Comandi in [setup-dgx](setup-dgx.md).
+
+## «Chiori sono»: «che ore sono» storpiato diventa un dato del turno (15/10, ramo `correzioni-15-10`)
+
+Problema aperto dal 02/10: whisper.cpp non ha le hotwords, e «Calliope, che ore sono?» detto d'un
+fiato arriva come «Calliope. Chiori sono.». Nelle registrazioni vere (21/09–01/10, misura di
+Whistle, `privato/misura-whistle/dettaglio.tsv`) le forme sono «chiore sono» (11 volte),
+«Chiori sono», «chi ore sono», «Chiure sono», «chi ora sono» (3) e, col nome storpiato, «Elliope,
+chiore sono.», «Per lì o per, chiore sono.». Il modello rispondeva sulla parola («La parola "Chiori"
+non è un termine comune») o su chi parla: e4b in locale **0/8** su «Calliope. Chiori sono.» e
+«Calliope, chiore sono?» («Sei Dario.»).
+
+Rimedio sul testo, come le altre forme chiuse storpiate (principio 10: la trascrizione è ciò che
+il modello non vede): `storpiature.FORME` ha la forma «che ore sono» (`chiore`, `chiori`, `chi
+ore`, `chiure`, `kiori`, `che ori` + «sono», la frase **intera** tolti il nome e i riempitivi);
+il modello riceve il dato del turno «…«Chiori sono» potrebbe essere «che ore sono»…» (regola
+`forma_storpiata`, campo `forma_storpiata` nel registro). Decide il modello, e l'ora è già nei dati
+del turno: **8/8** «Sono le 6:53.». Contrari in `prove/prova_storpiature.py`: «Calliope, chi
+sono?», «Chi sono io?», «Chi sono loro?», «Che ora è?», «I cuori sono rossi.», «Chiori.», «Le
+chiore sono finite in cantina ieri sera.». Lasciata fuori «chi ora sono?»: col dato il modello
+rispondeva ancora «Sei Dario.» (0/4), e «chi» resta una domanda su chi parla. Non presa: «Per lì
+o per, chiore sono.» (sei parole: il nome storpiato in quattro). Il rimedio alla radice (un
+prompt o un'hotword per whisper.cpp) resta da trovare.
