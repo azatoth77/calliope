@@ -18,6 +18,14 @@ fase** capisce le mosse dette con altre parole («apri la terza»); «**gioco an
 scritti** sostituiscono «Giocatore N»; dopo «**Riapri**» la partita riprende; le **partite
 condivise** tra schermi hanno un motore solo. Vedi «Lo stato della partita» in fondo.
 
+**15/10.** **Chi è quale giocatore**: «gioco anch'io» lega un giocatore allo schermo da cui è
+detto o toccato e alla voce riconosciuta (un segno opaco, «v1»); in una fase a turni la mossa vale
+solo per chi è di turno (la sua voce, o il suo schermo), e Calliope dice «Tocca ad Ada.» a chi
+prova a muovere per un altro; «che giocatore sono?»; chi dice «gioco anch'io» a metà entra
+subito (con `GIOCO.entra`) o dalla prossima partita. **«Gira il telefono»**: una tela può
+dichiarare un orientamento solo; sul telefono girato dall'altra parte una fascia lo dice e
+Calliope una volta a voce, senza fermare il gioco. Vedi «Chi è quale giocatore» in fondo.
+
 **14/10.** Ogni pagina si disegna su un **palco fisso** (1280×720, 720×1280 sul telefono in verticale) scalato alla finestra, con sei modelli di pagina più la tela; la prova di fumo **misura il palco** di ogni pagina e lo dice all'agente come un errore da correggere, e il motore misura anche lo schermo vero. La macchina a stati è l'**unico formato**: i giochi vecchi (gioco.js libero, `ascolta` piatto) non si approvano né si aprono più. Vedi «Il palco fisso» in fondo.
 
 ## Moduli
@@ -27,6 +35,7 @@ condivise** tra schermi hanno un motore solo. Vedi «Lo stato della partita» in
 | Giochi e schede interattive delle estensioni (05/10) | JavaScript nel browser degli schermi in un `<iframe sandbox="allow-scripts">` (origine opaca, CSP senza rete, script con l'impronta), ponte `postMessage` controllato dalla pagina e dal server; test della logica con Node in un container (`Dockerfile.node`) | `calliope/estensioni/scheda.py` (sezione «scheda» del manifesto, gioco puro, `documento`, `RUNTIME_JS`, `analizza_js`); `calliope/schermi/giochi.py` → `Giochi` (partite, `GET /gioco/<gettone>`, `POST /api/gioco`), `AzioneGioco`; cane da guardia in `schermo.js`; `minori.TempoGioco`, `minori.Richieste`, tool `richiesta_tutore`; `calliope/agenti/test_js.mjs`, prova di fumo `calliope/agenti/fumo_js.mjs`; comandi a voce (11/10) `calliope/gioco_voce.py` (forme e regola `gioco_comando`), `Giochi.ascolto`, `Giochi.comando`, `Giochi.schermi_voce`, `Ciclo._comando_gioco`, tool `gioco_comando` in `tools/schermi.py`; rapporto [`docs/ricerche/2026-10-05-giochi.md`](../ricerche/2026-10-05-giochi.md) |
 | Macchina a stati dei giochi (13/10) | JavaScript senza dipendenze, lo stesso file nel riquadro e in Node | `calliope/estensioni/macchina.py` (validazione di `scheda.macchina`, comandi piatti `ascolta`, `in_parole`); `calliope/estensioni/motore_gioco.js` (CalliopeMotore.crea: il nucleo puro; CalliopeMotore.avvia: disegno, pulsanti, voce); `scheda.documento` (motore e avvio nel riquadro, `STILE_MOTORE`); `calliope/agenti/fumo_js.mjs` (esplora, tuttiPiatti, apriGioco con g.stato()); esempi di accettazione `agenti/accettazione.py` (`test_js`, `FILE_GIOCO`); progetto [`2026-10-12-giochi-macchina-stati.md`](../ricerche/2026-10-12-giochi-macchina-stati.md) |
 | Stato della partita, domande, giudice, nomi, ripresa, partite condivise (14/10 sera) | Python e JavaScript senza dipendenze; il giudice sul modello del giudizio «rivolta» (Ollama, uscita vincolata) | `estensioni/macchina.py` (`valida_istantanea`, `per_fase`, `da_piatto`, `nome_chiuso`); `schermi/giochi.py` (`_t_stato`, `_t_rifiutato`, `_t_mossa`, `_nomi_detti`, `Posto.istantanea`, `Posto.ripresa`, `Partita.tiene`, `motore_condiviso`); `calliope/gioco_stato.py` (domande standard, `anchio_nome`, la riga dei dati del turno); `calliope/gioco_giudice.py`; `Ciclo._comando_gioco`, `Ciclo._giudice_di_fase`; `motore_gioco.js` (`perCalliope`, `rinomina`, `riprendi`, autorevole e specchio); `scheda.RUNTIME_JS` (canale del motore); `schermo.js` (i tipi nuovi) |
+| Chi è quale giocatore, «Gira il telefono» (15/10) | Python e JavaScript senza dipendenze | `motore_gioco.js` (`chiMuove`, `legame`, `iscritti`/`entrano`, `GIOCO.entra`, il posto dello schermo e la fascia «Gira il telefono»); `macchina.py` (`chi_muove`, i legami nell'istantanea, `orientamento` di una tela, «anchio» a partita cominciata in `per_fase`); `schermi/giochi.py` (`Partita.voci`/`voce_di`, `turno_altrui`, `_t_gira`, lo schermo nelle mosse); `gioco_stato.py` (domanda «io», `_dove`); `Ciclo._turno_altrui`; `schermo.js` (`gira`, `schermo` e `voce` verso il riquadro, il tocco all'avvio, `alDito`) |
 | Palco fisso e modelli di pagina (14/10) | JavaScript senza dipendenze: l'impaginazione è una funzione pura, la stessa nel riquadro e in Node | `motore_gioco.js`: `impagina` (contenuto della pagina → scatole sul palco), `controllaPalco`, `difettiPalco`, il nucleo `pagina(S)`, la misura vera nel riquadro (`misuraVera` → canale `palco`); `macchina.PAGINE`; `scheda.RUNTIME_JS` (il canale riservato al motore), `STILE_MOTORE` (il palco, niente scroll); `calliope/agenti/fumo_js.mjs` (il palco nell'esploratore, `g.palco()`); `schermi/giochi.py` (`_t_palco`, `Posto.palco`); `prove/giochi/pagine` |
 
 ## Problemi noti
@@ -808,7 +817,8 @@ sarebbe l'autorevole e gli altri riceverebbero istantanee e vista». Fatto così
   `quandoPartita`, `quandoAutorevole`, `quandoSpecchio`, `quandoNome` e `mossa` (il codice del
   gioco non li vede). L'agente non scrive niente in più (una riga nel contratto: con
   `"condivisa": true` la partita la tiene un motore solo).
-- **Cosa non fa** (da decidere se serve): chi è quale giocatore. I turni restano quelli del
+- **Cosa non fa** (da decidere se serve; *storico dal 15/10: fatto, vedi «Chi è quale
+  giocatore» qui sotto*): chi è quale giocatore. I turni restano quelli del
   motore (`tocca`), e ogni schermo può muovere quando tocca a qualcuno: va bene per giocare
   insieme da due stanze, non impedisce a uno schermo di muovere per l'altro. Una tela condivisa
   resta com'era (ogni schermo il suo motore, i messaggi con `manda`).
@@ -827,9 +837,10 @@ test che riproduce in `gioco.test.js`, il tetto con e senza la riproduzione). Ni
 
 ### Cosa resta, e il giro sulla DGX
 
-**Resta del progetto**: «Gira il telefono» per una tela che dichiara un orientamento solo
-(decisione 3, non fatto); la diagnosi del palco detta a voce al collaudo; nelle partite
-condivise, chi è quale giocatore (oggi ogni schermo muove quando tocca a qualcuno); il giudice
+**Resta del progetto** (*storico dal 15/10: «Gira il telefono» e chi è quale giocatore sono
+fatti, vedi «Chi è quale giocatore» qui sotto*): «Gira il telefono» per una tela che dichiara un
+orientamento solo (decisione 3, non fatto); la diagnosi del palco detta a voce al collaudo; nelle
+partite condivise, chi è quale giocatore (oggi ogni schermo muove quando tocca a qualcuno); il giudice
 senza il nome (decisione 2: da decidere dopo la misura); la partita come attività della macchina
 a stati del dialogo (§ 4 del progetto, «in futuro»). La prova del palco nel browser della DGX
 (passo 8) resta scartata (decisione 4).
@@ -849,3 +860,117 @@ telefono, sono file statici):
   ignora (`gioco_finestra_ignorata`) per decidere `giochi_giudice_senza_nome`;
 - nel registro dell'estensione: `gioco_stato_non_valido` (deve restare 0 con un gioco sano),
   `gioco_comando_vecchio`, `gioco_nome_fermato`, `gioco_partita_passata`.
+
+## Chi è quale giocatore e «Gira il telefono» (15/10, ramo `giochi-giocatori`)
+
+Roadmap 1.4, ciò che restava del progetto
+[`2026-10-12-giochi-macchina-stati.md`](../ricerche/2026-10-12-giochi-macchina-stati.md) dopo il
+14/10 sera (decisione 3 di chi amministra: «Gira il telefono» per una tela). Prima ogni schermo
+di una partita condivisa poteva muovere quando toccava a qualcuno, e su uno schermo solo la voce
+di Bruno muoveva per Ada; la tela orizzontale sul telefono in verticale si vedeva piccola senza
+che nessuno lo dicesse.
+
+### Il legame: schermo e voce
+
+- **Lo schermo** è il numero del posto nella partita (`Posto.giocatore`, 1, 2…: lo dà il server al
+  «pronto» e lo manda all'avvio). Conta solo in una partita **tra più schermi** (`avvio.condivisa`):
+  su uno schermo solo nessun giocatore è legato a uno schermo e le mosse non lo portano. I tocchi
+  dello schermo che tiene la partita portano il suo numero; quelli di uno specchio arrivano al
+  motore con il numero **messo dal server** (`_t_mossa`), mai dallo specchio; le mosse a voce, tra
+  più schermi, con il numero dello schermo del satellite che le ha sentite (`Giochi.comando`).
+- **La voce** è un **segno opaco** per partita («v1», «v2»…, `Partita.voci`, `voce_di`): Calliope
+  lo dà a ogni persona riconosciuta dalla voce in quella frase (lo stesso criterio di sempre:
+  sopra soglia, margine, lunghezza; mai la zona grigia né gli ospiti). Al riquadro arriva solo il
+  segno (in un gioco per più giocatori), mai il nome se il manifesto non chiede
+  `macchina.giocatore`: il gioco non sa chi è. Un segno che Calliope non ha dato non lega nessuno
+  (il server lo toglie dall'istantanea).
+- **Il legame nasce con «gioco anch'io»** (detto o toccato): il motore tiene gli iscritti della
+  preparazione con nome, schermo e voce (`S.iscritti`) e li porta nei giocatori (`schermo`,
+  `voce` nell'istantanea, validati da `macchina.valida_istantanea`: numero da 1 a 99, segno
+  `v1`–`v99`). La stessa voce due volte non prende due posti. Con «N giocatori» o «Inizia» senza
+  «gioco anch'io» i giocatori restano **liberi**: chiunque muove quando tocca a loro, come prima.
+
+### Chi muove (`chiMuove` nel motore, `macchina.chi_muove` sul server)
+
+Solo per le mosse del gioco in una fase **a turni** con più di un giocatore (i comandi di Calliope,
+«avanti», «ancora», «inizia», valgono per tutti):
+- la **voce** di un altro giocatore → rifiutata (`turno`); la voce di chi è di turno → vale anche
+  da un altro schermo; una voce che non gioca (qualcuno che aiuta) passa allo schermo;
+- lo **schermo** di un altro giocatore, quando la voce non è riconosciuta → rifiutata (`schermo`);
+- una mossa senza voce riconosciuta da uno schermo con più giocatori (uno schermo, due persone)
+  vale per chi è di turno: un comando di una parola è spesso troppo corto per l'impronta, e il
+  tocco non dice chi tocca. È il limite noto: lì decide il turno.
+
+Nelle fasi **senza turni** non si rifiuta niente, ma i punti (e `ctx.chi`) vanno a **chi ha
+mosso** se si sa (la sua voce, o il suo schermo con un giocatore solo), non a «chi tocca».
+
+Dove: il motore è il solo che decide (un tocco sullo schermo sbagliato non parte e lo dice un
+avviso sul palco, «Tocca a Giocatore 1, sull'altro schermo.»; una mossa a voce o di uno specchio
+che non vale torna a Calliope come `rifiutato` con il motivo). Il server fa lo stesso controllo
+sull'ultima istantanea valida **prima** di mandare una mossa a voce (`Giochi.turno_altrui`), così
+Calliope può dire «Tocca ad Ada.», «Tocca ad Ada, sullo schermo «Cucina».» o «Sei già nella
+partita: sei Ada.» invece di tacere (`Ciclo._turno_altrui`, anche per il giudice di fase e il tool
+`gioco_comando`; regola `gioco_turno_altrui`, esito `gioco_turno_altrui`, niente testo nel
+registro). È un vincolo sullo stato della partita, non una regola sul testo (principio 10).
+
+### Le domande
+
+«A chi tocca?» risponde «Tocca a te.» a chi è riconosciuto dalla voce **legata** al giocatore di
+turno (prima solo se il nome del giocatore era il suo), e aggiunge lo schermo quando il giocatore
+gioca da un altro («Tocca a Bruno, sullo schermo «Cucina».»); «quanti punti ho?» dalla voce
+legata. Nuova domanda standard (regola `gioco_stato_detto`, per intero; contrari in
+`prova_testo`): «che giocatore sono?», «quale giocatore sono (io)?», «chi sono nel gioco?» →
+«Sei Ada.» dalla voce, «Su questo schermo gioca Ada.» dallo schermo, oppure come entrare. «Chi
+sono?» da solo resta al modello. `Giochi.ascolto` porta per questo il numero dello schermo, i nomi
+degli schermi della partita e i segni (restano dentro Calliope).
+
+### Chi entra a metà
+
+«Gioco anch'io» vale anche a partita cominciata (nelle fasi del gioco che non sono una tela, e
+nella fine), finché c'è posto: **solo a voce** (la pagina del gioco non cambia: niente pulsante in
+più che sposti il palco; `g.stato()` dei test dell'agente non lo mostra). Senza altro, chi entra
+**gioca dalla prossima partita** (un avviso «Si gioca in più dalla prossima partita.», poi «ancora»
+lo mette in fondo): la logica ha già preparato i dati per chi c'era. Se la logica dichiara
+`GIOCO.entra(dati, ctx)` (`ctx.nuovo`: la posizione del nuovo) entra **subito**, a zero punti, e
+gioca quando arriva il suo turno; la forma dei dati si controlla come per `nuovaPartita`. La stessa
+voce due volte, o chi gioca già, no («Sei già nella partita…»). Il contratto lo dice in una riga.
+
+### «Gira il telefono»
+
+- Una fase con la pagina `tela` può dichiarare `"orientamento": "orizzontale"` (o `"verticale"`);
+  `macchina.normalizza` lo rifiuta su un'altra pagina (le pagine di Calliope stanno nei due
+  orientamenti) e con un altro valore. Il palco di quella tela è **sempre** quello dichiarato
+  (1280×720 scalato su un telefono in piedi resta giocabile, solo piccolo: niente blocco).
+- Sul telefono (o un tablet) girato dall'altra parte una **fascia** in alto, sopra il gioco e
+  senza prendere i tocchi (`.gira-telefono`, `pointer-events: none`), dice «Gira il telefono in
+  orizzontale»; girato, sparisce (il motore ridisegna al cambio d'orientamento). Su un PC o una TV
+  la finestra non si gira: niente fascia. Il «telefono» lo dice la pagina degli schermi
+  all'avvio (`avvio.tocco`, `pointer: coarse` della pagina) o il riquadro stesso: il riquadro gira
+  in un processo suo e in Edge non vede l'emulazione del tocco della pagina (trovato dalla prova).
+- **Calliope lo dice a voce una volta**: il motore manda `gira` (canale riservato, una volta per
+  riquadro), la pagina lo passa (`TIPI_DAL_RIQUADRO`), il server (`_t_gira`) mette una frase sua
+  («Per questo gioco gira il telefono in orizzontale.») tra le frasi dei giochi una volta per
+  schermo e partita (`Posto.gira_detto`, anche dopo «Riapri»), regola `gioco_gira_telefono`. Vale
+  anche in una partita di prova (`TIPI_PROVA`): è una frase di Calliope, non un ponte.
+- La prova di fumo e `g.palco()` misurano una tela orientata solo nel suo orientamento.
+
+**Profilo da 8 GB**: niente (browser, confronti e frasi dal codice). **Latenza**: il controllo di
+chi muove è sull'istantanea già in memoria; la voce di chi parla si aspetta (l'impronta corre già
+con Whisper) anche nei giochi per più giocatori senza `giocatore`, come per «a chi tocca?».
+
+**Per l'agente**: due righe in più nel §5 del contratto (`GIOCO.entra`, `orientamento` di una
+tela), da 6 964 a 7 378 caratteri (~120 token con il rapporto 3,47 di Qwen3.6); niente da
+scrivere per i legami.
+
+**Prove**: `prova_gioco_giocatori` (a secco, ~2 s: i quattro casi nel motore, il server, le
+domande, il ciclo, «Gira il telefono»), `prova_gioco_stato_pagina` (Edge: «Gioco anch'io» toccato
+sulle due pagine di una partita condivisa e il tocco sulla pagina dell'altro che non muove; un
+telefono finto 390×844 con una tela orizzontale, la fascia nel riquadro vero e la frase detta una
+volta), le attese aggiornate di `prova_gioco_stato`, `prova_giochi_pagina` e `prova_testo`.
+
+**Da fare sulla DGX** (dopo `calliope aggiorna`, ricaricando le pagine): una partita condivisa da
+due schermi con «gioco anch'io» toccato su ognuno, poi provare a muovere dallo schermo sbagliato;
+su uno schermo con due persone «gioco anch'io» detto da tutte e due e «porta tre» detto da chi
+non è di turno (Calliope: «Tocca a …»); «che giocatore sono?»; quanto spesso la voce di una mossa
+è riconosciuta (se quasi mai, su uno schermo solo decide sempre il turno): `calliope stato
+--turni`, esito `gioco_turno_altrui`. Un gioco con una tela orizzontale sul telefono in piedi.
