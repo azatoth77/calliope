@@ -2150,3 +2150,12 @@ turno 2 sempre. **Da fare sulla DGX** col 26B:
 
     cd ~/calliope && V=~/.local/share/calliope/versioni/$(cat ~/.local/share/calliope/attuale) \
         && $V/.venv/bin/python $V/prove/manuali/banco_stanza_storpiata.py --giri 5
+
+**Col 26B sulla DGX (15/10, 5 giri per modo)**: la correzione non basta. Medaglie entrambe ricostruite
+prima 1/5, dopo 0/5 (l'argento sempre, «OR» per l'oro mai); turno 5 che nega l'oro prima 3/5, dopo
+2/5; nome giusto subito dopo la correzione 5/5 in entrambi i modi (nel caso vero no: lì la riga
+era nel prefisso già letto); turno 4 ripetuto prima 2/5, dopo 3/5, con `domanda_insistita` scattata
+5/5 e una passata in più quando la spinta trattiene (prima frase 2,13 s). Il «mi è sembrato di…»
+c'è quasi sempre. Il limite è la trascrizione: una parola tronca come «OR» il modello non la
+ricostruisce; da guardare la ritrascrizione del solo segmento (l'audio del banco c'è) e la rete
+`domanda_insistita`, che costa senza effetto misurato.
