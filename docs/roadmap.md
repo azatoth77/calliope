@@ -349,7 +349,7 @@ voce raccontava male gli esiti, i comandi del flusso si perdevano.
     del turno** con Smart Turn v3.2 sull'audio (ombra sul server per ogni frase, attiva nel
     `Listener`); resta lo script sulla voce conservata della DGX
     (`prove/manuali/fine_turno_dgx.py`), una settimana d'ombra, poi «attiva» su un satellite e il
-    telefono con onnxruntime-web. Casi successivi, nell'ordine proposto: **comandi semplici con
+    telefono con onnxruntime-web. *[15/10: la **preselezione dei tool** misurata sulla DGX (richiamo 84 % sui turni veri, +0,4–0,5 s a ogni cambio d'insieme) non conviene ed è spenta; fatta, spenta di serie, la **frase dopo il tool** (`system1_dopo_tool`: per gli esiti chiusi niente seconda passata del modello), da tenere in ombra sulla DGX con lo script `prove/manuali/dopo_tool_dgx.py`; criterio per «attivo»: almeno 50 confronti, frasi diverse sotto il 5 %, nessun altro tool chiamato dopo, risparmio p50 ≥ 0,5 s.]* Casi successivi, nell'ordine proposto: **comandi semplici con
     FunctionGemma** (luci, ore, timer senza il modello grande; il grande quando il piccolo è
     incerto o il comando è fuori dall'elenco chiuso), **preselezione dei tool** (i 5–10 probabili
     tra i 78, misura già in `scelta_tool.py`), **giudizio «rivolta a Calliope?»** (oggi in ombra con
