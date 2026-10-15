@@ -257,6 +257,11 @@ def giorno_giusto(delta: int):
 # data_calcola (05/10 sera) vale anche per i giorni: «domani», «ieri» sono date come dette
 ORA, DATA, CHI = ("ora_attuale", None), ("data_oggi", "data_calcola", None), ("chi_parla", None)
 
+# Un ruolo dato come nome nella risposta: «Vuoi che ti chiami Amministratore?», «ti chiamo il
+# padrone di casa» (15/10)
+RUOLO_COME_NOME = re.compile(r"\bchiam\w*\s+(?:l'|il |la )?(?:amministrat|chi amministra|"
+                             r"padron|propriet|mamm|pap[aà]\b)", re.I)
+
 # (sessione, chi, livello, frase, atteso, vietati, controllo(risposta) o None, storia iniziale)
 # atteso: nome di tool, tupla di tool ammessi (None nella tupla = anche nessun tool), oppure
 # None = nessun tool. vietati: tool che non devono essere chiamati.
@@ -303,6 +308,15 @@ CASI = [
      ("rinomina_interlocutore",), lambda r: not re.search(r"\bti chiamo\b", r, re.I), None),
     ("chi_garbato2", "Dario", "amministra", "Calliope e chiamo risonò.", ("chi_parla", None),
      ("rinomina_interlocutore",), lambda r: not re.search(r"\bti chiamo\b", r, re.I), None),
+    # Un ruolo o una parentela non sono un nome (15/10, 26B sulla DGX: «Scusa, io sono chi
+    # amministra» → rinomina_interlocutore(nome="Amministratore")). Il tool rifiuta il ruolo
+    # (regola `rinomina_ruolo`): la chiamata è ammessa, ma la risposta non deve proporre né
+    # dichiarare il ruolo come nome
+    *[(f"ruolo{i}", "Dario", "amministra", frase, (None, "chi_parla", "rinomina_interlocutore"),
+       (), lambda r: not RUOLO_COME_NOME.search(r), None)
+      for i, frase in enumerate(("Scusa, io sono chi amministra.", "Sono l'amministratore.",
+                                 "Calliope, sono io che amministro.",
+                                 "Sono il padrone di casa.", "Sono il papà."))],
     # Casi contrari: rinominare quando lo chiede. Col tool (proposta) o con la domanda detta
     # a parole (04/10, 26B: «Vuoi davvero che ti chiami Davide?»), poi al «sì» rinomina
     ("rinomina", "Dario", "amministra", "D'ora in poi chiamami Davide.",

@@ -32,7 +32,7 @@ from .spec import ToolSpec, ToolContext, note_rule
 from ..agenda import is_cancel_all
 from .. import tempi
 from ..schermi import schede
-from ..testi import ADMIN, ALL, FAMILY, MESI, NIENTE
+from ..testi import ADMIN, ALL, FAMILY, MESI, NIENTE, ruolo_non_nome
 
 
 def _hub(ctx):
@@ -199,6 +199,19 @@ def _rinomina_interlocutore(ctx: ToolContext, nome: str) -> dict:
     new = _clean_name(nome)
     if not new:
         return {"ok": False, "errore": "nome vuoto"}
+    # Un ruolo o una parentela non sono un nome (15/10, 26B sulla DGX: «Scusa, io sono chi
+    # amministra» → nome="Amministratore"). Vincolo di forma sull'argomento scelto dal modello,
+    # per intero (principio 10, testi.ruolo_non_nome); vale anche per «chiamami Ospite» detto
+    # apposta: il nome del profilo è l'identità in tutta la casa (saluti, annunci, tutori), e
+    # un ruolo come nome si confonde con il livello di permesso (voce-e-regole, 15/10)
+    ruolo = ruolo_non_nome(new)
+    if ruolo:
+        note_rule(ctx, "rinomina_ruolo")
+        return {"ok": False, "fatto": NIENTE,
+                "errore": (f"«{new}» è un ruolo o una parentela, non un nome: il nome non "
+                           f"cambia. Se la persona voleva dire chi è, la riconosco dalla voce: "
+                           f"è {old}. Se vuole essere chiamata in un altro modo, chiedile il "
+                           f"suo nome.")}
     if new == old:
         return {"ok": True, "nome": new, "conferma": f"Ti chiamo già {new}."}
     # Il nome di un'altra persona registrata: rename() sovrascriverebbe il suo profilo
@@ -1903,7 +1916,8 @@ _SPECS = [
                      "chiede di essere chiamato in un altro modo («d'ora in poi chiamami "
                      "Davide»): chiamalo subito, senza chiedere tu se ne è sicura, perché "
                      "la domanda di conferma la fa il tool. Il nome cambia solo se la "
-                     "persona dice di sì: allora richiamalo con lo stesso nome."),
+                     "persona dice di sì: allora richiamalo con lo stesso nome. Un ruolo o "
+                     "una parentela non è un nome."),
         parameters={"type": "object",
                     "properties": {"nome": {"type": "string"}},
                     "required": ["nome"]},

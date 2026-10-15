@@ -1973,3 +1973,53 @@ le opzioni e le misure sono nella ricerca
     ritorno, e il lavoro del server fuori dal modello.
   - I criteri proposti per un modo «attiva» sono nella ricerca, § 6. Se il risparmio a cache
     calda non c'è, la preselezione resta una misura.
+
+## Un ruolo non è un nome: la regola `rinomina_ruolo` (15/10, ramo `rinomina-ruolo`)
+
+**Caso vero** (regressione col 26B sulla DGX, 15/10): la persona dice «Scusa, io sono chi
+amministra» (varianti: «sono l'amministratore», «sono io che amministro», «sono il padrone di
+casa», «sono la mamma», «sono il papà») e il modello chiama
+`rinomina_interlocutore(nome="Amministratore")`. La conferma del 02/10 fermava il cambio vero, ma
+Calliope chiedeva «Vuoi che ti chiami Amministratore d'ora in poi?», e un «sì» distratto lo
+avrebbe fatto diventare il nome del profilo.
+
+- **La correzione** è un vincolo di forma sull'argomento già scelto dal modello (principio 10):
+  `testi.ruolo_non_nome` confronta il nome **per intero**, senza accenti e maiuscole, con un
+  elenco chiuso (`testi.RUOLI_NON_NOME`: amministratore/amministratrice, chi amministra, admin,
+  padrone/padrona, proprietario, capofamiglia, capo, mamma, papà, babbo, nonno, nonna, figlio,
+  figlia, fratello, sorella, marito, moglie, zio, zia, tutore, ospite, utente, signore,
+  signora…), dopo aver tolto articoli e possessivi davanti («la mia mamma») e un complemento con
+  «di» dopo («padrone di casa», «mamma di Bianca»). Mai una parola dentro il nome: «Mamo»,
+  «Capotondi», «Admira», «Nonnis», «Papageno», «Ospitaletti» e «Zio Gino» restano nomi.
+- **Dove**: in `_rinomina_interlocutore`, prima della proposta. Il tool non propone e torna al
+  modello un esito in parole (`ok: false`, `fatto: NIENTE`): «“Amministratore” è un ruolo o una
+  parentela, non un nome: il nome non cambia. Se la persona voleva dire chi è, la riconosco dalla
+  voce: è Dario. Se vuole essere chiamata in un altro modo, chiedile il suo nome.» Regola
+  `rinomina_ruolo` nel registro dei turni. La stessa funzione vale in
+  `wakeword.risposta_al_nome` (la risposta a «Vuoi dirmi il tuo nome?» dopo la registrazione di
+  Primo/Prima): «Mamma.» o «Sono Amministratore.» non sono più un nome in forma chiusa e vanno al
+  modello (regola `nome_vero_al_modello`, come ogni altra frase).
+- **«Chiamami Ospite» detto apposta**: si rifiuta anche così. Il tool vede solo l'argomento e non
+  può distinguere la richiesta esplicita dalla descrizione; il nome del profilo è l'identità in
+  tutta la casa (saluti, annunci agli altri, tutori, `speakers.json`), e un ruolo come nome si
+  confonde con il livello di permesso («Ospite» è un livello, «Amministratore» ne suggerisce uno)
+  e con i dati del turno («persona: Ospite»). Il costo del rifiuto è basso e reversibile (la
+  persona dice un nome vero), quello di un ruolo salvato come nome no.
+- **La descrizione del tool**: una riga in fondo, «Un ruolo o una parentela non è un nome.».
+  Provata col 4B sul portatile (`gemma4:e4b-it-qat`, `prova_regressione 3 --solo ^ruolo`, 5 frasi
+  × 3 giri): con gli esempi tra «…» («sono chi amministra», «sono la mamma») il modello chiamava
+  `rinomina_interlocutore` 6 volte su 15 (la citazione innesca, come per «chi sono?» del 13/10;
+  il tool rifiutava e la risposta spiegava bene, ma con una passata in più, ~1,2 s); senza esempi
+  0 su 15, come main. Scelta la riga senza esempi.
+- **Misure col 4B** (stesse 15 frasi): main 13/15, il ramo 14/15; il 4B di solito non chiama il
+  tool (risponde «Ho capito, sei il padrone di casa»), e l'errore che resta è a parole senza tool:
+  «Ti chiamo papà d'ora in poi.» (2 volte su 3 con main, 1 su 3 col ramo), un'azione dichiarata
+  che `ACTION_CLAIM` non prende («ti chiamo …»): da guardare se si vede col 26B. La regola serve
+  al 26B, che il tool lo chiama. Casi nuovi nel banco `ruolo0`–`ruolo4` (errore una risposta che
+  dà il ruolo come nome, `RUOLO_COME_NOME`); **da rifare col 26B sulla DGX**:
+  con il tunnel verso l'Ollama della DGX (porta 11440 sul portatile) e
+  `CALLIOPE_LLM_PROFILO=gemma4-26b-ollama`,
+  `python prove\prova_regressione.py 3 --solo "^(ruolo|rinomina|chi)" --url http://127.0.0.1:11440`.
+- Casi e contrari a secco in `prova_testo` (la funzione e `risposta_al_nome`) e `prova_tool`
+  (il tool: sei ruoli rifiutati senza proposta, anche nella risposta dopo, la regola nel
+  registro, «Mamo» proposto).

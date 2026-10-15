@@ -476,6 +476,30 @@ for testo, nome, atteso in [
         ("Vuoi che ti chiami Davidone?", "Davide", False),
         ("", "Davide", False)]:
     verifica(f"rinomina, domanda detta «{testo[:40]}»", domanda_rinomina(testo, nome), atteso)
+# ── un ruolo o una parentela non sono un nome (15/10, regola `rinomina_ruolo`): il caso vero
+# del 26B sulla DGX («Scusa, io sono chi amministra» → nome="Amministratore") e le varianti,
+# confrontate per intero; i contrari sono nomi (di fantasia) che somigliano a un ruolo ──
+from calliope.testi import ruolo_non_nome  # noqa: E402
+for nome, atteso in [
+        ("Amministratore", "amministratore"), ("Chi Amministra", "chi amministra"),
+        ("L'Amministratore", "amministratore"), ("Amministratrice", "amministratrice"),
+        ("Io Che Amministro", "che amministro"), ("Admin", "admin"),
+        ("Il Padrone Di Casa", "padrone"), ("Padrona di casa", "padrona"),
+        ("Proprietario", "proprietario"), ("La Mamma", "mamma"), ("Papà", "papa"),
+        ("Il papà", "papa"), ("Mamma Di Bianca", "mamma"), ("Nonna", "nonna"),
+        ("Figlio", "figlio"), ("Ospite", "ospite"), ("Utente", "utente"), ("Capo", "capo"),
+        ("Capofamiglia", "capofamiglia"), ("la mia mamma", "mamma"),
+        # contrari: nomi veri, anche se cominciano come un ruolo o lo contengono
+        ("Mamo", None), ("Capotondi", None), ("Admira", None), ("Nonnis", None),
+        ("Dario", None), ("Maria Rosa", None), ("Zio Gino", None), ("Ospitaletti", None),
+        ("Papageno", None), ("Figliola", None), ("", None)]:
+    verifica(f"ruolo non nome «{nome}»", ruolo_non_nome(nome), atteso)
+for testo, atteso in [("Mamma.", ("altro", None)), ("Sono Amministratore.", ("altro", None)),
+                      ("Mi chiamo Ospite.", ("altro", None)),
+                      # contrari
+                      ("Mamo.", ("nome", "Mamo")), ("Sono Admira.", ("nome", "Admira")),
+                      ("Mi chiamo Capotondi.", ("nome", "Capotondi"))]:
+    verifica(f"risposta al nome, ruolo «{testo}»", risposta_al_nome(testo), atteso)
 for testo, atteso in [("Per aprire il file \"chiavi\", devo prima cercarlo sul portatile.", True),
                       ("Ora controllo l'ora.", True), ("Lo cerco.", True),
                       # dopo «no grazie» (misura del 01/10): non è una promessa
