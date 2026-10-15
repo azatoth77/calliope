@@ -207,6 +207,36 @@ $V/.venv/bin/python $V/prove/manuali/preselezione_dgx.py --latenza --limite 24  
 Se il punto 2 non regge, perché sulla DGX il server non costa niente fuori dal modello e la
 cache nasconde gli schemi, la preselezione resta una misura e la si chiude lì.
 
+## 7. Misure sulla DGX (15/10 mattina): la preselezione non conviene
+
+Lanciati i due comandi del § 6 sulla DGX (gemma4 26B, 85 schemi, Calliope inattiva).
+
+**Registro dei turni veri** (`--registro --giorni 14`: 1421 risposte con le parole, 863 con tool):
+il richiamo è **84 %** a margine 0,10 (83–84,5 % fra 0 e 0,20), lontanissimo dal 100 % del banco a
+secco; «nucleo» solo nel 9 % dei turni. I mancati sono quasi tutti dell'agente e della modalità
+sviluppo (`delega_lavoro` 46, `estensioni_gestisci` 20, `lavori_stato` 11, `estensione_crea` 10,
+`sviluppo_prova` 8, `lavori_esegui` 7): le frasi vere sono seguiti di una conversazione lunga, che
+il registro non dà al decisore come la conversazione viva. Il banco scritto conoscendo le descrizioni
+era ottimista, come temuto.
+
+**Latenza** (`--latenza --limite 24`, primo pezzo mediana / p90):
+
+| Scenario | Primo pezzo | Prompt | Fuori dal modello |
+|---|---|---|---|
+| tutti, cache calda | 0,50 / 0,72 s | 18 862 | 148 ms |
+| nucleo subito dopo il cambio | 0,90 / 1,08 s | 7 444 | 500 ms |
+| nucleo, cache calda | 0,46 / 0,65 s | 7 444 | 36 ms |
+| ritorno a tutti | 1,04 / 1,27 s | 18 862 | 442 ms |
+
+A cache calda il nucleo guadagna **~40 ms**; ogni cambio d'insieme costa **+0,4–0,5 s** (all'andata e
+al ritorno: la cache di «tutti» si ritrova solo in parte, 18 350 su 18 860). Con 111 cambi su 1421
+turni il saldo è negativo. Il costo «fuori dal modello» degli schemi visto sul portatile (~1,3 s) sulla
+DGX è 148 ms a cache calda.
+
+**Conclusione**: nessuno dei criteri del § 6 è vicino (richiamo, ≥ 150 ms); la preselezione resta solo
+una misura in ombra e non va accesa. Il divario dei turni con tool (2,71 contro 1,77 s del 14/10) è la
+**seconda passata** dopo il tool: è lì che va cercato il prossimo caso System 1.
+
 ## Fonti
 
 - FunctionGemma su Ollama: https://registry.ollama.ai/library/functiongemma (Gemma 3 270M per le
