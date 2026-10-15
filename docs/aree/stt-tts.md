@@ -2,6 +2,8 @@
 
 *Cattura e VAD, wake word acustica, Whisper (portatile e DGX), Piper, cuffie, impronta vocale CAM++. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
+**Al 15/10** in più: le impronte della voce per satellite (spente di serie, da misurare: sezione in fondo).
+
 **Stato al 14/10.** Come al 09/10 (sotto), più: le forme chiuse storpiate da whisper.cpp (10/10), Whistle misurato e non adottato (10/10), la frase lunga che al tetto di 120 s si unisce al seguito (10/10), l'impronta che non si aggiorna in compagnia (12/10); la **conversazione di stanza** dal satellite e dal telefono (13–14/10, decisione 0029, spenta di serie): passo 0 (compagnia con le voci tutte riconosciute), passo 1 (sola trascrizione veloce in ombra, protocollo 3), il giudizio «rivolta a Calliope?» con le righe della stanza (passo 2), il taglio morbido dei segmenti e l'ascolto durante la voce di Calliope col filtro dell'eco (passo 5, `stanza_durante_voce`); i conoscenti (decisione 0030, sezioni in fondo); la **fine del turno System 1** (14/10 sera, Smart Turn sull'audio, spenta di serie, da misurare in ombra: sezione in fondo). Aperti come al 09/10.
 
 *Stato al 09/10 (storico): Whisper con whisper.cpp sulla DGX e senza correzione (variante A, scelta il 07/10), Piper con la prima frase a pezzi e sulla GPU secondo la macchina (07/10), CAM++ con il margine tra i profili e la continuità delle frasi cortissime (07–08/10), pause e fine del turno solo misurate (07/10), parole incerte negli argomenti dei tool (F0 e F1, 08/10), modalità compagnia accesa con il giudizio «rivolta a Calliope?» in ombra (09/10). Aperti: whisper.cpp senza hotwords («Chiori sono», *storico: dal 15/10 un dato del turno, sezione in fondo*), le voci di famiglia al telefono da registrare di nuovo per canale, le cuffie Bluetooth mute.*
@@ -11,7 +13,7 @@
 | Stadio | Libreria | Dove |
 |---|---|---|
 | Cattura + VAD | sounddevice + Silero VAD (PyTorch, oppure il suo ONNX con onnxruntime senza torch: Linux) | `calliope/audio.py` → `Listener` (`listen`, `watch_for_name`, `measure_echo`); `calliope/vad.py` → `carica_vad`, `SileroOnnx`, `SileroTorch`; pause e fine del turno (dal 07/10, solo misura) `calliope/pause.py` → `MisuraPause`, `OsservaRipresa`, `inizio_ripresa`, `riassunto` (sotto); la frase al tetto e il suo seguito nello stesso turno (dal 10/10, sotto) `Listener._dopo_il_tetto`, `Ciclo._seguito_del_tetto`, `pause.TETTO_ATTESA_S`; la fine del turno System 1 (dal 14/10, spenta di serie, sotto) `calliope/system1/` → `Decisione`, `Sorvegliato`, `fine_turno.SmartTurn`, `Politica`, `Anticipo` (attiva, nel `Listener`), `OmbraFineTurno` (ombra, sul server), `log_mel`, `simula`, `esito`, `riassunto` |
-| Chi parla | CAM++ (3D-Speaker) in ONNX con onnxruntime | `calliope/speaker_id.py` → `SpeakerEmbedder`, `SpeakerRegistry`, `SpeakerContext`; `arruola.py`; margine tra i profili e voce incerta tra un adulto e un minore (07/10) `Ciclo._confronta_voce`, `Ciclo._chiedi_chi_parla`, `SpeakerContext.incerta`; continuità delle frasi cortissime (08/10) `Ciclo._per_continuita`; il nome da solo dopo lo scatto acustico `ciclo.solo_nome_acustico`; più voci vicino allo stesso satellite (dal 09/10, sotto) `calliope/compagnia.py` → `Compagnia`, `modo`, `riassunto`, e il giudizio «rivolta a Calliope» `calliope/rivolta.py` → `Giudice`, `etichetta` |
+| Chi parla | CAM++ (3D-Speaker) in ONNX con onnxruntime | `calliope/speaker_id.py` → `SpeakerEmbedder`, `SpeakerRegistry`, `SpeakerContext`; `arruola.py`; impronte per satellite (15/10, spente di serie, in fondo) `calliope/impronte_satellite.py` → `Impronta`, `chiavi`, `punteggio`, `sicura`, `impara`, `riassunto`, `SpeakerRegistry.classifica(emb, chiavi)`, `impara_satellite`, `Ciclo._decisione_alternativa`, `Ciclo._impara_impronte`; margine tra i profili e voce incerta tra un adulto e un minore (07/10) `Ciclo._confronta_voce`, `Ciclo._chiedi_chi_parla`, `SpeakerContext.incerta`; continuità delle frasi cortissime (08/10) `Ciclo._per_continuita`; il nome da solo dopo lo scatto acustico `ciclo.solo_nome_acustico`; più voci vicino allo stesso satellite (dal 09/10, sotto) `calliope/compagnia.py` → `Compagnia`, `modo`, `riassunto`, e il giudizio «rivolta a Calliope» `calliope/rivolta.py` → `Giudice`, `etichetta` |
 | Speech-to-Text | faster-whisper nel processo, oppure un server con l'API OpenAI (sulla DGX whisper.cpp con CUDA, servizio `calliope-whisper`; vLLM scartato) con ripiego su faster-whisper su CPU (modello di riserva dal catalogo, `whisper_riserva`) | `calliope/stt.py` → `Transcriber`, `ServerTranscriber`, `make_transcriber`, `modello_whisper`; server in `setup/linux/motore/whisper.sh`; correzione delle frasi incerte (spenta) `calliope/stt_correzione.py` → `Correttore`, `accettabile`, `min_utile`; a capo di whisper-server tolti `stt.unisci_righe`; parole incerte al modello (B, spenta) `stt_correzione.parole_incerte`, `Brain.STT_INCERTE_MSG`; frase capita trattenuta (B2, spenta) `Brain.CapitoHold`, `Brain._applica_capito`, `STT_RISCRIVI_MSG` (confronto A/B/B2/C in fondo); parole incerte negli argomenti dei tool (dal 08/10, F0 e F1, sotto) `calliope/argomenti_incerti.py` → `Ascolto`, `Misura`, `Vocabolario`, `allinea`, `esito`, `suggerimento`, `riassunto`, con le probabilità per parola `Transcriber.parole` e `ServerTranscriber.parole`; tempo massimo della richiesta in proporzione alla frase `ServerTranscriber.tempo_massimo` (10/10); frasi tipiche delle allucinazioni scartate per intero in `calliope/allucinazioni.py` (09/10) |
 | Conversazione di stanza, passo 1 in ombra (13/10, sotto) | Silero VAD in ONNX (un secondo VAD, suo), Whisper con la precedenza, CAM++ | sul satellite `calliope/satellite/stanza.py` → `Segmentatore`, `AscoltoStanza`, rubinetto `Listener.rubinetto`; sul server `calliope/stanza/` → `Stanza` (`ascolto.py`: `copertura`, `turno_testo`, `pausa`, `riprendi`, `dimentica`, `presenti`, `presenze`, `durante_qui`, `pronto`), filtro dell'eco del passo 5 `filtra`, `Detta` (`eco.py`), `Riproduttore.voce_ora`, `Collegamento.frasi_voce`, `Copertura`, `Precedenza` (`coda.py`), `RegistroStanza` (`registro.py`), `Misure`, `riassunto` (`misure.py`), `load_stanza`; `STTCondiviso.transcribe(priorita=…, prompt=…)`; ganci `Ciclo._stanza_copertura`, `Ciclo._stanza_turno`; tool `stanza_pausa` (`calliope/tools/stanza.py`) |
 | Corsia lenta della stanza (14/10 sera, passo 3, `stanza_lenta`, sotto; ritrascrizione solo con un Whisper suo o un beam che conta, `stanza_lenta_ritrascrivi`) | Whisper con la precedenza LENTA (o un Whisper suo, `stanza_lenta_stt_url`: `setup/linux/motore/whisper-lento.sh`, large-v3 q5_0), CAM++ a finestre, solo libreria standard | `calliope/stanza/lenta.py` → `Lenta` (`metti`, `dovuti`, `passo`, `giro`, `rivedi`, `prompt`, `finestre`, `pendente`), `allucinazione`, `dividi_testo`, `cambio_sostanziale`, `riassuntore_guardiano`; `calliope/stanza/banco.py` → `Banco` (eccezione dell'audio del banco); `Transcriber.transcribe(…, beam=)`; prova `prove/prova_stanza_lenta.py`, banco `prove/manuali/banco_stanza_lenta.py`, `prove/manuali/ritrascrivi_conservati.py` |
@@ -351,7 +353,7 @@ Correzioni (07/10, `ciclo._confronta_voce`, `conferme.py`, `brain._sfida`):
 - Prova a secco: `prove/prova_voci_famiglia.py` (impronte sintetiche con lo stesso coseno, nomi di
   fantasia, i quattro casi e i contrari).
 
-**Più impronte per persona (valutato, non fatto).** La struttura lo consente: `UserProfile` ha
+**Più impronte per persona (valutato, non fatto; *storico: fatto il 15/10 per satellite e per tutti, spento di serie, sezione «Impronte della voce per satellite» in fondo*).** La struttura lo consente: `UserProfile` ha
 `voiceprint` e `initial_voiceprint`; un dizionario `impronte_canale` (telefono, satellite,
 portatile) con il punteggio = massimo sui canali, ciascuna adattata solo dalle frasi sicure del
 suo canale e con la deriva misurata dalla propria impronta d'arruolamento, risolve due problemi:
@@ -1434,3 +1436,79 @@ chiore sono finite in cantina ieri sera.». Lasciata fuori «chi ora sono?»: co
 rispondeva ancora «Sei Dario.» (0/4), e «chi» resta una domanda su chi parla. Non presa: «Per lì
 o per, chiore sono.» (sei parole: il nome storpiato in quattro). Il rimedio alla radice (un
 prompt o un'hotword per whisper.cpp) resta da trovare.
+
+## Impronte della voce per satellite (15/10, ramo `impronte-satellite`)
+
+Proposta di Dario, approvata il 15/10; realizza la «più impronte per persona» valutata il 07/10
+(sopra, *storica*). **Caso vero** (15/10 mattina, telefono in auto): chi amministra preso a 0,444 e
+0,399 (soglia 0,48), il minore secondo a 0,358 e 0,354 → trattato da ospite; negli stessi minuti sei
+frasi sue tra 0,60 e 0,76 sullo stesso telefono. Il canale sposta l'impronta, e quella di chi
+amministra non si adatta più dal 07/10 (coseno 0,900 con l'arruolamento = `speaker_adapt_max_drift`).
+
+**Fatto** (`calliope/impronte_satellite.py`, `speaker_id.py`, `Ciclo._riconosci_voce`,
+`stanza/conoscenti.py`), dietro `speaker_impronte_satellite: spento|ombra|attivo` (**spento di
+serie**):
+
+- Per **ogni persona** (chi amministra, familiari, **minori compresi**, e i **conoscenti** della
+  decisione 0030) un'impronta in più per satellite (`sat:<nome>`) e una per tipo di canale
+  (`canale:telefono`, `canale:satellite`, `canale:locale`: il ripiego per un satellite nuovo).
+  L'impronta di partenza (arruolamento e adattamento di sempre) resta. Punteggio = **massimo** fra
+  quella di partenza e quella del satellite della frase (o del canale, se il satellite non ne ha);
+  **soglia invariata**.
+- **Solo dalle frasi sicure** (`impronte_satellite.sicura`): decisa dalla voce, sopra
+  `speaker_adapt_threshold` (0,58), margine sul secondo almeno `speaker_impronte_margine` (0,15,
+  più largo di `speaker_id_margine`), almeno `speaker_impronte_min_voce_s` (1,5 s); mai zona grigia,
+  frase breve, continuità, proprietario, compagnia (anche «due profili»: in auto col minore nessuno
+  dei due impara), voce incerta o minore vicino. Si impara sulla persona **decisa** (in ombra dalla
+  decisione di oggi, in attivo da quella con le impronte). **Seme** dopo
+  `speaker_impronte_seme_frasi` (3) frasi sicure, la loro media (mai la prima); le frasi in attesa
+  stanno solo in memoria. **Deriva** limitata due volte: coseno ≥
+  `speaker_impronte_deriva_arruolamento` (0,70) con l'arruolamento, ≥ `speaker_impronte_deriva_seme`
+  (0,85) col proprio seme; media mobile `speaker_impronte_alpha` (0,1); al più
+  `speaker_impronte_max` (12) satelliti per persona. I valori sono di partenza: li decide la misura
+  qui sotto.
+- **Simmetria**: per tutti allo stesso modo. Con l'impronta del telefono solo per chi amministra il
+  verso pericoloso peggiora (prova a secco: una frase debole del minore va a chi amministra, al più
+  familiare per `amministra_minore_vicino`; con l'impronta del minore torna al minore). Le
+  protezioni (`minori.piu_protetto`, che ora prende i punteggi già calcolati,
+  `minori_margine_amministra`, la sfida, la conferma breve) valgono sui punteggi nuovi. In attivo
+  l'impronta di partenza si aggiorna col suo punteggio, non con quello del satellite, e la media del
+  riconoscimento dei minori (il promemoria di rifare l'impronta) resta sull'impronta di partenza.
+- **Ombra**: le impronte si imparano e si salvano; nel registro dei turni `voce.impronte_satellite`
+  con `modo`, `con` e `senza` (chi, come, punteggio, fonte «base»/«sat»/«canale», `minore`,
+  `amministra`, il conoscente) e `imparata`; **decide quella di oggi** (la decisione alternativa si
+  calcola con le stesse regole senza toccare lo stato di chi parla). In attivo lo stesso blocco con
+  la decisione senza. `calliope stato --turni`, sezione «Impronte per satellite»: per satellite
+  rifiutate → riconosciute, riconosciute → rifiutate, scambi fra persone (minore → chi amministra e
+  il contrario), zona grigia → voce, frasi che hanno insegnato.
+- La **stanza** in attivo usa le impronte del satellite del segmento in sola lettura (non le
+  insegna). Il barge-in di livello B sul portatile resta con l'impronta di partenza.
+- **Tenuta e cancellazione** come le impronte di sempre (dati biometrici, stessi permessi): in
+  `speakers.json` (campo `impronte_satellite`, solo quelle nate) e nel file dei conoscenti; seguono
+  la persona nella rinomina, nella promozione a familiare e nel ritorno; via con «dimentica» e la
+  scadenza dei conoscenti, con una nuova registrazione della voce, con un modello diverso
+  dell'impronta, e con `calliope conserva --svuota` (di una persona o di tutti; da terminale anche
+  dalla copia `.bak`; dal processo il registro salva due volte, così la copia non le tiene). Il
+  tool `dati_conservati` lo dice nella domanda quando sono accese. Da terminale con Calliope accesa
+  il processo le ha ancora in memoria e le riscrive: meglio a voce (`dati_conservati`) o a Calliope
+  ferma.
+- Prova a secco `prove/prova_impronte_satellite.py` (79 controlli: apprendimento e contrari, seme,
+  deriva, ripiego, spento/ombra/attivo, il caso del 15/10, simmetria e protezioni, i casi del 07/10
+  di `prova_voci_famiglia` uguali in ombra e attivo, tenuta, conoscenti, stato --turni).
+
+**Da misurare prima di accendere** (sulla DGX, lo lancia chi amministra):
+
+    V=~/.local/share/calliope/versioni/$(cat ~/.local/share/calliope/attuale)
+    cd ~/calliope && $V/.venv/bin/python $V/prove/manuali/misura_impronte_satellite.py
+
+Rigioca in ordine di tempo la voce conservata degli adulti (con satellite e canale dal registro dei
+turni, conoscenti compresi) e l'audio del banco della stanza (voci di casa, minori compresi, finché
+vale l'eccezione: fino al 21/10), simula l'apprendimento in ombra e in attivo su una copia in
+memoria e stampa per persona e satellite (etichette senza nomi) rifiutate senza e con, scambi nei
+due versi, chi amministra col minore vicino, margini (mediana e p05) e le impronte insegnate alla
+persona sbagliata. Opzioni per provare altri valori (`--seme`, `--margine`, `--min-voce`,
+`--deriva-arr`, `--deriva-seme`, `--alpha`, `--json`). Limiti dichiarati: le frasi rifiutate vere
+non hanno audio (la voce di un ospite non si conserva: contate a parte dal registro), la decisione
+è semplificata (senza zona grigia né continuità), l'impronta di partenza è quella di oggi. Poi:
+`speaker_impronte_satellite: ombra` nel locale, qualche giorno di `calliope stato --turni`, e
+attivo solo con «minore → chi amministra» a 0.
