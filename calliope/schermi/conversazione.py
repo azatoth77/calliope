@@ -52,6 +52,12 @@ SCADUTA = "scaduta"
 ALTRA_PERSONA = "altra_persona"
 ALTRA_STANZA = "altra_stanza"
 REGOLA = "scritto_senza_conversazione"
+# Perché la conversazione di una persona non è più attiva (16/10, #96): la fine vera («esci»,
+# scaduta) o la sostituzione da parte di un'altra voce (un ospite, un'altra persona, anche la
+# propria frase breve presa per ospite). Per lo scritto è uguale; per le foto in attesa della
+# domanda no: restano fino alla loro scadenza (immagini.InAttesa.fine_conversazione)
+FINE = "fine"
+SOSTITUITA = "sostituita"
 
 
 @dataclass(frozen=True)
@@ -112,6 +118,15 @@ class Conversazioni:
         self._cond = threading.Condition(self._lock)
         self._conv: dict = {}
         self._thread = None
+        # #96: chi ha avuto la conversazione sostituita da un'altra voce (persona → chiave),
+        # e chi tra loro ha visto poi chiudere quella chiave con «esci» (fine vera, da dire).
+        # Una voce vecchia qui (la persona sostituita non è più tornata) non fa danni: conta
+        # solo per classificare un evento della persona (che non arriva finché non riapre una
+        # conversazione, e allora la voce si toglie) e per un «esci» sulla stessa chiave, che
+        # toglie al più le sue foto in attesa (scadute dopo `immagini_attesa_s` comunque); le
+        # voci sono al più una per persona
+        self._sostituite: dict = {}
+        self._chiuse_dopo: list = []
 
     def durata_s(self) -> float:
         try:
@@ -153,6 +168,11 @@ class Conversazioni:
                 nuova = None                 # chi non è provato dalla voce non apre nulla
             else:
                 nuova = Conversazione(None, ora, stanza, satellite, locale)
+            if (prima is not None and prima.persona and attiva(prima, ora, self.durata_s())
+                    and (nuova is None or nuova.persona != prima.persona)):
+                self._sostituite[prima.persona] = chiave
+            if nuova is not None and nuova.persona:
+                self._sostituite.pop(nuova.persona, None)
             if nuova is None:
                 self._conv.pop(chiave, None)
             else:
@@ -162,12 +182,35 @@ class Conversazioni:
         return nuova
 
     def chiudi(self, chiave=None) -> bool:
-        """«Esci», «vai a dormire»: la conversazione finisce, lo scritto si spegne."""
+        """«Esci», «vai a dormire»: la conversazione finisce, lo scritto si spegne. Finisce
+        davvero anche per chi l'aveva avuta sostituita da un'altra voce su questa chiave
+        (#96: la propria frase presa per ospite, poi «esci»)."""
         with self._lock:
             c = self._conv.pop(chiave, None)
-        if c is not None:
+            # «Esci» detto da chiunque su questa chiave (satellite) chiude anche per chi era
+            # stato sostituito: le sue foto in attesa vanno via con la fine vera. Voluto: il
+            # caso tipico è la propria frase presa per ospite che dice «esci»; e dopo «esci»
+            # lì non c'è più una conversazione in cui la foto valga
+            sost = [p for p, k in self._sostituite.items() if k == chiave]
+            for p in sost:
+                del self._sostituite[p]
+            self._chiuse_dopo.extend(sost)
+        if c is not None or sost:
             self._avvisa()
         return c is not None
+
+    def motivo_fine(self, persona: str) -> str:
+        """Perché la conversazione della persona non è più attiva (#96): SOSTITUITA se
+        un'altra voce l'ha presa, altrimenti FINE (chiusa o scaduta)."""
+        with self._lock:
+            return SOSTITUITA if persona in self._sostituite else FINE
+
+    def chiuse_dopo_sostituzione(self) -> list:
+        """Le persone la cui conversazione, già sostituita, è finita davvero con «esci» dopo
+        (#96): una volta sola."""
+        with self._lock:
+            fuori, self._chiuse_dopo = self._chiuse_dopo, []
+        return fuori
 
     def _avvisa(self):
         if self.on_cambio is not None:

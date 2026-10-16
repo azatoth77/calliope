@@ -41,6 +41,16 @@ FONTI = {"telefono": "dal telefono", "schermo": "dallo schermo", "webcam": "dall
 FOTO_IN_ATTESA = "Ho la foto. Cosa vuoi sapere?"
 FOTO_NON_VISTA = ("La persona ti ha mandato una foto, ma il modello di adesso non vede le "
                   "immagini: dillo in breve, e rispondi al resto se puoi.")
+# #96 (16/10): la foto (o il file) mandata senza domanda non c'è più quando la persona torna a
+# parlare (conversazione finita, attesa scaduta): un dato del turno, perché il modello non
+# inventi una causa («la foto non mi è stata inviata come file», DGX 15/10). Non è una regola
+# sul testo: vale per il turno dopo la perdita, qualunque cosa la persona dica
+FOTO_PERSA = ("Una foto o un file che la persona ti aveva mandato prima senza domanda non sono "
+              "più disponibili (la conversazione era finita o l'attesa scaduta). Se ne parla, "
+              "dille di rimandarli; non inventare altre cause.")
+# Per quanto, dopo la perdita, il dato vale per il turno della persona: `immagini_persa_s`
+# nella configurazione, questo è il predefinito di InAttesa
+FOTO_PERSA_S = 600.0
 # Pixel al massimo prima di decodificare (una PNG di pochi kB può dichiarare 50 000 × 50 000)
 MAX_PIXEL = 40_000_000
 
@@ -237,11 +247,15 @@ def opzioni_tool(cfg, pcs=None, archivio=None) -> dict | None:
 class InAttesa:
     """Foto arrivate senza domanda: aspettano la prossima frase della stessa persona."""
 
-    def __init__(self, durata_s: float = 120.0, massimo: int = 4):
+    def __init__(self, durata_s: float = 120.0, massimo: int = 4,
+                 persa_s: float = FOTO_PERSA_S):
         self.durata_s = float(durata_s)
+        self.persa_s = float(persa_s)
         self.massimo = massimo
         self._lock = threading.Lock()
         self._voci: list[Immagine] = []
+        # #96: persona → quando le sue foto in attesa sono andate perse (scadute o tolte)
+        self._perse: dict = {}
 
     def metti(self, img: Immagine):
         with self._lock:
@@ -254,7 +268,15 @@ class InAttesa:
             return []
         ora = time.time()
         with self._lock:
-            valide = [i for i in self._voci if ora - i.arrivata <= self.durata_s]
+            valide = []
+            for i in self._voci:
+                if ora - i.arrivata <= self.durata_s:
+                    valide.append(i)
+                elif i.persona:              # scaduta: persa per il dato del turno (#96)
+                    print("   [IMMAGINI] foto in attesa tolta: attesa scaduta (motivo "
+                          "scadenza)", flush=True)
+                    self._perse[i.persona] = max(self._perse.get(i.persona, 0.0),
+                                                 i.arrivata + self.durata_s)
             mie = [i for i in valide if i.persona == persona]
             self._voci = [i for i in valide if i.persona != persona]
         return mie
@@ -263,9 +285,55 @@ class InAttesa:
         with self._lock:
             self._voci.clear()
 
-    def togli(self, persona: str | None) -> int:
-        """Le foto della persona non valgono più (la sua conversazione è finita, 05/10)."""
+    def togli(self, persona: str | None, segna: bool = True) -> int:
+        """Le foto della persona non valgono più (la sua conversazione è finita, 05/10). Con
+        `segna` la perdita vale per il dato del turno `FOTO_PERSA` (#96)."""
         with self._lock:
             prima = len(self._voci)
             self._voci = [i for i in self._voci if i.persona != persona]
-            return prima - len(self._voci)
+            tolte = prima - len(self._voci)
+            if tolte and persona and segna:
+                self._perse[persona] = time.time()
+            return tolte
+
+    def dimentica(self, persona: str | None) -> int:
+        """«Dimentica», «ricominciamo» (#96, revisione della PR #113): le foto in attesa della
+        persona vanno via con la conversazione, ma non sono «perse»: l'ha chiesto lei, il turno
+        dopo non riceve `FOTO_PERSA` (e una perdita segnata prima si dimentica anche lei)."""
+        tolte = self.togli(persona, segna=False)
+        with self._lock:
+            self._perse.pop(persona, None)
+        return tolte
+
+    def fine_conversazione(self, persona: str | None, motivo: str = "fine") -> int:
+        """Da `Schermi.su_fine_conversazione` (#96, 16/10). Una foto in attesa vale nella
+        conversazione in cui è arrivata (05/10): la fine vera («esci», scaduta) la toglie. Se
+        invece un'altra voce ha preso la conversazione (`conversazione.SOSTITUITA`: un ospite,
+        un'altra persona, anche la propria frase breve sotto soglia) la foto resta fino a
+        `durata_s`: la prende solo la stessa persona (`prendi`), mai l'ospite."""
+        if motivo == "sostituita":
+            if self.di(persona):
+                print(f"   [IMMAGINI] foto in attesa tenuta: un'altra voce in mezzo "
+                      f"(motivo {motivo})", flush=True)
+            return 0
+        tolte = self.togli(persona)
+        if tolte:
+            print(f"   [IMMAGINI] {tolte} foto in attesa tolta: conversazione finita "
+                  f"(motivo {motivo})", flush=True)
+        return tolte
+
+    def di(self, persona: str | None) -> int:
+        """Quante foto (e file) della persona aspettano la domanda (scadute comprese)."""
+        with self._lock:
+            return sum(1 for i in self._voci if i.persona == persona)
+
+    def persa(self, persona: str | None, entro_s: float | None = None) -> bool:
+        """La persona aveva foto in attesa andate perse da meno di `entro_s` (predefinito
+        `persa_s`, cioè `immagini_persa_s`) (#96): vero una volta sola, per il dato del turno
+        `FOTO_PERSA`."""
+        entro_s = self.persa_s if entro_s is None else entro_s
+        if not persona:
+            return False
+        with self._lock:
+            quando = self._perse.pop(persona, None)
+        return quando is not None and time.time() - quando <= entro_s

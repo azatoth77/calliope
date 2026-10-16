@@ -344,6 +344,42 @@ def prova_svuota(m: Mondo):
              and not any("non tolti" in x for x in m.log), str(out))
 
 
+# ──────────── 7. il dubbio con un minore e i conoscenti accesi (16/10, issue #108) ────────────
+def prova_incerta_conoscenti(m: Mondo, c):
+    """Con `incerta` sopra soglia il testo va sotto il minore anche se la voce migliore è di un
+    altro (decisione 0031 punto 3, rischio accettato nella #104). Con i conoscenti accesi: la
+    famiglia vince, il conoscente non si cerca (`_conoscente_turno` solo senza nessun profilo
+    della famiglia), quindi la frase resta del minore, mai del conoscente; sotto soglia resta
+    fuori dal disco come la zona grigia."""
+    audio = np.zeros(16000, dtype=np.float32) + 0.01
+    # Carlo 0,50 e Nicola 0,47 (incerta sopra soglia), la voce del conoscente ancora più vicina
+    testo = "Calliope, domani c'è la verifica di storia"
+    t, rec = m.turno(K.miscela({K.CARLO: 0.50, K.NICOLA: 0.47, K.MARCO: 0.60}), testo,
+                     audio=audio)
+    r = m.righe()[-1]
+    verifica("incerta sopra soglia con i conoscenti accesi: vale il minore, nessun conoscente",
+             rec["voce"].get("nome") == "Nicola"
+             and rec["voce"].get("incerta") == ["Carlo", "Nicola"]
+             and not rec["voce"].get("conoscente") and m.sctx.conoscente is None,
+             json.dumps(rec["voce"]))
+    verifica("…il testo sotto il minore (0031 punto 3), la voce no (dubbio con un minore)",
+             r["testo"] == testo and "voce_file" not in rec
+             and m.cons.voce_turno(rec).motivo == "dubbio_minore", json.dumps(r)[:300])
+    # Contrario: il conoscente vicino al minore, nessun adulto sopra soglia → Nicola per
+    # prudenza, ma la voce migliore è sotto soglia: niente parole su disco
+    t, rec = m.turno(K.miscela({K.NICOLA: 0.45, K.MARCO: 0.80}), "Calliope, a che ora parto?")
+    r = m.righe()[-1]
+    verifica("contrario: conoscente vicino al minore sotto soglia → vale il minore per "
+             "prudenza, niente parole su disco", rec["voce"].get("nome") == "Nicola"
+             and not rec["voce"].get("conoscente") and r["testo"] is None,
+             json.dumps(rec["voce"]))
+    # Contrario: il conoscente da solo (la famiglia sotto la zona grigia) resta il conoscente
+    t, rec = m.turno(K.voce(K.MARCO, 0.03, seme=71), "Calliope, porto il dolce?")
+    verifica("contrario: il conoscente da solo resta il conoscente, con le sue parole",
+             rec["voce"].get("conoscente") and rec["voce"].get("id") == c.id
+             and m.righe()[-1]["testo"] == "Calliope, porto il dolce?", json.dumps(rec["voce"]))
+
+
 # ─────────────────────────── 6. promozione e ritorno ───────────────────────────
 def prova_promozione(m: Mondo):
     k = m.salva(K.BIANCA2, "Gina", "Neri")
@@ -385,6 +421,7 @@ def main():
     c = m.salva(K.MARCO, "Marco", "Rossi", "collega di Carlo")
     try:
         prova_turni(m, c)
+        prova_incerta_conoscenti(m, c)
         prova_conversazione(m, c)
         prova_ricerca(m, c)
         prova_dimentica(m, c)

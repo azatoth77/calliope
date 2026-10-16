@@ -182,6 +182,23 @@ def consenso_voce(prof, registry=None) -> bool:
     return bool(v)
 
 
+def voce_dei_tutori_scaduta(prof) -> bool:
+    """Una persona diventata maggiorenne che aveva la voce conservata col sì dei tutori (16/10,
+    issue #108): adulta, senza un suo sì, con il sì dato da un altro (`voce_conservata_da`) o i
+    tutori ancora nel profilo (il consenso implicito della registrazione). Alla prima rotazione
+    le sue registrazioni si cancellano (`consenso_voce`); serve solo a dirlo («stato», e una riga
+    nel journal), non decide niente."""
+    if prof is None or categoria(prof) in ("minore", "ospite", "conoscente"):
+        return False
+    v = getattr(prof, "voce_conservata", None)
+    da = getattr(prof, "voce_conservata_da", None)
+    if v is False or (v is True and (not da or da == getattr(prof, "id", None))):
+        return False
+    if v is None and getattr(prof, "admin", False):
+        return False
+    return bool((da and da != getattr(prof, "id", None)) or getattr(prof, "tutori", None))
+
+
 def decidi(prof, cosa: str, modo: str | None = None, dubbi=(), cfg=None,
            registry=None) -> Decisione:
     """Il solo posto che decide se qualcosa di questa persona si conserva. Puro.
@@ -957,6 +974,12 @@ class Conservazione:
                 prof = self.profilo(persona_id=pdir.name)
                 if prof is None or not consenso_voce(prof, self.registry) \
                         or not getattr(self.cfg, "conserva_voce", True):
+                    if voce_dei_tutori_scaduta(prof) and getattr(self.cfg, "conserva_voce", True):
+                        # Diventata maggiorenne (16/10, issue #108): il sì dei tutori non vale
+                        # più, da adulta lo ridice lei. Una riga con l'id, mai il nome
+                        self.log(f"   [CONSERVA] {pdir.name}: maggiorenne, tolte le "
+                                 "registrazioni della voce tenute col sì dei tutori")
+                        out["maggiorenni"] = out.get("maggiorenni", 0) + 1
                     shutil.rmtree(pdir, ignore_errors=True)
                     out["persone"] += 1
                     continue
