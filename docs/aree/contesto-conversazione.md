@@ -2275,3 +2275,19 @@ conversazione del minore su disco e ritrovata da un archivio nuovo; rotazione e 
 toccano; `--svuota --persona` di un minore), `prova_console_minori` rovesciata (minore e dubbio in
 chiaro, ospite nascosto), `prova_stanza_tenuta` (il minore sente che i testi si tengono),
 `prova_dopo_tool` (`parla_minore`), `prova_conoscenti_conserva` invariata.
+
+### 16/10: il dubbio come lo scrive il ciclo (revisione della PR #106)
+
+Nei casi `incerta` (vale il minore, `minori.piu_protetto`) e `minore_vicino` (chi amministra al
+più familiare) il ciclo scrive `modo: conversazione` nel campo `voce`, come per la zona grigia: il
+primo giro del 16/10 guardava solo il modo e quei turni restavano senza parole (le prove usavano
+turni che il ciclo non scrive). Ora `decidi` tiene il testo con `modo: conversazione` **e** il segno
+del dubbio; `Conservazione.dubbi_di_casa` tiene `incerta` solo se la voce migliore della frase è
+sopra `speaker_id_threshold` (sotto, `piu_protetto` ha dato al minore una voce di nessuno, che resta
+fuori come la zona grigia). La voce di quei turni non si tiene. Prova: `prova_conserva`, sezione
+«i turni come li scrive il ciclo» (il `Ciclo` vero con le impronte sintetiche di
+`prova_voci_famiglia`: caso 1 del 06/10, minore vicino, minore e adulto netti; contrari zona grigia,
+voce sconosciuta, voce di nessuno vicina al minore).
+
+**Limite** (documentato nella 0031, punto 8): quella voce di nessuno attribuita al minore va nel
+journal in chiaro, perché `console_riservata` guarda solo il livello ospite.

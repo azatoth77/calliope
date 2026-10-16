@@ -1,5 +1,6 @@
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # prova_voci_famiglia
 
 """Prova a secco della conservazione dei dati (12/10/2026, calliope/conserva.py, decisione 0028 T1;
 dal 16/10 la decisione 0031: i minori di casa come gli adulti, issue #104).
@@ -106,16 +107,31 @@ try:
     verifica("minore: testo, eventi e conversazioni sì (16/10, decisione 0031)",
              all(C.decidi(minore, c, "voce").ok for c in ("testo", "eventi", "conversazioni"))
              and C.decidi(minore, "testo", "voce").motivo == "minore")
-    verifica("minore, contrario: la voce no senza il sì di un tutore",
-             C.decidi(minore, "voce", "voce").motivo == "senza_consenso")
-    minore.voce_conservata = True
-    verifica("minore, contrario: un «sì» senza il tutore (il minore da solo) non vale",
-             not C.decidi(minore, "voce", "voce") and not C.consenso_voce(minore))
-    minore.voce_conservata_da = "p-amm"
-    verifica("minore col «sì» di un tutore: voce sì", C.decidi(minore, "voce", "voce").ok)
+    # La voce del minore (16/10, decisione 0031 aggiornata): il consenso è dei tutori e
+    # implicito nella registrazione; un minore con i tutori nel profilo ce l'ha senza domanda
+    verifica("minore già registrato con i tutori: voce sì senza domanda (consenso implicito)",
+             minore.voce_conservata is None and C.decidi(minore, "voce", "voce", registry=reg).ok)
+    minore.voce_conservata, minore.voce_conservata_da = False, "p-amm"
+    verifica("minore, contrario: revocato da un tutore → voce no",
+             C.decidi(minore, "voce", "voce", registry=reg).motivo == "senza_consenso")
+    minore.voce_conservata, minore.voce_conservata_da = True, "p-amm"
     verifica("minore col «sì» del tutore, contrario: in compagnia o con una frase breve no",
-             not C.decidi(minore, "voce", "voce", {"compagnia"})
-             and not C.decidi(minore, "voce", "breve"))
+             not C.decidi(minore, "voce", "voce", {"compagnia"}, registry=reg)
+             and not C.decidi(minore, "voce", "breve", registry=reg))
+    # Il tutore che l'ha dato non lo è più, o il suo profilo non c'è: senza altri tutori validi no
+    orfano = UserProfile(name="Teo", id="p-teo", nascita=minore.nascita, tutori=["p-via"],
+                         voce_conservata=True, voce_conservata_da="p-via")
+    verifica("contrario: il consenso di un tutore il cui profilo non c'è più non vale",
+             not C.consenso_voce(orfano, reg))
+    orfano.tutori, orfano.voce_conservata_da = ["p-amm"], "p-adu"
+    verifica("…chi l'ha dato non è (più) tutore: vale solo il consenso implicito dei tutori "
+             "validi", C.consenso_voce(orfano, reg))
+    orfano.tutori = []
+    verifica("contrario: chi l'ha dato non è tutore e nessun tutore nel profilo: no",
+             not C.consenso_voce(orfano, reg))
+    verifica("contrario: un minore senza tutori nel profilo e senza un «sì»: no",
+             not C.consenso_voce(UserProfile(name="Ada", id="p-ada", nascita=minore.nascita),
+                                 reg))
     minore.voce_conservata = minore.voce_conservata_da = None
     # Il testo della stanza (14/10, decisione 0029 punto 5): con la tenuta accesa anche i minori
     # riconosciuti dalla voce (prove/prova_stanza_tenuta.py)
@@ -124,8 +140,8 @@ try:
              and not C.decidi(minore, "stanza", "conversazione"))
     verifica("contrario: ospite, mai", not any(C.decidi(None, c, "voce") for c in C.COSE))
     verifica("dubbio con un minore (incerta, minore_vicino, minore_incerto): il testo sì",
-             all(C.decidi(amm, "testo", "voce", {d}).ok for d in C.DUBBI_MINORE)
-             and C.decidi(minore, "testo", "voce", {"incerta"}).ok)
+             all(C.decidi(amm, "testo", "conversazione", {d}).ok for d in C.DUBBI_MINORE)
+             and C.decidi(minore, "testo", "conversazione", {"incerta"}).ok)
     verifica("dubbio con un minore, contrario: la voce no",
              all(C.decidi(amm, "voce", "voce", {d}).motivo == "dubbio_minore"
                  for d in C.DUBBI_MINORE))
@@ -196,8 +212,9 @@ try:
             "minore": turno("Leo"),
             "minore_fascia": turno("Ginevra", ascolto={"fascia": "ragazzi"}),
             "ospite": turno(None, livello="ospite"),
-            "incerta": turno("Primo", livello="amministra",
-                             voce={"incerta": ["Primo", "Leo"]}),
+            # Come lo scrive il ciclo (minori.piu_protetto): il nome del minore, «conversazione»
+            "incerta": turno("Leo", modo="conversazione",
+                             voce={"incerta": ["Primo", "Leo"], "punteggio": 0.489}),
             "grigia": turno("Ginevra", modo="conversazione")}
     for k, r in casi.items():
         r["caso"] = k
@@ -235,6 +252,71 @@ try:
     verifica("contrario: una riga di altri senza segno e senza nessuno → senza parole",
              ultime[1]["testo"] is None, str(ultime[1]))
 
+    # ───────── i turni come li scrive il ciclo (16/10, revisione della PR #106) ─────────
+    # Il ciclo vero (`Ciclo._riconosci_voce` con le impronte sintetiche di prova_voci_famiglia:
+    # Carlo amministra ed è tutore di Luca, 14 anni) scrive il campo `voce`; da lì decide la
+    # conservazione, nel registro dei turni e per la voce
+    import prova_voci_famiglia as VF
+    from calliope.speaker_id import SpeakerContext  # noqa: F401  (il ciclo lo usa)
+
+    def dal_ciclo(sc_carlo, sc_luca, voce_s=2.0, in_session=False, prev=None, prima=None):
+        rg, scx, cx, _r = VF.ciclo_finto()
+        cx.speaker = VF.VoceFinta()
+        if prima is not None:
+            VF.riconosci(cx, scx, VF.frase_con(*prima), 2.0)
+        n, how, lv, v, _t = VF.riconosci(cx, scx, VF.frase_con(sc_carlo, sc_luca), voce_s,
+                                         in_session=in_session, prev=prev)
+        return rg, {"inizio": f"{oggi}T12:00:00.000", "livello": lv, "voce": v,
+                    "testo": "domani c'è la gita al lago", "esito": "risposta",
+                    "risposta": "Che bello, buona gita."}
+
+    cfg_c = Config()
+    cfg_c.turn_log_dir = str(tmp / "registro-ciclo")
+    cfg_c.memory_db = str(tmp / "memoria-ciclo.db")
+    cfg_c.conserva_voce = True
+    casi_ciclo = {
+        "incerta (caso 1 del 06/10: Carlo 0,489, Luca 0,46 → Luca)": ((0.489, 0.46, 3.19), True),
+        "minore_vicino (Carlo 0,62, Luca 0,52 → Carlo familiare)": ((0.62, 0.52, 2.0), True),
+        "Luca netto": ((0.20, 0.70, 2.0), True),
+        "Carlo netto": ((0.72, 0.20, 2.0), True),
+    }
+    for nome, ((a, b, vs), atteso) in casi_ciclo.items():
+        rg, rec = dal_ciclo(a, b, vs, in_session=True, prev="Carlo")
+        cc = C.Conservazione(cfg_c, rg, log=lambda m: None)
+        cc._ruotata_il = datetime.date.today()
+        tl = TurnLog(cfg_c.turn_log_dir, 60, conserva=cc)
+        cc.al_turno(rec, audio_ciclo := (0.2 * np.sin(np.arange(16000) / 7)).astype(np.float32),
+                    16000)
+        tl.write(dict(rec))
+        scritto = json.loads((Path(cfg_c.turn_log_dir) / f"turni-{oggi}.jsonl").read_text(
+            encoding="utf-8").splitlines()[-1])
+        verifica(f"ciclo vero, {nome}: il testo nel registro dei turni",
+                 scritto["testo"] == "domani c'è la gita al lago" and "conserva" not in rec,
+                 json.dumps(rec["voce"])[:300])
+        dubbio = rec["voce"].get("modo") == "conversazione"
+        verifica(f"ciclo vero, {nome}: la voce " + ("no (dubbio)" if dubbio else "sì"),
+                 bool(rec.get("voce_file")) is not dubbio, json.dumps(rec)[:300])
+    # Contrari dal ciclo: zona grigia (Carlo 0,45 nella sua conversazione, nessun minore in
+    # mezzo), voce di nessuno, voce di nessuno vicina al profilo del minore (piu_protetto)
+    for nome, (args, kw) in {
+            "zona grigia (Carlo 0,45 nella sua conversazione)":
+                ((0.45, 0.05, 2.0), {"in_session": True, "prev": "Carlo",
+                                     "prima": (0.72, 0.20)}),
+            "voce sconosciuta": ((0.10, 0.05, 2.0), {}),
+            "voce di nessuno vicina al minore (Luca 0,44 sotto soglia → Luca per prudenza)":
+                ((0.10, 0.44, 2.0), {})}.items():
+        rg, rec = dal_ciclo(*args, **kw)
+        cc = C.Conservazione(cfg_c, rg, log=lambda m: None)
+        cc._ruotata_il = datetime.date.today()
+        tl = TurnLog(cfg_c.turn_log_dir, 60, conserva=cc)
+        cc.al_turno(rec, audio_ciclo, 16000)
+        tl.write(dict(rec))
+        scritto = json.loads((Path(cfg_c.turn_log_dir) / f"turni-{oggi}.jsonl").read_text(
+            encoding="utf-8").splitlines()[-1])
+        verifica(f"ciclo vero, contrario: {nome} → niente parole, niente voce",
+                 scritto["testo"] is None and not rec.get("voce_file"),
+                 json.dumps(rec["voce"])[:300])
+
     # ───────── voce ─────────
     sr = 16000
     tt = np.arange(sr * 2) / sr
@@ -259,14 +341,16 @@ try:
     rec = turno("Primo", livello="amministra")
     cons.al_turno(rec, audio, sr)
     verifica("chi amministra: voce salvata senza averlo detto", bool(rec.get("voce_file")))
-    for nome, r in (("minore senza il sì di un tutore", turno("Leo")),
+    minore.voce_conservata, minore.voce_conservata_da = False, "p-amm"   # revocato
+    for nome, r in (("minore con il consenso revocato dal tutore", turno("Leo")),
                     ("ospite", turno(None, livello="ospite")),
                     ("adulto senza consenso", turno("Ginevra")),
                     ("frase breve", turno("Primo", modo="breve")),
                     ("compagnia", turno("Primo", voce={"compagnia": {"voci": 2}})),
                     ("scritta", turno("Primo", modo="schermo", canale="scritto")),
                     ("ignorata", {**turno("Primo"), "esito": "ignorato"}),
-                    ("incerta con un minore", turno("Primo", voce={"minore_vicino": "Leo"})),
+                    ("incerta con un minore", turno("Primo", modo="conversazione",
+                                                    voce={"minore_vicino": "Leo"})),
                     ("frase di sfida", {**turno("Primo"), "regole": ["sfida_risposta"]}),
                     ("codice detto", {**turno("Primo"), "tool": [
                         {"nome": "schermo_gestisci", "argomenti": {"codice": "******"}}]})):
@@ -275,17 +359,18 @@ try:
         cons.al_turno(r, audio, sr)
         verifica(f"voce, contrario «{nome}»: non salvata", not r.get("voce_file"), str(r)[:200])
         adulto.voce_conservata = True
-    verifica("nessun file per il minore senza il sì del tutore",
+    verifica("nessun file per il minore col consenso revocato",
              not (cons.voce_dir / "p-min").exists())
-    # Il tutore ha detto sì (16/10, decisione 0031): la voce del minore si tiene
-    cons.imposta_consenso(minore, True, da="p-amm")
+    # Il consenso implicito dei tutori (16/10, decisione 0031): la voce del minore si tiene
+    minore.voce_conservata = minore.voce_conservata_da = None
     rec = turno("Leo")
     cons.al_turno(rec, audio, sr)
-    verifica("voce del minore col «sì» del tutore: salvata nella sua cartella",
-             bool(rec.get("voce_file")) and rec["voce_file"].startswith("p-min/")
-             and minore.voce_conservata_da == "p-amm", str(rec)[:200])
+    verifica("voce del minore col consenso implicito dei tutori: salvata nella sua cartella",
+             bool(rec.get("voce_file")) and rec["voce_file"].startswith("p-min/"),
+             str(rec)[:200])
     for nome, r in (("minore in un dubbio con un adulto",
-                     turno("Leo", voce={"minore_incerto": "Leo"})),
+                     turno("Leo", modo="conversazione",
+                           voce={"incerta": ["Primo", "Leo"], "punteggio": 0.489})),
                     ("minore in compagnia", turno("Leo", voce={"compagnia": {"voci": 2}}))):
         cons.al_turno(r, audio, sr)
         verifica(f"voce, contrario «{nome}»: non salvata, il testo sì",
@@ -328,14 +413,14 @@ try:
              and not (cons.voce_dir / "p-adu").exists()
              and not (cons.voce_dir / "p-sconosciuto").exists()
              and (cons.voce_dir / "p-amm" / oggi).exists() and r["persone"] == 2, str(r))
-    verifica("rotazione: il minore col «sì» del tutore resta",
+    verifica("rotazione: il minore col consenso dei tutori resta",
              cons.registrazioni("p-min") == 1)
-    minore.voce_conservata_da = None              # come se l'avesse detto lui: non vale
+    minore.tutori = ["p-via"]                     # il tutore tolto dalla casa
     r = cons.ruota()
-    verifica("rotazione, contrario: il minore senza il «sì» di un tutore via",
+    verifica("rotazione, contrario: il minore senza più un tutore valido via",
              not (cons.voce_dir / "p-min").exists() and r["persone"] == 1, str(r))
-    minore.voce_conservata = None
-    ieri =(datetime.date.today() - datetime.timedelta(days=1)).isoformat()
+    minore.tutori = ["p-amm"]
+    ieri = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
     for g in (ieri, oggi):
         for i in range(3):
             C._scrivi_privato(cons.voce_dir / "p-amm" / g / f"x{i}.wav", C.wav_mulaw(audio, sr))
@@ -466,41 +551,66 @@ try:
     r = _dati_conservati(ctx, "consenso_voce", "Leo")
     verifica("contrario: nemmeno nominandosi", r["ok"] is False
              and minore.voce_conservata is None)
-    minore.voce_conservata, minore.voce_conservata_da = True, "p-amm"
+    # Il consenso implicito dei tutori (16/10, decisione 0031 aggiornata)
     r = _dati_conservati(ctx, "revoca_voce")
     verifica("contrario: un minore non revoca da solo il consenso dei tutori", r["ok"] is False
-             and minore.voce_conservata is True)
+             and minore.voce_conservata is None and C.consenso_voce(minore, reg))
     r = _dati_conservati(ctx, "stato")
-    verifica("stato per un minore: i testi si tengono, i genitori li rileggono, la voce sì",
+    verifica("stato per un minore: i testi, i genitori, la voce decisa alla registrazione",
              r["ok"] and "60 giorni" in r["conferma"] and "genitori" in r["conferma"]
-             and "voce sì" in r["conferma"], str(r))
-    minore.voce_conservata = minore.voce_conservata_da = None
-    # Il tutore (16/10, decisione 0031): con la voce, il minore come persona, domanda e «sì»
+             and "voce sì" in r["conferma"] and "decisa alla registrazione" in r["conferma"],
+             str(r))
     sc.current_speaker, ctx.turno = "Primo", 20
-    q = _dati_conservati(ctx, "consenso_voce", "Leo")
-    verifica("tutore: prima la domanda sulla voce del minore",
-             q["ok"] is False and "voce di Leo" in q["conferma"]
-             and q["in_sospeso"]["argomenti"] == {"azione": "consenso_voce", "persona": "Leo"}
-             and minore.voce_conservata is None, str(q))
-    sc.identified_by, ctx.turno = "breve", 21
     r = _dati_conservati(ctx, "consenso_voce", "Leo")
-    verifica("tutore: il «sì» salvato nel profilo del minore con chi l'ha dato",
-             r["ok"] and minore.voce_conservata is True and minore.voce_conservata_da == "p-amm"
-             and minore.voce_conservata_il == oggi and C.consenso_voce(minore), str(r))
-    verifica("…e chi amministra non ha cambiato la sua scelta", amm.voce_conservata is None)
-    sc.current_speaker, sc.identified_by, ctx.turno = "Ginevra", "voce", 22
+    verifica("tutore: con il consenso implicito nessuna domanda («la tengo già»)",
+             r["ok"] and "già" in r["conferma"] and "in_sospeso" not in r
+             and minore.voce_conservata is None, str(r))
+    # La revoca di un tutore: la stessa conferma di «svuota»
+    sc.identified_by, sc.minore_vicino = "conversazione", "Leo"
+    r = _dati_conservati(ctx, "revoca_voce", "Leo")
+    verifica("contrario: il tutore nel dubbio col minore non revoca",
+             r["ok"] is False and minore.voce_conservata is None, str(r))
+    sc.minore_vicino = None
+    sc.identified_by, sc.conferma_breve = "breve", False
+    r = _dati_conservati(ctx, "revoca_voce", "Leo")
+    verifica("contrario: un «sì» breve senza l'impronta compatibile non revoca",
+             r["ok"] is False and minore.voce_conservata is None, str(r))
+    sc.current_speaker, sc.identified_by = "Ginevra", "voce"
     r = _dati_conservati(ctx, "revoca_voce", "Leo")
     verifica("contrario: un adulto che non è tutore non revoca la voce del minore",
-             r["ok"] is False and minore.voce_conservata is True)
+             r["ok"] is False and minore.voce_conservata is None)
     r = _dati_conservati(ctx, "consenso_voce", "Primo")
     verifica("contrario: per la voce di un altro adulto decide solo lui",
              r["ok"] is False and "in_sospeso" not in r and amm.voce_conservata is None)
     sc.current_speaker = "Primo"
     C._scrivi_privato(cons.voce_dir / "p-min" / oggi / "1.wav", C.wav_mulaw(audio, sr))
     r = _dati_conservati(ctx, "revoca_voce", "Leo")
-    verifica("tutore: revoca subito, le registrazioni del minore cancellate",
-             r["ok"] and minore.voce_conservata is False and r["cancellate"] == 1
-             and cons.registrazioni("p-min") == 0 and "voce di Leo" in r["conferma"], str(r))
+    verifica("tutore con la voce: revoca subito, le registrazioni del minore cancellate",
+             r["ok"] and minore.voce_conservata is False and minore.voce_conservata_da == "p-amm"
+             and r["cancellate"] == 1 and cons.registrazioni("p-min") == 0
+             and "voce di Leo" in r["conferma"] and not C.consenso_voce(minore, reg), str(r))
+    sc.current_speaker = "Leo"
+    r = _dati_conservati(ctx, "stato")
+    verifica("stato per il minore dopo la revoca: la voce no, decisa dai genitori",
+             "voce no" in r["conferma"] and "genitori" in r["conferma"], str(r))
+    # Il consenso ridato a mano dopo la revoca: domanda, poi il «sì» con la conferma di «svuota»
+    sc.current_speaker, ctx.turno = "Primo", 30
+    q = _dati_conservati(ctx, "consenso_voce", "Leo")
+    verifica("tutore: dopo la revoca, prima la domanda sulla voce del minore",
+             q["ok"] is False and "voce di Leo" in q["conferma"]
+             and q["in_sospeso"]["argomenti"] == {"azione": "consenso_voce", "persona": "Leo"}
+             and minore.voce_conservata is False, str(q))
+    sc.identified_by, sc.conferma_breve, ctx.turno = "breve", False, 31
+    r = _dati_conservati(ctx, "consenso_voce", "Leo")
+    verifica("contrario: il «sì» del minore accanto (breve, impronta non compatibile) non vale",
+             r["ok"] is False and minore.voce_conservata is False, str(r))
+    sc.conferma_breve, ctx.turno = True, 32
+    r = _dati_conservati(ctx, "consenso_voce", "Leo")
+    verifica("tutore: il «sì» breve con l'impronta compatibile, salvato con chi l'ha dato",
+             r["ok"] and minore.voce_conservata is True and minore.voce_conservata_da == "p-amm"
+             and minore.voce_conservata_il == oggi and C.consenso_voce(minore, reg), str(r))
+    verifica("…e chi amministra non ha cambiato la sua scelta", amm.voce_conservata is None)
+    sc.identified_by, sc.conferma_breve = "voce", False
     sc.current_speaker = None
     r = _dati_conservati(ctx, "stato")
     verifica("contrario: ospite, niente", r["ok"] is False)
@@ -526,6 +636,45 @@ try:
              spec.name == "dati_conservati" and spec.risk == "azione"
              and spec.classe.sola_lettura[1] == frozenset({"stato"})
              and "svuota" in spec.classe.distruttiva)
+
+    # ───────── la registrazione di un minore: il consenso alla voce implicito (16/10) ─────────
+    # Decisione di chi amministra (16/10, 0031 aggiornata): registrando un minore chi amministra
+    # dà il consenso a tenere la sua voce. Il registro e i tool veri di prova_sicurezza
+    import prova_sicurezza as PS
+    from calliope.speaker_id import SpeakerContext as _SC, SpeakerRegistry as _SR
+    from calliope.tools.spec import ToolContext
+    path_prima = _SR.PATH
+    try:
+        regr = PS.registro_finto()
+        scr = _SC(regr)
+        ctxr = ToolContext(cfg=regr.cfg, speakers=regr, speaker_ctx=scr, speaker=None)
+        strumenti = PS.Strumenti()
+        nascita_g = f"{datetime.date.today().year - 9}-03-04"
+        scr.current_speaker, scr.identified_by = "Bianca", "voce"
+        out = strumenti.call("registra_utente", {"nome": "gino", "nascita": nascita_g}, ctxr,
+                             "familiare")
+        verifica("registrazione, contrario: un adulto che non amministra non registra un minore "
+                 "(e quindi non dà nessun consenso)", out.get("ok") is False
+                 and regr.get("Gino") is None, str(out))
+        scr.current_speaker, scr.sfida_superata = "Dario", True
+        out = strumenti.call("registra_utente", {"nome": "gino", "nascita": nascita_g}, ctxr,
+                             "amministra")
+        scr.sfida_superata = False
+        for _ in range(5):
+            esito_r = scr.enroll_sample("gino", voiced_s=3.0)
+        g = regr.get("Gino")
+        dario_id = regr.get("Dario").id
+        verifica("registrazione di un minore da chi amministra: la voce col consenso implicito",
+                 esito_r == "fatto" and g is not None and C.categoria(g) == "minore"
+                 and g.voce_conservata is True and g.voce_conservata_da == dario_id
+                 and g.tutori == [dario_id] and C.consenso_voce(g, regr)
+                 and C.decidi(g, "voce", "voce", registry=regr).ok,
+                 f"{out} {g and g.to_dict().get('voce_conservata_da')}")
+        verifica("…e resta nel profilo (speakers.json)",
+                 _SR.PATH.exists() and any(d.get("voce_conservata_da") == dario_id
+                                           for d in json.loads(_SR.PATH.read_text("utf-8"))))
+    finally:
+        _SR.PATH = path_prima
 
     # ───────── l'archivio delle conversazioni (12/10 sera) ─────────
     from calliope.ciclo import Ciclo
@@ -592,8 +741,8 @@ try:
     Ciclo._segna_conserva(finto, turno("Ginevra", modo="conversazione"))
     grigia = finto._meta_turno
     finto._meta_turno = None
-    Ciclo._segna_conserva(finto, turno("Primo", livello="amministra",
-                                       voce={"incerta": ["Primo", "Leo"]}))
+    Ciclo._segna_conserva(finto, turno("Leo", modo="conversazione",
+                                       voce={"incerta": ["Primo", "Leo"], "punteggio": 0.489}))
     dubbio = finto._meta_turno
     finto._meta_turno = {"luogo": "studio"}
     Ciclo._segna_conserva(finto, turno("Ginevra"))
@@ -960,20 +1109,56 @@ try:
         (cart / "registro" / f"turni-{oggi}.jsonl").write_text(json.dumps(
             {"inizio": f"{oggi}T09:00:00", "livello": "familiare", "testo": "una frase di Leo",
              "voce": {"nome": "Leo", "id": "p-min", "modo": "voce"}}) + "\n", encoding="utf-8")
+        # Gli eventi del minore su disco (nella stessa conversazioni.db) e una sua riga della
+        # stanza (stanza.db accanto alla configurazione), con una riga di Primo che deve restare
+        d_ev = Disco.file(cart / "conversazioni.db", log=lambda m: None)
+        r_ev = Registri(d_ev, log=lambda m: None)
+        for chiave in ("persona:p-min", "persona:p-amm"):
+            rg_ev = r_ev.della_corsia(chiave)
+            rg_ev.apri("persona")
+            rg_ev.aggiungi("detto_persona", 1, testo="una frase per gli eventi", canale="voce")
+        r_ev.scrivi()
+        d_ev.db.close()
+        from calliope.stanza.tenuta import Tenuta
+        import sqlite3 as _sq
+        Tenuta(cart / "stanza.db", 60, log=lambda m: None, avvia=False).chiudi()
+        dbs = _sq.connect(cart / "stanza.db")
+        for seq, (pid, chi_n) in enumerate((("p-min", "Leo"), ("p-amm", "Primo")), 1):
+            cur = dbs.execute(
+                "INSERT INTO righe (avvio, sat, seq, inizio, fine, testo, chi, persona, nome, "
+                "minore) VALUES ('a', '1', ?, ?, ?, ?, 'persona', ?, ?, ?)",
+                (seq, time.time(), time.time(), f"una frase di {chi_n} nella stanza", pid, chi_n,
+                 1 if pid == "p-min" else 0))
+            dbs.execute("INSERT INTO righe_fts (rowid, testo) VALUES (?, ?)",
+                        (cur.lastrowid, f"una frase di {chi_n} nella stanza"))
+        dbs.commit()
+        dbs.close()
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             rc = C.main(["--svuota", "--persona", "Leo"])
-        verifica("terminale: --svuota --persona di un minore (voce, conversazioni, turni)",
+        ev_dopo = Disco.file(cart / "conversazioni.db", log=lambda m: None)
+        chiavi_dopo = set(ev_dopo.chiavi())
+        ev_dopo.db.close()
+        dbs = _sq.connect(cart / "stanza.db")
+        stanza_dopo = [x[0] for x in dbs.execute("SELECT persona FROM righe")]
+        dbs.close()
+        verifica("terminale: --svuota --persona di un minore (voce, conversazioni, turni, "
+                 "eventi, stanza)",
                  rc == 0 and not (c2.voce_dir / "p-min").exists()
                  and C.conta_archivio(SimpleNamespace(conversazioni_db=str(
                      cart / "conversazioni.db")), "p-min")["conversazioni"] == 0
                  and "una frase di Leo" not in (cart / "registro" / f"turni-{oggi}.jsonl")
-                 .read_text(encoding="utf-8"), out.getvalue())
+                 .read_text(encoding="utf-8")
+                 and "persona:p-min" not in chiavi_dopo and "p-min" not in stanza_dopo,
+                 f"{out.getvalue()} {chiavi_dopo} {stanza_dopo}")
+        verifica("terminale, contrario: gli eventi e la stanza di Primo restano",
+                 "persona:p-amm" in chiavi_dopo and stanza_dopo == ["p-amm"],
+                 f"{chiavi_dopo} {stanza_dopo}")
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             C.main([])
-        verifica("terminale: il minore nel riepilogo, la voce decisa dai tutori",
-                 "Leo: minore, voce no (lo decidono i tutori)" in out.getvalue(), out.getvalue())
+        verifica("terminale: il minore nel riepilogo, la voce sì decisa dai tutori",
+                 "Leo: minore, voce sì (lo decidono i tutori)" in out.getvalue(), out.getvalue())
         with contextlib.redirect_stdout(io.StringIO()):
             rc = C.main(["--svuota", "--persona", "Nessuno"])
         verifica("terminale, contrario: persona sconosciuta → 1", rc == 1)

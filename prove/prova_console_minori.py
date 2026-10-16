@@ -175,6 +175,16 @@ def brain_per(nome, livello):
 
 
 def prova_brain():
+    # Brain.parla_minore vero (non finto): dal profilo e dal dubbio, per la frase dopo il tool
+    verifica("Brain.parla_minore: il minore → sì", brain_per("Tommaso", "familiare").parla_minore()
+             is True)
+    bc = brain_per("Carlo", "amministra")
+    verifica("Brain.parla_minore, contrario: l'adulto → no", bc.parla_minore() is False)
+    bc.tool_ctx.speaker_ctx.incerta = ("Carlo", "Tommaso")
+    verifica("Brain.parla_minore: l'adulto nel dubbio col minore → sì", bc.parla_minore() is True)
+    bc.tool_ctx.speaker_ctx.incerta = None
+    verifica("Brain.parla_minore, contrario: l'ospite → no",
+             brain_per(None, "ospite").parla_minore() is False)
     b = brain_per("Tommaso", "familiare")
     out = cattura(lambda: "".join(b.stream_reply(f"Ricorda che ho {SEGRETO}.", "familiare")))
     # Dal 16/10 (decisione 0031) come un adulto: le parole, gli argomenti e il risultato

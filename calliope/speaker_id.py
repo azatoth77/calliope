@@ -748,7 +748,10 @@ class SpeakerContext:
                 name, self._enroll_embs, gender=self._enroll_gender, admin=admin)
             meta = getattr(self, "_enroll_meta", None) or {}
             if meta:
-                for k in ("nascita", "tutori", "fascia"):
+                # Il consenso alla voce del minore, implicito nella registrazione (16/10,
+                # decisione 0031): chi lo registra, scritto dal tool registra_utente
+                for k in ("nascita", "tutori", "fascia", "voce_conservata",
+                          "voce_conservata_da", "voce_conservata_il"):
                     if k in meta:
                         setattr(prof, k, meta[k])
                 if meta.get("nascita"):

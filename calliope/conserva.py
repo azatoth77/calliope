@@ -15,8 +15,10 @@ privacy in casa di un minore non esiste»). Le parole dei minori tolte in quei g
   dalla voce sopra soglia, da una frase breve o per continuità, da uno schermo personale, o il
   proprietario di un satellite personale incerto con un minore (`proprietario`). Anche nel
   dubbio tra un adulto e un minore (`incerta`, `minore_vicino`, `minore_incerto`: dal 16/10) il
-  testo resta, sotto la persona decisa dal ciclo: sono due persone di casa. La zona grigia
-  (`conversazione`) no.
+  testo resta, sotto la persona decisa dal ciclo: sono due persone di casa. Il ciclo scrive quei
+  turni con `modo: conversazione` e il segno del dubbio nel campo `voce`: è il segno che li
+  distingue dalla zona grigia (`conversazione` senza segni, una voce sola sotto soglia), che
+  resta fuori.
 - `voce` (l'audio della frase): come il testo, ma solo con la voce riconosciuta sopra soglia
   in quella frase (`modo: voce`), senza altre voci vicino al satellite (`compagnia`: l'audio
   potrebbe avere dentro un'altra persona), **senza dubbi con un minore** (l'audio può essere
@@ -45,11 +47,13 @@ privacy in casa di un minore non esiste»). Le parole dei minori tolte in quei g
 **Il consenso** è un dato della persona, nel suo profilo (speakers.json, `voce_conservata`):
 None = mai detto, True = «sì» detto una volta a Calliope (tool `dati_conservati`), False =
 revocato (anche a voce; le registrazioni che c'erano si cancellano). Per chi amministra vale la
-sua scelta, e senza una scelta è sì. **Per un minore** (16/10, decisione 0031) lo danno e lo
-revocano solo i suoi **tutori** (`minori.e_tutore`), a voce, con la persona minore come
-argomento: nel profilo del minore con chi l'ha dato (`voce_conservata_da`, l'id del tutore) e la
-data. Il minore da solo non lo dà né lo revoca; senza il sì di un tutore, niente voce. Il
-consenso dato da un tutore vale finché la persona è minore: da adulta lo ridice lei.
+sua scelta, e senza una scelta è sì. **Per un minore** (16/10, decisione 0031) il consenso è
+dei **tutori** ed è **implicito**: chi amministra lo dà registrando il minore (`registra_utente`
+scrive `voce_conservata` e `voce_conservata_da`, l'id di chi registra), e un minore già
+registrato con i tutori nel profilo ce l'ha senza domanda. Lo revoca un tutore
+(`minori.e_tutore`), a voce, con la stessa conferma di «svuota»; lo ridà a mano un tutore. Vale
+finché c'è un tutore valido (il profilo esiste ed è ancora tutore). Il minore da solo non lo dà
+né lo revoca. Il consenso dei tutori vale finché la persona è minore: da adulta lo ridice lei.
 
 **La voce** si salva in G.711 μ-law (8 bit, 16 kHz, WAV con il formato 7): metà della PCM a 16
 bit, letta da ffmpeg e sox, e codificata con numpy (già una dipendenza di base: principio 4,
@@ -139,15 +143,38 @@ def categoria(prof) -> str:
     return "amministra" if getattr(prof, "admin", False) else "adulto"
 
 
-def consenso_voce(prof) -> bool:
+def tutori_validi(prof, registry=None) -> list[str]:
+    """Gli id dei tutori nel profilo del minore che esistono ancora (con il registro delle voci;
+    senza, tutti quelli scritti)."""
+    ids = [str(t) for t in (getattr(prof, "tutori", None) or []) if t]
+    by_id = getattr(registry, "by_id", None) if registry is not None else None
+    if not callable(by_id):
+        return ids
+    return [t for t in ids if by_id(t) is not None]
+
+
+def consenso_voce(prof, registry=None) -> bool:
     """La persona ha detto sì a tenere la sua voce? Per chi amministra, senza una scelta, sì.
 
-    Per un minore (16/10, decisione 0031) vale solo il sì di un tutore (`voce_conservata_da`);
-    per un adulto solo il suo: il sì dato da un tutore quando era minore non vale più."""
+    Per un minore (16/10, decisione 0031) il consenso è dei tutori e implicito: sì finché non
+    è revocato (`voce_conservata` False) e c'è un tutore valido, cioè il tutore che l'ha dato
+    (`voce_conservata_da`, il profilo esiste ed è ancora tutore: `minori.e_tutore`) o uno dei
+    tutori del profilo che esiste ancora. Senza tutori validi, no. Per un adulto solo il suo sì:
+    quello dato da un tutore quando era minore non vale più."""
     v = getattr(prof, "voce_conservata", None)
     da = getattr(prof, "voce_conservata_da", None)
     if categoria(prof) == "minore":
-        return v is True and bool(da)
+        if v is False:
+            return False
+        if v is True and da:
+            by_id = getattr(registry, "by_id", None) if registry is not None else None
+            if not callable(by_id):
+                return True
+            from . import minori
+            t = by_id(da)
+            if t is not None and minori.e_tutore(t, prof):
+                return True
+        return bool(tutori_validi(prof, registry))
     if v is True and da and da != getattr(prof, "id", None):
         return False
     if v is None:
@@ -155,7 +182,8 @@ def consenso_voce(prof) -> bool:
     return bool(v)
 
 
-def decidi(prof, cosa: str, modo: str | None = None, dubbi=(), cfg=None) -> Decisione:
+def decidi(prof, cosa: str, modo: str | None = None, dubbi=(), cfg=None,
+           registry=None) -> Decisione:
     """Il solo posto che decide se qualcosa di questa persona si conserva. Puro.
 
     `cosa`: «testo», «voce», «eventi», «conversazioni» o «stanza»; `modo`: come è stata decisa l'identità della frase;
@@ -184,8 +212,11 @@ def decidi(prof, cosa: str, modo: str | None = None, dubbi=(), cfg=None) -> Deci
         return Decisione(True, cat)
     dubbi = set(dubbi or ())
     if cosa == "testo":
-        return (Decisione(True, cat) if modo in MODI_TESTO
-                else Decisione(False, "voce_incerta"))
+        # Nel dubbio tra un adulto e un minore il ciclo scrive `modo: conversazione` con il segno
+        # del dubbio (16/10, decisione 0031): il testo resta. Senza segno è la zona grigia: no
+        if modo in MODI_TESTO or (modo == "conversazione" and dubbi & set(DUBBI_MINORE)):
+            return Decisione(True, cat)
+        return Decisione(False, "voce_incerta")
     if dubbi & set(DUBBI_MINORE):
         # Solo la voce (16/10, decisione 0031): l'audio può essere dell'altra persona
         return Decisione(False, "dubbio_minore")
@@ -195,7 +226,7 @@ def decidi(prof, cosa: str, modo: str | None = None, dubbi=(), cfg=None) -> Deci
         return Decisione(False, "voce_incerta")
     if "compagnia" in dubbi:
         return Decisione(False, "compagnia")
-    if not consenso_voce(prof):
+    if not consenso_voce(prof, registry):
         return Decisione(False, "senza_consenso")
     return Decisione(True, cat)
 
@@ -757,7 +788,24 @@ class Conservazione:
         # Dal 16/10 (decisione 0031) la fascia d'età nel campo `ascolto` non toglie più le
         # parole: un minore di casa si conserva come un adulto
         prof = self.profilo(nome=v.get("nome"), persona_id=v.get("id"))
-        return decidi(prof, "testo", v.get("modo"), dubbi_del_turno(rec), self.cfg)
+        return decidi(prof, "testo", v.get("modo"), self.dubbi_di_casa(rec), self.cfg)
+
+    def dubbi_di_casa(self, rec: dict) -> set:
+        """I segni di dubbio del turno, con «incerta» solo se la voce è davvero di una delle due
+        persone di casa (16/10, decisione 0031): il punteggio migliore della frase sopra
+        `speaker_id_threshold`. Sotto, `minori.piu_protetto` ha dato al minore una voce di
+        nessuno (un ospite vicino al suo profilo), e il turno resta fuori come la zona grigia."""
+        dubbi = dubbi_del_turno(rec)
+        v = rec.get("voce") if isinstance(rec.get("voce"), dict) else {}
+        if "incerta" in dubbi and v.get("modo") == "conversazione":
+            soglia = float(getattr(self.cfg, "speaker_id_threshold", 0.48) or 0.48)
+            try:
+                sopra = float(v.get("punteggio")) >= soglia
+            except (TypeError, ValueError):
+                sopra = False
+            if not sopra:
+                dubbi.discard("incerta")
+        return dubbi
 
     def voce_turno(self, rec: dict) -> Decisione:
         """L'audio di questo turno si tiene?"""
@@ -777,7 +825,8 @@ class Conservazione:
         prof = self.profilo(nome=v.get("nome"), persona_id=v.get("id"))
         if prof is None:
             return Decisione(False, "ospite")
-        return decidi(prof, "voce", v.get("modo"), dubbi_del_turno(rec), self.cfg)
+        return decidi(prof, "voce", v.get("modo"), dubbi_del_turno(rec), self.cfg,
+                      self.registry)
 
     def registro_su_disco(self, chiave: str) -> bool:
         """Il registro degli eventi di questa chiave va su disco? Le persone di casa sì, minori
@@ -906,7 +955,7 @@ class Conservazione:
             giorni: list[tuple[str, Path]] = []
             for pdir in [x for x in self.voce_dir.iterdir() if x.is_dir()]:
                 prof = self.profilo(persona_id=pdir.name)
-                if prof is None or not consenso_voce(prof) \
+                if prof is None or not consenso_voce(prof, self.registry) \
                         or not getattr(self.cfg, "conserva_voce", True):
                     shutil.rmtree(pdir, ignore_errors=True)
                     out["persone"] += 1
@@ -1195,7 +1244,7 @@ def testo_stato(d: dict | None) -> str | None:
     st = d.get("stanza")
     stanza = (f"; stanza su disco {st['righe']} righe ({st['mb']:.1f} MB, "
               f"{st.get('giorni_tenuta', 60)} giorni, famiglia e minori)" if st else "")
-    return (f"Conservazione ({d['giorni']} giorni, persone di casa):{d['turni_file']} giorni di "
+    return (f"Conservazione ({d['giorni']} giorni, persone di casa): {d['turni_file']} giorni di "
             f"turni; {voce}{conv}{stanza}")
 
 
@@ -1342,7 +1391,7 @@ def main(argv=None) -> int:
         print(testo_stato(d))
         for u in reg.users.values():
             cat = categoria(u)
-            stato_voce = "sì" if consenso_voce(u) else (
+            stato_voce = "sì" if consenso_voce(u, reg) else (
                 "no" if u.voce_conservata is False else "non chiesto")
             if cat == "minore":
                 # Il consenso alla voce di un minore è dei tutori (16/10, decisione 0031)

@@ -6,12 +6,15 @@ dati_conservati(azione, persona):
 - `consenso_voce`: «puoi tenere la mia voce», «sì, registra pure la mia voce». Il consenso è
   della persona che parla: solo con la sua voce riconosciuta sopra soglia in questa frase (mai
   scritto, mai la zona grigia). Prima la domanda con cosa si tiene e per quanto, poi il «sì» nella
-  risposta dopo (come conversazioni_dimentica). **Per un minore** (16/10) lo dà un suo tutore,
-  con il minore in `persona` («puoi tenere la voce di Leo»), alle stesse condizioni; il minore da
-  solo no.
+  risposta dopo (come conversazioni_dimentica). **Per un minore** (16/10, decisione 0031) il
+  consenso è implicito nella registrazione (lo dà chi amministra registrandolo); dopo una revoca
+  lo ridà a mano un suo tutore, con il minore in `persona` («puoi tenere la voce di Leo»), la
+  voce sopra soglia e il «sì» con la stessa conferma di `svuota` (breve solo con l'impronta
+  compatibile: un minore accanto che dice «sì» non vale); il minore da solo no.
 - `revoca_voce`: «non tenere più la mia voce». Subito, senza domanda (è la direzione sicura), e
   le registrazioni che c'erano si cancellano. Basta essere riconosciuti (anche una frase breve).
-  Per un minore la revoca un suo tutore (`persona`), non il minore da solo.
+  Per un minore la revoca un suo tutore (`persona`), con la conferma di `svuota`; non il minore
+  da solo.
 - `stato`: cosa tengo di te, e per quanto (solo conteggi). Dal 14/10 con `stanza_tenuta` anche
   le righe della conversazione di stanza su disco (per tutta la famiglia, minori compresi). A un
   minore dice che i testi si tengono e che i genitori li possono rileggere.
@@ -19,8 +22,8 @@ dati_conservati(azione, persona):
   la domanda e il «sì». Dal 12/10 sera anche l'archivio delle conversazioni.
 
 Per chi amministra la voce si tiene finché non dice di no; per gli altri adulti solo dopo il
-loro «sì»; per i minori solo dopo il «sì» di un tutore (fino al 16/10: mai). Il dubbio lo
-scioglie calliope.conserva.decidi.
+loro «sì»; per i minori finché un tutore non dice di no (consenso implicito nella registrazione,
+dal 16/10; fino al 16/10 mai). Il dubbio lo scioglie calliope.conserva.decidi.
 """
 from .. import impronte_satellite as _imp_sat
 from .. import minori as _minori
@@ -85,15 +88,17 @@ def _dati_conservati(ctx: ToolContext, azione: str = "", persona: str = "") -> d
     if azione == "stato":
         stanza = _stanza(cons, prof)
         n = cons.registrazioni(prof.id)
-        voce_si = C.consenso_voce(prof) and getattr(ctx.cfg, "conserva_voce", True)
+        speakers = getattr(ctx, "speakers", None)
+        voce_si = C.consenso_voce(prof, speakers) and getattr(ctx.cfg, "conserva_voce", True)
         extra = ({"righe_stanza": stanza[0]} if stanza is not None else {})
         in_stanza = (f"; per {stanza[1]} giorni anche le tue frasi nella stanza, {stanza[0]}"
                      if stanza is not None else "")
         if cat == "minore":
             # Un minore (16/10, decisione 0031): i testi come per un adulto, e i tutori li
-            # possono rileggere; la voce la decidono loro
-            voce = (f"la tua voce sì, {n} registrazioni, perché l'hanno deciso i tuoi genitori"
-                    if voce_si else "la tua voce no, a meno che lo decidano i tuoi genitori")
+            # possono rileggere; la voce decisa alla registrazione, i tutori la possono togliere
+            voce = (f"la tua voce sì, {n} registrazioni, decisa alla registrazione dai tuoi "
+                    "genitori" if voce_si else
+                    "la tua voce no, l'hanno deciso i tuoi genitori")
             return _final(f"Tengo per {giorni} giorni, solo qui, i testi delle nostre "
                           f"conversazioni, e i tuoi genitori li possono rileggere{in_stanza}; "
                           f"{voce}.", registrazioni=n, **extra)
@@ -126,7 +131,15 @@ def _dati_conservati(ctx: ToolContext, azione: str = "", persona: str = "") -> d
         da = prof.id if minore_di is not None else None
         arg_persona = {"persona": chi.name} if minore_di is not None else {}
 
+    # Per la voce di un minore (consenso dato a mano o revoca) la stessa conferma di «svuota»:
+    # la voce sopra soglia, o un «sì» breve con l'impronta compatibile (conferma_breve). Così un
+    # minore accanto che dice «sì», o il tutore nel dubbio col minore, non decide
+    tutore_ok = come == "voce" or (come == "breve" and getattr(sc, "conferma_breve", False))
+
     if azione == "revoca_voce":
+        if minore_di is not None and not tutore_ok:
+            return _final(f"Per {di_chi} mi serve la tua voce: dimmelo a voce, dopo avermi "
+                          "chiamata per nome.", ok=False)
         if come not in ("voce", "breve", "continuita"):
             return _final("Per questo mi serve la tua voce: dimmelo a voce.", ok=False)
         n = cons.imposta_consenso(chi, False, da=da)
@@ -139,13 +152,14 @@ def _dati_conservati(ctx: ToolContext, azione: str = "", persona: str = "") -> d
         # breve: arriva nella conversazione della stessa persona (le conversazioni seguono la
         # voce), mai scritto né dalla zona grigia
         chiave = f"voce:{chi.id}" + (f":{prof.id}" if minore_di is not None else "")
-        breve_ok = come in ("breve", "continuita") and _aperta(cons, chiave, turno)
+        breve_ok = ((tutore_ok if minore_di is not None else come in ("breve", "continuita"))
+                    and _aperta(cons, chiave, turno))
         if come != "voce" and not breve_ok:
             return _final(f"Il sì per {di_chi} me lo devi dire a voce, dopo avermi chiamata "
                           "per nome, così so che sei proprio tu.", ok=False)
         if not getattr(ctx.cfg, "conserva_voce", True):
             return _final("In questa casa la voce non la tengo per nessuno.", ok=False)
-        if C.consenso_voce(chi):
+        if C.consenso_voce(chi, getattr(ctx, "speakers", None)):
             return _final(f"{di_chi[0].upper()}{di_chi[1:]} la tengo già, per {giorni} giorni. "
                           "Se non volete più, ditemelo." if minore_di is not None else
                           f"La tua voce la tengo già, per {giorni} giorni. Se non vuoi più, "

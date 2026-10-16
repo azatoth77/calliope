@@ -1076,7 +1076,9 @@ minori, le sezioni «Nessuna conservazione per i minori» e «Le parole dei mino
   (`conversazioni_visibili_ai_tutori`, scheda «Conversazione», `conversazione_cerca`) e ora anche
   dopo un riavvio. Si svuota con `calliope conserva --svuota --persona <minore>` o a voce da chi
   amministra (`dati_conservati` azione `svuota`).
-- **La voce del minore col consenso dei tutori**: «Calliope, puoi tenere la voce di Leo?» detto da
+- **La voce del minore col consenso dei tutori** (*dal 16/10 il consenso è implicito nella
+  registrazione: sotto, «correzioni della revisione»; il testo qui descrive il consenso dato a
+  mano, che resta per dopo una revoca*): «Calliope, puoi tenere la voce di Leo?» detto da
   un tutore (`minori.e_tutore`; senza tutori nel profilo, chi amministra), riconosciuto dalla voce
   sopra soglia: domanda, poi il «sì» (anche breve, nella stessa conversazione). Nel profilo del
   minore `voce_conservata`, la data e `voce_conservata_da` (l'id del tutore). La revoca («non
@@ -1094,6 +1096,31 @@ minori, le sezioni «Nessuna conservazione per i minori» e «Le parole dei mino
 - **Le parole tolte dal 12 al 16/10 non tornano** (niente migrazioni).
 
 Prove: `prova_conserva`, `prova_console_minori`, `prova_stanza_tenuta`, `prova_dopo_tool`.
-**Sulla DGX dopo l'aggiornamento**: `calliope conserva` (il minore con «voce no (lo decidono i
-tutori)»), un turno di prova con il profilo della minore e `calliope stato --turni`; nel registro
+**Sulla DGX dopo l'aggiornamento**: `calliope conserva` (il minore con «voce sì (lo decidono i
+tutori)», consenso implicito dei tutori), un turno di prova con il profilo della minore e `calliope stato --turni`; nel registro
 dei turni il suo `testo` non più null.
+
+### 16/10: correzioni della revisione della PR #106 e consenso implicito
+
+- **Consenso alla voce implicito nella registrazione** (decisione di chi amministra del 16/10):
+  `registra_utente` per un minore scrive nel profilo `voce_conservata`, la data e
+  `voce_conservata_da` (chi registra); un minore già registrato con i tutori nel profilo ha il
+  consenso senza domanda. Vale finché c'è un tutore valido (chi l'ha dato, se esiste ed è ancora
+  tutore, o uno dei tutori del profilo che esiste: `conserva.tutori_validi`). La revoca e il
+  consenso ridato a mano vogliono la conferma di «svuota» (voce sopra soglia, o «sì» breve con
+  `conferma_breve`): il minore accanto che dice «sì» o il tutore nel dubbio col minore non
+  decidono. Il minore da solo non dà né revoca; un adulto che non amministra non registra minori.
+  `dati_conservati stato` per il minore: «la tua voce sì, …, decisa alla registrazione dai tuoi
+  genitori», o «la tua voce no, l'hanno deciso i tuoi genitori».
+- **Il dubbio come lo scrive il ciclo**: `incerta` e `minore_vicino` arrivano con `modo:
+  conversazione`; il testo resta per il segno del dubbio, `incerta` solo con la voce migliore sopra
+  soglia (vedi [contesto-conversazione](contesto-conversazione.md), stessa data).
+- **Limite**: una voce senza profilo attribuita a un minore da `piu_protetto` va nel journal in
+  chiaro (su disco no).
+
+Prove: `prova_conserva` (turni scritti dal ciclo vero con le impronte di `prova_voci_famiglia`;
+registrazione di un minore con i tool e il registro di `prova_sicurezza`; consenso implicito,
+revoca con la conferma, contrari: minore che revoca, tutore nel dubbio, «sì» breve del minore
+accanto, adulto non tutore, tutore non più valido; `--svuota --persona` del minore con eventi e
+stanza), `prova_minori` (i dati del consenso nella registrazione), `prova_console_minori`
+(`Brain.parla_minore` vero).

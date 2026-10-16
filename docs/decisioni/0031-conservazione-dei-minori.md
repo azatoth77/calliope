@@ -1,7 +1,9 @@
 # 0031. Le parole dei minori di casa si conservano come quelle degli adulti
 
 - **Stato**: accettata (16/10/2026, decisione di chi amministra dopo i log del 15/10 sera), fatta
-  il 16/10 sul ramo `issue-104-minori-conserva` (issue #104). Supera il punto 1 (T1) della
+  il 16/10 sul ramo `issue-104-minori-conserva` (issue #104); **aggiornata il 16/10** dopo la
+  revisione della PR #106 (consenso alla voce implicito nella registrazione, punto 2; il dubbio
+  come lo scrive il ciclo, punto 3; il limite del journal, punto 8). Supera il punto 1 (T1) della
   [0028](0028-decisioni-roadmap-12-10.md) per i minori di famiglia: «di minori e ospiti mai»
   diventa «degli ospiti mai».
 - **Area**: [contesto-conversazione](../aree/contesto-conversazione.md), [minori](../aree/minori.md);
@@ -32,17 +34,30 @@ DEVE finire nel db e nel disco».
    `turn_log_days` (60) giorni e con gli stessi comandi per svuotare (`calliope conserva --svuota
    [--persona]`, `dati_conservati` azione `svuota`). I tutori le rileggono come già potevano per la
    sessione (`conversazioni_visibili_ai_tutori`, a ogni età dal 14/10).
-2. **La voce del minore solo col consenso dei tutori.** Lo dà un tutore (`minori.e_tutore`: i
-   tutori del profilo, o chi amministra se non ne ha) a voce, riconosciuto sopra soglia, con il
-   minore come argomento (`dati_conservati(consenso_voce, persona)`), prima la domanda e poi il
-   «sì» (come per un adulto); lo revoca ogni tutore, subito, e le registrazioni si cancellano. Nel
-   profilo del minore restano la scelta, la data e chi l'ha data (`voce_conservata_da`). **Il
-   minore da solo non dà né revoca il consenso alla sua voce.** Il «sì» di un tutore vale finché
-   la persona è minore: da adulta lo ridice lei.
+2. **La voce del minore col consenso dei tutori, implicito nella registrazione** (decisione di chi
+   amministra del 16/10: «alla registrazione del minore da parte dell'amministratore, il consenso è
+   implicito»). Registrando un minore (`registra_utente`, solo chi amministra, con la voce e la
+   frase di sfida) chi amministra dà il consenso: nel profilo `voce_conservata`, la data e
+   `voce_conservata_da` (chi registra), senza una domanda in più. Un minore **già registrato** con
+   i tutori nel profilo ha il consenso senza domanda. Il consenso vale finché c'è un tutore
+   valido: chi l'ha dato, se il suo profilo esiste ed è ancora tutore (`minori.e_tutore`), o uno
+   dei tutori del profilo che esiste ancora; senza tutori validi, niente voce. Lo **revoca** un
+   tutore a voce, con la persona minore come argomento (`dati_conservati(revoca_voce, persona)`) e
+   la **stessa conferma di «svuota»** (voce sopra soglia, o un «sì» breve con l'impronta
+   compatibile: un minore accanto, o il tutore nel dubbio col minore, non decide); le
+   registrazioni si cancellano. Dopo una revoca lo ridà a mano un tutore, con la domanda e il «sì»
+   con la stessa conferma. **Il minore da solo non dà né revoca il consenso alla sua voce.** Un
+   adulto che non amministra non può registrare un minore, e quindi non dà nessun consenso;
+   chi amministra che registra un minore con altri tutori resta scritto come chi l'ha dato, e
+   vale il consenso dei tutori del profilo. Il consenso dei tutori vale finché la persona è
+   minore: da adulta lo ridice lei.
 3. **Nel dubbio tra un adulto e un minore** (`incerta`, `minore_vicino`, `minore_incerto`, il
    proprietario di un satellite personale incerto con un minore) **si tiene il testo ma non la
    voce**: sono due persone di casa, il testo va sotto la persona decisa dal ciclo; l'audio può
-   essere dell'altra persona, come in compagnia.
+   essere dell'altra persona, come in compagnia. Il ciclo scrive questi turni con `modo:
+   conversazione` e il segno del dubbio nel campo `voce`: il segno li distingue dalla zona grigia.
+   `incerta` vale solo con la voce migliore sopra `speaker_id_threshold`: sotto, `piu_protetto` ha
+   dato al minore una voce di nessuno (un ospite vicino al suo profilo) e il turno resta fuori.
 4. **Restano fuori dal disco come prima**: gli ospiti e le voci non riconosciute (nessun profilo),
    la zona grigia (`modo: conversazione`). I **conoscenti** restano come deciso il 14/10 sera
    ([0030](0030-conoscenti.md) punto 9), e un bambino non si salva mai come conoscente.
@@ -53,6 +68,11 @@ DEVE finire nel db e nel disco».
 7. **Permessi e guardiano invariati**: conservare non cambia cosa un minore può fare né il
    guardiano; la scelta di forma della frase dopo un tool (System 1, che con un minore lascia
    parlare il modello) passa da `minori.parla_minore` invece che dalla maschera del journal.
+8. **Limite accettato, il journal**: una voce senza profilo che `minori.piu_protetto` attribuisce
+   a un minore (vicina al suo profilo, sotto soglia) vale quel minore per i permessi e per la
+   prudenza, e le sue frasi vanno nel journal in chiaro (`console_riservata` guarda solo il
+   livello ospite); su disco no (punto 3). Prima del 16/10 erano mascherate perché lo erano tutte
+   quelle dei minori.
 
 ## Alternative considerate
 
