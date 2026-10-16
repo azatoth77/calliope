@@ -404,7 +404,7 @@ def prova_server():
                  and registro[-1]["regole"] == ["scritto_senza_conversazione"], r.text)
         # Una foto in attesa della domanda decade quando la conversazione finisce
         att = InAttesa(60)
-        hub.su_fine_conversazione.append(att.togli)
+        hub.su_fine_conversazione.append(att.fine_conversazione)
         hub.conversazioni.voce("dario", "voce")           # Dario parla a Calliope
         att.metti(Immagine(F.jpeg(F.foto()), 10, 10, persona="dario"))
         r = post(mio, {"immagine": url, "testo": "Cosa c'è qui?", "fonte": "telefono"})

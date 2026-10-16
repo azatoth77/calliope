@@ -119,6 +119,19 @@ class Config:
     # «Come più tardi.», 0,76 s): saluto, o suono d'inizio ascolto, e finestra aperta,
     # invece della frase al modello. «Calliope» da solo dura 0,5–0,65 s sulla DGX
     wake_solo_nome_s: float = 0.9
+    # «Grazie.» sul rumore (16/10, issue #97, calliope/cortesia.py): Whisper scrive «Grazie.»
+    # su un rumore breve (allucinazione dei sottotitoli), e la cortesia chiudeva la finestra
+    # d'ascolto a chi stava parlando (sulla DGX il 15/10 sera 7 casi su 8 con 0,00–0,38 s di
+    # voce; il «grazie» vero della minore 0,60 s). Una cortesia («grazie», «perfetto») detta su
+    # meno di cortesia_voce_min_s secondi di voce (il parlato del VAD, `parlato_ms`; la durata
+    # dell'audio meno pre-roll e silenzio solo se manca) vale come trascrizione vuota:
+    # «attiva» = niente frase pronta e finestra invariata (regola `cortesia_senza_voce`);
+    # «ombra» (di serie) = la cortesia come prima e nel registro dei turni la regola
+    # `cortesia_senza_voce_ombra` con `cortesia_voce` (forma, secondi di voce e fonte), da
+    # rileggere per una settimana prima di «attiva»; «spenta» = niente. Le frasi scritte non
+    # contano: non hanno voce
+    cortesia_voce_min: str = "ombra"
+    cortesia_voce_min_s: float = 0.3
     # Barge-in, livello A: mentre Calliope parla la wake word resta accesa e «Calliope,
     # basta» la interrompe (solo il nome: il resto della voce non viene ascoltato). Senza
     # cuffie si ignora quando è lei a dire il proprio nome. Richiede wake_mode="modello".
@@ -940,6 +953,11 @@ class Config:
     immagini_max_conversazione: int = 6
     # Secondi in cui una foto mandata senza domanda aspetta la frase dopo della persona
     immagini_attesa_s: float = 120.0
+    # Secondi dopo la perdita di una foto in attesa (conversazione finita con «esci» o
+    # scaduta, attesa scaduta) in cui il turno dopo della persona riceve il dato «la foto non
+    # c'è più, chiedi di rimandarla», invece di una causa inventata dal modello (16/10, #96,
+    # DGX 15/10). Oltre, il dato non vale più (la persona parla d'altro); 0 lo spegne
+    immagini_persa_s: float = 600.0
     # Allegati di qualsiasi tipo (05/10, calliope/allegati.py, docs/ricerche/2026-10-05-allegati.md):
     # dal pulsante «Allega» del telefono e degli schermi personali (scegli, trascina, incolla),
     # con la vita delle foto (la conversazione) e le stesse regole (solo durante una
@@ -3179,7 +3197,8 @@ SEZIONI: dict[str, list[str]] = {
                  "modalita", "suoni_ascolto",
                  "suono_inizio_ascolto", "suono_fine_ascolto", "suoni_volume"],
     "wake_word": ["wake_word", "wake_anche_nome", "wake_posizione", "wake_word_enabled", "wake_mode", "wake_model", "wake_threshold",
-                  "wake_consecutive", "wake_confirm_score", "wake_solo_nome_s", "followup_s",
+                  "wake_consecutive", "wake_confirm_score", "wake_solo_nome_s",
+                  "cortesia_voce_min", "cortesia_voce_min_s", "followup_s",
                   "wake_match"],
     "barge_in": ["barge_in_enabled", "barge_in_threshold", "barge_in_seed_s",
                  "barge_in_voice", "barge_in_voice_min_s", "barge_in_echo_max"],
@@ -3285,7 +3304,8 @@ SEZIONI: dict[str, list[str]] = {
                 "telefono_enabled", "telefono_web"],
     "immagini": ["immagini_enabled", "immagini_modello", "immagini_lato_max",
                  "immagini_pixel_per_token", "immagini_max_mb", "immagini_storia",
-                 "immagini_max_conversazione", "immagini_attesa_s"],
+                 "immagini_max_conversazione", "immagini_attesa_s",
+                 "immagini_persa_s"],
     "allegati": ["allegati_enabled", "allegati_max_mb", "allegati_memoria_mb",
                  "allegati_max_conversazione", "allegati_token_file", "allegati_token_totale",
                  "allegati_pdf_pagine", "allegati_pdf_pagine_immagini", "allegati_audio_max_s",
@@ -3550,6 +3570,7 @@ LIMITI: dict[str, tuple[float, float]] = {
     "contesto_conversazioni": (1, 64), "contesto_margine_gb": (0.0, 512.0),
     "max_history_turns": (0, 200), "max_tool_turns": (1, 20), "tool_correzioni_max": (0, 10),
     "tool_correzione_avviso_s": (0.0, 60.0), "followup_s": (0.0, 600.0), "wake_solo_nome_s": (0.0, 3.0),
+    "cortesia_voce_min_s": (0.0, 2.0),
     "giochi_ascolto_s": (0.0, 600.0),
     "giochi_giudice_timeout_s": (0.2, 30.0),
     "sample_rate": (8000, 48000), "whisper_beam_size": (1, 20), "stt_timeout_s": (0.5, 600.0),
@@ -3712,6 +3733,17 @@ def _eventi_valido(value):
     raise ValueError("serve «spento», «ombra» o «attivo»")
 
 
+def _cortesia_voce_min_valido(value):
+    """«spenta», «ombra» o «attiva» (16/10, issue #97, calliope/cortesia.py); il «no» di YAML
+    (false) è «spenta»."""
+    if value is False or value is None:
+        return "spenta"
+    s = str(value).strip().lower()
+    if s in ("spenta", "ombra", "attiva"):
+        return s
+    raise ValueError("serve «spenta», «ombra» o «attiva»")
+
+
 def _frasi_varianti_valido(value):
     """«spento», «ombra» o «attivo» (12/10, calliope/frasi.py)."""
     s = str(value or "").strip().lower()
@@ -3814,6 +3846,7 @@ VALIDATORI = {"llm_keep_alive": keep_alive_valido, "llm_num_ctx": _num_ctx_valid
               "contesto_riassuntore": _riassuntore_valido,
               "dialogo_interprete": _dialogo_interprete_valido,
               "eventi": _eventi_valido, "frasi_varianti": _frasi_varianti_valido,
+              "cortesia_voce_min": _cortesia_voce_min_valido,
               "stanza": _stanza_valido, "stanza_guardia": _stanza_guardia_valido,
               "fine_turno": _fine_turno_valido,
                "preselezione_tool": _preselezione_valido,

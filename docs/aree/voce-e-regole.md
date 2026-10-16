@@ -195,6 +195,7 @@ misure di questo documento sono col 4B in locale: da rifare col 26B sulla DGX do
 
 - **Registro delle regole** (01/10): ogni turno ha `regole`, l'elenco delle regole sul testo
   scattate: `uscita_dormi`, `uscita_spegni`, `uscita_spegni_satellite`, `stop`, `stop_interruzione`, `cortesia`,
+  `cortesia_senza_voce` e `cortesia_senza_voce_ombra` (dal 16/10, issue #97),
   `cortesia_dopo_nome`, `approfondisci`, `ricerca_promessa`, `annuncio_tool_taciuto` (solo l'annuncio di una chiamata; fino al 06/10 `nome_tool_taciuto`), `nome_tool_parlato` (dal 03/10 il nome di un tool detto a parole, «il mio comando per la casa»: prima la frase si taceva intera e Calliope restava muta),
   `citazione_tolta`, `nome_detto`, e da Brain e dai tool (`ToolContext.regole`,
   `note_rule`) `azione_in_sospeso`, `spinta_promessa`, `spinta_richiesta`,
@@ -2319,3 +2320,47 @@ criterio 2 dell'issue (una seconda azione diversa dichiarata nella stessa passat
 rete è spenta per la passata, e un confronto per azione (verbo e oggetto contro il tool eseguito)
 non c'è in nessuna risposta, sarebbe una regola sul testo nuova (principio 10) e fragile coi verbi
 che non conosce; la proposta consigliata dell'issue ha questo stesso effetto.
+
+## «Grazie.» sul rumore: la regola `cortesia_senza_voce`, in ombra (16/10, issue #97, ramo `issue-97-grazie-rumore`)
+
+**Caso vero** (DGX, 15/10 sera): 8 turni con esito `cortesia` («Grazie.» trascritto, «Prego!»,
+finestra d'ascolto chiusa), 7 con la voce quasi assente: `voce_s` 0,00–0,38 s (32–416 ms di
+parlato del VAD). Whisper scrive «Grazie.» su un rumore breve (allucinazione dei sottotitoli), e
+`Ciclo._chiusure` chiudeva la finestra a chi stava parlando (alle 19:00:57 a metà di una
+discussione; a casa 4 volte tra le frasi della minore). Il «grazie» vero della minore: 0,60 s.
+«Grazie» da solo non va tra le allucinazioni (`calliope/allucinazioni.py`): è anche una frase vera.
+
+**Correzione** (`calliope/cortesia.py` → `senza_voce`, `Ciclo._chiusure`): una cortesia
+(«grazie» o «conferma» di `closing_kind`, già forma chiusa per intero) detta su meno di
+`cortesia_voce_min_s` (0,3 s) di voce è rumore. Con `cortesia_voce_min: attiva` vale come una
+trascrizione vuota: niente frase pronta, finestra d'ascolto invariata, esito `vuoto`, regola
+`cortesia_senza_voce`. Di serie **ombra**: la cortesia resta com'era e il registro dei turni scrive
+`cortesia_senza_voce_ombra` con `cortesia_voce` (forma `grazie` o `conferma`, `voce_s`, fonte);
+«spenta» non fa niente. Principio 10: riguarda
+la trascrizione, che il modello non vede, ed è reversibile (al più la persona ripete «grazie»; la
+finestra resta aperta). Non toccano: «basta», «stop» (la finestra resta già aperta), le frasi
+scritte (senza voce), «grazie» dopo una domanda o un'offerta (va al modello come prima,
+`cortesia_dopo_domanda`), qualunque frase con una richiesta («Grazie, spegni la luce.»).
+
+I secondi di voce sono il parlato del VAD (`parlato_ms` di `rec["ascolto"]`, misurato anche dai
+satelliti e dal telefono; fonte `vad`); `Turno.voiced_s` (durata dell'audio meno pre-roll e
+`silence_ms`, fonte `durata`) solo se manca. *Revisione della PR #109, 16/10:* nella prima
+versione c'era solo `voiced_s`, che sottostima quando la frase non si chiude dopo il silenzio
+pieno, cioè col telefono a pressione lunga (chiusura `rilascio`) e con Smart Turn
+(`anticipata`): un «grazie» vero di mezzo secondo sarebbe valso rumore. La forma nel registro
+serve a leggere separati in ombra «grazie» e «perfetto». La soglia 0,3 s prende 6 dei 7 casi
+(160, 64, 32, 128, 96, 256 ms di parlato); quello delle 20:04:23 (416 ms) resta fuori, da
+rivedere sui turni conservati.
+
+**Prove a secco**: `prova_testo` (la funzione: 0,0–0,29 s scatta, 0,3–0,6 s no, frase scritta,
+«Basta.», «Grazie, spegni la luce.» a 0,1 e 2 s, ombra, spenta, validatore) e `prova_ciclo` (in
+ombra cortesia come prima con la regola nel registro; con «attiva» 0,12 s → nessuna risposta e
+finestra aperta; contrari 0,5 s → frase pronta e finestra chiusa, «Grazie, spegni la luce.» al
+modello; dopo la revisione «Grazie.» chiuso da `rilascio` e da `anticipata` con 520 ms di parlato
+riceve la cortesia, «Perfetto.» su 128 ms di parlato è rumore anche con 0,5 s di audio, e
+`voce_frase` col ripiego sulla durata). Sul codice di prima falliscono.
+
+**Da fare sulla DGX**: 7 giorni in ombra; leggere a campione i turni con
+`cortesia_senza_voce_ombra` (0 «grazie» veri tra quelli), poi `cortesia_voce_min: attiva` nel
+file locale. Dopo: 0 turni `cortesia` con `voce_s < 0,3` in 7 giorni e frasi pronte ripetute
+sotto 8 ogni 100 (`calliope stato --turni`).

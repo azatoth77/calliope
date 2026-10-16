@@ -76,6 +76,61 @@
   `politica.CLASSI`. Banco Ollama dopo il merge: 26 casi ostili, 0 azioni, 0 cambi (anche con la guardia spenta:
   `immagine_conferma` e il «sì» con dati nuovi sono superflui, `immagine_delega` no).
 
+## La foto in attesa e un'altra voce in mezzo (16/10, #96)
+
+**Caso vero** (DGX, 15/10 sera): chi amministra manda una foto dal telefono senza domanda
+(«aspetto la domanda»); 2 s dopo una sua frase breve vale 0,479 contro la soglia di 0,48 e
+diventa «ospite»; alla domanda vera, 17 s dopo, il modello non ha la foto (nessun
+`[IMMAGINI] 1 foto con la domanda`), dice di non poterla vedere e inventa una causa («la foto
+non mi è stata inviata come file»). Due turni persi; la foto rimandata un minuto dopo va bene.
+
+**Causa** (verificata come nell'analisi della issue): la frase dell'ospite passa per
+`Conversazioni.voce`, che **sostituisce** la conversazione degli schermi di chi amministra con
+una senza persona; `Schermi._scrittura_cambiata` la vede come finita e chiama
+`su_fine_conversazione`, a cui `main.py` aveva appeso `InAttesa.togli`. Il punto incerto
+dell'analisi è confermato dalla prova: succedeva lo stesso con **un'altra persona di casa** o
+un minore in mezzo, non solo con un ospite.
+
+**Correzione**: l'evento `su_fine_conversazione` porta il **motivo**
+(`conversazione.FINE`: «esci», scaduta; `conversazione.SOSTITUITA`: un'altra voce ha preso la
+conversazione). `main.py` vi appende `InAttesa.fine_conversazione`, che con «sostituita» lascia
+la foto fino a `immagini_attesa_s` (120 s): la prende solo la stessa persona (`prendi`, come
+prima), mai l'ospite, un'altra persona o un minore dallo stesso satellite. Lo scritto non
+cambia: un'altra voce chiude ancora la conversazione per gli schermi e i moduli aperti (vincolo
+di permesso del 05/10). La fine vera arriva anche dopo una sostituzione: «esci» sulla stessa
+chiave (`Conversazioni.chiudi`) avvisa con «fine» anche chi era stato sostituito (il caso della
+propria frase presa per ospite che dice «esci»).
+
+**Dato del turno quando la foto manca** (`immagini.FOTO_PERSA`): se le foto in attesa della
+persona sono andate perse (tolte dalla fine vera o scadute) da meno di `immagini_persa_s`
+(600 s di serie, 0 lo spegne), il suo turno dopo ha una riga breve: non sono più disponibili,
+se ne parla dille di rimandarle, non inventare altre cause. Una volta sola; nel registro dei
+turni `foto_persa: true`. Non è una regola sul testo (vale qualunque cosa la persona dica).
+
+**Dopo la revisione della PR #113** (16/10):
+- il dato sta in un campo suo del turno, `Turno.contesto_foto`, unito al contesto in
+  `_rispondi` come `contesto_gioco`. In `t.context` (che vuol dire «biblioteca») faceva dire
+  «Controllo nella biblioteca.» a vuoto, non aggiornava `last_question` e spegneva
+  `citazione_tolta` e la ricerca promessa. Lo stesso valeva da prima per `FOTO_NON_VISTA`,
+  spostato anche lui; il controllo di `prova_politica` copre anche il campo nuovo (solo frasi
+  fisse);
+- «ricominciamo» (regola breve e `conversazione_nuova`) e «dimentica» (al «sì») tolgono la foto
+  in attesa di chi parla **senza** segnarla persa (`InAttesa.dimentica`): niente `FOTO_PERSA`
+  dopo, e una perdita segnata prima si dimentica anche lei;
+- una riga nel log a ogni foto in attesa tolta o tenuta, con il motivo e senza contenuto
+  (`[IMMAGINI] … tolta: conversazione finita (motivo fine)`, `… tenuta: un'altra voce in mezzo
+  (motivo sostituita)`, `… attesa scaduta (motivo scadenza)`, `… (motivo ricominciamo)`,
+  `… (motivo dimentica)`): serve per il criterio dei 7 giorni sulla DGX;
+- «esci» detto da **chiunque** su quel satellite toglie anche la foto di chi era stato
+  sostituito: dopo «esci» lì non c'è più una conversazione in cui la foto valga.
+
+Prova `prova_immagini_attesa.py` (livello 1, ~1 s): hub degli schermi vero e i passi veri del
+ciclo (anche `_conversazione_nuova_chiesta` e `_conversazioni_dimenticate`); sul codice di
+main falliscono 9 controlli (la foto dopo l'ospite, dopo Bianca, dopo un
+minore, dopo la propria frase breve; il motivo; il dato «foto persa»). Da guardare sulla DGX
+per 7 giorni (criterio della issue): 0 turni con una foto in attesa sparita senza un turno della
+stessa persona con `immagini` entro 120 s, salvo uscita o scadenza (`foto_persa` nel registro).
+
 ## Schermo e webcam con una foto di prima (15/10, ramo `correzioni-15-10`)
 
 Problema aperto dal 06/10: con una foto nella conversazione «cosa vedi sul mio schermo?» riceveva
