@@ -1097,7 +1097,8 @@ minori, le sezioni «Nessuna conservazione per i minori» e «Le parole dei mino
 
 Prove: `prova_conserva`, `prova_console_minori`, `prova_stanza_tenuta`, `prova_dopo_tool`.
 **Sulla DGX dopo l'aggiornamento**: `calliope conserva` (il minore con «voce sì (lo decidono i
-tutori)», consenso implicito dei tutori), un turno di prova con il profilo della minore e `calliope stato --turni`; nel registro
+tutori)», consenso implicito dei tutori), un turno di prova con il profilo
+della minore e `calliope stato --turni`; nel registro
 dei turni il suo `testo` non più null.
 
 ### 16/10: correzioni della revisione della PR #106 e consenso implicito
