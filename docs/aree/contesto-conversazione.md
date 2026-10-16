@@ -2190,6 +2190,7 @@ testo del blocco entra nel registro della stanza, con `stanza_lenta_blocchi: att
 
 Prova a secco `prova_stanza_lenta_blocchi.py` (righe ridistribuite, versione 3 sopra la 2, tenuta,
 ricerca, contrari).
+
 ## I segni della frase nella proiezione: `_stanza` e `_chi` con `eventi: attivo` (15/10, issue #12, ramo `issue-11-12-eventi-attivo`)
 
 **Il difetto** (scritto il 13–14/10 nelle sezioni della conversazione anonima e delle righe della
@@ -2211,7 +2212,9 @@ li vede). Il numero del pezzo resta **solo in memoria** (`_non_su_disco`: i pezz
 come sempre non restano oltre la loro conversazione. In `Brain._stanza_prepara_dentro` i pezzi orfani
 se ne vanno anche con `attivo`, come in ombra: orfani sono ormai solo quelli dei turni usciti dalla
 storia (taglio, compressione, turno escluso, argomento messo da parte), e le loro righe, se ancora
-nella finestra, possono tornare in un pezzo nuovo. `proiezioni.py` resta sotto le 600 righe (599).
+nella finestra, tornano «non mandate» (un pezzo nuovo prende però solo righe dopo l'ultima
+mandata, `oltre_seq` del pezzo «in attesa»: di solito non tornano, in ombra come con `attivo`).
+`proiezioni.py` resta sotto le 600 righe (599).
 
 **Misura a secco** (`python prove\prova_stanza_storia.py --misura`, la stessa conversazione finta di
 10 turni con 12 righe fra un turno e l'altro, token stimati riletti per turno, tutto / della sola
@@ -2226,5 +2229,7 @@ frase, i dati del turno dicono «dalla più vecchia: Carlo, Luca» come in ombra
 nome nell'evento solo «Conversazione di gruppo».
 
 Prove: `prova_stanza_storia` (sezione 1b, con `eventi: attivo` attraverso il giro di
-`prova_eventi_attivo.GiroAttivo`, e il contrario), `prova_compagnia_passo0` (sezione «…con eventi:
+`prova_eventi_attivo.GiroAttivo`, e il contrario; dal 16/10, dopo la revisione della PR #93,
+anche il turno uscito dalla proiezione col taglio in testa: il suo pezzo se ne va, le righe non
+restano fuori posto e il risultato è quello di ombra, e col codice di prima fallisce), `prova_compagnia_passo0` (sezione «…con eventi:
 attivo»), `prova_eventi_attivo` invariata.

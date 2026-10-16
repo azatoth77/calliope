@@ -7,7 +7,10 @@ docs/ricerche/2026-10-10-registro-eventi.md, voce 2.1 della roadmap).
 1. **Guardia dei riletti** su turni finti del registro: la base è la mediana dei token riletti
    dei giorni d'ombra; un giorno con `eventi: attivo` sopra base × 1,5 ha l'ATTENZIONE in
    `calliope stato --turni` e la riga di `calliope stato`; i contrari (sotto la soglia, pochi
-   turni, base troppo piccola, nessun turno attivo); i riletti stimati se il motore non li dice.
+   turni, base troppo piccola, nessun turno attivo); i riletti stimati se il motore non li dice;
+   in `calliope stato` solo oggi o ieri (un giorno brutto non resta dopo uno buono né dopo il
+   ritorno a ombra), leggendo due file se non ci sono turni con `attivo`; il criterio di E1 su
+   tutto il registro.
 2. **Il criterio di E1** sul campo `eventi_ombra.proiezione_diversa`: i motivi dichiarati
    (`capito`, `canale_scritto`) non contano; la riga e l'ATTENZIONE in `calliope stato --turni`.
 3. **Perché in ombra «zero differenze nel parlato» non si ottiene**: sul ciclo vero (giro
@@ -87,6 +90,11 @@ def prova_guardia():
     verifica("contrario: base d'ombra troppo piccola (10 turni) → nessun avviso, lo dice",
              not g2["avvisi"] and "mediana" not in g2["base"]
              and "ancora nessun confronto" in "\n".join(misura.testo_guardia(g2)), str(g2))
+    # Pochi riletti del motore e niente stimati: la riga conta i turni veri
+    g5 = misura.guardia_riletti(base_ombra(10))
+    t5 = "\n".join(misura.testo_guardia(g5))
+    verifica("base piccola senza stimati: la riga dice i turni che ci sono (non «0 turni»)",
+             g5["campo"] == "riletti" and "10 turni, 10 con i riletti dal motore" in t5, t5)
     # Solo ombra: la base c'è, nessun giorno attivo, nessun avviso
     g3 = misura.guardia_riletti(base_ombra())
     verifica("solo giorni d'ombra: la base scritta prima dell'accensione, niente avvisi",
@@ -112,9 +120,31 @@ def prova_guardia():
         with open(os.path.join(tmp, f"turni-{data}.jsonl"), "w", encoding="utf-8") as f:
             f.write("\n".join(json.dumps(t) for t in tt) + "\n")
     cfg = types.SimpleNamespace(turn_log_dir=tmp)
-    a = misura.avviso_riletti(cfg)
-    verifica("calliope stato: la riga dell'avviso (l'ultimo giorno con l'avviso)",
-             a is not None and "il 2026-10-18" in a and "supera di più di metà" in a, str(a))
+    import datetime
+    from calliope import latenza
+    a = misura.avviso_riletti(cfg, oggi=datetime.date(2026, 10, 18))
+    verifica("calliope stato: la riga dell'avviso di oggi",
+             a is not None and "oggi la mediana" in a and "supera di più di metà" in a, str(a))
+    a = misura.avviso_riletti(cfg, oggi=datetime.date(2026, 10, 19))
+    verifica("contrario: il giorno dopo, buono (oggi con abbastanza turni), l'avviso di ieri "
+             "non c'è più", a is None, str(a))
+    a = misura.avviso_riletti(cfg, oggi=datetime.date(2026, 10, 25))
+    verifica("contrario: una settimana dopo (o tornati a ombra) nessuna riga", a is None, str(a))
+    letture = []
+    leggi, leggi_file = latenza.leggi, latenza.leggi_file
+    latenza.leggi = lambda c, g=None: letture.append("tutto") or leggi(c, g)
+    latenza.leggi_file = lambda f: letture.append(os.path.basename(f)) or leggi_file(f)
+    try:
+        misura.avviso_riletti(cfg, oggi=datetime.date(2026, 10, 14))
+        solo_ombra = list(letture)
+        letture.clear()
+        misura.avviso_riletti(cfg, oggi=datetime.date(2026, 10, 18))
+    finally:
+        latenza.leggi, latenza.leggi_file = leggi, leggi_file
+    verifica("calliope stato: senza turni con attivo oggi o ieri si leggono solo i due file",
+             solo_ombra == ["turni-2026-10-14.jsonl", "turni-2026-10-13.jsonl"]
+             and letture[:2] == ["turni-2026-10-18.jsonl", "turni-2026-10-17.jsonl"]
+             and "tutto" in letture, f"{solo_ombra} {letture[:3]}")
     verifica("contrario: cartella vuota o assente → nessuna riga",
              misura.avviso_riletti(types.SimpleNamespace(turn_log_dir=None)) is None
              and misura.avviso_riletti(types.SimpleNamespace(
@@ -151,6 +181,12 @@ def prova_criterio():
              r["2026-10-15"]["proiezione_diversa"] == 1
              and "ATTENZIONE: in 1 turni la proiezione degli eventi non dice" in testo
              and "eventi_ombra.proiezione_diversa: deve restare 0" in testo, testo)
+    e1 = misura.criterio_e1(turni + [turno("2026-10-11")])
+    t = misura.testo(misura.riassunto(turni), e1=e1)
+    verifica("il criterio di E1 su tutto il registro: turni col campo e quanti diversi",
+             e1 == {"turni": 6, "diversi": 1, "dal": "2026-10-15"}
+             and "6 turni col campo eventi_ombra.proiezione_diversa (dal 2026-10-15), di cui 1"
+             in t, t)
     verifica("turni di prima, senza il campo: non contati nel criterio",
              misura.riassunto([turno("2026-10-11")])["2026-10-11"]["proiezione"] == 0)
 

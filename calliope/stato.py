@@ -497,8 +497,9 @@ def main(argv=None) -> int:
         voce_sola = misura_eventi.riassunto(turni)
         # La guardia dei riletti (15/10, issue #11): la base è dei giorni d'ombra, anche fuori
         # da `--giorni`
-        guardia_riletti = misura_eventi.guardia_riletti(
-            turni if giorni is None else latenza.leggi(cfg.turn_log_dir))
+        turni_tutti = turni if giorni is None else latenza.leggi(cfg.turn_log_dir)
+        guardia_riletti = misura_eventi.guardia_riletti(turni_tutti)
+        criterio_e1 = misura_eventi.criterio_e1(turni_tutti)
         soglia_ms = float(getattr(cfg, "eventi_contesto_ms_avviso", 20.0) or 20.0)
         # La scelta dei tool come metrica (12/10, calliope/scelta_tool.py)
         from . import scelta_tool
@@ -545,6 +546,7 @@ def main(argv=None) -> int:
                               "impronte_satellite": impronte_r,
                               "dialogo": dialogo, "voce_sola": voce_sola,
                               "riletti_guardia": guardia_riletti,
+                              "criterio_e1": criterio_e1,
                               "scelta_tool": scelta, "preselezione": presel,
                               "si_breve": si_r,
                               "dopo_tool": dopo_tool_r,
@@ -568,7 +570,7 @@ def main(argv=None) -> int:
             print()
             print(stato_dialogo.testo(dialogo))
             print()
-            print(misura_eventi.testo(voce_sola, soglia_ms, guardia_riletti))
+            print(misura_eventi.testo(voce_sola, soglia_ms, guardia_riletti, criterio_e1))
             print()
             print(scelta_tool.testo(scelta))
             print()
@@ -670,9 +672,13 @@ def main(argv=None) -> int:
         if avviso:
             print()
             print(f"{avviso} Dettagli: --turni")
-        # La guardia dei riletti con il registro degli eventi acceso (15/10, issue #11)
-        from .eventi.misura import avviso_riletti
-        avviso = avviso_riletti(cfg)
+        # La guardia dei riletti con il registro degli eventi acceso (15/10, issue #11): oggi
+        # o ieri
+        try:
+            from .eventi.misura import avviso_riletti
+            avviso = avviso_riletti(cfg)
+        except Exception:  # noqa: BLE001 — lo stato non cade per la guardia
+            avviso = None
         if avviso:
             print()
             print(f"{avviso} Dettagli: --turni")

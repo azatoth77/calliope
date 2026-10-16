@@ -3296,8 +3296,9 @@ class Brain:
                   for n in _segni(m.get("_stanza"))}
         orfani = [p for p in pezzi if p.n not in ancore]
         if orfani:
-            # Il loro turno è uscito dalla storia: le righe, se ancora nella finestra, possono
-            # tornare in un pezzo nuovo. Con `eventi: attivo` (15/10, issue #12) il segno viene
+            # Il loro turno è uscito dalla storia: le righe tornano «non mandate» (un pezzo
+            # nuovo prende però solo righe dopo l'ultima mandata, `oltre_seq`: le più vecchie
+            # di solito non tornano, 15/10). Con `eventi: attivo` (15/10, issue #12) il segno viene
             # dalla proiezione (`detto_persona.stanza`): orfani sono, come in ombra, solo i pezzi
             # dei turni usciti (taglio, compressione, turno escluso, argomento messo da parte)
             via = set().union(*(p.ids | p.segmenti for p in orfani))

@@ -2226,7 +2226,13 @@ scritta: limite del § 1.1 che il passo 3 non risolve; con `attivo` resta anche 
 sentito in N turni su M» e, se N non è 0, l'ATTENZIONE col nome del campo. Sul giro sintetico del
 ciclo vero (interruzione, stop, timer, frase filtrata non allineata, «Sì?») in ombra il parlato è
 diverso in 5 turni su 6 e le differenze sono 4, `proiezione_diversa` 0 in tutti e 6; con `attivo` 0.
-Il criterio riscritto è nella voce 2.1 della [roadmap](../roadmap.md).
+Il criterio riscritto è nella voce 2.1 della [roadmap](../roadmap.md). In ombra il campo misura
+solo il testo detto: i segni del messaggio della persona (`_chi`, `_stanza`, che con `attivo` la
+proiezione porta dal 15/10, issue #12) non li vede; li coprono `prova_stanza_storia` e
+`prova_compagnia_passo0`. *16/10, dopo la revisione della PR #93:* in `calliope stato --turni`
+anche la riga cumulativa «Criterio di E1 su tutto il registro: N turni col campo … (dal …), di
+cui M con proiezione_diversa > 0», letta su tutti i giorni del registro e non solo su `--giorni`
+(`misura.criterio_e1`, nel JSON `criterio_e1`).
 
 **La guardia dei riletti** (§ 10 punto 5 del progetto, `misura.guardia_riletti`): la base è la
 mediana dei token riletti dei turni d'ombra (`eventi_ombra` senza `modo: attivo`, da tutti i giorni
@@ -2234,8 +2240,14 @@ del registro, anche fuori da `--giorni`): `cache.riletti` del motore se ce ne so
 `cache.riletti_stimati`. Per ogni giorno con turni `attivo` (almeno 10) la loro mediana contro base ×
 1,5 (`RILETTI_MARGINE`): oltre, l'ATTENZIONE in `calliope stato --turni` (sezione «Una voce sola»,
 riga «Guardia dei riletti» con la base scritta già prima dell'accensione; nel JSON
-`riletti_guardia`) e una riga in `calliope stato` senza opzioni (`avviso_riletti`, ultimi 60 giorni).
-Con meno di 20 turni d'ombra lo dice e non confronta.
+`riletti_guardia`) e una riga in `calliope stato` senza opzioni (`avviso_riletti`). *Storico fino
+al 16/10: la riga di `calliope stato` prendeva l'ultimo giorno con un avviso fra 60 file, e un
+giorno brutto restava lì per settimane.* Dal 16/10 come gli altri avvisi della pagina: oggi o
+ieri (il primo dei due con almeno 10 turni con `attivo`), leggendo i soli due file; il registro
+intero per la base solo se uno dei due giorni ha abbastanza turni con `attivo`. Con meno di 20
+turni d'ombra lo dice e non confronta; la riga dice i turni d'ombra che ci sono e quanti hanno i
+riletti (prima, senza stimati, diceva «0 turni»), e sceglie i riletti del motore se nessuno dei
+due basta.
 
 Prova `prove/prova_eventi_guardia.py` (livello 1, ~2 s): la guardia su turni finti e i contrari
 (sotto la soglia, pochi turni, base piccola, solo ombra, stimati, cartella vuota), il criterio con i

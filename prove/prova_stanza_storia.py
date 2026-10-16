@@ -156,6 +156,7 @@ def giro(in_storia: bool, turni_n: int = 10, righe_per_turno: int = 12, tetto: i
     st = nuova_stanza(cfg)
     b = brain(cfg, st)
     g = con_eventi(b) if eventi else None
+    b.__dict__["_giro_eventi"] = g
     t0 = time.time() - 3600
     out = []
     k = 0
@@ -285,7 +286,54 @@ def prova_attivo(ombra):
     verifica("contrario: senza il segno nell'evento si rilegge molto di più della stanza",
              sum(st_s) > 2 * sum(st_o), f"senza {st_s}, ombra {st_o}")
     st2.chiudi()
+    prova_attivo_uscito()
     return attivo
+
+
+def _turno_uscito(eventi: bool):
+    """Tre turni, poi il primo esce dalla storia (taglio in testa) e due turni ancora, l'ultimo
+    con la finestra della stanza che comprende ancora le righe del primo. Restituisce (numeri
+    dei pezzi rimasti, quante volte ogni riga del primo turno è nella richiesta, utenti della
+    richiesta, misure della stanza, regole)."""
+    b, st, _ = giro(True, turni_n=3, tetto=60000, eventi=eventi)
+    g = b._giro_eventi
+    t0 = time.time() - 3600                   # lo stesso orologio di giro()
+    primo = [r["testo"] for r in st.registro(1).righe()][:12]
+    users = [i for i, m in enumerate(b.history) if m["role"] == "user"]
+    b.conv.togli_in_testa(users[1])           # il primo turno esce dalla storia
+    for frase, inizio in (("Calliope, ripetimelo.", None), ("Calliope, e adesso?",
+                                                            t0 + 3 * 150 + 20)):
+        b.stanza_turno = (ctx_mod.costruisci(st, 1, b.cfg, inizio) if inizio is not None
+                          else None)
+        if g is not None:
+            g.turno(frase, "amministra")      # a turno chiuso, la finestra degli eventi
+        else:
+            "".join(b.stream_reply(frase, "amministra"))
+    ultimo = b.backend.visti[-1]
+    testo = "\n".join(str(m.get("content")) for m in _stanza_msgs(ultimo))
+    out = ([p.n for p in b.conv.stanza], [testo.count(t) for t in primo],
+           [m["content"] for m in ultimo if m["role"] == "user"],
+           dict(b.last_stanza_storia or {}), list(b.last_rules))
+    st.chiudi()
+    return out
+
+
+def prova_attivo_uscito():
+    """Con `eventi: attivo` un turno uscito dalla proiezione (il taglio in testa: la finestra
+    degli eventi parte dopo) porta via il suo pezzo, come in ombra; le sue righe non restano
+    davanti ai dati del turno (fino al 14/10, con attivo, il pezzo orfano restava lì, fuori
+    posto, a ogni turno) e non tornano due volte. Che non tornino affatto è la regola del pezzo
+    «in attesa» (14/10 notte, `oltre_seq`: solo righe dopo l'ultima mandata), uguale in ombra."""
+    numeri, conte, utenti, storia, regole = _turno_uscito(True)
+    verifica("attivo, turno uscito dalla proiezione: fuori dalla richiesta, il suo pezzo se ne va",
+             not any("quanto manca a Lucca" in u for u in utenti) and 1 not in numeri
+             and "stanza_storia_dimenticata" not in regole, f"{numeri} {utenti}")
+    verifica("…le sue righe non restano fuori posto né tornano due volte",
+             all(c <= 1 for c in conte) and not storia.get("fuori_posto"), f"{conte} {storia}")
+    o = _turno_uscito(False)
+    verifica("…come in ombra (stessi pezzi, stesse righe, stesse misure)",
+             (numeri, conte, storia) == (o[0], o[1], o[3]), f"attivo {numeri} {conte} {storia}, "
+             f"ombra {o[0]} {o[1]} {o[3]}")
 
 
 # ─────────────────────────── 2. mai su disco ───────────────────────────
