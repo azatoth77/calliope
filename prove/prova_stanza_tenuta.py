@@ -212,8 +212,11 @@ def prova_decidi():
     verifica("contrario: ospite (nessun profilo) no, zona grigia no, nessun modo no",
              not d(None, "stanza", "voce") and not d(v.get("Carlo"), "stanza", "conversazione")
              and not d(v.get("Nicola"), "stanza", None))
-    verifica("le altre cose non cambiano: il testo dei turni del minore resta no",
-             not d(v.get("Nicola"), "testo", "voce") and not d(v.get("Nicola"), "eventi"))
+    # Dal 16/10 (decisione 0031) anche testo ed eventi del minore si conservano; fino al 16/10 no
+    verifica("testo dei turni ed eventi del minore: sì come per un adulto (16/10, 0031)",
+             d(v.get("Nicola"), "testo", "voce").ok and d(v.get("Nicola"), "eventi").ok)
+    verifica("contrario: testo dei turni ed eventi dell'ospite no",
+             not d(None, "testo", "voce") and not d(None, "eventi"))
 
 
 # ─────────────────────────── 2. scritture ───────────────────────────
@@ -411,16 +414,19 @@ def prova_conteggi(cfg, st):
              and "stanza su disco" in conserva_mod.testo_stato(s), conserva_mod.testo_stato(s))
     ctx = contesto(st, "Nicola", conserva=c)
     r = tool_conserva._dati_conservati(ctx, "stato")
-    verifica("dati_conservati per il minore: «tengo solo quello che dici… lo possono cercare "
-             "i tuoi genitori»", "genitori" in r["risposta_finale"]
+    verifica("dati_conservati per il minore: i testi, le frasi nella stanza e i genitori "
+             "(16/10)", "genitori" in r["risposta_finale"] and "nella stanza" in r["risposta_finale"]
              and r.get("righe_stanza", 0) >= 1, r["risposta_finale"])
     r = tool_conserva._dati_conservati(contesto(st, "Bianca", conserva=c), "stato")
     verifica("dati_conservati per un adulto: anche le frasi nella stanza",
              "nella stanza" in r["risposta_finale"], r["risposta_finale"])
     c.stanza = None
-    verifica("contrario: senza tenuta il minore sente «non conservo niente»",
-             "non conservo niente" in tool_conserva._dati_conservati(
-                 contesto(st, "Nicola", conserva=c), "stato")["risposta_finale"])
+    # Dal 16/10 (decisione 0031) il minore sente che i testi si tengono anche senza la tenuta
+    # della stanza; fino al 16/10 «non conservo niente»
+    rs = tool_conserva._dati_conservati(contesto(st, "Nicola", conserva=c), "stato")
+    verifica("senza tenuta il minore sente i testi e i genitori, non le frasi nella stanza",
+             "testi" in rs["risposta_finale"] and "genitori" in rs["risposta_finale"]
+             and "nella stanza" not in rs["risposta_finale"], rs["risposta_finale"])
     c.stanza = st.tenuta
     verifica("stanza_pausa con la tenuta: «la tengo per 60 giorni», non «solo in memoria»",
              "60 giorni" in tool_mod._dove_tengo(st)

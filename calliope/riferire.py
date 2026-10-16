@@ -743,7 +743,8 @@ def filtra(brain, frasi, domanda: str, esito: Esito):
                 continue
             esito.fermate.append((g.esito, g.fonte, g.dettaglio))
             # La frase fermata nel journal (accorciata): senza, i casi veri si indovinavano.
-            # Mai le parole per un ospite o un minore (12/10 sera, conserva.console_riservata)
+            # Mai le parole per un ospite (conserva.console_riservata; dal 12 al 16/10 anche
+            # per un minore)
             cita = getattr(brain, "cita_in_console", None)
             print(f"\n   [USCITA] frase fermata: {g.esito} (dati da {g.fonte or '?'}): "
                   f"«{cita(frase.strip(), 160) if callable(cita) else frase.strip()[:160]}»",

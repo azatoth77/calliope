@@ -8,18 +8,19 @@ giorni). Così la compressione della storia e la fine di una conversazione non p
 `conversazione_cerca` ritrova «cosa ti avevo detto stamattina sul preventivo?».
 
 - **Conservazione** (12/10 sera, decisione 0028 T1, calliope/conserva.py): su disco solo le
-  conversazioni degli **adulti riconosciuti**, decise da `Conservazione.conversazioni_su_disco`
-  (cioè `conserva.decidi`, il solo posto che decide; qui `conserva`, una funzione persona →
-  sì/no/None). Quelle di minori, ospiti e profili tolti vanno nell'**archivio della sessione**
+  conversazioni delle **persone di casa riconosciute** (dal 16/10, decisione 0031, anche dei
+  minori), decise da `Conservazione.conversazioni_su_disco` (cioè `conserva.decidi`, il solo
+  posto che decide; qui `conserva`, una funzione persona → sì/no/None). Quelle di ospiti e
+  profili tolti (dal 12 al 16/10 anche dei minori) vanno nell'**archivio della sessione**
   (`sessione`: lo stesso archivio in un SQLite in memoria, senza vettori), così ricerca,
   «riprendi», la riga «l'ultima volta…» e la scheda «Conversazione» funzionano finché Calliope
   non si riavvia, e poi non c'è più niente. Dentro la conversazione di un adulto i turni le cui
-  parole non restano (`conserva.testo_turno`: zona grigia, dubbio con un minore; il ciclo lo
+  parole non restano (`conserva.testo_turno`: zona grigia; il ciclo lo
   segna nel `_turno` del messaggio) non vanno su disco, né nell'archivio né nella conversazione
   in corso salvata (`correnti`). Tenuta: `turn_log_days` (60), la stessa del registro dei turni
   (prima `conversazioni_giorni`, 30). La pulizia di ogni giorno toglie anche, con
   `secure_delete`, le conversazioni rimaste su disco di chi non ne ha più il diritto (ospiti,
-  minori, profili tolti: niente migrazioni, Calliope non è in produzione).
+  profili tolti: niente migrazioni, Calliope non è in produzione). I minori restano dal 16/10.
 
 - **Tabelle**: `conversazioni` (chi, dove, quando, riassunto di chiusura), `turni` (domanda,
   risposta, azioni con l'esito e la frase detta; mai gli argomenti dei tool), `turni_fts`
@@ -260,7 +261,8 @@ class ArchivioConversazioni:
         # Il registro degli eventi su disco (calliope/eventi/registro.Disco), se c'è: «dimentica»
         # cancella anche lì
         self.eventi = None
-        # L'archivio della sessione (12/10 sera, T1): le conversazioni di minori e ospiti, solo
+        # L'archivio della sessione (12/10 sera, T1): le conversazioni degli ospiti (dal 12 al
+        # 16/10 anche dei minori), solo
         # in memoria, con gli stessi metodi (senza thread: le scritture sono subito, sotto il
         # suo lock) e gli stessi avvisi agli schermi. Niente vettori: si cerca per parole
         self.sessione: ArchivioConversazioni | None = None
@@ -386,16 +388,17 @@ class ArchivioConversazioni:
     def archivia(self, conv, turni: list[dict], persona, nome, ospite: bool):
         """Aggiunge i turni finiti di `conv` (calliope.conversazione.turni); apre la riga della
         conversazione la prima volta e ne scrive l'id in `conv.id_archivio`. Dal 12/10 sera
-        (T1) solo per gli adulti riconosciuti su disco, e senza i turni segnati
-        `non_conservare`; minori e ospiti nell'archivio della sessione (`_dove`)."""
+        (T1) solo per le persone di casa riconosciute su disco (dal 16/10 anche i minori), e
+        senza i turni segnati `non_conservare`; gli ospiti nell'archivio della sessione
+        (`_dove`)."""
         if not turni:
             return
         if self.sessione is not None:
             dove = self._dove(persona, ospite)
             nome_dove = "sessione" if dove is not self else "disco"
             if getattr(conv, "archiviata_in", None) not in (None, nome_dove):
-                # La stessa conversazione cambia archivio (una persona diventata minore, un
-                # profilo tolto): una riga nuova di là, gli id dei due archivi non si mescolano
+                # La stessa conversazione cambia archivio (un profilo tolto): una riga nuova di
+                # là, gli id dei due archivi non si mescolano
                 conv.id_archivio = None
             try:
                 conv.archiviata_in = nome_dove
@@ -506,7 +509,7 @@ class ArchivioConversazioni:
 
     def salva_corrente(self, conv):
         """La conversazione in corso su disco (a ogni turno), nel thread dell'archivio. Dal 12/10
-        sera (T1) solo quella di un adulto riconosciuto e senza i turni le cui parole non
+        sera (T1) solo quella di una persona di casa riconosciuta e senza i turni le cui parole non
         restano; le altre non si salvano (dopo un riavvio si riparte da capo, come per il
         registro degli eventi), e una riga di prima della stessa chiave si toglie."""
         if not self.scrivibile:
@@ -929,8 +932,9 @@ class ArchivioConversazioni:
     def togli_non_conservate(self) -> int:
         """La rotazione della conservazione (12/10 sera, T1): via dal disco, con
         `secure_delete`, le conversazioni (e le conversazioni in corso salvate) di chi non ne ha
-        il diritto: ospiti, minori, profili tolti. Quelle di prima del 12/10 alla prima pulizia
-        dopo l'aggiornamento. Con `conserva` che non sa dire (profili non letti) restano quelle
+        il diritto: ospiti, profili tolti (dal 12 al 16/10 anche i minori; dal 16/10, decisione
+        0031, i minori restano). Quelle di prima del 12/10 alla prima pulizia dopo
+        l'aggiornamento. Con `conserva` che non sa dire (profili non letti) restano quelle
         delle persone: si tolgono solo gli ospiti. Restituisce quante conversazioni."""
         if self.in_memoria:
             return 0
@@ -983,8 +987,8 @@ class ArchivioConversazioni:
                     self.db.execute("PRAGMA secure_delete = OFF")
             self.db.commit()
             checkpoint(self.db)
-        self.log(f"[CONVERSAZIONI] Tolte {len(ids)} conversazioni di ospiti, minori o profili "
-                 f"tolti (conservazione dei soli adulti)")
+        self.log(f"[CONVERSAZIONI] Tolte {len(ids)} conversazioni di ospiti o profili tolti "
+                 f"(conservazione delle persone di casa)")
         return len(ids)
 
     # ── terminale ──

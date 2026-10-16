@@ -593,8 +593,8 @@ class Ombra:
         testo = getattr(t, "text", None) if t is not None else None
         sat = getattr(getattr(self.c, "corsia", None), "nome", None)
 
-        # Le parole di questo turno non si conservano (12/10, calliope/conserva.py: dubbio con
-        # un minore, zona grigia): nel registro di un adulto restano solo in memoria
+        # Le parole di questo turno non si conservano (12/10, calliope/conserva.py: zona
+        # grigia; dal 12 al 16/10 anche il dubbio con un minore): restano solo in memoria
         anonimo = isinstance(rec.get("conserva"), dict) and rec["conserva"].get("testo") is False
 
         def add(_tipo, **dati):

@@ -10,9 +10,10 @@ quanto scattano senza conservare altro.
 
 Privacy: degli ospiti (voce non riconosciuta) non si salva il testo, né la richiesta né
 la risposta; i file più vecchi di `keep_days` si cancellano all'avvio e poi una volta al
-giorno. Dal 12/10 (decisione 0028, T1, calliope/conserva.py) le parole restano solo per gli
-adulti riconosciuti, per `turn_log_days` (60) giorni: anche di minori e voci incerte (zona
-grigia, dubbio con un minore) restano solo i numeri. Lo decide `Conservazione.testo_turno`, il
+giorno. Dal 12/10 (decisione 0028, T1, calliope/conserva.py) le parole restano solo per le
+persone di casa riconosciute, per `turn_log_days` (60) giorni: delle voci incerte (zona grigia)
+restano solo i numeri. Dal 16/10 (decisione 0031) anche i minori e i dubbi tra un adulto e un
+minore tengono le parole (dal 12 al 16/10 no). Lo decide `Conservazione.testo_turno`, il
 solo posto; il ciclo lo segna nel turno (`conserva`), e qui vale anche per le righe scritte da
 altri (cassetto, schermi, installazioni). Dal 14/10 sera (decisione 0030 aggiornata) anche i
 turni di un **conoscente**: livello ospite, ma nel campo `voce` il suo id, il nome
@@ -103,8 +104,9 @@ class TurnLog:
         for k, v in self.modello.items():
             rec.setdefault(k, v)
         if self._senza_parole(rec):
-            # Ospiti (dal 01/10), e dal 12/10 minori e voci incerte: restano i numeri, le
-            # regole e i nomi dei tool; per testo e risposta quante parole c'erano (07/10)
+            # Ospiti (dal 01/10), e dal 12/10 voci incerte (dal 12 al 16/10 anche i minori):
+            # restano i numeri, le regole e i nomi dei tool; per testo e risposta quante parole
+            # c'erano (07/10)
             from .conserva import togli_testo
             togli_testo(rec)
         day = (rec.get("inizio") or datetime.datetime.now().isoformat())[:10]

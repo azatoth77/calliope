@@ -784,7 +784,11 @@ out = json.loads(TOOLS.call("registra_utente", {"nome": "Emma", "nascita": "2017
 sc = ctx.speaker_ctx
 verifica("sfida superata: registrazione di un minore con nascita e tutori",
          out.get("ok") and out.get("minorenne") and sc.enrolling_name == "Emma"
-         and sc._enroll_meta == {"nascita": "2017-05-12", "tutori": ["dario-id", "elena-id"]},
+         and {k: v for k, v in sc._enroll_meta.items() if not k.startswith("voce_")}
+         == {"nascita": "2017-05-12", "tutori": ["dario-id", "elena-id"]}
+         # il consenso alla voce implicito nella registrazione (16/10, decisione 0031)
+         and sc._enroll_meta.get("voce_conservata") is True
+         and sc._enroll_meta.get("voce_conservata_da") == "dario-id",
          str(out))
 out, ctx = chiama("registra_utente", {"nome": "Emma", "nascita": "2017-05-12"}, "Elena")
 verifica("Elena (familiare): non aggiunge nessuno", out.get("ok") is False)
