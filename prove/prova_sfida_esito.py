@@ -8,7 +8,8 @@ passata non vedeva più il tool (`_reply` azzerava `last_tools`), lo cambiava in
 niente». Dal 16/10 `_reply(gia_fatti=…)` tiene l'esito riuscito del tool della sfida.
 
 1. sfida → tool riuscito con `cosa_fare` → la frase del modello detta, una passata sola, né
-   `spinta_dichiarata` né `dichiarata_onesta`; nel registro il tool una volta;
+   `spinta_dichiarata` né `dichiarata_onesta`; nel registro il tool una volta; con la prima
+   passata vuota la seconda passata, non «Fatto.» (revisione della PR #105);
 2. contrario: la stessa frase senza nessun tool resta fermata (spinta, poi la frase onesta);
 3. contrario: dopo la sfida un tool di sola lettura non rende vera un'azione dichiarata;
 4. contrario: il tool della sfida fallito → la frase dell'errore, senza il modello.
@@ -122,6 +123,19 @@ def prova_caso_vero():
              and b.history[-1]["content"].strip() == FRASE, str(b.history[-1:]))
 
 
+def prova_vuota():
+    print("— 1b. dopo la sfida la prima passata vuota: la seconda passata, non «Fatto.»")
+    fatti = []
+    b = _brain([[("text", "")], [("text", FRASE)]], _registra(fatti))
+    detto = "".join(b.stream_reply(SFIDA_DETTA, "amministra")).strip()
+    regole = b.rules_fired()
+    verifica("la seconda passata (vuoto_seconda_passata) e la frase del modello",
+             detto == FRASE and "vuoto_seconda_passata" in regole
+             and len(b.backend.visti) == 2, f"{regole} {detto!r}")
+    verifica("…il tool una volta, nel registro una volta", fatti == [{"nome": NOME}]
+             and [t["nome"] for t in b.last_tools] == ["registra_utente"], str(b.last_tools))
+
+
 def prova_senza_tool():
     print("— 2. contrario: la stessa frase senza nessun tool resta fermata")
     fatti = []
@@ -160,6 +174,7 @@ def prova_fallito():
 
 def main():
     prova_caso_vero()
+    prova_vuota()
     prova_senza_tool()
     prova_lettura()
     prova_fallito()

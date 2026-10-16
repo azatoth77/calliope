@@ -12,6 +12,7 @@ più di una volta. A parte (solo contato): quante risposte dicono che adesso dev
 """
 
 import re
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -43,4 +44,10 @@ for giro in range(1, GIRI + 1):
           f"{len(fatti)}, reti {reti or '—'}: «{detto}»", flush=True)
 
 print(f"\n{b.cfg.llm_model}: {GIRI - errori}/{GIRI} giusti; «deve parlare» detto {parlare}/{GIRI}")
+# Il modello caricato esce dalla memoria (come prova_argomenti_ollama: il portatile ne ha poca)
+if b.cfg.llm_backend == "ollama":
+    try:
+        subprocess.run(["ollama", "stop", b.cfg.llm_model], capture_output=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        pass
 sys.exit(1 if errori else 0)

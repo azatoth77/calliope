@@ -5049,7 +5049,10 @@ class Brain:
                     said = self._last_confirmation() if self.last_tools else ""
                     # Solo punteggiatura («…»): la seconda passata anche senza una conferma
                     # pronta (06/10: dopo conversazione_cerca restava il silenzio)
-                    if not self._acted() and not retried_empty \
+                    # I soli `gia_fatti` non contano (16/10, revisione della PR #105): dopo la
+                    # sfida il risultato senza frase pronta va detto dal modello, e una passata
+                    # vuota tornava «Fatto.», il caso dell'08/10 di sfida_esito_modello
+                    if not self._acted(dopo=len(gia_fatti or ())) and not retried_empty \
                             and self._net("vuoto_seconda_passata"):
                         # Dopo sole letture (data_oggi, ora_attuale, calcola…) la conferma
                         # risponde solo a una parte della domanda: «cerca la data di oggi e
@@ -5724,12 +5727,14 @@ class Brain:
             self._ricorda_esterno(fonte, text)
         self.salva_conversazione()
 
-    def _acted(self) -> bool:
+    def _acted(self, dopo: int = 0) -> bool:
         """In questa risposta un tool d'azione è riuscito. Una dichiarazione d'azione («Ho
         salvato questa informazione.») dopo soli tool falliti o sole letture è falsa (04/10,
         26B: quattro «ricorda» falliti e poi «Ho salvato…»): la rete sulle azioni dichiarate
-        vale anche lì, non solo quando non c'è nessun tool."""
-        return any(t.get("ok") and t.get("azione", True) for t in self.last_tools or ())
+        vale anche lì, non solo quando non c'è nessun tool. `dopo`: salta i primi tool (i
+        `gia_fatti` di _reply, 16/10)."""
+        return any(t.get("ok") and t.get("azione", True)
+                   for t in list(self.last_tools or ())[dopo:])
 
     def _correzione_aperta(self, fatte: int = 0) -> dict | None:
         """L'ultimo tool di questa risposta è fallito con un errore correggibile (argomenti

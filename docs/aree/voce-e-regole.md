@@ -2305,3 +2305,17 @@ prima 0 su 3 (sempre «Scusa, ho capito. Non ho salvato niente…», `spinta_dic
 delle 5 però il modello dice che adesso deve parlare lei (il `cosa_fare` del risultato): la frase è
 vera ma l'arruolamento resta al buio. È un problema a parte (la frase pronta della registrazione o
 il `cosa_fare` detto dal codice), da guardare col 26B prima di decidere.
+
+*16/10, dopo la revisione della PR #105.* Con `gia_fatti` in `last_tools` la passata dopo la sfida
+si comporta come quella dopo un tool normale: oltre a `hold_claims` sono spenti anche
+`hold_names`, `hold_non_so`, `hold_rinuncia`, `hold_ripetuta` e `hold_request` (tutti con «nessun
+tool in questa risposta»), coerente col percorso di sempre. Un'eccezione: la risposta vuota. Con i
+soli `gia_fatti` `_acted()` era vero dall'inizio, `vuoto_seconda_passata` non partiva e
+`_sfida_reply` diceva «Fatto.», proprio il caso dell'08/10 per cui era nato `sfida_esito_modello`;
+ora quel test conta solo i tool della passata (`_acted(dopo=len(gia_fatti))`) e la prima passata
+vuota riceve la seconda (caso 1b di `prova_sfida_esito`, che sul codice di prima dava «Fatto.»). Il
+criterio 2 dell'issue (una seconda azione diversa dichiarata nella stessa passata resta trattenuta)
+è stato riconsiderato nella revisione e **accettato come limite**: dopo qualunque azione riuscita la
+rete è spenta per la passata, e un confronto per azione (verbo e oggetto contro il tool eseguito)
+non c'è in nessuna risposta, sarebbe una regola sul testo nuova (principio 10) e fragile coi verbi
+che non conosce; la proposta consigliata dell'issue ha questo stesso effetto.
