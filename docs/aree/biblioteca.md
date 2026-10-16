@@ -517,3 +517,60 @@ nel PDF, che non si scarica).
 **13/10 sera — 5 fatti invece di 3.** Su richiesta di Dario l'elenco di «che notizie ci sono?» dà
 5 fatti unici (ognuno con tutte le testate che lo riportano: i doppioni sono già raggruppati),
 dalla Config `notizie_fatti` (5 di serie, tenuto tra 1 e 10). Prova in `prova_notizie`.
+
+## Risultati fuori tema: dirlo invece di riferirli (16/10, issue #101)
+
+Tre casi veri della DGX del 15/10 sera (problema 9 dell'analisi del 16/10): dopo un racconto sul
+mito di Orione, «approfondiamo questo argomento» → `web_cerca` con una domanda storpiata, risultati
+su una startup dal nome simile a una parola della conversazione, riferiti per intero nonostante il
+`cosa_fare` (prima frase 4,33 s); `biblioteca_cerca('mito di Orione e la sua storia
+astronomica')` → voci omonime, e il modello rispondeva da sé sbagliando il mito; tre minuti dopo
+una lettura con `notizie`, dichiarazioni attribuite a un altro politico (i sommari non erano più
+nella storia). Fatto:
+
+- **`RICERCA_MSG` senza «web_cerca tipo notizie»** (brain.py): dal 13/10 le notizie hanno il loro
+  tool e `web_cerca` non ha più il tipo; la riga diceva ancora di usarlo. Con il tool notizie
+  dice «(le notizie con notizie)», e un `web_cerca` col tipo rimasto nella storia vale come
+  `notizie` (la spinta richiama quello); senza il tool notizie la fonte è «web_cerca (notizie)».
+  Due frasi in più: «se i risultati non riguardano ciò di cui parlavate, non riferirli: dillo e
+  chiedi cosa cercare», e dei risultati che non ha più davanti non citare nomi, cifre o
+  dichiarazioni a memoria.
+- **`notizie` nell'elenco delle ricerche** (`RICERCA_TOOLS`, con il tema o «notizia N»): la riga
+  delle ricerche c'è anche dopo le notizie, e «approfondisci» dopo le notizie va al modello
+  (`approfondisci_al_modello`) invece di rifare la biblioteca con la domanda di prima. Il criterio
+  biblioteca/internet resta sulle due fonti (`RICERCA_FONTI`).
+- **Misura di pertinenza** (`calliope/pertinenza.py`, solo libreria standard): un dato per il
+  modello, non un filtro (principio 10). Un risultato è «pertinente» se ha almeno una parola piena
+  in comune con la frase di chi parla, o almeno due con gli ultimi quattro messaggi della
+  conversazione (`ToolContext.storia`); la domanda composta dal modello non conta, perché è quella
+  che può uscire storpiata. Parole piene: da quattro lettere, senza accenti, fuori da un elenco di
+  parole vuote e di cornice («approfondiamo», «argomento», «dimmi»…), confrontate sulle prime
+  cinque lettere. `web_cerca` e `biblioteca_cerca` scrivono `pertinenti: "0 su 2 (nessun risultato
+  ha parole in comune con ciò di cui state parlando: probabilmente parlano d'altro)"`, fuori dalla
+  busta dei dati non fidati (`provenienza.CONTROLLO`), e la regola `ricerca_fuori_tema` quando è
+  0 (si conta in `calliope stato --turni`). Senza niente con cui confrontare (frase di sole parole
+  vuote, nessun turno prima) il campo non c'è. Il `cosa_fare` dei due tool dice di non riferire i
+  risultati fuori tema e di chiedere cosa cercare; quello della biblioteca risponde a memoria solo
+  se è sicura (il caso del lago di Garda del 26/09 resta), altrimenti dice che non ha trovato.
+- Alternative scartate come prima mossa: togliere in codice i risultati fuori tema (decide il
+  modello cosa è pertinente; si può fare dopo le misure); embedding sulla DGX (la misura per parole
+  basta per i casi visti e non aggiunge latenza: qualche decina di microsecondi).
+
+**Prove.** `prova_ricerca_fuori_tema` (a secco, ~1 s; su main non parte, manca `pertinenza.py`, e
+con quel solo modulo copiato 16 verifiche su 26 falliscono): testi senza «tipo notizie», la riga con e senza il tool notizie, notizie nell'elenco e in
+`ricerca_recente`, la misura (Orione e la startup 0 su 2, il mito 2 su 2, misti, una parola della
+frase basta, argomento nuovo, niente con cui confrontare, una parola sola della storia non basta),
+`pertinenti` nei due tool fuori dalla busta. `prova_web` aggiornata al nuovo testo.
+
+**Banco col modello** (`prove/manuali/banco_ricerca_fuori_tema.py`, scenari `fuori`, `dentro` e
+`notizie`, criterio della issue ≥ 9/10 ciascuno). Sul portatile con **gemma4 e4b** (non il 26B
+dei casi veri), 5 giri, prima (main) e dopo:
+
+| Scenario | Prima | Dopo |
+|---|---|---|
+| `fuori` (risultati fuori tema) | 0/5 riferiti come risposta («Secondo Wikipedia, … un incrociatore della Regia Marina…») | 2/2 «non ho trovato… vuoi che cerchi su internet?», 3 senza ricerca («dimmi cosa ti interessa») |
+| `dentro` (il contrario, risultati sul mito) | 4/4, 1 senza ricerca | 4/4, 1 senza ricerca |
+| `notizie` (il nome solo nel sommario uscito) | 0/5 richiami, risposta con le testate rimaste, nessuna persona inventata | uguale (0/3 richiami, «a memoria» con le testate) |
+
+Col 4B le notizie restano senza richiamo ma senza invenzioni: il 26B è quello del caso vero, da
+misurare sulla DGX (comando nel file) prima di chiudere il criterio 3 della issue.

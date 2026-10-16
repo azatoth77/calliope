@@ -256,6 +256,8 @@ A_SECCO = [
     ("prova_web.py", [], "ricerca su internet con SearXNG e siti finti: privacy, SSRF, testo non fidato, azioni bloccate, agente"),
     # ~2 s: feed di fantasia su 127.0.0.1, SearXNG finto, Brain a secco
     ("prova_notizie.py", [], "notizie dai feed RSS (13/10): lettore sicuro, date e fusi, pulizia dei titoli con i contrari, gruppi senza modello, scarico condizionato, fatti, tool, minori, ripiego, i fatti restano nel contesto"),
+    # ~1 s: web e biblioteca finti, Brain a secco (16/10, issue #101)
+    ("prova_ricerca_fuori_tema.py", [], "risultati della ricerca fuori tema (16/10, #101): nessun «tipo notizie» nei testi di brain.py, la riga delle ricerche con il tool notizie (tema e numero del fatto), i risultati fuori tema da non riferire e niente nomi e cifre a memoria, la misura di pertinenza (Orione e la startup 0 su 2, i contrari) e «pertinenti» in web_cerca e biblioteca_cerca, fuori dalla busta"),
     # ~5 s: SearXNG, registro delle immagini e docker finti; lo script con bash di Git se c'è
     ("prova_searxng_aggiorna.py", [], "SearXNG tenuto aggiornato (09/10): prove e giudizio (degradata), registro delle immagini (mai latest), aggiornamento accanto con ritorno indietro, automatico solo a Calliope ferma e senza lavori, modo manuale, blocchi, capacità «degradata», Windows spento, cruscotto con gettoni a due tocchi solo per chi amministra, script con docker finto"),
     ("prova_lavori_criteri.py", [], "criteri del banco dei documenti: titoli, dati in lettere, numeri ricavati"),
@@ -455,6 +457,12 @@ LEGAMI = [
     ("calliope/tools/ufficio.py", ["prova_scritto.py"]),
     ("calliope/tools/web.py", ["prova_web.py", "prova_estensioni_attacchi.py"]),
     ("calliope/tools/notizie.py", ["prova_notizie.py"]),
+    # I risultati della ricerca fuori tema (16/10, issue #101)
+    ("calliope/pertinenza.py", ["prova_ricerca_fuori_tema.py", "prova_web.py"]),
+    ("calliope/tools/web.py", ["prova_ricerca_fuori_tema.py"]),
+    ("calliope/tools/builtin.py", ["prova_ricerca_fuori_tema.py"]),
+    ("calliope/brain.py", ["prova_ricerca_fuori_tema.py", "prova_web.py"]),
+    ("calliope/provenienza.py", ["prova_ricerca_fuori_tema.py"]),
     # La conversazione di stanza (13/10, passo 1): il tool, il pacchetto, il lato satellite
     ("calliope/tools/stanza.py", ["prova_stanza.py", "prova_stanza_cerca.py",
                                   "prova_stanza_tenuta.py"]),
