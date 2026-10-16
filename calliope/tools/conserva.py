@@ -142,11 +142,11 @@ def _dati_conservati(ctx: ToolContext, azione: str = "", persona: str = "") -> d
     # la voce sopra soglia, o un «sì» breve con l'impronta compatibile (conferma_breve). Così un
     # minore accanto che dice «sì», o il tutore nel dubbio col minore, non decide. Dal 16/10
     # (issue #108, decisione di chi amministra) il «sì» breve compatibile vale anche per un
-    # tutore che non amministra, solo per la voce di un suo figlio (`breve_compatibile`: stessa
+    # tutore che non amministra, solo per la voce di un suo figlio (`breve_impronta_ok`: stessa
     # soglia, stessa conversazione sicura, nessun altro profilo più vicino)
     breve_tutore = bool(come == "breve" and minore_di is not None
                         and not getattr(sc, "conferma_breve", False)
-                        and getattr(sc, "breve_compatibile", False)
+                        and getattr(sc, "breve_impronta_ok", False)
                         and _minori.e_tutore(prof, minore_di))
     tutore_ok = (come == "voce" or (come == "breve" and getattr(sc, "conferma_breve", False))
                  or breve_tutore)
