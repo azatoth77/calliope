@@ -52,7 +52,7 @@ from .eventi.misura import norm as _norm_frase
 from .eventi.uscita import per_voce
 from .tools.dialogo import FRASI_CORREZIONE
 from .config import Config, DEEPEN_WORDS, SEARCH_PROMISE
-from .immagini import FOTO_IN_ATTESA, FOTO_NON_VISTA, Immagine
+from .immagini import FOTO_IN_ATTESA, FOTO_NON_VISTA, FOTO_PERSA, Immagine
 from .schermi import schede as schede_foto
 from .schermi.moduli import annuncio_lavoro, completa as completa_modulo, oscura, oscura_tutto
 from .speaker_id import estimate_gender
@@ -3519,6 +3519,13 @@ class Ciclo:
         else:
             for x in s.foto_attesa.prendi(prof_foto.id):
                 (foto if isinstance(x, Immagine) else files).append(x)
+            # #96: la foto mandata prima senza domanda non c'è più (conversazione finita,
+            # attesa scaduta): lo dice il dato del turno, invece di una causa inventata
+            if s.foto_attesa.persa(prof_foto.id) and not foto and not files:
+                t.context = ((t.context + "\n") if t.context else "") + FOTO_PERSA
+                self.rec["foto_persa"] = True
+                print("   [IMMAGINI] la foto mandata prima non c'è più: lo dico al modello",
+                      flush=True)
         for att in files:
             # Audio: trascritto qui con il Whisper della voce, come contenuto del file. Mai
             # dalla pipeline della voce (wake word, regole, chi parla, conferme): è un dato

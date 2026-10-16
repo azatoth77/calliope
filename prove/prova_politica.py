@@ -564,8 +564,9 @@ def prova_codice():
     # (t.context, self.last_question), e i nomi si confrontano interi («self.tool_ctx»)
     main = ast.parse((RADICE / "calliope" / "ciclo.py").read_text("utf-8"))
     # (gli argomenti di biblioteca_contesto: il contesto dei tool e la domanda della persona)
-    ammessi = {"biblioteca_contesto", "FOTO_NON_VISTA", "context", "tool_ctx", "last_question",
-               "text"}
+    # (FOTO_PERSA dal 16/10, #96: frase fissa quando la foto in attesa non c'è più)
+    ammessi = {"biblioteca_contesto", "FOTO_NON_VISTA", "FOTO_PERSA", "context", "tool_ctx",
+               "last_question", "text"}
 
     def nomi_di(nodo) -> set:
         """I nomi usati in un'espressione, con gli attributi di self e del turno ridotti
