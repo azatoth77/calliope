@@ -2219,7 +2219,7 @@ configurazione, `system1_dopo_tool: ombra` com'era):
 
 - `piu_frasi` conta le **richieste**, non le frasi (`richieste_della_persona`): una frase non chiede
   niente solo se è **per intero** fatta di parole d'apertura di un elenco chiuso («Perfetto.», «Ok,
-  grazie.», «Calliope.»: `_APERTURE`) oppure è un annuncio breve, al più 8 parole, «(Allora,)
+  grazie.» *[storico: «ok» tolto dopo la revisione, sotto]*, «Calliope.»: `_APERTURE`) oppure è un annuncio breve, al più 8 parole, «(Allora,)
   iniziamo/cominciamo/partiamo/ricominciamo con/da …» (`_ANNUNCIO`), senza punto di domanda né
   cifre. «No.» non c'è (può correggere il turno di prima), «Allora?» ha il punto di domanda, e
   un'apertura dentro una frase che chiede («Perfetto, metti un timer.») resta una richiesta. È
@@ -2252,6 +2252,30 @@ che non c'è).
 
 **Da misurare** (criterio della issue): su 100 risposte con tool in ombra sulla DGX, copertura
 ≥ 30 % con «diverse» 0, da `calliope stato --turni`. L'accensione resta una scelta separata.
+
+**Correzioni dopo la revisione della PR #118** (16/10, sonde in sola lettura del revisore):
+
+- L'annuncio chiudeva solo il prefisso: «Iniziamo con un timer da dieci minuti. Poi accendi la
+  luce.», «Allora, iniziamo con il meteo di domani. Metti un timer…», «Cominciamo con spegnere la
+  luce del salotto.» e «Ricominciamo da capo. Metti un timer…» uscivano col codice. Ora anche
+  l'oggetto è chiuso: «(Allora,) iniziamo/cominciamo/partiamo/ricominciamo con» seguito solo da
+  «un calcolo», «un conto», «un esercizio», «un problema», «una domanda», «il primo (esercizio,
+  calcolo)», «la prima (domanda)»; niente più «da …» né il limite di 8 parole.
+- Le parole d'assenso non sono più aperture («sì», «certo», «esatto», «giusto», «va bene»,
+  «d'accordo», e anche «ok»): come «No.» possono rispondere a una domanda del turno prima. Restano
+  «Perfetto.», «Bene.», «Grazie.», «Allora.», «Calliope.», «Ciao.» e simili.
+- Agenda: la frase della persona che nomina un tempo oltre domani (un giorno della settimana, la
+  settimana, il mese, un mese per nome, «dopodomani», «prossimi giorni», una data o un numero) va
+  al modello col perché nuovo **`fuori_portata`** (`Copertura.portata`); con le voci la frase dice
+  comunque la portata («…, e nessun appuntamento nei prossimi due giorni.», oppure «Gli
+  appuntamenti sono quelli dei prossimi due giorni.»). Il timer a zero «sta per scadere» (non «fra
+  0 secondi»), il promemoria con la preposizione articolata («della medicina», non «di la
+  medicina»).
+- **Limite della misura**: il criterio «diverse = 0» confronta la frase del codice con quella del
+  modello, e **non vede le richieste perse**: se la persona chiedeva due cose e il codice ne
+  conta una, la frase del modello che risponde a entrambe può risultare «uguale nella sostanza»
+  alla prima. Prima di «attivo» vanno rilette a mano, dal registro dei turni, tutte le coperture
+  con più di una frase della persona.
 
 ## Il criterio di E1 e la guardia dei riletti (15/10, issue #11, ramo `issue-11-12-eventi-attivo`)
 

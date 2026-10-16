@@ -177,7 +177,7 @@ def prova_issue_103():
         ("caso vero: «Perfetto.» davanti", esito(
             "Perfetto. Segna che la farina l'ho già comprata.", ("lista_togli",), (tolto,)),
          dt.CODICE, "esito_chiuso", tolto["conferma"]),
-        ("«Ok, grazie.» davanti", esito("Ok, grazie. Metti un timer di dieci minuti."),
+        ("«Bene, grazie.» davanti", esito("Bene, grazie. Metti un timer di dieci minuti."),
          dt.CODICE, "esito_chiuso", TIMER["conferma"]),
         ("lista letta con due voci", esito("Cosa c'è nella lista della spesa?", ("lista_leggi",),
                                            (_lista(["latte", "uova"]),)),
@@ -186,10 +186,12 @@ def prova_issue_103():
                                     (_lista([]),)),
          dt.CODICE, "esito_chiuso", "La lista della spesa è vuota."),
         ("agenda con una voce", esito("Cosa ho in agenda?", ("agenda_elenca",), (agenda1,)),
-         dt.CODICE, "esito_chiuso", "C'è il promemoria di chiamare Ugo, oggi alle 18."),
+         dt.CODICE, "esito_chiuso", "C'è il promemoria di chiamare Ugo, oggi alle 18, e nessun "
+                                    "appuntamento nei prossimi due giorni."),
         ("agenda con due voci", esito("Cosa ho in agenda?", ("agenda_elenca",), (agenda2,)),
          dt.CODICE, "esito_chiuso", "Ci sono il timer per la pasta, che scade fra 3 minuti, e "
-                                    "l'appuntamento «dentista», domani alle 17."),
+                                    "l'appuntamento «dentista», domani alle 17. Gli "
+                                    "appuntamenti sono quelli dei prossimi due giorni."),
         ("agenda vuota (gli appuntamenti dei due giorni detti)", esito(
             "Cosa ho in agenda?", ("agenda_elenca",), ({"voci": [], "numero": 0},)),
          dt.CODICE, "esito_chiuso", "Non c'è niente: nessun timer, nessun promemoria e nessun "
@@ -223,6 +225,42 @@ def prova_issue_103():
         ("contrario: lista breve letta da un minore", esito(
             "Cosa c'è nella lista della spesa?", ("lista_leggi",), (_lista(["latte"]),),
             minore=True), dt.MODELLO, "minore", None),
+        # revisione della PR #118: l'annuncio con l'oggetto chiuso, l'assenso, la portata
+        ("contrario: annuncio con un oggetto che chiede (timer)", esito(
+            "Iniziamo con un timer da dieci minuti. Poi accendi la luce."), dt.MODELLO,
+         "piu_frasi", None),
+        ("contrario: annuncio col meteo", esito(
+            "Allora, iniziamo con il meteo di domani. Metti un timer di dieci minuti."),
+         dt.MODELLO, "piu_frasi", None),
+        ("contrario: annuncio con un verbo", esito(
+            "Cominciamo con spegnere la luce del salotto. Metti un timer di dieci minuti."),
+         dt.MODELLO, "piu_frasi", None),
+        ("contrario: «Ricominciamo da capo.»", esito(
+            "Ricominciamo da capo. Metti un timer di dieci minuti."), dt.MODELLO, "piu_frasi",
+         None),
+        ("contrario: «Sì.» davanti (assenso al turno prima)", esito(
+            "Sì. Metti un timer di dieci minuti."), dt.MODELLO, "piu_frasi", None),
+        ("contrario: «Va bene.» davanti", esito("Va bene. Metti un timer di dieci minuti."),
+         dt.MODELLO, "piu_frasi", None),
+        ("contrario: «Certo, d'accordo.» davanti", esito(
+            "Certo, d'accordo. Metti un timer di dieci minuti."), dt.MODELLO, "piu_frasi", None),
+        ("contrario: «Ok.» davanti", esito("Ok. Metti un timer di dieci minuti."), dt.MODELLO,
+         "piu_frasi", None),
+        ("contrario: agenda di venerdì", esito("Cosa ho in agenda venerdì?", ("agenda_elenca",),
+                                               ({"voci": [], "numero": 0},)),
+         dt.MODELLO, "fuori_portata", None),
+        ("contrario: agenda della settimana prossima", esito(
+            "Ho impegni la settimana prossima?", ("agenda_elenca",), (agenda1,)),
+         dt.MODELLO, "fuori_portata", None),
+        ("contrario: agenda con una data", esito(
+            "Cosa ho il 25 ottobre?", ("agenda_elenca",), ({"voci": [], "numero": 0},)),
+         dt.MODELLO, "fuori_portata", None),
+        ("contrario: agenda di dopodomani", esito(
+            "Cosa ho dopodomani?", ("agenda_elenca",), ({"voci": [], "numero": 0},)),
+         dt.MODELLO, "fuori_portata", None),
+        ("agenda di domani: nella portata", esito(
+            "Cosa ho domani?", ("agenda_elenca",), ({"voci": [], "numero": 0},)),
+         dt.CODICE, "esito_chiuso", None),
         ("contrario: appuntamenti_elenca resta fuori", esito(
             "Che appuntamenti ho?", ("appuntamenti_elenca",),
             ({"ok": True, "voci": [], "conferma": "Nessun appuntamento."},)),
@@ -232,12 +270,26 @@ def prova_issue_103():
         s = d.decide(e)
         ok = s.scelta == scelta and s.perche == perche and (frase is None or s.frase == frase)
         verifica(f"#103: {nome}", ok, f"{s.scelta} {s.perche} {s.frase!r}")
+    verifica("#103: il timer che sta per scadere, il promemoria con l'articolo",
+             (dt.frase_agenda({"voci": [{"timer": "per la pasta", "mancano": "0 secondi"}]}),
+              dt.frase_agenda({"voci": [{"promemoria": "la medicina", "quando": "oggi alle 20"},
+                                        {"promemoria": "l'acqua alle piante",
+                                         "quando": "domani alle 8"}]})),
+             ("C'è il timer per la pasta, che sta per scadere, e nessun appuntamento nei "
+              "prossimi due giorni.",
+              "Ci sono il promemoria della medicina, oggi alle 20, e il promemoria dell'acqua "
+              "alle piante, domani alle 8, e nessun appuntamento nei prossimi due giorni."))
+    verifica("#103: annunci chiusi",
+             (dt.senza_richiesta("Allora, iniziamo con un esercizio."),
+              dt.senza_richiesta("Cominciamo con una domanda."),
+              dt.senza_richiesta("Iniziamo con un esercizio di inglese."),
+              dt.senza_richiesta("Partiamo da qui.")), (True, True, False, False))
     verifica("#103: richieste e frasi d'apertura",
              (dt.richieste_della_persona("Perfetto. Grazie."),
               dt.richieste_della_persona("Calliope. D'accordo, metti un timer."),
               dt.richieste_della_persona("Bene. Iniziamo con 3 timer."),
               dt.senza_richiesta("Allora, iniziamo con un calcolo."),
-              dt.senza_richiesta("Ok, ecco."),
+              dt.senza_richiesta("Grazie, ecco."),
               dt.senza_richiesta("Perfetto, metti un timer."),
               dt.senza_richiesta("Bene?"),
               dt.frasi_della_persona("Perfetto. Grazie.")),

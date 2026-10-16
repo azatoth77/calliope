@@ -70,11 +70,29 @@ class Copertura:
     # Una lettura senza frase pronta nel risultato (agenda_elenca): la frase composta dalle voci,
     # senza scegliere niente (tutte, nell'ordine del tool). None: la frase dai `campi`
     componi: object = None
+    # La portata della lettura (revisione della PR #118): se la frase della persona nomina un
+    # tempo che il risultato non copre (agenda_elenca dà gli appuntamenti dei soli due giorni),
+    # al modello («fuori_portata»). None: nessun limite
+    portata: object = None
 
 
 _LETTURA = Copertura(("da_dire",), True)
 _AZIONE = Copertura(("conferma",), False)
 VOCI_MAX = 2            # le letture brevi: al più tante voci (16/10, issue #103)
+
+
+_DI_ARTICOLO = (("il ", "del "), ("lo ", "dello "), ("la ", "della "), ("i ", "dei "),
+                ("gli ", "degli "), ("le ", "delle "), ("l'", "dell'"), ("l’", "dell’"))
+
+
+def _di(label: str) -> str:
+    """«di» davanti a ciò che dice il promemoria, con la preposizione articolata: «di chiamare
+    Ugo», «della medicina», «dell'acqua» (non «di la medicina»)."""
+    low = label.lower()
+    for art, prep in _DI_ARTICOLO:
+        if low.startswith(art) and len(label) > len(art):
+            return prep + label[len(art):]
+    return "di " + label
 
 
 def _voce_agenda(v: dict) -> str:
@@ -83,12 +101,16 @@ def _voce_agenda(v: dict) -> str:
         return ""
     if "timer" in v:
         label = str(v.get("timer") or "").strip()
-        resto = f", che scade fra {v['mancano']}" if v.get("mancano") else ""
+        mancano = str(v.get("mancano") or "").strip()
+        if re.match(r"0\s", mancano):        # «fra 0 secondi»
+            resto = ", che sta per scadere"
+        else:
+            resto = f", che scade fra {mancano}" if mancano else ""
         return f"il timer {label}".strip() + resto
     quando = f", {v['quando']}" if v.get("quando") else ""
     if "promemoria" in v:
         label = str(v.get("promemoria") or "").strip()
-        return (f"il promemoria di {label}" if label else "il promemoria") + quando
+        return (f"il promemoria {_di(label)}" if label else "il promemoria") + quando
     if "appuntamento" in v:
         label = str(v.get("appuntamento") or "").strip()
         return (f"l'appuntamento «{label}»" if label else "l'appuntamento") + quando
@@ -98,7 +120,7 @@ def _voce_agenda(v: dict) -> str:
 def frase_agenda(res: dict) -> str:
     """La frase di agenda_elenca (al più VOCI_MAX voci, lo controlla il decisore); "" se una
     voce non si sa dire. Gli appuntamenti nel risultato sono solo dei prossimi due giorni: la
-    frase dell'agenda vuota lo dice."""
+    frase lo dice sempre, anche con le voci (revisione della PR #118)."""
     voci = res.get("voci")
     if not isinstance(voci, list):
         return ""
@@ -109,14 +131,28 @@ def frase_agenda(res: dict) -> str:
     if not all(dette):
         return ""
     if len(dette) == 1:
-        return f"C'è {dette[0]}."
-    return "Ci sono " + ", ".join(dette[:-1]) + ", e " + dette[-1] + "."
+        frase = f"C'è {dette[0]}"
+    else:
+        frase = "Ci sono " + ", ".join(dette[:-1]) + ", e " + dette[-1]
+    if any(isinstance(v, dict) and "appuntamento" in v for v in voci):
+        return frase + ". Gli appuntamenti sono quelli dei prossimi due giorni."
+    return frase + ", e nessun appuntamento nei prossimi due giorni."
+
+
+# Un tempo oltre domani nella frase della persona (revisione della PR #118): un giorno della
+# settimana, la settimana, il mese, un mese per nome, «dopodomani», «prossimi giorni», una data
+# o un numero. Vincolo verso il modello (nel dubbio la seconda passata, come prima)
+_OLTRE_DOMANI = re.compile(
+    r"\b(?:(?:lune|marte|mercole|giove|vener)d[iì]|sabat[oi]|domenic[ah]e?|settiman\w*|"
+    r"mes[ei]|weekend|week-end|dopodomani|giorni|anno|prossim\w*|gennaio|febbraio|marzo|"
+    r"aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)\b|\d", re.I)
 
 
 # La lista letta ha già la sua `conferma` («Nella lista della spesa ci sono 2 cose: latte e
 # uova.»); l'agenda no, la frase si compone dalle voci
 _LISTA_BREVE = Copertura(("conferma",), True, voci_max=VOCI_MAX)
-_AGENDA_BREVE = Copertura((), True, voci_max=VOCI_MAX, componi=frase_agenda)
+_AGENDA_BREVE = Copertura((), True, voci_max=VOCI_MAX, componi=frase_agenda,
+                          portata=_OLTRE_DOMANI)
 
 # L'elenco chiuso (15/10): esiti semplici, con una frase scritta dal tool. `casa_comando` non c'è
 # perché ha già la sua `risposta_finale` (la frase di Home Assistant, senza seconda passata dal
@@ -182,21 +218,25 @@ def frasi_della_persona(testo: str) -> int:
 
 
 # Le frasi d'apertura che non chiedono niente (16/10, issue #103): riconosciute solo in forma
-# chiusa e per intero (principio 10). Una frase fatta solo di queste parole («Perfetto.», «Ok,
-# grazie.», «Allora, Calliope.»), oppure l'annuncio breve di ciò che segue («Allora, iniziamo
-# con un calcolo.»). «No» non c'è: può correggere il turno di prima
-_APERTURE = frozenset("""allora perfetto perfetta ok okay bene benissimo ottimo ottima va
-d'accordo accordo grazie sì si ecco dunque bravo brava bravissima bravissimo certo esatto
-giusto calliope ciao senti ascolta quindi beh mah ehm uhm eh oh""".split())
+# chiusa e per intero (principio 10). Una frase fatta solo di queste parole («Perfetto.»,
+# «Grazie.», «Allora, Calliope.»), oppure l'annuncio di ciò che segue con l'oggetto anch'esso
+# chiuso («Allora, iniziamo con un calcolo.»; non «Iniziamo con un timer da dieci minuti.», che
+# chiede già). Le parole d'assenso («sì», «certo», «esatto», «giusto», «va bene», «d'accordo»,
+# «ok») non ci sono, come «no»: possono rispondere a una domanda del turno prima (revisione
+# della PR #118)
+_APERTURE = frozenset("""allora perfetto perfetta bene benissimo ottimo ottima grazie ecco
+dunque bravo brava bravissima bravissimo calliope ciao senti ascolta quindi beh mah ehm uhm eh
+oh""".split())
 _ANNUNCIO = re.compile(
-    r"(?:(?:allora|bene|ok|okay|dunque|ecco|perfetto|calliope)[\s,]+)*(?:ora\s+|adesso\s+)?"
-    r"(?:iniziamo|cominciamo|partiamo|ricominciamo)\s+(?:con|da)\s+\S.*", re.I)
-_ANNUNCIO_PAROLE = 8
+    r"(?:(?:allora|bene|dunque|ecco|perfetto|calliope)[\s,]+)*(?:ora\s+|adesso\s+)?"
+    r"(?:iniziamo|cominciamo|partiamo|ricominciamo)\s+con\s+"
+    r"(?:un\s+calcolo|un\s+conto|un\s+esercizio|un\s+problema|una\s+domanda|"
+    r"il\s+primo(?:\s+esercizio|\s+calcolo)?|la\s+prima(?:\s+domanda)?)", re.I)
 
 
 def senza_richiesta(frase: str) -> bool:
     """Una frase della persona che non chiede niente: nessun punto di domanda, nessuna cifra, e
-    tutta fatta di parole d'apertura oppure un annuncio breve («Allora, iniziamo con un
+    tutta fatta di parole d'apertura oppure un annuncio chiuso («Allora, iniziamo con un
     calcolo.»). Solo la forma, per intero: una parola d'apertura dentro una frase non basta."""
     f = str(frase or "").strip().rstrip(".!…;").strip()
     if not f or "?" in f or re.search(r"\d", f):
@@ -204,7 +244,7 @@ def senza_richiesta(frase: str) -> bool:
     w = re.findall(r"[^\W\d_]+(?:'[^\W\d_]+)?", f.lower())
     if w and all(x in _APERTURE for x in w):
         return True
-    return bool(_ANNUNCIO.fullmatch(f)) and len(w) <= _ANNUNCIO_PAROLE
+    return bool(_ANNUNCIO.fullmatch(f))
 
 
 def richieste_della_persona(testo: str) -> int:
@@ -251,6 +291,8 @@ class DopoTool:
             voci = res.get("voci")
             if not isinstance(voci, list) or len(voci) > cop.voci_max:
                 return self._modello("non_coperto", tool)
+        if cop.portata is not None and cop.portata.search(str(e.testo or "")):
+            return self._modello("fuori_portata", tool)
         if cop.componi is not None:
             frase = str(cop.componi(res) or "").strip()
         else:
