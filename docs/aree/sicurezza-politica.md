@@ -1617,6 +1617,24 @@ persona che amministra, un altro tool, scaduta, il nome cambiato, nessun valore 
 `maggiorenne`, la domanda della politica, una foto, la voce non riconosciuta, la domanda nata
 senza sfida; `pc_guarda` con i contrari.
 
+**Revisione di sicurezza della PR #117 (16/10)**: cinque correzioni prima dell'unione.
+(1) Gli argomenti della domanda si confrontano **esatti** (maiuscole e spazi a parte, `_esatto`):
+`pol._uguali` guarda solo le parole lunghe, e «non spegnere il server» valeva come «spegnere il
+server», «10 euro» come «900 euro». (2) Con una negazione nella frase (`pol._NO`: «no», «non»,
+«aspetta», «lascia perdere»…) niente ancora né sfida portata: «No, aspetta, non registrarla: forse
+è nata il 12 ottobre 2015 ma devo controllare.» veniva eseguito con la sfida portata. E la
+proposta **dichiara gli argomenti che chiede** (`in_sospeso["chiede"]`, `Turno.chiede_sospeso`;
+`registra_utente`: `nascita` e `tutori`): solo quelli possono essere nuovi, una proposta che non
+li dichiara non ancora niente («Lascia perdere, ci penso domani.» con `maggiorenne="perdere"`
+passava). (3) `pc_guarda`: solo gli imperativi («fai/fammi/fatemi una foto», «scatta/scattami»),
+non «fa», «fare» descrittivi («Chi fa le foto al matrimonio?», «Mio cugino fa foto bellissime»,
+«Tre giorni fa le foto della gita…»). (4) Il mese a parole vale in cifre solo per un valore con la
+forma di una data («2015-10-12», «12/10/2015»), non per «10 euro». (5) La sfida portata vale per
+**una** chiamata sola (`Turno.risposta["sfida_portata_usata"]`): il giro di correzione dopo un
+errore chiede la sua sfida. Ogni punto ha i suoi contrari in `prova_risposta_sospeso.py`, che
+fallivano sul codice di prima (11 errori). Limite: per ora dichiara gli argomenti solo
+`registra_utente`; le altre domande di un dato restano come prima, finché non li dichiarano.
+
 **Da guardare sulla DGX** (7 giorni, `calliope stato --turni`): 0 `valore_non_ancorata` con
 `azione_in_sospeso` sullo stesso tool; «ESEGUITE con un bersaglio dal dato» = 0; quante
 `valore_risposta_sospeso` e `valore_sfida_sospeso`, e l'attrito sotto la soglia.

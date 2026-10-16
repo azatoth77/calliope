@@ -3963,7 +3963,9 @@ class Brain:
             # Gli argomenti proposti, per la politica dei tool (05/10): sul «sì» con gli
             # stessi valori la persona li ha già sentiti (calliope/politica.py)
             "args": dict(offer.get("argomenti")) if isinstance(offer.get("argomenti"),
-                                                              dict) else None}
+                                                              dict) else None,
+            # Gli argomenti che la domanda chiede (#98): solo loro nuovi nella risposta al dato
+            "chiede": tuple(offer.get("chiede") or ())}
 
     def set_reference(self, ref: dict | None):
         """Ricorda l'ultimo dispositivo della casa comandato o letto (REFERENCE_MSG)."""
@@ -6701,7 +6703,8 @@ class Brain:
             # stessa persona e solo nella risposta subito dopo
             sfida_sospeso=bool(tool) and p.get("tool") == tool
             and p.get("sfida_di") is not None and p.get("sfida_di") == self._speaker_key()
-            and getattr(self, "turn_number", 0) - p.get("turno", 0) <= 1)
+            and getattr(self, "turn_number", 0) - p.get("turno", 0) <= 1,
+            chiede_sospeso=tuple(p.get("chiede") or ()) if p.get("tool") == tool else ())
 
     def _intenzioni(self) -> list:
         conv = self._c()

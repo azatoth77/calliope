@@ -39,6 +39,7 @@ Solo libreria standard, sotto il millisecondo per chiamata.
 
 from __future__ import annotations
 
+import json
 import re
 import time
 from dataclasses import dataclass, field, replace
@@ -666,6 +667,27 @@ def ancorata(cl, name: str, args: dict, t) -> bool:
     return pol.chiesto_con_verbi(cl, t.testo, args) or pol.fatto_detto(cl, args, t)
 
 
+# Una data scritta in cifre dal modello (#98, revisione della PR #117): solo per lei il mese
+# detto a parole vale anche in cifre, non per un importo o un numero qualunque
+_FORMA_DATA = re.compile(r"\s*(?:\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/.-]\d{1,2}[/.-]\d{4})\s*")
+
+
+def forma_data(valore) -> bool:
+    return isinstance(valore, str) and bool(_FORMA_DATA.fullmatch(valore))
+
+
+def _esatto(valore) -> str:
+    """Un valore normalizzato per il confronto esatto con la domanda (#98, revisione della PR
+    #117: `pol._uguali` guarda solo le parole lunghe, e «non spegnere il server» valeva come
+    «spegnere il server», «10 euro» come «900 euro»): maiuscole e spazi soltanto."""
+    if isinstance(valore, str):
+        return " ".join(valore.split()).casefold()
+    try:
+        return json.dumps(valore, ensure_ascii=False, sort_keys=True).casefold()
+    except (TypeError, ValueError):
+        return repr(valore)
+
+
 def _numeri_mesi(testo) -> set[str]:
     """Il numero dei mesi detti a parole («12 ottobre 2015» → «10»): il modello può scrivere
     la data come «2015-10-12»."""
@@ -683,29 +705,40 @@ def risposta_al_sospeso(name: str, args: dict, t) -> bool:
     - la domanda in sospeso è di questo tool (Turno.in_sospeso: la stessa persona e il tempo li
       controlla già Brain._take_pending), senza foto o file arrivati con la frase, e non è una
       domanda della politica («Non me l'hai chiesto: vuoi che…?» vuole un consenso, non un dato);
-    - gli argomenti sono quelli della domanda, uguali, più almeno uno nuovo;
-    - ogni valore nuovo è detto in questa frase (parole e numeri, anche il mese a parole), non
-      preso da una riga della stanza o da un altro dato: un valore senza parole (un booleano,
-      una scelta) non basta.
+    - la frase non ha una negazione né un «aspetta», «lascia perdere» (`pol._NO`: «No, aspetta,
+      non registrarla: forse è nata il 12 ottobre…» non è una risposta da eseguire);
+    - la proposta dichiara quali argomenti chiede (`in_sospeso["chiede"]`, Turno.chiede_sospeso):
+      solo quelli possono essere nuovi, almeno uno c'è, e gli argomenti della domanda restano
+      uguali **esatti** (maiuscole e spazi a parte); nessun altro argomento in più;
+    - ogni valore nuovo è detto in questa frase (parole e numeri; il mese a parole vale anche in
+      cifre solo per un valore con la forma di una data), non preso da una riga della stanza o
+      da un altro dato: un valore senza parole (un booleano, una scelta) non basta.
+
+    Revisione di sicurezza della PR #117 (16/10): confronto esatto, negazione, argomenti
+    dichiarati, mese solo per le date.
 
     Vincolo di permesso su una chiamata già scelta dal modello (principio 10): allarga l'ancora,
     il resto della politica per valore (bersagli dal dato, effetto) resta."""
     if not pol._proposta(t, name) or getattr(t, "sospeso_politica", False):
         return False
+    if pol._NO.search(t.testo or ""):
+        return False
     sosp = t.args_sospeso
-    if not isinstance(sosp, dict):
+    chiede = set(getattr(t, "chiede_sospeso", None) or ())
+    if not isinstance(sosp, dict) or not chiede:
         return False
     args = args or {}
     for k, v in sosp.items():
-        if k not in args or not pol._uguali({k: args[k]}, {k: v}, (k,)):
+        if k not in args or _esatto(args[k]) != _esatto(v):
             return False
-    nuovi = [v for k, v in args.items() if k not in sosp and v not in (None, "", False)]
-    if not nuovi:
+    nuovi = {k: v for k, v in args.items() if k not in sosp and v not in (None, "", False)}
+    if not nuovi or not set(nuovi) <= chiede:
         return False
     f = Fonti.da(t)
-    f = replace(f, numeri_frase=f.numeri_frase | _numeri_mesi(t.testo))
-    for v in nuovi:
-        if _testo(v) in (None, "") or etichetta(v, CONTENUTO, f) != DETTO:
+    f_data = replace(f, numeri_frase=f.numeri_frase | _numeri_mesi(t.testo))
+    for v in nuovi.values():
+        if _testo(v) in (None, "") or etichetta(
+                v, CONTENUTO, f_data if forma_data(v) else f) != DETTO:
             return False
     return True
 
@@ -800,7 +833,9 @@ def _matrice(name: str, args: dict, cl, t, base, conferma_voce: bool = False,
         # La frase di sfida superata dalla stessa persona nella frase che ha aperto questa
         # domanda vale anche per la risposta, se la voce di questa frase è la sua (#98: prima
         # una seconda sfida a pochi secondi dalla prima)
-        if getattr(t, "sfida_sospeso", False) and voce_frase:
+        # Una chiamata sola (revisione della PR #117): non i giri di correzione dopo
+        if (getattr(t, "sfida_sospeso", False) and voce_frase
+                and not t.risposta.get("sfida_portata_usata")):
             det["sfida_portata"] = True
     if not risposta and not ancorata(cl, name, args, t):
         if not t.risposta.get("rifiutata_valore"):
@@ -810,9 +845,9 @@ def _matrice(name: str, args: dict, cl, t, base, conferma_voce: bool = False,
                              f"Non me l'hai chiesto: vuoi che {cosa}?", fonte), det
     # 2. da dove vengono gli argomenti
     f = Fonti.da(t, fidati)
-    if risposta:
-        # la data detta col mese a parole e scritta dal modello in cifre (#98)
-        f = replace(f, numeri_frase=f.numeri_frase | _numeri_mesi(t.testo))
+    # la data detta col mese a parole e scritta dal modello in cifre (#98), solo per un valore
+    # con la forma di una data
+    f_data = replace(f, numeri_frase=f.numeri_frase | _numeri_mesi(t.testo)) if risposta else f
     etichette, bers_dato, cont_dato, cont_modello = {}, [], [], []
     for k, v in args.items():
         tipo = (tipi or {}).get(k, BERSAGLIO)
@@ -825,7 +860,7 @@ def _matrice(name: str, args: dict, cl, t, base, conferma_voce: bool = False,
             tipo = CONTENUTO
         if k in OGGETTO_VALORI.get(name, ()):
             v = " ".join(pol._valori_foglia(v)) if pol._valori_foglia(v) else v
-        e = etichetta(v, tipo, f)
+        e = etichetta(v, tipo, f_data if forma_data(v) else f)
         # Un valore della chiamata di prima allo stesso tool, scelto prima del dato letto ora
         # (12/10 sera): l'etichetta che aveva allora, con i soli dati di allora
         if e == DATO and di_prima(name, k, v, t, f):
@@ -881,6 +916,7 @@ def _matrice(name: str, args: dict, cl, t, base, conferma_voce: bool = False,
                                      f"(«{_mostra(v)}»): vuoi davvero che {cosa}?", fonte), det
     # 3. che effetto ha
     if det.get("sfida_portata") and E >= E3:
+        t.risposta["sfida_portata_usata"] = True
         return pol.Decisione("esegui", "valore_sfida_sospeso"), det
     if E == E4:
         return pol.Decisione("sfida", "valore_e4_sfida", "", fonte), det

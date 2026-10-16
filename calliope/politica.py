@@ -450,10 +450,12 @@ VERBI = {
     "anagrafica_salva": (r"salv|rubric|anagrafic|contatt|aggiung|registr|segn|cliente|"
                          r"fornitor|cambi|aggiorn|corregg"),
     # «fai una foto a questo dispositivo», «scatta una foto» (16/10, issue #98, caso vero della
-    # DGX del 15/10 alle 20:23); «foto» da sola no: «la foto di ieri era bella» non chiede niente
+    # DGX del 15/10 alle 20:23); «foto» da sola no: «la foto di ieri era bella» non chiede niente.
+    # Solo gli imperativi (revisione della PR #117): non «fa», «fare» descrittivi («Chi fa le
+    # foto al matrimonio?», «Mio cugino fa foto bellissime», «Tre giorni fa le foto…»)
     "pc_guarda": (r"guard|scherm|ved|legg|controll|webcam|screenshot|fotograf|inquadr|"
-                  r"(?<![a-zà-ù])scatt(?:a|ami|are|ate|atemi|amene)(?![a-zà-ù])|"
-                  r"(?<![a-zà-ù])(?:fai|fa|fammi|fatemi|fare|facci|fammene)\s+"
+                  r"(?<![a-zà-ù])scatt(?:a|ami|atemi|amene)(?![a-zà-ù])|"
+                  r"(?<![a-zà-ù])(?:fai|fammi|fatemi|fammene)\s+"
                   r"(?:[a-zà-ù']+\s+){0,2}?foto"),
     # «eseguilo con 3 e 5», «fammelo vedere», «rilancialo», «provalo con 4»
     "programma_esegui": (r"esegu|lanc|avvi|gir[aio]|fa(?:mm|ll)\w* (?:vedere|girare|partire)|"
@@ -713,6 +715,9 @@ class Turno:
     # nascita di registra_utente dopo la sfida). Vale solo per la risposta al dato chiesto
     # (valore.risposta_al_sospeso) con la voce riconosciuta in questa frase
     sfida_sospeso: bool = False
+    # Gli argomenti che la domanda del tool chiede (`in_sospeso["chiede"]`, #98, revisione della
+    # PR #117): solo quelli possono essere nuovi nella risposta al dato
+    chiede_sospeso: tuple = ()
 
 
 # Le azioni interne chieste con un verbo che il lessico delle azioni sul mondo non ha

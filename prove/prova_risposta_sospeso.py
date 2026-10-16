@@ -60,12 +60,12 @@ def stanza(righe=STANZA):
                            riassunto="", righe=1)
 
 
-def prepara_registra():
+def prepara_registra(guasto=False):
     """Brain con registra_utente finto ma con i controlli del vero (tools/builtin.py,
     _nuovo_profilo): senza data chiede la data con una proposta in sospeso; con la data vuole la
     frase di sfida superata in questa frase (SpeakerContext.sfida_superata)."""
     b, eseguiti, _ = prepara(True)
-    visti = []
+    visti, guasti = [], [guasto]
 
     def registra(ctx, nome, nascita="", maggiorenne=None, tutori=""):
         sc = ctx.speaker_ctx
@@ -73,11 +73,14 @@ def prepara_registra():
             return {"ok": False, "fatto": "NON è partita la registrazione: manca la data",
                     "conferma": DOMANDA, "risposta_finale": DOMANDA,
                     "in_sospeso": {"tool": "registra_utente", "argomenti": {"nome": nome},
-                                   "domanda": DOMANDA,
+                                   "domanda": DOMANDA, "chiede": ["nascita", "tutori"],
                                    "messaggio": "Messaggio di sistema: hai chiesto la data."}}
         args = {"nome": nome, "nascita": nascita}
         if not getattr(sc, "sfida_superata", False):
             return chiedi_conferma(ctx, "registra_utente", args, f"registrare {nome}")
+        if guasti[0]:
+            guasti[0] = False
+            return {"ok": False, "fatto": "NIENTE", "errore": "il registro delle voci non risponde"}
         visti.append(("registra_utente", args))
         return {"ok": True, "risposta_finale": f"Ho registrato {nome}."}
 
@@ -94,10 +97,10 @@ def frase(b, sc, testo_frase, *risposte, righe=STANZA):
     return turno(b, testo_frase, *risposte, chi=sc)
 
 
-def fino_alla_domanda():
+def fino_alla_domanda(guasto=False):
     """«Registra Bianca» con la stanza accesa → frase di sfida → superata → la domanda della
     data. Restituisce Brain pronto per la risposta."""
-    b, visti, eseguiti, sc = prepara_registra()
+    b, visti, eseguiti, sc = prepara_registra(guasto)
     r1 = frase(b, sc, "Calliope, registra Bianca.", chiama("registra_utente", NOME))
     s = sc.sfida
     r2 = frase(b, sc, s.testo) if s is not None else ""
@@ -207,10 +210,42 @@ def prova_contrari():
              and "valore_sfida_sospeso" not in rr and sc.sfida is not None, f"{visti} {rr}")
 
 
+def prova_revisione():
+    """Revisione di sicurezza della PR #117 (16/10): negazione, argomenti dichiarati, una
+    chiamata sola con la sfida portata."""
+    b, visti, _, sc, _, _ = fino_alla_domanda()
+    frase(b, sc, "No, aspetta, non registrarla: forse è nata il 12 ottobre 2015 ma devo "
+          "controllare.", chiama("registra_utente", CON_DATA), testo("Va bene."))
+    rr = regole(b)
+    verifica("revisione: «No, aspetta, non registrarla: forse è nata…» → niente ancora né sfida "
+             "portata, niente eseguito", not visti and "valore_risposta_sospeso" not in rr
+             and "valore_sfida_sospeso" not in rr, f"{visti} {rr}")
+    b, visti, _, sc, _, _ = fino_alla_domanda()
+    frase(b, sc, "Lascia perdere, ci penso domani.",
+          chiama("registra_utente", {"nome": "Bianca", "maggiorenne": "perdere"}),
+          testo("Va bene."))
+    rr = regole(b)
+    verifica("revisione: «Lascia perdere, ci penso domani.» con maggiorenne=«perdere» → niente "
+             "ancora, niente eseguito", not visti and "valore_risposta_sospeso" not in rr
+             and "valore_sfida_sospeso" not in rr, f"{visti} {rr}")
+    # La sfida portata vale per una chiamata sola: il giro di correzione dopo un errore la chiede
+    b, visti, _, sc, _, _ = fino_alla_domanda(guasto=True)
+    r = frase(b, sc, "È nata il 12 ottobre 2015, il tutore è Dario.",
+              chiama("registra_utente", CON_DATA),
+              chiama("registra_utente", {**CON_DATA, "tutori": "Dario"}),
+              testo("Ho registrato Bianca."))
+    rr = regole(b)
+    verifica("revisione: la sfida portata una volta sola; la seconda chiamata della risposta "
+             "(giro di correzione) chiede la sua sfida", not visti
+             and rr.count("valore_sfida_sospeso") == 1 and sc.sfida is not None,
+             f"{visti} {rr} {r[:120]}")
+
+
 def _t(testo_frase, **k):
     base = dict(testo=testo_frase, contaminazione=frozenset({"stanza"}),
                 esterni=[("stanza", STANZA)], in_sospeso="registra_utente",
-                args_sospeso=dict(NOME), persona_txt="registra Bianca")
+                args_sospeso=dict(NOME), persona_txt="registra Bianca",
+                chiede_sospeso=("nascita", "tutori"))
     base.update(k)
     return pol.Turno(**base)
 
@@ -245,6 +280,35 @@ def prova_unita():
     verifica("unità: una foto arrivata con la frase → no",
              not r("registra_utente", CON_DATA, _t("È nata il 12 ottobre 2015.",
                                                     dato_nuovo=True)))
+    verifica("unità: la proposta non dichiara gli argomenti che chiede → no",
+             not r("registra_utente", CON_DATA, _t("È nata il 12 ottobre 2015.",
+                                                    chiede_sospeso=())))
+    verifica("unità: un argomento nuovo non dichiarato (maggiorenne=«perdere») → no",
+             not r("registra_utente", {"nome": "Bianca", "maggiorenne": "perdere"},
+                   _t("Perdere tempo così non mi piace.")))
+    verifica("unità: un argomento in più non detto (tutori) → no",
+             not r("registra_utente", {**CON_DATA, "tutori": "Carlo"},
+                   _t("È nata il 12 ottobre 2015.")))
+    verifica("unità: la negazione nella frase → no",
+             not r("registra_utente", CON_DATA, _t("Non so, forse il 12 ottobre 2015.")))
+    verifica("unità: maiuscole e spazi nel valore della domanda contano uguali",
+             r("registra_utente", {"nome": " bianca", "nascita": "2015-10-12"},
+               _t("È nata il 12 ottobre 2015.")))
+    gen = dict(in_sospeso="x", args_sospeso={"comando": "spegnere il server"},
+               chiede_sospeso=("nota",))
+    verifica("unità: confronto esatto, «non spegnere il server» ≠ «spegnere il server»",
+             not r("x", {"comando": "non spegnere il server", "nota": "subito"},
+                   _t("Va bene subito.", **gen)))
+    gen = dict(in_sospeso="x", args_sospeso={"importo": "10 euro"}, chiede_sospeso=("nota",))
+    verifica("unità: confronto esatto, «900 euro» ≠ «10 euro»",
+             not r("x", {"importo": "900 euro", "nota": "subito"}, _t("Va bene subito.", **gen)))
+    verifica("contrario del contrario: gli stessi argomenti e la nota detta → sì",
+             r("x", {"importo": "10 euro", "nota": "subito"}, _t("Va bene subito.", **gen)))
+    gen = dict(in_sospeso="x", args_sospeso={}, chiede_sospeso=("importo",))
+    verifica("unità: il mese a parole vale in cifre solo per una data («10 euro» dopo «il 12 "
+             "ottobre» no)", not r("x", {"importo": "10 euro"}, _t("Il 12 ottobre, in euro.", **gen)))
+    verifica("unità: una data «2015-10-12» dopo «12 ottobre 2015» sì",
+             r("x", {"importo": "2015-10-12"}, _t("Il 12 ottobre 2015.", **gen)))
     verifica("unità: proposta senza argomenti in forma di dizionario → no",
              not r("registra_utente", CON_DATA, _t("È nata il 12 ottobre 2015.",
                                                     args_sospeso=None)))
@@ -257,7 +321,9 @@ def prova_pc_guarda():
               "Fammi una foto della lavagna", "Fotografa la scrivania"):
         verifica(f"pc_guarda chiesto: «{f}»", pol.chiesto_con_verbi(cl, f, {"cosa": "webcam"}))
     for f in ("La foto di ieri era bella", "È scattato l'allarme stanotte",
-              "Non fare foto, per favore", "Ho messo le foto nella cartella"):
+              "Non fare foto, per favore", "Ho messo le foto nella cartella",
+              "Tre giorni fa le foto della gita erano sul tavolo",
+              "Chi fa le foto al matrimonio?", "Mio cugino fa foto bellissime"):
         verifica(f"contrario pc_guarda: «{f}»",
                  not pol.chiesto_con_verbi(cl, f, {"cosa": "webcam"}))
     t = _t("Fai una foto a questo dispositivo", in_sospeso=None, args_sospeso=None)
@@ -272,6 +338,7 @@ if __name__ == "__main__":
     prova_unita()
     prova_caso_vero()
     prova_contrari()
+    prova_revisione()
     prova_pc_guarda()
     print("\nTutto bene." if not errori else f"\n{errori} errori.")
     sys.exit(1 if errori else 0)
