@@ -33,13 +33,14 @@ def ESCLUSO(motivo: str) -> Escluso:  # noqa: N802 — si legge come una parola 
     return Escluso(motivo)
 
 
+SEGNI = ("chi", "stanza", "dati")   # i segni della frase per Brain (15/10, 16/10)
 # Ogni tipo ha la sua riga: come si rende nel contesto del modello, o ESCLUSO e perché (§ 3.1)
 PROIEZIONE_CONTESTO: dict[str, str] = {
     "conversazione_aperta": "ripresa o coda: messaggio di sistema subito dopo il prompt",
     "conversazione_chiusa": ESCLUSO("chiude il segmento: la proiezione è del segmento aperto"),
     "detto_persona": "il messaggio della persona (la trascrizione, o «dopo» della trascrizione "
                      "capita accettata), con gli ingressi del turno davanti; per Brain i segni "
-                     "chi e stanza (`_chi`, `_stanza`: 15/10)",
+                     "chi, stanza e dati (`_chi`, `_stanza`: 15/10; `_dati`: 16/10)",
     "trascrizione_capita": "cambia il testo del detto_persona del suo turno, se accettata",
     "dato_in_ingresso": "davanti al messaggio della persona del suo turno (la busta), con la "
                         "traccia della fonte",
@@ -212,7 +213,7 @@ def turni(eventi, da: int | None = None) -> dict:
             cur["brain"] = bool(d.get("brain"))
             cur["canale"] = d.get("canale") or ("modulo" if tipo == "modulo_compilato" else None)
             cur["modulo"] = tipo == "modulo_compilato"
-            cur["segni"] = {"_" + k: d[k] for k in ("chi", "stanza") if d.get(k) is not None}
+            cur["segni"] = {"_" + k: d[k] for k in SEGNI if d.get(k) is not None}
             out.append(cur)
             per_chiave[e.seq] = cur
         elif cur is None and tipo in ("detto_calliope", "chiamata_tool", "esito_tool",
@@ -385,7 +386,7 @@ def messaggi(vista: dict, forma: Forma = FORMA, per_risposta: bool = False,
     vuoto dell'assistente dopo una frase della persona senza niente di detto (uno stop: i ruoli
     si alternano, come vogliono alcuni modelli di chat). `seq`: ogni messaggio con `_seq`, la
     chiave del suo turno (per Brain: compressione, taglio, archivio). `riassunto`: il riassunto
-    in testa (Brain lo mette da sé). Con `seq` anche i segni della frase (`_chi`, `_stanza`)."""
+    in testa (Brain lo mette da sé). Con `seq` anche i segni della frase (SEGNI con «_»)."""
     out: list[dict] = []
     if riassunto and vista.get("riassunto"):
         out.append({"role": "system", "content": vista["riassunto"]})

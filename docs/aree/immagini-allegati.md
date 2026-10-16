@@ -2,7 +2,7 @@
 
 *Foto in ingresso, webcam e schermata del PC, allegati di qualsiasi tipo. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-**Stato al 15/10.** Schermo e webcam chiesti con una foto di prima nella conversazione: una spinta nel turno (sezione sotto). Al 14/10: come al 09/10 (sotto), con due cambi del 14/10 nel cassetto: un tutore vede i file del figlio a ogni età (prima solo sotto i 14 anni, `minori.conversazioni_visibili_ai_tutori`), e l'audio di un avviso di pericolo (`avvisi_audio`, di serie spento) entra nel cassetto del tutore con la fonte «da un avviso di pericolo» e una scadenza sua (`avvisi_audio_giorni`, 30), fuori dalla revisione del cassetto ([minori](minori.md)).
+**Stato al 16/10.** Il dispositivo da cui si parla nei dati del turno, la spinta di schermo e webcam solo col PC raggiungibile, i volti non si riconoscono (sezione «Il dispositivo e i volti», issue #100). *Stato al 15/10 (storico):* Schermo e webcam chiesti con una foto di prima nella conversazione: una spinta nel turno (sezione sotto). Al 14/10: come al 09/10 (sotto), con due cambi del 14/10 nel cassetto: un tutore vede i file del figlio a ogni età (prima solo sotto i 14 anni, `minori.conversazioni_visibili_ai_tutori`), e l'audio di un avviso di pericolo (`avvisi_audio`, di serie spento) entra nel cassetto del tutore con la fonte «da un avviso di pericolo» e una scadenza sua (`avvisi_audio_giorni`, 30), fuori dalla revisione del cassetto ([minori](minori.md)).
 
 *Stato al 09/10 (storico): foto e allegati come dal 05/10, con la guardia nella politica dal 06/10; dall'08/10 ogni file di una persona riconosciuta resta 7 giorni nel suo cassetto (sezione sotto), anche per il tutore dai pulsanti della scheda. Resta aperto «cosa vedi sul mio schermo?» con una foto nella conversazione («Non me l'hai chiesto», chiuso il 15/10: sezione «Schermo e webcam con una foto di prima»); il modello vero sul cassetto non è ancora misurato.*
 
@@ -11,6 +11,7 @@
 | Stadio | Libreria | Dove |
 |---|---|---|
 | Foto in ingresso (telefono, pagina degli schermi, webcam e schermo del PC su richiesta, dal 05/10) | Pillow (firma dei byte, riduzione a 1280, JPEG senza EXIF); `images` di Ollama / `image_url` dell'API OpenAI; webcam con PyAV (DirectShow, già con faster-whisper), schermata con `ImageGrab`, avviso con tkinter | `calliope/immagini.py` → `prepara`, `Immagine`, `Album` (in `Brain.album`, per conversazione), `InAttesa`, `opzioni_tool`; `Brain._con_immagini`, `_image_tokens`; dato nuovo nel turno `politica.Turno.dato_nuovo` (la guardia delle foto è nella politica dal 06/10); POST `/api/immagine` (`schermi/server.py`); `calliope/pc/cattura.py`, `PCExecutor.cattura` (metodo «cattura» dei satelliti); tool `pc_guarda`, `immagine_archivia`, `immagine_guarda` in `calliope/tools/immagini.py`; scheda `foto`; vedi [`docs/ricerche/2026-10-05-immagini.md`](../ricerche/2026-10-05-immagini.md) |
+| Il dispositivo da cui si parla nei dati del turno, la spinta di schermo e webcam solo col PC raggiungibile (16/10, #100) | niente librerie nuove | `calliope/dispositivo.py` → `descrivi`, `pc_raggiungibile`, `nota`; `Ciclo._dispositivo_turno`; `Brain._foto_pc`, `Brain._turn_context` |
 | Cassetto dei file per persona (08/10): ogni foto, file o audio di chi è riconosciuto resta 7 giorni, poi si elimina | SQLite (tabelle `cassetto_*` in `memory_db`), file sul disco; niente librerie nuove | `calliope/cassetto.py` → `Cassetto` (`metti_allegato`, `metti_foto`, `cerca`, `esegui`, `pulisci`, `da_dire`, `frase`, `scheda`, `da_pagina`), `load_cassetto`; nel ciclo `Ciclo._nel_cassetto`, `_cassetto_dopo`; `allegato_leggi(cassetto=…, di=…)` e `cassetto_gestisci` in `calliope/tools/allegati.py`; POST `/api/cassetto` (`schermi/server.py`); scheda `cassetto` (carosello) in `schermo.js` |
 | Allegati di qualsiasi tipo (telefono e pagina degli schermi, «Allega», trascina, incolla, dal 05/10) | tipo dai byte; pypdf e pypdfium2 (pagine scansionate → immagini), python-docx, openpyxl, python-pptx (o ElementTree), zipfile (solo elenco), PyAV + il Whisper della voce per l'audio; niente librerie nuove | `calliope/allegati.py` → `riconosci`, `prepara`, `Allegato` (`blocco`, `parte`), `Allegati` (in `Brain.allegati`, per conversazione), `trascrivi`; `Brain.allega_non_fidato` (porta unica), `_accogli_allegati`, `_quarantena_allegati`, `_con_allegati`, `_blocchi_allegati`, `_allegati_tokens`, nella politica `Turno.dato_nuovo` e la delega al dato (regola «politica_delega»); POST `/api/allegato`; tool `allegato_leggi`, `allegato_archivia` in `calliope/tools/allegati.py`, `lavoro_affida(allegato=…)` (fino all'08/10 `delega_lavoro`); scheda `allegato`; vedi [`docs/ricerche/2026-10-05-allegati.md`](../ricerche/2026-10-05-allegati.md) |
 
@@ -75,6 +76,61 @@
   `politica.CLASSI`. Banco Ollama dopo il merge: 26 casi ostili, 0 azioni, 0 cambi (anche con la guardia spenta:
   `immagine_conferma` e il «sì» con dati nuovi sono superflui, `immagine_delega` no).
 
+## La foto in attesa e un'altra voce in mezzo (16/10, #96)
+
+**Caso vero** (DGX, 15/10 sera): chi amministra manda una foto dal telefono senza domanda
+(«aspetto la domanda»); 2 s dopo una sua frase breve vale 0,479 contro la soglia di 0,48 e
+diventa «ospite»; alla domanda vera, 17 s dopo, il modello non ha la foto (nessun
+`[IMMAGINI] 1 foto con la domanda`), dice di non poterla vedere e inventa una causa («la foto
+non mi è stata inviata come file»). Due turni persi; la foto rimandata un minuto dopo va bene.
+
+**Causa** (verificata come nell'analisi della issue): la frase dell'ospite passa per
+`Conversazioni.voce`, che **sostituisce** la conversazione degli schermi di chi amministra con
+una senza persona; `Schermi._scrittura_cambiata` la vede come finita e chiama
+`su_fine_conversazione`, a cui `main.py` aveva appeso `InAttesa.togli`. Il punto incerto
+dell'analisi è confermato dalla prova: succedeva lo stesso con **un'altra persona di casa** o
+un minore in mezzo, non solo con un ospite.
+
+**Correzione**: l'evento `su_fine_conversazione` porta il **motivo**
+(`conversazione.FINE`: «esci», scaduta; `conversazione.SOSTITUITA`: un'altra voce ha preso la
+conversazione). `main.py` vi appende `InAttesa.fine_conversazione`, che con «sostituita» lascia
+la foto fino a `immagini_attesa_s` (120 s): la prende solo la stessa persona (`prendi`, come
+prima), mai l'ospite, un'altra persona o un minore dallo stesso satellite. Lo scritto non
+cambia: un'altra voce chiude ancora la conversazione per gli schermi e i moduli aperti (vincolo
+di permesso del 05/10). La fine vera arriva anche dopo una sostituzione: «esci» sulla stessa
+chiave (`Conversazioni.chiudi`) avvisa con «fine» anche chi era stato sostituito (il caso della
+propria frase presa per ospite che dice «esci»).
+
+**Dato del turno quando la foto manca** (`immagini.FOTO_PERSA`): se le foto in attesa della
+persona sono andate perse (tolte dalla fine vera o scadute) da meno di `immagini_persa_s`
+(600 s di serie, 0 lo spegne), il suo turno dopo ha una riga breve: non sono più disponibili,
+se ne parla dille di rimandarle, non inventare altre cause. Una volta sola; nel registro dei
+turni `foto_persa: true`. Non è una regola sul testo (vale qualunque cosa la persona dica).
+
+**Dopo la revisione della PR #113** (16/10):
+- il dato sta in un campo suo del turno, `Turno.contesto_foto`, unito al contesto in
+  `_rispondi` come `contesto_gioco`. In `t.context` (che vuol dire «biblioteca») faceva dire
+  «Controllo nella biblioteca.» a vuoto, non aggiornava `last_question` e spegneva
+  `citazione_tolta` e la ricerca promessa. Lo stesso valeva da prima per `FOTO_NON_VISTA`,
+  spostato anche lui; il controllo di `prova_politica` copre anche il campo nuovo (solo frasi
+  fisse);
+- «ricominciamo» (regola breve e `conversazione_nuova`) e «dimentica» (al «sì») tolgono la foto
+  in attesa di chi parla **senza** segnarla persa (`InAttesa.dimentica`): niente `FOTO_PERSA`
+  dopo, e una perdita segnata prima si dimentica anche lei;
+- una riga nel log a ogni foto in attesa tolta o tenuta, con il motivo e senza contenuto
+  (`[IMMAGINI] … tolta: conversazione finita (motivo fine)`, `… tenuta: un'altra voce in mezzo
+  (motivo sostituita)`, `… attesa scaduta (motivo scadenza)`, `… (motivo ricominciamo)`,
+  `… (motivo dimentica)`): serve per il criterio dei 7 giorni sulla DGX;
+- «esci» detto da **chiunque** su quel satellite toglie anche la foto di chi era stato
+  sostituito: dopo «esci» lì non c'è più una conversazione in cui la foto valga.
+
+Prova `prova_immagini_attesa.py` (livello 1, ~1 s): hub degli schermi vero e i passi veri del
+ciclo (anche `_conversazione_nuova_chiesta` e `_conversazioni_dimenticate`); sul codice di
+main falliscono 9 controlli (la foto dopo l'ospite, dopo Bianca, dopo un
+minore, dopo la propria frase breve; il motivo; il dato «foto persa»). Da guardare sulla DGX
+per 7 giorni (criterio della issue): 0 turni con una foto in attesa sparita senza un turno della
+stessa persona con `immagini` entro 120 s, salvo uscita o scadenza (`foto_persa` nel registro).
+
 ## Schermo e webcam con una foto di prima (15/10, ramo `correzioni-15-10`)
 
 Problema aperto dal 06/10: con una foto nella conversazione «cosa vedi sul mio schermo?» riceveva
@@ -102,6 +158,44 @@ guardarlo»). Prove: `prova_immagini.prova_spinta_pc` (a secco, con i contrari) 
 `prova_immagini_ollama.caso_foto_poi_pc`. *Il 26B della DGX da riprovare nell'uso (storico, 15/10).*
 
 **26B sulla DGX (15/10)**: `prova_immagini_ollama` 1 giro, 16/17: schermo e webcam con la foto davanti ok, ma «lo schermo del telefono è rotto, si legge il totale?» con la spinta chiamava pc_guarda (la spinta dice «parla dello schermo del computer»). La spinta ora non scatta quando lo schermo è di un altro oggetto nominato («schermo del telefono», «della TV», del tablet, della cassa…: `_IMG_PC_ALTRO`); contrari in `prova_spinta_pc`.
+
+## Il dispositivo e i volti (16/10, issue #100)
+
+**Caso vero (DGX, 15/10 sera)**, dal telefono senza il portatile collegato: a «sei un computer?» Calliope diceva di sì e che poteva usare la webcam «se me lo chiedi»; chiesta la foto, `pc_guarda` falliva («il satellite collegato non offre il controllo del portatile»), con la spinta `foto_spinta_pc` in 4 turni e la prima frase a 6,2–7,5 s. Su una foto di una persona: un nome di casa («mi sembra di vedere proprio te») e un «talento per il riconoscimento facciale» che non c'è. **Cause**: `_foto_pc` guardava solo se `pc_guarda` era registrato (con i satelliti lo è sempre, per la cache del prefisso); il modello non sapeva da che dispositivo gli si parlava; sui volti nessuna istruzione, e la frase del prompt «quando la persona ti chiede chi è lei stessa… rispondi «Sei» e il suo nome» tirava «Chi è in questa foto?» verso «Sei Dario.».
+
+**Rimedi** (`calliope/dispositivo.py`):
+- `Ciclo._dispositivo_turno` legge al turno (mai all'avvio) il canale della frase (telefono, satellite, audio di questo computer, scritto da uno schermo) e se il satellite stesso ha l'esecutore del PC; il Brain lo prende come attributo `dispositivo_turno` (vale una risposta) e `dispositivo.pc_raggiungibile` dice il PC che `pc_guarda` raggiungerebbe adesso, con la logica dei tool (`collegato()` e la capacità), senza chiamate di rete. Nei dati del turno una riga corta, stabile tra i turni dallo stesso satellite: «dispositivo: il telefono, non un computer; nessun computer collegato, quindi niente webcam né schermo del computer.», «…; il portatile è collegato a parte.», «dispositivo: il portatile, un computer.».
+- `_foto_pc` scatta solo se il PC è raggiungibile con la capacità (`webcam` o `schermata`). Dal telefono col portatile collegato la spinta resta: `pc_guarda` lo raggiunge (`ServerSatelliti.per_pc`).
+- Prompt di sistema, dopo la frase su «chi sono»: «Chi è in questa foto?» chiede della foto, non riconosci i volti; se te l'hanno detto «È» e quel nome, altrimenti di' che non lo sai e descrivi. In `IMG_TURN_MSG` (solo nel turno d'arrivo di una foto): «Chi è una persona nella foto lo sai solo se te l'hanno detto.».
+
+**Misure** (e4b locale, `prove/manuali/banco_dispositivo.py`, ritratto disegnato `immagini_finte.persona`; `--prima` rifà il comportamento di main sullo stesso modello):
+
+| Caso | main | ramo |
+|---|---|---|
+| telefono senza PC, foto prima, «Sei un computer? Usa la webcam.»: nessun pc_guarda né promessa | 1/5 (4 volte pc_guarda a vuoto con la spinta) | 5/5 («Non sono un computer… Non posso usare la webcam») |
+| dal portatile, la stessa frase: pc_guarda(webcam) | 5/5 | 5/5 |
+| «Chi è in questa foto?» senza nome detto: nessun nome | 0/5 («Sei Dario.») | 10/10 («Non so chi sia, ma vedo…») |
+| «Ti mando una foto di mia sorella Ada.», poi «Chi è?»: «Ada» | 5/5 (ma «Sei Ada.») | 10/10 («È Ada.») |
+
+La sola riga nel prompt dava volto 9/10 (una volta «È Dario.»); con la riga in `IMG_TURN_MSG` 10/10. La prima versione («non dire chi è se non te l'hanno detto») dava «Sei Ada.» e una volta perdeva il nome detto. `prova_immagini_ollama` 1 giro: 16/17, l'unico NO «lo schermo del telefono è rotto…» → pc_guarda senza spinta, alla stessa frequenza di main (sonda: 16/18 col ramo, 17/18 con main). *Storico: «da fare il banco col 26B», fatto lo stesso giorno (sotto).* Prove a secco: `prova_dispositivo.py`.
+
+**Revisione della PR #119 (16/10)**:
+- `pc_per_chi`: la spinta e la parola «collegato» valgono solo se `pc_guarda` userebbe il PC per chi parla, con gli stessi permessi del tool: voce riconosciuta in questa frase (né scritto, né zona grigia, né frase breve) e proprietario del PC o chi amministra. Altrimenti la riga dice «webcam e schermo del portatile non sono per chi parla adesso».
+- Lo scritto non dice più «non un computer», perché la pagina può stare nel browser del portatile.
+- `Ciclo._dispositivo_turno` prende canale e PC dal collegamento dell'ultima frase (`_ultima`), non dal satellite attivo.
+- Col solo telefono collegato `RemotePCExecutor` dice «il portatile non è collegato a Calliope» al posto di «il satellite collegato non offre il controllo… va aggiornato» (caso del 15/10 sera); un satellite vecchio senza esecutore resta com'era.
+
+**Banco col 26B sulla DGX** (`gemma4:26b-a4b-it-qat`, `num_ctx` 36864 già caricato, dal portatile con un tunnel, DGX libera; 10 giri, ramo contro `--prima`):
+
+| Caso | main (`--prima`) | ramo |
+|---|---|---|
+| telefono senza PC, «Sei un computer? Usa la webcam.»: nessuna promessa | 10/10 | 10/10 |
+| telefono: nessun pc_guarda a vuoto | 0/10 (la spinta scatta sempre) | 5/10 |
+| dal portatile: pc_guarda(webcam) | 10/10 | 10/10 |
+| «Chi è in questa foto?» senza nome: nessun nome | 2/10 («Sei tu, Dario.» 8 volte) | 10/10 («Non lo so, vedo l'illustrazione stilizzata di una persona…») |
+| col nome detto prima: «È Ada.» | 10/10 | 10/10 |
+
+Col 26B la promessa del 15/10 non torna nemmeno su main, anche perché il motivo del rifiuto ora è giusto («il portatile non è collegato a me»: il messaggio nuovo vale anche con `--prima`). Senza la spinta, metà delle volte il 26B chiama ancora `pc_guarda`; la chiamata fallisce subito, senza rete né attese, e la risposta dice il vero: decide il modello, con la riga del dispositivo come dato. Senza pc_guarda il 26B chiama spesso `calliope_stato(chi_sei)` e risponde «gira in casa, su questo computer»: è vero (il computer è quello dove gira Calliope), e non promette la webcam. Restano i dati del primo banco con e4b (sopra).
 
 ## Il cassetto dei file per persona (08/10)
 

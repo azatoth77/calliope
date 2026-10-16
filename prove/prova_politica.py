@@ -564,8 +564,9 @@ def prova_codice():
     # (t.context, self.last_question), e i nomi si confrontano interi («self.tool_ctx»)
     main = ast.parse((RADICE / "calliope" / "ciclo.py").read_text("utf-8"))
     # (gli argomenti di biblioteca_contesto: il contesto dei tool e la domanda della persona)
-    ammessi = {"biblioteca_contesto", "FOTO_NON_VISTA", "context", "tool_ctx", "last_question",
-               "text"}
+    # (FOTO_PERSA dal 16/10, #96: frase fissa quando la foto in attesa non c'è più)
+    ammessi = {"biblioteca_contesto", "FOTO_NON_VISTA", "FOTO_PERSA", "context", "tool_ctx",
+               "last_question", "text"}
 
     def nomi_di(nodo) -> set:
         """I nomi usati in un'espressione, con gli attributi di self e del turno ridotti
@@ -582,7 +583,9 @@ def prova_codice():
 
     def bersaglio(x) -> bool:
         return (isinstance(x, ast.Name) and x.id in ("context", "extra")) or (
-            isinstance(x, ast.Attribute) and x.attr in ("context", "extra")
+            # contesto_foto (16/10, #96): la foto non vista o persa, unita al contesto in
+            # _rispondi; anche lì solo frasi fisse
+            isinstance(x, ast.Attribute) and x.attr in ("context", "extra", "contesto_foto")
             and isinstance(x.value, ast.Name) and x.value.id == "t")
     cattivi, visti = [], 0
     for n in ast.walk(main):

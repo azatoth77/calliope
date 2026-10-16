@@ -271,6 +271,14 @@ class Anticipo:
     esterno: str = ""          # le sole righe, per la provenienza degli argomenti
     righe: int = 0
     tagliate: int = 0
+    # Non cercata per il tetto dei dati del turno (16/10, issue #95, `dati_turno_tetto_token`):
+    # per Brain come una ricerca non fatta (la spinta verso stanza_cerca resta)
+    tetto: bool = False
+
+
+# Sotto questi caratteri di righe la ricerca anticipata non vale la busta (~800 caratteri tra
+# busta e istruzioni): con il tetto dei dati del turno più stretto non parte (16/10, issue #95)
+ANTICIPO_MIN_CARATTERI = 300
 
 
 def stanze_nominate(st, frase: str) -> list[str]:
@@ -307,10 +315,12 @@ def nomi_propri(ctx, frase: str) -> frozenset:
     return frozenset(chiavi(" ".join(n for n in nomi if n.lower() not in wake)))
 
 
-def anticipa(ctx, frase: str, blocco=None) -> Anticipo | None:
+def anticipa(ctx, frase: str, blocco=None, massimo: int | None = None) -> Anticipo | None:
     """La ricerca anticipata per la frase del turno: None se non parte (spenta, tool spento,
     stanza spenta, chi parla non può cercare, ospiti, nessuna parola utile); un Anticipo con
-    testo vuoto se è partita e non ha trovato niente di nuovo."""
+    testo vuoto se è partita e non ha trovato niente di nuovo. `massimo`: i caratteri che il
+    messaggio intero (busta compresa) può avere, dal tetto dei dati del turno (16/10, issue #95);
+    se non bastano per `ANTICIPO_MIN_CARATTERI` di righe la ricerca non parte (`tetto`)."""
     from ..stanza import cerca as cerca_mod
     from .. import provenienza
     from ..stanza.contesto import FONTE
@@ -335,6 +345,15 @@ def anticipa(ctx, frase: str, blocco=None) -> Anticipo | None:
     tetto = int(getattr(cfg, "stanza_cerca_anticipo_caratteri", 1000) or 0)
     if tetto <= 0:
         return None
+    if massimo is not None:
+        # La busta, le istruzioni e la nota sulle persone non si accorciano: si accorciano le righe
+        fisso = len(provenienza.racchiudi(FONTE, ANTICIPO + "\n", "conversazione della stanza"))
+        nota0 = _nota_persone(ctx, chi, frase)
+        fisso += len(nota0) + 1 if nota0 else 0
+        # (40: le intestazioni «In cucina:», che il tetto di cerca non conta)
+        tetto = min(tetto, int(massimo) - fisso - 40)
+        if tetto < ANTICIPO_MIN_CARATTERI:
+            return Anticipo(testo=nota0 if nota0 and len(nota0) <= massimo else "", tetto=True)
     # Solo righe pertinenti (14/10 notte, seconda prova in auto: righe aggiunte in 22 turni su
     # 31, ~280 token riletti a ogni turno anche per «quando è Halloween?»): con due o più parole
     # utili nella domanda ne servono due nella riga, o un nome proprio («Rachele» basta)
@@ -356,6 +375,10 @@ def anticipa(ctx, frase: str, blocco=None) -> Anticipo | None:
     st._misura("anticipo", **misura, righe=len(es.righe), caratteri=len(es.testo),
                stanze=len(es.stanze), tagliate=es.tagliate)
     testo = provenienza.racchiudi(FONTE, ANTICIPO + "\n" + es.testo, "conversazione della stanza")
+    if massimo is not None and len(testo) + (len(nota) + 1 if nota else 0) > massimo:
+        # Il tetto di cerca non conta le intestazioni delle stanze e lascia passare la prima
+        # riga lunga: il tetto dei dati del turno invece vale (la cache del prefisso)
+        return Anticipo(testo=nota if nota and len(nota) <= massimo else "", tetto=True)
     return Anticipo(testo=testo + (f"\n{nota}" if nota else ""), righe=len(es.righe),
                     tagliate=es.tagliate,
                     esterno="\n".join(str(r.get("testo") or "") for _, r in es.righe

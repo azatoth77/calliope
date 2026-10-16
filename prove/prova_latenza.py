@@ -373,7 +373,7 @@ def prova_registro():
     verifica("dalla fine del parlato", d["fine_parlato"]["mediana"] == 1.6)
     a = latenza.avviso(d, 1.2, "2026-10-05")
     verifica("avviso oltre 1,2 s con le cause", a and "2,50 s" in a and "correzione" in a
-             and "guardiano" in a and "cache del prefisso persa in 3 turni" in a, str(a))
+             and "guardiano" in a and "rilettura oltre 1,00 s in 3 turni" in a, str(a))
     verifica("contrario: giorno veloce, nessun avviso", latenza.avviso(g["2026-10-02"]) is None)
     verifica("contrario: lento ma con 3 risposte, nessun avviso",
              latenza.avviso(g["2026-10-04"]) is None)

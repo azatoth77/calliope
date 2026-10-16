@@ -16,6 +16,7 @@
 | Registro della stanza e misure (13/10, passo 1 in ombra, sotto) | solo libreria standard, in memoria | `calliope/stanza/registro.py` → `RegistroStanza` (`aggiungi`, `righe`, `svuota`, `conteggi`, dal 14/10 `su_evento`, `seq_vivi`), `Evento.a_dict`; `calliope/stanza/misure.py` → `Misure`, `leggi`, `riassunto`, `testo` (sezione «Stanza» di `calliope stato --turni`); `Stanza.presenti`, `Stanza.presenze`, `Stanza.dimentica` |
 | Tenuta su disco del testo della stanza (14/10, `stanza_tenuta`, sotto) | SQLite in WAL con FTS5 (`stanza.db`, `detail=full`) | `calliope/stanza/tenuta.py` → `Tenuta` (`evento`, `presenza`, `cerca`, `presenze`, `stanze`, `dimentica`, `svuota`, `ruota`, `conteggi`), `conta_file`, `svuota_file`, `testo_stato`; `calliope/stanza/__init__.load_tenuta`; `conserva.decidi(…, "stanza", …)`; `stanza/cerca._dal_disco`, `info_stanze` |
 | Righe della stanza nella storia, in sola aggiunta (14/10 sera, `stanza_contesto_in_storia`, sotto) | solo libreria standard, in memoria | `calliope/stanza/contesto.py` → `Pezzo`, `pezzo`, `nota_turno`, `in_storia`, `gia_nella_storia`; `Conversazione.stanza`, `stanza_mandate`, `stanza_n`; `Brain._stanza_prepara`, `_con_stanza`, `_stanza_pota`, `_scalda_in_secondo_piano`, `last_stanza_storia` (registro dei turni `stanza.storia`) |
+| Dati del turno che cambiano di rado nella storia, in sola aggiunta (16/10, issue #95, `dati_stabili_in_storia`, sotto) | solo libreria standard, in memoria | `calliope/dati_turno.py` → `Fisso`, `prepara`, `con_fissi`; `Conversazione.dati_fissi`, `dati_n`; `Brain._dati_prepara`, `_con_ancorati`, `last_dati_fissi`, `last_dati_turno_token` (nel registro dei turni i campi dati_fissi, dati_turno_token e cache.ripresi); tetto `dati_turno_tetto_token` con `tools/stanza.anticipa(…, massimo)`; `latenza.cache_persa`; banchi `prove/manuali/banco_cache_swa.py`, `banco_dati_fissi.py`, `misura_cache_prefisso.py` |
 | Guardiano a posteriori della stanza (14/10, passo 6, `stanza_guardia`, in ombra; sotto e in [minori](minori.md)) | solo libreria standard; il rilevatore di pericolo su Ollama | `calliope/stanza/guardia.py` → `Guardia` (`raccogli`, `giudica_uno`, `decidi`, `libera`; dal 14/10 sera `_riprendi_disco`, `osserva_giochi`, `gioco_in`), `GiudiceModello`, `GIOCO`, `riassunto`, `testo`, `elenco`; `calliope/stanza/tenuta.py` → diario della guardia (`righe_guardia`, `segna_giudicate`, `segna_gioco`, `giochi`); `calliope/schermi/giochi.py` → `Giochi.in_corso`; `calliope/stanza/__init__.py` → `load_guardia`; `Avvio._guardia_stanza` in `main.py`; `calliope stato --guardia` |
 | Corsia lenta: righe di versione 2, riassunto progressivo (14/10 sera, passo 3, `stanza_lenta`, sotto) | solo libreria standard, in memoria; il rilevatore per il riassunto | `calliope/stanza/lenta.py` → `Lenta`; `calliope/stanza/registro.py` → `righe` (parti della v2), `rivisti`, `riassunto`; `calliope/stanza/contesto.py` → `righe_testo` (TV in una riga), `_riassunto`; `calliope/stanza/tenuta.py` (v2 al posto della v1); `calliope/stanza/guardia.py` → `_versioni`; `calliope/stanza/banco.py` (audio del banco, eccezione); prova `prove/prova_stanza_lenta.py` |
 | Latenza come metrica, cache scaldata, modelli di Ollama (dal 06/10) | solo libreria standard (registro dei turni, Ollama `/api/ps`) | `calliope/latenza.py` → `giorno`, `per_giorno`, `testo`, `avviso`, `avviso_recente`, `scalda_ripresa`, `leggi_file` (`calliope stato --turni`); `Brain.scalda_conversazione`, `Brain._scalda_se_cambiato` (prefisso nuovo dopo un cambio di modalità, 07/10); `calliope/ollama_carico.py` → `residenti`, `limite`, `usati`, `avviso`, `puo_caricare`; la prima frase a pezzi e la taratura della voce (sezioni del 07/10 sotto) hanno il codice in `tts.py` e `taratura_voce.py`, area [stt-tts](stt-tts.md) |
@@ -2237,6 +2238,180 @@ Prove: `prova_stanza_storia` (sezione 1b, con `eventi: attivo` attraverso il gir
 anche il turno uscito dalla proiezione col taglio in testa: il suo pezzo se ne va, le righe non
 restano fuori posto e il risultato è quello di ombra, e col codice di prima fallisce), `prova_compagnia_passo0` (sezione «…con eventi:
 attivo»), `prova_eventi_attivo` invariata.
+
+## La cache del prefisso e la finestra scorrevole: i dati che cambiano di rado nella storia (16/10, issue #95, ramo `issue-95-cache-prefisso`)
+
+**Caso vero** (registro dei turni della DGX, gemma4 26b-a4b qat su Ollama; misura con
+`prove/manuali/misura_cache_prefisso.py`). Il 15/10, 119 risposte: **cache del prefisso persa in
+62 turni su 93** con la misura (67 %; riletti dal motore oltre 1,3 × la stima della guardia +
+300), riletti/stimati mediana **2,27**, rilettura mediana 1,67 s (p90 4,05), prima frase mediana
+**2,58 s** (p90 4,79). Il 12/10, stesso servizio: 0 su 133, riletti/stimati 0,86, rilettura
+0,40 s (p90 0,72), prima frase 1,34 s; il 14/10 8 su 28. Nei turni persi i token ripresi dalla
+cache restano fermi a ~18 000 (prompt di sistema e tool) mentre il contesto cresce: si rilegge
+tutta la storia, a ogni turno (dettaglio nell'issue #95).
+
+**Il meccanismo** (letto il 16/10 sulla DGX in sola lettura: Ollama **0.35.0**, servizio con
+`OLLAMA_NUM_PARALLEL=2` e `OLLAMA_MAX_LOADED_MODELS=4`; `ollama show --verbose`: 26B
+`gemma4.attention.sliding_window` **1024**, e4b 512; portatile Ollama 0.40.4). Gemma 4 alterna
+strati ad attenzione piena e a finestra scorrevole (SWA). Ollama usa per gemma4 il motore di
+llama.cpp, che degli strati SWA tiene solo gli ultimi `n_swa + n_ubatch` token (26B: 1536 celle,
+e4b: 1024; nel journal «checkpoint … pos_min = 16483, pos_max = 18018»). Per tornare a un punto
+più indietro servono i **context checkpoint**, che il motore crea dove comincia a leggere e verso
+la fine di ogni prompt; un checkpoint serve solo se il suo inizio sta prima di «punto di
+differenza − n_swa», e quelli dopo il punto si cancellano («erased invalidated context
+checkpoint»). Quindi: se la richiesta nuova differisce da quella di prima a più di ~`n_ubatch`
+(512) token **veri** dalla fine di quella di prima, nessun checkpoint recente serve, il motore
+torna al primo rimasto (il primo prompt letto) e da lì rilegge; e il checkpoint di partenza della
+lettura nuova è di nuovo quel punto, così il punto fisso si mantiene da solo. È lo stesso
+margine per il 26B e per l'e4b (1536 − 1024 = 1024 − 512 = 512).
+
+In Calliope la differenza comincia sempre ai **dati del turno** di prima: stanno subito prima
+della domanda e alla richiesta dopo spariscono. Il 15/10 (eventi `dati_del_turno` della DGX, 79
+turni di chi amministra, caratteri p50): ora e chi parla 880, ricerca anticipata della stanza 1800
+(70 turni), nota della stanza 860 (riassunto della corsia lenta in busta), avvisi ai tutori 837,
+ricordi 290 (p90 466); in tutto p50 **4810 caratteri** (p90 6226), ~1 200 token veri più la
+domanda: oltre il margine quasi sempre. Il 12/10 i dati del turno erano corti (niente avvisi, né
+anticipo, né riassunto), e la cache reggeva.
+
+**Le misure del motore** (`prove/manuali/banco_cache_swa.py`, portatile, gemma4 e4b, un Ollama di
+prova sulla porta 11500 con `OLLAMA_NUM_PARALLEL=2` e `OLLAMA_DEBUG=1`, chiuso alla fine per PID).
+Dati del turno che spariscono, 6 turni, token veri del blocco: 151 e 353 → la cache regge
+(riletti ~210 e ~410 per turno, i ripresi crescono); 497, 696, 993, 1484 → **0 ripresi**, si
+rilegge tutto il prompt a ogni turno. La soglia sta fra ~350 e ~500 token veri di dati del turno
+(più domanda e intestazioni), come detto sopra. Lo stesso banco con 3000 caratteri «che cambiano
+di rado» e 900 per turno, 8 turni, prompt di sistema da 16 000 caratteri: `--modo vecchio` (tutto
+nei dati del turno) **4 718–4 974 token riletti a ogni turno**, lettura 1,63–1,72 s; `--modo nuovo`
+(il blocco stabile nella storia, entrato una volta) **275–292**, lettura 0,13–0,15 s, i ripresi
+che crescono (4 708 → 4 920).
+
+**La correzione** (`calliope/dati_turno.py`, `Brain._dati_prepara`, `_con_ancorati`;
+`dati_stabili_in_storia`, di serie acceso).
+
+- **I ricordi** di chi parla, **gli avvisi ai tutori** e **il riassunto della stanza** (la parte in
+  busta della nota della stanza, `stanza/contesto.riassunto_turno`) entrano nella richiesta **solo
+  quando cambiano**: un `Fisso` davanti alla frase del turno in cui è cambiato (dopo le righe
+  nuove della stanza, prima dei dati del turno), legato a lei col segno `_dati` come le righe
+  della stanza col segno `_stanza`; nei turni dopo resta lì, uguale byte per byte. Con `eventi:
+  attivo` il segno viene dall'evento `detto_persona` (campo `dati`, solo in memoria), come
+  `_stanza`.
+- **Ricordi**: un ricordo nuovo entra in un pezzo con **le sole voci nuove** (la cache resta).
+  **Se la nuova versione toglie un ricordo** («dimentica», o un fatto che ne sostituisce uno con
+  lo stesso soggetto) le versioni vecchie escono e la nuova entra intera al turno in corso: la
+  cache si rompe una volta, dal posto della più vecchia (regola `dati_stabili_rifatti`, che la
+  guardia della cache conta come attesa). Un ricordo dimenticato non resta davanti al modello.
+- **Avvisi ai tutori e riassunto della stanza** sono testi interi, decisi a ogni turno dai loro
+  cancelli: per gli avvisi `Ciclo._avvisi_contesto` (solo a chi è riconosciuto dalla voce o dal
+  suo schermo, niente avvisi «sicurezza» di un minore sentito da poco, `nascondi_minori`); per
+  il riassunto la pausa per ospiti, «dimentica» della stanza, lo scambio finito. **Ogni cambio,
+  anche il testo vuoto, li rifà** (`dati_stabili_rifatti`). *(Storico, prima versione del ramo
+  fino alla revisione della PR #107 del 16/10: una versione nuova si aggiungeva e un testo vuoto
+  lasciava la vecchia, così un avviso «sicurezza» nascosto o il riassunto dopo «dimentica»
+  restavano davanti al modello, saltando i cancelli.)*
+- **Solo in memoria** (`Conversazione.dati_fissi`): `esporta` toglie il segno, l'archivio e il
+  riassunto della compressione non li vedono; dopo un riavvio rientrano al primo turno. Un turno
+  uscito dalla storia (taglio, compressione) se li porta via, e il blocco torna al turno in corso;
+  `_trim_tokens` li conta.
+- **In compagnia** (conversazione anonima condivisa) i ricordi sono di chi parla adesso: restano
+  nei dati del turno come prima e i pezzi già nella storia escono (`dati_stabili_rifatti`).
+- **Senza la frase della persona** (la passata del modello dopo la frase di sfida, la
+  continuazione `stream_continuation`) i dati fissi si rifanno lo stesso coi dati di quel turno,
+  legati all'ultima frase della persona nella storia (`Brain._dati_ancora`): il ciclo calcola gli
+  avvisi anche nel turno della sfida, e un avviso «sicurezza» tolto perché un minore ha parlato
+  nel frattempo non resta (seconda revisione della PR #107).
+- **Minori e ospiti** (coerente con la decisione 0031, unita il 16/10 con la PR #106): i dati
+  fissi valgono per ogni conversazione di una persona di casa, minori compresi (come gli adulti);
+  un ospite non ha ricordi né avvisi, quindi niente pezzi. I pezzi e il segno `_dati` restano solo
+  in memoria per tutti: su disco vanno, secondo `conserva.decidi`, solo le parole della storia,
+  non i dati fissi (i ricordi stanno già in `memoria.db`).
+- La busta non cambia: il riassunto della stanza resta un dato non fidato e la politica lo vede
+  fra gli `esterni` nel turno in cui entra (anche senza righe della stanza visibili) e nei turni
+  dopo; gli avvisi restano testi di Calliope.
+- Nei dati del turno resta ciò che cambia a ogni turno: ora e chi parla (con tono, minore, parole
+  incerte), presenti della stanza, foto, riferimenti, ricerche, proposta, rifiuti, stato degli
+  eventi.
+
+**Il tetto** (`dati_turno_tetto_token`, 450 token stimati a 3,5 caratteri, ~1 575 caratteri, ~400
+token veri): dati del turno più domanda, cioè ciò che il motore dovrà riavvolgere. La **ricerca
+anticipata della stanza** ora parte dopo gli altri dati del turno con i caratteri che restano
+(`anticipa(…, massimo=…)`, busta compresa, e il risultato si scarta se la supera); sotto
+`ANTICIPO_MIN_CARATTERI` (300) di righe non parte (regola `anticipo_tetto`) e resta la spinta verso
+`stanza_cerca`. Con i numeri del 15/10 (ora e chi parla ~880 caratteri, busta e istruzioni
+dell'anticipo ~810) per chi amministra l'anticipo di fatto non parte più: una domanda sulla stanza
+costa una chiamata a `stanza_cerca` (una passata, ~+0,5–1 s) invece di rileggere tutta la storia a
+ogni turno (1–5 s). Da guardare sul vero; la busta più corta per l'anticipo è una scelta di
+sicurezza, non fatta. Oltre il tetto il turno si conta (`dati_turno_oltre`); 0 = nessun tetto.
+
+**Le misure nel registro dei turni**: `dati_turno_token` (e `dati_turno_oltre`), `dati_fissi`
+(`nuovi`, `nuovi_caratteri`, `pezzi`, `caratteri`, `rifatti`, `orfani`, solo nomi e numeri),
+`cache.ripresi` (i token ripresi dalla cache nella prima passata: fermi mentre il contesto cresce
+= punto fisso), `cache.riavvolti_stimati` (i messaggi della richiesta di prima dopo il punto di
+differenza); `cache.riletti_stimati` senza i byte delle foto (una foto ~280 token: il 15/10
+segnava 58 000–68 000), e `cache_rotta` non scatta più dopo la potatura delle righe della stanza
+(`stanza_potata` del turno prima). `calliope stato --turni`: «cache del prefisso persa in N turni
+su M» (riletti oltre la stima, `latenza.cache_persa`), «dati del turno N token (p90, oltre il
+tetto in N turni)»; la vecchia causa «cache del prefisso persa» (rilettura oltre 1 s) ora si
+chiama «rilettura oltre 1,00 s».
+
+**Misura a secco** (`python prove\prova_dati_fissi.py --misura`, motore finto, 8 turni di chi
+amministra con ricordi e avvisi): token stimati da riavvolgere per turno **575–579 prima, 109–114
+dopo** (tetto 450), dati del turno più domanda 536–542 → 89–95. **Col modello** sul portatile
+(`prove/manuali/banco_dati_fissi.py`, gemma4 e4b, Ollama di prova, 8 turni, mediane dal secondo):
+`prima` riletti 521, `dopo` **158**, ripresi che crescono in tutti e due (con questi dati del
+turno, ~470 token stimati, il 4B stava ancora appena dentro il margine); la lettura del portatile,
+condiviso con altri lavori, è troppo rumorosa per la prima frase.
+
+**Da fare sulla DGX** (criteri dell'issue #95), dopo `calliope aggiorna`:
+
+    cd ~/calliope && V=~/.local/share/calliope/versioni/$(cat ~/.local/share/calliope/attuale) \
+        && $V/.venv/bin/python $V/prove/manuali/misura_cache_prefisso.py --giorni 3 --dal <ora dell'aggiornamento>
+
+obiettivo: «cache del prefisso persa» sotto il 10 % dei turni, riletti/stimati ≤ 1,3, rilettura
+p90 ≤ 1,2 s, nessun punto fisso, prima frase mediana ≤ 1,5 s; il banco del motore col 26B su un
+Ollama di prova (`banco_cache_swa.py`, comandi in testa al file) e quello col Brain vero a
+Calliope inattiva (`banco_dati_fissi.py`); il banco della scelta dei tool (#20) prima/dopo, perché
+i ricordi ora stanno più lontani dalla domanda (misura del 03/10). Si torna indietro con
+`dati_stabili_in_storia: false` nel file locale.
+
+**Revisione della PR #107** (16/10 sera): oltre agli avvisi e al riassunto rifatti a ogni
+cambio (sopra), un ricordo nuovo porta solo sé stesso, un turno con un tool nella prova (dopo
+le due passate si riavvolge 183 token stimati, sotto il tetto), la misura della DGX divisa fra i
+turni dopo un tool e senza (il 15/10: cache persa in 19 turni su 21 dopo un tool, 43 su 72
+senza). **La qualità dei ricordi lontani dalla domanda** (16/10 sera, col 26B della DGX attraverso un
+tunnel SSH, a Calliope inattiva, `num_ctx` uguale a quello caricato, prima e dopo sullo stesso
+modello). `prove/manuali/banco_dati_fissi.py --qualita` (nuovo modo: per ogni domanda una
+conversazione con N turni d'altro prima, i ricordi e gli avvisi entrati al primo; domande che
+chiedono un ricordo, domande d'altro dove i ricordi non devono entrare, l'ora e «ricordati
+che…»): con 6 turni prima **18/18 prima, 18/18 dopo** (2 giri), prima frase mediana 0,69 → 0,61 s;
+con 12 turni prima **9/9 e 9/9**, 0,73 → 0,46 s. Nessuna intrusione dei ricordi nelle domande
+d'altro. `prova_regressione.py 1` (97 casi, nuove opzioni `--num-ctx` e `--senza-dati-fissi`):
+**95/97 prima, 94/97 dopo**, prima frase mediana 0,89 → 0,92 s (p90 1,52 → 1,44). Gli sbagliati
+sono gli stessi due (`chi_garbato`, `schermo`) più `data` dopo: ripetuto 4 volte per modo, con
+`calcola` in più fra i tool, sbaglia 3 volte su 4 prima e 4 su 4 dopo, quindi è un caso già
+instabile, non la posizione dei ricordi. Il banco della scelta dei tool sulle frasi vere (#20)
+non esiste ancora: questi due ne fanno le veci per ora. Seconda revisione (16/10 sera): con
+**30 turni** prima della domanda (un giro) **9/9 prima e 9/9 dopo**, prima frase 0,83 → 0,57 s;
+una sola differenza di forma, «ricordati che il mio colore preferito è il verde» salvato come
+«il colore preferito di chi parla…» invece che col nome (un campione). Sui ricordi lontani fino a
+30 turni, quindi, nessun peggioramento misurato su questo banco piccolo (9 domande, uno o due
+giri): la forma breve dei ricordi pertinenti vicino alla domanda per ora non si aggiunge, ma
+resta da riguardare col banco #20 sulle frasi vere e con conversazioni più lunghe (oltre i 40
+turni il taglio della storia rimette comunque i ricordi al turno in corso).
+
+**Proposta, non fatta**: le righe trovate dalla ricerca anticipata della stanza come
+pezzi stabili nella storia (fuori dal tetto, come le righe della stanza: una riga trovata una
+volta resta, e non si cerca di nuovo), così l'anticipo tornerebbe utile anche a chi amministra;
+da decidere con la crescita del contesto e la potatura.
+
+Prove: `prova_dati_fissi` (nuova, livello 1, ~1 s: la cache anche dopo un turno con un tool,
+ricordo nuovo da solo e dimenticato, avvisi rifatti a ogni cambio con l'avviso «sicurezza»
+nascosto, chi parla non riconosciuto e il contrario col codice di prima, riassunto tolto da
+«dimentica», pausa e scambio finito e visto dalla politica nel turno in cui entra, mai su
+disco, contrari, il tetto con la ricerca anticipata, le misure, `eventi: attivo` col contrario);
+`prova_stanza_cerca` (l'anticipo con `massimo`); `prova_latenza` (la causa rinominata);
+`prova_brain` (riferimento della casa e azione in sospeso: i ricordi ora stanno prima, nella
+storia, e quei due restano gli ultimi prima della domanda, come deciso il 07/10);
+`prova_stanza_storia`, `prova_stanza_attesa`, `prova_eventi*`, `prova_compagnia_passo0`
+invariate.
 
 ## I minori conservati come gli adulti (16/10, issue #104, ramo `issue-104-minori-conserva`)
 

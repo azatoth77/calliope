@@ -302,6 +302,12 @@ try:
             "zona grigia (Carlo 0,45 nella sua conversazione)":
                 ((0.45, 0.05, 2.0), {"in_session": True, "prev": "Carlo",
                                      "prima": (0.72, 0.20)}),
+            # Issue #108 punto 3: chi amministra nella zona grigia della sua conversazione con il
+            # minore vicino. Il ciclo scrive il dubbio (incerta, vale Luca), ma la voce migliore
+            # è sotto `speaker_id_threshold`: resta fuori come la zona grigia (0031 punto 3)
+            "zona grigia con il minore vicino (Carlo 0,45, Luca 0,44 → Luca, incerta)":
+                ((0.45, 0.44, 2.0), {"in_session": True, "prev": "Carlo",
+                                     "prima": (0.72, 0.20)}),
             "voce sconosciuta": ((0.10, 0.05, 2.0), {}),
             "voce di nessuno vicina al minore (Luca 0,44 sotto soglia → Luca per prudenza)":
                 ((0.10, 0.44, 2.0), {})}.items():
@@ -316,6 +322,14 @@ try:
         verifica(f"ciclo vero, contrario: {nome} → niente parole, niente voce",
                  scritto["testo"] is None and not rec.get("voce_file"),
                  json.dumps(rec["voce"])[:300])
+        if "zona grigia con il minore" in nome:
+            verifica("…il ciclo l'ha scritta col segno del dubbio, sotto il nome del minore, "
+                     "e il motivo è la voce incerta",
+                     rec["voce"].get("incerta") == ["Carlo", "Luca"]
+                     and rec["voce"].get("nome") == "Luca"
+                     and rec["voce"].get("modo") == "conversazione"
+                     and rec.get("conserva") == {"testo": False, "motivo": "voce_incerta"},
+                     json.dumps(rec)[:400])
 
     # ───────── voce ─────────
     sr = 16000
@@ -636,6 +650,150 @@ try:
              spec.name == "dati_conservati" and spec.risk == "azione"
              and spec.classe.sola_lettura[1] == frozenset({"stato"})
              and "svuota" in spec.classe.distruttiva)
+
+    # ───────── il «sì» breve di un tutore che non amministra (16/10, issue #108) ─────────
+    # Decisione di chi amministra: un tutore conferma con il «sì» breve compatibile (stessa
+    # soglia e stesse condizioni della conferma breve di chi amministra) la voce di un suo
+    # figlio. Con il SpeakerContext vero: `aggiorna_conversazione` decide `breve_compatibile`
+    from calliope.conferme import admin_confermato
+    from calliope.speaker_id import SpeakerContext as _SCt
+    tutrice = UserProfile(name="Marta", id="p-mar")
+    figlia = UserProfile(name="Nina", id="p-nin", tutori=["p-amm", "p-mar"],
+                         nascita=f"{datetime.date.today().year - 8}-05-02")
+    reg_t = Registro(amm, adulto, tutrice, figlia)
+    reg_t.cfg = cfg
+    sct = _SCt(reg_t)
+    ctx_t = SimpleNamespace(conserva=cons, speakers=reg_t, speaker_ctx=sct, turno=40, cfg=cfg,
+                            regole=[])
+
+    def _bc():
+        # getattr: su main, prima della #108, il campo non c'è e le verifiche falliscono
+        return getattr(sct, "breve_compatibile", False)
+
+    def frase_t(nome, how, punteggio=None, altro=False, in_session=True):
+        """Una frase come la decide il ciclo (_riconosci_voce): chi, come, il punteggio contro
+        il profilo di chi vale e se un altro profilo è almeno altrettanto vicino."""
+        sct.aggiorna_conversazione(nome, how, in_session, punteggio, altro)
+        sct.current_speaker, sct.identified_by = nome, how
+        ctx_t.turno += 1
+        ctx_t.regole = []
+
+    def domanda_tutrice():
+        """Marta, riconosciuta dalla voce, chiede di tenere la voce di Nina (dopo una revoca)."""
+        figlia.voce_conservata, figlia.voce_conservata_da = False, "p-amm"
+        cons.proposte.pop("voce:p-nin:p-mar", None)     # la domanda di prima non è aperta
+        frase_t("Marta", "voce", 0.62, in_session=False)
+        return _dati_conservati(ctx_t, "consenso_voce", "Nina")
+
+    q = domanda_tutrice()
+    verifica("tutrice che non amministra: con la voce prima la domanda sulla voce della figlia",
+             q["ok"] is False and q["in_sospeso"]["argomenti"] == {"azione": "consenso_voce",
+                                                                     "persona": "Nina"}, str(q))
+    frase_t("Marta", "breve", 0.45)
+    verifica("il «sì» breve compatibile della tutrice: compatibile ma non conferma di chi "
+             "amministra", _bc() and not sct.conferma_breve
+             and not admin_confermato(ctx_t), f"{_bc()} {sct.conferma_breve}")
+    r = _dati_conservati(ctx_t, "consenso_voce", "Nina")
+    verifica("tutrice: il «sì» breve compatibile dà il consenso, salvato con chi l'ha dato e con "
+             "la regola nel registro", r["ok"] and figlia.voce_conservata is True
+             and figlia.voce_conservata_da == "p-mar"
+             and "conferma_breve_tutore" in ctx_t.regole, f"{r} {ctx_t.regole}")
+    # I contrari: punteggio sotto `speaker_conferma_breve_soglia`, un altro profilo più vicino
+    # (il minore accanto che dice «sì»), una conversazione nuova senza la sua voce sicura
+    for nome_c, kw in {"punteggio sotto la soglia della conferma breve (0,30)":
+                           {"punteggio": 0.30},
+                       "un altro profilo vicino almeno quanto lei (la figlia accanto)":
+                           {"punteggio": 0.45, "altro": True},
+                       "senza la sua voce sicura nella conversazione":
+                           {"punteggio": 0.45, "in_session": False}}.items():
+        domanda_tutrice()
+        frase_t("Marta", "breve", **kw)
+        r = _dati_conservati(ctx_t, "consenso_voce", "Nina")
+        verifica(f"contrario, tutrice: {nome_c} → niente consenso",
+                 r["ok"] is False and figlia.voce_conservata is False
+                 and not _bc() and "conferma_breve_tutore" not in ctx_t.regole,
+                 str(r))
+    # La revoca con il «sì» breve compatibile della tutrice; con quello di chi non è tutore no
+    figlia.voce_conservata, figlia.voce_conservata_da = True, "p-mar"
+    frase_t("Marta", "voce", 0.62, in_session=False)
+    frase_t("Marta", "breve", 0.44)
+    C._scrivi_privato(cons.voce_dir / "p-nin" / oggi / "1.wav", C.wav_mulaw(audio, sr))
+    r = _dati_conservati(ctx_t, "revoca_voce", "Nina")
+    verifica("tutrice: la revoca con il «sì» breve compatibile, registrazioni cancellate",
+             r["ok"] and figlia.voce_conservata is False and r["cancellate"] == 1
+             and "conferma_breve_tutore" in ctx_t.regole, str(r))
+    figlia.voce_conservata = True
+    frase_t("Marta", "breve", 0.30)
+    r = _dati_conservati(ctx_t, "revoca_voce", "Nina")
+    verifica("contrario, tutrice: revoca con un «sì» breve non compatibile rifiutata",
+             r["ok"] is False and figlia.voce_conservata is True, str(r))
+    frase_t("Ginevra", "voce", 0.62, in_session=False)
+    frase_t("Ginevra", "breve", 0.45)
+    r = _dati_conservati(ctx_t, "revoca_voce", "Nina")
+    verifica("contrario: il «sì» breve compatibile di chi non è tutore non vale per la voce "
+             "di un minore", r["ok"] is False and figlia.voce_conservata is True
+             and _bc(), str(r))
+    frase_t("Nina", "voce", 0.62, in_session=False)
+    frase_t("Nina", "breve", 0.45)
+    r = _dati_conservati(ctx_t, "revoca_voce", "Nina")
+    verifica("contrario: il minore con il «sì» breve compatibile non revoca da solo",
+             r["ok"] is False and figlia.voce_conservata is True, str(r))
+    # «Svuota» resta di chi amministra: il «sì» breve compatibile di una tutrice non basta
+    frase_t("Marta", "voce", 0.62, in_session=False)
+    frase_t("Marta", "breve", 0.45)
+    r = _dati_conservati(ctx_t, "svuota", "Nina")
+    verifica("contrario: «svuota» col «sì» breve di una tutrice che non amministra, rifiutato",
+             r["ok"] is False and "in_sospeso" not in r, str(r))
+
+    # ───────── la maggiore età: il sì dei tutori non vale più (16/10, issue #108) ─────────
+    # Nina compie 18 anni: il sì dei tutori valeva finché era minore. La prima rotazione cancella
+    # le sue registrazioni (una riga nel journal con l'id), e «stato» le dice perché
+    # (getattr: su main, prima della #108, la funzione non c'è e le verifiche falliscono)
+    _scaduta = getattr(C, "voce_dei_tutori_scaduta", lambda p: False)
+    righe_log = []
+    cfg_m = Config()
+    cfg_m.turn_log_dir = str(tmp / "registro-maggiore")
+    cfg_m.memory_db = str(tmp / "memoria-maggiore.db")
+    cfg_m.conserva_voce = True
+    grande = UserProfile(name="Nina", id="p-nin", tutori=["p-amm", "p-mar"],
+                         nascita=f"{datetime.date.today().year - 19}-01-02",
+                         voce_conservata=True, voce_conservata_da="p-mar")
+    sua = UserProfile(name="Ginevra", id="p-adu", voce_conservata=True)
+    reg_m = Registro(amm, sua, tutrice, grande)
+    reg_m.cfg = cfg_m
+    cm = C.Conservazione(cfg_m, reg_m, log=righe_log.append)
+    cm._ruotata_il = datetime.date.today()
+    for pid in ("p-nin", "p-adu", "p-amm"):
+        C._scrivi_privato(cm.voce_dir / pid / oggi / "1.wav", C.wav_mulaw(audio, sr))
+    verifica("maggiorenne: adulta, e il sì dei tutori non vale più",
+             C.categoria(grande) == "adulto" and not C.consenso_voce(grande, reg_m)
+             and _scaduta(grande))
+    verifica("contrari: un adulto col suo sì e chi amministra senza scelta non sono «scaduti»",
+             not _scaduta(sua) and not _scaduta(amm)
+             and not _scaduta(adulto) and not _scaduta(figlia))
+    sc_m = SimpleNamespace(current_speaker="Nina", identified_by="voce", conferma_breve=False)
+    ctx_m = SimpleNamespace(conserva=cm, speakers=reg_m, speaker_ctx=sc_m, turno=1, cfg=cfg_m,
+                            regole=[])
+    r = _dati_conservati(ctx_m, "stato")
+    verifica("maggiorenne: «stato» dice che il sì dei genitori valeva finché era minorenne",
+             r["ok"] and "voce no" in r["conferma"] and "minorenne" in r["conferma"], str(r))
+    sc_m.current_speaker = "Ginevra"
+    r = _dati_conservati(ctx_m, "stato")
+    verifica("contrario: l'adulta col suo sì, «stato» senza la frase dei genitori",
+             "voce sì" in r["conferma"] and "minorenne" not in r["conferma"], str(r))
+    rm = cm.ruota()
+    verifica("maggiorenne: la rotazione cancella le sue registrazioni e lo scrive con l'id",
+             cm.registrazioni("p-nin") == 0 and rm.get("maggiorenni") == 1
+             and any("p-nin" in x and "maggiorenne" in x for x in righe_log)
+             and not any("Nina" in x for x in righe_log), f"{rm} {righe_log}")
+    verifica("contrario: le registrazioni degli adulti col consenso restano",
+             cm.registrazioni("p-adu") == 1 and cm.registrazioni("p-amm") == 1, str(rm))
+    grande.voce_conservata, grande.voce_conservata_da = True, "p-nin"
+    sc_m.current_speaker = "Nina"
+    r = _dati_conservati(ctx_m, "stato")
+    verifica("…e il suo sì da adulta vale (la frase dei genitori non c'è più)",
+             "voce sì" in r["conferma"] and C.consenso_voce(grande, reg_m)
+             and not _scaduta(grande), str(r))
 
     # ───────── la registrazione di un minore: il consenso alla voce implicito (16/10) ─────────
     # Decisione di chi amministra (16/10, 0031 aggiornata): registrando un minore chi amministra

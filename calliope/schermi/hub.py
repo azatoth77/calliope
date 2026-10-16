@@ -237,7 +237,8 @@ class Schermi:
                                            on_cambio=self._scrittura_cambiata)
         self._scrittura_persone: set = set()
         # Chi vuole sapere quando la conversazione di una persona finisce (main.py: le foto
-        # in attesa della domanda decadono): funzioni con l'id della persona
+        # in attesa della domanda decadono): funzioni con l'id della persona e il motivo
+        # (conv_mod.FINE o conv_mod.SOSTITUITA da un'altra voce: #96)
         self.su_fine_conversazione: list = []
         # turns.write di main.py: i rifiuti dello scritto (dal thread del server) nel registro
         self.registro_turni = None
@@ -947,14 +948,24 @@ class Schermi:
         ora = {c.persona for c in self.conversazioni.attive() if c.persona}
         finite, self._scrittura_persone = self._scrittura_persone - ora, ora
         for persona in finite:
-            for f in list(self.su_fine_conversazione):
-                try:
-                    f(persona)
-                except Exception:  # noqa: BLE001
-                    pass
+            self._avvisa_fine(persona, self.conversazioni.motivo_fine(persona))
             for m in self.moduli.aperti(persona):
                 self.moduli.chiudi(m, "Chiuso: la conversazione è finita. Chiedimelo di "
                                       "nuovo a voce.")
+        # #96: chi aveva la conversazione sostituita da un'altra voce e poi «esci»: la fine
+        # vera arriva adesso (i moduli si erano già chiusi alla sostituzione)
+        for persona in self.conversazioni.chiuse_dopo_sostituzione():
+            if persona not in ora:
+                self._avvisa_fine(persona, conv_mod.FINE)
+
+    def _avvisa_fine(self, persona: str, motivo: str):
+        """`su_fine_conversazione`: funzioni (persona, motivo), motivo `conv_mod.FINE` o
+        `conv_mod.SOSTITUITA` (#96)."""
+        for f in list(self.su_fine_conversazione):
+            try:
+                f(persona, motivo)
+            except Exception:  # noqa: BLE001
+                pass
 
     def rifiuta_scritto(self, schermo: dict, motivo: str, canale: str):
         """Una richiesta dalla pagina rifiutata senza conversazione: nel registro dei turni

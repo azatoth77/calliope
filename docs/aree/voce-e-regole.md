@@ -195,6 +195,7 @@ misure di questo documento sono col 4B in locale: da rifare col 26B sulla DGX do
 
 - **Registro delle regole** (01/10): ogni turno ha `regole`, l'elenco delle regole sul testo
   scattate: `uscita_dormi`, `uscita_spegni`, `uscita_spegni_satellite`, `stop`, `stop_interruzione`, `cortesia`,
+  `cortesia_senza_voce` e `cortesia_senza_voce_ombra` (dal 16/10, issue #97),
   `cortesia_dopo_nome`, `approfondisci`, `ricerca_promessa`, `annuncio_tool_taciuto` (solo l'annuncio di una chiamata; fino al 06/10 `nome_tool_taciuto`), `nome_tool_parlato` (dal 03/10 il nome di un tool detto a parole, «il mio comando per la casa»: prima la frase si taceva intera e Calliope restava muta),
   `citazione_tolta`, `nome_detto`, e da Brain e dai tool (`ToolContext.regole`,
   `note_rule`) `azione_in_sospeso`, `spinta_promessa`, `spinta_richiesta`,
@@ -2143,7 +2144,7 @@ con tool:
 - il modello non ha detto né tenuto testo prima del tool; chi parla non è un minore; il tono del
   turno è normale, amichevole o essenziale (il formale vuole il «lei», l'ironico e il computer di
   bordo il loro stile);
-- la frase della persona è **una** frase, di al più `system1_dopo_tool_parole_max` (16) parole, e
+- la frase della persona è **una** frase *[dal 16/10: una richiesta, le aperture non contano]*, di al più `system1_dopo_tool_parole_max` (16) parole, e
   senza punto di domanda se il tool è un'azione («Che ore sono?» va bene, «Metti un timer, quanto
   manca a cena?» no);
 - nessun dubbio di struttura di Brain: proposta aperta (anche di un altro), spinte, giri di
@@ -2151,7 +2152,8 @@ con tool:
   richiesta di file, cambio d'argomento, offerta del tool, risultato riservato, dato non fidato
   letto, continuazione.
 
-Fuori dall'elenco, di proposito: le letture con dati da riassumere (`lista_leggi`, `agenda_elenca`,
+Fuori dall'elenco, di proposito: le letture con dati da riassumere (`lista_leggi`, `agenda_elenca`
+*[storico: dal 16/10 coperte fino a due voci, § qui sotto]*,
 `appuntamenti_elenca`, `casa_stato`, meteo, ricerche), la memoria (`ricorda`, `dimentica`: il modello
 sceglie cosa dire del fatto), voci e toni. Per `calcola` il `da_dire` è il solo numero: la frase è
 «Fa 102.».
@@ -2202,6 +2204,78 @@ turni senza tool dello stesso giorno). Poi `system1_dopo_tool: ombra` nel file l
 giorno; **criteri proposti per «attivo»**: almeno 50 confronti, diverse nella sostanza sotto il 5 %
 (rilette a mano dal registro: la misura della sostanza è un'approssimazione), `altro_tool` 0, e un
 risparmio p50 di almeno 0,5 s.
+
+### Le richieste contate e le letture brevi (16/10, issue #103, ramo `issue-103-dopo-tool`)
+
+**Il caso vero** (prima sera in ombra sulla DGX, 15/10): 22 risposte con tool, frase del codice in 3
+(14 %), uguali nella sostanza 3 su 3, seconda passata risparmiabile p50 633 ms; al modello 14, di
+cui `non_coperto` 7 (letture di lista e agenda, elenco utenti, biblioteca, `pc_guarda`) e
+`piu_frasi` 2. I due `piu_frasi` avevano una frase d'apertura che non chiede niente («Allora,
+iniziamo con un calcolo. Prova a …» e «Perfetto. Segna che …»); una lista letta aveva la `conferma`
+uguale a ciò che poi ha detto il modello.
+
+**Cosa cambia** (`calliope/system1/dopo_tool.py`; resta una misura: sulla DGX niente cambi di
+configurazione, `system1_dopo_tool: ombra` com'era):
+
+- `piu_frasi` conta le **richieste**, non le frasi (`richieste_della_persona`): una frase non chiede
+  niente solo se è **per intero** fatta di parole d'apertura di un elenco chiuso («Perfetto.», «Ok,
+  grazie.» *[storico: «ok» tolto dopo la revisione, sotto]*, «Calliope.»: `_APERTURE`) oppure è un annuncio breve, al più 8 parole, «(Allora,)
+  iniziamo/cominciamo/partiamo/ricominciamo con/da …» (`_ANNUNCIO`), senza punto di domanda né
+  cifre. «No.» non c'è (può correggere il turno di prima), «Allora?» ha il punto di domanda, e
+  un'apertura dentro una frase che chiede («Perfetto, metti un timer.») resta una richiesta. È
+  l'unico controllo sulla frase della persona che manda verso il codice: per questo solo forme
+  chiuse e per intero (principio 10). La proposta della issue di riconoscere l'imperativo o il verbo
+  del tool è scartata: una richiesta senza imperativo («Mi servirebbe anche il meteo.») non si
+  conterebbe, e in «attivo» andrebbe persa.
+- `lista_leggi` e `agenda_elenca` sono nell'elenco solo come **letture brevi**: il risultato ha la
+  lista `voci` con al più due voci (`VOCI_MAX`), anche vuota; senza `voci` o con più voci restano
+  `non_coperto`, come prima. La lista ha già la sua `conferma`; **l'agenda non ne ha** (la issue la
+  dava per scontata): la frase si compone dalle voci, tutte e nell'ordine del tool (`frase_agenda`:
+  «C'è il promemoria di chiamare Ugo, oggi alle 18.», «Ci sono il timer per la pasta, che scade fra
+  3 minuti, e l'appuntamento «dentista», domani alle 17.»; vuota: «Non c'è niente: nessun timer,
+  nessun promemoria e nessun appuntamento nei prossimi due giorni.», perché il tool dà solo gli
+  appuntamenti dei due giorni). Non si è aggiunta una `conferma` al tool: avrebbe cambiato ciò che
+  vede il modello e ciò che resta nella storia dopo il sigillo dei risultati personali
+  (`Brain._seal_private`, oggi una traccia neutra per l'agenda). `appuntamenti_elenca`, elenco
+  utenti, biblioteca e `pc_guarda` restano fuori.
+- Lo script della DGX (`prove/manuali/dopo_tool_dgx.py`) conta le letture brevi come coperte (il
+  registro non ha quante voci c'erano: stima per eccesso, come il resto) e non cade più sull'agenda,
+  che non ha campi di frase.
+
+**Prove**: `prove/prova_dopo_tool.py`, `prova_issue_103`: i due casi veri diventano «codice», così
+la lista di due voci e vuota e l'agenda di una, due e nessuna voce; contrari: due richieste dopo
+«Perfetto.», «No.» e «Allora?» davanti, l'apertura dentro una frase che chiede, l'annuncio lungo,
+liste di 3 e 5 voci e agenda di 3 (`non_coperto`), voce dell'agenda sconosciuta (`senza_frase`),
+minore, `appuntamenti_elenca`; in Brain «attivo» la lista breve dopo «Perfetto.» con una passata.
+Col codice di main i casi nuovi falliscono (10 decisioni sbagliate, poi `richieste_della_persona`
+che non c'è).
+
+**Da misurare** (criterio della issue): su 100 risposte con tool in ombra sulla DGX, copertura
+≥ 30 % con «diverse» 0, da `calliope stato --turni`. L'accensione resta una scelta separata.
+
+**Correzioni dopo la revisione della PR #118** (16/10, sonde in sola lettura del revisore):
+
+- L'annuncio chiudeva solo il prefisso: «Iniziamo con un timer da dieci minuti. Poi accendi la
+  luce.», «Allora, iniziamo con il meteo di domani. Metti un timer…», «Cominciamo con spegnere la
+  luce del salotto.» e «Ricominciamo da capo. Metti un timer…» uscivano col codice. Ora anche
+  l'oggetto è chiuso: «(Allora,) iniziamo/cominciamo/partiamo/ricominciamo con» seguito solo da
+  «un calcolo», «un conto», «un esercizio», «un problema», «una domanda», «il primo (esercizio,
+  calcolo)», «la prima (domanda)»; niente più «da …» né il limite di 8 parole.
+- Le parole d'assenso non sono più aperture («sì», «certo», «esatto», «giusto», «va bene»,
+  «d'accordo», e anche «ok»): come «No.» possono rispondere a una domanda del turno prima. Restano
+  «Perfetto.», «Bene.», «Grazie.», «Allora.», «Calliope.», «Ciao.» e simili.
+- Agenda: la frase della persona che nomina un tempo oltre domani (un giorno della settimana, la
+  settimana, il mese, un mese per nome, «dopodomani», «prossimi giorni», una data o un numero) va
+  al modello col perché nuovo **`fuori_portata`** (`Copertura.portata`); con le voci la frase dice
+  comunque la portata («…, e nessun appuntamento nei prossimi due giorni.», oppure «Gli
+  appuntamenti sono quelli dei prossimi due giorni.»). Il timer a zero «sta per scadere» (non «fra
+  0 secondi»), il promemoria con la preposizione articolata («della medicina», non «di la
+  medicina»).
+- **Limite della misura**: il criterio «diverse = 0» confronta la frase del codice con quella del
+  modello, e **non vede le richieste perse**: se la persona chiedeva due cose e il codice ne
+  conta una, la frase del modello che risponde a entrambe può risultare «uguale nella sostanza»
+  alla prima. Prima di «attivo» vanno rilette a mano, dal registro dei turni, tutte le coperture
+  con più di una frase della persona.
 
 ## Il criterio di E1 e la guardia dei riletti (15/10, issue #11, ramo `issue-11-12-eventi-attivo`)
 
@@ -2319,3 +2393,47 @@ criterio 2 dell'issue (una seconda azione diversa dichiarata nella stessa passat
 rete è spenta per la passata, e un confronto per azione (verbo e oggetto contro il tool eseguito)
 non c'è in nessuna risposta, sarebbe una regola sul testo nuova (principio 10) e fragile coi verbi
 che non conosce; la proposta consigliata dell'issue ha questo stesso effetto.
+
+## «Grazie.» sul rumore: la regola `cortesia_senza_voce`, in ombra (16/10, issue #97, ramo `issue-97-grazie-rumore`)
+
+**Caso vero** (DGX, 15/10 sera): 8 turni con esito `cortesia` («Grazie.» trascritto, «Prego!»,
+finestra d'ascolto chiusa), 7 con la voce quasi assente: `voce_s` 0,00–0,38 s (32–416 ms di
+parlato del VAD). Whisper scrive «Grazie.» su un rumore breve (allucinazione dei sottotitoli), e
+`Ciclo._chiusure` chiudeva la finestra a chi stava parlando (alle 19:00:57 a metà di una
+discussione; a casa 4 volte tra le frasi della minore). Il «grazie» vero della minore: 0,60 s.
+«Grazie» da solo non va tra le allucinazioni (`calliope/allucinazioni.py`): è anche una frase vera.
+
+**Correzione** (`calliope/cortesia.py` → `senza_voce`, `Ciclo._chiusure`): una cortesia
+(«grazie» o «conferma» di `closing_kind`, già forma chiusa per intero) detta su meno di
+`cortesia_voce_min_s` (0,3 s) di voce è rumore. Con `cortesia_voce_min: attiva` vale come una
+trascrizione vuota: niente frase pronta, finestra d'ascolto invariata, esito `vuoto`, regola
+`cortesia_senza_voce`. Di serie **ombra**: la cortesia resta com'era e il registro dei turni scrive
+`cortesia_senza_voce_ombra` con `cortesia_voce` (forma `grazie` o `conferma`, `voce_s`, fonte);
+«spenta» non fa niente. Principio 10: riguarda
+la trascrizione, che il modello non vede, ed è reversibile (al più la persona ripete «grazie»; la
+finestra resta aperta). Non toccano: «basta», «stop» (la finestra resta già aperta), le frasi
+scritte (senza voce), «grazie» dopo una domanda o un'offerta (va al modello come prima,
+`cortesia_dopo_domanda`), qualunque frase con una richiesta («Grazie, spegni la luce.»).
+
+I secondi di voce sono il parlato del VAD (`parlato_ms` di `rec["ascolto"]`, misurato anche dai
+satelliti e dal telefono; fonte `vad`); `Turno.voiced_s` (durata dell'audio meno pre-roll e
+`silence_ms`, fonte `durata`) solo se manca. *Revisione della PR #109, 16/10:* nella prima
+versione c'era solo `voiced_s`, che sottostima quando la frase non si chiude dopo il silenzio
+pieno, cioè col telefono a pressione lunga (chiusura `rilascio`) e con Smart Turn
+(`anticipata`): un «grazie» vero di mezzo secondo sarebbe valso rumore. La forma nel registro
+serve a leggere separati in ombra «grazie» e «perfetto». La soglia 0,3 s prende 6 dei 7 casi
+(160, 64, 32, 128, 96, 256 ms di parlato); quello delle 20:04:23 (416 ms) resta fuori, da
+rivedere sui turni conservati.
+
+**Prove a secco**: `prova_testo` (la funzione: 0,0–0,29 s scatta, 0,3–0,6 s no, frase scritta,
+«Basta.», «Grazie, spegni la luce.» a 0,1 e 2 s, ombra, spenta, validatore) e `prova_ciclo` (in
+ombra cortesia come prima con la regola nel registro; con «attiva» 0,12 s → nessuna risposta e
+finestra aperta; contrari 0,5 s → frase pronta e finestra chiusa, «Grazie, spegni la luce.» al
+modello; dopo la revisione «Grazie.» chiuso da `rilascio` e da `anticipata` con 520 ms di parlato
+riceve la cortesia, «Perfetto.» su 128 ms di parlato è rumore anche con 0,5 s di audio, e
+`voce_frase` col ripiego sulla durata). Sul codice di prima falliscono.
+
+**Da fare sulla DGX**: 7 giorni in ombra; leggere a campione i turni con
+`cortesia_senza_voce_ombra` (0 «grazie» veri tra quelli), poi `cortesia_voce_min: attiva` nel
+file locale. Dopo: 0 turni `cortesia` con `voce_s < 0,3` in 7 giorni e frasi pronte ripetute
+sotto 8 ogni 100 (`calliope stato --turni`).

@@ -34,7 +34,9 @@ from .conversazione import UNSET, Conversazione
 from .immagini import Album
 from .memory import HOUSE
 from .notizie import contesto as notizie_contesto
-from . import argomenti_incerti, luogo, politica, provenienza, stato_dialogo, storpiature, valore
+from . import dispositivo
+from . import (argomenti_incerti, dati_turno, luogo, politica, provenienza, stato_dialogo,
+               storpiature, valore)
 from .risposte import forma_chiusa
 from .system1 import dopo_tool as dopo_tool_s1
 from .sicurezza import instruction_fact
@@ -674,7 +676,11 @@ ARCHIVIO_NOTA_RICERCHE = ("La conversazione è stata accorciata: qui sopra c'è 
 # (WEB_TOLTO) e il modello crede di non avere altro. Dati del turno, non una regola sul testo
 # (principio 10): ci sono quando nei turni appena prima c'è una ricerca, qualunque cosa dica
 # la persona, e il modello decide se la frase parla di quello. Rete `ricerca_recente`.
-RICERCA_TOOLS = ("web_cerca", "biblioteca_cerca")
+RICERCA_TOOLS = ("web_cerca", "biblioteca_cerca", "notizie")
+# Le due fonti fra cui scegliere una ricerca nuova (RICERCA_CRITERIO). `notizie` è nell'elenco
+# dal 16/10 (issue #101, caso vero della DGX del 15/10: una testata letta con notizie alle
+# 18:59, tre minuti dopo dichiarazioni attribuite a un altro politico, a memoria)
+RICERCA_FONTI = ("web_cerca", "biblioteca_cerca")
 RICERCA_TURNI = 2              # la ricerca in uno degli ultimi due turni prima di questo
 # Le ricerche della conversazione, ognuna con la sua fonte (09/10 sera, caso vero della DGX
 # alle 21:06: notizie della tromba marina con web_cerca, poi timer, ora e la Torre di Pisa con
@@ -683,14 +689,28 @@ RICERCA_TURNI = 2              # la ricerca in uno degli ultimi due turni prima 
 # della biblioteca). Restano negli ultimi RICERCA_TURNI_ELENCO turni, al più RICERCA_ELENCO_MAX
 RICERCA_TURNI_ELENCO = 6
 RICERCA_ELENCO_MAX = 4
+# Dal 16/10 (issue #101) niente più il tipo «notizie» di web_cerca nel testo: dal 13/10 le
+# notizie hanno il loro tool e web_cerca non ha più il tipo (tools/web.py). Due frasi in più,
+# dai casi veri del 15/10 sera: i risultati fuori tema non si riferiscono (dopo il mito di
+# Orione, una startup dal nome simile riferita per intero), e i nomi e le cifre dei risultati
+# usciti dalla storia non si citano a memoria
 RICERCA_MSG = ("Dati del turno: in questa conversazione hai cercato (dalla più recente) "
-               "{elenco}, e hai riferito quello che hai trovato; quei risultati non sono più "
-               "qui. Se ora chi parla vuole approfondire, sapere di più o torna a una di queste "
-               "cose, richiama il tool della ricerca di quell'argomento (le notizie con "
-               "web_cerca tipo notizie) con una domanda breve e mirata, con i nomi che hai "
-               "detto, e rispondi con quello che trovi: non dire che non hai altre informazioni "
-               "senza aver cercato.{criterio} Se parla d'altro (agenda, liste, casa, una "
-               "chiacchiera), questa riga non conta.")
+               "{elenco}, e hai riferito quello che hai trovato; {restano}, e dei risultati "
+               "che non hai più davanti non citare nomi, cifre o dichiarazioni a memoria. Se "
+               "ora chi "
+               "parla vuole approfondire, sapere di più o torna a una di queste cose, richiama "
+               "il tool della ricerca di quell'argomento{notizie} con una domanda breve e "
+               "mirata, con i nomi che hai detto, e rispondi con quello che trovi: non dire che "
+               "non hai altre informazioni senza aver cercato. Se i risultati non riguardano "
+               "ciò di cui parlavate, non riferirli: dillo e chiedi cosa cercare.{criterio} Se "
+               "parla d'altro (agenda, liste, casa, una chiacchiera), questa riga non conta.")
+RICERCA_NOTIZIE = " (le notizie con notizie)"
+# Cosa resta nella storia (revisione della PR #115): i risultati di internet e della biblioteca
+# escono a risposta finita (WEB_TOLTO, compressione), le notizie restano in busta, intere il
+# turno dopo e poi con titoli e testate (notizie/contesto.py)
+RICERCA_RESTANO_ALTRI = "quei risultati non sono più qui"
+RICERCA_RESTANO_NOTIZIE = "delle notizie restano qui sopra titoli e testate"
+RICERCA_RESTANO_NOTIZIE_ORA = "le notizie appena lette sono ancora qui sopra"
 # Il criterio per scegliere la fonte di una ricerca nuova (caso vero della DGX, 09/10 alle
 # 18:47: tre biblioteca_cerca per «tecniche di produzione casalinga della birra», passaggi fuori
 # tema, e internet solo dopo averlo proposto): solo con tutti e due i tool disponibili
@@ -703,12 +723,17 @@ RICERCA_EST = (" Se però chi parla nomina un'estensione e chiede di usarla, val
 RICERCA_SPENTA_MSG = ("Dati del turno: poco fa hai cercato {dove}, ma adesso quella ricerca non "
                       "è disponibile. Se chi parla vuole approfondire quello che hai riferito, "
                       "digli onestamente che adesso non puoi cercare {dove}; non inventare.")
-RICERCA_DOVE = {"web_cerca": "su internet", "biblioteca_cerca": "nella biblioteca"}
+RICERCA_DOVE = {"web_cerca": "su internet", "biblioteca_cerca": "nella biblioteca",
+                "notizie": "nelle notizie"}
 # «Non ho altre informazioni» senza aver cercato, con la ricerca disponibile: la frase non si
 # dice e il modello riceve la spinta, una volta (poi decide lui)
-RICERCA_NUDGE = ("Hai risposto di non avere altre informazioni senza cercare. Chiama {tool} con "
-                 "una domanda breve e mirata su quello che chiede chi parla, poi rispondi con "
-                 "quello che trovi; se non trovi niente, dillo.")
+RICERCA_NUDGE = ("Hai risposto di non avere altre informazioni senza cercare. Chiama {tool} "
+                 "{come} su quello che chiede chi parla, poi rispondi con quello che trovi; se "
+                 "non trovi niente, dillo.")
+# Come richiamare: notizie non ha una domanda ma il tema o il numero del fatto (revisione della
+# PR #115)
+RICERCA_COME = {"notizie": "con il tema o con fatto = il numero della notizia"}
+RICERCA_COME_DI_SOLITO = "con una domanda breve e mirata"
 
 
 # «Te lo scrivo qui nella conversazione» detto a voce (12/10, DGX col 26B, dopo il rifiuto di
@@ -1049,6 +1074,20 @@ def _tokens(obj) -> int:
     text = obj if isinstance(obj, str) else json.dumps(obj, ensure_ascii=False)
     return int(len(text) / CHARS_PER_TOKEN)
 
+
+# Il costo stimato di una foto nella stima dei riletti (16/10, issue #95): Gemma 4 su Ollama ne
+# usa ~1 ogni 2 250 pixel, ~280 per una foto da ~640×1000 (misura del 05/10, _image_tokens)
+TOKEN_FOTO_STIMA = 280
+
+
+def _tokens_senza_foto(msgs: list[dict]) -> int:
+    """Come _tokens per dei messaggi, ma una foto vale TOKEN_FOTO_STIMA e non i byte del suo
+    base64 (che contavano decine di migliaia di token)."""
+    foto = sum(len(m.get("images") or ()) for m in msgs if isinstance(m, dict))
+    senza = [{k: v for k, v in m.items() if k != "images"} if isinstance(m, dict)
+             and m.get("images") else m for m in msgs]
+    return _tokens(senza) + foto * TOKEN_FOTO_STIMA
+
 # Contesto del turno (03/10, analisi del comportamento): ora, data e chi parla, sempre, nel
 # primo messaggio prima della domanda (dopo la storia: il prefisso in cache non cambia).
 # Senza, l'ora veniva presa dalla storia («Sono le 21:50») o inventata, «che giorno è
@@ -1307,7 +1346,8 @@ IMG_LABEL = ("[{foto}: è in questo messaggio e la vedi già. Il testo scritto n
 IMG_TURN_MSG = ("Foto davanti a te: {foto}, appena mandata dalla persona, nel suo messaggio. "
                 "La vedi già: per guardarla non serve nessun tool, e «cosa vedi?», «cosa "
                 "c'è?», «leggimi» parlano di lei. pc_guarda solo se la persona chiede la "
-                "webcam o lo schermo del computer.")
+                "webcam o lo schermo del computer. Chi è una persona nella foto lo sai solo "
+                "se te l'hanno detto.")
 # Lo schermo o la webcam con una foto già nella conversazione (15/10, problema aperto dal 06/10:
 # «Non me l'hai chiesto»). La politica lascia passare pc_guarda (prova_politica.prova_pc_guarda,
 # dal 06/10); è il modello a non chiamarlo: e4b, dopo una foto, a «cosa vedi sul mio schermo?»
@@ -2221,8 +2261,9 @@ class Brain:
             hist = [dict(m) for m in hist] + [{"role": "user", "content": "ciao"}]
             _compatta_storia(hist)
             hist = hist[:-1]
-            # Le righe della stanza dei turni (14/10 sera), dove le rileggerà il turno dopo
-            hist = self._con_stanza(hist, conv)
+            # Le righe della stanza dei turni (14/10 sera) e i dati fissi (16/10), dove le
+            # rileggerà il turno dopo
+            hist = self._con_ancorati(hist, conv)
             # E i pezzi in attesa (14/10 notte): subito dopo la storia, come al turno dopo
             hist += [{"role": "system", "content": q.testo}
                      for q in list(getattr(conv, "stanza_attesa", None) or ())]
@@ -2269,7 +2310,8 @@ class Brain:
                      - _tokens(self._riassunto_msgs()))
         while (_tokens(self.history) + self._image_tokens()
                + self._allegati_tokens(ctx)
-               + int(self._stanza_caratteri() / CHARS_PER_TOKEN)) > budget:
+               + int((self._stanza_caratteri() + dati_turno.caratteri(self._c()))
+                     / CHARS_PER_TOKEN)) > budget:
             users = [i for i, m in enumerate(self.history) if m["role"] == "user"]
             if len(users) <= 1:
                 break
@@ -2489,6 +2531,9 @@ class Brain:
                                    if not k.startswith("_") and k != "images"},
                                   ensure_ascii=False, sort_keys=True, default=str)
             ora = [chiave(m) for m in messages]
+            # Le righe della stanza potate a fine risposta (16/10, issue #95): la regola sta nel
+            # turno prima, la differenza in questa richiesta
+            potata = bool(self.__dict__.pop("_potata_prima", False))
             conv = self._c()
             prima = getattr(self, "_richiesta_prima", None)
             confine = getattr(self, "_confine_cache", None)
@@ -2504,12 +2549,21 @@ class Brain:
                     break
                 k += 1
             scusa = {"storia_tagliata", "conversazione_coda", "conversazione_ripresa",
-                     "prefisso_scaldato"} & set(getattr(self, "last_rules", None) or ())
+                     "prefisso_scaldato", "dati_stabili_rifatti"} & set(
+                         getattr(self, "last_rules", None) or ())
+            if potata:
+                scusa.add("stanza_potata")
             confine_prima = prima[2]
             rotta = (isinstance(confine_prima, int) and fissi <= k < confine_prima
                      and not scusa and not getattr(self, "last_compressione", None))
+            # `riletti_stimati`: i messaggi dopo il prefisso uguale, senza i byte delle foto (16/10:
+            # il base64 contava 58 000–68 000 token) e con un costo fisso per foto;
+            # `riavvolti_stimati`: ciò che il motore deve riavvolgere dalla fine della richiesta di
+            # prima (oltre ~512 token veri con Gemma 4 la cache si perde tutta)
             self.last_cache = {"prefisso": k, "messaggi": len(ora),
-                               "riletti_stimati": _tokens(messages[k:]),
+                               "riletti_stimati": _tokens_senza_foto(messages[k:]),
+                               "riavvolti_stimati": int(sum(len(x) for x in vecchia[k:])
+                                                        / CHARS_PER_TOKEN),
                                **({"rotta": True} if rotta else {})}
         except Exception:  # noqa: BLE001 — una misura non ferma la risposta
             self.last_cache = None
@@ -2606,6 +2660,9 @@ class Brain:
         if (isinstance(cached, int) and isinstance(payload.get("prompt"), int)
                 and getattr(self, "last_riletti", None) is None):
             self.last_riletti = max(0, int(payload["prompt"]) - cached)
+            # I token ripresi dalla cache (16/10, issue #95): fermi da un turno all'altro mentre
+            # il contesto cresce = il motore riparte sempre dallo stesso checkpoint
+            self.last_ripresi = int(cached)
         last = getattr(self, "last_context", None)
         if u and (last is None or u["token"] >= last["token"]):
             self.last_context = u
@@ -2656,8 +2713,15 @@ class Brain:
         # Gli avvisi consegnati di recente al tutore che parla (14/10, minori.Avvisi.contesto):
         # dal ciclo come attributo, vale una risposta sola; nei dati del turno
         self._avvisi_turno = self.__dict__.pop("avvisi_turno", None)
+        # Il dispositivo da cui si parla (16/10, issue #100, calliope/dispositivo.py): dal ciclo
+        # come attributo, vale una risposta sola; nei dati del turno (_turn_context)
+        self._dispositivo_turno = self.__dict__.pop("dispositivo_turno", None)
         # Le righe della stanza davanti al modello in questa risposta (14/10 sera, _stanza_prepara)
         self._stanza_visibili, self._stanza_ancore, self.last_stanza_storia = [], {}, None
+        # I dati fissi davanti al modello in questa risposta (16/10, _dati_prepara) e quanto
+        # pesano i dati del turno
+        self._dati_ancore, self.last_dati_fissi, self._dati_visibili = {}, None, []
+        self.last_dati_turno_token, self.last_dati_turno_oltre = None, False
         self._ascolto = ascolto if ascolto is not None else turno_asc
         self.last_argomenti = []
         self._riscrivi_turno = bool(self._incerte_turno) and bool(
@@ -2704,6 +2768,7 @@ class Brain:
         self.testo_generato = []
         self.last_cache = None
         self.last_riletti = None
+        self.last_ripresi = None
         self.dalla_proiezione()
         # Una forma chiusa diventata un indizio per il modello («ricominciamo», § 13): dal
         # ciclo, vale una risposta sola
@@ -3563,6 +3628,85 @@ class Brain:
     def _stanza_caratteri(self) -> int:
         return sum(p.caratteri for p in getattr(self._c(), "stanza", None) or ())
 
+    # ─────────── i dati che cambiano di rado nella storia (16/10, issue #95, dati_turno.py) ───────────
+    def _con_ancorati(self, msgs: list[dict], conv=None) -> list[dict]:
+        """`msgs` (la storia prima del turno in corso) con le righe della stanza e i dati fissi dei
+        turni prima, ognuno davanti alla frase del suo turno e nell'ordine di allora (prima le
+        righe della stanza, poi i dati fissi: `stanza_ora + dati_ora` in _reply)."""
+        if conv is None:
+            ancore = getattr(self, "_dati_ancore", None) or {}
+        else:
+            ancore = {p.n: p for p in getattr(conv, "dati_fissi", None) or ()}
+        return dati_turno.con_fissi(self._con_stanza(msgs, conv), ancore)
+
+    def _dati_ancora(self, user_text, start: int) -> int | None:
+        """La frase della persona a cui legare i dati fissi di questa risposta, o None se non
+        vanno nella storia (spento; conversazione anonima condivisa in compagnia, dove i ricordi
+        sono di chi parla adesso e restano nei dati del turno). Con la frase del turno: `start`.
+        Senza (la passata dopo la frase di sfida, la continuazione): l'ultima frase della persona
+        nella storia, perché anche lì i dati del turno valgono e un avviso tolto dal ciclo non deve
+        restare (seconda revisione della PR #107)."""
+        if not getattr(self.cfg, "dati_stabili_in_storia", True):
+            return None
+        if getattr(self._c(), "condivisa", False):
+            return None
+        if user_text:
+            ok = (start < len(self.history) and isinstance(self.history[start], dict)
+                  and self.history[start].get("role") == "user")
+            return start if ok else None
+        return next((i for i in range(min(start, len(self.history)) - 1, -1, -1)
+                     if isinstance(self.history[i], dict)
+                     and self.history[i].get("role") == "user"), None)
+
+    def _dati_prepara(self, start: int, blocchi, dentro: bool = False):
+        """I pezzi dei dati fissi per questa risposta: ([messaggi nuovi da mettere davanti alla
+        frase del turno], [loro nomi]), e in `_dati_ancore` quelli dei turni prima. Con `blocchi`
+        None (spento, conversazione condivisa, continuazione) niente di nuovo: restano visibili i
+        pezzi già nella storia, tranne in una conversazione condivisa o con l'interruttore spento,
+        dove escono tutti (i ricordi di una persona non restano davanti a chi parla dopo).
+        `dentro`: `start` è una frase già nella storia (passata senza frase nuova): i pezzi nuovi
+        si legano a lei, nella storia, e i messaggi nuovi da mettere davanti sono nessuno."""
+        conv = self._c()
+        ancore = {n for m in self.history[:start + (1 if dentro else 0)]
+                  if isinstance(m, dict) and m.get("role") == "user"
+                  for n in dati_turno.segni(m.get("_dati"))}
+        pezzi = dati_turno.stato(conv)
+        if blocchi is None:
+            if pezzi and (getattr(conv, "condivisa", False)
+                          or not getattr(self.cfg, "dati_stabili_in_storia", True)):
+                pezzi.clear()
+                self._rule("dati_stabili_rifatti")
+            self._dati_ancore = {p.n: p for p in pezzi if p.n in ancore}
+            self._dati_visibili = list(self._dati_ancore.values())
+            return [], []
+        esito = dati_turno.prepara(conv, blocchi, ancore)
+        nuovi = esito["nuovi"]
+        if nuovi:
+            ns = ([n for n in dati_turno.segni(self.history[start].get("_dati"))
+                   if any(p.n == n for p in dati_turno.stato(conv))] if dentro else [])
+            ns += [p.n for p in nuovi]
+            self.history[start]["_dati"] = ns[0] if len(ns) == 1 else ns
+        if esito["rifatti"]:
+            self._rule("dati_stabili_rifatti")
+            print(f"   [STORIA] dati fissi rifatti ({', '.join(esito['rifatti'])}): la cache del "
+                  f"prefisso si rompe una volta", flush=True)
+        self._dati_ancore = ({**esito["storia"], **{p.n: p for p in nuovi}} if dentro
+                             else esito["storia"])
+        # Tutti quelli davanti al modello, anche i nuovi di questo turno (per la politica)
+        self._dati_visibili = list(esito["storia"].values()) + nuovi
+        visibili = list(esito["storia"].values()) + nuovi
+        if visibili or esito["rifatti"]:
+            self.last_dati_fissi = {
+                "nuovi": [p.nome for p in nuovi],
+                "nuovi_caratteri": sum(p.caratteri for p in nuovi),
+                "pezzi": len(visibili),
+                "caratteri": sum(p.caratteri for p in visibili),
+                **({"rifatti": esito["rifatti"]} if esito["rifatti"] else {}),
+                **({"orfani": esito["orfani"]} if esito["orfani"] else {})}
+        if dentro:
+            return [], []
+        return [p.messaggio() for p in nuovi], [p.nome for p in nuovi]
+
     def _stanza_pota(self) -> bool:
         """A risposta finita: oltre `stanza_storia_caratteri` le righe della stanza più vecchie
         escono dalla storia fino a metà del tetto, tutte insieme (la cache del prefisso si rompe
@@ -3581,6 +3725,9 @@ class Brain:
         if not via:
             return False
         self._rule("stanza_potata")
+        # La richiesta dopo cambia dentro i turni definitivi: è attesa (16/10, issue #95: la
+        # guardia della cache scattava alle 20:11 del 15/10 per questo)
+        self.__dict__["_potata_prima"] = True
         if isinstance(getattr(self, "last_stanza_storia", None), dict):
             self.last_stanza_storia["potati"] = via
         print(f"   [STANZA] righe della stanza nella storia oltre {tetto} caratteri: tolti "
@@ -3920,7 +4067,13 @@ class Brain:
                     if isinstance(args, str):
                         args = _loads_dict(args)
                     args = args or {}
-                    domanda = re.sub(r"\s+", " ", str(args.get("domanda") or "")).strip()[:120]
+                    if nome == "notizie":
+                        # Il tema, o la notizia chiesta per numero (16/10, issue #101)
+                        fatto = args.get("fatto")
+                        detta = args.get("tema") or (f"notizia {fatto}" if fatto else "")
+                    else:
+                        detta = args.get("domanda")
+                    domanda = re.sub(r"\s+", " ", str(detta or "")).strip()[:120]
                     tipo = ("notizie" if nome == "web_cerca"
                             and str(args.get("tipo") or "").lower().startswith("notiz") else "")
                     k = (nome, tipo, domanda.lower())
@@ -3947,20 +4100,40 @@ class Brain:
             spec = self.tools.get(tool)
             return (spec is not None and self.tools.allowed(tool, level)
                     and (self.cfg.online or not getattr(spec, "requires_internet", False)))
+        con_notizie = self.tools.get("notizie") is not None
+
+        def fonte(r):
+            # web_cerca col tipo «notizie» (rimasto nell'abitudine del modello o nella storia)
+            # va al tool notizie quando c'è (tools/web.py, `web_notizie_al_tool`): si richiama
+            # quello. Senza il tool notizie web_cerca ha ancora il tipo (16/10, issue #101)
+            if r["tipo"] and con_notizie:
+                return "notizie", "notizie"
+            return r["tool"], r["tool"] + (" (notizie)" if r["tipo"] else "")
         recente = elenco[0]["turni"] < RICERCA_TURNI
-        if recente and not disponibile(elenco[0]["tool"]):
-            return (RICERCA_SPENTA_MSG.format(dove=RICERCA_DOVE.get(elenco[0]["tool"], "")),
+        primo = fonte(elenco[0])[0]
+        if recente and not disponibile(primo):
+            return (RICERCA_SPENTA_MSG.format(dove=RICERCA_DOVE.get(primo, "")),
                     None, "ricerca_recente_spenta")
         pezzi = []
         for r in elenco:
-            fonte = r["tool"] + (" tipo notizie" if r["tipo"] else "")
-            detto = r["domanda"] or ("ultime notizie" if r["tipo"] else "…")
-            pezzi.append(f"«{detto}» con {fonte}"
-                         + ("" if disponibile(r["tool"]) else " (adesso non disponibile)"))
-        criterio = (RICERCA_CRITERIO if all(disponibile(t) for t in RICERCA_TOOLS) else "")
-        msg = RICERCA_MSG.format(elenco="; ".join(pezzi), criterio=criterio)
+            tool, detta = fonte(r)
+            detto = r["domanda"] or ("ultime notizie" if r["tipo"] or tool == "notizie"
+                                     else "…")
+            pezzi.append(f"«{detto}» con {detta}"
+                         + ("" if disponibile(tool) else " (adesso non disponibile)"))
+        criterio = (RICERCA_CRITERIO if all(disponibile(t) for t in RICERCA_FONTI) else "")
+        restano = []
+        if any(fonte(r)[0] != "notizie" for r in elenco):
+            restano.append(RICERCA_RESTANO_ALTRI)
+        notizie = [r for r in elenco if fonte(r)[0] == "notizie"]
+        if notizie:
+            restano.append(RICERCA_RESTANO_NOTIZIE_ORA if min(r["turni"] for r in notizie) == 0
+                           else RICERCA_RESTANO_NOTIZIE)
+        msg = RICERCA_MSG.format(elenco="; ".join(pezzi), criterio=criterio,
+                                 restano=", ".join(restano),
+                                 notizie=RICERCA_NOTIZIE if disponibile("notizie") else "")
         if recente:
-            return msg, elenco[0]["tool"], "ricerca_recente"
+            return msg, primo, "ricerca_recente"
         return msg, None, "ricerca_elenco"
 
     def _lavoro_turno(self) -> tuple[str, dict] | None:
@@ -4491,57 +4664,83 @@ class Brain:
             nomi_blocchi.extend([nome] * len(msgs))
             return msgs
 
+        def davanti(nome: str, msgs: list) -> list:
+            # Un blocco messo in testa ai dati del turno: il nome in testa anche lui (16/10:
+            # prima finiva in fondo e nomi e lunghezze dell'evento dati_del_turno si scambiavano)
+            nomi_blocchi[:0] = [nome] * len(msgs)
+            return msgs
+
         # Ora, data e chi parla per primi, poi i ricordi (TURN_CONTEXT_MSG)
-        memory = blocco("turno", self._turn_context()) + blocco("ricordi",
-                                                                self._memory_message())
+        ricordi_m = self._memory_message()
         # Gli avvisi consegnati di recente al tutore (14/10): testi di Calliope, mai le parole
         # del minore; dopo i ricordi
         avvisi_b = getattr(self, "_avvisi_turno", None)
-        if user_text and avvisi_b:
-            memory = memory + blocco("avvisi", [{"role": "system", "content": str(avvisi_b)}])
+        avvisi_m = ([{"role": "system", "content": str(avvisi_b)}] if user_text and avvisi_b
+                    else [])
+        stanza_b = getattr(self, "_stanza_turno", None)
+        # I dati che cambiano di rado (16/10, issue #95, calliope/dati_turno.py): con
+        # `dati_stabili_in_storia` ricordi, avvisi e riassunto della stanza entrano nella storia
+        # solo quando cambiano, davanti alla frase di questo turno (`dati_ora`), e nei turni dopo
+        # restano lì uguali (_con_dati); nei dati del turno resta ciò che cambia a ogni turno.
+        # Prima sparivano alla richiesta dopo e, oltre ~512 token, Ollama con Gemma 4 rileggeva
+        # tutta la storia
+        dati_ora, nomi_ora = [], []
+        # Senza la frase della persona (la passata dopo la frase di sfida, la continuazione) i
+        # dati fissi si rifanno lo stesso coi dati di questo turno, legati all'ultima frase della
+        # persona (seconda revisione della PR #107: nel turno della sfida restava l'avviso
+        # «sicurezza» del turno prima, anche se il ciclo l'aveva tolto)
+        ancora = self._dati_ancora(user_text, start)
+        fissi = ancora is not None
+        if fissi:
+            from .stanza import contesto as stanza_ctx
+            riass = ""
+            if stanza_b is not None and stanza_ctx.in_storia(self.cfg):
+                riass = stanza_ctx.riassunto_turno(stanza_b)
+            avvisi_t = str(avvisi_b) if avvisi_b else ""
+            dati_ora, nomi_ora = self._dati_prepara(ancora, [
+                ("ricordi", ricordi_m[0]["content"] if ricordi_m else "", True, "",
+                 lambda nuove: (self._memory_message(note=False, solo=nuove)
+                                or [{"content": ""}])[0]["content"]),
+                ("avvisi", avvisi_t, False),
+                ("stanza_riassunto", riass, False,
+                 str(getattr(stanza_b, "riassunto", "") or "") if riass else "")],
+                dentro=ancora != start)
+            memory = blocco("turno", self._turn_context())
+        else:
+            self._dati_prepara(start, None)
+            memory = blocco("turno", self._turn_context()) + blocco("ricordi", ricordi_m)
+            if avvisi_m:
+                memory = memory + blocco("avvisi", avvisi_m)
         # La conversazione della stanza (14/10, passo 2, calliope/stanza/contesto.py), in busta
         # come dato non fidato (fonte «stanza»). Dal 14/10 sera (`stanza_contesto_in_storia`) le
         # righe stanno nella storia in sola aggiunta: le nuove di questo turno subito prima dei
         # dati del turno (`stanza_ora`), quelle dei turni prima nello stesso posto di allora
         # (_con_stanza), uguali byte per byte; nei dati del turno solo presenti e righe non
         # ancora trascritte. Prima il blocco intero era qui, ricostruito e riletto a ogni turno
-        stanza_b = getattr(self, "_stanza_turno", None)
         stanza_ora, self._stanza_ancore = self._stanza_prepara(user_text, stanza_b, start)
         if stanza_ora is None:
             stanza_ora = []
             if user_text and stanza_b is not None and getattr(stanza_b, "testo", None):
-                memory = blocco("stanza", [{"role": "system", "content": stanza_b.testo}]) + memory
+                memory = davanti("stanza", [{"role": "system", "content": stanza_b.testo}]) + memory
                 self._rule("stanza_contesto")
         else:
             from .stanza import contesto as stanza_ctx
-            nota = stanza_ctx.nota_turno(stanza_b) if user_text else ""
+            # Con i dati fissi il riassunto della stanza sta nella storia (dati_ora), qui no
+            nota = stanza_ctx.nota_turno(stanza_b, riassunto=not fissi) if user_text else ""
             if nota:
-                memory = blocco("stanza_nota", [{"role": "system", "content": nota}]) + memory
+                memory = davanti("stanza_nota", [{"role": "system", "content": nota}]) + memory
             if self._stanza_visibili:
                 self._rule("stanza_contesto")
         # La ricerca anticipata nella stanza (14/10, `stanza_cerca_anticipo`, tools/stanza.py):
         # le righe di prima trovate con le parole della frase, che il blocco caldo non ha, dopo
         # il contesto del turno (il blocco caldo e il turno restano un prefisso stabile). Se
         # bastano, una passata sola invece della chiamata a stanza_cerca e della risposta dopo
+        # Dal 16/10 (issue #95) la ricerca parte dopo gli altri dati del turno, con i caratteri che
+        # restano sotto `dati_turno_tetto_token`, e il blocco va qui (`pos_anticipo`)
         self._stanza_anticipo = None
-        if (user_text and self.tools.get("stanza_cerca") is not None
-                and self.tools.allowed("stanza_cerca", level)):
-            try:
-                from .tools.stanza import anticipa
-                # Senza le righe che il modello ha già davanti (blocco o storia)
-                gia = stanza_b
-                if self._stanza_visibili:
-                    from types import SimpleNamespace
-                    gia = SimpleNamespace(righe_id=set().union(
-                        *(p.ids for p in self._stanza_visibili)))
-                self._stanza_anticipo = anticipa(self.tool_ctx, user_text, gia)
-            except Exception as e:  # noqa: BLE001 — la ricerca anticipata non ferma la voce
-                print(f"   [STANZA] ricerca anticipata: {type(e).__name__}: {e}", flush=True)
-            ant = self._stanza_anticipo
-            if ant is not None and ant.testo:
-                memory = memory + blocco("stanza_anticipo",
-                                         [{"role": "system", "content": ant.testo}])
-                self._rule("stanza_anticipo")
+        anticipo = (bool(user_text) and self.tools.get("stanza_cerca") is not None
+                    and self.tools.allowed("stanza_cerca", level))
+        pos_anticipo = len(memory)
         # Le foto della conversazione che il modello ha davanti (IMG_TURN_MSG)
         foto_msg = self._foto_turno(start if user_text else None)
         if foto_msg:
@@ -4629,8 +4828,41 @@ class Brain:
         if getattr(self, "_altrui_msg", None):
             memory = memory + blocco("proposta_altrui", [{"role": "system", "content": self._altrui_msg}])
             self._rule("sospeso_altrui_consenso")
+        tetto_tok = int(getattr(self.cfg, "dati_turno_tetto_token", 0) or 0)
+
+        def caratteri_volatili() -> int:
+            # Ciò che alla richiesta dopo sparisce: i dati del turno e la domanda
+            return sum(len(str(m.get("content") or "")) for m in memory) + len(user_text)
+        if anticipo:
+            try:
+                from .tools.stanza import anticipa
+                # Senza le righe che il modello ha già davanti (blocco o storia)
+                gia = stanza_b
+                if self._stanza_visibili:
+                    from types import SimpleNamespace
+                    gia = SimpleNamespace(righe_id=set().union(
+                        *(p.ids for p in self._stanza_visibili)))
+                massimo = (int(tetto_tok * CHARS_PER_TOKEN) - caratteri_volatili()
+                           if tetto_tok > 0 else None)
+                self._stanza_anticipo = anticipa(self.tool_ctx, user_text, gia, massimo=massimo)
+            except Exception as e:  # noqa: BLE001 — la ricerca anticipata non ferma la voce
+                print(f"   [STANZA] ricerca anticipata: {type(e).__name__}: {e}", flush=True)
+            ant = self._stanza_anticipo
+            if ant is not None and getattr(ant, "tetto", False):
+                self._rule("anticipo_tetto")
+            if ant is not None and ant.testo:
+                memory.insert(pos_anticipo, {"role": "system", "content": ant.testo})
+                nomi_blocchi.insert(pos_anticipo, "stanza_anticipo")
+                self._rule("stanza_anticipo")
+        # Quanto il motore dovrà riavvolgere alla richiesta dopo (16/10, issue #95): registro dei
+        # turni `dati_turno_token`, e `calliope stato --turni` conta i turni oltre il tetto
+        self.last_dati_turno_token = int(caratteri_volatili() / CHARS_PER_TOKEN)
+        self.last_dati_turno_oltre = bool(tetto_tok > 0
+                                          and self.last_dati_turno_token > tetto_tok)
         self.last_dati_turno = ([{"nome": "stanza", "caratteri": len(m["content"])}
                                  for m in stanza_ora]
+                                + [{"nome": n, "caratteri": len(str(m.get("content") or ""))}
+                                   for n, m in zip(nomi_ora, dati_ora)]
                                 + [{"nome": n, "caratteri": len(str(m.get("content") or ""))}
                                    for n, m in zip(nomi_blocchi, memory)])
 
@@ -4641,13 +4873,14 @@ class Brain:
 
         def with_memory(prefix):
             return self._con_allegati(self._con_immagini(
-                prefix + summary + self._con_stanza(self.history[:start]) + stanza_ora + memory
-                + self.history[start:] + tail, self.history[start] if user_text else None))
+                prefix + summary + self._con_ancorati(self.history[:start]) + stanza_ora
+                + dati_ora + memory + self.history[start:] + tail,
+                self.history[start] if user_text else None))
 
         # Per la guardia della cache (_misura_prefisso): i messaggi fissi (sistema e riassunto)
         # e dove comincia il turno precedente; prima di lì i turni sono definitivi (con le
-        # righe della stanza della storia al loro posto)
-        utenti_prima = [i for i, m in enumerate(self._con_stanza(self.history[:start]))
+        # righe della stanza e i dati fissi della storia al loro posto)
+        utenti_prima = [i for i, m in enumerate(self._con_ancorati(self.history[:start]))
                         if m.get("role") == "user"]
         self._fissi_cache = len(system) + len(summary)
         self._confine_cache = self._fissi_cache + (utenti_prima[-1] if utenti_prima else 0)
@@ -4711,7 +4944,7 @@ class Brain:
         stanza_hold = (bool(user_text) and self._net("spinta_stanza")
                        and self.tools.get("stanza_cerca") is not None
                        and self.tools.allowed("stanza_cerca", level)
-                       and (ant is None or ant.tagliate > 0))
+                       and (ant is None or ant.tagliate > 0 or getattr(ant, "tetto", False)))
         # Dopo una ricerca vuota nei documenti o nelle conversazioni passate (14/10 notte, caso
         # vero in auto: «ti ricordi quando è la cresima di…?» → archivio_cerca due volte, poi
         # conversazione_cerca, e la risposta era nella stanza): Brain cerca nella stanza con la
@@ -4818,7 +5051,8 @@ class Brain:
                 self._rule("spinta_ricerca")
                 print(f"   [TOOL] «non ho altre informazioni» senza cercare con {tool}, non lo "
                       f"dico: «{self.cita_in_console(held)}»", flush=True)
-                tail = [{"role": "system", "content": RICERCA_NUDGE.format(tool=tool)}]
+                tail = [{"role": "system", "content": RICERCA_NUDGE.format(
+                    tool=tool, come=RICERCA_COME.get(tool, RICERCA_COME_DI_SOLITO))}]
                 continue
             if held and self._held_kind == "non_so" and stanza_hold:
                 # «Non ho informazioni…» senza aver cercato nella stanza: non si dice; Brain
@@ -5480,6 +5714,12 @@ class Brain:
             who = f"persona: {conoscente_detto(sctx.conoscente)}."
         else:
             who = "persona: un ospite, non riconosciuto dalla voce."
+            # Un minore ha parlato da poco su questo satellite (16/10, issue #102): l'ospite
+            # potrebbe essere lui (impronta ancora debole); il modo di parlare della sua fascia,
+            # senza nome né età precisa. Livello e permessi restano da ospite
+            vicino = self._minor_guest_note(getattr(sctx, "minore_ospite", None))
+            if vicino:
+                who = who[:-1] + "; " + vicino + "."
         # Le parole incerte della trascrizione (stt_incerte_al_modello): dopo chi parla, prima
         # dell'ora e di «Per tutto il resto chiama i tool come sempre.», che resta in fondo
         riscrivi = bool(getattr(self, "_riscrivi_turno", False))
@@ -5504,6 +5744,15 @@ class Brain:
         gruppo = self._nota_gruppo()
         if gruppo:
             who += " " + gruppo
+        # Il dispositivo da cui si parla e il PC raggiungibile da lì (16/10, issue #100): dal
+        # telefono Calliope diceva di essere un computer e prometteva la webcam
+        # (revisione della PR #119: «collegato» solo se pc_guarda lo userebbe per chi parla)
+        disp_t = getattr(self, "_dispositivo_turno", None)
+        disp = dispositivo.nota(disp_t, dispositivo.pc_raggiungibile(
+            getattr(self.tool_ctx, "pc", None)), dispositivo.pc_per_chi(self.tool_ctx)
+            is not None) if disp_t else ""
+        if disp:
+            who += " " + disp
         return [{"role": "system", "content": TURN_CONTEXT_MSG.format(
             ora=f"{now:%H:%M}", giorno=_GIORNI[now.weekday()],
             data=f"{now.day} {_MESI[now.month - 1]} {now.year}", chi=who)}]
@@ -5520,6 +5769,19 @@ class Brain:
         if note:
             self._rule("minore_preset")
         return "; ".join(x for x in (note, minori.dato_nascita(prof)) if x)
+
+    def _minor_guest_note(self, name: str | None) -> str:
+        """Per un ospite dove il minore `name` ha parlato da poco (16/10, issue #102): il modo
+        di parlare della sua fascia (minori.dato_ospite), "" senza; regola `ospite_con_minore`."""
+        speakers = getattr(self.tool_ctx, "speakers", None)
+        prof = speakers.get(name) if (name and speakers is not None) else None
+        if prof is None:
+            return ""
+        from . import minori
+        note = minori.dato_ospite(prof)
+        if note:
+            self._rule("ospite_con_minore")
+        return note
 
     def _tone_note(self, name: str | None) -> str:
         """Il tono scelto da chi parla (cambia_voce con tono, salvato nel profilo), se è
@@ -5551,8 +5813,10 @@ class Brain:
             return []
         return re.findall(r"«([^»]+)»", msg[0]["content"]) if msg else []
 
-    def _memory_message(self, note: bool = True) -> list[dict]:
-        """I fatti ricordati su chi parla (memory.py), come messaggio di sistema."""
+    def _memory_message(self, note: bool = True, solo=None) -> list[dict]:
+        """I fatti ricordati su chi parla (memory.py), come messaggio di sistema. `solo`: solo
+        questi fatti (16/10, issue #95: un ricordo nuovo entra nella storia da solo, i dati fissi
+        di dati_turno.py)."""
         ctx = self.tool_ctx
         memory = getattr(ctx, "memory", None)
         name = getattr(getattr(ctx, "speaker_ctx", None), "current_speaker", None)
@@ -5569,6 +5833,9 @@ class Brain:
         if len(kept) + len(kept_house) < len(facts) + len(house) and note:
             self._rule("ricordo_istruzione_escluso")
         facts, house = kept, kept_house
+        if solo is not None:
+            facts = [f for f in facts if f.strip() in solo]
+            house = [f for f in house if f.strip() in solo]
         if not facts and not house:
             return []
         quote = lambda items: " ".join(f"«{f}»" for f in items)    # noqa: E731
@@ -6460,6 +6727,12 @@ class Brain:
         elif stanza_b is not None and getattr(stanza_b, "testo", None):
             fonti.add("stanza")
             esterni = esterni + [("stanza", str(getattr(stanza_b, "esterno", "") or ""))]
+        # Il riassunto della stanza nei dati fissi della storia (16/10, issue #95): un dato
+        # (anche quello entrato in questo turno, con o senza righe della stanza visibili)
+        for fx in getattr(self, "_dati_visibili", None) or ():
+            if getattr(fx, "esterno", ""):
+                fonti.add("stanza")
+                esterni = esterni + [("stanza", fx.esterno)]
         # Le righe della ricerca anticipata (14/10): lo stesso
         ant = getattr(self, "_stanza_anticipo", None)
         if ant is not None and getattr(ant, "righe", 0):
@@ -6545,14 +6818,24 @@ class Brain:
 
     def _foto_pc(self, user_text: str | None) -> str:
         """IMG_PC_MSG se la frase nomina lo schermo o la webcam, c'è una foto nella
-        conversazione e pc_guarda è registrato; "" altrimenti (15/10)."""
+        conversazione, pc_guarda è registrato e il PC è raggiungibile con la capacità che
+        serve e per chi parla (16/10, dispositivo.pc_per_chi); "" altrimenti (15/10)."""
         album = getattr(self, "album", None)
         if (not user_text or album is None or not len(album) or self.tools is None
                 or self.tools.get("pc_guarda") is None):
             return ""
+        # Solo se pc_guarda raggiungerebbe davvero un PC capace (16/10, issue #100): con i
+        # satelliti il tool è sempre registrato, e dal telefono senza il portatile collegato la
+        # spinta faceva promettere la webcam (4 turni il 15/10 sera, poi l'errore)
+        # Con la revisione della PR #119 anche per chi parla, come i permessi di pc_guarda
+        # (voce riconosciuta in questa frase, proprietario del PC o chi amministra)
         if _IMG_PC_WEBCAM.search(user_text):
+            if dispositivo.pc_per_chi(self.tool_ctx, "webcam") is None:
+                return ""
             return IMG_PC_MSG.format(cosa="della webcam", arg="webcam")
         if _IMG_PC_SCHERMO.search(user_text) and not _IMG_PC_ALTRO.search(user_text):
+            if dispositivo.pc_per_chi(self.tool_ctx, "schermata") is None:
+                return ""
             return IMG_PC_MSG.format(cosa="dello schermo del computer", arg="schermo")
         return ""
 

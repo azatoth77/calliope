@@ -26,7 +26,10 @@ di quest'area dopo il 07/10. Da rimisurare col 26B: età dai ricordi e dal profi
   sopravvive alla chiusura. I fatti sono legati a `UserProfile.id` (non al nome)
   e arrivano al modello come messaggio di sistema **subito prima della domanda**, non nel
   prompt, così la cache del prefisso resta valida e un 4B non deve ricordarsi di chiamare
-  un tool per leggerli. Un fatto con lo stesso soggetto sostituisce il vecchio («numero
+  un tool per leggerli. *(Dal 16/10, issue #95: nella storia, davanti alla frase del turno in
+  cui sono cambiati, e lì restano uguali; un ricordo tolto rifà il blocco. Con Gemma 4 i dati
+  del turno che sparivano a ogni richiesta facevano rileggere tutta la storia: sezione «La
+  cache del prefisso e la finestra scorrevole» in [contesto-conversazione](contesto-conversazione.md).)* Un fatto con lo stesso soggetto sostituisce il vecchio («numero
   preferito è 47» → «è 12»). Ospiti: nulla. Se un tool viene rifiutato per permessi,
   l'errore deve essere esplicito («NON è stata eseguita»): con un semplice «non permesso»
   il modello diceva all'ospite «ho registrato…». Prova: `prove/prova_memoria.py`.
