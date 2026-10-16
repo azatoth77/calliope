@@ -189,6 +189,8 @@ A_SECCO = [
     ("prova_scritto_pagina.py", [], "moduli nel browser vero: errore della cifra di controllo mentre si scrive, invio, casella"),
     # ~5 s: Pillow, Brain con un backend finto, server degli schermi vero, PC finto
     ("prova_immagini.py", [], "foto (05/10): controllo e riduzione dei byte, album della conversazione, foto nei messaggi, guardia sulle azioni, /api/immagine, pc_guarda e permessi, cattura dal satellite"),
+    # ~3 s: Brain con un backend finto, esecutore remoto con un server dei satelliti finto
+    ("prova_dispositivo.py", [], "il dispositivo da cui si parla (16/10, issue #100): la spinta di pc_guarda solo col PC raggiungibile e capace (telefono senza portatile no), la riga «dispositivo:» nei dati del turno per telefono, satellite, PC, scritto e locale, Ciclo._dispositivo_turno, i volti non si riconoscono nel prompt"),
     # ~1 s: hub degli schermi vero, i passi veri del ciclo (16/10, #96)
     ("prova_immagini_attesa.py", [], "foto in attesa della domanda con un'altra voce in mezzo (16/10, #96): l'ospite, un'altra persona o un minore non la tolgono né la ricevono, la stessa persona sì; «esci» (anche dopo l'ospite) e la scadenza la tolgono, con il dato «foto persa» una volta (mai come biblioteca); «ricominciamo» e «dimentica» la tolgono senza il dato"),
     # ~8 s: file generati in memoria (anche ostili), Brain finto, server degli schermi vero
@@ -575,6 +577,10 @@ LEGAMI = [
                            "prova_immagini.py", "prova_allegati.py", "prova_cassetto.py"]),
     ("calliope/ufficio/", ["prova_scritto.py"]),
     ("calliope/immagini.py", ["prova_immagini.py"]),
+    ("calliope/dispositivo.py", ["prova_dispositivo.py"]),
+    ("calliope/brain.py", ["prova_dispositivo.py"]),
+    ("calliope/ciclo.py", ["prova_dispositivo.py"]),
+    ("calliope/pc/remoto.py", ["prova_dispositivo.py"]),
     ("calliope/allegati.py", ["prova_allegati.py", "prova_cassetto.py"]),
     ("calliope/agenti/", ["prova_agenti.py", "prova_sandbox.py", "prova_agenti_domande.py",
                           "prova_avanzamento.py", "prova_esecuzione.py",

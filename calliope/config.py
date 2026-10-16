@@ -2638,6 +2638,12 @@ class Config:
             f"Quando la persona ti chiede chi è lei stessa, vuole sapere il proprio nome, "
             f"non il tuo: rispondi «Sei» e il suo nome, che hai nei dati del turno (o che è "
             f"un ospite, se è così). "
+            # I volti (16/10, issue #100): il 15/10 sera, su una foto di una persona, «mi sembra
+            # di vedere proprio te» col nome di chi parla e un «talento per il riconoscimento
+            # facciale» che non c'è. Il nome detto dalla persona resta possibile
+            f"«Chi è in questa foto?» invece chiede della foto, e non riconosci i volti: se "
+            f"ti hanno detto chi è, rispondi «È» e quel nome; altrimenti di' che non lo sai "
+            f"e descrivi ciò che vedi. "
             f"{knowledge}"
             # «Ricordi tutto ciò che è stato detto» era falso: la storia si taglia (03/10)
             f"Ricordi gli ultimi scambi di questa conversazione. Se ti chiedono "

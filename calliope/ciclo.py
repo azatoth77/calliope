@@ -2568,6 +2568,27 @@ class Ciclo:
         return sim2 is None or sim - sim2 >= float(getattr(cfg, "speaker_continuita_margine",
                                                            0.20))
 
+    def _dispositivo_turno(self, t) -> dict | None:
+        """Il dispositivo di questa frase per i dati del turno (16/10, issue #100,
+        calliope/dispositivo.py): letto adesso, non all'avvio (un satellite va e viene)."""
+        from . import dispositivo
+        if t.scritto is not None:
+            return dispositivo.descrivi(dispositivo.SCRITTO)
+        L, sat = self.listener, self.s.satelliti
+        if not getattr(L, "remoto", False) or sat is None:
+            return dispositivo.descrivi(dispositivo.LOCALE)
+        try:
+            # Il collegamento dell'ultima frase (revisione della PR #119): canale e PC dallo
+            # stesso dispositivo anche se l'attivo cambia prima della risposta
+            ultima = getattr(L, "_ultima", None)
+            sid = getattr(self.corsia, "satellite_id", None)
+            coll = (ultima[0] if ultima else
+                    sat.per_id(sid) if sid is not None else sat.attivo_pronto())
+            canale = getattr(coll, "canale", None) or getattr(L, "canale", None)
+            return dispositivo.descrivi(canale, getattr(coll, "esecutore", None) is not None)
+        except Exception:  # noqa: BLE001 — il dispositivo non ferma la voce
+            return None
+
     def _proprietario_satellite(self) -> str | None:
         """Il nome del proprietario del satellite di questa corsia, se è personale (abbinato con
         --personale: il telefono di una persona); None con l'audio locale o un satellite di
@@ -3825,6 +3846,8 @@ class Ciclo:
                 brain.stanza_turno = self._stanza_blocco(t)
             # Gli avvisi consegnati di recente a chi parla (14/10): vale una risposta sola
             brain.avvisi_turno = self._avvisi_contesto(t)
+            # Il dispositivo da cui si parla (16/10, issue #100): vale una risposta sola
+            brain.dispositivo_turno = self._dispositivo_turno(t)
             contesto_turno = t.context
             if t.contesto_gioco:
                 contesto_turno = (contesto_turno + "\n" if contesto_turno else "") + t.contesto_gioco
