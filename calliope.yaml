@@ -2136,6 +2136,14 @@ web:
   web_max_minuto: 10
   web_risultati: 5
   web_timeout_s: 6.0
+  # Quanti risultati di web_cerca e biblioteca_cerca parlano di ciò di cui si parlava (16/10,
+  # issue #101, calliope/pertinenza.py: parole in comune con la frase e i turni prima).
+  # «ombra»: solo nel registro dei turni (regola ricerca_fuori_tema_ombra, conteggio in
+  # calliope stato --turni), niente al modello; «attiva»: anche nel risultato come
+  # «pertinenti: 0 su 5», un dato per il modello (regola ricerca_fuori_tema); «spenta»: niente.
+  # In ombra finché non si sa quanti falsi «fuori tema» dà sulle ricerche vere (sinonimi,
+  # inglese, nomi storpiati non li riconosce)
+  ricerca_pertinenza: ombra
   web_lingua: it-IT
   # Preferire i risultati nella lingua di casa (09/10, caso della DGX: «la miglior salsa di
   # pomodoro» → Bing ignora `web_lingua` e dava forum in cinese tra i primi): con

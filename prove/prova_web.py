@@ -625,7 +625,7 @@ verifica("ricerca: al primo turno niente dati sulla ricerca",
          and "ricerca_recente" not in b.rules_fired())
 detto = "".join(b.stream_reply("Approfondiamo il primo", "familiare"))
 verifica("ricerca: il turno dopo ha l'ultima ricerca nei dati del turno",
-         "hai cercato (dalla più recente) «ultime notizie» con web_cerca tipo notizie"
+         "hai cercato (dalla più recente) «ultime notizie» con web_cerca (notizie)"
          in b.backend.visti[2]
          and "ricerca_recente" in b.rules_fired(), b.backend.visti[2][-300:])
 verifica("ricerca: «non ho altre informazioni» senza cercare non si dice, spinta e ricerca",
@@ -646,8 +646,8 @@ verifica("ricerca: ancora al secondo turno", "ricerca_recente" in b.rules_fired(
 "".join(b.stream_reply("Parliamo d'altro", "familiare"))
 verifica("ricerca: al terzo turno l'elenco, senza la spinta",
          "ricerca_recente" not in b.rules_fired() and "ricerca_elenco" in b.rules_fired()
-         and "«condizioni re di Norvegia» con web_cerca tipo notizie; «ultime notizie» con "
-             "web_cerca tipo notizie" in b.backend.visti[-1], b.backend.visti[-1][-400:])
+         and "«condizioni re di Norvegia» con web_cerca (notizie); «ultime notizie» con "
+             "web_cerca (notizie)" in b.backend.visti[-1], b.backend.visti[-1][-400:])
 for frase in ("Uno", "Due", "Tre"):
     "".join(b.stream_reply(frase, "familiare"))
 verifica("ricerca: al sesto turno dopo ancora l'elenco", "ricerca_elenco" in b.rules_fired())
@@ -736,8 +736,8 @@ b.history = (turno("Le notizie di sport", "Secondo l'ANSA…",
                        "familiare"))
 dati = b.backend.visti[-1]
 verifica("ricerche: l'elenco con la fonte di ognuna, dalla più recente",
-         "«torre di Pisa» con biblioteca_cerca; «tromba marina Trapanese» con web_cerca tipo "
-         "notizie; «ultime notizie» con web_cerca tipo notizie" in dati, dati[-700:])
+         "«torre di Pisa» con biblioteca_cerca; «tromba marina Trapanese» con web_cerca "
+         "(notizie); «ultime notizie» con web_cerca (notizie)" in dati, dati[-700:])
 verifica("ricerche: il criterio biblioteca/internet con tutti e due i tool",
          "biblioteca_cerca per i fatti da enciclopedia, web_cerca per guide pratiche" in dati)
 verifica("ricerche: la più recente nei due turni prima, la spinta resta",
@@ -760,7 +760,7 @@ b.history = turno("Notizie?", "Ecco.", call(0, "web_cerca", {"domanda": "Pisa",
                                                              "tipo": "notizie"}))
 "".join(b.stream_reply("E poi?", "familiare"))
 verifica("ricerche: senza biblioteca il criterio non c'è",
-         "«Pisa» con web_cerca tipo notizie" in b.backend.visti[-1]
+         "«Pisa» con web_cerca (notizie)" in b.backend.visti[-1]
          and "fatti da enciclopedia" not in b.backend.visti[-1])
 
 # Precedenze fra i dati del turno (analisi delle regole del 09/10, § 3.10): con un'estensione

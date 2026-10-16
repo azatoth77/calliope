@@ -2084,6 +2084,14 @@ class Config:
     web_max_minuto: int = 10
     web_risultati: int = 5
     web_timeout_s: float = 6.0
+    # Quanti risultati di web_cerca e biblioteca_cerca parlano di ciò di cui si parlava (16/10,
+    # issue #101, calliope/pertinenza.py: parole in comune con la frase e i turni prima).
+    # «ombra»: solo nel registro dei turni (regola ricerca_fuori_tema_ombra, conteggio in
+    # calliope stato --turni), niente al modello; «attiva»: anche nel risultato come
+    # «pertinenti: 0 su 5», un dato per il modello (regola ricerca_fuori_tema); «spenta»: niente.
+    # In ombra finché non si sa quanti falsi «fuori tema» dà sulle ricerche vere (sinonimi,
+    # inglese, nomi storpiati non li riconosce)
+    ricerca_pertinenza: str = "ombra"
     web_lingua: str = "it-IT"
     # Preferire i risultati nella lingua di casa (09/10, caso della DGX: «la miglior salsa di
     # pomodoro» → Bing ignora `web_lingua` e dava forum in cinese tra i primi): con
@@ -3380,7 +3388,7 @@ SEZIONI: dict[str, list[str]] = {
     "ufficio": ["ufficio_enabled", "ufficio_modelli", "ufficio_livello_fiscale", "ufficio_bozza_s",
                 "ufficio_serie", "fatture_emittente", "fatture_xsd"],
     "web": ["web_enabled", "web_searxng_url", "web_livello", "web_max_minuto", "web_risultati",
-            "web_timeout_s", "web_lingua", "web_preferisci_lingua", "web_dati_privati", "web_pagina_max_kb",
+            "web_timeout_s", "ricerca_pertinenza", "web_lingua", "web_preferisci_lingua", "web_dati_privati", "web_pagina_max_kb",
             "web_pagina_timeout_s", "web_pagina_caratteri", "web_agente_ricerche",
             "web_agente_pagine", "web_reti_vietate", "web_nomi_casa", "web_searxng_aggiorna",
             "web_searxng_giorni", "web_searxng_controllo_ore", "web_searxng_inattivita_min",
@@ -3818,6 +3826,14 @@ def _dopo_tool_valido(value):
     raise ValueError("serve «spento», «ombra» o «attivo»")
 
 
+def _pertinenza_valida(value):
+    """«spenta», «ombra» o «attiva» (16/10, calliope/pertinenza.py)."""
+    s = str(value or "").strip().lower()
+    if s in ("spenta", "ombra", "attiva"):
+        return s
+    raise ValueError("serve «spenta», «ombra» o «attiva»")
+
+
 def _fine_turno_valido(value):
     """«spenta», «ombra» o «attiva» (14/10, calliope/system1/fine_turno.py)."""
     s = str(value or "").strip().lower()
@@ -3843,6 +3859,7 @@ VALIDATORI = {"llm_keep_alive": keep_alive_valido, "llm_num_ctx": _num_ctx_valid
               "cortesia_voce_min": _cortesia_voce_min_valido,
               "stanza": _stanza_valido, "stanza_guardia": _stanza_guardia_valido,
               "fine_turno": _fine_turno_valido,
+              "ricerca_pertinenza": _pertinenza_valida,
                "preselezione_tool": _preselezione_valido,
                "preselezione_codifica": _preselezione_codifica_valida,
                "system1_dopo_tool": _dopo_tool_valido,

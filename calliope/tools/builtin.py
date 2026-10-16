@@ -27,7 +27,7 @@ from ..tempi import (parse_day_range, parse_duration, parse_shift, parse_when, s
 from .registry import ToolRegistry
 from ..conferme import (admin_confermato, chiedi_conferma, e_admin, proposta_valida,
                         secondi_validi, serve_conferma)
-from .. import minori
+from .. import minori, pertinenza
 from .spec import ToolSpec, ToolContext, note_rule
 from ..agenda import is_cancel_all
 from .. import tempi
@@ -1404,8 +1404,16 @@ def _biblioteca_cerca(ctx: ToolContext, domanda: str) -> dict:
                          "frasi con quel dato e cita la fonte in breve («secondo "
                          "Wikipedia…», «secondo il Wikizionario…»), senza leggere i "
                          "passaggi. Se i passaggi parlano d'altro, ignorali: rispondi con "
-                         "quello che sai, se ne sei sicura, senza citare fonti."
+                         "quello che sai, se ne sei sicura, senza citare fonti; se non ne sei "
+                         "sicura, di' che nella biblioteca non hai trovato niente su quello e "
+                         "chiedi cosa cercare."
                          + _WEB_DOPO_BIBLIOTECA.get(_web_disponibile(ctx), "")}
+    # Quanti passaggi parlano di ciò di cui si parlava (16/10, issue #101, caso vero della DGX
+    # del 15/10: «mito di Orione e la sua storia astronomica» → voci omonime, e il modello
+    # rispondeva da sé sbagliando il mito): un dato per il modello, come per web_cerca
+    pertinenza.applica(ctx, out, [f"{p.titolo} {p.testo}" for p in found])
+    if "pertinenti" in out:
+        out["cosa_fare"] += " Quanti passaggi ne parlano lo dice «pertinenti»."
     if simple:
         out["stile"] = ("Spiega in modo semplice e chiaro, con parole adatte a un ragazzo "
                         "delle medie, magari con un esempio; niente termini difficili.")

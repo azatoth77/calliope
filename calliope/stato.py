@@ -518,6 +518,9 @@ def main(argv=None) -> int:
         # Le frasi pronte ripetute (12/10, calliope/frasi.py, fase 0)
         from . import frasi
         pronte = frasi.riassunto(turni)
+        # La pertinenza delle ricerche (16/10, issue #101, calliope/pertinenza.py)
+        from . import pertinenza
+        pert_r = pertinenza.riassunto(turni)
         # La conversazione di stanza (13/10, calliope/stanza/misure.py, passo 1): solo numeri
         from .stanza import misure as misure_stanza
         stanza = misure_stanza.riassunto(misure_stanza.leggi(cfg.turn_log_dir, giorni), turni)
@@ -551,6 +554,7 @@ def main(argv=None) -> int:
                               "si_breve": si_r,
                               "dopo_tool": dopo_tool_r,
                               "frasi_pronte": pronte,
+                              "pertinenza_ricerche": pert_r,
                               "stanza": stanza, "fine_turno": fine_r,
                               "guardia": {k: v for k, v in guardia_r.items()
                                           if k not in ("elenco", "letture")}},
@@ -579,6 +583,8 @@ def main(argv=None) -> int:
             print(dopo_tool_s1.testo(dopo_tool_r))
             print()
             print(frasi.testo(pronte))
+            print()
+            print(pertinenza.testo(pert_r, pertinenza.modo(cfg)))
             print()
             print(misure_stanza.testo(stanza))
             print()
