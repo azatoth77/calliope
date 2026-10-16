@@ -2,7 +2,7 @@
 
 *Fasce d'età, preset, guardiano, compiti, avvisi ai tutori. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-**Stato al 14/10.** Come al 09/10 (sotto), più: nessuna conservazione per i minori (12/10: le loro parole né nel registro dei turni né nel journal, esercizi e richieste che scadono con la conservazione); l'indice del programma ministeriale per gli esercizi (12/10 sera); le notizie solo di sport, tecnologia e ragazzi (13/10); il rilevatore solo sulle frasi rivolte a Calliope (13/10); dal 14/10 i tutori vedono conversazioni e cassetto del figlio a ogni età, il **guardiano a posteriori della stanza** (`stanza_guardia`, spento di serie; in ombra solo misure, `calliope stato --guardia`), gli avvisi con data e origine (`calliope stato --avvisi`, azione `avvisi` di `minore_gestisci`), la trascrizione (`avvisi_trascrizione`, accesa) e l'audio (`avvisi_audio`, spento) sulla scheda del tutore. Da confermare con Dario le scelte prudenti dei cancelli; da rimisurare sulla DGX col 26B.
+**Stato al 16/10.** Dal 16/10 i minori di casa si conservano come gli adulti (decisione [0031](../decisioni/0031-conservazione-dei-minori.md), issue #104: turni, eventi, archivio e journal per 60 giorni, rileggibili dai tutori; la voce solo col consenso dei tutori; sezione in fondo). *Storico al 14/10:* come al 09/10 (sotto), più: nessuna conservazione per i minori (12/10: le loro parole né nel registro dei turni né nel journal, esercizi e richieste che scadono con la conservazione; superato il 16/10); l'indice del programma ministeriale per gli esercizi (12/10 sera); le notizie solo di sport, tecnologia e ragazzi (13/10); il rilevatore solo sulle frasi rivolte a Calliope (13/10); dal 14/10 i tutori vedono conversazioni e cassetto del figlio a ogni età, il **guardiano a posteriori della stanza** (`stanza_guardia`, spento di serie; in ombra solo misure, `calliope stato --guardia`), gli avvisi con data e origine (`calliope stato --avvisi`, azione `avvisi` di `minore_gestisci`), la trascrizione (`avvisi_trascrizione`, accesa) e l'audio (`avvisi_audio`, spento) sulla scheda del tutore. Da confermare con Dario le scelte prudenti dei cancelli; da rimisurare sulla DGX col 26B.
 
 *Stato al 09/10 (storico):* Profili dei minori con fasce, preset e tutori; guardiano (Llama Guard 3) su
 domanda e frasi, rilevatore di pericolo sulla domanda; compiti guidati; esercizi di matematica e italiano
@@ -424,6 +424,10 @@ come consenso a una proposta fatta prima.
 
 ## Nessuna conservazione per i minori (12/10, ramo `conserva-metrica`)
 
+*[Storico: superato il 16/10 dalla decisione [0031](../decisioni/0031-conservazione-dei-minori.md),
+i minori di casa si conservano come gli adulti; sezione «I minori di casa conservati come gli
+adulti» in fondo. Restano veri gli esercizi e le richieste che scadono con la conservazione.]*
+
 Decisione [0028](../decisioni/0028-decisioni-roadmap-12-10.md) T1: turni, eventi e voce si tengono
 60 giorni per le misure, **mai** per i minori. Prima del 12/10 il registro dei turni teneva per 30
 giorni le parole dei minori (tolte solo per gli ospiti e per le frasi fermate dal guardiano) e il
@@ -686,6 +690,9 @@ vero riscritto; voce incerta in compagnia; contrari: silenzio e conferma → sec
 acuto in compagnia → protezione).
 
 ## Le parole dei minori fuori dal journal (12/10 sera, ramo `compagnia-guardia`)
+
+*[Storico: dal 16/10 (decisione [0031](../decisioni/0031-conservazione-dei-minori.md)) le frasi dei
+minori vanno nel journal come quelle degli adulti; `console_riservata` risponde solo «ospite».]*
 
 Dalla decisione [0028](../decisioni/0028-decisioni-roadmap-12-10.md) T1 il registro dei turni non
 tiene le parole dei minori (sezione «Nessuna conservazione per i minori»), ma la console, che sulla
@@ -1055,3 +1062,38 @@ le altre si segnano nel diario come «versione». Le righe TV della corsia lenta
 temporanea del banco (decisione [0029](../decisioni/0029-conversazione-di-stanza.md), autorizzata dal
 tutore per quel banco, di serie spenta). Prova: `prove/prova_stanza_lenta.py`.
 
+## I minori di casa conservati come gli adulti (16/10, issue #104, ramo `issue-104-minori-conserva`)
+
+Decisione di chi amministra del 16/10 ([0031](../decisioni/0031-conservazione-dei-minori.md)): «la
+privacy in casa di un minore non esiste e ciò che dice DEVE finire nel db e nel disco». Supera, per i
+minori, le sezioni «Nessuna conservazione per i minori» e «Le parole dei minori fuori dal journal»
+(12/10, qui sopra, segnate storiche). Il dettaglio di registro dei turni, eventi e archivio è in
+[contesto-conversazione](contesto-conversazione.md), stessa data.
+
+- **Cosa si tiene di un minore**: il testo dei turni (anche nel dubbio tra lui e un adulto), il suo
+  registro degli eventi, le sue conversazioni nell'archivio su disco, per `turn_log_days` (60)
+  giorni; nel journal le sue frasi in chiaro. I tutori le rileggono come prima
+  (`conversazioni_visibili_ai_tutori`, scheda «Conversazione», `conversazione_cerca`) e ora anche
+  dopo un riavvio. Si svuota con `calliope conserva --svuota --persona <minore>` o a voce da chi
+  amministra (`dati_conservati` azione `svuota`).
+- **La voce del minore col consenso dei tutori**: «Calliope, puoi tenere la voce di Leo?» detto da
+  un tutore (`minori.e_tutore`; senza tutori nel profilo, chi amministra), riconosciuto dalla voce
+  sopra soglia: domanda, poi il «sì» (anche breve, nella stessa conversazione). Nel profilo del
+  minore `voce_conservata`, la data e `voce_conservata_da` (l'id del tutore). La revoca («non
+  tenere più la voce di Leo») la fa ogni tutore, subito, e cancella le registrazioni. **Il minore
+  da solo non dà né revoca il consenso** («Per la tua voce decidono i tuoi genitori»); un adulto
+  che non è tutore nemmeno, e per la voce di un altro adulto decide solo lui. Il «sì» di un tutore
+  vale finché la persona è minore (da adulta la rotazione toglie la voce finché non lo ridice
+  lei). Nel dubbio con un adulto, in compagnia o con una frase breve la voce non si tiene.
+- **`dati_conservati` azione `stato` per un minore**: «Tengo per 60 giorni, solo qui, i testi delle
+  nostre conversazioni, e i tuoi genitori li possono rileggere (…); la tua voce no, a meno che lo
+  decidano i tuoi genitori.» (con la tenuta della stanza anche le frasi nella stanza).
+- **Invariati**: permessi, preset e guardiano (conservare non cambia cosa un minore può fare); il
+  testo di un minore fermato dal guardiano resta fuori dal disco (`_non_su_disco`, come prima); un
+  bambino non si salva mai come conoscente (0030).
+- **Le parole tolte dal 12 al 16/10 non tornano** (niente migrazioni).
+
+Prove: `prova_conserva`, `prova_console_minori`, `prova_stanza_tenuta`, `prova_dopo_tool`.
+**Sulla DGX dopo l'aggiornamento**: `calliope conserva` (il minore con «voce no (lo decidono i
+tutori)»), un turno di prova con il profilo della minore e `calliope stato --turni`; nel registro
+dei turni il suo `testo` non più null.

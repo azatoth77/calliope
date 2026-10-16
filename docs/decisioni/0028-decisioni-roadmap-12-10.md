@@ -2,7 +2,8 @@
 
 - **Stato**: accettata (12/10/2026, risposte di chi amministra alle 41 domande sulla roadmap); il
   punto 1 (T1) in parte superato il 13/10 per il solo testo della conversazione di stanza, vedi
-  [0029](0029-conversazione-di-stanza.md)
+  [0029](0029-conversazione-di-stanza.md); **punto 1 superato il 16/10 per i minori di casa**,
+  vedi [0031](0031-conservazione-dei-minori.md) (si conservano come gli adulti)
 - **Area**: trasversale; [capacita-installazioni](../aree/capacita-installazioni.md),
   [voce-e-regole](../aree/voce-e-regole.md), [contesto-conversazione](../aree/contesto-conversazione.md),
   [casa](../aree/casa.md), [satelliti](../aree/satelliti.md)
@@ -23,7 +24,9 @@ valgono per più aree; quelle di una sola voce sono nella coda di [`roadmap.md`]
 1. **Conservazione dei dati (T1).** I turni e l'audio dei **soli adulti** si conservano in privato
    (fuori da git) per **60 giorni**, per misurare e migliorare Calliope: banco dei tool, set di
    regressione, dizionario delle correzioni, taratura delle soglie. Di **minori e ospiti mai**. Un
-   comando svuota tutto. Oggi niente di questo è nel codice: gli eventi ruotano a 7 giorni
+   comando svuota tutto. *[Superato il 16/10 per i minori di casa, decisione
+   [0031](0031-conservazione-dei-minori.md): si conservano come gli adulti, la voce col consenso
+   dei tutori; gli ospiti restano fuori.]* Oggi niente di questo è nel codice: gli eventi ruotano a 7 giorni
    (`eventi_giorni`) e l'audio si salva solo per il debug.
 2. **Un piano unico della memoria (T4).** Prima di aggiungere un modello sulla DGX (immagini,
    secondo parere per lo studio, giudice di sicurezza, revisione notturna) si scrive il suo posto in

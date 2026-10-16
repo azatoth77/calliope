@@ -405,8 +405,10 @@ quasi vuoto, contenuti creati solo con un servizio online). Dettagli: [`docs/roa
 ## Sicurezza e privacy
 
 - Nessun cloud: modelli, trascrizioni, memoria e registri restano locali.
-- Dati conservati: turni, eventi e voce dei soli adulti per 60 giorni, minori e ospiti mai, un
-  comando per svuotare tutto (`calliope conserva --svuota`). La conversazione di stanza è spenta
+- Dati conservati: turni, eventi e archivio delle conversazioni delle persone di casa per 60
+  giorni (dal 16/10 anche dei minori, decisione 0031: i tutori possono rileggerli), la voce solo
+  col consenso (per un minore quello dei tutori), ospiti mai, un comando per svuotare tutto
+  (`calliope conserva --svuota`). La conversazione di stanza è spenta
   di serie: dove la si accende, il suo stato si vede sugli schermi, l'audio non va su disco
   (l'unica eccezione: le frasi di un segnale di pericolo, nel cassetto del tutore, se acceso) e
   il testo resta in memoria o per 60 giorni, come sceglie chi amministra; ospiti mai.

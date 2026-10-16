@@ -228,6 +228,9 @@ corregge da sola alla cieca.
   [0030](decisioni/0030-conoscenti.md): il **testo** della stanza, dove chi amministra accende la
   tenuta, resta 60 giorni anche per i minori e per i conoscenti confermati da chi amministra; le
   voci non confermate mai.]*
+  *[16/10, decisione [0031](decisioni/0031-conservazione-dei-minori.md): i minori di casa si
+  conservano come gli adulti (turni, eventi, archivio, journal; la voce col consenso dei tutori);
+  gli ospiti restano fuori.]*
 - *[12/10: la «GPU libera di notte» non è vera sulla DGX, dove l'agente resta caricato; la
   revisione notturna viene dopo il banco dei casi veri e si approva dal cruscotto.]*
 - Più avanti, con qualche ora di dati: adattamento fine di Whisper sulle voci di casa,
