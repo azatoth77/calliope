@@ -136,11 +136,12 @@ def parla_minore(speaker_ctx, registry) -> bool:
     `minore_vicino`, `minore_incerto`)? Per scelte di forma della risposta (la frase pronta del
     tool dopo il System 1: con un minore parla il modello). Fino al 16/10 lo diceva
     `conserva.console_riservata` («minore»), che dal 16/10 (decisione 0031) non nasconde più le
-    frasi dei minori."""
+    frasi dei minori. Dal 16/10 (issue #102) anche un ospite dove un minore ha parlato da poco
+    (`minore_ospite`)."""
     if speaker_ctx is None:
         return False
     if any(getattr(speaker_ctx, k, None) for k in ("incerta", "minore_vicino",
-                                                   "minore_incerto")):
+                                                   "minore_incerto", "minore_ospite")):
         return True
     nome = getattr(speaker_ctx, "current_speaker", None)
     get = getattr(registry, "get", None)
@@ -637,6 +638,47 @@ def dato_nascita(prof, oggi: datetime.date | None = None) -> str:
     oggi = oggi or datetime.date.today()
     giorno = "primo" if d.day == 1 else str(d.day)
     return f"data di nascita {giorno} {MESI[d.month - 1]} {d.year} ({eta(d, oggi)} anni)"
+
+
+def dato_ospite(prof) -> str:
+    """Per un ospite non riconosciuto dove il minore `prof` ha parlato da poco (16/10, issue
+    #102): «potrebbe essere un minorenne» e il modo di parlare della sua fascia come dato del
+    turno. Nessun fatto sul minore (revisione della PR #116): né il nome, né l'età o la fascia
+    dette, né che ha parlato qui, né il genere, i compiti e gli esercizi (l'ospite potrebbe essere
+    un altro). "" per un adulto o con i minori spenti."""
+    p = preset(prof)
+    if p is None:
+        return ""
+    tono = p["tono"]
+    tono = tono[2:] if tono.startswith("è ") else tono
+    return (f"potrebbe essere un minorenne: nel caso {tono}; argomenti difficili (morte, guerra, "
+            f"droghe, corpo) spiegati adatti a un minore, niente contenuti per adulti")
+
+
+def riassunto_ospite(turni: list[dict]) -> dict:
+    """Per giorno (16/10, issue #102, criterio di chiusura): i turni d'ospite con un minore
+    sentito sullo stesso satellite dentro `minori_ospite_vicino_s` (campo `minore_sentito_s` del
+    ciclo) e quanti hanno avuto la nota (regola `ospite_con_minore`). Solo numeri."""
+    giorni: dict[str, dict] = {}
+    for t in turni:
+        if t.get("minore_sentito_s") is None:
+            continue
+        data = str(t.get("inizio") or "")[:10] or "?"
+        d = giorni.setdefault(data, {"turni": 0, "con_nota": 0})
+        d["turni"] += 1
+        d["con_nota"] += "ospite_con_minore" in (t.get("regole") or ())
+    return giorni
+
+
+def testo_ospite(giorni: dict) -> str:
+    if not giorni:
+        return "Ospite dove un minore ha parlato da poco: nessun turno nel registro."
+    righe = ["Ospite dove un minore ha parlato da poco (stesso satellite, minori_ospite_vicino_s)",
+             ""]
+    for data, d in giorni.items():
+        righe.append(f"{data}  {d['turni']} turni d'ospite, con la nota per i minori "
+                     f"{d['con_nota']}, senza {d['turni'] - d['con_nota']}")
+    return "\n".join(righe)
 
 
 # ─────────────────────────── permessi nel codice ───────────────────────────

@@ -1168,3 +1168,63 @@ stanza), `prova_minori` (i dati del consenso nella registrazione), `prova_consol
 Prove: `prova_conserva` (tutrice che non amministra con il `SpeakerContext` vero, maggiore età con
 `stato` e rotazione, zona grigia con il minore vicino dal ciclo vero), `prova_conoscenti_conserva`
 (dubbio sopra soglia con la voce di un conoscente più vicina, e i contrari).
+
+## L'ospite dove un minore ha parlato da poco (16/10, issue #102, ramo `issue-102-minore-ospite`)
+
+**Caso vero del 15/10 sera** (problema 12 dell'analisi del 16/10). Una bambina registrata alle
+19:59–20:01 (5 frasi, molte brevi: impronta debole) ha poi detto 6 frasi con 0,32–0,45 sul suo
+profilo, migliore un altro profilo di casa: sotto la zona grigia (soglia − margine di sessione,
+0,42) `minori.piu_protetto` non le dava a lei, e sono rimaste «ospite». Risposte con il livello
+da ospite (permessi già stretti, guardiano dei turni acceso) ma come a un adulto: niente
+`minore_preset`, nessun modo di parlare per l'età.
+
+- **Cosa cambia.** Il ciclo sa già quali minori hanno parlato su ogni satellite (`_minori_sentiti`,
+  per gli avvisi). Una frase d'ospite non riconosciuta (non un conoscente) su un satellite dove un
+  minore ha parlato da meno di `minori_avviso_privato_s` (600 s) porta `minore_ospite` (il minore
+  più protetto sentito lì, `Ciclo._minore_per_ospite`); nei dati del turno, dopo «un ospite, non
+  riconosciuto dalla voce», `minori.dato_ospite`: «forse un minorenne (7–10 anni: un minore ha
+  parlato da poco su questo satellite); nel caso un bambino delle elementari: …; argomenti
+  difficili … niente contenuti per adulti». Senza il nome, l'età precisa, il genere, i compiti e
+  gli esercizi (sono del minore: l'ospite potrebbe essere un altro). Regola `ospite_con_minore`.
+  Chi parla, livello, permessi, conversazione anonima e conservazione (ospiti mai su disco,
+  decisione 0031) restano da ospite. `minori.parla_minore` vale anche qui (dopo un tool parla il
+  modello, non la frase pronta).
+- **Scelta di chi amministra (etichetta serve-scelta), di serie la più prudente:** la nota vale
+  anche per gli **ospiti adulti veri** sullo stesso satellite in quei 10 minuti, perché la voce
+  non li distingue dal minore con l'impronta debole: un amico adulto avrà risposte più semplici.
+  Si torna al comportamento di prima con `minori_ospite_vicino: false` nel locale.
+- **Non fatto qui**: l'impronta del minore appena registrato che si aggiorna più in fretta (le
+  impronte per satellite sono in ombra, #42) e l'arruolamento guidato (issue della sfida), da cui
+  dipende quanto spesso capita.
+- **Da guardare sulla DGX** (criterio di chiusura, 7 giorni): in `calliope stato --turni` i turni
+  ospite su un satellite dove un minore ha parlato negli ultimi 600 s hanno tutti la regola
+  `ospite_con_minore`.
+
+Prove: `prova_minore_ospite` (7 casi falliscono su 9d4075e; contrari: finestra passata, altro
+satellite, voce riconosciuta, conoscente, interruttore spento, finestra a 0).
+
+### 16/10: correzioni della revisione della PR #116
+
+- **La nota non dice niente del minore.** *[storico, fino a questa correzione: «forse un
+  minorenne (7–10 anni: un minore ha parlato da poco su questo satellite); nel caso …»]*. Ora
+  `minori.dato_ospite` dà solo «potrebbe essere un minorenne: nel caso <tono della fascia>;
+  argomenti difficili … niente contenuti per adulti»: niente nome, età, fascia detta, «ha parlato
+  qui», genere, compiti. La tabella delle fasce copiata da `dato_turno` è tolta (non serve più).
+- **Solo con la voce vicina al minore** (scelta per ridurre il costo agli ospiti adulti): con la
+  voce, la nota scatta se il minore sentito è tra i primi due profili della frase **oppure** ha
+  almeno `minori_ospite_vicino_punteggio` (0,30) sul suo profilo; nel caso vero era 0,32–0,45.
+  Un adulto lontano dal profilo del minore (terzo profilo, 0,05) resta senza nota. Lo scritto da
+  uno schermo di stanza non ha voce da confrontare e la nota vale (prudenza). Limite: in una casa
+  con due o tre profili «tra i primi due» comprende quasi sempre il minore, e allora conta solo la
+  finestra; si guarda nella misura sotto prima di stringere (per esempio solo il punteggio).
+- **Finestra sua**: `minori_ospite_vicino_s` (600 s), non più `minori_avviso_privato_s`.
+- **La misura del criterio 2**: nel turno d'ospite il ciclo scrive `minore_sentito_s` (secondi
+  dall'ultima frase di un minore sulla stessa corsia, solo dentro la finestra, senza nomi), anche
+  quando la nota non scatta o l'interruttore è spento. `calliope stato --turni` ha la riga
+  «Ospite dove un minore ha parlato da poco»: per giorno i turni d'ospite con un minore sentito,
+  con e senza la nota (`minori.riassunto_ospite`). Con la scelta sopra «senza» non deve essere 0:
+  sono gli adulti lontani; da leggere insieme ai punteggi del campo `voce`.
+
+Prove: `prova_minore_ospite` (17 errori su main 3bbc674; contrari nuovi: adulto lontano dal
+profilo del minore, finestra propria a 60 s con quella degli avvisi a 0, nessun fatto sul minore
+nella nota, riga di `stato --turni` vuota senza turni).

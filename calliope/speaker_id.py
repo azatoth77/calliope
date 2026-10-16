@@ -604,6 +604,11 @@ class SpeakerContext:
         # frase vale lui, ma era incerta con questo minore. La prudenza per i minori (preset dei
         # tool, guardiano) guarda il minore (minori.profilo). Vale una frase
         self.minore_incerto: str | None = None
+        # Un ospite non riconosciuto sul satellite dove un minore ha parlato da poco (16/10,
+        # issue #102, `minori_ospite_vicino`): il nome del minore più protetto sentito lì, per
+        # il modo di parlare nei dati del turno (minori.dato_ospite, senza il nome). Non cambia
+        # chi parla né il livello (resta ospite). Vale una frase (ciclo._chi_parla)
+        self.minore_ospite: str | None = None
         # In compagnia (09/10, calliope/compagnia.py, con `compagnia_enabled: attiva`): più voci
         # vicino a questo satellite negli ultimi minuti. Le azioni vogliono la voce riconosciuta
         # in questa frase (la zona grigia non basta: tools/registry.py) e per i minori la voce

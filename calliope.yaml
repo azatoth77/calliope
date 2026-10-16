@@ -807,6 +807,21 @@ minori:
   # parlato da meno di tanti secondi (potrebbe essere lì vicino): una frase neutra e il testo
   # resta sul suo schermo personale; a voce più tardi. 0 = sempre a voce (come prima)
   minori_avviso_privato_s: 600.0
+  # Una voce non riconosciuta (ospite) sul satellite dove un minore di casa ha parlato da meno
+  # di `minori_ospite_vicino_s` secondi (16/10, issue #102: il 15/10 una bambina appena
+  # registrata, con l'impronta ancora debole, presa 6 volte per ospite e trattata come un
+  # adulto): nei dati del turno «potrebbe essere un minorenne» e il modo di parlare della
+  # fascia più giovane sentita lì, senza nessun fatto sul minore (regola `ospite_con_minore`).
+  # Livello e permessi restano da ospite. Scelta di chi amministra, di serie la più prudente:
+  # vale anche per un ospite adulto vero, se la sua voce è vicina al minore (sotto). false =
+  # l'ospite non riconosciuto ha sempre le risposte da adulto (come prima del 16/10)
+  minori_ospite_vicino: true
+  # Secondi dopo l'ultima frase del minore sullo stesso satellite in cui vale la nota (sopra)
+  minori_ospite_vicino_s: 600.0
+  # Con la voce, la nota scatta solo se il minore è tra i primi due profili della frase o ha
+  # almeno questo punteggio sul suo (caso vero del 15/10: 0,32–0,45): un adulto lontano dal
+  # profilo del minore resta senza nota (revisione della PR #116)
+  minori_ospite_vicino_punteggio: 0.3
   # Quando è nato un avviso ai tutori (14/10, caso vero: un avviso «sicurezza» del 12/10 sera,
   # rimasto da dire vicino al ragazzo, è arrivato il 14/10 mattina senza data ed è stato preso
   # per un allarme nuovo). Minuti oltre i quali la voce dice quando è nato («ieri sera alle
