@@ -1132,11 +1132,14 @@ stanza), `prova_minori` (i dati del consenso nella registrazione), `prova_consol
   amministra conferma con un «sì» breve il consenso alla voce di un suo figlio, o la revoca, come
   chi amministra. Fino al 16/10 documenti e docstring lo dicevano ma `conferma_breve` valeva solo
   per chi amministra: un tutore doveva ridire tutto sopra soglia. Ora `SpeakerContext` calcola
-  `breve_compatibile` (le condizioni di sempre senza «amministra»: frase breve della persona
-  riconosciuta dalla voce in questa conversazione, punteggio ≥ `speaker_conferma_breve_soglia`
-  0,40, nessun altro profilo vicino almeno quanto lei) e `conferma_breve` resta `breve_compatibile`
-  più «amministra». `dati_conservati` lo accetta solo per la voce di un minore di cui chi parla è
-  tutore (`minori.e_tutore`), con la regola `conferma_breve_tutore` nel registro dei turni.
+  `breve_impronta_ok` (fino al 16/10 `breve_compatibile`, issue #114; le condizioni di sempre
+  senza «amministra»: frase breve della persona riconosciuta dalla voce in questa conversazione,
+  punteggio ≥ `speaker_conferma_breve_soglia` 0,40, nessun altro profilo vicino almeno quanto
+  lei) e `conferma_breve` resta `breve_impronta_ok` più «amministra». `dati_conservati` lo accetta
+  solo per la voce di un minore di cui chi parla è tutore (`minori.e_tutore`), con la regola
+  `conferma_breve_tutore` nel registro dei turni. La regola si scrive solo quando il tutore
+  **non** amministra: per un tutore che amministra il «sì» breve passa già da `conferma_breve`,
+  come prima, e nel registro restano `voce_consenso` o `voce_revocata` (issue #114).
   Invariati: le conferme delle azioni (`conferme.admin_confermato`), «svuota» (solo chi
   amministra), il minore da solo, chi non è tutore. Contrari nelle prove: punteggio sotto soglia,
   la figlia accanto più vicina, conversazione nuova, adulto non tutore, il minore stesso, «svuota».
@@ -1148,7 +1151,9 @@ stanza), `prova_minori` (i dati del consenso nella registrazione), `prova_consol
   maggiorenne risponde «la tua voce no: il sì dei tuoi genitori valeva finché eri minorenne, se
   vuoi che la tenga dimmelo tu» (`conserva.voce_dei_tutori_scaduta`, che non decide niente), e la
   rotazione scrive nel journal una riga con l'id (mai il nome) e `maggiorenni` nel suo esito.
-  Il suo «sì» da adulta vale subito (`consenso_voce` con `voce_conservata_da` uguale al suo id).
+  Il suo «sì» da adulta vale subito: il tool lo salva con `voce_conservata_da` vuoto (None vuol
+  dire «l'ha deciso la persona stessa»), e `consenso_voce` accetta anche il suo id in quel campo.
+  *[Corretto il 16/10, issue #114: qui c'era scritto che il tool salva il suo id.]*
 - **La prova dal ciclo vero** (punto 3): chi amministra nella zona grigia della sua conversazione
   con il minore vicino (Carlo 0,45 e Luca 0,44): il ciclo scrive il dubbio (`incerta`, vale Luca,
   `modo: conversazione`) ma la voce migliore è sotto `speaker_id_threshold`, quindi il turno resta
@@ -1168,6 +1173,36 @@ stanza), `prova_minori` (i dati del consenso nella registrazione), `prova_consol
 Prove: `prova_conserva` (tutrice che non amministra con il `SpeakerContext` vero, maggiore età con
 `stato` e rotazione, zona grigia con il minore vicino dal ciclo vero), `prova_conoscenti_conserva`
 (dubbio sopra soglia con la voce di un conoscente più vicina, e i contrari).
+
+### 16/10: le rifiniture dopo la revisione della PR #112 (issue #114)
+
+Quattro suggerimenti della revisione della PR #112, nessun cambiamento di comportamento:
+
+- **Il «sì» breve del tutore dal ciclo vero.** Fino ad oggi il caso «il figlio accanto più
+  vicino» era provato passando a mano `altro_piu_vicino` a `aggiorna_conversazione`. Ora
+  `prova_conserva` usa il `Ciclo` vero con le impronte sintetiche di `prova_voci_famiglia` (Carlo
+  reso tutore che non amministra, Luca di 14 anni con la voce revocata) e chiama
+  `dati_conservati` da `ToolRegistry.call` con il livello deciso dal ciclo. Il «sì» breve di
+  Carlo (0,45, Luca lontano) dà il consenso e la revoca. Contrari: Luca accanto più vicino
+  (Luca 0,47, Carlo 0,44: la frase breve vale Carlo, ma `altro` del ciclo ferma la conferma),
+  Luca sopra soglia (0,50: `minori.piu_protetto` sposta la frase su di lui, e il minore da solo
+  non decide), in compagnia la frase breve (non vale nessuno, ospite) e la zona grigia (fermata
+  da `ToolRegistry.call`, `compagnia_voce_nella_frase`). Il codice decideva già così: è una prova
+  di regressione.
+- **Il «sì» da adulta**: allineato il documento al codice (sopra). La convenzione `None` = «la
+  persona stessa» è quella del campo e di `Conservazione.imposta_consenso`; cambiare il tool
+  avrebbe lasciato due forme nei profili già salvati. La prova fa dare il sì a Nina adulta col
+  tool (domanda e «sì») e controlla il campo vuoto; la forma col suo id resta accettata.
+- **`breve_compatibile` → `breve_impronta_ok`** per l'attributo di `SpeakerContext`.
+  `breve_compatibile` resta il modo della misura del «sì» breve (`si_breve.py`: solo il «sì» di
+  chi amministra con l'impronta compatibile), che è scritto nel registro dei turni
+  (`si_breve[].modo`) e contato da `calliope stato --turni`: rinominare quello avrebbe lasciato
+  le righe già scritte sotto un modo che non c'è più. L'attributo non va mai su disco.
+- **La regola `conferma_breve_tutore`**: detto sopra che si scrive solo per un tutore che non
+  amministra; la prova lo controlla con il «sì» breve di chi amministra ed è tutore.
+
+Prove: `prova_conserva`. Sul codice di main falliscono le verifiche che leggono
+`breve_impronta_ok` (4); le altre nuove passano anche lì.
 
 ## L'ospite dove un minore ha parlato da poco (16/10, issue #102, ramo `issue-102-minore-ospite`)
 

@@ -654,7 +654,8 @@ try:
     # ───────── il «sì» breve di un tutore che non amministra (16/10, issue #108) ─────────
     # Decisione di chi amministra: un tutore conferma con il «sì» breve compatibile (stessa
     # soglia e stesse condizioni della conferma breve di chi amministra) la voce di un suo
-    # figlio. Con il SpeakerContext vero: `aggiorna_conversazione` decide `breve_compatibile`
+    # figlio. Con il SpeakerContext vero: `aggiorna_conversazione` decide `breve_impronta_ok`
+    # (fino al 16/10 `breve_compatibile`, nome già usato da un modo di si_breve: issue #114)
     from calliope.conferme import admin_confermato
     from calliope.speaker_id import SpeakerContext as _SCt
     tutrice = UserProfile(name="Marta", id="p-mar")
@@ -666,9 +667,17 @@ try:
     ctx_t = SimpleNamespace(conserva=cons, speakers=reg_t, speaker_ctx=sct, turno=40, cfg=cfg,
                             regole=[])
 
+    def _bc_di(s):
+        # getattr: prima della #114 il campo si chiamava `breve_compatibile` e le verifiche
+        # falliscono
+        return getattr(s, "breve_impronta_ok", False)
+
     def _bc():
-        # getattr: su main, prima della #108, il campo non c'è e le verifiche falliscono
-        return getattr(sct, "breve_compatibile", False)
+        return _bc_di(sct)
+
+    verifica("issue #114: l'attributo del SpeakerContext si chiama `breve_impronta_ok`, non più "
+             "come il modo `breve_compatibile` di si_breve",
+             hasattr(sct, "breve_impronta_ok") and not hasattr(sct, "breve_compatibile"))
 
     def frase_t(nome, how, punteggio=None, altro=False, in_session=True):
         """Una frase come la decide il ciclo (_riconosci_voce): chi, come, il punteggio contro
@@ -744,6 +753,119 @@ try:
     r = _dati_conservati(ctx_t, "svuota", "Nina")
     verifica("contrario: «svuota» col «sì» breve di una tutrice che non amministra, rifiutato",
              r["ok"] is False and "in_sospeso" not in r, str(r))
+    # Issue #114 punto 4: un tutore che amministra (Primo) conferma con `conferma_breve`, come
+    # sempre; la regola `conferma_breve_tutore` si scrive solo per chi non amministra
+    figlia.voce_conservata, figlia.voce_conservata_da = False, "p-mar"
+    cons.proposte.pop("voce:p-nin:p-amm", None)
+    frase_t("Primo", "voce", 0.62, in_session=False)
+    q = _dati_conservati(ctx_t, "consenso_voce", "Nina")
+    frase_t("Primo", "breve", 0.45)
+    r = _dati_conservati(ctx_t, "consenso_voce", "Nina")
+    verifica("tutore che amministra: il «sì» breve passa da conferma_breve, senza la regola "
+             "conferma_breve_tutore", q["ok"] is False and r["ok"] and sct.conferma_breve
+             and figlia.voce_conservata is True and figlia.voce_conservata_da == "p-amm"
+             and "voce_consenso" in ctx_t.regole
+             and "conferma_breve_tutore" not in ctx_t.regole, f"{q} {r} {ctx_t.regole}")
+
+    # ───────── il «sì» breve del tutore dal ciclo vero e da ToolRegistry.call (#114) ─────────
+    # Issue #114 punto 1: sopra `altro` è passato a mano. Qui lo decide il `Ciclo` vero
+    # (`_riconosci_voce`: `altro`, `minori.piu_protetto`, la compagnia) con le impronte sintetiche
+    # di prova_voci_famiglia, e il tool passa da `ToolRegistry.call` con il livello del ciclo.
+    # Carlo qui è un tutore che **non** amministra (solo nel registro finto di questa prova);
+    # Luca, 14 anni, ha la voce revocata e Carlo chiede di tenerla di nuovo
+    from calliope.tools.registry import ToolRegistry
+    from calliope.tools.spec import ToolContext
+
+    def ciclo_tutore():
+        rg, scx, cx, regole_c = VF.ciclo_finto()
+        cx.speaker = VF.VoceFinta()
+        rg.cfg.turn_log_dir = str(tmp / "registro-tutore")
+        rg.cfg.conserva_voce = True
+        rg.users["Carlo"].admin = False
+        luca = rg.users["Luca"]
+        luca.voce_conservata, luca.voce_conservata_da = False, "carlo-id"
+        cx_cons = C.Conservazione(rg.cfg, rg, log=lambda m: None)
+        cx_cons._ruotata_il = datetime.date.today()
+        tr = ToolRegistry()
+        for s_ in conserva_specs():
+            tr.register(s_)
+        tc = ToolContext(cfg=rg.cfg, speakers=rg, speaker_ctx=scx, speaker=None,
+                         conserva=cx_cons)
+        return rg, scx, cx, tr, tc, luca
+
+    def chiama(tr, tc, scx, persona="Luca", azione="consenso_voce"):
+        tc.turno += 1
+        tc.regole = []
+        return json.loads(tr.call("dati_conservati", {"azione": azione, "persona": persona},
+                                  tc, scx.current_level))
+
+    def domanda_carlo(cx, scx, tr, tc):
+        """Carlo, riconosciuto dalla voce in una frase intera, chiede di tenere la voce di Luca."""
+        VF.riconosci(cx, scx, VF.frase_con(0.72, 0.20), 2.5)
+        return chiama(tr, tc, scx)
+
+    rg, scx, cx, tr, tc, luca = ciclo_tutore()
+    q = domanda_carlo(cx, scx, tr, tc)
+    verifica("ciclo vero: Carlo (tutore, non amministra) dalla voce → la domanda sulla voce di "
+             "Luca", scx.current_speaker == "Carlo" and scx.identified_by == "voce"
+             and scx.current_level == "familiare" and q["ok"] is False
+             and q.get("in_sospeso", {}).get("argomenti") == {"azione": "consenso_voce",
+                                                              "persona": "Luca"}, str(q))
+    n_, how_, lv_, v_, _t = VF.riconosci(cx, scx, VF.frase_con(0.45, 0.20), 0.6,
+                                         in_session=True, prev="Carlo")
+    r = chiama(tr, tc, scx)
+    verifica("ciclo vero: il «sì» breve di Carlo (0,45, Luca lontano) → breve_impronta_ok, "
+             "consenso dato da ToolRegistry.call con la regola conferma_breve_tutore",
+             (n_, how_) == ("Carlo", "breve") and _bc_di(scx) and not scx.conferma_breve
+             and r.get("ok") is True and luca.voce_conservata is True
+             and luca.voce_conservata_da == "carlo-id" and "conferma_breve_tutore" in tc.regole,
+             f"{n_} {how_} {r} {tc.regole}")
+    # La revoca, allo stesso modo
+    VF.riconosci(cx, scx, VF.frase_con(0.72, 0.20), 2.5)
+    VF.riconosci(cx, scx, VF.frase_con(0.46, 0.15), 0.7, in_session=True, prev="Carlo")
+    r = chiama(tr, tc, scx, azione="revoca_voce")
+    verifica("ciclo vero: la revoca col «sì» breve di Carlo da ToolRegistry.call",
+             r.get("ok") is True and luca.voce_conservata is False
+             and "conferma_breve_tutore" in tc.regole, f"{r} {tc.regole}")
+
+    # I contrari, ognuno col suo ciclo: la domanda di Carlo è aperta, poi la frase breve
+    contrari_ciclo = {
+        # Il caso della revisione: Luca accanto dice «sì», più vicino a sé (0,47) che a Carlo
+        # (0,44). La frase breve vale Carlo (chi parlava; 0,47 è sotto la soglia piena, quindi
+        # `piu_protetto` non la sposta), ma il ciclo vede che un altro profilo è più vicino
+        "il «sì» di Luca accanto (Luca 0,47, Carlo 0,44: vale Carlo, `altro` dal ciclo)":
+            ((0.44, 0.47), 0.6, False, ("Carlo", "breve")),
+        # Luca sopra la soglia piena: `piu_protetto` sposta la frase breve su di lui
+        "Luca sopra soglia (0,50, Carlo 0,44: vale Luca, il minore da solo)":
+            ((0.44, 0.50), 0.6, False, ("Luca", "conversazione")),
+        # In compagnia una frase breve non vale nessuno: ospite
+        "in compagnia, il «sì» breve di Carlo (0,45) non vale nessuno":
+            ((0.45, 0.20), 0.6, True, (None, None)),
+        # In compagnia, la zona grigia: ToolRegistry.call vuole la voce nella frase
+        "in compagnia, Carlo nella zona grigia (0,45 in una frase intera)":
+            ((0.45, 0.20), 2.0, True, ("Carlo", "conversazione")),
+    }
+    for nome_c, ((s_c, s_l), durata, in_comp, atteso) in contrari_ciclo.items():
+        rg, scx, cx, tr, tc, luca = ciclo_tutore()
+        domanda_carlo(cx, scx, tr, tc)
+        if in_comp:
+            cx._compagnia_attiva = lambda: True
+        n_, how_, lv_, v_, _t = VF.riconosci(cx, scx, VF.frase_con(s_c, s_l), durata,
+                                             in_session=True, prev="Carlo")
+        r = chiama(tr, tc, scx)
+        verifica(f"ciclo vero, contrario: {nome_c} → niente consenso",
+                 (n_, how_) == atteso and r.get("ok") is False and luca.voce_conservata is False
+                 and not _bc_di(scx) and "conferma_breve_tutore" not in tc.regole
+                 and "voce_consenso" not in tc.regole, f"{n_} {how_} {lv_} {r}")
+        if "zona grigia" in nome_c:
+            verifica("…fermata da ToolRegistry.call prima del tool (compagnia_voce_nella_frase)",
+                     "compagnia_voce_nella_frase" in tc.regole, f"{tc.regole} {r}")
+        if "il «sì» di Luca accanto" in nome_c:
+            verifica("…il ciclo ha visto Luca più vicino (punteggio di Carlo ~0,44 sopra la "
+                     "soglia della conferma breve: decide solo `altro`)",
+                     scx.punteggio is not None and abs(scx.punteggio - 0.44) < 0.01
+                     and scx.punteggio >= rg.cfg.speaker_conferma_breve_soglia,
+                     str(scx.punteggio))
 
     # ───────── la maggiore età: il sì dei tutori non vale più (16/10, issue #108) ─────────
     # Nina compie 18 anni: il sì dei tutori valeva finché era minore. La prima rotazione cancella
@@ -788,12 +910,27 @@ try:
              and not any("Nina" in x for x in righe_log), f"{rm} {righe_log}")
     verifica("contrario: le registrazioni degli adulti col consenso restano",
              cm.registrazioni("p-adu") == 1 and cm.registrazioni("p-amm") == 1, str(rm))
-    grande.voce_conservata, grande.voce_conservata_da = True, "p-nin"
-    sc_m.current_speaker = "Nina"
+    # Il suo sì da adulta, come lo scrive il tool (issue #114 punto 2): la domanda, poi il «sì»
+    # con la sua voce. Il tool salva `voce_conservata_da` vuoto (None = l'ha deciso lei)
+    grande.voce_conservata, grande.voce_conservata_da = True, "p-mar"     # il sì dei tutori
+    sc_m.current_speaker, sc_m.identified_by = "Nina", "voce"
+    ctx_m.turno = 5
+    q = _dati_conservati(ctx_m, "consenso_voce")
+    ctx_m.turno, ctx_m.regole = 6, []
+    r = _dati_conservati(ctx_m, "consenso_voce")
+    verifica("maggiorenne: il suo sì col tool (domanda, poi «sì»), salvato senza "
+             "`voce_conservata_da` (l'ha deciso lei)",
+             q["ok"] is False and "in_sospeso" in q and r["ok"]
+             and grande.voce_conservata is True and grande.voce_conservata_da is None
+             and "voce_consenso" in ctx_m.regole, f"{q} {r}")
     r = _dati_conservati(ctx_m, "stato")
     verifica("…e il suo sì da adulta vale (la frase dei genitori non c'è più)",
              "voce sì" in r["conferma"] and C.consenso_voce(grande, reg_m)
              and not _scaduta(grande), str(r))
+    # L'altra forma accettata: il suo id in `voce_conservata_da` (il tool non la scrive)
+    grande.voce_conservata_da = "p-nin"
+    verifica("…e vale anche col suo id in `voce_conservata_da`",
+             C.consenso_voce(grande, reg_m) and not _scaduta(grande))
 
     # ───────── la registrazione di un minore: il consenso alla voce implicito (16/10) ─────────
     # Decisione di chi amministra (16/10, 0031 aggiornata): registrando un minore chi amministra

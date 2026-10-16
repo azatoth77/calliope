@@ -589,8 +589,10 @@ class SpeakerContext:
         self.conferma_breve: bool = False
         # Le stesse condizioni di `conferma_breve` senza chiedere che la persona amministri
         # (16/10, issue #108): un tutore conferma con un «sì» breve il consenso alla voce di un
-        # suo figlio (tools/conserva.py, che controlla anche che sia tutore di quel minore)
-        self.breve_compatibile: bool = False
+        # suo figlio (tools/conserva.py, che controlla anche che sia tutore di quel minore).
+        # Fino al 16/10 si chiamava `breve_compatibile`, che è un modo della misura del «sì»
+        # breve (si_breve.py) e vuol dire un'altra cosa: lì solo chi amministra (issue #114)
+        self.breve_impronta_ok: bool = False
         self.sfida = None
         self.sfida_superata: bool = False
         # Voci di famiglia (07/10, ciclo._confronta_voce). `incerta`: (adulto, minore) quando
@@ -648,10 +650,10 @@ class SpeakerContext:
         prof = self.registry.get(name) if name else None
         soglia = float(getattr(self.registry.cfg, "speaker_conferma_breve_soglia", 0.40))
         self.punteggio = score
-        self.breve_compatibile = bool(how == "breve" and name and name == self.voce_sicura
+        self.breve_impronta_ok = bool(how == "breve" and name and name == self.voce_sicura
                                       and prof is not None and score is not None
                                       and score >= soglia and not altro_piu_vicino)
-        self.conferma_breve = bool(self.breve_compatibile and prof.admin)
+        self.conferma_breve = bool(self.breve_impronta_ok and prof.admin)
         self.sfida_superata = False
 
     @property

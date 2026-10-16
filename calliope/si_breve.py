@@ -18,9 +18,10 @@ sfida superata), una riga nel campo `si_breve` del turno:
   ha superato la sfida;
 - `modo`: con che cosa si è saputo chi parla in questa frase. `voce` (riconosciuta sopra
   soglia, frase intera), `breve_compatibile` (il «sì» breve di chi amministra con l'impronta
-  compatibile, regola `conferma_breve`), `breve` (frase sotto `speaker_min_voice_s` che vale
-  la conversazione), `zona_grigia` (anche la continuità e la voce incerta con un minore),
-  `sfida`, `scritto` (uno schermo personale), `nessuno`;
+  compatibile, regola `conferma_breve`; non il «sì» breve di un tutore che non amministra, che
+  in `SpeakerContext` si chiama `breve_impronta_ok`: issue #114), `breve` (frase sotto
+  `speaker_min_voice_s` che vale la conversazione), `zona_grigia` (anche la continuità e la
+  voce incerta con un minore), `sfida`, `scritto` (uno schermo personale), `nessuno`;
 - `parole` (quante, mai quali) e `forma_chiusa` (la frase è tutta un consenso: «sì», «vai»);
 - `rischi`: `compagnia` (più voci vicino al satellite), `voci_sconosciute` (in compagnia, voci
   che nessun profilo riconosce: anche la TV, che un filtro suo non ce l'ha ancora), `incerta`

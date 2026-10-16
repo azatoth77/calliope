@@ -2298,7 +2298,7 @@ class Ciclo:
         t.speaker_name = None
         t.prev_how, speaker_ctx.identified_by = speaker_ctx.identified_by, None
         speaker_ctx.conferma_breve = speaker_ctx.sfida_superata = False   # valgono una frase
-        speaker_ctx.breve_compatibile = False                             # (16/10, #108)
+        speaker_ctx.breve_impronta_ok = False                             # (16/10, #108)
         speaker_ctx.incerta = speaker_ctx.minore_vicino = None            # anche queste
         speaker_ctx.minore_incerto = None                                 # (09/10)
         speaker_ctx.compagnia = False                                     # e questa (09/10)
