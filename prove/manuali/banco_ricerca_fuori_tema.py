@@ -228,11 +228,15 @@ def main():
     ap.add_argument("--scenari", default="fuori,dentro,notizie")
     ap.add_argument("--num-ctx", type=int, default=0,
                     help="il num_ctx del modello già caricato (un altro lo fa ricaricare)")
+    ap.add_argument("--pertinenza", default="attiva", choices=("spenta", "ombra", "attiva"),
+                    help="ricerca_pertinenza (di serie in Calliope «ombra»; qui «attiva», come le "
+                         "misure del 16/10)")
     ap.add_argument("--url", default="", help="un altro Ollama (di prova) al posto di quello "
                                                "del profilo")
     a = ap.parse_args()
     cfg = load_config()
     cfg.online = True
+    cfg.ricerca_pertinenza = a.pertinenza
     if a.url:
         cfg.llm_native_url = a.url
     if a.num_ctx:

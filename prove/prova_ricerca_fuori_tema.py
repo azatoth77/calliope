@@ -153,6 +153,24 @@ dati = b.backend.visti[-1]
 verifica("notizie nell'elenco: il numero del fatto e il tema",
          "«notizia 2» con notizie; «sciopero treni» con notizie" in dati
          and "ricerca_recente" in b.rules_fired(), dati[-900:])
+verifica("notizie: «restano qui sopra» invece di «non sono più qui» (le notizie restano in busta)",
+         "le notizie appena lette sono ancora qui sopra" in dati
+         and "quei risultati non sono più qui" not in dati, dati[-900:])
+verifica("spinta verso notizie: tema o numero del fatto, non «una domanda»",
+         "Chiama notizie con il tema o con fatto = il numero della notizia"
+         in brain_mod.RICERCA_NUDGE.format(tool="notizie", come=brain_mod.RICERCA_COME["notizie"])
+         and "una domanda" not in brain_mod.RICERCA_COME["notizie"])
+b2 = brain(reg_n, [[("text", "Ok.")]])
+b2.history = (turno("Novità sullo sciopero dei treni?", "Secondo due testate…",
+                    call(0, "notizie", {"tema": "sciopero treni"}))
+              + turno("Che ore sono?", "Le 19.") + turno("Grazie", "Prego.")
+              + turno("Il mito di Orione", "Orione…",
+                      call(1, "biblioteca_cerca", {"domanda": "mito di Orione"})))
+"".join(b2.stream_reply("E poi?", "familiare"))
+dati2 = b2.backend.visti[-1]
+verifica("misti: la biblioteca non c'è più, delle notizie titoli e testate",
+         "quei risultati non sono più qui, delle notizie restano qui sopra titoli e testate"
+         in dati2, dati2[-900:])
 verifica("notizie: ricerca_recente per il ciclo («approfondisci» al modello)",
          b.ricerca_recente() == {"tool": "notizie", "domanda": "notizia 2"},
          str(b.ricerca_recente()))
@@ -193,6 +211,43 @@ verifica("pertinenza, contrario: argomento nuovo nella frase, pertinente",
 verifica("pertinenza: niente con cui confrontare → None",
          pertinenza.misura(testi_s, "Dimmi di più", []) is None
          and pertinenza.misura([], "Chi era Cavour?", []) is None)
+# I falsi «fuori tema» della revisione della PR #115 (scratchpad rev115script): ora pertinenti
+METEO = [("user", "Che tempo fa a Milano?"), ("assistant", "A Milano oggi c'è sole con 22 gradi.")]
+PARTITA = [("user", "Chi ha vinto ieri sera?"),
+           ("assistant", "Ha vinto l'Inter due a uno sul Napoli.")]
+ALTRO = [("user", "Metti un timer di 5 minuti"), ("assistant", "Fatto, timer di cinque minuti.")]
+CASI_REVISORE = [
+    ("seguito breve «e domani?» dopo il meteo, una parola della storia",
+     ["Previsioni meteo Milano: martedì pioggia e temporali, minime 12 gradi"], "e domani?", METEO),
+    ("«e adesso chi è primo?»: primo e primi",
+     ["Serie A: nerazzurri primi dopo la settima giornata"], "e adesso chi è primo?", PARTITA),
+    ("sigla breve nella frase: PIL", ["PIL: cos'è e come si calcola"], "Cos'è il PIL?", ALTRO),
+    ("sigla breve: NBA", ["Risultati NBA della notte"], "E la NBA?", ALTRO),
+    ("nome breve con la maiuscola: Eco", ["Umberto Eco, semiologo e scrittore"], "Chi era Eco?",
+     ALTRO),
+    ("sigla con cifra: F1", ["F1, GP di Monza: vince Leclerc"], "Chi ha vinto in F1?", []),
+    ("flessione: gatti e gatto", ["Il gatto dorme fino a sedici ore al giorno"],
+     "Quanto dormono i gatti?", []),
+    ("flessione: Roma e romano", ["L'impero romano raggiunse la massima estensione sotto Traiano"],
+     "Quando era più grande l'impero di Roma?", []),
+    ("flessione: vinto e vince", ["Leclerc vince a Monza"], "Chi ha vinto?", []),
+    ("nome storpiato da Whisper: Siner e Sinner", ["Jannik Sinner vince a Shanghai"],
+     "Come è andato Siner?", []),
+    ("inglese con lo stesso nome: Orion e Orione",
+     ["Orion (mythology) Orion was a giant huntsman in Greek mythology, son of Poseidon"],
+     "Approfondiamo questo argomento", STORIA_ORIONE),
+]
+for nome, testi, frase, storia in CASI_REVISORE:
+    m = pertinenza.misura(testi, frase, storia)
+    verifica(f"pertinenza, contrario dei falsi fuori tema: {nome}",
+             m is not None and m["pertinenti"] == m["totale"], str(m))
+# Le flessioni non si allargano ai nomi simili: Orione e Orionyx restano diversi
+verifica("pertinenza: Orione e Orionyx non sono la stessa parola, Orione e Orion sì",
+         not pertinenza.stessa("orione", "orionyx") and pertinenza.stessa("orione", "orion")
+         and not pertinenza.stessa("mito", "modelli"))
+verifica("pertinenza: le parole brevi con la maiuscola in testa non sono nomi",
+         pertinenza.parole("Chi era Eco? Che bello") == {"eco", "bello"},
+         str(pertinenza.parole("Chi era Eco? Che bello")))
 verifica("pertinenza: una sola parola in comune con la storia non basta",
          pertinenza.misura(["Gigante buono, un film"], "e poi?", STORIA_ORIONE)["pertinenti"] == 0)
 
@@ -215,9 +270,27 @@ def ctx_web(risultati, frase, storia):
     return c
 
 
+# Di serie in ombra (revisione della PR #115): solo nel registro dei turni, niente al modello
+verifica("config: ricerca_pertinenza di serie «ombra»", Config().ricerca_pertinenza == "ombra")
 c = ctx_web(STARTUP, "Approfondiamo questo argomento", STORIA_ORIONE)
 res = json.loads(reg_n.call("web_cerca", {"domanda": "Orionyx storia"}, c, "familiare"))
-verifica("web_cerca: «pertinenti» 0 su 2 con la nota, regola ricerca_fuori_tema",
+verifica("ombra: niente «pertinenti» al modello, regole ricerca_fuori_tema_ombra e misurata",
+         "pertinenti" not in res and "pertinenti" not in res.get("cosa_fare", "")
+         and "ricerca_fuori_tema_ombra" in c.regole and "ricerca_pertinenza_misurata" in c.regole
+         and "ricerca_fuori_tema" not in c.regole, str(c.regole))
+c = ctx_web(MITO, "Approfondiamo questo argomento", STORIA_ORIONE)
+reg_n.call("web_cerca", {"domanda": "mito di Orione"}, c, "familiare")
+verifica("ombra, contrario: risultati sul mito, misurata senza fuori tema",
+         "ricerca_pertinenza_misurata" in c.regole and "ricerca_fuori_tema_ombra" not in c.regole)
+cfg.ricerca_pertinenza = "spenta"
+c = ctx_web(STARTUP, "Approfondiamo questo argomento", STORIA_ORIONE)
+res = json.loads(reg_n.call("web_cerca", {"domanda": "Orionyx storia"}, c, "familiare"))
+verifica("spenta: niente misura né regole", "pertinenti" not in res
+         and not [r for r in c.regole if r.startswith("ricerca_")], str(c.regole))
+cfg.ricerca_pertinenza = "attiva"
+c = ctx_web(STARTUP, "Approfondiamo questo argomento", STORIA_ORIONE)
+res = json.loads(reg_n.call("web_cerca", {"domanda": "Orionyx storia"}, c, "familiare"))
+verifica("attiva: «pertinenti» 0 su 2 con la nota, regola ricerca_fuori_tema",
          str(res.get("pertinenti", "")).startswith("0 su 2 (nessun risultato")
          and "ricerca_fuori_tema" in c.regole, str(res)[:400])
 busta = json.loads(provenienza.racchiudi_risultato("web", json.dumps(res, ensure_ascii=False)))
@@ -274,6 +347,26 @@ c.biblioteca, c.regole = BibliotecaFinta(MITO), []
 res = json.loads(reg_n.call("biblioteca_cerca", {"domanda": "mito di Orione"}, c, "familiare"))
 verifica("biblioteca_cerca, contrario: voci sul mito, 2 su 2 e nessuna regola",
          res.get("pertinenti") == "2 su 2" and "ricerca_fuori_tema" not in c.regole, str(res)[:300])
+
+# La riga di `calliope stato --turni` (revisione della PR #115: conta davvero le regole)
+turni = [{"regole": ["ricerca_pertinenza_misurata", "ricerca_fuori_tema_ombra"]},
+         {"regole": ["ricerca_pertinenza_misurata"]}, {"regole": ["ricerca_recente"]},
+         {"regole": ["ricerca_pertinenza_misurata", "ricerca_fuori_tema"]}]
+r = pertinenza.riassunto(turni)
+riga = pertinenza.testo(r, "ombra")
+verifica("stato --turni: misurate 3, fuori tema 1 in ombra e 1 detta",
+         r == {"misurate": 3, "fuori_tema": 1, "fuori_tema_ombra": 1}
+         and "2 «fuori tema» su 3" in riga and "in ombra 1" in riga, riga)
+verifica("stato --turni: senza ricerche misurate lo dice",
+         "nessuna ricerca misurata" in pertinenza.testo(pertinenza.riassunto([]), "ombra"))
+import inspect  # noqa: E402
+from calliope import stato as stato_mod  # noqa: E402
+verifica("stato --turni stampa la riga della pertinenza",
+         "pertinenza.testo(pert_r" in inspect.getsource(stato_mod))
+from calliope.tools.conversazioni import FONTI_TIPO  # noqa: E402
+verifica("conversazioni: la fonte delle notizie senza «tipo «notizie»»",
+         "tipo «notizie»" not in FONTI_TIPO[("web_cerca", "notizie")]
+         and "notizie" in FONTI_TIPO[("web_cerca", "notizie")])
 
 print(f"\n{errori} errori." if errori else "\nTutto ok.")
 sys.exit(1 if errori else 0)

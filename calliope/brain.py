@@ -694,9 +694,9 @@ RICERCA_ELENCO_MAX = 4
 # Orione, una startup dal nome simile riferita per intero), e i nomi e le cifre dei risultati
 # usciti dalla storia non si citano a memoria
 RICERCA_MSG = ("Dati del turno: in questa conversazione hai cercato (dalla più recente) "
-               "{elenco}, e hai riferito quello che hai trovato; quei risultati non sono più "
-               "qui per intero, e di quelli che non hai più davanti non citare nomi, cifre o "
-               "dichiarazioni a memoria. Se ora chi "
+               "{elenco}, e hai riferito quello che hai trovato; {restano}, e dei risultati "
+               "che non hai più davanti non citare nomi, cifre o dichiarazioni a memoria. Se "
+               "ora chi "
                "parla vuole approfondire, sapere di più o torna a una di queste cose, richiama "
                "il tool della ricerca di quell'argomento{notizie} con una domanda breve e "
                "mirata, con i nomi che hai detto, e rispondi con quello che trovi: non dire che "
@@ -704,6 +704,12 @@ RICERCA_MSG = ("Dati del turno: in questa conversazione hai cercato (dalla più 
                "ciò di cui parlavate, non riferirli: dillo e chiedi cosa cercare.{criterio} Se "
                "parla d'altro (agenda, liste, casa, una chiacchiera), questa riga non conta.")
 RICERCA_NOTIZIE = " (le notizie con notizie)"
+# Cosa resta nella storia (revisione della PR #115): i risultati di internet e della biblioteca
+# escono a risposta finita (WEB_TOLTO, compressione), le notizie restano in busta, intere il
+# turno dopo e poi con titoli e testate (notizie/contesto.py)
+RICERCA_RESTANO_ALTRI = "quei risultati non sono più qui"
+RICERCA_RESTANO_NOTIZIE = "delle notizie restano qui sopra titoli e testate"
+RICERCA_RESTANO_NOTIZIE_ORA = "le notizie appena lette sono ancora qui sopra"
 # Il criterio per scegliere la fonte di una ricerca nuova (caso vero della DGX, 09/10 alle
 # 18:47: tre biblioteca_cerca per «tecniche di produzione casalinga della birra», passaggi fuori
 # tema, e internet solo dopo averlo proposto): solo con tutti e due i tool disponibili
@@ -720,9 +726,13 @@ RICERCA_DOVE = {"web_cerca": "su internet", "biblioteca_cerca": "nella bibliotec
                 "notizie": "nelle notizie"}
 # «Non ho altre informazioni» senza aver cercato, con la ricerca disponibile: la frase non si
 # dice e il modello riceve la spinta, una volta (poi decide lui)
-RICERCA_NUDGE = ("Hai risposto di non avere altre informazioni senza cercare. Chiama {tool} con "
-                 "una domanda breve e mirata su quello che chiede chi parla, poi rispondi con "
-                 "quello che trovi; se non trovi niente, dillo.")
+RICERCA_NUDGE = ("Hai risposto di non avere altre informazioni senza cercare. Chiama {tool} "
+                 "{come} su quello che chiede chi parla, poi rispondi con quello che trovi; se "
+                 "non trovi niente, dillo.")
+# Come richiamare: notizie non ha una domanda ma il tema o il numero del fatto (revisione della
+# PR #115)
+RICERCA_COME = {"notizie": "con il tema o con fatto = il numero della notizia"}
+RICERCA_COME_DI_SOLITO = "con una domanda breve e mirata"
 
 
 # «Te lo scrivo qui nella conversazione» detto a voce (12/10, DGX col 26B, dopo il rifiuto di
@@ -4107,7 +4117,15 @@ class Brain:
             pezzi.append(f"«{detto}» con {detta}"
                          + ("" if disponibile(tool) else " (adesso non disponibile)"))
         criterio = (RICERCA_CRITERIO if all(disponibile(t) for t in RICERCA_FONTI) else "")
+        restano = []
+        if any(fonte(r)[0] != "notizie" for r in elenco):
+            restano.append(RICERCA_RESTANO_ALTRI)
+        notizie = [r for r in elenco if fonte(r)[0] == "notizie"]
+        if notizie:
+            restano.append(RICERCA_RESTANO_NOTIZIE_ORA if min(r["turni"] for r in notizie) == 0
+                           else RICERCA_RESTANO_NOTIZIE)
         msg = RICERCA_MSG.format(elenco="; ".join(pezzi), criterio=criterio,
+                                 restano=", ".join(restano),
                                  notizie=RICERCA_NOTIZIE if disponibile("notizie") else "")
         if recente:
             return msg, primo, "ricerca_recente"
@@ -5028,7 +5046,8 @@ class Brain:
                 self._rule("spinta_ricerca")
                 print(f"   [TOOL] «non ho altre informazioni» senza cercare con {tool}, non lo "
                       f"dico: «{self.cita_in_console(held)}»", flush=True)
-                tail = [{"role": "system", "content": RICERCA_NUDGE.format(tool=tool)}]
+                tail = [{"role": "system", "content": RICERCA_NUDGE.format(
+                    tool=tool, come=RICERCA_COME.get(tool, RICERCA_COME_DI_SOLITO))}]
                 continue
             if held and self._held_kind == "non_so" and stanza_hold:
                 # «Non ho informazioni…» senza aver cercato nella stanza: non si dice; Brain

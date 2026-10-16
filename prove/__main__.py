@@ -463,6 +463,8 @@ LEGAMI = [
     ("calliope/tools/builtin.py", ["prova_ricerca_fuori_tema.py"]),
     ("calliope/brain.py", ["prova_ricerca_fuori_tema.py", "prova_web.py"]),
     ("calliope/provenienza.py", ["prova_ricerca_fuori_tema.py"]),
+    ("calliope/stato.py", ["prova_ricerca_fuori_tema.py"]),
+    ("calliope/tools/conversazioni.py", ["prova_ricerca_fuori_tema.py", "prova_conversazioni.py"]),
     # La conversazione di stanza (13/10, passo 1): il tool, il pacchetto, il lato satellite
     ("calliope/tools/stanza.py", ["prova_stanza.py", "prova_stanza_cerca.py",
                                   "prova_stanza_tenuta.py"]),

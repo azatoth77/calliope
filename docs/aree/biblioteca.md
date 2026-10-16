@@ -539,32 +539,61 @@ nella storia). Fatto:
   delle ricerche c'è anche dopo le notizie, e «approfondisci» dopo le notizie va al modello
   (`approfondisci_al_modello`) invece di rifare la biblioteca con la domanda di prima. Il criterio
   biblioteca/internet resta sulle due fonti (`RICERCA_FONTI`).
-- **Misura di pertinenza** (`calliope/pertinenza.py`, solo libreria standard): un dato per il
-  modello, non un filtro (principio 10). Un risultato è «pertinente» se ha almeno una parola piena
-  in comune con la frase di chi parla, o almeno due con gli ultimi quattro messaggi della
-  conversazione (`ToolContext.storia`); la domanda composta dal modello non conta, perché è quella
-  che può uscire storpiata. Parole piene: da quattro lettere, senza accenti, fuori da un elenco di
-  parole vuote e di cornice («approfondiamo», «argomento», «dimmi»…), confrontate sulle prime
-  cinque lettere. `web_cerca` e `biblioteca_cerca` scrivono `pertinenti: "0 su 2 (nessun risultato
-  ha parole in comune con ciò di cui state parlando: probabilmente parlano d'altro)"`, fuori dalla
-  busta dei dati non fidati (`provenienza.CONTROLLO`), e la regola `ricerca_fuori_tema` quando è
-  0 (si conta in `calliope stato --turni`). Senza niente con cui confrontare (frase di sole parole
-  vuote, nessun turno prima) il campo non c'è. Il `cosa_fare` dei due tool dice di non riferire i
-  risultati fuori tema e di chiedere cosa cercare; quello della biblioteca risponde a memoria solo
-  se è sicura (il caso del lago di Garda del 26/09 resta), altrimenti dice che non ha trovato.
+- **Misura di pertinenza** (`calliope/pertinenza.py`, solo libreria standard): un dato, mai un
+  filtro (principio 10), con l'interruttore `ricerca_pertinenza` (sezione web): **ombra di serie**
+  (revisione della PR #115), «attiva» o «spenta». Un risultato è «pertinente» se ha almeno una
+  parola piena in comune con la frase di chi parla, o con gli ultimi quattro messaggi della
+  conversazione (`ToolContext.storia`): due, o una sola quando la frase è breve (fino a cinque
+  parole) e ha parole sue («e domani?» dopo il meteo, «e adesso chi è primo?»). La domanda
+  composta dal modello non conta, perché è quella che può uscire storpiata. Parole piene: da
+  quattro lettere fuori da un elenco di parole vuote e di cornice («approfondiamo», «argomento»,
+  «dimmi»…), più le sigle («PIL», «NBA», «F1») e i nomi brevi con la maiuscola («Eco»). Stessa
+  parola: senza le vocali finali («gatti» e «gatto», «Orione» e «Orion»), una che continua l'altra
+  con una vocale («Roma» e «romano», non «Orione» e «Orionyx»), l'ultima lettera della radice
+  («vinto» e «vince»), una lettera di differenza da cinque lettere («Siner» di Whisper e
+  «Sinner»). Restano falsi «fuori tema» che per parole non si vedono: sinonimi («macchina» e
+  «vetture»), sigle sciolte nei risultati («IVA» e «imposta sul valore aggiunto»), l'inglese senza
+  nomi in comune, un seguito senza nomi («e domani?» con risultati che non nominano la città),
+  «e ieri chi ha vinto?» con «il campione italiano batte lo spagnolo». Per questo resta in ombra
+  finché non si rileggono i turni veri.
+  - **In ombra**: niente al modello; il registro dei turni ha `ricerca_pertinenza_misurata` a ogni
+    ricerca misurata e `ricerca_fuori_tema_ombra` quando è 0. **Attiva**: in più `web_cerca` e
+    `biblioteca_cerca` scrivono `pertinenti: "0 su 2 (nessun risultato ha parole in comune con ciò
+    di cui state parlando: probabilmente parlano d'altro)"`, fuori dalla busta dei dati non fidati
+    (`provenienza.CONTROLLO`), con la regola `ricerca_fuori_tema`, e il `cosa_fare` rimanda a quel
+    campo. Senza niente con cui confrontare (frase di sole parole vuote, nessun turno prima) non si
+    misura.
+  - **`calliope stato --turni`**: la riga «Pertinenza delle ricerche (ombra): N «fuori tema» su M
+    turni con ricerche misurate (… %; in ombra …, detti al modello …)». Prima di «attiva»:
+    rileggere i turni con `ricerca_fuori_tema_ombra`.
+  - **Tempo** (portatile, revisione): 0,29 ms con 5 risultati di ~290 caratteri e la storia, ~3 ms
+    con 10 testi di ~3000 caratteri.
+  - Il `cosa_fare` dei due tool dice sempre di non riferire i risultati fuori tema e di chiedere
+    cosa cercare; quello della biblioteca risponde a memoria solo se è sicura (il caso del lago di
+    Garda del 26/09 resta), altrimenti dice che non ha trovato.
+- **Cosa resta nella storia** (revisione): la riga delle ricerche non dice più «non sono più qui»
+  delle notizie, che restano in busta (intere il turno dopo, poi titoli e testate): «le notizie
+  appena lette sono ancora qui sopra» o «delle notizie restano qui sopra titoli e testate». La
+  spinta su «non ho altre informazioni» verso `notizie` chiede il tema o il numero del fatto, non
+  «una domanda» (`RICERCA_COME`). La fonte dei turni archiviati con `web_cerca` delle notizie
+  (`conversazioni.FONTI_TIPO`) nomina `notizie`, o `web_cerca` dove notizie non c'è.
 - Alternative scartate come prima mossa: togliere in codice i risultati fuori tema (decide il
-  modello cosa è pertinente; si può fare dopo le misure); embedding sulla DGX (la misura per parole
-  basta per i casi visti e non aggiunge latenza: qualche decina di microsecondi).
+  modello cosa è pertinente; si può fare dopo le misure); embedding sulla DGX (latenza e un
+  modello in più; da riconsiderare se l'ombra mostra troppi falsi «fuori tema» per sinonimi).
 
-**Prove.** `prova_ricerca_fuori_tema` (a secco, ~1 s; su main non parte, manca `pertinenza.py`, e
-con quel solo modulo copiato 16 verifiche su 26 falliscono): testi senza «tipo notizie», la riga con e senza il tool notizie, notizie nell'elenco e in
-`ricerca_recente`, la misura (Orione e la startup 0 su 2, il mito 2 su 2, misti, una parola della
-frase basta, argomento nuovo, niente con cui confrontare, una parola sola della storia non basta),
-`pertinenti` nei due tool fuori dalla busta. `prova_web` aggiornata al nuovo testo.
+**Prove.** `prova_ricerca_fuori_tema` (a secco, ~1 s; su main non parte, manca `pertinenza.py`):
+testi senza «tipo notizie», la riga con e senza il tool notizie, notizie nell'elenco e in
+`ricerca_recente`, «restano qui sopra» con le notizie e i casi misti, la spinta verso notizie, la
+misura (Orione e la startup 0 su 2, il mito 2 su 2, misti, una parola della frase basta, argomento
+nuovo, niente con cui confrontare, una parola sola della storia non basta) e, come contrari dei
+falsi «fuori tema» della revisione, «e domani?», «e adesso chi è primo?», PIL, NBA, Eco, F1,
+gatti/gatto, Roma/romano, vinto/vince, Siner/Sinner, Orion/Orione; i tre modi (ombra di serie: solo
+regole; spenta: niente; attiva: `pertinenti` fuori dalla busta), la riga di `stato --turni`, la
+fonte delle notizie nell'archivio. `prova_web` aggiornata al nuovo testo.
 
 **Banco col modello** (`prove/manuali/banco_ricerca_fuori_tema.py`, scenari `fuori`, `dentro` e
 `notizie`, criterio della issue ≥ 9/10 ciascuno). Sul portatile con **gemma4 e4b** (non il 26B
-dei casi veri), 5 giri, prima (main) e dopo:
+dei casi veri), 5 giri, prima (main) e dopo con la misura attiva (`--pertinenza attiva`):
 
 | Scenario | Prima | Dopo |
 |---|---|---|

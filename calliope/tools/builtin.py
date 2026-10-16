@@ -1406,18 +1406,14 @@ def _biblioteca_cerca(ctx: ToolContext, domanda: str) -> dict:
                          "passaggi. Se i passaggi parlano d'altro, ignorali: rispondi con "
                          "quello che sai, se ne sei sicura, senza citare fonti; se non ne sei "
                          "sicura, di' che nella biblioteca non hai trovato niente su quello e "
-                         "chiedi cosa cercare (vedi «pertinenti», se c'è)."
+                         "chiedi cosa cercare."
                          + _WEB_DOPO_BIBLIOTECA.get(_web_disponibile(ctx), "")}
     # Quanti passaggi parlano di ciò di cui si parlava (16/10, issue #101, caso vero della DGX
     # del 15/10: «mito di Orione e la sua storia astronomica» → voci omonime, e il modello
     # rispondeva da sé sbagliando il mito): un dato per il modello, come per web_cerca
-    pert = pertinenza.misura([f"{p.titolo} {p.testo}" for p in found],
-                             getattr(ctx, "user_text", "") or "", getattr(ctx, "storia", None))
-    if pert is not None:
-        out["pertinenti"] = pertinenza.detta(pert) + (
-            f" ({pertinenza.NOTA_NESSUNO})" if pert["pertinenti"] == 0 else "")
-        if pert["pertinenti"] == 0:
-            note_rule(ctx, "ricerca_fuori_tema")
+    pertinenza.applica(ctx, out, [f"{p.titolo} {p.testo}" for p in found])
+    if "pertinenti" in out:
+        out["cosa_fare"] += " Quanti passaggi ne parlano lo dice «pertinenti»."
     if simple:
         out["stile"] = ("Spiega in modo semplice e chiaro, con parole adatte a un ragazzo "
                         "delle medie, magari con un esempio; niente termini difficili.")
