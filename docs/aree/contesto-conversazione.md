@@ -2290,12 +2290,19 @@ che crescono (4 708 → 4 920).
   della stanza col segno `_stanza`; nei turni dopo resta lì, uguale byte per byte. Con `eventi:
   attivo` il segno viene dall'evento `detto_persona` (campo `dati`, solo in memoria), come
   `_stanza`.
-- **Una versione nuova si aggiunge** dopo le vecchie (un ricordo in più, un avviso in più: la
-  cache resta). **Se la nuova toglie un ricordo** («dimentica», o un fatto che ne sostituisce uno
-  con lo stesso soggetto) le versioni vecchie escono e la nuova entra intera al turno in corso:
-  la cache si rompe una volta, dal posto della più vecchia (regola `dati_stabili_rifatti`, che la
+- **Ricordi**: un ricordo nuovo entra in un pezzo con **le sole voci nuove** (la cache resta).
+  **Se la nuova versione toglie un ricordo** («dimentica», o un fatto che ne sostituisce uno con
+  lo stesso soggetto) le versioni vecchie escono e la nuova entra intera al turno in corso: la
+  cache si rompe una volta, dal posto della più vecchia (regola `dati_stabili_rifatti`, che la
   guardia della cache conta come attesa). Un ricordo dimenticato non resta davanti al modello.
-  Avvisi scaduti: la versione di prima resta dov'era (era vera).
+- **Avvisi ai tutori e riassunto della stanza** sono testi interi, decisi a ogni turno dai loro
+  cancelli: per gli avvisi `Ciclo._avvisi_contesto` (solo a chi è riconosciuto dalla voce o dal
+  suo schermo, niente avvisi «sicurezza» di un minore sentito da poco, `nascondi_minori`); per
+  il riassunto la pausa per ospiti, «dimentica» della stanza, lo scambio finito. **Ogni cambio,
+  anche il testo vuoto, li rifà** (`dati_stabili_rifatti`). *(Storico, prima versione del ramo
+  fino alla revisione della PR #107 del 16/10: una versione nuova si aggiungeva e un testo vuoto
+  lasciava la vecchia, così un avviso «sicurezza» nascosto o il riassunto dopo «dimentica»
+  restavano davanti al modello, saltando i cancelli.)*
 - **Solo in memoria** (`Conversazione.dati_fissi`): `esporta` toglie il segno, l'archivio e il
   riassunto della compressione non li vedono; dopo un riavvio rientrano al primo turno. Un turno
   uscito dalla storia (taglio, compressione) se li porta via, e il blocco torna al turno in corso;
@@ -2303,7 +2310,8 @@ che crescono (4 708 → 4 920).
 - **In compagnia** (conversazione anonima condivisa) i ricordi sono di chi parla adesso: restano
   nei dati del turno come prima e i pezzi già nella storia escono (`dati_stabili_rifatti`).
 - La busta non cambia: il riassunto della stanza resta un dato non fidato e la politica lo vede
-  fra gli `esterni` anche nei turni dopo; gli avvisi restano testi di Calliope.
+  fra gli `esterni` nel turno in cui entra (anche senza righe della stanza visibili) e nei turni
+  dopo; gli avvisi restano testi di Calliope.
 - Nei dati del turno resta ciò che cambia a ogni turno: ora e chi parla (con tono, minore, parole
   incerte), presenti della stanza, foto, riferimenti, ricerche, proposta, rifiuti, stato degli
   eventi.
@@ -2350,7 +2358,19 @@ Calliope inattiva (`banco_dati_fissi.py`); il banco della scelta dei tool (#20) 
 i ricordi ora stanno più lontani dalla domanda (misura del 03/10). Si torna indietro con
 `dati_stabili_in_storia: false` nel file locale.
 
-Prove: `prova_dati_fissi` (nuova, livello 1, ~1 s: la cache, ricordo nuovo e dimenticato, mai su
+**Revisione della PR #107** (16/10 sera): oltre agli avvisi e al riassunto rifatti a ogni
+cambio (sopra), un ricordo nuovo porta solo sé stesso, un turno con un tool nella prova (dopo
+le due passate si riavvolge 183 token stimati, sotto il tetto), la misura della DGX divisa fra i
+turni dopo un tool e senza (il 15/10: cache persa in 19 turni su 21 dopo un tool, 43 su 72
+senza). **Proposta, non fatta**: le righe trovate dalla ricerca anticipata della stanza come
+pezzi stabili nella storia (fuori dal tetto, come le righe della stanza: una riga trovata una
+volta resta, e non si cerca di nuovo), così l'anticipo tornerebbe utile anche a chi amministra;
+da decidere con la crescita del contesto e la potatura.
+
+Prove: `prova_dati_fissi` (nuova, livello 1, ~1 s: la cache anche dopo un turno con un tool,
+ricordo nuovo da solo e dimenticato, avvisi rifatti a ogni cambio con l'avviso «sicurezza»
+nascosto, chi parla non riconosciuto e il contrario col codice di prima, riassunto tolto da
+«dimentica», pausa e scambio finito e visto dalla politica nel turno in cui entra, mai su
 disco, contrari, il tetto con la ricerca anticipata, le misure, `eventi: attivo` col contrario);
 `prova_stanza_cerca` (l'anticipo con `massimo`); `prova_latenza` (la causa rinominata);
 `prova_brain` (riferimento della casa e azione in sospeso: i ricordi ora stanno prima, nella

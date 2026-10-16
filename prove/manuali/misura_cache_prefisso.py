@@ -12,6 +12,8 @@ giorno):
   riletti nei registri di prima del 16/10) restano quasi fermi (crescono meno di 0,3 volte il
   contesto, cresciuto di almeno 100): è il segno del motore che riparte sempre dallo stesso
   checkpoint;
+- la cache persa divisa fra i turni **dopo un turno con un tool** della stessa voce (la richiesta
+  di prima è la seconda passata, più lunga) e quelli dopo un turno senza;
 - mediana del rapporto `riletti / riletti_stimati`, rilettura (`lettura_s`) mediana e p90, prima
   frase mediana e p90;
 - i **dati del turno** (`dati_turno_token`, dal 16/10) mediana, p90 e turni oltre il tetto, e i
@@ -84,12 +86,21 @@ def misura(turni: list[dict], pausa_s: float = 300.0) -> dict:
     # Il punto fisso, fra turni consecutivi della stessa voce
     coppie = fermi = 0
     ultimo: dict = {}
+    # La cache persa divisa fra i turni dopo un turno con un tool della stessa voce (la richiesta
+    # di prima è la seconda passata, con la chiamata e il risultato) e gli altri
+    dopo_tool = {"n": 0, "perse": 0}
+    senza_tool = {"n": 0, "perse": 0}
     for t in sorted(r, key=lambda x: str(x.get("inizio") or "")):
         q, chi = _quando(t), _chi(t)
         rip = _ripresi(t)
         tok = (t.get("contesto") or {}).get("token") if isinstance(t.get("contesto"), dict) \
             else None
         prec = ultimo.get(chi)
+        cp = latenza.cache_persa(t)
+        if cp is not None and prec and q is not None and prec["q"] is not None                 and q - prec["q"] <= pausa_s:
+            gruppo = dopo_tool if prec["tool"] else senza_tool
+            gruppo["n"] += 1
+            gruppo["perse"] += int(cp)
         if (prec and q is not None and prec["q"] is not None and q - prec["q"] <= pausa_s
                 and rip is not None and prec["rip"] is not None
                 and isinstance(tok, int) and isinstance(prec["tok"], int)
@@ -98,13 +109,14 @@ def misura(turni: list[dict], pausa_s: float = 300.0) -> dict:
             cresce = tok - prec["tok"]
             if cresce >= CRESCE and rip - prec["rip"] <= FERMO * cresce:
                 fermi += 1
-        ultimo[chi] = {"q": q, "rip": rip, "tok": tok}
+        ultimo[chi] = {"q": q, "rip": rip, "tok": tok, "tool": bool(t.get("tool"))}
     return {
         "risposte": len(r),
         "cache": {"n": len(persa), "perse": sum(persa),
                   "quota": round(sum(persa) / len(persa), 3) if persa else None},
         "riletti_su_stimati": {"n": len(rapporti), "mediana": latenza._med(rapporti)},
         "punto_fisso": {"coppie": coppie, "fermi": fermi},
+        "dopo_tool": dopo_tool, "senza_tool": senza_tool,
         "lettura": {"n": len(letture), "mediana": latenza._med(letture),
                     "p90": latenza._q(letture, .9)},
         "prima_frase": {"mediana": latenza._med(pf), "p90": latenza._q(pf, .9)},
@@ -124,6 +136,9 @@ def testo(nome: str, m: dict) -> str:
     righe = [f"{nome}: {m['risposte']} risposte",
              f"  cache del prefisso persa in {c['perse']} turni su {c['n']}"
              + (f" ({_n(100 * c['quota'], '{:.0f}')} %)" if c["quota"] is not None else ""),
+             f"  dopo un turno con un tool persa in {m['dopo_tool']['perse']} su "
+             f"{m['dopo_tool']['n']}, dopo un turno senza in {m['senza_tool']['perse']} su "
+             f"{m['senza_tool']['n']}",
              f"  riletti/stimati mediana {_n(rs['mediana'])} su {rs['n']} turni; punto fisso "
              f"in {pfx['fermi']} coppie di turni su {pfx['coppie']}",
              f"  rilettura mediana {_n(le['mediana'])} s, p90 {_n(le['p90'])} s; prima frase "

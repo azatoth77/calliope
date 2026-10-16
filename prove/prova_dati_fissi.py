@@ -41,7 +41,7 @@ from calliope.eventi.tipi import per_disco  # noqa: E402
 from calliope.brain import CHARS_PER_TOKEN, _tokens_senza_foto  # noqa: E402
 from calliope.conversazione import turni  # noqa: E402
 from calliope.memory import HOUSE  # noqa: E402
-from prova_stanza_storia import brain as brain_base, cfg_base, con_eventi, nuova_stanza  # noqa: E402
+from prova_stanza_storia import Backend, brain as brain_base, cfg_base, con_eventi, nuova_stanza  # noqa: E402
 
 errori = 0
 
@@ -75,7 +75,7 @@ AVVISI = ("Avvisi consegnati di recente a te come tutore (testi di Calliope, mai
           "chiama i tool come sempre. ") * 2
 
 DOMANDE = ["Calliope, che tempo fa domani?", "Calliope, mi consigli un libro?",
-           "Calliope, quanto fa diciassette per tre?", "Calliope, come si fa il pane?",
+           "Calliope, quanto fa diciassette per tre?", "Calliope, che ore sono adesso?",
            "Calliope, cosa vuol dire resilienza?", "Calliope, dimmi un proverbio.",
            "Calliope, qual è il fiume più lungo d'Italia?", "Calliope, grazie mille."]
 
@@ -96,9 +96,22 @@ def riavvolti(prima, ora):
     return int(sum(len(x) for x in a[k:]) / CHARS_PER_TOKEN), k
 
 
+class BackendTool(Backend):
+    """Come Backend, ma «che ore sono?» chiama ora_attuale (una seconda passata)."""
+
+    def stream(self, messages, tools):
+        self.visti.append([dict(m) for m in messages])
+        u = messages[-1]
+        if u.get("role") == "user" and "che ore" in str(u.get("content")).lower():
+            yield ("calls", [{"id": "c1", "name": "ora_attuale", "arguments": {}}])
+            return
+        yield ("text", "Va bene, ne terrò conto.")
+
+
 def brain(cfg):
     b = brain_base(cfg, nuova_stanza(cfg))
     b.tool_ctx.memory = Memoria()
+    b.backend = BackendTool()
     return b
 
 
@@ -119,10 +132,13 @@ def giro(fissi: bool, turni_n: int = 8, eventi: bool = False, prima_del_turno=No
     for n in range(turni_n):
         if prima_del_turno:
             prima_del_turno(b, n)
+        i0 = len(b.backend.visti)
         turno(b, n, g)
         v = b.backend.visti
-        r, k = riavvolti(v[-2], v[-1]) if len(v) > 1 else (None, None)
-        out.append({"turno": n + 1, "riavvolti": r, "punto": k,
+        # Fra l'ultima richiesta del turno prima (dopo un tool, la seconda passata) e la prima
+        # di questo: è quella che il motore deve riavvolgere
+        r, k = riavvolti(v[i0 - 1], v[i0]) if i0 > 0 else (None, None)
+        out.append({"turno": n + 1, "riavvolti": r, "punto": k, "req": v[i0],
                     "dati_turno": b.last_dati_turno_token,
                     "cache": dict(b.last_cache or {}), "regole": list(b.last_rules or ()),
                     "fissi": b.last_dati_fissi})
@@ -147,10 +163,15 @@ def prova_cache():
     verifica("cache: i dati del turno (più la domanda) sotto il tetto in ogni turno, e il registro "
              "li conta", all(x["dati_turno"] is not None and x["dati_turno"] <= tetto
                               for x in dopo), str([x["dati_turno"] for x in dopo]))
+    verifica("cache: anche dopo un turno con un tool (due passate) sotto il tetto",
+             len(b.backend.visti) == 9 and dopo[4]["riavvolti"] <= tetto
+             and dopo[3]["riavvolti"] <= tetto, str([dopo[3]["riavvolti"], dopo[4]["riavvolti"]]))
     v = b.backend.visti
     ok = True
     for i in range(1, len(v)):
         prec, ora = v[i - 1], v[i]
+        if ora[-1].get("role") != "user":
+            continue                    # la seconda passata di un turno con un tool
         # Fino alla frase del turno prima esclusa, meno i dati del turno di allora (tutto ciò
         # che sta dopo l'ultimo messaggio di sistema dei dati fissi o della storia)
         u = max(j for j, m in enumerate(prec) if m.get("role") == "user")
@@ -199,11 +220,16 @@ def prova_ricordi():
         if n == 5:
             b.tool_ctx.memory.f["carlo-id"].remove("il dentista di Carlo è il dottor Lanfranchi")
     b, out = giro(True, prima_del_turno=cambia)
-    v = b.backend.visti
+    v = [x["req"] for x in out]
     verifica("ricordo nuovo: un pezzo in più in sola aggiunta, la cache resta (sotto il tetto)",
              out[3]["fissi"]["nuovi"] == ["ricordi"] and out[3]["riavvolti"] <= 450
              and conta(v[3], "Ricordi salvati") == 2 and conta(v[3], "Pepe") == 1,
              str(out[3]))
+    pezzo_pepe = [str(m.get("content")) for m in v[3] if "Pepe" in str(m.get("content"))]
+    verifica("…il pezzo nuovo ha solo il ricordo nuovo (ogni ricordo una volta nella richiesta)",
+             len(pezzo_pepe) == 1 and "pizza" not in pezzo_pepe[0]
+             and conta(v[3], "pizza margherita") == 1 and conta(v[3], "frigorifero") == 1,
+             pezzo_pepe[0][:160] if pezzo_pepe else "")
     verifica("ricordo dimenticato: le versioni vecchie escono e la nuova entra intera "
              "(regola dati_stabili_rifatti)", "dati_stabili_rifatti" in out[5]["regole"]
              and out[5]["fissi"].get("rifatti") == ["ricordi"]
@@ -217,17 +243,108 @@ def prova_ricordi():
     verifica("…al turno dopo di nuovo sotto il tetto", out[6]["riavvolti"] <= 450
              and out[7]["riavvolti"] <= 450, str([out[6]["riavvolti"], out[7]["riavvolti"]]))
 
-    def scadono(b, n):
-        if n >= 4:
-            b.avvisi_turno = None
-    cfg = cfg_base(dati_stabili_in_storia=True)
-    b = brain(cfg)
-    for n in range(6):
-        b.avvisi_turno = AVVISI if n < 4 else None
+    prova_avvisi()
+    prova_riassunto()
+
+
+SICUREZZA = ("oggi alle 18:02, avviso «sicurezza» per Nicola dal satellite «camera», consegnato "
+             "sul telefono, stato: non ancora letto; ")
+
+
+def prova_avvisi():
+    """Revisione della PR #107: gli avvisi sono un testo intero deciso a ogni turno dai cancelli
+    di Ciclo._avvisi_contesto (chi parla e come, i minori sentiti da poco): ogni cambio li rifà,
+    nessuna versione vecchia resta davanti al modello."""
+    con_sic = AVVISI.replace("ieri alle 17:40", SICUREZZA + "ieri alle 17:40", 1)
+    b = brain(cfg_base(dati_stabili_in_storia=True))
+    for n, testo in enumerate([con_sic, con_sic, AVVISI, AVVISI, None, None, AVVISI]):
+        b.avvisi_turno = testo
         "".join(b.stream_reply(DOMANDE[n], "amministra"))
-    verifica("avvisi scaduti: la versione di prima resta dov'era (era vera), nessun pezzo nuovo",
-             conta(b.backend.visti[-1], "Avvisi consegnati") == 1
-             and (b.last_dati_fissi or {}).get("nuovi") == [])
+        v = b.backend.visti[-1]
+        if n == 1:
+            verifica("avvisi uguali: una volta, nella storia", conta(v, "«sicurezza»") == 1
+                     and conta(v, "Avvisi consegnati") == 1)
+        if n == 2:
+            verifica("un minore sentito da poco (nascondi_minori): l'avviso «sicurezza» non è più "
+                     "in nessuna parte della richiesta, il blocco è rifatto",
+                     conta(v, "«sicurezza»") == 0 and conta(v, "Avvisi consegnati") == 1
+                     and "dati_stabili_rifatti" in b.last_rules, str(b.last_dati_fissi))
+        if n == 4:
+            verifica("chi parla non riconosciuto o un minore in zona grigia (avvisi assenti): "
+                     "nessun avviso di prima resta", conta(v, "Avvisi consegnati") == 0
+                     and "dati_stabili_rifatti" in b.last_rules, str(b.last_dati_fissi))
+        if n == 5:
+            verifica("…e il turno dopo nessun rifacimento in più (la cache torna)",
+                     "dati_stabili_rifatti" not in b.last_rules
+                     and conta(v, "Avvisi consegnati") == 0)
+        if n == 6:
+            verifica("avvisi di nuovo: rientrano una volta, al turno in corso",
+                     conta(v, "Avvisi consegnati") == 1
+                     and (b.last_dati_fissi or {}).get("nuovi") == ["avvisi"])
+    # Contrario (il codice di prima del 16/10 sera): la versione vecchia restava
+    import calliope.dati_turno as dt
+    vero = dt.prepara
+
+    def vecchia(conv, blocchi, ancore):
+        # come prima: un blocco intero diverso si aggiunge e il vuoto lascia il vecchio
+        out = vero(conv, [x for x in blocchi if x[2] or x[1]], ancore)
+        return out
+    b = brain(cfg_base(dati_stabili_in_storia=True))
+    dt.prepara = vecchia
+    try:
+        for n, testo in enumerate([con_sic, None]):
+            b.avvisi_turno = testo
+            "".join(b.stream_reply(DOMANDE[n], "amministra"))
+    finally:
+        dt.prepara = vero
+    verifica("contrario: lasciando il vecchio quando gli avvisi spariscono, il «sicurezza» "
+             "resterebbe davanti al modello", conta(b.backend.visti[-1], "«sicurezza»") == 1)
+
+
+def prova_riassunto():
+    """Il riassunto della stanza: «dimentica», la pausa per ospiti e lo scambio finito lo tolgono
+    (testo vuoto o nessun blocco), e la politica lo vede anche nel turno in cui entra."""
+    from calliope.stanza import contesto as ctx_mod
+    from prova_stanza_storia import riga
+    import time as _t
+    cfg = cfg_base(dati_stabili_in_storia=True)
+    st = nuova_stanza(cfg)
+    b = brain_base(cfg, st)
+    b.tool_ctx.memory = Memoria()
+    t0 = _t.time() - 600
+    for k in range(4):
+        riga(st, 1, f"Domani si parte presto per il lago numero {k}.", t0 + k * 10, "Carlo")
+    passi = [("Si parla della gita al lago di sabato.", "entra"),
+             ("Si parla della gita al lago di sabato.", "uguale"),
+             ("", "dimentica"), ("Si parla della cena con la nonna.", "di nuovo"),
+             (None, "pausa per ospiti"), ("Si parla della cena con la nonna.", "torna"),
+             ("", "scambio finito")]
+    for n, (riass, cosa) in enumerate(passi):
+        if riass is None:
+            b.stanza_turno = None
+        else:
+            blocco = ctx_mod.costruisci(st, 1, cfg, t0 + 60 + n * 30)
+            blocco.riassunto = riass
+            b.stanza_turno = blocco
+        "".join(b.stream_reply(DOMANDE[n], "amministra"))
+        v = b.backend.visti[-1]
+        n_r = conta(v, "Riassunto automatico")
+        if cosa == "entra":
+            pol = b._turno_politica()
+            verifica("riassunto: entra una volta, e la politica lo vede già in questo turno "
+                     "(fra gli esterni)", n_r == 1 and any(
+                         "gita al lago" in str(x[1]) for x in pol.esterni), str(pol.esterni)[:200])
+        elif cosa == "uguale":
+            verifica("riassunto uguale: resta, nessun rifacimento", n_r == 1
+                     and "dati_stabili_rifatti" not in b.last_rules)
+        elif cosa in ("dimentica", "pausa per ospiti", "scambio finito"):
+            verifica(f"riassunto: {cosa} lo toglie da tutta la richiesta", n_r == 0
+                     and conta(v, "gita al lago") + conta(v, "cena con la nonna") == 0
+                     and "dati_stabili_rifatti" in b.last_rules, cosa)
+        else:
+            verifica(f"riassunto {cosa}: una volta sola, quello di adesso", n_r == 1
+                     and conta(v, "cena con la nonna") == 1 and conta(v, "gita al lago") == 0)
+    st.chiudi()
 
 
 # ─────────────────────────── 3. contrari ───────────────────────────

@@ -2691,7 +2691,7 @@ class Brain:
         self._stanza_visibili, self._stanza_ancore, self.last_stanza_storia = [], {}, None
         # I dati fissi davanti al modello in questa risposta (16/10, _dati_prepara) e quanto
         # pesano i dati del turno
-        self._dati_ancore, self.last_dati_fissi = {}, None
+        self._dati_ancore, self.last_dati_fissi, self._dati_visibili = {}, None, []
         self.last_dati_turno_token, self.last_dati_turno_oltre = None, False
         self._ascolto = ascolto if ascolto is not None else turno_asc
         self.last_argomenti = []
@@ -3638,6 +3638,7 @@ class Brain:
                 pezzi.clear()
                 self._rule("dati_stabili_rifatti")
             self._dati_ancore = {p.n: p for p in pezzi if p.n in ancore}
+            self._dati_visibili = list(self._dati_ancore.values())
             return [], []
         esito = dati_turno.prepara(conv, blocchi, ancore)
         nuovi = esito["nuovi"]
@@ -3649,6 +3650,8 @@ class Brain:
             print(f"   [STORIA] dati fissi rifatti ({', '.join(esito['rifatti'])}): la cache del "
                   f"prefisso si rompe una volta", flush=True)
         self._dati_ancore = esito["storia"]
+        # Tutti quelli davanti al modello, anche i nuovi di questo turno (per la politica)
+        self._dati_visibili = list(esito["storia"].values()) + nuovi
         visibili = list(esito["storia"].values()) + nuovi
         if visibili or esito["rifatti"]:
             self.last_dati_fissi = {
@@ -4608,7 +4611,9 @@ class Brain:
             if user_text and stanza_b is not None and stanza_ctx.in_storia(self.cfg):
                 riass = stanza_ctx.riassunto_turno(stanza_b)
             dati_ora, nomi_ora = self._dati_prepara(start, [
-                ("ricordi", ricordi_m[0]["content"] if ricordi_m else "", True),
+                ("ricordi", ricordi_m[0]["content"] if ricordi_m else "", True, "",
+                 lambda nuove: (self._memory_message(note=False, solo=nuove)
+                                or [{"content": ""}])[0]["content"]),
                 ("avvisi", avvisi_m[0]["content"] if avvisi_m else "", False),
                 ("stanza_riassunto", riass, False,
                  str(getattr(stanza_b, "riassunto", "") or "") if riass else "")])
@@ -5675,8 +5680,10 @@ class Brain:
             return []
         return re.findall(r"«([^»]+)»", msg[0]["content"]) if msg else []
 
-    def _memory_message(self, note: bool = True) -> list[dict]:
-        """I fatti ricordati su chi parla (memory.py), come messaggio di sistema."""
+    def _memory_message(self, note: bool = True, solo=None) -> list[dict]:
+        """I fatti ricordati su chi parla (memory.py), come messaggio di sistema. `solo`: solo
+        questi fatti (16/10, issue #95: un ricordo nuovo entra nella storia da solo, i dati fissi
+        di dati_turno.py)."""
         ctx = self.tool_ctx
         memory = getattr(ctx, "memory", None)
         name = getattr(getattr(ctx, "speaker_ctx", None), "current_speaker", None)
@@ -5693,6 +5700,9 @@ class Brain:
         if len(kept) + len(kept_house) < len(facts) + len(house) and note:
             self._rule("ricordo_istruzione_escluso")
         facts, house = kept, kept_house
+        if solo is not None:
+            facts = [f for f in facts if f.strip() in solo]
+            house = [f for f in house if f.strip() in solo]
         if not facts and not house:
             return []
         quote = lambda items: " ".join(f"«{f}»" for f in items)    # noqa: E731
@@ -6589,7 +6599,8 @@ class Brain:
             fonti.add("stanza")
             esterni = esterni + [("stanza", str(getattr(stanza_b, "esterno", "") or ""))]
         # Il riassunto della stanza nei dati fissi della storia (16/10, issue #95): un dato
-        for fx in (getattr(self, "_dati_ancore", None) or {}).values():
+        # (anche quello entrato in questo turno, con o senza righe della stanza visibili)
+        for fx in getattr(self, "_dati_visibili", None) or ():
             if getattr(fx, "esterno", ""):
                 fonti.add("stanza")
                 esterni = esterni + [("stanza", fx.esterno)]
