@@ -22,6 +22,8 @@ profilo in CALLIOPE_LLM_PROFILO (calliope/config.py, PROFILI_LLM).
     python prove\\prova_regressione.py 1 --reti spinta_promessa,textcallguard
     python prove\\prova_regressione.py 1 --json esito.json   # righe per il confronto
     python prove\\prova_regressione.py 1 --url http://127.0.0.1:11440   # un altro Ollama
+    python prove\\prova_regressione.py 1 --url … --num-ctx 36864        # il num_ctx già caricato
+    python prove\\prova_regressione.py 1 --senza-dati-fissi             # come fino al 15/10 (#95)
 
 Alla fine anche la prima frase a livello costante e al cambio di livello (ospite, familiare,
 amministra) e le riuscite per livello.
@@ -53,6 +55,10 @@ USCITA = argv[argv.index("--json") + 1] if "--json" in argv else None
 SOLO = argv[argv.index("--solo") + 1] if "--solo" in argv else None
 # Un altro Ollama (API nativa), per esempio quello della DGX dietro un tunnel SSH
 URL = argv[argv.index("--url") + 1] if "--url" in argv else None
+# Il num_ctx del modello già caricato (un altro lo fa ricaricare: sulla DGX la voce aspetta)
+NUM_CTX = int(argv[argv.index("--num-ctx") + 1]) if "--num-ctx" in argv else None
+# I dati del turno che cambiano di rado nei dati del turno, come fino al 15/10 (#95)
+SENZA_FISSI = "--senza-dati-fissi" in argv
 errori = 0
 
 try:
@@ -628,12 +634,17 @@ cfg = Config()
 cfg.casa_timeout_s = 2.0
 if URL:
     cfg.llm_native_url = URL
+if NUM_CTX:
+    cfg.llm_num_ctx = NUM_CTX
+if SENZA_FISSI:
+    cfg.dati_stabili_in_storia = False
 if RETI:
     cfg.llm_reti_spente = [r.strip() for r in RETI.split(",") if r.strip()]
 if manca_ha:
     print(f"(HA finto non disponibile: {manca_ha}; la casa non risponde, si misura la scelta)")
 print(f"modello {cfg.llm_model} ({cfg.llm_backend}), profilo {cfg.llm_profilo}, reti spente: "
-      f"{cfg.llm_reti_spente or 'nessuna'}", flush=True)
+      f"{cfg.llm_reti_spente or 'nessuna'}, dati fissi nella storia "
+      f"{'no' if SENZA_FISSI else 'sì'}", flush=True)
 t = time.perf_counter()
 Brain(cfg, build_registry(biblioteca=True, citazioni=True, documenti=FORMATI, casa=True,
                           schermi=True, agenti=True,

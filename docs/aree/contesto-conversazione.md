@@ -2362,7 +2362,22 @@ i ricordi ora stanno più lontani dalla domanda (misura del 03/10). Si torna ind
 cambio (sopra), un ricordo nuovo porta solo sé stesso, un turno con un tool nella prova (dopo
 le due passate si riavvolge 183 token stimati, sotto il tetto), la misura della DGX divisa fra i
 turni dopo un tool e senza (il 15/10: cache persa in 19 turni su 21 dopo un tool, 43 su 72
-senza). **Proposta, non fatta**: le righe trovate dalla ricerca anticipata della stanza come
+senza). **La qualità dei ricordi lontani dalla domanda** (16/10 sera, col 26B della DGX attraverso un
+tunnel SSH, a Calliope inattiva, `num_ctx` uguale a quello caricato, prima e dopo sullo stesso
+modello). `prove/manuali/banco_dati_fissi.py --qualita` (nuovo modo: per ogni domanda una
+conversazione con N turni d'altro prima, i ricordi e gli avvisi entrati al primo; domande che
+chiedono un ricordo, domande d'altro dove i ricordi non devono entrare, l'ora e «ricordati
+che…»): con 6 turni prima **18/18 prima, 18/18 dopo** (2 giri), prima frase mediana 0,69 → 0,61 s;
+con 12 turni prima **9/9 e 9/9**, 0,73 → 0,46 s. Nessuna intrusione dei ricordi nelle domande
+d'altro. `prova_regressione.py 1` (97 casi, nuove opzioni `--num-ctx` e `--senza-dati-fissi`):
+**95/97 prima, 94/97 dopo**, prima frase mediana 0,89 → 0,92 s (p90 1,52 → 1,44). Gli sbagliati
+sono gli stessi due (`chi_garbato`, `schermo`) più `data` dopo: ripetuto 4 volte per modo, con
+`calcola` in più fra i tool, sbaglia 3 volte su 4 prima e 4 su 4 dopo, quindi è un caso già
+instabile, non la posizione dei ricordi. Il banco della scelta dei tool sulle frasi vere (#20)
+non esiste ancora: questi due ne fanno le veci per ora. La forma breve dei ricordi pertinenti
+vicino alla domanda non serve.
+
+**Proposta, non fatta**: le righe trovate dalla ricerca anticipata della stanza come
 pezzi stabili nella storia (fuori dal tetto, come le righe della stanza: una riga trovata una
 volta resta, e non si cerca di nuovo), così l'anticipo tornerebbe utile anche a chi amministra;
 da decidere con la crescita del contesto e la potatura.
