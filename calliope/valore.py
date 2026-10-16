@@ -211,18 +211,6 @@ def _sviluppo(a: dict) -> int:
     return E3                                # avanti, rifai, completa (11/10): riparte un lavoro
 
 
-def _agenda_annulla(a: dict) -> int:
-    # 16/10 (#99): annullare tutto non si disfa (promemoria e appuntamenti persi per un
-    # riferimento sbagliato del modello): E3, come il tool che con più voci chiede. Una voce
-    # sola, o «tutti i timer» (durano minuti), resta E2
-    from .agenda import is_cancel_all
-    c = pol._s(a, "cosa").lower()
-    if not is_cancel_all(c):
-        return E2
-    solo_timer = re.search(r"timer|svegli", c) and not re.search(r"promemoria|appuntament", c)
-    return E2 if solo_timer else E3
-
-
 def _ricorda(a: dict) -> int:
     # D3: per tutti E2; personale E2 anche lui, ma senza parole dal dato si esegue come oggi
     # (fatto_detto o ancorata): la differenza la fanno le etichette
@@ -238,7 +226,7 @@ EFFETTI: dict[str, object] = {
     # E2: resta, altri lo vedono o cambia le risposte future
     "lista_aggiungi": E2, "lista_togli": E2, "ricorda": _ricorda, "dimentica": E2,
     "citta_casa_salva": E2,
-    "appuntamento_aggiungi": E2, "agenda_annulla": _agenda_annulla, "anagrafica_salva": E2,
+    "appuntamento_aggiungi": E2, "agenda_annulla": E2, "anagrafica_salva": E2,
     "modello_compila": E2, "richiesta_tutore": E2, "lavoro_rispondi": E2,
     "lavoro_annulla": E2, "pc_guarda": E2, "schede_pulisci": E2, "dati_conservati": E3,
     "stanza_pausa": E1,

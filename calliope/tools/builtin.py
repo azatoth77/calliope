@@ -1314,34 +1314,45 @@ def _annulla_quale(ctx: ToolContext, cosa: str, prof) -> dict:
             "risposta_finale": text}
 
 
-def _tutto_confermato(ctx: ToolContext) -> bool:
+# Una voce breve si annulla in gruppo senza domanda: i timer che scadono entro un'ora (la pasta,
+# le uova). Una sveglia di 8 ore è anche lei un timer, ma perderla non si vede: chiede
+_TIMER_BREVE_S = 3600
+
+
+def _da_confermare(chosen: list[dict]) -> bool:
+    """Annullare tutte queste voci chiede prima (16/10, #99): più di una, e non soltanto timer
+    che scadono entro un'ora."""
+    now = time.time()
+    return len(chosen) >= 2 and not all(
+        it["kind"] == "timer" and it["due"] - now <= _TIMER_BREVE_S for it in chosen)
+
+
+def _si_alla_domanda(ctx: ToolContext) -> bool:
     """Questa chiamata è il «sì» alla domanda «Annullo tutti e 3?» (16/10, #99): la proposta in
     sospeso per chi parla è di agenda_annulla e annullava tutto (gli argomenti proposti, quando
-    la politica del turno li ha), oppure la persona ha già confermato questa chiamata alla
-    politica (`politica_accettata`). Il consenso lo giudica il modello, che richiama il tool:
-    qui si guarda solo di chi è la proposta."""
-    if getattr(ctx, "politica_accettata", False):
-        return True
+    la politica del turno li ha), **e** la frase di chi parla acconsente (`politica.consenso`,
+    come per le proposte della politica) o ripete la frase di sfida. Il modello che richiama il
+    tool non basta: «Intendevo quelli della lista della spesa.» non è un «sì» (revisione della
+    PR #110). Vincolo di permesso su una scelta già fatta dal modello (principio 10)."""
     if getattr(ctx, "tool_in_sospeso", None) != "agenda_annulla":
         return False
-    sosp = getattr(getattr(ctx, "politica", None), "args_sospeso", None)
-    return not isinstance(sosp, dict) or is_cancel_all(str(sosp.get("cosa") or ""))
+    t = getattr(ctx, "politica", None)
+    sosp = getattr(t, "args_sospeso", None)
+    if isinstance(sosp, dict) and not is_cancel_all(str(sosp.get("cosa") or "")):
+        return False
+    from .. import politica
+    testo = str(getattr(t, "testo", "") or getattr(ctx, "user_text", "") or "")
+    return bool(getattr(t, "sfida", False)) or politica.consenso(testo)
 
 
-def _annulla_tutto_chiede(ctx: ToolContext, cosa: str, prof) -> dict | None:
+def _annulla_tutto_chiede(ctx: ToolContext, chosen: list[dict], cosa: str, owner) -> dict:
     """Annullare tutto si conferma (16/10, #99, caso vero della DGX del 15/10 alle 18:57:
     «cancellare entrambi», detto delle due voci della lista appena letta, è diventato
-    agenda_annulla(cosa=tutti), eseguito senza domanda). Con più di una voce da annullare, e
-    non soltanto timer, non si annulla niente: si dice che cosa c'è e la proposta resta in
-    sospeso; al «sì» la richiamata esegue. Con una voce sola, o con soli timer (E1, durano
-    minuti), si annulla come prima. È la forma di una scelta già fatta dal modello (principio
-    10), regola `agenda_tutto_chiede`. None = si annulla."""
-    chosen = ctx.agenda.scegli(cosa, prof.id if prof else None)
-    if len(chosen) < 2 or all(it["kind"] == "timer" for it in chosen):
-        return None
-    if _tutto_confermato(ctx):
-        return None
+    agenda_annulla(cosa=tutti), eseguito senza domanda). Non si annulla niente: si dice che cosa
+    c'è e la proposta resta in sospeso, con gli id delle voci nominate; al «sì» si annullano
+    solo quelle. Regola `agenda_tutto_chiede`."""
     note_rule(ctx, "agenda_tutto_chiede")
+    ctx.agenda.proposte_tutto[owner] = {it["id"] for it in chosen}
     voci = [_voce_detta(it) for it in chosen[:4]]
     if len(chosen) > 4:
         voci.append(f"altre {len(chosen) - 4} voci")
@@ -1360,11 +1371,21 @@ def _agenda_annulla(ctx: ToolContext, cosa: str) -> dict:
     if ctx.agenda is None:
         return {"ok": False, "errore": "agenda non disponibile"}
     prof = _person(ctx)
+    owner = prof.id if prof else None
+    gone = None
     if is_cancel_all(cosa or ""):
-        chiede = _annulla_tutto_chiede(ctx, cosa or "", prof)
-        if chiede is not None:
-            return chiede
-    gone = ctx.agenda.cancel(cosa or "", prof.id if prof else None)
+        chosen = ctx.agenda.scegli(cosa or "", owner)
+        if _da_confermare(chosen) and not getattr(ctx, "politica_accettata", False):
+            proposte = getattr(ctx.agenda, "proposte_tutto", {})
+            if owner in proposte and _si_alla_domanda(ctx):
+                # Solo le voci nominate nella domanda e ancora da annullare con questa richiesta:
+                # non una voce aggiunta dopo, non un appuntamento fuori da «tutti i promemoria»
+                gia = proposte.pop(owner)
+                gone = ctx.agenda.cancel_ids({it["id"] for it in chosen} & gia, owner)
+            else:
+                return _annulla_tutto_chiede(ctx, chosen, cosa or "", owner)
+    if gone is None:
+        gone = ctx.agenda.cancel(cosa or "", owner)
     if is_cancel_all(cosa or ""):
         note_rule(ctx, "agenda_tutto")
     if not gone:

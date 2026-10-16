@@ -8,15 +8,19 @@ senza domanda. L'agenda era vuota; con appuntamenti e promemoria li avrebbe pers
 
 A secco, con l'agenda vera in un database temporaneo:
 
-1. **Il tool**: con più voci da annullare (non soli timer) niente si annulla, la risposta dice
-   che cosa c'è e chiede («Annullo tutti e 2?», regola `agenda_tutto_chiede`), con la proposta
-   in sospeso; la richiamata con la proposta di agenda_annulla per chi parla annulla tutto.
-   Contrari: una voce sola, «il timer della pasta», «tutti i timer», la proposta in sospeso di
-   un altro tool o di una voce sola, la conferma già data alla politica.
+1. **Il tool**: con più voci da annullare (non soli timer che scadono entro un'ora) niente si
+   annulla, la risposta dice che cosa c'è e chiede («Annullo tutti e 2?», regola
+   `agenda_tutto_chiede`), con la proposta in sospeso e gli id delle voci nominate. Al «sì»
+   (proposta di agenda_annulla per chi parla **e** una frase di consenso, o la sfida) si annullano
+   solo le voci nominate. Contrari (revisione della PR #110): la richiamata con «Intendevo quelli
+   della lista della spesa.» o «Cancella le zucchine dalla lista.», una voce aggiunta dopo la
+   domanda, un appuntamento fuori da «tutti i promemoria», una sveglia di 8 ore fra i timer; e
+   una voce sola, «il timer della pasta», i timer brevi, la proposta di un altro tool o di una
+   voce sola, l'agenda vuota.
 2. **Con Brain vero** e un modello finto: «Cancellali tutti.» → la domanda; «Sì.» → annullati;
-   «No.» → niente annullato, anche se il modello richiama il tool.
-3. **La classe d'effetto** (calliope/valore.py): E3 per «tutto», E2 per una voce e per «tutti
-   i timer».
+   «No.» e le frasi che non acconsentono → niente annullato, anche se il modello richiama il
+   tool; con la stanza accesa la domanda è quella del tool e il «Sì.» annulla senza sfida.
+3. **La classe d'effetto** resta E2 (decisione della revisione: chiede il tool, niente sfida).
 
     python prove\\prova_agenda_tutto.py
 """
@@ -36,6 +40,11 @@ from calliope.tools.spec import ToolContext
 
 from prove.prova_politica import ChiParla, Persone, chiama, testo
 
+try:
+    sys.stdout.reconfigure(encoding="utf-8")    # «→» e accenti anche nella console cp1252
+except (AttributeError, ValueError):
+    pass
+
 errori = 0
 
 
@@ -51,9 +60,11 @@ DARIO = "dario"            # l'id del profilo di Dario in prove/prova_politica.P
 
 
 def agenda_con(voci) -> Agenda:
+    """Voci (tipo, etichetta[, secondi da adesso]) di Dario, in un database nuovo."""
     ag = Agenda(str(Path(tempfile.mkdtemp(prefix="calliope_agenda_tutto_")) / "agenda.db"))
-    for kind, label in voci:
-        ag.add(kind, label, time.time() + 3600, owner=DARIO, owner_name="Dario")
+    for kind, label, *tra in voci:
+        ag.add(kind, label, time.time() + (tra[0] if tra else 3600), owner=DARIO,
+               owner_name="Dario")
     return ag
 
 
@@ -76,6 +87,15 @@ def annulla(ctx, cosa):
     return json.loads(REG.call("agenda_annulla", {"cosa": cosa}, ctx, "amministra"))
 
 
+def risposta(ag, frase, cosa="tutti", sospeso="tutti", sfida=False):
+    """La richiamata nel turno dopo la domanda: proposta di agenda_annulla su `sospeso`, la frase
+    di chi parla nella politica del turno."""
+    ctx = ctx_per(ag, tool_in_sospeso="agenda_annulla",
+                  politica=SimpleNamespace(args_sospeso={"cosa": sospeso}, testo=frase,
+                                           sfida=sfida))
+    return annulla(ctx, cosa), ctx
+
+
 DUE = [("promemoria", "innaffiare il basilico"), ("appuntamento", "dal veterinario")]
 
 
@@ -96,21 +116,25 @@ def prova_tool():
                  and sosp.get("tool") == "agenda_annulla"
                  and sosp.get("argomenti") == {"cosa": cosa}
                  and sosp.get("domanda") == "Annullo tutti e 2?"
+                 and len(ag.proposte_tutto.get(DARIO, ())) == 2
                  and "agenda_tutto_chiede" in ctx.regole and "agenda_tutto" not in ctx.regole,
                  f"{etichette(ag)} {r} {ctx.regole}")
-    # Il «sì»: la proposta in sospeso per chi parla è di agenda_annulla e annullava tutto
+    # Il «sì»: proposta di agenda_annulla su «tutti» e una frase di consenso (o la sfida)
+    for frase, sfida in (("Sì.", False), ("Sì, annullali pure.", False), ("Va bene.", False),
+                         ("girasole, treno, limone", True)):
+        ag = agenda_con(DUE)
+        annulla(ctx_per(ag), "tutti")
+        r, ctx = risposta(ag, frase, sfida=sfida)
+        verifica(f"al «{frase}»{' (sfida)' if sfida else ''}: annullati entrambi",
+                 etichette(ag) == [] and r.get("ok") is True and "agenda_tutto" in ctx.regole
+                 and "agenda_tutto_chiede" not in ctx.regole and DARIO not in ag.proposte_tutto
+                 and r.get("conferma", "").startswith("Ho annullato "), f"{r} {ctx.regole}")
+    # Senza la politica del turno (chiamate del codice): la frase di chi parla dal contesto
     ag = agenda_con(DUE)
-    ctx = ctx_per(ag, tool_in_sospeso="agenda_annulla",
-                  politica=SimpleNamespace(args_sospeso={"cosa": "tutti"}))
-    r = annulla(ctx, "tutti")
-    verifica("al «sì» (proposta di agenda_annulla su «tutti»): annullati entrambi",
-             etichette(ag) == [] and r.get("ok") is True and "agenda_tutto" in ctx.regole
-             and "agenda_tutto_chiede" not in ctx.regole
-             and r.get("conferma", "").startswith("Ho annullato "), f"{r} {ctx.regole}")
-    # Senza la politica del turno (chiamate del codice): basta il tool in sospeso
-    ag = agenda_con(DUE)
-    r = annulla(ctx_per(ag, tool_in_sospeso="agenda_annulla"), "tutto")
-    verifica("al «sì» senza gli argomenti proposti: annullati", etichette(ag) == [], str(r))
+    annulla(ctx_per(ag), "tutto")
+    r = annulla(ctx_per(ag, tool_in_sospeso="agenda_annulla", user_text="Sì, certo."), "tutto")
+    verifica("al «sì» senza la politica del turno (frase nel contesto): annullati",
+             etichette(ag) == [], str(r))
     # La conferma già data alla politica (politica_accettata, la imposta la politica solo per
     # la durata della chiamata: qui la funzione del tool chiamata direttamente)
     ag = agenda_con(DUE)
@@ -124,35 +148,71 @@ def prova_tool():
              len(etichette(ag)) == 6 and "altre 2 voci" in r.get("risposta_finale", "")
              and r.get("risposta_finale", "").endswith("Annullo tutti e 6?"), str(r))
 
-    # ── contrari ──
+    # ── contrari: la richiamata senza un consenso (revisione della PR #110) ──
+    for frase in ("Intendevo quelli della lista della spesa.",
+                  "Cancella le zucchine dalla lista.", "No.", "Sì, però ascolta, era la lista."):
+        ag = agenda_con(DUE)
+        annulla(ctx_per(ag), "tutti")
+        r, ctx = risposta(ag, frase)
+        verifica(f"contrario: richiamata con «{frase}» → niente annullato, chiede di nuovo",
+                 len(etichette(ag)) == 2 and "in_sospeso" in r
+                 and "agenda_tutto" not in ctx.regole, f"{r} {ctx.regole}")
+    # ── contrari: al «sì» solo le voci nominate nella domanda ──
+    ag = agenda_con([("promemoria", "innaffiare il basilico"), ("promemoria", "ritirare il pane"),
+                     ("appuntamento", "dal veterinario")])
+    r = annulla(ctx_per(ag), "tutti i promemoria")
+    verifica("«tutti i promemoria»: la domanda nomina i 2 promemoria",
+             r.get("risposta_finale", "").endswith("Annullo tutti e 2?")
+             and "veterinario" not in r.get("risposta_finale", ""), str(r))
+    r, _ = risposta(ag, "Sì.", cosa="tutto", sospeso="tutti i promemoria")
+    verifica("contrario: «Sì.» con la richiamata «tutto» → solo i 2 promemoria, l'appuntamento "
+             "mai nominato resta", etichette(ag) == ["dal veterinario"], f"{etichette(ag)} {r}")
+    ag = agenda_con(DUE)
+    annulla(ctx_per(ag), "tutti")
+    ag.add("promemoria", "chiamare l'idraulico", time.time() + 7200, owner=DARIO,
+           owner_name="Dario")
+    r, _ = risposta(ag, "Sì.")
+    verifica("contrario: una voce aggiunta dopo la domanda non si annulla al «sì»",
+             etichette(ag) == ["chiamare l'idraulico"], f"{etichette(ag)} {r}")
+    # ── contrari di sempre ──
     ag = agenda_con([("promemoria", "innaffiare il basilico")])
     ctx = ctx_per(ag)
     r = annulla(ctx, "tutto")
     verifica("contrario: 1 promemoria e «tutto» → annullato senza domanda",
              etichette(ag) == [] and r.get("ok") is True and "in_sospeso" not in r
              and "agenda_tutto_chiede" not in ctx.regole, f"{r} {ctx.regole}")
-    ag = agenda_con(DUE + [("timer", "della pasta")])
+    ag = agenda_con(DUE + [("timer", "della pasta", 600)])
     ctx = ctx_per(ag)
     r = annulla(ctx, "il timer della pasta")
     verifica("contrario: «il timer della pasta» → solo quello, come prima",
              etichette(ag) == ["dal veterinario", "innaffiare il basilico"]
              and r.get("ok") is True and "in_sospeso" not in r
              and "agenda_tutto_chiede" not in ctx.regole, f"{r} {ctx.regole}")
-    ag = agenda_con([("timer", "della pasta"), ("timer", "delle uova"),
+    ag = agenda_con([("timer", "della pasta", 600), ("timer", "delle uova", 300),
                      ("promemoria", "innaffiare il basilico")])
     r = annulla(ctx_per(ag), "tutti i timer")
-    verifica("contrario: «tutti i timer» (soli timer, durano minuti) → annullati senza domanda",
+    verifica("contrario: «tutti i timer» che scadono entro un'ora → annullati senza domanda",
              etichette(ag) == ["innaffiare il basilico"] and r.get("ok") is True, str(r))
+    ag = agenda_con([("timer", "della pasta", 600), ("timer", "di 8 ore", 8 * 3600)])
+    r = annulla(ctx_per(ag), "tutti i timer")
+    verifica("«tutti i timer» con una sveglia di 8 ore → chiede, niente annullato",
+             len(etichette(ag)) == 2 and r.get("risposta_finale", "").endswith(
+                 "Annullo tutti e 2?"), str(r))
     ag = agenda_con(DUE)
-    r = annulla(ctx_per(ag, tool_in_sospeso="lista_togli"), "tutti")
+    annulla(ctx_per(ag), "tutti")
+    r = annulla(ctx_per(ag, tool_in_sospeso="lista_togli",
+                        politica=SimpleNamespace(testo="Sì.", sfida=False)), "tutti")
     verifica("contrario: la proposta in sospeso è di un altro tool → chiede, niente annullato",
              len(etichette(ag)) == 2 and "in_sospeso" in r, str(r))
     ag = agenda_con(DUE)
-    r = annulla(ctx_per(ag, tool_in_sospeso="agenda_annulla",
-                        politica=SimpleNamespace(args_sospeso={"cosa": "dal veterinario"})),
-                "tutti")
+    annulla(ctx_per(ag), "tutti")
+    r, _ = risposta(ag, "Sì.", sospeso="dal veterinario")
     verifica("contrario: la proposta era di una voce sola («Annullo l'appuntamento…?»), il "
              "modello chiama «tutti» → chiede, niente annullato",
+             len(etichette(ag)) == 2 and "in_sospeso" in r, str(r))
+    ag = agenda_con(DUE)
+    r, _ = risposta(ag, "Sì.")
+    verifica("contrario: un «sì» senza la domanda del tool prima (niente id) → chiede",
              len(etichette(ag)) == 2 and "in_sospeso" in r, str(r))
     ag = agenda_con([])
     r = annulla(ctx_per(ag), "tutto")
@@ -183,8 +243,13 @@ def brain_con(ag) -> Brain:
     return b
 
 
-def turno(b, frase, *risposte):
+def turno(b, frase, *risposte, stanza=False):
     b.backend.risposte = list(risposte)
+    if stanza:
+        # La conversazione di stanza accesa: le sue righe sono un dato non fidato del turno
+        b.stanza_turno = SimpleNamespace(
+            testo="Conversazione della stanza: Nicola: domani porto io la torta.",
+            esterno="Nicola: domani porto io la torta.", riassunto="")
     return "".join(b.stream_reply(frase, "amministra"))
 
 
@@ -204,19 +269,20 @@ def prova_brain():
              and "agenda_tutto" in b.rules_fired() and not b.has_pending(),
              f"{r} {etichette(ag)} {b.rules_fired()}")
 
-    # Contrario: «No.» e il modello non chiama niente
-    ag = agenda_con(DUE)
-    b = brain_con(ag)
-    turno(b, "Cancellali tutti.", chiama("agenda_annulla", TUTTI))
-    turno(b, "No.", testo("Va bene, non annullo niente."))
-    verifica("Brain: «No.» → niente annullato", len(etichette(ag)) == 2, str(etichette(ag)))
-    # …e anche se il modello richiama il tool dopo il «no»: la proposta è chiusa, si richiede
-    ag = agenda_con(DUE)
-    b = brain_con(ag)
-    turno(b, "Cancellali tutti.", chiama("agenda_annulla", TUTTI))
-    r = turno(b, "No.", chiama("agenda_annulla", TUTTI), testo("Va bene."))
-    verifica("Brain: «No.» con il modello che richiama il tool → niente annullato",
-             len(etichette(ag)) == 2, f"{r} {etichette(ag)} {b.rules_fired()}")
+    # Contrari: frasi che non acconsentono, con o senza la richiamata del modello (revisione
+    # della PR #110: anche con un turno in mezzo)
+    for frasi in (("No.",), ("Intendevo quelli della lista della spesa.",),
+                  ("Che ore sono?", "Cancella le zucchine dalla lista.")):
+        for richiama in (False, True):
+            ag = agenda_con(DUE)
+            b = brain_con(ag)
+            turno(b, "Cancellali tutti.", chiama("agenda_annulla", TUTTI))
+            for f in frasi:
+                r = turno(b, f, *((chiama("agenda_annulla", TUTTI), testo("Va bene."))
+                                  if richiama else (testo("Va bene."),)))
+            verifica(f"Brain: {' → '.join(frasi)}{' con la richiamata' if richiama else ''} "
+                     f"→ niente annullato", len(etichette(ag)) == 2,
+                     f"{r} {etichette(ag)} {b.rules_fired()}")
     # Contrario: una voce sola, nessuna domanda
     ag = agenda_con([("promemoria", "innaffiare il basilico")])
     b = brain_con(ag)
@@ -224,18 +290,27 @@ def prova_brain():
     verifica("Brain: una voce sola → annullata subito", etichette(ag) == []
              and not b.has_pending() and "agenda_tutto_chiede" not in b.rules_fired(),
              f"{r} {b.rules_fired()}")
+    # La stanza accesa: chiede il tool con l'elenco, e il «Sì.» annulla senza la frase di sfida
+    ag = agenda_con(DUE)
+    b = brain_con(ag)
+    r = turno(b, "Cancellali tutti.", chiama("agenda_annulla", TUTTI), stanza=True)
+    verifica("Brain, stanza accesa: «Cancellali tutti.» → la domanda del tool con l'elenco",
+             len(etichette(ag)) == 2 and r.rstrip().endswith("Annullo tutti e 2?")
+             and "basilico" in r and "ripeti" not in r and "stanza_contesto" in b.rules_fired(),
+             f"{r} {b.rules_fired()}")
+    r = turno(b, "Sì.", chiama("agenda_annulla", TUTTI), testo("Fatto."), stanza=True)
+    verifica("Brain, stanza accesa: «Sì.» → annullati, senza sfida", etichette(ag) == []
+             and "ripeti" not in r and b.tool_ctx.speaker_ctx.sfida is None,
+             f"{r} {etichette(ag)} {b.rules_fired()}")
 
 
 # ─────────────────────────── 3. la classe d'effetto ───────────────────────────
 
 def prova_effetto():
-    for cosa, atteso in (("tutti", valore.E3), ("tutto quanto", valore.E3),
-                         ("tutti i promemoria", valore.E3), ("tutti gli appuntamenti", valore.E3),
-                         ("il timer della pasta", valore.E2), ("il dentista", valore.E2),
-                         ("tutti i timer", valore.E2), ("tutte le sveglie", valore.E2),
-                         ("il promemoria di salutare tutti", valore.E2)):
+    for cosa in ("tutti", "tutti i promemoria", "il timer della pasta", "tutti i timer"):
         e = valore.effetto("agenda_annulla", {"cosa": cosa}, REG.get("agenda_annulla"))
-        verifica(f"effetto di agenda_annulla(«{cosa}») = E{atteso}", e == atteso, f"E{e}")
+        verifica(f"effetto di agenda_annulla(«{cosa}») = E2 (chiede il tool, niente sfida)",
+                 e == valore.E2, f"E{e}")
 
 
 if __name__ == "__main__":

@@ -220,25 +220,35 @@ dice di «cancellare entrambi». Il modello chiama `agenda_annulla(cosa=tutti)`,
 nella storia (un controllo dell'agenda poco prima), eseguito senza domanda (`valore_esegue`,
 regola `agenda_tutto`). L'agenda era vuota; con appuntamenti e promemoria li avrebbe persi tutti.
 
-Cosa cambia:
-- **nel tool** (`_annulla_tutto_chiede` in `calliope/tools/builtin.py`): con `is_cancel_all` e
-  più di una voce da annullare, non soltanto timer, non si annulla niente: la risposta dice che
-  cosa c'è e chiede («Non ho ancora annullato niente: ci sono il promemoria di innaffiare il
-  basilico e l'appuntamento «dal veterinario». Annullo tutti e 2?», al più 4 voci nominate),
-  regola `agenda_tutto_chiede`, con la proposta in sospeso. Al «sì» il modello richiama il tool:
-  si annulla quando la proposta in sospeso per chi parla (`tool_in_sospeso`) è di
-  `agenda_annulla` e annullava tutto (`Turno.args_sospeso`), o quando la persona ha già
-  confermato la chiamata alla politica (`politica_accettata`). Una voce sola, «il timer della
-  pasta» e «tutti i timer» (soli timer: E1, durano minuti) restano come prima. Il consenso lo
-  giudica il modello; il codice cambia solo la forma di una scelta già fatta (principio 10).
-  `Agenda.scegli` dà le voci che `cancel` annullerebbe, senza annullarle;
-- **nella classe d'effetto** (`valore.EFFETTI["agenda_annulla"]`, ora una funzione): E3 per
-  «tutto», «tutti i promemoria», «tutti gli appuntamenti»; E2 per una voce e per «tutti i
-  timer». Con un dato non fidato di mezzo (stanza, web) la politica per valore chiede anche lei
-  (`valore_e3_chiede`), e al suo «sì» il tool non chiede di nuovo;
+Cosa cambia (`calliope/tools/builtin.py`, con le correzioni della revisione della PR #110):
+- **la domanda**: con `is_cancel_all` e più di una voce da annullare, non si annulla niente: la
+  risposta dice che cosa c'è e chiede («Non ho ancora annullato niente: ci sono il promemoria di
+  innaffiare il basilico e l'appuntamento «dal veterinario». Annullo tutti e 2?», al più 4 voci
+  nominate), regola `agenda_tutto_chiede`, con la proposta in sospeso; gli id delle voci nominate
+  restano in memoria per persona (`Agenda.proposte_tutto`). `Agenda.scegli` dà le voci che
+  `cancel` annullerebbe, senza annullarle;
+- **il «sì»**: il modello richiama il tool, e si annulla solo se la proposta in sospeso per chi
+  parla (`tool_in_sospeso`) è di `agenda_annulla` su «tutto» (`Turno.args_sospeso`) **e** la frase
+  di chi parla acconsente (`politica.consenso`, come per le proposte della politica) o ripete la
+  frase di sfida; oppure se la persona ha già confermato la chiamata alla politica
+  (`politica_accettata`). Il modello che richiama il tool non basta (revisione della PR #110:
+  «Intendevo quelli della lista della spesa.» o, un turno dopo, «Cancella le zucchine dalla
+  lista.» con la richiamata annullavano tutto). Al «sì» si annullano **solo le voci nominate
+  nella domanda** (`Agenda.cancel_ids`, gli id della proposta incrociati con `scegli`): non una
+  voce aggiunta dopo, non un appuntamento fuori da «tutti i promemoria» se il modello richiama
+  con «tutto»;
+- **senza domanda**: una voce sola, «il timer della pasta», e «tutti i timer» quando sono tutti
+  timer che scadono **entro un'ora** (pasta, uova). Una sveglia di 8 ore è anche lei un timer, ma
+  perderla non si vede subito: con lei si chiede;
+- **classe d'effetto**: `agenda_annulla` resta **E2** in ogni caso (decisione della revisione,
+  reversibile): chiede soltanto il tool con l'elenco, niente frase di sfida per l'agenda. Con la
+  stanza accesa «Cancellali tutti.» riceve la domanda del tool e il «Sì.» annulla senza sfida.
+  *Storico: nel primo commit del ramo «tutto» valeva E3 (`valore._agenda_annulla`), tolto.*
 - il riferimento sbagliato del modello («entrambi» detto della lista): caso `entrambi` nel banco
   di regressione (`prove/prova_regressione.py`, lista letta → «Cancellali entrambi.» →
-  `lista_togli`, mai `agenda_annulla`), da misurare col 26B sulla DGX (criterio ≥ 9/10, #70).
+  `lista_togli`, mai `agenda_annulla`): gemma4 e4b sul portatile 3/3; da misurare col 26B sulla
+  DGX (criterio ≥ 9/10, #70).
 
-Prova a secco: `prove/prova_agenda_tutto.py` (il tool con i contrari, Brain con «sì» e «no», la
-classe d'effetto); 14 controlli su 24 falliscono col codice di prima.
+Prova a secco: `prove/prova_agenda_tutto.py`, 41 controlli (il tool con il «sì» e i contrari,
+Brain con «sì», «no», le frasi che non acconsentono e la stanza accesa, la classe d'effetto); col
+codice di main ne falliscono 28.

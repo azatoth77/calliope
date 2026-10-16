@@ -92,6 +92,9 @@ class Agenda:
         # L'ultima voce messa o cambiata per tipo e persona (03/10): «impostalo di un minuto»
         # cambia quella, non la più simile. In memoria: dopo un riavvio vale la più recente
         self._last: dict[tuple, int] = {}
+        # Le voci nominate nella domanda «Annullo tutti e 3?» per persona (16/10, #99): al «sì»
+        # si annullano solo quelle (calliope/tools/builtin.py). In memoria: vale col sospeso
+        self.proposte_tutto: dict = {}
         # WAL e busy_timeout comuni (persistenza.apri_db, 03/10): memoria.db è condiviso
         self.db = apri_db(path)
         self.db.execute("""CREATE TABLE IF NOT EXISTS agenda (
@@ -240,7 +243,15 @@ class Agenda:
         """Annulla la voce nominata da `query` («il timer della pasta», «il dentista»: vedi
         match), o tutte («tutto», «tutti i timer»). Un appuntamento si porta via il suo avviso.
         Restituisce le voci annullate."""
-        chosen = self.scegli(query, owner)
+        return self._togli(self.scegli(query, owner))
+
+    def cancel_ids(self, ids, owner=None) -> list[dict]:
+        """Annulla le voci di `owner` con questi id (16/10, #99: il «sì» alla domanda
+        «Annullo tutti e 3?» annulla solo quelle nominate). Restituisce le voci annullate."""
+        ids = set(ids or ())
+        return self._togli([it for it in self.items(owner) if it["id"] in ids])
+
+    def _togli(self, chosen: list[dict]) -> list[dict]:
         with self._lock:
             for it in chosen:
                 self.db.execute("DELETE FROM agenda WHERE id = ? OR parent = ?",
