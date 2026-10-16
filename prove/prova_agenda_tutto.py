@@ -116,7 +116,7 @@ def prova_tool():
                  and sosp.get("tool") == "agenda_annulla"
                  and sosp.get("argomenti") == {"cosa": cosa}
                  and sosp.get("domanda") == "Annullo tutti e 2?"
-                 and len(ag.proposte_tutto.get(DARIO, ())) == 2
+                 and len(getattr(ag, "proposte_tutto", {}).get(DARIO, ())) == 2
                  and "agenda_tutto_chiede" in ctx.regole and "agenda_tutto" not in ctx.regole,
                  f"{etichette(ag)} {r} {ctx.regole}")
     # Il «sì»: proposta di agenda_annulla su «tutti» e una frase di consenso (o la sfida)
@@ -127,7 +127,7 @@ def prova_tool():
         r, ctx = risposta(ag, frase, sfida=sfida)
         verifica(f"al «{frase}»{' (sfida)' if sfida else ''}: annullati entrambi",
                  etichette(ag) == [] and r.get("ok") is True and "agenda_tutto" in ctx.regole
-                 and "agenda_tutto_chiede" not in ctx.regole and DARIO not in ag.proposte_tutto
+                 and "agenda_tutto_chiede" not in ctx.regole and DARIO not in getattr(ag, "proposte_tutto", {})
                  and r.get("conferma", "").startswith("Ho annullato "), f"{r} {ctx.regole}")
     # Senza la politica del turno (chiamate del codice): la frase di chi parla dal contesto
     ag = agenda_con(DUE)
@@ -283,6 +283,38 @@ def prova_brain():
             verifica(f"Brain: {' → '.join(frasi)}{' con la richiamata' if richiama else ''} "
                      f"→ niente annullato", len(etichette(ag)) == 2,
                      f"{r} {etichette(ag)} {b.rules_fired()}")
+    # Seconda revisione della PR #110: il «Sì.» passa dalla politica (politica_conferma_unica,
+    # ACCETTATA) e una voce aggiunta dopo la domanda non si annulla lo stesso; la proposta si toglie
+    ag = agenda_con(DUE)
+    b = brain_con(ag)
+    turno(b, "Cancellali tutti.", chiama("agenda_annulla", TUTTI))
+    ag.add("promemoria", "chiamare l'idraulico", time.time() + 7200, owner=DARIO,
+           owner_name="Dario")
+    r = turno(b, "Sì.", chiama("agenda_annulla", TUTTI), testo("Fatto."))
+    verifica("Brain: voce aggiunta dopo la domanda, «Sì.» accettato dalla politica → solo le 2 "
+             "nominate, la proposta tolta",
+             etichette(ag) == ["chiamare l'idraulico"] and DARIO not in getattr(ag, "proposte_tutto", {})
+             and "politica_conferma_unica" in b.rules_fired(),
+             f"{r} {etichette(ag)} {b.rules_fired()} {getattr(ag, "proposte_tutto", {})}")
+    # «Sì, ma solo il promemoria.»: con la richiamata «tutti» niente annullato; il modello poi
+    # chiama la voce indicata
+    ag = agenda_con(DUE)
+    b = brain_con(ag)
+    turno(b, "Cancellali tutti.", chiama("agenda_annulla", TUTTI))
+    r = turno(b, "Sì, ma solo il promemoria.", chiama("agenda_annulla", TUTTI),
+              chiama("agenda_annulla", {"cosa": "il promemoria di innaffiare il basilico"}),
+              testo("Fatto."))
+    verifica("Brain: «Sì, ma solo il promemoria.» con la richiamata «tutti» → solo il promemoria",
+             etichette(ag) == ["dal veterinario"] and "agenda_tutto_parziale" in b.rules_fired()
+             and DARIO not in getattr(ag, "proposte_tutto", {}), f"{r} {etichette(ag)} {b.rules_fired()}")
+    for frase in ("Sì, tranne l'appuntamento.", "Va bene, soltanto il promemoria."):
+        ag = agenda_con(DUE)
+        b = brain_con(ag)
+        turno(b, "Cancellali tutti.", chiama("agenda_annulla", TUTTI))
+        r = turno(b, frase, chiama("agenda_annulla", TUTTI), testo("Quale annullo?"))
+        verifica(f"Brain: «{frase}» con la richiamata «tutti» → niente annullato",
+                 len(etichette(ag)) == 2 and "agenda_tutto_parziale" in b.rules_fired(),
+                 f"{r} {etichette(ag)} {b.rules_fired()}")
     # Contrario: una voce sola, nessuna domanda
     ag = agenda_con([("promemoria", "innaffiare il basilico")])
     b = brain_con(ag)

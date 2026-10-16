@@ -1345,6 +1345,20 @@ def _si_alla_domanda(ctx: ToolContext) -> bool:
     return bool(getattr(t, "sfida", False)) or politica.consenso(testo)
 
 
+# «Sì, ma solo il promemoria.», «tranne l'appuntamento»: il consenso è per una parte (seconda
+# revisione della PR #110). Vincolo di sicurezza su un'azione già scelta dal modello (principio
+# 10): non si annulla niente e decide il modello con la voce indicata (effetto reversibile),
+# regola `agenda_tutto_parziale`
+_SOLO_PARTE = re.compile(r"(?<![a-zà-ù])(?:solo|soltanto|solamente|tranne|eccetto)(?![a-zà-ù])",
+                         re.I)
+
+
+def _solo_una_parte(ctx: ToolContext) -> bool:
+    t = getattr(ctx, "politica", None)
+    testo = str(getattr(t, "testo", "") or getattr(ctx, "user_text", "") or "")
+    return bool(_SOLO_PARTE.search(testo))
+
+
 def _annulla_tutto_chiede(ctx: ToolContext, chosen: list[dict], cosa: str, owner) -> dict:
     """Annullare tutto si conferma (16/10, #99, caso vero della DGX del 15/10 alle 18:57:
     «cancellare entrambi», detto delle due voci della lista appena letta, è diventato
@@ -1375,14 +1389,27 @@ def _agenda_annulla(ctx: ToolContext, cosa: str) -> dict:
     gone = None
     if is_cancel_all(cosa or ""):
         chosen = ctx.agenda.scegli(cosa or "", owner)
-        if _da_confermare(chosen) and not getattr(ctx, "politica_accettata", False):
+        if _da_confermare(chosen):
             proposte = getattr(ctx.agenda, "proposte_tutto", {})
-            if owner in proposte and _si_alla_domanda(ctx):
+            accettata = bool(getattr(ctx, "politica_accettata", False))
+            sua = (owner in proposte
+                   and getattr(ctx, "tool_in_sospeso", None) == "agenda_annulla")
+            si = accettata or (sua and _si_alla_domanda(ctx))
+            if si and _solo_una_parte(ctx):
+                # «Sì, ma solo il promemoria.»: il sì vale per una parte, non per tutto
+                proposte.pop(owner, None)
+                note_rule(ctx, "agenda_tutto_parziale")
+                return {"ok": False, "fatto": NIENTE,
+                        "errore": "chi parla ha chiesto di annullarne solo una parte",
+                        "cosa_fare": "chiama agenda_annulla con la voce che ha indicato, non "
+                                     "con «tutti»; se non è chiaro quale, chiediglielo"}
+            if si and sua:
                 # Solo le voci nominate nella domanda e ancora da annullare con questa richiesta:
-                # non una voce aggiunta dopo, non un appuntamento fuori da «tutti i promemoria»
+                # non una voce aggiunta dopo, non un appuntamento fuori da «tutti i promemoria».
+                # Anche quando il «sì» l'ha accettato la politica (politica_conferma_unica)
                 gia = proposte.pop(owner)
                 gone = ctx.agenda.cancel_ids({it["id"] for it in chosen} & gia, owner)
-            else:
+            elif not si:
                 return _annulla_tutto_chiede(ctx, chosen, cosa or "", owner)
     if gone is None:
         gone = ctx.agenda.cancel(cosa or "", owner)

@@ -236,7 +236,14 @@ Cosa cambia (`calliope/tools/builtin.py`, con le correzioni della revisione dell
   lista.» con la richiamata annullavano tutto). Al «sì» si annullano **solo le voci nominate
   nella domanda** (`Agenda.cancel_ids`, gli id della proposta incrociati con `scegli`): non una
   voce aggiunta dopo, non un appuntamento fuori da «tutti i promemoria» se il modello richiama
-  con «tutto»;
+  con «tutto». L'incrocio vale anche quando il «sì» l'ha accettato la politica
+  (`politica_conferma_unica`, il percorso più comune), e la proposta si toglie sempre da
+  `proposte_tutto` (seconda revisione della PR #110: prima, con `politica_accettata`, si
+  annullava tutto l'ambito, anche la voce aggiunta dopo). Un `politica_accettata` senza la
+  proposta del tool (la domanda era della politica) annulla tutto l'ambito come chiesto;
+- **un «sì» per una parte**: «Sì, ma solo il promemoria.», «tranne…», «eccetto…», «soltanto…»
+  non annullano tutto anche se il modello richiama con «tutti»: niente annullato, il tool dice al
+  modello di chiamare la voce indicata (o di chiedere quale), regola `agenda_tutto_parziale`;
 - **senza domanda**: una voce sola, «il timer della pasta», e «tutti i timer» quando sono tutti
   timer che scadono **entro un'ora** (pasta, uova). Una sveglia di 8 ore è anche lei un timer, ma
   perderla non si vede subito: con lei si chiede;
@@ -249,6 +256,7 @@ Cosa cambia (`calliope/tools/builtin.py`, con le correzioni della revisione dell
   `lista_togli`, mai `agenda_annulla`): gemma4 e4b sul portatile 3/3; da misurare col 26B sulla
   DGX (criterio ≥ 9/10, #70).
 
-Prova a secco: `prove/prova_agenda_tutto.py`, 41 controlli (il tool con il «sì» e i contrari,
-Brain con «sì», «no», le frasi che non acconsentono e la stanza accesa, la classe d'effetto); col
-codice di main ne falliscono 28.
+Prova a secco: `prove/prova_agenda_tutto.py`, 45 controlli (il tool con il «sì» e i contrari,
+Brain con «sì», «no», le frasi che non acconsentono, la voce aggiunta dopo con il «sì» accettato
+dalla politica, il «sì» per una parte e la stanza accesa, la classe d'effetto); col codice di
+main ne falliscono 32.
