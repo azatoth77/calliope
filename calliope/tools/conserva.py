@@ -160,8 +160,8 @@ def _dati_conservati(ctx: ToolContext, azione: str = "", persona: str = "") -> d
                           "cancello.")
         if minore_di is not None:
             domanda = (f"Posso tenere le registrazioni della voce di {chi.name} per {giorni} "
-                       "giorni, solo qui in casa, per capirlo meglio? Voi tutori potete dirmi "
-                       "di smettere quando volete.")
+                       "giorni, solo qui in casa, per capire meglio come parla? Voi tutori potete "
+                       "dirmi di smettere quando volete.")
         else:
             domanda = (f"Posso tenere le registrazioni della tua voce per {giorni} giorni, solo "
                        "qui in casa, per capirti meglio? Puoi dirmi di smettere quando vuoi.")
