@@ -1314,11 +1314,56 @@ def _annulla_quale(ctx: ToolContext, cosa: str, prof) -> dict:
             "risposta_finale": text}
 
 
+def _tutto_confermato(ctx: ToolContext) -> bool:
+    """Questa chiamata è il «sì» alla domanda «Annullo tutti e 3?» (16/10, #99): la proposta in
+    sospeso per chi parla è di agenda_annulla e annullava tutto (gli argomenti proposti, quando
+    la politica del turno li ha), oppure la persona ha già confermato questa chiamata alla
+    politica (`politica_accettata`). Il consenso lo giudica il modello, che richiama il tool:
+    qui si guarda solo di chi è la proposta."""
+    if getattr(ctx, "politica_accettata", False):
+        return True
+    if getattr(ctx, "tool_in_sospeso", None) != "agenda_annulla":
+        return False
+    sosp = getattr(getattr(ctx, "politica", None), "args_sospeso", None)
+    return not isinstance(sosp, dict) or is_cancel_all(str(sosp.get("cosa") or ""))
+
+
+def _annulla_tutto_chiede(ctx: ToolContext, cosa: str, prof) -> dict | None:
+    """Annullare tutto si conferma (16/10, #99, caso vero della DGX del 15/10 alle 18:57:
+    «cancellare entrambi», detto delle due voci della lista appena letta, è diventato
+    agenda_annulla(cosa=tutti), eseguito senza domanda). Con più di una voce da annullare, e
+    non soltanto timer, non si annulla niente: si dice che cosa c'è e la proposta resta in
+    sospeso; al «sì» la richiamata esegue. Con una voce sola, o con soli timer (E1, durano
+    minuti), si annulla come prima. È la forma di una scelta già fatta dal modello (principio
+    10), regola `agenda_tutto_chiede`. None = si annulla."""
+    chosen = ctx.agenda.scegli(cosa, prof.id if prof else None)
+    if len(chosen) < 2 or all(it["kind"] == "timer" for it in chosen):
+        return None
+    if _tutto_confermato(ctx):
+        return None
+    note_rule(ctx, "agenda_tutto_chiede")
+    voci = [_voce_detta(it) for it in chosen[:4]]
+    if len(chosen) > 4:
+        voci.append(f"altre {len(chosen) - 4} voci")
+    elenco = ", ".join(voci[:-1]) + " e " + voci[-1]
+    domanda = f"Annullo tutti e {len(chosen)}?"
+    text = f"Non ho ancora annullato niente: ci sono {elenco}. {domanda}"
+    return {"ok": False, "fatto": "NIENTE ancora: è una domanda, non ho annullato niente",
+            "conferma": text, "risposta_finale": text,
+            "in_sospeso": {"tool": "agenda_annulla", "argomenti": {"cosa": cosa},
+                           "cosa": f"annullare tutte le {len(chosen)} voci dell'agenda",
+                           "domanda": domanda}}
+
+
 def _agenda_annulla(ctx: ToolContext, cosa: str) -> dict:
     """Annulla un timer o un promemoria («il timer della pasta», «tutti i timer»)."""
     if ctx.agenda is None:
         return {"ok": False, "errore": "agenda non disponibile"}
     prof = _person(ctx)
+    if is_cancel_all(cosa or ""):
+        chiede = _annulla_tutto_chiede(ctx, cosa or "", prof)
+        if chiede is not None:
+            return chiede
     gone = ctx.agenda.cancel(cosa or "", prof.id if prof else None)
     if is_cancel_all(cosa or ""):
         note_rule(ctx, "agenda_tutto")

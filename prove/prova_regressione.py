@@ -238,6 +238,25 @@ STORIA_STORIA = [
     {"role": "user", "content": "Calliope, basta."},
     {"role": "assistant", "content": "Va bene, mi fermo. (argomento chiuso)"}]
 
+# «Cancellare entrambi» detto della lista appena letta (15/10 sera, caso vero della DGX in auto,
+# #99): il modello chiamò agenda_annulla(cosa=tutti), il tool più vicino nella storia. Il
+# riferimento è la lista: lista_togli, mai agenda_annulla
+STORIA_ENTRAMBI = [
+    {"role": "user", "content": "Ho qualcosa in agenda oggi?"},
+    {"role": "assistant", "content": "", "tool_calls": [
+        {"id": "call_0", "name": "agenda_elenca", "arguments": {}}]},
+    {"role": "tool", "tool_call_id": "call_0", "name": "agenda_elenca",
+     "content": json.dumps({"voci": [], "numero": 0})},
+    {"role": "assistant", "content": "Oggi non hai niente in agenda."},
+    {"role": "user", "content": "Cosa c'è nella lista della spesa?"},
+    {"role": "assistant", "content": "", "tool_calls": [
+        {"id": "call_1", "name": "lista_leggi", "arguments": {"lista": "spesa"}}]},
+    {"role": "tool", "tool_call_id": "call_1", "name": "lista_leggi",
+     "content": json.dumps({"ok": True, "lista": "spesa", "voci": ["zucchine", "yogurt"],
+                            "numero": 2, "conferma": "Nella lista della spesa ci sono 2 cose: "
+                                                     "zucchine e yogurt."})},
+    {"role": "assistant", "content": "Nella lista della spesa ci sono 2 cose: zucchine e yogurt."}]
+
 BREVE = lambda r: len(r) < 160  # noqa: E731 — una chiusura, non un racconto
 
 
@@ -335,6 +354,9 @@ CASI = [
      "promemoria_imposta", (), None, None),
     ("prom2", "Dario", "amministra", "Cancellami il promemoria dell'acqua.", "agenda_annulla",
      (), None, None),
+    # Il riferimento è la lista appena letta, non l'agenda (15/10 sera, #99)
+    ("entrambi", "Dario", "amministra", "Cancellali entrambi.", "lista_togli",
+     ("agenda_annulla",), None, STORIA_ENTRAMBI),
     # ── Date ──
     ("data", "Dario", "amministra", "Allora cerca la data di oggi e poi deduci quella di "
      "domani.", ("data_oggi", "data_calcola", "biblioteca_cerca", None), (), giorno_giusto(1), STORIA_DOMANI),
@@ -517,6 +539,7 @@ def esegui(cfg, giro, righe):
         casa.diagnosi(riprova=True)
     db = str(tmp / "memoria.db")
     ag, liste, mem = Agenda(db), Liste(db), Memory(db)
+    liste.add("spesa", ["zucchine", "yogurt"])      # la lista di STORIA_ENTRAMBI (#99)
     reg = build_registry(biblioteca=True, citazioni=True, documenti=FORMATI, casa=True,
                          schermi=True, agenti=True,
                          conversazioni=True)

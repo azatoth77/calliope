@@ -240,6 +240,18 @@ class Agenda:
         """Annulla la voce nominata da `query` («il timer della pasta», «il dentista»: vedi
         match), o tutte («tutto», «tutti i timer»). Un appuntamento si porta via il suo avviso.
         Restituisce le voci annullate."""
+        chosen = self.scegli(query, owner)
+        with self._lock:
+            for it in chosen:
+                self.db.execute("DELETE FROM agenda WHERE id = ? OR parent = ?",
+                                (it["id"], it["id"]))
+            self.db.commit()
+        self._wake.set()
+        return chosen
+
+    def scegli(self, query: str, owner=None) -> list[dict]:
+        """Le voci che `cancel` annullerebbe con questa richiesta, senza annullarle (16/10:
+        «annulla tutto» con più voci chiede prima, calliope/tools/builtin.py)."""
         items = self.items(owner)
         q = query.lower().strip()
         kinds_named = {k for k in ("timer", "promemoria", "appuntamento")
@@ -253,12 +265,6 @@ class Agenda:
             chosen = [it for it in items if it["kind"] in kinds]
         else:
             chosen = self.match(q, owner, items)
-        with self._lock:
-            for it in chosen:
-                self.db.execute("DELETE FROM agenda WHERE id = ? OR parent = ?",
-                                (it["id"], it["id"]))
-            self.db.commit()
-        self._wake.set()
         return chosen
 
     # ── scadenze ──

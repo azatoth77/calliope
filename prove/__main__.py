@@ -154,6 +154,7 @@ A_SECCO = [
     ("prova_dialogo_tool.py", [], "dialogo tra tool e modelli (09/10, caso della DGX web_cerca senza domanda): chiamata vuota a ogni tool con argomenti obbligatori → errore strutturato (campo, argomenti, esempio, correggibile, cosa_fare), obbligatorio mancante con altri argomenti, argomento sconosciuto, conversioni di forma e contrari, eccezioni senza traccia, giro di correzione in Brain (frase non detta, domanda detta, tetto, errore non correggibile, frase d'attesa), strumenti dell'agente"),
     ("prova_nome_da_solo.py", [], "il nome da solo e la modalità Star Trek in uso (06/10, DGX) con un satellite finto: scatto sicuro con testo vuoto o nome storpiato breve → saluto o suono d'inizio e finestra aperta, suono di fine se nessuno parla; contrari; tool senza argomenti obbligatori senza frase d'attesa; risposta di sola punteggiatura"),
     ("prova_agenda.py", ["--secco"], "timer, promemoria, appuntamenti: scadenza, annullo"),
+    ("prova_agenda_tutto.py", [], "annullare tutta l'agenda si conferma (16/10, #99): con più voci (non soli timer) la domanda con l'elenco e la proposta in sospeso, al «sì» annullate, contrari (una voce, il timer della pasta, tutti i timer, il «no», la proposta di un altro tool o di una voce sola); classe d'effetto E3 per «tutto»"),
     ("prova_memoria.py", ["--secco"], "memoria per persona"),
     ("prova_liste.py", [], "liste della casa e memoria della casa"),
     ("prova_pc.py", [], "tool pc_* con un PC finto: permessi, valori a voce, blocco"),
