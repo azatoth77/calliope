@@ -24,6 +24,11 @@ dal registro dei turni (calliope/turnlog.py), per ogni giorno:
 - la **generazione** (`generazione_tps`, dal 08/10, fase 0 della taratura): token al secondo
   del modello nel turno (Ollama `eval_count / eval_duration`; vLLM dal primo all'ultimo
   pezzo), mediana e p10 (i turni più lenti: contesa con l'agente, modello in parte sulla CPU);
+- la **cache del prefisso** (16/10, issue #95): turni in cui il motore ha riletto molto più
+  della stima della guardia (`cache.riletti` oltre `CACHE_PERSA_VOLTE` × `riletti_stimati` +
+  `CACHE_PERSA_MARGINE`: la cache si è persa, anche se la lettura resta sotto 1 s) e i **dati
+  del turno** (`dati_turno_token`: ciò che il motore deve riavvolgere alla richiesta dopo), coi
+  turni oltre `dati_turno_tetto_token`;
 - un **avviso** se la mediana del giorno supera `latenza_avviso_s` (1,2 s) con almeno
   `MIN_RISPOSTE` risposte: all'avvio di Calliope e in `calliope stato`.
 
@@ -38,6 +43,10 @@ from pathlib import Path
 
 MIN_RISPOSTE = 10          # sotto, un giorno non fa statistica (e non dà avvisi)
 LETTURA_LENTA_S = 1.0      # rilettura del prompt oltre questo: cache del prefisso persa
+# Riletti dal motore oltre questo multiplo della stima della guardia (più un margine per le
+# passate con un tool e il modo di contare di Ollama): la cache del prefisso si è persa
+CACHE_PERSA_VOLTE = 1.3
+CACHE_PERSA_MARGINE = 300
 
 
 def _q(valori: list[float], p: float) -> float | None:
@@ -72,6 +81,17 @@ def _lettura(t: dict) -> float | None:
     return float(x) if isinstance(x, (int, float)) else None
 
 
+def cache_persa(t: dict) -> bool | None:
+    """La cache del prefisso si è persa in questo turno (16/10, issue #95): il motore ha riletto
+    molto più dei messaggi cambiati dalla richiesta di prima. None se il turno non lo dice (il
+    primo della conversazione, niente misura)."""
+    c = t.get("cache") if isinstance(t.get("cache"), dict) else {}
+    r, st = c.get("riletti"), c.get("riletti_stimati")
+    if c.get("prima") or not isinstance(r, int) or not isinstance(st, int):
+        return None
+    return r > CACHE_PERSA_VOLTE * st + CACHE_PERSA_MARGINE
+
+
 def giorno(turni: list[dict]) -> dict:
     """Le misure di un gruppo di turni (di solito un giorno)."""
     r = [t for t in turni if _num(t, "prima_frase_s") is not None]
@@ -103,6 +123,8 @@ def giorno(turni: list[dict]) -> dict:
     gen = [_num(t, "generazione_tps") for t in r if _num(t, "generazione_tps")]
     token = [t["contesto"].get("token") for t in r if isinstance(t.get("contesto"), dict)]
     coda = [_num(t, "coda_s") for t in r if _num(t, "coda_s")]
+    persa = [x for x in (cache_persa(t) for t in r) if x is not None]
+    dati = [t["dati_turno_token"] for t in r if isinstance(t.get("dati_turno_token"), int)]
     base = [_num(t, "prima_frase_s") for t in r
             if not _tool(t) and not t.get("guardiano") and _num(t, "stt_correzione_ms") is None]
     # Quanto le schede trattenute hanno aspettato il giudizio del guardiano (06/10, il costo
@@ -139,6 +161,9 @@ def giorno(turni: list[dict]) -> dict:
         "generazione": {"n": len(gen), "mediana": _med(gen), "p10": _q(gen, .1)},
         "contesto": {"token_mediana": _med(token)},
         "coda": {"n": len(coda), "mediana": _med(coda)},
+        "cache": {"n": len(persa), "perse": sum(persa)},
+        "dati_turno": {"n": len(dati), "mediana": _med(dati), "p90": _q(dati, .9),
+                       "oltre": sum(1 for t in r if t.get("dati_turno_oltre"))},
         "base": {"n": len(base), "mediana": _med(base)},
         "schede_attesa": {"n": len(attese), "ms_mediana": _med(attese),
                           "ms_p90": _q(attese, .9), "ms_max": max(attese) if attese else None},
@@ -172,7 +197,13 @@ def avviso(d: dict, soglia: float = 1.2, data: str = "") -> str | None:
         cause.append(f"tool in {d['tool']['n']} turni ({_s(d['tool']['con'])} contro "
                      f"{_s(d['tool']['senza'])})")
     if d["lettura"]["lente"]:
-        cause.append(f"cache del prefisso persa in {d['lettura']['lente']} turni")
+        cause.append(f"rilettura oltre {_s(LETTURA_LENTA_S)} in {d['lettura']['lente']} turni")
+    ca = d.get("cache") or {}
+    if ca.get("perse"):
+        cause.append(f"cache del prefisso persa in {ca['perse']} turni su {ca['n']}")
+    dt = d.get("dati_turno") or {}
+    if dt.get("oltre"):
+        cause.append(f"dati del turno oltre il tetto in {dt['oltre']} turni")
     quando = f" del {data}" if data else ""
     return (f"La prima frase{quando} ha mediana {_s(med)} (soglia {_s(soglia)}, p90 "
             f"{_s(d['prima_frase']['p90'])}, base {_s(d['base']['mediana'])})"
@@ -249,6 +280,14 @@ def testo(giorni: dict[str, dict], soglia: float = 1.2) -> str:
             cause.append(f"contesto {int(d['contesto']['token_mediana'])} token")
         if d["coda"]["n"]:
             cause.append(f"in coda {d['coda']['n']} volte")
+        ca = d.get("cache") or {}
+        if ca.get("n"):
+            cause.append(f"cache del prefisso persa in {ca['perse']} turni su {ca['n']}")
+        dt = d.get("dati_turno") or {}
+        if dt.get("n"):
+            cause.append(f"dati del turno {int(dt['mediana'])} token (p90 {int(dt['p90'])}"
+                         + (f", oltre il tetto in {dt['oltre']} turni" if dt["oltre"] else "")
+                         + ")")
         sa = d.get("schede_attesa") or {}
         if sa.get("n"):
             cause.append(f"schede trattenute {sa['n']} volte, {int(sa['ms_mediana'])} ms "

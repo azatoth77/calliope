@@ -636,7 +636,8 @@ class Ombra:
                 # anonima, i pezzi della stanza legati alla frase) vanno nell'evento. I pezzi
                 # stanno solo in memoria (`Conversazione.stanza`): il loro numero non su disco
                 segni = self._segni_persona(conv) if self.attivo else {}
-                nsd = (["testo"] if fermato else []) + (["stanza"] if "stanza" in segni else [])
+                nsd = ((["testo"] if fermato else [])
+                       + [k for k in ("stanza", "dati") if k in segni])
                 persona = add(
                     "detto_persona", testo=testo, canale=canale,
                     come=getattr(sc, "identified_by", None),
@@ -703,7 +704,8 @@ class Ombra:
 
     def _segni_persona(self, conv) -> dict:
         """Passo 3: i segni del messaggio della persona del turno vivo che la proiezione deve
-        rendere (15/10, issue #12): `_chi` → `chi`, `_stanza` → `stanza` (numero o elenco)."""
+        rendere (15/10, issue #12): `_chi` → `chi`, `_stanza` → `stanza` (numero o elenco); dal
+        16/10 (issue #95) `_dati` → `dati`, i dati fissi legati alla frase."""
         vivo = self._turno_vivo(conv)
         if vivo is None:
             return {}
@@ -711,12 +713,13 @@ class Ombra:
         out: dict = {}
         if isinstance(u.get("_chi"), str) and u["_chi"]:
             out["chi"] = u["_chi"]
-        s = u.get("_stanza")
-        if isinstance(s, int) and not isinstance(s, bool):
-            out["stanza"] = s
-        elif isinstance(s, (list, tuple)) and s and all(
-                isinstance(x, int) and not isinstance(x, bool) for x in s):
-            out["stanza"] = list(s)
+        for k in ("stanza", "dati"):
+            s = u.get("_" + k)
+            if isinstance(s, int) and not isinstance(s, bool):
+                out[k] = s
+            elif isinstance(s, (list, tuple)) and s and all(
+                    isinstance(x, int) and not isinstance(x, bool) for x in s):
+                out[k] = list(s)
         return out
 
     def _dalla_storia(self, reg, conv, persona, info, turni_s, add) -> list:

@@ -143,6 +143,58 @@ verifica("cortesia: niente dichiarazioni d'azione né maschili",
          [f for t in RISPOSTE.values() for v in t.values() for f in v
           if re.search(r"\b(fatto|eseguito|contento|pronto)\b", f, re.I)], [])
 
+# ── «Grazie.» sul rumore (16/10, issue #97, regola `cortesia_senza_voce`): casi veri della
+# DGX del 15/10 sera, «Grazie.» trascritto su 0,00–0,38 s di voce chiudeva la finestra ──
+from calliope.config import VALIDATORI as _VAL, Config as _Cfg  # noqa: E402
+from calliope.cortesia import senza_voce, voce_frase  # noqa: E402
+
+_cv = _Cfg()
+verifica("cortesia sul rumore: di serie in ombra, soglia 0,3 s",
+         (_cv.cortesia_voce_min, _cv.cortesia_voce_min_s), ("ombra", 0.3))
+_cv.cortesia_voce_min = "attiva"
+for testo, voce_s, scritto, atteso in [
+        ("Grazie.", 0.12, False, "attiva"), ("Grazie.", 0.0, False, "attiva"),
+        ("Grazie.", 0.29, False, "attiva"), ("Perfetto.", 0.1, False, "attiva"),
+        # contrari: abbastanza voce (il «grazie» vero della minore, 0,60 s), frase scritta,
+        # l'ordine di silenzio (non chiude la finestra), una frase con una richiesta a ogni
+        # durata (non è una forma chiusa: va al modello)
+        ("Grazie.", 0.5, False, None), ("Grazie.", 0.6, False, None),
+        ("Grazie.", 0.3, False, None), ("Grazie.", 0.0, True, None),
+        ("Basta.", 0.1, False, None),
+        ("Grazie, spegni la luce.", 0.1, False, None),
+        ("Grazie, spegni la luce.", 2.0, False, None)]:
+    verifica(f"cortesia sul rumore «{testo}» {voce_s} s{' scritto' if scritto else ''}",
+             senza_voce(closing_kind(testo), voce_s, scritto, _cv), atteso)
+# I secondi di voce (revisione della PR #109): il parlato del VAD prima, con qualunque chiusura;
+# la durata dell'audio, che sottostima con «rilascio» (telefono a pressione) e «anticipata»
+# (Smart Turn), solo se il parlato manca
+for ascolto, voiced, atteso in [
+        ({"parlato_ms": 160, "chiusura": "silenzio"}, 0.12, (0.16, "vad")),
+        ({"parlato_ms": 520, "chiusura": "rilascio"}, 0.0, (0.52, "vad")),
+        ({"parlato_ms": 600, "chiusura": "anticipata"}, 0.1, (0.6, "vad")),
+        ({"parlato_ms": 0}, 0.4, (0.0, "vad")),
+        ({"chiusura": "silenzio"}, 0.12, (0.12, "durata")), (None, 0.5, (0.5, "durata")),
+        ({"parlato_ms": None}, 0.2, (0.2, "durata")), ({"parlato_ms": True}, 0.2, (0.2, "durata"))]:
+    verifica(f"cortesia sul rumore: voce di {ascolto} / {voiced} s", voce_frase(ascolto, voiced),
+             atteso)
+for chiusura in ("rilascio", "anticipata"):
+    verifica(f"contrario: «Grazie.» chiuso da «{chiusura}» con la voce piena non scatta",
+             senza_voce("grazie", voce_frase({"parlato_ms": 520, "chiusura": chiusura}, 0.0)[0],
+                        False, _cv), None)
+_cv.cortesia_voce_min = "ombra"
+verifica("cortesia sul rumore: in ombra il modo «ombra»",
+         senza_voce("grazie", 0.1, False, _cv), "ombra")
+_cv.cortesia_voce_min = "spenta"
+verifica("cortesia sul rumore: spenta non scatta", senza_voce("grazie", 0.1, False, _cv), None)
+verifica("cortesia sul rumore: il «no» di YAML è «spenta», «Attiva» vale",
+         (_VAL["cortesia_voce_min"](False), _VAL["cortesia_voce_min"]("Attiva")),
+         ("spenta", "attiva"))
+try:
+    _VAL["cortesia_voce_min"]("acceso")
+    verifica("cortesia sul rumore: «acceso» rifiutato", False, True)
+except ValueError:
+    verifica("cortesia sul rumore: «acceso» rifiutato", True, True)
+
 # ── cortesia dopo una domanda o un'offerta di Calliope (09/10, caso vero della DGX alle
 # 11:24: «Sì, grazie.» trascritto «Grazie.» dopo «… se vuoi cerco su internet.») ──
 from calliope.brain import Brain, chiede_risposta, traccia_risposta  # noqa: E402

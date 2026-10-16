@@ -40,7 +40,8 @@ from . import impronte_satellite as impronte_mod
 from . import provenienza, riferire, stato_dialogo, storpiature
 from . import allegati as allegati_mod
 from . import frasi
-from .cortesia import Cortesia
+from .cortesia import (Cortesia, senza_voce as cortesia_senza_voce,
+                       voce_frase as cortesia_voce_frase)
 from . import gioco_voce
 from . import gioco_stato
 from . import gioco_giudice
@@ -3436,6 +3437,23 @@ class Ciclo:
             if forma == "grazie":
                 self.rule("cortesia_dopo_domanda")
             forma = None
+        # «Grazie.» sul rumore (16/10, issue #97): meno di cortesia_voce_min_s di voce
+        # (revisione della PR #109: il parlato del VAD, che vale anche con la frase chiusa dal
+        # rilascio del tasto o da Smart Turn; la durata dell'audio solo se manca)
+        voce_s, fonte = cortesia_voce_frase(self.rec.get("ascolto"), t.voiced_s)
+        rumore = cortesia_senza_voce(forma, voce_s, t.scritto is not None, cfg)
+        if rumore:
+            self.rec["cortesia_voce"] = {"forma": forma, "voce_s": round(voce_s, 2),
+                                         "fonte": fonte}
+        if rumore == "attiva":
+            # Come una trascrizione vuota: niente frase pronta, finestra d'ascolto invariata
+            print(f"   [CORTESIA] «{self.in_console(text)}» su {voce_s:.2f} s di voce: "
+                  "rumore, resto in ascolto")
+            self.rec["esito"] = "vuoto"
+            self.rule("cortesia_senza_voce")
+            return _FINE
+        if rumore == "ombra":
+            self.rule("cortesia_senza_voce_ombra")
         if forma in ("grazie", "conferma"):
             prof = s.registry.get(t.speaker_name) if t.speaker_name else None
             frase = s.cortesia.risposta(forma, getattr(prof, "preferred_tone", None), cfg.tono,
@@ -4294,6 +4312,10 @@ class Ciclo:
         cache = dict(getattr(brain, "last_cache", None) or {})
         if isinstance(getattr(brain, "last_riletti", None), int):
             cache["riletti"] = brain.last_riletti
+        # I token ripresi dalla cache nella prima passata (16/10, issue #95): fermi da un turno
+        # all'altro mentre il contesto cresce = la cache si perde sempre allo stesso punto
+        if isinstance(getattr(brain, "last_ripresi", None), int):
+            cache["ripresi"] = brain.last_ripresi
         p = getattr(brain, "_stato_eventi", None)
         if isinstance(p, dict) and isinstance(p.get("ms"), (int, float)):
             # Con `eventi: attivo` la proiezione sta nel percorso della risposta
@@ -4302,6 +4324,17 @@ class Ciclo:
                 cache["fughe"] = p["fughe"]
         if cache:
             self.rec["cache"] = cache
+        # Quanto il motore dovrà riavvolgere alla richiesta dopo (16/10, issue #95): i dati del
+        # turno più la domanda, in token stimati, e se superano `dati_turno_tetto_token`; i dati
+        # fissi nella storia (ricordi, avvisi, riassunto della stanza), solo nomi e numeri
+        dt = getattr(brain, "last_dati_turno_token", None)
+        if isinstance(dt, int) and not isinstance(dt, bool):
+            self.rec["dati_turno_token"] = dt
+            if getattr(brain, "last_dati_turno_oltre", False):
+                self.rec["dati_turno_oltre"] = True
+        df = getattr(brain, "last_dati_fissi", None)
+        if isinstance(df, dict) and df:
+            self.rec["dati_fissi"] = dict(df)
         # Le righe della stanza nella storia (14/10 sera, `stanza_contesto_in_storia`): quante
         # nuove in questo turno e quante davanti al modello, solo numeri
         st_s = getattr(brain, "last_stanza_storia", None)

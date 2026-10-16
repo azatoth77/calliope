@@ -119,6 +119,19 @@ class Config:
     # «Come più tardi.», 0,76 s): saluto, o suono d'inizio ascolto, e finestra aperta,
     # invece della frase al modello. «Calliope» da solo dura 0,5–0,65 s sulla DGX
     wake_solo_nome_s: float = 0.9
+    # «Grazie.» sul rumore (16/10, issue #97, calliope/cortesia.py): Whisper scrive «Grazie.»
+    # su un rumore breve (allucinazione dei sottotitoli), e la cortesia chiudeva la finestra
+    # d'ascolto a chi stava parlando (sulla DGX il 15/10 sera 7 casi su 8 con 0,00–0,38 s di
+    # voce; il «grazie» vero della minore 0,60 s). Una cortesia («grazie», «perfetto») detta su
+    # meno di cortesia_voce_min_s secondi di voce (il parlato del VAD, `parlato_ms`; la durata
+    # dell'audio meno pre-roll e silenzio solo se manca) vale come trascrizione vuota:
+    # «attiva» = niente frase pronta e finestra invariata (regola `cortesia_senza_voce`);
+    # «ombra» (di serie) = la cortesia come prima e nel registro dei turni la regola
+    # `cortesia_senza_voce_ombra` con `cortesia_voce` (forma, secondi di voce e fonte), da
+    # rileggere per una settimana prima di «attiva»; «spenta» = niente. Le frasi scritte non
+    # contano: non hanno voce
+    cortesia_voce_min: str = "ombra"
+    cortesia_voce_min_s: float = 0.3
     # Barge-in, livello A: mentre Calliope parla la wake word resta accesa e «Calliope,
     # basta» la interrompe (solo il nome: il resto della voce non viene ascoltato). Senza
     # cuffie si ignora quando è lei a dire il proprio nome. Richiede wake_mode="modello".
@@ -335,6 +348,21 @@ class Config:
     # un altro la conversazione resta da parte, e si chiude come con «esci» dopo questi
     # secondi senza turni. 0 = niente scadenza
     storia_inattiva_s: float = 300.0
+    # I dati del turno che cambiano di rado nella storia, in sola aggiunta (16/10, issue #95,
+    # calliope/dati_turno.py): i ricordi di chi parla, gli avvisi ai tutori e il riassunto della
+    # stanza entrano nella richiesta solo quando cambiano, davanti alla frase di quel turno, e lì
+    # restano uguali. Prima stavano nei dati del turno e sparivano alla richiesta dopo: con Gemma 4
+    # (finestra scorrevole) Ollama non sa riavvolgere la cache oltre ~512 token dalla fine della
+    # richiesta di prima e rileggeva tutta la storia a ogni turno (DGX, 15/10: 85 turni su 118,
+    # prima frase mediana 2,58 s). false = come prima, per il confronto
+    dati_stabili_in_storia: bool = True
+    # Tetto in token stimati (3,5 caratteri a token) dei dati del turno più la domanda, cioè di ciò
+    # che alla richiesta dopo il motore deve riavvolgere (16/10, issue #95). Sul portatile
+    # (gemma4 e4b) la cache regge con ~350 token veri di dati del turno e si perde tutta con
+    # ~500; la finestra riavvolgibile è `n_ubatch` (512) anche per il 26B. Oltre il tetto la
+    # ricerca anticipata nella stanza si accorcia o non parte (il modello ha stanza_cerca), e il
+    # turno si conta in `calliope stato --turni`. 0 = nessun tetto
+    dati_turno_tetto_token: int = 450
     # Reti e spinte da spegnere (03/10): servono al modello piccolo, uno più forte può farne
     # a meno. Nomi in RETI (in fondo a questo file), solo quelle di categoria «modello»:
     # textcallguard, chiamata_in_mezzo, spinta_promessa, spinta_richiesta, spinta_dichiarata,
@@ -3158,7 +3186,8 @@ SEZIONI: dict[str, list[str]] = {
                  "modalita", "suoni_ascolto",
                  "suono_inizio_ascolto", "suono_fine_ascolto", "suoni_volume"],
     "wake_word": ["wake_word", "wake_anche_nome", "wake_posizione", "wake_word_enabled", "wake_mode", "wake_model", "wake_threshold",
-                  "wake_consecutive", "wake_confirm_score", "wake_solo_nome_s", "followup_s",
+                  "wake_consecutive", "wake_confirm_score", "wake_solo_nome_s",
+                  "cortesia_voce_min", "cortesia_voce_min_s", "followup_s",
                   "wake_match"],
     "barge_in": ["barge_in_enabled", "barge_in_threshold", "barge_in_seed_s",
                  "barge_in_voice", "barge_in_voice_min_s", "barge_in_echo_max"],
@@ -3175,7 +3204,7 @@ SEZIONI: dict[str, list[str]] = {
             "conferma_sfida", "conferma_sfida_s", "conferma_sfida_parole", "quarantena_token",
             "intento_valido_s", "politica_per_valore", "dialogo_interprete",
             "uscita_controllo",
-            "storia_inattiva_s",
+            "storia_inattiva_s", "dati_stabili_in_storia", "dati_turno_tetto_token",
             "llm_reti_spente", "preselezione_tool", "preselezione_codifica",
             "preselezione_embedding", "preselezione_nucleo", "preselezione_margine",
             "system1_dopo_tool", "system1_dopo_tool_parole_max"],
@@ -3508,6 +3537,7 @@ LIMITI: dict[str, tuple[float, float]] = {
     "stanza_cerca_righe": (1, 200), "stanza_cerca_caratteri": (200, 20_000),
     "stanza_cerca_attesa_max_s": (0.0, 30.0), "stanza_cerca_attesa_s": (0.0, 30.0),
     "stanza_cerca_anticipo_caratteri": (0, 20_000),
+    "dati_turno_tetto_token": (0, 100_000),
     "stanza_tenuta_giorni": (1, 3650),
     "conoscenti_scadenza_giorni": (1, 3650), "conoscenti_soglia": (1, 50),
     "conoscenti_min_voce_s": (0.0, 600.0),
@@ -3528,6 +3558,7 @@ LIMITI: dict[str, tuple[float, float]] = {
     "contesto_conversazioni": (1, 64), "contesto_margine_gb": (0.0, 512.0),
     "max_history_turns": (0, 200), "max_tool_turns": (1, 20), "tool_correzioni_max": (0, 10),
     "tool_correzione_avviso_s": (0.0, 60.0), "followup_s": (0.0, 600.0), "wake_solo_nome_s": (0.0, 3.0),
+    "cortesia_voce_min_s": (0.0, 2.0),
     "giochi_ascolto_s": (0.0, 600.0),
     "giochi_giudice_timeout_s": (0.2, 30.0),
     "sample_rate": (8000, 48000), "whisper_beam_size": (1, 20), "stt_timeout_s": (0.5, 600.0),
@@ -3690,6 +3721,17 @@ def _eventi_valido(value):
     raise ValueError("serve «spento», «ombra» o «attivo»")
 
 
+def _cortesia_voce_min_valido(value):
+    """«spenta», «ombra» o «attiva» (16/10, issue #97, calliope/cortesia.py); il «no» di YAML
+    (false) è «spenta»."""
+    if value is False or value is None:
+        return "spenta"
+    s = str(value).strip().lower()
+    if s in ("spenta", "ombra", "attiva"):
+        return s
+    raise ValueError("serve «spenta», «ombra» o «attiva»")
+
+
 def _frasi_varianti_valido(value):
     """«spento», «ombra» o «attivo» (12/10, calliope/frasi.py)."""
     s = str(value or "").strip().lower()
@@ -3792,6 +3834,7 @@ VALIDATORI = {"llm_keep_alive": keep_alive_valido, "llm_num_ctx": _num_ctx_valid
               "contesto_riassuntore": _riassuntore_valido,
               "dialogo_interprete": _dialogo_interprete_valido,
               "eventi": _eventi_valido, "frasi_varianti": _frasi_varianti_valido,
+              "cortesia_voce_min": _cortesia_voce_min_valido,
               "stanza": _stanza_valido, "stanza_guardia": _stanza_guardia_valido,
               "fine_turno": _fine_turno_valido,
                "preselezione_tool": _preselezione_valido,
