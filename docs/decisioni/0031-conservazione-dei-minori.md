@@ -3,7 +3,8 @@
 - **Stato**: accettata (16/10/2026, decisione di chi amministra dopo i log del 15/10 sera), fatta
   il 16/10 sul ramo `issue-104-minori-conserva` (issue #104); **aggiornata il 16/10** dopo la
   revisione della PR #106 (consenso alla voce implicito nella registrazione, punto 2; il dubbio
-  come lo scrive il ciclo, punto 3; il limite del journal, punto 8). Supera il punto 1 (T1) della
+  come lo scrive il ciclo, punto 3; il limite del journal, punto 8) e dopo la issue #108 (il «sì»
+  breve di ogni tutore, punto 2; la maggiore età e i conoscenti, conseguenze). Supera il punto 1 (T1) della
   [0028](0028-decisioni-roadmap-12-10.md) per i minori di famiglia: «di minori e ospiti mai»
   diventa «degli ospiti mai».
 - **Area**: [contesto-conversazione](../aree/contesto-conversazione.md), [minori](../aree/minori.md);
@@ -44,7 +45,8 @@ DEVE finire nel db e nel disco».
    dei tutori del profilo che esiste ancora; senza tutori validi, niente voce. Lo **revoca** un
    tutore a voce, con la persona minore come argomento (`dati_conservati(revoca_voce, persona)`) e
    la **stessa conferma di «svuota»** (voce sopra soglia, o un «sì» breve con l'impronta
-   compatibile: un minore accanto, o il tutore nel dubbio col minore, non decide); le
+   compatibile: un minore accanto, o il tutore nel dubbio col minore, non decide; dal 16/10,
+   issue #108, il «sì» breve compatibile vale per ogni tutore, anche se non amministra); le
    registrazioni si cancellano. Dopo una revoca lo ridà a mano un tutore, con la domanda e il «sì»
    con la stessa conferma. **Il minore da solo non dà né revoca il consenso alla sua voce.** Un
    adulto che non amministra non può registrare un minore, e quindi non dà nessun consenso;
@@ -91,6 +93,12 @@ DEVE finire nel db e nel disco».
   dell'altra persona di casa: accettato (stessa famiglia); la voce resta fuori.
 - Nessun costo di latenza né di GPU: la conservazione non usa il modello.
 - Nessuna regola sul testo nuova (principio 10).
+- **La maggiore età** (issue #108): compiuti i 18 anni il sì dei tutori non vale più e la prima
+  rotazione cancella tutte le registrazioni della voce della persona; nessun avviso prima (sono
+  dati per le misure e toglierli è la direzione sicura), ma `dati_conservati stato` le dice perché
+  e il journal ne tiene una riga con l'id; il suo sì da adulta vale subito.
+- **Conoscenti** (issue #108): con `incerta` sopra soglia il conoscente non si cerca (la famiglia
+  vince), quindi accendere `stanza_conoscenti` non cambia il rischio accettato del punto 3.
 
 ## Fonti
 

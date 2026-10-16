@@ -953,6 +953,11 @@ class Config:
     immagini_max_conversazione: int = 6
     # Secondi in cui una foto mandata senza domanda aspetta la frase dopo della persona
     immagini_attesa_s: float = 120.0
+    # Secondi dopo la perdita di una foto in attesa (conversazione finita con «esci» o
+    # scaduta, attesa scaduta) in cui il turno dopo della persona riceve il dato «la foto non
+    # c'è più, chiedi di rimandarla», invece di una causa inventata dal modello (16/10, #96,
+    # DGX 15/10). Oltre, il dato non vale più (la persona parla d'altro); 0 lo spegne
+    immagini_persa_s: float = 600.0
     # Allegati di qualsiasi tipo (05/10, calliope/allegati.py, docs/ricerche/2026-10-05-allegati.md):
     # dal pulsante «Allega» del telefono e degli schermi personali (scegli, trascina, incolla),
     # con la vita delle foto (la conversazione) e le stesse regole (solo durante una
@@ -3302,7 +3307,8 @@ SEZIONI: dict[str, list[str]] = {
                 "telefono_enabled", "telefono_web"],
     "immagini": ["immagini_enabled", "immagini_modello", "immagini_lato_max",
                  "immagini_pixel_per_token", "immagini_max_mb", "immagini_storia",
-                 "immagini_max_conversazione", "immagini_attesa_s"],
+                 "immagini_max_conversazione", "immagini_attesa_s",
+                 "immagini_persa_s"],
     "allegati": ["allegati_enabled", "allegati_max_mb", "allegati_memoria_mb",
                  "allegati_max_conversazione", "allegati_token_file", "allegati_token_totale",
                  "allegati_pdf_pagine", "allegati_pdf_pagine_immagini", "allegati_audio_max_s",

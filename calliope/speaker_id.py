@@ -587,6 +587,10 @@ class SpeakerContext:
         self.voce_sicura: str | None = None
         self.punteggio: float | None = None
         self.conferma_breve: bool = False
+        # Le stesse condizioni di `conferma_breve` senza chiedere che la persona amministri
+        # (16/10, issue #108): un tutore conferma con un «sì» breve il consenso alla voce di un
+        # suo figlio (tools/conserva.py, che controlla anche che sia tutore di quel minore)
+        self.breve_compatibile: bool = False
         self.sfida = None
         self.sfida_superata: bool = False
         # Voci di famiglia (07/10, ciclo._confronta_voce). `incerta`: (adulto, minore) quando
@@ -644,9 +648,10 @@ class SpeakerContext:
         prof = self.registry.get(name) if name else None
         soglia = float(getattr(self.registry.cfg, "speaker_conferma_breve_soglia", 0.40))
         self.punteggio = score
-        self.conferma_breve = bool(how == "breve" and name and name == self.voce_sicura
-                                   and prof is not None and prof.admin and score is not None
-                                   and score >= soglia and not altro_piu_vicino)
+        self.breve_compatibile = bool(how == "breve" and name and name == self.voce_sicura
+                                      and prof is not None and score is not None
+                                      and score >= soglia and not altro_piu_vicino)
+        self.conferma_breve = bool(self.breve_compatibile and prof.admin)
         self.sfida_superata = False
 
     @property

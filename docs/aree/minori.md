@@ -1126,6 +1126,49 @@ accanto, adulto non tutore, tutore non più valido; `--svuota --persona` del min
 stanza), `prova_minori` (i dati del consenso nella registrazione), `prova_console_minori`
 (`Brain.parla_minore` vero).
 
+### 16/10: i quattro suggerimenti della revisione della PR #106 (issue #108)
+
+- **Il «sì» breve dei tutori** (decisione di chi amministra del 16/10): un tutore che non
+  amministra conferma con un «sì» breve il consenso alla voce di un suo figlio, o la revoca, come
+  chi amministra. Fino al 16/10 documenti e docstring lo dicevano ma `conferma_breve` valeva solo
+  per chi amministra: un tutore doveva ridire tutto sopra soglia. Ora `SpeakerContext` calcola
+  `breve_compatibile` (le condizioni di sempre senza «amministra»: frase breve della persona
+  riconosciuta dalla voce in questa conversazione, punteggio ≥ `speaker_conferma_breve_soglia`
+  0,40, nessun altro profilo vicino almeno quanto lei) e `conferma_breve` resta `breve_compatibile`
+  più «amministra». `dati_conservati` lo accetta solo per la voce di un minore di cui chi parla è
+  tutore (`minori.e_tutore`), con la regola `conferma_breve_tutore` nel registro dei turni.
+  Invariati: le conferme delle azioni (`conferme.admin_confermato`), «svuota» (solo chi
+  amministra), il minore da solo, chi non è tutore. Contrari nelle prove: punteggio sotto soglia,
+  la figlia accanto più vicina, conversazione nuova, adulto non tutore, il minore stesso, «svuota».
+- **La maggiore età**: compiuti i 18 anni il sì dei tutori non vale più e la prima rotazione
+  cancella le registrazioni della voce (era già così, decisione 0031 punto 2, ora scritto anche
+  nelle conseguenze). Avvisare prima la persona: **no**, scelta motivata: le registrazioni servono
+  solo alle misure, toglierle è la direzione sicura, e Calliope non parla di sua iniziativa per
+  questo. Invece lo si dice quando lo si chiede: `dati_conservati stato` a una persona diventata
+  maggiorenne risponde «la tua voce no: il sì dei tuoi genitori valeva finché eri minorenne, se
+  vuoi che la tenga dimmelo tu» (`conserva.voce_dei_tutori_scaduta`, che non decide niente), e la
+  rotazione scrive nel journal una riga con l'id (mai il nome) e `maggiorenni` nel suo esito.
+  Il suo «sì» da adulta vale subito (`consenso_voce` con `voce_conservata_da` uguale al suo id).
+- **La prova dal ciclo vero** (punto 3): chi amministra nella zona grigia della sua conversazione
+  con il minore vicino (Carlo 0,45 e Luca 0,44): il ciclo scrive il dubbio (`incerta`, vale Luca,
+  `modo: conversazione`) ma la voce migliore è sotto `speaker_id_threshold`, quindi il turno resta
+  fuori come la zona grigia (`conserva: voce_incerta`), testo e voce. Nessuna correzione: è la
+  regola della 0031 punto 3.
+- **`incerta` sopra soglia e conoscenti** (punto 4), controllato prima di accendere
+  `stanza_conoscenti` stabilmente: i conoscenti non sono nella classifica della famiglia e
+  `ciclo._conoscente_turno` si chiama solo quando la frase non vale nessun profilo della famiglia
+  (e rinuncia con la famiglia almeno nella zona grigia). Con `incerta` sopra soglia la frase vale
+  già il minore: il conoscente non si cerca mai, anche quando la sua voce è la più vicina, e il
+  testo va sotto il minore come senza conoscenti (rischio della #104, invariato; la voce resta
+  fuori). Accendere i conoscenti non cambia questo caso. Il rischio vero è a monte: una voce di
+  fuori casa sopra soglia su un adulto della famiglia vale quell'adulto anche senza minori (falsi
+  accettati misurati ≤ 1,8 % sullo stesso canale). Sotto soglia, una voce di conoscente vicina al
+  minore vale il minore per prudenza e resta fuori dal disco. Prova in `prova_conoscenti_conserva`.
+
+Prove: `prova_conserva` (tutrice che non amministra con il `SpeakerContext` vero, maggiore età con
+`stato` e rotazione, zona grigia con il minore vicino dal ciclo vero), `prova_conoscenti_conserva`
+(dubbio sopra soglia con la voce di un conoscente più vicina, e i contrari).
+
 ## L'ospite dove un minore ha parlato da poco (16/10, issue #102, ramo `issue-102-minore-ospite`)
 
 **Caso vero del 15/10 sera** (problema 12 dell'analisi del 16/10). Una bambina registrata alle

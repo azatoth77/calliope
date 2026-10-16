@@ -1313,6 +1313,11 @@ immagini:
   immagini_max_conversazione: 6
   # Secondi in cui una foto mandata senza domanda aspetta la frase dopo della persona
   immagini_attesa_s: 120.0
+  # Secondi dopo la perdita di una foto in attesa (conversazione finita con «esci» o
+  # scaduta, attesa scaduta) in cui il turno dopo della persona riceve il dato «la foto non
+  # c'è più, chiedi di rimandarla», invece di una causa inventata dal modello (16/10, #96,
+  # DGX 15/10). Oltre, il dato non vale più (la persona parla d'altro); 0 lo spegne
+  immagini_persa_s: 600.0
 
 allegati:
   # Allegati di qualsiasi tipo (05/10, calliope/allegati.py, docs/ricerche/2026-10-05-allegati.md):
