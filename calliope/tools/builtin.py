@@ -27,7 +27,7 @@ from ..tempi import (parse_day_range, parse_duration, parse_shift, parse_when, s
 from .registry import ToolRegistry
 from ..conferme import (admin_confermato, chiedi_conferma, e_admin, proposta_valida,
                         secondi_validi, serve_conferma)
-from .. import minori
+from .. import minori, pertinenza
 from .spec import ToolSpec, ToolContext, note_rule
 from ..agenda import is_cancel_all
 from .. import tempi
@@ -1316,12 +1316,105 @@ def _annulla_quale(ctx: ToolContext, cosa: str, prof) -> dict:
             "risposta_finale": text}
 
 
+# Una voce breve si annulla in gruppo senza domanda: i timer che scadono entro un'ora (la pasta,
+# le uova). Una sveglia di 8 ore è anche lei un timer, ma perderla non si vede: chiede
+_TIMER_BREVE_S = 3600
+
+
+def _da_confermare(chosen: list[dict]) -> bool:
+    """Annullare tutte queste voci chiede prima (16/10, #99): più di una, e non soltanto timer
+    che scadono entro un'ora."""
+    now = time.time()
+    return len(chosen) >= 2 and not all(
+        it["kind"] == "timer" and it["due"] - now <= _TIMER_BREVE_S for it in chosen)
+
+
+def _si_alla_domanda(ctx: ToolContext) -> bool:
+    """Questa chiamata è il «sì» alla domanda «Annullo tutti e 3?» (16/10, #99): la proposta in
+    sospeso per chi parla è di agenda_annulla e annullava tutto (gli argomenti proposti, quando
+    la politica del turno li ha), **e** la frase di chi parla acconsente (`politica.consenso`,
+    come per le proposte della politica) o ripete la frase di sfida. Il modello che richiama il
+    tool non basta: «Intendevo quelli della lista della spesa.» non è un «sì» (revisione della
+    PR #110). Vincolo di permesso su una scelta già fatta dal modello (principio 10)."""
+    if getattr(ctx, "tool_in_sospeso", None) != "agenda_annulla":
+        return False
+    t = getattr(ctx, "politica", None)
+    sosp = getattr(t, "args_sospeso", None)
+    if isinstance(sosp, dict) and not is_cancel_all(str(sosp.get("cosa") or "")):
+        return False
+    from .. import politica
+    testo = str(getattr(t, "testo", "") or getattr(ctx, "user_text", "") or "")
+    return bool(getattr(t, "sfida", False)) or politica.consenso(testo)
+
+
+# «Sì, ma solo il promemoria.», «tranne l'appuntamento»: il consenso è per una parte (seconda
+# revisione della PR #110). Vincolo di sicurezza su un'azione già scelta dal modello (principio
+# 10): non si annulla niente e decide il modello con la voce indicata (effetto reversibile),
+# regola `agenda_tutto_parziale`
+_SOLO_PARTE = re.compile(r"(?<![a-zà-ù])(?:solo|soltanto|solamente|tranne|eccetto)(?![a-zà-ù])",
+                         re.I)
+
+
+def _solo_una_parte(ctx: ToolContext) -> bool:
+    t = getattr(ctx, "politica", None)
+    testo = str(getattr(t, "testo", "") or getattr(ctx, "user_text", "") or "")
+    return bool(_SOLO_PARTE.search(testo))
+
+
+def _annulla_tutto_chiede(ctx: ToolContext, chosen: list[dict], cosa: str, owner) -> dict:
+    """Annullare tutto si conferma (16/10, #99, caso vero della DGX del 15/10 alle 18:57:
+    «cancellare entrambi», detto delle due voci della lista appena letta, è diventato
+    agenda_annulla(cosa=tutti), eseguito senza domanda). Non si annulla niente: si dice che cosa
+    c'è e la proposta resta in sospeso, con gli id delle voci nominate; al «sì» si annullano
+    solo quelle. Regola `agenda_tutto_chiede`."""
+    note_rule(ctx, "agenda_tutto_chiede")
+    ctx.agenda.proposte_tutto[owner] = {it["id"] for it in chosen}
+    voci = [_voce_detta(it) for it in chosen[:4]]
+    if len(chosen) > 4:
+        voci.append(f"altre {len(chosen) - 4} voci")
+    elenco = ", ".join(voci[:-1]) + " e " + voci[-1]
+    domanda = f"Annullo tutti e {len(chosen)}?"
+    text = f"Non ho ancora annullato niente: ci sono {elenco}. {domanda}"
+    return {"ok": False, "fatto": "NIENTE ancora: è una domanda, non ho annullato niente",
+            "conferma": text, "risposta_finale": text,
+            "in_sospeso": {"tool": "agenda_annulla", "argomenti": {"cosa": cosa},
+                           "cosa": f"annullare tutte le {len(chosen)} voci dell'agenda",
+                           "domanda": domanda}}
+
+
 def _agenda_annulla(ctx: ToolContext, cosa: str) -> dict:
     """Annulla un timer o un promemoria («il timer della pasta», «tutti i timer»)."""
     if ctx.agenda is None:
         return {"ok": False, "errore": "agenda non disponibile"}
     prof = _person(ctx)
-    gone = ctx.agenda.cancel(cosa or "", prof.id if prof else None)
+    owner = prof.id if prof else None
+    gone = None
+    if is_cancel_all(cosa or ""):
+        chosen = ctx.agenda.scegli(cosa or "", owner)
+        if _da_confermare(chosen):
+            proposte = getattr(ctx.agenda, "proposte_tutto", {})
+            accettata = bool(getattr(ctx, "politica_accettata", False))
+            sua = (owner in proposte
+                   and getattr(ctx, "tool_in_sospeso", None) == "agenda_annulla")
+            si = accettata or (sua and _si_alla_domanda(ctx))
+            if si and _solo_una_parte(ctx):
+                # «Sì, ma solo il promemoria.»: il sì vale per una parte, non per tutto
+                proposte.pop(owner, None)
+                note_rule(ctx, "agenda_tutto_parziale")
+                return {"ok": False, "fatto": NIENTE,
+                        "errore": "chi parla ha chiesto di annullarne solo una parte",
+                        "cosa_fare": "chiama agenda_annulla con la voce che ha indicato, non "
+                                     "con «tutti»; se non è chiaro quale, chiediglielo"}
+            if si and sua:
+                # Solo le voci nominate nella domanda e ancora da annullare con questa richiesta:
+                # non una voce aggiunta dopo, non un appuntamento fuori da «tutti i promemoria».
+                # Anche quando il «sì» l'ha accettato la politica (politica_conferma_unica)
+                gia = proposte.pop(owner)
+                gone = ctx.agenda.cancel_ids({it["id"] for it in chosen} & gia, owner)
+            elif not si:
+                return _annulla_tutto_chiede(ctx, chosen, cosa or "", owner)
+    if gone is None:
+        gone = ctx.agenda.cancel(cosa or "", owner)
     if is_cancel_all(cosa or ""):
         note_rule(ctx, "agenda_tutto")
     if not gone:
@@ -1406,8 +1499,16 @@ def _biblioteca_cerca(ctx: ToolContext, domanda: str) -> dict:
                          "frasi con quel dato e cita la fonte in breve («secondo "
                          "Wikipedia…», «secondo il Wikizionario…»), senza leggere i "
                          "passaggi. Se i passaggi parlano d'altro, ignorali: rispondi con "
-                         "quello che sai, se ne sei sicura, senza citare fonti."
+                         "quello che sai, se ne sei sicura, senza citare fonti; se non ne sei "
+                         "sicura, di' che nella biblioteca non hai trovato niente su quello e "
+                         "chiedi cosa cercare."
                          + _WEB_DOPO_BIBLIOTECA.get(_web_disponibile(ctx), "")}
+    # Quanti passaggi parlano di ciò di cui si parlava (16/10, issue #101, caso vero della DGX
+    # del 15/10: «mito di Orione e la sua storia astronomica» → voci omonime, e il modello
+    # rispondeva da sé sbagliando il mito): un dato per il modello, come per web_cerca
+    pertinenza.applica(ctx, out, [f"{p.titolo} {p.testo}" for p in found])
+    if "pertinenti" in out:
+        out["cosa_fare"] += " Quanti passaggi ne parlano lo dice «pertinenti»."
     if simple:
         out["stile"] = ("Spiega in modo semplice e chiaro, con parole adatte a un ragazzo "
                         "delle medie, magari con un esempio; niente termini difficili.")

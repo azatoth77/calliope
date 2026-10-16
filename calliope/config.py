@@ -119,6 +119,19 @@ class Config:
     # «Come più tardi.», 0,76 s): saluto, o suono d'inizio ascolto, e finestra aperta,
     # invece della frase al modello. «Calliope» da solo dura 0,5–0,65 s sulla DGX
     wake_solo_nome_s: float = 0.9
+    # «Grazie.» sul rumore (16/10, issue #97, calliope/cortesia.py): Whisper scrive «Grazie.»
+    # su un rumore breve (allucinazione dei sottotitoli), e la cortesia chiudeva la finestra
+    # d'ascolto a chi stava parlando (sulla DGX il 15/10 sera 7 casi su 8 con 0,00–0,38 s di
+    # voce; il «grazie» vero della minore 0,60 s). Una cortesia («grazie», «perfetto») detta su
+    # meno di cortesia_voce_min_s secondi di voce (il parlato del VAD, `parlato_ms`; la durata
+    # dell'audio meno pre-roll e silenzio solo se manca) vale come trascrizione vuota:
+    # «attiva» = niente frase pronta e finestra invariata (regola `cortesia_senza_voce`);
+    # «ombra» (di serie) = la cortesia come prima e nel registro dei turni la regola
+    # `cortesia_senza_voce_ombra` con `cortesia_voce` (forma, secondi di voce e fonte), da
+    # rileggere per una settimana prima di «attiva»; «spenta» = niente. Le frasi scritte non
+    # contano: non hanno voce
+    cortesia_voce_min: str = "ombra"
+    cortesia_voce_min_s: float = 0.3
     # Barge-in, livello A: mentre Calliope parla la wake word resta accesa e «Calliope,
     # basta» la interrompe (solo il nome: il resto della voce non viene ascoltato). Senza
     # cuffie si ignora quando è lei a dire il proprio nome. Richiede wake_mode="modello".
@@ -940,6 +953,11 @@ class Config:
     immagini_max_conversazione: int = 6
     # Secondi in cui una foto mandata senza domanda aspetta la frase dopo della persona
     immagini_attesa_s: float = 120.0
+    # Secondi dopo la perdita di una foto in attesa (conversazione finita con «esci» o
+    # scaduta, attesa scaduta) in cui il turno dopo della persona riceve il dato «la foto non
+    # c'è più, chiedi di rimandarla», invece di una causa inventata dal modello (16/10, #96,
+    # DGX 15/10). Oltre, il dato non vale più (la persona parla d'altro); 0 lo spegne
+    immagini_persa_s: float = 600.0
     # Allegati di qualsiasi tipo (05/10, calliope/allegati.py, docs/ricerche/2026-10-05-allegati.md):
     # dal pulsante «Allega» del telefono e degli schermi personali (scegli, trascina, incolla),
     # con la vita delle foto (la conversazione) e le stesse regole (solo durante una
@@ -1956,6 +1974,21 @@ class Config:
     # parlato da meno di tanti secondi (potrebbe essere lì vicino): una frase neutra e il testo
     # resta sul suo schermo personale; a voce più tardi. 0 = sempre a voce (come prima)
     minori_avviso_privato_s: float = 600.0
+    # Una voce non riconosciuta (ospite) sul satellite dove un minore di casa ha parlato da meno
+    # di `minori_ospite_vicino_s` secondi (16/10, issue #102: il 15/10 una bambina appena
+    # registrata, con l'impronta ancora debole, presa 6 volte per ospite e trattata come un
+    # adulto): nei dati del turno «potrebbe essere un minorenne» e il modo di parlare della
+    # fascia più giovane sentita lì, senza nessun fatto sul minore (regola `ospite_con_minore`).
+    # Livello e permessi restano da ospite. Scelta di chi amministra, di serie la più prudente:
+    # vale anche per un ospite adulto vero, se la sua voce è vicina al minore (sotto). false =
+    # l'ospite non riconosciuto ha sempre le risposte da adulto (come prima del 16/10)
+    minori_ospite_vicino: bool = True
+    # Secondi dopo l'ultima frase del minore sullo stesso satellite in cui vale la nota (sopra)
+    minori_ospite_vicino_s: float = 600.0
+    # Con la voce, la nota scatta solo se il minore è tra i primi due profili della frase o ha
+    # almeno questo punteggio sul suo (caso vero del 15/10: 0,32–0,45): un adulto lontano dal
+    # profilo del minore resta senza nota (revisione della PR #116)
+    minori_ospite_vicino_punteggio: float = 0.30
     # Quando è nato un avviso ai tutori (14/10, caso vero: un avviso «sicurezza» del 12/10 sera,
     # rimasto da dire vicino al ragazzo, è arrivato il 14/10 mattina senza data ed è stato preso
     # per un allarme nuovo). Minuti oltre i quali la voce dice quando è nato («ieri sera alle
@@ -2066,6 +2099,14 @@ class Config:
     web_max_minuto: int = 10
     web_risultati: int = 5
     web_timeout_s: float = 6.0
+    # Quanti risultati di web_cerca e biblioteca_cerca parlano di ciò di cui si parlava (16/10,
+    # issue #101, calliope/pertinenza.py: parole in comune con la frase e i turni prima).
+    # «ombra»: solo nel registro dei turni (regola ricerca_fuori_tema_ombra, conteggio in
+    # calliope stato --turni), niente al modello; «attiva»: anche nel risultato come
+    # «pertinenti: 0 su 5», un dato per il modello (regola ricerca_fuori_tema); «spenta»: niente.
+    # In ombra finché non si sa quanti falsi «fuori tema» dà sulle ricerche vere (sinonimi,
+    # inglese, nomi storpiati non li riconosce)
+    ricerca_pertinenza: str = "ombra"
     web_lingua: str = "it-IT"
     # Preferire i risultati nella lingua di casa (09/10, caso della DGX: «la miglior salsa di
     # pomodoro» → Bing ignora `web_lingua` e dava forum in cinese tra i primi): con
@@ -2597,6 +2638,12 @@ class Config:
             f"Quando la persona ti chiede chi è lei stessa, vuole sapere il proprio nome, "
             f"non il tuo: rispondi «Sei» e il suo nome, che hai nei dati del turno (o che è "
             f"un ospite, se è così). "
+            # I volti (16/10, issue #100): il 15/10 sera, su una foto di una persona, «mi sembra
+            # di vedere proprio te» col nome di chi parla e un «talento per il riconoscimento
+            # facciale» che non c'è. Il nome detto dalla persona resta possibile
+            f"«Chi è in questa foto?» invece chiede della foto, e non riconosci i volti: se "
+            f"ti hanno detto chi è, rispondi «È» e quel nome; altrimenti di' che non lo sai "
+            f"e descrivi ciò che vedi. "
             f"{knowledge}"
             # «Ricordi tutto ciò che è stato detto» era falso: la storia si taglia (03/10)
             f"Ricordi gli ultimi scambi di questa conversazione. Se ti chiedono "
@@ -3173,7 +3220,8 @@ SEZIONI: dict[str, list[str]] = {
                  "modalita", "suoni_ascolto",
                  "suono_inizio_ascolto", "suono_fine_ascolto", "suoni_volume"],
     "wake_word": ["wake_word", "wake_anche_nome", "wake_posizione", "wake_word_enabled", "wake_mode", "wake_model", "wake_threshold",
-                  "wake_consecutive", "wake_confirm_score", "wake_solo_nome_s", "followup_s",
+                  "wake_consecutive", "wake_confirm_score", "wake_solo_nome_s",
+                  "cortesia_voce_min", "cortesia_voce_min_s", "followup_s",
                   "wake_match"],
     "barge_in": ["barge_in_enabled", "barge_in_threshold", "barge_in_seed_s",
                  "barge_in_voice", "barge_in_voice_min_s", "barge_in_echo_max"],
@@ -3232,7 +3280,9 @@ SEZIONI: dict[str, list[str]] = {
                "minori_avviso_ripetuto_s", "minori_pericolo_verifica",
                "minori_pericolo_attesa_s", "minori_pericolo_silenzio",
                "minori_pericolo_finestra_s", "minori_avviso_privato_s",
-               "avvisi_data_dopo_min", "avvisi_urgente_ore", "avvisi_contesto_ore",
+               "minori_ospite_vicino", "minori_ospite_vicino_s",
+               "minori_ospite_vicino_punteggio", "avvisi_data_dopo_min", "avvisi_urgente_ore",
+               "avvisi_contesto_ore",
                "avvisi_trascrizione", "avvisi_audio", "avvisi_audio_anello_min",
                "avvisi_audio_anello_mb", "avvisi_audio_contesto_s", "avvisi_audio_giorni",
                "esercizi_enabled", "esercizi_verifica_modello", "esercizi_verifica_url",
@@ -3279,7 +3329,8 @@ SEZIONI: dict[str, list[str]] = {
                 "telefono_enabled", "telefono_web"],
     "immagini": ["immagini_enabled", "immagini_modello", "immagini_lato_max",
                  "immagini_pixel_per_token", "immagini_max_mb", "immagini_storia",
-                 "immagini_max_conversazione", "immagini_attesa_s"],
+                 "immagini_max_conversazione", "immagini_attesa_s",
+                 "immagini_persa_s"],
     "allegati": ["allegati_enabled", "allegati_max_mb", "allegati_memoria_mb",
                  "allegati_max_conversazione", "allegati_token_file", "allegati_token_totale",
                  "allegati_pdf_pagine", "allegati_pdf_pagine_immagini", "allegati_audio_max_s",
@@ -3360,7 +3411,7 @@ SEZIONI: dict[str, list[str]] = {
     "ufficio": ["ufficio_enabled", "ufficio_modelli", "ufficio_livello_fiscale", "ufficio_bozza_s",
                 "ufficio_serie", "fatture_emittente", "fatture_xsd"],
     "web": ["web_enabled", "web_searxng_url", "web_livello", "web_max_minuto", "web_risultati",
-            "web_timeout_s", "web_lingua", "web_preferisci_lingua", "web_dati_privati", "web_pagina_max_kb",
+            "web_timeout_s", "ricerca_pertinenza", "web_lingua", "web_preferisci_lingua", "web_dati_privati", "web_pagina_max_kb",
             "web_pagina_timeout_s", "web_pagina_caratteri", "web_agente_ricerche",
             "web_agente_pagine", "web_reti_vietate", "web_nomi_casa", "web_searxng_aggiorna",
             "web_searxng_giorni", "web_searxng_controllo_ore", "web_searxng_inattivita_min",
@@ -3544,6 +3595,7 @@ LIMITI: dict[str, tuple[float, float]] = {
     "contesto_conversazioni": (1, 64), "contesto_margine_gb": (0.0, 512.0),
     "max_history_turns": (0, 200), "max_tool_turns": (1, 20), "tool_correzioni_max": (0, 10),
     "tool_correzione_avviso_s": (0.0, 60.0), "followup_s": (0.0, 600.0), "wake_solo_nome_s": (0.0, 3.0),
+    "cortesia_voce_min_s": (0.0, 2.0),
     "giochi_ascolto_s": (0.0, 600.0),
     "giochi_giudice_timeout_s": (0.2, 30.0),
     "sample_rate": (8000, 48000), "whisper_beam_size": (1, 20), "stt_timeout_s": (0.5, 600.0),
@@ -3560,6 +3612,8 @@ LIMITI: dict[str, tuple[float, float]] = {
     "compagnia_rivolta_timeout_s": (0.2, 30.0),
     "minori_pericolo_attesa_s": (0.0, 86_400.0), "minori_pericolo_finestra_s": (0.0, 604_800.0),
     "minori_avviso_privato_s": (0.0, 86_400.0),
+    "minori_ospite_vicino_s": (0.0, 86_400.0),
+    "minori_ospite_vicino_punteggio": (0.0, 1.0),
     "avvisi_data_dopo_min": (0.0, 1440.0), "avvisi_urgente_ore": (0.0, 720.0),
     "avvisi_contesto_ore": (0.0, 720.0),
     "avvisi_audio_anello_min": (0.0, 240.0), "avvisi_audio_anello_mb": (0.0, 512.0),
@@ -3706,6 +3760,17 @@ def _eventi_valido(value):
     raise ValueError("serve «spento», «ombra» o «attivo»")
 
 
+def _cortesia_voce_min_valido(value):
+    """«spenta», «ombra» o «attiva» (16/10, issue #97, calliope/cortesia.py); il «no» di YAML
+    (false) è «spenta»."""
+    if value is False or value is None:
+        return "spenta"
+    s = str(value).strip().lower()
+    if s in ("spenta", "ombra", "attiva"):
+        return s
+    raise ValueError("serve «spenta», «ombra» o «attiva»")
+
+
 def _frasi_varianti_valido(value):
     """«spento», «ombra» o «attivo» (12/10, calliope/frasi.py)."""
     s = str(value or "").strip().lower()
@@ -3786,6 +3851,14 @@ def _dopo_tool_valido(value):
     raise ValueError("serve «spento», «ombra» o «attivo»")
 
 
+def _pertinenza_valida(value):
+    """«spenta», «ombra» o «attiva» (16/10, calliope/pertinenza.py)."""
+    s = str(value or "").strip().lower()
+    if s in ("spenta", "ombra", "attiva"):
+        return s
+    raise ValueError("serve «spenta», «ombra» o «attiva»")
+
+
 def _fine_turno_valido(value):
     """«spenta», «ombra» o «attiva» (14/10, calliope/system1/fine_turno.py)."""
     s = str(value or "").strip().lower()
@@ -3808,8 +3881,10 @@ VALIDATORI = {"llm_keep_alive": keep_alive_valido, "llm_num_ctx": _num_ctx_valid
               "contesto_riassuntore": _riassuntore_valido,
               "dialogo_interprete": _dialogo_interprete_valido,
               "eventi": _eventi_valido, "frasi_varianti": _frasi_varianti_valido,
+              "cortesia_voce_min": _cortesia_voce_min_valido,
               "stanza": _stanza_valido, "stanza_guardia": _stanza_guardia_valido,
               "fine_turno": _fine_turno_valido,
+              "ricerca_pertinenza": _pertinenza_valida,
                "preselezione_tool": _preselezione_valido,
                "preselezione_codifica": _preselezione_codifica_valida,
                "system1_dopo_tool": _dopo_tool_valido,

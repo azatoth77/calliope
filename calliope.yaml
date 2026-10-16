@@ -83,6 +83,19 @@ wake_word:
   # «Come più tardi.», 0,76 s): saluto, o suono d'inizio ascolto, e finestra aperta,
   # invece della frase al modello. «Calliope» da solo dura 0,5–0,65 s sulla DGX
   wake_solo_nome_s: 0.9
+  # «Grazie.» sul rumore (16/10, issue #97, calliope/cortesia.py): Whisper scrive «Grazie.»
+  # su un rumore breve (allucinazione dei sottotitoli), e la cortesia chiudeva la finestra
+  # d'ascolto a chi stava parlando (sulla DGX il 15/10 sera 7 casi su 8 con 0,00–0,38 s di
+  # voce; il «grazie» vero della minore 0,60 s). Una cortesia («grazie», «perfetto») detta su
+  # meno di cortesia_voce_min_s secondi di voce (il parlato del VAD, `parlato_ms`; la durata
+  # dell'audio meno pre-roll e silenzio solo se manca) vale come trascrizione vuota:
+  # «attiva» = niente frase pronta e finestra invariata (regola `cortesia_senza_voce`);
+  # «ombra» (di serie) = la cortesia come prima e nel registro dei turni la regola
+  # `cortesia_senza_voce_ombra` con `cortesia_voce` (forma, secondi di voce e fonte), da
+  # rileggere per una settimana prima di «attiva»; «spenta» = niente. Le frasi scritte non
+  # contano: non hanno voce
+  cortesia_voce_min: ombra
+  cortesia_voce_min_s: 0.3
   # secondi di ascolto libero dopo una risposta
   followup_s: 8.0
   # Tolleranza sulla trascrizione del nome (0–1). Era 0,65: «cavallo» (0,67), «calcio»
@@ -794,6 +807,21 @@ minori:
   # parlato da meno di tanti secondi (potrebbe essere lì vicino): una frase neutra e il testo
   # resta sul suo schermo personale; a voce più tardi. 0 = sempre a voce (come prima)
   minori_avviso_privato_s: 600.0
+  # Una voce non riconosciuta (ospite) sul satellite dove un minore di casa ha parlato da meno
+  # di `minori_ospite_vicino_s` secondi (16/10, issue #102: il 15/10 una bambina appena
+  # registrata, con l'impronta ancora debole, presa 6 volte per ospite e trattata come un
+  # adulto): nei dati del turno «potrebbe essere un minorenne» e il modo di parlare della
+  # fascia più giovane sentita lì, senza nessun fatto sul minore (regola `ospite_con_minore`).
+  # Livello e permessi restano da ospite. Scelta di chi amministra, di serie la più prudente:
+  # vale anche per un ospite adulto vero, se la sua voce è vicina al minore (sotto). false =
+  # l'ospite non riconosciuto ha sempre le risposte da adulto (come prima del 16/10)
+  minori_ospite_vicino: true
+  # Secondi dopo l'ultima frase del minore sullo stesso satellite in cui vale la nota (sopra)
+  minori_ospite_vicino_s: 600.0
+  # Con la voce, la nota scatta solo se il minore è tra i primi due profili della frase o ha
+  # almeno questo punteggio sul suo (caso vero del 15/10: 0,32–0,45): un adulto lontano dal
+  # profilo del minore resta senza nota (revisione della PR #116)
+  minori_ospite_vicino_punteggio: 0.3
   # Quando è nato un avviso ai tutori (14/10, caso vero: un avviso «sicurezza» del 12/10 sera,
   # rimasto da dire vicino al ragazzo, è arrivato il 14/10 mattina senza data ed è stato preso
   # per un allarme nuovo). Minuti oltre i quali la voce dice quando è nato («ieri sera alle
@@ -1291,6 +1319,11 @@ immagini:
   immagini_max_conversazione: 6
   # Secondi in cui una foto mandata senza domanda aspetta la frase dopo della persona
   immagini_attesa_s: 120.0
+  # Secondi dopo la perdita di una foto in attesa (conversazione finita con «esci» o
+  # scaduta, attesa scaduta) in cui il turno dopo della persona riceve il dato «la foto non
+  # c'è più, chiedi di rimandarla», invece di una causa inventata dal modello (16/10, #96,
+  # DGX 15/10). Oltre, il dato non vale più (la persona parla d'altro); 0 lo spegne
+  immagini_persa_s: 600.0
 
 allegati:
   # Allegati di qualsiasi tipo (05/10, calliope/allegati.py, docs/ricerche/2026-10-05-allegati.md):
@@ -2118,6 +2151,14 @@ web:
   web_max_minuto: 10
   web_risultati: 5
   web_timeout_s: 6.0
+  # Quanti risultati di web_cerca e biblioteca_cerca parlano di ciò di cui si parlava (16/10,
+  # issue #101, calliope/pertinenza.py: parole in comune con la frase e i turni prima).
+  # «ombra»: solo nel registro dei turni (regola ricerca_fuori_tema_ombra, conteggio in
+  # calliope stato --turni), niente al modello; «attiva»: anche nel risultato come
+  # «pertinenti: 0 su 5», un dato per il modello (regola ricerca_fuori_tema); «spenta»: niente.
+  # In ombra finché non si sa quanti falsi «fuori tema» dà sulle ricerche vere (sinonimi,
+  # inglese, nomi storpiati non li riconosce)
+  ricerca_pertinenza: ombra
   web_lingua: it-IT
   # Preferire i risultati nella lingua di casa (09/10, caso della DGX: «la miglior salsa di
   # pomodoro» → Bing ignora `web_lingua` e dava forum in cinese tra i primi): con

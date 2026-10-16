@@ -10,7 +10,8 @@ dati_conservati(azione, persona):
   consenso è implicito nella registrazione (lo dà chi amministra registrandolo); dopo una revoca
   lo ridà a mano un suo tutore, con il minore in `persona` («puoi tenere la voce di Leo»), la
   voce sopra soglia e il «sì» con la stessa conferma di `svuota` (breve solo con l'impronta
-  compatibile: un minore accanto che dice «sì» non vale); il minore da solo no.
+  compatibile: un minore accanto che dice «sì» non vale; dal 16/10, issue #108, il «sì» breve
+  compatibile vale per ogni tutore, anche se non amministra); il minore da solo no.
 - `revoca_voce`: «non tenere più la mia voce». Subito, senza domanda (è la direzione sicura), e
   le registrazioni che c'erano si cancellano. Basta essere riconosciuti (anche una frase breve).
   Per un minore la revoca un suo tutore (`persona`), con la conferma di `svuota`; non il minore
@@ -103,13 +104,19 @@ def _dati_conservati(ctx: ToolContext, azione: str = "", persona: str = "") -> d
                           f"conversazioni, e i tuoi genitori li possono rileggere{in_stanza}; "
                           f"{voce}.", registrazioni=n, **extra)
         voce = f"la tua voce sì, {n} registrazioni" if voce_si else "la tua voce no"
+        if not voce_si and getattr(ctx.cfg, "conserva_voce", True) \
+                and C.voce_dei_tutori_scaduta(prof):
+            # Diventata maggiorenne (16/10, issue #108): il sì dei tutori valeva finché era
+            # minore; da adulta lo ridice lei
+            voce = ("la tua voce no: il sì dei tuoi genitori valeva finché eri minorenne, se "
+                    "vuoi che la tenga dimmelo tu")
         return _final(f"Tengo per {giorni} giorni, solo qui, i testi delle nostre conversazioni "
                       f"per migliorare{in_stanza}; {voce}.", registrazioni=n, **extra)
 
     # La voce di chi (16/10, decisione 0031): la persona che parla, o un minore di cui è tutore
     # (`persona`). Il minore da solo non dà né revoca il consenso alla sua voce
+    minore_di = None
     if azione in ("consenso_voce", "revoca_voce"):
-        minore_di = None
         nome = str(persona or "").strip()
         if nome:
             b = _trova(ctx, nome)
@@ -133,8 +140,16 @@ def _dati_conservati(ctx: ToolContext, azione: str = "", persona: str = "") -> d
 
     # Per la voce di un minore (consenso dato a mano o revoca) la stessa conferma di «svuota»:
     # la voce sopra soglia, o un «sì» breve con l'impronta compatibile (conferma_breve). Così un
-    # minore accanto che dice «sì», o il tutore nel dubbio col minore, non decide
-    tutore_ok = come == "voce" or (come == "breve" and getattr(sc, "conferma_breve", False))
+    # minore accanto che dice «sì», o il tutore nel dubbio col minore, non decide. Dal 16/10
+    # (issue #108, decisione di chi amministra) il «sì» breve compatibile vale anche per un
+    # tutore che non amministra, solo per la voce di un suo figlio (`breve_compatibile`: stessa
+    # soglia, stessa conversazione sicura, nessun altro profilo più vicino)
+    breve_tutore = bool(come == "breve" and minore_di is not None
+                        and not getattr(sc, "conferma_breve", False)
+                        and getattr(sc, "breve_compatibile", False)
+                        and _minori.e_tutore(prof, minore_di))
+    tutore_ok = (come == "voce" or (come == "breve" and getattr(sc, "conferma_breve", False))
+                 or breve_tutore)
 
     if azione == "revoca_voce":
         if minore_di is not None and not tutore_ok:
@@ -144,6 +159,8 @@ def _dati_conservati(ctx: ToolContext, azione: str = "", persona: str = "") -> d
             return _final("Per questo mi serve la tua voce: dimmelo a voce.", ok=False)
         n = cons.imposta_consenso(chi, False, da=da)
         note_rule(ctx, "voce_revocata")
+        if breve_tutore:
+            note_rule(ctx, "conferma_breve_tutore")
         detto = f" e ho cancellato le {n} registrazioni che avevo" if n else ""
         return _final(f"Va bene: non tengo più {di_chi}{detto}.", cancellate=n)
 
@@ -167,6 +184,8 @@ def _dati_conservati(ctx: ToolContext, azione: str = "", persona: str = "") -> d
         if _proposta(cons, chiave, turno):
             cons.imposta_consenso(chi, True, da=da)
             note_rule(ctx, "voce_consenso")
+            if breve_tutore:
+                note_rule(ctx, "conferma_breve_tutore")
             if minore_di is not None:
                 return _final(f"Grazie: da adesso tengo la voce di {chi.name}. Se cambiate "
                               "idea, ditemelo e la cancello.")

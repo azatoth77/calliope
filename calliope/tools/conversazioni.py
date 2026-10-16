@@ -365,7 +365,10 @@ FONTI = {"web_cerca": "una ricerca su internet (web_cerca)",
          "pc_cerca_file": "i file del computer (pc_cerca_file)",
          # le notizie dei feed (13/10, calliope/notizie/)
          "notizie": "le notizie dei giornali (notizie)"}
-FONTI_TIPO = {("web_cerca", "notizie"): "le notizie su internet (web_cerca con tipo «notizie»)"}
+# Dal 13/10 le notizie hanno il loro tool e web_cerca col tipo «notizie» va lì (tools/web.py);
+# un turno archiviato prima, o in una casa senza il tool notizie, si richiama così (16/10, #101)
+FONTI_TIPO = {("web_cerca", "notizie"): "le notizie su internet (notizie, o web_cerca dove "
+                                        "notizie non c'è)"}
 # A pari pertinenza (punti della fusione almeno questa parte del migliore) vince il più recente
 PARI_PERTINENZA = 0.85
 

@@ -142,9 +142,10 @@ def racchiudi(fonte: str, contenuto, titolo: str = "") -> str:
 # (li legge il codice di Brain) e le indicazioni scritte dal codice di Calliope per il modello
 # («cosa_fare», l'avviso dei siti, la data di oggi). Dentro la busta varrebbero come «testo di
 # altri» e il modello non le seguirebbe più. Li scrive il codice del tool, mai il dato: i
-# risultati delle estensioni stanno sotto «risultati»
+# risultati delle estensioni stanno sotto «risultati». «pertinenti» (16/10, issue #101): la
+# misura di calliope/pertinenza.py, quanti risultati parlano di ciò di cui si parlava
 CONTROLLO = ("ok", "errore", "fatto", "risposta_finale", "conferma", "cosa_fare",
-             "attenzione", "avviso", "oggi", "trovato", "nota", "motivo")
+             "attenzione", "avviso", "oggi", "trovato", "nota", "motivo", "pertinenti")
 
 
 def racchiudi_risultato(fonte: str, risultato: str) -> str:

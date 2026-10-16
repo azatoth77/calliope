@@ -40,7 +40,8 @@ from . import impronte_satellite as impronte_mod
 from . import provenienza, riferire, stato_dialogo, storpiature
 from . import allegati as allegati_mod
 from . import frasi
-from .cortesia import Cortesia
+from .cortesia import (Cortesia, senza_voce as cortesia_senza_voce,
+                       voce_frase as cortesia_voce_frase)
 from . import gioco_voce
 from . import gioco_stato
 from . import gioco_giudice
@@ -52,7 +53,7 @@ from .eventi.misura import norm as _norm_frase
 from .eventi.uscita import per_voce
 from .tools.dialogo import FRASI_CORREZIONE
 from .config import Config, DEEPEN_WORDS, SEARCH_PROMISE
-from .immagini import FOTO_IN_ATTESA, FOTO_NON_VISTA, Immagine
+from .immagini import FOTO_IN_ATTESA, FOTO_NON_VISTA, FOTO_PERSA, Immagine
 from .schermi import schede as schede_foto
 from .schermi.moduli import annuncio_lavoro, completa as completa_modulo, oscura, oscura_tutto
 from .speaker_id import estimate_gender
@@ -234,6 +235,10 @@ class Turno:
     gioco: dict | None = None
     finestra_gioco: bool = False
     contesto_gioco: str | None = None    # per il modello: i comandi del gioco (gioco_comando)
+    # Per il modello: la foto non vista o persa (#96, revisione della PR #113). Un campo suo,
+    # non `context`: `context` vuol dire «biblioteca» («Controllo nella biblioteca.»,
+    # last_question, citazione_tolta, ricerca promessa); unito al contesto in _rispondi
+    contesto_foto: str | None = None
 
 
 def solo_nome_acustico(text: str, voiced_s: float, cfg) -> bool:
@@ -2293,23 +2298,84 @@ class Ciclo:
         t.speaker_name = None
         t.prev_how, speaker_ctx.identified_by = speaker_ctx.identified_by, None
         speaker_ctx.conferma_breve = speaker_ctx.sfida_superata = False   # valgono una frase
+        speaker_ctx.breve_compatibile = False                             # (16/10, #108)
         speaker_ctx.incerta = speaker_ctx.minore_vicino = None            # anche queste
         speaker_ctx.minore_incerto = None                                 # (09/10)
         speaker_ctx.compagnia = False                                     # e questa (09/10)
         speaker_ctx.compagnia_sconosciute = False                         # e queste (13/10)
         speaker_ctx.senza_nome = False
         speaker_ctx.conoscente = None                                     # (14/10)
+        speaker_ctx.minore_ospite = None                                  # (16/10)
         if t.scritto is not None:
             self._chi_scrive(t)
         if t.emb_job is not None:
             self._riconosci_voce(t)
         self._segna_minore(t.speaker_name)
+        speaker_ctx.minore_ospite = self._minore_per_ospite(t)
         self._anello_turno(t)
         self.rec.update(livello=speaker_ctx.current_level, testo=t.text,
                         stt_s=round(time.perf_counter() - t.t0, 2))
         if getattr(self.s, "stanza", None) is not None:
             self._stanza_turno(t)
         return None
+
+    def _minore_per_ospite(self, t) -> str | None:
+        """Un ospite non riconosciuto dove un minore ha parlato da poco (16/10, issue #102): il
+        nome del minore più protetto sentito su questa corsia negli ultimi
+        `minori_ospite_vicino_s` secondi, per il modo di parlare nei dati del turno
+        (Brain._turn_context, regola `ospite_con_minore`). Caso vero del 15/10: una bambina
+        appena registrata, con l'impronta debole, presa 6 volte per ospite (0,32–0,45 sul suo
+        profilo, sotto la zona grigia: `minori.piu_protetto` non la dava a lei).
+
+        Con la voce, vale solo se il minore è tra i primi due profili della frase o ha almeno
+        `minori_ospite_vicino_punteggio` sul suo (revisione della PR #116: un adulto lontano
+        dal profilo del minore non paga le risposte semplici); lo scritto da uno schermo di
+        stanza non ha voce, e vale. None per chi è riconosciuto, per un conoscente, con
+        `minori_ospite_vicino: false` o senza minori sentiti qui.
+
+        Nel turno d'ospite, solo per la misura e senza nomi, `minore_sentito_s`: i secondi da
+        quando un minore ha parlato qui (dentro la finestra), anche quando la nota non scatta
+        (`calliope stato --turni`)."""
+        cfg, sc = self.s.cfg, self.speaker_ctx
+        if (t.speaker_name or getattr(sc, "conoscente", None)
+                or not getattr(cfg, "minori_enabled", True)):
+            return None
+        finestra = float(getattr(cfg, "minori_ospite_vicino_s", 0.0) or 0.0)
+        if finestra <= 0 or not self._minori_sentiti:
+            return None
+        ora = time.monotonic()
+        vicini = []
+        for p in getattr(self.s.registry, "users", {}).values():
+            quando = self._minori_sentiti.get(getattr(p, "id", None))
+            if quando is not None and ora - quando < finestra and minori.e_minore(p):
+                vicini.append((p, ora - quando))
+        if not vicini:
+            return None
+        self.rec["minore_sentito_s"] = round(min(d for _p, d in vicini), 1)
+        if not getattr(cfg, "minori_ospite_vicino", True):
+            return None
+        if t.emb_job is not None:
+            emb = t.emb_job.result()
+            ch = t.chiavi_impronte
+            attivo = ch is not None and impronte_mod.modo(cfg) == impronte_mod.ATTIVO
+            classifica = self._classifica(emb, ch if attivo else None)
+            primi = {n for n, _s in classifica[:2]}
+            punti = dict(classifica)
+            minimo = float(getattr(cfg, "minori_ospite_vicino_punteggio", 0.30))
+
+            def vicino_alla_voce(p):
+                if p.name in primi:
+                    return True
+                s = punti.get(p.name)
+                if s is None and getattr(p, "voiceprint", None) is not None:
+                    s = float(np.dot(emb, p.voiceprint))
+                return s is not None and s >= minimo
+
+            vicini = [(p, d) for p, d in vicini if vicino_alla_voce(p)]
+            if not vicini:
+                return None
+        f = minori.piu_protetta(*(minori.fascia(p) for p, _d in vicini))
+        return next(p.name for p, _d in vicini if minori.fascia(p) == f)
 
     def _segna_minore(self, nome):
         """Un minore ha parlato (o scritto) su questa corsia: per un po' gli avvisi «sicurezza»
@@ -2501,6 +2567,27 @@ class Ciclo:
             return False
         return sim2 is None or sim - sim2 >= float(getattr(cfg, "speaker_continuita_margine",
                                                            0.20))
+
+    def _dispositivo_turno(self, t) -> dict | None:
+        """Il dispositivo di questa frase per i dati del turno (16/10, issue #100,
+        calliope/dispositivo.py): letto adesso, non all'avvio (un satellite va e viene)."""
+        from . import dispositivo
+        if t.scritto is not None:
+            return dispositivo.descrivi(dispositivo.SCRITTO)
+        L, sat = self.listener, self.s.satelliti
+        if not getattr(L, "remoto", False) or sat is None:
+            return dispositivo.descrivi(dispositivo.LOCALE)
+        try:
+            # Il collegamento dell'ultima frase (revisione della PR #119): canale e PC dallo
+            # stesso dispositivo anche se l'attivo cambia prima della risposta
+            ultima = getattr(L, "_ultima", None)
+            sid = getattr(self.corsia, "satellite_id", None)
+            coll = (ultima[0] if ultima else
+                    sat.per_id(sid) if sid is not None else sat.attivo_pronto())
+            canale = getattr(coll, "canale", None) or getattr(L, "canale", None)
+            return dispositivo.descrivi(canale, getattr(coll, "esecutore", None) is not None)
+        except Exception:  # noqa: BLE001 — il dispositivo non ferma la voce
+            return None
 
     def _proprietario_satellite(self) -> str | None:
         """Il nome del proprietario del satellite di questa corsia, se è personale (abbinato con
@@ -3410,6 +3497,7 @@ class Ciclo:
             self._di_e_aspetta("Va bene, ricominciamo da capo." + (f" {sospeso}" if sospeso
                                                                   else ""))
             self.brain.end_conversation("nuova")
+            self._foto_attesa_dimenticata(self._persona_id(t.speaker_name), "ricominciamo")
             self.awake_until, self.last_question = time.monotonic() + cfg.followup_s, None
             return _FINE
         return None
@@ -3436,6 +3524,23 @@ class Ciclo:
             if forma == "grazie":
                 self.rule("cortesia_dopo_domanda")
             forma = None
+        # «Grazie.» sul rumore (16/10, issue #97): meno di cortesia_voce_min_s di voce
+        # (revisione della PR #109: il parlato del VAD, che vale anche con la frase chiusa dal
+        # rilascio del tasto o da Smart Turn; la durata dell'audio solo se manca)
+        voce_s, fonte = cortesia_voce_frase(self.rec.get("ascolto"), t.voiced_s)
+        rumore = cortesia_senza_voce(forma, voce_s, t.scritto is not None, cfg)
+        if rumore:
+            self.rec["cortesia_voce"] = {"forma": forma, "voce_s": round(voce_s, 2),
+                                         "fonte": fonte}
+        if rumore == "attiva":
+            # Come una trascrizione vuota: niente frase pronta, finestra d'ascolto invariata
+            print(f"   [CORTESIA] «{self.in_console(text)}» su {voce_s:.2f} s di voce: "
+                  "rumore, resto in ascolto")
+            self.rec["esito"] = "vuoto"
+            self.rule("cortesia_senza_voce")
+            return _FINE
+        if rumore == "ombra":
+            self.rule("cortesia_senza_voce_ombra")
         if forma in ("grazie", "conferma"):
             prof = s.registry.get(t.speaker_name) if t.speaker_name else None
             frase = s.cortesia.risposta(forma, getattr(prof, "preferred_tone", None), cfg.tono,
@@ -3519,6 +3624,13 @@ class Ciclo:
         else:
             for x in s.foto_attesa.prendi(prof_foto.id):
                 (foto if isinstance(x, Immagine) else files).append(x)
+            # #96: la foto mandata prima senza domanda non c'è più (conversazione finita,
+            # attesa scaduta): lo dice il dato del turno, invece di una causa inventata
+            if s.foto_attesa.persa(prof_foto.id) and not foto and not files:
+                t.contesto_foto = FOTO_PERSA
+                self.rec["foto_persa"] = True
+                print("   [IMMAGINI] la foto mandata prima non c'è più: lo dico al modello",
+                      flush=True)
         for att in files:
             # Audio: trascritto qui con il Whisper della voce, come contenuto del file. Mai
             # dalla pipeline della voce (wake word, regole, chi parla, conferme): è un dato
@@ -3543,7 +3655,7 @@ class Ciclo:
                   + ")", flush=True)
         if foto and not brain.vede_immagini():
             print("   [IMMAGINI] il modello della voce non vede le immagini", flush=True)
-            t.context = ((t.context + "\n") if t.context else "") + FOTO_NON_VISTA
+            t.contesto_foto = FOTO_NON_VISTA
             foto = []
         if foto:
             self.rec["immagini"] = [i.per_registro() for i in foto]
@@ -3734,9 +3846,13 @@ class Ciclo:
                 brain.stanza_turno = self._stanza_blocco(t)
             # Gli avvisi consegnati di recente a chi parla (14/10): vale una risposta sola
             brain.avvisi_turno = self._avvisi_contesto(t)
+            # Il dispositivo da cui si parla (16/10, issue #100): vale una risposta sola
+            brain.dispositivo_turno = self._dispositivo_turno(t)
             contesto_turno = t.context
             if t.contesto_gioco:
                 contesto_turno = (contesto_turno + "\n" if contesto_turno else "") + t.contesto_gioco
+            if getattr(t, "contesto_foto", None):
+                contesto_turno = (contesto_turno + "\n" if contesto_turno else "") + t.contesto_foto
             # La preselezione dei tool in ombra (15/10, calliope/system1/preselezione.py): il
             # decisore sceglie «nucleo» o «tutti» in un thread suo mentre il modello risponde
             # (con tutti i tool, come sempre); l'esito va nel registro (_registra_risposta)
@@ -4455,9 +4571,24 @@ class Ciclo:
         if self.rec is not None:
             self.rec["conversazione_nuova"] = True
         self.brain.end_conversation("nuova")
+        # Tollerante a un Ciclo parziale delle prove (senza servizi né chi parla)
+        chi = getattr(getattr(self, "speaker_ctx", None), "current_speaker", None)
+        if chi and getattr(self, "s", None) is not None:
+            self._foto_attesa_dimenticata(self._persona_id(chi), "ricominciamo")
         self.last_question = None
         self._contesto_azzerato()
         return True
+
+    def _foto_attesa_dimenticata(self, persona_id, motivo: str):
+        """«Ricominciamo», «dimentica» (#96, revisione della PR #113): le foto in attesa della
+        persona vanno via con la conversazione, senza il dato «foto persa» dopo (l'ha chiesto
+        lei). Nel log il motivo, mai il contenuto."""
+        attesa = getattr(getattr(self, "s", None), "foto_attesa", None)
+        if attesa is None or not persona_id:
+            return
+        tolte = attesa.dimentica(persona_id)
+        if tolte:
+            print(f"   [IMMAGINI] {tolte} foto in attesa tolta (motivo {motivo})", flush=True)
 
     def _contesto_azzerato(self):
         """Dopo una conversazione chiusa a richiesta («dimentica», «ricominciamo»: 13/10) la
@@ -4510,6 +4641,7 @@ class Ciclo:
         conv = getattr(self.brain, "conv", None)
         chiave_conv = str(getattr(conv, "chiave", None) or "")
         chiusa = chiave_conv in (chiave, "casa") or chiave_conv.startswith("ospite:")
+        self._foto_attesa_dimenticata(persona, "dimentica")
         if self.ombra is not None:
             self.ombra.dimentica(chiave)
             if chiusa and chiave_conv != chiave:
