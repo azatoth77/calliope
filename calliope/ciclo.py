@@ -2311,7 +2311,7 @@ class Ciclo:
         if t.emb_job is not None:
             self._riconosci_voce(t)
         self._segna_minore(t.speaker_name)
-        speaker_ctx.minore_ospite = self._minore_per_ospite(t.speaker_name)
+        speaker_ctx.minore_ospite = self._minore_per_ospite(t)
         self._anello_turno(t)
         self.rec.update(livello=speaker_ctx.current_level, testo=t.text,
                         stt_s=round(time.perf_counter() - t.t0, 2))
@@ -2319,20 +2319,28 @@ class Ciclo:
             self._stanza_turno(t)
         return None
 
-    def _minore_per_ospite(self, nome) -> str | None:
+    def _minore_per_ospite(self, t) -> str | None:
         """Un ospite non riconosciuto dove un minore ha parlato da poco (16/10, issue #102): il
         nome del minore più protetto sentito su questa corsia negli ultimi
-        `minori_avviso_privato_s` secondi, per il modo di parlare nei dati del turno
-        (Brain._turn_context, regola `ospite_con_minore`); None per chi è riconosciuto, per un
-        conoscente, con `minori_ospite_vicino: false` o senza minori sentiti qui. Caso vero del
-        15/10: una bambina appena registrata, con l'impronta debole, presa 6 volte per ospite
-        (sotto la zona grigia, `minori.piu_protetto` non la dava a lei)."""
+        `minori_ospite_vicino_s` secondi, per il modo di parlare nei dati del turno
+        (Brain._turn_context, regola `ospite_con_minore`). Caso vero del 15/10: una bambina
+        appena registrata, con l'impronta debole, presa 6 volte per ospite (0,32–0,45 sul suo
+        profilo, sotto la zona grigia: `minori.piu_protetto` non la dava a lei).
+
+        Con la voce, vale solo se il minore è tra i primi due profili della frase o ha almeno
+        `minori_ospite_vicino_punteggio` sul suo (revisione della PR #116: un adulto lontano
+        dal profilo del minore non paga le risposte semplici); lo scritto da uno schermo di
+        stanza non ha voce, e vale. None per chi è riconosciuto, per un conoscente, con
+        `minori_ospite_vicino: false` o senza minori sentiti qui.
+
+        Nel turno d'ospite, solo per la misura e senza nomi, `minore_sentito_s`: i secondi da
+        quando un minore ha parlato qui (dentro la finestra), anche quando la nota non scatta
+        (`calliope stato --turni`)."""
         cfg, sc = self.s.cfg, self.speaker_ctx
-        if (nome or getattr(sc, "conoscente", None)
-                or not getattr(cfg, "minori_ospite_vicino", True)
+        if (t.speaker_name or getattr(sc, "conoscente", None)
                 or not getattr(cfg, "minori_enabled", True)):
             return None
-        finestra = float(getattr(cfg, "minori_avviso_privato_s", 0.0) or 0.0)
+        finestra = float(getattr(cfg, "minori_ospite_vicino_s", 0.0) or 0.0)
         if finestra <= 0 or not self._minori_sentiti:
             return None
         ora = time.monotonic()
@@ -2340,11 +2348,34 @@ class Ciclo:
         for p in getattr(self.s.registry, "users", {}).values():
             quando = self._minori_sentiti.get(getattr(p, "id", None))
             if quando is not None and ora - quando < finestra and minori.e_minore(p):
-                vicini.append(p)
+                vicini.append((p, ora - quando))
         if not vicini:
             return None
-        f = minori.piu_protetta(*(minori.fascia(p) for p in vicini))
-        return next(p.name for p in vicini if minori.fascia(p) == f)
+        self.rec["minore_sentito_s"] = round(min(d for _p, d in vicini), 1)
+        if not getattr(cfg, "minori_ospite_vicino", True):
+            return None
+        if t.emb_job is not None:
+            emb = t.emb_job.result()
+            ch = t.chiavi_impronte
+            attivo = ch is not None and impronte_mod.modo(cfg) == impronte_mod.ATTIVO
+            classifica = self._classifica(emb, ch if attivo else None)
+            primi = {n for n, _s in classifica[:2]}
+            punti = dict(classifica)
+            minimo = float(getattr(cfg, "minori_ospite_vicino_punteggio", 0.30))
+
+            def vicino_alla_voce(p):
+                if p.name in primi:
+                    return True
+                s = punti.get(p.name)
+                if s is None and getattr(p, "voiceprint", None) is not None:
+                    s = float(np.dot(emb, p.voiceprint))
+                return s is not None and s >= minimo
+
+            vicini = [(p, d) for p, d in vicini if vicino_alla_voce(p)]
+            if not vicini:
+                return None
+        f = minori.piu_protetta(*(minori.fascia(p) for p, _d in vicini))
+        return next(p.name for p, _d in vicini if minori.fascia(p) == f)
 
     def _segna_minore(self, nome):
         """Un minore ha parlato (o scritto) su questa corsia: per un po' gli avvisi «sicurezza»

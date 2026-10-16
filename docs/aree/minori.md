@@ -1202,3 +1202,29 @@ da ospite (permessi già stretti, guardiano dei turni acceso) ma come a un adult
 
 Prove: `prova_minore_ospite` (7 casi falliscono su 9d4075e; contrari: finestra passata, altro
 satellite, voce riconosciuta, conoscente, interruttore spento, finestra a 0).
+
+### 16/10: correzioni della revisione della PR #116
+
+- **La nota non dice niente del minore.** *[storico, fino a questa correzione: «forse un
+  minorenne (7–10 anni: un minore ha parlato da poco su questo satellite); nel caso …»]*. Ora
+  `minori.dato_ospite` dà solo «potrebbe essere un minorenne: nel caso <tono della fascia>;
+  argomenti difficili … niente contenuti per adulti»: niente nome, età, fascia detta, «ha parlato
+  qui», genere, compiti. La tabella delle fasce copiata da `dato_turno` è tolta (non serve più).
+- **Solo con la voce vicina al minore** (scelta per ridurre il costo agli ospiti adulti): con la
+  voce, la nota scatta se il minore sentito è tra i primi due profili della frase **oppure** ha
+  almeno `minori_ospite_vicino_punteggio` (0,30) sul suo profilo; nel caso vero era 0,32–0,45.
+  Un adulto lontano dal profilo del minore (terzo profilo, 0,05) resta senza nota. Lo scritto da
+  uno schermo di stanza non ha voce da confrontare e la nota vale (prudenza). Limite: in una casa
+  con due o tre profili «tra i primi due» comprende quasi sempre il minore, e allora conta solo la
+  finestra; si guarda nella misura sotto prima di stringere (per esempio solo il punteggio).
+- **Finestra sua**: `minori_ospite_vicino_s` (600 s), non più `minori_avviso_privato_s`.
+- **La misura del criterio 2**: nel turno d'ospite il ciclo scrive `minore_sentito_s` (secondi
+  dall'ultima frase di un minore sulla stessa corsia, solo dentro la finestra, senza nomi), anche
+  quando la nota non scatta o l'interruttore è spento. `calliope stato --turni` ha la riga
+  «Ospite dove un minore ha parlato da poco»: per giorno i turni d'ospite con un minore sentito,
+  con e senza la nota (`minori.riassunto_ospite`). Con la scelta sopra «senza» non deve essere 0:
+  sono gli adulti lontani; da leggere insieme ai punteggi del campo `voce`.
+
+Prove: `prova_minore_ospite` (17 errori su main 3bbc674; contrari nuovi: adulto lontano dal
+profilo del minore, finestra propria a 60 s con quella degli avvisi a 0, nessun fatto sul minore
+nella nota, riga di `stato --turni` vuota senza turni).

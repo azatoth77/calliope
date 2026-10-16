@@ -640,24 +640,45 @@ def dato_nascita(prof, oggi: datetime.date | None = None) -> str:
     return f"data di nascita {giorno} {MESI[d.month - 1]} {d.year} ({eta(d, oggi)} anni)"
 
 
-# Le fasce dette a un ospite che potrebbe essere un minore (dato_ospite)
-_FASCE_DETTE = {"piccoli": "meno di 7 anni", "bambini": "7–10 anni", "ragazzi": "11–13 anni",
-                "adolescenti": "14–17 anni"}
-
-
 def dato_ospite(prof) -> str:
     """Per un ospite non riconosciuto dove il minore `prof` ha parlato da poco (16/10, issue
-    #102): il modo di parlare della sua fascia come dato del turno, «forse un minorenne», senza
-    il nome, l'età precisa, il genere, i compiti e gli esercizi (sono suoi: l'ospite potrebbe
-    essere un adulto). "" per un adulto o con i minori spenti."""
+    #102): «potrebbe essere un minorenne» e il modo di parlare della sua fascia come dato del
+    turno. Nessun fatto sul minore (revisione della PR #116): né il nome, né l'età o la fascia
+    dette, né che ha parlato qui, né il genere, i compiti e gli esercizi (l'ospite potrebbe essere
+    un altro). "" per un adulto o con i minori spenti."""
     p = preset(prof)
     if p is None:
         return ""
     tono = p["tono"]
     tono = tono[2:] if tono.startswith("è ") else tono
-    return (f"forse un minorenne ({_FASCE_DETTE[p['fascia']]}: un minore ha parlato da poco su "
-            f"questo satellite); nel caso {tono}; argomenti difficili (morte, guerra, droghe, "
-            f"corpo) spiegati adatti a un minore, niente contenuti per adulti")
+    return (f"potrebbe essere un minorenne: nel caso {tono}; argomenti difficili (morte, guerra, "
+            f"droghe, corpo) spiegati adatti a un minore, niente contenuti per adulti")
+
+
+def riassunto_ospite(turni: list[dict]) -> dict:
+    """Per giorno (16/10, issue #102, criterio di chiusura): i turni d'ospite con un minore
+    sentito sullo stesso satellite dentro `minori_ospite_vicino_s` (campo `minore_sentito_s` del
+    ciclo) e quanti hanno avuto la nota (regola `ospite_con_minore`). Solo numeri."""
+    giorni: dict[str, dict] = {}
+    for t in turni:
+        if t.get("minore_sentito_s") is None:
+            continue
+        data = str(t.get("inizio") or "")[:10] or "?"
+        d = giorni.setdefault(data, {"turni": 0, "con_nota": 0})
+        d["turni"] += 1
+        d["con_nota"] += "ospite_con_minore" in (t.get("regole") or ())
+    return giorni
+
+
+def testo_ospite(giorni: dict) -> str:
+    if not giorni:
+        return "Ospite dove un minore ha parlato da poco: nessun turno nel registro."
+    righe = ["Ospite dove un minore ha parlato da poco (stesso satellite, minori_ospite_vicino_s)",
+             ""]
+    for data, d in giorni.items():
+        righe.append(f"{data}  {d['turni']} turni d'ospite, con la nota per i minori "
+                     f"{d['con_nota']}, senza {d['turni'] - d['con_nota']}")
+    return "\n".join(righe)
 
 
 # ─────────────────────────── permessi nel codice ───────────────────────────

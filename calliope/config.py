@@ -1975,14 +1975,20 @@ class Config:
     # resta sul suo schermo personale; a voce più tardi. 0 = sempre a voce (come prima)
     minori_avviso_privato_s: float = 600.0
     # Una voce non riconosciuta (ospite) sul satellite dove un minore di casa ha parlato da meno
-    # di `minori_avviso_privato_s` secondi (16/10, issue #102: il 15/10 una bambina appena
+    # di `minori_ospite_vicino_s` secondi (16/10, issue #102: il 15/10 una bambina appena
     # registrata, con l'impronta ancora debole, presa 6 volte per ospite e trattata come un
-    # adulto): nei dati del turno il modo di parlare della fascia più giovane sentita lì, senza
-    # nome né età precisa (regola `ospite_con_minore`). Livello e permessi restano da ospite.
-    # Scelta di chi amministra, di serie la più prudente: vale anche per gli ospiti adulti veri
-    # in quel momento (la voce non li distingue dal minore), che avranno risposte più semplici.
-    # false = l'ospite non riconosciuto ha sempre le risposte da adulto (come prima del 16/10)
+    # adulto): nei dati del turno «potrebbe essere un minorenne» e il modo di parlare della
+    # fascia più giovane sentita lì, senza nessun fatto sul minore (regola `ospite_con_minore`).
+    # Livello e permessi restano da ospite. Scelta di chi amministra, di serie la più prudente:
+    # vale anche per un ospite adulto vero, se la sua voce è vicina al minore (sotto). false =
+    # l'ospite non riconosciuto ha sempre le risposte da adulto (come prima del 16/10)
     minori_ospite_vicino: bool = True
+    # Secondi dopo l'ultima frase del minore sullo stesso satellite in cui vale la nota (sopra)
+    minori_ospite_vicino_s: float = 600.0
+    # Con la voce, la nota scatta solo se il minore è tra i primi due profili della frase o ha
+    # almeno questo punteggio sul suo (caso vero del 15/10: 0,32–0,45): un adulto lontano dal
+    # profilo del minore resta senza nota (revisione della PR #116)
+    minori_ospite_vicino_punteggio: float = 0.30
     # Quando è nato un avviso ai tutori (14/10, caso vero: un avviso «sicurezza» del 12/10 sera,
     # rimasto da dire vicino al ragazzo, è arrivato il 14/10 mattina senza data ed è stato preso
     # per un allarme nuovo). Minuti oltre i quali la voce dice quando è nato («ieri sera alle
@@ -3260,7 +3266,9 @@ SEZIONI: dict[str, list[str]] = {
                "minori_avviso_ripetuto_s", "minori_pericolo_verifica",
                "minori_pericolo_attesa_s", "minori_pericolo_silenzio",
                "minori_pericolo_finestra_s", "minori_avviso_privato_s",
-               "minori_ospite_vicino", "avvisi_data_dopo_min", "avvisi_urgente_ore", "avvisi_contesto_ore",
+               "minori_ospite_vicino", "minori_ospite_vicino_s",
+               "minori_ospite_vicino_punteggio", "avvisi_data_dopo_min", "avvisi_urgente_ore",
+               "avvisi_contesto_ore",
                "avvisi_trascrizione", "avvisi_audio", "avvisi_audio_anello_min",
                "avvisi_audio_anello_mb", "avvisi_audio_contesto_s", "avvisi_audio_giorni",
                "esercizi_enabled", "esercizi_verifica_modello", "esercizi_verifica_url",
@@ -3590,6 +3598,8 @@ LIMITI: dict[str, tuple[float, float]] = {
     "compagnia_rivolta_timeout_s": (0.2, 30.0),
     "minori_pericolo_attesa_s": (0.0, 86_400.0), "minori_pericolo_finestra_s": (0.0, 604_800.0),
     "minori_avviso_privato_s": (0.0, 86_400.0),
+    "minori_ospite_vicino_s": (0.0, 86_400.0),
+    "minori_ospite_vicino_punteggio": (0.0, 1.0),
     "avvisi_data_dopo_min": (0.0, 1440.0), "avvisi_urgente_ore": (0.0, 720.0),
     "avvisi_contesto_ore": (0.0, 720.0),
     "avvisi_audio_anello_min": (0.0, 240.0), "avvisi_audio_anello_mb": (0.0, 512.0),

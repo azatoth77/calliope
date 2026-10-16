@@ -484,6 +484,9 @@ def main(argv=None) -> int:
         # Più voci vicino a un satellite (09/10, calliope/compagnia.py)
         from . import compagnia
         comp = compagnia.riassunto(turni)
+        # L'ospite dove un minore ha parlato da poco (16/10, issue #102): con e senza la nota
+        from . import minori as minori_mod
+        ospite_minore = minori_mod.riassunto_ospite(turni)
         # Le impronte per satellite (15/10, calliope/impronte_satellite.py): con e senza, per
         # satellite (ombra o attivo)
         from . import impronte_satellite
@@ -543,6 +546,7 @@ def main(argv=None) -> int:
             print(json.dumps({"giorni": dati, "soglia_s": getattr(cfg, "latenza_avviso_s", None),
                               "attrito": sicurezza, "attrito_soglia": soglia_a,
                               "argomenti": argomenti, "compagnia": comp,
+                              "ospite_con_minore": ospite_minore,
                               "impronte_satellite": impronte_r,
                               "dialogo": dialogo, "voce_sola": voce_sola,
                               "riletti_guardia": guardia_riletti,
@@ -565,6 +569,8 @@ def main(argv=None) -> int:
             print(argomenti_incerti.testo(argomenti))
             print()
             print(compagnia.testo(comp))
+            print()
+            print(minori_mod.testo_ospite(ospite_minore))
             print()
             print(impronte_satellite.testo(impronte_r))
             print()
