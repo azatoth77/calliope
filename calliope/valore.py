@@ -765,7 +765,10 @@ def _matrice(name: str, args: dict, cl, t, base, conferma_voce: bool = False,
     proposta, _ripetuta, stessa = pol.consenso_turno(name, args, cl, t)
     fonte = pol.fonte_principale(t)
     cosa = cosa or pol._cosa(cl, args)
-    if proposta:
+    # La risposta al dato chiesto dal tool stesso (#98) passa dall'ancora anche se comincia con
+    # un consenso («Sì, è nata il 12 ottobre»): il «sì» non è alla domanda della politica
+    risposta = risposta_al_sospeso(name, args, t)
+    if proposta and not risposta:
         # Il «sì» breve della persona della conversazione a una domanda su un'azione E1–E2
         # (09/10, caso vero della DGX delle 20:39: «Sì.» a «vuoi che spenga la luce della
         # taverna?» → «C'è di mezzo una pagina internet… ripeti: …»). La frase di sfida della
@@ -792,7 +795,6 @@ def _matrice(name: str, args: dict, cl, t, base, conferma_voce: bool = False,
     if E == E0:
         return pol.Decisione("esegui", "valore_lettura"), det
     # 1. l'ancora: chi l'ha chiesta (o la risposta al dato chiesto dal tool stesso: #98)
-    risposta = risposta_al_sospeso(name, args, t)
     if risposta:
         det["risposta_sospeso"] = True
         # La frase di sfida superata dalla stessa persona nella frase che ha aperto questa

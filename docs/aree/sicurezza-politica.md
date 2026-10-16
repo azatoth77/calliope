@@ -1588,7 +1588,9 @@ superata dieci secondi prima, nella frase che ha aperto la domanda, non contava 
   scelta) non basta: resta la strada di prima. Una data presente solo in una riga della stanza
   resta «dal dato» e il rifiuto resta. Per la risposta non vale il controllo dei dati personali
   in ciò che esce (D7): i valori nuovi sono detti adesso, anche se scritti in un'altra forma.
-  Restano i bersagli dal dato e il resto della matrice.
+  Restano i bersagli dal dato e il resto della matrice. Vale anche quando la risposta comincia
+  con un consenso («Sì, è nata il 12 ottobre 2015», «Ok, il 12 ottobre»): senza, il «sì» la
+  mandava alla politica di prima, che chiedeva «C'è di mezzo la conversazione della stanza…».
 - **La sfida della domanda** (regola `valore_sfida_sospeso`): se la proposta è nata nella frase
   in cui la stessa persona ha superato la sfida per lo stesso tool (`pending["sfida_di"]`,
   scritto da `stream_reply` dopo `_sfida_reply`), nella risposta **subito dopo**, ancorata come
@@ -1610,7 +1612,7 @@ voce di chi amministra.
 
 Prova `prove/prova_risposta_sospeso.py` (livello 2, ~1 s, fallisce sul codice di prima: 9
 errori): il caso vero eseguito senza seconda sfida, con le due regole nel registro e la sfida che
-non resta dopo la chiamata, la data «come detta»; contrari: la data solo nella stanza, un'altra
+non resta dopo la chiamata, la data «come detta», la risposta che comincia con «sì» o «ok»; contrari: la data solo nella stanza, un'altra
 persona che amministra, un altro tool, scaduta, il nome cambiato, nessun valore nuovo,
 `maggiorenne`, la domanda della politica, una foto, la voce non riconosciuta, la domanda nata
 senza sfida; `pc_guarda` con i contrari.

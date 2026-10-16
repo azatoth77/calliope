@@ -135,6 +135,12 @@ def prova_caso_vero():
     frase(b, sc, "Il tre marzo del 2016.", chiama("registra_utente",
                                                    {"nome": "Bianca", "nascita": "3 marzo 2016"}))
     verifica("la data «come detta» (il tre marzo del 2016) vale", len(visti) == 1, str(visti))
+    # La risposta che comincia con un consenso: il «sì» non è alla domanda della politica
+    for f in ("Sì, è nata il 12 ottobre 2015.", "Ok, il 12 ottobre 2015."):
+        b, visti, _, sc, _, _ = fino_alla_domanda()
+        frase(b, sc, f, chiama("registra_utente", CON_DATA), testo("Ho registrato Bianca."))
+        verifica(f"«{f}» → eseguito senza altre domande", visti == [("registra_utente", CON_DATA)]
+                 and "valore_sfida_sospeso" in regole(b), f"{visti} {regole(b)}")
 
 
 # ─────────────────────────── 2. contrari ───────────────────────────
