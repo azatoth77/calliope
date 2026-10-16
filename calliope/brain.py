@@ -3691,12 +3691,19 @@ class Brain:
                 # modello dal risultato, senza rifare la chiamata
                 self._rule("sfida_esito_modello")
                 fatti = list(self.last_tools or [])
+                # L'esito riuscito del tool della sfida resta tra i tool di questa risposta
+                # anche dentro la passata (16/10, #94, caso vero del 15/10: registra_utente
+                # riuscito, il modello diceva «Ho registrato…» e la rete delle azioni
+                # dichiarate, senza il tool in last_tools, lo cambiava in «Non ho salvato
+                # niente»). Solo quello: un altro tool, o uno fallito, non rende vera una
+                # dichiarazione
+                gia = [t for t in fatti if t.get("ok") and t.get("nome") == sfida.tool]
                 detto = []
                 for pezzo in self._reply(None, level, SFIDA_ESITO_MSG.format(tool=sfida.tool),
-                                         None):
+                                         None, gia_fatti=gia):
                     detto.append(pezzo)
                     yield pezzo
-                self.last_tools = fatti + list(self.last_tools or [])
+                self.last_tools = fatti + list(self.last_tools or [])[len(gia):]
                 if "".join(detto).strip():
                     return
                 frase = "Fatto."
@@ -4414,7 +4421,10 @@ class Brain:
                                                   citta_salva="citta_casa_salva" in names)}]
         return system
 
-    def _reply(self, user_text: str, level: str, context: str | None, pending: str | None):
+    def _reply(self, user_text: str, level: str, context: str | None, pending: str | None,
+               gia_fatti: list | None = None):
+        # `gia_fatti` (16/10, #94): i tool già eseguiti dal codice in questa risposta, prima
+        # della passata (la frase di sfida superata): contano come fatti per le reti
         # La risposta di prima, per «fammelo leggere» sullo schermo (tool schermo_mostra)
         if self.tool_ctx is not None and hasattr(self.tool_ctx, "risposta_precedente"):
             last = next((m for m in reversed(self.history) if m.get("role") == "assistant"
@@ -4451,7 +4461,8 @@ class Brain:
             self._turn_text = user_text   # per la politica dei tool (Turno.testo)
             self._accogli_immagini()
             self._accogli_allegati()
-        self.last_tools = []    # cosa è successo in questa risposta (per il registro dei turni)
+        # cosa è successo in questa risposta (per il registro dei turni)
+        self.last_tools = list(gia_fatti or ())
         # Le schede mandate agli schermi in questa risposta (12/10: l'evento scheda_mandata)
         self.last_schede_mandate = []
         self.last_secrets = []  # valori da non scrivere nel registro (codici degli schermi)

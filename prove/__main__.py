@@ -123,6 +123,7 @@ A_SECCO = [
     ("prova_avvisi_audio.py", [], "trascrizione e audio negli avvisi di pericolo al tutore (14/10 sera, decisione di Dario che cambia la 0029 punto 4): anello in memoria (minuti, MB, anello pieno, dimentica, WAV), turni (minore sì, adulto e scritto no), avviso acuto con trascrizione e audio nel cassetto del tutore, scheda «avviso» solo a lui, Scarica l'audio solo dal suo schermo (non altri, nemmeno chi amministra), voce senza parole, spento, senza trascrizione; stanza (minore, adulto con minore presente sì; adulto da solo, ospite, altra stanza no), guardiano attivo con il contesto breve, ombra senza disco con audio_s; scadenza, svuota (tutto, persona, terminale), dimentica della stanza e del tutore; avviso di prima ricostruito o «non c'è più»; dopo un riavvio la scheda ripresa dalla cronologia tiene «Scarica l'audio» (solo l'id del file del cassetto, permessi rifatti al clic; contrari: altro schermo, schermo di stanza, non più tutore, file di un altro, scaduto o tolto con la nota)"),
     ("prova_ciclo_ripetuto.py", [], "la risposta che gira in tondo (14/10, rete ciclo_ripetuto, calliope/ciclo_ripetuto.py): ciclo di una parola, di un gruppo e di una frase fermato nello streaming, stream chiuso verso il motore, il ciclo né detto né nella storia, parte sana o frase pronta scusa.incartata, contrari (no no no, numeri e IBAN dettati, ritornelli, elenchi, la la la), rete spenta, latenza invariata"),
     ("prova_brain.py", [], "filtro del thinking, guardia, ciclo dei tool, storia, nota dichiarata due volte → frase onesta (12/10)"),
+    ("prova_sfida_esito.py", [], "l'esito detto dal modello dopo la frase di sfida superata (16/10, #94, caso vero del 15/10: registra_utente riuscito con cosa_fare e «Non ho salvato niente»): la frase vera detta in una passata, il tool una volta nel registro; contrari: la stessa frase senza tool fermata, dopo un tool di lettura fermata, tool della sfida fallito"),
     ("prova_tempi.py", [], "durate e orari detti a voce"),
     ("prova_stt_correzione.py", [], "correzione delle frasi incerte (05/10, spenta): confidenza da verbose_json, controllo con i contrari, correttore finto, privacy; parole incerte al modello e frase capita trattenuta (07/10)"),
     ("prova_argomenti_incerti.py", [], "parole incerte negli argomenti dei tool (08/10, F0 e F1): argomenti marcati, allineamento alle parole di Whisper, esito vuoto, vocabolario dei nomi noti, probabilità in parallelo al tool, «forse intendeva» con la proposta e il sì senza altre domande, «ripeti o scrivi», contrari (pieno, nome lontano, ospite, zona grigia, casa, frase pronta, la gente), registro e riassunto"),
@@ -355,6 +356,7 @@ def keep_alive_della_voce():
 # Le durate tra parentesi sono del 06/10 sul portatile, nel gruppo parallelo.
 LIVELLO_2 = {
     "prova_casa_ha.py",              # 13 s
+    "prova_sfida_esito.py",          # ~1 s (16/10, #94)
     "prova_meteo_casa.py",           # ~3 s (09/10)
     "prova_capacita.py",             # 11 s
     "prova_installa.py",             # 6 s
@@ -423,6 +425,8 @@ SERIALI = LIVELLO_3 | {"prova_inoltro.py", "prova_telefono_abbina.py"}
 # e le prove che lo importano (scelte da sole: vedi `_importatori`).
 LEGAMI = [
     ("calliope/brain.py", ["prova_linux_import.py"]),
+    ("calliope/brain.py", ["prova_sfida_esito.py"]),
+    ("calliope/conferme.py", ["prova_sfida_esito.py"]),
     ("calliope/ciclo.py", ["prova_linux_import.py"]),
     ("calliope/main.py", ["prova_linux_import.py"]),
     ("calliope/config.py", ["prova_linux_import.py"]),
