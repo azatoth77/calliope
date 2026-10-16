@@ -125,3 +125,5 @@ misure, sono nei documenti d'area ([`docs/aree/`](docs/aree/)) e nelle ricerche
 | 16/10 | Ricerca fuori tema: i risultati che non c'entrano non si riferiscono; misura di pertinenza in ombra di serie (`ricerca_pertinenza`) (#101, PR #115) |
 | 16/10 | Un ospite con la voce vicina a quella di un minore che ha parlato da poco riceve il modo di parlare della sua fascia, senza dati sul minore (`minori_ospite_vicino`) (#102, PR #116) |
 | 16/10 | Il dispositivo da cui si parla nei dati del turno; la spinta della webcam solo se il PC è raggiungibile per chi parla; niente nomi ai volti (#100, PR #119) |
+| 16/10 | Annullare tutta l'agenda chiede conferma con l'elenco; al «sì» solo le voci nominate; «sì, ma solo…» non annulla tutto; timer senza domanda solo entro un'ora (#99, PR #110) |
+| 16/10 | La risposta alla domanda di un tool in sospeso vale come richiesta anche con la stanza accesa, e la frase di sfida superata vale per quella risposta (argomenti esatti, niente con negazioni o rinvii, solo gli argomenti dichiarati); «fammi una foto» chiede `pc_guarda` (#98, PR #117) |
