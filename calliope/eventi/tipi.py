@@ -45,8 +45,9 @@ TIPI: dict[str, Tipo] = dict([
     _t("conversazione_chiusa", "motivo", "registro",
        "dopo, nessun evento con lo stesso conv"),
     _t("detto_persona", "testo canale come sicurezza satellite sfida brain incerte "
-                        "riassegnato_da compagnia", "modello",
-       "il testo della sfida non si scrive"),
+                        "riassegnato_da compagnia chi stanza", "modello",
+       "il testo della sfida non si scrive; chi (il nome di chi l'ha detta nella conversazione "
+       "anonima) e stanza (i pezzi della stanza legati alla frase, solo in memoria) dal 15/10"),
     _t("trascrizione_capita", "prima dopo accettata", "modello",
        "la proiezione usa «dopo» solo se accettata"),
     _t("dato_in_ingresso", "fonte testo caratteri", "modello",
@@ -265,7 +266,7 @@ def sigillato(contenuto: str, riservato: bool, personale: bool,
 # si conservano (dubbio con un minore, zona grigia, nel registro di un adulto) restano solo in
 # memoria (`_non_su_disco`), come il testo di un minore fermato dal guardiano
 CAMPI_TESTO: dict[str, tuple[str, ...]] = {
-    "detto_persona": ("testo",), "trascrizione_capita": ("prima", "dopo"),
+    "detto_persona": ("testo", "chi"), "trascrizione_capita": ("prima", "dopo"),
     "dato_in_ingresso": ("testo",), "foto_in_ingresso": ("testo",),
     "allegato_in_ingresso": ("testo", "info"), "chiamata_tool": ("argomenti",),
     "esito_tool": ("contenuto", "frase"), "detto_calliope": ("testo",),

@@ -3255,8 +3255,8 @@ class Brain:
           frase del turno riceve il segno `_stanza` col suo numero;
         - un pezzo il cui turno non c'è più nella storia (taglio, compressione) se ne va con lui
           (la cache era già rotta lì); con `eventi: attivo` la storia si rifà dalla proiezione e
-          i segni non ci sono: i pezzi stanno tutti prima dei dati del turno (come il blocco di
-          prima, si rileggono: da fare se si accendono gli eventi);
+          il segno lo porta l'evento della frase (dal 15/10: prima mancava e i pezzi stavano
+          tutti prima dei dati del turno, riletti come il blocco);
         - un pezzo le cui righe non sono più nel registro della stanza («dimentica», la tenuta
           in memoria scaduta) se ne va;
         - in pausa per ospiti i pezzi di quel satellite non si mostrano (come il blocco)."""
@@ -3295,9 +3295,12 @@ class Brain:
                   if isinstance(m, dict) and m.get("role") == "user"
                   for n in _segni(m.get("_stanza"))}
         orfani = [p for p in pezzi if p.n not in ancore]
-        if orfani and not Brain.eventi_attivo(self):
-            # Il loro turno è uscito dalla storia: le righe, se ancora nella finestra, possono
-            # tornare in un pezzo nuovo
+        if orfani:
+            # Il loro turno è uscito dalla storia: le righe tornano «non mandate» (un pezzo
+            # nuovo prende però solo righe dopo l'ultima mandata, `oltre_seq`: le più vecchie
+            # di solito non tornano, 15/10). Con `eventi: attivo` (15/10, issue #12) il segno viene
+            # dalla proiezione (`detto_persona.stanza`): orfani sono, come in ombra, solo i pezzi
+            # dei turni usciti (taglio, compressione, turno escluso, argomento messo da parte)
             via = set().union(*(p.ids | p.segmenti for p in orfani))
             pezzi[:] = [p for p in pezzi if p.n in ancore]
             conv.stanza_mandate -= via

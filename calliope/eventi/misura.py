@@ -23,6 +23,15 @@ Due contatori per turno, sul codice di oggi, da ciò che è andato alla voce (le
 
 Funzioni pure (nessun Brain, nessun ciclo): le chiama calliope/eventi/ombra.py con ciò che ha
 osservato. Solo libreria standard.
+
+**Il criterio di E1** (15/10, issue #11). In ombra `parlato.diverso` e `eventi_ombra.differenze`
+non vanno a zero **per costruzione**: il primo misura la storia di Brain, che dei meccanismi del
+§ 1.1 è fatta (`record_stop`, le frasi filtrate, gli atti `fuori_storia`…), il secondo conta
+proprio le differenze fra la proiezione e quella storia. Il campo che si può misurare in ombra è
+`eventi_ombra.proiezione_diversa`: lo stesso passo 0 fatto sulla proiezione degli eventi (ciò che
+il modello vedrebbe con `attivo`, e vede dopo), senza i motivi dichiarati (`DICHIARATI`). Deve
+valere 0 in ogni turno. Accanto, la **guardia dei riletti** (§ 10 punto 5): la mediana dei token
+riletti dei turni con `attivo` contro quella dei giorni d'ombra (`guardia_riletti`).
 """
 from __future__ import annotations
 
@@ -41,6 +50,20 @@ VOLUTI = atti_di("voluto")
 # `non_in_storia:<atto>` è atteso fino al passo 3
 FUORI_STORIA = atti_di("fuori_storia")
 ANNUNCI = frozenset(n for n, (_c, annuncio, _r) in ATTI.items() if annuncio)
+
+
+# Motivi del passo 0 che non dicono una frase sentita diversa da quella della storia: la frase
+# della persona riscritta e accettata (la proiezione usa quella capita, `trascrizione_capita`) e
+# il canale scritto (né la storia né la proiezione dicono al modello che la risposta era scritta:
+# limite dichiarato del § 1.1, non risolto dal passo 3). Si contano, fuori dal criterio di E1
+DICHIARATI = frozenset({"capito", "canale_scritto"})
+
+
+def proiezione_diversa(parlato: dict) -> tuple[int, dict]:
+    """Dal passo 0 misurato sulla proiezione (`Ombra._parlato_attivo`): (1 se la proiezione non
+    dice ciò che si è sentito, motivi). Il criterio di E1: 0 in ogni turno."""
+    motivi = dict(parlato.get("motivi") or {})
+    return (1 if any(m not in DICHIARATI for m in motivi) else 0), motivi
 
 
 def atteso(motivo: str) -> bool:
@@ -227,7 +250,8 @@ def riassunto(turni: list[dict]) -> dict:
             "ombra": 0, "ombra_diversi": 0, "differenze": {}, "contesto_ms": [],
             "byte": [], "fughe": 0, "troncati": 0, "errori": 0, "porte": {},
             "dimentica": 0, "attivo": 0, "riletti": [], "stimati": [], "cache_rotta": 0,
-            "proiezione_ms": []})
+            "proiezione_ms": [], "proiezione": 0, "proiezione_diversa": 0,
+            "proiezione_motivi": {}})
         if ca is not None:
             # La cache del prefisso (passo 3, § 10 punto 5): riletti dal motore e stimati
             if isinstance(ca.get("riletti"), int):
@@ -268,6 +292,12 @@ def riassunto(turni: list[dict]) -> dict:
             g["dimentica"] += int(o.get("dimentica") or 0)
             for k in o.get("porte") or ():
                 g["porte"][k] = g["porte"].get(k, 0) + 1
+            # Il criterio di E1 (15/10): il passo 0 sulla proiezione, in ombra e con attivo
+            if "proiezione_diversa" in o:
+                g["proiezione"] += 1
+                g["proiezione_diversa"] += 1 if o.get("proiezione_diversa") else 0
+                for k, v in (o.get("proiezione_motivi") or {}).items():
+                    g["proiezione_motivi"][k] = g["proiezione_motivi"].get(k, 0) + int(v or 0)
     for g in giorni.values():
         ms = sorted(g.pop("contesto_ms"))
         g["contesto_ms"] = ({"n": len(ms), "mediana": ms[len(ms) // 2],
@@ -284,15 +314,159 @@ def riassunto(turni: list[dict]) -> dict:
     return dict(sorted(giorni.items()))
 
 
+# ─────────────────────── la guardia dei riletti (§ 10 punto 5, issue #11) ───────────────────────
+RILETTI_MARGINE = 0.5        # «supera di metà» la mediana dei giorni d'ombra
+RILETTI_MIN_BASE = 20        # turni d'ombra con i riletti perché la base valga
+RILETTI_MIN_GIORNO = 10      # turni con `attivo` in un giorno perché la sua mediana conti
+
+
+def _mediana(v: list):
+    v = sorted(v)
+    return v[len(v) // 2]
+
+
+def guardia_riletti(turni: list[dict]) -> dict:
+    """La guardia della cache del prefisso dopo l'accensione: la base è la mediana dei token
+    riletti dei turni d'ombra (`eventi_ombra` senza `modo: attivo`, da tutti i giorni letti);
+    per ogni giorno, la mediana dei turni con `attivo` contro base × (1 + RILETTI_MARGINE).
+    I riletti veri dal motore (`cache.riletti`) se la base ne ha abbastanza, se no gli stimati
+    (`cache.riletti_stimati`, il backend che non li dice). Pura."""
+    base: dict[str, list] = {"riletti": [], "stimati": []}
+    giorni_base: set = set()
+    turni_base = 0
+    attivi: dict[str, dict] = {}
+    for t in turni:
+        o, ca = t.get("eventi_ombra"), t.get("cache")
+        if not isinstance(o, dict) or not isinstance(ca, dict):
+            continue
+        data = str(t.get("inizio") or "")[:10] or "?"
+        if o.get("modo") == "attivo":
+            dest = attivi.setdefault(data, {"riletti": [], "stimati": []})
+        else:
+            dest = base
+            giorni_base.add(data)
+            turni_base += 1
+        for k, campo in (("riletti", "riletti"), ("stimati", "riletti_stimati")):
+            v = ca.get(campo)
+            if isinstance(v, int) and not isinstance(v, bool):
+                dest[k].append(v)
+    # I riletti del motore se bastano; se no gli stimati se bastano; se no quelli che sono di più
+    nr, ns = len(base["riletti"]), len(base["stimati"])
+    campo = ("riletti" if nr >= RILETTI_MIN_BASE or (ns < RILETTI_MIN_BASE and nr >= ns)
+             else "stimati")
+    b = base[campo]
+    out: dict = {"campo": campo, "base": {"n": len(b), "turni": turni_base,
+                                          "giorni": sorted(giorni_base)},
+                 "giorni": {}, "avvisi": []}
+    soglia = None
+    if len(b) >= RILETTI_MIN_BASE:
+        out["base"]["mediana"] = _mediana(b)
+        soglia = out["soglia"] = round(out["base"]["mediana"] * (1 + RILETTI_MARGINE), 1)
+    for data, d in sorted(attivi.items()):
+        v = d[campo]
+        voce: dict = {"n": len(v)}
+        if v:
+            voce["mediana"] = _mediana(v)
+        if soglia is not None and len(v) >= RILETTI_MIN_GIORNO and voce["mediana"] > soglia:
+            voce["avviso"] = True
+            out["avvisi"].append(data)
+        out["giorni"][data] = voce
+    return out
+
+
+def testo_guardia(gr: dict | None) -> list[str]:
+    """Le righe della guardia dei riletti per `calliope stato --turni`."""
+    if not gr:
+        return []
+    nome = "riletti dal motore" if gr["campo"] == "riletti" else "riletti stimati"
+    b = gr["base"]
+    if "mediana" not in b:
+        righe = [f"Guardia dei riletti (§ 10 punto 5): base dei giorni d'ombra con "
+                 f"{b.get('turni', b['n'])} turni, {b['n']} con i {nome} (ne servono "
+                 f"{RILETTI_MIN_BASE}): ancora nessun confronto."]
+    else:
+        righe = [f"Guardia dei riletti (§ 10 punto 5): base dei giorni d'ombra mediana "
+                 f"{b['mediana']} token ({nome}, {b['n']} turni, "
+                 f"{len(b['giorni'])} giorni); avviso oltre {gr['soglia']:g} con eventi: attivo."]
+    for data, v in gr["giorni"].items():
+        righe.append(f"    {data}  con eventi: attivo {v['n']} turni"
+                     + (f", mediana {v['mediana']} token" if "mediana" in v else "")
+                     + (f" (ne servono {RILETTI_MIN_GIORNO} per il confronto)"
+                        if v["n"] < RILETTI_MIN_GIORNO else ""))
+        if v.get("avviso"):
+            righe.append(f"    ATTENZIONE: con eventi: attivo la mediana dei token riletti "
+                         f"({v['mediana']}) supera di più di metà quella dei giorni d'ombra "
+                         f"({b['mediana']}): la cache del prefisso si rompe (tornare a "
+                         f"`eventi: ombra` e guardare `cache_rotta` e le righe della stanza)")
+    return righe
+
+
+def avviso_riletti(cfg, oggi=None) -> str | None:
+    """Per `calliope stato` senza opzioni, come gli altri avvisi della pagina: oggi o ieri (il
+    primo dei due con almeno RILETTI_MIN_GIORNO turni con `attivo`), l'avviso della guardia dei
+    riletti di quel giorno, o None. Si leggono i due file di oggi e ieri; il registro intero
+    (per la base dei giorni d'ombra) solo se uno dei due ha abbastanza turni con `attivo`. Non
+    solleva."""
+    import datetime
+    try:
+        from .. import latenza
+        cartella = getattr(cfg, "turn_log_dir", None)
+        oggi = oggi or datetime.date.today()
+        date = (oggi.isoformat(), (oggi - datetime.timedelta(days=1)).isoformat())
+        if not cartella:
+            return None
+        from pathlib import Path
+        recenti = [t for d in date
+                   for t in latenza.leggi_file(Path(cartella) / f"turni-{d}.jsonl")
+                   if str(t.get("inizio") or "")[:10] in date
+                   and (t.get("eventi_ombra") or {}).get("modo") == "attivo"]
+        per_data = {d: sum(1 for t in recenti if str(t.get("inizio"))[:10] == d) for d in date}
+        data = next((d for d in date if per_data[d] >= RILETTI_MIN_GIORNO), None)
+        if data is None:
+            return None
+        gr = guardia_riletti(latenza.leggi(cartella))
+        if data in gr["avvisi"]:
+            return (f"Registro degli eventi acceso: {'oggi' if data == date[0] else 'ieri'} la "
+                    f"mediana dei token riletti ({gr['giorni'][data]['mediana']}) supera di più "
+                    f"di metà quella dei giorni d'ombra ({gr['base']['mediana']}).")
+    except Exception:  # noqa: BLE001 — un registro strano non ferma niente
+        pass
+    return None
+
+
+def criterio_e1(turni: list[dict]) -> dict:
+    """Il criterio di E1 su tutto il registro letto (non solo `--giorni`): quanti turni hanno
+    il campo `eventi_ombra.proiezione_diversa`, quanti con un valore > 0, da che giorno."""
+    con = [t for t in turni if isinstance(t.get("eventi_ombra"), dict)
+           and "proiezione_diversa" in t["eventi_ombra"]]
+    date = sorted(str(t.get("inizio") or "")[:10] for t in con)
+    return {"turni": len(con),
+            "diversi": sum(1 for t in con if t["eventi_ombra"]["proiezione_diversa"]),
+            **({"dal": date[0]} if date else {})}
+
+
+def testo_e1(e1: dict | None) -> list[str]:
+    if not e1:
+        return []
+    riga = (f"Criterio di E1 su tutto il registro: {e1['turni']} turni col campo "
+            f"eventi_ombra.proiezione_diversa" + (f" (dal {e1['dal']})" if e1.get("dal") else "")
+            + f", di cui {e1['diversi']} con proiezione_diversa > 0 (servono almeno 200 turni, "
+            f"tutti a 0).")
+    return [riga]
+
+
 def _elenco(d: dict) -> str:
     return ", ".join(f"{k} {v}" for k, v in sorted(d.items(), key=lambda x: (-x[1], x[0])))
 
 
-def testo(r: dict, contesto_ms_avviso: float = 20.0) -> str:
-    """La sezione per il terminale (`calliope stato --turni`), con gli avvisi se non zero."""
+def testo(r: dict, contesto_ms_avviso: float = 20.0, guardia: dict | None = None,
+          e1: dict | None = None) -> str:
+    """La sezione per il terminale (`calliope stato --turni`), con gli avvisi se non zero;
+    in fondo `e1` (il criterio su tutto il registro, `criterio_e1`) e `guardia` (la guardia
+    dei riletti, `guardia_riletti`)."""
     if not r:
-        return ("Una voce sola (registro degli eventi, passi 0–1): nessun turno misurato nel "
-                "registro.")
+        return "\n".join(["Una voce sola (registro degli eventi, passi 0–1): nessun turno "
+                          "misurato nel registro."] + testo_e1(e1) + testo_guardia(guardia))
     righe = ["Una voce sola: ciò che si è sentito e la storia del modello (passo 0), registro "
              "degli eventi in ombra (passo 1)", ""]
     for data, g in r.items():
@@ -327,9 +501,19 @@ def testo(r: dict, contesto_ms_avviso: float = 20.0) -> str:
                 righe.append("    " + ", ".join(f"{k} {v}" for k, v in extra.items())
                              + (("; " if extra else "") + "porte: " + _elenco(g["porte"])
                                 if g["porte"] else ""))
+        if g["proiezione"]:
+            righe.append(f"    criterio di E1: proiezione degli eventi diversa da ciò che si è "
+                         f"sentito in {g['proiezione_diversa']} turni su {g['proiezione']}"
+                         + (f" (motivi: {_elenco(g['proiezione_motivi'])})"
+                            if g["proiezione_motivi"] else ""))
         if g["parlato_diverso"]:
             righe.append(f"    ATTENZIONE: in {g['parlato_diverso']} turni la storia del modello "
                          f"non dice ciò che la persona ha sentito (deve restare 0 dal passo 3)")
+        if g["proiezione_diversa"]:
+            righe.append(f"    ATTENZIONE: in {g['proiezione_diversa']} turni la proiezione degli "
+                         f"eventi non dice ciò che la persona ha sentito "
+                         f"(eventi_ombra.proiezione_diversa: deve restare 0 per accendere "
+                         f"eventi: attivo, E1)")
         if g["domande_non_registrate"]:
             righe.append(f"    ATTENZIONE: {g['domande_non_registrate']} domande dette senza "
                          f"una proposta (deve restare 0 dal passo 4)")
@@ -356,4 +540,5 @@ def testo(r: dict, contesto_ms_avviso: float = 20.0) -> str:
                          f"{contesto_ms_avviso:.0f} ms (massimo {pm['max']:.1f} ms)")
         if g["fughe"]:
             righe.append(f"    ATTENZIONE: {g['fughe']} fughe nella proiezione (deve essere 0)")
-    return "\n".join(righe)
+    g_righe = testo_e1(e1) + testo_guardia(guardia)
+    return "\n".join(righe + ([""] + g_righe if g_righe else []))

@@ -17,7 +17,11 @@ calliope/stanza/contesto.py `Pezzo`, Brain `_stanza_prepara`, `_con_stanza`, `_s
 - i contrari: spento (niente righe), in pausa per ospiti (nascoste, poi tornano uguali),
   «dimentica» (via), il blocco intero con `stanza_contesto_in_storia: false`, il turno tolto dalla
   storia (via anche le sue righe), il tetto (`stanza_storia_caratteri`: via le più vecchie fino a
-  metà, una volta, e il prefisso scaldato in secondo piano).
+  metà, una volta, e il prefisso scaldato in secondo piano);
+- con `eventi: attivo` (15/10, issue #12: la storia si rifà dalla proiezione a ogni risposta) il
+  segno `_stanza` arriva dall'evento della frase: i token della stanza riletti per turno sono gli
+  stessi che con `ombra`, ogni pezzo davanti alla sua frase; il numero del pezzo non va su disco;
+  contrario: senza il segno nell'evento i pezzi tornano tutti davanti ai dati del turno.
 
 Nomi di fantasia (Carlo amministra, Nicola ha 14 anni). ~1 s.
 """
@@ -133,14 +137,26 @@ DOMANDE = ["Calliope, quanto manca a Lucca?", "Calliope, a cosa si riferiscono l
            "Calliope, quanto manca adesso?"]
 
 
+def con_eventi(b):
+    """Il minimo del ciclo con `eventi: attivo` intorno a Brain (15/10, issue #12): l'uscita
+    unica, l'ombra col registro e la proiezione all'inizio di ogni risposta
+    (`prova_eventi_attivo.GiroAttivo`)."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from prova_eventi_attivo import GiroAttivo
+    return GiroAttivo(b)
+
+
 def giro(in_storia: bool, turni_n: int = 10, righe_per_turno: int = 12, tetto: int = 16000,
-         cfg_extra: dict | None = None):
+         cfg_extra: dict | None = None, eventi: bool = False):
     """Una conversazione finta: a ogni turno `righe_per_turno` righe nuove dette nei due minuti
-    prima della domanda, poi la domanda. Restituisce (brain, stanza, misure per turno)."""
+    prima della domanda, poi la domanda. Restituisce (brain, stanza, misure per turno).
+    `eventi`: con `eventi: attivo` (la storia rifatta dalla proiezione a ogni risposta)."""
     cfg = cfg_base(stanza_contesto_in_storia=in_storia, stanza_storia_caratteri=tetto,
                    **(cfg_extra or {}))
     st = nuova_stanza(cfg)
     b = brain(cfg, st)
+    g = con_eventi(b) if eventi else None
+    b.__dict__["_giro_eventi"] = g
     t0 = time.time() - 3600
     out = []
     k = 0
@@ -152,7 +168,10 @@ def giro(in_storia: bool, turni_n: int = 10, righe_per_turno: int = 12, tetto: i
             k += 1
         inizio = base + righe_per_turno * 10 + 5
         b.stanza_turno = ctx_mod.costruisci(st, 1, cfg, inizio)
-        "".join(b.stream_reply(DOMANDE[n % len(DOMANDE)], "amministra"))
+        if g is not None:
+            g.turno(DOMANDE[n % len(DOMANDE)], "amministra")
+        else:
+            "".join(b.stream_reply(DOMANDE[n % len(DOMANDE)], "amministra"))
         c = b.last_cache or {}
         # I token riletti della sola stanza: i suoi messaggi dopo il prefisso uguale
         k_ = c.get("prefisso")
@@ -227,6 +246,94 @@ def prova_cache():
     st.chiudi()
     st2.chiudi()
     return prima, dopo
+
+
+# ─────────────────────── 1b. con eventi: attivo (issue #12) ───────────────────────
+def prova_attivo(ombra):
+    """`ombra`: le misure per turno dello stesso giro con `eventi: ombra` (prova_cache)."""
+    from calliope.eventi import ombra as ombra_mod
+    from calliope.eventi.tipi import per_disco
+    b, st, attivo = giro(True, tetto=60000, eventi=True)
+    verifica("attivo: la storia viene dalla proiezione degli eventi (Brain legge dall'ombra)",
+             b.proiettore is not None and all("_seq" in m for m in b.history[:b.conv.vivo_da]))
+    st_o = [m["riletti_stanza"] for m in ombra[1:]]
+    st_a = [m["riletti_stanza"] for m in attivo[1:]]
+    verifica("attivo: i token della stanza riletti a ogni turno sono gli stessi che con ombra",
+             st_a == st_o and not any(m["rotta"] for m in attivo), f"attivo {st_a}, ombra {st_o}")
+    ultimo = b.backend.visti[-1]
+    domande_pos = [i for i, m in enumerate(ultimo) if m.get("role") == "user"]
+    verifica("attivo: ogni pezzo subito prima della frase del suo turno (l'ultimo prima dei dati "
+             "del turno, nessuno fuori posto)",
+             all("fonte: stanza" in str(ultimo[i - 1].get("content")) for i in domande_pos[:-1])
+             and len(_stanza_msgs(ultimo)) == 10
+             and not (attivo[-1]["storia"] or {}).get("fuori_posto"), str(attivo[-1]["storia"]))
+    reg = b.proiettore.registri.della_corsia(b.conv.chiave)
+    dette = [e for e in reg.eventi() if e.tipo == "detto_persona"]
+    verifica("attivo: il segno nell'evento della frase, mai su disco (solo in memoria)",
+             len(dette) == 10 and [e.dati.get("stanza") for e in dette] == list(range(1, 11))
+             and not any("stanza" in per_disco(e) for e in dette),
+             str([e.dati.get("stanza") for e in dette]))
+    st.chiudi()
+    # Contrario: senza il segno nell'evento (com'era fino al 14/10) i pezzi stanno tutti davanti
+    # ai dati del turno o tornano nuovi: si rileggono molto più dei soli nuovi
+    vecchio = ombra_mod.Ombra._segni_persona
+    ombra_mod.Ombra._segni_persona = lambda self, conv: {}
+    try:
+        _, st2, senza = giro(True, tetto=60000, eventi=True)
+    finally:
+        ombra_mod.Ombra._segni_persona = vecchio
+    st_s = [m["riletti_stanza"] for m in senza[1:]]
+    verifica("contrario: senza il segno nell'evento si rilegge molto di più della stanza",
+             sum(st_s) > 2 * sum(st_o), f"senza {st_s}, ombra {st_o}")
+    st2.chiudi()
+    prova_attivo_uscito()
+    return attivo
+
+
+def _turno_uscito(eventi: bool):
+    """Tre turni, poi il primo esce dalla storia (taglio in testa) e due turni ancora, l'ultimo
+    con la finestra della stanza che comprende ancora le righe del primo. Restituisce (numeri
+    dei pezzi rimasti, quante volte ogni riga del primo turno è nella richiesta, utenti della
+    richiesta, misure della stanza, regole)."""
+    b, st, _ = giro(True, turni_n=3, tetto=60000, eventi=eventi)
+    g = b._giro_eventi
+    t0 = time.time() - 3600                   # lo stesso orologio di giro()
+    primo = [r["testo"] for r in st.registro(1).righe()][:12]
+    users = [i for i, m in enumerate(b.history) if m["role"] == "user"]
+    b.conv.togli_in_testa(users[1])           # il primo turno esce dalla storia
+    for frase, inizio in (("Calliope, ripetimelo.", None), ("Calliope, e adesso?",
+                                                            t0 + 3 * 150 + 20)):
+        b.stanza_turno = (ctx_mod.costruisci(st, 1, b.cfg, inizio) if inizio is not None
+                          else None)
+        if g is not None:
+            g.turno(frase, "amministra")      # a turno chiuso, la finestra degli eventi
+        else:
+            "".join(b.stream_reply(frase, "amministra"))
+    ultimo = b.backend.visti[-1]
+    testo = "\n".join(str(m.get("content")) for m in _stanza_msgs(ultimo))
+    out = ([p.n for p in b.conv.stanza], [testo.count(t) for t in primo],
+           [m["content"] for m in ultimo if m["role"] == "user"],
+           dict(b.last_stanza_storia or {}), list(b.last_rules))
+    st.chiudi()
+    return out
+
+
+def prova_attivo_uscito():
+    """Con `eventi: attivo` un turno uscito dalla proiezione (il taglio in testa: la finestra
+    degli eventi parte dopo) porta via il suo pezzo, come in ombra; le sue righe non restano
+    davanti ai dati del turno (fino al 14/10, con attivo, il pezzo orfano restava lì, fuori
+    posto, a ogni turno) e non tornano due volte. Che non tornino affatto è la regola del pezzo
+    «in attesa» (14/10 notte, `oltre_seq`: solo righe dopo l'ultima mandata), uguale in ombra."""
+    numeri, conte, utenti, storia, regole = _turno_uscito(True)
+    verifica("attivo, turno uscito dalla proiezione: fuori dalla richiesta, il suo pezzo se ne va",
+             not any("quanto manca a Lucca" in u for u in utenti) and 1 not in numeri
+             and "stanza_storia_dimenticata" not in regole, f"{numeri} {utenti}")
+    verifica("…le sue righe non restano fuori posto né tornano due volte",
+             all(c <= 1 for c in conte) and not storia.get("fuori_posto"), f"{conte} {storia}")
+    o = _turno_uscito(False)
+    verifica("…come in ombra (stessi pezzi, stesse righe, stesse misure)",
+             (numeri, conte, storia) == (o[0], o[1], o[3]), f"attivo {numeri} {conte} {storia}, "
+             f"ombra {o[0]} {o[1]} {o[3]}")
 
 
 # ─────────────────────────── 2. mai su disco ───────────────────────────
@@ -409,22 +516,26 @@ def main() -> int:
     except (AttributeError, ValueError):
         pass
     prima, dopo = prova_cache()
+    attivo = prova_attivo(dopo)
     if "--misura" in sys.argv:
         print("\nToken riletti stimati per turno (tutto / della sola stanza), conversazione "
               "finta di 10 turni, 12 righe nuove fra un turno e l'altro (~2 minuti)")
-        print("turno   prima (blocco intero)   dopo (sola aggiunta)   righe nuove   righe "
-              "nella storia")
-        for p, d in zip(prima, dopo):
+        print("turno   prima (blocco intero)   dopo (sola aggiunta)   eventi: attivo   righe nuove"
+              "   righe nella storia")
+        for p, d, a in zip(prima, dopo, attivo):
             s = d["storia"] or {}
             print(f"{p['turno']:>5}   {p['riletti']!s:>9} / {p['riletti_stanza']!s:>5}     "
                   f"{d['riletti']!s:>9} / {d['riletti_stanza']!s:>5}    "
+                  f"{a['riletti']!s:>6} / {a['riletti_stanza']!s:>5}   "
                   f"{s.get('nuove', '-')!s:>11}   {s.get('righe', '-')!s:>17}")
         import statistics
         print("p50 dal turno 2: prima "
               f"{statistics.median(p['riletti'] for p in prima[1:])} / "
               f"{statistics.median(p['riletti_stanza'] for p in prima[1:])}, dopo "
               f"{statistics.median(d['riletti'] for d in dopo[1:])} / "
-              f"{statistics.median(d['riletti_stanza'] for d in dopo[1:])}\n")
+              f"{statistics.median(d['riletti_stanza'] for d in dopo[1:])}, attivo "
+              f"{statistics.median(a['riletti'] for a in attivo[1:])} / "
+              f"{statistics.median(a['riletti_stanza'] for a in attivo[1:])}\n")
     prova_disco()
     prova_politica()
     prova_contrari()

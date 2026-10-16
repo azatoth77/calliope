@@ -25,7 +25,7 @@ misure di questo documento sono col 4B in locale: da rifare col 26B sulla DGX do
 | Configurazione | dataclass + YAML (PyYAML) | `calliope/config.py` → `Config`, `load_config`, `VOICE_MAP`; file `calliope.yaml` |
 | Stato del dialogo (dal 10/10, in ombra) | — | `calliope/stato_dialogo.py` → `Proposta`, `StatoPersona`, `StatoCorsia`, `blocco`, `decidi`, `consenso_progetto`, `confronto`; corsia veloce `calliope/risposte.py` → `forma_chiusa`; tool di risposta `calliope/tools/proposta.py` → `proposta_rispondi`; in Brain `_dialogo_inizio`, `_proposta_rispondi`, `_dialogo_fine` (sezione «Stato del dialogo, passo 1») |
 | Registro dei turni | JSONL, un file al giorno in `registro/` | `calliope/turnlog.py` → `TurnLog`; analisi con `revisione.py` |
-| Registro degli eventi (dal 10/10, in ombra: passi 0 e 1 della decisione 0027) | SQLite in WAL, tabella `eventi` di `conversazioni.db` | `calliope/eventi/` → `tipi.py` (`TIPI`, `Evento`, `per_disco`), `registro.py` (`Registro`, `Registri`, `Disco`, `porta_annuncio`, `porta_avviso_tutore`, `porta_coda`, `porta_riassegna`, `stato_disco`), `proiezioni.py` (`PROIEZIONE_CONTESTO`, `PROIEZIONE_TURNI`, `turni`, `messaggi`, `contesto`), `misura.py` (`misura_finestra`, `motivi_parlato`, `riassunto`), `ombra.py` (`Ombra`), dal passo 2 (10/10) `uscita.py` (`Uscita`, `per_voce`: l'uscita unica verso la voce) e l'elenco degli atti `tipi.ATTI`; ciclo `Ciclo._scrivi_turno`, `Ciclo._conversazioni_dimenticate`; `Brain.dimentica_conversazione` (sezione «Una voce sola, passi 0 e 1») |
+| Registro degli eventi (dal 10/10, in ombra: passi 0 e 1 della decisione 0027) | SQLite in WAL, tabella `eventi` di `conversazioni.db` | `calliope/eventi/` → `tipi.py` (`TIPI`, `Evento`, `per_disco`), `registro.py` (`Registro`, `Registri`, `Disco`, `porta_annuncio`, `porta_avviso_tutore`, `porta_coda`, `porta_riassegna`, `stato_disco`), `proiezioni.py` (`PROIEZIONE_CONTESTO`, `PROIEZIONE_TURNI`, `turni`, `messaggi`, `contesto`), `misura.py` (`misura_finestra`, `motivi_parlato`, `riassunto`; dal 15/10 `proiezione_diversa`, `guardia_riletti`, `avviso_riletti`), `ombra.py` (`Ombra`), dal passo 2 (10/10) `uscita.py` (`Uscita`, `per_voce`: l'uscita unica verso la voce) e l'elenco degli atti `tipi.ATTI`; ciclo `Ciclo._scrivi_turno`, `Ciclo._conversazioni_dimenticate`; `Brain.dimentica_conversazione` (sezione «Una voce sola, passi 0 e 1») |
 | Persistenza comune | SQLite in WAL, file di stato atomici, versioni dello schema | `calliope/persistenza.py` → `apri_db`, `scrivi_atomico` / `scrivi_json` / `leggi_json`, `migra` / `prepara_schema` (tabella `meta_schema`) |
 
 ## Problemi noti
@@ -2202,3 +2202,54 @@ turni senza tool dello stesso giorno). Poi `system1_dopo_tool: ombra` nel file l
 giorno; **criteri proposti per «attivo»**: almeno 50 confronti, diverse nella sostanza sotto il 5 %
 (rilette a mano dal registro: la misura della sostanza è un'approssimazione), `altro_tool` 0, e un
 risparmio p50 di almeno 0,5 s.
+
+## Il criterio di E1 e la guardia dei riletti (15/10, issue #11, ramo `issue-11-12-eventi-attivo`)
+
+**Perché «zero differenze nel parlato» non si poteva ottenere in ombra** (letto sul codice). Il
+criterio di E1 della roadmap chiedeva zero differenze nel parlato dopo 7 giorni d'ombra. Ma in ombra
+i due campi che le contano non vanno a zero **per costruzione**: `parlato.diverso` (passo 0) misura
+ciò che si è sentito contro la **storia di Brain**, che con `ombra` è ancora quella di prima (lo
+«Va bene, mi fermo.» di `record_stop`, le frasi filtrate per la voce, gli atti `fuori_storia` come il
+timer o il «Sì?»: i meccanismi del § 1.1, la base che ha motivato il registro); e
+`eventi_ombra.differenze` conta proprio le differenze fra la proiezione e quella storia, cioè gli
+stessi meccanismi. Il passo 0 va a zero solo con `attivo` (`Ombra._parlato_attivo` lo misura sulla
+proiezione), quindi il criterio scritto così si poteva verificare solo dopo l'accensione.
+
+**Il campo nuovo, misurabile in ombra**: `eventi_ombra.proiezione_diversa` (0/1 per turno) e
+`eventi_ombra.proiezione_motivi`. A turno finito l'ombra fa il passo 0 anche sulla **proiezione**
+(lo stesso `_parlato_attivo` di `attivo`: ciò che il modello vedrebbe), in ombra e con `attivo`, così
+il campo è lo stesso prima e dopo l'accensione. Non contano i motivi **dichiarati**
+(`misura.DICHIARATI`): `capito` (la frase della persona riscritta e accettata: la proiezione usa
+quella capita) e `canale_scritto` (né la storia né la proiezione dicono al modello che la risposta era
+scritta: limite del § 1.1 che il passo 3 non risolve; con `attivo` resta anche in `parlato`). In
+`calliope stato --turni` la riga «criterio di E1: proiezione degli eventi diversa da ciò che si è
+sentito in N turni su M» e, se N non è 0, l'ATTENZIONE col nome del campo. Sul giro sintetico del
+ciclo vero (interruzione, stop, timer, frase filtrata non allineata, «Sì?») in ombra il parlato è
+diverso in 5 turni su 6 e le differenze sono 4, `proiezione_diversa` 0 in tutti e 6; con `attivo` 0.
+Il criterio riscritto è nella voce 2.1 della [roadmap](../roadmap.md). In ombra il campo misura
+solo il testo detto: i segni del messaggio della persona (`_chi`, `_stanza`, che con `attivo` la
+proiezione porta dal 15/10, issue #12) non li vede; li coprono `prova_stanza_storia` e
+`prova_compagnia_passo0`. *16/10, dopo la revisione della PR #93:* in `calliope stato --turni`
+anche la riga cumulativa «Criterio di E1 su tutto il registro: N turni col campo … (dal …), di
+cui M con proiezione_diversa > 0», letta su tutti i giorni del registro e non solo su `--giorni`
+(`misura.criterio_e1`, nel JSON `criterio_e1`).
+
+**La guardia dei riletti** (§ 10 punto 5 del progetto, `misura.guardia_riletti`): la base è la
+mediana dei token riletti dei turni d'ombra (`eventi_ombra` senza `modo: attivo`, da tutti i giorni
+del registro, anche fuori da `--giorni`): `cache.riletti` del motore se ce ne sono almeno 20, se no
+`cache.riletti_stimati`. Per ogni giorno con turni `attivo` (almeno 10) la loro mediana contro base ×
+1,5 (`RILETTI_MARGINE`): oltre, l'ATTENZIONE in `calliope stato --turni` (sezione «Una voce sola»,
+riga «Guardia dei riletti» con la base scritta già prima dell'accensione; nel JSON
+`riletti_guardia`) e una riga in `calliope stato` senza opzioni (`avviso_riletti`). *Storico fino
+al 16/10: la riga di `calliope stato` prendeva l'ultimo giorno con un avviso fra 60 file, e un
+giorno brutto restava lì per settimane.* Dal 16/10 come gli altri avvisi della pagina: oggi o
+ieri (il primo dei due con almeno 10 turni con `attivo`), leggendo i soli due file; il registro
+intero per la base solo se uno dei due giorni ha abbastanza turni con `attivo`. Con meno di 20
+turni d'ombra lo dice e non confronta; la riga dice i turni d'ombra che ci sono e quanti hanno i
+riletti (prima, senza stimati, diceva «0 turni»), e sceglie i riletti del motore se nessuno dei
+due basta.
+
+Prova `prove/prova_eventi_guardia.py` (livello 1, ~2 s): la guardia su turni finti e i contrari
+(sotto la soglia, pochi turni, base piccola, solo ombra, stimati, cartella vuota), il criterio con i
+motivi dichiarati, il giro del ciclo vero in ombra e con `attivo`. Sulla DGX il campo c'è dai turni
+scritti dopo l'aggiornamento: i 200 turni del criterio si contano da lì.

@@ -35,16 +35,15 @@ def ESCLUSO(motivo: str) -> Escluso:  # noqa: N802 — si legge come una parola 
 
 # Ogni tipo ha la sua riga: come si rende nel contesto del modello, o ESCLUSO e perché (§ 3.1)
 PROIEZIONE_CONTESTO: dict[str, str] = {
-    "conversazione_aperta": "il riassunto di ripresa o la coda, come messaggio di sistema "
-                            "subito dopo il prompt",
+    "conversazione_aperta": "ripresa o coda: messaggio di sistema subito dopo il prompt",
     "conversazione_chiusa": ESCLUSO("chiude il segmento: la proiezione è del segmento aperto"),
     "detto_persona": "il messaggio della persona (la trascrizione, o «dopo» della trascrizione "
-                     "capita accettata), con gli ingressi del turno davanti",
+                     "capita accettata), con gli ingressi del turno davanti; per Brain i segni "
+                     "chi e stanza (`_chi`, `_stanza`: 15/10)",
     "trascrizione_capita": "cambia il testo del detto_persona del suo turno, se accettata",
     "dato_in_ingresso": "davanti al messaggio della persona del suo turno (la busta), con la "
                         "traccia della fonte",
-    "foto_in_ingresso": "davanti al messaggio della persona del suo turno (l'etichetta), con i "
-                        "numeri dell'album",
+    "foto_in_ingresso": "davanti al messaggio della persona (l'etichetta), numeri dell'album",
     "allegato_in_ingresso": "i numeri e la traccia della fonte sul messaggio della persona",
     "dati_del_turno": ESCLUSO("effimeri: blocco dello stato e dati del turno, mai storia"),
     "passata_modello": ESCLUSO("visibilità registro: rigioco, diagnosi e la parte non detta di "
@@ -56,8 +55,7 @@ PROIEZIONE_CONTESTO: dict[str, str] = {
                       "conversazione esclusi (ATTI_FUORI)",
     "voce_fine": "quali frasi si sono sentite; un'interruzione mette il segno in fondo",
     "interruzione": ESCLUSO("il segno lo mette voce_fine"),
-    "proposta_aperta": ESCLUSO("stato della macchina: va nel blocco dello stato, non nella "
-                               "storia"),
+    "proposta_aperta": ESCLUSO("stato della macchina: nel blocco dello stato, non storia"),
     "proposta_chiusa": ESCLUSO("stato della macchina"),
     "sfida_chiesta": ESCLUSO("stato della sfida; le parole mai"),
     "sfida_esito": ESCLUSO("stato della sfida"),
@@ -212,9 +210,9 @@ def turni(eventi, da: int | None = None) -> dict:
                        else modulo_testo(d.get("titolo"), d.get("campi")))
             cur = _nuovo_turno(e.seq, persona, e.turno, arg)
             cur["brain"] = bool(d.get("brain"))
-            cur["canale"] = d.get("canale") or ("modulo" if tipo == "modulo_compilato"
-                                                else None)
+            cur["canale"] = d.get("canale") or ("modulo" if tipo == "modulo_compilato" else None)
             cur["modulo"] = tipo == "modulo_compilato"
+            cur["segni"] = {"_" + k: d[k] for k in ("chi", "stanza") if d.get(k) is not None}
             out.append(cur)
             per_chiave[e.seq] = cur
         elif cur is None and tipo in ("detto_calliope", "chiamata_tool", "esito_tool",
@@ -387,7 +385,7 @@ def messaggi(vista: dict, forma: Forma = FORMA, per_risposta: bool = False,
     vuoto dell'assistente dopo una frase della persona senza niente di detto (uno stop: i ruoli
     si alternano, come vogliono alcuni modelli di chat). `seq`: ogni messaggio con `_seq`, la
     chiave del suo turno (per Brain: compressione, taglio, archivio). `riassunto`: il riassunto
-    in testa (Brain lo mette da sé)."""
+    in testa (Brain lo mette da sé). Con `seq` anche i segni della frase (`_chi`, `_stanza`)."""
     out: list[dict] = []
     if riassunto and vista.get("riassunto"):
         out.append({"role": "system", "content": vista["riassunto"]})
@@ -402,7 +400,8 @@ def messaggi(vista: dict, forma: Forma = FORMA, per_risposta: bool = False,
     for i, t in enumerate(tt):
         tag = {"_seq": t["chiave"]} if seq else {}
         if t["persona"] is not None:
-            u = {"role": "user", "content": (t["ingressi"] + t["persona"]).strip(), **tag}
+            u = {"role": "user", "content": (t["ingressi"] + t["persona"]).strip(), **tag,
+                 **((t.get("segni") or {}) if seq else {})}
             if t["img"]:
                 u["_img"] = list(t["img"])
             if t["all"]:
