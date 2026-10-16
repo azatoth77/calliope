@@ -1613,7 +1613,8 @@ def tools_per_registro(tools) -> list[dict]:
     """`Brain.last_tools` come va nel registro dei turni: per le chiamate di un minore gli
     argomenti senza i valori («…», decisione 0028 T1) al posto di quelli veri, che restano in
     memoria per la logica del turno (stato_dialogo, ciclo). Copie: `tools` non cambia. Senza
-    chiamate di un minore la lista stessa, come prima del 13/10."""
+    chiamate di un minore la lista stessa, come prima del 13/10. Dal 16/10 (decisione 0031)
+    nessuna chiamata porta più la chiave: resta il meccanismo, per un caso futuro."""
     if not any(isinstance(t, dict) and ARGOMENTI_REGISTRO in t for t in tools or ()):
         return tools
     out = []
@@ -5273,7 +5274,7 @@ class Brain:
         e = dopo_tool_s1.Esito(
             testo=user_text or "", chiamate=tuple(c.get("name") or "" for c in calls),
             risultati=tuple(risultati), detto_prima=detto or "",
-            minore=self.console_riservata() == "minore", tono=tono, dubbi=tuple(dubbi))
+            minore=self.parla_minore(), tono=tono, dubbi=tuple(dubbi))
         return sorv.chiedi(e, dopo_tool_s1.ATTESA_S)
 
     def _cronometra(self, passata):
@@ -5336,19 +5337,32 @@ class Brain:
             return False
 
     def console_riservata(self) -> str | None:
-        """«ospite» o «minore» se le parole di questo turno non vanno nel terminale (sulla DGX il
-        journal, che resta: conserva.console_riservata, dal 12/10 sera anche i minori)."""
+        """«ospite» se le parole di questo turno non vanno nel terminale (sulla DGX il journal, che
+        resta: conserva.console_riservata). Dal 12/10 sera al 16/10 anche «minore»; dal 16/10
+        (decisione 0031) le frasi dei minori vanno nel journal come quelle degli adulti."""
         from . import conserva
         ctx = getattr(self, "tool_ctx", None)
         try:
             return conserva.console_riservata(getattr(ctx, "speaker_ctx", None),
                                               getattr(ctx, "speakers", None))
         except Exception:  # noqa: BLE001 — nel dubbio, niente parole
-            return "minore"
+            return "ospite"
+
+    def parla_minore(self) -> bool:
+        """Parla un minore (o nel dubbio con un minore)? minori.parla_minore (16/10: prima era
+        `console_riservata() == "minore"`)."""
+        from . import minori
+        ctx = getattr(self, "tool_ctx", None)
+        try:
+            return minori.parla_minore(getattr(ctx, "speaker_ctx", None),
+                                       getattr(ctx, "speakers", None))
+        except Exception:  # noqa: BLE001 — nel dubbio, minore
+            return True
 
     def cita_in_console(self, testo, n: int = 80) -> str:
         """Il testo (del modello o di chi parla) da citare in una riga del terminale: accorciato,
-        o «…» per un ospite o un minore (le reti lo citavano per intero, 12/10 sera)."""
+        o «…» per un ospite (le reti lo citavano per intero, 12/10 sera; fino al 16/10 anche
+        per un minore)."""
         if self.console_riservata() is not None:
             return "…"
         return str(testo or "")[:n]
@@ -5949,17 +5963,11 @@ class Brain:
         # registro dei turni (03/10, analisi di sicurezza S9)
         quiet = private or level == "ospite"
         # Ciò che va nel terminale e nel registro dei turni quando è diverso da ciò che resta in
-        # memoria in `last_tools` (13/10): per un minore
+        # memoria in `last_tools` (13/10). *Storico, 12–16/10: per un minore i nomi degli
+        # argomenti senza i valori; dal 16/10 (decisione 0031) come per un adulto: oggi nessuno*
         su_disco = None
         if level == "ospite":
             shown = {}
-        elif self.console_riservata() == "minore":
-            # Un minore (12/10 sera, decisione 0028 T1): nel terminale e nel registro dei turni
-            # i nomi degli argomenti dati, senza i valori, come per i documenti di casa; il
-            # risultato «(riservato)». In memoria (`last_tools`) gli argomenti veri, dal 13/10:
-            # li leggono il confronto in ombra della macchina a stati (stato_dialogo) e il ciclo
-            su_disco = {k: "…" for k, v in args.items() if v not in (None, "")}
-            quiet = True
         if hidden:
             if not isinstance(getattr(self, "last_secrets", None), list):
                 self.last_secrets = []

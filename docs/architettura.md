@@ -142,7 +142,9 @@ Dettagli in [contesto-conversazione](aree/contesto-conversazione.md).
 - **Archivio delle conversazioni** (`conversazioni.py`): 30 giorni in SQLite con FTS5 e vettori,
   ricerca ibrida (17/18 contro 15/18 con le sole parole) e cronologica («di cosa parlavamo ieri?»).
   *[Dal 12/10 ([0028](decisioni/0028-decisioni-roadmap-12-10.md)): su disco solo le conversazioni
-  degli adulti, per 60 giorni; minori e ospiti in memoria.]*
+  degli adulti, per 60 giorni; minori e ospiti in memoria. Dal 16/10
+  ([0031](decisioni/0031-conservazione-dei-minori.md)) anche i minori su disco; gli ospiti in
+  memoria.]*
 - **Una conversazione per persona** (`corsie.py`): ogni satellite ha la sua corsia (un ciclo `Ciclo`
   in un thread); ogni persona riconosciuta ha la sua conversazione, che la segue da una stanza
   all'altra. Ospiti e voci incerte hanno una conversazione anonima per satellite (dal 13/10, in

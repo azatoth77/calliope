@@ -56,9 +56,9 @@ class Conversazione:
         self.riassunto: dict | None = None    # {"testo", "dati", "tipo", "quando"}
         self.archiviati = 0               # messaggi in testa già archiviati
         self.id_archivio = None           # id della riga in conversazioni.db (dal worker)
-        # In quale archivio sono i suoi turni (12/10 sera, T1): "disco", "sessione" (minori e
-        # ospiti, in memoria) o None (ancora nessuno). Non si esporta: la sessione non
-        # sopravvive a un riavvio, e una conversazione ripresa è su disco
+        # In quale archivio sono i suoi turni (12/10 sera, T1): "disco", "sessione" (ospiti, in
+        # memoria; dal 12 al 16/10 anche i minori) o None (ancora nessuno). Non si esporta: la
+        # sessione non sopravvive a un riavvio, e una conversazione ripresa è su disco
         self.archiviata_in = None
         self.nome = None                  # nome di chi parla (per il riassunto)
         self.luogo = None                 # satellite o "locale" (ripresa entro qualche ora)

@@ -122,6 +122,9 @@ comporta nella taglia ridotta da 8 GB (V7, E11).
    amministra sì finché non dice no), `calliope conserva --svuota [--persona]` e a voce per chi
    amministra; nel profilo ridotto c'è uguale (niente GPU). Resta da decidere l'archivio delle
    conversazioni di minori e ospiti ([contesto-conversazione](aree/contesto-conversazione.md)).
+   *Dal 16/10 ([0031](decisioni/0031-conservazione-dei-minori.md), issue #104) i minori di casa si
+   conservano come gli adulti (turni, eventi, archivio, journal; la voce col consenso dei tutori);
+   gli ospiti restano fuori.*
 2. **Piano unico della memoria della DGX** (T4): un budget scritto in `calliope stato --piano`
    prima di ogni modello nuovo. *Quasi* · dipende da: una misura della memoria libera in una
    giornata tipica.

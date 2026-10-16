@@ -1662,7 +1662,8 @@ def check_conversazioni(cfg, arch=None, timeout: float = 1.5) -> dict:
     if not getattr(cfg, "conversazioni_enabled", True):
         return _r("conversazioni", "da_configurare", "spento (conversazioni_enabled)",
                   "Accendilo con conversazioni_enabled: true in calliope.locale.yaml.")
-    # La tenuta della conservazione (12/10 sera, T1): turn_log_days, solo gli adulti
+    # La tenuta della conservazione (12/10 sera, T1): turn_log_days, le persone di casa (dal
+    # 16/10, decisione 0031, anche i minori)
     giorni = getattr(cfg, "turn_log_days", 60)
     modello = (getattr(cfg, "conversazioni_embedding", None) or "").strip()
     if not modello:

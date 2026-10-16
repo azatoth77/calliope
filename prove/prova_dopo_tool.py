@@ -255,7 +255,7 @@ def prova_brain_attivo():
         [("text", "Allora, vediamo. "), chiama("calcola", {"espressione": "17*6"})],
         [("text", "Fa 102.")]]), perche="dubbio_detto")
     b = brain([list(x) for x in calc])
-    b.console_riservata = lambda: "minore"
+    b.parla_minore = lambda: True          # minori.parla_minore (16/10: prima console_riservata)
     due_passate("un minore", b, perche="minore")
     b = brain([list(x) for x in calc])
     frasi.FRASI.inizio_turno(None, "formale")

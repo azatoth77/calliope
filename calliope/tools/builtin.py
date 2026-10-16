@@ -340,7 +340,12 @@ def _nuovo_profilo(ctx: ToolContext, n: str, nascita: str, tutori: str, maggiore
             frase = "Una persona nuova la può aggiungere solo chi amministra, con la sua voce."
             return {"ok": False, "fatto": "NON è partita la registrazione", "errore": frase,
                     "risposta_finale": frase}
-    meta = {"nascita": d.isoformat(), "tutori": ids} if minore else (
+    # Il consenso alla voce del minore è implicito nella registrazione (16/10, decisione 0031):
+    # lo dà chi registra (chi amministra), revocabile da un tutore (dati_conservati)
+    meta = {"nascita": d.isoformat(), "tutori": ids,
+            **({"voce_conservata": True, "voce_conservata_da": chi.id,
+                "voce_conservata_il": datetime.date.today().isoformat()}
+               if chi is not None else {})} if minore else (
         {"nascita": d.isoformat()} if d else {})
     sc.start_enroll(n, meta=meta)
     note_rule(ctx, "registra_minore" if minore else "registra_nuovo")

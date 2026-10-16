@@ -2,7 +2,7 @@
 
 *Finestra di contesto, compressione e archivio delle conversazioni, una conversazione per persona (corsie). Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-**Stato al 14/10.** Come al 09/10 (sotto), più: la storia come proiezione degli eventi (10/10, in ombra; con `eventi: attivo` il contesto viene dalla proiezione); la **conservazione** (12/10): turni, eventi, voce (col consenso) e archivio delle conversazioni dei soli adulti per `turn_log_days` (60) giorni, minori e ospiti solo in memoria, `calliope conserva --svuota`; «dimentica» che chiude anche la conversazione in corso (13/10); la **conversazione di stanza** (13–14/10, decisione 0029, ogni passo spento di serie): conversazione anonima condivisa in compagnia (passo 0), registro della stanza in memoria (passo 1, `stanza: ombra`), righe della stanza nei dati del turno e nella storia in sola aggiunta (`stanza_contesto`), `stanza_cerca` (passo 4), tenuta su disco per 60 giorni (`stanza_tenuta`), guardiano a posteriori (`stanza_guardia`), avvisi ai tutori con data, origine, trascrizione e audio, e i conoscenti (decisione 0030, sezioni in fondo). La latenza vera sulla DGX con la stanza accesa è da misurare (`calliope stato --turni`, sezione «Stanza»).
+**Stato al 14/10.** Come al 09/10 (sotto), più: la storia come proiezione degli eventi (10/10, in ombra; con `eventi: attivo` il contesto viene dalla proiezione); la **conservazione** (12/10): turni, eventi, voce (col consenso) e archivio delle conversazioni per `turn_log_days` (60) giorni, ospiti solo in memoria, `calliope conserva --svuota` (dal 16/10, decisione 0031, anche i minori su disco come gli adulti, la loro voce col consenso dei tutori; dal 12 al 16/10 i minori solo in memoria); «dimentica» che chiude anche la conversazione in corso (13/10); la **conversazione di stanza** (13–14/10, decisione 0029, ogni passo spento di serie): conversazione anonima condivisa in compagnia (passo 0), registro della stanza in memoria (passo 1, `stanza: ombra`), righe della stanza nei dati del turno e nella storia in sola aggiunta (`stanza_contesto`), `stanza_cerca` (passo 4), tenuta su disco per 60 giorni (`stanza_tenuta`), guardiano a posteriori (`stanza_guardia`), avvisi ai tutori con data, origine, trascrizione e audio, e i conoscenti (decisione 0030, sezioni in fondo). La latenza vera sulla DGX con la stanza accesa è da misurare (`calliope stato --turni`, sezione «Stanza»).
 
 *Stato al 09/10 (storico): una conversazione per persona con i satelliti insieme (06/10), finestra dal setup, compressione e archivio; dal 07/10 prima frase a pezzi, taratura della voce e Piper sulla GPU secondo la macchina; dall'08/10 la generazione nel registro, l'archivio a turno finito con la scheda «Conversazione» e le domande cronologiche («più indietro»); dal 09/10 la finestra d'ascolto si chiude in compagnia con una voce sconosciuta. La latenza vera sulla DGX è da rimisurare con un giorno d'uso (`calliope stato --turni`).*
 
@@ -908,6 +908,8 @@ latenza, promemoria, cache, sigilli, banchi d'attacco con `attivo`, argomenti, b
 
 ## Conservazione dei dati e la scelta dei tool come metrica (12/10, ramo `conserva-metrica`)
 
+*[Storico per i minori dal 16/10: superato dalla decisione [0031](../decisioni/0031-conservazione-dei-minori.md), i minori di casa si conservano come gli adulti; sezione «I minori conservati come gli adulti» in fondo.]*
+
 Decisione [0028](../decisioni/0028-decisioni-roadmap-12-10.md) T1 con la seconda tornata del 12/10:
 turni, eventi e voce dei **soli adulti riconosciuti** si tengono **60 giorni**, in privato, per il
 banco della scelta dei tool, i set di regressione, il dizionario delle correzioni e la taratura
@@ -1047,6 +1049,8 @@ Prove a secco: `prova_mulaw` (livello 1, ~1 s), con i contrari: il formato di pr
 lettore standard, i file da non toccare, il rilancio identico, l'interruzione a metà.
 
 ## L'archivio delle conversazioni allineato alla conservazione (12/10 sera, ramo `archivio-t1`)
+
+*[Storico per i minori dal 16/10: superato dalla decisione [0031](../decisioni/0031-conservazione-dei-minori.md), i minori di casa si conservano come gli adulti; sezione «I minori conservati come gli adulti» in fondo.]*
 
 Decisione di Dario del 12/10 ([0028](../decisioni/0028-decisioni-roadmap-12-10.md), T1): l'archivio
 delle conversazioni (`conversazioni.db`, la memoria di «cosa ti avevo detto») segue la stessa
@@ -2233,3 +2237,57 @@ Prove: `prova_stanza_storia` (sezione 1b, con `eventi: attivo` attraverso il gir
 anche il turno uscito dalla proiezione col taglio in testa: il suo pezzo se ne va, le righe non
 restano fuori posto e il risultato è quello di ombra, e col codice di prima fallisce), `prova_compagnia_passo0` (sezione «…con eventi:
 attivo»), `prova_eventi_attivo` invariata.
+
+## I minori conservati come gli adulti (16/10, issue #104, ramo `issue-104-minori-conserva`)
+
+Decisione di chi amministra del 16/10 ([0031](../decisioni/0031-conservazione-dei-minori.md), che
+supera la [0028](../decisioni/0028-decisioni-roadmap-12-10.md) T1 per i minori): «la privacy in casa
+di un minore non esiste e ciò che dice DEVE finire nel db e nel disco». Il caso vero del 15/10 sera:
+~25 minuti di una minore (29 risposte), su disco solo i numeri, la conversazione persa al riavvio,
+nel journal «(una frase di un minore)» tranne le frasi dell'arruolamento.
+
+- **Un solo posto, `conserva.decidi`**: «minore» come «adulto» per `testo`, `eventi` e
+  `conversazioni` (stessi `turn_log_days`); «ospite» escluso come prima. `testo_turno` non rifiuta
+  più per la fascia nel campo `ascolto` (resta solo per il conoscente, che non è mai un bambino).
+- **Nel dubbio tra un adulto e un minore** (`incerta`, `minore_vicino`, `minore_incerto`) e per il
+  proprietario incerto (`modo: proprietario`, ora in `MODI_TESTO`) **il testo sì, la voce no**
+  (`dubbio_minore` vale solo per la voce): il testo resta sotto la persona decisa dal ciclo, e
+  `Ciclo._segna_conserva` non segna più quei turni (l'archivio li tiene, gli eventi pure). La zona
+  grigia (`conversazione`) resta fuori.
+- **Registro degli eventi e archivio**: `registro_su_disco` e `conversazioni_su_disco` veri per un
+  minore; quindi il suo registro va su disco e si riprende dopo un riavvio, la sua conversazione va
+  nell'archivio su disco (anche quella in corso) invece che nella sessione, e la rotazione
+  (`Disco._togli_effimeri`, `ArchivioConversazioni.togli_non_conservate`) e la pulizia del
+  registro dei turni di prima (`ripulisci_registro`) non li toccano più. Nessun cambio in
+  `eventi/registro.py` né in `conversazioni.py` oltre ai commenti: tutto passa da `decidi`.
+- **Journal**: `conserva.console_riservata` risponde solo «ospite»; le frasi dei minori, le
+  risposte, gli argomenti dei tool e le citazioni delle reti vanno nel terminale come per un adulto
+  (anche le frasi dei giochi di un minore). Chiude il problema 11 dell'analisi (le frasi
+  dell'arruolamento in chiaro: ora lo sono tutte). La scelta di forma della frase dopo un tool
+  (System 1: con un minore parla il modello) passa da `minori.parla_minore`.
+- **Voce**: vedi [minori](minori.md), stessa data: il consenso è dei tutori (`voce_conservata_da`).
+- **Le parole già tolte non tornano** (12–16/10: registro dei turni ripulito, eventi in memoria,
+  archivio della sessione). Niente migrazioni.
+
+Prove: `prova_conserva` (casi e contrari: minore con le parole e dalla sola fascia, dubbio col testo
+e senza voce, ospite e zona grigia senza; eventi del minore su disco e ripresi, dell'ospite no;
+conversazione del minore su disco e ritrovata da un archivio nuovo; rotazione e pulizia che non lo
+toccano; `--svuota --persona` di un minore), `prova_console_minori` rovesciata (minore e dubbio in
+chiaro, ospite nascosto), `prova_stanza_tenuta` (il minore sente che i testi si tengono),
+`prova_dopo_tool` (`parla_minore`), `prova_conoscenti_conserva` invariata.
+
+### 16/10: il dubbio come lo scrive il ciclo (revisione della PR #106)
+
+Nei casi `incerta` (vale il minore, `minori.piu_protetto`) e `minore_vicino` (chi amministra al
+più familiare) il ciclo scrive `modo: conversazione` nel campo `voce`, come per la zona grigia: il
+primo giro del 16/10 guardava solo il modo e quei turni restavano senza parole (le prove usavano
+turni che il ciclo non scrive). Ora `decidi` tiene il testo con `modo: conversazione` **e** il segno
+del dubbio; `Conservazione.dubbi_di_casa` tiene `incerta` solo se la voce migliore della frase è
+sopra `speaker_id_threshold` (sotto, `piu_protetto` ha dato al minore una voce di nessuno, che resta
+fuori come la zona grigia). La voce di quei turni non si tiene. Prova: `prova_conserva`, sezione
+«i turni come li scrive il ciclo» (il `Ciclo` vero con le impronte sintetiche di
+`prova_voci_famiglia`: caso 1 del 06/10, minore vicino, minore e adulto netti; contrari zona grigia,
+voce sconosciuta, voce di nessuno vicina al minore).
+
+**Limite** (documentato nella 0031, punto 8): quella voce di nessuno attribuita al minore va nel
+journal in chiaro, perché `console_riservata` guarda solo il livello ospite.

@@ -268,8 +268,9 @@ class Avvio:
         cfg, s = self.cfg, self.s
         s.registry = SpeakerRegistry(cfg)
         self.speaker_ctx = SpeakerContext(s.registry)
-        # La conservazione dei dati (12/10, calliope/conserva.py, decisione 0028 T1): turni,
-        # eventi e voce dei soli adulti riconosciuti, per turn_log_days giorni; niente GPU
+        # La conservazione dei dati (12/10, calliope/conserva.py, decisione 0028 T1; dal 16/10
+        # la 0031 per i minori): turni, eventi e voce delle persone di casa riconosciute, per
+        # turn_log_days giorni; niente GPU
         from .conserva import Conservazione
         s.conserva = Conservazione(cfg, s.registry, log=lambda m: print(m, flush=True))
         # L'impronta si calcola in parallelo a Whisper: 25–50 ms che non pesano sulla risposta
@@ -589,9 +590,10 @@ class Avvio:
         # Archivio delle conversazioni (05/10, calliope/conversazioni.py): i turni finiti, per
         # la compressione della storia e per conversazione_cerca
         from .conversazioni import load_conversazioni
-        # Su disco solo le conversazioni degli adulti riconosciuti (12/10 sera, decisione 0028
-        # T1: la stessa decisione di turni ed eventi); minori e ospiti nell'archivio della
-        # sessione, in memoria. «Svuota» della conservazione svuota anche l'archivio
+        # Su disco solo le conversazioni delle persone di casa riconosciute (12/10 sera,
+        # decisione 0028 T1, dal 16/10 la 0031 anche per i minori: la stessa decisione di turni
+        # ed eventi); gli ospiti nell'archivio della sessione, in memoria. «Svuota» della
+        # conservazione svuota anche l'archivio
         cons = s.conserva
         conv_arch = self.conv_arch = load_conversazioni(
             cfg, conserva=cons.conversazioni_su_disco if cons is not None else None)

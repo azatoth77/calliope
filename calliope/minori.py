@@ -31,9 +31,10 @@ Decisioni di Dario del 05/10:
   (`conversazioni_visibili_ai_tutori`; fino al 14/10 solo sotto i 14 anni, art. 8 GDPR: chi
   amministra l'ha allineata alla conversazione di stanza, decisione 0029; la usa anche il
   cassetto dei file); niente dati sanitari o sensibili
-  nei ricordi di un minore (`ricordo_sensibile`). Dal 12/10 (decisione 0028 T1,
-  calliope/conserva.py) le conversazioni di un minore non vanno su disco: restano
-  nell'archivio della sessione, in memoria, fino al riavvio.
+  nei ricordi di un minore (`ricordo_sensibile`). Dal 16/10 (decisione 0031,
+  calliope/conserva.py) turni, eventi e conversazioni di un minore si conservano come quelli di
+  un adulto (60 giorni), e la sua voce col consenso dei tutori. *Storico, 12–16/10 (0028 T1): le
+  conversazioni di un minore non andavano su disco, solo nell'archivio della sessione.*
 
 Le regole sul testo qui sono vincoli di sicurezza o di permesso (principio 10): ognuna scrive
 il suo nome nel registro dei turni e ha i casi contrari in prove/prova_minori.py.
@@ -128,6 +129,25 @@ def fascia(prof, oggi: datetime.date | None = None) -> str | None:
 
 def e_minore(prof, oggi: datetime.date | None = None) -> bool:
     return fascia(prof, oggi) is not None
+
+
+def parla_minore(speaker_ctx, registry) -> bool:
+    """La frase è di un minore riconosciuto, o nel dubbio tra un adulto e un minore (`incerta`,
+    `minore_vicino`, `minore_incerto`)? Per scelte di forma della risposta (la frase pronta del
+    tool dopo il System 1: con un minore parla il modello). Fino al 16/10 lo diceva
+    `conserva.console_riservata` («minore»), che dal 16/10 (decisione 0031) non nasconde più le
+    frasi dei minori."""
+    if speaker_ctx is None:
+        return False
+    if any(getattr(speaker_ctx, k, None) for k in ("incerta", "minore_vicino",
+                                                   "minore_incerto")):
+        return True
+    nome = getattr(speaker_ctx, "current_speaker", None)
+    get = getattr(registry, "get", None)
+    try:
+        return bool(nome and callable(get) and e_minore(get(nome)))
+    except Exception:  # noqa: BLE001 — una data rovinata: nel dubbio minore
+        return True
 
 
 def piu_protetta(*fasce: str | None) -> str | None:

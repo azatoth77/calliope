@@ -21,10 +21,10 @@ progetto docs/ricerche/2026-10-10-registro-eventi.md).
 - **Porte** (§ 2.5): ciò che attraversa i registri passa da una funzione `porta_*` con un nome,
   che scrive un evento nuovo nel registro di destinazione (mai una copia di eventi).
 - **Conservazione** (12/10, decisione 0028 T1, calliope/conserva.py): con `Registri(conserva=…)`
-  vanno su disco solo i registri delle persone adulte (e quello della casa); minori, ospiti e
-  voci incerte restano in memoria, per la conversazione, e un riavvio non li riprende. La
-  rotazione toglie quelli rimasti da prima (`Disco.ruota(effimero=…)`); `Disco.svuota` è il
-  comando per svuotare (tutto o una persona).
+  vanno su disco solo i registri delle persone di casa (e quello della casa): dal 16/10
+  (decisione 0031) anche dei minori; ospiti e voci incerte restano in memoria, per la
+  conversazione, e un riavvio non li riprende. La rotazione toglie quelli rimasti da prima
+  (`Disco.ruota(effimero=…)`); `Disco.svuota` è il comando per svuotare (tutto o una persona).
 
 Solo libreria standard e sqlite3.
 """
@@ -230,8 +230,9 @@ class Disco:
             self._togli_effimeri(effimero)
 
     def _togli_effimeri(self, effimero):
-        """I registri che non devono stare su disco (minori, ospiti: `effimero(chiave)`), scritti
-        da una versione di prima o prima che la persona fosse un minore: via tutte le righe."""
+        """I registri che non devono stare su disco (ospiti, profili tolti: `effimero(chiave)`),
+        scritti da una versione di prima: via tutte le righe. Dal 16/10 (decisione 0031) i minori
+        restano."""
         def f():
             try:
                 with self.lock:
@@ -462,7 +463,7 @@ class Registri:
             return out
         for chiave in chiavi:
             if self.conserva is not None and not self._su_disco(chiave):
-                continue                       # minori e ospiti: mai ripresi dal disco
+                continue                       # ospiti: mai ripresi dal disco
             try:
                 self._riprendi_uno(chiave, scadenza_s, ora, out)
             except Exception as e:  # noqa: BLE001 — un registro rovinato non ferma l'avvio

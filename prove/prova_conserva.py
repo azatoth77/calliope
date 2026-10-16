@@ -1,29 +1,39 @@
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # prova_voci_famiglia
 
-"""Prova a secco della conservazione dei dati (12/10/2026, calliope/conserva.py, decisione 0028 T1).
+"""Prova a secco della conservazione dei dati (12/10/2026, calliope/conserva.py, decisione 0028 T1;
+dal 16/10 la decisione 0031: i minori di casa come gli adulti, issue #104).
 
-- `decidi`, il solo posto: adulto riconosciuto sì; minore, ospite, dubbio con un minore, zona
-  grigia no (testo); la voce solo sopra soglia, senza compagnia, con il consenso (chi amministra
-  sì finché non dice no, gli altri adulti solo dopo il loro «sì»), mai con `conserva_voce: false`;
-- registro dei turni: le parole restano solo per gli adulti; minori (dal profilo o dalla fascia),
-  ospiti, voci incerte, zona grigia senza parole (restano i numeri e quante parole);
+- `decidi`, il solo posto: persona di casa riconosciuta sì, **minore compreso** (testo, eventi,
+  conversazioni); ospite e zona grigia no (testo); nel dubbio tra un adulto e un minore il testo
+  sì e la voce no; la voce solo sopra soglia, senza compagnia, con il consenso (chi amministra sì
+  finché non dice no, gli altri adulti solo dopo il loro «sì», un minore solo col «sì» di un
+  tutore), mai con `conserva_voce: false`;
+- registro dei turni: le parole restano per adulti e minori (dal profilo o dalla fascia) e nel
+  dubbio con un minore; ospiti e zona grigia senza parole (restano i numeri e quante parole);
 - voce: μ-law che si rilegge (errore piccolo), un file per frase nella cartella della persona,
-  permessi 600/700 fuori da Windows; mai per minore, ospite, adulto senza consenso, scritto,
-  frase ignorata, compagnia, frase di sfida, codice detto;
-- consenso: il «sì» salvato nel profilo; la revoca cancella le registrazioni;
-- rotazione: giorni vecchi, persone senza più il diritto, tetto di spazio;
-- il registro dei turni di prima ripulito una volta (segno nella cartella);
+  permessi 600/700 fuori da Windows; mai per ospite, adulto senza consenso, minore senza il sì di
+  un tutore, scritto, frase ignorata, compagnia, dubbio con un minore, frase di sfida, codice
+  detto; il minore col sì del tutore sì;
+- consenso: il «sì» salvato nel profilo (per un minore con il tutore che l'ha dato); la revoca
+  cancella le registrazioni;
+- rotazione: giorni vecchi, persone senza più il diritto, tetto di spazio; il minore col sì del
+  tutore resta;
+- il registro dei turni di prima ripulito una volta (segno nella cartella): le parole del minore
+  restano, quelle dell'ospite no;
 - svuotare: una persona (voce, parole nei turni, eventi) e tutto;
-- eventi: i registri di minori e ospiti non vanno su disco né si riprendono; la rotazione toglie
-  quelli rimasti; le parole di un turno incerto restano solo in memoria (`senza_parole`);
-  `dati_del_turno` su disco con nomi e lunghezze;
-- il tool `dati_conservati`: ospite, minore, scritto, zona grigia rifiutati; domanda e «sì»;
-  revoca; «svuota» solo per chi amministra, con la domanda;
-- da terminale: `python -m calliope.conserva` (conteggi) e `--svuota --persona`;
-- l'archivio delle conversazioni (12/10 sera): su disco solo l'adulto, minore, ospite e turno
-  incerto no (minore e ospite nella sessione in memoria), conversazione in corso salvata,
-  rotazione delle righe di prima, tenuta di `turn_log_days`, svuota e conteggi.
+- eventi: i registri di adulti e minori su disco e ripresi dopo un riavvio; quelli degli ospiti
+  no, e la rotazione li toglie; le parole di un turno incerto restano solo in memoria
+  (`senza_parole`); `dati_del_turno` su disco con nomi e lunghezze;
+- il tool `dati_conservati`: ospite, scritto, zona grigia rifiutati; domanda e «sì»; revoca; il
+  minore che dà o revoca da solo il consenso rifiutato, il tutore che lo dà con la persona e il
+  «sì», un adulto non tutore rifiutato; «svuota» solo per chi amministra, con la domanda;
+- da terminale: `python -m calliope.conserva` (conteggi) e `--svuota --persona` (anche di un
+  minore: turni, eventi, conversazioni, voce);
+- l'archivio delle conversazioni (12/10 sera): su disco l'adulto e il minore, ospite e turno
+  incerto no (l'ospite nella sessione in memoria), conversazione in corso salvata, rotazione delle
+  righe di prima (il minore resta), tenuta di `turn_log_days`, svuota e conteggi.
 
 Nomi di fantasia. Tutto in una cartella temporanea. ~1 s.
 """
@@ -81,7 +91,7 @@ def profili():
     amm = UserProfile(name="Primo", admin=True, id="p-amm")
     adulto = UserProfile(name="Ginevra", id="p-adu")
     minore = UserProfile(name="Leo", id="p-min",
-                         nascita=f"{oggi.year - 10}-01-15")
+                         nascita=f"{oggi.year - 10}-01-15", tutori=["p-amm"])
     return amm, adulto, minore
 
 
@@ -93,22 +103,54 @@ try:
     # ───────── decidi ─────────
     verifica("adulto dalla voce: testo sì", C.decidi(adulto, "testo", "voce").ok)
     verifica("adulto, frase breve: testo sì", C.decidi(adulto, "testo", "breve").ok)
-    verifica("contrario: minore, mai (testo, voce, eventi, conversazioni)",
-             not any(C.decidi(minore, c, "voce") for c in C.COSE if c != "stanza")
-             and C.decidi(minore, "voce", "voce").motivo == "minore")
+    # Dal 16/10 (decisione 0031) il minore di casa come un adulto
+    verifica("minore: testo, eventi e conversazioni sì (16/10, decisione 0031)",
+             all(C.decidi(minore, c, "voce").ok for c in ("testo", "eventi", "conversazioni"))
+             and C.decidi(minore, "testo", "voce").motivo == "minore")
+    # La voce del minore (16/10, decisione 0031 aggiornata): il consenso è dei tutori e
+    # implicito nella registrazione; un minore con i tutori nel profilo ce l'ha senza domanda
+    verifica("minore già registrato con i tutori: voce sì senza domanda (consenso implicito)",
+             minore.voce_conservata is None and C.decidi(minore, "voce", "voce", registry=reg).ok)
+    minore.voce_conservata, minore.voce_conservata_da = False, "p-amm"
+    verifica("minore, contrario: revocato da un tutore → voce no",
+             C.decidi(minore, "voce", "voce", registry=reg).motivo == "senza_consenso")
+    minore.voce_conservata, minore.voce_conservata_da = True, "p-amm"
+    verifica("minore col «sì» del tutore, contrario: in compagnia o con una frase breve no",
+             not C.decidi(minore, "voce", "voce", {"compagnia"}, registry=reg)
+             and not C.decidi(minore, "voce", "breve", registry=reg))
+    # Il tutore che l'ha dato non lo è più, o il suo profilo non c'è: senza altri tutori validi no
+    orfano = UserProfile(name="Teo", id="p-teo", nascita=minore.nascita, tutori=["p-via"],
+                         voce_conservata=True, voce_conservata_da="p-via")
+    verifica("contrario: il consenso di un tutore il cui profilo non c'è più non vale",
+             not C.consenso_voce(orfano, reg))
+    orfano.tutori, orfano.voce_conservata_da = ["p-amm"], "p-adu"
+    verifica("…chi l'ha dato non è (più) tutore: vale solo il consenso implicito dei tutori "
+             "validi", C.consenso_voce(orfano, reg))
+    orfano.tutori = []
+    verifica("contrario: chi l'ha dato non è tutore e nessun tutore nel profilo: no",
+             not C.consenso_voce(orfano, reg))
+    verifica("contrario: un minore senza tutori nel profilo e senza un «sì»: no",
+             not C.consenso_voce(UserProfile(name="Ada", id="p-ada", nascita=minore.nascita),
+                                 reg))
+    minore.voce_conservata = minore.voce_conservata_da = None
     # Il testo della stanza (14/10, decisione 0029 punto 5): con la tenuta accesa anche i minori
     # riconosciuti dalla voce (prove/prova_stanza_tenuta.py)
     verifica("la stanza sì anche per il minore con la voce, no nella zona grigia",
              C.decidi(minore, "stanza", "voce").ok
              and not C.decidi(minore, "stanza", "conversazione"))
     verifica("contrario: ospite, mai", not any(C.decidi(None, c, "voce") for c in C.COSE))
-    verifica("contrario: dubbio con un minore (incerta, minore_vicino): testo no",
-             not C.decidi(amm, "testo", "voce", {"incerta"})
-             and not C.decidi(amm, "testo", "voce", {"minore_vicino"})
-             and C.decidi(amm, "testo", "voce", {"incerta"}).motivo == "dubbio_minore")
-    verifica("contrario: zona grigia («conversazione») e proprietario incerto: testo no",
+    verifica("dubbio con un minore (incerta, minore_vicino, minore_incerto): il testo sì",
+             all(C.decidi(amm, "testo", "conversazione", {d}).ok for d in C.DUBBI_MINORE)
+             and C.decidi(minore, "testo", "conversazione", {"incerta"}).ok)
+    verifica("dubbio con un minore, contrario: la voce no",
+             all(C.decidi(amm, "voce", "voce", {d}).motivo == "dubbio_minore"
+                 for d in C.DUBBI_MINORE))
+    verifica("proprietario incerto con un minore: il testo sì, la voce no",
+             C.decidi(amm, "testo", "proprietario").ok
+             and C.decidi(amm, "voce", "proprietario").motivo == "voce_incerta")
+    verifica("contrario: zona grigia («conversazione») e nessun modo: testo no",
              not C.decidi(amm, "testo", "conversazione")
-             and not C.decidi(amm, "testo", "proprietario")
+             and not C.decidi(minore, "testo", "conversazione")
              and not C.decidi(amm, "testo", None))
     verifica("chi amministra: voce sì senza averlo detto (scelta di partenza)",
              C.decidi(amm, "voce", "voce").ok)
@@ -128,6 +170,12 @@ try:
     verifica("contrario: chi amministra che ha detto no: voce no",
              not C.decidi(amm, "voce", "voce"))
     amm.voce_conservata = None
+    cresciuto = UserProfile(name="Ugo", id="p-ugo", voce_conservata=True,
+                            voce_conservata_da="p-amm")
+    verifica("contrario: un adulto col «sì» dato da un tutore quando era minore: voce no",
+             C.decidi(cresciuto, "voce", "voce").motivo == "senza_consenso")
+    cresciuto.voce_conservata_da = "p-ugo"
+    verifica("…e col «sì» suo, sì", C.decidi(cresciuto, "voce", "voce").ok)
     verifica("minore per la sola fascia scritta a mano: minore",
              C.categoria(UserProfile(name="X", fascia="ragazzi")) == "minore")
     try:
@@ -164,8 +212,9 @@ try:
             "minore": turno("Leo"),
             "minore_fascia": turno("Ginevra", ascolto={"fascia": "ragazzi"}),
             "ospite": turno(None, livello="ospite"),
-            "incerta": turno("Primo", livello="amministra",
-                             voce={"incerta": ["Primo", "Leo"]}),
+            # Come lo scrive il ciclo (minori.piu_protetto): il nome del minore, «conversazione»
+            "incerta": turno("Leo", modo="conversazione",
+                             voce={"incerta": ["Primo", "Leo"], "punteggio": 0.489}),
             "grigia": turno("Ginevra", modo="conversazione")}
     for k, r in casi.items():
         r["caso"] = k
@@ -173,25 +222,100 @@ try:
         log.write(r)
     righe = {r["caso"]: r for r in (json.loads(x) for x in (
         Path(cfg.turn_log_dir) / f"turni-{oggi}.jsonl").read_text(encoding="utf-8").splitlines())}
-    verifica("registro: l'adulto con le parole e gli argomenti",
-             righe["adulto"]["testo"] == "accendi la luce della cucina"
-             and righe["adulto"]["tool"][0].get("argomenti"))
-    for k in ("minore", "minore_fascia", "ospite", "incerta", "grigia"):
+    for k in ("adulto", "minore", "minore_fascia", "incerta"):
+        # Dal 16/10 (decisione 0031) il minore (dal profilo o dalla sola fascia nel turno) e il
+        # dubbio tra un adulto e un minore tengono le parole come l'adulto
+        r = righe[k]
+        verifica(f"registro «{k}»: le parole, la risposta e gli argomenti restano",
+                 r["testo"] == "accendi la luce della cucina"
+                 and r["risposta"] == "Fatto, luce accesa." and r["tool"][0].get("argomenti")
+                 and "conserva" not in r, str(r)[:300])
+    for k in ("ospite", "grigia"):
         r = righe[k]
         verifica(f"registro, contrario «{k}»: niente parole, restano i numeri",
                  r["testo"] is None and r["risposta"] is None and r.get("testo_parole") == 5
                  and "argomenti" not in r["tool"][0] and r["tool"][0]["nome"] == "casa_comando",
                  str(r)[:300])
     verifica("il ciclo segna il motivo nel turno (letto dall'ombra degli eventi)",
-             righe["minore"]["conserva"] == {"testo": False, "motivo": "minore"}
-             and "conserva" not in righe["adulto"])
+             righe["grigia"]["conserva"] == {"testo": False, "motivo": "voce_incerta"}
+             and righe["ospite"]["conserva"] == {"testo": False, "motivo": "ospite"}
+             and "conserva" not in righe["adulto"] and "conserva" not in righe["minore"])
     # Righe scritte da altri (cassetto, schermi) senza il segno: decide la conservazione
     log.write({"inizio": f"{oggi}T11:00:00", "livello": "familiare", "testo": "foto.jpg",
                "voce": {"nome": "Leo", "modo": "schermo"}, "caso": "altri"})
-    r = [json.loads(x) for x in (Path(cfg.turn_log_dir) / f"turni-{oggi}.jsonl").read_text(
-        encoding="utf-8").splitlines()][-1]
-    verifica("contrario: una riga di altri senza segno, di un minore → senza parole",
-             r["testo"] is None, str(r))
+    log.write({"inizio": f"{oggi}T11:00:01", "livello": "familiare", "testo": "foto.jpg",
+               "voce": {"nome": None, "modo": "schermo"}, "caso": "altri_ospite"})
+    ultime = [json.loads(x) for x in (Path(cfg.turn_log_dir) / f"turni-{oggi}.jsonl").read_text(
+        encoding="utf-8").splitlines()][-2:]
+    verifica("una riga di altri senza segno, di un minore → con le parole",
+             ultime[0]["testo"] == "foto.jpg", str(ultime[0]))
+    verifica("contrario: una riga di altri senza segno e senza nessuno → senza parole",
+             ultime[1]["testo"] is None, str(ultime[1]))
+
+    # ───────── i turni come li scrive il ciclo (16/10, revisione della PR #106) ─────────
+    # Il ciclo vero (`Ciclo._riconosci_voce` con le impronte sintetiche di prova_voci_famiglia:
+    # Carlo amministra ed è tutore di Luca, 14 anni) scrive il campo `voce`; da lì decide la
+    # conservazione, nel registro dei turni e per la voce
+    import prova_voci_famiglia as VF
+    from calliope.speaker_id import SpeakerContext  # noqa: F401  (il ciclo lo usa)
+
+    def dal_ciclo(sc_carlo, sc_luca, voce_s=2.0, in_session=False, prev=None, prima=None):
+        rg, scx, cx, _r = VF.ciclo_finto()
+        cx.speaker = VF.VoceFinta()
+        if prima is not None:
+            VF.riconosci(cx, scx, VF.frase_con(*prima), 2.0)
+        n, how, lv, v, _t = VF.riconosci(cx, scx, VF.frase_con(sc_carlo, sc_luca), voce_s,
+                                         in_session=in_session, prev=prev)
+        return rg, {"inizio": f"{oggi}T12:00:00.000", "livello": lv, "voce": v,
+                    "testo": "domani c'è la gita al lago", "esito": "risposta",
+                    "risposta": "Che bello, buona gita."}
+
+    cfg_c = Config()
+    cfg_c.turn_log_dir = str(tmp / "registro-ciclo")
+    cfg_c.memory_db = str(tmp / "memoria-ciclo.db")
+    cfg_c.conserva_voce = True
+    casi_ciclo = {
+        "incerta (caso 1 del 06/10: Carlo 0,489, Luca 0,46 → Luca)": ((0.489, 0.46, 3.19), True),
+        "minore_vicino (Carlo 0,62, Luca 0,52 → Carlo familiare)": ((0.62, 0.52, 2.0), True),
+        "Luca netto": ((0.20, 0.70, 2.0), True),
+        "Carlo netto": ((0.72, 0.20, 2.0), True),
+    }
+    for nome, ((a, b, vs), atteso) in casi_ciclo.items():
+        rg, rec = dal_ciclo(a, b, vs, in_session=True, prev="Carlo")
+        cc = C.Conservazione(cfg_c, rg, log=lambda m: None)
+        cc._ruotata_il = datetime.date.today()
+        tl = TurnLog(cfg_c.turn_log_dir, 60, conserva=cc)
+        cc.al_turno(rec, audio_ciclo := (0.2 * np.sin(np.arange(16000) / 7)).astype(np.float32),
+                    16000)
+        tl.write(dict(rec))
+        scritto = json.loads((Path(cfg_c.turn_log_dir) / f"turni-{oggi}.jsonl").read_text(
+            encoding="utf-8").splitlines()[-1])
+        verifica(f"ciclo vero, {nome}: il testo nel registro dei turni",
+                 scritto["testo"] == "domani c'è la gita al lago" and "conserva" not in rec,
+                 json.dumps(rec["voce"])[:300])
+        dubbio = rec["voce"].get("modo") == "conversazione"
+        verifica(f"ciclo vero, {nome}: la voce " + ("no (dubbio)" if dubbio else "sì"),
+                 bool(rec.get("voce_file")) is not dubbio, json.dumps(rec)[:300])
+    # Contrari dal ciclo: zona grigia (Carlo 0,45 nella sua conversazione, nessun minore in
+    # mezzo), voce di nessuno, voce di nessuno vicina al profilo del minore (piu_protetto)
+    for nome, (args, kw) in {
+            "zona grigia (Carlo 0,45 nella sua conversazione)":
+                ((0.45, 0.05, 2.0), {"in_session": True, "prev": "Carlo",
+                                     "prima": (0.72, 0.20)}),
+            "voce sconosciuta": ((0.10, 0.05, 2.0), {}),
+            "voce di nessuno vicina al minore (Luca 0,44 sotto soglia → Luca per prudenza)":
+                ((0.10, 0.44, 2.0), {})}.items():
+        rg, rec = dal_ciclo(*args, **kw)
+        cc = C.Conservazione(cfg_c, rg, log=lambda m: None)
+        cc._ruotata_il = datetime.date.today()
+        tl = TurnLog(cfg_c.turn_log_dir, 60, conserva=cc)
+        cc.al_turno(rec, audio_ciclo, 16000)
+        tl.write(dict(rec))
+        scritto = json.loads((Path(cfg_c.turn_log_dir) / f"turni-{oggi}.jsonl").read_text(
+            encoding="utf-8").splitlines()[-1])
+        verifica(f"ciclo vero, contrario: {nome} → niente parole, niente voce",
+                 scritto["testo"] is None and not rec.get("voce_file"),
+                 json.dumps(rec["voce"])[:300])
 
     # ───────── voce ─────────
     sr = 16000
@@ -217,14 +341,16 @@ try:
     rec = turno("Primo", livello="amministra")
     cons.al_turno(rec, audio, sr)
     verifica("chi amministra: voce salvata senza averlo detto", bool(rec.get("voce_file")))
-    for nome, r in (("minore", turno("Leo")),
+    minore.voce_conservata, minore.voce_conservata_da = False, "p-amm"   # revocato
+    for nome, r in (("minore con il consenso revocato dal tutore", turno("Leo")),
                     ("ospite", turno(None, livello="ospite")),
                     ("adulto senza consenso", turno("Ginevra")),
                     ("frase breve", turno("Primo", modo="breve")),
                     ("compagnia", turno("Primo", voce={"compagnia": {"voci": 2}})),
                     ("scritta", turno("Primo", modo="schermo", canale="scritto")),
                     ("ignorata", {**turno("Primo"), "esito": "ignorato"}),
-                    ("incerta con un minore", turno("Primo", voce={"minore_vicino": "Leo"})),
+                    ("incerta con un minore", turno("Primo", modo="conversazione",
+                                                    voce={"minore_vicino": "Leo"})),
                     ("frase di sfida", {**turno("Primo"), "regole": ["sfida_risposta"]}),
                     ("codice detto", {**turno("Primo"), "tool": [
                         {"nome": "schermo_gestisci", "argomenti": {"codice": "******"}}]})):
@@ -233,7 +359,22 @@ try:
         cons.al_turno(r, audio, sr)
         verifica(f"voce, contrario «{nome}»: non salvata", not r.get("voce_file"), str(r)[:200])
         adulto.voce_conservata = True
-    verifica("nessun file per il minore", not (cons.voce_dir / "p-min").exists())
+    verifica("nessun file per il minore col consenso revocato",
+             not (cons.voce_dir / "p-min").exists())
+    # Il consenso implicito dei tutori (16/10, decisione 0031): la voce del minore si tiene
+    minore.voce_conservata = minore.voce_conservata_da = None
+    rec = turno("Leo")
+    cons.al_turno(rec, audio, sr)
+    verifica("voce del minore col consenso implicito dei tutori: salvata nella sua cartella",
+             bool(rec.get("voce_file")) and rec["voce_file"].startswith("p-min/"),
+             str(rec)[:200])
+    for nome, r in (("minore in un dubbio con un adulto",
+                     turno("Leo", modo="conversazione",
+                           voce={"incerta": ["Primo", "Leo"], "punteggio": 0.489})),
+                    ("minore in compagnia", turno("Leo", voce={"compagnia": {"voci": 2}}))):
+        cons.al_turno(r, audio, sr)
+        verifica(f"voce, contrario «{nome}»: non salvata, il testo sì",
+                 not r.get("voce_file") and "conserva" not in r, str(r)[:200])
     # Dal ciclo: _scrivi_turno prende l'audio del turno di questo rec, poi il registro dei turni
     from calliope.ciclo import Ciclo
     finto = SimpleNamespace(s=SimpleNamespace(conserva=cons, cfg=cfg, turns=log), ombra=None,
@@ -272,6 +413,13 @@ try:
              and not (cons.voce_dir / "p-adu").exists()
              and not (cons.voce_dir / "p-sconosciuto").exists()
              and (cons.voce_dir / "p-amm" / oggi).exists() and r["persone"] == 2, str(r))
+    verifica("rotazione: il minore col consenso dei tutori resta",
+             cons.registrazioni("p-min") == 1)
+    minore.tutori = ["p-via"]                     # il tutore tolto dalla casa
+    r = cons.ruota()
+    verifica("rotazione, contrario: il minore senza più un tutore valido via",
+             not (cons.voce_dir / "p-min").exists() and r["persone"] == 1, str(r))
+    minore.tutori = ["p-amm"]
     ieri = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
     for g in (ieri, oggi):
         for i in range(3):
@@ -290,14 +438,19 @@ try:
         {"inizio": f"{ieri}T09:00:00", "livello": "familiare", "testo": "quanto fa sette per otto",
          "voce": {"nome": "Leo", "modo": "voce"}, "risposta": "Cinquantasei."},
         {"inizio": f"{ieri}T09:01:00", "livello": "amministra", "testo": "che ore sono",
-         "voce": {"nome": "Primo", "modo": "voce"}, "risposta": "Sono le nove."})) + "\nrotta{\n",
+         "voce": {"nome": "Primo", "modo": "voce"}, "risposta": "Sono le nove."},
+        {"inizio": f"{ieri}T09:02:00", "livello": "ospite", "testo": "il mio cane si chiama Fido",
+         "voce": None, "risposta": "Bel nome."})) + "\nrotta{\n",
         encoding="utf-8")
     r = cons.ripulisci_registro()
     righe = vecchia.read_text(encoding="utf-8").splitlines()
-    verifica("registro di prima: le parole del minore tolte, l'adulto e la riga rotta restano",
-             r and r["turni"] >= 1 and json.loads(righe[0])["testo"] is None
-             and json.loads(righe[1])["testo"] == "che ore sono" and righe[2] == "rotta{",
+    # Dal 16/10 (decisione 0031) la pulizia all'avvio non toglie più le parole dei minori
+    verifica("registro di prima: le parole del minore e dell'adulto restano, la riga rotta pure",
+             json.loads(righe[0])["testo"] == "quanto fa sette per otto"
+             and json.loads(righe[1])["testo"] == "che ore sono" and righe[3] == "rotta{",
              str(righe)[:300])
+    verifica("registro di prima, contrario: le parole dell'ospite tolte",
+             r and r["turni"] == 1 and json.loads(righe[2])["testo"] is None, f"{r} {righe[2]}")
     verifica("una volta sola: il segno nella cartella", cons.ripulisci_registro() is None
              and (Path(cfg.turn_log_dir) / C.SEGNO_RIPULITO).exists())
 
@@ -312,22 +465,27 @@ try:
         rg.aggiungi("detto_persona", 1, testo="la frase di prova", canale="voce")
     regs.scrivi()
     chiavi = set(disco.chiavi())
-    verifica("eventi: su disco solo l'adulto; minore, ospite e profilo ignoto in memoria",
-             chiavi == {"persona:p-adu"} and regs.della_corsia("persona:p-min").eventi(),
-             str(chiavi))
-    # Righe di un minore scritte da una versione di prima: la rotazione le toglie
+    # Dal 16/10 (decisione 0031) anche il registro del minore va su disco
+    verifica("eventi: su disco l'adulto e il minore; ospite e profilo ignoto in memoria",
+             chiavi == {"persona:p-adu", "persona:p-min"}
+             and regs.della_corsia("ospite:studio").eventi(), str(chiavi))
+    # Righe di un ospite scritte da una versione di prima: la rotazione le toglie
     vecchie = Registri(disco, log=lambda m: None)            # senza conservazione, come prima
-    v = vecchie.della_corsia("persona:p-min")
+    v = vecchie.della_corsia("ospite:cucina")
     v.apri("persona")
-    v.aggiungi("detto_persona", 1, testo="frase di un ragazzo", canale="voce")
+    v.aggiungi("detto_persona", 1, testo="frase di un ospite", canale="voce")
     vecchie.scrivi()
-    verifica("(prima) il minore era su disco", "persona:p-min" in disco.chiavi())
-    rip = Registri(disco, log=lambda m: None, conserva=cons.registro_su_disco).riprendi()
-    verifica("riavvio: il registro del minore non si riprende dal disco", rip["ripresi"] == 1,
-             str(rip))
+    verifica("(prima) l'ospite era su disco", "ospite:cucina" in disco.chiavi())
+    regs2 = Registri(disco, log=lambda m: None, conserva=cons.registro_su_disco)
+    rip = regs2.riprendi()
+    verifica("riavvio: il registro del minore si riprende dal disco, quello dell'ospite no",
+             rip["ripresi"] == 2
+             and [e.dati.get("testo") for e in regs2.della_corsia("persona:p-min").eventi()
+                  if e.tipo == "detto_persona"] == ["la frase di prova"]
+             and not regs2.della_corsia("ospite:cucina").eventi(), str(rip))
     disco.ruota(60, effimero=lambda k: not cons.registro_su_disco(k))
-    verifica("rotazione: via le righe del minore, l'adulto resta",
-             set(disco.chiavi()) == {"persona:p-adu"}, str(disco.chiavi()))
+    verifica("rotazione: via le righe dell'ospite, l'adulto e il minore restano",
+             set(disco.chiavi()) == {"persona:p-adu", "persona:p-min"}, str(disco.chiavi()))
     # Il turno incerto nel registro di un adulto: le parole restano in memoria
     ev = Evento("persona:p-adu", 9, "c", None, time.time(), "detto_persona", 1, "modello",
                 senza_parole("detto_persona", {"testo": "parole incerte", "canale": "voce"}))
@@ -388,7 +546,71 @@ try:
     sc.current_speaker, sc.identified_by = "Leo", "voce"
     r = _dati_conservati(ctx, "consenso_voce")
     verifica("contrario: un minore non può dare il consenso", r["ok"] is False
+             and minore.voce_conservata is None and "genitori" in r["conferma"]
+             and "in_sospeso" not in r, str(r))
+    r = _dati_conservati(ctx, "consenso_voce", "Leo")
+    verifica("contrario: nemmeno nominandosi", r["ok"] is False
              and minore.voce_conservata is None)
+    # Il consenso implicito dei tutori (16/10, decisione 0031 aggiornata)
+    r = _dati_conservati(ctx, "revoca_voce")
+    verifica("contrario: un minore non revoca da solo il consenso dei tutori", r["ok"] is False
+             and minore.voce_conservata is None and C.consenso_voce(minore, reg))
+    r = _dati_conservati(ctx, "stato")
+    verifica("stato per un minore: i testi, i genitori, la voce decisa alla registrazione",
+             r["ok"] and "60 giorni" in r["conferma"] and "genitori" in r["conferma"]
+             and "voce sì" in r["conferma"] and "decisa alla registrazione" in r["conferma"],
+             str(r))
+    sc.current_speaker, ctx.turno = "Primo", 20
+    r = _dati_conservati(ctx, "consenso_voce", "Leo")
+    verifica("tutore: con il consenso implicito nessuna domanda («la tengo già»)",
+             r["ok"] and "già" in r["conferma"] and "in_sospeso" not in r
+             and minore.voce_conservata is None, str(r))
+    # La revoca di un tutore: la stessa conferma di «svuota»
+    sc.identified_by, sc.minore_vicino = "conversazione", "Leo"
+    r = _dati_conservati(ctx, "revoca_voce", "Leo")
+    verifica("contrario: il tutore nel dubbio col minore non revoca",
+             r["ok"] is False and minore.voce_conservata is None, str(r))
+    sc.minore_vicino = None
+    sc.identified_by, sc.conferma_breve = "breve", False
+    r = _dati_conservati(ctx, "revoca_voce", "Leo")
+    verifica("contrario: un «sì» breve senza l'impronta compatibile non revoca",
+             r["ok"] is False and minore.voce_conservata is None, str(r))
+    sc.current_speaker, sc.identified_by = "Ginevra", "voce"
+    r = _dati_conservati(ctx, "revoca_voce", "Leo")
+    verifica("contrario: un adulto che non è tutore non revoca la voce del minore",
+             r["ok"] is False and minore.voce_conservata is None)
+    r = _dati_conservati(ctx, "consenso_voce", "Primo")
+    verifica("contrario: per la voce di un altro adulto decide solo lui",
+             r["ok"] is False and "in_sospeso" not in r and amm.voce_conservata is None)
+    sc.current_speaker = "Primo"
+    C._scrivi_privato(cons.voce_dir / "p-min" / oggi / "1.wav", C.wav_mulaw(audio, sr))
+    r = _dati_conservati(ctx, "revoca_voce", "Leo")
+    verifica("tutore con la voce: revoca subito, le registrazioni del minore cancellate",
+             r["ok"] and minore.voce_conservata is False and minore.voce_conservata_da == "p-amm"
+             and r["cancellate"] == 1 and cons.registrazioni("p-min") == 0
+             and "voce di Leo" in r["conferma"] and not C.consenso_voce(minore, reg), str(r))
+    sc.current_speaker = "Leo"
+    r = _dati_conservati(ctx, "stato")
+    verifica("stato per il minore dopo la revoca: la voce no, decisa dai genitori",
+             "voce no" in r["conferma"] and "genitori" in r["conferma"], str(r))
+    # Il consenso ridato a mano dopo la revoca: domanda, poi il «sì» con la conferma di «svuota»
+    sc.current_speaker, ctx.turno = "Primo", 30
+    q = _dati_conservati(ctx, "consenso_voce", "Leo")
+    verifica("tutore: dopo la revoca, prima la domanda sulla voce del minore",
+             q["ok"] is False and "voce di Leo" in q["conferma"]
+             and q["in_sospeso"]["argomenti"] == {"azione": "consenso_voce", "persona": "Leo"}
+             and minore.voce_conservata is False, str(q))
+    sc.identified_by, sc.conferma_breve, ctx.turno = "breve", False, 31
+    r = _dati_conservati(ctx, "consenso_voce", "Leo")
+    verifica("contrario: il «sì» del minore accanto (breve, impronta non compatibile) non vale",
+             r["ok"] is False and minore.voce_conservata is False, str(r))
+    sc.conferma_breve, ctx.turno = True, 32
+    r = _dati_conservati(ctx, "consenso_voce", "Leo")
+    verifica("tutore: il «sì» breve con l'impronta compatibile, salvato con chi l'ha dato",
+             r["ok"] and minore.voce_conservata is True and minore.voce_conservata_da == "p-amm"
+             and minore.voce_conservata_il == oggi and C.consenso_voce(minore, reg), str(r))
+    verifica("…e chi amministra non ha cambiato la sua scelta", amm.voce_conservata is None)
+    sc.identified_by, sc.conferma_breve = "voce", False
     sc.current_speaker = None
     r = _dati_conservati(ctx, "stato")
     verifica("contrario: ospite, niente", r["ok"] is False)
@@ -415,17 +637,56 @@ try:
              and spec.classe.sola_lettura[1] == frozenset({"stato"})
              and "svuota" in spec.classe.distruttiva)
 
+    # ───────── la registrazione di un minore: il consenso alla voce implicito (16/10) ─────────
+    # Decisione di chi amministra (16/10, 0031 aggiornata): registrando un minore chi amministra
+    # dà il consenso a tenere la sua voce. Il registro e i tool veri di prova_sicurezza
+    import prova_sicurezza as PS
+    from calliope.speaker_id import SpeakerContext as _SC, SpeakerRegistry as _SR
+    from calliope.tools.spec import ToolContext
+    path_prima = _SR.PATH
+    try:
+        regr = PS.registro_finto()
+        scr = _SC(regr)
+        ctxr = ToolContext(cfg=regr.cfg, speakers=regr, speaker_ctx=scr, speaker=None)
+        strumenti = PS.Strumenti()
+        nascita_g = f"{datetime.date.today().year - 9}-03-04"
+        scr.current_speaker, scr.identified_by = "Bianca", "voce"
+        out = strumenti.call("registra_utente", {"nome": "gino", "nascita": nascita_g}, ctxr,
+                             "familiare")
+        verifica("registrazione, contrario: un adulto che non amministra non registra un minore "
+                 "(e quindi non dà nessun consenso)", out.get("ok") is False
+                 and regr.get("Gino") is None, str(out))
+        scr.current_speaker, scr.sfida_superata = "Dario", True
+        out = strumenti.call("registra_utente", {"nome": "gino", "nascita": nascita_g}, ctxr,
+                             "amministra")
+        scr.sfida_superata = False
+        for _ in range(5):
+            esito_r = scr.enroll_sample("gino", voiced_s=3.0)
+        g = regr.get("Gino")
+        dario_id = regr.get("Dario").id
+        verifica("registrazione di un minore da chi amministra: la voce col consenso implicito",
+                 esito_r == "fatto" and g is not None and C.categoria(g) == "minore"
+                 and g.voce_conservata is True and g.voce_conservata_da == dario_id
+                 and g.tutori == [dario_id] and C.consenso_voce(g, regr)
+                 and C.decidi(g, "voce", "voce", registry=regr).ok,
+                 f"{out} {g and g.to_dict().get('voce_conservata_da')}")
+        verifica("…e resta nel profilo (speakers.json)",
+                 _SR.PATH.exists() and any(d.get("voce_conservata_da") == dario_id
+                                           for d in json.loads(_SR.PATH.read_text("utf-8"))))
+    finally:
+        _SR.PATH = path_prima
+
     # ───────── l'archivio delle conversazioni (12/10 sera) ─────────
     from calliope.ciclo import Ciclo
     from calliope.conversazione import Conversazione, turni as turni_conv
     from calliope.conversazioni import (ArchivioConversazioni, load_conversazioni,
                                         senza_non_conservati)
-    verifica("decidi, conversazioni: adulto e chi amministra sì; minore e ospite no",
+    verifica("decidi, conversazioni: adulto, chi amministra e minore sì; ospite no",
              C.decidi(adulto, "conversazioni").ok and C.decidi(amm, "conversazioni").ok
-             and not C.decidi(minore, "conversazioni") and not C.decidi(None, "conversazioni"))
-    verifica("conversazioni_su_disco: adulto sì, minore no, profilo tolto no",
+             and C.decidi(minore, "conversazioni").ok and not C.decidi(None, "conversazioni"))
+    verifica("conversazioni_su_disco: adulto e minore sì, profilo tolto no",
              cons.conversazioni_su_disco("p-adu") is True
-             and cons.conversazioni_su_disco("p-min") is False
+             and cons.conversazioni_su_disco("p-min") is True
              and cons.conversazioni_su_disco("p-tolto") is False)
     verifica("conversazioni_su_disco: profili non letti → «non so» (None)",
              C.Conservazione(cfg, Registro(), log=lambda m: None)
@@ -456,14 +717,21 @@ try:
     co = archivia(None, "sono un ospite e il mio cane si chiama Fido")
     verifica("adulto: la conversazione su disco", ("p-adu", 0) in su_disco()
              and "barone" in parole_su_disco(), str(su_disco()))
-    verifica("contrario: minore, niente su disco", ("p-min", 0) not in su_disco()
-             and "verifica" not in parole_su_disco())
+    verifica("minore: la conversazione su disco (16/10, decisione 0031)",
+             ("p-min", 0) in su_disco() and "verifica" in parole_su_disco())
     verifica("contrario: ospite, niente su disco", not any(o for _p, o in su_disco())
              and "Fido" not in parole_su_disco())
-    verifica("minore: la conversazione resta nella sessione (ricerca e scheda)",
+    verifica("minore: la conversazione nell'archivio su disco (ricerca e scheda)",
              arch.cerca("verifica di storia", "p-min")["risultati"]
-             and arch.chat("p-min") and cm.archiviata_in == "sessione"
-             and ca.archiviata_in == "disco")
+             and arch.chat("p-min") and cm.archiviata_in == "disco"
+             and ca.archiviata_in == "disco" and co.archiviata_in == "sessione")
+    # Dopo un riavvio: un archivio nuovo sullo stesso file la ritrova
+    rilegge = ArchivioConversazioni(tmp / "conv.db", giorni=cons.giorni, log=lambda m: None,
+                                    avvia=False, conserva=cons.conversazioni_su_disco)
+    verifica("minore: la conversazione si ritrova dopo un riavvio, l'ospite no",
+             rilegge.cerca("verifica di storia", "p-min")["risultati"]
+             and not rilegge.cerca("cane Fido", None, ospiti=True)["risultati"])
+    rilegge.close()
     verifica("ospite: nella sessione, la trova solo chi cerca quelle degli ospiti",
              arch.cerca("cane Fido", None, ospiti=True)["risultati"]
              and not arch.cerca("cane Fido", "p-adu")["risultati"])
@@ -473,13 +741,13 @@ try:
     Ciclo._segna_conserva(finto, turno("Ginevra", modo="conversazione"))
     grigia = finto._meta_turno
     finto._meta_turno = None
-    Ciclo._segna_conserva(finto, turno("Primo", livello="amministra",
-                                       voce={"incerta": ["Primo", "Leo"]}))
+    Ciclo._segna_conserva(finto, turno("Leo", modo="conversazione",
+                                       voce={"incerta": ["Primo", "Leo"], "punteggio": 0.489}))
     dubbio = finto._meta_turno
     finto._meta_turno = {"luogo": "studio"}
     Ciclo._segna_conserva(finto, turno("Ginevra"))
-    verifica("ciclo: zona grigia e dubbio con un minore segnati, l'adulto certo no",
-             grigia == {"luogo": "studio", "conserva": False} and dubbio == {"conserva": False}
+    verifica("ciclo: la zona grigia segnata; il dubbio con un minore (dal 16/10) e l'adulto "
+             "certo no", grigia == {"luogo": "studio", "conserva": False} and dubbio is None
              and finto._meta_turno == {"luogo": "studio"}, f"{grigia} {dubbio}")
     archivia("p-adu", "frase in zona grigia sul garage", meta=grigia, conv=ca)
     archivia("p-adu", "e poi il cavaliere inesistente", conv=ca)
@@ -494,8 +762,9 @@ try:
     verifica("conversazione in corso su disco: l'adulto senza il turno incerto",
              salvata and len(salvata["history"]) == 4 and "garage" not in json.dumps(salvata)
              and salvata["archiviati"] == 4, str(salvata)[:300])
-    verifica("contrario: la conversazione in corso di minore e ospite non va su disco",
-             arch.chiavi_correnti() == ["persona:p-adu"], str(arch.chiavi_correnti()))
+    verifica("la conversazione in corso del minore su disco, quella dell'ospite no",
+             sorted(arch.chiavi_correnti()) == ["persona:p-adu", "persona:p-min"],
+             str(arch.chiavi_correnti()))
     verifica("senza_non_conservati: niente da togliere, lo stesso dizionario",
              senza_non_conservati({"history": [{"role": "user", "content": "x"}]})
              == {"history": [{"role": "user", "content": "x"}]})
@@ -625,8 +894,8 @@ try:
                  and "gita" in fb.conv.riassunto["testo"], str(fb.conv.riassunto)[:200])
     comp.close()
     archc.close()
-    # Le conversazioni di prima del 12/10 (minore, ospite, profilo tolto): via alla prima
-    # rotazione, con le conversazioni in corso salvate; l'adulto e chi amministra restano
+    # Le conversazioni di prima del 12/10 (ospite, profilo tolto): via alla prima rotazione, con
+    # le conversazioni in corso salvate; l'adulto, chi amministra e (dal 16/10) il minore restano
     vecchio = ArchivioConversazioni(tmp / "conv.db", log=lambda m: None, avvia=False,
                                     sessione=False)
     for chi in ("p-min", "p-tolto", "p-amm"):
@@ -650,10 +919,13 @@ try:
              (None, 1) not in su_disco() and ("p-min", 0) in su_disco())
     arch.conserva = cons.conversazioni_su_disco
     n = arch.togli_non_conservate()
-    verifica("rotazione: via minore e profilo tolto, restano l'adulto e chi amministra",
-             n == 2 and su_disco() == {("p-adu", 0), ("p-amm", 0)}
-             and "di prima di p-min" not in parole_su_disco()
-             and set(arch.chiavi_correnti()) == {"persona:p-adu", "persona:p-amm"},
+    # Dal 16/10 (decisione 0031) la pulizia non toglie più le conversazioni dei minori
+    verifica("rotazione: via il profilo tolto, restano l'adulto, chi amministra e il minore",
+             n == 1 and su_disco() == {("p-adu", 0), ("p-amm", 0), ("p-min", 0)}
+             and "di prima di p-min" in parole_su_disco()
+             and "di prima di p-tolto" not in parole_su_disco()
+             and set(arch.chiavi_correnti()) == {"persona:p-adu", "persona:p-amm",
+                                                 "persona:p-min"},
              f"{n} {su_disco()} {arch.chiavi_correnti()}")
     # La tenuta: quella della conservazione (turn_log_days), non un numero suo
     cfg_a = Config()
@@ -680,13 +952,15 @@ try:
     verifica("scadenza: via la conversazione di 61 giorni fa, resta quella di 59",
              "sessantuno" not in parole_su_disco() and "cinquantanove" in parole_su_disco())
     st = cons.stato()
-    verifica("riepilogo: le conversazioni archiviate contate", st["conversazioni"] == 3
+    verifica("riepilogo: le conversazioni archiviate contate", st["conversazioni"] == 5
              and st["conversazioni_turni"] >= 4
              and "conversazioni archiviate" in C.testo_stato(st), str(st))
     # Svuotare: una persona (anche nella sessione), poi tutto
     r = cons.svuota("p-min", "Leo")
-    verifica("svuota una persona: anche la conversazione della sessione",
-             r["conversazioni"] == 1 and not arch.chat("p-min"), str(r))
+    verifica("svuota un minore: le sue conversazioni su disco",
+             r["conversazioni"] == 2 and not arch.chat("p-min")
+             and ("p-min", 0) not in su_disco()
+             and "persona:p-min" not in arch.chiavi_correnti(), str(r))
     r = cons.svuota("p-adu", "Ginevra")
     verifica("svuota una persona: le sue conversazioni archiviate e quella in corso",
              r["conversazioni"] == 2 and ("p-adu", 0) not in su_disco()
@@ -779,8 +1053,8 @@ try:
     # ───────── da terminale ─────────
     cart = tmp / "dati"
     cart.mkdir()
-    (cart / "speakers.json").write_text(json.dumps([amm.to_dict(), adulto.to_dict()]),
-                                        encoding="utf-8")
+    (cart / "speakers.json").write_text(json.dumps([amm.to_dict(), adulto.to_dict(),
+                                                    minore.to_dict()]), encoding="utf-8")
     prima = os.getcwd()
     env = {k: os.environ.get(k) for k in ("CALLIOPE_TURN_LOG", "CALLIOPE_CONVERSAZIONI_DB",
                                           "CALLIOPE_CONFIG", "CALLIOPE_MEMORY_DB")}
@@ -823,6 +1097,68 @@ try:
                  and C.conta_archivio(SimpleNamespace(conversazioni_db=str(
                      cart / "conversazioni.db")))["conversazioni"] == 0
                  and "1 conversazioni archiviate" in out.getvalue(), out.getvalue())
+        # Un minore (16/10, decisione 0031): i suoi dati conservati via come quelli di un adulto
+        C._scrivi_privato(c2.voce_dir / "p-min" / oggi / "1.wav", C.wav_mulaw(audio, sr))
+        a_t = ArchivioConversazioni(cart / "conversazioni.db", log=lambda m: None, avvia=False,
+                                    sessione=False)
+        cv = Conversazione("persona:p-min")
+        cv.owner = "p-min"
+        a_t.archivia(cv, turni_conv([{"role": "user", "content": "una frase di Leo"}]),
+                     "p-min", "Leo", False)
+        a_t.close()
+        (cart / "registro" / f"turni-{oggi}.jsonl").write_text(json.dumps(
+            {"inizio": f"{oggi}T09:00:00", "livello": "familiare", "testo": "una frase di Leo",
+             "voce": {"nome": "Leo", "id": "p-min", "modo": "voce"}}) + "\n", encoding="utf-8")
+        # Gli eventi del minore su disco (nella stessa conversazioni.db) e una sua riga della
+        # stanza (stanza.db accanto alla configurazione), con una riga di Primo che deve restare
+        d_ev = Disco.file(cart / "conversazioni.db", log=lambda m: None)
+        r_ev = Registri(d_ev, log=lambda m: None)
+        for chiave in ("persona:p-min", "persona:p-amm"):
+            rg_ev = r_ev.della_corsia(chiave)
+            rg_ev.apri("persona")
+            rg_ev.aggiungi("detto_persona", 1, testo="una frase per gli eventi", canale="voce")
+        r_ev.scrivi()
+        d_ev.db.close()
+        from calliope.stanza.tenuta import Tenuta
+        import sqlite3 as _sq
+        Tenuta(cart / "stanza.db", 60, log=lambda m: None, avvia=False).chiudi()
+        dbs = _sq.connect(cart / "stanza.db")
+        for seq, (pid, chi_n) in enumerate((("p-min", "Leo"), ("p-amm", "Primo")), 1):
+            cur = dbs.execute(
+                "INSERT INTO righe (avvio, sat, seq, inizio, fine, testo, chi, persona, nome, "
+                "minore) VALUES ('a', '1', ?, ?, ?, ?, 'persona', ?, ?, ?)",
+                (seq, time.time(), time.time(), f"una frase di {chi_n} nella stanza", pid, chi_n,
+                 1 if pid == "p-min" else 0))
+            dbs.execute("INSERT INTO righe_fts (rowid, testo) VALUES (?, ?)",
+                        (cur.lastrowid, f"una frase di {chi_n} nella stanza"))
+        dbs.commit()
+        dbs.close()
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = C.main(["--svuota", "--persona", "Leo"])
+        ev_dopo = Disco.file(cart / "conversazioni.db", log=lambda m: None)
+        chiavi_dopo = set(ev_dopo.chiavi())
+        ev_dopo.db.close()
+        dbs = _sq.connect(cart / "stanza.db")
+        stanza_dopo = [x[0] for x in dbs.execute("SELECT persona FROM righe")]
+        dbs.close()
+        verifica("terminale: --svuota --persona di un minore (voce, conversazioni, turni, "
+                 "eventi, stanza)",
+                 rc == 0 and not (c2.voce_dir / "p-min").exists()
+                 and C.conta_archivio(SimpleNamespace(conversazioni_db=str(
+                     cart / "conversazioni.db")), "p-min")["conversazioni"] == 0
+                 and "una frase di Leo" not in (cart / "registro" / f"turni-{oggi}.jsonl")
+                 .read_text(encoding="utf-8")
+                 and "persona:p-min" not in chiavi_dopo and "p-min" not in stanza_dopo,
+                 f"{out.getvalue()} {chiavi_dopo} {stanza_dopo}")
+        verifica("terminale, contrario: gli eventi e la stanza di Primo restano",
+                 "persona:p-amm" in chiavi_dopo and stanza_dopo == ["p-amm"],
+                 f"{chiavi_dopo} {stanza_dopo}")
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            C.main([])
+        verifica("terminale: il minore nel riepilogo, la voce sì decisa dai tutori",
+                 "Leo: minore, voce sì (lo decidono i tutori)" in out.getvalue(), out.getvalue())
         with contextlib.redirect_stdout(io.StringIO()):
             rc = C.main(["--svuota", "--persona", "Nessuno"])
         verifica("terminale, contrario: persona sconosciuta → 1", rc == 1)
