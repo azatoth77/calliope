@@ -628,7 +628,8 @@ VALORE_REGOLE = (
     "valore_lettura", "valore_non_ancorata", "valore_bersaglio_dato", "valore_contenuto_dato",
     "valore_contenuto_non_detto", "valore_dati_personali", "valore_esegue",
     "valore_voce", "valore_e3_chiede", "valore_e4_sfida", "valore_consenso_breve",
-    "valore_consenso_voce", "valore_consenso_sfida", "valore_sfida_classe")
+    "valore_consenso_voce", "valore_consenso_sfida", "valore_sfida_classe",
+    "valore_sfida_sospeso")
 
 
 def fonte_del_valore(valore, t) -> str:
@@ -665,6 +666,50 @@ def ancorata(cl, name: str, args: dict, t) -> bool:
     return pol.chiesto_con_verbi(cl, t.testo, args) or pol.fatto_detto(cl, args, t)
 
 
+def _numeri_mesi(testo) -> set[str]:
+    """Il numero dei mesi detti a parole («12 ottobre 2015» → «10»): il modello può scrivere
+    la data come «2015-10-12»."""
+    from .testi import MESI
+    return {str(MESI.index(g) + 1) for g in pol._gettoni(testo) if g in MESI}
+
+
+def risposta_al_sospeso(name: str, args: dict, t) -> bool:
+    """La chiamata è la risposta della persona alla domanda in sospeso di questo stesso tool
+    (16/10, issue #98, caso vero della DGX del 15/10 alle 19:58: «Quando è nata Bianca?» di
+    registra_utente, la data detta da chi amministra con la stanza accesa → `valore_non_ancorata`,
+    «la persona non ha chiesto azioni»). Il tool ha chiesto un dato e la persona lo dà: la
+    richiesta è quella di prima. Vale solo se:
+
+    - la domanda in sospeso è di questo tool (Turno.in_sospeso: la stessa persona e il tempo li
+      controlla già Brain._take_pending), senza foto o file arrivati con la frase, e non è una
+      domanda della politica («Non me l'hai chiesto: vuoi che…?» vuole un consenso, non un dato);
+    - gli argomenti sono quelli della domanda, uguali, più almeno uno nuovo;
+    - ogni valore nuovo è detto in questa frase (parole e numeri, anche il mese a parole), non
+      preso da una riga della stanza o da un altro dato: un valore senza parole (un booleano,
+      una scelta) non basta.
+
+    Vincolo di permesso su una chiamata già scelta dal modello (principio 10): allarga l'ancora,
+    il resto della politica per valore (bersagli dal dato, effetto) resta."""
+    if not pol._proposta(t, name) or getattr(t, "sospeso_politica", False):
+        return False
+    sosp = t.args_sospeso
+    if not isinstance(sosp, dict):
+        return False
+    args = args or {}
+    for k, v in sosp.items():
+        if k not in args or not pol._uguali({k: args[k]}, {k: v}, (k,)):
+            return False
+    nuovi = [v for k, v in args.items() if k not in sosp and v not in (None, "", False)]
+    if not nuovi:
+        return False
+    f = Fonti.da(t)
+    f = replace(f, numeri_frase=f.numeri_frase | _numeri_mesi(t.testo))
+    for v in nuovi:
+        if _testo(v) in (None, "") or etichetta(v, CONTENUTO, f) != DETTO:
+            return False
+    return True
+
+
 def _mostra(valore) -> str:
     testo = _testo(valore)
     if testo is None:
@@ -685,7 +730,8 @@ def decidi_valore(name: str, args: dict, cl, t, base, conferma_voce: bool = Fals
     d, det = _matrice(name, args, cl, t, base, conferma_voce, voce_frase, cosa, ctx, spec,
                       fidati)
     if (d is not base and cl.sfida and d.esito in ("esegui", "conferma")
-            and not getattr(t, "sfida", False)):
+            and not getattr(t, "sfida", False)
+            and not (d.esito == "esegui" and det.get("sfida_portata"))):
         d = pol.Decisione("sfida", "valore_sfida_classe", d.domanda, d.fonte)
     return d, det
 
@@ -745,8 +791,16 @@ def _matrice(name: str, args: dict, cl, t, base, conferma_voce: bool = False,
         return base, det
     if E == E0:
         return pol.Decisione("esegui", "valore_lettura"), det
-    # 1. l'ancora: chi l'ha chiesta
-    if not ancorata(cl, name, args, t):
+    # 1. l'ancora: chi l'ha chiesta (o la risposta al dato chiesto dal tool stesso: #98)
+    risposta = risposta_al_sospeso(name, args, t)
+    if risposta:
+        det["risposta_sospeso"] = True
+        # La frase di sfida superata dalla stessa persona nella frase che ha aperto questa
+        # domanda vale anche per la risposta, se la voce di questa frase è la sua (#98: prima
+        # una seconda sfida a pochi secondi dalla prima)
+        if getattr(t, "sfida_sospeso", False) and voce_frase:
+            det["sfida_portata"] = True
+    if not risposta and not ancorata(cl, name, args, t):
         if not t.risposta.get("rifiutata_valore"):
             t.risposta["rifiutata_valore"] = True
             return pol.Decisione("rifiuta", "valore_non_ancorata", "", fonte), det
@@ -754,6 +808,9 @@ def _matrice(name: str, args: dict, cl, t, base, conferma_voce: bool = False,
                              f"Non me l'hai chiesto: vuoi che {cosa}?", fonte), det
     # 2. da dove vengono gli argomenti
     f = Fonti.da(t, fidati)
+    if risposta:
+        # la data detta col mese a parole e scritta dal modello in cifre (#98)
+        f = replace(f, numeri_frase=f.numeri_frase | _numeri_mesi(t.testo))
     etichette, bers_dato, cont_dato, cont_modello = {}, [], [], []
     for k, v in args.items():
         tipo = (tipi or {}).get(k, BERSAGLIO)
@@ -809,8 +866,11 @@ def _matrice(name: str, args: dict, cl, t, base, conferma_voce: bool = False,
         return pol.Decisione("sfida" if E == E4 else "conferma", "valore_contenuto_non_detto",
                              f"C'è di mezzo {prov.detta(fonte)}, quindi chiedo a te: vuoi che "
                              f"{cosa}?", fonte), det
-    # Dati personali in ciò che esce (D7): il compito di un lavoro, l'esecuzione di codice
-    if E >= E3 or name in ("lavoro_affida", "sviluppo_apri"):
+    # Dati personali in ciò che esce (D7): il compito di un lavoro, l'esecuzione di codice.
+    # Non per la risposta al dato chiesto dal tool (#98): i valori nuovi sono detti in questa
+    # frase (anche se scritti in un'altra forma, «12 ottobre 2015» → «2015-10-12»), gli altri
+    # sono quelli della domanda
+    if (E >= E3 or name in ("lavoro_affida", "sviluppo_apri")) and not risposta:
         for k, v in args.items():
             tipo = (tipi or {}).get(k, BERSAGLIO)
             if tipo in (LIBERO, CONTENUTO) and personali(v, t, ctx):
@@ -818,6 +878,8 @@ def _matrice(name: str, args: dict, cl, t, base, conferma_voce: bool = False,
                                      f"Nel lavoro ci sono dati di casa che non hai detto adesso "
                                      f"(«{_mostra(v)}»): vuoi davvero che {cosa}?", fonte), det
     # 3. che effetto ha
+    if det.get("sfida_portata") and E >= E3:
+        return pol.Decisione("esegui", "valore_sfida_sospeso"), det
     if E == E4:
         return pol.Decisione("sfida", "valore_e4_sfida", "", fonte), det
     if E == E3:

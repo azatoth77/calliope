@@ -640,7 +640,8 @@ def prova_fase4():
     verifica("fase 4: la politica per valore è accesa per difetto (Config)",
              Config().politica_per_valore is True)
     chiedono = set(valore.VALORE_REGOLE) - {"valore_lettura", "valore_esegue", "valore_voce",
-                                            "valore_consenso_breve", "valore_consenso_voce"}
+                                            "valore_consenso_breve", "valore_consenso_voce",
+                                            "valore_sfida_sospeso"}
     verifica("fase 4: ogni regola della matrice che chiede conta nell'attrito",
              chiedono <= attrito.DOMANDE, str(chiedono - attrito.DOMANDE))
     # L'ombra al contrario: con la politica accesa il registro dice la politica di prima
