@@ -2298,3 +2298,10 @@ frase detta in una passata e il tool una volta nel registro); contrari: la stess
 tool resta fermata (spinta e frase onesta), dopo un tool di lettura resta fermata, il tool della
 sfida fallito dà la frase dell'errore senza il modello. Sulla DGX, 7 giorni: 0 turni con
 `sfida_esito_modello` insieme a `dichiarata_onesta`, `dichiarata_taciuta` o `spinta_dichiarata`.
+
+**Col modello** (`prove/prova_sfida_esito_ollama.py`, portatile, gemma4 e4b, 16/10): sul codice di
+prima 0 su 3 (sempre «Scusa, ho capito. Non ho salvato niente…», `spinta_dichiarata` e
+`dichiarata_onesta`), con la correzione 5 su 5 «Ho registrato Ada come familiare.». In nessuna
+delle 5 però il modello dice che adesso deve parlare lei (il `cosa_fare` del risultato): la frase è
+vera ma l'arruolamento resta al buio. È un problema a parte (la frase pronta della registrazione o
+il `cosa_fare` detto dal codice), da guardare col 26B prima di decidere.

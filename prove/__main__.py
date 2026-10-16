@@ -300,6 +300,7 @@ CON_OLLAMA = [
     ("prova_gioco_giudice_ollama.py", ["1"], "giudice di fase dei giochi (14/10, passo 6) sul modello del rilevatore: le 22 frasi del prototipo (le porte da 1 a 5 con la 2 aperta), almeno 20/22 giuste e nessuna mossa su «a chi tocca?» e «quanti punti ho?», tempo mediano"),
     ("prova_rivolta_ollama.py", ["1"], "giudizio «rivolta a Calliope» (09/10, F2 della compagnia) sul modello del rilevatore: 56 frasi di fantasia, almeno 25/27 rivolte e 26/29 non rivolte giuste, tempo mediano"),
     ("prova_brain_ollama.py", ["1"], "tool di base con il modello"),
+    ("prova_sfida_esito_ollama.py", ["1"], "l'esito dopo la frase di sfida con il modello vero (16/10, #94): registra_utente riuscito con cosa_fare → la frase del modello detta, mai «Non ho salvato niente» né una rete delle azioni dichiarate; conta anche «deve parlare» detto"),
     ("prova_rinomina_ollama.py", ["1"], "rinominare chi parla: mai al primo turno, solo dopo il «sì»"),
     ("prova_allegati_ollama.py", ["1"], "allegati con gemma4: bolletta, Excel, PDF lungo, Word, archivia, spesa, vocale; banco di sicurezza (istruzioni nei file e negli audio, esci, sì procedi, sfida): zero azioni"),
     ("prova_risultato_pdf_ollama.py", ["1"], "«Fammene un PDF» dopo il risultato di un lavoro con gemma4 (07/10 sera, caso della DGX «Ho metto un pdf.» → pc_cerca_file): lavoro_risultato pdf o word, i contrari col PDF di un file del PC, e (solo misura) il risultato di un lavoro nominato un po' dopo l'annuncio"),
