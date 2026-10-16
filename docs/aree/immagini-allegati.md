@@ -101,13 +101,31 @@ chiave (`Conversazioni.chiudi`) avvisa con «fine» anche chi era stato sostitui
 propria frase presa per ospite che dice «esci»).
 
 **Dato del turno quando la foto manca** (`immagini.FOTO_PERSA`): se le foto in attesa della
-persona sono andate perse (tolte dalla fine vera o scadute) da meno di 10 minuti
-(`FOTO_PERSA_S`), il suo turno dopo ha una riga breve: non sono più disponibili, se ne parla
-dille di rimandarle, non inventare altre cause. Una volta sola; nel registro dei turni
-`foto_persa: true`. Non è una regola sul testo (vale qualunque cosa la persona dica).
+persona sono andate perse (tolte dalla fine vera o scadute) da meno di `immagini_persa_s`
+(600 s di serie, 0 lo spegne), il suo turno dopo ha una riga breve: non sono più disponibili,
+se ne parla dille di rimandarle, non inventare altre cause. Una volta sola; nel registro dei
+turni `foto_persa: true`. Non è una regola sul testo (vale qualunque cosa la persona dica).
+
+**Dopo la revisione della PR #113** (16/10):
+- il dato sta in un campo suo del turno, `Turno.contesto_foto`, unito al contesto in
+  `_rispondi` come `contesto_gioco`. In `t.context` (che vuol dire «biblioteca») faceva dire
+  «Controllo nella biblioteca.» a vuoto, non aggiornava `last_question` e spegneva
+  `citazione_tolta` e la ricerca promessa. Lo stesso valeva da prima per `FOTO_NON_VISTA`,
+  spostato anche lui; il controllo di `prova_politica` copre anche il campo nuovo (solo frasi
+  fisse);
+- «ricominciamo» (regola breve e `conversazione_nuova`) e «dimentica» (al «sì») tolgono la foto
+  in attesa di chi parla **senza** segnarla persa (`InAttesa.dimentica`): niente `FOTO_PERSA`
+  dopo, e una perdita segnata prima si dimentica anche lei;
+- una riga nel log a ogni foto in attesa tolta o tenuta, con il motivo e senza contenuto
+  (`[IMMAGINI] … tolta: conversazione finita (motivo fine)`, `… tenuta: un'altra voce in mezzo
+  (motivo sostituita)`, `… attesa scaduta (motivo scadenza)`, `… (motivo ricominciamo)`,
+  `… (motivo dimentica)`): serve per il criterio dei 7 giorni sulla DGX;
+- «esci» detto da **chiunque** su quel satellite toglie anche la foto di chi era stato
+  sostituito: dopo «esci» lì non c'è più una conversazione in cui la foto valga.
 
 Prova `prova_immagini_attesa.py` (livello 1, ~1 s): hub degli schermi vero e i passi veri del
-ciclo; sul codice di main falliscono 9 controlli (la foto dopo l'ospite, dopo Bianca, dopo un
+ciclo (anche `_conversazione_nuova_chiesta` e `_conversazioni_dimenticate`); sul codice di
+main falliscono 9 controlli (la foto dopo l'ospite, dopo Bianca, dopo un
 minore, dopo la propria frase breve; il motivo; il dato «foto persa»). Da guardare sulla DGX
 per 7 giorni (criterio della issue): 0 turni con una foto in attesa sparita senza un turno della
 stessa persona con `immagini` entro 120 s, salvo uscita o scadenza (`foto_persa` nel registro).

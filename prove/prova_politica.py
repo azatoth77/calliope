@@ -583,7 +583,9 @@ def prova_codice():
 
     def bersaglio(x) -> bool:
         return (isinstance(x, ast.Name) and x.id in ("context", "extra")) or (
-            isinstance(x, ast.Attribute) and x.attr in ("context", "extra")
+            # contesto_foto (16/10, #96): la foto non vista o persa, unita al contesto in
+            # _rispondi; anche lì solo frasi fisse
+            isinstance(x, ast.Attribute) and x.attr in ("context", "extra", "contesto_foto")
             and isinstance(x.value, ast.Name) and x.value.id == "t")
     cattivi, visti = [], 0
     for n in ast.walk(main):

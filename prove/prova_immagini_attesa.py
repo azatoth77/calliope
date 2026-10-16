@@ -80,25 +80,48 @@ class Banco:
                                         origine=lambda: {"satellite": "telefono"})),
             speaker_ctx=types.SimpleNamespace(current_level="familiare", identified_by="voce",
                                               is_enrolling=False),
-            brain=types.SimpleNamespace(vede_immagini=lambda: True),
+            brain=types.SimpleNamespace(vede_immagini=lambda: True,
+                                        end_conversation=lambda *a: None,
+                                        dimentica_conversazione=lambda: None,
+                                        conv=types.SimpleNamespace(chiave="persona:dario")),
+            tool_ctx=types.SimpleNamespace(conversazione_nuova=False,
+                                           conversazioni_dimenticate=None, conversazioni=None),
+            ombra=None, last_question=None,
             corsia=types.SimpleNamespace(chiave_schermi=None), rec={}, regole=[])
         k.rule = k.regole.append
-        k._segna_conversazione = types.MethodType(Ciclo._segna_conversazione, k)
-        k._foto_e_file = types.MethodType(Ciclo._foto_e_file, k)
+        k._contesto_azzerato = lambda: None
+        for nome in ("_segna_conversazione", "_foto_e_file", "_persona_id",
+                     "_foto_attesa_dimenticata", "_conversazione_nuova_chiesta",
+                     "_conversazioni_dimenticate"):
+            setattr(k, nome, types.MethodType(getattr(Ciclo, nome), k))
         self.k = k
+        self.t = None
 
     def frase(self, chi=None, come="voce", livello=None):
         """Una frase detta e rivolta a Calliope: la conversazione degli schermi, poi le foto
-        del turno. Restituisce (foto, contesto, rec)."""
+        del turno. Restituisce (foto, contesto della foto, rec); il turno in `self.t`."""
         k = self.k
         prof = PROFILI.get(chi) if chi else None
         k.speaker_ctx.identified_by = come
         k.speaker_ctx.current_level = livello or (prof.level if prof else "ospite")
+        k.speaker_ctx.current_speaker = chi
         k.rec = {}
-        t = types.SimpleNamespace(scritto=None, speaker_name=chi, context="", text="")
+        t = types.SimpleNamespace(scritto=None, speaker_name=chi, context="", text="",
+                                  contesto_foto=None)
         k._segna_conversazione(t)
         k._foto_e_file(t)
-        return t.foto, t.context, k.rec
+        self.t = t
+        return t.foto, t.contesto_foto or "", k.rec
+
+    def ricominciamo(self):
+        """Il modello ha chiamato conversazione_nuova (il passo vero del ciclo)."""
+        self.k.tool_ctx.conversazione_nuova = True
+        return self.k._conversazione_nuova_chiesta()
+
+    def dimentica(self, persona="dario"):
+        """«Dimentica le nostre conversazioni», al «sì» (il passo vero del ciclo)."""
+        self.k.tool_ctx.conversazioni_dimenticate = persona
+        return self.k._conversazioni_dimenticate()
 
     def esci(self):
         self.hub.conversazioni.chiudi(self.k.corsia.chiave_schermi)     # _addormentati
@@ -159,6 +182,13 @@ def prova_fine_vera():
     verifica("foto → «esci» → Dario: la foto non c'è più", f == [] and "immagini" not in rec)
     verifica("…e il turno ha il dato «foto persa» (rec foto_persa)",
              FOTO_PERSA in ctx and rec.get("foto_persa") is True, ctx)
+    # Revisione della PR #113: il dato in un campo suo, non in `context` (che vuol dire
+    # biblioteca: «Controllo nella biblioteca.», last_question, citazione_tolta, ricerca)
+    verifica("dopo una foto persa nessun annuncio della biblioteca: `context` del turno vuoto",
+             not b.t.context, b.t.context)
+    import inspect
+    verifica("_rispondi unisce contesto_foto al contesto del turno, come contesto_gioco",
+             "contesto_foto" in inspect.getsource(Ciclo._rispondi))
     _, ctx2, rec2 = b.frase("Dario")
     verifica("il dato «foto persa» una volta sola", FOTO_PERSA not in ctx2
              and "foto_persa" not in rec2)
@@ -176,6 +206,62 @@ def prova_fine_vera():
     verifica("una seconda chiusura non ripete l'evento", len(b.fini) == n, b.fini)
     f, ctx, _ = b.frase("Dario")
     verifica("…e la foto non c'è più (con il dato «foto persa»)", f == [] and FOTO_PERSA in ctx)
+
+
+def prova_dimentica_ricominciamo():
+    """«Ricominciamo» e «dimentica» tolgono la foto in attesa senza segnarla persa (revisione
+    della PR #113)."""
+    b = Banco()
+    b.frase("Dario")
+    b.attesa.metti(foto())
+    b.ricominciamo()
+    f, ctx, rec = b.frase("Dario")
+    verifica("foto → «ricominciamo» (conversazione_nuova) → Dario: la foto non c'è più",
+             f == [] and "immagini" not in rec)
+    verifica("…senza il dato «foto persa»", FOTO_PERSA not in ctx and "foto_persa" not in rec)
+    b = Banco()
+    b.frase("Dario")
+    b.attesa.metti(foto())
+    b.dimentica("dario")
+    f, ctx, rec = b.frase("Dario")
+    verifica("foto → «dimentica» (al sì) → Dario: la foto non c'è più",
+             f == [] and "immagini" not in rec)
+    verifica("…senza il dato «foto persa»", FOTO_PERSA not in ctx and "foto_persa" not in rec)
+    # Una perdita segnata prima (es. «esci») e poi «dimentica»: niente dato dopo
+    b = Banco()
+    b.frase("Dario")
+    b.attesa.metti(foto())
+    b.esci()
+    b.dimentica("dario")
+    _, ctx, rec = b.frase("Dario")
+    verifica("«esci» poi «dimentica»: la perdita si dimentica, niente dato",
+             FOTO_PERSA not in ctx and "foto_persa" not in rec)
+    # Contrari: «ricominciamo» di Dario non tocca la foto di Bianca; la regola breve
+    # «ricominciamo» passa dallo stesso punto
+    b = Banco()
+    b.frase("Bianca")
+    b.attesa.metti(foto("bianca"))
+    b.frase("Dario")
+    b.ricominciamo()
+    f, _, _ = b.frase("Bianca")
+    verifica("«ricominciamo» di Dario non toglie la foto di Bianca", len(f) == 1)
+    import inspect
+    verifica("la regola breve «ricominciamo» toglie anche lei la foto (_foto_attesa_dimenticata)",
+             "_foto_attesa_dimenticata" in inspect.getsource(Ciclo._uscite))
+
+
+def prova_configurazione():
+    from calliope import main as main_mod
+    import inspect
+    cfg = Config()
+    verifica("immagini_persa_s in Config (600 s di serie)", cfg.immagini_persa_s == 600.0)
+    verifica("main.py passa immagini_persa_s a InAttesa",
+             "immagini_persa_s" in inspect.getsource(main_mod))
+    a = InAttesa(60, persa_s=0)
+    a.metti(foto())
+    a.togli("dario")
+    time.sleep(0.01)
+    verifica("immagini_persa_s 0: il dato è spento", not a.persa("dario"))
 
 
 def prova_scadenza():
@@ -205,5 +291,7 @@ if __name__ == "__main__":
     prova_altre_persone()
     prova_fine_vera()
     prova_scadenza()
+    prova_dimentica_ricominciamo()
+    prova_configurazione()
     print(f"\n{'Tutto bene' if not ERRORI else 'Fallite: ' + ', '.join(ERRORI)}")
     sys.exit(1 if ERRORI else 0)

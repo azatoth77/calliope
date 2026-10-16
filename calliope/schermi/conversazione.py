@@ -119,7 +119,12 @@ class Conversazioni:
         self._conv: dict = {}
         self._thread = None
         # #96: chi ha avuto la conversazione sostituita da un'altra voce (persona → chiave),
-        # e chi tra loro ha visto poi chiudere quella chiave con «esci» (fine vera, da dire)
+        # e chi tra loro ha visto poi chiudere quella chiave con «esci» (fine vera, da dire).
+        # Una voce vecchia qui (la persona sostituita non è più tornata) non fa danni: conta
+        # solo per classificare un evento della persona (che non arriva finché non riapre una
+        # conversazione, e allora la voce si toglie) e per un «esci» sulla stessa chiave, che
+        # toglie al più le sue foto in attesa (scadute dopo `immagini_attesa_s` comunque); le
+        # voci sono al più una per persona
         self._sostituite: dict = {}
         self._chiuse_dopo: list = []
 
@@ -182,6 +187,10 @@ class Conversazioni:
         (#96: la propria frase presa per ospite, poi «esci»)."""
         with self._lock:
             c = self._conv.pop(chiave, None)
+            # «Esci» detto da chiunque su questa chiave (satellite) chiude anche per chi era
+            # stato sostituito: le sue foto in attesa vanno via con la fine vera. Voluto: il
+            # caso tipico è la propria frase presa per ospite che dice «esci»; e dopo «esci»
+            # lì non c'è più una conversazione in cui la foto valga
             sost = [p for p, k in self._sostituite.items() if k == chiave]
             for p in sost:
                 del self._sostituite[p]

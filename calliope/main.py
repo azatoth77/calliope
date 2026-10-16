@@ -651,7 +651,8 @@ class Avvio:
                                  conserva=s.conserva is not None)
         # Foto (e file allegati) mandati senza domanda: aspettano la frase dopo della stessa
         # persona
-        s.foto_attesa = InAttesa(getattr(cfg, "immagini_attesa_s", 120.0))
+        s.foto_attesa = InAttesa(getattr(cfg, "immagini_attesa_s", 120.0),
+                                 persa_s=getattr(cfg, "immagini_persa_s", 600.0))
         if schermi is not None:
             # Una foto in attesa della domanda vale solo nella conversazione in cui è arrivata;
             # un'altra voce in mezzo (un ospite) non la toglie (#96)
