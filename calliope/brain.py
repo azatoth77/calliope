@@ -5659,6 +5659,12 @@ class Brain:
             who = f"persona: {conoscente_detto(sctx.conoscente)}."
         else:
             who = "persona: un ospite, non riconosciuto dalla voce."
+            # Un minore ha parlato da poco su questo satellite (16/10, issue #102): l'ospite
+            # potrebbe essere lui (impronta ancora debole); il modo di parlare della sua fascia,
+            # senza nome né età precisa. Livello e permessi restano da ospite
+            vicino = self._minor_guest_note(getattr(sctx, "minore_ospite", None))
+            if vicino:
+                who = who[:-1] + "; " + vicino + "."
         # Le parole incerte della trascrizione (stt_incerte_al_modello): dopo chi parla, prima
         # dell'ora e di «Per tutto il resto chiama i tool come sempre.», che resta in fondo
         riscrivi = bool(getattr(self, "_riscrivi_turno", False))
@@ -5699,6 +5705,19 @@ class Brain:
         if note:
             self._rule("minore_preset")
         return "; ".join(x for x in (note, minori.dato_nascita(prof)) if x)
+
+    def _minor_guest_note(self, name: str | None) -> str:
+        """Per un ospite dove il minore `name` ha parlato da poco (16/10, issue #102): il modo
+        di parlare della sua fascia (minori.dato_ospite), "" senza; regola `ospite_con_minore`."""
+        speakers = getattr(self.tool_ctx, "speakers", None)
+        prof = speakers.get(name) if (name and speakers is not None) else None
+        if prof is None:
+            return ""
+        from . import minori
+        note = minori.dato_ospite(prof)
+        if note:
+            self._rule("ospite_con_minore")
+        return note
 
     def _tone_note(self, name: str | None) -> str:
         """Il tono scelto da chi parla (cambia_voce con tono, salvato nel profilo), se è

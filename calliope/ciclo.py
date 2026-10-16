@@ -2300,17 +2300,46 @@ class Ciclo:
         speaker_ctx.compagnia_sconosciute = False                         # e queste (13/10)
         speaker_ctx.senza_nome = False
         speaker_ctx.conoscente = None                                     # (14/10)
+        speaker_ctx.minore_ospite = None                                  # (16/10)
         if t.scritto is not None:
             self._chi_scrive(t)
         if t.emb_job is not None:
             self._riconosci_voce(t)
         self._segna_minore(t.speaker_name)
+        speaker_ctx.minore_ospite = self._minore_per_ospite(t.speaker_name)
         self._anello_turno(t)
         self.rec.update(livello=speaker_ctx.current_level, testo=t.text,
                         stt_s=round(time.perf_counter() - t.t0, 2))
         if getattr(self.s, "stanza", None) is not None:
             self._stanza_turno(t)
         return None
+
+    def _minore_per_ospite(self, nome) -> str | None:
+        """Un ospite non riconosciuto dove un minore ha parlato da poco (16/10, issue #102): il
+        nome del minore più protetto sentito su questa corsia negli ultimi
+        `minori_avviso_privato_s` secondi, per il modo di parlare nei dati del turno
+        (Brain._turn_context, regola `ospite_con_minore`); None per chi è riconosciuto, per un
+        conoscente, con `minori_ospite_vicino: false` o senza minori sentiti qui. Caso vero del
+        15/10: una bambina appena registrata, con l'impronta debole, presa 6 volte per ospite
+        (sotto la zona grigia, `minori.piu_protetto` non la dava a lei)."""
+        cfg, sc = self.s.cfg, self.speaker_ctx
+        if (nome or getattr(sc, "conoscente", None)
+                or not getattr(cfg, "minori_ospite_vicino", True)
+                or not getattr(cfg, "minori_enabled", True)):
+            return None
+        finestra = float(getattr(cfg, "minori_avviso_privato_s", 0.0) or 0.0)
+        if finestra <= 0 or not self._minori_sentiti:
+            return None
+        ora = time.monotonic()
+        vicini = []
+        for p in getattr(self.s.registry, "users", {}).values():
+            quando = self._minori_sentiti.get(getattr(p, "id", None))
+            if quando is not None and ora - quando < finestra and minori.e_minore(p):
+                vicini.append(p)
+        if not vicini:
+            return None
+        f = minori.piu_protetta(*(minori.fascia(p) for p in vicini))
+        return next(p.name for p in vicini if minori.fascia(p) == f)
 
     def _segna_minore(self, nome):
         """Un minore ha parlato (o scritto) su questa corsia: per un po' gli avvisi «sicurezza»

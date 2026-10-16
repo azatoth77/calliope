@@ -136,11 +136,12 @@ def parla_minore(speaker_ctx, registry) -> bool:
     `minore_vicino`, `minore_incerto`)? Per scelte di forma della risposta (la frase pronta del
     tool dopo il System 1: con un minore parla il modello). Fino al 16/10 lo diceva
     `conserva.console_riservata` («minore»), che dal 16/10 (decisione 0031) non nasconde più le
-    frasi dei minori."""
+    frasi dei minori. Dal 16/10 (issue #102) anche un ospite dove un minore ha parlato da poco
+    (`minore_ospite`)."""
     if speaker_ctx is None:
         return False
     if any(getattr(speaker_ctx, k, None) for k in ("incerta", "minore_vicino",
-                                                   "minore_incerto")):
+                                                   "minore_incerto", "minore_ospite")):
         return True
     nome = getattr(speaker_ctx, "current_speaker", None)
     get = getattr(registry, "get", None)
@@ -637,6 +638,26 @@ def dato_nascita(prof, oggi: datetime.date | None = None) -> str:
     oggi = oggi or datetime.date.today()
     giorno = "primo" if d.day == 1 else str(d.day)
     return f"data di nascita {giorno} {MESI[d.month - 1]} {d.year} ({eta(d, oggi)} anni)"
+
+
+# Le fasce dette a un ospite che potrebbe essere un minore (dato_ospite)
+_FASCE_DETTE = {"piccoli": "meno di 7 anni", "bambini": "7–10 anni", "ragazzi": "11–13 anni",
+                "adolescenti": "14–17 anni"}
+
+
+def dato_ospite(prof) -> str:
+    """Per un ospite non riconosciuto dove il minore `prof` ha parlato da poco (16/10, issue
+    #102): il modo di parlare della sua fascia come dato del turno, «forse un minorenne», senza
+    il nome, l'età precisa, il genere, i compiti e gli esercizi (sono suoi: l'ospite potrebbe
+    essere un adulto). "" per un adulto o con i minori spenti."""
+    p = preset(prof)
+    if p is None:
+        return ""
+    tono = p["tono"]
+    tono = tono[2:] if tono.startswith("è ") else tono
+    return (f"forse un minorenne ({_FASCE_DETTE[p['fascia']]}: un minore ha parlato da poco su "
+            f"questo satellite); nel caso {tono}; argomenti difficili (morte, guerra, droghe, "
+            f"corpo) spiegati adatti a un minore, niente contenuti per adulti")
 
 
 # ─────────────────────────── permessi nel codice ───────────────────────────

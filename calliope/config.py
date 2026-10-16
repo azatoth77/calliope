@@ -1969,6 +1969,15 @@ class Config:
     # parlato da meno di tanti secondi (potrebbe essere lì vicino): una frase neutra e il testo
     # resta sul suo schermo personale; a voce più tardi. 0 = sempre a voce (come prima)
     minori_avviso_privato_s: float = 600.0
+    # Una voce non riconosciuta (ospite) sul satellite dove un minore di casa ha parlato da meno
+    # di `minori_avviso_privato_s` secondi (16/10, issue #102: il 15/10 una bambina appena
+    # registrata, con l'impronta ancora debole, presa 6 volte per ospite e trattata come un
+    # adulto): nei dati del turno il modo di parlare della fascia più giovane sentita lì, senza
+    # nome né età precisa (regola `ospite_con_minore`). Livello e permessi restano da ospite.
+    # Scelta di chi amministra, di serie la più prudente: vale anche per gli ospiti adulti veri
+    # in quel momento (la voce non li distingue dal minore), che avranno risposte più semplici.
+    # false = l'ospite non riconosciuto ha sempre le risposte da adulto (come prima del 16/10)
+    minori_ospite_vicino: bool = True
     # Quando è nato un avviso ai tutori (14/10, caso vero: un avviso «sicurezza» del 12/10 sera,
     # rimasto da dire vicino al ragazzo, è arrivato il 14/10 mattina senza data ed è stato preso
     # per un allarme nuovo). Minuti oltre i quali la voce dice quando è nato («ieri sera alle
@@ -3246,7 +3255,7 @@ SEZIONI: dict[str, list[str]] = {
                "minori_avviso_ripetuto_s", "minori_pericolo_verifica",
                "minori_pericolo_attesa_s", "minori_pericolo_silenzio",
                "minori_pericolo_finestra_s", "minori_avviso_privato_s",
-               "avvisi_data_dopo_min", "avvisi_urgente_ore", "avvisi_contesto_ore",
+               "minori_ospite_vicino", "avvisi_data_dopo_min", "avvisi_urgente_ore", "avvisi_contesto_ore",
                "avvisi_trascrizione", "avvisi_audio", "avvisi_audio_anello_min",
                "avvisi_audio_anello_mb", "avvisi_audio_contesto_s", "avvisi_audio_giorni",
                "esercizi_enabled", "esercizi_verifica_modello", "esercizi_verifica_url",
