@@ -19,12 +19,14 @@ decide nessun significato, converte un esito già deciso nella frase che il tool
 scritto (correzione della forma). Ogni dubbio rimanda al modello, cioè a ciò che succedeva
 prima: più tool nella stessa risposta, un tool fallito o da spiegare (`cosa_fare`, una domanda
 in sospeso, un nome incerto), un tool che non è nell'elenco chiuso (`COPERTI`: i risultati con
-dati da riassumere, come una lista letta o una ricerca, non ci sono), testo del modello già
-detto, una persona minore, un tono che il codice non sa fare, segnali di struttura del turno
-(proposta aperta, spinte, giri di correzione, dati del turno in più, foto, sviluppo ed esercizi),
-e la frase della persona con più frasi, lunga, o con una domanda quando il tool è un'azione. I
-controlli sulla frase della persona guardano solo la forma (quante frasi, quante parole, il
-punto di domanda) e possono soltanto mandare al modello. In «attivo» la regola scrive il suo
+dati da riassumere, come una ricerca, non ci sono; la lista e l'agenda lette solo fino a due
+voci, dal 16/10), testo del modello già detto, una persona minore, un tono che il codice non sa
+fare, segnali di struttura del turno (proposta aperta, spinte, giri di correzione, dati del turno
+in più, foto, sviluppo ed esercizi), e la frase della persona con più richieste, lunga, o con una
+domanda quando il tool è un'azione. I controlli sulla frase della persona guardano solo la forma
+(quante frasi, quante parole, il punto di domanda) e mandano al modello; l'unica eccezione
+(16/10, issue #103) è una frase d'apertura in forma chiusa e per intero («Perfetto.», «Allora,
+iniziamo con un calcolo.»), che non conta come una richiesta in più. In «attivo» la regola scrive il suo
 nome nel registro dei turni (`dopo_tool_codice`); casi e contrari in `prove/prova_dopo_tool.py`.
 
 Modi (`system1_dopo_tool`): «spento» (di serie), «ombra» (si calcola la frase, si fa comunque la
@@ -61,16 +63,69 @@ class Copertura:
     campi: tuple
     domanda: bool
     forma: str = "{}"
+    # Le letture brevi (16/10, issue #103): il risultato ha la lista `voci`, e la frase del codice
+    # vale solo fino a `voci_max` voci (anche nessuna); oltre, i dati sono da riassumere e si
+    # torna al modello («non_coperto», come prima). -1: nessun limite (i tool senza voci)
+    voci_max: int = -1
+    # Una lettura senza frase pronta nel risultato (agenda_elenca): la frase composta dalle voci,
+    # senza scegliere niente (tutte, nell'ordine del tool). None: la frase dai `campi`
+    componi: object = None
 
 
 _LETTURA = Copertura(("da_dire",), True)
 _AZIONE = Copertura(("conferma",), False)
+VOCI_MAX = 2            # le letture brevi: al più tante voci (16/10, issue #103)
+
+
+def _voce_agenda(v: dict) -> str:
+    """Una voce di agenda_elenca detta a voce (come _voce_detta di tools/builtin.py)."""
+    if not isinstance(v, dict):
+        return ""
+    if "timer" in v:
+        label = str(v.get("timer") or "").strip()
+        resto = f", che scade fra {v['mancano']}" if v.get("mancano") else ""
+        return f"il timer {label}".strip() + resto
+    quando = f", {v['quando']}" if v.get("quando") else ""
+    if "promemoria" in v:
+        label = str(v.get("promemoria") or "").strip()
+        return (f"il promemoria di {label}" if label else "il promemoria") + quando
+    if "appuntamento" in v:
+        label = str(v.get("appuntamento") or "").strip()
+        return (f"l'appuntamento «{label}»" if label else "l'appuntamento") + quando
+    return ""
+
+
+def frase_agenda(res: dict) -> str:
+    """La frase di agenda_elenca (al più VOCI_MAX voci, lo controlla il decisore); "" se una
+    voce non si sa dire. Gli appuntamenti nel risultato sono solo dei prossimi due giorni: la
+    frase dell'agenda vuota lo dice."""
+    voci = res.get("voci")
+    if not isinstance(voci, list):
+        return ""
+    if not voci:
+        return ("Non c'è niente: nessun timer, nessun promemoria e nessun appuntamento nei "
+                "prossimi due giorni.")
+    dette = [_voce_agenda(v) for v in voci]
+    if not all(dette):
+        return ""
+    if len(dette) == 1:
+        return f"C'è {dette[0]}."
+    return "Ci sono " + ", ".join(dette[:-1]) + ", e " + dette[-1] + "."
+
+
+# La lista letta ha già la sua `conferma` («Nella lista della spesa ci sono 2 cose: latte e
+# uova.»); l'agenda no, la frase si compone dalle voci
+_LISTA_BREVE = Copertura(("conferma",), True, voci_max=VOCI_MAX)
+_AGENDA_BREVE = Copertura((), True, voci_max=VOCI_MAX, componi=frase_agenda)
 
 # L'elenco chiuso (15/10): esiti semplici, con una frase scritta dal tool. `casa_comando` non c'è
 # perché ha già la sua `risposta_finale` (la frase di Home Assistant, senza seconda passata dal
 # 27/09): nel registro è «gia_pronta». Fuori, di proposito: le letture con dati da riassumere
-# (lista_leggi, agenda_elenca, appuntamenti_elenca, casa_stato, meteo), la memoria (ricorda,
-# dimentica: il modello sceglie cosa dire del fatto), le voci e i toni (cambia_voce)
+# (appuntamenti_elenca, casa_stato, meteo; lista_leggi e agenda_elenca oltre due voci), la
+# memoria (ricorda, dimentica: il modello sceglie cosa dire del fatto), le voci e i toni
+# (cambia_voce). Dal 16/10 (issue #103) la lista e l'agenda lette fino a due voci o vuote: nel
+# caso vero della prima sera in ombra la `conferma` della lista era uguale a ciò che ha detto
+# il modello
 COPERTI: dict[str, Copertura] = {
     "ora_attuale": _LETTURA,
     "data_oggi": _LETTURA,
@@ -85,6 +140,8 @@ COPERTI: dict[str, Copertura] = {
     "pc_volume": _AZIONE,
     "pc_media": _AZIONE,
     "pc_luminosita": _AZIONE,
+    "lista_leggi": _LISTA_BREVE,
+    "agenda_elenca": _AGENDA_BREVE,
 }
 
 # Campi di un risultato riuscito che chiedono al modello di fare o spiegare altro
@@ -124,6 +181,39 @@ def frasi_della_persona(testo: str) -> int:
     return sum(1 for p in parti if re.search(r"[^\W\d_]", p))
 
 
+# Le frasi d'apertura che non chiedono niente (16/10, issue #103): riconosciute solo in forma
+# chiusa e per intero (principio 10). Una frase fatta solo di queste parole («Perfetto.», «Ok,
+# grazie.», «Allora, Calliope.»), oppure l'annuncio breve di ciò che segue («Allora, iniziamo
+# con un calcolo.»). «No» non c'è: può correggere il turno di prima
+_APERTURE = frozenset("""allora perfetto perfetta ok okay bene benissimo ottimo ottima va
+d'accordo accordo grazie sì si ecco dunque bravo brava bravissima bravissimo certo esatto
+giusto calliope ciao senti ascolta quindi beh mah ehm uhm eh oh""".split())
+_ANNUNCIO = re.compile(
+    r"(?:(?:allora|bene|ok|okay|dunque|ecco|perfetto|calliope)[\s,]+)*(?:ora\s+|adesso\s+)?"
+    r"(?:iniziamo|cominciamo|partiamo|ricominciamo)\s+(?:con|da)\s+\S.*", re.I)
+_ANNUNCIO_PAROLE = 8
+
+
+def senza_richiesta(frase: str) -> bool:
+    """Una frase della persona che non chiede niente: nessun punto di domanda, nessuna cifra, e
+    tutta fatta di parole d'apertura oppure un annuncio breve («Allora, iniziamo con un
+    calcolo.»). Solo la forma, per intero: una parola d'apertura dentro una frase non basta."""
+    f = str(frase or "").strip().rstrip(".!…;").strip()
+    if not f or "?" in f or re.search(r"\d", f):
+        return False
+    w = re.findall(r"[^\W\d_]+(?:'[^\W\d_]+)?", f.lower())
+    if w and all(x in _APERTURE for x in w):
+        return True
+    return bool(_ANNUNCIO.fullmatch(f)) and len(w) <= _ANNUNCIO_PAROLE
+
+
+def richieste_della_persona(testo: str) -> int:
+    """Quante frasi della persona chiedono qualcosa: le frasi (come frasi_della_persona) meno
+    quelle d'apertura (senza_richiesta)."""
+    parti = re.split(r"(?<=[.!?…;])\s+", str(testo or "").strip())
+    return sum(1 for p in parti if re.search(r"[^\W\d_]", p) and not senza_richiesta(p))
+
+
 def parole(testo: str) -> int:
     return len(re.findall(r"[^\W_]+(?:'[^\W_]+)?", str(testo or "")))
 
@@ -156,8 +246,16 @@ class DopoTool:
             return self._modello("tool_fallito", tool)
         if any(k in res for k in _DA_SPIEGARE):
             return self._modello("da_spiegare", tool)
-        frase = next((res[k].strip() for k in cop.campi
-                      if isinstance(res.get(k), str) and res[k].strip()), "")
+        if cop.voci_max >= 0:
+            # Una lettura breve (16/10): senza la lista delle voci, o con più voci, al modello
+            voci = res.get("voci")
+            if not isinstance(voci, list) or len(voci) > cop.voci_max:
+                return self._modello("non_coperto", tool)
+        if cop.componi is not None:
+            frase = str(cop.componi(res) or "").strip()
+        else:
+            frase = next((res[k].strip() for k in cop.campi
+                          if isinstance(res.get(k), str) and res[k].strip()), "")
         if not frase:
             return self._modello("senza_frase", tool)
         frase = cop.forma.format(frase)
@@ -172,7 +270,8 @@ class DopoTool:
         if e.tono not in TONI:
             return self._modello("tono", tool)
         testo = str(e.testo or "")
-        if frasi_della_persona(testo) > 1:
+        # Più richieste (16/10, issue #103: prima più frasi, anche con «Perfetto.» davanti)
+        if richieste_della_persona(testo) > 1:
             return self._modello("piu_frasi", tool)
         if parole(testo) > self.parole_max:
             return self._modello("persona_lunga", tool)

@@ -10,6 +10,11 @@ roadmap 3.12).
   dall'elenco (una lista letta, la casa, la memoria), senza frase o frase lunga, testo del modello
   già detto, un minore, un tono che il codice non sa fare, la frase della persona con più frasi,
   lunga o con una domanda per un'azione, i dubbi di struttura di Brain;
+- 16/10, issue #103: le frasi d'apertura in forma chiusa («Perfetto.», «Allora, iniziamo con un
+  calcolo.») non contano come richieste in più (i due casi veri della prima sera in ombra), la
+  lista e l'agenda lette fino a due voci coperte; contrari: due richieste, «No.» o «Allora?»
+  davanti, l'apertura dentro una frase che chiede, liste di 3 e 5 voci, agenda di 3, voce che il
+  codice non sa dire, minore, appuntamenti_elenca fuori;
 - la sostanza (ombra): numeri in cifre e in parole, parole piene, percentuali;
 - Brain con un motore finto: «spento» come prima; «attivo» una passata sola, la frase del tool
   detta e nella storia, la regola `dopo_tool_codice`; i contrari in Brain (due tool, testo prima
@@ -92,7 +97,7 @@ def prova_decisore():
             {**TIMER, "in_sospeso": {"tool": "x"}},)), dt.MODELLO, "da_spiegare", None),
         ("contrario: nome incerto", esito("Metti un timer", risultati=(
             {**TIMER, "nome_incerto": {"forse": "pasta"}},)), dt.MODELLO, "da_spiegare", None),
-        ("contrario: lista letta (dati da riassumere)", esito(
+        ("contrario: lista letta senza le voci", esito(
             "Cosa c'è nella lista della spesa?", ("lista_leggi",),
             ({"ok": True, "conferma": "Nella lista: latte, uova, pane."},)),
          dt.MODELLO, "non_coperto", None),
@@ -139,6 +144,104 @@ def prova_decisore():
     d2 = dt.DopoTool(parole_max=3)
     verifica("decisore: parole al più configurabili",
              d2.decide(esito("Metti un timer di dieci minuti")).perche == "persona_lunga")
+
+
+def _lista(voci, nome="spesa"):
+    """Il risultato di lista_leggi come lo scrive tools/builtin.py."""
+    if not voci:
+        return {"ok": True, "lista": nome, "voci": [], "numero": 0,
+                "conferma": "La lista della spesa è vuota."}
+    c = "c'è una cosa" if len(voci) == 1 else f"ci sono {len(voci)} cose"
+    cose = voci[0] if len(voci) == 1 else ", ".join(voci[:-1]) + " e " + voci[-1]
+    return {"ok": True, "lista": nome, "voci": list(voci), "numero": len(voci),
+            "conferma": f"Nella lista della spesa {c}: {cose}."}
+
+
+def prova_issue_103():
+    """16/10, issue #103: le frasi d'apertura non contano come richieste in più, e la lista e
+    l'agenda lette fino a due voci sono coperte. I due casi veri della prima sera in ombra
+    (erano «piu_frasi») e i contrari."""
+    d = dt.DopoTool()
+    radice = {"ok": True, "espressione": "sqrt(855)", "risultato": "29,24", "da_dire": "29,24"}
+    tolto = {"ok": True, "lista": "spesa", "tolti": ["farina"], "non_trovati": [],
+             "conferma": "Ho tolto farina dalla lista della spesa."}
+    agenda1 = {"voci": [{"promemoria": "chiamare Ugo", "quando": "oggi alle 18"}], "numero": 1}
+    agenda2 = {"voci": [{"timer": "per la pasta", "mancano": "3 minuti"},
+                        {"appuntamento": "dentista", "quando": "domani alle 17"}], "numero": 2}
+    agenda3 = {"voci": agenda2["voci"] + [{"promemoria": "il pane", "quando": "oggi alle 19"}],
+               "numero": 3}
+    casi = [
+        ("caso vero: «Allora, iniziamo con un calcolo.» davanti", esito(
+            "Allora, iniziamo con un calcolo. Prova a calcolare la radice quadrata di 855.",
+            ("calcola",), (radice,)), dt.CODICE, "esito_chiuso", "Fa 29,24."),
+        ("caso vero: «Perfetto.» davanti", esito(
+            "Perfetto. Segna che la farina l'ho già comprata.", ("lista_togli",), (tolto,)),
+         dt.CODICE, "esito_chiuso", tolto["conferma"]),
+        ("«Ok, grazie.» davanti", esito("Ok, grazie. Metti un timer di dieci minuti."),
+         dt.CODICE, "esito_chiuso", TIMER["conferma"]),
+        ("lista letta con due voci", esito("Cosa c'è nella lista della spesa?", ("lista_leggi",),
+                                           (_lista(["latte", "uova"]),)),
+         dt.CODICE, "esito_chiuso", "Nella lista della spesa ci sono 2 cose: latte e uova."),
+        ("lista letta vuota", esito("Cosa c'è nella lista della spesa?", ("lista_leggi",),
+                                    (_lista([]),)),
+         dt.CODICE, "esito_chiuso", "La lista della spesa è vuota."),
+        ("agenda con una voce", esito("Cosa ho in agenda?", ("agenda_elenca",), (agenda1,)),
+         dt.CODICE, "esito_chiuso", "C'è il promemoria di chiamare Ugo, oggi alle 18."),
+        ("agenda con due voci", esito("Cosa ho in agenda?", ("agenda_elenca",), (agenda2,)),
+         dt.CODICE, "esito_chiuso", "Ci sono il timer per la pasta, che scade fra 3 minuti, e "
+                                    "l'appuntamento «dentista», domani alle 17."),
+        ("agenda vuota (gli appuntamenti dei due giorni detti)", esito(
+            "Cosa ho in agenda?", ("agenda_elenca",), ({"voci": [], "numero": 0},)),
+         dt.CODICE, "esito_chiuso", "Non c'è niente: nessun timer, nessun promemoria e nessun "
+                                    "appuntamento nei prossimi due giorni."),
+        # contrari
+        ("contrario: due richieste dopo «Perfetto.»", esito(
+            "Perfetto. Metti un timer di dieci minuti. Poi raccontami una storia."),
+         dt.MODELLO, "piu_frasi", None),
+        ("contrario: «Perfetto» dentro una frase che chiede", esito(
+            "Perfetto, metti un timer. Grazie, poi spegni la luce."), dt.MODELLO, "piu_frasi",
+         None),
+        ("contrario: «No.» davanti (può correggere il turno di prima)", esito(
+            "No. Metti un timer di dieci minuti."), dt.MODELLO, "piu_frasi", None),
+        ("contrario: «Allora?» con il punto di domanda", esito(
+            "Allora? Metti un timer di dieci minuti."), dt.MODELLO, "piu_frasi", None),
+        ("contrario: annuncio lungo che chiede altro", esito(
+            "Allora, iniziamo con un calcolo e poi con una storia lunga. Prova 855.",
+            ("calcola",), (radice,)), dt.MODELLO, "piu_frasi", None),
+        ("contrario: lista letta con 5 voci", esito(
+            "Cosa c'è nella lista della spesa?", ("lista_leggi",),
+            (_lista(["latte", "uova", "pane", "farina", "sale"]),)),
+         dt.MODELLO, "non_coperto", None),
+        ("contrario: lista letta con 3 voci", esito(
+            "Cosa c'è nella lista della spesa?", ("lista_leggi",),
+            (_lista(["latte", "uova", "pane"]),)), dt.MODELLO, "non_coperto", None),
+        ("contrario: agenda con 3 voci", esito("Cosa ho in agenda?", ("agenda_elenca",),
+                                               (agenda3,)), dt.MODELLO, "non_coperto", None),
+        ("contrario: agenda con una voce che il codice non sa dire", esito(
+            "Cosa ho in agenda?", ("agenda_elenca",), ({"voci": [{"boh": "x"}]},)),
+         dt.MODELLO, "senza_frase", None),
+        ("contrario: lista breve letta da un minore", esito(
+            "Cosa c'è nella lista della spesa?", ("lista_leggi",), (_lista(["latte"]),),
+            minore=True), dt.MODELLO, "minore", None),
+        ("contrario: appuntamenti_elenca resta fuori", esito(
+            "Che appuntamenti ho?", ("appuntamenti_elenca",),
+            ({"ok": True, "voci": [], "conferma": "Nessun appuntamento."},)),
+         dt.MODELLO, "non_coperto", None),
+    ]
+    for nome, e, scelta, perche, frase in casi:
+        s = d.decide(e)
+        ok = s.scelta == scelta and s.perche == perche and (frase is None or s.frase == frase)
+        verifica(f"#103: {nome}", ok, f"{s.scelta} {s.perche} {s.frase!r}")
+    verifica("#103: richieste e frasi d'apertura",
+             (dt.richieste_della_persona("Perfetto. Grazie."),
+              dt.richieste_della_persona("Calliope. D'accordo, metti un timer."),
+              dt.richieste_della_persona("Bene. Iniziamo con 3 timer."),
+              dt.senza_richiesta("Allora, iniziamo con un calcolo."),
+              dt.senza_richiesta("Ok, ecco."),
+              dt.senza_richiesta("Perfetto, metti un timer."),
+              dt.senza_richiesta("Bene?"),
+              dt.frasi_della_persona("Perfetto. Grazie.")),
+             (0, 1, 1, True, True, False, False, 2))
 
 
 # ─────────────────────────────── la sostanza ───────────────────────────────
@@ -232,6 +335,13 @@ def prova_brain_attivo():
     detto = "".join(b.stream_reply("Metti un timer di dieci minuti", "familiare"))
     verifica("attivo: il timer con la sua conferma", (b.backend.passate, detto.strip()),
              (1, TIMER["conferma"]))
+    # 16/10, issue #103: la lista letta breve, dopo «Perfetto.» (prima: due frasi → il modello)
+    b = brain([[chiama("lista_leggi", {"lista": "spesa"})], [("text", "Latte e uova.")]],
+              risultato=_lista(["latte", "uova"]))
+    detto = "".join(b.stream_reply("Perfetto. Cosa c'è nella lista della spesa?", "familiare"))
+    verifica("attivo, #103: la lista breve letta dopo «Perfetto.», una passata",
+             (b.backend.passate, detto.strip(), b.last_dopo_tool["tool"]),
+             (1, "Nella lista della spesa ci sono 2 cose: latte e uova.", "lista_leggi"))
     # ospite: la frase non va nel registro
     b = brain([list(x) for x in calc])
     "".join(b.stream_reply("Quanto fa 17 per 6?", "ospite"))
@@ -425,16 +535,20 @@ def prova_script_dgx():
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)
     r = m.valuta(m._finti())
+    # (dal 16/10 la lista letta è coperta, stima per eccesso: il registro non ha le voci)
     verifica("script della DGX: coperti, già pronte, senza parole, perché",
              (r["coperti"], r["gia_pronte"], r["senza_parole"], dict(r["perche"])),
-             (3, 1, 1, {"piu_tool": 1, "non_coperto": 1, "tool_fallito": 1,
+             (4, 1, 1, {"piu_tool": 1, "non_coperto": 1, "tool_fallito": 1,
                         "dubbio_proposta": 1}))
     verifica("script della DGX: risparmio stimato dai turni senza tool dello stesso giorno",
-             (r["prima_frase_senza_tool"], r["risparmio_p50_s"]), (1.8, 0.9))
+             (r["prima_frase_senza_tool"], r["risparmio_p50_s"]), (1.8, 1.0))
+    verifica("script della DGX: l'agenda letta (senza campi di frase) non lo fa cadere",
+             m._risultato("agenda_elenca", True), {"ok": True, "voci": []})
 
 
 if __name__ == "__main__":
     prova_decisore()
+    prova_issue_103()
     prova_sostanza()
     prova_brain_attivo()
     prova_brain_ombra()

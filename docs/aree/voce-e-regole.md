@@ -2144,7 +2144,7 @@ con tool:
 - il modello non ha detto né tenuto testo prima del tool; chi parla non è un minore; il tono del
   turno è normale, amichevole o essenziale (il formale vuole il «lei», l'ironico e il computer di
   bordo il loro stile);
-- la frase della persona è **una** frase, di al più `system1_dopo_tool_parole_max` (16) parole, e
+- la frase della persona è **una** frase *[dal 16/10: una richiesta, le aperture non contano]*, di al più `system1_dopo_tool_parole_max` (16) parole, e
   senza punto di domanda se il tool è un'azione («Che ore sono?» va bene, «Metti un timer, quanto
   manca a cena?» no);
 - nessun dubbio di struttura di Brain: proposta aperta (anche di un altro), spinte, giri di
@@ -2152,7 +2152,8 @@ con tool:
   richiesta di file, cambio d'argomento, offerta del tool, risultato riservato, dato non fidato
   letto, continuazione.
 
-Fuori dall'elenco, di proposito: le letture con dati da riassumere (`lista_leggi`, `agenda_elenca`,
+Fuori dall'elenco, di proposito: le letture con dati da riassumere (`lista_leggi`, `agenda_elenca`
+*[storico: dal 16/10 coperte fino a due voci, § qui sotto]*,
 `appuntamenti_elenca`, `casa_stato`, meteo, ricerche), la memoria (`ricorda`, `dimentica`: il modello
 sceglie cosa dire del fatto), voci e toni. Per `calcola` il `da_dire` è il solo numero: la frase è
 «Fa 102.».
@@ -2203,6 +2204,54 @@ turni senza tool dello stesso giorno). Poi `system1_dopo_tool: ombra` nel file l
 giorno; **criteri proposti per «attivo»**: almeno 50 confronti, diverse nella sostanza sotto il 5 %
 (rilette a mano dal registro: la misura della sostanza è un'approssimazione), `altro_tool` 0, e un
 risparmio p50 di almeno 0,5 s.
+
+### Le richieste contate e le letture brevi (16/10, issue #103, ramo `issue-103-dopo-tool`)
+
+**Il caso vero** (prima sera in ombra sulla DGX, 15/10): 22 risposte con tool, frase del codice in 3
+(14 %), uguali nella sostanza 3 su 3, seconda passata risparmiabile p50 633 ms; al modello 14, di
+cui `non_coperto` 7 (letture di lista e agenda, elenco utenti, biblioteca, `pc_guarda`) e
+`piu_frasi` 2. I due `piu_frasi` avevano una frase d'apertura che non chiede niente («Allora,
+iniziamo con un calcolo. Prova a …» e «Perfetto. Segna che …»); una lista letta aveva la `conferma`
+uguale a ciò che poi ha detto il modello.
+
+**Cosa cambia** (`calliope/system1/dopo_tool.py`; resta una misura: sulla DGX niente cambi di
+configurazione, `system1_dopo_tool: ombra` com'era):
+
+- `piu_frasi` conta le **richieste**, non le frasi (`richieste_della_persona`): una frase non chiede
+  niente solo se è **per intero** fatta di parole d'apertura di un elenco chiuso («Perfetto.», «Ok,
+  grazie.», «Calliope.»: `_APERTURE`) oppure è un annuncio breve, al più 8 parole, «(Allora,)
+  iniziamo/cominciamo/partiamo/ricominciamo con/da …» (`_ANNUNCIO`), senza punto di domanda né
+  cifre. «No.» non c'è (può correggere il turno di prima), «Allora?» ha il punto di domanda, e
+  un'apertura dentro una frase che chiede («Perfetto, metti un timer.») resta una richiesta. È
+  l'unico controllo sulla frase della persona che manda verso il codice: per questo solo forme
+  chiuse e per intero (principio 10). La proposta della issue di riconoscere l'imperativo o il verbo
+  del tool è scartata: una richiesta senza imperativo («Mi servirebbe anche il meteo.») non si
+  conterebbe, e in «attivo» andrebbe persa.
+- `lista_leggi` e `agenda_elenca` sono nell'elenco solo come **letture brevi**: il risultato ha la
+  lista `voci` con al più due voci (`VOCI_MAX`), anche vuota; senza `voci` o con più voci restano
+  `non_coperto`, come prima. La lista ha già la sua `conferma`; **l'agenda non ne ha** (la issue la
+  dava per scontata): la frase si compone dalle voci, tutte e nell'ordine del tool (`frase_agenda`:
+  «C'è il promemoria di chiamare Ugo, oggi alle 18.», «Ci sono il timer per la pasta, che scade fra
+  3 minuti, e l'appuntamento «dentista», domani alle 17.»; vuota: «Non c'è niente: nessun timer,
+  nessun promemoria e nessun appuntamento nei prossimi due giorni.», perché il tool dà solo gli
+  appuntamenti dei due giorni). Non si è aggiunta una `conferma` al tool: avrebbe cambiato ciò che
+  vede il modello e ciò che resta nella storia dopo il sigillo dei risultati personali
+  (`Brain._seal_private`, oggi una traccia neutra per l'agenda). `appuntamenti_elenca`, elenco
+  utenti, biblioteca e `pc_guarda` restano fuori.
+- Lo script della DGX (`prove/manuali/dopo_tool_dgx.py`) conta le letture brevi come coperte (il
+  registro non ha quante voci c'erano: stima per eccesso, come il resto) e non cade più sull'agenda,
+  che non ha campi di frase.
+
+**Prove**: `prove/prova_dopo_tool.py`, `prova_issue_103`: i due casi veri diventano «codice», così
+la lista di due voci e vuota e l'agenda di una, due e nessuna voce; contrari: due richieste dopo
+«Perfetto.», «No.» e «Allora?» davanti, l'apertura dentro una frase che chiede, l'annuncio lungo,
+liste di 3 e 5 voci e agenda di 3 (`non_coperto`), voce dell'agenda sconosciuta (`senza_frase`),
+minore, `appuntamenti_elenca`; in Brain «attivo» la lista breve dopo «Perfetto.» con una passata.
+Col codice di main i casi nuovi falliscono (10 decisioni sbagliate, poi `richieste_della_persona`
+che non c'è).
+
+**Da misurare** (criterio della issue): su 100 risposte con tool in ombra sulla DGX, copertura
+≥ 30 % con «diverse» 0, da `calliope stato --turni`. L'accensione resta una scelta separata.
 
 ## Il criterio di E1 e la guardia dei riletti (15/10, issue #11, ramo `issue-11-12-eventi-attivo`)
 
