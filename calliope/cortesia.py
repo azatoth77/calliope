@@ -45,6 +45,21 @@ RISPOSTE: dict[str, dict[str, tuple[str, ...]]] = {
 }
 
 
+def senza_voce(forma: str | None, voiced_s: float, scritto: bool, cfg) -> str | None:
+    """Regola `cortesia_senza_voce` (16/10, issue #97; principio 10: riguarda la trascrizione,
+    che il modello non vede, ed è reversibile). Whisper scrive «Grazie.» su un rumore breve:
+    una cortesia («grazie» o «conferma» di wakeword.closing_kind) detta su meno di
+    `cortesia_voce_min_s` secondi di voce è rumore, non una chiusura. Restituisce il modo
+    («ombra» o «attiva») se la regola scatta, None se no: le altre forme, una frase scritta
+    (non ha voce) e la regola spenta non contano."""
+    if forma not in ("grazie", "conferma") or scritto:
+        return None
+    modo = getattr(cfg, "cortesia_voce_min", "spenta")
+    if modo not in ("ombra", "attiva"):
+        return None
+    return modo if voiced_s < float(getattr(cfg, "cortesia_voce_min_s", 0.0) or 0.0) else None
+
+
 class Cortesia:
     """Sceglie la risposta a rotazione, per tono e forma: mai la stessa due volte di fila
     (se ce n'è più d'una)."""
