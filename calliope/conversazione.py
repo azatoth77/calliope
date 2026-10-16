@@ -119,6 +119,12 @@ class Conversazione:
         # righe della conversazione (quello dell'ultimo turno con la stanza)
         self.stanza_attesa: list = []
         self.stanza_sat = None
+        # I dati che cambiano di rado (16/10, issue #95, calliope/dati_turno.Fisso): ricordi,
+        # avvisi ai tutori, riassunto della stanza, nella richiesta subito prima della frase del
+        # turno in cui sono cambiati (segno `_dati`), uguali nei turni dopo. Solo in memoria, come
+        # le righe della stanza: mai su disco (esporta toglie il segno), mai nell'archivio
+        self.dati_fissi: list = []
+        self.dati_n = 0
 
     # ── stato ──
     def vuota(self) -> bool:
@@ -161,9 +167,10 @@ class Conversazione:
         # disco come eventi, a turno finito
         hist = self.history if self.vivo_da is None else self.history[:self.vivo_da]
         # Né le foto né il segno delle righe della stanza (14/10 sera: le righe stanno solo in
-        # memoria, Conversazione.stanza)
-        storia = [{k: v for k, v in m.items() if k not in ("images", "_stanza")}
-                  if (m.get("images") or "_stanza" in m) else m for m in hist]
+        # memoria, Conversazione.stanza) né quello dei dati fissi (16/10)
+        via = ("images", "_stanza", "_dati")
+        storia = [{k: v for k, v in m.items() if k not in via}
+                  if any(k in m for k in via) else m for m in hist]
         return {"formato": FORMATO, "chiave": self.chiave, "history": storia,
                 "riassunto": self.riassunto, "owner": owner,
                 "owner_aperto": self.owner is UNSET, "nome": self.nome, "luogo": self.luogo,

@@ -569,6 +569,27 @@ def prova_anticipo():
     verifica("anticipo: misura senza parole né nomi", m["esito"] == "trovato"
              and "gita" not in json.dumps(m) and "Bianca" not in json.dumps(m), str(m))
     verifica("anticipo: tetto di caratteri", len(a.testo) < 1000 + 600)
+    # Il tetto dei dati del turno (16/10, issue #95): `massimo` per il messaggio intero
+    domanda_gita = "Calliope, dove si parte sabato per la gita?"
+    largo = tool_mod.anticipa(contesto(st, "Bianca"), domanda_gita, None, massimo=100_000)
+    verifica("anticipo con massimo largo: come senza", largo is not None
+             and largo.testo == a.testo and not largo.tetto)
+    # Busta e istruzioni ~810 caratteri; le righe della scena sono poche: il minimo più basso
+    minimo = tool_mod.ANTICIPO_MIN_CARATTERI
+    tool_mod.ANTICIPO_MIN_CARATTERI = 50
+    try:
+        stretto = tool_mod.anticipa(contesto(st, "Bianca"), domanda_gita, None,
+                                    massimo=len(a.testo) - 10)
+    finally:
+        tool_mod.ANTICIPO_MIN_CARATTERI = minimo
+    verifica("anticipo con massimo più stretto: il messaggio intero ci sta, meno righe",
+             stretto is not None and stretto.testo and len(stretto.testo) <= len(a.testo) - 10
+             and "DATO NON FIDATO (fonte: stanza)" in stretto.testo and not stretto.tetto
+             and stretto.righe < a.righe,
+             f"{len(getattr(stretto, 'testo', ''))} su {len(a.testo)}")
+    poco = tool_mod.anticipa(contesto(st, "Bianca"), domanda_gita, None, massimo=500)
+    verifica("contrario: massimo che non basta per la busta e qualche riga → non parte (tetto)",
+             poco is not None and poco.tetto and poco.testo == "" and poco.righe == 0)
     # La stanza nominata senza altre parole: gli ultimi discorsi di lì
     st.server.attivo.satellite = {"id": 2}
     a = tool_mod.anticipa(contesto(st, "Carlo"), "Calliope, di cosa parlavamo in cucina?", None)

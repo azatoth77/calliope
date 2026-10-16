@@ -335,6 +335,21 @@ class Config:
     # un altro la conversazione resta da parte, e si chiude come con «esci» dopo questi
     # secondi senza turni. 0 = niente scadenza
     storia_inattiva_s: float = 300.0
+    # I dati del turno che cambiano di rado nella storia, in sola aggiunta (16/10, issue #95,
+    # calliope/dati_turno.py): i ricordi di chi parla, gli avvisi ai tutori e il riassunto della
+    # stanza entrano nella richiesta solo quando cambiano, davanti alla frase di quel turno, e lì
+    # restano uguali. Prima stavano nei dati del turno e sparivano alla richiesta dopo: con Gemma 4
+    # (finestra scorrevole) Ollama non sa riavvolgere la cache oltre ~512 token dalla fine della
+    # richiesta di prima e rileggeva tutta la storia a ogni turno (DGX, 15/10: 85 turni su 118,
+    # prima frase mediana 2,58 s). false = come prima, per il confronto
+    dati_stabili_in_storia: bool = True
+    # Tetto in token stimati (3,5 caratteri a token) dei dati del turno più la domanda, cioè di ciò
+    # che alla richiesta dopo il motore deve riavvolgere (16/10, issue #95). Sul portatile
+    # (gemma4 e4b) la cache regge con ~350 token veri di dati del turno e si perde tutta con
+    # ~500; la finestra riavvolgibile è `n_ubatch` (512) anche per il 26B. Oltre il tetto la
+    # ricerca anticipata nella stanza si accorcia o non parte (il modello ha stanza_cerca), e il
+    # turno si conta in `calliope stato --turni`. 0 = nessun tetto
+    dati_turno_tetto_token: int = 450
     # Reti e spinte da spegnere (03/10): servono al modello piccolo, uno più forte può farne
     # a meno. Nomi in RETI (in fondo a questo file), solo quelle di categoria «modello»:
     # textcallguard, chiamata_in_mezzo, spinta_promessa, spinta_richiesta, spinta_dichiarata,
@@ -3173,7 +3188,7 @@ SEZIONI: dict[str, list[str]] = {
             "conferma_sfida", "conferma_sfida_s", "conferma_sfida_parole", "quarantena_token",
             "intento_valido_s", "politica_per_valore", "dialogo_interprete",
             "uscita_controllo",
-            "storia_inattiva_s",
+            "storia_inattiva_s", "dati_stabili_in_storia", "dati_turno_tetto_token",
             "llm_reti_spente", "preselezione_tool", "preselezione_codifica",
             "preselezione_embedding", "preselezione_nucleo", "preselezione_margine",
             "system1_dopo_tool", "system1_dopo_tool_parole_max"],
@@ -3506,6 +3521,7 @@ LIMITI: dict[str, tuple[float, float]] = {
     "stanza_cerca_righe": (1, 200), "stanza_cerca_caratteri": (200, 20_000),
     "stanza_cerca_attesa_max_s": (0.0, 30.0), "stanza_cerca_attesa_s": (0.0, 30.0),
     "stanza_cerca_anticipo_caratteri": (0, 20_000),
+    "dati_turno_tetto_token": (0, 100_000),
     "stanza_tenuta_giorni": (1, 3650),
     "conoscenti_scadenza_giorni": (1, 3650), "conoscenti_soglia": (1, 50),
     "conoscenti_min_voce_s": (0.0, 600.0),

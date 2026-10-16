@@ -311,6 +311,21 @@ llm:
   # un altro la conversazione resta da parte, e si chiude come con «esci» dopo questi
   # secondi senza turni. 0 = niente scadenza
   storia_inattiva_s: 300.0
+  # I dati del turno che cambiano di rado nella storia, in sola aggiunta (16/10, issue #95,
+  # calliope/dati_turno.py): i ricordi di chi parla, gli avvisi ai tutori e il riassunto della
+  # stanza entrano nella richiesta solo quando cambiano, davanti alla frase di quel turno, e lì
+  # restano uguali. Prima stavano nei dati del turno e sparivano alla richiesta dopo: con Gemma 4
+  # (finestra scorrevole) Ollama non sa riavvolgere la cache oltre ~512 token dalla fine della
+  # richiesta di prima e rileggeva tutta la storia a ogni turno (DGX, 15/10: 85 turni su 118,
+  # prima frase mediana 2,58 s). false = come prima, per il confronto
+  dati_stabili_in_storia: true
+  # Tetto in token stimati (3,5 caratteri a token) dei dati del turno più la domanda, cioè di ciò
+  # che alla richiesta dopo il motore deve riavvolgere (16/10, issue #95). Sul portatile
+  # (gemma4 e4b) la cache regge con ~350 token veri di dati del turno e si perde tutta con
+  # ~500; la finestra riavvolgibile è `n_ubatch` (512) anche per il 26B. Oltre il tetto la
+  # ricerca anticipata nella stanza si accorcia o non parte (il modello ha stanza_cerca), e il
+  # turno si conta in `calliope stato --turni`. 0 = nessun tetto
+  dati_turno_tetto_token: 450
   # Reti e spinte da spegnere (03/10): servono al modello piccolo, uno più forte può farne
   # a meno. Nomi in RETI (in fondo a questo file), solo quelle di categoria «modello»:
   # textcallguard, chiamata_in_mezzo, spinta_promessa, spinta_richiesta, spinta_dichiarata,

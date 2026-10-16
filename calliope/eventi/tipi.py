@@ -45,9 +45,10 @@ TIPI: dict[str, Tipo] = dict([
     _t("conversazione_chiusa", "motivo", "registro",
        "dopo, nessun evento con lo stesso conv"),
     _t("detto_persona", "testo canale come sicurezza satellite sfida brain incerte "
-                        "riassegnato_da compagnia chi stanza", "modello",
+                        "riassegnato_da compagnia chi stanza dati", "modello",
        "il testo della sfida non si scrive; chi (il nome di chi l'ha detta nella conversazione "
-       "anonima) e stanza (i pezzi della stanza legati alla frase, solo in memoria) dal 15/10"),
+       "anonima) e stanza (i pezzi della stanza legati alla frase, solo in memoria) dal 15/10; "
+       "dati (i dati fissi legati alla frase, solo in memoria) dal 16/10"),
     _t("trascrizione_capita", "prima dopo accettata", "modello",
        "la proiezione usa «dopo» solo se accettata"),
     _t("dato_in_ingresso", "fonte testo caratteri", "modello",
