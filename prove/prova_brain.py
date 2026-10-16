@@ -390,10 +390,13 @@ def prova_riferimento():
     verifica("riferimento: non nella stessa risposta", "riferimento_casa" in b.rules_fired(), False)
     "".join(b.stream_reply("Scendila.", "amministra"))
     visti = b.backend.visti[-1]
+    # Dal 16/10 (issue #95) i ricordi stanno nella storia, davanti alla frase del turno in cui
+    # sono entrati: prima, non più accanto
+    ricordi_i = [i for i, m in enumerate(visti) if m.get("content") == "RICORDI"]
     verifica("riferimento: dopo i ricordi, subito prima della domanda, con nome e comando",
-             (visti[-3]["content"], visti[-2]["role"], "Taverna (comando «spegni Taverna»)"
-              in visti[-2]["content"], visti[-1]["content"]),
-             ("RICORDI", "system", True, "Scendila."))
+             (len(ricordi_i) == 1 and ricordi_i[0] < len(visti) - 2, visti[-2]["role"],
+              "Taverna (comando «spegni Taverna»)" in visti[-2]["content"], visti[-1]["content"]),
+             (True, "system", True, "Scendila."))
     verifica("riferimento: nel registro, fuori dalla storia",
              ("riferimento_casa" in b.rules_fired(),
               any("Contesto della casa" in (m.get("content") or "") for m in b.history)),
@@ -476,8 +479,10 @@ def prova_sospeso():
     "".join(b.stream_reply("Sì grazie.", "amministra"))
     visti = b.backend.visti[-2] if len(b.backend.visti) >= 2 else []
     sistema = [m["content"] for m in visti if m["role"] == "system"]
+    # Dal 16/10 (issue #95) i ricordi stanno nella storia (prima, non più accanto)
     verifica("sospeso: dopo i ricordi, subito prima della domanda",
-             (visti[-2]["role"], sospeso_in(visti[-2]["content"]), sistema[-2] == "RICORDI",
+             (visti[-2]["role"], sospeso_in(visti[-2]["content"]),
+              sistema.count("RICORDI") == 1 and sistema.index("RICORDI") < len(sistema) - 1,
               visti[-1]["content"]),
              ("system", True, True, "Sì grazie."))
     # Con lo stato del dialogo in ombra (10/10) il blocco dello stato nomina il tool e la

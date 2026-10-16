@@ -466,9 +466,12 @@ def pezzo(blocco: Blocco, mandate: set, cfg, n: int, primo: bool,
                  seq_max=max(int(r.get("seq") or 0) for r in scelte))
 
 
-def nota_turno(blocco: Blocco | None) -> str:
+def nota_turno(blocco: Blocco | None, riassunto: bool = True) -> str:
     """Ciò che del blocco cambia a ogni turno e non va nel prefisso: chi è presente adesso e le
-    righe non ancora trascritte. Testo di Calliope (nomi dalla voce), fuori dalla busta."""
+    righe non ancora trascritte. Testo di Calliope (nomi dalla voce), fuori dalla busta. Con
+    `riassunto` anche il riassunto della stanza (in busta); dal 16/10 (issue #95, Brain con
+    `dati_stabili_in_storia`) il riassunto, che cambia di rado, va nella storia a parte
+    (`riassunto_turno`) e qui resta solo ciò che cambia davvero."""
     if blocco is None:
         return ""
     parti = []
@@ -477,12 +480,19 @@ def nota_turno(blocco: Blocco | None) -> str:
         parti.append(NOTA_PRESENTI.format(dove=blocco.dove or "qui", nomi=nomi))
     if blocco.mancano:
         parti.append(NON_TRASCRITTE)
-    if blocco.riassunto:
-        # Il riassunto (passo 3) è fatto dalle righe: un dato, in busta
-        parti.append(provenienza.racchiudi(
-            FONTE, RIASSUNTO.format(dove=blocco.dove or "qui", testo=blocco.riassunto),
-            "riassunto della stanza"))
+    if riassunto and blocco.riassunto:
+        parti.append(riassunto_turno(blocco))
     return " ".join(parti)
+
+
+def riassunto_turno(blocco: Blocco | None) -> str:
+    """Il riassunto della conversazione della stanza (passo 3), fatto dalle righe: un dato, in
+    busta; "" se non c'è."""
+    if blocco is None or not blocco.riassunto:
+        return ""
+    return provenienza.racchiudi(
+        FONTE, RIASSUNTO.format(dove=blocco.dove or "qui", testo=blocco.riassunto),
+        "riassunto della stanza")
 
 
 def righe_rivolta(stanza, sat, cfg, inizio_turno: float, massimo: int = 6,
