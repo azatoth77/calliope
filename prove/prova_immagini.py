@@ -651,6 +651,7 @@ def prova_spinta_pc():
 
     def spinta(frasi, **reg):
         b = brain([[("text", "Uno scontrino.")], [("text", "x")]], **reg)
+        b.cfg.pc_proprietari = ["Dario"]   # dal 16/10 la spinta vale per chi può usare il PC
         for testo, imm in frasi:
             "".join(b.stream_reply(testo, "familiare", **({"immagini": imm} if imm else {})))
         req = b.backend.visti[-1]

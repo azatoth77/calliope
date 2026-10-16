@@ -65,6 +65,10 @@ class RemotePCExecutor(PCExecutor):
         if c is None:
             raise PCNonCollegato(f"il {self.nome} non è collegato a Calliope")
         if getattr(c, "esecutore", None) is None:
+            # Il solo telefono (16/10, issue #100): «il satellite collegato non offre il
+            # controllo… va aggiornato» parlava di un satellite che non c'era
+            if getattr(c, "canale", None) == "telefono":
+                raise PCNonCollegato(f"il {self.nome} non è collegato a Calliope")
             raise PCNonCollegato(f"il satellite collegato non offre il controllo del "
                                  f"{self.nome} (va aggiornato, oppure non è Windows)")
         return c

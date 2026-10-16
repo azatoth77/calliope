@@ -25,9 +25,11 @@ Sul portatile con l'Ollama locale (e4b), poi `ollama stop gemma4:e4b-it-qat`:
     python prove\\manuali\\banco_dispositivo.py --giri 3
     python prove\\manuali\\banco_dispositivo.py --giri 3 --prima
 
-Col 26B (un Ollama di prova con il modello, `--modello` e `--url`):
+Col 26B della DGX dal portatile, con un tunnel verso il suo Ollama (solo a DGX libera, col
+`num_ctx` del modello già caricato, per non ricaricarlo):
 
-    python prove/manuali/banco_dispositivo.py --giri 10 --url http://127.0.0.1:11440 --modello gemma4:26b
+    ssh -N -L 11440:127.0.0.1:11434 DevLabDGX
+    CALLIOPE_LLM_PROFILO=gemma4-26b-ollama python prove/manuali/banco_dispositivo.py --giri 10 --url http://127.0.0.1:11440 --modello gemma4:26b-a4b-it-qat --num-ctx 36864
 
 Non scrive niente su disco.
 """
@@ -79,7 +81,7 @@ def foto(nome):
     return Immagine(jpeg, w, h, fonte="telefono", persona="dario")
 
 
-def nuovo(cfg, pc, prima: bool):
+def nuovo(cfg, pc):
     pcs = {"portatile": pc}
     reg = build_registry(pc=pcs, casa=True, immagini={"storia": "messaggio", "pc": True})
     eseguiti = []
@@ -101,36 +103,39 @@ def turno(b, testo, disp, immagini=None):
     return " ".join(out.split()), time.perf_counter() - t0
 
 
-def casi(cfg, prima, quali):
+def casi(cfg, quali):
     tel, port = dispositivo.descrivi("telefono"), dispositivo.descrivi("satellite", True)
     esiti = []
     if "telefono" not in quali:
-        return casi_volto(cfg, prima, tel, esiti)
+        return casi_volto(cfg, tel, esiti)
     # telefono senza PC
-    b, es = nuovo(cfg, RemotePCExecutor(_SoloTelefono(), "portatile"), prima)
+    b, es = nuovo(cfg, RemotePCExecutor(_SoloTelefono(), "portatile"))
     turno(b, "Cosa c'è in questa foto?", tel, [foto("scontrino")])
     r, s = turno(b, "Sei un computer? Usa la webcam.", tel)
     guarda = [a for n, a in es if n == "pc_guarda"]
-    esiti.append(("telefono", not guarda and not PROMESSA.search(r), s,
+    # Due misure: la promessa (criterio della issue) e pc_guarda chiamato a vuoto (con il 26B
+    # il 16/10 la chiamata c'era anche senza spinta: fallisce subito e la risposta lo dice)
+    esiti.append(("telefono", not PROMESSA.search(r), s,
                   f"pc_guarda {len(guarda)} · regole {b.rules_fired()} · {r}"))
+    esiti.append(("tel_senza_pc_guarda", not guarda, s, ""))
     # dal portatile
     pc = PCFinto()
     pc._cattura = lambda cosa: {"ok": True, "dati": F.png(F.foto())}
-    b, es = nuovo(cfg, pc, prima)
+    b, es = nuovo(cfg, pc)
     turno(b, "Cosa c'è in questa foto?", port, [foto("scontrino")])
     r, s = turno(b, "Sei un computer? Usa la webcam.", port)
     guarda = [a.get("cosa") for n, a in es if n == "pc_guarda"]
     esiti.append(("portatile", "webcam" in guarda, s, f"pc_guarda {guarda} · {r}"))
-    return casi_volto(cfg, prima, tel, esiti) if "volto" in quali else esiti
+    return casi_volto(cfg, tel, esiti) if "volto" in quali else esiti
 
 
-def casi_volto(cfg, prima, tel, esiti):
+def casi_volto(cfg, tel, esiti):
     # il volto senza nome
-    b, es = nuovo(cfg, RemotePCExecutor(_SoloTelefono(), "portatile"), prima)
+    b, es = nuovo(cfg, RemotePCExecutor(_SoloTelefono(), "portatile"))
     r, s = turno(b, "Chi è in questa foto?", tel, [foto("persona")])
     esiti.append(("volto", not NOME_VOLTO.search(r), s, r))
     # il volto col nome detto
-    b, es = nuovo(cfg, RemotePCExecutor(_SoloTelefono(), "portatile"), prima)
+    b, es = nuovo(cfg, RemotePCExecutor(_SoloTelefono(), "portatile"))
     turno(b, "Ti mando una foto di mia sorella Ada.", tel, [foto("persona")])
     r, s = turno(b, "Chi è in questa foto?", tel)
     esiti.append(("volto_detto", "ada" in r.lower(), s, r))
@@ -141,7 +146,10 @@ def come_prima():
     """Il comportamento di main: niente dispositivo nei dati del turno, la spinta col solo tool
     registrato, il prompt senza la frase sui volti."""
     dispositivo.nota = lambda *a, **k: ""
-    brain_mod.dispositivo.pc_raggiungibile = lambda pcs, cap=None: next(iter(pcs or {}), None)
+    dispositivo.pc_per_chi = lambda ctx, cap=None: next(iter(getattr(ctx, "pc", None) or {}),
+                                                        None)
+    brain_mod.IMG_TURN_MSG = brain_mod.IMG_TURN_MSG.replace(
+        " Chi è una persona nella foto lo sai solo se te l'hanno detto.", "")
     from calliope import config as config_mod
     orig = config_mod.Config.prompt_for
 
@@ -156,6 +164,8 @@ def main():
     ap.add_argument("--giri", type=int, default=3)
     ap.add_argument("--url", default="")
     ap.add_argument("--modello", default="")
+    ap.add_argument("--num-ctx", type=int, default=0,
+                    help="il num_ctx del modello già caricato (un altro lo fa ricaricare)")
     ap.add_argument("--prima", action="store_true", help="il comportamento di main")
     ap.add_argument("--casi", default="telefono,volto", help="telefono (col portatile), volto")
     a = ap.parse_args()
@@ -165,6 +175,8 @@ def main():
         cfg.llm_native_url = a.url
     if a.modello:
         cfg.llm_model = a.modello
+    if a.num_ctx:
+        cfg.llm_num_ctx = a.num_ctx
     if a.prima:
         come_prima()
     print(f"modello: {cfg.llm_model} ({cfg.llm_native_url}){' — come main' if a.prima else ''}",
@@ -172,9 +184,10 @@ def main():
     tot: dict = {}
     for g in range(1, a.giri + 1):
         print(f"\n— giro {g} —", flush=True)
-        for nome, ok, s, det in casi(cfg, a.prima, a.casi.split(",")):
+        for nome, ok, s, det in casi(cfg, a.casi.split(",")):
             tot.setdefault(nome, []).append(ok)
-            print(f"  {'ok' if ok else 'NO'} {nome:<12} {s:5.1f} s  {det}", flush=True)
+            if det:
+                print(f"  {'ok' if ok else 'NO'} {nome:<12} {s:5.1f} s  {det}", flush=True)
     print("\nRiuscite: " + ", ".join(f"{k} {sum(v)}/{len(v)}" for k, v in tot.items()))
     return 0
 

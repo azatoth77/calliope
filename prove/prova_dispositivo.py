@@ -62,10 +62,20 @@ def remoto(caps=None):
     return RemotePCExecutor(Server(coll), "portatile")
 
 
-def spinta(pcs, frase, disp=None):
+class Chi:
+    """Chi parla: Dario, proprietario del PC, riconosciuto dalla voce (come SC delle foto)."""
+    def __init__(self, nome="Dario", livello="familiare", come="voce", sessione=False):
+        self.current_speaker, self.current_level = nome, livello
+        self.identified_by, self.from_session, self.sfida = come, sessione, None
+
+
+def spinta(pcs, frase, disp=None, chi=None, proprietari=("Dario",)):
     b = brain([[("text", "Uno scontrino.")], [("text", "x")], [("text", "y")]],
               pc=pcs, immagini={"storia": "messaggio", "pc": True})
+    b.cfg.pc_proprietari = list(proprietari)
     "".join(b.stream_reply("Cosa c'è qui?", "familiare", immagini=[foto()]))
+    if chi is not None:
+        b.tool_ctx.speaker_ctx = chi
     if disp is not None:
         b.dispositivo_turno = disp
     "".join(b.stream_reply(frase, "familiare"))
@@ -103,6 +113,25 @@ def prova_spinta():
     righe, regole, _, _ = spinta({"portatile": PCFinto()}, "Guarda con la webcam.")
     verifica("il PC di questo computer (esecutore locale): la spinta c'è",
              len(righe) == 1 and "foto_spinta_pc" in regole, (righe, regole))
+    # Chi parla (revisione della PR #119): come i permessi di pc_guarda
+    collegato = {"portatile": remoto(("schermata", "webcam"))}
+    for nome, chi, prop in [
+            ("un ospite", Chi(None, "ospite", None), ("Dario",)),
+            ("chi non è proprietario", Chi(), ("Bianca",)),
+            ("scritto da uno schermo", Chi(come="schermo"), ("Dario",)),
+            ("zona grigia (dalla conversazione)", Chi(come="conversazione", sessione=True),
+             ("Dario",)),
+            ("frase breve", Chi(come="breve", sessione=True), ("Dario",))]:
+        righe, regole, turno, _ = spinta(collegato, "Usa la webcam.",
+                                         dispositivo.descrivi("telefono"), chi, prop)
+        verifica(f"contrario, {nome} col portatile collegato: nessuna spinta e niente "
+                 f"«collegato»", not righe and "foto_spinta_pc" not in regole
+                 and "collegato a parte" not in turno and "non sono per chi parla" in turno,
+                 (righe, regole, turno))
+    righe, regole, turno, _ = spinta(collegato, "Usa la webcam.", dispositivo.descrivi("telefono"),
+                                     Chi("Dario", "amministra"), ("Bianca",))
+    verifica("chi amministra, anche non proprietario: la spinta e «collegato a parte»",
+             len(righe) == 1 and "collegato a parte" in turno, (righe, turno))
 
 
 def prova_dati_turno():
@@ -132,6 +161,16 @@ def prova_dati_turno():
     _, _, turno, _ = spinta({}, "Sei un computer?", dispositivo.descrivi("scritto"))
     verifica("scritto da uno schermo senza PC", "dispositivo: uno schermo, per scritto" in turno
              and "nessun computer" in turno, turno)
+    _, _, turno, _ = spinta({"portatile": remoto(("webcam",))}, "Sei un computer?",
+                            dispositivo.descrivi("scritto"), Chi(come="schermo"))
+    verifica("scritto (anche dal browser del portatile): mai «non un computer»",
+             "dispositivo: uno schermo, per scritto;" in turno
+             and "non un computer" not in turno, turno)
+    _, _, turno, _ = spinta({"portatile": remoto(("webcam",))}, "Sei un computer?",
+                            dispositivo.descrivi("satellite", True), Chi(None, "ospite", None))
+    verifica("dal portatile, un ospite: un computer, ma webcam e schermo non per lui",
+             "dispositivo: il portatile, un computer; la sua webcam e il suo schermo non sono "
+             "per chi parla adesso." in turno, turno)
     _, _, turno, _ = spinta({}, "Sei un computer?", dispositivo.descrivi("locale"))
     verifica("audio di questo computer senza il controllo del PC: un computer che non comandi",
              "dispositivo: un computer che non comandi" in turno, turno)
@@ -166,11 +205,31 @@ def prova_ciclo():
     verifica("ciclo: dal satellite con l'esecutore del PC → il PC stesso",
              d == {"canale": "satellite", "pc_qui": True}, d)
 
+    # Il collegamento dell'ultima frase vale più dell'attivo (revisione della PR #119)
+    L = types.SimpleNamespace(remoto=True, canale="satellite",
+                              _ultima=(Coll(None, "telefono"), 7))
+    d = Ciclo._dispositivo_turno(finto(L, Server(Coll({"capacita": ["webcam"]}))), t)
+    verifica("ciclo: l'ultima frase dal telefono, l'attivo ora il portatile → telefono",
+             d == {"canale": "telefono", "pc_qui": False}, d)
+
     class Rotto:
         def attivo_pronto(self, sat_id=None):
             raise RuntimeError("guasto")
+    L = types.SimpleNamespace(remoto=True, canale="satellite")
     d = Ciclo._dispositivo_turno(finto(L, Rotto()), t)
     verifica("ciclo: un guasto del server → None (la voce non si ferma)", d is None, d)
+
+
+def prova_motivo():
+    """Il solo telefono: «il portatile non è collegato», non «il satellite collegato non offre
+    il controllo… va aggiornato» (caso del 15/10 sera); un satellite vecchio senza esecutore
+    resta com'era."""
+    m = remoto().motivo_non_collegato()
+    verifica("solo il telefono: «il portatile non è collegato a Calliope»",
+             m == "il portatile non è collegato a Calliope", m)
+    m = RemotePCExecutor(Server(Coll(None, "satellite")), "portatile").motivo_non_collegato()
+    verifica("contrario: un satellite senza esecutore dice ancora di aggiornarlo",
+             "non offre il controllo" in m, m)
 
 
 def prova_prompt():
@@ -184,6 +243,7 @@ if __name__ == "__main__":
     prova_spinta()
     prova_dati_turno()
     prova_ciclo()
+    prova_motivo()
     prova_prompt()
     print(f"\n{'Tutto bene' if not ERRORI else 'Fallite: ' + ', '.join(ERRORI)}")
     sys.exit(1 if ERRORI else 0)

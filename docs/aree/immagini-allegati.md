@@ -177,7 +177,25 @@ guardarlo»). Prove: `prova_immagini.prova_spinta_pc` (a secco, con i contrari) 
 | «Chi è in questa foto?» senza nome detto: nessun nome | 0/5 («Sei Dario.») | 10/10 («Non so chi sia, ma vedo…») |
 | «Ti mando una foto di mia sorella Ada.», poi «Chi è?»: «Ada» | 5/5 (ma «Sei Ada.») | 10/10 («È Ada.») |
 
-La sola riga nel prompt dava volto 9/10 (una volta «È Dario.»); con la riga in `IMG_TURN_MSG` 10/10. La prima versione («non dire chi è se non te l'hanno detto») dava «Sei Ada.» e una volta perdeva il nome detto. `prova_immagini_ollama` 1 giro: 16/17, l'unico NO «lo schermo del telefono è rotto…» → pc_guarda senza spinta, alla stessa frequenza di main (sonda: 16/18 col ramo, 17/18 con main). **Da fare**: il banco col 26B sulla DGX, 10 giri (criteri 2 e 3 dell'issue). Prove a secco: `prova_dispositivo.py`.
+La sola riga nel prompt dava volto 9/10 (una volta «È Dario.»); con la riga in `IMG_TURN_MSG` 10/10. La prima versione («non dire chi è se non te l'hanno detto») dava «Sei Ada.» e una volta perdeva il nome detto. `prova_immagini_ollama` 1 giro: 16/17, l'unico NO «lo schermo del telefono è rotto…» → pc_guarda senza spinta, alla stessa frequenza di main (sonda: 16/18 col ramo, 17/18 con main). *Storico: «da fare il banco col 26B», fatto lo stesso giorno (sotto).* Prove a secco: `prova_dispositivo.py`.
+
+**Revisione della PR #119 (16/10)**:
+- `pc_per_chi`: la spinta e la parola «collegato» valgono solo se `pc_guarda` userebbe il PC per chi parla, con gli stessi permessi del tool: voce riconosciuta in questa frase (né scritto, né zona grigia, né frase breve) e proprietario del PC o chi amministra. Altrimenti la riga dice «webcam e schermo del portatile non sono per chi parla adesso».
+- Lo scritto non dice più «non un computer», perché la pagina può stare nel browser del portatile.
+- `Ciclo._dispositivo_turno` prende canale e PC dal collegamento dell'ultima frase (`_ultima`), non dal satellite attivo.
+- Col solo telefono collegato `RemotePCExecutor` dice «il portatile non è collegato a Calliope» al posto di «il satellite collegato non offre il controllo… va aggiornato» (caso del 15/10 sera); un satellite vecchio senza esecutore resta com'era.
+
+**Banco col 26B sulla DGX** (`gemma4:26b-a4b-it-qat`, `num_ctx` 36864 già caricato, dal portatile con un tunnel, DGX libera; 10 giri, ramo contro `--prima`):
+
+| Caso | main (`--prima`) | ramo |
+|---|---|---|
+| telefono senza PC, «Sei un computer? Usa la webcam.»: nessuna promessa | 10/10 | 10/10 |
+| telefono: nessun pc_guarda a vuoto | 0/10 (la spinta scatta sempre) | 5/10 |
+| dal portatile: pc_guarda(webcam) | 10/10 | 10/10 |
+| «Chi è in questa foto?» senza nome: nessun nome | 2/10 («Sei tu, Dario.» 8 volte) | 10/10 («Non lo so, vedo l'illustrazione stilizzata di una persona…») |
+| col nome detto prima: «È Ada.» | 10/10 | 10/10 |
+
+Col 26B la promessa del 15/10 non torna nemmeno su main, anche perché il motivo del rifiuto ora è giusto («il portatile non è collegato a me»: il messaggio nuovo vale anche con `--prima`). Senza la spinta, metà delle volte il 26B chiama ancora `pc_guarda`; la chiamata fallisce subito, senza rete né attese, e la risposta dice il vero: decide il modello, con la riga del dispositivo come dato. Senza pc_guarda il 26B chiama spesso `calliope_stato(chi_sei)` e risponde «gira in casa, su questo computer»: è vero (il computer è quello dove gira Calliope), e non promette la webcam. Restano i dati del primo banco con e4b (sopra).
 
 ## Il cassetto dei file per persona (08/10)
 

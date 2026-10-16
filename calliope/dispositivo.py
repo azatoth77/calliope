@@ -44,22 +44,50 @@ def pc_raggiungibile(pcs, cap: str | None = None) -> str | None:
     return None
 
 
-def nota(disp: dict | None, pc: str | None) -> str:
+def pc_per_chi(ctx, cap: str | None = None) -> str | None:
+    """Il PC che pc_guarda userebbe per chi parla adesso (revisione della PR #119): raggiungibile
+    con la capacità, la voce riconosciuta in questa frase (né scritto, né zona grigia, né frase
+    breve) e un proprietario del PC o chi amministra, come in tools/immagini._pc_guarda. None
+    altrimenti: niente spinta né «collegato» per una chiamata destinata al rifiuto."""
+    nome = pc_raggiungibile(getattr(ctx, "pc", None), cap)
+    if nome is None:
+        return None
+    sc = getattr(ctx, "speaker_ctx", None)
+    if getattr(sc, "identified_by", None) != "voce" or getattr(sc, "from_session", False):
+        return None
+    try:
+        from .tools.pc import _owner
+        return nome if _owner(ctx) else None
+    except Exception:  # noqa: BLE001 — nel dubbio il PC non è per chi parla
+        return None
+
+
+def nota(disp: dict | None, pc: str | None, per_chi: bool = True) -> str:
     """La riga dei dati del turno, "" senza dispositivo. `pc`: il nome del PC raggiungibile
-    (pc_raggiungibile), come nel prompt (cfg.pc_nome), o None."""
+    (pc_raggiungibile), come nel prompt (cfg.pc_nome), o None; `per_chi`: pc_guarda lo
+    userebbe per chi parla (pc_per_chi)."""
     if not isinstance(disp, dict):
         return ""
     canale = disp.get("canale")
     if canale == LOCALE or (canale == SATELLITE and disp.get("pc_qui")):
-        if pc:
+        if pc and per_chi:
             return f"dispositivo: il {pc}, un computer."
+        if pc:
+            return (f"dispositivo: il {pc}, un computer; la sua webcam e il suo schermo non "
+                    f"sono per chi parla adesso.")
         return ("dispositivo: un computer che non comandi, quindi niente webcam né schermo "
                 "del computer.")
-    dove = {TELEFONO: "il telefono", SATELLITE: "un satellite vocale (microfono e cassa)",
+    # Lo scritto può venire anche dal browser del portatile (revisione della PR #119): lì
+    # «non un computer» sarebbe falso
+    dove = {TELEFONO: "il telefono, non un computer",
+            SATELLITE: "un satellite vocale (microfono e cassa), non un computer",
             SCRITTO: "uno schermo, per scritto"}.get(canale)
     if dove is None:
         return ""
+    if pc and per_chi:
+        return f"dispositivo: {dove}; il {pc} è collegato a parte."
     if pc:
-        return f"dispositivo: {dove}, non un computer; il {pc} è collegato a parte."
-    return (f"dispositivo: {dove}, non un computer; nessun computer collegato, quindi "
-            f"niente webcam né schermo del computer.")
+        return (f"dispositivo: {dove}; webcam e schermo del {pc} non sono per chi parla "
+                f"adesso.")
+    return (f"dispositivo: {dove}; nessun computer collegato, quindi niente webcam né "
+            f"schermo del computer.")

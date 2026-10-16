@@ -2518,9 +2518,13 @@ class Ciclo:
         if not getattr(L, "remoto", False) or sat is None:
             return dispositivo.descrivi(dispositivo.LOCALE)
         try:
+            # Il collegamento dell'ultima frase (revisione della PR #119): canale e PC dallo
+            # stesso dispositivo anche se l'attivo cambia prima della risposta
+            ultima = getattr(L, "_ultima", None)
             sid = getattr(self.corsia, "satellite_id", None)
-            coll = sat.per_id(sid) if sid is not None else sat.attivo_pronto()
-            canale = getattr(L, "canale", None) or getattr(coll, "canale", None)
+            coll = (ultima[0] if ultima else
+                    sat.per_id(sid) if sid is not None else sat.attivo_pronto())
+            canale = getattr(coll, "canale", None) or getattr(L, "canale", None)
             return dispositivo.descrivi(canale, getattr(coll, "esecutore", None) is not None)
         except Exception:  # noqa: BLE001 — il dispositivo non ferma la voce
             return None

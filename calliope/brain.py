@@ -5690,8 +5690,11 @@ class Brain:
             who += " " + gruppo
         # Il dispositivo da cui si parla e il PC raggiungibile da lì (16/10, issue #100): dal
         # telefono Calliope diceva di essere un computer e prometteva la webcam
-        disp = dispositivo.nota(getattr(self, "_dispositivo_turno", None),
-                                dispositivo.pc_raggiungibile(getattr(self.tool_ctx, "pc", None)))
+        # (revisione della PR #119: «collegato» solo se pc_guarda lo userebbe per chi parla)
+        disp_t = getattr(self, "_dispositivo_turno", None)
+        disp = dispositivo.nota(disp_t, dispositivo.pc_raggiungibile(
+            getattr(self.tool_ctx, "pc", None)), dispositivo.pc_per_chi(self.tool_ctx)
+            is not None) if disp_t else ""
         if disp:
             who += " " + disp
         return [{"role": "system", "content": TURN_CONTEXT_MSG.format(
@@ -6747,7 +6750,7 @@ class Brain:
     def _foto_pc(self, user_text: str | None) -> str:
         """IMG_PC_MSG se la frase nomina lo schermo o la webcam, c'è una foto nella
         conversazione, pc_guarda è registrato e il PC è raggiungibile con la capacità che
-        serve (16/10, dispositivo.pc_raggiungibile); "" altrimenti (15/10)."""
+        serve e per chi parla (16/10, dispositivo.pc_per_chi); "" altrimenti (15/10)."""
         album = getattr(self, "album", None)
         if (not user_text or album is None or not len(album) or self.tools is None
                 or self.tools.get("pc_guarda") is None):
@@ -6755,13 +6758,14 @@ class Brain:
         # Solo se pc_guarda raggiungerebbe davvero un PC capace (16/10, issue #100): con i
         # satelliti il tool è sempre registrato, e dal telefono senza il portatile collegato la
         # spinta faceva promettere la webcam (4 turni il 15/10 sera, poi l'errore)
-        pcs = getattr(self.tool_ctx, "pc", None)
+        # Con la revisione della PR #119 anche per chi parla, come i permessi di pc_guarda
+        # (voce riconosciuta in questa frase, proprietario del PC o chi amministra)
         if _IMG_PC_WEBCAM.search(user_text):
-            if dispositivo.pc_raggiungibile(pcs, "webcam") is None:
+            if dispositivo.pc_per_chi(self.tool_ctx, "webcam") is None:
                 return ""
             return IMG_PC_MSG.format(cosa="della webcam", arg="webcam")
         if _IMG_PC_SCHERMO.search(user_text) and not _IMG_PC_ALTRO.search(user_text):
-            if dispositivo.pc_raggiungibile(pcs, "schermata") is None:
+            if dispositivo.pc_per_chi(self.tool_ctx, "schermata") is None:
                 return ""
             return IMG_PC_MSG.format(cosa="dello schermo del computer", arg="schermo")
         return ""
