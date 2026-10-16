@@ -43,6 +43,7 @@ class Ascolto:
     on_speech_start = on_speech_end = None
 
     durata_s = 1.0       # con pre-roll e silenzio di serie (1,0 s) la voce è 0 s
+    parlato_ms = chiusura = None     # le misure del VAD (None: il ciclo usa la durata)
 
     def listen(self, wake, awake_until, seed=None, wakeup=None):
         self.started_at = self.ended_at = time.monotonic()
@@ -330,7 +331,9 @@ def main():
              and "cortesia_dopo_domanda" not in c.rec.get("regole", []), str(detto))
     verifica("…su 0 s di voce, di serie in ombra: la cortesia come prima, la regola nel registro",
              "cortesia_senza_voce_ombra" in c.rec.get("regole", [])
-             and c.rec.get("cortesia_voce_s") == 0.0, str(c.rec.get("regole")))
+             and c.rec.get("cortesia_voce") == {"forma": "grazie", "voce_s": 0.0,
+                                                "fonte": "durata"},
+             f"{c.rec.get('regole')} {c.rec.get('cortesia_voce')}")
     # «Grazie.» sul rumore (16/10, issue #97; caso vero della DGX alle 19:00:57 del 15/10:
     # 0,12 s di voce, finestra chiusa a chi stava parlando). Con «attiva» è una trascrizione
     # vuota: niente frase pronta, finestra d'ascolto invariata
@@ -347,7 +350,26 @@ def main():
     verifica("contrario: «Grazie.» su 0,5 s di voce chiude con la frase pronta",
              len(detto) == 1 and c.rec["esito"] == "cortesia" and c.awake_until == 0.0
              and "cortesia_senza_voce" not in c.rec.get("regole", [])
-             and "cortesia_voce_s" not in c.rec, f"{detto} {c.rec.get('regole')}")
+             and "cortesia_voce" not in c.rec, f"{detto} {c.rec.get('regole')}")
+    # Il parlato del VAD vince sulla durata (revisione della PR #109): sul telefono a pressione
+    # (chiusura «rilascio») e con Smart Turn («anticipata») la frase non ha il silenzio pieno
+    # in fondo e la durata sottostima la voce
+    for chiusura in ("rilascio", "anticipata"):
+        asc.durata_s, asc.parlato_ms, asc.chiusura = 0.6, 520, chiusura
+        c.awake_until = time.monotonic() + 30
+        _, detto = giro("Grazie.")
+        verifica(f"contrario: «Grazie.» chiuso da «{chiusura}» con 0,52 s di parlato: cortesia",
+                 len(detto) == 1 and c.rec["esito"] == "cortesia"
+                 and "cortesia_senza_voce" not in c.rec.get("regole", []),
+                 f"{detto} {c.rec.get('regole')} {c.rec.get('ascolto')}")
+    asc.durata_s, asc.parlato_ms, asc.chiusura = 1.5, 128, "silenzio"
+    c.awake_until = finestra = time.monotonic() + 30
+    _, detto = giro("Perfetto.")
+    verifica("«Perfetto.» su 128 ms di parlato del VAD (audio di 0,5 s di voce): rumore",
+             detto == [] and c.rec["esito"] == "vuoto" and c.awake_until == finestra
+             and c.rec.get("cortesia_voce") == {"forma": "conferma", "voce_s": 0.13,
+                                                "fonte": "vad"}, f"{detto} {c.rec}")
+    asc.parlato_ms = asc.chiusura = None
     asc.durata_s = 1.1
     c.awake_until = time.monotonic() + 30
     _, detto = giro("Grazie, spegni la luce.")

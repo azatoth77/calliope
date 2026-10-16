@@ -2335,22 +2335,30 @@ discussione; a casa 4 volte tra le frasi della minore). Il «grazie» vero della
 `cortesia_voce_min_s` (0,3 s) di voce è rumore. Con `cortesia_voce_min: attiva` vale come una
 trascrizione vuota: niente frase pronta, finestra d'ascolto invariata, esito `vuoto`, regola
 `cortesia_senza_voce`. Di serie **ombra**: la cortesia resta com'era e il registro dei turni scrive
-`cortesia_senza_voce_ombra` con `cortesia_voce_s`; «spenta» non fa niente. Principio 10: riguarda
+`cortesia_senza_voce_ombra` con `cortesia_voce` (forma `grazie` o `conferma`, `voce_s`, fonte);
+«spenta» non fa niente. Principio 10: riguarda
 la trascrizione, che il modello non vede, ed è reversibile (al più la persona ripete «grazie»; la
 finestra resta aperta). Non toccano: «basta», «stop» (la finestra resta già aperta), le frasi
 scritte (senza voce), «grazie» dopo una domanda o un'offerta (va al modello come prima,
 `cortesia_dopo_domanda`), qualunque frase con una richiesta («Grazie, spegni la luce.»).
 
-`voce_s` è `Turno.voiced_s`: durata dell'audio meno pre-roll e `silence_ms`. Con la fine del turno
-System 1 attiva (Smart Turn, spenta di serie) il silenzio finale può essere più corto di
-`silence_ms` e `voce_s` sottostima: va tenuto presente nella lettura dell'ombra. La soglia 0,3 s
-prende 6 dei 7 casi; quello delle 20:04:23 (0,38 s) resta fuori, da rivedere sui turni conservati.
+I secondi di voce sono il parlato del VAD (`parlato_ms` di `rec["ascolto"]`, misurato anche dai
+satelliti e dal telefono; fonte `vad`); `Turno.voiced_s` (durata dell'audio meno pre-roll e
+`silence_ms`, fonte `durata`) solo se manca. *Revisione della PR #109, 16/10:* nella prima
+versione c'era solo `voiced_s`, che sottostima quando la frase non si chiude dopo il silenzio
+pieno, cioè col telefono a pressione lunga (chiusura `rilascio`) e con Smart Turn
+(`anticipata`): un «grazie» vero di mezzo secondo sarebbe valso rumore. La forma nel registro
+serve a leggere separati in ombra «grazie» e «perfetto». La soglia 0,3 s prende 6 dei 7 casi
+(160, 64, 32, 128, 96, 256 ms di parlato); quello delle 20:04:23 (416 ms) resta fuori, da
+rivedere sui turni conservati.
 
 **Prove a secco**: `prova_testo` (la funzione: 0,0–0,29 s scatta, 0,3–0,6 s no, frase scritta,
 «Basta.», «Grazie, spegni la luce.» a 0,1 e 2 s, ombra, spenta, validatore) e `prova_ciclo` (in
 ombra cortesia come prima con la regola nel registro; con «attiva» 0,12 s → nessuna risposta e
 finestra aperta; contrari 0,5 s → frase pronta e finestra chiusa, «Grazie, spegni la luce.» al
-modello). Sul codice di prima falliscono.
+modello; dopo la revisione «Grazie.» chiuso da `rilascio` e da `anticipata` con 520 ms di parlato
+riceve la cortesia, «Perfetto.» su 128 ms di parlato è rumore anche con 0,5 s di audio, e
+`voce_frase` col ripiego sulla durata). Sul codice di prima falliscono.
 
 **Da fare sulla DGX**: 7 giorni in ombra; leggere a campione i turni con
 `cortesia_senza_voce_ombra` (0 «grazie» veri tra quelli), poi `cortesia_voce_min: attiva` nel

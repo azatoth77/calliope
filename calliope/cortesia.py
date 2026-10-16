@@ -45,6 +45,18 @@ RISPOSTE: dict[str, dict[str, tuple[str, ...]]] = {
 }
 
 
+def voce_frase(ascolto: dict | None, voiced_s: float) -> tuple[float, str]:
+    """I secondi di voce della frase, e da dove vengono (revisione della PR #109). Prima il
+    parlato del VAD (`parlato_ms` in `rec["ascolto"]`, misurato anche dai satelliti e dal
+    telefono): vale con qualunque chiusura. `voiced_s` (durata dell'audio meno pre-roll e
+    `silence_ms`) sottostima quando la frase non si chiude dopo il silenzio pieno: telefono a
+    pressione lunga (chiusura «rilascio»), Smart Turn («anticipata»). Solo se il parlato manca."""
+    p = (ascolto or {}).get("parlato_ms") if isinstance(ascolto, dict) else None
+    if isinstance(p, (int, float)) and not isinstance(p, bool) and p >= 0:
+        return p / 1000, "vad"
+    return float(voiced_s or 0.0), "durata"
+
+
 def senza_voce(forma: str | None, voiced_s: float, scritto: bool, cfg) -> str | None:
     """Regola `cortesia_senza_voce` (16/10, issue #97; principio 10: riguarda la trascrizione,
     che il modello non vede, ed è reversibile). Whisper scrive «Grazie.» su un rumore breve:

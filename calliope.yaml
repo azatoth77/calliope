@@ -87,10 +87,11 @@ wake_word:
   # su un rumore breve (allucinazione dei sottotitoli), e la cortesia chiudeva la finestra
   # d'ascolto a chi stava parlando (sulla DGX il 15/10 sera 7 casi su 8 con 0,00–0,38 s di
   # voce; il «grazie» vero della minore 0,60 s). Una cortesia («grazie», «perfetto») detta su
-  # meno di cortesia_voce_min_s secondi di voce (voce_s: durata dell'audio meno pre-roll e
-  # silenzio finale) vale come trascrizione vuota: «attiva» = niente frase pronta e finestra
-  # invariata (regola `cortesia_senza_voce`); «ombra» (di serie) = la cortesia come prima e
-  # nel registro dei turni la regola `cortesia_senza_voce_ombra` con `cortesia_voce_s`, da
+  # meno di cortesia_voce_min_s secondi di voce (il parlato del VAD, `parlato_ms`; la durata
+  # dell'audio meno pre-roll e silenzio solo se manca) vale come trascrizione vuota:
+  # «attiva» = niente frase pronta e finestra invariata (regola `cortesia_senza_voce`);
+  # «ombra» (di serie) = la cortesia come prima e nel registro dei turni la regola
+  # `cortesia_senza_voce_ombra` con `cortesia_voce` (forma, secondi di voce e fonte), da
   # rileggere per una settimana prima di «attiva»; «spenta» = niente. Le frasi scritte non
   # contano: non hanno voce
   cortesia_voce_min: ombra
