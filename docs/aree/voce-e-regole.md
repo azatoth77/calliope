@@ -201,7 +201,7 @@ misure di questo documento sono col 4B in locale: da rifare col 26B sulla DGX do
   `note_rule`) `azione_in_sospeso`, `spinta_promessa`, `spinta_richiesta`,
   `spinta_dichiarata`, `dichiarata_taciuta`, `dichiarata_ricordo`, `riferimento_casa`,
   `textcallguard`, `conferma_al_posto_del_vuoto`,
-  `agenda_tutto`, `formato_detto`, `lettera_non_excel`, `valore_assoluto_detto`,
+  `agenda_tutto` (dal 16/10 anche `agenda_tutto_chiede`, #99), `formato_detto`, `lettera_non_excel`, `valore_assoluto_detto`,
   `casa_riscrittura`, `casa_delicata`, `casa_domanda_letta` (dall'08/10 anche `casa_nome_entita`, [casa](casa.md)); dal 02/10 `persona_io` e, dagli
   agenti, `lavori_permesso`, `lavori_senza_offerta`, `lavori_proposta_non_id`,
   `lavori_conferma_implicita` (dal 10/10 `lavori_conferma_diversa`, `sviluppo_cambio` e `sviluppo_analisi_prima`), `lavori_agente_irraggiungibile`; dal 03/10 `schermo_personale_senza_codice`, `schermo_personale_con_codice`, `schermo_proprietario_permesso`. Solo nomi: per gli ospiti il
