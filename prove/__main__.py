@@ -188,6 +188,8 @@ A_SECCO = [
     ("prova_scritto_pagina.py", [], "moduli nel browser vero: errore della cifra di controllo mentre si scrive, invio, casella"),
     # ~5 s: Pillow, Brain con un backend finto, server degli schermi vero, PC finto
     ("prova_immagini.py", [], "foto (05/10): controllo e riduzione dei byte, album della conversazione, foto nei messaggi, guardia sulle azioni, /api/immagine, pc_guarda e permessi, cattura dal satellite"),
+    # ~1 s: hub degli schermi vero, i passi veri del ciclo (16/10, #96)
+    ("prova_immagini_attesa.py", [], "foto in attesa della domanda con un'altra voce in mezzo (16/10, #96): l'ospite, un'altra persona o un minore non la tolgono né la ricevono, la stessa persona sì; «esci» (anche dopo l'ospite) e la scadenza la tolgono, con il dato «foto persa» una volta (mai come biblioteca); «ricominciamo» e «dimentica» la tolgono senza il dato"),
     # ~8 s: file generati in memoria (anche ostili), Brain finto, server degli schermi vero
     ("prova_allegati.py", [], "allegati (05/10): tipo dai byte, lettura per tipo, file ostili (bomba zip, XXE, macro, PDF rotto, eseguibili), audio, contenuto marcato e guardia, allegato_leggi/archivia, delega, /api/allegato"),
     # ~6 s: cassetto in una cartella temporanea, Brain finto, server degli schermi vero

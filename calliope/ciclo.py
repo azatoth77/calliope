@@ -53,7 +53,7 @@ from .eventi.misura import norm as _norm_frase
 from .eventi.uscita import per_voce
 from .tools.dialogo import FRASI_CORREZIONE
 from .config import Config, DEEPEN_WORDS, SEARCH_PROMISE
-from .immagini import FOTO_IN_ATTESA, FOTO_NON_VISTA, Immagine
+from .immagini import FOTO_IN_ATTESA, FOTO_NON_VISTA, FOTO_PERSA, Immagine
 from .schermi import schede as schede_foto
 from .schermi.moduli import annuncio_lavoro, completa as completa_modulo, oscura, oscura_tutto
 from .speaker_id import estimate_gender
@@ -235,6 +235,10 @@ class Turno:
     gioco: dict | None = None
     finestra_gioco: bool = False
     contesto_gioco: str | None = None    # per il modello: i comandi del gioco (gioco_comando)
+    # Per il modello: la foto non vista o persa (#96, revisione della PR #113). Un campo suo,
+    # non `context`: `context` vuol dire «biblioteca» («Controllo nella biblioteca.»,
+    # last_question, citazione_tolta, ricerca promessa); unito al contesto in _rispondi
+    contesto_foto: str | None = None
 
 
 def solo_nome_acustico(text: str, voiced_s: float, cfg) -> bool:
@@ -3411,6 +3415,7 @@ class Ciclo:
             self._di_e_aspetta("Va bene, ricominciamo da capo." + (f" {sospeso}" if sospeso
                                                                   else ""))
             self.brain.end_conversation("nuova")
+            self._foto_attesa_dimenticata(self._persona_id(t.speaker_name), "ricominciamo")
             self.awake_until, self.last_question = time.monotonic() + cfg.followup_s, None
             return _FINE
         return None
@@ -3537,6 +3542,13 @@ class Ciclo:
         else:
             for x in s.foto_attesa.prendi(prof_foto.id):
                 (foto if isinstance(x, Immagine) else files).append(x)
+            # #96: la foto mandata prima senza domanda non c'è più (conversazione finita,
+            # attesa scaduta): lo dice il dato del turno, invece di una causa inventata
+            if s.foto_attesa.persa(prof_foto.id) and not foto and not files:
+                t.contesto_foto = FOTO_PERSA
+                self.rec["foto_persa"] = True
+                print("   [IMMAGINI] la foto mandata prima non c'è più: lo dico al modello",
+                      flush=True)
         for att in files:
             # Audio: trascritto qui con il Whisper della voce, come contenuto del file. Mai
             # dalla pipeline della voce (wake word, regole, chi parla, conferme): è un dato
@@ -3561,7 +3573,7 @@ class Ciclo:
                   + ")", flush=True)
         if foto and not brain.vede_immagini():
             print("   [IMMAGINI] il modello della voce non vede le immagini", flush=True)
-            t.context = ((t.context + "\n") if t.context else "") + FOTO_NON_VISTA
+            t.contesto_foto = FOTO_NON_VISTA
             foto = []
         if foto:
             self.rec["immagini"] = [i.per_registro() for i in foto]
@@ -3755,6 +3767,8 @@ class Ciclo:
             contesto_turno = t.context
             if t.contesto_gioco:
                 contesto_turno = (contesto_turno + "\n" if contesto_turno else "") + t.contesto_gioco
+            if getattr(t, "contesto_foto", None):
+                contesto_turno = (contesto_turno + "\n" if contesto_turno else "") + t.contesto_foto
             # La preselezione dei tool in ombra (15/10, calliope/system1/preselezione.py): il
             # decisore sceglie «nucleo» o «tutti» in un thread suo mentre il modello risponde
             # (con tutti i tool, come sempre); l'esito va nel registro (_registra_risposta)
@@ -4473,9 +4487,24 @@ class Ciclo:
         if self.rec is not None:
             self.rec["conversazione_nuova"] = True
         self.brain.end_conversation("nuova")
+        # Tollerante a un Ciclo parziale delle prove (senza servizi né chi parla)
+        chi = getattr(getattr(self, "speaker_ctx", None), "current_speaker", None)
+        if chi and getattr(self, "s", None) is not None:
+            self._foto_attesa_dimenticata(self._persona_id(chi), "ricominciamo")
         self.last_question = None
         self._contesto_azzerato()
         return True
+
+    def _foto_attesa_dimenticata(self, persona_id, motivo: str):
+        """«Ricominciamo», «dimentica» (#96, revisione della PR #113): le foto in attesa della
+        persona vanno via con la conversazione, senza il dato «foto persa» dopo (l'ha chiesto
+        lei). Nel log il motivo, mai il contenuto."""
+        attesa = getattr(getattr(self, "s", None), "foto_attesa", None)
+        if attesa is None or not persona_id:
+            return
+        tolte = attesa.dimentica(persona_id)
+        if tolte:
+            print(f"   [IMMAGINI] {tolte} foto in attesa tolta (motivo {motivo})", flush=True)
 
     def _contesto_azzerato(self):
         """Dopo una conversazione chiusa a richiesta («dimentica», «ricominciamo»: 13/10) la
@@ -4528,6 +4557,7 @@ class Ciclo:
         conv = getattr(self.brain, "conv", None)
         chiave_conv = str(getattr(conv, "chiave", None) or "")
         chiusa = chiave_conv in (chiave, "casa") or chiave_conv.startswith("ospite:")
+        self._foto_attesa_dimenticata(persona, "dimentica")
         if self.ombra is not None:
             self.ombra.dimentica(chiave)
             if chiusa and chiave_conv != chiave:
