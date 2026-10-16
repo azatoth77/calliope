@@ -11,7 +11,9 @@ Rigioca il decisore sul registro dei turni (le parole degli adulti, decisione 00
 risposta con tool la frase della persona, i tool chiamati e il loro esito, i segnali di
 struttura che il registro ha (proposta aperta, spinte, correzioni, contesto). Il registro **non
 ha** il risultato del tool, il testo detto dal modello prima del tool né il tono: un tool riuscito
-dell'elenco vale come «con la sua frase», il tono come «normale». È quindi una **stima per
+dell'elenco vale come «con la sua frase» (dal 16/10 anche la lista e l'agenda lette, che il
+decisore copre solo fino a due voci: il registro non ha quante erano), il tono come «normale».
+È quindi una **stima per
 eccesso** dei turni coperti; l'ombra (`system1_dopo_tool: ombra`) dà il numero vero.
 
 Stampa, **solo numeri e nomi di tool**:
@@ -58,7 +60,12 @@ def _risultato(nome: str, ok: bool) -> dict:
     if not ok:
         return {"ok": False, "errore": "(dal registro: fallito)"}
     cop = dt.COPERTI.get(nome)
-    return {"ok": True, **({cop.campi[0]: "x"} if cop else {})}
+    if cop is None:
+        return {"ok": True}
+    # Le letture brevi (16/10, issue #103): il registro non ha quante voci c'erano, si contano
+    # come brevi (stima per eccesso, come il resto)
+    voci = {"voci": []} if cop.voci_max >= 0 else {}
+    return {"ok": True, **voci, **({cop.campi[0]: "x"} if cop.campi else {})}
 
 
 def valuta(turni: list[dict], parole_max: int = dt.PAROLE_MAX) -> dict:
@@ -153,6 +160,7 @@ def _finti() -> list[dict]:
         t("Metti un timer e dimmi che ore sono", [("timer_imposta", True),
                                                   ("ora_attuale", True)], 3.1),
         t("Cosa c'è nella lista della spesa?", [("lista_leggi", True)], 2.9),
+        t("Ricorda che a Ugo piace il tè", [("ricorda", True)], 2.9),
         t("Metti un timer", [("timer_imposta", False)], 2.5),
         t("Sì", [("timer_imposta", True)], 2.6, regole=["azione_in_sospeso"]),
         {"inizio": "2026-10-15T11:00:00", "esito": "risposta", "testo": None,
