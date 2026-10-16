@@ -34,6 +34,7 @@ from .conversazione import UNSET, Conversazione
 from .immagini import Album
 from .memory import HOUSE
 from .notizie import contesto as notizie_contesto
+from . import dispositivo
 from . import (argomenti_incerti, dati_turno, luogo, politica, provenienza, stato_dialogo,
                storpiature, valore)
 from .risposte import forma_chiusa
@@ -1322,7 +1323,8 @@ IMG_LABEL = ("[{foto}: è in questo messaggio e la vedi già. Il testo scritto n
 IMG_TURN_MSG = ("Foto davanti a te: {foto}, appena mandata dalla persona, nel suo messaggio. "
                 "La vedi già: per guardarla non serve nessun tool, e «cosa vedi?», «cosa "
                 "c'è?», «leggimi» parlano di lei. pc_guarda solo se la persona chiede la "
-                "webcam o lo schermo del computer.")
+                "webcam o lo schermo del computer. Chi è una persona nella foto lo sai solo "
+                "se te l'hanno detto.")
 # Lo schermo o la webcam con una foto già nella conversazione (15/10, problema aperto dal 06/10:
 # «Non me l'hai chiesto»). La politica lascia passare pc_guarda (prova_politica.prova_pc_guarda,
 # dal 06/10); è il modello a non chiamarlo: e4b, dopo una foto, a «cosa vedi sul mio schermo?»
@@ -2688,6 +2690,9 @@ class Brain:
         # Gli avvisi consegnati di recente al tutore che parla (14/10, minori.Avvisi.contesto):
         # dal ciclo come attributo, vale una risposta sola; nei dati del turno
         self._avvisi_turno = self.__dict__.pop("avvisi_turno", None)
+        # Il dispositivo da cui si parla (16/10, issue #100, calliope/dispositivo.py): dal ciclo
+        # come attributo, vale una risposta sola; nei dati del turno (_turn_context)
+        self._dispositivo_turno = self.__dict__.pop("dispositivo_turno", None)
         # Le righe della stanza davanti al modello in questa risposta (14/10 sera, _stanza_prepara)
         self._stanza_visibili, self._stanza_ancore, self.last_stanza_storia = [], {}, None
         # I dati fissi davanti al modello in questa risposta (16/10, _dati_prepara) e quanto
@@ -5683,6 +5688,12 @@ class Brain:
         gruppo = self._nota_gruppo()
         if gruppo:
             who += " " + gruppo
+        # Il dispositivo da cui si parla e il PC raggiungibile da lì (16/10, issue #100): dal
+        # telefono Calliope diceva di essere un computer e prometteva la webcam
+        disp = dispositivo.nota(getattr(self, "_dispositivo_turno", None),
+                                dispositivo.pc_raggiungibile(getattr(self.tool_ctx, "pc", None)))
+        if disp:
+            who += " " + disp
         return [{"role": "system", "content": TURN_CONTEXT_MSG.format(
             ora=f"{now:%H:%M}", giorno=_GIORNI[now.weekday()],
             data=f"{now.day} {_MESI[now.month - 1]} {now.year}", chi=who)}]
@@ -6735,14 +6746,23 @@ class Brain:
 
     def _foto_pc(self, user_text: str | None) -> str:
         """IMG_PC_MSG se la frase nomina lo schermo o la webcam, c'è una foto nella
-        conversazione e pc_guarda è registrato; "" altrimenti (15/10)."""
+        conversazione, pc_guarda è registrato e il PC è raggiungibile con la capacità che
+        serve (16/10, dispositivo.pc_raggiungibile); "" altrimenti (15/10)."""
         album = getattr(self, "album", None)
         if (not user_text or album is None or not len(album) or self.tools is None
                 or self.tools.get("pc_guarda") is None):
             return ""
+        # Solo se pc_guarda raggiungerebbe davvero un PC capace (16/10, issue #100): con i
+        # satelliti il tool è sempre registrato, e dal telefono senza il portatile collegato la
+        # spinta faceva promettere la webcam (4 turni il 15/10 sera, poi l'errore)
+        pcs = getattr(self.tool_ctx, "pc", None)
         if _IMG_PC_WEBCAM.search(user_text):
+            if dispositivo.pc_raggiungibile(pcs, "webcam") is None:
+                return ""
             return IMG_PC_MSG.format(cosa="della webcam", arg="webcam")
         if _IMG_PC_SCHERMO.search(user_text) and not _IMG_PC_ALTRO.search(user_text):
+            if dispositivo.pc_raggiungibile(pcs, "schermata") is None:
+                return ""
             return IMG_PC_MSG.format(cosa="dello schermo del computer", arg="schermo")
         return ""
 

@@ -191,7 +191,9 @@ def brain(copione, modo="messaggio", **reg):
     cfg.immagini_storia = modo
     cfg.storia_inattiva_s = 0
     from calliope.tools.spec import ToolContext
-    ctx = ToolContext(cfg=cfg, speakers=Speakers(), speaker_ctx=SC(), speaker=None)
+    # I PC nel contesto come in main.py (16/10: la spinta di pc_guarda guarda se il PC c'è)
+    ctx = ToolContext(cfg=cfg, speakers=Speakers(), speaker_ctx=SC(), speaker=None,
+                      pc=reg.get("pc"))
     if modo == "descrizione":
         reg.setdefault("immagini", {"storia": modo})
     b = Brain(cfg, build_registry(**reg), ctx)

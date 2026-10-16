@@ -112,6 +112,23 @@ def foto() -> Image.Image:
     return img
 
 
+def persona() -> Image.Image:
+    """Il ritratto disegnato di una persona (16/10, issue #100: «chi è in questa foto?» senza un
+    nome detto): viso, capelli, occhi, sorriso, maglia, su un muro."""
+    img = Image.new("RGB", (1200, 1600), (225, 215, 190))
+    d = ImageDraw.Draw(img)
+    d.rectangle((250, 1050, 950, 1600), fill=(40, 90, 160))            # maglia
+    d.rectangle((530, 900, 670, 1080), fill=(235, 190, 160))           # collo
+    d.ellipse((330, 330, 870, 1000), fill=(240, 200, 170))             # viso
+    d.chord((310, 240, 890, 760), 180, 360, fill=(90, 55, 30))         # capelli
+    for x in (470, 730):
+        d.ellipse((x - 45, 560, x + 45, 620), fill="white")
+        d.ellipse((x - 20, 570, x + 20, 610), fill=(60, 40, 20))       # occhi
+    d.line((600, 620, 580, 760), fill=(200, 150, 120), width=10)       # naso
+    d.arc((470, 740, 730, 880), 20, 160, fill=(170, 60, 60), width=14)  # sorriso
+    return img
+
+
 def schermo() -> Image.Image:
     """Uno screenshot finto: una finestra di un editor con un messaggio d'errore."""
     img = Image.new("RGB", (1920, 1080), (30, 30, 30))
@@ -127,7 +144,7 @@ def schermo() -> Image.Image:
 
 
 TUTTE = {"scontrino": scontrino, "bolletta": bolletta, "istruzione": istruzione,
-         "foto": foto, "schermo": schermo}
+         "foto": foto, "schermo": schermo, "persona": persona}
 
 
 def jpeg(img: Image.Image, quality: int = 90) -> bytes:
