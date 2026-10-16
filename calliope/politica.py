@@ -449,7 +449,18 @@ VERBI = {
                         r"bolla|emett|fai|fammi"),
     "anagrafica_salva": (r"salv|rubric|anagrafic|contatt|aggiung|registr|segn|cliente|"
                          r"fornitor|cambi|aggiorn|corregg"),
-    "pc_guarda": r"guard|scherm|ved|legg|controll|webcam|screenshot|fotograf|inquadr",
+    # «fai una foto a questo dispositivo», «scatta una foto» (16/10, issue #98, caso vero della
+    # DGX del 15/10 alle 20:23); «foto» da sola no: «la foto di ieri era bella» non chiede niente.
+    # Solo gli imperativi (revisione della PR #117): non «fa», «fare» descrittivi («Chi fa le
+    # foto al matrimonio?», «Mio cugino fa foto bellissime», «Tre giorni fa le foto…»). Dalla
+    # seconda revisione l'imperativo apre la frase (o una sua parte, dopo la punteggiatura;
+    # «mi», «ci» davanti): «Quando fai le foto…?» no; «fate», «facci», «scattate» sì; «scatta»
+    # e «scattate» solo con «foto» vicino («Scatta l'allarme se…» no), «scattami» da sé
+    "pc_guarda": (r"guard|scherm|ved|legg|controll|webcam|screenshot|fotograf|inquadr|"
+                  r"(?:^|[,.;:!?])\s*(?:(?:mi|ci)\s+)?(?:"
+                  r"(?:fai|fammi|fate|fatemi|facci|fateci|fammene)\s+(?:[a-zà-ù']+\s+){0,2}?foto"
+                  r"|scatt(?:a|ate)\s+(?:[a-zà-ù']+\s+){0,2}?foto"
+                  r"|scatt(?:ami|aci|atemi|ateci|amene|acene)(?![a-zà-ù]))"),
     # «eseguilo con 3 e 5», «fammelo vedere», «rilancialo», «provalo con 4»
     "programma_esegui": (r"esegu|lanc|avvi|gir[aio]|fa(?:mm|ll)\w* (?:vedere|girare|partire)|"
                       r"mostr|prov[aio]|rifa|ripet"),
@@ -703,6 +714,14 @@ class Turno:
     domanda_sospeso: str = ""
     cosa_sospeso: str = ""
     risposta_dato: bool = False
+    # La proposta in sospeso è nata nella frase in cui la stessa persona ha superato la frase
+    # di sfida per lo stesso tool, una risposta fa (16/10, issue #98: la domanda della data di
+    # nascita di registra_utente dopo la sfida). Vale solo per la risposta al dato chiesto
+    # (valore.risposta_al_sospeso) con la voce riconosciuta in questa frase
+    sfida_sospeso: bool = False
+    # Gli argomenti che la domanda del tool chiede (`in_sospeso["chiede"]`, #98, revisione della
+    # PR #117): solo quelli possono essere nuovi nella risposta al dato
+    chiede_sospeso: tuple = ()
 
 
 # Le azioni interne chieste con un verbo che il lessico delle azioni sul mondo non ha
@@ -1901,6 +1920,20 @@ def _segna_accettata(ctx, valore: bool):
         pass
 
 
+def _segna_sfida_portata(ctx, valore: bool):
+    try:
+        ctx.politica_sfida_portata = bool(valore)
+    except AttributeError:
+        pass
+
+
+def sfida_portata(ctx) -> bool:
+    """La chiamata in corso è la risposta al dato chiesto dal tool dopo una frase di sfida
+    superata dalla stessa persona (regola `valore_sfida_sospeso`, issue #98): ToolRegistry.call
+    dà al tool la sfida superata per la sola esecuzione. Lo imposta `controlla`."""
+    return bool(getattr(ctx, "politica_sfida_portata", False))
+
+
 def accettata(ctx) -> bool:
     """La chiamata in corso è già stata confermata dalla persona (Decisione.accettata): un tool
     con il suo «Procedo?» parte senza chiederlo di nuovo. Lo imposta `controlla`, lo azzera
@@ -2062,6 +2095,9 @@ def controlla(spec, name: str, args: dict, ctx) -> dict | None:
             ombra = {**valore.ombra(vecchia, nuova, det), "attiva": per_valore}
             if det.get("di_prima") and per_valore:
                 note_rule(ctx, "valore_di_prima")    # valore.di_prima (12/10 sera)
+            # La risposta al dato chiesto dal tool stesso (16/10, issue #98): l'ancora nel registro
+            if det.get("risposta_sospeso") and per_valore:
+                note_rule(ctx, "valore_risposta_sospeso")
             d = nuova if per_valore else vecchia
         except Exception as e:  # noqa: BLE001 — l'ombra non deve mai fermare la politica
             print(f"   [POLITICA] ombra non calcolata: {type(e).__name__}: {e}", flush=True)
@@ -2094,6 +2130,9 @@ def controlla(spec, name: str, args: dict, ctx) -> dict | None:
     _finale(ombra, d.esito, d.regola)
     _esito_per_brain(ctx, name, args, cl, t, d, intento, cv, vf, cosa, spec, ombra)
     _segna_accettata(ctx, d.accettata)
+    # La sfida superata nella frase che ha aperto la domanda vale per questa chiamata (#98): il
+    # tool che la controlla da sé (registra_utente) la vede solo durante questa esecuzione
+    _segna_sfida_portata(ctx, d.esito == "esegui" and d.regola == "valore_sfida_sospeso")
     if d.esito == "esegui":
         if d.accettata:
             note_rule(ctx, "politica_conferma_unica")

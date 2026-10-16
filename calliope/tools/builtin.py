@@ -309,6 +309,8 @@ def _nuovo_profilo(ctx: ToolContext, n: str, nascita: str, tutori: str, maggiore
                 "conferma": domanda, "risposta_finale": domanda,
                 "in_sospeso": {"tool": "registra_utente", "argomenti": {"nome": n},
                                "domanda": domanda,
+                               # gli argomenti che la domanda chiede (#98, valore.py)
+                               "chiede": ["nascita", "tutori"],
                                "messaggio": _NASCITA_MSG.format(nome=n, nome_json=json.dumps(n))}}
     chi = _person(ctx)
     ids = []

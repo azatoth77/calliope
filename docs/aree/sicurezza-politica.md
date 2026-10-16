@@ -1554,3 +1554,99 @@ il caso vero del 04/10 («Sì, procedi pure.», 0,515) come `breve_compatibile`,
 familiare a un'azione E3, la sfida superata anche passando da Brain, la richiesta nuova con la
 voce; contrari: E1 chiesta, lettura, chiamata rifiutata o mandata alla sfida, righe di un'altra
 risposta, misura che si rompe (il tool parte lo stesso).
+
+## La risposta al dato chiesto da un tool è la richiesta (16/10, issue #98, ramo `issue-98-risposta-in-sospeso`)
+
+**Caso vero della DGX del 15/10 sera** (nomi di fantasia). Con la stanza accesa, alle 19:58:28
+chi amministra supera la frase di sfida e `registra_utente({'nome': 'Bianca'})` risponde con la
+domanda «Quando è nato o nata Bianca?…» (proposta in sospeso). Alle 19:58:37 chi amministra
+(0,761) dice la data, il modello richiama giustamente `registra_utente` con la nascita e la
+politica per valore la rifiuta: `valore_non_ancorata`, «la persona non ha chiesto azioni (dati
+da stanza)». Calliope dice «Non ho salvato niente», chi amministra ripete tutto e deve dire una
+**seconda** frase di sfida (attrito 3,4 sopra la soglia di 3,0). Stesso meccanismo alle 20:23
+con «fai una foto a questo dispositivo» per `pc_guarda`.
+
+**Perché**. Con la stanza accesa il turno è contaminato e decide la matrice (`valore._matrice`):
+`consenso_turno` riconosce la risposta alla proposta solo con un consenso, la sfida o la
+richiesta ripetuta con gli stessi argomenti, e l'ancora (`ancorata`) guarda solo le parole del
+tool nella frase. «È nata il 12 ottobre 2015» non è nessuna delle due. L'etichetta «dati da
+stanza» viene dalla contaminazione del turno, non dagli argomenti. **L'analisi della issue era
+incompleta su un punto**: la sola ancora non bastava per «senza seconda sfida». `registra_utente`
+è E4 con `Classe.sfida`: ancorata, la matrice chiedeva comunque `valore_e4_sfida`, e il tool
+stesso vuole `sfida_superata` in questa frase (vale una frase sola, `ciclo.py`). La sfida
+superata dieci secondi prima, nella frase che ha aperto la domanda, non contava più.
+
+**Cosa cambia**.
+
+- **Ancora** (`valore.risposta_al_sospeso`, regola `valore_risposta_sospeso` nel registro): una
+  chiamata è ancorata anche quando è la risposta alla domanda in sospeso **di quel tool**
+  (`Turno.in_sospeso`: la stessa persona e il tempo `azione_in_sospeso_s` li controlla già
+  `Brain._take_pending`), senza foto o file con la frase, non una domanda della politica (quella
+  vuole un sì), con gli argomenti della domanda uguali e **almeno un valore nuovo**, e ogni
+  valore nuovo **detto in questa frase** (parole e numeri; il mese a parole vale anche in cifre,
+  «12 ottobre 2015» → «2015-10-12»). Un valore senza parole (un booleano come `maggiorenne`, una
+  scelta) non basta: resta la strada di prima. Una data presente solo in una riga della stanza
+  resta «dal dato» e il rifiuto resta. Per la risposta non vale il controllo dei dati personali
+  in ciò che esce (D7): i valori nuovi sono detti adesso, anche se scritti in un'altra forma.
+  Restano i bersagli dal dato e il resto della matrice. Vale anche quando la risposta comincia
+  con un consenso («Sì, è nata il 12 ottobre 2015», «Ok, il 12 ottobre»): senza, il «sì» la
+  mandava alla politica di prima, che chiedeva «C'è di mezzo la conversazione della stanza…».
+- **La sfida della domanda** (regola `valore_sfida_sospeso`): se la proposta è nata nella frase
+  in cui la stessa persona ha superato la sfida per lo stesso tool (`pending["sfida_di"]`,
+  scritto da `stream_reply` dopo `_sfida_reply`), nella risposta **subito dopo**, ancorata come
+  sopra e con la voce riconosciuta in questa frase (`voce_frase`), quella sfida vale: la matrice
+  esegue al posto di `valore_e4_sfida` e del pavimento della classe, e `ToolRegistry.call` dà al
+  tool `sfida_superata` per la sola esecuzione di quella chiamata (`politica.sfida_portata`),
+  poi la rimette com'era. Mai per un'altra persona, un altro tool, una frase breve o della zona
+  grigia, una domanda nata senza sfida (lì si chiede la sfida, una sola come a conversazione
+  pulita), una seconda risposta.
+- **`pc_guarda`**: le parole che lo chiedono prendono «fai/fammi una foto» e «scatta» (verbo:
+  «scatta», «scattami», «scattare»), non «foto» da sola: «la foto di ieri era bella», «è
+  scattato l'allarme», «non fare foto» non lo chiedono. Vincolo di permesso (principio 10).
+
+**Rischio** (da far leggere a chi amministra): la regola allarga l'ancora. Il cancello è la fonte
+dei valori nuovi (detti in questa frase, non dalla stanza né da un altro dato) e la proposta del
+tool stesso, della stessa persona. La sfida portata vale una frase sola e solo con la voce
+riconosciuta: una registrazione che ripete una data subito dopo la sfida dovrebbe anche avere la
+voce di chi amministra.
+
+Prova `prove/prova_risposta_sospeso.py` (livello 2, ~1 s, fallisce sul codice di prima: 9
+errori): il caso vero eseguito senza seconda sfida, con le due regole nel registro e la sfida che
+non resta dopo la chiamata, la data «come detta», la risposta che comincia con «sì» o «ok»; contrari: la data solo nella stanza, un'altra
+persona che amministra, un altro tool, scaduta, il nome cambiato, nessun valore nuovo,
+`maggiorenne`, la domanda della politica, una foto, la voce non riconosciuta, la domanda nata
+senza sfida; `pc_guarda` con i contrari.
+
+**Revisione di sicurezza della PR #117 (16/10)**: cinque correzioni prima dell'unione.
+(1) Gli argomenti della domanda si confrontano **esatti** (maiuscole e spazi a parte, `_esatto`):
+`pol._uguali` guarda solo le parole lunghe, e «non spegnere il server» valeva come «spegnere il
+server», «10 euro» come «900 euro». (2) Con una negazione nella frase (`pol._NO`: «no», «non»,
+«aspetta», «lascia perdere»…) niente ancora né sfida portata: «No, aspetta, non registrarla: forse
+è nata il 12 ottobre 2015 ma devo controllare.» veniva eseguito con la sfida portata. E la
+proposta **dichiara gli argomenti che chiede** (`in_sospeso["chiede"]`, `Turno.chiede_sospeso`;
+`registra_utente`: `nascita` e `tutori`): solo quelli possono essere nuovi, una proposta che non
+li dichiara non ancora niente («Lascia perdere, ci penso domani.» con `maggiorenne="perdere"`
+passava). (3) `pc_guarda`: solo gli imperativi («fai/fammi/fatemi una foto», «scatta/scattami»),
+non «fa», «fare» descrittivi («Chi fa le foto al matrimonio?», «Mio cugino fa foto bellissime»,
+«Tre giorni fa le foto della gita…»). (4) Il mese a parole vale in cifre solo per un valore con la
+forma di una data («2015-10-12», «12/10/2015»), non per «10 euro». (5) La sfida portata vale per
+**una** chiamata sola (`Turno.risposta["sfida_portata_usata"]`): il giro di correzione dopo un
+errore chiede la sua sfida. Ogni punto ha i suoi contrari in `prova_risposta_sospeso.py`, che
+fallivano sul codice di prima (11 errori). Limite: per ora dichiara gli argomenti solo
+`registra_utente`; le altre domande di un dato restano come prima, finché non li dichiarano.
+
+**Seconda revisione della PR #117 (16/10)**, nessun buco nuovo, quattro rifiniture.
+(1) La prova del controllo «solo gli argomenti dichiarati»: «È nata il 12 ottobre 2015, è una
+bambina tranquilla.» con `maggiorenne="tranquilla"` si rifiuta (senza il controllo si eseguiva).
+(2) I **rinvii** valgono come una negazione (`valore._RINVIO`: «rimandiamo», «aspettiamo», «più
+tardi», «lascia», «annulliamo», «domani», «ci penso», «vediamo», «forse»…): con loro niente ancora
+né sfida portata, anche se la data c'è. (3) Una data in cifre deve essere **proprio quella detta**
+(giorno, mese e anno, `minori.leggi_data` sui due lati): «2015-12-10» dopo «12 ottobre 2015» non
+vale. (4) `pc_guarda`: l'imperativo apre la frase o una sua parte («mi», «ci» davanti ammessi), con
+i plurali e i pronomi («Fate una foto», «Scattate una foto», «Facci una foto», «Mi fai una foto?»,
+«Scattami»); «scatta» e «scattate» solo con «foto» vicino; «Quando fai le foto alla gita?» e
+«Scatta l'allarme se entra qualcuno» non lo chiedono. Contrari in `prova_risposta_sospeso.py`.
+
+**Da guardare sulla DGX** (7 giorni, `calliope stato --turni`): 0 `valore_non_ancorata` con
+`azione_in_sospeso` sullo stesso tool; «ESEGUITE con un bersaglio dal dato» = 0; quante
+`valore_risposta_sospeso` e `valore_sfida_sospeso`, e l'attrito sotto la soglia.

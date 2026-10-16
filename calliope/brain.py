@@ -2871,6 +2871,14 @@ class Brain:
         if (self._offer and domanda_in_fondo(said, self._offer)
                 and self._net("azione_in_sospeso")):
             self.set_pending(self._offer)
+            # La domanda del tool che ha appena superato la frase di sfida (16/10, issue #98:
+            # «Quando è nata Bianca?» dopo la sfida di registra_utente): la sfida vale anche per
+            # la risposta al dato, della stessa persona, nella frase dopo (Turno.sfida_sospeso)
+            sf = sfida[1] if sfida is not None else None
+            pend = getattr(self, "pending", None)
+            if (sf is not None and pend and pend.get("tool") == sf.tool
+                    and pend.get("chi") == sf.persona):
+                pend["sfida_di"] = sf.persona
         self._ricorda_domanda_fidata(said)
         self._dialogo_fine()
         potata = self._stanza_pota()
@@ -3983,7 +3991,9 @@ class Brain:
             # Gli argomenti proposti, per la politica dei tool (05/10): sul «sì» con gli
             # stessi valori la persona li ha già sentiti (calliope/politica.py)
             "args": dict(offer.get("argomenti")) if isinstance(offer.get("argomenti"),
-                                                              dict) else None}
+                                                              dict) else None,
+            # Gli argomenti che la domanda chiede (#98): solo loro nuovi nella risposta al dato
+            "chiede": tuple(offer.get("chiede") or ())}
 
     def set_reference(self, ref: dict | None):
         """Ricorda l'ultimo dispositivo della casa comandato o letto (REFERENCE_MSG)."""
@@ -6771,7 +6781,13 @@ class Brain:
             domanda_sospeso=str(p.get("domanda") or "") if p.get("tool") == tool else "",
             cosa_sospeso=str(p.get("cosa") or "") if p.get("tool") == tool else "",
             risposta_dato=bool(p.get("su_misura") or p.get("risposta"))
-            and p.get("tool") == tool)
+            and p.get("tool") == tool,
+            # La sfida superata nella frase che ha aperto la domanda (16/10, issue #98): per la
+            # stessa persona e solo nella risposta subito dopo
+            sfida_sospeso=bool(tool) and p.get("tool") == tool
+            and p.get("sfida_di") is not None and p.get("sfida_di") == self._speaker_key()
+            and getattr(self, "turn_number", 0) - p.get("turno", 0) <= 1,
+            chiede_sospeso=tuple(p.get("chiede") or ()) if p.get("tool") == tool else ())
 
     def _intenzioni(self) -> list:
         conv = self._c()

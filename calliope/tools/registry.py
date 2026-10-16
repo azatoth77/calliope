@@ -419,6 +419,12 @@ class ToolRegistry:
         prima = (getattr(sc, "identified_by", None), getattr(sc, "from_session", False))
         if breve:
             sc.identified_by, sc.from_session = "voce", False   # solo durante questa chiamata
+        # La sfida superata nella frase che ha aperto la domanda del tool (16/10, issue #98): per
+        # la sola risposta al dato chiesto, solo durante questa chiamata
+        portata = politica.sfida_portata(ctx) and sc is not None
+        sfida_prima = getattr(sc, "sfida_superata", False) if portata else False
+        if portata:
+            sc.sfida_superata = True
         try:
             result = spec.func(ctx, **(arguments or {}))
             if result is None:
@@ -434,4 +440,7 @@ class ToolRegistry:
         finally:
             if breve:
                 sc.identified_by, sc.from_session = prima
+            if portata:
+                sc.sfida_superata = sfida_prima
             politica._segna_accettata(ctx, False)
+            politica._segna_sfida_portata(ctx, False)
